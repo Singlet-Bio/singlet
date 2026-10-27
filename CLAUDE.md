@@ -3,7 +3,7 @@
 - **Cell data architecture (`docs/CELL-ARCHITECTURE.md`) is binding** for any change that stores, indexes or serves
   per-sample or per-cell data (the canonical copy is in zdebruine/singlet-website; change that one first, then this copy).
   - Raw counts (exon, intron, junctions, heteroplasmy, VDJ) stay in immutable per-sample `.s1` objects in R2
-    (`docs/format-store.md`), read by byte range through `data.singlet.bio/store`; never copied into a database.
+    (`docs/format-s1.md`), read by byte range through `data.singlet.bio/s1`; never copied into a database.
   - D1 holds sample-level metadata and per-sample summaries of cell properties (`sample_term`, `sample_property`,
     `cell_feature`, `sample_cell_summary`), never one row per cell.
   - Per-cell labels and feature scores live in R2 columnar objects (cell-index shards, per-sample label and feature

@@ -1,6 +1,6 @@
 # `called_ed` against ground truth: over-calling, its cause and the fix
 
-Study of 2026-10-25. Question: does `called_ed` (docs/called-ed.md; Python `python/singlet/store/cellcall.py`, C++
+Study of 2026-10-25. Question: does `called_ed` (docs/called-ed.md; Python `python/singlet/s1/cellcall.py`, C++
 `include/singlet/pileup/called_ed.h`) over-call cells, and what change makes it match ground truth without losing the low-RNA
 cells it was designed to recover? Code: `bench/called_ed_truth/`. Results on Clipper: `$WORK/state/called_ed_truth/`. No
 pipeline code was changed.

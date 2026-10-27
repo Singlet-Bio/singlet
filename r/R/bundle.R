@@ -386,8 +386,8 @@
 #' barcode column of \code{cell_calls.tsv} may be named \code{barcode},
 #' \code{cb}, \code{cell_barcode} or \code{CB}.
 #'
-#' @param path Path to a local `.singlet` file (or to a local store manifest,
-#'   \code{.../store/m/<GSE>.json}, as returned by \code{\link{download}}).
+#' @param path Path to a local `.singlet` file (or to a local .s1 manifest,
+#'   \code{.../s1/m/<GSE>.json}, as returned by \code{\link{download}}).
 #' @return A \code{SingleCellExperiment} with one column per called cell
 #'   (named \code{<GSM>_<barcode>}) and one row per gene. Assays are
 #'   \code{counts} (exonic + intronic), \code{spliced} (exonic) and
@@ -411,7 +411,7 @@
 #' @export
 read_singlet <- function(path) {
     if (is.character(path) && length(path) == 1L && grepl("\\.json$", path, ignore.case = TRUE)) {
-        return(.store_load_manifest(path.expand(path), NULL))
+        return(.s1_load_manifest(path.expand(path), NULL))
     }
     .read_singlet_bundle(path)
 }

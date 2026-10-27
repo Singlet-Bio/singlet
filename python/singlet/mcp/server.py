@@ -209,7 +209,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="singlet_load",
             description=(
-                "Get access information for loading a processed sample: the store sample object URL, the byte "
+                "Get access information for loading a processed sample: the .s1 sample object URL, the byte "
                 "range of each member (an HTTP Range request fetches one member), the vocabulary pack ids and "
                 "the one-line singlet.load() call. Pass if_rev to get {unchanged:true} when the study has not changed."
             ),
@@ -597,11 +597,11 @@ async def _tool_qc(args: dict) -> dict:
 
 
 def _store_sample_info(gse_id: str, gsm_id: str, if_rev: str | None = None) -> dict | None:
-    """Download information for one sample from the study's store manifest, or None when the study has no store manifest.
+    """Download information for one sample from the study's .s1 manifest, or None when the study has no .s1 manifest.
 
     The answer is what a client needs to fetch the sample without further requests: the object URL and size, the byte range
     of every member, the pack ids, and the single coalesced range ``singlet.load`` issues for the gene-level matrices."""
-    from singlet.store import client as _store
+    from singlet.s1 import client as _store
 
     try:
         st = _store.open_study(gse_id)
@@ -611,9 +611,7 @@ def _store_sample_info(gse_id: str, gsm_id: str, if_rev: str | None = None) -> d
         return {"unchanged": True, "rev": st.rev}
     sm = st.samples.get(gsm_id)
     if sm is None:
-        return {
-            "error": f"{gsm_id} is not a sample of {gse_id} in the store manifest (rev {st.rev})"
-        }
+        return {"error": f"{gsm_id} is not a sample of {gse_id} in the .s1 manifest (rev {st.rev})"}
     members = {
         n: [m.off, m.len, m.kind]
         for n, m in sm.members.items()
@@ -622,7 +620,7 @@ def _store_sample_info(gse_id: str, gsm_id: str, if_rev: str | None = None) -> d
     need = [sm.members[n] for n in (_store.CELLS, _store.EXON, _store.INTRON) if n in sm.members]
     co = _store._coalesce([(m.off, m.len) for m in need])
     return {
-        "format": "singlet-store",
+        "format": "singlet-s1",
         "rev": st.rev,
         "manifest": st.transport.url(st.manifest_key),
         "object": st.transport.url(sm.key),
@@ -663,16 +661,16 @@ async def _tool_load(args: dict) -> dict:
         "load": f'singlet.load("{gsm_id}")',
         "web_url": f"https://singlet.bio/sample/{gsm_id}",
     }
-    store_info = None
+    s1_info = None
     if gse_id:
         try:
-            store_info = _store_sample_info(gse_id, gsm_id, args.get("if_rev"))
+            s1_info = _store_sample_info(gse_id, gsm_id, args.get("if_rev"))
         except Exception as e:  # noqa: BLE001 - the data host being unreachable must not hide the catalog answer
-            out["store_error"] = str(e)
-    if store_info is not None:
-        if store_info.get("unchanged"):
-            return {"gsm_id": gsm_id, "gse_id": gse_id, **store_info}
-        out["store"] = store_info
+            out["s1_error"] = str(e)
+    if s1_info is not None:
+        if s1_info.get("unchanged"):
+            return {"gsm_id": gsm_id, "gse_id": gse_id, **s1_info}
+        out["s1"] = s1_info
     else:
         from singlet._loader import _bundle_url
 
@@ -736,7 +734,7 @@ async def _tool_slice_cells(args: dict) -> dict:
     """Select cells by cell-table filters and read only the chunks that hold them; summary (and optional .h5ad)."""
     import numpy as np
 
-    from singlet.store import client as _store
+    from singlet.s1 import client as _store
 
     gse_id = args.get("gse_id")
     if not gse_id:
@@ -767,7 +765,7 @@ async def _tool_slice_cells(args: dict) -> dict:
         adata.write_h5ad(path)
         out["saved"] = path
     out["load"] = (
-        f'singlet.store.cells("{gse_id}", {args.get("where")!r}, samples={args.get("samples")!r}, max_cells={int(args.get("max_cells", 1000))})'
+        f'singlet.s1.cells("{gse_id}", {args.get("where")!r}, samples={args.get("samples")!r}, max_cells={int(args.get("max_cells", 1000))})'
     )
     return out
 

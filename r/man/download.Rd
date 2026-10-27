@@ -23,14 +23,14 @@ cached needs no network in later sessions.}
 \item{legacy}{\code{TRUE} downloads the legacy \code{.singlet} bundle
 (deprecated, being retired). The default \code{NULL} downloads the per-sample format and,
 only when the environment variable \code{SINGLET_LEGACY_FALLBACK=1} is
-set and the study has no store manifest yet, falls back to the legacy bundle.}
+set and the study has no .s1 manifest yet, falls back to the legacy bundle.}
 }
 \value{
-The path to the local manifest (\code{.../store/m/<GSE>.json}) or, with
+The path to the local manifest (\code{.../s1/m/<GSE>.json}) or, with
   \code{legacy = TRUE}, to the local \code{.singlet} file.
 }
 \description{
-Mirrors a study's store objects (the manifest, one \code{.s1} object per
+Mirrors a study's .s1 objects (the manifest, one \code{.s1} object per
 sample, and the vocabulary packs they use) from \url{https://data.singlet.bio}
 into the local cache, verifying each object against the manifest's sha256, and
 returns the path of the manifest. \code{\link{load}} then reads the local

@@ -3,14 +3,14 @@
 
 ::
 
-    from singlet.celllabels import read_store, annotate_sample, write_labels
-    s = read_store("GSE145370", "GSM4317426")
+    from singlet.celllabels import read_s1, annotate_sample, write_labels
+    s = read_s1("GSE145370", "GSM4317426")
     table, summary = annotate_sample(s)
     write_labels(table, "GSM4317426.labels.parquet")
 
 Modules: :mod:`~singlet.celllabels.celltype` (marker guide + per-sample self-training), :mod:`~singlet.celllabels.sex`,
 :mod:`~singlet.celllabels.ancestry` (from restricted donor SNP depths; only labels leave it), :mod:`~singlet.celllabels.output`
-(the interchange schema and the public-output guard), :mod:`~singlet.celllabels.io` (store and legacy readers).
+(the interchange schema and the public-output guard), :mod:`~singlet.celllabels.io` (.s1 and legacy readers).
 ``docs/cell_annotation.md`` documents the methods and their validation.
 """
 
@@ -18,7 +18,7 @@ from .celltype import CellTypeResult, annotate_cell_types
 from .io import (  # noqa: F401  (read_v2: DUAL old name)
     SampleInput,
     read_legacy,
-    read_store,
+    read_s1,
     read_v2,
 )
 from .output import COLUMNS, PublicOutputError, assert_public_safe, write_labels
@@ -37,6 +37,6 @@ __all__ = [
     "call_sex",
     "model_version",
     "read_legacy",
-    "read_store",
+    "read_s1",
     "write_labels",
 ]

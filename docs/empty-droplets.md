@@ -1,6 +1,6 @@
 # Are Singlet's uncalled barcodes empty droplets?
 
-Study for the store decision "may store drop the matrix entries of uncalled barcodes?" (2026-10-23). Code: `bench/empty_droplets/`.
+Study for the .s1 format decision "may the format drop the matrix entries of uncalled barcodes?" (2026-10-23). Code: `bench/empty_droplets/`.
 Data: 65 samples of 18 studies read from the legacy `.singlet` bundles, 49 of them usable as gene-expression libraries (the rest
 are hashtag/antibody/guide or TCR libraries processed as RNA, or Parse sub-libraries with a broken call; see "Samples").
 
@@ -37,7 +37,7 @@ Two facts change the framing of the question:
    own counts (`export.h` takes `Solo.out/Gene/filtered/barcodes.tsv` whenever it exists; the pipeline's own EmptyDrops runs only
    for protocols without Solo.out). That rule is known to miss cells with little RNA, and it is what the data show: a single
    threshold on the stored totals reproduces the call to within 0-5% of barcodes in every sample (median 0.6%).
-2. **The store pilot GSE145370 is the wrong library type.** Its 14 samples (GSM4317423-36) are TCR-enriched V(D)J libraries
+2. **The .s1 pilot GSE145370 is the wrong library type.** Its 14 samples (GSM4317423-36) are TCR-enriched V(D)J libraries
    ("S133_TCR Sample 1" ... in GEO); the mRNA libraries are GSM4317409-22 and are not in the bundle. The pilot's shallow counts,
    TRBV/TRAV cluster markers and large vdj member follow from that. Measurements on the pilot (29.9 MB -> 13 MB; 39-56% of
    entries in uncalled barcodes) describe amplicon libraries. Over the 49 usable gene-expression samples uncalled barcodes hold a

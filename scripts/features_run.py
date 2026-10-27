@@ -117,16 +117,16 @@ def cmd_run(a):
     for gse, gsms, bundle in read_list(a):
         fetched = None
         try:
-            is_st = bundle is None and FIO.is_store(gse)
+            is_st = bundle is None and FIO.is_s1(gse)
             if not is_st and bundle is None:
                 bundle = fetched = FIO.fetch_bundle(gse, scratch)
-            todo = gsms or (FIO.store_gsms(gse) if is_st else FIO.bundle_gsms(bundle))
+            todo = gsms or (FIO.s1_gsms(gse) if is_st else FIO.bundle_gsms(bundle))
             todo = [g for g in todo if a.force or not done(out, gse, g, sets)]
             if not todo:
                 log(gse=gse, status="done")
                 continue
             t = time.perf_counter()
-            for gsm, s in FIO.iter_samples(gse, todo, bundle=bundle, store=is_st):
+            for gsm, s in FIO.iter_samples(gse, todo, bundle=bundle, s1=is_st):
                 read_s = time.perf_counter() - t
                 if isinstance(s, Exception):
                     log(
@@ -199,8 +199,8 @@ def cmd_collect(a):
         '-H "X-Ingest-Token: $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$f; done'
     )
     print(
-        "  sidecars: the cell-index builder normalises them (singlet.store.atlas.normalize_feature_sidecar -> "
-        "store/cf/<GSM>/<set>.<d16>.parquet) and attaches them to the study manifest; see docs/cell_features.md"
+        "  sidecars: the cell-index builder normalises them (singlet.s1.atlas.normalize_feature_sidecar -> "
+        "s1/cf/<GSM>/<set>.<d16>.parquet) and attaches them to the study manifest; see docs/cell_features.md"
     )
 
 

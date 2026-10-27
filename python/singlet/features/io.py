@@ -2,9 +2,9 @@
 """Where a feature job's cells come from. Counts and ``col`` are read with :mod:`singlet.celllabels.io` (the same reader as the
 labels, so labels and features line up on ``col``):
 
-* a per-sample study on data.singlet.bio: :func:`singlet.celllabels.io.read_store`;
+* a per-sample study on data.singlet.bio: :func:`singlet.celllabels.io.read_s1`;
 * a legacy ``.singlet`` bundle on disk: :func:`singlet.celllabels.io.read_legacy` (``col`` = position among the columns of
-  ``exon_counts.1pz``, the order the store migration gives the cells table).
+  ``exon_counts.1pz``, the order the .s1 migration gives the cells table).
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ def _req(url: str, method: str = "GET") -> urllib.request.Request:
     return urllib.request.Request(url, method=method, headers=HEADERS)
 
 
-def is_store(gse: str, base: str = DATA_BASE) -> bool:
-    for prefix in ("store", "v2"):  # DUAL: the old v2/m/ prefix
+def is_s1(gse: str, base: str = DATA_BASE) -> bool:
+    for prefix in ("s1", "store", "v2"):  # DUAL: the old v2/m/ prefix
         req = _req(f"{base}/{prefix}/m/{gse}.json", "HEAD")
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
@@ -71,8 +71,8 @@ def bundle_gsms(path: Path) -> List[str]:
         b.close()
 
 
-def store_gsms(gse: str, base: Optional[str] = None) -> List[str]:
-    from singlet.store import client as C
+def s1_gsms(gse: str, base: Optional[str] = None) -> List[str]:
+    from singlet.s1 import client as C
 
     st = C.open_study(gse, base=base)
     return list(st.gsm_ids)
@@ -83,19 +83,21 @@ def iter_samples(
     gsms: Optional[List[str]] = None,
     *,
     bundle: Optional[Path] = None,
-    store: bool = False,
-    v2: Optional[bool] = None,  # DUAL: old name of store=
+    s1: bool = False,
+    store: Optional[bool] = None,  # DUAL: old names of s1=
+    v2: Optional[bool] = None,
 ) -> Iterator[Tuple[str, object]]:
     """Yield (gsm, SampleInput or the exception raised while reading it)."""
     from singlet.celllabels import io as A
 
-    if v2 is not None:
-        store = v2
-    if store:
-        todo = store_gsms(gse) if gsms is None else gsms
+    for old in (store, v2):
+        if old is not None:
+            s1 = old
+    if s1:
+        todo = s1_gsms(gse) if gsms is None else gsms
         for g in todo:
             try:
-                yield g, A.read_store(gse, g)
+                yield g, A.read_s1(gse, g)
             except Exception as e:  # noqa: BLE001 - reported per sample
                 yield g, e
         return
@@ -108,5 +110,5 @@ def iter_samples(
             yield g, e
 
 
-is_v2 = is_store  # DUAL: old names, removed in the cleanup
-v2_gsms = store_gsms
+is_v2 = is_store = is_s1  # DUAL: old names, removed in the cleanup
+v2_gsms = store_gsms = s1_gsms

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// pz2 internals: public entry points (encode_matrix, Matrix, decode, canonical_digest).  Container layout: docs/format-store.md 4.
+// pz2 internals: public entry points (encode_matrix, Matrix, decode, canonical_digest).  Container layout: docs/format-s1.md 4.
 #pragma once
 
 namespace singlet {
