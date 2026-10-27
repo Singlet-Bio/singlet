@@ -119,3 +119,59 @@ Owner decision: no "store" naming anywhere. The format is named by its extension
 - D1 schema 036 with the `s1_*` tables;
 - the ingest endpoint `/api/ingest/s1-study`;
 - `series.s1` in the API.
+
+## Research Alpha: the release policy in the transcode (2026-10-26)
+
+The Alpha data release transcodes every included sample of the published atlas into .s1 objects; no read is reprocessed. The
+campaign takes the policy JSON (`version`, `withheld_studies`, `excluded_samples`) with `s1_campaign.py run --alpha-policy FILE`
+(`s1_migrate.sbatch`: `ALPHA_POLICY=...`, optionally `ALPHA_POLICY_SHA256=...`). `singlet.s1.policy` applies it:
+
+- **Withheld study:** skipped before anything is read. Nothing is written: no object, manifest, ledger or catalog row.
+- **Excluded sample:** dropped from the legacy view before the transcoder reads it, so it gets no .s1 object, manifest entry or
+  ledger line. `manifest.json` and `study_meta.json` are rewritten without it. The study fails if any kept study file or small text
+  member still names an excluded accession. A study with no sample left counts as withheld (migrate exits 3).
+- **Withheld layers**, never written to a public object (`policy.omitted_layer`, a tested superset of `_restricted.is_restricted_member`):
+
+  | layer | members |
+  |---|---|
+  | `genotype` | `donor/*` except `donor_assignments.tsv`, `snp_*`, `*.vcf`/`.bcf`, `ase_counts.tsv`, aligned reads (`*.bam`, 4 samples) |
+  | `mtdna_alleles` | `mt/*` except `mt_summary.tsv`, `mt_heteroplasmy.1pz`, `mt_variants.tsv`, `*_mt_consensus*`, `*_mt_variants*` |
+  | `ancestry_call` | `ancestry_call.json` |
+  | `ambient` | `ambient_contamination.*`, `ambient_profile.tsv` |
+  | `doublet_scores` | `doublet_scores.tsv` |
+  | `nonhost_per_cell` | `nonhost/*per_cell*`; the sample-level `nonhost_summary.json` and `nonhost_em_abundance.tsv` stay |
+  | `splice_psi_legacy` | `splice_psi.1pz`; clients compute true PSI from `sj_counts` (D8) |
+  | `sex_call_legacy` | `sex_call.json`, the legacy pipeline call, for every species; replaced by the validated per-cell `sex_chrom` labels |
+
+- **Manifest:** `release_policy` holds `{name, version, omitted_layers}`, the generic layer names only. It never holds an excluded
+  accession or a per-study count of them. The per-study record of what was dropped is `policy-audit.json`, next to the .s1 tree,
+  copied to `$OUT/policy-audit/` on the cluster and never uploaded.
+- **Verify** (`singlet.s1.verify --policy`) compares the store with the policy's view of the legacy bundle, using decode equality
+  for every kept member as before. It also checks:
+  - the policy version;
+  - that no excluded sample or withheld member is present;
+  - that no excluded accession appears in the manifest or in any study file.
+
+**Extras computed in the same pass, from members already in memory:**
+- `samples[i].provenance` holds:
+  - `reads_used`, from STAR's "Number of input reads", else `pileup_stats.total_reads`;
+  - `reads_available`, which is null unless `--sample-facts` supplies it, because neither the bundle nor the catalog records it;
+  - the strand wrong-fraction `wrong_strand / (wrong_strand + exon_hits)`, with the class from the PR #25 thresholds;
+  - the library-type verdict;
+  - the policy version.
+- `samples[i].junction_support` holds the junction count and how many junctions reach 2 molecules in the sample, with a threshold note.
+- The `cells` table gets `called_ed` and `called_ed_fdr` as additional columns (EmptyDrops 2.1, `docs/called-ed.md`), with
+  `validated: false` for inDrop and Drop-seq. `called` stays the knee call and remains the default.
+- Per-cell labels (`--labels`; `LABELS=1 AF=... RESTRICTED_BUCKET=singlet-restricted` in the sbatch) use `singlet.s1.labels_step`,
+  which runs the validated labeller (`docs/cell_annotation.md`, `method="guide"`) on the counts the transcoder has already decoded:
+  - cell type: the full CL path with per-level confidences (label schema 2: `cell_type_path`, `cell_type_p1..p6`). The default
+    display levels are 1–2 (compartment, lineage); deeper levels are marked as previews;
+  - chromosomal sex, for human and mouse only;
+  - ancestry, for human donors whose per-donor depth tables exist in the bundle or in the restricted sidecar. Only those members are
+    fetched from the sidecar, by ranged reads, and they are read in memory.
+
+  The output is a canonical sidecar `s1/a/<GSM>/<d16>.parquet` referenced from `samples[i].annotations[a2026-10]`, which the atlas
+  cell index ingests. Species without a model get no sidecar. A sample whose labelling exceeds its budget (`--labels-timeout`,
+  `--labels-max-gb`) or fails is written without labels, and the ledger records why.
+- Bundles whose central directory disagrees with a member's local header CRC are read on the local header when the data match it
+  (`LegacyBundle.crc_repaired`, logged in the ledger). 14 published bundles have such a `manifest.json`.

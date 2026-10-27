@@ -30,6 +30,7 @@ import json
 import os
 import re
 import struct
+import threading
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -43,7 +44,9 @@ MAGIC = b"SPK2"
 VERSION = 1
 KIND_VOCAB, KIND_WHITELIST, KIND_COMPOSITE = 1, 2, 3
 PKG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "packs")
-REMOTE = "https://data.singlet.bio/s1/ref/"
+# $SINGLET_S1_PACKS_REMOTE overrides the data host, e.g. file:///path/to/a/mirror/of/s1/ref/ for a cluster campaign, so hundreds of
+# transcoder processes do not each fetch the index and the junction tables over HTTPS at once
+REMOTE = util.env("PACKS_REMOTE") or "https://data.singlet.bio/s1/ref/"
 USER_AGENT = "singlet/1.0 (+https://singlet.bio)"
 
 
@@ -851,8 +854,11 @@ class PackStore:
         d = user_cache_dir()
         os.makedirs(d, exist_ok=True)
         path = os.path.join(d, e["id"] + ".pack")
-        with open(path, "wb") as fh:
+        # atomic: several transcoder processes may fetch the same pack into one cache at once, and a reader must never see half a file
+        tmp = "%s.%d.%d.part" % (path, os.getpid(), threading.get_ident())
+        with open(tmp, "wb") as fh:
             fh.write(data)
+        os.replace(tmp, path)
         self._files[e["id"]] = path
         return e["id"]
 

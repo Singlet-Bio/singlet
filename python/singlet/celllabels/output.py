@@ -8,6 +8,9 @@ One Parquet file per sample, one row per called cell::
     cell_type_cl        string   Cell Ontology id (null: no call)
     cell_type_label     string   Cell Ontology name of that id
     cell_type_score     float32  confidence of the call in [0, 1] (guide: product of the gating confidences on its path)
+    cell_type_path      string   the call's full Cell Ontology path, compartment first, ids joined by '>' (level 1 = compartment,
+                                 2 = lineage, deeper levels are previews: see LEVELS_DEFAULT / PREVIEW_FROM_LEVEL)
+    cell_type_p1..p6    float32  gating confidence of each level of that path (null past the call's depth)
     sex_chrom           string   'female' (PATO:0000383) | 'male' (PATO:0000384) | 'ambiguous'
     sex_score           float32  posterior of that label
     ancestry_hancestro  string   HANCESTRO genetic ancestry category of the cell's donor
@@ -26,13 +29,21 @@ from typing import Union
 
 import numpy as np
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
+#: guide depth levels the path columns carry (the guide is at most 6 levels deep)
+MAX_LEVELS = 6
+#: levels the API and UI show by default (per-study accuracy 0.84 / 0.75, docs/cell_annotation.md 3); deeper levels are previews
+LEVELS_DEFAULT = (1, 2)
+PREVIEW_FROM_LEVEL = 3
+LEVEL_COLUMNS = tuple(f"cell_type_p{k}" for k in range(1, MAX_LEVELS + 1))
 COLUMNS = (
     ("gsm", "string"),
     ("col", "int64"),
     ("cell_type_cl", "string"),
     ("cell_type_label", "string"),
     ("cell_type_score", "float32"),
+    ("cell_type_path", "string"),
+    *((c, "float32") for c in LEVEL_COLUMNS),
     ("sex_chrom", "string"),
     ("sex_score", "float32"),
     ("ancestry_hancestro", "string"),
@@ -42,6 +53,7 @@ COLUMNS = (
 SEX_LABELS = frozenset({"female", "male", "ambiguous"})
 _GSM = re.compile(r"^GSM\d+$")
 _CL = re.compile(r"^CL:\d{7}$")
+_CL_PATH = re.compile(r"^CL:\d{7}(>CL:\d{7}){0,%d}$" % (MAX_LEVELS - 1))
 _HANCESTRO = re.compile(r"^HANCESTRO:\d{4}$")
 # Anything that looks like a variant, a genotype or an allele: rsIDs, chr:pos, VCF genotype fields, bare nucleotide strings.
 _GENOTYPE_LIKE = re.compile(
@@ -92,6 +104,7 @@ def assert_public_safe(table) -> None:
     checks = {
         "gsm": lambda x: bool(_GSM.match(x)),
         "cell_type_cl": lambda x: bool(_CL.match(x)),
+        "cell_type_path": lambda x: bool(_CL_PATH.match(x)),
         "sex_chrom": lambda x: x in SEX_LABELS,
         "ancestry_hancestro": lambda x: bool(_HANCESTRO.match(x)),
         "cell_type_label": lambda x: len(x) <= 200 and not _GENOTYPE_LIKE.search(x),
@@ -112,6 +125,16 @@ def assert_public_safe(table) -> None:
         raise PublicOutputError("gsm and col are required on every row")
     if bool(df["col"].duplicated().any()):
         raise PublicOutputError("col must be unique within a sample")
+    # the path ends at the call, and there is one level confidence per path step (none past it)
+    path = df["cell_type_path"]
+    depth = path.fillna("").astype(str).map(lambda x: x.count(">") + 1 if x else 0).to_numpy()
+    leaf = path.fillna("").astype(str).map(lambda x: x.rsplit(">", 1)[-1] if x else None)
+    if bool(((leaf.fillna("") != df["cell_type_cl"].fillna("").astype(str)) & path.notna()).any()):
+        raise PublicOutputError("cell_type_path must end at cell_type_cl")
+    for k, c in enumerate(LEVEL_COLUMNS, 1):
+        v = pd.to_numeric(df[c], errors="coerce").to_numpy(np.float64)
+        if bool((np.isfinite(v) & (depth < k)).any()):
+            raise PublicOutputError(f"{c} is set past the end of the cell's path")
 
 
 def scan_bytes_for_genotypes(data: bytes) -> list:
@@ -177,6 +200,8 @@ def empty_table(gsm: str, cols: np.ndarray, model_version: str):
             "cell_type_cl": pd.array([None] * n, dtype="string"),
             "cell_type_label": pd.array([None] * n, dtype="string"),
             "cell_type_score": np.full(n, np.nan, np.float32),
+            "cell_type_path": pd.array([None] * n, dtype="string"),
+            **{c: np.full(n, np.nan, np.float32) for c in LEVEL_COLUMNS},
             "sex_chrom": pd.array([None] * n, dtype="string"),
             "sex_score": np.full(n, np.nan, np.float32),
             "ancestry_hancestro": pd.array([None] * n, dtype="string"),

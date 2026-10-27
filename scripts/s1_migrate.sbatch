@@ -13,7 +13,8 @@
 #                     EXCLUDE_LIST=big.txt leaves the big studies to their own job (see notes/m_w6.md)
 #   MODE=summarize    aggregate the results files of RUNS (counts, bytes, per-stage throughput, projection)
 #   MODE=catalog-sql  SQL files (schema 032) from the rows of RUNS, in days of at most DAY_BUDGET (80000) estimated row writes
-#                     (FROM_R2=1: rebuild the rows from the manifests and ledgers in R2). The orchestrator applies them with wrangler.
+#                     (FROM_R2=1: rebuild the rows from the manifests and ledgers in R2; GSE_LIST=file: only those studies).
+#                     The orchestrator applies them with wrangler.
 #   MODE=catalog-post POST the manifests to /api/ingest/s1-study (needs ~/.config/singlet-ingest.env: INGEST_TOKEN; secondary route)
 #   MODE=refs-index   publish the reference packs and s1/ref/index.json from python/singlet/s1/packs (APPLY=1 to write). Run before the campaign.
 #   Retirement, three separate steps (notes/m_w6.md section 6), so the site never offers a dead legacy URL:
@@ -28,6 +29,10 @@
 #   sbatch --array=0       --export=ALL,MODE=pilot,COMMIT=<sha>                                    scripts/s1_migrate.sbatch
 #   sbatch --array=0-63%12 --export=ALL,MODE=full,NSHARD=64,LISTING=<plan.tsv>,EXCLUDE_LIST=<big.txt>,COMMIT=<sha>   scripts/s1_migrate.sbatch
 #
+# Research Alpha (docs/s1-migration.md, Research Alpha): ALPHA_POLICY=<policy json> (withheld studies skipped; excluded samples and withheld
+# layers never written; policy audit per study in $OUT/policy-audit/, private), SAMPLE_FACTS=<json> (provenance), LABELS=1 (per-cell
+# labels from the decoded counts into s1/a/; AF=<1kgp af parquet> for ancestry, RESTRICTED_BUCKET for the depth tables),
+# ALPHA_POLICY_SHA256=<hex> (refuse a policy file with other bytes). READBACK=sha256 re-reads every uploaded object. BRANCH=<the branch COMMIT is on>.
 # Needs: ~/.config/singlet-r2.env (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY), $WORK/images/python-3.12-bookworm.sif
 # (the clipper runtime image: compiler, Python headers), the bare clone $WORK/repos/singlet-py.git of singlet-bio.
 # A migrate process is one Python thread (its native encoder adds 4 threads for a few seconds per sample): a job runs
@@ -39,6 +44,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=03:59:00
 #SBATCH --no-requeue
+# (scavenger runs pass --requeue: a full-mode task is safe to requeue, RESUME=1 skips every study already committed)
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 set -euo pipefail
 
@@ -57,7 +63,7 @@ TASK=${SLURM_ARRAY_TASK_ID:-0}
 RUN=${RUN:-$MODE-$C10}
 OUT=$WORK/state/s1/$RUN
 NSHARD=${NSHARD:-}
-mkdir -p "$WORK/state/store" "$WORK/cache" "$WORK/logs" "$OUT"
+mkdir -p "$WORK/state/s1" "$WORK/cache" "$WORK/logs" "$OUT"
 
 # Keep $HOME clean (100 GB quota): every cache under $WORK, scratch on the node-local disk.
 export XDG_CACHE_HOME=$WORK/cache PIP_CACHE_DIR=$WORK/cache/pip PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1
@@ -169,6 +175,14 @@ need_creds() {
   [ -n "${LOCAL_ROOT:-}" ] && return 0   # rehearsal against directories, no R2
   set -a; . "$HOME/.config/singlet-r2.env"; set +a; : "${R2_ACCESS_KEY_ID:?}" "${R2_SECRET_ACCESS_KEY:?}"
 }
+if [ -n "${ALPHA_POLICY:-}" ]; then
+  [ -f "$ALPHA_POLICY" ] || { echo "ALPHA_POLICY $ALPHA_POLICY not found"; exit 2; }
+  GOT=$(sha256sum "$ALPHA_POLICY" | cut -d' ' -f1)
+  if [ -n "${ALPHA_POLICY_SHA256:-}" ] && [ "$GOT" != "$ALPHA_POLICY_SHA256" ]; then echo "policy sha256 $GOT != $ALPHA_POLICY_SHA256"; exit 2; fi
+  echo "release policy: $ALPHA_POLICY sha256=$GOT"
+fi
+AF=${AF:-$WORK/data/annotate/1kgp_superpop_af.parquet}
+[ -f "$AF" ] || AF=
 need_shard() { [ -n "$NSHARD" ] || { echo "set NSHARD (number of shards = the array size)"; exit 2; }; }
 echo "mode=$MODE run=$RUN task=$TASK nshard=${NSHARD:-n/a} commit=$(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo "$C10") host=$(hostname) scratch=$SCRATCH cpus=${SLURM_CPUS_PER_TASK:-?}"
 printf '%s\n' "mode=$MODE commit=$COMMIT task=$TASK nshard=$NSHARD host=$(hostname) at=$(date -u +%FT%TZ)" >> "$OUT/run-info.txt"
@@ -189,8 +203,8 @@ run_campaign() {  # run_campaign <mode> [extra args]
     ${WORKERS:+--workers "$WORKERS"} --io-threads "${IO_THREADS:-8}" --min-rate-mbs "${MIN_RATE_MBS:-0.4}" \
     --commit "$COMMIT" --task "$TASK" --deadline-epoch "$deadline" \
     ${EXCLUDE_LIST:+--exclude-list "$EXCLUDE_LIST"} ${LISTING:+--listing "$LISTING"} ${GSE_LIST:+--gse-list "$GSE_LIST"} \
-    ${KEEP_SCRATCH:+--keep-scratch "$KEEP_SCRATCH"} ${MIGRATE_TIMEOUT:+--migrate-timeout "$MIGRATE_TIMEOUT"} ${VERIFY_TIMEOUT:+--verify-timeout "$VERIFY_TIMEOUT"} \
-    ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"} ${MIGRATE_CMD:+--migrate-cmd "$MIGRATE_CMD"} ${VERIFY_CMD:+--verify-cmd "$VERIFY_CMD"} "$@"
+    ${KEEP_SCRATCH:+--keep-scratch "$KEEP_SCRATCH"} ${READBACK:+--readback "$READBACK"} ${MIGRATE_TIMEOUT:+--migrate-timeout "$MIGRATE_TIMEOUT"} ${VERIFY_TIMEOUT:+--verify-timeout "$VERIFY_TIMEOUT"} \
+    ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"} ${MIGRATE_CMD:+--migrate-cmd "$MIGRATE_CMD"} ${VERIFY_CMD:+--verify-cmd "$VERIFY_CMD"}     ${ALPHA_POLICY:+--alpha-policy "$ALPHA_POLICY" --audit-dir "$OUT/policy-audit"} ${SAMPLE_FACTS:+--sample-facts "$SAMPLE_FACTS"}     ${LABELS:+--labels --labels-timeout "${LABELS_TIMEOUT:-1800}" --labels-max-gb "${LABELS_MAX_GB:-24}"}     ${LABELS:+${AF:+--af "$AF"}} ${LABELS:+--restricted-bucket "${RESTRICTED_BUCKET:-singlet-restricted}"} "$@"
 }
 
 rows_args() { local d; for r in ${RUNS:-full-$C10}; do d=$WORK/state/s1/$r/rows; [ -d "$d" ] && printf '%s\n' "$d"; done; }
@@ -227,7 +241,7 @@ case "$MODE" in
   catalog-sql)
     mapfile -t RD < <(rows_args)
     if [ -n "${FROM_R2:-}" ]; then need_creds; rt "${PY[@]}" "${CAMP[@]}" catalog-sql --from-r2 --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
-    else rt "${PY[@]}" "${CAMP[@]}" catalog-sql --rows-dir "${RD[@]}" --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}"; fi
+    else rt "${PY[@]}" "${CAMP[@]}" catalog-sql --rows-dir "${RD[@]}" ${GSE_LIST:+--gse-list "$GSE_LIST"} --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}"; fi
     # one compressed file to bring back to the laptop (the whole atlas is about 200 MB of SQL, about 25 MB packed)
     tar --force-local -C "$OUT" -czf "$OUT/sql.tar.gz" sql && ls -l "$OUT/sql.tar.gz"
     ;;
@@ -239,7 +253,7 @@ case "$MODE" in
     ;;
   refs-index)
     need_creds
-    rt "${PY[@]}" "${CAMP[@]}" refs-index ${APPLY:+--apply} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
+    rt "${PY[@]}" "${CAMP[@]}" refs-index ${APPLY:+--apply} ${MERGE_PREFIX:+--merge-prefix "$MERGE_PREFIX"} --scratch "$SCRATCH" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
   archive-dry)  # (A) read-only: what would be copied
     need_creds; need_shard

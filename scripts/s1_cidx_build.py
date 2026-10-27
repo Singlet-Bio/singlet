@@ -13,7 +13,8 @@
         --threads 32 --out $WORK/cidx
 
 Writes ``<out>/s1/cidx/obj/*`` (content-addressed shards, sample table, summary, plan blocks), ``<out>/s1/cidx/v/<version>.json``
-(the directory) and, unless ``--no-current``, ``<out>/s1/cidx/current.json``; prints a JSON report. Uploading is a separate,
+(the directory) and, unless ``--no-current``, ``<out>/s1/cidx/current.json``; prints a JSON report. Samples with nothing to index
+(no count matrix, so no cells table) are left out and listed under ``skipped``; the exit status is 2 only for real errors. Uploading is a separate,
 owner-run step (``rclone copy <out>/s1/cidx r2:singlet-data/s1/cidx``: objects first, ``current.json`` last). Nothing here writes to
 R2 or D1.
 """
@@ -113,8 +114,10 @@ def main(argv=None) -> int:
             {
                 "version": res.version,
                 "stats": res.stats,
-                "errors": res.errors[:50],
+                "errors": res.errors,
                 "n_errors": len(res.errors),
+                "skipped": res.skipped,
+                "n_skipped": len(res.skipped),
                 "objects": len(keys),
             },
             indent=1,
