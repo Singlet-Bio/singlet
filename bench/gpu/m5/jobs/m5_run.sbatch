@@ -48,6 +48,12 @@ SINGLET_STAR_SEQCACHE_MB=0 STARDUMP_M5=$SCR/m5/t $SD --runMode alignReads --geno
 echo "stardump exit=$?"; tail -3 $SCR/star.out; cp $SCR/star/Log.final.out $OUT/m5_${LABEL}_star_Log.final.out 2>/dev/null
 du -sh $SCR/m5; cp $SCR/m5/t.params.txt $OUT/m5_${LABEL}_params.txt
 echo "[t] stardump $(( $(date +%s) - T0 )) s"
-apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=24 $M5 --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3 --json $OUT/m5_$LABEL.json ${M5ARGS:-}
-echo "m5 exit=$?"
+# variants: "binary:args|binary:args" (default: m5 with no extra args); the first variant writes m5_<label>.json
+IFS='|' read -ra VARS <<< "${M5RUNS:-m5:}"
+for vi in "${!VARS[@]}"; do
+  BIN=${VARS[$vi]%%:*}; ARGS=${VARS[$vi]#*:}; SUF=""; [ $vi -gt 0 ] && SUF="_v$vi"
+  echo "=== variant $vi: $BIN $ARGS"
+  apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=24 $W/jobs/w11/bin/$BIN --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3     --json $OUT/m5_$LABEL$SUF.json $ARGS ${M5ARGS:-} 2>&1 | grep -v "^  seq\|^  star\|^  ours" | grep -v "^DIFF" | tail -14
+  echo "m5 exit=${PIPESTATUS[0]}"
+done
 echo "[t] total $(( $(date +%s) - T0 )) s"

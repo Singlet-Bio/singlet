@@ -5,7 +5,7 @@
 // Run:   m5 --genome-dir STAR_INDEX --truth PREFIX [--reps 3] [--json OUT] [--blocks-per-sm 4] [--threads 128]
 //          PREFIX: stardump's STARDUMP_M5 prefix (PREFIX.<tid>.bin, PREFIX.params.txt, PREFIX.genome.bin; m5_dump.h)
 //
-// Every truth read (a distinct cDNA sequence after clipping, as STAR mapped it) runs through mapRead<Main> on the GPU,
+// Every truth read (a distinct cDNA sequence after clipping, as STAR mapped it) runs through mapRead<LaneA> on the GPU (overflow: mapRead<LaneB>),
 // one read per thread. Reads that exceed a main-lane capacity run through mapRead<Heavy> (STAR's own limits) on the host
 // with the same source. The result (the sequence cache's encoding of STAR's mapping state, plus unmapType) is compared
 // with STAR's: identical or not, per read and weighted by the read multiplicity.
@@ -23,6 +23,8 @@
 #include <sys/stat.h>
 #include <omp.h>
 #include <cuda_runtime.h>
+#include <thrust/device_ptr.h>
+#include <thrust/scan.h>
 #include "stitch.cuh"
 
 using namespace m5;
@@ -30,22 +32,200 @@ using namespace m5;
     fprintf(stderr, "%s:%d %s\n", __FILE__, __LINE__, cudaGetErrorString(e)); exit(1); } } while (0)
 static double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
-//                LREAD NSPLIT  NP   NW  NWA  NWB  NEX NWTR NKEEP NBLOB
-typedef Caps<     160,     4,  32,  16,  16, 256,   8,   8,    8,  640> Main;
-typedef Caps<     650,    50, 1000, 10000, 50, 1 << 20, 20, 100, 4096, 1 << 20> Heavy;   // STAR: seedPerReadNmax, alignWindowsPerReadNmax, seedPerWindowNmax, MAX_N_EXONS, alignTranscriptsPerWindowNmax
+//                 LREAD NSPLIT    NP     NW  NWA      NWB NEX NWTR NKEEP    NBLOB
+#ifndef LA_NW
+#define LA_NW 16
+#define LA_NWA 16
+#define LA_NWB 256
+#endif
+typedef Caps<      160,     4,   32, LA_NW, LA_NWA, LA_NWB, 8,   8,    8,     640> LaneA;   // per thread, every read
+typedef Caps<      160,     8,  128,   128,  50,    4096, 20,  32,   64,    4096> LaneB;   // A's overflow; NWA = seedPerWindowNmax
+typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20> Heavy;   // host: STAR's limits (seedPerReadNmax,
+                                                                                            // alignWindowsPerReadNmax, MAX_N_EXONS, alignTranscriptsPerWindowNmax)
+// ---------------------------------------------------------------------------------------------------------------------
+__device__ unsigned long long g_clk[4], g_scan;
+template <class C>
+__device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
+                          u64 tid, u64 nt, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap);
+// one lane: reads idx[k] (or k), work either per thread in global memory or in local memory (LOCAL)
+template <class C, bool LOCAL>
+__global__ void k_lane(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
+                       Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap) {
+    u64 tid = blockIdx.x * (u64)blockDim.x + threadIdx.x, nt = (u64)gridDim.x * blockDim.x;
+    if (tid >= n) return;
+    if constexpr (LOCAL) {
+        Work<C> wl_; ReadBuf<C::LREAD> bl_;
+        lane_loop<C>(P, g, rb, roff, rlen, idx, n, tid, nt, &wl_, &bl_, out, outLen, status, why, unmap);
+    } else {
+        lane_loop<C>(P, g, rb, roff, rlen, idx, n, tid, nt, &work[tid], &rbuf[tid], out, outLen, status, why, unmap);
+    }
+}
+template <class C>
+__device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
+                          u64 tid, u64 nt, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap) {
+    wp->wbEpoch = 0;
+    for (int c = 0; c < 4; c++) wp->clk[c] = 0;
+    wp->nScan = 0;
+    for (u64 k = tid; k < n; k += nt) {
+        u64 i = idx ? idx[k] : k;
+        Blob bl{out + k * C::NBLOB, 0, C::NBLOB, false};
+        Status s = mapRead(P, g, *wp, *bp, rb + roff[i], rlen[i], bl);
+        status[k] = (uint8_t)s; why[k] = (uint8_t)wp->ov; outLen[k] = (uint16_t)bl.n; unmap[k] = (int8_t)wp->unmapType;
+    }
+    for (int c = 0; c < 4; c++) atomicAdd(&g_clk[c], (unsigned long long)wp->clk[c]);
+    atomicAdd(&g_scan, (unsigned long long)wp->nScan);
+}
+
+struct LaneOut { std::vector<uint8_t> out, status, why; std::vector<uint16_t> len; std::vector<int8_t> unmap; double ms = 0; std::vector<double> runs; double phaseMs[3] = {0, 0, 0}; };
+
+static double medianv(std::vector<double> v) { std::sort(v.begin(), v.end()); return v.empty() ? 0 : v[v.size() / 2]; }
+
+template <class C>
+static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, const u64* dRoff, const uint16_t* dRlen, const uint32_t* dIdx,
+                       u64 n, int blocks, int nthr, int reps, bool local, cudaEvent_t e0, cudaEvent_t e1, const char* name) {
+    LaneOut L;
+    u64 nt = (u64)blocks * nthr;
+    if (nt > n) { nt = n; blocks = (int)((n + nthr - 1) / nthr); nt = (u64)blocks * nthr; }
+    uint8_t* dOut; CK(cudaMalloc(&dOut, n * (u64)C::NBLOB));
+    uint16_t* dLen; CK(cudaMalloc(&dLen, n * 2)); uint8_t* dSt; CK(cudaMalloc(&dSt, n)); uint8_t* dWhy; CK(cudaMalloc(&dWhy, n));
+    int8_t* dUn; CK(cudaMalloc(&dUn, n));
+    Work<C>* dWork = nullptr; ReadBuf<C::LREAD>* dRbuf = nullptr;
+    if (!local) { CK(cudaMalloc(&dWork, nt * sizeof(Work<C>))); CK(cudaMalloc(&dRbuf, nt * sizeof(ReadBuf<C::LREAD>)));
+                  CK(cudaMemset(dWork, 0, nt * sizeof(Work<C>))); }
+    fprintf(stderr, "lane %s: %llu reads, %d blocks x %d threads, work %zu B/thread (%s, %.2f GB)\n", name, n, blocks, nthr, sizeof(Work<C>),
+            local ? "local" : "global", nt * (double)sizeof(Work<C>) / 1e9);
+    unsigned long long clk[4] = {0};
+    for (int r = 0; r < reps + 1; r++) {
+        unsigned long long z[4] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
+        cudaEventRecord(e0);
+        if constexpr (sizeof(Work<C>) < 200000) {
+            if (local) k_lane<C, true><<<blocks, nthr>>>(P, D, dRb, dRoff, dRlen, dIdx, n, dWork, dRbuf, dOut, dLen, dSt, dWhy, dUn);
+        }
+        if (!local)       k_lane<C, false><<<blocks, nthr>>>(P, D, dRb, dRoff, dRlen, dIdx, n, dWork, dRbuf, dOut, dLen, dSt, dWhy, dUn);
+        cudaEventRecord(e1); CK(cudaEventSynchronize(e1)); CK(cudaGetLastError());
+        float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) L.runs.push_back(m);
+        fprintf(stderr, "  lane %s run %d: %.1f ms\n", name, r, m);
+    }
+    CK(cudaMemcpyFromSymbol(clk, g_clk, sizeof clk));
+    { unsigned long long sc; CK(cudaMemcpyFromSymbol(&sc, g_scan, 8)); fprintf(stderr, "  lane %s: %.1f SA entries scanned per read\n", name, (double)sc / n); }
+    { double t = (double)clk[0] + clk[1] + clk[2] + clk[3]; if (t > 0)
+        fprintf(stderr, "  lane %s thread cycles: seeds %.1f%%, windows %.1f%%, stitching %.1f%%, select+encode %.1f%%\n", name,
+                100 * clk[0] / t, 100 * clk[1] / t, 100 * clk[2] / t, 100 * clk[3] / t); }
+    L.ms = medianv(L.runs);
+    L.out.resize(n * (u64)C::NBLOB); L.status.resize(n); L.why.resize(n); L.len.resize(n); L.unmap.resize(n);
+    CK(cudaMemcpy(L.out.data(), dOut, L.out.size(), cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.len.data(), dLen, n * 2, cudaMemcpyDeviceToHost));
+    CK(cudaMemcpy(L.status.data(), dSt, n, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.why.data(), dWhy, n, cudaMemcpyDeviceToHost));
+    CK(cudaMemcpy(L.unmap.data(), dUn, n, cudaMemcpyDeviceToHost));
+    cudaFree(dOut); cudaFree(dLen); cudaFree(dSt); cudaFree(dWhy); cudaFree(dUn); if (dWork) cudaFree(dWork); if (dRbuf) cudaFree(dRbuf);
+    return L;
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
-__global__ void k_map(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, u64 n,
-                      Work<Main>* work, ReadBuf<Main::LREAD>* rbuf, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why,
-                      int8_t* unmap) {
-    u64 tid = blockIdx.x * (u64)blockDim.x + threadIdx.x, nt = (u64)gridDim.x * blockDim.x;
-    Work<Main>& w = work[tid];
-    ReadBuf<Main::LREAD>& b = rbuf[tid];
-    for (u64 i = tid; i < n; i += nt) {
-        Blob bl{out + i * Main::NBLOB, 0, Main::NBLOB, false};
-        Status s = mapRead(P, g, w, b, rb + roff[i], rlen[i], bl);
-        status[i] = (uint8_t)s; why[i] = (uint8_t)w.ov; outLen[i] = (uint16_t)bl.n; unmap[i] = (int8_t)w.unmapType;
+// staged lane: per batch of reads (one Work per read), phase 1 (thread per read), the assignment scan (warp per read,
+// lanes over consecutive SA entries: coalesced) marking the entries that do something, phase 3 (thread per read:
+// assignments in STAR's order from the marks, then stitching, selection, encoding)
+template <class C>
+__global__ void k_p1(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 b0, u64 n,
+                     Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* status, u64* nEnt) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    u64 i = idx ? idx[b0 + k] : b0 + k;
+    Work<C>& w = work[k];
+    Status s = mapPhase1(P, g, w, rbuf[k], rb + roff[i], rlen[i]);
+    status[k] = (uint8_t)s;
+    nEnt[k] = (s == Status::Ok && w.stitched) ? w.nEntries : 0;
+}
+template <class C>
+__global__ void k_p2(Params P, GenomeView g, u64 n, const Work<C>* work, const u64* nEnt, const u64* base, uint32_t* bits) {
+    u64 wid = (blockIdx.x * (u64)blockDim.x + threadIdx.x) >> 5;
+    int lane = threadIdx.x & 31;
+    if (wid >= n || nEnt[wid] == 0) return;
+    const Work<C>& w = work[wid];
+    u64 off = base[wid];
+    for (uint iP = 0; iP < w.nP; iP++) {
+        const u64 s0 = w.PC[iP][PC_SAstart], cnt = w.PC[iP][PC_SAend] - s0 + 1;
+        for (u64 j = lane; j < cnt; j += 32)
+            if (entryHit(P, g, w, iP, (uint)(s0 + j))) atomicOr(&bits[(off + j) >> 5], 1u << ((off + j) & 31));
+        off += cnt;
     }
+}
+template <class C>
+__global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* nEnt, const u64* base,
+                     const uint32_t* bits, uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    Work<C>& w = work[k];
+    u64 o = b0 + k;
+    Status s = (Status)status[k];
+    Blob bl{out + o * C::NBLOB, 0, C::NBLOB, false};
+    if (s == Status::Ok && w.stitched && !assignHits(P, g, w, bits, base[k])) s = Status::Overflow;
+    if (s == Status::Ok) s = mapFinish(P, g, w, rbuf[k], bl);
+    status[k] = (uint8_t)s; why[o] = (uint8_t)w.ov; outLen[o] = (uint16_t)bl.n; unmap[o] = (int8_t)w.unmapType;
+    for (int c = 0; c < 4; c++) { atomicAdd(&g_clk[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
+    atomicAdd(&g_scan, (unsigned long long)nEnt[k]);
+}
+__global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k < n) dst[k] = s[k];
+}
+
+template <class C>
+static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, const u64* dRoff, const uint16_t* dRlen, const uint32_t* dIdx,
+                         u64 n, u64 NB, int reps, cudaEvent_t e0, cudaEvent_t e1, const char* name) {
+    LaneOut L;
+    NB = std::min<u64>(NB, std::max<u64>(n, 1));
+    uint8_t* dOut; CK(cudaMalloc(&dOut, n * (u64)C::NBLOB));
+    uint16_t* dLen; CK(cudaMalloc(&dLen, n * 2)); uint8_t* dSt; CK(cudaMalloc(&dSt, n)); uint8_t* dWhy; CK(cudaMalloc(&dWhy, n));
+    int8_t* dUn; CK(cudaMalloc(&dUn, n));
+    Work<C>* dWork; CK(cudaMalloc(&dWork, NB * sizeof(Work<C>))); CK(cudaMemset(dWork, 0, NB * sizeof(Work<C>)));
+    ReadBuf<C::LREAD>* dRbuf; CK(cudaMalloc(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>)));
+    uint8_t* dBst; CK(cudaMalloc(&dBst, NB)); u64* dNent; CK(cudaMalloc(&dNent, NB * 8)); u64* dBase; CK(cudaMalloc(&dBase, NB * 8));
+    u64 bitsCap = 1 << 20; uint32_t* dBits; CK(cudaMalloc(&dBits, bitsCap * 4));
+    fprintf(stderr, "lane %s (staged): %llu reads, batches of %llu, work %zu B/read (%.2f GB)\n", name, n, NB, sizeof(Work<C>),
+            NB * (double)sizeof(Work<C>) / 1e9);
+    cudaEvent_t q[4]; for (auto& e : q) cudaEventCreate(&e);
+    unsigned long long clk[4] = {0}, scan = 0; double phMs[3] = {0, 0, 0};
+    for (int r = 0; r < reps + 1; r++) {
+        unsigned long long z[4] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
+        double ph[3] = {0, 0, 0};
+        cudaEventRecord(e0);
+        for (u64 b0 = 0; b0 < n; b0 += NB) {
+            u64 nb = std::min(NB, n - b0);
+            int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
+            cudaEventRecord(q[0]);
+            k_p1<C><<<G, T>>>(P, D, dRb, dRoff, dRlen, dIdx, b0, nb, dWork, dRbuf, dBst, dNent);
+            cudaEventRecord(q[1]);
+            thrust::exclusive_scan(thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dBase));
+            u64 lastB, lastN; CK(cudaMemcpy(&lastB, dBase + nb - 1, 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(&lastN, dNent + nb - 1, 8, cudaMemcpyDeviceToHost));
+            u64 words = (lastB + lastN) / 32 + 2;
+            if (words > bitsCap) { CK(cudaFree(dBits)); bitsCap = words * 2; CK(cudaMalloc(&dBits, bitsCap * 4)); }
+            CK(cudaMemsetAsync(dBits, 0, words * 4));
+            k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
+            cudaEventRecord(q[2]);
+            k_p3<C><<<G, T>>>(P, D, b0, nb, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn);
+            k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
+            cudaEventRecord(q[3]);
+            CK(cudaEventSynchronize(q[3])); CK(cudaGetLastError());
+            float m; cudaEventElapsedTime(&m, q[0], q[1]); ph[0] += m; cudaEventElapsedTime(&m, q[1], q[2]); ph[1] += m;
+            cudaEventElapsedTime(&m, q[2], q[3]); ph[2] += m;
+        }
+        cudaEventRecord(e1); CK(cudaEventSynchronize(e1));
+        float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) { L.runs.push_back(m); for (int k = 0; k < 3; k++) phMs[k] += ph[k] / reps; }
+        fprintf(stderr, "  lane %s run %d: %.1f ms (phase 1 %.1f, scan %.1f, phase 3 %.1f)\n", name, r, m, ph[0], ph[1], ph[2]);
+    }
+    CK(cudaMemcpyFromSymbol(clk, g_clk, sizeof clk)); CK(cudaMemcpyFromSymbol(&scan, g_scan, 8));
+    { double t = (double)clk[0] + clk[1] + clk[2] + clk[3]; if (t > 0)
+        fprintf(stderr, "  lane %s thread cycles: seeds %.1f%%, windows %.1f%%, stitching %.1f%%, select+encode %.1f%%; %.1f SA entries per read\n",
+                name, 100 * clk[0] / t, 100 * clk[1] / t, 100 * clk[2] / t, 100 * clk[3] / t, (double)scan / n); }
+    L.ms = medianv(L.runs);
+    L.phaseMs[0] = phMs[0]; L.phaseMs[1] = phMs[1]; L.phaseMs[2] = phMs[2];
+    L.out.resize(n * (u64)C::NBLOB); L.status.resize(n); L.why.resize(n); L.len.resize(n); L.unmap.resize(n);
+    CK(cudaMemcpy(L.out.data(), dOut, L.out.size(), cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.len.data(), dLen, n * 2, cudaMemcpyDeviceToHost));
+    CK(cudaMemcpy(L.status.data(), dSt, n, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.why.data(), dWhy, n, cudaMemcpyDeviceToHost));
+    CK(cudaMemcpy(L.unmap.data(), dUn, n, cudaMemcpyDeviceToHost));
+    cudaFree(dOut); cudaFree(dLen); cudaFree(dSt); cudaFree(dWhy); cudaFree(dUn); cudaFree(dWork); cudaFree(dRbuf);
+    cudaFree(dBst); cudaFree(dNent); cudaFree(dBase); cudaFree(dBits);
+    return L;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -63,7 +243,6 @@ template <class T> static T* toDev(const T* h, u64 n) {
     return d;
 }
 template <class T> static T* toDev(const std::vector<T>& v) { return toDev(v.data(), (u64)v.size()); }
-static double median(std::vector<double> v) { std::sort(v.begin(), v.end()); return v[v.size() / 2]; }
 
 struct ParamFile {
     std::map<std::string, std::string> kv;
@@ -101,7 +280,9 @@ static void loadTruth(const std::string& prefix, Truth& T) {
     glob_t g; std::string pat = prefix + ".*.bin";
     if (glob(pat.c_str(), 0, nullptr, &g)) { fprintf(stderr, "no truth files %s\n", pat.c_str()); exit(2); }
     for (size_t fi = 0; fi < g.gl_pathc; fi++) {
-        std::vector<char> b = loadFile(g.gl_pathv[fi]);
+        std::string path = g.gl_pathv[fi];
+        if (path.size() >= 11 && path.compare(path.size() - 11, 11, ".genome.bin") == 0) continue;
+        std::vector<char> b = loadFile(path);
         if (b.size() < 8 || memcmp(b.data(), "STARM5T1", 8)) { fprintf(stderr, "bad header %s\n", g.gl_pathv[fi]); exit(2); }
         u64 o = 8;
         while (o < b.size()) {
@@ -131,7 +312,7 @@ static std::string blobStr(const uint8_t* p, int n) {
 static int glScore(double scale, u64 x) { return int(std::ceil(std::log2((double)x) * scale - 0.5)); }
 
 int main(int argc, char** argv) {
-    std::string gdir, truth, json, input, emit; int reps = 3, bps = 4, nthr = 128;
+    std::string gdir, truth, json, input, emit; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 65536, nbB = 4096;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--genome-dir") gdir = argv[++i];
@@ -140,13 +321,19 @@ int main(int argc, char** argv) {
         else if (a == "--json") json = argv[++i];
         else if (a == "--blocks-per-sm") bps = atoi(argv[++i]);
         else if (a == "--threads") nthr = atoi(argv[++i]);
+        else if (a == "--blocks-per-sm-b") bpsB = atoi(argv[++i]);
+        else if (a == "--threads-b") nthrB = atoi(argv[++i]);
+        else if (a == "--local") localWork = true;
+        else if (a == "--mono") mono = true;            // one kernel per lane (no staged assignment scan)
+        else if (a == "--batch-a") nbA = atoll(argv[++i]);
+        else if (a == "--batch-b") nbB = atoll(argv[++i]);     // lane A work in local memory instead of a global array
         else if (a == "--input") input = argv[++i];     // "count sequence" lines (uniq -c): map these instead of the truth reads
         else if (a == "--emit") emit = argv[++i];       // write (sequence, result) for the sequence cache preload (inject/)
     }
     if (gdir.empty() || truth.empty()) { fprintf(stderr, "usage: m5 --genome-dir D --truth PREFIX [--json F]\n"); return 2; }
     cudaDeviceProp prop; CK(cudaGetDeviceProperties(&prop, 0));
-    fprintf(stderr, "device %s, %d SMs; sizeof Work<Main> %zu, Work<Heavy> %zu\n", prop.name, prop.multiProcessorCount,
-            sizeof(Work<Main>), sizeof(Work<Heavy>));
+    fprintf(stderr, "device %s, %d SMs; sizeof Work: A %zu, B %zu, host %zu\n", prop.name, prop.multiProcessorCount,
+            sizeof(Work<LaneA>), sizeof(Work<LaneB>), sizeof(Work<Heavy>));
 
     // ---- parameters
     ParamFile pf; pf.load(truth + ".params.txt");
@@ -290,34 +477,32 @@ int main(int argc, char** argv) {
     u64 n = T.rlen.size(), nReadsW = 0; for (auto c : T.count) nReadsW += c;
     fprintf(stderr, "truth: %llu distinct reads (%llu reads), loaded in %.1f s\n", n, nReadsW, now() - t0);
 
-    // ---- GPU main lane
+    // ---- GPU lanes: A (small capacities, every read), B (wide capacities, A's overflow); then the host (STAR's limits)
     char* dRb = toDev(T.rb); u64* dRoff = toDev(T.roff); uint16_t* dRlen = toDev(T.rlen);
-    uint8_t* dOut; CK(cudaMalloc(&dOut, n * (u64)Main::NBLOB));
-    uint16_t* dOutLen; CK(cudaMalloc(&dOutLen, n * 2)); uint8_t* dStatus; CK(cudaMalloc(&dStatus, n)); uint8_t* dWhy; CK(cudaMalloc(&dWhy, n));
-    int8_t* dUnmap; CK(cudaMalloc(&dUnmap, n));
-    int blocks = prop.multiProcessorCount * bps; u64 nt = (u64)blocks * nthr;
-    Work<Main>* dWork; CK(cudaMalloc(&dWork, nt * sizeof(Work<Main>)));
-    ReadBuf<Main::LREAD>* dRbuf; CK(cudaMalloc(&dRbuf, nt * sizeof(ReadBuf<Main::LREAD>)));
-    CK(cudaDeviceSetLimit(cudaLimitStackSize, 16 * 1024));
-    fprintf(stderr, "main lane: %d blocks x %d threads, work %.2f GB\n", blocks, nthr, nt * (double)sizeof(Work<Main>) / 1e9);
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
-    std::vector<double> ms;
-    for (int r = 0; r < reps + 1; r++) {
-        cudaEventRecord(e0);
-        k_map<<<blocks, nthr>>>(P, D, dRb, dRoff, dRlen, n, dWork, dRbuf, dOut, dOutLen, dStatus, dWhy, dUnmap);
-        cudaEventRecord(e1); CK(cudaEventSynchronize(e1)); CK(cudaGetLastError());
-        float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) ms.push_back(m);
-        fprintf(stderr, "  run %d: %.1f ms\n", r, m);
+    CK(cudaDeviceSetLimit(cudaLimitStackSize, localWork ? (int)(sizeof(Work<LaneA>) + 4096) : 16 * 1024));
+    LaneOut A = mono ? runLane<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, prop.multiProcessorCount * bps, nthr, reps, localWork, e0, e1, "A")
+                     : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, reps, e0, e1, "A");
+    std::vector<uint32_t> idxB;
+    for (u64 i = 0; i < n; i++) if (A.status[i] != (uint8_t)Status::Ok) idxB.push_back((uint32_t)i);
+    CK(cudaDeviceSetLimit(cudaLimitStackSize, 16 * 1024));
+    LaneOut B;
+    if (!idxB.empty()) {
+        uint32_t* dIdx = toDev(idxB);
+        B = mono ? runLane<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), prop.multiProcessorCount * bpsB, nthrB, reps, false, e0, e1, "B")
+                 : runStaged<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), (u64)nbB, reps, e0, e1, "B");
+        CK(cudaFree(dIdx));
     }
-    double gpuMs = median(ms);
-    std::vector<uint8_t> out(n * (u64)Main::NBLOB), status(n), why(n); std::vector<uint16_t> outLen(n); std::vector<int8_t> unmap(n);
-    CK(cudaMemcpy(out.data(), dOut, out.size(), cudaMemcpyDeviceToHost)); CK(cudaMemcpy(outLen.data(), dOutLen, n * 2, cudaMemcpyDeviceToHost));
-    CK(cudaMemcpy(status.data(), dStatus, n, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(why.data(), dWhy, n, cudaMemcpyDeviceToHost));
-    CK(cudaMemcpy(unmap.data(), dUnmap, n, cudaMemcpyDeviceToHost));
-
-    // ---- heavy lane (host, STAR's limits)
-    std::vector<u64> heavy; u64 whyCount[16] = {0};
-    for (u64 i = 0; i < n; i++) if (status[i] != (uint8_t)Status::Ok) { heavy.push_back(i); whyCount[why[i] & 15]++; }
+    double gpuMs = A.ms + B.ms;
+    // where each read's result is: lane 0 = A (index i), 1 = B (index in idxB), 2 = host (index in heavy)
+    std::vector<uint8_t> lane(n, 0); std::vector<uint32_t> lanePos(n);
+    for (u64 i = 0; i < n; i++) lanePos[i] = (uint32_t)i;
+    u64 whyA[16] = {0}, whyCount[16] = {0};
+    std::vector<u64> heavy;
+    for (u64 k = 0; k < idxB.size(); k++) {
+        u64 i = idxB[k]; lane[i] = 1; lanePos[i] = (uint32_t)k; whyA[A.why[i] & 15]++;
+        if (B.status[k] != (uint8_t)Status::Ok) { lane[i] = 2; lanePos[i] = (uint32_t)heavy.size(); heavy.push_back(i); whyCount[B.why[k] & 15]++; }
+    }
     std::vector<std::vector<uint8_t>> hout(heavy.size()); std::vector<int8_t> hunmap(heavy.size()); std::vector<uint8_t> hstatus(heavy.size());
     t0 = now();
     int nHostThreads = omp_get_max_threads();
@@ -326,7 +511,7 @@ int main(int argc, char** argv) {
         Work<Heavy>* w = new Work<Heavy>;
         ReadBuf<Heavy::LREAD>* b = new ReadBuf<Heavy::LREAD>;
         std::vector<uint8_t> buf(Heavy::NBLOB);
-        #pragma omp for schedule(dynamic, 16)
+        #pragma omp for schedule(dynamic, 1)
         for (long long k = 0; k < (long long)heavy.size(); k++) {
             u64 i = heavy[k];
             Blob bl{buf.data(), 0, Heavy::NBLOB, false};
@@ -336,19 +521,20 @@ int main(int argc, char** argv) {
         delete w; delete b;
     }
     double heavySec = now() - t0;
+    auto result = [&](u64 i, const uint8_t*& p, int& len, int8_t& un, bool& ok) {
+        uint32_t k = lanePos[i];
+        if (lane[i] == 0) { p = A.out.data() + (u64)i * LaneA::NBLOB; len = A.len[i]; un = A.unmap[i]; ok = true; }
+        else if (lane[i] == 1) { p = B.out.data() + (u64)k * LaneB::NBLOB; len = B.len[k]; un = B.unmap[k]; ok = true; }
+        else { p = hout[k].data(); len = (int)hout[k].size(); un = hunmap[k]; ok = hstatus[k] == (uint8_t)Status::Ok; }
+    };
 
     // ---- compare
     u64 same = 0, diff = 0, sameW = 0, diffW = 0, heavyFail = 0, nPrinted = 0, sameUnmapOnly = 0;
-    std::vector<u64> heavyIdx(n, ~0ULL); for (u64 k = 0; k < heavy.size(); k++) heavyIdx[heavy[k]] = k;
     u64 classN[5] = {0}, classSame[5] = {0};   // by STAR result: unmapped(0..3 -> idx) / mapped unique / mapped multi
     for (u64 i = 0; i < n; i++) {
-        const uint8_t* ours; int olen; int8_t oun;
-        if (heavyIdx[i] == ~0ULL) { ours = out.data() + i * Main::NBLOB; olen = outLen[i]; oun = unmap[i]; }
-        else {
-            u64 k = heavyIdx[i];
-            if (hstatus[k] != (uint8_t)Status::Ok) heavyFail++;
-            ours = hout[k].data(); olen = (int)hout[k].size(); oun = hunmap[k];
-        }
+        const uint8_t* ours; int olen; int8_t oun; bool okr;
+        result(i, ours, olen, oun, okr);
+        if (!okr) heavyFail++;
         const uint8_t* tb = T.blob.data() + T.boff[i]; int tlen = (int)(T.boff[i + 1] - T.boff[i]);
         bool eq = olen == tlen && memcmp(ours, tb, tlen) == 0 && oun == T.unmap[i];
         int cls = T.unmap[i] >= 0 ? 0 : 1;
@@ -361,7 +547,7 @@ int main(int argc, char** argv) {
                 nPrinted++;
                 std::string seq; for (int k = 0; k < T.rlen[i]; k++) seq += "ACGTN"[std::min(4, (int)T.rb[T.roff[i] + k])];
                 fprintf(stderr, "DIFF read %llu L=%u count=%u flags=%u marker=%u lane=%s unmap star=%d ours=%d\n  seq  %s\n  star %s\n  ours %s\n",
-                        i, T.rlen[i], T.count[i], T.flags[i], T.marker[i], heavyIdx[i] == ~0ULL ? "main" : "heavy", T.unmap[i], oun,
+                        i, T.rlen[i], T.count[i], T.flags[i], T.marker[i], lane[i] == 0 ? "A" : lane[i] == 1 ? "B" : "host", T.unmap[i], oun,
                         seq.c_str(), blobStr(tb, tlen).c_str(), blobStr(ours, olen).c_str());
             }
         }
@@ -371,9 +557,10 @@ int main(int argc, char** argv) {
         for (u64 i = 0; i < n; i++) {
             bool hasN = false; for (int k = 0; k < T.rlen[i]; k++) if (T.rb[T.roff[i] + k] > 3) hasN = true;
             if (hasN) continue;
-            const uint8_t* ours; uint32_t olen;
-            if (heavyIdx[i] == ~0ULL) { ours = out.data() + i * Main::NBLOB; olen = outLen[i]; }
-            else { if (hstatus[heavyIdx[i]] != (uint8_t)Status::Ok) continue; ours = hout[heavyIdx[i]].data(); olen = (uint32_t)hout[heavyIdx[i]].size(); }
+            const uint8_t* ours; int olenI; int8_t oun; bool okr;
+            result(i, ours, olenI, oun, okr);
+            if (!okr) continue;
+            uint32_t olen = (uint32_t)olenI;
             uint16_t L = T.rlen[i]; fwrite(&L, 2, 1, f); fwrite(T.rb.data() + T.roff[i], 1, L, f); fwrite(&olen, 4, 1, f); fwrite(ours, 1, olen, f); nEmit++;
         }
         fclose(f); fprintf(stderr, "emitted %llu sequence results to %s\n", nEmit, emit.c_str());
@@ -382,7 +569,9 @@ int main(int argc, char** argv) {
     fprintf(stderr, "\nM5: %llu / %llu distinct reads identical (%.6f%%), reads weighted %llu / %llu (%.6f%%); differ %llu (unmapType only %llu)\n",
             same, n, 100.0 * same / n, sameW, nReadsW, 100.0 * sameW / nReadsW, diff, sameUnmapOnly);
     fprintf(stderr, "    unmapped by STAR: %llu (%llu identical), mapped: %llu (%llu identical)\n", classN[0], classSame[0], classN[1], classSame[1]);
-    fprintf(stderr, "    GPU main lane %.1f ms for %llu reads = %.1f M distinct reads/s (incl. heavy-lane reads that stop early)\n", gpuMs, n, rate / 1e6);
+    fprintf(stderr, "    GPU lane A %.1f ms (%llu reads), lane B %.1f ms (%zu reads) = %.2f M distinct reads/s on the GPU\n", A.ms, n, B.ms, idxB.size(), rate / 1e6);
+    { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob"};
+      fprintf(stderr, "    lane A overflow why:"); for (int k = 0; k < 11; k++) if (whyA[k]) fprintf(stderr, " %s=%llu", wn[k], whyA[k]); fprintf(stderr, "\n"); }
     fprintf(stderr, "    heavy lane: %zu reads (%.4f%%), %.2f s on %d host threads, failures %llu; why:", heavy.size(), 100.0 * heavy.size() / n,
             heavySec, nHostThreads, heavyFail);
     const char* whyName[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob"};
@@ -394,11 +583,12 @@ int main(int argc, char** argv) {
                    "  \"differ_distinct\": %llu,\n  \"differ_reads\": %llu,\n  \"star_unmapped\": %llu,\n  \"star_unmapped_identical\": %llu,\n"
                    "  \"star_mapped\": %llu,\n  \"star_mapped_identical\": %llu,\n  \"gpu_ms_median\": %.3f,\n  \"gpu_ms_runs\": [",
                 prop.name, n, nReadsW, same, sameW, diff, diffW, classN[0], classSame[0], classN[1], classSame[1], gpuMs);
-        for (size_t k = 0; k < ms.size(); k++) fprintf(f, "%s%.3f", k ? ", " : "", ms[k]);
+        for (size_t k = 0; k < A.runs.size(); k++) fprintf(f, "%s%.3f", k ? ", " : "", A.runs[k] + (k < B.runs.size() ? B.runs[k] : 0));
         fprintf(f, "],\n  \"gpu_distinct_reads_per_s\": %.0f,\n  \"heavy_reads\": %zu,\n  \"heavy_host_s\": %.3f,\n  \"heavy_host_threads\": %d,\n  \"heavy_failures\": %llu,\n  \"heavy_why\": {",
                 rate, heavy.size(), heavySec, nHostThreads, heavyFail);
         bool first = true; for (int k = 0; k < 11; k++) if (whyCount[k]) { fprintf(f, "%s\"%s\": %llu", first ? "" : ", ", whyName[k], whyCount[k]); first = false; }
-        fprintf(f, "},\n  \"blocks\": %d,\n  \"threads_per_block\": %d,\n  \"work_bytes_per_thread\": %zu,\n  \"index_load_s\": %.1f\n}\n", blocks, nthr, sizeof(Work<Main>), tIndex);
+        fprintf(f, "},\n  \"lane_a_ms\": %.3f,\n  \"lane_b_ms\": %.3f,\n  \"lane_b_reads\": %zu,\n  \"lane_a_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_b_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_a_local\": %s,\n  \"work_bytes\": [%zu, %zu],\n  \"index_load_s\": %.1f\n}\n",
+                A.ms, B.ms, idxB.size(), A.phaseMs[0], A.phaseMs[1], A.phaseMs[2], B.phaseMs[0], B.phaseMs[1], B.phaseMs[2], localWork ? "true" : "false", sizeof(Work<LaneA>), sizeof(Work<LaneB>), tIndex);
         fclose(f);
     }
     return 0;

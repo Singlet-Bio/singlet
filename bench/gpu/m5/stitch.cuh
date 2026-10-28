@@ -105,6 +105,13 @@ HD inline u64 packed_get(const u64* a, u64 ii, u64 bits) {
     return v & ((1ULL << bits) - 1);
 }
 
+HD inline int ctz32(uint32_t x) {
+#ifdef __CUDA_ARCH__
+    return __ffs((int)x) - 1;
+#else
+    return __builtin_ctz(x);
+#endif
+}
 template <class T> HD inline T mn(T a, T b) { return a < b ? a : b; }
 template <class T> HD inline T mx(T a, T b) { return a > b ? a : b; }
 template <class T> HD inline void swp(T& a, T& b) { T t = a; a = b; b = t; }
@@ -134,6 +141,23 @@ template <int NEX> struct Tr {
         maxScore = 0; nMatch = 0; nMM = 0;
         nGap = 0; lGap = 0; lDel = 0; lIns = 0; nDel = 0; nIns = 0;
         nUnique = nAnchor = 0;
+    }
+    // the copy STAR makes (Transcript operator=), restricted to the live exon rows: rows >= nExons are never read before
+    // stitching writes them (stitchAlignToTranscript writes a row's 5 fields and its junction fields when it adds the exon)
+    HD void copyFrom(const Tr& o) {
+        nExons = o.nExons; iFrag = o.iFrag;
+        rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength; cStart = o.cStart;
+        Chr = o.Chr; Str = o.Str; roStr = o.roStr; primaryFlag = o.primaryFlag;
+        nMatch = o.nMatch; nMM = o.nMM; mappedLength = o.mappedLength; extendL = o.extendL; maxScore = o.maxScore;
+        nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = o.nUnique; nAnchor = o.nAnchor;
+        intronMotifs[0] = o.intronMotifs[0]; intronMotifs[1] = o.intronMotifs[1]; intronMotifs[2] = o.intronMotifs[2];
+        sjMotifStrand = o.sjMotifStrand; sjYes = o.sjYes;
+        uint ne = o.nExons < (uint)NEX ? o.nExons : (uint)NEX;
+        for (uint i = 0; i < ne; i++) {
+            for (int k = 0; k < EX_SIZE; k++) exons[i][k] = o.exons[i][k];
+            shiftSJ[i][0] = o.shiftSJ[i][0]; shiftSJ[i][1] = o.shiftSJ[i][1];
+            canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
+        }
     }
     HD void add(const Tr* t) {
         maxScore += t->maxScore; nMatch += t->nMatch; nMM += t->nMM;
@@ -175,7 +199,9 @@ template <class C> struct Work {
     i64 WlastAnchor[C::NW];   // STAR: uint, set to -1, compared as uint (WlastAnchor[iW]<nWA[iW] / <iA)
     uint WA[C::NW][C::NWA][WA_SIZE];
     // winBin: key = (str << 40) | bin, value = window index; absent = uintWinBinMax
-    u64 wbKey[C::NWB]; uint16_t wbVal[C::NWB]; int wbN;
+    u64 wbKey[C::NWB]; uint16_t wbVal[C::NWB]; int wbN; u64 wbEpoch;
+    u64 wbBits[2][16];         // filter: bit (bin & 1023) of strand str is set if some bin with these low bits was written
+    u64 nScan;                 // SA entries scanned by window creation and assignment (statistics)   // key = epoch << 41 | str << 40 | bin; other epochs = empty
     // transcripts
     int maxScoreMate[1];
     uint mapMarker;
@@ -192,28 +218,37 @@ template <class C> struct Work {
     // multMapSelect
     uint nTr; int maxScore; int unmapType;
     OvWhy ov;
+    bool stitched; u64 nEntries;
+    long long clk[4];          // cycles: seeds, windows + assignment, stitching, selection + encoding (device only)
 };
+#ifdef __CUDA_ARCH__
+#define M5CLK(w, k, t) do { long long t1_ = clock64(); (w).clk[k] += t1_ - (t); (t) = t1_; } while (0)
+#else
+#define M5CLK(w, k, t) do { } while (0)
+#endif
 
 // ---------------------------------------------------------------------------------------------------------------------
 // winBin map
 // ---------------------------------------------------------------------------------------------------------------------
 template <class C> HD inline u64 wbGet(const Work<C>& w, uint str, uint bin) {
-    u64 key = (str << 40) | bin;
-    unsigned h = (unsigned)((key * 0x9E3779B97F4A7C15ULL) >> 40) & (C::NWB - 1);
+    { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uintWinBinMax; }
+    u64 key = (w.wbEpoch << 41) | (str << 40) | bin;
+    unsigned h = (unsigned)((((str << 40) | bin) * 0x9E3779B97F4A7C15ULL) >> 40) & (C::NWB - 1);
     for (int k = 0; k < C::NWB; k++) {
         unsigned i = (h + k) & (C::NWB - 1);
-        if (w.wbKey[i] == ~0ULL) return uintWinBinMax;
+        if ((w.wbKey[i] >> 41) != w.wbEpoch) return uintWinBinMax;
         if (w.wbKey[i] == key) return w.wbVal[i];
     }
     return uintWinBinMax;
 }
 template <class C> HD inline bool wbSet(Work<C>& w, uint str, uint bin, uint val) {
-    u64 key = (str << 40) | bin;
-    unsigned h = (unsigned)((key * 0x9E3779B97F4A7C15ULL) >> 40) & (C::NWB - 1);
+    { unsigned b = (unsigned)bin & 1023; w.wbBits[str & 1][b >> 6] |= 1ULL << (b & 63); }
+    u64 key = (w.wbEpoch << 41) | (str << 40) | bin;
+    unsigned h = (unsigned)((((str << 40) | bin) * 0x9E3779B97F4A7C15ULL) >> 40) & (C::NWB - 1);
     for (int k = 0; k < C::NWB; k++) {
         unsigned i = (h + k) & (C::NWB - 1);
         if (w.wbKey[i] == key) { w.wbVal[i] = (uint16_t)val; return true; }
-        if (w.wbKey[i] == ~0ULL) {
+        if ((w.wbKey[i] >> 41) != w.wbEpoch) {
             if (w.wbN * 4 >= C::NWB * 3) { w.ov = OV_WINBIN; return false; }
             w.wbKey[i] = key; w.wbVal[i] = (uint16_t)val; w.wbN++; return true;
         }
@@ -1050,7 +1085,7 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
             int pTr = w.slotP[w.nWinTr];
             for (int ii = (int)w.nWinTr; ii > int(iTr); ii--) w.slotP[ii] = w.slotP[ii - 1];
             w.slotP[iTr] = pTr;
-            w.slot[w.slotP[iTr]] = trA;
+            w.slot[w.slotP[iTr]].copyFrom(trA);
             if (w.nWinTr < P.alignTranscriptsPerWindowNmax) {
                 if (w.nWinTr + 1 > (uint)C::NWTR) { w.ov = OV_WTR; return false; }
                 w.nWinTr++;
@@ -1077,14 +1112,14 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
         if (F.phase == 0) {
             if (iA >= nA && F.tR2 == 0) { d--; continue; }
             if (iA >= nA) {
-                w.fin = trA;
+                w.fin.copyFrom(trA);
                 if (!finalizeTranscript(P, gv, w, F.Score, F.tR2, F.tG2, w.fin, R, WA)) return false;
                 d--; continue;
             }
             // include this align
             int dScore = 0;
             T& trAi = w.stack[d + 1];
-            trAi = trA;
+            trAi.copyFrom(trA);
             if (trA.nExons > 0) {
                 bool ovEx = false;
                 dScore = stitchAlignToTranscript<T, C::NEX>(F.tR2, F.tG2, WA[iA][WA_rStart], WA[iA][WA_gStart], WA[iA][WA_Length], WA[iA][WA_iFrag],
@@ -1117,7 +1152,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
             F.phase = 2;
             if (WA[iA][WA_Anchor] != 2 || trA.nAnchor > 0) {
                 T& next = w.stack[d + 1];
-                next = trA;
+                next.copyFrom(trA);
                 Frame& N = fr[d + 1];
                 N.Score = F.Score; N.tR2 = F.tR2; N.tG2 = F.tG2; N.phase = 0;
                 d++;
@@ -1163,10 +1198,16 @@ template <class T> HD inline void encodeTr(Blob& b, const T& t) {
 // One read: ReadAlign::oneRead's mapping part (mapOneRead, multMapSelect, mappedFilter) for a single-end read.
 // R0: Read1[0] (bases 0..3, 4 = N), Lread. Writes the blob; returns the status; sets unmapType and mapMarker.
 // ---------------------------------------------------------------------------------------------------------------------
-template <class C> HD inline Status mapRead(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb,
-                                         const char* R0, uint Lread, Blob& blob) {
-    typedef typename Work<C>::T T;
+// phase 1: read set-up, seeds, windows from anchors and their flanks. Sets w.stitched and w.nEntries (SA entries that the
+// assignment loop visits). The assignment (assignAll, or entryHit + assignHits) and mapFinish follow.
+template <class C> HD inline Status mapPhase1(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb,
+                                           const char* R0, uint Lread) {
     w.ov = OV_NONE;
+    long long tc = 0;
+#ifdef __CUDA_ARCH__
+    tc = clock64();
+#endif
+    w.stitched = false; w.nEntries = 0;
     if (Lread > (uint)C::LREAD || Lread == 0) { w.ov = OV_LREAD; return Status::Overflow; }
     // oneRead: Read1[1] = complement, Read1[2] = reverse complement
     for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
@@ -1213,6 +1254,7 @@ template <class C> HD inline Status mapRead(const Params& P, const GenomeView& g
             }
         }
     }
+    M5CLK(w, 0, tc);
     bool stitched = false;
     if (Lread < P.outFilterMatchNmin) {
         w.mapMarker = MARKER_READ_TOO_SHORT; w.trInitRLength = 0; w.nW = 0;
@@ -1225,12 +1267,16 @@ template <class C> HD inline Status mapRead(const Params& P, const GenomeView& g
     }
     if (stitched) {
         // ---- stitchPieces: windows from anchors
-        for (int i = 0; i < C::NWB; i++) w.wbKey[i] = ~0ULL;
+        // new epoch instead of clearing the map (keys of other epochs read as empty); epoch 0 is never used
+        if (w.wbEpoch == 0 || w.wbEpoch >= (1ULL << 22) - 1) { for (int i = 0; i < C::NWB; i++) w.wbKey[i] = 0; w.wbEpoch = 1; }
+        else w.wbEpoch++;
         w.wbN = 0;
+        for (int i = 0; i < 16; i++) { w.wbBits[0][i] = 0; w.wbBits[1][i] = 0; }
         w.nW = 0;
         for (uint iP = 0; iP < w.nP; iP++) {
             if (w.PC[iP][PC_Nrep] <= P.winAnchorMultimapNmax) {
                 uint aDir = w.PC[iP][PC_Dir], aLength = w.PC[iP][PC_Length];
+                w.nScan += w.PC[iP][PC_SAend] - w.PC[iP][PC_SAstart] + 1;
                 for (uint iSA = w.PC[iP][PC_SAstart]; iSA <= w.PC[iP][PC_SAend]; iSA++) {
                     uint a1 = packed_get(gv.SA, iSA, gv.saBits);
                     uint aStr = a1 >> gv.GstrandBit;
@@ -1275,34 +1321,100 @@ template <class C> HD inline Status mapRead(const Params& P, const GenomeView& g
             w.nWA[iWin] = 0; w.WALrec[iWin] = 0; w.WlastAnchor[iWin] = -1;
         }
         w.nWall = w.nW;
-        // aligns to windows (FASTASSIGN path: g_starFastAssign = true in the campaign)
-        for (uint iP = 0; iP < w.nP; iP++) {
-            uint aNrep = w.PC[iP][PC_Nrep], aFrag = w.PC[iP][PC_iFrag], aLength = w.PC[iP][PC_Length], aDir = w.PC[iP][PC_Dir];
-            bool aAnchor = (aNrep <= P.winAnchorMultimapNmax);
-            const uint rS0 = w.PC[iP][PC_rStart], rS1 = Lread - (aLength + rS0);
-            uint strOf[2], rsOf[2];
-            if (aDir == 0) { strOf[0] = 0; rsOf[0] = rS0; strOf[1] = 1; rsOf[1] = rS1; }
-            else { strOf[0] = 1; rsOf[0] = rS1; strOf[1] = 0; rsOf[1] = rS0; }
-            const uint iSAend = w.PC[iP][PC_SAend];
-            for (uint iSA = w.PC[iP][PC_SAstart]; iSA <= iSAend; iSA++) {
-                uint a1 = packed_get(gv.SA, iSA, gv.saBits);
-                const uint s = a1 >> gv.GstrandBit;
-                a1 &= gv.GstrandMask;
-                if (s == 1) a1 = gv.nGenome - (aLength + a1);
-                const uint aStr = strOf[s], aRstart = rsOf[s];
-                if (a1 >= gv.sjGstart) {
-                    uint a1D, aLengthD, a1A, aLengthA, isj1;
-                    if (sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) {
-                        if (!assignAlignToWindow(P, w, a1D, aLengthD, aStr, aNrep, aFrag, aRstart, aAnchor, isj1)) return Status::Overflow;
-                        if (!assignAlignToWindow(P, w, a1A, aLengthA, aStr, aNrep, aFrag, aRstart + aLengthD, aAnchor, isj1)) return Status::Overflow;
-                    }
-                } else if (wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax) {
-                    if (!assignAlignToWindow(P, w, a1, aLength, aStr, aNrep, aFrag, aRstart, aAnchor, (uint)-1)) return Status::Overflow;
-                }
-                if (w.nW == 0 && w.mapMarker == MARKER_TOO_MANY_ANCHORS_PER_WINDOW) break;   // nothing observable follows (see below)
-            }
-            if (w.nW == 0 && w.mapMarker == MARKER_TOO_MANY_ANCHORS_PER_WINDOW) break;
+        w.nEntries = 0;
+        for (uint iP = 0; iP < w.nP; iP++) w.nEntries += w.PC[iP][PC_SAend] - w.PC[iP][PC_SAstart] + 1;
+        M5CLK(w, 1, tc);
+    }
+    w.stitched = stitched;
+    return Status::Ok;
+}
+
+// the assignment of one SA entry of piece iP (stitchPieces, FASTASSIGN path); false = overflow
+template <class C> HD inline bool assignEntry(const Params& P, const GenomeView& gv, Work<C>& w, uint iP, uint iSA) {
+    uint aNrep = w.PC[iP][PC_Nrep], aFrag = w.PC[iP][PC_iFrag], aLength = w.PC[iP][PC_Length], aDir = w.PC[iP][PC_Dir];
+    bool aAnchor = (aNrep <= P.winAnchorMultimapNmax);
+    const uint rS0 = w.PC[iP][PC_rStart], rS1 = w.Lread - (aLength + rS0);
+    uint a1 = packed_get(gv.SA, iSA, gv.saBits);
+    const uint s = a1 >> gv.GstrandBit;
+    a1 &= gv.GstrandMask;
+    if (s == 1) a1 = gv.nGenome - (aLength + a1);
+    const uint aStr = (aDir == 0) ? s : 1 - s;                 // strOf[s]
+    const uint aRstart = ((aDir == 0) == (s == 0)) ? rS0 : rS1;  // rsOf[s]
+    if (a1 >= gv.sjGstart) {
+        uint a1D, aLengthD, a1A, aLengthA, isj1;
+        if (sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) {
+            if (!assignAlignToWindow(P, w, a1D, aLengthD, aStr, aNrep, aFrag, aRstart, aAnchor, isj1)) return false;
+            if (!assignAlignToWindow(P, w, a1A, aLengthA, aStr, aNrep, aFrag, aRstart + aLengthD, aAnchor, isj1)) return false;
         }
+    } else if (wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax) {
+        if (!assignAlignToWindow(P, w, a1, aLength, aStr, aNrep, aFrag, aRstart, aAnchor, (uint)-1)) return false;
+    }
+    return true;
+}
+// does assignEntry do anything for this entry? Its calls return at once when no window holds the bin, and the
+// assignment never changes winBin, so this test made before the assignment gives the answer STAR gets during it.
+template <class C> HD inline bool entryHit(const Params& P, const GenomeView& gv, const Work<C>& w, uint iP, uint iSA) {
+    uint aLength = w.PC[iP][PC_Length], aDir = w.PC[iP][PC_Dir];
+    uint a1 = packed_get(gv.SA, iSA, gv.saBits);
+    const uint s = a1 >> gv.GstrandBit;
+    a1 &= gv.GstrandMask;
+    if (s == 1) a1 = gv.nGenome - (aLength + a1);
+    const uint aStr = (aDir == 0) ? s : 1 - s;
+    if (a1 >= gv.sjGstart) {
+        uint a1D, aLengthD, a1A, aLengthA, isj1;
+        if (!sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) return false;
+        return wbGet(w, aStr, a1D >> P.winBinNbits) != uintWinBinMax || wbGet(w, aStr, a1A >> P.winBinNbits) != uintWinBinMax;
+    }
+    return wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax;
+}
+#define M5_TOO_MANY_ANCHORS(w) ((w).nW == 0 && (w).mapMarker == MARKER_TOO_MANY_ANCHORS_PER_WINDOW)
+// every entry in order (host lane, wide GPU lane)
+template <class C> HD inline bool assignAll(const Params& P, const GenomeView& gv, Work<C>& w) {
+    for (uint iP = 0; iP < w.nP; iP++) {
+        const uint iSAend = w.PC[iP][PC_SAend];
+        w.nScan += iSAend - w.PC[iP][PC_SAstart] + 1;
+        for (uint iSA = w.PC[iP][PC_SAstart]; iSA <= iSAend; iSA++) {
+            if (!assignEntry(P, gv, w, iP, iSA)) return false;
+            if (M5_TOO_MANY_ANCHORS(w)) return true;   // nothing observable follows: STAR goes on with nW = 0
+        }
+    }
+    return true;
+}
+// only the entries marked in bits (bit base + k = the read's k-th entry, pieces in order), in the same order
+template <class C> HD inline bool assignHits(const Params& P, const GenomeView& gv, Work<C>& w, const uint32_t* bits, u64 base) {
+    u64 off = base;
+    for (uint iP = 0; iP < w.nP; iP++) {
+        const u64 cnt = w.PC[iP][PC_SAend] - w.PC[iP][PC_SAstart] + 1;
+        u64 b = off, e = off + cnt;
+        while (b < e) {
+            uint32_t word = bits[b >> 5] >> (b & 31);
+            u64 left = mn<u64>(32 - (b & 31), e - b);
+            if (left < 32) word &= (1u << left) - 1;
+            while (word) {
+                int t = ctz32(word);
+                word &= word - 1;
+                uint iSA = w.PC[iP][PC_SAstart] + (b + t - off);
+                if (!assignEntry(P, gv, w, iP, iSA)) return false;
+                if (M5_TOO_MANY_ANCHORS(w)) return true;
+            }
+            b += left;
+        }
+        off = e;
+    }
+    return true;
+}
+
+// the rest of the read: stitching of every window, multMapSelect, mappedFilter, encoding
+template <class C> HD inline Status mapFinish(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb, Blob& blob) {
+    typedef typename Work<C>::T T;
+    const char* Read1[3] = {rb.r[0], rb.r[1], rb.r[2]};
+    const uint Lread = w.Lread;
+    const bool stitched = w.stitched;
+    long long tc = 0;
+#ifdef __CUDA_ARCH__
+    tc = clock64();
+#endif
+    if (stitched) {
         // ---- stitch each window, keep its transcripts; trBest
         uint iW1 = 0;
         for (uint iW = 0; iW < w.nW; iW++) {
@@ -1318,7 +1430,7 @@ template <class C> HD inline Status mapRead(const Params& P, const GenomeView& g
             trA.maxScore = 0;
             if (w.trNtotal + P.alignTranscriptsPerWindowNmax >= P.alignTranscriptsPerReadNmax) break;   // STAR: warning, stop
             for (int k = 0; k <= C::NWTR; k++) w.slotP[k] = k;
-            w.slot[0] = trA;
+            w.slot[0].copyFrom(trA);
             w.nWinTr = 0;
             if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2])) return Status::Overflow;
             if (w.nWinTr == 0) continue;
@@ -1331,7 +1443,7 @@ template <class C> HD inline Status mapRead(const Params& P, const GenomeView& g
                 const T& t = w.slot[w.slotP[k]];
                 if (t.maxScore + P.outFilterMultimapScoreRange >= runBest || (better && k == 0)) {
                     if (w.nKeep >= C::NKEEP) { w.ov = OV_KEEP; return Status::Overflow; }
-                    w.keep[w.nKeep] = t;
+                    w.keep[w.nKeep].copyFrom(t);
                     w.keep[w.nKeep].Chr = t0.Chr; w.keep[w.nKeep].Str = t0.Str; w.keep[w.nKeep].roStr = t0.roStr;   // multMapSelect copies [0]'s
                     w.keepWin[w.nKeep] = (int)iW1;
                     w.nKeep++;
@@ -1344,7 +1456,7 @@ template <class C> HD inline Status mapRead(const Params& P, const GenomeView& g
                 for (int k = 0; k < w.nKeep; k++) {
                     if (w.keep[k].maxScore + P.outFilterMultimapScoreRange >= w.trBestScore) {
                         if (k == w.trBestKeep) w.trBestKeep = j;
-                        if (j != k) { w.keep[j] = w.keep[k]; w.keepWin[j] = w.keepWin[k]; }
+                        if (j != k) { w.keep[j].copyFrom(w.keep[k]); w.keepWin[j] = w.keepWin[k]; }
                         j++;
                     }
                 }
@@ -1359,6 +1471,7 @@ template <class C> HD inline Status mapRead(const Params& P, const GenomeView& g
             w.nW = 0;
         }
     }
+    if (stitched) M5CLK(w, 2, tc);
     // ---- multMapSelect
     w.nTr = 0;
     int iBest = -1;
@@ -1366,7 +1479,7 @@ template <class C> HD inline Status mapRead(const Params& P, const GenomeView& g
         w.maxScore = w.trBestScore;
         for (int k = 0; k < w.nKeep; k++) {
             if (w.keep[k].maxScore + P.outFilterMultimapScoreRange >= w.maxScore) {
-                if (k != (int)w.nTr) { w.keep[w.nTr] = w.keep[k]; }
+                if (k != (int)w.nTr) { w.keep[w.nTr].copyFrom(w.keep[k]); }
                 if (k == w.trBestKeep) iBest = (int)w.nTr;
                 w.nTr++;
             }
@@ -1404,8 +1517,19 @@ template <class C> HD inline Status mapRead(const Params& P, const GenomeView& g
     blob.putV((i64)w.nW); blob.putV((i64)w.nTr); blob.putV((i64)(w.nW > 0 ? iBest : -1));
     if (w.nW == 0) blob.putV((i64)w.trInitRLength);
     for (uint i = 0; i < w.nTr; i++) encodeTr(blob, w.keep[i]);
+    M5CLK(w, 3, tc);
     if (blob.full) { w.ov = OV_BLOB; return Status::BlobFull; }
     return Status::Ok;
+}
+
+
+// one read, all phases in one call (host lane, wide GPU lane)
+template <class C> HD inline Status mapRead(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb,
+                                         const char* R0, uint Lread, Blob& blob) {
+    Status st = mapPhase1(P, gv, w, rb, R0, Lread);
+    if (st != Status::Ok) return st;
+    if (w.stitched && !assignAll(P, gv, w)) return Status::Overflow;
+    return mapFinish(P, gv, w, rb, blob);
 }
 
 } // namespace m5
