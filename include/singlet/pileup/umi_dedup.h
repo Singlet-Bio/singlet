@@ -487,4 +487,63 @@ public:
     }
 };
 
+/// Per-molecule allele consensus at panel SNP sites (docs/research-beta/order-free-rules.md R1).
+/// add() counts each read's base class (REF / ALT / other) for its (barcode, SNP, UMI) molecule;
+/// finalize() emits one DP (and one AD if ALT) per molecule whose strict majority is REF or ALT.
+/// A tie between the two largest classes leaves the molecule ambiguous, and an "other" majority is
+/// evidence for neither allele: neither enters AD or DP. Counts commute, so the result does not
+/// depend on read order. A read without a UMI is its own molecule.
+class SnpConsensus {
+public:
+    static constexpr uint8_t kRef = 0, kAlt = 1, kOther = 2;
+    static uint8_t base_class(char base, char ref, char alt) {
+        return base == alt ? kAlt : (base == ref ? kRef : kOther);
+    }
+
+    void add(uint32_t bc_idx, uint32_t snp_idx, const char* umi, int umi_len, uint8_t cls) {
+        if (!umi || umi_len <= 0) { single_.push_back({bc_idx, snp_idx, cls}); return; }
+        uint64_t h = 14695981039346656037ULL;   // FNV-1a over the UMI, mixed with barcode and site
+        for (int i = 0; i < umi_len; ++i) { h ^= static_cast<uint64_t>(umi[i]); h *= 1099511628211ULL; }
+        h ^= static_cast<uint64_t>(bc_idx) * 0x517cc1b727220a95ULL;
+        h ^= static_cast<uint64_t>(snp_idx) * 0x6c62272e07bb0142ULL;
+        h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33; h *= 0xc4ceb9fe1a85ec53ULL; h ^= h >> 33;
+        Mol& m = mols_[h];
+        m.bc = bc_idx;
+        m.snp = snp_idx;
+        if (m.n[cls] < 255) ++m.n[cls];
+    }
+
+    /// AccT: increment(feature, barcode, delta). StatsT: snp_molecules, snp_molecules_ambiguous, snp_molecules_other.
+    template <typename AccT, typename StatsT>
+    void finalize(AccT& ad, AccT& dp, StatsT& st) const {
+        auto emit = [&](uint32_t bc, uint32_t snp, uint8_t cls) {
+            if (cls == kOther) { ++st.snp_molecules_other; return; }
+            ++st.snp_molecules;
+            dp.increment(snp, bc, 1);
+            if (cls == kAlt) ad.increment(snp, bc, 1);
+        };
+        for (const auto& r : single_) emit(r.bc, r.snp, r.cls);
+        for (const auto& kv : mols_) {
+            const Mol& m = kv.second;
+            uint8_t best = 0;
+            for (uint8_t c = 1; c < 3; ++c) if (m.n[c] > m.n[best]) best = c;
+            bool tie = false;
+            for (uint8_t c = 0; c < 3; ++c) if (c != best && m.n[c] == m.n[best]) tie = true;
+            if (tie) { ++st.snp_molecules_ambiguous; continue; }
+            emit(m.bc, m.snp, best);
+        }
+    }
+
+    void clear() {
+        std::unordered_map<uint64_t, Mol>().swap(mols_);
+        std::vector<Single>().swap(single_);
+    }
+
+private:
+    struct Mol { uint32_t bc = 0; uint32_t snp = 0; uint8_t n[3] = {0, 0, 0}; };
+    struct Single { uint32_t bc; uint32_t snp; uint8_t cls; };
+    std::unordered_map<uint64_t, Mol> mols_;
+    std::vector<Single> single_;
+};
+
 } // namespace singlet

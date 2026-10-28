@@ -69,6 +69,9 @@ struct PileupConfig {
     // follows in this pipeline (the .1fq barcodes are already whitelist-exact): CB = CR unless CR has an N or UR has an N or is a
     // homopolymer. Serial run() only.
     bool cb_from_cr = false;
+    // Stream (order-free-rules R5): count the whole pass in the protocol orientation, no first-N-reads probe;
+    // strand_probe() then reports the aggregate over all informative reads.
+    bool strand_prior_only = false;
     std::string snp_path;           // VCF/TSV of SNP positions
     std::string exon_gtf_path;      // GTF/BED for exon intervals (used for GeneModel)
     std::string barcode_path;       // Filtered barcode list
@@ -148,6 +151,10 @@ struct PileupStats {
     // G-RRNA: rRNA contamination sampling
     uint64_t rrna_reads = 0;          ///< reads identified as rRNA (sampled subset)
     uint64_t rrna_reads_sampled = 0;  ///< total reads checked for rRNA
+    // SNP allele consensus per (barcode, SNP, UMI) molecule (order-free-rules R1)
+    uint64_t snp_molecules = 0;            ///< molecules with a REF or ALT majority (in DP)
+    uint64_t snp_molecules_ambiguous = 0;  ///< tie between the two largest base classes: in neither AD nor DP
+    uint64_t snp_molecules_other = 0;      ///< majority base is neither REF nor ALT: in neither AD nor DP
     // Molecule labels (each UMI-deduplicated (barcode, gene, UMI) counted once)
     uint64_t molecules_spliced = 0;
     uint64_t molecules_unspliced = 0;
@@ -564,7 +571,7 @@ public:
         // An indexed BAM file is sampled across nuclear chromosomes before the
         // pass; a stream (STAR pipe, unsorted or unindexed BAM) is probed in-line.
         bool inline_probe = false;
-        if (config_.stranded && config_.auto_strand && has_gene_model_ && !strand_probed_)
+        if (config_.stranded && config_.auto_strand && has_gene_model_ && !strand_probed_ && !config_.strand_prior_only)
             inline_probe = !probe_strand_file(bam_path, hdr);
 
         // ── Main read loop ──
@@ -600,8 +607,10 @@ public:
             if (b->core.flag & BAM_FUNMAP) { PROF_BAM_IO_RESTART; continue; }
             stats.mapped_reads++;
 
-            // G-RRNA: sample every 1000th mapped read for rRNA contamination
-            if (b->core.l_qseq >= 21 && stats.mapped_reads % 1000 == 0) {
+            // G-RRNA: rRNA contamination on a 1/64 sample fixed by the read name, once per read
+            // (order-free-rules R4)
+            if (b->core.l_qseq >= 21 && !(b->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY))
+                && (hash_qname(bam_get_qname(b)) & 63) == 0) {
                 ++stats.rrna_reads_sampled;
                 const uint8_t* qseq = bam_get_seq(b);
                 if (qseq) {
@@ -1059,6 +1068,13 @@ public:
                       << " incomplete multi-mapped entries\n";
         }
 
+        // ── Order-free finalize (docs/research-beta/order-free-rules.md) ──
+        snp_cons_.finalize(snp_ad_, snp_dp_, stats);   // R1
+        snp_cons_.clear();
+        canonicalize_splice_junctions();               // R7
+        if (config_.strand_prior_only)                  // R5: report the aggregate over all informative reads
+            strand_probe_ = StrandEvidence{stats.strand_sense, stats.strand_antisense};
+
         // ── UMI collapse + spliced/unspliced/ambiguous labelling ──
         {
             std::cerr << "[singlet-pileup] Molecule labelling ("
@@ -1150,7 +1166,8 @@ public:
         // chrM indel events captured during CIGAR walk
         std::vector<mt::MtIndelEvent> mt_indels;
 
-        UmiDedup snp_umi, sj_umi;
+        UmiDedup sj_umi;
+        SnpConsensus snp_cons;  // per-molecule SNP allele consensus (order-free-rules R1)
         // Gene-model molecules (per worker, labelled and finalized after thread join)
         DirectionalUmiStore mol_store;
         SparseAccumulator<uint16_t> amb;  // ambiguous molecules per gene
@@ -1541,7 +1558,8 @@ public:
             const auto& cq = workers[w].cell_qc;
             for (uint32_t i = 0; i < n_barcodes && i < cq.size(); ++i) per_cell_qc_[i].merge(cq[i]);
         }
-        // SNP AD/DP
+        // SNP AD/DP: consensus per molecule in its worker (order-free-rules R1), then merge
+        for (auto& wc : workers) { wc.snp_cons.finalize(wc.snp_ad, wc.snp_dp, stats); wc.snp_cons.clear(); }
         merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_ad; });
         merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_dp; });
         if (config_.count_mt) {
@@ -1562,8 +1580,9 @@ public:
             }
         }
 
-        // Merge SJ: reassign indices to build global SJ list
+        // Merge SJ: reassign indices to build global SJ list, then canonical order (order-free-rules R7)
         merge_splice_junctions(workers);
+        canonicalize_splice_junctions();
 
         // N18: Merge CRISPR guide accumulators
         if (!guide_ref_.empty()) {
@@ -1952,7 +1971,7 @@ private:
     SparseAccumulator<uint16_t> mt_acc_;   // chrM allele counts: feat = pos*4 + base
     SparseAccumulator<uint16_t> mt_acc_rev_;  // chrM reverse-strand allele counts (same layout)
     std::vector<mt::MtIndelEvent> mt_indels_;  // chrM indels captured during CIGAR walk
-    UmiDedup snp_umi_dedup_;  // UMI dedup for SNP positions
+    SnpConsensus snp_cons_;   // per-molecule SNP allele consensus (order-free-rules R1)
     UmiDedup sj_umi_dedup_;  // UMI dedup for splice junctions
 
     // G-EM: ambiguous reads buffered for post-pileup EM rescue
@@ -2508,15 +2527,9 @@ private:
                             if (qual[0] != 0xff && qual[query_pos + offset] < config_.min_baseq)
                                 continue;
                             char base = seq_nt16_str[bam_seqi(seq, query_pos + offset)];
-                            bool umi_new = !config_.umi_dedup || !umi_str ||
-                                           snp_umi_dedup_.insert(bc_idx, it->index,
-                                                                umi_str, umi_len);
-                            if (umi_new) {
-                                snp_dp_.increment(it->index, bc_idx, 1);
-                                if (base == it->alt_allele) {
-                                    snp_ad_.increment(it->index, bc_idx, 1);
-                                }
-                            }
+                            // one allele per molecule, by consensus at finalize (order-free-rules R1)
+                            snp_cons_.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
+                                          SnpConsensus::base_class(base, it->ref_allele, it->alt_allele));
                             stats.snp_hits++;
                         }
                     }
@@ -2902,14 +2915,9 @@ private:
                             if (qual[0] != 0xff && qual[query_pos + offset] < config_.min_baseq)
                                 continue;
                             char base = seq_nt16_str[bam_seqi(seq, query_pos + offset)];
-                            bool umi_new = !config_.umi_dedup || !umi_str ||
-                                           wc.snp_umi.insert(bc_idx, it->index,
-                                                             umi_str, umi_len);
-                            if (umi_new) {
-                                wc.snp_dp.increment(it->index, bc_idx, 1);
-                                if (base == it->alt_allele)
-                                    wc.snp_ad.increment(it->index, bc_idx, 1);
-                            }
+                            // one allele per molecule, by consensus at finalize (order-free-rules R1)
+                            wc.snp_cons.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
+                                            SnpConsensus::base_class(base, it->ref_allele, it->alt_allele));
                             wc.stats.snp_hits++;
                         }
                     }
@@ -2933,8 +2941,10 @@ private:
         if (b->core.flag & BAM_FUNMAP) return;
         wc.stats.mapped_reads++;
 
-        // G-RRNA: sample every 1000th mapped read for rRNA contamination
-        if (b->core.l_qseq >= 21 && wc.stats.mapped_reads % 1000 == 0) {
+        // G-RRNA: rRNA contamination on a 1/64 sample fixed by the read name, once per read
+        // (order-free-rules R4)
+        if (b->core.l_qseq >= 21 && !(b->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY))
+            && (hash_qname(bam_get_qname(b)) & 63) == 0) {
             ++wc.stats.rrna_reads_sampled;
             const uint8_t* qseq = bam_get_seq(b);
             if (qseq) {
@@ -3328,6 +3338,38 @@ private:
         for (auto& w : workers) {
             target.merge_from(get(w));
         }
+    }
+
+    // Canonical junction order (order-free-rules R7): rows sorted by (contig index, donor, acceptor) instead of
+    // first seen, so sj_counts / sj_features / splice_* do not depend on read order or worker count.
+    void canonicalize_splice_junctions() {
+        const size_t n = sj_names_.size();
+        if (n < 2) return;
+        std::unordered_map<std::string, int32_t> chrom_tid;
+        for (size_t t = 0; t < tid_to_chrom_.size(); ++t) chrom_tid.emplace(tid_to_chrom_[t], static_cast<int32_t>(t));
+        struct Key { int32_t tid; int64_t donor; int64_t acceptor; uint32_t old; };
+        std::vector<Key> keys(n);
+        for (size_t i = 0; i < n; ++i) {
+            const std::string& s = sj_names_[i];      // chrom:donor-acceptor (chrom may contain ':' or '-')
+            const size_t c = s.rfind(':'), d = s.rfind('-');
+            auto it = chrom_tid.find(s.substr(0, c));
+            keys[i] = {it == chrom_tid.end() ? INT32_MAX : it->second, std::stoll(s.substr(c + 1, d - c - 1)),
+                       std::stoll(s.substr(d + 1)), static_cast<uint32_t>(i)};
+        }
+        std::sort(keys.begin(), keys.end(), [](const Key& a, const Key& b) {
+            if (a.tid != b.tid) return a.tid < b.tid;
+            if (a.donor != b.donor) return a.donor < b.donor;
+            return a.acceptor < b.acceptor;
+        });
+        std::vector<uint32_t> new_idx(n);
+        std::vector<std::string> names(n);
+        for (size_t r = 0; r < n; ++r) {
+            new_idx[keys[r].old] = static_cast<uint32_t>(r);
+            names[r] = std::move(sj_names_[keys[r].old]);
+        }
+        sj_names_ = std::move(names);
+        for (auto& kv : sj_index_) kv.second = new_idx[kv.second];
+        sj_acc_.remap_rows(new_idx);
     }
 
     void merge_splice_junctions(std::vector<WorkerContext>& workers) {
