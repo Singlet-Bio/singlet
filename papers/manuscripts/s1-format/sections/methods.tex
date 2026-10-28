@@ -42,7 +42,7 @@ blocks of 64 consecutive cells at random offsets, which is how block-shuffling l
 Each loader must return each minibatch as a \texttt{torch.sparse\_csr\_tensor} of the exact counts. Loaders: AnnData in
 memory and in backed mode, AnnData Zarr read lazily, scDataset over backed AnnData, TileDB-SOMA ML, BPCells (R, with
 the result handed to PyTorch), and the \sone{} streaming reader in stored and source gene order. Files are served by a
-local MinIO object store through a Toxiproxy proxy that limits bandwidth to 0.1, 1 or 10\,Gbit/s with 1\,ms latency, or
+local S3-compatible object store (	exttt{rclone serve s3}) through a Toxiproxy proxy that limits bandwidth to 0.1, 1 or 10\,Gbit/s with 1\,ms latency, or
 1\,Gbit/s with 30\,ms latency, from the cluster's shared NFS filesystem, and from the node's own disk; the proxy's achieved ceiling is measured with a bulk transfer first
 and recorded, and results at a tier above that ceiling are flagged. Loaders that cannot read by range download the object
 first, and that time is counted. We record, from a new process with a cold cache, the time to open, to read the first

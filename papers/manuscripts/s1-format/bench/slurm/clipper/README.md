@@ -8,7 +8,7 @@ commit of this repository (`S1_SHA`), cloned under `$S1=/mnt/projects/debruinz_p
 |---|---|---|
 | `setup.sbatch` | conda env from `environment.yml`, BPCells, the singlet package (Python, R), C++ bench, `test_floor.py`, `smoke.py`, `s1bench env` | short-cpu |
 | `stage.sbatch` | the stages in `STAGES` for one dataset of `DS_LIST` per array task | per size class, below |
-| `netem.sbatch` | installs MinIO, mc and Toxiproxy into `$S1/bin` and checks a throttled range read | scavenger |
+| `netem.sbatch` | installs Toxiproxy into `$S1/bin` and checks `rclone serve s3` behind it (throttled GET, range GET, unsigned listing) | scavenger |
 | `timed.sbatch` | `decode`, the thread `sweep`, `minibatch`, `eco` for one dataset per task, on a whole node | exclusive H100 node |
 
 Hardware (measured 2026-10-28). AVX-512 on every node. Only c100 and c101 have a local NVMe `/tmp`; every other node
@@ -19,7 +19,8 @@ spinning disks, shared filesystems or object stores:
   L on 420 GB, XL on 1 TB. Write times from these jobs are not headline numbers (the report does not use them).
 - Timed stages run on an H100 node to itself (`timed.sbatch`: `--exclusive --gres=gpu:nvidia_h100_nvl:2`, 4 h on
   short-gpu). Each task copies its dataset's format files to the node's own disk (the `local` tier), reads the NFS copy in
-  place (`nfs`), and serves the files from MinIO behind Toxiproxy (`s3_*`). With a GPU present the first minibatch is also
+  place (`nfs`), and serves the files from `rclone serve s3` behind Toxiproxy (`s3_*`; MinIO no longer publishes
+  community binaries). With a GPU present the first minibatch is also
   copied to the device and timed separately (`to_cuda_s`).
 - Cross-check: the same script on a CPU-only node (bigmem, Xeon 6226) with `S1_RESULTS=$S1/results-xcheck`, `--partition=bigmem`
   and no `--gres`.

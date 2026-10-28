@@ -17,6 +17,7 @@ set -euo pipefail
 source "/mnt/projects/debruinz_project/debruinz/singlet/s1paper/src/${S1_SHA:?set S1_SHA}/papers/manuscripts/s1-format/bench/slurm/clipper/common.sh"
 s1_checkout
 s1_activate
+s1_netem_tools
 IFS=, read -ra DS <<<"${DS_LIST:?set DS_LIST}"
 D=${DS[${SLURM_ARRAY_TASK_ID:-0}]}
 STAGES=${STAGES:-"decode sweep minibatch eco"}

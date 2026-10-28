@@ -1,6 +1,8 @@
-"""Network tiers for the minibatch stage: a MinIO object store behind Toxiproxy (bandwidth and latency toxics).
+"""Network tiers for the minibatch stage: an S3-compatible object store behind Toxiproxy (bandwidth and latency toxics).
 
-No root is needed: both are single static binaries. Objects are served anonymously over plain HTTP so that every reader
+The store is `rclone serve s3` over a local directory (netem.store: rclone, the default) or a MinIO server
+(netem.store: minio; MinIO stopped publishing community binaries in 2025, so rclone is what the Clipper runs use).
+No root is needed: each is a single static binary. Objects are served anonymously over plain HTTP so that every reader
 can use HTTP range requests or a whole-object GET through the same throttled port. Before the timed runs, `calibrate`
 measures what the proxy sustains with no toxic; a tier above that ceiling is reported as capped, not as measured.
 """
@@ -47,6 +49,10 @@ def object_store(cfg: Config, files: dict[str, Path], workdir: Path) -> Iterator
     """Start MinIO and Toxiproxy, upload `files` (key -> local path) and yield the proxied base URL."""
     n = cfg["netem"]
     workdir.mkdir(parents=True, exist_ok=True)
+    if n.get("store", "rclone") == "rclone":
+        with _rclone_store(cfg, files, workdir) as base:
+            yield base
+        return
     env = {"MINIO_ROOT_USER": n["access_key"], "MINIO_ROOT_PASSWORD": n["secret_key"], "PATH": "/usr/bin:/bin"}
     minio = subprocess.Popen([n["minio"], "server", str(workdir / "minio"), "--address", f"127.0.0.1:{n['minio_port']}", "--quiet"],
                              env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -74,6 +80,53 @@ def object_store(cfg: Config, files: dict[str, Path], workdir: Path) -> Iterator
             except subprocess.TimeoutExpired:
                 p.kill()
         shutil.rmtree(workdir / "minio", ignore_errors=True)
+
+
+def _place(src: Path, dst: Path) -> None:
+    """Put a file (or a directory tree) at dst by hard link when it is on the same filesystem, else by copy."""
+    import os
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
+    def link(a, b):
+        try:
+            os.link(a, b)
+        except OSError:
+            shutil.copy2(a, b)
+
+    if src.is_dir():
+        shutil.copytree(src, dst, copy_function=link, dirs_exist_ok=True)
+    else:
+        link(src, dst)
+
+
+@contextmanager
+def _rclone_store(cfg: Config, files: dict[str, Path], workdir: Path) -> Iterator[str]:
+    """`rclone serve s3` over workdir/s3 (bucket = a directory, anonymous access, path-style), behind Toxiproxy."""
+    n = cfg["netem"]
+    root = workdir / "s3"
+    for key, p in files.items():
+        _place(p, root / n["bucket"] / key)
+    port = n["minio_port"]
+    srv = subprocess.Popen([n.get("rclone", "rclone"), "serve", "s3", str(root), "--addr", f"127.0.0.1:{port}",
+                            "--force-path-style", "--vfs-cache-mode", "off", "--log-level", "ERROR"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    tox = subprocess.Popen([n["toxiproxy_server"], "-port", str(n["toxiproxy_api_port"])], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+    try:
+        _wait(f"http://127.0.0.1:{port}/")
+        _wait(f"http://127.0.0.1:{n['toxiproxy_api_port']}/version")
+        _api(cfg, "POST", "/proxies", {"name": "s3", "listen": f"127.0.0.1:{n['proxy_port']}",
+                                       "upstream": f"127.0.0.1:{port}", "enabled": True})
+        yield f"http://127.0.0.1:{n['proxy_port']}/{n['bucket']}"
+    finally:
+        for p in (tox, srv):
+            p.terminate()
+            try:
+                p.wait(10)
+            except subprocess.TimeoutExpired:
+                p.kill()
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def set_tier(cfg: Config, tier: dict) -> None:

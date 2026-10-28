@@ -49,6 +49,14 @@ s1_activate() {
 s1b() {
   (cd "$BENCH" && python -m s1bench --set "results_dir=${S1_RESULTS:-$S1/results}" --set "generated_dir=$S1/generated" "$@")
 }
-export PATH="$S1/bin:$PATH"   # minio, mc, toxiproxy-server (netem.sbatch installs them)
+export PATH="$S1/bin:$PATH"   # toxiproxy-server (netem.sbatch installs it)
+
+# rclone (the S3 store of the network tiers) comes from the cluster's module system.
+s1_netem_tools() {
+  set +u
+  source /etc/profile.d/lmod.sh
+  module load rclone/1.74.3
+  set -u
+}
 
 echo "job ${SLURM_JOB_ID:-?} task ${SLURM_ARRAY_TASK_ID:--} on $(hostname) $(date -Is)"

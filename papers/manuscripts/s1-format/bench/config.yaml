@@ -64,7 +64,9 @@ minibatch:
     - {name: s3_1g_wan, gbit: 1, latency_ms: 30}
 
 netem:
-  minio: minio                            # binaries on PATH or absolute paths
+  store: rclone                           # rclone (rclone serve s3) or minio
+  rclone: rclone                          # binaries on PATH or absolute paths (Clipper: module load rclone)
+  minio: minio
   mc: mc
   toxiproxy_server: toxiproxy-server
   minio_port: 9900
