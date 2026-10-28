@@ -9,18 +9,25 @@ GitHub Actions, `R CMD check --as-cran --no-manual` (`.github/workflows/R-CMD-ch
 
 - ubuntu-latest, R release
 - ubuntu-latest, R devel
+- ubuntu-latest, R oldrel-1
 - macos-latest, R release
 - windows-latest, R release
+
+Also `R CMD check --as-cran --run-donttest` with CRAN's incoming checks (`_R_CHECK_CRAN_INCOMING_REMOTE_=true`) on
+Ubuntu 24.04, R 4.4 (Bioconductor 3.20 image): incoming feasibility reported only "New submission"; tests and examples
+passed. Its other notes came from that image (no Seurat or qpdf installed, its own compiler flags, no clock check).
 
 To add before submitting: win-builder R-devel (`devtools::check_win_devel()`) and the CRAN macOS builder
 (`devtools::check_mac_release()`).
 
 ## R CMD check results
 
-0 errors | 0 warnings | 0 notes on all four GitHub Actions environments. CRAN's incoming checks will add:
+0 errors | 0 warnings | 0 notes on all five GitHub Actions environments. CRAN's incoming checks will add:
 
 * checking CRAN incoming feasibility ... NOTE
   New submission
+
+The `download()` example (a 0.2 Mb study, fetched into `tempdir()`) can take a few seconds over a slow network.
 
 On Linux the installed size is about 11 Mb, almost all of it the compiled library with debugging symbols (the source
 tarball is 0.6 Mb); a "sub-directories of 1Mb or more: libs" NOTE may appear on some platforms.
