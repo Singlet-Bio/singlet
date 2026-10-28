@@ -1,0 +1,45 @@
+# Conda environment for the .s1 manuscript benchmark. Pin exact versions on the cluster after the first solve
+# (`conda env export --no-builds > environment.lock.yml` and commit the lock file); `s1bench env` records what ran.
+name: s1bench
+channels: [conda-forge, bioconda]
+dependencies:
+  - python=3.11
+  - numpy>=1.26
+  - scipy>=1.11
+  - pandas>=2.1
+  - pyyaml
+  - h5py>=3.10
+  - anndata>=0.11
+  - scanpy>=1.10          # Leiden clustering for the floor stage, 10x readers
+  - leidenalg
+  - igraph
+  - zarr>=2.18,<3
+  - loompy>=3.0
+  - pyarrow>=15
+  - zstandard>=0.22
+  - brotli-python
+  - fsspec
+  - s3fs
+  - boto3
+  - pytorch>=2.2
+  - tiledbsoma-py>=1.14
+  - psutil
+  - pybind11>=2.11
+  - cmake>=3.20
+  - cxx-compiler
+  - zstd
+  - r-base=4.4
+  - r-matrix
+  - r-seurat>=5
+  - bioconductor-singlecellexperiment
+  - bioconductor-zellkonverter
+  - r-hdf5r
+  - r-remotes
+  - r-data.table
+  - r-jsonlite
+  - pip
+  - pip:
+      - scdataset          # block-shuffling loader (D'Ascenzo and Cultrera di Montesano 2025)
+      - tiledbsoma-ml      # PyTorch loader for TileDB-SOMA
+# R packages not on conda: in R, remotes::install_github("bnprks/BPCells/r")
+# The singlet package from this commit: `pip install ../../../../` (builds singlet._pz2) and `R CMD INSTALL ../../../../r`
