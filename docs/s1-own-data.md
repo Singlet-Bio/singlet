@@ -37,8 +37,8 @@ singlet.read_s1(path, *, member="counts", genes=None, dtype=numpy.float32) -> an
   or `float64` for deeper data.
 - **Gene packs.** `gene_pack="<16 hex>"` (or 8 bytes) stores the gene ids as a reference to a vocabulary pack instead of
   inline. The reader then needs the pack, or `read_s1(path, genes=...)`.
-- **Loading.** `singlet.load(path)` treats a `.s1` file with a `counts` member and no atlas members as one of these.
-  Atlas sample objects keep their own reader.
+- **Loading.** `singlet.load(path)` (and `singlet.s1.client.load`) reads any `.s1` file that has no atlas members and
+  one count matrix: the member `counts`, or else its only matrix member. Atlas sample objects keep their own reader.
 
 ## R
 
