@@ -26,6 +26,8 @@ cat > $SCR/build.sh <<EOS
 set -euo pipefail
 export PATH=$ENV/bin:/usr/local/cuda/bin:\$PATH CONDA_PREFIX=$ENV CMAKE_PREFIX_PATH=$ENV PKG_CONFIG_PATH=$ENV/lib/pkgconfig:$ENV/share/pkgconfig
 export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gnu-g++ LD_LIBRARY_PATH=$ENV/lib CMAKE_POLICY_VERSION_MINIMUM=3.5
+# the conda libstdc++ (gcc 16) before the CUDA image's system one, which CUDA's implicit link directories would otherwise put first
+export LDFLAGS="-L$ENV/lib -Wl,-rpath,$ENV/lib"
 \$CXX --version | head -1; nvcc --version | tail -1
 for v in gpu cpu; do
   E=ON; [ \$v = cpu ] && E=OFF
