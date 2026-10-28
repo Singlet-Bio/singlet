@@ -43,7 +43,7 @@ public:
     std::string stats() const;
 
     bool verify;
-    bool prefilled = false; //the GPU engine filled the cache with every distinct sequence (SeqCacheGpuPrefill.cpp)
+    bool prefilled = false; //the GPU engine filled the cache with every distinct sequence, or with hand-off summaries every unmapped one (SeqCacheGpuPrefill.cpp)
     std::atomic<uint64> nLookup{0}, nHit{0}, nInsert{0}, nUncacheable{0}, nVerified{0}, nVerifyFail{0}, nRefresh{0};
 
 private:

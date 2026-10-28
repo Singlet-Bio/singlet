@@ -253,20 +253,29 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             cache = c2;
         };
     };
-    // insert, sharded by hash across threads (SeqCache is thread-safe per shard)
-    {
+    // insert, sharded by hash across threads (SeqCache is thread-safe per shard); keep(i) picks the records
+    auto insertRecords = [&](auto keep) {
         int nt = std::max(1, (int) P.runThreadN);
         std::vector<std::thread> th;
         for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
             for (uint64 i = t; i < nRec; i += nt) {
+                if (!keep(i)) continue;
                 const char *s = out.seq.data() + out.seqOff[i];
                 uint64 L = out.seqOff[i + 1] - out.seqOff[i];
                 cache->insert(SeqCache::hashSeq(s, L), s, L, out.blob.data() + out.blobOff[i], out.blobOff[i + 1] - out.blobOff[i]);
             }
         });
         for (auto &x : th) x.join();
+    };
+    // GPU pileup "on" with hand-off summaries: reads of a mapped sequence replay its summary and never look it up, so only the
+    // unmapped sequences go into the cache (after the hand-off, which tells which they are)
+    const char *gpEnv = getenv("SINGLET_GPU_PILEUP"), *hsEnv = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
+    const bool deferInsert = getenv("SINGLET_ENGINE_GPU_HANDOFF") != nullptr && gpEnv != nullptr && strcmp(gpEnv, "on") == 0
+        && !(hsEnv != nullptr && hsEnv[0] == '0') && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes);
+    if (!deferInsert) {
+        insertRecords([](uint64) { return true; });
+        cache->prefilled = true;
     }
-    cache->prefilled = true;
     // singlet's GPU pileup (SINGLET_GPU_PILEUP): per read its record, per record the alignments STAR writes for it (core fields)
     if (const char *hp = getenv("SINGLET_ENGINE_GPU_HANDOFF")) {
         time_t th0 = time(nullptr);
@@ -366,6 +375,18 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 }
             }
         }
+    }
+    if (deferInsert) {   // summaries installed: the unmapped sequences only; otherwise (hand-off not written) every record
+        uint64 nIns = 0;
+        if (g_handoffSum != nullptr && g_handoffRecAln != nullptr) {
+            insertRecords([&](uint64 i) { return g_handoffRecAln[i] == 0; });
+            for (uint64 i = 0; i < nRec; i++) nIns += g_handoffRecAln[i] == 0;
+        } else {
+            insertRecords([](uint64) { return true; });
+            nIns = nRec;
+        }
+        cache->prefilled = true;
+        P.inOut->logMain << "ENGINE_GPU: " << nIns << " of " << nRec << " sequence results in the cache (the others replay hand-off summaries)\n";
     }
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
