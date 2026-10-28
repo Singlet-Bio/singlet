@@ -1737,7 +1737,7 @@ Capacity of each stage for one Clipper GPU node (2 × H100 NVL, 56 cores), in M 
   the next batch (tails); (d) cross-sample result reuse (§12.16), −19% of distinct sequences for a same-chemistry sample now,
   more as a campaign accumulates results.
 - Host levers: step 1 (per-node non-host indices, resident in HBM in M13: 8.9 s once instead of 38–48 s per sample) and step 2
-  (M13, bit-identical, §12.16) are both shown; together they take W from 2.18 to ~1.1 core-s per M pairs (host bound ~45 M pairs/s
+  (M13, bit-identical, §12.16) are both shown; together they take W from 2.18 to 1.43 core-s per M pairs (host bound 36 M pairs/s
   per node). They matter only once M5 passes ~24 M pairs/s per node.
 
 ### 12.16 M13, cross-sample reuse, and the cost case
