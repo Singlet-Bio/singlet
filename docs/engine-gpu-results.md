@@ -53,8 +53,8 @@ Before tonight (end of W11 round 2, research branch) and after (this PR), M read
 | per-sample memory (limits samples in flight on both node types) | 54–74 GB | same, plus the cache for the GPU results (~3× the results: 7 GB for pbmc1k_v3, ~30 GB for a 263 M-pair sample) | `/usr/bin/time` max RSS |
 | per-sample wall, one sample alone | 418 s (pbmc1k_v3, 24 threads) | 468 s: the 76 s GPU prefill runs before STAR | job 789947 |
 
-What binds a GPU node with this binary is the CPU stages and per-sample memory, not the GPU (GPU busy < 5% of the node run's
-time, from its `nvidia-smi` log). Next, in order: (1) start STAR's mapping while the GPU fills the cache instead of after (the
+What binds a GPU node with this binary is the CPU stages and per-sample memory, not the GPU (the GPUs read 0% utilisation in almost every 5 s
+sample of the node run: `bench/engine_gpu/results/node_run1_gpu_monitor.txt`). Next, in order: (1) start STAR's mapping while the GPU fills the cache instead of after (the
 prefill is serial today); (2) wire in the research branch's GPU pileup and non-host stages (identical; they remove 85% of the
 remaining CPU work with STAR's BAM sort); (3) lower per-sample memory so more samples fit per node.
 
@@ -62,7 +62,7 @@ Profilers: Nsight Compute could not collect counters on the Clipper GPU nodes (t
 the counter-permission setting) and Nsight Systems is not in the CUDA 12.4 devel image; the hot spots come from per-phase
 `clock64()` counters compiled into the kernels (`stitch.cuh`, M5CLK) and from CUDA event timings per lane.
 
-## 4. Cost case
+## 4. Cost case: projected for the GPU stages, and today
 
 Model: `bench/engine_gpu/cost/cost_model.py` → `cost_case.json`; rates with sources: `bench/engine_gpu/cost/rates.{json,md}`.
 CPU baseline (**measured**): `prod/campaign` c4a1be38 sources with 3′/5′ PGO, campaign command line, `--threads 4`, six real samples
@@ -79,10 +79,19 @@ pipelines). GPU node rates are **projected** from the measured M5 rate and each 
 | ACCESS credits per sample (Anvil; GPU rate derived) | 1.28 | 0.52 | 0.41 | 0.25 |
 | energy per sample, kWh (estimated, not metered) | 0.017 | 0.0085 | 0.0066 | 0.0041 |
 
-In words: one GPU node does the work of 6–8 CPU nodes with identical outputs once the GPU stages carry the node, at 2.0–2.6× lower
-cloud cost per sample (1.0–1.3× if cloud CPU cores are twice as fast as the 2019 Xeons the baseline ran on). In this PR's binary
-only mapping is on the GPU, so the node rate measured in §2 is what a GPU node delivers today; the table is the rate once the
-research branch's GPU stages are wired in.
+**This PR's binary, today** (only mapping on the GPU), with the same prices:
+
+| | CPU node, `--engine cpu` | GPU node, `--engine gpu` | label |
+|---|---|---|---|
+| CPU core-s per M read pairs | 41.1 (on the GPU node; 37.5 on Clipper CPU nodes) | 23.6 | measured (job 789929) |
+| node rate if cores bind (54 or 52 cores) | 1.27–1.39 M pairs/s | 2.29 M pairs/s | derived |
+| $ per sample (122 M pairs) at node-hour prices ($2.60 CPU node, $7.98 GPU node) | $0.06–0.07 | $0.12 | modelled |
+
+So **today's binary is not cheaper per sample in the cloud**: it cuts the CPU work by 43%, but the GPUs sit idle most of the
+time and a GPU node costs ~3× a CPU node. On an owned cluster (Clipper), where the GPU nodes exist anyway, it frees 43% of their
+CPU time per sample with identical outputs. The table above (6–8 CPU nodes per GPU node, 2.0–2.6× cheaper) is the projection for
+the research branch's GPU stages (annotation, pileup, non-host; all identical) carrying the CPU work, and for M5 at its measured
+rate; it is not what this binary delivers.
 
 ## 5. Not done
 
