@@ -3647,7 +3647,9 @@ int main(int argc, char* argv[]) {
     // to revert to the legacy file-based decode (writes full FASTQs to TMPDIR).
     // Pass 1: lightweight BC count + R2 prefix capture (no FASTQ files written)
     // Pass 2: full decode streamed to named FIFOs → STAR reads live from them
-    const bool use_fifo_decode = onefq_mode &&
+    // --engine gpu reads the cDNA reads before STAR does (src/star/SeqCacheGpuPrefill.cpp), so it needs the file-based decode.
+    const bool engine_gpu_reads = getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1";
+    const bool use_fifo_decode = onefq_mode && !engine_gpu_reads &&
         !(getenv("SINGLET_FILE_DECODE") &&
           std::string(getenv("SINGLET_FILE_DECODE")) == "1");
     std::thread fifo_writer_thread;    // Pass 2 writer (started after Phase 0.9)
