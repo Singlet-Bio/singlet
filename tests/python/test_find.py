@@ -175,16 +175,16 @@ def _versions(**installed):
 
 
 class TestPackageVersion:
-    """The distribution is "singlet-bio"; "singlet" is the pre-rename name."""
+    """The distribution is "singlet"; "singlet-bio" is the name GitHub installs had before 1.1.0."""
 
-    def test_prefers_the_singlet_bio_distribution(self):
-        fake = _versions(**{"singlet-bio": "9.9.9", "singlet": "1.0.0"})
+    def test_prefers_the_singlet_distribution(self):
+        fake = _versions(**{"singlet": "9.9.9", "singlet-bio": "1.0.0"})
         with patch("importlib.metadata.version", side_effect=fake):
             assert find_mod._package_version() == "9.9.9"
             assert find_mod._user_agent() == "singlet-python/9.9.9"
 
     def test_falls_back_to_the_pre_rename_distribution(self):
-        with patch("importlib.metadata.version", side_effect=_versions(singlet="1.2.3")):
+        with patch("importlib.metadata.version", side_effect=_versions(**{"singlet-bio": "1.2.3"})):
             assert find_mod._package_version() == "1.2.3"
 
     def test_source_checkout_uses_the_package_version(self):

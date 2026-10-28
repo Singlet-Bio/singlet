@@ -156,7 +156,7 @@ def refresh() -> None:
             "Could not refresh catalog from GitHub. "
             "The bundled catalog (included with the package) is still available. "
             "If this is a private repo, update the package instead: "
-            "pip install --upgrade singlet-bio"
+            "pip install --upgrade singlet"
         ) from e
     print(f"Updated: {len(_SAMPLE_INDEX_CACHE)} samples, {len(_CATALOG_CACHE)} series")
 

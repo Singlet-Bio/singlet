@@ -22,7 +22,7 @@ If you discover a security vulnerability in singlet, please report it
 
 This policy covers:
 
-- The `singlet-bio` Python package (`python/singlet/`) and the `singlet` R client (`r/`)
+- The `singlet` Python package (`python/singlet/`) and the `singlet` R client (`r/`)
 - The C++ library (`include/`, `src/`)
 - The MCP server (`python/singlet/mcp/`)
 - File format parsers (`.1pz`, `.singlet`)

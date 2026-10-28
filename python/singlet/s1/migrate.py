@@ -1599,7 +1599,7 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--no-cell-call-ed",
         action="store_true",
-        help="do not compute called_ed (default: computed; needs numba, pip install 'singlet-bio[migrate]')",
+        help="do not compute called_ed (default: computed; needs numba, pip install 'singlet[migrate]')",
     )
     ap.add_argument(
         "--policy",

@@ -4,6 +4,20 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-10-28: on PyPI as `singlet`
+
+The first release on PyPI: `pip install singlet`, then `import singlet`. Wheels for CPython 3.9 to 3.13 on Linux (x86_64,
+aarch64), macOS (Intel, Apple silicon) and Windows include the compiled `.1pz` / `.s1` codec (`singlet._pz`,
+`singlet._pz2`), so reading count matrices needs no compiler.
+
+- **Distribution renamed from `singlet-bio` to `singlet`**, the import name. Releases 0.1 to 0.5 of the PyPI `singlet`
+  project are an unrelated 2017 package (github.com/iosonofabio/singlet). Extras are `singlet[torch]`, `singlet[mcp]`,
+  and so on. A GitHub install made as `singlet-bio` should be uninstalled first (`pip uninstall singlet-bio`).
+- **`singlet.torch.AtlasCells`** streams atlas cells by HTTP range reads, with study-held-out splits (PR #68).
+- **Clients:** the legacy-bundle fallback is off since the legacy files were retired; studies not in the atlas get a clear
+  message (PR #64).
+- **Release policy:** per-cell mtDNA and doublet columns are stripped from `.s1` objects (PR #65).
+
 ## [1.1.0] — 2026-10-27: Research Alpha per-cell labels in the clients
 
 Users install from GitHub `main` (`pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"`,

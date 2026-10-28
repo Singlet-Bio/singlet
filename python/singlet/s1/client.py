@@ -226,7 +226,7 @@ def _native():
         from singlet import _pz2
     except ImportError as e:  # pragma: no cover - environment dependent
         raise ImportError(
-            "singlet._pz2 (the .s1 matrix decoder) is not built. Install with `pip install singlet-bio` (wheel) or build it with "
+            "singlet._pz2 (the .s1 matrix decoder) is not built. Install with `pip install singlet` (wheel) or build it with "
             "`pip install .` / src/bindings/python/build_pz2_mingw.sh."
         ) from e
     return _pz2
@@ -574,7 +574,7 @@ def _validate_manifest(doc: dict, gse: str) -> None:
         raise S1Error(f"{gse}: not a singlet-s1 manifest")
     if int(doc.get("manifest_version", 1)) > MANIFEST_VERSION_MAX:
         raise S1Error(
-            f"{gse}: manifest_version {doc.get('manifest_version')} is newer than this client supports; upgrade singlet-bio"
+            f"{gse}: manifest_version {doc.get('manifest_version')} is newer than this client supports; upgrade singlet"
         )
     if not isinstance(doc.get("samples"), list):
         raise S1Error(f"{gse}: manifest has no sample list")
