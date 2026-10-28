@@ -1217,6 +1217,370 @@
      "exit_error": true
     }
    }
+  },
+  "proto_binary_sorted": {
+   "GSM4006843": {
+    "t4_r1": {
+     "star_total": 720.195,
+     "star_map": 483.0,
+     "star_solo": 49.0,
+     "sort": 177.19500000000005,
+     "index": 11.315,
+     "cb_refresh": 8.20638,
+     "pileup_pass": 26.7277,
+     "pileup_total": 71.9829,
+     "fq_pass1": 7.0076,
+     "ref_load": 10.864,
+     "export_csc": 4.89126,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 976.31,
+     "user_s": 2401.29,
+     "sys_s": 260.27,
+     "maxrss_kb": 56772340.0,
+     "cpu_s": 2661.56,
+     "memory_peak_mb": "66685",
+     "tmp_peak_mb": "20554",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.04 0.04 0.26",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   },
+   "GSM7901264": {
+    "t4_r1": {
+     "star_total": 1015.04,
+     "star_map": 696.0,
+     "star_solo": 59.0,
+     "sort": 249.03999999999996,
+     "index": 16.6241,
+     "cb_refresh": 7.84841,
+     "pileup_pass": 24.1245,
+     "pileup_total": 54.7908,
+     "fq_pass1": 10.7376,
+     "ref_load": 14.5491,
+     "export_csc": 3.58955,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 1283.05,
+     "user_s": 3285.51,
+     "sys_s": 372.31,
+     "maxrss_kb": 54244084.0,
+     "cpu_s": 3657.82,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "31679",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.08 0.02 0.03",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   }
+  },
+  "proto_binary_stream_own_barcodes": {
+   "GSM4006843": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 633.249,
+     "fq_pass1": 7.07562,
+     "ref_load": 10.9465,
+     "export_csc": 4.52577,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 877.53,
+     "user_s": 2425.04,
+     "sys_s": 241.37,
+     "maxrss_kb": 57222584.0,
+     "cpu_s": 2666.41,
+     "memory_peak_mb": "57368",
+     "tmp_peak_mb": "4061",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.50 1.98 1.77",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   },
+   "GSM7901264": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 838.706,
+     "fq_pass1": 10.3142,
+     "ref_load": 14.0745,
+     "export_csc": 3.18488,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 1008.41,
+     "user_s": 3232.79,
+     "sys_s": 265.12,
+     "maxrss_kb": 53062256.0,
+     "cpu_s": 3497.91,
+     "memory_peak_mb": "55718",
+     "tmp_peak_mb": "6952",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.12 1.77 1.90",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   }
+  },
+  "proto_binary_sorted_fixed_barcodes": {
+   "GSM4006843": {
+    "t4_r1": {
+     "star_total": 719.791,
+     "star_map": 483.0,
+     "star_solo": 50.0,
+     "sort": 175.79100000000005,
+     "index": 9.54534,
+     "pileup_pass": 26.8634,
+     "pileup_total": 74.9719,
+     "fq_pass1": 7.08068,
+     "ref_load": 10.9134,
+     "export_csc": 4.46908,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 965.78,
+     "user_s": 2367.13,
+     "sys_s": 261.08,
+     "maxrss_kb": 56758976.0,
+     "cpu_s": 2628.21,
+     "memory_peak_mb": "65383",
+     "tmp_peak_mb": "20552",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.04 0.07 0.51",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   },
+   "GSM7901264": {
+    "t4_r1": {
+     "star_total": 1018.06,
+     "star_map": 694.0,
+     "star_solo": 59.0,
+     "sort": 254.05999999999995,
+     "index": 16.0506,
+     "pileup_pass": 24.8503,
+     "pileup_total": 55.3822,
+     "fq_pass1": 9.66976,
+     "ref_load": 13.5012,
+     "export_csc": 2.68573,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 1246.46,
+     "user_s": 3225.93,
+     "sys_s": 351.93,
+     "maxrss_kb": 54277824.0,
+     "cpu_s": 3577.8599999999997,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "31678",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.02 0.11 0.94",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   }
+  },
+  "proto_binary_stream_fixed_barcodes": {
+   "GSM4006843": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 629.214,
+     "fq_pass1": 7.04435,
+     "ref_load": 10.9267,
+     "export_csc": 4.74313,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 776.31,
+     "user_s": 2312.7,
+     "sys_s": 228.71,
+     "maxrss_kb": 57370248.0,
+     "cpu_s": 2541.41,
+     "memory_peak_mb": "57510",
+     "tmp_peak_mb": "3651",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.24 1.79 1.76",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   },
+   "GSM5411066": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 408.852,
+     "fq_pass1": 6.29552,
+     "ref_load": 9.05089,
+     "export_csc": 1.89222,
+     "strand_rerun_logged": false,
+     "reads": 80448599,
+     "wall": 525.85,
+     "user_s": 1423.38,
+     "sys_s": 220.1,
+     "maxrss_kb": 53660276.0,
+     "cpu_s": 1643.48,
+     "memory_peak_mb": "69199",
+     "tmp_peak_mb": "4783",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.00 2.25 2.96",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   },
+   "GSM6470208": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 1099.93,
+     "fq_pass1": 10.2274,
+     "ref_load": 14.1024,
+     "export_csc": 6.74613,
+     "strand_rerun_logged": false,
+     "reads": 331702882,
+     "wall": 1294.53,
+     "user_s": 4214.08,
+     "sys_s": 363.98,
+     "maxrss_kb": 58155772.0,
+     "cpu_s": 4578.0599999999995,
+     "memory_peak_mb": "61947",
+     "tmp_peak_mb": "9337",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.03 1.21 2.25",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   },
+   "GSM7036403": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 793.583,
+     "fq_pass1": 10.9207,
+     "ref_load": 14.7875,
+     "export_csc": 4.46246,
+     "strand_rerun_logged": false,
+     "reads": 128399687,
+     "wall": 996.6,
+     "user_s": 2956.57,
+     "sys_s": 307.86,
+     "maxrss_kb": 56768460.0,
+     "cpu_s": 3264.4300000000003,
+     "memory_peak_mb": "58268",
+     "tmp_peak_mb": "5073",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.21 2.47 3.00",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   },
+   "GSM7656149": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 2840.94,
+     "fq_pass1": 22.9991,
+     "ref_load": 27.1503,
+     "export_csc": 25.8351,
+     "strand_rerun_logged": false,
+     "reads": 292438995,
+     "wall": 3169.1,
+     "user_s": 10719.99,
+     "sys_s": 696.81,
+     "maxrss_kb": 72700676.0,
+     "cpu_s": 11416.8,
+     "memory_peak_mb": "81771",
+     "tmp_peak_mb": "17167",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.08 0.20 1.08",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   },
+   "GSM7901264": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 845.915,
+     "fq_pass1": 10.0694,
+     "ref_load": 13.8359,
+     "export_csc": 3.36694,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 1012.77,
+     "user_s": 3249.56,
+     "sys_s": 271.2,
+     "maxrss_kb": 53199204.0,
+     "cpu_s": 3520.7599999999998,
+     "memory_peak_mb": "54121",
+     "tmp_peak_mb": "6951",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.83 1.78 2.12",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   }
+  },
+  "proto_binary_sorted_1thread_fixed_barcodes": {
+   "GSM4006843": {
+    "t1_r1": {
+     "star_total": 2777.81,
+     "star_map": 2495.0,
+     "star_solo": 56.0,
+     "sort": 214.80999999999995,
+     "index": 11.9787,
+     "pileup_pass": 133.289,
+     "pileup_total": 167.226,
+     "fq_pass1": 30.243,
+     "ref_load": 37.111,
+     "export_csc": 7.93327,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 3190.71,
+     "user_s": 2920.06,
+     "sys_s": 238.14,
+     "maxrss_kb": 56592272.0,
+     "cpu_s": 3158.2,
+     "memory_peak_mb": "66053",
+     "tmp_peak_mb": "20552",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 42,
+     "loadavg": "30.92 29.72 26.16",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   },
+   "GSM7901264": {
+    "t1_r1": {
+     "star_total": 3948.32,
+     "star_map": 3579.0,
+     "star_solo": 64.0,
+     "sort": 292.32000000000016,
+     "index": 19.8831,
+     "pileup_pass": 122.874,
+     "pileup_total": 130.233,
+     "fq_pass1": 42.8646,
+     "ref_load": 49.5776,
+     "export_csc": 2.86456,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 4321.0,
+     "user_s": 3943.33,
+     "sys_s": 332.69,
+     "maxrss_kb": 53110260.0,
+     "cpu_s": 4276.0199999999995,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "31678",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 42,
+     "loadavg": "30.92 29.72 26.16",
+     "binary_sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978",
+     "exit_error": false
+    }
+   }
   }
  },
  "p2_stream": {
@@ -2423,6 +2787,46 @@
    }
   }
  },
+ "identity_proto": {
+  "sorted_vs_stream_own_barcodes": [
+   "######## GSM4006843 runs_s0 vs runs_s1",
+   "files: 17 identical, 1 differ only in timings/paths, 47 differ",
+   "RESULT: 47 differences",
+   "######## GSM7901264 runs_s0 vs runs_s1",
+   "files: 17 identical, 0 differ only in timings/paths, 46 differ",
+   "RESULT: 46 differences"
+  ],
+  "sorted_vs_stream_fixed_barcodes": [
+   "######## GSM4006843 runs_b0 vs runs_b1",
+   "files: 37 identical, 1 differ only in timings/paths, 25 differ",
+   "RESULT: 25 differences",
+   "######## GSM7901264 runs_b0 vs runs_b1",
+   "files: 34 identical, 1 differ only in timings/paths, 26 differ",
+   "RESULT: 26 differences"
+  ],
+  "sorted_1thread_vs_stream_fixed_barcodes": [
+   "######## GSM4006843 runs_t1 vs runs_b1",
+   "files: 37 identical, 1 differ only in timings/paths, 25 differ",
+   "RESULT: 25 differences",
+   "######## GSM7901264 runs_t1 vs runs_b1",
+   "files: 34 identical, 1 differ only in timings/paths, 26 differ",
+   "RESULT: 26 differences"
+  ],
+  "big_sets_baseline_runs_vs_stream_fixed_barcodes": [
+   "######## GSM7036403 runs vs runs_b1",
+   "files: 16 identical, 1 differ only in timings/paths, 48 differ",
+   "RESULT: 48 differences",
+   "######## GSM6470208 runs vs runs_b1",
+   "files: 17 identical, 0 differ only in timings/paths, 44 differ",
+   "RESULT: 44 differences",
+   "######## GSM5411066 runs vs runs_b1",
+   "files: 18 identical, 0 differ only in timings/paths, 45 differ",
+   "RESULT: 45 differences",
+   "######## GSM7656149 runs vs runs_b1",
+   "files: 17 identical, 0 differ only in timings/paths, 46 differ",
+   "RESULT: 46 differences"
+  ]
+ },
  "decision": {
   "phase2_stop_rule_fired": false,
   "threshold": 0.15,
@@ -2449,6 +2853,20 @@
    "post-#41 re-baseline: 1 replicate",
    "GSM6250705 dropped (corrupt .1fq)",
    "streaming-pileup cost measured on the barcoded-only tagged BAM"
+  ]
+ },
+ "decision_after_prototype": {
+  "a": "met like-for-like: 18.7-19.6% wall (3', 5'), 4T exclusive",
+  "b": "not met: 37/63 and 34/61 files byte-identical; molecules differ <=0.12%, junction hits +0.05..3.4%; barcode-set rule and residue unresolved; determinism untested",
+  "c": "no regression: RSS 53-73 GB streaming vs 54-74 GB sorted",
+  "recommendation": "opt-in flag now; not default until (b) closed",
+  "binary": {
+   "commit": "db696122a32f2e1e5cf41d167ca84d1485458ace",
+   "sha256": "c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978"
+  },
+  "not_done": [
+   "determinism 4/8/16 threads and rerun (stopped: Alpha stmig waiting on resources)",
+   "Kang pool and high-mtDNA identity"
   ]
  }
 }

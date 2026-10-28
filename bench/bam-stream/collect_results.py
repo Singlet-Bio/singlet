@@ -4,14 +4,14 @@ stages.json / tally / timing files and out_equiv.py's file-by-file comparison of
 import glob, json, os, re, subprocess, sys
 W = "/mnt/projects/debruinz_project/debruinz/singlet"; B = f"{W}/bam-stream"
 res = {"binaries": {}, "baseline": {}, "p2_stream": {}, "p3_cb": {}, "p4": {}, "identity": {}, "atlas_bound": {}}
-for sub in ("", "_fa", "_memsort", "_stream"):
+for sub in ("", "_fa", "_memsort", "_stream", "_s0", "_s1", "_b0", "_b1", "_t1"):
     for f in sorted(glob.glob(f"{B}/runs{sub}/*/t*_r*/stages.json")):
         set_, tr = f.split(f"/runs{sub}/")[1].split("/")[:2]
         d = json.load(open(f)); d.pop("dir", None)
         nodef = open(os.path.dirname(f) + "/node.txt").read().split("\n") if os.path.exists(os.path.dirname(f) + "/node.txt") else []
         d["binary_sha256"] = next((l.split()[0] for l in nodef if re.match(r"^[0-9a-f]{64} ", l)), None)
         d["exit_error"] = "exit " in open(os.path.dirname(f) + "/run.log", errors="replace").read()[-300:]
-        res["baseline"].setdefault({"": "sorted_disk", "_fa": "sorted_disk_28969b8", "_memsort": "sorted_memory", "_stream": "existing_stream_path"}[sub], {}).setdefault(set_, {})[tr] = d
+        res["baseline"].setdefault({"": "sorted_disk", "_fa": "sorted_disk_28969b8", "_memsort": "sorted_memory", "_stream": "existing_stream_path", "_s0": "proto_binary_sorted", "_s1": "proto_binary_stream_own_barcodes", "_b0": "proto_binary_sorted_fixed_barcodes", "_b1": "proto_binary_stream_fixed_barcodes", "_t1": "proto_binary_sorted_1thread_fixed_barcodes"}[sub], {}).setdefault(set_, {})[tr] = d
 for p in glob.glob(f"{B}/p2/*/"):
     s = os.path.basename(p.rstrip("/")); o = {}
     for m in ("serial", "parallel"):
@@ -38,6 +38,12 @@ for s in ("GSM4006843", "GSM7036403", "GSM7901264", "GSM5411066", "GSM6470208", 
              "campaign_02aa9b9_vs_28969b8": (f"{B}/runs/{s}/t4_r1/out", f"{B}/runs_fa/{s}/t4_r1/out")}
     for k, (a, b) in pairs.items():
         if os.path.isdir(a) and os.path.isdir(b): res["identity"].setdefault(s, {})[k] = equiv(a, b)
+# identity logs of the prototype comparisons (out_equiv.py output kept in the job logs)
+res["identity_proto"] = {}
+for jid, label in (("789498", "sorted_vs_stream_own_barcodes"), ("789542", "sorted_vs_stream_fixed_barcodes"), ("789731", "sorted_1thread_vs_stream_fixed_barcodes"), ("789732", "big_sets_baseline_runs_vs_stream_fixed_barcodes")):
+    lf = f"{W}/logs/bs-eq-{jid}.out"
+    if os.path.exists(lf):
+        res["identity_proto"][label] = [l[:300] for l in open(lf, errors="replace").read().splitlines() if l.startswith(("########", "files:", "RESULT", "DIFF", "only in"))]
 for f in sorted(glob.glob(f"{B}/results/atlas_bound_T*.json")):
     res["atlas_bound"][os.path.basename(f)[:-5]] = json.load(open(f))
 json.dump(res, open(f"{B}/results.json", "w"), indent=1)

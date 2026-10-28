@@ -41,6 +41,8 @@ MON=$!
 ( pk=0; while true; do u=$(du -sm $SCR 2>/dev/null | cut -f1); [ "${u:-0}" -gt $pk ] && { pk=$u; echo "tmp_peak_mb=$pk" > $O/tmp_peak.txt; }; sleep 10; done ) &
 TMON=$!
 SCREEN=(); [ -f $D/screen.json ] && SCREEN=(--run-screen $D/screen.json)
+# BCFROM=<runs dir>: use that run's refreshed auto_barcodes.tsv as --barcodes (fixes the barcode set and order for A/B identity runs)
+[ -n "${BCFROM:-}" ] && EXTRA="${EXTRA:-} --barcodes $W/bam-stream/$BCFROM/$SET/t4_r1/out/auto_barcodes.tsv"
 cd $SCR
 /usr/bin/time -v -o $O/time.txt $BIN $D/sample.1fq --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
   --out-prefix $SCR/out/ --threads $T --pipeline --output-format 1pz --bam-sort-mode disk --genome-shared off \

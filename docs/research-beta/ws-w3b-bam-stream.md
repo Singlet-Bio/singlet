@@ -3,7 +3,47 @@
 Protocol: [bam-stream-protocol.md](bam-stream-protocol.md). Scripts and the raw per-run record: `bench/bam-stream/` (`results.json`).
 Draft PR Singlet-Bio/singlet#60 (this report) and branch `perf/bam-stream` (one debug env var, no change in default behaviour).
 
-## Result in one paragraph
+## Update 2026-10-28: the streaming prototype (flag `--stream-unsorted`) exists and runs
+
+Branch `perf/bam-stream` (draft PR Singlet-Bio/singlet#63; merged with `prod/campaign` at `c4a1be38`, so #41 and #62 are included). The
+flag is opt-in; the sorted path is the default and unchanged. What it does: STAR writes an unsorted BAM to a pipe without `CB`; the serial
+streaming pileup runs concurrently with STAR; the barcode comes from `CR` by the rule in phase 3 (`inline_scan_cb_from_cr`); there is
+no sort, index, CB-tag scan, strand probe re-run or BAM on disk. Binary: commit `db696122a32f2e1e5cf41d167ca84d1485458ace`
+(not PGO), sha256 `c54ec8ec22d8ccc0cc56b775ae73d29c5200cbc95105db74ce8a65c198a90978`.
+
+**Saving (same binary, flag off vs on, 4 threads, exclusive node, barcode list held fixed):**
+
+| set | sorted wall (s) | streaming wall (s) | saving | streaming RSS | cgroup peak | job `/tmp` peak |
+|---|---|---|---|---|---|---|
+| GSM4006843 (3', 74 M records) | 966 | 776 | **19.6%** | 57 GB | 58 GB | 3.7 GB |
+| GSM7901264 (5', 112 M records) | 1,246 | 1,013 | **18.7%** | 53 GB | 54 GB | 7.0 GB |
+
+The sorted path peaks at 54-74 GB RSS, so **peak memory does not grow**. Four more datasets were run in streaming mode only
+(GSM7036403 997 s, GSM6470208 1,295 s, GSM5411066 526 s, GSM7656149 3,169 s; RSS 54-73 GB). They have no same-binary sorted run, so
+their savings cannot be attributed: against the exclusive replicate of the pinned binary they are -33 to -48%, against the post-#41 PGO
+binary -24 to -45%, and both comparisons include the effect of the other speed-ups in `c4a1be38` (and PGO).
+The like-for-like figure is the 19-20% above, which already meets criterion (a).
+
+**Identity: not byte-identical; the cause is not fully isolated.** Held to the same barcode list and order, 37 of 63 output files
+(3') and 34 of 61 (5') are byte-identical; the rest differ by small amounts:
+- Molecule counts differ by at most 0.002%: GSM4006843 `molecules_spliced` 45,064,155 vs 45,064,250, `total_umis` 45,103,837 vs
+  45,103,935; GSM7901264 `molecules_spliced` 4,718,591 vs 4,724,251 (0.12%).
+- Junction hits differ by +0.05% (3') and +3.4% (5'), and the junction feature table is larger in streaming mode.
+- `rrna_reads`, `ase_counts.tsv`, `snp_ad/dp.1pz`, `cell_qc_metrics.tsv` and the downstream files built from them differ.
+- Without the fixed list the streaming run chooses a different barcode set (13,302 vs 13,098 cells; 60.85 M vs 59.53 M barcoded reads):
+  the sorted path re-derives its list from a full scan of the sorted BAM (at least 5 primary records per `CB`, in the order the
+  scan first sees them, ties included). A streaming path has no such scan; this is the "barcode-order dependence" W2 already
+  tracks, and needs either the pass-1 set or a pre-scan of the unsorted BAM.
+- Running the sorted path with one pileup thread (to rule out the parallel pileup's cross-worker multimapper count) leaves 25-26
+  differing files, so the parallel pileup is not the main cause. The remaining candidates (UMI-dedup and multimapper tie-breaks that
+  depend on read order, a different strand probe sample - 10,000 reads, antisense fraction 0.022 vs 0.056, same call - and
+  junction filtering) were not separated.
+
+**Not done:** the determinism runs (4/8/16 threads, rerun) and the Kang and high-mtDNA samples. Alpha's `stmig` array was waiting on
+resources in the scavenger partition, so under the Alpha-first rule I stopped submitting; I cancelled three exclusive jobs
+(789728-789730) rather than hold whole nodes. They are ready to submit (`phase1.sbatch` with `SUF=_b1`, `T=4/8/16`, `BCFROM`).
+
+## Result before the prototype (kept for the record)
 
 Retiring the sorted BAM would save **an estimated 19-39% of atlas core-hours (medians across scenarios; 13-58% across
 sample profiles)**, so the phase 2 stop rule (15%) does not fire. The feared identity risk, rebuilding STAR's barcode correction, is
@@ -143,18 +183,23 @@ Both alternatives recover well under 15%.
   thread-count dependence of the junction and rRNA outputs, not a streaming effect.
 - **Non-host EM table:** differs between reruns of the same binary (job 789001, reported by the orchestrator): pre-existing nondeterminism.
 
-## Phase 6: decision
+## Phase 6: decision (after the prototype)
 
 | criterion | state |
 |---|---|
-| (a) measured saving at least 15% of atlas core-hours | **bounded, not measured**: medians 19-39%; the lowest per-profile minimum is 12.6% |
-| (b) identical outputs, or every difference accepted | **untested**; the largest identified risk (barcode correction) is shown to be absent |
-| (c) peak memory fits 16 jobs per 512 GB node | **unknown** for streaming; the sorted path's RSS is 53-74 GB |
+| (a) measured saving at least 15% of atlas core-hours | **met on the like-for-like pair: 18.7-19.6% of wall** (3' and 5', 4 threads, exclusive nodes); core-hours follow wall at fixed threads. The atlas-weighted bound (19-39% medians) says the saving grows with depth. Production's shared-node sort is slower, which favours streaming further |
+| (b) identical outputs, or every difference benchmarked and accepted by W7 | **not met yet**: 37 of 63 / 34 of 61 files byte-identical, the rest differ by 0.002% (molecules) to 3.4% (junction hits); the barcode list needs a rule; the cause of the residue is not isolated; determinism untested |
+| (c) peak memory fits 16 jobs per 512 GB node | **no regression**: RSS 53-73 GB streaming vs 54-74 GB sorted; the packing plan's per-job budget (about 32 GB) is unmet by both and depends on the shared-genome work, not on this change |
 
-The three criteria cannot yet all be shown to hold, so this is **not yet a "proceed"**. The saving bound is large enough, and the main
-identity risk small enough, to justify finishing the prototype (steps 1-6 above) before the Beta Software Freeze. If it misses, the best
-cheap fallback is the external sort at about 6-7%. Memory is the open item for the packing plan: the sorted path already needs 53-74 GB
-RSS, and any in-memory per-position tally comes on top.
+**Recommendation: proceed with the streaming path as an opt-in flag, but do not make it the Beta default until (b) is closed.** The
+saving is real (about 19% of wall at idle nodes, more under co-tenancy) and costs no memory. Closing (b) needs, in order:
+1. A barcode-set rule that does not depend on BAM order (sort ties lexicographically in both paths; take the set from the pass-1
+   `.1fq` counts or a pre-scan of the unsorted BAM). W2 has this as bug 5.
+2. Isolate the residue by feeding the same unsorted-order BAM to the serial pileup with a sorted-order BAM of the same reads
+   (`--bam-file`), which separates read-order effects from the strand probe and the junction filter.
+3. Determinism (4/8/16 threads, rerun) and the Kang and high-mtDNA samples for demux, doublet, SNP and mtDNA truth.
+4. W7's acceptance of whatever remains. If it cannot be accepted, keep the sorted path as the default for the Beta software
+   freeze and fall back to the external sort at about 6-7%.
 
 ## Housekeeping
 
