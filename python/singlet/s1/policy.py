@@ -35,10 +35,10 @@ from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 #: generic layer names recorded in the manifest, in a fixed order
 OMITTED_LAYERS = (
     "genotype",  # donor/* except donor_assignments.tsv, snp_*, *.vcf/.bcf, ase_counts.tsv, aligned reads (BAM/CRAM)
-    "mtdna_alleles",  # mt/* except mt_summary.tsv, mt_heteroplasmy.1pz, mt_variants.tsv, *_mt_consensus*, *_mt_variants*
+    "mtdna_alleles",  # mt/* (mt_summary.tsv included: its per-cell mts_* columns), mt_heteroplasmy.1pz, mt_variants.tsv, *_mt_consensus*, *_mt_variants*
     "ancestry_call",  # ancestry_call.json (50-marker call; replaced by the validated per-cell label)
     "ambient",  # ambient_contamination.*, ambient_profile.tsv
-    "doublet_scores",  # doublet_scores.tsv
+    "doublet_scores",  # doublet_scores.tsv, and the doublet columns of cell_qc_metrics.tsv (qc_doublet_score)
     "nonhost_per_cell",  # nonhost/*per_cell* (the sample-level nonhost summary and abundance stay)
     "splice_psi_legacy",  # splice_psi.1pz (0/1 values; clients compute true PSI from sj_counts, D8)
     "sex_call_legacy",  # sex_call.json (legacy pipeline call; replaced by the validated per-cell sex_chrom labels)
@@ -66,7 +66,7 @@ def omitted_layer(rel: str) -> Optional[str]:
     ):
         return "genotype"
     if rel.startswith("mt/"):
-        return None if rel == "mt/mt_summary.tsv" else "mtdna_alleles"
+        return "mtdna_alleles"  # mt_summary.tsv too: its per-cell columns (mts_*) are mtDNA-derived
     if (
         rel in ("mt_heteroplasmy.1pz", "mt_variants.tsv")
         or "_mt_consensus" in name
@@ -190,6 +190,36 @@ def _rewrite_study_meta(data: bytes, drop_gsm: Callable[[str], bool]) -> bytes:
     return (json.dumps(m, indent=2) + "\n").encode("utf-8")
 
 
+def strip_doublet_columns(data: bytes) -> bytes:
+    """``cell_qc_metrics.tsv`` without its doublet columns (``doublet_score``, ``is_doublet``, ...): doublet calls are a withheld
+    layer, and this table would otherwise carry them into the public cells table as ``qc_doublet_score``. Other bytes unchanged."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    lines = text.split("
+")
+    head = [h.rstrip("") for h in lines[0].split("	")]
+    drop = {i for i, h in enumerate(head) if "doublet" in h.strip().lower()}
+    if not drop:
+        return data
+    out = []
+    for ln in lines:
+        if not ln:
+            out.append(ln)
+            continue
+        cr = ln.endswith("")
+        f = (ln[:-1] if cr else ln).split("	")
+        out.append("	".join(x for i, x in enumerate(f) if i not in drop) + ("" if cr else ""))
+    return "
+".join(out).encode("utf-8")
+
+
+def _is_qc_table(path: str) -> bool:
+    s = _sample_of(path)
+    return s is not None and s[1].rsplit("/", 1)[-1] == "cell_qc_metrics.tsv"
+
+
 def _sample_of(path: str) -> Optional[Tuple[str, str]]:
     if not path.startswith("samples/"):
         return None
@@ -270,6 +300,12 @@ def apply_to_bundle(
             rep.omitted_members[why] = rep.omitted_members.get(why, 0) + 1
         rep.omitted_bytes += e.csize
     rep.excluded_samples = sorted(excl)
+    for p in [p for p in bundle.entries if _is_qc_table(p)]:
+        old = bundle.read(p)
+        new = strip_doublet_columns(old)
+        if new != old:
+            bundle.override(p, new)
+            rep.omitted_members["doublet_scores"] = rep.omitted_members.get("doublet_scores", 0) + 1
     study = {p: bundle.read(p) for p in bundle.study_paths()}
     new = rewrite_study_files(study, drop, excl, policy)
     for name, data in new.items():
@@ -311,6 +347,12 @@ class FilteredLegacy:
         self._names = [n for n in names if n not in self.drop and not n.endswith("/")]
         study = {n: inner.read(n) for n in self._names if not n.startswith("samples/")}
         self.override = rewrite_study_files(study, self.drop, self.excl, policy)
+        for n in self._names:
+            if _is_qc_table(n):
+                old = inner.read(n)
+                new = strip_doublet_columns(old)
+                if new != old:
+                    self.override[n] = new
 
     def names(self):
         return list(self._names)
