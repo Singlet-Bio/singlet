@@ -121,7 +121,7 @@ if(SINGLET_BUILD_PIPELINE)
             set_target_properties(singlet_engine_gpu PROPERTIES CUDA_ARCHITECTURES "80;90")
         endif()
         # no fused multiply-add: the port's double arithmetic must round as STAR's does on the host
-        target_compile_options(singlet_engine_gpu PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3 -fmad=false --extended-lambda>)
+        target_compile_options(singlet_engine_gpu PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3 -fmad=false>)
         target_include_directories(singlet_engine_gpu PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/engine_gpu)
         target_link_libraries(singlet_engine_gpu PUBLIC CUDA::cudart_static Threads::Threads)

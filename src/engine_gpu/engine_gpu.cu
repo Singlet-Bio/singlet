@@ -120,6 +120,7 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     status[o] = (uint8_t)s; outLen[o] = (uint16_t)bl.n;
 }
 
+struct ToU64 { __host__ __device__ u64 operator()(uint16_t x) const { return (u64)x; } };
 struct Lane { std::vector<uint8_t> out, status; std::vector<uint16_t> len; std::vector<u64> off; };   // out packed: read k at off[k], len[k] bytes
 
 // packs the lane's fixed-size result slots (slot k at k * slot) into consecutive bytes at off[k]
@@ -160,7 +161,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     {   // copy only the bytes of the results (the slots are 640-4096 bytes, results ~70)
         u64* dPoff; EG_CK(cudaMalloc(&dPoff, (n + 1) * 8)); EG_CK(cudaMemset(dPoff, 0, (n + 1) * 8));
         thrust::transform_inclusive_scan(thrust::device_ptr<uint16_t>(dLen), thrust::device_ptr<uint16_t>(dLen + n), thrust::device_ptr<u64>(dPoff + 1),
-                                         [] __device__ (uint16_t x) { return (u64)x; }, thrust::plus<u64>());
+                                         ToU64(), thrust::plus<u64>());
         u64 total; EG_CK(cudaMemcpy(&total, dPoff + n, 8, cudaMemcpyDeviceToHost));
         uint8_t* dPacked; EG_CK(cudaMalloc(&dPacked, total + 1));
         k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked);
