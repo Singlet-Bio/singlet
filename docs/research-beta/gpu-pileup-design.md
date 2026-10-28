@@ -78,7 +78,11 @@ order, so thread count and rerun cannot change it.
 
 ## Steps, each gated
 
-1. **Hand-off.** `SeqCacheGpuPrefill` keeps the per-read distinct id and the per-distinct results (device-resident while the GPU
+1. **Hand-off, with STAR's own code for the alignments.** In the STAR child, right after the prefill, run STAR's
+   `seqCacheRestore` + `alignBAM` once per distinct sequence: 31.9 M calls instead of 66.6 M per-read calls, on STAR's threads,
+   with a placeholder name and quality. Keep each alignment's core fields: flag, chr, pos, MAPQ, CIGAR, NH, nM. They are then
+   exactly STAR's by construction, with no re-implementation of `alignBAM`'s flag, MAPQ and CIGAR rules.
+   **Original plan for this step:** `SeqCacheGpuPrefill` keeps the per-read distinct id and the per-distinct results (device-resident while the GPU
    is held; on the host, in shared memory for the parent). Per distinct sequence, decode its alignments into the research
    pileup's `AlnRec` layout.
    - Gate: the alignments equal those `extract.cpp` builds from the CPU engine's BAM for the same reads.
