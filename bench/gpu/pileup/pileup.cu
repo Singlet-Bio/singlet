@@ -78,7 +78,7 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
 struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; };
-struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi; };     // per alignment: classify_read result (primary) or exon hit (secondary)
+struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat; };   // stat: see k_annotate     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
 struct SJL { int32_t tid, donor, acc; };
 struct IND { uint32_t pos, lenins; };
@@ -113,27 +113,38 @@ __device__ __forceinline__ bool wrong_strand(const StrandPar& S, uint32_t g) {
     bool er = (gs == '-'); if (S.reverse) er = !er; return S.read_rev != er; }
 struct ExonCb {
     const StrandPar* S; const uint32_t* e2g; uint32_t ne; bool any, same; uint32_t first_idx, first_gene;
+    bool sense = false, anti = false; uint32_t blk_raw = 0, blk_ok = 0;   // engine's strand_vote (unfiltered overlaps) and block counts
     __device__ void operator()(uint32_t idx) {
-        uint32_t g = idx < ne ? e2g[idx] : MAXU; if (wrong_strand(*S, g)) return;
+        uint32_t g = idx < ne ? e2g[idx] : MAXU;
+        { char gs = g < S->ng ? S->gstr[g] : '.'; if (gs != '.') { if (S->read_rev == (gs == '-')) sense = true; else anti = true; } }
+        blk_raw++;
+        if (wrong_strand(*S, g)) return;
+        blk_ok++;
         if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) same = false; } };
 struct IntronCb {
     const StrandPar* S; const uint32_t* i2g; uint32_t ni; uint32_t exon_gene; bool any, same; uint32_t first_idx, first_gene, match_idx;
     __device__ void operator()(uint32_t idx) {
         uint32_t g = idx < ni ? i2g[idx] : MAXU; if (wrong_strand(*S, g)) return;
         if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) same = false;
-        if (exon_gene != MAXU && g == exon_gene && match_idx == MAXU) match_idx = idx; } };
+        if (exon_gene != MAXU && g == exon_gene && match_idx == MAXU) match_idx = idx;
+        if (exon_gene != MAXU && g != exon_gene) other = true; }   // classify_read's other_gene_intron
+    bool other = false; };
 
 __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree EX, DTree IN, const uint32_t* e2g, uint32_t ne, const uint32_t* i2g, uint32_t ni, const char* gstr, uint32_t ng, DPar P, AA* out) {
     int a = blockIdx.x * blockDim.x + threadIdx.x; if (a >= nA) return;
-    AlnRec x = A[a]; bool prim = (x.flags & 2) != 0; StrandPar SP{P.stranded, P.reverse, gstr, ng, (x.flags & 1) != 0};
+    AlnRec x = A[a]; bool prim = (x.flags & 2) != 0; StrandPar SP{P.stranded, P.reverse, gstr, ng, (x.flags & 1) != 0}; bool had_reject = false;
     ExonCb ec{&SP, e2g, ne, false, true, MAXU, MAXU};
     const uint32_t* o = ops + x.ops_off; int32_t rpos = x.pos;
     for (int i = 0; i < x.n_ops; i++) {
         uint32_t c = o[i]; int op = c & 15; int32_t len = (int32_t)(c >> 4);
-        if (op == 0 || op == 7 || op == 8) { tree_query(EX, x.tid, rpos, rpos + len, ec); rpos += len; }
+        if (op == 0 || op == 7 || op == 8) {
+            ec.blk_raw = 0; ec.blk_ok = 0;
+            tree_query(EX, x.tid, rpos, rpos + len, ec); rpos += len;
+            if (ec.blk_raw > 0 && ec.blk_ok == 0) had_reject = true;   // a block whose exons were all on the wrong strand
+        }
         else if (op == 2 || op == 3) rpos += len;
     }
-    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0};
+    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0};
     if (!prim) { if (ec.any) { if (ec.same) { r.gene = ec.first_gene; r.exon = ec.first_idx; } else r.multi = 1; } out[a] = r; return; }
     bool unique_e = ec.any && ec.same && ec.first_gene != MAXU; uint32_t exon_gene = unique_e ? ec.first_gene : MAXU; bool pm = ec.any && !unique_e;
     IntronCb ic{&SP, i2g, ni, exon_gene, false, true, MAXU, MAXU, MAXU};
@@ -149,7 +160,12 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
     if (pm) { }
     else if (exon_gene != MAXU) { r.gene = exon_gene; r.exon = ec.first_idx; r.intron = ic.match_idx; r.flags = ic.match_idx == MAXU ? 5 : 6; }
     else if (intron_gene != MAXU) { r.gene = intron_gene; r.intron = ic.first_idx; r.flags = 2; }
-    r.multi = pm; r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene; out[a] = r;
+    r.multi = pm; r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
+    // stat (primary alignments; the engine's serial loop counters): 1 strand vote sense, 2 strand vote antisense, 4 wrong_strand
+    // (no accepted exon overlap although a block had only wrong-strand exons), 8 cross_gene_intron (classify_read), 16 multigene
+    r.stat = (ec.sense ? 1u : 0u) | (ec.anti ? 2u : 0u) | ((!ec.any && had_reject) ? 4u : 0u)
+           | ((!pm && exon_gene != MAXU && ic.other) ? 8u : 0u) | (pm ? 16u : 0u);
+    out[a] = r;
 }
 
 // one signature -> what the engine's count_read receives (NH == 1 directly, NH > 1 through the mm_buffer state machine, in BAM order)
@@ -285,6 +301,10 @@ __global__ void k_moldec(const uint64_t* mv, int m, uint64_t* val, unsigned long
     val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull); }
 static bool g_snp_first = false;   // --snp-first: the sorted path's first-read rule (prod/campaign), for the original gate
 static unsigned long long g_snp_stat[3] = {0, 0, 0};
+// count_read's counters over the gene tuples: [0] exon_hits, [1] intron_hits (kReadIntron), [2] reads recorded with a UMI (umi_duplicate)
+__global__ void k_hits(const Rec* r, int n, unsigned long long* c) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    atomicAdd(&c[(r[i].flags & 2) ? 1 : 0], 1ull); if (!r[i].direct) atomicAdd(&c[2], 1ull); }
 // reads recorded in the molecule store per cell (per_cell_molecule_stats' total_reads): gene tuples with a UMI
 __global__ void k_cellreads(const Rec* r, int n, uint32_t* out) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n && !r[i].direct) atomicAdd(&out[r[i].bc], 1u); }
@@ -319,6 +339,8 @@ struct Outputs {
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
     long long n_gene_tuples = 0, n_sjl = 0, n_sj_tuples = 0, n_snp_tuples = 0, n_mt_tuples = 0, n_ind_tuples = 0, n_junctions = 0;
     std::vector<uint32_t> cell_reads, cell_mol;   // per cell, when g_cell_stats
+    unsigned long long hits[3] = {0, 0, 0};         // exon_hits, intron_hits, UMI reads recorded (when g_cell_stats)
+    std::vector<uint32_t> aa_gene; std::vector<uint8_t> aa_stat;   // per alignment (when g_cell_stats): classify_read gene, k_annotate stat
     unsigned long long sj_raw_sum = 0;   // distinct (cell, junction, UMI) before the 65535 clamp (the engine's stats.sj_hits)
 };
 static std::vector<T3> csr_to_t3(const Csr& c, int ncells) { std::vector<T3> v; v.reserve(c.indices.size()); for (int cell = 0; cell < ncells; cell++) for (uint32_t k = c.indptr[cell]; k < c.indptr[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, c.indices[k], c.data[k]}); return v; }
@@ -357,11 +379,13 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     uint32_t* gf = A.alloc<uint32_t>(nR); k_gflag<<<(nR + TB - 1) / TB, TB>>>(in.R, nR, gr, gf);
     uint32_t* goff = scan_u32(A, gf, nR); int ng = total_of(A, gf, goff, nR);
     Rec* recs = A.alloc<Rec>(std::max(ng, 1)); k_gfill<<<(nR + TB - 1) / TB, TB>>>(in.R, nR, gr, gf, goff, in.ulen, recs);
-    uint32_t* cell_reads = nullptr; uint32_t* cell_mol = nullptr;
+    uint32_t* cell_reads = nullptr; uint32_t* cell_mol = nullptr; unsigned long long* hits = nullptr;
     if (g_cell_stats) {
         cell_reads = A.alloc<uint32_t>(std::max(in.ncells, 1)); cell_mol = A.alloc<uint32_t>(std::max(in.ncells, 1));
         CK(cudaMemset(cell_reads, 0, std::max(in.ncells, 1) * 4)); CK(cudaMemset(cell_mol, 0, std::max(in.ncells, 1) * 4));
         if (ng > 0) k_cellreads<<<(ng + TB - 1) / TB, TB>>>(recs, ng, cell_reads);
+        hits = A.alloc<unsigned long long>(4); CK(cudaMemset(hits, 0, 32));
+        if (ng > 0) k_hits<<<(ng + TB - 1) / TB, TB>>>(recs, ng, hits);
         CK(cudaMemcpyToSymbol(g_cell_mol, &cell_mol, sizeof(cell_mol)));
     }
     uint32_t* rc = A.alloc<uint32_t>(nR); const int GR = (nR + TB - 1) / TB;
@@ -439,6 +463,11 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1));
         CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->cell_mol.data(), cell_mol, out->cell_mol.size() * 4, cudaMemcpyDeviceToHost));
+        CK(cudaMemcpy(out->hits, hits, 24, cudaMemcpyDeviceToHost));
+        std::vector<AA> h(nA);
+        if (nA) CK(cudaMemcpy(h.data(), aa, (size_t)nA * sizeof(AA), cudaMemcpyDeviceToHost));
+        out->aa_gene.resize(nA); out->aa_stat.resize(nA);
+        for (int k = 0; k < nA; k++) { out->aa_gene[k] = h[k].gene; out->aa_stat[k] = (uint8_t)h[k].stat; }
     }
     // ---------------- fetch (not timed) ----------------
     out->n_gene_tuples = ng; out->n_sjl = n_sjl; out->n_sj_tuples = n_sjt; out->n_snp_tuples = n_snpt; out->n_mt_tuples = n_mtt; out->n_ind_tuples = n_indt; out->n_junctions = nj;
