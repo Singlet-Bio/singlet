@@ -5034,6 +5034,8 @@ int main(int argc, char* argv[]) {
         static std::string handoff_path;
         handoff_path = out_prefix + "/.gpu_handoff.bin";
         setenv("SINGLET_ENGINE_GPU_HANDOFF", handoff_path.c_str(), 1);
+        // "on": STAR's mapping threads count each hand-off read's bases below the pileup's base-quality threshold
+        setenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ", std::to_string(config.min_baseq).c_str(), 1);
     }
 #endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5

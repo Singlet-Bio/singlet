@@ -1914,8 +1914,16 @@ public:
         const gpupileup::Handoff* H = gpu_col_ ? gpu_col_->handoff() : nullptr;
         if (!H) return true;   // no hand-off: every read came through the stream
         if (!H->simple) { std::cerr << "[gpu_pileup] hand-off: barcode layout is not CB_UMI_Simple\n"; return false; }
-        gpupileup::LineReader f1(std::getenv("SINGLET_DECODE_R1")), f2(std::getenv("SINGLET_DECODE_R2"));
-        if (!f1.ok() || !f2.ok()) return false;
+        // "on": STAR's mapping threads wrote each hand-off read's CR, UR and quality counters (ReadEntry); otherwise (and in check
+        // mode) they come from the decoded R1/R2, cut as STAR cuts them
+        const bool ent = !check && gpu_col_->load_handoff_reads();
+        const gpupileup::ReadEntry* E = ent ? H->reads : nullptr;
+        gpupileup::LineReader f1(ent ? nullptr : std::getenv("SINGLET_DECODE_R1")), f2(ent ? nullptr : std::getenv("SINGLET_DECODE_R2"));
+        if (!ent && (!f1.ok() || !f2.ok())) return false;
+        auto unpack = [](uint64_t v, uint32_t L, std::string& s) {
+            static const char kB[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
+            s.resize(L); for (uint32_t j = 0; j < L; j++) s[j] = kB[(v >> (3 * j)) & 7];
+        };
         char comp[256]; for (int i = 0; i < 256; i++) comp[i] = 'N';
         comp[(int)'A'] = 'T'; comp[(int)'C'] = 'G'; comp[(int)'G'] = 'C'; comp[(int)'T'] = 'A';
         std::string l1[4], l2[4];
@@ -1935,10 +1943,13 @@ public:
         PileupStats& st = check ? scratch : stats;
         uint64_t n_done = 0;
         std::string bseq, cr, ur, qn, rseq;
+        uint64_t n_unwritten = 0;
         for (uint64_t i = 0; i < H->n_reads; ++i) {
-            bool ok = true;
-            for (int k = 0; k < 4 && ok; ++k) ok = f1.get(l1[k]) && f2.get(l2[k]);
-            if (!ok) return false;
+            if (!ent) {
+                bool ok = true;
+                for (int k = 0; k < 4 && ok; ++k) ok = f1.get(l1[k]) && f2.get(l2[k]);
+                if (!ok) return false;
+            }
             const uint32_t rec = H->read_rec[i];
             if (rec == 0xFFFFFFFFu) continue;   // read with N (or not mapped on the GPU): it came through the stream
             const uint8_t* p = H->data + H->rec_off[rec];
@@ -1961,20 +1972,27 @@ public:
             st.total_reads += n; st.mapped_reads += n; st.secondary_reads += nsec;
             if (pk < 0) continue;
             ++n_done;
-            const int L2 = (int) l2[1].size();
+            if (ent && !(E[i].flags & 1)) { ++n_unwritten; continue; }
+            // the cDNA read: the record's sequence (the prefill's distinct sequences are the R2 lines as decoded), or R2
+            uint16_t rl = 0; std::memcpy(&rl, p, 2); const uint8_t* rs = p + 2;
+            const int L2 = ent ? (int) rl : (int) l2[1].size();
             // R4 rRNA sample (primary; once per read), on the sequence as the BAM stores it
             qn = "r" + std::to_string(i);
             if (L2 >= 21 && (hash_qname(qn.c_str()) & 63) == 0) {
                 ++st.rrna_reads_sampled;
-                rseq.assign(l2[1].data(), L2);
-                if (pflag & BAM_FREVERSE) { for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) l2[1][L2 - 1 - j]]; }
+                if (ent) { rseq.resize(L2); for (int j = 0; j < L2; j++) rseq[j] = seq_nt16_str[(rs[j >> 1] >> ((j & 1) * 4)) & 15]; }
+                else rseq.assign(l2[1].data(), L2);
+                if (pflag & BAM_FREVERSE) { const std::string fw = rseq; for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) fw[L2 - 1 - j]]; }
                 if (rrna_detector_.detect(rseq)) ++st.rrna_reads;
             }
             if (ptid == chrm_tid_) st.chrm_reads++;
             // CB from CR (the stream's rule), CR / UR as STAR cuts them
-            bseq = l1[1];
-            if (bseq.size() < H->cbumiL) bseq.append(H->cbumiL - bseq.size(), 'N');
-            cr = bseq.substr(H->cbS - 1, H->cbL); ur = bseq.substr(H->umiS - 1, H->umiL);
+            if (ent) { unpack(E[i].cr3, H->cbL, cr); unpack(E[i].ur3, H->umiL, ur); }
+            else {
+                bseq = l1[1];
+                if (bseq.size() < H->cbumiL) bseq.append(H->cbumiL - bseq.size(), 'N');
+                cr = bseq.substr(H->cbS - 1, H->cbL); ur = bseq.substr(H->umiS - 1, H->umiL);
+            }
             bool cbok = !cr.empty() && !ur.empty() && ur[0] != ' ';
             for (char c : cr) if (c == 'N') cbok = false;
             bool homo = true;
@@ -1999,8 +2017,10 @@ public:
                 t_bc[i] = -3;
                 continue;
             }
-            gpu_col_->add_quality(l2[1].data(), l2[3].data(), std::min<int>(L2, (int) l2[3].size()));   // every barcoded primary, as the
-            gpu_col_->add_handoff_read(rec, bc, ur.c_str(), (int) ur.size());                          // collector does (GPU gates MAPQ)
+            // every barcoded primary, as the collector does (the GPU gates MAPQ)
+            if (ent) gpu_col_->add_quality_counts(E[i].low_qual, E[i].qual_neq_n);
+            else gpu_col_->add_quality(l2[1].data(), l2[3].data(), std::min<int>(L2, (int) l2[3].size()));
+            gpu_col_->add_handoff_read(rec, bc, ur.c_str(), (int) ur.size());
             st.barcoded_reads++;
             if (static_cast<uint32_t>(bc) < per_cell_reads_.size()) per_cell_reads_[static_cast<uint32_t>(bc)]++;
             const int nh = std::max<int>(pnh, 1);
@@ -2020,7 +2040,12 @@ public:
                       << c_umi << " UMI differs, " << c_only_pass << " only in the pass, " << c_only_stream << " only in the stream\n";
             return true;
         }
-        std::cerr << "[gpu_pileup] hand-off pass: " << n_done << " reads without BAM records\n";
+        if (n_unwritten) {
+            std::cerr << "[gpu_pileup] hand-off: STAR wrote no entry for " << n_unwritten << " hand-off reads\n";
+            return false;
+        }
+        std::cerr << "[gpu_pileup] hand-off pass: " << n_done << " reads without BAM records (barcodes and qualities from "
+                  << (ent ? "STAR's per-read entries" : "R1/R2") << ")\n";
         return true;
     }
     bool gpu_pileup_apply(PileupStats& stats) {

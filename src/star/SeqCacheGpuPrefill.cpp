@@ -314,6 +314,22 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
             keep.swap(out.readRecord);
             g_handoffReadRecord = keep.data(); g_handoffNReads = keep.size();
             P.inOut->logMain << "ENGINE_GPU: no BAM records for the reads of the " << nRec << " hand-off records\n";
+            // and the per-read entries (barcode, UMI, quality counters) in a shared mapping, filled by the mapping threads
+            const char *mq = getenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ");
+            if (mq != nullptr && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21) {
+                const std::string rp = std::string(hp) + ".reads";
+                const size_t bytes = std::max<size_t>(1, g_handoffNReads * sizeof(HandoffReadEntry));
+                int fd = open(rp.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
+                void *m = MAP_FAILED;
+                if (fd >= 0 && ftruncate(fd, (off_t) bytes) == 0) m = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+                if (fd >= 0) close(fd);
+                if (m != MAP_FAILED) {   // the file is zero-filled: unwritten entries have flags 0
+                    g_handoffReads = (HandoffReadEntry *) m; g_handoffMinQ = atoi(mq);
+                    P.inOut->logMain << "ENGINE_GPU: per-read hand-off entries -> " << rp << "\n";
+                } else {
+                    unlink(rp.c_str());
+                }
+            }
         }
     }
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "

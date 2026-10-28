@@ -55,10 +55,27 @@ struct LineReader {
         }
     }
 };
+// STAR's per-read hand-off entry (HandoffReadEntry in src/star/SeqCache.h): CR and UR, 3 bits per base (A0 C1 G2 T3 other 4, base 0
+// lowest), and the cDNA read's base-quality counters; flags bit 0 set when STAR wrote it
+struct ReadEntry { uint64_t cr3, ur3; uint16_t low_qual, qual_neq_n; uint32_t flags; };
+static_assert(sizeof(ReadEntry) == 24, "ReadEntry layout is STAR's HandoffReadEntry");
 struct Handoff {
     const uint8_t* map = nullptr; size_t size = 0;
     uint64_t n_reads = 0, n_rec = 0; const uint32_t* read_rec = nullptr; const uint64_t* rec_off = nullptr; const uint8_t* data = nullptr;
     uint32_t cbS = 0, cbL = 0, umiS = 0, umiL = 0, cbumiL = 0, simple = 0;   // STAR's barcode layout (v2)
+    const ReadEntry* reads = nullptr; size_t reads_size = 0; std::string reads_path;   // "on": <path>.reads, written by STAR's mapping threads
+    // the per-read entries, once STAR has exited ("on" only); false if there are none
+    bool load_reads() {
+        if (reads) return true;
+        if (reads_path.empty()) return false;
+        int fd = open(reads_path.c_str(), O_RDONLY); if (fd < 0) return false;
+        struct stat st; if (fstat(fd, &st) != 0 || (uint64_t) st.st_size != n_reads * sizeof(ReadEntry) || n_reads == 0) { close(fd); return false; }
+        void* m = mmap(nullptr, (size_t) st.st_size, PROT_READ, MAP_PRIVATE, fd, 0); close(fd);
+        if (m == MAP_FAILED) return false;
+        madvise(m, (size_t) st.st_size, MADV_SEQUENTIAL);
+        reads = (const ReadEntry*) m; reads_size = (size_t) st.st_size;
+        return true;
+    }
     bool load(const char* path) {
         int fd = open(path, O_RDONLY); if (fd < 0) return false;
         struct stat st; if (fstat(fd, &st) != 0 || st.st_size < 24) { close(fd); return false; }
@@ -74,9 +91,13 @@ struct Handoff {
         rec_off = (const uint64_t*) (map + 48 + 4 * n_reads);
         data = (const uint8_t*) (rec_off + n_rec + 1);
         if ((size_t) (data - map) + rec_off[n_rec] > size) { unmap(); return false; }
+        reads_path = std::string(path) + ".reads";
         return true;
     }
-    void unmap() { if (map) munmap((void*) map, size); map = nullptr; }
+    void unmap() {
+        if (map) munmap((void*) map, size); map = nullptr;
+        if (reads) { munmap((void*) reads, reads_size); unlink(reads_path.c_str()); } reads = nullptr;
+    }
     ~Handoff() { unmap(); }
 };
 
@@ -174,6 +195,8 @@ public:
         if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
         return ho_ok_ ? &ho_ : nullptr;
     }
+    // "on", after STAR has exited: map STAR's per-read entries (handoff()->reads); false if there are none
+    bool load_handoff_reads() { return handoff() != nullptr && ho_.load_reads(); }
     // a hand-off read that STAR wrote no BAM record for ("on"): its record, barcode column and UMI (A0 C1 G2 T3 N4, 3 bits each)
     void add_handoff_read(uint32_t rec, int32_t bc, const char* umi, int umi_len) {
         uint64_t u3 = 0;
@@ -189,6 +212,8 @@ public:
             if (lq != isn) qual_neq_n_++;
         }
     }
+    // the same counters, as STAR's mapping threads counted them for a hand-off read (ReadEntry)
+    void add_quality_counts(uint32_t low_qual, uint32_t qual_neq_n) { lowqual_bases_ += low_qual; qual_neq_n_ += qual_neq_n; }
     size_t n_sigs() const { return sigs_.size(); }
     uint64_t incomplete() const { return incomplete_; }
     uint64_t no_umi() const { return no_umi_; }

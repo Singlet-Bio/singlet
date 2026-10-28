@@ -13,6 +13,8 @@
 SeqCache *g_seqCache = nullptr;
 const uint32 *g_handoffReadRecord = nullptr;
 uint64 g_handoffNReads = 0;
+HandoffReadEntry *g_handoffReads = nullptr;
+int g_handoffMinQ = 0;
 #ifdef STAR_PROFILE
 std::atomic<unsigned long long> g_prof[PROF_N];
 std::atomic<unsigned long long> g_profOutcome[6][2];

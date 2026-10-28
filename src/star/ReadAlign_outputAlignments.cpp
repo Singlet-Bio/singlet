@@ -59,6 +59,26 @@ void ReadAlign::outputAlignments() {
         PROF_T0(tOutBarcode);
         soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
         PROF_ADD(PROF_outBarcode, tOutBarcode);
+        //singlet GPU pileup "on": what the pileup would have taken from this hand-off read's BAM record (CR, UR, base qualities)
+        if (g_handoffReads != nullptr && iReadAll >= 1 && iReadAll - 1 < g_handoffNReads && g_handoffReadRecord[iReadAll - 1] != 0xFFFFFFFFu) {
+            HandoffReadEntry &e = g_handoffReads[iReadAll - 1];
+            auto pack = [](const string &s) {
+                uint64 v = 0;
+                for (size_t j = 0; j < s.size() && j < 21; j++) {
+                    const char c = s[j];
+                    v |= (uint64) (c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4) << (3 * j);
+                }
+                return v;
+            };
+            e.cr3 = pack(soloRead->readBar->cbSeq); e.ur3 = pack(soloRead->readBar->umiSeq);
+            uint32 lq = 0, ne = 0;
+            for (uint64 j = 0; j < readLengthOriginal[0]; j++) {
+                const bool low = ((int) (unsigned char) Qual0[0][j] - 33) < g_handoffMinQ, isN = Read0[0][j] == 'N';
+                lq += low; ne += (low != isN);
+            }
+            e.lowQual = (uint16) min(lq, (uint32) 65535); e.qualNeqN = (uint16) min(ne, (uint32) 65535);
+            e.flags = 1;
+        };
 
         //transcripts: need to be run after CB/UMI are obtained to output CR/UR tags
         if ( P.quant.trSAM.yes && unmapType<0) {//Aligned.toTranscriptome output, only for mapped
