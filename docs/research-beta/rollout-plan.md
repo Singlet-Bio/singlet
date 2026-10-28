@@ -160,6 +160,17 @@ Changes in order of value:
 - **Brief:** [gpu-aligner-brief.md](gpu-aligner-brief.md).
 - **Relation to the BSF:** it does not gate the BSF. It can take over the campaign mid-way if it passes the same
   equivalence and benchmark gates.
+- **Status and direction (Zach, 2026-10-27 evening):**
+  - W11 (an exact STAR port, PR #61) is the path to a state-of-the-art H100 node pipeline that uses the node's CPU and GPU
+    fully. It must keep reducing bottlenecks and show the cost offset against the best CPU pipeline.
+  - Projected 20–30× per node against a CPU node; the CPU-side work on the node is the limit. This is not measured end to
+    end until the stitch port (M5) passes.
+  - Ideas from the separate "Aligner Brainstorming" study (its own non-STAR aligner, not at parity) go into W11 only where
+    they stay exact. That study is not committed until it is validated.
+  - The engine ships in the `singlet` package as an optional CUDA build (`--engine gpu`), so the pipeline can be reproduced
+    end to end.
+  - The input format is reconsidered for a CPU-download / GPU-align split ([ingest-format.md](ingest-format.md), with W4).
+  - An overnight run (to 06:00, 2026-10-28) ends in a PR against `prod/campaign`.
 
 ### 3c. Calendar and SU model
 
