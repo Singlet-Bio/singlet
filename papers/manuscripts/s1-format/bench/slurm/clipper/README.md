@@ -27,9 +27,11 @@ spinning disks, shared filesystems or object stores:
 
 ```bash
 SHA=<commit>                                   # pushed to GitHub first
-sbatch --export=ALL,S1_SHA=$SHA setup.sbatch
-sbatch --array=0-9%6 --partition=short-cpu --mem=64G --cpus-per-task=8 \
-  --export=ALL,S1_SHA=$SHA,DS_LIST=pbmc3k,pbmc10k_v3,...,STAGES="fetch canon" stage.sbatch
+S1_SHA=$SHA sbatch --export=ALL setup.sbatch
+# lists go through the environment: sbatch --export splits its argument on commas
+DS_LIST=pbmc3k,pbmc10k_v3 STAGES="fetch canon" S1_SHA=$SHA sbatch --array=0-1 --partition=scavenger --mem=64G \
+  --cpus-per-task=8 --export=ALL stage.sbatch
+DS_LIST=pbmc10k_v3 S1_SHA=$SHA sbatch --array=0 --export=ALL timed.sbatch
 ```
 
 Results stay in `$S1/results` (cross-checks in `$S1/results-<name>`); copy the TSVs, `env.json` and `environment.lock.yml` back to `../../results/` in the
