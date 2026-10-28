@@ -161,6 +161,7 @@ pass (cache lookups, FASTQ parsing: about 3).
 | + molecule list for saturation and cell QC, cheaper collector | **pass** | 1,214 (18.2) | 1,172 (17.6) | 420 / 407 s | 790520 |
 | + classification, strand, poly(A) and VDJ from the GPU | **pass** | 1,230 (18.5) | **1,175 (17.6)** | 456 / **376 s** | 790552 |
 | + hand-off: the prefill's alignments go to the pileup; STAR writes no BAM records for those reads (60.3 M of 60.4 M barcoded) | **pass** | 1,273 (19.1) | 1,180 (17.7) | 464 / 397 s | 790789 |
+| + STAR's mapping threads write each hand-off read's CR, UR and quality counters; no FASTQ re-read | **pass** | 1,228 (18.4) | **1,102 (16.5)** | 426 / **349 s** | 790820 (node g052) |
 
 How the hand-off was checked: with `SINGLET_GPU_PILEUP=compare`, the pass rebuilds each hand-off read's barcode and UMI from R1 and
 compares them with the stream's. All 60,338,992 reads matched (job 790769). Two bugs found on the way:
