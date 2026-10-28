@@ -79,13 +79,24 @@ write_s1 <- function(x, path, sample_id = "sample", assay = "counts", member = "
     head
 }
 
-#' Is a file a .s1 object written by write_s1 (a "counts" member, no atlas members)?
+#' The matrix member of a .s1 object that is not an atlas sample (none of the atlas members): "counts" if it has one, else
+#' its only pz2 matrix member. NULL for an atlas sample, a file that is not a sample object, or several matrices and no
+#' "counts". As user_member() in python/singlet/s1/write.py.
 #' @keywords internal
 #' @noRd
-.s1_is_user_object <- function(path) {
+.s1_user_member <- function(path) {
     info <- tryCatch(s1_members_(.s1_read_head(path)), error = function(e) NULL)
-    !is.null(info) && "counts" %in% info$name && !any(c("exon_counts.1pz", "intron_counts.1pz", "cells") %in% info$name)
+    if (is.null(info) || any(c("exon_counts.1pz", "intron_counts.1pz", "cells") %in% info$name)) return(NULL)
+    k <- match("counts", info$name)
+    if (!is.na(k) && info$kind[[k]] == 1L) return("counts")
+    mats <- info$name[info$kind == 1L]
+    if (length(mats) == 1L) mats else NULL
 }
+
+#' Is a file a one-matrix .s1 object, such as one written by write_s1?
+#' @keywords internal
+#' @noRd
+.s1_is_user_object <- function(path) !is.null(.s1_user_member(path))
 
 #' Read a .s1 object written by write_s1
 #'

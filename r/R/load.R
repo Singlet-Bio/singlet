@@ -571,7 +571,7 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
                 return(list(manifest = p, gsm = NA_character_))
             }
             if (grepl("\\.s1$", p, ignore.case = TRUE) && .s1_is_user_object(p)) {
-                return(list(s1 = p, gsm = NA_character_))  # written by write_s1(), not an atlas sample
+                return(list(s1 = p, gsm = NA_character_))  # one count matrix (write_s1()), not an atlas sample
             }
             return(list(path = p, gsm = NA_character_))
         }
@@ -599,7 +599,7 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
         } else if (!is.null(t1$manifest)) {
             .s1_load_manifest(t1$manifest, gsms, modalities = modalities, labels = lab)
         } else if (!is.null(t1$s1)) {
-            read_s1(t1$s1, as = "sce")
+            read_s1(t1$s1, as = "sce", member = .s1_user_member(t1$s1))
         } else {
             .legacy_modalities(.read_singlet_bundle(t1$path, gsms = gsms), modalities)
         }

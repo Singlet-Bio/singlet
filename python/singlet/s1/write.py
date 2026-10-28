@@ -172,13 +172,25 @@ def write_s1(
     return out
 
 
-def is_user_object(path: PathLike) -> bool:
-    """True for a sample object with a ``counts`` member and none of the atlas members (a :func:`write_s1` file)."""
+def user_member(path: PathLike) -> Optional[str]:
+    """The matrix member to read from a sample object that is not an atlas sample (none of the atlas members): ``counts``
+    if it has one, else its only pz2 matrix member. None for an atlas sample, a file that is not a sample object, or one
+    with several matrices and no ``counts``."""
     try:
-        names = C.S2Reader(str(path)).members
+        members = C.S2Reader(str(path)).members
     except (OSError, C.S2Error):
-        return False
-    return DEFAULT_MEMBER in names and not any(a in names for a in _ATLAS_MEMBERS)
+        return None
+    if any(a in members for a in _ATLAS_MEMBERS):
+        return None
+    if DEFAULT_MEMBER in members and members[DEFAULT_MEMBER].kind == C.KIND_PZ2:
+        return DEFAULT_MEMBER
+    mats = [n for n, mi in members.items() if mi.kind == C.KIND_PZ2]
+    return mats[0] if len(mats) == 1 else None
+
+
+def is_user_object(path: PathLike) -> bool:
+    """True for a one-matrix sample object such as a :func:`write_s1` file (see :func:`user_member`)."""
+    return user_member(path) is not None
 
 
 def read_s1(

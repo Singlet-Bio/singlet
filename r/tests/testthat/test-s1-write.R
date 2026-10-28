@@ -101,4 +101,16 @@ test_that("SingleCellExperiment in, SingleCellExperiment out, and load() reads t
     expect_identical(as.matrix(SummarizedExperiment::assay(back, "counts")), as.matrix(m))
     loaded <- load(f)
     expect_identical(as.matrix(SummarizedExperiment::assay(loaded, "counts")), as.matrix(m))
+    expect_identical(dimnames(loaded), dimnames(m))
+})
+
+test_that("load() reads any one-matrix .s1 object, whatever its member is called", {
+    skip_if_not_installed("SingleCellExperiment")
+    m <- random_counts(60, 45, 0.2, seed = 5)
+    f <- tempfile(fileext = ".s1")
+    write_s1(m, f, member = "rna")
+    expect_identical(.s1_user_member(f), "rna")
+    loaded <- load(f)
+    expect_identical(dimnames(loaded), dimnames(m))
+    expect_identical(as.matrix(SummarizedExperiment::assay(loaded, "counts")), as.matrix(m))
 })

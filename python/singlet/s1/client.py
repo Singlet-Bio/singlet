@@ -2028,10 +2028,26 @@ def load_s2(
     verify: bool = False,
     **kw,
 ) -> "anndata.AnnData":
-    """AnnData of the called cells of a local ``.s1`` sample object (memory mapped, no network, no copies of the file)."""
+    """AnnData of the called cells of a local ``.s1`` sample object (memory mapped, no network, no copies of the file).
+
+    A one-matrix object that is not an atlas sample (a :func:`singlet.write_s1` file) is read whole by
+    :func:`singlet.read_s1`: its counts in ``X``, its gene ids and barcodes as ``var_names`` and ``obs_names``."""
     import pandas as pd
 
     from .container import S2Reader
+    from .write import read_s1, user_member
+
+    um = user_member(path)
+    if um is not None:
+        extra = set(normalize_modalities(modalities, layers=layers)) - {"counts"}
+        if modalities is not None and extra:
+            raise ModalityUnavailable(
+                f"{path} holds one count matrix ({um!r}); only modality 'counts' is available"
+            )
+        adata = read_s1(path, member=um)
+        if genes is not None:
+            adata = adata[:, [g for g in genes if g in adata.var_names]].copy()
+        return adata
 
     path = str(path)
     rd = S2Reader(path)

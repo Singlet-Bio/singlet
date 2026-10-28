@@ -110,6 +110,27 @@ def test_round_trip_anndata(tmp_path):
     assert c.shape == (500, 300) and (c.X != sp.csr_matrix(x)).nnz == 0
 
 
+def test_load_reads_one_matrix_objects(tmp_path):
+    """singlet.load, singlet.s1.client.load and load_s2 open a write_s1 file (and a bench-written object) exactly."""
+    from singlet.s1 import client
+
+    x, genes, cells = random_counts(400, 250, 0.08, seed=11)
+    want = sp.csr_matrix(x).astype(np.uint32)
+    p = singlet.write_s1(x, tmp_path / "w.s1", genes=genes, barcodes=cells)
+    (tmp_path / "bench.s1").write_bytes(internal_object(x, genes, cells))
+    (tmp_path / "other.s1").write_bytes(internal_object(x, genes, cells, member="rna"))
+    for path in (p, tmp_path / "bench.s1", tmp_path / "other.s1"):
+        for got in (singlet.load(str(path)), client.load(str(path)), client.load_s2(path)):
+            assert list(got.var_names) == genes and list(got.obs_names) == cells
+            assert got.shape == (400, 250)
+            assert (sp.csr_matrix(got.X).astype(np.uint32) != want).nnz == 0
+    sub = singlet.load(str(p), genes=[genes[7], "absent", genes[3]])
+    assert list(sub.var_names) == [genes[7], genes[3]]
+    assert np.array_equal(sub.X.toarray(), x[:, [7, 3]].toarray())
+    with pytest.raises(client.ModalityUnavailable, match="counts"):
+        singlet.load(str(p), modalities="spliced")
+
+
 def test_round_trip_scipy_and_dense(tmp_path):
     x, genes, cells = random_counts(80, 60, 0.2, seed=3)
     singlet.write_s1(x, tmp_path / "s.s1", genes=genes, barcodes=cells)
