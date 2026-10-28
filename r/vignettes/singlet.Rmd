@@ -17,9 +17,10 @@ knitr::opts_chunk$set(
 
 The `singlet` package gives you programmatic access to the Singlet
 single-cell genomics atlas. You work with two simple things: **GEO
-accessions** (such as `"GSE138867"` or `"GSM4120733"`) and self-contained
-**`.singlet` bundles**. The package handles downloading, caching, decoding,
-and assembling the data into the single-cell objects you already use.
+accessions** (such as `"GSE138867"` or `"GSM4120733"`) and **cell searches**
+across the whole atlas. Each study is published as one `.s1` object per sample
+plus a manifest; the package fetches only the parts it needs, caches them, and
+assembles them into the single-cell objects you already use.
 
 The chunks below need network access and download real studies, so they are
 not run when the vignette is built. Every one of them works as written
@@ -31,6 +32,7 @@ against the public atlas.
 install.packages(c("remotes", "BiocManager"))
 BiocManager::install(c("SingleCellExperiment", "SummarizedExperiment", "S4Vectors"))
 remotes::install_github("Singlet-Bio/singlet", subdir = "r")
+# once on CRAN: install.packages("singlet")
 ```
 
 ```{r setup}
@@ -45,9 +47,10 @@ library(singlet)
 
 ## Load a study by accession
 
-Pass a GEO Series accession to `singlet_load()`. The corresponding `.singlet`
-bundle is downloaded from <https://data.singlet.bio>, cached locally, and
-assembled into a `SingleCellExperiment`.
+Pass a GEO Series accession to `singlet_load()`. The study's manifest and the
+parts of its sample objects that hold the count matrices are fetched from
+<https://data.singlet.bio>, cached locally, and assembled into a
+`SingleCellExperiment`.
 
 ```{r load-one}
 sce <- singlet_load("GSE138867")
@@ -55,7 +58,7 @@ sce
 table(sce$gsm_id)
 ```
 
-Subsequent calls reuse the cached bundle instead of re-downloading. The
+Subsequent calls reuse the cached objects instead of downloading them again. The
 cache lives in `tools::R_user_dir("singlet", "cache")` by default; override
 it with the `cache_dir` argument or the `SINGLET_CACHE_DIR` environment
 variable.
@@ -63,7 +66,7 @@ variable.
 ## Load a single sample
 
 A GEO Sample accession works too. `singlet_load()` looks up the study it
-belongs to, downloads that study's bundle, and keeps only the sample's cells.
+belongs to, fetches that sample from the study, and keeps only the sample's cells.
 
 ```{r load-gsm}
 sce <- singlet_load("GSM4120733")
@@ -88,13 +91,13 @@ cm <- singlet_cells("GSE286650", cell_type == "cardiac muscle cell" & sex_chrom 
   in `cell_type`.
 - `sex_chrom`: chromosomal sex, 98.1% agreement with GEO sample metadata. `ancestry_hancestro`: continental HANCESTRO
   category, human donors with coverage tables only.
-- `called` is the default cell call and `called_ed` the EmptyDrops call. `qc_doublet_score` is unvalidated and only
-  returned with `include_unvalidated = TRUE`.
+- `called` is the default cell call and `called_ed` the EmptyDrops call.
+- Research Alpha withholds per-cell mitochondrial DNA and doublet columns from every published object.
 - The curated GEO fields are `geo_tissue`, `geo_cell_type`, `geo_disease`, `geo_sex` and `geo_age`.
 
 ## Combine several studies
 
-Give `singlet_load()` a vector of accessions (or local bundle paths, or a
+Give `singlet_load()` a vector of accessions (or local manifest paths, or a
 mix) and it returns one combined object aligned on the shared gene axis.
 
 ```{r load-many}
@@ -138,48 +141,50 @@ obj
 head(obj[[]])
 ```
 
-## Other modalities
+## Search the whole atlas for cells
 
-Bundles hold more than gene counts: splicing, mitochondrial heteroplasmy,
-donor assignments, non-host reads and per-cell QC tables, depending on the
-study and pipeline version. Download the bundle, check what a sample has, and
-read what you need.
+`singlet_search_cells()` counts and locates cells by their labels (cell type,
+chromosomal sex, genetic ancestry) and by their sample's metadata (tissue,
+disease, stage, organism, assay, ...); ontology terms match their descendants.
+`singlet_fetch_cells()` then loads just those cells.
 
-```{r modalities}
-path <- singlet_download("GSE128639")
-singlet_modalities(path)
+```{r cells}
+hits <- singlet_search_cells(list(cell_type = "T cell", sex = "female", tissue = "blood"))
+hits
+hits$unmapped   # samples a sample-level filter cannot see (no value recorded)
 
-gsm <- "GSM3681518"
-if (singlet_has(path, "mt_heteroplasmy", gsm)) {
-  het <- singlet_read(path, gsm, "mt_heteroplasmy")
-  dim(het)
-}
-if (singlet_has(path, "cell_qc", gsm)) {
-  head(singlet_read(path, gsm, "cell_qc"))
-}
-
-# One sample's raw counts, with spliced and unspliced assays
-if (singlet_has(path, "exon_counts", gsm)) {
-  raw <- singlet_raw_counts(path, gsm)
-  SummarizedExperiment::assayNames(raw)
-}
+sce <- singlet_fetch_cells(list(cell_type = "B cell", organism = "Homo sapiens", tissue = "blood"),
+                           max_cells = 2000)
+singlet_cell_fields()   # every field and its coverage
 ```
 
-## Working with local bundles
+## Other modalities
 
-If you already have a `.singlet` file on disk, read it directly with
-`read_singlet()` (or just pass the path to `singlet_load()`).
+Beyond gene counts, a study's samples can carry spliced and unspliced layers,
+splice junctions and PSI and V(D)J usage. Ask what a study has, then load it.
+
+```{r modalities}
+singlet_study_modalities("GSE128639")
+sce <- singlet_load("GSE128639", modalities = c("counts", "spliced", "unspliced"))
+SummarizedExperiment::assayNames(sce)
+```
+
+## Working offline
+
+`singlet_download()` copies a study's manifest and sample objects into the
+cache and returns the local manifest path, which `singlet_load()` reads
+without the network.
 
 ```{r local}
 path <- singlet_download("GSE138867")
-sce <- read_singlet(path)
+sce <- singlet_load(path)
 ```
 
 ## Where the data comes from
 
 Each cell carries its source sample in `colData(sce)$gsm_id`, alongside
 tissue, cell type, disease, protocol, and other study metadata when
-available. The parsed bundle manifest and study metadata are attached to
+available. The study's manifest revision and modalities are attached to
 `metadata(sce)` for full provenance.
 
 ```{r provenance}

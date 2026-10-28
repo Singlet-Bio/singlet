@@ -387,7 +387,7 @@ set_api_key <- function(key) {
 #'   \code{legacy = TRUE}, to the local \code{.singlet} file.
 #'
 #' @details
-#' Objects are fetched from \code{<base>/store/...}, where \code{<base>} is the
+#' Objects are fetched from \code{<base>/s1/...}, where \code{<base>} is the
 #' \code{SINGLET_DATA_BASE} environment variable (default
 #' \code{https://data.singlet.bio}; a value ending in \code{/data} is
 #' accepted). \code{GSM} accessions are resolved with the API named by
@@ -486,8 +486,8 @@ singlet_download <- download
 #' @param cell_type_level,cell_type_min_score Per-sample studies: the deepest
 #'   level of \code{colData$cell_type} (default 2, compartment and lineage) and
 #'   an extra minimum path score for it (default 0, none). See \code{\link{singlet_labels}}.
-#' @param include_unvalidated Per-sample studies: also keep the unvalidated
-#'   \code{qc_doublet_score} in \code{colData}.
+#' @param include_unvalidated Also keep the unvalidated \code{qc_doublet_score} in
+#'   \code{colData}; published Research Alpha objects never carry it (local outputs only).
 #' @return A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
 #'   \code{Seurat} object (when \code{as = "seurat"}) spanning all inputs.
 #'   For a per-sample study, \code{colData} holds the per-cell labels
@@ -504,7 +504,7 @@ singlet_download <- download
 #' @details
 #' Downloads honor three environment variables: \code{SINGLET_DATA_BASE}
 #' (the host serving the data, default \code{https://data.singlet.bio}; the per-sample format
-#' objects are fetched from \code{<base>/store/...}),
+#' objects are fetched from \code{<base>/s1/...}),
 #' \code{SINGLET_API_BASE} (used to resolve \code{GSM} accessions, default
 #' \code{https://singlet.bio/api}) and \code{SINGLET_CACHE_DIR} (the on-disk
 #' cache location).
@@ -580,7 +580,7 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
 
     # Read each study or bundle once, however many of its samples were asked for.
     units <- vapply(targets, function(t) {
-        if (!is.null(t$gse)) paste0("store:", t$gse)
+        if (!is.null(t$gse)) paste0("s1:", t$gse)
         else if (!is.null(t$manifest)) paste0("manifest:", t$manifest)
         else t$path
     }, character(1))

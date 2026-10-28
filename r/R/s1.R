@@ -73,7 +73,7 @@
 }
 
 .s1_root <- function(cache_dir = NULL) {
-    d <- file.path(.singlet_cache_dir(cache_dir), "store")
+    d <- file.path(.singlet_cache_dir(cache_dir), "s1")  # same layout as the Python client (<cache>/s1)
     if (!dir.exists(d)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
     d
 }
@@ -120,6 +120,8 @@
         return(list(status = 304L, body = raw(0), etag = etag, total = NA_real_))
     }
     if (status == 404L) .s1_stop(sprintf("%s: HTTP 404", url), "singlet_s1_not_found")
+    # 410: a retired object (a legacy .singlet bundle, or a study Research Alpha withholds)
+    if (status == 410L) .s1_stop(.s1_no_study_message(sprintf("%s: HTTP 410 (gone)", url)), "singlet_s1_not_found")
     if (status == 403L) {
         .s1_stop(sprintf("%s: HTTP 403 (the data host rejects this client; check SINGLET_DATA_BASE)", url))
     }
@@ -970,7 +972,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @param cache_dir Cache directory (see \code{\link{load}}).
 #' @param cell_type_level,cell_type_min_score Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
 #'   it (default 0, none); see \code{\link{singlet_labels}}.
-#' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated) in \code{colData}.
+#' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).
 #' @return A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
 #'   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
 #'   matrix) and the per-cell columns (\code{\link{singlet_labels}}).
@@ -1132,7 +1134,7 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     sce
 }
 
-# A local manifest, .../s1/m/<GSE>.json (its objects are read from the same store/ tree; DUAL: v2/m/ trees too).
+# A local manifest, .../s1/m/<GSE>.json (its objects are read from the same tree; DUAL: older v2/m/ trees too).
 .s1_load_manifest <- function(path, gsms = NULL, modalities = NULL, labels = list()) {
     p <- normalizePath(path, winslash = "/", mustWork = TRUE)
     if (basename(dirname(p)) != "m" || !(basename(dirname(dirname(p))) %in% c("s1", "store", "v2"))) {
