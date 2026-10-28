@@ -24,6 +24,8 @@ Rule: collect, for every (barcode, SNP, UMI), the count of reads showing REF, AL
 
 Why: a molecule is one template; its reads are PCR copies of one allele, so the consensus is the maximum-likelihood allele under any per-read error rate below 0.5, and it is the standard for UMI data (UMI-tools/fgbio consensus, cellsnp-lite and Vireo's UMI mode count one allele per UMI). A tie carries no information about the template's allele; counting it either way, or as both, biases AD/DP toward whichever allele the tie-breaker favours, which distorts allelic ratios at heterozygous sites (ASE, donor genotyping). Excluding it costs only depth, and the counter makes the loss visible.
 
+Key: exact, never a hash: (barcode index, SNP index, UMI), the UMI packed 3 bits per base behind a length bit (UMIs over 21 bases as strings). A hashed key could merge two molecules on a collision (raised by W11; the GPU uses the exact key, CPU since `perf/bam-stream` after `7aa3339`).
+
 Memory: one entry per covered (barcode, SNP, UMI) with three uint8 saturating counters, replacing the `snp_umi_dedup_` set (same key count). Order-free by construction (counts are commutative).
 
 ## R2. mtDNA base counts: unchanged for now, consensus as a follow-on
@@ -83,12 +85,13 @@ Why: row order carries no biology; a canonical order makes identity checkable wi
 
 ## Status
 
-| rule | CPU engine | GPU (W11) |
+| rule | CPU engine (`perf/bam-stream`) | GPU (W11) |
 |---|---|---|
-| R1 SNP consensus | to implement | to implement |
+| R1 SNP consensus | done, `8ab560d`, serial and parallel pileup | to implement |
 | R2 mt consensus | follow-on (memory first) | follow-on |
-| R3 multimappers | already order-free (unique only); EM unused | match unique-only |
-| R4 rRNA hash sample | to implement | to implement |
-| R5 strand | to implement | to implement |
-| R6 barcode universe | done in b237f57 (stream) | take the list from the CPU pass-1 |
-| R7 canonical order | to implement (junctions first) | to implement |
+| R3 multimappers | already order-free (unique only); EM collected but unused | match unique-only |
+| R4 rRNA hash sample | done, `8ab560d`, both paths | to implement |
+| R5 strand | done for the stream, `8ab560d` (no inline probe; aggregate reported; exit 8 on contradiction). The sorted path keeps its genome-sampled probe plus safety net, which re-reads the whole BAM | to implement |
+| R6 barcode universe | done for the stream, `b237f57`; the sorted path still refreshes from the CB-tag scan | take the list from the CPU pass-1 |
+| R7 canonical order | junctions done, `8ab560d`, both paths; other discovery axes still to check against the gates | to implement |
+| shuffled-order gate | not run yet (needs an unsorted STAR BAM kept in job `/tmp` and a `--bam-file` mode that takes CB from CR) | — |
