@@ -46,6 +46,7 @@
 #include "rrna_detect.h"
 #include "polya_sites.h"
 #include "gpu_pileup_dump.h"   // W11: SINGLET_PILEUP_DUMP / SINGLET_STREAM_TEE debug hooks (no effect unless set)
+#include "gpu_pileup_bridge.h" // W11: SINGLET_GPU_PILEUP=compare (GPU builds only; no effect unless set)
 
 namespace singlet {
 
@@ -588,8 +589,17 @@ public:
 #endif
 
         gpudump::StreamTee tee(hdr);   // W11 debug: SINGLET_STREAM_TEE=<file> keeps a copy of the record stream
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (gpupileup::enabled()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end
+#endif
         while (sam_read1(fp, hdr, b) >= 0) {
             tee.write(hdr, b);
+#ifdef SINGLET_HAVE_ENGINE_GPU
+            if (gpu_col_) {
+                const char* gcb = config_.cb_from_cr ? inline_scan_cb_from_cr(b) : inline_scan_cb(b);
+                gpu_col_->add(b, (gcb && gcb[0] != '-') ? bc_index_.lookup(gcb) : -1);
+            }
+#endif
             // Prefetch aux data region into L2 cache while doing flag checks.
             __builtin_prefetch(bam_get_aux(b), 0, 2);
 #ifdef SINGLET_PROFILE
@@ -1141,6 +1151,9 @@ public:
                   << stats.wall_time_s << "s\n";
 
         gpudump_write(static_cast<uint32_t>(tid_to_chrom_.size()));   // W11 debug (SINGLET_PILEUP_DUMP); hdr is already freed here
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        gpu_pileup_compare();   // W11 (SINGLET_GPU_PILEUP=compare)
+#endif
         return stats;
     }
 
@@ -1694,6 +1707,80 @@ public:
                                            (int)config_.umi_dedup_directional, config_.umi_len, chrm_tid_, n_snps_loaded_,
                                            (int)has_gene_model_, gene_model_.n_exons(), gene_model_.n_introns(), gene_model_.n_genes()});
     }
+
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    // W11: runs the GPU pileup on the records collected from this pass and compares each covered output with this engine's accumulators
+    // (exon, intron, ambiguous, junctions by contig/donor/acceptor, SNP AD/DP, chrM total/reverse, chrM indels, R1 molecule counters).
+    std::unique_ptr<gpupileup::Collector> gpu_col_;
+    PileupStats* gpu_stats_ = nullptr;
+    void gpu_pileup_compare() {
+        if (!gpu_col_) return;
+        using namespace singlet_engine_gpu;
+        PileupInput in;
+        const auto& et = gene_model_.exon_trees_view(); const auto& it = gene_model_.intron_trees_view();
+        const uint32_t n_tid = static_cast<uint32_t>(tid_to_chrom_.size());
+        in.exonTrees.resize(n_tid); in.intronTrees.resize(n_tid);
+        for (uint32_t t = 0; t < n_tid; ++t) {
+            if (t < et.size()) for (const auto& v : et[t].sorted_intervals()) in.exonTrees[t].push_back({v.start, v.end, v.index});
+            if (t < it.size()) for (const auto& v : it[t].sorted_intervals()) in.intronTrees[t].push_back({v.start, v.end, v.index});
+        }
+        in.exonToGene = gene_model_.exon_to_gene_view(); in.intronToGene = gene_model_.intron_to_gene_view(); in.geneStrand = gene_model_.gene_strands_view();
+        in.snps.resize(chrom_snps_.size());
+        for (size_t t = 0; t < chrom_snps_.size(); ++t)
+            for (const auto& x : chrom_snps_[t]) in.snps[t].push_back({x.pos, x.index, x.ref_allele, x.alt_allele, 0});
+        in.stranded = config_.stranded; in.reverseStrand = config_.reverse_strand; in.minMapq = config_.min_mapq; in.minBaseq = config_.min_baseq;
+        in.countIntrons = config_.count_introns; in.countSj = config_.count_sj; in.countMt = config_.count_mt; in.umiDedup = config_.umi_dedup;
+        in.directional = config_.umi_dedup_directional; in.umiLen = config_.umi_len; in.chrmTid = chrm_tid_; in.hasGeneModel = has_gene_model_;
+        in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
+        in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
+        const size_t nreads = gpu_col_->n_reads(), nsigs = gpu_col_->n_sigs(); const uint64_t inc = gpu_col_->incomplete();
+        gpu_col_->finish(in);
+        gpu_col_.reset();
+        if (in.snpSkipN < 0) { std::cerr << "[gpu_pileup] not run: base qualities neither constant nor tied to N\n"; return; }
+        int lock_fd = -1;
+        const int device = lockDevice(&lock_fd);
+        PileupOutput out;
+        const bool ok = pileupRun(in, device, out);
+        unlockDevice(lock_fd);
+        if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return; }
+        std::cerr << "[gpu_pileup] " << nreads << " reads, " << nsigs << " signatures (" << inc << " incomplete groups); GPU " << out.msGpu
+                  << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; R1 molecules " << out.snpMolecules << ", ambiguous "
+                  << out.snpAmbiguous << ", other " << out.snpOther << "\n";
+        bool all = true;
+        std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("exon", out.exon, gpupileup::cpu_triplets(exon_acc_), all) << "\n";
+        std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("intron", out.intron, gpupileup::cpu_triplets(intron_acc_), all) << "\n";
+        std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("ambiguous", out.amb, gpupileup::cpu_triplets(amb_acc_), all) << "\n";
+        std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("snp_ad", out.snpAd, gpupileup::cpu_triplets(snp_ad_), all) << "\n";
+        std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("snp_dp", out.snpDp, gpupileup::cpu_triplets(snp_dp_), all) << "\n";
+        std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("mt", out.mt, gpupileup::cpu_triplets(mt_acc_), all) << "\n";
+        std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("mt_rev", out.mtRev, gpupileup::cpu_triplets(mt_acc_rev_), all) << "\n";
+        {   // junctions by (contig, donor, acceptor): the CPU's names are "contig:donor-acceptor"
+            std::map<std::string, uint32_t> tidof;
+            for (uint32_t t = 0; t < n_tid; ++t) tidof[tid_to_chrom_[t]] = t;
+            std::vector<std::array<uint32_t, 3>> cpukey(sj_names_.size());
+            for (size_t i = 0; i < sj_names_.size(); ++i) {
+                const std::string& nm = sj_names_[i]; const size_t c = nm.rfind(':'), d = nm.find('-', c);
+                if (c == std::string::npos || d == std::string::npos || !tidof.count(nm.substr(0, c))) { cpukey[i] = {~0u, 0, 0}; continue; }
+                cpukey[i] = {tidof[nm.substr(0, c)], (uint32_t) std::atoll(nm.substr(c + 1, d - c - 1).c_str()), (uint32_t) std::atoll(nm.c_str() + d + 1)};
+            }
+            using K = std::array<uint32_t, 5>;   // cell, tid, donor, acceptor, value
+            std::vector<K> g, c;
+            for (const auto& x : out.sj) { const auto& k = out.sjtab[x.row]; g.push_back({x.cell, k[0], k[1], k[2], x.val}); }
+            for (const auto& x : gpupileup::cpu_triplets(sj_acc_)) { const auto& k = cpukey[x.row]; c.push_back({x.cell, k[0], k[1], k[2], x.val}); }
+            std::sort(g.begin(), g.end()); std::sort(c.begin(), c.end());
+            const bool ok_sj = g == c; all = all && ok_sj;
+            std::cerr << "[gpu_pileup] junctions " << (ok_sj ? "identical" : "DIFFERENT") << " (gpu " << g.size() << ", cpu " << c.size() << " entries)\n";
+        }
+        {
+            std::vector<std::array<uint32_t, 4>> c;
+            for (const auto& e : mt_indels_) c.push_back({e.bc_idx, e.pos, (uint32_t) e.len, e.is_ins ? 1u : 0u});
+            auto g = out.indels; std::sort(g.begin(), g.end()); std::sort(c.begin(), c.end());
+            const bool ok_in = g == c; all = all && ok_in;
+            std::cerr << "[gpu_pileup] mt_indels " << (ok_in ? "identical" : "DIFFERENT") << " (gpu " << g.size() << ", cpu " << c.size() << ")\n";
+        }
+        std::cerr << "[gpu_pileup] RESULT " << (all ? "IDENTICAL" : "DIFFERENT") << "\n";
+    }
+#endif
 
     // Get accumulators for export
     const SparseAccumulator<uint8_t>& snp_ad() const { return snp_ad_; }

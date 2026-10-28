@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include <array>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -84,5 +85,36 @@ struct NonhostResult {
 // loads the three indexes and the Bloom filter into HBM (loadThreads reader threads), classifies `reads` and frees the device.
 // false on any failure (the caller then runs the CPU screen).
 bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out);
+
+// ---- pileup (pileup_gpu.cu; kernels in src/engine_gpu/gpu_pileup/, from PR #61 bench/gpu/pileup): the exon / intron / ambiguous
+// matrices, junctions, SNP AD/DP (order-free-rules R1 consensus), chrM allele counts and indels, from per-signature alignment records.
+// Record layout: src/engine_gpu/gpu_pileup/pileup/pileup_rec.h (AlnRec / SigRec / ReadRec, 16 bytes each).
+struct PileupIv { int32_t s, e; uint32_t idx; };                        // = singlet::Interval
+struct PileupSnpRow { int32_t pos; uint32_t idx; char ref, alt; uint16_t pad; };
+struct PileupTriplet { uint32_t cell, row, val; };                      // sorted by (cell, row)
+struct PileupInput {
+    // annotation: the engine's own interval trees as sorted arrays (the GPU replays the CPU's pre-order traversal), gene maps, SNP table
+    std::vector<std::vector<PileupIv>> exonTrees, intronTrees;
+    std::vector<uint32_t> exonToGene, intronToGene;
+    std::vector<char> geneStrand;
+    std::vector<std::vector<PileupSnpRow>> snps;
+    int stranded = 1, reverseStrand = 0, minMapq = 20, minBaseq = 10, countIntrons = 1, countSj = 1, countMt = 0, umiDedup = 1, directional = 1,
+        umiLen = 12, chrmTid = -1, hasGeneModel = 1, snpSkipN = 0;
+    uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
+    // records, raw pileup_rec.h structs
+    std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
+    std::vector<uint32_t> ops;
+    std::vector<uint8_t> seq;
+};
+struct PileupOutput {
+    std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
+    std::vector<std::array<uint32_t, 3>> sjtab;      // junction id -> (tid, donor, acceptor), ids in (tid, donor, acceptor) order
+    std::vector<std::array<uint32_t, 4>> indels;     // (cell, pos, len, is_ins)
+    uint64_t snpMolecules = 0, snpAmbiguous = 0, snpOther = 0;
+    double msGpu = 0, msTotal = 0, peakGB = 0;
+    std::string log;
+};
+// Runs the pileup on `device`. NOTE: the kernels' CUDA error checks still exit the process (research code); callers isolate it.
+bool pileupRun(const PileupInput& in, int device, PileupOutput& out);
 
 } // namespace singlet_engine_gpu

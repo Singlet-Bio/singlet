@@ -114,7 +114,7 @@ if(SINGLET_BUILD_PIPELINE)
 
     add_subdirectory(src/star)
     if(SINGLET_ENGINE_GPU_ENABLED)
-        add_library(singlet_engine_gpu STATIC src/engine_gpu/engine_gpu.cu src/engine_gpu/nonhost_gpu.cu)
+        add_library(singlet_engine_gpu STATIC src/engine_gpu/engine_gpu.cu src/engine_gpu/nonhost_gpu.cu src/engine_gpu/pileup_gpu.cu)
         set_target_properties(singlet_engine_gpu PROPERTIES
             CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)
         if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "52")
