@@ -63,8 +63,16 @@ def _first(root: Path, *patterns: str) -> Optional[Path]:
 
 
 def _main_file(cfg: Config, d: dict) -> Path:
-    url = d["source"]["url"]
-    return _raw_dir(cfg, d) / url.rstrip("/").split("/")[-1]
+    from .fetch import local_name
+
+    return _raw_dir(cfg, d) / local_name(d["source"], d["source"]["url"], 0)
+
+
+def _raw_file(cfg: Config, d: dict, i: int) -> Path:
+    """The i-th downloaded file of a dataset (0 = source.url, then source.extra in order)."""
+    from .fetch import _urls, local_name
+
+    return _raw_dir(cfg, d) / local_name(d["source"], _urls(d)[i], i)
 
 
 # ----------------------------------------------------------------------------------------------- parsers
@@ -105,31 +113,62 @@ def parse_tenx_h5(path: Path, feature_type: Optional[str] = None) -> Canon:
     return canon_from_scipy(x, genes, barcodes)
 
 
-def parse_h5ad(path: Path, x_location: str = "X") -> Canon:
-    """Counts from X, raw/X or layers/<name>; genes from var (or raw/var) index, cells from obs index."""
-    import anndata as ad
+def _read_elem(node):
+    try:
+        from anndata.io import read_elem
+    except ImportError:  # anndata < 0.11
+        from anndata.experimental import read_elem
+    return read_elem(node)
 
-    a = ad.read_h5ad(path, backed=None)
-    if x_location == "X":
-        x, var = a.X, a.var
-    elif x_location == "raw/X":
-        x, var = a.raw.X, a.raw.var
-    elif x_location.startswith("layers/"):
-        x, var = a.layers[x_location.split("/", 1)[1]], a.var
-    else:
+
+def _h5ad_rows(node, keep: Optional[np.ndarray] = None, block: int = 100_000) -> sp.csr_matrix:
+    """cells x genes CSR from one h5ad matrix element. Sparse groups are read whole; dense datasets (some atlases store
+    counts as dense float32) are read in row blocks so the dense array is never in memory at once."""
+    import h5py
+
+    if not isinstance(node, h5py.Dataset):
+        x = sp.csr_matrix(_read_elem(node))
+        return x if keep is None else x[keep]
+    blocks = []
+    for s in range(0, node.shape[0], block):
+        a = node[s : s + block]
+        if keep is not None:
+            a = a[keep[s : s + block]]
+        blocks.append(sp.csr_matrix(a))
+    return sp.vstack(blocks, format="csr")
+
+
+def parse_h5ad(path: Path, x_location: str = "X", obs_filter: Optional[tuple[str, str]] = None) -> Canon:
+    """Counts from X, raw/X or layers/<name>; genes from var (or raw/var) index, cells from obs index. Reads only the
+    element named, so a normalised X next to raw counts is never loaded. obs_filter = (column, value) keeps those cells."""
+    import h5py
+
+    if not (x_location in ("X", "raw/X") or x_location.startswith("layers/")):
         raise ValueError(f"unknown x_location {x_location}")
-    return canon_from_scipy(sp.csr_matrix(x), list(var.index), list(a.obs.index), genes_by_cells=False)
+    with h5py.File(path, "r") as f:
+        obs = _read_elem(f["obs"])
+        var = _read_elem(f["raw/var" if x_location == "raw/X" else "var"])
+        keep = None
+        if obs_filter:
+            keep = (obs[obs_filter[0]].astype(str) == obs_filter[1]).to_numpy()
+            log(f"{path.name}: keeping {int(keep.sum())} of {len(keep)} cells with {obs_filter[0]} == {obs_filter[1]!r}")
+        x = _h5ad_rows(f[x_location], keep)
+    cells = list(obs.index if keep is None else obs.index[keep])
+    return canon_from_scipy(x, list(var.index), cells, genes_by_cells=False)
 
 
-def parse_dense_table(paths: list[Path], sep: str, genes_by_cells: bool, chunk: int = 2000) -> Canon:
+def parse_dense_table(paths: list[Path], sep: str, genes_by_cells: bool, chunk: int = 2000,
+                      index_col: Optional[int] = 0) -> Canon:
     """Dense text tables (first column = row names, header = column names), read in chunks into sparse blocks and
-    concatenated along cells. Several files are concatenated in the order given (cells must not repeat)."""
+    concatenated along cells. Several files are concatenated in the order given (cells must not repeat).
+    index_col=None is for tables whose header has no field for the row names (R write.table, zUMIs): pandas then takes
+    the extra first column of the body as the index."""
     import pandas as pd
 
     blocks, genes, barcodes = [], None, []
     for p in paths:
         rows, names = [], []
-        for df in pd.read_csv(p, sep=sep, index_col=0, chunksize=chunk):
+        for df in pd.read_csv(p, sep=sep, index_col=index_col, chunksize=chunk):
             names += list(map(str, df.index))
             rows.append(sp.csr_matrix(df.to_numpy()))
         x = sp.vstack(rows).tocsc()
@@ -217,9 +256,12 @@ def parse(cfg: Config, u: Unit) -> Canon:
     if fmt == "mtx_tar":
         return parse_mtx_dir(_extract(main), ft)
     if fmt == "h5ad":
-        return parse_h5ad(main, src.get("x_location", "X"))
+        flt = src.get("obs_filter")
+        return parse_h5ad(main, src.get("x_location", "X"), (flt["column"], flt["value"]) if flt else None)
     if fmt in ("dense_tsv_genes_by_cells", "dense_txt_genes_by_cells"):
         return parse_dense_table([main], "\t", True)
+    if fmt == "dense_tsv_genes_by_cells_noindexhdr":
+        return parse_dense_table([main], "\t", True, index_col=None)
     if fmt == "dense_csv_genes_by_cells":
         return parse_dense_table([main], ",", True)
     if fmt == "gct":
@@ -283,29 +325,13 @@ def _baron(cfg: Config, u: Unit) -> Canon:
     return canon_from_scipy(sp.hstack(blocks).tocsc(), genes, cells)
 
 
-def _tabula_sapiens(cfg: Config, u: Unit) -> Canon:
-    """Keep 10x 3' v3 cells only, counts from raw/X."""
-    import anndata as ad
-
-    a = ad.read_h5ad(_main_file_or_glob(cfg, u, "*.h5ad"))
-    keep = (a.obs["assay"].astype(str) == "10x 3' v3").to_numpy()
-    x = a.raw.X[keep] if a.raw is not None else a.X[keep]
-    return canon_from_scipy(sp.csr_matrix(x), list((a.raw or a).var.index), list(a.obs.index[keep]), genes_by_cells=False)
-
-
-def _xenium(cfg: Config, u: Unit) -> Canon:
-    """cell_feature_matrix.h5 inside the outs zip; keep Gene Expression rows (drop control probes and codewords)."""
-    root = _extract(_main_file(cfg, u.dataset))
-    return parse_tenx_h5(_first(root, "cell_feature_matrix.h5"), "Gene Expression")
-
-
 def _hao(cfg: Config, u: Unit) -> Canon:
-    """GSE164378 3' data: sc.GEX and sc.ADT MTX triplets (file prefixes confirmed on download)."""
+    """GSE164378 3' data, one 10x MTX triplet per GEO sample: GSM5008737_RNA_3P-* and GSM5008738_ADT_3P-*."""
     root = _raw_dir(cfg, u.dataset)
-    tag = {"rna": "GEX", "adt": "ADT"}[u.name]
-    files = sorted(root.rglob(f"*sc.{tag}*"))
-    mtx = next(p for p in files if "matrix" in p.name or p.name.endswith(".mtx.gz"))
-    feat = next(p for p in files if "features" in p.name or "genes" in p.name)
+    tag = {"rna": "RNA_3P", "adt": "ADT_3P"}[u.name]
+    files = sorted(root.glob(f"*_{tag}-*"))
+    mtx = next(p for p in files if "matrix" in p.name)
+    feat = next(p for p in files if "features" in p.name)
     bc = next(p for p in files if "barcodes" in p.name)
     return canon_from_scipy(scipy.io.mmread(str(mtx)).tocsc(), _read_lines(feat), _read_lines(bc))
 
@@ -317,20 +343,132 @@ def _cao(cfg: Config, u: Unit) -> Canon:
     )
 
 
-def _main_file_or_glob(cfg: Config, u: Unit, pattern: str) -> Path:
-    d = u.dataset
-    if d["source"].get("url"):
-        return _main_file(cfg, d)
-    hit = _first(_raw_dir(cfg, d), pattern)
-    if not hit:
-        raise SystemExit(f"{u.key}: no file matching {pattern} under {_raw_dir(cfg, d)}")
-    return hit
+def _union_genes(parts: list[tuple[str, Canon]]) -> Canon:
+    """Concatenate matrices whose gene lists differ (per-batch tables): rows are the union of genes in order of first
+    appearance, absent genes are zero, and barcodes are prefixed with the part name so they stay unique."""
+    order: dict[str, int] = {}
+    for _, c in parts:
+        for g in c.genes:
+            order.setdefault(str(g), len(order))
+    blocks, cells = [], []
+    for name, c in parts:
+        x = c.to_scipy().tocoo()
+        rows = np.fromiter((order[str(g)] for g in c.genes), dtype=np.int64, count=c.m)[x.row]
+        blocks.append(sp.csc_matrix((x.data, (rows, x.col)), shape=(len(order), c.n)))
+        cells += [f"{name}:{b}" for b in c.barcodes]
+    return canon_from_scipy(sp.hstack(blocks).tocsc(), list(order), cells)
+
+
+def _mca(cfg: Config, u: Unit) -> Canon:
+    """GSE108097_RAW.tar: one dense genes x cells DGE table per tissue batch (GSM*_<Tissue>_dge.txt.gz). Two layouts
+    occur: R write.table (space separated, quoted, header without a gene field) and Drop-seq (tab separated, GENE column).
+    The cell-line and species-mixing controls (293T, 3T3, mixed species) are left out."""
+    import re
+
+    root = _extract(_main_file(cfg, u.dataset))
+    files = [p for p in sorted(root.rglob("*_dge.txt.gz")) if not re.search(r"293T|3T3|[Mm]ix|GSM2906480", p.name)]
+    log(f"{u.key}: {len(files)} tissue DGE tables")
+    parts = []
+    for p in files:
+        with gzip.open(p, "rt") as f:
+            head, body = f.readline().rstrip("\n"), f.readline().rstrip("\n")
+        sep = "\t" if "\t" in head else " "
+        index_col = None if len(body.split(sep)) == len(head.split(sep)) + 1 else 0
+        parts.append((p.name.split("_", 1)[1].replace("_dge.txt.gz", ""), parse_dense_table([p], sep, True, index_col=index_col)))
+    return _union_genes(parts)
+
+
+def _mat_strings(a) -> list[str]:
+    """Names from a MATLAB v5 variable: a char matrix (one padded row per name) or a cell array."""
+    a = np.asarray(a)
+    if a.dtype.kind == "U":
+        return [str(s).strip() for s in a.ravel()]
+    return [str(np.asarray(s).ravel()[0]).strip() if np.asarray(s).size else "" for s in a.ravel()]
+
+
+def _rosenberg(cfg: Config, u: Unit) -> Canon:
+    """GSM3017261_150000_CNS_nuclei.mat.gz (MATLAB v5): the sparse count matrix plus gene and barcode names."""
+    path = _main_file(cfg, u.dataset)
+    mat = path.with_suffix("")  # .mat
+    if not mat.exists():
+        with gzip.open(path, "rb") as fi, mat.open("wb") as fo:
+            import shutil
+
+            shutil.copyfileobj(fi, fo, 1 << 22)
+    m = scipy.io.loadmat(str(mat))
+    keys = [k for k in m if not k.startswith("__")]
+    log(f"{u.key}: .mat variables {keys}")
+    xk = next(k for k in keys if sp.issparse(m[k]))
+    genes = _mat_strings(m[next(k for k in keys if "gene" in k.lower())])
+    cells = _mat_strings(m[next(k for k in keys if "barcode" in k.lower())])
+    x = m[xk]
+    if x.shape == (len(cells), len(genes)):
+        return canon_from_scipy(sp.csr_matrix(x), genes, cells, genes_by_cells=False)
+    return canon_from_scipy(sp.csc_matrix(x), genes, cells)
+
+
+def _visium_hd(cfg: Config, u: Unit) -> Canon:
+    """binned_outputs.tar.gz (gzip, not seekable): stream it once and keep only the 8 um filtered matrix."""
+    member = "square_008um/filtered_feature_bc_matrix.h5"
+    out = _raw_dir(cfg, u.dataset) / "square_008um_filtered_feature_bc_matrix.h5"
+    if not out.exists():
+        import shutil
+
+        with tarfile.open(_main_file(cfg, u.dataset), "r|gz") as t:
+            for m in t:
+                if m.name.endswith(member):
+                    with t.extractfile(m) as fi, out.with_suffix(".part").open("wb") as fo:
+                        shutil.copyfileobj(fi, fo, 1 << 22)
+                    out.with_suffix(".part").replace(out)
+                    break
+        if not out.exists():
+            raise SystemExit(f"{u.key}: {member} not found in the archive")
+    return parse_tenx_h5(out, u.matrix.get("feature_type"))
+
+
+def _slideseq(cfg: Config, u: Unit) -> Canon:
+    """Zenodo tarball holding Puck_200115_08_counts_no_cutoff.zip, a 10x-style MTX triplet of every bead (no UMI cutoff)."""
+    root = _extract(_main_file(cfg, u.dataset))
+    return parse_mtx_dir(_extract(_first(root, "*counts_no_cutoff.zip")))
+
+
+def _tabula_muris(cfg: Config, u: Unit) -> Canon:
+    """FACS.zip: one genes x cells CSV of read counts per tissue (FACS/<Tissue>-counts.csv), same gene list in each."""
+    root = _extract(_main_file(cfg, u.dataset))
+    files = [p for p in sorted(root.rglob("*-counts.csv")) if "__MACOSX" not in p.parts]
+    log(f"{u.key}: {len(files)} tissue tables")
+    return parse_dense_table(files, ",", True)
+
+
+def _paul(cfg: Config, u: Unit) -> Canon:
+    """GSE72857_umitab.txt.gz holds every well (cells, empty wells, controls). Keep the 2,730 cells of Paul et al., named
+    by the wells in the scanpy paul15 file (extra file 1); its own values are batch-corrected floats and are not used."""
+    import h5py
+
+    c = parse_dense_table([_main_file(cfg, u.dataset)], "\t", True, index_col=None)
+    with h5py.File(_raw_file(cfg, u.dataset, 1), "r") as f:
+        names = []
+        for k in f.keys():
+            if k.startswith("data.debatched_") and "names" in k:
+                names.append({s.decode() if isinstance(s, bytes) else str(s) for s in f[k][()].ravel()})
+    have = {str(b) for b in c.barcodes}
+    wells = max(names, key=lambda s: len(s & have)) if names else set()
+    keep = np.flatnonzero([str(b) in wells for b in c.barcodes])
+    log(f"{u.key}: {len(keep)} of {c.n} wells are paul15 cells")
+    if len(keep) < 2700:
+        raise SystemExit(f"{u.key}: only {len(keep)} wells match the paul15 cell names; check the paul15 key names")
+    x = c.to_scipy()[:, keep]
+    return canon_from_scipy(x, list(c.genes), [c.barcodes[i] for i in keep])
 
 
 HOOKS: dict[tuple[str, str], Callable[[Config, Unit], Canon]] = {
     ("baron_pancreas", "*"): _baron,
-    ("tabula_sapiens", "*"): _tabula_sapiens,
-    ("xenium_breast_rep1", "*"): _xenium,
     ("hao_citeseq", "*"): _hao,
     ("cao_moca", "*"): _cao,
+    ("mca_microwell", "*"): _mca,
+    ("rosenberg_splitseq", "*"): _rosenberg,
+    ("visium_hd_crc", "*"): _visium_hd,
+    ("slideseq2_hippocampus", "*"): _slideseq,
+    ("tabula_muris_facs", "*"): _tabula_muris,
+    ("paul_marsseq", "*"): _paul,
 }

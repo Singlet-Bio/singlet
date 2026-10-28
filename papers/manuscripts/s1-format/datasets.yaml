@@ -108,15 +108,16 @@ datasets:
   cite: replogle2022mapping
   source:
     repository: Figshare (plus.figshare.com, record 20029387)
-    url: null
-    file: K562_gwps_raw_singlecell.h5ad (or the split _01.._n parts; confirm the name in the record)
+    url: https://ndownloader.figshare.com/files/35775507
+    filename: K562_gwps_raw_singlecell_01.h5ad
+    file: K562_gwps_raw_singlecell_01.h5ad (one file; X is dense float32 holding whole-number UMI counts, 8,248 genes)
     format: h5ad
     x_location: X
   matrices: [{name: rna, value: umi}]
   license: CC BY 4.0
-  verify: true
+  verify: false
   loader_panel: true
-  notes: Large perturbation screen used to train perturbation-response models; a natural minibatch workload.
+  notes: Large perturbation screen used to train perturbation-response models; a natural minibatch workload. The ndownloader URL redirects to a short-lived signed URL, so always fetch the ndownloader URL itself.
 
 - id: tabula_sapiens
   name: Tabula Sapiens (10x subset)
@@ -124,20 +125,21 @@ datasets:
   protocol_class: droplet_3p
   organism: human
   tissue: 24 organs
-  cells: 483152
+  cells: 412848
   features: 58870
   tier: L
   cite: tabulasapiens2022
   source:
-    repository: CZ CELLxGENE Discover
-    url: null
-    file: the "All Cells" Tabula Sapiens h5ad of the 2022 collection; keep cells with assay == "10x 3' v3"
+    repository: CZ CELLxGENE Discover (Tabula Sapiens 2022, versioned file of 2024-10-10, schema 5.2.0)
+    url: https://datasets.cellxgene.cziscience.com/c4a7e716-c250-4a51-86cc-4efb1afbca96.h5ad
+    file: All Cells h5ad, 483,152 cells; counts in raw/X (X is normalised)
     format: h5ad
     x_location: raw/X
+    obs_filter: {column: assay, value: "10x 3' v3"}
   matrices: [{name: rna, value: umi}]
   license: CC BY 4.0
-  verify: true
-  notes: The Smart-seq2 cells of the same atlas are dropped here so the matrix is one protocol.
+  verify: false
+  notes: The Smart-seq2 and other-assay cells of the same atlas are dropped so the matrix is one protocol (412,848 of 483,152 cells). The current CELLxGENE record serves Tabula Sapiens 2.0; this versioned URL pins the 2022 data.
 
 - id: hlca_core
   name: Human Lung Cell Atlas core (Sikkema et al. 2023)
@@ -150,14 +152,14 @@ datasets:
   tier: L
   cite: sikkema2023integrated
   source:
-    repository: CZ CELLxGENE Discover
-    url: null
-    file: '"An integrated cell atlas of the human lung in health and disease (core)" h5ad'
+    repository: CZ CELLxGENE Discover (dataset 066943a2-fdac-4b29-b348-40cede398e4e)
+    url: https://datasets.cellxgene.cziscience.com/688185ad-11c2-4172-a53a-f4f1f4076860.h5ad
+    file: An integrated cell atlas of the human lung in health and disease (core); counts in raw/X
     format: h5ad
     x_location: raw/X
   matrices: [{name: rna, value: umi}]
   license: CC BY 4.0
-  verify: true
+  verify: false
   loader_panel: true
   notes: Integrated atlas of many studies, the typical input of reference-mapping and foundation-model training.
 
@@ -168,18 +170,18 @@ datasets:
   protocol_class: droplet_5p
   organism: human
   tissue: peripheral blood mononuclear cells
-  cells: 10000
+  cells: 9302
   features: 36601
   tier: S
   cite: tenx_datasets
   source:
-    repository: 10x Genomics datasets
-    url: null
-    file: sc5p_v2_hs_PBMC_10k count/sample_filtered_feature_bc_matrix.h5 (Cell Ranger 6.x multi output)
+    repository: 10x Genomics datasets (10k Human PBMCs, 5' v2.0, Chromium Controller; Cell Ranger 6.1.0 multi)
+    url: https://cf.10xgenomics.com/samples/cell-vdj/6.1.0/10k_PBMC_5pv2_nextgem_Chromium_Controller_10k_PBMC_5pv2_nextgem_Chromium_Controller/10k_PBMC_5pv2_nextgem_Chromium_Controller_10k_PBMC_5pv2_nextgem_Chromium_Controller_count_sample_feature_bc_matrix.h5
+    file: count/sample_feature_bc_matrix.h5 (the filtered per-sample matrix in Cell Ranger 6.x multi)
     format: tenx_h5
-  matrices: [{name: rna, value: umi}]
+  matrices: [{name: rna, value: umi, feature_type: Gene Expression}]
   license: CC BY 4.0 (10x Genomics)
-  verify: true
+  verify: false
 
 - id: flex_pbmc
   name: 10x Flex (Fixed RNA Profiling) human PBMC
@@ -187,18 +189,18 @@ datasets:
   protocol_class: droplet_probe
   organism: human
   tissue: peripheral blood mononuclear cells
-  cells: 10000
+  cells: 8961
   features: 18082
   tier: S
   cite: tenx_datasets
   source:
-    repository: 10x Genomics datasets
-    url: null
-    file: any single-sample Flex PBMC dataset on the 10x datasets page (filter Chemistry = Flex); record the one used
+    repository: 10x Genomics datasets (10k Human PBMCs stained with TotalSeq-B Human Universal Cocktail, singleplex; Flex, Cell Ranger 8.0.0)
+    url: https://cf.10xgenomics.com/samples/cell-exp/8.0.0/10k_Human_PBMC_TotalSeqB_singleplex_10k_Human_PBMC_TotalSeqB_singleplex/10k_Human_PBMC_TotalSeqB_singleplex_10k_Human_PBMC_TotalSeqB_singleplex_count_sample_filtered_feature_bc_matrix.h5
+    file: count/sample_filtered_feature_bc_matrix.h5; Gene Expression rows only (the antibody rows are dropped)
     format: tenx_h5
-  matrices: [{name: rna, value: umi}]
+  matrices: [{name: rna, value: umi, feature_type: Gene Expression}]
   license: CC BY 4.0 (10x Genomics)
-  verify: true
+  verify: false
   notes: Probe-based counting gives a different count distribution (fewer features, higher counts per feature).
 
 # ------------------------------------------------------------------ other droplet platforms
@@ -219,7 +221,7 @@ datasets:
     format: dense_tsv_genes_by_cells
   matrices: [{name: rna, value: umi}]
   license: public (GEO)
-  verify: true
+  verify: false   # URL checked live 2026-10-28
 
 - id: baron_pancreas
   name: Human and mouse pancreas inDrops (Baron et al. 2016)
@@ -253,12 +255,12 @@ datasets:
   source:
     repository: GEO
     accession: GSE108097
-    url: null
-    file: the per-tissue digital expression matrices in the GSE108097 supplementary archive; concatenate all batches
+    url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE108nnn/GSE108097/suppl/GSE108097_RAW.tar
+    file: the per-batch tissue DGE tables (GSM*_<Tissue>_dge.txt.gz) inside the RAW tar, concatenated over the union of genes; the 293T, 3T3 and species-mixing controls and the batch-corrected Figure 2 table are not used
     format: dense_txt_per_batch
   matrices: [{name: rna, value: umi}]
   license: public (GEO)
-  verify: true
+  verify: false
 
 # ------------------------------------------------------------------ combinatorial indexing
 - id: rosenberg_splitseq
@@ -274,11 +276,12 @@ datasets:
   source:
     repository: GEO
     accession: GSE110823
-    url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE110nnn/GSE110823/suppl/GSE110823_RAW.tar
-    format: mtx_or_mat_in_tar
+    url: https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3017nnn/GSM3017261/suppl/GSM3017261_150000_CNS_nuclei.mat.gz
+    file: GSM3017261_150000_CNS_nuclei.mat.gz (MATLAB v5; the full 156,049-nucleus matrix with gene and barcode names)
+    format: mat_v5
   matrices: [{name: rna, value: umi}]
   license: public (GEO)
-  verify: true
+  verify: false
   notes: Confirm which supplementary file holds the full count matrix (GEO lists a .mat and per-sample files).
 
 - id: cao_moca
@@ -301,7 +304,7 @@ datasets:
       - https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/GSE119945/suppl/GSE119945_gene_annotate.csv.gz
   matrices: [{name: rna, value: umi}]
   license: public (GEO)
-  verify: true
+  verify: false   # URL checked live 2026-10-28
 
 - id: tahoe_plate
   name: Tahoe-100M, one plate (Zhang et al. 2025)
@@ -309,21 +312,21 @@ datasets:
   protocol_class: combinatorial
   organism: human
   tissue: 50 cancer cell lines, 1,100 drug treatments
-  cells: 5000000
+  cells: 5481420
   features: 62710
   tier: XL
   cite: zhang2025tahoe
   source:
-    repository: Arc Virtual Cell Atlas (also Hugging Face tahoebio/Tahoe-100M as parquet)
-    url: null
-    file: one per-plate h5ad from the Arc Virtual Cell Atlas bucket (use plate 1); count the cells on download
+    repository: Arc Virtual Cell Atlas (public GCS bucket arc-institute-virtual-cell-atlas; the older arc-ctc-tahoe100 bucket was retired)
+    url: https://storage.googleapis.com/arc-institute-virtual-cell-atlas/tahoe100M/2025-02-25/h5ad/plate1_filt_Vevo_Tahoe100M_WServicesFrom_ParseGigalab.h5ad
+    file: plate 1 h5ad, 5,481,420 cells x 62,710 genes; X is sparse float32 holding whole-number counts
     format: h5ad
     x_location: X
   matrices: [{name: rna, value: umi}]
   license: CC0 1.0
-  verify: true
+  verify: false
   loader_panel: true
-  notes: The largest public single-cell training corpus; one plate keeps the run tractable and is still XL.
+  notes: The largest public single-cell training corpus; one plate keeps the run tractable and is still XL. Arc describes the new bucket as requester-pays; anonymous range reads worked on 2026-10-28.
 
 # ------------------------------------------------------------------ single nucleus and multiome
 - id: siletti_brain_nonneuronal
@@ -337,14 +340,14 @@ datasets:
   tier: L
   cite: siletti2023transcriptomic
   source:
-    repository: CZ CELLxGENE Discover
-    url: null
-    file: '"Supercluster: Non-neuronal cells" h5ad of the Siletti human brain collection'
+    repository: CZ CELLxGENE Discover (Human Brain Cell Atlas v1.0, dataset b165f033-9dec-468a-9248-802fc6902a74)
+    url: https://datasets.cellxgene.cziscience.com/bef677f9-90fa-4cc4-a0f8-6892c6f646bb.h5ad
+    file: All non-neuronal cells h5ad (888,263 nuclei, 58,232 genes); counts in X, no raw
     format: h5ad
-    x_location: raw/X
+    x_location: X
   matrices: [{name: rna, value: umi}]
   license: CC BY 4.0
-  verify: true
+  verify: false
   notes: Single-nucleus data carry intronic reads, so counts per nucleus and the count distribution differ from cells.
 
 - id: pbmc_multiome
@@ -380,14 +383,20 @@ datasets:
   source:
     repository: GEO
     accession: GSE164378
-    url: null
-    file: GSE164378_sc.GEX.* and GSE164378_sc.ADT.* (3' data; MTX triplets in the supplementary files)
+    url: https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5008nnn/GSM5008737/suppl/GSM5008737_RNA_3P-matrix.mtx.gz
+    extra:
+      - https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5008nnn/GSM5008737/suppl/GSM5008737_RNA_3P-features.tsv.gz
+      - https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5008nnn/GSM5008737/suppl/GSM5008737_RNA_3P-barcodes.tsv.gz
+      - https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5008nnn/GSM5008738/suppl/GSM5008738_ADT_3P-matrix.mtx.gz
+      - https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5008nnn/GSM5008738/suppl/GSM5008738_ADT_3P-features.tsv.gz
+      - https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5008nnn/GSM5008738/suppl/GSM5008738_ADT_3P-barcodes.tsv.gz
+    file: the 3' RNA (GSM5008737) and ADT (GSM5008738) 10x MTX triplets
     format: mtx_triplets
   matrices:
     - {name: rna, value: umi}
     - {name: adt, value: adt}
   license: public (GEO)
-  verify: true
+  verify: false
   notes: The ADT matrix is dense-ish with large counts, a stress test for a codec tuned on sparse RNA.
 
 # ------------------------------------------------------------------ plate-based
@@ -402,13 +411,14 @@ datasets:
   tier: M
   cite: tabulamuris2018single
   source:
-    repository: Figshare (Tabula Muris "FACS" record)
-    url: null
-    file: FACS.zip (one CSV of read counts per tissue); confirm the ndownloader file id in the figshare record
+    repository: Figshare (Tabula Muris FACS, record 5829687 v2)
+    url: https://ndownloader.figshare.com/files/10700143
+    filename: FACS.zip
+    file: FACS.zip, one genes x cells CSV of read counts per tissue (18 tissues)
     format: dense_csv_per_tissue
   matrices: [{name: rna, value: reads}]
   license: CC BY 4.0
-  verify: true
+  verify: false
   loader_panel: true
   notes: Read counts reach tens of thousands, the opposite regime from UMI data. The loader panel needs one plate dataset.
 
@@ -429,29 +439,29 @@ datasets:
     format: dense_csv_genes_by_cells
   matrices: [{name: rna, value: reads}]
   license: public (GEO)
-  verify: true
+  verify: false   # URL checked live 2026-10-28
   notes: GEO also has intron counts (GSE115746_cells_intron_counts.csv.gz); optional second matrix.
 
-- id: smartseq3_hek
-  name: Smart-seq3 HEK293T and PBMC (Hagemann-Jensen et al. 2020)
+- id: smartseq3_pbmc
+  name: Smart-seq3 PBMC (Hagemann-Jensen et al. 2020)
   protocol: Smart-seq3 (full length with 5' UMIs)
   protocol_class: plate_umi
   organism: human
-  tissue: HEK293T cells and PBMCs
-  cells: 3000
+  tissue: peripheral blood mononuclear cells
+  cells: 3129
   features: 60000
   tier: S
   cite: hagemannjensen2020single
   source:
     repository: ArrayExpress
     accession: E-MTAB-8735
-    url: null
-    file: zUMIs output count tables (UMI counts; read counts optional) in the processed files of the record
-    format: rds_or_txt
+    url: https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/735/E-MTAB-8735/Files/HCA.UMIcounts.PBMC.txt
+    file: HCA.UMIcounts.PBMC.txt (zUMIs UMI counts, genes x 3,129 cells, header without a gene field)
+    format: dense_tsv_genes_by_cells_noindexhdr
   matrices: [{name: rna, value: umi}]
   license: public (ArrayExpress)
-  verify: true
-  notes: Accession taken from the paper's data availability statement; confirm it and the processed file names.
+  verify: false
+  notes: The PBMC set (3,129 cells) is used rather than HEK293T (351 cells) to keep the S tier near 3k cells.
 
 - id: paul_marsseq
   name: Mouse myeloid progenitors, MARS-seq (Paul et al. 2015)
@@ -464,14 +474,15 @@ datasets:
   tier: S
   cite: paul2015transcriptional
   source:
-    repository: GEO (also scanpy.datasets.paul15)
+    repository: GEO (cell names from scanpy.datasets.paul15)
     accession: GSE72857
-    url: null
-    file: GSE72857_umitab.txt.gz in the GEO supplementary files, or the scanpy paul15 h5 (same counts)
+    url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE72nnn/GSE72857/suppl/GSE72857_umitab.txt.gz
+    extra: [https://exampledata.scverse.org/scanpy/paul15.h5]
+    file: GSE72857_umitab.txt.gz (raw UMI counts, genes x 10,368 wells), restricted to the 2,730 cells of the paper as named in paul15.h5
     format: dense_txt_genes_by_cells
   matrices: [{name: rna, value: umi}]
   license: public (GEO)
-  verify: true
+  verify: false
 
 - id: muraro_pancreas
   name: Human pancreas CEL-seq2 (Muraro et al. 2016)
@@ -490,7 +501,7 @@ datasets:
     format: dense_csv_genes_by_cells
   matrices: [{name: rna, value: umi}]
   license: public (GEO)
-  verify: true
+  verify: false   # URL checked live 2026-10-28
   notes: GEO values are UMI-corrected transcript estimates and can be non-integer; canon.py rejects the matrix if so
     (then use the scRNAseq Bioconductor MuraroPancreasData() counts, which are the same table rounded by the authors).
 
@@ -524,13 +535,13 @@ datasets:
   tier: L
   cite: oliveira2025highdefinition
   source:
-    repository: 10x Genomics datasets
-    url: null
-    file: Visium_HD_Human_Colon_Cancer binned_outputs/square_008um/filtered_feature_bc_matrix.h5
+    repository: 10x Genomics datasets (Visium_HD_Human_Colon_Cancer, Space Ranger 3.0.0)
+    url: https://cf.10xgenomics.com/samples/spatial-exp/3.0.0/Visium_HD_Human_Colon_Cancer/Visium_HD_Human_Colon_Cancer_binned_outputs.tar.gz
+    file: binned_outputs/square_008um/filtered_feature_bc_matrix.h5, streamed out of the 15.9 GB binned_outputs.tar.gz (no standalone file is offered)
     format: tenx_h5
   matrices: [{name: rna, value: umi}]
   license: CC BY 4.0 (10x Genomics)
-  verify: true
+  verify: false
   notes: Probe-based and very shallow per bin; the 2 um bins are optional as an XL stress test.
 
 - id: slideseq2_hippocampus
@@ -544,14 +555,14 @@ datasets:
   tier: M
   cite: stickels2021highly
   source:
-    repository: Broad Single Cell Portal
-    accession: SCP815
-    url: null
-    file: Puck_200115_08 bead-by-gene digital expression matrix (raw, before filtering); portal login required
-    format: dense_or_mtx
+    repository: Zenodo 15556390 (re-deposit of Broad SCP815 by the SPLISOSM authors; SCP815 itself needs a login)
+    url: https://zenodo.org/records/15556390/files/slideseqv2_mouse_hippo.tar.gz?download=1
+    filename: slideseqv2_mouse_hippo.tar.gz
+    file: Puck_200115_08_counts_no_cutoff.zip inside the tarball, a 10x MTX triplet of all 53,208 beads (no UMI cutoff)
+    format: mtx_in_zip_in_tar
   matrices: [{name: rna, value: umi}]
   license: see the SCP815 study terms
-  verify: true
+  verify: false
   notes: Median about 500 UMIs per bead; filtered copies (Open Problems, squidpy) have fewer beads, so record which one.
 
 - id: mosta_e165
@@ -560,20 +571,20 @@ datasets:
   protocol_class: spatial_seq
   organism: mouse
   tissue: whole embryo section, E16.5
-  cells: 120000
+  cells: 121767
   features: 28000
   tier: M
   cite: chen2022spatiotemporal
   source:
     repository: CNGB STOmicsDB
     accession: STDS0000058
-    url: null
-    file: E16.5_E1S1.MOSTA.h5ad (bin 50); the record also has cell-bin files; record which
+    url: https://ftp.cngb.org/pub/SciRAID/stomics/STDS0000058/stomics/E16.5_E1S1.MOSTA.h5ad
+    file: E16.5_E1S1.MOSTA.h5ad (bin 50, 121,767 bins x 28,204 genes); integer counts in layers/count (X is log-normalised)
     format: h5ad
     x_location: layers/count
   matrices: [{name: rna, value: umi}]
   license: CC BY 4.0
-  verify: true
+  verify: false
 
 # ------------------------------------------------------------------ spatial, imaging based
 - id: abc_merfish_zhuang1
@@ -582,19 +593,19 @@ datasets:
   protocol_class: spatial_imaging
   organism: mouse
   tissue: whole brain, coronal sections
-  cells: 2846908
+  cells: 4167870
   features: 1122
   tier: XL
   cite: zhang2023molecularly
   source:
     repository: Allen Brain Cell Atlas (AWS Open Data, s3://allen-brain-cell-atlas)
-    url: null
-    file: expression_matrices/Zhuang-ABCA-1/<release>/Zhuang-ABCA-1-raw.h5ad (the raw, integer counts, not -log2)
+    url: https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/expression_matrices/Zhuang-ABCA-1/20230830/Zhuang-ABCA-1-raw.h5ad
+    file: Zhuang-ABCA-1-raw.h5ad (release 20230830; 4,167,870 cells x 1,122 genes; X is dense float32 holding whole-number counts)
     format: h5ad
     x_location: X
   matrices: [{name: rna, value: transcripts}]
   license: CC BY 4.0 (Allen Institute)
-  verify: true
+  verify: false
   notes: Few features and many cells, the dense-ish, narrow regime of imaging panels.
 
 - id: xenium_breast_rep1
@@ -609,12 +620,12 @@ datasets:
   cite: janesick2023high
   source:
     repository: 10x Genomics datasets (also GEO GSE243280)
-    url: null
-    file: Xenium_FFPE_Human_Breast_Cancer_Rep1_outs.zip -> cell_feature_matrix.h5 (drop control probe and codeword rows)
+    url: https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_cell_feature_matrix.h5
+    file: cell_feature_matrix.h5; Gene Expression rows only (313 genes; control probes and codewords dropped)
     format: tenx_h5
-  matrices: [{name: rna, value: transcripts}]
+  matrices: [{name: rna, value: transcripts, feature_type: Gene Expression}]
   license: CC BY 4.0 (10x Genomics)
-  verify: true
+  verify: false
 
 # ------------------------------------------------------------------ out-of-domain count data (supplementary; not in the 29)
 extensions:
@@ -629,13 +640,13 @@ extensions:
   tier: M
   cite: gtex2020
   source:
-    repository: GTEx portal
-    url: null
+    repository: GTEx portal (Google Cloud bucket adult-gtex)
+    url: https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_reads.gct.gz
     file: GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_reads.gct.gz
     format: gct
   matrices: [{name: rna, value: reads}]
   license: GTEx open access
-  verify: true
+  verify: false
   notes: Dense, deep counts. Shows where a codec tuned for sparse single-cell counts stops paying off.
 
 - id: nytimes_bow
@@ -653,5 +664,5 @@ extensions:
     format: uci_bow
   matrices: [{name: words, value: counts}]
   license: CC BY 4.0 (UCI)
-  verify: true
+  verify: false   # URL checked live 2026-10-28
   notes: Sparse, heavy-tailed counts from outside biology; the same Zipf-like structure as gene expression.

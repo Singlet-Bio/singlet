@@ -4,10 +4,22 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 from .util import Config, Unit, log
+
+
+def local_name(src: dict, url: str, i: int) -> str:
+    """File name under data/raw/<id>/: source.filename (main file) or source.extra_names[i-1] when the URL does not end in
+    one (figshare ndownloader ids, `?download=1`), else the last path segment."""
+    if i == 0 and src.get("filename"):
+        return src["filename"]
+    names = src.get("extra_names") or []
+    if i > 0 and i - 1 < len(names):
+        return names[i - 1]
+    return url.split("?")[0].rstrip("/").split("/")[-1]
 
 
 def _urls(d: dict) -> list[str]:
@@ -18,6 +30,30 @@ def _urls(d: dict) -> list[str]:
             "URL in datasets.yaml first (see PLAN.md section 2)."
         )
     return [src["url"]] + list(src.get("extra", []))
+
+
+def _download(url: str, tmp: Path, tries: int = 5) -> None:
+    """Download into tmp, resuming a partial file with a Range request (large files, preemptible jobs)."""
+    for attempt in range(tries):
+        have = tmp.stat().st_size if tmp.exists() else 0
+        headers = {"User-Agent": "s1bench/1 (+https://github.com/Singlet-Bio/singlet)"}
+        if have:
+            headers["Range"] = f"bytes={have}-"
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers)) as r:
+                mode = "ab" if have and r.status == 206 else "wb"
+                with tmp.open(mode) as f:
+                    shutil.copyfileobj(r, f, 1 << 22)
+            return
+        except urllib.error.HTTPError as e:
+            if e.code == 416:  # already complete
+                return
+            if attempt == tries - 1:
+                raise
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            if attempt == tries - 1:
+                raise
+        log(f"retrying {url} from byte {tmp.stat().st_size if tmp.exists() else 0}")
 
 
 def sha256(path: Path) -> str:
@@ -39,14 +75,13 @@ def run(cfg: Config, units: list[Unit], force: bool = False) -> None:
         out.mkdir(parents=True, exist_ok=True)
         want = d["source"].get("sha256")
         for i, url in enumerate(_urls(d)):
-            dst = out / url.rstrip("/").split("/")[-1]
+            dst = out / local_name(d["source"], url, i)
             if dst.exists() and not force:
                 log(f"{d['id']}: have {dst.name}")
             else:
                 log(f"{d['id']}: downloading {url}")
                 tmp = dst.with_suffix(dst.suffix + ".part")
-                with urllib.request.urlopen(url) as r, tmp.open("wb") as f:
-                    shutil.copyfileobj(r, f, 1 << 22)
+                _download(url, tmp)
                 tmp.replace(dst)
             digest = sha256(dst)
             size = dst.stat().st_size
