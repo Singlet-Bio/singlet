@@ -2036,12 +2036,19 @@ public:
         gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
         gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);
         sj_names_.clear(); sj_index_.clear();
+        // the GPU's table has every junction of every signature (hand-off records include reads without a cell barcode); the CPU
+        // names a junction when a counted read has it, so keep the junctions with a count, in table (R7) order
+        std::vector<uint32_t> sj_new(out.sjtab.size(), UINT32_MAX);
+        for (const auto& t : out.sj) if (t.row < sj_new.size()) sj_new[t.row] = 0;
         for (size_t j = 0; j < out.sjtab.size(); ++j) {
+            if (sj_new[j] == UINT32_MAX) continue;
             const auto& k = out.sjtab[j];
+            sj_new[j] = static_cast<uint32_t>(sj_names_.size());
             sj_index_[((static_cast<uint64_t>(k[0]) << 32) | k[1]) ^ (static_cast<uint64_t>(k[2]) * 0x9e3779b97f4a7c15ULL)] =
-                static_cast<uint32_t>(j);   // keyed as extract_splice_junctions keys them
+                sj_new[j];   // keyed as extract_splice_junctions keys them
             sj_names_.push_back(tid_to_chrom_[k[0]] + ":" + std::to_string(k[1]) + "-" + std::to_string(k[2]));
         }
+        for (auto& t : out.sj) t.row = sj_new[t.row];
         if (!sj_names_.empty()) {   // the CPU grows the feature count in steps of 1000 as junctions appear (extract_splice_junctions)
             const uint32_t n = static_cast<uint32_t>(sj_names_.size());
             sj_acc_.set_barcodes(barcodes_); sj_acc_.set_n_features(((n - 1) / 1000 + 1) * 1000);
