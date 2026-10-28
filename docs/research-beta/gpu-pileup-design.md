@@ -162,6 +162,12 @@ pass (cache lookups, FASTQ parsing: about 3).
 | + classification, strand, poly(A) and VDJ from the GPU | **pass** | 1,230 (18.5) | **1,175 (17.6)** | 456 / **376 s** | 790552 |
 | + hand-off: the prefill's alignments go to the pileup; STAR writes no BAM records for those reads (60.3 M of 60.4 M barcoded) | **pass** | 1,273 (19.1) | 1,180 (17.7) | 464 / 397 s | 790789 |
 | + STAR's mapping threads write each hand-off read's CR, UR and quality counters; no FASTQ re-read | **pass** | 1,228 (18.4) | **1,102 (16.5)** | 426 / **349 s** | 790820 (node g052) |
+| + STAR replays a per-sequence summary (stats, junction records, Solo Gene annotation) instead of restoring each hand-off read's alignments | **pass** | 1,321 (19.8) | 1,065 (16.0) | 473 / 379 s | 790990 (node g051, slower) |
+
+The summary step first failed (job 790899: 50 files differed, 7 M alignments lost). The prefill never set STAR's per-read mismatch
+limit (`outFilterMismatchNmaxTotal`), so its `mappedFilter` read an uninitialized value. That had been harmless by luck since the
+hand-off began. It is set now, and STAR skips BAM only for reads whose record has alignments, so any disagreement between STAR and
+the hand-off reaches the pileup's check instead of losing reads.
 
 How the hand-off was checked: with `SINGLET_GPU_PILEUP=compare`, the pass rebuilds each hand-off read's barcode and UMI from R1 and
 compares them with the stream's. All 60,338,992 reads matched (job 790769). Two bugs found on the way:
