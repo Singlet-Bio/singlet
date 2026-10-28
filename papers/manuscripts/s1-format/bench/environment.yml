@@ -1,7 +1,7 @@
 # Conda environment for the .s1 manuscript benchmark. Pin exact versions on the cluster after the first solve
 # (`conda env export --no-builds > environment.lock.yml` and commit the lock file); `s1bench env` records what ran.
 name: s1bench
-channels: [conda-forge, bioconda]
+channels: [conda-forge, bioconda, nodefaults]   # nodefaults: never the Anaconda defaults channel
 dependencies:
   - python=3.11
   - numpy>=1.26
