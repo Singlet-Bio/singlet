@@ -285,3 +285,5 @@ Why this shows up across thread counts but not across same-T reruns: STAR's unso
 Canonical fix (adds to the list in (c)): decide a molecule's allele by majority base over its reads (ties to REF, or to the lexicographically smaller read name), i.e. buffer per-(barcode, SNP, UMI) base counts and emit at finalize, as the molecule store already does for gene labels. Order-free, and arguably more accurate than first-read-wins. Memory: one small counter per covered molecule-SNP pair.
 
 Updated criterion (b) status: every count tally and the exon/intron/gene matrices are order-independent today; the known order-dependent rules are (1) junction feature numbering (bytes only), (2) positional 1/1000 rRNA sampling, (3) first-10,000-reads strand probe, (4) first-two-genes-seen EM-rescue candidates, (5) first-read-wins SNP allele, (6) barcode candidate list from a BAM scan vs none. All six have a canonical replacement above, and the shuffled-BAM acceptance test in (c) proves each one closed.
+
+Engine task for W2 with the six canonical rules and the shuffled-BAM acceptance test: `w2-task-order-independent-pileup.md`.
