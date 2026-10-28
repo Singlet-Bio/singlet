@@ -339,3 +339,41 @@ High-quality bars (a barcode counts as above the bar if its UMIs clear it in eit
 Downstream on the high-quality cells (called, at least the knee): per-cell-type counts are identical on GSM4006843 (10,870 cells, 14 types) and identical on Kang except one unlabelled barcode (346 vs 345). Per-type pseudobulk Pearson (log CPM) is 1.000000 on GSM4006843 for every type and at least 0.99989 on Kang for every type with 10 or more cells.
 
 Verdict: **no high-quality cell changes.** Every barcode above the knee or above 1,000 UMIs is called by both paths, on both samples, and the per-type composition and pseudobulk of the high-quality cells are the same. The discordant calls (0.6% of calls on GSM4006843, 0.05% on Kang) are all borderline EmptyDrops retentions below the knee: tens to a few hundred UMIs, low-confidence cell types, intermediate ambient similarity, no published cell among them on Kang, and weaker donor assignment. They differ because the two paths test cells against slightly different candidate universes (stream: barcodes with at least 5 reads in the `.1fq`, 122,233; sorted: at least 5 primary CB records after alignment, 119,449), which moves the ambient estimate (alpha 33,430 vs 33,506 on GSM4006843). The four barcodes at the 531-UMI bar on GSM4006843 are the same kind (two each way). Both universes are deterministic; under rule R6 the sorted path should take the same pass-1 universe, which would remove this difference entirely.
+
+## Update 2026-10-28 (g): determinism gates with the order-free rules
+
+Binary `singlet-bs-rules` = `perf/bam-stream` `8ab560d` (R1 SNP consensus, R4 hash rRNA sample, R5 stream strand prior, R6 pass-1 barcode universe, R7 canonical junctions), default stream unless stated, one exclusive node per run. Jobs 790252-790258 (runs), 790261-790265 (`out_equiv.py`).
+
+| pair | identical | differ only in timings/paths | differ | what differs |
+|---|---|---|---|---|
+| GSM4006843 stream 4 vs 8 threads | 58 | 3 | 4 | see below |
+| GSM4006843 stream 4 vs 16 threads | 57 | 4 | 4 | see below |
+| GSM4006843 stream rerun at 4 threads | 58 | 3 | 4 | see below |
+| GSM7901264 (5') stream 4 vs 16 threads | 56 | 3 | 4 | see below |
+| GSM4006843 stream vs `--sorted-bam`, same binary | 18 | 1 | 46 | barcode universe (below) |
+
+The four remaining differences in every stream pair, none of them a pileup or matrix output:
+
+| file | difference | cause |
+|---|---|---|
+| `read_stats.tsv` | `wall_seconds` only | timing (missing from out_equiv's ignore list) |
+| `star_Log.std.out` | STAR's command line contains the job's `/tmp` path | path |
+| `pileup_stats.json` | `/provenance/outputs/bytes_public` (1 to 2,300 bytes) | sum of output file sizes, which includes the two files above and the non-host table |
+| `nonhost/nonhost_em_abundance.tsv` (3') / `nonhost/nonhost_summary.json:em_iterations` (5', 259 vs 250) | 6th decimal of a probability; EM iteration count | pre-existing: the non-host EM's convergence depends on the order of its input reads (W11 found the same; also differs between sorted reruns). Not a pileup output |
+
+So with the rules, **every count matrix, junction, splice, SNP AD/DP, donor, mt, cell-call, ambient and QC output is byte-identical across 4, 8 and 16 threads and on a rerun, on both the 3' and the 5' sample.** Before the rules (update (b)), 9 to 12 files differed per pair, including junctions, splice tables, rRNA, SNP AD and donor outputs. The gate is met except for the non-host EM, which needs ordered input (sort the reads it receives by name) and is outside the pileup.
+
+Stream vs `--sorted-bam` on the same binary still differs in 46 files because the sorted path keeps its own barcode universe (CB-tag scan of the sorted BAM, 119,449 barcodes, vs pass-1 >= 5 reads, 122,233): the ambient model, cell calls (13,043 vs 13,098) and every per-barcode table follow from that. Pileup totals differ only by the reads of the extra barcodes (`barcoded_reads` 60,860,604 vs 60,849,821, +0.018%). Update (f) shows that no high-quality cell is affected. Making the sorted path take the pass-1 universe too (R6) would remove this; it is not done, because the default no longer uses the sorted path for these samples.
+
+New rule counters on the two samples (stream, 4 threads):
+
+| | GSM4006843 (3') | GSM7901264 (5') |
+|---|---|---|
+| SNP molecules with a REF/ALT majority | 7,062,514 | 2,801,931 |
+| ambiguous (tie), excluded from AD and DP | 2,158 (0.031%) | 3,398 (0.12%) |
+| majority neither REF nor ALT, excluded | 33,389 (0.47%) | 11,356 (0.40%) |
+| strand: informative reads, antisense share | 43,389,316, 1.79% | 56,826,236, 2.48% |
+| rRNA sample (1/64 by read name), rRNA hits | 994,297 reads, 30 | 1,456,937 reads, 16 |
+| wall, peak RSS | 14:13, 57.5 GB | 17:18, 53.2 GB |
+
+Not run yet: the shuffled-record-order gate (it needs an unsorted STAR BAM kept in `/tmp` and a `--bam-file` mode that takes CB from CR), and the comparison with `prod/campaign`'s sorted output (jobs 790259/790260 are queued behind the per-user node limit; comparisons 790266/790267 follow).

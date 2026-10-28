@@ -94,4 +94,5 @@ Why: row order carries no biology; a canonical order makes identity checkable wi
 | R5 strand | done for the stream, `8ab560d` (no inline probe; aggregate reported; exit 8 on contradiction). The sorted path keeps its genome-sampled probe plus safety net, which re-reads the whole BAM | to implement |
 | R6 barcode universe | done for the stream, `b237f57`; the sorted path still refreshes from the CB-tag scan | take the list from the CPU pass-1 |
 | R7 canonical order | junctions done, `8ab560d`, both paths; other discovery axes still to check against the gates | to implement |
+| thread/rerun gate | met for every pileup output, 3' and 5' (update (g) of ws-w3b); non-host EM still order-dependent | — |
 | shuffled-order gate | not run yet (needs an unsorted STAR BAM kept in job `/tmp` and a `--bam-file` mode that takes CB from CR) | — |
