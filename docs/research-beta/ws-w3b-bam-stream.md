@@ -230,3 +230,46 @@ emission order (thread timing), which read-order-dependent steps (first-N sampli
 Criterion (b) is therefore not met and is not near the noise floor for junctions/SNPs; it needs those steps made order-independent
 (or the stream re-ordered) before streaming can be the default. (a) and (c) are unchanged. Not run: shuffled-order test, Kang pool,
 high-mtDNA sample (staging needed). Recommendation stands: opt-in flag only.
+
+## Update 2026-10-28 (c): what actually varies, and why
+
+Job 790050 diffed the differing files field by field (runs_d1 streaming T4 r1/r2/T16; runs_s0 sorted T4 r1/r2; sorted vs streaming).
+
+**Run-to-run variation inside streaming is a byte-order effect, not a count effect.**
+
+| file | what differs | cause (code) |
+|---|---|---|
+| `sj_counts.1pz`, `sj_features.tsv.gz`, `splice_events.tsv`, `splice_psi.1pz` | nothing in content: 170,281 junctions in both, 0 only-in-A/B, per-junction `n_molecules`/`n_cells` differ in **0 rows**; only row order | junction index assigned first-seen (`sj_names_.push_back` in `extract_splice_junctions`): STAR's unsorted emission order is thread-timing dependent, so the feature order differs; counts are set-based (`UmiDedup` = exact-match hash set) and order-independent |
+| `rrna_report.json`, `pileup_stats.json:/rrna_*` | 19 vs 23 vs 22 rRNA hits of ~73.5k sampled | "every 1000th mapped read" sampling: a different 1/1000 slice each run; 1-in-1000 sampling noise, not a signal change |
+| `read_stats.tsv` | one line: `wall_seconds` of the pileup stage | timing only (the TSV is not in out_equiv's timing-ignore list) |
+| `pileup_stats.json:/strand_probe_antisense_frac` | 0.0218 (T4) vs 0.0189 (T16); same decision (forward) | inline probe uses the first 10,000 informative reads of the stream; the sorted path samples 64 windows over 4 chromosomes (18,835 reads, 5.6%) |
+| `nonhost/nonhost_em_abundance.tsv` | 6th decimal of a probability; the **sorted rerun also differs here**, including one read count (57,473 vs 57,474) | pre-existing floating-point/threading nondeterminism in the nonhost EM (not a BAM-order effect) |
+| `private/snp_ad.1pz`, `donor0.vcf`, `donor0_coverage.tsv` | identical between same-T reruns (byte-identical files), differ across T4/T8/T16; `snp_hits` identical (7,398,620) in all | donor demux is threaded (`dcfg.threads = export_cfg.threads`, VB with seed 42): the reduction order changes with the thread count. Whether `snp_ad` itself differs or only its downstream is settled by the sorted T16 control (job 790051/790052, below) |
+
+Every pileup tally that is a count (`exon_hits 48,836,959`, `intron_hits 6,934,289`, `sj_hits 15,116,871`, `snp_hits`, `secondary_reads`, `multigene_reads`, `wrong_strand`) is identical across all five streaming runs. The exon, intron and gene matrices are byte-identical. So the serial `run()` is order-independent in what it counts; it is order-dependent only in (i) the order it names junction features, (ii) which reads the 1/1000 rRNA sampler sees, and (iii) which reads feed the strand probe.
+
+**Sorted vs streaming (same binary, same barcode list) is systematic, not stochastic.** Both streaming T4 runs give the same numbers, so the gap to the sorted run is deterministic:
+
+- `sj_hits` 15,109,243 (sorted) vs 15,116,871 (streaming), +0.05%; 1,418 of 170,281 junctions differ in `n_molecules`. Exon/intron/SNP hit counts are identical. Not yet isolated; see the shuffle test below.
+- The large `n_cells`/`n_cell_molecules` differences in `sj_features` (51,838 rows) are an artifact of the comparison setup: `--barcodes` disables cell calling, so the streaming run's "cells" are all 119,449 barcodes. Not a streaming effect.
+- Molecules 0.002-0.12%: the only order-dependent decision in gene counting is the EM-rescue candidate pair for ambiguous multimappers (`first_gene`/`second_gene` = the first two genes seen; in a sorted BAM "first" is leftmost on the genome, in the stream it is STAR's primary-then-secondaries order). Not yet proven to be the whole residue.
+- Strand probe: a different sample (genome-wide windows vs first 10,000 informative reads). Same decision on both test samples. On a library whose antisense share is near the 0.4-0.6 band the two probes could decide differently, and in the stream the reads before the decision keep the starting orientation.
+- Barcode set with auto selection (13,098 sorted vs 13,302 streaming, each reproducible within its mode): the sorted path refreshes the candidate list from a CB-tag scan of the BAM (>=5 primary records, ties by first-seen); the stream has no scan, so the candidate universe and hence EmptyDrops' ambient model differ (alpha 33,506 vs 36,219).
+
+**Does sorting create artifacts of its own?** Sorting does not change any count; the sorted path's advantage is reproducibility of bytes (56/63 identical on rerun, the rest timing/FP). What sorting changes is the order in which per-read decisions see evidence: (a) a multimapper's alignments are scattered across the genome, so `mm_buffer` must hold up to 500k partial entries and the parallel path merges partial entries across workers at region boundaries; in the stream every read's alignments are adjacent and primary-first, so entries complete immediately and nothing is flushed incomplete. (b) The parallel pileup partitions by region, so per-worker UMI dedup and SJ dedup are merged afterwards; the stream dedups globally. (c) The strand probe can sample the genome. So the stream order is the cleaner order for per-read logic (multimappers, dedup); the sorted file is better only for genome-sampled probes. Neither is more correct on the evidence here; the sorted path is simply the one whose first-seen choices are reproducible because the file order is.
+
+**How to make the result provably order-independent** (engine work in `pileup_engine.h` and export; W2 owns the file):
+
+1. Name features canonically: sort `sj_names_` (chrom, donor, acceptor) and remap `sj_acc_` before export; build splice events from the sorted list. Removes the whole junction/splice byte difference.
+2. Sample by hash, not by position: rRNA sample = reads with `hash(qname) % 1000 == 0`. Deterministic and order-free; also removes the periodicity.
+3. Canonical EM-rescue candidates: keep the candidate gene set per multimapper (or the two smallest gene indices), not the first two seen.
+4. Candidate barcodes from the `.1fq` pass-1 (CR counts; barcodes are whitelist-exact), ordered by count with lexicographic ties. Same list in both modes, no BAM scan.
+5. Strand probe: take the orientation from the protocol table and use the probe only to confirm; or buffer the pre-decision reads' exon candidates for both orientations and commit after the decision.
+6. Threaded floating point (demux VB, nonhost EM): fixed partition and ordered reduction. Pre-existing, shared by both paths.
+7. Acceptance test: run `run()` on the same unsorted BAM in three shuffled orders (`samtools collate`) and require byte-identical outputs. This proves order-independence directly, without STAR's timing in the loop, and separates the remaining sorted-vs-stream residue (`sj_hits` +0.05%, molecules) into "order" vs "different input" (CB from CR, strand probe).
+
+**Performance around streaming.** In the stream the pileup is serial and runs alongside STAR: pileup wall 628 s at T4 (STAR 9.5 min) and 282 s at T16 (STAR 4.4 min, 909 M reads/h, about 250k reads/s). The serial pileup processed 73.7 M reads in 282 s, about 261k reads/s, so at 16 threads it is already the bottleneck; above that the saving shrinks. Options, in order of value:
+
+- Barcode-sharded streaming pileup: route each record by `hash(CB) % W` to one of W workers with their own accumulators and dedup sets. All reads of a barcode (and all alignments of a read, which share CB) land in one worker, so per-worker dedup and `mm_buffer` are exact with no merge step, the result is order-independent by construction, and memory does not duplicate (disjoint barcode sets). This is the existing `run_parallel` worker structure partitioned by barcode instead of region.
+- Keep `--outBAMcompression 0` on the pipe (already so); the remaining stream cost is BAM record parsing, which the sharded design parallelises.
+- The sort itself (phase 4) does not scale with threads and is inflated up to 5x by co-tenancy; streaming removes it entirely, which is the whole 19%. The in-RAM/NVMe sort alternatives measured in phase 4 recover less than that.
