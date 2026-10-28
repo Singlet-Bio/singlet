@@ -197,9 +197,8 @@ def strip_doublet_columns(data: bytes) -> bytes:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
         return data
-    lines = text.split("
-")
-    head = [h.rstrip("") for h in lines[0].split("	")]
+    lines = text.split("\n")
+    head = [h.rstrip("\r") for h in lines[0].split("\t")]
     drop = {i for i, h in enumerate(head) if "doublet" in h.strip().lower()}
     if not drop:
         return data
@@ -208,11 +207,10 @@ def strip_doublet_columns(data: bytes) -> bytes:
         if not ln:
             out.append(ln)
             continue
-        cr = ln.endswith("")
-        f = (ln[:-1] if cr else ln).split("	")
-        out.append("	".join(x for i, x in enumerate(f) if i not in drop) + ("" if cr else ""))
-    return "
-".join(out).encode("utf-8")
+        cr = ln.endswith("\r")
+        f = (ln[:-1] if cr else ln).split("\t")
+        out.append("\t".join(x for i, x in enumerate(f) if i not in drop) + ("\r" if cr else ""))
+    return "\n".join(out).encode("utf-8")
 
 
 def _is_qc_table(path: str) -> bool:
