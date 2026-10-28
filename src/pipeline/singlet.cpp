@@ -6237,6 +6237,11 @@ int main(int argc, char* argv[]) {
                 }
             }
 
+            // Test hook: delay STAR's start (and so its open of the input FIFOs) to
+            // reproduce a slow STAR start on a loaded node.
+            if (const char* d = std::getenv("SINGLET_TEST_STAR_START_DELAY_MS"))
+                std::this_thread::sleep_for(std::chrono::milliseconds(std::atol(d)));
+
             // Build STAR args vector — identical content to the previous
             // execv call; we now pass it to star_main_impl() directly.
             std::vector<const char*> args;
