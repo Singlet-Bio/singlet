@@ -1880,3 +1880,43 @@ qualities.
 **Projected**, from the measured stages: after step 2 the GPU path would be at about 6–8 core-s per M pairs, against 12.7 at
 cloud break-even. M5 then becomes the node's bound (about 8 M pairs/s for two GPUs), which is where queue item 2 (warp-parallel
 stitching, concurrent lanes) starts to pay.
+
+### 12.19 GPU pileup on the order-free stream path: identical to the CPU engine under the spec (job 790376, 2026-10-28)
+
+**Setup:**
+- Spec: `docs/research-beta/order-free-rules.md` (bam-stream session, PR #60).
+- CPU reference: the CPU engine's unsorted-stream path, branch `perf/bam-stream` 7aa3339 (PR #63). It implements R1 (SNP
+  consensus per molecule), R4, R5 and R7, merged unchanged into `gpu/engine-gpu-stream` on PR #66.
+- Hooks: the engine ran with `SINGLET_STREAM_TEE` (a copy of STAR's unsorted record stream) and `SINGLET_PILEUP_DUMP` (what
+  the callers receive, plus the annotation). Both are debug-only.
+- `extract --cb-from-cr` built the GPU records from the stream copy. CB comes from CR by #63's rule.
+- `pileup` now implements R1 on the GPU. Per (cell, SNP, UMI) molecule it reduces the REF/ALT/OTHER read counts (each capped at
+  255), lets a strict maximum decide, and leaves ties and OTHER-majority molecules out of AD and DP. `--snp-first` keeps the
+  sorted path's rule.
+
+**Result:** pbmc1k_v3, 10x 3' v3, campaign configuration (whitelist, CB_UMI_Simple), 66.6 M read pairs, 60.4 M barcoded
+reads. Every output is identical, entry by entry:
+
+| output | entries | result |
+|---|---|---|
+| exon matrix | 3,984,658 (sum 10,557,742) | **identical** |
+| intron matrix | 3,559,731 | **identical** |
+| ambiguous per gene | 158,073 | **identical** |
+| junction table (by contig, donor, acceptor) | 1,461,137 (sum 4,811,746) | **identical** |
+| SNP AD (R1) | 1,027,489 | **identical** |
+| SNP DP (R1) | 3,344,444 | **identical** |
+| chrM base counts, total and reverse | 24,187,747 and 877,153 | **identical** |
+| chrM indel events | 56,655 | **identical** |
+
+- **R1 molecule counters:** the GPU's 4,909,556 counted, 8,970 ties and 20,357 other-majority equal the CPU's
+  `pileup_stats.json` exactly.
+- **Speed:** GPU time 72.9 ms for 60.4 M reads (0.83 G reads/s), deterministic across runs.
+- **Records:** 27.6 M signatures and 30.7 M alignments; E0 violations 0; incomplete multimapper groups 0.
+
+**Not yet in the binary.** The records still come from the stream copy via `extract`. The engine integration is next: records from
+the GPU prefill's per-distinct results, and the kernels linked into `singlet` (`docs/research-beta/gpu-pileup-design.md` on
+`gpu/engine-gpu-stream`). The dumped annotation was 17–24 GB with a size that varied between two runs. It does not affect the
+results, but it is being checked before integration, since it would be HBM.
+
+**Tooling note:** `clipper.py push` resolves a relative destination against the home directory. The first run of this job and
+the read-binning job 790068 compiled stale sources because of it (§12.12 correction).
