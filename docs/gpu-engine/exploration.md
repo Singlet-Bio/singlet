@@ -1827,3 +1827,52 @@ What the table says:
   pairs, §12.10).
 - **Demux** (host step 3) only matters once M5 passes ~25 M pairs/s per node.
 - Carried over: memory per in-flight export on the host; M2 on same-study batches; M10 at 1k/10k/30k cells.
+
+### 12.18 After milestone 1: where the GPU path's CPU goes, and the next lever (2026-10-28)
+
+All figures are measured on PR #66, pbmc1k_v3, 9 threads, in core-s per M read pairs.
+
+| stage | build 0027286f (job 790058) | + blocking sync and parallel read concatenation (job 790078) |
+|---|---|---|
+| STAR: GPU prefill and per-read pass | 8.88 | 8.99 (no change within noise) |
+| `.1fq` decode to FASTQ files | 1.14 | 1.17 |
+| STAR BAM sort; BAM index; CB-tag refresh | 1.47; 0.22; 0.27 | 1.55; 0.23; 0.25 |
+| pileup; export; non-host | 1.53; 1.51; 0.47 | 1.55; 1.49; 0.49 |
+| **total** (`--engine cpu`: 36.2 and 36.8) | **15.8** | **16.1** |
+
+**The prefill's single-core stretch is not a spin.** The per-second CPU shows about 15 s at 8–9 cores (reading the reads), then
+about 60 s at exactly one core. Blocking sync did not change it. That core is the serial host side of `mapDistinct`: pageable
+uploads of the 18 GB index and the reads, the dedup loop, record assembly and pageable device-to-host copies. Making it parallel
+saves at most about 1 core-s per M pairs, but would shorten a single sample's wall time by up to about a minute.
+
+**STAR's per-read pass** (47 s × 9 threads; `-DSTAR_PROFILE`, job 790048), in thread-seconds:
+- output 189: BAM records 77, junction recording 52 before the annotation skip, barcode tags 21;
+- cache lookups and restores 97 (1.45 µs per hit);
+- FASTQ parsing 53;
+- chunk reading 28.
+
+**The next lever is STAR's per-read pass itself.** Together with decode, sort, index and CB refresh it is about 13 of the 16
+core-s per M pairs; every other stage is 1.5 or less. Every read is a cache hit, so what STAR still does per read is only to
+produce outputs:
+- BAM records (flag, position, MAPQ, CIGAR, sequence, qualities, NH nM AS CR UR CB);
+- the unmapped FASTQ records;
+- `Log.final.out` counters;
+- `SJ.out.tab` junction counts;
+- `Solo.out/Barcodes.stats`.
+
+All of these are functions of the per-sequence result, which the GPU already holds, plus the read's number, barcode, UMI and
+qualities.
+
+**Plan, as a stacked PR**, each step gated byte-identical to STAR's own output:
+1. Build those per-read outputs from the GPU results in parallel host code that calls STAR's own functions (`alignBAM`,
+   `outReadsUnmapped`, `statsRA`, `outputTranscriptSJ`), reading the reads straight from the `.1fq`. This removes the decode,
+   the FASTQ files, STAR's chunk machinery and its parsing. Gate: the sorted BAM's records, `SJ.out.tab`, the counts in
+   `Log.final.out` and the unmapped records equal STAR's.
+2. Sort the records by STAR's key (start, then iReadAll << 32 | iTr << 8 | mate) on the GPU and stream them to the unchanged
+   CPU pileup by chromosome, without writing a BAM. This removes the sort, index and disk round trip; the order rules are in
+   `ws-w11-gpu.md`.
+3. Build the records on the GPU and switch the covered accumulators to the GPU pileup (§12.13).
+
+**Projected**, from the measured stages: after step 2 the GPU path would be at about 6–8 core-s per M pairs, against 12.7 at
+cloud break-even. M5 then becomes the node's bound (about 8 M pairs/s for two GPUs), which is where queue item 2 (warp-parallel
+stitching, concurrent lanes) starts to pay.
