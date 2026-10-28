@@ -1,0 +1,2454 @@
+{
+ "binaries": {},
+ "baseline": {
+  "sorted_disk": {
+   "GSM4006843": {
+    "t16_r1": {
+     "star_total": 371.614,
+     "star_map": 134.0,
+     "star_solo": 49.0,
+     "sort": 173.61399999999998,
+     "index": 5.87627,
+     "cb_refresh": 21.3207,
+     "pileup_pass": 9.14032,
+     "pileup_total": 62.1537,
+     "fq_pass1": 22.8116,
+     "ref_load": 26.6685,
+     "export_csc": 4.12903,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 635.93,
+     "user_s": 2550.16,
+     "sys_s": 263.97,
+     "maxrss_kb": 55808180.0,
+     "cpu_s": 2814.13,
+     "memory_peak_mb": "69881",
+     "tmp_peak_mb": "20554",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.04 1.78 2.57",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t16_r2": {
+     "star_total": 368.632,
+     "star_map": 135.0,
+     "star_solo": 49.0,
+     "sort": 172.632,
+     "index": 9.86033,
+     "cb_refresh": 21.5192,
+     "pileup_pass": 10.2328,
+     "pileup_total": 66.8978,
+     "fq_pass1": 23.2247,
+     "ref_load": 27.0081,
+     "export_csc": 4.73093,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 640.03,
+     "user_s": 2553.02,
+     "sys_s": 277.61,
+     "maxrss_kb": 55879840.0,
+     "cpu_s": 2830.63,
+     "memory_peak_mb": "69647",
+     "tmp_peak_mb": "20554",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.22 2.68 3.52",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r1": {
+     "star_total": 1014.62,
+     "star_map": 571.0,
+     "star_solo": 52.0,
+     "sort": 378.62,
+     "index": 5.4914,
+     "cb_refresh": 24.326,
+     "pileup_pass": 29.1686,
+     "pileup_total": 65.319,
+     "fq_pass1": 24.0797,
+     "ref_load": 27.9166,
+     "export_csc": 3.31564,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 1292.72,
+     "user_s": 2616.02,
+     "sys_s": 245.78,
+     "maxrss_kb": 56811584.0,
+     "cpu_s": 2861.8,
+     "memory_peak_mb": "66198",
+     "tmp_peak_mb": "20554",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 40,
+     "loadavg": "16.20 22.80 21.38",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r2": {
+     "star_total": 955.999,
+     "star_map": 575.0,
+     "star_solo": 52.0,
+     "sort": 316.999,
+     "index": 5.58481,
+     "cb_refresh": 23.707,
+     "pileup_pass": 28.4757,
+     "pileup_total": 65.4508,
+     "fq_pass1": 22.9063,
+     "ref_load": 26.7819,
+     "export_csc": 3.28108,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 1230.64,
+     "user_s": 2688.89,
+     "sys_s": 229.4,
+     "maxrss_kb": 56777928.0,
+     "cpu_s": 2918.29,
+     "memory_peak_mb": "65112",
+     "tmp_peak_mb": "20554",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 36,
+     "loadavg": "17.52 18.98 22.25",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r3": {
+     "star_total": 747.607,
+     "star_map": 510.0,
+     "star_solo": 49.0,
+     "sort": 169.60699999999997,
+     "index": 9.88853,
+     "cb_refresh": 21.261,
+     "pileup_pass": 28.8761,
+     "pileup_total": 78.3463,
+     "fq_pass1": 23.866,
+     "ref_load": 27.7026,
+     "export_csc": 3.5493,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 1037.66,
+     "user_s": 2512.14,
+     "sys_s": 252.08,
+     "maxrss_kb": 56782220.0,
+     "cpu_s": 2764.22,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "20553",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.72 1.45 1.84",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    }
+   },
+   "GSM5411066": {
+    "t16_r1": {
+     "star_total": 348.136,
+     "star_map": 85.0,
+     "star_solo": 46.0,
+     "sort": 182.13600000000002,
+     "index": 11.9982,
+     "cb_refresh": 19.4022,
+     "pileup_pass": 7.90751,
+     "pileup_total": 39.5879,
+     "fq_pass1": 19.5759,
+     "ref_load": 22.5929,
+     "export_csc": 1.58183,
+     "strand_rerun_logged": false,
+     "reads": 80448599,
+     "wall": 557.19,
+     "user_s": 1621.52,
+     "sys_s": 299.08,
+     "maxrss_kb": 54095740.0,
+     "cpu_s": 1920.6,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "22271",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.00 2.42 3.37",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t16_r2": {
+     "star_total": 341.46,
+     "star_map": 79.0,
+     "star_solo": 46.0,
+     "sort": 183.45999999999998,
+     "index": 9.73099,
+     "cb_refresh": 19.172,
+     "pileup_pass": 7.0764,
+     "pileup_total": 40.7928,
+     "fq_pass1": 18.9999,
+     "ref_load": 21.5412,
+     "export_csc": 2.04991,
+     "strand_rerun_logged": false,
+     "reads": 80448599,
+     "wall": 556.76,
+     "user_s": 1562.45,
+     "sys_s": 292.21,
+     "maxrss_kb": 54124728.0,
+     "cpu_s": 1854.66,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "22271",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.29 1.90 2.63",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r1": {
+     "star_total": 664.788,
+     "star_map": 314.0,
+     "star_solo": 46.0,
+     "sort": 286.788,
+     "index": 6.54549,
+     "cb_refresh": 19.8188,
+     "pileup_pass": 23.2892,
+     "pileup_total": 49.2586,
+     "fq_pass1": 20.4354,
+     "ref_load": 23.38,
+     "export_csc": 1.47588,
+     "strand_rerun_logged": false,
+     "reads": 80448599,
+     "wall": 875.22,
+     "user_s": 1528.59,
+     "sys_s": 250.61,
+     "maxrss_kb": 53511096.0,
+     "cpu_s": 1779.1999999999998,
+     "memory_peak_mb": "71793",
+     "tmp_peak_mb": "22271",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 40,
+     "loadavg": "16.07 23.47 21.54",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r2": {
+     "star_total": 707.81,
+     "star_map": 337.0,
+     "star_solo": 48.0,
+     "sort": 302.80999999999995,
+     "index": 6.17273,
+     "cb_refresh": 20.0596,
+     "pileup_pass": 23.8639,
+     "pileup_total": 50.6617,
+     "fq_pass1": 19.6854,
+     "ref_load": 22.3952,
+     "export_csc": 1.64491,
+     "strand_rerun_logged": false,
+     "reads": 80448599,
+     "wall": 916.88,
+     "user_s": 1643.32,
+     "sys_s": 248.48,
+     "maxrss_kb": 53422640.0,
+     "cpu_s": 1891.8,
+     "memory_peak_mb": "70969",
+     "tmp_peak_mb": "22271",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 36,
+     "loadavg": "14.29 19.44 23.02",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r3": {
+     "star_total": 570.836,
+     "star_map": 294.0,
+     "star_solo": 46.0,
+     "sort": 192.836,
+     "index": 7.14193,
+     "cb_refresh": 19.634,
+     "pileup_pass": 21.8013,
+     "pileup_total": 54.4627,
+     "fq_pass1": 20.1166,
+     "ref_load": 23.468,
+     "export_csc": 1.29174,
+     "strand_rerun_logged": false,
+     "reads": 80448599,
+     "wall": 782.0,
+     "user_s": 1535.79,
+     "sys_s": 267.94,
+     "maxrss_kb": 53486876.0,
+     "cpu_s": 1803.73,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "22271",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.95 1.82 2.37",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    }
+   },
+   "GSM6250705": {
+    "t4_r1": {
+     "star_total": null,
+     "fq_pass1": 15.6704,
+     "ref_load": 19.4066,
+     "strand_rerun_logged": false,
+     "wall": 45.09,
+     "user_s": 60.83,
+     "sys_s": 25.41,
+     "maxrss_kb": 19246112.0,
+     "cpu_s": 86.24,
+     "memory_peak_mb": "20693",
+     "tmp_peak_mb": "1",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 40,
+     "loadavg": "25.45 25.17 23.38",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": true
+    },
+    "t4_r2": {
+     "star_total": null,
+     "fq_pass1": 15.4419,
+     "ref_load": 19.2062,
+     "strand_rerun_logged": false,
+     "wall": 44.06,
+     "user_s": 61.99,
+     "sys_s": 24.2,
+     "maxrss_kb": 19248648.0,
+     "cpu_s": 86.19,
+     "memory_peak_mb": "20238",
+     "tmp_peak_mb": "1",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 32,
+     "loadavg": "25.01 24.01 23.07",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": true
+    }
+   },
+   "GSM6470208": {
+    "t16_r1": {
+     "star_total": 1147.69,
+     "star_map": 251.0,
+     "star_solo": 50.0,
+     "sort": 834.69,
+     "index": 108.088,
+     "cb_refresh": 65.6411,
+     "pileup_pass": 81.5539,
+     "pileup_total": 174.651,
+     "fq_pass1": 32.8379,
+     "ref_load": 36.6129,
+     "export_csc": 4.68156,
+     "strand_rerun_logged": false,
+     "reads": 331702882,
+     "wall": 1693.55,
+     "user_s": 4861.9,
+     "sys_s": 948.43,
+     "maxrss_kb": 58815208.0,
+     "cpu_s": 5810.33,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "85356",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.91 2.06 2.90",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t16_r2": {
+     "star_total": 1158.82,
+     "star_map": 264.0,
+     "star_solo": 50.0,
+     "sort": 831.8199999999999,
+     "index": 101.546,
+     "cb_refresh": 63.8323,
+     "pileup_pass": 92.9832,
+     "pileup_total": 190.157,
+     "fq_pass1": 33.655,
+     "ref_load": 37.4502,
+     "export_csc": 4.66686,
+     "strand_rerun_logged": false,
+     "reads": 331702882,
+     "wall": 1725.0,
+     "user_s": 4957.63,
+     "sys_s": 958.83,
+     "maxrss_kb": 58348732.0,
+     "cpu_s": 5916.46,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "85356",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.94 1.30 2.70",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r1": {
+     "star_total": 3459.54,
+     "star_map": 1058.0,
+     "star_solo": 116.0,
+     "sort": 2273.54,
+     "index": 149.504,
+     "cb_refresh": 59.4632,
+     "pileup_pass": 114.214,
+     "pileup_total": 197.294,
+     "fq_pass1": 34.2411,
+     "ref_load": 38.04,
+     "export_csc": 4.56871,
+     "strand_rerun_logged": false,
+     "reads": 331702882,
+     "wall": 4199.0,
+     "user_s": 5033.06,
+     "sys_s": 951.11,
+     "maxrss_kb": 60795940.0,
+     "cpu_s": 5984.17,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "85356",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 32,
+     "loadavg": "5.64 4.40 2.48",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r2": {
+     "star_total": 3753.85,
+     "star_map": 1276.0,
+     "star_solo": 176.0,
+     "sort": 2289.85,
+     "index": 118.362,
+     "cb_refresh": 66.7365,
+     "pileup_pass": 93.6794,
+     "pileup_total": 169.082,
+     "fq_pass1": 33.3107,
+     "ref_load": 37.1676,
+     "export_csc": 4.34392,
+     "strand_rerun_logged": false,
+     "reads": 331702882,
+     "wall": 4320.0,
+     "user_s": 4984.15,
+     "sys_s": 946.67,
+     "maxrss_kb": 61132400.0,
+     "cpu_s": 5930.82,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "85356",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 44,
+     "loadavg": "19.88 17.81 17.71",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r3": {
+     "star_total": 1881.23,
+     "star_map": 966.0,
+     "star_solo": 50.0,
+     "sort": 844.23,
+     "index": 97.1697,
+     "cb_refresh": 79.9079,
+     "pileup_pass": 91.0939,
+     "pileup_total": 197.998,
+     "fq_pass1": 33.3147,
+     "ref_load": 37.1563,
+     "export_csc": 5.60913,
+     "strand_rerun_logged": false,
+     "reads": 331702882,
+     "wall": 2487.67,
+     "user_s": 4864.41,
+     "sys_s": 890.59,
+     "maxrss_kb": 60789912.0,
+     "cpu_s": 5755.0,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "85356",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.03 1.20 1.65",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    }
+   },
+   "GSM7036403": {
+    "t16_r1": {
+     "star_total": 538.786,
+     "star_map": 166.0,
+     "star_solo": 69.0,
+     "sort": 292.78599999999994,
+     "index": 12.6286,
+     "cb_refresh": 30.9926,
+     "pileup_pass": 12.3718,
+     "pileup_total": 69.8216,
+     "fq_pass1": 37.7883,
+     "ref_load": 41.6025,
+     "export_csc": 3.26716,
+     "strand_rerun_logged": false,
+     "reads": 128399687,
+     "wall": 930.37,
+     "user_s": 3251.47,
+     "sys_s": 401.23,
+     "maxrss_kb": 56949908.0,
+     "cpu_s": 3652.7,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "35170",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "2.04 2.37 2.25",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t16_r2": {
+     "star_total": 536.92,
+     "star_map": 167.0,
+     "star_solo": 69.0,
+     "sort": 288.91999999999996,
+     "index": 15.7396,
+     "cb_refresh": 31.5855,
+     "pileup_pass": 12.4823,
+     "pileup_total": 80.9451,
+     "fq_pass1": 38.4027,
+     "ref_load": 42.191,
+     "export_csc": 4.43111,
+     "strand_rerun_logged": false,
+     "reads": 128399687,
+     "wall": 943.13,
+     "user_s": 3269.87,
+     "sys_s": 406.38,
+     "maxrss_kb": 56843748.0,
+     "cpu_s": 3676.25,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "35170",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.81 1.19 1.71",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r1": {
+     "star_total": 1181.62,
+     "star_map": 715.0,
+     "star_solo": 72.0,
+     "sort": 382.6199999999999,
+     "index": 10.3064,
+     "cb_refresh": 34.6327,
+     "pileup_pass": 46.8117,
+     "pileup_total": 103.968,
+     "fq_pass1": 39.1803,
+     "ref_load": 42.9946,
+     "export_csc": 2.81822,
+     "strand_rerun_logged": false,
+     "reads": 128399687,
+     "wall": 1637.44,
+     "user_s": 3469.44,
+     "sys_s": 404.47,
+     "maxrss_kb": 57705696.0,
+     "cpu_s": 3873.91,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "35170",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 32,
+     "loadavg": "5.64 4.40 2.48",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r2": {
+     "star_total": 1758.14,
+     "star_map": 804.0,
+     "star_solo": 83.0,
+     "sort": 859.1400000000001,
+     "index": 10.072,
+     "cb_refresh": 32.6131,
+     "pileup_pass": 40.9599,
+     "pileup_total": 82.7371,
+     "fq_pass1": 38.9379,
+     "ref_load": 42.805,
+     "export_csc": 3.07615,
+     "strand_rerun_logged": false,
+     "reads": 128399687,
+     "wall": 2172.98,
+     "user_s": 3487.37,
+     "sys_s": 391.63,
+     "maxrss_kb": 57725256.0,
+     "cpu_s": 3879.0,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "35170",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 44,
+     "loadavg": "19.88 17.81 17.71",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r3": {
+     "star_total": 1043.57,
+     "star_map": 640.0,
+     "star_solo": 69.0,
+     "sort": 312.56999999999994,
+     "index": 16.8277,
+     "cb_refresh": 31.1723,
+     "pileup_pass": 35.1063,
+     "pileup_total": 91.6164,
+     "fq_pass1": 37.9012,
+     "ref_load": 42.2674,
+     "export_csc": 4.5255,
+     "strand_rerun_logged": false,
+     "reads": 128399687,
+     "wall": 1485.33,
+     "user_s": 3237.26,
+     "sys_s": 424.55,
+     "maxrss_kb": 57729612.0,
+     "cpu_s": 3661.8100000000004,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "35170",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.00 0.00 0.00",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    }
+   },
+   "GSM7656149": {
+    "t16_r1": {
+     "star_total": 1640.01,
+     "star_map": 676.0,
+     "star_solo": 174.0,
+     "sort": 777.01,
+     "index": 25.989,
+     "cb_refresh": 97.985,
+     "pileup_pass": 37.0553,
+     "pileup_total": 199.94,
+     "fq_pass1": 73.1767,
+     "ref_load": 77.2503,
+     "export_csc": 20.8847,
+     "strand_rerun_logged": false,
+     "reads": 292438995,
+     "wall": 2629.88,
+     "user_s": 12858.89,
+     "sys_s": 723.99,
+     "maxrss_kb": 71899316.0,
+     "cpu_s": 13582.88,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "15814",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.42 1.91 2.24",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t16_r2": {
+     "star_total": 1654.54,
+     "star_map": 688.0,
+     "star_solo": 175.0,
+     "sort": 778.54,
+     "index": 26.6367,
+     "cb_refresh": 97.9872,
+     "pileup_pass": 38.1678,
+     "pileup_total": 171.253,
+     "fq_pass1": 74.9792,
+     "ref_load": 79.0406,
+     "export_csc": 24.3226,
+     "strand_rerun_logged": false,
+     "reads": 292438995,
+     "wall": 2590.75,
+     "user_s": 12874.18,
+     "sys_s": 722.5,
+     "maxrss_kb": 71850532.0,
+     "cpu_s": 13596.68,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "15814",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.40 1.69 2.37",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r1": {
+     "star_total": 4656.86,
+     "star_map": 3038.0,
+     "star_solo": 225.0,
+     "sort": 1381.8599999999997,
+     "index": 25.082,
+     "cb_refresh": 101.563,
+     "pileup_pass": 98.7964,
+     "pileup_total": 199.503,
+     "fq_pass1": 77.14,
+     "ref_load": 81.2497,
+     "export_csc": 16.7353,
+     "strand_rerun_logged": false,
+     "reads": 292438995,
+     "wall": 5626.0,
+     "user_s": 13529.72,
+     "sys_s": 632.98,
+     "maxrss_kb": 73006956.0,
+     "cpu_s": 14162.699999999999,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "15814",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 32,
+     "loadavg": "5.64 4.40 2.48",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r2": {
+     "star_total": 4495.33,
+     "star_map": 3194.0,
+     "star_solo": 339.0,
+     "sort": 950.3299999999999,
+     "index": 23.935,
+     "cb_refresh": 99.1233,
+     "pileup_pass": 97.4794,
+     "pileup_total": 197.284,
+     "fq_pass1": 77.2634,
+     "ref_load": 81.3833,
+     "export_csc": 15.9628,
+     "strand_rerun_logged": false,
+     "reads": 292438995,
+     "wall": 5395.0,
+     "user_s": 13575.64,
+     "sys_s": 593.06,
+     "maxrss_kb": 73590300.0,
+     "cpu_s": 14168.699999999999,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "15814",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 44,
+     "loadavg": "19.88 17.81 17.71",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r3": {
+     "star_total": 3650.79,
+     "star_map": 2653.0,
+     "star_solo": 171.0,
+     "sort": 801.79,
+     "index": 27.7063,
+     "cb_refresh": 97.8156,
+     "pileup_pass": 95.0036,
+     "pileup_total": 244.79,
+     "fq_pass1": 73.5538,
+     "ref_load": 77.6393,
+     "export_csc": 22.2789,
+     "strand_rerun_logged": false,
+     "reads": 292438995,
+     "wall": 4722.0,
+     "user_s": 12777.38,
+     "sys_s": 725.66,
+     "maxrss_kb": 73852924.0,
+     "cpu_s": 13503.039999999999,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "15814",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.02 0.27 0.37",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    }
+   },
+   "GSM7901264": {
+    "t16_r1": {
+     "star_total": 505.486,
+     "star_map": 194.0,
+     "star_solo": 58.0,
+     "sort": 241.486,
+     "index": 13.1859,
+     "cb_refresh": 24.6451,
+     "pileup_pass": 8.54199,
+     "pileup_total": 45.8112,
+     "fq_pass1": 33.6179,
+     "ref_load": 37.3755,
+     "export_csc": 2.47862,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 793.59,
+     "user_s": 3539.82,
+     "sys_s": 375.06,
+     "maxrss_kb": 53922884.0,
+     "cpu_s": 3914.88,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "31680",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.09 1.29 2.52",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t16_r2": {
+     "star_total": 516.496,
+     "star_map": 196.0,
+     "star_solo": 58.0,
+     "sort": 249.49599999999998,
+     "index": 12.7886,
+     "cb_refresh": 24.4544,
+     "pileup_pass": 9.58895,
+     "pileup_total": 45.7504,
+     "fq_pass1": 34.4905,
+     "ref_load": 38.2372,
+     "export_csc": 3.55952,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 800.9,
+     "user_s": 3571.56,
+     "sys_s": 386.04,
+     "maxrss_kb": 53939648.0,
+     "cpu_s": 3957.6,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "31679",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.87 1.88 2.62",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r1": {
+     "star_total": 1315.1,
+     "star_map": 828.0,
+     "star_solo": 78.0,
+     "sort": 397.0999999999999,
+     "index": 8.629,
+     "cb_refresh": 24.7679,
+     "pileup_pass": 28.4772,
+     "pileup_total": 52.8352,
+     "fq_pass1": 34.8096,
+     "ref_load": 38.6057,
+     "export_csc": 2.4176,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 1600.53,
+     "user_s": 3669.56,
+     "sys_s": 342.56,
+     "maxrss_kb": 54238800.0,
+     "cpu_s": 4012.12,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "31680",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 32,
+     "loadavg": "5.64 4.40 2.48",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r2": {
+     "star_total": 1721.69,
+     "star_map": 913.0,
+     "star_solo": 61.0,
+     "sort": 735.69,
+     "index": 8.91606,
+     "cb_refresh": 24.8546,
+     "pileup_pass": 28.6157,
+     "pileup_total": 52.6426,
+     "fq_pass1": 35.7845,
+     "ref_load": 39.588,
+     "export_csc": 2.52752,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 2001.46,
+     "user_s": 3715.88,
+     "sys_s": 326.38,
+     "maxrss_kb": 54321252.0,
+     "cpu_s": 4042.26,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "31680",
+     "node": "b001.clipper.gvsu.edu",
+     "cotenant_cpus": 44,
+     "loadavg": "19.88 17.81 17.71",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    },
+    "t4_r3": {
+     "star_total": 1077.1,
+     "star_map": 757.0,
+     "star_solo": 58.0,
+     "sort": 241.0999999999999,
+     "index": 15.1204,
+     "cb_refresh": 24.334,
+     "pileup_pass": 24.4848,
+     "pileup_total": 54.191,
+     "fq_pass1": 34.2477,
+     "ref_load": 38.0367,
+     "export_csc": 2.5117,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 1362.85,
+     "user_s": 3519.44,
+     "sys_s": 345.01,
+     "maxrss_kb": 54201672.0,
+     "cpu_s": 3864.45,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "31679",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.01 1.51 1.72",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    }
+   }
+  },
+  "sorted_disk_28969b8": {
+   "GSM4006843": {
+    "t4_r1": {
+     "star_total": 681.431,
+     "star_map": 448.0,
+     "star_solo": 49.0,
+     "sort": 172.43100000000004,
+     "index": 8.40879,
+     "cb_refresh": 21.4482,
+     "pileup_pass": 26.8787,
+     "pileup_total": 78.5049,
+     "fq_pass1": 22.7849,
+     "ref_load": 26.6485,
+     "export_csc": 4.51713,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 988.89,
+     "user_s": 2262.46,
+     "sys_s": 270.56,
+     "maxrss_kb": 56741644.0,
+     "cpu_s": 2533.02,
+     "memory_peak_mb": "65482",
+     "tmp_peak_mb": "20553",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.96 1.81 2.40",
+     "binary_sha256": "0317a5b6414fc8c470d374a10379318029a22787965081a037b593e8a585db33",
+     "exit_error": false
+    }
+   },
+   "GSM5411066": {
+    "t4_r1": {
+     "star_total": 535.889,
+     "star_map": 264.0,
+     "star_solo": 47.0,
+     "sort": 191.889,
+     "index": 9.00006,
+     "cb_refresh": 19.2826,
+     "pileup_pass": 21.4035,
+     "pileup_total": 55.6661,
+     "fq_pass1": 20.0064,
+     "ref_load": 22.3824,
+     "export_csc": 1.9617,
+     "strand_rerun_logged": false,
+     "reads": 80448599,
+     "wall": 753.27,
+     "user_s": 1418.29,
+     "sys_s": 277.24,
+     "maxrss_kb": 53468128.0,
+     "cpu_s": 1695.53,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "22271",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.06 1.69 2.64",
+     "binary_sha256": "0317a5b6414fc8c470d374a10379318029a22787965081a037b593e8a585db33",
+     "exit_error": false
+    }
+   },
+   "GSM6470208": {
+    "t4_r1": {
+     "star_total": 1777.78,
+     "star_map": 871.0,
+     "star_solo": 50.0,
+     "sort": 843.78,
+     "index": 87.9187,
+     "cb_refresh": 51.7399,
+     "pileup_pass": 91.2331,
+     "pileup_total": 190.822,
+     "fq_pass1": 32.8175,
+     "ref_load": 36.6221,
+     "export_csc": 6.33545,
+     "strand_rerun_logged": false,
+     "reads": 331702882,
+     "wall": 2339.61,
+     "user_s": 4466.06,
+     "sys_s": 880.86,
+     "maxrss_kb": 60791692.0,
+     "cpu_s": 5346.92,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "85356",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.19 2.34 2.86",
+     "binary_sha256": "0317a5b6414fc8c470d374a10379318029a22787965081a037b593e8a585db33",
+     "exit_error": false
+    }
+   },
+   "GSM7036403": {
+    "t4_r1": {
+     "star_total": 959.317,
+     "star_map": 573.0,
+     "star_solo": 69.0,
+     "sort": 306.317,
+     "index": 19.5714,
+     "cb_refresh": 31.2001,
+     "pileup_pass": 33.3267,
+     "pileup_total": 85.363,
+     "fq_pass1": 38.034,
+     "ref_load": 41.8757,
+     "export_csc": 4.89231,
+     "strand_rerun_logged": false,
+     "reads": 128399687,
+     "wall": 1374.03,
+     "user_s": 2957.3,
+     "sys_s": 392.9,
+     "maxrss_kb": 57774420.0,
+     "cpu_s": 3350.2000000000003,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "35170",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.01 2.48 3.14",
+     "binary_sha256": "0317a5b6414fc8c470d374a10379318029a22787965081a037b593e8a585db33",
+     "exit_error": false
+    }
+   },
+   "GSM7656149": {
+    "t4_r1": {
+     "star_total": 3159.03,
+     "star_map": 2198.0,
+     "star_solo": 173.0,
+     "sort": 776.0300000000002,
+     "index": 27.1734,
+     "cb_refresh": 97.9644,
+     "pileup_pass": 94.0386,
+     "pileup_total": 235.542,
+     "fq_pass1": 73.1665,
+     "ref_load": 77.2681,
+     "export_csc": 22.8311,
+     "strand_rerun_logged": false,
+     "reads": 292438995,
+     "wall": 4181.0,
+     "user_s": 10899.24,
+     "sys_s": 676.8,
+     "maxrss_kb": 73918980.0,
+     "cpu_s": 11576.039999999999,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "15814",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.60 2.69 3.38",
+     "binary_sha256": "0317a5b6414fc8c470d374a10379318029a22787965081a037b593e8a585db33",
+     "exit_error": false
+    }
+   },
+   "GSM7901264": {
+    "t4_r1": {
+     "star_total": 972.316,
+     "star_map": 662.0,
+     "star_solo": 59.0,
+     "sort": 240.31600000000003,
+     "index": 12.2056,
+     "cb_refresh": 24.3463,
+     "pileup_pass": 25.6393,
+     "pileup_total": 55.4438,
+     "fq_pass1": 34.2618,
+     "ref_load": 38.039,
+     "export_csc": 3.55625,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 1283.04,
+     "user_s": 3139.6,
+     "sys_s": 357.94,
+     "maxrss_kb": 54201840.0,
+     "cpu_s": 3497.54,
+     "memory_peak_mb": "81920",
+     "tmp_peak_mb": "31679",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.02 2.49 3.58",
+     "binary_sha256": "0317a5b6414fc8c470d374a10379318029a22787965081a037b593e8a585db33",
+     "exit_error": false
+    }
+   }
+  },
+  "sorted_memory": {
+   "GSM4006843": {
+    "t4_r1": {
+     "star_total": 736.73,
+     "star_map": 510.0,
+     "star_solo": 49.0,
+     "sort": 157.73000000000002,
+     "index": 8.87787,
+     "cb_refresh": 21.1999,
+     "pileup_pass": 28.1106,
+     "pileup_total": 82.516,
+     "fq_pass1": 22.5892,
+     "ref_load": 26.4234,
+     "export_csc": 4.32302,
+     "strand_rerun_logged": false,
+     "reads": 73746398,
+     "wall": 1024.81,
+     "user_s": 2521.54,
+     "sys_s": 247.84,
+     "maxrss_kb": 56838080.0,
+     "cpu_s": 2769.38,
+     "memory_peak_mb": "80791",
+     "tmp_peak_mb": "20553",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.08 0.45 1.32",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    }
+   },
+   "GSM7036403": {
+    "t4_r1": {
+     "star_total": 992.133,
+     "star_map": 629.0,
+     "star_solo": 70.0,
+     "sort": 281.13300000000004,
+     "index": 14.6376,
+     "cb_refresh": 31.1635,
+     "pileup_pass": 33.8083,
+     "pileup_total": 84.7205,
+     "fq_pass1": 37.7317,
+     "ref_load": 41.532,
+     "export_csc": 4.54242,
+     "strand_rerun_logged": false,
+     "reads": 128399687,
+     "wall": 1402.28,
+     "user_s": 3193.32,
+     "sys_s": 363.67,
+     "maxrss_kb": 57834564.0,
+     "cpu_s": 3556.9900000000002,
+     "memory_peak_mb": "111245",
+     "tmp_peak_mb": "35170",
+     "node": "b003.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.77 1.65 2.29",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    }
+   },
+   "GSM7901264": {
+    "t4_r1": {
+     "star_total": 1052.72,
+     "star_map": 751.0,
+     "star_solo": 59.0,
+     "sort": 230.72000000000003,
+     "index": 13.4682,
+     "cb_refresh": 24.4765,
+     "pileup_pass": 26.2846,
+     "pileup_total": 56.6898,
+     "fq_pass1": 33.9535,
+     "ref_load": 37.7061,
+     "export_csc": 3.08524,
+     "strand_rerun_logged": false,
+     "reads": 111842216,
+     "wall": 1357.2,
+     "user_s": 3520.76,
+     "sys_s": 340.52,
+     "maxrss_kb": 54327164.0,
+     "cpu_s": 3861.28,
+     "memory_peak_mb": "100533",
+     "tmp_peak_mb": "31679",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "1.06 1.51 1.93",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": false
+    }
+   }
+  },
+  "existing_stream_path": {
+   "GSM4006843": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 0.206407,
+     "fq_pass1": 23.2086,
+     "ref_load": 27.0746,
+     "strand_rerun_logged": false,
+     "reads": 0,
+     "wall": 28.16,
+     "user_s": 15.25,
+     "sys_s": 16.54,
+     "maxrss_kb": 2334676.0,
+     "cpu_s": 31.79,
+     "memory_peak_mb": "3652",
+     "tmp_peak_mb": "1",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.23 1.11 1.94",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": true
+    }
+   },
+   "GSM5411066": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 0.878572,
+     "fq_pass1": 19.443,
+     "ref_load": 22.0172,
+     "strand_rerun_logged": false,
+     "reads": 0,
+     "wall": 23.43,
+     "user_s": 13.23,
+     "sys_s": 13.22,
+     "maxrss_kb": 1866008.0,
+     "cpu_s": 26.450000000000003,
+     "memory_peak_mb": "3499",
+     "tmp_peak_mb": "1",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.53 0.95 1.77",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": true
+    }
+   },
+   "GSM7036403": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 0.185634,
+     "fq_pass1": 39.0309,
+     "ref_load": 42.9173,
+     "strand_rerun_logged": false,
+     "reads": 0,
+     "wall": 43.93,
+     "user_s": 20.84,
+     "sys_s": 26.68,
+     "maxrss_kb": 2350244.0,
+     "cpu_s": 47.519999999999996,
+     "memory_peak_mb": "4074",
+     "tmp_peak_mb": "1",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.76 0.97 1.75",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": true
+    }
+   },
+   "GSM7901264": {
+    "t4_r1": {
+     "star_total": null,
+     "pileup_total": 0.242325,
+     "fq_pass1": 34.1836,
+     "ref_load": 37.978,
+     "strand_rerun_logged": false,
+     "reads": 0,
+     "wall": 39.0,
+     "user_s": 19.41,
+     "sys_s": 23.4,
+     "maxrss_kb": 2348640.0,
+     "cpu_s": 42.81,
+     "memory_peak_mb": "4036",
+     "tmp_peak_mb": "1",
+     "node": "b004.clipper.gvsu.edu",
+     "cotenant_cpus": 46,
+     "loadavg": "0.32 1.00 1.84",
+     "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+     "exit_error": true
+    }
+   }
+  }
+ },
+ "p2_stream": {
+  "GSM4006843": {
+   "serial": {
+    "reads": 60849821,
+    "pileup_s": 114.512
+   },
+   "parallel": {
+    "reads": 60849821,
+    "pileup_s": 108.404
+   }
+  }
+ },
+ "p3_cb": {
+  "GSM4006843": {
+   "reads": 73746398,
+   "no_CR": 0,
+   "CB_absent_CRhasN": 0,
+   "CB_absent_CRnoN": 0,
+   "CB_equals_CR": 71051134,
+   "CB_differs_CR": 2695264,
+   "barcodes_stats": [
+    "                                       noNoAdapter              0",
+    "                                           noNoUMI              0",
+    "                                            noNoCB              0",
+    "                                           noNinCB        2393395",
+    "                                          noNinUMI          67024",
+    "                                  noUMIhomopolymer          22506",
+    "                                       noNoWLmatch              0",
+    "                                       noTooManyMM              0",
+    "                                noTooManyWLmatches              0",
+    "                                   yesWLmatchExact       64216700",
+    "                               yesOneWLmatchWithMM              0",
+    "                              yesMultWLmatchWithMM              0",
+    ""
+   ]
+  },
+  "GSM7901264": {
+   "reads": 111842216,
+   "no_CR": 0,
+   "CB_absent_CRhasN": 0,
+   "CB_absent_CRnoN": 0,
+   "CB_equals_CR": 108281494,
+   "CB_allN_dash": 3544340,
+   "CB_UMIbad_dash": 16382,
+   "CB_other_differs": 0,
+   "barcodes_stats": [
+    "                                       noNoAdapter              0",
+    "                                           noNoUMI              0",
+    "                                            noNoCB              0",
+    "                                           noNinCB        3225133",
+    "                                          noNinUMI          12784",
+    "                                  noUMIhomopolymer          45767",
+    "                                       noNoWLmatch              0",
+    "                                       noTooManyMM              0",
+    "                                noTooManyWLmatches              0",
+    "                                   yesWLmatchExact       97050791",
+    "                               yesOneWLmatchWithMM              0",
+    "                              yesMultWLmatchWithMM              0",
+    ""
+   ]
+  }
+ },
+ "p4": {
+  "GSM4006843": [
+   "collate 80.623202951",
+   "sort_t4 96.531589827",
+   "index_t4 8.080746276",
+   "sort_t16 88.906871276",
+   "index_t16 8.788285400",
+   "record order identical to STAR sorted BAM: no (ties in coordinate order)",
+   "[singlet] STAR completed in 733.165s",
+   "[singlet] BAM indexed in 6.904s",
+   "[singlet] CB-tag barcode refresh: 119449 barcodes (>=5 CB reads) in 21.283s"
+  ]
+ },
+ "identity": {
+  "GSM4006843": {
+   "t4_r1_vs_t4_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM4006843/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM4006843/t4_r2/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    3 of 4/4 lines differ",
+    "    a: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084205\t57473\t0.839217\tHIGH",
+    "    b: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084205\t57473\t0.839220\tHIGH",
+    "    a: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.058778\t40118\t0.838579\tHIGH",
+    "    b: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.058778\t40118\t0.838575\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1636222784 != 1636222787",
+    "  DIFF read_stats.tsv (142 vs 141 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t73746398\t73746398\t\t0\t0\t1014.62",
+    "    b: align\t73746398\t73746398\t\t0\t0\t956.00",
+    "    a: pileup\t73746398\t73746398\t\t0\t0\t65.32",
+    "    b: pileup\t73746398\t73746398\t\t0\t0\t65.45",
+    "files: 56 identical, 4 differ only in timings/paths, 3 differ",
+    "RESULT: 3 differences"
+   ],
+   "t4_r1_vs_t16_r1": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM4006843/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM4006843/t16_r1/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    3 of 4/4 lines differ",
+    "    a: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084205\t57473\t0.839217\tHIGH",
+    "    b: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084966\t57993\t0.839279\tHIGH",
+    "    a: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.058778\t40118\t0.838579\tHIGH",
+    "    b: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.058012\t39596\t0.838540\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1636222784 != 1636220702; /rrna_reads: 19 != 20; /rrna_reads_sampled: 73494 != 73491",
+    "  DIFF read_stats.tsv (142 vs 141 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t73746398\t73746398\t\t0\t0\t1014.62",
+    "    b: align\t73746398\t73746398\t\t0\t0\t371.61",
+    "    a: pileup\t73746398\t73746398\t\t0\t0\t65.32",
+    "    b: pileup\t73746398\t73746398\t\t0\t0\t62.15",
+    "  DIFF rrna_report.json: /rrna_fraction: 0.000258525 != 0.000272142; /rrna_reads: 19 != 20; /total_reads: 73494 != 73491",
+    "  DIFF sj_counts.1pz (10134729 vs 10129651 bytes)",
+    "  DIFF sj_features.tsv.gz (2949654 vs 2949093 bytes)",
+    "  DIFF splice_psi.1pz (7331990 vs 7333769 bytes)",
+    "files: 52 identical, 4 differ only in timings/paths, 7 differ",
+    "RESULT: 7 differences"
+   ],
+   "t16_r1_vs_t16_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM4006843/t16_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM4006843/t16_r2/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    3 of 4/4 lines differ",
+    "    a: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084966\t57993\t0.839279\tHIGH",
+    "    b: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084205\t57473\t0.839222\tHIGH",
+    "    a: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.058012\t39596\t0.838540\tHIGH",
+    "    b: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.058778\t40118\t0.838583\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1636220702 != 1636220749",
+    "  DIFF read_stats.tsv (141 vs 141 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t73746398\t73746398\t\t0\t0\t371.61",
+    "    b: align\t73746398\t73746398\t\t0\t0\t368.63",
+    "    a: pileup\t73746398\t73746398\t\t0\t0\t62.15",
+    "    b: pileup\t73746398\t73746398\t\t0\t0\t66.90",
+    "files: 56 identical, 4 differ only in timings/paths, 3 differ",
+    "RESULT: 3 differences"
+   ],
+   "sorted_disk_vs_memsort": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM4006843/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_memsort/GSM4006843/t4_r1/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    2 of 4/4 lines differ",
+    "    a: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084205\t57473\t0.839217\tHIGH",
+    "    b: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084205\t57473\t0.839224\tHIGH",
+    "    a: FUNGAL\t7006\tNC_038868.1 Lacanobia oleracea granulovirus egt gene\t0.050352\t34367\t0.838327\tHIGH",
+    "    b: FUNGAL\t7006\tNC_038868.1 Lacanobia oleracea granulovirus egt gene\t0.050351\t34367\t0.838328\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/bam_sort_mode: disk != memory; /provenance/outputs/bytes_public: 1636222784 != 1636220283",
+    "  DIFF read_stats.tsv (142 vs 141 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t73746398\t73746398\t\t0\t0\t1014.62",
+    "    b: align\t73746398\t73746398\t\t0\t0\t736.73",
+    "    a: pileup\t73746398\t73746398\t\t0\t0\t65.32",
+    "    b: pileup\t73746398\t73746398\t\t0\t0\t82.52",
+    "files: 56 identical, 4 differ only in timings/paths, 3 differ",
+    "RESULT: 3 differences"
+   ],
+   "campaign_02aa9b9_vs_28969b8": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM4006843/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_fa/GSM4006843/t4_r1/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    3 of 4/4 lines differ",
+    "    a: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084205\t57473\t0.839217\tHIGH",
+    "    b: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.084205\t57473\t0.839221\tHIGH",
+    "    a: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.058778\t40118\t0.838579\tHIGH",
+    "    b: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.058778\t40118\t0.838581\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1636222784 != 1636222588",
+    "  DIFF read_stats.tsv (142 vs 141 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t73746398\t73746398\t\t0\t0\t1014.62",
+    "    b: align\t73746398\t73746398\t\t0\t0\t681.43",
+    "    a: pileup\t73746398\t73746398\t\t0\t0\t65.32",
+    "    b: pileup\t73746398\t73746398\t\t0\t0\t78.50",
+    "files: 56 identical, 4 differ only in timings/paths, 3 differ",
+    "RESULT: 3 differences"
+   ]
+  },
+  "GSM7036403": {
+   "t4_r1_vs_t4_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7036403/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7036403/t4_r2/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    3 of 4/4 lines differ",
+    "    a: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.136106\t58779\t0.857921\tHIGH",
+    "    b: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.136106\t58780\t0.857924\tHIGH",
+    "    a: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.086952\t37552\t0.856951\tHIGH",
+    "    b: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.086952\t37552\t0.856954\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1385078133 != 1385078349",
+    "  DIFF read_stats.tsv (147 vs 146 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t128399687\t128399687\t\t0\t0\t1181.62",
+    "    b: align\t128399687\t128399687\t\t0\t0\t1758.14",
+    "    a: pileup\t128399687\t128399687\t\t0\t0\t103.97",
+    "    b: pileup\t128399687\t128399687\t\t0\t0\t82.74",
+    "files: 56 identical, 4 differ only in timings/paths, 3 differ",
+    "RESULT: 3 differences"
+   ],
+   "t4_r1_vs_t16_r1": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7036403/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7036403/t16_r1/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    3 of 4/4 lines differ",
+    "    a: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.136106\t58779\t0.857921\tHIGH",
+    "    b: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.136106\t58780\t0.857926\tHIGH",
+    "    a: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.086952\t37552\t0.856951\tHIGH",
+    "    b: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.086952\t37552\t0.856952\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1385078133 != 1385077338; /rrna_reads: 5 != 2; /rrna_reads_sampled: 128211 != 128215",
+    "  DIFF read_stats.tsv (147 vs 145 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t128399687\t128399687\t\t0\t0\t1181.62",
+    "    b: align\t128399687\t128399687\t\t0\t0\t538.79",
+    "    a: pileup\t128399687\t128399687\t\t0\t0\t103.97",
+    "    b: pileup\t128399687\t128399687\t\t0\t0\t69.82",
+    "  DIFF rrna_report.json: /rrna_fraction: 3.89982e-05 != 1.55988e-05; /rrna_reads: 5 != 2; /total_reads: 128211 != 128215",
+    "  DIFF sj_counts.1pz (8980890 vs 8981662 bytes)",
+    "  DIFF sj_features.tsv.gz (4082080 vs 4081445 bytes)",
+    "  DIFF splice_psi.1pz (6325106 vs 6322666 bytes)",
+    "files: 52 identical, 4 differ only in timings/paths, 7 differ",
+    "RESULT: 7 differences"
+   ],
+   "t16_r1_vs_t16_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7036403/t16_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7036403/t16_r2/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    2 of 4/4 lines differ",
+    "    a: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.086952\t37552\t0.856952\tHIGH",
+    "    b: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.086952\t37552\t0.856950\tHIGH",
+    "    a: FUNGAL\t7006\tNC_038868.1 Lacanobia oleracea granulovirus egt gene\t0.080946\t34958\t0.856734\tHIGH",
+    "    b: FUNGAL\t7006\tNC_038868.1 Lacanobia oleracea granulovirus egt gene\t0.080946\t34958\t0.856735\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1385077338 != 1385077387",
+    "  DIFF read_stats.tsv (145 vs 145 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t128399687\t128399687\t\t0\t0\t538.79",
+    "    b: align\t128399687\t128399687\t\t0\t0\t536.92",
+    "    a: pileup\t128399687\t128399687\t\t0\t0\t69.82",
+    "    b: pileup\t128399687\t128399687\t\t0\t0\t80.95",
+    "files: 57 identical, 3 differ only in timings/paths, 3 differ",
+    "RESULT: 3 differences"
+   ],
+   "sorted_disk_vs_memsort": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7036403/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_memsort/GSM7036403/t4_r1/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    3 of 4/4 lines differ",
+    "    a: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.136106\t58779\t0.857921\tHIGH",
+    "    b: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.136106\t58779\t0.857931\tHIGH",
+    "    a: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.086952\t37552\t0.856951\tHIGH",
+    "    b: FUNGAL\t7001\tNC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene\t0.086952\t37552\t0.856950\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/bam_sort_mode: disk != memory; /provenance/outputs/bytes_public: 1385078133 != 1385075623",
+    "  DIFF read_stats.tsv (147 vs 145 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t128399687\t128399687\t\t0\t0\t1181.62",
+    "    b: align\t128399687\t128399687\t\t0\t0\t992.13",
+    "    a: pileup\t128399687\t128399687\t\t0\t0\t103.97",
+    "    b: pileup\t128399687\t128399687\t\t0\t0\t84.72",
+    "files: 56 identical, 4 differ only in timings/paths, 3 differ",
+    "RESULT: 3 differences"
+   ],
+   "campaign_02aa9b9_vs_28969b8": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7036403/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_fa/GSM7036403/t4_r1/out",
+    "  DIFF nonhost/nonhost_em_abundance.tsv (407 vs 407 bytes)",
+    "    2 of 4/4 lines differ",
+    "    a: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.136106\t58779\t0.857921\tHIGH",
+    "    b: FUNGAL\t7016\tNC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds\t0.136106\t58779\t0.857923\tHIGH",
+    "    a: FUNGAL\t7006\tNC_038868.1 Lacanobia oleracea granulovirus egt gene\t0.080946\t34958\t0.856728\tHIGH",
+    "    b: FUNGAL\t7006\tNC_038868.1 Lacanobia oleracea granulovirus egt gene\t0.080946\t34958\t0.856721\tHIGH",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1385078133 != 1385077886",
+    "  DIFF read_stats.tsv (147 vs 145 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t128399687\t128399687\t\t0\t0\t1181.62",
+    "    b: align\t128399687\t128399687\t\t0\t0\t959.32",
+    "    a: pileup\t128399687\t128399687\t\t0\t0\t103.97",
+    "    b: pileup\t128399687\t128399687\t\t0\t0\t85.36",
+    "files: 57 identical, 3 differ only in timings/paths, 3 differ",
+    "RESULT: 3 differences"
+   ]
+  },
+  "GSM7901264": {
+   "t4_r1_vs_t4_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7901264/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7901264/t4_r2/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 2641451878 != 2641452096",
+    "  DIFF read_stats.tsv (146 vs 146 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t111842216\t111842216\t\t0\t0\t1315.10",
+    "    b: align\t111842216\t111842216\t\t0\t0\t1721.69",
+    "    a: pileup\t111842216\t111842216\t\t0\t0\t52.84",
+    "    b: pileup\t111842216\t111842216\t\t0\t0\t52.64",
+    "files: 56 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ],
+   "t4_r1_vs_t16_r1": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7901264/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7901264/t16_r1/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 2641451878 != 2641449455; /rrna_reads_sampled: 111686 != 111680",
+    "  DIFF read_stats.tsv (146 vs 145 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t111842216\t111842216\t\t0\t0\t1315.10",
+    "    b: align\t111842216\t111842216\t\t0\t0\t505.49",
+    "    a: pileup\t111842216\t111842216\t\t0\t0\t52.84",
+    "    b: pileup\t111842216\t111842216\t\t0\t0\t45.81",
+    "  DIFF rrna_report.json: /rrna_fraction: 9.84904e-05 != 9.84957e-05; /total_reads: 111686 != 111680",
+    "  DIFF sj_counts.1pz (3998235 vs 3995856 bytes)",
+    "  DIFF sj_features.tsv.gz (2362138 vs 2362808 bytes)",
+    "  DIFF splice_psi.1pz (3246211 vs 3244049 bytes)",
+    "files: 52 identical, 3 differ only in timings/paths, 6 differ",
+    "RESULT: 6 differences"
+   ],
+   "t16_r1_vs_t16_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7901264/t16_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7901264/t16_r2/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 2641449455 != 2641449456",
+    "  DIFF read_stats.tsv (145 vs 145 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t111842216\t111842216\t\t0\t0\t505.49",
+    "    b: align\t111842216\t111842216\t\t0\t0\t516.50",
+    "    a: pileup\t111842216\t111842216\t\t0\t0\t45.81",
+    "    b: pileup\t111842216\t111842216\t\t0\t0\t45.75",
+    "files: 56 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ],
+   "sorted_disk_vs_memsort": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7901264/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_memsort/GSM7901264/t4_r1/out",
+    "  DIFF pileup_stats.json: /provenance/bam_sort_mode: disk != memory; /provenance/outputs/bytes_public: 2641451878 != 2641449355",
+    "  DIFF read_stats.tsv (146 vs 146 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t111842216\t111842216\t\t0\t0\t1315.10",
+    "    b: align\t111842216\t111842216\t\t0\t0\t1052.72",
+    "    a: pileup\t111842216\t111842216\t\t0\t0\t52.84",
+    "    b: pileup\t111842216\t111842216\t\t0\t0\t56.69",
+    "files: 56 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ],
+   "campaign_02aa9b9_vs_28969b8": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7901264/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_fa/GSM7901264/t4_r1/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 2641451878 != 2641451662",
+    "  DIFF read_stats.tsv (146 vs 145 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t111842216\t111842216\t\t0\t0\t1315.10",
+    "    b: align\t111842216\t111842216\t\t0\t0\t972.32",
+    "    a: pileup\t111842216\t111842216\t\t0\t0\t52.84",
+    "    b: pileup\t111842216\t111842216\t\t0\t0\t55.44",
+    "files: 56 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ]
+  },
+  "GSM5411066": {
+   "t4_r1_vs_t4_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM5411066/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM5411066/t4_r2/out",
+    "  DIFF read_stats.tsv (141 vs 141 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t80448599\t80448599\t\t0\t0\t664.79",
+    "    b: align\t80448599\t80448599\t\t0\t0\t707.81",
+    "    a: pileup\t80448599\t80448599\t\t0\t0\t49.26",
+    "    b: pileup\t80448599\t80448599\t\t0\t0\t50.66",
+    "files: 56 identical, 4 differ only in timings/paths, 1 differ",
+    "RESULT: 1 differences"
+   ],
+   "t4_r1_vs_t16_r1": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM5411066/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM5411066/t16_r1/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1784470682 != 1784471353; /rrna_reads: 461 != 452; /rrna_reads_sampled: 80117 != 80116",
+    "  DIFF read_stats.tsv (141 vs 141 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t80448599\t80448599\t\t0\t0\t664.79",
+    "    b: align\t80448599\t80448599\t\t0\t0\t348.14",
+    "    a: pileup\t80448599\t80448599\t\t0\t0\t49.26",
+    "    b: pileup\t80448599\t80448599\t\t0\t0\t39.59",
+    "  DIFF rrna_report.json: /rrna_fraction: 0.00575408 != 0.00564182; /rrna_reads: 461 != 452; /total_reads: 80117 != 80116",
+    "  DIFF sj_counts.1pz (6626400 vs 6626794 bytes)",
+    "  DIFF sj_features.tsv.gz (3462200 vs 3461730 bytes)",
+    "  DIFF splice_psi.1pz (4688802 vs 4687373 bytes)",
+    "files: 52 identical, 3 differ only in timings/paths, 6 differ",
+    "RESULT: 6 differences"
+   ],
+   "t16_r1_vs_t16_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM5411066/t16_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM5411066/t16_r2/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1784471353 != 1784471308",
+    "  DIFF read_stats.tsv (141 vs 141 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t80448599\t80448599\t\t0\t0\t348.14",
+    "    b: align\t80448599\t80448599\t\t0\t0\t341.46",
+    "    a: pileup\t80448599\t80448599\t\t0\t0\t39.59",
+    "    b: pileup\t80448599\t80448599\t\t0\t0\t40.79",
+    "files: 56 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ],
+   "campaign_02aa9b9_vs_28969b8": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM5411066/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_fa/GSM5411066/t4_r1/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1784470682 != 1784470600",
+    "  DIFF read_stats.tsv (141 vs 141 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t80448599\t80448599\t\t0\t0\t664.79",
+    "    b: align\t80448599\t80448599\t\t0\t0\t535.89",
+    "    a: pileup\t80448599\t80448599\t\t0\t0\t49.26",
+    "    b: pileup\t80448599\t80448599\t\t0\t0\t55.67",
+    "files: 56 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ]
+  },
+  "GSM6470208": {
+   "t4_r1_vs_t4_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM6470208/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM6470208/t4_r2/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 3998808953 != 3998809050",
+    "  DIFF read_stats.tsv (147 vs 147 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t331702882\t331702882\t\t0\t0\t3459.54",
+    "    b: align\t331702882\t331702882\t\t0\t0\t3753.85",
+    "    a: pileup\t331702882\t331702882\t\t0\t0\t197.29",
+    "    b: pileup\t331702882\t331702882\t\t0\t0\t169.08",
+    "files: 54 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ],
+   "t4_r1_vs_t16_r1": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM6470208/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM6470208/t16_r1/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 3998808953 != 3998812101; /rrna_reads_sampled: 331701 != 331695",
+    "  DIFF read_stats.tsv (147 vs 147 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t331702882\t331702882\t\t0\t0\t3459.54",
+    "    b: align\t331702882\t331702882\t\t0\t0\t1147.69",
+    "    a: pileup\t331702882\t331702882\t\t0\t0\t197.29",
+    "    b: pileup\t331702882\t331702882\t\t0\t0\t174.65",
+    "  DIFF rrna_report.json: /rrna_fraction: 0.0072083 != 0.00720843; /total_reads: 331701 != 331695",
+    "  DIFF sj_counts.1pz (11125890 vs 11125600 bytes)",
+    "  DIFF sj_features.tsv.gz (4565401 vs 4564338 bytes)",
+    "  DIFF splice_psi.1pz (8710037 vs 8713529 bytes)",
+    "files: 50 identical, 3 differ only in timings/paths, 6 differ",
+    "RESULT: 6 differences"
+   ],
+   "t16_r1_vs_t16_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM6470208/t16_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM6470208/t16_r2/out",
+    "  DIFF read_stats.tsv (147 vs 147 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t331702882\t331702882\t\t0\t0\t1147.69",
+    "    b: align\t331702882\t331702882\t\t0\t0\t1158.82",
+    "    a: pileup\t331702882\t331702882\t\t0\t0\t174.65",
+    "    b: pileup\t331702882\t331702882\t\t0\t0\t190.16",
+    "files: 54 identical, 4 differ only in timings/paths, 1 differ",
+    "RESULT: 1 differences"
+   ],
+   "campaign_02aa9b9_vs_28969b8": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM6470208/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_fa/GSM6470208/t4_r1/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 3998808953 != 3998808593",
+    "  DIFF read_stats.tsv (147 vs 147 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t331702882\t331702882\t\t0\t0\t3459.54",
+    "    b: align\t331702882\t331702882\t\t0\t0\t1777.78",
+    "    a: pileup\t331702882\t331702882\t\t0\t0\t197.29",
+    "    b: pileup\t331702882\t331702882\t\t0\t0\t190.82",
+    "files: 54 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ]
+  },
+  "GSM7656149": {
+   "t4_r1_vs_t4_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7656149/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7656149/t4_r2/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 5568154789 != 5568155123",
+    "  DIFF read_stats.tsv (147 vs 147 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t292438995\t292438995\t\t0\t0\t4656.86",
+    "    b: align\t292438995\t292438995\t\t0\t0\t4495.33",
+    "    a: pileup\t292438995\t292438995\t\t0\t0\t199.50",
+    "    b: pileup\t292438995\t292438995\t\t0\t0\t197.28",
+    "files: 56 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ],
+   "t4_r1_vs_t16_r1": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7656149/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7656149/t16_r1/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 5568154789 != 5568159016; /rrna_reads: 382 != 374; /rrna_reads_sampled: 292291 != 292270",
+    "  DIFF read_stats.tsv (147 vs 147 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t292438995\t292438995\t\t0\t0\t4656.86",
+    "    b: align\t292438995\t292438995\t\t0\t0\t1640.01",
+    "    a: pileup\t292438995\t292438995\t\t0\t0\t199.50",
+    "    b: pileup\t292438995\t292438995\t\t0\t0\t199.94",
+    "  DIFF rrna_report.json: /rrna_fraction: 0.00130692 != 0.00127964; /rrna_reads: 382 != 374; /total_reads: 292291 != 292270",
+    "  DIFF sj_counts.1pz (19371799 vs 19372599 bytes)",
+    "  DIFF sj_features.tsv.gz (10581094 vs 10579574 bytes)",
+    "  DIFF splice_psi.1pz (14247749 vs 14254542 bytes)",
+    "files: 52 identical, 3 differ only in timings/paths, 6 differ",
+    "RESULT: 6 differences"
+   ],
+   "t16_r1_vs_t16_r2": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7656149/t16_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7656149/t16_r2/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 5568159016 != 5568158974",
+    "  DIFF read_stats.tsv (147 vs 147 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t292438995\t292438995\t\t0\t0\t1640.01",
+    "    b: align\t292438995\t292438995\t\t0\t0\t1654.54",
+    "    a: pileup\t292438995\t292438995\t\t0\t0\t199.94",
+    "    b: pileup\t292438995\t292438995\t\t0\t0\t171.25",
+    "files: 56 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ],
+   "campaign_02aa9b9_vs_28969b8": [
+    "a = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs/GSM7656149/t4_r1/out",
+    "b = /mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_fa/GSM7656149/t4_r1/out",
+    "  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 5568154789 != 5568153278",
+    "  DIFF read_stats.tsv (147 vs 147 bytes)",
+    "    2 of 3/3 lines differ",
+    "    a: align\t292438995\t292438995\t\t0\t0\t4656.86",
+    "    b: align\t292438995\t292438995\t\t0\t0\t3159.03",
+    "    a: pileup\t292438995\t292438995\t\t0\t0\t199.50",
+    "    b: pileup\t292438995\t292438995\t\t0\t0\t235.54",
+    "files: 56 identical, 3 differ only in timings/paths, 2 differ",
+    "RESULT: 2 differences"
+   ]
+  }
+ },
+ "atlas_bound": {
+  "atlas_bound_T16": {
+   "T": 16,
+   "n_samples": 56606,
+   "total_Mreads": 15847476.278067999,
+   "median_Mreads": 207.364718,
+   "datasets": {
+    "GSM6470208": {
+     "wall": 1709.275,
+     "sort": 833.255,
+     "index": 104.81700000000001,
+     "cb_refresh": 64.7367,
+     "pileup_total": 182.404,
+     "reads": 331702882.0,
+     "cpu_s": 5863.395,
+     "n_reps": 2,
+     "wall_range": [
+      1693.55,
+      1725.0
+     ],
+     "sort_range": [
+      831.8199999999999,
+      834.69
+     ]
+    },
+    "GSM7656149": {
+     "wall": 2610.315,
+     "sort": 777.775,
+     "index": 26.31285,
+     "cb_refresh": 97.9861,
+     "pileup_total": 185.5965,
+     "reads": 292438995.0,
+     "cpu_s": 13589.779999999999,
+     "n_reps": 2,
+     "wall_range": [
+      2590.75,
+      2629.88
+     ],
+     "sort_range": [
+      777.01,
+      778.54
+     ]
+    },
+    "GSM7901264": {
+     "wall": 797.245,
+     "sort": 245.49099999999999,
+     "index": 12.98725,
+     "cb_refresh": 24.54975,
+     "pileup_total": 45.7808,
+     "reads": 111842216.0,
+     "cpu_s": 3936.24,
+     "n_reps": 2,
+     "wall_range": [
+      793.59,
+      800.9
+     ],
+     "sort_range": [
+      241.486,
+      249.49599999999998
+     ]
+    },
+    "GSM7036403": {
+     "wall": 936.75,
+     "sort": 290.85299999999995,
+     "index": 14.1841,
+     "cb_refresh": 31.28905,
+     "pileup_total": 75.38335000000001,
+     "reads": 128399687.0,
+     "cpu_s": 3664.475,
+     "n_reps": 2,
+     "wall_range": [
+      930.37,
+      943.13
+     ],
+     "sort_range": [
+      288.91999999999996,
+      292.78599999999994
+     ]
+    },
+    "GSM5411066": {
+     "wall": 556.975,
+     "sort": 182.798,
+     "index": 10.864595000000001,
+     "cb_refresh": 19.287100000000002,
+     "pileup_total": 40.190349999999995,
+     "reads": 80448599.0,
+     "cpu_s": 1887.63,
+     "n_reps": 2,
+     "wall_range": [
+      556.76,
+      557.19
+     ],
+     "sort_range": [
+      182.13600000000002,
+      183.45999999999998
+     ]
+    },
+    "GSM4006843": {
+     "wall": 637.98,
+     "sort": 173.123,
+     "index": 7.8683,
+     "cb_refresh": 21.41995,
+     "pileup_total": 64.52575,
+     "reads": 73746398.0,
+     "cpu_s": 2822.38,
+     "n_reps": 2,
+     "wall_range": [
+      635.93,
+      640.03
+     ],
+     "sort_range": [
+      172.632,
+      173.61399999999998
+     ]
+    }
+   },
+   "scenarios": {
+    "GSM6470208:B_parallel_stream": {
+     "saving_share": 0.5785541645008162,
+     "atlas_wall_core_h": 368046.2663510989,
+     "saved_core_h": 212934.7001264049
+    },
+    "GSM6470208:A_serial_stream": {
+     "saving_share": 0.4024744303474462,
+     "atlas_wall_core_h": 368046.2663510989,
+     "saved_core_h": 148129.21139116297
+    },
+    "GSM7656149:B_parallel_stream": {
+     "saving_share": 0.34481510737709636,
+     "atlas_wall_core_h": 630083.5853115254,
+     "saved_core_h": 217262.3391257395
+    },
+    "GSM7656149:A_serial_stream": {
+     "saving_share": 0.2514364252711735,
+     "atlas_wall_core_h": 630083.5853115254,
+     "saved_core_h": 158425.96431277442
+    },
+    "GSM7901264:B_parallel_stream": {
+     "saving_share": 0.3935432127106065,
+     "atlas_wall_core_h": 452906.76172725187,
+     "saved_core_h": 178238.38206849986
+    },
+    "GSM7901264:A_serial_stream": {
+     "saving_share": 0.22859503783225793,
+     "atlas_wall_core_h": 452906.76172725187,
+     "saved_core_h": 103532.23833152656
+    },
+    "GSM7036403:B_parallel_stream": {
+     "saving_share": 0.3882004300516928,
+     "atlas_wall_core_h": 475245.75995901227,
+     "saved_core_h": 184490.60839633213
+    },
+    "GSM7036403:A_serial_stream": {
+     "saving_share": 0.25735117177142,
+     "atlas_wall_core_h": 475245.75995901227,
+     "saved_core_h": 122305.0532048508
+    },
+    "GSM5411066:B_parallel_stream": {
+     "saving_share": 0.45861582364460496,
+     "atlas_wall_core_h": 406524.8461831057,
+     "saved_core_h": 186438.72716426136
+    },
+    "GSM5411066:A_serial_stream": {
+     "saving_share": 0.2904835318627304,
+     "atlas_wall_core_h": 406524.8461831057,
+     "saved_core_h": 118088.77310922177
+    },
+    "GSM4006843:B_parallel_stream": {
+     "saving_share": 0.3732981021585517,
+     "atlas_wall_core_h": 517863.9078696229,
+     "saved_core_h": 193317.6139841413
+    },
+    "GSM4006843:A_serial_stream": {
+     "saving_share": 0.292369478409359,
+     "atlas_wall_core_h": 517863.9078696229,
+     "saved_core_h": 151407.60063087402
+    }
+   },
+   "summary": {
+    "upper_B": [
+     0.34481510737709636,
+     0.3908718213811496,
+     0.5785541645008162
+    ],
+    "lower_A": [
+     0.22859503783225793,
+     0.2739173518170752,
+     0.4024744303474462
+    ],
+    "stop_rule_threshold": 0.15
+   }
+  },
+  "atlas_bound_T4": {
+   "T": 4,
+   "n_samples": 56606,
+   "total_Mreads": 15847476.278067999,
+   "median_Mreads": 207.364718,
+   "datasets": {
+    "GSM6470208": {
+     "wall": 4199.0,
+     "sort": 2273.54,
+     "index": 118.362,
+     "cb_refresh": 66.7365,
+     "pileup_total": 197.294,
+     "reads": 331702882,
+     "cpu_s": 5930.82,
+     "n_reps": 3,
+     "wall_range": [
+      2487.67,
+      4320.0
+     ],
+     "sort_range": [
+      844.23,
+      2289.85
+     ]
+    },
+    "GSM7656149": {
+     "wall": 5395.0,
+     "sort": 950.3299999999999,
+     "index": 25.082,
+     "cb_refresh": 99.1233,
+     "pileup_total": 199.503,
+     "reads": 292438995,
+     "cpu_s": 14162.699999999999,
+     "n_reps": 3,
+     "wall_range": [
+      4722.0,
+      5626.0
+     ],
+     "sort_range": [
+      801.79,
+      1381.8599999999997
+     ]
+    },
+    "GSM7901264": {
+     "wall": 1600.53,
+     "sort": 397.0999999999999,
+     "index": 8.91606,
+     "cb_refresh": 24.7679,
+     "pileup_total": 52.8352,
+     "reads": 111842216,
+     "cpu_s": 4012.12,
+     "n_reps": 3,
+     "wall_range": [
+      1362.85,
+      2001.46
+     ],
+     "sort_range": [
+      241.0999999999999,
+      735.69
+     ]
+    },
+    "GSM7036403": {
+     "wall": 1637.44,
+     "sort": 382.6199999999999,
+     "index": 10.3064,
+     "cb_refresh": 32.6131,
+     "pileup_total": 91.6164,
+     "reads": 128399687,
+     "cpu_s": 3873.91,
+     "n_reps": 3,
+     "wall_range": [
+      1485.33,
+      2172.98
+     ],
+     "sort_range": [
+      312.56999999999994,
+      859.1400000000001
+     ]
+    },
+    "GSM5411066": {
+     "wall": 875.22,
+     "sort": 286.788,
+     "index": 6.54549,
+     "cb_refresh": 19.8188,
+     "pileup_total": 50.6617,
+     "reads": 80448599,
+     "cpu_s": 1803.73,
+     "n_reps": 3,
+     "wall_range": [
+      782.0,
+      916.88
+     ],
+     "sort_range": [
+      192.836,
+      302.80999999999995
+     ]
+    },
+    "GSM4006843": {
+     "wall": 1230.64,
+     "sort": 316.999,
+     "index": 5.58481,
+     "cb_refresh": 23.707,
+     "pileup_total": 65.4508,
+     "reads": 73746398,
+     "cpu_s": 2861.8,
+     "n_reps": 3,
+     "wall_range": [
+      1037.66,
+      1292.72
+     ],
+     "sort_range": [
+      169.60699999999997,
+      378.62
+     ]
+    }
+   },
+   "scenarios": {
+    "GSM6470208:B_parallel_stream": {
+     "saving_share": 0.582198241426541,
+     "atlas_wall_core_h": 224177.56352024383,
+     "saved_core_h": 130515.78324877264
+    },
+    "GSM6470208:A_serial_stream": {
+     "saving_share": 0.5134538827160312,
+     "atlas_wall_core_h": 224177.56352024383,
+     "saved_core_h": 115104.84040728892
+    },
+    "GSM7656149:B_parallel_stream": {
+     "saving_share": 0.19895875948331243,
+     "atlas_wall_core_h": 325192.0658667977,
+     "saved_core_h": 64699.8100186737
+    },
+    "GSM7656149:A_serial_stream": {
+     "saving_share": 0.15630163959034268,
+     "atlas_wall_core_h": 325192.0658667977,
+     "saved_core_h": 50828.05307675119
+    },
+    "GSM7901264:B_parallel_stream": {
+     "saving_share": 0.2829518269009317,
+     "atlas_wall_core_h": 239694.93627665416,
+     "saved_core_h": 67822.1201183817
+    },
+    "GSM7901264:A_serial_stream": {
+     "saving_share": 0.20966742729644933,
+     "atlas_wall_core_h": 239694.93627665416,
+     "saved_core_h": 50256.220625112444
+    },
+    "GSM7036403:B_parallel_stream": {
+     "saving_share": 0.27155235923669874,
+     "atlas_wall_core_h": 214901.7413216789,
+     "saved_core_h": 58357.07485997666
+    },
+    "GSM7036403:A_serial_stream": {
+     "saving_share": 0.20956941713031538,
+     "atlas_wall_core_h": 214901.7413216789,
+     "saved_core_h": 45036.832669074065
+    },
+    "GSM5411066:B_parallel_stream": {
+     "saving_share": 0.40015558649350164,
+     "atlas_wall_core_h": 171287.56011015255,
+     "saved_core_h": 68541.67407491902
+    },
+    "GSM5411066:A_serial_stream": {
+     "saving_share": 0.31377712345426384,
+     "atlas_wall_core_h": 171287.56011015255,
+     "saved_core_h": 53746.11789486298
+    },
+    "GSM4006843:B_parallel_stream": {
+     "saving_share": 0.30513317755337593,
+     "atlas_wall_core_h": 270974.43697622593,
+     "saved_core_h": 82683.29099029281
+    },
+    "GSM4006843:A_serial_stream": {
+     "saving_share": 0.26728226152061224,
+     "atlas_wall_core_h": 270974.43697622593,
+     "saved_core_h": 72426.66032928028
+    }
+   },
+   "summary": {
+    "upper_B": [
+     0.19895875948331243,
+     0.2940425022271538,
+     0.582198241426541
+    ],
+    "lower_A": [
+     0.15630163959034268,
+     0.23847484440853078,
+     0.5134538827160312
+    ],
+    "stop_rule_threshold": 0.15
+   }
+  },
+  "atlas_bound_T4_fa": {
+   "T": 4,
+   "n_samples": 56606,
+   "total_Mreads": 15847476.278067999,
+   "median_Mreads": 207.364718,
+   "datasets": {
+    "GSM7656149": {
+     "wall": 4181.0,
+     "sort": 776.0300000000002,
+     "index": 27.1734,
+     "cb_refresh": 97.9644,
+     "pileup_total": 235.542,
+     "reads": 292438995,
+     "cpu_s": 11576.039999999999,
+     "n_reps": 1,
+     "wall_range": [
+      4181.0,
+      4181.0
+     ],
+     "sort_range": [
+      776.0300000000002,
+      776.0300000000002
+     ]
+    },
+    "GSM7036403": {
+     "wall": 1374.03,
+     "sort": 306.317,
+     "index": 19.5714,
+     "cb_refresh": 31.2001,
+     "pileup_total": 85.363,
+     "reads": 128399687,
+     "cpu_s": 3350.2000000000003,
+     "n_reps": 1,
+     "wall_range": [
+      1374.03,
+      1374.03
+     ],
+     "sort_range": [
+      306.317,
+      306.317
+     ]
+    },
+    "GSM6470208": {
+     "wall": 2339.61,
+     "sort": 843.78,
+     "index": 87.9187,
+     "cb_refresh": 51.7399,
+     "pileup_total": 190.822,
+     "reads": 331702882,
+     "cpu_s": 5346.92,
+     "n_reps": 1,
+     "wall_range": [
+      2339.61,
+      2339.61
+     ],
+     "sort_range": [
+      843.78,
+      843.78
+     ]
+    },
+    "GSM7901264": {
+     "wall": 1283.04,
+     "sort": 240.31600000000003,
+     "index": 12.2056,
+     "cb_refresh": 24.3463,
+     "pileup_total": 55.4438,
+     "reads": 111842216,
+     "cpu_s": 3497.54,
+     "n_reps": 1,
+     "wall_range": [
+      1283.04,
+      1283.04
+     ],
+     "sort_range": [
+      240.31600000000003,
+      240.31600000000003
+     ]
+    },
+    "GSM5411066": {
+     "wall": 753.27,
+     "sort": 191.889,
+     "index": 9.00006,
+     "cb_refresh": 19.2826,
+     "pileup_total": 55.6661,
+     "reads": 80448599,
+     "cpu_s": 1695.53,
+     "n_reps": 1,
+     "wall_range": [
+      753.27,
+      753.27
+     ],
+     "sort_range": [
+      191.889,
+      191.889
+     ]
+    },
+    "GSM4006843": {
+     "wall": 988.89,
+     "sort": 172.43100000000004,
+     "index": 8.40879,
+     "cb_refresh": 21.4482,
+     "pileup_total": 78.5049,
+     "reads": 73746398,
+     "cpu_s": 2533.02,
+     "n_reps": 1,
+     "wall_range": [
+      988.89,
+      988.89
+     ],
+     "sort_range": [
+      172.43100000000004,
+      172.43100000000004
+     ]
+    }
+   },
+   "scenarios": {
+    "GSM7656149:B_parallel_stream": {
+     "saving_share": 0.21524053306067975,
+     "atlas_wall_core_h": 252094.8215392546,
+     "saved_core_h": 54261.02376994609
+    },
+    "GSM7656149:A_serial_stream": {
+     "saving_share": 0.16882236281095533,
+     "atlas_wall_core_h": 252094.8215392546,
+     "saved_core_h": 42559.24342466307
+    },
+    "GSM7036403:B_parallel_stream": {
+     "saving_share": 0.273913883577966,
+     "atlas_wall_core_h": 178778.56805840615,
+     "saved_core_h": 48969.93187738572
+    },
+    "GSM7036403:A_serial_stream": {
+     "saving_share": 0.19461012324070773,
+     "atlas_wall_core_h": 178778.56805840615,
+     "saved_core_h": 34792.11916264368
+    },
+    "GSM6470208:B_parallel_stream": {
+     "saving_share": 0.41607018369791576,
+     "atlas_wall_core_h": 125472.63304147057,
+     "saved_core_h": 52205.421478625845
+    },
+    "GSM6470208:A_serial_stream": {
+     "saving_share": 0.2905088892711032,
+     "atlas_wall_core_h": 125472.63304147057,
+     "saved_core_h": 36450.91525879834
+    },
+    "GSM7901264:B_parallel_stream": {
+     "saving_share": 0.22977085669525996,
+     "atlas_wall_core_h": 189709.68400220782,
+     "saved_core_h": 43589.75661657434
+    },
+    "GSM7901264:A_serial_stream": {
+     "saving_share": 0.1393421331071036,
+     "atlas_wall_core_h": 189709.68400220782,
+     "saved_core_h": 26434.552039942202
+    },
+    "GSM5411066:B_parallel_stream": {
+     "saving_share": 0.33327714966456023,
+     "atlas_wall_core_h": 144595.5721529948,
+     "saved_core_h": 48190.40014126637
+    },
+    "GSM5411066:A_serial_stream": {
+     "saving_share": 0.23852866968388697,
+     "atlas_wall_core_h": 144595.5721529948,
+     "saved_core_h": 34490.189467834345
+    },
+    "GSM4006843:B_parallel_stream": {
+     "saving_share": 0.22649227740057623,
+     "atlas_wall_core_h": 213252.18440791982,
+     "saved_core_h": 48299.97290719741
+    },
+    "GSM4006843:A_serial_stream": {
+     "saving_share": 0.19301208328442448,
+     "atlas_wall_core_h": 213252.18440791982,
+     "saved_core_h": 41160.24837752686
+    }
+   },
+   "summary": {
+    "upper_B": [
+     0.21524053306067975,
+     0.251842370136613,
+     0.41607018369791576
+    ],
+    "lower_A": [
+     0.1393421331071036,
+     0.19381110326256612,
+     0.2905088892711032
+    ],
+    "stop_rule_threshold": 0.15
+   }
+  },
+  "atlas_bound_T4_memsort": {
+   "T": 4,
+   "n_samples": 56606,
+   "total_Mreads": 15847476.278067999,
+   "median_Mreads": 207.364718,
+   "datasets": {
+    "GSM4006843": {
+     "wall": 1024.81,
+     "sort": 157.73000000000002,
+     "index": 8.87787,
+     "cb_refresh": 21.1999,
+     "pileup_total": 82.516,
+     "reads": 73746398,
+     "cpu_s": 2769.38,
+     "n_reps": 1,
+     "wall_range": [
+      1024.81,
+      1024.81
+     ],
+     "sort_range": [
+      157.73000000000002,
+      157.73000000000002
+     ]
+    },
+    "GSM7901264": {
+     "wall": 1357.2,
+     "sort": 230.72000000000003,
+     "index": 13.4682,
+     "cb_refresh": 24.4765,
+     "pileup_total": 56.6898,
+     "reads": 111842216,
+     "cpu_s": 3861.28,
+     "n_reps": 1,
+     "wall_range": [
+      1357.2,
+      1357.2
+     ],
+     "sort_range": [
+      230.72000000000003,
+      230.72000000000003
+     ]
+    },
+    "GSM7036403": {
+     "wall": 1402.28,
+     "sort": 281.13300000000004,
+     "index": 14.6376,
+     "cb_refresh": 31.1635,
+     "pileup_total": 84.7205,
+     "reads": 128399687,
+     "cpu_s": 3556.9900000000002,
+     "n_reps": 1,
+     "wall_range": [
+      1402.28,
+      1402.28
+     ],
+     "sort_range": [
+      281.13300000000004,
+      281.13300000000004
+     ]
+    }
+   },
+   "scenarios": {
+    "GSM4006843:B_parallel_stream": {
+     "saving_share": 0.2021494311278515,
+     "atlas_wall_core_h": 221828.74412768628,
+     "saved_core_h": 44842.55443321751
+    },
+    "GSM4006843:A_serial_stream": {
+     "saving_share": 0.1742810826878826,
+     "atlas_wall_core_h": 221828.74412768628,
+     "saved_core_h": 38660.55369786644
+    },
+    "GSM7901264:B_parallel_stream": {
+     "saving_share": 0.210036405540585,
+     "atlas_wall_core_h": 201385.34720001864,
+     "saved_core_h": 42298.25445443463
+    },
+    "GSM7901264:A_serial_stream": {
+     "saving_share": 0.12582453989319672,
+     "atlas_wall_core_h": 201385.34720001864,
+     "saved_core_h": 25339.21865267402
+    },
+    "GSM7036403:B_parallel_stream": {
+     "saving_share": 0.2454640014011237,
+     "atlas_wall_core_h": 182652.6793096398,
+     "saved_core_h": 44834.657529980424
+    },
+    "GSM7036403:A_serial_stream": {
+     "saving_share": 0.1673599019348591,
+     "atlas_wall_core_h": 182652.6793096398,
+     "saved_core_h": 30568.734497400583
+    }
+   },
+   "summary": {
+    "upper_B": [
+     0.2021494311278515,
+     0.210036405540585,
+     0.2454640014011237
+    ],
+    "lower_A": [
+     0.12582453989319672,
+     0.1673599019348591,
+     0.1742810826878826
+    ],
+    "stop_rule_threshold": 0.15
+   }
+  }
+ },
+ "decision": {
+  "phase2_stop_rule_fired": false,
+  "threshold": 0.15,
+  "criteria": {
+   "a_saving": "bounded 19-39% (medians), not measured",
+   "b_identity": "untested; barcode correction is a no-op (CB==CR on every valid-barcode record)",
+   "c_memory": "unknown for streaming; sorted path RSS 53-74 GB"
+  },
+  "recommendation": "build the streaming prototype; fallback external sort ~6-7% of wall; in-RAM sort ~2%",
+  "binaries": {
+   "campaign_02aa9b9": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+   "prod_campaign_28969b8": "0317a5b6414fc8c470d374a10379318029a22787965081a037b593e8a585db33",
+   "bs_dev_f8def8c8": "a70965ae6584e1db99ab467de8507c8956614138c42b479a0ed54486a50a8360"
+  },
+  "p3_cb_GSM7901264": {
+   "reads": 111842216,
+   "CB_equals_CR": 108281494,
+   "allN_dash": 3544340,
+   "UMIbad_dash": 16382,
+   "other_differs": 0
+  },
+  "deviations": [
+   "16 threads: 2 replicates (3rd cancelled)",
+   "post-#41 re-baseline: 1 replicate",
+   "GSM6250705 dropped (corrupt .1fq)",
+   "streaming-pileup cost measured on the barcoded-only tagged BAM"
+  ]
+ }
+}

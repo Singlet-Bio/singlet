@@ -17,11 +17,12 @@ import pandas as pd
 W = "/mnt/projects/debruinz_project/debruinz/singlet"
 T = int(sys.argv[1]) if len(sys.argv) > 1 else 4
 FIXED = 130.0                       # s, audit §3: the fixed part of the wall is closer to 130 s than 300 s
-STREAM_SERIAL_S_PER_M = float(sys.argv[2]) if len(sys.argv) > 2 else 1.47   # s per M total reads (measured, phase 2 job)
+STREAM_SERIAL_S_PER_M = float(sys.argv[2]) if len(sys.argv) > 2 else 1.47
+SUF = sys.argv[3] if len(sys.argv) > 3 else ""   # runs directory suffix: "", "_fa", "_memsort"   # s per M total reads (measured, phase 2 job)
 
 runs = {}
-for f in glob.glob(f"{W}/bam-stream/runs/*/t{T}_r*/stages.json"):
-    d = json.load(open(f)); g = f.split("/runs/")[1].split("/")[0]
+for f in glob.glob(f"{W}/bam-stream/runs{SUF}/*/t{T}_r*/stages.json"):
+    d = json.load(open(f)); g = f.split(f"/runs{SUF}/")[1].split("/")[0]
     if d.get("sort") is None or not d.get("reads") or d.get("pileup_total") is None: continue
     runs.setdefault(g, []).append(d)
 med = lambda xs: st.median(xs)
@@ -56,4 +57,4 @@ out["summary"] = {"upper_B": [min(shares_B), st.median(shares_B), max(shares_B)]
                   "stop_rule_threshold": 0.15}
 print(json.dumps(out["summary"], indent=1))
 os.makedirs(f"{W}/bam-stream/results", exist_ok=True)
-json.dump(out, open(f"{W}/bam-stream/results/atlas_bound_T{T}.json", "w"), indent=1)
+json.dump(out, open(f"{W}/bam-stream/results/atlas_bound_T{T}{SUF}.json", "w"), indent=1)

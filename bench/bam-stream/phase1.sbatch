@@ -19,7 +19,7 @@ REF=/mnt/projects/debruinz_project/cellarium/reference; G=$REF/GRCh38-2024-A
 [ "$SET" = GSM5411066 ] && G=$REF/GRCm39-2024-A   # the mouse sample
 # input lookup: bam-stream staging first, then the earlier perf staging
 D=$W/data/bam-stream/$SET; [ -e $D/sample.1fq ] || D=$W/data/atlas-rerun/perf/$SET
-O=$W/bam-stream/runs/$SET/t${T}_r${REP}; rm -rf $O; mkdir -p $O
+O=$W/bam-stream/runs${SUF:-}/$SET/t${T}_r${REP}; rm -rf $O; mkdir -p $O
 SCR=/tmp/$USER-bs-$SLURM_JOB_ID; mkdir -p $SCR/out
 trap 'kill $MON $TMON 2>/dev/null; rm -rf $SCR' EXIT
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=10800 SINGLET_REF_BASE=$REF
