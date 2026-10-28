@@ -133,3 +133,28 @@ instructed:
 
 Until then the evidence is in-kernel `clock64()` counters (`stitch.cuh`, M5CLK), CUDA events per lane, and STAR's
 `-DSTAR_PROFILE` per-phase counters (now including the output sub-phases).
+
+## BAM-free path: what the CPU pileup reads from each BAM record (inventory, prod/campaign c4a1be38)
+
+Gathered by reading `include/singlet/pileup/pileup_engine.h` (PE), `cb_tag_scan.h` and `singlet.cpp`; not run. STAR writes
+`NH nM AS CR UR CB`, no unmapped records, no UB or HI tags. AS is never read.
+
+- **Fields a replacement record must carry:**
+  - flag (UNMAP, SEC, SUPP, REVERSE), tid, pos, MAPQ, CIGAR, NH, nM;
+  - CB (including missing and `-`), CR, UR (UB falls back to UR);
+  - a per-read id shared by all its alignments (the code hashes the qname, PE:1971);
+  - seq and qual, needed only for SNP and chrM reads, guide matching, poly(A) clips and the rRNA sample.
+- **Order-free** (any record order gives the same result): molecule store, exon/intron/ambiguous sums, junction counts,
+  chrM alleles and indels, poly(A), cell QC (`n_reads`, multimapped, mismatch rate), WL ambient profile, record counters.
+- **Order-dependent** (the stream must follow STAR's coordinate key: start, then iReadAll << 32 | iTr << 8 | mate):
+  - **rRNA sample:** every 1000th record per pileup worker (`mapped_reads % 1000`, PE:2905). The worker walks its chromosomes in
+    descending index-count order, so the sample also depends on the thread count.
+  - **SNP AD/DP:** the first read in file order per (cell, SNP, UMI) passing the base-quality gate decides it (PE:2873).
+  - **Strand probe:** the first ~313 informative records per window in 16 windows of the 4 largest non-mito chromosomes with
+    exons (PE:1741-1807).
+  - **CB refresh:** keys are inserted in order of first occurrence, which fixes the barcode column order among equal counts
+    (`cb_tag_scan.h`).
+  - **Multimapper exon choice:** when the primary has no gene, the first secondary in file order with a gene wins (PE:2951, 3197).
+    Across workers, worker order decides.
+- **Partition-dependent** (follows the chromosome-to-worker assignment): guide counts (per-worker dedup), junction row order,
+  `ambig_reads()` (no callers).
