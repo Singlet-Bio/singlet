@@ -354,6 +354,9 @@ __global__ void k_comp_agg(const Agg* ag, const uint32_t* lab, int m, uint32_t* 
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
     uint32_t r = lab[i]; atomicOr(&cf[r], ag[i].flags); atomicMin(&ce[r], ag[i].exon); atomicMin(&ci[r], ag[i].intron);
 }
+// molecule label counts, as DirectionalUmiStore::finalize_molecules' MoleculeStats: spliced, unspliced, ambiguous, legacy_double
+// (TouchesExon and Intron both set); zeroed by the caller before a run
+__device__ unsigned long long g_molstat[4];
 // roots emit one molecule: flags bit1 = exon-only read, bit2 = intron read (DirectionalUmiStore::kReadExonOnly / kReadIntron)
 __global__ void k_emit(const uint64_t* uk, const uint32_t* lab, const uint32_t* cf, const uint32_t* ce, const uint32_t* ci, int m, int gb, int ub,
                        uint64_t* kex, uint64_t* kin, uint64_t* kam) {
@@ -362,6 +365,8 @@ __global__ void k_emit(const uint64_t* uk, const uint32_t* lab, const uint32_t* 
     if (lab[i] != (uint32_t)i) return;
     uint32_t f = cf[i]; bool e = f & 1, in = f & 2;
     uint64_t cell = uk[i] >> (gb + ub), gene = (uk[i] >> ub) & ((1ull << gb) - 1);
+    if ((f & 4) && in) atomicAdd(&g_molstat[3], 1ull);
+    atomicAdd(&g_molstat[(e && in) ? 2 : (in ? 1 : 0)], 1ull);
     if (e && in) { kex[i] = (cell << FB) | ce[i]; kam[i] = (cell << FB) | gene; }      // ambiguous: exon matrix + per-gene ambiguous count
     else if (in) kin[i] = (cell << FB) | ci[i];                                          // unspliced
     else kex[i] = (cell << FB) | ce[i];                                                  // spliced
