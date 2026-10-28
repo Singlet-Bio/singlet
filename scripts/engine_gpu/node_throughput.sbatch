@@ -13,10 +13,15 @@
 # core-s, for --engine gpu and then --engine cpu on the same node and samples. Outputs in job /tmp; summary to results/.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
-BIN=${BIN:-$W/jobs/w11/engine/bin/singlet-gpu}; RES=$W/jobs/w11/engine/results; mkdir -p $RES
+BIN=${BIN:-$W/jobs/w11/engine/bin/singlet-gpu}; RES=$W/jobs/w11/engine/results/node-$SLURM_JOB_ID; mkdir -p $RES
 SETS=(${SETS:-pbmc1k_v3 GSM7036403 GSM7656149 GSM6470208})
 T=${T:-13}; ENGINES=(${ENGINES:-gpu cpu})
-SCR=/tmp/$USER-engnode-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
+SCR=/tmp/$USER-engnode-$SLURM_JOB_ID; mkdir -p $SCR
+LIMIT=${LIMIT:-5400}   # per-sample wall limit (s): a hung sample is killed instead of holding the node
+# kill-safe: on exit or cancel, stop every child (samples, monitors) before removing the scratch, so nothing outlives the job
+tree() { local c; for c in $(pgrep -P $1); do tree $c; echo $c; done; }   # every descendant, deepest first
+cleanup() { kill -TERM $(tree $$) 2>/dev/null; sleep 5; kill -KILL $(tree $$) 2>/dev/null; rm -rf $SCR; }
+trap cleanup EXIT INT TERM
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=10800 SINGLET_REF_BASE=$REF
 G=$REF/GRCh38-2024-A
 echo "node=$(hostname) job=$SLURM_JOB_ID sets=${SETS[*]} T=$T bin=$(sha256sum $BIN | cut -c1-16) $(date -Is)"; nvidia-smi -L; lscpu | grep "Model name"
@@ -29,7 +34,7 @@ for E in "${ENGINES[@]}"; do
     FQ=$PB/data/$s/$s.1fq; [ -e $FQ ] || FQ=$W/data/atlas-rerun/perf/$s/sample.1fq
     SCREEN=(); [ -f $(dirname $FQ)/screen.json ] && SCREEN=(--run-screen $(dirname $FQ)/screen.json)
     mkdir -p $SCR/$E/$s/out
-    ( cd $SCR/$E/$s && /usr/bin/time -v -o time.txt $BIN $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
+    ( cd $SCR/$E/$s && timeout -k 60 $LIMIT /usr/bin/time -v -o time.txt $BIN $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
         --out-prefix $SCR/$E/$s/out/ --threads $T --pipeline --output-format 1pz --engine $E "${SCREEN[@]}" > run.log 2>&1; echo "exit $?" >> run.log ) &
   done
   wait $(jobs -p | grep -v "^$MON$") 2>/dev/null

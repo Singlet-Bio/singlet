@@ -15,7 +15,8 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF
 BIN=${BIN:-$W/jobs/w11/engine/bin/singlet-gpu}; RES=$W/jobs/w11/engine/results/perf-$SLURM_JOB_ID; mkdir -p $RES
 S=${SET:-pbmc1k_v3}; T=${T:-9}; PERF_S=${PERF_S:-40}
 SCR=/tmp/$USER-engperf-$SLURM_JOB_ID; mkdir -p $SCR/out
-cleanup() { pkill -TERM -P $$ 2>/dev/null; sleep 2; pkill -KILL -P $$ 2>/dev/null; rm -rf $SCR; }
+tree() { local c; for c in $(pgrep -P $1); do tree $c; echo $c; done; }   # every descendant, deepest first
+cleanup() { kill -TERM $(tree $$) 2>/dev/null; sleep 2; kill -KILL $(tree $$) 2>/dev/null; rm -rf $SCR; }
 trap cleanup EXIT INT TERM
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF
 G=$REF/GRCh38-2024-A

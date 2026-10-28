@@ -17,7 +17,8 @@ REFBIN=${REFBIN:-$W/jobs/w11/engine/bin9/singlet-cpu}; CPUBIN=${CPUBIN:-$W/jobs/
 SETS=(${SETS:-GSM6996272 GSM6996274 pbmc1k_v3}); T=${T:-18}
 RES=$W/jobs/w11/engine/results/cpu_unchanged-$SLURM_JOB_ID; mkdir -p $RES
 SCR=/tmp/$USER-cpusame-$SLURM_JOB_ID; mkdir -p $SCR
-cleanup() { pkill -TERM -P $$ 2>/dev/null; sleep 2; pkill -KILL -P $$ 2>/dev/null; rm -rf $SCR; }
+tree() { local c; for c in $(pgrep -P $1); do tree $c; echo $c; done; }   # every descendant, deepest first
+cleanup() { kill -TERM $(tree $$) 2>/dev/null; sleep 2; kill -KILL $(tree $$) 2>/dev/null; rm -rf $SCR; }
 trap cleanup EXIT INT TERM
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF
 G=$REF/GRCh38-2024-A
