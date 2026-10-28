@@ -272,6 +272,7 @@ bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& 
     const double t0 = now();
     try {
         if (reads.size() >= (1ull << 31)) throw std::string("too many reads for this version");
+        cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: waiting threads sleep, not spin
         NH_CK(cudaSetDevice(device));
         Arena A;
         // ---- the resident index (viral, bacterial, fungal) and the host Bloom filter

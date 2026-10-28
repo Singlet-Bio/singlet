@@ -211,6 +211,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     std::string err;
     // on failure, release everything this process holds on the device (STAR then maps every read on the CPU)
     auto fail = [&](const std::string& e) { out.log += "engine_gpu: " + e + "\n"; cudaDeviceReset(); return false; };
+    cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: a waiting host thread sleeps, not spins
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
     // ---- index (G with 200 bytes of padding on each side, as STAR's G1)

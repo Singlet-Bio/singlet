@@ -162,10 +162,21 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
             });
             for (auto &x : th) x.join();
         }
-        for (int t = 0; t < T; t++) {
-            in.seq.insert(in.seq.end(), seqT[t].begin(), seqT[t].end());
-            uint64 o = in.off.back();
-            for (uint64 L : lenT[t]) { o += L; in.off.push_back(o); }
+        {   // concatenate the threads' pieces in parallel (a serial copy of several GB took ~15 s on one core)
+            std::vector<uint64> seqAt(T + 1), offAt(T + 1);
+            seqAt[0] = in.seq.size(); offAt[0] = in.off.size();
+            for (int t = 0; t < T; t++) { seqAt[t + 1] = seqAt[t] + seqT[t].size(); offAt[t + 1] = offAt[t] + lenT[t].size(); }
+            const uint64 base = in.off.back();
+            in.seq.resize(seqAt[T]);
+            in.off.resize(offAt[T]);
+            std::vector<std::thread> th;
+            for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+                if (!seqT[t].empty()) memcpy(in.seq.data() + seqAt[t], seqT[t].data(), seqT[t].size());
+                uint64 o = base + (seqAt[t] - seqAt[0]);
+                for (uint64 k = 0; k < lenT[t].size(); k++) { o += lenT[t][k]; in.off[offAt[t] + k] = o; }
+                std::vector<char>().swap(seqT[t]); std::vector<uint64>().swap(lenT[t]);
+            });
+            for (auto &x : th) x.join();
         }
         munmap((void *) m, n);
         close(fd);
