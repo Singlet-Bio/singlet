@@ -23,7 +23,14 @@
 
 namespace singlet { namespace gpupileup {
 
-inline bool enabled() { static const char* p = std::getenv("SINGLET_GPU_PILEUP"); return p && std::strcmp(p, "compare") == 0; }
+// SINGLET_GPU_PILEUP: "compare" = CPU pileup as usual, GPU alongside, every covered output compared in-process;
+// "on" = the covered steps are skipped on the CPU and their accumulators and counters come from the GPU.
+inline int mode() {
+    static const int m = [] { const char* p = std::getenv("SINGLET_GPU_PILEUP");
+                              return !p ? 0 : std::strcmp(p, "compare") == 0 ? 1 : std::strcmp(p, "on") == 0 ? 2 : 0; }();
+    return m;
+}
+inline bool enabled() { return mode() != 0; }
 
 class Collector {
 public:

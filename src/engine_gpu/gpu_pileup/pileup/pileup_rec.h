@@ -1,5 +1,5 @@
-// Copied unchanged from PR #61 (branch gpu/w11-prototypes, commit 913acc67), bench/gpu/pileup/pileup_rec.h: see bench/gpu/pileup/README.md there.
-// Linked into singlet through ../pileup_gpu.cu (its main() is renamed there); identity: docs/gpu-engine/exploration.md 12.13, 12.19.
+// Copied unchanged from PR #61 (branch gpu/w11-prototypes, commit aeed377d), bench/gpu/pileup/pileup_rec.h: see bench/gpu/pileup/README.md there.
+// Linked into singlet through ../pileup_gpu.cu (PILEUP_NO_MAIN); identity: docs/gpu-engine/exploration.md 12.13, 12.19.
 // GPU input records for the W11 pileup stage (shared by extract.cpp and pileup.cu).
 //
 // The unit is a SIGNATURE: one distinct (read sequence, STAR transcript set). STAR maps a cDNA read from its sequence alone, so every

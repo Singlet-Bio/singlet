@@ -591,6 +591,7 @@ public:
         gpudump::StreamTee tee(hdr);   // W11 debug: SINGLET_STREAM_TEE=<file> keeps a copy of the record stream
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (gpupileup::enabled()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end
+        gpu_covers_ = gpu_col_ && gpupileup::mode() == 2;   // W11 "on": the GPU replaces the covered steps below
 #endif
         while (sam_read1(fp, hdr, b) >= 0) {
             tee.write(hdr, b);
@@ -1040,7 +1041,7 @@ public:
                 // Splice junction extraction (always for primary alignments)
                 if (config_.count_sj) {
                     PROF_START(sj);
-                    extract_splice_junctions(b, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len, stats);
+                    if (!gpu_covers_) extract_splice_junctions(b, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len, stats);
                     PROF_END(prof, sj);
                 }
             }
@@ -1051,7 +1052,7 @@ public:
                 PROF_START(variant);
                 int32_t end_pos_v = bam_endpos(b);
                 if (has_variant_overlap(tid, b->core.pos, end_pos_v)) {
-                    pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
+                    if (!gpu_covers_) pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
                                          umi_str, umi_len, stats);
                 }
                 PROF_END(prof, variant);
@@ -1061,7 +1062,7 @@ public:
             // MAPQ gate: multimapped reads (NH>1, low MAPQ; e.g. NUMT-derived) reach this point, so require high_mapq here.
             if (config_.count_mt && high_mapq && is_chrm(tid)) {
                 PROF_START(mt_pileup);
-                pileup_mt_bases(b, static_cast<uint32_t>(bc_idx), stats);
+                if (!gpu_covers_) pileup_mt_bases(b, static_cast<uint32_t>(bc_idx), stats);
                 PROF_END(prof, mt_pileup);
             }
             PROF_BAM_IO_RESTART;
@@ -1081,6 +1082,12 @@ public:
                       << " incomplete multi-mapped entries\n";
         }
 
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (gpu_covers_ && !gpu_pileup_apply(stats)) {   // W11 "on": covered accumulators and counters from the GPU
+            std::cerr << "[gpu_pileup] ERROR: the GPU pileup failed after the CPU skipped its steps; rerun with SINGLET_GPU_PILEUP unset\n";
+            std::exit(9);
+        }
+#endif
         // ── Order-free finalize (docs/research-beta/order-free-rules.md) ──
         snp_cons_.finalize(snp_ad_, snp_dp_, stats);   // R1
         snp_cons_.clear();
@@ -1096,6 +1103,9 @@ public:
                       << " UMI collapse)...\n";
             auto ms = finalize_store(mol_store_, exon_acc_, intron_acc_, amb_acc_);
             add_molecule_stats(stats, ms);
+#ifdef SINGLET_HAVE_ENGINE_GPU
+            if (gpu_covers_) add_molecule_stats(stats, gpu_ms_);   // W11 "on": the GPU's molecules (the CPU store is empty)
+#endif
         }
         if (config_.umi_dedup && config_.umi_dedup_directional) {
             uint64_t exon_deduped = stats.molecules_spliced + stats.molecules_ambiguous;
@@ -1713,10 +1723,9 @@ public:
     // (exon, intron, ambiguous, junctions by contig/donor/acceptor, SNP AD/DP, chrM total/reverse, chrM indels, R1 molecule counters).
     std::unique_ptr<gpupileup::Collector> gpu_col_;
     PileupStats* gpu_stats_ = nullptr;
-    void gpu_pileup_compare() {
-        if (!gpu_col_) return;
+    // this pass's records plus this engine's annotation and parameters, as the GPU pileup takes them; false if not reproducible
+    bool gpu_build_input(singlet_engine_gpu::PileupInput& in) {
         using namespace singlet_engine_gpu;
-        PileupInput in;
         const auto& et = gene_model_.exon_trees_view(); const auto& it = gene_model_.intron_trees_view();
         const uint32_t n_tid = static_cast<uint32_t>(tid_to_chrom_.size());
         in.exonTrees.resize(n_tid); in.intronTrees.resize(n_tid);
@@ -1736,14 +1745,23 @@ public:
         const size_t nreads = gpu_col_->n_reads(), nsigs = gpu_col_->n_sigs(); const uint64_t inc = gpu_col_->incomplete();
         gpu_col_->finish(in);
         gpu_col_.reset();
-        if (in.snpSkipN < 0) { std::cerr << "[gpu_pileup] not run: base qualities neither constant nor tied to N\n"; return; }
+        if (in.snpSkipN < 0) { std::cerr << "[gpu_pileup] not run: base qualities neither constant nor tied to N\n"; return false; }
+        std::cerr << "[gpu_pileup] " << nreads << " reads, " << nsigs << " signatures (" << inc << " incomplete groups)\n";
+        return true;
+    }
+    void gpu_pileup_compare() {
+        if (!gpu_col_) return;
+        using namespace singlet_engine_gpu;
+        PileupInput in;
+        if (!gpu_build_input(in)) return;
+        const uint32_t n_tid = in.nTid;
         int lock_fd = -1;
         const int device = lockDevice(&lock_fd);
         PileupOutput out;
         const bool ok = pileupRun(in, device, out);
         unlockDevice(lock_fd);
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return; }
-        std::cerr << "[gpu_pileup] " << nreads << " reads, " << nsigs << " signatures (" << inc << " incomplete groups); GPU " << out.msGpu
+        std::cerr << "[gpu_pileup] GPU " << out.msGpu
                   << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; R1 molecules " << out.snpMolecules << ", ambiguous "
                   << out.snpAmbiguous << ", other " << out.snpOther << "\n";
         bool all = true;
@@ -1780,8 +1798,49 @@ public:
         }
         std::cerr << "[gpu_pileup] RESULT " << (all ? "IDENTICAL" : "DIFFERENT") << "\n";
     }
+
+    // W11 "on": runs the GPU pileup on this pass's records and puts its outputs where the skipped CPU steps would have: the exon,
+    // intron and ambiguous accumulators (molecules), junctions (rows in (contig, donor, acceptor) order, the R7 order), SNP AD/DP (R1),
+    // chrM allele counts and indels, and the counters those steps keep. The molecule label counts are applied after the CPU finalize.
+    DirectionalUmiStore::MoleculeStats gpu_ms_{};
+    template <typename V>
+    static void gpu_put(SparseAccumulator<V>& acc, const std::vector<singlet_engine_gpu::PileupTriplet>& v) {
+        for (const auto& t : v) acc.increment(t.row, t.cell, static_cast<V>(t.val));
+    }
+    bool gpu_pileup_apply(PileupStats& stats) {
+        using namespace singlet_engine_gpu;
+        PileupInput in;
+        if (!gpu_build_input(in)) return false;
+        int lock_fd = -1;
+        const int device = lockDevice(&lock_fd);
+        PileupOutput out;
+        const bool ok = pileupRun(in, device, out);
+        unlockDevice(lock_fd);
+        if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
+        gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
+        gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);
+        sj_names_.clear(); sj_index_.clear();
+        for (size_t j = 0; j < out.sjtab.size(); ++j) {
+            const auto& k = out.sjtab[j];
+            sj_index_[((static_cast<uint64_t>(k[0]) << 32) | k[1]) ^ (static_cast<uint64_t>(k[2]) * 0x9e3779b97f4a7c15ULL)] =
+                static_cast<uint32_t>(j);   // keyed as extract_splice_junctions keys them
+            sj_names_.push_back(tid_to_chrom_[k[0]] + ":" + std::to_string(k[1]) + "-" + std::to_string(k[2]));
+        }
+        if (!sj_names_.empty()) { sj_acc_.set_barcodes(barcodes_); sj_acc_.set_n_features(static_cast<uint32_t>(sj_names_.size())); }
+        gpu_put(sj_acc_, out.sj);
+        for (const auto& e : out.indels) mt_indels_.push_back(mt::MtIndelEvent{e[0], e[1], static_cast<uint16_t>(e[2]), e[3] != 0});
+        stats.snp_hits += out.snpHits; stats.sj_hits += out.sjHits; stats.mt_pileup_bases += out.mtBases;
+        stats.snp_molecules += out.snpMolecules; stats.snp_molecules_ambiguous += out.snpAmbiguous; stats.snp_molecules_other += out.snpOther;
+        gpu_ms_ = DirectionalUmiStore::MoleculeStats{};
+        gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
+        gpu_ms_.legacy_double = out.molLegacyDouble;
+        std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
+                  << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules << "\n";
+        return true;
+    }
 #endif
 
+    bool gpu_covers_ = false;   // W11: SINGLET_GPU_PILEUP=on in a GPU build (always false in a CPU-only build)
     // Get accumulators for export
     const SparseAccumulator<uint8_t>& snp_ad() const { return snp_ad_; }
     const SparseAccumulator<uint8_t>& snp_dp() const { return snp_dp_; }
@@ -2907,6 +2966,10 @@ private:
         const bool intronic = (flags & DirectionalUmiStore::kReadIntron) != 0;
         if (intronic && !config_.count_introns) return;
         if (intronic) st.intron_hits++; else st.exon_hits++;
+        if (gpu_covers_) {   // W11 "on": the GPU collapses the molecules (gpu_pileup_apply)
+            if (config_.umi_dedup && umi_str && umi_len > 0) st.umi_duplicate++;
+            return;
+        }
         if (config_.umi_dedup && umi_str && umi_len > 0) {
             store.record_read(bc_idx, rf.gene, umi_pack_2bit(umi_str, umi_len),
                               rf.exon_idx, rf.intron_idx, flags);

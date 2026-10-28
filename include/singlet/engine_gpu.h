@@ -111,6 +111,9 @@ struct PileupOutput {
     std::vector<std::array<uint32_t, 3>> sjtab;      // junction id -> (tid, donor, acceptor), ids in (tid, donor, acceptor) order
     std::vector<std::array<uint32_t, 4>> indels;     // (cell, pos, len, is_ins)
     uint64_t snpMolecules = 0, snpAmbiguous = 0, snpOther = 0;
+    // the engine's PileupStats counters these outputs replace: molecule labels (DirectionalUmiStore::MoleculeStats), SNP overlaps
+    // passing the quality gate (snp_hits), distinct (cell, junction, UMI) (sj_hits), chrM bases counted (mt_pileup_bases)
+    uint64_t molSpliced = 0, molUnspliced = 0, molAmbiguous = 0, molLegacyDouble = 0, snpHits = 0, sjHits = 0, mtBases = 0;
     double msGpu = 0, msTotal = 0, peakGB = 0;
     std::string log;
 };

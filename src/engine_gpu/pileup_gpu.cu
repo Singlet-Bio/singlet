@@ -60,9 +60,13 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     in.S = (SigRec*)devBytes(pi.sigs); in.Al = (AlnRec*)devBytes(pi.alns); in.R = (ReadRec*)devBytes(pi.reads);
     in.ops = to_dev(A, pi.ops); in.seq = devBytes(pi.seq);
     // ---- one run with outputs
+    { unsigned long long z[4] = {0, 0, 0, 0}; CK(cudaMemcpyToSymbol(g_molstat, z, sizeof z)); }
     Timer T; T.start();
     Outputs o;
     run_pipeline(A, T, in, &o);
+    { unsigned long long ms[4]; CK(cudaMemcpyFromSymbol(ms, g_molstat, sizeof ms));
+      po.molSpliced = ms[0]; po.molUnspliced = ms[1]; po.molAmbiguous = ms[2]; po.molLegacyDouble = ms[3]; }
+    po.snpHits = (uint64_t) o.n_snp_tuples; po.sjHits = o.sj_raw_sum; po.mtBases = (uint64_t) o.n_mt_tuples;
     for (auto& kv : T.acc) po.msGpu += kv.second;
     copyT3(o.exon, po.exon); copyT3(o.intron, po.intron); copyT3(o.amb, po.amb); copyT3(o.sj, po.sj);
     copyT3(o.snp_ad, po.snpAd); copyT3(o.snp_dp, po.snpDp); copyT3(o.mt, po.mt); copyT3(o.mt_rev, po.mtRev);
