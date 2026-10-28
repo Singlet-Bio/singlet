@@ -9,7 +9,8 @@ can then:
 - stream minibatches of cells from it into PyTorch with `singlet.torch.S1Cells`. Only the chunks that hold those cells
   are read, from a local disk or over HTTP.
 
-Python and R write the same bytes for the same matrix.
+Python and R write the same object for the same matrix (identical bytes when both are built against the same zstd
+library; see below).
 
 ## Python
 
@@ -57,8 +58,12 @@ read_s1(path, as = c("matrix", "sce", "seurat"), member = "counts", genes = NULL
 - **Inputs.** A `SingleCellExperiment` gives `assay(x, assay)`, and a Seurat object gives layer `assay` of its default
   assay.
 - **Encoder.** The R package calls the header-only C++ encoder (`inst/include/singlet/pz2/`) directly, with the options
-  the Python binding uses. `r/tests/testthat/test-s1-write.R` and `tests/python/test_s1_write.py` both check one fixture
-  object byte for byte.
+  the Python binding uses. `r/tests/testthat/test-s1-write.R` and `tests/python/test_s1_write.py` both check one shared
+  fixture object: container, header, canonical digest and decoded counts and names.
+- **Bytes across builds.** The names and probability tables inside a member are zstd level 19, and zstd releases can
+  compress the same input to different bytes. Two builds that link the same zstd (Python and R from one conda
+  environment, say) write identical files. Builds against different zstd releases write files that differ in those
+  sections and decode to the same matrix.
 
 ## Streaming into PyTorch
 

@@ -15,7 +15,7 @@ The stored ``called`` flag is STARsolo's default ``CellRanger2.2 3000 0.99 10`` 
   does not depend on threads); a barcode below every simulated path gets p = min(Phi(z), 1 / (niters + 1)), z from the mean and
   sd of the simulated log-probabilities at its total; Benjamini-Hochberg over the tested barcodes; flag at FDR <= 0.001.
 
-The Monte Carlo loop needs numba (``pip install singlet-bio[migrate]``); everything else is numpy/scipy. Validated on 65 samples
+The Monte Carlo loop needs numba (``pip install singlet[migrate]``); everything else is numpy/scipy. Validated on 65 samples
 against the authors' Cell Ranger calls and hashtags (docs/called-ed.md) and against ground truth on six benchmark datasets
 (docs/called-ed-truth.md, reference bench/called_ed_truth/common.py). Golden vectors shared with the C++ port
 (include/singlet/pileup/called_ed.h): tests/data/called_ed_golden/.
@@ -214,9 +214,7 @@ def _mc_kernel():
     try:
         import numba as nb
     except ImportError as e:  # pragma: no cover - depends on the environment
-        raise CellCallUnavailable(
-            "called_ed needs numba (pip install 'singlet-bio[migrate]')"
-        ) from e
+        raise CellCallUnavailable("called_ed needs numba (pip install 'singlet[migrate]')") from e
 
     @nb.njit(nogil=True)
     def _draw(prob, alias, K):

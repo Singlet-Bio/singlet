@@ -29,7 +29,7 @@ try:
     import torch as _torch
 except ImportError:
     raise ImportError(
-        "singlet.torch requires PyTorch. Install with: pip install 'singlet-bio[torch]'"
+        "singlet.torch requires PyTorch. Install with: pip install 'singlet[torch]'"
     ) from None
 
 from singlet.torch._s1stream import S1Cells, S1Stream, block_batches
