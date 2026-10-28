@@ -1652,7 +1652,11 @@ is independent of recording, so a prefix max gives STAR's maxScoreMate at each w
 and per-read state in shared memory; running the M/B lanes concurrently with lane A of the next batch; a cross-sample result
 cache (a sequence's result depends on the sequence only; see §12.16).
 
-**Read binning by window count (job 790068, 2026-10-28; measured, no gain):** sorting each staged batch by (windows, SA entries)
+**Correction (2026-10-28, later):** job 790068 did **not** test binning. Its sources had been pushed to the home directory
+instead of `$W/jobs/w11/m5` (`clipper.py push` resolves a relative destination against `~`), so it compiled and ran the previous
+`m5`, which ignores `--bin`. The "no gain" result below is void; binning is untested. Stitching is deprioritized for now.
+
+~~**Read binning by window count (job 790068, 2026-10-28; measured, no gain):**~~ sorting each staged batch by (windows, SA entries)
 before phase 3 (`m5 --bin`) left every lane time unchanged within noise (lane B 4,820 vs 4,818 ms; pbmc1k_v3, 7,967,704
 distinct sequences, default lane settings, 1.04 M distinct/s in both variants; both 100% identical). Lane B's 362 k reads (4.5%)
 take 63% of GPU time, 81% of it in stitching (3,110 SA entries per read); a batch ends with its slowest read, and binning does
