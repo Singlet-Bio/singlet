@@ -2637,6 +2637,7 @@ int main(int argc, char* argv[]) {
     bool threads_specified = false;
     int pileup_threads = 1;  // bgzf not useful for uncompressed pipe from STAR
     int parallel_pileup = -1; // -1=auto, 0=off, 1=on
+    bool stream_unsorted = false; // --stream-unsorted: no sorted BAM; unsorted STAR output streamed into the serial pileup, CB from CR
     int n_donors = -1;
     int umi_len = 12;
     bool umi_len_explicit = false;  // S5-UMI-LEN: true when --umi-len given by user
@@ -2712,6 +2713,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--pileup-threads" && i+1 < argc) pileup_threads = std::atoi(argv[++i]);
         else if (arg == "--parallel-pileup") parallel_pileup = 1;
         else if (arg == "--no-parallel-pileup") parallel_pileup = 0;
+        else if (arg == "--stream-unsorted") { stream_unsorted = true; parallel_pileup = 0; config.cb_from_cr = true; }
         else if (arg == "--output-format" && i+1 < argc) output_format = argv[++i];
         else if (arg == "--pipeline") pipeline_mode = true;
         else if (arg == "--cascade" && i+1 < argc) cascade_mode = argv[++i];
@@ -6083,6 +6085,11 @@ int main(int argc, char* argv[]) {
                   << " mode: forcing sorted BAM (parallel_pileup=1)\n";
     }
 
+    if (stream_unsorted && parallel_pileup == 1) {
+        std::cerr << "[singlet] --stream-unsorted ignored: this mode needs the sorted BAM
+";
+        stream_unsorted = false; config.cb_from_cr = false;
+    }
     std::string parallel_bam_path; // set when parallel_pileup=1
     std::string parallel_bai_path;
 
@@ -7051,7 +7058,16 @@ int main(int argc, char* argv[]) {
             args.push_back("--outSAMattributes");
             args.push_back("NH"); args.push_back("nM");
             args.push_back("AS"); args.push_back("CR"); args.push_back("UR");
-            args.push_back("CB");
+            if (stream_unsorted) {
+                if (solo_type_is_sam_tag_out || use_complex || use_complex_concat) {
+                    std::cerr << "ERROR: --stream-unsorted supports CB_UMI_Simple only (this protocol uses CB_samTagOut or CB_UMI_Complex)
+";
+                    return 1;
+                }
+                // No CB: STAR allows it only in a sorted BAM; the pileup derives CB from CR (PileupConfig::cb_from_cr).
+            } else {
+                args.push_back("CB");
+            }
             // Debug only (BAM-stream CB-correction replica test): extra STAR SAM attributes, e.g. SINGLET_EXTRA_SAM_ATTRS="CY UY".
             if (const char *extra_attrs = std::getenv("SINGLET_EXTRA_SAM_ATTRS")) {
                 static std::vector<std::string> extra_store;   // args holds const char*: keep the strings alive
