@@ -76,9 +76,17 @@ Why: it is decided before alignment from the full read set, so it is order-free 
 
 Why: row order carries no biology; a canonical order makes identity checkable with a byte compare and lets downstream code join outputs across samples by position.
 
+## R8. Non-host EM: canonical input and reduction order
+
+Today: `em_deconvolve` sums E-step responsibilities in single precision over the reads in the order STAR wrote its unmapped mate file, which varies with threads; species are indexed first-seen and output ties keep input order. Result: the 6th decimal of abundances, occasionally a read count, and the EM iteration count change between runs and between sorted reruns (update (g) of ws-w3b). Above 20 M unmapped reads the screen kept the first 20 M in file order.
+
+Rule: each read's hits become a vector of (species id, hit rate) sorted by species id; reads are sorted by that content; species are indexed in species-id order; every sum (prior, E-step, M-step, posterior statistics) runs over that order; output ties are broken by species id. Above the cap, reads are kept by read-name hash: the kept set is every read whose hash is below a threshold that halves until the set fits, so it depends only on the set of unmapped reads.
+
+Why: an EM over a fixed set of reads has one answer; summing in a fixed order makes the floating-point result reproducible without changing the model. Sorting by content needs no read names and costs one sort of the non-host reads (a small fraction of a sample). A hash sample above the cap is uniform over reads, where "first 20 M" is biased toward whatever STAR emitted first.
+
 ## Gates
 
-1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings).
+1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, including the non-host tables (`nonhost/*`), except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings) and fields that hold paths or the sizes of those files.
 2. A shuffled-order test: the same unsorted STAR BAM fed to the serial pileup in three record orders (as written, `samtools collate`, coordinate-sorted) gives byte-identical outputs.
 3. Every difference from `prod/campaign`'s sorted output is listed by file, size and cause (rule R1-R7 or input difference), in `ws-w3b-bam-stream.md`.
 4. Real data only: GSM4006843 (3'), GSM7901264 (5'); the Kang pool for donor-SNP truth where it can be staged.
@@ -95,4 +103,5 @@ Why: row order carries no biology; a canonical order makes identity checkable wi
 | R6 barcode universe | done for the stream, `b237f57`; the sorted path still refreshes from the CB-tag scan | take the list from the CPU pass-1 |
 | R7 canonical order | junctions done, `8ab560d`, both paths; other discovery axes still to check against the gates | to implement |
 | thread/rerun gate | met for every pileup output, 3' and 5' (update (g) of ws-w3b); non-host EM still order-dependent | — |
-| shuffled-order gate | not run yet (needs an unsorted STAR BAM kept in job `/tmp` and a `--bam-file` mode that takes CB from CR) | — |
+| R8 non-host EM | done, `f4a1e95` (canonical input order, hash sample above the cap) | match if the GPU runs the non-host EM |
+| shuffled-order gate | mode added in `f4a1e95`: `SINGLET_TEE_STREAM_BAM=<path>` saves the stream, `--bam-file <path> --stream-unsorted` replays it; not run yet | — |
