@@ -29,6 +29,13 @@ from .util import Canon, Config, Unit, load_canon, log, read_tsv, result_path, w
 
 LN2 = math.log(2.0)
 
+# scanpy 1.11 calls .getnnz(axis=...) on the kNN graph, which scikit-learn >= 1.9 returns as a sparse *array*; SciPy
+# 1.17 dropped getnnz from sparse arrays. _getnnz is the same method under its private name, so this changes nothing
+# numerically. Remove once scanpy stops calling getnnz.
+for _cls in (sp.csr_array, sp.csc_array):
+    if not hasattr(_cls, "getnnz") and hasattr(_cls, "_getnnz"):
+        _cls.getnnz = lambda self, axis=None: self._getnnz(axis=axis)
+
 
 # ----------------------------------------------------------------------------------------------- helpers
 def _cols(c: Canon, cells: np.ndarray):
