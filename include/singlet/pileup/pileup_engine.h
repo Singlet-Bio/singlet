@@ -648,7 +648,7 @@ public:
             if (is_secondary) {
                 PROF_START(secondary);
                 stats.secondary_reads++;
-                if (has_gene_model_) {
+                if (has_gene_model_ && !gpu_covers_) {   // W11 "on": multimappers are resolved on the GPU
                     // Inline CB scanner — same as primary path, avoids htslib call overhead
                     const char* cb_sec_str = config_.cb_from_cr ? inline_scan_cb_from_cr(b) : inline_scan_cb(b);
                     if (cb_sec_str && cb_sec_str[0] != '-') {
@@ -814,6 +814,7 @@ public:
             // ── Exon + Intron counting ──
             if (has_gene_model_) {
                 PROF_START(exon_intron);
+                if (!gpu_covers_) {   // W11 "on": classification and everything that uses it comes from the GPU (gpu_pileup_apply)
                 // Extract aligned blocks from CIGAR
                 aligned_blocks_.clear();
                 {
@@ -1036,6 +1037,7 @@ public:
                     }
                 }
 
+                }   // !gpu_covers_
                 PROF_END(prof, exon_intron);
 
                 // Splice junction extraction (always for primary alignments)
@@ -1807,6 +1809,94 @@ public:
     static void gpu_put(SparseAccumulator<V>& acc, const std::vector<singlet_engine_gpu::PileupTriplet>& v) {
         for (const auto& t : v) acc.increment(t.row, t.cell, static_cast<V>(t.val));
     }
+    // W11 "on": what the serial loop derives from each barcoded primary's classification, from the GPU's per-alignment results: the
+    // strand votes (non-mito contigs), wrong_strand, multigene, cross_gene_intron counters, poly(A) records (NH 1, gene assigned,
+    // forward-oriented library) and VDJ usage. Same conditions as the loop: primary, barcode in the set, past the MAPQ gate.
+    bool gpu_host_pass(const singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::PileupOutput& out, PileupStats& stats) {
+        const SigRec* S = reinterpret_cast<const SigRec*>(in.sigs.data());
+        const AlnRec* A = reinterpret_cast<const AlnRec*>(in.alns.data());
+        const ReadRec* R = reinterpret_cast<const ReadRec*>(in.reads.data());
+        const size_t nR = in.reads.size() / sizeof(ReadRec);
+        if (out.alnStat.size() != in.alns.size() / sizeof(AlnRec)) { std::cerr << "[gpu_pileup] per-alignment results missing\n"; return false; }
+        static const char UMI_CH[5] = {'A', 'C', 'G', 'T', 'N'};
+        static const uint8_t COMP[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
+        const int ulen = in.umiLen > 0 ? in.umiLen : 0;
+        char umi[32];
+        for (size_t r = 0; r < nR; ++r) {
+            const ReadRec& rr = R[r];
+            const SigRec& sg = S[rr.sig];
+            int p = -1;
+            for (int k = 0; k < sg.n_aln; ++k) if (A[sg.aln_off + k].flags & 2) { p = k; break; }
+            if (p < 0) continue;
+            const AlnRec& a = A[sg.aln_off + p];
+            const int nh = sg.nh;
+            if (a.mapq < static_cast<uint8_t>(config_.min_mapq) && nh == 1) continue;   // the loop skips unique low-MAPQ reads
+            const uint8_t st = out.alnStat[sg.aln_off + p];
+            const uint32_t gene = out.alnGene[sg.aln_off + p];
+            const bool vs = st & 1, va = st & 2;
+            if (vs != va && a.tid >= 0 && static_cast<size_t>(a.tid) < mito_tid_.size() && !mito_tid_[a.tid])
+                (vs ? stats.strand_sense : stats.strand_antisense)++;
+            if (st & 4) stats.wrong_strand++;
+            if (st & 16) stats.multigene_reads++;
+            if (st & 8) stats.cross_gene_intron_reads++;
+            for (int i = 0; i < ulen && i < 21; ++i) umi[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
+            umi[std::min(ulen, 21)] = 0;
+            const char* umi_str = ulen > 0 ? umi : nullptr;
+            const int umi_len = ulen > 0 ? std::min(ulen, 21) : 0;
+            const uint32_t* ops = in.ops.data() + a.ops_off;
+            const bool rev = (a.flags & 1) != 0;
+            // poly(A): polya_site_from_read on the BAM-orientation sequence (the collector stores the read's own orientation)
+            if (nh == 1 && config_.count_polya && !config_.reverse_strand && gene != UINT32_MAX && a.n_ops >= 2) {
+                const int qlen = sg.rlen;
+                auto base = [&](int j) -> uint8_t {   // BAM nt16 code of query position j
+                    const int i = rev ? qlen - 1 - j : j;
+                    const uint8_t v = (in.seq[sg.seq_off + (i >> 1)] >> ((i & 1) * 4)) & 15;
+                    return rev ? COMP[v] : v;
+                };
+                uint64_t key = 0; bool ok = false;
+                if (!rev) {
+                    const uint32_t c = ops[a.n_ops - 1];
+                    const int cl = static_cast<int>(c >> 4);
+                    if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
+                        int na = 0; for (int i = qlen - cl; i < qlen; ++i) na += base(i) == 1;
+                        if (na >= 0.8 * cl && base(qlen - cl) == 1) {
+                            int64_t end = a.pos;
+                            for (int k = 0; k < a.n_ops; ++k) { const int op = ops[k] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += ops[k] >> 4; }
+                            if (end > 0) { key = polya_site_key(a.tid, false, static_cast<uint32_t>(end - 1)); ok = true; }
+                        }
+                    }
+                } else {
+                    const uint32_t c = ops[0];
+                    const int cl = static_cast<int>(c >> 4);
+                    if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
+                        int nt = 0; for (int i = 0; i < cl; ++i) nt += base(i) == 8;
+                        if (nt >= 0.8 * cl && base(cl - 1) == 8) { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
+                    }
+                }
+                if (ok) polya_recs_.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)});
+            }
+            // VDJ usage: the first VDJ gene overlapping [first aligned block start, last aligned block end)
+            if (has_vdj_) {
+                int32_t rpos = a.pos, s0 = -1, e0 = -1;
+                for (int k = 0; k < a.n_ops; ++k) {
+                    const int op = ops[k] & 15; const int32_t len = static_cast<int32_t>(ops[k] >> 4);
+                    if (op == 0 || op == 7 || op == 8) { if (s0 < 0) s0 = rpos; rpos += len; e0 = rpos; }
+                    else if (op == 2 || op == 3) rpos += len;
+                }
+                if (s0 >= 0) {
+                    vdj_overlaps_.clear();
+                    vdj_model_.query(a.tid, s0, e0, vdj_overlaps_);
+                    if (!vdj_overlaps_.empty()) {
+                        const uint32_t vg = vdj_overlaps_[0];
+                        bool count = true;
+                        if (config_.umi_dedup && umi_str) count = vdj_umi_.insert(static_cast<uint32_t>(rr.bc), vg, umi_str, umi_len);
+                        if (count) { vdj_acc_.increment(vg, static_cast<uint32_t>(rr.bc)); stats.vdj_hits++; }
+                    }
+                }
+            }
+        }
+        return true;
+    }
     bool gpu_pileup_apply(PileupStats& stats) {
         using namespace singlet_engine_gpu;
         PileupInput in;
@@ -1838,6 +1928,8 @@ public:
         gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
         gpu_ms_.legacy_double = out.molLegacyDouble;
         gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
+        stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
+        if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
                   << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules << "\n";
         return true;

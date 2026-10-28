@@ -91,7 +91,8 @@ public:
         in.alns.assign((const uint8_t*) alns_.data(), (const uint8_t*) (alns_.data() + alns_.size()));
         in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
         in.ops.swap(ops_); in.seq.swap(seq_);
-        in.snpSkipN = lowqual_bases_ == 0 ? 0 : (qual_neq_n_ == 0 ? 1 : -1);
+        in.snpSkipN = (lowqual_bases_ == 0 ? 0 : (qual_neq_n_ == 0 ? 1 : -1));
+        if (no_umi_ > 0) in.snpSkipN = -1;   // reads without a UMI: not reproducible from the packed UMI (never seen in the campaign data)
         if (umi_len_ > 0) in.umiLen = umi_len_;
     }
     size_t n_reads() const { return reads_.size(); }
