@@ -31,7 +31,7 @@ The path to the local manifest (\code{.../s1/m/<GSE>.json}) or, with
 }
 \description{
 Mirrors a study's .s1 objects (the manifest, one \code{.s1} object per
-sample, and the vocabulary packs they use) from \de{https://data.singlet.bio}
+sample, and the vocabulary packs they use) from \code{https://data.singlet.bio}
 into the local cache, verifying each object against the manifest's sha256, and
 returns the path of the manifest. \code{\link{load}} then reads the local
 copies without the network. \code{singlet_download()} is the same function.

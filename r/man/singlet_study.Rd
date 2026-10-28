@@ -12,7 +12,7 @@ singlet_study(accession, cache_dir = NULL, base = NULL, force = FALSE)
 \item{cache_dir}{Directory for the manifest and pack cache (default
 \code{tools::R_user_dir("singlet", "cache")}, or \code{SINGLET_CACHE_DIR}).}
 
-\item{base}{Data host (default \code{SINGLET_DATA_BASE} or \de{https://data.singlet.bio}; a directory with the
+\item{base}{Data host (default \code{SINGLET_DATA_BASE} or \code{https://data.singlet.bio}; a directory with the
 server layout also works).}
 
 \item{force}{Re-check the manifest even if it was read less than a minute ago.}

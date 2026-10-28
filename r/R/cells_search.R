@@ -56,7 +56,8 @@
 #' @examples
 #' \donttest{
 #' if (curl::has_internet()) {
-#'   hits <- singlet_search_cells(list(cell_type = "T cell", sex = "female", tissue = "blood"), limit = 5)
+#'   hits <- singlet_search_cells(list(cell_type = "T cell", sex = "female", tissue = "blood"),
+#'                                limit = 5)
 #'   hits$totals
 #'   head(hits$studies)
 #' }
@@ -138,8 +139,8 @@ singlet_cell_fields <- function() {
 #' @examples
 #' \donttest{
 #' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
-#'   sce <- singlet_fetch_cells(list(cell_type = "B cell", organism = "Homo sapiens", tissue = "blood"),
-#'                              max_cells = 200)
+#'   b_cells <- list(cell_type = "B cell", organism = "Homo sapiens", tissue = "blood")
+#'   sce <- singlet_fetch_cells(b_cells, max_cells = 200)
 #' }
 #' }
 #' @seealso \code{\link{singlet_search_cells}}, \code{\link{singlet_gather}}

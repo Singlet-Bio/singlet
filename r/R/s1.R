@@ -272,7 +272,7 @@
 #' @param accession A GEO Series accession (\code{"GSE..."}).
 #' @param cache_dir Directory for the manifest and pack cache (default
 #'   \code{tools::R_user_dir("singlet", "cache")}, or \code{SINGLET_CACHE_DIR}).
-#' @param base Data host (default \code{SINGLET_DATA_BASE} or \de{https://data.singlet.bio}; a directory with the
+#' @param base Data host (default \code{SINGLET_DATA_BASE} or \code{https://data.singlet.bio}; a directory with the
 #'   server layout also works).
 #' @param force Re-check the manifest even if it was read less than a minute ago.
 #' @return A \code{singlet_study} object (a list with \code{gse}, \code{samples}, \code{gsm_ids}, \code{packs}, ...).

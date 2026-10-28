@@ -91,7 +91,7 @@ The primary entry point for working with the Singlet atlas from R. Accepts
 one or more inputs that may be GEO accessions (\code{"GSE..."} or
 \code{"GSM..."}), local \code{.singlet} bundle paths, or a mix of these,
 and returns a single combined object. Accessions are downloaded (and
-cached) from \de{https://data.singlet.bio} on demand: only the sample
+cached) from \code{https://data.singlet.bio} on demand: only the sample
 members that gene-level counts need are fetched, with HTTP Range requests,
 and decoded once in C++; local paths are read directly. Multiple inputs are
 combined column-wise on their shared gene axis. \code{singlet_load()} is the

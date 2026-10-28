@@ -362,7 +362,7 @@ set_api_key <- function(key) {
 #' Download a study for offline use and return its local path
 #'
 #' Mirrors a study's .s1 objects (the manifest, one \code{.s1} object per
-#' sample, and the vocabulary packs they use) from \de{https://data.singlet.bio}
+#' sample, and the vocabulary packs they use) from \code{https://data.singlet.bio}
 #' into the local cache, verifying each object against the manifest's sha256, and
 #' returns the path of the manifest. \code{\link{load}} then reads the local
 #' copies without the network. \code{singlet_download()} is the same function.
@@ -445,7 +445,7 @@ singlet_download <- download
 #' one or more inputs that may be GEO accessions (\code{"GSE..."} or
 #' \code{"GSM..."}), local \code{.singlet} bundle paths, or a mix of these,
 #' and returns a single combined object. Accessions are downloaded (and
-#' cached) from \de{https://data.singlet.bio} on demand: only the sample
+#' cached) from \code{https://data.singlet.bio} on demand: only the sample
 #' members that gene-level counts need are fetched, with HTTP Range requests,
 #' and decoded once in C++; local paths are read directly. Multiple inputs are
 #' combined column-wise on their shared gene axis. \code{singlet_load()} is the
@@ -685,7 +685,7 @@ singlet_load <- load
 #'
 #' Query the Singlet atlas with a free-text description and receive matching
 #' GEO accessions. The query is sent to the Singlet search API
-#' (\de{https://singlet.bio/api}); pair the result with \code{\link{load}}
+#' (\code{https://singlet.bio/api}); pair the result with \code{\link{load}}
 #' (or use \code{\link{find_load}}) to pull the matching data.
 #' \code{singlet_find()} is the same function.
 #'

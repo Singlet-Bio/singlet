@@ -53,7 +53,8 @@ Cell types below lineage level are previews: per-study accuracy is 0.84 (compart
 \examples{
 \donttest{
 if (curl::has_internet()) {
-  hits <- singlet_search_cells(list(cell_type = "T cell", sex = "female", tissue = "blood"), limit = 5)
+  hits <- singlet_search_cells(list(cell_type = "T cell", sex = "female", tissue = "blood"),
+                               limit = 5)
   hits$totals
   head(hits$studies)
 }
