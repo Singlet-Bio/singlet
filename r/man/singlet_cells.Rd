@@ -44,7 +44,7 @@ the cell-table data frame returning a logical vector; or \code{NULL} for every c
 \item{cell_type_level, cell_type_min_score}{Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
 it (default 0, none); see \code{\link{singlet_labels}}.}
 
-\item{include_unvalidated}{Also keep \code{qc_doublet_score} (unvalidated) in \code{colData}.}
+\item{include_unvalidated}{Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).}
 }
 \value{
 A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
@@ -59,8 +59,11 @@ matrix chunks that contain the selected cells (a small sample is fetched whole, 
 (spliced + unspliced), as in \code{\link{load}}.
 }
 \examples{
-\dontrun{
-deep <- singlet_cells("GSE145370", n_umi_exon > 5000, samples = "GSM4317426")
+\donttest{
+if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+  deep <- singlet_cells("GSE307528", n_umi_exon > 500, samples = "GSM9226069",
+                        cache_dir = file.path(tempdir(), "singlet-example"))
+}
 }
 }
 \seealso{

@@ -236,7 +236,7 @@ set_api_key <- function(key) {
     hit <- .gsm_index_lookup(cache, gsm)
     if (!is.null(hit)) {
         assign(gsm, hit, envir = .singlet_gsm_parents)
-        message(sprintf("%s belongs to %s; using the %s bundle", gsm, hit, hit))
+        message(sprintf("%s belongs to %s", gsm, hit))
         return(hit)
     }
     base <- sub("/+$", "", .singlet_api_base())
@@ -282,7 +282,7 @@ set_api_key <- function(key) {
     }
     assign(gsm, gse, envir = .singlet_gsm_parents)
     .gsm_index_record(cache, gsm, gse)
-    message(sprintf("%s belongs to %s; using the %s bundle", gsm, gse, gse))
+    message(sprintf("%s belongs to %s", gsm, gse))
     gse
 }
 
@@ -362,7 +362,7 @@ set_api_key <- function(key) {
 #' Download a study for offline use and return its local path
 #'
 #' Mirrors a study's .s1 objects (the manifest, one \code{.s1} object per
-#' sample, and the vocabulary packs they use) from \url{https://data.singlet.bio}
+#' sample, and the vocabulary packs they use) from \code{https://data.singlet.bio}
 #' into the local cache, verifying each object against the manifest's sha256, and
 #' returns the path of the manifest. \code{\link{load}} then reads the local
 #' copies without the network. \code{singlet_download()} is the same function.
@@ -387,7 +387,7 @@ set_api_key <- function(key) {
 #'   \code{legacy = TRUE}, to the local \code{.singlet} file.
 #'
 #' @details
-#' Objects are fetched from \code{<base>/store/...}, where \code{<base>} is the
+#' Objects are fetched from \code{<base>/s1/...}, where \code{<base>} is the
 #' \code{SINGLET_DATA_BASE} environment variable (default
 #' \code{https://data.singlet.bio}; a value ending in \code{/data} is
 #' accepted). \code{GSM} accessions are resolved with the API named by
@@ -395,13 +395,12 @@ set_api_key <- function(key) {
 #' answer is saved in \code{gsm_parents.tsv} in the cache directory.
 #'
 #' @examples
-#' \dontrun{
-#' path <- singlet_download("GSE138867")
-#' sce <- singlet_load(path)           # reads the local copies
-#'
-#' # The legacy bundle, for modality-level access
-#' b <- singlet_download("GSE138867", legacy = TRUE)
-#' singlet_modalities(b)
+#' \donttest{
+#' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+#'   cache <- file.path(tempdir(), "singlet-example")
+#'   path <- singlet_download("GSE307528", cache_dir = cache)  # local manifest + sample objects
+#'   sce <- singlet_load(path, cache_dir = cache)              # reads the local copies
+#' }
 #' }
 #'
 #' @seealso \code{\link{load}}, \code{\link{singlet_study}}, \code{\link{singlet_modalities}}
@@ -445,7 +444,7 @@ singlet_download <- download
 #' one or more inputs that may be GEO accessions (\code{"GSE..."} or
 #' \code{"GSM..."}), local \code{.singlet} bundle paths, or a mix of these,
 #' and returns a single combined object. Accessions are downloaded (and
-#' cached) from \url{https://data.singlet.bio} on demand: only the sample
+#' cached) from \code{https://data.singlet.bio} on demand: only the sample
 #' members that gene-level counts need are fetched, with HTTP Range requests,
 #' and decoded once in C++; local paths are read directly. Multiple inputs are
 #' combined column-wise on their shared gene axis. \code{singlet_load()} is the
@@ -486,8 +485,8 @@ singlet_download <- download
 #' @param cell_type_level,cell_type_min_score Per-sample studies: the deepest
 #'   level of \code{colData$cell_type} (default 2, compartment and lineage) and
 #'   an extra minimum path score for it (default 0, none). See \code{\link{singlet_labels}}.
-#' @param include_unvalidated Per-sample studies: also keep the unvalidated
-#'   \code{qc_doublet_score} in \code{colData}.
+#' @param include_unvalidated Also keep the unvalidated \code{qc_doublet_score} in
+#'   \code{colData}; published Research Alpha objects never carry it (local outputs only).
 #' @return A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
 #'   \code{Seurat} object (when \code{as = "seurat"}) spanning all inputs.
 #'   For a per-sample study, \code{colData} holds the per-cell labels
@@ -504,7 +503,7 @@ singlet_download <- download
 #' @details
 #' Downloads honor three environment variables: \code{SINGLET_DATA_BASE}
 #' (the host serving the data, default \code{https://data.singlet.bio}; the per-sample format
-#' objects are fetched from \code{<base>/store/...}),
+#' objects are fetched from \code{<base>/s1/...}),
 #' \code{SINGLET_API_BASE} (used to resolve \code{GSM} accessions, default
 #' \code{https://singlet.bio/api}) and \code{SINGLET_CACHE_DIR} (the on-disk
 #' cache location).
@@ -514,21 +513,18 @@ singlet_download <- download
 #' nothing.
 #'
 #' @examples
+#' \donttest{
+#' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+#'   cache <- file.path(tempdir(), "singlet-example")
+#'   # One sample: resolves to its study (GSE307528) and keeps only its cells
+#'   sce <- singlet_load("GSM9226069", cache_dir = cache)
+#'   table(sce$cell_type)
+#' }
+#' }
 #' \dontrun{
-#' # One study by accession (downloaded + cached automatically)
-#' sce <- singlet_load("GSE138867")
-#'
-#' # One sample: resolves to GSE138867 and keeps only GSM4120733's cells
-#' sce <- singlet_load("GSM4120733")
-#'
-#' # Combine several studies into one object
+#' # Whole studies, combined on their shared gene axis (larger downloads)
 #' sce <- singlet_load(c("GSE138867", "GSE146974"))
-#'
-#' # Samples that were skipped for having no usable cells, and why
-#' S4Vectors::metadata(sce)$skipped_samples
-#'
-#' # A local bundle, returned as a Seurat object
-#' obj <- singlet_load("GSE138867.singlet", as = "seurat")
+#' obj <- singlet_load("GSE138867", as = "seurat")
 #' }
 #'
 #' @seealso \code{\link{read_singlet}}, \code{\link{find}},
@@ -580,7 +576,7 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
 
     # Read each study or bundle once, however many of its samples were asked for.
     units <- vapply(targets, function(t) {
-        if (!is.null(t$gse)) paste0("store:", t$gse)
+        if (!is.null(t$gse)) paste0("s1:", t$gse)
         else if (!is.null(t$manifest)) paste0("manifest:", t$manifest)
         else t$path
     }, character(1))
@@ -685,7 +681,7 @@ singlet_load <- load
 #'
 #' Query the Singlet atlas with a free-text description and receive matching
 #' GEO accessions. The query is sent to the Singlet search API
-#' (\url{https://singlet.bio/api}); pair the result with \code{\link{load}}
+#' (\code{https://singlet.bio/api}); pair the result with \code{\link{load}}
 #' (or use \code{\link{find_load}}) to pull the matching data.
 #' \code{singlet_find()} is the same function.
 #'

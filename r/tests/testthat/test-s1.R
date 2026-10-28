@@ -22,7 +22,7 @@ s1_root <- local({
         py <- Sys.getenv("SINGLET_PYTHON", Sys.which("python"))
         script <- normalizePath(file.path(testthat::test_path("..", "..", ".."), "tests", "python", "_s1_synth.py"), mustWork = FALSE)
         if (!nzchar(py) || !file.exists(script)) return(NA_character_)
-        out <- file.path(tempdir(), "store_synth")
+        out <- file.path(tempdir(), "s1_synth")
         res <- suppressWarnings(tryCatch(
             system2(py, c("-P", shQuote(script), shQuote(out)), stdout = TRUE, stderr = TRUE,
                     env = c(paste0("PYTHONPATH=", normalizePath(file.path(testthat::test_path("..", "..", ".."), "python"), mustWork = FALSE)))),
