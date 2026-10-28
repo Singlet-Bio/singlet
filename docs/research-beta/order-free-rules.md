@@ -1,0 +1,94 @@
+# Order-free pileup rules
+
+Status: spec, 2026-10-28. One shared spec for the CPU engine (`include/singlet/pileup/pileup_engine.h`, export, `src/pipeline/singlet.cpp`; branch `perf/bam-stream`, PR #63) and the W11 GPU pileup (PR #61). Supersedes the "canonical replacement" notes in `w2-task-order-independent-pileup.md` where they differ.
+
+## Principle
+
+Every output is a function of the **set** of alignments, never of the order in which records arrive. Where a choice exists, the rule is the one that is most defensible biologically, not the one that reproduces STAR, STARsolo or the old sorted path. A rule that is order-free but arbitrary (first read wins, lowest index wins) is acceptable only for choices that carry no biological meaning (row order of an output table).
+
+Order already does not matter in the stream for anything decided inside one read: STAR emits all alignments of a read together and in a fixed per-read order, independent of threads. What varies across threads and reruns is the order **between** reads. So the rules below are the ones that combine evidence across reads.
+
+Notation: a *molecule* is (cell barcode, UMI, gene) for counting and (cell barcode, UMI) for site-level evidence. `.1fq` input has no base qualities (`qual[0] == 0xff`), so no rule may depend on them.
+
+## R1. SNP allele per molecule: consensus vote
+
+Today: for each (barcode, SNP, UMI) the first read seen sets DP += 1 and AD += 1 iff that read carries ALT (`pileup_aligned_bases`, `snp_umi_dedup_`). When the reads of one molecule disagree at the site (sequencing error, PCR error in a late cycle, or a chimeric/barcode-collision molecule) the arrival order decides.
+
+Rule: collect, for every (barcode, SNP, UMI), the count of reads showing REF, ALT and other bases at the site. At finalize, per molecule:
+
+- strict majority REF: DP += 1;
+- strict majority ALT: DP += 1, AD += 1;
+- majority "other" (neither panel allele): no count (not evidence for either allele);
+- tie between the two most frequent of REF/ALT/other: the molecule is **ambiguous** and is excluded from both AD and DP; count it in `pileup_stats.json:snp_molecules_ambiguous` (and `snp_molecules_total`).
+- reads without a UMI: each read is its own molecule (one read, never a tie).
+
+Why: a molecule is one template; its reads are PCR copies of one allele, so the consensus is the maximum-likelihood allele under any per-read error rate below 0.5, and it is the standard for UMI data (UMI-tools/fgbio consensus, cellsnp-lite and Vireo's UMI mode count one allele per UMI). A tie carries no information about the template's allele; counting it either way, or as both, biases AD/DP toward whichever allele the tie-breaker favours, which distorts allelic ratios at heterozygous sites (ASE, donor genotyping). Excluding it costs only depth, and the counter makes the loss visible.
+
+Memory: one entry per covered (barcode, SNP, UMI) with three uint8 saturating counters, replacing the `snp_umi_dedup_` set (same key count). Order-free by construction (counts are commutative).
+
+## R2. mtDNA base counts: unchanged for now, consensus as a follow-on
+
+Today `pileup_mt_bases` counts every read base (no UMI collapse). That is order-free already. Molecule consensus (as R1, per chrM position) is the more correct estimator of heteroplasmy (it removes PCR-duplicate inflation; maegatk does this for MAESTER), but per-position-per-molecule state is ~90 entries per chrM molecule, of order 1 GB for a 2 M-chrM-read sample. Spec: implement after measuring memory against the 32 GB per-job budget; until then, per-read counts, documented as such in the mt outputs' provenance.
+
+## R3. Ambiguous multimappers
+
+Today: a multimapper whose alignments touch more than one gene is dropped from the count matrices (`resolve_mm` returns on `gene_ambiguous`). The EM rescue collects `AmbigRead{gene_a, gene_b}` with the first two genes seen, but `run_em_rescue` is never called: no output uses it, so the "first two genes" rule has no effect today.
+
+Rule: keep the count matrices on uniquely assigned molecules (current behaviour, order-free). If EM rescue is enabled later, it must take each read's **full candidate gene set** (all genes of all its alignments, sorted, deduplicated; reads with more than 16 candidates are dropped as uninformative), UMI-collapse per (barcode, UMI, candidate set), run the EM over equivalence classes with a fixed iteration order (classes sorted by their gene vector, genes in index order, fixed iteration count or convergence test on sorted data), and distribute each cell's class count with largest-remainder rounding (remainders tied by smaller gene index), which preserves the integer total.
+
+Why: dropping is conservative and unbiased for genes without paralogs; it is what STARsolo `--soloMultiMappers Unique` does. A two-gene truncation of the candidate set is never correct (it hands a 3-way ambiguous molecule to an arbitrary pair). The full set with EM is the alevin-fry/STARsolo `EM` model. Rounding per gene with a clamp (current `run_em_rescue`) can lose or add counts; largest remainder cannot.
+
+## R4. rRNA fraction: deterministic hash sample
+
+Today: every 1000th mapped read (`stats.mapped_reads % 1000 == 0`), so the sampled set depends on order; 16-23 hits of ~73,500 on GSM4006843.
+
+Rule: a read is sampled iff `hash64(qname) % 64 == 0` (the engine's `hash_qname`), counted once per read (primary or first alignment only). The detector itself is unchanged.
+
+Why: the rate is an estimate of a fraction; the right sample is a uniform one fixed by the read, not by its position in a stream. Counting all reads costs ~70 k-mer lookups per read on the serial pileup thread (several percent of pileup time with the current string-based detector), while 1/64 gives ~1.1 M reads per 70 M (standard error ~5% of a 0.03% fraction, versus ~23% today) at ~1/64 of that cost. If the detector is rewritten with packed k-mers, counting all reads becomes the rule.
+
+## R5. Strand orientation: protocol prior, confirmed by all informative reads
+
+Today: indexed BAM: 64 windows on 4 chromosomes; stream: the first 10,000 informative reads decide, and reads before the decision keep the starting orientation.
+
+Rule:
+1. The orientation comes from the protocol table (`known_protocols()` and the `.1fq` header, which already set `reverse_strand` per chemistry, e.g. 3' sense vs 5' antisense on the aligned cDNA read). Counting starts in that orientation and never changes mid-pass.
+2. The pass accumulates sense/antisense votes over **all** informative nuclear reads (already counted: `strand_sense`, `strand_antisense`).
+3. At the end: if the aggregate antisense share is above 0.6 (the existing `kStrandProbeReverse`), the protocol call was wrong for this library. The stream cannot be re-read, so the run exits with a dedicated code (`strand_contradiction`, recorded in `summary.json`) and the driver reruns the sample once with the orientation flipped (`--reverse-strand`) and records why. Between 0.4 and 0.6 the library is unstranded or mixed: keep the protocol orientation and flag `strand_unclear` in QC.
+
+Why: the protocol is known and is right for essentially every library in the atlas, so the prior is strong; a decision taken from the first 10,000 reads of a stream is a small, position-biased sample that only adds variance, and reads counted before a flip are counted in a wrong orientation. A full-data confirmation is free (the counters exist), and a rare, explicit rerun is cheaper than buffering every read's two candidate assignments for the whole pass.
+
+## R6. Candidate barcode universe
+
+Today (sorted path): pass-1 list of barcodes with >= 100 raw reads, replaced after alignment by the CB-tag scan (>= 5 primary CB records, count order, ties by hash-map insertion order). Stream (b237f57): pass-1 list with >= 5 raw reads, ties by barcode.
+
+Rule: the universe is every barcode with >= 5 reads in the complete pass-1 count of the `.1fq` (barcodes there are whitelist-exact), ordered by read count descending, ties by barcode string ascending. This is the barcode axis of every matrix and the input to cell calling and the ambient model.
+
+Why: it is decided before alignment from the full read set, so it is order-free and needs no BAM. A barcode with fewer than 5 reads carries no usable expression and adds nothing to the ambient profile beyond sampling noise, and 5 matches the threshold the sorted refresh used, so the universe is a superset of the old one (raw reads >= mapped CB records). Counting by reads rather than mapped records keeps it independent of the aligner. Cell calling (EmptyDrops-style, `called_v2`) is then a deterministic function of this universe and the counts.
+
+## R7. Canonical output order
+
+- Barcode axis: the R6 order everywhere (matrices, `cell_calls.tsv`, `cell_qc_metrics.tsv`, every per-barcode table).
+- Splice junctions: rows sorted by (contig index in the BAM header, donor, acceptor); `sj_names`, `sj_counts`, `sj_features`, `splice_events`, `splice_psi` all built from that order. Today rows are numbered first-seen.
+- Any other feature axis built from first-seen discovery (poly-A sites, mt indel events, non-host taxa, VDJ genes) is sorted by its natural key (coordinate, or stable reference ID) before export.
+- Floating-point reductions (EmptyDrops alpha, ambient model, demux VB, non-host EM) run over inputs in that canonical order, with a fixed partition when threaded, so results are bit-identical across thread counts.
+
+Why: row order carries no biology; a canonical order makes identity checkable with a byte compare and lets downstream code join outputs across samples by position.
+
+## Gates
+
+1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings).
+2. A shuffled-order test: the same unsorted STAR BAM fed to the serial pileup in three record orders (as written, `samtools collate`, coordinate-sorted) gives byte-identical outputs.
+3. Every difference from `prod/campaign`'s sorted output is listed by file, size and cause (rule R1-R7 or input difference), in `ws-w3b-bam-stream.md`.
+4. Real data only: GSM4006843 (3'), GSM7901264 (5'); the Kang pool for donor-SNP truth where it can be staged.
+
+## Status
+
+| rule | CPU engine | GPU (W11) |
+|---|---|---|
+| R1 SNP consensus | to implement | to implement |
+| R2 mt consensus | follow-on (memory first) | follow-on |
+| R3 multimappers | already order-free (unique only); EM unused | match unique-only |
+| R4 rRNA hash sample | to implement | to implement |
+| R5 strand | to implement | to implement |
+| R6 barcode universe | done in b237f57 (stream) | take the list from the CPU pass-1 |
+| R7 canonical order | to implement (junctions first) | to implement |
