@@ -44,7 +44,7 @@ the cell-table data frame returning a logical vector; or \code{NULL} for every c
 \item{cell_type_level, cell_type_min_score}{Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
 it (default 0, none); see \code{\link{singlet_labels}}.}
 
-\item{include_unvalidated}{Also keep \code{qc_doublet_score} (unvalidated) in \code{colData}.}
+\item{include_unvalidated}{Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).}
 }
 \value{
 A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named

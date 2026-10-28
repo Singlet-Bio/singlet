@@ -31,7 +31,7 @@ The path to the local manifest (\code{.../s1/m/<GSE>.json}) or, with
 }
 \description{
 Mirrors a study's .s1 objects (the manifest, one \code{.s1} object per
-sample, and the vocabulary packs they use) from \url{https://data.singlet.bio}
+sample, and the vocabulary packs they use) from \de{https://data.singlet.bio}
 into the local cache, verifying each object against the manifest's sha256, and
 returns the path of the manifest. \code{\link{load}} then reads the local
 copies without the network. \code{singlet_download()} is the same function.
@@ -42,7 +42,7 @@ instead (and its path returned); use this when you want to reach individual
 modalities with \code{\link{singlet_read}} or \code{\link{singlet_raw_counts}}.
 
 
-Objects are fetched from \code{<base>/store/...}, where \code{<base>} is the
+Objects are fetched from \code{<base>/s1/...}, where \code{<base>} is the
 \code{SINGLET_DATA_BASE} environment variable (default
 \code{https://data.singlet.bio}; a value ending in \code{/data} is
 accepted). \code{GSM} accessions are resolved with the API named by

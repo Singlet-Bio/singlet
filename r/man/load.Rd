@@ -69,8 +69,8 @@ whole and only subset, with a warning.}
 level of \code{colData$cell_type} (default 2, compartment and lineage) and
 an extra minimum path score for it (default 0, none). See \code{\link{singlet_labels}}.}
 
-\item{include_unvalidated}{Per-sample studies: also keep the unvalidated
-\code{qc_doublet_score} in \code{colData}.}
+\item{include_unvalidated}{Also keep the unvalidated \code{qc_doublet_score} in
+\code{colData}; published Research Alpha objects never carry it (local outputs only).}
 }
 \value{
 A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
@@ -91,7 +91,7 @@ The primary entry point for working with the Singlet atlas from R. Accepts
 one or more inputs that may be GEO accessions (\code{"GSE..."} or
 \code{"GSM..."}), local \code{.singlet} bundle paths, or a mix of these,
 and returns a single combined object. Accessions are downloaded (and
-cached) from \url{https://data.singlet.bio} on demand: only the sample
+cached) from \de{https://data.singlet.bio} on demand: only the sample
 members that gene-level counts need are fetched, with HTTP Range requests,
 and decoded once in C++; local paths are read directly. Multiple inputs are
 combined column-wise on their shared gene axis. \code{singlet_load()} is the
@@ -100,7 +100,7 @@ same function.
 \details{
 Downloads honor three environment variables: \code{SINGLET_DATA_BASE}
 (the host serving the data, default \code{https://data.singlet.bio}; the per-sample format
-objects are fetched from \code{<base>/store/...}),
+objects are fetched from \code{<base>/s1/...}),
 \code{SINGLET_API_BASE} (used to resolve \code{GSM} accessions, default
 \code{https://singlet.bio/api}) and \code{SINGLET_CACHE_DIR} (the on-disk
 cache location).

@@ -82,6 +82,7 @@ singlet_search_cells <- function(where = NULL, question = NULL, include_low_qc =
     out
 }
 
+#' @method print singlet_cell_search
 #' @export
 print.singlet_cell_search <- function(x, ...) {
     t <- x$totals
