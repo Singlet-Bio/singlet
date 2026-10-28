@@ -304,6 +304,8 @@ def run(cfg: Config, units: list[Unit], force: bool = False) -> None:
             continue
         log(f"{u.key}: parsing")
         c = parse(cfg, u)
+        if c.n == 0 or c.m == 0 or c.nnz == 0:
+            raise SystemExit(f"{u.key}: parsed an empty matrix ({c.m} x {c.n}, nnz {c.nnz}); the parser does not fit the file")
         save_canon(c, out)
         write_tsv([descriptors(c, u)], result_path(cfg, "stats", u))
         log(f"{u.key}: {c.m} genes x {c.n} cells, nnz {c.nnz}")

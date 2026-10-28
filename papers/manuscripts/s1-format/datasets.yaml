@@ -498,7 +498,7 @@ datasets:
     repository: GEO
     accession: GSE85241
     url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE85nnn/GSE85241/suppl/GSE85241_cellsystems_dataset_4donors_updated.csv.gz
-    format: dense_csv_genes_by_cells
+    format: dense_tsv_genes_by_cells_noindexhdr   # tab separated despite .csv; header has no gene field
   matrices: [{name: rna, value: umi}]
   license: public (GEO)
   verify: false   # URL checked live 2026-10-28
