@@ -108,3 +108,28 @@ instructed:
   short-gpu) then `m5_run.sbatch` (`M5RUNS` = variants, `MAXD` = distinct set size); best flags `--budget-a 1024 --budget-m 2048
   --budget-b 2048 --batch-a 262144 --batch-m 262144 --batch-b 65536`. Whole sample: `bench/gpu/m5/inject/inject_build.sbatch`,
   then `e2e.sbatch` (`SET`, `RUNS="ref ref2 verify gpu"`).
+
+## Draft for Zach: request to GVSU HPC (GPU profiling on Clipper)
+
+> Subject: Clipper GPU nodes: user access to GPU performance counters and Nsight Systems
+>
+> Hello, we run CUDA development jobs on Clipper's H100 NVL nodes (g050–g052, account debruinz) and need NVIDIA's profilers
+> to tune our kernels. Two things currently block them:
+>
+> 1. **GPU performance counters are restricted to root.** Nsight Compute (`ncu`) fails with ERR_NVGPUCTRPERM. Could the NVIDIA
+>    driver on the GPU nodes be loaded with `NVreg_RestrictProfilingToAdminUsers=0`, for example via
+>    `/etc/modprobe.d/nvidia-profiling.conf` containing `options nvidia NVreg_RestrictProfilingToAdminUsers=0`? This takes effect
+>    after a driver reload or reboot. NVIDIA documents it at https://developer.nvidia.com/ERR_NVGPUCTRPERM.
+> 2. **Nsight Systems (`nsys`) is not installed**, and the CUDA 12.4 devel container we use does not include it. Could Nsight
+>    Systems (2024.x or newer) be installed as a module, or could we have permission to install it ourselves?
+>
+> Also, CPU profiling with `perf` is blocked: `kernel.perf_event_paranoid=4` on the compute nodes. Setting it to 2 would allow
+> users to profile their own processes and nothing else.
+>
+> Separately, node c010 was drained after one of our jobs (789621) hung. The hang was in our software, and our job scripts now
+> carry hard timeouts and kill the whole process tree on exit. Could the node be returned to service?
+>
+> Thank you. Zach DeBruine
+
+Until then the evidence is in-kernel `clock64()` counters (`stitch.cuh`, M5CLK), CUDA events per lane, and STAR's
+`-DSTAR_PROFILE` per-phase counters (now including the output sub-phases).

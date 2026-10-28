@@ -25,6 +25,7 @@
 #include <cuda_runtime.h>
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
+#include <thrust/sort.h>
 #include "stitch.cuh"
 
 using namespace m5;
@@ -152,9 +153,10 @@ __global__ void k_p2(Params P, GenomeView g, u64 n, const Work<C>* work, const u
 }
 template <class C>
 __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* nEnt, const u64* base,
-                     const uint32_t* bits, uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap) {
-    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
-    if (k >= n) return;
+                     const uint32_t* bits, uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap, const uint32_t* perm) {
+    u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (t >= n) return;
+    u64 k = perm ? perm[t] : t;   // --bin: threads take the batch's reads in order of estimated cost (each read is independent)
     Work<C>& w = work[k];
     w.stepBudget = budget;
     u64 o = b0 + k;
@@ -166,6 +168,15 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     for (int c = 0; c < 8; c++) { atomicAdd(&g_clk[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
     atomicAdd(&g_scan, (unsigned long long)nEnt[k]);
 }
+// cost key of each read after phase 1, for --bin: windows, then SA entries to assign (reads that need no phase 3 first)
+template <class C>
+__global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, uint32_t* perm) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    key[k] = nEnt[k] ? ((u64)work[k].nW << 40) | min(nEnt[k], (u64)0xFFFFFFFFFFULL) : 0;
+    perm[k] = (uint32_t)k;
+}
+static bool g_bin = false;
 __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k < n) dst[k] = s[k];
@@ -183,6 +194,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     ReadBuf<C::LREAD>* dRbuf; CK(cudaMalloc(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>)));
     uint8_t* dBst; CK(cudaMalloc(&dBst, NB)); u64* dNent; CK(cudaMalloc(&dNent, NB * 8)); u64* dBase; CK(cudaMalloc(&dBase, NB * 8));
     u64 bitsCap = 1 << 20; uint32_t* dBits; CK(cudaMalloc(&dBits, bitsCap * 4));
+    u64* dKey; CK(cudaMalloc(&dKey, NB * 8)); uint32_t* dPerm; CK(cudaMalloc(&dPerm, NB * 4));
     fprintf(stderr, "lane %s (staged): %llu reads, batches of %llu, work %zu B/read (%.2f GB)\n", name, n, NB, sizeof(Work<C>),
             NB * (double)sizeof(Work<C>) / 1e9);
     cudaEvent_t q[4]; for (auto& e : q) cudaEventCreate(&e);
@@ -204,7 +216,11 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             CK(cudaMemsetAsync(dBits, 0, words * 4));
             k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
             cudaEventRecord(q[2]);
-            k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn);
+            if (g_bin) {
+                k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm);
+                thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
+            }
+            k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn, g_bin ? dPerm : nullptr);
             k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
             cudaEventRecord(q[3]);
             CK(cudaEventSynchronize(q[3])); CK(cudaGetLastError());
@@ -228,7 +244,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     CK(cudaMemcpy(L.status.data(), dSt, n, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.why.data(), dWhy, n, cudaMemcpyDeviceToHost));
     CK(cudaMemcpy(L.unmap.data(), dUn, n, cudaMemcpyDeviceToHost));
     cudaFree(dOut); cudaFree(dLen); cudaFree(dSt); cudaFree(dWhy); cudaFree(dUn); cudaFree(dWork); cudaFree(dRbuf);
-    cudaFree(dBst); cudaFree(dNent); cudaFree(dBase); cudaFree(dBits);
+    cudaFree(dBst); cudaFree(dNent); cudaFree(dBase); cudaFree(dBits); cudaFree(dKey); cudaFree(dPerm);
     return L;
 }
 
@@ -335,6 +351,7 @@ int main(int argc, char** argv) {
         else if (a == "--budget-b") budgetB = atoll(argv[++i]);
         else if (a == "--budget-m") budgetM = atoll(argv[++i]);
         else if (a == "--batch-m") nbM = atoll(argv[++i]);
+        else if (a == "--bin") g_bin = true;   // phase 3 threads take the reads of a batch sorted by window count / SA entries
         else if (a == "--no-mid") noMid = true;          // lanes A, B only
         else if (a == "--input") input = argv[++i];     // "count sequence" lines (uniq -c): map these instead of the truth reads
         else if (a == "--emit") emit = argv[++i];       // write (sequence, result) for the sequence cache preload (inject/)
