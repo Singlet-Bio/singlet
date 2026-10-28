@@ -23,6 +23,34 @@ Research track only: nothing here touches the CPU engine or the Beta freeze. The
 for 5′ samples; M7; nvCOMP ingest; demux (not needed until M5 is ~3× faster); CPU node-packing efficiency (single-sample
 core-s used, labelled modelled); metered power.
 
+## Overnight run (2026-10-28, 01:25–06:00): `singlet --engine gpu`
+
+PR against `prod/campaign`: branch `gpu/engine-gpu` (see the PR link in the parent's report). Decisions made without asking, as
+instructed:
+
+- **Integration through STAR's sequence cache.** The GPU maps every distinct cDNA sequence (dedup on the GPU with a byte-level
+  collision check, the M5 lane cascade, a host lane at STAR's limits) and fills STAR's cache before mapping; STAR and every other
+  stage are unchanged. Outputs are the CPU engine's by construction, and `SINGLET_STAR_SEQCACHE_VERIFY=1` checks it in the run.
+  Chosen over wiring the GPU pileup and non-host stages tonight: those need the M5 → record glue and engine refactoring that would
+  not have been ready and verified by 05:00.
+- **File-based decode with `--engine gpu`.** The default FIFO decode streams R2 to STAR, which cannot be read twice; the GPU path
+  forces the engine's existing file decode. Effect on outputs: provenance only (5′-probe sample count, a decode line in
+  `read_stats.tsv`).
+- **Optional build:** `SINGLET_ENGINE_GPU=AUTO|ON|OFF`, CUDA runtime linked statically, sm_80/sm_90, `-fmad=false`.
+- **Several samples per node:** an exclusive lock per GPU (named by PCI bus id), first free device or wait; any CUDA failure
+  releases the device and falls back to CPU mapping for that sample.
+- **Cache sizing** from the exact size of the GPU results (3×), replacing STAR's 4 GB default for `--engine gpu`.
+- **Measured tonight:** identity PASS three times on pbmc1k_v3 (61.1 M, 64.8 M, 64.8 M reads STAR-verified, 0 mismatches); on a
+  GPU node with 3 samples in flight, every data output identical to `--engine cpu` and **43% less CPU** (23.6 vs 41.1 core-s per M
+  read pairs); GPU prefill for pbmc1k_v3 76 s (mapping 16 s). A single sample is not faster yet (468 vs 418 s): the prefill is
+  serial before STAR. What binds the node is the CPU stages and per-sample memory (54–74 GB), not the GPU.
+- **Ingest format** (Sonnet subagent): `docs/research-beta/ingest-format.md`, `.1fg` with nvCOMP-decodable zstd chunks, GPU
+  reader 0.010–0.014 host core-s per M pairs (6–10× less than `.1fq`), decode identical on 188 M reads.
+- **Profilers:** Nsight Compute could not collect counters on Clipper's GPU nodes; Nsight Systems is not in the CUDA 12.4 image.
+  Evidence is in-kernel cycle counters and per-lane CUDA events.
+- **Cluster incident (CPU-baseline subagent):** a hung 8-copy packing run left node c010 drained ("Kill task failed"); it needs an
+  admin undrain.
+
 ## What changed in the design
 
 - **Identity is solved for mapping.** M5 reproduces STAR's mapping state byte for byte through windows, stitching, extension,
