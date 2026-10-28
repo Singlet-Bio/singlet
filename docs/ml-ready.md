@@ -83,4 +83,4 @@ python bench/stream/summarize.py --out docs/ml-ready/preliminary.json
   backward step on the laptop CPU, so the baseline reads a gene panel instead. On a GPU the full gene axis is practical.
 - **Index and manifests.** A few samples the cell index lists are not in the released manifests (withheld studies, excluded
   samples); the loader skips and counts them (12 of 827 in the training run).
-- **Machine-readable metadata.** The atlas and every study also publish MLCommons Croissant metadata on singlet.bio (CROISSANT_LINK).
+- **Machine-readable metadata.** The atlas and every study also publish MLCommons Croissant metadata on singlet.bio: the atlas at `https://singlet.bio/croissant.json`, a study at `https://singlet.bio/api/croissant/<GSE>`, a sample at `https://singlet.bio/api/croissant/<GSE>/<GSM>` (live once the website change is deployed).
