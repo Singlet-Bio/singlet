@@ -5762,40 +5762,53 @@ int main(int argc, char* argv[]) {
              thr_use_concat, thr_concat_segs, thr_concat_umi_start, thr_concat_umi_len]() {
             signal(SIGPIPE, SIG_IGN);  // prevent SIGPIPE if STAR exits before writer finishes
 
-            // FIX-FIFO-HANG: open write-only so the writer does NOT hold a read reference.
-            // Strategy: open O_RDONLY|O_NONBLOCK dummy first (completes immediately — the
-            // FIFO already has a write-end holder from mkfifo), then open O_WRONLY (blocks
-            // briefly until STAR opens the read end), then close the dummy so STAR is the
-            // SOLE reader.  When STAR dies, its fd is the last read ref → EPIPE on next
-            // fwrite() → write_ok=false → thread exits → join() returns.
+            // FIX-FIFO-HANG / FIX-FIFO-RACE: the writer must hold only write ends, so that
+            // STAR is the sole reader and its exit gives EPIPE (write_ok=false, thread
+            // exits, join() returns).  It must also not write before STAR has opened the
+            // read end: with no reader the first flush fails with EPIPE, the writer gives
+            // up, and STAR later opens an empty FIFO and maps 0 reads ("No reads
+            // processed").  The earlier dummy O_RDONLY|O_NONBLOCK reader made the
+            // O_WRONLY open return at once and was closed before STAR connected, which
+            // opened exactly that window whenever STAR started slowly.
             //
-            // The dummy open is O_NONBLOCK so it never hangs even if no reader arrives.
-            // The O_WRONLY open may block if STAR hasn't opened yet, but STAR opens its
-            // input FIFOs as part of its startup sequence which happens before any reads,
-            // so this is bounded and race-free on the normal path.
-            // Timeout guard: if STAR never starts, the SIGALRM watchdog below will _exit.
-            auto open_fifo_write_only = [](const std::string& path) -> int {
-                // Open a dummy read fd (O_NONBLOCK → immediate) so mkfifo open-counts are
-                // satisfied on both sides simultaneously.
-                int dummy = open(path.c_str(), O_RDONLY | O_NONBLOCK);
-                if (dummy < 0) {
-                    std::cerr << "[1fq-fifo] ERROR: dummy open " << path << ": "
-                              << strerror(errno) << "\n";
-                    return -1;
+            // So: open each FIFO O_WRONLY|O_NONBLOCK, which fails with ENXIO until a
+            // reader exists, retrying both FIFOs in one loop (a blocking open of R1
+            // would deadlock while STAR blocks opening R2 first), then clear O_NONBLOCK.
+            // STAR opens its read files while parsing parameters, before the genome
+            // load; the wait is capped, and the SIGALRM watchdog stays the backstop.
+            int r1_fd = -1, r2_fd = -1;
+            {
+                const auto t0 = std::chrono::steady_clock::now();
+                const auto cap = std::chrono::seconds(1800);
+                auto try_open = [](const std::string& path, int& fd) -> bool {
+                    if (fd >= 0) return true;
+                    int f = open(path.c_str(), O_WRONLY | O_NONBLOCK);
+                    if (f >= 0) {
+                        int fl = fcntl(f, F_GETFL);
+                        if (fl >= 0) fcntl(f, F_SETFL, fl & ~O_NONBLOCK);
+                        fd = f;
+                        return true;
+                    }
+                    if (errno != ENXIO && errno != EINTR) {
+                        std::cerr << "[1fq-fifo] ERROR: wronly open " << path << ": "
+                                  << strerror(errno) << "\n";
+                        fd = -2;  // hard error
+                    }
+                    return false;
+                };
+                while (true) {
+                    bool ok1 = try_open(thr_r1, r1_fd);
+                    bool ok2 = try_open(thr_r2, r2_fd);
+                    if (ok1 && ok2) break;
+                    if (r1_fd == -2 || r2_fd == -2) break;
+                    if (std::chrono::steady_clock::now() - t0 > cap) {
+                        std::cerr << "[1fq-fifo] ERROR: STAR did not open its input FIFOs within "
+                                  << cap.count() << " s\n";
+                        break;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
                 }
-                // Now open write-only (blocks until STAR opens read end, which it does
-                // immediately on startup).
-                int wfd = open(path.c_str(), O_WRONLY);
-                // Close dummy: STAR is now the sole read-reference holder.
-                close(dummy);
-                if (wfd < 0) {
-                    std::cerr << "[1fq-fifo] ERROR: wronly open " << path << ": "
-                              << strerror(errno) << "\n";
-                }
-                return wfd;
-            };
-            int r1_fd = open_fifo_write_only(thr_r1);
-            int r2_fd = open_fifo_write_only(thr_r2);
+            }
             if (r1_fd < 0 || r2_fd < 0) {
                 std::cerr << "[1fq-fifo] ERROR: open FIFOs failed\n";
                 if (r1_fd >= 0) close(r1_fd);
@@ -6087,6 +6100,7 @@ int main(int argc, char* argv[]) {
             // of the other, eliminating the blocking asymmetry.
             const uint32_t batch_size = static_cast<uint32_t>(n_thr);
             uint64_t reads_written = 0;
+            uint32_t blocks_written = 0;
             bool write_ok = true;
 
             for (uint32_t base = 0; base < total_blocks && write_ok; base += batch_size) {
@@ -6120,13 +6134,19 @@ int main(int argc, char* argv[]) {
                     if (write_ok &&
                         (fflush(r1_fp) != 0 || fflush(r2_fp) != 0))
                         write_ok = false;
-                    reads_written += fb.n_reads;
+                    // Count only blocks that reached the FIFOs.
+                    if (write_ok) { reads_written += fb.n_reads; ++blocks_written; }
+                    else std::cerr << "[1fq-fifo] ERROR: write to STAR failed at block "
+                                   << (base + i) << " after " << reads_written
+                                   << " reads: " << strerror(errno) << "\n";
                 }
             }
 
             fclose(r1_fp);
             fclose(r2_fp);
-            std::cerr << "[1fq-fifo] Pass 2 done: " << reads_written << " reads\n";
+            std::cerr << "[1fq-fifo] Pass 2 " << (write_ok ? "done" : "INCOMPLETE") << ": "
+                      << reads_written << " reads delivered (" << blocks_written << "/"
+                      << total_blocks << " blocks)\n";
         });  // end fifo_writer_thread lambda
 
         std::cerr << "[1fq-fifo] FIFO writer thread started\n";
