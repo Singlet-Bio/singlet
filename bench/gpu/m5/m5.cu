@@ -44,7 +44,7 @@ typedef Caps<      160,     8,  128,   128,  50,    4096, 20,  32,   64,    4096
 typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20> Heavy;   // host: STAR's limits (seedPerReadNmax,
                                                                                             // alignWindowsPerReadNmax, MAX_N_EXONS, alignTranscriptsPerWindowNmax)
 // ---------------------------------------------------------------------------------------------------------------------
-__device__ unsigned long long g_clk[4], g_scan;
+__device__ unsigned long long g_clk[8], g_scan;
 template <class C>
 __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
                           u64 tid, u64 nt, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap);
@@ -65,7 +65,7 @@ template <class C>
 __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
                           u64 tid, u64 nt, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap) {
     wp->wbEpoch = 0;
-    for (int c = 0; c < 4; c++) wp->clk[c] = 0;
+    for (int c = 0; c < 8; c++) wp->clk[c] = 0;
     wp->nScan = 0;
     for (u64 k = tid; k < n; k += nt) {
         u64 i = idx ? idx[k] : k;
@@ -73,7 +73,7 @@ __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, 
         Status s = mapRead(P, g, *wp, *bp, rb + roff[i], rlen[i], bl);
         status[k] = (uint8_t)s; why[k] = (uint8_t)wp->ov; outLen[k] = (uint16_t)bl.n; unmap[k] = (int8_t)wp->unmapType;
     }
-    for (int c = 0; c < 4; c++) atomicAdd(&g_clk[c], (unsigned long long)wp->clk[c]);
+    for (int c = 0; c < 8; c++) atomicAdd(&g_clk[c], (unsigned long long)wp->clk[c]);
     atomicAdd(&g_scan, (unsigned long long)wp->nScan);
 }
 
@@ -95,9 +95,9 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
                   CK(cudaMemset(dWork, 0, nt * sizeof(Work<C>))); }
     fprintf(stderr, "lane %s: %llu reads, %d blocks x %d threads, work %zu B/thread (%s, %.2f GB)\n", name, n, blocks, nthr, sizeof(Work<C>),
             local ? "local" : "global", nt * (double)sizeof(Work<C>) / 1e9);
-    unsigned long long clk[4] = {0};
+    unsigned long long clk[8] = {0};
     for (int r = 0; r < reps + 1; r++) {
-        unsigned long long z[4] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
+        unsigned long long z[8] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
         cudaEventRecord(e0);
         if constexpr (sizeof(Work<C>) < 200000) {
             if (local) k_lane<C, true><<<blocks, nthr>>>(P, D, dRb, dRoff, dRlen, dIdx, n, dWork, dRbuf, dOut, dLen, dSt, dWhy, dUn);
@@ -163,7 +163,7 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     if (s == Status::Ok && w.stitched && !assignHits(P, g, w, bits, base[k])) s = Status::Overflow;
     if (s == Status::Ok) s = mapFinish(P, g, w, rbuf[k], bl);
     status[k] = (uint8_t)s; why[o] = (uint8_t)w.ov; outLen[o] = (uint16_t)bl.n; unmap[o] = (int8_t)w.unmapType;
-    for (int c = 0; c < 4; c++) { atomicAdd(&g_clk[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
+    for (int c = 0; c < 8; c++) { atomicAdd(&g_clk[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
     atomicAdd(&g_scan, (unsigned long long)nEnt[k]);
 }
 __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
@@ -186,9 +186,9 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     fprintf(stderr, "lane %s (staged): %llu reads, batches of %llu, work %zu B/read (%.2f GB)\n", name, n, NB, sizeof(Work<C>),
             NB * (double)sizeof(Work<C>) / 1e9);
     cudaEvent_t q[4]; for (auto& e : q) cudaEventCreate(&e);
-    unsigned long long clk[4] = {0}, scan = 0; double phMs[3] = {0, 0, 0};
+    unsigned long long clk[8] = {0}, scan = 0; double phMs[3] = {0, 0, 0};
     for (int r = 0; r < reps + 1; r++) {
-        unsigned long long z[4] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
+        unsigned long long z[8] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
         double ph[3] = {0, 0, 0};
         cudaEventRecord(e0);
         for (u64 b0 = 0; b0 < n; b0 += NB) {
@@ -219,6 +219,8 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     { double t = (double)clk[0] + clk[1] + clk[2] + clk[3]; if (t > 0)
         fprintf(stderr, "  lane %s thread cycles: seeds %.1f%%, windows %.1f%%, stitching %.1f%%, select+encode %.1f%%; %.1f SA entries per read\n",
                 name, 100 * clk[0] / t, 100 * clk[1] / t, 100 * clk[2] / t, 100 * clk[3] / t, (double)scan / n); }
+    if (clk[2] > 0) fprintf(stderr, "  lane %s inside stitching: stitchAlignToTranscript %.1f%%, finalization %.1f%% (of which recording %.1f%%), copies %.1f%%\n",
+                            name, 100.0 * clk[4] / clk[2], 100.0 * clk[5] / clk[2], 100.0 * clk[7] / clk[2], 100.0 * clk[6] / clk[2]);
     L.ms = medianv(L.runs);
     L.phaseMs[0] = phMs[0]; L.phaseMs[1] = phMs[1]; L.phaseMs[2] = phMs[2];
     L.out.resize(n * (u64)C::NBLOB); L.status.resize(n); L.why.resize(n); L.len.resize(n); L.unmap.resize(n);

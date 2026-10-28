@@ -11,13 +11,13 @@ Research track only: nothing here touches the CPU engine or the Beta freeze. The
 
 | item | result | verdict | files |
 |---|---|---|---|
-| A. M5: STAR's mapping after the seeds, on the GPU | 1,991,926 / 1,991,926 distinct sequences byte-identical to STAR (its sequence-cache encoding: every transcript field, nW, nTr, best, unmapType); 2.36 M distinct reads/s per GPU (lanes A → M → B on the GPU, 0.27–0.37% on the host lane, same code) | **identity PASS; speed FAIL (4.2× short of 10 M)** | `bench/gpu/m5/`, `src/gpu/stardump/{ReadAlign_oneRead_dump.cpp,m5_dump.h}`, §12.12 |
+| A. M5: STAR's mapping after the seeds, on the GPU | 1,991,926 / 1,991,926 distinct sequences byte-identical to STAR (its sequence-cache encoding: every transcript field, nW, nTr, best, unmapType); 2.40 M distinct reads/s per GPU (lanes A → M → B on the GPU, 0.27–0.37% on the host lane, same code) | **identity PASS; speed FAIL (4.2× short of 10 M)** | `bench/gpu/m5/`, `src/gpu/stardump/{ReadAlign_oneRead_dump.cpp,m5_dump.h}`, §12.12 |
 | B. whole sample through the engine | pbmc1k_v3 (66.6 M pairs): 31.9 M distinct sequences mapped on the GPU in 17.1 s; engine fed through STAR's cache: **66,004,541 reads took the GPU's result, 0 STAR-verified mismatches**; every output equals a reference run up to the variation between two CPU-only runs | **PASS** | `bench/gpu/m5/inject/`, `results/e2e_*`, §12.14 |
 | B. annotation + pileup on the GPU | 9 of 9 outputs identical to the engine on 3 samples; 40–63 ms per sample | **PASS** (Sonnet subagent) | `bench/gpu/pileup/`, `results/pileup*.json`, §12.13 |
 | C. host: M13 non-host classify on the GPU | per-read results and all `nonhost/` files identical on 3 samples; index resident in HBM (8.9 s once vs 38–48 s per sample) | **PASS** (Sonnet subagent) | `bench/gpu/m13/`, `results/m13.json`, §12.16 |
-| C. ranked bottlenecks | node GPU-bound by M5 at 8.7–11.0 M pairs/s; host bound 24 (today) / 36 (steps 1+2) | M5 is #1 | §12.15 |
+| C. ranked bottlenecks | node GPU-bound by M5 at 8.7–11.2 M pairs/s; host bound 18 (today, incl. M5's host lane) / 24 (steps 1+2) | M5 is #1 | §12.15 |
 | C. cross-sample reuse | 49.5% of pbmc1k_v3's reads (19% of distinct sequences) already occur in GSM7656149 (same chemistry); 0 across read lengths | a campaign-wide result store is exact and cuts M5 work | `results/m5_crosssample.json`, §12.16 |
-| D. cost case | CPU baseline measured (c4a1be38 + PGO, 6 samples, 37.6 core-s per M pairs credited); a GPU node offsets **6.3–8.0 CPU nodes** (17.5 at the host bound); cloud $ per sample 2.0–2.6× lower on GPU (1.0–1.3× if cloud CPU cores are 2× faster than Clipper's 2019 Xeons); ACCESS credits 2.5–3.1× fewer | labelled per number | `bench/gpu/cost/`, `results/cost_case.json`, §12.16 |
+| D. cost case | CPU baseline measured (c4a1be38 + PGO, 6 samples, 37.6 core-s per M pairs credited); a GPU node offsets **6.3–8.1 CPU nodes** (13 at today's host bound); cloud $ per sample 2.0–2.6× lower on GPU (1.0–1.3× if cloud CPU cores are 2× faster than Clipper's 2019 Xeons); ACCESS credits 2.5–3.1× fewer | labelled per number | `bench/gpu/cost/`, `results/cost_case.json`, §12.16 |
 
 **Not done:** M5 at ≥ 10 M distinct reads/s; the M5 → pileup record glue (equivalence holds by composition); GPU read clipping
 for 5′ samples; M7; nvCOMP ingest; demux (not needed until M5 is ~3× faster); CPU node-packing efficiency (single-sample
@@ -30,7 +30,7 @@ core-s used, labelled modelled); metered power.
   path (the GPU fills STAR's cache; the engine is unchanged).
 - **The node is GPU-bound by M5**, not host-bound: the cost is window assignment and stitching for the 26% of sequences with more
   than 16 windows (multimappers). Lane A alone (all reads, ≤ 16 windows) runs at 6.4 M distinct/s.
-- **Host steps 1 and 2 are shown exact** (M13), so the host bound is 36 M pairs/s per node; host work is not the constraint now.
+- **Host steps 1 and 2 are shown exact** (M13), so the host bound is 24 M pairs/s per node with M5's host lane counted; host work is not the constraint now.
 - **Cross-sample result reuse** is a real, exact lever for same-chemistry samples.
 - **CPU-engine finding (outside W11):** the non-host EM depends on the order of its input reads, which multithreaded STAR leaves
   nondeterministic (iteration count 458 vs 462 between runs with identical inputs). Sorting the EM's reads would fix it.
@@ -41,7 +41,7 @@ core-s used, labelled modelled); metered power.
 
 1. **M5 speed:** warp-parallel windows in lanes M and B (two passes: each window's max finalized score is independent of
    recording, so a prefix max gives STAR's maxScoreMate per window); compact per-read state in lane A; overlap the lanes; a
-   campaign-wide result store keyed by sequence (genome + parameters). Target ≥ 24 M pairs/s per node (the host bound).
+   campaign-wide result store keyed by sequence (genome + parameters). Target ≥ 18–24 M pairs/s per node (the host bound), and a smaller host lane.
 2. **M5 → pileup glue** with an order key for the multimapper ties; then one fused GPU pass per batch.
 3. **GPU read clipping** (STAR's ClipMate) so 5′ samples can run.
 4. CPU node packing (finish `bench/gpu/cost/run_pack.sbatch` on a free short-cpu node) and metered power; re-run `cost_model.py

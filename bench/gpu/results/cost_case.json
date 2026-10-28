@@ -43,15 +43,15 @@
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
-   "gpu_s_per_sample_best_2M_set_job789812": {
-    "value": 13.5,
+   "gpu_s_per_sample_best_2M_set_job789830": {
+    "value": 13.27,
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
    "gpu_node_host_core_s": {
-    "value": 180.6,
+    "value": 233.4,
     "label": "derived",
-    "note": "W after the pileup + ingest"
+    "note": "W after the pileup + ingest + M5 host lane (pbmc1k_v3 rate)"
    }
   },
   "GSM5411066": {
@@ -85,15 +85,15 @@
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
-   "gpu_s_per_sample_best_2M_set_job789812": {
-    "value": 11.66,
+   "gpu_s_per_sample_best_2M_set_job789830": {
+    "value": 11.47,
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
    "gpu_node_host_core_s": {
-    "value": 98.1,
+    "value": 153.3,
     "label": "derived",
-    "note": "W after the pileup + ingest"
+    "note": "W after the pileup + ingest + M5 host lane (pbmc1k_v3 rate)"
    }
   },
   "GSM7901264": {
@@ -127,15 +127,15 @@
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
-   "gpu_s_per_sample_best_2M_set_job789812": {
-    "value": 20.25,
+   "gpu_s_per_sample_best_2M_set_job789830": {
+    "value": 19.91,
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
    "gpu_node_host_core_s": {
-    "value": 129.7,
+    "value": 209.2,
     "label": "derived",
-    "note": "W after the pileup + ingest"
+    "note": "W after the pileup + ingest + M5 host lane (pbmc1k_v3 rate)"
    }
   },
   "GSM7036403": {
@@ -169,15 +169,15 @@
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
-   "gpu_s_per_sample_best_2M_set_job789812": {
-    "value": 14.19,
+   "gpu_s_per_sample_best_2M_set_job789830": {
+    "value": 13.96,
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
    "gpu_node_host_core_s": {
-    "value": 253.1,
+    "value": 341.6,
     "label": "derived",
-    "note": "W after the pileup + ingest"
+    "note": "W after the pileup + ingest + M5 host lane (pbmc1k_v3 rate)"
    }
   },
   "GSM6470208": {
@@ -211,15 +211,15 @@
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
-   "gpu_s_per_sample_best_2M_set_job789812": {
-    "value": 15.74,
+   "gpu_s_per_sample_best_2M_set_job789830": {
+    "value": 15.48,
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
    "gpu_node_host_core_s": {
-    "value": 281.8,
+    "value": 378.3,
     "label": "derived",
-    "note": "W after the pileup + ingest"
+    "note": "W after the pileup + ingest + M5 host lane (pbmc1k_v3 rate)"
    }
   },
   "GSM7656149": {
@@ -253,15 +253,15 @@
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
-   "gpu_s_per_sample_best_2M_set_job789812": {
-    "value": 57.58,
+   "gpu_s_per_sample_best_2M_set_job789830": {
+    "value": 56.62,
     "label": "projected",
     "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
    },
    "gpu_node_host_core_s": {
-    "value": 717.2,
+    "value": 926.0,
     "label": "derived",
-    "note": "W after the pileup + ingest"
+    "note": "W after the pileup + ingest + M5 host lane (pbmc1k_v3 rate)"
    }
   }
  },
@@ -296,7 +296,7 @@
    "label": "modelled (packing 1.0)"
   },
   "gpu_node_host_bound_M_pairs_per_s": {
-   "value": 24.29,
+   "value": 17.99,
    "label": "derived",
    "note": "step 0 (today's host callers)"
   },
@@ -323,7 +323,7 @@
      "label": "projected"
     },
     "gpu_node_host_core_hours_per_sample": {
-     "value": 0.0769,
+     "value": 0.1038,
      "label": "derived"
     },
     "cpu_nodes_offset_per_gpu_node": {
@@ -379,51 +379,51 @@
      "note": "no metered power for either node; both GPU and 6230R node figures are estimates"
     }
    },
-   "best_2M_set_job789812": {
+   "best_2M_set_job789830": {
     "gpu_node_gpu_bound_M_pairs_per_s": {
-     "value": 11.04,
+     "value": 11.22,
      "label": "projected"
     },
     "gpu_node_M_pairs_per_s": {
-     "value": 11.04,
+     "value": 11.22,
      "label": "projected"
     },
     "gpu_node_samples_per_hour": {
-     "value": 325.0,
+     "value": 330.5,
      "label": "projected"
     },
     "gpu_node_hours_per_sample": {
-     "value": 0.00308,
+     "value": 0.00303,
      "label": "projected"
     },
     "gpu_hours_per_sample": {
-     "value": 0.00615,
+     "value": 0.00605,
      "label": "projected"
     },
     "gpu_node_host_core_hours_per_sample": {
-     "value": 0.0769,
+     "value": 0.1038,
      "label": "derived"
     },
     "cpu_nodes_offset_per_gpu_node": {
-     "value": 7.97,
+     "value": 8.1,
      "label": "projected"
     },
     "usd_per_sample_cloud_on_demand": {
      "value": {
       "central": {
-       "gpu_node_usd_per_sample": 0.0246,
+       "gpu_node_usd_per_sample": 0.0241,
        "cpu_usd_per_sample": 0.0637,
-       "cpu_over_gpu": 2.6
+       "cpu_over_gpu": 2.64
       },
       "low": {
-       "gpu_node_usd_per_sample": 0.0159,
+       "gpu_node_usd_per_sample": 0.0157,
        "cpu_usd_per_sample": 0.0521,
-       "cpu_over_gpu": 3.27
+       "cpu_over_gpu": 3.33
       },
       "high": {
-       "gpu_node_usd_per_sample": 0.0423,
+       "gpu_node_usd_per_sample": 0.0416,
        "cpu_usd_per_sample": 0.1139,
-       "cpu_over_gpu": 2.69
+       "cpu_over_gpu": 2.73
       }
      },
      "label": "modelled"
@@ -431,13 +431,13 @@
     "cpu_speed_sensitivity": {
      "value": {
       "cpu_usd_per_sample_if_cores_2x_faster": 0.0319,
-      "cpu_over_gpu": 1.3
+      "cpu_over_gpu": 1.32
      },
      "label": "modelled"
     },
     "access_credits_per_sample": {
      "value": {
-      "gpu": 0.412,
+      "gpu": 0.405,
       "cpu": 1.275
      },
      "label": "modelled",
@@ -445,11 +445,11 @@
     },
     "energy_kwh_per_sample": {
      "value": {
-      "gpu_node": 0.0067,
+      "gpu_node": 0.0066,
       "cpu_epyc_power_per_core": 0.0067,
-      "cpu_over_gpu_epyc_power": 1.0,
+      "cpu_over_gpu_epyc_power": 1.02,
       "cpu_6230r_power": 0.0172,
-      "cpu_over_gpu_6230r_power": 2.56,
+      "cpu_over_gpu_6230r_power": 2.6,
       "usd_gpu": 0.001,
       "usd_cpu_6230r": 0.0025
      },
@@ -459,49 +459,49 @@
    },
    "target_m5_at_host_bound": {
     "gpu_node_gpu_bound_M_pairs_per_s": {
-     "value": 24.29,
+     "value": 17.99,
      "label": "target"
     },
     "gpu_node_M_pairs_per_s": {
-     "value": 24.29,
+     "value": 17.99,
      "label": "projected"
     },
     "gpu_node_samples_per_hour": {
-     "value": 715.5,
+     "value": 529.9,
      "label": "projected"
     },
     "gpu_node_hours_per_sample": {
-     "value": 0.0014,
+     "value": 0.00189,
      "label": "projected"
     },
     "gpu_hours_per_sample": {
-     "value": 0.0028,
+     "value": 0.00377,
      "label": "projected"
     },
     "gpu_node_host_core_hours_per_sample": {
-     "value": 0.0769,
+     "value": 0.1038,
      "label": "derived"
     },
     "cpu_nodes_offset_per_gpu_node": {
-     "value": 17.54,
+     "value": 12.99,
      "label": "projected"
     },
     "usd_per_sample_cloud_on_demand": {
      "value": {
       "central": {
-       "gpu_node_usd_per_sample": 0.0112,
+       "gpu_node_usd_per_sample": 0.0151,
        "cpu_usd_per_sample": 0.0637,
-       "cpu_over_gpu": 5.72
+       "cpu_over_gpu": 4.23
       },
       "low": {
-       "gpu_node_usd_per_sample": 0.0072,
+       "gpu_node_usd_per_sample": 0.0098,
        "cpu_usd_per_sample": 0.0521,
-       "cpu_over_gpu": 7.2
+       "cpu_over_gpu": 5.33
       },
       "high": {
-       "gpu_node_usd_per_sample": 0.0192,
+       "gpu_node_usd_per_sample": 0.026,
        "cpu_usd_per_sample": 0.1139,
-       "cpu_over_gpu": 5.92
+       "cpu_over_gpu": 4.38
       }
      },
      "label": "modelled"
@@ -509,13 +509,13 @@
     "cpu_speed_sensitivity": {
      "value": {
       "cpu_usd_per_sample_if_cores_2x_faster": 0.0319,
-      "cpu_over_gpu": 2.85
+      "cpu_over_gpu": 2.11
      },
      "label": "modelled"
     },
     "access_credits_per_sample": {
      "value": {
-      "gpu": 0.187,
+      "gpu": 0.253,
       "cpu": 1.275
      },
      "label": "modelled",
@@ -523,12 +523,12 @@
     },
     "energy_kwh_per_sample": {
      "value": {
-      "gpu_node": 0.0031,
+      "gpu_node": 0.0041,
       "cpu_epyc_power_per_core": 0.0067,
-      "cpu_over_gpu_epyc_power": 2.21,
+      "cpu_over_gpu_epyc_power": 1.63,
       "cpu_6230r_power": 0.0172,
-      "cpu_over_gpu_6230r_power": 5.64,
-      "usd_gpu": 0.0004,
+      "cpu_over_gpu_6230r_power": 4.18,
+      "usd_gpu": 0.0006,
       "usd_cpu_6230r": 0.0025
      },
      "label": "modelled",

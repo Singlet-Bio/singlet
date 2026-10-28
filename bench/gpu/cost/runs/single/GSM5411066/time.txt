@@ -1,0 +1,23 @@
+	Command being timed: "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-w3 /mnt/projects/debruinz_project/debruinz/singlet/data/bam-stream/GSM5411066/sample.1fq --ref-base /mnt/projects/debruinz_project/cellarium/reference --genome-dir /mnt/projects/debruinz_project/cellarium/reference/GRCm39-2024-A/star_2.7.11b --exons /mnt/projects/debruinz_project/cellarium/reference/GRCm39-2024-A/genes/genes.gtf --out-prefix /tmp/debruinz-w11c-789534/out/ --threads 4 --pipeline --output-format 1pz --bam-sort-mode disk --genome-shared off"
+	User time (seconds): 1374.86
+	System time (seconds): 264.25
+	Percent of CPU this job got: 237%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 11:30.60
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 53529800
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 17
+	Minor (reclaiming a frame) page faults: 37526294
+	Voluntary context switches: 2428354
+	Involuntary context switches: 7125
+	Swaps: 0
+	File system inputs: 107120944
+	File system outputs: 134015976
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

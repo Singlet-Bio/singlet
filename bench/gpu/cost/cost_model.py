@@ -36,8 +36,9 @@ W_HOST = {"GSM4006843": 174.9, "GSM5411066": 92.2, "GSM7901264": 121.2, "GSM7036
 D_FRAC = {"GSM4006843": None, "GSM5411066": 0.392, "GSM7901264": None, "GSM7036403": 0.298, "GSM6470208": 0.303, "GSM7656149": 0.515}
 D_POOLED_3P = 0.474            # pbmc1k_v3 (3' v3, measured) used where d is not measured
 # ---- measured (section 12.12): M5 on pbmc1k_v3, M distinct reads/s per GPU
-M5_RATE = {"whole_sample_job789771": 1.86, "best_2M_set_job789812": 2.36}
+M5_RATE = {"whole_sample_job789771": 1.86, "best_2M_set_job789830": 2.40}
 INGEST = 0.085                 # core-s per M pairs (section 12.10)
+HEAVY = 2.2 * 24 / 66.6        # M5's host lane: 2.2 s on 24 threads per 66.6 M pairs (whole sample, job 789771): an upper bound
 GPU_NODE = {"gpus": 2, "host_cores": 55}
 PILEUP_M6_S = 0.1              # GPU s per sample, annotation + pileup + M6 (sections 12.8, 12.13): 40-63 ms + ~40 ms
 
@@ -85,8 +86,8 @@ for s, (mp, us, sy, wall) in CPU.items():
         rec[f"gpu_s_per_sample_{k}"] = {"value": round(gs, 2), "label": "projected",
                                         "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"}
         tot["gpu_s"][k] += gs
-    hc = W_HOST[s] + INGEST * mp
-    rec["gpu_node_host_core_s"] = {"value": round(hc, 1), "label": "derived", "note": "W after the pileup + ingest"}
+    hc = W_HOST[s] + (INGEST + HEAVY) * mp
+    rec["gpu_node_host_core_s"] = {"value": round(hc, 1), "label": "derived", "note": "W after the pileup + ingest + M5 host lane (pbmc1k_v3 rate)"}
     out["samples"][s] = rec
     tot["pairs"] += mp; tot["cpu_cs"] += cs; tot["cpu_cs_cred"] += cred; tot["host_cs"] += hc
 

@@ -220,12 +220,17 @@ template <class C> struct Work {
     OvWhy ov;
     bool stitched; u64 nEntries;
     u64 nSteps, stepBudget;    // stitching recursion steps of this read; budget (0 = none): over it, the read goes to the next lane
-    long long clk[4];          // cycles: seeds, windows + assignment, stitching, selection + encoding (device only)
+    long long clk[8];          // cycles: seeds, windows + assignment, stitching, selection + encoding; inside stitching:
+                               // [4] stitchAlignToTranscript, [5] finalization, [6] transcript copies, [7] recording (device only)
 };
 #ifdef __CUDA_ARCH__
 #define M5CLK(w, k, t) do { long long t1_ = clock64(); (w).clk[k] += t1_ - (t); (t) = t1_; } while (0)
+#define M5T(t) long long t = clock64()
+#define M5ADD(w, k, t) do { (w).clk[k] += clock64() - (t); } while (0)
 #else
 #define M5CLK(w, k, t) do { } while (0)
+#define M5T(t) do { } while (0)
+#define M5ADD(w, k, t) do { } while (0)
 #endif
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1055,6 +1060,11 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
     }
     trA.maxScore = Score;   // + variationAdjust = 0 (no variation)
     typedef typename Work<C>::T T;
+    M5T(trec);
+    struct RecClk { Work<C>& w; long long t; HD ~RecClk() { M5ADD(w, 7, t); } };
+#ifdef __CUDA_ARCH__
+    RecClk rc_{w, trec};
+#endif
     if (Score + P.outFilterMultimapScoreRange >= w.slot[w.slotP[0]].maxScore
         || (trA.iFrag >= 0 && Score + P.outFilterMultimapScoreRange >= w.maxScoreMate[trA.iFrag])) {
         uint iTr = 0;
@@ -1114,18 +1124,23 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
         if (F.phase == 0) {
             if (iA >= nA && F.tR2 == 0) { d--; continue; }
             if (iA >= nA) {
+                M5T(tf);
                 w.fin.copyFrom(trA);
-                if (!finalizeTranscript(P, gv, w, F.Score, F.tR2, F.tG2, w.fin, R, WA)) return false;
+                bool okf = finalizeTranscript(P, gv, w, F.Score, F.tR2, F.tG2, w.fin, R, WA);
+                M5ADD(w, 5, tf);
+                if (!okf) return false;
                 d--; continue;
             }
             // include this align
             int dScore = 0;
             T& trAi = w.stack[d + 1];
-            trAi.copyFrom(trA);
+            { M5T(tcp); trAi.copyFrom(trA); M5ADD(w, 6, tcp); }
             if (trA.nExons > 0) {
                 bool ovEx = false;
+                M5T(tsa);
                 dScore = stitchAlignToTranscript<T, C::NEX>(F.tR2, F.tG2, WA[iA][WA_rStart], WA[iA][WA_gStart], WA[iA][WA_Length], WA[iA][WA_iFrag],
                                                             WA[iA][WA_sjA], P, R, gv, &trAi, w.outFilterMismatchNmaxTotal, ovEx);
+                M5ADD(w, 4, tsa);
                 if (ovEx) { w.ov = OV_EXONS; return false; }
             } else {
                 trAi.exons[0][EX_R] = trAi.rStart = WA[iA][WA_rStart];
@@ -1154,7 +1169,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
             F.phase = 2;
             if (WA[iA][WA_Anchor] != 2 || trA.nAnchor > 0) {
                 T& next = w.stack[d + 1];
-                next.copyFrom(trA);
+                { M5T(tcp); next.copyFrom(trA); M5ADD(w, 6, tcp); }
                 Frame& N = fr[d + 1];
                 N.Score = F.Score; N.tR2 = F.tR2; N.tG2 = F.tG2; N.phase = 0;
                 d++;

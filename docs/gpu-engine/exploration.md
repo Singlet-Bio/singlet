@@ -1141,10 +1141,10 @@ tool in `src/gpu/stardump/`. First pass: `bench/gpu/results/{m1,m2,m10}.json` (p
 | M4 certificates | 0 wrong; 16–23% of calls resolved | 0 mismatches; ≥ 50% certified | **PASS on exactness, FAIL on coverage**: dropped from the plan (§12.7) |
 | M6 dedup + count + UMI | 1.6–2.0 G pairs/s; matrices identical to the CPU engine; identical across batch sizes and runs | ≥ 1 G pairs/s; identical | **PASS** |
 | M8 ingest | 12–15 M pairs/s per decode thread, 0.085 core-s/M (0.175 with CRC); 50 M/s needs 5–6 threads | ≥ 50 M/s with ≤ 3 cores | **FAIL on cores**, irrelevant at the 14–18 M pairs/s per GPU the host allows (§12.10) |
-| M5 STAR mapping after the seeds, on the GPU | 100% of 1,991,926 distinct sequences byte-identical (STAR's own cache encoding); whole sample: 66.0 M reads took the GPU's result with 0 STAR-verified mismatches; 2.36 M distinct reads/s per GPU | 100% identical; ≥ 10 M distinct reads/s | **PASS on identity, FAIL on speed (4.2× short)**: the node's bottleneck (§12.12, §12.14) |
+| M5 STAR mapping after the seeds, on the GPU | 100% of 1,991,926 distinct sequences byte-identical (STAR's own cache encoding); whole sample: 66.0 M reads took the GPU's result with 0 STAR-verified mismatches; 2.40 M distinct reads/s per GPU | 100% identical; ≥ 10 M distinct reads/s | **PASS on identity, FAIL on speed (4.2× short)**: the node's bottleneck (§12.12, §12.14) |
 | GPU annotation + pileup | 9 of 9 outputs identical on 3 samples; 40–63 ms per sample | identical | **PASS** (§12.13) |
 | M13 non-host classify | per-read results and all `nonhost/` files identical on 3 samples; 35–79 ms per sample; index resident (8.9 s load) | identical | **PASS** (§12.16) |
-| cost: CPU nodes offset per GPU node | 6.3–8.0 (17.5 at the host bound); cloud $ per sample 2.0–2.6× lower on GPU (1.0–1.3× if cloud CPU cores are 2× faster) | — | §12.16 |
+| cost: CPU nodes offset per GPU node | 6.3–8.1 (13 at today's host bound); cloud $ per sample 2.0–2.6× lower on GPU (1.0–1.3× if cloud CPU cores are 2× faster) | — | §12.16 |
 
 ### 12.1 M1: random-access roofline (H100 NVL, job 789081; knee 789085)
 
@@ -1638,14 +1638,15 @@ marks, then stitching, selection, encoding). The scan went from >50% of lane tim
 | + staged scan, bigger batches | 100% / 100% | 2,041 | 0.98 |
 | + step budget | 100% / 100% | 1,157 | 1.72 |
 | + lane M (cascade A → M → B → host) | 100% / 100% | 1,014 | 1.96 |
-| + batches of 262k (A, M) and 65k (B) reads (job 789812) | **100% / 100%** | **844** | **2.36** |
+| + batches of 262k (A, M) and 65k (B) reads (job 789812) | 100% / 100% | 844 | 2.36 |
+| + batches of 524k (A), 393k (M) (job 789830) | **100% / 100%** | **829** | **2.40** |
 
 STAR-unmapped reads (151,095) and mapped reads (1,840,831) are both 100% identical in every version. The whole sample
 (31,870,813 distinct sequences, 66.6 M reads; job 789771) maps in 17.1 s of GPU time (1.86 M distinct reads/s, 3.9 M reads/s).
 
 **Where the time is now:** lane A runs at 6.4 M distinct reads/s (313 ms for all 2 M reads), close to the 10 M requirement; lanes
 M and B (the 26% of sequences with more than 16 windows: multimappers whose anchors map up to winAnchorMultimapNmax = 50 times)
-take 70% of GPU time. **M5 is below the ≥ 10 M distinct reads/s requirement (2.36 M), by 4.2×.** What would close it, in order of
+take 70% of GPU time. **M5 is below the ≥ 10 M distinct reads/s requirement (2.40 M), by 4.2×.** Its host lane is not free: 2.2 s on 24 host threads per whole sample (0.79 core-s per M pairs, an upper bound), which counts in the host bound (§12.15). What would close it, in order of
 expected gain: windows of a read stitched in parallel across a warp (exact with two passes: each window's maximum finalized score
 is independent of recording, so a prefix max gives STAR's maxScoreMate at each window's start); compact transcripts (32-bit rows)
 and per-read state in shared memory; running the M/B lanes concurrently with lane A of the next batch; a cross-sample result
@@ -1724,21 +1725,21 @@ Capacity of each stage for one Clipper GPU node (2 × H100 NVL, 56 cores), in M 
 
 | rank | stage | where | capacity per node | basis | status |
 |---|---|---|---|---|---|
-| 1 | **M5: seeds → windows → stitching → selection** | GPU | **7.8** (3.9 per GPU; whole sample, job 789771); **9.9** with the larger batches of job 789812 (2.36 M distinct/s on the 2 M set) | measured (§12.12) | **the bottleneck**: 70% of it in lanes M and B (reads with > 16 windows) |
-| 2 | host callers + export (W = 2.18 core-s/M), 55 cores | host | 25 (step 0) / 28 (step 1) / 36 (step 2) / 83 (step 3) | measured (§12.9) | not binding until M5 is 3.2× faster |
+| 1 | **M5: seeds → windows → stitching → selection** | GPU | **7.8** (3.9 per GPU; whole sample, job 789771); **11.2** with the larger batches of job 789830 (2.40 M distinct/s on the 2 M set) | measured (§12.12) | **the bottleneck**: 70% of it in lanes M and B (reads with > 16 windows) |
+| 2 | host callers + export (W = 2.18 core-s/M) + ingest + M5's host lane (0.79), 55 cores | host | 18 (step 0) / 20 (step 1) / 24 (steps 1+2) / 39 (step 3) | measured (§12.9, §12.12) | binding once M5 is ~1.6× faster |
 | 3 | records host→device (pileup input), pageable copies | PCIe | ~70 per GPU as measured (0.8 s per 61 M records); > 100 pinned | measured (§12.13), projected | move to pinned, overlapped buffers |
 | 4 | ingest: `.1fq` decode + pack + H2D | host | 0.085 core-s/M: 0.7 cores at 7.8 M/s | measured (§12.10) | fine |
 | 5 | annotation + pileup + M6 collapse | GPU | > 1,000 | measured (§12.13, §12.8) | negligible |
 
-- The node is **GPU-bound at 7.8–9.9 M pairs/s**: below the 27–36 M pairs/s host bound and the ≥ 20 M target, which therefore
-  holds only as a host-side capacity until M5 improves by about 2× (to 20 M) or 2.8× (to the step-1 host bound).
+- The node is **GPU-bound at 8.7–11.2 M pairs/s** (pooled over the 6 cost samples; 7.8–9.9 on pbmc1k_v3). The host bound, now
+  including M5's host lane, is 18 M pairs/s today and 24 with host steps 1+2, so the ≥ 20 M target needs both M5 ×1.8 and steps 1+2.
 - Ranked M5 levers (all exact): (a) warp-parallel windows in lanes M and B with the two-pass maxScoreMate (70% of M5 time);
   (b) compact transcripts and shared-memory state in lane A (6.4 M distinct/s alone); (c) lanes M/B overlapped with lane A of
   the next batch (tails); (d) cross-sample result reuse (§12.16), −19% of distinct sequences for a same-chemistry sample now,
   more as a campaign accumulates results.
 - Host levers: step 1 (per-node non-host indices, resident in HBM in M13: 8.9 s once instead of 38–48 s per sample) and step 2
-  (M13, bit-identical, §12.16) are both shown; together they take W from 2.18 to 1.43 core-s per M pairs (host bound 36 M pairs/s
-  per node). They matter only once M5 passes ~24 M pairs/s per node.
+  (M13, bit-identical, §12.16) are both shown; together they take W from 2.18 to 1.43 core-s per M pairs (host bound 24 M pairs/s
+  per node with ingest and M5's host lane). A smaller host lane (fewer reads past lane B) raises it further.
 
 ### 12.16 M13, cross-sample reuse, and the cost case
 
@@ -1774,33 +1775,35 @@ would help both pipelines). Six samples, 733.4 M read pairs:
 | | CPU node (52 cores) | GPU node (2 × H100 NVL), M5 as measured on the whole sample | same, M5 at its best measured rate | target: M5 at the host bound |
 |---|---|---|---|---|
 | core-s per M read pairs (credited) | 37.55 measured (37.87 uncredited; 23.5–44.3 per sample) | host 2.27 (W + ingest) | 2.27 | 2.27 |
-| node throughput, M read pairs/s | 1.39 (cores / core-s; packing efficiency 1.0: single-sample runs; the node-packing measurement had not landed at this stop) | 8.71 (GPU-bound) | 11.04 (GPU-bound) | 24.3 (host-bound) |
-| samples/hour per node (mix of 6, 122 M pairs average) | 40.8 | 256 | 325 | 717 |
-| core-hours per sample | 1.275 | 0.077 host | 0.077 | 0.077 |
-| GPU-hours per sample | — | 0.0078 | 0.0062 | 0.0028 |
-| **CPU nodes offset per GPU node** | — | **6.3** | **8.0** | **17.5** |
-| $ per sample, cloud on-demand (central: $3.99/H100-h, $0.05/core-h) | $0.064 | $0.031 (CPU/GPU 2.05×) | $0.025 (2.6×) | $0.011 (5.7×) |
-| same, low / high price sets | $0.052 / $0.114 | $0.020 / $0.054 | $0.016 / $0.042 | — |
-| if cloud CPU cores are 2× faster than the 6230R | $0.032 | CPU/GPU 1.0× | 1.3× | 2.9× |
-| ACCESS credits per sample (Anvil: 1 per core-h; ~67 per GPU-h, derived) | 1.28 | 0.52 | 0.41 | 0.19 |
-| energy per sample, kWh (PUE 1.56; both nodes estimated, not metered) | 0.0172 (6230R node ~450 W) | 0.0085 (~1,400 W) | 0.0067 | 0.0031 |
+| node throughput, M read pairs/s | 1.39 (cores / core-s; packing efficiency 1.0: single-sample runs; the node-packing measurement had not landed at this stop) | 8.71 (GPU-bound) | 11.22 (GPU-bound) | 18.0 (host-bound, today's host work) |
+| samples/hour per node (mix of 6, 122 M pairs average) | 40.8 | 256 | 331 | 530 |
+| core-hours per sample | 1.275 | 0.104 host (W, ingest, M5 host lane) | 0.104 | 0.104 |
+| GPU-hours per sample | — | 0.0078 | 0.0061 | 0.0038 |
+| **CPU nodes offset per GPU node** | — | **6.3** | **8.1** | **13.0** |
+| $ per sample, cloud on-demand (central: $3.99/H100-h, $0.05/core-h) | $0.064 | $0.031 (CPU/GPU 2.05×) | $0.024 (2.6×) | $0.015 (4.2×) |
+| same, low / high price sets | $0.052 / $0.114 | $0.020 / $0.054 | $0.016 / $0.042 | $0.010 / $0.026 |
+| if cloud CPU cores are 2× faster than the 6230R | $0.032 | CPU/GPU 1.0× | 1.3× | 2.1× |
+| ACCESS credits per sample (Anvil: 1 per core-h; ~67 per GPU-h, derived) | 1.28 | 0.52 | 0.41 | 0.25 |
+| energy per sample, kWh (PUE 1.56; both nodes estimated, not metered) | 0.0172 (6230R node ~450 W) | 0.0085 (~1,400 W) | 0.0066 | 0.0041 |
 
 Labels (in the JSON, per number): CPU core-s and wall are **measured**; CPU node throughput is **derived** with packing efficiency
 1.0 (**modelled** until the packing run lands); GPU node rates are **projected** (M5's rate is measured on pbmc1k_v3 and applied to
 each sample's distinct sequences; d is measured for four of the six samples); dollars, credits and energy are **modelled**.
 
 What the table says:
-- **A GPU node replaces 6–8 Clipper CPU nodes today, with byte-identical outputs**, and ~17 once M5 reaches the host bound. The node
-  is M5-bound, so every M5 gain moves the ratio until ~24 M pairs/s.
+- **A GPU node replaces 6–8 Clipper CPU nodes today, with byte-identical outputs**, and ~13 once M5 reaches today's host bound
+  (18 M pairs/s; ~17 at 24 with host steps 1+2). The node is M5-bound, so every M5 gain moves the ratio until then.
 - **In cloud dollars the GPU route is 2.0–2.6× cheaper per sample today** at central on-demand prices, 2.6–3.3× at the cheapest
   H100 NVL price found. The honest caveat is the CPU core: the baseline ran on 2019 Xeons, and cloud core-hour prices buy faster
-  cores; at 2× faster cores the routes cost the same today and the GPU is 2.9× cheaper at the target.
+  cores; at 2× faster cores the routes cost the same today and the GPU is 2.1× cheaper at the target.
 - In ACCESS credits (Anvil), 2.5–3.1× fewer credits per sample on GPU at the derived GPU rate.
+- The GPU node's host cores are mostly idle at today's M5 rate (~0.1 core-hours per sample of 55 cores), so it could also carry
+  CPU work; the comparison does not credit that.
 - Energy: ~2–2.6× less per sample on the GPU node with consistent (old-Xeon) CPU power; unmetered on both sides.
 
 ### 12.17 Open items
 
-- **M5 speed** (the node's bottleneck, 2.36 M distinct reads/s per GPU against the 10 M requirement): warp-parallel windows in
+- **M5 speed** (the node's bottleneck, 2.40 M distinct reads/s per GPU against the 10 M requirement; and its host lane, 0.79 core-s per M pairs): warp-parallel windows in
   lanes M and B with the two-pass maxScoreMate; compact per-read state in lane A; overlap of lanes; a campaign-wide result store
   (§12.16). Nsight Compute could not profile on the Clipper GPU nodes (the application aborted under the profiler; likely
   counter permissions), so the hot spots come from in-kernel cycle counters.
