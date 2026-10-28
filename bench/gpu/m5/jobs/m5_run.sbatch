@@ -53,7 +53,14 @@ IFS='|' read -ra VARS <<< "${M5RUNS:-m5:}"
 for vi in "${!VARS[@]}"; do
   BIN=${VARS[$vi]%%:*}; ARGS=${VARS[$vi]#*:}; SUF=""; [ $vi -gt 0 ] && SUF="_v$vi"
   echo "=== variant $vi: $BIN $ARGS"
-  apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=24 $W/jobs/w11/bin/$BIN --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3     --json $OUT/m5_$LABEL$SUF.json $ARGS ${M5ARGS:-} 2>&1 | grep -v "^  seq\|^  star\|^  ours" | grep -v "^DIFF" | tail -14
+  PROF=""
+  if [ -n "${NSYS:-}" ]; then   # Nsight Systems timeline + kernel summary (no performance-counter permission needed)
+    NS=$(apptainer exec $IMG bash -c 'ls /usr/local/cuda/bin/nsys /opt/nvidia/nsight-systems*/bin/nsys /opt/nvidia/nsight-systems*/*/bin/nsys 2>/dev/null | head -1')
+    echo "nsys=$NS"; [ -n "$NS" ] && PROF="$NS profile -t cuda --stats=true -o $SCR/nsys_$vi -f true"
+  fi
+  apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=24 $PROF $W/jobs/w11/bin/$BIN --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3     --json $OUT/m5_$LABEL$SUF.json $ARGS ${M5ARGS:-} 2>&1 | grep -v "^  seq\|^  star\|^  ours" | grep -v "^DIFF" | tail -14
   echo "m5 exit=${PIPESTATUS[0]}"
+  [ -f $SCR/nsys_$vi.nsys-rep ] && { apptainer exec -B $SCR $IMG $NS stats -r cuda_gpu_kern_sum,cuda_api_sum -f csv -o $SCR/nsys_$vi $SCR/nsys_$vi.nsys-rep >/dev/null 2>&1;
+    cp $SCR/nsys_${vi}_cuda_gpu_kern_sum.csv $OUT/m5_${LABEL}_nsys_kern_v$vi.csv 2>/dev/null; cp $SCR/nsys_$vi.nsys-rep $OUT/m5_${LABEL}_v$vi.nsys-rep 2>/dev/null; }
 done
 echo "[t] total $(( $(date +%s) - T0 )) s"
