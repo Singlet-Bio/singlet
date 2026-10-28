@@ -76,7 +76,7 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // ------------------------------------------------------------------------------------------------------------------------
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
-struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const uint32_t *off, *n; int ntid; };
+struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
 struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; };
 struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi; };     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
@@ -209,8 +209,10 @@ __global__ void k_lists(const SigRec* S, int nS, const AlnRec* A, const uint32_t
                     for (uint32_t k = lo; k < n && sp[k] < rpos + len; k++) {
                         int qp = qpos + (sp[k] - rpos); uint8_t code = aligned_base(seq, sg.seq_off, sg.rlen, qp, rev);
                         if (P.snp_skip_n && code == 15) continue;     // the engine skips a base with quality < min_baseq; in some samples that is exactly the N bases (extractor checks every base, meta snp_skip_n)
-                        bool isalt = nt16_char(code) == SN.alt[SN.off[a.tid] + k];
-                        if (FILL) o_snp[wsnp + nsnp] = (SN.idx[SN.off[a.tid] + k] << 1) | (isalt ? 1u : 0u);
+                        // base class as SnpConsensus::base_class (order-free-rules R1): ALT if base == alt, REF if base == ref, else OTHER
+                        const char bc = nt16_char(code);
+                        const uint32_t cls = bc == SN.alt[SN.off[a.tid] + k] ? 1u : (bc == SN.ref[SN.off[a.tid] + k] ? 0u : 2u);
+                        if (FILL) o_snp[wsnp + nsnp] = (SN.idx[SN.off[a.tid] + k] << 2) | cls;
                         nsnp++; }
                 }
                 if (mt_ok) for (int j = 0; j < len; j++) {
@@ -240,7 +242,7 @@ __global__ void k_fill_hilo(const ReadRec* R, int n, const uint32_t* off, const 
                             uint64_t* hi, uint32_t* lo, uint8_t* alt) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) return;
     uint32_t c = list_cnt[x.sig], b = list_off[x.sig], o = off[r]; uint32_t u = umi_b5(x.umi3, ulen);
-    for (uint32_t k = 0; k < c; k++) { uint32_t e = lists[b + k]; hi[o + k] = ((uint64_t)x.bc << hb) | (is_snp ? (e >> 1) : e); lo[o + k] = u; if (is_snp) alt[o + k] = (uint8_t)(e & 1); }
+    for (uint32_t k = 0; k < c; k++) { uint32_t e = lists[b + k]; hi[o + k] = ((uint64_t)x.bc << hb) | (is_snp ? (e >> 2) : e); lo[o + k] = u; if (is_snp) alt[o + k] = (uint8_t)(e & 3); }
 }
 __global__ void k_fill_mt(const ReadRec* R, const AlnRec* A, const SigRec* S, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, uint64_t* key) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) return;
@@ -266,6 +268,23 @@ __global__ void k_runflag(const uint64_t* hs, const uint32_t* lo, const uint32_t
     first[i] = (i == 0) || hs[i] != hs[i - 1] || lo[ord[i]] != lo[ord[i - 1]]; }
 __global__ void k_snpval(const uint32_t* first, const uint32_t* ord, const uint8_t* alt, int n, uint64_t* v) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) v[i] = first[i] ? (1ull | ((uint64_t)alt[ord[i]] << 32)) : 0ull; }
+// R1 consensus (order-free-rules.md; SnpConsensus in umi_dedup.h): per molecule (cell, SNP, UMI) the reads' REF / ALT / OTHER counts,
+// each saturating at 255; a strict maximum decides (REF: DP; ALT: DP + AD; OTHER: nothing); a tie at the top is ambiguous (nothing).
+__global__ void k_snpcls(const uint32_t* ord, const uint8_t* cls, int n, uint64_t* v) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) v[i] = 1ull << (16 * cls[ord[i]]); }
+__global__ void k_molkey(const uint32_t* first, const uint32_t* seg, const uint64_t* hs, int n, uint64_t* mk) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n && first[i]) mk[seg[i] - 1] = hs[i]; }
+__global__ void k_moldec(const uint64_t* mv, int m, uint64_t* val, unsigned long long* stat) {   // stat: molecules, ambiguous, other
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    uint32_t c[3]; for (int k = 0; k < 3; k++) c[k] = min((uint32_t)((mv[i] >> (16 * k)) & 0xFFFF), 255u);
+    int best = 0; for (int k = 1; k < 3; k++) if (c[k] > c[best]) best = k;
+    bool tie = false; for (int k = 0; k < 3; k++) if (k != best && c[k] == c[best]) tie = true;
+    if (tie) { val[i] = 0; atomicAdd(&stat[1], 1ull); return; }
+    if (best == 2) { val[i] = 0; atomicAdd(&stat[2], 1ull); return; }
+    atomicAdd(&stat[0], 1ull);
+    val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull); }
+static bool g_snp_first = false;   // --snp-first: the sorted path's first-read rule (prod/campaign), for the original gate
+static unsigned long long g_snp_stat[3] = {0, 0, 0};
 struct SumU64 { __host__ __device__ uint64_t operator()(const uint64_t& a, const uint64_t& b) const { return a + b; } };
 struct SumU32 { __host__ __device__ uint32_t operator()(const uint32_t& a, const uint32_t& b) const { return a + b; } };
 
@@ -369,9 +388,24 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     if (n_snpt > 0) {
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sn_hi, sn_lo, n_snpt, cb + sb, ub5, &hs); const int G = (n_snpt + TB - 1) / TB;
         uint32_t* first = A.alloc<uint32_t>(n_snpt); k_runflag<<<G, TB>>>(hs, sn_lo, ord, n_snpt, first);
-        uint64_t* v = A.alloc<uint64_t>(n_snpt); k_snpval<<<G, TB>>>(first, ord, sn_alt, n_snpt, v);
         sn_u = A.alloc<uint64_t>(n_snpt); sn_v = A.alloc<uint64_t>(n_snpt); int* dn = A.alloc<int>(4);
-        cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, hs, sn_u, v, sn_v, dn, SumU64(), n_snpt); });
+        uint64_t* v = A.alloc<uint64_t>(n_snpt);
+        if (g_snp_first) {
+            k_snpval<<<G, TB>>>(first, ord, sn_alt, n_snpt, v);
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, hs, sn_u, v, sn_v, dn, SumU64(), n_snpt); });
+        } else {
+            k_snpcls<<<G, TB>>>(ord, sn_alt, n_snpt, v);
+            uint32_t* seg = A.alloc<uint32_t>(n_snpt);
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::InclusiveSum(t, b, first, seg, n_snpt); });
+            int m = 0; CK(cudaMemcpy(&m, seg + n_snpt - 1, 4, cudaMemcpyDeviceToHost));
+            uint64_t* mk = A.alloc<uint64_t>(m); uint64_t* mv = A.alloc<uint64_t>(m); uint32_t* segu = A.alloc<uint32_t>(m);
+            k_molkey<<<G, TB>>>(first, seg, hs, n_snpt, mk);
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, seg, segu, v, mv, dn, SumU64(), n_snpt); });
+            uint64_t* val = A.alloc<uint64_t>(m); unsigned long long* st = A.alloc<unsigned long long>(4); CK(cudaMemset(st, 0, 32));
+            k_moldec<<<(m + TB - 1) / TB, TB>>>(mv, m, val, st);
+            CK(cudaMemcpy(g_snp_stat, st, 24, cudaMemcpyDeviceToHost));
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, mk, sn_u, val, sn_v, dn, SumU64(), m); });
+        }
         CK(cudaMemcpy(&n_snu, dn, 4, cudaMemcpyDeviceToHost));
     }
     T.mark("6.snp");
@@ -396,7 +430,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         for (int i = 0; i < n_sju; i++) out->sj.push_back(T3{(uint32_t)(k[i] >> jb), (uint32_t)(k[i] & ((1ull << jb) - 1)), std::min(c[i], 65535u)}); }
     if (n_snu > 0) { std::vector<uint64_t> k(n_snu), v(n_snu); CK(cudaMemcpy(k.data(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.data(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
         for (int i = 0; i < n_snu; i++) { T3 a{(uint32_t)(k[i] >> sb), (uint32_t)(k[i] & ((1ull << sb) - 1)), 0}; uint32_t dp = (uint32_t)(v[i] & 0xFFFFFFFFu), ad = (uint32_t)(v[i] >> 32);
-            T3 d = a; d.val = std::min(dp, 255u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 255u); out->snp_ad.push_back(a); } } }
+            if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 255u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 255u); out->snp_ad.push_back(a); } } }
     if (n_mtu > 0) { std::vector<uint64_t> k(n_mtu); std::vector<uint32_t> c(n_mtu); CK(cudaMemcpy(k.data(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
         for (int i = 0; i < n_mtu;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
             uint64_t base = k[i] >> 1; uint64_t tot = 0, rv = 0; int j = i;
@@ -431,7 +465,9 @@ int main(int argc, char** argv) {
     std::string rec, dump, label = "pileup", json; int reps = 3; double arena_gb = 80;
     for (int i = 1; i < argc; i++) { std::string a = argv[i]; auto nx = [&]() { if (i + 1 >= argc) die("missing value"); return std::string(argv[++i]); };
         if (a == "--rec") rec = nx(); else if (a == "--dump") dump = nx(); else if (a == "--label") label = nx(); else if (a == "--json") json = nx(); else if (a == "--reps") reps = atoi(nx().c_str());
-        else if (a == "--arena-gb") arena_gb = atof(nx().c_str()); else die(("unknown arg " + a).c_str()); }
+        else if (a == "--arena-gb") arena_gb = atof(nx().c_str());
+        else if (a == "--snp-first") g_snp_first = true;   // prod/campaign's first-read rule instead of the R1 consensus
+        else die(("unknown arg " + a).c_str()); }
     cudaDeviceProp prop; CK(cudaGetDeviceProperties(&prop, 0)); fprintf(stderr, "device %s, %d SMs\n", prop.name, prop.multiProcessorCount);
     Par par = load_par(dump + "/params.txt"); Anno an = load_anno(dump + "/anno.bin"); CpuTruth tr = load_cpu_truth(dump + "/truth.bin"); auto chroms = read_lines(dump + "/chroms.txt");
     { uint32_t mx = 0; for (auto& v : an.snp) for (auto& sr : v) mx = std::max(mx, sr.idx + 1); par.n_snps = std::max(par.n_snps, mx); }
@@ -452,9 +488,9 @@ int main(int argc, char** argv) {
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
     in.EX = upload_tree(A, an.ex); in.IN = upload_tree(A, an.in); in.e2g = to_dev(A, an.e2g); in.i2g = to_dev(A, an.i2g); in.gstr = to_dev(A, an.gstr);
     in.ne2g = (uint32_t)an.e2g.size(); in.ni2g = (uint32_t)an.i2g.size(); in.ngstr = (uint32_t)an.gstr.size();
-    { std::vector<int32_t> P; std::vector<uint32_t> I, off(an.snp.size()), n(an.snp.size()); std::vector<char> alt;
-      for (size_t t = 0; t < an.snp.size(); t++) { off[t] = (uint32_t)P.size(); n[t] = (uint32_t)an.snp[t].size(); for (auto& s : an.snp[t]) { P.push_back(s.pos); I.push_back(s.idx); alt.push_back(s.alt); } }
-      in.SN.pos = to_dev(A, P); in.SN.idx = to_dev(A, I); in.SN.alt = to_dev(A, alt); in.SN.off = to_dev(A, off); in.SN.n = to_dev(A, n); in.SN.ntid = (int)an.snp.size(); }
+    { std::vector<int32_t> P; std::vector<uint32_t> I, off(an.snp.size()), n(an.snp.size()); std::vector<char> alt, ref;
+      for (size_t t = 0; t < an.snp.size(); t++) { off[t] = (uint32_t)P.size(); n[t] = (uint32_t)an.snp[t].size(); for (auto& s : an.snp[t]) { P.push_back(s.pos); I.push_back(s.idx); alt.push_back(s.alt); ref.push_back(s.ref); } }
+      in.SN.pos = to_dev(A, P); in.SN.idx = to_dev(A, I); in.SN.alt = to_dev(A, alt); in.SN.ref = to_dev(A, ref); in.SN.off = to_dev(A, off); in.SN.n = to_dev(A, n); in.SN.ntid = (int)an.snp.size(); }
     size_t anno_bytes = A.mark();
     cudaEventRecord(e0);
     in.S = to_dev(A, hS); in.Al = to_dev(A, hA); in.ops = to_dev(A, hO); in.seq = to_dev(A, hQ); in.R = to_dev(A, hR);
@@ -488,6 +524,7 @@ int main(int argc, char** argv) {
             else if (j >= sc.size() || (i < sg.size() && sg[i] < sc[j])) { c_sj.only_gpu++; i++; } else { c_sj.only_cpu++; j++; } } }
     std::vector<std::array<uint32_t, 4>> ig = g.indels, ic = tr.indels; std::sort(ig.begin(), ig.end()); std::sort(ic.begin(), ic.end()); bool ind_same = ig == ic;
     auto show = [&](const char* n, const Cmp& c) { fprintf(stderr, "equiv %-10s gpu nnz %lld cpu nnz %lld identical %lld only_gpu %lld only_cpu %lld value_diff %lld sum gpu %llu cpu %llu -> %s\n", n, c.gpu_nnz, c.cpu_nnz, c.identical, c.only_gpu, c.only_cpu, c.value_diff, c.gpu_sum, c.cpu_sum, is_identical(c) ? "IDENTICAL" : "DIFFERENT"); };
+    if (!g_snp_first) printf("SNP consensus (R1): %llu molecules counted, %llu ambiguous (ties), %llu other-majority\n", g_snp_stat[0], g_snp_stat[1], g_snp_stat[2]);
     show("exon", c_exon); show("intron", c_intr); show("ambiguous", c_amb); show("junctions", c_sj); show("snp_ad", c_ad); show("snp_dp", c_dp); show("mt", c_mt); show("mt_rev", c_mtr);
     fprintf(stderr, "equiv mt_indels  gpu %zu cpu %zu -> %s;  junction names unparsed %lld; deterministic across runs %s\n", ig.size(), ic.size(), ind_same ? "IDENTICAL" : "DIFFERENT", bad_names, deterministic ? "yes" : "NO");
     // ---------------- report ----------------

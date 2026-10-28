@@ -60,8 +60,23 @@ static void finalize(Group& g) {
 
 int main(int argc, char** argv) {
     if (argc < 4) { fprintf(stderr, "usage: extract BAM DUMPDIR OUTDIR [--threads N]\n"); return 1; }
-    std::string bam = argv[1], dd = argv[2], od = argv[3]; int thr = 8;
-    for (int i = 4; i < argc; i++) if (!strcmp(argv[i], "--threads") && i + 1 < argc) thr = atoi(argv[++i]);
+    std::string bam = argv[1], dd = argv[2], od = argv[3]; int thr = 8; bool cb_from_cr = false;
+    for (int i = 4; i < argc; i++) {
+        if (!strcmp(argv[i], "--threads") && i + 1 < argc) thr = atoi(argv[++i]);
+        // the unsorted stream (PR #63): STAR writes no CB; the barcode is CR unless CR has an N or UR has an N or is a homopolymer
+        // (pileup_engine.h inline_scan_cb_from_cr)
+        else if (!strcmp(argv[i], "--cb-from-cr")) cb_from_cr = true;
+    }
+    auto cb_of = [&](bam1_t* r) -> const char* {
+        if (!cb_from_cr) { uint8_t* t = bam_aux_get(r, "CB"); return t ? bam_aux2Z(t) : nullptr; }
+        uint8_t* ct = bam_aux_get(r, "CR"); uint8_t* ut = bam_aux_get(r, "UR");
+        if (!ct || !ut) return nullptr;
+        const char* cr = bam_aux2Z(ct); const char* ur = bam_aux2Z(ut);
+        if (!cr || !ur || ur[0] == ' ') return nullptr;
+        for (const char* q = cr; *q; ++q) if (*q == 'N') return nullptr;
+        bool homo = true;
+        for (const char* q = ur; *q; ++q) { if (*q == 'N') return nullptr; if (*q != ur[0]) homo = false; }
+        return homo ? nullptr : cr; };
     std::vector<std::string> bcs; { std::ifstream f(dd + "/barcodes.txt"); std::string l; while (std::getline(f, l)) if (!l.empty()) bcs.push_back(l); }
     int min_baseq = 10; { std::ifstream f(dd + "/params.txt"); std::string k; long v; while (f >> k >> v) if (k == "min_baseq") min_baseq = (int)v; }
     std::unordered_map<std::string, int32_t> bcmap; bcmap.reserve(bcs.size() * 3);
@@ -81,8 +96,8 @@ int main(int argc, char** argv) {
         if (b->core.flag & BAM_FUNMAP) { n_unmap++; continue; }
         if (b->core.flag & BAM_FSUPPLEMENTARY) { n_supp++; continue; }
         bool sec = (b->core.flag & BAM_FSECONDARY) != 0;
-        uint8_t* cbt = bam_aux_get(b, "CB"); if (!cbt) { n_nocb++; continue; }
-        int32_t bc = lookup(bam_aux2Z(cbt)); if (bc < 0) { n_badcb++; continue; }
+        const char* cbs = cb_of(b); if (!cbs || cbs[0] == '-') { n_nocb++; continue; }
+        int32_t bc = lookup(cbs); if (bc < 0) { n_badcb++; continue; }
         int nh = 1; if (uint8_t* t = bam_aux_get(b, "NH")) { nh = (int)bam_aux2i(t); if (nh < 1) nh = 1; }
         AlnTmp a; a.tid = b->core.tid; a.pos = (int32_t)b->core.pos; a.flags = (uint8_t)(((b->core.flag & BAM_FREVERSE) ? 1 : 0) | (sec ? 0 : 2)); a.mapq = b->core.qual;
         const uint32_t* cg = bam_get_cigar(b); a.ops.assign(cg, cg + b->core.n_cigar);
