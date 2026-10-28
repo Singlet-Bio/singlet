@@ -2,8 +2,8 @@
 """Baseline: a cell-type classifier trained on cells streamed from data.singlet.bio, scored on held-out studies.
 
 The cells come from :class:`singlet.torch.AtlasCells` (HTTP range reads; nothing is downloaded to disk). Splits are held out by
-study (``study_split``): no study gives cells to both training and test. The model reads log1p(CP10k) counts of the full gene
-axis through an ``EmbeddingBag`` (a sparse first layer), then a hidden layer and one softmax head per Cell Ontology level
+study (``study_split``): no study gives cells to both training and test. The model reads log1p(CP10k) values of a panel of the most
+variable genes (chosen from a pilot of training samples only), then two hidden layers and one softmax head per Cell Ontology level
 (1 compartment, 2 lineage, 3 cell type). Targets are the Research Alpha per-cell labels at each level (the CL path of the
 labeller's call), so the scores measure how well a model trained on streamed atlas cells reproduces the atlas labels on studies it
 never saw. They are not accuracy against author annotations; the labeller's own accuracy against those is documented separately.
@@ -56,6 +56,10 @@ def main(argv=None) -> int:
     ap.add_argument("--cap-test", type=int, default=300, help="max cells per test sample")
     ap.add_argument("--batch", type=int, default=512)
     ap.add_argument("--hidden", type=int, default=256)
+    ap.add_argument("--panel", type=int, default=4096, help="most variable genes the model reads")
+    ap.add_argument(
+        "--pilot-samples", type=int, default=40, help="training samples the panel is chosen from"
+    )
     ap.add_argument("--lr", type=float, default=2e-3)
     ap.add_argument("--prefetch", type=int, default=4, help="reader threads per worker process")
     ap.add_argument("--workers", type=int, default=8, help="DataLoader worker processes")
@@ -97,7 +101,12 @@ def main(argv=None) -> int:
     )
 
     kw = dict(
-        batch_size=a.batch, mix_samples=a.mix, prefetch=a.prefetch, output="scipy", levels=(1, 2, 3)
+        batch_size=a.batch,
+        mix_samples=a.mix,
+        prefetch=a.prefetch,
+        output="scipy",
+        levels=(1, 2, 3),
+        transform=None,
     )
     train = AtlasCells(where, plan=train_plan, max_cells_per_sample=a.cap_train, seed=a.seed, **kw)
     n_genes = len(train.gene_axis)
@@ -109,6 +118,40 @@ def main(argv=None) -> int:
         genes=train.gene_axis.ids,
         **kw,
     )
+
+    # gene panel: the most variable genes (variance of log1p CP10k) in a pilot of training samples; test studies are not looked at
+    from singlet.torch._stream import log1p_cp10k
+
+    t_p = time.perf_counter()
+    pilot = AtlasCells(
+        where,
+        plan=train_plan.head(a.pilot_samples),
+        max_cells_per_sample=a.cap_train,
+        seed=a.seed,
+        **kw,
+    )
+    s1 = np.zeros(n_genes)
+    s2 = np.zeros(n_genes)
+    n_pilot = 0
+    for b in pilot:
+        Xp = log1p_cp10k(b["X"].astype(np.float32))
+        s1 += np.asarray(Xp.sum(0)).ravel()
+        s2 += np.asarray(Xp.multiply(Xp).sum(0)).ravel()
+        n_pilot += Xp.shape[0]
+    var = s2 / n_pilot - (s1 / n_pilot) ** 2
+    panel = np.sort(np.argsort(-var)[: a.panel])
+    pilot_info = {
+        "samples": int(min(a.pilot_samples, len(train_plan))),
+        "cells": n_pilot,
+        "seconds": round(time.perf_counter() - t_p, 1),
+        "bytes": pilot.stats()["bytes"],
+    }
+    print(json.dumps({"pilot": pilot_info}), flush=True)
+
+    def prep(X):
+        """log1p CP10k over all genes, then the panel columns, as a dense tensor."""
+        X = log1p_cp10k(X.astype(np.float32))
+        return torch.from_numpy(X[:, panel].toarray())
 
     classes = {k: {} for k in CAPACITY}
 
@@ -130,22 +173,19 @@ def main(argv=None) -> int:
     class Net(nn.Module):
         def __init__(self):
             super().__init__()
-            self.emb = nn.EmbeddingBag(n_genes, a.hidden, mode="sum")
-            self.bias = nn.Parameter(torch.zeros(a.hidden))
             self.body = nn.Sequential(
-                nn.LayerNorm(a.hidden), nn.ReLU(), nn.Linear(a.hidden, a.hidden), nn.ReLU()
+                nn.Linear(len(panel), a.hidden),
+                nn.LayerNorm(a.hidden),
+                nn.ReLU(),
+                nn.Linear(a.hidden, a.hidden),
+                nn.ReLU(),
             )
             self.heads = nn.ModuleDict(
                 {str(k): nn.Linear(a.hidden, c) for k, c in CAPACITY.items()}
             )
 
         def forward(self, X):
-            h = self.emb(
-                torch.from_numpy(X.indices.astype(np.int64)),
-                torch.from_numpy(X.indptr[:-1].astype(np.int64)),
-                per_sample_weights=torch.from_numpy(X.data),
-            )
-            h = self.body(h + self.bias)
+            h = self.body(X)
             return {k: self.heads[str(k)](h) for k in CAPACITY}
 
     net = Net()
@@ -181,7 +221,7 @@ def main(argv=None) -> int:
     for step, b in enumerate(loader(train)):
         io_train.add(b)
         y = targets(b, grow=True)
-        out = net(b["X"])
+        out = net(prep(b["X"]))
         loss = sum(ce(out[k], torch.from_numpy(y[k])) for k in CAPACITY if (y[k] >= 0).any())
         opt.zero_grad()
         loss.backward()
@@ -189,7 +229,9 @@ def main(argv=None) -> int:
         seen += len(b["gsm"])
         if step % 200 == 0:
             el = time.perf_counter() - t0
-            curve.append({"cells": seen, "loss": round(float(loss), 4), "seconds": round(el, 1)})
+            curve.append(
+                {"cells": seen, "loss": round(float(loss.detach()), 4), "seconds": round(el, 1)}
+            )
             print(json.dumps(curve[-1] | {"cells_per_s": round(seen / el, 1)}), flush=True)
     t_train = time.perf_counter() - t0
     train_stats = io_train.stats()
@@ -206,7 +248,7 @@ def main(argv=None) -> int:
         for b in loader(test):
             io_test.add(b)
             y = targets(b, grow=False)
-            out = net(b["X"])
+            out = net(prep(b["X"]))
             for k in CAPACITY:
                 pred = out[k].argmax(1).numpy()
                 lab = np.asarray(b[f"cell_type_l{k}"], dtype=object)
@@ -277,8 +319,11 @@ def main(argv=None) -> int:
         },
         "levels": levels,
         "model": {
-            "genes": n_genes,
-            "input": "log1p(counts per 10k), full gene axis, sparse EmbeddingBag",
+            "gene_axis": n_genes,
+            "panel_genes": int(len(panel)),
+            "panel": "highest variance of log1p(CP10k) over the pilot (training samples only)",
+            "pilot": pilot_info,
+            "input": "log1p(counts per 10k over all genes), panel columns",
             "hidden": a.hidden,
             "parameters": int(sum(p.numel() for p in net.parameters())),
             "optimizer": f"AdamW lr={a.lr} wd=1e-4",
