@@ -1,5 +1,37 @@
 # singlet (R) — NEWS
 
+## singlet (development version)
+
+### New features
+
+- `write_s1()` writes a count matrix (dgCMatrix or matrix, genes x cells; `SingleCellExperiment`; Seurat) as a `.s1`
+  sample object with one matrix member, with the same encoder and options as `singlet.write_s1()` in Python;
+  `read_s1()` reads it back exactly as a dgCMatrix, `SingleCellExperiment` or Seurat object.
+- `load()` reads any local `.s1` file that holds one count matrix and no atlas members (a `write_s1()` file).
+
+## singlet 1.2.0
+
+Prepared for CRAN; matches the Python package 1.2.0 (`pip install singlet`).
+
+### New features
+
+- `singlet_search_cells()` counts and locates cells across the whole atlas by cell type, chromosomal sex, genetic ancestry,
+  UMIs and genes, and by sample metadata (tissue, disease, stage, organism, assay, ...), with ontology descendants; it
+  reports how much of the atlas each sample-level filter cannot see (`$unmapped`). `singlet_cell_fields()` lists the fields
+  and their coverage.
+- `singlet_fetch_cells()` loads the cells a search matches; `singlet_cells_slice()` lists them as (GSM, 0-based columns)
+  and `singlet_gather()` loads such a list (the form the MCP tools and Python's `atlas.gather()` use).
+
+### Changes
+
+- Zstandard 1.5.6 is bundled (`src/zstd/`, BSD): installing no longer needs a system `libzstd`, only a C++17 compiler.
+- `curl` moved from Suggests to Imports: every published study is read by HTTP range requests.
+- The release policy strips per-cell mitochondrial DNA (`mts_*`) and doublet (`qc_doublet_score`) columns from every
+  published object; the documentation no longer lists them.
+- A retired or withheld object (HTTP 410) stops with the not-in-the-atlas message.
+- The local cache tree is `<cache>/s1`, as in the Python client (it was `<cache>/store`; old caches are not reused).
+- Documentation describes the per-sample `.s1` objects and manifests instead of `.singlet` bundles.
+
 ## singlet 1.1.0
 
 ### New features

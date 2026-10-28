@@ -73,7 +73,7 @@
 }
 
 .s1_root <- function(cache_dir = NULL) {
-    d <- file.path(.singlet_cache_dir(cache_dir), "store")
+    d <- file.path(.singlet_cache_dir(cache_dir), "s1")  # same layout as the Python client (<cache>/s1)
     if (!dir.exists(d)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
     d
 }
@@ -120,6 +120,8 @@
         return(list(status = 304L, body = raw(0), etag = etag, total = NA_real_))
     }
     if (status == 404L) .s1_stop(sprintf("%s: HTTP 404", url), "singlet_s1_not_found")
+    # 410: a retired object (a legacy .singlet bundle, or a study Research Alpha withholds)
+    if (status == 410L) .s1_stop(.s1_no_study_message(sprintf("%s: HTTP 410 (gone)", url)), "singlet_s1_not_found")
     if (status == 403L) {
         .s1_stop(sprintf("%s: HTTP 403 (the data host rejects this client; check SINGLET_DATA_BASE)", url))
     }
@@ -270,14 +272,16 @@
 #' @param accession A GEO Series accession (\code{"GSE..."}).
 #' @param cache_dir Directory for the manifest and pack cache (default
 #'   \code{tools::R_user_dir("singlet", "cache")}, or \code{SINGLET_CACHE_DIR}).
-#' @param base Data host (default \code{SINGLET_DATA_BASE} or \url{https://data.singlet.bio}; a directory with the
+#' @param base Data host (default \code{SINGLET_DATA_BASE} or \code{https://data.singlet.bio}; a directory with the
 #'   server layout also works).
 #' @param force Re-check the manifest even if it was read less than a minute ago.
 #' @return A \code{singlet_study} object (a list with \code{gse}, \code{samples}, \code{gsm_ids}, \code{packs}, ...).
 #' @examples
-#' \dontrun{
-#' st <- singlet_study("GSE145370")
-#' st$gsm_ids
+#' \donttest{
+#' if (curl::has_internet()) {
+#'   st <- singlet_study("GSE307528", cache_dir = file.path(tempdir(), "singlet-example"))
+#'   st$gsm_ids
+#' }
 #' }
 #' @seealso \code{\link{load}}, \code{\link{singlet_cells}}
 #' @export
@@ -970,13 +974,16 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @param cache_dir Cache directory (see \code{\link{load}}).
 #' @param cell_type_level,cell_type_min_score Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
 #'   it (default 0, none); see \code{\link{singlet_labels}}.
-#' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated) in \code{colData}.
+#' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).
 #' @return A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
 #'   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
 #'   matrix) and the per-cell columns (\code{\link{singlet_labels}}).
 #' @examples
-#' \dontrun{
-#' deep <- singlet_cells("GSE145370", n_umi_exon > 5000, samples = "GSM4317426")
+#' \donttest{
+#' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+#'   deep <- singlet_cells("GSE307528", n_umi_exon > 500, samples = "GSM9226069",
+#'                         cache_dir = file.path(tempdir(), "singlet-example"))
+#' }
 #' }
 #' @seealso \code{\link{load}}, \code{\link{singlet_study}}
 #' @export
@@ -1087,6 +1094,11 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
         file.rename(tmp, dest)
     }
     for (id in unique(unlist(study$packs))) if (!is.null(id) && nzchar(id)) tryCatch(.s1_pack(study, id), error = function(e) NULL)
+    # the pack index too, so a load of the local copy can resolve any pack without the network
+    ip <- file.path(.s1_pack_dir(study), "index.json")
+    if (!file.exists(ip) && identical(study$transport$kind, "http")) {
+        tryCatch(writeBin(.s1_get_ref(study$transport, "index.json")$body, ip), error = function(e) NULL)
+    }
     mp <- file.path(root, "m", paste0(study$gse, ".json"))
     dir.create(dirname(mp), recursive = TRUE, showWarnings = FALSE)
     if (!file.exists(mp)) writeLines(jsonlite::toJSON(study$doc, auto_unbox = TRUE, null = "null", digits = NA), mp)
@@ -1132,7 +1144,7 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     sce
 }
 
-# A local manifest, .../s1/m/<GSE>.json (its objects are read from the same store/ tree; DUAL: v2/m/ trees too).
+# A local manifest, .../s1/m/<GSE>.json (its objects are read from the same tree; DUAL: older v2/m/ trees too).
 .s1_load_manifest <- function(path, gsms = NULL, modalities = NULL, labels = list()) {
     p <- normalizePath(path, winslash = "/", mustWork = TRUE)
     if (basename(dirname(p)) != "m" || !(basename(dirname(dirname(p))) %in% c("s1", "store", "v2"))) {

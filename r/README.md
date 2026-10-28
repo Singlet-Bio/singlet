@@ -1,13 +1,12 @@
 # singlet (R)
 
-An R client for the [Singlet](https://singlet.bio) single-cell RNA-seq atlas —
-search and download processed public studies as a `SingleCellExperiment` or
-`Seurat` object — plus an R package for reading `.1pz` sparse-matrix files and
-working with singlet pipeline outputs directly.
+An R client for the [Singlet](https://singlet.bio) single-cell RNA-seq atlas: search the atlas for studies or cells and load
+them as a `SingleCellExperiment` or `Seurat` object. Each public GEO study is published as one `.s1` object per sample plus a
+manifest; the package fetches only the parts it needs by HTTP range requests and caches them.
 
-All decompression and format parsing happens in a **header-only C++ reader**
-(namespace `singlet::pz`) that is byte-identical to the Python package. R is a
-thin Rcpp binding.
+Count matrices are decoded by a header-only C++ reader shared with the Singlet Python package
+([`pip install singlet`](https://pypi.org/project/singlet/)); R is a thin Rcpp binding. Zstandard is bundled, so installing
+needs only a C++17 compiler.
 
 ## Install
 
@@ -17,20 +16,17 @@ BiocManager::install(c("SingleCellExperiment", "SummarizedExperiment", "S4Vector
 remotes::install_github("Singlet-Bio/singlet", subdir = "r")
 ```
 
-Building from source needs a C++17 compiler and `libzstd` (>= 1.4) at link
-time: `apt install libzstd-dev` (Debian/Ubuntu), `yum install libzstd-devel`
-(RHEL/Fedora) or `brew install zstd` (macOS).
+Once the package is on CRAN, `install.packages("singlet")` replaces the `remotes` line.
 
-`singlet_load()` returns a `SingleCellExperiment` by default, which is why the
-Bioconductor packages above are part of the install. For Seurat output
-(`as = "seurat"`) also run `install.packages("Seurat")`.
+`singlet_load()` returns a `SingleCellExperiment` by default, which is why the Bioconductor packages above are part of the
+install. For Seurat output (`as = "seurat"`) also run `install.packages("Seurat")`.
 
-## Quickstart: browse and load the atlas
+## Quickstart: load studies
 
 ```r
 library(singlet)
 
-# Load one study (downloaded from data.singlet.bio and cached) -> SingleCellExperiment
+# One study -> SingleCellExperiment
 sce <- singlet_load("GSE138867")
 table(sce$gsm_id)
 
@@ -47,97 +43,65 @@ heart <- singlet_cells("GSE286650", cell_type == "cardiac muscle cell" & called_
 # ...or as a Seurat object
 obj <- singlet_load("GSE138867", as = "seurat")
 
-# Search the atlas with natural language -> GSE accessions
+# Search studies with natural language -> GSE accessions
 hits <- singlet_find("T cells from pediatric AML")
 sce <- singlet_load(hits[1:3])
-
-# Search and load in one step
-sce <- singlet_find_load("human pancreas islet cells", limit = 3)
-
-# A local .singlet bundle works the same way as an accession
-sce <- singlet_load("/path/to/GSE138867.singlet")
 ```
 
-`load()`, `find()`, `find_load()` and `download()` are the same functions
-under shorter names. They mask `base::load()` and `utils::find()` once the
-package is attached, which is why the examples use the `singlet_` names.
+`load()`, `find()`, `find_load()` and `download()` are the same functions under shorter names. They mask `base::load()` and
+`utils::find()` once the package is attached, which is why the examples use the `singlet_` names.
 
-Samples with no usable cells (for example an empty count matrix left by a
-failed pipeline run) are skipped with a warning rather than failing the whole
-study. The skipped samples, and why, are in
-`S4Vectors::metadata(sce)$skipped_samples`.
+A study that is not in the atlas (an unknown accession, or one Research Alpha withholds) stops with a message pointing to
+<https://singlet.bio/known-issues>.
 
-## Beyond gene counts: other modalities
-
-A `.singlet` bundle carries more than the gene-level counts `singlet_load()`
-assembles: splice junctions and PSI, mitochondrial heteroplasmy, donor
-assignments, non-host reads, per-cell QC tables and the raw exon/intron
-matrices. Download the bundle and ask what a sample has before reading it:
+## Search and fetch cells across the atlas
 
 ```r
-path <- singlet_download("GSE128639")   # CITE-seq bone marrow
-singlet_modalities(path)                # what the first sample carries
+# Count and locate cells by label and sample metadata (ontology terms match their descendants)
+hits <- singlet_search_cells(list(cell_type = "T cell", sex = "female", tissue = "blood"))
+hits                       # cells, samples and studies; hits$studies, hits$samples, hits$facets
+hits$unmapped              # how much of the atlas each sample-level filter cannot see
 
-gsm <- "GSM3681518"
-if (singlet_has(path, "mt_heteroplasmy", gsm)) {
-  het <- singlet_read(path, gsm, "mt_heteroplasmy")   # variants x cells
-}
-if (singlet_has(path, "cell_qc", gsm)) {
-  qc <- singlet_read(path, gsm, "cell_qc")            # data.frame
-}
+# Fetch the matching cells (only their matrix chunks are downloaded)
+sce <- singlet_fetch_cells(list(cell_type = "B cell", organism = "Homo sapiens", tissue = "blood"), max_cells = 2000)
 
-# Raw counts for one sample with spliced/unspliced assays
-if (singlet_has(path, "exon_counts", gsm)) {
-  raw <- singlet_raw_counts(path, gsm)
-}
+# Cells listed elsewhere (MCP get_cells_page / find_cells, Python atlas): (GSM, 0-based columns)
+sce <- singlet_gather(list(list(gsm = "GSM4736413", columns = c(115L, 175L, 260L))))
+
+singlet_cell_fields()      # every searchable field and its coverage
 ```
+
+Cell types below lineage level are previews (per-study accuracy 0.84 compartment, 0.75 lineage, 0.43 cell type, 0.32
+subtype). Genetic ancestry covers under 2% of cells, and disease is recorded for a minority of samples, so combined filters
+can match few cells.
+
+## Other modalities
+
+`singlet_study_modalities("GSE128639")` lists what a study's samples carry beyond gene counts (spliced and unspliced layers,
+splice junctions and PSI, V(D)J usage), and `singlet_load(..., modalities = )` fetches them. Research Alpha withholds
+per-cell mitochondrial DNA, doublet scores and per-donor germline data from every published object.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SINGLET_DATA_BASE` | `https://data.singlet.bio` | Host serving bundles at `<base>/data/<GSE>/<GSE>.singlet` |
-| `SINGLET_API_BASE` | `https://singlet.bio/api` | Search and GSM-to-GSE lookups |
-| `SINGLET_CACHE_DIR` | `tools::R_user_dir("singlet", "cache")` | Where downloaded bundles are kept |
+| `SINGLET_DATA_BASE` | `https://data.singlet.bio` | Host serving the `.s1` objects at `<base>/s1/...` |
+| `SINGLET_API_BASE` | `https://singlet.bio/api` | Search, cell search and GSM-to-GSE lookups |
+| `SINGLET_CACHE_DIR` | `tools::R_user_dir("singlet", "cache")` | Where fetched objects are kept |
 | `SINGLET_API_KEY` | unset | Raises the natural-language search limit (see `set_api_key()`) |
 
 ## Reading pipeline output directly
 
-For `.1pz` files and pipeline output directories rather than atlas
-accessions. Every `samples/<GSM>/` folder inside a bundle is such a directory:
+For `.1pz` files and pipeline output directories you produced yourself:
 
 ```r
-library(singlet)
-
-path <- singlet_download("GSE138867")
-exdir <- tempfile()
-utils::unzip(path, exdir = exdir)
-sample_dir <- file.path(exdir, "samples", "GSM4120733")
-
-# Low-level: one file -> dgCMatrix
-mat <- read_1pz(file.path(sample_dir, "exon_counts.1pz"))
-dim(mat)
-attr(mat, "user_kv")[["gsm_id"]]     # "GSM4120733"
-
-# Mid-level: a whole sample directory -> named list of matrices
-dd <- read_singlet_dir(sample_dir)
-print(dd)
+mat <- read_1pz("samples/GSM4120733/exon_counts.1pz")   # one file -> dgCMatrix
+attr(mat, "user_kv")[["gsm_id"]]
+dd <- read_singlet_dir("samples/GSM4120733")            # a sample directory -> named list of matrices
 ```
 
-`as_sce()` and `as_seurat()` convert a directory written by running the
-pipeline yourself (they need its per-gene `spliced.1pz` or
-`gene_counts.1pz`, which atlas bundles do not ship; use `singlet_load()` for
-those).
-
-## Embedded Metadata
-
-Every `.1pz` file carries the GEO context from the pipeline:
-
-- `gsm_id`, `gse_id`, `srr_ids`
-- `organism`, `protocol`
-- `singlet_version`, `pipeline_date`
-- `read_count`
+`as_sce()` and `as_seurat()` convert such a directory (they need its per-gene `spliced.1pz` or `gene_counts.1pz`).
 
 ## License
 
-MIT
+MIT. The bundled Zstandard library is BSD-licensed (see `inst/COPYRIGHTS`). Atlas data is CC0.

@@ -20,8 +20,8 @@
 #'   \item{\code{ancestry_hancestro}, \code{ancestry_prob}}{continental genetic ancestry of the cell's donor (HANCESTRO id) and its
 #'     proportion; human donors with per-donor coverage tables only.}
 #'   \item{\code{called}, \code{called_ed}, \code{called_ed_fdr}}{the default cell call, and the EmptyDrops call (additional).}
-#'   \item{\code{n_umi_*}, \code{n_feat_*}, \code{cyc_*}, \code{qc_*}, \code{don_*}, \code{mts_*}}{counts summaries, cell cycle, QC,
-#'     genotype-free donor assignment and mtDNA summary.}
+#'   \item{\code{n_umi_*}, \code{n_feat_*}, \code{cyc_*}, \code{qc_*}, \code{don_*}}{counts summaries, cell cycle, QC and
+#'     genotype-free donor assignment.}
 #' }
 #' GEO sample metadata follows: \code{organism}, \code{protocol}, \code{protocol_name}, \code{sample_source},
 #' \code{sample_characteristics}, \code{qc_flag}, \code{reference_build} and the curated fields \code{geo_tissue},
@@ -31,10 +31,11 @@
 #' \strong{Accuracy} (docs/cell_annotation.md): cell type per-study accuracy against CELLxGENE author labels is 0.84 at level 1,
 #' 0.75 at level 2, 0.43 at level 3 and 0.32 at level 4, so levels 3+ are previews; the score ranks calls and is optimistic above
 #' 0.9. Sex agrees with GEO metadata for 153 of 156 called samples (98.1\%). Ancestry is continental (HANCESTRO), for human donors
-#' with coverage only (about 1\% of cells).
+#' with coverage only (under 2\% of cells).
 #'
-#' \strong{Hidden by default:} \code{qc_doublet_score} is unvalidated and is left out unless \code{include_unvalidated = TRUE} or
-#' it is named in \code{columns}; \code{where} conditions can still use it.
+#' \strong{Not in Research Alpha:} the release policy strips per-cell mitochondrial DNA (\code{mts_*}) and doublet
+#' (\code{qc_doublet_score}, \code{dbl_*}) columns from every published object. \code{include_unvalidated = TRUE} only matters
+#' for local pipeline outputs that still carry \code{qc_doublet_score}, which is unvalidated and otherwise left out.
 #'
 #' @name singlet_labels
 #' @seealso \code{\link{load}}, \code{\link{singlet_cells}}

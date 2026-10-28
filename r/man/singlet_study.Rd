@@ -12,7 +12,7 @@ singlet_study(accession, cache_dir = NULL, base = NULL, force = FALSE)
 \item{cache_dir}{Directory for the manifest and pack cache (default
 \code{tools::R_user_dir("singlet", "cache")}, or \code{SINGLET_CACHE_DIR}).}
 
-\item{base}{Data host (default \code{SINGLET_DATA_BASE} or \url{https://data.singlet.bio}; a directory with the
+\item{base}{Data host (default \code{SINGLET_DATA_BASE} or \code{https://data.singlet.bio}; a directory with the
 server layout also works).}
 
 \item{force}{Re-check the manifest even if it was read less than a minute ago.}
@@ -26,9 +26,11 @@ study object. Nothing else is downloaded: \code{\link{load}} and \code{\link{sin
 members they need with HTTP Range requests.
 }
 \examples{
-\dontrun{
-st <- singlet_study("GSE145370")
-st$gsm_ids
+\donttest{
+if (curl::has_internet()) {
+  st <- singlet_study("GSE307528", cache_dir = file.path(tempdir(), "singlet-example"))
+  st$gsm_ids
+}
 }
 }
 \seealso{
