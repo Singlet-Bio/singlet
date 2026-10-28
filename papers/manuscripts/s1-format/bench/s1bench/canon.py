@@ -54,9 +54,14 @@ def _read_lines(path: Path, col: int = 0) -> list[str]:
         return [ln.rstrip("\n").split("\t")[col] for ln in f if ln.strip()]
 
 
+def _glob(root: Path, pattern: str) -> list[Path]:
+    """Sorted recursive matches, without macOS archive debris (__MACOSX/, ._* resource forks)."""
+    return sorted(p for p in root.rglob(pattern) if not p.name.startswith("._") and "__MACOSX" not in p.parts)
+
+
 def _first(root: Path, *patterns: str) -> Optional[Path]:
     for pat in patterns:
-        hits = sorted(root.rglob(pat))
+        hits = _glob(root, pat)
         if hits:
             return hits[0]
     return None
@@ -318,7 +323,7 @@ def _baron(cfg: Config, u: Unit) -> Canon:
 
     root = _extract(_main_file(cfg, u.dataset))
     blocks, genes, cells = [], None, []
-    for p in sorted(root.rglob("*human*_umifm_counts.csv.gz")):
+    for p in _glob(root, "*human*_umifm_counts.csv.gz"):
         df = pd.read_csv(p, index_col=0)
         g = [c for c in df.columns if c not in ("barcode", "assigned_cluster")]
         genes = genes or g
@@ -368,7 +373,7 @@ def _mca(cfg: Config, u: Unit) -> Canon:
     import re
 
     root = _extract(_main_file(cfg, u.dataset))
-    files = [p for p in sorted(root.rglob("*_dge.txt.gz")) if not re.search(r"293T|3T3|[Mm]ix|GSM2906480", p.name)]
+    files = [p for p in _glob(root, "*_dge.txt.gz") if not re.search(r"293T|3T3|[Mm]ix|GSM2906480", p.name)]
     log(f"{u.key}: {len(files)} tissue DGE tables")
     parts = []
     for p in files:
@@ -437,7 +442,7 @@ def _slideseq(cfg: Config, u: Unit) -> Canon:
 def _tabula_muris(cfg: Config, u: Unit) -> Canon:
     """FACS.zip: one genes x cells CSV of read counts per tissue (FACS/<Tissue>-counts.csv), same gene list in each."""
     root = _extract(_main_file(cfg, u.dataset))
-    files = [p for p in sorted(root.rglob("*-counts.csv")) if "__MACOSX" not in p.parts]
+    files = _glob(root, "*-counts.csv")
     log(f"{u.key}: {len(files)} tissue tables")
     return parse_dense_table(files, ",", True)
 
