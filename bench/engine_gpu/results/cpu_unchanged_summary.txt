@@ -1,0 +1,115 @@
+node=g052.clipper.gvsu.edu job=790059 ref=30293087e3511827 cpu=70d917a6dfe6223d gpubin=41f5d0e5310b6371 2026-10-28T07:33:19-04:00
+ref GSM6996272: exit 0
+ref GSM6996274: exit 0
+ref pbmc1k_v3: exit 0
+ref2 GSM6996272: exit 0
+ref2 GSM6996274: exit 0
+ref2 pbmc1k_v3: exit 0
+cpu GSM6996272: exit 0
+cpu GSM6996274: exit 0
+cpu pbmc1k_v3: exit 0
+gpubin GSM6996272: exit 0
+gpubin GSM6996274: exit 0
+gpubin pbmc1k_v3: exit 0
+    ref2 GSM6996272 differs: ./ambient_contamination.json
+    ref2 GSM6996272 same content, other order: ./nonhost_reads.fq
+    ref2 GSM6996272 differs: ./pileup_stats.json
+    ref2 GSM6996272 differs: ./provenance.json
+    ref2 GSM6996272 differs: ./read_stats.tsv
+    ref2 GSM6996272 differs: ./star_Log.final.out
+    ref2 GSM6996272 differs: ./star_Log.out
+    ref2 GSM6996272 same content, other order: ./star_Unmapped.out.mate1
+    ref2 GSM6996272 same content, other order: ./star_Unmapped.out.mate2
+    ref2 GSM6996272 differs: ./summary.json
+  ref2 vs ref, GSM6996272: 56 files, 10 differ byte-wise, 7 differ order-independently; files only in ref2: none
+    ref2 GSM6996274 differs: ./ambient_contamination.json
+    ref2 GSM6996274 same content, other order: ./nonhost_reads.fq
+    ref2 GSM6996274 differs: ./pileup_stats.json
+    ref2 GSM6996274 differs: ./provenance.json
+    ref2 GSM6996274 differs: ./read_stats.tsv
+    ref2 GSM6996274 differs: ./star_Log.final.out
+    ref2 GSM6996274 differs: ./star_Log.out
+    ref2 GSM6996274 same content, other order: ./star_Unmapped.out.mate1
+    ref2 GSM6996274 same content, other order: ./star_Unmapped.out.mate2
+    ref2 GSM6996274 differs: ./summary.json
+  ref2 vs ref, GSM6996274: 56 files, 10 differ byte-wise, 7 differ order-independently; files only in ref2: none
+    ref2 pbmc1k_v3 differs: ./ambient_contamination.json
+    ref2 pbmc1k_v3 same content, other order: ./nonhost_reads.fq
+    ref2 pbmc1k_v3 differs: ./pileup_stats.json
+    ref2 pbmc1k_v3 differs: ./provenance.json
+    ref2 pbmc1k_v3 differs: ./read_stats.tsv
+    ref2 pbmc1k_v3 differs: ./star_Log.final.out
+    ref2 pbmc1k_v3 differs: ./star_Log.out
+    ref2 pbmc1k_v3 differs: ./star_Log.progress.out
+    ref2 pbmc1k_v3 same content, other order: ./star_Unmapped.out.mate1
+    ref2 pbmc1k_v3 same content, other order: ./star_Unmapped.out.mate2
+    ref2 pbmc1k_v3 differs: ./summary.json
+  ref2 vs ref, pbmc1k_v3: 57 files, 11 differ byte-wise, 8 differ order-independently; files only in ref2: none
+    cpu GSM6996272 differs: ./ambient_contamination.json
+    cpu GSM6996272 same content, other order: ./nonhost_reads.fq
+    cpu GSM6996272 differs: ./pileup_stats.json
+    cpu GSM6996272 differs: ./provenance.json
+    cpu GSM6996272 differs: ./read_stats.tsv
+    cpu GSM6996272 differs: ./star_Log.final.out
+    cpu GSM6996272 differs: ./star_Log.out
+    cpu GSM6996272 same content, other order: ./star_Unmapped.out.mate1
+    cpu GSM6996272 same content, other order: ./star_Unmapped.out.mate2
+    cpu GSM6996272 differs: ./summary.json
+  cpu vs ref, GSM6996272: 56 files, 10 differ byte-wise, 7 differ order-independently; files only in cpu: none
+    cpu GSM6996274 differs: ./ambient_contamination.json
+    cpu GSM6996274 same content, other order: ./nonhost_reads.fq
+    cpu GSM6996274 differs: ./pileup_stats.json
+    cpu GSM6996274 differs: ./provenance.json
+    cpu GSM6996274 differs: ./read_stats.tsv
+    cpu GSM6996274 differs: ./star_Log.final.out
+    cpu GSM6996274 differs: ./star_Log.out
+    cpu GSM6996274 same content, other order: ./star_Unmapped.out.mate1
+    cpu GSM6996274 same content, other order: ./star_Unmapped.out.mate2
+    cpu GSM6996274 differs: ./summary.json
+  cpu vs ref, GSM6996274: 56 files, 10 differ byte-wise, 7 differ order-independently; files only in cpu: none
+    cpu pbmc1k_v3 differs: ./ambient_contamination.json
+    cpu pbmc1k_v3 same content, other order: ./nonhost_reads.fq
+    cpu pbmc1k_v3 differs: ./pileup_stats.json
+    cpu pbmc1k_v3 differs: ./provenance.json
+    cpu pbmc1k_v3 differs: ./read_stats.tsv
+    cpu pbmc1k_v3 differs: ./star_Log.final.out
+    cpu pbmc1k_v3 differs: ./star_Log.out
+    cpu pbmc1k_v3 differs: ./star_Log.progress.out
+    cpu pbmc1k_v3 same content, other order: ./star_Unmapped.out.mate1
+    cpu pbmc1k_v3 same content, other order: ./star_Unmapped.out.mate2
+    cpu pbmc1k_v3 differs: ./summary.json
+  cpu vs ref, pbmc1k_v3: 57 files, 11 differ byte-wise, 8 differ order-independently; files only in cpu: none
+    gpubin GSM6996272 differs: ./ambient_contamination.json
+    gpubin GSM6996272 same content, other order: ./nonhost_reads.fq
+    gpubin GSM6996272 differs: ./pileup_stats.json
+    gpubin GSM6996272 differs: ./provenance.json
+    gpubin GSM6996272 differs: ./read_stats.tsv
+    gpubin GSM6996272 differs: ./star_Log.final.out
+    gpubin GSM6996272 differs: ./star_Log.out
+    gpubin GSM6996272 same content, other order: ./star_Unmapped.out.mate1
+    gpubin GSM6996272 same content, other order: ./star_Unmapped.out.mate2
+    gpubin GSM6996272 differs: ./summary.json
+  gpubin vs ref, GSM6996272: 56 files, 10 differ byte-wise, 7 differ order-independently; files only in gpubin: none
+    gpubin GSM6996274 differs: ./ambient_contamination.json
+    gpubin GSM6996274 same content, other order: ./nonhost_reads.fq
+    gpubin GSM6996274 differs: ./pileup_stats.json
+    gpubin GSM6996274 differs: ./provenance.json
+    gpubin GSM6996274 differs: ./read_stats.tsv
+    gpubin GSM6996274 differs: ./star_Log.final.out
+    gpubin GSM6996274 differs: ./star_Log.out
+    gpubin GSM6996274 same content, other order: ./star_Unmapped.out.mate1
+    gpubin GSM6996274 same content, other order: ./star_Unmapped.out.mate2
+    gpubin GSM6996274 differs: ./summary.json
+  gpubin vs ref, GSM6996274: 56 files, 10 differ byte-wise, 7 differ order-independently; files only in gpubin: none
+    gpubin pbmc1k_v3 differs: ./ambient_contamination.json
+    gpubin pbmc1k_v3 same content, other order: ./nonhost_reads.fq
+    gpubin pbmc1k_v3 differs: ./pileup_stats.json
+    gpubin pbmc1k_v3 differs: ./provenance.json
+    gpubin pbmc1k_v3 differs: ./read_stats.tsv
+    gpubin pbmc1k_v3 differs: ./star_Log.final.out
+    gpubin pbmc1k_v3 differs: ./star_Log.out
+    gpubin pbmc1k_v3 differs: ./star_Log.progress.out
+    gpubin pbmc1k_v3 same content, other order: ./star_Unmapped.out.mate1
+    gpubin pbmc1k_v3 same content, other order: ./star_Unmapped.out.mate2
+    gpubin pbmc1k_v3 differs: ./summary.json
+  gpubin vs ref, pbmc1k_v3: 57 files, 11 differ byte-wise, 8 differ order-independently; files only in gpubin: none
