@@ -114,6 +114,9 @@ struct PileupOutput {
     // the engine's PileupStats counters these outputs replace: molecule labels (DirectionalUmiStore::MoleculeStats), SNP overlaps
     // passing the quality gate (snp_hits), distinct (cell, junction, UMI) (sj_hits), chrM bases counted (mt_pileup_bases)
     uint64_t molSpliced = 0, molUnspliced = 0, molAmbiguous = 0, molLegacyDouble = 0, snpHits = 0, sjHits = 0, mtBases = 0;
+    // per cell (barcode column): reads recorded in the molecule store and molecules after directional collapse
+    // (DirectionalUmiStore::per_cell_molecule_stats: the inputs of saturation_metrics.tsv and cell_qc_metrics.tsv)
+    std::vector<uint32_t> cellReads, cellMolecules;
     double msGpu = 0, msTotal = 0, peakGB = 0;
     std::string log;
 };

@@ -1837,6 +1837,7 @@ public:
         gpu_ms_ = DirectionalUmiStore::MoleculeStats{};
         gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
         gpu_ms_.legacy_double = out.molLegacyDouble;
+        gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
                   << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules << "\n";
         return true;
@@ -1844,6 +1845,15 @@ public:
 #endif
 
     bool gpu_covers_ = false;   // W11: SINGLET_GPU_PILEUP=on in a GPU build (always false in a CPU-only build)
+    std::vector<uint32_t> gpu_cell_reads_, gpu_cell_mols_;   // W11 "on": per-cell molecule-store reads and molecules from the GPU
+    // W11 "on": the per-cell saturation inputs the molecule store would give (empty when the CPU store was used)
+    bool gpu_saturation(std::vector<std::pair<uint32_t, std::pair<uint64_t, uint64_t>>>& cells) const {
+        if (!gpu_covers_ || gpu_cell_reads_.empty()) return false;
+        cells.clear();
+        for (uint32_t c = 0; c < gpu_cell_reads_.size(); ++c)
+            if (gpu_cell_reads_[c] > 0) cells.push_back({c, {gpu_cell_reads_[c], gpu_cell_mols_[c]}});
+        return true;
+    }
     // Get accumulators for export
     const SparseAccumulator<uint8_t>& snp_ad() const { return snp_ad_; }
     const SparseAccumulator<uint8_t>& snp_dp() const { return snp_dp_; }

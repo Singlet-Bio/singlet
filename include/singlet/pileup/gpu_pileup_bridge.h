@@ -34,7 +34,7 @@ inline bool enabled() { return mode() != 0; }
 
 class Collector {
 public:
-    explicit Collector(int min_baseq) : min_baseq_(min_baseq) { pend_.reserve(1 << 20); sigmap_.reserve(1 << 24); }
+    explicit Collector(int min_baseq) : min_baseq_(min_baseq) { pend_.reserve(1 << 20); }
 
     // one record of the stream; bc = the engine's barcode column for it (-1: no CB or not in the barcode set)
     void add(const bam1_t* b, int32_t bc) {
@@ -48,9 +48,9 @@ public:
         a.flags = (uint8_t) (((b->core.flag & BAM_FREVERSE) ? 1 : 0) | (sec ? 0 : 2));
         const uint32_t* cg = bam_get_cigar(b);
         a.ops.assign(cg, cg + b->core.n_cigar);
-        Group local; Group* gp; std::string qn;
+        Group local; Group* gp; uint64_t qn = 0;
         if (nh == 1 && !sec) { gp = &local; gp->nh = 1; }
-        else { qn = bam_get_qname(b); gp = &pend_[qn]; if (gp->nh == 0) gp->nh = std::min(nh, 255); }
+        else { qn = qname_hash(bam_get_qname(b)); gp = &pend_[qn]; if (gp->nh == 0) gp->nh = std::min(nh, 255); }
         Group& g = *gp;
         g.alns.push_back(std::move(a)); g.seen++;
         if (!sec) {
@@ -102,6 +102,8 @@ public:
 private:
     struct Aln { int32_t tid, pos; uint8_t flags, mapq; std::vector<uint32_t> ops; };
     struct Group { std::vector<Aln> alns; int seen = 0, nh = 0, primary = -1; int32_t bc = -1; uint64_t umi3 = 0; std::vector<uint8_t> seq; };
+    // FNV-1a over the qname: groups a multimapper's alignments (64-bit, as the engine's mm_buffer)
+    static uint64_t qname_hash(const char* q) { uint64_t h = 14695981039346656037ULL; for (; *q; ++q) { h ^= (uint8_t) *q; h *= 1099511628211ULL; } return h; }
     struct H128 { uint64_t a, b; bool operator==(const H128& o) const { return a == o.a && b == o.b; } };
     struct H128Hash { size_t operator()(const H128& h) const { return h.a ^ (h.b * 0x9e3779b97f4a7c15ULL); } };
     static uint64_t mix(uint64_t k) { k ^= k >> 33; k *= 0xff51afd7ed558ccdULL; k ^= k >> 33; k *= 0xc4ceb9fe1a85ec53ULL; k ^= k >> 33; return k; }
@@ -113,17 +115,10 @@ private:
     void finalize(Group& g) {
         if (g.primary < 0) return;
         const uint32_t rlen = (uint32_t) g.seq.size();
-        Hasher hs;
-        for (size_t i = 0; i < rlen; i += 8) { uint64_t v = 0; for (size_t j = 0; j < 8 && i + j < rlen; j++) v |= (uint64_t) g.seq[i + j] << (8 * j); hs.add(v); }
-        hs.add(rlen); hs.add(g.nh); hs.add(g.alns.size());
-        for (auto& a : g.alns) {
-            hs.add(((uint64_t) (uint32_t) a.tid << 32) | (uint32_t) a.pos); hs.add(((uint64_t) a.flags << 8) | a.mapq); hs.add(a.ops.size());
-            for (uint32_t o : a.ops) hs.add(o);
-        }
-        const H128 h = hs.get();
-        auto it = sigmap_.find(h); uint32_t sid;
-        if (it == sigmap_.end()) {
-            sid = (uint32_t) sigs_.size(); sigmap_.emplace(h, sid);
+        // every read is its own signature: deduplication by (sequence, alignments) cost the serial thread more than it saved the GPU
+        uint32_t sid;
+        {
+            sid = (uint32_t) sigs_.size();
             SigRec s; s.aln_off = (uint32_t) alns_.size(); s.n_aln = (uint8_t) g.alns.size(); s.nh = (uint8_t) std::min(g.nh, 255);
             s.rlen = (uint16_t) rlen; s.seq_off = seq_.size();
             for (auto& a : g.alns) {
@@ -132,13 +127,13 @@ private:
             }
             for (uint32_t i = 0; i < rlen; i += 2) seq_.push_back((uint8_t) (g.seq[i] | ((i + 1 < rlen ? g.seq[i + 1] : 0) << 4)));
             sigs_.push_back(s);
-        } else sid = it->second;
+        }
         reads_.push_back(ReadRec{sid, g.bc, g.umi3});
     }
 
     int min_baseq_; int umi_len_ = -1;
     uint64_t lowqual_bases_ = 0, qual_neq_n_ = 0, incomplete_ = 0, no_umi_ = 0;
-    std::unordered_map<std::string, Group> pend_;
+    std::unordered_map<uint64_t, Group> pend_;   // keyed like the engine's mm_buffer (64-bit qname hash)
     std::unordered_map<H128, uint32_t, H128Hash> sigmap_;
     std::vector<SigRec> sigs_; std::vector<AlnRec> alns_; std::vector<ReadRec> reads_; std::vector<uint32_t> ops_; std::vector<uint8_t> seq_;
 };
