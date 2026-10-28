@@ -45,6 +45,7 @@
 #include "vdj_counter.h"
 #include "rrna_detect.h"
 #include "polya_sites.h"
+#include "gpu_pileup_dump.h"   // W11: SINGLET_PILEUP_DUMP / SINGLET_STREAM_TEE debug hooks (no effect unless set)
 
 namespace singlet {
 
@@ -586,7 +587,9 @@ public:
         uint64_t _bam_io_start = ProfileCounters::rdtsc();
 #endif
 
+        gpudump::StreamTee tee(hdr);   // W11 debug: SINGLET_STREAM_TEE=<file> keeps a copy of the record stream
         while (sam_read1(fp, hdr, b) >= 0) {
+            tee.write(hdr, b);
             // Prefetch aux data region into L2 cache while doing flag checks.
             __builtin_prefetch(bam_get_aux(b), 0, 2);
 #ifdef SINGLET_PROFILE
@@ -1137,6 +1140,7 @@ public:
                   << stats.umi_duplicate << " dup in "
                   << stats.wall_time_s << "s\n";
 
+        gpudump_write(static_cast<uint32_t>(sam_hdr_nref(hdr)));   // W11 debug (SINGLET_PILEUP_DUMP)
         return stats;
     }
 
@@ -1675,6 +1679,20 @@ public:
         hts_close(master_fp);
 
         return stats;
+    }
+
+    // W11 GPU pileup harness: with SINGLET_PILEUP_DUMP=<dir>, writes the accumulators the callers receive (truth.bin), the annotation
+    // arrays (anno.bin), parameters, barcodes and contig names, in the format of PR #61 bench/gpu/pileup. Unset: nothing happens.
+    void gpudump_write(uint32_t n_tid) {
+        if (!gpudump::dir()) return;
+        gpudump::write_all(gene_model_.exon_trees_view(), gene_model_.intron_trees_view(), gene_model_.exon_to_gene_view(),
+                           gene_model_.intron_to_gene_view(), gene_model_.gene_strands_view(), chrom_snps_, n_tid,
+                           exon_acc_, intron_acc_, amb_acc_, sj_acc_, sj_names_, snp_ad_, snp_dp_, mt_acc_, mt_acc_rev_, mt_indels_,
+                           ambig_reads_.size(), barcodes_, tid_to_chrom_,
+                           gpudump::Params{(int)config_.stranded, (int)config_.reverse_strand, config_.min_mapq, config_.min_baseq,
+                                           (int)config_.count_introns, (int)config_.count_sj, (int)config_.count_mt, (int)config_.umi_dedup,
+                                           (int)config_.umi_dedup_directional, config_.umi_len, chrm_tid_, n_snps_loaded_,
+                                           (int)has_gene_model_, gene_model_.n_exons(), gene_model_.n_introns(), gene_model_.n_genes()});
     }
 
     // Get accumulators for export
