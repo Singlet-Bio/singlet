@@ -1,0 +1,12 @@
+{
+  "label": "GSM4006843",
+  "device": "NVIDIA H100 NVL",
+  "index": {"entries_viral": 90310522, "entries_bacterial": 411215174, "entries_fungal": 1128455398, "entries_bytes": 26079697504, "directory_bytes": 2818572300, "bloom_bytes": 386764872, "resident_hbm_gb": 29.858, "dir_bits": [25, 27, 29], "load_cold_s": 9.181, "load_warm_s": 3.554, "load_read_to_hbm_s": [0.925, 2.368, 5.550], "load_directory_build_s": [0.0205, 0.0150, 0.0120], "load_bloom_s": 0.290, "unsorted_pairs": 0},
+  "reads": {"records_seen": 3035990, "reads": 3035990, "sequence_bytes": 274224244, "host_parse_s": 0.970, "reads_with_np": 2453419, "reads_with_hits": 682540, "minimizers_after_bloom": 24250570, "occurrences": 9189747, "groups": 3299953, "viral_groups": 254187, "microbial_groups": 3045766},
+  "gpu_ms": {"reps": 3, "median_total": 63.361, "median_h2d": 24.236, "median_extract_bloom": 17.010, "median_probe": 16.020, "median_expand_sort_group": 2.467, "median_d2h": 3.617, "median_compute_only": 35.498, "warmup_total": 93.836, "all_total": [63.377, 63.272, 63.361]},
+  "reads_per_s": {"total_incl_transfers": 47915758, "compute_only": 85525626},
+  "hbm_gb": {"resident_index_and_bloom": 29.858, "peak_with_classify_buffers": 31.511, "classify_buffers": 1.622},
+  "deterministic_across_reps": true,
+  "compare_cpu_dump": {"reads": 3035990, "np_mismatch": 0, "viral_map_mismatch": 0, "microbial_map_mismatch": 0, "reads_with_any_mismatch": 0},
+  "results_fnv64": "4ff5593851a6cada"
+}

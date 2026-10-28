@@ -1,0 +1,547 @@
+{
+ "labels": "see module docstring",
+ "assumptions": {
+  "cpu_pack_efficiency": {
+   "value": 1.0,
+   "label": "modelled",
+   "note": "1.0 = a node's cores are as productive packed as in single-sample runs; replace with the packing run"
+  },
+  "gpu_node_host_cores": "55 of 56 (one for orchestration)",
+  "gpu_node_cloud_price": "2 x the per-GPU price (cloud GPU prices include the host's vCPUs and RAM)",
+  "cpu_cores": "Clipper's Xeon Gold 6230R (2019, 2.1 GHz); cloud core prices are for newer cores, so the CPU side is probably 1.5-2x cheaper in the cloud than modelled here: see cpu_speed_sensitivity",
+  "cpu_power": "650 W per dual EPYC 9654 server (192 cores) scaled per core; GPU node 1,400 W is an estimate (rates.json)"
+ },
+ "samples": {
+  "GSM4006843": {
+   "M_read_pairs": {
+    "value": 66.7,
+    "label": "measured"
+   },
+   "cpu_core_s": {
+    "value": 2598.0,
+    "label": "measured"
+   },
+   "cpu_wall_s_4threads": {
+    "value": 972.3,
+    "label": "measured"
+   },
+   "cpu_core_s_per_M_pairs": {
+    "value": 38.95,
+    "label": "derived"
+   },
+   "cpu_core_s_credited": {
+    "value": 2564.8,
+    "label": "derived",
+    "note": "minus the non-host index load (section 12.9 timer build, labelled measured there)"
+   },
+   "distinct_fraction": {
+    "value": 0.474,
+    "label": "projected (pbmc1k_v3's d)"
+   },
+   "gpu_s_per_sample_whole_sample_job789771": {
+    "value": 17.1,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_s_per_sample_best_2M_set_job789812": {
+    "value": 13.5,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_node_host_core_s": {
+    "value": 180.6,
+    "label": "derived",
+    "note": "W after the pileup + ingest"
+   }
+  },
+  "GSM5411066": {
+   "M_read_pairs": {
+    "value": 69.6,
+    "label": "measured"
+   },
+   "cpu_core_s": {
+    "value": 1639.1,
+    "label": "measured"
+   },
+   "cpu_wall_s_4threads": {
+    "value": 690.6,
+    "label": "measured"
+   },
+   "cpu_core_s_per_M_pairs": {
+    "value": 23.55,
+    "label": "derived"
+   },
+   "cpu_core_s_credited": {
+    "value": 1610.5,
+    "label": "derived",
+    "note": "minus the non-host index load (section 12.9 timer build, labelled measured there)"
+   },
+   "distinct_fraction": {
+    "value": 0.392,
+    "label": "measured"
+   },
+   "gpu_s_per_sample_whole_sample_job789771": {
+    "value": 14.77,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_s_per_sample_best_2M_set_job789812": {
+    "value": 11.66,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_node_host_core_s": {
+    "value": 98.1,
+    "label": "derived",
+    "note": "W after the pileup + ingest"
+   }
+  },
+  "GSM7901264": {
+   "M_read_pairs": {
+    "value": 100.3,
+    "label": "measured"
+   },
+   "cpu_core_s": {
+    "value": 3386.7,
+    "label": "measured"
+   },
+   "cpu_wall_s_4threads": {
+    "value": 1173.3,
+    "label": "measured"
+   },
+   "cpu_core_s_per_M_pairs": {
+    "value": 33.77,
+    "label": "derived"
+   },
+   "cpu_core_s_credited": {
+    "value": 3358.7,
+    "label": "derived",
+    "note": "minus the non-host index load (section 12.9 timer build, labelled measured there)"
+   },
+   "distinct_fraction": {
+    "value": 0.474,
+    "label": "projected (pbmc1k_v3's d)"
+   },
+   "gpu_s_per_sample_whole_sample_job789771": {
+    "value": 25.66,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_s_per_sample_best_2M_set_job789812": {
+    "value": 20.25,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_node_host_core_s": {
+    "value": 129.7,
+    "label": "derived",
+    "note": "W after the pileup + ingest"
+   }
+  },
+  "GSM7036403": {
+   "M_read_pairs": {
+    "value": 111.6,
+    "label": "measured"
+   },
+   "cpu_core_s": {
+    "value": 3205.4,
+    "label": "measured"
+   },
+   "cpu_wall_s_4threads": {
+    "value": 1261.0,
+    "label": "measured"
+   },
+   "cpu_core_s_per_M_pairs": {
+    "value": 28.72,
+    "label": "derived"
+   },
+   "cpu_core_s_credited": {
+    "value": 3152.1,
+    "label": "derived",
+    "note": "minus the non-host index load (section 12.9 timer build, labelled measured there)"
+   },
+   "distinct_fraction": {
+    "value": 0.298,
+    "label": "measured"
+   },
+   "gpu_s_per_sample_whole_sample_job789771": {
+    "value": 17.98,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_s_per_sample_best_2M_set_job789812": {
+    "value": 14.19,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_node_host_core_s": {
+    "value": 253.1,
+    "label": "derived",
+    "note": "W after the pileup + ingest"
+   }
+  },
+  "GSM6470208": {
+   "M_read_pairs": {
+    "value": 121.8,
+    "label": "measured"
+   },
+   "cpu_core_s": {
+    "value": 5281.5,
+    "label": "measured"
+   },
+   "cpu_wall_s_4threads": {
+    "value": 2097.8,
+    "label": "measured"
+   },
+   "cpu_core_s_per_M_pairs": {
+    "value": 43.36,
+    "label": "derived"
+   },
+   "cpu_core_s_credited": {
+    "value": 5235.3,
+    "label": "derived",
+    "note": "minus the non-host index load (section 12.9 timer build, labelled measured there)"
+   },
+   "distinct_fraction": {
+    "value": 0.303,
+    "label": "measured"
+   },
+   "gpu_s_per_sample_whole_sample_job789771": {
+    "value": 19.94,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_s_per_sample_best_2M_set_job789812": {
+    "value": 15.74,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_node_host_core_s": {
+    "value": 281.8,
+    "label": "derived",
+    "note": "W after the pileup + ingest"
+   }
+  },
+  "GSM7656149": {
+   "M_read_pairs": {
+    "value": 263.4,
+    "label": "measured"
+   },
+   "cpu_core_s": {
+    "value": 11661.1,
+    "label": "measured"
+   },
+   "cpu_wall_s_4threads": {
+    "value": 4129,
+    "label": "measured"
+   },
+   "cpu_core_s_per_M_pairs": {
+    "value": 44.27,
+    "label": "derived"
+   },
+   "cpu_core_s_credited": {
+    "value": 11618.4,
+    "label": "derived",
+    "note": "minus the non-host index load (section 12.9 timer build, labelled measured there)"
+   },
+   "distinct_fraction": {
+    "value": 0.515,
+    "label": "measured"
+   },
+   "gpu_s_per_sample_whole_sample_job789771": {
+    "value": 73.03,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_s_per_sample_best_2M_set_job789812": {
+    "value": 57.58,
+    "label": "projected",
+    "note": "M5 rate measured on pbmc1k_v3, applied to this sample's distinct sequences"
+   },
+   "gpu_node_host_core_s": {
+    "value": 717.2,
+    "label": "derived",
+    "note": "W after the pileup + ingest"
+   }
+  }
+ },
+ "pooled": {
+  "samples": 6,
+  "M_read_pairs_total": {
+   "value": 733.4,
+   "label": "measured"
+  },
+  "cpu_core_s_per_M_pairs": {
+   "value": 37.87,
+   "label": "derived"
+  },
+  "cpu_core_s_per_M_pairs_credited": {
+   "value": 37.55,
+   "label": "derived"
+  },
+  "cpu_node_M_pairs_per_s": {
+   "value": 1.385,
+   "label": "modelled (packing 1.0)"
+  },
+  "cpu_node_samples_per_hour": {
+   "value": 40.8,
+   "label": "modelled (packing 1.0)"
+  },
+  "cpu_core_hours_per_sample": {
+   "value": 1.275,
+   "label": "derived"
+  },
+  "cpu_node_hours_per_sample": {
+   "value": 0.0245,
+   "label": "modelled (packing 1.0)"
+  },
+  "gpu_node_host_bound_M_pairs_per_s": {
+   "value": 24.29,
+   "label": "derived",
+   "note": "step 0 (today's host callers)"
+  },
+  "scenarios": {
+   "whole_sample_job789771": {
+    "gpu_node_gpu_bound_M_pairs_per_s": {
+     "value": 8.71,
+     "label": "projected"
+    },
+    "gpu_node_M_pairs_per_s": {
+     "value": 8.71,
+     "label": "projected"
+    },
+    "gpu_node_samples_per_hour": {
+     "value": 256.4,
+     "label": "projected"
+    },
+    "gpu_node_hours_per_sample": {
+     "value": 0.0039,
+     "label": "projected"
+    },
+    "gpu_hours_per_sample": {
+     "value": 0.0078,
+     "label": "projected"
+    },
+    "gpu_node_host_core_hours_per_sample": {
+     "value": 0.0769,
+     "label": "derived"
+    },
+    "cpu_nodes_offset_per_gpu_node": {
+     "value": 6.29,
+     "label": "projected"
+    },
+    "usd_per_sample_cloud_on_demand": {
+     "value": {
+      "central": {
+       "gpu_node_usd_per_sample": 0.0311,
+       "cpu_usd_per_sample": 0.0637,
+       "cpu_over_gpu": 2.05
+      },
+      "low": {
+       "gpu_node_usd_per_sample": 0.0202,
+       "cpu_usd_per_sample": 0.0521,
+       "cpu_over_gpu": 2.58
+      },
+      "high": {
+       "gpu_node_usd_per_sample": 0.0537,
+       "cpu_usd_per_sample": 0.1139,
+       "cpu_over_gpu": 2.12
+      }
+     },
+     "label": "modelled"
+    },
+    "cpu_speed_sensitivity": {
+     "value": {
+      "cpu_usd_per_sample_if_cores_2x_faster": 0.0319,
+      "cpu_over_gpu": 1.02
+     },
+     "label": "modelled"
+    },
+    "access_credits_per_sample": {
+     "value": {
+      "gpu": 0.523,
+      "cpu": 1.275
+     },
+     "label": "modelled",
+     "note": "Anvil GPU rate derived from Purdue's example, not published (rates.json)"
+    },
+    "energy_kwh_per_sample": {
+     "value": {
+      "gpu_node": 0.0085,
+      "cpu_epyc_power_per_core": 0.0067,
+      "cpu_over_gpu_epyc_power": 0.79,
+      "cpu_6230r_power": 0.0172,
+      "cpu_over_gpu_6230r_power": 2.02,
+      "usd_gpu": 0.0012,
+      "usd_cpu_6230r": 0.0025
+     },
+     "label": "modelled",
+     "note": "no metered power for either node; both GPU and 6230R node figures are estimates"
+    }
+   },
+   "best_2M_set_job789812": {
+    "gpu_node_gpu_bound_M_pairs_per_s": {
+     "value": 11.04,
+     "label": "projected"
+    },
+    "gpu_node_M_pairs_per_s": {
+     "value": 11.04,
+     "label": "projected"
+    },
+    "gpu_node_samples_per_hour": {
+     "value": 325.0,
+     "label": "projected"
+    },
+    "gpu_node_hours_per_sample": {
+     "value": 0.00308,
+     "label": "projected"
+    },
+    "gpu_hours_per_sample": {
+     "value": 0.00615,
+     "label": "projected"
+    },
+    "gpu_node_host_core_hours_per_sample": {
+     "value": 0.0769,
+     "label": "derived"
+    },
+    "cpu_nodes_offset_per_gpu_node": {
+     "value": 7.97,
+     "label": "projected"
+    },
+    "usd_per_sample_cloud_on_demand": {
+     "value": {
+      "central": {
+       "gpu_node_usd_per_sample": 0.0246,
+       "cpu_usd_per_sample": 0.0637,
+       "cpu_over_gpu": 2.6
+      },
+      "low": {
+       "gpu_node_usd_per_sample": 0.0159,
+       "cpu_usd_per_sample": 0.0521,
+       "cpu_over_gpu": 3.27
+      },
+      "high": {
+       "gpu_node_usd_per_sample": 0.0423,
+       "cpu_usd_per_sample": 0.1139,
+       "cpu_over_gpu": 2.69
+      }
+     },
+     "label": "modelled"
+    },
+    "cpu_speed_sensitivity": {
+     "value": {
+      "cpu_usd_per_sample_if_cores_2x_faster": 0.0319,
+      "cpu_over_gpu": 1.3
+     },
+     "label": "modelled"
+    },
+    "access_credits_per_sample": {
+     "value": {
+      "gpu": 0.412,
+      "cpu": 1.275
+     },
+     "label": "modelled",
+     "note": "Anvil GPU rate derived from Purdue's example, not published (rates.json)"
+    },
+    "energy_kwh_per_sample": {
+     "value": {
+      "gpu_node": 0.0067,
+      "cpu_epyc_power_per_core": 0.0067,
+      "cpu_over_gpu_epyc_power": 1.0,
+      "cpu_6230r_power": 0.0172,
+      "cpu_over_gpu_6230r_power": 2.56,
+      "usd_gpu": 0.001,
+      "usd_cpu_6230r": 0.0025
+     },
+     "label": "modelled",
+     "note": "no metered power for either node; both GPU and 6230R node figures are estimates"
+    }
+   },
+   "target_m5_at_host_bound": {
+    "gpu_node_gpu_bound_M_pairs_per_s": {
+     "value": 24.29,
+     "label": "target"
+    },
+    "gpu_node_M_pairs_per_s": {
+     "value": 24.29,
+     "label": "projected"
+    },
+    "gpu_node_samples_per_hour": {
+     "value": 715.5,
+     "label": "projected"
+    },
+    "gpu_node_hours_per_sample": {
+     "value": 0.0014,
+     "label": "projected"
+    },
+    "gpu_hours_per_sample": {
+     "value": 0.0028,
+     "label": "projected"
+    },
+    "gpu_node_host_core_hours_per_sample": {
+     "value": 0.0769,
+     "label": "derived"
+    },
+    "cpu_nodes_offset_per_gpu_node": {
+     "value": 17.54,
+     "label": "projected"
+    },
+    "usd_per_sample_cloud_on_demand": {
+     "value": {
+      "central": {
+       "gpu_node_usd_per_sample": 0.0112,
+       "cpu_usd_per_sample": 0.0637,
+       "cpu_over_gpu": 5.72
+      },
+      "low": {
+       "gpu_node_usd_per_sample": 0.0072,
+       "cpu_usd_per_sample": 0.0521,
+       "cpu_over_gpu": 7.2
+      },
+      "high": {
+       "gpu_node_usd_per_sample": 0.0192,
+       "cpu_usd_per_sample": 0.1139,
+       "cpu_over_gpu": 5.92
+      }
+     },
+     "label": "modelled"
+    },
+    "cpu_speed_sensitivity": {
+     "value": {
+      "cpu_usd_per_sample_if_cores_2x_faster": 0.0319,
+      "cpu_over_gpu": 2.85
+     },
+     "label": "modelled"
+    },
+    "access_credits_per_sample": {
+     "value": {
+      "gpu": 0.187,
+      "cpu": 1.275
+     },
+     "label": "modelled",
+     "note": "Anvil GPU rate derived from Purdue's example, not published (rates.json)"
+    },
+    "energy_kwh_per_sample": {
+     "value": {
+      "gpu_node": 0.0031,
+      "cpu_epyc_power_per_core": 0.0067,
+      "cpu_over_gpu_epyc_power": 2.21,
+      "cpu_6230r_power": 0.0172,
+      "cpu_over_gpu_6230r_power": 5.64,
+      "usd_gpu": 0.0004,
+      "usd_cpu_6230r": 0.0025
+     },
+     "label": "modelled",
+     "note": "no metered power for either node; both GPU and 6230R node figures are estimates"
+    }
+   }
+  }
+ },
+ "sources": {
+  "cpu_baseline": "bench/gpu/cost/run_single.sbatch; $W/jobs/w11/cost/runs/single/<sample>/time.txt",
+  "nonhost_load_and_W": "docs/gpu-engine/exploration.md 12.9 (bench/gpu/results/m10b_timers.json)",
+  "distinct_fraction": "exploration.md 12.2 (bench/gpu/results/m2_*.json)",
+  "m5": "exploration.md 12.12 (bench/gpu/results/m5_pbmc1k_v3_2m*.json, e2e_pbmc1k_v3_m5.json)",
+  "rates": "bench/gpu/cost/rates.json"
+ }
+}
