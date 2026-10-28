@@ -103,3 +103,38 @@ order, so thread count and rerun cannot change it.
 
 Below the 12.7 core-s per M pairs cloud break-even on a 54-core GPU node. The next lever after that is STAR's remaining per-read
 pass (cache lookups, FASTQ parsing: about 3).
+
+## Status and next decision (2026-10-28, afternoon)
+
+- **Done:** the GPU pileup is linked into `singlet` (`src/engine_gpu/pileup_gpu.cu`). `SINGLET_GPU_PILEUP=compare` checks it
+  in-process: all 9 covered outputs and the R1 counters are identical to the CPU pileup of the same run (pbmc1k_v3, job 790407).
+- **First switch-over, `SINGLET_GPU_PILEUP=on` (build 68e48256):**
+  - The CPU skips the SNP and chrM walks, junction extraction and the UMI store with its final collapse.
+  - Their accumulators, junction rows (R7 order) and counters come from the GPU: `snp_hits`, `sj_hits`, `mt_pileup_bases`,
+    the R1 molecule counters, and the molecule labels (M6 now counts spliced, unspliced, ambiguous and legacy_double).
+  - The CPU keeps the per-read classification, which strand, poly(A), VDJ, the WL ambient profile and the stats counters need.
+  - The gate is job 790461: every output against the CPU pileup, plus CPU per run.
+- **Measured cost of the serial pileup in stream mode** (pbmc1k_v3, job 790421, one thread, 286 s):
+
+  | step | seconds | covered by the first cut? |
+  |---|---|---|
+  | exon/intron classification | 68 | stays |
+  | BAM parse and pipe wait | 54 | stays |
+  | SNP | 26 | covered |
+  | chrM | 8.5 | covered |
+  | junctions | 7.6 | covered |
+  | barcode, NH/UMI, secondary | 20 | stays |
+  | unaccounted, including molecule labelling | 101 | partly covered |
+
+- **Full offload, the next decision.** Moving the classification to the GPU (68 s, about 1 core-s per M pairs) means extending
+  `k_annotate` to emit, per alignment:
+  - strand votes over the unfiltered overlaps;
+  - the strand-reject and multigene flags;
+  - `classify_read`'s counters;
+  - VDJ genes;
+  - poly(A) sites.
+
+  A host pass over the collected reads would then add these up per read. The reads outside the barcode set, which feed the WL
+  ambient profile, would also need collecting. Removing the BAM entirely (records straight from the GPU prefill) would also take
+  away the 54 s parse and STAR's BAM generation, but requires the same ports. Sized at a day or more. It goes ahead after the
+  first cut's gate and measured saving.
