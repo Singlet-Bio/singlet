@@ -174,7 +174,7 @@ rate; it is not what this binary delivers.
   and read number) and sorts them; (3) the GPU pileup (identical on 4 samples, research branch) replaces the covered
   accumulators, leaving the CPU only the outputs it does not cover (per-cell QC, poly(A), rRNA sample, VDJ, guides, strand probe).
   The field and order inventory per output is in `ws-w11-gpu.md` on the research branch.
-- GPU mapping at ≥ 10 M distinct sequences/s (2.4 M now; read binning by window count measured no gain, job 790068).
+- GPU mapping at ≥ 10 M distinct sequences/s (2.4 M now; read binning by window count untested: job 790068 ran the previous binary).
 - GPU read clipping (5′ samples with adapter clipping map on the CPU in this release).
 - A persistent per-node engine (genome index and non-host index resident across samples; today each sample's process loads
   them: 4 s upload of the genome arrays, 4 s non-host index).
