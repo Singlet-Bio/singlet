@@ -212,35 +212,15 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
     singlet_engine_gpu::Input in;
     if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
     time_t tRead = time(nullptr);
-    // one sample at a time per GPU (several samples in flight per node): an exclusive lock per device; SINGLET_ENGINE_GPU_DEVICE
-    // pins the device, otherwise the first free one is taken, or the process waits for device (pid mod devices)
-    const char *dv = getenv("SINGLET_ENGINE_GPU_DEVICE");
-    int nDev = std::max(1, singlet_engine_gpu::deviceCount());
-    int device = -1, lockFd = -1;
-    // locks are named by PCI bus id: jobs that see different GPUs under the same index do not wait for each other
-    auto lockPath = [](int d) { return "/tmp/singlet_engine_gpu_" + singlet_engine_gpu::deviceId(d) + ".lock"; };
+    // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
     time_t tWait = time(nullptr);
-    if (dv != nullptr) {
-        device = atoi(dv);
-        lockFd = open(lockPath(device).c_str(), O_CREAT | O_RDWR, 0666);
-        if (lockFd >= 0) flock(lockFd, LOCK_EX);
-    } else {
-        for (int d = 0; d < nDev && device < 0; d++) {
-            int fd = open(lockPath(d).c_str(), O_CREAT | O_RDWR, 0666);
-            if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { device = d; lockFd = fd; }
-            else if (fd >= 0) close(fd);
-        }
-        if (device < 0) {
-            device = (int) (getpid() % nDev);
-            lockFd = open(lockPath(device).c_str(), O_CREAT | O_RDWR, 0666);
-            if (lockFd >= 0) flock(lockFd, LOCK_EX);
-        }
-    }
+    int lockFd = -1;
+    int device = singlet_engine_gpu::lockDevice(&lockFd);
     time_t tLock = time(nullptr);
     int hostThreads = (int) P.runThreadN;
     singlet_engine_gpu::Output out;
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
-    if (lockFd >= 0) { flock(lockFd, LOCK_UN); close(lockFd); }
+    singlet_engine_gpu::unlockDevice(lockFd);
     time_t tGpu = time(nullptr);
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it\n" << out.log;
