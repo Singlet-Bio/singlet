@@ -206,3 +206,27 @@ saving is real (about 19% of wall at idle nodes, more under co-tenancy) and cost
 - The staged `.1fq` files under `$WORK/data/bam-stream/` (about 4.4 GB) are deleted once this report is reviewed.
 - Clipper cost: roughly 120 core-hours of shared-node baseline plus about 20 node-hours exclusive, all at nice 10000 and `%2` or less.
 - Jobs are named `bs-*`; scripts are in `bench/bam-stream/`.
+
+## Update 2026-10-28 (b): determinism runs on GSM4006843
+
+Streaming (`--stream-unsorted`, binary `singlet-bs-stream`) vs the sorted path, 4/8/16 threads and reruns, one exclusive node per run
+(jobs 790002, 790010-790015; compare jobs 790026-790032). Barcode list fixed from the sorted run (runs 1-4, fixed list disables cell
+calling, so summary says `align_zero_cells` and the job exits 4: expected) or auto (runs r3-r5, cells=13,302, status success).
+
+| pair | files identical | differing |
+|---|---|---|
+| streaming T4 vs T8 | 48/63 | nonhost EM, pileup_stats, donor VCF + coverage, snp_ad, read_stats, rrna_report, sj_counts, sj_features, splice_events, splice_psi, star_Log.std.out |
+| streaming T4 vs T16 | 48/63 | same 12 |
+| streaming T4 rerun | 51/63 | the above minus donor VCF/coverage/snp_ad (9) |
+| streaming auto T4 rerun | 49/63 | 12 |
+| streaming auto T4 vs T16 | 50/63 | 12 |
+| **sorted T4 rerun (control)** | **56/63** | nonhost EM, read_stats (1 line), 13 bytes of a pileup_stats provenance size |
+
+Reading: the exon/intron/gene count matrices are identical across threads and reruns in streaming. Junction counts (and the
+splice tables built from them), rRNA sampling, read_stats and the donor SNP tallies are not: they vary run to run, where the sorted
+path reproduces them exactly (only the pre-existing nonhost EM and a one-line read_stats differ). The likely cause is STAR's unsorted
+emission order (thread timing), which read-order-dependent steps (first-N sampling, junction filters, SNP tallies) inherit.
+
+Criterion (b) is therefore not met and is not near the noise floor for junctions/SNPs; it needs those steps made order-independent
+(or the stream re-ordered) before streaming can be the default. (a) and (c) are unchanged. Not run: shuffled-order test, Kang pool,
+high-mtDNA sample (staging needed). Recommendation stands: opt-in flag only.
