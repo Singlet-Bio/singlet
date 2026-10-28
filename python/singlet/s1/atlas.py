@@ -2561,7 +2561,7 @@ class Index:
         d = json.loads(_get(t, version_key(version)).decode("utf-8"))
         if d.get("format") != FORMAT or int(d.get("format_version", 0)) > FORMAT_VERSION:
             raise IndexError_(
-                f"{version}: not a {FORMAT} v{FORMAT_VERSION} directory (upgrade singlet-bio)"
+                f"{version}: not a {FORMAT} v{FORMAT_VERSION} directory (upgrade singlet)"
             )
         return cls(d, t, base=base)
 

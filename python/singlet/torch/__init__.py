@@ -26,7 +26,7 @@ try:
     import torch as _torch
 except ImportError:
     raise ImportError(
-        "singlet.torch requires PyTorch. Install with: pip install 'singlet-bio[torch]'"
+        "singlet.torch requires PyTorch. Install with: pip install 'singlet[torch]'"
     ) from None
 
 from singlet.torch._stream import AtlasCells, plan_samples, study_split
