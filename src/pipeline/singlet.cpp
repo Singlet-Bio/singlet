@@ -5007,6 +5007,10 @@ int main(int argc, char* argv[]) {
         else if (is_atac_mode) sorted_reason = "ATAC fragments are read from the sorted BAM";
         else if (is_smart_seq2_mode || is_bulk_rna_mode) sorted_reason = "plate/bulk counting reads the sorted BAM";
         else if (detected_soloType != "CB_UMI_Simple") sorted_reason = "the protocol is not CB_UMI_Simple";
+        // Same condition as the native CB_UMI_Simple STAR branch below: without a whitelist file STAR runs
+        // CB_samTagOut (auto-discovery), which the stream does not support (found by W11, job 790268).
+        else if (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")
+            sorted_reason = "no barcode whitelist file (STAR runs CB_samTagOut)";
         else if (tagged_bam_enabled) sorted_reason = "--tagged-bam rewrites the sorted BAM";
         else if (std::getenv("SINGLET_KEEP_STAR_BAM")) sorted_reason = "SINGLET_KEEP_STAR_BAM keeps the sorted BAM";
         if (sorted_reason) {
@@ -5020,6 +5024,7 @@ int main(int argc, char* argv[]) {
         }
     }
     config.cb_from_cr = (stream_unsorted == 1);
+    config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
     // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
     const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
     if (engine_ptr && config.cb_from_cr) {
@@ -8083,6 +8088,17 @@ int main(int argc, char* argv[]) {
         }
         // Join FIFO writer thread (if FIFO decode mode) after STAR completes
         if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
+
+        // Stream (order-free-rules R5): the pass was counted in the protocol orientation. A pipe cannot be
+        // re-read, so a library whose reads contradict that orientation goes to the sorted path, where the
+        // strand safety net re-reads the BAM. Exit 8 = strand_contradiction: rerun with --sorted-bam.
+        if (stream_unsorted == 1 && config.stranded && config.auto_strand
+            && stats.strand_sense + stats.strand_antisense >= singlet::kStrandRetryMinReads
+            && singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) > singlet::kStrandRetryFrac) {
+            std::cerr << "[singlet] ERROR: " << static_cast<int>(singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) * 100)
+                      << "% of nuclear reads are antisense to the protocol orientation; rerun with --sorted-bam (strand safety net)" << std::endl;
+            return 8;  // strand_contradiction
+        }
     }
 
     // ── BUG-MAPPING-GUARD: Warn on very low mapping rate (wrong genome) ──
