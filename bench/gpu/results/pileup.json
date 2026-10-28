@@ -1,0 +1,634 @@
+{
+ "task": "W11 GPU annotation and pileup",
+ "engine_commit": "c4a1be3844ae5a43c35eb3124850f91d303ebbc8 (prod/campaign), dev build with bench/gpu/pileup/pileup_dump.patch",
+ "gpu": "NVIDIA H100 NVL (sm_90, nvcc 12.4.131, -fmad=false)",
+ "timing": "CUDA events, median of 3 after one warm-up; H2D of the records and D2H of the outputs excluded and reported separately",
+ "samples": {
+  "GSM4006843": {
+   "description": "human 3' v2",
+   "job": 789669,
+   "read_pairs": 66699625.0,
+   "records_reads": 60873094,
+   "signatures": 23070222,
+   "alignments": 25894673,
+   "barcodes": 119473,
+   "tuples": {
+    "gene": 55792540,
+    "junction_instances": 3341174,
+    "junction_tuples": 15792389,
+    "junctions": 170321,
+    "snp": 7401489,
+    "mt_bases": 179639797,
+    "mt_indels": 42928
+   },
+   "identical": {
+    "exon": true,
+    "intron": true,
+    "ambiguous": true,
+    "junctions": true,
+    "snp_ad": true,
+    "snp_dp": true,
+    "mt": true,
+    "mt_rev": true,
+    "mt_indels": true
+   },
+   "all_identical": true,
+   "equivalence_detail": {
+    "exon": {
+     "identical_entries": 24604078,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 24604078,
+     "cpu_nnz": 24604078,
+     "gpu_sum": 45120052,
+     "cpu_sum": 45120052,
+     "identical": true
+    },
+    "intron": {
+     "identical_entries": 6031894,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 6031894,
+     "cpu_nnz": 6031894,
+     "gpu_sum": 6408333,
+     "cpu_sum": 6408333,
+     "identical": true
+    },
+    "ambiguous": {
+     "identical_entries": 39356,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 39356,
+     "cpu_nnz": 39356,
+     "gpu_sum": 39714,
+     "cpu_sum": 39714,
+     "identical": true
+    },
+    "junctions": {
+     "identical_entries": 8586171,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 8586171,
+     "cpu_nnz": 8586171,
+     "gpu_sum": 15122798,
+     "cpu_sum": 15122798,
+     "identical": true
+    },
+    "snp_ad": {
+     "identical_entries": 1656215,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 1656215,
+     "cpu_nnz": 1656215,
+     "gpu_sum": 1871759,
+     "cpu_sum": 1871759,
+     "identical": true
+    },
+    "snp_dp": {
+     "identical_entries": 5613873,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 5613873,
+     "cpu_nnz": 5613873,
+     "gpu_sum": 7099653,
+     "cpu_sum": 7099653,
+     "identical": true
+    },
+    "mt": {
+     "identical_entries": 56926070,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 56926070,
+     "cpu_nnz": 56926070,
+     "gpu_sum": 179639797,
+     "cpu_sum": 179639797,
+     "identical": true
+    },
+    "mt_rev": {
+     "identical_entries": 4821008,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 4821008,
+     "cpu_nnz": 4821008,
+     "gpu_sum": 5497669,
+     "cpu_sum": 5497669,
+     "identical": true
+    },
+    "mt_indels": {
+     "gpu": 42928,
+     "cpu": 42928,
+     "identical": true
+    }
+   },
+   "deterministic_across_runs": true,
+   "output_sha256": "c827d68418602a7da63e6e36e9e10384f4d712cc7c47edb2f6e261036e6d5f49",
+   "gpu_ms_by_stage": {
+    "annotate": 4.386,
+    "signature_lists": 3.805,
+    "junction_ids": 0.728,
+    "expand_to_reads": 12.346,
+    "gene_collapse_M6_bcd": 21.609,
+    "junction_count": 2.414,
+    "snp_count": 1.269,
+    "chrM_count": 8.704
+   },
+   "gpu_ms_total": 55.282,
+   "reads_per_s": 1101000000.0,
+   "pairs_per_s": 1206534224.5215442,
+   "peak_device_memory_GB": 23.76,
+   "resident_inputs_GB": 3.08,
+   "h2d_records_ms": 762.3,
+   "h2d_records_GB": 3.01,
+   "host_work_removed": {
+    "stage_wall_s_mean_of_2": {
+     "pileup_total": 65.38,
+     "index": 5.54,
+     "cb_refresh": 24.02,
+     "pileup_pass": 28.82,
+     "sort": 347.81
+    },
+    "pileup_total_core_s_per_Mpairs": 3.921,
+    "index_plus_cb_refresh_core_s_per_Mpairs_at_1_core": 0.443,
+    "removed_core_s_per_Mpairs": 4.364,
+    "not_counted_BAM_sort_core_s_per_Mpairs_at_4_threads": 20.858,
+    "basis": "campaign binary, 4 threads: pileup_total x 4 workers (allocated cores); index and cb_refresh at 1 core (lower bound); source runs t4_r1,t4_r2 in $W/bam-stream/runs"
+   }
+  },
+  "GSM5411066": {
+   "description": "mouse 3' v3 (GRCm39)",
+   "job": 789670,
+   "read_pairs": 69600000.0,
+   "records_reads": 61022378,
+   "signatures": 23174407,
+   "alignments": 25773679,
+   "barcodes": 151743,
+   "tuples": {
+    "gene": 47462894,
+    "junction_instances": 1943643,
+    "junction_tuples": 10119989,
+    "junctions": 206952,
+    "snp": 3987128,
+    "mt_bases": 91376620,
+    "mt_indels": 5048
+   },
+   "identical": {
+    "exon": true,
+    "intron": true,
+    "ambiguous": true,
+    "junctions": true,
+    "snp_ad": true,
+    "snp_dp": true,
+    "mt": true,
+    "mt_rev": true,
+    "mt_indels": true
+   },
+   "all_identical": true,
+   "equivalence_detail": {
+    "exon": {
+     "identical_entries": 9771259,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 9771259,
+     "cpu_nnz": 9771259,
+     "gpu_sum": 19585720,
+     "cpu_sum": 19585720,
+     "identical": true
+    },
+    "intron": {
+     "identical_entries": 5357748,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 5357748,
+     "cpu_nnz": 5357748,
+     "gpu_sum": 7113720,
+     "cpu_sum": 7113720,
+     "identical": true
+    },
+    "ambiguous": {
+     "identical_entries": 128722,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 128722,
+     "cpu_nnz": 128722,
+     "gpu_sum": 138355,
+     "cpu_sum": 138355,
+     "identical": true
+    },
+    "junctions": {
+     "identical_entries": 3496649,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 3496649,
+     "cpu_nnz": 3496649,
+     "gpu_sum": 7059928,
+     "cpu_sum": 7059928,
+     "identical": true
+    },
+    "snp_ad": {
+     "identical_entries": 12144,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 12144,
+     "cpu_nnz": 12144,
+     "gpu_sum": 19957,
+     "cpu_sum": 19957,
+     "identical": true
+    },
+    "snp_dp": {
+     "identical_entries": 2054044,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 2054044,
+     "cpu_nnz": 2054044,
+     "gpu_sum": 2798910,
+     "cpu_sum": 2798910,
+     "identical": true
+    },
+    "mt": {
+     "identical_entries": 20271143,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 20271143,
+     "cpu_nnz": 20271143,
+     "gpu_sum": 91376620,
+     "cpu_sum": 91376620,
+     "identical": true
+    },
+    "mt_rev": {
+     "identical_entries": 612264,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 612264,
+     "cpu_nnz": 612264,
+     "gpu_sum": 923992,
+     "cpu_sum": 923992,
+     "identical": true
+    },
+    "mt_indels": {
+     "gpu": 5048,
+     "cpu": 5048,
+     "identical": true
+    }
+   },
+   "deterministic_across_runs": true,
+   "output_sha256": "675dc98647d34f088ea12291484e4ec16f0eea748e3247459ec3c17bda2ca618",
+   "gpu_ms_by_stage": {
+    "annotate": 4.288,
+    "signature_lists": 3.037,
+    "junction_ids": 0.501,
+    "expand_to_reads": 9.157,
+    "gene_collapse_M6_bcd": 15.876,
+    "junction_count": 1.583,
+    "snp_count": 0.777,
+    "chrM_count": 4.367
+   },
+   "gpu_ms_total": 39.581,
+   "reads_per_s": 1542000000.0,
+   "pairs_per_s": 1758419443.672469,
+   "peak_device_memory_GB": 16.7,
+   "resident_inputs_GB": 3.0,
+   "h2d_records_ms": 802.4,
+   "h2d_records_GB": 2.96,
+   "host_work_removed": {
+    "stage_wall_s_mean_of_2": {
+     "pileup_total": 49.96,
+     "index": 6.36,
+     "cb_refresh": 19.94,
+     "pileup_pass": 23.58,
+     "sort": 294.8
+    },
+    "pileup_total_core_s_per_Mpairs": 2.871,
+    "index_plus_cb_refresh_core_s_per_Mpairs_at_1_core": 0.378,
+    "removed_core_s_per_Mpairs": 3.249,
+    "not_counted_BAM_sort_core_s_per_Mpairs_at_4_threads": 16.942,
+    "basis": "campaign binary, 4 threads: pileup_total x 4 workers (allocated cores); index and cb_refresh at 1 core (lower bound); source runs t4_r1,t4_r2 in $W/bam-stream/runs"
+   }
+  },
+  "GSM6470208": {
+   "description": "human 5' v2",
+   "job": 789671,
+   "read_pairs": 121800000.0,
+   "records_reads": 88529056,
+   "signatures": 21804813,
+   "alignments": 34541709,
+   "barcodes": 115822,
+   "tuples": {
+    "gene": 62938411,
+    "junction_instances": 4475246,
+    "junction_tuples": 25799747,
+    "junctions": 266889,
+    "snp": 9454320,
+    "mt_bases": 277407325,
+    "mt_indels": 28822
+   },
+   "identical": {
+    "exon": true,
+    "intron": true,
+    "ambiguous": true,
+    "junctions": true,
+    "snp_ad": true,
+    "snp_dp": true,
+    "mt": true,
+    "mt_rev": true,
+    "mt_indels": true
+   },
+   "all_identical": true,
+   "equivalence_detail": {
+    "exon": {
+     "identical_entries": 8931249,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 8931249,
+     "cpu_nnz": 8931249,
+     "gpu_sum": 16755940,
+     "cpu_sum": 16755940,
+     "identical": true
+    },
+    "intron": {
+     "identical_entries": 2762989,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 2762989,
+     "cpu_nnz": 2762989,
+     "gpu_sum": 4855479,
+     "cpu_sum": 4855479,
+     "identical": true
+    },
+    "ambiguous": {
+     "identical_entries": 413682,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 413682,
+     "cpu_nnz": 413682,
+     "gpu_sum": 461020,
+     "cpu_sum": 461020,
+     "identical": true
+    },
+    "junctions": {
+     "identical_entries": 7532947,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 7532947,
+     "cpu_nnz": 7532947,
+     "gpu_sum": 13975797,
+     "cpu_sum": 13975797,
+     "identical": true
+    },
+    "snp_ad": {
+     "identical_entries": 1200484,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 1200484,
+     "cpu_nnz": 1200484,
+     "gpu_sum": 1551953,
+     "cpu_sum": 1551953,
+     "identical": true
+    },
+    "snp_dp": {
+     "identical_entries": 3870197,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 3870197,
+     "cpu_nnz": 3870197,
+     "gpu_sum": 5294990,
+     "cpu_sum": 5294990,
+     "identical": true
+    },
+    "mt": {
+     "identical_entries": 61569961,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 61569961,
+     "cpu_nnz": 61569961,
+     "gpu_sum": 277407325,
+     "cpu_sum": 277407325,
+     "identical": true
+    },
+    "mt_rev": {
+     "identical_entries": 55847955,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 55847955,
+     "cpu_nnz": 55847955,
+     "gpu_sum": 246364882,
+     "cpu_sum": 246364882,
+     "identical": true
+    },
+    "mt_indels": {
+     "gpu": 28822,
+     "cpu": 28822,
+     "identical": true
+    }
+   },
+   "deterministic_across_runs": true,
+   "output_sha256": "57bd1c8504c8664c54c7ed4b3807c696363e1c398cef153fed66d7878ca5721e",
+   "gpu_ms_by_stage": {
+    "annotate": 5.128,
+    "signature_lists": 4.063,
+    "junction_ids": 0.94,
+    "expand_to_reads": 17.931,
+    "gene_collapse_M6_bcd": 16.197,
+    "junction_count": 3.812,
+    "snp_count": 1.497,
+    "chrM_count": 13.553
+   },
+   "gpu_ms_total": 63.124,
+   "reads_per_s": 1402000000.0,
+   "pairs_per_s": 1929535517.394335,
+   "peak_device_memory_GB": 25.12,
+   "resident_inputs_GB": 3.62,
+   "h2d_records_ms": 891.0,
+   "h2d_records_GB": 3.54,
+   "host_work_removed": {
+    "stage_wall_s_mean_of_2": {
+     "pileup_total": 183.19,
+     "index": 133.93,
+     "cb_refresh": 63.1,
+     "pileup_pass": 103.95,
+     "sort": 2281.69
+    },
+    "pileup_total_core_s_per_Mpairs": 6.016,
+    "index_plus_cb_refresh_core_s_per_Mpairs_at_1_core": 1.618,
+    "removed_core_s_per_Mpairs": 7.634,
+    "not_counted_BAM_sort_core_s_per_Mpairs_at_4_threads": 74.933,
+    "basis": "campaign binary, 4 threads: pileup_total x 4 workers (allocated cores); index and cb_refresh at 1 core (lower bound); source runs t4_r1,t4_r2 in $W/bam-stream/runs"
+   }
+  }
+ },
+ "dev_samples": {
+  "pbmc2m": {
+   "description": "PBMC 2 M-pair subsample (development run)",
+   "job": 789652,
+   "read_pairs": 2000000.0,
+   "records_reads": 1743496,
+   "signatures": 1155036,
+   "alignments": 1294319,
+   "barcodes": 1854,
+   "tuples": {
+    "gene": 1492812,
+    "junction_instances": 101678,
+    "junction_tuples": 268530,
+    "junctions": 18585,
+    "snp": 264456,
+    "mt_bases": 10062345,
+    "mt_indels": 1572
+   },
+   "identical": {
+    "exon": true,
+    "intron": true,
+    "ambiguous": true,
+    "junctions": true,
+    "snp_ad": true,
+    "snp_dp": true,
+    "mt": true,
+    "mt_rev": true,
+    "mt_indels": true
+   },
+   "all_identical": true,
+   "equivalence_detail": {
+    "exon": {
+     "identical_entries": 507374,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 507374,
+     "cpu_nnz": 507374,
+     "gpu_sum": 890002,
+     "cpu_sum": 890002,
+     "identical": true
+    },
+    "intron": {
+     "identical_entries": 383927,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 383927,
+     "cpu_nnz": 383927,
+     "gpu_sum": 405254,
+     "cpu_sum": 405254,
+     "identical": true
+    },
+    "ambiguous": {
+     "identical_entries": 747,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 747,
+     "cpu_nnz": 747,
+     "gpu_sum": 751,
+     "cpu_sum": 751,
+     "identical": true
+    },
+    "junctions": {
+     "identical_entries": 158898,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 158898,
+     "cpu_nnz": 158898,
+     "gpu_sum": 239684,
+     "cpu_sum": 239684,
+     "identical": true
+    },
+    "snp_ad": {
+     "identical_entries": 62649,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 62649,
+     "cpu_nnz": 62649,
+     "gpu_sum": 70142,
+     "cpu_sum": 70142,
+     "identical": true
+    },
+    "snp_dp": {
+     "identical_entries": 209364,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 209364,
+     "cpu_nnz": 209364,
+     "gpu_sum": 237314,
+     "cpu_sum": 237314,
+     "identical": true
+    },
+    "mt": {
+     "identical_entries": 4005955,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 4005955,
+     "cpu_nnz": 4005955,
+     "gpu_sum": 10062345,
+     "cpu_sum": 10062345,
+     "identical": true
+    },
+    "mt_rev": {
+     "identical_entries": 61323,
+     "only_gpu": 0,
+     "only_cpu": 0,
+     "value_diff": 0,
+     "gpu_nnz": 61323,
+     "cpu_nnz": 61323,
+     "gpu_sum": 72769,
+     "cpu_sum": 72769,
+     "identical": true
+    },
+    "mt_indels": {
+     "gpu": 1572,
+     "cpu": 1572,
+     "identical": true
+    }
+   },
+   "deterministic_across_runs": true,
+   "output_sha256": "e626c3f35c521f87cf154a05d0b3df43c09b89b6e6332a971f07694c77814fdf",
+   "gpu_ms_by_stage": {
+    "annotate": 0.297,
+    "signature_lists": 0.459,
+    "junction_ids": 0.229,
+    "expand_to_reads": 0.72,
+    "gene_collapse_M6_bcd": 1.283,
+    "junction_count": 0.196,
+    "snp_count": 0.227,
+    "chrM_count": 0.525
+   },
+   "gpu_ms_total": 3.974,
+   "reads_per_s": 438700000.0,
+   "pairs_per_s": 503271263.2108706,
+   "peak_device_memory_GB": 0.94,
+   "resident_inputs_GB": 0.2,
+   "h2d_records_ms": 27.4,
+   "h2d_records_GB": 0.13
+  }
+ },
+ "gpu_hours_used": 1.1,
+ "core_hours_used": 31.4,
+ "notes": [
+  "records come from the CPU engine's STAR BAM via extract.cpp (M5 stand-in); truth = the engine's accumulators after run_parallel (to_csc, clamps included)",
+  "junctions compared by (chromosome, donor, acceptor); mt indels compared as sorted multisets; all other matrices entry by entry (cell, row, value)"
+ ]
+}

@@ -54,7 +54,7 @@ enum { EX_R, EX_G, EX_L, EX_iFrag, EX_sjA, EX_SIZE };
 
 enum class Status : uint8_t { Ok = 0, Overflow = 1, BlobFull = 2, Unsupported = 3 };
 // which capacity overflowed (for the heavy-lane statistics)
-enum OvWhy : uint8_t { OV_NONE, OV_LREAD, OV_SPLIT, OV_PC, OV_WIN, OV_WA, OV_WINBIN, OV_EXONS, OV_WTR, OV_KEEP, OV_BLOB };
+enum OvWhy : uint8_t { OV_NONE, OV_LREAD, OV_SPLIT, OV_PC, OV_WIN, OV_WA, OV_WINBIN, OV_EXONS, OV_WTR, OV_KEEP, OV_BLOB, OV_STEPS };
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Parameters (src/gpu/stardump/m5_dump.h writes them from the running STAR) and genome view
@@ -219,6 +219,7 @@ template <class C> struct Work {
     uint nTr; int maxScore; int unmapType;
     OvWhy ov;
     bool stitched; u64 nEntries;
+    u64 nSteps, stepBudget;    // stitching recursion steps of this read; budget (0 = none): over it, the read goes to the next lane
     long long clk[4];          // cycles: seeds, windows + assignment, stitching, selection + encoding (device only)
 };
 #ifdef __CUDA_ARCH__
@@ -1106,6 +1107,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
     int d = 0;
     fr[0].Score = 0; fr[0].tR2 = 0; fr[0].tG2 = 0; fr[0].phase = 0;
     while (d >= 0) {
+        if (w.stepBudget && ++w.nSteps > w.stepBudget) { w.ov = OV_STEPS; return false; }
         Frame& F = fr[d];
         uint iA = (uint)d;
         T& trA = w.stack[d];
@@ -1410,6 +1412,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     const char* Read1[3] = {rb.r[0], rb.r[1], rb.r[2]};
     const uint Lread = w.Lread;
     const bool stitched = w.stitched;
+    w.nSteps = 0;
     long long tc = 0;
 #ifdef __CUDA_ARCH__
     tc = clock64();

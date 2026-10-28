@@ -142,19 +142,20 @@ __global__ void k_p2(Params P, GenomeView g, u64 n, const Work<C>* work, const u
     if (wid >= n || nEnt[wid] == 0) return;
     const Work<C>& w = work[wid];
     u64 off = base[wid];
-    for (uint iP = 0; iP < w.nP; iP++) {
+    for (m5::uint iP = 0; iP < w.nP; iP++) {
         const u64 s0 = w.PC[iP][PC_SAstart], cnt = w.PC[iP][PC_SAend] - s0 + 1;
         for (u64 j = lane; j < cnt; j += 32)
-            if (entryHit(P, g, w, iP, (uint)(s0 + j))) atomicOr(&bits[(off + j) >> 5], 1u << ((off + j) & 31));
+            if (entryHit(P, g, w, iP, (m5::uint)(s0 + j))) atomicOr(&bits[(off + j) >> 5], 1u << ((off + j) & 31));
         off += cnt;
     }
 }
 template <class C>
-__global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* nEnt, const u64* base,
+__global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* nEnt, const u64* base,
                      const uint32_t* bits, uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
     Work<C>& w = work[k];
+    w.stepBudget = budget;
     u64 o = b0 + k;
     Status s = (Status)status[k];
     Blob bl{out + o * C::NBLOB, 0, C::NBLOB, false};
@@ -171,7 +172,7 @@ __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
 
 template <class C>
 static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, const u64* dRoff, const uint16_t* dRlen, const uint32_t* dIdx,
-                         u64 n, u64 NB, int reps, cudaEvent_t e0, cudaEvent_t e1, const char* name) {
+                         u64 n, u64 NB, u64 budget, int reps, cudaEvent_t e0, cudaEvent_t e1, const char* name) {
     LaneOut L;
     NB = std::min<u64>(NB, std::max<u64>(n, 1));
     uint8_t* dOut; CK(cudaMalloc(&dOut, n * (u64)C::NBLOB));
@@ -202,7 +203,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             CK(cudaMemsetAsync(dBits, 0, words * 4));
             k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
             cudaEventRecord(q[2]);
-            k_p3<C><<<G, T>>>(P, D, b0, nb, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn);
+            k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn);
             k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
             cudaEventRecord(q[3]);
             CK(cudaEventSynchronize(q[3])); CK(cudaGetLastError());
@@ -312,7 +313,7 @@ static std::string blobStr(const uint8_t* p, int n) {
 static int glScore(double scale, u64 x) { return int(std::ceil(std::log2((double)x) * scale - 0.5)); }
 
 int main(int argc, char** argv) {
-    std::string gdir, truth, json, input, emit; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 65536, nbB = 4096;
+    std::string gdir, truth, json, input, emit; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, budgetA = 0, budgetB = 0;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--genome-dir") gdir = argv[++i];
@@ -326,7 +327,9 @@ int main(int argc, char** argv) {
         else if (a == "--local") localWork = true;
         else if (a == "--mono") mono = true;            // one kernel per lane (no staged assignment scan)
         else if (a == "--batch-a") nbA = atoll(argv[++i]);
-        else if (a == "--batch-b") nbB = atoll(argv[++i]);     // lane A work in local memory instead of a global array
+        else if (a == "--batch-b") nbB = atoll(argv[++i]);
+        else if (a == "--budget-a") budgetA = atoll(argv[++i]);   // stitching steps per read before it moves on (0 = none)
+        else if (a == "--budget-b") budgetB = atoll(argv[++i]);
         else if (a == "--input") input = argv[++i];     // "count sequence" lines (uniq -c): map these instead of the truth reads
         else if (a == "--emit") emit = argv[++i];       // write (sequence, result) for the sequence cache preload (inject/)
     }
@@ -482,7 +485,7 @@ int main(int argc, char** argv) {
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
     CK(cudaDeviceSetLimit(cudaLimitStackSize, localWork ? (int)(sizeof(Work<LaneA>) + 4096) : 16 * 1024));
     LaneOut A = mono ? runLane<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, prop.multiProcessorCount * bps, nthr, reps, localWork, e0, e1, "A")
-                     : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, reps, e0, e1, "A");
+                     : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A");
     std::vector<uint32_t> idxB;
     for (u64 i = 0; i < n; i++) if (A.status[i] != (uint8_t)Status::Ok) idxB.push_back((uint32_t)i);
     CK(cudaDeviceSetLimit(cudaLimitStackSize, 16 * 1024));
@@ -490,7 +493,7 @@ int main(int argc, char** argv) {
     if (!idxB.empty()) {
         uint32_t* dIdx = toDev(idxB);
         B = mono ? runLane<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), prop.multiProcessorCount * bpsB, nthrB, reps, false, e0, e1, "B")
-                 : runStaged<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), (u64)nbB, reps, e0, e1, "B");
+                 : runStaged<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), (u64)nbB, (u64)budgetB, reps, e0, e1, "B");
         CK(cudaFree(dIdx));
     }
     double gpuMs = A.ms + B.ms;
@@ -509,6 +512,7 @@ int main(int argc, char** argv) {
     #pragma omp parallel
     {
         Work<Heavy>* w = new Work<Heavy>;
+        w->stepBudget = 0; w->wbEpoch = 0; w->nScan = 0;
         ReadBuf<Heavy::LREAD>* b = new ReadBuf<Heavy::LREAD>;
         std::vector<uint8_t> buf(Heavy::NBLOB);
         #pragma omp for schedule(dynamic, 1)
@@ -570,12 +574,12 @@ int main(int argc, char** argv) {
             same, n, 100.0 * same / n, sameW, nReadsW, 100.0 * sameW / nReadsW, diff, sameUnmapOnly);
     fprintf(stderr, "    unmapped by STAR: %llu (%llu identical), mapped: %llu (%llu identical)\n", classN[0], classSame[0], classN[1], classSame[1]);
     fprintf(stderr, "    GPU lane A %.1f ms (%llu reads), lane B %.1f ms (%zu reads) = %.2f M distinct reads/s on the GPU\n", A.ms, n, B.ms, idxB.size(), rate / 1e6);
-    { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob"};
-      fprintf(stderr, "    lane A overflow why:"); for (int k = 0; k < 11; k++) if (whyA[k]) fprintf(stderr, " %s=%llu", wn[k], whyA[k]); fprintf(stderr, "\n"); }
+    { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
+      fprintf(stderr, "    lane A overflow why:"); for (int k = 0; k < 12; k++) if (whyA[k]) fprintf(stderr, " %s=%llu", wn[k], whyA[k]); fprintf(stderr, "\n"); }
     fprintf(stderr, "    heavy lane: %zu reads (%.4f%%), %.2f s on %d host threads, failures %llu; why:", heavy.size(), 100.0 * heavy.size() / n,
             heavySec, nHostThreads, heavyFail);
-    const char* whyName[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob"};
-    for (int k = 0; k < 11; k++) if (whyCount[k]) fprintf(stderr, " %s=%llu", whyName[k], whyCount[k]);
+    const char* whyName[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
+    for (int k = 0; k < 12; k++) if (whyCount[k]) fprintf(stderr, " %s=%llu", whyName[k], whyCount[k]);
     fprintf(stderr, "\n");
     if (!json.empty()) {
         FILE* f = fopen(json.c_str(), "w");
@@ -586,7 +590,7 @@ int main(int argc, char** argv) {
         for (size_t k = 0; k < A.runs.size(); k++) fprintf(f, "%s%.3f", k ? ", " : "", A.runs[k] + (k < B.runs.size() ? B.runs[k] : 0));
         fprintf(f, "],\n  \"gpu_distinct_reads_per_s\": %.0f,\n  \"heavy_reads\": %zu,\n  \"heavy_host_s\": %.3f,\n  \"heavy_host_threads\": %d,\n  \"heavy_failures\": %llu,\n  \"heavy_why\": {",
                 rate, heavy.size(), heavySec, nHostThreads, heavyFail);
-        bool first = true; for (int k = 0; k < 11; k++) if (whyCount[k]) { fprintf(f, "%s\"%s\": %llu", first ? "" : ", ", whyName[k], whyCount[k]); first = false; }
+        bool first = true; for (int k = 0; k < 12; k++) if (whyCount[k]) { fprintf(f, "%s\"%s\": %llu", first ? "" : ", ", whyName[k], whyCount[k]); first = false; }
         fprintf(f, "},\n  \"lane_a_ms\": %.3f,\n  \"lane_b_ms\": %.3f,\n  \"lane_b_reads\": %zu,\n  \"lane_a_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_b_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_a_local\": %s,\n  \"work_bytes\": [%zu, %zu],\n  \"index_load_s\": %.1f\n}\n",
                 A.ms, B.ms, idxB.size(), A.phaseMs[0], A.phaseMs[1], A.phaseMs[2], B.phaseMs[0], B.phaseMs[1], B.phaseMs[2], localWork ? "true" : "false", sizeof(Work<LaneA>), sizeof(Work<LaneB>), tIndex);
         fclose(f);
