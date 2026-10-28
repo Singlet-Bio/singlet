@@ -1,5 +1,6 @@
 #include "StarProfile.h"
 #include "ReadAlign.h"
+#include "SeqCache.h"
 #include "GlobalVariables.h"
 #include "ErrorWarning.h"
 #include <cstdlib>
@@ -198,7 +199,8 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
                 };
             };
 
-            if (P.outBAMunsorted || P.outBAMcoord) {//BAM output
+            const bool handoffCovered = g_handoffReadRecord != nullptr && iReadAll < g_handoffNReads && g_handoffReadRecord[iReadAll] != 0xFFFFFFFFu;
+            if ((P.outBAMunsorted || P.outBAMcoord) && !handoffCovered) {//BAM output (singlet GPU pileup "on": not for hand-off reads)
                 alignBAM(*(trOutSAM[iTr]), nTrOutSAM, iTr, mapGen.chrStart[trOutSAM[iTr]->Chr], (uint) -1, (uint) -1, 0, -1, NULL, P.outSAMattrOrder,outBAMoneAlign, outBAMoneAlignNbytes);
 
                 if (P.outBAMunsorted) {//unsorted

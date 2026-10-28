@@ -286,9 +286,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
         FILE *f = fopen(hp, "wb");
         bool okw = f != nullptr;
         if (okw) {
-            const char magic[8] = {'S', 'G', 'H', 'O', 'F', 'F', '0', '1'};
+            const char magic[8] = {'S', 'G', 'H', 'O', 'F', 'F', '0', '2'};
             uint64 nReads = out.readRecord.size();
-            okw = fwrite(magic, 1, 8, f) == 8 && fwrite(&nReads, 8, 1, f) == 1 && fwrite(&nRec, 8, 1, f) == 1
+            // STAR's barcode layout (SoloReadBarcode::getCBandUMI, CB_UMI_Simple): CR = bSeq[cbS-1, +cbL), UR = bSeq[umiS-1, +umiL), the
+            // barcode read padded with N to cbumiL when shorter
+            uint32 lay[6] = {(uint32) P.pSolo.cbS, (uint32) P.pSolo.cbL, (uint32) P.pSolo.umiS, (uint32) P.pSolo.umiL, (uint32) P.pSolo.cbumiL,
+                             (uint32) (P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple ? 1 : 0)};
+            okw = fwrite(magic, 1, 8, f) == 8 && fwrite(&nReads, 8, 1, f) == 1 && fwrite(&nRec, 8, 1, f) == 1 && fwrite(lay, 4, 6, f) == 6
                 && fwrite(out.readRecord.data(), 4, nReads, f) == nReads;
             uint64 base = 0;
             for (int t = 0; t < nt && okw; t++) {
@@ -303,6 +307,14 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
                              << " bytes in " << (time(nullptr) - th0) << " s -> " << hp << "\n";
         }
         if (!okw) { P.inOut->logMain << "ENGINE_GPU: hand-off not written (" << hp << ")\n"; unlink(hp); }
+        // "on": STAR writes no BAM records for reads with a record (the pileup has their alignments)
+        const char *gm = getenv("SINGLET_GPU_PILEUP");
+        if (okw && gm != nullptr && strcmp(gm, "on") == 0) {
+            static std::vector<uint32> keep;
+            keep.swap(out.readRecord);
+            g_handoffReadRecord = keep.data(); g_handoffNReads = keep.size();
+            P.inOut->logMain << "ENGINE_GPU: no BAM records for the reads of the " << nRec << " hand-off records\n";
+        }
     }
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;

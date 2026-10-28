@@ -70,7 +70,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     po.snpHits = (uint64_t) o.n_snp_tuples; po.sjHits = o.sj_raw_sum; po.mtBases = (uint64_t) o.n_mt_tuples;
     po.cellReads.swap(o.cell_reads); po.cellMolecules.swap(o.cell_mol);
     po.hitsExon = o.hits[0]; po.hitsIntron = o.hits[1]; po.umiRecorded = o.hits[2];
-    po.alnGene.swap(o.aa_gene); po.alnStat.swap(o.aa_stat);
+    po.alnGene.swap(o.aa_gene); po.alnStat.swap(o.aa_stat); po.alnExonGene.swap(o.aa_exg);
     for (auto& kv : T.acc) po.msGpu += kv.second;
     copyT3(o.exon, po.exon); copyT3(o.intron, po.intron); copyT3(o.amb, po.amb); copyT3(o.sj, po.sj);
     copyT3(o.snp_ad, po.snpAd); copyT3(o.snp_dp, po.snpDp); copyT3(o.mt, po.mt); copyT3(o.mt_rev, po.mtRev);

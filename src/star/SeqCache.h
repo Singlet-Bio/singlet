@@ -63,5 +63,9 @@ private:
 };
 
 extern SeqCache *g_seqCache; //set in STAR.cpp for the main mapping pass only
+//singlet GPU pileup ("on"): per read (iReadAll) its hand-off record, or 0xFFFFFFFF; reads with a record get no BAM records from STAR
+//(the pileup takes their alignments from the hand-off). Set by SeqCacheGpuPrefill.cpp; nullptr otherwise.
+extern const uint32 *g_handoffReadRecord;
+extern uint64 g_handoffNReads;
 
 #endif

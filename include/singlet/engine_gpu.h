@@ -121,7 +121,7 @@ struct PileupOutput {
     // count_read's counters over the gene tuples, and per alignment the classify_read gene and the serial loop's per-alignment
     // flags (1 strand vote sense, 2 antisense, 4 wrong_strand, 8 cross_gene_intron, 16 multigene)
     uint64_t hitsExon = 0, hitsIntron = 0, umiRecorded = 0;
-    std::vector<uint32_t> alnGene;
+    std::vector<uint32_t> alnGene, alnExonGene;   // alnExonGene: the engine's determine_exon_gene per alignment
     std::vector<uint8_t> alnStat;
     double msGpu = 0, msTotal = 0, peakGB = 0;
     std::string log;

@@ -4192,6 +4192,8 @@ int main(int argc, char* argv[]) {
         mkdir_p(decode_dir);
         std::string r1_tmp = decode_dir + "/R1.fastq";
         std::string r2_tmp = decode_dir + "/R2.fastq";
+        setenv("SINGLET_DECODE_R1", r1_tmp.c_str(), 1);   // W11 GPU pileup "on": barcodes and UMIs of hand-off reads
+        setenv("SINGLET_DECODE_R2", r2_tmp.c_str(), 1);
 
         if (!use_fifo_decode) {
             // ── File mode: decode all blocks to FASTQ files on /dev/shm ──
@@ -5027,6 +5029,7 @@ int main(int argc, char* argv[]) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
     // W11 GPU pileup on the stream path: the GPU prefill hands the per-sequence alignments to the pileup (SINGLET_ENGINE_GPU_HANDOFF)
     if (stream_unsorted == 1 && getenv("SINGLET_GPU_PILEUP") && getenv("SINGLET_ENGINE_GPU") && !getenv("SINGLET_ENGINE_GPU_HANDOFF")
+        && config.out_chrm_bam.empty() && config.guide_ref_path.empty()
         && !(getenv("SINGLET_GPU_HANDOFF") && std::string(getenv("SINGLET_GPU_HANDOFF")) == "0")) {
         static std::string handoff_path;
         handoff_path = out_prefix + "/.gpu_handoff.bin";

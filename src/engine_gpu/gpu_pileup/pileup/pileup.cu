@@ -1,4 +1,4 @@
-// Copied unchanged from PR #61 (branch gpu/w11-prototypes, commit cc92f0cf), bench/gpu/pileup/pileup.cu: see bench/gpu/pileup/README.md there.
+// Copied unchanged from PR #61 (branch gpu/w11-prototypes, commit f84aafff), bench/gpu/pileup/pileup.cu: see bench/gpu/pileup/README.md there.
 // Linked into singlet through ../pileup_gpu.cu (PILEUP_NO_MAIN); identity: docs/gpu-engine/exploration.md 12.13, 12.19.
 // W11 GPU annotation + pileup stage: alignments (STAR transcripts) -> every pileup output of the CPU engine (prod/campaign c4a1be38).
 //
@@ -80,7 +80,7 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
 struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; };
-struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat; };   // stat: see k_annotate     // per alignment: classify_read result (primary) or exon hit (secondary)
+struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg; };   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
 struct SJL { int32_t tid, donor, acc; };
 struct IND { uint32_t pos, lenins; };
@@ -146,7 +146,8 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
         else if (op == 2 || op == 3) rpos += len;
     }
-    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0};
+    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0, MAXU};
+    r.exg = (ec.any && ec.same) ? ec.first_gene : MAXU;   // the engine's determine_exon_gene (single gene; multi-gene -> none)
     if (!prim) { if (ec.any) { if (ec.same) { r.gene = ec.first_gene; r.exon = ec.first_idx; } else r.multi = 1; } out[a] = r; return; }
     bool unique_e = ec.any && ec.same && ec.first_gene != MAXU; uint32_t exon_gene = unique_e ? ec.first_gene : MAXU; bool pm = ec.any && !unique_e;
     IntronCb ic{&SP, i2g, ni, exon_gene, false, true, MAXU, MAXU, MAXU};
@@ -342,7 +343,7 @@ struct Outputs {
     long long n_gene_tuples = 0, n_sjl = 0, n_sj_tuples = 0, n_snp_tuples = 0, n_mt_tuples = 0, n_ind_tuples = 0, n_junctions = 0;
     std::vector<uint32_t> cell_reads, cell_mol;   // per cell, when g_cell_stats
     unsigned long long hits[3] = {0, 0, 0};         // exon_hits, intron_hits, UMI reads recorded (when g_cell_stats)
-    std::vector<uint32_t> aa_gene; std::vector<uint8_t> aa_stat;   // per alignment (when g_cell_stats): classify_read gene, k_annotate stat
+    std::vector<uint32_t> aa_gene, aa_exg; std::vector<uint8_t> aa_stat;   // per alignment (when g_cell_stats): classify_read gene, k_annotate stat
     unsigned long long sj_raw_sum = 0;   // distinct (cell, junction, UMI) before the 65535 clamp (the engine's stats.sj_hits)
 };
 static std::vector<T3> csr_to_t3(const Csr& c, int ncells) { std::vector<T3> v; v.reserve(c.indices.size()); for (int cell = 0; cell < ncells; cell++) for (uint32_t k = c.indptr[cell]; k < c.indptr[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, c.indices[k], c.data[k]}); return v; }
@@ -468,8 +469,8 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         CK(cudaMemcpy(out->hits, hits, 24, cudaMemcpyDeviceToHost));
         std::vector<AA> h(nA);
         if (nA) CK(cudaMemcpy(h.data(), aa, (size_t)nA * sizeof(AA), cudaMemcpyDeviceToHost));
-        out->aa_gene.resize(nA); out->aa_stat.resize(nA);
-        for (int k = 0; k < nA; k++) { out->aa_gene[k] = h[k].gene; out->aa_stat[k] = (uint8_t)h[k].stat; }
+        out->aa_gene.resize(nA); out->aa_stat.resize(nA); out->aa_exg.resize(nA);
+        for (int k = 0; k < nA; k++) { out->aa_gene[k] = h[k].gene; out->aa_stat[k] = (uint8_t)h[k].stat; out->aa_exg[k] = h[k].exg; }
     }
     // ---------------- fetch (not timed) ----------------
     out->n_gene_tuples = ng; out->n_sjl = n_sjl; out->n_sj_tuples = n_sjt; out->n_snp_tuples = n_snpt; out->n_mt_tuples = n_mtt; out->n_ind_tuples = n_indt; out->n_junctions = nj;

@@ -1,4 +1,4 @@
-// Copied unchanged from PR #61 (branch gpu/w11-prototypes, commit cc92f0cf), bench/gpu/m6/m6.cu: see bench/gpu/pileup/README.md there.
+// Copied unchanged from PR #61 (branch gpu/w11-prototypes, commit f84aafff), bench/gpu/m6/m6.cu: see bench/gpu/pileup/README.md there.
 // Linked into singlet through ../pileup_gpu.cu (PILEUP_NO_MAIN); identity: docs/gpu-engine/exploration.md 12.13, 12.19.
 // M6: read dedup, count-key sort, UMI collapse and CSR reduce on one GPU (docs/gpu-engine/exploration.md section 9, M6).
 //

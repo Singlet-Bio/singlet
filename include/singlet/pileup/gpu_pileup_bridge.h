@@ -41,6 +41,7 @@ inline bool enabled() { return mode() != 0; }
 struct Handoff {
     const uint8_t* map = nullptr; size_t size = 0;
     uint64_t n_reads = 0, n_rec = 0; const uint32_t* read_rec = nullptr; const uint64_t* rec_off = nullptr; const uint8_t* data = nullptr;
+    uint32_t cbS = 0, cbL = 0, umiS = 0, umiL = 0, cbumiL = 0, simple = 0;   // STAR's barcode layout (v2)
     bool load(const char* path) {
         int fd = open(path, O_RDONLY); if (fd < 0) return false;
         struct stat st; if (fstat(fd, &st) != 0 || st.st_size < 24) { close(fd); return false; }
@@ -48,10 +49,12 @@ struct Handoff {
         void* m = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0); close(fd);
         if (m == MAP_FAILED) return false;
         map = (const uint8_t*) m;
-        if (std::memcmp(map, "SGHOFF01", 8) != 0) { unmap(); return false; }
+        if (std::memcmp(map, "SGHOFF02", 8) != 0) { unmap(); return false; }
         std::memcpy(&n_reads, map + 8, 8); std::memcpy(&n_rec, map + 16, 8);
-        read_rec = (const uint32_t*) (map + 24);
-        rec_off = (const uint64_t*) (map + 24 + 4 * n_reads);
+        uint32_t lay[6]; std::memcpy(lay, map + 24, 24);
+        cbS = lay[0]; cbL = lay[1]; umiS = lay[2]; umiL = lay[3]; cbumiL = lay[4]; simple = lay[5];
+        read_rec = (const uint32_t*) (map + 48);
+        rec_off = (const uint64_t*) (map + 48 + 4 * n_reads);
         data = (const uint8_t*) (rec_off + n_rec + 1);
         if ((size_t) (data - map) + rec_off[n_rec] > size) { unmap(); return false; }
         return true;
@@ -148,6 +151,26 @@ public:
     size_t n_handoff_reads() const { return ho_reads_.size(); }
     uint64_t handoff_mismatches() const { return ho_mismatch_; }
     bool handoff_used() const { return ho_ok_; }
+    // the hand-off (loaded on first use); null if there is none
+    const Handoff* handoff() {
+        if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
+        return ho_ok_ ? &ho_ : nullptr;
+    }
+    // a hand-off read that STAR wrote no BAM record for ("on"): its record, barcode column and UMI (A0 C1 G2 T3 N4, 3 bits each)
+    void add_handoff_read(uint32_t rec, int32_t bc, const char* umi, int umi_len) {
+        uint64_t u3 = 0;
+        if (umi_len_ < 0) umi_len_ = umi_len;
+        for (int i = 0; i < umi_len && i < 21; i++) { const char c = umi[i]; const uint64_t v = c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4; u3 |= v << (3 * i); }
+        ho_reads_.push_back(ReadRec{rec, bc, u3});
+    }
+    // the base-quality rule of qual_check on a FASTQ record (Phred+33): BAM qualities are the FASTQ's
+    void add_quality(const char* seq, const char* qual, int L) {
+        for (int i = 0; i < L; i++) {
+            const bool lq = (qual[i] - 33) < min_baseq_, isn = seq[i] == 'N';
+            if (lq) lowqual_bases_++;
+            if (lq != isn) qual_neq_n_++;
+        }
+    }
     size_t n_sigs() const { return sigs_.size(); }
     uint64_t incomplete() const { return incomplete_; }
     uint64_t no_umi() const { return no_umi_; }
