@@ -14,6 +14,8 @@
 #include <thrust/scan.h>
 #include <thrust/sort.h>
 #include <thrust/sequence.h>
+#include <thrust/transform_scan.h>
+#include <thrust/functional.h>
 #include <thrust/iterator/zip_iterator.h>
 #include <algorithm>
 #include <atomic>
@@ -69,6 +71,14 @@ __global__ void k_groups(const char* seq, const u64* off, const u64* h1, const u
     }
 }
 
+__global__ void k_prefix_key(const char* seq, const u64* off, const uint32_t* rep, u64 n, u64* key) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    u64 i = rep[k], L = off[i + 1] - off[i], kk = 0;
+    for (u64 t = 0; t < 32; t++) kk = (kk << 2) | (t < L ? (u64)(uint8_t)seq[off[i] + t] : 0);
+    key[k] = kk;
+}
+
 // ---- staged lanes (bench/gpu/m5/m5.cu)
 template <class C>
 __global__ void k_p1(Params P, GenomeView g, const char* rb, const u64* roff, const uint32_t* idx, u64 b0, u64 n,
@@ -110,13 +120,20 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     status[o] = (uint8_t)s; outLen[o] = (uint16_t)bl.n;
 }
 
-struct Lane { std::vector<uint8_t> out, status; std::vector<uint16_t> len; };
+struct Lane { std::vector<uint8_t> out, status; std::vector<uint16_t> len; std::vector<u64> off; };   // out packed: read k at off[k], len[k] bytes
+
+// packs the lane's fixed-size result slots (slot k at k * slot) into consecutive bytes at off[k]
+__global__ void k_pack(const uint8_t* slots, u64 slot, const uint16_t* len, const u64* off, u64 n, uint8_t* packed) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    for (u64 t = 0; t < len[k]; t++) packed[off[k] + t] = slots[k * slot + t];
+}
 
 template <class C>
 bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* dOff, const std::vector<uint32_t>& idx, u64 NB, u64 budget,
              Lane& L, std::string& err) {
     u64 n = idx.size();
-    L.out.assign(n * (u64)C::NBLOB, 0); L.status.assign(n, (uint8_t)Status::Overflow); L.len.assign(n, 0);
+    L.status.assign(n, (uint8_t)Status::Overflow); L.len.assign(n, 0); L.off.assign(n + 1, 0);
     if (n == 0) return true;
     NB = std::min<u64>(NB, n);
     uint32_t* dIdx; uint8_t *dOut, *dSt, *dBst; uint16_t* dLen; Work<C>* dWork; ReadBuf<C::LREAD>* dRbuf; u64 *dNent, *dBase; uint32_t* dBits;
@@ -140,7 +157,19 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         EG_CK(cudaGetLastError());
     }
     EG_CK(cudaDeviceSynchronize());
-    EG_CK(cudaMemcpy(L.out.data(), dOut, L.out.size(), cudaMemcpyDeviceToHost));
+    {   // copy only the bytes of the results (the slots are 640-4096 bytes, results ~70)
+        u64* dPoff; EG_CK(cudaMalloc(&dPoff, (n + 1) * 8)); EG_CK(cudaMemset(dPoff, 0, (n + 1) * 8));
+        thrust::transform_inclusive_scan(thrust::device_ptr<uint16_t>(dLen), thrust::device_ptr<uint16_t>(dLen + n), thrust::device_ptr<u64>(dPoff + 1),
+                                         [] __device__ (uint16_t x) { return (u64)x; }, thrust::plus<u64>());
+        u64 total; EG_CK(cudaMemcpy(&total, dPoff + n, 8, cudaMemcpyDeviceToHost));
+        uint8_t* dPacked; EG_CK(cudaMalloc(&dPacked, total + 1));
+        k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked);
+        EG_CK(cudaGetLastError());
+        L.out.resize(total);
+        EG_CK(cudaMemcpy(L.out.data(), dPacked, total, cudaMemcpyDeviceToHost));
+        EG_CK(cudaMemcpy(L.off.data(), dPoff, (n + 1) * 8, cudaMemcpyDeviceToHost));
+        cudaFree(dPoff); cudaFree(dPacked);
+    }
     EG_CK(cudaMemcpy(L.status.data(), dSt, n, cudaMemcpyDeviceToHost)); EG_CK(cudaMemcpy(L.len.data(), dLen, n * 2, cudaMemcpyDeviceToHost));
     cudaFree(dIdx); cudaFree(dOut); cudaFree(dSt); cudaFree(dLen); cudaFree(dWork); cudaFree(dRbuf); cudaFree(dBst); cudaFree(dNent);
     cudaFree(dBase); cudaFree(dBits);
@@ -228,19 +257,14 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
     // map them in sequence order (first 32 bases), not hash order: neighbouring threads then search the same SA ranges and loci
     // (2.7x faster on pbmc1k_v3). Each sequence's result does not depend on the order.
-    {
-        std::vector<u64> key(rep.size());
-        for (u64 k = 0; k < rep.size(); k++) {
-            u64 i = rep[k], kk = 0, L = in.off[i + 1] - in.off[i];
-            for (u64 t = 0; t < 32; t++) kk = (kk << 2) | (t < L ? (u64)(uint8_t)in.seq[in.off[i] + t] : 0);
-            key[k] = kk;
-        }
-        std::vector<uint32_t> idx(rep.size());
-        for (u64 k = 0; k < idx.size(); k++) idx[k] = (uint32_t)k;
-        std::stable_sort(idx.begin(), idx.end(), [&](uint32_t a, uint32_t b) { return key[a] < key[b]; });
-        std::vector<uint32_t> r2(rep.size());
-        for (u64 k = 0; k < idx.size(); k++) r2[k] = rep[idx[k]];
-        rep.swap(r2);
+    if (!rep.empty()) {   // keys (first 32 bases) and the stable sort on the device
+        uint32_t* dRep; u64* dKey;
+        if (cudaMalloc(&dRep, rep.size() * 4) || cudaMalloc(&dKey, rep.size() * 8)) return fail("out of device memory (order)");
+        cudaMemcpy(dRep, rep.data(), rep.size() * 4, cudaMemcpyHostToDevice);
+        k_prefix_key<<<(unsigned)((rep.size() + 255) / 256), 256>>>(dSeq, dOff, dRep, rep.size(), dKey);
+        thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + rep.size()), thrust::device_ptr<uint32_t>(dRep));
+        if (cudaMemcpy(rep.data(), dRep, rep.size() * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
+        cudaFree(dRep); cudaFree(dKey);
     }
     out.secDedup = now() - t0;
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
@@ -294,9 +318,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             const uint8_t* p; u64 len; bool ok = true;
             uint32_t q = lpos[k];
             switch (lane[k]) {
-                case 0: p = A.out.data() + (u64)q * LaneA::NBLOB; len = A.len[q]; break;
-                case 1: p = M.out.data() + (u64)q * LaneM::NBLOB; len = M.len[q]; break;
-                case 2: p = B.out.data() + (u64)q * LaneB::NBLOB; len = B.len[q]; break;
+                case 0: p = A.out.data() + A.off[q]; len = A.len[q]; break;
+                case 1: p = M.out.data() + M.off[q]; len = M.len[q]; break;
+                case 2: p = B.out.data() + B.off[q]; len = B.len[q]; break;
                 default: p = hout[q].data(); len = hout[q].size(); ok = hst[q] == (uint8_t)Status::Ok; break;
             }
             if (!ok) { out.nFailed++; continue; }   // not cached: STAR maps it
