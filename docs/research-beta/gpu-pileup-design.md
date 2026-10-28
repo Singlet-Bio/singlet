@@ -164,6 +164,19 @@ pass (cache lookups, FASTQ parsing: about 3).
 | + STAR's mapping threads write each hand-off read's CR, UR and quality counters; no FASTQ re-read | **pass** | 1,228 (18.4) | **1,102 (16.5)** | 426 / **349 s** | 790820 (node g052) |
 | + STAR replays a per-sequence summary (stats, junction records, Solo Gene annotation) instead of restoring each hand-off read's alignments | **pass** | 1,321 (19.8) | 1,065 (16.0) | 473 / 379 s | 790990 (node g051, slower) |
 
+| + only unmapped sequences go into STAR's cache (mapped ones replay summaries) | **pass** | 1,314 | 972 | 475 / 377 s | 791012 (node g051) |
+
+Same node (job 791013, g052, one run each, per M pairs = core-s / 66.6 M):
+
+| build | core-s | per M pairs | wall |
+|---|---|---|---|
+| CPU pileup | 1,227 | 18.4 | 424 s |
+| + per-read entries (ad24936d) | 1,128 | 16.9 | 350 s |
+| + summary replay (c389cf56) | 996 | 15.0 | 355 s |
+| + cache trimmed (0b560145) | **929** | **13.9** | 356 s |
+
+The break-even of 12.7 per M pairs is 846 core-s, 83 below the current build.
+
 The summary step first failed (job 790899: 50 files differed, 7 M alignments lost). The prefill never set STAR's per-read mismatch
 limit (`outFilterMismatchNmaxTotal`), so its `mappedFilter` read an uninitialized value. That had been harmless by luck since the
 hand-off began. It is set now, and STAR skips BAM only for reads whose record has alignments, so any disagreement between STAR and
