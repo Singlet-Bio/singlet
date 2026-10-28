@@ -502,15 +502,18 @@ public:
 
     void add(uint32_t bc_idx, uint32_t snp_idx, const char* umi, int umi_len, uint8_t cls) {
         if (!umi || umi_len <= 0) { single_.push_back({bc_idx, snp_idx, cls}); return; }
-        uint64_t h = 14695981039346656037ULL;   // FNV-1a over the UMI, mixed with barcode and site
-        for (int i = 0; i < umi_len; ++i) { h ^= static_cast<uint64_t>(umi[i]); h *= 1099511628211ULL; }
-        h ^= static_cast<uint64_t>(bc_idx) * 0x517cc1b727220a95ULL;
-        h ^= static_cast<uint64_t>(snp_idx) * 0x6c62272e07bb0142ULL;
-        h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33; h *= 0xc4ceb9fe1a85ec53ULL; h ^= h >> 33;
-        Mol& m = mols_[h];
-        m.bc = bc_idx;
-        m.snp = snp_idx;
-        if (m.n[cls] < 255) ++m.n[cls];
+        // Exact molecule key, no hashing collisions: (barcode, site) and the UMI packed 3 bits per base
+        // (A C G T N other) behind a leading 1 bit that fixes the length; UMIs over 21 bases are kept as strings.
+        const uint64_t site = (static_cast<uint64_t>(bc_idx) << 32) | snp_idx;
+        uint8_t* n;
+        if (umi_len <= 21) {
+            uint64_t packed = 1;
+            for (int i = 0; i < umi_len; ++i) packed = (packed << 3) | base3(umi[i]);
+            n = mols_[Key{site, packed}].n;
+        } else {
+            n = long_mols_[std::to_string(site) + ':' + std::string(umi, static_cast<size_t>(umi_len))].n;
+        }
+        if (n[cls] < 255) ++n[cls];
     }
 
     /// AccT: increment(feature, barcode, delta). StatsT: snp_molecules, snp_molecules_ambiguous, snp_molecules_other.
@@ -522,27 +525,44 @@ public:
             dp.increment(snp, bc, 1);
             if (cls == kAlt) ad.increment(snp, bc, 1);
         };
-        for (const auto& r : single_) emit(r.bc, r.snp, r.cls);
-        for (const auto& kv : mols_) {
-            const Mol& m = kv.second;
+        auto vote = [&](uint64_t site, const uint8_t* n) {
             uint8_t best = 0;
-            for (uint8_t c = 1; c < 3; ++c) if (m.n[c] > m.n[best]) best = c;
-            bool tie = false;
-            for (uint8_t c = 0; c < 3; ++c) if (c != best && m.n[c] == m.n[best]) tie = true;
-            if (tie) { ++st.snp_molecules_ambiguous; continue; }
-            emit(m.bc, m.snp, best);
-        }
+            for (uint8_t c = 1; c < 3; ++c) if (n[c] > n[best]) best = c;
+            for (uint8_t c = 0; c < 3; ++c)
+                if (c != best && n[c] == n[best]) { ++st.snp_molecules_ambiguous; return; }
+            emit(static_cast<uint32_t>(site >> 32), static_cast<uint32_t>(site & 0xffffffffu), best);
+        };
+        for (const auto& r : single_) emit(r.bc, r.snp, r.cls);
+        for (const auto& kv : mols_) vote(kv.first.site, kv.second.n);
+        for (const auto& kv : long_mols_) vote(std::stoull(kv.first.substr(0, kv.first.find(':'))), kv.second.n);
     }
 
     void clear() {
-        std::unordered_map<uint64_t, Mol>().swap(mols_);
+        decltype(mols_)().swap(mols_);
+        decltype(long_mols_)().swap(long_mols_);
         std::vector<Single>().swap(single_);
     }
 
 private:
-    struct Mol { uint32_t bc = 0; uint32_t snp = 0; uint8_t n[3] = {0, 0, 0}; };
+    static uint64_t base3(char c) {
+        switch (c | 32) { case 'a': return 0; case 'c': return 1; case 'g': return 2; case 't': return 3;
+                          case 'n': return 4; default: return 5; }
+    }
+    struct Key {
+        uint64_t site, umi;
+        bool operator==(const Key& o) const { return site == o.site && umi == o.umi; }
+    };
+    struct KeyHash {
+        size_t operator()(const Key& k) const {
+            uint64_t h = k.site * 0x9e3779b97f4a7c15ULL ^ (k.umi + 0x632be59bd9b4e019ULL + (k.site << 6) + (k.site >> 2));
+            h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33;
+            return static_cast<size_t>(h);
+        }
+    };
+    struct Counts { uint8_t n[3] = {0, 0, 0}; };
     struct Single { uint32_t bc; uint32_t snp; uint8_t cls; };
-    std::unordered_map<uint64_t, Mol> mols_;
+    std::unordered_map<Key, Counts, KeyHash> mols_;
+    std::unordered_map<std::string, Counts> long_mols_;
     std::vector<Single> single_;
 };
 
