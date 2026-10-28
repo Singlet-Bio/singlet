@@ -107,6 +107,11 @@ STAR's per-read pass went from 56.7 s to 47.1 s of wall (job 790048, 9 threads).
 | wall, one sample alone (9 threads) | 9:04 | **7:16** |
 | peak memory (max RSS) | 56.5 GB | 50.2 GB |
 
+Host threads waiting on the GPU now sleep (blocking sync), and the prefill concatenates its read pieces in parallel (build
+807de24c). The total stayed level, 16.1 core-s per M pairs (job 790078), and identity still passes with 66.5 M GPU results
+verified, 0 mismatches (job 790079). The single-core stretch of the prefill turned out to be serial host data movement in
+`mapDistinct` (pageable copies, the dedup loop, record assembly), not a spin: about 1 core-s per M pairs.
+
 What is left on the GPU path, ranked: STAR's per-read pass (8.9: BAM records, FASTQ parsing, cache lookups, barcode tags), the
 BAM sort + index + CB refresh (2.0), export (1.5), pileup (1.5), decode (1.1).
 
