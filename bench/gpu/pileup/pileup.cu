@@ -285,6 +285,10 @@ __global__ void k_moldec(const uint64_t* mv, int m, uint64_t* val, unsigned long
     val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull); }
 static bool g_snp_first = false;   // --snp-first: the sorted path's first-read rule (prod/campaign), for the original gate
 static unsigned long long g_snp_stat[3] = {0, 0, 0};
+// reads recorded in the molecule store per cell (per_cell_molecule_stats' total_reads): gene tuples with a UMI
+__global__ void k_cellreads(const Rec* r, int n, uint32_t* out) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n && !r[i].direct) atomicAdd(&out[r[i].bc], 1u); }
+static bool g_cell_stats = false;   // set by the engine wrapper: per-cell reads and molecules for saturation / cell QC
 struct SumU64 { __host__ __device__ uint64_t operator()(const uint64_t& a, const uint64_t& b) const { return a + b; } };
 struct SumU32 { __host__ __device__ uint32_t operator()(const uint32_t& a, const uint32_t& b) const { return a + b; } };
 
@@ -314,6 +318,7 @@ struct Inputs {
 struct Outputs {
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
     long long n_gene_tuples = 0, n_sjl = 0, n_sj_tuples = 0, n_snp_tuples = 0, n_mt_tuples = 0, n_ind_tuples = 0, n_junctions = 0;
+    std::vector<uint32_t> cell_reads, cell_mol;   // per cell, when g_cell_stats
     unsigned long long sj_raw_sum = 0;   // distinct (cell, junction, UMI) before the 65535 clamp (the engine's stats.sj_hits)
 };
 static std::vector<T3> csr_to_t3(const Csr& c, int ncells) { std::vector<T3> v; v.reserve(c.indices.size()); for (int cell = 0; cell < ncells; cell++) for (uint32_t k = c.indptr[cell]; k < c.indptr[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, c.indices[k], c.data[k]}); return v; }
@@ -352,6 +357,13 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     uint32_t* gf = A.alloc<uint32_t>(nR); k_gflag<<<(nR + TB - 1) / TB, TB>>>(in.R, nR, gr, gf);
     uint32_t* goff = scan_u32(A, gf, nR); int ng = total_of(A, gf, goff, nR);
     Rec* recs = A.alloc<Rec>(std::max(ng, 1)); k_gfill<<<(nR + TB - 1) / TB, TB>>>(in.R, nR, gr, gf, goff, in.ulen, recs);
+    uint32_t* cell_reads = nullptr; uint32_t* cell_mol = nullptr;
+    if (g_cell_stats) {
+        cell_reads = A.alloc<uint32_t>(std::max(in.ncells, 1)); cell_mol = A.alloc<uint32_t>(std::max(in.ncells, 1));
+        CK(cudaMemset(cell_reads, 0, std::max(in.ncells, 1) * 4)); CK(cudaMemset(cell_mol, 0, std::max(in.ncells, 1) * 4));
+        if (ng > 0) k_cellreads<<<(ng + TB - 1) / TB, TB>>>(recs, ng, cell_reads);
+        CK(cudaMemcpyToSymbol(g_cell_mol, &cell_mol, sizeof(cell_mol)));
+    }
     uint32_t* rc = A.alloc<uint32_t>(nR); const int GR = (nR + TB - 1) / TB;
     k_cnt<<<GR, TB>>>(in.R, nR, c_sj, rc); uint32_t* r_sj = scan_u32(A, rc, nR); int n_sjt = total_of(A, rc, r_sj, nR);
     k_cnt<<<GR, TB>>>(in.R, nR, c_snp, rc); uint32_t* r_snp = scan_u32(A, rc, nR); int n_snpt = total_of(A, rc, r_snp, nR);
@@ -421,7 +433,13 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     }
     T.mark("7.mt");
     T.finish();
+    if (g_cell_stats) { uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_mol, &z, sizeof(z))); }
     if (!out) return;
+    if (g_cell_stats) {
+        out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1));
+        CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
+        CK(cudaMemcpy(out->cell_mol.data(), cell_mol, out->cell_mol.size() * 4, cudaMemcpyDeviceToHost));
+    }
     // ---------------- fetch (not timed) ----------------
     out->n_gene_tuples = ng; out->n_sjl = n_sjl; out->n_sj_tuples = n_sjt; out->n_snp_tuples = n_snpt; out->n_mt_tuples = n_mtt; out->n_ind_tuples = n_indt; out->n_junctions = nj;
     if (ng > 0) { out->exon = csr_to_t3(fetch_csr(C[0], in.ncells), in.ncells); out->intron = csr_to_t3(fetch_csr(C[1], in.ncells), in.ncells); out->amb = csr_to_t3(fetch_csr(C[2], in.ncells), in.ncells); }
