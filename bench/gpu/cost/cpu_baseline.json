@@ -70,7 +70,8 @@
    "node": "c010.clipper.gvsu.edu",
    "cpu_model": "Intel(R) Xeon(R) Gold 6230R CPU @ 2.10GHz",
    "cpus_on_node": 52,
-   "cotenant_cpus_at_start": 48,
+   "cotenant_cpus_at_start": 40,
+   "cotenant_note": "squeue count of running CPUs on the node at job start minus this job's own 8",
    "loadavg_at_start": "17.36 25.93 26.37",
    "bam_records": 73746398,
    "exit_ok": true
@@ -135,7 +136,8 @@
    "node": "c003.clipper.gvsu.edu",
    "cpu_model": "Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz",
    "cpus_on_node": 40,
-   "cotenant_cpus_at_start": 20,
+   "cotenant_cpus_at_start": 12,
+   "cotenant_note": "squeue count of running CPUs on the node at job start minus this job's own 8",
    "loadavg_at_start": "1.15 1.11 1.04",
    "bam_records": 80448599,
    "exit_ok": true
@@ -200,7 +202,8 @@
    "node": "c003.clipper.gvsu.edu",
    "cpu_model": "Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz",
    "cpus_on_node": 40,
-   "cotenant_cpus_at_start": 20,
+   "cotenant_cpus_at_start": 12,
+   "cotenant_note": "squeue count of running CPUs on the node at job start minus this job's own 8",
    "loadavg_at_start": "1.15 1.11 1.04",
    "bam_records": 111842216,
    "exit_ok": true
@@ -265,7 +268,8 @@
    "node": "c003.clipper.gvsu.edu",
    "cpu_model": "Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz",
    "cpus_on_node": 40,
-   "cotenant_cpus_at_start": 20,
+   "cotenant_cpus_at_start": 12,
+   "cotenant_note": "squeue count of running CPUs on the node at job start minus this job's own 8",
    "loadavg_at_start": "4.83 6.67 4.76",
    "bam_records": 128399687,
    "exit_ok": true
@@ -330,7 +334,8 @@
    "node": "c003.clipper.gvsu.edu",
    "cpu_model": "Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz",
    "cpus_on_node": 40,
-   "cotenant_cpus_at_start": 32,
+   "cotenant_cpus_at_start": 24,
+   "cotenant_note": "squeue count of running CPUs on the node at job start minus this job's own 8",
    "loadavg_at_start": "8.66 7.11 5.39",
    "bam_records": 331702882,
    "exit_ok": true
@@ -395,7 +400,8 @@
    "node": "c003.clipper.gvsu.edu",
    "cpu_model": "Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz",
    "cpus_on_node": 40,
-   "cotenant_cpus_at_start": 28,
+   "cotenant_cpus_at_start": 20,
+   "cotenant_note": "squeue count of running CPUs on the node at job start minus this job's own 8",
    "loadavg_at_start": "12.02 9.66 6.75",
    "bam_records": 292438995,
    "exit_ok": true
@@ -460,7 +466,8 @@
    "node": "c003.clipper.gvsu.edu",
    "cpu_model": "Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz",
    "cpus_on_node": 40,
-   "cotenant_cpus_at_start": 38,
+   "cotenant_cpus_at_start": 30,
+   "cotenant_note": "squeue count of running CPUs on the node at job start minus this job's own 8",
    "loadavg_at_start": "26.51 25.57 24.56",
    "bam_records": 73921372,
    "exit_ok": true
@@ -525,7 +532,8 @@
    "node": "c003.clipper.gvsu.edu",
    "cpu_model": "Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz",
    "cpus_on_node": 40,
-   "cotenant_cpus_at_start": 38,
+   "cotenant_cpus_at_start": 30,
+   "cotenant_note": "squeue count of running CPUs on the node at job start minus this job's own 8",
    "loadavg_at_start": "21.71 24.33 24.22",
    "bam_records": 107244732,
    "exit_ok": true
@@ -539,5 +547,126 @@
   "core_s_credited_per_M": 37.51,
   "label": "derived (sums over the six samples)"
  },
- "packing": {}
+ "packing": {
+  "hom4_t4": {
+   "instances": [
+    {
+     "sample": "pbmc1k_v3",
+     "M_pairs": 66.6,
+     "wall_s": 675.66,
+     "core_s": 2059.7,
+     "core_s_per_M": 30.93,
+     "max_rss_gb": 53.7,
+     "exit_ok": true
+    },
+    {
+     "sample": "pbmc1k_v3",
+     "M_pairs": 66.6,
+     "wall_s": 667.51,
+     "core_s": 2010.8,
+     "core_s_per_M": 30.19,
+     "max_rss_gb": 53.6,
+     "exit_ok": true
+    },
+    {
+     "sample": "pbmc1k_v3",
+     "M_pairs": 66.6,
+     "wall_s": 667.45,
+     "core_s": 2014.3,
+     "core_s_per_M": 30.24,
+     "max_rss_gb": 53.8,
+     "exit_ok": true
+    },
+    {
+     "sample": "pbmc1k_v3",
+     "M_pairs": 66.6,
+     "wall_s": 672.31,
+     "core_s": 2044.5,
+     "core_s_per_M": 30.7,
+     "max_rss_gb": 53.6,
+     "exit_ok": true
+    }
+   ],
+   "makespan_s": 676,
+   "M_pairs_total": 266.4,
+   "node_M_pairs_per_s": 0.394,
+   "samples_per_hour": 21.31,
+   "node_core_s_through_makespan": 8136,
+   "mean_cores_busy": 12.0,
+   "cgroup_peak_mem_gb": 213.0,
+   "label": "measured (makespan includes the tail where fewer samples run)",
+   "node_info": [
+    "node=c100.clipper.gvsu.edu set_count=4 T=4 tag=hom4_t4 jobid=789778 2026-10-28T03:24:30-04:00",
+    "CPU(s):                                  64",
+    "Model name:                              Intel(R) Xeon(R) 6730P",
+    "CPU(s) scaling MHz:                      31%",
+    "memory.max=520116764672 memory.high=520116764672 shm_size=255641MB tmp_free=3421050MB"
+   ]
+  }
+ },
+ "node": {
+  "node_type": "c100, 2 x Xeon 6730P, 64 cores (62 allocatable), 512 GB",
+  "cores": 64,
+  "cpu_model": "Intel(R) Xeon(R) 6730P",
+  "label": "measured (lscpu in job 789778)",
+  "measured_4_concurrent_pbmc1k_v3_t4": {
+   "node_M_pairs_per_s": 0.394,
+   "samples_per_hour_of_66M_pair_sample": 21.31,
+   "mean_cores_busy": 12.0,
+   "wall_s_each": [
+    676,
+    668,
+    667,
+    672
+   ],
+   "core_s_per_M_each": [
+    30.93,
+    30.19,
+    30.24,
+    30.7
+   ],
+   "job": 789778,
+   "label": "measured"
+  },
+  "mix_core_s_per_M_on_this_node": 30.1,
+  "mix_core_s_per_M_label": "derived: six-sample pooled core-s/M (measured on Gold 6230R/6248 nodes) x (pbmc1k_v3 packed on 6730P / pbmc1k_v3 single on Gold 6248 = 0.796); mixes CPU model with co-tenancy, cannot be separated",
+  "projected_concurrency": 8,
+  "projected_concurrency_basis": "90% of MemAvailable (488 GB) / max RSS 54 GB; untested above 4 (an 8-concurrent attempt on c010 hung in the BAM sort and drained the node)",
+  "projected_node_M_pairs_per_s": 0.788,
+  "projected_samples_per_hour_six_sample_mix": 23.2,
+  "projected_mix_makespan_s": 931,
+  "projected_label": "projected: per-slot rate measured at 4 concurrent, assumed unchanged up to the RAM limit (cores busy would be 24 of 64)",
+  "six_sample_mix_measured": "not measured (pack job 789779 cancelled while pending; no idle node for hours)",
+  "threads_choice": "--threads 4 kept (campaign setting); thread-count sweep not measured. Mean busy cores per 4-thread sample = 3.0 (STAR 4 threads, pileup 3-4, then serial export), so ~3 cores per sample-in-flight; RAM (~54 GB RSS each), not cores, bounds concurrency."
+ },
+ "incidents": [
+  "hom8_t4 (job 789621, 8 x GSM4006843, c010, exclusive): all 8 stuck at 'started sorting BAM' for 20 min at ~0 CPU; scancel failed ('Kill task failed') and Slurm drained c010. Cause unknown; data not used. Needs admin undrain.",
+  "hom4_t4 (job 789778): complete (4 runs exit 0); my stall watchdog fired after the runs finished and cancelled the job (state CANCELLED), so pack_wall.txt has no t1: makespan taken from the per-instance wall stamps.",
+  "run_single array 789532: tasks 0-5 show FAILED (exit 1) after the engine finished with exit 0 and all outputs written (script bug in the last lines; fixed in run_single.sbatch with an EXIT trap). Data complete, not rerun.",
+  "$W/data/bam-stream/ was deleted by another session after GSM4006843, GSM5411066, GSM7901264 had been measured (their runs are kept); pbmc1k_v3 and nuclei2k_v2 singles added from pipeline-benchmark/data."
+ ],
+ "core_hours": {
+  "singles_789532": 23.0,
+  "singles_789777": 5.5,
+  "hom8_t4_789621_stalled": 25.3,
+  "hom4_t4_789778": 16.6,
+  "total": 70.4,
+  "label": "derived: allocated cores x elapsed"
+ },
+ "jobs": {
+  "singles": [
+   789532,
+   789777
+  ],
+  "hom8_t4_stalled": 789621,
+  "hom4_t4": 789778,
+  "cancelled_unrun": [
+   789622,
+   789623,
+   789693,
+   789758,
+   789759,
+   789779
+  ]
+ }
 }
