@@ -67,6 +67,8 @@ extern SeqCache *g_seqCache; //set in STAR.cpp for the main mapping pass only
 //(the pileup takes their alignments from the hand-off). Set by SeqCacheGpuPrefill.cpp; nullptr otherwise.
 extern const uint32 *g_handoffReadRecord;
 extern uint64 g_handoffNReads;
+//per hand-off record its number of alignments (0: unmapped); STAR skips BAM output only for reads whose record has alignments
+extern const uint8 *g_handoffRecAln;
 //and per read what the pileup took from its BAM record: CR and UR (3 bits per base, A0 C1 G2 T3 other 4, base 0 lowest) and the
 //base-quality counters of the cDNA read (bases with quality < minQ; bases where "quality < minQ" differs from "base is N"). The
 //entries live in a shared file mapping (<hand-off>.reads) that the pileup reads after STAR exits; nullptr when off.

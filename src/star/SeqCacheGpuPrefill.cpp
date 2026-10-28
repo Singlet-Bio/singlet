@@ -297,6 +297,10 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
         });
         for (auto &x : th) x.join();
+        static std::vector<uint8> recAln;   // per record its alignment count (the first byte of each record)
+        recAln.resize(nRec);
+        for (int t = 0, r = 0; t < nt; t++)
+            for (uint64 o : partOff[t]) recAln[r++] = part[t][o];
         FILE *f = fopen(hp, "wb");
         bool okw = f != nullptr;
         if (okw) {
@@ -326,7 +330,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         if (okw && gm != nullptr && strcmp(gm, "on") == 0) {
             static std::vector<uint32> keep;
             keep.swap(out.readRecord);
-            g_handoffReadRecord = keep.data(); g_handoffNReads = keep.size();
+            g_handoffReadRecord = keep.data(); g_handoffNReads = keep.size(); g_handoffRecAln = recAln.data();
             P.inOut->logMain << "ENGINE_GPU: no BAM records for the reads of the " << nRec << " hand-off records\n";
             if (sumOn) {   // the summaries, concatenated in record order (threads hold contiguous record ranges)
                 static std::vector<uint8> sumAll;

@@ -13,6 +13,7 @@
 SeqCache *g_seqCache = nullptr;
 const uint32 *g_handoffReadRecord = nullptr;
 uint64 g_handoffNReads = 0;
+const uint8 *g_handoffRecAln = nullptr;
 HandoffReadEntry *g_handoffReads = nullptr;
 int g_handoffMinQ = 0;
 const uint8 *g_handoffSum = nullptr;

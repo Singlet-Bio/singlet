@@ -206,7 +206,9 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
             };
 
             // iReadAll is 1-based (processChunks increments it before the read); readRecord is indexed from read 0
-            const bool handoffCovered = g_handoffReadRecord != nullptr && iReadAll >= 1 && iReadAll - 1 < g_handoffNReads && g_handoffReadRecord[iReadAll - 1] != 0xFFFFFFFFu;
+            //(a read whose record has no alignments still gets its records, so it reaches the pileup, which stops: STAR and the hand-off disagree)
+            const bool handoffCovered = g_handoffReadRecord != nullptr && iReadAll >= 1 && iReadAll - 1 < g_handoffNReads && g_handoffReadRecord[iReadAll - 1] != 0xFFFFFFFFu
+                && g_handoffRecAln[g_handoffReadRecord[iReadAll - 1]] > 0;
             if ((P.outBAMunsorted || P.outBAMcoord) && !handoffCovered) {//BAM output (singlet GPU pileup "on": not for hand-off reads)
                 alignBAM(*(trOutSAM[iTr]), nTrOutSAM, iTr, mapGen.chrStart[trOutSAM[iTr]->Chr], (uint) -1, (uint) -1, 0, -1, NULL, P.outSAMattrOrder,outBAMoneAlign, outBAMoneAlignNbytes);
 

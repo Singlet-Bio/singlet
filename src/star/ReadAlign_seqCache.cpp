@@ -151,6 +151,8 @@ void ReadAlign::seqCacheAlignRecords(const char *seqNum, uint L, const std::vect
     for (uint ii=0;ii<L;ii++) {Read0[0][ii]=NUC[(uint8)seqNum[ii]<4 ? (uint8)seqNum[ii] : 4]; Qual0[0][ii]='I';};
     Read0[0][L]=0; Qual0[0][L]=0;
     strcpy(readName,"@x"); readFilter='N'; readNameExtra[0].clear();
+    //as oneRead sets it for every read (mappedFilter's mismatch limit; it was left uninitialised here)
+    outFilterMismatchNmaxTotal=min(P.outFilterMismatchNmax, (uint) (P.outFilterMismatchNoverReadLmax*(readLength[0]+readLength[1])));
     seqCacheRestore(blob);
     mappedFilter();
     const size_t at=out.size(); out.push_back(0);
