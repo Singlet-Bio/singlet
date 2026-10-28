@@ -152,3 +152,21 @@ pass (cache lookups, FASTQ parsing: about 3).
   step is the full offload with no BAM: records come from the GPU prefill, and every pileup output is computed from them,
   including the per-molecule list behind saturation and cell QC. "On" stays an off-by-default experiment, and compare mode is
   the per-output identity harness.
+
+## Curve toward the break-even (pbmc1k_v3, `--engine gpu`, campaign configuration; measured)
+
+| build | gate (a), every data output | CPU pileup: core-s (per M pairs) | `SINGLET_GPU_PILEUP=on`: core-s (per M pairs) | wall, CPU pileup / on | job |
+|---|---|---|---|---|---|
+| first cut (SNP, chrM, junctions, molecules on the GPU) | 3 outputs differed | 1,230 / 1,186 | 1,196 | 430 / 438 s | 790461 |
+| + molecule list for saturation and cell QC, cheaper collector | **pass** | 1,214 (18.2) | 1,172 (17.6) | 420 / 407 s | 790520 |
+| + classification, strand, poly(A) and VDJ from the GPU | **pass** | 1,230 (18.5) | **1,175 (17.6)** | 456 / **376 s** | 790552 |
+
+Remaining differences in every pass: the non-host EM iteration count (D4b), the record order of `star_Unmapped.out.mate*` and
+`nonhost_reads.fq`, timings, and `summary.json` `memory_tier`, a peak-RSS bucket that the collector's memory pushes past 64 GB.
+The CPU-pileup run varies by about ±3% across nodes.
+
+**Projected:** the serial pileup thread is down to 251 s (BAM read, tag scans, collector, cheap per-record outputs). Removing all
+of it brings the GPU path to about 13.8 core-s per M pairs. The 12.7 break-even also needs STAR's per-read pass reduced. Next
+steps:
+1. Compact records instead of the BAM stream, with the cheap per-record outputs moved onto them.
+2. STAR's BAM-record building off the per-read pass.
