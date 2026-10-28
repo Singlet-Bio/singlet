@@ -179,7 +179,8 @@ int deviceCount() { int n = 0; if (cudaGetDeviceCount(&n) != cudaSuccess) return
 bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
                  Output& out) {
     std::string err;
-    auto fail = [&](const std::string& e) { out.log += "engine_gpu: " + e + "\n"; return false; };
+    // on failure, release everything this process holds on the device (STAR then maps every read on the CPU)
+    auto fail = [&](const std::string& e) { out.log += "engine_gpu: " + e + "\n"; cudaDeviceReset(); return false; };
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
     // ---- index (G with 200 bytes of padding on each side, as STAR's G1)
