@@ -21,6 +21,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -107,9 +108,10 @@ __global__ void k_p2(Params P, GenomeView g, u64 n, const Work<C>* work, const u
 }
 template <class C>
 __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
-                     const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen) {
-    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
-    if (k >= n) return;
+                     const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen, const uint32_t* perm) {
+    u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (t >= n) return;
+    u64 k = perm ? perm[t] : t;   // threads take the batch's reads in order of estimated cost (k_cost); each read is independent
     Work<C>& w = work[k];
     w.stepBudget = budget;
     u64 o = b0 + k;
@@ -118,6 +120,16 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     if (s == Status::Ok && w.stitched && !assignHits(P, g, w, bits, base[k])) s = Status::Overflow;
     if (s == Status::Ok) s = mapFinish(P, g, w, rbuf[k], bl);
     status[o] = (uint8_t)s; outLen[o] = (uint16_t)bl.n;
+}
+
+// cost of each read's phase 3 after phase 1: windows, then SA entries to assign. Sorting a batch by it puts reads of similar cost
+// in the same warp, so a warp no longer waits for its one heavy read (most phase-3 time is in reads with > 16 windows).
+template <class C>
+__global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, uint32_t* perm) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    key[k] = nEnt[k] ? ((u64)work[k].nW << 40) | min(nEnt[k], (u64)0xFFFFFFFFFFULL) : 0;
+    perm[k] = (uint32_t)k;
 }
 
 struct ToU64 { __host__ __device__ u64 operator()(uint16_t x) const { return (u64)x; } };
@@ -144,6 +156,8 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     EG_CK(cudaMalloc(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>))); EG_CK(cudaMalloc(&dBst, NB));
     EG_CK(cudaMalloc(&dNent, NB * 8)); EG_CK(cudaMalloc(&dBase, NB * 8));
     u64 bitsCap = 1 << 20; EG_CK(cudaMalloc(&dBits, bitsCap * 4));
+    static const bool bin = !(getenv("SINGLET_ENGINE_GPU_BIN") && getenv("SINGLET_ENGINE_GPU_BIN")[0] == '0');
+    u64* dKey; uint32_t* dPerm; EG_CK(cudaMalloc(&dKey, NB * 8)); EG_CK(cudaMalloc(&dPerm, NB * 4));
     for (u64 b0 = 0; b0 < n; b0 += NB) {
         u64 nb = std::min(NB, n - b0);
         int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
@@ -154,7 +168,11 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         if (words > bitsCap) { cudaFree(dBits); bitsCap = words * 2; EG_CK(cudaMalloc(&dBits, bitsCap * 4)); }
         EG_CK(cudaMemset(dBits, 0, words * 4));
         k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
-        k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen);
+        if (bin) {
+            k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm);
+            thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
+        }
+        k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, bin ? dPerm : nullptr);
         EG_CK(cudaGetLastError());
     }
     EG_CK(cudaDeviceSynchronize());
@@ -173,7 +191,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     }
     EG_CK(cudaMemcpy(L.status.data(), dSt, n, cudaMemcpyDeviceToHost)); EG_CK(cudaMemcpy(L.len.data(), dLen, n * 2, cudaMemcpyDeviceToHost));
     cudaFree(dIdx); cudaFree(dOut); cudaFree(dSt); cudaFree(dLen); cudaFree(dWork); cudaFree(dRbuf); cudaFree(dBst); cudaFree(dNent);
-    cudaFree(dBase); cudaFree(dBits);
+    cudaFree(dBase); cudaFree(dBits); cudaFree(dKey); cudaFree(dPerm);
     return true;
 }
 
