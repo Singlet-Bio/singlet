@@ -252,6 +252,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
         });
         for (auto &x : th) x.join();
     }
+    cache->prefilled = true;
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
 #endif

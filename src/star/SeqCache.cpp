@@ -74,18 +74,18 @@ SeqCache *SeqCache::create(Parameters &P, uint64 nGenome) {
         P.inOut->logMain << "SEQCACHE: off (" << why << ")\n";
         return nullptr;
     }
-    SeqCache *c = new SeqCache(mb << 20);
+    SeqCache *c = new SeqCache(mb << 20, (eg != nullptr && eg[0] == '1') ? 8 : 2);
     const char *v = getenv("SINGLET_STAR_SEQCACHE_VERIFY");
     c->verify = v && v[0] == '1';
     P.inOut->logMain << "SEQCACHE: on, " << mb << " MB in " << c->nShards << " shards" << (c->verify ? ", verify" : "") << "\n";
     return c;
 }
 
-SeqCache::SeqCache(uint64 totalBytes) : verify(false) {
+SeqCache::SeqCache(uint64 totalBytes, uint64 waysIn) : verify(false), ways(waysIn) {
     nShards = 64;
     uint64 perShard = totalBytes / nShards;
     //index: one 16-byte slot per ~112 bytes of ring (entries are ~100-150 bytes)
-    uint64 slots = 1;
+    uint64 slots = ways;
     while (slots * 128 < perShard) slots <<= 1;
     indexMask = slots - 1;
     ringBytes = ((perShard - slots*sizeof(Slot)) / 8) * 8;
@@ -138,9 +138,9 @@ uint64 SeqCache::append(Shard &s, const char *ent, uint64 entLen) {
 bool SeqCache::lookup(uint64 h, const char *seq, uint64 L, std::vector<uint8> &out) {
     nLookup++;
     Shard &s = shards[(h >> 40) % nShards];
-    uint64 b = h & indexMask & ~1ULL;
+    uint64 b = h & indexMask & ~(ways-1);
     std::lock_guard<std::mutex> lock(s.mtx);
-    for (uint64 j=0; j<2; j++) {
+    for (uint64 j=0; j<ways; j++) {
         Slot &sl = s.index[b+j];
         uint64 blobOff, blobLen, entLen;
         if (sl.hash != h || !entryMatches(s, sl.pos, h, seq, L, blobOff, blobLen, entLen))
@@ -169,18 +169,21 @@ void SeqCache::insert(uint64 h, const char *seq, uint64 L, const uint8 *blob, ui
     memcpy(ent.data() + entHeader + packedBytes(L), blob, blobLen);
 
     Shard &s = shards[(h >> 40) % nShards];
-    uint64 b = h & indexMask & ~1ULL;
+    uint64 b = h & indexMask & ~(ways-1);
     std::lock_guard<std::mutex> lock(s.mtx);
-    //slot: same hash, else empty or overwritten, else the older one
+    //slot: same hash, else empty or overwritten, else the oldest one (ties: the later slot)
     Slot *target = nullptr;
-    for (uint64 j=0; j<2 && !target; j++)
+    for (uint64 j=0; j<ways && !target; j++)
         if (s.index[b+j].hash == h) target = &s.index[b+j];
-    for (uint64 j=0; j<2 && !target; j++) {
+    for (uint64 j=0; j<ways && !target; j++) {
         Slot &sl = s.index[b+j];
         if (sl.pos == 0 || sl.pos - 1 + ringBytes < s.head) target = &sl;
     }
-    if (!target)
-        target = s.index[b].pos < s.index[b+1].pos ? &s.index[b] : &s.index[b+1];
+    if (!target) {
+        target = &s.index[b+ways-1];
+        for (uint64 j=ways-1; j-- > 0; )
+            if (s.index[b+j].pos < target->pos) target = &s.index[b+j];
+    }
     target->hash = h;
     target->pos = append(s, ent.data(), entLen) + 1;
     nInsert++;

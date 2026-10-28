@@ -1,3 +1,4 @@
+#include "StarProfile.h"
 #include "ReadAlign.h"
 #include "GlobalVariables.h"
 #include "ErrorWarning.h"
@@ -17,6 +18,7 @@ void ReadAlign::outputAlignments() {
     
     if (outFilterBySJoutPass) {//otherwise align is held for the 2nd stage of outFilterBySJout
         ////////////////////////////////////
+        PROF_T0(tOutMapped);
         if (unmapType<0) {//passed mappedFilter. Unmapped reads can have nTr>0
 
             auto nTr1 = nTr;
@@ -43,9 +45,12 @@ void ReadAlign::outputAlignments() {
             
             ReadAlign::alignedAnnotation();
         };
+        PROF_ADD(PROF_outMapped, tOutMapped);
 
         //the operations below are both for mapped and unmapped reads
+        PROF_T0(tOutBarcode);
         soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
+        PROF_ADD(PROF_outBarcode, tOutBarcode);
 
         //transcripts: need to be run after CB/UMI are obtained to output CR/UR tags
         if ( P.quant.trSAM.yes && unmapType<0) {//Aligned.toTranscriptome output, only for mapped
@@ -56,18 +61,24 @@ void ReadAlign::outputAlignments() {
             };
         };        
         
+        PROF_T0(tOutSolo);
         soloRead->record((unmapType<0 ? nTr : 0), trMult, iReadAll, readAnnot); //need to supply nTr=0 for unmapped reads
+        PROF_ADD(PROF_outSolo, tOutSolo);
+        PROF_T0(tOutSAM);
 
         if (P.pGe.transform.outSAM) {
             ReadAlign::writeSAM(alignsGenOut.alN, alignsGenOut.alMult, alignsGenOut.alBest);
         } else {
             ReadAlign::writeSAM(nTr, trMult, trBest); //this will set mateMapped
         };
+        PROF_ADD(PROF_outSAM, tOutSAM);
     };    
 
     if (unmapType>=0) {//unmapped reads
         statsRA.unmappedAll++; //include unmapType==4, i.e. one-mate alignments of PE reads - which may have been set in writeSAM above
+        PROF_T0(tOutUnmapped);
         ReadAlign::outReadsUnmapped(); //uses mateMapped that was set in writeSAM above
+        PROF_ADD(PROF_outUnmapped, tOutUnmapped);
     };    
 };
 

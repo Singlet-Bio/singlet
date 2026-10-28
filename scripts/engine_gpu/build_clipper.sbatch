@@ -14,6 +14,7 @@
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
 BARE=$W/repos/singlet-py.git; BR=${BRANCH:-gpu/engine-gpu}; OUTD=${OUTD:-$W/jobs/w11/engine/bin}; mkdir -p $OUTD
+VARIANTS=${VARIANTS:-gpu cpu}; XFLAGS=${XFLAGS:-}   # XFLAGS: extra C++ flags, e.g. -DSTAR_PROFILE (STAR's per-phase cycle counters)
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/w11/engine
 COMMIT=$(git -C $BARE rev-parse refs/w11/engine); echo "COMMIT=$COMMIT"
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
@@ -29,9 +30,9 @@ export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gn
 # the conda libstdc++ (gcc 16) before the CUDA image's system one, which CUDA's implicit link directories would otherwise put first
 export LDFLAGS="-L$ENV/lib -Wl,-rpath,$ENV/lib"
 \$CXX --version | head -1; nvcc --version | tail -1
-for v in gpu cpu; do
+for v in $VARIANTS; do
   E=ON; [ \$v = cpu ] && E=OFF
-  cmake -S $S -B $SCR/b-\$v -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_GIT_COMMIT=$COMMIT -DSINGLET_ENGINE_GPU=\$E \
+  cmake -S $S -B $SCR/b-\$v -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_GIT_COMMIT=$COMMIT -DSINGLET_ENGINE_GPU=\$E -DCMAKE_CXX_FLAGS="$XFLAGS" \
     -DCMAKE_CUDA_HOST_COMPILER=\$CXX -DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler -DCMAKE_CUDA_ARCHITECTURES="80;90" > $SCR/c-\$v.log 2>&1 \
     || { tail -40 $SCR/c-\$v.log; exit 1; }
   grep -i "GPU engine" $SCR/c-\$v.log || true
@@ -40,6 +41,6 @@ for v in gpu cpu; do
 done
 EOS
 apptainer exec --nv -B $W -B $SCR $IMG bash $SCR/build.sh
-echo "$COMMIT" > $OUTD/commit; sha256sum $OUTD/singlet-*; ldd $OUTD/singlet-gpu | grep -iE "cuda|not found" || true
+echo "$COMMIT" > $OUTD/commit; sha256sum $OUTD/singlet-*; [ -e $OUTD/singlet-gpu ] && { ldd $OUTD/singlet-gpu | grep -iE "cuda|not found" || true; }
 $OUTD/singlet-gpu --help 2>&1 | grep -i engine || true
 echo "[build] ok"
