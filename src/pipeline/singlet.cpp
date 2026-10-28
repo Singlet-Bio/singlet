@@ -6086,8 +6086,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (stream_unsorted && parallel_pileup == 1) {
-        std::cerr << "[singlet] --stream-unsorted ignored: this mode needs the sorted BAM
-";
+        std::cerr << "[singlet] --stream-unsorted ignored: this mode needs the sorted BAM\n";
         stream_unsorted = false; config.cb_from_cr = false;
     }
     std::string parallel_bam_path; // set when parallel_pileup=1
@@ -7060,8 +7059,7 @@ int main(int argc, char* argv[]) {
             args.push_back("AS"); args.push_back("CR"); args.push_back("UR");
             if (stream_unsorted) {
                 if (solo_type_is_sam_tag_out || use_complex || use_complex_concat) {
-                    std::cerr << "ERROR: --stream-unsorted supports CB_UMI_Simple only (this protocol uses CB_samTagOut or CB_UMI_Complex)
-";
+                    std::cerr << "ERROR: --stream-unsorted supports CB_UMI_Simple only (this protocol uses CB_samTagOut or CB_UMI_Complex)\n";
                     return 1;
                 }
                 // No CB: STAR allows it only in a sorted BAM; the pileup derives CB from CR (PileupConfig::cb_from_cr).
