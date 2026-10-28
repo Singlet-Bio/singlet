@@ -214,9 +214,7 @@ def _mc_kernel():
     try:
         import numba as nb
     except ImportError as e:  # pragma: no cover - depends on the environment
-        raise CellCallUnavailable(
-            "called_ed needs numba (pip install 'singlet[migrate]')"
-        ) from e
+        raise CellCallUnavailable("called_ed needs numba (pip install 'singlet[migrate]')") from e
 
     @nb.njit(nogil=True)
     def _draw(prob, alias, K):
