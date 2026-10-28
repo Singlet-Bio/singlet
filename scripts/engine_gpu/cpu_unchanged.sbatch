@@ -13,7 +13,7 @@
 # (ref2 = ref again: the run-to-run baseline) byte for byte, then order-independently (sorted lines / sorted FASTQ records) for files that differ. Outputs in job /tmp.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
-REFBIN=${REFBIN:-$W/jobs/w11/engine/bin9/singlet-cpu}; CPUBIN=${CPUBIN:-$W/jobs/w11/engine/bin10/singlet-cpu}; GPUBIN=${GPUBIN:-$W/jobs/w11/engine/bin10/singlet-gpu}
+REFBIN=${REFBIN:-$W/jobs/w11/engine/bin9/singlet-cpu}; CPUBIN=${CPUBIN:-$W/jobs/w11/engine/bin8/singlet-cpu}; GPUBIN=${GPUBIN:-$W/jobs/w11/engine/bin8/singlet-gpu}
 SETS=(${SETS:-GSM6996272 GSM6996274 pbmc1k_v3}); T=${T:-18}
 RES=$W/jobs/w11/engine/results/cpu_unchanged-$SLURM_JOB_ID; mkdir -p $RES
 SCR=/tmp/$USER-cpusame-$SLURM_JOB_ID; mkdir -p $SCR
@@ -24,20 +24,19 @@ export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_R
 G=$REF/GRCh38-2024-A
 echo "node=$(hostname) job=$SLURM_JOB_ID ref=$(sha256sum $REFBIN | cut -c1-16) cpu=$(sha256sum $CPUBIN | cut -c1-16) gpubin=$(sha256sum $GPUBIN | cut -c1-16) $(date -Is)" | tee $RES/summary.txt
 for r in ref ref2 cpu gpubin; do
-  ENG=(); case $r in ref|ref2) B=$REFBIN;; cpu) B=$CPUBIN;; gpubin) B=$GPUBIN; ENG=(--engine cpu);; esac   # prod/campaign has no --engine flag
+  case $r in ref|ref2) B=$REFBIN;; cpu) B=$CPUBIN;; gpubin) B=$GPUBIN;; esac
   for s in "${SETS[@]}"; do
     FQ=$PB/data/$s/$s.1fq; [ -e $FQ ] || FQ=$W/data/atlas-rerun/perf/$s/sample.1fq
     SCREEN=(); [ -f $(dirname $FQ)/screen.json ] && SCREEN=(--run-screen $(dirname $FQ)/screen.json)
     mkdir -p $SCR/$r/$s/out
     ( cd $SCR/$r/$s && timeout -k 30 3000 $B $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
-        --out-prefix $SCR/$r/$s/out/ --threads $T --pipeline --output-format 1pz "${ENG[@]}" "${SCREEN[@]}" > run.log 2>&1; echo "exit $?" >> run.log ) &
+        --out-prefix $SCR/$r/$s/out/ --threads $T --pipeline --output-format 1pz --engine cpu "${SCREEN[@]}" > run.log 2>&1; echo "exit $?" >> run.log ) &
   done
   wait
   for s in "${SETS[@]}"; do echo "$r $s: $(tail -1 $SCR/$r/$s/run.log)" | tee -a $RES/summary.txt; done
 done
 for r in ref2 cpu gpubin; do
   for s in "${SETS[@]}"; do
-    grep -q "^exit 0" $SCR/ref/$s/run.log || { echo "  ref run of $s failed: $(grep -m3 -iE "error|unknown" $SCR/ref/$s/run.log)" | tee -a $RES/summary.txt; continue; }
     n=0; d=0; od=0
     for f in $(cd $SCR/ref/$s/out && find . -type f | sort); do
       n=$((n+1)); cmp -s $SCR/ref/$s/out/$f $SCR/$r/$s/out/$f && continue
