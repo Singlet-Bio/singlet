@@ -64,7 +64,7 @@
 \begin{axis}[
   title={d\quad Sustained minibatch throughput},
   width=0.44\linewidth, height=6.6cm, ymode=log,
-  xmin=-0.3, xmax=3.3, xtick={0,1,2,3}, xticklabels={0.1 Gbit/s, 1 Gbit/s, 10 Gbit/s, NVMe},
+  xmin=-0.3, xmax=4.3, xtick={0,1,2,3,4}, xticklabels={0.1 Gbit/s, 1 Gbit/s, 10 Gbit/s, NFS, local disk},
   xlabel={storage tier}, ylabel={cells per second into the model},
   axis x line*=bottom, axis y line*=left,
   legend style={font=\sffamily\tiny, draw=none, at={(0.5,-0.2)}, anchor=north, legend columns=2, cells={anchor=west}},
@@ -90,6 +90,6 @@ decode) and building the tensor. All values per tier in Table~\ref{tab:minibatch
 equal effective delivery rate $R_{\mathrm{eff}}$ (Eq.~\ref{eq:reff}, million non-zeros per second) on a 1\,Gbit/s link;
 points above and left of a line deliver faster.
 \textbf{(d)} Cells per second delivered to the model after warm-up by storage tier (object store behind a
-bandwidth-limited proxy, or local NVMe), \nm{threadsHeadline} reader cores.}
+bandwidth-limited proxy, the shared NFS filesystem, or the node's own disk), \nm{threadsHeadline} reader cores.}
 \label{fig:wow}
 \end{figure*}

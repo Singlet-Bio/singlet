@@ -44,9 +44,11 @@ s1_activate() {
   export PYTHONPATH="$BENCH"
 }
 
-# python -m s1bench with results and generated output under $S1 (data comes from S1BENCH_DATA).
+# python -m s1bench with results and generated output under $S1 (data comes from S1BENCH_DATA). S1_RESULTS points a
+# cross-check run at a results directory of its own.
 s1b() {
-  (cd "$BENCH" && python -m s1bench --set "results_dir=$S1/results" --set "generated_dir=$S1/generated" "$@")
+  (cd "$BENCH" && python -m s1bench --set "results_dir=${S1_RESULTS:-$S1/results}" --set "generated_dir=$S1/generated" "$@")
 }
+export PATH="$S1/bin:$PATH"   # minio, mc, toxiproxy-server (netem.sbatch installs them)
 
 echo "job ${SLURM_JOB_ID:-?} task ${SLURM_ARRAY_TASK_ID:--} on $(hostname) $(date -Is)"

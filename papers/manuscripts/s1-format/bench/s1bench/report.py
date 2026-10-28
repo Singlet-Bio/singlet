@@ -32,8 +32,9 @@ LOADER_LABELS = {
     "anndata_zarr_lazy": "AnnData Zarr", "soma_ml": "TileDB-SOMA ML", "bpcells": "BPCells (R)",
     "s1_stream": "\\textbf{.s1}", "s1_stream_canonical": ".s1, source gene order",
 }
-TIER_ORDER = ["s3_0.1g", "s3_1g", "s3_10g", "nvme"]
-TIER_LABELS = {"s3_0.1g": "0.1 Gbit/s", "s3_1g": "1 Gbit/s", "s3_10g": "10 Gbit/s", "nvme": "local NVMe", "s3_1g_wan": "1 Gbit/s, 30 ms"}
+TIER_ORDER = ["s3_0.1g", "s3_1g", "s3_10g", "nfs", "local"]
+TIER_LABELS = {"s3_0.1g": "0.1 Gbit/s", "s3_1g": "1 Gbit/s", "s3_10g": "10 Gbit/s", "nfs": "shared filesystem (NFS)",
+               "local": "node-local disk", "s3_1g_wan": "1 Gbit/s, 30 ms"}
 CLASS_LABELS = {
     "droplet_3p": "droplet 3'", "droplet_3p_nuclei": "droplet nuclei", "droplet_5p": "droplet 5'", "droplet_probe": "droplet probe",
     "droplet_other": "other droplet", "combinatorial": "combinatorial", "plate_umi": "plate, UMI", "plate_reads": "plate, reads",
@@ -54,6 +55,13 @@ def _f(v) -> Optional[float]:
         return x if math.isfinite(x) else None
     except (TypeError, ValueError):
         return None
+
+
+def _headline_decode(cfg: Config) -> list[dict]:
+    """Decode rows of the main run from node-local disk (and the in-memory codec rows): not the thread sweep, not the
+    shared-filesystem tier, which have their own tables."""
+    return [r for r in read_stage(cfg, "decode")
+            if r.get("run", "main") == "main" and r.get("storage", "local") in ("local", "memory")]
 
 
 def _stats(vals: Iterable) -> dict:
@@ -174,7 +182,7 @@ def _group(f: str) -> str:
 
 
 def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None:
-    d = [r for r in read_stage(cfg, "decode") if r.get("status") == "ok"]
+    d = [r for r in _headline_decode(cfg) if r.get("status") == "ok"]
     H = int(cfg["threads"]["headline"])
 
     def pick(fmt, what, threads, cache=None, mode=None, isa=None):
@@ -212,7 +220,7 @@ def wire_section(cfg: Config, N: Numbers) -> None:
     """Q5 from measured size and decode: R_eff(B) = (b/B + 1/D)^-1 for .s1 against uncompressed CSC, per matrix."""
     w = {(r["dataset"], r["matrix"], r["format"]): r for r in read_stage(cfg, "write") if r.get("status") == "ok"}
     H = int(cfg["threads"]["headline"])
-    d = {(r["dataset"], r["matrix"], r["format"]): r for r in read_stage(cfg, "decode")
+    d = {(r["dataset"], r["matrix"], r["format"]): r for r in _headline_decode(cfg)
          if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "cold" and int(r["threads"]) == H
          and r["mode"] in ("", "native")}
     for gbit in (0.1, 1, 10, 25):
@@ -393,6 +401,12 @@ def env_section(cfg: Config, N: Numbers) -> None:
     N.put("cpu", _tex_escape(e.get("cpu") or ""))
     N.put("cores", e.get("cores"))
     N.put("memGB", e.get("mem_gb"), "{:.0f}")
+    if e.get("gpu"):
+        N.put("gpu", _tex_escape(", ".join(e["gpu"].splitlines())))
+    disk = dict(re.findall(r'(\w+)="([^"]*)"', e.get("data_disk") or ""))
+    if disk:  # lsblk -P pairs: MODEL, SIZE, ROTA (1 = spinning)
+        kind = "spinning disk" if disk.get("ROTA") == "1" else "solid-state disk"
+        N.put("localDisk", _tex_escape(f"{disk.get('SIZE', '')} {kind} ({disk.get('MODEL', '').strip()})"))
     N.put("threadsHeadline", int(cfg["threads"]["headline"]))
     for pkg, ver in (e.get("packages") or {}).items():
         if ver:

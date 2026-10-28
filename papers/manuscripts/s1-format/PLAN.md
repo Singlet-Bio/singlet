@@ -30,7 +30,7 @@ Read this file, then `README.md` (layout and commands), then `datasets.yaml`.
 | Q1 | How large is each format, in bits per non-zero, across protocols and sizes? | `write` | Fig 1a, Table 2 |
 | Q2 | How fast does each format decode to an in-memory CSC on 1 and 4 threads? | `decode` | Fig 1c, Table 4 |
 | Q3 | How long from a cold start to the first minibatch on the device, and what dominates? | `minibatch` | Fig 1b, Table 3 |
-| Q4 | What sustained training throughput does each loader deliver at 0.1, 1 and 10 Gbit/s and on local NVMe? | `minibatch` | Fig 1d |
+| Q4 | What sustained training throughput does each loader deliver at 0.1, 1 and 10 Gbit/s from the shared filesystem and from node-local disk? | `minibatch` | Fig 1d |
 | Q5 | Is compression worth it on the wire, i.e. is R_eff(B) of .s1 above that of uncompressed CSC at every bandwidth? | `report` (from Q1, Q2) and `minibatch` (measured) | Fig 1c iso-lines, Table 4 |
 | Q6 | Where do the bits go, step by step, from raw arrays to .s1? | `ladder` | Fig 3a |
 | Q7 | How close is .s1 to the best achievable code length under count models (Poisson, NB, per-gene x depth, cluster-conditioned)? | `floor` | Fig 3b, Table 5 |
@@ -114,7 +114,9 @@ measure bytes on disk (sum of all files for directory formats), read back and co
 `dataset matrix format bytes bits_per_nnz write_s roundtrip_ok`.
 
 ### 4.4 `decode` (Q2, Q5)
-For every format, time from file on local NVMe to an in-memory SciPy CSC (or dgCMatrix for R formats).
+For every format, time from a file on node-local disk to an in-memory SciPy CSC (or dgCMatrix for R formats), and,
+cold at the headline thread count, from the shared NFS filesystem (`storages` in config.yaml). On Clipper the timing host
+is an ordinary GPU node (H100, spinning RAID `/tmp`), deliberately not one with fast local storage.
 - Cold: evict the files from the page cache first (`os.posix_fadvise(..., POSIX_FADV_DONTNEED)` on every file;
   verify with `vmtouch` if present). Warm: second read. Report both; the headline is cold.
 - Threads: 1, 2, 4, 8, 16 for readers that take threads; everything is pinned with `taskset` to that many cores.
@@ -171,7 +173,7 @@ without replacement (the block-shuffling scheme of scDataset, which every loader
 loader returns `torch.sparse_csr_tensor` (float32 values, int64 indices, genes as columns) on the CPU; if a GPU is
 present also time `.to("cuda")` and report it separately.
 
-*Storage tiers.* (a) local NVMe, cold page cache; (b) an S3-compatible object store (MinIO on another node of the same
+*Storage tiers.* (a) node-local disk, cold page cache; (a') the shared NFS filesystem, read in place; (b) an S3-compatible object store (MinIO on another node of the same
 cluster, or on the same node through a loopback) reached through Toxiproxy with a bandwidth toxic of 0.1, 1 and
 10 Gbit/s and 1 ms added latency; (c) the same at 1 Gbit/s with 30 ms latency (a WAN-like case). Readers that can read
 ranges from S3 do so (`s1`, `zarr`, `soma`, `h5ad` through `fsspec`/`s3fs`); the others download the object first and

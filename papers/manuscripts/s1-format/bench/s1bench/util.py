@@ -296,8 +296,10 @@ def timed(out: dict, key: str) -> Iterator[None]:
         out[key] = out.get(key, 0.0) + time.perf_counter() - t0
 
 
-def repeat(fn, repeats: int, warmup: int, before=None) -> list[float]:
-    """Run fn() warmup + repeats times, calling before() untimed ahead of each run; return the timed seconds."""
+def repeat(fn, repeats: int, warmup: int, before=None, long_s: Optional[float] = None) -> list[float]:
+    """Run fn() warmup + repeats times, calling before() untimed ahead of each run; return the timed seconds.
+    A run longer than long_s (warm-up included) ends the series and is returned alone: slow readers of XL matrices
+    (text formats) are timed once rather than six times. The summary's n then reads 1."""
     out = []
     for i in range(warmup + repeats):
         if before:
@@ -305,6 +307,8 @@ def repeat(fn, repeats: int, warmup: int, before=None) -> list[float]:
         t0 = time.perf_counter()
         fn()
         dt = time.perf_counter() - t0
+        if long_s and dt > long_s:
+            return [dt]
         if i >= warmup:
             out.append(dt)
     return out
@@ -343,7 +347,7 @@ def pin_cores(n: int) -> None:
 
 
 # ----------------------------------------------------------------------------------------------- environment record
-def env_record() -> dict:
+def env_record(data_dir: Optional[Path] = None) -> dict:
     def run(cmd):
         try:
             return subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout.strip()
@@ -359,6 +363,11 @@ def env_record() -> dict:
         "isa_flags": run(["bash", "-c", "grep -o -w -E 'avx2|avx512f|avx512bw' /proc/cpuinfo | sort -u | tr '\\n' ' '"]),
         "mem_gb": round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30, 1),
         "governor": run(["bash", "-c", "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null"]),
+        "gpu": run(["bash", "-c", "nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | sort | uniq -c | sed 's/^ *//'"]),
+        # the disk under data_dir (the timed jobs' node-local copy): model, size, rotational (1 = spinning)
+        "data_disk": run(["bash", "-c", f"d=$(findmnt -no SOURCE -T '{data_dir or '/tmp'}' | sed 's/\[.*//'); "
+                                        "lsblk -ndPo MODEL,SIZE,ROTA $(lsblk -no PKNAME $d 2>/dev/null | head -1 | sed 's|^|/dev/|') "
+                                        "2>/dev/null || echo $d"]),
         "git_commit": run(["git", "-C", str(PAPER_DIR), "rev-parse", "HEAD"]),
         "git_dirty": bool(run(["git", "-C", str(PAPER_DIR), "status", "--porcelain"])),
         "packages": {},
@@ -383,7 +392,7 @@ def env_record() -> dict:
 def write_env(cfg: Config) -> Path:
     p = cfg.results_dir / "env.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(env_record(), indent=2, sort_keys=True) + "\n")
+    p.write_text(json.dumps(env_record(cfg.data_dir), indent=2, sort_keys=True) + "\n")
     return p
 
 

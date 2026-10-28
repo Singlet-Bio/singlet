@@ -58,7 +58,8 @@ start, reading \nm{fig1b-dataset} from an object store at \nm{fig1b-tier}, the f
 alternative (\nm{ttfm-best-other-name}; Fig.~\ref{fig:wow}b, Table~\ref{tab:minibatch}). The \sone{} reader needs one
 request for a few kilobytes that plan every later read and one request per run of chunks, and it moves only the chunks
 that hold the requested cells. Sustained throughput into the model is \nm{thr-s1_stream-s3_1g} cells per second at
-1\,Gbit/s and \nm{thr-s1_stream-nvme} from local NVMe (Fig.~\ref{fig:wow}d).
+1\,Gbit/s, \nm{thr-s1_stream-nfs} from the shared filesystem and \nm{thr-s1_stream-local} from the node's own disk
+(Fig.~\ref{fig:wow}d).
 
 \input{figures/fig1_wow}
 
@@ -202,7 +203,7 @@ fraction of non-zeros equal to one and median counts per cell. Sources and acces
 
 \begin{table}[h]
 \centering\small
-\caption{Read rate from a cold file on local NVMe to an in-memory sparse matrix, million non-zeros per second, median
+\caption{Read rate from a cold file on the node's own disk to an in-memory sparse matrix, million non-zeros per second, median
 over matrices. \sone{} rows: stored gene order. Codec-only rates (member in memory, C++): AVX-512
 \nm{codec_cpp-native-avx512-t1} / \nm{codec_cpp-native-avx512-t4}, AVX2 \nm{codec_cpp-native-avx2-t1} /
 \nm{codec_cpp-native-avx2-t4}, scalar \nm{codec_cpp-native-scalar-t1} / \nm{codec_cpp-native-scalar-t4} on 1 /
@@ -224,13 +225,14 @@ the five loader-panel datasets and three seeds, by storage tier (object store th
 latency unless stated).}
 \label{tab:minibatch}
 \pgfplotstabletypeset[
-  columns={loader,s3_0.1g,s3_1g,s3_10g,s3_1g_wan,nvme},
+  columns={loader,s3_0.1g,s3_1g,s3_10g,s3_1g_wan,nfs,local},
   columns/loader/.style={string type, column name=Loader, column type=l},
   columns/s3_0.1g/.style={column name=0.1 Gbit/s, fixed, precision=2},
   columns/s3_1g/.style={column name=1 Gbit/s, fixed, precision=2},
   columns/s3_10g/.style={column name=10 Gbit/s, fixed, precision=2},
   columns/s3_1g_wan/.style={column name={1 Gbit/s, 30 ms}, fixed, precision=2},
-  columns/nvme/.style={column name=NVMe, fixed, precision=2},
+  columns/nfs/.style={column name=NFS, fixed, precision=2},
+  columns/local/.style={column name=Local disk, fixed, precision=2},
 ]{\gen{tab_minibatch.tsv}}
 \end{table}
 

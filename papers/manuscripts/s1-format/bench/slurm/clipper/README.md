@@ -8,15 +8,21 @@ commit of this repository (`S1_SHA`), cloned under `$S1=/mnt/projects/debruinz_p
 |---|---|---|
 | `setup.sbatch` | conda env from `environment.yml`, BPCells, the singlet package (Python, R), C++ bench, `test_floor.py`, `smoke.py`, `s1bench env` | short-cpu |
 | `stage.sbatch` | the stages in `STAGES` for one dataset of `DS_LIST` per array task | per size class, below |
+| `netem.sbatch` | installs MinIO, mc and Toxiproxy into `$S1/bin` and checks a throttled range read | scavenger |
+| `timed.sbatch` | `decode`, the thread `sweep`, `minibatch`, `eco` for one dataset per task, on a whole node | exclusive H100 node |
 
-Hardware (measured 2026-10-28). AVX-512 on every node. Only **c100 and c101** (Xeon 6730P, 64 cores, 512 GB) have a
-local NVMe `/tmp`; every other node has a spinning RAID `/tmp`, and `$S1` is NFS. So:
+Hardware (measured 2026-10-28). AVX-512 on every node. Only c100 and c101 have a local NVMe `/tmp`; every other node
+has a spinning RAID `/tmp`, and `$S1` is NFS. The timings deliberately use an ordinary node, since most users read from
+spinning disks, shared filesystems or object stores:
 
-- Untimed stages (`fetch canon write ladder floor second`) run on shared nodes: S and M on `short-cpu` (8 cores, 64 GB),
-  L on `short-bigmem` or `bigmem` (16 cores, 256 GB), XL on `bigmem` (16 cores, 600 GB, up to 2 days). Write times from these
-  jobs are not headline numbers; `write` is re-timed on c100.
-- Timed stages (`decode`, `minibatch`, `eco`, and a re-run of `write --force` for timings) run on c100 alone:
-  `--partition=cpu --constraint=granite-rapids --exclusive`, after copying each dataset's files to the node's `/tmp`.
+- Untimed stages (`fetch canon write ladder floor second`) run on shared nodes (scavenger): S on 96 GB, M on 192 GB,
+  L on 420 GB, XL on 1 TB. Write times from these jobs are not headline numbers (the report does not use them).
+- Timed stages run on an H100 node to itself (`timed.sbatch`: `--exclusive --gres=gpu:nvidia_h100_nvl:2`, 4 h on
+  short-gpu). Each task copies its dataset's format files to the node's own disk (the `local` tier), reads the NFS copy in
+  place (`nfs`), and serves the files from MinIO behind Toxiproxy (`s3_*`). With a GPU present the first minibatch is also
+  copied to the device and timed separately (`to_cuda_s`).
+- Cross-check: the same script on a CPU-only node (bigmem, Xeon 6226) with `S1_RESULTS=$S1/results-xcheck`, `--partition=bigmem`
+  and no `--gres`.
 
 ```bash
 SHA=<commit>                                   # pushed to GitHub first
@@ -25,5 +31,5 @@ sbatch --array=0-9%6 --partition=short-cpu --mem=64G --cpus-per-task=8 \
   --export=ALL,S1_SHA=$SHA,DS_LIST=pbmc3k,pbmc10k_v3,...,STAGES="fetch canon" stage.sbatch
 ```
 
-Results stay in `$S1/results`; copy the TSVs, `env.json` and `environment.lock.yml` back to `../../results/` in the
+Results stay in `$S1/results` (cross-checks in `$S1/results-<name>`); copy the TSVs, `env.json` and `environment.lock.yml` back to `../../results/` in the
 repository after each phase. Data and format outputs never leave Clipper.

@@ -43,7 +43,7 @@ Each loader must return each minibatch as a \texttt{torch.sparse\_csr\_tensor} o
 memory and in backed mode, AnnData Zarr read lazily, scDataset over backed AnnData, TileDB-SOMA ML, BPCells (R, with
 the result handed to PyTorch), and the \sone{} streaming reader in stored and source gene order. Files are served by a
 local MinIO object store through a Toxiproxy proxy that limits bandwidth to 0.1, 1 or 10\,Gbit/s with 1\,ms latency, or
-1\,Gbit/s with 30\,ms latency, and from local NVMe; the proxy's achieved ceiling is measured with a bulk transfer first
+1\,Gbit/s with 30\,ms latency, from the cluster's shared NFS filesystem, and from the node's own disk; the proxy's achieved ceiling is measured with a bulk transfer first
 and recorded, and results at a tier above that ceiling are flagged. Loaders that cannot read by range download the object
 first, and that time is counted. We record, from a new process with a cold cache, the time to open, to read the first
 minibatch and to build its tensor; then the sustained rate in cells per second over 200 minibatches after 10 warm-up
@@ -94,7 +94,8 @@ For two datasets we timed, from a cold file, the calls of Fig.~\ref{fig:eco} and
 exactly the source counts, identifiers and barcodes.
 
 \subsection{Hardware, software and reproducibility}
-All timings ran on one node (\nm{cpu}, \nm{cores} cores, \nm{memGB}\,GB memory, local NVMe), with software versions as
+All timings ran on one node to itself (\nm{cpu}, \nm{cores} cores, \nm{memGB}\,GB memory, \nm{gpu}, node-local
+\nm{localDisk}), an ordinary GPU training node rather than one with fast local storage, with software versions as
 in Table~\ref{tab:formats}. The pipeline is \texttt{python -m s1bench} in \texttt{papers/manuscripts/s1-format/bench} of
 the \texttt{singlet} repository: stages \texttt{fetch}, \texttt{canon}, \texttt{write}, \texttt{decode}, \texttt{ladder},
 \texttt{floor}, \texttt{second}, \texttt{minibatch}, \texttt{eco} and \texttt{report}, with all settings in

@@ -14,6 +14,13 @@ threads:
   sweep: [1, 2, 4, 8, 16]
 repeats: 5
 warmup: 1
+long_run_s: 300                           # a timed run longer than this is not repeated (slow readers of XL matrices)
+
+# Where decode reads the format files. local = data_dir, which the timed jobs point at a copy on the node's own disk.
+# nfs = the shared project filesystem read in place (cold only; warm reads are page-cache reads either way).
+storages:
+  - {name: local}
+  - {name: nfs, root: "${S1BENCH_NFS_DATA:-}", threads: [4], caches: [cold]}
 
 s1:
   isas: [scalar, avx2, avx512]
@@ -49,7 +56,8 @@ minibatch:
   workers: [0, 2, 4]
   loaders: [anndata_inmem, anndata_backed, scdataset, anndata_zarr_lazy, soma_ml, bpcells, s1_stream, s1_stream_canonical]
   tiers:
-    - {name: nvme}
+    - {name: local}                       # node-local disk: the timed jobs copy the files there first (data_dir)
+    - {name: nfs, root: "${S1BENCH_NFS_DATA:-}"}   # the shared project filesystem, read in place
     - {name: s3_0.1g, gbit: 0.1, latency_ms: 1}
     - {name: s3_1g, gbit: 1, latency_ms: 1}
     - {name: s3_10g, gbit: 10, latency_ms: 1}

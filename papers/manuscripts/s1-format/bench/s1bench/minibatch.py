@@ -240,6 +240,11 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
     mb = cfg["minibatch"]
     import torch  # noqa: F401  (import cost outside the timed region, as in a training script)
 
+    cuda = torch.cuda.is_available() and mb.get("device", "auto") in ("auto", "cuda")
+    if cuda:  # CUDA context creation is a one-off cost of the training script, not of the loader
+        torch.zeros(1, device="cuda")
+        torch.cuda.synchronize()
+
     L = LOADERS[loader]()
     import importlib
 
@@ -267,6 +272,11 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
     t4 = time.perf_counter()
     rec.update({"open_s": t2 - t1 + rec.get("download_s", 0.0), "first_read_s": t3 - t2, "to_tensor_s": t4 - t3,
                 "first_batch_s": t4 - t0, "batch_rows": int(tens.size(0))})
+    if cuda:  # reported separately: host-to-device copy of the first minibatch, after it is ready on the CPU
+        t5 = time.perf_counter()
+        tens.to("cuda", non_blocking=False)
+        torch.cuda.synchronize()
+        rec.update({"to_cuda_s": time.perf_counter() - t5, "device": torch.cuda.get_device_name(0)})
     rec.update({f"first_{k}": v for k, v in L.split().items()})
     if mb.get("_first_only"):
         rec["sustained_batches"] = 0
@@ -341,6 +351,8 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
         if out.exists() and not force:
             continue
         fdir = format_dir(cfg, u)
+        from .util import _expand
+
         stats = read_tsv(result_path(cfg, "stats", u))
         n_cells = int(stats[0]["cells"])
         files = {}
@@ -355,11 +367,18 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
             log(f"{u.key} {tier['name']} {ld} seed {seed}: {res.get('first_batch_s', res.get('note'))}")
 
         for tier in tier_list:
-            if tier["name"] == "nvme":
+            if not tier.get("gbit"):
+                # a file tier: data_dir (node-local disk in the timed jobs) or a root of its own (the shared filesystem)
+                root = _expand(str(tier["root"])) if tier.get("root") else None
+                if tier.get("root") and not root:
+                    log(f"{u.key}: tier {tier['name']} skipped (its root variable is not set)")
+                    continue
+                tdir = (Path(root) / "formats" / u.key) if root else fdir
                 for ld in loaders:
+                    path = formats.get(["bpcells" if ld == "bpcells" else LOADERS[ld].fmt])[0].path(tdir)
                     for seed in mb["seeds"]:
-                        res = (_bpcells(cfg, files[ld], seed, threads, n_cells, None) if ld == "bpcells"
-                               else _child(cfg, overrides, u.key, ld, str(files[ld]), seed, threads, n_cells))
+                        res = (_bpcells(cfg, path, seed, threads, n_cells, None) if ld == "bpcells"
+                               else _child(cfg, overrides, u.key, ld, str(path), seed, threads, n_cells))
                         record(tier, ld, seed, res)
                 continue
             work = cfg.data_dir / "tmp" / f"netem_{u.key}"
