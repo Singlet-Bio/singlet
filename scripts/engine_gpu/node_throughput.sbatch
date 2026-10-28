@@ -3,19 +3,19 @@
 #SBATCH --account=debruinz
 #SBATCH --partition=short-gpu
 #SBATCH --gres=gpu:nvidia_h100_nvl:2
-#SBATCH --cpus-per-task=56
+#SBATCH --cpus-per-task=54
 #SBATCH --mem=700G
 #SBATCH --exclusive
 #SBATCH --time=03:59:00
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# A whole Clipper GPU node (2 x H100 NVL, 56 cores) with several samples in flight: wall (makespan), read pairs/s per node and
+# A whole Clipper GPU node (2 x H100 NVL, 54 schedulable cores) with several samples in flight: wall (makespan), read pairs/s per node and
 # core-s, for --engine gpu and then --engine cpu on the same node and samples. Outputs in job /tmp; summary to results/.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 BIN=${BIN:-$W/jobs/w11/engine/bin/singlet-gpu}; RES=$W/jobs/w11/engine/results; mkdir -p $RES
 SETS=(${SETS:-pbmc1k_v3 GSM7036403 GSM7656149 GSM6470208})
-T=${T:-14}; ENGINES=(${ENGINES:-gpu cpu})
+T=${T:-13}; ENGINES=(${ENGINES:-gpu cpu})
 SCR=/tmp/$USER-engnode-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=10800 SINGLET_REF_BASE=$REF
 G=$REF/GRCh38-2024-A
