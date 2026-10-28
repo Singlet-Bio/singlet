@@ -2572,7 +2572,8 @@ static void usage(const char* prog) {
         << "                         disk: disk-backed sort (same output, no measured time penalty)\n"
         << "  --no-clip5p            Never clip a constant 5' prefix from the cDNA read\n"
         << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
-        << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n\n"
+        << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
+        << "  --engine cpu|gpu       gpu: map each distinct cDNA sequence on the GPU (CUDA build); same outputs (default cpu)\n\n"
         << "Legacy (deprecated — archive to .1fq first, then process):\n"
         << "  --reads R2 R1          FASTQ files (use 'singlet encode' instead)\n"
         << "  --sra FILE             SRA file (use 'singlet download' instead)\n"
@@ -2775,6 +2776,23 @@ int main(int argc, char* argv[]) {
         else if (arg == "--tissue-positions" && i+1 < argc) tissue_positions_path = argv[++i]; // V2
         else if (arg == "--visium-min-umi" && i+1 < argc) visium_min_umi = static_cast<uint32_t>(std::atoi(argv[++i])); // V3
         else if (arg == "--threads" && i+1 < argc) { star_threads = std::atoi(argv[++i]); threads_specified = true; }
+        else if (arg == "--engine" && i+1 < argc) {
+            // gpu: STAR's mapping of each distinct cDNA sequence on the GPU, into STAR's sequence cache (src/star/
+            // SeqCacheGpuPrefill.cpp, docs/engine-gpu.md); every other stage, and every read the GPU path does not cover, runs the CPU
+            // engine's code, so outputs are those of --engine cpu. Device: SINGLET_ENGINE_GPU_DEVICE (default 0).
+            std::string eng = argv[++i];
+            if (eng == "gpu") {
+                setenv("SINGLET_ENGINE_GPU", "1", 1);
+#ifndef SINGLET_HAVE_ENGINE_GPU
+                std::cerr << "[singlet] --engine gpu: this binary was built without CUDA; using the CPU engine\n";
+#endif
+            } else if (eng == "cpu") {
+                unsetenv("SINGLET_ENGINE_GPU");
+            } else {
+                std::cerr << "[singlet] --engine must be cpu or gpu\n";
+                return 1;
+            }
+        }
         else if (arg == "--sra" && i+1 < argc) sra_file = argv[++i];
         else if (arg == "--1fq" && i+1 < argc) onefq_file = argv[++i];
         else if (arg[0] != '-' && onefq_file.empty() && arg.size() > 4 &&

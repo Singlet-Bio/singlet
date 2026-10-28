@@ -5,6 +5,8 @@
 #include "InOutStreams.h"
 
 #include <cstdlib>
+#include <sys/stat.h>
+#include <algorithm>
 #include <cstring>
 #include <sstream>
 
@@ -47,6 +49,15 @@ uint64 SeqCache::hashSeq(const char *seq, uint64 L) {
 SeqCache *SeqCache::create(Parameters &P, uint64 nGenome) {
     const char *e = getenv("SINGLET_STAR_SEQCACHE_MB");
     uint64 mb = e ? strtoull(e, nullptr, 10) : 4096;
+    const char *eg = getenv("SINGLET_ENGINE_GPU");
+    if (e == nullptr && eg != nullptr && eg[0] == '1' && !P.readFilesNames.empty()) {//--engine gpu: room for every distinct sequence
+        uint64 bytes = 0;                                                         //of the sample (~0.6 x the cDNA FASTQ size)
+        for (const std::string &fn : P.readFilesNames[0]) {
+            struct stat st;
+            if (stat(fn.c_str(), &st) == 0) bytes += (uint64) st.st_size;
+        };
+        mb = std::max<uint64>(mb, std::min<uint64>(98304, (bytes / 10 * 6) >> 20));
+    };
     if (mb == 0)
         return nullptr;
     //the cached result must depend on the read sequence only

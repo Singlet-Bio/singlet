@@ -18,6 +18,7 @@ extern "C" void __gcov_dump(void);
 #include "ReadAlignChunk.h"
 #include "ReadAlign.h"
 #include "SeqCache.h"
+void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *cache);
 #include "StarAccel.h"
 #include "Stats.h"
 #include "genomeGenerate.h"
@@ -217,6 +218,7 @@ int star_main_impl(int argInN, char *argIn[])
 
     // sequence cache for the main mapping pass (after any 2-pass junction insertion)
     g_seqCache = SeqCache::create(P, genomeMain.nGenome);
+    seqCacheGpuPrefill(P, genomeMain, g_seqCache); //singlet --engine gpu: GPU mapping results into the cache (SeqCacheGpuPrefill.cpp)
     {
         const char *fa = getenv("SINGLET_STAR_FASTASSIGN");
         g_starFastAssign = !(fa != nullptr && fa[0] == '0');
