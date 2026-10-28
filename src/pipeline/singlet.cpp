@@ -4917,6 +4917,7 @@ int main(int argc, char* argv[]) {
     if (stream_unsorted != 0) {
         const char* sorted_reason = nullptr;
         if (!bam_file.empty()) sorted_reason = "the input is an existing BAM";
+        else if (!onefq_mode) sorted_reason = "CB from CR needs whitelist-exact .1fq barcodes";
         else if (parallel_pileup == 1) sorted_reason = "--parallel-pileup was given";
         else if (is_atac_mode) sorted_reason = "ATAC fragments are read from the sorted BAM";
         else if (is_smart_seq2_mode || is_bulk_rna_mode) sorted_reason = "plate/bulk counting reads the sorted BAM";
@@ -4934,6 +4935,8 @@ int main(int argc, char* argv[]) {
         }
     }
     config.cb_from_cr = (stream_unsorted == 1);
+    // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
+    const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
     if (engine_ptr && config.cb_from_cr) {
         std::cerr << "ERROR: pileup engine was built before the BAM source mode was decided" << std::endl;
         return 1;
@@ -5020,10 +5023,15 @@ int main(int argc, char* argv[]) {
         if (onefq_bc_dict_n > 0 && !onefq_bc_freq.empty() && onefq_bc_length > 0) {
             static constexpr char NUM_TO_ASCII_BC[5] = {'A','C','G','T','N'};
 
-            // Build sorted (count, barcode_string) list from BC index frequencies
+            // Build sorted (count, barcode_string) list from BC index frequencies.
+            // The sorted path replaces this list after alignment by the CB-tag refresh (>=5 primary CB
+            // records). The unsorted stream has no BAM to scan, so it takes the refresh's threshold here
+            // instead: .1fq barcodes are whitelist-exact, so raw reads >= mapped CB records and the list
+            // is a superset of the refreshed one (barcodes with 5-99 reads were otherwise lost: ~2% of
+            // barcoded reads on GSM4006843). Ties go to the smaller barcode, independent of dictionary order.
             std::vector<std::pair<uint64_t, std::string>> sorted_bcs;
             for (uint32_t idx = 0; idx < onefq_bc_dict_n; ++idx) {
-                if (onefq_bc_freq[idx] >= 100) {
+                if (onefq_bc_freq[idx] >= bc_min_reads) {
                     // Convert numeric BC to ASCII string
                     std::string bc(onefq_bc_length, ' ');
                     for (uint16_t j = 0; j < onefq_bc_length; ++j) {
@@ -5033,8 +5041,12 @@ int main(int argc, char* argv[]) {
                     sorted_bcs.emplace_back(onefq_bc_freq[idx], std::move(bc));
                 }
             }
-            std::sort(sorted_bcs.begin(), sorted_bcs.end(),
-                      [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (stream_unsorted == 1)
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+            else
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first > b.first; });
 
             // Write barcode file
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
@@ -5046,7 +5058,7 @@ int main(int argc, char* argv[]) {
             config.barcode_path = barcode_file;
 
             std::cerr << "[singlet] Discovered " << sorted_bcs.size()
-                      << " barcodes (≥100 reads) from .1fq BC dictionary ("
+                      << " barcodes (≥" << bc_min_reads << " reads) from .1fq BC dictionary ("
                       << onefq_bc_dict_n << " entries)\n";
 
             if (sorted_bcs.empty()) {
@@ -5073,7 +5085,7 @@ int main(int argc, char* argv[]) {
             static constexpr char UNPACK_BASE[5] = {'A','C','G','T','N'};
             std::vector<std::pair<uint64_t, std::string>> sorted_bcs;
             for (auto& [key, cnt] : onefq_bc_counts) {
-                if (cnt >= 100) {
+                if (cnt >= bc_min_reads) {   // see the BC-dictionary fast path above
                     // Unpack 3-bit-per-base uint64_t key to ASCII string
                     std::string bc(bc_len, ' ');
                     uint64_t k = key;
@@ -5089,8 +5101,12 @@ int main(int argc, char* argv[]) {
                     if (valid) sorted_bcs.emplace_back(cnt, std::move(bc));
                 }
             }
-            std::sort(sorted_bcs.begin(), sorted_bcs.end(),
-                      [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (stream_unsorted == 1)   // hash-map order: ties to the smaller barcode
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+            else
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first > b.first; });
 
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
             std::ofstream bc_out(auto_barcode_file);
@@ -5101,7 +5117,7 @@ int main(int argc, char* argv[]) {
             config.barcode_path = barcode_file;
 
             std::cerr << "[singlet] Discovered " << sorted_bcs.size()
-                      << " barcodes (≥100 reads) from decode-time counting ("
+                      << " barcodes (≥" << bc_min_reads << " reads) from decode-time counting ("
                       << onefq_bc_counts.size() << " unique)\n";
 
             // ── Guard 2: Barcode explosion warning ──
