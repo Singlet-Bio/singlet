@@ -38,6 +38,23 @@ inline bool enabled() { return mode() != 0; }
 
 // The GPU prefill's hand-off (src/star/SeqCacheGpuPrefill.cpp, SINGLET_ENGINE_GPU_HANDOFF): per read (in input order, the read named
 // r<index>) its record or 0xFFFFFFFF, per record the alignments STAR writes for that sequence (ReadAlign::seqCacheAlignRecords).
+// FASTQ lines from a file through a 4 MB buffer (getc per character was the hand-off pass's bottleneck)
+struct LineReader {
+    FILE* f = nullptr; std::vector<char> buf; size_t pos = 0, len = 0; bool eof = false;
+    explicit LineReader(const char* path) : f(path ? std::fopen(path, "rb") : nullptr), buf(4 << 20) {}
+    ~LineReader() { if (f) std::fclose(f); }
+    bool ok() const { return f != nullptr; }
+    // the next line without its terminator (and without a trailing \r), NUL-terminated in out
+    bool get(std::string& out) {
+        out.clear();
+        for (;;) {
+            if (pos == len) { if (eof) return !out.empty(); len = std::fread(buf.data(), 1, buf.size(), f); pos = 0; if (len == 0) { eof = true; return !out.empty(); } }
+            const char* s = buf.data() + pos; const char* e = (const char*) std::memchr(s, '\n', len - pos);
+            if (e) { out.append(s, e - s); pos += (e - s) + 1; if (!out.empty() && out.back() == '\r') out.pop_back(); return true; }
+            out.append(s, len - pos); pos = len;
+        }
+    }
+};
 struct Handoff {
     const uint8_t* map = nullptr; size_t size = 0;
     uint64_t n_reads = 0, n_rec = 0; const uint32_t* read_rec = nullptr; const uint64_t* rec_off = nullptr; const uint8_t* data = nullptr;
@@ -95,6 +112,7 @@ public:
                 const uint32_t rec = ho_.read_rec[idx];
                 check_primary(b, rec);
                 ho_reads_.push_back(ReadRec{rec, bc, u3});
+                ho_idx_.push_back(idx);
                 return;
             }
         }
@@ -242,6 +260,11 @@ private:
     }
     std::string handoff_path_; Handoff ho_; bool ho_tried_ = false, ho_ok_ = false; uint64_t ho_mismatch_ = 0;
     std::vector<ReadRec> ho_reads_;
+    std::vector<uint64_t> ho_idx_;
+public:
+    // check mode: (read index, barcode column, packed UMI) of every stream-derived hand-off read
+    void stream_truth(std::vector<uint64_t>& idx, std::vector<ReadRec>& rr) const { idx = ho_idx_; rr = ho_reads_; }
+private:
     // NH (integer types), UB and UR (Z) from one pass over the aux tags; same values as bam_aux_get + bam_aux2i / bam_aux2Z
     static void scan_aux(const bam1_t* b, int& nh, const char*& ub, const char*& ur) {
         const uint8_t* s = bam_get_aux(b); const uint8_t* end = b->data + b->l_data;

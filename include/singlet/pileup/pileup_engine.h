@@ -1760,6 +1760,7 @@ public:
     }
     void gpu_pileup_compare() {
         if (!gpu_col_) return;
+        { PileupStats dummy; if (gpu_col_->handoff()) gpu_handoff_pass(dummy, true); }
         using namespace singlet_engine_gpu;
         PileupInput in;
         if (!gpu_build_input(in)) return;
@@ -1909,30 +1910,30 @@ public:
     // the files): record counters, the R4 rRNA sample, chrM reads, barcode (CB from CR), per-cell reads and alignment QC, the MAPQ gate,
     // and the WL-ambient barcodes (genes after the GPU). Returns false if the decoded reads cannot be read.
     std::vector<std::pair<uint32_t, uint32_t>> gpu_wl_pending_;   // (record, WL index) of WL-ambient reads, genes from the GPU
-    bool gpu_handoff_pass(PileupStats& stats) {
+    bool gpu_handoff_pass(PileupStats& stats, bool check = false) {
         const gpupileup::Handoff* H = gpu_col_ ? gpu_col_->handoff() : nullptr;
         if (!H) return true;   // no hand-off: every read came through the stream
         if (!H->simple) { std::cerr << "[gpu_pileup] hand-off: barcode layout is not CB_UMI_Simple\n"; return false; }
-        const char* p1 = std::getenv("SINGLET_DECODE_R1"); const char* p2 = std::getenv("SINGLET_DECODE_R2");
-        FILE* f1 = p1 ? std::fopen(p1, "r") : nullptr; FILE* f2 = p2 ? std::fopen(p2, "r") : nullptr;
-        if (!f1 || !f2) { if (f1) std::fclose(f1); if (f2) std::fclose(f2); return false; }
-        static const char RC[256] = {};
+        gpupileup::LineReader f1(std::getenv("SINGLET_DECODE_R1")), f2(std::getenv("SINGLET_DECODE_R2"));
+        if (!f1.ok() || !f2.ok()) return false;
         char comp[256]; for (int i = 0; i < 256; i++) comp[i] = 'N';
-        comp[(int)'A'] = 'T'; comp[(int)'C'] = 'G'; comp[(int)'G'] = 'C'; comp[(int)'T'] = 'A'; (void) RC;
-        std::vector<char> l1[4], l2[4];
-        auto getl = [](FILE* f, std::vector<char>& buf) -> bool {
-            buf.clear(); int c;
-            while ((c = std::getc(f)) != EOF && c != '\n') buf.push_back((char) c);
-            if (c == EOF && buf.empty()) return false;
-            while (!buf.empty() && buf.back() == '\r') buf.pop_back();
-            buf.push_back(0); return true;
-        };
+        comp[(int)'A'] = 'T'; comp[(int)'C'] = 'G'; comp[(int)'G'] = 'C'; comp[(int)'T'] = 'A';
+        std::string l1[4], l2[4];
+        // check mode: the stream's own barcode column and UMI of every hand-off read (STAR still wrote their records)
+        std::vector<int32_t> t_bc; std::vector<uint64_t> t_u3; uint64_t c_only_pass = 0, c_only_stream = 0, c_bc = 0, c_umi = 0, c_same = 0;
+        if (check) {
+            std::vector<uint64_t> idx; std::vector<ReadRec> rr; gpu_col_->stream_truth(idx, rr);
+            t_bc.assign(H->n_reads, -2); t_u3.assign(H->n_reads, 0);
+            for (size_t k = 0; k < idx.size(); ++k) if (idx[k] < H->n_reads) { t_bc[idx[k]] = rr[k].bc; t_u3[idx[k]] = rr[k].umi3; }
+        }
+        PileupStats scratch;
+        PileupStats& st = check ? scratch : stats;
         uint64_t n_done = 0;
         std::string bseq, cr, ur, qn, rseq;
         for (uint64_t i = 0; i < H->n_reads; ++i) {
             bool ok = true;
-            for (int k = 0; k < 4 && ok; ++k) ok = getl(f1, l1[k]) && getl(f2, l2[k]);
-            if (!ok) { std::fclose(f1); std::fclose(f2); return false; }
+            for (int k = 0; k < 4 && ok; ++k) ok = f1.get(l1[k]) && f2.get(l2[k]);
+            if (!ok) return false;
             const uint32_t rec = H->read_rec[i];
             if (rec == 0xFFFFFFFFu) continue;   // read with N (or not mapped on the GPU): it came through the stream
             const uint8_t* p = H->data + H->rec_off[rec];
@@ -1952,21 +1953,21 @@ public:
                 }
             }
             (void) ppos;
-            stats.total_reads += n; stats.mapped_reads += n; stats.secondary_reads += nsec;
+            st.total_reads += n; st.mapped_reads += n; st.secondary_reads += nsec;
             if (pk < 0) continue;
             ++n_done;
-            const int L2 = (int) l2[1].size() - 1;
+            const int L2 = (int) l2[1].size();
             // R4 rRNA sample (primary; once per read), on the sequence as the BAM stores it
             qn = "r" + std::to_string(i);
             if (L2 >= 21 && (hash_qname(qn.c_str()) & 63) == 0) {
-                ++stats.rrna_reads_sampled;
+                ++st.rrna_reads_sampled;
                 rseq.assign(l2[1].data(), L2);
                 if (pflag & BAM_FREVERSE) { for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) l2[1][L2 - 1 - j]]; }
-                if (rrna_detector_.detect(rseq)) ++stats.rrna_reads;
+                if (rrna_detector_.detect(rseq)) ++st.rrna_reads;
             }
-            if (ptid == chrm_tid_) stats.chrm_reads++;
+            if (ptid == chrm_tid_) st.chrm_reads++;
             // CB from CR (the stream's rule), CR / UR as STAR cuts them
-            bseq.assign(l1[1].data(), l1[1].size() - 1);
+            bseq = l1[1];
             if (bseq.size() < H->cbumiL) bseq.append(H->cbumiL - bseq.size(), 'N');
             cr = bseq.substr(H->cbS - 1, H->cbL); ur = bseq.substr(H->umiS - 1, H->umiL);
             bool cbok = !cr.empty() && !ur.empty() && ur[0] != ' ';
@@ -1974,7 +1975,7 @@ public:
             bool homo = true;
             for (char c : ur) { if (c == 'N') cbok = false; if (c != ur[0]) homo = false; }
             if (homo) cbok = false;
-            if (!cbok || cr[0] == '-') { stats.no_barcode++; continue; }
+            if (!cbok || cr[0] == '-') { st.no_barcode++; continue; }
             const int32_t bc = bc_index_.lookup(cr.c_str());
             if (bc < 0) {
                 if (!wl_umi_counts_.empty() && pmapq >= static_cast<uint8_t>(config_.min_mapq)) {
@@ -1986,22 +1987,34 @@ public:
                 }
                 continue;
             }
-            gpu_col_->add_quality(l2[1].data(), l2[3].data(), std::min<int>(L2, (int) l2[3].size() - 1));   // every barcoded primary, as the
-            gpu_col_->add_handoff_read(rec, bc, ur.c_str(), (int) ur.size());                                 // collector does (GPU gates MAPQ)
-            stats.barcoded_reads++;
+            if (check) {   // compare with the stream's barcode and UMI for this read
+                uint64_t u3 = 0;
+                for (int j = 0; j < (int) ur.size() && j < 21; j++) { const char c = ur[j]; const uint64_t v = c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4; u3 |= v << (3 * j); }
+                if (t_bc[i] == -2) c_only_pass++; else if (t_bc[i] != bc) c_bc++; else if (t_u3[i] != u3) c_umi++; else c_same++;
+                t_bc[i] = -3;
+                continue;
+            }
+            gpu_col_->add_quality(l2[1].data(), l2[3].data(), std::min<int>(L2, (int) l2[3].size()));   // every barcoded primary, as the
+            gpu_col_->add_handoff_read(rec, bc, ur.c_str(), (int) ur.size());                          // collector does (GPU gates MAPQ)
+            st.barcoded_reads++;
             if (static_cast<uint32_t>(bc) < per_cell_reads_.size()) per_cell_reads_[static_cast<uint32_t>(bc)]++;
             const int nh = std::max<int>(pnh, 1);
-            if (nh > 1) stats.multimapper_reads++;
+            if (nh > 1) st.multimapper_reads++;
             if (static_cast<uint32_t>(bc) < per_cell_qc_.size()) {
                 CellAlignQC& q = per_cell_qc_[static_cast<uint32_t>(bc)];
                 if (nh > 1) ++q.multimapped; else { ++q.unique; q.mismatches += pnm; q.aligned_bases += pmlen; }
             }
             const bool high = pmapq >= static_cast<uint8_t>(config_.min_mapq);
-            if (!high) stats.low_mapq++;
+            if (!high) st.low_mapq++;
             if (!high && nh == 1) continue;
-            if (config_.umi_dedup && ur.empty()) stats.no_umi++;
+            if (config_.umi_dedup && ur.empty()) st.no_umi++;
         }
-        std::fclose(f1); std::fclose(f2);
+        if (check) {
+            for (uint64_t i = 0; i < H->n_reads; ++i) if (t_bc[i] >= -1) c_only_stream++;
+            std::cerr << "[gpu_pileup] hand-off check: " << c_same << " reads with the stream's barcode and UMI, " << c_bc << " barcode differs, "
+                      << c_umi << " UMI differs, " << c_only_pass << " only in the pass, " << c_only_stream << " only in the stream\n";
+            return true;
+        }
         std::cerr << "[gpu_pileup] hand-off pass: " << n_done << " reads without BAM records\n";
         return true;
     }
