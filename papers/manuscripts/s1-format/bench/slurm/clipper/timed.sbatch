@@ -31,8 +31,8 @@ fi
 LOCAL=$TMPDIR/data
 mkdir -p "$LOCAL/formats" "$LOCAL/canon" "$LOCAL/tmp"
 t0=$SECONDS
-for f in "$S1/data/formats/$D".*; do cp -a "$f" "$LOCAL/formats/"; done
-cp -a "$S1/data/canon/$D".*.npz "$LOCAL/canon/" 2>/dev/null || true
+for f in "$S1/data/formats/$D".*; do cp -r --preserve=timestamps "$f" "$LOCAL/formats/"; done
+cp --preserve=timestamps "$S1/data/canon/$D".*.npz "$LOCAL/canon/" 2>/dev/null || true
 echo "staged $(du -sh "$LOCAL" | cut -f1) for $D in $((SECONDS - t0)) s"
 export S1BENCH_DATA=$LOCAL S1BENCH_NFS_DATA=$S1/data
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
