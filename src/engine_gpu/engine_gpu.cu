@@ -257,6 +257,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     cudaFree(dH1); cudaFree(dH2); cudaFree(dN); cudaFree(dOrder); cudaFree(dHead); cudaFree(dColl);
     std::vector<uint32_t> rep;   // one read per distinct sequence without N
     for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
+    // per read: the representative read of its distinct sequence (NONE for sequences with N, which STAR maps itself)
+    const uint32_t NONE = 0xFFFFFFFFu;
+    std::vector<uint32_t> readRep(n, NONE);
+    { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = hasN[order[k]] ? NONE : order[k]; readRep[order[k]] = cur; } }
     // map them in sequence order (first 32 bases), not hash order: neighbouring threads then search the same SA ranges and loci
     // (2.7x faster on pbmc1k_v3). Each sequence's result does not depend on the order.
     if (!rep.empty()) {   // keys (first 32 bases) and the stable sort on the device
@@ -269,9 +273,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         cudaFree(dRep); cudaFree(dKey);
     }
     out.secDedup = now() - t0;
+    std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
     u64 nGpuMapped = 0;
-    auto processChunk = [&](const std::vector<uint32_t>& repc) -> bool {
+    auto processChunk = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
         // ---- lanes
         double tc0 = now();
         Lane A, M, B;
@@ -327,6 +332,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             }
             if (!ok) { out.nFailed++; continue; }   // not cached: STAR maps it
             u64 i = repc[k];
+            recOfPos[c0 + k] = (uint32_t)(out.seqOff.size() - 1);
             out.seq.insert(out.seq.end(), in.seq.data() + in.off[i], in.seq.data() + in.off[i + 1]); out.seqOff.push_back(out.seq.size());
             out.blob.insert(out.blob.end(), p, p + len); out.blobOff.push_back(out.blob.size());
         }
@@ -336,7 +342,13 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 CHUNK = 16u << 20;
     for (u64 c0 = 0; c0 < rep.size(); c0 += CHUNK) {
         std::vector<uint32_t> repc(rep.begin() + c0, rep.begin() + std::min<u64>(rep.size(), c0 + CHUNK));
-        if (!processChunk(repc)) return fail(err);
+        if (!processChunk(repc, c0)) return fail(err);
+    }
+    {   // per read: its record (sequence-cache result) or NONE
+        std::vector<uint32_t> posOf(n, NONE);
+        for (u64 k = 0; k < rep.size(); k++) posOf[rep[k]] = (uint32_t)k;
+        out.readRecord.assign(n, NONE);
+        for (u64 i = 0; i < n; i++) { const uint32_t r = readRep[i]; if (r != NONE) out.readRecord[i] = recOfPos[posOf[r]]; }
     }
     cudaFree(dG1); cudaFree(dSA); cudaFree(dSAi); cudaFree(dSeq); cudaFree(dOff);
     cudaFree(dcs); cudaFree(dcl); cudaFree(dcb); cudaFree(dss); cudaFree(dse); cudaFree(dsd); cudaFree(dsa);

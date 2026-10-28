@@ -5024,6 +5024,15 @@ int main(int argc, char* argv[]) {
         }
     }
     config.cb_from_cr = (stream_unsorted == 1);
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    // W11 GPU pileup on the stream path: the GPU prefill hands the per-sequence alignments to the pileup (SINGLET_ENGINE_GPU_HANDOFF)
+    if (stream_unsorted == 1 && getenv("SINGLET_GPU_PILEUP") && getenv("SINGLET_ENGINE_GPU") && !getenv("SINGLET_ENGINE_GPU_HANDOFF")
+        && !(getenv("SINGLET_GPU_HANDOFF") && std::string(getenv("SINGLET_GPU_HANDOFF")) == "0")) {
+        static std::string handoff_path;
+        handoff_path = out_prefix + "/.gpu_handoff.bin";
+        setenv("SINGLET_ENGINE_GPU_HANDOFF", handoff_path.c_str(), 1);
+    }
+#endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
     // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
     const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;

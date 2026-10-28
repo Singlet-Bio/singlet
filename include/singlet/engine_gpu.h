@@ -29,6 +29,7 @@ struct Output {
     std::vector<uint64_t> seqOff{0};
     std::vector<uint8_t> blob;
     std::vector<uint64_t> blobOff{0};
+    std::vector<uint32_t> readRecord;   // per input read: index of its record above, or 0xFFFFFFFF (sequence with N, or not mapped)
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
     double secUpload = 0, secDedup = 0, secMapGpu = 0, secHostLane = 0;
     std::string log;

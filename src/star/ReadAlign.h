@@ -34,6 +34,9 @@ class ReadAlign {
         bool seqCacheable();
         bool seqCacheEncode(std::vector<uint8> &blob);
         void seqCacheRestore(const std::vector<uint8> &blob);
+        //singlet --engine gpu: the BAM core fields STAR writes for a read with sequence seqNum (numeric, no clipping), from its cached
+        //result, appended to out (ReadAlign_seqCache.cpp); one call per distinct sequence instead of one per read
+        void seqCacheAlignRecords(const char *seqNum, uint L, const std::vector<uint8> &blob, std::vector<uint8> &out);
 
         Genome &mapGen, &genOut; //mapped-to-genome structure
 

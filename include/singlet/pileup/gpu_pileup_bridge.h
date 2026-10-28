@@ -10,6 +10,10 @@
 #include "singlet/engine_gpu.h"
 #include "gpu_pileup/pileup/pileup_rec.h"   // src/engine_gpu is on the include path of GPU builds
 #include <htslib/sam.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -32,15 +36,65 @@ inline int mode() {
 }
 inline bool enabled() { return mode() != 0; }
 
+// The GPU prefill's hand-off (src/star/SeqCacheGpuPrefill.cpp, SINGLET_ENGINE_GPU_HANDOFF): per read (in input order, the read named
+// r<index>) its record or 0xFFFFFFFF, per record the alignments STAR writes for that sequence (ReadAlign::seqCacheAlignRecords).
+struct Handoff {
+    const uint8_t* map = nullptr; size_t size = 0;
+    uint64_t n_reads = 0, n_rec = 0; const uint32_t* read_rec = nullptr; const uint64_t* rec_off = nullptr; const uint8_t* data = nullptr;
+    bool load(const char* path) {
+        int fd = open(path, O_RDONLY); if (fd < 0) return false;
+        struct stat st; if (fstat(fd, &st) != 0 || st.st_size < 24) { close(fd); return false; }
+        size = (size_t) st.st_size;
+        void* m = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0); close(fd);
+        if (m == MAP_FAILED) return false;
+        map = (const uint8_t*) m;
+        if (std::memcmp(map, "SGHOFF01", 8) != 0) { unmap(); return false; }
+        std::memcpy(&n_reads, map + 8, 8); std::memcpy(&n_rec, map + 16, 8);
+        read_rec = (const uint32_t*) (map + 24);
+        rec_off = (const uint64_t*) (map + 24 + 4 * n_reads);
+        data = (const uint8_t*) (rec_off + n_rec + 1);
+        if ((size_t) (data - map) + rec_off[n_rec] > size) { unmap(); return false; }
+        return true;
+    }
+    void unmap() { if (map) munmap((void*) map, size); map = nullptr; }
+    ~Handoff() { unmap(); }
+};
+
 class Collector {
 public:
-    explicit Collector(int min_baseq) : min_baseq_(min_baseq) { pend_.reserve(1 << 20); }
+    explicit Collector(int min_baseq) : min_baseq_(min_baseq) {
+        pend_.reserve(1 << 20);
+        if (const char* hp = std::getenv("SINGLET_ENGINE_GPU_HANDOFF")) handoff_path_ = hp;
+    }
 
     // one record of the stream; bc = the engine's barcode column for it (-1: no CB or not in the barcode set)
     void add(const bam1_t* b, int32_t bc) {
         if (b->core.flag & (BAM_FUNMAP | BAM_FSUPPLEMENTARY)) return;
         if (bc < 0) return;
         const bool sec = (b->core.flag & BAM_FSECONDARY) != 0;
+        if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
+        if (ho_ok_) {   // reads with a GPU record: the alignments come from the hand-off; the stream gives barcode, UMI, qualities
+            const char* qn = bam_get_qname(b);
+            uint64_t idx = 0; bool num = qn[0] == 'r' && qn[1] != 0;
+            for (const char* q = qn + 1; num && *q; ++q) { if (*q < '0' || *q > '9') num = false; else idx = idx * 10 + (uint64_t) (*q - '0'); }
+            if (num && idx < ho_.n_reads && ho_.read_rec[idx] != 0xFFFFFFFFu) {
+                if (sec) return;
+                int nh = 1; const char* ub = nullptr; const char* ur = nullptr;
+                scan_aux(b, nh, ub, ur);
+                const char* us = ub ? ub : ur;
+                uint64_t u3 = 0;
+                if (us) {
+                    const int ul = (int) std::strlen(us);
+                    if (umi_len_ < 0) umi_len_ = ul;
+                    for (int i = 0; i < ul && i < 21; i++) { const char c = us[i]; const uint64_t v = c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4; u3 |= v << (3 * i); }
+                } else no_umi_++;
+                qual_check(b);
+                const uint32_t rec = ho_.read_rec[idx];
+                check_primary(b, rec);
+                ho_reads_.push_back(ReadRec{rec, bc, u3});
+                return;
+            }
+        }
         int nh = 1; const char* ub = nullptr; const char* ur = nullptr;
         scan_aux(b, nh, ub, ur);   // one pass over the tags (NH, UB, UR) instead of three bam_aux_get scans
         Aln a;
@@ -71,13 +125,7 @@ public:
             static const uint8_t COMP[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
             g.seq.resize(L);
             for (int i = 0; i < L; i++) g.seq[i] = rev ? COMP[bam_seqi(sq, L - 1 - i)] : (uint8_t) bam_seqi(sq, i);
-            const uint8_t* ql = bam_get_qual(b);
-            if (!(L > 0 && ql[0] == 0xff))
-                for (int i = 0; i < L; i++) {
-                    const bool lq = ql[i] < min_baseq_, isn = bam_seqi(sq, i) == 15;
-                    if (lq) lowqual_bases_++;
-                    if (lq != isn) qual_neq_n_++;
-                }
+            qual_check(b);
         }
         if (nh == 1 && !sec) finalize(g);
         else if (g.seen >= g.nh) { finalize(g); pend_.erase(qn); }
@@ -87,6 +135,7 @@ public:
     void finish(singlet_engine_gpu::PileupInput& in) {
         for (auto& kv : pend_) { incomplete_++; finalize(kv.second); }
         pend_.clear();
+        if (ho_ok_) prepend_handoff();
         in.sigs.assign((const uint8_t*) sigs_.data(), (const uint8_t*) (sigs_.data() + sigs_.size()));
         in.alns.assign((const uint8_t*) alns_.data(), (const uint8_t*) (alns_.data() + alns_.size()));
         in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
@@ -95,12 +144,81 @@ public:
         if (no_umi_ > 0) in.snpSkipN = -1;   // reads without a UMI: not reproducible from the packed UMI (never seen in the campaign data)
         if (umi_len_ > 0) in.umiLen = umi_len_;
     }
-    size_t n_reads() const { return reads_.size(); }
+    size_t n_reads() const { return reads_.size() + ho_reads_.size(); }
+    size_t n_handoff_reads() const { return ho_reads_.size(); }
+    uint64_t handoff_mismatches() const { return ho_mismatch_; }
+    bool handoff_used() const { return ho_ok_; }
     size_t n_sigs() const { return sigs_.size(); }
     uint64_t incomplete() const { return incomplete_; }
     uint64_t no_umi() const { return no_umi_; }
 
 private:
+    // the SNP pileup's base-quality rule (see snpSkipN): every base of every primary
+    void qual_check(const bam1_t* b) {
+        const int L = b->core.l_qseq; const uint8_t* sq = bam_get_seq(b); const uint8_t* ql = bam_get_qual(b);
+        if (L > 0 && ql[0] == 0xff) return;
+        for (int i = 0; i < L; i++) {
+            const bool lq = ql[i] < min_baseq_, isn = bam_seqi(sq, i) == 15;
+            if (lq) lowqual_bases_++;
+            if (lq != isn) qual_neq_n_++;
+        }
+    }
+    // the hand-off's primary alignment of record rec vs the stream's primary record: position, strand, MAPQ, CIGAR
+    void check_primary(const bam1_t* b, uint32_t rec) {
+        const uint8_t* p = ho_.data + ho_.rec_off[rec];
+        const int n = *p++;
+        for (int k = 0; k < n; k++) {
+            int32_t tid, pos; uint16_t flag, nh, nm, nc; uint8_t mapq;
+            std::memcpy(&tid, p, 4); std::memcpy(&pos, p + 4, 4); std::memcpy(&flag, p + 8, 2); mapq = p[10];
+            std::memcpy(&nh, p + 12, 2); std::memcpy(&nm, p + 14, 2); std::memcpy(&nc, p + 16, 2);
+            const uint8_t* cig = p + 18; p = cig + 4 * nc;
+            if (flag & BAM_FSECONDARY) continue;
+            const bool same = tid == b->core.tid && pos == (int32_t) b->core.pos && mapq == b->core.qual && nc == b->core.n_cigar
+                && (flag & BAM_FREVERSE) == (b->core.flag & BAM_FREVERSE) && std::memcmp(cig, bam_get_cigar(b), 4 * nc) == 0;
+            if (!same) ho_mismatch_++;
+            return;
+        }
+        ho_mismatch_++;   // no primary in the record although the stream has one
+    }
+    // hand-off records become signatures 0..n_rec-1; the stream's own signatures (reads without a record) follow
+    void prepend_handoff() {
+        std::vector<SigRec> sg; std::vector<AlnRec> al; std::vector<uint32_t> op; std::vector<uint8_t> sq;
+        sg.reserve(ho_.n_rec);
+        for (uint64_t r = 0; r < ho_.n_rec; r++) {
+            const uint8_t* p = ho_.data + ho_.rec_off[r];
+            const int n = *p++;
+            SigRec s; s.aln_off = (uint32_t) al.size(); s.n_aln = (uint8_t) n; s.nh = 1; s.seq_off = sq.size();
+            for (int k = 0; k < n; k++) {
+                int32_t tid, pos; uint16_t flag, nh, nm, nc; uint8_t mapq;
+                std::memcpy(&tid, p, 4); std::memcpy(&pos, p + 4, 4); std::memcpy(&flag, p + 8, 2); mapq = p[10];
+                std::memcpy(&nh, p + 12, 2); std::memcpy(&nm, p + 14, 2); std::memcpy(&nc, p + 16, 2);
+                if (k == 0) s.nh = (uint8_t) std::min<uint32_t>(std::max<uint32_t>(nh, 1), 255);
+                AlnRec a; a.tid = tid; a.pos = pos; a.ops_off = (uint32_t) op.size(); a.n_ops = nc; a.mapq = mapq;
+                a.flags = (uint8_t) (((flag & BAM_FREVERSE) ? 1 : 0) | ((flag & BAM_FSECONDARY) ? 0 : 2));
+                const uint8_t* cig = p + 18;
+                for (int c = 0; c < nc; c++) { uint32_t v; std::memcpy(&v, cig + 4 * c, 4); op.push_back(v); }
+                p = cig + 4 * nc;
+                al.push_back(a);
+            }
+            uint16_t L; std::memcpy(&L, p, 2); p += 2;
+            s.rlen = L;
+            sq.insert(sq.end(), p, p + (L + 1) / 2);
+            sg.push_back(s);
+        }
+        const uint32_t s0 = (uint32_t) sg.size(), a0 = (uint32_t) al.size(), o0 = (uint32_t) op.size(); const uint64_t q0 = sq.size();
+        for (auto& s : sigs_) { s.aln_off += a0; s.seq_off += q0; sg.push_back(s); }
+        for (auto& a : alns_) { a.ops_off += o0; al.push_back(a); }
+        op.insert(op.end(), ops_.begin(), ops_.end());
+        sq.insert(sq.end(), seq_.begin(), seq_.end());
+        for (auto& r : reads_) r.sig += s0;
+        ho_reads_.insert(ho_reads_.end(), reads_.begin(), reads_.end());
+        reads_.swap(ho_reads_);
+        sigs_.swap(sg); alns_.swap(al); ops_.swap(op); seq_.swap(sq);
+        ho_.unmap();
+        unlink(handoff_path_.c_str());
+    }
+    std::string handoff_path_; Handoff ho_; bool ho_tried_ = false, ho_ok_ = false; uint64_t ho_mismatch_ = 0;
+    std::vector<ReadRec> ho_reads_;
     // NH (integer types), UB and UR (Z) from one pass over the aux tags; same values as bam_aux_get + bam_aux2i / bam_aux2Z
     static void scan_aux(const bam1_t* b, int& nh, const char*& ub, const char*& ur) {
         const uint8_t* s = bam_get_aux(b); const uint8_t* end = b->data + b->l_data;

@@ -17,6 +17,7 @@
 #include "Parameters.h"
 #include "Genome.h"
 #include "InOutStreams.h"
+#include "ReadAlign.h"
 #include <cmath>
 #include <sys/stat.h>
 #include <sys/file.h>
@@ -264,6 +265,45 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
         for (auto &x : th) x.join();
     }
     cache->prefilled = true;
+    // singlet's GPU pileup (SINGLET_GPU_PILEUP): per read its record, per record the alignments STAR writes for it (core fields)
+    if (const char *hp = getenv("SINGLET_ENGINE_GPU_HANDOFF")) {
+        time_t th0 = time(nullptr);
+        const int nt = std::max(1, (int) P.runThreadN);
+        std::vector<std::vector<uint8>> part(nt);
+        std::vector<std::vector<uint64>> partOff(nt);
+        std::vector<std::thread> th;
+        for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
+            ReadAlign *ra = new ReadAlign(P, G, nullptr, t);
+            const uint64 r0 = nRec * t / nt, r1 = nRec * (t + 1) / nt;
+            std::vector<uint8> blob;
+            for (uint64 r = r0; r < r1; r++) {
+                partOff[t].push_back(part[t].size());
+                blob.assign(out.blob.begin() + out.blobOff[r], out.blob.begin() + out.blobOff[r + 1]);
+                ra->seqCacheAlignRecords(out.seq.data() + out.seqOff[r], out.seqOff[r + 1] - out.seqOff[r], blob, part[t]);
+            }
+        });
+        for (auto &x : th) x.join();
+        FILE *f = fopen(hp, "wb");
+        bool okw = f != nullptr;
+        if (okw) {
+            const char magic[8] = {'S', 'G', 'H', 'O', 'F', 'F', '0', '1'};
+            uint64 nReads = out.readRecord.size();
+            okw = fwrite(magic, 1, 8, f) == 8 && fwrite(&nReads, 8, 1, f) == 1 && fwrite(&nRec, 8, 1, f) == 1
+                && fwrite(out.readRecord.data(), 4, nReads, f) == nReads;
+            uint64 base = 0;
+            for (int t = 0; t < nt && okw; t++) {
+                for (uint64 &o : partOff[t]) o += base;
+                okw = partOff[t].empty() || fwrite(partOff[t].data(), 8, partOff[t].size(), f) == partOff[t].size();
+                base += part[t].size();
+            }
+            okw = okw && fwrite(&base, 8, 1, f) == 1;
+            for (int t = 0; t < nt && okw; t++) okw = part[t].empty() || fwrite(part[t].data(), 1, part[t].size(), f) == part[t].size();
+            okw = (fclose(f) == 0) && okw;
+            P.inOut->logMain << "ENGINE_GPU: hand-off for the GPU pileup: " << nReads << " reads, " << nRec << " records, " << base
+                             << " bytes in " << (time(nullptr) - th0) << " s -> " << hp << "\n";
+        }
+        if (!okw) { P.inOut->logMain << "ENGINE_GPU: hand-off not written (" << hp << ")\n"; unlink(hp); }
+    }
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
 #endif
