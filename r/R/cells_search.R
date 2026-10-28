@@ -140,7 +140,7 @@ singlet_cell_fields <- function() {
 #' \donttest{
 #' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
 #'   b_cells <- list(cell_type = "B cell", organism = "Homo sapiens", tissue = "blood")
-#'   sce <- singlet_fetch_cells(b_cells, max_cells = 200)
+#'   sce <- singlet_fetch_cells(b_cells, max_cells = 50)
 #' }
 #' }
 #' @seealso \code{\link{singlet_search_cells}}, \code{\link{singlet_gather}}

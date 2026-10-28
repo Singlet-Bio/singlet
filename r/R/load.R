@@ -398,7 +398,7 @@ set_api_key <- function(key) {
 #' \donttest{
 #' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
 #'   cache <- file.path(tempdir(), "singlet-example")
-#'   path <- singlet_download("GSE46817", cache_dir = cache)  # local manifest + sample objects
+#'   path <- singlet_download("GSE307528", cache_dir = cache)  # local manifest + sample objects
 #'   sce <- singlet_load(path, cache_dir = cache)              # reads the local copies
 #' }
 #' }
@@ -516,8 +516,8 @@ singlet_download <- download
 #' \donttest{
 #' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
 #'   cache <- file.path(tempdir(), "singlet-example")
-#'   # One sample: resolves to its study (GSE46817) and keeps only its cells
-#'   sce <- singlet_load("GSM1138786", cache_dir = cache)
+#'   # One sample: resolves to its study (GSE307528) and keeps only its cells
+#'   sce <- singlet_load("GSM9226069", cache_dir = cache)
 #'   table(sce$cell_type)
 #' }
 #' }

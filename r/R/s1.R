@@ -279,7 +279,7 @@
 #' @examples
 #' \donttest{
 #' if (curl::has_internet()) {
-#'   st <- singlet_study("GSE46817", cache_dir = file.path(tempdir(), "singlet-example"))
+#'   st <- singlet_study("GSE307528", cache_dir = file.path(tempdir(), "singlet-example"))
 #'   st$gsm_ids
 #' }
 #' }
@@ -981,7 +981,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @examples
 #' \donttest{
 #' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
-#'   deep <- singlet_cells("GSE46817", n_umi_exon > 500, samples = "GSM1138786",
+#'   deep <- singlet_cells("GSE307528", n_umi_exon > 500, samples = "GSM9226069",
 #'                         cache_dir = file.path(tempdir(), "singlet-example"))
 #' }
 #' }

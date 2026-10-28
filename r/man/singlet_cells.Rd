@@ -61,7 +61,7 @@ matrix chunks that contain the selected cells (a small sample is fetched whole, 
 \examples{
 \donttest{
 if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
-  deep <- singlet_cells("GSE46817", n_umi_exon > 500, samples = "GSM1138786",
+  deep <- singlet_cells("GSE307528", n_umi_exon > 500, samples = "GSM9226069",
                         cache_dir = file.path(tempdir(), "singlet-example"))
 }
 }

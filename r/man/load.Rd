@@ -113,8 +113,8 @@ nothing.
 \donttest{
 if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
   cache <- file.path(tempdir(), "singlet-example")
-  # One sample: resolves to its study (GSE46817) and keeps only its cells
-  sce <- singlet_load("GSM1138786", cache_dir = cache)
+  # One sample: resolves to its study (GSE307528) and keeps only its cells
+  sce <- singlet_load("GSM9226069", cache_dir = cache)
   table(sce$cell_type)
 }
 }

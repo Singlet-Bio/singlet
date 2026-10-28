@@ -76,7 +76,7 @@ Cells of one organism can be combined; give \code{organism} in \code{where} when
 \donttest{
 if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
   b_cells <- list(cell_type = "B cell", organism = "Homo sapiens", tissue = "blood")
-  sce <- singlet_fetch_cells(b_cells, max_cells = 200)
+  sce <- singlet_fetch_cells(b_cells, max_cells = 50)
 }
 }
 \donttest{

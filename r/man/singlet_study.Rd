@@ -28,7 +28,7 @@ members they need with HTTP Range requests.
 \examples{
 \donttest{
 if (curl::has_internet()) {
-  st <- singlet_study("GSE46817", cache_dir = file.path(tempdir(), "singlet-example"))
+  st <- singlet_study("GSE307528", cache_dir = file.path(tempdir(), "singlet-example"))
   st$gsm_ids
 }
 }

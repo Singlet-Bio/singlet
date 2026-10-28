@@ -53,7 +53,7 @@ answer is saved in \code{gsm_parents.tsv} in the cache directory.
 \donttest{
 if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
   cache <- file.path(tempdir(), "singlet-example")
-  path <- singlet_download("GSE46817", cache_dir = cache)  # local manifest + sample objects
+  path <- singlet_download("GSE307528", cache_dir = cache)  # local manifest + sample objects
   sce <- singlet_load(path, cache_dir = cache)              # reads the local copies
 }
 }
