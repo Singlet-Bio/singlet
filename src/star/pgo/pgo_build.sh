@@ -1,11 +1,12 @@
 #!/bin/bash
 # Profile-guided build of the bundled STAR (the rest of singlet is built normally).
 #
-#   src/star/pgo/pgo_build.sh SRC_DIR BUILD_DIR TRAIN.1fq GENOME_DIR GTF REF_BASE [extra STAR flags]
+#   src/star/pgo/pgo_build.sh SRC_DIR BUILD_DIR TRAIN.1fq[:TRAIN2.1fq...] GENOME_DIR GTF REF_BASE [extra STAR flags]
 #
 # 1. builds singlet with the STAR objects instrumented (-fprofile-generate),
-# 2. runs the pipeline once on TRAIN.1fq (a ~2M-read 10x sample is enough: the profile is about
-#    which branches the aligner takes, not about volume),
+# 2. runs the pipeline once on each training .1fq (a ~2M-read 10x sample each is enough: the profile is
+#    about which branches the aligner takes, not about volume; give a 3' and a 5' sample, whose
+#    too-short and soft-clip paths differ; gcc sums the counts of all runs),
 # 3. rebuilds the STAR objects with -fprofile-use in the same BUILD_DIR (gcc finds the .gcda files
 #    next to the objects, so both builds must use the same directory).
 # The result is BUILD_DIR/src/pipeline/singlet. Profiles are build products: not committed.
@@ -21,8 +22,14 @@ find "$B" -name '*.gcda' -delete
 cmake --build "$B" --target singlet -j "$JOBS" > "$B.build-gen.log" 2>&1
 
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-"$B/src/pipeline/singlet" "$TRAIN" --ref-base "$REFBASE" --genome-dir "$GENOME" --exons "$GTF" \
-  --out-prefix "$T/" --threads "$THREADS" --pipeline --output-format mtx > "$B.train.log" 2>&1
+IFS=: read -ra TRAINS <<< "$TRAIN"
+: > "$B.train.log"
+for k in "${!TRAINS[@]}"; do
+  mkdir -p "$T/$k"
+  "$B/src/pipeline/singlet" "${TRAINS[$k]}" --ref-base "$REFBASE" --genome-dir "$GENOME" --exons "$GTF" \
+    --out-prefix "$T/$k/" --threads "$THREADS" --pipeline --output-format mtx >> "$B.train.log" 2>&1
+  echo "pgo: trained on ${TRAINS[$k]}"
+done
 n=$(find "$B" -name '*.gcda' | wc -l)
 echo "pgo: training run wrote $n profile files"
 [ "$n" -gt 0 ] || { echo "pgo: no profile written"; exit 1; }

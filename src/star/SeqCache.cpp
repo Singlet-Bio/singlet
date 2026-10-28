@@ -46,7 +46,7 @@ uint64 SeqCache::hashSeq(const char *seq, uint64 L) {
 
 SeqCache *SeqCache::create(Parameters &P, uint64 nGenome) {
     const char *e = getenv("SINGLET_STAR_SEQCACHE_MB");
-    uint64 mb = e ? strtoull(e, nullptr, 10) : 2048;
+    uint64 mb = e ? strtoull(e, nullptr, 10) : 4096;
     if (mb == 0)
         return nullptr;
     //the cached result must depend on the read sequence only
