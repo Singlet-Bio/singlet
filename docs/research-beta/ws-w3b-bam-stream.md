@@ -287,3 +287,24 @@ Canonical fix (adds to the list in (c)): decide a molecule's allele by majority 
 Updated criterion (b) status: every count tally and the exon/intron/gene matrices are order-independent today; the known order-dependent rules are (1) junction feature numbering (bytes only), (2) positional 1/1000 rRNA sampling, (3) first-10,000-reads strand probe, (4) first-two-genes-seen EM-rescue candidates, (5) first-read-wins SNP allele, (6) barcode candidate list from a BAM scan vs none. All six have a canonical replacement above, and the shuffled-BAM acceptance test in (c) proves each one closed.
 
 Engine task for W2 with the six canonical rules and the shuffled-BAM acceptance test: `w2-task-order-independent-pileup.md`.
+
+## Update 2026-10-28 (e): unsorted streaming is the default (Zach's decision)
+
+Zach, 2026-10-28: unsorted BAMs are the go-to; sorting is not essential for STAR. Implemented on `perf/bam-stream` (draft PR #63, commit `b3099e4`): the pipeline streams STAR's unsorted BAM into the serial pileup by default and falls back to the sorted path automatically where a mode still reads the sorted file. `--sorted-bam` forces the old path; `--stream-unsorted` is kept and now only reports why it was ignored.
+
+| case | path | why |
+|---|---|---|
+| scRNA, `CB_UMI_Simple` (10x 3'/5', Drop-seq, most of the atlas) | **stream (default)** | pileup counts are order-independent (measured, update (c)) |
+| existing `--bam-file` input | sorted reader as given | no STAR run |
+| `--parallel-pileup` given | sorted | explicit request |
+| ATAC | sorted | `ATACFragmentExtractor` reads coordinate-sorted records |
+| SMART-seq2 / bulk | sorted | plate/bulk counting reads the sorted BAM |
+| `CB_UMI_Complex`, `CB_samTagOut` (inDrops, SPLiT-seq, BD Rhapsody, ...) | sorted | STAR writes corrected CB only into a sorted BAM; the CR-as-CB rule is proven only for whitelist-exact `.1fq` barcodes of CB_UMI_Simple |
+| `--tagged-bam` | sorted | rewrites the sorted BAM |
+| `SINGLET_KEEP_STAR_BAM=1` | sorted | keeps the BAM for aligner equivalence checks |
+
+What "sorting is not essential" does and does not cover: STAR aligns and STARsolo counts identically either way; what needs `SortedByCoordinate` in STAR is the `CB`/`UB` SAM attributes (`ParametersSolo.cpp`: "CB and/or UB attributes ... can only be output in the sorted BAM file") and the bedGraph signal output. That is why the stream derives CB from CR. The pileup's own requirement for sorting was only the parallel region split and the indexed strand probe; the serial pileup needs neither.
+
+Not yet sort-free, follow-ups: ATAC fragments, SMART-seq2/bulk counting, and the complex barcode protocols (need a CB-correction replica or CB from the `.1fq` pass). Until the six canonical rules land (`w2-task-order-independent-pileup.md`), streaming output is byte-reproducible only at a fixed thread count, and its SNP AD, junction byte order, rRNA sample and auto barcode set differ from Alpha's sorted outputs (sizes in updates (b)-(d)). That is the accepted cost of the default today; the acceptance test in the W2 task is what makes it identical.
+
+GPU (W11, PR #61): the GPU pileup prototype does not read a sorted BAM. It sorts its own records on the device (sort + merge-join + segmented reduce) and was written to reproduce the CPU engine's sorted-BAM tie rules ("the GPU uses the BAM-order rule", `bench/gpu/pileup/README.md`). So the STAR coordinate sort is not on the GPU path at all; the saving there is on the CPU baseline it is compared against (the sort is part of the ~85% "STAR, sort, pileup and CB refresh" in `bench/gpu/cost/README.md`), which makes the GPU cost case slightly harder, not easier. The canonical rules matter for W11 too: once the CPU engine is order-free, the GPU can drop the BAM-order emulation and match by construction.
