@@ -138,3 +138,17 @@ pass (cache lookups, FASTQ parsing: about 3).
   ambient profile, would also need collecting. Removing the BAM entirely (records straight from the GPU prefill) would also take
   away the 54 s parse and STAR's BAM generation, but requires the same ports. Sized at a day or more. It goes ahead after the
   first cut's gate and measured saving.
+
+## Gate of the first cut (job 790461, pbmc1k_v3, `--engine gpu`, measured)
+
+- **CPU:** 1,196 core-s with `SINGLET_GPU_PILEUP=on`, against 1,230 and 1,186 for two runs with the CPU pileup, so within noise.
+  The serial pileup took 316 s against 278 s. The collector's per-record cost (signature hashing into a 27.6 M-entry map, vector
+  allocations) in the same thread cancels the skipped work.
+- **Output differences against the CPU pileup:**
+  - `sj_counts.1pz` and `splice_psi.1pz`: the feature count. The CPU grows it in steps of 1000; fixed in the next build.
+  - `saturation_metrics.tsv` is missing and `cell_qc_metrics.tsv` differs: both read the CPU molecule store, which "on" empties.
+  - `summary.json` `memory_tier`: a peak-RSS bucket, not data.
+- **Conclusion:** while the CPU loop still parses the BAM and classifies every read, a GPU pileup cannot reduce CPU. The next
+  step is the full offload with no BAM: records come from the GPU prefill, and every pileup output is computed from them,
+  including the per-molecule list behind saturation and cell QC. "On" stays an off-by-default experiment, and compare mode is
+  the per-output identity harness.

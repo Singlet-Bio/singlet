@@ -1826,7 +1826,10 @@ public:
                 static_cast<uint32_t>(j);   // keyed as extract_splice_junctions keys them
             sj_names_.push_back(tid_to_chrom_[k[0]] + ":" + std::to_string(k[1]) + "-" + std::to_string(k[2]));
         }
-        if (!sj_names_.empty()) { sj_acc_.set_barcodes(barcodes_); sj_acc_.set_n_features(static_cast<uint32_t>(sj_names_.size())); }
+        if (!sj_names_.empty()) {   // the CPU grows the feature count in steps of 1000 as junctions appear (extract_splice_junctions)
+            const uint32_t n = static_cast<uint32_t>(sj_names_.size());
+            sj_acc_.set_barcodes(barcodes_); sj_acc_.set_n_features(((n - 1) / 1000 + 1) * 1000);
+        }
         gpu_put(sj_acc_, out.sj);
         for (const auto& e : out.indels) mt_indels_.push_back(mt::MtIndelEvent{e[0], e[1], static_cast<uint16_t>(e[2]), e[3] != 0});
         stats.snp_hits += out.snpHits; stats.sj_hits += out.sjHits; stats.mt_pileup_bases += out.mtBases;
