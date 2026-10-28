@@ -1,0 +1,1411 @@
+// M5: STAR's read mapping after the seed search, ported for the GPU (and the host, from the same source).
+// docs/gpu-engine/exploration.md §12.13.
+//
+// One read per thread, from the read sequence to STAR's final transcripts:
+//   qualitySplit -> the seed loop of ReadAlign::mapOneRead -> maxMappableLength2strands (all iDist passes) -> storeAligns
+//   -> stitchPieces (createExtendWindowsWithAlign, flanks, assignAlignToWindow with FASTASSIGN) -> stitchWindowAligns
+//   (stitchAlignToTranscript, extendAlign, blocksOverlap, the score-range recording) -> multMapSelect -> mappedFilter
+// and writes the result in the encoding of STAR's sequence cache (ReadAlign_seqCache.cpp), so that it can be compared
+// byte for byte with what STAR computed for the same sequence (src/gpu/stardump/m5_dump.h).
+//
+// Each function is a line-by-line port of the STAR 2.7.11b source vendored in prod/campaign (c4a1be38); the STAR file is
+// named above each one. Differences are representation only:
+//  - winBin (two arrays of nGenome/2^winBinNbits bins per thread in STAR) is a small open-addressing map with the same
+//    read/write semantics (absent = uintWinBinMax);
+//  - the recursion of stitchWindowAligns runs on an explicit stack of transcripts (one per depth, as the by-value
+//    arguments of the recursion), with the same visiting order;
+//  - the transcript slots of a window (trArrayPointer) are a local pointer array with the same permutations; only the
+//    transcripts that can still pass multMapSelect's score range are kept across windows (their order is kept);
+//  - every array has a capacity (template parameter). A read that would exceed one where STAR's own limit is larger
+//    stops with Status::Overflow and goes to the heavy lane (the same code with STAR's limits).
+//  - scoreGenomicLength's log2 uses breakpoints computed on the host with the C library's log2 (exact).
+// Single-end only (readNmates = 1), no chimeric detection, no variation, no genome transformation, no BySJout stage 2:
+// the driver checks these parameters.
+#pragma once
+#include <cstdint>
+#include <cmath>
+
+#ifdef __CUDACC__
+#define HD __host__ __device__
+#else
+#define HD
+#endif
+
+namespace m5 {
+
+typedef unsigned long long u64;
+typedef long long i64;
+typedef u64 uint;     // STAR's `uint` is 64-bit (IncludeDefine.h)
+
+constexpr int scoreMatch = 1;
+constexpr u64 MARK_FRAG_SPACER_BASE = 11;
+constexpr int MAX_SJ_REPEAT_SEARCH = 255;
+constexpr int DEF_readSeqLengthMax = 650;
+constexpr u64 uintWinBinMax = 65535;
+constexpr u64 MARKER_ALL_PIECES_EXCEED_seedMultimapNmax = 999901;
+constexpr u64 MARKER_NO_GOOD_WINDOW = 999903;
+constexpr u64 MARKER_NO_GOOD_PIECES = 999904;
+constexpr u64 MARKER_TOO_MANY_ANCHORS_PER_WINDOW = 999905;
+constexpr u64 MARKER_READ_TOO_SHORT = 999910;
+enum { PC_rStart, PC_Length, PC_Str, PC_Dir, PC_Nrep, PC_SAstart, PC_SAend, PC_iFrag, PC_SIZE };
+enum { WC_Str, WC_Chr, WC_gStart, WC_gEnd, WC_SIZE };
+enum { WA_Length, WA_rStart, WA_gStart, WA_Nrep, WA_Anchor, WA_iFrag, WA_sjA, WA_SIZE };
+enum { EX_R, EX_G, EX_L, EX_iFrag, EX_sjA, EX_SIZE };
+
+enum class Status : uint8_t { Ok = 0, Overflow = 1, BlobFull = 2, Unsupported = 3 };
+// which capacity overflowed (for the heavy-lane statistics)
+enum OvWhy : uint8_t { OV_NONE, OV_LREAD, OV_SPLIT, OV_PC, OV_WIN, OV_WA, OV_WINBIN, OV_EXONS, OV_WTR, OV_KEEP, OV_BLOB };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Parameters (src/gpu/stardump/m5_dump.h writes them from the running STAR) and genome view
+// ---------------------------------------------------------------------------------------------------------------------
+struct Params {
+    u64 maxNsplit, seedSplitMin, seedSearchStartLmax, seedMapMin, seedSearchLmax, seedMultimapNmax, seedPerReadNmax, seedPerWindowNmax;
+    double seedSearchStartLmaxOverLread;
+    u64 winBinChrNbits, winBinNbits, winAnchorDistNbins, winFlankNbins, winBinN, winAnchorMultimapNmax;
+    u64 alignWindowsPerReadNmax, alignTranscriptsPerWindowNmax, alignTranscriptsPerReadNmax;
+    u64 alignSJoverhangMin, alignSJDBoverhangMin, alignSplicedMateMapLmin;
+    double alignSplicedMateMapLminOverLmate;
+    u64 alignIntronMin, alignIntronMax, alignMatesGapMax;
+    int alignSJstitchMismatchNmax[4];
+    bool alignSoftClipAtReferenceEnds, alignEndsTypeExt[2][2], flushRight;
+    int alignEndsProtrudeNbasesMax;
+    int intronMotifsFilter;      // 0 None, 1 RemoveNoncanonical, 2 RemoveNoncanonicalUnannotated
+    bool removeInconsistentStrands;
+    u64 outSAMstrandFieldType;
+    double scoreGenomicLengthLog2scale;
+    int outFilterMultimapScoreRange; u64 outFilterMultimapNmax;
+    bool multOrderRandom; u64 outSAMmultNmax; bool primaryAllBest;
+    int outFilterScoreMin; double outFilterScoreMinOverLread;
+    u64 outFilterMatchNmin; double outFilterMatchNminOverLread;
+    u64 outFilterMismatchNmax; double outFilterMismatchNoverLmax, outFilterMismatchNoverReadLmax;
+    int scoreGap, scoreGapNoncan, scoreGapGCAG, scoreGapATAC, scoreDelBase, scoreDelOpen, scoreInsBase, scoreInsOpen, scoreStitchSJshift;
+    int sjdbScore; u64 gSAsparseD, gSAindexNbases;
+    // genomic length score: value for gLength >= glBreak[k] is glVal[k] (k ascending); below glBreak[0] it is glVal0
+    int glN; int glVal0; u64 glBreak[64]; int glVal[64];
+};
+
+struct GenomeView {
+    const char* G;            // G[-200 .. nGenome+200): STAR's G = G1 + 200, padding = 5
+    const u64* SA;            // STAR's packed SA (GstrandBit+1 bits per entry)
+    const u64* SAi;           // STAR's packed SAindex (GstrandBit+3 bits per entry)
+    u64 nGenome, nSA, GstrandBit, GstrandMask, saBits, saiBits, SAiMarkNmaskC, SAiMarkNmask, SAiMarkAbsentMaskC;
+    u64 saiStart[32];
+    const u64* chrStart; const u64* chrLength; const u64* chrBin; u64 nChr, chrBinN;
+    u64 sjGstart, sjdbOverhang, sjdbLength, sjdbN;
+    const u64* sjdbStart; const u64* sjdbEnd; const u64* sjDstart; const u64* sjAstart;
+    const uint8_t* sjdbMotif; const uint8_t* sjdbShiftLeft; const uint8_t* sjdbShiftRight; const uint8_t* sjdbStrand;
+};
+
+// STAR's PackedArray::operator[]: an unaligned little-endian load at bit offset ii*wordLength, masked
+HD inline u64 packed_get(const u64* a, u64 ii, u64 bits) {
+    u64 b = ii * bits, w = b >> 6, sh = b & 63;
+    u64 v = a[w] >> sh;
+    if (sh) v |= a[w + 1] << (64 - sh);
+    return v & ((1ULL << bits) - 1);
+}
+
+template <class T> HD inline T mn(T a, T b) { return a < b ? a : b; }
+template <class T> HD inline T mx(T a, T b) { return a > b ? a : b; }
+template <class T> HD inline void swp(T& a, T& b) { T t = a; a = b; b = t; }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Transcript (Transcript.h): the fields seed stitching and multMapSelect write; exons capped at NEX (STAR: MAX_N_EXONS 20)
+// ---------------------------------------------------------------------------------------------------------------------
+template <int NEX> struct Tr {
+    uint exons[NEX][EX_SIZE];
+    uint shiftSJ[NEX][2];
+    int canonSJ[NEX];
+    uint8_t sjAnnot[NEX], sjStr[NEX];
+    uint intronMotifs[3];
+    uint8_t sjMotifStrand; bool sjYes;
+    uint nExons;
+    int iFrag;
+    uint rStart, roStart, rLength, gStart, gLength, cStart;
+    uint Chr, Str, roStr;
+    bool primaryFlag;
+    uint nMatch, nMM, mappedLength, extendL;
+    int maxScore;
+    uint nGap, lGap, nDel, nIns, lDel, lIns;
+    uint nUnique, nAnchor;
+    HD void reset() {
+        extendL = 0; primaryFlag = false;
+        rStart = 0; roStart = 0; rLength = 0; gStart = 0; gLength = 0;
+        maxScore = 0; nMatch = 0; nMM = 0;
+        nGap = 0; lGap = 0; lDel = 0; lIns = 0; nDel = 0; nIns = 0;
+        nUnique = nAnchor = 0;
+    }
+    HD void add(const Tr* t) {
+        maxScore += t->maxScore; nMatch += t->nMatch; nMM += t->nMM;
+        nGap += t->nGap; lGap += t->lGap; lDel += t->lDel; nDel += t->nDel; lIns += t->lIns; nIns += t->nIns;
+        nUnique += t->nUnique;
+    }
+};
+// the extension results only (extendAlign writes extendL, maxScore, nMatch, nMM; add() reads the counters, all 0 after reset)
+struct Ext { uint extendL; int maxScore; uint nMatch, nMM; };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Capacities. Main lane: small, per thread; heavy lane: STAR's limits.
+// ---------------------------------------------------------------------------------------------------------------------
+template <int LREAD_, int NSPLIT_, int NP_, int NW_, int NWA_, int NWB_, int NEX_, int NWTR_, int NKEEP_, int NBLOB_>
+struct Caps {
+    static constexpr int LREAD = LREAD_, NSPLIT = NSPLIT_, NP = NP_, NW = NW_, NWA = NWA_, NWB = NWB_, NEX = NEX_,
+                         NWTR = NWTR_, NKEEP = NKEEP_, NBLOB = NBLOB_;
+};
+
+// read buffers: STAR's Read1[0] (bases 0..3, N = 4), Read1[1] (complement), Read1[2] (reverse complement)
+template <int L> struct ReadBuf { char r[3][L + 1]; };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Per-read state (ReadAlign members that mapping touches)
+// ---------------------------------------------------------------------------------------------------------------------
+template <class C> struct Work {
+    typedef Tr<C::NEX> T;
+    // read
+    uint Lread, outFilterMismatchNmaxTotal;
+    uint Nsplit, splitR[3][C::NSPLIT];
+    // seeds (storeAligns)
+    uint nP, nA, nUM[2];
+    uint PC[C::NP][PC_SIZE];
+    uint storedLmin, uniqLmax, uniqLmaxInd, multLmax, multLmaxN, multNmin, multNminL, multNmax, multNmaxL;
+    // windows
+    uint nW, nWall;
+    uint WC[C::NW][WC_SIZE];
+    uint nWA[C::NW], WALrec[C::NW];
+    i64 WlastAnchor[C::NW];   // STAR: uint, set to -1, compared as uint (WlastAnchor[iW]<nWA[iW] / <iA)
+    uint WA[C::NW][C::NWA][WA_SIZE];
+    // winBin: key = (str << 40) | bin, value = window index; absent = uintWinBinMax
+    u64 wbKey[C::NWB]; uint16_t wbVal[C::NWB]; int wbN;
+    // transcripts
+    int maxScoreMate[1];
+    uint mapMarker;
+    int trBestScore; uint trBestGLength; int trBestKeep;    // trBest: index into keep[] (-1 = trInit)
+    uint trInitRLength;
+    // windows' transcripts that can still be selected (in window order, then within-window order), and their counts
+    T keep[C::NKEEP]; int nKeep; int keepWin[C::NKEEP];
+    uint nWtr;                // number of windows with transcripts (STAR's nW after stitching)
+    uint trNtotal;
+    // stitching scratch
+    T stack[C::NWA + 1];
+    T slot[C::NWTR + 1]; int slotP[C::NWTR + 1]; uint nWinTr;
+    T fin;                    // finalize scratch (trA copy at iA>=nA)
+    // multMapSelect
+    uint nTr; int maxScore; int unmapType;
+    OvWhy ov;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// winBin map
+// ---------------------------------------------------------------------------------------------------------------------
+template <class C> HD inline u64 wbGet(const Work<C>& w, uint str, uint bin) {
+    u64 key = (str << 40) | bin;
+    unsigned h = (unsigned)((key * 0x9E3779B97F4A7C15ULL) >> 40) & (C::NWB - 1);
+    for (int k = 0; k < C::NWB; k++) {
+        unsigned i = (h + k) & (C::NWB - 1);
+        if (w.wbKey[i] == ~0ULL) return uintWinBinMax;
+        if (w.wbKey[i] == key) return w.wbVal[i];
+    }
+    return uintWinBinMax;
+}
+template <class C> HD inline bool wbSet(Work<C>& w, uint str, uint bin, uint val) {
+    u64 key = (str << 40) | bin;
+    unsigned h = (unsigned)((key * 0x9E3779B97F4A7C15ULL) >> 40) & (C::NWB - 1);
+    for (int k = 0; k < C::NWB; k++) {
+        unsigned i = (h + k) & (C::NWB - 1);
+        if (w.wbKey[i] == key) { w.wbVal[i] = (uint16_t)val; return true; }
+        if (w.wbKey[i] == ~0ULL) {
+            if (w.wbN * 4 >= C::NWB * 3) { w.ov = OV_WINBIN; return false; }
+            w.wbKey[i] = key; w.wbVal[i] = (uint16_t)val; w.wbN++; return true;
+        }
+    }
+    w.ov = OV_WINBIN; return false;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// SequenceFuns.cpp qualitySplit
+// ---------------------------------------------------------------------------------------------------------------------
+template <class C> HD inline bool qualitySplit(const char* r, uint L, uint maxNsplit, uint minLsplit, Work<C>& w) {
+    uint iR = 0, iS = 0, iR1, LgoodMin = 0, iFrag = 0;
+    while ((iR < L) & (iS < maxNsplit)) {
+        while (iR < L && r[iR] > 3) {
+            if ((u64)r[iR] == MARK_FRAG_SPACER_BASE) iFrag++;
+            iR++;
+        }
+        if (iR == L) break;
+        iR1 = iR;
+        while (iR < L && r[iR] <= 3) iR++;
+        if ((iR - iR1) > LgoodMin) LgoodMin = iR - iR1;
+        if ((iR - iR1) < minLsplit) continue;
+        if (iS >= (uint)C::NSPLIT) { w.ov = OV_SPLIT; return false; }
+        w.splitR[0][iS] = iR1; w.splitR[1][iS] = iR - iR1; w.splitR[2][iS] = iFrag;
+        iS++;
+    }
+    if (iS == 0) w.splitR[1][0] = LgoodMin;
+    w.Nsplit = iS;
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// SuffixArrayFuns.cpp: compareSeqToGenome (byte genome), findMultRange, maxMappableLength
+// ---------------------------------------------------------------------------------------------------------------------
+HD inline u64 medianUint2(u64 a, u64 b) { return a / 2 + b / 2 + (a % 2 + b % 2) / 2; }
+
+HD inline u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u64 S, u64 N, u64 L, u64 iSA, bool dirR, bool& compRes) {
+    u64 SAstr = packed_get(g_.SA, iSA, g_.saBits);
+    bool dirG = (SAstr >> g_.GstrandBit) == 0;
+    SAstr &= g_.GstrandMask;
+    const char* g = g_.G;
+    i64 ii;
+    if (dirR && dirG) {
+        const char* s = s2[0] + S + L; g += SAstr + L;
+        for (ii = 0; (u64)ii < N - L; ii++)
+            if (s[ii] != g[ii]) { compRes = s[ii] > g[ii]; return ii + L; }
+        return N;
+    } else if (dirR && !dirG) {
+        const char* s = s2[1] + S + L; g += g_.nGenome - 1 - SAstr - L;
+        for (ii = 0; (u64)ii < N - L; ii++)
+            if (s[ii] != g[-ii]) { compRes = !(s[ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+        return N;
+    } else if (!dirR && dirG) {
+        const char* s = s2[1] + S - L; g += SAstr + L;
+        for (ii = 0; (u64)ii < N - L; ii++)
+            if (s[-ii] != g[ii]) { compRes = s[-ii] > g[ii]; return ii + L; }
+        return N;
+    } else {
+        const char* s = s2[0] + S - L; g += g_.nGenome - 1 - SAstr - L;
+        for (ii = 0; (u64)ii < N - L; ii++)
+            if (s[-ii] != g[-ii]) { compRes = !(s[-ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+        return N;
+    }
+}
+
+HD inline u64 findMultRange(const GenomeView& g, u64 i3, u64 L3, u64 i1, u64 L1, u64 i1a, u64 L1a, u64 i1b, u64 L1b,
+                            const char* const* s, bool dirR, u64 S) {
+    bool compRes;
+    if (L1 < L3) { L1b = L1; i1b = i1; i1a = i3; }
+    else if (L1a < L1) { L1b = L1a; i1b = i1a; i1a = i1; }
+    while ((i1b + 1 < i1a) | (i1b > i1a + 1)) {
+        u64 i1c = medianUint2(i1a, i1b);
+        u64 L1c = compareSeqToGenome(g, s, S, L3, L1b, i1c, dirR, compRes);
+        if (L1c == L3) i1a = i1c;
+        else { i1b = i1c; L1b = L1c; }
+    }
+    return i1a;
+}
+
+HD inline u64 maxMappableLength(const GenomeView& g, const char* const* s, u64 S, u64 N, u64 i1, u64 i2, bool dirR, u64& L, u64* ind) {
+    bool compRes;
+    u64 L1, L2, i3, L3, L1a, L1b, L2a, L2b, i1a, i1b, i2a, i2b;
+    L1 = compareSeqToGenome(g, s, S, N, L, i1, dirR, compRes);
+    L2 = compareSeqToGenome(g, s, S, N, L, i2, dirR, compRes);
+    L = L1 < L2 ? L1 : L2;
+    L1a = L1; L1b = L1; i1a = i1; i1b = i1;
+    L2a = L2; L2b = L2; i2a = i2; i2b = i2;
+    i3 = i1; L3 = L1;
+    while (i1 + 1 < i2) {
+        i3 = medianUint2(i1, i2);
+        L3 = compareSeqToGenome(g, s, S, N, L, i3, dirR, compRes);
+        if (L3 == N) break;
+        if (compRes) {
+            if (L3 > L1) { L1b = L1a; L1a = L1; i1b = i1a; i1a = i1; }
+            i1 = i3; L1 = L3;
+        } else {
+            if (L3 > L2) { L2b = L2a; L2a = L2; i2b = i2a; i2a = i2; }
+            i2 = i3; L2 = L3;
+        }
+        L = L1 < L2 ? L1 : L2;
+    }
+    if (L3 < N) {
+        if (L1 > L2) { i3 = i1; L3 = L1; } else { i3 = i2; L3 = L2; }
+    }
+    i1 = findMultRange(g, i3, L3, i1, L1, i1a, L1a, i1b, L1b, s, dirR, S);
+    i2 = findMultRange(g, i3, L3, i2, L2, i2a, L2a, i2b, L2b, s, dirR, S);
+    L = L3;
+    ind[0] = i1; ind[1] = i2;
+    return i2 - i1 + 1;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ReadAlign_storeAligns.cpp (OPTIM_STOREaligns_SIMPLE)
+// ---------------------------------------------------------------------------------------------------------------------
+template <class C> HD inline bool storeAligns(const Params& P, Work<C>& w, uint iDir, uint Shift, uint Nrep, uint L, const uint ind[2], uint iFrag) {
+    if (Nrep > P.seedMultimapNmax) {
+        if (Nrep < w.multNmin || w.multNmin == 0) { w.multNmin = Nrep; w.multNminL = L; }
+        return true;
+    }
+    w.nUM[Nrep == 1 ? 0 : 1] += Nrep;
+    w.nA += Nrep;
+    uint rStart = iDir == 0 ? Shift : Shift + 1 - L;
+    i64 iP;
+    for (iP = (i64)w.nP - 1; iP >= 0; iP--) {
+        if (w.PC[iP][0] <= rStart) {
+            if ((w.PC[iP][PC_rStart] == rStart) && w.PC[iP][PC_Length] < L) continue;
+            if ((w.PC[iP][PC_rStart] == rStart) && w.PC[iP][PC_Length] == L) return true;
+            break;
+        }
+    }
+    iP = iP + 1;
+    if (w.nP + 1 > (uint)C::NP) { w.ov = OV_PC; return false; }   // STAR exits with an error past seedPerReadNmax
+    for (i64 ii = (i64)w.nP - 1; ii >= iP; ii--)
+        for (int jj = 0; jj < PC_SIZE; jj++) w.PC[ii + 1][jj] = w.PC[ii][jj];
+    w.nP++;
+    w.PC[iP][PC_rStart] = rStart; w.PC[iP][PC_Length] = L; w.PC[iP][PC_Dir] = iDir; w.PC[iP][PC_Nrep] = Nrep;
+    w.PC[iP][PC_SAstart] = ind[0]; w.PC[iP][PC_SAend] = ind[1]; w.PC[iP][PC_iFrag] = iFrag;
+    if (L < w.storedLmin) L = w.storedLmin;
+    if (Nrep == 1) {
+        if (L > w.uniqLmax) { w.uniqLmax = L; w.uniqLmaxInd = w.nP - 1; }
+    } else {
+        if (Nrep < w.multNmin || w.multNmin == 0) { w.multNmin = Nrep; w.multNminL = L; }
+        if (L > w.multLmax) { w.multLmax = L; w.multLmaxN = Nrep; }
+        if (Nrep > w.multNmax) { w.multNmax = Nrep; w.multNmaxL = L; }
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ReadAlign_maxMappableLength2strands.cpp
+// ---------------------------------------------------------------------------------------------------------------------
+template <class C> HD inline uint maxMappableLength2strands(const Params& P, const GenomeView& g, Work<C>& w, const char* const* Read1,
+                                                         uint pieceStartIn, uint pieceLengthIn, uint iDir, uint& maxLbest, uint iFrag) {
+    uint Nrep = 0, indStartEnd[2] = {0, 0}, maxL = 0;
+    constexpr int SD = 4;   // gSAsparseD <= 4 (checked by the driver)
+    uint NrepAll[SD], indAll[SD][2], maxLall[SD];
+    maxLbest = 0;
+    bool dirR = iDir == 0;
+    uint nD = mn<uint>(pieceLengthIn, P.gSAsparseD);
+    for (uint iDist = 0; iDist < nD; iDist++) {
+        uint pieceStart;
+        uint pieceLength = pieceLengthIn - iDist;
+        uint Lmax = mn<uint>(P.gSAindexNbases, pieceLength);
+        uint ind1 = 0;
+        if (dirR) {
+            pieceStart = pieceStartIn + iDist;
+            for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += ((uint)Read1[0][pieceStart + ii]); }
+        } else {
+            pieceStart = pieceStartIn - iDist;
+            for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += (3 - ((uint)Read1[0][pieceStart - ii])); }
+        }
+        uint Lind = Lmax, iSA1 = 0, iSA2;
+        while (Lind > 0) {
+            iSA1 = packed_get(g.SAi, g.saiStart[Lind - 1] + ind1, g.saiBits);
+            if ((iSA1 & g.SAiMarkAbsentMaskC) == 0) break;
+            --Lind; ind1 = ind1 >> 2;
+        }
+        bool iSA2good = true;
+        if (g.saiStart[Lind - 1] + ind1 + 1 < g.saiStart[Lind]) {
+            iSA2 = packed_get(g.SAi, g.saiStart[Lind - 1] + ind1 + 1, g.saiBits);
+            if ((iSA2 & g.SAiMarkAbsentMaskC) == 0) iSA2 = (iSA2 & g.SAiMarkNmask) - 1;
+            else { iSA2 = g.nSA - 1; iSA2good = false; }
+        } else { iSA2 = g.nSA - 1; iSA2good = false; }
+        bool iSA1noN = (iSA1 & g.SAiMarkNmaskC) == 0;
+        if (Lind < P.gSAindexNbases && iSA1noN && iSA2good) {
+            indStartEnd[0] = iSA1; indStartEnd[1] = iSA2; Nrep = indStartEnd[1] - indStartEnd[0] + 1; maxL = Lind;
+        } else if (iSA1 == iSA2 && iSA1noN && iSA2good) {
+            indStartEnd[0] = indStartEnd[1] = iSA1; Nrep = 1;
+            bool comparRes;
+            maxL = compareSeqToGenome(g, Read1, pieceStart, pieceLength, Lind, iSA1, dirR, comparRes);
+        } else {
+            maxL = (iSA2good && iSA1noN) ? Lind : 0;
+            Nrep = maxMappableLength(g, Read1, pieceStart, pieceLength, iSA1 & g.SAiMarkNmask, iSA2, dirR, maxL, indStartEnd);
+        }
+        if (maxL + iDist > maxLbest) maxLbest = maxL + iDist;
+        NrepAll[iDist] = Nrep; indAll[iDist][0] = indStartEnd[0]; indAll[iDist][1] = indStartEnd[1]; maxLall[iDist] = maxL;
+    }
+    for (uint iDist = 0; iDist < nD; iDist++) {
+        if ((maxLall[iDist] + iDist) == maxLbest)
+            if (!storeAligns(P, w, iDir, (dirR ? pieceStartIn + iDist : pieceStartIn - iDist), NrepAll[iDist], maxLall[iDist], indAll[iDist], iFrag)) return 0;
+    }
+    return Nrep;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// sjAlignSplit.cpp, binarySearch2.cpp
+// ---------------------------------------------------------------------------------------------------------------------
+HD inline bool sjAlignSplit(uint a1, uint aLength, const GenomeView& g, uint& a1D, uint& aLengthD, uint& a1A, uint& aLengthA, uint& isj) {
+    uint sj1 = (a1 - g.sjGstart) % g.sjdbLength;
+    if (sj1 < g.sjdbOverhang && sj1 + aLength > g.sjdbOverhang) {
+        isj = (a1 - g.sjGstart) / g.sjdbLength;
+        aLengthD = g.sjdbOverhang - sj1;
+        aLengthA = aLength - aLengthD;
+        a1D = g.sjDstart[isj] + sj1;
+        a1A = g.sjAstart[isj];
+        return true;
+    }
+    return false;
+}
+
+HD inline int binarySearch2(uint x, uint y, const uint* X, const uint* Y, int N) {
+    if (N == 0 || x > X[N - 1] || x < X[0]) return -1;
+    int i1 = 0, i2 = N - 1, i3 = N / 2;
+    while (i2 > i1 + 1) {
+        i3 = (i1 + i2) / 2;
+        if (X[i3] > x) i2 = i3; else i1 = i3;
+    }
+    if (x == X[i1]) i3 = i1;
+    else if (x == X[i2]) i3 = i2;
+    else return -1;
+    for (int jj = i3; jj >= 0; jj--) {
+        if (x != X[jj]) break;
+        else if (y == Y[jj]) return jj;
+    }
+    for (int jj = i3; jj < N; jj++) {
+        if (x != X[jj]) return -1;
+        else if (y == Y[jj]) return jj;
+    }
+    return -2;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ReadAlign_createExtendWindowsWithAlign.cpp
+// ---------------------------------------------------------------------------------------------------------------------
+constexpr int EXIT_TOO_MANY_WINDOWS = 101;
+template <class C> HD inline int createExtendWindowsWithAlign(const Params& P, const GenomeView& g, Work<C>& w, uint a1, uint aStr) {
+    uint aBin = (a1 >> P.winBinNbits);
+    uint iBinLeft = aBin, iBinRight = aBin;
+    uint iBin = (uint)-1, iWin = (uint)-1, iWinRight = (uint)-1;
+    if (wbGet(w, aStr, aBin) == uintWinBinMax) {
+        bool flagMergeLeft = false;
+        if (aBin > 0) {
+            for (iBin = aBin - 1; iBin >= (aBin > P.winAnchorDistNbins ? aBin - P.winAnchorDistNbins : 0); --iBin) {
+                if (wbGet(w, aStr, iBin) < uintWinBinMax) { flagMergeLeft = true; break; }
+                if (iBin == 0) break;
+            }
+            flagMergeLeft = flagMergeLeft && (g.chrBin[iBin >> P.winBinChrNbits] == g.chrBin[aBin >> P.winBinChrNbits]);
+            if (flagMergeLeft) {
+                iWin = wbGet(w, aStr, iBin);
+                iBinLeft = w.WC[iWin][WC_gStart];
+                for (uint ii = iBin + 1; ii <= aBin; ii++) if (!wbSet(w, aStr, ii, iWin)) return -1;
+            }
+        }
+        bool flagMergeRight = false;
+        if (aBin + 1 < P.winBinN) {
+            for (iBin = aBin + 1; iBin < mn<uint>(aBin + P.winAnchorDistNbins + 1, P.winBinN); ++iBin) {
+                if (wbGet(w, aStr, iBin) < uintWinBinMax) { flagMergeRight = true; break; }
+            }
+            flagMergeRight = flagMergeRight && (g.chrBin[iBin >> P.winBinChrNbits] == g.chrBin[aBin >> P.winBinChrNbits]);
+            if (flagMergeRight) {
+                while (wbGet(w, aStr, iBin) == wbGet(w, aStr, iBin + 1)) ++iBin;
+                iBinRight = iBin;
+                iWinRight = wbGet(w, aStr, iBin);
+                if (!flagMergeLeft) iWin = wbGet(w, aStr, iBin);
+                for (uint ii = aBin; ii <= iBin; ii++) if (!wbSet(w, aStr, ii, iWin)) return -1;
+            }
+        }
+        if (!flagMergeLeft && !flagMergeRight) {
+            if (w.nW >= (uint)C::NW) { w.ov = OV_WIN; return -1; }
+            iWin = w.nW;
+            if (!wbSet(w, aStr, aBin, iWin)) return -1;
+            w.WC[iWin][WC_Chr] = g.chrBin[aBin >> P.winBinChrNbits];
+            w.WC[iWin][WC_Str] = aStr;
+            w.WC[iWin][WC_gEnd] = w.WC[iWin][WC_gStart] = aBin;
+            ++w.nW;
+            if (w.nW >= P.alignWindowsPerReadNmax) {
+                w.nW = P.alignWindowsPerReadNmax - 1;
+                return EXIT_TOO_MANY_WINDOWS;
+            }
+        } else {
+            w.WC[iWin][WC_gStart] = iBinLeft;
+            w.WC[iWin][WC_gEnd] = iBinRight;
+            if (flagMergeLeft && flagMergeRight) {
+                w.WC[iWinRight][WC_gStart] = 1;
+                w.WC[iWinRight][WC_gEnd] = 0;
+            }
+        }
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ReadAlign_assignAlignToWindow.cpp
+// ---------------------------------------------------------------------------------------------------------------------
+template <class C> HD inline bool assignAlignToWindow(const Params& P, Work<C>& w, uint a1, uint aLength, uint aStr, uint aNrep,
+                                                   uint aFrag, uint aRstart, bool aAnchor, uint sjA) {
+    uint iW = wbGet(w, aStr, a1 >> P.winBinNbits);
+    if (iW == uintWinBinMax || (!aAnchor && aLength < w.WALrec[iW])) return true;
+    {
+        uint iA;
+        for (iA = 0; iA < w.nWA[iW]; iA++) {
+            const uint* A = w.WA[iW][iA];
+            if (aFrag == A[WA_iFrag] && A[WA_sjA] == sjA && a1 + A[WA_rStart] == A[WA_gStart] + aRstart
+                && ((aRstart >= A[WA_rStart] && aRstart < A[WA_rStart] + A[WA_Length])
+                    || (aRstart + aLength >= A[WA_rStart] && aRstart + aLength < A[WA_rStart] + A[WA_Length]))) break;
+        }
+        if (iA < w.nWA[iW]) {
+            if (aLength > w.WA[iW][iA][WA_Length]) {
+                uint iA0;
+                for (iA0 = 0; iA0 < w.nWA[iW]; iA0++)
+                    if (iA0 != iA && aRstart < w.WA[iW][iA0][WA_rStart]) break;
+                if (iA0 > iA) --iA0;
+                if (iA0 < iA) {
+                    for (uint iA1 = iA; iA1 > iA0; iA1--) for (int ii = 0; ii < WA_SIZE; ii++) w.WA[iW][iA1][ii] = w.WA[iW][iA1 - 1][ii];
+                } else if (iA0 > iA) {
+                    for (uint iA1 = iA; iA1 < iA0; iA1++) for (int ii = 0; ii < WA_SIZE; ii++) w.WA[iW][iA1][ii] = w.WA[iW][iA1 + 1][ii];
+                }
+                uint* A = w.WA[iW][iA0];
+                A[WA_rStart] = aRstart; A[WA_Length] = aLength; A[WA_gStart] = a1; A[WA_Nrep] = aNrep;
+                A[WA_Anchor] = (uint)(int)aAnchor; A[WA_iFrag] = aFrag; A[WA_sjA] = sjA;
+            }
+            return true;
+        }
+    }
+    if (w.nWA[iW] == P.seedPerWindowNmax) {
+        w.WALrec[iW] = w.Lread + 1;
+        for (uint iA = 0; iA < w.nWA[iW]; iA++)
+            if (w.WA[iW][iA][WA_Anchor] != 1) w.WALrec[iW] = mn(w.WALrec[iW], w.WA[iW][iA][WA_Length]);
+        if (w.WALrec[iW] == w.Lread + 1) {
+            w.mapMarker = MARKER_TOO_MANY_ANCHORS_PER_WINDOW;
+            w.nW = 0;
+            return true;
+        }
+        if (!aAnchor && aLength < w.WALrec[iW]) return true;
+        uint iA1 = 0;
+        for (uint iA = 0; iA < w.nWA[iW]; iA++) {
+            if (w.WA[iW][iA][WA_Anchor] == 1 || w.WA[iW][iA][WA_Length] > w.WALrec[iW]) {
+                for (int ii = 0; ii < WA_SIZE; ii++) w.WA[iW][iA1][ii] = w.WA[iW][iA][ii];
+                iA1++;
+            }
+        }
+        w.nWA[iW] = iA1;
+    }
+    if (aAnchor || aLength > w.WALrec[iW]) {
+        if (w.nWA[iW] >= (uint)C::NWA) { w.ov = OV_WA; return false; }   // (STAR: BUG exit at seedPerWindowNmax, unreachable)
+        uint iA;
+        for (iA = 0; iA < w.nWA[iW]; iA++) if (aRstart < w.WA[iW][iA][WA_rStart]) break;
+        for (uint iA1 = w.nWA[iW]; iA1 > iA; iA1--) for (int ii = 0; ii < WA_SIZE; ii++) w.WA[iW][iA1][ii] = w.WA[iW][iA1 - 1][ii];
+        uint* A = w.WA[iW][iA];
+        A[WA_rStart] = aRstart; A[WA_Length] = aLength; A[WA_gStart] = a1; A[WA_Nrep] = aNrep;
+        A[WA_Anchor] = (uint)(int)aAnchor; A[WA_iFrag] = aFrag; A[WA_sjA] = sjA;
+        w.nWA[iW]++;
+        if (aAnchor && (uint)w.WlastAnchor[iW] < iA) w.WlastAnchor[iW] = (i64)iA;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// extendAlign.cpp
+// ---------------------------------------------------------------------------------------------------------------------
+HD inline bool extendAlign(const char* R, const char* G, uint rStart, uint gStart, int dR, int dG, uint L, uint Lprev, uint nMMprev,
+                           uint nMMmax, double pMMmax, bool extendToEnd, Ext* trA) {
+    int iS, iG;
+    int Score = 0, nMatch = 0, nMM = 0;
+    trA->maxScore = 0;
+    R = R + rStart;
+    G = G + gStart;
+    if (extendToEnd) {
+        int iExt;
+        for (iExt = 0; iExt < (int)L; iExt++) {
+            iS = dR * iExt; iG = dG * iExt;
+            if ((gStart + iG) == (uint)(-1) || G[iG] == 5) {
+                trA->extendL = 0; trA->maxScore = -999999999; trA->nMatch = 0; trA->nMM = nMMmax + 1;
+                return true;
+            }
+            if ((u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+            if (R[iS] > 3 || G[iG] > 3) continue;
+            if (G[iG] == R[iS]) { nMatch++; Score += scoreMatch; }
+            else { nMM++; Score -= scoreMatch; }
+        }
+        if (iExt > 0) {
+            trA->extendL = iExt; trA->maxScore = Score; trA->nMatch = nMatch; trA->nMM = nMM;
+            return true;
+        }
+        return false;
+    }
+    for (int i = 0; i < (int)L; i++) {
+        iS = dR * i; iG = dG * i;
+        if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+        if (R[iS] > 3 || G[iG] > 3) continue;
+        if (G[iG] == R[iS]) {
+            nMatch++;
+            Score += scoreMatch;
+            if (Score > trA->maxScore) {
+                if (nMM + nMMprev <= mn(pMMmax * double(Lprev + i + 1), double(nMMmax))) {
+                    trA->extendL = i + 1; trA->maxScore = Score; trA->nMatch = nMatch; trA->nMM = nMM;
+                }
+            }
+        } else {
+            if (nMM + nMMprev >= mn(pMMmax * double(Lprev + L), double(nMMmax))) break;
+            nMM++;
+            Score -= scoreMatch;
+        }
+    }
+    return trA->extendL > 0;
+}
+// Transcript::add of an extension result (reset() Transcript: only maxScore, nMatch, nMM are non-zero)
+template <class T> HD inline void addExt(T& t, const Ext& e) { t.maxScore += e.maxScore; t.nMatch += e.nMatch; t.nMM += e.nMM; }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// stitchAlignToTranscript.cpp
+// ---------------------------------------------------------------------------------------------------------------------
+template <class T, int NEX> HD inline int stitchAlignToTranscript(uint rAend, uint gAend, uint rBstart, uint gBstart, uint L, uint iFragB, uint sjAB,
+                                                               const Params& P, const char* R, const GenomeView& gv, T* trA,
+                                                               const uint outFilterMismatchNmaxTotal, bool& ovEx) {
+    if (trA->nExons >= 20) return -1000010;               // MAX_N_EXONS
+    if (trA->nExons >= (uint)NEX) { ovEx = true; return -1000010; }
+    const char* G = gv.G;
+    int Score = 0;
+    if (sjAB != ((uint)-1) && trA->exons[trA->nExons - 1][EX_sjA] == sjAB
+        && trA->exons[trA->nExons - 1][EX_iFrag] == iFragB && rBstart == rAend + 1 && gAend + 1 < gBstart) {
+        if (gv.sjdbMotif[sjAB] == 0 && (L <= gv.sjdbShiftRight[sjAB] || trA->exons[trA->nExons - 1][EX_L] <= gv.sjdbShiftLeft[sjAB])) {
+            return -1000006;
+        }
+        trA->exons[trA->nExons][EX_L] = L;
+        trA->exons[trA->nExons][EX_R] = rBstart;
+        trA->exons[trA->nExons][EX_G] = gBstart;
+        trA->canonSJ[trA->nExons - 1] = gv.sjdbMotif[sjAB];
+        trA->shiftSJ[trA->nExons - 1][0] = gv.sjdbShiftLeft[sjAB];
+        trA->shiftSJ[trA->nExons - 1][1] = gv.sjdbShiftRight[sjAB];
+        trA->sjAnnot[trA->nExons - 1] = 1;
+        trA->sjStr[trA->nExons - 1] = gv.sjdbStrand[sjAB];
+        trA->nExons++;
+        trA->nMatch += L;
+        for (uint ii = rBstart; ii < rBstart + L; ii++) Score += scoreMatch;
+        Score += P.sjdbScore;
+    } else {
+        trA->sjAnnot[trA->nExons - 1] = 0;
+        trA->sjStr[trA->nExons - 1] = 0;
+        if (trA->exons[trA->nExons - 1][EX_iFrag] == iFragB) {
+            uint gBend = gBstart + L - 1;
+            uint rBend = rBstart + L - 1;
+            if (rBend <= rAend) return -1000001;
+            if (gBend <= gAend && trA->exons[trA->nExons - 1][EX_iFrag] == iFragB) return -1000002;
+            if (rBstart <= rAend) {
+                gBstart += rAend - rBstart + 1;
+                rBstart = rAend + 1;
+                L = rBend - rBstart + 1;
+            }
+            for (uint ii = rBstart; ii <= rBend; ii++) Score += scoreMatch;
+            int gGap = gBstart - gAend - 1;
+            int rGap = rBstart - rAend - 1;
+            uint nMatch = L;
+            uint nMM = 0;
+            uint Del = 0, Ins = 0;
+            uint nIns = 0, nDel = 0;
+            int jR = 0;
+            int jCan = 999;
+            uint gBstart1 = gBstart - rGap - 1;
+            if (gGap == 0 && rGap == 0) {
+            } else if (gGap > 0 && rGap > 0 && rGap == gGap) {
+                for (int ii = 1; ii <= rGap; ii++) {
+                    if (G[gAend + ii] < 4 && R[rAend + ii] < 4) {
+                        if (R[rAend + ii] == G[gAend + ii]) { Score += scoreMatch; nMatch++; }
+                        else { Score -= scoreMatch; nMM++; }
+                    }
+                }
+            } else if (gGap > rGap) {
+                nDel = 1;
+                Del = gGap - rGap;
+                if (Del > P.alignIntronMax && P.alignIntronMax > 0) return -1000003;
+                int Score1 = 0;
+                int jR1 = 1;
+                do {
+                    jR1--;
+                    if (R[rAend + jR1] != G[gBstart1 + jR1] && G[gBstart1 + jR1] < 4 && R[rAend + jR1] == G[gAend + jR1]) Score1 -= scoreMatch;
+                } while (Score1 + P.scoreStitchSJshift >= 0 && int(trA->exons[trA->nExons - 1][EX_L]) + jR1 > 1);
+                int maxScore2 = -999999;
+                Score1 = 0;
+                int jPen = 0;
+                do {
+                    if (R[rAend + jR1] == G[gAend + jR1] && R[rAend + jR1] != G[gBstart1 + jR1]) Score1 += scoreMatch;
+                    if (R[rAend + jR1] != G[gAend + jR1] && R[rAend + jR1] == G[gBstart1 + jR1]) Score1 -= scoreMatch;
+                    int jCan1 = -1;
+                    int jPen1 = 0;
+                    int Score2 = Score1;
+                    if (Del >= P.alignIntronMin) {
+                        if (G[gAend + jR1 + 1] == 2 && G[gAend + jR1 + 2] == 3 && G[gBstart1 + jR1 - 1] == 0 && G[gBstart1 + jR1] == 2) { jCan1 = 1; }
+                        else if (G[gAend + jR1 + 1] == 1 && G[gAend + jR1 + 2] == 3 && G[gBstart1 + jR1 - 1] == 0 && G[gBstart1 + jR1] == 1) { jCan1 = 2; }
+                        else if (G[gAend + jR1 + 1] == 2 && G[gAend + jR1 + 2] == 1 && G[gBstart1 + jR1 - 1] == 0 && G[gBstart1 + jR1] == 2) { jCan1 = 3; jPen1 = P.scoreGapGCAG; }
+                        else if (G[gAend + jR1 + 1] == 1 && G[gAend + jR1 + 2] == 3 && G[gBstart1 + jR1 - 1] == 2 && G[gBstart1 + jR1] == 1) { jCan1 = 4; jPen1 = P.scoreGapGCAG; }
+                        else if (G[gAend + jR1 + 1] == 0 && G[gAend + jR1 + 2] == 3 && G[gBstart1 + jR1 - 1] == 0 && G[gBstart1 + jR1] == 1) { jCan1 = 5; jPen1 = P.scoreGapATAC; }
+                        else if (G[gAend + jR1 + 1] == 2 && G[gAend + jR1 + 2] == 3 && G[gBstart1 + jR1 - 1] == 0 && G[gBstart1 + jR1] == 3) { jCan1 = 6; jPen1 = P.scoreGapATAC; }
+                        else { jCan1 = 0; jPen1 = P.scoreGapNoncan; }
+                        Score2 += jPen1;
+                    }
+                    if (maxScore2 < Score2) { maxScore2 = Score2; jR = jR1; jCan = jCan1; jPen = jPen1; }
+                    jR1++;
+                } while (jR1 < int(rBend) - int(rAend));
+                uint jjL = 0, jjR = 0;
+                while (gAend + jR >= jjL && G[gAend - jjL + jR] == G[gBstart1 - jjL + jR] && G[gAend - jjL + jR] < 4 && jjL <= MAX_SJ_REPEAT_SEARCH) jjL++;
+                while (gAend + jjR + jR + 1 < gv.nGenome && G[gAend + jjR + jR + 1] == G[gBstart1 + jjR + jR + 1] && G[gAend + jjR + jR + 1] < 4 && jjR <= MAX_SJ_REPEAT_SEARCH) jjR++;
+                if (jCan <= 0) {
+                    jR -= jjL;
+                    if (int(trA->exons[trA->nExons - 1][EX_L]) + jR < 1) return -1000005;
+                    jjR += jjL;
+                    jjL = 0;
+                }
+                for (int ii = mn(1, jR + 1); ii <= mx(rGap, jR); ii++) {
+                    uint g1 = (ii <= jR) ? (gAend + ii) : (gBstart1 + ii);
+                    if (G[g1] < 4 && R[rAend + ii] < 4) {
+                        if (R[rAend + ii] == G[g1]) {
+                            if (ii >= 1 && ii <= rGap) { Score += scoreMatch; nMatch++; }
+                        } else {
+                            Score -= scoreMatch;
+                            nMM++;
+                            if (ii < 1 || ii > rGap) { Score -= scoreMatch; nMatch--; }
+                        }
+                    }
+                }
+                if (gv.sjdbN > 0) {
+                    uint jS = gAend + jR + 1, jE = gBstart1 + jR;
+                    int sjdbInd = binarySearch2(jS, jE, gv.sjdbStart, gv.sjdbEnd, (int)gv.sjdbN);
+                    if (sjdbInd < 0) {
+                        if (Del >= P.alignIntronMin) {
+                            Score += P.scoreGap + jPen;
+                        } else {
+                            Score += Del * P.scoreDelBase + P.scoreDelOpen;
+                            jCan = -1;
+                            trA->sjAnnot[trA->nExons - 1] = 0;
+                        }
+                    } else {
+                        jCan = gv.sjdbMotif[sjdbInd];
+                        if (gv.sjdbMotif[sjdbInd] == 0) {
+                            if (L <= gv.sjdbShiftLeft[sjdbInd] || trA->exons[trA->nExons - 1][EX_L] <= gv.sjdbShiftLeft[sjdbInd]) return -1000006;
+                            jR += (int)gv.sjdbShiftLeft[sjdbInd];
+                            if (rAend + jR >= rBend) return -1000006;
+                            jjL = gv.sjdbShiftLeft[sjdbInd];
+                            jjR = gv.sjdbShiftRight[sjdbInd];
+                        }
+                        trA->sjAnnot[trA->nExons - 1] = 1;
+                        trA->sjStr[trA->nExons - 1] = gv.sjdbStrand[sjdbInd];
+                        Score += P.sjdbScore;
+                    }
+                } else {
+                    if (Del >= P.alignIntronMin) {
+                        Score += P.scoreGap + jPen;
+                    } else {
+                        Score += Del * P.scoreDelBase + P.scoreDelOpen;
+                        jCan = -1;
+                        trA->sjAnnot[trA->nExons - 1] = 0;
+                    }
+                }
+                trA->shiftSJ[trA->nExons - 1][0] = jjL;
+                trA->shiftSJ[trA->nExons - 1][1] = jjR;
+                trA->canonSJ[trA->nExons - 1] = jCan;
+                if (trA->sjAnnot[trA->nExons - 1] == 0) {
+                    if (jCan > 0) trA->sjStr[trA->nExons - 1] = 2 - jCan % 2;
+                    else trA->sjStr[trA->nExons - 1] = 0;
+                }
+            } else if (rGap > gGap) {
+                Ins = rGap - gGap;
+                nIns = 1;
+                if (gGap == 0) {
+                    jR = 0;
+                } else if (gGap < 0) {
+                    jR = 0;
+                    for (int ii = 0; ii < -gGap; ii++) Score -= scoreMatch;
+                } else {
+                    int Score1 = 0; int maxScore1 = 0;
+                    for (int jR1 = 1; jR1 <= gGap; jR1++) {
+                        if (G[gAend + jR1] < 4) {
+                            Score1 += (R[rAend + jR1] == G[gAend + jR1]) ? scoreMatch : -scoreMatch;
+                            Score1 += (R[rAend + Ins + jR1] == G[gAend + jR1]) ? -scoreMatch : +scoreMatch;
+                        }
+                        if (Score1 > maxScore1 || (Score1 == maxScore1 && P.flushRight)) { maxScore1 = Score1; jR = jR1; }
+                    }
+                    for (int ii = 1; ii <= gGap; ii++) {
+                        uint r1 = rAend + ii + (ii <= jR ? 0 : Ins);
+                        if (G[gAend + ii] < 4 && R[r1] < 4) {
+                            if (R[r1] == G[gAend + ii]) { Score += scoreMatch; nMatch++; }
+                            else { Score -= scoreMatch; nMM++; }
+                        }
+                    }
+                }
+                if (P.flushRight) {
+                    for (; jR < (int)rBend - (int)rAend - (int)Ins; jR++)
+                        if (R[rAend + jR + 1] != G[gAend + jR + 1] || G[gAend + jR + 1] == 4) break;
+                    if (jR == (int)rBend - (int)rAend - (int)Ins) return -1000009;
+                }
+                Score += Ins * P.scoreInsBase + P.scoreInsOpen;
+                jCan = -2;
+            }
+            if ((trA->nMM + nMM) <= outFilterMismatchNmaxTotal
+                && (jCan < 0 || (jCan < 7 && nMM <= (uint)P.alignSJstitchMismatchNmax[(jCan + 1) / 2]))) {
+                trA->nMM += nMM;
+                trA->nMatch += nMatch;
+                if (Del >= P.alignIntronMin) { trA->nGap += nDel; trA->lGap += Del; }
+                else { trA->nDel += nDel; trA->lDel += Del; }
+                if (Del == 0 && Ins == 0) {
+                    trA->exons[trA->nExons - 1][EX_L] += rBend - rAend;
+                } else if (Del > 0) {
+                    trA->exons[trA->nExons - 1][EX_L] += jR;
+                    trA->exons[trA->nExons][EX_L] = rBend - rAend - jR;
+                    trA->exons[trA->nExons][EX_R] = rAend + jR + 1;
+                    trA->exons[trA->nExons][EX_G] = gBstart1 + jR + 1;
+                    trA->nExons++;
+                } else if (Ins > 0) {
+                    trA->nIns += nIns;
+                    trA->lIns += Ins;
+                    trA->exons[trA->nExons - 1][EX_L] += jR;
+                    trA->exons[trA->nExons][EX_L] = rBend - rAend - jR - Ins;
+                    trA->exons[trA->nExons][EX_R] = rAend + jR + Ins + 1;
+                    trA->exons[trA->nExons][EX_G] = gAend + 1 + jR;
+                    trA->canonSJ[trA->nExons - 1] = -2;
+                    trA->sjAnnot[trA->nExons - 1] = 0;
+                    trA->nExons++;
+                }
+            } else {
+                return -1000007;
+            }
+        } else if (gBstart + trA->exons[0][EX_R] + P.alignEndsProtrudeNbasesMax >= trA->exons[0][EX_G] || trA->exons[0][EX_G] < trA->exons[0][EX_R]) {
+            if (P.alignMatesGapMax > 0 && gBstart > trA->exons[trA->nExons - 1][EX_G] + trA->exons[trA->nExons - 1][EX_L] + P.alignMatesGapMax)
+                return -1000004;
+            for (uint ii = rBstart; ii < rBstart + L; ii++) Score += scoreMatch;
+            Ext trExtend;
+            trExtend.extendL = 0; trExtend.maxScore = 0; trExtend.nMatch = 0; trExtend.nMM = 0;
+            if (extendAlign(R, G, rAend + 1, gAend + 1, 1, 1, DEF_readSeqLengthMax, trA->nMatch, trA->nMM, outFilterMismatchNmaxTotal,
+                            P.outFilterMismatchNoverLmax, P.alignEndsTypeExt[trA->exons[trA->nExons - 1][EX_iFrag]][1], &trExtend)) {
+                addExt(*trA, trExtend);
+                Score += trExtend.maxScore;
+                trA->exons[trA->nExons - 1][EX_L] += trExtend.extendL;
+            }
+            trA->exons[trA->nExons][EX_R] = rBstart;
+            trA->exons[trA->nExons][EX_G] = gBstart;
+            trA->exons[trA->nExons][EX_L] = L;
+            trA->nMatch += L;
+            trExtend.extendL = 0; trExtend.maxScore = 0; trExtend.nMatch = 0; trExtend.nMM = 0;
+            uint extlen = P.alignEndsTypeExt[iFragB][1] ? DEF_readSeqLengthMax : gBstart - trA->exons[0][EX_G] + trA->exons[0][EX_R];
+            if (extendAlign(R, G, rBstart - 1, gBstart - 1, -1, -1, extlen, trA->nMatch, trA->nMM, outFilterMismatchNmaxTotal,
+                            P.outFilterMismatchNoverLmax, P.alignEndsTypeExt[iFragB][1], &trExtend)) {
+                addExt(*trA, trExtend);
+                Score += trExtend.maxScore;
+                trA->exons[trA->nExons][EX_R] -= trExtend.extendL;
+                trA->exons[trA->nExons][EX_G] -= trExtend.extendL;
+                trA->exons[trA->nExons][EX_L] += trExtend.extendL;
+            }
+            trA->canonSJ[trA->nExons - 1] = -3;
+            trA->sjAnnot[trA->nExons - 1] = 0;
+            trA->nExons++;
+        } else {
+            return -1000008;
+        }
+    }
+    trA->exons[trA->nExons - 1][EX_iFrag] = iFragB;
+    trA->exons[trA->nExons - 1][EX_sjA] = sjAB;
+    return Score;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// blocksOverlap.cpp
+// ---------------------------------------------------------------------------------------------------------------------
+template <class T> HD inline uint blocksOverlap(const T& t1, const T& t2) {
+    uint i1 = 0, i2 = 0, nOverlap = 0;
+    while (i1 < t1.nExons && i2 < t2.nExons) {
+        uint rs1 = t1.exons[i1][EX_R], rs2 = t2.exons[i2][EX_R];
+        uint re1 = t1.exons[i1][EX_R] + t1.exons[i1][EX_L], re2 = t2.exons[i2][EX_R] + t2.exons[i2][EX_L];
+        uint gs1 = t1.exons[i1][EX_G], gs2 = t2.exons[i2][EX_G];
+        if (rs1 >= re2) i2++;
+        else if (rs2 >= re1) i1++;
+        else if (gs1 - rs1 != gs2 - rs2) {
+            if (re1 >= re2) i2++;
+            if (re2 >= re1) i1++;
+        } else {
+            nOverlap += mn(re1, re2) - mx(rs1, rs2);
+            if (re1 >= re2) i2++;
+            if (re2 >= re1) i1++;
+        }
+    }
+    return nOverlap;
+}
+
+// genomic length score: int(ceil(log2((double)x) * scoreGenomicLengthLog2scale - 0.5)), from host-made breakpoints
+HD inline int genomicLengthScore(const Params& P, uint x) {
+    int v = P.glVal0;
+    for (int k = 0; k < P.glN; k++) { if (x >= P.glBreak[k]) v = P.glVal[k]; else break; }
+    return v;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// stitchWindowAligns.cpp, finalization (the iA >= nA branch). trA is taken by value in STAR: `t` is a copy here.
+// Records into the window's slots (wTr = slotP over slot[]).
+// ---------------------------------------------------------------------------------------------------------------------
+template <class C> HD inline bool finalizeTranscript(const Params& P, const GenomeView& gv, Work<C>& w, int Score, uint tR2, uint tG2,
+                                                  typename Work<C>::T& trA, const char* R, const uint (*WA)[WA_SIZE]) {
+    const uint Lread = w.Lread;
+    Ext trAstep1;
+    int vOrder[2];
+    if (trA.roStr == 0) { vOrder[0] = 0; vOrder[1] = 1; } else { vOrder[0] = 1; vOrder[1] = 0; }   // EXTEND_ORDER 1
+    for (int iOrd = 0; iOrd < 2; iOrd++) {
+        switch (vOrder[iOrd]) {
+        case 0:
+            if (trA.rStart > 0) {
+                trAstep1.extendL = 0; trAstep1.maxScore = 0; trAstep1.nMatch = 0; trAstep1.nMM = 0;
+                uint imate = trA.exons[0][EX_iFrag];
+                if (extendAlign(R, gv.G, trA.rStart - 1, trA.gStart - 1, -1, -1, trA.rStart, tR2 - trA.rStart + 1,
+                                trA.nMM, w.outFilterMismatchNmaxTotal, P.outFilterMismatchNoverLmax,
+                                P.alignEndsTypeExt[imate][(int)(trA.Str != imate)], &trAstep1)) {
+                    addExt(trA, trAstep1);
+                    Score += trAstep1.maxScore;
+                    trA.exons[0][EX_R] = trA.rStart = trA.rStart - trAstep1.extendL;
+                    trA.exons[0][EX_G] = trA.gStart = trA.gStart - trAstep1.extendL;
+                    trA.exons[0][EX_L] += trAstep1.extendL;
+                }
+            }
+            break;
+        case 1:
+            if (tR2 < Lread) {
+                trAstep1.extendL = 0; trAstep1.maxScore = 0; trAstep1.nMatch = 0; trAstep1.nMM = 0;
+                uint imate = trA.exons[trA.nExons - 1][EX_iFrag];
+                if (extendAlign(R, gv.G, tR2 + 1, tG2 + 1, +1, +1, Lread - tR2 - 1, tR2 - trA.rStart + 1,
+                                trA.nMM, w.outFilterMismatchNmaxTotal, P.outFilterMismatchNoverLmax,
+                                P.alignEndsTypeExt[imate][(int)(imate == trA.Str)], &trAstep1)) {
+                    addExt(trA, trAstep1);
+                    Score += trAstep1.maxScore;
+                    tR2 += trAstep1.extendL;
+                    tG2 += trAstep1.extendL;
+                    trA.exons[trA.nExons - 1][EX_L] += trAstep1.extendL;
+                }
+            }
+        }
+    }
+    if (!P.alignSoftClipAtReferenceEnds &&
+        ((trA.exons[trA.nExons - 1][EX_G] + Lread - trA.exons[trA.nExons - 1][EX_R]) > (gv.chrStart[trA.Chr] + gv.chrLength[trA.Chr]) ||
+         trA.exons[0][EX_G] < (gv.chrStart[trA.Chr] + trA.exons[0][EX_R]))) {
+        return true;
+    }
+    trA.rLength = 0;
+    for (uint isj = 0; isj < trA.nExons; isj++) trA.rLength += trA.exons[isj][EX_L];
+    trA.gLength = tG2 + 1 - trA.gStart;
+    for (uint isj = 0; isj < trA.nExons - 1; isj++) {
+        if (trA.canonSJ[isj] >= 0) {
+            if (trA.sjAnnot[isj] == 1) {
+                if ((trA.exons[isj][EX_L] < P.alignSJDBoverhangMin && (isj == 0 || trA.canonSJ[isj - 1] == -3 || (trA.sjAnnot[isj - 1] == 0 && trA.canonSJ[isj - 1] >= 0)))
+                    || (trA.exons[isj + 1][EX_L] < P.alignSJDBoverhangMin && (isj == trA.nExons - 2 || trA.canonSJ[isj + 1] == -3 || (trA.sjAnnot[isj + 1] == 0 && trA.canonSJ[isj + 1] >= 0)))) return true;
+            } else {
+                if (trA.exons[isj][EX_L] < P.alignSJoverhangMin + trA.shiftSJ[isj][0]
+                    || trA.exons[isj + 1][EX_L] < P.alignSJoverhangMin + trA.shiftSJ[isj][1]) return true;
+            }
+        }
+    }
+    if (trA.nExons > 1 && trA.sjAnnot[trA.nExons - 2] == 1 && trA.exons[trA.nExons - 1][EX_L] < P.alignSJDBoverhangMin) return true;
+    uint sjN = 0;
+    trA.intronMotifs[0] = 0; trA.intronMotifs[1] = 0; trA.intronMotifs[2] = 0;
+    trA.sjYes = false;
+    for (uint iex = 0; iex < trA.nExons - 1; iex++) {
+        if (trA.canonSJ[iex] >= 0) { sjN++; trA.intronMotifs[trA.sjStr[iex]]++; trA.sjYes = true; }
+    }
+    if (trA.intronMotifs[1] > 0 && trA.intronMotifs[2] == 0) trA.sjMotifStrand = 1;
+    else if (trA.intronMotifs[1] == 0 && trA.intronMotifs[2] > 0) trA.sjMotifStrand = 2;
+    else trA.sjMotifStrand = 0;
+    if (trA.intronMotifs[1] > 0 && trA.intronMotifs[2] > 0 && P.removeInconsistentStrands) return true;
+    if (sjN > 0 && trA.sjMotifStrand == 0 && P.outSAMstrandFieldType == 1) return true;
+    if (P.intronMotifsFilter == 1) {
+        for (uint iex = 0; iex < trA.nExons - 1; iex++) if (trA.canonSJ[iex] == 0) return true;
+    } else if (P.intronMotifsFilter == 2) {
+        for (uint iex = 0; iex < trA.nExons - 1; iex++) if (trA.canonSJ[iex] == 0 && trA.sjAnnot[iex] == 0) return true;
+    }
+    {
+        uint nsj = 0, exl = 0;
+        for (uint iex = 0; iex < trA.nExons; iex++) {
+            exl += trA.exons[iex][EX_L];
+            if (iex == trA.nExons - 1 || trA.canonSJ[iex] == -3) {
+                if (nsj > 0 && (exl < P.alignSplicedMateMapLmin || exl < (uint)(P.alignSplicedMateMapLminOverLmate * Lread))) return true;   // readLength[iFrag] = Lread (single end)
+                exl = 0; nsj = 0;
+            } else if (trA.canonSJ[iex] >= 0) {
+                nsj++;
+            }
+        }
+    }
+    if (trA.exons[0][EX_iFrag] != trA.exons[trA.nExons - 1][EX_iFrag]) return true;   // mates: not supported (single end)
+    if (P.scoreGenomicLengthLog2scale != 0) {
+        Score += genomicLengthScore(P, trA.exons[trA.nExons - 1][EX_G] + trA.exons[trA.nExons - 1][EX_L] - trA.exons[0][EX_G]);
+        Score = mx(0, Score);
+    }
+    trA.roStart = (trA.roStr == 0) ? trA.rStart : Lread - trA.rStart - trA.rLength;
+    trA.maxScore = Score;
+    if (trA.exons[0][EX_iFrag] == trA.exons[trA.nExons - 1][EX_iFrag]) {
+        trA.iFrag = (int)trA.exons[0][EX_iFrag];
+        w.maxScoreMate[trA.iFrag] = mx(w.maxScoreMate[trA.iFrag], Score);
+    } else {
+        trA.iFrag = -1;
+    }
+    trA.maxScore = Score;   // + variationAdjust = 0 (no variation)
+    typedef typename Work<C>::T T;
+    if (Score + P.outFilterMultimapScoreRange >= w.slot[w.slotP[0]].maxScore
+        || (trA.iFrag >= 0 && Score + P.outFilterMultimapScoreRange >= w.maxScoreMate[trA.iFrag])) {
+        uint iTr = 0;
+        trA.mappedLength = 0;
+        for (uint iex = 0; iex < trA.nExons; iex++) trA.mappedLength += trA.exons[iex][EX_L];
+        while (iTr < w.nWinTr) {
+            const T& old = w.slot[w.slotP[iTr]];
+            uint nOverlap = blocksOverlap(trA, old);
+            uint uNew = trA.mappedLength - nOverlap;
+            uint uOld = old.mappedLength - nOverlap;
+            if (uNew == 0 && Score < old.maxScore) {
+                break;
+            } else if (uOld == 0) {
+                int pTr = w.slotP[iTr];
+                for (uint ii = iTr + 1; ii < w.nWinTr; ii++) w.slotP[ii - 1] = w.slotP[ii];
+                w.nWinTr--;
+                w.slotP[w.nWinTr] = pTr;
+            } else if (uOld > 0 && (uNew > 0 || Score >= old.maxScore)) {
+                iTr++;
+            }
+            // (STAR loops forever if none applies; that needs uOld>0, uNew==0, Score>=old: excluded by the first branch? no:
+            //  uNew==0 && Score>=old && uOld>0 -> third branch. uNew>0 or uOld==0 cover the rest.)
+        }
+        if (iTr == w.nWinTr) {
+            for (iTr = 0; iTr < w.nWinTr; iTr++) {
+                const T& o = w.slot[w.slotP[iTr]];
+                if (Score > o.maxScore || (Score == o.maxScore && trA.gLength < o.gLength)) break;
+            }
+            int pTr = w.slotP[w.nWinTr];
+            for (int ii = (int)w.nWinTr; ii > int(iTr); ii--) w.slotP[ii] = w.slotP[ii - 1];
+            w.slotP[iTr] = pTr;
+            w.slot[w.slotP[iTr]] = trA;
+            if (w.nWinTr < P.alignTranscriptsPerWindowNmax) {
+                if (w.nWinTr + 1 > (uint)C::NWTR) { w.ov = OV_WTR; return false; }
+                w.nWinTr++;
+            }
+        }
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// stitchWindowAligns.cpp, the recursion over aligns (include, then exclude), on an explicit stack.
+// Frame d holds STAR's arguments for the call with iA = d: trA = stack[d], Score, tR2, tG2.
+// ---------------------------------------------------------------------------------------------------------------------
+template <class C> HD inline bool stitchWindowAligns(const Params& P, const GenomeView& gv, Work<C>& w, uint nA, const uint (*WA)[WA_SIZE], const char* R) {
+    typedef typename Work<C>::T T;
+    struct Frame { int Score; uint tR2, tG2; uint8_t phase; };
+    Frame fr[C::NWA + 1];
+    int d = 0;
+    fr[0].Score = 0; fr[0].tR2 = 0; fr[0].tG2 = 0; fr[0].phase = 0;
+    while (d >= 0) {
+        Frame& F = fr[d];
+        uint iA = (uint)d;
+        T& trA = w.stack[d];
+        if (F.phase == 0) {
+            if (iA >= nA && F.tR2 == 0) { d--; continue; }
+            if (iA >= nA) {
+                w.fin = trA;
+                if (!finalizeTranscript(P, gv, w, F.Score, F.tR2, F.tG2, w.fin, R, WA)) return false;
+                d--; continue;
+            }
+            // include this align
+            int dScore = 0;
+            T& trAi = w.stack[d + 1];
+            trAi = trA;
+            if (trA.nExons > 0) {
+                bool ovEx = false;
+                dScore = stitchAlignToTranscript<T, C::NEX>(F.tR2, F.tG2, WA[iA][WA_rStart], WA[iA][WA_gStart], WA[iA][WA_Length], WA[iA][WA_iFrag],
+                                                            WA[iA][WA_sjA], P, R, gv, &trAi, w.outFilterMismatchNmaxTotal, ovEx);
+                if (ovEx) { w.ov = OV_EXONS; return false; }
+            } else {
+                trAi.exons[0][EX_R] = trAi.rStart = WA[iA][WA_rStart];
+                trAi.exons[0][EX_G] = trAi.gStart = WA[iA][WA_gStart];
+                trAi.exons[0][EX_L] = WA[iA][WA_Length];
+                trAi.exons[0][EX_iFrag] = WA[iA][WA_iFrag];
+                trAi.exons[0][EX_sjA] = WA[iA][WA_sjA];
+                trAi.nExons = 1;
+                for (uint ii = 0; ii < WA[iA][WA_Length]; ii++) dScore += scoreMatch;
+                trAi.nMatch = WA[iA][WA_Length];
+            }
+            F.phase = 1;
+            if (dScore > -1000000) {
+                if (WA[iA][WA_Nrep] == 1) trAi.nUnique++;
+                if (WA[iA][WA_Anchor] > 0) trAi.nAnchor++;
+                Frame& N = fr[d + 1];
+                N.Score = F.Score + dScore;
+                N.tR2 = WA[iA][WA_rStart] + WA[iA][WA_Length] - 1;
+                N.tG2 = WA[iA][WA_gStart] + WA[iA][WA_Length] - 1;
+                N.phase = 0;
+                d++;
+                continue;
+            }
+        }
+        if (F.phase == 1) {
+            F.phase = 2;
+            if (WA[iA][WA_Anchor] != 2 || trA.nAnchor > 0) {
+                T& next = w.stack[d + 1];
+                next = trA;
+                Frame& N = fr[d + 1];
+                N.Score = F.Score; N.tR2 = F.tR2; N.tG2 = F.tG2; N.phase = 0;
+                d++;
+                continue;
+            }
+        }
+        d--;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Encoding of the sequence cache (ReadAlign_seqCache.cpp putV, forEachScalar, forEachRow)
+// ---------------------------------------------------------------------------------------------------------------------
+struct Blob {
+    uint8_t* p; int n, cap; bool full;
+    HD void putV(i64 v) {
+        u64 u = ((u64)v << 1) ^ (u64)(v >> 63);
+        while (u >= 0x80) { put((uint8_t)(u | 0x80)); u >>= 7; }
+        put((uint8_t)u);
+    }
+    HD void put(uint8_t b) { if (n < cap) p[n++] = b; else full = true; }
+};
+template <class T> HD inline void encodeTr(Blob& b, const T& t) {
+    b.putV((i64)t.nExons);
+    i64 v[] = {(i64)t.rStart, (i64)t.roStart, (i64)t.rLength, (i64)t.gStart, (i64)t.gLength, (i64)t.cStart,
+               (i64)t.Chr, (i64)t.Str, (i64)t.roStr,
+               (i64)t.nMatch, (i64)t.nMM, (i64)t.mappedLength, (i64)t.extendL,
+               (i64)t.nGap, (i64)t.lGap, (i64)t.nDel, (i64)t.nIns, (i64)t.lDel, (i64)t.lIns, (i64)t.nUnique, (i64)t.nAnchor,
+               (i64)t.intronMotifs[0], (i64)t.intronMotifs[1], (i64)t.intronMotifs[2],
+               (i64)t.maxScore, (i64)t.iFrag, (i64)t.sjMotifStrand, (i64)(t.sjYes ? 1 : 0), (i64)(t.primaryFlag ? 1 : 0)};
+    for (int k = 0; k < (int)(sizeof v / sizeof v[0]); k++) b.putV(v[k]);
+    for (uint iex = 0; iex < t.nExons; iex++) {
+        for (int k = 0; k < EX_SIZE; k++) b.putV((i64)t.exons[iex][k]);
+        if (iex + 1 < t.nExons) {
+            b.putV(t.canonSJ[iex]); b.putV(t.sjAnnot[iex]); b.putV(t.sjStr[iex]);
+            if (t.canonSJ[iex] >= 0) { b.putV((i64)t.shiftSJ[iex][0]); b.putV((i64)t.shiftSJ[iex][1]); }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// One read: ReadAlign::oneRead's mapping part (mapOneRead, multMapSelect, mappedFilter) for a single-end read.
+// R0: Read1[0] (bases 0..3, 4 = N), Lread. Writes the blob; returns the status; sets unmapType and mapMarker.
+// ---------------------------------------------------------------------------------------------------------------------
+template <class C> HD inline Status mapRead(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb,
+                                         const char* R0, uint Lread, Blob& blob) {
+    typedef typename Work<C>::T T;
+    w.ov = OV_NONE;
+    if (Lread > (uint)C::LREAD || Lread == 0) { w.ov = OV_LREAD; return Status::Overflow; }
+    // oneRead: Read1[1] = complement, Read1[2] = reverse complement
+    for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
+    for (uint ii = 0; ii < Lread; ii++) rb.r[2][Lread - ii - 1] = rb.r[1][ii];
+    const char* Read1[3] = {rb.r[0], rb.r[1], rb.r[2]};
+    w.Lread = Lread;
+    w.outFilterMismatchNmaxTotal = mn<uint>(P.outFilterMismatchNmax, (uint)(P.outFilterMismatchNoverReadLmax * (Lread + 0)));
+    // mapOneRead
+    if (Lread > 0) { if (!qualitySplit(Read1[0], Lread, P.maxNsplit, P.seedSplitMin, w)) return Status::Overflow; }
+    else w.Nsplit = 0;
+    // resetN
+    w.mapMarker = 0; w.nA = 0; w.nP = 0; w.nW = 0; w.nTr = 0; w.nUM[0] = w.nUM[1] = 0;
+    w.storedLmin = 0; w.uniqLmax = 0; w.uniqLmaxInd = 0; w.multLmax = 0; w.multLmaxN = 0; w.multNminL = 0; w.multNmin = 0; w.multNmax = 0; w.multNmaxL = 0;
+    w.maxScoreMate[0] = 0;
+    w.trInitRLength = 0;
+    w.trBestKeep = -1; w.trBestScore = 0; w.trBestGLength = 0;     // trBest = trInit (maxScore 0, gLength 0)
+    w.nKeep = 0; w.nWtr = 0; w.trNtotal = 0;
+    uint seedSearchStartLmax = mn<uint>(P.seedSearchStartLmax, (uint)(P.seedSearchStartLmaxOverLread * (Lread - 1)));
+    for (uint ip = 0; ip < w.Nsplit; ip++) {
+        uint Nstart = P.seedSearchStartLmax > 0 && seedSearchStartLmax < w.splitR[1][ip] ? w.splitR[1][ip] / seedSearchStartLmax + 1 : 1;
+        uint Lstart = w.splitR[1][ip] / Nstart;
+        bool flagDirMap = true;
+        for (uint iDir = 0; iDir < 2; iDir++) {
+            uint Lmapped, L;
+            for (uint istart = 0; istart < Nstart; istart++) {
+                if (flagDirMap || istart > 0) {
+                    Lmapped = 0;
+                    while (istart * Lstart + Lmapped + P.seedMapMin < w.splitR[1][ip]) {
+                        uint Shift = iDir == 0 ? (w.splitR[0][ip] + istart * Lstart + Lmapped)
+                                               : (w.splitR[0][ip] + w.splitR[1][ip] - istart * Lstart - 1 - Lmapped);
+                        uint seedLength = w.splitR[1][ip] - Lmapped - istart * Lstart;
+                        maxMappableLength2strands(P, gv, w, Read1, Shift, seedLength, iDir, L, w.splitR[2][ip]);
+                        if (w.ov) return Status::Overflow;
+                        if (iDir == 0 && istart == 0 && Lmapped == 0 && Shift + L == w.splitR[1][ip]) flagDirMap = false;
+                        Lmapped += L;
+                    }
+                }
+                if (P.seedSearchLmax > 0) {
+                    uint Shift = iDir == 0 ? (w.splitR[0][ip] + istart * Lstart) : (w.splitR[0][ip] + w.splitR[1][ip] - istart * Lstart - 1);
+                    uint seedLength = mn<uint>(P.seedSearchLmax, iDir == 0 ? (w.splitR[0][ip] + w.splitR[1][ip] - Shift) : (Shift + 1));
+                    maxMappableLength2strands(P, gv, w, Read1, Shift, seedLength, iDir, L, w.splitR[2][ip]);
+                    if (w.ov) return Status::Overflow;
+                }
+            }
+        }
+    }
+    bool stitched = false;
+    if (Lread < P.outFilterMatchNmin) {
+        w.mapMarker = MARKER_READ_TOO_SHORT; w.trInitRLength = 0; w.nW = 0;
+    } else if (w.Nsplit == 0) {
+        w.mapMarker = MARKER_NO_GOOD_PIECES; w.trInitRLength = w.splitR[1][0]; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA == 0) {
+        w.mapMarker = MARKER_ALL_PIECES_EXCEED_seedMultimapNmax; w.trInitRLength = w.multNminL; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA > 0) {
+        stitched = true;
+    }
+    if (stitched) {
+        // ---- stitchPieces: windows from anchors
+        for (int i = 0; i < C::NWB; i++) w.wbKey[i] = ~0ULL;
+        w.wbN = 0;
+        w.nW = 0;
+        for (uint iP = 0; iP < w.nP; iP++) {
+            if (w.PC[iP][PC_Nrep] <= P.winAnchorMultimapNmax) {
+                uint aDir = w.PC[iP][PC_Dir], aLength = w.PC[iP][PC_Length];
+                for (uint iSA = w.PC[iP][PC_SAstart]; iSA <= w.PC[iP][PC_SAend]; iSA++) {
+                    uint a1 = packed_get(gv.SA, iSA, gv.saBits);
+                    uint aStr = a1 >> gv.GstrandBit;
+                    a1 &= gv.GstrandMask;
+                    if (aDir == 1 && aStr == 0) aStr = 1;
+                    else if (aDir == 0 && aStr == 1) a1 = gv.nGenome - (aLength + a1);
+                    else if (aDir == 1 && aStr == 1) { aStr = 0; a1 = gv.nGenome - (aLength + a1); }
+                    if (a1 >= gv.sjGstart) {
+                        uint a1D, aLengthD, a1A, aLengthA, sj1;
+                        if (sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, sj1)) {
+                            int st = createExtendWindowsWithAlign(P, gv, w, a1D, aStr);
+                            if (st < 0) return Status::Overflow;
+                            if (st == EXIT_TOO_MANY_WINDOWS) break;
+                            st = createExtendWindowsWithAlign(P, gv, w, a1A, aStr);
+                            if (st < 0) return Status::Overflow;
+                            if (st == EXIT_TOO_MANY_WINDOWS) break;
+                        }
+                    } else {
+                        int st = createExtendWindowsWithAlign(P, gv, w, a1, aStr);
+                        if (st < 0) return Status::Overflow;
+                        if (st == EXIT_TOO_MANY_WINDOWS) break;
+                    }
+                }
+            }
+        }
+        // flanks
+        for (uint iWin = 0; iWin < w.nW; iWin++) {
+            if (w.WC[iWin][WC_gStart] <= w.WC[iWin][WC_gEnd]) {
+                uint wb = w.WC[iWin][WC_gStart];
+                for (uint ii = 0; ii < P.winFlankNbins && wb > 0 && gv.chrBin[(wb - 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                    wb--;
+                    if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return Status::Overflow;
+                }
+                w.WC[iWin][WC_gStart] = wb;
+                wb = w.WC[iWin][WC_gEnd];
+                for (uint ii = 0; ii < P.winFlankNbins && wb + 1 < P.winBinN && gv.chrBin[(wb + 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                    wb++;
+                    if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return Status::Overflow;
+                }
+                w.WC[iWin][WC_gEnd] = wb;
+            }
+            w.nWA[iWin] = 0; w.WALrec[iWin] = 0; w.WlastAnchor[iWin] = -1;
+        }
+        w.nWall = w.nW;
+        // aligns to windows (FASTASSIGN path: g_starFastAssign = true in the campaign)
+        for (uint iP = 0; iP < w.nP; iP++) {
+            uint aNrep = w.PC[iP][PC_Nrep], aFrag = w.PC[iP][PC_iFrag], aLength = w.PC[iP][PC_Length], aDir = w.PC[iP][PC_Dir];
+            bool aAnchor = (aNrep <= P.winAnchorMultimapNmax);
+            const uint rS0 = w.PC[iP][PC_rStart], rS1 = Lread - (aLength + rS0);
+            uint strOf[2], rsOf[2];
+            if (aDir == 0) { strOf[0] = 0; rsOf[0] = rS0; strOf[1] = 1; rsOf[1] = rS1; }
+            else { strOf[0] = 1; rsOf[0] = rS1; strOf[1] = 0; rsOf[1] = rS0; }
+            const uint iSAend = w.PC[iP][PC_SAend];
+            for (uint iSA = w.PC[iP][PC_SAstart]; iSA <= iSAend; iSA++) {
+                uint a1 = packed_get(gv.SA, iSA, gv.saBits);
+                const uint s = a1 >> gv.GstrandBit;
+                a1 &= gv.GstrandMask;
+                if (s == 1) a1 = gv.nGenome - (aLength + a1);
+                const uint aStr = strOf[s], aRstart = rsOf[s];
+                if (a1 >= gv.sjGstart) {
+                    uint a1D, aLengthD, a1A, aLengthA, isj1;
+                    if (sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) {
+                        if (!assignAlignToWindow(P, w, a1D, aLengthD, aStr, aNrep, aFrag, aRstart, aAnchor, isj1)) return Status::Overflow;
+                        if (!assignAlignToWindow(P, w, a1A, aLengthA, aStr, aNrep, aFrag, aRstart + aLengthD, aAnchor, isj1)) return Status::Overflow;
+                    }
+                } else if (wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax) {
+                    if (!assignAlignToWindow(P, w, a1, aLength, aStr, aNrep, aFrag, aRstart, aAnchor, (uint)-1)) return Status::Overflow;
+                }
+                if (w.nW == 0 && w.mapMarker == MARKER_TOO_MANY_ANCHORS_PER_WINDOW) break;   // nothing observable follows (see below)
+            }
+            if (w.nW == 0 && w.mapMarker == MARKER_TOO_MANY_ANCHORS_PER_WINDOW) break;
+        }
+        // ---- stitch each window, keep its transcripts; trBest
+        uint iW1 = 0;
+        for (uint iW = 0; iW < w.nW; iW++) {
+            if (w.nWA[iW] == 0) continue;
+            if ((uint)w.WlastAnchor[iW] < w.nWA[iW]) w.WA[iW][w.WlastAnchor[iW]][WA_Anchor] = 2;
+            T& trA = w.stack[0];
+            trA.reset();
+            trA.Chr = 0; trA.Str = 0; trA.roStr = 0; trA.cStart = 0; trA.gLength = 0; trA.nExons = 0;   // trInit
+            trA.rLength = 0;
+            trA.Chr = w.WC[iW][WC_Chr];
+            trA.Str = w.WC[iW][WC_Str];
+            trA.roStr = trA.Str;            // revertStrand = false
+            trA.maxScore = 0;
+            if (w.trNtotal + P.alignTranscriptsPerWindowNmax >= P.alignTranscriptsPerReadNmax) break;   // STAR: warning, stop
+            for (int k = 0; k <= C::NWTR; k++) w.slotP[k] = k;
+            w.slot[0] = trA;
+            w.nWinTr = 0;
+            if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2])) return Status::Overflow;
+            if (w.nWinTr == 0) continue;
+            const T& t0 = w.slot[w.slotP[0]];
+            bool better = t0.maxScore > w.trBestScore || (t0.maxScore == w.trBestScore && t0.gLength < w.trBestGLength);
+            // keep this window's transcripts that can still pass the score range (final maxScore >= running best)
+            int runBest = mx(w.trBestScore, t0.maxScore);
+            int nKeep0 = w.nKeep;
+            for (uint k = 0; k < w.nWinTr; k++) {
+                const T& t = w.slot[w.slotP[k]];
+                if (t.maxScore + P.outFilterMultimapScoreRange >= runBest || (better && k == 0)) {
+                    if (w.nKeep >= C::NKEEP) { w.ov = OV_KEEP; return Status::Overflow; }
+                    w.keep[w.nKeep] = t;
+                    w.keep[w.nKeep].Chr = t0.Chr; w.keep[w.nKeep].Str = t0.Str; w.keep[w.nKeep].roStr = t0.roStr;   // multMapSelect copies [0]'s
+                    w.keepWin[w.nKeep] = (int)iW1;
+                    w.nKeep++;
+                }
+            }
+            if (better) { w.trBestScore = t0.maxScore; w.trBestGLength = t0.gLength; w.trBestKeep = nKeep0; }
+            // drop earlier kept transcripts that fell out of range (never trBest: it has the running best score)
+            if (better) {
+                int j = 0;
+                for (int k = 0; k < w.nKeep; k++) {
+                    if (w.keep[k].maxScore + P.outFilterMultimapScoreRange >= w.trBestScore) {
+                        if (k == w.trBestKeep) w.trBestKeep = j;
+                        if (j != k) { w.keep[j] = w.keep[k]; w.keepWin[j] = w.keepWin[k]; }
+                        j++;
+                    }
+                }
+                w.nKeep = j;
+            }
+            w.trNtotal += w.nWinTr;
+            iW1++;
+        }
+        w.nW = iW1;
+        if (w.trBestScore == 0) {   // trBest->maxScore == 0
+            w.mapMarker = MARKER_NO_GOOD_WINDOW;
+            w.nW = 0;
+        }
+    }
+    // ---- multMapSelect
+    w.nTr = 0;
+    int iBest = -1;
+    if (w.nW > 0) {
+        w.maxScore = w.trBestScore;
+        for (int k = 0; k < w.nKeep; k++) {
+            if (w.keep[k].maxScore + P.outFilterMultimapScoreRange >= w.maxScore) {
+                if (k != (int)w.nTr) { w.keep[w.nTr] = w.keep[k]; }
+                if (k == w.trBestKeep) iBest = (int)w.nTr;
+                w.nTr++;
+            }
+        }
+        if (!(w.nTr > P.outFilterMultimapNmax || w.nTr == 0)) {
+            for (uint iTr = 0; iTr < w.nTr; iTr++) {
+                T& t = w.keep[iTr];
+                t.roStart = t.roStr == 0 ? t.rStart : Lread - t.rStart - t.rLength;
+                t.cStart = t.gStart - gv.chrStart[t.Chr];
+            }
+            if (w.nTr == 1) {
+                w.keep[0].primaryFlag = true;
+            } else {
+                // outMultimapperOrder Old_2.4, outSAMmultNmax -1, outSAMprimaryFlag OneBestScore (checked by the driver)
+                w.keep[iBest].primaryFlag = true;
+            }
+        }
+    }
+    // ---- mappedFilter
+    w.unmapType = -1;
+    if (w.nW == 0) {
+        w.unmapType = 0;
+    } else {
+        const T& b = w.keep[iBest];
+        if ((b.maxScore < P.outFilterScoreMin) || (b.maxScore < (int)(P.outFilterScoreMinOverLread * (Lread - 1)))
+            || (b.nMatch < P.outFilterMatchNmin) || (b.nMatch < (uint)(P.outFilterMatchNminOverLread * (Lread - 1)))) {
+            w.unmapType = 1;
+        } else if ((b.nMM > w.outFilterMismatchNmaxTotal) || (double(b.nMM) / double(b.rLength) > P.outFilterMismatchNoverLmax)) {
+            w.unmapType = 2;
+        } else if (w.nTr > P.outFilterMultimapNmax) {
+            w.unmapType = 3;
+        }
+    }
+    // ---- encode (m5_dump.h record)
+    blob.putV((i64)w.nW); blob.putV((i64)w.nTr); blob.putV((i64)(w.nW > 0 ? iBest : -1));
+    if (w.nW == 0) blob.putV((i64)w.trInitRLength);
+    for (uint i = 0; i < w.nTr; i++) encodeTr(blob, w.keep[i]);
+    if (blob.full) { w.ov = OV_BLOB; return Status::BlobFull; }
+    return Status::Ok;
+}
+
+} // namespace m5

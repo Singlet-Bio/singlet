@@ -8,11 +8,12 @@
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Build `stardump`: the vendored STAR of prod/campaign with ReadAlign_maxMappableLength2strands.cpp replaced by the dumping
-# copy (src/gpu/stardump/). Scratch copy only; src/star in git is untouched. Output: $W/jobs/w11/bin/stardump.
+# copy and ReadAlign_oneRead.cpp by the M5 truth copy (src/gpu/stardump/). Scratch copy only; src/star in git is untouched. Output: $W/jobs/w11/bin/stardump.
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench
 BARE=$W/repos/singlet-py.git; BR=prod/campaign; SD=$W/jobs/w11/stardump
-git -C $BARE fetch -q origin +refs/heads/$BR:refs/w11/campaign   # private ref: never move a checked-out branch
+# fetch by URL (not the remote name) so the remote's mirror refspec does not try to move the checked-out prod/campaign
+git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/w11/campaign
 COMMIT=$(git -C $BARE rev-parse refs/w11/campaign); echo "COMMIT=$COMMIT"
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
 git -C $BARE archive refs/w11/campaign | tar -x -C $SCR/src
@@ -25,6 +26,8 @@ grep -q "sam_hdr_destroy(bam_hdr_t" $S/src/star/bam_cat.c || \
 # swap in the dumping copy (same file name, so STAR's glob compiles it instead of the original)
 cp $SD/ReadAlign_maxMappableLength2strands_dump.cpp $S/src/star/ReadAlign_maxMappableLength2strands.cpp
 cp $SD/dump_format.h $S/src/star/dump_format.h
+cp $SD/ReadAlign_oneRead_dump.cpp $S/src/star/ReadAlign_oneRead.cpp
+cp $SD/m5_dump.h $S/src/star/m5_dump.h
 mkdir -p $S/w11 && cp $SD/stardump_main.cpp $S/w11/
 cat >> $S/src/pipeline/CMakeLists.txt <<'EOF'
 add_executable(stardump ${CMAKE_SOURCE_DIR}/w11/stardump_main.cpp)
