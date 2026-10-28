@@ -1086,7 +1086,7 @@ public:
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (gpu_covers_ && !gpu_handoff_pass(stats)) {
-            std::cerr << "[gpu_pileup] ERROR: hand-off reads could not be read; rerun with SINGLET_GPU_PILEUP unset\n";
+            std::cerr << "[gpu_pileup] ERROR: the hand-off pass failed (see above); rerun with SINGLET_GPU_PILEUP unset\n";
             std::exit(9);
         }
         if (gpu_covers_ && !gpu_pileup_apply(stats)) {   // W11 "on": covered accumulators and counters from the GPU
@@ -1925,6 +1925,11 @@ public:
             std::vector<uint64_t> idx; std::vector<ReadRec> rr; gpu_col_->stream_truth(idx, rr);
             t_bc.assign(H->n_reads, -2); t_u3.assign(H->n_reads, 0);
             for (size_t k = 0; k < idx.size(); ++k) if (idx[k] < H->n_reads) { t_bc[idx[k]] = rr[k].bc; t_u3[idx[k]] = rr[k].umi3; }
+        }
+        // "on": STAR wrote no records for hand-off reads, so none may have reached the collector from the stream
+        if (!check && gpu_col_->n_handoff_reads() != 0) {
+            std::cerr << "[gpu_pileup] hand-off: " << gpu_col_->n_handoff_reads() << " hand-off reads also came through the stream (STAR's skip set differs)\n";
+            return false;
         }
         PileupStats scratch;
         PileupStats& st = check ? scratch : stats;
