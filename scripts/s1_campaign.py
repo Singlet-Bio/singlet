@@ -317,7 +317,7 @@ class S3Store(StoreBase):
         def fetch(span: Tuple[int, int]) -> None:
             a, b = span
             last: Optional[BaseException] = None
-            for attempt in range(4):
+            for attempt in range(8):  # R2 reads from Clipper drop now and then (read timeouts, short bodies)
                 try:
                     kw: Dict[str, Any] = dict(Bucket=bucket, Key=key, Range=f"bytes={a}-{b}")
                     if if_match:
@@ -336,7 +336,7 @@ class S3Store(StoreBase):
                     if _precondition_failed(e):
                         raise LegacyChanged(f"{key} changed while it was being read") from e
                     last = e
-                    time.sleep(min(30, 2 ** attempt))
+                    time.sleep(min(60, 2 ** attempt))
             raise IOError(f"{key} bytes {a}-{b}: {last}")
 
         if not spans:
