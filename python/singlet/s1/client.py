@@ -657,9 +657,7 @@ def open_study(
                     verify=verify,
                     _prefix=_prefix + 1,
                 )
-            raise StudyNotFound(
-                f"no .s1 manifest for {gse} at {t.url(key)}"
-            ) from e
+            raise StudyNotFound(f"no .s1 manifest for {gse} at {t.url(key)}") from e
         except TransportError as e:
             if mp.exists():
                 warnings.warn(
