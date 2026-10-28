@@ -1140,7 +1140,7 @@ public:
                   << stats.umi_duplicate << " dup in "
                   << stats.wall_time_s << "s\n";
 
-        gpudump_write(static_cast<uint32_t>(sam_hdr_nref(hdr)));   // W11 debug (SINGLET_PILEUP_DUMP)
+        gpudump_write(static_cast<uint32_t>(tid_to_chrom_.size()));   // W11 debug (SINGLET_PILEUP_DUMP); hdr is already freed here
         return stats;
     }
 
