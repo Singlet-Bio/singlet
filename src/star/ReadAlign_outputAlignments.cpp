@@ -2,6 +2,7 @@
 #include "ReadAlign.h"
 #include "GlobalVariables.h"
 #include "ErrorWarning.h"
+#include <cstdlib>
 
 void ReadAlign::outputAlignments() {
   
@@ -43,7 +44,13 @@ void ReadAlign::outputAlignments() {
                 ReadAlign::recordSJ(nTr, trMult, chunkOutSJ); //this will set mateMapped
             };            
             
-            ReadAlign::alignedAnnotation();
+            //singlet --engine gpu: with --soloType CB_samTagOut, no GX/GN/sF attributes, no gene counts and no transcriptomic output,
+            //nothing reads the per-read gene annotation (SoloRead::record returns at once for CB_samTagOut), so it is skipped
+            static const bool annotUnused = getenv("SINGLET_ENGINE_GPU") != nullptr && getenv("SINGLET_ENGINE_GPU")[0] == '1'
+                && P.pSolo.type == P.pSolo.SoloTypes::CB_samTagOut && !P.outSAMattrPresent.GX && !P.outSAMattrPresent.GN
+                && !P.outSAMattrPresent.gx && !P.outSAMattrPresent.gn && !P.outSAMattrPresent.sF && !P.quant.geCount.yes && !P.quant.trSAM.yes;
+            if (!annotUnused)
+                ReadAlign::alignedAnnotation();
         };
         PROF_ADD(PROF_outMapped, tOutMapped);
 
