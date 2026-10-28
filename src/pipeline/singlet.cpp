@@ -4908,6 +4908,37 @@ int main(int argc, char* argv[]) {
         std::cerr << "[singlet] .1fq decoded to temp files\n";
     }
 
+    // ── BAM source mode: decided here because the engine copies config (cb_from_cr) when it is built ──
+    // Unsorted streaming is the default wherever the pileup does not need the sorted file: STAR's unsorted
+    // BAM goes through a pipe into the serial pileup (no sort, no index, no CB scan, no BAM on disk; about
+    // 19% less wall, docs/research-beta/ws-w3b-bam-stream.md). STAR writes its corrected CB only into a
+    // sorted BAM, so the pileup takes CB from CR (identical here: .1fq barcodes are whitelist-exact).
+    // The modes below still read the sorted BAM; --sorted-bam forces it everywhere.
+    if (stream_unsorted != 0) {
+        const char* sorted_reason = nullptr;
+        if (!bam_file.empty()) sorted_reason = "the input is an existing BAM";
+        else if (parallel_pileup == 1) sorted_reason = "--parallel-pileup was given";
+        else if (is_atac_mode) sorted_reason = "ATAC fragments are read from the sorted BAM";
+        else if (is_smart_seq2_mode || is_bulk_rna_mode) sorted_reason = "plate/bulk counting reads the sorted BAM";
+        else if (detected_soloType != "CB_UMI_Simple") sorted_reason = "the protocol is not CB_UMI_Simple";
+        else if (tagged_bam_enabled) sorted_reason = "--tagged-bam rewrites the sorted BAM";
+        else if (std::getenv("SINGLET_KEEP_STAR_BAM")) sorted_reason = "SINGLET_KEEP_STAR_BAM keeps the sorted BAM";
+        if (sorted_reason) {
+            if (stream_unsorted == 1)
+                std::cerr << "[singlet] --stream-unsorted ignored: " << sorted_reason << std::endl;
+            stream_unsorted = 0;
+        } else {
+            stream_unsorted = 1;
+            parallel_pileup = 0;
+            std::cerr << "[singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)" << std::endl;
+        }
+    }
+    config.cb_from_cr = (stream_unsorted == 1);
+    if (engine_ptr && config.cb_from_cr) {
+        std::cerr << "ERROR: pileup engine was built before the BAM source mode was decided" << std::endl;
+        return 1;
+    }
+
     // ── Phase 0 (deferred): construct the pileup engine now that the .1fq header has set the strand ──
     if (construct_engine_early && !engine_ptr) {
         engine_ptr = std::make_unique<singlet::PileupEngine>(config);
@@ -6058,33 +6089,7 @@ int main(int argc, char* argv[]) {
 
 
     // ── Phase 1: Set up BAM source ──
-    // Unsorted streaming is the default wherever the pileup does not need the sorted file: STAR's unsorted
-    // BAM goes through a pipe into the serial pileup (no sort, no index, no CB scan, no BAM on disk; about
-    // 19% less wall, docs/research-beta/ws-w3b-bam-stream.md). STAR writes its corrected CB only into a
-    // sorted BAM, so the pileup takes CB from CR (identical here: .1fq barcodes are whitelist-exact).
-    // The modes below still read the sorted BAM; --sorted-bam forces it everywhere.
-    if (stream_unsorted != 0) {
-        const char* sorted_reason = nullptr;
-        if (!bam_file.empty()) sorted_reason = "the input is an existing BAM";
-        else if (parallel_pileup == 1) sorted_reason = "--parallel-pileup was given";
-        else if (is_atac_mode) sorted_reason = "ATAC fragments are read from the sorted BAM";
-        else if (is_smart_seq2_mode || is_bulk_rna_mode) sorted_reason = "plate/bulk counting reads the sorted BAM";
-        else if (detected_soloType != "CB_UMI_Simple") sorted_reason = "the protocol is not CB_UMI_Simple";
-        else if (tagged_bam_enabled) sorted_reason = "--tagged-bam rewrites the sorted BAM";
-        else if (std::getenv("SINGLET_KEEP_STAR_BAM")) sorted_reason = "SINGLET_KEEP_STAR_BAM keeps the sorted BAM";
-        if (sorted_reason) {
-            if (stream_unsorted == 1)
-                std::cerr << "[singlet] --stream-unsorted ignored: " << sorted_reason << std::endl;
-            stream_unsorted = 0;
-        } else {
-            stream_unsorted = 1;
-            parallel_pileup = 0;
-            std::cerr << "[singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)" << std::endl;
-        }
-    }
-    config.cb_from_cr = (stream_unsorted == 1);
-
-    // Sorted path: parallel pileup (sorted BAM to /dev/shm + indexed).
+    // Sorted path (stream_unsorted == 0, decided before the engine is built): parallel pileup (sorted BAM to /dev/shm + indexed).
     // Auto mode: enable when /dev/shm has >=10 GB free and we're running STAR.
     if (parallel_pileup == -1 && bam_file.empty()) {
         struct statvfs svfs;
