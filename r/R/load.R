@@ -455,7 +455,8 @@ singlet_download <- download
 #'   GEO Sample accessions (\code{"GSM..."}) and/or paths to local
 #'   \code{.singlet} bundles or .s1 manifests. Length one or more. A sample
 #'   accession is resolved to its parent Series through the Singlet API; only
-#'   that sample's members are fetched.
+#'   that sample's members are fetched. A local \code{.s1} file written by
+#'   \code{\link{write_s1}} is read with \code{\link{read_s1}}.
 #' @param as Output class: \code{"sce"} (default) for a
 #'   \code{SingleCellExperiment}, or \code{"seurat"} for a \code{Seurat}
 #'   object.
@@ -569,6 +570,9 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
             if (grepl("\\.json$", p, ignore.case = TRUE)) {
                 return(list(manifest = p, gsm = NA_character_))
             }
+            if (grepl("\\.s1$", p, ignore.case = TRUE) && .s1_is_user_object(p)) {
+                return(list(s1 = p, gsm = NA_character_))  # written by write_s1(), not an atlas sample
+            }
             return(list(path = p, gsm = NA_character_))
         }
         gsm <- if (startsWith(acc, "GSM")) acc else NA_character_
@@ -582,6 +586,7 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
     units <- vapply(targets, function(t) {
         if (!is.null(t$gse)) paste0("store:", t$gse)
         else if (!is.null(t$manifest)) paste0("manifest:", t$manifest)
+        else if (!is.null(t$s1)) paste0("s1:", t$s1)
         else t$path
     }, character(1))
     sces <- lapply(unique(units), function(u) {
@@ -593,6 +598,8 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
             .s1_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities, labels = lab)
         } else if (!is.null(t1$manifest)) {
             .s1_load_manifest(t1$manifest, gsms, modalities = modalities, labels = lab)
+        } else if (!is.null(t1$s1)) {
+            read_s1(t1$s1, as = "sce")
         } else {
             .legacy_modalities(.read_singlet_bundle(t1$path, gsms = gsms), modalities)
         }

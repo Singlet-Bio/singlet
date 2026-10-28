@@ -697,6 +697,13 @@ def _load_one(
             adata = _legacy_modalities(bundle.to_anndata(verbose=False), bundle, modalities)
         elif suffix in (".s1", ".s2", ".json"):  # a .s1 sample object or study manifest on disk
             from singlet.s1 import client as _store
+            from singlet.s1.write import is_user_object, read_s1
+
+            if suffix != ".json" and is_user_object(path):  # written by singlet.write_s1, not an atlas sample
+                adata = read_s1(path)
+                if genes is not None:
+                    adata = adata[:, [g for g in genes if g in adata.var_names]].copy()
+                return adata
 
             return _store.load(
                 path,

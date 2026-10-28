@@ -33,6 +33,8 @@ Load data:
     singlet.load(["GSE138867", "GSE146974"]) Load + concatenate several → one AnnData
     singlet.load("GSE138867", genes=["CD3E", "MS4A1"])  Gene symbols or Ensembl ids
     singlet.load_dir("/path/to/quant/GSM") Load a pipeline output directory → AnnData
+    singlet.write_s1(adata, "x.s1")        Write your own counts as a .s1 sample object
+    singlet.load("x.s1")                   ... and read it back exactly (singlet.read_s1)
 
 Format I/O:
     singlet.read_kraken2("gse_dir/")       Read kraken2 microbiome matrix
@@ -160,6 +162,7 @@ from singlet._io import (
 from singlet._knn_impute import knn_impute
 from singlet._leiden import leiden
 from singlet._loader import download, load, load_dir, open_bundle
+from singlet.s1.write import read_s1, write_s1
 from singlet._loader import load_sample as load_sample  # cluster use; not in __all__
 from singlet._louvain import louvain
 from singlet._magic import magic
@@ -274,6 +277,8 @@ __all__ = [
     "SingletBundle",
     "MODALITIES",
     "open_bundle",
+    "write_s1",
+    "read_s1",
     # (gene_programs / project / annotate stay importable so old code gets a
     # clear NotImplementedError, but are no longer advertised.)
     # I/O
