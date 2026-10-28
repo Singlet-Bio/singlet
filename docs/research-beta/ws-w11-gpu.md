@@ -44,6 +44,21 @@ instructed:
   GPU node with 3 samples in flight, every data output identical to `--engine cpu` and **43% less CPU** (23.6 vs 41.1 core-s per M
   read pairs); GPU prefill for pbmc1k_v3 76 s (mapping 16 s). A single sample is not faster yet (468 vs 418 s): the prefill is
   serial before STAR. What binds the node is the CPU stages and per-sample memory (54–74 GB), not the GPU.
+- **Before / after, the night's binary changes** (pbmc1k_v3 unless stated; all measured):
+
+  | | first working build (02:30) | final build (05:00) |
+  |---|---|---|
+  | GPU prefill (read reads, upload, dedup, map, insert) | 130 s | 76 s |
+  | of which GPU mapping / dedup | 48 s / 20 s | 16 s / 1.6 s |
+  | cache hit rate (reads served from GPU results) | 91.9% | 97.4% |
+  | 263 M-pair sample (137 M distinct) | GPU out of memory → CPU mapping | mapped on the GPU in 73 s (16 M-sequence chunks) |
+  | node, 3 samples in flight, CPU used vs `--engine cpu` | −43% (deep sample still on CPU) | −44% (10,224 vs 18,136 core-s) |
+  | node, 6 samples in flight | — | −39% (4,044 vs 6,583 core-s; 21.7 vs 35.3 core-s per M pairs) |
+
+  Changes: sequence-order mapping on the GPU, packed device-to-host copies, cache sized from the results, parallel mmap read
+  parsing, chunking, a per-GPU lock. Projected node rate if a queue keeps the 54 cores busy: 2.49 vs 1.53 M read pairs/s (1.63×).
+  Per-sample cloud cost is still higher on a GPU node (~$0.11 vs ~$0.06 at node-hour prices): the GPUs are idle most of the time
+  until the GPU pileup and non-host stages move into the binary, which is the next step.
 - **Ingest format** (Sonnet subagent): `docs/research-beta/ingest-format.md`, `.1fg` with nvCOMP-decodable zstd chunks, GPU
   reader 0.010–0.014 host core-s per M pairs (6–10× less than `.1fq`), decode identical on 188 M reads.
 - **Profilers:** Nsight Compute could not collect counters on Clipper's GPU nodes; Nsight Systems is not in the CUDA 12.4 image.
