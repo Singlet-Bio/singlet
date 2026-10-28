@@ -242,63 +242,74 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         rep.swap(r2);
     }
     out.secDedup = now() - t0;
-    // ---- lanes
-    t0 = now();
-    Lane A, M, B;
-    if (!runLane<LaneA>(P, D, dSeq, dOff, rep, 262144, 1024, A, err)) return fail(err);
-    std::vector<uint32_t> repM, posM;
-    for (u64 k = 0; k < rep.size(); k++) if (A.status[k] != (uint8_t)Status::Ok) { repM.push_back(rep[k]); posM.push_back((uint32_t)k); }
-    if (!runLane<LaneM>(P, D, dSeq, dOff, repM, 262144, 2048, M, err)) return fail(err);
-    std::vector<uint32_t> repB, posB;
-    for (u64 k = 0; k < repM.size(); k++) if (M.status[k] != (uint8_t)Status::Ok) { repB.push_back(repM[k]); posB.push_back(posM[k]); }
-    if (!runLane<LaneB>(P, D, dSeq, dOff, repB, 65536, 2048, B, err)) return fail(err);
-    out.secMapGpu = now() - t0;
-    // where each result is: 0 = A, 1 = M, 2 = B, 3 = host
-    std::vector<uint8_t> lane(rep.size(), 0); std::vector<uint32_t> lpos(rep.size());
-    for (u64 k = 0; k < rep.size(); k++) lpos[k] = (uint32_t)k;
-    for (u64 k = 0; k < repM.size(); k++) { lane[posM[k]] = 1; lpos[posM[k]] = (uint32_t)k; }
-    std::vector<uint32_t> repH, posH;
-    for (u64 k = 0; k < repB.size(); k++) {
-        lane[posB[k]] = 2; lpos[posB[k]] = (uint32_t)k;
-        if (B.status[k] != (uint8_t)Status::Ok) { repH.push_back(repB[k]); posH.push_back(posB[k]); lane[posB[k]] = 3; lpos[posB[k]] = (uint32_t)(repH.size() - 1); }
-    }
-    // ---- host lane (STAR's limits)
-    t0 = now();
-    std::vector<std::vector<uint8_t>> hout(repH.size()); std::vector<uint8_t> hst(repH.size(), 0);
-    {
-        std::atomic<u64> next{0};
-        int nt = std::max(1, hostThreads);
-        std::vector<std::thread> th;
-        for (int t = 0; t < nt; t++) th.emplace_back([&]() {
-            Work<Heavy>* w = new Work<Heavy>; memset((void*)w, 0, sizeof(Work<Heavy>));
-            ReadBuf<Heavy::LREAD>* b = new ReadBuf<Heavy::LREAD>;
-            std::vector<uint8_t> buf(Heavy::NBLOB);
-            for (u64 k; (k = next++) < repH.size();) {
-                u64 i = repH[k];
-                Blob bl{buf.data(), 0, Heavy::NBLOB, false};
-                Status s = mapRead(P, H, *w, *b, in.seq.data() + in.off[i], (m5::uint)(in.off[i + 1] - in.off[i]), bl);
-                hst[k] = (uint8_t)s; hout[k].assign(buf.data(), buf.data() + bl.n);
-            }
-            delete w; delete b;
-        });
-        for (auto& x : th) x.join();
-    }
-    out.secHostLane = now() - t0;
-    out.nHostLane = repH.size();
-    // ---- records
-    for (u64 k = 0; k < rep.size(); k++) {
-        const uint8_t* p; u64 len; bool ok = true;
-        uint32_t q = lpos[k];
-        switch (lane[k]) {
-            case 0: p = A.out.data() + (u64)q * LaneA::NBLOB; len = A.len[q]; break;
-            case 1: p = M.out.data() + (u64)q * LaneM::NBLOB; len = M.len[q]; break;
-            case 2: p = B.out.data() + (u64)q * LaneB::NBLOB; len = B.len[q]; break;
-            default: p = hout[q].data(); len = hout[q].size(); ok = hst[q] == (uint8_t)Status::Ok; break;
+    // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
+    u64 nGpuMapped = 0;
+    auto processChunk = [&](const std::vector<uint32_t>& repc) -> bool {
+        // ---- lanes
+        double tc0 = now();
+        Lane A, M, B;
+        if (!runLane<LaneA>(P, D, dSeq, dOff, repc, 262144, 1024, A, err)) return false;
+        std::vector<uint32_t> repM, posM;
+        for (u64 k = 0; k < repc.size(); k++) if (A.status[k] != (uint8_t)Status::Ok) { repM.push_back(repc[k]); posM.push_back((uint32_t)k); }
+        if (!runLane<LaneM>(P, D, dSeq, dOff, repM, 262144, 2048, M, err)) return false;
+        std::vector<uint32_t> repB, posB;
+        for (u64 k = 0; k < repM.size(); k++) if (M.status[k] != (uint8_t)Status::Ok) { repB.push_back(repM[k]); posB.push_back(posM[k]); }
+        if (!runLane<LaneB>(P, D, dSeq, dOff, repB, 65536, 2048, B, err)) return false;
+        out.secMapGpu += now() - tc0;
+        // where each result is: 0 = A, 1 = M, 2 = B, 3 = host
+        std::vector<uint8_t> lane(repc.size(), 0); std::vector<uint32_t> lpos(repc.size());
+        for (u64 k = 0; k < repc.size(); k++) lpos[k] = (uint32_t)k;
+        for (u64 k = 0; k < repM.size(); k++) { lane[posM[k]] = 1; lpos[posM[k]] = (uint32_t)k; }
+        std::vector<uint32_t> repH, posH;
+        for (u64 k = 0; k < repB.size(); k++) {
+            lane[posB[k]] = 2; lpos[posB[k]] = (uint32_t)k;
+            if (B.status[k] != (uint8_t)Status::Ok) { repH.push_back(repB[k]); posH.push_back(posB[k]); lane[posB[k]] = 3; lpos[posB[k]] = (uint32_t)(repH.size() - 1); }
         }
-        if (!ok) { out.nFailed++; continue; }   // not cached: STAR maps it
-        u64 i = rep[k];
-        out.seq.insert(out.seq.end(), in.seq.data() + in.off[i], in.seq.data() + in.off[i + 1]); out.seqOff.push_back(out.seq.size());
-        out.blob.insert(out.blob.end(), p, p + len); out.blobOff.push_back(out.blob.size());
+        // ---- host lane (STAR's limits)
+        double th0 = now();
+        std::vector<std::vector<uint8_t>> hout(repH.size()); std::vector<uint8_t> hst(repH.size(), 0);
+        {
+            std::atomic<u64> next{0};
+            int nt = std::max(1, hostThreads);
+            std::vector<std::thread> th;
+            for (int t = 0; t < nt; t++) th.emplace_back([&]() {
+                Work<Heavy>* w = new Work<Heavy>; memset((void*)w, 0, sizeof(Work<Heavy>));
+                ReadBuf<Heavy::LREAD>* b = new ReadBuf<Heavy::LREAD>;
+                std::vector<uint8_t> buf(Heavy::NBLOB);
+                for (u64 k; (k = next++) < repH.size();) {
+                    u64 i = repH[k];
+                    Blob bl{buf.data(), 0, Heavy::NBLOB, false};
+                    Status s = mapRead(P, H, *w, *b, in.seq.data() + in.off[i], (m5::uint)(in.off[i + 1] - in.off[i]), bl);
+                    hst[k] = (uint8_t)s; hout[k].assign(buf.data(), buf.data() + bl.n);
+                }
+                delete w; delete b;
+            });
+            for (auto& x : th) x.join();
+        }
+        out.secHostLane += now() - th0;
+        out.nHostLane += repH.size();
+        // ---- records
+        for (u64 k = 0; k < repc.size(); k++) {
+            const uint8_t* p; u64 len; bool ok = true;
+            uint32_t q = lpos[k];
+            switch (lane[k]) {
+                case 0: p = A.out.data() + (u64)q * LaneA::NBLOB; len = A.len[q]; break;
+                case 1: p = M.out.data() + (u64)q * LaneM::NBLOB; len = M.len[q]; break;
+                case 2: p = B.out.data() + (u64)q * LaneB::NBLOB; len = B.len[q]; break;
+                default: p = hout[q].data(); len = hout[q].size(); ok = hst[q] == (uint8_t)Status::Ok; break;
+            }
+            if (!ok) { out.nFailed++; continue; }   // not cached: STAR maps it
+            u64 i = repc[k];
+            out.seq.insert(out.seq.end(), in.seq.data() + in.off[i], in.seq.data() + in.off[i + 1]); out.seqOff.push_back(out.seq.size());
+            out.blob.insert(out.blob.end(), p, p + len); out.blobOff.push_back(out.blob.size());
+        }
+        nGpuMapped += repc.size() - repH.size();
+        return true;
+    };
+    const u64 CHUNK = 16u << 20;
+    for (u64 c0 = 0; c0 < rep.size(); c0 += CHUNK) {
+        std::vector<uint32_t> repc(rep.begin() + c0, rep.begin() + std::min<u64>(rep.size(), c0 + CHUNK));
+        if (!processChunk(repc)) return fail(err);
     }
     cudaFree(dG1); cudaFree(dSA); cudaFree(dSAi); cudaFree(dSeq); cudaFree(dOff);
     cudaFree(dcs); cudaFree(dcl); cudaFree(dcb); cudaFree(dss); cudaFree(dse); cudaFree(dsd); cudaFree(dsa);
@@ -306,7 +317,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     char line[512];
     snprintf(line, sizeof line, "engine_gpu: %llu reads, %llu distinct (%llu with N), mapped on the GPU %llu, host lane %llu (%.2f s), not mapped %llu; "
              "upload %.2f s, dedup %.2f s, GPU mapping %.2f s\n", (unsigned long long)out.nReads, (unsigned long long)out.nDistinct,
-             (unsigned long long)out.nWithN, (unsigned long long)(rep.size() - repH.size()), (unsigned long long)repH.size(), out.secHostLane,
+             (unsigned long long)out.nWithN, (unsigned long long)nGpuMapped, (unsigned long long)out.nHostLane, out.secHostLane,
              (unsigned long long)out.nFailed, out.secUpload, out.secDedup, out.secMapGpu);
     out.log += line;
     return true;
