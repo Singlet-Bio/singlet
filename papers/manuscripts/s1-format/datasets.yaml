@@ -502,7 +502,8 @@ datasets:
   matrices: [{name: rna, value: umi}]
   license: public (GEO)
   verify: false   # URL checked live 2026-10-28
-  notes: GEO values are UMI-corrected transcript estimates and can be non-integer; canon.py rejects the matrix if so
+  excluded: "no integer count matrix is public: every non-zero of the GEO table (GSE85241) and of the scRNAseq Bioconductor copy (gypsum muraro-pancreas-2016/2023-12-19) is a UMI-saturation-corrected estimate (e.g. 1.00196, 2.00785), checked 2026-10-28"
+  notes: GEO values are UMI-corrected transcript estimates; plate_umi keeps Smart-seq3 and MARS-seq.
     (then use the scRNAseq Bioconductor MuraroPancreasData() counts, which are the same table rounded by the authors).
 
 # ------------------------------------------------------------------ spatial, sequencing based

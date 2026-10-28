@@ -127,7 +127,10 @@ def select_units(cfg: Config, which: str, include_extensions: bool = False, load
         if bad:
             raise SystemExit(f"unknown dataset id(s): {', '.join(bad)}")
         ds = [d for d in load_datasets(cfg, True) if d["id"] in ids]
-    return [Unit(d, m) for d in ds for m in d["matrices"]]
+    dropped = [d["id"] for d in ds if d.get("excluded")]
+    if dropped:
+        log(f"excluded (see datasets.yaml): {', '.join(dropped)}")
+    return [Unit(d, m) for d in ds if not d.get("excluded") for m in d["matrices"]]
 
 
 # ----------------------------------------------------------------------------------------------- canonical matrix
