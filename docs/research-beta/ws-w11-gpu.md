@@ -109,6 +109,32 @@ instructed:
   --budget-b 2048 --batch-a 262144 --batch-m 262144 --batch-b 65536`. Whole sample: `bench/gpu/m5/inject/inject_build.sbatch`,
   then `e2e.sbatch` (`SET`, `RUNS="ref ref2 verify gpu"`).
 
+## Milestone 1 (2026-10-28, morning): non-host on the GPU and STAR's per-read pass, PR #66 build 0027286f
+
+All numbers below are measured, except where labelled.
+
+| | before (06:00 build) | after | job |
+|---|---|---|---|
+| core-s per M read pairs, one sample (`--engine gpu`; `--engine cpu` 36.2) | 20.2 | **15.8** | 790022, 790058 |
+| node, 6 samples in flight: `--engine gpu` vs `--engine cpu` core-s per M pairs | 21.7 vs 35.3 (−39%) | **17.6 vs 35.2 (−50%)** | 789997, 790056 |
+| node, 3 samples in flight | 23.2 vs 41.1 (−44%) | **20.4 vs 41.1 (−50%)** | 789966, 790055 |
+| makespan, 6 samples | 770 vs 754 s | **695 vs 756 s** | 790056 |
+| single-sample wall, 9 threads | 541 s (both) | **436 vs 544 s** | 790058 |
+| STAR cache hit rate | 97.44% | 99.99% | 790048 |
+| $ per 122 M-pair sample, GPU node vs CPU node (modelled) | $0.12 vs $0.064 | $0.088–0.102 vs $0.064 | derived |
+
+- **Gates:** identity PASS (verify mode: 66.5 M GPU results, 0 mismatches; job 790057). Every data output identical in both node
+  runs, except D4b: GSM7036403's non-host EM files follow the order of the EM's input reads, which already varies between CPU runs.
+- **CPU-only build unchanged** (job 790059): it matches `prod/campaign` up to the files that differ between two `prod/campaign`
+  runs.
+- **Decisions:**
+  - Profile before porting. The stage profile showed STAR's per-read pass at 63% of the GPU path's CPU, the pileup at 7.6% and
+    non-host at 5%.
+  - Three STAR changes, all `--engine gpu` only and identical in output: an 8-way cache index, no chunk prefix sort, no unused
+    gene annotation.
+  - GPU non-host is in the binary. Read binning in M5 measured no gain and was reverted in the engine.
+  - The GPU pileup waits for an order-exact record stream; the inventory is below.
+
 ## Draft for Zach: request to GVSU HPC (GPU profiling on Clipper)
 
 > Subject: Clipper GPU nodes: user access to GPU performance counters and Nsight Systems
