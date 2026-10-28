@@ -49,7 +49,7 @@ library(singlet)
 
 Pass a GEO Series accession to `singlet_load()`. The study's manifest and the
 parts of its sample objects that hold the count matrices are fetched from
-<https://data.singlet.bio>, cached locally, and assembled into a
+`https://data.singlet.bio`, cached locally, and assembled into a
 `SingleCellExperiment`.
 
 ```{r load-one}
