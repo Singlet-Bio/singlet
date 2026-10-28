@@ -461,6 +461,7 @@ static std::string sha_out(const Outputs& o) {
     s.update(o.sjtab.data(), o.sjtab.size() * 12); return s.hex(); }
 struct SjKey { uint32_t cell, tid, donor, acc, val; bool operator<(const SjKey& o) const { return std::tie(cell, tid, donor, acc) < std::tie(o.cell, o.tid, o.donor, o.acc); } };
 
+#ifndef PILEUP_NO_MAIN   // defined when linked into singlet (src/engine_gpu/pileup_gpu.cu)
 int main(int argc, char** argv) {
     std::string rec, dump, label = "pileup", json; int reps = 3; double arena_gb = 80;
     for (int i = 1; i < argc; i++) { std::string a = argv[i]; auto nx = [&]() { if (i + 1 >= argc) die("missing value"); return std::string(argv[++i]); };
@@ -543,3 +544,4 @@ int main(int argc, char** argv) {
     bool all = is_identical(c_exon) && is_identical(c_intr) && is_identical(c_amb) && is_identical(c_sj) && is_identical(c_ad) && is_identical(c_dp) && is_identical(c_mt) && is_identical(c_mtr) && ind_same;
     return all ? 0 : 3;
 }
+#endif // PILEUP_NO_MAIN
