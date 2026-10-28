@@ -288,7 +288,9 @@ class S1Stream:
         it = np.int32 if indptr[-1] < 2**31 else np.int64  # torch wants crow and col indices in one dtype
         crow = torch.from_numpy(indptr.astype(it, copy=False))
         col = torch.from_numpy(indices.astype(it, copy=False))
-        return torch.sparse_csr_tensor(crow, col, torch.from_numpy(data), size=(len(indptr) - 1, self.n_genes))
+        return torch.sparse_csr_tensor(
+            crow, col, torch.from_numpy(data), size=(len(indptr) - 1, self.n_genes), check_invariants=False
+        )
 
     def cells(self, c0: int, c1: int):
         """Cells ``[c0, c1)`` as a scipy CSR matrix (cells x genes, float32)."""

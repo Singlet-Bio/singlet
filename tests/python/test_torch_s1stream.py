@@ -27,9 +27,10 @@ from test_s1_write import random_counts  # noqa: E402
 
 @pytest.fixture(scope="module")
 def big(tmp_path_factory):
-    """3,000 cells x 2,000 genes, about 300k non-zeros: several chunks, so a subset of cells is a subset of the bytes."""
+    """3,000 cells x 2,000 genes at 25% density, about 1.5M non-zeros in some 30 chunks: a block of cells is a small part of the
+    bytes, next to the fixed prefix (header, chunk index, tables, names)."""
     d = tmp_path_factory.mktemp("s1stream")
-    x, genes, cells = random_counts(3000, 2000, 0.05, seed=11)
+    x, genes, cells = random_counts(3000, 2000, 0.25, seed=11)
     p = singlet.write_s1(x, d / "big.s1", genes=genes, barcodes=cells)
     return p, sp.csr_matrix(x), genes, cells
 
@@ -61,8 +62,10 @@ def test_stream_over_http_reads_only_needed_bytes(big):
         s = S1Stream(f"{url}/{p.name}", order="canonical")
         blocks = [(1500, 1564)]
         assert np.array_equal(s.batch(blocks).to_dense().numpy(), _rows(x, blocks))
-        assert s.bytes_fetched < p.stat().st_size / 2
+        one = s.bytes_fetched
         assert s.requests <= 3
+        s.batch([(0, 3000)])
+        assert one < s.bytes_fetched / 4  # one block costs a fraction of reading every cell
 
 
 def test_block_batches():
