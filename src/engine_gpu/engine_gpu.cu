@@ -167,6 +167,15 @@ bool available(std::string* why) {
     return true;
 }
 
+std::string deviceId(int device) {
+    char b[64] = {0};
+    if (cudaDeviceGetPCIBusId(b, sizeof b, device) != cudaSuccess) return "dev" + std::to_string(device);
+    std::string s(b);
+    for (auto& c : s) if (c == ':' || c == '.') c = '_';
+    return s;
+}
+int deviceCount() { int n = 0; if (cudaGetDeviceCount(&n) != cudaSuccess) return 0; return n; }
+
 bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
                  Output& out) {
     std::string err;
@@ -220,10 +229,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // ---- lanes
     t0 = now();
     Lane A, M, B;
-    if (!runLane<LaneA>(P, D, dSeq, dOff, rep, 524288, 1024, A, err)) return fail(err);
+    if (!runLane<LaneA>(P, D, dSeq, dOff, rep, 262144, 1024, A, err)) return fail(err);
     std::vector<uint32_t> repM, posM;
     for (u64 k = 0; k < rep.size(); k++) if (A.status[k] != (uint8_t)Status::Ok) { repM.push_back(rep[k]); posM.push_back((uint32_t)k); }
-    if (!runLane<LaneM>(P, D, dSeq, dOff, repM, 393216, 2048, M, err)) return fail(err);
+    if (!runLane<LaneM>(P, D, dSeq, dOff, repM, 262144, 2048, M, err)) return fail(err);
     std::vector<uint32_t> repB, posB;
     for (u64 k = 0; k < repM.size(); k++) if (M.status[k] != (uint8_t)Status::Ok) { repB.push_back(repM[k]); posB.push_back(posM[k]); }
     if (!runLane<LaneB>(P, D, dSeq, dOff, repB, 65536, 2048, B, err)) return fail(err);

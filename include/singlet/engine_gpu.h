@@ -31,6 +31,8 @@ struct Output {
 
 // true if a CUDA device of compute capability >= 8.0 is usable
 bool available(std::string* why = nullptr);
+int deviceCount();
+std::string deviceId(int device);   // PCI bus id, e.g. 0000:4e:00.0
 
 // map the distinct sequences of `in` on device `device`; the host lane (reads past the GPU lanes' capacities) uses
 // `hostThreads` threads. `host` holds host pointers to STAR's genome and suffix arrays (G with its 200-byte padding on each side).
