@@ -1671,6 +1671,19 @@ def ensure_object(ctx: Ctx, key: str, path: Path, d: FileDigest, *, readback: st
     raise StudyFailure("upload_failed", "upload", f"{key}: {type(last).__name__}: {last}")
 
 
+def _withheld_cell_data(sample: dict) -> bool:
+    """A manifest sample entry whose object still carries per-cell mtDNA or doublet data (an mt/ member, mts_* / dbl_* /
+    qc_doublet_score cells columns); the don_* donor columns are public."""
+    mm = sample.get("members") or {}
+    if any(n.startswith("mt/") or "doublet" in n for n in mm):
+        return True
+    for c in (mm.get("cells") or {}).get("columns") or []:
+        name = c if isinstance(c, str) else str((c or {}).get("name", ""))
+        if name.startswith(("mts_", "dbl_")) or ("doublet" in name and not name.startswith("don_")):
+            return True
+    return False
+
+
 def check_done(ctx: Ctx, gse: str, legacy: Head) -> Optional[dict]:
     """The result row of a study that is already migrated against exactly this legacy object, else None."""
     mh = ctx.store.head(ctx.public, manifest_key(gse))
@@ -1687,6 +1700,8 @@ def check_done(ctx: Ctx, gse: str, legacy: Head) -> Optional[dict]:
         return None  # migrated under another policy version or layer list (or none): redo it
     if ctx.labels and (m.get("transcode") or {}).get("labels") != "cells-table+sidecar/1":
         return None  # transcoded without the labels in the cells tables: redo it
+    if ctx.policy is not None and any(_withheld_cell_data(s) for s in m["samples"]):
+        return None  # written before the policy stripped per-cell mtDNA / doublet data: redo it
 
     def present(s: dict) -> bool:
         h = ctx.store.head(ctx.public, s.get("key", ""))
