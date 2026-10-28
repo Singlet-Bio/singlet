@@ -54,7 +54,7 @@ gpu = ["cupy-cuda12x>=13.0"]
 zarr = ["zarr>=2.12"]
 tiledb = ["tiledbsoma>=1.4"]
 # The local MCP server is written against the 1.x SDK (mcp.server.Server).
-mcp = ["mcp>=1.0,<2"]
+mcp = ["mcp>=2.3.0,<3"]
 # The .s1 migration computes called_ed (python/singlet/s1/cellcall.py), whose Monte Carlo loop is compiled with numba.
 migrate = ["numba>=0.57"]
 # Optional algorithm packages some analysis functions use when present
