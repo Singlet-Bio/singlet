@@ -105,10 +105,14 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
     // Only include reads with ≥1 hit above the soft threshold (as captured in MultiHit).
     // Merge viral_hits and microbial_hits per read; take max rate if a species appears in both.
 
+    // Order-free (docs/research-beta/order-free-rules.md R8): the result must not depend on the order of
+    // the reads (STAR's unmapped output order varies with threads). Each read becomes a sparse vector of
+    // (species_id, hit_rate) sorted by species_id; reads are then sorted by that content and species
+    // indexed in species_id order, so every sum below runs over the same sequence in every run.
     std::unordered_map<uint32_t, uint32_t> species_to_idx;  // species_id → sequential index
     std::vector<uint32_t>                  idx_to_species;   // sequential index → species_id
 
-    // Per-read sparse vectors: each element = (species_idx, hit_rate)
+    // Per-read sparse vectors: each element = (species_id, hit_rate) until canonicalised, then (species_idx, hit_rate)
     // Only reads with ≥1 hit are included.
     std::vector<std::vector<std::pair<uint32_t, float>>> read_hits;
     read_hits.reserve(multi_hits.size());
@@ -136,23 +140,26 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
 
         if (merged.empty()) continue;
 
-        // Assign sequential indices to newly seen species
         std::vector<std::pair<uint32_t, float>> sparse;
         sparse.reserve(merged.size());
-        for (const auto& [sid, rate] : merged) {
-            if (rate <= 0.0f) continue;
-            auto it = species_to_idx.find(sid);
-            if (it == species_to_idx.end()) {
-                uint32_t k = static_cast<uint32_t>(idx_to_species.size());
-                species_to_idx.emplace(sid, k);
-                idx_to_species.push_back(sid);
-                sparse.emplace_back(k, rate);
-            } else {
-                sparse.emplace_back(it->second, rate);
-            }
-        }
+        for (const auto& [sid, rate] : merged)
+            if (rate > 0.0f) sparse.emplace_back(sid, rate);
+        std::sort(sparse.begin(), sparse.end());
         if (!sparse.empty())
             read_hits.push_back(std::move(sparse));
+    }
+
+    // Canonical order (R8): reads by content, species by id
+    std::sort(read_hits.begin(), read_hits.end());
+    {
+        for (const auto& rs : read_hits)
+            for (const auto& [sid, h] : rs) { (void)h; species_to_idx.emplace(sid, 0u); }
+        idx_to_species.reserve(species_to_idx.size());
+        for (const auto& [sid, k] : species_to_idx) { (void)k; idx_to_species.push_back(sid); }
+        std::sort(idx_to_species.begin(), idx_to_species.end());
+        for (uint32_t k = 0; k < idx_to_species.size(); ++k) species_to_idx[idx_to_species[k]] = k;
+        for (auto& rs : read_hits)
+            for (auto& [sid, h] : rs) { (void)h; sid = species_to_idx[sid]; }
     }
 
     const uint32_t K = static_cast<uint32_t>(idx_to_species.size());
@@ -290,10 +297,11 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
         result.push_back(sa);
     }
 
-    // Sort descending by relative_abundance
+    // Sort descending by relative_abundance, ties by species_id (R8)
     std::sort(result.begin(), result.end(),
               [](const SpeciesAbundance& a, const SpeciesAbundance& b) {
-                  return a.relative_abundance > b.relative_abundance;
+                  if (a.relative_abundance != b.relative_abundance) return a.relative_abundance > b.relative_abundance;
+                  return a.species_id < b.species_id;
               });
 
     return result;

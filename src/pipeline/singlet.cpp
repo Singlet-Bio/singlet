@@ -1513,21 +1513,42 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // when mapping rate is near-zero and nearly all reads are unmapped.
         // EM deconvolution is statistical — 20M reads is more than sufficient for
         // species-level classification (even 1M would suffice).
+        // The sample above the cap is fixed by the read name, not by file order (STAR writes unmapped reads in
+        // thread-dependent order; order-free-rules R8): keep reads whose name hash is below a threshold that
+        // halves whenever the kept set exceeds the cap. The kept set depends only on the set of reads.
         static constexpr size_t MAX_NONHOST_READS = 20'000'000;
         std::vector<std::string> reads;
+        bool nonhost_subsampled = false;
         {
+            std::vector<std::pair<uint64_t, std::string>> kept;
+            uint64_t thr = UINT64_MAX;
             std::ifstream fq(mate1_path);
             std::string name_l, seq_l, plus_l, qual_l;
             while (std::getline(fq, name_l) && std::getline(fq, seq_l) &&
                    std::getline(fq, plus_l) && std::getline(fq, qual_l)) {
-                if (!seq_l.empty()) reads.push_back(seq_l);
-                if (reads.size() >= MAX_NONHOST_READS) break;
+                if (seq_l.empty()) continue;
+                size_t e = name_l.find_first_of(" \t");
+                uint64_t h = 14695981039346656037ULL;   // FNV-1a of the read name
+                for (size_t i = 1; i < (e == std::string::npos ? name_l.size() : e); ++i) {
+                    h ^= static_cast<unsigned char>(name_l[i]); h *= 1099511628211ULL;
+                }
+                h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33;
+                if (h >= thr) continue;
+                kept.emplace_back(h, std::move(seq_l));
+                while (kept.size() > MAX_NONHOST_READS) {
+                    thr >>= 1;
+                    nonhost_subsampled = true;
+                    kept.erase(std::remove_if(kept.begin(), kept.end(),
+                                              [thr](const auto& p) { return p.first >= thr; }), kept.end());
+                }
             }
+            reads.reserve(kept.size());
+            for (auto& p : kept) reads.push_back(std::move(p.second));
         }
         const size_t n_total = reads.size();
-        if (n_total >= MAX_NONHOST_READS)
-            std::cerr << "[nonhost] Capped at " << MAX_NONHOST_READS
-                      << " reads (file larger; subsampling for EM)\n";
+        if (nonhost_subsampled)
+            std::cerr << "[nonhost] Subsampled to " << n_total
+                      << " reads by read-name hash (file above " << MAX_NONHOST_READS << ")\n";
         std::cerr << "[nonhost] EM screening " << n_total << " unmapped reads"
                   << (using_host_filter ? " (host-subtraction ON)" : "") << "...\n";
 
@@ -4916,7 +4937,10 @@ int main(int argc, char* argv[]) {
     // The modes below still read the sorted BAM; --sorted-bam forces it everywhere.
     if (stream_unsorted != 0) {
         const char* sorted_reason = nullptr;
-        if (!bam_file.empty()) sorted_reason = "the input is an existing BAM";
+        // An existing BAM is read as given. With an explicit --stream-unsorted it is treated as a saved stream
+        // (SINGLET_TEE_STREAM_BAM, any record order): serial pileup, CB from CR, protocol strand (test replay).
+        if (!bam_file.empty() && stream_unsorted != 1) sorted_reason = "the input is an existing BAM";
+        else if (!bam_file.empty()) {}
         else if (!onefq_mode) sorted_reason = "CB from CR needs whitelist-exact .1fq barcodes";
         else if (parallel_pileup == 1) sorted_reason = "--parallel-pileup was given";
         else if (is_atac_mode) sorted_reason = "ATAC fragments are read from the sorted BAM";
@@ -7262,6 +7286,32 @@ int main(int argc, char* argv[]) {
             bam_source = "/dev/fd/" + std::to_string(pipe_fd[0]);
             std::cerr << "[singlet] STAR pid=" << star_pid
                       << ", " << star_threads << " threads, pipe fd=" << pipe_fd[0] << "\n";
+            // Test only (order-free-rules shuffled-order gate): SINGLET_TEE_STREAM_BAM=<path> copies the unsorted
+            // STAR stream to a file while the pileup reads it, for replay with --bam-file <path> --stream-unsorted.
+            if (const char* tee_path = std::getenv("SINGLET_TEE_STREAM_BAM"); tee_path && *tee_path && stream_unsorted == 1) {
+                int tee_pipe[2];
+                FILE* tee_fp = std::fopen(tee_path, "wb");
+                if (tee_fp && pipe(tee_pipe) == 0) {
+                    const int src = pipe_fd[0];
+                    std::thread([src, dst = tee_pipe[1], tee_fp]() {
+                        std::vector<char> buf(1 << 20);
+                        for (ssize_t n; (n = read(src, buf.data(), buf.size())) > 0;) {
+                            std::fwrite(buf.data(), 1, static_cast<size_t>(n), tee_fp);
+                            for (ssize_t off = 0; off < n;) {
+                                ssize_t w = write(dst, buf.data() + off, static_cast<size_t>(n - off));
+                                if (w <= 0) break;
+                                off += w;
+                            }
+                        }
+                        std::fclose(tee_fp);
+                        close(dst);
+                    }).detach();
+                    bam_source = "/dev/fd/" + std::to_string(tee_pipe[0]);
+                    std::cerr << "[singlet] SINGLET_TEE_STREAM_BAM: copying the STAR stream to " << tee_path << std::endl;
+                } else if (tee_fp) {
+                    std::fclose(tee_fp);
+                }
+            }
         }
     }
 
