@@ -141,9 +141,21 @@ CPU time per sample with identical outputs. The table above (6–8 CPU nodes per
 the research branch's GPU stages (annotation, pileup, non-host; all identical) carrying the CPU work, and for M5 at its measured
 rate; it is not what this binary delivers.
 
-## 5. Not done
+## 5. Not done, and the plan for the next step
 
-- GPU mapping at ≥ 10 M distinct sequences/s (2.41 M now).
-- Annotation, pileup and non-host classification on the GPU inside the binary (identical on the research branch).
+- **The BAM on the GPU path** (BAM records, sort, index, CB-tag refresh, the CPU pileup's re-read: about 4.5 of the 15.8 core-s per
+  M pairs). Several outputs depend on the exact order of the BAM's records, not only on their content: the rRNA sample (every
+  1000th record per pileup worker), the SNP AD/DP first read per (cell, SNP, UMI), the strand probe (first informative records per
+  window), the CB-refresh insertion order (barcode column order for equal counts) and the multimapper exon choice when the
+  primary has no gene. STAR's coordinate sort key is fully determined (start, then read number << 32 | transcript << 8 | mate), so a
+  record stream sorted by the same key reproduces the BAM's order exactly. Plan: (1) STAR hands its per-read records to the parent
+  process in memory and the parent sorts them by that key per chromosome, feeding the unchanged CPU pileup (removes the sort,
+  index and disk round trip); (2) the GPU builds the records from its own results (the M5 blobs plus the per-read barcode, UMI
+  and read number) and sorts them; (3) the GPU pileup (identical on 4 samples, research branch) replaces the covered
+  accumulators, leaving the CPU only the outputs it does not cover (per-cell QC, poly(A), rRNA sample, VDJ, guides, strand probe).
+  The field and order inventory per output is in `ws-w11-gpu.md` on the research branch.
+- GPU mapping at ≥ 10 M distinct sequences/s (2.4 M now; read binning by window count measured no gain, job 790068).
 - GPU read clipping (5′ samples with adapter clipping map on the CPU in this release).
+- A persistent per-node engine (genome index and non-host index resident across samples; today each sample's process loads
+  them: 4 s upload of the genome arrays, 4 s non-host index).
 - Metered power; CPU node-packing efficiency (single-sample core-s used, so the CPU node rate is an upper bound).
