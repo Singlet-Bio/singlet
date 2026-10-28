@@ -13,7 +13,7 @@
 # BRANCH (default gpu/engine-gpu) is fetched by URL into a private ref. Outputs: $W/jobs/w11/engine/bin/singlet-{gpu,cpu}.
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
-BARE=$W/repos/singlet-py.git; BR=${BRANCH:-gpu/engine-gpu}; OUTD=$W/jobs/w11/engine/bin; mkdir -p $OUTD
+BARE=$W/repos/singlet-py.git; BR=${BRANCH:-gpu/engine-gpu}; OUTD=${OUTD:-$W/jobs/w11/engine/bin}; mkdir -p $OUTD
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/w11/engine
 COMMIT=$(git -C $BARE rev-parse refs/w11/engine); echo "COMMIT=$COMMIT"
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
