@@ -24,12 +24,17 @@ dependencies:
   - pytorch>=2.2
   - tiledbsoma-py>=1.14
   - psutil
+  - requests             # singlet package dependencies not pulled in above
+  - tqdm
+  - scikit-learn
+  - pytest
   - pybind11>=2.11
   - cmake>=3.20
   - cxx-compiler
   - zstd
   - r-base=4.4
   - r-matrix
+  - r-rcpp               # the singlet R package
   - r-seurat>=5
   - bioconductor-singlecellexperiment
   - bioconductor-zellkonverter

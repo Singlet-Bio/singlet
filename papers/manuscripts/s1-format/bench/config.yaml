@@ -41,7 +41,11 @@ minibatch:
   block_size: 64
   n_batches: 200
   warmup_batches: 10
-  seeds: [0, 1, 2]
+  seeds: [0, 1, 2]                        # every seed times the first minibatch
+  sustained_seeds: [0]                    # only these also run the n_batches sustained-throughput loop
+  # Download-first loaders on slow links are not run above this size tier; the row records the computed transfer
+  # time of the file (bytes * 8 / link rate) as est_download_s instead. Tier order: S < M < L < XL.
+  skip_download_above_tier: {s3_0.1g: M}
   workers: [0, 2, 4]
   loaders: [anndata_inmem, anndata_backed, scdataset, anndata_zarr_lazy, soma_ml, bpcells, s1_stream, s1_stream_canonical]
   tiers:

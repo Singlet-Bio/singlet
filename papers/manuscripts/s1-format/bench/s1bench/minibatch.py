@@ -268,6 +268,9 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
     rec.update({"open_s": t2 - t1 + rec.get("download_s", 0.0), "first_read_s": t3 - t2, "to_tensor_s": t4 - t3,
                 "first_batch_s": t4 - t0, "batch_rows": int(tens.size(0))})
     rec.update({f"first_{k}": v for k, v in L.split().items()})
+    if mb.get("_first_only"):
+        rec["sustained_batches"] = 0
+        return rec
     for b in batches[1:1 + int(mb["warmup_batches"])]:
         L.to_tensor(L.read(b))
     t5 = time.perf_counter()
@@ -286,8 +289,10 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
 
 
 def _child(cfg: Config, overrides, unit_key, loader, src, seed, threads, n_cells) -> dict:
+    first_only = seed not in cfg["minibatch"].get("sustained_seeds", cfg["minibatch"]["seeds"])
     cmd = [sys.executable, "-m", "s1bench", "--config", str(cfg.path), *sum((["--set", o] for o in overrides), []),
-           "--set", f"minibatch._n_cells={n_cells}", "minibatch-one", unit_key, loader, src, str(seed), str(threads)]
+           "--set", f"minibatch._n_cells={n_cells}", "--set", f"minibatch._first_only={str(first_only).lower()}",
+           "minibatch-one", unit_key, loader, src, str(seed), str(threads)]
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=BENCH_DIR, timeout=3 * 3600)
     if r.returncode != 0:
         return {"status": "error", "note": (r.stderr.strip().splitlines() or ["failed"])[-1]}
@@ -309,6 +314,20 @@ def _bpcells(cfg: Config, path: Path, seed: int, threads: int, n_cells: int, src
 
 
 # ----------------------------------------------------------------------------------------------- driver
+_TIER_ORDER = {"S": 0, "M": 1, "L": 2, "XL": 3}
+
+
+def _skip_download(mb: dict, tier: dict, loader: str, u: Unit) -> bool:
+    """Download-first loaders on a slow link above the configured size tier are estimated, not run."""
+    limit = (mb.get("skip_download_above_tier") or {}).get(tier["name"])
+    access = "download" if loader == "bpcells" else LOADERS[loader].access
+    return bool(limit) and access == "download" and _TIER_ORDER[u.dataset["tier"]] > _TIER_ORDER[limit]
+
+
+def _path_bytes(p: Path) -> int:
+    return sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) if p.is_dir() else p.stat().st_size
+
+
 def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers: Optional[list[str]] = None) -> None:
     from . import formats, netem
     from .util import read_tsv
@@ -350,6 +369,13 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
                 netem.set_tier(cfg, tier)
                 for ld in loaders:
                     url = f"{base}/{u.key}/{files[ld].name}"
+                    if _skip_download(mb, tier, ld, u):
+                        nbytes = _path_bytes(files[ld])
+                        res = {"status": "skipped", "access": "download", "bytes_file": nbytes,
+                               "est_download_s": nbytes * 8 / (float(tier["gbit"]) * 1e9),
+                               "note": f"download-first loader above tier {mb['skip_download_above_tier'][tier['name']]}"}
+                        record(tier, ld, "", res)
+                        continue
                     for seed in mb["seeds"]:
                         res = (_bpcells(cfg, files[ld], seed, threads, n_cells, url) if ld == "bpcells"
                                else _child(cfg, overrides, u.key, ld, url, seed, threads, n_cells))
