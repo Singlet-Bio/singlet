@@ -65,6 +65,10 @@ struct ChrSNP {
 
 // Configuration for the pileup engine
 struct PileupConfig {
+    // --stream-unsorted: STAR writes an unsorted BAM with no CB tag; the barcode is taken from CR by the rule STAR's sorted-BAM CB
+    // follows in this pipeline (the .1fq barcodes are already whitelist-exact): CB = CR unless CR has an N or UR has an N or is a
+    // homopolymer. Serial run() only.
+    bool cb_from_cr = false;
     std::string snp_path;           // VCF/TSV of SNP positions
     std::string exon_gtf_path;      // GTF/BED for exon intervals (used for GeneModel)
     std::string barcode_path;       // Filtered barcode list
@@ -298,6 +302,34 @@ static inline const char* inline_scan_cb(const bam1_t* b) {
         } else break;
     }
     return nullptr;
+}
+
+// CB for --stream-unsorted (see PileupConfig::cb_from_cr). Returns a pointer to the CR value, or nullptr when STAR would have
+// written no CB (N-containing barcode, or a UMI that is N-containing or a homopolymer). One pass over the aux tags.
+static inline const char* inline_scan_cb_from_cr(const bam1_t* b) {
+    uint8_t* s = bam_get_aux(b);
+    const uint8_t* end = b->data + b->l_data;
+    const char* cr = nullptr; const char* ur = nullptr;
+    while (s + 4 <= end && !(cr && ur)) {
+        const char n0 = static_cast<char>(s[0]), n1 = static_cast<char>(s[1]); const uint8_t ty = s[2];
+        if (ty == 'Z' || ty == 'H') {
+            if (n0 == 'C' && n1 == 'R' && ty == 'Z') cr = reinterpret_cast<const char*>(s + 3);
+            else if (n0 == 'U' && n1 == 'R' && ty == 'Z') ur = reinterpret_cast<const char*>(s + 3);
+            s += 3; while (s < end && *s) ++s; ++s;
+        } else if (ty == 'A' || ty == 'c' || ty == 'C') { s += 4; }
+        else if (ty == 's' || ty == 'S') { s += 5; }
+        else if (ty == 'i' || ty == 'I' || ty == 'f') { s += 7; }
+        else if (ty == 'd') { s += 11; }
+        else if (ty == 'B') {
+            const uint8_t sub = s[3]; uint32_t n; memcpy(&n, s + 4, 4);
+            s += 8 + static_cast<size_t>(n) * ((sub == 'f' || sub == 'i' || sub == 'I') ? 4 : (sub == 's' || sub == 'S') ? 2 : (sub == 'd') ? 8 : 1);
+        } else break;
+    }
+    if (!cr || !ur || ur[0] == ' ') return nullptr;
+    for (const char* q = cr; *q; ++q) if (*q == 'N') return nullptr;
+    bool homo = true;
+    for (const char* q = ur; *q; ++q) { if (*q == 'N') return nullptr; if (*q != ur[0]) homo = false; }
+    return homo ? nullptr : cr;
 }
 
 class PileupEngine {
@@ -595,7 +627,7 @@ public:
                 stats.secondary_reads++;
                 if (has_gene_model_) {
                     // Inline CB scanner — same as primary path, avoids htslib call overhead
-                    const char* cb_sec_str = inline_scan_cb(b);
+                    const char* cb_sec_str = config_.cb_from_cr ? inline_scan_cb_from_cr(b) : inline_scan_cb(b);
                     if (cb_sec_str && cb_sec_str[0] != '-') {
                         int32_t bc_check = bc_index_.lookup(cb_sec_str);
 
@@ -670,7 +702,7 @@ public:
 
             // CB + barcode check (skip ~94% of primaries before NH extraction)
             PROF_START(barcode);
-            const char* cb_str = inline_scan_cb(b);
+            const char* cb_str = config_.cb_from_cr ? inline_scan_cb_from_cr(b) : inline_scan_cb(b);
             if (!cb_str || cb_str[0] == '-') {
                 stats.no_barcode++;
                 PROF_END(prof, barcode);
