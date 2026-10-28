@@ -59,7 +59,10 @@ def load(run):
 
 
 A, B = load(args.run_a), load(args.run_b)
-called = lambda R: set(R["cc"].index[R["cc"]["is_cell"].astype(str).str.upper().isin(["TRUE", "1"])])
+def called(R):
+    # the final call is called_v2 (knee + retained); is_cell / called are the knee-only subset
+    col = "called_v2" if "called_v2" in R["cc"] else "is_cell"
+    return set(R["cc"].index[R["cc"][col].astype(str).str.upper().isin(["TRUE", "1"])])
 ca, cb = called(A), called(B)
 groups = {"both": sorted(ca & cb), "a_only": sorted(ca - cb), "b_only": sorted(cb - ca)}
 src = {"both": B, "a_only": A, "b_only": B}

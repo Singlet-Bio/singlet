@@ -308,3 +308,34 @@ What "sorting is not essential" does and does not cover: STAR aligns and STARsol
 Not yet sort-free, follow-ups: ATAC fragments, SMART-seq2/bulk counting, and the complex barcode protocols (need a CB-correction replica or CB from the `.1fq` pass). Until the six canonical rules land (`w2-task-order-independent-pileup.md`), streaming output is byte-reproducible only at a fixed thread count, and its SNP AD, junction byte order, rRNA sample and auto barcode set differ from Alpha's sorted outputs (sizes in updates (b)-(d)). That is the accepted cost of the default today; the acceptance test in the W2 task is what makes it identical.
 
 GPU (W11, PR #61): the GPU pileup prototype does not read a sorted BAM. It sorts its own records on the device (sort + merge-join + segmented reduce) and was written to reproduce the CPU engine's sorted-BAM tie rules ("the GPU uses the BAM-order rule", `bench/gpu/pileup/README.md`). So the STAR coordinate sort is not on the GPU path at all; the saving there is on the CPU baseline it is compared against (the sort is part of the ~85% "STAR, sort, pileup and CB refresh" in `bench/gpu/cost/README.md`), which makes the GPU cost case slightly harder, not easier. The canonical rules matter for W11 too: once the CPU engine is order-free, the GPU can drop the BAM-order emulation and match by construction.
+
+## Update 2026-10-28 (f): do the cell calls change for high-quality cells? (Zach's question)
+
+Same build (`perf/bam-stream` `b237f57`), same `.1fq`, automatic barcode selection, `--output-format mtx`; A = default stream, B = `--sorted-bam`. Final calls are `called_v2` (knee plus EmptyDrops-style retained). Script `bench/bam-stream/cc_compare.py`, results `bench/bam-stream/results/cc_GSM4006843.json` and `cc_kang21.json`. GSM4006843 labels are celltypist `Immune_All_High` (with confidence); Kang 2018 batch 2 (`kang21.1fq`, 8 donors) uses the published demuxlet table (donor, singlet/doublet, cell type) as truth.
+
+| | GSM4006843 (3' v2) | Kang 2018 batch 2 (3' v1, 8 donors) |
+|---|---|---|
+| cells A / B | 13,043 / 13,098 | 16,572 / 16,569 |
+| called by both / A only / B only | 13,020 / 23 / 78 | 16,566 / 6 / 3 |
+| median UMIs: both / A only / B only | 3,177 / 368 / 268 | 1,451 / 99 / 57 |
+| median genes: both / A only / B only | 1,557 / 279 / 217 | 698 / 57 / 43 |
+| mt % median (p95): both / A only / B only | 3.4 (11.8) / 0.8 (12.2) / 0.8 (25.3) | 1.8 (3.7) / 1.6 (8.5) / 1.8 (4.5) |
+| ambient cosine median: empty droplets / both / A only / B only | 0.49 / 0.85 / 0.63 / 0.61 | 0.52 / 0.71 / 0.52 / 0.65 |
+| doublet score median: both / discordant | 0.080 / 0.004 | 0.068 / 0.000 |
+| EmptyDrops FDR, discordant barcodes | 1e-4 to 5e-4 (all retained by the test, none above the knee) | 7e-4 to 8e-4 (same) |
+| cell-type confidence median: both / discordant | 0.97 / 0.18-0.21 | n/a (published labels) |
+| discordant barcodes in the published truth table | n/a | 0 of 9 (the joint calls: 14,661 of 16,566) |
+| Singlet donor demux prob_max, discordant | 1.0 (single donor) | 0.91 (A only), 0.73 (B only) vs 1.0 for joint cells |
+| fraction of barcoded reads in cells A / B | 0.8277 / 0.8282 | 0.9858 / 0.9858 |
+
+High-quality bars (a barcode counts as above the bar if its UMIs clear it in either run):
+
+| bar | GSM4006843: above / both / A only / B only / neither | Kang: above / both / A only / B only / neither |
+|---|---|---|
+| knee of the sorted run (984; Kang 656 UMIs) | 10,890 / 10,870 / 0 / 0 / 20 | 14,960 / 14,960 / 0 / 0 / 0 |
+| 1,000 UMIs | 10,848 / 10,845 / 0 / 0 / 3 | 13,142 / 13,142 / 0 / 0 / 0 |
+| 10th percentile of jointly called cells (531; Kang 668) | 12,548 / 11,719 / 2 / 2 / 825 | 14,913 / 14,913 / 0 / 0 / 0 |
+
+Downstream on the high-quality cells (called, at least the knee): per-cell-type counts are identical on GSM4006843 (10,870 cells, 14 types) and identical on Kang except one unlabelled barcode (346 vs 345). Per-type pseudobulk Pearson (log CPM) is 1.000000 on GSM4006843 for every type and at least 0.99989 on Kang for every type with 10 or more cells.
+
+Verdict: **no high-quality cell changes.** Every barcode above the knee or above 1,000 UMIs is called by both paths, on both samples, and the per-type composition and pseudobulk of the high-quality cells are the same. The discordant calls (0.6% of calls on GSM4006843, 0.05% on Kang) are all borderline EmptyDrops retentions below the knee: tens to a few hundred UMIs, low-confidence cell types, intermediate ambient similarity, no published cell among them on Kang, and weaker donor assignment. They differ because the two paths test cells against slightly different candidate universes (stream: barcodes with at least 5 reads in the `.1fq`, 122,233; sorted: at least 5 primary CB records after alignment, 119,449), which moves the ambient estimate (alpha 33,430 vs 33,506 on GSM4006843). The four barcodes at the 531-UMI bar on GSM4006843 are the same kind (two each way). Both universes are deterministic; under rule R6 the sorted path should take the same pass-1 universe, which would remove this difference entirely.
