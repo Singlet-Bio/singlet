@@ -7,6 +7,7 @@ commit of this repository (`S1_SHA`), cloned under `$S1=/mnt/projects/debruinz_p
 | Script | What | Where |
 |---|---|---|
 | `setup.sbatch` | conda env from `environment.yml`, BPCells, the singlet package (Python, R), C++ bench, `test_floor.py`, `smoke.py`, `s1bench env` | short-cpu |
+| `setup.sbatch` with `S1_ENV=$S1/env-gpu S1_ENV_FROM=$S1/env` | the timed jobs' env: a clone of `$S1/env` updated to `environment.yml` (CUDA build of PyTorch) | short-cpu |
 | `stage.sbatch` | the stages in `STAGES` for one dataset of `DS_LIST` per array task | per size class, below |
 | `netem.sbatch` | installs Toxiproxy into `$S1/bin` and checks `rclone serve s3` behind it (throttled GET, range GET, unsigned listing) | scavenger |
 | `timed.sbatch` | `decode`, the thread `sweep`, `minibatch`, `eco` for one dataset per task, on a whole node | exclusive H100 node |

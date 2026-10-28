@@ -19,9 +19,11 @@ dependencies:
   - zstandard>=0.22
   - brotli-python
   - fsspec
+  - aiohttp              # fsspec over HTTP: zarr read lazily from the object store
   - s3fs
   - boto3
   - pytorch>=2.2
+  - pytorch-gpu          # the CUDA build (setup.sbatch solves on a CPU node with CONDA_OVERRIDE_CUDA); runs on CPU nodes too
   - tiledbsoma-py>=1.14
   - psutil
   - requests             # singlet package dependencies not pulled in above
@@ -38,6 +40,7 @@ dependencies:
   - r-seurat>=5
   - bioconductor-singlecellexperiment
   - bioconductor-zellkonverter
+  - bioconductor-rhdf5   # zellkonverter's R reader
   - r-hdf5r
   - r-remotes
   - r-data.table

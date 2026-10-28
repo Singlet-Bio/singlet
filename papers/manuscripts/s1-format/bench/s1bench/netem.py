@@ -143,17 +143,47 @@ def set_tier(cfg: Config, tier: dict) -> None:
                                                  "attributes": {"latency": int(tier["latency_ms"]), "jitter": 0}})
 
 
-def calibrate(cfg: Config, url: str, nbytes_hint: int) -> float:
-    """Gbit/s the proxy sustains for one large GET with no toxics."""
-    set_tier(cfg, {})
-    t0 = time.perf_counter()
-    with urllib.request.urlopen(url) as r:
-        n = 0
+def calib_blob(cfg: Config, tmp: Path) -> Path:
+    """A random object of netem.calib_mb (default 1024) MB for `calibrate`: a small file measures TCP ramp-up, not the
+    ceiling. Made once per data_dir."""
+    import os
+
+    mb = int(cfg["netem"].get("calib_mb", 1024))
+    p = tmp / f"calib_{mb}mb.bin"
+    if not p.exists() or p.stat().st_size != mb << 20:
+        tmp.mkdir(parents=True, exist_ok=True)
+        with p.open("wb") as f:
+            for _ in range(mb // 16):
+                f.write(os.urandom(16 << 20))
+    return p
+
+
+def _get(url: str, rng: Optional[tuple[int, int]] = None) -> int:
+    req = urllib.request.Request(url, headers={"Range": f"bytes={rng[0]}-{rng[1] - 1}"} if rng else {})
+    n = 0
+    with urllib.request.urlopen(req) as r:
         while True:
             b = r.read(1 << 22)
             if not b:
                 break
             n += len(b)
+    return n
+
+
+def calibrate(cfg: Config, url: str, nbytes_hint: int, streams: int = 1) -> float:
+    """Gbit/s the proxy sustains with no toxics: one GET of the whole object, or `streams` concurrent range GETs that
+    split it. The tier toxics act on each connection separately, so the one-stream figure is what caps a tier."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    set_tier(cfg, {})
+    t0 = time.perf_counter()
+    if streams <= 1:
+        n = _get(url)
+    else:
+        size = int(urllib.request.urlopen(urllib.request.Request(url, method="HEAD")).headers["Content-Length"])
+        cuts = [size * k // streams for k in range(streams + 1)]
+        with ThreadPoolExecutor(streams) as ex:
+            n = sum(ex.map(lambda k: _get(url, (cuts[k], cuts[k + 1])), range(streams)))
     g = n * 8 / (time.perf_counter() - t0) / 1e9
-    log(f"proxy ceiling: {g:.2f} Gbit/s over {n} bytes")
+    log(f"proxy ceiling: {g:.2f} Gbit/s over {n} bytes, {streams} stream(s)")
     return g

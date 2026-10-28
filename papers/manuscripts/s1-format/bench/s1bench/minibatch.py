@@ -75,6 +75,16 @@ class Loader:
         return {}
 
 
+def _next_epoch(loader, restart):
+    """Next batch of a loader with its own sampler; on a small matrix the sustained loop outlasts one epoch, and a training
+    loop would then start the next one."""
+    try:
+        return next(loader.it)
+    except StopIteration:
+        loader.it = restart()
+        return next(loader.it)
+
+
 class AnndataInmem(Loader):
     fmt = "h5ad_gzip"
 
@@ -143,12 +153,14 @@ class ScDataset(Loader):
         from scdataset import BlockShuffling, scDataset
 
         self.a = ad.read_h5ad(src, backed="r")
+        # a fetch is a view of the backed file; batches are sliced from it, and backed AnnData cannot view a view, so each
+        # fetch is read into memory (the fetch_transform of the scDataset AnnData examples)
         self.ds = scDataset(self.a, BlockShuffling(block_size=self.block_size), batch_size=self.batch_size,
-                            fetch_factor=self.fetch_factor)
+                            fetch_factor=self.fetch_factor, fetch_transform=lambda v: v.to_memory())
         self.it = iter(self.ds)
 
     def read(self, blocks):
-        b = next(self.it)
+        b = _next_epoch(self, lambda: iter(self.ds))
         return getattr(b, "X", b)
 
 
@@ -174,10 +186,11 @@ class SomaMl(Loader):
         self.q = self.exp.axis_query("RNA")
         ds = sml.ExperimentDataset(self.q, layer_name="data", batch_size=self.batch_size, shuffle=True, seed=self.seed,
                                    return_sparse_X=True)
-        self.it = iter(sml.experiment_dataloader(ds))
+        self.dl = sml.experiment_dataloader(ds)
+        self.it = iter(self.dl)
 
     def read(self, blocks):
-        x, _obs = next(self.it)
+        x, _obs = _next_epoch(self, lambda: iter(self.dl))
         return x
 
     def to_tensor(self, x):
@@ -383,8 +396,10 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
                 continue
             work = cfg.data_dir / "tmp" / f"netem_{u.key}"
             keys = {f"{u.key}/{p.name}": p for p in set(files.values())}
+            keys["_calib/blob.bin"] = netem.calib_blob(cfg, cfg.data_dir / "tmp")
             with netem.object_store(cfg, keys, work) as base:
-                ceiling = netem.calibrate(cfg, f"{base}/{u.key}/{files['s1_stream'].name}", 0)
+                ceiling = netem.calibrate(cfg, f"{base}/_calib/blob.bin", 0)
+                ceiling_par = netem.calibrate(cfg, f"{base}/_calib/blob.bin", 0, streams=threads)
                 netem.set_tier(cfg, tier)
                 for ld in loaders:
                     url = f"{base}/{u.key}/{files[ld].name}"
@@ -398,7 +413,8 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
                     for seed in mb["seeds"]:
                         res = (_bpcells(cfg, files[ld], seed, threads, n_cells, url) if ld == "bpcells"
                                else _child(cfg, overrides, u.key, ld, url, seed, threads, n_cells))
-                        res["proxy_ceiling_gbit"] = ceiling
+                        res["proxy_ceiling_gbit"] = ceiling            # one connection; the toxics limit each one
+                        res["proxy_ceiling_par_gbit"] = ceiling_par    # `threads` concurrent connections
                         res["capped"] = bool(tier.get("gbit") and tier["gbit"] > ceiling)
                         record(tier, ld, seed, res)
         write_tsv(rows, out)
