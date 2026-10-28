@@ -301,7 +301,7 @@ def test_policy_transcode_drops_and_still_verifies(tmp_path, pol):
 
     smp = S1Sample((out / man["samples"][0]["key"]).read_bytes())
     t = smp.cells()
-    cols = t.names() if t is not None else []
+    cols = list(t.names) if t is not None else []
     assert not [c for c in cols if c.startswith(("mts_", "dbl_")) or "doublet" in c], cols
     for r in (
         "donor/donor_assignments.tsv",
