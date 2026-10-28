@@ -60,6 +60,52 @@ sample of the node run: `bench/engine_gpu/results/node_run1_gpu_monitor.txt`). N
 prefill is serial today); (2) wire in the research branch's GPU pileup and non-host stages (identical; they remove 85% of the
 remaining CPU work with STAR's BAM sort); (3) lower per-sample memory so more samples fit per node.
 
+### 3.1 Where the CPU goes, stage by stage (pbmc1k_v3, 66.6 M read pairs, 9 threads, one H100; measured)
+
+`scripts/engine_gpu/stage_profile.sbatch` stamps each engine log line with the wall clock and samples the job cgroup's CPU
+counter every second; `stage_profile.py` attributes the core-s between log markers. Job 790022, build of the previous PR head:
+
+| stage | `--engine cpu` core-s per M pairs | `--engine gpu` core-s per M pairs |
+|---|---|---|
+| decode the `.1fq` | (overlaps STAR through the FIFO) | 1.14 |
+| STAR: GPU prefill, then its per-read pass | 29.30 (mapping) | **12.74** (prefill 2.8, per-read pass 9.9) |
+| STAR: BAM sort | 1.30 | 1.32 |
+| BAM index + CB-tag barcode refresh | 0.48 | 0.48 |
+| pileup (annotation, UMI, SNP, junctions, chrM) | 1.53 | 1.53 |
+| non-host: index load + classify | 1.04 | 1.05 |
+| export and the rest | 2.4 | 2.0 |
+| **total** | **36.1** | **20.2** |
+
+STAR's per-read pass from a full cache cost 9.9 µs per read. STAR's own counters (`-DSTAR_PROFILE`, job 790043; thread-seconds over
+the 57 s pass) split it as: cache lookups 80 s plus 92 s re-mapping the 2.6% of reads whose prefilled results the 2-way cache index
+had evicted, output 159 s (BAM records 77, junctions and gene annotation 52, barcode tags 21), FASTQ parsing 53, a per-chunk
+prefix sort 38, chunk reading 30. Three changes, each identical in output, followed:
+
+| change (only under `--engine gpu`) | effect, measured | job |
+|---|---|---|
+| 8-way cache index (one 128-byte line per bucket) instead of 2-way | hit rate 97.44% → **99.99%**; STAR's re-mapping 92 → 9 thread-s | 790048 |
+| no per-chunk prefix sort once the GPU filled the cache (it only helps STAR's own seed search; the BAM's sort key is the read number, set before the sort) | 38 → 0 thread-s | 790048 |
+| no per-read gene annotation when nothing reads it (`CB_samTagOut`, no GX/GN/sF tags, no gene counts) | part of the 52 thread-s (not measured separately) | 790058 |
+| GPU non-host screen (index resident in HBM, 24.9 GB in 4.0 s from the page cache; 2.93 M reads classified in 0.31 s) | 1.18 → 0.47 core-s per M pairs (what is left: reading the unmapped reads, the 12 threads that copy the index to the GPU, Phase D, EM, writers) | 790042, 790058 |
+
+STAR's per-read pass went from 56.7 s to 47.1 s of wall (job 790048, 9 threads). The same profile on this PR's final build
+(job 790058, measured):
+
+| stage | `--engine cpu` | `--engine gpu` |
+|---|---|---|
+| STAR (GPU prefill + per-read pass / full mapping) | 29.34 | **8.88** |
+| decode the `.1fq` to files | (in STAR, FIFO) | 1.14 |
+| STAR BAM sort + BAM index + CB-tag refresh | 1.78 | 1.96 |
+| pileup | 1.53 | 1.53 |
+| non-host (load, classify, EM, writers) | 1.18 | 0.47 |
+| export, callers, the rest | 2.4 | 1.8 |
+| **total core-s per M read pairs** | **36.2** | **15.8 (−56%)** |
+| wall, one sample alone (9 threads) | 9:04 | **7:16** |
+| peak memory (max RSS) | 56.5 GB | 50.2 GB |
+
+What is left on the GPU path, ranked: STAR's per-read pass (8.9: BAM records, FASTQ parsing, cache lookups, barcode tags), the
+BAM sort + index + CB refresh (2.0), export (1.5), pileup (1.5), decode (1.1).
+
 Profilers: Nsight Compute could not collect counters on the Clipper GPU nodes (the application aborted under the profiler; likely
 the counter-permission setting) and Nsight Systems is not in the CUDA 12.4 devel image; the hot spots come from per-phase
 `clock64()` counters compiled into the kernels (`stitch.cuh`, M5CLK) and from CUDA event timings per lane.
