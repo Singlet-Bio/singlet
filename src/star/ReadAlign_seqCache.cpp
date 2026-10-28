@@ -11,6 +11,9 @@
 #include "ReadAlign.h"
 #include "SeqCache.h"
 #include "SequenceFuns.h"
+#include "Transcriptome.h"
+#include "OutSJ.h"
+#include "Stats.h"
 #include <cstring>
 
 namespace {
@@ -183,4 +186,55 @@ void ReadAlign::seqCacheAlignRecords(const char *seqNum, uint L, const std::vect
         uint8 lo=NT16[(uint8)seqNum[ii]<4 ? (uint8)seqNum[ii] : 4], hi=ii+1<L ? NT16[(uint8)seqNum[ii+1]<4 ? (uint8)seqNum[ii+1] : 4] : 0;
         out.push_back((uint8) (lo | (hi<<4)));
     };
+}
+
+//singlet GPU pileup "on": the hand-off summary is exact where STAR's per-read output reads only mapping stats, SJ.out.tab and the Solo
+//Gene record from a mapped read's alignments (CB_UMI_Simple, the Gene feature alone, single-end, no transformation, chimeric, WASP,
+//BySJout, transcriptomic or gene-count output)
+bool ReadAlign::seqCacheHandoffConfig(const Parameters &P) {
+    return P.pSolo.type==P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.nFeatures==1 && P.pSolo.features[0]==SoloFeatureTypes::Gene
+        && P.readNmates==1 && P.outFilterBySJoutStage==0 && !P.pGe.transform.outYes && !P.pGe.transform.outSAM && !P.pGe.transform.outQuant
+        && P.pCh.segmentMin==0 && !P.wasp.yes && !P.quant.trSAM.yes && !P.quant.geCount.yes && !P.quant.geneFull.yes
+        && !P.quant.geneFull_Ex50pAS.yes && !P.quant.geneFull_ExonOverIntron.yes && P.pGe.gType!=101;
+}
+
+//Layout: uint16 nTr, uint8 flags (1: an alignment on a mito contig, 2: unique with exons), uint8 Solo Gene ovType, uint16 n genes,
+//uint32 genes (fSet order); for nTr==1 Stats::transcriptStats of trMult[0]: uint16 nMM, nIns, nDel, uint32 lIns, lDel, mapped length,
+//uint8 splicesN[SJ_MOTIF_SIZE], uint8 splicesNsjdb; then uint16 n and n Junction records as recordSJ writes them (chunkOutSJ is a
+//scratch OutSJ here). Called after seqCacheAlignRecords (restored state, mappedFilter done).
+void ReadAlign::seqCacheHandoffSummary(std::vector<uint8> &out) {
+    if (unmapType>=0 || nTr==0)
+        return;
+    auto put=[&](const void *x, size_t n) {out.insert(out.end(), (const uint8*) x, (const uint8*) x+n);};
+    uint16 n16=(uint16) nTr;
+    uint8 flags=0;
+    for (uint64 i=0; i<nTr; i++)
+        if (P.pGe.chrSet.mito.count(trMult[i]->Chr)==1) flags|=1;
+    readAnnot.reset();
+    if (P.quant.gene.yes)
+        chunkTr->classifyAlign(trMult, nTr, readAnnot);
+    const ReadAnnotFeature &af=readAnnot.annotFeatures[SoloFeatureTypes::Gene];
+    Stats s;
+    s.resetN();
+    if (nTr==1) {
+        s.transcriptStats(*trMult[0], Lread);
+        if (trMult[0]->nExons>0) flags|=2;
+    };
+    uint8 ov=(uint8) af.ovType;
+    uint16 ng=(uint16) af.fSet.size();
+    put(&n16,2); put(&flags,1); put(&ov,1); put(&ng,2);
+    for (uint32 g : af.fSet) put(&g,4);
+    if (nTr==1) {
+        uint16 a[3]={(uint16) s.mappedMismatchesN, (uint16) s.mappedInsN, (uint16) s.mappedDelN};
+        uint32 b[3]={(uint32) s.mappedInsL, (uint32) s.mappedDelL, (uint32) s.mappedBases};
+        uint8 c[SJ_MOTIF_SIZE+1];
+        for (int k=0; k<SJ_MOTIF_SIZE; k++) c[k]=(uint8) s.splicesN[k];
+        c[SJ_MOTIF_SIZE]=(uint8) s.splicesNsjdb;
+        put(a,6); put(b,12); put(c,SJ_MOTIF_SIZE+1);
+    };
+    chunkOutSJ->N=0;
+    recordSJ(nTr, trMult, chunkOutSJ);
+    uint16 nsj=(uint16) chunkOutSJ->N;
+    put(&nsj,2);
+    put(chunkOutSJ->data, (size_t) nsj*Junction::dataSize);
 }

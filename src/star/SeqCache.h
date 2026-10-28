@@ -74,5 +74,9 @@ struct HandoffReadEntry { uint64 cr3, ur3; uint16 lowQual, qualNeqN; uint32 flag
 static_assert(sizeof(HandoffReadEntry) == 24, "HandoffReadEntry layout is shared with the pileup");
 extern HandoffReadEntry *g_handoffReads;
 extern int g_handoffMinQ;
+//per hand-off record its summary (ReadAlign::seqCacheHandoffSummary) at g_handoffSum + g_handoffSumOff[rec], empty for an unmapped
+//sequence (its reads take the normal path); nullptr when off
+extern const uint8 *g_handoffSum;
+extern const uint64 *g_handoffSumOff;
 
 #endif

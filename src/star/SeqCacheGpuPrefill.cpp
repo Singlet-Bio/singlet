@@ -18,6 +18,8 @@
 #include "Genome.h"
 #include "InOutStreams.h"
 #include "ReadAlign.h"
+#include "Transcriptome.h"
+#include "OutSJ.h"
 #include <cmath>
 #include <sys/stat.h>
 #include <sys/file.h>
@@ -188,13 +190,13 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
 
 } // namespace
 
-void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
+void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptome *tr) {
     const char *e = getenv("SINGLET_ENGINE_GPU");
     if (e == nullptr || e[0] != '1' || cache == nullptr)
         return;
 #ifndef SINGLET_HAVE_ENGINE_GPU
     P.inOut->logMain << "ENGINE_GPU: requested, but this binary was built without CUDA (SINGLET_ENGINE_GPU=OFF): STAR maps every read\n" << flush;
-    (void) G;
+    (void) G; (void) tr;
 #else
     auto skip = [&](const std::string &why) {
         P.inOut->logMain << "ENGINE_GPU: not used (" << why << "): STAR maps every read\n" << flush;
@@ -271,15 +273,27 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
         const int nt = std::max(1, (int) P.runThreadN);
         std::vector<std::vector<uint8>> part(nt);
         std::vector<std::vector<uint64>> partOff(nt);
+        // "on": per record also the summary STAR's per-read output replays for its reads (ReadAlign::seqCacheHandoffSummary)
+        const char *gm0 = getenv("SINGLET_GPU_PILEUP"), *hs = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
+        const bool sumOn = gm0 != nullptr && strcmp(gm0, "on") == 0 && !(hs != nullptr && hs[0] == '0')
+            && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes);
+        std::vector<std::vector<uint8>> sumPart(nt);
+        std::vector<std::vector<uint64>> sumPartOff(nt);
         std::vector<std::thread> th;
         for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
-            ReadAlign *ra = new ReadAlign(P, G, nullptr, t);
+            Transcriptome *trT = (sumOn && tr != nullptr) ? new Transcriptome(*tr) : nullptr;
+            ReadAlign *ra = new ReadAlign(P, G, trT, t);
+            if (sumOn) ra->chunkOutSJ = new OutSJ(P.limitOutSJoneRead, P, G);   // scratch: one sequence's junctions at a time
             const uint64 r0 = nRec * t / nt, r1 = nRec * (t + 1) / nt;
             std::vector<uint8> blob;
             for (uint64 r = r0; r < r1; r++) {
                 partOff[t].push_back(part[t].size());
                 blob.assign(out.blob.begin() + out.blobOff[r], out.blob.begin() + out.blobOff[r + 1]);
                 ra->seqCacheAlignRecords(out.seq.data() + out.seqOff[r], out.seqOff[r + 1] - out.seqOff[r], blob, part[t]);
+                if (sumOn) {
+                    sumPartOff[t].push_back(sumPart[t].size());
+                    ra->seqCacheHandoffSummary(sumPart[t]);
+                }
             }
         });
         for (auto &x : th) x.join();
@@ -314,6 +328,23 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
             keep.swap(out.readRecord);
             g_handoffReadRecord = keep.data(); g_handoffNReads = keep.size();
             P.inOut->logMain << "ENGINE_GPU: no BAM records for the reads of the " << nRec << " hand-off records\n";
+            if (sumOn) {   // the summaries, concatenated in record order (threads hold contiguous record ranges)
+                static std::vector<uint8> sumAll;
+                static std::vector<uint64> sumOff;
+                uint64 tot = 0;
+                for (int t = 0; t < nt; t++) tot += sumPart[t].size();
+                sumAll.resize(std::max<uint64>(tot, 1)); sumOff.resize(nRec + 1);
+                uint64 base = 0, r = 0;
+                for (int t = 0; t < nt; t++) {
+                    if (!sumPart[t].empty()) memcpy(sumAll.data() + base, sumPart[t].data(), sumPart[t].size());
+                    for (uint64 o : sumPartOff[t]) sumOff[r++] = base + o;
+                    base += sumPart[t].size();
+                    std::vector<uint8>().swap(sumPart[t]);
+                }
+                sumOff[nRec] = base;
+                g_handoffSum = sumAll.data(); g_handoffSumOff = sumOff.data();
+                P.inOut->logMain << "ENGINE_GPU: hand-off summaries for STAR's per-read output: " << base << " bytes\n";
+            }
             // and the per-read entries (barcode, UMI, quality counters) in a shared mapping, filled by the mapping threads
             const char *mq = getenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ");
             if (mq != nullptr && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21) {

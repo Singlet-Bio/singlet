@@ -15,6 +15,8 @@ const uint32 *g_handoffReadRecord = nullptr;
 uint64 g_handoffNReads = 0;
 HandoffReadEntry *g_handoffReads = nullptr;
 int g_handoffMinQ = 0;
+const uint8 *g_handoffSum = nullptr;
+const uint64 *g_handoffSumOff = nullptr;
 #ifdef STAR_PROFILE
 std::atomic<unsigned long long> g_prof[PROF_N];
 std::atomic<unsigned long long> g_profOutcome[6][2];
