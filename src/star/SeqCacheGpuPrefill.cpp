@@ -150,10 +150,18 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                 const char *start = m + b[t];   // start of the line that ends at the first newline of this range
                 while (start > m && start[-1] != '\n') start--;
                 const char *e = m + b[t + 1];
+                // sequence lines are under half of a FASTQ's bytes (the quality line is as long): no reallocation; bases through a
+                // table instead of one push_back each (that loop was ~170 core-s for 66 M reads)
+                seqT[t].reserve((b[t + 1] - b[t]) / 2 + 4096);
+                char lut[256];
+                for (int c = 0; c < 256; c++) lut[c] = nucl((unsigned char) c);
                 auto take = [&](const char *ls, const char *le) {
                     uint64 L = le - ls;
                     while (L > 0 && ls[L - 1] == '\r') L--;
-                    for (uint64 k = 0; k < L; k++) seqT[t].push_back(nucl((unsigned char) ls[k]));
+                    const size_t at = seqT[t].size();
+                    seqT[t].resize(at + L);
+                    char *d = seqT[t].data() + at;
+                    for (uint64 k = 0; k < L; k++) d[k] = lut[(unsigned char) ls[k]];
                     lenT[t].push_back(L);
                 };
                 for (const char *q = m + b[t]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) {
