@@ -50,13 +50,12 @@ accepted). \code{GSM} accessions are resolved with the API named by
 answer is saved in \code{gsm_parents.tsv} in the cache directory.
 }
 \examples{
-\dontrun{
-path <- singlet_download("GSE138867")
-sce <- singlet_load(path)           # reads the local copies
-
-# The legacy bundle, for modality-level access
-b <- singlet_download("GSE138867", legacy = TRUE)
-singlet_modalities(b)
+\donttest{
+if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+  cache <- file.path(tempdir(), "singlet-example")
+  path <- singlet_download("GSE46817", cache_dir = cache)  # local manifest + sample objects
+  sce <- singlet_load(path, cache_dir = cache)              # reads the local copies
+}
 }
 
 }

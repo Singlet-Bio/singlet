@@ -59,8 +59,11 @@ matrix chunks that contain the selected cells (a small sample is fetched whole, 
 (spliced + unspliced), as in \code{\link{load}}.
 }
 \examples{
-\dontrun{
-deep <- singlet_cells("GSE145370", n_umi_exon > 5000, samples = "GSM4317426")
+\donttest{
+if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+  deep <- singlet_cells("GSE46817", n_umi_exon > 500, samples = "GSM1138786",
+                        cache_dir = file.path(tempdir(), "singlet-example"))
+}
 }
 }
 \seealso{

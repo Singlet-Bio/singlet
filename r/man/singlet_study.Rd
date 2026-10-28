@@ -26,9 +26,11 @@ study object. Nothing else is downloaded: \code{\link{load}} and \code{\link{sin
 members they need with HTTP Range requests.
 }
 \examples{
-\dontrun{
-st <- singlet_study("GSE145370")
-st$gsm_ids
+\donttest{
+if (curl::has_internet()) {
+  st <- singlet_study("GSE46817", cache_dir = file.path(tempdir(), "singlet-example"))
+  st$gsm_ids
+}
 }
 }
 \seealso{

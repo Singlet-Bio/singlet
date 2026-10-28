@@ -277,9 +277,11 @@
 #' @param force Re-check the manifest even if it was read less than a minute ago.
 #' @return A \code{singlet_study} object (a list with \code{gse}, \code{samples}, \code{gsm_ids}, \code{packs}, ...).
 #' @examples
-#' \dontrun{
-#' st <- singlet_study("GSE145370")
-#' st$gsm_ids
+#' \donttest{
+#' if (curl::has_internet()) {
+#'   st <- singlet_study("GSE46817", cache_dir = file.path(tempdir(), "singlet-example"))
+#'   st$gsm_ids
+#' }
 #' }
 #' @seealso \code{\link{load}}, \code{\link{singlet_cells}}
 #' @export
@@ -977,8 +979,11 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #'   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
 #'   matrix) and the per-cell columns (\code{\link{singlet_labels}}).
 #' @examples
-#' \dontrun{
-#' deep <- singlet_cells("GSE145370", n_umi_exon > 5000, samples = "GSM4317426")
+#' \donttest{
+#' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+#'   deep <- singlet_cells("GSE46817", n_umi_exon > 500, samples = "GSM1138786",
+#'                         cache_dir = file.path(tempdir(), "singlet-example"))
+#' }
 #' }
 #' @seealso \code{\link{load}}, \code{\link{singlet_study}}
 #' @export
@@ -1089,6 +1094,11 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
         file.rename(tmp, dest)
     }
     for (id in unique(unlist(study$packs))) if (!is.null(id) && nzchar(id)) tryCatch(.s1_pack(study, id), error = function(e) NULL)
+    # the pack index too, so a load of the local copy can resolve any pack without the network
+    ip <- file.path(.s1_pack_dir(study), "index.json")
+    if (!file.exists(ip) && identical(study$transport$kind, "http")) {
+        tryCatch(writeBin(.s1_get_ref(study$transport, "index.json")$body, ip), error = function(e) NULL)
+    }
     mp <- file.path(root, "m", paste0(study$gse, ".json"))
     dir.create(dirname(mp), recursive = TRUE, showWarnings = FALSE)
     if (!file.exists(mp)) writeLines(jsonlite::toJSON(study$doc, auto_unbox = TRUE, null = "null", digits = NA), mp)

@@ -110,21 +110,18 @@ cache location).
 nothing.
 }
 \examples{
+\donttest{
+if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+  cache <- file.path(tempdir(), "singlet-example")
+  # One sample: resolves to its study (GSE46817) and keeps only its cells
+  sce <- singlet_load("GSM1138786", cache_dir = cache)
+  table(sce$cell_type)
+}
+}
 \dontrun{
-# One study by accession (downloaded + cached automatically)
-sce <- singlet_load("GSE138867")
-
-# One sample: resolves to GSE138867 and keeps only GSM4120733's cells
-sce <- singlet_load("GSM4120733")
-
-# Combine several studies into one object
+# Whole studies, combined on their shared gene axis (larger downloads)
 sce <- singlet_load(c("GSE138867", "GSE146974"))
-
-# Samples that were skipped for having no usable cells, and why
-S4Vectors::metadata(sce)$skipped_samples
-
-# A local bundle, returned as a Seurat object
-obj <- singlet_load("GSE138867.singlet", as = "seurat")
+obj <- singlet_load("GSE138867", as = "seurat")
 }
 
 }
