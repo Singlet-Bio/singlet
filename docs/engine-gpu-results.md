@@ -13,8 +13,12 @@ Gold 6230R, 52 cores). CPU truth: `prod/campaign` c4a1be38.
 |---|---|---|
 | STAR's mapping state per distinct sequence, GPU port vs STAR (its sequence-cache encoding: every transcript field, nW, nTr, best transcript, unmapType) | 1,991,926 / 1,991,926 identical (pbmc1k_v3, every 16th distinct sequence; 151,095 unmapped and 1,840,831 mapped, all identical) | measured |
 | whole sample through the engine, STAR verifying every GPU result (`SINGLET_STAR_SEQCACHE_VERIFY=1`) | 66,004,541 reads took the GPU result (99.27%), **0 mismatches** (pbmc1k_v3, 66.6 M read pairs) | measured |
-| this PR's binary: `scripts/engine_gpu/identity_test.sh` | IDENTITY_RESULT | measured |
+| this PR's binary: `scripts/engine_gpu/identity_test.sh`, pbmc1k_v3 (66.6 M read pairs), final build | **PASS**: verify run 64,775,880 reads took the GPU result, each re-mapped by STAR, **0 mismatches**; GPU-fed vs CPU outputs differ only where two CPU runs differ (below). Earlier builds of this branch: PASS twice more (61.1 M and 64.8 M reads verified, 0 mismatches). Jobs 789898, 789924, 789947; `bench/engine_gpu/results/` | measured |
 | file-by-file outputs, GPU engine vs CPU engine, several samples in flight | NODE_IDENTITY | measured |
+
+Two differences come from the file-based decode `--engine gpu` uses (STAR must read the cDNA reads twice, so they cannot come
+through the default FIFO): provenance only. The 5′-prefix probe records 12,194 sampled reads instead of 12,000 in
+`pileup_stats.json`, and `read_stats.tsv` gains a decode line; no data output changes.
 
 What differs between any two runs of the CPU engine itself (and therefore also between CPU and GPU runs): the order of records in
 `star_Unmapped.out.mate1/2` and `nonhost_reads.fq` (same content), timings in logs and run summaries, and the non-host EM's
@@ -27,7 +31,7 @@ above threshold in all). Sorting the EM's reads would make that deterministic (a
 |---|---|---|
 | GPU mapping rate (seeds → windows → stitching → selection), one H100 NVL | 2.41 M distinct sequences/s (pbmc1k_v3; 4.9 M reads/s at its 2.07 reads per distinct sequence) | measured |
 | whole sample on the GPU (31.9 M distinct sequences of 66.6 M read pairs) | 17.1 s GPU time | measured |
-| sample wall time, one sample on a GPU node (24 threads): `--engine cpu` / `--engine gpu` | WALL_CPU / WALL_GPU | measured |
+| one sample on a GPU node, 24 threads (pbmc1k_v3): `--engine cpu` / `--engine gpu` wall | 418 s / 468 s; the GPU path's prefill is 76 s (reading the reads 27 s, GPU 44 s of which mapping 16 s and dedup 1.6 s, cache inserts 5 s) and runs before STAR; STAR then finds 97.4% of reads in the cache | measured (job 789947) |
 | node throughput, 4 samples in flight on one GPU node (both GPUs, 52 cores): `--engine gpu` / `--engine cpu` | NODE_RATE | measured |
 
 In this release the GPU replaces STAR's mapping; STAR's read loading, BAM writing and sorting, the pileup, callers and export still
