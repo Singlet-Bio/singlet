@@ -22,7 +22,22 @@ except ImportError:  # pragma: no cover
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "python"))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from singlet.torch import _stream as S  # noqa: E402
+
+def _load_stream():
+    """singlet/torch/_stream.py without the singlet.torch package (whose import needs torch), so the unit tests run without it."""
+    import importlib.util
+
+    import singlet
+
+    p = pathlib.Path(singlet.__file__).resolve().parent / "torch" / "_stream.py"
+    spec = importlib.util.spec_from_file_location("singlet.torch._stream", p)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("singlet.torch._stream", mod)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return sys.modules["singlet.torch._stream"]
+
+
+S = _load_stream()
 
 GSE = "GSE900001"
 G1, G3 = "GSM9000001", "GSM9000003"

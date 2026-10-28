@@ -299,8 +299,18 @@ def plan_samples(
         if gsms:
             w["samples"] = sorted(gsms)
 
+    def retry(fn, *args, **kw):
+        # the index answers in about a second; a dropped connection is retried, not fatal to a long plan
+        for attempt in range(4):
+            try:
+                return fn(*args, **kw)
+            except OSError:
+                if attempt == 3:
+                    raise
+                time.sleep(2.0 * (attempt + 1))
+
     def count(ww):
-        df = A.count_cells(by=["study", "sample"], base=base, api_key=api_key, **ww)
+        df = retry(A.count_cells, by=["study", "sample"], base=base, api_key=api_key, **ww)
         return df.rename(columns={"study": "gse", "sample": "gsm"})
 
     if "studies" in w:
@@ -311,7 +321,9 @@ def plan_samples(
         if (
             len(df) >= _INDEX_GROUP_CAP
         ):  # capped: list the studies first, then their samples in chunks
-            st = A.count_cells(by=["study"], base=base, api_key=api_key, **w)["study"].tolist()
+            st = retry(A.count_cells, by=["study"], base=base, api_key=api_key, **w)[
+                "study"
+            ].tolist()
             chunks = [st[i : i + 200] for i in range(0, len(st), 200)]
             df = pd.concat([count({**w, "studies": c}) for c in chunks], ignore_index=True)
     df = df[df["n_cells"] > 0][["gse", "gsm", "n_cells"]]
