@@ -37,6 +37,10 @@ digit between runs too. Sorting the EM's reads would make it deterministic (a CP
 | one GPU node, 3 samples in flight (17 threads each, 51 of 54 cores; 441.6 M read pairs), intermediate build: `--engine cpu` / `--engine gpu` | CPU used: **18,136 / 10,411 core-s (41.1 / 23.6 core-s per M read pairs: −43%)**; makespan 1,844 / 2,189 s (the deep sample's 647 s GPU prefill in that build was 4× slower than the final build's; final build (job 789966, same samples): **10,224 core-s (−44%), makespan 1,924 s**; GPU mapping 16 s / 17 s / 73 s for 31.9 M / 34.8 M / 137.2 M distinct sequences) | measured (job 789929) |
 | one GPU node, 6 samples in flight (9 threads each), final build: pbmc1k_v3, GSM7036403, GSM6996272/3/4 (186.4 M read pairs; GSM6250705 failed under both engines with exit 3 and is excluded) | CPU used: **6,583 / 4,044 core-s (35.3 / 21.7 core-s per M read pairs: −39%)**; makespan 754 / 770 s (set by the largest sample); every data output of the 5 samples identical | measured (job 789997) |
 | steady-state node rate if cores bind (54 cores, a queue keeping the node full) | `--engine cpu` 1.53 M pairs/s; `--engine gpu` 2.49 M pairs/s (1.63×) | projected (from the measured core-s per M pairs; memory per sample may bind first) |
+| **after the non-host and STAR changes** (build 0027286f): one GPU node, 3 samples in flight (17 threads each; 441.6 M read pairs) | CPU used: **18,147 / 8,994 core-s (41.1 / 20.4 core-s per M read pairs: −50%)**; makespan 1,879 / 1,907 s (the 263 M-pair sample); every data output identical except GSM7036403's non-host EM files (D4b) | measured (job 790055) |
+| same build, 6 samples in flight (9 threads each; 186.4 M read pairs, GSM6250705 failing under both engines) | CPU used: **6,559 / 3,281 core-s (35.2 / 17.6 core-s per M read pairs: −50%)**; makespan **756 / 695 s**; every data output identical except GSM7036403's non-host EM files (D4b) | measured (job 790056) |
+| node rate if cores bind (54 cores), this build | `--engine cpu` 1.31–1.53 M pairs/s; `--engine gpu` **2.65–3.07 M pairs/s (2.0×)** | projected (from jobs 790055, 790056) |
+| samples in flight against memory | max RSS 50.2 GB per sample on the GPU path (56.5 GB on the CPU path; pbmc1k_v3): ~14 fit in 768 GB, so the node's 54 cores bind first (6 × 9 threads) | measured (job 790058), derived |
 | CPU node, 4 copies of pbmc1k_v3 in flight (Xeon 6730P, 64 cores, 512 GB) | 0.394 M read pairs/s, 12 cores busy on average: 53.7 GB per sample, so memory, not cores, limits the samples in flight | measured (CPU-baseline subagent, job 789778) |
 
 In this release the GPU replaces STAR's mapping; STAR's read loading, BAM writing and sorting, the pileup, callers and export still
@@ -127,7 +131,18 @@ pipelines). GPU node rates are **projected** from the measured M5 rate and each 
 | ACCESS credits per sample (Anvil; GPU rate derived) | 1.28 | 0.52 | 0.41 | 0.25 |
 | energy per sample, kWh (estimated, not metered) | 0.017 | 0.0085 | 0.0066 | 0.0041 |
 
-**This PR's binary, today** (only mapping on the GPU), with the same prices:
+**This PR's binary, today**, with the same prices (node-hour prices: $7.98 for a 2 × H100 node, $2.60 for a 52-core CPU node;
+a 122 M-pair sample):
+
+| | CPU node, `--engine cpu` | GPU node, `--engine gpu`, after the non-host and STAR changes | label |
+|---|---|---|---|
+| CPU core-s per M read pairs | 37.5 (Clipper CPU nodes) | 17.6–20.4 | measured (jobs 790055, 790056) |
+| node rate if cores bind | 1.39 M pairs/s | 2.65–3.07 M pairs/s | derived |
+| $ per sample | **$0.064** | **$0.088–0.102** | modelled |
+| break-even | | 12.7 core-s per M pairs on the GPU node (54 cores) | derived |
+
+Still **not cheaper per sample in the cloud** at these prices, but the gap is down from about 1.9× to 1.4–1.6×. Removing the BAM
+round trip (about 4.5 core-s per M pairs, §5) would bring the GPU node to about break-even. Before these changes:
 
 | | CPU node, `--engine cpu` | GPU node, `--engine gpu` | label |
 |---|---|---|---|
