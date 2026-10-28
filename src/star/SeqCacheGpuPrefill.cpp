@@ -20,6 +20,7 @@
 #include <cmath>
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdio>
@@ -105,26 +106,69 @@ bool noClipping(Parameters &P) {
 }
 
 // the cDNA reads (mate 1) of every input file, as STAR reads them (sequence line of each FASTQ record)
-bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &why) {
+bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, int nThreads) {
     if (P.readFilesNames.empty()) { why = "no read files"; return false; }
     for (const std::string &fn : P.readFilesNames[0]) {
         struct stat st;
         if (stat(fn.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) { why = fn + " is not a regular file (a stream cannot be read twice)"; return false; }
-        FILE *f = fopen(fn.c_str(), "r");
-        if (f == nullptr) { why = "cannot open " + fn; return false; }
-        size_t lineNo = 0;
-        char *ln = nullptr; size_t cap = 0; ssize_t len;
-        while ((len = getline(&ln, &cap, f)) > 0) {
-            if ((lineNo & 3) == 1) {
-                while (len > 0 && (ln[len - 1] == '\n' || ln[len - 1] == '\r')) len--;
-                for (ssize_t k = 0; k < len; k++) in.seq.push_back(nucl((unsigned char) ln[k]));
-                in.off.push_back(in.seq.size());
-            }
-            lineNo++;
+        int fd = open(fn.c_str(), O_RDONLY);
+        if (fd < 0) { why = "cannot open " + fn; return false; }
+        uint64 n = (uint64) st.st_size;
+        if (n == 0) { close(fd); continue; }
+        const char *m = (const char *) mmap(nullptr, n, PROT_READ, MAP_PRIVATE, fd, 0);
+        if (m == MAP_FAILED) { close(fd); why = "cannot map " + fn; return false; }
+        madvise((void *) m, n, MADV_SEQUENTIAL);
+        // lines are numbered globally: each thread counts the newlines of its byte range, a prefix sum gives the index of its
+        // first line, and it converts the sequence lines (index % 4 == 1) whose terminating newline lies in its range
+        int T = std::max(1, nThreads);
+        std::vector<uint64> b(T + 1), cnt(T, 0);
+        for (int t = 0; t <= T; t++) b[t] = n * t / T;
+        {
+            std::vector<std::thread> th;
+            for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+                uint64 c = 0;
+                for (const char *q = m + b[t], *e = m + b[t + 1]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) c++;
+                cnt[t] = c;
+            });
+            for (auto &x : th) x.join();
         }
-        free(ln);
-        fclose(f);
-        if (lineNo % 4 != 0) { why = fn + ": not 4-line FASTQ"; return false; }
+        uint64 lines = 0;
+        std::vector<uint64> first(T);
+        for (int t = 0; t < T; t++) { first[t] = lines; lines += cnt[t]; }
+        bool lastUnterminated = m[n - 1] != '\n';
+        if (lastUnterminated) lines++;
+        if (lines % 4 != 0) { munmap((void *) m, n); close(fd); why = fn + ": not 4-line FASTQ"; return false; }
+        std::vector<std::vector<char>> seqT(T);
+        std::vector<std::vector<uint64>> lenT(T);
+        {
+            std::vector<std::thread> th;
+            for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+                uint64 li = first[t];
+                const char *start = m + b[t];   // start of the line that ends at the first newline of this range
+                while (start > m && start[-1] != '\n') start--;
+                const char *e = m + b[t + 1];
+                auto take = [&](const char *ls, const char *le) {
+                    uint64 L = le - ls;
+                    while (L > 0 && ls[L - 1] == '\r') L--;
+                    for (uint64 k = 0; k < L; k++) seqT[t].push_back(nucl((unsigned char) ls[k]));
+                    lenT[t].push_back(L);
+                };
+                for (const char *q = m + b[t]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) {
+                    if ((li & 3) == 1) take(start, q);
+                    li++;
+                    start = q + 1;
+                }
+                if (t == T - 1 && lastUnterminated && (li & 3) == 1) take(start, m + n);
+            });
+            for (auto &x : th) x.join();
+        }
+        for (int t = 0; t < T; t++) {
+            in.seq.insert(in.seq.end(), seqT[t].begin(), seqT[t].end());
+            uint64 o = in.off.back();
+            for (uint64 L : lenT[t]) { o += L; in.off.push_back(o); }
+        }
+        munmap((void *) m, n);
+        close(fd);
     }
     return true;
 }
@@ -166,7 +210,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
     if (chrStart.size() < chrLength.size() + 1) return skip("chrStart size");
     time_t t0 = time(nullptr);
     singlet_engine_gpu::Input in;
-    if (!readSequences(P, in, why)) return skip(why);
+    if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
+    time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): an exclusive lock per device; SINGLET_ENGINE_GPU_DEVICE
     // pins the device, otherwise the first free one is taken, or the process waits for device (pid mod devices)
     const char *dv = getenv("SINGLET_ENGINE_GPU_DEVICE");
@@ -196,6 +241,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
     singlet_engine_gpu::Output out;
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     if (lockFd >= 0) { flock(lockFd, LOCK_UN); close(lockFd); }
+    time_t tGpu = time(nullptr);
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it\n" << out.log;
     if (!ok) return skip("GPU mapping failed");
@@ -226,6 +272,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
         });
         for (auto &x : th) x.join();
     }
-    P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (device " << device << ")\n" << flush;
+    P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
+                     << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
 #endif
 }
