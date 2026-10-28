@@ -26,9 +26,9 @@
              singlet_s1_not_found = function(e) .s1_get(tr, paste0("v2/ref/", rel)))
 }
 
-# Transition switch (docs/s1-migration.md): on by default while studies are migrated; the retirement step sets
-# .STORE_LEGACY_FALLBACK_DEFAULT to FALSE. SINGLET_LEGACY_FALLBACK overrides either way.
-.STORE_LEGACY_FALLBACK_DEFAULT <- TRUE
+# Transition switch (docs/s1-migration.md): off since the legacy bundles were retired (data.singlet.bio answers 410 for
+# them). SINGLET_LEGACY_FALLBACK overrides either way.
+.STORE_LEGACY_FALLBACK_DEFAULT <- FALSE
 .s1_legacy_fallback <- function() {
     v <- tolower(Sys.getenv("SINGLET_LEGACY_FALLBACK", ""))
     if (v %in% c("1", "true", "yes", "on")) return(TRUE)
@@ -37,8 +37,8 @@
 }
 
 .s1_no_study_message <- function(msg) {
-    paste0(msg, ". Pass legacy = TRUE to read the legacy .singlet bundle (deprecated, being retired), ",
-           "or set SINGLET_LEGACY_FALLBACK=1 to fall back automatically while studies are migrated.")
+    paste0(msg, ". The study is not in the atlas: check the accession, or see https://singlet.bio/known-issues for studies ",
+           "Research Alpha withholds (legacy .singlet bundles are retired).")
 }
 
 
@@ -307,8 +307,8 @@ singlet_study <- function(accession, cache_dir = NULL, base = NULL, force = FALS
     epath <- file.path(mdir, paste0(gse, ".etag"))
     not_found <- function(e) {
         .s1_stop(.s1_no_study_message(sprintf(
-            "no .s1 manifest for %s at %s: the study has not been migrated to the per-sample format (or the accession is wrong)",
-            gse, paste0(tr$base, "/", key))), "singlet_s1_not_found")
+            "no .s1 manifest for %s at %s",
+            gse, paste0(tr$base, "/", keys[1L]))), "singlet_s1_not_found")
     }
     if (tr$kind == "dir") {
         r <- tryCatch(get_manifest(), singlet_s1_not_found = not_found)

@@ -331,7 +331,7 @@ set_api_key <- function(key) {
         error = function(e) {
             unlink(tmp)
             stop(sprintf(
-                "failed to download bundle for %s from %s: %s. The study may have no published bundle; check it at https://singlet.bio",
+                "failed to download bundle for %s from %s: %s. Legacy .singlet bundles are retired: load the study without legacy = TRUE (it is read from its .s1 manifest)",
                 gse, url, conditionMessage(e)), call. = FALSE)
         }
     )
