@@ -1052,9 +1052,9 @@ public:
             // Only use high-MAPQ reads for variant calling accuracy
             if (high_mapq) {
                 PROF_START(variant);
-                int32_t end_pos_v = bam_endpos(b);
-                if (has_variant_overlap(tid, b->core.pos, end_pos_v)) {
-                    if (!gpu_covers_) pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
+                int32_t end_pos_v = gpu_covers_ ? 0 : bam_endpos(b);   // W11 "on": the GPU does the SNP pileup; skip the search too
+                if (!gpu_covers_ && has_variant_overlap(tid, b->core.pos, end_pos_v)) {
+                    pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
                                          umi_str, umi_len, stats);
                 }
                 PROF_END(prof, variant);

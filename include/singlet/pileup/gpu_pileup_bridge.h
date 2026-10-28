@@ -41,8 +41,8 @@ public:
         if (b->core.flag & (BAM_FUNMAP | BAM_FSUPPLEMENTARY)) return;
         if (bc < 0) return;
         const bool sec = (b->core.flag & BAM_FSECONDARY) != 0;
-        int nh = 1;
-        if (uint8_t* t = bam_aux_get(b, "NH")) { nh = (int) bam_aux2i(t); if (nh < 1) nh = 1; }
+        int nh = 1; const char* ub = nullptr; const char* ur = nullptr;
+        scan_aux(b, nh, ub, ur);   // one pass over the tags (NH, UB, UR) instead of three bam_aux_get scans
         Aln a;
         a.tid = b->core.tid; a.pos = (int32_t) b->core.pos; a.mapq = b->core.qual;
         a.flags = (uint8_t) (((b->core.flag & BAM_FREVERSE) ? 1 : 0) | (sec ? 0 : 2));
@@ -55,9 +55,9 @@ public:
         g.alns.push_back(std::move(a)); g.seen++;
         if (!sec) {
             g.primary = (int) g.alns.size() - 1; g.bc = bc;
-            uint8_t* ut = bam_aux_get(b, "UB"); if (!ut) ut = bam_aux_get(b, "UR");
-            if (ut) {
-                const char* us = bam_aux2Z(ut); const int ul = (int) std::strlen(us);
+            const char* us = ub ? ub : ur;
+            if (us) {
+                const int ul = (int) std::strlen(us);
                 if (umi_len_ < 0) umi_len_ = ul;
                 uint64_t u3 = 0;
                 for (int i = 0; i < ul && i < 21; i++) {
@@ -101,6 +101,34 @@ public:
     uint64_t no_umi() const { return no_umi_; }
 
 private:
+    // NH (integer types), UB and UR (Z) from one pass over the aux tags; same values as bam_aux_get + bam_aux2i / bam_aux2Z
+    static void scan_aux(const bam1_t* b, int& nh, const char*& ub, const char*& ur) {
+        const uint8_t* s = bam_get_aux(b); const uint8_t* end = b->data + b->l_data;
+        while (s + 3 <= end) {
+            const char t0 = (char) s[0], t1 = (char) s[1]; const uint8_t ty = s[2]; const uint8_t* v = s + 3;
+            if (ty == 'Z' || ty == 'H') {
+                if (t0 == 'U' && t1 == 'B' && ty == 'Z') ub = (const char*) v;
+                else if (t0 == 'U' && t1 == 'R' && ty == 'Z') ur = (const char*) v;
+                while (v < end && *v) ++v; s = v + 1; continue;
+            }
+            int64_t iv = 0; int w = 0;
+            switch (ty) {
+                case 'A': case 'c': iv = (int8_t) v[0]; w = 1; break;
+                case 'C': iv = v[0]; w = 1; break;
+                case 's': { int16_t x; std::memcpy(&x, v, 2); iv = x; w = 2; break; }
+                case 'S': { uint16_t x; std::memcpy(&x, v, 2); iv = x; w = 2; break; }
+                case 'i': { int32_t x; std::memcpy(&x, v, 4); iv = x; w = 4; break; }
+                case 'I': { uint32_t x; std::memcpy(&x, v, 4); iv = x; w = 4; break; }
+                case 'f': w = 4; break;
+                case 'd': w = 8; break;
+                case 'B': { const uint8_t sub = v[0]; uint32_t n; std::memcpy(&n, v + 1, 4);
+                            const int es = (sub == 'c' || sub == 'C') ? 1 : (sub == 's' || sub == 'S') ? 2 : 4; w = 5 + (int) n * es; break; }
+                default: return;   // malformed: stop, as bam_aux_get would not find later tags either
+            }
+            if (t0 == 'N' && t1 == 'H' && ty != 'A' && ty != 'f' && ty != 'd' && ty != 'B') { nh = (int) iv; if (nh < 1) nh = 1; }
+            s = v + w;
+        }
+    }
     struct Aln { int32_t tid, pos; uint8_t flags, mapq; std::vector<uint32_t> ops; };
     struct Group { std::vector<Aln> alns; int seen = 0, nh = 0, primary = -1; int32_t bc = -1; uint64_t umi3 = 0; std::vector<uint8_t> seq; };
     // FNV-1a over the qname: groups a multimapper's alignments (64-bit, as the engine's mm_buffer)
