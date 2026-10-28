@@ -73,6 +73,11 @@ inline void write_all(const Trees& et, const Trees& it, const std::vector<uint32
             uint64_t n = v.size(); w<uint64_t>(f, n);
             for (const auto& s : v) { w<int32_t>(f, s.pos); w<uint32_t>(f, s.index); w<char>(f, s.ref_allele); w<char>(f, s.alt_allele); w<uint16_t>(f, 0); }
         }
+        uint64_t n_iv = 0;
+        for (uint32_t t = 0; t < n_tid; ++t) { if (t < et.size()) n_iv += et[t].sorted_intervals().size(); if (t < it.size()) n_iv += it[t].sorted_intervals().size(); }
+        uint64_t n_snp = 0; for (const auto& v : chrom_snps) n_snp += v.size();
+        std::fprintf(stderr, "[gpudump] anno.bin: %u contigs, %llu intervals, e2g %zu, i2g %zu, gene strands %zu, %zu SNP contigs, %llu SNPs, %ld bytes\n",
+                     n_tid, (unsigned long long)n_iv, e2g.size(), i2g.size(), gstr.size(), chrom_snps.size(), (unsigned long long)n_snp, std::ftell(f));
         std::fclose(f);
     }
     if (FILE* f = std::fopen((d + "/truth.bin").c_str(), "wb")) {
