@@ -160,6 +160,17 @@ pass (cache lookups, FASTQ parsing: about 3).
 | first cut (SNP, chrM, junctions, molecules on the GPU) | 3 outputs differed | 1,230 / 1,186 | 1,196 | 430 / 438 s | 790461 |
 | + molecule list for saturation and cell QC, cheaper collector | **pass** | 1,214 (18.2) | 1,172 (17.6) | 420 / 407 s | 790520 |
 | + classification, strand, poly(A) and VDJ from the GPU | **pass** | 1,230 (18.5) | **1,175 (17.6)** | 456 / **376 s** | 790552 |
+| + hand-off: the prefill's alignments go to the pileup; STAR writes no BAM records for those reads (60.3 M of 60.4 M barcoded) | **pass** | 1,273 (19.1) | 1,180 (17.7) | 464 / 397 s | 790789 |
+
+How the hand-off was checked: with `SINGLET_GPU_PILEUP=compare`, the pass rebuilds each hand-off read's barcode and UMI from R1 and
+compares them with the stream's. All 60,338,992 reads matched (job 790769). Two bugs found on the way:
+- STAR's `iReadAll` is 1-based, while the hand-off's per-read list starts at 0, so STAR skipped the wrong reads (job 790699: 48
+  files differed). The pass now fails if any hand-off read also comes through the stream.
+- The GPU's junction table spans every hand-off record, including reads without a cell barcode. Only junctions with a count are
+  kept now, as the CPU does (job 790778: 13K extra zero-count junctions).
+
+Skipping BAM records saves no CPU yet: the serial pileup drops from 316 to 269 s, but the prefill's record building and the FASTQ
+pass offset that.
 
 Remaining differences in every pass: the non-host EM iteration count (D4b), the record order of `star_Unmapped.out.mate*` and
 `nonhost_reads.fq`, timings, and `summary.json` `memory_tier`, a peak-RSS bucket that the collector's memory pushes past 64 GB.
