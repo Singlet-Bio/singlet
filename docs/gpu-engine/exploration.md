@@ -1122,7 +1122,7 @@ The phases follow the brief's table (§6), filled in from this exploration:
 
 ---
 
-## 12. Measured results (M1, M2, M10, M3, M4, M6, M8, host timers)
+## 12. Measured results (M1, M2, M10, M3, M4, M6, M8, host timers; round 2: M5, GPU pileup, end to end, cost)
 
 Run on Clipper on 2026-10-27, after §9 was written (§12.5 onwards: the second pass, same day). Raw data and scripts:
 `bench/gpu/results/` and `bench/gpu/jobs/*.sbatch`, plus per-benchmark folders `bench/gpu/{m3m4,m6,m8,host}/` and the STAR dump
@@ -1581,7 +1581,102 @@ the `.1fq` library's decoder on 150 M + 121.8 M reads (0 mismatches) and by host
 - **The GPU is idle most of the time at this point.** Raising the host bound (step 2 then step 3, §12.9) is the way to use it;
   step 3 lifts the host to ~73–83 M pairs/s per node, where the GPUs (and M5) would bind.
 
-### 12.12 Open items
+### 12.12 M5: STAR's whole mapping path on the GPU, byte-identical (jobs 789536–789772)
+
+Round 2 (2026-10-27/28). Code: `bench/gpu/m5/stitch.cuh` (the port), `bench/gpu/m5/m5.cu` (driver, lanes, comparison),
+`src/gpu/stardump/{ReadAlign_oneRead_dump.cpp,m5_dump.h}` (truth). Results: `bench/gpu/results/m5_pbmc1k_v3_2m*.json`.
+
+**Truth.** The campaign's STAR already has an exact per-sequence encoding of a read's mapping result: the sequence cache
+(`ReadAlign_seqCache.cpp`, verified in the W3 work: identical outputs with it on). Its blob holds nW, nTr, the best transcript's
+index and every field of every transcript that mapping writes (exons, junction motifs and shifts, scores, mismatch and gap counts,
+primary flag). `stardump` now also links a copy of `ReadAlign_oneRead.cpp` that writes, for every mapped read, the sequence STAR
+mapped (after clipping) and that blob (without the cache's 255-transcript limit), plus `unmapType`; and, once per process, every
+alignment parameter and the genome arrays that stitching reads (chrStart/Length, chrBin, the 386,483 sjdb junctions with motifs,
+shifts and strands, sjDstart/sjAstart). The gate compares the GPU's blob with STAR's byte for byte, and `unmapType`.
+
+**The port.** One read per thread, from the read sequence to the final transcripts: `qualitySplit` → the seed loop of
+`mapOneRead` → `maxMappableLength2strands` (both iDist passes of the sparse SA) → `storeAligns` → `stitchPieces`
+(`createExtendWindowsWithAlign`, flanks, `assignAlignToWindow` on the FASTASSIGN path) → `stitchWindowAligns`
+(`stitchAlignToTranscript`, `extendAlign`, `blocksOverlap`, the score-range recording) → `multMapSelect` → `mappedFilter` → the
+blob. Each function is a line-by-line port of the vendored STAR 2.7.11b; differences are representation only (stitch.cuh header):
+winBin is a per-read open-addressing map with the same read/write semantics plus a 1,024-bit prefilter; the include/exclude
+recursion runs on an explicit stack of transcripts; transcript copies move only the live exon rows; across windows only the
+transcripts that can still pass `multMapSelect`'s score range are kept, in order; `scoreGenomicLength`'s `log2` uses
+breakpoints computed on the host with the C library's `log2`. Two STAR quirks reproduced on the way: `WlastAnchor` is a `uint`
+set to −1, so the "last anchor" mark never fires; after `MARKER_TOO_MANY_ANCHORS_PER_WINDOW` STAR keeps assigning to windows with
+nW = 0 (nothing observable follows).
+
+**Lanes.** Every array has a capacity; a read that would exceed one where STAR's own limit is larger stops and goes to the next
+lane, which runs the same code with larger capacities; the last lane is the host with STAR's limits (seedPerReadNmax 1000,
+alignWindowsPerReadNmax 10000, seedPerWindowNmax 50, MAX_N_EXONS 20, alignTranscriptsPerWindowNmax 100). A per-read budget of
+stitching steps (STAR's include/exclude recursion is exponential in the aligns of a window) moves pathological reads on.
+
+| lane | capacities (windows / aligns per window / exons / transcripts kept) | where | reads (2 M set) |
+|---|---|---|---|
+| A | 16 / 16 / 8 / 8; budget 1,024 steps | GPU, staged, batches of 131k reads | all 1,991,926 |
+| M | 64 / 8 / 8 / 32; budget 2,048 | GPU, staged | 524,577 (26%) |
+| B | 128 / 50 / 20 / 64; budget 2,048 | GPU, staged, batches of 32k | 98,152 (4.9%) |
+| host | STAR's limits, no budget | 24 host threads, concurrent with the GPU | 5,304 (0.27%) |
+
+**Staging.** Per-phase cycle counters showed the cost was not stitching but window assignment: a multimapper piece (up to
+seedMultimapNmax = 10,000 loci) makes `stitchPieces` visit every SA entry, ~2,300–3,000 per read in the wide lanes. Each lane now
+runs three kernels per batch: phase 1 (thread per read: seeds, windows from anchors, flanks), the scan (warp per read, lanes over
+consecutive SA entries, coalesced, marking the entries whose bin holds a window; exact because the assignment never changes
+winBin, so the test gives the answer STAR gets during it), and phase 3 (thread per read: the assignments in STAR's order from the
+marks, then stitching, selection, encoding). The scan went from >50% of lane time to 3–8%.
+
+**Results** (pbmc1k_v3, every 16th distinct cDNA sequence: 1,991,926 sequences, 4,118,999 reads; median of 3 after a warm-up):
+
+| version | identical (distinct / reads) | GPU ms | M distinct reads/s per GPU |
+|---|---|---|---|
+| one kernel, lanes A (16 windows) + B | 100% / 100% | 5,561 | 0.36 |
+| + live-row copies, epoch winBin, bitmask | 100% / 100% | 2,558 | 0.78 |
+| + staged scan, bigger batches | 100% / 100% | 2,041 | 0.98 |
+| + step budget | 100% / 100% | 1,157 | 1.72 |
+| + lane M (cascade A → M → B → host) | **100% / 100%** | **1,014** | **1.96** |
+
+STAR-unmapped reads (151,095) and mapped reads (1,840,831) are both 100% identical in every version. The whole sample
+(31,870,813 distinct sequences, 66.6 M reads; job 789771) maps in 17.1 s of GPU time (1.86 M distinct reads/s, 3.9 M reads/s).
+
+**Where the time is now:** lane A runs at 6.4 M distinct reads/s (313 ms for all 2 M reads), close to the 10 M requirement; lanes
+M and B (the 26% of sequences with more than 16 windows: multimappers whose anchors map up to winAnchorMultimapNmax = 50 times)
+take 70% of GPU time. **M5 is below the ≥ 10 M distinct reads/s requirement (1.96 M), by 5×.** What would close it, in order of
+expected gain: windows of a read stitched in parallel across a warp (exact with two passes: each window's maximum finalized score
+is independent of recording, so a prefix max gives STAR's maxScoreMate at each window's start); compact transcripts (32-bit rows)
+and per-read state in shared memory; running the M/B lanes concurrently with lane A of the next batch; a cross-sample result
+cache (a sequence's result depends on the sequence only; see §12.16).
+
+**Design inputs from the Aligner Brainstorming session** (read only, `singlet-agents/.claude/worktrees/gpu-align-vision`,
+`bench/gpu-prototype/{stitch.h,probe.cu,results/RESULTS.md}`): its separate repeat/heavy-read lane became the lane cascade and
+the step budget here; its warp-cooperative chaining is the next step above. Its seeding and scoring were not used: they are not
+STAR's (about 90–100 genes per sample off by more than 19% in its own gene comparison).
+
+### 12.13 GPU annotation and pileup, identical to the engine's callers (Sonnet subagent; jobs 789562, 789652, 789669–789671)
+
+Details: `bench/gpu/pileup/README.md` (§1 is the specification ported: which records reach the counters, gene assignment,
+the multimapper buffer, junctions, SNP AD/DP, chrM bases and indels, every tie-break and clamp), `bench/gpu/results/pileup*.json`.
+Kernels (`pileup.cu`): annotate each distinct alignment signature against the gene model (merge-join), expand to reads, M6's
+collapse for the gene tuples, and sort + segmented reduce for junctions, SNP AD/DP, chrM bases (total and reverse strand) and
+chrM indels. Inputs were built from the engine's own STAR BAM in job /tmp (M5 will supply them; see the order caveat below).
+Idea taken from the Aligner Brainstorming session (`gpu-align-vision/bench/gpu-pileup/`, read only): pileup as sort + merge-join +
+segmented reduce with an arena allocator; every rule here is the engine's, and the gate is the engine's own accumulators.
+
+| sample | records | GPU ms (8 stages) | reads/s | peak device memory | identical outputs |
+|---|---|---|---|---|---|
+| GSM4006843 (human 3′ v2) | 60.9 M | 55.3 | 1.10 G | 23.8 GB | **9 of 9** (exon, intron, ambiguous, junctions, SNP AD, SNP DP, chrM, chrM reverse, chrM indels) |
+| GSM5411066 (mouse 3′ v3) | 61.0 M | 39.6 | 1.54 G | 16.7 GB | **9 of 9** |
+| GSM6470208 (human 5′ v2) | 88.5 M | 63.1 | 1.40 G | 25.1 GB | **9 of 9** |
+
+- Host work removed: the pileup stage plus BAM index and CB refresh, **3.3–7.6 core-s per M read pairs** (campaign stage timers),
+  more than all of W after the pileup (§12.9). The STAR BAM sort (17–75 core-s per M pairs) disappears too.
+- Two rules the gate caught: N bases count in SNP DP except where the decode's quality marks them (sample-dependent, now read per
+  sample); junction ids depend on the CPU's worker order, so junctions compare by (chromosome, donor, acceptor).
+- Caveats: multimapper tie rules that depend on STAR's coordinate-sort order need M5 to carry an order key; host-to-device
+  transfer of the records from pageable memory (0.8–0.9 s) is 14–20× the compute and must move to pinned, overlapped buffers;
+  not ported: the EM-rescue list, poly(A) records, VDJ and guides.
+- Cost: 1.1 GPU-hours, 31 core-hours.
+
+### 12.17 Open items
 
 - **M5, the stitch port** (windows, `stitchPieces`, `stitchWindowAligns`, `extendAlign`, scoring, multimapper selection,
   filters) is the remaining unmeasured GPU stage and the equivalence risk (A4). Requirement for the node goal: ≥ 10 M distinct

@@ -39,6 +39,7 @@ static double now() { return std::chrono::duration<double>(std::chrono::steady_c
 #define LA_NWB 256
 #endif
 typedef Caps<      160,     4,   32, LA_NW, LA_NWA, LA_NWB, 8,   8,    8,     640> LaneA;   // per thread, every read
+typedef Caps<      160,     4,   32,    64,   8,    1024,  8,   8,   32,    2048> LaneM;   // A's overflow: many windows, few aligns each
 typedef Caps<      160,     8,  128,   128,  50,    4096, 20,  32,   64,    4096> LaneB;   // A's overflow; NWA = seedPerWindowNmax
 typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20> Heavy;   // host: STAR's limits (seedPerReadNmax,
                                                                                             // alignWindowsPerReadNmax, MAX_N_EXONS, alignTranscriptsPerWindowNmax)
@@ -313,7 +314,7 @@ static std::string blobStr(const uint8_t* p, int n) {
 static int glScore(double scale, u64 x) { return int(std::ceil(std::log2((double)x) * scale - 0.5)); }
 
 int main(int argc, char** argv) {
-    std::string gdir, truth, json, input, emit; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, budgetA = 0, budgetB = 0;
+    std::string gdir, truth, json, input, emit; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, nbM = 131072, budgetA = 0, budgetB = 0, budgetM = 0; bool noMid = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--genome-dir") gdir = argv[++i];
@@ -330,6 +331,9 @@ int main(int argc, char** argv) {
         else if (a == "--batch-b") nbB = atoll(argv[++i]);
         else if (a == "--budget-a") budgetA = atoll(argv[++i]);   // stitching steps per read before it moves on (0 = none)
         else if (a == "--budget-b") budgetB = atoll(argv[++i]);
+        else if (a == "--budget-m") budgetM = atoll(argv[++i]);
+        else if (a == "--batch-m") nbM = atoll(argv[++i]);
+        else if (a == "--no-mid") noMid = true;          // lanes A, B only
         else if (a == "--input") input = argv[++i];     // "count sequence" lines (uniq -c): map these instead of the truth reads
         else if (a == "--emit") emit = argv[++i];       // write (sequence, result) for the sequence cache preload (inject/)
     }
@@ -486,8 +490,15 @@ int main(int argc, char** argv) {
     CK(cudaDeviceSetLimit(cudaLimitStackSize, localWork ? (int)(sizeof(Work<LaneA>) + 4096) : 16 * 1024));
     LaneOut A = mono ? runLane<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, prop.multiProcessorCount * bps, nthr, reps, localWork, e0, e1, "A")
                      : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A");
-    std::vector<uint32_t> idxB;
-    for (u64 i = 0; i < n; i++) if (A.status[i] != (uint8_t)Status::Ok) idxB.push_back((uint32_t)i);
+    std::vector<uint32_t> idxM, idxB;
+    for (u64 i = 0; i < n; i++) if (A.status[i] != (uint8_t)Status::Ok) idxM.push_back((uint32_t)i);
+    LaneOut M;
+    if (!idxM.empty() && !noMid) {
+        uint32_t* dIdx = toDev(idxM);
+        M = runStaged<LaneM>(P, D, dRb, dRoff, dRlen, dIdx, idxM.size(), (u64)nbM, (u64)budgetM, reps, e0, e1, "M");
+        CK(cudaFree(dIdx));
+        for (u64 k = 0; k < idxM.size(); k++) if (M.status[k] != (uint8_t)Status::Ok) idxB.push_back(idxM[k]);
+    } else idxB = idxM;
     CK(cudaDeviceSetLimit(cudaLimitStackSize, 16 * 1024));
     LaneOut B;
     if (!idxB.empty()) {
@@ -496,14 +507,19 @@ int main(int argc, char** argv) {
                  : runStaged<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), (u64)nbB, (u64)budgetB, reps, e0, e1, "B");
         CK(cudaFree(dIdx));
     }
-    double gpuMs = A.ms + B.ms;
+    double gpuMs = A.ms + M.ms + B.ms;
     // where each read's result is: lane 0 = A (index i), 1 = B (index in idxB), 2 = host (index in heavy)
     std::vector<uint8_t> lane(n, 0); std::vector<uint32_t> lanePos(n);
     for (u64 i = 0; i < n; i++) lanePos[i] = (uint32_t)i;
     u64 whyA[16] = {0}, whyCount[16] = {0};
     std::vector<u64> heavy;
+    u64 whyM[16] = {0};
+    for (u64 k = 0; k < idxM.size(); k++) {
+        u64 i = idxM[k]; whyA[A.why[i] & 15]++;
+        if (!noMid) { lane[i] = 3; lanePos[i] = (uint32_t)k; if (M.status[k] != (uint8_t)Status::Ok) whyM[M.why[k] & 15]++; }
+    }
     for (u64 k = 0; k < idxB.size(); k++) {
-        u64 i = idxB[k]; lane[i] = 1; lanePos[i] = (uint32_t)k; whyA[A.why[i] & 15]++;
+        u64 i = idxB[k]; lane[i] = 1; lanePos[i] = (uint32_t)k;
         if (B.status[k] != (uint8_t)Status::Ok) { lane[i] = 2; lanePos[i] = (uint32_t)heavy.size(); heavy.push_back(i); whyCount[B.why[k] & 15]++; }
     }
     std::vector<std::vector<uint8_t>> hout(heavy.size()); std::vector<int8_t> hunmap(heavy.size()); std::vector<uint8_t> hstatus(heavy.size());
@@ -529,6 +545,7 @@ int main(int argc, char** argv) {
         uint32_t k = lanePos[i];
         if (lane[i] == 0) { p = A.out.data() + (u64)i * LaneA::NBLOB; len = A.len[i]; un = A.unmap[i]; ok = true; }
         else if (lane[i] == 1) { p = B.out.data() + (u64)k * LaneB::NBLOB; len = B.len[k]; un = B.unmap[k]; ok = true; }
+        else if (lane[i] == 3) { p = M.out.data() + (u64)k * LaneM::NBLOB; len = M.len[k]; un = M.unmap[k]; ok = true; }
         else { p = hout[k].data(); len = (int)hout[k].size(); un = hunmap[k]; ok = hstatus[k] == (uint8_t)Status::Ok; }
     };
 
@@ -551,7 +568,7 @@ int main(int argc, char** argv) {
                 nPrinted++;
                 std::string seq; for (int k = 0; k < T.rlen[i]; k++) seq += "ACGTN"[std::min(4, (int)T.rb[T.roff[i] + k])];
                 fprintf(stderr, "DIFF read %llu L=%u count=%u flags=%u marker=%u lane=%s unmap star=%d ours=%d\n  seq  %s\n  star %s\n  ours %s\n",
-                        i, T.rlen[i], T.count[i], T.flags[i], T.marker[i], lane[i] == 0 ? "A" : lane[i] == 1 ? "B" : "host", T.unmap[i], oun,
+                        i, T.rlen[i], T.count[i], T.flags[i], T.marker[i], lane[i] == 0 ? "A" : lane[i] == 1 ? "B" : lane[i] == 3 ? "M" : "host", T.unmap[i], oun,
                         seq.c_str(), blobStr(tb, tlen).c_str(), blobStr(ours, olen).c_str());
             }
         }
@@ -573,7 +590,10 @@ int main(int argc, char** argv) {
     fprintf(stderr, "\nM5: %llu / %llu distinct reads identical (%.6f%%), reads weighted %llu / %llu (%.6f%%); differ %llu (unmapType only %llu)\n",
             same, n, 100.0 * same / n, sameW, nReadsW, 100.0 * sameW / nReadsW, diff, sameUnmapOnly);
     fprintf(stderr, "    unmapped by STAR: %llu (%llu identical), mapped: %llu (%llu identical)\n", classN[0], classSame[0], classN[1], classSame[1]);
-    fprintf(stderr, "    GPU lane A %.1f ms (%llu reads), lane B %.1f ms (%zu reads) = %.2f M distinct reads/s on the GPU\n", A.ms, n, B.ms, idxB.size(), rate / 1e6);
+    fprintf(stderr, "    GPU lane A %.1f ms (%llu reads), lane M %.1f ms (%zu reads), lane B %.1f ms (%zu reads) = %.2f M distinct reads/s on the GPU\n",
+            A.ms, n, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), rate / 1e6);
+    { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
+      fprintf(stderr, "    lane M overflow why:"); for (int k = 0; k < 12; k++) if (whyM[k]) fprintf(stderr, " %s=%llu", wn[k], whyM[k]); fprintf(stderr, "\n"); }
     { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
       fprintf(stderr, "    lane A overflow why:"); for (int k = 0; k < 12; k++) if (whyA[k]) fprintf(stderr, " %s=%llu", wn[k], whyA[k]); fprintf(stderr, "\n"); }
     fprintf(stderr, "    heavy lane: %zu reads (%.4f%%), %.2f s on %d host threads, failures %llu; why:", heavy.size(), 100.0 * heavy.size() / n,
@@ -587,12 +607,12 @@ int main(int argc, char** argv) {
                    "  \"differ_distinct\": %llu,\n  \"differ_reads\": %llu,\n  \"star_unmapped\": %llu,\n  \"star_unmapped_identical\": %llu,\n"
                    "  \"star_mapped\": %llu,\n  \"star_mapped_identical\": %llu,\n  \"gpu_ms_median\": %.3f,\n  \"gpu_ms_runs\": [",
                 prop.name, n, nReadsW, same, sameW, diff, diffW, classN[0], classSame[0], classN[1], classSame[1], gpuMs);
-        for (size_t k = 0; k < A.runs.size(); k++) fprintf(f, "%s%.3f", k ? ", " : "", A.runs[k] + (k < B.runs.size() ? B.runs[k] : 0));
+        for (size_t k = 0; k < A.runs.size(); k++) fprintf(f, "%s%.3f", k ? ", " : "", A.runs[k] + (k < M.runs.size() ? M.runs[k] : 0) + (k < B.runs.size() ? B.runs[k] : 0));
         fprintf(f, "],\n  \"gpu_distinct_reads_per_s\": %.0f,\n  \"heavy_reads\": %zu,\n  \"heavy_host_s\": %.3f,\n  \"heavy_host_threads\": %d,\n  \"heavy_failures\": %llu,\n  \"heavy_why\": {",
                 rate, heavy.size(), heavySec, nHostThreads, heavyFail);
         bool first = true; for (int k = 0; k < 12; k++) if (whyCount[k]) { fprintf(f, "%s\"%s\": %llu", first ? "" : ", ", whyName[k], whyCount[k]); first = false; }
-        fprintf(f, "},\n  \"lane_a_ms\": %.3f,\n  \"lane_b_ms\": %.3f,\n  \"lane_b_reads\": %zu,\n  \"lane_a_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_b_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_a_local\": %s,\n  \"work_bytes\": [%zu, %zu],\n  \"index_load_s\": %.1f\n}\n",
-                A.ms, B.ms, idxB.size(), A.phaseMs[0], A.phaseMs[1], A.phaseMs[2], B.phaseMs[0], B.phaseMs[1], B.phaseMs[2], localWork ? "true" : "false", sizeof(Work<LaneA>), sizeof(Work<LaneB>), tIndex);
+        fprintf(f, "},\n  \"lane_a_ms\": %.3f,\n  \"lane_m_ms\": %.3f,\n  \"lane_m_reads\": %zu,\n  \"lane_b_ms\": %.3f,\n  \"lane_b_reads\": %zu,\n  \"lane_a_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_b_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_a_local\": %s,\n  \"work_bytes\": [%zu, %zu],\n  \"index_load_s\": %.1f\n}\n",
+                A.ms, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), A.phaseMs[0], A.phaseMs[1], A.phaseMs[2], B.phaseMs[0], B.phaseMs[1], B.phaseMs[2], localWork ? "true" : "false", sizeof(Work<LaneA>), sizeof(Work<LaneB>), tIndex);
         fclose(f);
     }
     return 0;
