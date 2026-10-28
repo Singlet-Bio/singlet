@@ -1633,14 +1633,15 @@ marks, then stitching, selection, encoding). The scan went from >50% of lane tim
 | + live-row copies, epoch winBin, bitmask | 100% / 100% | 2,558 | 0.78 |
 | + staged scan, bigger batches | 100% / 100% | 2,041 | 0.98 |
 | + step budget | 100% / 100% | 1,157 | 1.72 |
-| + lane M (cascade A → M → B → host) | **100% / 100%** | **1,014** | **1.96** |
+| + lane M (cascade A → M → B → host) | 100% / 100% | 1,014 | 1.96 |
+| + batches of 262k (A, M) and 65k (B) reads (job 789812) | **100% / 100%** | **844** | **2.36** |
 
 STAR-unmapped reads (151,095) and mapped reads (1,840,831) are both 100% identical in every version. The whole sample
 (31,870,813 distinct sequences, 66.6 M reads; job 789771) maps in 17.1 s of GPU time (1.86 M distinct reads/s, 3.9 M reads/s).
 
 **Where the time is now:** lane A runs at 6.4 M distinct reads/s (313 ms for all 2 M reads), close to the 10 M requirement; lanes
 M and B (the 26% of sequences with more than 16 windows: multimappers whose anchors map up to winAnchorMultimapNmax = 50 times)
-take 70% of GPU time. **M5 is below the ≥ 10 M distinct reads/s requirement (1.96 M), by 5×.** What would close it, in order of
+take 70% of GPU time. **M5 is below the ≥ 10 M distinct reads/s requirement (2.36 M), by 4.2×.** What would close it, in order of
 expected gain: windows of a read stitched in parallel across a warp (exact with two passes: each window's maximum finalized score
 is independent of recording, so a prefix max gives STAR's maxScoreMate at each window's start); compact transcripts (32-bit rows)
 and per-read state in shared memory; running the M/B lanes concurrently with lane A of the next batch; a cross-sample result
@@ -1675,6 +1676,64 @@ segmented reduce with an arena allocator; every rule here is the engine's, and t
   transfer of the records from pageable memory (0.8–0.9 s) is 14–20× the compute and must move to pinned, overlapped buffers;
   not ported: the EM-rescue list, poly(A) records, VDJ and guides.
 - Cost: 1.1 GPU-hours, 31 core-hours.
+
+### 12.14 A whole sample through the engine with GPU mapping (jobs 789760 build, 789771, 789810)
+
+**Method** (`bench/gpu/m5/inject/`). The engine consumes M5's results through STAR's own sequence cache, so nothing downstream
+changes: `singlet-m5inject` is `prod/campaign` c4a1be38 with one addition to `SeqCache::create` (`apply_preload.py`, dev build
+only): with `SINGLET_STAR_SEQCACHE_PRELOAD` it inserts (sequence, result) records before mapping. A read whose sequence is in the
+cache takes its mapping state from the record (`seqCacheRestore`) instead of from STAR's mapping; with
+`SINGLET_STAR_SEQCACHE_VERIFY=1` STAR maps it anyway and counts every record that differs from its own result.
+`e2e.sbatch`: every distinct cDNA sequence of the sample → `m5` (lanes A/M/B/host) → records → the full campaign command line
+(`--pipeline --output-format 1pz`, run screen, 24 threads) three ways; then `bench/star_accel/out_equiv.py` (the W3 harness)
+on every output file. pbmc1k_v3 (3′ v3, 66.6 M read pairs; 3′ samples are not clipped, so STAR maps the raw sequence).
+(GSM4006843 was planned; its staged copy had been deleted.)
+
+| | result |
+|---|---|
+| distinct sequences mapped on the GPU | 31,870,813 in 17.1 s of GPU time (1.86 M distinct/s, 3.9 M reads/s); 31,763,130 records (sequences without N) |
+| **verify run**: reads taking the GPU's result, each re-mapped by STAR and compared | **66,004,541 of 66,488,663 (99.27%), 0 mismatches** |
+| reads not served (mapped by STAR as usual) | 113,225 with N (not cacheable), ~370 k lost to the cache's 2-way index collisions |
+| GPU-fed run vs reference run, every output file (54 files; `out_equiv.py`, then an order-independent check of each file that differs) | every matrix, cell table, pileup, junction, SNP, mtDNA and QC output identical; the differences are the same as between **two CPU-only runs** of the engine (below) |
+
+What differs, and why it is not the GPU (job 789810 ran the reference twice, `ref` and `ref2`, both CPU only):
+
+| file | ref vs ref2 (CPU vs CPU) | ref vs GPU-fed | cause |
+|---|---|---|---|
+| `star_Unmapped.out.mate1/2`, `nonhost_reads.fq` | differ; same content sorted | differ; same content sorted | STAR's threads write unmapped reads in arrival order |
+| `read_stats.tsv`, `star_Log*`, timing fields of `summary.json`, `provenance.json`, `ambient_contamination.json` | differ | differ | timings |
+| `pileup_stats.json` `bytes_public` | 959,255,571 vs 959,255,576 | vs 959,255,669 | the summed size of public files that hold timings |
+| `nonhost/nonhost_summary.json` `em_iterations` | 458 = 458 | 458 (run 1, job 789771) / **462 (run 2)** | the non-host EM reads `nonhost_reads.fq` in its (varying) order; floating-point sums in a different order converge in a different number of iterations. 0 species above threshold in every run. |
+
+So on a whole real sample every read that took M5's result got STAR's exact mapping state, and the engine's outputs equal a
+reference run's up to the run-to-run variation the CPU engine already has. **One CPU-engine finding:** the non-host EM result
+depends on the order of its input, which multithreaded STAR leaves nondeterministic; sorting `nonhost_reads.fq` (or the EM's
+reads) before the EM would make it deterministic (a CPU-engine change, outside W11; a follow-up). The cache preload is also a
+deployable integration path: the GPU fills STAR's cache, the engine is unchanged. Engine wall time per run (24 threads): 7:17
+reference, 6:56 GPU-fed: STAR's mapping is ~half cached already in the reference, and every other CPU stage still runs, so this
+path proves equivalence, not cost (cost: §12.16).
+
+### 12.15 Ranked bottlenecks per GPU node (after round 2)
+
+Capacity of each stage for one Clipper GPU node (2 × H100 NVL, 56 cores), in M read pairs/s, from the measurements above
+(pbmc1k_v3 unless stated; 2.09 reads per distinct sequence there). The node runs at the minimum.
+
+| rank | stage | where | capacity per node | basis | status |
+|---|---|---|---|---|---|
+| 1 | **M5: seeds → windows → stitching → selection** | GPU | **7.8** (3.9 per GPU; whole sample, job 789771); **9.9** with the larger batches of job 789812 (2.36 M distinct/s on the 2 M set) | measured (§12.12) | **the bottleneck**: 70% of it in lanes M and B (reads with > 16 windows) |
+| 2 | host callers + export (W = 2.18 core-s/M), 55 cores | host | 25 (step 0) / 28 (step 1) / 36 (step 2) / 83 (step 3) | measured (§12.9) | not binding until M5 is 3.2× faster |
+| 3 | records host→device (pileup input), pageable copies | PCIe | ~70 per GPU as measured (0.8 s per 61 M records); > 100 pinned | measured (§12.13), projected | move to pinned, overlapped buffers |
+| 4 | ingest: `.1fq` decode + pack + H2D | host | 0.085 core-s/M: 0.7 cores at 7.8 M/s | measured (§12.10) | fine |
+| 5 | annotation + pileup + M6 collapse | GPU | > 1,000 | measured (§12.13, §12.8) | negligible |
+
+- The node is **GPU-bound at 7.8–9.9 M pairs/s**: below the 27–36 M pairs/s host bound and the ≥ 20 M target, which therefore
+  holds only as a host-side capacity until M5 improves by about 2× (to 20 M) or 2.8× (to the step-1 host bound).
+- Ranked M5 levers (all exact): (a) warp-parallel windows in lanes M and B with the two-pass maxScoreMate (70% of M5 time);
+  (b) compact transcripts and shared-memory state in lane A (6.4 M distinct/s alone); (c) lanes M/B overlapped with lane A of
+  the next batch (tails); (d) cross-sample result reuse (§12.16), −19% of distinct sequences for a same-chemistry sample now,
+  more as a campaign accumulates results.
+- Host levers stay as in §12.9: step 1 (per-node non-host indices) and step 2 (M13, a Sonnet subagent's port in progress at this
+  stop) are needed only once M5 passes ~25 M pairs/s per node.
 
 ### 12.17 Open items
 
