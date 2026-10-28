@@ -77,7 +77,7 @@ __global__ void k_p1(Params P, GenomeView g, const char* rb, const u64* roff, co
     if (k >= n) return;
     u64 i = idx[b0 + k];
     Work<C>& w = work[k];
-    Status s = mapPhase1(P, g, w, rbuf[k], rb + roff[i], (uint)(roff[i + 1] - roff[i]));
+    Status s = mapPhase1(P, g, w, rbuf[k], rb + roff[i], (m5::uint)(roff[i + 1] - roff[i]));
     status[k] = (uint8_t)s;
     nEnt[k] = (s == Status::Ok && w.stitched) ? w.nEntries : 0;
 }
@@ -193,7 +193,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     u64 n = in.off.size() - 1;
     out.nReads = n;
     char* dSeq; u64* dOff;
-    if (!upload(in.seq.data(), in.seq.size(), dSeq, err) || !upload(in.off.data(), n + 1, dOff, err)) return fail(err);
+    if (!upload(in.seq.data(), in.seq.size(), dSeq, err) || !upload((const u64*)in.off.data(), n + 1, dOff, err)) return fail(err);
     cudaDeviceSynchronize();
     out.secUpload = now() - t0;
     // ---- dedup
@@ -251,7 +251,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             for (u64 k; (k = next++) < repH.size();) {
                 u64 i = repH[k];
                 Blob bl{buf.data(), 0, Heavy::NBLOB, false};
-                Status s = mapRead(P, H, *w, *b, in.seq.data() + in.off[i], (uint)(in.off[i + 1] - in.off[i]), bl);
+                Status s = mapRead(P, H, *w, *b, in.seq.data() + in.off[i], (m5::uint)(in.off[i + 1] - in.off[i]), bl);
                 hst[k] = (uint8_t)s; hout[k].assign(buf.data(), buf.data() + bl.n);
             }
             delete w; delete b;
