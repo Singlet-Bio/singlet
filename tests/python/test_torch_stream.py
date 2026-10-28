@@ -258,20 +258,22 @@ def test_every_matching_cell_once_with_its_counts(labelled, env):
     assert st["cells"] == len(want) and st["samples"] == 2 and st["samples_skipped"] == 0
 
 
-def test_batches_mix_samples_and_reshuffle_per_epoch(labelled, env):
+def test_reshuffle_per_epoch(labelled, env):
+    """Each sample's cell order is fixed by (seed, epoch); how samples interleave into batches depends on read timing."""
     root, s = labelled
     ds = S.AtlasCells(
         plan=_plan(s), base=str(root), batch_size=8, mix_samples=2, prefetch=2, output="scipy"
     )
-    e0 = [(g, int(c)) for b in _drain(ds) for g, c in zip(b["gsm"], b["col"])]
-    assert (
-        sum(len(set(b)) > 1 for b in [e0[i : i + 8] for i in range(0, 48, 8)]) >= 1
-    )  # batches hold both samples
-    again = [(g, int(c)) for b in _drain(ds) for g, c in zip(b["gsm"], b["col"])]
-    assert again == e0  # same epoch, same order
+
+    def per_sample():
+        seen = [(g, int(c)) for b in _drain(ds) for g, c in zip(b["gsm"], b["col"])]
+        return {g: [c for gg, c in seen if gg == g] for g in (G1, G3)}
+
+    e0 = per_sample()
+    assert per_sample() == e0  # same epoch, same order inside each sample
     ds.set_epoch(1)
-    e1 = [(g, int(c)) for b in _drain(ds) for g, c in zip(b["gsm"], b["col"])]
-    assert sorted(e1) == sorted(e0) and e1 != e0
+    e1 = per_sample()
+    assert all(sorted(e1[g]) == sorted(e0[g]) and e1[g] != e0[g] for g in (G1, G3))
 
 
 def test_cell_filter_split_and_cap(labelled, env):
@@ -376,3 +378,30 @@ def test_transport_receive_buffer(monkeypatch):
     monkeypatch.setenv("SINGLET_RCVBUF", str(1 << 20))
     assert T._rcvbuf() == 1 << 20
     assert issubclass(T._HTTPSConnection, T.http.client.HTTPSConnection)
+
+
+def test_a_batch_draws_from_every_open_sample():
+    """_batch takes cells from every open sample, in proportion to what each has left (no reader threads)."""
+    import scipy.sparse as sp
+
+    ds = S.AtlasCells.__new__(S.AtlasCells)
+    ds.transform, ds.output, ds.levels, ds._t0_req = None, "scipy", (1,), None
+    ds._stats = {"samples": 0, "samples_skipped": 0}
+    ds.base = None
+
+    def loaded(gsm, n):
+        obs = {
+            "col": np.arange(n),
+            "path": np.array(["CL:0000988"] * n, object),
+            "score": np.zeros(n, np.float32),
+            "sex": np.full(n, None),
+            "ancestry": np.full(n, None),
+        }
+        return S._Loaded("GSE" + gsm[3:], gsm, sp.csr_matrix(np.ones((n, 3), np.float32)), obs)
+
+    open_ = [loaded("GSM1", 400), loaded("GSM2", 400), loaded("GSM3", 200)]
+    b = ds._batch(open_, 100, np.random.default_rng(0))
+    counts = pd.Series(b["gsm"]).value_counts()
+    assert len(b["gsm"]) == 100 and set(counts.index) == {"GSM1", "GSM2", "GSM3"}
+    assert counts["GSM3"] < counts["GSM1"] and b["X"].shape == (100, 3)
+    assert sum(x.left for x in open_) == 900 and b["cell_type_l1"] == ["CL:0000988"] * 100
