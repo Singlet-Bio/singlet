@@ -162,7 +162,6 @@ from singlet._io import (
 from singlet._knn_impute import knn_impute
 from singlet._leiden import leiden
 from singlet._loader import download, load, load_dir, open_bundle
-from singlet.s1.write import read_s1, write_s1
 from singlet._loader import load_sample as load_sample  # cluster use; not in __all__
 from singlet._louvain import louvain
 from singlet._magic import magic
@@ -246,6 +245,7 @@ from singlet.pipeline import PipelineError, Run
 from singlet.pipeline import run as run_pipeline
 from singlet.s1.client import cells as cells  # per-sample objects, cell slicing
 from singlet.s1.client import open_study as open_study
+from singlet.s1.write import read_s1, write_s1
 
 __all__ = [
     # Browse

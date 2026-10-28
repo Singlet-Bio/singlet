@@ -2,9 +2,13 @@
 """singlet.write_s1 / read_s1 (a count matrix as a .s1 sample object of your own) and the streaming loader over such files
 (singlet.torch.S1Stream / S1Cells), locally and over HTTP ranges.
 
-The byte-identity fixture ``tests/data/s1_write_fixture.s1`` is the object written for :func:`fixture_matrix`; the R suite
-(``r/tests/testthat/test-s1-write.R``) builds the same matrix and checks that ``singlet::write_s1`` writes the same bytes.
-Regenerate it only when the format changes on purpose: ``python tests/python/test_s1_write.py --regen``.
+``tests/data/s1_write_fixture.s1`` is the object written for :func:`fixture_matrix`; the R suite
+(``r/tests/testthat/test-s1-write.R``) builds the same matrix and checks ``singlet::write_s1`` against its copy. Both suites
+compare everything that does not depend on the zstd library the codec was built with: the container (sample id, member,
+kind, meta, digest), the pz2 header (shape, codec, layout, canonical digest) and the decoded counts and names. The names and
+tables sections are zstd level 19, whose bytes can differ between zstd releases, so whole-file bytes are equal only between
+builds that link the same zstd (Python and R built in one conda env write identical files). Regenerate the fixture only when
+the format changes on purpose: ``python tests/python/test_s1_write.py --regen``.
 """
 
 from __future__ import annotations
@@ -32,7 +36,14 @@ from singlet.s1.container import S2Reader, S2Writer  # noqa: E402
 from singlet.s1.matrix import VT_U32, Csc, canonical_digest  # noqa: E402
 
 FIXTURE = pathlib.Path(__file__).resolve().parents[1] / "data" / "s1_write_fixture.s1"
-R_FIXTURE = pathlib.Path(__file__).resolve().parents[2] / "r" / "tests" / "testthat" / "fixtures" / "s1_write_fixture.s1"
+R_FIXTURE = (
+    pathlib.Path(__file__).resolve().parents[2]
+    / "r"
+    / "tests"
+    / "testthat"
+    / "fixtures"
+    / "s1_write_fixture.s1"
+)
 
 
 def fixture_matrix():
@@ -48,18 +59,39 @@ def fixture_matrix():
 
 def random_counts(n_cells, n_genes, density, seed=0):
     rng = np.random.default_rng(seed)
-    x = sp.random(n_cells, n_genes, density=density, format="csr", random_state=seed, data_rvs=lambda n: rng.zipf(1.6, n).clip(max=5000))
-    return x.astype(np.float32), ["ENSG%011d" % i for i in range(n_genes)], ["CELL%07d" % j for j in range(n_cells)]
+    x = sp.random(
+        n_cells,
+        n_genes,
+        density=density,
+        format="csr",
+        random_state=seed,
+        data_rvs=lambda n: rng.zipf(1.6, n).clip(max=5000),
+    )
+    return (
+        x.astype(np.float32),
+        ["ENSG%011d" % i for i in range(n_genes)],
+        ["CELL%07d" % j for j in range(n_cells)],
+    )
 
 
 def internal_object(x_cells_genes, genes, cells, sample_id="sample", member="counts", threads=4):
     """The object the .s1 benchmark built before write_s1 existed (bench/s1bench/formats/s1.py)."""
     t = sp.csc_matrix(sp.csr_matrix(x_cells_genes).T)
     t.sort_indices()
-    csc = Csc(m=t.shape[0], n=t.shape[1], indptr=t.indptr.astype(np.int64), indices=t.indices.astype(np.uint32),
-              data=t.data.astype(np.uint32), rownames=list(genes), colnames=list(cells), value_type=VT_U32)
+    csc = Csc(
+        m=t.shape[0],
+        n=t.shape[1],
+        indptr=t.indptr.astype(np.int64),
+        indices=t.indices.astype(np.uint32),
+        data=t.data.astype(np.uint32),
+        rownames=list(genes),
+        colnames=list(cells),
+        value_type=VT_U32,
+    )
     dg = canonical_digest(csc)
-    body = NativeCodec("auto").encode(csc, EncodeOptions(row_names="inline", col_names="inline", threads=threads, digest=dg))
+    body = NativeCodec("auto").encode(
+        csc, EncodeOptions(row_names="inline", col_names="inline", threads=threads, digest=dg)
+    )
     w = S2Writer(sample_id)
     w.add_matrix(member, body, dg, {"modality": "counts"})
     return w.build()
@@ -112,13 +144,53 @@ def test_threads_do_not_change_bytes(tmp_path):
     assert a == b
 
 
-def test_fixture_bytes(tmp_path):
+_HEADER_KEYS = (
+    "version",
+    "codec",
+    "m",
+    "n",
+    "nnz",
+    "value_type",
+    "row_order",
+    "chunk_cols",
+    "n_chunks",
+    "lanes",
+    "prob_bits",
+    "value_prob_bits",
+    "ctx_kind",
+    "digest",
+    "rows_kind",
+    "cols_kind",
+)
+
+
+def _fingerprint(path):
+    """What a .s1 object fixes independently of the zstd build: container layout, member digest, pz2 header fields."""
+    from singlet.s1.codec import parse_header
+
+    rd = S2Reader(str(path))
+    out = {"sample_id": rd.sample_id}
+    for name, mi in rd.members.items():
+        h = parse_header(rd.read_range(name, 0, 256))
+        out[name] = (mi.kind, mi.flags, mi.meta, mi.digest, mi.off) + tuple(
+            h[k] for k in _HEADER_KEYS
+        )
+    return out
+
+
+def test_fixture(tmp_path):
     if not FIXTURE.exists():
         pytest.skip("fixture not generated")
+    assert (
+        R_FIXTURE.read_bytes() == FIXTURE.read_bytes()
+    )  # the R suite checks singlet::write_s1 against its copy
     x, genes, cells = fixture_matrix()
     p = singlet.write_s1(x.T, tmp_path / "f.s1", genes=genes, barcodes=cells)
-    assert p.read_bytes() == FIXTURE.read_bytes()
-    assert R_FIXTURE.read_bytes() == FIXTURE.read_bytes()  # the R suite checks singlet::write_s1 against its copy
+    assert _fingerprint(p) == _fingerprint(FIXTURE)
+    for f in (p, FIXTURE):
+        a = singlet.read_s1(f, dtype=np.uint32)
+        assert list(a.var_names) == genes and list(a.obs_names) == cells
+        assert np.array_equal(a.X.toarray(), x.T)
 
 
 def test_gene_pack_reference(tmp_path):
@@ -152,7 +224,9 @@ def test_needs_names_and_orientation(tmp_path):
 
 def test_object_layout(tmp_path):
     x, genes, cells = random_counts(30, 20, 0.3, seed=8)
-    p = singlet.write_s1(x, tmp_path / "o.s1", genes=genes, barcodes=cells, sample_id="GSM123", member="counts")
+    p = singlet.write_s1(
+        x, tmp_path / "o.s1", genes=genes, barcodes=cells, sample_id="GSM123", member="counts"
+    )
     rd = S2Reader(str(p))
     assert rd.sample_id == "GSM123" and list(rd.members) == ["counts"]
     assert rd.members["counts"].meta == {"modality": "counts"}

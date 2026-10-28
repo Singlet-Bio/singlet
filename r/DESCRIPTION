@@ -31,6 +31,7 @@ Suggests:
     SummarizedExperiment,
     S4Vectors,
     Seurat,
+    SeuratObject,
     curl,
     digest,
     testthat (>= 3.1.7),

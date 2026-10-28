@@ -2,11 +2,11 @@
 % Please edit documentation in R/RcppExports.R
 \name{s1_members_}
 \alias{s1_members_}
-\title{Members of a .s1 sample object from its first bytes (header and member table): name, kind, offset, length.}
+\title{Members of a .s1 sample object from its first bytes (header and member table): name, kind, offset, length, digest.}
 \usage{
 s1_members_(head)
 }
 \description{
-Members of a .s1 sample object from its first bytes (header and member table): name, kind, offset, length.
+Members of a .s1 sample object from its first bytes (header and member table): name, kind, offset, length, digest.
 }
 \keyword{internal}

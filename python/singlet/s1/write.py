@@ -59,7 +59,10 @@ def _as_cells_by_genes(x, genes, barcodes, layer):
         genes = list(map(str, x.var_names)) if genes is None else list(map(str, genes))
         barcodes = list(map(str, x.obs_names)) if barcodes is None else list(map(str, barcodes))
         if m is None:
-            raise ValueError("the AnnData object has no matrix in %s" % ("X" if layer is None else "layers[%r]" % layer))
+            raise ValueError(
+                "the AnnData object has no matrix in %s"
+                % ("X" if layer is None else "layers[%r]" % layer)
+            )
         if hasattr(m, "to_memory"):  # backed / lazy arrays
             m = m.to_memory()
         x = m
@@ -68,7 +71,7 @@ def _as_cells_by_genes(x, genes, barcodes, layer):
     if genes is None or barcodes is None:
         raise ValueError("genes= and barcodes= are required unless x is an AnnData object")
     xs = sp.csr_matrix(x)
-    n_cells, n_genes = xs.shape
+    n_cells, n_genes = (int(v) for v in xs.shape or (0, 0))
     if len(genes) != n_genes or len(barcodes) != n_cells:
         raise ValueError(
             "x is %d cells x %d genes (cells x genes, as in AnnData) but %d gene ids and %d barcodes were given"
@@ -89,12 +92,14 @@ def _canonical_csc(xs, genes, barcodes) -> Csc:
     if d.size:
         if np.issubdtype(d.dtype, np.floating):
             if not np.all(np.isfinite(d)) or np.any(d != np.floor(d)):
-                raise ValueError("x has non-integer values: write_s1 stores counts, not normalised data")
+                raise ValueError(
+                    "x has non-integer values: write_s1 stores counts, not normalised data"
+                )
         if np.any(d < 0):
             raise ValueError("x has negative values: write_s1 stores counts")
         if d.max() > np.iinfo(np.uint32).max:
             raise ValueError("a count exceeds 2**32 - 1")
-    m, n = t.shape
+    m, n = (int(v) for v in t.shape or (0, 0))
     if m >= 2**32 or n >= 2**32:
         raise ValueError("a .s1 matrix has fewer than 2**32 rows and columns")
     return Csc(
@@ -207,16 +212,24 @@ def read_s1(
                 rows = csc.rownames
             except Exception as e:  # noqa: BLE001 - pack not installed
                 raise ValueError(
-                    "the gene ids of %s are in vocabulary pack %s, which is not installed; pass genes=" % (path, (csc.row_ref or {}).get("pack"))
+                    "the gene ids of %s are in vocabulary pack %s, which is not installed; pass genes="
+                    % (path, (csc.row_ref or {}).get("pack"))
                 ) from e
+    cols = csc.colnames
+    if rows is None or cols is None:
+        raise ValueError("%s: member %r has unresolved gene ids or barcodes" % (path, member))
     if len(rows) != csc.m:
         raise ValueError("%d gene ids for %d genes" % (len(rows), csc.m))
     x = sp.csc_matrix(
-        (np.asarray(csc.data).astype(dtype), np.asarray(csc.indices).astype(np.int64), np.asarray(csc.indptr).astype(np.int64)),
+        (
+            np.asarray(csc.data).astype(dtype),
+            np.asarray(csc.indices).astype(np.int64),
+            np.asarray(csc.indptr).astype(np.int64),
+        ),
         shape=(csc.m, csc.n),
     )
     a = ad.AnnData(X=sp.csr_matrix(x.T))
     a.var_names = [str(g) for g in rows]
-    a.obs_names = [str(b) for b in csc.colnames]
+    a.obs_names = [str(b) for b in cols]
     a.uns["s1"] = {"sample_id": s.sample_id, "member": member}
     return a

@@ -51,7 +51,9 @@ def test_stream_batches_match_slices(big, order):
         want = want[:, s.gene_order]
     assert np.array_equal(got, want)
     names = s.gene_names
-    assert names == (genes if order == "canonical" or s.gene_order is None else [genes[i] for i in s.gene_order])
+    assert names == (
+        genes if order == "canonical" or s.gene_order is None else [genes[i] for i in s.gene_order]
+    )
 
 
 def test_stream_over_http_reads_only_needed_bytes(big):

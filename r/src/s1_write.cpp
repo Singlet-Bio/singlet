@@ -162,7 +162,7 @@ Rcpp::RawVector s1_write_(Rcpp::IntegerVector p, Rcpp::IntegerVector i, Rcpp::Nu
     return r;
 }
 
-//' Members of a .s1 sample object from its first bytes (header and member table): name, kind, offset, length.
+//' Members of a .s1 sample object from its first bytes (header and member table): name, kind, offset, length, digest.
 //' @keywords internal
 // [[Rcpp::export]]
 Rcpp::List s1_members_(Rcpp::RawVector head) {
@@ -179,6 +179,7 @@ Rcpp::List s1_members_(Rcpp::RawVector head) {
     Rcpp::CharacterVector name(n_members);
     Rcpp::IntegerVector kind(n_members);
     Rcpp::NumericVector off(n_members), size(n_members);
+    Rcpp::CharacterVector digest(n_members);
     size_t q = static_cast<size_t>(table_off);
     const size_t end = static_cast<size_t>(table_off + table_len);
     for (uint32_t k = 0; k < n_members; ++k) {
@@ -191,10 +192,18 @@ Rcpp::List s1_members_(Rcpp::RawVector head) {
         kind[k] = b[q];
         off[k] = static_cast<double>(get_le<uint64_t>(b + q + 2));
         size[k] = static_cast<double>(get_le<uint64_t>(b + q + 10));
+        static const char* hx = "0123456789abcdef";
+        std::string d(32, '0');
+        for (int t = 0; t < 16; ++t) {
+            const uint8_t v = b[q + 30 + t];  // after kind, flags, off, len, out_len, crc32 (30 bytes)
+            d[2 * t] = hx[v >> 4];
+            d[2 * t + 1] = hx[v & 15];
+        }
+        digest[k] = d;
         const uint32_t ml = get_le<uint32_t>(b + q + kEntryFixed - 4);
         q += kEntryFixed + ml;
     }
     if (q != end) Rcpp::stop("trailing bytes in the member table");
     return Rcpp::List::create(Rcpp::Named("sample_id") = sid, Rcpp::Named("file_len") = static_cast<double>(file_len),
-                              Rcpp::Named("name") = name, Rcpp::Named("kind") = kind, Rcpp::Named("off") = off, Rcpp::Named("len") = size);
+                              Rcpp::Named("name") = name, Rcpp::Named("kind") = kind, Rcpp::Named("off") = off, Rcpp::Named("len") = size, Rcpp::Named("digest") = digest);
 }

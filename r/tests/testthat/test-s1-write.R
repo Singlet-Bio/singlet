@@ -2,7 +2,10 @@
 # write_s1() / read_s1(): a count matrix as a .s1 sample object of your own, and load() of such a file.
 #
 # fixtures/s1_write_fixture.s1 is the object singlet.write_s1() (Python) writes for fixture_matrix() below; the Python suite
-# (tests/python/test_s1_write.py) builds the same matrix and checks the same bytes, so the two packages write identical files.
+# (tests/python/test_s1_write.py) builds the same matrix. Both compare what does not depend on the zstd library the codec
+# links: the container (sample id, member, kind, digest, offset), the pz2 header and the decoded counts and names. The names
+# and tables sections are zstd level 19, whose bytes can differ between zstd releases; built against one zstd, the two
+# packages write identical files.
 
 fixture_matrix <- function() {
     g <- 0:39
@@ -34,12 +37,24 @@ test_that("write_s1 and read_s1 round-trip a dgCMatrix exactly", {
     expect_false(file.exists(paste0(f, ".part")))
 })
 
-test_that("write_s1 writes the same bytes as singlet.write_s1 in Python", {
+fingerprint <- function(path) {
+    info <- s1_members_(.s1_read_head(path))
+    con <- file(path, "rb")
+    on.exit(close(con))
+    seek(con, info$off[[1L]])
+    h <- pz2_header_(readBin(con, "raw", n = min(256, info$len[[1L]])))
+    keep <- c("m", "n", "nnz", "codec", "value_type", "row_order", "chunk_cols", "n_chunks", "row_names_kind",
+              "row_names_id", "col_names_kind", "col_names_id", "digest")
+    list(sample_id = info$sample_id, name = info$name, kind = info$kind, off = info$off, digest = info$digest, header = h[keep])
+}
+
+test_that("write_s1 writes what singlet.write_s1 writes in Python (shared fixture)", {
     fix <- testthat::test_path("fixtures", "s1_write_fixture.s1")
     skip_if_not(file.exists(fix), "fixture missing")
     f <- tempfile(fileext = ".s1")
     write_s1(fixture_matrix(), f)
-    expect_identical(readBin(f, "raw", file.size(f)), readBin(fix, "raw", file.size(fix)))
+    expect_identical(fingerprint(f), fingerprint(fix))
+    expect_identical(as.matrix(read_s1(f)), as.matrix(fixture_matrix()))
     expect_identical(as.matrix(read_s1(fix)), as.matrix(fixture_matrix()))
 })
 

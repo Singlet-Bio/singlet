@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import os
 import time
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator
 from typing import Optional, Union
 
 import numpy as np
@@ -137,7 +137,10 @@ def block_batches(
         rng.shuffle(starts)
         need = per * int(n_batches)
         starts = np.resize(starts, need) if len(starts) < need else starts[:need]
-        return [sorted((int(s), int(s) + block_size) for s in starts[i * per : (i + 1) * per]) for i in range(int(n_batches))]
+        return [
+            sorted((int(s), int(s) + block_size) for s in starts[i * per : (i + 1) * per])
+            for i in range(int(n_batches))
+        ]
     starts = np.arange(0, n_cells, block_size)
     rng.shuffle(starts)
     out = []
@@ -197,15 +200,21 @@ class S1Stream:
         if order not in ("native", "canonical"):
             raise ValueError("order must be 'native' or 'canonical'")
         fetch, known = _open_source(source)
-        self.reader = S2Reader(fetch, size=size if size is not None else known, prefetch=prefix_hint)
+        self.reader = S2Reader(
+            fetch, size=size if size is not None else known, prefetch=prefix_hint
+        )
         if member not in self.reader.members:
             raise KeyError(f"no member {member!r} (members: {', '.join(self.reader.members)})")
         self.member, self.threads, self.order = member, int(threads), order
-        self.mem = _pz2.Member(fetch=lambda off, ln: self.reader.read_range(member, off, ln), prefix_hint=prefix_hint)
+        self.mem = _pz2.Member(
+            fetch=lambda off, ln: self.reader.read_range(member, off, ln), prefix_hint=prefix_hint
+        )
         self.n_genes, self.n_cells = int(self.mem.m), int(self.mem.n)
         perm = self.mem.row_perm
         #: stored row -> source (canonical) row, or None when the two orders agree
-        self.gene_order: Optional[np.ndarray] = None if perm is None else np.asarray(perm, dtype=np.int64)
+        self.gene_order: Optional[np.ndarray] = (
+            None if perm is None else np.asarray(perm, dtype=np.int64)
+        )
         self.fetch_s = 0.0  # seconds waiting for bytes
         self.decode_s = 0.0  # seconds in the decoder
         self._genes: Optional[list] = None
@@ -255,7 +264,9 @@ class S1Stream:
         buf = self.reader.read_range(self.member, int(p["byte_off"]), int(p["byte_len"]))
         t1 = time.perf_counter()
         self.mem.add_range(int(p["byte_off"]), buf)
-        d = self.mem.decode(c0, c1, mode=self.order, threads=self.threads, dtype="float32", index_dtype="int32")
+        d = self.mem.decode(
+            c0, c1, mode=self.order, threads=self.threads, dtype="float32", index_dtype="int32"
+        )
         self.fetch_s += t1 - t0
         self.decode_s += time.perf_counter() - t1
         return d
@@ -285,11 +296,17 @@ class S1Stream:
         import torch
 
         indptr, indices, data = self.batch_arrays(list(blocks))
-        it = np.int32 if indptr[-1] < 2**31 else np.int64  # torch wants crow and col indices in one dtype
+        it = (
+            np.int32 if indptr[-1] < 2**31 else np.int64
+        )  # torch wants crow and col indices in one dtype
         crow = torch.from_numpy(indptr.astype(it, copy=False))
         col = torch.from_numpy(indices.astype(it, copy=False))
         return torch.sparse_csr_tensor(
-            crow, col, torch.from_numpy(data), size=(len(indptr) - 1, self.n_genes), check_invariants=False
+            crow,
+            col,
+            torch.from_numpy(data),
+            size=(len(indptr) - 1, self.n_genes),
+            check_invariants=False,
         )
 
     def cells(self, c0: int, c1: int):
@@ -333,7 +350,9 @@ class S1Cells(_Base):
     @property
     def stream(self) -> S1Stream:
         if self._stream is None:
-            self._stream = S1Stream(self.source, member=self.member, threads=self.threads, order=self.order)
+            self._stream = S1Stream(
+                self.source, member=self.member, threads=self.threads, order=self.order
+            )
         return self._stream
 
     @property
@@ -355,7 +374,9 @@ class S1Cells(_Base):
         """This epoch's batches (before splitting between workers)."""
         if self.shuffle:
             seed = int(np.random.SeedSequence([self.seed, self.epoch]).generate_state(1)[0])
-            return block_batches(self.n_cells, self.batch_size, self.block_size, seed=seed, drop_last=self.drop_last)
+            return block_batches(
+                self.n_cells, self.batch_size, self.block_size, seed=seed, drop_last=self.drop_last
+            )
         starts = range(0, self.n_cells, self.block_size)
         blocks = [(s, min(s + self.block_size, self.n_cells)) for s in starts]
         per = self.batch_size // self.block_size
@@ -374,6 +395,9 @@ class S1Cells(_Base):
             mine = mine[wi.id :: wi.num_workers]
         s = self.stream
         for blocks in mine:
-            idx = np.concatenate([np.arange(a, b) for a, b in blocks]) if blocks else np.zeros(0, np.int64)
+            idx = (
+                np.concatenate([np.arange(a, b) for a, b in blocks])
+                if blocks
+                else np.zeros(0, np.int64)
+            )
             yield {"X": s.batch(blocks), "index": torch.from_numpy(idx.astype(np.int64))}
-
