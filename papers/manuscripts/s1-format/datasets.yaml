@@ -555,11 +555,12 @@ datasets:
   tier: M
   cite: stickels2021highly
   source:
-    repository: Zenodo 15556390 (re-deposit of Broad SCP815 by the SPLISOSM authors; SCP815 itself needs a login)
-    url: https://zenodo.org/records/15556390/files/slideseqv2_mouse_hippo.tar.gz?download=1
-    filename: slideseqv2_mouse_hippo.tar.gz
-    file: Puck_200115_08_counts_no_cutoff.zip inside the tarball, a 10x MTX triplet of all 53,208 beads (no UMI cutoff)
-    format: mtx_in_zip_in_tar
+    repository: Zenodo 12785822 (SVG benchmark deposit of Broad SCP815; SCP815 itself needs a login)
+    url: https://zenodo.org/records/12785822/files/Slide-seqV2_stickels2020highly_stickels2021highly_Slide-seqV2_Mouse_Hippocampus_Puck_200115_08_data_whole.h5ad?download=1
+    filename: slideseqv2_puck_200115_08_whole.h5ad
+    file: the whole puck (53,208 beads x 23,264 genes, no UMI cutoff); X holds the integer bead counts
+    format: h5ad
+    x_location: X
   matrices: [{name: rna, value: umi}]
   license: see the SCP815 study terms
   verify: false

@@ -433,12 +433,6 @@ def _visium_hd(cfg: Config, u: Unit) -> Canon:
     return parse_tenx_h5(out, u.matrix.get("feature_type"))
 
 
-def _slideseq(cfg: Config, u: Unit) -> Canon:
-    """Zenodo tarball holding Puck_200115_08_counts_no_cutoff.zip, a 10x-style MTX triplet of every bead (no UMI cutoff)."""
-    root = _extract(_main_file(cfg, u.dataset))
-    return parse_mtx_dir(_extract(_first(root, "*counts_no_cutoff.zip")))
-
-
 def _tabula_muris(cfg: Config, u: Unit) -> Canon:
     """FACS.zip: one genes x cells CSV of read counts per tissue (FACS/<Tissue>-counts.csv), same gene list in each."""
     root = _extract(_main_file(cfg, u.dataset))
@@ -475,7 +469,6 @@ HOOKS: dict[tuple[str, str], Callable[[Config, Unit], Canon]] = {
     ("mca_microwell", "*"): _mca,
     ("rosenberg_splitseq", "*"): _rosenberg,
     ("visium_hd_crc", "*"): _visium_hd,
-    ("slideseq2_hippocampus", "*"): _slideseq,
     ("tabula_muris_facs", "*"): _tabula_muris,
     ("paul_marsseq", "*"): _paul,
 }
