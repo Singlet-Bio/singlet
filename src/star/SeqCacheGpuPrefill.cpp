@@ -132,7 +132,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
 
 } // namespace
 
-void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *cache) {
+void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
     const char *e = getenv("SINGLET_ENGINE_GPU");
     if (e == nullptr || e[0] != '1' || cache == nullptr)
         return;
@@ -199,8 +199,21 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *cache) {
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it\n" << out.log;
     if (!ok) return skip("GPU mapping failed");
-    // insert, sharded by hash across threads (SeqCache is thread-safe per shard)
+    // a cache large enough for every result (entries are ~(32 + L/4 + blob) bytes; 3x for the ring, the 2-way index and
+    // the shards' imbalance), unless SINGLET_STAR_SEQCACHE_MB was set
     uint64 nRec = out.seqOff.size() - 1;
+    if (getenv("SINGLET_STAR_SEQCACHE_MB") == nullptr) {
+        uint64 need = (out.blob.size() + out.seq.size() / 4 + 40 * nRec) * 3;
+        uint64 mb = std::max<uint64>(4096, (need >> 20) + 1);
+        setenv("SINGLET_STAR_SEQCACHE_MB", std::to_string(mb).c_str(), 1);
+        SeqCache *c2 = SeqCache::create(P, G.nGenome);
+        if (c2 != nullptr) {
+            c2->verify = cache->verify;
+            delete cache;
+            cache = c2;
+        };
+    };
+    // insert, sharded by hash across threads (SeqCache is thread-safe per shard)
     {
         int nt = std::max(1, (int) P.runThreadN);
         std::vector<std::thread> th;

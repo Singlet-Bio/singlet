@@ -18,7 +18,7 @@ extern "C" void __gcov_dump(void);
 #include "ReadAlignChunk.h"
 #include "ReadAlign.h"
 #include "SeqCache.h"
-void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *cache);
+void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache);
 #include "StarAccel.h"
 #include "Stats.h"
 #include "genomeGenerate.h"

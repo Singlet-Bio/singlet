@@ -223,8 +223,24 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     cudaMemcpy(order.data(), dOrder, n * 4, cudaMemcpyDeviceToHost); cudaMemcpy(head.data(), dHead, n * 4, cudaMemcpyDeviceToHost);
     cudaMemcpy(hasN.data(), dN, n, cudaMemcpyDeviceToHost);
     cudaFree(dH1); cudaFree(dH2); cudaFree(dN); cudaFree(dOrder); cudaFree(dHead); cudaFree(dColl);
-    std::vector<uint32_t> rep;   // one read per distinct sequence without N, in sort order
+    std::vector<uint32_t> rep;   // one read per distinct sequence without N
     for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
+    // map them in sequence order (first 32 bases), not hash order: neighbouring threads then search the same SA ranges and loci
+    // (2.7x faster on pbmc1k_v3). Each sequence's result does not depend on the order.
+    {
+        std::vector<u64> key(rep.size());
+        for (u64 k = 0; k < rep.size(); k++) {
+            u64 i = rep[k], kk = 0, L = in.off[i + 1] - in.off[i];
+            for (u64 t = 0; t < 32; t++) kk = (kk << 2) | (t < L ? (u64)(uint8_t)in.seq[in.off[i] + t] : 0);
+            key[k] = kk;
+        }
+        std::vector<uint32_t> idx(rep.size());
+        for (u64 k = 0; k < idx.size(); k++) idx[k] = (uint32_t)k;
+        std::stable_sort(idx.begin(), idx.end(), [&](uint32_t a, uint32_t b) { return key[a] < key[b]; });
+        std::vector<uint32_t> r2(rep.size());
+        for (u64 k = 0; k < idx.size(); k++) r2[k] = rep[idx[k]];
+        rep.swap(r2);
+    }
     out.secDedup = now() - t0;
     // ---- lanes
     t0 = now();
