@@ -4922,6 +4922,10 @@ int main(int argc, char* argv[]) {
         else if (is_atac_mode) sorted_reason = "ATAC fragments are read from the sorted BAM";
         else if (is_smart_seq2_mode || is_bulk_rna_mode) sorted_reason = "plate/bulk counting reads the sorted BAM";
         else if (detected_soloType != "CB_UMI_Simple") sorted_reason = "the protocol is not CB_UMI_Simple";
+        // Same condition as the native CB_UMI_Simple STAR branch below: without a whitelist file STAR runs
+        // CB_samTagOut (auto-discovery), which the stream does not support (found by W11, job 790268).
+        else if (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")
+            sorted_reason = "no barcode whitelist file (STAR runs CB_samTagOut)";
         else if (tagged_bam_enabled) sorted_reason = "--tagged-bam rewrites the sorted BAM";
         else if (std::getenv("SINGLET_KEEP_STAR_BAM")) sorted_reason = "SINGLET_KEEP_STAR_BAM keeps the sorted BAM";
         if (sorted_reason) {
