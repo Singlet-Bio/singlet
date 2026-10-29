@@ -16,7 +16,7 @@
 set -u
 W=/mnt/projects/debruinz_project/debruinz/singlet; export PATH=$W/envs/pbench/bin:$PATH
 L=$W/bench-public/code/public/genotype/lib; T=$W/bench-public/data/kang_truth; ORIG=$W/bench-public/runs
-S=$W/jobs/fq-read-source/snp
+S=$W/jobs/fq-read-source/snp${SNPTAG:-}
 mkdir -p $S/published/kang2018_b2_stim
 ln -sfn $ORIG/kang2018_b2_stim/singlet_auto $S/published/kang2018_b2_stim/singlet_auto
 for VAR in published none ilmn4; do

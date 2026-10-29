@@ -22,7 +22,7 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; export PATH=$W/envs/pbench/bi
 BIN=$W/jobs/fq-read-source/bin/$BIN; echo "bin $(sha256sum $BIN | cut -c1-16) $(cat $BIN.commit)"
 FQ=$W/bench-public/data/kang_b2stim/fastq
 REF=/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A
-O=$W/jobs/fq-read-source/snp/$VAR/kang2018_b2_stim/singlet_auto; rm -rf $O; mkdir -p $O
+O=$W/jobs/fq-read-source/snp${SNPTAG:-}/$VAR/kang2018_b2_stim/singlet_auto; rm -rf $O; mkdir -p $O
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT; cd $SCR
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists SINGLET_STALL_TIMEOUT=10800 TMPDIR=$SCR
 /usr/bin/time -v -o $O/encode.time.txt $BIN encode --reads $FQ/R1.fastq.gz $FQ/R2.fastq.gz -o $SCR/s.1fq \
@@ -30,5 +30,5 @@ export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists SINGLET_STALL_TIME
 echo "1fq bytes $(stat -c %s $SCR/s.1fq)"; grep -E "Elapsed|Maximum" $O/encode.time.txt
 /usr/bin/time -v -o $O/time.txt $BIN $SCR/s.1fq --ref-base /mnt/projects/debruinz_project/cellarium/reference \
   --genome-dir $REF/star_2.7.11b --exons $REF/genes/genes.gtf --out-prefix $O/ --threads 16 --pipeline \
-  --n-donors -1 --read-source ${RS:-file} --tagged-bam $SCR/possorted.bam --bam-sort-mode disk --output-format mtx --raw-matrix > $O/run.log 2>&1 || echo "exit $?" >> $O/run.log
+  --n-donors -1 --read-source ${RS:-file} --tagged-bam $SCR/possorted.bam --bam-sort-mode ${SORT:-disk} --output-format mtx --raw-matrix > $O/run.log 2>&1 || echo "exit $?" >> $O/run.log
 grep -E "Elapsed|Maximum resident" $O/time.txt; grep -E "auto-K|selected K" $O/run.log | head -5; ls $O/private
