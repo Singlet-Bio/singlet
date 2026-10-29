@@ -724,6 +724,7 @@ public:
                 continue;
             }
             int32_t bc_idx = bc_index_.lookup(cb_str);
+            cur_read_gene_ = UINT32_MAX;
             if (bc_idx < 0) {
                 // N22: WL ambient profiling — accumulate gene hits from WL-only barcodes
                 if (!wl_umi_counts_.empty() &&
@@ -938,6 +939,7 @@ public:
                 ReadFeatures rf = classify_read(exon_gene, first_exon_idx, primary_multigene,
                                                 intron_overlaps, intron_gene, first_intron_idx,
                                                 stats);
+                if (nh == 1) cur_read_gene_ = rf.gene;   // R9: evidence UMIs are corrected within (cell, gene)
                 if (nh == 1 && config_.count_polya && !config_.reverse_strand && rf.gene != UINT32_MAX) {
                     uint64_t pk;
                     if (polya_site_from_read(b, 6, 0.8, pk))
@@ -1017,7 +1019,7 @@ public:
                     if (!vdj_overlaps_.empty()) {
                         uint32_t vdj_gene = vdj_overlaps_[0];
                         if (config_.umi_dedup) {                  // R9: counted at finalize
-                            vdj_umi_.add(static_cast<uint32_t>(bc_idx), vdj_gene, umi_str, umi_len);
+                            vdj_umi_.add(static_cast<uint32_t>(bc_idx), vdj_gene, umi_str, umi_len, cur_read_gene_);
                         } else {
                             vdj_acc_.increment(vdj_gene, static_cast<uint32_t>(bc_idx));
                             stats.vdj_hits++;
@@ -1072,10 +1074,10 @@ public:
         }
 
         // ── Order-free finalize (docs/research-beta/order-free-rules.md) ──
-        snp_cons_.finalize(snp_ad_, snp_dp_, stats, config_.umi_dedup_directional);   // R1 over R9 molecules
+        snp_cons_.finalize(snp_ad_, snp_dp_, stats, config_.umi_dedup_directional, gene_roots(mol_store_));  // R1 over R9
         snp_cons_.clear();
-        finalize_umi_features(sj_umi_dedup_, sj_acc_, stats.sj_hits);   // R9
-        finalize_umi_features(vdj_umi_, vdj_acc_, stats.vdj_hits);
+        finalize_umi_features(sj_umi_dedup_, sj_acc_, stats.sj_hits, mol_store_);   // R9, before the molecule store
+        finalize_umi_features(vdj_umi_, vdj_acc_, stats.vdj_hits, mol_store_);      // is finalized below
         canonicalize_splice_junctions();               // R7
         if (config_.strand_prior_only)                  // R5: report the aggregate over all informative reads
             strand_probe_ = StrandEvidence{stats.strand_sense, stats.strand_antisense};
@@ -1172,6 +1174,7 @@ public:
         std::vector<mt::MtIndelEvent> mt_indels;
 
         UmiFeatureCollapse sj_umi;   // R9: junction molecules, collapsed at finalize
+        uint32_t cur_gene = UINT32_MAX;  // R9: gene of the current unique read
         SnpConsensus snp_cons;  // per-molecule SNP allele consensus (order-free-rules R1)
         // Gene-model molecules (per worker, labelled and finalized after thread join)
         DirectionalUmiStore mol_store;
@@ -1497,8 +1500,7 @@ public:
         for (int w = 0; w < n_workers; ++w) {
             mol_stats += finalize_store(workers[w].mol_store, workers[w].exon,
                                         workers[w].intron, workers[w].amb);
-            workers[w].mol_store.clear_molecules();
-        }
+        }   // the stores are cleared after R9 has used them (below)
 
         // ── Merge worker outputs ──
         PileupStats stats;
@@ -1569,11 +1571,13 @@ public:
         }
         // SNP AD/DP: consensus per molecule in its worker (order-free-rules R1), then merge
         for (auto& wc : workers) {
-            wc.snp_cons.finalize(wc.snp_ad, wc.snp_dp, stats, config_.umi_dedup_directional);  // R1 over R9 molecules
+            wc.snp_cons.finalize(wc.snp_ad, wc.snp_dp, stats, config_.umi_dedup_directional,
+                                 gene_roots(wc.mol_store));  // R1 over R9 molecules
             wc.snp_cons.clear();
-            // R9: a junction or V(D)J gene lies on one chromosome, so all its reads are in one worker
-            finalize_umi_features(wc.sj_umi, wc.sj, stats.sj_hits);
-            finalize_umi_features(wc.vdj_umi, wc.vdj, stats.vdj_hits);
+            // R9: a junction, V(D)J gene or gene lies on one chromosome, so all its reads are in one worker
+            finalize_umi_features(wc.sj_umi, wc.sj, stats.sj_hits, wc.mol_store);
+            finalize_umi_features(wc.vdj_umi, wc.vdj, stats.vdj_hits, wc.mol_store);
+            wc.mol_store.clear_molecules();
         }
         merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_ad; });
         merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_dp; });
@@ -1988,6 +1992,7 @@ private:
     std::vector<mt::MtIndelEvent> mt_indels_;  // chrM indels captured during CIGAR walk
     SnpConsensus snp_cons_;   // per-molecule SNP allele consensus (order-free-rules R1)
     UmiFeatureCollapse sj_umi_dedup_;  // splice-junction molecules (order-free-rules R9)
+    uint32_t cur_read_gene_ = UINT32_MAX;  // R9: gene of the current unique read, for its junction/V(D)J/SNP evidence
 
     // G-EM: ambiguous reads buffered for post-pileup EM rescue
     std::vector<em_rescue::AmbigRead> ambig_reads_;
@@ -2487,7 +2492,7 @@ private:
                     // UMI dedup: exact match on (barcode, junction_id, UMI)
                     // R9: molecules are counted at finalize, after UMI correction
                     if (config_.umi_dedup) {
-                        sj_umi_dedup_.add(bc_idx, sj_idx, umi_str, umi_len);
+                        sj_umi_dedup_.add(bc_idx, sj_idx, umi_str, umi_len, cur_read_gene_);
                     } else {
                         sj_acc_.increment(sj_idx, bc_idx);
                         stats.sj_hits++;
@@ -2543,7 +2548,8 @@ private:
                             char base = seq_nt16_str[bam_seqi(seq, query_pos + offset)];
                             // one allele per molecule, by consensus at finalize (order-free-rules R1)
                             snp_cons_.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
-                                          SnpConsensus::base_class(base, it->ref_allele, it->alt_allele));
+                                          SnpConsensus::base_class(base, it->ref_allele, it->alt_allele),
+                                          cur_read_gene_);
                             stats.snp_hits++;
                         }
                     }
@@ -2886,7 +2892,7 @@ private:
                     }
                     // UMI dedup: exact match on (barcode, junction_id, UMI)
                     if (config_.umi_dedup) {                      // R9: counted at finalize
-                        wc.sj_umi.add(bc_idx, sj_idx, umi_str, umi_len);
+                        wc.sj_umi.add(bc_idx, sj_idx, umi_str, umi_len, wc.cur_gene);
                     } else {
                         wc.sj.increment(sj_idx, bc_idx);
                         wc.stats.sj_hits++;
@@ -2929,7 +2935,8 @@ private:
                             char base = seq_nt16_str[bam_seqi(seq, query_pos + offset)];
                             // one allele per molecule, by consensus at finalize (order-free-rules R1)
                             wc.snp_cons.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
-                                            SnpConsensus::base_class(base, it->ref_allele, it->alt_allele));
+                                            SnpConsensus::base_class(base, it->ref_allele, it->alt_allele),
+                                            wc.cur_gene);
                             wc.stats.snp_hits++;
                         }
                     }
@@ -3067,6 +3074,7 @@ private:
         }
         const char* cb_str = bam_aux2Z(cb_tag);
         int32_t bc_idx = bc_index_.lookup(cb_str);
+        wc.cur_gene = UINT32_MAX;
         if (bc_idx < 0) {
             // N22: WL ambient profiling (parallel path) — CB present but not in
             // the auto-discovered barcode set.  Try the full WL ambient index.
@@ -3237,6 +3245,7 @@ private:
             ReadFeatures rf = classify_read(exon_gene, first_exon_idx, primary_multigene,
                                             wc.intron_overlaps, intron_gene, first_intron_idx,
                                             wc.stats);
+            if (nh == 1) wc.cur_gene = rf.gene;   // R9: evidence UMIs are corrected within (cell, gene)
             if (nh == 1 && config_.count_polya && !config_.reverse_strand && rf.gene != UINT32_MAX) {
                 uint64_t pk;
                 if (polya_site_from_read(b, 6, 0.8, pk))
@@ -3312,7 +3321,7 @@ private:
                 if (!wc.vdj_overlaps.empty()) {
                     uint32_t vdj_gene = wc.vdj_overlaps[0];
                     if (config_.umi_dedup) {                      // R9: counted at finalize
-                        wc.vdj_umi.add(static_cast<uint32_t>(bc_idx), vdj_gene, umi_str, umi_len);
+                        wc.vdj_umi.add(static_cast<uint32_t>(bc_idx), vdj_gene, umi_str, umi_len, wc.cur_gene);
                     } else {
                         wc.vdj.increment(vdj_gene, static_cast<uint32_t>(bc_idx));
                         wc.stats.vdj_hits++;
@@ -3354,12 +3363,22 @@ private:
         }
     }
 
+    // R9: an evidence UMI's root within its (cell, gene) group of the molecule store, as the gene counts collapse it
+    auto gene_roots(const DirectionalUmiStore& genes) const {
+        const bool dir = config_.umi_dedup_directional;
+        return [&genes, dir](uint32_t bc, uint32_t gene, uint64_t umi3, uint64_t& root) {
+            int len = 0;
+            const uint64_t p2 = umi3_to_2bit(umi3, &len);
+            return genes.gene_root(bc, gene, p2, len, dir, root);
+        };
+    }
+
     // R9: emit the molecules of one feature kind into its accumulator and add them to the hit counter
     template <typename AccT>
-    void finalize_umi_features(UmiFeatureCollapse& store, AccT& acc, uint64_t& hits) {
+    void finalize_umi_features(UmiFeatureCollapse& store, AccT& acc, uint64_t& hits, const DirectionalUmiStore& genes) {
         if (store.empty()) return;
         hits += store.finalize([&](uint32_t bc, uint32_t f, uint32_t n) { acc.increment(f, bc, n); },
-                               config_.umi_dedup_directional);
+                               config_.umi_dedup_directional, gene_roots(genes));
         store.clear();
     }
 

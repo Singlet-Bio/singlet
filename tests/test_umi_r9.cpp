@@ -111,6 +111,52 @@ int main() {
         s.finalize(ad, dp, st, true);
         CHECK((dp.m[{2, 1}] == 2)); CHECK((ad.m[{2, 1}] == 1));
     }
+    // R9 per (cell, gene): the gene's molecule store decides which evidence UMIs are one molecule
+    {
+        using singlet::DirectionalUmiStore; using singlet::umi_pack_2bit;
+        DirectionalUmiStore genes;
+        auto rec = [&](uint32_t bc, uint32_t g, const char* u, int n) {
+            for (int i = 0; i < n; ++i) genes.record_read(bc, g, umi_pack_2bit(u, 10), 0, UINT32_MAX, DirectionalUmiStore::kReadExonOnly);
+        };
+        rec(0, 4, "ACGTACGTAC", 20); rec(0, 4, "ACGTACGTAA", 18);   // two templates (20 < 2*18-1)
+        rec(0, 5, "TTTTGGGGCC", 20); rec(0, 5, "TTTTGGGGCA", 2);    // parent and error copy
+        auto gr = [&](uint32_t bc, uint32_t g, uint64_t u3, uint64_t& r) {
+            int len = 0; const uint64_t p2 = singlet::umi3_to_2bit(u3, &len);
+            return genes.gene_root(bc, g, p2, len, true, r);
+        };
+        // feature evidence: template pair 3 vs 1 read (per feature would merge), error pair 2 vs 2 (would not)
+        UmiFeatureCollapse c;
+        for (int i = 0; i < 3; ++i) c.add(0, 1, "ACGTACGTAC", 10, 4);
+        c.add(0, 1, "ACGTACGTAA", 10, 4);
+        for (int i = 0; i < 2; ++i) { c.add(0, 2, "TTTTGGGGCC", 10, 5); c.add(0, 2, "TTTTGGGGCA", 10, 5); }
+        c.add(0, 3, "GGGGGGGGGG", 10); c.add(0, 3, "GGGGGGGGGA", 10);   // no gene: per feature, merges (1 >= 1)
+        Emitted pf, pg;
+        c.finalize([&](uint32_t bc, uint32_t f, uint32_t n) { pf[{bc, f}] += n; }, true);
+        c.finalize([&](uint32_t bc, uint32_t f, uint32_t n) { pg[{bc, f}] += n; }, true, gr);
+        CHECK((pf[{0, 1}] == 1)); CHECK((pg[{0, 1}] == 2));
+        CHECK((pf[{0, 2}] == 2)); CHECK((pg[{0, 2}] == 1));
+        CHECK((pf[{0, 3}] == 1)); CHECK((pg[{0, 3}] == 1));
+        // the same through SnpConsensus: the template pair stays two molecules (REF and ALT)
+        SnpConsensus s;
+        for (int i = 0; i < 3; ++i) s.add(0, 9, "ACGTACGTAC", 10, SnpConsensus::kRef, 4);
+        s.add(0, 9, "ACGTACGTAA", 10, SnpConsensus::kAlt, 4);
+        Acc ad, dp; St st;
+        s.finalize(ad, dp, st, true, gr);
+        CHECK((dp.m[{9, 0}] == 2)); CHECK((ad.m[{9, 0}] == 1));
+        // order independence with genes: shuffled adds, identical output
+        std::mt19937 rng(11);
+        std::vector<Read> r = rep(0, 1, "ACGTACGTAC", 3); append(r, rep(0, 1, "ACGTACGTAA", 1));
+        append(r, rep(0, 2, "TTTTGGGGCC", 2)); append(r, rep(0, 2, "TTTTGGGGCA", 2));
+        Emitted ref;
+        for (int t = 0; t < 10; ++t) {
+            std::shuffle(r.begin(), r.end(), rng);
+            UmiFeatureCollapse d;
+            for (const auto& x : r) d.add(x.bc, x.f, x.umi.c_str(), 10, x.f == 1 ? 4u : 5u);
+            Emitted e;
+            d.finalize([&](uint32_t bc, uint32_t f, uint32_t n) { e[{bc, f}] += n; }, true, gr);
+            if (t == 0) ref = e; else CHECK(e == ref);
+        }
+    }
     std::printf(failures ? "R9 tests: %d FAILED\n" : "R9 tests: all passed%.0d\n", failures);
     return failures ? 1 : 0;
 }
