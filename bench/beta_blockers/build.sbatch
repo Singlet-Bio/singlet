@@ -10,7 +10,7 @@
 #   sbatch build.sbatch <branch> <bin-name> [test ...]
 # Fetch <branch>, build the pipeline binary as pipeline-benchmark/bin/<bin-name> (x86-64-v3, as bench/prod_atlas/build.sbatch),
 # then build and run the listed C++ tests (names without path, e.g. test_umi_store_scale).
-set -euo pipefail
+set -eu
 BR=$1; NAME=$2; shift 2; TESTS=("$@")
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; PB=$W/pipeline-benchmark
 BARE=$W/repos/singlet-py.git; SRC=$W/src/singlet-py/bb__${BR//\//__}
@@ -33,6 +33,6 @@ if [ ${#TESTS[@]} -gt 0 ]; then
   cmake -S $SCR/src -B $SCR/t -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF -DCMAKE_BUILD_TYPE=Release > $SCR/tc.log 2>&1 || { tail -30 $SCR/tc.log; exit 1; }
   for t in "${TESTS[@]}"; do
     cmake --build $SCR/t --target $t -j 8 > $SCR/tb.log 2>&1 || { grep -m30 -A8 error $SCR/tb.log; echo "BUILD FAIL $t"; continue; }
-    echo "== $t"; (cd $SCR/t/tests/cpp && ./$t | grep -v "PASS" | tail -15; echo "exit ${PIPESTATUS[0]}")
+    echo "== $t"; (cd $SCR/t/tests/cpp && ./$t | grep -v "PASS" | tail -15 || true; echo "exit ${PIPESTATUS[0]}")
   done
 fi
