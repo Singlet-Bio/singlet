@@ -163,6 +163,8 @@ struct AmbientDecontConfig {
     uint32_t kmeans_iters     = 30;
     uint64_t seed             = 42;
     uint32_t kmeans_restarts  = 1;      ///< R10b: 10 in the pipeline (keyed clusters only)
+    uint32_t ensemble         = 1;      ///< R10c: fits averaged (keyed clusters only), each with its own seed salt
+    uint64_t cluster_salt     = 0;      ///< R10c: member index, mixed into every keyed draw
     const std::vector<uint64_t>* barcode_keys = nullptr; ///< R10b: packed barcode of each column (export.h)
     double   rho_min          = 1e-6;
     double   rho_max          = 0.5;
@@ -327,7 +329,7 @@ inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecont
     SplitMix64 rng(cfg.seed);
     const bool keyed = X.key.size() == n;   // R10b: draws from each cell's barcode
     auto ukey = [&](size_t j, uint64_t salt) {
-        SplitMix64 h(X.key[j] ^ (salt * 0xD1B54A32D192ED03ULL));
+        SplitMix64 h(X.key[j] ^ ((salt + (cfg.cluster_salt << 40)) * 0xD1B54A32D192ED03ULL));
         return (static_cast<double>(h.next() >> 11) + 0.5) * (1.0 / 9007199254740992.0);
     };
     std::vector<double> Q(n * kp);
@@ -506,9 +508,45 @@ inline double cluster_contamination(const std::vector<double>& n, double Nk, dou
 /// Core: estimate rho and produce integer corrected counts for the called cells.
 /// @param X   called cells, gene x cell (ambient_detail::CellMat)
 /// @param a   ambient gene fractions (sum 1, all > 0)
+namespace ambient_detail {
+/// Largest-remainder rounding per cell of the expected native counts `nat` (one per nnz of X): every cell keeps
+/// round(sum nat) UMIs and no gene exceeds its observed count.
+inline void round_native(const CellMat& X, const std::vector<double>& nat, unsigned thr,
+                         std::vector<uint32_t>& corrected_vals) {
+    corrected_vals.assign(X.gene.size(), 0);
+    parallel_for(X.n_cells, thr, [&](size_t j) {
+        const size_t b = X.ptr[j], e1 = X.ptr[j + 1];
+        std::vector<std::pair<double, uint32_t>> frac;   // (fractional part, nnz offset)
+        frac.reserve(e1 - b);
+        double sum_nat = 0.0; uint64_t sum_floor = 0;
+        for (size_t e = b; e < e1; ++e) {
+            const double v = std::min(nat[e], static_cast<double>(X.val[e]));
+            const double fl = std::floor(v);
+            corrected_vals[e] = static_cast<uint32_t>(fl);
+            sum_floor += static_cast<uint64_t>(fl);
+            sum_nat += v;
+            frac.emplace_back(v - fl, static_cast<uint32_t>(e - b));
+        }
+        const uint64_t target = static_cast<uint64_t>(std::llround(sum_nat));
+        if (target > sum_floor && !frac.empty()) {
+            size_t need = static_cast<size_t>(target - sum_floor);
+            need = std::min(need, frac.size());
+            auto cmp = [](const std::pair<double, uint32_t>& x, const std::pair<double, uint32_t>& y) {
+                return x.first != y.first ? x.first > y.first : x.second < y.second;
+            };
+            std::nth_element(frac.begin(), frac.begin() + static_cast<std::ptrdiff_t>(need - 1), frac.end(), cmp);
+            for (size_t i = 0; i < need; ++i) {
+                const size_t e = b + frac[i].second;
+                if (corrected_vals[e] < X.val[e]) ++corrected_vals[e];
+            }
+        }
+    });
+}
+} // namespace ambient_detail
+
 inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::vector<double>& a,
                                  const AmbientDecontConfig& cfg, AmbientCorrectionResult& R,
-                                 std::vector<uint32_t>& corrected_vals)
+                                 std::vector<uint32_t>& corrected_vals, std::vector<double>* nat_out = nullptr)
 {
     using namespace ambient_detail;
     const size_t n = X.n_cells, G = X.n_genes;
@@ -704,39 +742,18 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
     R.cluster_rho = ck;
 
     // integer correction: expected native counts x_g (1 - r_g), largest-remainder rounding per cell
-    corrected_vals.assign(X.gene.size(), 0);
+    std::vector<double> nat(X.gene.size(), 0.0);
     parallel_for(n, thr, [&](size_t j) {
         const uint32_t k = cl[j];
         const double r = rho[j];
-        const size_t b = X.ptr[j], e1 = X.ptr[j + 1];
-        std::vector<std::pair<double, uint32_t>> frac;   // (fractional part, nnz offset)
-        frac.reserve(e1 - b);
-        double sum_nat = 0.0; uint64_t sum_floor = 0;
-        for (size_t e = b; e < e1; ++e) {
+        for (size_t e = X.ptr[j]; e < X.ptr[j + 1]; ++e) {
             const uint32_t g = X.gene[e];
             const double pa = r * a[g], pn = (1.0 - r) * phi[static_cast<size_t>(g) * K + k];
-            double nat = X.val[e] * (pn / (pa + pn));
-            nat = std::min(nat, static_cast<double>(X.val[e]));
-            const double fl = std::floor(nat);
-            corrected_vals[e] = static_cast<uint32_t>(fl);
-            sum_floor += static_cast<uint64_t>(fl);
-            sum_nat += nat;
-            frac.emplace_back(nat - fl, static_cast<uint32_t>(e - b));
-        }
-        const uint64_t target = static_cast<uint64_t>(std::llround(sum_nat));
-        if (target > sum_floor && !frac.empty()) {
-            size_t need = static_cast<size_t>(target - sum_floor);
-            need = std::min(need, frac.size());
-            auto cmp = [](const std::pair<double, uint32_t>& x, const std::pair<double, uint32_t>& y) {
-                return x.first != y.first ? x.first > y.first : x.second < y.second;
-            };
-            std::nth_element(frac.begin(), frac.begin() + static_cast<std::ptrdiff_t>(need - 1), frac.end(), cmp);
-            for (size_t i = 0; i < need; ++i) {
-                const size_t e = b + frac[i].second;
-                if (corrected_vals[e] < X.val[e]) ++corrected_vals[e];
-            }
+            nat[e] = std::min(X.val[e] * (pn / (pa + pn)), static_cast<double>(X.val[e]));
         }
     });
+    round_native(X, nat, thr, corrected_vals);
+    if (nat_out) *nat_out = std::move(nat);
 
     R.contam.assign(n, CellContamination{});
     for (size_t j = 0; j < n; ++j) {
@@ -813,8 +830,42 @@ inline AmbientCorrectionResult correct_ambient_gene_level(
 
     std::vector<uint32_t> cvals;
     const bool have_pool = R.profile.n_ambient_barcodes > 0 && R.profile.total_ambient_umi >= 1.0;
-    if (have_pool) {
+    const uint32_t n_fit = (cfg.ensemble > 1 && X.key.size() == X.n_cells) ? cfg.ensemble : 1u;
+    if (have_pool && n_fit == 1) {
         decontx_ambient_core(X, R.profile.gene_fractions, cfg, R, cvals);
+        R.ok = true;
+    } else if (have_pool) {
+        // order-free-rules R10c: consensus over clusterings. Each member is a full fit with its own data-derived seeds
+        // (cluster_salt = member); rho and the expected native counts are averaged, then rounded once.
+        const unsigned thr = cfg.threads ? cfg.threads : std::max(1u, std::thread::hardware_concurrency());
+        std::vector<double> nat_sum(X.gene.size(), 0.0), nat, rho_sum(X.n_cells, 0.0);
+        for (uint32_t m = 0; m < n_fit; ++m) {
+            AmbientDecontConfig cm = cfg;
+            cm.cluster_salt = m;
+            AmbientCorrectionResult Rm;
+            Rm.profile = R.profile;
+            std::vector<uint32_t> cv;
+            decontx_ambient_core(X, R.profile.gene_fractions, cm, Rm, cv, &nat);
+            for (size_t e = 0; e < nat.size(); ++e) nat_sum[e] += nat[e];
+            for (size_t j = 0; j < X.n_cells; ++j) rho_sum[j] += Rm.contam[j].rho;
+            if (m == 0) {   // member 0 keeps clusters and cluster statistics
+                auto corr = std::move(R.corrected);
+                auto prof = R.profile;
+                R = std::move(Rm);
+                R.corrected = std::move(corr);
+                R.profile = std::move(prof);
+            }
+        }
+        for (auto& v : nat_sum) v /= n_fit;
+        ambient_detail::round_native(X, nat_sum, thr, cvals);
+        for (size_t j = 0; j < X.n_cells; ++j) {
+            auto& c = R.contam[j];
+            c.rho = rho_sum[j] / n_fit;
+            uint64_t kept = 0;
+            for (size_t e = X.ptr[j]; e < X.ptr[j + 1]; ++e) kept += cvals[e];
+            c.n_removed = static_cast<uint32_t>(static_cast<uint64_t>(X.tot[j]) - kept);
+        }
+        R.method = "decontx_cluster_offgene_v1_consensus" + std::to_string(n_fit);
         R.ok = true;
     } else {
         cvals = X.val;   // identity
