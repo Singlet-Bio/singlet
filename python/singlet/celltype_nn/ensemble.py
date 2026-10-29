@@ -328,9 +328,7 @@ class SingleRRef:
     ) -> np.ndarray:
         cl = [int(c) for c in cand]
         while len(cl) > 1:
-            genes = np.unique(
-                np.concatenate([self.pair[a, b] for a in cl for b in cl if a != b])
-            )
+            genes = np.unique(np.concatenate([self.pair[a, b] for a in cl for b in cl if a != b]))
             m = np.isin(self.sample_lab, cl)
             if excl is not None:
                 m &= self.groups != excl
