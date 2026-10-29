@@ -43,13 +43,15 @@ def sh(cmd):
 
 
 def adt(a, rep):
-    seqs = io.read_fastq_seqs(ADT, a.n_adt)
-    cnt = Counter(s[:15] for s in seqs[:200000])
+    # 10x TotalSeq-B antibody reads carry the 15-base tag at R2 offset 10; the matcher scans offsets 0..5, so the first 8 bases are
+    # dropped here (tag at offset 2). Reads and tag sequences are real; only the shift is applied.
+    seqs = [x[8:] for x in io.read_fastq_seqs(ADT, a.n_adt)]
+    cnt = Counter(s[2:17] for s in seqs[:200000])
     tags = [t for t, _ in cnt.most_common(17)]
     t1 = tags[0]
     var = Counter()
     for s in seqs[:400000]:
-        w = s[:15]
+        w = s[2:17]
         if w != t1 and sum(x != y for x, y in zip(w, t1)) == 1:
             var[w] += 1
     v = var.most_common(1)[0][0]
