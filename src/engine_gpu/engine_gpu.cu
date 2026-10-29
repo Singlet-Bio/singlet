@@ -293,7 +293,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         cudaFree(dSeq); cudaFree(dOff); cudaFree(dCs); cudaFree(dCl); if (dAd) cudaFree(dAd);
         dSeq = dSeqC; dOff = dOffC;
         u64 nClipped = 0;
-        for (u64 i = 0; i < n; i++) nClipped += hoffC[i + 1] - hoffC[i] != in.off[i + 1] - in.off[i];
+        out.clip5.resize(n); out.clip3.resize(n);
+        for (u64 i = 0; i < n; i++) {
+            const u64 L0 = in.off[i + 1] - in.off[i], L = hoffC[i + 1] - hoffC[i], c5 = hcs[i] - in.off[i];
+            out.clip5[i] = (uint16_t) std::min<u64>(c5, 65535); out.clip3[i] = (uint16_t) std::min<u64>(L0 - L - c5, 65535);
+            nClipped += L != L0;
+        }
         char line[200];
         snprintf(line, sizeof line, "engine_gpu: clipping: %llu of %llu reads clipped, %.2f s\n", (unsigned long long)nClipped, (unsigned long long)n, now() - tc);
         out.log += line;
@@ -386,7 +391,14 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         }
         out.secHostLane += now() - th0;
         out.nHostLane += repH.size();
-        // ---- records
+        // ---- records (reserved first: at 16 M-sequence chunks a doubling vector copied GBs)
+        {
+            u64 bytesSeq = 0, bytesBlob = A.out.size() + M.out.size() + B.out.size();
+            for (u64 k = 0; k < repc.size(); k++) bytesSeq += rlen(repc[k]);
+            for (const auto& h : hout) bytesBlob += h.size();
+            out.seq.reserve(out.seq.size() + bytesSeq); out.blob.reserve(out.blob.size() + bytesBlob);
+            out.seqOff.reserve(out.seqOff.size() + repc.size()); out.blobOff.reserve(out.blobOff.size() + repc.size());
+        }
         for (u64 k = 0; k < repc.size(); k++) {
             const uint8_t* p; u64 len; bool ok = true;
             uint32_t q = lpos[k];

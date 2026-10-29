@@ -13,6 +13,9 @@
 SeqCache *g_seqCache = nullptr;
 const uint32 *g_handoffReadRecord = nullptr;
 uint64 g_handoffNReads = 0;
+const uint16 *g_handoffClip5 = nullptr, *g_handoffClip3 = nullptr;
+bool g_handoffClipCheck = false;
+std::atomic<uint64> g_handoffClipBad(0);
 const uint8 *g_handoffRecAln = nullptr;
 HandoffReadEntry *g_handoffReads = nullptr;
 int g_handoffMinQ = 0;

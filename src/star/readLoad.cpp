@@ -1,5 +1,6 @@
 #include "readLoad.h"
 #include "ErrorWarning.h"
+#include "SeqCache.h"
 
 int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOriginal, \
             char* readName, char* Seq, char* SeqNum, char* Qual, vector<ClipMate> &clipOneMate, \
@@ -72,8 +73,23 @@ int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOrigi
 
     //cout << readName <<'\t' << (uint32) line3char << '\n';
     
-    clipOneMate[0].clip(Lread, SeqNum); //5p clip
-    clipOneMate[1].clip(Lread, SeqNum); //3p clip
+    //singlet --engine gpu: a read with a hand-off record was clipped on the GPU (engine_gpu.cu k_clip, STAR's ClipMate::clip); its clip
+    //lengths replace the CPU clip (SINGLET_HANDOFF_CLIPCHECK=1 runs both and counts differences)
+    const bool gpuClip = g_handoffClip5 != nullptr && iReadAll >= 1 && iReadAll - 1 < g_handoffNReads
+        && g_handoffReadRecord[iReadAll - 1] != 0xFFFFFFFFu && (clipOneMate[0].type >= 0 || clipOneMate[1].type >= 0);
+    if (gpuClip && !g_handoffClipCheck) {
+        const uint c5 = g_handoffClip5[iReadAll - 1], c3 = g_handoffClip3[iReadAll - 1];
+        clipOneMate[0].clippedN = (uint32) c5; clipOneMate[1].clippedN = (uint32) c3;
+        if (c5 > 0) memmove(SeqNum, SeqNum + c5, Lread - c5);
+        Lread -= c5 + c3;
+    } else {
+        clipOneMate[0].clip(Lread, SeqNum); //5p clip
+        clipOneMate[1].clip(Lread, SeqNum); //3p clip
+        if (gpuClip && (clipOneMate[0].clippedN != g_handoffClip5[iReadAll - 1] || clipOneMate[1].clippedN != g_handoffClip3[iReadAll - 1])
+            && g_handoffClipBad++ < 10)
+            std::cerr << "[singlet] SINGLET_HANDOFF_CLIPCHECK: read " << iReadAll - 1 << " CPU clip " << clipOneMate[0].clippedN << "/"
+                      << clipOneMate[1].clippedN << ", GPU clip " << g_handoffClip5[iReadAll - 1] << "/" << g_handoffClip3[iReadAll - 1] << "\n";
+    };
 
     if (readName[0]=='@') {//fastq format, read qualities
         readInStream.getline(Qual,DEF_readSeqLengthMax);//read qualities

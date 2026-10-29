@@ -106,6 +106,9 @@ bool fillClip(Parameters &P, singlet_engine_gpu::Clip &c, std::string &why) {
     auto at = [](const auto &v, auto d) { return v.empty() ? decltype(v[0] + d)(d) : decltype(v[0] + d)(v[0]); };
     c.n5 = at(i5.N, 0); c.after5 = at(i5.NafterAd, 0); c.n3 = at(i3.N, 0); c.after3 = at(i3.NafterAd, 0);
     const std::string ad5 = i5.adSeq.empty() ? "-" : i5.adSeq[0], ad3 = i3.adSeq.empty() ? "-" : i3.adSeq[0];
+    // ClipMate::initialize: a side with no N bases and no adapter does not clip at all (its NafterAd is ignored too)
+    if (c.n5 == 0 && ad5 == "-") c.after5 = 0;
+    if (c.n3 == 0 && ad3 == "-") c.after3 = 0;
     c.on = c.n5 || c.after5 || c.n3 || c.after3 || ad5 != "-" || ad3 != "-";
     if (!c.on) return true;
     if (P.pClip.adapterType.empty() || P.pClip.adapterType[0] != "Hamming") { why = "read clipping with --clipAdapterType CellRanger4"; return false; }
@@ -362,6 +365,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             static std::vector<uint32> keep;
             keep.swap(out.readRecord);
             g_handoffReadRecord = keep.data(); g_handoffNReads = keep.size(); g_handoffRecAln = recAln.data();
+            if (!out.clip5.empty()) {   // the GPU's clip lengths replace STAR's CPU clip for these reads (readLoad)
+                static std::vector<uint16> c5, c3;
+                c5.swap(out.clip5); c3.swap(out.clip3);
+                g_handoffClip5 = c5.data(); g_handoffClip3 = c3.data();
+                const char *cc = getenv("SINGLET_HANDOFF_CLIPCHECK");
+                g_handoffClipCheck = cc != nullptr && cc[0] == '1';
+            }
             P.inOut->logMain << "ENGINE_GPU: no BAM records for the reads of the " << nRec << " hand-off records\n";
             if (sumOn) {   // the summaries, concatenated in record order (threads hold contiguous record ranges)
                 static std::vector<uint8> sumAll;
