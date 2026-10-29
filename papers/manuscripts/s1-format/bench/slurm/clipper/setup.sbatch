@@ -29,8 +29,6 @@ source /etc/profile.d/lmod.sh
 module load miniconda3/25.5.1
 eval "$(conda shell.bash hook)"
 set -u
-# The solve runs on a CPU node: tell conda which CUDA the GPU nodes' driver serves, so it picks the CUDA build of PyTorch.
-export CONDA_OVERRIDE_CUDA=${CONDA_OVERRIDE_CUDA:-12.9}
 # S1_ENV picks the env (default $S1/env); with S1_ENV_FROM a new env starts as a clone of that one, so only what
 # environment.yml changed is solved again (S1_ENV=$S1/env-gpu S1_ENV_FROM=$S1/env for the timed jobs).
 if [ ! -x "$S1_ENV/bin/python" ] && [ -n "${S1_ENV_FROM:-}" ]; then
@@ -43,6 +41,14 @@ elif ! cmp -s "$BENCH/environment.yml" "$S1_ENV/.environment.yml"; then
 fi
 cp "$BENCH/environment.yml" "$S1_ENV/.environment.yml"
 s1_activate
+# CUDA PyTorch: conda-forge's CUDA builds need the __cuda_arch virtual package, which the cluster's conda (25.5.1) does not
+# provide, so with S1_TORCH_INDEX set (the timed env) the conda CPU build is replaced by the wheel from that index.
+if [ -n "${S1_TORCH_INDEX:-}" ] && ! python -c "import sys, torch; sys.exit(torch.version.cuda is None)"; then
+  for p in pytorch libtorch; do
+    if conda list -p "$S1_ENV" "^$p\$" | grep -q "^$p "; then conda remove -q -y -p "$S1_ENV" --force "$p"; fi
+  done
+  pip install -q "torch==${S1_TORCH_VERSION:-2.13.0+cu129}" --index-url "$S1_TORCH_INDEX" --extra-index-url https://pypi.org/simple
+fi
 python -c "import torch; print('torch', torch.__version__, 'cuda build', torch.version.cuda)"
 
 Rscript -e 'if (!requireNamespace("BPCells", quietly = TRUE)) remotes::install_github("bnprks/BPCells/r", upgrade = "never")'

@@ -22,8 +22,7 @@ dependencies:
   - aiohttp              # fsspec over HTTP: zarr read lazily from the object store
   - s3fs
   - boto3
-  - pytorch>=2.2
-  - pytorch-gpu          # the CUDA build (setup.sbatch solves on a CPU node with CONDA_OVERRIDE_CUDA); runs on CPU nodes too
+  - pytorch>=2.2          # CPU build; the timed env ($S1/env-gpu) swaps in the CUDA wheel (setup.sbatch, S1_TORCH_INDEX)
   - tiledbsoma-py>=1.14
   - psutil
   - requests             # singlet package dependencies not pulled in above
