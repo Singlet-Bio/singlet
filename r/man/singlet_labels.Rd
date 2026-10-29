@@ -27,6 +27,20 @@ GEO sample metadata follows: \code{organism}, \code{protocol}, \code{protocol_na
 \code{sample_characteristics}, \code{qc_flag}, \code{reference_build} and the curated fields \code{geo_tissue},
 \code{geo_cell_type}, \code{geo_disease}, \code{geo_sex}, \code{geo_age} (sample-level; before 1.1.0 these were named
 \code{tissue}, \code{cell_type}, ... and collided with the per-cell labels).
+Then the structured sample facts of the singlet.bio study API, read from each sample's own GEO record (factors, \code{NA}
+where the record does not say; \code{sample_facts = FALSE} leaves them out, and they are absent offline or for a local study):
+\describe{
+  \item{\code{tissue_type}}{CELLxGENE \code{tissue_type}: \code{tissue}, \code{organoid}, \code{primary cell culture} or
+    \code{cell line}.}
+  \item{\code{cell_line}, \code{cell_line_cellosaurus_id}}{Cellosaurus name and accession (\code{K-562}, \code{CVCL_0004});
+    several lines are joined by \code{"; "} in the same order.}
+  \item{\code{tumor_sample_type}}{GDC/TCGA-style \code{tumor}, \code{primary tumor}, \code{metastatic},
+    \code{recurrent tumor} or \code{adjacent normal}.}
+  \item{\code{disease}, \code{disease_ontology_term_id}}{MONDO term of the donor's disease, or \code{normal} /
+    \code{PATO:0000461} for a healthy donor.}
+  \item{\code{donor_status}, \code{sample_kind}}{\code{healthy} / \code{diseased}; \code{primary}, \code{cell_line},
+    \code{stem_cell}, \code{organoid} or \code{xenograft}.}
+}
 }
 \details{
 \strong{Accuracy} (docs/cell_annotation.md): cell type per-study accuracy against CELLxGENE author labels is 0.84 at level 1,

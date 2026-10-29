@@ -55,6 +55,7 @@ import numpy as np
 
 from . import FORMATS, PREFIXES, SAMPLE_SUFFIXES
 from . import labels as L
+from . import sample_facts as SF
 from . import transport as T
 from .transport import NotFound, Transport, TransportError
 
@@ -1630,11 +1631,14 @@ def _study_to_anndata(
     cell_type_level: int = L.CELL_TYPE_LEVEL,
     cell_type_min_score: float = L.CELL_TYPE_MIN_SCORE,
     include_unvalidated: bool = False,
+    sample_facts: bool = True,
 ) -> "anndata.AnnData":
     """AnnData of the called cells; ``obs`` carries the per-cell labels, cell calls and QC columns of the cells table
     (:mod:`singlet.s1.labels`: ``cell_type`` at level <= ``cell_type_level`` with path score >= ``cell_type_min_score``;
-    ``qc_doublet_score`` only with ``include_unvalidated``), then the GEO sample metadata. ``layers`` holds ``spliced`` and
-    ``unspliced``; anndata 0.13 and newer also list ``X`` itself under the key ``None``."""
+    ``qc_doublet_score`` only with ``include_unvalidated``), then the GEO sample metadata, then the structured sample facts of
+    :mod:`singlet.s1.sample_facts` (``tissue_type``, ``cell_line``, ``tumor_sample_type``, ``disease``, ``donor_status``, ...; read
+    from the study API, so only for a study read over HTTP and not with ``sample_facts=False`` or ``$SINGLET_OFFLINE``). ``layers``
+    holds ``spliced`` and ``unspliced``; anndata 0.13 and newer also list ``X`` itself under the key ``None``."""
     mods = normalize_modalities(modalities, layers=layers)
     gsms = _select_samples(study, samples, obs_filter)
     if not gsms:
@@ -1696,6 +1700,7 @@ def _study_to_anndata(
 
     perms = [_cell_order(r.cols, r.sel, cell_order) for r in ok]
     gsm_meta = study.study_meta.get("gsm_meta", {})
+    facts = SF.study_facts(study) if sample_facts else {}
     parts, index = [], []
     for r, perm in zip(ok, perms):
         n = len(r.sel)
@@ -1714,6 +1719,8 @@ def _study_to_anndata(
             )
         )
         d.update(_geo_obs(info, n))
+        if facts:
+            d.update(SF.facts_obs(facts.get(r.gsm), n))
         parts.append(d)
         index.extend(f"{r.gsm}_{b}" for b in bc)
     import pandas as pd
@@ -1824,6 +1831,7 @@ def _study_cells(
     cell_type_level: int = L.CELL_TYPE_LEVEL,
     cell_type_min_score: float = L.CELL_TYPE_MIN_SCORE,
     include_unvalidated: bool = False,
+    sample_facts: bool = True,
 ) -> "anndata.AnnData":
     """Cell-level slice: the cells of ``samples`` that satisfy ``where`` (evaluated on the cells table), as a cells x genes AnnData.
 
@@ -1835,7 +1843,8 @@ def _study_cells(
     ``modalities`` picks the matrices (default ``counts``, plus the spliced/unspliced layers with ``layers=True``); only the chunk
     runs of those members are fetched. ``obs`` has ``gsm_id``, ``column`` (the cell's column in the sample object) and the
     per-cell columns (``columns=`` keeps only those; ``qc_doublet_score``, unvalidated, only with ``include_unvalidated`` or when
-    named in ``columns``)."""
+    named in ``columns``), then the structured sample facts (``tissue_type``, ``cell_line``, ``disease``, ...; see
+    :mod:`singlet.s1.sample_facts`; ``sample_facts=False`` leaves them out)."""
     import anndata as ad
     import pandas as pd
 
@@ -1892,6 +1901,7 @@ def _study_cells(
                 index=pd.Index(var_ids.astype(object), name="gene_id"),
             ),
         )
+    facts = SF.study_facts(study) if sample_facts else {}
     parts, index = [], []
     for r in ok:
         n = len(r.sel)
@@ -1910,6 +1920,8 @@ def _study_cells(
                 **lab,
             )
         )
+        if facts:
+            d.update(SF.facts_obs(facts.get(r.gsm), n))
         parts.append(d)
         index.extend(f"{r.gsm}_{b}" for b in bc)
     obs = L.to_frame(parts, index=pd.Index(index, dtype=object))

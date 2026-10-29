@@ -16,7 +16,8 @@ singlet_cells(
   modalities = NULL,
   cell_type_level = 2L,
   cell_type_min_score = 0,
-  include_unvalidated = FALSE
+  include_unvalidated = FALSE,
+  sample_facts = TRUE
 )
 }
 \arguments{
@@ -45,11 +46,17 @@ the cell-table data frame returning a logical vector; or \code{NULL} for every c
 it (default 0, none); see \code{\link{singlet_labels}}.}
 
 \item{include_unvalidated}{Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).}
+
+\item{sample_facts}{Add the structured sample facts of the singlet.bio study API to \code{colData}: \code{tissue_type},
+\code{cell_line}, \code{cell_line_cellosaurus_id}, \code{tumor_sample_type}, \code{disease},
+\code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
+GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
+local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.}
 }
 \value{
 A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
-  matrix) and the per-cell columns (\code{\link{singlet_labels}}).
+  matrix), the per-cell columns (\code{\link{singlet_labels}}) and the sample facts (\code{tissue_type}, \code{disease}, ...).
 }
 \description{
 Reads the (small) cell table of each requested sample, evaluates \code{where} on its columns
