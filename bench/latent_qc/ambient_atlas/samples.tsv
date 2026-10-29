@@ -1,0 +1,515 @@
+gsm	gse	org	tissue_coarse	tissue_label	tissue	disease_label	sample_kind
+GSM5467177	GSE180661	human	adipose	omentum	UBERON:0003688		
+GSM8558947	GSE278962	human	blood	blood	UBERON:0000178		
+GSM5702278	GSE189460	human	bone_marrow	bone marrow	UBERON:0002371	plasma cell myeloma	
+GSM4453763	GSE148077	human	brain	retina	UBERON:0000966		
+GSM8441771	GSE274011	human	breast	breast	UBERON:0000310		
+GSM8213046	GSE264154	human	eye	choroid plexus	UBERON:0001886		
+GSM4494559	GSE149224	human	gut	colon	UBERON:0001155		
+GSM8076054	GSE255992	human	heart	left cardiac atrium	UBERON:0002079		
+GSM2946619	GSE109564	human	kidney	kidney	UBERON:0002113		
+GSM8785720	GSE289173	human	liver	liver	UBERON:0002107		
+GSM4065881	GSE137026	human	lung	lung	UBERON:0002048	idiopathic pulmonary fibrosis	
+GSM7933493	GSE249313	human	lymphoid	lymph node	UBERON:0000029		
+GSM9469386	GSE317327	human	muscle	calcaneal tendon	UBERON:0003701		
+GSM8730300	GSE286827	human	oral_nasal	oropharynx	UBERON:0001729		
+GSM8481269	GSE275627	human	other	milk	UBERON:0001913		
+GSM8023252	GSE253561	human	pancreas	pancreas	UBERON:0001264	malignant pancreatic neoplasm	
+GSM8445689	GSE274229	human	prostate	prostate gland	UBERON:0002367		
+GSM5646537	GSE186368	human	reproductive	decidua	UBERON:0002450		
+GSM7518428	GSE236111	human	skin	zone of skin	UBERON:0000014		
+GSM5743022	GSE191288	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM8955407	GSE295708	human	adipose	adipose tissue	UBERON:0001013		
+GSM7927173	GSE249131	human	blood	blood	UBERON:0000178	normal	
+GSM8337957	GSE243545	human	bone_marrow	bone marrow	UBERON:0002371		primary
+GSM4080414	GSE136719	human	brain	spinal cord	UBERON:0002240		
+GSM3484481	GSE122743	human	breast	breast	UBERON:0000310		
+GSM4451262	GSE147979	human	eye	optic choroid	UBERON:0001776		
+GSM7661379	GSE238275	human	gut	ileum	UBERON:0002116		
+GSM5572767	GSE183852	human	heart	heart left ventricle	UBERON:0002084	dilated cardiomyopathy	
+GSM5392418	GSE178481	human	kidney	kidney	UBERON:0002113		
+GSM4774807	GSE157767	human	liver	liver	UBERON:0002107		
+GSM3265083	GSE116946	human	lung	lung	UBERON:0002048		
+GSM7777736	GSE243033	human	lymphoid	lymph node	UBERON:0000029		
+GSM8558921	GSE278962	human	muscle	layer of synovial tissue	UBERON:0007616		
+GSM5685287	GSE188545	human	oral_nasal	middle temporal gyrus	UBERON:0002771		
+GSM5578032	GSE184111	human	other	ureter	UBERON:0000056	normal	
+GSM5266067	GSE173339	human	pancreas	pancreas	UBERON:0001264		
+GSM7810350	GSE244267	human	prostate	prostate gland	UBERON:0002367		
+GSM5646536	GSE186368	human	reproductive	decidua	UBERON:0002450		
+GSM7932815	GSE249279	human	skin	zone of skin	UBERON:0000014		
+GSM8473244	GSE275234	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM5467333	GSE180661	human	adipose	omentum	UBERON:0003688		
+GSM8011026	GSE253862	human	blood	blood	UBERON:0000178		
+GSM7836865	GSE245108	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM8117728	GSE260461	human	brain	brain	UBERON:0000955		
+GSM8197323	GSE263728	human	breast	breast	UBERON:0000310		
+GSM9255051	GSE308887	human	eye	aqueous humor of eyeball	UBERON:0001796		
+GSM9178795	GSE305528	human	gut	alimentary part of gastrointestinal system	UBERON:0005409		
+GSM5572768	GSE183852	human	heart	heart left ventricle	UBERON:0002084	normal	
+GSM5392399	GSE178481	human	kidney	kidney	UBERON:0002113		
+GSM5172577	GSE168933	human	liver	liver	UBERON:0002107		
+GSM1683322	GSE66357	human	lung	lung	UBERON:0002048		
+GSM8128494	GSE260943	human	lymphoid	tonsil	UBERON:0002372		
+GSM5203389	GSE169454	human	muscle	cartilage tissue	UBERON:0002418		
+GSM8730271	GSE286827	human	oral_nasal	larynx	UBERON:0001737		
+GSM5608430	GSE185222	human	other	dental pulp	UBERON:0001754		
+GSM5266071	GSE173339	human	pancreas	pancreas	UBERON:0001264		
+GSM7966549	GSE249890	human	prostate	prostate gland	UBERON:0002367		
+GSM8772423	GSE288650	human	reproductive	placenta	UBERON:0001987		
+GSM5837085	GSE195452	human	skin	zone of skin	UBERON:0000014		
+GSM5743026	GSE191288	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM8302405	GSE268904	human	adipose	subcutaneous adipose tissue	UBERON:0002190		
+GSM4670214	GSE154386	human	blood	blood	UBERON:0000178		
+GSM8441921	GSE274018	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM9162810	GSE305153	human	brain	brain	UBERON:0000955		
+GSM8149401	GSE261713	human	breast	breast	UBERON:0000310		
+GSM4376599	GSE146276	human	eye	corneal epithelium	UBERON:0001772		
+GSM8045353	GSE254513	human	gut	fundus of stomach	UBERON:0001160	normal	
+GSM6118770	GSE202398	human	heart	heart	UBERON:0000948		
+GSM7229782	GSE230606	human	kidney	kidney	UBERON:0002113		
+GSM7844671	GSE245535	human	liver	liver	UBERON:0002107		
+GSM4680839	GSE154826	human	lung	lung	UBERON:0002048		
+GSM8178135	GSE262751	human	lymphoid	thymus	UBERON:0002370		
+GSM8641970	GSE282362	human	muscle	skeletal muscle tissue	UBERON:0001134		
+GSM7508301	GSE235711	human	oral_nasal	ethmoid sinus	UBERON:0002453	chronic rhinosinusitis	
+GSM6481638	GSE211630	human	other	buccal mucosa	UBERON:0006956		
+GSM8395054	GSE272171	human	pancreas	pancreas	UBERON:0001264		
+GSM5494378	GSE181294	human	prostate	prostate gland	UBERON:0002367		
+GSM4568359	GSE151192	human	reproductive	wall of vagina	UBERON:0036523		
+GSM8544992	GSE278330	human	skin	zone of skin	UBERON:0000014		
+GSM4974542	GSE163203	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM8016253	GSE253200	human	adipose	infrapatellar fat pad	UBERON:0016400		
+GSM5776889	GSE193220	human	blood	blood	UBERON:0000178		
+GSM3993351	GSE135194	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM6173988	GSE203499	human	brain	retina	UBERON:0000966		
+GSM7500492	GSE235326	human	breast	breast	UBERON:0000310		
+GSM4463223	GSE148371	human	eye	eye trabecular meshwork	UBERON:0005969		
+GSM8819751	GSE290695	human	gut	rectum	UBERON:0001052		
+GSM8729879	GSE286608	human	heart	heart left ventricle	UBERON:0002084		primary
+GSM5969954	GSE199321	human	kidney	urine	UBERON:0001088	COVID-19	
+GSM6964952	GSE223581	human	liver	liver	UBERON:0002107		
+GSM4058908	GSE136831	human	lung	lung	UBERON:0002048	normal	
+GSM8061616	GSE254975	human	lymphoid	thymus	UBERON:0002370		
+GSM8244374	GSE233304	human	muscle	cranial bone	UBERON:0004766		
+GSM9114320	GSE302937	human	oral_nasal	olfactory epithelium	UBERON:0001997		
+GSM8452934	GSE274562	human	other	dental pulp	UBERON:0001754		
+GSM9231908	GSE307815	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM5082425	GSE166782	human	prostate	prostate gland	UBERON:0002367		
+GSM8338116	GSE270250	human	reproductive	fallopian tube	UBERON:0003889		
+GSM5099594	GSE167209	human	skin	zone of skin	UBERON:0000014		
+GSM4974539	GSE163203	human	thyroid_endocrine	thyroid gland	UBERON:0002046	thyroid gland papillary carcinoma	
+GSM8016276	GSE253200	human	adipose	infrapatellar fat pad	UBERON:0016400		
+GSM8704150	GSE281106	human	blood	blood	UBERON:0000178		
+GSM8370307	GSE271137	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM4227521	GSE142449	human	brain	retina	UBERON:0000966		
+GSM5474109	GSE180878	human	breast	mammary gland	UBERON:0001911		
+GSM6174000	GSE203499	human	eye	optic choroid	UBERON:0001776		
+GSM8819722	GSE290695	human	gut	rectum	UBERON:0001052		
+GSM4837527	GSE159677	human	heart	carotid artery segment	UBERON:0005396		
+GSM9127963	GSE303481	human	kidney	kidney	UBERON:0002113		
+GSM8493743	GSE210077	human	liver	liver	UBERON:0002107	normal	
+GSM7865477	GSE246242	human	lung	lung	UBERON:0002048		
+GSM5348023	GSE175785	human	lymphoid	spleen	UBERON:0002106		
+GSM8558932	GSE278962	human	muscle	layer of synovial tissue	UBERON:0007616		
+GSM8149317	GSE261706	human	oral_nasal	inferior nasal concha	UBERON:0005922		
+GSM8013365	GSE253075	human	other	myometrium	UBERON:0001296		
+GSM8506160	GSE276815	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM7810358	GSE244267	human	prostate	prostate gland	UBERON:0002367		
+GSM5005820	GSE164291	human	reproductive	fallopian tube	UBERON:0003889		
+GSM6532928	GSE212450	human	skin	scalp	UBERON:0000403		
+GSM5391773	GSE178452	human	thyroid_endocrine	pituitary gland	UBERON:0000007		
+GSM7057117	GSE225820	human	adipose	subcutaneous adipose tissue	UBERON:0002190	tuberculosis, spinal	
+GSM8453230	GSE274588	human	blood	blood	UBERON:0000178		
+GSM3993353	GSE135194	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM8046256	GSE254569	human	brain	brain	UBERON:0000955	normal	
+GSM8122811	GSE260703	human	breast	breast	UBERON:0000310		
+GSM4766813	GSE157474	human	eye	corneo-scleral junction	UBERON:0006761		
+GSM8819783	GSE290695	human	gut	rectum	UBERON:0001052		
+GSM4697653	GSE155226	human	heart	heart	UBERON:0000948		
+GSM8339254	GSE270296	human	kidney	bladder organ	UBERON:0018707		
+GSM8730021	GSE286658	human	liver	right lobe of liver	UBERON:0001114		primary
+GSM8026668	GSE253698	human	lung	respiratory tract epithelium	UBERON:0004802		
+GSM4475921	GSE148633	human	lymphoid	lymph node	UBERON:0000029		
+GSM8600000	GSE280537	human	muscle	layer of synovial tissue	UBERON:0007616		primary
+GSM8730354	GSE286827	human	oral_nasal	oropharynx	UBERON:0001729		
+GSM5578041	GSE184111	human	other	ureter	UBERON:0000056	normal	
+GSM8699426	GSE285264	human	pancreas	pancreas	UBERON:0001264		
+GSM8445688	GSE274229	human	prostate	prostate gland	UBERON:0002367		
+GSM8335891	GSE270174	human	reproductive	placenta	UBERON:0001987		
+GSM5836987	GSE195452	human	skin	zone of skin	UBERON:0000014		
+GSM8627213	GSE281736	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM8016258	GSE253200	human	adipose	infrapatellar fat pad	UBERON:0016400		
+GSM8240216	GSE266079	human	blood	blood	UBERON:0000178		
+GSM4771282	GSE157591	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM4453756	GSE148077	human	brain	retina	UBERON:0000966		
+GSM7500481	GSE235326	human	breast	breast	UBERON:0000310		
+GSM6173969	GSE203499	human	eye	optic choroid	UBERON:0001776		
+GSM6061528	GSE201347	human	gut	stomach	UBERON:0000945		
+GSM5050685	GSE165824	human	heart	ascending aorta	UBERON:0001496		
+GSM6025627	GSE200256	human	kidney	kidney	UBERON:0002113	Wilms tumor	
+GSM7844652	GSE245535	human	liver	liver	UBERON:0002107		
+GSM7744276	GSE241834	human	lung	lung	UBERON:0002048		
+GSM7851024	GSE245920	human	lymphoid	lymphoid tissue	UBERON:0001744		
+GSM8072842	GSE255460	human	muscle	cartilage tissue	UBERON:0002418		
+GSM8370329	GSE271139	human	oral_nasal	nasal cavity epithelium	UBERON:0005384		
+GSM3557961	GSE118127	human	other	stroma	UBERON:0003891		
+GSM5560791	GSE183568	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM3735994	GSE130318	human	prostate	prostate gland	UBERON:0002367		
+GSM8823445	GSE290822	human	reproductive	endometrium	UBERON:0001295		
+GSM5837072	GSE195452	human	skin	zone of skin	UBERON:0000014		
+GSM8627211	GSE281736	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM5467098	GSE180661	human	adipose	omentum	UBERON:0003688		
+GSM8704213	GSE281106	human	blood	blood	UBERON:0000178		
+GSM5400788	GSE178910	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM8224161	GSE264624	human	brain	hippocampal formation	UBERON:0002421		
+GSM7500522	GSE235326	human	breast	breast	UBERON:0000310		
+GSM5651519	GSE186433	human	eye	cornea	UBERON:0000964		
+GSM6732258	GSE218000	human	gut	colon	UBERON:0001155	ulcerative colitis	
+GSM5572773	GSE183852	human	heart	heart left ventricle	UBERON:0002084	normal	
+GSM6820327	GSE189536	human	kidney	kidney	UBERON:0002113		
+GSM8493739	GSE210077	human	liver	liver	UBERON:0002107	normal	
+GSM9287582	GSE310058	human	lung	lung	UBERON:0002048		
+GSM8128509	GSE260944	human	lymphoid	mediastinal lymph node	UBERON:0002524		
+GSM9228348	GSE293514	human	muscle	skeletal muscle tissue	UBERON:0001134		
+GSM5685297	GSE188545	human	oral_nasal	middle temporal gyrus	UBERON:0002771		
+GSM8021034	GSE253462	human	other	substantia nigra	UBERON:0002038		
+GSM3513972	GSE123844	human	pancreas	pancreas	UBERON:0001264		
+GSM8289377	GSE268307	human	prostate	prostate gland	UBERON:0002367		
+GSM4568357	GSE151192	human	reproductive	wall of vagina	UBERON:0036523		
+GSM4430464	GSE147424	human	skin	zone of skin	UBERON:0000014	normal	
+GSM5391770	GSE178452	human	thyroid_endocrine	pituitary gland	UBERON:0000007		
+GSM4875248	GSE160560	human	adipose	adipose tissue	UBERON:0001013		
+GSM8436871	GSE273781	human	blood	blood	UBERON:0000178		
+GSM8187575	GSE263201	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM4996678	GSE164101	human	brain	brain	UBERON:0000955		
+GSM8197327	GSE263728	human	breast	breast	UBERON:0000310		
+GSM9255053	GSE308887	human	eye	aqueous humor of eyeball	UBERON:0001796		
+GSM6061539	GSE201347	human	gut	stomach	UBERON:0000945		
+GSM7885782	GSE247238	human	heart	carotid artery segment	UBERON:0005396		primary
+GSM5815990	GSE193672	human	kidney	adrenal gland	UBERON:0002369		
+GSM9037565	GSE299340	human	liver	liver	UBERON:0002107		
+GSM8012456	GSE253013	human	lung	lung	UBERON:0002048		
+GSM7851042	GSE245920	human	lymphoid	lymphoid tissue	UBERON:0001744		
+GSM8770236	GSE288581	human	muscle	synovial fluid	UBERON:0001090		primary
+GSM5870063	GSE196296	human	oral_nasal	tongue	UBERON:0001723		
+GSM8656021	GSE283098	human	other	ligament	UBERON:0000211		
+GSM7986587	GSE251730	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM5494342	GSE181294	human	prostate	prostate gland	UBERON:0002367		
+GSM5536967	GSE182786	human	reproductive	testis	UBERON:0000473		
+GSM8544974	GSE278330	human	skin	zone of skin	UBERON:0000014		
+GSM8627215	GSE281736	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM8302413	GSE268904	human	adipose	subcutaneous adipose tissue	UBERON:0002190		
+GSM5399838	GSE178882	human	blood	blood	UBERON:0000178		
+GSM8067277	GSE255245	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM6106350	GSE202210	human	brain	prefrontal cortex	UBERON:0000451	normal	
+GSM3484485	GSE122743	human	breast	breast	UBERON:0000310		
+GSM9255056	GSE308887	human	eye	aqueous humor of eyeball	UBERON:0001796		
+GSM8125233	GSE260842	human	gut	rectum	UBERON:0001052		
+GSM5919356	GSE197518	human	heart	left cardiac atrium	UBERON:0002079		
+GSM9228306	GSE307631	human	kidney	kidney	UBERON:0002113		primary
+GSM4808968	GSE158723	human	liver	liver	UBERON:0002107		
+GSM4058938	GSE136831	human	lung	lung	UBERON:0002048	chronic obstructive pulmonary disease	
+GSM6254905	GSE206459	human	lymphoid	thymus	UBERON:0002370		
+GSM4274189	GSE143753	human	muscle	limb bud	UBERON:0004347		
+GSM5005057	GSE164241	human	oral_nasal	gingiva	UBERON:0001828	normal	
+GSM8353836	GSE270863	human	other	sputum	UBERON:0007311		primary
+GSM7986593	GSE251730	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM4337425	GSE145843	human	prostate	prostate gland	UBERON:0002367		
+GSM1624223	GSE66507	human	reproductive	embryo	UBERON:0000922		
+GSM3892579	GSE132802	human	skin	zone of skin	UBERON:0000014		
+GSM8473245	GSE275234	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM8343421	GSE270461	human	adipose	adipose tissue	UBERON:0001013		
+GSM8436874	GSE273781	human	blood	blood	UBERON:0000178		
+GSM5701717	GSE189431	human	bone_marrow	bone marrow	UBERON:0002371	CD4+/CD56+ hematodermic neoplasm	
+GSM8380728	GSE271618	human	brain	brain	UBERON:0000955		
+GSM5955969	GSE198732	human	breast	breast	UBERON:0000310		
+GSM5962423	GSE199013	human	eye	left eye	UBERON:0004548		
+GSM8517673	GSE277276	human	gut	duodenum	UBERON:0002114	celiac disease	
+GSM8029964	GSE253903	human	heart	carotid artery segment	UBERON:0005396		
+GSM6820335	GSE189536	human	kidney	kidney	UBERON:0002113		
+GSM5172586	GSE168933	human	liver	liver	UBERON:0002107		
+GSM5019483	GSE164789	human	lung	lung	UBERON:0002048		
+GSM7851052	GSE245920	human	lymphoid	lymphoid tissue	UBERON:0001744		
+GSM5968654	GSE199280	human	muscle	tendon	UBERON:0000043	normal	
+GSM8979540	GSE296893	human	oral_nasal	inferior nasal concha	UBERON:0005922		
+GSM8572070	GSE279475	human	other	ileal mucosa	UBERON:0000331		
+GSM5818722	GSE193693	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM7810356	GSE244267	human	prostate	prostate gland	UBERON:0002367		
+GSM5808297	GSE193474	human	reproductive	ovary	UBERON:0000992		
+GSM5550102	GSE183047	human	skin	zone of skin	UBERON:0000014		
+GSM4974535	GSE163203	human	thyroid_endocrine	thyroid gland	UBERON:0002046	thyroid gland papillary carcinoma	
+GSM8955409	GSE295708	human	adipose	adipose tissue	UBERON:0001013		
+GSM6341294	GSE208337	human	blood	blood	UBERON:0000178	COVID-19	
+GSM9096715	GSE302126	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM4157068	GSE140231	human	brain	brain	UBERON:0000955		
+GSM9102017	GSE302333	human	breast	breast	UBERON:0000310	granulomatous mastitis	
+GSM5962426	GSE199013	human	eye	left eye	UBERON:0004548		
+GSM3954957	GSE134520	human	gut	stomach	UBERON:0000945		
+GSM8076058	GSE255992	human	heart	left cardiac atrium	UBERON:0002079		
+GSM6025639	GSE200256	human	kidney	kidney	UBERON:0002113	Wilms tumor	
+GSM4742270	GSE156690	human	liver	liver	UBERON:0002107		
+GSM9287511	GSE310058	human	lung	lung	UBERON:0002048		
+GSM5233920	GSE163834	human	lymphoid	spleen	UBERON:0002106		
+GSM8072849	GSE255460	human	muscle	cartilage tissue	UBERON:0002418		
+GSM5005059	GSE164241	human	oral_nasal	gingiva	UBERON:0001828	periodontitis	
+GSM7990494	GSE251953	human	other	dental pulp	UBERON:0001754		
+GSM5114473	GSE167880	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM5494380	GSE181294	human	prostate	prostate gland	UBERON:0002367		
+GSM9411140	GSE314816	human	reproductive	placenta	UBERON:0001987		
+GSM9104349	GSE302456	human	skin	scalp	UBERON:0000403	normal	
+GSM8473247	GSE275234	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM4675274	GSE154600	human	adipose	omentum	UBERON:0003688		
+GSM5091041	GSE167029	human	blood	blood	UBERON:0000178		
+GSM8413000	GSE272816	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM8776899	GSE288856	human	brain	leptomeninx	UBERON:0000391		
+GSM5474107	GSE180878	human	breast	mammary gland	UBERON:0001911		
+GSM4766814	GSE157474	human	eye	corneo-scleral junction	UBERON:0006761		
+GSM8680340	GSE284230	human	gut	small intestine	UBERON:0002108	Crohn disease	
+GSM8846848	GSE292037	human	heart	femoral artery	UBERON:0002060		
+GSM8024416	GSE253633	human	kidney	kidney	UBERON:0002113		
+GSM7844665	GSE245535	human	liver	liver	UBERON:0002107		
+GSM9287472	GSE310058	human	lung	lung	UBERON:0002048		
+GSM7408928	GSE233180	human	lymphoid	thymus	UBERON:0002370	myasthenia gravis	
+GSM4274193	GSE143753	human	muscle	long bone	UBERON:0002495		
+GSM4964345	GSE162864	human	oral_nasal	nasal cavity mucosa	UBERON:0001826	normal	
+GSM6164863	GSE203217	human	other	conjunctiva	UBERON:0001811		
+GSM5560788	GSE183568	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM5252137	GSE172301	human	prostate	prostate gland	UBERON:0002367		
+GSM8823440	GSE290822	human	reproductive	endometrium	UBERON:0001295		
+GSM7932805	GSE249279	human	skin	zone of skin	UBERON:0000014		
+GSM5743027	GSE191288	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM5885727	GSE196518	human	adipose	adipose tissue	UBERON:0001013		
+GSM5025730	GSE165080	human	blood	blood	UBERON:0000178	COVID-19	
+GSM9268807	GSE309534	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM8117708	GSE260461	human	brain	brain	UBERON:0000955	normal	
+GSM8197326	GSE263728	human	breast	breast	UBERON:0000310		
+GSM5962410	GSE199013	human	eye	left eye	UBERON:0004548		
+GSM8636424	GSE282122	human	gut	digestive tract	UBERON:0001555		
+GSM5672375	GSE188211	human	heart	heart	UBERON:0000948		
+GSM8837510	GSE291551	human	kidney	kidney	UBERON:0002113		
+GSM4742268	GSE156690	human	liver	liver	UBERON:0002107		
+GSM5019540	GSE164789	human	lung	lung	UBERON:0002048		
+GSM6470061	GSE180059	human	lymphoid	thymus	UBERON:0002370		
+GSM8072850	GSE255460	human	muscle	cartilage tissue	UBERON:0002418		
+GSM8334605	GSE270109	human	oral_nasal	temporal lobe	UBERON:0001871		
+GSM4777156	GSE157863	human	other	dental pulp	UBERON:0001754		
+GSM8395057	GSE272171	human	pancreas	pancreas	UBERON:0001264		
+GSM8289375	GSE268307	human	prostate	prostate gland	UBERON:0002367	prostate cancer	
+GSM6705179	GSE196825	human	reproductive	placenta	UBERON:0001987		
+GSM8901892	GSE294296	human	skin	zone of skin	UBERON:0000014		
+GSM5391771	GSE178452	human	thyroid_endocrine	pituitary gland	UBERON:0000007		
+GSM8619164	GSE281356	human	adipose	subcutaneous adipose tissue	UBERON:0002190		
+GSM8703997	GSE281106	human	blood	blood	UBERON:0000178		
+GSM8337947	GSE243545	human	bone_marrow	bone marrow	UBERON:0002371		primary
+GSM8193079	GSE263468	human	brain	Brodmann (1909) area 17	UBERON:8440010		
+GSM6772148	GSE219110	human	breast	mammary gland	UBERON:0001911		
+GSM5651514	GSE186433	human	eye	cornea	UBERON:0000964		
+GSM6061540	GSE201347	human	gut	stomach	UBERON:0000945		
+GSM9102207	GSE302337	human	heart	heart	UBERON:0000948		
+GSM6094665	GSE202109	human	kidney	kidney	UBERON:0002113		
+GSM6962663	GSE223561	human	liver	liver	UBERON:0002107		
+GSM8171906	GSE262575	human	lung	lung parenchyma	UBERON:0008946		
+GSM9003659	GSE297982	human	lymphoid	tonsil	UBERON:0002372		
+GSM6044091	GSE200815	human	muscle	synovial membrane of synovial joint	UBERON:0002018		
+GSM8979541	GSE296893	human	oral_nasal	inferior nasal concha	UBERON:0005922		
+GSM8481271	GSE275627	human	other	milk	UBERON:0001913		
+GSM5114463	GSE167880	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM7966548	GSE249890	human	prostate	prostate gland	UBERON:0002367		
+GSM8339544	GSE270321	human	reproductive	placenta	UBERON:0001987		
+GSM5821749	GSE193807	human	skin	zone of skin	UBERON:0000014		
+GSM8454454	GSE274674	human	thyroid_endocrine	thyroid gland	UBERON:0002046		
+GSM5885729	GSE196518	human	adipose	adipose tissue	UBERON:0001013		
+GSM4995453	GSE163668	human	blood	blood	UBERON:0000178	normal	
+GSM4698216	GSE155254	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM5289075	GSE174202	human	brain	retina	UBERON:0000966		
+GSM8477063	GSE274011	human	breast	breast	UBERON:0000310		
+GSM4463229	GSE148371	human	eye	eye trabecular meshwork	UBERON:0005969		
+GSM8252512	GSE266616	human	gut	ascending colon	UBERON:0001156		
+GSM6720567	GSE218392	human	heart	heart	UBERON:0000948		
+GSM6094653	GSE202109	human	kidney	kidney	UBERON:0002113		
+GSM8785729	GSE289173	human	liver	liver	UBERON:0002107		
+GSM9102266	GSE302339	human	lung	lung	UBERON:0002048		
+GSM9258370	GSE309020	human	lymphoid	spleen	UBERON:0002106		
+GSM8244377	GSE233304	human	muscle	cranial bone	UBERON:0004766		
+GSM8422438	GSE273138	human	oral_nasal	tongue	UBERON:0001723		
+GSM9206805	GSE306722	human	other	periodontal ligament	UBERON:0008266		
+GSM6204604	GSE205049	human	pancreas	pancreas	UBERON:0001264	malignant pancreatic neoplasm	
+GSM7730912	GSE241556	human	prostate	prostate gland	UBERON:0002367		
+GSM4568348	GSE151192	human	reproductive	wall of vagina	UBERON:0036523		
+GSM5364336	GSE176417	human	skin	zone of skin	UBERON:0000014		
+GSM8500432	GSE276533	human	adipose	subcutaneous adipose tissue	UBERON:0002190		
+GSM5171610	GSE168859	human	blood	blood	UBERON:0000178	normal	
+GSM5350656	GSE175879	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM8246610	GSE266415	human	brain	retina	UBERON:0000966		
+GSM7475157	GSE234817	human	breast	breast	UBERON:0000310		
+GSM4376603	GSE146276	human	eye	corneal epithelium	UBERON:0001772		
+GSM8252478	GSE266616	human	gut	ascending colon	UBERON:0001156		
+GSM9405321	GSE314596	human	heart	coronary artery	UBERON:0001621		
+GSM5224637	GSE171374	human	kidney	kidney	UBERON:0002113		
+GSM4808965	GSE158723	human	liver	liver	UBERON:0002107		
+GSM8686564	GSE279404	human	lung	lower lobe of right lung	UBERON:0002171		
+GSM8933026	GSE294959	human	lymphoid	lymph node	UBERON:0000029		
+GSM8655603	GSE283080	human	muscle	layer of synovial tissue	UBERON:0007616	osteoarthritis	
+GSM4964342	GSE162864	human	oral_nasal	nasal cavity mucosa	UBERON:0001826	normal	
+GSM8714478	GSE285983	human	other	sural nerve	UBERON:0015488	normal	
+GSM8699427	GSE285264	human	pancreas	pancreas	UBERON:0001264		
+GSM8445708	GSE274229	human	prostate	prostate gland	UBERON:0002367		
+GSM5175967	GSE169062	human	reproductive	testis	UBERON:0000473	Klinefelter syndrome	
+GSM6426634	GSE210261	human	skin	zone of skin	UBERON:0000014		
+GSM5957160	GSE198809	human	adipose	subcutaneous adipose tissue	UBERON:0002190		
+GSM8436879	GSE273781	human	blood	blood	UBERON:0000178		
+GSM5858687	GSE196052	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM8776931	GSE288856	human	brain	brain	UBERON:0000955		
+GSM5272829	GSE173634	human	breast	breast	UBERON:0000310		
+GSM7977019	GSE250294	human	eye	cornea	UBERON:0000964		
+GSM8249600	GSE266546	human	gut	ileum	UBERON:0002116		
+GSM7919396	GSE228638	human	heart	cardiac valve	UBERON:0000946		primary
+GSM4251053	GSE143154	human	kidney	kidney	UBERON:0002113		
+GSM5830282	GSE194189	human	liver	liver	UBERON:0002107		
+GSM8012382	GSE253013	human	lung	lung	UBERON:0002048		
+GSM3535280	GSE124494	human	lymphoid	craniocervical lymph node	UBERON:0038849		
+GSM8770262	GSE288581	human	muscle	synovial fluid	UBERON:0001090		primary
+GSM8345949	GSE270518	human	oral_nasal	nasopharynx	UBERON:0001728		
+GSM8072347	GSE255431	human	other	peritoneal fluid	UBERON:0001268		
+GSM4060914	GSE136887	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM8308565	GSE269205	human	prostate	transition zone of prostate	UBERON:8410025		
+GSM4568675	GSE151214	human	reproductive	fallopian tube	UBERON:0003889		
+GSM8219172	GSE264508	human	skin	zone of skin	UBERON:0000014	normal	
+GSM8723592	GSE286321	human	adipose	subcutaneous adipose tissue	UBERON:0002190		
+GSM8688723	GSE280974	human	blood	blood	UBERON:0000178		
+GSM5970498	GSE199333	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM5106118	GSE167492	human	brain	prefrontal cortex	UBERON:0000451		
+GSM5272827	GSE173634	human	breast	breast	UBERON:0000310		
+GSM4766810	GSE157474	human	eye	corneo-scleral junction	UBERON:0006761		
+GSM8101866	GSE256497	human	gut	rectum	UBERON:0001052		
+GSM8029971	GSE253903	human	heart	carotid artery segment	UBERON:0005396		
+GSM8406676	GSE272610	human	kidney	kidney	UBERON:0002113		
+GSM6964935	GSE223581	human	liver	liver	UBERON:0002107		
+GSM7829649	GSE244781	human	lung	lung	UBERON:0002048	systemic sclerosis	
+GSM7698015	GSE240441	human	lymphoid	tonsil	UBERON:0002372		
+GSM8978307	GSE296834	human	muscle	tongue muscle	UBERON:0000378		
+GSM7841768	GSE245392	human	oral_nasal	nose	UBERON:0000004		
+GSM7890214	GSE247456	human	other	developing neuroepithelium	UBERON:0034705		
+GSM7989937	GSE251913	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM5252138	GSE172301	human	prostate	prostate gland	UBERON:0002367		
+GSM4568677	GSE151214	human	reproductive	left fallopian tube	UBERON:0001303		
+GSM5652704	GSE186476	human	skin	zone of skin	UBERON:0000014	normal	
+GSM8619172	GSE281356	human	adipose	visceral fat	UBERON:0035818		
+GSM6341255	GSE208337	human	blood	blood	UBERON:0000178	COVID-19	
+GSM7892405	GSE247531	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM8193148	GSE263468	human	brain	Brodmann (1909) area 9	UBERON:0013540		
+GSM6132997	GSE202771	human	breast	breast	UBERON:0000310		
+GSM5651511	GSE186433	human	eye	cornea	UBERON:0000964		
+GSM6061647	GSE201349	human	gut	colon	UBERON:0001155		
+GSM5919358	GSE197518	human	heart	left cardiac atrium	UBERON:0002079		
+GSM5969963	GSE199321	human	kidney	urine	UBERON:0001088	COVID-19	
+GSM5172573	GSE168933	human	liver	liver	UBERON:0002107		
+GSM6047625	GSE200972	human	lung	lung	UBERON:0002048		
+GSM9003664	GSE297982	human	lymphoid	tonsil	UBERON:0002372		
+GSM8247922	GSE266476	human	muscle	synovial fluid	UBERON:0001090		
+GSM8401519	GSE272409	human	oral_nasal	minor salivary gland	UBERON:0001830		
+GSM7884564	GSE265801	human	other	macula lutea	UBERON:0000053		
+GSM5114466	GSE167880	human	pancreas	islet of Langerhans	UBERON:0000006		
+GSM6591751	GSE213670	human	prostate	prostate gland	UBERON:0002367		
+GSM5743969	GSE191335	human	reproductive	outer epithelium	UBERON:0007376	graft versus host disease	
+GSM7090361	GSE227041	human	skin	zone of skin	UBERON:0000014	sarcoidosis	
+GSM8500439	GSE276533	human	adipose	subcutaneous adipose tissue	UBERON:0002190		
+GSM7837239	GSE245131	human	blood	blood	UBERON:0000178		
+GSM8527506	GSE277678	human	bone_marrow	bone marrow	UBERON:0002371		
+GSM5292147	GSE174332	human	brain	primary motor cortex	UBERON:0001384	amyotrophic lateral sclerosis	
+GSM5852284	GSE195861	human	breast	breast	UBERON:0000310		
+GSM4376602	GSE146276	human	eye	corneal epithelium	UBERON:0001772		
+GSM8647250	GSE266616	human	gut	ascending colon	UBERON:0001156		
+GSM7885775	GSE247238	human	heart	carotid artery segment	UBERON:0005396		primary
+GSM9127959	GSE303481	human	kidney	kidney	UBERON:0002113		
+GSM6709884	GSE217235	human	liver	liver	UBERON:0002107	metabolic dysfunction-associated steatohepatitis	
+GSM5740432	GSE191176	human	lung	respiratory tube	UBERON:0000117		
+GSM8374250	GSE271304	human	lymphoid	thymus	UBERON:0002370		
+GSM5203394	GSE169454	human	muscle	cartilage tissue	UBERON:0002418	osteoarthritis	
+GSM5177044	GSE164241	human	oral_nasal	gingiva	UBERON:0001828	periodontitis	
+GSM5360359	GSE147979	human	other	iris	UBERON:0001769		
+GSM8262854	GSE267243	human	pancreas	pancreas	UBERON:0001264		
+GSM4337071	GSE145838	human	prostate	prostate gland	UBERON:0002367		
+GSM8585394	GSE279998	human	reproductive	uterine cervix	UBERON:0000002		
+GSM5514810	GSE181957	human	skin	zone of skin	UBERON:0000014	scleroderma	
+GSM6961494	GSE223550	mouse	adipose	adipose tissue	UBERON:0001013		
+GSM4560076	GSE150876	mouse	blood	blood	UBERON:0000178		
+GSM6616797	GSE214857	mouse	bone_marrow	bone marrow	UBERON:0002371		
+GSM8145349	GSE261494	mouse	brain	brain	UBERON:0000955		
+GSM4385427	GSE146437	mouse	breast	mammary gland	UBERON:0001911		
+GSM8702246	GSE285427	mouse	eye	Peyer's patch	UBERON:0001211		
+GSM6128532	GSE202691	mouse	gut	colon	UBERON:0001155		
+GSM9000734	GSE297835	mouse	heart	aorta	UBERON:0000947		
+GSM4195146	GSE141115	mouse	kidney	kidney	UBERON:0002113		
+GSM3885181	GSE132662	mouse	liver	liver	UBERON:0002107		
+GSM7965612	GSE249835	mouse	lung	lung	UBERON:0002048		
+GSM6689661	GSE216731	mouse	lymphoid	lymph node	UBERON:0000029		
+GSM8757335	GSE288005	mouse	muscle	skeletal muscle tissue	UBERON:0001134		
+GSM8441832	GSE274015	mouse	oral_nasal	tongue	UBERON:0001723		
+GSM6034994	GSE200487	mouse	other	rectus femoris	UBERON:0001378		
+GSM7889146	GSE247410	mouse	pancreas	pancreas	UBERON:0001264		
+GSM8277490	GSE267773	mouse	prostate	prostate gland	UBERON:0002367		
+GSM6705072	GSE241465	mouse	reproductive	embryo	UBERON:0000922		
+GSM8586893	GSE280067	mouse	skin	skin of back	UBERON:0001068		
+GSM6723960	GSE217648	mouse	thyroid_endocrine	pituitary gland	UBERON:0000007		
+GSM7743937	GSE241800	mouse	adipose	brown adipose tissue	UBERON:0001348		
+GSM4560078	GSE150876	mouse	blood	blood	UBERON:0000178		
+GSM6532694	GSE212427	mouse	bone_marrow	bone marrow	UBERON:0002371		
+GSM6068595	GSE201610	mouse	brain	brain	UBERON:0000955		
+GSM8577291	GSE279628	mouse	breast	mammary gland	UBERON:0001911		
+GSM6807946	GSE220625	mouse	eye	optic choroid	UBERON:0001776		
+GSM6128527	GSE202690	mouse	gut	small intestine	UBERON:0002108		
+GSM8252247	GSE266597	mouse	heart	heart	UBERON:0000948		
+GSM8336800	GSE270205	mouse	kidney	kidney	UBERON:0002113		
+GSM5590433	GSE184506	mouse	liver	liver	UBERON:0002107		
+GSM7509781	GSE235800	mouse	lung	lung	UBERON:0002048		
+GSM7670672	GSE239736	mouse	lymphoid	spleen	UBERON:0002106		
+GSM8835956	GSE291457	mouse	muscle	skeletal muscle tissue	UBERON:0001134		
+GSM8367560	GSE271031	mouse	oral_nasal	olfactory epithelium	UBERON:0001997		
+GSM9167634	GSE305266	mouse	other	femur	UBERON:0000981		
+GSM8610656	GSE281084	mouse	pancreas	pancreas	UBERON:0001264		
+GSM5879692	GSE196371	mouse	prostate	prostate gland	UBERON:0002367		
+GSM8252291	GSE266600	mouse	reproductive	ovary	UBERON:0000992		
+GSM8586906	GSE280067	mouse	skin	skin of back	UBERON:0001068		
+GSM7821516	GSE244595	mouse	thyroid_endocrine	pituitary gland	UBERON:0000007		
+GSM8972799	GSE296575	mouse	adipose	brown adipose tissue	UBERON:0001348		
+GSM6596922	GSE213957	mouse	blood	blood	UBERON:0000178		
+GSM5792201	GSE193322	mouse	bone_marrow	bone marrow	UBERON:0002371		
+GSM8023836	GSE253582	mouse	brain	brain	UBERON:0000955		
+GSM8577268	GSE279627	mouse	breast	mammary gland	UBERON:0001911		
+GSM8525761	GSE277598	mouse	eye	corneo-scleral junction	UBERON:0006761		
+GSM8454789	GSE274687	mouse	gut	small intestine	UBERON:0002108		
+GSM4680682	GSE154817	mouse	heart	aorta	UBERON:0000947		
+GSM8635356	GSE282077	mouse	kidney	pronephros	UBERON:0002120		
+GSM6288582	GSE207480	mouse	liver	liver	UBERON:0002107		
+GSM8455183	GSE274691	mouse	lung	lung	UBERON:0002048		
+GSM5526032	GSE182275	mouse	lymphoid	spleen	UBERON:0002106		
+GSM6736412	GSE218201	mouse	muscle	skeletal muscle tissue	UBERON:0001134		
+GSM5747607	GSE192470	mouse	oral_nasal	tongue	UBERON:0001723		
+GSM6996256	GSE223813	mouse	other	tibialis anterior	UBERON:0001385		
+GSM9410189	GSE314765	mouse	pancreas	pancreas	UBERON:0001264		
+GSM6084985	GSE201956	mouse	prostate	prostate gland	UBERON:0002367		
+GSM6039037	GSE200612	mouse	reproductive	ovary	UBERON:0000992		
+GSM6423822	GSE210224	mouse	skin	zone of skin	UBERON:0000014		
+GSM7821519	GSE244595	mouse	thyroid_endocrine	pituitary gland	UBERON:0000007		
+GSM5526023	GSE182275	mouse	adipose	gonadal fat pad	UBERON:0003428		
+GSM8797662	GSE289732	mouse	blood	blood	UBERON:0000178		
+GSM8242175	GSE266190	mouse	bone_marrow	bone marrow	UBERON:0002371		
+GSM7785350	GSE243413	mouse	brain	retina	UBERON:0000966		
+GSM6438843	GSE210825	mouse	breast	mammary gland	UBERON:0001911		primary
+GSM8525760	GSE277598	mouse	eye	corneo-scleral junction	UBERON:0006761		
+GSM8602628	GSE280631	mouse	gut	colon	UBERON:0001155		
+GSM5820435	GSE193746	mouse	heart	heart	UBERON:0000948		
+GSM5501385	GSE181382	mouse	kidney	kidney	UBERON:0002113		
+GSM3671553	GSE128334	mouse	liver	liver	UBERON:0002107		
+GSM6307670	GSE207687	mouse	lung	lung	UBERON:0002048		
+GSM6511814	GSE212162	mouse	lymphoid	spleen	UBERON:0002106		
+GSM6250188	GSE206303	mouse	muscle	knee joint	UBERON:0001485		
+GSM8441830	GSE274015	mouse	oral_nasal	tongue	UBERON:0001723		
+GSM9140851	GSE304010	mouse	other	central nervous system	UBERON:0001017		
+GSM8008993	GSE252859	mouse	pancreas	islet of Langerhans	UBERON:0000006		
+GSM6084988	GSE201956	mouse	prostate	prostate gland	UBERON:0002367		
+GSM4306639	GSE145107	mouse	reproductive	ovary	UBERON:0000992		
+GSM6124223	GSE202544	mouse	skin	skin of back	UBERON:0001068		
+GSM4399751	GSE146619	mouse	thyroid_endocrine	pituitary gland	UBERON:0000007		

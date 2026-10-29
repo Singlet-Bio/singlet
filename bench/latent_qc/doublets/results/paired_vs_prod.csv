@@ -1,0 +1,16 @@
+method,n,auprc_delta_median,better,wilcoxon_p
+atlas_clf,17,0.0069,11,1.0
+atlas_knn,17,0.0092,9,0.6777
+atlas_nnls,17,-0.3007,0,0.0
+ct_entropy,17,-0.2562,0,0.0
+ct_maxprob,17,-0.27,0,0.0
+nnls,17,-0.1737,2,0.0001
+scdblfinder,17,0.0274,16,0.0008
+scrublet,17,-0.0588,4,0.0638
+solo,17,-0.0988,1,0.0
+umi,17,-0.1808,0,0.0
+combo_all,17,0.0562,16,0.0
+combo_no_atlas,17,0.0335,14,0.0013
+combo_atlas,17,0.047,12,0.0267
+combo_prod_atlas,17,0.0603,15,0.0004
+rankavg_sdf_solo_atlas_prod,17,0.0472,16,0.0
