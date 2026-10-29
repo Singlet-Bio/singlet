@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import struct
+import threading
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -253,6 +254,7 @@ class S2Reader:
             raise TypeError("source must be bytes, a path or a fetch(offset, length) callable")
         self.n_requests = 0
         self.bytes_fetched = 0
+        self._count_lock = threading.Lock()
         head = self._get(0, prefetch)
         if len(head) < HEADER_SIZE:
             raise S2Error("object shorter than the 64-byte header")
@@ -310,9 +312,12 @@ class S2Reader:
 
     # ------------------------------------------------------------------ io
     def _get(self, off: int, length: int) -> bytes:
-        self.n_requests += 1
         b = self._fetch(off, length)
-        self.bytes_fetched += len(b)
+        with (
+            self._count_lock
+        ):  # readers may fetch ranges from several threads (singlet.torch.S1Stream)
+            self.n_requests += 1
+            self.bytes_fetched += len(b)
         return b
 
     def read_range(self, name: str, rel_off: int = 0, length: Optional[int] = None) -> bytes:
