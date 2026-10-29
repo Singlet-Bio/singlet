@@ -651,6 +651,15 @@ def test_gather_direct_matches_client(built):
     assert (a.X != b.X).nnz == 0
 
 
+def test_gather_direct_same_cells_at_io_threads_1_and_4(built):
+    root, _s, _res, idx = built
+    df = idx.find({}, limit=None)
+    one = atlas.gather(df, base=str(root), via="direct", index=idx, io_threads=1)
+    four = atlas.gather(df, base=str(root), via="direct", index=idx, io_threads=4)
+    assert one.obs_names.tolist() == four.obs_names.tolist() and (one.X != four.X).nnz == 0
+    assert one.uns["singlet_gather"]["planned_reads"] == four.uns["singlet_gather"]["planned_reads"]
+
+
 def test_gather_batches_by_cells_and_studies(built):
     root, _s, _res, idx = built
     df = idx.find({}, limit=None)
