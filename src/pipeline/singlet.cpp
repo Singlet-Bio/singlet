@@ -6837,7 +6837,9 @@ int main(int argc, char* argv[]) {
             // Chunk source: the reads are decoded by worker threads of this (forked) process and copied into
             // STAR's chunk buffers by its reading thread (read_source.h). Threads start on STAR's first read.
             if (use_chunk_source) {
-                int dthreads = std::max(1, std::min(8, star_threads / 2));
+                // A worker decodes + formats a 500k-read block in well under the time STAR's threads take to map
+                // it, so a few workers keep up; each formatted block in flight is ~150-300 MB.
+                int dthreads = std::max(2, std::min(4, star_threads / 4));
                 if (const char* e = std::getenv("SINGLET_READ_SOURCE_THREADS"); e && std::atoi(e) > 0)
                     dthreads = std::atoi(e);
                 g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(

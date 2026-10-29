@@ -1,8 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=fqrs-build
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
-#SBATCH --cpus-per-task=16
+#SBATCH --partition=short-cpu,scavenger
+#SBATCH --requeue
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=02:00:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
@@ -33,7 +34,7 @@ if [ "${PGO:-0}" = 1 ]; then
   bash $SCR/src/src/star/pgo/pgo_build.sh $SCR/src $SCR/b $SCR/train.1fq $REF/GRCh38-2024-A/star_2.7.11b \
     $REF/GRCh38-2024-A/genes/genes.gtf $REF "" || { for f in $SCR/b.*.log; do echo == $f; tail -n 25 $f; done; exit 1; }
 else
-  cmake -S $SCR/src -B $SCR/b -DCMAKE_BUILD_TYPE=Release -DSINGLET_GIT_COMMIT=$COMMIT > $SCR/c.log 2>&1 || { tail -30 $SCR/c.log; exit 1; }
+  cmake -S $SCR/src -B $SCR/b -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release -DSINGLET_GIT_COMMIT=$COMMIT > $SCR/c.log 2>&1 || { tail -30 $SCR/c.log; exit 1; }
   cmake --build $SCR/b -j 16 --target singlet > $SCR/m.log 2>&1 || { grep -m40 -B3 -A12 "error" $SCR/m.log || tail -60 $SCR/m.log; exit 1; }
 fi
 cp $SCR/b/src/pipeline/singlet $OUT/singlet-fqrs-$TAG.new && mv $OUT/singlet-fqrs-$TAG.new $OUT/singlet-fqrs-$TAG

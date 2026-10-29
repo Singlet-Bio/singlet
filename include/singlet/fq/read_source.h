@@ -482,7 +482,7 @@ class StarChunkSourceT : public StarSourceBase {
         runs_.open(paths_);
         const uint32_t workers = static_cast<uint32_t>(std::max(1, threads_));
         pipe_ = std::make_unique<OrderedBlocks<FormattedBlock>>(
-            runs_.block_count(), threads_, 2 * workers + 2, [this](uint32_t g, FormattedBlock& fb) {
+            runs_.block_count(), threads_, workers + 2, [this](uint32_t g, FormattedBlock& fb) {
                 DecodedBlock blk;
                 runs_.decode(g, blk);
                 format_block(blk, runs_.block_read_offset(g), opts_, fb);
