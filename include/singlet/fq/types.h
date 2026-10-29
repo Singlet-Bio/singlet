@@ -54,6 +54,7 @@ enum class QualMode : uint8_t {
     BINNED4 = 1,  // 2 bits/base, 4 bins
     FULL = 2,     // 6 bits/base, full phred
     BINNED2 = 3,  // 1 bit/base, pass/fail at Q20
+    ILLUMINA4 = 4,  // 2 bits/base, Illumina's 4-level bins (qual::ilmn4_*); the download/encode default
 };
 
 // ── Compression tier ──
@@ -251,6 +252,19 @@ inline uint8_t bin4_to_phred(uint8_t bin) {
     static constexpr uint8_t centers[4] = {6, 15, 25, 37};
     return centers[bin & 0x03];
 }
+
+// Illumina-style 4 levels (QualMode::ILLUMINA4). The decoded values are the four NovaSeq / NextSeq 2000 write after
+// RTA3 binning (2, 12, 23, 37: '#', '-', '8', 'F'), so reads from those instruments round-trip exactly. The bounds
+// are the decades 0-9, 10-19, 20-29, 30+, so a Q10 / Q20 / Q30 cut (the pileup's --min-baseq, STAR) keeps or drops
+// the same bases as on the original qualities, whatever the instrument's own binning. Checked against the R2 Phred
+// histograms of atlas runs in docs/format-1fq.md, section 4.3.
+inline constexpr uint8_t kIlmn4Upper[3] = {9, 19, 29};    // bin 0: Q <= 9, bin 1: 10-19, bin 2: 20-29, bin 3: >= 30
+inline constexpr uint8_t kIlmn4Phred[4] = {2, 12, 23, 37};
+
+inline uint8_t phred_to_ilmn4(uint8_t phred) {
+    return phred <= kIlmn4Upper[0] ? 0 : phred <= kIlmn4Upper[1] ? 1 : phred <= kIlmn4Upper[2] ? 2 : 3;
+}
+inline uint8_t ilmn4_to_phred(uint8_t bin) { return kIlmn4Phred[bin & 0x03]; }
 
 // Phred → 1-bit bin (pass/fail at Q20)
 inline uint8_t phred_to_bin2(uint8_t phred) {

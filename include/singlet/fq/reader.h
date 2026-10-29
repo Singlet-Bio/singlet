@@ -352,6 +352,8 @@ class Reader {
         if (ptr < end) {
             if (qual_mode_ == QualMode::BINNED4) {
                 ptr = decode_qual_column_binned4(ptr, end, blk.r2_lengths, blk.r2_qual);
+            } else if (qual_mode_ == QualMode::ILLUMINA4) {
+                ptr = decode_qual_column_ilmn4(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::BINNED2) {
                 ptr = decode_qual_column_binned2(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::FULL) {
@@ -483,6 +485,8 @@ class Reader {
         if (ptr < end) {
             if (qual_mode_ == QualMode::BINNED4) {
                 ptr = decode_qual_column_binned4(ptr, end, blk.r2_lengths, blk.r2_qual);
+            } else if (qual_mode_ == QualMode::ILLUMINA4) {
+                ptr = decode_qual_column_ilmn4(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::BINNED2) {
                 ptr = decode_qual_column_binned2(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::FULL) {
@@ -781,6 +785,27 @@ class Reader {
         for (uint16_t len : lengths) {
             uint32_t pb = pack::packed_bytes(len);
             pack::unpack_qual_binned4(ptr, len, dst);
+            ptr += pb;
+            dst += len;
+        }
+        return ptr;
+    }
+
+    // Decode an ILLUMINA4 quality column (2 bits/base, qual::kIlmn4Phred)
+    const uint8_t* decode_qual_column_ilmn4(const uint8_t* ptr, const uint8_t* end,
+                                            const std::vector<uint16_t>& lengths,
+                                            std::vector<uint8_t>& qual) const {
+        size_t total = 0;
+        for (uint16_t len : lengths) total += len;
+        qual.resize(total);
+        uint8_t* dst = qual.data();
+        for (uint16_t len : lengths) {
+            const uint32_t pb = pack::packed_bytes(len);
+            if (ptr + pb > end) {   // truncated block: no quality rather than a read past the buffer
+                qual.clear();
+                return end;
+            }
+            pack::unpack_qual_4level(ptr, len, dst, qual::kIlmn4Phred);
             ptr += pb;
             dst += len;
         }

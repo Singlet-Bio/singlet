@@ -2250,7 +2250,13 @@ class SraEncoder {
         t0 = Clock::now();
         std::string meta = build_metadata_json(
             sra_path, protocol_tag, protocol_id, confidence, assay,
-            stats.wl_match_rate, r1_len, r2_len, count, clip5p_length, cfg);
+            stats.wl_match_rate, r1_len, r2_len, count, clip5p_length, cfg,
+            writer.bc_whitelist_exact(), writer.bc_raw());
+        if (writer.bc_whitelist_exact() + writer.bc_raw() > 0)
+            std::fprintf(stderr, "[1fq-encode] barcodes: %llu whitelist-exact, %llu raw (%.2f%% exact)\n",
+                         static_cast<unsigned long long>(writer.bc_whitelist_exact()),
+                         static_cast<unsigned long long>(writer.bc_raw()),
+                         100.0 * writer.bc_whitelist_exact() / (writer.bc_whitelist_exact() + writer.bc_raw()));
         // B-G2-1: persist swap flag in Header::reserved[1] so downstream processing
         // can verify that R1↔R2 orientation was corrected during encoding.
         // All three swap paths must be covered:
@@ -2318,7 +2324,9 @@ class SraEncoder {
         uint16_t r2_len,
         uint64_t total_reads,
         uint16_t clip5p_length,
-        const EncoderConfig& cfg) {
+        const EncoderConfig& cfg,
+        uint64_t bc_exact = 0,
+        uint64_t bc_raw = 0) {
         // ── Compute processing route ──
         int cb_start = 1, cb_len = 0, umi_start = 1, umi_len = 0;
 
@@ -2471,6 +2479,8 @@ class SraEncoder {
         j += "    \"id\": " + std::to_string(protocol_id) + ",\n";
         j += "    \"confidence\": " + std::to_string(static_cast<int>(confidence)) + ",\n";
         j += "    \"whitelist_match_rate\": " + std::to_string(wl_match_rate) + ",\n";
+        j += "    \"bc_whitelist_exact\": " + std::to_string(bc_exact) + ",\n";   // stored as dictionary index
+        j += "    \"bc_raw\": " + std::to_string(bc_raw) + ",\n";               // stored as read (not in whitelist)
         if (!proto_uri.empty())
             j += "    \"uri\": " + json_str(proto_uri) + "\n";
         else

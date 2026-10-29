@@ -422,7 +422,7 @@ static int cmd_download(int argc, char* argv[]) {
     std::string sra_input;    // .sra path or SRR accession
     std::string output_path;
     std::string protocol_tag;
-    std::string qual_str  = "none";   // alignment-only: quality unused by STAR CB matching
+    std::string qual_str  = "binned";   // ILLUMINA4: STAR's adapter clip and the SNP / mtDNA callers use it
     std::string codec_str = "zstd";
     int    codec_level = 4;
     uint32_t block_size = 500000;
@@ -449,7 +449,8 @@ static int cmd_download(int argc, char* argv[]) {
                 << "  -o, --output FILE    Output .1fq file [derived from input]\n\n"
                 << "Options:\n"
                 << "  --protocol TAG       Force protocol (skip auto-detect)\n"
-                << "  --quality MODE       none|binned|binned2|full (default: none — STAR does not use base quality for alignment)\n"
+                << "  --quality MODE       none|binned|binned2|full|binned-legacy (default: binned = 4 Illumina levels,\n"
+                << "                       2, 12, 23, 37; read by STAR's adapter clip and the SNP / mtDNA callers)\n"
                 << "  --no-trim            Skip polyA/adapter trimming\n"
                 << "  --codec NAME         zstd|lz4|none (default: zstd)\n"
                 << "  --codec-level N      Codec level (default: 4)\n"
@@ -519,10 +520,15 @@ static int cmd_download(int argc, char* argv[]) {
     }
 
     // Parse quality mode
-    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::BINNED4;
+    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::ILLUMINA4;
     if (qual_str == "none") qual_mode = singlet::fq::QualMode::NONE;
     else if (qual_str == "full") qual_mode = singlet::fq::QualMode::FULL;
     else if (qual_str == "binned2") qual_mode = singlet::fq::QualMode::BINNED2;
+    else if (qual_str == "binned-legacy") qual_mode = singlet::fq::QualMode::BINNED4;   // 0-9/10-19/20-29/30+
+    else if (qual_str != "binned") {
+        std::cerr << "ERROR: --quality must be none, binned, binned2, full or binned-legacy\n";
+        return 1;
+    }
 
     // Parse codec
     singlet::fq::Codec codec = singlet::fq::Codec::ZSTD;
@@ -850,7 +856,7 @@ static int cmd_encode(int argc, char* argv[]) {
                 << "  -o, --output FILE    Output .1fq file\n\n"
                 << "Options:\n"
                 << "  --protocol TAG       Force protocol (skip auto-detect)\n"
-                << "  --quality MODE       none|binned|binned2|full (default: binned)\n"
+                << "  --quality MODE       none|binned|binned2|full|binned-legacy (default: binned = 4 Illumina levels)\n"
                 << "  --no-dedup           Skip PCR duplicate collapsing\n"
                 << "  --no-trim            Skip polyA/adapter trimming\n"
                 << "  --codec NAME         zstd|lz4|none (default: zstd)\n"
@@ -907,10 +913,15 @@ static int cmd_encode(int argc, char* argv[]) {
         output_path = base + ".1fq";
     }
 
-    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::BINNED4;
+    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::ILLUMINA4;
     if (qual_str == "none") qual_mode = singlet::fq::QualMode::NONE;
     else if (qual_str == "full") qual_mode = singlet::fq::QualMode::FULL;
     else if (qual_str == "binned2") qual_mode = singlet::fq::QualMode::BINNED2;
+    else if (qual_str == "binned-legacy") qual_mode = singlet::fq::QualMode::BINNED4;   // 0-9/10-19/20-29/30+
+    else if (qual_str != "binned") {
+        std::cerr << "ERROR: --quality must be none, binned, binned2, full or binned-legacy\n";
+        return 1;
+    }
 
     singlet::fq::Codec codec = singlet::fq::Codec::ZSTD;
     if (codec_str == "lz4") codec = singlet::fq::Codec::LZ4;
