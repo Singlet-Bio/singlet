@@ -246,6 +246,34 @@ For each protocol class, on real public samples with real ground truth (the benc
 
 1d and 1e carry the most aligner risk, so their microbenchmarks (paired windows, unspliced seeding) run before their phase starts.
 
+## 6a. Status of the phases and next steps (2026-10-29)
+
+| Phase | Status | Evidence |
+|---|---|---|
+| 1a clip spans | **passed** | gate (a) on GSM6470208 (5') and 3' regressions; GPU clip = STAR's CPU clip on all 28.3 M clipped reads (`SINGLET_HANDOFF_CLIPCHECK`) |
+| 1b reducers + cell partitions | **passed** (c), (f), (a) | digest identical for K = 1, 2, 7; GSM7656149 at automatic K = 2, peak 72 GB, no unified-memory retry; gate (a) on 7 samples (`gpu-pileup-design.md`) |
+| host cost (F1-F3, N1, N2) | **passed** | gate (a) on 4 samples; lean alignment fields 0 of 79 M differ; 5' at 10.7 core-s per M reads |
+| 1c barcodes | harness only | `claude/gpu-barcode-layer-484c70`: kernel vs reference and vs STAR CB/UB (results in its prep doc) |
+| 1d paired-end | harness passed | `claude/gpu-paired-prep-f54059`: 18 unit cases equal on H100; 200k real ATAC pairs: 178,870 / 178,870 STAR-unique pairs identical, 416 (0.21%) to the host lane; no Smart-seq2 sample on Clipper |
+| 1e ATAC | harness passed | `claude/gpu-atac-reducers-270cf8`: every reducer byte-identical to the CPU on atac_pbmc_5k (102.5 M fragments, 118,589 peaks), K = 1, 2, 7 equal; CPU A1/A2 (`claude/atac-orderfree-a1-a2`) order-free (sorted = collated) at +62% wall and 10.8 GB RSS |
+
+Next steps, not started (token budget):
+1. **1c integration:** the barcode layer into the stream and hand-off for `CB_samTagOut` / `CB_UMI_Complex`, gated against W3b's R11 corrected
+   stream (mm1).
+2. **1d integration:** the paired kernel into `mapDistinct` (mate windows) and the hand-off; a Smart-seq2 sample from SRA for the spliced
+   paired case.
+3. **1e integration:** the read-level expansion that produces ATAC fragment records on the GPU path (needs 1d), barcode correction for ATAC,
+   the device peak-merge kernels; A1/A2's memory and time cost on the CPU path to be reviewed.
+4. **1f:** Visium spot cell keys; the feature-barcode reducer (ADT, CRISPR, hashtags) with R9 for ADT.
+5. **Aligner (scored on the frozen ground-truth gate, not before):** M5 stitching as batched DP over candidate windows (70% of GPU time,
+   4.2x short of 10 M distinct reads/s); a GPU heavy lane replacing the host lane; paired mate-window DP; minimizer seeding for ATAC.
+   The candidate BAM comes from `--engine gpu` with the GPU pileup off; the hand-off identity check (locus, strand, MAPQ, CIGAR, NH)
+   certifies that "on" makes the same decisions.
+6. **ILLUMINA4 qualities** (new `.1fq`): the GPU pileup requires base qualities constant or tied to N (`snpSkipN`); per-read quality at
+   SNP and chrM sites must reach the GPU before such files reach the campaign, or the GPU pileup falls back to the CPU.
+7. **Read source:** the prefill reads R2.fastq; it must iterate `fq::RunSet` / `OrderedBlocks` once perf/fq-read-source lands
+   (until then `--engine gpu` needs file mode).
+
 ## 7. Not in scope here
 
 - Multi-GPU (Zach: single GPU for now).
