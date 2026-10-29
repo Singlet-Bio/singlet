@@ -38,10 +38,8 @@ wc -l $SCR/r1.fq $SCR/r2.fq; head -2 $SCR/r1.fq; head -2 $SCR/r2.fq
 head -1 $SCR/r1.fq | cut -d' ' -f1 > $RES/first_names.txt; head -1 $SCR/r2.fq | cut -d' ' -f1 >> $RES/first_names.txt
 # STAR on the same pairs (conda STAR 2.7.11b), ATAC parameters; times itself
 cd $SCR
-T0=$SECONDS
 env LD_LIBRARY_PATH=$ENV/lib timeout 40m $ENV/bin/STAR --runThreadN 28 --genomeDir $GDIR --readFilesIn r1.fq r2.fq --outSAMtype SAM \
   --outSAMunmapped Within --outSAMattributes NH HI AS nM --outSAMmultNmax -1 --alignIntronMax 1 --alignMatesGapMax 2000 --outFileNamePrefix ref_ > $RES/star_stdout.txt 2>&1
-echo "STAR wall seconds incl. genome load: $((SECONDS - T0))" | tee $RES/star_time.txt
 cp ref_Log.final.out $RES/; grep -E "Mapping speed|Number of input|Uniquely mapped reads n|multiple loci" ref_Log.final.out || true
 # kernel
 cd $SCR/src
