@@ -42,13 +42,20 @@ underlying per-sample matrix codec. Most users will not need them.
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://singlet.bio}
   \item \url{https://github.com/Singlet-Bio/singlet}
   \item Report bugs at \url{https://github.com/Singlet-Bio/singlet/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: Zach DeBruine \email{zacharydebruine@gmail.com}
+\strong{Maintainer}: Zach DeBruine \email{zacharydebruine@gmail.com} [copyright holder]
+
+Other contributors:
+\itemize{
+  \item Meta Platforms, Inc. and affiliates (Zstandard library bundled in src/zstd) [copyright holder]
+  \item Yann Collet (Zstandard and xxHash, bundled in src/zstd) [contributor, copyright holder]
+}
 
 }
 \keyword{internal}

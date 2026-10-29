@@ -41,20 +41,19 @@
     suppressWarnings(as.numeric(trimws(sub("^[^:]*:", "", m[length(m)]))))
 }
 
-# TRUE when a SHA-256 can be computed here (R >= 4.5, or the digest package).
-.singlet_can_hash <- function() {
-    exists("sha256sum", envir = asNamespace("tools"), inherits = FALSE) ||
-        requireNamespace("digest", quietly = TRUE)
-}
+# A SHA-256 can always be computed: tools::sha256sum() on R >= 4.5 (looked up at run time, so older R has no reference to a
+# missing object), else the digest package, else the package's own compiled SHA-256 over the file's bytes.
+.singlet_can_hash <- function() TRUE
 
 .singlet_sha256 <- function(path) {
-    if (exists("sha256sum", envir = asNamespace("tools"), inherits = FALSE)) {
-        return(unname(tools::sha256sum(path)))
+    f <- get0("sha256sum", envir = asNamespace("tools"), mode = "function", inherits = FALSE)
+    if (!is.null(f)) {
+        return(unname(f(path)))
     }
     if (requireNamespace("digest", quietly = TRUE)) {
         return(digest::digest(file = path, algo = "sha256"))
     }
-    NA_character_
+    pz2_sha256_(readBin(path, "raw", n = file.size(path)))
 }
 
 # Check a bundle on disk and return its parsed manifest; raises a
@@ -86,9 +85,11 @@
         stop(.singlet_integrity_error("manifest.json is implausibly large"))
     }
     manifest <- tryCatch({
-        con <- unz(path, "manifest.json")
-        on.exit(close(con), add = TRUE)
-        jsonlite::fromJSON(paste(readLines(con, warn = FALSE, encoding = "UTF-8"), collapse = "\n"),
+        # extracted, not read through unz(): before R 4.5 unz() returns nothing for these zip64 archives
+        mdir <- tempfile("singlet_manifest_")
+        on.exit(unlink(mdir, recursive = TRUE), add = TRUE)
+        mf <- utils::unzip(path, files = "manifest.json", exdir = mdir)
+        jsonlite::fromJSON(paste(readLines(mf, warn = FALSE, encoding = "UTF-8"), collapse = "\n"),
                            simplifyVector = FALSE)
     }, error = function(e) {
         stop(.singlet_integrity_error("manifest.json could not be read"))

@@ -29,6 +29,14 @@ Written 2026-10-27 by the orchestrating session after a five-part audit. The evi
 - **Depth.** All reads of every run; no cap.
 - **Clusters.** Clipper first, Anvil only after Zach confirms. State the SU estimate before anything over ~1,000 SU.
 
+**GPU engine correctness** (2026-10-29)
+- **Alignment:** no regression against the frozen production-STAR baseline on the pre-registered ground-truth measures M1-M7
+  ("Increase Mapping Rate" harness, `bench/ground-truth` PREREGISTRATION.md), beyond each measure's tolerance, plus the
+  throughput gate. Byte identity to STAR is no longer required; non-STAR algorithms are allowed with their M1-M7 results.
+  No aligner change is accepted before the harness is frozen.
+- **Counting** (pileup, dedup, UMI collapse, cell calling, reducers): exact against the CPU engine under the order-free rules.
+- Single GPU only; no multi-GPU or whole-node work.
+
 **Data and release rules**
 - **Format.** `.s1` with the pz2 codec is the only data format. Nothing is named "store" or "v2".
 - **Public vs private.** Genotypes are never public. Inferred sex, ancestry and cell type are public cell metadata.
@@ -160,6 +168,17 @@ Changes in order of value:
 - **Brief:** [gpu-aligner-brief.md](gpu-aligner-brief.md).
 - **Relation to the BSF:** it does not gate the BSF. It can take over the campaign mid-way if it passes the same
   equivalence and benchmark gates.
+- **Status and direction (Zach, 2026-10-27 evening):**
+  - W11 (an exact STAR port, PR #61) is the path to a state-of-the-art H100 node pipeline that uses the node's CPU and GPU
+    fully. It must keep reducing bottlenecks and show the cost offset against the best CPU pipeline.
+  - Projected 20–30× per node against a CPU node; the CPU-side work on the node is the limit. This is not measured end to
+    end until the stitch port (M5) passes.
+  - Ideas from the separate "Aligner Brainstorming" study (its own non-STAR aligner, not at parity) go into W11 only where
+    they stay exact. That study is not committed until it is validated.
+  - The engine ships in the `singlet` package as an optional CUDA build (`--engine gpu`), so the pipeline can be reproduced
+    end to end.
+  - The input format is reconsidered for a CPU-download / GPU-align split ([ingest-format.md](ingest-format.md), with W4).
+  - An overnight run (to 06:00, 2026-10-28) ends in a PR against `prod/campaign`.
 
 ### 3c. Calendar and SU model
 
@@ -326,6 +345,7 @@ become public layers.
 | D2 non-expression libraries processed as RNA | runs dropped with a reason; modality campaigns later (decision 4) | W4 / W2 |
 | D3 empty matrices | publish gate in the adapter: nnz = 0 with cells is refused | W5 |
 | D4 molecule double count; counts depend on `--threads` | molecule labels (#22 in #31) plus the determinism fixes | W2 |
+| D4b non-host EM is not reproducible run to run: the same binary on the same sample gives 69 vs 71 iterations and slightly different abundances (job 789001, 2026-10-27); demux auto-K also depends on `--threads` (W11) | fixed-order EM reduction and a thread-independent demux split, checked by a rerun identity test | W2 |
 | D5 first run, 30 M reads | all reads, every run | W4 |
 | D6 conservative knee | `called_ed` (EmptyDrops-class) as the published call, after the truth decision | W2 / W7 |
 | D7 false 5′ clip | the #36 probe fix | W2 verifies |

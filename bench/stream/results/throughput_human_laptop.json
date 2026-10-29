@@ -1,0 +1,98 @@
+{
+  "where": {
+    "organism": "Homo sapiens"
+  },
+  "plan": {
+    "seconds": 26.06,
+    "studies": 3201,
+    "samples": 27561,
+    "cells": 122302547
+  },
+  "host": {
+    "hostname": "DESKTOP-62J0NOM",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "cpus": 8,
+    "python": "3.11.9",
+    "torch": "2.11.0+cpu",
+    "data_base": "https://data.singlet.bio"
+  },
+  "settings": {
+    "batch_size": 512,
+    "mix_samples": 16,
+    "output": "csr",
+    "max_cells_per_sample": null
+  },
+  "runs": [
+    {
+      "workers": 0,
+      "prefetch": 4,
+      "samples": 150,
+      "studies": 142,
+      "samples_read": 147,
+      "samples_skipped": 3,
+      "cells": 629143,
+      "batches": 1229,
+      "requests": 298,
+      "bytes": 1175244047,
+      "wall_seconds": 321.72,
+      "first_batch_seconds": 9.22,
+      "cells_per_s": 1955.5,
+      "mb_per_s": 3.65,
+      "bytes_per_cell": 1868.0,
+      "requests_per_sample": 2.03,
+      "studies_per_batch_mean": 3.83
+    },
+    {
+      "workers": 0,
+      "prefetch": 8,
+      "samples": 150,
+      "studies": 134,
+      "samples_read": 147,
+      "samples_skipped": 3,
+      "cells": 650328,
+      "batches": 1271,
+      "requests": 284,
+      "bytes": 1157196647,
+      "wall_seconds": 367.95,
+      "first_batch_seconds": 3.64,
+      "cells_per_s": 1767.4,
+      "mb_per_s": 3.14,
+      "bytes_per_cell": 1779.4,
+      "requests_per_sample": 1.93,
+      "studies_per_batch_mean": 9.46
+    },
+    {
+      "workers": 0,
+      "prefetch": 16,
+      "samples": 150,
+      "studies": 133,
+      "samples_read": 144,
+      "samples_skipped": 6,
+      "cells": 798243,
+      "batches": 1560,
+      "requests": 280,
+      "bytes": 1243315656,
+      "wall_seconds": 488.6,
+      "first_batch_seconds": 6.27,
+      "cells_per_s": 1633.7,
+      "mb_per_s": 2.54,
+      "bytes_per_cell": 1557.6,
+      "requests_per_sample": 1.94,
+      "studies_per_batch_mean": 10.54
+    }
+  ],
+  "link_before": {
+    "source": "https://speed.cloudflare.com/__down?bytes=25000000",
+    "connections": 4,
+    "bytes": 100000000,
+    "seconds": 11.19,
+    "mb_per_s": 8.94
+  },
+  "link_after": {
+    "source": "https://speed.cloudflare.com/__down?bytes=25000000",
+    "connections": 4,
+    "bytes": 100000000,
+    "seconds": 26.74,
+    "mb_per_s": 3.74
+  }
+}

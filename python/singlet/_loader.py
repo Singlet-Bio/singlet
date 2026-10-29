@@ -160,13 +160,13 @@ def _resolve_gse_path(accession: str) -> Optional[Path]:
     return None
 
 
-# Transition switch (docs/s1-migration.md): while studies are being migrated, a study without a .s1 manifest is read
-# from its legacy bundle. The retirement step sets this to False; ``$SINGLET_LEGACY_FALLBACK`` overrides either way.
-_LEGACY_FALLBACK_DEFAULT = True
+# Transition switch (docs/s1-migration.md): legacy bundles are retired (data.singlet.bio answers 410 for them), so a study
+# without a .s1 manifest is not read from one. ``$SINGLET_LEGACY_FALLBACK`` still overrides either way.
+_LEGACY_FALLBACK_DEFAULT = False
 
 
 def _legacy_fallback_enabled() -> bool:
-    """Transition aid: allow the legacy bundle for studies without a .s1 manifest (default on until retirement)."""
+    """Transition aid: allow the legacy bundle for studies without a .s1 manifest (off since the retirement)."""
     v = os.environ.get("SINGLET_LEGACY_FALLBACK", "").strip().lower()
     if v in ("1", "true", "yes", "on"):
         return True
@@ -187,8 +187,8 @@ def _warn_fallback(err: Exception, stacklevel: int = 3) -> None:
 
 def _no_s1_message(err: Exception) -> str:
     return (
-        f"{err}. Pass legacy=True to read the legacy .singlet bundle (deprecated, being retired), or unset "
-        f"SINGLET_LEGACY_FALLBACK=0 to fall back automatically while studies are migrated."
+        f"{err}. The study is not in the atlas: check the accession, or see https://singlet.bio/known-issues for studies "
+        f"Research Alpha withholds (legacy .singlet bundles are retired)."
     )
 
 
@@ -341,6 +341,12 @@ def _download_legacy(
                 f"Dataset '{accession}' not found at {url}. "
                 f"Check the accession or use singlet.catalog() to browse available datasets."
             ) from None
+        if e.code == 410:  # retired legacy bundle: the server names the study's .s1 manifest
+            link = e.headers.get("Link", "") if e.headers else ""
+            raise FileNotFoundError(
+                f"The legacy bundle of '{accession}' is retired{(' (' + link + ')') if link else ''}. "
+                f"Load the study with singlet.load('{accession}') or singlet.download('{accession}') without legacy=True."
+            ) from None
         raise RuntimeError(f"Failed to download '{accession}' from {url}: HTTP {e.code}") from e
     except BaseException:
         tmp_dest.unlink(missing_ok=True)
@@ -484,14 +490,22 @@ def load(
         ``"barcode"`` or ``"column"``), ``concurrency`` (parallel samples and
         range requests, default 4), ``threads`` (decoder threads), ``verify``
         (recompute canonical matrix digests), ``whole_max`` (bytes below which a
-        sample's members are fetched whole), ``base`` (data host).
+        sample's members are fetched whole), ``base`` (data host),
+        ``cell_type_level`` (deepest level of ``obs["cell_type"]``, default 2),
+        ``cell_type_min_score`` (extra minimum path score for it, default 0),
+        ``include_unvalidated`` (also keep ``qc_doublet_score``).
 
     Returns
     -------
     anndata.AnnData
         Count matrix with obs metadata, var gene annotations, and uns study
         info. Samples whose count matrix is empty are skipped with a warning
-        and listed in ``adata.uns["skipped_samples"]``.
+        and listed in ``adata.uns["skipped_samples"]``. For a per-sample (.s1)
+        study, ``obs`` carries the per-cell labels (``cell_type``,
+        ``cell_type_ontology_term_id``, ``sex_chrom``, ``ancestry_hancestro``,
+        ...), the cell calls (``called``, ``called_ed``) and the QC columns of
+        each sample's cells table, then the GEO sample metadata; see
+        :mod:`singlet.s1.labels`.
 
     Examples
     --------
@@ -572,7 +586,19 @@ def load(
 
 
 _STORE_OPTIONS = frozenset(
-    {"samples", "cell_order", "concurrency", "threads", "verify", "whole_max", "base", "verbose"}
+    {
+        "samples",
+        "cell_order",
+        "concurrency",
+        "threads",
+        "verify",
+        "whole_max",
+        "base",
+        "verbose",
+        "cell_type_level",
+        "cell_type_min_score",
+        "include_unvalidated",
+    }
 )
 
 
@@ -672,6 +698,7 @@ def _load_one(
         elif suffix in (".s1", ".s2", ".json"):  # a .s1 sample object or study manifest on disk
             from singlet.s1 import client as _store
 
+            # _store.load reads atlas samples, manifests and one-matrix objects (singlet.write_s1 files) alike
             return _store.load(
                 path,
                 genes=genes,

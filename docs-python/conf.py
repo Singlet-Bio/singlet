@@ -13,10 +13,9 @@ project = "singlet"
 author = "Zach DeBruine"
 copyright = "2026, Zach DeBruine"
 
-# The distribution is "singlet-bio" ("singlet" on PyPI is an unrelated
-# project); "singlet" covers installs made before the rename.
+# The distribution is "singlet"; "singlet-bio" covers GitHub installs made before 1.1.0.
 release = None
-for _dist in ("singlet-bio", "singlet"):
+for _dist in ("singlet", "singlet-bio"):
     try:
         release = importlib.metadata.version(_dist)
         break
