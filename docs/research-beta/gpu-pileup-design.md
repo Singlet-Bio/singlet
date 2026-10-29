@@ -175,7 +175,21 @@ Same node (job 791013, g052, one run each, per M pairs = core-s / 66.6 M):
 | + summary replay (c389cf56) | 996 | 15.0 | 355 s |
 | + cache trimmed (0b560145) | **929** | **13.9** | 356 s |
 
-The break-even of 12.7 per M pairs is 846 core-s, 83 below the current build.
+The break-even of 12.7 per M pairs is 846 core-s, 83 below that build.
+
+The prefill converted R2's sequence lines one `push_back` per base, about 170 core-s for 66.6 M reads (STAR log with timestamps,
+job 791104). A table into a buffer reserved up front (cfd66207) passes gate (a) (job 791113). Same node (g051, job 791114), runs
+alternated:
+
+| build | core-s | per M pairs | wall |
+|---|---|---|---|
+| CPU pileup (cfd66207; it uses the same prefill) | 1,020 | 15.3 | 409 s |
+| `on`, 0b560145 | 893, 913 | 13.4, 13.7 | 336, 338 s |
+| `on`, cfd66207 | **765, 760** | **11.5, 11.4** | **328, 327 s** |
+
+That is below the 12.7 break-even on pbmc1k_v3. Still to do before the flag can default on: the multi-sample gates (identity test,
+3- and 6-sample node runs, CPU path unchanged), node rate, memory and cost, and the order-dependent differences against
+prod/campaign.
 
 The summary step first failed (job 790899: 50 files differed, 7 M alignments lost). The prefill never set STAR's per-read mismatch
 limit (`outFilterMismatchNmaxTotal`), so its `mappedFilter` read an uninitialized value. That had been harmless by luck since the
