@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=ar-build
 #SBATCH --account=debruinz
-#SBATCH --partition=debug-cpu,short-cpu
+#SBATCH --partition=short-bigmem,debug-cpu,short-cpu
 #SBATCH --nice=10000
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G

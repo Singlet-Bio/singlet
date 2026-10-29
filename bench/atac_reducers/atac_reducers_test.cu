@@ -26,8 +26,8 @@
 #include <chrono>
 #include <unistd.h>
 
-static double now_s() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
-static std::vector<std::string> read_lines(const std::string& p) {
+static double t_now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+static std::vector<std::string> t_lines(const std::string& p) {
     std::vector<std::string> v; std::ifstream f(p); if (!f) { fprintf(stderr, "cannot open %s\n", p.c_str()); exit(2); }
     std::string l; while (std::getline(f, l)) { if (!l.empty() && l.back() == '\r') l.pop_back(); v.push_back(l); } return v; }
 
@@ -71,19 +71,19 @@ static FragDev upload_frag(Ctx& X, const PartHost& P, const std::vector<uint8_t>
 
 static Out run_config(Ctx& X, const std::vector<FragRec>& R, int K, bool diag) {
     Out o; std::vector<PartHost> parts(K); std::vector<std::vector<uint64_t>> iks(K); std::vector<std::vector<uint32_t>> ics(K);
-    double t0 = now_s();
+    double t0 = t_now();
     for (int p = 0; p < K; p++) {
         std::vector<FragRec> sub; const FragRec* src = R.data(); size_t n = R.size();
         if (K > 1) { for (const FragRec& r : R) if (r.bc >= 0 && cell_part(r.bc, (uint32_t)K) == (uint32_t)p) sub.push_back(r); src = sub.data(); n = sub.size(); }
         const size_t m = X.A.mark(); FragRec* dR = X.A.alloc<FragRec>(std::max<size_t>(n, 1)); if (n) CK(cudaMemcpy(dR, src, n * sizeof(FragRec), cudaMemcpyHostToDevice));
-        FragDev F = red_fragment(X.A, X.T, dR, (int)n, X.cb, X.tb, X.sb); CK(cudaDeviceSynchronize()); const double t1 = now_s(); o.t_frag += t1 - t0;
+        FragDev F = red_fragment(X.A, X.T, dR, (int)n, X.cb, X.tb, X.sb); CK(cudaDeviceSynchronize()); const double t1 = t_now(); o.t_frag += t1 - t0;
         PartHost& P = parts[p]; P.hi.resize(F.n); P.lo.resize(F.n); P.rp.resize(F.n);
         if (F.n) { CK(cudaMemcpy(P.hi.data(), F.hi, (size_t)F.n * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(P.lo.data(), F.lo, (size_t)F.n * 4, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(P.rp.data(), F.read_pairs, (size_t)F.n * 4, cudaMemcpyDeviceToHost)); }
-        t0 = now_s();
-        InsDev I = red_insertions(X.A, X.T, F, X.d_mito); CK(cudaDeviceSynchronize()); o.t_ins += now_s() - t0;
+        t0 = t_now();
+        InsDev I = red_insertions(X.A, X.T, F, X.d_mito); CK(cudaDeviceSynchronize()); o.t_ins += t_now() - t0;
         iks[p].resize(I.n); ics[p].resize(I.n);
         if (I.n) { CK(cudaMemcpy(iks[p].data(), I.key, (size_t)I.n * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(ics[p].data(), I.count, (size_t)I.n * 4, cudaMemcpyDeviceToHost)); }
-        X.A.reset(m); t0 = now_s();
+        X.A.reset(m); t0 = t_now();
         const uint64_t cm = (1ull << X.cb) - 1, sm = (1ull << X.sb) - 1, tm = (1ull << X.tb) - 1; (void)cm;
         for (size_t i = 0; i < P.hi.size(); i++) {
             const uint64_t tid = (P.hi[i] >> X.sb) & tm, start = P.hi[i] & sm, cell = P.hi[i] >> (X.tb + X.sb), end = start + P.lo[i];
@@ -93,11 +93,11 @@ static Out run_config(Ctx& X, const std::vector<FragRec>& R, int K, bool diag) {
     std::sort(o.frags.begin(), o.frags.end(), hf_less);
     merge_tables(X, iks, ics, o.ik, o.ic);
     // pass 1 peaks: all resolved barcodes
-    t0 = now_s();
+    t0 = t_now();
     { const size_t m = X.A.mark(); InsDev I = upload_ins(X.A, o.ik, o.ic);
       if (diag) o.diag.stride = 997;
       o.peaks_all = peak_call_dev(X.A, X.T, I, X.clen, X.skip, PeakPar(), diag ? &o.diag : nullptr); X.A.reset(m); }
-    o.t_peak += now_s() - t0;
+    o.t_peak += t_now() - t0;
     if (!X.cellmask.empty()) {   // A8: insertions of the called cells only, merged canonically, final peaks
         for (int p = 0; p < K; p++) {
             const size_t m = X.A.mark(); FragDev F = upload_frag(X, parts[p], &X.cellmask); InsDev I = red_insertions(X.A, X.T, F, X.d_mito); CK(cudaDeviceSynchronize());
@@ -106,10 +106,10 @@ static Out run_config(Ctx& X, const std::vector<FragRec>& R, int K, bool diag) {
             X.A.reset(m);
         }
         merge_tables(X, iks, ics, o.ik2, o.ic2);
-        t0 = now_s(); { const size_t m = X.A.mark(); InsDev I = upload_ins(X.A, o.ik2, o.ic2); o.peaks = peak_call_dev(X.A, X.T, I, X.clen, X.skip); X.A.reset(m); } o.t_peak += now_s() - t0;
+        t0 = t_now(); { const size_t m = X.A.mark(); InsDev I = upload_ins(X.A, o.ik2, o.ic2); o.peaks = peak_call_dev(X.A, X.T, I, X.clen, X.skip); X.A.reset(m); } o.t_peak += t_now() - t0;
     } else { o.peaks = o.peaks_all; o.ik2 = o.ik; o.ic2 = o.ic; }
     // pass 2: cell x peak cut-site counts and per-cell counters against the final peaks, per partition
-    t0 = now_s();
+    t0 = t_now();
     const int np = (int)o.peaks.size(); std::vector<uint64_t> hps(np), hpe(np);
     for (int i = 0; i < np; i++) { hps[i] = ((uint64_t)o.peaks[i].tid << 32) | (uint32_t)o.peaks[i].start; hpe[i] = ((uint64_t)o.peaks[i].tid << 32) | (uint32_t)o.peaks[i].end; }
     o.metrics.assign((size_t)X.ncell * 5, 0u); std::vector<std::pair<uint64_t, uint32_t>> trip;
@@ -129,7 +129,7 @@ static Out run_config(Ctx& X, const std::vector<FragRec>& R, int K, bool diag) {
     }
     std::sort(trip.begin(), trip.end());
     for (auto& t : trip) { o.tkey.push_back(t.first); o.tcnt.push_back(t.second); }
-    o.t_cnt += now_s() - t0;
+    o.t_cnt += t_now() - t0;
     return o;
 }
 
@@ -179,8 +179,8 @@ int main(int argc, char** argv) {
         else if (a == "--cols") colsp = nx(); else if (a == "--metrics-tsv") metrics_tsv = true; else if (a == "--arena-gb") arena_gb = std::stod(nx());
         else { fprintf(stderr, "unknown argument %s\n", a.c_str()); return 2; }
     }
-    Ctx X; for (auto& l : read_lines(chroms)) { auto t = l.find('\t'); X.cname.push_back(l.substr(0, t)); X.clen.push_back(std::stoi(l.substr(t + 1))); }
-    X.wl = read_lines(wlp); X.ncell = (int)X.wl.size(); const int nc = (int)X.cname.size();
+    Ctx X; for (auto& l : t_lines(chroms)) { auto t = l.find('\t'); X.cname.push_back(l.substr(0, t)); X.clen.push_back(std::stoi(l.substr(t + 1))); }
+    X.wl = t_lines(wlp); X.ncell = (int)X.wl.size(); const int nc = (int)X.cname.size();
     for (auto& n : X.cname) { const bool mt = n == "chrM" || n == "MT" || n == "chrMT" || n == "M" || n == "mitochondrion_genome"; X.is_mito.push_back(mt); X.skip.push_back(mt); }
     X.cb = bits_of((uint64_t)X.ncell - 1); X.tb = bits_of((uint64_t)nc - 1); int32_t maxlen = 0; for (int32_t l : X.clen) maxlen = std::max(maxlen, l); X.sb = bits_of((uint64_t)maxlen);
     printf("[cfg] contigs %d (mito %d), whitelist %d, bits cell %d contig %d pos %d = %d\n", nc, (int)std::count(X.is_mito.begin(), X.is_mito.end(), (uint8_t)1), X.ncell, X.cb, X.tb, X.sb, X.cb + X.tb + X.sb);
@@ -188,7 +188,7 @@ int main(int argc, char** argv) {
     std::unordered_map<std::string_view, int> wl_id, ch_id; for (int i = 0; i < X.ncell; i++) wl_id.emplace(X.wl[i], i); for (int i = 0; i < nc; i++) ch_id.emplace(X.cname[i], i);
 
     // ---- records
-    std::vector<FragRec> R; double t0 = now_s();
+    std::vector<FragRec> R; double t0 = t_now();
     if (!recs.empty()) {
         FILE* f = fopen(recs.c_str(), "rb"); if (!f) { fprintf(stderr, "cannot open %s\n", recs.c_str()); return 2; }
         fseek(f, 0, SEEK_END); size_t sz = ftell(f); fseek(f, 0, SEEK_SET); R.resize(sz / sizeof(FragRec)); if (fread(R.data(), sizeof(FragRec), R.size(), f) != R.size()) { fprintf(stderr, "short read\n"); return 2; } fclose(f);
@@ -217,9 +217,9 @@ int main(int argc, char** argv) {
         }
         pclose(p); printf("[load] tsv lines %zu, unparsed %zu, decoys %zu\n", nl, bad, ndecoy);
     }
-    printf("[load] %zu records in %.1f s\n", R.size(), now_s() - t0);
+    printf("[load] %zu records in %.1f s\n", R.size(), t_now() - t0);
     if (!cellsbc.empty()) {
-        X.cellmask.assign(X.ncell, 0); size_t hit = 0, tot = 0; auto ls = read_lines(cellsbc);
+        X.cellmask.assign(X.ncell, 0); size_t hit = 0, tot = 0; auto ls = t_lines(cellsbc);
         for (auto& l : ls) { if (l.rfind("barcode", 0) == 0) continue; auto t = l.find('\t'); auto it = wl_id.find(std::string_view(l.data(), t == std::string::npos ? l.size() : t)); tot++; if (it != wl_id.end()) { X.cellmask[it->second] = 1; hit++; } }
         printf("[cells] %zu called cells read, %zu in the whitelist\n", tot, hit);
     }
@@ -234,10 +234,10 @@ int main(int argc, char** argv) {
     for (size_t ci = 0; ci < cfgs.size(); ci++) {
         const int K = cfgs[ci].first, seed = cfgs[ci].second;
         if (seed) { std::mt19937_64 g(seed); std::shuffle(R.begin(), R.end(), g); }
-        const double a = now_s(); Out o = run_config(X, R, K, ci == 0);
+        const double a = t_now(); Out o = run_config(X, R, K, ci == 0);
         uint64_t rps = 0; for (auto& f : o.frags) rps += f.rp;
         printf("[run K=%d seed=%d] %.1f s (fragments %.2f, insertions %.2f, peaks %.2f, counts+metrics %.2f): unique fragments %zu, read pairs in them %llu, insertion entries %zu, peaks_all %zu, peaks %zu, triplets %zu\n",
-               K, seed, now_s() - a, o.t_frag, o.t_ins, o.t_peak, o.t_cnt, o.frags.size(), (unsigned long long)rps, o.ik.size(), o.peaks_all.size(), o.peaks.size(), o.tkey.size());
+               K, seed, t_now() - a, o.t_frag, o.t_ins, o.t_peak, o.t_cnt, o.frags.size(), (unsigned long long)rps, o.ik.size(), o.peaks_all.size(), o.peaks.size(), o.tkey.size());
         if (ci == 0) {
             base = std::move(o); check_scores(X, base);
             // outputs of the baseline
@@ -262,7 +262,7 @@ int main(int argc, char** argv) {
                     f << X.cname[p.tid] << '\t' << p.start << '\t' << p.end << "\tpeak_" << (i + 1) << '\t' << std::min(1000, static_cast<int>(p.nlq * 10)) << "\t.\t" << p.pileup << '\t' << p.nlp << '\t' << p.nlq << '\t' << (p.summit - p.start) << '\n'; }
             }
             if (!colsp.empty()) {
-                auto cols = read_lines(colsp); std::vector<int32_t> col_of(X.ncell, -1); for (size_t i = 0; i < cols.size(); i++) { auto it = wl_id.find(cols[i]); if (it != wl_id.end()) col_of[it->second] = (int32_t)i; }
+                auto cols = t_lines(colsp); std::vector<int32_t> col_of(X.ncell, -1); for (size_t i = 0; i < cols.size(); i++) { auto it = wl_id.find(cols[i]); if (it != wl_id.end()) col_of[it->second] = (int32_t)i; }
                 std::vector<std::pair<uint64_t, uint32_t>> t; for (size_t i = 0; i < base.tkey.size(); i++) { const int32_t c = col_of[base.tkey[i] >> 32]; if (c >= 0) t.emplace_back(((uint64_t)c << 32) | (uint32_t)base.tkey[i], base.tcnt[i]); }
                 std::sort(t.begin(), t.end()); std::ofstream f(outd + "/atac_peak_counts.mtx"); f << "%%MatrixMarket matrix coordinate integer general\n" << base.peaks.size() << ' ' << cols.size() << ' ' << t.size() << '\n';
                 for (auto& e : t) f << ((uint32_t)e.first + 1) << ' ' << ((e.first >> 32) + 1) << ' ' << e.second << '\n';
