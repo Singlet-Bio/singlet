@@ -13,7 +13,7 @@ set -u
 # 5k NextGEM ATAC (not Multiome: no --paired-gex). Single-threaded post-alignment stage; no thread option exists in `singlet atac`.
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; ENV=$W/envs/pbench; export PATH=$ENV/bin:$PATH LD_LIBRARY_PATH=$ENV/lib
 RUN=${RUN:-atac_pbmc_5k_nextgem}; PAIRED_GEX=${PAIRED_GEX:-}
-OLD=$PB/bin/${OLD:-singlet-atacsp}; NEW=$PB/bin/${NEW:-singlet-atacsp-ordfree}
+OLD=$PB/bin/${OLD:-singlet-atacsp-pr48}; NEW=$PB/bin/${NEW:-singlet-atacsp-ordfree}
 G=/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A
 O=$PB/runs/atacsp/$RUN; OUT=$PB/runs/atacsp/${RUN}_ordfree; mkdir -p $OUT
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT INT TERM
