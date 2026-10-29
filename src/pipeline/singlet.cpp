@@ -93,6 +93,10 @@
 #include "singlet/fq/run_screen.h"
 #include "singlet/pileup/run_provenance.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
+#ifdef SINGLET_HAVE_ENGINE_GPU
+// STAR's per-read hand-off hook (src/star/SeqCache.h; STAR's uint32 / uint64 are unsigned int / unsigned long long)
+extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsigned long long);
+#endif
 #include "singlet/version.h"        // singlet::kVersion
 
 // ── Timing helper ──
@@ -5060,6 +5064,8 @@ int main(int argc, char* argv[]) {
         setenv("SINGLET_ENGINE_GPU_HANDOFF", handoff_path.c_str(), 1);
         // "on": STAR's mapping threads count each hand-off read's bases below the pileup's base-quality threshold
         setenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ", std::to_string(config.min_baseq).c_str(), 1);
+        // a clipped read's rRNA verdict on the whole read, computed by STAR's mapping threads (the forked aligner inherits it)
+        g_handoffReadHook = &singlet::PileupEngine::handoff_read_hook;
     }
 #endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5

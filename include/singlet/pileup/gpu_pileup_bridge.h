@@ -132,7 +132,7 @@ public:
                 qual_check(b);
                 const uint32_t rec = ho_.read_rec[idx];
                 check_primary(b, rec);
-                ho_reads_.push_back(ReadRec{rec, bc, u3});
+                ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(0);
                 ho_idx_.push_back(idx);
                 return;
             }
@@ -198,12 +198,17 @@ public:
     // "on", after STAR has exited: map STAR's per-read entries (handoff()->reads); false if there are none
     bool load_handoff_reads() { return handoff() != nullptr && ho_.load_reads(); }
     // a hand-off read that STAR wrote no BAM record for ("on"): its record, barcode column and UMI (A0 C1 G2 T3 N4, 3 bits each)
-    void add_handoff_read(uint32_t rec, int32_t bc, const char* umi, int umi_len) {
+    // clip: the read's entry flags when it was clipped (STAR's HandoffReadEntry: clip lengths and the 3' tail), else 0
+    void add_handoff_read(uint32_t rec, int32_t bc, const char* umi, int umi_len, uint32_t clip = 0) {
         uint64_t u3 = 0;
         if (umi_len_ < 0) umi_len_ = umi_len;
         for (int i = 0; i < umi_len && i < 21; i++) { const char c = umi[i]; const uint64_t v = c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4; u3 |= v << (3 * i); }
-        ho_reads_.push_back(ReadRec{rec, bc, u3});
+        ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(clip);
+        if (clip) n_clipped_++;
     }
+    // per read of the final input (hand-off reads first): its clip flags, 0 when not clipped
+    uint32_t read_clip(size_t r) const { return r < ho_clip_.size() ? ho_clip_[r] : 0u; }
+    uint64_t n_clipped() const { return n_clipped_; }
     // the base-quality rule of qual_check on a FASTQ record (Phred+33): BAM qualities are the FASTQ's
     void add_quality(const char* seq, const char* qual, int L) {
         for (int i = 0; i < L; i++) {
@@ -285,6 +290,7 @@ private:
     }
     std::string handoff_path_; Handoff ho_; bool ho_tried_ = false, ho_ok_ = false; uint64_t ho_mismatch_ = 0;
     std::vector<ReadRec> ho_reads_;
+    std::vector<uint32_t> ho_clip_; uint64_t n_clipped_ = 0;
     std::vector<uint64_t> ho_idx_;
 public:
     // check mode: (read index, barcode column, packed UMI) of every stream-derived hand-off read

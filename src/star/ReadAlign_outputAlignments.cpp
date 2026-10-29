@@ -373,7 +373,19 @@ void ReadAlign::handoffReadEntry()
         lq += low; ne += (low != isN);
     }
     e.lowQual = (uint16) min(lq, (uint32) 65535); e.qualNeqN = (uint16) min(ne, (uint32) 65535);
-    e.flags = 1;
+    uint32 fl = 1;
+    //clipped read: its record is the clipped sequence, so the pileup gets the clip lengths and what it reads from the clipped 3' tail of
+    //the BAM sequence (poly(A): A count and first base; the rRNA sample: the hook's verdict on the whole read)
+    const uint32 c5 = clipMates[0][0].clippedN, c3 = clipMates[0][1].clippedN;
+    if (c5 + c3 > 0) {
+        uint32 nA = 0;
+        for (uint64 j = readLengthOriginal[0] - c3; j < readLengthOriginal[0]; j++) nA += (Read0[0][j] | 32) == 'a';
+        if (c5 > 255 || c3 > 255) fl |= 32;
+        fl |= (min(c5, 255u) << 8) | (min(c3, 255u) << 16) | (min(nA, 255u) << 24);
+        if (c3 > 0 && (Read0[0][readLengthOriginal[0] - c3] | 32) == 'a') fl |= 2;
+        if (g_handoffReadHook != nullptr) fl |= g_handoffReadHook(iReadAll - 1, Read0[0], readLengthOriginal[0]) & 0x1Cu;
+    }
+    e.flags = fl;
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

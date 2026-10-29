@@ -72,10 +72,15 @@ extern const uint8 *g_handoffRecAln;
 //and per read what the pileup took from its BAM record: CR and UR (3 bits per base, A0 C1 G2 T3 other 4, base 0 lowest) and the
 //base-quality counters of the cDNA read (bases with quality < minQ; bases where "quality < minQ" differs from "base is N"). The
 //entries live in a shared file mapping (<hand-off>.reads) that the pileup reads after STAR exits; nullptr when off.
-struct HandoffReadEntry { uint64 cr3, ur3; uint16 lowQual, qualNeqN; uint32 flags; };   //flags bit 0: written
+//flags: bit 0 written; for a clipped read (the record is its clipped sequence): bits 8-15 bases clipped at 5', 16-23 at 3', 24-31 A
+//bases in the clipped 3' tail, bit 1 the tail starts with A, bit 5 a clip over 255 bases; bits 2-4 from g_handoffReadHook
+struct HandoffReadEntry { uint64 cr3, ur3; uint16 lowQual, qualNeqN; uint32 flags; };
 static_assert(sizeof(HandoffReadEntry) == 24, "HandoffReadEntry layout is shared with the pileup");
 extern HandoffReadEntry *g_handoffReads;
 extern int g_handoffMinQ;
+//set by singlet: called for each clipped hand-off read (read index, the read as in the FASTQ, its length); returns entry flag bits 2-4
+//(bit 2 the read is in the pileup's rRNA sample, bits 3 / 4 the rRNA detector's verdict on the read / its reverse complement)
+extern uint32 (*g_handoffReadHook)(uint64 iRead, const char *seq, uint64 len);
 //per hand-off record its summary (ReadAlign::seqCacheHandoffSummary) at g_handoffSum + g_handoffSumOff[rec], empty for an unmapped
 //sequence (its reads take the normal path); nullptr when off
 extern const uint8 *g_handoffSum;

@@ -1869,7 +1869,7 @@ public:
             const uint32_t* ops = in.ops.data() + a.ops_off;
             const bool rev = (a.flags & 1) != 0;
             // poly(A): polya_site_from_read on the BAM-orientation sequence (the collector stores the read's own orientation)
-            if (nh == 1 && config_.count_polya && !config_.reverse_strand && gene != UINT32_MAX && a.n_ops >= 2) {
+            if (nh == 1 && config_.count_polya && !config_.reverse_strand && gene != UINT32_MAX && a.n_ops >= 1) {   // BAM CIGAR of >= 2 ops (a clipped read adds soft clips)
                 const int qlen = sg.rlen;
                 auto base = [&](int j) -> uint8_t {   // BAM nt16 code of query position j
                     const int i = rev ? qlen - 1 - j : j;
@@ -1877,7 +1877,29 @@ public:
                     return rev ? COMP[v] : v;
                 };
                 uint64_t key = 0; bool ok = false;
-                if (!rev) {
+                const uint32_t clip = gpu_col_ ? gpu_col_->read_clip(r) : 0u;
+                if (clip) {
+                    // a clipped read: the BAM sequence is the whole read and its CIGAR has the clipped bases as soft clips, so the 3' soft
+                    // clip (in read orientation; the BAM's last op when forward, its first when reverse) is the record's own plus the tail
+                    const int c5 = (int) ((clip >> 8) & 255), c3 = (int) ((clip >> 16) & 255), nAt = (int) (clip >> 24);
+                    const int ql = qlen + c5 + c3;
+                    const uint32_t o3 = rev ? ops[0] : ops[a.n_ops - 1], o5 = rev ? ops[a.n_ops - 1] : ops[0];
+                    const int s3 = (o3 & 15) == BAM_CSOFT_CLIP ? (int) (o3 >> 4) : 0;
+                    const int nb = a.n_ops + ((c3 > 0 && s3 == 0) ? 1 : 0) + ((c5 > 0 && (o5 & 15) != BAM_CSOFT_CLIP) ? 1 : 0);
+                    const int cl = s3 + c3;
+                    auto rbase = [&](int j) -> uint8_t { return (in.seq[sg.seq_off + (j >> 1)] >> ((j & 1) * 4)) & 15; };   // record, read orientation
+                    if (nb >= 2 && cl >= 6 && cl <= ql) {
+                        int na = nAt; for (int j = qlen - s3; j < qlen; ++j) na += rbase(j) == 1;
+                        const bool firstA = s3 > 0 ? rbase(qlen - s3) == 1 : (clip & 2u) != 0;
+                        if (na >= 0.8 * cl && firstA) {
+                            if (!rev) {
+                                int64_t end = a.pos;
+                                for (int k = 0; k < a.n_ops; ++k) { const int op = ops[k] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += ops[k] >> 4; }
+                                if (end > 0) { key = polya_site_key(a.tid, false, static_cast<uint32_t>(end - 1)); ok = true; }
+                            } else { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
+                        }
+                    }
+                } else if (a.n_ops >= 2 && !rev) {
                     const uint32_t c = ops[a.n_ops - 1];
                     const int cl = static_cast<int>(c >> 4);
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
@@ -1888,7 +1910,7 @@ public:
                             if (end > 0) { key = polya_site_key(a.tid, false, static_cast<uint32_t>(end - 1)); ok = true; }
                         }
                     }
-                } else {
+                } else if (a.n_ops >= 2) {
                     const uint32_t c = ops[0];
                     const int cl = static_cast<int>(c >> 4);
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
@@ -1924,6 +1946,20 @@ public:
     // the files): record counters, the R4 rRNA sample, chrM reads, barcode (CB from CR), per-cell reads and alignment QC, the MAPQ gate,
     // and the WL-ambient barcodes (genes after the GPU). Returns false if the decoded reads cannot be read.
     std::vector<std::pair<uint32_t, uint32_t>> gpu_wl_pending_;   // (record, WL index) of WL-ambient reads, genes from the GPU
+    /// STAR's g_handoffReadHook (src/star/SeqCache.h), called in STAR's mapping threads for each clipped hand-off read: whether the
+    /// read is in the R4 rRNA sample (bit 2) and the detector's verdict on the read as the BAM would store it, forward (bit 3) and
+    /// reverse-complemented (bit 4). The pass picks the orientation of the read's primary alignment.
+    static unsigned int handoff_read_hook(unsigned long long i, const char* seq, unsigned long long len) {
+        if (len < 21 || (hash_qname(("r" + std::to_string(i)).c_str()) & 63) != 0) return 0;
+        static const RrnaDetector det;
+        std::string f(len, 'N'), r(len, 'N');
+        for (unsigned long long j = 0; j < len; j++) f[j] = seq_nt16_str[seq_nt16_table[(unsigned char) seq[j]]];
+        for (unsigned long long j = 0; j < len; j++) {
+            const char c = f[len - 1 - j];
+            r[j] = c == 'A' ? 'T' : c == 'C' ? 'G' : c == 'G' ? 'C' : c == 'T' ? 'A' : 'N';
+        }
+        return 4u | (det.detect(f) ? 8u : 0u) | (det.detect(r) ? 16u : 0u);
+    }
     bool gpu_handoff_pass(PileupStats& stats, bool check = false) {
         const gpupileup::Handoff* H = gpu_col_ ? gpu_col_->handoff() : nullptr;
         if (!H) return true;   // no hand-off: every read came through the stream
@@ -1957,7 +1993,7 @@ public:
         PileupStats& st = check ? scratch : stats;
         uint64_t n_done = 0;
         std::string bseq, cr, ur, qn, rseq;
-        uint64_t n_unwritten = 0;
+        uint64_t n_unwritten = 0; uint64_t n_bigclip = 0, n_nohook = 0;
         for (uint64_t i = 0; i < H->n_reads; ++i) {
             if (!ent) {
                 bool ok = true;
@@ -1989,15 +2025,24 @@ public:
             if (ent && !(E[i].flags & 1)) { ++n_unwritten; continue; }
             // the cDNA read: the record's sequence (the prefill's distinct sequences are the R2 lines as decoded), or R2
             uint16_t rl = 0; std::memcpy(&rl, p, 2); const uint8_t* rs = p + 2;
-            const int L2 = ent ? (int) rl : (int) l2[1].size();
+            // a clipped read (STAR's --clip3pAdapterSeq / clip N bases): its record is the clipped sequence; the BAM would hold the
+            // whole read, so its length, rRNA verdict and 3' tail come from the entry (HandoffReadEntry flags)
+            const uint32_t clip = (ent && (E[i].flags & 0xFFFF00u)) ? E[i].flags : 0u;
+            if (clip & 32u) { ++n_bigclip; continue; }
+            const int L2 = ent ? (int) rl + (int) ((clip >> 8) & 255) + (int) ((clip >> 16) & 255) : (int) l2[1].size();
             // R4 rRNA sample (primary; once per read), on the sequence as the BAM stores it
             qn = "r" + std::to_string(i);
             if (L2 >= 21 && (hash_qname(qn.c_str()) & 63) == 0) {
                 ++st.rrna_reads_sampled;
-                if (ent) { rseq.resize(L2); for (int j = 0; j < L2; j++) rseq[j] = seq_nt16_str[(rs[j >> 1] >> ((j & 1) * 4)) & 15]; }
+                if (clip) {
+                    if (!(clip & 4u)) { ++n_nohook; continue; }
+                    if (clip & ((pflag & BAM_FREVERSE) ? 16u : 8u)) ++st.rrna_reads;
+                } else if (ent) { rseq.resize(L2); for (int j = 0; j < L2; j++) rseq[j] = seq_nt16_str[(rs[j >> 1] >> ((j & 1) * 4)) & 15]; }
                 else rseq.assign(l2[1].data(), L2);
-                if (pflag & BAM_FREVERSE) { const std::string fw = rseq; for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) fw[L2 - 1 - j]]; }
-                if (rrna_detector_.detect(rseq)) ++st.rrna_reads;
+                if (!clip) {
+                    if (pflag & BAM_FREVERSE) { const std::string fw = rseq; for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) fw[L2 - 1 - j]]; }
+                    if (rrna_detector_.detect(rseq)) ++st.rrna_reads;
+                }
             }
             if (ptid == chrm_tid_) st.chrm_reads++;
             // CB from CR (the stream's rule), CR / UR as STAR cuts them
@@ -2034,7 +2079,7 @@ public:
             // every barcoded primary, as the collector does (the GPU gates MAPQ)
             if (ent) gpu_col_->add_quality_counts(E[i].low_qual, E[i].qual_neq_n);
             else gpu_col_->add_quality(l2[1].data(), l2[3].data(), std::min<int>(L2, (int) l2[3].size()));
-            gpu_col_->add_handoff_read(rec, bc, ur.c_str(), (int) ur.size());
+            gpu_col_->add_handoff_read(rec, bc, ur.c_str(), (int) ur.size(), clip);
             st.barcoded_reads++;
             if (static_cast<uint32_t>(bc) < per_cell_reads_.size()) per_cell_reads_[static_cast<uint32_t>(bc)]++;
             const int nh = std::max<int>(pnh, 1);
@@ -2056,6 +2101,11 @@ public:
         }
         if (n_unwritten) {
             std::cerr << "[gpu_pileup] hand-off: STAR wrote no entry for " << n_unwritten << " hand-off reads\n";
+            return false;
+        }
+        if (n_bigclip || n_nohook) {
+            std::cerr << "[gpu_pileup] hand-off: " << n_bigclip << " reads clipped by more than 255 bases, " << n_nohook
+                      << " sampled clipped reads without the rRNA verdict (g_handoffReadHook unset)\n";
             return false;
         }
         std::cerr << "[gpu_pileup] hand-off pass: " << n_done << " reads without BAM records (barcodes and qualities from "

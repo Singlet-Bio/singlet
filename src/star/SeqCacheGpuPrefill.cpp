@@ -20,6 +20,7 @@
 #include "ReadAlign.h"
 #include "Transcriptome.h"
 #include "OutSJ.h"
+#include "SequenceFuns.h"
 #include <cmath>
 #include <sys/stat.h>
 #include <sys/file.h>
@@ -98,13 +99,20 @@ bool fillParams(Parameters &P, m5::Params &Q, std::string &why) {
     return true;
 }
 
-bool noClipping(Parameters &P) {
-    for (int ip = 0; ip < 2; ip++) {
-        const ReadClipInput &c = P.pClip.in[ip];
-        if (!c.N.empty() && c.N[0] != 0) return false;
-        if (!c.NafterAd.empty() && c.NafterAd[0] != 0) return false;
-        if (!c.adSeq.empty() && c.adSeq[0] != "-") return false;
-    }
+// STAR's clipping of mate 1 for the GPU (engine_gpu.h Clip: the reads are clipped on the device before dedup, so the records are the
+// clipped sequences STAR's cache is keyed by). Supported: --clipAdapterType Hamming (CellRanger4's 5' clip is per chunk, with opal).
+bool fillClip(Parameters &P, singlet_engine_gpu::Clip &c, std::string &why) {
+    const ReadClipInput &i5 = P.pClip.in[0], &i3 = P.pClip.in[1];
+    auto at = [](const auto &v, auto d) { return v.empty() ? decltype(v[0] + d)(d) : decltype(v[0] + d)(v[0]); };
+    c.n5 = at(i5.N, 0); c.after5 = at(i5.NafterAd, 0); c.n3 = at(i3.N, 0); c.after3 = at(i3.NafterAd, 0);
+    const std::string ad5 = i5.adSeq.empty() ? "-" : i5.adSeq[0], ad3 = i3.adSeq.empty() ? "-" : i3.adSeq[0];
+    c.on = c.n5 || c.after5 || c.n3 || c.after3 || ad5 != "-" || ad3 != "-";
+    if (!c.on) return true;
+    if (P.pClip.adapterType.empty() || P.pClip.adapterType[0] != "Hamming") { why = "read clipping with --clipAdapterType CellRanger4"; return false; }
+    if (ad5 != "-") { why = "5' adapter clipping"; return false; }
+    if (ad3 == "polyA") c.ad3.assign(DEF_readSeqLengthMax, 0);   // ClipMate::initialize: an all-A adapter
+    else if (ad3 != "-") { c.ad3.resize(ad3.size()); convertNucleotidesToNumbers(ad3.data(), c.ad3.data(), c.ad3.size()); }
+    c.adMMp = at(i3.adMMp, 0.0);
     return true;
 }
 
@@ -212,7 +220,6 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     std::string why;
     if (!singlet_engine_gpu::available(&why)) return skip(why);
     if (P.readNmates != 1) return skip("paired-end alignment");
-    if (!noClipping(P)) return skip("read clipping (the cache key is the clipped sequence)");
     if (P.readFilesCommandString != "" && P.readFilesCommandString != "-") return skip("readFilesCommand");
     m5::Params Q;
     if (!fillParams(P, Q, why)) return skip(why);
@@ -232,6 +239,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     if (chrStart.size() < chrLength.size() + 1) return skip("chrStart size");
     time_t t0 = time(nullptr);
     singlet_engine_gpu::Input in;
+    if (!fillClip(P, in.clip, why)) return skip(why);
     if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
     time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice

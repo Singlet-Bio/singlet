@@ -18,9 +18,20 @@ namespace m5 { struct Params; struct GenomeView; }
 
 namespace singlet_engine_gpu {
 
+// STAR's read clipping for mate 1 (ClipMate::clip, --clipAdapterType Hamming), applied to every read on the GPU before dedup, so the
+// distinct sequences and the records are the clipped sequences STAR's cache is keyed by. 5': N bases, then NafterAd (STAR has no 5'
+// adapter search for Hamming). 3': N bases, then the adapter (localSearch with adMMp; "polyA" is an all-A adapter), then NafterAd.
+struct Clip {
+    bool on = false;
+    uint32_t n5 = 0, after5 = 0, n3 = 0, after3 = 0;
+    std::vector<char> ad3;           // 3' adapter, numeric; empty: none
+    double adMMp = 0;
+};
+
 struct Input {
     std::vector<char> seq;           // concatenated sequences, STAR's numeric code (A0 C1 G2 T3, other 4)
     std::vector<uint64_t> off{0};    // seq[off[i] .. off[i+1]) is sequence i
+    Clip clip;
 };
 
 struct Output {
