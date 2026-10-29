@@ -251,3 +251,21 @@ of it brings the GPU path to about 13.8 core-s per M pairs. The 12.7 break-even 
 steps:
 1. Compact records instead of the BAM stream, with the cheap per-record outputs moved onto them.
 2. STAR's BAM-record building off the per-read pass.
+
+## R9 / R7 and phase 1a gates (2026-10-29, measured)
+
+R9 (directional UMI collapse for junction, V(D)J and SNP molecules) and R7 (a multimapper takes the smallest secondary exon) are in the GPU pileup:
+commit 493586b4, which merges perf/bam-stream 253c2c65, so the CPU side is W3b's code. Phase 1a (read clipping on the GPU, so 10x 5' takes the
+prefill and the hand-off) is commit b50f7501. Gate (a) is `--engine gpu` with the CPU pileup against the GPU pileup ("on"), 18 threads, one
+H100. Every sample shows only the 7 known differences (nonhost / Unmapped read order, timing fields, memory_tier).
+
+| sample | binary | CPU pileup core-s | on core-s | note |
+|---|---|---|---|---|
+| GSM6996272 | 493586b4 | 109 | 102 | |
+| GSM6996274 | 493586b4 / b50f7501 | 143 / 132 | 131 / 124 | |
+| GSM7036403 | 493586b4 / b50f7501 | 1,945 / 1,827 | 1,292 / 1,195 | |
+| GSM7656149 | 493586b4 | 4,800 | 3,410 | peak 106 GB, unified-memory retry; R1 molecules 23.38 M -> 23.00 M under R9 |
+| GSM6470208 (10x 5' v2) | 493586b4 | 4,510 | 4,361 | no prefill (clipping) |
+| GSM6470208 (10x 5' v2) | **b50f7501** | **2,943** | **2,274** | prefill + hand-off: 108.8 M of 121.8 M reads skip BAM; rRNA sample identical (4,680 / 1,711,402) |
+
+Jobs 791872 (R9) and 791995 (1a). GSM4006843 was not run: its input (`data/bam-stream/`) is no longer on Clipper.

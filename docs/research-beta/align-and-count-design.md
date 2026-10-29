@@ -21,7 +21,7 @@ Zach, 2026-10-28:
 
 Today `--engine gpu` is STAR on the CPU, with three GPU additions:
 1. **GPU prefill.** It maps each distinct cDNA sequence once on the GPU (seed, window, stitch) and fills STAR's sequence cache.
-   It runs only for single-end reads without clipping.
+   It runs only for single-end reads (Hamming read clipping runs on the GPU since phase 1a).
 2. **Hand-off.** STAR's own records go to the pileup once per distinct sequence. STAR writes no BAM for those reads, and replays a
    per-sequence summary for its own outputs (stats, `SJ.out.tab`, Solo).
 3. **GPU pileup.** Molecules, matrices, junctions, SNP and chrM tallies are counted by sort-based reductions on the GPU, under the
@@ -44,7 +44,7 @@ Source: `known_protocols()` in `include/singlet/fq/protocol.h:66-190` and the gu
 | Protocol | Read layout | GPU prefill | Hand-off, summary, GPU pileup | What blocks it |
 |---|---|---|---|---|
 | 10x 3' v1-v4, CITE-seq GEX, Quartz-seq2 (whitelist installed) | CB+UMI in R1, cDNA single-end | yes | yes | — |
-| **10x 5' v2/v3/v4, 10x ARC GEX** | CB+UMI in R1, cDNA single-end | **no** | no hand-off (the pileup reads the stream) | TSO trimmed by STAR's `--clip3pAdapterSeq`; the prefill refuses any clipping (`noClipping`, SeqCacheGpuPrefill.cpp:101-109, 215) |
+| **10x 5' v2/v3/v4, 10x ARC GEX** | CB+UMI in R1, cDNA single-end | **yes since 1a** (b50f7501) | yes since 1a | STAR's `--clip3pAdapterSeq` (TSO) is applied per read on the GPU before dedup (`k_clip`, engine_gpu.cu); CellRanger4 clipping and 5' adapters still fall back (`fillClip`) |
 | Drop-seq, Seq-Well, CEL-seq2, MARS-seq2, ddSEQ, Visium | CB+UMI in R1, no whitelist (Visium: spot list not bundled) | yes | no | `CB_samTagOut` and the sorted BAM path (singlet.cpp:5014) |
 | BD Rhapsody, SPLiT/Parse, inDrop, Microwell-seq, SureCell | multi-segment barcodes | yes | no | `CB_UMI_Complex`, sorted path (5011) |
 | sci-RNA-seq3, DNBelab C4 | CB+UMI, Simple or Complex by metadata | yes | only when Simple | same as the two rows above |
@@ -224,6 +224,7 @@ For each protocol class, on real public samples with real ground truth (the benc
 | Phase | Scope | Kill criterion |
 |---|---|---|
 | 1a | Clip spans on the GPU, so 10x 5' and ARC GEX get the prefill, hand-off and summary | gate (a) fails on 5' after clipping is matched to STAR's `clip3pAdapterSeq` semantics |
+|  | **1a result (2026-10-29): passed.** Gate (a) on GSM6470208 (10x 5' v2, 121.8 M reads) with the prefill, hand-off and summary: only the 7 known order / timing / memory-tier differences. 108.8 M reads skip BAM, 87.9 M take their alignments from the prefill. Core-s 2,274 with the GPU pileup (18.7 per M reads; it was 4,361 on the stream path), 2,943 with the CPU pileup (was 4,510). 3' regressions GSM6996274 and GSM7036403 also pass (job 791995) | |
 | 1b | Reducer interface over the W11 kernels; cell partitioning with up-front sizing | (c) or (f) fails, or partitioning costs > 10% of GPU time |
 | 1c | Stream and hand-off for whitelist-free and complex barcodes (`CB_samTagOut`, `CB_UMI_Complex`) | gate (a) on the Drop-seq and complex samples |
 | 1d | Paired-end alignment on the GPU (mate windows); plate layout (cell = file); no-UMI gene reducer | ≥ 99.9% identical primary alignments on unique reads, or (a) fails |
