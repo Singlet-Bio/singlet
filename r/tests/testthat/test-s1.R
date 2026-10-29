@@ -8,7 +8,8 @@
 #
 # If SINGLET_S1_TEST_ROOT is unset the helper tries to build it with `python` (set SINGLET_PYTHON for another interpreter);
 # without Python or the singlet package the tests skip. SINGLET_S1_TEST_URL (a server of that directory with Range support,
-# e.g. tests/python/_s1_range_server.py) enables the HTTP tests; the io_threads tests start that server themselves.
+# e.g. tests/python/_s1_range_server.py) enables the HTTP tests; the io_threads tests start that server themselves
+# (SINGLET_S1_RANGE_SERVER gives its path when the tests run outside the repository, as under R CMD check).
 
 s1_root <- local({
     cache <- NULL
@@ -274,8 +275,11 @@ test_that("load() and singlet_cells() carry the study API's sample facts as fact
 s1_serve <- function(root, ..., env = parent.frame()) {
     skip_if_not_installed("curl")
     py <- Sys.getenv("SINGLET_PYTHON", Sys.which("python"))
-    script <- normalizePath(file.path(testthat::test_path("..", "..", ".."), "tests", "python", "_s1_range_server.py"), mustWork = FALSE)
-    skip_if(!nzchar(py) || !file.exists(script), "needs Python and tests/python/_s1_range_server.py")
+    # SINGLET_S1_RANGE_SERVER names the script when the tests do not run from the repository (R CMD check)
+    script <- Sys.getenv("SINGLET_S1_RANGE_SERVER",
+                         file.path(testthat::test_path("..", "..", ".."), "tests", "python", "_s1_range_server.py"))
+    script <- normalizePath(script, mustWork = FALSE)
+    skip_if(!nzchar(py) || !file.exists(script), "needs Python and tests/python/_s1_range_server.py (or SINGLET_S1_RANGE_SERVER)")
     out <- tempfile(fileext = ".url")
     system2(py, c("-P", shQuote(script), shQuote(root), ..., "--ttl", "600", "--url-file", shQuote(out)), stdout = FALSE, stderr = FALSE,
             wait = FALSE)
@@ -318,18 +322,22 @@ test_that("io_threads 1 and 8 load the same study over HTTP, and 8 has requests 
         suppressWarnings(singlet:::.s1_read_study(singlet_study(GSE, base = url), G1, sample_facts = FALSE))
         res <- list()
         for (io in c(1L, 8L)) {
-            for (wm in c(48 * 1024^2, 0)) {  # whole objects, then the chunk path (members' prefixes, then chunk runs)
+            # whole objects; the chunk path, where these small members fit in the first read (prefixes of 512 KiB); and the chunk
+            # path with 4 KiB prefixes, where most chunk runs are fetched in a second round
+            for (wm in c(48 * 1024^2, 0, -1)) {
+                withr::local_options(singlet.s1_prefix_bytes = if (wm < 0) 4096 else NULL)
                 singlet:::.s1_clear_memory()
                 st <- singlet_study(GSE, base = url, force = TRUE)
                 before <- s1_server_stats(url)
                 singlet:::.s1_stats_reset()
-                sce <- suppressWarnings(singlet:::.s1_read_study(st, c(G1, G2, G3), io_threads = io, whole_max = wm, sample_facts = FALSE))
+                sce <- suppressWarnings(singlet:::.s1_read_study(st, c(G1, G2, G3), io_threads = io, whole_max = max(wm, 0),
+                                                                 sample_facts = FALSE))
                 after <- s1_server_stats(url)
                 res[[sprintf("%d_%.0f", io, wm)]] <- list(sce = sce_content(sce), requests = singlet:::.s1_stats()$requests,
                                                           server = after$requests - before$requests)
             }
         }
-        for (wm in c("50331648", "0")) {
+        for (wm in c("50331648", "0", "-1")) {
             one <- res[[paste0("1_", wm)]]
             eight <- res[[paste0("8_", wm)]]
             expect_identical(eight$sce, one$sce)
@@ -337,6 +345,11 @@ test_that("io_threads 1 and 8 load the same study over HTTP, and 8 has requests 
             expect_identical(one$server, one$requests)
         }
         expect_identical(res[["8_0"]]$sce, res[["8_50331648"]]$sce)
+        expect_identical(res[["8_-1"]]$sce, res[["8_50331648"]]$sce)
+        # chunk runs inside the bytes the first read already holds are not fetched again: with members smaller than the prefix,
+        # the chunk path asks for no more than the whole-object path; with 4 KiB prefixes it needs a second round
+        expect_identical(res[["1_0"]]$requests, res[["1_50331648"]]$requests)
+        expect_gt(res[["1_-1"]]$requests, res[["1_0"]]$requests)
         x1 <- res[["8_0"]]$sce$assays$counts[, startsWith(res[["8_0"]]$sce$cn, G1)]
         expect_equal(sum(abs(x1 - as.matrix(read_truth(root, G1)))), 0)
         expect_identical(res[["8_0"]]$sce$skipped$gsm_id, G2)

@@ -774,7 +774,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 }
 
 # Phase 1: the members to read, and the ranges of the cells table and of each member, whole (a small or local object) or its
-# first 512 KiB (header and chunk index). Returns list(skipped = reason) when the sample has nothing to read.
+# first 512 KiB (header and chunk index; option singlet.s1_prefix_bytes). Returns list(skipped = reason) when the sample has
+# nothing to read.
 .s1_sample_plan <- function(study, gsm, members, whole_max) {
     sm <- study$samples[[gsm]]
     mem <- sm$members
@@ -798,7 +799,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
         len <- vapply(names_m, function(n) as.numeric(mem[[n]]$len), numeric(1))
         gap <- 63
     } else {
-        len <- vapply(names_m, function(n) if (n == "cells") as.numeric(mem[[n]]$len) else min(as.numeric(mem[[n]]$len), 512 * 1024), numeric(1))
+        pre <- getOption("singlet.s1_prefix_bytes", 512 * 1024)
+        len <- vapply(names_m, function(n) if (n == "cells") as.numeric(mem[[n]]$len) else min(as.numeric(mem[[n]]$len), pre), numeric(1))
         gap <- 256 * 1024
     }
     list(gsm = gsm, sm = sm, present = present, names_m = names_m, whole = whole,
@@ -806,8 +808,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 }
 
 # Phase 2, from the phase 1 bytes `bl`: decode the cells table, select the columns, check each member's header and plan the
-# chunk runs that hold the selected columns. `items` are the chunk ranges still to fetch, one item per member (none when the
-# members were read whole).
+# chunk runs that hold the selected columns. `items` are the chunk ranges still to fetch (runs inside the bytes already read are
+# not), one item per member (none when the members were read whole).
 .s1_sample_select <- function(study, plan, bl, axis, keep_map, n_genes, sel_fn, want_cols, verify_digest = TRUE, io_threads = 1L) {
     gsm <- plan$gsm
     sm <- plan$sm
@@ -851,8 +853,11 @@ singlet_study_modalities <- function(x, gsm = NULL) {
         if (!whole) {
             h$runs <- .s1_runs(sel, pz2_chunk_first_cols_(buf))
             h$plans <- lapply(h$runs, function(r) pz2_plan_(buf, r[[1L]], r[[2L]]))
-            h$item <- list(sm = sm, off = vapply(h$plans, function(p) mref$off + p$byte_off, numeric(1)),
-                           len = vapply(h$plans, function(p) p$byte_len, numeric(1)), gap = 256 * 1024)
+            # a run inside the bytes already read (the member's first 512 KiB) is taken from them, not fetched again
+            h$held <- vapply(h$plans, function(p) p$byte_off + p$byte_len <= length(buf), NA)
+            fetch <- h$plans[!h$held]
+            h$item <- list(sm = sm, off = vapply(fetch, function(p) mref$off + p$byte_off, numeric(1)),
+                           len = vapply(fetch, function(p) p$byte_len, numeric(1)), gap = 256 * 1024)
         }
         heads[[name]] <- h
     }
@@ -872,11 +877,13 @@ singlet_study_modalities <- function(x, gsm = NULL) {
         if (st$whole) {
             part <- .s1_dgc(pz2_decode_(h$buf, numeric(0), list(), 0, c_hi, h$mode, sel, h$gm, h$ng, threads, "auto"))
         } else {
+            nth <- cumsum(!h$held)  # position of each fetched run in got[[k]]
             pieces <- lapply(seq_along(h$runs), function(q) {
                 r <- h$runs[[q]]
+                p <- h$plans[[q]]
+                bytes <- if (h$held[[q]]) h$buf[p$byte_off + seq_len(p$byte_len)] else got[[k]][[nth[[q]]]]
                 s_run <- sel[sel >= r[[1L]] & sel < r[[2L]]]
-                .s1_dgc(pz2_decode_(h$buf, h$plans[[q]]$byte_off, list(got[[k]][[q]]), r[[1L]], r[[2L]], h$mode, s_run - r[[1L]], h$gm,
-                                    h$ng, threads, "auto"))
+                .s1_dgc(pz2_decode_(h$buf, p$byte_off, list(bytes), r[[1L]], r[[2L]], h$mode, s_run - r[[1L]], h$gm, h$ng, threads, "auto"))
             })
             part <- if (length(pieces) == 1L) pieces[[1L]] else do.call(cbind, pieces)
         }

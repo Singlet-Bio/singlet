@@ -14,7 +14,8 @@
 - Concurrent range requests: `load()`, `singlet_cells()`, `download()` and `read_s1()` take `io_threads`, the number of
   HTTP range requests in flight at once: `"auto"` (default; 8 over HTTP, 1 for a local study or file) or a whole number, and
   1 sends them one at a time. Once a study's manifest is read, `load()` fetches the cells tables and members of
-  `io_threads` samples together, then all their matrix chunk runs together; `download()` fetches `io_threads` 32 MiB pieces
+  `io_threads` samples together, then all their matrix chunk runs together (a run inside the first 512 KiB of its matrix,
+  already read, is not fetched again); `download()` fetches `io_threads` 32 MiB pieces
   at a time; a long range is split into pieces of at least 8 MiB when there are fewer ranges than connections. The
   connections come from one curl pool per process and are reused. The result does not depend on `io_threads`, and it is a
   separate budget from the decoder's CPU `threads`. Same option and defaults as `singlet.torch.S1Stream` in Python.
