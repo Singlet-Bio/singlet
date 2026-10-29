@@ -90,7 +90,9 @@ struct PileupConfig {
     uint32_t wl_ambient_ceil = 50;      // UMI ceiling: WL barcodes with ≤ this count define the ambient pool
     // Intron-assignment rules (intron_rule::k* bits). SINGLET_INTRON_RULES overrides it
     // (decimal or 0x hex) for experiments; see docs/pipeline-validation.md §4.4.
-    uint32_t intron_rules = 0;
+    // Default 389 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer), chosen on real truth (sweep2: matches or beats every
+    // other combination on pbmc v3/v2, nuclei, hgmm, CITE against STARsolo Velocyto and alevin-fry USA).
+    uint32_t intron_rules = 389;
 };
 
 namespace intron_rule {
@@ -1386,7 +1388,7 @@ public:
         // Partial mm_buffer entries (seen < nh) are merged here across all workers,
         // BEFORE the molecule stores are finalized, so a resolved read joins the
         // store that already holds its (barcode, gene) and its UMI is counted once.
-        uint64_t xw_exon = 0;
+        uint64_t xw_exon = 0, xw_mt = 0;
         {
             std::unordered_map<uint64_t, WorkerContext::MultiHitEntry> global_mm;
             global_mm.reserve(500000);
@@ -1397,6 +1399,10 @@ public:
                     m.seen += wentry.seen;
                     if (m.nh == 0 && wentry.nh > 0) m.nh = wentry.nh;
                     if (m.bc_idx < 0 && wentry.bc_idx >= 0) m.bc_idx = wentry.bc_idx;
+                    if (wentry.mt_gene != UINT32_MAX) {
+                        m.mt_gene = wentry.mt_gene; m.mt_exon = wentry.mt_exon; m.mt_intron = wentry.mt_intron;
+                        m.mt_flags = wentry.mt_flags; m.mt_diag = wentry.mt_diag;
+                    }
                     if (m.umi_len == 0 && wentry.umi_len > 0) {
                         m.umi_len = wentry.umi_len;
                         std::memcpy(m.umi, wentry.umi, wentry.umi_len);
@@ -1436,6 +1442,22 @@ public:
 
             PileupStats xw_stats;
             for (auto& [qh, m] : global_mm) {
+                // intron_rule::kMtPrefer (see resolve_mm_parallel): chrM gene vs. its nuclear copy
+                if (m.gene_ambiguous && m.bc_idx >= 0 && m.mt_gene != UINT32_MAX &&
+                    m.first_gene != UINT32_MAX && m.second_gene != UINT32_MAX &&
+                    is_mt_gene(m.first_gene) != is_mt_gene(m.second_gene)) {
+                    const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
+                    int target = 0;
+                    for (int w = 0; w < n_workers; ++w)
+                        if (workers[w].mol_store.has_group(bc, m.mt_gene)) { target = w; break; }
+                    auto& tw = workers[target];
+                    ReadFeatures rf{m.mt_gene, m.mt_exon, m.mt_intron, m.mt_flags,
+                                    static_cast<uint8_t>(m.mt_diag | DirectionalUmiStore::kDiagMulti)};
+                    count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, rf,
+                               m.umi_len > 0 ? m.umi : nullptr, m.umi_len);
+                    xw_mt++;
+                    continue;
+                }
                 if (m.gene_ambiguous || m.bc_idx < 0) {
                     // G-EM: collect cross-worker ambiguous reads for rescue
                     if (m.gene_ambiguous && m.bc_idx >= 0 &&
@@ -1464,6 +1486,7 @@ public:
                 xw_exon++;
             }
             workers[0].stats.exon_hits += xw_stats.exon_hits;
+            workers[0].stats.mt_numt_rescued += xw_mt;
             workers[0].stats.intron_hits += xw_stats.intron_hits;
             workers[0].stats.umi_duplicate += xw_stats.umi_duplicate;
 
