@@ -326,12 +326,12 @@ class SingleRRef:
     def _fine_tune(
         self, q: np.ndarray, cand: np.ndarray, sc: np.ndarray, excl, quantile: float
     ) -> np.ndarray:
-        cand = list(cand)
-        while len(cand) > 1:
+        cl = [int(c) for c in cand]
+        while len(cl) > 1:
             genes = np.unique(
-                np.concatenate([self.pair[a, b] for a in cand for b in cand if a != b])
+                np.concatenate([self.pair[a, b] for a in cl for b in cl if a != b])
             )
-            m = np.isin(self.sample_lab, cand)
+            m = np.isin(self.sample_lab, cl)
             if excl is not None:
                 m &= self.groups != excl
             if m.sum() == 0:
@@ -341,14 +341,14 @@ class SingleRRef:
             rho = (rq @ rr.T)[0]
             lab = self.sample_lab[m]
             s = np.array(
-                [np.quantile(rho[lab == a], quantile) if (lab == a).any() else -1 for a in cand]
+                [np.quantile(rho[lab == a], quantile) if (lab == a).any() else -1 for a in cl]
             )
-            keep = [a for a, v in zip(cand, s) if v >= s.max() - 0.05]
-            if len(keep) == len(cand):
-                cand = [cand[int(np.argmax(s))]] + [a for a in cand if a != cand[int(np.argmax(s))]]
+            keep = [a for a, v in zip(cl, s) if v >= s.max() - 0.05]
+            if len(keep) == len(cl):
+                cl = [cl[int(np.argmax(s))]] + [a for a in cl if a != cl[int(np.argmax(s))]]
                 break
-            cand = sorted(keep, key=lambda a: -s[cand.index(a)])
-        return np.array(cand)
+            cl = sorted(keep, key=lambda a: -s[cl.index(a)])
+        return np.array(cl)
 
 
 # ------------------------------------------------------------------------------------------------------------ consensus
