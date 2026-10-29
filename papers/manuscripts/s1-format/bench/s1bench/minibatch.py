@@ -184,8 +184,9 @@ class SomaMl(Loader):
         ctx = tiledbsoma.SOMATileDBContext(tiledb_config=cfg)
         self.exp = tiledbsoma.Experiment.open(src, context=ctx)
         self.q = self.exp.axis_query("RNA")
+        # the shared workload: blocks of block_size cells, one batch per read, no larger shuffle buffer to fill first
         ds = sml.ExperimentDataset(self.q, layer_name="data", batch_size=self.batch_size, shuffle=True, seed=self.seed,
-                                   return_sparse_X=True)
+                                   return_sparse_X=True, shuffle_chunk_size=self.block_size, io_batch_size=self.batch_size)
         self.dl = sml.experiment_dataloader(ds)
         self.it = iter(self.dl)
 
@@ -271,7 +272,7 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
     for m in L.modules:
         importlib.import_module(m)
     L.batch_size, L.block_size, L.seed = int(mb["batch_size"]), int(mb["block_size"]), seed
-    L.fetch_factor = int(mb.get("fetch_factor", 16))
+    L.fetch_factor = int(mb.get("fetch_factor", 1))   # one batch per fetch: the same 8 blocks of 64 cells as every loader
     rec: dict = {"access": L.access if src.startswith("http") else "local"}
     t0 = time.perf_counter()
     local = src
@@ -334,7 +335,11 @@ def _bpcells(cfg: Config, path: Path, seed: int, threads: int, n_cells: int, src
     wl = workload(n_cells, int(mb["batch_size"]), int(mb["block_size"]), int(mb["n_batches"]) + int(mb["warmup_batches"]) + 1, seed)
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
         json.dump(wl, f)
-    args = ["Rscript", str(BENCH_DIR / "R" / "minibatch_bpcells.R"), str(path), f.name, str(threads), str(mb["warmup_batches"])]
+    import os
+
+    cores = ",".join(map(str, sorted(os.sched_getaffinity(0))[:threads]))   # pinned like the other loaders' processes
+    args = ["taskset", "-c", cores, "Rscript", str(BENCH_DIR / "R" / "minibatch_bpcells.R"), str(path), f.name, str(threads),
+            str(mb["warmup_batches"])]
     if src_url:
         args.append(src_url)
     r = subprocess.run(args, capture_output=True, text=True, cwd=BENCH_DIR)

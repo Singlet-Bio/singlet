@@ -73,7 +73,7 @@ def run(cfg: Config, units: list[Unit], force: bool = False) -> None:
             r = subprocess.run([str(exe), str(member), str(threads), "auto", "native", str(reps), str(warm)], capture_output=True,
                                text=True, check=True)
             j = json.loads(r.stdout.strip().splitlines()[-1])
-            rows.append({"dataset": u.id, "lang": "C++", "call": "pz2::Matrix::open + decode", **summary(j["times"]),
+            rows.append({"dataset": u.id, "lang": "C++", "call": "pz2::Matrix::open + decode (member in memory)", **summary(j["times"]),
                          "equal": ""})
 
         r = subprocess.run(["Rscript", str(BENCH_DIR / "R" / "eco.R"), str(d), str(threads), str(reps)], capture_output=True, text=True,

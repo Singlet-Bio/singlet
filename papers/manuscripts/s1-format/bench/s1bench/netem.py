@@ -104,27 +104,38 @@ def _place(src: Path, dst: Path) -> None:
 
 @contextmanager
 def _rclone_store(cfg: Config, files: dict[str, Path], workdir: Path, gbit: Optional[float] = None) -> Iterator[str]:
-    """`rclone serve s3` over workdir/s3 (bucket = a directory, anonymous access, path-style), behind Toxiproxy. `gbit`
-    becomes rclone's --bwlimit, a limit on the total of all transfers."""
+    """`rclone serve s3` over workdir/s3 (bucket = a directory, anonymous access, path-style), behind Toxiproxy (latency).
+    With `gbit`, bwproxy.py sits between them and limits the total rate of all connections together, with a burst of at
+    most 64 KiB (rclone's own --bwlimit lets several MiB through at full speed after idle, which flatters small reads)."""
+    import sys
+
     n = cfg["netem"]
     root = workdir / "s3"
     for key, p in files.items():
         _place(p, root / n["bucket"] / key)
     port = n["minio_port"]
-    bw = ["--bwlimit", f"{int(gbit * 1e9 / 8 / 1024)}K"] if gbit else []  # rclone's K is KiB/s
     srv = subprocess.Popen([n.get("rclone", "rclone"), "serve", "s3", str(root), "--addr", f"127.0.0.1:{port}",
-                            "--force-path-style", "--vfs-cache-mode", "off", "--log-level", "ERROR", *bw],
+                            "--force-path-style", "--vfs-cache-mode", "off", "--log-level", "ERROR"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    procs = [srv]
+    upstream = port
+    if gbit:
+        upstream = int(n.get("bwproxy_port", port + 3))
+        procs.append(subprocess.Popen([sys.executable, "-m", "s1bench.bwproxy", str(upstream), str(port), str(gbit * 1e9 / 8)],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     tox = subprocess.Popen([n["toxiproxy_server"], "-port", str(n["toxiproxy_api_port"])], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL)
+    procs.append(tox)
     try:
         _wait(f"http://127.0.0.1:{port}/")
+        if gbit:
+            _wait(f"http://127.0.0.1:{upstream}/")
         _wait(f"http://127.0.0.1:{n['toxiproxy_api_port']}/version")
         _api(cfg, "POST", "/proxies", {"name": "s3", "listen": f"127.0.0.1:{n['proxy_port']}",
-                                       "upstream": f"127.0.0.1:{port}", "enabled": True})
+                                       "upstream": f"127.0.0.1:{upstream}", "enabled": True})
         yield f"http://127.0.0.1:{n['proxy_port']}/{n['bucket']}"
     finally:
-        for p in (tox, srv):
+        for p in reversed(procs):
             p.terminate()
             try:
                 p.wait(10)

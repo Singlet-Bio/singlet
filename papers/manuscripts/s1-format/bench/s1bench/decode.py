@@ -28,6 +28,8 @@ def _one(cfg: Config, unit_key: str, fmt_id: str, threads: int, cold: bool, extr
     reps, warm = int(cfg["repeats"]), 0 if cold else int(cfg["warmup"])
     long_s = cfg.get("long_run_s")
     before = (lambda: evict(p)) if cold else None
+    # Timed: the library's own read into memory (load), not the benchmark's conversion and checks (to_canon), which the
+    # write stage's round trip already covers.
     if f.lang == "r":
         ts = f.time_read(p, threads, reps, warm, cold)
     elif extra.get("codec_only"):
@@ -36,11 +38,25 @@ def _one(cfg: Config, unit_key: str, fmt_id: str, threads: int, cold: bool, extr
         body = S2Reader(str(p)).read_member("counts")
         ts = repeat(lambda: f.decode_only(body, threads, extra["mode"], extra.get("isa")), reps, warm, long_s=long_s)
     elif f.id.startswith("s1"):
-        ts = repeat(lambda: f.read(p, threads, mode=extra.get("mode", "canonical"), isa=extra.get("isa")), reps, warm, before,
+        ts = repeat(lambda: f.load(p, threads, mode=extra.get("mode", "canonical"), isa=extra.get("isa")), reps, warm, before,
                     long_s)
     else:
-        ts = repeat(lambda: f.read(p, threads), reps, warm, before, long_s)
-    return {**summary(ts), "times": ts}
+        ts = repeat(lambda: f.load(p, threads), reps, warm, before, long_s)
+    res = {**summary(ts), "times": ts}
+    if f.id.startswith("s1"):
+        res["isa_used"] = _isa_used(extra.get("isa"))
+    return res
+
+
+def _isa_used(requested) -> str:
+    """The kernel the codec actually ran: a request the CPU cannot serve falls back (AVX-512 needs VBMI2)."""
+    from singlet import _pz2  # type: ignore
+
+    order = ["scalar", "avx2", "avx512"]
+    best = next((t.split("=", 1)[1] for t in _pz2.isa_report().split() if t.startswith("best=")), "scalar")
+    if requested in (None, "", "auto"):
+        return best
+    return order[min(order.index(requested), order.index(best))] if requested in order and best in order else str(requested)
 
 
 def _child(cfg_path: str, unit_key: str, fmt_id: str, threads: int, cold: bool, extra: dict, overrides) -> dict:
@@ -89,12 +105,20 @@ def _run(cfg: Config, units: list[Unit], fmt_ids: list[str], force: bool, sweep:
             continue
         written = {r["format"]: r for r in read_tsv(result_path(cfg, "write", u)) if r.get("status") == "ok"}
         nnz = int(next(iter(written.values()))["nnz"]) if written else load_canon(cfg, u).nnz
+        # large matrices (decode.big_nnz): the formats in decode.big_formats at the headline thread count from the node's
+        # own disk only, and no thread sweep, so that no measurement runs for hours
+        big = nnz > float((cfg.get("decode") or {}).get("big_nnz", float("inf")))
+        if big and (sweep or not local):
+            log(f"{u.key}: {nnz:,} non-zeros, above decode.big_nnz: {'thread sweep' if sweep else st['name']} not timed")
+            continue
+        unit_fmts = [f for f in fmt_ids if f in cfg["decode"]["big_formats"]] if big else fmt_ids
+        unit_threads = [H] if big else thread_list
         rows = []
         configs = []
-        for fid in fmt_ids:
+        for fid in unit_fmts:
             if fid not in written:
                 continue
-            for t in thread_list:
+            for t in unit_threads:
                 for cold in caches:
                     if not cold and t not in warm_threads:
                         continue
@@ -104,7 +128,7 @@ def _run(cfg: Config, units: list[Unit], fmt_ids: list[str], force: bool, sweep:
                     else:
                         configs.append((fid, t, cold, {}))
             if fid == "s1" and local:
-                for t in thread_list:
+                for t in unit_threads:
                     for mode in cfg["s1"]["modes"]:
                         for isa in cfg["s1"]["isas"]:
                             configs.append((fid, t, False, {"codec_only": True, "mode": mode, "isa": isa}))
@@ -118,7 +142,8 @@ def _run(cfg: Config, units: list[Unit], fmt_ids: list[str], force: bool, sweep:
                    "nnz": nnz}
             if "median_s" in res:
                 row.update({"status": "ok", "median_s": res["median_s"], "q1_s": res["q1_s"], "q3_s": res["q3_s"],
-                            "mnnz_per_s": nnz / res["median_s"] / 1e6})
+                            "mnnz_per_s": nnz / res["median_s"] / 1e6, "n": res.get("n"),
+                            "times_s": ",".join(f"{v:.6f}" for v in res.get("times", [])), "isa_used": res.get("isa_used", "")})
             else:
                 row.update(res)
             rows.append(row)
@@ -151,8 +176,10 @@ def _cpp_rows(cfg: Config, u: Unit, thread_list: list[int], nnz: int) -> list[di
                        "mode": mode, "isa": isa, "nnz": nnz}
                 if r.returncode == 0:
                     s = summary(json.loads(r.stdout.strip().splitlines()[-1])["times"])
+                    out_j = json.loads(r.stdout.strip().splitlines()[-1])
                     row.update({"status": "ok", "median_s": s["median_s"], "q1_s": s["q1_s"], "q3_s": s["q3_s"],
-                                "mnnz_per_s": nnz / s["median_s"] / 1e6})
+                                "mnnz_per_s": nnz / s["median_s"] / 1e6, "n": s["n"],
+                                "times_s": ",".join(f"{v:.6f}" for v in out_j["times"]), "isa_used": out_j.get("isa_used", "")})
                 else:
                     row.update({"status": "error", "note": (r.stderr.strip().splitlines() or ["failed"])[-1]})
                 rows.append(row)

@@ -196,32 +196,49 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
     d = [r for r in _headline_decode(cfg) if r.get("status") == "ok"]
     H = int(cfg["threads"]["headline"])
 
+    def ran(r, isa):   # a codec row counts for an ISA only if that kernel ran (the CPU may not support it)
+        return isa is None or (r["isa"] == isa and r.get("isa_used") in (None, "", isa))
+
     def pick(fmt, what, threads, cache=None, mode=None, isa=None):
         return [_f(r["mnnz_per_s"]) for r in d if r["format"] == fmt and r["what"] == what and int(r["threads"]) == threads
-                and (cache is None or r["cache"] == cache) and (mode is None or r["mode"] == mode) and (isa is None or r["isa"] == isa)]
+                and (cache is None or r["cache"] == cache) and (mode is None or r["mode"] == mode) and ran(r, isa)]
 
+    # .s1 is compared in source gene order, the order every other format returns; stored order is an extra row
     rows, trade = [], []
-    for f in cfg["formats"]:
-        if f == "s1_pack":
-            continue
-        mode = "native" if f == "s1" else None
+    plan = [(f, "canonical" if f == "s1" else None, FORMAT_LABELS.get(f, f)) for f in cfg["formats"] if f != "s1_pack"]
+    for f, mode, label in plan + [("s1", "native", ".s1, stored gene order")]:
         c1 = _stats(pick(f, "file", 1, "cold", mode))
         c4 = _stats(pick(f, "file", H, "cold", mode))
         w4 = _stats(pick(f, "file", H, "warm", mode))
         if c4["n"] == 0 and c1["n"] == 0:
             continue
-        rows.append({"format": FORMAT_LABELS.get(f, f), "cold_t1": c1["median"], "cold_th": c4["median"], "warm_th": w4["median"]})
+        rows.append({"format": label, "cold_t1": c1["median"], "cold_th": c4["median"], "warm_th": w4["median"]})
+        if mode == "native":
+            N.put(f"dec-s1native-cold-t{H}", c4["median"], "{:.0f}")
+            continue
         if c4["median"] and f in size_stats:
             trade.append({"format": f, "label": FORMAT_LABELS.get(f, f).replace("\\textbf{", "").replace("}", ""), "group": _group(f),
                           "bits": size_stats[f]["median"], "mnnzs": c4["median"]})
         N.put(f"dec-{f}-cold-t{H}", c4["median"], "{:.0f}")
-    # the fastest other format to read cold at the headline thread count, and how much faster .s1 is
-    cold = {f: _stats(pick(f, "file", H, "cold", "native" if f == "s1" else None))["median"] for f in cfg["formats"]}
+    # the fastest other format to read cold at the headline thread count, and how much faster .s1 is: the median over
+    # matrices of the per-matrix ratio (paired), not a ratio of medians
+    cold = {f: _stats(pick(f, "file", H, "cold", "canonical" if f == "s1" else None))["median"] for f in cfg["formats"]}
     others = {f: v for f, v in cold.items() if v and not f.startswith("s1")}
     if others and cold.get("s1"):
         best = max(others, key=others.get)
+        per = {}
+        for r in d:
+            if r["what"] == "file" and r["cache"] == "cold" and int(r["threads"]) == H and r["format"] in ("s1", best) \
+                    and (r["format"] != "s1" or r["mode"] == "canonical"):
+                per.setdefault((r["dataset"], r["matrix"]), {})[r["format"]] = _f(r["mnnz_per_s"])
+        ratios = _stats(u["s1"] / u[best] for u in per.values() if u.get("s1") and u.get(best))
         N.put("dec-best-other-name", FORMAT_LABELS.get(best, best))
-        N.put("dec-speedup-best-other", cold["s1"] / others[best], "{:.1f}")
+        N.put("dec-speedup-best-other", ratios["median"], "{:.1f}")
+        N.put("dec-speedup-best-other-lo", ratios["lo"], "{:.1f}")
+        N.put("dec-speedup-best-other-hi", ratios["hi"], "{:.1f}")
+    used = [r.get("isa_used") for r in d if r["format"] == "s1" and r["what"] == "file" and r.get("isa_used")]
+    if used:
+        N.put("isaBest", max(set(used), key=used.count).replace("avx", "AVX").replace("scalar", "scalar"))
     _write(rows, out / "tab_decode.tsv", ["format", "cold_t1", "cold_th", "warm_th"])
     # label sides for Fig 1c, chosen where the formats sit (west: label to the right of the point); others alternate
     sides = {"h5ad_none": "west", "csc_i32": "east", "h5ad_lzf": "west", "mtx_gz": "west", "loom": "west",
@@ -244,9 +261,25 @@ def wire_section(cfg: Config, N: Numbers) -> None:
     """Q5 from measured size and decode: R_eff(B) = (b/B + 1/D)^-1 for .s1 against uncompressed CSC, per matrix."""
     w = {(r["dataset"], r["matrix"], r["format"]): r for r in _stage(cfg, "write") if r.get("status") == "ok"}
     H = int(cfg["threads"]["headline"])
+    # D is the rate with the file already in memory (warm): Eq. 1 adds the transfer itself, so a cold read from the node's
+    # disk would count reading twice. .s1 in source gene order, like the others.
     d = {(r["dataset"], r["matrix"], r["format"]): r for r in _headline_decode(cfg)
-         if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "cold" and int(r["threads"]) == H
-         and r["mode"] in ("", "native")}
+         if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "warm" and int(r["threads"]) == H
+         and r["mode"] in ("", "canonical")}
+    cross = []
+    for (ds, m, f) in d:   # the bandwidth above which uncompressed CSC delivers faster: b0/B + 1/D0 = b1/B + 1/D1
+        if f != "s1" or (ds, m, "csc_i32") not in d:
+            continue
+        nnz = _f(w[(ds, m, "s1")]["nnz"])
+        b1, b0 = 8 * _f(w[(ds, m, "s1")]["bytes"]) / nnz, 8 * _f(w[(ds, m, "csc_i32")]["bytes"]) / nnz      # bits per nnz
+        D1, D0 = _f(d[(ds, m, "s1")]["mnnz_per_s"]) * 1e6, _f(d[(ds, m, "csc_i32")]["mnnz_per_s"]) * 1e6
+        cross.append(float("inf") if 1 / D1 <= 1 / D0 else (b0 - b1) / (1 / D1 - 1 / D0) / 1e9)
+    if cross:
+        fin = [c for c in cross if math.isfinite(c)]
+        N.put("wire-crossover-gbit", _stats(fin)["median"] if fin else None, "{:.0f}")
+        N.put("wire-crossover-gbit-lo", _stats(fin)["lo"] if fin else None, "{:.0f}")
+        N.put("wire-crossover-never", sum(1 for c in cross if not math.isfinite(c)))
+        N.put("wire-crossover-n", len(cross))
     for gbit in (0.1, 1, 10, 25):
         wins, n, gains = 0, 0, []
         for (ds, m, f) in list(d):
@@ -325,15 +358,28 @@ def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
             ratios["sust"].append(a / b)
     N.put("concurrency-gain-first", _stats(ratios["first"])["median"], "{:.1f}")
     N.put("concurrency-gain-sustained", _stats(ratios["sust"])["median"], "{:.1f}")
-    # first-batch table over all panel datasets and tiers
+    # first-batch table: per loader and tier, the median over panel datasets of each dataset's median over seeds. Where a
+    # download-first loader was not run (above the M tier) the dataset contributes the computed download time instead, a
+    # lower bound, and the cell is marked with a superscript e. Cells are strings so the table can carry the mark.
+    skipped = [r for r in _stage(cfg, "minibatch") if r.get("status") == "skipped" and _f(r.get("est_download_s"))]
     tab = []
     for ld in loaders:
         rec = {"loader": LOADER_LABELS.get(ld, ld)}
         for t in TIER_ORDER + ["s3_1g_wan"]:
-            rs = [r for r in mb if r["tier"] == t and r["loader"] == ld]
-            rec[t] = _stats(r.get("first_batch_s") for r in rs)["median"]
+            per, est = [], False
+            for ds in sorted({r["dataset"] for r in mb} | {r["dataset"] for r in skipped}):
+                v = _stats(r.get("first_batch_s") for r in mb if r["tier"] == t and r["loader"] == ld and r["dataset"] == ds)["median"]
+                if v is None:
+                    v = next((_f(r["est_download_s"]) for r in skipped if r["tier"] == t and r["loader"] == ld and r["dataset"] == ds), None)
+                    est = est or v is not None
+                if v is not None:
+                    per.append(v)
+            m = _stats(per)["median"]
+            rec[t] = "--" if m is None else (f"{m:.2f}" + ("\\textsuperscript{e}" if est else ""))
         tab.append(rec)
     _write(tab, out / "tab_minibatch.tsv", ["loader", *TIER_ORDER, "s3_1g_wan"])
+    capped = sorted({r["tier"] for r in mb if str(r.get("capped")) == "True"})
+    N.put("cappedTiers", ", ".join(TIER_LABELS.get(t, t) for t in capped) if capped else "none")
 
 
 def ladder_floor_section(cfg: Config, N: Numbers, out: Path) -> None:
@@ -392,7 +438,11 @@ def ladder_floor_section(cfg: Config, N: Numbers, out: Path) -> None:
             bestm[b] += 1
     for k, _ in MODELS:
         N.put(f"bestModelCount-{k}", bestm.get(k, 0))
-    frac = [(_f(f.get("sample_sampling_bpn")) / _f(f.get("s1_payload_bpn"))) * 100 for f in fl
+    # the multinomial sampling model describes UMI counts (molecules), not read counts, peaks, tags or imaging spots
+    value = {(d["id"], m["name"]): m.get("value") for d in load_datasets(cfg) for m in d["matrices"]}
+    fl_umi = [f for f in fl if value.get((f["dataset"], f["matrix"])) == "umi"]
+    N.put("samplingN", len(fl_umi))
+    frac = [(_f(f.get("sample_sampling_bpn")) / _f(f.get("s1_payload_bpn"))) * 100 for f in fl_umi
             if _f(f.get("sample_sampling_bpn")) and _f(f.get("s1_payload_bpn"))]
     s = _stats(frac)
     N.put("samplingPctMedian", s["median"], "{:.0f}")
@@ -434,7 +484,8 @@ def eco_section(cfg: Config, N: Numbers, out: Path) -> None:
     # seconds per call on the first eco dataset, for the text: eco-<short key>
     keys = {"singlet.load": "py-singlet", "anndata.read_h5ad": "py-read-h5ad", "scanpy.read_10x_h5": "py-read-10x",
             "singlet::load(as='sce')": "r-singlet-sce", "singlet::load(as='seurat')": "r-singlet-seurat",
-            "Seurat::Read10X_h5": "r-read10x", "zellkonverter::readH5AD": "r-readh5ad", "pz2::Matrix::open + decode": "cpp-s1"}
+            "Seurat::Read10X_h5": "r-read10x", "zellkonverter::readH5AD": "r-readh5ad", "CreateSeuratObject(Read10X_h5)": "r-read10x-seurat",
+            "pz2::Matrix::open + decode (member in memory)": "cpp-s1"}
     first = (cfg["eco"].get("datasets") or [None])[0]
     for r in eco:
         if r["dataset"] == first and r["call"] in keys:

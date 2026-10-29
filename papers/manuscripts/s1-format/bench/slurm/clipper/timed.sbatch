@@ -2,8 +2,8 @@
 # Timed stages for one dataset per array task, on 8 cores of a shared bigmem node (no GPU, no whole node):
 #   sbatch --array=0-N%1 -w <node> --mem=... --export=ALL ... timed.sbatch     with DS_LIST, S1_SHA (and STAGES) set
 # One array per node with %1 keeps one timed job per node, so cold reads do not share a disk with another of ours.
-# DS_LIST entries are dataset ids, or id@big for matrices above ~400M non-zeros: decode then times the main formats
-# (BIG_FORMATS) at the headline thread count from local disk only, with no thread sweep, so no job runs for hours.
+# DS_LIST entries are dataset ids, or id@big for matrices above decode.big_nnz (config.yaml), for which only the files
+# the timed stages read are copied to the node (the decode stage applies the reduced protocol itself).
 # Files are read from three places: a copy on the node's own disk (data_dir; the `local` tier), the shared NFS project
 # space in place (S1BENCH_NFS_DATA; the `nfs` tier), and `rclone serve s3` behind Toxiproxy (the network tiers).
 # A cross-check on another node type sets S1_RESULTS to a results directory of its own.
@@ -76,13 +76,9 @@ s1b env >/dev/null
 for st in $STAGES; do
   t0=$SECONDS
   case $st in
-    sweep) if [ -n "$BIG" ]; then echo "stage sweep $D skipped (@big)"; continue; fi
-           s1b "${SET[@]}" --set 'storages=[{name: local}]' decode --datasets "$D" --sweep --formats s1,h5ad_gzip,csc_i32 $FORCE ;;
-    decode) if [ -n "$BIG" ]; then
-              s1b "${SET[@]}" --set 'storages=[{name: local}]' --set 'threads.main=[4]' decode --datasets "$D" --formats "$BIG_FORMATS" $FORCE
-            else
-              s1b "${SET[@]}" decode --datasets "$D" $FORCE
-            fi ;;
+    # matrices above config decode.big_nnz get the reduced protocol inside the decode stage itself (no sweep, no NFS tier,
+    # decode.big_formats only); @big here only limits which files are copied to the node
+    sweep) s1b "${SET[@]}" --set 'storages=[{name: local}]' decode --datasets "$D" --sweep --formats s1,h5ad_gzip,csc_i32 $FORCE ;;
     *) s1b "${SET[@]}" "$st" --datasets "$D" $FORCE ;;
   esac
   echo "stage $st $D done in $((SECONDS - t0)) s"

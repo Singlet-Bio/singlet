@@ -23,6 +23,10 @@ storages:
   - {name: local}
   - {name: nfs, root: "${S1BENCH_NFS_DATA:-}", threads: [4], caches: [cold]}
 
+decode:
+  big_nnz: 4.0e8                          # above this many non-zeros: big_formats only, headline threads, local disk, no sweep
+  big_formats: [csc_i32, tenx_h5, h5ad_none, h5ad_gzip, zarr, soma, s1, s1_pack]
+
 s1:
   isas: [scalar, avx2, avx512]
   modes: [native, canonical]
@@ -54,7 +58,7 @@ minibatch:
   # Download-first loaders on slow links are not run above this size tier; the row records the computed transfer
   # time of the file (bytes * 8 / link rate) as est_download_s instead. Tier order: S < M < L < XL.
   skip_download_above_tier: {s3_0.1g: M, s3_1g: M, s3_10g: M, s3_1g_wan: M}   # estimated, not run, above M
-  workers: [0, 2, 4]
+  fetch_factor: 1                         # scDataset: one batch per fetch (matched to the block workload)
   loaders: [anndata_inmem, anndata_backed, scdataset, anndata_zarr_lazy, soma_ml, bpcells, s1_stream, s1_stream_canonical,
             s1_stream_seq]
   tiers:

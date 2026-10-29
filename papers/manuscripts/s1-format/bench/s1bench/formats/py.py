@@ -26,6 +26,18 @@ def _from_cells_by_genes(x, genes, barcodes) -> Canon:
     return canon_from_scipy(sp.csc_matrix((x.data, x.indices, x.indptr), shape=(x.shape[1], x.shape[0])), genes, barcodes)
 
 
+def _anndata_to_canon(a) -> Canon:
+    return _from_cells_by_genes(a.X, list(map(str, a.var.index)), list(map(str, a.obs.index)))
+
+
+class _ScipyTriple:
+    """load() returns (matrix genes x cells, gene ids, barcodes), the form these libraries give a user."""
+
+    def to_canon(self, obj) -> Canon:
+        x, g, b = obj
+        return canon_from_scipy(x, g, b)
+
+
 def _write_names(path: Path, names, compress: bool = False) -> None:
     txt = "\n".join(map(str, names)) + "\n"
     if compress:
@@ -42,7 +54,7 @@ def _read_names(path: Path) -> list[str]:
 
 
 # ----------------------------------------------------------------------------------------------- plain arrays
-class CscI32(Format):
+class CscI32(_ScipyTriple, Format):
     id, label, is_dir = "csc_i32", "CSC, 32-bit integers", True
 
     def write(self, c, path, threads):
@@ -53,14 +65,14 @@ class CscI32(Format):
         _write_names(path / "genes.txt", c.genes)
         _write_names(path / "barcodes.txt", c.barcodes)
 
-    def read(self, path, threads):
-        x = sp.csc_matrix((np.load(path / "data.npy"), np.load(path / "indices.npy"), np.load(path / "indptr.npy")))
+    def load(self, path, threads):
         g, b = _read_names(path / "genes.txt"), _read_names(path / "barcodes.txt")
-        x.resize((len(g), len(b)))
-        return canon_from_scipy(x, g, b)
+        x = sp.csc_matrix((np.load(path / "data.npy"), np.load(path / "indices.npy"), np.load(path / "indptr.npy")),
+                          shape=(len(g), len(b)))
+        return x, g, b
 
 
-class CscZstd(Format):
+class CscZstd(_ScipyTriple, Format):
     id, label, is_dir = "csc_zstd19", "CSC + zstd-19", True
     level = 19
 
@@ -80,7 +92,7 @@ class CscZstd(Format):
             (path / f"{k}.zst").write_bytes(z.compress(v))
         (path / "shape.json").write_text(json.dumps([c.m, c.n]))
 
-    def read(self, path, threads):
+    def load(self, path, threads):
         import zstandard as zstd
 
         d = zstd.ZstdDecompressor()
@@ -90,11 +102,11 @@ class CscZstd(Format):
             (np.frombuffer(get("data"), np.int32), np.frombuffer(get("indices"), np.int32), np.frombuffer(get("indptr"), np.int64)),
             shape=(m, n),
         )
-        return canon_from_scipy(x, get("genes").decode().splitlines(), get("barcodes").decode().splitlines())
+        return x, get("genes").decode().splitlines(), get("barcodes").decode().splitlines()
 
 
 # ----------------------------------------------------------------------------------------------- text and HDF5
-class MtxGz(Format):
+class MtxGz(_ScipyTriple, Format):
     id, label, is_dir = "mtx_gz", "MTX.gz", True
 
     def write(self, c, path, threads):
@@ -106,14 +118,14 @@ class MtxGz(Format):
         _write_names(path / "features.tsv.gz", c.genes, compress=True)
         _write_names(path / "barcodes.tsv.gz", c.barcodes, compress=True)
 
-    def read(self, path, threads):
+    def load(self, path, threads):
         import scipy.io
 
-        x = scipy.io.mmread(str(path / "matrix.mtx.gz"))
-        return canon_from_scipy(x, _read_names(path / "features.tsv.gz"), _read_names(path / "barcodes.tsv.gz"))
+        x = sp.csc_matrix(scipy.io.mmread(str(path / "matrix.mtx.gz")))
+        return x, _read_names(path / "features.tsv.gz"), _read_names(path / "barcodes.tsv.gz")
 
 
-class TenxH5(Format):
+class TenxH5(_ScipyTriple, Format):
     id, label, ext = "tenx_h5", "10x HDF5", ".h5"
 
     def write(self, c, path, threads):
@@ -133,10 +145,15 @@ class TenxH5(Format):
             ft.create_dataset("feature_type", data=np.full(c.m, b"Gene Expression"), **kw)
             ft.create_dataset("genome", data=np.full(c.m, b"NA"), **kw)
 
-    def read(self, path, threads):
-        from ..canon import parse_tenx_h5
+    def load(self, path, threads):
+        import h5py
 
-        return parse_tenx_h5(path)
+        with h5py.File(path, "r") as f:
+            g = f["matrix"]
+            x = sp.csc_matrix((g["data"][:], g["indices"][:], g["indptr"][:]), shape=tuple(g["shape"][:]))
+            genes = [s.decode() for s in g["features"]["id"][:]]
+            barcodes = [s.decode() for s in g["barcodes"][:]]
+        return x, genes, barcodes
 
 
 class H5ad(Format):
@@ -153,11 +170,13 @@ class H5ad(Format):
         opts = 4 if self.compression == "gzip" else None
         a.write_h5ad(path, compression=self.compression, compression_opts=opts)
 
-    def read(self, path, threads):
+    def load(self, path, threads):
         import anndata as ad
 
-        a = ad.read_h5ad(path)
-        return _from_cells_by_genes(a.X, list(a.var.index), list(a.obs.index))
+        return ad.read_h5ad(path)
+
+    def to_canon(self, obj):
+        return _anndata_to_canon(obj)
 
 
 class Zarr(Format):
@@ -170,7 +189,7 @@ class Zarr(Format):
         a = ad.AnnData(X=_cells_by_genes_csr(c), obs=pd.DataFrame(index=c.barcodes.astype(str)), var=pd.DataFrame(index=c.genes.astype(str)))
         a.write_zarr(path)
 
-    def read(self, path, threads):
+    def load(self, path, threads):
         import anndata as ad
 
         try:
@@ -179,11 +198,13 @@ class Zarr(Format):
             blosc.set_nthreads(threads)
         except Exception:
             pass
-        a = ad.read_zarr(path)
-        return _from_cells_by_genes(a.X, list(a.var.index), list(a.obs.index))
+        return ad.read_zarr(path)
+
+    def to_canon(self, obj):
+        return _anndata_to_canon(obj)
 
 
-class Loom(Format):
+class Loom(_ScipyTriple, Format):
     id, label, ext = "loom", "loom", ".loom"
 
     def applicable(self, c, cfg):
@@ -195,13 +216,13 @@ class Loom(Format):
 
         loompy.create(str(path), c.to_scipy().tocoo(), {"Gene": c.genes.astype(str)}, {"CellID": c.barcodes.astype(str)})
 
-    def read(self, path, threads):
+    def load(self, path, threads):
         import loompy
 
         with loompy.connect(str(path), "r") as ds:
             x = ds.sparse()
             g, b = list(ds.ra["Gene"]), list(ds.ca["CellID"])
-        return canon_from_scipy(x, g, b)
+        return x, g, b
 
 
 class Soma(Format):
@@ -217,18 +238,20 @@ class Soma(Format):
             shutil.rmtree(path)
         tiledbsoma.io.from_anndata(str(path), a, measurement_name="RNA")
 
-    def read(self, path, threads):
+    def load(self, path, threads):
         import tiledbsoma
         import tiledbsoma.io
 
         ctx = tiledbsoma.SOMATileDBContext(tiledb_config={"sm.compute_concurrency_level": threads, "sm.io_concurrency_level": threads})
-        a = tiledbsoma.io.to_anndata(tiledbsoma.Experiment.open(str(path), context=ctx), measurement_name="RNA", X_layer_name="data")
+        return tiledbsoma.io.to_anndata(tiledbsoma.Experiment.open(str(path), context=ctx), measurement_name="RNA", X_layer_name="data")
+
+    def to_canon(self, a):
         obs_ids = a.obs["obs_id"] if "obs_id" in a.obs else a.obs.index
         var_ids = a.var["var_id"] if "var_id" in a.var else a.var.index
         return _from_cells_by_genes(a.X, list(map(str, var_ids)), list(map(str, obs_ids)))
 
 
-class ParquetCoo(Format):
+class ParquetCoo(_ScipyTriple, Format):
     id, label, is_dir = "parquet_coo", "Parquet COO (zstd)", True
 
     def write(self, c, path, threads):
@@ -242,7 +265,7 @@ class ParquetCoo(Format):
         pq.write_table(pa.table({"gene": c.genes.astype(str)}), path / "genes.parquet", compression="zstd")
         pq.write_table(pa.table({"barcode": c.barcodes.astype(str)}), path / "barcodes.parquet", compression="zstd")
 
-    def read(self, path, threads):
+    def load(self, path, threads):
         import pyarrow.parquet as pq
 
         t = pq.read_table(path / "counts.parquet", use_threads=threads > 1)
@@ -251,7 +274,7 @@ class ParquetCoo(Format):
         x = sp.csc_matrix(
             (t.column("count").to_numpy(), (t.column("gene").to_numpy(), t.column("cell").to_numpy())), shape=(len(g), len(b))
         )
-        return canon_from_scipy(x, g, b)
+        return x, g, b
 
 
 FORMATS: list[Format] = [
