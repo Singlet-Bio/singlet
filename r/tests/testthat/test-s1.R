@@ -239,3 +239,26 @@ test_that("ranged HTTP reads work against a server that honours Range", {
         expect_equal(ncol(sce2), 40L)
     })
 })
+
+test_that("load() and singlet_cells() carry the study API's sample facts as factors", {
+    root <- skip_if_no_s1()
+    skip_if_not_installed("SingleCellExperiment")
+    k562 <- list(sample_kind = "cell_line", tissue_type = "cell line", cell_line = list(list(id = "CVCL_0004", name = "K-562")))
+    adj <- list(tissue_type = "tissue", tumor_sample_type = "adjacent normal",
+                disease = list(list(id = "MONDO:0005061", label = "lung adenocarcinoma")))
+    testthat::local_mocked_bindings(.sample_facts_for_study = function(study) structure(list(k562, adj), names = c(G1, G3)),
+                                    .package = "singlet")
+    with_s1_cache({
+        sce <- suppressWarnings(singlet:::.s1_read_study(singlet_study(GSE, base = root), c(G1, G3)))
+        cd <- SummarizedExperiment::colData(sce)
+        expect_true(all(singlet:::.sample_fact_columns %in% colnames(cd)))
+        expect_true(is.factor(cd$tissue_type) && is.factor(cd$cell_line_cellosaurus_id))
+        expect_identical(unique(as.character(cd$cell_line[cd$gsm_id == G1])), "K-562")
+        expect_true(all(is.na(cd$disease[cd$gsm_id == G1])))
+        expect_identical(unique(as.character(cd$disease_ontology_term_id[cd$gsm_id == G3])), "MONDO:0005061")
+        sub <- singlet_cells(singlet_study(GSE, base = root), called, samples = G1)
+        expect_identical(unique(as.character(SummarizedExperiment::colData(sub)$tissue_type)), "cell line")
+        off <- suppressWarnings(singlet:::.s1_read_study(singlet_study(GSE, base = root), G1, sample_facts = FALSE))
+        expect_false(any(singlet:::.sample_fact_columns %in% colnames(SummarizedExperiment::colData(off))))
+    })
+})

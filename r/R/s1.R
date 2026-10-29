@@ -874,7 +874,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 }
 
 .s1_read_study <- function(study, gsms = NULL, cell_order = "legacy", threads = 0L, concurrency = 4L, whole_max = 48 * 1024^2,
-                           modalities = NULL, cell_type_level = 2L, cell_type_min_score = 0, include_unvalidated = FALSE) {
+                           modalities = NULL, cell_type_level = 2L, cell_type_min_score = 0, include_unvalidated = FALSE,
+                           sample_facts = TRUE) {
     .require_sce("load()")
     mods <- .s1_normalize_modalities(modalities)
     gene_axis <- any(mods %in% .s1_gene_modalities)
@@ -895,6 +896,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
     members <- .s1_members_for(mods)
     study_meta <- .s1_study_file(study, "study_meta.json")
     gsm_meta_map <- if (!is.null(study_meta)) study_meta$gsm_meta else NULL
+    facts <- if (isTRUE(sample_facts)) .sample_facts_for_study(study) else list()
 
     res <- lapply(targets, function(g) {
         tryCatch(
@@ -922,7 +924,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
         lab <- .s1_label_columns(cols, n, .s1_label_categories(study$samples[[g]]$members), cell_type_level,
                                  cell_type_min_score, include_unvalidated)
         geo <- .bundle_obs_frame(g, info, n)
-        coldata_rows[[g]] <- c(list(gsm_id = rep(g, n)), lab, as.list(geo[setdiff(names(geo), "gsm_id")]))
+        coldata_rows[[g]] <- c(list(gsm_id = rep(g, n)), lab, as.list(geo[setdiff(names(geo), "gsm_id")]),
+                               if (length(facts)) .sample_facts_cols(facts[[g]], n))
     }
     if (length(ok) == 0L) {
         detail <- if (length(skipped) > 0L) paste0(": ", .describe_skipped(skipped)) else ""
@@ -933,7 +936,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
                 call. = FALSE)
     }
     parts <- .s1_assemble(ok, mods, axis, n_genes, explicit = !is.null(modalities))
-    coldata <- .s1_label_rbind(unname(coldata_rows))
+    coldata <- .sample_facts_factorize(.s1_label_rbind(unname(coldata_rows)))
     rownames(coldata) <- parts$cn
     sce <- .s1_make_sce(parts, coldata)
     S4Vectors::metadata(sce)$manifest <- list(
@@ -975,9 +978,14 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @param cell_type_level,cell_type_min_score Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
 #'   it (default 0, none); see \code{\link{singlet_labels}}.
 #' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).
+#' @param sample_facts Add the structured sample facts of the singlet.bio study API to \code{colData}: \code{tissue_type},
+#'   \code{cell_line}, \code{cell_line_cellosaurus_id}, \code{tumor_sample_type}, \code{disease},
+#'   \code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
+#'   GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
+#'   local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.
 #' @return A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
 #'   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
-#'   matrix) and the per-cell columns (\code{\link{singlet_labels}}).
+#'   matrix), the per-cell columns (\code{\link{singlet_labels}}) and the sample facts (\code{tissue_type}, \code{disease}, ...).
 #' @examples
 #' \donttest{
 #' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
@@ -989,7 +997,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @export
 singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layers = FALSE, max_cells = NULL,
                           as = c("sce", "seurat"), cache_dir = NULL, modalities = NULL, cell_type_level = 2L,
-                          cell_type_min_score = 0, include_unvalidated = FALSE) {
+                          cell_type_min_score = 0, include_unvalidated = FALSE, sample_facts = TRUE) {
     as <- match.arg(as)
     cond <- substitute(where)
     caller <- parent.frame()
@@ -1047,12 +1055,14 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     })
     parts <- .s1_assemble(ok, mods, axis, n_genes, explicit = !is.null(modalities))
     cn <- parts$cn
-    cd <- .s1_label_rbind(unname(lapply(ok, function(r) {
+    facts <- if (isTRUE(sample_facts)) .sample_facts_for_study(study) else list()
+    cd <- .sample_facts_factorize(.s1_label_rbind(unname(lapply(ok, function(r) {
         n <- length(r$sel)
         c(list(gsm_id = rep(r$gsm, n), matrix_column = r$sel + 1L),
           .s1_label_columns(r$cols, n, .s1_label_categories(study$samples[[r$gsm]]$members), cell_type_level,
-                            cell_type_min_score, include_unvalidated, columns))
-    })))
+                            cell_type_min_score, include_unvalidated, columns),
+          if (length(facts)) .sample_facts_cols(facts[[r$gsm]], n))
+    }))))
     rownames(cd) <- cn
     sce <- .s1_make_sce(parts, cd)
     S4Vectors::metadata(sce)$singlet_s1 <- list(gse = study$gse, rev = study$rev, modalities = mods)
