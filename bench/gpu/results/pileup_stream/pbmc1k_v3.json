@@ -1,0 +1,21 @@
+{
+  "label": "stream_pbmc1k_v3",
+  "device": "NVIDIA H100 NVL",
+  "qual_neq_n_bases": 0,
+  "reads": 60407678, "signatures": 27618048, "alignments": 30718869, "barcodes": 157719, "umi_len": 12,
+  "tuples": {"gene": 51773831, "junction_instances": 1900878, "junction_tuples": 9291345, "junctions": 177186, "snp": 9134997, "mt_bases": 353613637, "mt_indels": 56655},
+  "equivalence": {"exon": {"identical_entries": 3984658, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 3984658, "cpu_nnz": 3984658, "gpu_sum": 10557742, "cpu_sum": 10557742, "identical": true},
+    "intron": {"identical_entries": 3559731, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 3559731, "cpu_nnz": 3559731, "gpu_sum": 4891284, "cpu_sum": 4891284, "identical": true},
+    "ambiguous": {"identical_entries": 158073, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 158073, "cpu_nnz": 158073, "gpu_sum": 197027, "cpu_sum": 197027, "identical": true},
+    "junctions": {"identical_entries": 1461137, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 1461137, "cpu_nnz": 1461137, "gpu_sum": 4811746, "cpu_sum": 4811746, "identical": true},
+    "snp_ad": {"identical_entries": 1027489, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 1027489, "cpu_nnz": 1027489, "gpu_sum": 1469277, "cpu_sum": 1469277, "identical": true},
+    "snp_dp": {"identical_entries": 3344444, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 3344444, "cpu_nnz": 3344444, "gpu_sum": 4848480, "cpu_sum": 4848480, "identical": true},
+    "mt": {"identical_entries": 24187747, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 24187747, "cpu_nnz": 24187747, "gpu_sum": 353613637, "cpu_sum": 353613637, "identical": true},
+    "mt_rev": {"identical_entries": 877153, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 877153, "cpu_nnz": 877153, "gpu_sum": 2398793, "cpu_sum": 2398793, "identical": true},
+    "mt_indels": {"gpu": 56655, "cpu": 56655, "identical": true}},
+  "deterministic_across_runs": true, "output_sha256": "772d11fdb462f9e4383ca4d81ac0c5dbbc5bc9b0857c961b43a7bf346b545fdc",
+  "phase_median_ms": {"1.annotate": 13.522, "2.siglists": 8.859, "3.sjids": 0.546, "4.expand": 15.443, "5.sj": 1.478, "6.snp": 1.978, "7.mt": 16.560, "b.end": 0.003, "b.key": 0.689, "b.rbk": 2.427, "b.sort": 5.317, "c.cand": 2.790, "c.cc": 0.744, "c.emit": 0.564, "c.end": 0.001, "c.seg": 0.264, "d.end": 1.665},
+  "total_median_ms": 72.852, "reads_per_s": 8.292e+08, "reps": 1,
+  "h2d_records_ms": 1207.2, "h2d_records_GB": 3.33, "second_run_with_fetch_s": 1.04,
+  "peak_device_memory_GB": 48.29, "resident_inputs_GB": 27.46
+}

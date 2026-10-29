@@ -55,6 +55,15 @@ Requirements:
   - the multimapper classification identical, or explained;
   - matrices, junctions and calls within the tolerances the benchmark harness accepts;
   - every capability benchmark in `bench/public/` passing.
+- **Correctness contract (Zach, 2026-10-29), replacing the alignment rows above.** "Inform the concept of correctness and not
+  byte-identical to STAR ... different aligner algorithms would be acceptable, provided we do not show regression as opposed to STAR."
+  - **Alignment:** no regression against the frozen production-STAR baseline on the pre-registered ground-truth measures M1-M7 (the
+    "Increase Mapping Rate" harness: branch `bench/ground-truth`, `PREREGISTRATION.md`), beyond each measure's stated tolerance, plus
+    the throughput gate. Ties and improvements are fine; batched-DP stitching, one alignment per distinct sequence, junction-aware or
+    k-mer seeding are allowed if each lands with its M1-M7 result on the pinned truth sets. No aligner change is accepted before that
+    harness is frozen.
+  - **Counting** (pileup, dedup, UMI collapse, cell calling, every reducer): exact against the CPU engine under the order-free rules.
+  - Single GPU only; no multi-GPU or whole-node work.
 - **Determinism.** Byte-identical outputs across runs, GPU counts and batch sizes. Ordering from floating-point and atomic
   operations must not leak into results: use sort-based, ordered reductions.
 - **Reads, BAMs and genotypes never become public outputs.** No BAM is needed at all unless a design wants one internally.

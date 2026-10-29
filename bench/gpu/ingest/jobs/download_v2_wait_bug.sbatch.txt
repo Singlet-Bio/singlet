@@ -1,0 +1,48 @@
+#!/bin/bash
+#SBATCH --job-name=w11-ing-dl2
+#SBATCH --account=debruinz
+#SBATCH --partition=short-gpu
+#SBATCH --nice=10000
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=00:55:00
+#SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
+# CPU-only (no GPU gres). Read-only public access: NCBI S3 (sra-pub-run-odp) and the existing `singlet download` (SRA -> .1fq),
+# plus gunzip cost on FASTQ text made from real reads. Nothing is written to Cloudflare; reads stay in job /tmp.
+# (v1 of this job, 789879, was cancelled: a 1.2 GB single-stream S3 range test did not finish in 15 min on a busy shared egress.)
+set -uo pipefail
+W=/mnt/projects/debruinz_project/debruinz/singlet
+D=$W/jobs/w11/ingest; OUT=$D/results/dl2_$SLURM_JOB_ID; mkdir -p $OUT; R=$OUT/dl.log
+S=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $S; trap 'rm -rf $S' EXIT
+exec > >(tee -a $R) 2>&1
+echo "== node $(hostname) $(date -Is)"; uptime
+SW=$W/pipeline-benchmark/bin/singlet-w3
+netrx() { awk '/:/ && $1 !~ /^lo:/ {gsub(":"," "); s+=$2} END{print s}' /proc/net/dev; }
+echo "== gunzip cost on FASTQ text of real reads (first 3.0 M pairs of pbmc1k_v3, re-gzipped at level 6 like ENA files)"
+Q=$W/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq
+$SW decode $Q --r1 /dev/stdout --threads 4 2>/dev/null | head -n 12000000 | gzip -6 > $S/r1.fastq.gz
+$SW decode $Q --r2 /dev/stdout --threads 4 2>/dev/null | head -n 12000000 | gzip -6 > $S/r2.fastq.gz
+ls -l $S/r1.fastq.gz $S/r2.fastq.gz
+for f in r1 r2; do /usr/bin/time -f "GUNZIP $f cpu_user=%U cpu_sys=%S wall=%e" zcat $S/$f.fastq.gz > /dev/null; done
+which pigz && for f in r1 r2; do /usr/bin/time -f "PIGZ-d $f cpu_user=%U cpu_sys=%S wall=%e" pigz -d -c $S/$f.fastq.gz > /dev/null; done
+echo "GUNZIP_BYTES r1=$(zcat $S/r1.fastq.gz | wc -c) r2=$(zcat $S/r2.fastq.gz | wc -c) pairs=3000000"
+rm -f $S/r1.fastq.gz $S/r2.fastq.gz
+echo "== singlet download SRR21102187 --max-reads 4000000 (SRA -> .1fq, VDB streaming, existing campaign tool)"
+rx0=$(netrx)
+/usr/bin/time -v $SW download SRR21102187 -o $S/part.1fq --vdb-threads 4 --max-reads 4000000 --whitelist-dir $W/pipeline-benchmark/whitelists 2> $OUT/download_part_time.txt
+rx1=$(netrx); echo "NODE_RX_BYTES part=$((rx1-rx0))"
+grep -E "Elapsed|Maximum resident|User time|System time|Percent of CPU|Done|Output|Protocol" $OUT/download_part_time.txt | cut -c1-300; ls -l $S/part.1fq; rm -f $S/part.1fq
+echo "== S3 ranged-read scaling (40 s windows, SRR21102188 .sra, bytes actually received)"
+URL=https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR21102188/SRR21102188
+for N in 1 4 8; do
+  t0=$(date +%s.%N); rx0=$(netrx)
+  for i in $(seq 0 $((N-1))); do ( curl -s --max-time 40 -r $((300000000 + i*200000000))-$((300000000 + i*200000000 + 199999999)) -o /dev/null -w "%{size_download}\n" "$URL" > $S/n$i.txt ) & done; wait
+  t1=$(date +%s.%N); rx1=$(netrx); tot=$(cat $S/n*.txt | awk '{s+=$1} END{print s}'); rm -f $S/n*.txt
+  echo "NET streams=$N bytes=$tot secs=$(echo "$t1 - $t0" | bc) MBps=$(echo "$tot / ($t1 - $t0) / 1000000" | bc -l) node_rx=$((rx1-rx0))"
+done
+echo "== singlet download SRR21102187 FULL (61.1 M spots, 2.80 GB .sra); timeout 25 min"
+rx0=$(netrx)
+timeout 1500 /usr/bin/time -v $SW download SRR21102187 -o $S/full.1fq --vdb-threads 4 --whitelist-dir $W/pipeline-benchmark/whitelists 2> $OUT/download_full_time.txt
+echo "full download rc=$?"; rx1=$(netrx); echo "NODE_RX_BYTES full=$((rx1-rx0))"
+grep -E "Elapsed|Maximum resident|User time|System time|Percent of CPU|Done|Output|Protocol|Reads" $OUT/download_full_time.txt | cut -c1-300; ls -l $S/full.1fq
+echo "== done $(date -Is)"

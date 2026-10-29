@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "singlet_git_sha": "unknown",
+  "singlet_version": "1.0.0",
+  "timestamp": "2026-10-27T19:42:43Z",
+  "build_flags": ["-O3", "-DNDEBUG"],
+  "command_line": [],
+  "env": {"OMP_NUM_THREADS": "", "TMPDIR": "/tmp"},
+  "host": {"node": "c100.clipper.gvsu.edu", "ram_gb": 52.0},
+  "input": {
+    "file": "sample.1fq",
+    "reads": 80448599
+  },
+  "references": {
+    "genome": {"build": "GRCm39-2024-A", "gtf": "genes.gtf"},
+    "whitelist": {"name": "None"},
+    "snp_vcf": {"name": "mus_musculus.vcf.gz"}
+  },
+  "parameters": {
+    "threads": 4,
+    "umi_dedup": true,
+    "umi_dedup_directional": true,
+    "pipeline": true
+  },
+  "cascade": {
+    "enabled": false,
+    "mode": "off",
+    "te_classify": "off"
+  },
+  "cell_caller": "called_v2",
+  "output": {
+    "exon_features": 386028,
+    "cells": 3859,
+    "total_umis": 19585720
+  },
+  "timings": {
+    "wall_seconds": 402.0,
+    "star_seconds": 0.0,
+    "pileup_seconds": 36.7
+  },
+  "output_schema_version": "1.0"
+}

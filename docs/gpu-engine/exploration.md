@@ -979,7 +979,8 @@ Format: a binary SoA plus a JSON header. 10 M distinct reads per dataset (~5 GB)
 | **inputs** | dumped PC arrays → windows and transcripts |
 | **kernel** | the stitch pipeline of §4.3 (thread per window, shared-memory state; overflow kernel) |
 | **metric** | reads/s by class; identity of transcripts (exons, score, nMM, junction motifs and annotations, multimapper order, primary) |
-| **pass** | 100% identical on ≥ 30 M distinct reads across the 3 datasets; ≥ 100 M single-window reads/s |
+| **pass** (until 2026-10-29) | 100% identical on ≥ 30 M distinct reads across the 3 datasets; ≥ 100 M single-window reads/s |
+| **pass** (from 2026-10-29, Zach's decision) | **no regression against production STAR** on every pre-registered real-truth measure M1-M7 of the "Increase Mapping Rate" work (singlet-agents `docs/gpu-align/GROUND_TRUTH_ACCURACY_PLAN.md`, `bench/ground-truth/PREREGISTRATION.md`; truth sets: molecule-matched PBMC-E, MuSC, CHM13, WTC11 + SIRV junctions, human-mouse mixtures), scored with the frozen harness and tolerances; and the throughput gate. Byte identity to STAR is no longer required, so the aligner may change algorithm (batched DP over candidate windows, one alignment per distinct sequence, junction-aware or k-mer seeding). Each change ships with its M1-M7 scores. Nothing below STAR on any registered measure is accepted |
 
 ### M6 — dedup, count sort and UMI collapse (A8, determinism)
 
@@ -1122,9 +1123,22 @@ The phases follow the brief's table (§6), filled in from this exploration:
 
 ---
 
-## 12. Measured results (M1, M2, M10)
+## 12. Measured results (M1, M2, M10, M3, M4, M6, M8, host timers; round 2: M5, GPU pileup, end to end, cost)
 
-Run on Clipper on 2026-10-27, after §9 was written. Raw data and scripts: `bench/gpu/results/{m1,m2,m10}.json` (plus
+**Correctness contract, from 2026-10-29 (Zach).** The results below were measured against the old contract (alignment byte-identical to STAR,
+§12.12). From now on the two halves of the engine have different contracts:
+- **Alignment** (seed search, windows, stitching, extension, multimapper selection: M3-M5): no regression against production STAR on the
+  pre-registered real-truth measures M1-M7 of the "Increase Mapping Rate" work, with the frozen scoring harness and tolerances. A
+  different algorithm is acceptable if it shows no regression on any registered measure. The harness and tolerances must be frozen before
+  any aligner change is accepted (that session's phase-3 STAR census is not complete yet).
+- **Counting** (dedup, UMI collapse, pileup, reducers, cell calling: M6, §12.13 onwards): unchanged. It stays exact against the CPU
+  engine under the order-free rules R1-R10, given the same alignments.
+- Scope unchanged: single-GPU jobs; no multi-GPU or whole-node partitioning.
+The 100% identity results in §12.12 still hold for the current STAR port, which is the reference any new aligner is scored against.
+
+Run on Clipper on 2026-10-27, after §9 was written (§12.5 onwards: the second pass, same day). Raw data and scripts:
+`bench/gpu/results/` and `bench/gpu/jobs/*.sbatch`, plus per-benchmark folders `bench/gpu/{m3m4,m6,m8,host}/` and the STAR dump
+tool in `src/gpu/stardump/`. First pass: `bench/gpu/results/{m1,m2,m10}.json` (plus
 `m1_raw.jsonl`, `m1_knee.jsonl`, `m10_runs.json`, one `m2_*.json` per sample) and `bench/gpu/jobs/*.sbatch`.
 `bench/gpu/model_measured.py` re-runs the §7 model with the substitutions below.
 
@@ -1134,6 +1148,15 @@ Run on Clipper on 2026-10-27, after §9 was written. Raw data and scripts: `benc
 | M2 d, 3′ ≥ 66 M | 0.474 (pbmc1k_v3), 0.515 (263 M deep), 0.392 (GSM5411066, mouse), 0.298 (GSM7036403, v2), 0.369 (neuron1k_v3); **0.658 (nuclei2k_v2)** | ≤ 0.6 | **PASS for 5 of 6; FAIL for nuclei2k_v2** |
 | M2 d, 5′ | 0.306 (pbmc5p_v1), 0.303 (GSM6470208, 121 M) | ≤ 0.7 | **PASS** |
 | M10 W, 66–70 M sample | 201 and 143 core-s (export + non-host residual, an upper bound); export alone 122 and 51 | ≤ 120 core-s | **FAIL** as bounded (see caveats) |
+| M10b W, timed (6 samples) | pooled 2.18 core-s per M pairs (1.21–2.64); demux auto-K + non-host screen = 74% | node ≥ 20 M pairs/s | **PASS** with a persistent non-host index (every sample ≥ 20.7 M pairs/s per node; §12.9) |
+| M3 exact seed search | 323,688,051 of 323,688,051 seed records identical to STAR; ~1.0 G records/s | 100% identical; ≥ 300 M seeds/s | **PASS** (3.3× the rate gate) |
+| M4 certificates | 0 wrong; 16–23% of calls resolved | 0 mismatches; ≥ 50% certified | **PASS on exactness, FAIL on coverage**: dropped from the plan (§12.7) |
+| M6 dedup + count + UMI | 1.6–2.0 G pairs/s; matrices identical to the CPU engine; identical across batch sizes and runs | ≥ 1 G pairs/s; identical | **PASS** |
+| M8 ingest | 12–15 M pairs/s per decode thread, 0.085 core-s/M (0.175 with CRC); 50 M/s needs 5–6 threads | ≥ 50 M/s with ≤ 3 cores | **FAIL on cores**, irrelevant at the 14–18 M pairs/s per GPU the host allows (§12.10) |
+| M5 STAR mapping after the seeds, on the GPU | 100% of 1,991,926 distinct sequences byte-identical (STAR's own cache encoding); whole sample: 66.0 M reads took the GPU's result with 0 STAR-verified mismatches; 2.40 M distinct reads/s per GPU | 100% identical; ≥ 10 M distinct reads/s | **PASS on identity, FAIL on speed (4.2× short)**: the node's bottleneck (§12.12, §12.14) |
+| GPU annotation + pileup | 9 of 9 outputs identical on 3 samples; 40–63 ms per sample | identical | **PASS** (§12.13) |
+| M13 non-host classify | per-read results and all `nonhost/` files identical on 3 samples; 35–79 ms per sample; index resident (8.9 s load) | identical | **PASS** (§12.16) |
+| cost: CPU nodes offset per GPU node | 6.3–8.1 (13 at today's host bound); cloud $ per sample 2.0–2.6× lower on GPU (1.0–1.3× if cloud CPU cores are 2× faster) | — | §12.16 |
 
 ### 12.1 M1: random-access roofline (H100 NVL, job 789081; knee 789085)
 
@@ -1336,11 +1359,576 @@ pairs/s (GPU stages summed: 70).
 - **Plan consequence.** The first host lever is demux (auto-K selection is 30–74% of the export wall). Cutting W to ~1.0 core-s
   per M pairs would lift the host bound to ~26 M pairs/s. The non-host EM needs a timer, since its cost is hidden in the residual.
 
-### 12.5 Open items
+### 12.5 Finding: the campaign's GRCh38 index is sparse (`genomeSAsparseD 2`)
 
-- An engine timer for the non-host EM and for the demux phases outside the K fits, to split the residual.
-- `called_ed` timers (the logs show `called_v2`).
-- M2 on the spec's 8-sample same-study batches (3′ and 5′) once the atlas queue stages them.
-- M10 at 1k / 10k / 30k cells.
-- Whether the 76–80 GB fall in the M1 sweep is TLB reach or HBM pressure; it does not affect the design.
-- M3–M9, M11–M14 and the equivalence suite remain unrun.
+`/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b/genomeParameters.txt` records
+`--genomeSAsparseD 2`: the SA holds every other suffix, 3.10 G entries in 12.8 GB (§4.14 assumed a dense 24.3 GB SA). Mouse
+GRCm39-2024-A is dense (5.46 G suffixes). §2.2's `gSAsparseD = 1` is therefore wrong for human, with three consequences:
+- **Every human seed call runs two SA searches** (`maxMappableLength2strands` loops iDist 0 and 1: the piece and the piece
+  shifted by one base), and `storeAligns` keeps the ones with the largest `maxL + iDist`. The GPU port does the same (M3).
+- **Certificates need a second array.** Only one of the two sub-searches lands on a sampled suffix; the other is the MMP
+  among sampled suffixes of a shifted query, which a U-array cannot certify. The **V-array** (§12.7) bounds it instead.
+- **HBM is smaller than budgeted:** the human core index (SA 12.8 + SAi 1.6 + byte genome 3.2 GB) loads in 6 s from NVMe and
+  occupies 17.6 GB.
+
+The index must not be rebuilt dense for the GPU: `gSAsparseD` changes STAR's results (§4.16), and the contract is the CPU
+engine's results with this index.
+
+### 12.6 M3: exact STAR seed search on the GPU (jobs 789234 build, 789235 array)
+
+**Method.**
+- **The dump (§9).** `src/gpu/stardump/` is the vendored STAR of `prod/campaign` (28969b87) with
+  `ReadAlign_maxMappableLength2strands.cpp` replaced by a copy that writes, per mapping thread, every seed call in STAR's call
+  order: the read (STAR's `Read1[0]`, `Read1[1]`, `splitR`), and per iDist the inputs and the answer (`maxL`, `Nrep`, SA
+  interval, `SA[ind0]`, which branch answered). It is built from a scratch copy (`bench/gpu/jobs/stardump_build.sbatch`);
+  `src/star/` is untouched. The sequence cache is off (`SINGLET_STAR_SEQCACHE_MB=0`) so every read is searched.
+- **Reads.** All R2 reads of the sample, deduplicated with multiplicities in job `/tmp`; every k-th sequence of the sorted
+  distinct list is kept (~8–9 M distinct reads per sample), with the sample's STAR parameters from its campaign run log
+  (`--outFilterScoreMin 10`; pbmc5p_v1 adds `--clip3pAdapterSeq AAGCAGTGGTATCAACGCAGAGTACATGGG --clip3pAdapterMMp 0.1`).
+- **Kernel.** `bench/gpu/m3m4/seedsearch.cu` `seed_search`: a line-by-line port of `maxMappableLength2strands` (one iDist
+  pass), `maxMappableLength`, `findMultRange` and the byte-genome `compareSeqToGenome`, over STAR's own `Genome`, `SA` and
+  `SAindex` files loaded unchanged into HBM (packed 33-bit SA and 35-bit SAindex read with STAR's `PackedArray` rule). One
+  thread per dumped record; queries in dump order and prefix-sorted order (first 32 bases in search direction, CUB/thrust sort).
+  "Steps" counts SAindex probes plus genome compares, the dependent accesses of one search.
+- H100 NVL (g050/g051), driver 610.43.02, nvcc 12.4.131, `-O3 -arch=sm_90`; 3 timed repeats after a warm-up, medians.
+
+| sample | index | distinct reads (reads) | seed records | **identical to STAR** | records/s dump order | prefix-sorted | SIMT dump / sorted | steps per record |
+|---|---|---|---|---|---|---|---|---|
+| pbmc1k_v3 (3′ v3) | GRCh38, sparse | 7.97 M (16.6 M) | 104,010,422 | **104,010,422** | 995 M | 1,025 M | 0.40 / 0.61 | 10.5 |
+| pbmc5p_v1 (5′) | GRCh38, sparse | 9.25 M (30.1 M) | 127,455,158 | **127,455,158** | 976 M | 1,109 M | 0.38 / 0.62 | 10.8 |
+| nuclei2k_v2 (mouse nuclei) | GRCm39, dense | 8.97 M (13.2 M) | 92,222,471 | **92,222,471** | 1,085 M | 1,020 M | 0.39 / 0.61 | 9.9 |
+
+- **Identity: 323,688,051 of 323,688,051 seed records identical** (maxL, Nrep, SA interval and the answering branch), on
+  three real samples, two species, sparse and dense SA. A2 holds for the port side: STAR's search is reproduced exactly.
+- **Throughput: ~1.0 G records/s, 3.3× the §9 pass line** (300 M normal seeds/s). By branch (sorted): SAindex-only 2.2–2.4 G/s,
+  unique extension 1.7 G/s, full SA search 0.96–1.04 G/s. At ~10 dependent steps per record, each with an SA word and a
+  genome window, the kernel issues roughly 20 G random accesses/s, ~70% of M1's 28.2 G sectors/s.
+- **Records per distinct read:** 13.1 (pbmc1k_v3), 13.8 (pbmc5p_v1), 10.3 (nuclei2k_v2, dense: one record per call).
+  **The seed stage alone therefore runs at 78–105 M distinct reads/s**, i.e. 166 M (3′, d = 0.474), 259 M (5′, d = 0.31) and
+  160 M (nuclei, d = 0.658) read pairs/s, before any certificate or reuse. 47–49% of records have Nrep > 1.
+- **Sorted vs unsorted:** prefix sorting lifts SIMT efficiency from 0.39 to 0.61 but the rate only by 1.03–1.14× (human) and
+  0.94× (mouse): scattered result writes and read fetches eat most of the gain. §4.9's "≤ 1.1–1.3×" is confirmed at the low
+  end. Not worth a sort pass by itself; it comes free if seeds are sorted for another reason.
+- **Not measured here:** the PC/WC/WA size distributions (A3) need a dump of the window and stitch stage (M5); the overflow
+  share is still unmeasured. The heavy-read kernel (M9) was not built: heavy reads are inside these rates, unseparated.
+
+### 12.7 M4: U-array, V-array and certificate coverage (same jobs)
+
+**Build** (on the GPU, from STAR's SA): pack the two-strand text to 2 bits plus a 1-bit N mask (8 ms); adjacent-suffix LCP
+over A/C/G/T with a sortedness check (0.33 s for 3.10 G suffixes, 0.62 s for 5.46 G); scatter U[t] by text coordinate and
+mark sampled positions (0.46 / 0.80 s); for the sparse index, the **V-array**: for every unsampled position, the longest
+prefix shared with any sampled suffix, by binary search of the text suffix in STAR's SA (5.9 s for GRCh38). **SA order
+violations: 0** on both indexes.
+
+**Certificate rule.** Anchors come from earlier records of the same read that STAR answered with one locus and maxL ≥ 20
+(a certified answer equals STAR's, so this is what the engine itself would have). For each record, the candidate t is the
+anchor shifted by the read offset (mirrored for reverse searches). If t is sampled: certified when lcp(Q, text[t..]) = m ≥
+U[t] (STAR's answer must then be maxL = m, Nrep = 1, locus t). If t is unsampled: bounded when m > V[t] (STAR's maxL must
+then be ≤ V[t]). A call is **resolved** when every record of it is certified or bounded below the best certified
+maxL + iDist, i.e. `storeAligns`' input is known without any SA search.
+
+| sample | records certified | records bounded | **certified or bounded WRONG** | calls resolved (read-weighted) | perfect reads | heavy or short reads | other | certify rate |
+|---|---|---|---|---|---|---|---|---|
+| pbmc1k_v3 | 19.1% | 10.8% | **0** | **22.8%** | 35% of 22% of calls | 11% of 44% | 29% of 34% | 1.66 G records/s |
+| pbmc5p_v1 | 17.1% | 5.2% | **0** | **16.0%** | 27% of 29% | 6% of 31% | 16% of 40% | 1.85 G/s |
+| nuclei2k_v2 | 21.5% | — (dense) | **0** | **21.5%** | 62% of 13% | 11% of 64% | 28% of 23% | 2.60 G/s |
+
+(Shares read-weighted, i.e. per original read. "Perfect": the first record maps its whole piece uniquely; "heavy or short":
+any record with Nrep > 50 or no record with maxL ≥ 20.)
+
+- **Exactness holds:** 0 wrong certificates and 0 wrong bounds over 323.7 M records, so the U and V proofs and A2 for
+  certified seeds are confirmed on real data.
+- **Coverage fails the §9 gate** (≥ 50% of normal-read seeds; the model assumed 3.3 of 5.9 seeds per normal read): 16–23% of
+  calls. Why, from the decline counters (pbmc1k_v3): 33% of records have no anchor yet (every read's first call, both iDist
+  records); U above the remaining query length on 26.6 M attempts (short seeds near read ends); the anchor's prediction fails
+  (m < U) on 29.5 M (restart seeds after mismatches, splices); V unknown or not exceeded on 49.9 M.
+- **Decision: drop certificates from the build plan.** The exact search already runs at ~1 G records/s (§12.6). Removing the
+  certified records saves at most ~1/5 of the seed stage, which already measures at 160–260 M pairs/s, for 6.4 GB (U) +
+  6.4 GB (V) of HBM and two extra code paths. Kill criterion §10 P2
+  ("certificates ... cannot be made identical: drop them") is not what happened: they are identical; they are just not worth
+  it. The code stays in `seedsearch.cu` as a validated tool (it also proves SA sortedness of an index in < 1 s).
+
+### 12.8 M6: dedup, count sort and UMI collapse (Sonnet subagent; jobs 789186–789241)
+
+Details, CPU rules with file:line references and per-run JSON: `bench/gpu/m6/README.md`, `bench/gpu/results/m6*.json`.
+
+**CPU rules found** (prod/campaign): the pileup counts raw `UR` UMIs (STAR is not asked for `UB`); `--pipeline` forces
+directional dedup: two UMIs of one (cell, gene) are linked when they differ in exactly one base (N packed as T) and
+`max count ≥ 2·min count − 1`. With counts ordered this rule is symmetric, so a molecule is a **connected component**, which
+makes the GPU result independent of tie order. Molecule evidence is the OR of flags and the minimum exon/intron index;
+spliced → exon matrix, unspliced → intron matrix, ambiguous → exon matrix plus a per-gene count; counts clamp at 65535.
+
+**Truth.** A dev patch (`bench/gpu/m6/tuple_dump.patch`, timers-only style, outputs unchanged) dumped every tuple at
+`count_read` and the CPU's final matrices from a real engine run.
+
+| | GSM4006843 (3′ v2, 66.7 M pairs) | pbmc1k_v3 (3′ v3, 66.6 M pairs) |
+|---|---|---|
+| a. read dedup, exact full-length key (≤ 128 nt), hash sort + neighbour compare | 19.2 ms, 3.46 G reads/s | 18.6 ms, 3.57 G reads/s |
+| b. (cell, gene, UMI) key sort + reduce | 8.7 ms | 8.4 ms |
+| c. UMI collapse (split halves + connected components) | 8.7 ms | 4.4 ms |
+| d. class select + CSR | 4.3 ms | 1.6 ms |
+| **chain per read pair** | **1.63 G pairs/s** | **2.01 G pairs/s** |
+| matrices vs CPU (exon / intron / ambiguous entries) | **24.6 M / 6.03 M / 39 k, all identical** | **3.98 M / 3.56 M / 158 k, all identical** |
+| CSR SHA-256 across batch sizes {4, 16, 64, all} M × 3 runs × 2 processes | identical, = CPU truth | identical, = CPU truth |
+
+- **Pass on all three gates:** ≥ 1 G pairs/s (1.6–2.0), identical matrices, identical across batch sizes and runs.
+- Transfers are not in the chain rate: non-overlapped H2D of packed reads and tuples (~320 ms) and D2H of the CSR (17–63 ms)
+  would cut it to 0.2 G pairs/s. In the engine the tuples are produced on the GPU and only the CSR leaves, so ~60 ms per
+  66 M-pair sample remains, overlapped with the next sample.
+- The read-dedup distinct fraction matches M2 under M2's definition (pbmc1k_v3: 0.4739 vs 0.474).
+- **Open:** stage a and stages b–d are not linked per read yet (no per-sequence annotation exists); only 3′ v2/v3 tested;
+  UMI-heavy samples (more component rounds, larger split-half groups) untested.
+
+### 12.9 Host work, timed (M10 follow-up; Sonnet subagent; jobs 789193, 789215, 789253) and the host-side plan
+
+**Method.** A DEV build of `prod/campaign` (28969b87 + `bench/gpu/host/timers.patch`, PGO with the campaign's own
+`pgo_build.sh` and training data; timers only, outputs unchanged; the campaign binary untouched) ran the six §12.3 samples with
+the campaign command line (`--threads 4 --pipeline`, run screen). Every stage after STAR, every caller and writer in the export,
+and every demux phase prints wall, process CPU and thread CPU. The timer totals agree with the cgroup CPU counter within 1–3%.
+Details and the full table: `bench/gpu/host/README.md`, `bench/gpu/results/m10b_*.json`.
+
+**W, the work after the pileup** (core-s; the GPU design removes STAR, sort, index, CB refresh and pileup):
+
+| sample | M pairs | W | per M pairs | non-host index load | non-host classify | demux auto-K | demux final fit | non-host EM |
+|---|---|---|---|---|---|---|---|---|
+| GSM4006843 (3′ v2) | 66.7 | 174.9 | 2.62 | 33.2 | 20.5 | 47.9 | 28.5 | 4.9 |
+| GSM5411066 (mouse 3′ v3) | 69.6 | 92.2 | 1.32 | 28.6 | 20.3 | 12.2 | 1.6 | 7.8 |
+| GSM7901264 (3′ v2) | 100.3 | 121.2 | 1.21 | 28.0 | 40.8 | 11.9 | 1.9 | 19.2 |
+| GSM7036403 (3′ v2) | 111.6 | 243.6 | 2.18 | 53.3 | 29.7 | 92.9 | 8.9 | 5.8 |
+| GSM6470208 (5′ v2) | 121.8 | 271.4 | 2.23 | 46.2 | 77.2 | 49.4 | 5.0 | 24.7 |
+| GSM7656149 (3′ v3, deep) | 263.4 | 694.8 | 2.64 | 42.7 | 126.0 | 337.5 | 27.2 | 17.8 |
+| **pooled** | 733.4 | 1,598 | **2.18** | 0.32 /M | 0.43 /M | 0.75 /M | 0.10 /M | 0.11 /M |
+
+(auto-K here is process CPU of the auto-K window; the README's 0.68 /M is its thread CPU.)
+
+- **M10's bound is confirmed:** pooled W = 2.18 core-s per M pairs (M10: 2.3). The "non-host residual" is the non-host screen.
+- **Where it goes:** demux auto-K (31–49% of W on the deep samples), the non-host screen (43% pooled: index load 0.32, classify
+  0.43, EM 0.11, I/O 0.09), then a long tail of callers and writers at ≤ 0.08 /M each (CSC conversion, writers, cell calling,
+  doublets, ambient, saturation, mt variants).
+- **Demux:** all six samples are single donor. Auto-K tries K = 1..4 (it stops after 3 K without gain), so K = 2..4 are ~75% of
+  auto-K. Cost follows SNP observations in the fit cells, not cells (the 263 M sample: 3,274 fit cells, 1.48 M covered SNPs,
+  322 thread-s). The export calls demux with `threads = 1`, so the fits are serial and their floating-point sums run in one
+  canonical order (relevant for any port: a GPU port must keep that order per accumulator).
+- **Non-host:** the three indices (viral, bacterial, fungal) are re-loaded for every sample, 28–53 s; the EM hits its
+  500-iteration cap on every sample.
+- **Threads and contention** (replay of GSM4006843's export from its kept BAM; same cells and demux input): export core-s at
+  `--threads` 1 / 4 / 8 = 117.7 / 119.3 / 116.0; **eight concurrent copies on one node: 116.6–120.8 core-s each (< 3% more)**.
+  The node had no other tenants. Host work therefore scales linearly with the number of samples in flight.
+
+**The host-side plan, with its measured capacity per GPU node.** A Clipper H100 node has 56 cores; one is kept for
+orchestration. Ingest (M8, §12.10) costs i = 0.085 core-s per M pairs (0.175 with the `.1fq` CRC check). The node's host
+capacity R solves R · (W + i) = 55 cores:
+
+| step | what moves | exact because | pooled W (core-s/M) | **node capacity, pooled** (CRC off / on) | worst sample (CRC off / on) |
+|---|---|---|---|---|---|
+| 0 | nothing (today's CPU callers and export) | — | 2.18 | **24.3 / 23.4 M pairs/s** | 20.2 / 19.5 (263 M) |
+| 1 | persistent per-node service loads the non-host indices once | same index bytes | 1.86 | **28.3 / 27.0** | 21.4 / 20.7 |
+| 2 | non-host k-mer classify on the GPU (§4.12, M13) | same hash and minimizer rule, sort-merge | 1.43 | **36.3 / 34.3** | 26.4 / 25.3 |
+| 3 | demux fits (auto-K + final fit) on the GPU or a bit-exact parallel CPU path | serial-order sums per accumulator kept | 0.58 | **82.7 / 72.8** | 64.3 / 58.2 |
+
+- **The ≥ 20 M pairs/s per node target is met by step 1 on every measured sample** (worst 20.7 with CRC on, the 263 M sample),
+  and on the pooled mix already by step 0 (24.3). Step 1 is the persistent service the design already needs (§4.15); it costs nothing in exactness.
+- **Step 2** is the planned GPU non-host screen. Its GPU cost is unmeasured (M13), but the §7.2 model puts it at ≥ 500 M pairs/s,
+  < 5% of GPU time. It adds 30% host headroom.
+- **Step 3 is not needed for the target.** It is the lever if callers grow (Beta adds callers) or if a node is shared. A
+  bit-exact demux port is feasible because the CPU fits are serial: one GPU thread per (SNP, K) accumulator walking its cells in
+  the CPU's cell order reproduces every float sum (with `-fmad=false`); PCA power iteration and the RNG streams stay on the host.
+  Cheaper exact CPU cuts exist but are unverified (e.g. the K = 1 restarts of the final fit may be bit-identical; 28.5 s on
+  GSM4006843).
+- **Why not just parallelise the export:** its wall is long (serial demux: 352 s at 263 M) but its core-seconds do not change
+  with threads (above). Throughput needs many samples in flight per node (~45 at ~1.1 cores each), not more threads per sample.
+  Memory per in-flight export is the remaining host risk: not measured (the 8-copy replay ran without trouble).
+- **Not on the host any more** (vs the CPU engine): STAR, BAM sort and index, CB refresh, pileup (`stage.pileup` alone is
+  100–437 core-s per sample, 1.1–3.6 /M, more than all of W).
+
+### 12.10 M8: host→device ingest (Sonnet subagent; jobs 789223 single GPU, 789286 dual GPU)
+
+Details: `bench/gpu/m8/README.md`, `bench/gpu/results/m8.json`. `m8_ingest.cu`: N decode threads read `.1fq` blocks, zstd-decode
+and pack each pair into the GPU layout (R2 2-bit, CB+UMI 2-bit, a quality slot), fill a pinned ring of 4 × 256 MB, a copy
+stream does H2D, and a dummy kernel reads every byte and spins a set time per pair. The direct decoder was checked against
+the `.1fq` library's decoder on 150 M + 121.8 M reads (0 mismatches) and by host-vs-GPU checksums.
+
+**GSM7656149 (263 M pairs), sustained M pairs/s per GPU, kernel spin 0:**
+
+| decode threads | local NVMe, cold cache | shared filesystem, direct |
+|---|---|---|
+| 1 | 11.6 | 13.1 |
+| 2 | 21.5 | 24.7 |
+| 3 | 29.9 | 36.8 |
+| 4 | 38.3 | 47.9 |
+| 6 | 51.3 | 70.1 |
+
+- **Host cost: 0.085 core-s per M pairs** (5′ GSM6470208: 0.076), of which zstd ~43 ns and packing ~20 ns per pair per thread:
+  one thread sustains 12–15 M pairs/s, not the 67 M reads/s of `format-1fq.md` (that figure is decode only, without the
+  per-pair packing). **The library's CRC check doubles it to 0.175 core-s per M pairs.**
+- **§9 gate (≥ 50 M pairs/s with ≤ 3 cores, < 5% idle): FAIL on cores** (50 M/s needs 5–6 threads, ~4.4 cores). Idle is 0.02%
+  at 6 threads against a 20 ns/pair kernel. For this goal it does not matter: at 14–18 M pairs/s per GPU (§12.11) ingest
+  needs 1.2–1.5 cores per GPU (2.5–3.2 with CRC).
+- **PCIe: 12.3 GB/s pinned H2D** (D2H 14.3), not 53.8; both GPUs of a node sit behind one host link and get 6.2 GB/s each when
+  copying together. At 56 B per pair that is still > 100 M pairs/s per GPU.
+- **Dual GPU:** two pipelines run at the single-GPU rate each (6 threads: 49.1 and 44.5 M/s from NVMe; 64.5 M/s each from the
+  shared filesystem, 2.9 GB/s combined).
+- **Staging is not needed for rate:** reading the shared filesystem directly is no slower than cold local NVMe (NFS server
+  caching cannot be excluded: the file had been read that day).
+- The atlas `.1fq` files store no base qualities (`qual_mode` 0); the quality slot was filled synthetically (real payload
+  32 B/pair; within 3%). The mtDNA/SNP pileup's binned-quality input (§2) therefore does not exist in these files.
+
+### 12.11 End to end per node, with what is now measured
+
+| stage | where | measured rate per GPU (or node) | source |
+|---|---|---|---|
+| `.1fq` ingest (decode + pack + H2D) | host + PCIe | 12–15 M pairs/s per thread; 0.085 core-s/M (0.175 with CRC); H2D 12.3 GB/s | M8 |
+| read dedup (exact) | GPU | 3.5 G reads/s | M6 |
+| seed search, exact STAR port, no certificates | GPU | 166 M pairs/s (3′), 259 M (5′), 160 M (nuclei) | M3 (78–105 M distinct reads/s × 1/d) |
+| windows, stitch, extend, multimapper selection, annotation | GPU | **unmeasured** (M5) | — |
+| count sort, UMI collapse, CSR | GPU | 1.6–2.0 G pairs/s (with dedup) | M6 |
+| callers, export, non-host EM | host, 55 cores | 27.0–28.3 M pairs/s per node (step 1), 34.3–36.3 (step 2) | §12.9 |
+
+**What this says.**
+- **The node is host-bound at 27–36 M pairs/s** until M5 says otherwise, with two GPUs. Each GPU therefore has to deliver only
+  14–18 M pairs/s. Seeds plus dedup and counting take ~7 ns per pair (3′), so the stitch stage may use up to ~50 ns per pair,
+  i.e. **~100 ns per distinct read: M5 needs ≥ 10 M distinct reads/s per GPU** to keep the node host-bound. §9's 100 M
+  single-window reads/s was a target for headroom, not for this goal.
+- **Target ≥ 20 M pairs/s per node: met on the host side by measurement** (§12.9, step 1, every sample ≥ 20.7). The GPU side
+  is measured for every stage except M5; the earlier prototype (memory note, 2026-10-27) ran probe + stitch at 10–17 M reads/s
+  per GPU with a non-STAR stitcher, so the M5 requirement is in reach but not shown.
+- **Against a CPU node** (1.0–1.3 M pairs/s end to end): a GPU node at 27–36 M pairs/s is **21–36×** per node, or ~10–18× per
+  GPU. The campaign (20.6 T pairs) on 3 GPU nodes: 2.2–2.9 days of compute, below the input-supply bound (§7.4).
+- **The GPU is idle most of the time at this point.** Raising the host bound (step 2 then step 3, §12.9) is the way to use it;
+  step 3 lifts the host to ~73–83 M pairs/s per node, where the GPUs (and M5) would bind.
+
+### 12.12 M5: STAR's whole mapping path on the GPU, byte-identical (jobs 789536–789772)
+
+Round 2 (2026-10-27/28). Code: `bench/gpu/m5/stitch.cuh` (the port), `bench/gpu/m5/m5.cu` (driver, lanes, comparison),
+`src/gpu/stardump/{ReadAlign_oneRead_dump.cpp,m5_dump.h}` (truth). Results: `bench/gpu/results/m5_pbmc1k_v3_2m*.json`.
+
+**Truth.** The campaign's STAR already has an exact per-sequence encoding of a read's mapping result: the sequence cache
+(`ReadAlign_seqCache.cpp`, verified in the W3 work: identical outputs with it on). Its blob holds nW, nTr, the best transcript's
+index and every field of every transcript that mapping writes (exons, junction motifs and shifts, scores, mismatch and gap counts,
+primary flag). `stardump` now also links a copy of `ReadAlign_oneRead.cpp` that writes, for every mapped read, the sequence STAR
+mapped (after clipping) and that blob (without the cache's 255-transcript limit), plus `unmapType`; and, once per process, every
+alignment parameter and the genome arrays that stitching reads (chrStart/Length, chrBin, the 386,483 sjdb junctions with motifs,
+shifts and strands, sjDstart/sjAstart). The gate compares the GPU's blob with STAR's byte for byte, and `unmapType`.
+
+**The port.** One read per thread, from the read sequence to the final transcripts: `qualitySplit` → the seed loop of
+`mapOneRead` → `maxMappableLength2strands` (both iDist passes of the sparse SA) → `storeAligns` → `stitchPieces`
+(`createExtendWindowsWithAlign`, flanks, `assignAlignToWindow` on the FASTASSIGN path) → `stitchWindowAligns`
+(`stitchAlignToTranscript`, `extendAlign`, `blocksOverlap`, the score-range recording) → `multMapSelect` → `mappedFilter` → the
+blob. Each function is a line-by-line port of the vendored STAR 2.7.11b; differences are representation only (stitch.cuh header):
+winBin is a per-read open-addressing map with the same read/write semantics plus a 1,024-bit prefilter; the include/exclude
+recursion runs on an explicit stack of transcripts; transcript copies move only the live exon rows; across windows only the
+transcripts that can still pass `multMapSelect`'s score range are kept, in order; `scoreGenomicLength`'s `log2` uses
+breakpoints computed on the host with the C library's `log2`. Two STAR quirks reproduced on the way: `WlastAnchor` is a `uint`
+set to −1, so the "last anchor" mark never fires; after `MARKER_TOO_MANY_ANCHORS_PER_WINDOW` STAR keeps assigning to windows with
+nW = 0 (nothing observable follows).
+
+**Lanes.** Every array has a capacity; a read that would exceed one where STAR's own limit is larger stops and goes to the next
+lane, which runs the same code with larger capacities; the last lane is the host with STAR's limits (seedPerReadNmax 1000,
+alignWindowsPerReadNmax 10000, seedPerWindowNmax 50, MAX_N_EXONS 20, alignTranscriptsPerWindowNmax 100). A per-read budget of
+stitching steps (STAR's include/exclude recursion is exponential in the aligns of a window) moves pathological reads on.
+
+| lane | capacities (windows / aligns per window / exons / transcripts kept) | where | reads (2 M set) |
+|---|---|---|---|
+| A | 16 / 16 / 8 / 8; budget 1,024 steps | GPU, staged, batches of 131k reads | all 1,991,926 |
+| M | 64 / 8 / 8 / 32; budget 2,048 | GPU, staged | 524,577 (26%) |
+| B | 128 / 50 / 20 / 64; budget 2,048 | GPU, staged, batches of 32k | 98,152 (4.9%) |
+| host | STAR's limits, no budget | 24 host threads, concurrent with the GPU | 5,304 (0.27%) |
+
+**Staging.** Per-phase cycle counters showed the cost was not stitching but window assignment: a multimapper piece (up to
+seedMultimapNmax = 10,000 loci) makes `stitchPieces` visit every SA entry, ~2,300–3,000 per read in the wide lanes. Each lane now
+runs three kernels per batch: phase 1 (thread per read: seeds, windows from anchors, flanks), the scan (warp per read, lanes over
+consecutive SA entries, coalesced, marking the entries whose bin holds a window; exact because the assignment never changes
+winBin, so the test gives the answer STAR gets during it), and phase 3 (thread per read: the assignments in STAR's order from the
+marks, then stitching, selection, encoding). The scan went from >50% of lane time to 3–8%.
+
+**Results** (pbmc1k_v3, every 16th distinct cDNA sequence: 1,991,926 sequences, 4,118,999 reads; median of 3 after a warm-up):
+
+| version | identical (distinct / reads) | GPU ms | M distinct reads/s per GPU |
+|---|---|---|---|
+| one kernel, lanes A (16 windows) + B | 100% / 100% | 5,561 | 0.36 |
+| + live-row copies, epoch winBin, bitmask | 100% / 100% | 2,558 | 0.78 |
+| + staged scan, bigger batches | 100% / 100% | 2,041 | 0.98 |
+| + step budget | 100% / 100% | 1,157 | 1.72 |
+| + lane M (cascade A → M → B → host) | 100% / 100% | 1,014 | 1.96 |
+| + batches of 262k (A, M) and 65k (B) reads (job 789812) | 100% / 100% | 844 | 2.36 |
+| + batches of 524k (A), 393k (M) (job 789830) | **100% / 100%** | **829** | **2.40** |
+
+STAR-unmapped reads (151,095) and mapped reads (1,840,831) are both 100% identical in every version. The whole sample
+(31,870,813 distinct sequences, 66.6 M reads; job 789771) maps in 17.1 s of GPU time (1.86 M distinct reads/s, 3.9 M reads/s).
+
+**Where the time is now:** lane A runs at 6.4 M distinct reads/s (313 ms for all 2 M reads), close to the 10 M requirement; lanes
+M and B (the 26% of sequences with more than 16 windows: multimappers whose anchors map up to winAnchorMultimapNmax = 50 times)
+take 70% of GPU time. **M5 is below the ≥ 10 M distinct reads/s requirement (2.40 M), by 4.2×.** Its host lane is not free: 2.2 s on 24 host threads per whole sample (0.79 core-s per M pairs, an upper bound), which counts in the host bound (§12.15). What would close it, in order of
+expected gain: windows of a read stitched in parallel across a warp (exact with two passes: each window's maximum finalized score
+is independent of recording, so a prefix max gives STAR's maxScoreMate at each window's start); compact transcripts (32-bit rows)
+and per-read state in shared memory; running the M/B lanes concurrently with lane A of the next batch; a cross-sample result
+cache (a sequence's result depends on the sequence only; see §12.16).
+
+**Correction (2026-10-28, later):** job 790068 did **not** test binning. Its sources had been pushed to the home directory
+instead of `$W/jobs/w11/m5` (`clipper.py push` resolves a relative destination against `~`), so it compiled and ran the previous
+`m5`, which ignores `--bin`. The "no gain" result below is void; binning is untested. Stitching is deprioritized for now.
+
+~~**Read binning by window count (job 790068, 2026-10-28; measured, no gain):**~~ sorting each staged batch by (windows, SA entries)
+before phase 3 (`m5 --bin`) left every lane time unchanged within noise (lane B 4,820 vs 4,818 ms; pbmc1k_v3, 7,967,704
+distinct sequences, default lane settings, 1.04 M distinct/s in both variants; both 100% identical). Lane B's 362 k reads (4.5%)
+take 63% of GPU time, 81% of it in stitching (3,110 SA entries per read); a batch ends with its slowest read, and binning does
+not shorten that tail. What can: windows stitched across a warp, and lanes M/B running concurrently with lane A (streams).
+Node context: with the host at 15.8 core-s per M pairs (54 cores: ~3.4 M pairs/s per node) and two GPUs mapping ~8 M pairs/s,
+M5 limits a node only once the host work falls below ~7 core-s per M pairs.
+
+**Design inputs from the Aligner Brainstorming session** (read only, `singlet-agents/.claude/worktrees/gpu-align-vision`,
+`bench/gpu-prototype/{stitch.h,probe.cu,results/RESULTS.md}`): its separate repeat/heavy-read lane became the lane cascade and
+the step budget here; its warp-cooperative chaining is the next step above. Its seeding and scoring were not used: they are not
+STAR's (about 90–100 genes per sample off by more than 19% in its own gene comparison).
+
+### 12.13 GPU annotation and pileup, identical to the engine's callers (Sonnet subagent; jobs 789562, 789652, 789669–789671)
+
+Details: `bench/gpu/pileup/README.md` (§1 is the specification ported: which records reach the counters, gene assignment,
+the multimapper buffer, junctions, SNP AD/DP, chrM bases and indels, every tie-break and clamp), `bench/gpu/results/pileup*.json`.
+Kernels (`pileup.cu`): annotate each distinct alignment signature against the gene model (merge-join), expand to reads, M6's
+collapse for the gene tuples, and sort + segmented reduce for junctions, SNP AD/DP, chrM bases (total and reverse strand) and
+chrM indels. Inputs were built from the engine's own STAR BAM in job /tmp (M5 will supply them; see the order caveat below).
+Idea taken from the Aligner Brainstorming session (`gpu-align-vision/bench/gpu-pileup/`, read only): pileup as sort + merge-join +
+segmented reduce with an arena allocator; every rule here is the engine's, and the gate is the engine's own accumulators.
+
+| sample | records | GPU ms (8 stages) | reads/s | peak device memory | identical outputs |
+|---|---|---|---|---|---|
+| GSM4006843 (human 3′ v2) | 60.9 M | 55.3 | 1.10 G | 23.8 GB | **9 of 9** (exon, intron, ambiguous, junctions, SNP AD, SNP DP, chrM, chrM reverse, chrM indels) |
+| GSM5411066 (mouse 3′ v3) | 61.0 M | 39.6 | 1.54 G | 16.7 GB | **9 of 9** |
+| GSM6470208 (human 5′ v2) | 88.5 M | 63.1 | 1.40 G | 25.1 GB | **9 of 9** |
+
+- Host work removed: the pileup stage plus BAM index and CB refresh, **3.3–7.6 core-s per M read pairs** (campaign stage timers),
+  more than all of W after the pileup (§12.9). The STAR BAM sort (17–75 core-s per M pairs) disappears too.
+- Two rules the gate caught: N bases count in SNP DP except where the decode's quality marks them (sample-dependent, now read per
+  sample); junction ids depend on the CPU's worker order, so junctions compare by (chromosome, donor, acceptor).
+- Caveats: multimapper tie rules that depend on STAR's coordinate-sort order need M5 to carry an order key; host-to-device
+  transfer of the records from pageable memory (0.8–0.9 s) is 14–20× the compute and must move to pinned, overlapped buffers;
+  not ported: the EM-rescue list, poly(A) records, VDJ and guides.
+- Cost: 1.1 GPU-hours, 31 core-hours.
+
+### 12.14 A whole sample through the engine with GPU mapping (jobs 789760 build, 789771, 789810)
+
+**Method** (`bench/gpu/m5/inject/`). The engine consumes M5's results through STAR's own sequence cache, so nothing downstream
+changes: `singlet-m5inject` is `prod/campaign` c4a1be38 with one addition to `SeqCache::create` (`apply_preload.py`, dev build
+only): with `SINGLET_STAR_SEQCACHE_PRELOAD` it inserts (sequence, result) records before mapping. A read whose sequence is in the
+cache takes its mapping state from the record (`seqCacheRestore`) instead of from STAR's mapping; with
+`SINGLET_STAR_SEQCACHE_VERIFY=1` STAR maps it anyway and counts every record that differs from its own result.
+`e2e.sbatch`: every distinct cDNA sequence of the sample → `m5` (lanes A/M/B/host) → records → the full campaign command line
+(`--pipeline --output-format 1pz`, run screen, 24 threads) three ways; then `bench/star_accel/out_equiv.py` (the W3 harness)
+on every output file. pbmc1k_v3 (3′ v3, 66.6 M read pairs; 3′ samples are not clipped, so STAR maps the raw sequence).
+(GSM4006843 was planned; its staged copy had been deleted.)
+
+| | result |
+|---|---|
+| distinct sequences mapped on the GPU | 31,870,813 in 17.1 s of GPU time (1.86 M distinct/s, 3.9 M reads/s); 31,763,130 records (sequences without N) |
+| **verify run**: reads taking the GPU's result, each re-mapped by STAR and compared | **66,004,541 of 66,488,663 (99.27%), 0 mismatches** |
+| reads not served (mapped by STAR as usual) | 113,225 with N (not cacheable), ~370 k lost to the cache's 2-way index collisions |
+| GPU-fed run vs reference run, every output file (54 files; `out_equiv.py`, then an order-independent check of each file that differs) | every matrix, cell table, pileup, junction, SNP, mtDNA and QC output identical; the differences are the same as between **two CPU-only runs** of the engine (below) |
+
+What differs, and why it is not the GPU (job 789810 ran the reference twice, `ref` and `ref2`, both CPU only):
+
+| file | ref vs ref2 (CPU vs CPU) | ref vs GPU-fed | cause |
+|---|---|---|---|
+| `star_Unmapped.out.mate1/2`, `nonhost_reads.fq` | differ; same content sorted | differ; same content sorted | STAR's threads write unmapped reads in arrival order |
+| `read_stats.tsv`, `star_Log*`, timing fields of `summary.json`, `provenance.json`, `ambient_contamination.json` | differ | differ | timings |
+| `pileup_stats.json` `bytes_public` | 959,255,571 vs 959,255,576 | vs 959,255,669 | the summed size of public files that hold timings |
+| `nonhost/nonhost_summary.json` `em_iterations` | 458 = 458 | 458 (run 1, job 789771) / **462 (run 2)** | the non-host EM reads `nonhost_reads.fq` in its (varying) order; floating-point sums in a different order converge in a different number of iterations. 0 species above threshold in every run. |
+
+So on a whole real sample every read that took M5's result got STAR's exact mapping state, and the engine's outputs equal a
+reference run's up to the run-to-run variation the CPU engine already has. **One CPU-engine finding:** the non-host EM result
+depends on the order of its input, which multithreaded STAR leaves nondeterministic; sorting `nonhost_reads.fq` (or the EM's
+reads) before the EM would make it deterministic (a CPU-engine change, outside W11; a follow-up). The cache preload is also a
+deployable integration path: the GPU fills STAR's cache, the engine is unchanged. Engine wall time per run (24 threads): 7:17
+reference, 6:56 GPU-fed: STAR's mapping is ~half cached already in the reference, and every other CPU stage still runs, so this
+path proves equivalence, not cost (cost: §12.16).
+
+### 12.15 Ranked bottlenecks per GPU node (after round 2)
+
+Capacity of each stage for one Clipper GPU node (2 × H100 NVL, 56 cores), in M read pairs/s, from the measurements above
+(pbmc1k_v3 unless stated; 2.09 reads per distinct sequence there). The node runs at the minimum.
+
+| rank | stage | where | capacity per node | basis | status |
+|---|---|---|---|---|---|
+| 1 | **M5: seeds → windows → stitching → selection** | GPU | **7.8** (3.9 per GPU; whole sample, job 789771); **11.2** with the larger batches of job 789830 (2.40 M distinct/s on the 2 M set) | measured (§12.12) | **the bottleneck**: 70% of it in lanes M and B (reads with > 16 windows) |
+| 2 | host callers + export (W = 2.18 core-s/M) + ingest + M5's host lane (0.79), 55 cores | host | 18 (step 0) / 20 (step 1) / 24 (steps 1+2) / 39 (step 3) | measured (§12.9, §12.12) | binding once M5 is ~1.6× faster |
+| 3 | records host→device (pileup input), pageable copies | PCIe | ~70 per GPU as measured (0.8 s per 61 M records); > 100 pinned | measured (§12.13), projected | move to pinned, overlapped buffers |
+| 4 | ingest: `.1fq` decode + pack + H2D | host | 0.085 core-s/M: 0.7 cores at 7.8 M/s | measured (§12.10) | fine |
+| 5 | annotation + pileup + M6 collapse | GPU | > 1,000 | measured (§12.13, §12.8) | negligible |
+
+- The node is **GPU-bound at 8.7–11.2 M pairs/s** (pooled over the 6 cost samples; 7.8–9.9 on pbmc1k_v3). The host bound, now
+  including M5's host lane, is 18 M pairs/s today and 24 with host steps 1+2, so the ≥ 20 M target needs both M5 ×1.8 and steps 1+2.
+- Ranked M5 levers (all exact): (a) warp-parallel windows in lanes M and B with the two-pass maxScoreMate (70% of M5 time);
+  (b) compact transcripts and shared-memory state in lane A (6.4 M distinct/s alone); (c) lanes M/B overlapped with lane A of
+  the next batch (tails); (d) cross-sample result reuse (§12.16), −19% of distinct sequences for a same-chemistry sample now,
+  more as a campaign accumulates results.
+- Host levers: step 1 (per-node non-host indices, resident in HBM in M13: 8.9 s once instead of 38–48 s per sample) and step 2
+  (M13, bit-identical, §12.16) are both shown; together they take W from 2.18 to 1.43 core-s per M pairs (host bound 24 M pairs/s
+  per node with ingest and M5's host lane). A smaller host lane (fewer reads past lane B) raises it further.
+
+### 12.16 M13, cross-sample reuse, and the cost case
+
+**M13: non-host classification on the GPU, bit-identical** (Sonnet subagent; jobs 789787–789820; `bench/gpu/m13/README.md`,
+`bench/gpu/results/m13.json`). The 29.9 GB index (26.1 GB entries, 2.8 GB radix directory, 0.4 GB host Bloom filter) is resident in
+HBM: 8.9 s to load once (the CPU engine reloads it for every sample, 38–48 s). Per-read minimizer counts and species hit counts
+are identical for every read (3.04 M on GSM4006843, 12.27 M on GSM6470208, 4.9 M on GSM5411066), and with the GPU's results
+injected into a dev engine every `nonhost/` file and `nonhost_reads.fq` is byte-identical. GPU time 35–79 ms per sample
+(87–155 M reads/s; 49–63 M/s with copies). Host work removed: 1.0–1.2 core-s per M read pairs (index load + classify; this
+job's own timers). The EM stays on the host: its sums depend on read order and on `unordered_map` iteration order, the same
+order dependence §12.14 found.
+
+**Cross-sample reuse** (job 789785, `bench/gpu/results/m5_crosssample.json`). A sequence's mapping result depends on the sequence
+only (the sequence cache's premise), so results computed for one sample serve later ones. Measured on real samples:
+
+| A (earlier sample) | B | share of B's distinct sequences found in A | share of B's reads |
+|---|---|---|---|
+| GSM7656149 (3′ v3, 263 M) | pbmc1k_v3 (3′ v3) | 19.1% | **49.5%** |
+| pbmc1k_v3 | GSM7656149 | 4.4% | 32.8% |
+| GSM7036403 (3′ v2, 98 bp) | pbmc1k_v3 (91 bp) | 0.2% | 0.7% |
+| GSM6470208 (5′, 90 bp) | pbmc5p_v1 (5′, 91 bp) | 0 | 0 |
+
+Reuse needs the same read length (and chemistry); within that it is large. M5's cost is per distinct sequence, so a campaign-wide
+result store would cut M5 work by ~19% for a sample like pbmc1k_v3 already, and more as results accumulate over thousands of
+same-chemistry samples. It is exact by construction (the key is the full sequence, as in the sequence cache).
+
+**The cost case** (`bench/gpu/cost/cost_model.py` → `bench/gpu/results/cost_case.json`; rates `bench/gpu/cost/rates.{json,md}`).
+Baseline: the best CPU pipeline, measured. `prod/campaign` c4a1be38 sources with 3′/5′ PGO (binary `singlet-w3`, source-identical),
+the campaign command line, `--threads 4`, one sample per job on Clipper `short-cpu` (Xeon Gold 6230R, 52 cores per node; Sonnet
+subagent, jobs 789532–789560; `bench/gpu/cost/`). The CPU side gets the per-node non-host index credit too (a persistent service
+would help both pipelines). Six samples, 733.4 M read pairs:
+
+| | CPU node (52 cores) | GPU node (2 × H100 NVL), M5 as measured on the whole sample | same, M5 at its best measured rate | target: M5 at the host bound |
+|---|---|---|---|---|
+| core-s per M read pairs (credited) | 37.55 measured (37.87 uncredited; 23.5–44.3 per sample) | host 2.27 (W + ingest) | 2.27 | 2.27 |
+| node throughput, M read pairs/s | 1.39 (cores / core-s; packing efficiency 1.0: single-sample runs; the node-packing measurement had not landed at this stop) | 8.71 (GPU-bound) | 11.22 (GPU-bound) | 18.0 (host-bound, today's host work) |
+| samples/hour per node (mix of 6, 122 M pairs average) | 40.8 | 256 | 331 | 530 |
+| core-hours per sample | 1.275 | 0.104 host (W, ingest, M5 host lane) | 0.104 | 0.104 |
+| GPU-hours per sample | — | 0.0078 | 0.0061 | 0.0038 |
+| **CPU nodes offset per GPU node** | — | **6.3** | **8.1** | **13.0** |
+| $ per sample, cloud on-demand (central: $3.99/H100-h, $0.05/core-h) | $0.064 | $0.031 (CPU/GPU 2.05×) | $0.024 (2.6×) | $0.015 (4.2×) |
+| same, low / high price sets | $0.052 / $0.114 | $0.020 / $0.054 | $0.016 / $0.042 | $0.010 / $0.026 |
+| if cloud CPU cores are 2× faster than the 6230R | $0.032 | CPU/GPU 1.0× | 1.3× | 2.1× |
+| ACCESS credits per sample (Anvil: 1 per core-h; ~67 per GPU-h, derived) | 1.28 | 0.52 | 0.41 | 0.25 |
+| energy per sample, kWh (PUE 1.56; both nodes estimated, not metered) | 0.0172 (6230R node ~450 W) | 0.0085 (~1,400 W) | 0.0066 | 0.0041 |
+
+Labels (in the JSON, per number): CPU core-s and wall are **measured**; CPU node throughput is **derived** with packing efficiency
+1.0 (**modelled** until the packing run lands); GPU node rates are **projected** (M5's rate is measured on pbmc1k_v3 and applied to
+each sample's distinct sequences; d is measured for four of the six samples); dollars, credits and energy are **modelled**.
+
+What the table says:
+- **A GPU node replaces 6–8 Clipper CPU nodes today, with byte-identical outputs**, and ~13 once M5 reaches today's host bound
+  (18 M pairs/s; ~17 at 24 with host steps 1+2). The node is M5-bound, so every M5 gain moves the ratio until then.
+- **In cloud dollars the GPU route is 2.0–2.6× cheaper per sample today** at central on-demand prices, 2.6–3.3× at the cheapest
+  H100 NVL price found. The honest caveat is the CPU core: the baseline ran on 2019 Xeons, and cloud core-hour prices buy faster
+  cores; at 2× faster cores the routes cost the same today and the GPU is 2.1× cheaper at the target.
+- In ACCESS credits (Anvil), 2.5–3.1× fewer credits per sample on GPU at the derived GPU rate.
+- The GPU node's host cores are mostly idle at today's M5 rate (~0.1 core-hours per sample of 55 cores), so it could also carry
+  CPU work; the comparison does not credit that.
+- Energy: ~2–2.6× less per sample on the GPU node with consistent (old-Xeon) CPU power; unmetered on both sides.
+
+### 12.17 Open items
+
+- **M5 speed** (the node's bottleneck, 2.40 M distinct reads/s per GPU against the 10 M requirement; and its host lane, 0.79 core-s per M pairs): warp-parallel windows in
+  lanes M and B with the two-pass maxScoreMate; compact per-read state in lane A; overlap of lanes; a campaign-wide result store
+  (§12.16). Nsight Compute could not profile on the Clipper GPU nodes (the application aborted under the profiler; likely
+  counter permissions), so the hot spots come from in-kernel cycle counters.
+- **M5 → pileup glue**: the pileup's inputs came from STAR BAMs; feeding it M5's transcripts directly needs the record conversion
+  and an order key for the multimapper ties that depend on STAR's coordinate sort (§12.13). Equivalence is already shown by
+  composition: M5 = STAR per read (whole sample, §12.14), pileup = engine given STAR's alignments (§12.13).
+- **Read clipping on the GPU** (STAR's `--clip3pAdapterSeq` for 5′ samples, `--clip5pNbases`): M5's input is the sequence after
+  clipping; 3′ samples need none, 5′ samples need the clip port before their sequences can be keyed.
+- **CPU-engine finding (outside W11)**: the non-host EM is input-order dependent; sort its reads to make it deterministic
+  (§12.14, M13 README).
+- **CPU node packing efficiency** for the cost case (single-sample runs used; §12.16), and metered power for both node types.
+- **M7** (bit-exact barcode correction) and nvCOMP ingest: not started; neither is near the bottleneck (ingest 0.085 core-s per M
+  pairs, §12.10).
+- **Demux** (host step 3) only matters once M5 passes ~25 M pairs/s per node.
+- Carried over: memory per in-flight export on the host; M2 on same-study batches; M10 at 1k/10k/30k cells.
+
+### 12.18 After milestone 1: where the GPU path's CPU goes, and the next lever (2026-10-28)
+
+All figures are measured on PR #66, pbmc1k_v3, 9 threads, in core-s per M read pairs.
+
+| stage | build 0027286f (job 790058) | + blocking sync and parallel read concatenation (job 790078) |
+|---|---|---|
+| STAR: GPU prefill and per-read pass | 8.88 | 8.99 (no change within noise) |
+| `.1fq` decode to FASTQ files | 1.14 | 1.17 |
+| STAR BAM sort; BAM index; CB-tag refresh | 1.47; 0.22; 0.27 | 1.55; 0.23; 0.25 |
+| pileup; export; non-host | 1.53; 1.51; 0.47 | 1.55; 1.49; 0.49 |
+| **total** (`--engine cpu`: 36.2 and 36.8) | **15.8** | **16.1** |
+
+**The prefill's single-core stretch is not a spin.** The per-second CPU shows about 15 s at 8–9 cores (reading the reads), then
+about 60 s at exactly one core. Blocking sync did not change it. That core is the serial host side of `mapDistinct`: pageable
+uploads of the 18 GB index and the reads, the dedup loop, record assembly and pageable device-to-host copies. Making it parallel
+saves at most about 1 core-s per M pairs, but would shorten a single sample's wall time by up to about a minute.
+
+**STAR's per-read pass** (47 s × 9 threads; `-DSTAR_PROFILE`, job 790048), in thread-seconds:
+- output 189: BAM records 77, junction recording 52 before the annotation skip, barcode tags 21;
+- cache lookups and restores 97 (1.45 µs per hit);
+- FASTQ parsing 53;
+- chunk reading 28.
+
+**The next lever is STAR's per-read pass itself.** Together with decode, sort, index and CB refresh it is about 13 of the 16
+core-s per M pairs; every other stage is 1.5 or less. Every read is a cache hit, so what STAR still does per read is only to
+produce outputs:
+- BAM records (flag, position, MAPQ, CIGAR, sequence, qualities, NH nM AS CR UR CB);
+- the unmapped FASTQ records;
+- `Log.final.out` counters;
+- `SJ.out.tab` junction counts;
+- `Solo.out/Barcodes.stats`.
+
+All of these are functions of the per-sequence result, which the GPU already holds, plus the read's number, barcode, UMI and
+qualities.
+
+**Plan, as a stacked PR**, each step gated byte-identical to STAR's own output:
+1. Build those per-read outputs from the GPU results in parallel host code that calls STAR's own functions (`alignBAM`,
+   `outReadsUnmapped`, `statsRA`, `outputTranscriptSJ`), reading the reads straight from the `.1fq`. This removes the decode,
+   the FASTQ files, STAR's chunk machinery and its parsing. Gate: the sorted BAM's records, `SJ.out.tab`, the counts in
+   `Log.final.out` and the unmapped records equal STAR's.
+2. Sort the records by STAR's key (start, then iReadAll << 32 | iTr << 8 | mate) on the GPU and stream them to the unchanged
+   CPU pileup by chromosome, without writing a BAM. This removes the sort, index and disk round trip; the order rules are in
+   `ws-w11-gpu.md`.
+3. Build the records on the GPU and switch the covered accumulators to the GPU pileup (§12.13).
+
+**Projected**, from the measured stages: after step 2 the GPU path would be at about 6–8 core-s per M pairs, against 12.7 at
+cloud break-even. M5 then becomes the node's bound (about 8 M pairs/s for two GPUs), which is where queue item 2 (warp-parallel
+stitching, concurrent lanes) starts to pay.
+
+### 12.19 GPU pileup on the order-free stream path: identical to the CPU engine under the spec (job 790376, 2026-10-28)
+
+**Setup:**
+- Spec: `docs/research-beta/order-free-rules.md` (bam-stream session, PR #60).
+- CPU reference: the CPU engine's unsorted-stream path, branch `perf/bam-stream` 7aa3339 (PR #63). It implements R1 (SNP
+  consensus per molecule), R4, R5 and R7, merged unchanged into `gpu/engine-gpu-stream` on PR #66.
+- Hooks: the engine ran with `SINGLET_STREAM_TEE` (a copy of STAR's unsorted record stream) and `SINGLET_PILEUP_DUMP` (what
+  the callers receive, plus the annotation). Both are debug-only.
+- `extract --cb-from-cr` built the GPU records from the stream copy. CB comes from CR by #63's rule.
+- `pileup` now implements R1 on the GPU. Per (cell, SNP, UMI) molecule it reduces the REF/ALT/OTHER read counts (each capped at
+  255), lets a strict maximum decide, and leaves ties and OTHER-majority molecules out of AD and DP. `--snp-first` keeps the
+  sorted path's rule.
+
+**Result:** pbmc1k_v3, 10x 3' v3, campaign configuration (whitelist, CB_UMI_Simple), 66.6 M read pairs, 60.4 M barcoded
+reads. Every output is identical, entry by entry:
+
+| output | entries | result |
+|---|---|---|
+| exon matrix | 3,984,658 (sum 10,557,742) | **identical** |
+| intron matrix | 3,559,731 | **identical** |
+| ambiguous per gene | 158,073 | **identical** |
+| junction table (by contig, donor, acceptor) | 1,461,137 (sum 4,811,746) | **identical** |
+| SNP AD (R1) | 1,027,489 | **identical** |
+| SNP DP (R1) | 3,344,444 | **identical** |
+| chrM base counts, total and reverse | 24,187,747 and 877,153 | **identical** |
+| chrM indel events | 56,655 | **identical** |
+
+- **R1 molecule counters:** the GPU's 4,909,556 counted, 8,970 ties and 20,357 other-majority equal the CPU's
+  `pileup_stats.json` exactly.
+- **Speed:** GPU time 72.9 ms for 60.4 M reads (0.83 G reads/s), deterministic across runs.
+- **Records:** 27.6 M signatures and 30.7 M alignments; E0 violations 0; incomplete multimapper groups 0.
+
+**Not yet in the binary.** The records still come from the stream copy via `extract`. The engine integration is next: records from
+the GPU prefill's per-distinct results, and the kernels linked into `singlet` (`docs/research-beta/gpu-pileup-design.md` on
+`gpu/engine-gpu-stream`). The dumped annotation was 17–24 GB with a size that varied between two runs. It does not affect the
+results, but it is being checked before integration, since it would be HBM.
+
+**Tooling note:** `clipper.py push` resolves a relative destination against the home directory. The first run of this job and
+the read-binning job 790068 compiled stale sources because of it (§12.12 correction).
