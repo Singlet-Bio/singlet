@@ -117,6 +117,7 @@ datasets:
   license: CC BY 4.0
   verify: false
   loader_panel: true
+  excluded: "6.3 billion non-zeros: writing the formats needs more than 440 GB of memory (Parquet COO) and the untimed stages most of a day, beyond this campaign's time budget, 2026-10-29"
   notes: Large perturbation screen used to train perturbation-response models; a natural minibatch workload. The ndownloader URL redirects to a short-lived signed URL, so always fetch the ndownloader URL itself.
 
 - id: tabula_sapiens

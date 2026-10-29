@@ -29,16 +29,20 @@ stores gene identifiers in a separate vocabulary file whose size is not counted,
 same annotation.
 
 \subsection{Read speed}
-Each configuration runs in a fresh process pinned to $p$ cores ($p \in \{1,2,4,8,16\}$, headline $p=\nm{threadsHeadline}$),
-with one warm-up and five timed repeats; we report the median. ``Cold'' reads evict the file from the page cache
-(\texttt{posix\_fadvise(POSIX\_FADV\_DONTNEED)}) before every repeat; ``warm'' reads do not. The timed interval is from
+Each configuration runs in a fresh process pinned to $p$ cores (headline $p=\nm{threadsHeadline}$; every format at $p=1$
+and $p=\nm{threadsHeadline}$, and \sone{}, AnnData with gzip and the raw CSC arrays also at $p \in \{1,2,4,8\}$), with
+three timed repeats; we report the median. ``Cold'' reads evict the file from the page cache
+(\texttt{posix\_fadvise(POSIX\_FADV\_DONTNEED)}) before every repeat; ``warm'' reads, at $p=\nm{threadsHeadline}$ only,
+do not, and follow one untimed warm-up read. A read longer than 60\,s is timed once. Matrices above $4\times10^8$
+non-zeros are timed cold at $p=\nm{threadsHeadline}$ from the node's disk only, for the CSC arrays, the Cell Ranger HDF5,
+AnnData uncompressed and with gzip, AnnData Zarr, TileDB-SOMA and both \sone{} variants. The timed interval is from
 opening the file to an in-memory SciPy CSC matrix (or the equivalent R object), and the rate is non-zeros per second.
 For \sone{} we also time the codec alone, from the member in memory to CSC arrays, through the Python binding and in a
 C++ program that links the header-only library, for each instruction set the CPU supports (scalar, AVX2, AVX-512) and
 for the stored (frequency) and source gene order.
 
 \subsection{Minibatch loading}
-Five datasets form the loader panel, from small to the largest tier and from droplet,
+Four datasets form the loader panel, from small to the largest tier and from droplet,
 combinatorial and plate protocols. A workload is a seeded sequence of minibatches of 512 cells, each made of eight
 blocks of 64 consecutive cells at random offsets, which is how block-shuffling loaders read~\cite{dascenzo2025scdataset}.
 Each loader must return each minibatch as a \texttt{torch.sparse\_csr\_tensor} of the exact counts. Loaders: AnnData in
@@ -50,7 +54,8 @@ the limit to each connection, so a reader that issues concurrent requests (TileD
 fsspec) can draw more than the tier's bandwidth; the \sone{} reader issues one request at a time. Before each tier the proxy's ceiling with no
 limit is measured with a 1\,GiB transfer over one connection and over $p$, and recorded; results at a tier above the
 one-connection ceiling are flagged. Loaders that cannot read by range download the object
-first, and that time is counted. We record, from a new process with a cold cache, the time to open, to read the first
+first, and that time is counted; for datasets above the M tier such loaders are not run over the network tiers, and the
+transfer time of the object at the tier's bandwidth is reported instead. We record, from a new process with a cold cache, the time to open, to read the first
 minibatch and to build its tensor; then the sustained rate in cells per second over 200 minibatches after 10 warm-up
 batches; and peak resident memory. Library imports are done before timing starts. Three workload seeds per
 configuration; we report medians.
@@ -99,9 +104,9 @@ For two datasets we timed, from a cold file, the calls of Fig.~\ref{fig:eco} and
 exactly the source counts, identifiers and barcodes.
 
 \subsection{Hardware, software and reproducibility}
-All timings ran on one node to itself (\nm{cpu}, \nm{cores} cores, \nm{memGB}\,GB memory, \nm{gpu}, node-local
-\nm{localDisk}), an ordinary GPU training node rather than one with fast local storage, with software versions as
-in Table~\ref{tab:formats}. The pipeline is \texttt{python -m s1bench} in \texttt{papers/manuscripts/s1-format/bench} of
+All timings ran on 8 cores of shared nodes of one type (\nm{cpu}, \nm{cores} cores, \nm{memGB}\,GB memory, node-local
+\nm{localDisk}), ordinary cluster nodes rather than ones with fast local storage, with at most one of our timed jobs per
+node and other users' jobs beside it, and with software versions as in Table~\ref{tab:formats}. The pipeline is \texttt{python -m s1bench} in \texttt{papers/manuscripts/s1-format/bench} of
 the \texttt{singlet} repository: stages \texttt{fetch}, \texttt{canon}, \texttt{write}, \texttt{decode}, \texttt{ladder},
 \texttt{floor}, \texttt{second}, \texttt{minibatch}, \texttt{eco} and \texttt{report}, with all settings in
 \texttt{config.yaml} and the software environment in \texttt{environment.yml}. The \texttt{report} stage writes every

@@ -24,7 +24,8 @@ def _one(cfg: Config, unit_key: str, fmt_id: str, threads: int, cold: bool, extr
     f = formats.get([fmt_id])[0]
     ds, mat = unit_key.split(".", 1)
     p = f.path(Path(extra.get("root") or cfg.data_dir) / "formats" / unit_key)
-    reps, warm = int(cfg["repeats"]), int(cfg["warmup"])
+    # a cold read evicts the file before every run, so a warm-up run would only repeat the first timed one
+    reps, warm = int(cfg["repeats"]), 0 if cold else int(cfg["warmup"])
     long_s = cfg.get("long_run_s")
     before = (lambda: evict(p)) if cold else None
     if f.lang == "r":
@@ -73,9 +74,11 @@ def run(cfg: Config, units: list[Unit], fmt_ids: list[str], force: bool = False,
 
 
 def _run(cfg: Config, units: list[Unit], fmt_ids: list[str], force: bool, sweep: bool, overrides, st: dict) -> None:
-    base_threads = list(cfg["threads"]["sweep"]) if sweep else sorted({1, int(cfg["threads"]["headline"])})
+    H = int(cfg["threads"]["headline"])
+    base_threads = list(cfg["threads"]["sweep"]) if sweep else list(cfg["threads"].get("main") or sorted({1, H}))
     thread_list = [t for t in base_threads if t in st["threads"]] if st.get("threads") else base_threads
     caches = [c == "cold" for c in st.get("caches", ["cold", "warm"])]
+    warm_threads = set(cfg["threads"].get("warm") or thread_list)  # warm reads only at these thread counts
     local = st["name"] == "local"
     for u in units:
         out = result_path(cfg, "decode", u, "" if local else f".{st['name']}")
@@ -93,6 +96,8 @@ def _run(cfg: Config, units: list[Unit], fmt_ids: list[str], force: bool, sweep:
                 continue
             for t in thread_list:
                 for cold in caches:
+                    if not cold and t not in warm_threads:
+                        continue
                     if fid.startswith("s1"):
                         for mode in cfg["s1"]["modes"]:
                             configs.append((fid, t, cold, {"mode": mode}))
