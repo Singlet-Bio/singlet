@@ -1,0 +1,51 @@
+node=g050.clipper.gvsu.edu job=790376 set=pbmc1k_v3 engine=cpu file=/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq T=24 bin=1a900e3dfe75aa3b commit=d1b34120ce953c4f3717b4a143befe437ec48875 2026-10-28T11:02:36-04:00
+engine wall 538 s
+[singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+[singlet] Discovered 157719 barcodes (≥5 reads) from .1fq BC dictionary (3686400 entries)
+[singlet-pileup] Loaded 157719 barcodes
+[singlet-pileup] WL ambient profiling: 50000 barcodes sampled (cap=50000)
+[singlet-pileup] References loaded in 4.29016s: 157719 barcodes, 7352548 SNP positions, 310797 exons, 272191 introns, 38606 genes
+[singlet] Pileup: streaming from STAR pipe (.1fq stream)...
+[singlet-pileup] Done: 73921372 reads, 73921372 mapped, 60407678 barcoded, 10254235 secondary, 9134997 SNP hits, 35747444 exon hits, 16026387 intron hits, 4811746 SJ, 4439148 chrM, 353613637 mt_bases, 175922 multigene, 908366 wrong_strand, 151690 vdj_hits, UMI 15449026 unique / 36324805 dup in 264.335s
+[gpudump] wrote anno.bin truth.bin params.txt barcodes.txt chroms.txt -> /tmp/debruinz-pus-790376/dump
+[singlet] Pileup: 73921372 reads, 369.652s (0M reads/s)
+[ambient] method=decontx_cluster_offgene_v1 n_ambient_barcodes=50000 total_ambient_umi=679808 n_clusters=8 mean_rho=0.0288077 median_rho=0.0115941 removed_umis=338447/14260925 n_cells=1190 corrected=yes time=0.730695s
+[demux] Cell filter: running VB on 1131 called cells (of 157719 total barcodes); 156588 other barcodes will be back-assigned post-convergence
+[demux] Ambient barcodes: 87281 assigned, 69248 unassigned
+"snp_molecules": 4909556
+"snp_molecules_ambiguous": 8970
+"snp_molecules_other": 20357
+-rw-r--r-- 1 debruinz domain users 17402561603 Oct 28 11:08 /tmp/debruinz-pus-790376/stream.bam
+
+/tmp/debruinz-pus-790376/dump:
+total 24040708
+drwxr-xr-x 2 debruinz domain users        4096 Oct 28 11:08 .
+drwxr-xr-x 5 debruinz domain users        4096 Oct 28 11:03 ..
+-rw-r--r-- 1 debruinz domain users 24146119654 Oct 28 11:08 anno.bin
+-rw-r--r-- 1 debruinz domain users     2681223 Oct 28 11:08 barcodes.txt
+-rw-r--r-- 1 debruinz domain users        1997 Oct 28 11:08 chroms.txt
+-rw-r--r-- 1 debruinz domain users         263 Oct 28 11:08 params.txt
+-rw-r--r-- 1 debruinz domain users   468859334 Oct 28 11:08 truth.bin
+extract exit 0 wall 125 s
+extract: 73921372 records (unmapped 0, supplementary 0), primary 60407678 secondary 9477108; dropped no CB 3708694, CB not in set 327892; NH==1 reads 55626400, multi-mapper reads 4781278 (incomplete groups 0, no primary 0)
+extract: reads 60407678, signatures 27618048 (0.4572), alignments 30718869, E0 violations (same sequence, different transcript set) 0; no UMI 0, variable UMI length 0, non-ACGTN UMI chars 0; primary records with no quality 0, reads with a base below min_baseq=10: 68686 (87026 bases; 87026 N bases; bases where (quality < min_baseq) != (base is N): 0)
+extract: SNP-pileup base-quality rule: skip N bases (quality < min_baseq exactly on N)
+pileup exit 0
+SNP consensus (R1): 4909556 molecules counted, 8970 ambiguous (ties), 20357 other-majority
+device NVIDIA H100 NVL, 132 SMs
+params: stranded 1 reverse 0 min_mapq 20 min_baseq 10 count_introns 1 count_sj 1 count_mt 1 directional 1 chrm_tid 22 snps 7352548 barcodes 157719 genes 38606 exons 310797 introns 272191
+records: 60407678 reads, 27618048 signatures, 30718869 alignments, 41562148 ops, 1261148371 seq bytes; E0 violations 0, incomplete multi-mapper groups 0, reads with a base below min_baseq 68686
+quality check: bases where (quality < min_baseq) != (base is N): 0
+resident inputs 27.46 GB (annotation 24.13 GB), H2D of records 1207 ms (2.8 GB/s, pageable)
+equiv exon       gpu nnz 3984658 cpu nnz 3984658 identical 3984658 only_gpu 0 only_cpu 0 value_diff 0 sum gpu 10557742 cpu 10557742 -> IDENTICAL
+equiv intron     gpu nnz 3559731 cpu nnz 3559731 identical 3559731 only_gpu 0 only_cpu 0 value_diff 0 sum gpu 4891284 cpu 4891284 -> IDENTICAL
+equiv ambiguous  gpu nnz 158073 cpu nnz 158073 identical 158073 only_gpu 0 only_cpu 0 value_diff 0 sum gpu 197027 cpu 197027 -> IDENTICAL
+equiv junctions  gpu nnz 1461137 cpu nnz 1461137 identical 1461137 only_gpu 0 only_cpu 0 value_diff 0 sum gpu 4811746 cpu 4811746 -> IDENTICAL
+equiv snp_ad     gpu nnz 1027489 cpu nnz 1027489 identical 1027489 only_gpu 0 only_cpu 0 value_diff 0 sum gpu 1469277 cpu 1469277 -> IDENTICAL
+equiv snp_dp     gpu nnz 3344444 cpu nnz 3344444 identical 3344444 only_gpu 0 only_cpu 0 value_diff 0 sum gpu 4848480 cpu 4848480 -> IDENTICAL
+equiv mt         gpu nnz 24187747 cpu nnz 24187747 identical 24187747 only_gpu 0 only_cpu 0 value_diff 0 sum gpu 353613637 cpu 353613637 -> IDENTICAL
+equiv mt_rev     gpu nnz 877153 cpu nnz 877153 identical 877153 only_gpu 0 only_cpu 0 value_diff 0 sum gpu 2398793 cpu 2398793 -> IDENTICAL
+equiv mt_indels  gpu 56655 cpu 56655 -> IDENTICAL;  junction names unparsed 0; deterministic across runs yes
+stages (median of 1 after warm-up, ms): "1.annotate": 13.522, "2.siglists": 8.859, "3.sjids": 0.546, "4.expand": 15.443, "5.sj": 1.478, "6.snp": 1.978, "7.mt": 16.560, "b.end": 0.003, "b.key": 0.689, "b.rbk": 2.427, "b.sort": 5.317, "c.cand": 2.790, "c.cc": 0.744, "c.emit": 0.564, "c.end": 0.001, "c.seg": 0.264, "d.end": 1.665
+total 72.9 ms for 60407678 reads = 0.829 G reads/s; arena peak 48.29 GB; device in use now 80.56 GB of 99.9
+done 2026-10-28T11:17:18-04:00

@@ -923,6 +923,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
         cols <- lapply(r$cols, function(v) if (is.list(v)) v else v[r$ord])
         lab <- .s1_label_columns(cols, n, .s1_label_categories(study$samples[[g]]$members), cell_type_level,
                                  cell_type_min_score, include_unvalidated)
+        if (length(facts)) lab <- .sample_facts_relabel(lab, facts[[g]], n)
         geo <- .bundle_obs_frame(g, info, n)
         coldata_rows[[g]] <- c(list(gsm_id = rep(g, n)), lab, as.list(geo[setdiff(names(geo), "gsm_id")]),
                                if (length(facts)) .sample_facts_cols(facts[[g]], n))
@@ -1059,8 +1060,9 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     cd <- .sample_facts_factorize(.s1_label_rbind(unname(lapply(ok, function(r) {
         n <- length(r$sel)
         c(list(gsm_id = rep(r$gsm, n), matrix_column = r$sel + 1L),
-          .s1_label_columns(r$cols, n, .s1_label_categories(study$samples[[r$gsm]]$members), cell_type_level,
-                            cell_type_min_score, include_unvalidated, columns),
+          .sample_facts_relabel(.s1_label_columns(r$cols, n, .s1_label_categories(study$samples[[r$gsm]]$members),
+                                                  cell_type_level, cell_type_min_score, include_unvalidated, columns),
+                                facts[[r$gsm]], n),
           if (length(facts)) .sample_facts_cols(facts[[r$gsm]], n))
     }))))
     rownames(cd) <- cn

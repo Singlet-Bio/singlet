@@ -1,0 +1,13 @@
+node=c100.clipper.gvsu.edu set_count=4 T=4 tag=hom4_t4 jobid=789778 2026-10-28T03:24:30-04:00
+36e13164cea273912a87b55b1b115665f7451c2d8f21c64626923848770420b3  /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-w3
+cotenant_cpus=62
+CPU(s):                                  64
+Model name:                              Intel(R) Xeon(R) 6730P
+Thread(s) per core:                      1
+Core(s) per socket:                      32
+Socket(s):                               2
+CPU(s) scaling MHz:                      31%
+62
+               total        used        free      shared  buff/cache   available
+Mem:             499          10         101           0         391         488
+memory.max=520116764672 memory.high=520116764672 shm_size=255641MB tmp_free=3421050MB

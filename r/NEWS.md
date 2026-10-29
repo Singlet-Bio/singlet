@@ -4,6 +4,9 @@
 
 ### New features
 
+- A cell-line sample's cells carry the line as cell type in `colData` (`cell_type`, `cell_type_ontology_term_id`,
+  `cell_type_deepest`): the Cellosaurus name and id from the sample's GEO record, or "cultured cell" (CL:0000010). The
+  labeller, trained on primary tissue, is unreliable on cultured lines. `sample_facts = FALSE` keeps its calls.
 - `write_s1()` writes a count matrix (dgCMatrix or matrix, genes x cells; `SingleCellExperiment`; Seurat) as a `.s1`
   sample object with one matrix member, with the same encoder and options as `singlet.write_s1()` in Python;
   `read_s1()` reads it back exactly as a dgCMatrix, `SingleCellExperiment` or Seurat object.

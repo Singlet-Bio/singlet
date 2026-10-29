@@ -1,0 +1,16 @@
+Metric,Value
+Estimated Number of Cells,3,920
+Mean Reads per Cell,74602
+Median Genes per Cell,5572
+Number of Reads,292,438,995
+Valid Barcodes,76.4%
+Sequencing Saturation,20.5%
+Q30 Bases in Barcode,N/A
+Q30 Bases in RNA Read,N/A
+Q30 Bases in UMI,N/A
+Reads Mapped to Genome,100.0%
+Reads Mapped Confidently to Transcriptome,47.7%
+Reads Mapped Confidently to Intronic Regions,19.8%
+Fraction Reads in Cells,35.6%
+Total Genes Detected,26,364
+Median UMI Counts per Cell,23096
