@@ -267,14 +267,15 @@ class Reader {
             blk.bc_indices.resize(bh.n_reads);
 
             // Phase 1: decode varint BC indices
+            std::vector<const uint8_t*> raw_bc(bh.n_reads, nullptr);
             for (uint32_t i = 0; i < bh.n_reads; ++i) {
                 uint64_t idx;
                 uint32_t consumed = pack::decode_varint(ptr, idx);
                 ptr += consumed;
                 blk.bc_indices[i] = static_cast<uint32_t>(idx);
-                // If sentinel (unknown BC), raw BC bytes follow
+                // If sentinel (unknown BC), the raw BC bytes follow: kept for Phase 3 (order-free-rules R11)
                 if (idx == bc_dict_n_) {
-                    // Skip the raw BC bytes for now (handled below)
+                    raw_bc[i] = ptr;
                     ptr += bc_length_;
                 }
             }
@@ -319,6 +320,8 @@ class Reader {
                     std::memcpy(r1_base + bc_start_,
                                 bc_dict_flat_.data() + static_cast<size_t>(idx) * bc_length_,
                                 bc_length_);
+                } else if (raw_bc[i]) {
+                    std::memcpy(r1_base + bc_start_, raw_bc[i], bc_length_);   // the raw barcode, for STAR's correction
                 } else {
                     std::memset(r1_base + bc_start_, 4, bc_length_);
                 }
@@ -423,12 +426,13 @@ class Reader {
         if (has_bc_dict_) {
             uint16_t umi_len_val = umi_length();
             blk.bc_indices.resize(bh.n_reads);
+            std::vector<const uint8_t*> raw_bc(bh.n_reads, nullptr);   // R11: raw barcode of a whitelist miss
             for (uint32_t i = 0; i < bh.n_reads; ++i) {
                 uint64_t idx;
                 uint32_t consumed = pack::decode_varint(ptr, idx);
                 ptr += consumed;
                 blk.bc_indices[i] = static_cast<uint32_t>(idx);
-                if (idx == bc_dict_n_) ptr += bc_length_;
+                if (idx == bc_dict_n_) { raw_bc[i] = ptr; ptr += bc_length_; }
             }
             std::vector<uint8_t> umi_data;
             std::vector<uint32_t> umi_offsets;
@@ -453,6 +457,8 @@ class Reader {
                     std::memcpy(r1_base + bc_start_,
                                 bc_dict_flat_.data() + static_cast<size_t>(idx) * bc_length_,
                                 bc_length_);
+                } else if (raw_bc[i]) {
+                    std::memcpy(r1_base + bc_start_, raw_bc[i], bc_length_);
                 } else {
                     std::memset(r1_base + bc_start_, 4, bc_length_);
                 }

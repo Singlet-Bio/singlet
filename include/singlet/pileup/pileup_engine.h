@@ -21,6 +21,7 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -42,6 +43,7 @@
 #include "em_rescue.h"
 #include "sparse_accumulator.h"
 #include "umi_dedup.h"
+#include "cb_correct.h"
 #include "vdj_counter.h"
 #include "rrna_detect.h"
 #include "polya_sites.h"
@@ -65,10 +67,11 @@ struct ChrSNP {
 
 // Configuration for the pileup engine
 struct PileupConfig {
-    // --stream-unsorted: STAR writes an unsorted BAM with no CB tag; the barcode is taken from CR by the rule STAR's sorted-BAM CB
-    // follows in this pipeline (the .1fq barcodes are already whitelist-exact): CB = CR unless CR has an N or UR has an N or is a
-    // homopolymer. Serial run() only.
+    // --stream-unsorted: STAR writes an unsorted BAM with no CB tag; the barcode is taken from CR. A read whose UR has an N or is
+    // a homopolymer has no CB (STAR's UMI check). With cb_corrector (order-free-rules R11) the CR is corrected against STAR's
+    // whitelist by STAR's 1MM_multi_Nbase_pseudocounts rule; without it only an N-free CR is taken, exactly. Serial run() only.
     bool cb_from_cr = false;
+    const CbCorrector* cb_corrector = nullptr;   // owned by the caller, outlives the engine
     // Stream (order-free-rules R5): count the whole pass in the protocol orientation, no first-N-reads probe;
     // strand_probe() then reports the aggregate over all informative reads.
     bool strand_prior_only = false;
@@ -313,7 +316,7 @@ static inline const char* inline_scan_cb(const bam1_t* b) {
 
 // CB for --stream-unsorted (see PileupConfig::cb_from_cr). Returns a pointer to the CR value, or nullptr when STAR would have
 // written no CB (N-containing barcode, or a UMI that is N-containing or a homopolymer). One pass over the aux tags.
-static inline const char* inline_scan_cb_from_cr(const bam1_t* b) {
+static inline const char* inline_scan_cb_from_cr(const bam1_t* b, bool reject_n = true) {
     uint8_t* s = bam_get_aux(b);
     const uint8_t* end = b->data + b->l_data;
     const char* cr = nullptr; const char* ur = nullptr;
@@ -333,7 +336,7 @@ static inline const char* inline_scan_cb_from_cr(const bam1_t* b) {
         } else break;
     }
     if (!cr || !ur || ur[0] == ' ') return nullptr;
-    for (const char* q = cr; *q; ++q) if (*q == 'N') return nullptr;
+    if (reject_n) for (const char* q = cr; *q; ++q) if (*q == 'N') return nullptr;
     bool homo = true;
     for (const char* q = ur; *q; ++q) { if (*q == 'N') return nullptr; if (*q != ur[0]) homo = false; }
     return homo ? nullptr : cr;
@@ -637,7 +640,7 @@ public:
                 stats.secondary_reads++;
                 if (has_gene_model_) {
                     // Inline CB scanner — same as primary path, avoids htslib call overhead
-                    const char* cb_sec_str = config_.cb_from_cr ? inline_scan_cb_from_cr(b) : inline_scan_cb(b);
+                    const char* cb_sec_str = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);
                     if (cb_sec_str && cb_sec_str[0] != '-') {
                         int32_t bc_check = bc_index_.lookup(cb_sec_str);
 
@@ -716,7 +719,8 @@ public:
 
             // CB + barcode check (skip ~94% of primaries before NH extraction)
             PROF_START(barcode);
-            const char* cb_str = config_.cb_from_cr ? inline_scan_cb_from_cr(b) : inline_scan_cb(b);
+            const char* cb_str = config_.cb_from_cr ? stream_cb(b, true) : inline_scan_cb(b);
+            if (cb_check_) check_cb_against_star(b, cb_str);
             if (!cb_str || cb_str[0] == '-') {
                 stats.no_barcode++;
                 PROF_END(prof, barcode);
@@ -1128,6 +1132,8 @@ public:
                       << std::chrono::duration<double>(tc1 - tc0).count() << "s\n";
         }
 
+        report_cb_status();   // R11
+        report_cb_check();
         std::cerr << "[singlet-pileup] Done: " << stats.total_reads << " reads, "
                   << stats.mapped_reads << " mapped, "
                   << stats.barcoded_reads << " barcoded, "
@@ -1673,6 +1679,7 @@ public:
 
         std::cerr << "[parallel] Processing: " << proc_s << "s ("
                   << n_workers << " workers)\n";
+        report_cb_check();   // R11 (sorted path, SINGLET_TEST_CB_CHECK)
         std::cerr << "[singlet-pileup] Done: " << stats.total_reads << " reads, "
                   << stats.mapped_reads << " mapped, "
                   << stats.barcoded_reads << " barcoded, "
@@ -2050,6 +2057,58 @@ private:
         if (pct == 0) return false;
         const uint64_t h = hash_qname(bam_get_qname(b)) * 0x9E3779B97F4A7C15ULL;
         return (h >> 32) % 100 < pct;
+    }
+
+    // R11: the stream's CB (PileupConfig::cb_from_cr). `count` tallies primary records by correction status.
+    char cb_buf_[40] = {};
+    uint64_t cb_status_[8] = {};   // index status + 4: -4 rejected, -3 bad UMI, -2 two N, -1 no match, 0 exact, 1 one, 2 posterior
+    const char* stream_cb(const bam1_t* b, bool count) {
+        const CbCorrector* cc = config_.cb_corrector;
+        const char* cr = inline_scan_cb_from_cr(b, cc == nullptr);
+        if (!cc) return cr;
+        if (!cr) { if (count) ++cb_status_[1]; return nullptr; }
+        if (static_cast<int>(std::strlen(cr)) != cc->length()) { if (count) ++cb_status_[3]; return nullptr; }
+        const int st = cc->resolve(cr, nullptr, cb_buf_);
+        if (count) ++cb_status_[st + 4];
+        if (st < 0) return nullptr;
+        cb_buf_[cc->length()] = '\0';
+        return cb_buf_;
+    }
+    void report_cb_status() const {
+        if (!config_.cb_corrector) return;
+        std::cerr << "[cb-correct] primary records: exact=" << cb_status_[4] << " one_candidate=" << cb_status_[5]
+                  << " posterior_accepted=" << cb_status_[6] << " posterior_rejected=" << cb_status_[0]
+                  << " no_match=" << cb_status_[3] << " two_N=" << cb_status_[2] << " bad_umi=" << cb_status_[1]
+                  << " (whitelist " << config_.cb_corrector->size() << ")\n";
+    }
+
+    // R11 check (sorted path, SINGLET_TEST_CB_CHECK=1): the corrector's CB from CR/UR against STAR's CB tag, per primary record.
+    const bool cb_check_ = [] { const char* e = std::getenv("SINGLET_TEST_CB_CHECK"); return e && e[0] == '1'; }();
+    std::atomic<uint64_t> cb_check_n_[4] = {};   // [0] agree (same CB, or neither has one), [2] differ, [3] STAR has a CB and ours none
+    std::atomic<uint32_t> cb_check_shown_{0};
+    void check_cb_against_star(const bam1_t* b, const char* star_cb) {
+        const CbCorrector* cc = config_.cb_corrector;
+        if (!cc || config_.cb_from_cr) return;
+        const char* cr = inline_scan_cb_from_cr(b, false);   // nullptr: bad UMI or no CR
+        char ours[40] = {};
+        int st = -3;
+        if (cr && static_cast<int>(std::strlen(cr)) == cc->length()) st = cc->resolve(cr, nullptr, ours);
+        const bool star_none = !star_cb || star_cb[0] == '-';
+        const bool ours_none = st < 0;
+        int k;
+        if (star_none && ours_none) k = 1;
+        else if (star_none || ours_none) k = ours_none ? 3 : 2;
+        else k = std::strncmp(star_cb, ours, cc->length()) == 0 ? 0 : 2;
+        ++cb_check_n_[k == 1 ? 0 : k];
+        if ((k == 2 || k == 3) && cb_check_shown_.fetch_add(1) < 20) {
+            std::cerr << "[cb-check] differ: CR=" << (cr ? cr : "(none)") << " STAR CB=" << (star_none ? "-" : star_cb)
+                      << " ours=" << (ours_none ? "-" : std::string(ours, cc->length())) << " status=" << st << "\n";
+        }
+    }
+    void report_cb_check() const {
+        if (!cb_check_) return;
+        std::cerr << "[cb-check] primary records: agree=" << cb_check_n_[0] << " differ=" << cb_check_n_[2]
+                  << " ours_none_star_cb=" << cb_check_n_[3] << "\n";
     }
 
     static uint64_t hash_qname(const char* s) {
@@ -3086,6 +3145,7 @@ private:
             wc.stats.no_barcode++; return;
         }
         const char* cb_str = bam_aux2Z(cb_tag);
+        if (cb_check_ && !(b->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY))) check_cb_against_star(b, cb_str);
         if (test_drop_read(b)) return;
         int32_t bc_idx = bc_index_.lookup(cb_str);
         wc.cur_gene = UINT32_MAX;

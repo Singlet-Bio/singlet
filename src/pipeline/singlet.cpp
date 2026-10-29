@@ -3641,6 +3641,9 @@ int main(int argc, char* argv[]) {
     // R1.fastq scan for barcode discovery — saves ~10s).
     uint32_t onefq_bc_dict_n = 0;
     std::vector<uint64_t> onefq_bc_freq;
+    // order-free-rules R11: STAR's CB_UMI_Simple whitelist correction for the stream, its exact histogram from pass 1
+    singlet::CbCorrector cb_corrector;
+    bool cb_hist_ready = false;
     std::vector<uint8_t> onefq_bc_dict_flat;
     uint16_t onefq_bc_length = 0;
     std::unordered_map<uint64_t, uint64_t> onefq_bc_counts;  // non-dict path (packed keys)
@@ -4557,10 +4560,22 @@ int main(int argc, char* argv[]) {
             if (const char* e = std::getenv("SINGLET_PASS1_THREADS"); e && std::atoi(e) > 0)
                 p1_threads = std::min(p1_threads, std::atoi(e));
             std::vector<std::vector<uint64_t>> bc_freq_t(p1_threads);
+            // R11: STAR's exact histogram (cbReadCountExact): reads whose CB is an exact whitelist hit and whose UMI has no
+            // N and is not a homopolymer, over every read of the sample (unmapped ones included), weighted by duplicates.
+            const int cbx_cb0 = detected_cb_start - 1, cbx_cbl = detected_bc_len;
+            const int cbx_umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, cbx_umil = umi_len;
+            const bool cbx_on = detected_soloType == "CB_UMI_Simple" && !has_i2_p1 && cbx_cbl > 0 && cbx_cbl <= 31
+                && cbx_umil > 0 && !whitelist_file.empty() && whitelist_file != "None" && whitelist_file != "none"
+                && cb_corrector.load_whitelist(whitelist_file) && cb_corrector.length() == cbx_cbl;
+            std::vector<std::vector<uint64_t>> cbx_dict_t(p1_threads);
+            std::vector<std::unordered_map<int64_t, uint64_t>> cbx_raw_t(p1_threads);
             std::atomic<uint32_t> p1_next{0};
             auto pass1_worker = [&](int tid) {
                 std::vector<uint64_t>& freq = bc_freq_t[tid];
                 if (!bc_freq_p1.empty()) freq.assign(bc_freq_p1.size(), 0);
+                std::vector<uint64_t>& cbx_dict = cbx_dict_t[tid];
+                auto& cbx_raw = cbx_raw_t[tid];
+                if (cbx_on && has_bc_dict_p1) cbx_dict.assign(bc_dict_n_p1, 0);
                 std::unordered_map<uint64_t, size_t> key_pos;
                 std::vector<std::unordered_map<uint64_t, size_t>> seg_pos(complex_extra_segs.size());
                 for (uint32_t bi; (bi = p1_next.fetch_add(1)) < total_blocks_p1;) {
@@ -4649,6 +4664,28 @@ int main(int argc, char* argv[]) {
                             uint32_t idx = blk_p1.bc_indices[i];
                             if (idx <= bc_dict_n_p1 && !freq.empty()) freq[idx] += repeat_p1;
                         }
+                        if (cbx_on && r1len_p1 >= cbx_cb0 + cbx_cbl && r1len_p1 >= cbx_umi0 + cbx_umil) {
+                            const uint8_t* r1p1 = blk_p1.r1_seq(i);
+                            const uint8_t* u = r1p1 + cbx_umi0;
+                            bool umi_ok = true, homo = true;
+                            for (int j = 0; j < cbx_umil; ++j) {
+                                if (u[j] > 3) { umi_ok = false; break; }
+                                if (u[j] != u[0]) homo = false;
+                            }
+                            if (umi_ok && !homo) {
+                                const uint32_t idx = (has_bc_dict_p1 && i < blk_p1.bc_indices.size())
+                                                     ? blk_p1.bc_indices[i] : UINT32_MAX;
+                                if (idx < bc_dict_n_p1 && !cbx_dict.empty()) {
+                                    cbx_dict[idx] += repeat_p1;
+                                } else {
+                                    static constexpr char kNt5[5] = {'A', 'C', 'G', 'T', 'N'};
+                                    char bcs[32];
+                                    for (int j = 0; j < cbx_cbl; ++j) bcs[j] = kNt5[std::min<uint8_t>(r1p1[cbx_cb0 + j], 4)];
+                                    const int64_t w = cb_corrector.find(bcs);
+                                    if (w >= 0) cbx_raw[w] += repeat_p1;
+                                }
+                            }
+                        }
                     }
                 }
             };
@@ -4660,6 +4697,30 @@ int main(int argc, char* argv[]) {
             }
             for (const auto& f : bc_freq_t)
                 for (size_t k = 0; k < f.size(); ++k) bc_freq_p1[k] += f[k];
+            if (cbx_on) {   // R11: fold the per-thread exact counts into the corrector, by whitelist index
+                static constexpr char kNt5[5] = {'A', 'C', 'G', 'T', 'N'};
+                const auto& dflat = reader.bc_dict_flat();
+                const uint16_t dlen = reader.bc_length();
+                uint64_t n_exact = 0;
+                if (has_bc_dict_p1 && dlen == static_cast<uint16_t>(cbx_cbl)) {
+                    std::vector<uint64_t> dsum(bc_dict_n_p1, 0);
+                    for (const auto& t : cbx_dict_t)
+                        for (size_t k = 0; k < t.size(); ++k) dsum[k] += t[k];
+                    char bcs[32];
+                    for (uint32_t k = 0; k < bc_dict_n_p1; ++k) {
+                        if (!dsum[k]) continue;
+                        for (int j = 0; j < cbx_cbl; ++j)
+                            bcs[j] = kNt5[std::min<uint8_t>(dflat[static_cast<size_t>(k) * dlen + j], 4)];
+                        const int64_t w = cb_corrector.find(bcs);
+                        if (w >= 0) { cb_corrector.add_exact(w, dsum[k]); n_exact += dsum[k]; }
+                    }
+                }
+                for (const auto& m : cbx_raw_t)
+                    for (const auto& [w, n] : m) { cb_corrector.add_exact(w, n); n_exact += n; }
+                cb_hist_ready = true;
+                std::cerr << "[1fq-pass1] R11 exact CB histogram: " << n_exact << " reads over a "
+                          << cb_corrector.size() << "-barcode whitelist\n";
+            }
             for (auto& b : p1_blocks) {
                 for (auto& s : b.probe) {
                     if (fifo_first25_r2.size() >= 20000) break;
@@ -4963,6 +5024,11 @@ int main(int argc, char* argv[]) {
         }
     }
     config.cb_from_cr = (stream_unsorted == 1);
+    // R11: STAR's whitelist correction of CR on the stream (and the SINGLET_TEST_CB_CHECK comparison on the sorted path)
+    config.cb_corrector = (cb_hist_ready && cb_corrector.loaded()) ? &cb_corrector : nullptr;
+    if (config.cb_from_cr)
+        std::cerr << "[singlet] stream CB: " << (config.cb_corrector ? "CR corrected by STAR's 1MM_multi_Nbase_pseudocounts rule (R11)"
+                                                                     : "CR exact (no pass-1 histogram)") << "\n";
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
     // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
     const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
