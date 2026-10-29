@@ -52,6 +52,8 @@
 .s1_mem$packs <- list()
 .s1_mem$vocab <- list()
 .s1_mem$pack_index <- list()
+.s1_mem$pool <- NULL
+.s1_mem$pool_n <- NULL
 
 # Requests and bytes issued by the .s1 client in this session (for tests and the network model).
 .s1_stats <- function() list(requests = .s1_mem$requests, bytes = .s1_mem$bytes)
@@ -129,8 +131,10 @@
     if (!status %in% c(200L, 206L)) .s1_stop(sprintf("%s: HTTP %d", url, status))
     body <- res$content
     total <- NA_real_
-    if (status == 206L) {
-        cr <- hdr[["content-range"]]
+    cr <- hdr[["content-range"]]
+    # A Content-Range makes it a range answer, whatever the status: some servers (rclone serve s3) send the slice with 200.
+    # A server that ignores Range sends the whole object with 200 and no Content-Range.
+    if (status == 206L || (!is.null(range) && !is.null(cr))) {
         m <- if (is.null(cr)) NULL else regmatches(cr, regexec("^bytes ([0-9]+)-([0-9]+)/([0-9]+|\\*)$", cr))[[1L]]
         if (is.null(range) || length(m) == 0L) {
             .s1_stop(sprintf("%s: missing or unexpected Content-Range %s", url, if (is.null(cr)) "(none)" else cr), "singlet_s1_integrity")
@@ -203,34 +207,85 @@
     .s1_stop(sprintf("GET %s failed after %d attempts: %s", url, retries + 1L, last))
 }
 
-# Several GETs, concurrently when the transport allows. `reqs` is a list of list(key, range, expect_total).
-.s1_get_many <- function(tr, reqs, concurrency = 4L) {
-    n <- length(reqs)
-    one <- function(r) .s1_get(tr, r$key, r$range, if (is.null(r$expect_total)) NA_real_ else r$expect_total)
-    if (n == 0L) return(list())
-    if (n == 1L || tr$kind != "http" || concurrency <= 1L) {
-        return(lapply(reqs, one))
+.S1_RETRY_STATUS <- c(429L, 500L, 502L, 503L, 504L)
+
+# I/O concurrency, a budget separate from the decoder's CPU threads: how many range requests are in flight at once. "auto" is
+# 8 over HTTP and 1 for a local directory or file; 1 sends them one at a time. Same option and defaults as singlet.torch.S1Stream.
+.s1_io_threads <- function(io_threads = "auto", tr = NULL) {
+    if (identical(io_threads, "auto")) return(if (!is.null(tr) && identical(tr$kind, "http")) 8L else 1L)
+    n <- if (is.numeric(io_threads) && length(io_threads) == 1L) io_threads else NA_real_
+    if (is.na(n) || n < 1 || n != floor(n)) stop("io_threads must be \"auto\" or a whole number of at least 1", call. = FALSE)
+    as.integer(n)
+}
+
+# One curl pool for the process, io_threads connections with one request each (no HTTP/2 multiplexing, so io_threads is the
+# number of requests in flight); later batches reuse its open connections.
+.s1_pool <- function(n) {
+    if (!identical(.s1_mem$pool_n, n)) {
+        .s1_mem$pool <- curl::new_pool(total_con = n, host_con = n, multiplex = FALSE)
+        .s1_mem$pool_n <- n
     }
+    for (h in curl::multi_list(.s1_mem$pool)) curl::multi_cancel(h)  # left behind by an interrupted batch
+    .s1_mem$pool
+}
+
+# A long range is split into pieces of at least this many bytes when there are fewer ranges than connections.
+.s1_piece_min <- function() getOption("singlet.s1_piece_min", 8 * 1024^2)
+
+# Several GETs. `reqs` is a list of list(key, range, expect_total). Over HTTP with io_threads > 1 they go out together on the
+# shared pool, and when there are fewer requests than connections a long range is split into pieces (joined again after); each
+# answer is checked as .s1_get checks it, and a transfer that fails is retried on its own, with backoff. io_threads = 1 sends
+# them one at a time. errors = "return" puts a request's error in its slot instead of stopping.
+.s1_get_many <- function(tr, reqs, io_threads = 1L, errors = c("stop", "return")) {
+    errors <- match.arg(errors)
+    n <- length(reqs)
+    guard <- function(expr) if (errors == "stop") expr else tryCatch(expr, error = function(e) e)
+    total_of <- function(r) if (is.null(r$expect_total)) NA_real_ else r$expect_total
+    one <- function(r) guard(.s1_get(tr, r$key, r$range, total_of(r)))
+    if (n == 0L) return(list())
+    if (tr$kind != "http" || io_threads <= 1L) return(lapply(reqs, one))
+    want <- ceiling(io_threads / n)
+    parts <- list()
+    for (j in seq_len(n)) {
+        r <- reqs[[j]]$range
+        k <- if (is.null(r) || want <= 1L) 1L else max(1L, min(want, floor((r[[2L]] - r[[1L]] + 1) / .s1_piece_min())))
+        edges <- if (k == 1L) NULL else round(seq(r[[1L]], r[[2L]] + 1, length.out = k + 1L))
+        for (p in seq_len(k)) {
+            parts[[length(parts) + 1L]] <- list(j = j, range = if (k == 1L) r else c(edges[[p]], edges[[p + 1L]] - 1))
+        }
+    }
+    if (length(parts) == 1L) return(lapply(reqs, one))
     .s1_require_curl()
-    pool <- curl::new_pool(total_con = as.integer(concurrency), host_con = as.integer(concurrency))
-    results <- vector("list", n)
-    for (i in seq_len(n)) {
+    pool <- .s1_pool(io_threads)
+    results <- vector("list", length(parts))
+    for (q in seq_along(parts)) {
         local({
-            j <- i
-            h <- .s1_handle(reqs[[j]]$range)
-            curl::handle_setopt(h, url = paste0(tr$base, "/", reqs[[j]]$key))
-            curl::multi_add(h, done = function(res) results[[j]] <<- res, fail = function(msg) NULL, pool = pool)
+            k <- q
+            h <- .s1_handle(parts[[k]]$range)
+            curl::handle_setopt(h, url = paste0(tr$base, "/", reqs[[parts[[k]]$j]]$key))
+            curl::multi_add(h, done = function(res) results[[k]] <<- res, fail = function(msg) NULL, pool = pool)
         })
     }
     curl::multi_run(pool = pool)
-    lapply(seq_len(n), function(j) {
-        res <- results[[j]]
-        r <- reqs[[j]]
-        if (!is.null(res) && !(res$status_code %in% c(429L, 500L, 502L, 503L, 504L))) {
-            .s1_check_response(res, paste0(tr$base, "/", r$key), r$range, if (is.null(r$expect_total)) NA_real_ else r$expect_total)
+    got <- lapply(seq_along(parts), function(q) {
+        res <- results[[q]]
+        r <- reqs[[parts[[q]]$j]]
+        piece <- list(key = r$key, range = parts[[q]]$range, expect_total = r$expect_total)
+        if (!is.null(res) && !(res$status_code %in% .S1_RETRY_STATUS)) {
+            guard(.s1_check_response(res, paste0(tr$base, "/", r$key), piece$range, total_of(r)))
         } else {
-            one(r)  # a failed transfer is retried on its own, with backoff
+            one(piece)
         }
+    })
+    owner <- vapply(parts, function(p) p$j, integer(1))
+    lapply(seq_len(n), function(j) {
+        mine <- got[owner == j]
+        if (length(mine) == 1L) return(mine[[1L]])
+        err <- Find(function(x) inherits(x, "condition"), mine)
+        if (!is.null(err)) return(err)
+        out <- mine[[1L]]
+        out$body <- do.call(c, lapply(mine, function(x) x$body))
+        out
     })
 }
 
@@ -353,7 +408,7 @@ singlet_study <- function(accession, cache_dir = NULL, base = NULL, force = FALS
     study
 }
 
-#' @export
+#' @exportS3Method print singlet_study
 print.singlet_study <- function(x, ...) {
     cat(sprintf("<singlet_study %s: %d samples, rev %s, %s>\n", x$gse, length(x$gsm_ids), substr(x$rev, 1L, 8L), x$transport$base))
     invisible(x)
@@ -597,29 +652,64 @@ singlet_study_modalities <- function(x, gsm = NULL) {
     groups
 }
 
-# Object reader for one sample: a function(off, len) -> list of raw vectors, coalescing near ranges.
-.s1_reader <- function(study, sm, concurrency = 4L) {
-    local_path <- file.path(study$root, "s", sm$gsm, basename(sm$key))
-    if (study$transport$kind == "dir") local_path <- file.path(study$transport$root, sm$key)
-    use_local <- file.exists(local_path) && file.size(local_path) == sm$bytes
-    function(off, len, gap = 2 * 1024^2) {
-        groups <- .s1_coalesce(off, len, gap)
-        bufs <- if (use_local) {
-            lapply(groups, function(g) .s1_get_dir(list(kind = "dir", root = dirname(local_path)), basename(local_path), c(g$start, g$end - 1), sm$bytes, NULL)$body)
+# The sample object on disk (the cache's copy, or the local study's own file) when it is there whole, else NULL.
+.s1_local_object <- function(study, sm) {
+    p <- file.path(study$root, "s", sm$gsm, basename(sm$key))
+    if (study$transport$kind == "dir") p <- file.path(study$transport$root, sm$key)
+    if (file.exists(p) && file.size(p) == sm$bytes) p else NULL
+}
+
+# Bytes of several reads, in one batch. Each item is list(sm, off, len, gap): ranges of one sample object, near ones coalesced
+# (`gap`). A whole object on disk is read from it; every other range of every item goes out together, io_threads at a time (the
+# format allows any order once the manifest and the members' chunk indexes are known). Returns, per item, a list of raw vectors
+# (one per range), or with errors = "return" the error that item's fetch hit.
+.s1_fetch <- function(study, items, io_threads = 1L, errors = c("stop", "return")) {
+    errors <- match.arg(errors)
+    groups <- lapply(items, function(it) .s1_coalesce(it$off, it$len, it$gap))
+    bufs <- vector("list", length(items))
+    reqs <- list()
+    owner <- integer(0)
+    for (k in seq_along(items)) {
+        sm <- items[[k]]$sm
+        lp <- .s1_local_object(study, sm)
+        if (!is.null(lp)) {
+            tr <- list(kind = "dir", root = dirname(lp))
+            bufs[[k]] <- tryCatch(lapply(groups[[k]], function(g) .s1_get_dir(tr, basename(lp), c(g$start, g$end - 1), sm$bytes, NULL)$body),
+                                  error = function(e) if (errors == "stop") stop(e) else e)
         } else {
-            reqs <- lapply(groups, function(g) list(key = sm$key, range = c(g$start, g$end - 1), expect_total = as.numeric(sm$bytes)))
-            lapply(.s1_get_many(study$transport, reqs, concurrency), function(r) r$body)
+            for (g in groups[[k]]) {
+                reqs[[length(reqs) + 1L]] <- list(key = sm$key, range = c(g$start, g$end - 1), expect_total = as.numeric(sm$bytes))
+                owner <- c(owner, k)
+            }
+            bufs[k] <- list(list())
         }
+    }
+    got <- .s1_get_many(study$transport, reqs, io_threads, errors)
+    for (k in unique(owner)) {
+        mine <- got[owner == k]
+        err <- Find(function(r) inherits(r, "condition"), mine)
+        bufs[[k]] <- if (!is.null(err)) err else lapply(mine, function(r) r$body)
+    }
+    lapply(seq_along(items), function(k) {
+        if (inherits(bufs[[k]], "condition")) return(bufs[[k]])
+        off <- items[[k]]$off
+        len <- items[[k]]$len
         out <- vector("list", length(off))
-        for (k in seq_along(groups)) {
-            g <- groups[[k]]
+        for (q in seq_along(groups[[k]])) {
+            g <- groups[[k]][[q]]
+            b <- bufs[[k]][[q]]
             for (i in g$idx) {
                 a <- off[[i]] - g$start + 1
-                out[[i]] <- if (a == 1 && len[[i]] == length(bufs[[k]])) bufs[[k]] else bufs[[k]][seq.int(a, length.out = len[[i]])]
+                out[[i]] <- if (a == 1 && len[[i]] == length(b)) b else b[seq.int(a, length.out = len[[i]])]
             }
         }
         out
-    }
+    })
+}
+
+# Object reader for one sample: a function(off, len) -> list of raw vectors, coalescing near ranges.
+.s1_reader <- function(study, sm, io_threads = 1L) {
+    function(off, len, gap = 2 * 1024^2) .s1_fetch(study, list(list(sm = sm, off = off, len = len, gap = gap)), io_threads)[[1L]]
 }
 
 # Column runs [c0, c1) aligned to chunk boundaries that cover `sel` (0-based, ascending); touching chunks share a run.
@@ -671,9 +761,21 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 # One sample: cells table, then the wanted matrices (`members`; default the exon matrix and, when present, the intron matrix)
 # for the selected cells: exon and intron decoded to genes, the others (junctions, V(D)J, ...) as feature x cell matrices with
 # their row names. Only those members' bytes are read. `sel_fn(cells)` returns the selected matrix columns (0-based,
-# ascending). Returns a list, or list(skipped = reason).
+# ascending). Returns a list, or list(skipped = reason). The read has three phases (.s1_sample_plan, .s1_sample_select,
+# .s1_sample_decode) so that .s1_read_samples can fetch the ranges of several samples together.
 .s1_read_sample <- function(study, gsm, axis, keep_map, n_genes, sel_fn, want_cols, threads = 0L, whole_max = 48 * 1024^2,
-                            concurrency = 4L, verify_digest = TRUE, members = NULL) {
+                            io_threads = 1L, verify_digest = TRUE, members = NULL) {
+    plan <- .s1_sample_plan(study, gsm, members, whole_max)
+    if (!is.null(plan$skipped)) return(plan)
+    bl <- .s1_fetch(study, list(plan$item), io_threads)[[1L]]
+    st <- .s1_sample_select(study, plan, bl, axis, keep_map, n_genes, sel_fn, want_cols, verify_digest, io_threads)
+    if (!is.null(st$skipped)) return(st)
+    .s1_sample_decode(st, .s1_fetch(study, st$items, io_threads), threads)
+}
+
+# Phase 1: the members to read, and the ranges of the cells table and of each member, whole (a small or local object) or its
+# first 512 KiB (header and chunk index). Returns list(skipped = reason) when the sample has nothing to read.
+.s1_sample_plan <- function(study, gsm, members, whole_max) {
     sm <- study$samples[[gsm]]
     mem <- sm$members
     cm <- mem[["cells"]]
@@ -686,24 +788,33 @@ singlet_study_modalities <- function(x, gsm = NULL) {
         return(list(skipped = if (length(members) == 1L) paste(members, "is missing") else
             sprintf("none of %s is present", paste(members, collapse = ", "))))
     }
-    reader <- .s1_reader(study, sm, concurrency)
     total <- cm$len + sum(vapply(present, function(n) as.numeric(mem[[n]]$len), numeric(1)))
     local_obj <- file.exists(file.path(study$root, "s", sm$gsm, basename(sm$key))) || study$transport$kind == "dir"
     whole <- local_obj || total <= whole_max
     names_m <- c("cells", present)
+    off <- vapply(names_m, function(n) as.numeric(mem[[n]]$off), numeric(1))
     if (whole) {
         # whole members are merged only across alignment padding: another member's body never rides along
-        bl <- reader(vapply(names_m, function(n) as.numeric(mem[[n]]$off), numeric(1)), vapply(names_m, function(n) as.numeric(mem[[n]]$len), numeric(1)),
-                     gap = 63)
-        names(bl) <- names_m
-        cells_raw <- bl[["cells"]]
+        len <- vapply(names_m, function(n) as.numeric(mem[[n]]$len), numeric(1))
+        gap <- 63
     } else {
-        pre_len <- vapply(names_m, function(n) if (n == "cells") as.numeric(mem[[n]]$len) else min(as.numeric(mem[[n]]$len), 512 * 1024), numeric(1))
-        bl <- reader(vapply(names_m, function(n) as.numeric(mem[[n]]$off), numeric(1)), pre_len, gap = 256 * 1024)
-        names(bl) <- names_m
-        cells_raw <- bl[["cells"]]
+        len <- vapply(names_m, function(n) if (n == "cells") as.numeric(mem[[n]]$len) else min(as.numeric(mem[[n]]$len), 512 * 1024), numeric(1))
+        gap <- 256 * 1024
     }
-    cells <- .s1_cells(study, cells_raw, want_cols)
+    list(gsm = gsm, sm = sm, present = present, names_m = names_m, whole = whole,
+         item = list(sm = sm, off = off, len = len, gap = gap))
+}
+
+# Phase 2, from the phase 1 bytes `bl`: decode the cells table, select the columns, check each member's header and plan the
+# chunk runs that hold the selected columns. `items` are the chunk ranges still to fetch, one item per member (none when the
+# members were read whole).
+.s1_sample_select <- function(study, plan, bl, axis, keep_map, n_genes, sel_fn, want_cols, verify_digest = TRUE, io_threads = 1L) {
+    gsm <- plan$gsm
+    sm <- plan$sm
+    mem <- sm$members
+    whole <- plan$whole
+    names(bl) <- plan$names_m
+    cells <- .s1_cells(study, bl[["cells"]], want_cols)
     n_rows <- cells$n_rows
     if (n_rows == 0) return(list(skipped = "count matrix has 0 cells"))
     sel <- as.integer(sel_fn(cells))
@@ -712,10 +823,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
         .s1_stop(sprintf("%s: column selection must be ascending and inside the matrix", gsm))
     }
     cols <- lapply(cells$columns, function(v) if (is.list(v)) v else v[sel + 1L])
-    c_hi <- sel[[length(sel)]] + 1L
-    parts <- list(exon = NULL, intron = NULL)
-    features <- list()
-    for (name in present) {
+    heads <- list()
+    for (name in plan$present) {
         gene_level <- name %in% .s1_gene_members
         mref <- mem[[name]]
         if (is.null(mref) || mref$len == 0) next
@@ -727,44 +836,89 @@ singlet_study_modalities <- function(x, gsm = NULL) {
             .s1_stop(sprintf("%s: %s header digest %s != manifest %s", gsm, name, hdr$digest, mref$digest))
         }
         if (!whole && length(buf) < hdr$prefix_len) {  # the first read was shorter than the prefix
-            buf <- reader(mref$off, min(mref$len, hdr$prefix_len), gap = 0)[[1L]]
+            buf <- .s1_reader(study, sm, io_threads)(mref$off, min(mref$len, hdr$prefix_len), gap = 0)[[1L]]
         }
         if (gene_level) {
-            mode <- "gene"
-            gm <- .s1_member_gene_map(study, hdr, buf, axis, keep_map)
-            ng <- n_genes
+            h <- list(mode = "gene", gm = .s1_member_gene_map(study, hdr, buf, axis, keep_map), ng = n_genes)
         } else {
             if (!identical(hdr$row_names_kind, "inline")) {
                 .s1_stop(sprintf("%s: %s names its rows from a pack (%s), which the R reader does not resolve yet", gsm, name,
                                  hdr$row_names_kind))
             }
-            mode <- "canonical"
-            gm <- NULL
-            ng <- 0L
+            h <- list(mode = "canonical", gm = NULL, ng = 0L)
         }
-        if (whole) {
-            res <- pz2_decode_(buf, numeric(0), list(), 0, c_hi, mode, sel, gm, ng, threads, "auto")
-            part <- .s1_dgc(res)
+        h$buf <- buf
+        if (!whole) {
+            h$runs <- .s1_runs(sel, pz2_chunk_first_cols_(buf))
+            h$plans <- lapply(h$runs, function(r) pz2_plan_(buf, r[[1L]], r[[2L]]))
+            h$item <- list(sm = sm, off = vapply(h$plans, function(p) mref$off + p$byte_off, numeric(1)),
+                           len = vapply(h$plans, function(p) p$byte_len, numeric(1)), gap = 256 * 1024)
+        }
+        heads[[name]] <- h
+    }
+    items <- if (whole) list() else unname(lapply(heads, function(h) h$item))
+    list(gsm = gsm, sel = sel, cols = cols, n_rows = n_rows, whole = whole, heads = heads, items = items)
+}
+
+# Phase 3: decode the members for the selected columns; `got` holds the bytes of the phase 2 `items`, in order.
+.s1_sample_decode <- function(st, got, threads = 0L) {
+    sel <- st$sel
+    c_hi <- sel[[length(sel)]] + 1L
+    parts <- list(exon = NULL, intron = NULL)
+    features <- list()
+    for (k in seq_along(st$heads)) {
+        name <- names(st$heads)[[k]]
+        h <- st$heads[[k]]
+        if (st$whole) {
+            part <- .s1_dgc(pz2_decode_(h$buf, numeric(0), list(), 0, c_hi, h$mode, sel, h$gm, h$ng, threads, "auto"))
         } else {
-            first_col <- pz2_chunk_first_cols_(buf)
-            runs <- .s1_runs(sel, first_col)
-            plans <- lapply(runs, function(r) pz2_plan_(buf, r[[1L]], r[[2L]]))
-            got <- reader(vapply(plans, function(p) mref$off + p$byte_off, numeric(1)), vapply(plans, function(p) p$byte_len, numeric(1)), gap = 256 * 1024)
-            pieces <- lapply(seq_along(runs), function(k) {
-                r <- runs[[k]]
+            pieces <- lapply(seq_along(h$runs), function(q) {
+                r <- h$runs[[q]]
                 s_run <- sel[sel >= r[[1L]] & sel < r[[2L]]]
-                .s1_dgc(pz2_decode_(buf, plans[[k]]$byte_off, list(got[[k]]), r[[1L]], r[[2L]], mode, s_run - r[[1L]], gm, ng, threads, "auto"))
+                .s1_dgc(pz2_decode_(h$buf, h$plans[[q]]$byte_off, list(got[[k]][[q]]), r[[1L]], r[[2L]], h$mode, s_run - r[[1L]], h$gm,
+                                    h$ng, threads, "auto"))
             })
             part <- if (length(pieces) == 1L) pieces[[1L]] else do.call(cbind, pieces)
         }
-        if (gene_level) {
+        if (h$mode == "gene") {
             parts[[if (name == "exon_counts.1pz") "exon" else "intron"]] <- part
         } else {
-            rownames(part) <- pz2_names_(buf, TRUE)$names
+            rownames(part) <- pz2_names_(h$buf, TRUE)$names
             features[[name]] <- part
         }
     }
-    list(gsm = gsm, sel = sel, cols = cols, exon = parts$exon, intron = parts$intron, features = features, n_rows = n_rows)
+    list(gsm = st$gsm, sel = sel, cols = st$cols, exon = parts$exon, intron = parts$intron, features = features, n_rows = st$n_rows)
+}
+
+# Several samples, io_threads of them at a time: the phase 1 ranges of the batch go out together, then all their chunk ranges.
+# `sel_fn(cells, gsm)` selects each sample's columns; `guard(expr)` evaluates one sample's step (a handler can turn an error into
+# list(skipped = ...)). With io_threads = 1 this is .s1_read_sample on each sample in turn.
+.s1_read_samples <- function(study, gsms, axis, n_genes, sel_fn, members, threads = 0L, whole_max = 48 * 1024^2, io_threads = 1L,
+                             guard = function(expr) expr) {
+    out <- vector("list", length(gsms))
+    names(out) <- gsms
+    settle <- function(x) if (inherits(x, "condition")) stop(x) else x
+    for (w in split(seq_along(gsms), ceiling(seq_along(gsms) / io_threads))) {
+        plans <- lapply(gsms[w], function(g) guard(.s1_sample_plan(study, g, members, whole_max)))
+        live <- which(vapply(plans, function(p) is.null(p$skipped), NA))
+        bl <- .s1_fetch(study, lapply(plans[live], function(p) p$item), io_threads, errors = "return")
+        states <- plans
+        for (i in seq_along(live)) {
+            k <- live[[i]]
+            g <- gsms[w][[k]]
+            states[[k]] <- guard(.s1_sample_select(study, plans[[k]], settle(bl[[i]]), axis, NULL, n_genes,
+                                                   function(cells) sel_fn(cells, g), character(0), TRUE, io_threads))
+        }
+        live <- which(vapply(states, function(s) is.null(s$skipped), NA))
+        items <- unlist(lapply(states[live], function(s) s$items), recursive = FALSE)
+        owner <- unlist(lapply(live, function(k) rep(k, length(states[[k]]$items))))
+        got <- .s1_fetch(study, items, io_threads, errors = "return")
+        for (k in live) {
+            states[[k]] <- guard(.s1_sample_decode(states[[k]], lapply(got[owner == k], settle), threads))
+        }
+        out[w] <- states
+    }
+    out
 }
 
 .s1_sample_empty <- function(r) is.null(r$exon) && is.null(r$intron) && length(r$features) == 0L
@@ -873,7 +1027,16 @@ singlet_study_modalities <- function(x, gsm = NULL) {
     list(gene_id = v$gene_id, gene_name = v$gene_name)
 }
 
-.s1_read_study <- function(study, gsms = NULL, cell_order = "legacy", threads = 0L, concurrency = 4L, whole_max = 48 * 1024^2,
+# A sample that cannot be read is skipped with the reason; an integrity failure (a server that ignores Range, a replaced object)
+# stops the load. (One handler: tryCatch nests its handlers, so a separate integrity handler's stop() would reach `error`.)
+.s1_skip_unreadable <- function(expr) {
+    tryCatch(expr, error = function(e) {
+        if (inherits(e, "singlet_s1_integrity")) stop(e)
+        list(skipped = paste("unreadable:", conditionMessage(e)))
+    })
+}
+
+.s1_read_study <- function(study, gsms = NULL, cell_order = "legacy", threads = 0L, io_threads = "auto", whole_max = 48 * 1024^2,
                            modalities = NULL, cell_type_level = 2L, cell_type_min_score = 0, include_unvalidated = FALSE,
                            sample_facts = TRUE) {
     .require_sce("load()")
@@ -898,15 +1061,9 @@ singlet_study_modalities <- function(x, gsm = NULL) {
     gsm_meta_map <- if (!is.null(study_meta)) study_meta$gsm_meta else NULL
     facts <- if (isTRUE(sample_facts)) .sample_facts_for_study(study) else list()
 
-    res <- lapply(targets, function(g) {
-        tryCatch(
-            .s1_read_sample(study, g, axis, NULL, n_genes, function(cells) which(cells$columns$called) - 1L,
-                            character(0), threads, whole_max, concurrency, members = members),
-            singlet_s1_integrity = function(e) stop(e),
-            error = function(e) list(skipped = paste("unreadable:", conditionMessage(e)))
-        )
-    })
-    names(res) <- targets
+    res <- .s1_read_samples(study, targets, axis, n_genes, function(cells, gsm) which(cells$columns$called) - 1L, members,
+                            threads, whole_max, .s1_io_threads(io_threads, study$transport),
+                            guard = .s1_skip_unreadable)
     ok <- list(); coldata_rows <- list()
     for (g in targets) {
         r <- res[[g]]
@@ -984,6 +1141,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #'   \code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
 #'   GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
 #'   local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.
+#' @param io_threads Range requests in flight at once (see \code{\link{load}}): \code{"auto"} (8 over HTTP, 1 for a local
+#'   study) or a whole number; 1 sends them one at a time.
 #' @return A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
 #'   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
 #'   matrix), the per-cell columns (\code{\link{singlet_labels}}) and the sample facts (\code{tissue_type}, \code{disease}, ...).
@@ -998,7 +1157,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @export
 singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layers = FALSE, max_cells = NULL,
                           as = c("sce", "seurat"), cache_dir = NULL, modalities = NULL, cell_type_level = 2L,
-                          cell_type_min_score = 0, include_unvalidated = FALSE, sample_facts = TRUE) {
+                          cell_type_min_score = 0, include_unvalidated = FALSE, sample_facts = TRUE, io_threads = "auto") {
     as <- match.arg(as)
     cond <- substitute(where)
     caller <- parent.frame()
@@ -1040,11 +1199,8 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
         if (!is.null(max_cells)) idx <- utils::head(idx, max_cells)
         idx
     }
-    res <- lapply(gsms, function(g) {
-        .s1_read_sample(study, g, axis, NULL, n_genes, function(cells) keep_fun(cells, g), character(0), 0L,
-                        members = .s1_members_for(mods))
-    })
-    names(res) <- gsms
+    res <- .s1_read_samples(study, gsms, axis, n_genes, keep_fun, .s1_members_for(mods), 0L,
+                            io_threads = .s1_io_threads(io_threads, study$transport))
     ok <- Filter(function(r) is.null(r$skipped) && !.s1_sample_empty(r), res)
     if (length(ok) == 0L) {
         return(SingleCellExperiment::SingleCellExperiment(assays = list(counts = .s1_empty_gene_matrix(n_genes, 0L))))
@@ -1076,8 +1232,9 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
 # ---------------------------------------------------------------------------
 # Offline copy of a study
 # ---------------------------------------------------------------------------
-.s1_download <- function(gse, cache_dir = NULL, verify = TRUE) {
+.s1_download <- function(gse, cache_dir = NULL, verify = TRUE, io_threads = "auto") {
     study <- singlet_study(gse, cache_dir = cache_dir, force = TRUE)
+    io_threads <- .s1_io_threads(io_threads, study$transport)
     root <- study$root
     for (g in study$gsm_ids) {
         sm <- study$samples[[g]]
@@ -1086,13 +1243,14 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
         dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
         tmp <- paste0(dest, ".", Sys.getpid(), ".part")
         con <- file(tmp, "wb")
-        pos <- 0
         step <- 32 * 1024^2
+        starts <- seq(0, sm$bytes - 1, by = step)
         ok <- tryCatch({
-            while (pos < sm$bytes) {
-                n <- min(step, sm$bytes - pos)
-                writeBin(.s1_get(study$transport, sm$key, c(pos, pos + n - 1), expect_total = as.numeric(sm$bytes))$body, con)
-                pos <- pos + n
+            # io_threads steps of 32 MiB in flight at a time, written in order
+            for (w in split(seq_along(starts), ceiling(seq_along(starts) / io_threads))) {
+                reqs <- lapply(starts[w], function(a) list(key = sm$key, range = c(a, min(a + step, sm$bytes) - 1),
+                                                           expect_total = as.numeric(sm$bytes)))
+                for (r in .s1_get_many(study$transport, reqs, io_threads)) writeBin(r$body, con)
             }
             TRUE
         }, finally = close(con))
@@ -1124,7 +1282,7 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
 
 # A per-sample study by accession; a study with no .s1 manifest stops with a message naming legacy = TRUE
 # (SINGLET_LEGACY_FALLBACK=1 falls back to the legacy bundle instead).
-.s1_load_gse <- function(gse, gsms = NULL, cache_dir = NULL, legacy = NULL, modalities = NULL, labels = list()) {
+.s1_load_gse <- function(gse, gsms = NULL, cache_dir = NULL, legacy = NULL, modalities = NULL, labels = list(), io_threads = "auto") {
     study <- tryCatch(singlet_study(gse, cache_dir = cache_dir), singlet_s1_not_found = function(e) e)
     if (inherits(study, "condition")) {
         if (is.null(legacy) && .s1_legacy_fallback()) {
@@ -1136,7 +1294,7 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
         }
         stop(study)
     }
-    do.call(.s1_read_study, c(list(study, gsms, modalities = modalities), labels))
+    do.call(.s1_read_study, c(list(study, gsms, modalities = modalities, io_threads = io_threads), labels))
 }
 
 # modalities= on a legacy bundle: it has been downloaded whole already, so only the gene assays are subset (with a warning);
@@ -1157,12 +1315,13 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
 }
 
 # A local manifest, .../s1/m/<GSE>.json (its objects are read from the same tree; DUAL: older v2/m/ trees too).
-.s1_load_manifest <- function(path, gsms = NULL, modalities = NULL, labels = list()) {
+.s1_load_manifest <- function(path, gsms = NULL, modalities = NULL, labels = list(), io_threads = "auto") {
     p <- normalizePath(path, winslash = "/", mustWork = TRUE)
     if (basename(dirname(p)) != "m" || !(basename(dirname(dirname(p))) %in% c("s1", "store", "v2"))) {
         stop(sprintf("%s is not under a s1/m/ directory", path), call. = FALSE)
     }
     root <- dirname(dirname(dirname(p)))
     gse <- sub("\\.json$", "", basename(p), ignore.case = TRUE)
-    do.call(.s1_read_study, c(list(singlet_study(gse, base = root, force = TRUE), gsms, modalities = modalities), labels))
+    do.call(.s1_read_study, c(list(singlet_study(gse, base = root, force = TRUE), gsms, modalities = modalities, io_threads = io_threads),
+                              labels))
 }

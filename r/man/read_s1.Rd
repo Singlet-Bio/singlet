@@ -9,11 +9,13 @@ read_s1(
   as = c("matrix", "sce", "seurat"),
   member = "counts",
   genes = NULL,
-  threads = 4L
+  threads = 4L,
+  io_threads = "auto"
 )
 }
 \arguments{
-\item{path}{A \code{.s1} file written by \code{\link{write_s1}} (or by \code{singlet.write_s1()} in Python).}
+\item{path}{A \code{.s1} file written by \code{\link{write_s1}} (or by \code{singlet.write_s1()} in Python), or the
+\code{http(s)} URL of one on a server that answers byte ranges.}
 
 \item{as}{\code{"matrix"} (a \code{dgCMatrix}, genes x cells), \code{"sce"} or \code{"seurat"}.}
 
@@ -22,6 +24,9 @@ read_s1(
 \item{genes}{Gene ids, for an object written with \code{gene_pack} (the pack is not read here).}
 
 \item{threads}{Decoder threads.}
+
+\item{io_threads}{For a URL, range requests in flight at once: \code{"auto"} (8 for a URL, 1 for a local file) or a whole
+number; 1 sends them one at a time. A large member is fetched in pieces of at least 8 MiB.}
 }
 \value{
 The counts as \code{as} asks, with gene ids as row names and barcodes as column names.
