@@ -24,8 +24,16 @@ s1_cpp
 # S1_PKG_OVERLAY=1: the singlet package of this commit, built into this job's TMPDIR and put ahead of the env's copy, so a
 # rerun can use newer package code without reinstalling into the env that other jobs are using.
 if [ -n "${S1_PKG_OVERLAY:-}" ]; then
-  pip install -q --no-deps --no-build-isolation --target "$TMPDIR/site" "$SRC"
-  export PYTHONPATH="$TMPDIR/site:$PYTHONPATH"
+  SITE=$S1/site/$SHA   # built once per commit (array tasks that start together would race building in the same tree)
+  (
+    flock 9
+    if [ ! -f "$SITE/.ok" ]; then
+      rm -rf "$SITE.part" && cp -r "$SRC" "$TMPDIR/pkgsrc"
+      pip install -q --no-deps --no-build-isolation --target "$SITE.part" "$TMPDIR/pkgsrc" && touch "$SITE.part/.ok" \
+        && rm -rf "$SITE" && mv "$SITE.part" "$SITE"
+    fi
+  ) 9>"$S1/src/.lock-site-$SHA"
+  export PYTHONPATH="$SITE:$PYTHONPATH"
   python -c "import singlet, singlet.torch; print('singlet', singlet.__version__, singlet.__file__)"
 fi
 IFS=, read -ra DS <<<"${DS_LIST:?set DS_LIST}"
