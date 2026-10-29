@@ -59,9 +59,14 @@ are small. Classical codes are Elias $\gamma$ and $\delta$~\cite{elias1975univer
 codes~\cite{golomb1966run,rice1979some}, and Elias--Fano~\cite{elias1974efficient,vigna2013quasi}. For speed, byte- and word-aligned codes
 replaced bit-level ones: patched frame-of-reference (PFOR)~\cite{zukowski2006super}, SIMD bit packing that decodes
 billions of integers per second~\cite{lemire2015decoding}, Stream VByte~\cite{lemire2018stream}, and hybrid
-bitmap/array containers such as Roaring~\cite{chambi2016better}. These codes are fast because they ignore the
-distribution of the values beyond their bit width; they leave the entropy of skewed gap and value distributions on
-the table. General-purpose compressors (DEFLATE, bzip2~\cite{burrows1994block}, LZMA/xz, brotli~\cite{alakuijala2016brotli},
+bitmap/array containers such as Roaring~\cite{chambi2016better}; partitioned Elias--Fano~\cite{ottaviano2014partitioned}
+and binary interpolative coding~\cite{moffat2000binary} trade speed for size~\cite{pibiri2021techniques}. Most of these
+codes are fast because they ignore the distribution of the values beyond their bit width, leaving the entropy of skewed
+gap and value distributions on the table; ANS with contexts closes much of that gap for inverted
+indexes~\cite{moffat2017ans,moffat2018index,moffat2020large}, the closest precedent for the approach taken here. Generic
+filters such as Blosc with bit shuffling~\cite{alted2010modern,masui2015compression,alted2023blosc2} and compressors primed
+with a trained dictionary~\cite{collet2016smaller,liao2016effective} help on small, similar blocks without modelling the
+values. General-purpose compressors (DEFLATE, bzip2~\cite{burrows1994block}, LZMA/xz, brotli~\cite{alakuijala2016brotli},
 zstd~\cite{collet2021zstd}) find repeated byte strings and model bytes with small contexts; they compress the
 \emph{representation} of a sparse matrix rather than the counts. Context-mixing compressors such as
 PAQ~\cite{mahoney2005adaptive} come closer to the entropy of almost any byte stream, but run hundreds to thousands of
@@ -79,8 +84,10 @@ dozens of tools found that how each field is modelled matters more to the ratio 
 coder~\cite{numanagic2016comparison,hernaez2019genomic}.
 The lessons that carry over are: separate fields with different statistics into their own streams, condition each
 on cheap side information, use static tables learned from the data being coded, and keep random access by coding in
-independent blocks. Count matrices have received far less attention: we are not aware of a published entropy-coded
-format for them, and the formats in use rely on generic filters.
+independent blocks. Genotype matrices, sparse integer matrices of a different kind, have dedicated compressors that
+reorder and model them~\cite{durbin2014efficient,danek2018gtc,deorowicz2019gtshark,lan2021genozip}, as reordering does
+for graphs~\cite{boldi2004webgraph,boldi2011layered,dhulipala2016compressing}. Count matrices have received far less
+attention: we found no published entropy-coded format for them, and the formats in use rely on generic filters.
 
 \subsection{What the counts look like}
 
@@ -116,13 +123,18 @@ rows of an on-disk \texttt{.h5ad}, \texttt{AnnLoader} wraps AnnData for PyTorch,
 loaders: scTab used NVIDIA Merlin over Parquet~\cite{fischer2024scaling}, the CELLxGENE Census provides
 TileDB-SOMA-ML~\cite{tiledbsomaml,czi2025cellxgene}, and scDataset showed that fetching blocks of contiguous cells, then
 shuffling within a larger buffer, is more than two orders of magnitude faster than fully random sampling, with the same
-model accuracy on the tasks tested~\cite{dascenzo2025scdataset}. These loaders optimise I/O patterns over existing formats. When the data sit
-on a network file system or in an object store, as in most clusters and clouds, the bytes moved per cell set the
-ceiling on throughput, and that ceiling is set by the format.
+model accuracy on the tasks tested~\cite{dascenzo2025scdataset}. These loaders optimise I/O patterns over existing
+formats. When the data sit on a network file system or in an object store, as in most clusters and clouds, two costs set
+the ceiling on throughput: the bytes moved per cell, which the format sets, and the number of round trips, each of which
+waits tens of milliseconds on a cloud object store~\cite{durner2023exploiting}. Cloud-native scientific formats such as
+Zarr and OME-Zarr address the second by splitting data into independently addressable chunks that can be fetched
+concurrently~\cite{abernathey2021cloud,moore2021omengff}.
 
 Whether compression helps a loader depends on both the bytes per value $b$ and the decode rate $D$. Delivered over a link of
 bandwidth $B$, a format provides values at the effective rate $R_{\mathrm{eff}} = (b/B + 1/D)^{-1}$ (Eq.~\ref{eq:reff}),
-so a smaller format is only better if it decodes fast enough that $1/D$ does not eat its transfer savings. Formats
-with generic compression shrink $b$ modestly and decode at tens of millions of values per second in practice;
-uncompressed formats have the highest $D$ and the largest $b$. The question this paper answers is whether a count
-matrix can be both much smaller than existing formats and fast enough to decode that it is never the bottleneck.
+so a smaller format is only better if it decodes fast enough that $1/D$ does not eat its transfer savings. The model
+is conservative: it assumes transfer and decoding happen one after the other, while a reader that overlaps them does
+better. Formats with generic compression shrink $b$ modestly and decode at tens of millions of values per second in
+practice; uncompressed formats have the highest $D$ and the largest $b$. The question this paper asks is whether a count
+matrix can be both much smaller than existing formats and fast enough to decode that the network, not the decoder,
+stays the limit on the links data actually travel over.

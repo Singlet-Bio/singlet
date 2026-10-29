@@ -27,52 +27,64 @@ on $p$ cores. A format beats a reference ($b_0$, $D_{p,0}$) on a link of bandwid
 $(b_0-b)/B > 1/D_p - 1/D_{p,0}$: the transfer time saved must exceed the decode time added.
 
 % =====================================================================
-\subsection{\sone{} is the smallest format and is never the bottleneck}
+\subsection{\sone{} is the smallest format and the fastest to read}
 
 Across the panel, \sone{} files take a median of \nm{s1BpnMedian} bits per non-zero (range
 \nm{s1BpnMin}--\nm{s1BpnMax}) with gene identifiers and barcodes included, and are the smallest file on
-\nm{s1SmallestCount} of \nm{nMatrices} matrices (Fig.~\ref{fig:wow}a, Table~\ref{tab:size}). The median matrix is
-\nm{ratio-h5ad_gzip}$\times$ smaller than gzip-compressed AnnData, \nm{ratio-tenx_h5}$\times$ smaller than 10x HDF5,
-\nm{ratio-soma}$\times$ smaller than TileDB-SOMA and \nm{ratio-bpcells}$\times$ smaller than BPCells; the strongest
-alternative, \nm{bestOtherFormat}, is \nm{ratioBestOther}$\times$ larger. Applying zstd at level 19 to the raw arrays
-gives \nm{size-csc_zstd19} bits per non-zero, so most of the gain comes from the transform and the model, not from the
-entropy coder alone (Section~\ref{sec:floor}). With gene identifiers moved into a vocabulary pack shared by every
-dataset of the same annotation, the median falls to \nm{size-s1_pack} bits per non-zero.
-% CHECK: s1SmallestCount == nMatrices; if not, name the exceptions (likely the ADT or imaging matrices).
+\nm{s1SmallestCount} of \nm{nMatrices} matrices (Fig.~\ref{fig:wow}a, Table~\ref{tab:size}). Paired by matrix, the median
+gzip-compressed AnnData file is \nm{ratio-h5ad_gzip}$\times$ larger, 10x HDF5 \nm{ratio-tenx_h5}$\times$, TileDB-SOMA
+\nm{ratio-soma}$\times$ and BPCells \nm{ratio-bpcells}$\times$; the most compact alternative, \nm{bestOtherFormat}, is
+\nm{ratioBestOther}$\times$ larger. The raw CSC arrays compressed with zstd at level 19 take \nm{size-csc_zstd19} bits per
+non-zero, so most of the gain comes from how the counts are represented and modelled, not from the entropy coder alone
+(Section~\ref{sec:floor}). With gene identifiers moved into a vocabulary pack shared by every dataset of the same
+annotation, the median falls to \nm{size-s1_pack} bits per non-zero.
 
-Smaller files are usually slower to read. \sone{} is not. The C++ decoder reads \nm{codec_cpp-native-avx2-t1}
+Smaller files are usually slower to read; \sone{} files are not. We timed each library's own read, from opening the file
+to the object it gives a user (a SciPy matrix with gene identifiers and barcodes, or an AnnData object), with the page
+cache cleared; the conversion and checks that verify the round trip are not timed for any format
+(Section~\ref{sec:methods}). In the source gene order that every other format returns, \sone{} reads
+\nm{dec-s1-cold-t4} million non-zeros per second on \nm{threadsHeadline} cores, a median of
+\nm{dec-speedup-best-other}$\times$ the fastest other format, \nm{dec-best-other-name}, paired by matrix (range
+\nm{dec-speedup-best-other-lo}--\nm{dec-speedup-best-other-hi}$\times$), against \nm{dec-h5ad_gzip-cold-t4} for gzip
+AnnData and \nm{dec-csc_i32-cold-t4} for the uncompressed arrays (Table~\ref{tab:decode}). In its stored, frequency-sorted
+gene order, which a model can use directly with a fixed permutation of its input layer, it reads
+\nm{dec-s1native-cold-t4} million. The codec alone, from a member in memory, runs at \nm{codec_cpp-native-avx2-t1}
 million non-zeros per second on one core and \nm{codec_cpp-native-avx2-t4} million on \nm{threadsHeadline} with AVX2,
-against \nm{codec_cpp-native-scalar-t1} million on one core with the portable scalar decoder; all kernels give identical
-output (Table~\ref{tab:decode}). On this CPU the AVX-512 kernel is no faster than AVX2
-(\nm{codec_cpp-native-avx512-t4} million on \nm{threadsHeadline} cores): decoding is bound by the table lookups, not
-by the width of the arithmetic. Through the Python binding, from a cold file on the node's disk to a SciPy matrix,
-\sone{} reads \nm{dec-s1-cold-t4} million non-zeros per second, \nm{dec-speedup-best-other}$\times$ the next fastest
-format (\nm{dec-best-other-name}), against \nm{dec-h5ad_gzip-cold-t4} for gzip AnnData and \nm{dec-csc_i32-cold-t4}
-for the uncompressed arrays, which must move twelve times as many bytes. Fig.~\ref{fig:wow}c places every format on the
-size--speed plane with iso-lines of Eq.~\eqref{eq:reff} at 1\,Gbit/s. Measured per matrix, \sone{} delivers non-zeros
-faster than uncompressed CSC on \nm{wire-wins-0p1} of \nm{wire-n-0p1} matrices at 0.1\,Gbit/s,
-\nm{wire-wins-1} of \nm{wire-n-1} at 1\,Gbit/s and \nm{wire-wins-10} of \nm{wire-n-10} at 10\,Gbit/s (median
-gains \nm{wire-gain-0p1}$\times$, \nm{wire-gain-1}$\times$ and \nm{wire-gain-10}$\times$), so the compression pays
-for itself on every link we consider.
+and \nm{codec_cpp-native-scalar-t1} million on one core with the portable scalar decoder, which is what processors
+without AVX2, including ARM, use today; all kernels give identical output. The AVX-512 kernel needs the VBMI2
+extension, which the benchmark CPU lacks, so it was not measured.
 
-For machine learning the quantity that matters is the time until a sparse minibatch is ready for the model. From a cold
-start, reading \nm{fig1b-dataset} from an object store at \nm{fig1b-tier}, the first 512-cell minibatch is a
-\texttt{torch.sparse\_csr\_tensor} after \nm{ttfm-s1}\,s with \sone, against \nm{ttfm-best-other}\,s for the fastest
-alternative (\nm{ttfm-best-other-name}; Fig.~\ref{fig:wow}b, Table~\ref{tab:minibatch}). The \sone{} reader needs one
-request for a few kilobytes that plan every later read and one request per run of chunks, and it moves only the chunks
-that hold the requested cells. Sustained throughput into the model is \nm{thr-s1_stream-s3_1g} cells per second at
+Whether a compact format pays for itself depends on the link. Fig.~\ref{fig:wow}c places every format on the size--speed
+plane with lines of equal effective delivery rate $R_{\mathrm{eff}}$ (Eq.~\eqref{eq:reff}) at 1\,Gbit/s. Using each
+format's in-memory read rate for $D$, so that reading from disk is not counted twice, \sone{} delivers non-zeros faster
+than the uncompressed arrays on \nm{wire-wins-0p1} of \nm{wire-n-0p1} matrices at 0.1\,Gbit/s, \nm{wire-wins-1} of
+\nm{wire-n-1} at 1\,Gbit/s and \nm{wire-wins-10} of \nm{wire-n-10} at 10\,Gbit/s (median gains
+\nm{wire-gain-0p1}$\times$, \nm{wire-gain-1}$\times$ and \nm{wire-gain-10}$\times$). The uncompressed arrays catch up
+only above a median of \nm{wire-crossover-gbit}\,Gbit/s per matrix, and on \nm{wire-crossover-never} of
+\nm{wire-crossover-n} matrices \sone{} decodes faster than the uncompressed arrays even from memory, so they never catch
+up. On slower links the network, not the decoder, sets the rate.
+
+For machine learning the quantity that matters is how fast sparse minibatches reach the model. Every loader read the same
+workload, minibatches of 512 cells made of eight blocks of 64 consecutive cells at random offsets, with no larger shuffle
+buffer to fill first (Section~\ref{sec:methods}). From a cold start, reading \nm{fig1b-dataset} from an object store at
+\nm{fig1b-tier}, the first minibatch is a \texttt{torch.sparse\_csr\_tensor} after \nm{ttfm-s1}\,s with \sone, against
+\nm{ttfm-best-other}\,s for the fastest alternative (\nm{ttfm-best-other-name}; Fig.~\ref{fig:wow}b,
+Table~\ref{tab:minibatch}). The \sone{} reader first fetches the member's prefix, whose index grows with the number of
+chunks (24 bytes per chunk, a few hundred kilobytes for a matrix of a billion non-zeros), and then only the chunks that
+hold the requested cells. Sustained throughput into the model is \nm{thr-s1_stream-s3_1g} cells per second at
 1\,Gbit/s, \nm{thr-s1_stream-nfs} from the shared filesystem and \nm{thr-s1_stream-local} from the node's own disk
-(Fig.~\ref{fig:wow}d).
+(Fig.~\ref{fig:wow}d). AnnData read wholly into memory sustains more once loaded, at the cost of reading the entire file
+first and holding it in memory.
 
 Latency, more than bandwidth, sets the cost of reading from an object store: every request waits a round trip, and
-cloud object stores take tens of milliseconds to return a first byte. Because the index locates every chunk before any is
-read, the \sone{} reader sends all of a minibatch's range requests together, eight at a time over HTTP. On a 1\,Gbit/s
-link with 30\,ms latency, the first minibatch arrives in a median of \nm{ttfm-wan-s1_stream}\,s over the panel, against
-\nm{ttfm-wan-s1_stream_seq}\,s for the same reader sending its requests one at a time and \nm{ttfm-wan-anndata_zarr_lazy}\,s
-for AnnData Zarr, whose reader also sends concurrent requests; sustained throughput on that link is
-\nm{concurrency-gain-sustained}$\times$ higher with concurrent requests than without (Fig.~\ref{fig:wow}d). The tiers
-limit the total bandwidth of all connections, so concurrent readers share the link rather than multiply it
-(Section~\ref{sec:methods}).
+cloud object stores take tens of milliseconds to return a first byte~\cite{durner2023exploiting}. Because the index
+locates every chunk before any is read, the \sone{} reader sends all of a minibatch's range requests together, up to
+eight at a time over HTTP. On a 1\,Gbit/s link with 30\,ms latency, the first minibatch arrives in a median of
+\nm{ttfm-wan-s1_stream}\,s over the panel, against \nm{ttfm-wan-s1_stream_seq}\,s for the same reader sending its requests
+one at a time and \nm{ttfm-wan-anndata_zarr_lazy}\,s for AnnData Zarr, whose reader also sends concurrent requests;
+sustained throughput on that link is \nm{concurrency-gain-sustained}$\times$ higher with concurrent requests than without
+(Fig.~\ref{fig:wow}d). Each tier limits the total bandwidth of all connections, so concurrent readers share the link
+rather than multiply it (Section~\ref{sec:methods}).
 
 \input{figures/fig1_wow}
 
@@ -104,35 +116,37 @@ integrity check of every chunk.
 \input{figures/fig2_how}
 
 % =====================================================================
-\subsection{\sone{} is close to the best code any count model gives}
+\subsection{\sone{} is close to the code lengths of cross-validated count models}
 \label{sec:floor}
 
 We next asked how much smaller a lossless file could be. Fig.~\ref{fig:floor}a follows the payload (row indices and
-values only) as each idea is added, median over the panel. CSC as 32-bit integers costs \nm{ladder-L0_csc_i32} bits
+values only) as representations change, median over the panel. CSC as 32-bit integers costs \nm{ladder-L0_csc_i32} bits
 per non-zero; variable-length integers bring this to \nm{ladder-L1_leb128}; row gaps in separate streams with zstd
-reach \nm{ladder-L2_gaps_leb_zstd3} at level 3 and \nm{ladder-L3_gaps_leb_zstd19} at level 19. General-purpose coders
-stop there because they cannot see which gene a gap belongs to or how deep the cell is. The \sone{} payload is
-\nm{ladder-L4_s1_payload} bits per non-zero.
+reach \nm{ladder-L2_gaps_leb_zstd3} at level 3 and \nm{ladder-L3_gaps_leb_zstd19} at level 19. The \sone{} payload is
+\nm{ladder-L4_s1_payload} bits per non-zero. That last step combines three changes, gene reordering by frequency,
+context modelling and static rANS, whose separate contributions the ladder does not resolve.
 
-To bound what is left, we fitted count models on half of each matrix's cells and measured their code length on the other
-half, with zeros included and no charge for describing the model (Section~\ref{sec:methods}): Poisson and negative
-binomial models with a depth factor per cell and parameters per gene~\cite{hafemeister2019normalization,townes2019feature},
-a nonparametric model of each gene's presence and value given the cell's depth, and the same model additionally conditioned
-on the cell's cluster. The best of these reaches \nm{ladder-floor} bits per non-zero; \sone{} is a median of
-\nm{s1AboveFloorPct}\% above it (range \nm{s1AboveFloorPctLo} to \nm{s1AboveFloorPctHi}\%) while decoding with static
-tables (Fig.~\ref{fig:floor}b, Table~\ref{tab:floor}). Knowing a cell's cluster, which is the information other cells
-hold about it, is worth \nm{sharedBpnMedian} bits per non-zero (range \nm{sharedBpnLo}--\nm{sharedBpnHi}) before the
-cost of the model, and a second compression pass over \sone{} output returns \nm{secondMin}--\nm{secondMax} of its size
-with every general-purpose coder (Fig.~\ref{fig:floor}d).
-% CHECK: sign of gain-nb; the negative binomial should cost more than the nonparametric model on UMI data and may win
-% on read counts. State which model is best per protocol class from tab_floor.tsv.
+As a reference for what is left, we fitted count models on half of each matrix's cells and measured their code length on
+the other half, with zeros included (Section~\ref{sec:methods}): Poisson and negative binomial models with a depth factor
+per cell and parameters per gene~\cite{hafemeister2019normalization,townes2019feature}, a nonparametric model of each
+gene's presence and value given the cell's depth, and the same model additionally conditioned on the cell's cluster. These
+code lengths are neither a lower bound nor an achievable code: the models are charged nothing for their parameters or for
+the cell's depth, are fitted on half of the cells, and are far simpler than latent-variable models of expression such as
+scVI or GLM-PCA~\cite{lopez2018deep,townes2019feature}. The best of the four is a median of \nm{s1AboveFloorPct}\% shorter
+than \sone{} (range \nm{s1AboveFloorPctLo} to \nm{s1AboveFloorPctHi}\%; negative where \sone{} is shorter, as on both
+read-count matrices; Fig.~\ref{fig:floor}b, Table~\ref{tab:floor}). Knowing a cell's cluster, the information other
+cells hold about it, is worth \nm{sharedBpnMedian} bits per non-zero (range \nm{sharedBpnLo}--\nm{sharedBpnHi}), and a
+second compression pass over \sone{} output returns \nm{secondMin}--\nm{secondMax} of its size with every
+general-purpose coder (Fig.~\ref{fig:floor}d).
 
-The reason is the data. Given a cell's expression profile, its molecules are a multinomial sample, and which molecules
-were captured is information, not redundancy~\cite{townes2019feature,grun2014validation,svensson2020droplet}. We computed the entropy of
-that sample for each cell under a profile shrunk toward the cell's cluster (Section~\ref{sec:methods}): it accounts
-for a median of \nm{samplingPctMedian}\% of the \sone{} code length (range
-\nm{samplingPctLo}--\nm{samplingPctHi}\%, Fig.~\ref{fig:floor}c). The rest is what the counts reveal about the cell's own
-profile, which a decoder cannot know in advance, and the small margin between \sone{} and the best model.
+Part of what remains is sampling. Given a cell's expression profile, its UMI counts behave like a multinomial sample of
+molecules, and which molecules were captured is information, not
+redundancy~\cite{townes2019feature,grun2014validation,svensson2020droplet}. For the \nm{samplingN} UMI matrices we
+estimated the entropy of that sample for 2{,}000 cells per matrix under a plug-in profile, the cell's normalised counts
+shrunk toward its cluster (Section~\ref{sec:methods}). Relative to the \sone{} payload of the whole matrix it is a median
+of \nm{samplingPctMedian}\% (range \nm{samplingPctLo}--\nm{samplingPctHi}\%, Fig.~\ref{fig:floor}c). The estimate depends
+on the profile estimator, which uses the cell's own counts, so it indicates rather than bounds how much of the code length
+any model of the profile can remove.
 
 \input{figures/fig3_floor}
 
@@ -146,9 +160,12 @@ returns an AnnData object with counts in \texttt{X}, and \texttt{singlet.torch.S
 block-shuffled sparse minibatches from a local file or a URL, reading one minibatch ahead on a background thread. In R,
 \texttt{singlet::load(path, as = "sce")} and \texttt{as = "seurat"} return SingleCellExperiment and Seurat objects.
 Each call returns exactly the counts, gene identifiers and barcodes of the source. On pbmc10k\_v3, \texttt{singlet.load}
-takes \nm{eco-py-singlet}\,s against \nm{eco-py-read-h5ad}\,s for \texttt{anndata.read\_h5ad}, and in R
-\texttt{singlet::load(as = "sce")} takes \nm{eco-r-singlet-sce}\,s against \nm{eco-r-read10x}\,s for
-\texttt{Seurat::Read10X\_h5} and \nm{eco-r-readh5ad}\,s for \texttt{zellkonverter::readH5AD} (Table~\ref{tab:eco}). The C++ codec builds without architecture flags and selects the
+takes \nm{eco-py-singlet}\,s against \nm{eco-py-read-h5ad}\,s for \texttt{anndata.read\_h5ad}. In R,
+\texttt{singlet::load(as = "sce")} takes \nm{eco-r-singlet-sce}\,s against \nm{eco-r-readh5ad}\,s for
+\texttt{zellkonverter::readH5AD}, and \texttt{singlet::load(as = "seurat")} takes \nm{eco-r-singlet-seurat}\,s against
+\nm{eco-r-read10x-seurat}\,s for building the same Seurat object from the 10x HDF5 file
+(\texttt{CreateSeuratObject(Read10X\_h5(\ldots))}). Table~\ref{tab:eco} gives every call on both datasets; on the larger,
+hlca\_core, the gains are smaller. The C++ codec builds without architecture flags and selects the
 scalar, AVX2 or AVX-512 kernel at run time.
 
 \input{figures/fig4_eco}

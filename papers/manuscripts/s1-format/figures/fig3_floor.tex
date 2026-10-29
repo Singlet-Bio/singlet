@@ -52,7 +52,7 @@
 \addplot[fill=ink2!55, draw=none] table[x=sampling, y=pos] {\gen{fig3c_decomp.tsv}};
 \addplot[fill=dl!70, draw=none]   table[x=state, y=pos] {\gen{fig3c_decomp.tsv}};
 \addplot[fill=sone, draw=none]    table[x=above, y=pos] {\gen{fig3c_decomp.tsv}};
-\legend{sampling of molecules (no decoder can remove), the cell's own profile (best model $-$ sampling), \sone{} above the best model}
+\legend{sampling of molecules (estimated), the cell's own profile (best model $-$ sampling), \sone{} above the best model}
 \end{axis}
 \end{tikzpicture}\hfill
 % ---------------- (d) second pass ----------------
@@ -69,16 +69,18 @@
   table[x=median, y=pos, x error plus=rp, x error minus=rm] {\gen{fig3d_second.tsv}};
 \end{axis}
 \end{tikzpicture}
-\caption{\textbf{\sone{} is close to the best code a count model gives, and most of what remains is sampling.}
+\caption{\textbf{\sone{} is close to the code lengths of cross-validated count models, and much of what remains is the
+sampling of molecules.}
 \textbf{(a)} Payload (row indices and values, no names) in bits per non-zero, median over matrices, as each idea is
 added; whiskers, interquartile range. Dashed: the shortest cross-validated code length among the count models of (b),
 per matrix.
 \textbf{(b)} Bits per non-zero each model saves relative to the \sone{} payload, median and interquartile range over
 matrices (negative: the model codes the matrix in more bits than \sone). The Poisson model's worst cases are the
 read-count matrices, which it codes with hundreds of bits more per non-zero (Table~\ref{tab:floor}). Models are fitted on half of the cells and scored on
-the other half, zeros included, with no charge for the model itself.
-\textbf{(c)} The \sone{} payload split into the entropy of the multinomial sample of each cell's molecules given its
-cluster-shrunk profile, the remaining information in the best model's code, and \sone's margin above that model.
+the other half, zeros included, with no charge for the model itself; they are a reference, not a bound.
+\textbf{(c)} The \sone{} payload split into the estimated entropy of the multinomial sample of each cell's molecules given
+a plug-in, cluster-shrunk profile (meaningful for UMI counts only), the remaining information in the best model's code,
+and \sone's margin above that model.
 \textbf{(d)} Size of \sone{} after a second general-purpose compression pass, relative to \sone{} (median, range).
 Values per class in Table~\ref{tab:floor}.}
 \label{fig:floor}

@@ -76,8 +76,8 @@ Single-cell and spatial transcriptomics store their primary data as sparse matri
 in use compress them with generic byte-level filters that know nothing about counts. We describe \sone, a storage format
 for count matrices that orders genes by how many cells express them, turns each cell's non-zeros into small symbols coded
 under contexts every reader already knows, and entropy-codes them with static, 32-way interleaved rANS that decodes with
-SIMD instructions. Matrices are split into independently decodable chunks behind an index of a few kilobytes, so a reader
-can fetch any set of cells with a handful of concurrent HTTP range requests. On \nm{nMatrices} public count matrices from
+SIMD instructions. Matrices are split into independently decodable chunks behind a compact index, so a reader can fetch
+any set of cells with a handful of concurrent HTTP range requests. On \nm{nMatrices} public count matrices from
 \nm{nDatasets} datasets in \nm{nProtocolClasses} protocol classes, from droplet and plate single-cell data to
 sequencing- and imaging-based spatial data, \sone{} files take a median of \nm{s1BpnMedian} bits per non-zero including
 gene identifiers and barcodes: \nm{ratio-h5ad_gzip}$\times$ smaller than gzip-compressed AnnData and
@@ -85,10 +85,11 @@ gene identifiers and barcodes: \nm{ratio-h5ad_gzip}$\times$ smaller than gzip-co
 \nm{dec-s1-cold-t4} million non-zeros per second from a cold file on \nm{threadsHeadline} cores,
 \nm{dec-speedup-best-other}$\times$ the next fastest format. Streamed from an object store at 1\,Gbit/s, the first
 512-cell minibatch reaches PyTorch in \nm{ttfm-s1}\,s, \nm{ttfm-speedup}$\times$ sooner than the fastest alternative
-loader. Cross-validated count models, including negative binomial and cluster-conditioned models, code the same matrices
-a median of only \nm{s1AboveFloorPct}\% more compactly than \sone, and a sampling bound shows that about
-\nm{samplingPctMedian}\% of the \sone{} code length is the multinomial sampling of molecules, which no lossless decoder
-can avoid. \sone{} files are written and read from Python, R and C++ by the open-source \texttt{singlet} package.
+loader, and sending a minibatch's range requests together rather than one at a time makes streaming over a 30\,ms link
+\nm{concurrency-gain-sustained}$\times$ faster. Cross-validated count models, including negative binomial and
+cluster-conditioned models, charged nothing for their parameters, code the same matrices a median of only
+\nm{s1AboveFloorPct}\% more compactly than \sone, and for UMI data the multinomial sampling of molecules, which no
+lossless decoder can avoid, accounts for an estimated \nm{samplingPctMedian}\% of the \sone{} code length. \sone{} files are written and read from Python, R and C++ by the open-source \texttt{singlet} package.
 \end{abstract}
 
 \section{Introduction}
