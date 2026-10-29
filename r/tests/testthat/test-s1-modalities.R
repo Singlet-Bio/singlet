@@ -21,7 +21,7 @@ storex_root <- local({
         top <- testthat::test_path("..", "..", "..")
         script <- normalizePath(file.path(top, "tests", "python", "_s1_synth.py"), mustWork = FALSE)
         if (!nzchar(py) || !file.exists(script)) return(NA_character_)
-        out <- file.path(tempdir(), "store_synth_extras")
+        out <- file.path(tempdir(), "s1_synth_extras")
         res <- suppressWarnings(tryCatch(
             system2(py, c("-P", shQuote(script), shQuote(out), "--extras"), stdout = TRUE, stderr = TRUE,
                     env = c(paste0("PYTHONPATH=", normalizePath(file.path(top, "python"), mustWork = FALSE)))),

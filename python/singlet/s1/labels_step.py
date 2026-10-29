@@ -207,7 +207,7 @@ def species_of_build(build: Optional[str]) -> set:
 
 # genome builds of species without a label model (the atlas has mRatBN7.2, GRCz11, Mmul_10, Sscrofa11.1)
 _OTHER_BUILD = re.compile(
-    r"mRatBN|Rnor|rn\d|GRCz|danRer|Mmul|rheMac|Sscrofa|susScr|GRCg|galGal|canFam|ROS_Cfam|ARS-UCD|bosTau|xenTro|Xenopus",
+    r"mRatBN|Rnor|\brn\d|GRCz|danRer|Mmul|rheMac|Sscrofa|susScr|GRCg|galGal|canFam|ROS_Cfam|ARS-UCD|bosTau|xenTro|Xenopus",
     re.I,
 )
 

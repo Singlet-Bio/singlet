@@ -1,17 +1,25 @@
 Package: singlet
 Type: Package
 Title: Access the Singlet Single-Cell Atlas
-Version: 1.1.0
+Version: 1.2.1
 Authors@R: c(
     person("Zach", "DeBruine", email = "zacharydebruine@gmail.com",
-           role = c("aut", "cre")))
-Description: Load, search, and analyze the Singlet single-cell genomics atlas
-    from R. Studies are distributed as self-contained 'singlet' bundles
-    addressed by Gene Expression Omnibus accession; the package downloads,
-    caches, and assembles them into 'SingleCellExperiment' or 'Seurat'
-    objects. A natural-language search interface maps free-text descriptions
-    to matching accessions. Sparse count matrices are decoded by a
-    header-only C++ reader shared with the Singlet Python package.
+           role = c("aut", "cre", "cph")),
+    person("Meta Platforms, Inc. and affiliates", role = "cph",
+           comment = "Zstandard library bundled in src/zstd"),
+    person("Yann", "Collet", role = c("ctb", "cph"),
+           comment = "Zstandard and xxHash, bundled in src/zstd"))
+Description: Load, search and analyze the Singlet single-cell RNA sequencing
+    atlas <https://singlet.bio> from R. Public studies from the Gene Expression
+    Omnibus are reprocessed from raw reads with one pipeline and published as
+    one '.s1' object per sample, listed by a manifest per study. The package
+    reads the manifests, fetches only the parts of the sample objects it needs
+    by HTTP range requests, caches them, and assembles count matrices, per-cell
+    labels (cell type, chromosomal sex, genetic ancestry) and quality-control
+    metrics into 'SingleCellExperiment' or 'Seurat' objects. It also searches
+    the atlas for studies or for cells by their labels and sample metadata.
+    Sparse count matrices are decoded by a header-only C++ reader shared with
+    the Singlet 'Python' package, using the bundled 'Zstandard' library.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: false
@@ -22,6 +30,7 @@ Imports:
     Matrix (>= 1.5),
     methods,
     jsonlite,
+    curl,
     utils,
     tools
 LinkingTo:
@@ -31,16 +40,14 @@ Suggests:
     SummarizedExperiment,
     S4Vectors,
     Seurat,
-    curl,
+    SeuratObject,
     digest,
     testthat (>= 3.1.7),
     withr,
     knitr,
     rmarkdown
 VignetteBuilder: knitr
-Additional_repositories: https://bioconductor.org/packages/release/bioc
-SystemRequirements: C++17, libzstd (>= 1.4)
-Biarch: FALSE
+SystemRequirements: C++17
 RoxygenNote: 7.3.3
-URL: https://github.com/Singlet-Bio/singlet
+URL: https://singlet.bio, https://github.com/Singlet-Bio/singlet
 BugReports: https://github.com/Singlet-Bio/singlet/issues

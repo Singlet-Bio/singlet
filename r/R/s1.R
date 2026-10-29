@@ -73,7 +73,7 @@
 }
 
 .s1_root <- function(cache_dir = NULL) {
-    d <- file.path(.singlet_cache_dir(cache_dir), "store")
+    d <- file.path(.singlet_cache_dir(cache_dir), "s1")  # same layout as the Python client (<cache>/s1)
     if (!dir.exists(d)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
     d
 }
@@ -120,6 +120,8 @@
         return(list(status = 304L, body = raw(0), etag = etag, total = NA_real_))
     }
     if (status == 404L) .s1_stop(sprintf("%s: HTTP 404", url), "singlet_s1_not_found")
+    # 410: a retired object (a legacy .singlet bundle, or a study Research Alpha withholds)
+    if (status == 410L) .s1_stop(.s1_no_study_message(sprintf("%s: HTTP 410 (gone)", url)), "singlet_s1_not_found")
     if (status == 403L) {
         .s1_stop(sprintf("%s: HTTP 403 (the data host rejects this client; check SINGLET_DATA_BASE)", url))
     }
@@ -270,14 +272,16 @@
 #' @param accession A GEO Series accession (\code{"GSE..."}).
 #' @param cache_dir Directory for the manifest and pack cache (default
 #'   \code{tools::R_user_dir("singlet", "cache")}, or \code{SINGLET_CACHE_DIR}).
-#' @param base Data host (default \code{SINGLET_DATA_BASE} or \url{https://data.singlet.bio}; a directory with the
+#' @param base Data host (default \code{SINGLET_DATA_BASE} or \code{https://data.singlet.bio}; a directory with the
 #'   server layout also works).
 #' @param force Re-check the manifest even if it was read less than a minute ago.
 #' @return A \code{singlet_study} object (a list with \code{gse}, \code{samples}, \code{gsm_ids}, \code{packs}, ...).
 #' @examples
-#' \dontrun{
-#' st <- singlet_study("GSE145370")
-#' st$gsm_ids
+#' \donttest{
+#' if (curl::has_internet()) {
+#'   st <- singlet_study("GSE307528", cache_dir = file.path(tempdir(), "singlet-example"))
+#'   st$gsm_ids
+#' }
 #' }
 #' @seealso \code{\link{load}}, \code{\link{singlet_cells}}
 #' @export
@@ -870,7 +874,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 }
 
 .s1_read_study <- function(study, gsms = NULL, cell_order = "legacy", threads = 0L, concurrency = 4L, whole_max = 48 * 1024^2,
-                           modalities = NULL, cell_type_level = 2L, cell_type_min_score = 0, include_unvalidated = FALSE) {
+                           modalities = NULL, cell_type_level = 2L, cell_type_min_score = 0, include_unvalidated = FALSE,
+                           sample_facts = TRUE) {
     .require_sce("load()")
     mods <- .s1_normalize_modalities(modalities)
     gene_axis <- any(mods %in% .s1_gene_modalities)
@@ -891,6 +896,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
     members <- .s1_members_for(mods)
     study_meta <- .s1_study_file(study, "study_meta.json")
     gsm_meta_map <- if (!is.null(study_meta)) study_meta$gsm_meta else NULL
+    facts <- if (isTRUE(sample_facts)) .sample_facts_for_study(study) else list()
 
     res <- lapply(targets, function(g) {
         tryCatch(
@@ -918,7 +924,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
         lab <- .s1_label_columns(cols, n, .s1_label_categories(study$samples[[g]]$members), cell_type_level,
                                  cell_type_min_score, include_unvalidated)
         geo <- .bundle_obs_frame(g, info, n)
-        coldata_rows[[g]] <- c(list(gsm_id = rep(g, n)), lab, as.list(geo[setdiff(names(geo), "gsm_id")]))
+        coldata_rows[[g]] <- c(list(gsm_id = rep(g, n)), lab, as.list(geo[setdiff(names(geo), "gsm_id")]),
+                               if (length(facts)) .sample_facts_cols(facts[[g]], n))
     }
     if (length(ok) == 0L) {
         detail <- if (length(skipped) > 0L) paste0(": ", .describe_skipped(skipped)) else ""
@@ -929,7 +936,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
                 call. = FALSE)
     }
     parts <- .s1_assemble(ok, mods, axis, n_genes, explicit = !is.null(modalities))
-    coldata <- .s1_label_rbind(unname(coldata_rows))
+    coldata <- .sample_facts_factorize(.s1_label_rbind(unname(coldata_rows)))
     rownames(coldata) <- parts$cn
     sce <- .s1_make_sce(parts, coldata)
     S4Vectors::metadata(sce)$manifest <- list(
@@ -970,19 +977,27 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @param cache_dir Cache directory (see \code{\link{load}}).
 #' @param cell_type_level,cell_type_min_score Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
 #'   it (default 0, none); see \code{\link{singlet_labels}}.
-#' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated) in \code{colData}.
+#' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).
+#' @param sample_facts Add the structured sample facts of the singlet.bio study API to \code{colData}: \code{tissue_type},
+#'   \code{cell_line}, \code{cell_line_cellosaurus_id}, \code{tumor_sample_type}, \code{disease},
+#'   \code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
+#'   GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
+#'   local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.
 #' @return A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
 #'   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
-#'   matrix) and the per-cell columns (\code{\link{singlet_labels}}).
+#'   matrix), the per-cell columns (\code{\link{singlet_labels}}) and the sample facts (\code{tissue_type}, \code{disease}, ...).
 #' @examples
-#' \dontrun{
-#' deep <- singlet_cells("GSE145370", n_umi_exon > 5000, samples = "GSM4317426")
+#' \donttest{
+#' if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+#'   deep <- singlet_cells("GSE307528", n_umi_exon > 500, samples = "GSM9226069",
+#'                         cache_dir = file.path(tempdir(), "singlet-example"))
+#' }
 #' }
 #' @seealso \code{\link{load}}, \code{\link{singlet_study}}
 #' @export
 singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layers = FALSE, max_cells = NULL,
                           as = c("sce", "seurat"), cache_dir = NULL, modalities = NULL, cell_type_level = 2L,
-                          cell_type_min_score = 0, include_unvalidated = FALSE) {
+                          cell_type_min_score = 0, include_unvalidated = FALSE, sample_facts = TRUE) {
     as <- match.arg(as)
     cond <- substitute(where)
     caller <- parent.frame()
@@ -1040,12 +1055,14 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     })
     parts <- .s1_assemble(ok, mods, axis, n_genes, explicit = !is.null(modalities))
     cn <- parts$cn
-    cd <- .s1_label_rbind(unname(lapply(ok, function(r) {
+    facts <- if (isTRUE(sample_facts)) .sample_facts_for_study(study) else list()
+    cd <- .sample_facts_factorize(.s1_label_rbind(unname(lapply(ok, function(r) {
         n <- length(r$sel)
         c(list(gsm_id = rep(r$gsm, n), matrix_column = r$sel + 1L),
           .s1_label_columns(r$cols, n, .s1_label_categories(study$samples[[r$gsm]]$members), cell_type_level,
-                            cell_type_min_score, include_unvalidated, columns))
-    })))
+                            cell_type_min_score, include_unvalidated, columns),
+          if (length(facts)) .sample_facts_cols(facts[[r$gsm]], n))
+    }))))
     rownames(cd) <- cn
     sce <- .s1_make_sce(parts, cd)
     S4Vectors::metadata(sce)$singlet_s1 <- list(gse = study$gse, rev = study$rev, modalities = mods)
@@ -1087,6 +1104,11 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
         file.rename(tmp, dest)
     }
     for (id in unique(unlist(study$packs))) if (!is.null(id) && nzchar(id)) tryCatch(.s1_pack(study, id), error = function(e) NULL)
+    # the pack index too, so a load of the local copy can resolve any pack without the network
+    ip <- file.path(.s1_pack_dir(study), "index.json")
+    if (!file.exists(ip) && identical(study$transport$kind, "http")) {
+        tryCatch(writeBin(.s1_get_ref(study$transport, "index.json")$body, ip), error = function(e) NULL)
+    }
     mp <- file.path(root, "m", paste0(study$gse, ".json"))
     dir.create(dirname(mp), recursive = TRUE, showWarnings = FALSE)
     if (!file.exists(mp)) writeLines(jsonlite::toJSON(study$doc, auto_unbox = TRUE, null = "null", digits = NA), mp)
@@ -1132,7 +1154,7 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     sce
 }
 
-# A local manifest, .../s1/m/<GSE>.json (its objects are read from the same store/ tree; DUAL: v2/m/ trees too).
+# A local manifest, .../s1/m/<GSE>.json (its objects are read from the same tree; DUAL: older v2/m/ trees too).
 .s1_load_manifest <- function(path, gsms = NULL, modalities = NULL, labels = list()) {
     p <- normalizePath(path, winslash = "/", mustWork = TRUE)
     if (basename(dirname(p)) != "m" || !(basename(dirname(dirname(p))) %in% c("s1", "store", "v2"))) {

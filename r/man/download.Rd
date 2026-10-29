@@ -31,7 +31,7 @@ The path to the local manifest (\code{.../s1/m/<GSE>.json}) or, with
 }
 \description{
 Mirrors a study's .s1 objects (the manifest, one \code{.s1} object per
-sample, and the vocabulary packs they use) from \url{https://data.singlet.bio}
+sample, and the vocabulary packs they use) from \code{https://data.singlet.bio}
 into the local cache, verifying each object against the manifest's sha256, and
 returns the path of the manifest. \code{\link{load}} then reads the local
 copies without the network. \code{singlet_download()} is the same function.
@@ -42,7 +42,7 @@ instead (and its path returned); use this when you want to reach individual
 modalities with \code{\link{singlet_read}} or \code{\link{singlet_raw_counts}}.
 
 
-Objects are fetched from \code{<base>/store/...}, where \code{<base>} is the
+Objects are fetched from \code{<base>/s1/...}, where \code{<base>} is the
 \code{SINGLET_DATA_BASE} environment variable (default
 \code{https://data.singlet.bio}; a value ending in \code{/data} is
 accepted). \code{GSM} accessions are resolved with the API named by
@@ -50,13 +50,12 @@ accepted). \code{GSM} accessions are resolved with the API named by
 answer is saved in \code{gsm_parents.tsv} in the cache directory.
 }
 \examples{
-\dontrun{
-path <- singlet_download("GSE138867")
-sce <- singlet_load(path)           # reads the local copies
-
-# The legacy bundle, for modality-level access
-b <- singlet_download("GSE138867", legacy = TRUE)
-singlet_modalities(b)
+\donttest{
+if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+  cache <- file.path(tempdir(), "singlet-example")
+  path <- singlet_download("GSE307528", cache_dir = cache)  # local manifest + sample objects
+  sce <- singlet_load(path, cache_dir = cache)              # reads the local copies
+}
 }
 
 }

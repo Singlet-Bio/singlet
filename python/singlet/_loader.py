@@ -698,6 +698,7 @@ def _load_one(
         elif suffix in (".s1", ".s2", ".json"):  # a .s1 sample object or study manifest on disk
             from singlet.s1 import client as _store
 
+            # _store.load reads atlas samples, manifests and one-matrix objects (singlet.write_s1 files) alike
             return _store.load(
                 path,
                 genes=genes,

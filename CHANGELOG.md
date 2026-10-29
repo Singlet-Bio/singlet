@@ -4,6 +4,48 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+- **Your own counts as `.s1`** ([docs/s1-own-data.md](docs/s1-own-data.md)).
+  - `singlet.write_s1(x, path, ...)` (AnnData, scipy sparse or dense, cells x genes) and `singlet::write_s1(x, path, ...)`
+    (dgCMatrix, matrix, SingleCellExperiment or Seurat, genes x cells) store an integer count matrix with its gene ids
+    and barcodes as a `.s1` sample object with one `counts` member.
+  - Both packages call the same C++ encoder and write the same bytes when built against one zstd; the shared fixture test
+    compares the container, header, digest and decoded counts and names across builds.
+  - `singlet.read_s1()` / `singlet::read_s1()` read it back exactly. `singlet.load()`, `singlet.s1.client.load()` and R
+    `load()` read any `.s1` file that holds one count matrix and no atlas members.
+- **`singlet.torch.S1Cells` / `S1Stream`: stream minibatches from one `.s1` file**, local or over HTTP Range requests.
+  - Batches are block-shuffled: `batch_size // block_size` blocks of contiguous cells, a new order each epoch, split
+    across DataLoader workers.
+  - Each run of blocks costs one range request and one multithreaded decode straight into a `torch.sparse_csr_tensor`.
+  - `order="native"` keeps the codec's gene order (`gene_order` gives the permutation once); `"canonical"` keeps the
+    source order.
+  - `block_batches()` is the workload of the `.s1` benchmark.
+
+## [1.3.0] — sample facts in the clients (not yet released)
+
+- **Structured sample facts in `obs` / `colData`.** `singlet.load()`, `Study.to_anndata()` and `singlet.cells()` / `Study.cells()`
+  (R: `load()` / `singlet_load()` and `singlet_cells()`, R package 1.2.1) add, per sample and repeated on its cells, the facts the
+  singlet.bio study API (`GET /api/gse/<GSE>`, `facts`) reads from the sample's own GEO record: `tissue_type` (CELLxGENE:
+  tissue, organoid, primary cell culture, cell line), `cell_line` + `cell_line_cellosaurus_id` (Cellosaurus), `tumor_sample_type`
+  (GDC/TCGA: tumor, primary tumor, metastatic, recurrent tumor, adjacent normal), `disease` + `disease_ontology_term_id` (MONDO,
+  or `normal` / PATO:0000461 for a healthy donor), `donor_status` and `sample_kind`. Categoricals (R: factors); a field the record
+  does not state is missing, never guessed. They are fetched once per study and process when the study is read over HTTP;
+  offline (`$SINGLET_OFFLINE`), for a local study or when the API cannot be reached the columns are absent and nothing fails.
+  `sample_facts=False` (R: `sample_facts = FALSE`) skips them. New module `singlet.s1.sample_facts`.
+
+## [1.2.0] — 2026-10-28: on PyPI as `singlet`
+
+The first release on PyPI: `pip install singlet`, then `import singlet`. Wheels for CPython 3.9 to 3.13 on Linux (x86_64,
+aarch64), macOS (Intel, Apple silicon) and Windows include the compiled `.1pz` / `.s1` codec (`singlet._pz`,
+`singlet._pz2`), so reading count matrices needs no compiler.
+
+- **Distribution renamed from `singlet-bio` to `singlet`**, the import name. Releases 0.1 to 0.5 of the PyPI `singlet`
+  project are an unrelated 2017 package (github.com/iosonofabio/singlet). Extras are `singlet[torch]`, `singlet[mcp]`,
+  and so on. A GitHub install made as `singlet-bio` should be uninstalled first (`pip uninstall singlet-bio`).
+- **`singlet.torch.AtlasCells`** streams atlas cells by HTTP range reads, with study-held-out splits (PR #68).
+- **Clients:** the legacy-bundle fallback is off since the legacy files were retired; studies not in the atlas get a clear
+  message (PR #64).
+- **Release policy:** per-cell mtDNA and doublet columns are stripped from `.s1` objects (PR #65).
+
 ## [1.1.0] — 2026-10-27: Research Alpha per-cell labels in the clients
 
 Users install from GitHub `main` (`pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"`,

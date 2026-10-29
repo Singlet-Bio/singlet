@@ -85,7 +85,7 @@ def check_schema(manifest: dict) -> None:
     if major != SUPPORTED_SCHEMA_MAJOR:
         raise BundleIntegrityError(
             f"this bundle uses schema {manifest.get('schema_version')!r}, but this version of singlet reads "
-            f"schema {SUPPORTED_SCHEMA_MAJOR}.x. Upgrade singlet (pip install -U singlet-bio) to read it."
+            f"schema {SUPPORTED_SCHEMA_MAJOR}.x. Upgrade singlet (pip install -U singlet) to read it."
         )
 
 

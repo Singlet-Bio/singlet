@@ -62,7 +62,7 @@ KEEP, DROP = "GSM9001", "GSM9002"
         ("mt/mt_events.1pz", "mtdna_alleles"),
         ("mt/donor0_mt_consensus.fa", "mtdna_alleles"),
         ("mt/donor0_mt_variants.vcf", "genotype"),  # a VCF either way: withheld
-        ("mt/mt_summary.tsv", None),
+        ("mt/mt_summary.tsv", "mtdna_alleles"),
         ("mt_heteroplasmy.1pz", "mtdna_alleles"),
         ("mt_variants.tsv", "mtdna_alleles"),
         ("mt_reference.fa", None),
@@ -89,6 +89,15 @@ KEEP, DROP = "GSM9001", "GSM9002"
 def test_omitted_layer(rel, layer):
     assert POL.omitted_layer(rel) == layer
     assert layer is None or layer in POL.OMITTED_LAYERS
+
+
+def test_doublet_columns_are_stripped_from_the_qc_table():
+    raw = b"barcode\tn_umi\tdoublet_score\tis_doublet\tpct_mt\nAAAC\t5\t0.12\tFalse\t1.5\n"
+    assert POL.strip_doublet_columns(raw) == b"barcode\tn_umi\tpct_mt\nAAAC\t5\t1.5\n"
+    crlf = b"barcode\tdoublet_score\r\nAAAC\t0.1\r\n"
+    assert POL.strip_doublet_columns(crlf) == b"barcode\r\nAAAC\r\n"
+    plain = b"barcode\tn_umi\nAAAC\t5\n"
+    assert POL.strip_doublet_columns(plain) is plain
 
 
 def test_policy_withholds_everything_the_restricted_rules_hold_back():
@@ -142,6 +151,7 @@ def _policy_bundle(tmp_path: Path, leak: bool = False) -> Path:
         "donor/donor_assignments.tsv": b"cell\tcell_status\n",
         "mt/mt_events.1pz": b"mt-events" * 10,
         "mt/mt_summary.tsv": b"cell\tn_events\n",
+        "cell_qc_metrics.tsv": b"barcode\tn_umi\tdoublet_score\tis_doublet\nAAAC\t5\t0.12\tFalse\n",
         "mt_variants.tsv": b"pos\tref\talt\n73\tA\tG\n",
         "ancestry_call.json": b'{"group": "EUR"}',
         "doublet_scores.tsv": b"cell\tscore\n",
@@ -283,11 +293,18 @@ def test_policy_transcode_drops_and_still_verifies(tmp_path, pol):
         "nonhost/nonhost_per_cell.tsv",
         "splice_psi.1pz",
         "sex_call.json",
+        "mt/mt_summary.tsv",
     ):
         assert r not in members, r
+    # per-cell mtDNA (mts_*) and doublet (qc_doublet_score) columns never reach the public cells table
+    from singlet.s1.sample import S1Sample
+
+    smp = S1Sample((out / man["samples"][0]["key"]).read_bytes())
+    t = smp.cells()
+    cols = list(t.names) if t is not None else []
+    assert not [c for c in cols if c.startswith(("mts_", "dbl_")) or "doublet" in c], cols
     for r in (
         "donor/donor_assignments.tsv",
-        "mt/mt_summary.tsv",
         "nonhost/nonhost_summary.json",
         "sj_counts.1pz",
         "exon_counts.1pz",
