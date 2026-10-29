@@ -349,8 +349,7 @@ How to read it:
   by construction. Counting every one of them as a miss, the identity over all 200,000 pairs of STAR's unique class cannot be below
   178,870 / (178,870 + 416) = 99.77% (ATAC) and 178,936 / (178,936 + 496) = 99.72% (spliced). That bound is arithmetic, not a measurement
   (STAR's class of those pairs was not looked up). Overflow is the lever for the 99.9% target as a pipeline figure.
-- Compared per pair and per mate: FLAG, chromosome, POS, the full CIGAR including soft clips (the N in the first base of mate 1 of the
-  first pair gives `1S49M` in the kernel and `50M` in STAR is **not** what happened: the comparison reports no difference, so both agree),
+- Compared per pair and per mate: FLAG, chromosome, POS, the full CIGAR including soft clips,
   PNEXT, NH, the tie set and the primary. Not compared: TLEN, MAPQ, SEQ/QUAL, AS and nM, records of an unmapped mate, BAM encoding (section 6, risk 9).
 - Throughput caveats: the kernel figure is kernel time only (CUDA events), after upload, no FASTQ parsing, no host lane, no output
   copy; STAR's figure includes everything and uses a different CPU (a Clipper GPU node). The two are not a like-for-like speedup, and
