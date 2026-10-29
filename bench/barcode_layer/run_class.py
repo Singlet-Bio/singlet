@@ -75,6 +75,62 @@ def pct(a, b):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
+from numba import njit  # noqa: E402
+
+
+@njit(cache=False)
+def resolve_pass_f64(cbs, quals, n_reads, cb_len, wl, counts, qtab, out_cell):
+    """Same as ref.resolve_pass but with the posterior in double (what a MATCH_CellRanger build, or a CPU port that forgot the float, would do)."""
+    cand = np.empty(3 * cb_len + 4, dtype=np.int64)
+    cq = np.empty(3 * cb_len + 4, dtype=np.int64)
+    for r in range(n_reads):
+        v, pos_n = ref._pack(cbs[r], 0, cb_len)
+        out_cell[r] = -1
+        if pos_n == -2:
+            continue
+        if pos_n == -1:
+            i = ref._bsearch(wl, v)
+            if i >= 0:
+                out_cell[r] = i
+                continue
+        n = 0
+        if pos_n >= 0:
+            shift = np.uint64(2 * (cb_len - 1 - pos_n))
+            for jj in range(4):
+                i = ref._bsearch(wl, v ^ (np.uint64(jj) << shift))
+                if i >= 0:
+                    cand[n] = i
+                    cq[n] = quals[r, pos_n]
+                    n += 1
+        else:
+            for ii in range(cb_len):
+                for jj in range(1, 4):
+                    i = ref._bsearch(wl, v ^ (np.uint64(jj) << np.uint64(2 * ii)))
+                    if i >= 0:
+                        cand[n] = i
+                        cq[n] = quals[r, cb_len - 1 - ii]
+                        n += 1
+        if n == 1:
+            out_cell[r] = cand[0]
+        elif n > 1:
+            ptot = 0.0
+            pmax = 0.0
+            best = -1
+            for k in range(n):
+                c = counts[cand[k]]
+                if c > 0:
+                    q = cq[k] - 33
+                    if q > 33:
+                        q = 33
+                    pin = np.float64(c) * qtab[q]
+                    ptot = ptot + pin
+                    if pin > pmax:
+                        best = cand[k]
+                        pmax = pin
+            if ptot > 0.0 and pmax >= 0.975 * ptot:
+                out_cell[r] = best
+
+
 def umi_check_arrays(umm: np.ndarray):
     """convertCheckUMI over a (n, L) base matrix: -23 any N, -24 homopolymer of the UMI length, else 0."""
     c = io._CODE2[umm]
@@ -123,6 +179,9 @@ def compare_simple(cfg, work, wl_path, args, rep):
     r_cell[okidx] = cell_ok
     r_code[okidx] = code_ok
     rep["ref_numba_seconds"] = round(time.time() - t, 1)
+    d_cell = np.empty(len(okidx), dtype=np.int64)
+    resolve_pass_f64(cb_codes[okidx], cbq[okidx].astype(np.int64), len(okidx), cbl, keys, hist, ref.qual_table(), d_cell)
+    rep["double_precision_posterior_differs_on_reads"] = int((d_cell != cell_ok).sum())
     same_cell = k_cell == r_cell
     same_st = k_st == r_code
     rep["kernel_vs_numba"] = {"reads": n, "cell_identical": int(same_cell.sum()), "status_identical": int(same_st.sum()),
