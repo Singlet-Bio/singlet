@@ -979,7 +979,8 @@ Format: a binary SoA plus a JSON header. 10 M distinct reads per dataset (~5 GB)
 | **inputs** | dumped PC arrays → windows and transcripts |
 | **kernel** | the stitch pipeline of §4.3 (thread per window, shared-memory state; overflow kernel) |
 | **metric** | reads/s by class; identity of transcripts (exons, score, nMM, junction motifs and annotations, multimapper order, primary) |
-| **pass** | 100% identical on ≥ 30 M distinct reads across the 3 datasets; ≥ 100 M single-window reads/s |
+| **pass** (until 2026-10-29) | 100% identical on ≥ 30 M distinct reads across the 3 datasets; ≥ 100 M single-window reads/s |
+| **pass** (from 2026-10-29, Zach's decision) | **no regression against production STAR** on every pre-registered real-truth measure M1-M7 of the "Increase Mapping Rate" work (singlet-agents `docs/gpu-align/GROUND_TRUTH_ACCURACY_PLAN.md`, `bench/ground-truth/PREREGISTRATION.md`; truth sets: molecule-matched PBMC-E, MuSC, CHM13, WTC11 + SIRV junctions, human-mouse mixtures), scored with the frozen harness and tolerances; and the throughput gate. Byte identity to STAR is no longer required, so the aligner may change algorithm (batched DP over candidate windows, one alignment per distinct sequence, junction-aware or k-mer seeding). Each change ships with its M1-M7 scores. Nothing below STAR on any registered measure is accepted |
 
 ### M6 — dedup, count sort and UMI collapse (A8, determinism)
 
@@ -1123,6 +1124,17 @@ The phases follow the brief's table (§6), filled in from this exploration:
 ---
 
 ## 12. Measured results (M1, M2, M10, M3, M4, M6, M8, host timers; round 2: M5, GPU pileup, end to end, cost)
+
+**Correctness contract, from 2026-10-29 (Zach).** The results below were measured against the old contract (alignment byte-identical to STAR,
+§12.12). From now on the two halves of the engine have different contracts:
+- **Alignment** (seed search, windows, stitching, extension, multimapper selection: M3-M5): no regression against production STAR on the
+  pre-registered real-truth measures M1-M7 of the "Increase Mapping Rate" work, with the frozen scoring harness and tolerances. A
+  different algorithm is acceptable if it shows no regression on any registered measure. The harness and tolerances must be frozen before
+  any aligner change is accepted (that session's phase-3 STAR census is not complete yet).
+- **Counting** (dedup, UMI collapse, pileup, reducers, cell calling: M6, §12.13 onwards): unchanged. It stays exact against the CPU
+  engine under the order-free rules R1-R10, given the same alignments.
+- Scope unchanged: single-GPU jobs; no multi-GPU or whole-node partitioning.
+The 100% identity results in §12.12 still hold for the current STAR port, which is the reference any new aligner is scored against.
 
 Run on Clipper on 2026-10-27, after §9 was written (§12.5 onwards: the second pass, same day). Raw data and scripts:
 `bench/gpu/results/` and `bench/gpu/jobs/*.sbatch`, plus per-benchmark folders `bench/gpu/{m3m4,m6,m8,host}/` and the STAR dump
