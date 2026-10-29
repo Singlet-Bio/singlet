@@ -200,6 +200,7 @@ void run_case(const std::string& dir, bool parallel, bool directional) {
     cfg.count_sj = false;
     cfg.aim_ancestry = false;
     cfg.count_vdj = false;
+    cfg.intron_rules = 0;  // these cases test the molecule labels of the unrestricted pileup; rules have their own tests
     singlet::PileupEngine e(cfg);
     if (!e.load_references()) { CHECK(false, tag + ": load_references"); return; }
     auto st = parallel ? e.run_parallel(dir + "/t.bam", 2) : e.run(dir + "/t.bam");
