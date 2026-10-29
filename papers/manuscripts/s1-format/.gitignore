@@ -1,0 +1,10 @@
+# benchmark data and run outputs (large; produced on the cluster)
+data/
+bench/results/
+bench/logs/
+tmp/
+# built C++ decode benchmark
+bench/cpp/decode_bench
+__pycache__/
+*.pyc
+main.pdf
