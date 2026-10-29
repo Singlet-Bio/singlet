@@ -1,0 +1,2838 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "gex-counts",
+ "title": "Gene counts of the published atlas vs the authors' Cell Ranger matrices (Research Alpha)",
+ "engine": "alpha (published atlas)",
+ "dataset_scope": "Research Alpha: samples as currently published on singlet.bio (atlas engine v0.3.0, first SRA run, first 30M reads), stratified human/mouse x 10x 3' v2 / 3' v3 / 5' / nuclei x small/large, restricted to samples whose GEO record holds the authors' filtered matrix",
+ "status": "final",
+ "generated_at": "2026-10-26T15:29:04+00:00",
+ "owner": "alpha-bench",
+ "singlet": {
+  "version": "0.3.0 (Research Alpha atlas engine)",
+  "commit": "8e1803ba5ac9cb8038e666f06df446c9a85550b0",
+  "branch": "v0.3.0-pilot-freeze",
+  "binary": "singlet (campaign build, cellarium full_campaign)"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "0.3.0",
+   "role": "singlet",
+   "params": "published Research Alpha bundle: singlet download --max-reads 30000000 (first SRR); singlet --threads 4 --pipeline --output-format 1pz; cell calls = STARsolo CellRanger2.2 knee"
+  },
+  {
+   "name": "cellranger-authors",
+   "version": "as deposited (Cell Ranger 2-8, per study)",
+   "role": "truth",
+   "url": "https://ftp.ncbi.nlm.nih.gov/geo/samples/ (GEO sample supplementary files; exact files in alpha_samples.csv)",
+   "params": "filtered feature-barcode matrix as deposited by the authors"
+  },
+  {
+   "name": "authors-thinning-noise-floor",
+   "version": "n/a",
+   "role": "truth",
+   "params": "two independent binomial thinnings of the authors' per-cell profile to the shared depth; their correlation is the best any tool can reach at that depth"
+  }
+ ],
+ "code": [
+  {
+   "path": "bench/alpha/select_samples.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/81f0a6801d9d8c93d5cc647c6e41e2d3bb4ed0f8/bench/alpha/select_samples.py",
+   "role": "harness"
+  },
+  {
+   "path": "bench/alpha/alpha_compare.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/81f0a6801d9d8c93d5cc647c6e41e2d3bb4ed0f8/bench/alpha/alpha_compare.py",
+   "role": "metric"
+  },
+  {
+   "path": "bench/alpha/aggregate.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/81f0a6801d9d8c93d5cc647c6e41e2d3bb4ed0f8/bench/alpha/aggregate.py",
+   "role": "metric"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/alpha/aggregate.py",
+  "function": "compute",
+  "laptop_minutes": 1,
+  "clipper_command": "sbatch --array=0-158%12 bench/alpha/alpha_compare.sbatch"
+ },
+ "datasets": [
+  {
+   "id": "alpha_human_3p_v2_small",
+   "title": "Research Alpha samples: human, 3p_v2, small",
+   "accessions": {
+    "gsm": [
+     "GSM4634067",
+     "GSM4647123",
+     "GSM5005051",
+     "GSM5017037",
+     "GSM5870063",
+     "GSM7910989",
+     "GSM8002529",
+     "GSM8730312",
+     "GSM8751474"
+    ],
+    "other": [
+     "GSE153099",
+     "GSE153559",
+     "GSE164241",
+     "GSE164690",
+     "GSE196296",
+     "GSE248288",
+     "GSE252524",
+     "GSE286827",
+     "GSE287791"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 36753,
+   "notes": "9 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_3p_v2_large",
+   "title": "Research Alpha samples: human, 3p_v2, large",
+   "accessions": {
+    "gsm": [
+     "GSM4006845",
+     "GSM4337069",
+     "GSM4568683",
+     "GSM4848250",
+     "GSM4955761",
+     "GSM5519466",
+     "GSM6049610",
+     "GSM8502131",
+     "GSM8996539",
+     "GSM9032631"
+    ],
+    "other": [
+     "GSE135357",
+     "GSE145838",
+     "GSE151214",
+     "GSE159843",
+     "GSE162632",
+     "GSE182158",
+     "GSE201047",
+     "GSE276563",
+     "GSE297676",
+     "GSE299082"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 66958,
+   "notes": "10 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_3p_v3_small",
+   "title": "Research Alpha samples: human, 3p_v3, small",
+   "accessions": {
+    "gsm": [
+     "GSM5057687",
+     "GSM5578176",
+     "GSM6071622",
+     "GSM7500412",
+     "GSM8101603",
+     "GSM8422222",
+     "GSM8825778",
+     "GSM9228772"
+    ],
+    "other": [
+     "GSE165903",
+     "GSE184117",
+     "GSE201795",
+     "GSE235326",
+     "GSE256493",
+     "GSE273127",
+     "GSE290927",
+     "GSE307655"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 28495,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_3p_v3_large",
+   "title": "Research Alpha samples: human, 3p_v3, large",
+   "accessions": {
+    "gsm": [
+     "GSM4405014",
+     "GSM4980292",
+     "GSM6094669",
+     "GSM8067267",
+     "GSM8118468",
+     "GSM8306709",
+     "GSM8798777",
+     "GSM8899428",
+     "GSM8945748",
+     "GSM9176947"
+    ],
+    "other": [
+     "GSE135253",
+     "GSE163505",
+     "GSE202109",
+     "GSE255245",
+     "GSE260499",
+     "GSE269125",
+     "GSE289789",
+     "GSE294147",
+     "GSE295330",
+     "GSE305423"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 111513,
+   "notes": "10 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_5p_small",
+   "title": "Research Alpha samples: human, 5p, small",
+   "accessions": {
+    "gsm": [
+     "GSM5019530",
+     "GSM5261283",
+     "GSM6090513",
+     "GSM7901263",
+     "GSM7927979",
+     "GSM8564830",
+     "GSM8770264",
+     "GSM8901884",
+     "GSM9145722"
+    ],
+    "other": [
+     "GSE164789",
+     "GSE173165",
+     "GSE202052",
+     "GSE245131",
+     "GSE247824",
+     "GSE279219",
+     "GSE288581",
+     "GSE294296",
+     "GSE304243"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 26588,
+   "notes": "9 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_5p_large",
+   "title": "Research Alpha samples: human, 5p, large",
+   "accessions": {
+    "gsm": [
+     "GSM4670203",
+     "GSM5731071",
+     "GSM8207597",
+     "GSM8385341",
+     "GSM8416333",
+     "GSM8488932",
+     "GSM8608358",
+     "GSM8791443",
+     "GSM8800515",
+     "GSM9005890"
+    ],
+    "other": [
+     "GSE154386",
+     "GSE190760",
+     "GSE263931",
+     "GSE271789",
+     "GSE272993",
+     "GSE275981",
+     "GSE280982",
+     "GSE289435",
+     "GSE289864",
+     "GSE298047"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 138688,
+   "notes": "10 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_nuclei_small",
+   "title": "Research Alpha samples: human, nuclei, small",
+   "accessions": {
+    "gsm": [
+     "GSM4546547",
+     "GSM6061710",
+     "GSM6911567",
+     "GSM7889698",
+     "GSM8016257",
+     "GSM8213057",
+     "GSM8453381",
+     "GSM8619164"
+    ],
+    "other": [
+     "GSE150311",
+     "GSE201349",
+     "GSE222007",
+     "GSE247416",
+     "GSE253200",
+     "GSE264154",
+     "GSE274595",
+     "GSE281356"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 33117,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_nuclei_large",
+   "title": "Research Alpha samples: human, nuclei, large",
+   "accessions": {
+    "gsm": [
+     "GSM4080400",
+     "GSM4433529",
+     "GSM8013368",
+     "GSM8117730",
+     "GSM8281752",
+     "GSM9127972",
+     "GSM9210281",
+     "GSM9347611"
+    ],
+    "other": [
+     "GSE136719",
+     "GSE147564",
+     "GSE253075",
+     "GSE260461",
+     "GSE267932",
+     "GSE303481",
+     "GSE306825",
+     "GSE312510"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 211177,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_3p_v2_small",
+   "title": "Research Alpha samples: mouse, 3p_v2, small",
+   "accessions": {
+    "gsm": [
+     "GSM3874365",
+     "GSM4770465",
+     "GSM5257094",
+     "GSM5651435",
+     "GSM5883812",
+     "GSM7068147",
+     "GSM7745731",
+     "GSM8507255",
+     "GSM8567238"
+    ],
+    "other": [
+     "GSE132543",
+     "GSE157561",
+     "GSE172455",
+     "GSE186419",
+     "GSE196426",
+     "GSE226207",
+     "GSE241928",
+     "GSE276868",
+     "GSE279315"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 25743,
+   "notes": "9 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_3p_v2_large",
+   "title": "Research Alpha samples: mouse, 3p_v2, large",
+   "accessions": {
+    "gsm": [
+     "GSM3934452",
+     "GSM4103033",
+     "GSM4489569",
+     "GSM5410928",
+     "GSM5678488",
+     "GSM7158694",
+     "GSM8192612",
+     "GSM8452582",
+     "GSM9293409"
+    ],
+    "other": [
+     "GSE133531",
+     "GSE138222",
+     "GSE149068",
+     "GSE179165",
+     "GSE188387",
+     "GSE229311",
+     "GSE263461",
+     "GSE274545",
+     "GSE310290"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 63115,
+   "notes": "9 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_3p_v3_small",
+   "title": "Research Alpha samples: mouse, 3p_v3, small",
+   "accessions": {
+    "gsm": [
+     "GSM5025928",
+     "GSM5353268",
+     "GSM6307664",
+     "GSM6758185",
+     "GSM7660705",
+     "GSM8023983",
+     "GSM8123674",
+     "GSM8703560"
+    ],
+    "other": [
+     "GSE165092",
+     "GSE176032",
+     "GSE207687",
+     "GSE218884",
+     "GSE238223",
+     "GSE253602",
+     "GSE260749",
+     "GSE285504"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 35551,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_3p_v3_large",
+   "title": "Research Alpha samples: mouse, 3p_v3, large",
+   "accessions": {
+    "gsm": [
+     "GSM5556429",
+     "GSM7049154",
+     "GSM7720305",
+     "GSM7967330",
+     "GSM8286701",
+     "GSM8314324",
+     "GSM8316002",
+     "GSM8785673",
+     "GSM8899164",
+     "GSM9131348"
+    ],
+    "other": [
+     "GSE183368",
+     "GSE196778",
+     "GSE241268",
+     "GSE249931",
+     "GSE268163",
+     "GSE269395",
+     "GSE269455",
+     "GSE289171",
+     "GSE294130",
+     "GSE303604"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 110762,
+   "notes": "10 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_5p_small",
+   "title": "Research Alpha samples: mouse, 5p, small",
+   "accessions": {
+    "gsm": [
+     "GSM5472162",
+     "GSM8009873",
+     "GSM8011199",
+     "GSM8436481",
+     "GSM8554632",
+     "GSM9059662"
+    ],
+    "other": [
+     "GSE180859",
+     "GSE252891",
+     "GSE252964",
+     "GSE273752",
+     "GSE278765",
+     "GSE300404"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 22593,
+   "notes": "6 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_5p_large",
+   "title": "Research Alpha samples: mouse, 5p, large",
+   "accessions": {
+    "gsm": [
+     "GSM5516045",
+     "GSM6670824",
+     "GSM6935009",
+     "GSM8180901",
+     "GSM8252246",
+     "GSM8314416",
+     "GSM8499134",
+     "GSM8586887"
+    ],
+    "other": [
+     "GSE182005",
+     "GSE216347",
+     "GSE222901",
+     "GSE251735",
+     "GSE262874",
+     "GSE266597",
+     "GSE269399",
+     "GSE280067"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 93855,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_nuclei_small",
+   "title": "Research Alpha samples: mouse, nuclei, small",
+   "accessions": {
+    "gsm": [
+     "GSM4186883",
+     "GSM4460590",
+     "GSM7747722",
+     "GSM8606605",
+     "GSM8970753",
+     "GSM9140838"
+    ],
+    "other": [
+     "GSE140811",
+     "GSE148339",
+     "GSE241800",
+     "GSE280857",
+     "GSE296454",
+     "GSE304010"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 18672,
+   "notes": "6 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_nuclei_large",
+   "title": "Research Alpha samples: mouse, nuclei, large",
+   "accessions": {
+    "gsm": [
+     "GSM6672395",
+     "GSM6777767",
+     "GSM7979977",
+     "GSM8713752",
+     "GSM8979866",
+     "GSM9263480",
+     "GSM9922113"
+    ],
+    "other": [
+     "GSE216431",
+     "GSE219201",
+     "GSE250505",
+     "GSE285948",
+     "GSE296919",
+     "GSE309236",
+     "GSE342034"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 104318,
+   "notes": "7 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5651,
+    "ci": [
+     0.5338,
+     0.595
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0033
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0186)"
+   },
+   "notes": "median over 135 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.6023,
+     "ci": [
+      0.5608,
+      0.6226
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.7529,
+    "ci": [
+     0.6608,
+     0.8245
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0035
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.016)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.7715,
+     "ci": [
+      0.6722,
+      0.8412
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6003,
+    "ci": [
+     0.5541,
+     0.6858
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0087
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0168)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.6346,
+     "ci": [
+      0.5841,
+      0.6949
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6657,
+    "ci": [
+     0.4812,
+     0.7206
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0043
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0118)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.6784,
+     "ci": [
+      0.5841,
+      0.7363
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5481,
+    "ci": [
+     0.4703,
+     0.5957
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0025
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0101)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.5559,
+     "ci": [
+      0.4809,
+      0.6039
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_human_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6961,
+    "ci": [
+     0.6442,
+     0.7753
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0056
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0142)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.7218,
+     "ci": [
+      0.6464,
+      0.7877
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_human_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.469,
+    "ci": [
+     0.4205,
+     0.5657
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0071
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0138)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.4891,
+     "ci": [
+      0.4617,
+      0.58
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_human_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5277,
+    "ci": [
+     0.4576,
+     0.6513
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0059
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0149)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.5426,
+     "ci": [
+      0.4853,
+      0.6703
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_human_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.2856,
+    "ci": [
+     0.2389,
+     0.3714
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0043
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0075)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.3057,
+     "ci": [
+      0.2709,
+      0.4018
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.676,
+    "ci": [
+     0.577,
+     0.7201
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.009
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.034)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.7036,
+     "ci": [
+      0.6126,
+      0.7658
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5175,
+    "ci": [
+     0.3122,
+     0.574
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0223
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0508)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.5319,
+     "ci": [
+      0.3758,
+      0.6226
+     ]
+    }
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6054,
+    "ci": [
+     0.5712,
+     0.6586
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0082
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0447)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.6543,
+     "ci": [
+      0.6121,
+      0.6987
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4411,
+    "ci": [
+     0.3487,
+     0.5437
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0264
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0498)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.5148,
+     "ci": [
+      0.4352,
+      0.5813
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_mouse_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5798,
+    "ci": [
+     0.5238,
+     0.6895
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0245
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0293)"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.6173,
+     "ci": [
+      0.548,
+      0.7505
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_mouse_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4738,
+    "ci": [
+     0.4076,
+     0.5536
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0135
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0309)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.5149,
+     "ci": [
+      0.4495,
+      0.5758
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_mouse_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6077,
+    "ci": [
+     0.5166,
+     0.6721
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0087
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0177)"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.6272,
+     "ci": [
+      0.5291,
+      0.6988
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "cell_corr_depth_matched",
+   "name": "Per-cell gene correlation at equal depth (log1p Pearson)",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "alpha_mouse_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.3903,
+    "ci": [
+     0.289,
+     0.4079
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0095
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the median per-sample difference (0.0201)"
+   },
+   "notes": "median over 7 samples; CI = bootstrap over samples",
+   "competitors": [
+    {
+     "tool": "authors-thinning-noise-floor",
+     "value": 0.4104,
+     "ci": [
+      0.3226,
+      0.4305
+     ]
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "pooled",
+   "direction": "none",
+   "singlet": {
+    "value": 0.26,
+    "ci": [
+     0.2302,
+     0.3047
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 135 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v2_small",
+   "direction": "none",
+   "singlet": {
+    "value": 0.5374,
+    "ci": [
+     0.3256,
+     0.8031
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v2_large",
+   "direction": "none",
+   "singlet": {
+    "value": 0.3089,
+    "ci": [
+     0.2084,
+     0.572
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v3_small",
+   "direction": "none",
+   "singlet": {
+    "value": 0.2691,
+    "ci": [
+     0.2052,
+     0.4071
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v3_large",
+   "direction": "none",
+   "singlet": {
+    "value": 0.13,
+    "ci": [
+     0.084,
+     0.1575
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_human_5p_small",
+   "direction": "none",
+   "singlet": {
+    "value": 0.7643,
+    "ci": [
+     0.3047,
+     0.8605
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_human_5p_large",
+   "direction": "none",
+   "singlet": {
+    "value": 0.1755,
+    "ci": [
+     0.1164,
+     0.2202
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_human_nuclei_small",
+   "direction": "none",
+   "singlet": {
+    "value": 0.3432,
+    "ci": [
+     0.2227,
+     0.5059
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_human_nuclei_large",
+   "direction": "none",
+   "singlet": {
+    "value": 0.2661,
+    "ci": [
+     0.1435,
+     0.3828
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v2_small",
+   "direction": "none",
+   "singlet": {
+    "value": 0.4935,
+    "ci": [
+     0.3622,
+     0.7617
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v2_large",
+   "direction": "none",
+   "singlet": {
+    "value": 0.212,
+    "ci": [
+     0.151,
+     0.2988
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v3_small",
+   "direction": "none",
+   "singlet": {
+    "value": 0.3559,
+    "ci": [
+     0.2232,
+     0.5512
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v3_large",
+   "direction": "none",
+   "singlet": {
+    "value": 0.1511,
+    "ci": [
+     0.1164,
+     0.2083
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_mouse_5p_small",
+   "direction": "none",
+   "singlet": {
+    "value": 0.3452,
+    "ci": [
+     0.2414,
+     0.6318
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_mouse_5p_large",
+   "direction": "none",
+   "singlet": {
+    "value": 0.2861,
+    "ci": [
+     0.1563,
+     0.3629
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_mouse_nuclei_small",
+   "direction": "none",
+   "singlet": {
+    "value": 0.5139,
+    "ci": [
+     0.2968,
+     0.6845
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio",
+   "name": "UMIs per cell, Singlet / authors (matched layer, shared cells)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "alpha_mouse_nuclei_large",
+   "direction": "none",
+   "singlet": {
+    "value": 0.1838,
+    "ci": [
+     0.1059,
+     0.21
+    ]
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -10% to +5% of 10x's published Cell Ranger matrices (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 7 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.952,
+    "ci": [
+     0.9493,
+     0.9575
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 135 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9655,
+    "ci": [
+     0.9589,
+     0.9702
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9461,
+    "ci": [
+     0.9272,
+     0.9588
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9627,
+    "ci": [
+     0.9582,
+     0.9669
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_human_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9469,
+    "ci": [
+     0.9423,
+     0.954
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_human_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9655,
+    "ci": [
+     0.9487,
+     0.9737
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_human_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.936,
+    "ci": [
+     0.9231,
+     0.949
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_human_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9668,
+    "ci": [
+     0.9238,
+     0.9745
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_human_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9396,
+    "ci": [
+     0.9163,
+     0.9497
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9661,
+    "ci": [
+     0.9461,
+     0.97
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9501,
+    "ci": [
+     0.9481,
+     0.9612
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9598,
+    "ci": [
+     0.9546,
+     0.969
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_mouse_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9515,
+    "ci": [
+     0.9317,
+     0.955
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_mouse_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.957,
+    "ci": [
+     0.9382,
+     0.969
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_mouse_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9503,
+    "ci": [
+     0.9456,
+     0.9598
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_mouse_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9448,
+    "ci": [
+     0.9293,
+     0.9661
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "pseudobulk_spearman",
+   "name": "Pseudobulk Spearman rho over common genes",
+   "unit": "rho",
+   "category": "agreement",
+   "dataset": "alpha_mouse_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9512,
+    "ci": [
+     0.9468,
+     0.9526
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "on identical reads Singlet's exonic pseudobulk vs published Cell Ranger reaches rho 0.96-0.98 (docs/pipeline-validation.md 4.3)"
+   },
+   "notes": "median over 7 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.0996,
+    "ci": [
+     0.0869,
+     0.1196
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 135 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.1874,
+    "ci": [
+     0.0885,
+     0.2318
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.0997,
+    "ci": [
+     0.0726,
+     0.1902
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.1395,
+    "ci": [
+     0.0767,
+     0.1611
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.078,
+    "ci": [
+     0.0416,
+     0.0977
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.1813,
+    "ci": [
+     0.082,
+     0.2542
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.0627,
+    "ci": [
+     0.0328,
+     0.0795
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.1356,
+    "ci": [
+     0.0529,
+     0.2113
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.1341,
+    "ci": [
+     0.0612,
+     0.2035
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.1383,
+    "ci": [
+     0.0658,
+     0.2258
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.1139,
+    "ci": [
+     0.0799,
+     0.1754
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.1083,
+    "ci": [
+     0.0651,
+     0.1935
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.0673,
+    "ci": [
+     0.0478,
+     0.14
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.1377,
+    "ci": [
+     0.0812,
+     0.1632
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.0899,
+    "ci": [
+     0.0465,
+     0.1518
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.0786,
+    "ci": [
+     0.056,
+     0.2813
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads available in SRA",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.09,
+    "ci": [
+     0.0564,
+     0.1602
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 7 samples; CI = bootstrap over samples",
+   "pass": "na"
+  }
+ ],
+ "conclusion": "At equal depth the published atlas's per-cell profiles match the authors' Cell Ranger matrices almost to the sampling-noise floor (median r 0.565 vs floor 0.602; pseudobulk rho 0.952, 135 samples). Absolute counts are low: a median 0.26x the authors' UMIs per cell (95% CI 0.23-0.30), because the atlas used a median 10% of each sample's SRA reads.",
+ "methods": "**Samples.** Research Alpha = samples in published bundles of studies that are not withheld, minus the samples excluded by the Alpha policy (wrong strand, non-RNA library, empty matrix), in studies downloadable now, usable and QC tier 0 (47,702 samples). From these, candidates were drawn at random (seed 7, one per study) for human and mouse, labelled 10x 3' v2, 3' v3 or 5', and kept when the GEO sample record holds a filtered matrix (.h5 or matrix/barcodes/features, no 'raw' in the name). Nuclei were recognised from the GEO text. Up to 10 samples per stratum (species x chemistry x Singlet called cells <3,000 or >=3,000), one per study.\n\n**Singlet** values are read from the bundles exactly as data.singlet.bio serves them (exon_counts, intron_counts, cell_calls, summary.json), by HTTP ranges. **Truth** is the authors' deposited Cell Ranger matrix. Barcodes are matched on the 16-mer; genes on Ensembl ID (symbol when the deposit has none).\n\n**Metrics.** Recovery = Singlet-called & author / author; precision = Singlet-called & author / Singlet-called. On cells both called: UMIs per cell (Singlet / author), per-cell gene correlation (log1p Pearson, up to 2,000 cells) after thinning both profiles of each cell to half the smaller total, against a noise floor of two independent thinnings of the authors' profile; pseudobulk Spearman over common genes. Singlet's exon or exon+intron layer is used, whichever fits the authors' pseudobulk better (Cell Ranger <7 counts exons only). reads_used / reads_available = Singlet's input reads over all SRA spots of the sample (NCBI runinfo). Values are medians over samples with bootstrap 95% CIs, pooled and per stratum.",
+ "caveats": [
+  "24 of 159 picked samples were not scored: 16 author matrix looks unfiltered (raw barcodes); 5 singlet fetch; 2 author barcodes do not match Singlet's (renamed, multiplexed or different library); 1 author fetch",
+  "Samples were limited to those whose GEO sample record holds a Cell Ranger-style filtered matrix, which favours newer, better-documented studies; the 16 strata are equally weighted, not weighted by their share of the atlas.",
+  "The authors' matrices are not uniform truth: Cell Ranger versions differ (exon-only before 7.0, introns after), and some authors filtered cells further (QC, doublets) before depositing, which lowers recovery and is not Singlet's error. The Singlet layer compared (exon or exon+intron) is chosen per sample from which one fits the authors' pseudobulk better.",
+  "Nuclei and 5' strata were assigned from GEO text (regular expressions on the sample record); some may be mislabelled.",
+  "Mouse samples were not screened for wrong-strand counting before Alpha; wrong_strand_frac is reported per sample.",
+  "reads_available counts every run of the sample in SRA (NCBI runinfo), including non-GEX runs of the same GSM where they exist; it overstates the GEX reads for multi-library samples.",
+  "The depth-matched correlation removes depth, not counting rules; it says the profiles agree at the atlas's depth, not that the atlas has the authors' depth. Both profiles are thinned to half the smaller per-cell total, so the correlations are lower than at full depth.",
+  "Published samples come from three engine builds (git 8e1803ba: 79, 37e7cbdf: 75, unknown: 5 in this set); singlet.commit names the build most samples report."
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "pooled",
+   "wall_s": 561.4024999999999,
+   "max_rss_gb": 48.6173,
+   "threads": 4,
+   "cpu_h": 0.624,
+   "notes": "median over the Alpha public samples of wall_seconds and peak_rss_gb in their summary.json (campaign, 4 threads)"
+  }
+ ],
+ "figures": [
+  {
+   "id": "umi_ratio_vs_reads_used",
+   "title": "UMI ratio to the authors rises with the share of reads used",
+   "kind": "scatter",
+   "x": {
+    "label": "reads used / reads available",
+    "scale": "log"
+   },
+   "y": {
+    "label": "UMIs per cell, Singlet / authors",
+    "scale": "log"
+   },
+   "series": [
+    {
+     "name": "sample",
+     "tool": "singlet",
+     "x": [
+      0.1558,
+      0.0799,
+      0.4631,
+      0.0377,
+      0.1754,
+      0.0491,
+      0.0866,
+      0.0416,
+      0.1747,
+      0.0628,
+      0.0801,
+      0.2415,
+      0.2165,
+      0.0885,
+      0.1874,
+      0.0565,
+      0.3757,
+      0.0786,
+      0.1067,
+      0.0618,
+      0.2318,
+      0.1107,
+      0.082,
+      0.0651,
+      0.1611,
+      0.0558,
+      0.1814,
+      0.1752,
+      0.121,
+      0.1739,
+      0.2902,
+      0.0304,
+      0.1572,
+      0.0294,
+      0.1128,
+      0.0497,
+      0.0289,
+      0.0282,
+      0.2258,
+      0.1743,
+      0.1822,
+      0.3345,
+      0.0677,
+      0.1242,
+      0.594,
+      0.0792,
+      0.109,
+      0.097,
+      0.1717,
+      0.1838,
+      0.0419,
+      0.0515,
+      0.1284,
+      0.2086,
+      0.0767,
+      0.0821,
+      0.044,
+      0.1526,
+      0.0864,
+      0.0891,
+      0.1813,
+      0.2241,
+      0.1222,
+      0.14,
+      0.077,
+      0.1974,
+      0.1166,
+      0.131,
+      0.2035,
+      0.2113,
+      0.211,
+      0.1016,
+      0.1528,
+      0.0495,
+      0.0356,
+      0.0453,
+      0.0914,
+      0.1139,
+      0.0757,
+      0.0563,
+      0.0465,
+      0.2337,
+      0.1489,
+      0.0765,
+      0.0423,
+      0.1094,
+      0.0869,
+      0.0702,
+      0.0328,
+      0.1456,
+      0.1524,
+      0.0532,
+      0.0514,
+      0.0432,
+      0.0884,
+      0.0927,
+      0.1383,
+      0.1444,
+      0.1523,
+      0.0658,
+      0.1518,
+      0.4554,
+      0.0299,
+      0.0495,
+      0.1196,
+      0.09,
+      0.0685,
+      0.2463,
+      0.2542,
+      0.0549,
+      0.0888,
+      0.0899,
+      0.1081,
+      0.0996,
+      0.0797,
+      0.0977,
+      1.0,
+      0.0795,
+      0.0708,
+      0.0506,
+      0.1639,
+      0.0689,
+      0.0526,
+      0.0459,
+      0.1183,
+      0.0517,
+      0.1071,
+      0.2482,
+      0.027,
+      0.1498,
+      0.1335,
+      0.0564,
+      0.1485,
+      0.0729,
+      0.1602
+     ],
+     "y": [
+      0.7424,
+      0.212,
+      0.5222,
+      0.1546,
+      0.4795,
+      0.5109,
+      0.3348,
+      0.0675,
+      0.401,
+      0.517,
+      0.2302,
+      0.2866,
+      0.8165,
+      0.3256,
+      0.5374,
+      0.2346,
+      0.7617,
+      0.1754,
+      0.5178,
+      0.0826,
+      0.786,
+      0.8031,
+      0.3047,
+      0.26,
+      0.2387,
+      0.3622,
+      0.8543,
+      0.5142,
+      0.2988,
+      0.3261,
+      0.3031,
+      0.0601,
+      0.1408,
+      0.1884,
+      0.4033,
+      0.1733,
+      0.2108,
+      0.0754,
+      0.803,
+      0.2718,
+      0.6015,
+      0.4285,
+      0.556,
+      0.1017,
+      0.6128,
+      0.5593,
+      0.1838,
+      0.4517,
+      0.3984,
+      0.6117,
+      0.3172,
+      0.1841,
+      0.4933,
+      0.2129,
+      0.1717,
+      0.2232,
+      0.1615,
+      0.7477,
+      0.4065,
+      0.2429,
+      0.7643,
+      0.777,
+      0.417,
+      0.2345,
+      0.206,
+      0.3506,
+      0.232,
+      0.3643,
+      0.2548,
+      0.4102,
+      0.5882,
+      0.1575,
+      0.2789,
+      0.0867,
+      0.084,
+      0.1011,
+      0.3629,
+      0.1446,
+      0.4911,
+      0.2227,
+      0.1071,
+      0.2773,
+      0.182,
+      0.2318,
+      0.0715,
+      0.1871,
+      0.1225,
+      0.1206,
+      0.111,
+      0.2592,
+      0.8917,
+      0.151,
+      0.3998,
+      0.089,
+      0.2691,
+      0.283,
+      0.2084,
+      0.3719,
+      0.188,
+      0.4935,
+      0.1563,
+      0.8105,
+      0.1767,
+      0.1909,
+      0.2307,
+      0.21,
+      0.2859,
+      0.974,
+      0.8081,
+      0.1308,
+      0.2058,
+      0.1244,
+      0.1743,
+      0.5515,
+      0.3755,
+      0.2075,
+      1.0246,
+      0.1355,
+      0.187,
+      0.1004,
+      0.2088,
+      0.1217,
+      0.8091,
+      0.2509,
+      0.1435,
+      0.0921,
+      0.5585,
+      0.8605,
+      0.155,
+      0.2812,
+      0.3857,
+      0.1059,
+      0.1628,
+      0.3828,
+      0.1821
+     ],
+     "text": [
+      "GSM3874365",
+      "GSM3934452",
+      "GSM4006845",
+      "GSM4080400",
+      "GSM4103033",
+      "GSM4186883",
+      "GSM4337069",
+      "GSM4405014",
+      "GSM4433529",
+      "GSM4460590",
+      "GSM4489569",
+      "GSM4546547",
+      "GSM4568683",
+      "GSM4634067",
+      "GSM4647123",
+      "GSM4670203",
+      "GSM4770465",
+      "GSM4848250",
+      "GSM4955761",
+      "GSM4980292",
+      "GSM5005051",
+      "GSM5017037",
+      "GSM5019530",
+      "GSM5025928",
+      "GSM5057687",
+      "GSM5257094",
+      "GSM5261283",
+      "GSM5353268",
+      "GSM5410928",
+      "GSM5472162",
+      "GSM5516045",
+      "GSM5519466",
+      "GSM5556429",
+      "GSM5578176",
+      "GSM5651435",
+      "GSM5678488",
+      "GSM5731071",
+      "GSM5870063",
+      "GSM5883812",
+      "GSM6049610",
+      "GSM6061710",
+      "GSM6071622",
+      "GSM6090513",
+      "GSM6094669",
+      "GSM6307664",
+      "GSM6670824",
+      "GSM6672395",
+      "GSM6758185",
+      "GSM6777767",
+      "GSM6911567",
+      "GSM6935009",
+      "GSM7049154",
+      "GSM7068147",
+      "GSM7158694",
+      "GSM7500412",
+      "GSM7660705",
+      "GSM7720305",
+      "GSM7745731",
+      "GSM7747722",
+      "GSM7889698",
+      "GSM7901263",
+      "GSM7910989",
+      "GSM7927979",
+      "GSM7967330",
+      "GSM7979977",
+      "GSM8002529",
+      "GSM8009873",
+      "GSM8011199",
+      "GSM8013368",
+      "GSM8016257",
+      "GSM8023983",
+      "GSM8067267",
+      "GSM8101603",
+      "GSM8117730",
+      "GSM8118468",
+      "GSM8123674",
+      "GSM8180901",
+      "GSM8192612",
+      "GSM8207597",
+      "GSM8213057",
+      "GSM8252246",
+      "GSM8281752",
+      "GSM8286701",
+      "GSM8306709",
+      "GSM8314324",
+      "GSM8314416",
+      "GSM8316002",
+      "GSM8385341",
+      "GSM8416333",
+      "GSM8422222",
+      "GSM8436481",
+      "GSM8452582",
+      "GSM8453381",
+      "GSM8488932",
+      "GSM8499134",
+      "GSM8502131",
+      "GSM8507255",
+      "GSM8554632",
+      "GSM8564830",
+      "GSM8567238",
+      "GSM8586887",
+      "GSM8606605",
+      "GSM8608358",
+      "GSM8619164",
+      "GSM8703560",
+      "GSM8713752",
+      "GSM8730312",
+      "GSM8751474",
+      "GSM8770264",
+      "GSM8785673",
+      "GSM8791443",
+      "GSM8798777",
+      "GSM8800515",
+      "GSM8825778",
+      "GSM8899164",
+      "GSM8899428",
+      "GSM8901884",
+      "GSM8945748",
+      "GSM8970753",
+      "GSM8979866",
+      "GSM8996539",
+      "GSM9005890",
+      "GSM9032631",
+      "GSM9059662",
+      "GSM9127972",
+      "GSM9131348",
+      "GSM9140838",
+      "GSM9145722",
+      "GSM9176947",
+      "GSM9210281",
+      "GSM9228772",
+      "GSM9263480",
+      "GSM9293409",
+      "GSM9347611",
+      "GSM9922113"
+     ]
+    }
+   ],
+   "reference_lines": [
+    {
+     "axis": "y",
+     "value": 1.0,
+     "label": "equal depth"
+    }
+   ]
+  },
+  {
+   "id": "umi_ratio_by_stratum",
+   "title": "UMIs per cell, Singlet / authors, by stratum",
+   "kind": "box",
+   "x": {
+    "label": "stratum",
+    "categories": [
+     "human|3p_v2|small",
+     "human|3p_v2|large",
+     "human|3p_v3|small",
+     "human|3p_v3|large",
+     "human|5p|small",
+     "human|5p|large",
+     "human|nuclei|small",
+     "human|nuclei|large",
+     "mouse|3p_v2|small",
+     "mouse|3p_v2|large",
+     "mouse|3p_v3|small",
+     "mouse|3p_v3|large",
+     "mouse|5p|small",
+     "mouse|5p|large",
+     "mouse|nuclei|small",
+     "mouse|nuclei|large"
+    ]
+   },
+   "y": {
+    "label": "umi_ratio_matched",
+    "scale": "linear"
+   },
+   "series": [
+    {
+     "name": "Singlet (published)",
+     "tool": "singlet",
+     "x": [
+      "human|3p_v2|small",
+      "human|3p_v2|large",
+      "human|3p_v3|small",
+      "human|3p_v3|large",
+      "human|5p|small",
+      "human|5p|large",
+      "human|nuclei|small",
+      "human|nuclei|large",
+      "mouse|3p_v2|small",
+      "mouse|3p_v2|large",
+      "mouse|3p_v3|small",
+      "mouse|3p_v3|large",
+      "mouse|5p|small",
+      "mouse|5p|large",
+      "mouse|nuclei|small",
+      "mouse|nuclei|large"
+     ],
+     "y": [
+      0.5374,
+      0.3089,
+      0.2691,
+      0.13,
+      0.7643,
+      0.1755,
+      0.3432,
+      0.2661,
+      0.4935,
+      0.212,
+      0.3559,
+      0.1511,
+      0.3452,
+      0.2861,
+      0.5139,
+      0.1838
+     ]
+    }
+   ],
+   "caption": "Median over samples per stratum; the per-sample values are in the alpha_samples.csv artifact."
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "alpha_samples.csv",
+   "kind": "derived",
+   "format": "csv",
+   "url": "https://data.singlet.bio/benchmarking/alpha/alpha_samples.csv",
+   "sha256": "630caeefbfd0220ea4b97bd42564249b42b17705695f48e7b4a2834017ae0043",
+   "bytes": 92444
+  }
+ ]
+}
