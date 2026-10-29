@@ -84,7 +84,7 @@ def adt(a, rep):
 
 
 def guide(a, rep):
-    seqs = io.read_fastq_seqs(R2, a.n_guide)
+    seqs = io.read_fastq_seqs(a.r2 or R2, a.n_guide)
     rng = random.Random(4)
     src = rng.sample(range(len(seqs)), 40)
     guides = [seqs[i][30:50] for i in src]
@@ -132,6 +132,7 @@ if __name__ == "__main__":
     ap.add_argument("--out", required=True)
     ap.add_argument("--n-adt", type=int, default=1000000)
     ap.add_argument("--n-guide", type=int, default=1000000)
+    ap.add_argument("--r2", default=None, help="cDNA FASTQ for the guide test (default: the fetched pbmc1k_v3 R2)")
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     os.makedirs(a.out, exist_ok=True)
