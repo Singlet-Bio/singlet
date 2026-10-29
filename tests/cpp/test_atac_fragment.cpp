@@ -330,6 +330,44 @@ static void test_extractor_with_corrector() {
     std::printf("  test_extractor_with_corrector: PASS\n");
 }
 
+// A1 (NOT COMPILED when written): duplicates that are not adjacent in the stream are still merged.
+static void test_dedup_unsorted_order() {
+    singlet::ATACFragmentExtractor ex;
+    std::unordered_map<std::string, uint32_t> bc_map;
+    bc_map["AACCGGTTAACCGGTT"] = 0;
+    ex.set_barcode_map(bc_map);
+    uint16_t flag = BAM_FPROPER_PAIR | BAM_FREAD1;
+    // same fragment (pos 500, TLEN 300) three times with other starts in between: the old per-start table kept all three
+    bam1_t* r[5] = {make_record("BC:AACCGGTTAACCGGTT_a", 0, 500, 300, flag), make_record("BC:AACCGGTTAACCGGTT_b", 0, 900, 200, flag),
+                    make_record("BC:AACCGGTTAACCGGTT_c", 0, 500, 300, flag), make_record("BC:AACCGGTTAACCGGTT_d", 0, 700, 250, flag),
+                    make_record("BC:AACCGGTTAACCGGTT_e", 0, 500, 300, flag)};
+    for (auto* b : r) { ex.process_record(b, nullptr); free_record(b); }
+    ex.finalise();
+    assert(ex.unique_fragments() == 3);
+    assert(ex.duplicate_fragments() == 2);
+    bool found = false;
+    for (const auto& f : ex.fragments()) if (f.start == 504) { assert(f.read_pairs == 3); found = true; }
+    assert(found);
+    std::printf("  test_dedup_unsorted_order: PASS
+");
+}
+
+// A2 (NOT COMPILED when written): the layout sample is every hash-sampled record, not the first N.
+static void test_layout_sample_is_hash_sample_not_prefix() {
+    singlet::AtacBarcodeCorrector cor;
+    cor.add_entry("AACCGGTTAACCGGTT");
+    for (int i = 0; i < 300000; ++i) cor.observe("AACCGGTTAACCGGTT");   // more than the old 200,000 cap
+    auto lay = cor.detect_layout();
+    assert(lay.hit_rate == 1.0 && lay.offset == 0 && !lay.revcomp);
+    // the sampling hash is fixed by the QNAME
+    assert(singlet::AtacBarcodeCorrector::qname_hash("BC:AACC_r1") == singlet::AtacBarcodeCorrector::qname_hash("BC:AACC_r1"));
+    int in = 0;
+    for (int i = 0; i < 6400; ++i) in += singlet::AtacBarcodeCorrector::is_layout_sample(("BC:AACC_r" + std::to_string(i)).c_str());
+    assert(in > 40 && in < 200);   // about 1/64
+    std::printf("  test_layout_sample_is_hash_sample_not_prefix: PASS
+");
+}
+
 int main() {
     std::printf("=== test_atac_fragment ===\n");
     test_basic_fragment();
@@ -346,6 +384,8 @@ int main() {
     test_duplicate_count();
     test_corrector_layout_and_correction();
     test_extractor_with_corrector();
+    test_dedup_unsorted_order();
+    test_layout_sample_is_hash_sample_not_prefix();
     std::printf("All tests PASSED\n");
     return 0;
 }

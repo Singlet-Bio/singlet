@@ -15,8 +15,8 @@
 // the legacy exact-match barcode map is used. Reads with no or all-N barcode are skipped.
 //
 // Deduplication: identical (start, end, barcode) pairs are one fragment whose read_pairs counts the duplicates (column 5
-// of fragments.tsv.gz). Leftmost mates arrive sorted by start in a coordinate-sorted BAM, so the dedup table only holds
-// the current start position.
+// of fragments.tsv.gz), in one global table (order-free rule A1). With set_assume_sorted(true) on a coordinate-sorted BAM
+// the table only holds the current start position.
 
 #include <htslib/sam.h>
 
@@ -96,6 +96,10 @@ class ATACFragmentExtractor {
     /// Whitelist correction (takes precedence over the barcode map). Caller owns the corrector.
     void set_barcode_corrector(AtacBarcodeCorrector* c) { corrector_ = c; }
 
+    /// Memory optimisation for a coordinate-sorted BAM only: dedup keys are dropped whenever the start changes. Off by default
+    /// (A1): on any other record order it would keep duplicates that are not adjacent.
+    void set_assume_sorted(bool v) { assume_sorted_ = v; }
+
     void set_min_fragment_size(int min_size = 10) { min_frag_ = min_size; }
     void set_max_fragment_size(int max_size = 2000) { max_frag_ = max_size; }
     void set_min_mapq(uint8_t min_mapq = 30) { min_mapq_ = min_mapq; }
@@ -151,8 +155,10 @@ class ATACFragmentExtractor {
 
         const int32_t tid = b->core.tid;
 
-        // Deduplication: keys only collide at the same start, and starts arrive sorted.
-        if (tid != cur_tid_ || frag_start != cur_start_) {
+        // Deduplication (rule A1, docs/research-beta/atac-reducers-prep.md): one global exact-key table, so the result is a
+        // function of the set of records. The table is only cleared per start when the caller promises a coordinate-sorted
+        // stream (set_assume_sorted), where keys can only collide at the same start; it is NOT the default.
+        if (assume_sorted_ && (tid != cur_tid_ || frag_start != cur_start_)) {
             dedup_.clear();
             cur_tid_ = tid;
             cur_start_ = frag_start;
@@ -260,6 +266,7 @@ class ATACFragmentExtractor {
     AtacBarcodeCorrector* corrector_ = nullptr;
     std::unordered_map<FragmentKey, size_t, FragmentKeyHash> dedup_;
     int32_t cur_tid_ = -1, cur_start_ = -1;
+    bool assume_sorted_ = false;
 
     int min_frag_ = 10;
     int max_frag_ = 2000;

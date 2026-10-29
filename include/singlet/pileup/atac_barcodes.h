@@ -68,10 +68,19 @@ class AtacBarcodeCorrector {
     size_t size() const { return wl_.size(); }
     bool has_pairs() const { return has_pairs_; }
 
-    /// Phase 1: feed raw barcodes from the first reads (layout detection); call before count().
-    void observe(std::string_view raw) {
-        if (sample_.size() < kSample) sample_.emplace_back(raw);
+    /// Phase 1: feed the raw barcodes of the hash-sampled records (rule A2: records with qname_hash(qname) % 64 == 0, see
+    /// is_layout_sample); call before count(). Every sampled record is kept: a cap would make the sample a prefix of the stream,
+    /// i.e. dependent on record order.
+    void observe(std::string_view raw) { sample_.emplace_back(raw); }
+
+    /// FNV-1a over the QNAME with a murmur finaliser (the engine's hash_qname), the sampling hash of rule A2.
+    static uint64_t qname_hash(const char* s) {
+        uint64_t h = 14695981039346656037ULL;
+        while (*s) { h ^= static_cast<uint8_t>(*s++); h *= 1099511628211ULL; }
+        h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33; h *= 0xc4ceb9fe1a85ec53ULL; h ^= h >> 33;
+        return h;
     }
+    static bool is_layout_sample(const char* qname) { return (qname_hash(qname) & 63) == 0; }
 
     /// Choose the window with the highest exact hit rate over the observed sample.
     Layout detect_layout() {
@@ -98,12 +107,12 @@ class AtacBarcodeCorrector {
         return best;
     }
 
-    /// Phase 2: count exact hits per whitelist entry over all reads (the correction prior).
-    void count(std::string_view raw) {
+    /// Phase 2: count exact hits per whitelist entry over all reads (the correction prior). n = number of reads with this raw barcode.
+    void count(std::string_view raw, uint64_t n = 1) {
         uint32_t code;
         if (!window(raw, layout_.offset, layout_.revcomp, code)) return;
         auto it = index_.find(code);
-        if (it != index_.end()) ++counts_[it->second];
+        if (it != index_.end()) counts_[it->second] += n;
     }
 
     /// Phase 3: raw barcode -> whitelist index, or -1.
@@ -135,7 +144,6 @@ class AtacBarcodeCorrector {
     const Stats& stats() const { return stats_; }
 
    private:
-    static constexpr size_t kSample = 200000;
 
     static int base2(char c) {
         switch (c) {

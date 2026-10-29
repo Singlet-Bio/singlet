@@ -106,7 +106,7 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
         chrom_map[chrom_names.back()] = i;
     }
 
-    // ── Whitelist candidates and layout detection on the first fragment records ──
+    // ── Whitelist candidates and layout detection on a hash sample of the fragment records (A2) ──
     std::vector<std::unique_ptr<AtacBarcodeCorrector>> cands;
     for (const auto& w : opt.whitelists) {
         auto c = std::make_unique<AtacBarcodeCorrector>();
@@ -121,7 +121,11 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
     if (cands.empty()) { std::cerr << "[atac] ERROR: no whitelist\n"; return 1; }
 
     bam1_t* rec = bam_init1();
-    std::vector<std::string> first;
+    // Rule A2 (docs/research-beta/atac-reducers-prep.md): layout and whitelist are chosen on the records with
+    // qname_hash % 64 == 0, all of them (not the first N of a coordinate-sorted BAM); the prior counts every record. The pass
+    // keeps the sample and the raw barcode counts, then decides once at the end, so the result is a function of the set of records.
+    std::vector<std::string> first;   // hash-sampled raw barcodes
+    std::unordered_map<std::string, uint64_t> raw_counts;
     uint64_t pass1_records = 0;
     AtacBarcodeCorrector* cor = nullptr;
     std::vector<std::string> wl_names;
@@ -136,32 +140,30 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
         for (size_t i = 0; i < cands.size(); ++i) {
             for (const auto& r : first) cands[i]->observe(r);
             auto lay = cands[i]->detect_layout();
-            std::cerr << "[atac] layout on " << first.size() << " reads, whitelist " << i << ": offset " << lay.offset
-                      << (lay.revcomp ? " revcomp" : " forward") << ", exact hit rate " << lay.hit_rate << "\n";
-            if (lay.hit_rate > best) { best = lay.hit_rate; bi = i; }
+            std::cerr << "[atac] layout on " << first.size() << " hash-sampled reads, whitelist " << i << ": offset " << lay.offset
+                      << (lay.revcomp ? " revcomp" : " forward") << ", exact hit rate " << lay.hit_rate << "
+";
+            if (lay.hit_rate > best) { best = lay.hit_rate; bi = i; }   // ties: the earlier whitelist
         }
         cor = cands[bi].get();
         chosen_wl = wl_names[bi];
-        for (const auto& r : first) cor->count(r);
+        for (const auto& [raw, n] : raw_counts) cor->count(raw, n);   // integer adds: iteration order does not matter
         first.clear();
-        std::cerr << "[atac] using whitelist " << bi << "\n";
+        raw_counts.clear();
+        std::cerr << "[atac] using whitelist " << bi << "
+";
     };
     while (sam_read1(fp, hdr, rec) >= 0) {
         if (!ATACFragmentExtractor::is_fragment_record(rec)) continue;
         auto raw = ATACFragmentExtractor::raw_barcode(rec);
         if (raw.empty()) continue;
         ++pass1_records;
-        if (!cor) {
-            first.emplace_back(raw);
-            if (first.size() >= 200000) choose();
-        } else {
-            cor->count(raw);
-        }
+        ++raw_counts[std::string(raw)];
+        if (AtacBarcodeCorrector::is_layout_sample(bam_get_qname(rec))) first.emplace_back(raw);
     }
-    if (!cor) {
-        if (first.empty()) { std::cerr << "[atac] ERROR: no barcoded fragment records\n"; return 1; }
-        choose();
-    }
+    if (raw_counts.empty()) { std::cerr << "[atac] ERROR: no barcoded fragment records
+"; return 1; }
+    choose();
     bam_hdr_destroy(hdr);
     sam_close(fp);
 
