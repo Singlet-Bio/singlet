@@ -452,7 +452,7 @@ static int cmd_download(int argc, char* argv[]) {
                 << "Options:\n"
                 << "  --protocol TAG       Force protocol (skip auto-detect)\n"
                 << "  --quality MODE       none|binned|binned2|full|binned-legacy (default: binned = 4 Illumina levels,\n"
-                << "                       2, 12, 23, 37; read by STAR's adapter clip and the SNP / mtDNA callers)\n"
+                << "                       2, 11, 25, 37; read by STAR's adapter clip and the SNP / mtDNA callers)\n"
                 << "  --no-trim            Skip polyA/adapter trimming\n"
                 << "  --codec NAME         zstd|lz4|none (default: zstd)\n"
                 << "  --codec-level N      Codec level (default: 4)\n"

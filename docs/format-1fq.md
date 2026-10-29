@@ -435,7 +435,7 @@ barcode+gene based.
 | BINNED4 (1) | `binned-legacy` | 2 | decades, decoded 6 / 15 / 25 / 37; still read, no longer written by default |
 | FULL (2) | `full` | 8 | raw Phred |
 | BINNED2 (3) | `binned2` | 1 | pass/fail at Q20 |
-| **ILLUMINA4 (4)** | `binned` (default) | 2 | decades, decoded **2 / 12 / 23 / 37** (section 4.3) |
+| **ILLUMINA4 (4)** | `binned` (default) | 2 | decades, decoded **2 / 11 / 25 / 37** (section 4.3) |
 
 The decoder writes the R2 quality into the records STAR reads (FASTQ or the in-process read source); R1 (barcode + UMI)
 has no stored quality and is written as `F`. STAR's adapter clip and the pileup's SNP and mtDNA counts
@@ -446,11 +446,15 @@ has no stored quality and is written as `F`. STAR's adapter clip and the pileup'
 | Bin | Phred range | Decoded Phred |
 |---|---|---|
 | 0 | 0–9 | 2 |
-| 1 | 10–19 | 12 |
-| 2 | 20–29 | 23 |
+| 1 | 10–19 | 11 |
+| 2 | 20–29 | 25 |
 | 3 | ≥ 30 | 37 |
 
-- The decoded values are the four NovaSeq / NextSeq 2000 (RTA3) write, so those instruments' qualities round-trip exactly.
+- The decoded values are the 4-level binning seen most in the atlas's 10x R2 reads: 2 / 11 / 25 / 37 in SRR14999752
+  below and in every 10x input of the mapping-rate ablation (PBMC-E ERR16108677-80, 10x hgmm_1k_v3 on NovaSeq). Those
+  round-trip exactly; other 4-level schemes (2 / 12 / 26 / 34 in SRR21102187, RTA3's 2 / 12 / 23 / 37) move within
+  their decade. Every quality consumer in the pipeline only thresholds (`--min-baseq` 10, the RNA variant caller's
+  Q20, STAR's adapter clip uses none), so the decoded value inside a decade cannot change an output.
 - The bounds are decades, so any Q10 / Q20 / Q30 cut keeps or drops exactly the bases it would on the original
   qualities, whatever the instrument's own binning (4-level, 7-level, 8-level or full range).
 - Checked on the R2 Phred histograms of the first 5 M spots of 7 atlas runs (`bench/fq_read_source/qual_hist.sbatch`,
