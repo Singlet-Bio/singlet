@@ -37,6 +37,11 @@ fi
 # Stage this dataset's format files and canonical matrices onto the node's own disk.
 LOCAL=$TMPDIR/data
 mkdir -p "$LOCAL/formats" "$LOCAL/canon" "$LOCAL/tmp"
+# The large datasets need hundreds of GB here: stop before copying if the node's disk cannot hold them (+20%, +1 GiB blob).
+need=$(du -scb "$S1/data/formats/$D".* "$S1/data/canon/$D".*.npz 2>/dev/null | tail -1 | cut -f1)
+have=$(df -B1 --output=avail "$LOCAL" | tail -1)
+echo "local disk: $((have >> 30)) GiB free, $D needs $((need >> 30)) GiB"
+[ "$have" -gt $((need / 5 * 6 + (1 << 30))) ] || { echo "not enough local disk for $D"; exit 1; }
 t0=$SECONDS
 for f in "$S1/data/formats/$D".*; do cp -r --preserve=timestamps "$f" "$LOCAL/formats/"; done
 cp --preserve=timestamps "$S1/data/canon/$D".*.npz "$LOCAL/canon/" 2>/dev/null || true
