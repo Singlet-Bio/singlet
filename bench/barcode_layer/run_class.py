@@ -363,14 +363,19 @@ def compare_nowl(cfg, work, args, rep):
     sub = sorted(rng.sample(range(n), min(args.py_subset, n)))
     lay = ref.SimpleLayout(cb0 + 1, cbl, um0 + 1, uml, ref.flags_from_type("Exact"), None)
     discovered_str = {io.decode2(np.array([b], dtype=np.uint64), cbl)[0].decode(): i for i, b in enumerate(disc)}
-    sd = 0
+    sd = ss = 0
+    first = []
     for i in sub:
         s = seq[off[i]:off[i + 1]].tobytes().decode()
         q = qual[off[i]:off[i + 1]].tobytes().decode()
         rec = ref.simple_record(s, q, lay, None, discovered_str)
         if rec.cell_key != k_cell[i]:
             sd += 1
-    rep["kernel_vs_python"] = {"reads": len(sub), "cell_identical": len(sub) - sd}
+            if len(first) < 5:
+                first.append((i, s[:cb0 + cbl + uml], int(k_cell[i]), int(k_st[i]), int(rec.cell_key), int(rec.status)))
+        if rec.status != k_st[i]:
+            ss += 1
+    rep["kernel_vs_python"] = {"reads": len(sub), "cell_identical": len(sub) - sd, "status_identical": len(sub) - ss, "first_diffs": first}
     rep["umi_bad"] = {"N": int((ucheck == -23).sum()), "homopolymer": int((ucheck == -24).sum())}
     if args.star_bam and os.path.exists(args.star_bam):
         t = time.time()
@@ -474,7 +479,8 @@ def compare_complex(cfg, work, args, rep):
     rep["kernel_vs_python"] = {"reads": len(sub), "cell_identical": len(sub) - sd, "status_identical": len(sub) - ss, "umi_identical": len(sub) - su,
                                "python_seconds": round(time.time() - t, 1), "first_cell_diffs": first}
     if args.star_bam and os.path.exists(args.star_bam):
-        rep["star"] = compare_star_complex(cfg, args.star_bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, k_ul, off, seq, n)
+        up = umi.split('_')
+        rep["star"] = compare_star_complex(cfg, args.star_bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, int(up[3]) - int(up[1]) + 1, off, seq, n)
 
 
 def decode_cells(cell: np.ndarray, sg_objs, seg_seqs):
@@ -504,7 +510,7 @@ def seg_strings_from(s, seqs):
     return [d[v] for v in sorted(d)]
 
 
-def compare_star_complex(cfg, bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, k_ul, off, seq, n):
+def compare_star_complex(cfg, bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, ul, off, seq, n):
     t = time.time()
     st = io.star_tags(bam, tags=("CB", "UB", "UR"))
     idx = st["idx"]
@@ -532,7 +538,6 @@ def compare_star_complex(cfg, bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, k_ul,
     rep["disagree_by_our_status_mapped"] = {int(v): int(c) for v, c in zip(vals, cnts)}
     ex = np.flatnonzero(bad & ~unm)[:6]
     rep["disagree_examples"] = [{"read": int(idx[i]), "ours": o_str[i].decode(), "ours_status": int(k_st[idx[i]]), "star_cb": cbtag[i].decode()} for i in ex]
-    ul = int(k_ul[0]) if len(k_ul) else 0
     umm = np.zeros((len(idx), ul), dtype=np.uint8)
     dec = io.decode3(k_umi[idx], ul) if ul else np.zeros(len(idx), "S1")
     has_ur = urtag != b""

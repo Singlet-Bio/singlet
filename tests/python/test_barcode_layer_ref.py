@@ -165,6 +165,24 @@ def test_nowl_any_n_free_barcode_and_discovery_order():
     assert B.cell_key_no_wl("GGG", idx) == 2 and B.cell_key_no_wl("TTT", idx) == -1 and B.cell_key_no_wl("GNG", idx) == -2
 
 
+def test_nowl_record_drops_bad_umi_and_n_barcodes():
+    """Found by the real-read comparison with the CUDA kernel (bench/barcode_layer): the stream drops a read whose UMI has an N or is a
+    homopolymer, and a read with an N in the CB, even when the barcode is in the discovered list."""
+    lay = simple([], nowl=True, cb_len=12, umi_len=8)
+    lay.wl_strings = None
+    disc = {"ACGTACGTACGT": 0}
+    good = B.simple_record("ACGTACGTACGT" + "ACGTACGT", Q, lay, None, disc)
+    assert (good.cell_key, good.status) == (0, 0)
+    poly = B.simple_record("ACGTACGTACGT" + "AAAAAAAA", Q, lay, None, disc)
+    assert (poly.cell_key, poly.status) == (-1, -24)
+    nu = B.simple_record("ACGTACGTACGT" + "ACGTACGN", Q, lay, None, disc)
+    assert (nu.cell_key, nu.status) == (-1, -23)
+    ncb = B.simple_record("ACGTACGTACGN" + "ACGTACGT", Q, lay, None, disc)
+    assert (ncb.cell_key, ncb.status) == (-1, -2)
+    unlisted = B.simple_record("TTTTACGTACGT" + "ACGTACGT", Q, lay, None, disc)
+    assert (unlisted.cell_key, unlisted.status) == (-1, 0)
+
+
 def test_samtag_out_corrected_cb_and_no_umi_check():
     lay = simple(WL, "Exact", sam=True)
     rb = B.get_cb_umi_simple("CCCCCCCC" + "AAAA", Q, lay)

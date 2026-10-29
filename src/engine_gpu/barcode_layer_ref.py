@@ -672,8 +672,10 @@ def simple_record(seq, qual, lay: SimpleLayout, counts: Optional[np.ndarray], di
     rb = get_cb_umi_simple(seq, qual, lay)
     umi_key = pack3(rb.umi_seq)
     if lay.wl is None:                                         # no whitelist: STAR gives the raw CB, the list gives the cell
-        cell = -2 if rb.cb_match == -2 else (discovered.get(rb.cb_seq, -1) if discovered is not None else -1)
-        return Record(cell, umi_key, lay.umi_len, rb.cb_match if cell < 0 else 0, clip5, adapter3p)
+        if rb.cb_match < 0:                                    # N in the CB (-2) or a UMI with N / a homopolymer (-23, -24): the stream's
+            return Record(-1, umi_key, lay.umi_len, rb.cb_match, clip5, adapter3p)   # inline_scan_cb_from_cr drops the read
+        cell = discovered.get(rb.cb_seq, -1) if discovered is not None else -1
+        return Record(cell, umi_key, lay.umi_len, 0, clip5, adapter3p)
     if rb.cb_match < 0:
         return Record(-1, umi_key, lay.umi_len, rb.cb_match, clip5, adapter3p)
     cb, _ = resolve_cb(rb, counts, lay.flags)
