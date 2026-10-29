@@ -217,6 +217,7 @@ add_pileup_test(test_nonhost_sylph)
 add_pileup_test(test_1fq_header)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)
+add_pileup_test(test_donor_genotype_call)
 add_pileup_test(test_demux_doublet_autok)   # genotype doublets + held-out auto-K on synthetic pools
 add_pileup_test(test_prefix_probe)   # 5' constant-prefix probe on reads spread through the file (no false clip on sorted duplicates)
 add_pileup_test(test_polya_sites)    # poly(A) site detection/clustering, STAR CellReads.stats parsing, sj_features
