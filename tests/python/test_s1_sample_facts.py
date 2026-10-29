@@ -146,13 +146,21 @@ def test_cell_lines_carry_their_line_as_cell_type():
     }
     d = {k: v.copy() for k, v in base.items()}
     SF.relabel_cell_lines(d, K562, n)
-    assert list(d["cell_type"]) == ["K-562"] * n and list(d["cell_type_ontology_term_id"]) == ["CVCL_0004"] * n
-    assert list(d["cell_type_deepest"]) == ["K-562"] * n and "cell_type_deepest_ontology_term_id" not in d
+    assert (
+        list(d["cell_type"]) == ["K-562"] * n
+        and list(d["cell_type_ontology_term_id"]) == ["CVCL_0004"] * n
+    )
+    assert (
+        list(d["cell_type_deepest"]) == ["K-562"] * n
+        and "cell_type_deepest_ontology_term_id" not in d
+    )
     assert list(d["cell_type_level"]) == [0] * n and np.isnan(d["cell_type_score"]).all()
     assert list(d["cell_type_path"]) == [None] * n
     unnamed = {k: v.copy() for k, v in base.items()}
     SF.relabel_cell_lines(unnamed, {"tissue_type": "cell line"}, n)
-    assert set(unnamed["cell_type"]) == {"cultured cell"} and set(unnamed["cell_type_ontology_term_id"]) == {"CL:0000010"}
+    assert set(unnamed["cell_type"]) == {"cultured cell"} and set(
+        unnamed["cell_type_ontology_term_id"]
+    ) == {"CL:0000010"}
     tissue = {k: v.copy() for k, v in base.items()}
     SF.relabel_cell_lines(tissue, ADJ, n)
     assert list(tissue["cell_type"]) == list(base["cell_type"])
@@ -184,8 +192,12 @@ def test_load_and_cells_carry_the_facts(study_dir, tmp_path, monkeypatch):
         b["disease_ontology_term_id"]
     ) == {"MONDO:0005061"}
     assert "cell_type" not in SF.FACT_OBS_COLUMNS  # the per-cell label keeps its name
-    if "cell_type" in ad.obs.columns:  # a cell line carries its line, a tissue sample the labeller's call
-        assert set(a["cell_type"]) == {"K-562"} and set(a["cell_type_ontology_term_id"]) == {"CVCL_0004"}
+    if (
+        "cell_type" in ad.obs.columns
+    ):  # a cell line carries its line, a tissue sample the labeller's call
+        assert set(a["cell_type"]) == {"K-562"} and set(a["cell_type_ontology_term_id"]) == {
+            "CVCL_0004"
+        }
 
     sub = st.cells("called", samples=[g1])
     assert set(sub.obs["tissue_type"]) == {"cell line"}
