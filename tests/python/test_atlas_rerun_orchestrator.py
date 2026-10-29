@@ -348,7 +348,7 @@ def test_strand_contradiction_exit_8_reruns_on_the_sorted_path():
     assert S.STRAND_CONTRADICTION == 8
     assert S.strand_retry_cmd(cmd) == cmd + ["--sorted-bam"]
     assert S.strand_retry_cmd(cmd + ["--sorted-bam"]) == cmd + ["--sorted-bam"]  # never doubled
-    assert S.strand_retry_cmd(cmd) is not cmd and cmd[-1] == "off"                # the first command is untouched
+    assert S.strand_retry_cmd(cmd) is not cmd and cmd[-1] == "off"  # the first command is untouched
     # still contradicting after the sorted-path retry: reported as such, not as a generic exit
     assert S.classify_failure(8, "...") == "strand_contradiction"
     assert S.classify_failure(137, "") == "oom"
