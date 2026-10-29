@@ -103,3 +103,60 @@ def test_s1cells_epoch_and_workers(big):
     first = [b[0] for b in ds.batches()]
     ds.set_epoch(1)
     assert [b[0] for b in ds.batches()] != first
+
+
+def test_io_threads_auto_and_checked(big):
+    p = big[0]
+    assert S1Stream(str(p)).io_threads == 1  # a local file: one request at a time
+    assert S1Stream(str(p), io_threads=3).io_threads == 3
+    with pytest.raises(ValueError):
+        S1Stream(str(p), io_threads=0)
+
+
+def test_stream_over_http_sends_a_batchs_requests_together(big):
+    import time
+
+    import _s1_range_server as rs
+
+    p, x, _, _ = big
+    blocks = [(i * 370, i * 370 + 64) for i in range(8)]  # 8 separate ranges, one request each
+    with rs.serve(str(p.parent), delay_s=0.05) as (url, _):
+        seq = S1Stream(f"{url}/{p.name}", order="canonical", io_threads=1)
+        par = S1Stream(f"{url}/{p.name}", order="canonical")
+        assert par.io_threads == 8  # "auto" over HTTP
+        out, took = {}, {}
+        for name, s in (("seq", seq), ("par", par)):
+            n0, t0 = s.requests, time.perf_counter()
+            out[name] = s.batch(blocks).to_dense().numpy()
+            took[name] = (time.perf_counter() - t0, s.requests - n0)
+        par.close()
+    assert np.array_equal(out["seq"], _rows(x, blocks)) and np.array_equal(out["par"], out["seq"])
+    assert took["par"][1] == took["seq"][1] >= 8  # the same requests, sent together
+    assert took["par"][0] < took["seq"][0] / 2  # ~one round trip instead of eight
+
+
+def test_s1cells_prefetch_gives_the_same_batches(big):
+    p = big[0]
+    a = list(S1Cells(str(p), batch_size=256, threads=1, prefetch=0))
+    b = list(S1Cells(str(p), batch_size=256, threads=1, prefetch=3))
+    assert len(a) == len(b)
+    for u, v in zip(a, b):
+        assert torch.equal(u["index"], v["index"])
+        assert np.array_equal(u["X"].to_dense().numpy(), v["X"].to_dense().numpy())
+
+
+def test_read_ahead_raises_errors_and_stops_when_closed():
+    from singlet.torch._s1stream import _read_ahead
+
+    def make(i):
+        if i == 3:
+            raise RuntimeError("boom")
+        return i
+
+    g = _read_ahead(make, list(range(10)), 2)
+    assert [next(g) for _ in range(3)] == [0, 1, 2]
+    with pytest.raises(RuntimeError, match="boom"):
+        next(g)
+    g2 = _read_ahead(lambda i: i, list(range(1000)), 1)
+    assert next(g2) == 0
+    g2.close()  # returns: the producer is unblocked and stops

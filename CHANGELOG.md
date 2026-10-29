@@ -4,6 +4,12 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+- **`S1Stream` / `S1Cells` send a batch's range requests together** (`io_threads`). `"auto"` means 8 for an HTTP URL and
+  1 for a local file; `io_threads=1` sends them one at a time.
+  - Over a link with a 30 ms round trip, the eight block ranges of a minibatch cost about one round trip instead of
+    eight.
+  - `S1Cells(prefetch=1)` reads the next batch ahead on a background thread.
+  - `S2Reader`'s request and byte counters are safe to update from several threads.
 - **Cell lines carry their line as cell type.** The labeller was trained on primary tissue, so on a cultured cell line it gave
   the nearest primary type, often wrong (K-562 cells came out as "transit amplifying cell"). With sample facts on (the
   default), every cell of a cell-line sample now has `cell_type` / `cell_type_deepest` = the line's name and
