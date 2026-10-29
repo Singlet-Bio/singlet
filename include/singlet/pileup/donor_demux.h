@@ -161,8 +161,8 @@ struct CoveredSNPData {
     // ad[c][k] and dp[c][k] where k is position in cell's sparse list
     struct CellSNPs {
         std::vector<int32_t> snp_idx;  // reduced SNP index (into covered_snps)
-        std::vector<uint8_t> ad;       // alt depth
-        std::vector<uint8_t> dp;       // total depth
+        std::vector<uint16_t> ad;      // alt depth
+        std::vector<uint16_t> dp;      // total depth
     };
     std::vector<CellSNPs> cells;
     int n_covered_snps;
@@ -173,8 +173,8 @@ struct CoveredSNPData {
 // Extract covered SNPs from CSC AD/DP matrices
 static CoveredSNPData extract_covered_snps(
     uint32_t n_features, uint32_t n_barcodes,
-    const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
-    const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data)
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data)
 {
     // Find SNPs with any coverage
     std::vector<bool> has_coverage(n_features, false);
@@ -207,7 +207,7 @@ static CoveredSNPData extract_covered_snps(
         // DP drives the loop (DP >= AD at every position)
         for (int32_t k = dp_indptr[j]; k < dp_indptr[j+1]; ++k) {
             int32_t snp = dp_indices[k];
-            uint8_t dp_val = dp_data[k];
+            uint16_t dp_val = dp_data[k];
             if (dp_val == 0) continue;
             int32_t ridx = snp_to_reduced[snp];
             if (ridx < 0) continue;
@@ -2057,9 +2057,9 @@ struct DemuxResult {
 // ============================================================================
 inline DemuxResult run_demux(
     uint32_t n_snps, uint32_t n_cells,
-    const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
     uint64_t /*ad_nnz*/,
-    const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data,
     uint64_t /*dp_nnz*/,
     const DonorDemuxConfig& cfg,
     const std::vector<uint32_t>& cell_indices = {}) // empty = use all barcodes (no filter)
@@ -2402,8 +2402,8 @@ struct DonorDepths {
 inline DonorDepths aggregate_donor_depths(
     const DemuxResult& demux,
     uint32_t n_snps, uint32_t n_barcodes,
-    const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
-    const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data,
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data,
     float min_prob = 0.9f)
 {
     DonorDepths depths;
@@ -2624,8 +2624,8 @@ inline bool write_donor_assignments(
 // ============================================================================
 inline DemuxResult make_single_donor_result(
     uint32_t n_snps, uint32_t n_cells,
-    const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
-    const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data)
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data)
 {
     std::cerr << "[demux] K=1 workaround: skipping VB inference, assigning all "
               << n_cells << " cells to donor0\n";

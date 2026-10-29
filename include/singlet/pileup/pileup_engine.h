@@ -1102,7 +1102,7 @@ public:
     // Per-worker mutable state (no sharing between workers)
     struct WorkerContext {
         PileupStats stats;
-        SparseAccumulator<uint8_t> snp_ad, snp_dp;
+        SparseAccumulator<uint16_t> snp_ad, snp_dp;
         SparseAccumulator<uint16_t> exon, intron;
 
         // SJ tracking: per-worker local index + names
@@ -1510,8 +1510,8 @@ public:
             for (uint32_t i = 0; i < n_barcodes && i < cq.size(); ++i) per_cell_qc_[i].merge(cq[i]);
         }
         // SNP AD/DP
-        merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_ad; });
-        merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_dp; });
+        merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.snp_ad; });
+        merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.snp_dp; });
         if (config_.count_mt) {
             merge_accumulators(mt_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.mt; });
             merge_accumulators(mt_acc_rev_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.mt_rev; });
@@ -1627,8 +1627,8 @@ public:
     }
 
     // Get accumulators for export
-    const SparseAccumulator<uint8_t>& snp_ad() const { return snp_ad_; }
-    const SparseAccumulator<uint8_t>& snp_dp() const { return snp_dp_; }
+    const SparseAccumulator<uint16_t>& snp_ad() const { return snp_ad_; }
+    const SparseAccumulator<uint16_t>& snp_dp() const { return snp_dp_; }
     const SparseAccumulator<uint16_t>& exons() const { return exon_acc_; }
     const SparseAccumulator<uint16_t>& introns() const { return intron_acc_; }
     const SparseAccumulator<uint16_t>& splice_junctions() const { return sj_acc_; }
@@ -1912,8 +1912,8 @@ private:
     std::vector<char> mito_tid_;  // per tid: mitochondrial contig (excluded from strand evidence)
 
     // Accumulators
-    SparseAccumulator<uint8_t> snp_ad_;
-    SparseAccumulator<uint8_t> snp_dp_;
+    SparseAccumulator<uint16_t> snp_ad_;
+    SparseAccumulator<uint16_t> snp_dp_;
     SparseAccumulator<uint16_t> exon_acc_;
     SparseAccumulator<uint16_t> intron_acc_;
     SparseAccumulator<uint16_t> sj_acc_;

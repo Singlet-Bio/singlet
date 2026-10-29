@@ -37,7 +37,7 @@ static int n_pass = 0, n_fail = 0;
 struct Pool {
     int nsnp = 0, ncell = 0, K = 0;
     std::vector<int32_t> ad_ip, ad_ix, dp_ip, dp_ix;
-    std::vector<uint8_t> ad_v, dp_v;
+    std::vector<uint16_t> ad_v, dp_v;
     std::vector<int> donor;       // true donor (first donor for doublets)
     std::vector<char> dbl;        // 1 = planted heterotypic doublet
 };
