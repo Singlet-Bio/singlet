@@ -15,8 +15,8 @@
 //   3 sjids      sort of the distinct junction instances -> canonical junction ids
 //   4 expand     per read: gather of the signature results -> tuples (scan + fill)
 //   b c d        M6: (cell, gene, UMI) sort + reduce, directional UMI collapse, CSR  (m6.cu, unchanged)
-//   5 sj         (cell, junction, UMI) sort, first-of-run, count per (cell, junction)
-//   6 snp        (cell, SNP, UMI) stable sort in BAM order, first read per UMI, DP / AD per (cell, SNP)
+//   5 sj         (cell, junction, UMI) sort, reads per exact UMI, R9 directional collapse per (cell, junction), molecules per (cell, junction)
+//   6 snp        (cell, SNP, UMI) sort, class counts per exact UMI, R9 collapse per (cell, SNP), R1 vote per molecule, DP / AD per (cell, SNP)
 //   7 mt         (cell, position, base, strand) sort + run-length encode; chrM indel tuples
 // Determinism: integer sorts / scans / reduce-by-key only, no float arithmetic, no atomics on values (-fmad=false anyway).
 #define main m6_unused_main
@@ -171,7 +171,7 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
     out[a] = r;
 }
 
-// one signature -> what the engine's count_read receives (NH == 1 directly, NH > 1 through the mm_buffer state machine, in BAM order)
+// one signature -> what the engine's count_read receives (NH == 1 directly, NH > 1 through the mm_buffer state machine; R7: the primary's gene, else the smallest secondary exon)
 __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, const AA* aa, GRes* out) {
     int s = blockIdx.x * blockDim.x + threadIdx.x; if (s >= nS) return;
     SigRec sg = S[s]; GRes r{MAXU, MAXU, MAXU, 0};
@@ -180,16 +180,16 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, const AA* aa
             for (int k = 0; k < sg.n_aln; k++) if (A[sg.aln_off + k].flags & 2) {
                 AA x = aa[sg.aln_off + k]; if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; } break; }
         } else {
-            bool amb = false; uint32_t fg = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;
+            bool amb = false, pa = false; uint32_t fg = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
             for (int k = 0; k < sg.n_aln; k++) {
                 AA x = aa[sg.aln_off + k];
                 if (A[sg.aln_off + k].flags & 2) {
-                    if (x.gene != MAXU) { gi = x.gene; ex = x.exon; in = x.intron; fl = x.flags; }
+                    if (x.gene != MAXU) { gi = x.gene; ex = x.exon; in = x.intron; fl = x.flags; pa = true; }
                     if (x.multi) amb = true;
                     if (x.aln_gene != MAXU) { if (fg == MAXU) fg = x.aln_gene; else if (x.aln_gene != fg) amb = true; }
                 } else {
                     if (x.multi) amb = true;
-                    else if (x.gene != MAXU) { if (fg == MAXU) fg = x.gene; else if (x.gene != fg) amb = true; if (gi == MAXU) { gi = x.gene; ex = x.exon; fl = 5; } }
+                    else if (x.gene != MAXU) { if (fg == MAXU) fg = x.gene; else if (x.gene != fg) amb = true; if (!pa && (gi == MAXU || x.exon < ex)) { gi = x.gene; ex = x.exon; fl = 5; } }   // R7: else the smallest secondary exon
                 }
             }
             if (!amb && fg != MAXU && gi != MAXU) { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
@@ -287,21 +287,54 @@ __global__ void k_runflag(const uint64_t* hs, const uint32_t* lo, const uint32_t
     first[i] = (i == 0) || hs[i] != hs[i - 1] || lo[ord[i]] != lo[ord[i - 1]]; }
 __global__ void k_snpval(const uint32_t* first, const uint32_t* ord, const uint8_t* alt, int n, uint64_t* v) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) v[i] = first[i] ? (1ull | ((uint64_t)alt[ord[i]] << 32)) : 0ull; }
-// R1 consensus (order-free-rules.md; SnpConsensus in umi_dedup.h): per molecule (cell, SNP, UMI) the reads' REF / ALT / OTHER counts,
-// each saturating at 255; a strict maximum decides (REF: DP; ALT: DP + AD; OTHER: nothing); a tie at the top is ambiguous (nothing).
+// R1 consensus (order-free-rules.md; SnpConsensus in umi_dedup.h): per molecule (cell, SNP, R9-merged UMIs) the reads' REF / ALT / OTHER counts,
+// each saturating at 255 per exact UMI; a strict maximum decides (REF: DP; ALT: DP + AD; OTHER: nothing); a tie at the top is ambiguous (nothing).
 __global__ void k_snpcls(const uint32_t* ord, const uint8_t* cls, int n, uint64_t* v) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) v[i] = 1ull << (16 * cls[ord[i]]); }
-__global__ void k_molkey(const uint32_t* first, const uint32_t* seg, const uint64_t* hs, int n, uint64_t* mk) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n && first[i]) mk[seg[i] - 1] = hs[i]; }
-__global__ void k_moldec(const uint64_t* mv, int m, uint64_t* val, unsigned long long* stat) {   // stat: molecules, ambiguous, other
-    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
-    uint32_t c[3]; for (int k = 0; k < 3; k++) c[k] = min((uint32_t)((mv[i] >> (16 * k)) & 0xFFFF), 255u);
-    int best = 0; for (int k = 1; k < 3; k++) if (c[k] > c[best]) best = k;
-    bool tie = false; for (int k = 0; k < 3; k++) if (k != best && c[k] == c[best]) tie = true;
-    if (tie) { val[i] = 0; atomicAdd(&stat[1], 1ull); return; }
-    if (best == 2) { val[i] = 0; atomicAdd(&stat[2], 1ull); return; }
-    atomicAdd(&stat[0], 1ull);
-    val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull); }
+// R9 (order-free-rules.md; UmiFeatureCollapse / SnpConsensus::finalize in umi_dedup.h): junction and SNP molecules are collapsed per
+// (cell, feature) by the gene rule. Entries are the exact (cell, feature, UMI) runs: u[i] the UMI (base 5, N distinct), w[i] its reads.
+// Two UMIs are joined iff they differ at exactly one base and max(w) >= 2 min(w) - 1; a molecule is a connected component. One thread
+// per (cell, feature) group runs the union-find sequentially, so the result does not depend on scheduling; no output depends on the root.
+__device__ __forceinline__ bool umi5_one_mismatch(uint32_t a, uint32_t b, int len) {
+    int d = 0; for (int k = 0; k < len && d < 2; k++) { d += (a % 5) != (b % 5); a /= 5; b /= 5; } return d == 1; }
+__global__ void k_unique_hilo(const uint32_t* first, const uint32_t* seg, const uint64_t* hs, const uint32_t* lo, const uint32_t* ord, int n, uint64_t* uh, uint32_t* ul) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n && first[i]) { uh[seg[i] - 1] = hs[i]; ul[seg[i] - 1] = lo[ord[i]]; } }
+__global__ void k_gstart(const uint64_t* uh, int m, uint32_t* f) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) f[i] = (i == 0 || uh[i] != uh[i - 1]) ? 1u : 0u; }
+// SNP class vector (16 bits per class) -> per-UMI counts clamped at 255 (SnpConsensus::add saturates), and the UMI's reads
+__global__ void k_snpw(const uint64_t* mv, int m, uint32_t* w) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return; uint32_t s = 0; for (int k = 0; k < 3; k++) s += min((uint32_t)((mv[i] >> (16 * k)) & 0xFFFF), 255u); w[i] = s; }
+// snp == 0: root[i] = 1 for component roots (molecules per group = their sum). snp == 1: the root's value is the R1 vote over the merged
+// molecule (REF: DP; ALT: DP + AD), members 0; stat: molecules, ambiguous, other.
+__global__ void k_r9(const uint32_t* gs, int ng, int m, const uint32_t* u, const uint32_t* w, const uint64_t* mv, int ulen, int directional,
+                     uint32_t* root, uint32_t* isroot, uint64_t* val, uint32_t* msum, unsigned long long* stat) {
+    int g = blockIdx.x * blockDim.x + threadIdx.x; if (g >= ng) return;
+    const uint32_t s = gs[g], e = g + 1 < ng ? gs[g + 1] : (uint32_t)m;
+    for (uint32_t i = s; i < e; i++) root[i] = i;
+    auto find = [&](uint32_t x) { while (root[x] != x) { root[x] = root[root[x]]; x = root[x]; } return x; };
+    if (directional && e - s > 1)
+        for (uint32_t i = s; i + 1 < e; i++) for (uint32_t j = i + 1; j < e; j++) {
+            const uint32_t hi = max(w[i], w[j]), lo = min(w[i], w[j]);
+            if (hi + 1 >= 2 * lo && umi5_one_mismatch(u[i], u[j], ulen)) { uint32_t ri = find(i), rj = find(j); if (ri != rj) root[max(ri, rj)] = min(ri, rj); }
+        }
+    for (uint32_t i = s; i < e; i++) root[i] = find(i);
+    if (!val) { for (uint32_t i = s; i < e; i++) isroot[i] = root[i] == i; return; }
+    for (uint32_t i = s; i < e; i++) { msum[3 * i] = msum[3 * i + 1] = msum[3 * i + 2] = 0; }
+    for (uint32_t i = s; i < e; i++) for (int k = 0; k < 3; k++) msum[3 * root[i] + k] += min((uint32_t)((mv[i] >> (16 * k)) & 0xFFFF), 255u);
+    for (uint32_t i = s; i < e; i++) {
+        val[i] = 0; if (root[i] != i) continue;
+        const uint32_t* c = msum + 3 * i; int best = 0; for (int k = 1; k < 3; k++) if (c[k] > c[best]) best = k;
+        bool tie = false; for (int k = 0; k < 3; k++) if (k != best && c[k] == c[best]) tie = true;
+        if (tie) { atomicAdd(&stat[1], 1ull); continue; }
+        if (best == 2) { atomicAdd(&stat[2], 1ull); continue; }
+        atomicAdd(&stat[0], 1ull); val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull);
+    }
+}
+// group starts of the m unique entries (sorted by uh): returns the number of groups, starts in *gs
+static int group_starts(Arena& A, const uint64_t* uh, int m, uint32_t** gs) {
+    const int TB = 256; uint32_t* f = A.alloc<uint32_t>(m); k_gstart<<<(m + TB - 1) / TB, TB>>>(uh, m, f);
+    *gs = A.alloc<uint32_t>(m); int* dn = A.alloc<int>(1);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, cub::CountingInputIterator<uint32_t>(0), f, *gs, dn, m); });
+    int ng = 0; CK(cudaMemcpy(&ng, dn, 4, cudaMemcpyDeviceToHost)); return ng; }
 static bool g_snp_first = false;   // --snp-first: the sorted path's first-read rule (prod/campaign), for the original gate
 static unsigned long long g_snp_stat[3] = {0, 0, 0};
 // count_read's counters over the gene tuples: [0] exon_hits, [1] intron_hits (kReadIntron), [2] reads recorded with a UMI (umi_duplicate)
@@ -418,8 +451,18 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     if (n_sjt > 0) {
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sj_hi, sj_lo, n_sjt, cb + jb, ub5, &hs); const int G = (n_sjt + TB - 1) / TB;
         uint32_t* first = A.alloc<uint32_t>(n_sjt); k_runflag<<<G, TB>>>(hs, sj_lo, ord, n_sjt, first);
-        sj_u = A.alloc<uint64_t>(n_sjt); sj_n = A.alloc<uint32_t>(n_sjt); int* dn = A.alloc<int>(4);
-        cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, hs, sj_u, first, sj_n, dn, SumU32(), n_sjt); });
+        // R9: exact (cell, junction, UMI) runs with their reads, then the directional collapse per (cell, junction)
+        uint32_t* seg = A.alloc<uint32_t>(n_sjt);
+        cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::InclusiveSum(t, b, first, seg, n_sjt); });
+        int m = 0; CK(cudaMemcpy(&m, seg + n_sjt - 1, 4, cudaMemcpyDeviceToHost));
+        uint64_t* uh = A.alloc<uint64_t>(m); uint32_t *ul = A.alloc<uint32_t>(m), *segu = A.alloc<uint32_t>(m), *w = A.alloc<uint32_t>(m); int* dn = A.alloc<int>(4);
+        k_unique_hilo<<<G, TB>>>(first, seg, hs, sj_lo, ord, n_sjt, uh, ul);
+        cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, seg, segu, cub::ConstantInputIterator<uint32_t>(1), w, dn, SumU32(), n_sjt); });
+        uint32_t* gs; int ngr = group_starts(A, uh, m, &gs);
+        uint32_t *root = A.alloc<uint32_t>(m), *isroot = A.alloc<uint32_t>(m);
+        k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, ul, w, nullptr, in.ulen, in.par.directional, root, isroot, nullptr, nullptr, nullptr);
+        sj_u = A.alloc<uint64_t>(m); sj_n = A.alloc<uint32_t>(m);
+        cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, uh, sj_u, isroot, sj_n, dn, SumU32(), m); });
         CK(cudaMemcpy(&n_sju, dn, 4, cudaMemcpyDeviceToHost));
     }
     T.mark("5.sj");
@@ -438,11 +481,15 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             uint32_t* seg = A.alloc<uint32_t>(n_snpt);
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::InclusiveSum(t, b, first, seg, n_snpt); });
             int m = 0; CK(cudaMemcpy(&m, seg + n_snpt - 1, 4, cudaMemcpyDeviceToHost));
-            uint64_t* mk = A.alloc<uint64_t>(m); uint64_t* mv = A.alloc<uint64_t>(m); uint32_t* segu = A.alloc<uint32_t>(m);
-            k_molkey<<<G, TB>>>(first, seg, hs, n_snpt, mk);
+            uint64_t* mk = A.alloc<uint64_t>(m); uint64_t* mv = A.alloc<uint64_t>(m); uint32_t *segu = A.alloc<uint32_t>(m), *mu = A.alloc<uint32_t>(m);
+            k_unique_hilo<<<G, TB>>>(first, seg, hs, sn_lo, ord, n_snpt, mk, mu);
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, seg, segu, v, mv, dn, SumU64(), n_snpt); });
             uint64_t* val = A.alloc<uint64_t>(m); unsigned long long* st = A.alloc<unsigned long long>(4); CK(cudaMemset(st, 0, 32));
-            k_moldec<<<(m + TB - 1) / TB, TB>>>(mv, m, val, st);
+            // R9: per (cell, SNP) the UMIs are collapsed (weight: the UMI's clamped class counts), then R1 votes over each merged molecule
+            uint32_t* w = A.alloc<uint32_t>(m); k_snpw<<<(m + TB - 1) / TB, TB>>>(mv, m, w);
+            uint32_t* gs; int ngr = group_starts(A, mk, m, &gs);
+            uint32_t *root = A.alloc<uint32_t>(m), *msum = A.alloc<uint32_t>(3 * (size_t)m);
+            k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, mu, w, mv, in.ulen, in.par.directional, root, nullptr, val, msum, st);
             CK(cudaMemcpy(g_snp_stat, st, 24, cudaMemcpyDeviceToHost));
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, mk, sn_u, val, sn_v, dn, SumU64(), m); });
         }

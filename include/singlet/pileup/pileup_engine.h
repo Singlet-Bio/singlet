@@ -1911,9 +1911,8 @@ public:
                     vdj_model_.query(a.tid, s0, e0, vdj_overlaps_);
                     if (!vdj_overlaps_.empty()) {
                         const uint32_t vg = vdj_overlaps_[0];
-                        bool count = true;
-                        if (config_.umi_dedup && umi_str) count = vdj_umi_.insert(static_cast<uint32_t>(rr.bc), vg, umi_str, umi_len);
-                        if (count) { vdj_acc_.increment(vg, static_cast<uint32_t>(rr.bc)); stats.vdj_hits++; }
+                        if (config_.umi_dedup) vdj_umi_.add(static_cast<uint32_t>(rr.bc), vg, umi_str, umi_len);   // R9: counted at finalize
+                        else { vdj_acc_.increment(vg, static_cast<uint32_t>(rr.bc)); stats.vdj_hits++; }
                     }
                 }
             }
