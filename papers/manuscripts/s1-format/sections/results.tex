@@ -69,9 +69,8 @@ workload, minibatches of 512 cells made of eight blocks of 64 consecutive cells 
 buffer to fill first (Section~\ref{sec:methods}). From a cold start, reading \nm{fig1b-dataset} from an object store at
 \nm{fig1b-tier}, the first minibatch is a \texttt{torch.sparse\_csr\_tensor} after \nm{ttfm-s1}\,s with \sone, against
 \nm{ttfm-best-other}\,s for the fastest alternative (\nm{ttfm-best-other-name}; Fig.~\ref{fig:wow}b,
-Table~\ref{tab:minibatch}). The \sone{} reader first fetches the member's prefix, whose index grows with the number of
-chunks (24 bytes per chunk, a few hundred kilobytes for a matrix of a billion non-zeros), and then only the chunks that
-hold the requested cells. Sustained throughput into the model is \nm{thr-s1_stream-s3_1g} cells per second at
+Table~\ref{tab:minibatch}). The \sone{} reader first fetches the member's prefix (Section~\ref{sec:how}), then only the
+chunks that hold the requested cells. Sustained throughput into the model is \nm{thr-s1_stream-s3_1g} cells per second at
 1\,Gbit/s, \nm{thr-s1_stream-nfs} from the shared filesystem and \nm{thr-s1_stream-local} from the node's own disk
 (Fig.~\ref{fig:wow}d). AnnData read wholly into memory sustains more once loaded, at the cost of reading the entire file
 first and holding it in memory.
@@ -90,28 +89,33 @@ rather than multiply it (Section~\ref{sec:methods}).
 
 % =====================================================================
 \subsection{How \sone{} stores a count matrix}
+\label{sec:how}
 
-Fig.~\ref{fig:how} shows the format from a dataset down to the bit stream. A dataset is a small manifest that lists
-immutable sample objects named by the SHA-256 of their content (Fig.~\ref{fig:how}a). What a sample shares with other
-samples, the gene vocabulary of an annotation and the barcode whitelist of a chemistry, can live in a shared pack that
-a reader downloads once and caches. Anything that can be recomputed from the stored data is replaced by a recipe that
-the writer runs and verifies byte for byte before it drops the original (Fig.~\ref{fig:how}b).
+Fig.~\ref{fig:how} shows the format from a dataset down to the bit stream; Supplementary Section~\ref{sec:spec} specifies
+it exactly. A dataset is a small manifest that lists immutable sample objects named by a 128-bit prefix of the SHA-256 of
+their content (Fig.~\ref{fig:how}a). What a sample shares with other samples, the gene vocabulary of an annotation and the
+barcode whitelist of a chemistry, can live in a shared pack that a reader downloads once and caches. Anything that can be
+recomputed from the stored data is replaced by a recipe that the writer runs and verifies byte for byte before it drops
+the original (Fig.~\ref{fig:how}b).
 
-The count matrix is a \texttt{pz2} member whose first few kilobytes (header, chunk index, entropy tables and row keys)
-are enough to plan a read of any set of columns (Fig.~\ref{fig:how}c). Chunks of at most 49{,}152 non-zeros decode
-independently, so a reader issues one request for the prefix and one per contiguous run of chunks it needs.
+The count matrix is a \texttt{pz2} member whose prefix (header, chunk index of 24 bytes per chunk, entropy tables, and a
+key per gene that fixes the gene order) is enough to plan a read of any set of columns (Fig.~\ref{fig:how}c). The prefix
+grows with the number of genes and chunks, from a few kilobytes to about a hundred for the matrices here. Chunks of
+consecutive cells, by default at most 49{,}152 non-zeros each (a denser cell is a chunk of its own), decode independently,
+so a reader issues one or two requests for the prefix and one per contiguous run of chunks it needs.
 
 The codec turns each column into a short sequence of small symbols and codes them with static rANS
 (Fig.~\ref{fig:how}d). Rows are stored in order of how many cells express them, in classes of four per doubling, so
-frequent genes get small row numbers and the gaps between a cell's non-zeros are small; the order is derived from
-per-row counts that the file stores anyway, so it costs no permutation. Each non-zero becomes one symbol carrying the
-gap class and a flag for counts above one, plus a residual for those counts. The probability table for each symbol is
-selected by two contexts every reader knows at that point: how many non-zeros the cell has, and how far down the gene
-list the cell has progressed. The tables are counted once per matrix and stored, so decoding is a table lookup, a
-multiply and an add per symbol, with no model to update. Thirty-two interleaved rANS states~\cite{giesen2014interleaved}
-share one 16-bit word stream, which lets AVX2 and AVX-512 decode eight to sixteen symbols per instruction with output
-identical to the scalar decoder. After decoding, every state must return to its initial value, which doubles as an
-integrity check of every chunk.
+frequent genes get small row numbers and the gaps between a cell's non-zeros are small; the order is derived from the
+per-gene keys in the prefix rather than stored as an explicit permutation. Each non-zero becomes one symbol carrying the
+gap class and a flag for counts above one, with raw bits for the rest of the gap and, for counts above one, a residual.
+The probability table for each symbol is selected by two contexts every reader knows at that point: how many non-zeros
+the cell has, and how far down the gene list the cell has progressed. The tables are counted once per matrix and stored,
+so decoding a symbol takes a few table lookups and integer operations, with no model to update. Thirty-two interleaved
+rANS states~\cite{giesen2014interleaved} share one 16-bit word stream, which lets AVX2 and AVX-512 kernels decode eight
+to sixteen symbols per instruction with output identical to the scalar decoder. After decoding, every state must reach
+the encoder's initial value, which detects most corruption of the entropy-coded symbols of a chunk but not of the raw
+bits; the member also stores a SHA-256 digest of the canonical matrix, against which a full decode can be checked.
 
 \input{figures/fig2_how}
 

@@ -56,14 +56,15 @@ margin is modest.
   dictionary trained per matrix or Blosc2 with bit shuffling per chunk, nor stronger count models; the payload ladder
   does not separate the contributions of gene reordering, context modelling and the entropy coder.
 \item \emph{Scope.} \sone{} stores non-negative integer counts below $2^{32}$; normalised or otherwise non-integer matrices
-  are rejected, not rounded, which excluded one candidate dataset. A sample object holds count matrices, gene identifiers,
+  are rejected by the writer, not rounded, which excluded one candidate dataset (the container can hold floating-point
+  values through its generic codec, which we did not evaluate). A sample object holds count matrices, gene identifiers,
   barcodes and a cells table; richer annotations (AnnData's \texttt{obs}, \texttt{var}, \texttt{obsm} and \texttt{uns})
   are not part of the format. Reading the counts of one gene across all cells needs a full decode. Files are immutable;
   adding cells means writing a new sample object.
 \item \emph{Writing.} We did not time writing. The \sone{} writer counts its tables in one pass over the matrix and then
   codes it, but the formats differ in how much writing costs.
 \item \emph{Specification.} \sone{} has one implementation, in C++ with Python and R bindings over the same code; the
-  format specification (Supplementary Section~S1) and test vectors are meant to make a second one possible.
+  format specification (Supplementary Section~\ref{sec:spec}) and test vectors are meant to make a second one possible.
 \end{itemize}
 
 \paragraph{Beyond single cells.}
