@@ -1016,12 +1016,9 @@ public:
                     vdj_model_.query(tid, vdj_read_start, vdj_read_end, vdj_overlaps_);
                     if (!vdj_overlaps_.empty()) {
                         uint32_t vdj_gene = vdj_overlaps_[0];
-                        bool should_count = true;
-                        if (config_.umi_dedup && umi_str) {
-                            should_count = vdj_umi_.insert(
-                                static_cast<uint32_t>(bc_idx), vdj_gene, umi_str, umi_len);
-                        }
-                        if (should_count) {
+                        if (config_.umi_dedup) {                  // R9: counted at finalize
+                            vdj_umi_.add(static_cast<uint32_t>(bc_idx), vdj_gene, umi_str, umi_len);
+                        } else {
                             vdj_acc_.increment(vdj_gene, static_cast<uint32_t>(bc_idx));
                             stats.vdj_hits++;
                         }
@@ -1075,8 +1072,10 @@ public:
         }
 
         // ── Order-free finalize (docs/research-beta/order-free-rules.md) ──
-        snp_cons_.finalize(snp_ad_, snp_dp_, stats);   // R1
+        snp_cons_.finalize(snp_ad_, snp_dp_, stats, config_.umi_dedup_directional);   // R1 over R9 molecules
         snp_cons_.clear();
+        finalize_umi_features(sj_umi_dedup_, sj_acc_, stats.sj_hits);   // R9
+        finalize_umi_features(vdj_umi_, vdj_acc_, stats.vdj_hits);
         canonicalize_splice_junctions();               // R7
         if (config_.strand_prior_only)                  // R5: report the aggregate over all informative reads
             strand_probe_ = StrandEvidence{stats.strand_sense, stats.strand_antisense};
@@ -1172,7 +1171,7 @@ public:
         // chrM indel events captured during CIGAR walk
         std::vector<mt::MtIndelEvent> mt_indels;
 
-        UmiDedup sj_umi;
+        UmiFeatureCollapse sj_umi;   // R9: junction molecules, collapsed at finalize
         SnpConsensus snp_cons;  // per-molecule SNP allele consensus (order-free-rules R1)
         // Gene-model molecules (per worker, labelled and finalized after thread join)
         DirectionalUmiStore mol_store;
@@ -1185,7 +1184,7 @@ public:
 
         // N17: VDJ gene usage (per-worker)
         SparseAccumulator<uint16_t> vdj;
-        UmiDedup vdj_umi;
+        UmiFeatureCollapse vdj_umi;  // R9: V(D)J molecules, collapsed at finalize
         std::vector<uint32_t> vdj_overlaps;  // scratch
 
         // Multi-mapper buffer (per-worker)
@@ -1569,7 +1568,13 @@ public:
             for (uint32_t i = 0; i < n_barcodes && i < cq.size(); ++i) per_cell_qc_[i].merge(cq[i]);
         }
         // SNP AD/DP: consensus per molecule in its worker (order-free-rules R1), then merge
-        for (auto& wc : workers) { wc.snp_cons.finalize(wc.snp_ad, wc.snp_dp, stats); wc.snp_cons.clear(); }
+        for (auto& wc : workers) {
+            wc.snp_cons.finalize(wc.snp_ad, wc.snp_dp, stats, config_.umi_dedup_directional);  // R1 over R9 molecules
+            wc.snp_cons.clear();
+            // R9: a junction or V(D)J gene lies on one chromosome, so all its reads are in one worker
+            finalize_umi_features(wc.sj_umi, wc.sj, stats.sj_hits);
+            finalize_umi_features(wc.vdj_umi, wc.vdj, stats.vdj_hits);
+        }
         merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_ad; });
         merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_dp; });
         if (config_.count_mt) {
@@ -1982,7 +1987,7 @@ private:
     SparseAccumulator<uint16_t> mt_acc_rev_;  // chrM reverse-strand allele counts (same layout)
     std::vector<mt::MtIndelEvent> mt_indels_;  // chrM indels captured during CIGAR walk
     SnpConsensus snp_cons_;   // per-molecule SNP allele consensus (order-free-rules R1)
-    UmiDedup sj_umi_dedup_;  // UMI dedup for splice junctions
+    UmiFeatureCollapse sj_umi_dedup_;  // splice-junction molecules (order-free-rules R9)
 
     // G-EM: ambiguous reads buffered for post-pileup EM rescue
     std::vector<em_rescue::AmbigRead> ambig_reads_;
@@ -1996,7 +2001,7 @@ private:
     VdjModel vdj_model_;
     bool has_vdj_ = false;
     SparseAccumulator<uint16_t> vdj_acc_;
-    UmiDedup vdj_umi_;
+    UmiFeatureCollapse vdj_umi_;       // V(D)J molecules (order-free-rules R9)
 
     // G-RRNA: rRNA contamination detector (stateless, shared across serial path)
     singlet::RrnaDetector rrna_detector_;
@@ -2480,11 +2485,10 @@ private:
                         sj_acc_.set_n_features(sj_idx + 1000);  // batch resize
                     }
                     // UMI dedup: exact match on (barcode, junction_id, UMI)
-                    bool should_count = true;
-                    if (config_.umi_dedup && umi_str) {
-                        should_count = sj_umi_dedup_.insert(bc_idx, sj_idx, umi_str, umi_len);
-                    }
-                    if (should_count) {
+                    // R9: molecules are counted at finalize, after UMI correction
+                    if (config_.umi_dedup) {
+                        sj_umi_dedup_.add(bc_idx, sj_idx, umi_str, umi_len);
+                    } else {
                         sj_acc_.increment(sj_idx, bc_idx);
                         stats.sj_hits++;
                     }
@@ -2881,11 +2885,9 @@ private:
                         wc.sj.set_n_features(sj_idx + 1000);
                     }
                     // UMI dedup: exact match on (barcode, junction_id, UMI)
-                    bool should_count = true;
-                    if (config_.umi_dedup && umi_str) {
-                        should_count = wc.sj_umi.insert(bc_idx, sj_idx, umi_str, umi_len);
-                    }
-                    if (should_count) {
+                    if (config_.umi_dedup) {                      // R9: counted at finalize
+                        wc.sj_umi.add(bc_idx, sj_idx, umi_str, umi_len);
+                    } else {
                         wc.sj.increment(sj_idx, bc_idx);
                         wc.stats.sj_hits++;
                     }
@@ -3309,12 +3311,9 @@ private:
                 vdj_model_.query(tid, vdj_rs, vdj_re, wc.vdj_overlaps);
                 if (!wc.vdj_overlaps.empty()) {
                     uint32_t vdj_gene = wc.vdj_overlaps[0];
-                    bool should_count = true;
-                    if (config_.umi_dedup && umi_str) {
-                        should_count = wc.vdj_umi.insert(
-                            static_cast<uint32_t>(bc_idx), vdj_gene, umi_str, umi_len);
-                    }
-                    if (should_count) {
+                    if (config_.umi_dedup) {                      // R9: counted at finalize
+                        wc.vdj_umi.add(static_cast<uint32_t>(bc_idx), vdj_gene, umi_str, umi_len);
+                    } else {
                         wc.vdj.increment(vdj_gene, static_cast<uint32_t>(bc_idx));
                         wc.stats.vdj_hits++;
                     }
@@ -3353,6 +3352,15 @@ private:
         for (auto& w : workers) {
             target.merge_from(get(w));
         }
+    }
+
+    // R9: emit the molecules of one feature kind into its accumulator and add them to the hit counter
+    template <typename AccT>
+    void finalize_umi_features(UmiFeatureCollapse& store, AccT& acc, uint64_t& hits) {
+        if (store.empty()) return;
+        hits += store.finalize([&](uint32_t bc, uint32_t f, uint32_t n) { acc.increment(f, bc, n); },
+                               config_.umi_dedup_directional);
+        store.clear();
     }
 
     // Canonical junction order (order-free-rules R7): rows sorted by (contig index, donor, acceptor) instead of

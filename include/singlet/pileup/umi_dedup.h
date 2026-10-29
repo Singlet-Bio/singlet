@@ -487,12 +487,128 @@ public:
     }
 };
 
+// ── R9: UMI correction for junction, V(D)J and SNP evidence (docs/research-beta/order-free-rules.md) ──
+//
+// UMIs are packed 3 bits per base (A C G T N other) behind a leading 1 bit that fixes the length, for UMIs of up
+// to 21 bases: exact, no hashing, and two UMIs of one length differ at one base iff one 3-bit group differs.
+
+inline uint64_t umi_pack3(const char* umi, int len) {
+    uint64_t packed = 1;
+    for (int i = 0; i < len; ++i) {
+        uint64_t b;
+        switch (umi[i] | 32) { case 'a': b = 0; break; case 'c': b = 1; break; case 'g': b = 2; break;
+                               case 't': b = 3; break; case 'n': b = 4; break; default: b = 5; }
+        packed = (packed << 3) | b;
+    }
+    return packed;
+}
+
+/// Same length and exactly one base differs (UMIs from umi_pack3).
+inline bool umi3_one_mismatch(uint64_t a, uint64_t b) {
+    if (a == b || __builtin_clzll(a) != __builtin_clzll(b)) return false;
+    const uint64_t d = a ^ b;
+    return __builtin_popcountll((d | (d >> 1) | (d >> 2)) & 0x1249249249249249ULL) == 1;
+}
+
+/// Directional 1-mismatch collapse of one (barcode, feature) group, the rule DirectionalUmiStore applies to exon and
+/// intron molecules. Entries [0, n) must be sorted by read count descending, then packed UMI ascending (so the result
+/// does not depend on read order). UMI i absorbs a later UMI j that differs at one base when count_i >= 2 count_j - 1.
+/// On return root[i] is the component root of entry i; the number of roots is the number of molecules.
+template <typename UmiAt, typename CountAt>
+inline void umi3_directional_roots(size_t n, UmiAt umi, CountAt count, std::vector<uint32_t>& root) {
+    root.resize(n);
+    std::iota(root.begin(), root.end(), 0u);
+    auto find = [&](uint32_t x) { while (root[x] != x) { root[x] = root[root[x]]; x = root[x]; } return x; };
+    for (size_t i = 0; i + 1 < n; ++i)
+        for (size_t j = i + 1; j < n; ++j)
+            if (count(i) >= 2 * count(j) - 1 && umi3_one_mismatch(umi(i), umi(j))) {
+                const uint32_t ri = find(static_cast<uint32_t>(i)), rj = find(static_cast<uint32_t>(j));
+                if (ri != rj) root[rj] = ri;
+            }
+    for (size_t i = 0; i < n; ++i) root[i] = find(static_cast<uint32_t>(i));
+}
+
+/// Molecule counting for one feature kind (splice junctions, V(D)J genes) under R9: add() keeps the read count of
+/// every exact (barcode, feature, UMI) during the pass; finalize() collapses each (barcode, feature) group and emits
+/// its molecule count. Order-free: the pass only counts, and finalize sorts before collapsing.
+class UmiFeatureCollapse {
+public:
+    void add(uint32_t bc_idx, uint32_t feature, const char* umi, int umi_len) {
+        const uint64_t g = (static_cast<uint64_t>(bc_idx) << 32) | feature;
+        if (!umi || umi_len <= 0) { ++no_umi_[g]; return; }        // a read without a UMI is its own molecule
+        if (umi_len <= 21) { uint32_t& c = mols_[Key{g, umi_pack3(umi, umi_len)}]; if (c != UINT32_MAX) ++c; }
+        else long_.insert(std::to_string(g) + ':' + std::string(umi, static_cast<size_t>(umi_len)));  // exact only
+    }
+
+    /// emit(bc_idx, feature, molecules) once per (barcode, feature) group with molecules > 0. Returns the total.
+    template <typename Emit>
+    uint64_t finalize(Emit&& emit, bool directional) const {
+        struct E { uint64_t g, umi; uint32_t n; };
+        std::vector<E> v;
+        v.reserve(mols_.size());
+        for (const auto& kv : mols_) v.push_back({kv.first.g, kv.first.umi, kv.second});
+        std::sort(v.begin(), v.end(), [](const E& a, const E& b) {
+            if (a.g != b.g) return a.g < b.g;
+            if (a.n != b.n) return a.n > b.n;
+            return a.umi < b.umi;
+        });
+        std::unordered_map<uint64_t, uint32_t> out;               // group -> molecules
+        out.reserve(v.size() / 2 + no_umi_.size() + long_.size());
+        std::vector<uint32_t> root;
+        for (size_t s = 0; s < v.size();) {
+            size_t e = s;
+            while (e < v.size() && v[e].g == v[s].g) ++e;
+            uint32_t mols = static_cast<uint32_t>(e - s);
+            if (directional && mols > 1) {
+                umi3_directional_roots(e - s, [&](size_t i) { return v[s + i].umi; },
+                                       [&](size_t i) { return v[s + i].n; }, root);
+                mols = 0;
+                for (size_t i = 0; i < root.size(); ++i) mols += (root[i] == i);
+            }
+            out[v[s].g] += mols;
+            s = e;
+        }
+        for (const auto& kv : no_umi_) out[kv.first] += kv.second;
+        for (const auto& k : long_) out[std::stoull(k.substr(0, k.find(':')))] += 1;
+        uint64_t total = 0;
+        for (const auto& kv : out) {
+            emit(static_cast<uint32_t>(kv.first >> 32), static_cast<uint32_t>(kv.first & 0xffffffffu), kv.second);
+            total += kv.second;
+        }
+        return total;
+    }
+
+    bool empty() const { return mols_.empty() && no_umi_.empty() && long_.empty(); }
+    void clear() {
+        decltype(mols_)().swap(mols_);
+        decltype(no_umi_)().swap(no_umi_);
+        decltype(long_)().swap(long_);
+    }
+
+private:
+    struct Key {
+        uint64_t g, umi;
+        bool operator==(const Key& o) const { return g == o.g && umi == o.umi; }
+    };
+    struct KeyHash {
+        size_t operator()(const Key& k) const {
+            uint64_t h = k.g * 0x9e3779b97f4a7c15ULL ^ (k.umi + 0x632be59bd9b4e019ULL + (k.g << 6) + (k.g >> 2));
+            h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33;
+            return static_cast<size_t>(h);
+        }
+    };
+    std::unordered_map<Key, uint32_t, KeyHash> mols_;
+    std::unordered_map<uint64_t, uint32_t> no_umi_;
+    std::unordered_set<std::string> long_;
+};
+
 /// Per-molecule allele consensus at panel SNP sites (docs/research-beta/order-free-rules.md R1).
 /// add() counts each read's base class (REF / ALT / other) for its (barcode, SNP, UMI) molecule;
 /// finalize() emits one DP (and one AD if ALT) per molecule whose strict majority is REF or ALT.
 /// A tie between the two largest classes leaves the molecule ambiguous, and an "other" majority is
 /// evidence for neither allele: neither enters AD or DP. Counts commute, so the result does not
-/// depend on read order. A read without a UMI is its own molecule.
+/// depend on read order. A read without a UMI is its own molecule. With `directional`, the UMIs of one (barcode, SNP)
+/// are first collapsed by R9 (umi3_directional_roots) and the class counts summed over each merged molecule.
 class SnpConsensus {
 public:
     static constexpr uint8_t kRef = 0, kAlt = 1, kOther = 2;
@@ -507,9 +623,7 @@ public:
         const uint64_t site = (static_cast<uint64_t>(bc_idx) << 32) | snp_idx;
         uint8_t* n;
         if (umi_len <= 21) {
-            uint64_t packed = 1;
-            for (int i = 0; i < umi_len; ++i) packed = (packed << 3) | base3(umi[i]);
-            n = mols_[Key{site, packed}].n;
+            n = mols_[Key{site, umi_pack3(umi, umi_len)}].n;
         } else {
             n = long_mols_[std::to_string(site) + ':' + std::string(umi, static_cast<size_t>(umi_len))].n;
         }
@@ -518,14 +632,14 @@ public:
 
     /// AccT: increment(feature, barcode, delta). StatsT: snp_molecules, snp_molecules_ambiguous, snp_molecules_other.
     template <typename AccT, typename StatsT>
-    void finalize(AccT& ad, AccT& dp, StatsT& st) const {
+    void finalize(AccT& ad, AccT& dp, StatsT& st, bool directional = true) const {
         auto emit = [&](uint32_t bc, uint32_t snp, uint8_t cls) {
             if (cls == kOther) { ++st.snp_molecules_other; return; }
             ++st.snp_molecules;
             dp.increment(snp, bc, 1);
             if (cls == kAlt) ad.increment(snp, bc, 1);
         };
-        auto vote = [&](uint64_t site, const uint8_t* n) {
+        auto vote = [&](uint64_t site, const uint32_t* n) {
             uint8_t best = 0;
             for (uint8_t c = 1; c < 3; ++c) if (n[c] > n[best]) best = c;
             for (uint8_t c = 0; c < 3; ++c)
@@ -533,8 +647,43 @@ public:
             emit(static_cast<uint32_t>(site >> 32), static_cast<uint32_t>(site & 0xffffffffu), best);
         };
         for (const auto& r : single_) emit(r.bc, r.snp, r.cls);
-        for (const auto& kv : mols_) vote(kv.first.site, kv.second.n);
-        for (const auto& kv : long_mols_) vote(std::stoull(kv.first.substr(0, kv.first.find(':'))), kv.second.n);
+        // R9: per (barcode, SNP) site, UMIs sorted by reads descending then UMI, collapsed, class counts merged
+        struct E { uint64_t site, umi; uint32_t reads; uint8_t n[3]; };
+        std::vector<E> v;
+        v.reserve(mols_.size());
+        for (const auto& kv : mols_) {
+            const uint8_t* c = kv.second.n;
+            v.push_back({kv.first.site, kv.first.umi, uint32_t(c[0]) + c[1] + c[2], {c[0], c[1], c[2]}});
+        }
+        std::sort(v.begin(), v.end(), [](const E& a, const E& b) {
+            if (a.site != b.site) return a.site < b.site;
+            if (a.reads != b.reads) return a.reads > b.reads;
+            return a.umi < b.umi;
+        });
+        std::vector<uint32_t> root;
+        std::vector<uint32_t> merged;
+        for (size_t s = 0; s < v.size();) {
+            size_t e = s;
+            while (e < v.size() && v[e].site == v[s].site) ++e;
+            const size_t m = e - s;
+            if (directional && m > 1) {
+                umi3_directional_roots(m, [&](size_t i) { return v[s + i].umi; },
+                                       [&](size_t i) { return v[s + i].reads; }, root);
+            } else {
+                root.resize(m);
+                std::iota(root.begin(), root.end(), 0u);
+            }
+            merged.assign(3 * m, 0);
+            for (size_t i = 0; i < m; ++i)
+                for (int c = 0; c < 3; ++c) merged[3 * root[i] + c] += v[s + i].n[c];
+            for (size_t i = 0; i < m; ++i)
+                if (root[i] == i) vote(v[s].site, &merged[3 * i]);
+            s = e;
+        }
+        for (const auto& kv : long_mols_) {
+            const uint32_t n[3] = {kv.second.n[0], kv.second.n[1], kv.second.n[2]};
+            vote(std::stoull(kv.first.substr(0, kv.first.find(':'))), n);
+        }
     }
 
     void clear() {
@@ -544,10 +693,6 @@ public:
     }
 
 private:
-    static uint64_t base3(char c) {
-        switch (c | 32) { case 'a': return 0; case 'c': return 1; case 'g': return 2; case 't': return 3;
-                          case 'n': return 4; default: return 5; }
-    }
     struct Key {
         uint64_t site, umi;
         bool operator==(const Key& o) const { return site == o.site && umi == o.umi; }
