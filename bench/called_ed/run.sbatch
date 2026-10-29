@@ -17,6 +17,7 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 set -euo pipefail
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
+sdir() { [ -d "$1/state/$2" ] && echo "$1/state/$2" || echo "$1/state/${2/called_ed/called_v2}"; }   # state/called_ed* was renamed called_v2* on Clipper
 BRANCH=${BRANCH:-claude/festive-vaughan-4a4a8f}
 REPO=$WORK/repos/singlet-py.git
 SRC=$WORK/src/singlet-py/${BRANCH//\//__}
@@ -24,7 +25,7 @@ VENV=$WORK/venvs/singlet
 SIF=$WORK/images/python-3.12-bookworm.sif
 DATA=${DATA:-$WORK/data/emptydrop}
 EDROP=${EDROP:-$WORK/state/emptydrop/results}
-OUT=${OUT:-$WORK/state/called_ed/results}
+OUT=${OUT:-$(sdir "$WORK" called_ed)/results}
 CACHE=${CACHE:-$WORK/data/called_ed/truth}
 MODE=${MODE:-validate}
 TASK=${SLURM_ARRAY_TASK_ID:-0}
@@ -58,7 +59,7 @@ case "$MODE" in
     rt "${PY[@]}" "$B/inspect_outliers.py" --data "$DATA" --results "$OUT" --edrop "$EDROP" --truth-cache "$CACHE"
     ;;
   aggregate)
-    rt "${PY[@]}" "$B/aggregate.py" "$OUT" --out "${REPORT:-$WORK/state/called_ed/report}"
+    rt "${PY[@]}" "$B/aggregate.py" "$OUT" --out "${REPORT:-$(sdir "$WORK" called_ed)/report}"
     ;;
   *) echo "MODE must be validate, inspect or aggregate"; exit 2 ;;
 esac
