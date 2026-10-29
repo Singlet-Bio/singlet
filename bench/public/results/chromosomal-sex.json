@@ -1,0 +1,2787 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "chromosomal-sex",
+ "title": "Chromosomal sex per cell",
+ "conclusion": "On 171 samples with sex in their GEO metadata (472,363 cells), Singlet labels 97.0% of cells with their sample's recorded sex, against 68.0% for cellXY, 50.6% for xist-chrY-rule.",
+ "methods": "Data: the geo_sex21 cohort row, 21 studies whose GEO sample characteristics record donor sex, with both sexes in each study. Counts are Singlet's served gene counts (exon + intron) of the called cells. Every tool sees the same cells and the same counts. Truth: the sex recorded in GEO. Singlet: singlet.celllabels.sex. It uses the split of sex-informative UMIs (XIST against 10 non-PAR chrY genes) as a per-cell likelihood ratio. Cells are pooled per donor (per sample when genotype demultiplexing found one donor), and the male fraction is fitted by EM. cellXY::classifySex (phipsonlab, GitHub 0.99.0) runs with defaults (qc = TRUE) on the full count matrix, in random blocks of at least 5,000 cells because it densifies the matrix. The XIST/chrY rule calls female when XIST > 0 and no MSY UMI, male when MSY > 0 and XIST = 0, and makes no call otherwise. A tool's sample call is the majority of its labelled cells; Singlet's is the donor call. Per-cell metrics count a missing label as wrong (accuracy) or leave the cell out (precision). 95% CIs are bootstrap over samples.",
+ "status": "draft",
+ "generated_at": "2026-10-25T15:52:47+00:00",
+ "owner": "bench-public",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "bf1f5741144eb845eddec94f0417931c4533e98e",
+  "branch": "claude/bench-public-cohort-485cf7",
+  "binary": "python: singlet.celllabels (sex model xist-chrY-split/2)"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet.celllabels.sex.call_sex(X, genes, species, groups=donor)"
+  },
+  {
+   "name": "cellXY",
+   "version": "0.99.0 (phipsonlab/cellXY, GitHub)",
+   "role": "competitor",
+   "url": "https://github.com/phipsonlab/cellXY",
+   "params": "classifySex(counts, genome = 'Hs' | 'Mm', qc = TRUE)"
+  },
+  {
+   "name": "xist-chrY-rule",
+   "version": "n/a",
+   "role": "competitor",
+   "params": "female if XIST > 0 and MSY = 0; male if MSY > 0 and XIST = 0; MSY = cellXY's 34-gene set"
+  },
+  {
+   "name": "geo-metadata",
+   "version": "GEO sample characteristics",
+   "role": "truth"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "geo_sex21",
+   "title": "18 studies, 171 samples with sex in GEO metadata",
+   "accessions": {
+    "gse": "GSE130653;GSE143381;GSE145370;GSE155224;GSE157783;GSE176417;GSE179502;GSE193416;GSE207097;GSE209832;GSE221494;GSE228056;GSE240975;GSE254999;GSE262873;GSE267240;GSE292067;GSE316782",
+    "gsm": [
+     "GSM3746421",
+     "GSM3746422",
+     "GSM3746423",
+     "GSM3746424",
+     "GSM3746425",
+     "GSM4257562",
+     "GSM3746426",
+     "GSM3746427",
+     "GSM3746428",
+     "GSM4257563",
+     "GSM4317423",
+     "GSM4317424",
+     "GSM4317425",
+     "GSM4317426",
+     "GSM4317427",
+     "GSM4317428",
+     "GSM4317429",
+     "GSM4317430",
+     "GSM4317431",
+     "GSM4317432",
+     "GSM4257564",
+     "GSM4317433",
+     "GSM4317434",
+     "GSM4317435",
+     "GSM4317436",
+     "GSM4257566",
+     "GSM4697611",
+     "GSM4774931",
+     "GSM5364333",
+     "GSM4697612",
+     "GSM5364334",
+     "GSM4257567",
+     "GSM6401755",
+     "GSM5364335",
+     "GSM4697613",
+     "GSM5419465",
+     "GSM5799922",
+     "GSM4774932",
+     "GSM6278492",
+     "GSM5364336",
+     "GSM4257926",
+     "GSM4697614",
+     "GSM5364337",
+     "GSM5419466",
+     "GSM4697615",
+     "GSM5799923",
+     "GSM4697616",
+     "GSM5364338",
+     "GSM4774933",
+     "GSM4257927",
+     "GSM6876510",
+     "GSM5419467",
+     "GSM6278495",
+     "GSM4697617",
+     "GSM5799924",
+     "GSM4774934",
+     "GSM4697618",
+     "GSM4257928",
+     "GSM5419468",
+     "GSM6876511",
+     "GSM5364339",
+     "GSM4697619",
+     "GSM4697620",
+     "GSM4257929",
+     "GSM6876512",
+     "GSM5799925",
+     "GSM6278496",
+     "GSM6876514",
+     "GSM4697621",
+     "GSM6876515",
+     "GSM4774935",
+     "GSM5419469",
+     "GSM4257930",
+     "GSM4697622",
+     "GSM5799926",
+     "GSM4774936",
+     "GSM4485991",
+     "GSM6278498",
+     "GSM6876516",
+     "GSM4697623",
+     "GSM5419470",
+     "GSM4697624",
+     "GSM4697625",
+     "GSM6876517",
+     "GSM4774937",
+     "GSM5799927",
+     "GSM6278499",
+     "GSM6876518",
+     "GSM7113328",
+     "GSM7113329",
+     "GSM4697626",
+     "GSM4774938",
+     "GSM6876519",
+     "GSM8062049",
+     "GSM7713226",
+     "GSM4697627",
+     "GSM7713227",
+     "GSM6876520",
+     "GSM4697628",
+     "GSM8062050",
+     "GSM7113330",
+     "GSM7113331",
+     "GSM4774939",
+     "GSM6876521",
+     "GSM6876523",
+     "GSM7713228",
+     "GSM8062059",
+     "GSM6876525",
+     "GSM4774940",
+     "GSM6876526",
+     "GSM8180893",
+     "GSM7713231",
+     "GSM8062060",
+     "GSM6876527",
+     "GSM8180894",
+     "GSM6876528",
+     "GSM8180895",
+     "GSM7713232",
+     "GSM6876529",
+     "GSM4774941",
+     "GSM6876530",
+     "GSM8180896",
+     "GSM6876531",
+     "GSM8180897",
+     "GSM6876532",
+     "GSM7713233",
+     "GSM8180898",
+     "GSM7713234",
+     "GSM8262819",
+     "GSM8180899",
+     "GSM8180900",
+     "GSM7713235",
+     "GSM6876536",
+     "GSM6876538",
+     "GSM7713236",
+     "GSM8262820",
+     "GSM6876539",
+     "GSM8848307",
+     "GSM7713237",
+     "GSM6876540",
+     "GSM8262821",
+     "GSM9460196",
+     "GSM8848308",
+     "GSM9460197",
+     "GSM8262822",
+     "GSM9460199",
+     "GSM8848311",
+     "GSM9460200",
+     "GSM8848313",
+     "GSM9460201",
+     "GSM8848314",
+     "GSM9460202",
+     "GSM8848317",
+     "GSM9460203",
+     "GSM8848318",
+     "GSM8848321",
+     "GSM9460205",
+     "GSM8848323",
+     "GSM9460206",
+     "GSM8848324",
+     "GSM8848325",
+     "GSM8848326",
+     "GSM9460207",
+     "GSM8848327",
+     "GSM9460209",
+     "GSM8848328",
+     "GSM9460210",
+     "GSM8848329",
+     "GSM8848330",
+     "GSM9460211",
+     "GSM9460213"
+    ]
+   },
+   "truth": "sex in GEO sample characteristics",
+   "n_cells": 472363
+  }
+ ],
+ "metrics": [
+  {
+   "id": "sample_accuracy",
+   "name": "Samples whose call matches the GEO metadata",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "geo_sex21",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9708
+   },
+   "competitors": [
+    {
+     "tool": "cellXY",
+     "value": 0.8187
+    },
+    {
+     "tool": "xist-chrY-rule",
+     "value": 0.9708
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "171 samples; a tool's sample call is the majority of its labelled cells (Singlet: the donor call)",
+   "pass": "pass"
+  },
+  {
+   "id": "sample_called",
+   "name": "Samples given a call",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "geo_sex21",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "competitors": [
+    {
+     "tool": "cellXY",
+     "value": 1.0
+    },
+    {
+     "tool": "xist-chrY-rule",
+     "value": 1.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cell_accuracy",
+   "name": "Cells labelled with their sample's recorded sex (no call counts as wrong)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "geo_sex21",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9698,
+    "ci": [
+     0.9379,
+     0.9936
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "cellXY",
+     "value": 0.6797,
+     "ci": [
+      0.6228,
+      0.7368
+     ]
+    },
+    {
+     "tool": "xist-chrY-rule",
+     "value": 0.506,
+     "ci": [
+      0.4542,
+      0.5599
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0544
+    },
+    "rationale": "half-width of the paired 95% bootstrap CI (samples resampled) of Singlet minus cellXY"
+   },
+   "notes": "472363 cells; 95% CI: bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Labelled cells that match their sample's recorded sex",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "geo_sex21",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9721,
+    "ci": [
+     0.9401,
+     0.9957
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "cellXY",
+     "value": 0.773,
+     "ci": [
+      0.7229,
+      0.822
+     ]
+    },
+    {
+     "tool": "xist-chrY-rule",
+     "value": 0.9756,
+     "ci": [
+      0.9519,
+      0.9935
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0138
+    },
+    "rationale": "half-width of the paired 95% bootstrap CI (samples resampled) of Singlet minus xist-chrY-rule"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cell_coverage",
+   "name": "Cells given a label",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "geo_sex21",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9976,
+    "ci": [
+     0.993,
+     0.9998
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "cellXY",
+     "value": 0.8793,
+     "ci": [
+      0.8409,
+      0.9147
+     ]
+    },
+    {
+     "tool": "xist-chrY-rule",
+     "value": 0.5186,
+     "ci": [
+      0.4693,
+      0.5706
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0369
+    },
+    "rationale": "half-width of the paired 95% bootstrap CI (samples resampled) of Singlet minus cellXY"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "n_cells",
+   "name": "Cells scored",
+   "unit": "cells",
+   "category": "coverage",
+   "dataset": "pooled",
+   "direction": "none",
+   "singlet": {
+    "value": 472363
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "n_samples",
+   "name": "Samples scored",
+   "unit": "samples",
+   "category": "coverage",
+   "dataset": "pooled",
+   "direction": "none",
+   "singlet": {
+    "value": 171
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "geo_sex21",
+   "wall_s": 5.69,
+   "max_rss_gb": 0.0,
+   "threads": 1,
+   "notes": "sex model only (counts already in memory), 472,363 cells"
+  },
+  {
+   "tool": "cellXY",
+   "dataset": "geo_sex21",
+   "wall_s": 1394.16,
+   "max_rss_gb": 27.71,
+   "threads": 1,
+   "notes": "classifySex(qc = TRUE) and (qc = FALSE); dense blocks of >= 5,000 cells"
+  },
+  {
+   "tool": "xist-chrY-rule",
+   "dataset": "geo_sex21",
+   "wall_s": 0.0626,
+   "max_rss_gb": 0.0,
+   "threads": 1
+  }
+ ],
+ "figures": [
+  {
+   "id": "geo_sex21_cells",
+   "title": "Per-cell accuracy and coverage, GEO-metadata samples",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "metric",
+    "categories": [
+     "cell_accuracy",
+     "cell_precision",
+     "cell_coverage"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "cell_accuracy",
+      "cell_precision",
+      "cell_coverage"
+     ],
+     "y": [
+      0.9698,
+      0.9721,
+      0.9976
+     ],
+     "err_lo": [
+      0.9379,
+      0.9401,
+      0.993
+     ],
+     "err_hi": [
+      0.9936,
+      0.9957,
+      0.9998
+     ]
+    },
+    {
+     "name": "cellXY",
+     "tool": "cellXY",
+     "x": [
+      "cell_accuracy",
+      "cell_precision",
+      "cell_coverage"
+     ],
+     "y": [
+      0.6797,
+      0.773,
+      0.8793
+     ],
+     "err_lo": [
+      0.6228,
+      0.7229,
+      0.8409
+     ],
+     "err_hi": [
+      0.7368,
+      0.822,
+      0.9147
+     ]
+    },
+    {
+     "name": "xist-chrY-rule",
+     "tool": "xist-chrY-rule",
+     "x": [
+      "cell_accuracy",
+      "cell_precision",
+      "cell_coverage"
+     ],
+     "y": [
+      0.506,
+      0.9756,
+      0.5186
+     ],
+     "err_lo": [
+      0.4542,
+      0.9519,
+      0.4693
+     ],
+     "err_hi": [
+      0.5599,
+      0.9935,
+      0.5706
+     ]
+    }
+   ]
+  },
+  {
+   "id": "geo_sex21_samples",
+   "title": "Per-sample calls",
+   "kind": "table",
+   "columns": [
+    "gsm",
+    "gse",
+    "GEO sex",
+    "cells",
+    "singlet call",
+    "singlet cell acc.",
+    "cellXY call",
+    "cellXY cell acc.",
+    "xist-chrY-rule call",
+    "xist-chrY-rule cell acc."
+   ],
+   "rows": [
+    [
+     "GSM3746421",
+     "GSE130653",
+     "female",
+     2515,
+     "female",
+     1.0,
+     "female",
+     0.928,
+     "female",
+     0.928
+    ],
+    [
+     "GSM3746422",
+     "GSE130653",
+     "female",
+     3861,
+     "female",
+     1.0,
+     "female",
+     0.791,
+     "female",
+     0.748
+    ],
+    [
+     "GSM3746423",
+     "GSE130653",
+     "female",
+     2088,
+     "female",
+     1.0,
+     "female",
+     0.896,
+     "female",
+     0.875
+    ],
+    [
+     "GSM3746424",
+     "GSE130653",
+     "male",
+     3572,
+     "male",
+     0.999,
+     "male",
+     0.977,
+     "male",
+     0.328
+    ],
+    [
+     "GSM3746425",
+     "GSE130653",
+     "male",
+     2618,
+     "male",
+     1.0,
+     "female",
+     0.013,
+     "male",
+     0.013
+    ],
+    [
+     "GSM4257562",
+     "GSE143381",
+     "male",
+     1772,
+     "male",
+     1.0,
+     "male",
+     0.991,
+     "male",
+     0.981
+    ],
+    [
+     "GSM3746426",
+     "GSE130653",
+     "male",
+     2874,
+     "male",
+     1.0,
+     "female",
+     0.018,
+     "male",
+     0.019
+    ],
+    [
+     "GSM3746427",
+     "GSE130653",
+     "male",
+     1876,
+     "male",
+     1.0,
+     "male",
+     0.799,
+     "male",
+     0.093
+    ],
+    [
+     "GSM3746428",
+     "GSE130653",
+     "female",
+     2012,
+     "female",
+     1.0,
+     "female",
+     0.81,
+     "female",
+     0.11
+    ],
+    [
+     "GSM4257563",
+     "GSE143381",
+     "male",
+     1893,
+     "male",
+     1.0,
+     "male",
+     0.98,
+     "male",
+     0.975
+    ],
+    [
+     "GSM4317423",
+     "GSE145370",
+     "male",
+     2722,
+     "male",
+     1.0,
+     "male",
+     0.291,
+     "male",
+     0.075
+    ],
+    [
+     "GSM4317424",
+     "GSE145370",
+     "female",
+     1727,
+     "female",
+     1.0,
+     "male",
+     0.002,
+     "female",
+     0.013
+    ],
+    [
+     "GSM4317425",
+     "GSE145370",
+     "male",
+     1207,
+     "male",
+     1.0,
+     "male",
+     0.331,
+     "male",
+     0.101
+    ],
+    [
+     "GSM4317426",
+     "GSE145370",
+     "male",
+     2928,
+     "male",
+     1.0,
+     "male",
+     0.596,
+     "male",
+     0.2
+    ],
+    [
+     "GSM4317427",
+     "GSE145370",
+     "male",
+     3576,
+     "male",
+     1.0,
+     "male",
+     0.212,
+     "male",
+     0.048
+    ],
+    [
+     "GSM4317428",
+     "GSE145370",
+     "male",
+     2473,
+     "male",
+     1.0,
+     "male",
+     0.383,
+     "male",
+     0.099
+    ],
+    [
+     "GSM4317429",
+     "GSE145370",
+     "male",
+     3820,
+     "male",
+     1.0,
+     "male",
+     0.161,
+     "male",
+     0.034
+    ],
+    [
+     "GSM4317430",
+     "GSE145370",
+     "male",
+     3732,
+     "male",
+     1.0,
+     "male",
+     0.197,
+     "male",
+     0.057
+    ],
+    [
+     "GSM4317431",
+     "GSE145370",
+     "female",
+     3371,
+     "female",
+     1.0,
+     "male",
+     0.002,
+     "female",
+     0.011
+    ],
+    [
+     "GSM4317432",
+     "GSE145370",
+     "male",
+     4289,
+     "male",
+     1.0,
+     "male",
+     0.405,
+     "male",
+     0.126
+    ],
+    [
+     "GSM4257564",
+     "GSE143381",
+     "male",
+     5922,
+     "male",
+     1.0,
+     "male",
+     0.902,
+     "male",
+     0.887
+    ],
+    [
+     "GSM4317433",
+     "GSE145370",
+     "male",
+     2028,
+     "male",
+     1.0,
+     "male",
+     0.641,
+     "male",
+     0.257
+    ],
+    [
+     "GSM4317434",
+     "GSE145370",
+     "male",
+     2106,
+     "male",
+     1.0,
+     "male",
+     0.358,
+     "male",
+     0.113
+    ],
+    [
+     "GSM4317435",
+     "GSE145370",
+     "male",
+     2977,
+     "male",
+     1.0,
+     "male",
+     0.265,
+     "male",
+     0.08
+    ],
+    [
+     "GSM4317436",
+     "GSE145370",
+     "male",
+     3658,
+     "male",
+     1.0,
+     "male",
+     0.182,
+     "male",
+     0.039
+    ],
+    [
+     "GSM4257566",
+     "GSE143381",
+     "male",
+     3665,
+     "male",
+     1.0,
+     "male",
+     0.938,
+     "male",
+     0.936
+    ],
+    [
+     "GSM4697611",
+     "GSE155224",
+     "male",
+     4350,
+     "male",
+     1.0,
+     "male",
+     0.948,
+     "male",
+     0.834
+    ],
+    [
+     "GSM4774931",
+     "GSE157783",
+     "female",
+     1596,
+     "female",
+     1.0,
+     "female",
+     0.82,
+     "female",
+     0.764
+    ],
+    [
+     "GSM5364333",
+     "GSE176417",
+     "male",
+     4241,
+     "male",
+     1.0,
+     "male",
+     0.882,
+     "male",
+     0.423
+    ],
+    [
+     "GSM4697612",
+     "GSE155224",
+     "male",
+     1711,
+     "male",
+     1.0,
+     "male",
+     0.793,
+     "male",
+     0.743
+    ],
+    [
+     "GSM5364334",
+     "GSE176417",
+     "female",
+     4154,
+     "female",
+     0.998,
+     "male",
+     0.012,
+     "female",
+     0.054
+    ],
+    [
+     "GSM4257567",
+     "GSE143381",
+     "male",
+     4342,
+     "male",
+     1.0,
+     "male",
+     0.939,
+     "male",
+     0.934
+    ],
+    [
+     "GSM6401755",
+     "GSE209832",
+     "female",
+     52,
+     "female",
+     1.0,
+     "female",
+     0.827,
+     "female",
+     0.712
+    ],
+    [
+     "GSM5364335",
+     "GSE176417",
+     "female",
+     4419,
+     "female",
+     1.0,
+     "male",
+     0.045,
+     "female",
+     0.131
+    ],
+    [
+     "GSM4697613",
+     "GSE155224",
+     "female",
+     3601,
+     "female",
+     1.0,
+     "male",
+     0.46,
+     "female",
+     0.119
+    ],
+    [
+     "GSM5419465",
+     "GSE179502",
+     "male",
+     2153,
+     "male",
+     1.0,
+     "male",
+     0.992,
+     "male",
+     0.64
+    ],
+    [
+     "GSM5799922",
+     "GSE193416",
+     "female",
+     2982,
+     "female",
+     1.0,
+     "female",
+     0.912,
+     "female",
+     0.911
+    ],
+    [
+     "GSM4774932",
+     "GSE157783",
+     "male",
+     4263,
+     "male",
+     1.0,
+     "male",
+     0.943,
+     "male",
+     0.835
+    ],
+    [
+     "GSM6278492",
+     "GSE207097",
+     "female",
+     6613,
+     "female",
+     1.0,
+     "female",
+     0.665,
+     "female",
+     0.668
+    ],
+    [
+     "GSM5364336",
+     "GSE176417",
+     "female",
+     2390,
+     "female",
+     1.0,
+     "female",
+     0.959,
+     "female",
+     0.614
+    ],
+    [
+     "GSM4257926",
+     "GSE143381",
+     "female",
+     5626,
+     "female",
+     1.0,
+     "female",
+     0.834,
+     "female",
+     0.285
+    ],
+    [
+     "GSM4697614",
+     "GSE155224",
+     "female",
+     4704,
+     "female",
+     1.0,
+     "male",
+     0.293,
+     "female",
+     0.122
+    ],
+    [
+     "GSM5364337",
+     "GSE176417",
+     "male",
+     5127,
+     "male",
+     1.0,
+     "male",
+     0.756,
+     "male",
+     0.29
+    ],
+    [
+     "GSM5419466",
+     "GSE179502",
+     "male",
+     2887,
+     "male",
+     1.0,
+     "male",
+     0.993,
+     "male",
+     0.54
+    ],
+    [
+     "GSM4697615",
+     "GSE155224",
+     "male",
+     3486,
+     "male",
+     1.0,
+     "male",
+     0.967,
+     "male",
+     0.693
+    ],
+    [
+     "GSM5799923",
+     "GSE193416",
+     "male",
+     3108,
+     "male",
+     1.0,
+     "male",
+     0.971,
+     "male",
+     0.435
+    ],
+    [
+     "GSM4697616",
+     "GSE155224",
+     "male",
+     253,
+     "male",
+     0.996,
+     "male",
+     0.545,
+     "male",
+     0.206
+    ],
+    [
+     "GSM5364338",
+     "GSE176417",
+     "male",
+     3491,
+     "male",
+     0.999,
+     "male",
+     0.789,
+     "male",
+     0.275
+    ],
+    [
+     "GSM4774933",
+     "GSE157783",
+     "male",
+     2964,
+     "male",
+     1.0,
+     "male",
+     0.948,
+     "male",
+     0.855
+    ],
+    [
+     "GSM4257927",
+     "GSE143381",
+     "female",
+     2987,
+     "female",
+     1.0,
+     "female",
+     0.985,
+     "female",
+     0.507
+    ],
+    [
+     "GSM6876510",
+     "GSE221494",
+     "female",
+     1613,
+     "female",
+     1.0,
+     "female",
+     0.988,
+     "female",
+     0.722
+    ],
+    [
+     "GSM5419467",
+     "GSE179502",
+     "male",
+     770,
+     "male",
+     1.0,
+     "male",
+     0.977,
+     "male",
+     0.805
+    ],
+    [
+     "GSM6278495",
+     "GSE207097",
+     "female",
+     8541,
+     "female",
+     1.0,
+     "female",
+     0.546,
+     "female",
+     0.543
+    ],
+    [
+     "GSM4697617",
+     "GSE155224",
+     "female",
+     3322,
+     "female",
+     1.0,
+     "male",
+     0.459,
+     "female",
+     0.192
+    ],
+    [
+     "GSM5799924",
+     "GSE193416",
+     "male",
+     3383,
+     "male",
+     1.0,
+     "male",
+     0.904,
+     "male",
+     0.294
+    ],
+    [
+     "GSM4774934",
+     "GSE157783",
+     "male",
+     1951,
+     "male",
+     1.0,
+     "male",
+     0.927,
+     "male",
+     0.916
+    ],
+    [
+     "GSM4697618",
+     "GSE155224",
+     "female",
+     1162,
+     "female",
+     1.0,
+     "female",
+     0.854,
+     "female",
+     0.238
+    ],
+    [
+     "GSM4257928",
+     "GSE143381",
+     "female",
+     2901,
+     "female",
+     1.0,
+     "female",
+     0.971,
+     "female",
+     0.52
+    ],
+    [
+     "GSM5419468",
+     "GSE179502",
+     "male",
+     872,
+     "male",
+     1.0,
+     "male",
+     0.99,
+     "male",
+     0.806
+    ],
+    [
+     "GSM6876511",
+     "GSE221494",
+     "female",
+     3096,
+     "female",
+     1.0,
+     "female",
+     0.926,
+     "female",
+     0.586
+    ],
+    [
+     "GSM5364339",
+     "GSE176417",
+     "female",
+     5809,
+     "female",
+     0.999,
+     "female",
+     0.736,
+     "female",
+     0.633
+    ],
+    [
+     "GSM4697619",
+     "GSE155224",
+     "male",
+     2414,
+     "male",
+     1.0,
+     "male",
+     0.938,
+     "male",
+     0.708
+    ],
+    [
+     "GSM4697620",
+     "GSE155224",
+     "male",
+     595,
+     "male",
+     1.0,
+     "male",
+     0.837,
+     "male",
+     0.571
+    ],
+    [
+     "GSM4257929",
+     "GSE143381",
+     "female",
+     1863,
+     "female",
+     1.0,
+     "female",
+     0.977,
+     "female",
+     0.561
+    ],
+    [
+     "GSM6876512",
+     "GSE221494",
+     "female",
+     4893,
+     "female",
+     1.0,
+     "male",
+     0.044,
+     "female",
+     0.104
+    ],
+    [
+     "GSM5799925",
+     "GSE193416",
+     "female",
+     1787,
+     "female",
+     1.0,
+     "female",
+     0.913,
+     "female",
+     0.914
+    ],
+    [
+     "GSM6278496",
+     "GSE207097",
+     "male",
+     7665,
+     "male",
+     1.0,
+     "male",
+     0.992,
+     "male",
+     0.217
+    ],
+    [
+     "GSM6876514",
+     "GSE221494",
+     "male",
+     2580,
+     "male",
+     1.0,
+     "male",
+     0.703,
+     "male",
+     0.161
+    ],
+    [
+     "GSM4697621",
+     "GSE155224",
+     "male",
+     2551,
+     "male",
+     1.0,
+     "male",
+     0.975,
+     "male",
+     0.771
+    ],
+    [
+     "GSM6876515",
+     "GSE221494",
+     "male",
+     936,
+     "male",
+     1.0,
+     "male",
+     0.893,
+     "male",
+     0.332
+    ],
+    [
+     "GSM4774935",
+     "GSE157783",
+     "male",
+     4028,
+     "male",
+     1.0,
+     "male",
+     0.973,
+     "male",
+     0.844
+    ],
+    [
+     "GSM5419469",
+     "GSE179502",
+     "female",
+     2294,
+     "female",
+     1.0,
+     "female",
+     0.866,
+     "female",
+     0.928
+    ],
+    [
+     "GSM4257930",
+     "GSE143381",
+     "female",
+     1419,
+     "female",
+     1.0,
+     "female",
+     0.974,
+     "female",
+     0.665
+    ],
+    [
+     "GSM4697622",
+     "GSE155224",
+     "male",
+     2594,
+     "male",
+     1.0,
+     "male",
+     0.925,
+     "male",
+     0.908
+    ],
+    [
+     "GSM5799926",
+     "GSE193416",
+     "female",
+     3660,
+     "female",
+     1.0,
+     "female",
+     0.769,
+     "female",
+     0.78
+    ],
+    [
+     "GSM4774936",
+     "GSE157783",
+     "female",
+     2395,
+     "female",
+     1.0,
+     "female",
+     0.763,
+     "female",
+     0.668
+    ],
+    [
+     "GSM4485991",
+     "GSE143381",
+     "male",
+     5115,
+     "male",
+     1.0,
+     "male",
+     0.935,
+     "male",
+     0.867
+    ],
+    [
+     "GSM6278498",
+     "GSE207097",
+     "female",
+     4541,
+     "female",
+     1.0,
+     "female",
+     0.734,
+     "female",
+     0.736
+    ],
+    [
+     "GSM6876516",
+     "GSE221494",
+     "male",
+     1997,
+     "male",
+     1.0,
+     "male",
+     0.875,
+     "male",
+     0.877
+    ],
+    [
+     "GSM4697623",
+     "GSE155224",
+     "female",
+     3458,
+     "female",
+     1.0,
+     "male",
+     0.48,
+     "female",
+     0.115
+    ],
+    [
+     "GSM5419470",
+     "GSE179502",
+     "female",
+     1926,
+     "female",
+     1.0,
+     "female",
+     0.773,
+     "female",
+     0.935
+    ],
+    [
+     "GSM4697624",
+     "GSE155224",
+     "female",
+     2457,
+     "female",
+     1.0,
+     "female",
+     0.611,
+     "female",
+     0.163
+    ],
+    [
+     "GSM4697625",
+     "GSE155224",
+     "male",
+     578,
+     "male",
+     1.0,
+     "male",
+     0.882,
+     "male",
+     0.813
+    ],
+    [
+     "GSM6876517",
+     "GSE221494",
+     "male",
+     1389,
+     "male",
+     1.0,
+     "male",
+     0.737,
+     "male",
+     0.739
+    ],
+    [
+     "GSM4774937",
+     "GSE157783",
+     "male",
+     3000,
+     "male",
+     1.0,
+     "male",
+     0.927,
+     "male",
+     0.855
+    ],
+    [
+     "GSM5799927",
+     "GSE193416",
+     "female",
+     5435,
+     "male",
+     0.0,
+     "male",
+     0.0,
+     "male",
+     0.001
+    ],
+    [
+     "GSM6278499",
+     "GSE207097",
+     "female",
+     3812,
+     "female",
+     1.0,
+     "female",
+     0.625,
+     "female",
+     0.551
+    ],
+    [
+     "GSM6876518",
+     "GSE221494",
+     "female",
+     3679,
+     "female",
+     0.997,
+     "male",
+     0.015,
+     "female",
+     0.046
+    ],
+    [
+     "GSM7113328",
+     "GSE228056",
+     "male",
+     2858,
+     "male",
+     1.0,
+     "male",
+     0.903,
+     "male",
+     0.888
+    ],
+    [
+     "GSM7113329",
+     "GSE228056",
+     "male",
+     1310,
+     "male",
+     0.999,
+     "male",
+     0.358,
+     "male",
+     0.037
+    ],
+    [
+     "GSM4697626",
+     "GSE155224",
+     "male",
+     3958,
+     "male",
+     1.0,
+     "male",
+     0.956,
+     "male",
+     0.731
+    ],
+    [
+     "GSM4774938",
+     "GSE157783",
+     "male",
+     1954,
+     "male",
+     1.0,
+     "male",
+     0.935,
+     "male",
+     0.879
+    ],
+    [
+     "GSM6876519",
+     "GSE221494",
+     "male",
+     1093,
+     "male",
+     1.0,
+     "male",
+     0.923,
+     "male",
+     0.928
+    ],
+    [
+     "GSM8062049",
+     "GSE254999",
+     "female",
+     1021,
+     "female",
+     1.0,
+     "female",
+     0.546,
+     "female",
+     0.578
+    ],
+    [
+     "GSM7713226",
+     "GSE240975",
+     "female",
+     2532,
+     "female",
+     0.999,
+     "female",
+     0.614,
+     "female",
+     0.772
+    ],
+    [
+     "GSM4697627",
+     "GSE155224",
+     "male",
+     2037,
+     "male",
+     1.0,
+     "male",
+     0.926,
+     "male",
+     0.81
+    ],
+    [
+     "GSM7713227",
+     "GSE240975",
+     "male",
+     1512,
+     "male",
+     1.0,
+     "male",
+     0.989,
+     "male",
+     0.282
+    ],
+    [
+     "GSM6876520",
+     "GSE221494",
+     "male",
+     1128,
+     "male",
+     1.0,
+     "male",
+     0.98,
+     "male",
+     0.979
+    ],
+    [
+     "GSM4697628",
+     "GSE155224",
+     "male",
+     1968,
+     "male",
+     1.0,
+     "male",
+     0.883,
+     "male",
+     0.867
+    ],
+    [
+     "GSM8062050",
+     "GSE254999",
+     "male",
+     2157,
+     "female",
+     0.0,
+     "female",
+     0.095,
+     "female",
+     0.0
+    ],
+    [
+     "GSM7113330",
+     "GSE228056",
+     "female",
+     4881,
+     "female",
+     1.0,
+     "female",
+     0.98,
+     "female",
+     0.81
+    ],
+    [
+     "GSM7113331",
+     "GSE228056",
+     "male",
+     1000,
+     "male",
+     0.006,
+     "male",
+     0.133,
+     "male",
+     0.014
+    ],
+    [
+     "GSM4774939",
+     "GSE157783",
+     "male",
+     4344,
+     "male",
+     1.0,
+     "male",
+     0.96,
+     "male",
+     0.815
+    ],
+    [
+     "GSM6876521",
+     "GSE221494",
+     "female",
+     1999,
+     "female",
+     1.0,
+     "female",
+     0.874,
+     "female",
+     0.665
+    ],
+    [
+     "GSM6876523",
+     "GSE221494",
+     "female",
+     6355,
+     "female",
+     1.0,
+     "male",
+     0.092,
+     "female",
+     0.075
+    ],
+    [
+     "GSM7713228",
+     "GSE240975",
+     "female",
+     3139,
+     "female",
+     1.0,
+     "female",
+     0.533,
+     "female",
+     0.722
+    ],
+    [
+     "GSM8062059",
+     "GSE254999",
+     "female",
+     3616,
+     "male",
+     0.0,
+     "male",
+     0.0,
+     "male",
+     0.001
+    ],
+    [
+     "GSM6876525",
+     "GSE221494",
+     "female",
+     1444,
+     "female",
+     1.0,
+     "male",
+     0.087,
+     "female",
+     0.185
+    ],
+    [
+     "GSM4774940",
+     "GSE157783",
+     "male",
+     2710,
+     "male",
+     1.0,
+     "male",
+     0.958,
+     "male",
+     0.785
+    ],
+    [
+     "GSM6876526",
+     "GSE221494",
+     "female",
+     2557,
+     "female",
+     0.995,
+     "male",
+     0.104,
+     "female",
+     0.19
+    ],
+    [
+     "GSM8180893",
+     "GSE262873",
+     "male",
+     913,
+     "male",
+     1.0,
+     "male",
+     0.991,
+     "male",
+     0.369
+    ],
+    [
+     "GSM7713231",
+     "GSE240975",
+     "female",
+     2803,
+     "female",
+     1.0,
+     "male",
+     0.415,
+     "female",
+     0.58
+    ],
+    [
+     "GSM8062060",
+     "GSE254999",
+     "male",
+     2702,
+     "male",
+     1.0,
+     "male",
+     0.777,
+     "male",
+     0.462
+    ],
+    [
+     "GSM6876527",
+     "GSE221494",
+     "female",
+     2528,
+     "female",
+     1.0,
+     "male",
+     0.227,
+     "female",
+     0.254
+    ],
+    [
+     "GSM8180894",
+     "GSE262873",
+     "male",
+     658,
+     "male",
+     1.0,
+     "male",
+     0.995,
+     "male",
+     0.435
+    ],
+    [
+     "GSM6876528",
+     "GSE221494",
+     "male",
+     1843,
+     "male",
+     1.0,
+     "male",
+     0.746,
+     "male",
+     0.213
+    ],
+    [
+     "GSM8180895",
+     "GSE262873",
+     "male",
+     310,
+     "male",
+     1.0,
+     "male",
+     0.997,
+     "male",
+     0.471
+    ],
+    [
+     "GSM7713232",
+     "GSE240975",
+     "female",
+     2311,
+     "female",
+     1.0,
+     "male",
+     0.469,
+     "female",
+     0.611
+    ],
+    [
+     "GSM6876529",
+     "GSE221494",
+     "female",
+     1669,
+     "female",
+     0.986,
+     "male",
+     0.257,
+     "female",
+     0.313
+    ],
+    [
+     "GSM4774941",
+     "GSE157783",
+     "male",
+     4161,
+     "male",
+     1.0,
+     "male",
+     0.929,
+     "male",
+     0.815
+    ],
+    [
+     "GSM6876530",
+     "GSE221494",
+     "female",
+     554,
+     "female",
+     1.0,
+     "female",
+     0.507,
+     "female",
+     0.46
+    ],
+    [
+     "GSM8180896",
+     "GSE262873",
+     "male",
+     990,
+     "male",
+     1.0,
+     "male",
+     0.994,
+     "male",
+     0.32
+    ],
+    [
+     "GSM6876531",
+     "GSE221494",
+     "female",
+     3176,
+     "female",
+     0.997,
+     "male",
+     0.048,
+     "female",
+     0.102
+    ],
+    [
+     "GSM8180897",
+     "GSE262873",
+     "female",
+     793,
+     "female",
+     1.0,
+     "female",
+     0.588,
+     "female",
+     0.661
+    ],
+    [
+     "GSM6876532",
+     "GSE221494",
+     "female",
+     2065,
+     "female",
+     0.994,
+     "male",
+     0.048,
+     "female",
+     0.118
+    ],
+    [
+     "GSM7713233",
+     "GSE240975",
+     "male",
+     2551,
+     "male",
+     1.0,
+     "male",
+     0.996,
+     "male",
+     0.336
+    ],
+    [
+     "GSM8180898",
+     "GSE262873",
+     "female",
+     367,
+     "female",
+     0.997,
+     "female",
+     0.599,
+     "female",
+     0.684
+    ],
+    [
+     "GSM7713234",
+     "GSE240975",
+     "female",
+     1853,
+     "female",
+     0.999,
+     "female",
+     0.55,
+     "female",
+     0.742
+    ],
+    [
+     "GSM8262819",
+     "GSE267240",
+     "female",
+     3188,
+     "female",
+     1.0,
+     "female",
+     0.844,
+     "female",
+     0.835
+    ],
+    [
+     "GSM8180899",
+     "GSE262873",
+     "female",
+     1579,
+     "female",
+     0.994,
+     "female",
+     0.535,
+     "female",
+     0.541
+    ],
+    [
+     "GSM8180900",
+     "GSE262873",
+     "female",
+     347,
+     "female",
+     1.0,
+     "female",
+     0.697,
+     "female",
+     0.749
+    ],
+    [
+     "GSM7713235",
+     "GSE240975",
+     "male",
+     842,
+     "male",
+     1.0,
+     "male",
+     1.0,
+     "male",
+     0.683
+    ],
+    [
+     "GSM6876536",
+     "GSE221494",
+     "female",
+     5491,
+     "female",
+     1.0,
+     "female",
+     0.885,
+     "female",
+     0.419
+    ],
+    [
+     "GSM6876538",
+     "GSE221494",
+     "male",
+     1655,
+     "male",
+     0.999,
+     "male",
+     0.809,
+     "male",
+     0.267
+    ],
+    [
+     "GSM7713236",
+     "GSE240975",
+     "female",
+     519,
+     "female",
+     1.0,
+     "female",
+     0.94,
+     "female",
+     0.96
+    ],
+    [
+     "GSM8262820",
+     "GSE267240",
+     "female",
+     4119,
+     "female",
+     1.0,
+     "female",
+     0.79,
+     "female",
+     0.79
+    ],
+    [
+     "GSM6876539",
+     "GSE221494",
+     "female",
+     1098,
+     "female",
+     0.994,
+     "male",
+     0.113,
+     "female",
+     0.087
+    ],
+    [
+     "GSM8848307",
+     "GSE292067",
+     "male",
+     5370,
+     "male",
+     1.0,
+     "male",
+     0.971,
+     "male",
+     0.744
+    ],
+    [
+     "GSM7713237",
+     "GSE240975",
+     "male",
+     395,
+     "male",
+     1.0,
+     "male",
+     0.927,
+     "male",
+     0.876
+    ],
+    [
+     "GSM6876540",
+     "GSE221494",
+     "female",
+     2295,
+     "female",
+     1.0,
+     "male",
+     0.139,
+     "female",
+     0.203
+    ],
+    [
+     "GSM8262821",
+     "GSE267240",
+     "male",
+     3353,
+     "male",
+     0.999,
+     "female",
+     0.297,
+     "male",
+     0.29
+    ],
+    [
+     "GSM9460196",
+     "GSE316782",
+     "male",
+     3716,
+     "male",
+     1.0,
+     "male",
+     0.96,
+     "male",
+     0.666
+    ],
+    [
+     "GSM8848308",
+     "GSE292067",
+     "male",
+     3979,
+     "male",
+     1.0,
+     "male",
+     0.978,
+     "male",
+     0.815
+    ],
+    [
+     "GSM9460197",
+     "GSE316782",
+     "male",
+     2063,
+     "male",
+     1.0,
+     "male",
+     0.951,
+     "male",
+     0.917
+    ],
+    [
+     "GSM8262822",
+     "GSE267240",
+     "male",
+     3378,
+     "male",
+     1.0,
+     "male",
+     0.992,
+     "male",
+     0.406
+    ],
+    [
+     "GSM9460199",
+     "GSE316782",
+     "female",
+     2807,
+     "female",
+     1.0,
+     "male",
+     0.246,
+     "female",
+     0.086
+    ],
+    [
+     "GSM8848311",
+     "GSE292067",
+     "female",
+     5610,
+     "female",
+     1.0,
+     "female",
+     0.653,
+     "female",
+     0.702
+    ],
+    [
+     "GSM9460200",
+     "GSE316782",
+     "female",
+     1543,
+     "female",
+     1.0,
+     "female",
+     0.927,
+     "female",
+     0.283
+    ],
+    [
+     "GSM8848313",
+     "GSE292067",
+     "female",
+     3984,
+     "female",
+     1.0,
+     "female",
+     0.681,
+     "female",
+     0.691
+    ],
+    [
+     "GSM9460201",
+     "GSE316782",
+     "female",
+     1619,
+     "female",
+     1.0,
+     "female",
+     0.746,
+     "female",
+     0.281
+    ],
+    [
+     "GSM8848314",
+     "GSE292067",
+     "female",
+     2414,
+     "female",
+     0.999,
+     "female",
+     0.889,
+     "female",
+     0.869
+    ],
+    [
+     "GSM9460202",
+     "GSE316782",
+     "male",
+     6015,
+     "male",
+     1.0,
+     "male",
+     0.979,
+     "male",
+     0.749
+    ],
+    [
+     "GSM8848317",
+     "GSE292067",
+     "female",
+     2541,
+     "female",
+     0.999,
+     "female",
+     0.791,
+     "female",
+     0.798
+    ],
+    [
+     "GSM9460203",
+     "GSE316782",
+     "male",
+     3439,
+     "male",
+     1.0,
+     "male",
+     0.961,
+     "male",
+     0.661
+    ],
+    [
+     "GSM8848318",
+     "GSE292067",
+     "female",
+     3577,
+     "female",
+     1.0,
+     "female",
+     0.86,
+     "female",
+     0.839
+    ],
+    [
+     "GSM8848321",
+     "GSE292067",
+     "female",
+     1625,
+     "female",
+     1.0,
+     "female",
+     0.947,
+     "female",
+     0.921
+    ],
+    [
+     "GSM9460205",
+     "GSE316782",
+     "male",
+     3592,
+     "male",
+     1.0,
+     "male",
+     0.958,
+     "male",
+     0.655
+    ],
+    [
+     "GSM8848323",
+     "GSE292067",
+     "female",
+     3191,
+     "female",
+     1.0,
+     "female",
+     0.768,
+     "female",
+     0.769
+    ],
+    [
+     "GSM9460206",
+     "GSE316782",
+     "female",
+     5267,
+     "female",
+     1.0,
+     "female",
+     0.69,
+     "female",
+     0.175
+    ],
+    [
+     "GSM8848324",
+     "GSE292067",
+     "male",
+     1266,
+     "male",
+     0.998,
+     "male",
+     0.979,
+     "male",
+     0.872
+    ],
+    [
+     "GSM8848325",
+     "GSE292067",
+     "male",
+     1025,
+     "male",
+     1.0,
+     "male",
+     0.583,
+     "male",
+     0.163
+    ],
+    [
+     "GSM8848326",
+     "GSE292067",
+     "male",
+     1670,
+     "male",
+     0.999,
+     "male",
+     0.957,
+     "male",
+     0.9
+    ],
+    [
+     "GSM9460207",
+     "GSE316782",
+     "female",
+     2989,
+     "female",
+     1.0,
+     "female",
+     0.751,
+     "female",
+     0.328
+    ],
+    [
+     "GSM8848327",
+     "GSE292067",
+     "female",
+     595,
+     "female",
+     0.998,
+     "male",
+     0.054,
+     "female",
+     0.195
+    ],
+    [
+     "GSM9460209",
+     "GSE316782",
+     "male",
+     763,
+     "female",
+     0.0,
+     "female",
+     0.028,
+     "female",
+     0.003
+    ],
+    [
+     "GSM8848328",
+     "GSE292067",
+     "female",
+     2610,
+     "female",
+     1.0,
+     "female",
+     0.845,
+     "female",
+     0.817
+    ],
+    [
+     "GSM9460210",
+     "GSE316782",
+     "male",
+     4110,
+     "male",
+     1.0,
+     "male",
+     0.959,
+     "male",
+     0.838
+    ],
+    [
+     "GSM8848329",
+     "GSE292067",
+     "female",
+     3035,
+     "female",
+     1.0,
+     "female",
+     0.777,
+     "female",
+     0.769
+    ],
+    [
+     "GSM8848330",
+     "GSE292067",
+     "male",
+     1140,
+     "male",
+     1.0,
+     "male",
+     0.949,
+     "male",
+     0.887
+    ],
+    [
+     "GSM9460211",
+     "GSE316782",
+     "male",
+     4287,
+     "male",
+     1.0,
+     "male",
+     0.954,
+     "male",
+     0.687
+    ],
+    [
+     "GSM9460213",
+     "GSE316782",
+     "male",
+     1179,
+     "female",
+     0.0,
+     "female",
+     0.037,
+     "female",
+     0.001
+    ]
+   ]
+  },
+  {
+   "id": "pareto_cell_accuracy_geo_sex21",
+   "kind": "pareto",
+   "title": "Cells labelled with their sample's recorded sex (no call counts as wrong) against seconds (geo_sex21)",
+   "x": {
+    "label": "wall_s",
+    "unit": "seconds",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Cells labelled with their sample's recorded sex (no call counts as wrong)",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      5.69
+     ],
+     "y": [
+      0.9698
+     ],
+     "frontier": true
+    },
+    {
+     "name": "cellXY",
+     "tool": "cellXY",
+     "x": [
+      1394.16
+     ],
+     "y": [
+      0.6797
+     ],
+     "frontier": false
+    },
+    {
+     "name": "xist-chrY-rule",
+     "tool": "xist-chrY-rule",
+     "x": [
+      0.0626
+     ],
+     "y": [
+      0.506
+     ],
+     "frontier": true
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "sex_cells.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/chromosomal-sex/sex_cells.parquet",
+   "kind": "derived",
+   "sha256": "66d7bd01e053ad1736e87aa7512debca728353c21160556a8553bcb883fb487c",
+   "bytes": 3914862,
+   "format": "parquet"
+  },
+  {
+   "name": "sex_samples.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/chromosomal-sex/sex_samples.tsv",
+   "kind": "truth",
+   "sha256": "4c4175404c206a1a3f7ea81c899c0c682eea3fa9aac7e92d0e477495f069ec70",
+   "bytes": 8565,
+   "format": "tsv"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/chromosomal-sex/provenance.json",
+   "kind": "derived",
+   "sha256": "ff4918dcc209888f25fe76308f35e0ad5732e5b9637555797c092a79efd0d2ca",
+   "bytes": 7450,
+   "format": "json"
+  }
+ ],
+ "code": [
+  {
+   "path": "python/singlet/celllabels/sex.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/bf1f5741144eb845eddec94f0417931c4533e98e/python/singlet/celllabels/sex.py"
+  },
+  {
+   "path": "bench/public/sexancestry/sex_extract.py",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/bf1f5741144eb845eddec94f0417931c4533e98e/bench/public/sexancestry/sex_extract.py"
+  },
+  {
+   "path": "bench/public/sexancestry/cellxy.R",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/bf1f5741144eb845eddec94f0417931c4533e98e/bench/public/sexancestry/cellxy.R"
+  },
+  {
+   "path": "bench/public/capabilities/chromosomal_sex.py",
+   "role": "metric",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/bf1f5741144eb845eddec94f0417931c4533e98e/bench/public/capabilities/chromosomal_sex.py"
+  }
+ ],
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "per-cell chromosomal sex",
+   "supported": "yes"
+  },
+  {
+   "tool": "cellXY",
+   "output": "per-cell chromosomal sex",
+   "supported": "yes"
+  },
+  {
+   "tool": "xist-chrY-rule",
+   "output": "per-cell chromosomal sex",
+   "supported": "partial",
+   "note": "only cells with XIST or chrY UMIs"
+  },
+  {
+   "tool": "singlet",
+   "output": "label for every cell via its donor (genotype demultiplexing)",
+   "supported": "yes"
+  },
+  {
+   "tool": "cellXY",
+   "output": "label for every cell via its donor (genotype demultiplexing)",
+   "supported": "no"
+  },
+  {
+   "tool": "xist-chrY-rule",
+   "output": "label for every cell via its donor (genotype demultiplexing)",
+   "supported": "no"
+  },
+  {
+   "tool": "singlet",
+   "output": "flags male-female doublets (XIST and chrY in one cell)",
+   "supported": "yes"
+  },
+  {
+   "tool": "cellXY",
+   "output": "flags male-female doublets (XIST and chrY in one cell)",
+   "supported": "yes",
+   "note": "findMfDoublet, a separate function"
+  },
+  {
+   "tool": "xist-chrY-rule",
+   "output": "flags male-female doublets (XIST and chrY in one cell)",
+   "supported": "no"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/chromosomal_sex.py",
+  "function": "compute",
+  "laptop_minutes": 2,
+  "clipper_command": "bash bench/public/sexancestry/submit_sex.sh"
+ },
+ "caveats": [
+  "Counts are the atlas counts served today (pre-1.0 counting engine). The sex model only reads XIST and chrY gene counts, which the 1.0 double-count fix changes by a few percent; re-run on 1.0 counts after the atlas re-run.",
+  "8 labelled samples were left out because their served atlas bundle has an empty count matrix (a known atlas defect, re-run pending): GSM6815428, GSM6815430, GSM6815431, GSM6815432, GSM6815433, GSM6815434, GSM6815441, GSM6815442.",
+  "5 samples are called the opposite of their GEO sex by every tool (GSM5799927, GSM8062050, GSM8062059, GSM9460209, GSM9460213); they are scored against GEO as recorded, so they lower every tool's accuracy. The earlier validation (docs/cell_annotation.md section 4) found unambiguous XIST/chrY evidence against GEO for three of them, so these are probably metadata errors."
+ ]
+}
