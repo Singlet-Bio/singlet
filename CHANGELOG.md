@@ -4,6 +4,22 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+- **Your own counts as `.s1`** ([docs/s1-own-data.md](docs/s1-own-data.md)).
+  - `singlet.write_s1(x, path, ...)` (AnnData, scipy sparse or dense, cells x genes) and `singlet::write_s1(x, path, ...)`
+    (dgCMatrix, matrix, SingleCellExperiment or Seurat, genes x cells) store an integer count matrix with its gene ids
+    and barcodes as a `.s1` sample object with one `counts` member.
+  - Both packages call the same C++ encoder and write the same bytes when built against one zstd; the shared fixture test
+    compares the container, header, digest and decoded counts and names across builds.
+  - `singlet.read_s1()` / `singlet::read_s1()` read it back exactly. `singlet.load()`, `singlet.s1.client.load()` and R
+    `load()` read any `.s1` file that holds one count matrix and no atlas members.
+- **`singlet.torch.S1Cells` / `S1Stream`: stream minibatches from one `.s1` file**, local or over HTTP Range requests.
+  - Batches are block-shuffled: `batch_size // block_size` blocks of contiguous cells, a new order each epoch, split
+    across DataLoader workers.
+  - Each run of blocks costs one range request and one multithreaded decode straight into a `torch.sparse_csr_tensor`.
+  - `order="native"` keeps the codec's gene order (`gene_order` gives the permutation once); `"canonical"` keeps the
+    source order.
+  - `block_batches()` is the workload of the `.s1` benchmark.
+
 ## [1.3.0] — sample facts in the clients (not yet released)
 
 - **Structured sample facts in `obs` / `colData`.** `singlet.load()`, `Study.to_anndata()` and `singlet.cells()` / `Study.cells()`

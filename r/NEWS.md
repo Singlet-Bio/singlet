@@ -1,5 +1,14 @@
 # singlet (R) — NEWS
 
+## singlet (development version)
+
+### New features
+
+- `write_s1()` writes a count matrix (dgCMatrix or matrix, genes x cells; `SingleCellExperiment`; Seurat) as a `.s1`
+  sample object with one matrix member, with the same encoder and options as `singlet.write_s1()` in Python;
+  `read_s1()` reads it back exactly as a dgCMatrix, `SingleCellExperiment` or Seurat object.
+- `load()` reads any local `.s1` file that holds one count matrix and no atlas members (a `write_s1()` file).
+
 ## singlet 1.2.1
 
 - `load()` / `singlet_load()` and `singlet_cells()` add the structured sample facts of the singlet.bio study API to `colData`,

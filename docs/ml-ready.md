@@ -84,3 +84,5 @@ python bench/stream/summarize.py --out docs/ml-ready/preliminary.json
 - **Index and manifests.** A few samples the cell index lists are not in the released manifests (withheld studies, excluded
   samples); the loader skips and counts them (12 of 827 in the training run).
 - **Machine-readable metadata.** The atlas and every study also publish MLCommons Croissant metadata on singlet.bio: the atlas at `https://singlet.bio/croissant.json`, a study at `https://singlet.bio/api/croissant/<GSE>`, a sample at `https://singlet.bio/api/croissant/<GSE>/<GSM>` (live once the website change is deployed).
+- **One file of your own.** `singlet.torch.S1Cells` streams block-shuffled minibatches from a single `.s1` file (local or
+  HTTP), for example one written with `singlet.write_s1`; see [s1-own-data.md](s1-own-data.md).

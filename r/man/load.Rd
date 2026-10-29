@@ -34,7 +34,8 @@ singlet_load(
 GEO Sample accessions (\code{"GSM..."}) and/or paths to local
 \code{.singlet} bundles or .s1 manifests. Length one or more. A sample
 accession is resolved to its parent Series through the Singlet API; only
-that sample's members are fetched.}
+that sample's members are fetched. A local \code{.s1} file written by
+\code{\link{write_s1}} is read with \code{\link{read_s1}}.}
 
 \item{as}{Output class: \code{"sce"} (default) for a
 \code{SingleCellExperiment}, or \code{"seurat"} for a \code{Seurat}
