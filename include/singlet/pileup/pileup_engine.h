@@ -3364,13 +3364,17 @@ private:
     }
 
     // R9: an evidence UMI's root within its (cell, gene) group of the molecule store, as the gene counts collapse it
-    auto gene_roots(const DirectionalUmiStore& genes) const {
-        const bool dir = config_.umi_dedup_directional;
-        return [&genes, dir](uint32_t bc, uint32_t gene, uint64_t umi3, uint64_t& root) {
+    struct GeneRoots {
+        const DirectionalUmiStore* genes;
+        bool directional;
+        bool operator()(uint32_t bc, uint32_t gene, uint64_t umi3, uint64_t& root) const {
             int len = 0;
             const uint64_t p2 = umi3_to_2bit(umi3, &len);
-            return genes.gene_root(bc, gene, p2, len, dir, root);
-        };
+            return genes->gene_root(bc, gene, p2, len, directional, root);
+        }
+    };
+    GeneRoots gene_roots(const DirectionalUmiStore& genes) const {
+        return GeneRoots{&genes, config_.umi_dedup_directional};
     }
 
     // R9: emit the molecules of one feature kind into its accumulator and add them to the hit counter
