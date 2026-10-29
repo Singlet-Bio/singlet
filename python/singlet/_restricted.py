@@ -42,6 +42,10 @@ RESTRICTED_PROFILE = "restricted-1"
 def is_restricted_member(rel: str) -> bool:
     """True when ``rel`` (a path inside ``samples/<GSM>/``) is held back from the public bundle."""
     rel = rel.replace("\\", "/")
+    # The pipeline writes genotype-bearing outputs (snp_ad/snp_dp, ASE, donor VCFs, raw chrM allele counts, mt
+    # haplotypes) under private/ since prod/modality-fixes: everything there is restricted.
+    if rel.startswith("private/"):
+        return True
     if rel.startswith("donor/"):
         return rel[len("donor/") :] not in _DONOR_PUBLIC
     if rel.startswith("mt/"):

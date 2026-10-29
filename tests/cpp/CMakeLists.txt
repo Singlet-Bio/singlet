@@ -69,6 +69,9 @@ add_test(NAME test_pz2_multi_tu COMMAND test_pz2_multi_tu)
 
 # Cell calling / QC
 add_pileup_test(test_cell_calling)
+add_pileup_test(test_called_v2)   # C++ port of python/singlet/s1/cellcall.py vs its output (called_v2_fixture.h)
+target_include_directories(test_called_v2 PRIVATE ${CMAKE_SOURCE_DIR}/tests/cpp)
+target_compile_definitions(test_called_v2 PRIVATE CV2_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/data/called_ed_golden")
 add_pileup_test(test_barcode_rank)
 add_pileup_test(test_cell_qc)
 add_pileup_test(test_tiny_dataset_guard)
@@ -84,12 +87,17 @@ add_pileup_test(test_doublet_scores)
 add_pileup_test(test_saturation_curve)
 add_pileup_test(test_splice_psi)
 add_pileup_test(test_em_rescue)
+add_pileup_test(test_molecule_labels)
+add_pileup_test(test_strand_detect)
+add_pileup_test(test_run_screen)
 add_pileup_test(test_tpm_fpkm)
 add_pileup_test(test_atac_peaks)
 add_pileup_test(test_protocol_confidence_override)
 
 # ATAC tests
 add_pileup_test(test_atac_fragment)
+add_pileup_test(test_atac_peak_caller)
+add_pileup_test(test_atac_metrics)
 add_pileup_test(test_atac_bin_counter)
 add_pileup_test(test_atac_qc)
 add_pileup_test(test_atac_cell_caller)
@@ -133,11 +141,13 @@ add_pileup_test(test_summary_json)
 
 # Doublet / ambient / dedup
 add_pileup_test(test_doublet_detect_v2)
+add_pileup_test(test_doublet_calibration)   # v7 Scrublet-style scorer: planted doublets, rate-calibrated calls, determinism
 add_pileup_test(test_ambient_profile)
 add_pileup_test(test_read_dedup_stats)
 add_pileup_test(test_donor_demux_perf)
 add_pileup_test(test_wl_ambient)
 add_pileup_test(test_ambient_realistic)
+add_pileup_test(test_ambient_decontx)   # gene-level cluster-EM ambient estimator + integer corrected matrix
 add_pileup_test(test_sparse_accumulator)
 add_pileup_test(test_pseudocount_sensitivity)
 add_pileup_test(test_gray_zone)
@@ -145,6 +155,7 @@ add_pileup_test(test_mc_pvalue_calibration)
 
 # Modality-specific
 add_pileup_test(test_mt_events)
+add_pileup_test(test_mt_caller)   # reference-based, strand-aware chrM caller + private haplotype outputs
 add_pileup_test(test_rna_variant_caller)
 add_pileup_test(test_longread)
 add_pileup_test(test_methyl)
@@ -160,6 +171,7 @@ add_pileup_test(test_wgs_assembly)
 # Spatial
 add_pileup_test(test_visium_spatial)
 add_pileup_test(test_visium_qc)
+add_pileup_test(test_visium_tissue)
 add_pileup_test(test_spatial_barcodes)
 add_pileup_test(test_spatial_multiome)
 
@@ -205,6 +217,9 @@ add_pileup_test(test_nonhost_sylph)
 add_pileup_test(test_1fq_header)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)
+add_pileup_test(test_demux_doublet_autok)   # genotype doublets + held-out auto-K on synthetic pools
+add_pileup_test(test_prefix_probe)   # 5' constant-prefix probe on reads spread through the file (no false clip on sorted duplicates)
+add_pileup_test(test_polya_sites)    # poly(A) site detection/clustering, STAR CellReads.stats parsing, sj_features
 add_pileup_test(test_feature_barcode_detect)
 add_pileup_test(test_ram_tier)
 add_pileup_test(test_species_short_r2)

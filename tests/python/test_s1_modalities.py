@@ -124,8 +124,8 @@ def test_vocabulary_aliases_and_errors(study_dir, env):
         "splice_junctions",
     )
     assert client.normalize_modalities("splice_psi") == ("psi",)
-    with pytest.raises(client.ModalityUnavailable, match="unknown modality 'atac'.*vocabulary"):
-        client.normalize_modalities(["counts", "atac"])
+    with pytest.raises(client.ModalityUnavailable, match="unknown modality 'bogus'.*vocabulary"):
+        client.normalize_modalities(["counts", "bogus"])
     st = client.open_study(GSE, base=str(root))
     assert st.modalities() == ["counts", "spliced", "unspliced", "splice_junctions", "psi", "vdj"]
     assert st.modalities(G3) == ["counts", "spliced", "splice_junctions", "psi"]

@@ -196,6 +196,71 @@ would need a `called_ed` bit to filter on.
 2. `called` stays the default selection for now.
 3. inDrop and Drop-seq: stored with `validated: false` (as proposed; not separately decided).
 
+## In the pipeline (C++ port, prod/atlas-rerun)
+
+`include/singlet/pileup/called_v2.h` is a port of `cellcall.call()` with the same parameters (version 2.1 since
+2026-10-25: bounded knee and tail p-values, see the correction at the top of this note). It is the pipeline's
+default cell caller (`--cell-caller called_v2`; `star_solo` and `emptydrops` keep the old callers):
+
+* The knee set `called` is STARsolo's `CellRanger2.2 3000 0.99 10` rule (`SoloFeature_cellFiltering.cpp`), computed
+  on the pileup's exon counts after strand detection. STARsolo's own filtered barcodes are no longer used: STARsolo
+  counts with `--soloStrand Forward`, so for 5' libraries its knee came from wrong-strand counts. Strand is only known
+  after the pileup probe (#25), so passing `--soloStrand Reverse` would not cover undeclared 5' libraries.
+* `called_v2` runs on exon + intron counts per gene, keyed and sorted as in `cellcall.gene_counts`.
+* `cell_calls.tsv` has one row per barcode: `is_cell` (= `called`, what the migration reads), `called`, `called_v2`,
+  `umi_exon`, `umi_total`, `fdr`, `pvalue`, `log_prob`. The parameters (lower, retain, alpha, pool, counts) are in
+  `pileup_stats.json` under `provenance.cell_call`. Downstream per-cell outputs use the `called_v2` set.
+
+The port follows the reference down to floating-point order wherever a discrete decision depends on it:
+
+* the Monte Carlo is the same numbers: MT19937 seeded per path (`seed + i`), drawing as numba's `random()` and
+  `randint()`;
+* cephes `lgam` matches `scipy.special.gammaln` bit for bit;
+* the FITPACK `curfit` port reproduces `UnivariateSpline`'s knots and coefficients, including the `nest`
+  reset. It matched in 300 of 300 random barcode-rank curves;
+* numpy's pairwise sums, `quantile` and `histogram` edges, and scipy's bounded Brent minimiser are reproduced.
+
+One step is not reproduced bit for bit: `np.polyfit` in the Good-Turing smoothing (LAPACK `gelsd`). The ambient
+profile can therefore differ in the last bit, and alpha by up to the minimiser's `xatol` (1e-4 in log alpha) when
+the likelihood is flat. That can move a Monte Carlo count by one. A second residual: `retain = 10 ** log10(knee total)`. numpy's
+`log10` uses SVML on AVX-512 machines, the port uses glibc, and the two can land one ulp apart. When they
+straddle the total, uncalled barcodes with exactly the knee total are retained by one side and tested by the
+other. On the five validation samples the retain values were bit-identical on 4. On `nuclei2k_v2` they straddled
+3814, but no uncalled barcode had that total.
+
+Validation (Clipper, `bench/prod_atlas/`): on pbmc1k_v3, pbmc5p_v1, nuclei2k_v2, neuron1k_v3 and hgmm1k_v3 the
+binary's `called_v2` equals `cellcall.call` on its stored counts at 4 and 8 threads. That held in both the
+pinned venv (numpy 2.2 / scipy 1.15 / numba 0.64) and a newer env (numpy 2.5 / scipy 1.18 / numba 0.68). Over
+10,349 tested barcodes there were 0 differences, and FDRs agreed to the printed 6 digits. `tests/cpp/test_called_v2.cpp` checks the port
+against `cellcall.py` output (`bench/called_ed/make_cpp_fixture.py`). It requires identical `called_v2` sets and
+FDRs equal except for Monte Carlo ties. `bench/called_ed/equiv_cpp.py` runs the same comparison on real pipeline
+outputs.
+
+**Version 2.1 in C++** (2026-10-25). `knee_bounded()` (= `cellcall.knee`: the spline between DropletUtils' curve bounds,
+at least 6 points or the total at the left bound) gives `retain`; `knee()` keeps the 2.0 knee for reference. Barcodes below
+every simulated path get `p = min(Phi(z), 1/(niters+1))` (cephes `ndtr`, including its underflow to 0); the null mean and
+sd at each total are accumulated in the Monte Carlo kernel as exact fixed-point sums of deviations from path 0, so they do
+not depend on the thread count. Uncalled barcodes above 50,000 UMIs keep p = 1/(niters+1). The FDR is now kept in double
+(tail p reach 1e-200). `n_tail` is in the parameters. Both deviations from DropletUtils (the 6-point minimum, DropletUtils
+uses 4, and the tail extrapolation, DropletUtils keeps the floor) are intentional and pinned by the golden vectors.
+
+* Golden vectors (`tests/data/called_ed_golden/`): `test_called_v2.cpp` reads every case. Exact: `lower`, the ambient pool,
+  the tested set, `n_tail`, `called_v2`, every Monte Carlo and retained p. alpha agrees to 1e-6 (worst 6.9e-7, pbmc1k).
+  With alpha pinned to the reference value, tail p and FDR agree to 1e-6 on the log scale (worst 4e-14). Unpinned, the tail
+  p of `real_pbmc1k_v3` differ by up to 2.2e-6 on the log scale, so the free pass uses 1e-5 there. The cause is the
+  Good-Turing `np.polyfit`: LAPACK `gelsd` (SVD) is not reproduced bit for bit, a ~3-ulp change in the fitted line moves
+  alpha by up to ~7e-7 (fminbound's path), and a tail p at z near -30 moves by |z| times the change in z. Swapping the
+  port's line fit into the Python reproduces the C++ alpha exactly, so nothing else differs.
+* The vectors found a port gap, fixed here: when FITPACK's knot insertion reaches `n = nmax` it restarts with interior knots
+  placed as for interpolation and then smooths; the port returned NaN. Short curve-bounded fits reach it
+  (`synth_tail_extrapolation`: knee 2,755).
+* Stored counts (Clipper, `bench/called_ed_truth/verify_cpp.sbatch MODE=stored`, the `cv2_stored` driver on the runs the
+  truth-check script used): identical barcode sets to the script's recommended calls on all six datasets, Kang 16,573,
+  hgmm1k_v3 1,026, neuron1k_v3 1,355, nuclei2k_v2 2,376, pbmc1k_v3 1,190, pbmc5p_v1 8,399, with every Monte Carlo p equal.
+* Full pipeline (`singlet-prod-cv2`, 8 threads, `MODE=e2e`): pbmc1k_v3 1,196 and hgmm1k_v3 1,026, identical to
+  `cellcall.call` and to `cv2_stored` on the run's own stored counts. (pbmc1k_v3 calls 1,196 rather than 1,190 because this
+  branch's counts differ slightly from the `singlet-modfix` run the script used; the stored `prod-t4/t8` runs also call 1,196.)
+
 ## Limitations
 
 * The authors' calls are Cell Ranger, itself OrdMag + EmptyDrops on full-depth counts (Singlet caps input at 30M reads), so

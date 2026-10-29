@@ -1,0 +1,7 @@
+bayes8k hvg=8000
+clf_r0 hvg=8000 clf=1
+clf_r01 hvg=8000 clf=1 sridge=0.1
+clf_r03 hvg=8000 clf=1 sridge=0.3
+clf_r1 hvg=8000 clf=1 sridge=1
+clf_r3 hvg=8000 clf=1 sridge=3
+clf_r10 hvg=8000 clf=1 sridge=10

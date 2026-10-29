@@ -272,6 +272,167 @@ public:
     size_t n_groups()   const  { return groups_.size(); }
     bool   empty()      const  { return groups_.empty(); }
 
+    // ── Molecule labelling: spliced / unspliced / ambiguous ──────────────────
+    //
+    // record() above keeps one exon index per UMI and is used once per feature
+    // type, so a molecule whose reads touch both an exon and an intron of a gene
+    // used to be counted once in the exon matrix AND once in the intron matrix.
+    // record_read() keeps every read of a (barcode, gene, UMI) together with
+    // what that read touched; finalize_molecules() then labels each molecule
+    // exactly once (velocyto / STARsolo Velocyto rules on the collapsed gene
+    // model, see docs/pipeline-validation.md):
+    //   spliced    every read lies in exons only
+    //   unspliced  every read touches an intron (intronic or exon-intron spanning)
+    //   ambiguous  both kinds of reads
+    // and writes spliced + ambiguous to the exon matrix, unspliced to the intron
+    // matrix, so exon + intron counts every molecule once (= STARsolo GeneFull)
+    // and the exon matrix alone stays STARsolo Gene-like.
+
+    /// Read evidence bits passed to record_read().
+    static constexpr uint8_t kReadExonOnly    = 1;  ///< all aligned bases in exons of the gene
+    static constexpr uint8_t kReadIntron      = 2;  ///< some aligned bases in an intron of the gene
+    static constexpr uint8_t kReadTouchesExon = 4;  ///< some aligned bases in an exon of the gene
+
+    enum class MoleculeLabel : uint8_t { Spliced, Unspliced, Ambiguous };
+
+    static MoleculeLabel label_of(uint8_t flags) {
+        const bool e = (flags & kReadExonOnly) != 0;
+        const bool i = (flags & kReadIntron) != 0;
+        if (e && i) return MoleculeLabel::Ambiguous;
+        return i ? MoleculeLabel::Unspliced : MoleculeLabel::Spliced;
+    }
+
+    struct MoleculeStats {
+        uint64_t spliced = 0;
+        uint64_t unspliced = 0;
+        uint64_t ambiguous = 0;
+        /// Molecules the pre-fix engine counted in both matrices: some read
+        /// touched an exon and some read touched an intron of the same gene.
+        uint64_t legacy_double = 0;
+        uint64_t total() const { return spliced + unspliced + ambiguous; }
+        MoleculeStats& operator+=(const MoleculeStats& o) {
+            spliced += o.spliced; unspliced += o.unspliced;
+            ambiguous += o.ambiguous; legacy_double += o.legacy_double;
+            return *this;
+        }
+    };
+
+    /// Record one read of a molecule. exon_idx / intron_idx are the features the
+    /// read hit (UINT32_MAX if none); flags are kRead* bits.
+    void record_read(uint32_t bc_idx, uint32_t gene_idx, uint64_t umi_packed,
+                     uint32_t exon_idx, uint32_t intron_idx, uint8_t flags) {
+        uint64_t key = (static_cast<uint64_t>(bc_idx) << 32) | gene_idx;
+        auto& group = mol_groups_[key];
+        for (auto& e : group) {
+            if (e.packed == umi_packed) {
+                e.count++;
+                e.flags |= flags;
+                // smallest index, not first seen: read order (STAR threads) must not matter
+                e.exon_idx = std::min(e.exon_idx, exon_idx);
+                e.intron_idx = std::min(e.intron_idx, intron_idx);
+                return;
+            }
+        }
+        group.push_back({umi_packed, exon_idx, intron_idx, 1u, flags});
+    }
+
+    /// True if (bc, gene) already has molecules here (used to route reads that
+    /// were resolved outside the store's worker to the right store).
+    bool has_group(uint32_t bc_idx, uint32_t gene_idx) const {
+        return mol_groups_.count((static_cast<uint64_t>(bc_idx) << 32) | gene_idx) != 0;
+    }
+
+    /// Collapse UMIs (directional 1-Hamming when `directional`, exact otherwise),
+    /// label each molecule once and emit it.
+    ///   exon_acc.increment(exon_idx, bc)      spliced and ambiguous molecules
+    ///   intron_acc.increment(intron_idx, bc)  unspliced molecules
+    ///   on_ambiguous(bc, gene)                 ambiguous molecules (also in exon_acc)
+    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
+    MoleculeStats finalize_molecules(ExonAccT& exon_acc, IntronAccT& intron_acc,
+                                     AmbFn&& on_ambiguous, int umi_len,
+                                     bool directional) const {
+        MoleculeStats st;
+        std::vector<MolEntry> sorted;
+        std::vector<int> parent;
+        std::vector<uint8_t> comp_flags;
+        std::vector<uint32_t> comp_exon, comp_intron;
+
+        auto emit = [&](uint32_t bc, uint32_t gene, uint8_t flags,
+                        uint32_t exon_idx, uint32_t intron_idx) {
+            if ((flags & kReadTouchesExon) && (flags & kReadIntron)) st.legacy_double++;
+            switch (label_of(flags)) {
+                case MoleculeLabel::Spliced:
+                    exon_acc.increment(exon_idx, bc); st.spliced++; break;
+                case MoleculeLabel::Unspliced:
+                    intron_acc.increment(intron_idx, bc); st.unspliced++; break;
+                case MoleculeLabel::Ambiguous:
+                    exon_acc.increment(exon_idx, bc); on_ambiguous(bc, gene);
+                    st.ambiguous++; break;
+            }
+        };
+
+        for (const auto& [key, entries] : mol_groups_) {
+            const uint32_t bc = static_cast<uint32_t>(key >> 32);
+            const uint32_t gene = static_cast<uint32_t>(key & 0xffffffffu);
+
+            if (!directional || entries.size() == 1) {
+                for (const auto& e : entries)
+                    emit(bc, gene, e.flags, e.exon_idx, e.intron_idx);
+                continue;
+            }
+
+            sorted.assign(entries.begin(), entries.end());
+            std::sort(sorted.begin(), sorted.end(),
+                [](const MolEntry& a, const MolEntry& b) {
+                    return a.count != b.count ? a.count > b.count : a.packed < b.packed;
+                });
+            const int n = static_cast<int>(sorted.size());
+            parent.resize(n);
+            std::iota(parent.begin(), parent.end(), 0);
+            auto find = [&](int x) -> int {
+                while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+                return x;
+            };
+            for (int i = 0; i < n - 1; ++i)
+                for (int j = i + 1; j < n; ++j)
+                    if (umi_hamming_2bit(sorted[i].packed, sorted[j].packed, umi_len) == 1 &&
+                        sorted[i].count >= 2 * sorted[j].count - 1) {
+                        int ri = find(i), rj = find(j);
+                        if (ri != rj) parent[rj] = ri;
+                    }
+
+            // A molecule's evidence is the union over every UMI merged into it.
+            comp_flags.assign(n, 0);
+            comp_exon.assign(n, UINT32_MAX);
+            comp_intron.assign(n, UINT32_MAX);
+            for (int i = 0; i < n; ++i) {   // smallest feature index over the merged UMIs
+                int r = find(i);
+                comp_flags[r] |= sorted[i].flags;
+                comp_exon[r] = std::min(comp_exon[r], sorted[i].exon_idx);
+                comp_intron[r] = std::min(comp_intron[r], sorted[i].intron_idx);
+            }
+            for (int i = 0; i < n; ++i)
+                if (find(i) == i) emit(bc, gene, comp_flags[i], comp_exon[i], comp_intron[i]);
+        }
+        return st;
+    }
+
+    size_t n_molecule_groups() const { return mol_groups_.size(); }
+    bool   molecules_empty()   const { return mol_groups_.empty(); }
+    void   clear_molecules()         { mol_groups_.clear(); }
+
+private:
+    struct MolEntry {
+        uint64_t packed;      ///< 2-bit packed UMI
+        uint32_t exon_idx;    ///< first exon a read of this UMI hit
+        uint32_t intron_idx;  ///< first intron a read of this UMI hit
+        uint32_t count;       ///< reads with this exact UMI
+        uint8_t  flags;       ///< OR of kRead* over those reads
+    };
+    std::unordered_map<uint64_t, std::vector<MolEntry>> mol_groups_;
+
+public:
+
     // ── N7: Per-cell UMI statistics for sequencing saturation ────────────────
     struct PerCellUmiStats {
         uint64_t total_reads = 0;   ///< Raw read count (pre-dedup)
@@ -303,6 +464,24 @@ public:
                     [](const auto& a, const auto& b) { return a.second > b.second; });
                 s.unique_umis += directional_dedup(umi_counts, umi_len);
             }
+        }
+        return result;
+    }
+
+    /// per_cell_stats() over the molecule store (record_read()).
+    std::unordered_map<uint32_t, PerCellUmiStats> per_cell_molecule_stats(int umi_len) const {
+        std::unordered_map<uint32_t, PerCellUmiStats> result;
+        std::vector<std::pair<uint64_t, uint32_t>> umi_counts;
+        for (const auto& [key, entries] : mol_groups_) {
+            auto& s = result[static_cast<uint32_t>(key >> 32)];
+            umi_counts.clear();
+            for (const auto& e : entries) {
+                s.total_reads += e.count;
+                umi_counts.push_back({e.packed, e.count});
+            }
+            std::sort(umi_counts.begin(), umi_counts.end(),
+                [](const auto& a, const auto& b) { return a.second > b.second; });
+            s.unique_umis += directional_dedup(umi_counts, umi_len);
         }
         return result;
     }

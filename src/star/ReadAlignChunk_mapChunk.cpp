@@ -1,4 +1,6 @@
+#include "StarProfile.h"
 #include "ReadAlignChunk.h"
+#include "SeqCache.h"
 #include "GlobalVariables.h"
 #include "ThreadControl.h"
 #include "ErrorWarning.h"
@@ -93,13 +95,19 @@ void ReadAlignChunk::mapChunk() {//map one chunk. Input reads stream has to be s
     };
 
     #ifdef OPT_SORT_CHUNK_BY_PREFIX
-    if (P.outSAMorder != "PairedKeepInputOrder")
+    //the sort only helps STAR's own seed search (suffix-array locality); when the GPU engine has filled the sequence cache
+    //with every distinct sequence, reads take their result from the cache and the sort is pure cost. The BAM is unchanged
+    //either way (its sort key is iReadAll, assigned before this point); only the order of records within a chunk changes,
+    //which STAR's multi-threaded output already leaves unordered (Unmapped.out.mate*). SINGLET_ENGINE_GPU_CHUNK_SORT=1 keeps it.
+    static const bool keepSortGpu = getenv("SINGLET_ENGINE_GPU_CHUNK_SORT") != nullptr && getenv("SINGLET_ENGINE_GPU_CHUNK_SORT")[0] == '1';
+    if (P.outSAMorder != "PairedKeepInputOrder" && (g_seqCache == nullptr || !g_seqCache->prefilled || keepSortGpu))
+    {
+        PROF_T0(tSort);
         sortChunkByPrefix(chunkIn, chunkInSizeBytesTotal, P.readNends);
+        PROF_ADD(PROF_chunkSort, tSort);
+    }
     #endif
 
-    #ifdef OPT_DEDUP_R2
-    RA->dedupResetCache();
-    #endif
     
     RA->statsRA.resetN();
 

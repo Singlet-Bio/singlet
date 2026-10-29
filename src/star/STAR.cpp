@@ -1,3 +1,8 @@
+#include "StarProfile.h"
+#include <chrono>
+#ifdef SINGLET_PGO_GENERATE
+extern "C" void __gcov_dump(void);
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef __linux__
@@ -12,6 +17,9 @@
 #include "Chain.h"
 #include "ReadAlignChunk.h"
 #include "ReadAlign.h"
+#include "SeqCache.h"
+void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache);
+#include "StarAccel.h"
 #include "Stats.h"
 #include "genomeGenerate.h"
 #include "outputSJ.h"
@@ -208,6 +216,18 @@ int star_main_impl(int argInN, char *argIn[])
     // this does not seem to work at the moment
     // P.inOut->logMain << "mlock value="<<mlockall(MCL_CURRENT|MCL_FUTURE) <<"\n"<<flush;
 
+    // sequence cache for the main mapping pass (after any 2-pass junction insertion)
+    g_seqCache = SeqCache::create(P, genomeMain.nGenome);
+    seqCacheGpuPrefill(P, genomeMain, g_seqCache); //singlet --engine gpu: GPU mapping results into the cache (SeqCacheGpuPrefill.cpp)
+    {
+        const char *fa = getenv("SINGLET_STAR_FASTASSIGN");
+        g_starFastAssign = !(fa != nullptr && fa[0] == '0');
+        P.inOut->logMain << "FASTASSIGN: " << (g_starFastAssign ? "on" : "off") << "\n";
+    }
+#ifdef STAR_PROFILE
+    auto profClock0 = std::chrono::steady_clock::now(); unsigned long long profTsc0 = __rdtsc();
+#endif
+
     // prepare chunks and spawn mapping threads
     ReadAlignChunk *RAchunk[P.runThreadN];
     for (int ii = 0; ii < P.runThreadN; ii++)
@@ -260,6 +280,38 @@ int star_main_impl(int argInN, char *argIn[])
     P.inOut->logMain << timeMonthDayTime(g_statsAll.timeFinishMap) << " ..... finished mapping\n"
                      << "RAM after mapping:\n"
                      << linuxProcMemory() << flush;
+#ifdef STAR_PROFILE
+    {
+        double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - profClock0).count();
+        double hz = (__rdtsc() - profTsc0) / sec;
+        const char *nm[PROF_N] = {"chunkRead", "chunkMutexWait", "chunkSort", "readLoad", "map", "output", "chunkWrite", "seed", "windows", "stitch",
+                                   "outMapped", "outBarcode", "outSolo", "outSAM", "outUnmapped"};
+        P.inOut->logMain << "STAR_PROFILE wall=" << sec << "s threads=" << P.runThreadN;
+        for (int i = 0; i < PROF_N; i++)
+            P.inOut->logMain << " " << nm[i] << "=" << g_prof[i] / hz << "s";
+        const char *on[6] = {"unique", "multi", "tooManyLoci", "tooShort", "otherUnmapped", "cacheHit"};
+        for (int i = 0; i < 6; i++)
+            P.inOut->logMain << " " << on[i] << "=" << g_profOutcome[i][1] << "reads/" << g_profOutcome[i][0] / hz << "s"
+                             << "[seed=" << g_profOutcomeDetail[i][0] / hz << ",win=" << g_profOutcomeDetail[i][1] / hz << ",stitch=" << g_profOutcomeDetail[i][2] / hz
+                             << ",mmp=" << g_profOutcomeDetail[i][3] << ",saSearch=" << g_profOutcomeDetail[i][4] << ",windows=" << g_profOutcomeDetail[i][5]
+                             << ",shortProven=" << g_profOutcomeDetail[i][6]
+                             << ",winCreate=" << g_profOutcomeDetail[i][7] / hz << ",winFlank=" << g_profOutcomeDetail[i][8] / hz
+                             << ",winAssign=" << g_profOutcomeDetail[i][9] / hz << ",saAnchor=" << g_profOutcomeDetail[i][10]
+                             << ",saAll=" << g_profOutcomeDetail[i][11] << "]";
+        const char *cn[7] = {"g1perfectU", "g1perfectS", "g1mm1U", "g1mm1S", "g1otherU", "g1otherS", "uniqueOther"};
+        for (int i = 0; i < 7; i++)
+            P.inOut->logMain << " " << cn[i] << "=" << g_profClass[i][1] << "reads/" << g_profClass[i][0] / hz << "s"
+                             << "[seed=" << g_profClassDetail[i][0] / hz << ",win=" << g_profClassDetail[i][1] / hz << ",stitch=" << g_profClassDetail[i][2] / hz
+                             << ",mmp=" << g_profClassDetail[i][3] << ",saSearch=" << g_profClassDetail[i][4] << "]";
+        P.inOut->logMain << "\n" << flush;
+    }
+#endif
+    if (g_seqCache != nullptr)
+    {
+        P.inOut->logMain << g_seqCache->stats() << "\n" << flush;
+        delete g_seqCache;
+        g_seqCache = nullptr;
+    };
 
     // no need for genome anymore, free the memory
     genomeMain.freeMemory();
@@ -326,6 +378,12 @@ int star_main_impl(int argInN, char *argIn[])
     };
 
     delete P.inOut; // to close files
+
+#ifdef SINGLET_PGO_GENERATE
+    // profile-generate builds (src/star/pgo/pgo_build.sh): the pipeline's STAR child leaves with
+    // _exit(), which skips the gcov atexit handler, so write the profile here
+    __gcov_dump();
+#endif
 
     return 0;
 };

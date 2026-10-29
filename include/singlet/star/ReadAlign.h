@@ -1,12 +1,6 @@
 #ifndef H_ReadAlign
 #define H_ReadAlign
 
-// R2 sequence deduplication via consecutive-read comparison.
-// 14-mer prefix sort groups identical R2 sequences together.
-// Consecutive reads with identical numeric sequence skip alignment.
-// ~15-17% per-chunk hit rate, ~384KB/thread cache footprint.
-#define OPT_DEDUP_R2
-
 #include "IncludeDefine.h"
 #include "Parameters.h"
 #include "Transcript.h"
@@ -30,20 +24,11 @@ class ReadAlign {
         ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk);//allocate arrays
         int oneRead();
 
-        ///// R2 sequence dedup via consecutive comparison (OPT_DEDUP_R2) /////
-        // 14-mer sort groups identical R2 sequences; memcmp catches adjacent dupes.
-        #ifdef OPT_DEDUP_R2
-        static const uint DEDUP_MAX_MULTI = 256;
-        bool dedupCacheValid;
-        uint64 dedupCachedNTr;
-        uint dedupCachedNW;
-        bool dedupCachedChimRecord;
-        Transcript dedupCachedTr[DEDUP_MAX_MULTI];
-        char *dedupPrevSeq;      // previous R2 numeric sequence
-        uint dedupPrevSeqLen;
-        uint64 dedupReadsSkipped;
-        void dedupResetCache();
-        #endif
+        //sequence cache (SeqCache.h): encode/restore the mapping result of a read
+        std::vector<uint8> seqCacheBlob, seqCacheEncoded;
+        bool seqCacheable();
+        bool seqCacheEncode(std::vector<uint8> &blob);
+        void seqCacheRestore(const std::vector<uint8> &blob);
 
         Genome &mapGen, &genOut; //mapped-to-genome structure
 

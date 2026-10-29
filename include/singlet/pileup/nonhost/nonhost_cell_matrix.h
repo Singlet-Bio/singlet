@@ -102,7 +102,11 @@ public:
             const std::vector<NonHostScreener::MultiHit>&           multi_hits,
             const std::unordered_set<std::string>&                  valid_barcodes,
             const std::unordered_map<uint32_t, std::string>&        species_names,
-            const std::unordered_map<uint32_t, NonHostCategory>&    kingdom_map) {
+            const std::unordered_map<uint32_t, NonHostCategory>&    kingdom_map,
+            const std::unordered_set<uint32_t>*                     keep_species = nullptr) {
+        // keep_species: when non-null, only these species (the sample-level EM-confirmed set) are counted; a read is
+        // assigned to its best-scoring kept species. Sub-threshold k-mer hits (99% of PBMC cells had one "viral" UMI)
+        // are dropped instead of being written under numeric ids.
 
         NonHostCellMatrix mat;
 
@@ -134,6 +138,7 @@ public:
             NonHostCategory best_king  = NonHostCategory::UNKNOWN;
 
             for (const auto& [sid, rate] : mh.viral_hits) {
+                if (keep_species && !keep_species->count(sid)) continue;
                 if (rate > best_rate) {
                     best_rate  = rate;
                     best_sid   = sid;
@@ -141,6 +146,7 @@ public:
                 }
             }
             for (const auto& [sid, rate] : mh.microbial_hits) {
+                if (keep_species && !keep_species->count(sid)) continue;
                 if (rate > best_rate) {
                     best_rate  = rate;
                     best_sid   = sid;

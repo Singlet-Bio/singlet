@@ -1,3 +1,4 @@
+#include "StarProfile.h"
 #include "ReadAlignChunk.h"
 #include "ThreadControl.h"
 #include "ErrorWarning.h"
@@ -15,7 +16,10 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
             //////////////read a chunk from input files and store in memory
         if (P.outFilterBySJoutStage<2) {//read chunks from input file
 
+            PROF_T0(tMutex);
             if (P.runThreadN>1) pthread_mutex_lock(&g_threadChunks.mutexInRead);
+            PROF_ADD(PROF_chunkMutex, tMutex);
+            PROF_T0(tRead);
 
             chunkInSizeBytesTotal={0,0};
             
@@ -235,6 +239,7 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
             for (uint imate=0; imate<P.readNends; imate++) 
                 chunkIn[imate][chunkInSizeBytesTotal[imate]]='\n';//extra empty line at the end of the chunks
 
+            PROF_ADD(PROF_chunkRead, tRead);
             if (P.runThreadN>1) pthread_mutex_unlock(&g_threadChunks.mutexInRead);
 
         } else {//read from one file per thread
