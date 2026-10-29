@@ -1,6 +1,6 @@
 # Phase 1e preparation: ATAC fragment and peak reducers
 
-Status: preparation only, 2026-10-29. **Rules A1-A7 approved by the Beta Launch Prep session (2026-10-29); A8 added below.** Nothing here is switched on, compiled on a GPU, or run on a cluster. Phase 1e is not approved to
+Status: preparation only, 2026-10-29. **Rules A1-A7 approved by the Beta Launch Prep session (2026-10-29); A8 added below.** The CPU change and the CUDA reducers are now compiled and measured on Clipper (section 8); nothing is switched on in the engine. Phase 1e is not approved to
 switch on. Branch `claude/gpu-atac-reducers-270cf8`, no PR.
 
 What exists:
@@ -9,10 +9,10 @@ What exists:
 |---|---|---|
 | CPU semantics and order-dependence audit | this file, sections 1-2 | done |
 | Order-free rules A1-A8 | section 3 | A1-A7 approved; A8 (peaks from called cells) implemented in the reference |
-| CPU change for A1 and A2 (PR #48 code) | branch `claude/atac-orderfree-a1-a2` (commit 466da65c, cut from `origin/claude/atac-spatial-benchmark-2ba7df`) | pushed, **not compiled**; no PR |
+| CPU change for A1 and A2 (PR #48 code) | branch `claude/atac-orderfree-a1-a2` (commit 466da65c, cut from `origin/claude/atac-spatial-benchmark-2ba7df`) | pushed, compiled and tested on Clipper (sections 3.1, 8.1); no PR |
 | Reference reducers (numba/numpy) and CPU oracle ports | `bench/atac_reducers/atac_ref.py`, fixture generator `sim.py` | done |
 | Tests | `tests/python/test_atac_reducers_ref.py` | 18 pass (section 4) |
-| CUDA drafts | `src/engine_gpu/gpu_pileup/pileup/atac_reducers.cuh` | **not compiled**, not included anywhere |
+| CUDA drafts | `src/engine_gpu/gpu_pileup/pileup/atac_reducers.cuh` | compiles (nvcc 12.4, sm_90, `-fmad=false`) and runs in a standalone harness, `bench/atac_reducers/atac_reducers_test.cu` (section 8.2); not included in the engine |
 | What W11 builds and gates | section 6 | list |
 
 `pileup.cu` and `engine_gpu.cu` are untouched. The drafts are written against the 1b reducer interface (commit 475295a6): `Arena`,
@@ -318,7 +318,84 @@ Known risks for W11, in the order they are likely to bite:
 
 - A1-A7 approved (2026-10-29). A8: peaks from called cells in a second pass, because the cell call needs a first peak set (section 3). Implemented in the reference;
   not on the CPU branch; not yet benchmarked.
-- A1 and A2 are on the CPU branch `claude/atac-orderfree-a1-a2`, uncompiled. First thing to do with a compiler: build `test_atac_fragment` and run it, then rerun the
-  5k and Multiome sets and compare `fragments.tsv.gz`, `atac_barcode_metrics.tsv` and the layout line against the PR #48 outputs (identical expected on a sorted BAM).
+- A1 and A2 are on the CPU branch `claude/atac-orderfree-a1-a2`. Built and tested on Clipper; 5k and Multiome 3k give byte-identical outputs on the sorted BAM and on a name-collated BAM (section 8.1). Multiome 10k not run.
 - PR #48 is still a draft and its CPU path is the gate-(a) baseline; the engine branch does not contain it.
 - The mixture cell call was not audited line by line (F5).
+
+## 8. Measured results (Clipper, 2026-10-29)
+
+Sample `atac_pbmc_5k_nextgem` (10x ATAC NextGEM, 196.4 M fragment-record pairs, 102,477,773 unique fragments, kept `atac_sorted.bam` 70.8 GB). Everything below ran on Clipper,
+node-local scratch, code by git (branch fetched by URL, `git archive`). Scripts: `bench/atac_reducers/` (`build_test.sbatch`, `prep_a.sbatch`, `run_test.sbatch`,
+`compare_ordfree_5k.sbatch`, harness `atac_reducers_test.cu`, `prep_a.py`, `compare_a.py`).
+
+### 8.1 CPU: A1 + A2 before and after (job 792257, `short-bigmem`, 1:05 h)
+
+`singlet atac --bam` on the kept sorted BAM and on the same BAM after `samtools collate` (name-grouped, not coordinate-sorted). "old" = unmodified PR #48 tip
+(`singlet-atacsp-pr48`), "new" = `claude/atac-orderfree-a1-a2` (`a7cd1999`). Same whitelists and GTF; no `--paired-gex` (not Multiome).
+
+| run | unique fragments | duplicate read pairs | peaks | cells | wall | peak RSS | fragments.tsv md5 | peaks.bed md5 |
+|---|---|---|---|---|---|---|---|---|
+| old, sorted | 102,477,773 | 93,971,077 | 118,589 | 4,707 | 8:27 | 4.3 GB | ce0d30b1... | 7c2cfa2e... |
+| new, sorted | 102,477,773 | 93,971,077 | 118,589 | 4,707 | 13:43 | 10.8 GB | ce0d30b1... | 7c2cfa2e... |
+| new, collated | 102,477,773 | 93,971,077 | 118,589 | 4,707 | 14:53 | 10.8 GB | ce0d30b1... | 7c2cfa2e... |
+| old, collated | 196,448,848 | 2 | 135,060 | 4,676 (of 89,854 candidates) | 16:36 | 7.9 GB | 7073b1eb... | 8e616018... |
+
+- `fragments.tsv.gz` (decompressed), `atac_peak_counts.mtx.gz` (decompressed), `peaks.bed`, `atac_barcode_metrics.tsv`, `atac_cells.tsv`: **byte-identical** across old-sorted,
+  new-sorted and new-collated (md5 equal for all five files).
+- Old code on the collated BAM: +91.7% "unique" fragments (it only merges adjacent records, so almost no duplicate is merged), +13.9% peaks (118,589 to 135,060), 31 fewer cells and a
+  different candidate set (74,222 to 89,854); this is finding F1, measured at 5k scale (3k Multiome: +51%, +14% peaks).
+- A2: same layout and whitelist (offset 0, forward, whitelist 0). Exact hit rate 0.946165 on the 3,245,831 hash-sampled reads vs 0.94602 on the first 200,000 records; barcode counts
+  (exact 188,951,564, corrected 7,497,286, ambiguous 233,822, unmatched 3,048,592) are identical in all four runs.
+- Cost of A1/A2: wall 8:27 to 13:43 (+62%), peak RSS 4.3 to 10.8 GB (global dedup table, raw-barcode map).
+- "Two thread counts": `singlet atac` has no thread option (single-threaded post-alignment stage), so the order-free check here is sorted vs name-collated input, not thread count.
+- The C++ tests: `test_atac_fragment` (with the two new tests), `test_atac_peak_caller`, `test_atac_metrics` build and pass with the conda toolchain (build job 792135, section 3.1).
+  Two compile errors were found and fixed by that session (string and printf newline escapes broken by the edit). The A1/A2 branch compiled with no further change in this run.
+
+### 8.2 GPU: every reducer on real data (H100 NVL, one GPU)
+
+`atac_reducers_test.cu` includes `pileup.cu` (`PILEUP_NO_MAIN`) then `atac_reducers.cuh`; nvcc 12.4, `-arch=sm_90 -fmad=false`, host gcc 11, builds in 8 s (job 792294). The templates
+instantiate and ran with no change to the reducer logic: no wrong result was found in `red_fragment`, `red_insertions`, `insertions_merge`, `k_grid_scores`, `red_peak_count`.
+Added to `atac_reducers.cuh` (the draft described but did not write them): `ins_cum`, `peak_call_dev` (device scoring + histogram + candidate compaction with `cub::DeviceSelect::Flagged`,
+**host** BH threshold and **host** sequential region merge over the compacted candidates; the flag + scan + reduce-by-key region kernels are still not written), and `red_cell_metrics`
+(per-cell integer counters by `ReduceByKey` over the cell-major fragment table). `k_cand_flag` lost an unused parameter. Run job 792313 (10:24 total), earlier identical run 792286.
+
+**Mode B, all of the 5k sample.** Input: the CPU engine's own `fragments.tsv.gz` (102,477,773 rows) expanded to its read pairs (196,448,850 records) plus 20,495,555 decoy records
+(same coordinates with a failing flag, MAPQ, TLEN, mate contig, mate-unmapped or barcode; 216,944,405 records, 5.2 GB). Output vs the CPU engine's files, `cmp`:
+
+| output | result |
+|---|---|
+| `fragments.tsv` (102,477,773 lines, incl. read_pairs) | IDENTICAL |
+| `peaks.bed` (118,589 peaks: coordinates, pileup, -log10 p, -log10 q, summit offset) | IDENTICAL |
+| `atac_peak_counts.mtx` (118,589 x 35,091, 44,104,689 nonzeros) | IDENTICAL |
+| per-cell read_pairs, fragments, mito_fragments, peak_region_fragments, peak_region_cutsites (475,545 barcodes) | IDENTICAL |
+
+Partition and order invariance (all outputs compared field by field): K = 1 stream order, K = 1 shuffled, K = 2 shuffled: fragments, insertion table (98,282,269 entries),
+peaks, cell x peak triplets (45,709,654), per-cell counters all EQUAL. Timings (GPU stages, K = 1): fragment reduce 0.97 s for 217 M records, insertions 0.02 s, peak call 0.75 s
+(310 M grid positions), counts + metrics 5.5 s (includes host copies and the host sort of the triplets); whole run 36 s plus 78 s to load the tsv; peak host RSS 19.7 GB.
+Score cross-check (a strided sample of 310,907 of the 309,973,496 grid positions recomputed on the host with glibc): pileup k mismatches 0; of 13,567 scored positions, 3,788 scores are not
+bit-equal to the host's, max abs diff 3.6e-12 (max relative 1.6e-13); 0 of 118,589 peaks differ, because the decision is on the 0.01-wide histogram bins (section 3, A3).
+`lambda_bg` 15.167253; `s_thresh` 2.98; 6,582,879 candidate positions.
+
+A8 on the same data (`--cells-bc` = the CPU's 4,707 called cells): final peaks 116,232 vs 118,589 from all barcodes (-2.0%); the second pass costs 0.7 s of GPU peak-call time; K = 2 shuffled
+identical. Not compared with a CPU result (the CPU branch has no A8).
+
+**Mode A, real alignment records** (`prep_a.sbatch`, job 792279: one streaming pass over the BAM, chr21 + chr22 + chrM, 27,445,024 records, 25,814,508 with an exact-hit barcode,
+13,883,244 with MAPQ >= 30, barcode = exact whitelist hit only, no Hamming-1 correction). Reference = `atac_ref.py` run on the same records (numba, 217 s):
+
+| output | vs numba reference |
+|---|---|
+| fragments: 3,419,835 unique, 6,564,072 read pairs | EQUAL (also equal to the sequential CPU port on the sorted records, with the old and the A1 table) |
+| insertion table, all barcodes (2,924,957 entries) and called cells (2,517,167) | EQUAL |
+| peaks, all barcodes (4,471) and A8 (6,097 called cells, 4,416) | EQUAL (coordinates, summit, pileup, p and q as float32) |
+| cell x peak triplets (1,546,065 nonzeros, 3,970,486 cut sites) | EQUAL |
+| per-cell counters (103,237 cells with data) | EQUAL |
+
+K = 1, 1 shuffled, 2, 7 (shuffled): all outputs EQUAL. The old per-start dedup on the shuffled records gives 6,564,072 "fragments" (no duplicate merged), the reducer 3,419,835.
+Against the CPU engine's own rows for these contigs (3,509,609 rows, read pairs 6,826,814): every GPU fragment is in the CPU output (100.000%), 95.455% with an equal read_pairs; 89,774 CPU rows (2.558%)
+are not in the GPU output. The difference is the barcode: the CPU corrected 3.8% of the read barcodes (Hamming-1), the harness resolved exact hits only, so its read_pairs are smaller where a corrected
+read joined a fragment. This comparison is therefore not a gate; the exact one is mode B.
+
+**Not done / limits.** The records of mode B are derived from the CPU's unique fragments (so the dedup is tested against the CPU's own read_pairs, and the filter masks on decoys, but not on
+real alignment records at full scale); mode A tests the filters and dedup on real records for three contigs only. The barcode stage (A2, correction, Multiome pairing), the alignment and
+the host mixture cell call were not exercised. Multiome 3k and 10k were not run on the GPU. The region merge of the peak caller is host code. Timings are a single run on an otherwise idle
+H100 NVL and exclude the read-level expansion (phase 1e step 1).
