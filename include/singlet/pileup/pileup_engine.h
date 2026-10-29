@@ -538,6 +538,7 @@ public:
             uint8_t nh = 0;
             uint8_t seen = 0;
             bool gene_ambiguous = false;
+            bool primary_assigned = false;      // gene/exon came from the primary alignment
             uint32_t first_gene  = UINT32_MAX;   // first non-intergenic gene seen
             uint32_t second_gene = UINT32_MAX;   // conflicting gene for EM rescue
         };
@@ -666,7 +667,11 @@ public:
                                             if (it->second.second_gene == UINT32_MAX)
                                                 it->second.second_gene = hit.gene_idx;
                                         }
-                                        if (it->second.gene_idx == UINT32_MAX) {
+                                        // Without a primary assignment, the smallest exon over the
+                                        // secondaries, not the first seen (order-free-rules R7)
+                                        if (!it->second.primary_assigned &&
+                                            (it->second.gene_idx == UINT32_MAX ||
+                                             hit.exon_idx < it->second.exon_idx)) {
                                             it->second.gene_idx = hit.gene_idx;
                                             it->second.exon_idx = hit.exon_idx;
                                             it->second.read_flags = kExonicReadFlags;
@@ -952,6 +957,7 @@ public:
                     entry.bc_idx = bc_idx;
                     // The primary's assignment wins over one a secondary provided
                     if (rf.gene != UINT32_MAX) {
+                        entry.primary_assigned = true;
                         entry.gene_idx = rf.gene;
                         entry.exon_idx = rf.exon_idx;
                         entry.intron_idx = rf.intron_idx;
@@ -1194,6 +1200,7 @@ public:
             uint8_t nh = 0;
             uint8_t seen = 0;
             bool gene_ambiguous = false;
+            bool primary_assigned = false;
             uint32_t first_gene  = UINT32_MAX;
             uint32_t second_gene = UINT32_MAX;  // conflicting gene for EM rescue
         };
@@ -1432,9 +1439,12 @@ public:
                                 if (m.second_gene == UINT32_MAX) m.second_gene = eg;
                                 m.gene_idx = UINT32_MAX;
                                 m.exon_idx = UINT32_MAX;
-                            } else if (wentry.gene_idx != UINT32_MAX &&
-                                       (m.gene_idx == UINT32_MAX || wentry.bc_idx >= 0)) {
-                                // Take the primary's assignment (the entry that saw it has bc_idx)
+                            } else if (wentry.gene_idx != UINT32_MAX && !m.primary_assigned &&
+                                       (wentry.primary_assigned || m.gene_idx == UINT32_MAX ||
+                                        wentry.exon_idx < m.exon_idx)) {
+                                // The primary's assignment wins; otherwise the smallest
+                                // secondary exon (order-free-rules R7)
+                                m.primary_assigned = wentry.primary_assigned;
                                 m.gene_idx = wentry.gene_idx;
                                 m.exon_idx = wentry.exon_idx;
                                 m.intron_idx = wentry.intron_idx;
@@ -2990,7 +3000,11 @@ private:
                                             if (it->second.second_gene == UINT32_MAX)
                                                 it->second.second_gene = hit.gene_idx;
                                         }
-                                        if (it->second.gene_idx == UINT32_MAX) {
+                                        // Without a primary assignment, the smallest exon over the
+                                        // secondaries, not the first seen (order-free-rules R7)
+                                        if (!it->second.primary_assigned &&
+                                            (it->second.gene_idx == UINT32_MAX ||
+                                             hit.exon_idx < it->second.exon_idx)) {
                                             it->second.gene_idx = hit.gene_idx;
                                             it->second.exon_idx = hit.exon_idx;
                                             it->second.read_flags = kExonicReadFlags;
@@ -3237,6 +3251,7 @@ private:
                 entry.seen++;
                 entry.bc_idx = bc_idx;
                 if (rf.gene != UINT32_MAX) {
+                    entry.primary_assigned = true;
                     entry.gene_idx = rf.gene;
                     entry.exon_idx = rf.exon_idx;
                     entry.intron_idx = rf.intron_idx;
