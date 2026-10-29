@@ -67,11 +67,20 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // ---- one run with outputs
     { unsigned long long z[4] = {0, 0, 0, 0}; CK(cudaMemcpyToSymbol(g_molstat, z, sizeof z)); }
     g_cell_stats = true;
+    { const char* pk = getenv("SINGLET_GPU_PILEUP_PARTS"); g_force_parts = pk ? std::max(0, std::min(atoi(pk), kMaxParts)) : 0; }
     Timer T; T.start();
     Outputs o;
     run_pipeline(A, T, in, &o);
     { unsigned long long ms[4]; CK(cudaMemcpyFromSymbol(ms, g_molstat, sizeof ms));
       po.molSpliced = ms[0]; po.molUnspliced = ms[1]; po.molAmbiguous = ms[2]; po.molLegacyDouble = ms[3]; }
+    {   // digest of everything the run returns (the partition-invariance gate compares it across K)
+        Sha256 h; h.update(sha_out(o).data(), 64);
+        h.update(o.indels.data(), o.indels.size() * 16); h.update(o.cell_reads.data(), o.cell_reads.size() * 4); h.update(o.cell_mol.data(), o.cell_mol.size() * 4);
+        h.update(o.hits, sizeof o.hits); h.update(&o.sj_raw_sum, 8); h.update(g_snp_stat, sizeof g_snp_stat);
+        unsigned long long ms[4]; CK(cudaMemcpyFromSymbol(ms, g_molstat, sizeof ms)); h.update(ms, sizeof ms);
+        long long n[4] = {o.n_gene_tuples, o.n_sj_tuples, o.n_snp_tuples, o.n_mt_tuples}; h.update(n, sizeof n);
+        po.log += "digest " + h.hex() + "; ";
+    }
     po.snpHits = (uint64_t) o.n_snp_tuples; po.sjHits = o.sj_raw_sum; po.mtBases = (uint64_t) o.n_mt_tuples;
     po.cellReads.swap(o.cell_reads); po.cellMolecules.swap(o.cell_mol);
     po.hitsExon = o.hits[0]; po.hitsIntron = o.hits[1]; po.umiRecorded = o.hits[2];
@@ -82,6 +91,8 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     po.sjtab = o.sjtab; po.indels = o.indels;
     po.snpMolecules = g_snp_stat[0]; po.snpAmbiguous = g_snp_stat[1]; po.snpOther = g_snp_stat[2];
     po.peakGB = A.peak / 1e9;
+    po.log += "cell partitions: " + std::to_string(g_parts_used) + (g_force_parts > 0 ? " (forced)" : "") + "; ";
+    for (auto& l : g_parts_log) po.log += l + "; ";
     cudaFree(A.base);
     cudaDeviceReset();
     po.msTotal = (now_s() - t0) * 1e3;
