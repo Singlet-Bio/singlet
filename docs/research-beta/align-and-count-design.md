@@ -253,7 +253,7 @@ For each protocol class, on real public samples with real ground truth (the benc
 | 1a clip spans | **passed** | gate (a) on GSM6470208 (5') and 3' regressions; GPU clip = STAR's CPU clip on all 28.3 M clipped reads (`SINGLET_HANDOFF_CLIPCHECK`) |
 | 1b reducers + cell partitions | **passed** (c), (f), (a) | digest identical for K = 1, 2, 7; GSM7656149 at automatic K = 2, peak 72 GB, no unified-memory retry; gate (a) on 7 samples (`gpu-pileup-design.md`) |
 | host cost (F1-F3, N1, N2) | **passed** | gate (a) on 4 samples; lean alignment fields 0 of 79 M differ; 5' at 10.7 core-s per M reads |
-| 1c barcodes | harness only | `claude/gpu-barcode-layer-484c70`: kernel vs reference and vs STAR CB/UB (results in its prep doc) |
+| 1c barcodes | harness passed | `claude/gpu-barcode-layer-484c70` (46484d80): all 8 kernels equal the reference; CB identical to STAR on every read for 10x 1MM (12 M), Drop-seq, BD, SPLiT-seq, inDrop; equal to W3b's R11 `CbCorrector` on 12 M reads. Found: singlet's SPLiT-seq geometry gives a cell to 7 of 2.55 M reads (STAR's recipe: 65%); inDrop has no positive example yet |
 | 1d paired-end | harness passed | `claude/gpu-paired-prep-f54059`: 18 unit cases equal on H100; 200k real ATAC pairs: 178,870 / 178,870 STAR-unique pairs identical, 416 (0.21%) to the host lane; no Smart-seq2 sample on Clipper |
 | 1e ATAC | harness passed | `claude/gpu-atac-reducers-270cf8`: every reducer byte-identical to the CPU on atac_pbmc_5k (102.5 M fragments, 118,589 peaks), K = 1, 2, 7 equal; CPU A1/A2 (`claude/atac-orderfree-a1-a2`) order-free (sorted = collated) at +62% wall and 10.8 GB RSS |
 
