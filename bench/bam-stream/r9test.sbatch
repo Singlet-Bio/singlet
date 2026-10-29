@@ -15,3 +15,4 @@ S=/tmp/$USER-r9t-$SLURM_JOB_ID; mkdir -p $S; trap 'rm -rf $S' EXIT
 git clone -q --depth 1 --branch ${REF:-perf/bam-stream} git@github.com:Singlet-Bio/singlet.git $S/src
 git -C $S/src log --oneline -1
 $E/bin/x86_64-conda-linux-gnu-g++ -O2 -std=c++17 -Wall -I$S/src/include $S/src/tests/test_umi_r9.cpp -o $S/t && $S/t
+$E/bin/x86_64-conda-linux-gnu-g++ -O2 -std=c++17 -Wall -I$S/src/include $S/src/tests/test_cb_correct.cpp -o $S/t2 && (cd $S && ./t2)
