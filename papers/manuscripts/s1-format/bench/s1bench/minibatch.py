@@ -204,13 +204,12 @@ class S1StreamLoader(Loader):
     access = "range"
     returns_tensor = True
     order = "native"
-    modules = ("singlet._pz2", "singlet.s1.container", "requests")
+    modules = ("singlet.torch", "requests")
 
     def open(self, src, threads):
-        from .s1_loader import S1Stream, file_fetch, http_fetch
+        from singlet.torch import S1Stream   # the package's streaming reader (local path or HTTP ranges)
 
-        fetch, size = http_fetch(src) if src.startswith("http") else file_fetch(src)
-        self.s = S1Stream(fetch, size=size, threads=threads, order=self.order)
+        self.s = S1Stream(src, member="counts", threads=threads, order=self.order)
 
     def read(self, blocks):
         return self.s.batch(blocks)

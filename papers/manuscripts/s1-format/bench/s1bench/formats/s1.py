@@ -1,9 +1,5 @@
-""".s1 sample objects written with the singlet package's own codec and container code.
-
-There is no public writer yet (PLAN.md gap G2), so this builds the object the way the package does internally:
-`singlet.s1.codec.NativeCodec` (codec "auto": lane rANS, or the generic codec if that is smaller) for the pz2 member and
-`singlet.s1.container.S2Writer` for the sample object. When `singlet.write_s1` exists, call it here instead and check
-that the sizes do not change.
+""".s1 sample objects written by the singlet package's public writer, `singlet.write_s1` (codec "auto": lane rANS, or the
+generic codec if that is smaller), with one matrix member, `counts`.
 
 `s1` stores gene ids and barcodes inline. `s1_pack` stores the gene ids as a reference to a shared vocabulary pack (a
 file every sample of the same annotation shares and a reader downloads once); the pack is written next to the object
@@ -23,33 +19,8 @@ from . import GROUP_S1, Format
 MEMBER = "counts"
 
 
-def _csc(c: Canon):
-    from singlet.s1.matrix import VT_U32, Csc
-
-    return Csc(
-        m=c.m,
-        n=c.n,
-        indptr=c.indptr.astype(np.int64),
-        indices=c.indices.astype(np.uint32),
-        data=c.data.astype(np.uint32),
-        rownames=[str(g) for g in c.genes],
-        colnames=[str(b) for b in c.barcodes],
-        value_type=VT_U32,
-    )
-
-
 def pack_id(genes) -> bytes:
     return hashlib.sha256(("\0".join(map(str, genes)) + "\0").encode()).digest()[:8]
-
-
-def encode_member(c: Canon, threads: int, row_names="inline") -> tuple[bytes, bytes]:
-    from singlet.s1.codec import EncodeOptions, NativeCodec
-    from singlet.s1.matrix import canonical_digest
-
-    csc = _csc(c)
-    digest = canonical_digest(csc)
-    body = NativeCodec("auto").encode(csc, EncodeOptions(row_names=row_names, col_names="inline", threads=threads, digest=digest))
-    return body, digest
 
 
 class S1(Format):
@@ -57,17 +28,16 @@ class S1(Format):
     use_pack = False
 
     def write(self, c, path, threads):
-        from singlet.s1.container import S2Writer
+        import scipy.sparse as sp
+        from singlet import write_s1
 
+        x = sp.csc_matrix((c.data, c.indices, c.indptr), shape=(c.m, c.n)).T  # cells x genes, as write_s1 takes it
+        pid = None
         if self.use_pack:
             pid = pack_id(c.genes)
-            body, digest = encode_member(c, threads, row_names=("pack", pid))
             self._pack_path(path).write_text("\n".join(map(str, c.genes)) + "\n")
-        else:
-            body, digest = encode_member(c, threads)
-        w = S2Writer("bench")
-        w.add_matrix(MEMBER, body, digest, {"modality": "counts"})
-        path.write_bytes(w.build())
+        write_s1(x, path, genes=[str(g) for g in c.genes], barcodes=[str(b) for b in c.barcodes], sample_id="bench",
+                 member=MEMBER, gene_pack=pid, threads=threads)
 
     def _pack_path(self, path: Path) -> Path:
         return path.with_suffix(".genes.pack.txt")
