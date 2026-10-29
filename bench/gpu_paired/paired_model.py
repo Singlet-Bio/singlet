@@ -83,7 +83,7 @@ class Params:
     alignSoftClipAtReferenceEnds: bool = True
     alignEndsTypeExt: Tuple[Tuple[bool, bool], Tuple[bool, bool]] = ((False, False), (False, False))
     alignEndsProtrudeNbasesMax: int = 0
-    alignEndsProtrudeConcordantPair: bool = True
+    alignEndsProtrudeConcordantPair: bool = False  # Parameters.cpp:1085: false unless nBasesMax > 0 and the 2nd word is ConcordantPair
     flushRight: bool = False
     # filters and scores
     outFilterMultimapScoreRange: int = 1

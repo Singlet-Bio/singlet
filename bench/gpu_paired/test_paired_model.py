@@ -119,9 +119,9 @@ def test_protruding_mate_needs_alignEndsProtrude(G):
     assert t.gLength == 90 and t.maxScore == 198              # ceil(log2(90) * -0.25 - 0.5) = -2
     P9 = params("spliced", alignEndsProtrudeNbasesMax=9)      # one short: :193 rejects (LeftMateEnd 1100 > 1090 + 9)
     assert not pair_transcripts(run(G, P9, m1, m2))
-    assert proper_pair(P10, t, 201)                           # ConcordantPair: always proper
-    P10d = params("spliced", alignEndsProtrudeNbasesMax=10, alignEndsProtrudeConcordantPair=False)
-    assert not proper_pair(P10d, t, 201)                      # DiscordantPair: flag 0x2 only if the ends do not protrude
+    P10c = params("spliced", alignEndsProtrudeNbasesMax=10, alignEndsProtrudeConcordantPair=True)
+    assert proper_pair(P10c, t, 201)                          # --alignEndsProtrude 10 ConcordantPair: protruding pairs are proper
+    assert not proper_pair(P10, t, 201)                       # DiscordantPair (the default): flag 0x2 only if the ends do not protrude
 
 
 @pytest.mark.parametrize("start2, accepted", [(3100, True), (3101, False)])
@@ -261,3 +261,27 @@ def test_replay_from_windows_equals_full_run(G):
     WC = [[w["Str"], w["Chr"], 0, 0] for w in full.windows]
     again = map_windows(G, P, rd, WC, [w["WA"] for w in full.windows], [w["WlastAnchor"] for w in full.windows])
     assert full.summaries() == again.summaries()
+
+
+def test_end_to_end_extends_the_mate_end_that_local_clips(G):
+    # a mismatch at the second-to-last base of mate 1: Local extension finds no gain after it and soft-clips 2 bases; EndToEnd
+    # (alignEndsType.ext all true, stitchAlignToTranscript.cpp:374-381 with the extendToEnd flag) forces the extension
+    m1 = list(seq(G, "chr1", 1000, 1100))
+    m1[98] = "A" if m1[98] != "A" else "C"
+    m1 = "".join(m1)
+    m2 = rc(seq(G, "chr1", 1300, 1400))
+    loc = run(G, params("spliced"), m1, m2).transcripts[0]
+    assert loc.summary()["exons"] == [[0, 1000, 98, 0], [101, 1300, 100, 1]] and loc.nMM == 0 and loc.maxScore == 196
+    e2e = run(G, params("spliced", alignEndsTypeExt=((True, True), (True, True))), m1, m2).transcripts[0]
+    assert e2e.summary()["exons"] == [[0, 1000, 100, 0], [101, 1300, 100, 1]] and e2e.nMM == 1 and e2e.nMatch == 199
+    assert e2e.maxScore == 196                                # 98 + 100 + (1 match - 1 mismatch) + ceil(log2(400) * -0.25 - 0.5) = -2
+
+
+def test_window_geometry_on_a_human_size_genome():
+    # Genome_genomeLoad.cpp:427: the genome-size term (floor(log2(nGenome / 40000 + 1) + 0.5) = 16 for 3.1 Gb) beats the one from
+    # alignMatesGapMax 2000 (9), so ATAC windows are 65 kb bins, flank 1 bin, anchor distance 2 bins: the 2000 limit is enforced by
+    # stitching alone, not by the window geometry
+    P = params("atac").derive(3_100_000_000, 18)
+    assert (P.winBinNbits, P.winFlankNbins, P.winAnchorDistNbins) == (16, 1, 2)
+    P = params("spliced").derive(3_100_000_000, 18)
+    assert (P.winBinNbits, P.winFlankNbins, P.winAnchorDistNbins) == (16, 4, 9)

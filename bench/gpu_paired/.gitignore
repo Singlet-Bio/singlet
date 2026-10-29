@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+paired_unit_host
+paired_unit_host.exe
+paired_microbench
+*.exe

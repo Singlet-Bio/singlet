@@ -12,10 +12,12 @@ from paired_model import map_pair  # noqa: E402
 def main(out="fixtures/cases.json"):
     G = build_genome()
     cases = []
+    windows = []
     for name, kind, kw, m1, m2 in case_list(G):
         P = params(kind, **kw)
         G.prepare(P)
         r = map_pair(G, P, m1, m2)
+        windows.append(r.windows)
         cases.append(dict(
             name=name, params=kind, overrides=kw, mate1=m1, mate2=m2,
             expect=dict(unmapType=r.unmapType, nW=r.nW, primary=r.primary, transcripts=r.summaries()),
@@ -29,6 +31,39 @@ def main(out="fixtures/cases.json"):
     with open(out, "w") as f:
         json.dump(doc, f, separators=(",", ":"))
     print(out, os.path.getsize(out), "bytes,", len(cases), "cases")
+    txt = out.replace(".json", ".txt")
+    write_txt(txt, G, doc, windows)
+    print(txt, os.path.getsize(txt), "bytes")
+
+
+def _s(x):  # unsigned 64-bit -1 sentinels as -1
+    return -1 if x >= (1 << 63) else int(x)
+
+
+def write_txt(path, G, doc, windows):
+    """Line-oriented copy for the CUDA harness's unit mode (no JSON parser needed): the genome, and per case the mates, the windows
+    the model built (the kernel stage under test starts from them), and the expected result."""
+    L = [f"GENOME {G.gChrBinNbits} {len(G.names)}"]
+    for n in G.names:
+        L.append(f"CHR {n} {G.text[n]}")
+    for c, wins in zip(doc["cases"], windows):
+        kv = " ".join(f"{k} {v}" for k, v in c["overrides"].items())
+        L.append(f"CASE {c['name']} {c['params']} {len(c['overrides'])} {kv}".rstrip())
+        L.append(f"READ {c['mate1']} {c['mate2']}")
+        L.append(f"NWIN {len(wins)}")
+        for w in wins:
+            rows = " ".join(" ".join(str(_s(v)) for v in a) for a in w["WA"])
+            L.append(f"WIN {w['Str']} {w['Chr']} {_s(w['WlastAnchor'])} {len(w['WA'])} {rows}".rstrip())
+        e = c["expect"]
+        L.append(f"EXPECT {e['unmapType']} {e['nW']} {e['primary']} {len(e['transcripts'])}")
+        for t in e["transcripts"]:
+            ex = " ".join(" ".join(str(v) for v in x) for x in t["exons"])
+            sj = " ".join(str(v) for v in t["canonSJ"])
+            L.append(f"TR {len(t['exons'])} {t['maxScore']} {t['nMatch']} {t['nMM']} {t['gLength']} {t['iFrag']} {t['Str']} {t['Chr']} "
+                     f"{int(t['primary'])} {ex} {sj}".rstrip())
+        L.append("END")
+    with open(path, "w") as f:
+        f.write(chr(10).join(L) + chr(10))
 
 
 if __name__ == "__main__":

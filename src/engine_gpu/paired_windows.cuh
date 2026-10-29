@@ -7,7 +7,7 @@
 // is a run of 2^winBinNbits bins, so "the mates' windows are joined" means: the two mates' seeds fall into bins within
 // winAnchorDistNbins, which Genome_genomeLoad.cpp:426-446 derives from alignMatesGapMax), and stitches them with the same
 // recursion. stitch.cuh ports all of that, including the mate branch of stitchAlignToTranscript (-1000004, -1000008, canonSJ -3).
-// Only four places assume a single mate. This header leaves stitch.cuh untouched and re-declares them in namespace m5pe:
+// Only four places assume a single mate. This header leaves stitch.cuh untouched and re-declares them in namespace m5::pe:
 //
 //   1. finalizeTranscript, stitchWindowAligns, mapFinish   copied from stitch.cuh with the changes marked "PE:" below
 //        - stitchWindowAligns.cpp:159  the spliced-mate length check uses readLength[mate of the exon], not Lread
@@ -29,8 +29,8 @@
 #pragma once
 #include "stitch.cuh"
 
-namespace m5pe {
-using namespace m5;
+namespace m5 {
+namespace pe {   // m5::pe: lookup reaches m5::uint (STAR's 64-bit uint) before ::uint, as inside stitch.cuh
 
 // Lane for pairs: LREAD = 2 * 150 + 1 rounded up. NSPLIT 8: both mates can split at Ns. NEX 20 (STAR's MAX_N_EXONS): a pair has
 // up to two mates' worth of exons. Provisional sizes; a pair that overflows goes to the host lane (Status::Overflow).
@@ -476,4 +476,5 @@ __global__ void k_pe_map(Params P, GenomeView g, const char* m1, const u64* off1
 }
 #endif
 
-} // namespace m5pe
+} // namespace pe
+} // namespace m5
