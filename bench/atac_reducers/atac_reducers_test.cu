@@ -134,6 +134,8 @@ static Out run_config(Ctx& X, const std::vector<FragRec>& R, int K, bool diag) {
 }
 
 template <class T> static bool same(const std::vector<T>& a, const std::vector<T>& b) { return a.size() == b.size() && (a.empty() || !memcmp(a.data(), b.data(), a.size() * sizeof(T))); }
+static bool same(const std::vector<HF>& a, const std::vector<HF>& b) {   // field-wise: HF has padding bytes
+    if (a.size() != b.size()) return false; for (size_t i = 0; i < a.size(); i++) if (a[i].a != b[i].a || a[i].b != b[i].b || a[i].rp != b[i].rp) return false; return true; }
 static bool compare(const char* tag, const Out& a, const Out& b) {
     const bool f = same(a.frags, b.frags), i1 = same(a.ik, b.ik) && same(a.ic, b.ic), p1 = same(a.peaks_all, b.peaks_all), i2 = same(a.ik2, b.ik2) && same(a.ic2, b.ic2),
                p2 = same(a.peaks, b.peaks), t = same(a.tkey, b.tkey) && same(a.tcnt, b.tcnt), m = same(a.metrics, b.metrics);
