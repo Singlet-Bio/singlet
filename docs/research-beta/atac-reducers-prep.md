@@ -213,6 +213,12 @@ Cut from `origin/claude/atac-spatial-benchmark-2ba7df` (afc8fe35), commit 466da6
 | A2: pass 1 keeps the hash sample and a raw-barcode count map, then chooses layout and whitelist once and adds the counts (integer adds, map order irrelevant) | `atac_pipeline.h` |
 | C++ tests `test_dedup_unsorted_order`, `test_layout_sample_is_hash_sample_not_prefix` | `tests/cpp/test_atac_fragment.cpp` |
 
+**Clipper result (2026-10-29, Multiome 3k ATAC, job 792135; details in `docs/research-beta/atac-orderfree-a1-a2.md` on that branch):** it builds and
+`test_atac_fragment` (with the two new tests) passes. On the kept sorted BAM the new binary's `fragments.tsv.gz`, peak counts, `peaks.bed`, barcode metrics and
+cell calls are byte-identical to the unmodified PR #48 binary, and also byte-identical on the same BAM name-collated (unsorted). The old code on the collated BAM
+gives 68.6 M "unique" fragments instead of 45.3 M (+51%), 111,605 peaks instead of 97,814, and a different cell call. Layout and barcode counts are unchanged.
+Wall time 3:37 -> 4:16 (sorted), peak RSS 2.2 -> 4.8 GB. Not run: 5k and Multiome 10k.
+
 Costs to know: the dedup table now holds all unique fragments (about 2x the fragment vector) instead of one start position; the raw-barcode map holds one entry
 per distinct raw barcode (millions on a deep run, including error variants). Neither is measured. Port-level checks that run on the laptop are in section 4
 (`test_a1_cpu_global_dedup_port...`, `test_a2_*`). Not done on that branch: A8 (two-pass peaks) and A3-A7 (already the CPU's behaviour).
