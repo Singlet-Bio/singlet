@@ -20,7 +20,7 @@ case $DS in
   neuron*|nuclei*) IN=$PB/data/$DS/$DS.1fq; SPECIES=GRCm39-2024-A ;;
   *) IN=$PB/data/$DS/$DS.1fq; SPECIES=GRCh38-2024-A ;;
 esac
-G=$REF/$SPECIES; HERE=$(dirname "$(readlink -f "$0")")
+G=$REF/$SPECIES; HERE=$W/jobs/bb-mem
 O=$W/bb-mem/$DS; rm -rf $O; mkdir -p $O
 SCR=/tmp/$USER-bbmem-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR; $PB/bin/$NEW genome unload $G/star_2.7.11b > /dev/null 2>&1' EXIT
 cp $IN $SCR/s.1fq
