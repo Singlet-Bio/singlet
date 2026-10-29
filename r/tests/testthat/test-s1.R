@@ -15,19 +15,19 @@ s1_root <- local({
     function() {
         if (!is.null(cache)) return(cache)
         env <- Sys.getenv("SINGLET_S1_TEST_ROOT")
-        if (nzchar(env) && dir.exists(file.path(env, "store"))) {
+        if (nzchar(env) && dir.exists(file.path(env, "s1"))) {
             cache <<- normalizePath(env, winslash = "/")
             return(cache)
         }
         py <- Sys.getenv("SINGLET_PYTHON", Sys.which("python"))
         script <- normalizePath(file.path(testthat::test_path("..", "..", ".."), "tests", "python", "_s1_synth.py"), mustWork = FALSE)
         if (!nzchar(py) || !file.exists(script)) return(NA_character_)
-        out <- file.path(tempdir(), "store_synth")
+        out <- file.path(tempdir(), "s1_synth")
         res <- suppressWarnings(tryCatch(
             system2(py, c("-P", shQuote(script), shQuote(out)), stdout = TRUE, stderr = TRUE,
                     env = c(paste0("PYTHONPATH=", normalizePath(file.path(testthat::test_path("..", "..", ".."), "python"), mustWork = FALSE)))),
             error = function(e) NULL))
-        if (is.null(res) || !dir.exists(file.path(out, "store"))) return(NA_character_)
+        if (is.null(res) || !dir.exists(file.path(out, "s1"))) return(NA_character_)
         cache <<- normalizePath(out, winslash = "/")
         cache
     }
@@ -84,7 +84,7 @@ test_that("the manifest opens from a local directory and describes the samples",
         expect_match(st$samples[[G1]]$key, "^s1/s/GSM9000001/[0-9a-f]{32}\\.s1$")
         expect_output(print(st), "singlet_study GSE900001")
         expect_error(singlet_study("GSE1", base = root), "has not been migrated")
-        expect_error(singlet_study("GSE1", base = root), "legacy = TRUE")
+        expect_error(singlet_study("GSE1", base = root), "not in the atlas")
         expect_error(singlet_study("nonsense", base = root), "not a GEO Series")
     })
 })
@@ -113,7 +113,7 @@ test_that("load() of a local manifest reproduces the expected gene-level matrice
     root <- skip_if_no_s1()
     skip_if_not_installed("SingleCellExperiment")
     with_s1_cache({
-        mp <- file.path(root, "store", "m", paste0(GSE, ".json"))
+        mp <- file.path(root, "s1", "m", paste0(GSE, ".json"))
         expect_warning(sce <- load(mp), "skipped 1 of 3")
         expect_s4_class(sce, "SingleCellExperiment")
         expect_identical(sort(unique(sce$gsm_id)), c(G1, G3))
@@ -145,7 +145,7 @@ test_that("a GSM of the study loads alone; a study without usable cells says why
     root <- skip_if_no_s1()
     skip_if_not_installed("SingleCellExperiment")
     with_s1_cache({
-        mp <- file.path(root, "store", "m", paste0(GSE, ".json"))
+        mp <- file.path(root, "s1", "m", paste0(GSE, ".json"))
         st <- singlet_study(GSE, base = root)
         sce <- singlet:::.s1_read_study(st, G3)
         expect_identical(unique(sce$gsm_id), G3)
@@ -205,7 +205,8 @@ test_that("download() mirrors a study and load() then reads the local copy", {
         expect_true(file.exists(mp))
         expect_true(all(file.exists(file.path(dirname(dirname(mp)), "s", c(G1, G2, G3)))))
         expect_true(length(list.files(file.path(dirname(dirname(mp)), "ref"), pattern = "\\.pack$")) >= 2L)
-        expect_error(download("GSE1"), "legacy = TRUE")
+        # with the fallback off (the default since the retirement), a study without a manifest is said not to be in the atlas
+        withr::with_envvar(c(SINGLET_LEGACY_FALLBACK = "0"), expect_error(download("GSE1"), "not in the atlas"))
         sce <- suppressWarnings(load(GSE))
         expect_equal(ncol(sce), 40L + 25L)
     })
@@ -236,5 +237,28 @@ test_that("ranged HTTP reads work against a server that honours Range", {
         sce2 <- suppressWarnings(singlet:::.s1_read_study(st2, G1))
         expect_equal(singlet:::.s1_stats()$requests, 2L)
         expect_equal(ncol(sce2), 40L)
+    })
+})
+
+test_that("load() and singlet_cells() carry the study API's sample facts as factors", {
+    root <- skip_if_no_s1()
+    skip_if_not_installed("SingleCellExperiment")
+    k562 <- list(sample_kind = "cell_line", tissue_type = "cell line", cell_line = list(list(id = "CVCL_0004", name = "K-562")))
+    adj <- list(tissue_type = "tissue", tumor_sample_type = "adjacent normal",
+                disease = list(list(id = "MONDO:0005061", label = "lung adenocarcinoma")))
+    testthat::local_mocked_bindings(.sample_facts_for_study = function(study) structure(list(k562, adj), names = c(G1, G3)),
+                                    .package = "singlet")
+    with_s1_cache({
+        sce <- suppressWarnings(singlet:::.s1_read_study(singlet_study(GSE, base = root), c(G1, G3)))
+        cd <- SummarizedExperiment::colData(sce)
+        expect_true(all(singlet:::.sample_fact_columns %in% colnames(cd)))
+        expect_true(is.factor(cd$tissue_type) && is.factor(cd$cell_line_cellosaurus_id))
+        expect_identical(unique(as.character(cd$cell_line[cd$gsm_id == G1])), "K-562")
+        expect_true(all(is.na(cd$disease[cd$gsm_id == G1])))
+        expect_identical(unique(as.character(cd$disease_ontology_term_id[cd$gsm_id == G3])), "MONDO:0005061")
+        sub <- singlet_cells(singlet_study(GSE, base = root), called, samples = G1)
+        expect_identical(unique(as.character(SummarizedExperiment::colData(sub)$tissue_type)), "cell line")
+        off <- suppressWarnings(singlet:::.s1_read_study(singlet_study(GSE, base = root), G1, sample_facts = FALSE))
+        expect_false(any(singlet:::.sample_fact_columns %in% colnames(SummarizedExperiment::colData(off))))
     })
 })

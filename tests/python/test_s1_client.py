@@ -232,7 +232,7 @@ def test_manifest_is_revalidated_with_etag_and_survives_offline(study_dir, env, 
 def test_missing_study_is_studynotfound_with_a_hint(study_dir, env):
     root, s = study_dir
     with rs.serve(str(root)) as (base, rec):
-        with pytest.raises(client.StudyNotFound, match="has not been migrated"):
+        with pytest.raises(client.StudyNotFound, match="no .s1 manifest"):
             client.open_study("GSE1", base=base)
     with pytest.raises(client.StudyNotFound):
         client.open_study("GSE1", base=str(root))
@@ -483,16 +483,12 @@ def test_unmigrated_study_fallback_and_legacy_true(study_dir, env, monkeypatch):
     import singlet.bundle as B
 
     monkeypatch.setattr(B, "SingletBundle", FakeBundle)
-    # transition default: an unmigrated study quietly falls back to its legacy bundle
-    import warnings as _w
-
-    with _w.catch_warnings():
-        _w.simplefilter("error", FutureWarning)
-        assert L.load("GSE0") == "legacy-adata" and calls == ["GSE0"]
-    calls.clear()
-    # after retirement (or when the user opts out) the fallback is off
+    # since the retirement the fallback is off by default: a study without a manifest is not in the atlas, and no
+    # legacy bundle is requested
+    with pytest.raises(client.StudyNotFound, match="not in the atlas"):
+        L.load("GSE0")
     monkeypatch.setenv("SINGLET_LEGACY_FALLBACK", "0")
-    with pytest.raises(client.StudyNotFound, match="legacy=True"):
+    with pytest.raises(client.StudyNotFound, match="known-issues"):
         L.load("GSE1")
     assert calls == []
     assert L.load("GSE1", legacy=True) == "legacy-adata" and calls == ["GSE1"]

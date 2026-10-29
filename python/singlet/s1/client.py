@@ -54,6 +54,8 @@ from typing import (
 import numpy as np
 
 from . import FORMATS, PREFIXES, SAMPLE_SUFFIXES
+from . import labels as L
+from . import sample_facts as SF
 from . import transport as T
 from .transport import NotFound, Transport, TransportError
 
@@ -251,7 +253,7 @@ def _native():
         from singlet import _pz2
     except ImportError as e:  # pragma: no cover - environment dependent
         raise ImportError(
-            "singlet._pz2 (the .s1 matrix decoder) is not built. Install with `pip install singlet-bio` (wheel) or build it with "
+            "singlet._pz2 (the .s1 matrix decoder) is not built. Install with `pip install singlet` (wheel) or build it with "
             "`pip install .` / src/bindings/python/build_pz2_mingw.sh."
         ) from e
     return _pz2
@@ -599,7 +601,7 @@ def _validate_manifest(doc: dict, gse: str) -> None:
         raise S1Error(f"{gse}: not a singlet-s1 manifest")
     if int(doc.get("manifest_version", 1)) > MANIFEST_VERSION_MAX:
         raise S1Error(
-            f"{gse}: manifest_version {doc.get('manifest_version')} is newer than this client supports; upgrade singlet-bio"
+            f"{gse}: manifest_version {doc.get('manifest_version')} is newer than this client supports; upgrade singlet"
         )
     if not isinstance(doc.get("samples"), list):
         raise S1Error(f"{gse}: manifest has no sample list")
@@ -682,9 +684,7 @@ def open_study(
                     verify=verify,
                     _prefix=_prefix + 1,
                 )
-            raise StudyNotFound(
-                f"no .s1 manifest for {gse} at {t.url(key)}: the study has not been migrated to the per-sample format (or the accession is wrong)"
-            ) from e
+            raise StudyNotFound(f"no .s1 manifest for {gse} at {t.url(key)}") from e
         except TransportError as e:
             if mp.exists():
                 warnings.warn(
@@ -1067,9 +1067,11 @@ def _concat_parts(parts: List[_Part]) -> _Part:
     return _Part(indptr, indices, data, n_genes)
 
 
-def _sample_columns(cells_buf, resolver: _PackResolver, want: Sequence[str]):
+def _sample_columns(cells_buf, resolver: _PackResolver, want: Optional[Sequence[str]]):
+    """The opened cells table and the wanted columns (``None``: every column, in stored order)."""
     rd = _open_cells(cells_buf, resolver)
-    return rd, {n: rd.column(n) for n in want if n in rd.entries}
+    names = rd.names if want is None else [n for n in want if n in rd.entries]
+    return rd, {n: rd.column(n) for n in names}
 
 
 def pk_names_junctions(table, idx: np.ndarray, local) -> List[str]:
@@ -1105,7 +1107,7 @@ def _read_sample(
     sm: SampleRef,
     *,
     sel_fn: Callable[[Any], np.ndarray],
-    want_cols: Sequence[str],
+    want_cols: Optional[Sequence[str]],
     keep_map: Optional[np.ndarray],
     n_genes: int,
     threads: int,
@@ -1442,6 +1444,28 @@ def _sample_obs_value(meta: dict, key: str, default=""):
     return default if v is None else v
 
 
+#: GEO sample metadata repeated on every cell of the sample (after the per-cell columns)
+GEO_OBS_COLUMNS = (
+    "organism",
+    "protocol",
+    "protocol_name",
+    "sample_source",
+    "sample_characteristics",
+    "qc_flag",
+    "reference_build",
+)
+
+
+def _geo_obs(info: dict, n: int) -> Dict[str, np.ndarray]:
+    d = {c: np.full(n, str(_sample_obs_value(info, c)), dtype=object) for c in GEO_OBS_COLUMNS}
+    try:
+        nc = int(info.get("n_cells", n))
+    except (TypeError, ValueError):
+        nc = n
+    d["n_cells_sample"] = np.full(n, nc, dtype=np.int64)
+    return d
+
+
 def _select_samples(
     study: Study, samples: Optional[Sequence[str]], obs_filter: Optional[dict]
 ) -> List[str]:
@@ -1737,9 +1761,17 @@ def _study_to_anndata(
     verify: Optional[bool] = None,
     whole_max: int = WHOLE_MAX_BYTES,
     verbose: bool = False,
+    cell_type_level: int = L.CELL_TYPE_LEVEL,
+    cell_type_min_score: float = L.CELL_TYPE_MIN_SCORE,
+    include_unvalidated: bool = False,
+    sample_facts: bool = True,
 ) -> "anndata.AnnData":
-    import pandas as pd
-
+    """AnnData of the called cells; ``obs`` carries the per-cell labels, cell calls and QC columns of the cells table
+    (:mod:`singlet.s1.labels`: ``cell_type`` at level <= ``cell_type_level`` with path score >= ``cell_type_min_score``;
+    ``qc_doublet_score`` only with ``include_unvalidated``), then the GEO sample metadata, then the structured sample facts of
+    :mod:`singlet.s1.sample_facts` (``tissue_type``, ``cell_line``, ``tumor_sample_type``, ``disease``, ``donor_status``, ...; read
+    from the study API, so only for a study read over HTTP and not with ``sample_facts=False`` or ``$SINGLET_OFFLINE``). ``layers``
+    holds ``spliced`` and ``unspliced``; anndata 0.13 and newer also list ``X`` itself under the key ``None``."""
     mods = normalize_modalities(modalities, layers=layers)
     gsms = _select_samples(study, samples, obs_filter)
     if not gsms:
@@ -1761,7 +1793,7 @@ def _study_to_anndata(
             study,
             sm,
             sel_fn=lambda rd: np.flatnonzero(np.asarray(rd.column("called"), dtype=bool)),
-            want_cols=("barcode", "called", "cc_pos", "cc_listed", "cc_pvalue"),
+            want_cols=None,
             keep_map=kmap,
             n_genes=n_genes,
             threads=dec_threads,
@@ -1801,30 +1833,32 @@ def _study_to_anndata(
 
     perms = [_cell_order(r.cols, r.sel, cell_order) for r in ok]
     gsm_meta = study.study_meta.get("gsm_meta", {})
-    obs_frames = []
+    facts = SF.study_facts(study) if sample_facts else {}
+    parts, index = [], []
     for r, perm in zip(ok, perms):
         n = len(r.sel)
-        bc = np.asarray(r.cols["barcode"], dtype=object)
-        if perm is not None:
-            bc = bc[perm]
+        cols = r.cols if perm is None else {k: np.asarray(v)[perm] for k, v in r.cols.items()}
+        bc = np.asarray(cols["barcode"], dtype=object)
         info = gsm_meta.get(r.gsm, {})
-        idx = np.char.add(f"{r.gsm}_", bc.astype(str)) if n else np.array([], dtype=str)
-        d = {"gsm_id": np.full(n, r.gsm, dtype=object)}
-        for c in (
-            "organism",
-            "protocol",
-            "protocol_name",
-            "sample_source",
-            "sample_characteristics",
-            "qc_flag",
-            "reference_build",
-        ):
-            d[c] = np.full(n, _sample_obs_value(info, c), dtype=object)
-        d["n_cells_sample"] = np.full(
-            n, info.get("n_cells", n) if info.get("n_cells", n) is not None else n, dtype=object
+        d: Dict[str, Any] = {"gsm_id": np.full(n, r.gsm, dtype=object)}
+        d.update(
+            L.obs_columns(
+                cols,
+                n,
+                cats=L.categories(study.samples[r.gsm].members),
+                cell_type_level=cell_type_level,
+                cell_type_min_score=cell_type_min_score,
+                include_unvalidated=include_unvalidated,
+            )
         )
-        obs_frames.append(pd.DataFrame(d, index=pd.Index(idx.astype(object))))
-    obs = pd.concat(obs_frames, axis=0) if len(obs_frames) > 1 else obs_frames[0]
+        d.update(_geo_obs(info, n))
+        if facts:
+            d.update(SF.facts_obs(facts.get(r.gsm), n))
+        parts.append(d)
+        index.extend(f"{r.gsm}_{b}" for b in bc)
+    import pandas as pd
+
+    obs = L.to_frame(parts, index=pd.Index(index, dtype=object))
     adata = _build_anndata(
         ok,
         perms,
@@ -1927,15 +1961,23 @@ def _study_cells(
     verify: Optional[bool] = None,
     whole_max: int = WHOLE_MAX_BYTES,
     called_only: bool = False,
+    cell_type_level: int = L.CELL_TYPE_LEVEL,
+    cell_type_min_score: float = L.CELL_TYPE_MIN_SCORE,
+    include_unvalidated: bool = False,
+    sample_facts: bool = True,
 ) -> "anndata.AnnData":
     """Cell-level slice: the cells of ``samples`` that satisfy ``where`` (evaluated on the cells table), as a cells x genes AnnData.
 
     Only the cells tables of the samples and the chunk runs of the matrices that contain the selected cells are fetched when the
     samples are large (small samples are fetched whole in one request). ``where`` is a pandas query over the cells-table columns
-    (``called``, ``n_umi_exon``, ``n_umi_intron``, ``n_feat_exon``, ``n_feat_intron``, ...), a callable on that DataFrame, or a dict
+    (``called``, ``n_umi_exon``, ..., and the label columns of :mod:`singlet.s1.labels`, e.g.
+    ``"cell_type == 'T cell' and sex_chrom == 'female'"``), a callable on that DataFrame, or a dict
     ``{column: value | (lo, hi) | [values]}``. ``max_cells`` keeps the first cells per sample in matrix-column order (largest first).
     ``modalities`` picks the matrices (default ``counts``, plus the spliced/unspliced layers with ``layers=True``); only the chunk
-    runs of those members are fetched."""
+    runs of those members are fetched. ``obs`` has ``gsm_id``, ``column`` (the cell's column in the sample object) and the
+    per-cell columns (``columns=`` keeps only those; ``qc_doublet_score``, unvalidated, only with ``include_unvalidated`` or when
+    named in ``columns``), then the structured sample facts (``tissue_type``, ``cell_line``, ``disease``, ...; see
+    :mod:`singlet.s1.sample_facts`; ``sample_facts=False`` leaves them out)."""
     import anndata as ad
     import pandas as pd
 
@@ -1951,8 +1993,10 @@ def _study_cells(
     dec_threads = threads if threads is not None else max(1, (os.cpu_count() or 4) // conc)
     do_verify = study.verify if verify is None else verify
 
-    def sel_fn(rd):
-        df = _cells_frame(rd, columns=None)
+    lab = dict(cell_type_level=cell_type_level, cell_type_min_score=cell_type_min_score)
+
+    def sel_fn(rd, gsm):
+        df = _cells_frame(rd, columns=None, cats=L.categories(study.samples[gsm].members), **lab)
         m = _eval_where(where, df)
         if called_only and "called" in df.columns:
             m &= df["called"].to_numpy(dtype=bool)
@@ -1965,8 +2009,8 @@ def _study_cells(
         return _read_sample(
             study,
             study.samples[g],
-            sel_fn=sel_fn,
-            want_cols=_cells_wanted(columns),
+            sel_fn=lambda rd: sel_fn(rd, g),
+            want_cols=None,
             keep_map=kmap,
             n_genes=n_genes,
             threads=dec_threads,
@@ -1990,19 +2034,30 @@ def _study_cells(
                 index=pd.Index(var_ids.astype(object), name="gene_id"),
             ),
         )
-    frames = []
+    facts = SF.study_facts(study) if sample_facts else {}
+    parts, index = [], []
     for r in ok:
         n = len(r.sel)
         bc = np.asarray(r.cols.get("barcode", np.array([""] * n, dtype=object)), dtype=object)
-        d = {"gsm_id": np.full(n, r.gsm, dtype=object), "column": r.sel.astype(np.int64)}
-        for k, v in r.cols.items():
-            if k == "barcode" or (columns is not None and k not in columns):
-                continue
-            d[k] = np.asarray(v)
-        frames.append(
-            pd.DataFrame(d, index=pd.Index(np.char.add(f"{r.gsm}_", bc.astype(str)).astype(object)))
+        d: Dict[str, Any] = {
+            "gsm_id": np.full(n, r.gsm, dtype=object),
+            "column": r.sel.astype(np.int64),
+        }
+        d.update(
+            L.obs_columns(
+                r.cols,
+                n,
+                cats=L.categories(study.samples[r.gsm].members),
+                include_unvalidated=include_unvalidated,
+                columns=columns,
+                **lab,
+            )
         )
-    obs = pd.concat(frames, axis=0) if len(frames) > 1 else frames[0]
+        if facts:
+            d.update(SF.facts_obs(facts.get(r.gsm), n))
+        parts.append(d)
+        index.extend(f"{r.gsm}_{b}" for b in bc)
+    obs = L.to_frame(parts, index=pd.Index(index, dtype=object))
     adata = _build_anndata(
         ok,
         [None] * len(ok),
@@ -2022,26 +2077,12 @@ def _study_cells(
     return adata
 
 
-def _cells_wanted(columns: Optional[Sequence[str]]) -> Sequence[str]:
-    base = ["barcode", "called", "n_umi_exon", "n_umi_intron", "n_feat_exon", "n_feat_intron"]
-    return base if columns is None else list(dict.fromkeys(base[:1] + list(columns)))
-
-
-def _cells_frame(rd, columns: Optional[Sequence[str]]):
-    """Numeric / boolean columns of an opened cells table as a DataFrame (strings and barcodes excluded)."""
-    import pandas as pd
-
-    names = (
-        [n for n in rd.names if n != "barcode"]
-        if columns is None
-        else [n for n in columns if n in rd.entries]
-    )
-    cols = {}
-    for n in names:
-        if rd.entries[n][1] in (8, 9):  # string / barcode
-            continue
-        cols[n] = np.asarray(rd.column(n))
-    return pd.DataFrame(cols)
+def _cells_frame(rd, columns: Optional[Sequence[str]], cats=None, **lab):
+    """Every row of an opened cells table as a DataFrame of its obs columns (:func:`singlet.s1.labels.obs_columns`, unvalidated
+    columns included), for evaluating ``where``."""
+    names = [n for n in rd.names if n != "barcode"] if columns is None else columns
+    cols = {n: rd.column(n) for n in names if n in rd.entries}
+    return L.to_frame([L.obs_columns(cols, rd.n_rows, cats=cats, include_unvalidated=True, **lab)])
 
 
 # ================================================================================================================= public functions
@@ -2132,10 +2173,26 @@ def load_s2(
     verify: bool = False,
     **kw,
 ) -> "anndata.AnnData":
-    """AnnData of the called cells of a local ``.s1`` sample object (memory mapped, no network, no copies of the file)."""
+    """AnnData of the called cells of a local ``.s1`` sample object (memory mapped, no network, no copies of the file).
+
+    A one-matrix object that is not an atlas sample (a :func:`singlet.write_s1` file) is read whole by
+    :func:`singlet.read_s1`: its counts in ``X``, its gene ids and barcodes as ``var_names`` and ``obs_names``."""
     import pandas as pd
 
     from .container import S2Reader
+    from .write import read_s1, user_member
+
+    um = user_member(path)
+    if um is not None:
+        extra = set(normalize_modalities(modalities, layers=layers)) - {"counts"}
+        if modalities is not None and extra:
+            raise ModalityUnavailable(
+                f"{path} holds one count matrix ({um!r}); only modality 'counts' is available"
+            )
+        adata = read_s1(path, member=um)
+        if genes is not None:
+            adata = adata[:, [g for g in genes if g in adata.var_names]].copy()
+        return adata
 
     path = str(path)
     rd = S2Reader(path)
@@ -2174,7 +2231,7 @@ def load_s2(
             st,
             sm,
             sel_fn=lambda r: np.flatnonzero(np.asarray(r.column("called"), dtype=bool)),
-            want_cols=("barcode", "called", "cc_pos", "cc_listed", "cc_pvalue"),
+            want_cols=None,
             keep_map=kmap,
             n_genes=n_genes,
             threads=threads if threads is not None else 0,
@@ -2187,14 +2244,21 @@ def load_s2(
     if sd.skipped:
         raise ValueError(f"{sm.gsm} has no usable cells: {sd.skipped}")
     perm = _cell_order(sd.cols, sd.sel, kw.get("cell_order", "legacy"))
-    bc = np.asarray(sd.cols["barcode"], dtype=object)
-    if perm is not None:
-        bc = bc[perm]
+    cols = sd.cols if perm is None else {k: np.asarray(v)[perm] for k, v in sd.cols.items()}
+    bc = np.asarray(cols["barcode"], dtype=object)
     n = len(sd.sel)
-    obs = pd.DataFrame(
-        {"gsm_id": np.full(n, sm.gsm, dtype=object)},
-        index=pd.Index(np.char.add(f"{sm.gsm}_", bc.astype(str)).astype(object)),
+    d: Dict[str, Any] = {"gsm_id": np.full(n, sm.gsm, dtype=object)}
+    d.update(
+        L.obs_columns(
+            cols,
+            n,
+            cats=L.categories(members),
+            cell_type_level=kw.get("cell_type_level", L.CELL_TYPE_LEVEL),
+            cell_type_min_score=kw.get("cell_type_min_score", L.CELL_TYPE_MIN_SCORE),
+            include_unvalidated=bool(kw.get("include_unvalidated", False)),
+        )
     )
+    obs = L.to_frame([d], index=pd.Index([f"{sm.gsm}_{b}" for b in bc], dtype=object))
     adata = _build_anndata(
         [sd], [perm], mods, obs, n_genes, var_ids, var_names, explicit=modalities is not None
     )

@@ -10,13 +10,20 @@ int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOrigi
     if (readInStream.peek()!='@' && readInStream.peek()!='>') 
         return -1; //end of the stream
 
-    string line1;
-    
+    //1st line: readName iReadAll readFilter readFilesIndex [readNameExtra]
+    //parsed in place: same result as the former istringstream extraction, without building a stream per read
+    static thread_local string line1;
     getline(readInStream, line1); //read 1st line
-    istringstream line1str(line1);
-    
-    readName[0]=0;//clear char array
-    line1str >> readName; //TODO check that it does not overflow the array
+    const char *lp = line1.c_str();
+    auto skipWs = [&lp]() {while (*lp!=0 && isspace((unsigned char) *lp)) lp++;};
+
+    skipWs();
+    {
+        const char *t = lp;
+        while (*lp!=0 && !isspace((unsigned char) *lp)) lp++;
+        memcpy(readName, t, lp-t); //TODO check that it does not overflow the array
+        readName[lp-t]=0;
+    };
     if (strlen(readName)>=DEF_readNameLengthMax-1) {
         ostringstream errOut;
         errOut << "EXITING because of FATAL ERROR in reads input: read name is too long:" << readInStream.gcount()<<"\nRead Name="<<readName<<"\nDEF_readNameLengthMax="<<DEF_readNameLengthMax<<'\n';
@@ -24,9 +31,17 @@ int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOrigi
         exitWithError(errOut.str(),std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
     };  
     
-    line1str >> iReadAll >> readFilter >> readFilesIndex; //extract read number TODO this is needed only for one mate
-    line1str >> std::ws; //skip whitespace before readNameExtra
-    getline(line1str, readNameExtra);
+    {//extract read number TODO this is needed only for one mate
+        char *e;
+        skipWs();
+        iReadAll = strtoull(lp, &e, 10); lp = e;
+        skipWs();
+        if (*lp!=0) readFilter = *lp++;
+        skipWs();
+        readFilesIndex = (uint32) strtoul(lp, &e, 10); lp = e;
+        skipWs(); //skip whitespace before readNameExtra
+        readNameExtra.assign(lp);
+    };
 
     readInStream.getline(Seq,DEF_readSeqLengthMax+1); //extract sequence
 

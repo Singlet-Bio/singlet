@@ -1,0 +1,182 @@
+{
+ "singlet_sub_d1": {
+  "cells_called": 1852,
+  "truth_cells": 14619,
+  "cells_in_truth": 1852,
+  "truth_singlets": 1852,
+  "ari_all_singlets": 1.0,
+  "ari_assigned_only": 1.0,
+  "acc_assigned": 1.0,
+  "unassigned_rate": 0.0,
+  "singlets_called_doublet": 0.0,
+  "per_donor_recall": {
+   "1244": 1.0
+  },
+  "dbl_auroc_genotype": NaN,
+  "dbl_auprc_genotype": NaN,
+  "dbl_recall_at_call": null,
+  "dbl_precision_at_call": null,
+  "n_donors_found": 1
+ },
+ "singlet_sub_d2": {
+  "cells_called": 3926,
+  "truth_cells": 14619,
+  "cells_in_truth": 3926,
+  "truth_singlets": 3926,
+  "ari_all_singlets": 0.9936767112863913,
+  "ari_assigned_only": 1.0,
+  "acc_assigned": 1.0,
+  "unassigned_rate": 0.0,
+  "singlets_called_doublet": 0.003056546102903719,
+  "per_donor_recall": {
+   "1244": 0.9989200863930886,
+   "1256": 0.9951783992285439
+  },
+  "dbl_auroc_genotype": NaN,
+  "dbl_auprc_genotype": NaN,
+  "dbl_recall_at_call": null,
+  "dbl_precision_at_call": 0.0,
+  "n_donors_found": 2
+ },
+ "singlet_sub_d3": {
+  "cells_called": 4438,
+  "truth_cells": 14619,
+  "cells_in_truth": 4438,
+  "truth_singlets": 4438,
+  "ari_all_singlets": 0.9889563871864147,
+  "ari_assigned_only": 0.9961895695207342,
+  "acc_assigned": 0.9984166478172359,
+  "unassigned_rate": 0.0,
+  "singlets_called_doublet": 0.0038305543037404238,
+  "per_donor_recall": {
+   "107": 0.986328125,
+   "1244": 0.9983801295896328,
+   "1256": 0.9932497589199615
+  },
+  "dbl_auroc_genotype": NaN,
+  "dbl_auprc_genotype": NaN,
+  "dbl_recall_at_call": null,
+  "dbl_precision_at_call": 0.0,
+  "n_donors_found": 3
+ },
+ "singlet_sub_d4": {
+  "cells_called": 7621,
+  "truth_cells": 14619,
+  "cells_in_truth": 7621,
+  "truth_singlets": 7621,
+  "ari_all_singlets": 0.991859121444009,
+  "ari_assigned_only": 0.9992726370848718,
+  "acc_assigned": 0.9997361477572559,
+  "unassigned_rate": 0.0,
+  "singlets_called_doublet": 0.005379871407951712,
+  "per_donor_recall": {
+   "1016": 0.9964768056371109,
+   "1244": 0.9967602591792657,
+   "1256": 0.991321118611379,
+   "1488": 0.9934738955823293
+  },
+  "dbl_auroc_genotype": NaN,
+  "dbl_auprc_genotype": NaN,
+  "dbl_recall_at_call": null,
+  "dbl_precision_at_call": 0.0,
+  "n_donors_found": 4
+ },
+ "singlet_sub_d5": {
+  "cells_called": 10324,
+  "truth_cells": 14619,
+  "cells_in_truth": 10324,
+  "truth_singlets": 10324,
+  "ari_all_singlets": 0.9680920836109264,
+  "ari_assigned_only": 0.9995270201393942,
+  "acc_assigned": 0.9998020389983173,
+  "unassigned_rate": 0.0,
+  "singlets_called_doublet": 0.021406431615652848,
+  "per_donor_recall": {
+   "1015": 0.9396966333703293,
+   "1016": 0.995302407516148,
+   "1244": 0.9956803455723542,
+   "1256": 0.9893924783027965,
+   "1488": 0.9889558232931727
+  },
+  "dbl_auroc_genotype": NaN,
+  "dbl_auprc_genotype": NaN,
+  "dbl_recall_at_call": null,
+  "dbl_precision_at_call": 0.0,
+  "n_donors_found": 5
+ },
+ "singlet_sub_d6": {
+  "cells_called": 11170,
+  "truth_cells": 14619,
+  "cells_in_truth": 11170,
+  "truth_singlets": 11170,
+  "ari_all_singlets": 0.96731831683683,
+  "ari_assigned_only": 0.9994977773615361,
+  "acc_assigned": 0.999725073313783,
+  "unassigned_rate": 0.0,
+  "singlets_called_doublet": 0.023097582811101164,
+  "per_donor_recall": {
+   "101": 0.9609929078014184,
+   "1015": 0.9367369589345172,
+   "1016": 0.995302407516148,
+   "1244": 0.9951403887688985,
+   "1256": 0.9903567984570878,
+   "1488": 0.9899598393574297
+  },
+  "dbl_auroc_genotype": NaN,
+  "dbl_auprc_genotype": NaN,
+  "dbl_recall_at_call": null,
+  "dbl_precision_at_call": 0.0,
+  "n_donors_found": 6
+ },
+ "singlet_sub_d7": {
+  "cells_called": 11682,
+  "truth_cells": 14619,
+  "cells_in_truth": 11682,
+  "truth_singlets": 11682,
+  "ari_all_singlets": 0.9663488754362995,
+  "ari_assigned_only": 0.9982874055142833,
+  "acc_assigned": 0.9990366088631984,
+  "unassigned_rate": 0.0,
+  "singlets_called_doublet": 0.022598870056497175,
+  "per_donor_recall": {
+   "101": 0.9657210401891253,
+   "1015": 0.9359970403255642,
+   "1016": 0.992953611274222,
+   "107": 0.982421875,
+   "1244": 0.9962203023758099,
+   "1256": 0.9893924783027965,
+   "1488": 0.9884538152610441
+  },
+  "dbl_auroc_genotype": NaN,
+  "dbl_auprc_genotype": NaN,
+  "dbl_recall_at_call": null,
+  "dbl_precision_at_call": 0.0,
+  "n_donors_found": 7
+ },
+ "vireo": {
+  "cells_called": 14404,
+  "truth_cells": 14619,
+  "cells_in_truth": 14402,
+  "truth_singlets": 12139,
+  "ari_all_singlets": 0.9232509620243582,
+  "ari_assigned_only": 0.9573033976429854,
+  "acc_assigned": 0.9479976090854751,
+  "unassigned_rate": 0.01985336518658868,
+  "singlets_called_doublet": 0.015404893319054288,
+  "per_donor_recall": {
+   "101": 0.9657210401891253,
+   "1015": 0.8405475397706252,
+   "1016": 0.995302407516148,
+   "1039": 0.0,
+   "107": 0.892578125,
+   "1244": 0.9956803455723542,
+   "1256": 0.9879459980713597,
+   "1488": 0.9879518072289156
+  },
+  "dbl_auroc_genotype": 0.9500847556273747,
+  "dbl_auprc_genotype": 0.8423919286477767,
+  "dbl_recall_at_call": 0.7891113892365457,
+  "dbl_precision_at_call": 0.8214983713355049,
+  "n_donors_found": 8
+ }
+}
