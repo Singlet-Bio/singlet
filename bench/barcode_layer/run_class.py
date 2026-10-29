@@ -480,7 +480,7 @@ def compare_complex(cfg, work, args, rep):
                                "python_seconds": round(time.time() - t, 1), "first_cell_diffs": first}
     if args.star_bam and os.path.exists(args.star_bam):
         up = umi.split('_')
-        rep["star"] = compare_star_complex(cfg, args.star_bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, int(up[3]) - int(up[1]) + 1, off, seq, n)
+        rep["star"] = compare_star_complex(cfg, args.star_bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, k_ul, int(up[3]) - int(up[1]) + 1, off, seq, n)
 
 
 def decode_cells(cell: np.ndarray, sg_objs, seg_seqs):
@@ -510,7 +510,7 @@ def seg_strings_from(s, seqs):
     return [d[v] for v in sorted(d)]
 
 
-def compare_star_complex(cfg, bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, ul, off, seq, n):
+def compare_star_complex(cfg, bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, k_ul, ul, off, seq, n):
     t = time.time()
     st = io.star_tags(bam, tags=("CB", "UB", "UR"))
     idx = st["idx"]
@@ -541,9 +541,19 @@ def compare_star_complex(cfg, bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, ul, o
     umm = np.zeros((len(idx), ul), dtype=np.uint8)
     dec = io.decode3(k_umi[idx], ul) if ul else np.zeros(len(idx), "S1")
     has_ur = urtag != b""
-    rep["UR"] = {"records_with_UR": int(has_ur.sum()), "identical_to_raw_umi": int((has_ur & (dec == urtag)).sum())}
+    # UR vs ours by (3-bit key, length): the length can be one short (R17: pos[1] == read size passes and substr clips)
+    ur_len = np.char.str_len(urtag.astype("S64")).astype(np.int64)
+    ur_key = np.zeros(len(idx), dtype=np.uint64)
+    for L in np.unique(ur_len[has_ur]):
+        if L == 0:
+            continue
+        sel_l = has_ur & (ur_len == L)
+        ur_key[sel_l] = io.pack3_matrix(io.strings_to_matrix(urtag[sel_l], int(L)))
+    same_ur = has_ur & (ur_key == k_umi[idx]) & (ur_len == k_ul[idx].astype(np.int64))
+    rep["UR"] = {"records_with_UR": int(has_ur.sum()), "identical_to_raw_umi": int(same_ur.sum())}
     rep["UR"]["identical_pct"] = pct(rep["UR"]["identical_to_raw_umi"], rep["UR"]["records_with_UR"])
-    badur = np.flatnonzero(has_ur & (dec != urtag))[:6]
+    rep["UR"]["length_differs_from_nominal"] = int((has_ur & (ur_len != ul)).sum())
+    badur = np.flatnonzero(has_ur & ~same_ur)[:6]
     rep["UR"]["mismatch_examples"] = [{"read": int(idx[i]), "ours": dec[i].decode(), "ours_status": int(k_st[idx[i]]), "star_UR": urtag[i].decode(),
                                        "barcode_read": seq[off[idx[i]]:off[idx[i] + 1]].tobytes().decode()} for i in badur]
     has_ub = (ubtag != b"") & (ubtag != b"-")
