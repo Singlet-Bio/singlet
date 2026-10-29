@@ -33,9 +33,13 @@ CLASSES = {
     "dropseq": dict(kind="nowl", dir="dropseq", bc="M1.fq", cb=(0, 12), umi=(12, 8), qual="F", min_reads=5),
     "bd": dict(kind="complex", dir="bd", bc="M1.fq", segs=["0_0_0_8", "0_21_0_29", "0_43_0_51"], umi="0_52_0_59",
                wl=["bd_cls1.txt", "bd_cls2.txt", "bd_cls3.txt"], qual="F"),
-    "splitseq": dict(kind="complex", dir="splitseq", bc="M2.fq", segs=["0_10_0_17", "0_33_0_40", "0_56_0_63"], umi="0_0_0_9",
+    # GSE281535 / SRR31302021 (Parse-style linkers: BC3 at 10-17, a 30-base linker, BC2, ...). 'splitseq' is singlet's protocol row as it stands
+    # (BC2 at 33-40, BC1 at 56-63); 'splitseq48' is STAR's published SPLiT-seq recipe (0_10_0_17 0_48_0_55 0_78_0_85).
+    "splitseq": dict(kind="complex", dir="splitseq_parse", bc="M2.fq", segs=["0_10_0_17", "0_33_0_40", "0_56_0_63"], umi="0_0_0_9",
                      wl=["splitseq_bc_rd3.txt", "splitseq_bc_rd2.txt", "splitseq_bc_rd1.txt"], qual="F"),
-    "indrop": dict(kind="complex", dir="indrop", bc="M1.fq", segs=["0_0_2_-1", "3_1_3_8"], umi="3_9_3_14",
+    "splitseq48": dict(kind="complex", dir="splitseq_parse", bc="M2.fq", segs=["0_10_0_17", "0_48_0_55", "0_78_0_85"], umi="0_0_0_9",
+                       wl=["splitseq_bc_rd3.txt", "splitseq_bc_rd2.txt", "splitseq_bc_rd1.txt"], qual="F"),
+    "indrop": dict(kind="complex", dir="indrop", bc="M2.fq", segs=["0_0_2_-1", "3_1_3_8"], umi="3_9_3_14",
                    wl=["indrop_bc1.txt", "indrop_bc2.txt"], adapter="GAGTGATTGCTTGTGACGCCTT", adapter_mm=1, qual="F"),
 }
 

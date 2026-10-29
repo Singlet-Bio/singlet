@@ -13,7 +13,7 @@
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif; BARE=$W/repos/singlet-py.git
 D=$W/data/barcode-layer; BR=${BRANCH:-claude/gpu-barcode-layer-484c70}
-CLASSES=${CLASSES:-"pbmc1k_v3_F pbmc1k_v3_real dropseq bd splitseq indrop"}
+CLASSES=${CLASSES:-"pbmc1k_v3_F pbmc1k_v3_real dropseq bd splitseq splitseq48 indrop"}
 RES=$W/jobs/barcode-layer/results/$SLURM_JOB_ID; mkdir -p $RES $D/work
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT INT TERM
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/w11/barcode-layer || exit 1

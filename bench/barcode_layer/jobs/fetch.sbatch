@@ -39,7 +39,8 @@ case $WHAT in
     mv $D/pbmc1k_v3/$m.fq.tmp $D/pbmc1k_v3/$m.fq; echo "pbmc1k_v3 $m: $(( $(wc -l < $D/pbmc1k_v3/$m.fq) / 4 )) reads"; sed -n 1,4p $D/pbmc1k_v3/$m.fq;;
   dropseq)  ena dropseq  SRR5747459  6000000;;
   bd)       ena bd       SRR12364726 6000000;;
-  splitseq) ena splitseq SRR31302021 6000000;;
+  splitseq) ena splitseq SRR9900121 6000000;;
+  splitseq_swap) [ -e $D/splitseq/M1.fq ] && ! [ -e $D/splitseq_parse ] && mv $D/splitseq $D/splitseq_parse; ena splitseq SRR9900121 6000000;;
   indrop)   ena indrop   SRR15409581 900000;;
   ena_all)  rm -f $D/*/M?.fq.tmp; ena dropseq SRR5747459 6000000; ena bd SRR12364726 6000000; ena splitseq SRR31302021 6000000; ena indrop SRR15409581 900000;;
 esac
