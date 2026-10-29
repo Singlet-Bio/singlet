@@ -444,3 +444,50 @@ The 5' 16-thread run 790764 got 0 reads: the 1fq writer opened its FIFO with a t
 About 14 node-hours (exclusive nodes; 6 R10 runs of 10-19 min, 6 r8 runs, two shuffle gates of ~35 min, builds, probes and comparisons).
 
 Clipper storage cleared after this update (run outputs, shuffle diagnostics, staged `.1fq` reads; about 15 GB). Logs and small summaries are kept in `bam-stream/` (2.4 MB).
+
+## Update 2026-10-29 (i): per-gene R9, the ambient fit (R10, R10b, R10c) and barcode correction (R11)
+
+Engine on `perf/bam-stream`; binaries r12-r16; real data GSM4006843 (3') and GSM7901264 (5'). Result files are in `bench/bam-stream/results/` (`umi_group_probe_*`, `cls_r1*_*`, `ambient_*`).
+
+**R9 per (cell, gene).**
+- Probe 792017 counted 5' molecules five ways on the same reads (chr1 SNP sites plus the IG/TR loci). Of the two R9 groupings, per (cell, feature) and per (cell, gene), these numbers come from the first:
+
+  | | raw UMI | STAR UB | R9 | 1MM_All |
+  |---|---|---|---|---|
+  | V(D)J | 47,723 | 44,097 | 43,616 | 43,207 |
+  | SNP sites | 169,295 | 167,472 | 165,240 | 165,228 |
+
+- Per (cell, gene) changes them by 0.02-0.06%. The gap to production is STAR's lighter correction: UB differs from the raw UMI in 0.68% of reads.
+- Gene-wide read counts favour per gene, so R9 now groups UMIs per (cell, gene) (`13d8faf`).
+- Gates met on r14: thread/rerun 59/57 files identical (792095-792098); shuffled order 44 identical (792099).
+
+**Ambient fit.**
+- R10, pool defined by each barcode's own counts (5-100 UMIs, sequence ties). The pool now agrees between the paths: profile L1 2.5e-6 on 3', 7e-4 on 5'.
+- Per-cell rho still did not agree. The cluster step drew its random numbers over the cell list, so one changed cell reshuffled every draw.
+- R10b: every draw comes from the cell's barcode, 10 k-means restarts, canonical labels. That met the gate on 5' (0.9995) but not on 3' (0.735). There the 24 k-means clusters land on different optima even under a 1% read drop.
+- R10c: a consensus that averages rho and the expected native counts over M data-seeded fits.
+- The offline sweep 792138 (harness `amb_harness.cpp`; M=1 reproduces the pipeline exactly) gave the smallest passing M as 32: 3' 0.996 vs sorted, 0.994 under a 1% read drop; 5' 0.999 / 0.999.
+- In the pipeline (r16): 0.9950 (3') and 0.9996 (5'); corrected counts moved 1.6% / 0.5% between paths (they were 11.7% / 14.6%).
+- Cost: +66 s per 3' sample (13k cells), +11 s on 5'.
+
+**R11 barcode correction.**
+- The `.1fq` reader rebuilt every whitelist-miss barcode as all-N, although the raw barcode is stored. So STAR's 1MM rescue did nothing on either path, in production too.
+- Fixed in the reader. The stream now corrects CR with STAR's exact rule, using an exact histogram built in pass 1 before alignment.
+- Per primary record the corrected stream barcode equals STAR's own CB on the sorted path: 63,663,635 (3') and 93,177,259 (5') records agree, 0 differ.
+- Recovery, cells called in both runs:
+
+  | | 3' | 5' |
+  |---|---|---|
+  | primary records | +1.07% | +1.28% |
+  | exon molecules | +0.89% | +0.48% |
+  | intron molecules | +0.96% | +0.73% |
+  | junction molecules | +0.91% | +0.57% |
+
+- Effect on production: the sorted path with the reader fix vs without (r16s vs r14s) gains the same +0.89% (3') / +0.48% (5') exon molecules. That is how much prod/campaign, and so Alpha, under-counted.
+
+**Not done (next steps, not started).**
+1. Thread/rerun/shuffle gates on r16 (R11 + R10c), about 3 node-hours.
+2. Merge prod/campaign (`5ac57642`: #75 FIFO fix, a duplicate of my cherry-pick; #48) into perf/bam-stream.
+3. #80's chrM/NUMT cross-worker fix. It touches the same files (+336 -18 in `pileup_engine.h`), so it was not folded in. It affects the region-worker path; the stream is serial and has no cross-worker merge (not verified).
+4. The `fq-read-source` branch took the reader hunk of R11 (`fdccd145`). The pass-1 histogram has to move into its `read_source.h` on merge.
+5. `called_v2` still builds its own pool from the barcode list (cell sets differ by 1-112 low-quality barcodes between paths).

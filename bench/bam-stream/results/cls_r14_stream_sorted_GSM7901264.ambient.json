@@ -1,0 +1,72 @@
+{
+ "json": {
+  "method": [
+   "decontx_cluster_offgene_v1",
+   "decontx_cluster_offgene_v1"
+  ],
+  "n_cells": [
+   1462,
+   1462
+  ],
+  "n_clusters": [
+   8,
+   8
+  ],
+  "mean_rho": [
+   0.207743,
+   0.208038
+  ],
+  "median_rho": [
+   0.146641,
+   0.146734
+  ],
+  "umi_weighted_rho": [
+   0.133456,
+   0.13354
+  ],
+  "umis_removed": [
+   748440,
+   748138
+  ],
+  "ambient_profile_n_barcodes": [
+   50000,
+   50000
+  ],
+  "ambient_profile_total_umis": [
+   745346,
+   745035
+  ],
+  "ambient_profile_n_genes_detected": [
+   28600,
+   28600
+  ],
+  "ambient_pool_min_umi": [
+   5,
+   5
+  ],
+  "ambient_pool_max_umi": [
+   100,
+   100
+  ]
+ },
+ "profile": {
+  "l1": 0.0007178707299999969,
+  "max_abs": 1.1709999999999846e-05,
+  "pearson": 0.9999998018163158,
+  "identical": false
+ },
+ "cells": {
+  "a": 1462,
+  "b": 1462,
+  "both": 1461,
+  "rho_identical": 259,
+  "rho_abs_diff_quantiles_50_90_99_max": [
+   1.8699999999996497e-05,
+   0.0004310000000000147,
+   0.015079600000000016,
+   0.184411
+  ],
+  "rho_pearson": 0.9995264418284138,
+  "cluster_same_share": 0.998631074606434
+ }
+}

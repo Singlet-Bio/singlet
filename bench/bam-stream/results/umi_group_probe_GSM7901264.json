@@ -1,0 +1,278 @@
+{
+ "n_reads_in": 9892030,
+ "n_reads_used": 6747594,
+ "tags": {
+  "ub_present": 6747594,
+  "gx_missing": 2233763,
+  "gx_present": 4513831,
+  "ub_ne_ur": 45605
+ },
+ "n_vdj_segments": 411,
+ "n_snp_sites_chr1": 555352,
+ "vdj": {
+  "groups": 9470,
+  "evidence_reads": 479507,
+  "evidence_reads_with_gx": 382862,
+  "molecules": {
+   "ur": 47723,
+   "ub": 44097,
+   "feat": 43616,
+   "gene": 43641,
+   "gene_all": 43207
+  },
+  "feat_merge_gene_apart": {
+   "n": 1,
+   "gene_wide_ratio_low_over_high_quantiles": [
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ],
+   "share_ratio_ge_0.5": 1.0,
+   "share_low_gene_reads_ge_3": 1.0,
+   "examples_gene_hi_lo_feat_hi_lo": [
+    [
+     18,
+     9,
+     18,
+     9
+    ]
+   ]
+  },
+  "gene_merge_feat_apart": {
+   "n": 6,
+   "gene_wide_ratio_low_over_high_quantiles": [
+    0.111,
+    0.286,
+    0.444,
+    0.5,
+    0.529
+   ],
+   "share_ratio_ge_0.5": 0.5,
+   "share_low_gene_reads_ge_3": 0.8333,
+   "examples_gene_hi_lo_feat_hi_lo": [
+    [
+     9,
+     1,
+     10,
+     1
+    ],
+    [
+     9,
+     4,
+     9,
+     7
+    ],
+    [
+     11,
+     6,
+     11,
+     7
+    ],
+    [
+     17,
+     9,
+     17,
+     10
+    ],
+    [
+     18,
+     9,
+     18,
+     14
+    ],
+    [
+     21,
+     6,
+     21,
+     12
+    ]
+   ]
+  }
+ },
+ "snp": {
+  "groups": 147016,
+  "evidence_reads": 693134,
+  "evidence_reads_with_gx": 286544,
+  "molecules": {
+   "ur": 169295,
+   "ub": 167472,
+   "feat": 165240,
+   "gene": 165276,
+   "gene_all": 165228
+  },
+  "feat_merge_gene_apart": {
+   "n": 25,
+   "gene_wide_ratio_low_over_high_quantiles": [
+    0.6,
+    0.714,
+    0.818,
+    0.839,
+    1.0
+   ],
+   "share_ratio_ge_0.5": 0.96,
+   "share_low_gene_reads_ge_3": 0.96,
+   "examples_gene_hi_lo_feat_hi_lo": [
+    [
+     3,
+     1,
+     1,
+     1
+    ],
+    [
+     3,
+     3,
+     3,
+     2
+    ],
+    [
+     4,
+     3,
+     3,
+     2
+    ],
+    [
+     7,
+     5,
+     5,
+     1
+    ],
+    [
+     9,
+     8,
+     7,
+     4
+    ],
+    [
+     10,
+     10,
+     1,
+     3
+    ],
+    [
+     11,
+     7,
+     8,
+     4
+    ],
+    [
+     11,
+     9,
+     4,
+     1
+    ],
+    [
+     11,
+     9,
+     6,
+     1
+    ],
+    [
+     14,
+     10,
+     1,
+     6
+    ],
+    [
+     24,
+     18,
+     2,
+     5
+    ],
+    [
+     25,
+     15,
+     10,
+     4
+    ]
+   ]
+  },
+  "gene_merge_feat_apart": {
+   "n": 18,
+   "gene_wide_ratio_low_over_high_quantiles": [
+    0.062,
+    0.182,
+    0.2,
+    0.364,
+    0.5
+   ],
+   "share_ratio_ge_0.5": 0.2778,
+   "share_low_gene_reads_ge_3": 0.5,
+   "examples_gene_hi_lo_feat_hi_lo": [
+    [
+     2,
+     1,
+     2,
+     1
+    ],
+    [
+     7,
+     2,
+     2,
+     2
+    ],
+    [
+     7,
+     4,
+     4,
+     4
+    ],
+    [
+     8,
+     4,
+     6,
+     4
+    ],
+    [
+     9,
+     3,
+     3,
+     3
+    ],
+    [
+     10,
+     2,
+     2,
+     2
+    ],
+    [
+     10,
+     2,
+     2,
+     2
+    ],
+    [
+     11,
+     2,
+     2,
+     2
+    ],
+    [
+     11,
+     2,
+     2,
+     2
+    ],
+    [
+     11,
+     2,
+     2,
+     2
+    ],
+    [
+     11,
+     3,
+     4,
+     3
+    ],
+    [
+     11,
+     4,
+     2,
+     2
+    ]
+   ]
+  }
+ }
+}
