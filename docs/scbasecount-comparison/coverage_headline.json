@@ -1,0 +1,17 @@
+{
+ "singlet_samples": 74292,
+ "singlet_studies": 8010,
+ "sbc_samples": 61378,
+ "sbc_geo_samples": 44754,
+ "sbc_geo_studies": 6231,
+ "both_samples": 22896,
+ "both_studies": 3089,
+ "singlet_only": 51389,
+ "sbc_only": 38482,
+ "sbc_only_geo": 21858,
+ "sbc_non_geo": 16624,
+ "singlet_non10x": 11265,
+ "sbc_studies_total": 1129,
+ "singlet_10x": 63027,
+ "singlet_10x_in_sbc": 22368
+}

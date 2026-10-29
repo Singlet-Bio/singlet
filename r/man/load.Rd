@@ -5,16 +5,37 @@
 \alias{singlet_load}
 \title{Load Singlet data by accession or bundle path}
 \usage{
-load(x, as = c("sce", "seurat"), cache_dir = NULL)
+load(
+  x,
+  as = c("sce", "seurat"),
+  cache_dir = NULL,
+  legacy = NULL,
+  modalities = NULL,
+  cell_type_level = 2L,
+  cell_type_min_score = 0,
+  include_unvalidated = FALSE,
+  sample_facts = TRUE
+)
 
-singlet_load(x, as = c("sce", "seurat"), cache_dir = NULL)
+singlet_load(
+  x,
+  as = c("sce", "seurat"),
+  cache_dir = NULL,
+  legacy = NULL,
+  modalities = NULL,
+  cell_type_level = 2L,
+  cell_type_min_score = 0,
+  include_unvalidated = FALSE,
+  sample_facts = TRUE
+)
 }
 \arguments{
 \item{x}{A character vector of GEO Series accessions (\code{"GSE..."}),
 GEO Sample accessions (\code{"GSM..."}) and/or paths to local
-\code{.singlet} bundles. Length one or more. A sample accession is
-resolved to its parent Series through the Singlet API; that Series'
-bundle is downloaded and only the sample's cells are kept.}
+\code{.singlet} bundles or .s1 manifests. Length one or more. A sample
+accession is resolved to its parent Series through the Singlet API; only
+that sample's members are fetched. A local \code{.s1} file written by
+\code{\link{write_s1}} is read with \code{\link{read_s1}}.}
 
 \item{as}{Output class: \code{"sce"} (default) for a
 \code{SingleCellExperiment}, or \code{"seurat"} for a \code{Seurat}
@@ -25,10 +46,51 @@ to \code{tools::R_user_dir("singlet", "cache")} (override with the
 \code{SINGLET_CACHE_DIR} environment variable). Existing bundles are
 reused rather than re-downloaded, and \code{GSM} lookups are
 remembered there, so a sample of an already cached study loads offline.}
+
+\item{legacy}{\code{TRUE} reads the legacy \code{.singlet} bundle of an
+accession (deprecated, being retired); the default reads the per-sample study. A
+local \code{.singlet} path is always read as a legacy bundle, and a local
+.s1 manifest (\code{.json}, see \code{\link{download}}) as a per-sample study.
+When a study has no .s1 manifest yet, \code{load()} stops with a message
+naming \code{legacy = TRUE}; setting the environment variable
+\code{SINGLET_LEGACY_FALLBACK=1} makes it fall back automatically.}
+
+\item{modalities}{Which matrices to download (per-sample studies: only those
+members' byte ranges are fetched). \code{"counts"} (assay \code{counts} =
+spliced + unspliced; needs the exon and intron matrices),
+\code{"spliced"} (assay, exon matrix only), \code{"unspliced"} (assay,
+intron matrix only), \code{"splice_junctions"} and \code{"psi"}
+(\code{altExp}s on the junctions; junction matrix only, \code{psi} is
+the true percent spliced in), \code{"mt"} and \code{"vdj"}
+(\code{altExp}s). The cell table is always read. \code{NULL} (default)
+returns counts, spliced and unspliced. A modality that no requested sample
+carries stops with a message listing what the study has (see
+\code{\link{singlet_study_modalities}}). A legacy bundle is downloaded
+whole and only subset, with a warning.}
+
+\item{cell_type_level, cell_type_min_score}{Per-sample studies: the deepest
+level of \code{colData$cell_type} (default 2, compartment and lineage) and
+an extra minimum path score for it (default 0, none). See \code{\link{singlet_labels}}.}
+
+\item{include_unvalidated}{Also keep the unvalidated \code{qc_doublet_score} in
+\code{colData}; published Research Alpha objects never carry it (local outputs only).}
+
+\item{sample_facts}{Add the structured sample facts of the singlet.bio study API to \code{colData}: \code{tissue_type},
+\code{cell_line}, \code{cell_line_cellosaurus_id}, \code{tumor_sample_type}, \code{disease},
+\code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
+GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
+local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.}
 }
 \value{
 A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
   \code{Seurat} object (when \code{as = "seurat"}) spanning all inputs.
+  For a per-sample study, \code{colData} holds the per-cell labels
+  (\code{cell_type}, \code{cell_type_ontology_term_id}, \code{sex_chrom},
+  \code{ancestry_hancestro}, ...), the cell calls (\code{called},
+  \code{called_ed}) and the QC columns of each sample, then the GEO sample
+  metadata (\code{organism}, ..., \code{geo_cell_type}, \code{geo_sex}, ...),
+  then the sample facts (\code{tissue_type}, \code{cell_line}, \code{disease}, ...);
+  see \code{\link{singlet_labels}}.
   Samples with no usable cells (for example an empty count matrix left by
   a failed pipeline run) are skipped with a warning and listed, with the
   reason, in \code{metadata(sce)$skipped_samples}
@@ -39,14 +101,16 @@ The primary entry point for working with the Singlet atlas from R. Accepts
 one or more inputs that may be GEO accessions (\code{"GSE..."} or
 \code{"GSM..."}), local \code{.singlet} bundle paths, or a mix of these,
 and returns a single combined object. Accessions are downloaded (and
-cached) from \url{https://data.singlet.bio} on demand; local paths are read
-directly. Multiple inputs are combined column-wise on their shared gene
-axis. \code{singlet_load()} is the same function.
+cached) from \code{https://data.singlet.bio} on demand: only the sample
+members that gene-level counts need are fetched, with HTTP Range requests,
+and decoded once in C++; local paths are read directly. Multiple inputs are
+combined column-wise on their shared gene axis. \code{singlet_load()} is the
+same function.
 }
 \details{
 Downloads honor three environment variables: \code{SINGLET_DATA_BASE}
-(the host serving bundles, default \code{https://data.singlet.bio};
-bundles are fetched from \code{<base>/data/<GSE>/<GSE>.singlet}),
+(the host serving the data, default \code{https://data.singlet.bio}; the per-sample format
+objects are fetched from \code{<base>/s1/...}),
 \code{SINGLET_API_BASE} (used to resolve \code{GSM} accessions, default
 \code{https://singlet.bio/api}) and \code{SINGLET_CACHE_DIR} (the on-disk
 cache location).
@@ -56,21 +120,18 @@ cache location).
 nothing.
 }
 \examples{
+\donttest{
+if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+  cache <- file.path(tempdir(), "singlet-example")
+  # One sample: resolves to its study (GSE307528) and keeps only its cells
+  sce <- singlet_load("GSM9226069", cache_dir = cache)
+  table(sce$cell_type)
+}
+}
 \dontrun{
-# One study by accession (downloaded + cached automatically)
-sce <- singlet_load("GSE138867")
-
-# One sample: resolves to GSE138867 and keeps only GSM4120733's cells
-sce <- singlet_load("GSM4120733")
-
-# Combine several studies into one object
+# Whole studies, combined on their shared gene axis (larger downloads)
 sce <- singlet_load(c("GSE138867", "GSE146974"))
-
-# Samples that were skipped for having no usable cells, and why
-S4Vectors::metadata(sce)$skipped_samples
-
-# A local bundle, returned as a Seurat object
-obj <- singlet_load("GSE138867.singlet", as = "seurat")
+obj <- singlet_load("GSE138867", as = "seurat")
 }
 
 }

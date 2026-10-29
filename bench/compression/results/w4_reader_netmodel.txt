@@ -1,0 +1,27 @@
+assumptions: TTFB 0.22 s/request, single stream 32 MB/s, 8-stream aggregate 18 MB/s (observed on this laptop), RTT 50 ms
+today = urllib GET of the whole bundle, one stream, then SHA-256 + CRC-32 of the whole file (7.2 ms/MB)
+index = member ranges via the service index (1 ETag/size check + one ranged GET per member, pipelined on one connection)
+par8  = same ranges on 8 connections. "par8 ideal" = streams scale to 95% of the link (projection, NOT observed here)
+
+A: one sample, 9.6 MB needed of a 187 MB bundle (4 ranges: exon+intron adjacent, calls, vocab, manifest)
+link         path                                 seconds      MB/s
+100 Mbit/s   today: whole bundle, 1 stream + verify all     17.55      10.7
+100 Mbit/s   index: member ranges, 1 connection      2.18       4.4
+100 Mbit/s   index + par8 (observed 18 MB/s agg)      1.42       6.8
+100 Mbit/s   index + par8 (ideal scaling)            1.42       6.8
+1 Gbit/s     today: whole bundle, 1 stream + verify all      7.68      24.3
+1 Gbit/s     index: member ranges, 1 connection      1.70       5.6
+1 Gbit/s     index + par8 (observed 18 MB/s agg)      1.16       8.3
+1 Gbit/s     index + par8 (ideal scaling)            0.77      12.4
+
+B: whole 500 MB study, gene-level (54% = 270 MB needed)
+link         path                                 seconds      MB/s
+100 Mbit/s   today: whole bundle, 1 stream + verify all     46.16      10.8
+100 Mbit/s   index: member ranges, 1 connection     33.18       8.1
+100 Mbit/s   index + par8 (observed 18 MB/s agg)     24.68      10.9
+100 Mbit/s   index + par8 (ideal scaling)           24.68      10.9
+1 Gbit/s     today: whole bundle, 1 stream + verify all     19.71      25.4
+1 Gbit/s     index: member ranges, 1 connection     18.92      14.3
+1 Gbit/s     index + par8 (observed 18 MB/s agg)     16.96      15.9
+1 Gbit/s     index + par8 (ideal scaling)            4.30      62.8
+

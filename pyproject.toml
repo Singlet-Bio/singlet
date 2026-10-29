@@ -3,12 +3,10 @@ requires = ["setuptools>=64", "pybind11>=2.11"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# Distribution name on PyPI is "singlet-bio": "singlet" on PyPI is an
-# unrelated 2017 project (github.com/iosonofabio/singlet, Fabio Zanini).
-# The import name is unchanged: `pip install singlet-bio`, then `import singlet`.
-# Wheels and sdists are named singlet_bio-<version>-*.whl / singlet_bio-<version>.tar.gz.
-name = "singlet-bio"
-version = "1.0.0"
+# `pip install singlet`, then `import singlet`. Releases 0.1-0.5 of the PyPI "singlet" project are an unrelated 2017
+# package (github.com/iosonofabio/singlet); this package takes the name over from 1.1.0.
+name = "singlet"
+version = "1.3.0"
 description = "Open single-cell RNA-seq atlas: find, load, and analyze single-cell data at scale"
 readme = "python/README.md"
 license = {text = "MIT"}
@@ -56,7 +54,9 @@ gpu = ["cupy-cuda12x>=13.0"]
 zarr = ["zarr>=2.12"]
 tiledb = ["tiledbsoma>=1.4"]
 # The local MCP server is written against the 1.x SDK (mcp.server.Server).
-mcp = ["mcp>=1.0,<2"]
+mcp = ["mcp>=2.3.0,<3"]
+# The .s1 migration computes called_ed (python/singlet/s1/cellcall.py), whose Monte Carlo loop is compiled with numba.
+migrate = ["numba>=0.57"]
 # Optional algorithm packages some analysis functions use when present
 # (plotting, scanpy interop, GLM-based tests, Leiden on igraph).
 analysis = [
@@ -66,17 +66,17 @@ analysis = [
     "igraph>=0.10",
     "leidenalg>=0.9",
 ]
-all = ["singlet-bio[torch,gpu,zarr,tiledb,mcp,analysis]"]
+all = ["singlet[torch,gpu,zarr,tiledb,mcp,analysis]"]
 # Everything the Python test suite imports.
 test = [
     "pytest>=7.0",
     "pytest-cov",
     "coverage>=7.0",
     "hypothesis>=6.0",
-    "singlet-bio[analysis]",
+    "singlet[analysis]",
 ]
 dev = [
-    "singlet-bio[test]",
+    "singlet[test]",
     "ruff",
     "pyright",
     "pybind11>=2.11",
@@ -103,7 +103,7 @@ where = ["python"]
 include = ["singlet*"]
 
 [tool.setuptools.package-data]
-singlet = ["data/*.parquet", "data/whitelists/*.txt", "py.typed", "_singlepress*.so"]
+singlet = ["celllabels/data/*.gz", "data/*.parquet", "data/whitelists/*.txt", "py.typed", "features/data/*.json", "features/data/*.parquet", "_singlepress*.so", "s1/packs/*.pack", "s1/packs/index.json", "s1/recipes_data/*.zst"]
 
 # The four large 10x whitelists (about 106 MB of 113 MB) are not shipped: singlet.whitelists
 # downloads them from the public Teichlab CDN on first use. The small ones, and 737K-april-2014
@@ -117,6 +117,7 @@ addopts = "-v --tb=short"
 markers = [
     "smoke: lightweight smoke tests for new features",
     "gpu: requires CUDA GPU and CuPy",
+    "live: reads data.singlet.bio (runs only with SINGLET_LIVE_TESTS=1)",
 ]
 filterwarnings = [
     "ignore:Sparse CSR tensor support is in beta:UserWarning",
@@ -147,6 +148,8 @@ omit = [
     "python/singlet/gpu/*",
     "python/singlet/mcp/*",
     "python/singlet/torch/*",
+    # build-time generator of the shipped packs (run once per reference build, never at import)
+    "python/singlet/s1/packs_build.py",
 ]
 
 [tool.coverage.report]

@@ -1,0 +1,3 @@
+-rw-r--r-- 1 debruinz domain users     2031041 Oct 27 16:17 /tmp/debruinz-w11r-789253/full/auto_barcodes.tsv
+-rw-r--r-- 1 debruinz domain users 19134027295 Oct 27 16:16 /tmp/debruinz-w11r-789253/full/star_Aligned.sortedByCoord.out.bam
+-rw-r--r-- 1 debruinz domain users     4615136 Oct 27 16:16 /tmp/debruinz-w11r-789253/full/star_Aligned.sortedByCoord.out.bam.bai

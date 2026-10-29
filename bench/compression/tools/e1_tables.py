@@ -1,0 +1,118 @@
+#!/usr/bin/env python
+"""E1: compact cross-file markdown tables for notes/e1.md  ->  results/e1_tables.md
+
+    python -P tools/e1_tables.py
+"""
+import os, sys, glob, csv
+import numpy as np
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import e1_split as E
+import e1_report as R
+
+RES = E.RES
+ORDER = ["pbmc_v2_typical", "pbmc_v2_shallow", "pbmc_v3_lowgenes", "tcell_5p", "tumor_3p", "brain_sn_v3_deep", "brain_sn_v3_intronic"]
+
+
+def files(res):
+    out = []
+    for s in ORDER:
+        for m in ("exon", "intron"):
+            p = os.path.join(RES, f"e1_percell_{s}__{m}__{res}__cells.npz")
+            if os.path.exists(p):
+                out.append((s, m, p))
+    return out
+
+
+def ladder_tables(res):
+    L = []
+    L.append(f"### Ladder, {res} resolution: multiset bits per held-out nonzero (b/nnzB), called cells, 2-fold cross-fitted hyper-parameters\n")
+    L.append("| file | cells | med N | med nnz | med nnz_B | L0 | L1 | L2 | L3 seq | L3 best | L3dm best | L4 (in-sample) |")
+    L.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    G = []
+    G.append(f"### Gains over L1, {res} resolution: b/nnzB [bits per cell] {{b per nnz of the whole cell}}\n")
+    G.append("| file | L2 (neighbours) | L3 seq (own half, Dirichlet) | L3 best (neighbour prior + own half) | L3dm best (exact DM) | F1->F1dm full-cell burstiness (b/nnz) | empties control: L3dm gain |")
+    G.append("|---|---|---|---|---|---|---|")
+    S = []
+    for s, m, p in files(res):
+        fd = R.FileData(p)
+        if fd.n < 30:
+            continue
+        sel = fd.select()
+        z = fd.z
+        nB, nC = z["nnzB"].sum(), z["nnz"].sum()
+        v = lambda k: sel[k]["ms"].sum() / nB
+        L1 = sel["L1"]["ms"].sum()
+        gcell = lambda k: (L1 - sel[k]["ms"].sum()) / fd.n
+        gnnz = lambda k: (L1 - sel[k]["ms"].sum()) / nC
+        gb = lambda k: (L1 - sel[k]["ms"].sum()) / nB
+        L.append(f"| {s}/{m} | {fd.n} | {np.median(z['N']):.0f} | {np.median(z['nnz']):.0f} | {np.median(z['nnzB']):.0f} | "
+                 f"{v('L0'):.3f} | {v('L1'):.3f} | {v('L2'):.3f} | {v('L3seq'):.3f} | {v('L3'):.3f} | {v('L3dm'):.3f} | {v('L4'):.3f} |")
+        f1 = sel["F1"]["ms"].sum() / nC
+        f1dm = sel["F1dm"]["ms"].sum() / nC
+        ep = os.path.join(RES, f"e1_percell_{s}__{m}__{res}__empties.npz")
+        etxt = ""
+        if os.path.exists(ep):
+            fe = R.FileData(ep)
+            if fe.n >= 30:
+                se = fe.select()
+                etxt = f"{(se['L1']['ms'].sum() - se['L3dm']['ms'].sum()) / fe.z['nnzB'].sum():+.3f} ({fe.n})"
+        fmt = lambda k: f"{gb(k):+.3f} [{gcell(k):+.1f}] {{{gnnz(k):+.3f}}}"
+        G.append(f"| {s}/{m} | {fmt('L2')} | {fmt('L3seq')} | {fmt('L3')} | {fmt('L3dm')} | {f1 - f1dm:+.3f} (F1 {f1:.2f}) | {etxt} |")
+        S.append((s, m, fd, sel))
+    return "\n".join(L), "\n".join(G), S
+
+
+def keff_table(S, res):
+    T = [f"### Effective k, {res} resolution (gain-bits per cell vs log2 N across depth groups; hyper-parameters cross-fitted within group)\n",
+         "| file | k_eff (L3 best) | R2 | N0 (gain crosses 0) | k_eff (L3dm) | (k_eff/2) log2 N_med, bits/cell | same per nnz | measured L3 best gain, bits/cell |",
+         "|---|---|---|---|---|---|---|---|"]
+    for s, m, fd, sel in S:
+        rows, dsel = R.depth_table(fd)
+        k3 = R.keff(rows, "L3", dsel, fd)
+        kd = R.keff(rows, "L3dm", dsel, fd)
+        if not k3:
+            continue
+        gm = (sel["L1"]["ms"].sum() - sel["L3"]["ms"].sum()) / fd.n
+        T.append(f"| {s}/{m} | {k3['keff']:.1f} | {k3['r2']:.2f} | {k3['N0']:.0f} | {kd['keff']:.1f} | {k3['bound_bits']:.0f} | {k3['bound_per_nnz']:.3f} | {gm:+.1f} |")
+    return "\n".join(T)
+
+
+def floor_table(S, res):
+    T = [f"### Sampling-floor bracket, {res} resolution (multiset bits per nnz of the WHOLE cell unless noted)\n",
+         "| file | F1 (static L1) | CS-implied H(Mult) median | plug-in-implied | Hcs median (bits) | Hcs deficit per depth doubling (deep cells) |",
+         "|---|---|---|---|---|---|"]
+    hc = {}
+    hp = os.path.join(RES, "e1_hcurve.tsv")
+    if os.path.exists(hp) and res == "interval":
+        for r in csv.DictReader(open(hp), delimiter="\t"):
+            hc[r["file"]] = r
+    for s, m, fd, sel in S:
+        z = fd.z
+        nC = z["nnz"].sum()
+        f1 = sel["F1"]["ms"].sum() / nC
+        gain_cell = (sel["L1"]["ms"].sum() - sel["L3"]["ms"].sum()) / nC
+        hm = (z["N"] * z["Hcs"] - z["lfN"] + z["sumlfx"]) / z["nnz"]
+        hpl = (z["N"] * z["Hplug"] - z["lfN"] + z["sumlfx"]) / z["nnz"]
+        d = ""
+        r = hc.get(f"{s}/{m}")
+        if r:
+            d = f"{float(r['Hcs_f1']) - float(r['Hcs_f2']):+.2f} (at N~{float(r['median_N']):.0f}); extrap {float(r['Hcs_extrap_inf']):.1f}"
+        T.append(f"| {s}/{m} | {f1:.2f} | {np.median(hm):.2f} | {np.median(hpl):.2f} | {np.median(z['Hcs']):.2f} | {d} |")
+    return "\n".join(T)
+
+
+def main():
+    out = ["# E1 tables (generated by tools/e1_tables.py)\n"]
+    for res in ("interval", "gene"):
+        if not files(res):
+            continue
+        a, g, S = ladder_tables(res)
+        out += [a, "", g, "", keff_table(S, res), "", floor_table(S, res), ""]
+    with open(os.path.join(RES, "e1_tables.md"), "w", encoding="utf-8") as f:
+        f.write("\n".join(out))
+    print("\n".join(out))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,15 @@
+{
+ "packs_total": 145,
+ "packs_uploaded": 145,
+ "packs_skipped": 0,
+ "bytes": 11213863,
+ "index_entries_before": 16,
+ "index_entries_after": 161,
+ "previous_index": "index.json.previous-20261024T115141Z",
+ "apply": true,
+ "public_index_sha256": "ccbdbe3d587672c953133a7ed69c63cb07133fce0ec0cbd6e21d3236d5060e5c",
+ "public_index_matches_written": true,
+ "old_entries_unchanged": true,
+ "new_entries_present": true,
+ "packs_verified_via_public_host": 145
+}

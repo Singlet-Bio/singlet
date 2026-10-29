@@ -1,0 +1,391 @@
+[
+ {
+  "gsm": "GSM4317423",
+  "n_junctions": 129853,
+  "n_events": 24756,
+  "n_assigned": 48016,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 622696,
+  "junctions_policy_differs": 4,
+  "entries_on_those_junctions": 21,
+  "same_structure": true,
+  "entries_psi_changed": 0,
+  "entries_stored_value_changed_after_rint": 0,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": true,
+  "names_of_differing_junctions": [
+   "chr12:991322-1027747",
+   "chr12:991322-1083163",
+   "chr10:99972134-100009837",
+   "chr1:99993741-100007033"
+  ],
+  "events_chosen_sorted_first": [
+   "chr12:1027747-A",
+   "chr12:1083163-A",
+   "chr10:100009837-A",
+   "chr1:100007033-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr12:991322-D",
+   "chr12:991322-D",
+   "chr10:99972134-D",
+   "chr1:99993741-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317424",
+  "n_junctions": 90181,
+  "n_events": 12741,
+  "n_assigned": 25027,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 237212,
+  "junctions_policy_differs": 3,
+  "entries_on_those_junctions": 7,
+  "same_structure": true,
+  "entries_psi_changed": 0,
+  "entries_stored_value_changed_after_rint": 0,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": true,
+  "names_of_differing_junctions": [
+   "chr12:991322-1027747",
+   "chr12:991487-1027747",
+   "chr10:99972134-100009837"
+  ],
+  "events_chosen_sorted_first": [
+   "chr12:1027747-A",
+   "chr12:1027747-A",
+   "chr10:100009837-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr12:991322-D",
+   "chr12:991487-D",
+   "chr10:99972134-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317425",
+  "n_junctions": 101095,
+  "n_events": 15243,
+  "n_assigned": 29502,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 261695,
+  "junctions_policy_differs": 0,
+  "entries_on_those_junctions": 0,
+  "names_of_differing_junctions": [],
+  "events_chosen_sorted_first": [],
+  "events_chosen_donor_first": []
+ },
+ {
+  "gsm": "GSM4317426",
+  "n_junctions": 151949,
+  "n_events": 28154,
+  "n_assigned": 53763,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 565078,
+  "junctions_policy_differs": 8,
+  "entries_on_those_junctions": 46,
+  "same_structure": true,
+  "entries_psi_changed": 0,
+  "entries_stored_value_changed_after_rint": 0,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": true,
+  "names_of_differing_junctions": [
+   "chr4:987242-1000611",
+   "chr4:987949-1000611",
+   "chr12:990629-1027747",
+   "chr12:991322-1027747",
+   "chr12:991487-1027747"
+  ],
+  "events_chosen_sorted_first": [
+   "chr4:1000611-A",
+   "chr4:1000611-A",
+   "chr12:1027747-A",
+   "chr12:1027747-A",
+   "chr12:1027747-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr4:987242-D",
+   "chr4:987949-D",
+   "chr12:990629-D",
+   "chr12:991322-D",
+   "chr12:991487-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317427",
+  "n_junctions": 111080,
+  "n_events": 18618,
+  "n_assigned": 36565,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 434517,
+  "junctions_policy_differs": 2,
+  "entries_on_those_junctions": 7,
+  "same_structure": true,
+  "entries_psi_changed": 2,
+  "entries_stored_value_changed_after_rint": 2,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": false,
+  "names_of_differing_junctions": [
+   "chr10:99972134-100009837",
+   "chr12:991322-1027747"
+  ],
+  "events_chosen_sorted_first": [
+   "chr10:100009837-A",
+   "chr12:1027747-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr10:99972134-D",
+   "chr12:991322-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317428",
+  "n_junctions": 67308,
+  "n_events": 7440,
+  "n_assigned": 14556,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 104102,
+  "junctions_policy_differs": 0,
+  "entries_on_those_junctions": 0,
+  "names_of_differing_junctions": [],
+  "events_chosen_sorted_first": [],
+  "events_chosen_donor_first": []
+ },
+ {
+  "gsm": "GSM4317429",
+  "n_junctions": 92802,
+  "n_events": 14317,
+  "n_assigned": 29524,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 372571,
+  "junctions_policy_differs": 1,
+  "entries_on_those_junctions": 1,
+  "same_structure": true,
+  "entries_psi_changed": 0,
+  "entries_stored_value_changed_after_rint": 0,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": true,
+  "names_of_differing_junctions": [
+   "chr1:99993741-100007033"
+  ],
+  "events_chosen_sorted_first": [
+   "chr1:100007033-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr1:99993741-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317430",
+  "n_junctions": 87912,
+  "n_events": 13270,
+  "n_assigned": 25577,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 228176,
+  "junctions_policy_differs": 4,
+  "entries_on_those_junctions": 15,
+  "same_structure": true,
+  "entries_psi_changed": 0,
+  "entries_stored_value_changed_after_rint": 0,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": true,
+  "names_of_differing_junctions": [
+   "chr12:991322-1027747",
+   "chr1:99993741-100007033",
+   "chr10:99972134-100009837",
+   "chr4:987949-1000611"
+  ],
+  "events_chosen_sorted_first": [
+   "chr12:1027747-A",
+   "chr1:100007033-A",
+   "chr10:100009837-A",
+   "chr4:1000611-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr12:991322-D",
+   "chr1:99993741-D",
+   "chr10:99972134-D",
+   "chr4:987949-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317431",
+  "n_junctions": 79508,
+  "n_events": 11983,
+  "n_assigned": 23114,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 174114,
+  "junctions_policy_differs": 1,
+  "entries_on_those_junctions": 1,
+  "same_structure": true,
+  "entries_psi_changed": 0,
+  "entries_stored_value_changed_after_rint": 0,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": true,
+  "names_of_differing_junctions": [
+   "chr1:99993741-100007033"
+  ],
+  "events_chosen_sorted_first": [
+   "chr1:100007033-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr1:99993741-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317432",
+  "n_junctions": 126409,
+  "n_events": 24604,
+  "n_assigned": 46416,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 558048,
+  "junctions_policy_differs": 7,
+  "entries_on_those_junctions": 58,
+  "same_structure": true,
+  "entries_psi_changed": 8,
+  "entries_stored_value_changed_after_rint": 8,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": false,
+  "names_of_differing_junctions": [
+   "chr1:99993741-100011364",
+   "chr11:994245-1003721",
+   "chr12:754324-1083163",
+   "chr12:991322-1027747",
+   "chr12:991487-1027747"
+  ],
+  "events_chosen_sorted_first": [
+   "chr1:100011364-A",
+   "chr11:1003721-A",
+   "chr12:1083163-A",
+   "chr12:1027747-A",
+   "chr12:1027747-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr1:99993741-D",
+   "chr11:994245-D",
+   "chr12:754324-D",
+   "chr12:991322-D",
+   "chr12:991487-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317433",
+  "n_junctions": 130160,
+  "n_events": 22910,
+  "n_assigned": 43309,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 361961,
+  "junctions_policy_differs": 7,
+  "entries_on_those_junctions": 26,
+  "same_structure": true,
+  "entries_psi_changed": 2,
+  "entries_stored_value_changed_after_rint": 2,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": false,
+  "names_of_differing_junctions": [
+   "chr12:991487-1027747",
+   "chr12:991487-1083163",
+   "chr10:99972134-100009837",
+   "chr1:99993741-100007033",
+   "chr1:99999415-100007033"
+  ],
+  "events_chosen_sorted_first": [
+   "chr12:1027747-A",
+   "chr12:1083163-A",
+   "chr10:100009837-A",
+   "chr1:100007033-A",
+   "chr1:100007033-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr12:991487-D",
+   "chr12:991487-D",
+   "chr10:99972134-D",
+   "chr1:99993741-D",
+   "chr1:99999415-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317434",
+  "n_junctions": 103505,
+  "n_events": 15865,
+  "n_assigned": 30372,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 253603,
+  "junctions_policy_differs": 2,
+  "entries_on_those_junctions": 8,
+  "same_structure": true,
+  "entries_psi_changed": 0,
+  "entries_stored_value_changed_after_rint": 0,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": true,
+  "names_of_differing_junctions": [
+   "chr12:991487-1027747",
+   "chr10:99972134-100009837"
+  ],
+  "events_chosen_sorted_first": [
+   "chr12:1027747-A",
+   "chr10:100009837-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr12:991487-D",
+   "chr10:99972134-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317435",
+  "n_junctions": 99013,
+  "n_events": 15149,
+  "n_assigned": 29735,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 255978,
+  "junctions_policy_differs": 4,
+  "entries_on_those_junctions": 16,
+  "same_structure": true,
+  "entries_psi_changed": 0,
+  "entries_stored_value_changed_after_rint": 0,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": true,
+  "names_of_differing_junctions": [
+   "chr2:99752301-100006631",
+   "chr12:991322-1027747",
+   "chr11:994245-1003721",
+   "chr10:99972134-100009837"
+  ],
+  "events_chosen_sorted_first": [
+   "chr2:100006631-A",
+   "chr12:1027747-A",
+   "chr11:1003721-A",
+   "chr10:100009837-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr2:99752301-D",
+   "chr12:991322-D",
+   "chr11:994245-D",
+   "chr10:99972134-D"
+  ]
+ },
+ {
+  "gsm": "GSM4317436",
+  "n_junctions": 86564,
+  "n_events": 13227,
+  "n_assigned": 26452,
+  "numpy_vs_cpp_bit_identical": true,
+  "n_entries": 234844,
+  "junctions_policy_differs": 1,
+  "entries_on_those_junctions": 10,
+  "same_structure": true,
+  "entries_psi_changed": 0,
+  "entries_stored_value_changed_after_rint": 0,
+  "shipped_matches_sorted_first_rint": true,
+  "shipped_matches_donor_first_rint": true,
+  "names_of_differing_junctions": [
+   "chr12:991487-1027747"
+  ],
+  "events_chosen_sorted_first": [
+   "chr12:1027747-A"
+  ],
+  "events_chosen_donor_first": [
+   "chr12:991487-D"
+  ]
+ }
+]

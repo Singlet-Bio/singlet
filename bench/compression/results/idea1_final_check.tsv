@@ -1,0 +1,4 @@
+sample	member	codec	orig_bytes	enc_bytes	ratio_vs_1pz	bits_per_nnz	nnz	m	n	enc_ms	dec_ms_min	dec_Mnnz_s	matrix_ok	file_ok	model_bytes	names_bytes	payload_bits_per_nnz	side_bits_per_nnz	payload_dec_ms	payload_Mnnz_s	hold	dec_cyc_per_nnz	pay_cyc_per_nnz	cal_cyc_per_iter	pay_Mnnz_s_norm
+tumor_3p	exon_counts.1pz	idea1_s3	4704028	3909099	0.831011	127.583	245117	310797	25067	2742.51	508.011	0.482504	1	-1	5292873	3.45695e+06	14.757	0.306368	216.947	1.12985	GSE145370	5027.14	-1	9.39222	-1
+tumor_3p	exon_counts.1pz	idea1_s4	4704028	3909271	0.831048	127.589	245117	310797	25067	657.563	444.484	0.551465	1	-1	5292873	3.45695e+06	14.7626	0.306368	148.113	1.65494	GSE145370	4585.84	1658.46	9.43976	4.26891
+tumor_3p	exon_counts.1pz	idea1_s4r	4704028	3910328	0.831272	127.623	245117	310797	25067	2451.55	948.721	0.258366	1	-1	630982	3.45695e+06	14.7971	0.306368	275.032	0.89123	GSE145370	3516.25	634.891	9.74867	11.5161

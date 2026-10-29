@@ -8,7 +8,8 @@ Exposes these tools to any MCP client (Claude Desktop, Cursor, VS Code Copilot):
   - singlet_nl_search:  Natural-language search → interpreted filters + accessions
   - singlet_search:     Search processed single-cell datasets
   - singlet_qc:        Get QC metrics for a sample
-  - singlet_load:      Get download/access info for a sample
+  - singlet_load:      Get download/access info for a sample (store: object URL, member byte ranges, pack ids)
+  - singlet_slice_cells: Select cells of a study by cell-table filters and fetch only their chunks
   - singlet_browse:    Browse samples with filters (organism, protocol, tissue, status)
   - singlet_protocols: Get protocol distribution and success rates
   - singlet_quality:   Get quality tier breakdown (gold/silver/bronze)
@@ -43,7 +44,7 @@ with the package.
 This local server is separate from the hosted MCP endpoint at
 https://singlet.bio/mcp, which serves the live catalog and has its own tool set.
 
-Requires: pip install "singlet-bio[mcp]"
+Requires: pip install "singlet[mcp]"
 """
 
 from __future__ import annotations
@@ -208,8 +209,9 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="singlet_load",
             description=(
-                "Get access information for loading a processed sample. "
-                "Returns the file path, size, and Python code to load it."
+                "Get access information for loading a processed sample: the .s1 sample object URL, the byte "
+                "range of each member (an HTTP Range request fetches one member), the vocabulary pack ids and "
+                "the one-line singlet.load() call. Pass if_rev to get {unchanged:true} when the study has not changed."
             ),
             inputSchema={
                 "type": "object",
@@ -218,8 +220,50 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "GEO sample accession (e.g. 'GSM5238385')",
                     },
+                    "if_rev": {
+                        "type": "string",
+                        "description": "Study revision you already hold (the 'rev' of an earlier answer).",
+                    },
                 },
                 "required": ["gsm_id"],
+            },
+        ),
+        Tool(
+            name="singlet_slice_cells",
+            description=(
+                "Select cells of a study by cell-table filters (called, n_umi_exon, n_umi_intron, n_feat_exon, "
+                "n_feat_intron) and read only the matrix chunks that hold them. Returns counts per sample, the "
+                "requests and bytes used, and optionally saves the slice as .h5ad. 'where' is a conjunction such as "
+                "'n_umi_exon >= 5000 and called'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "gse_id": {
+                        "type": "string",
+                        "description": "GEO series accession (e.g. 'GSE145370')",
+                    },
+                    "where": {
+                        "type": "string",
+                        "description": "Clauses joined by 'and': '<column> <op> <number>' (>=, <=, >, <, ==, !=), "
+                        "'<boolean column>' or 'not <boolean column>'.",
+                    },
+                    "samples": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "GSM ids (default: all)",
+                    },
+                    "max_cells": {
+                        "type": "integer",
+                        "description": "Cells per sample, largest first (default 1000)",
+                        "default": 1000,
+                    },
+                    "save_to": {
+                        "type": "string",
+                        "description": "Write the slice to this .h5ad path",
+                    },
+                },
+                "required": ["gse_id"],
             },
         ),
         Tool(
@@ -369,6 +413,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _tool_qc(arguments)
         elif name == "singlet_load":
             result = await _tool_load(arguments)
+        elif name == "singlet_slice_cells":
+            result = await _tool_slice_cells(arguments)
         elif name == "singlet_browse":
             result = await _tool_browse(arguments)
         elif name == "singlet_protocols":
@@ -388,7 +434,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     except Exception as e:
         result = {"error": str(e)}
 
-    return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+    # Compact JSON: indentation adds a quarter to a third of the bytes (and tokens) a model has to read.
+    return [TextContent(type="text", text=json.dumps(result, separators=(",", ":"), default=str))]
 
 
 # ─── Tool Implementations ────────────────────────────────────────────────────
@@ -549,44 +596,178 @@ async def _tool_qc(args: dict) -> dict:
     }
 
 
-async def _tool_load(args: dict) -> dict:
-    """Get load/access info for a sample, plus the public R2 bundle URL.
+def _store_sample_info(gse_id: str, gsm_id: str, if_rev: str | None = None) -> dict | None:
+    """Download information for one sample from the study's .s1 manifest, or None when the study has no .s1 manifest.
 
-    The public data is hosted per-GSE on Cloudflare R2. This returns the parent
-    GSE, the direct bundle URL, and a ready-to-run code snippet (which calls
-    ``singlet.load()`` to fetch + assemble the data).
-    """
+    The answer is what a client needs to fetch the sample without further requests: the object URL and size, the byte range
+    of every member, the pack ids, and the single coalesced range ``singlet.load`` issues for the gene-level matrices."""
+    from singlet.s1 import client as _store
+
+    try:
+        st = _store.open_study(gse_id)
+    except _store.StudyNotFound:
+        return None
+    if if_rev and st.rev == if_rev:
+        return {"unchanged": True, "rev": st.rev}
+    sm = st.samples.get(gsm_id)
+    if sm is None:
+        return {"error": f"{gsm_id} is not a sample of {gse_id} in the .s1 manifest (rev {st.rev})"}
+    members = {
+        n: [m.off, m.len, m.kind]
+        for n, m in sm.members.items()
+        if not n.startswith("vector:") and not n.endswith("#csc")
+    }
+    need = [sm.members[n] for n in (_store.CELLS, _store.EXON, _store.INTRON) if n in sm.members]
+    co = _store._coalesce([(m.off, m.len) for m in need])
+    return {
+        "format": "singlet-s1",
+        "rev": st.rev,
+        "manifest": st.transport.url(st.manifest_key),
+        "object": st.transport.url(sm.key),
+        "bytes": sm.bytes,
+        "sha256": sm.sha256,
+        "n_columns": sm.n_columns,
+        "n_called": sm.n_called,
+        "members": members,
+        "packs": {k: v for k, v in st.packs.items() if v},
+        "gene_level": {
+            "ranges": [[a, b - 1] for a, b, _ in co],
+            "bytes": sum(b - a for a, b, _ in co),
+            "requests": len(co),
+            "note": "send 'Range: bytes=a-b' and check Content-Range reports the total 'bytes' above",
+        },
+    }
+
+
+async def _tool_load(args: dict) -> dict:
+    """Get load/access info for a sample.
+
+    For a migrated study (store): the sample object URL, member byte ranges, pack ids, and the one-line load call.
+    Otherwise the legacy per-study bundle URL (deprecated)."""
     gsm_id = args["gsm_id"]
     sample = _lookup_gsm(gsm_id)
     if not sample:
         return {"error": f"Sample {gsm_id} not found in atlas"}
 
     gse_id = sample.get("gse_id")
-    from singlet._loader import _bundle_url
-
-    bundle_url = _bundle_url(gse_id) if gse_id else None
-
-    return {
+    out = {
         "gsm_id": gsm_id,
         "gse_id": gse_id,
         "organism": sample.get("organism"),
         "protocol": sample.get("protocol"),
         "status": sample.get("status"),
         "title": sample.get("title", ""),
-        "tissue": sample.get("tissue", ""),
-        "cell_type": sample.get("cell_type", ""),
         "cells": sample.get("n_cells", sample.get("cells_called")),
-        "format": ".singlet bundle (per-GSE ZIP; free, no auth)",
-        "bundle_url": bundle_url,
-        "python_code": (
-            f"import singlet\n"
-            f"# Loads just this sample (downloads the parent {gse_id} bundle, cached):\n"
-            f'adata = singlet.load("{gsm_id}")\n'
-            f"# ...or load the whole series:\n"
-            f'adata = singlet.load("{gse_id}")'
-        ),
+        "load": f'singlet.load("{gsm_id}")',
         "web_url": f"https://singlet.bio/sample/{gsm_id}",
     }
+    s1_info = None
+    if gse_id:
+        try:
+            s1_info = _store_sample_info(gse_id, gsm_id, args.get("if_rev"))
+        except Exception as e:  # noqa: BLE001 - the data host being unreachable must not hide the catalog answer
+            out["s1_error"] = str(e)
+    if s1_info is not None:
+        if s1_info.get("unchanged"):
+            return {"gsm_id": gsm_id, "gse_id": gse_id, **s1_info}
+        out["s1"] = s1_info
+    else:
+        from singlet._loader import _bundle_url
+
+        out["format"] = ".singlet bundle (legacy, per-study ZIP; being retired)"
+        out["bundle_url"] = _bundle_url(gse_id) if gse_id else None
+        out["load"] = f'singlet.load("{gsm_id}", legacy=True)'
+    for k in ("tissue", "cell_type"):
+        if sample.get(k):
+            out[k] = sample[k]
+    return out
+
+
+def _parse_where(text: str | None):
+    """Safe filter from 'a >= 5 and not called': clauses joined by ``and`` over cell-table columns (no expression evaluation)."""
+    import re
+
+    import numpy as np
+
+    if not text or not text.strip():
+        return None
+    ops = {
+        ">=": lambda a, b: a >= b,
+        "<=": lambda a, b: a <= b,
+        ">": lambda a, b: a > b,
+        "<": lambda a, b: a < b,
+        "==": lambda a, b: a == b,
+        "!=": lambda a, b: a != b,
+    }
+    clauses = []
+    for part in re.split(r"\s+and\s+", text.strip(), flags=re.I):
+        part = part.strip()
+        m = re.fullmatch(
+            r"([A-Za-z_][A-Za-z0-9_]*)\s*(>=|<=|==|!=|>|<)\s*(-?[0-9]+(?:\.[0-9]+)?)", part
+        )
+        if m:
+            clauses.append((m.group(1), ops[m.group(2)], float(m.group(3))))
+            continue
+        m = re.fullmatch(r"(not\s+)?([A-Za-z_][A-Za-z0-9_]*)", part, flags=re.I)
+        if m:
+            clauses.append((m.group(2), None, bool(not m.group(1))))
+            continue
+        raise ValueError(
+            f"cannot parse clause {part!r}: use '<column> <op> <number>', '<column>' or 'not <column>'"
+        )
+
+    def mask(df):
+        keep = np.ones(len(df), dtype=bool)
+        for col, op, val in clauses:
+            if col not in df.columns:
+                raise ValueError(
+                    f"unknown cell-table column {col!r}; available: {list(df.columns)}"
+                )
+            v = df[col].to_numpy()
+            keep &= (v.astype(bool) == val) if op is None else op(v, val)
+        return keep
+
+    return mask
+
+
+async def _tool_slice_cells(args: dict) -> dict:
+    """Select cells by cell-table filters and read only the chunks that hold them; summary (and optional .h5ad)."""
+    import numpy as np
+
+    from singlet.s1 import client as _store
+
+    gse_id = args.get("gse_id")
+    if not gse_id:
+        return {"error": "gse_id is required"}
+    try:
+        where = _parse_where(args.get("where"))
+    except ValueError as e:
+        return {"error": str(e)}
+    st = _store.open_study(gse_id)
+    r0, b0 = st.stats.requests, st.stats.bytes
+    adata = st.cells(where, samples=args.get("samples"), max_cells=int(args.get("max_cells", 1000)))
+    per = adata.obs["gsm_id"].value_counts().to_dict() if adata.n_obs else {}
+    out = {
+        "gse_id": gse_id,
+        "rev": st.rev,
+        "n_cells": int(adata.n_obs),
+        "n_genes": int(adata.n_vars),
+        "samples": {k: int(v) for k, v in per.items()},
+        "requests": st.stats.requests - r0,
+        "bytes": st.stats.bytes - b0,
+    }
+    if adata.n_obs and "n_umi_exon" in adata.obs:
+        out["median_n_umi_exon"] = float(np.median(adata.obs["n_umi_exon"]))
+    if args.get("save_to"):
+        path = os.path.abspath(os.path.expanduser(str(args["save_to"])))
+        if not path.endswith(".h5ad"):
+            return {"error": "save_to must end with .h5ad"}
+        adata.write_h5ad(path)
+        out["saved"] = path
+    out["load"] = (
+        f'singlet.s1.cells("{gse_id}", {args.get("where")!r}, samples={args.get("samples")!r}, max_cells={int(args.get("max_cells", 1000))})'
+    )
+    return out
 
 
 async def _tool_browse(args: dict) -> dict:

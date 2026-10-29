@@ -1,26 +1,29 @@
 # SPDX-License-Identifier: MIT
 """Load Singlet datasets as AnnData.
 
-Users work with two things only: ``.singlet`` files and GEO accession strings
-(``GSE…`` / ``GSM…``). Public per-GSE data is hosted at::
+Users work with GEO accession strings (``GSE…`` / ``GSM…``) and local files.
+Public data is hosted in the per-sample format (``docs/format-s1.md``)::
 
-    https://data.singlet.bio/data/<GSE>/<GSE>.singlet
+    https://data.singlet.bio/s1/m/<GSE>.json         study manifest
+    https://data.singlet.bio/s1/s/<GSM>/<d>.s1       one immutable object per sample
 
-(free, no authentication). A ``.singlet`` file opens via
-:class:`singlet.SingletBundle`. The host is configurable with
-``$SINGLET_DATA_BASE``: the base URL such that files live at
-``<base>/data/<GSE>/<GSE>.singlet`` (default ``https://data.singlet.bio``).
-A value that already ends in ``/data`` (the form the R client documents) is
-accepted too.
+(free, no authentication). :func:`load` fetches only the members it needs with
+HTTP Range requests (:mod:`singlet.s1.client`). The legacy per-study archive
+``https://data.singlet.bio/data/<GSE>/<GSE>.singlet`` is being retired: it is
+read only with an explicit ``legacy=True`` (or, as a transition aid, when
+``$SINGLET_LEGACY_FALLBACK=1`` and a study has no .s1 manifest yet). A local
+``.singlet`` file always opens via :class:`singlet.SingletBundle`. The host is
+configurable with ``$SINGLET_DATA_BASE`` (default ``https://data.singlet.bio``;
+a value that already ends in ``/data`` — the form the R client documents — is
+accepted too; a directory laid out like the server works as well).
 
 Resolution priority for :func:`load`:
-  1. A local ``.singlet`` file path (also accepts ``.h5ad`` / ``.zarr`` you exported)
+  1. A local ``.singlet`` file path (also accepts ``.h5ad`` / ``.zarr`` you exported), a ``.s1`` sample object or a .s1 manifest
   2. A local catalog directory (cluster use: SINGLET_CATALOG_DIR or singlet.set_catalog_dir())
-  3. A free, cached download of the public ``.singlet`` bundle for an accession
+  3. The public per-sample study for an accession (ranged reads; nothing is stored unless you call :func:`download`)
 
 GSM accessions are resolved to their parent GSE (via the public REST API at
-``https://singlet.bio/api``); the parent bundle is downloaded and the returned
-AnnData is filtered to that GSM's cells.
+``https://singlet.bio/api``); only that sample's members are fetched.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import warnings
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -156,13 +160,76 @@ def _resolve_gse_path(accession: str) -> Optional[Path]:
     return None
 
 
+# Transition switch (docs/s1-migration.md): legacy bundles are retired (data.singlet.bio answers 410 for them), so a study
+# without a .s1 manifest is not read from one. ``$SINGLET_LEGACY_FALLBACK`` still overrides either way.
+_LEGACY_FALLBACK_DEFAULT = False
+
+
+def _legacy_fallback_enabled() -> bool:
+    """Transition aid: allow the legacy bundle for studies without a .s1 manifest (off since the retirement)."""
+    v = os.environ.get("SINGLET_LEGACY_FALLBACK", "").strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    return _LEGACY_FALLBACK_DEFAULT
+
+
+def _warn_fallback(err: Exception, stacklevel: int = 3) -> None:
+    """Say so only when the user asked for the fallback explicitly; the default transition path stays quiet."""
+    if os.environ.get("SINGLET_LEGACY_FALLBACK", "").strip():
+        warnings.warn(
+            f"{err}; using the legacy bundle (SINGLET_LEGACY_FALLBACK)",
+            FutureWarning,
+            stacklevel=stacklevel,
+        )
+
+
+def _no_s1_message(err: Exception) -> str:
+    return (
+        f"{err}. The study is not in the atlas: check the accession, or see https://singlet.bio/known-issues for studies "
+        f"Research Alpha withholds (legacy .singlet bundles are retired)."
+    )
+
+
 def download(
     accession: str,
     output_dir: Optional[str | Path] = None,
     force: bool = False,
     verify: bool = True,
+    *,
+    legacy: Optional[bool] = None,
 ) -> Path:
-    """Download a GSE's public ``.singlet`` bundle from Cloudflare R2.
+    """Download a study for offline use.
+
+    By default this mirrors the study's .s1 objects (manifest, one ``.s1`` per sample, the packs they need) under
+    ``<output_dir or cache>/s1/`` with the server's layout, verifies every sample object against the manifest's
+    sha256, and returns the path of the manifest (``.../s1/m/<GSE>.json``). :func:`load` and :func:`open_bundle`
+    accept that path and read the local copies without network access; :func:`load` also finds them in the default
+    cache on its own. With ``legacy=True`` the legacy ``.singlet`` bundle is fetched instead.
+    """
+    if legacy is not True:
+        from singlet.s1 import client as _store
+
+        try:
+            return _store.download_study(
+                normalize_gse(accession), output_dir, force=force, verify=verify
+            )
+        except _store.StudyNotFound as e:
+            if legacy is None and _legacy_fallback_enabled():
+                _warn_fallback(e)
+            else:
+                raise _store.StudyNotFound(_no_s1_message(e)) from None
+    return _download_legacy(accession, output_dir, force, verify)
+
+
+def _download_legacy(
+    accession: str,
+    output_dir: Optional[str | Path] = None,
+    force: bool = False,
+    verify: bool = True,
+) -> Path:
+    """Download a GSE's legacy ``.singlet`` bundle from Cloudflare R2 (deprecated: the per-sample format replaces it).
 
     Fetches ``https://data.singlet.bio/data/<GSE>/<GSE>.singlet`` (free, no
     auth) to the local cache. The download is path-cached: an existing file
@@ -274,6 +341,12 @@ def download(
                 f"Dataset '{accession}' not found at {url}. "
                 f"Check the accession or use singlet.catalog() to browse available datasets."
             ) from None
+        if e.code == 410:  # retired legacy bundle: the server names the study's .s1 manifest
+            link = e.headers.get("Link", "") if e.headers else ""
+            raise FileNotFoundError(
+                f"The legacy bundle of '{accession}' is retired{(' (' + link + ')') if link else ''}. "
+                f"Load the study with singlet.load('{accession}') or singlet.download('{accession}') without legacy=True."
+            ) from None
         raise RuntimeError(f"Failed to download '{accession}' from {url}: HTTP {e.code}") from e
     except BaseException:
         tmp_dest.unlink(missing_ok=True)
@@ -282,7 +355,7 @@ def download(
     return dest
 
 
-def open_bundle(source: str | Path, *, force: bool = False):
+def open_bundle(source: str | Path, *, force: bool = False, legacy: Optional[bool] = None):
     """Open a study's ``.singlet`` bundle for modality-level access.
 
     :func:`load` gives you the assembled gene-count AnnData. ``open_bundle``
@@ -298,10 +371,13 @@ def open_bundle(source: str | Path, *, force: bool = False):
         Accessions are downloaded to the cache on first use.
     force : bool
         Re-download even if the bundle is already cached.
+    legacy : bool, optional
+        ``True`` opens the legacy ``.singlet`` bundle of an accession (deprecated). The default opens the per-sample study.
 
     Returns
     -------
     singlet.SingletBundle
+        For a per-sample study (the default), a :class:`singlet.s1.bundle.S1Bundle` with the same interface.
 
     Examples
     --------
@@ -315,6 +391,10 @@ def open_bundle(source: str | Path, *, force: bool = False):
 
     path = Path(str(source)).expanduser()
     if path.exists():
+        if path.suffix.lower() in (".json", ".s1", ".s2"):  # a .s1 manifest or sample object
+            from singlet.s1.bundle import S1Bundle
+
+            return S1Bundle.open(path)
         return SingletBundle.open(path)
 
     try:
@@ -328,7 +408,17 @@ def open_bundle(source: str | Path, *, force: bool = False):
         if parent is None:
             raise ValueError(f"Could not resolve {accession} to a parent GSE")
         accession = parent
-    return SingletBundle.open(download(accession, force=force))
+    if legacy is not True:
+        from singlet.s1 import client as _store
+        from singlet.s1.bundle import S1Bundle
+
+        try:
+            return S1Bundle.open(accession, force=force)
+        except _store.StudyNotFound as e:
+            if not (legacy is None and _legacy_fallback_enabled()):
+                raise _store.StudyNotFound(_no_s1_message(e)) from None
+            _warn_fallback(e)
+    return SingletBundle.open(_download_legacy(accession, force=force))
 
 
 def load(
@@ -337,6 +427,10 @@ def load(
     genes: Optional[Sequence[str]] = None,
     obs_filter: Optional[dict] = None,
     force: bool = False,
+    legacy: Optional[bool] = None,
+    layers: bool = True,
+    modalities: Optional[str | Sequence[str]] = None,
+    **s1_options,
 ) -> anndata.AnnData:
     """Load one or more datasets as a single AnnData.
 
@@ -345,9 +439,11 @@ def load(
     file path to read directly. Pass a list/tuple of accessions and/or
     ``.singlet`` paths to load them all and concatenate into one AnnData.
 
-    For a ``GSE`` accession, the public ``.singlet`` bundle is downloaded and
-    assembled into one AnnData. For a ``GSM`` accession, the parent GSE bundle
-    is downloaded and the result is filtered to that sample's cells.
+    For a ``GSE`` accession, the study's .s1 members are fetched with HTTP Range
+    requests (only the matrices and cell tables the gene-level result needs) and
+    assembled into one AnnData. For a ``GSM`` accession, only that sample's
+    members are fetched. A ``.s1`` sample object or a .s1 manifest path is read
+    from disk.
 
     Parameters
     ----------
@@ -366,14 +462,50 @@ def load(
     obs_filter : dict, optional
         Filter cells by obs columns, e.g. ``{"organism": "Homo sapiens"}``.
     force : bool
-        Re-download even if the bundle is already cached.
+        Re-validate the study manifest even if it was checked a moment ago
+        (.s1), or re-download the bundle (legacy).
+    legacy : bool, optional
+        ``True`` reads the legacy ``.singlet`` bundle of an accession (deprecated,
+        being retired). The default reads the per-sample format.
+    layers : bool
+        Attach ``spliced`` / ``unspliced`` layers next to ``X = spliced + unspliced``
+        (.s1 reader; the legacy reader always does).
+    modalities : str or list of str, optional
+        Fetch only what these modalities need (.s1 reader: only those members'
+        byte ranges are downloaded). ``"counts"`` (``X`` = spliced + unspliced;
+        needs the exon and intron matrices), ``"spliced"`` (``layers["spliced"]``,
+        exon matrix only), ``"unspliced"`` (``layers["unspliced"]``, intron matrix
+        only), ``"splice_junctions"`` and ``"psi"`` (``obsm``, junction matrix
+        only; ``psi`` is the true float PSI), ``"mt"`` and ``"vdj"`` (``obsm``).
+        Feature names of an ``obsm`` modality are in
+        ``uns["obsm_features"][name]``; :func:`singlet.s1.client.modality_anndata`
+        turns one into its own AnnData. Without ``"counts"``, ``X`` is ``None``.
+        The default keeps ``counts`` + ``spliced`` + ``unspliced`` (``counts``
+        alone with ``layers=False``). A modality no requested sample carries
+        raises :class:`singlet.s1.client.ModalityUnavailable` listing what the
+        study has. A legacy bundle is always downloaded whole; the result is
+        then subset (with a warning).
+    **s1_options
+        ``samples`` (restrict a study to some GSMs), ``cell_order`` (``"legacy"``,
+        ``"barcode"`` or ``"column"``), ``concurrency`` (parallel samples and
+        range requests, default 4), ``threads`` (decoder threads), ``verify``
+        (recompute canonical matrix digests), ``whole_max`` (bytes below which a
+        sample's members are fetched whole), ``base`` (data host),
+        ``cell_type_level`` (deepest level of ``obs["cell_type"]``, default 2),
+        ``cell_type_min_score`` (extra minimum path score for it, default 0),
+        ``include_unvalidated`` (also keep ``qc_doublet_score``).
 
     Returns
     -------
     anndata.AnnData
         Count matrix with obs metadata, var gene annotations, and uns study
         info. Samples whose count matrix is empty are skipped with a warning
-        and listed in ``adata.uns["skipped_samples"]``.
+        and listed in ``adata.uns["skipped_samples"]``. For a per-sample (.s1)
+        study, ``obs`` carries the per-cell labels (``cell_type``,
+        ``cell_type_ontology_term_id``, ``sex_chrom``, ``ancestry_hancestro``,
+        ...), the cell calls (``called``, ``called_ed``) and the QC columns of
+        each sample's cells table, then the GEO sample metadata; see
+        :mod:`singlet.s1.labels`.
 
     Examples
     --------
@@ -394,7 +526,16 @@ def load(
 
         parts = []
         for item in items:
-            sub = load(item, genes=genes, obs_filter=obs_filter, force=force)
+            sub = load(
+                item,
+                genes=genes,
+                obs_filter=obs_filter,
+                force=force,
+                legacy=legacy,
+                layers=layers,
+                modalities=modalities,
+                **s1_options,
+            )
             sub.obs["source"] = str(item)
             parts.append(sub)
         if len(parts) == 1:
@@ -432,7 +573,74 @@ def load(
             combined.uns["skipped_samples"] = pd.concat(skipped, ignore_index=True)
         return combined
 
-    return _load_one(source, genes=genes, obs_filter=obs_filter, force=force)
+    return _load_one(
+        source,
+        genes=genes,
+        obs_filter=obs_filter,
+        force=force,
+        legacy=legacy,
+        layers=layers,
+        modalities=modalities,
+        s1_options=s1_options,
+    )
+
+
+_STORE_OPTIONS = frozenset(
+    {
+        "samples",
+        "cell_order",
+        "concurrency",
+        "threads",
+        "verify",
+        "whole_max",
+        "base",
+        "verbose",
+        "cell_type_level",
+        "cell_type_min_score",
+        "include_unvalidated",
+    }
+)
+
+
+def _load_store(
+    accession: str,
+    gsm: Optional[str],
+    *,
+    genes,
+    obs_filter,
+    force: bool,
+    layers: bool,
+    options: dict,
+    modalities=None,
+) -> anndata.AnnData:
+    """Gene-level AnnData of a per-sample study (or of one sample of it) through :mod:`singlet.s1.client`."""
+    from singlet.s1 import client as _store
+
+    unknown = set(options) - _STORE_OPTIONS
+    if unknown:
+        raise TypeError(f"load() got unexpected keyword argument(s): {sorted(unknown)}")
+    opts = dict(options)
+    base = opts.pop("base", None)
+    samples = opts.pop("samples", None)
+    if gsm is not None:
+        samples = [gsm]
+    study = _store.open_study(accession, base=base, force=force)
+    try:
+        return study.to_anndata(
+            samples,
+            genes=genes,
+            obs_filter=obs_filter,
+            layers=layers,
+            modalities=modalities,
+            **opts,
+        )
+    except _store.NoUsableSamples as e:
+        if gsm is not None:
+            raise KeyError(
+                f"Sample {gsm!r} has no usable cells in its parent GSE: {e.reasons.get(gsm, 'skipped')}. "
+                f"See https://singlet.bio/sample/{gsm}."
+            ) from None
+        raise
 
 
 def _load_one(
@@ -441,6 +649,10 @@ def _load_one(
     genes: Optional[Sequence[str]] = None,
     obs_filter: Optional[dict] = None,
     force: bool = False,
+    legacy: Optional[bool] = None,
+    layers: bool = True,
+    modalities: Optional[str | Sequence[str]] = None,
+    s1_options: Optional[dict] = None,
 ) -> anndata.AnnData:
     """Load a single dataset (accession or local ``.singlet``/file path)."""
     from singlet._io import read_1pz, read_matrix
@@ -481,7 +693,21 @@ def _load_one(
         if suffix == ".singlet":
             from singlet.bundle import SingletBundle
 
-            adata = SingletBundle.open(path).to_anndata(verbose=False)
+            bundle = SingletBundle.open(path)
+            adata = _legacy_modalities(bundle.to_anndata(verbose=False), bundle, modalities)
+        elif suffix in (".s1", ".s2", ".json"):  # a .s1 sample object or study manifest on disk
+            from singlet.s1 import client as _store
+
+            # _store.load reads atlas samples, manifests and one-matrix objects (singlet.write_s1 files) alike
+            return _store.load(
+                path,
+                genes=genes,
+                obs_filter=obs_filter,
+                layers=layers,
+                modalities=modalities,
+                force=force,
+                **(s1_options or {}),
+            )
         elif suffix == ".h5ad":
             import anndata as ad
 
@@ -524,10 +750,29 @@ def _load_one(
         if local_path is not None and _gsm_filter is None:
             adata = read_1pz(local_path)
         else:
-            local = download(gse_accession, force=force)
+            if legacy is not True:
+                from singlet.s1 import client as _store
+
+                try:
+                    return _load_store(
+                        gse_accession,
+                        _gsm_filter,
+                        genes=genes,
+                        obs_filter=obs_filter,
+                        force=force,
+                        layers=layers,
+                        options=s1_options or {},
+                        modalities=modalities,
+                    )
+                except _store.StudyNotFound as e:
+                    if not (legacy is None and _legacy_fallback_enabled()):
+                        raise _store.StudyNotFound(_no_s1_message(e)) from None
+                    _warn_fallback(e, stacklevel=4)
+            local = _download_legacy(gse_accession, force=force)
             from singlet.bundle import SingletBundle
 
-            adata = SingletBundle.open(local).to_anndata(verbose=False)
+            bundle = SingletBundle.open(local)
+            adata = _legacy_modalities(bundle.to_anndata(verbose=False), bundle, modalities)
 
     # Filter to a single GSM's cells (obs has a 'gsm_id' column; index is
     # '<GSM>_<barcode>').
@@ -568,6 +813,98 @@ def _load_one(
     return adata
 
 
+_LEGACY_MODALITY = {
+    "splice_junctions": "junctions",
+    "psi": "junctions",
+    "mt": "mt_heteroplasmy",
+    "vdj": "vdj_gene_usage",
+}
+
+
+def _legacy_modalities(adata, bundle, modalities):
+    """``modalities=`` on a legacy bundle: the whole bundle was downloaded already, so this only shapes the result like the
+    .s1 reader does (X / layers / obsm). A modality the bundle cannot supply is warned about and left out, never fatal."""
+    if modalities is None:
+        return adata
+    from singlet.s1 import client as _store
+
+    mods = _store.normalize_modalities(modalities)
+    warnings.warn(
+        "this study is read from its legacy .singlet bundle, which is downloaded whole; modalities= only subsets the "
+        "result (the .s1 reader fetches only the members asked for)",
+        UserWarning,
+        stacklevel=4,
+    )
+    for lname in ("spliced", "unspliced"):
+        if lname not in mods and lname in adata.layers:
+            del adata.layers[lname]
+    if "counts" not in mods:
+        adata.X = None
+    if not any(_store.MODALITIES[k].slot != "obsm" for k in mods):
+        adata = adata[:, []].copy()
+    names_out = {}
+    for k in mods:
+        if _store.MODALITIES[k].slot != "obsm":
+            continue
+        try:
+            mat, names = _legacy_feature_block(adata, bundle, _LEGACY_MODALITY[k], psi=(k == "psi"))
+        except Exception as e:  # noqa: BLE001 - a legacy bundle may lack or mangle a member
+            warnings.warn(
+                f"{k} is not available from the legacy bundle: {e}", UserWarning, stacklevel=4
+            )
+            continue
+        adata.obsm[k] = mat
+        names_out[k] = names
+    if names_out:
+        adata.uns["obsm_features"] = names_out
+    return adata
+
+
+def _legacy_feature_block(adata, bundle, legacy_name: str, *, psi: bool):
+    """cells x features CSR aligned to ``adata.obs_names`` (``<GSM>_<barcode>``) from ``bundle.read(legacy_name, gsm)``."""
+    import numpy as np
+    import scipy.sparse as sp
+
+    gsms = (
+        list(dict.fromkeys(adata.obs["gsm_id"].astype(str)))
+        if "gsm_id" in adata.obs.columns
+        else list(bundle.gsm_ids)
+    )
+    row_of = {n: i for i, n in enumerate(adata.obs_names)}
+    union: dict = {}
+    rows, cols, vals = [], [], []
+    for g in gsms:
+        if legacy_name not in bundle.modalities(g):
+            continue
+        sub = bundle.read(legacy_name, g)
+        m = sp.csr_matrix(sub.X)
+        m.sort_indices()
+        names = [str(x) for x in sub.var_names]
+        if psi:
+            from singlet.s1.client import _Part, _psi_part
+
+            part, _ = _psi_part(
+                _Part(m.indptr, m.indices.astype(np.int32), m.data, len(names)), names
+            )
+            m = part.csr()
+        remap = np.fromiter(
+            (union.setdefault(n, len(union)) for n in names), dtype=np.int64, count=len(names)
+        )
+        target = np.array([row_of.get(f"{g}_{b}", -1) for b in sub.obs_names], dtype=np.int64)
+        coo = m.tocoo()
+        keep = target[coo.row] >= 0
+        rows.append(target[coo.row[keep]])
+        cols.append(remap[coo.col[keep]])
+        vals.append(coo.data[keep])
+    if not rows:
+        raise KeyError(f"no sample carries {legacy_name!r}")
+    mat = sp.csr_matrix(
+        (np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(adata.n_obs, len(union)),
+    )
+    return mat, np.array(list(union), dtype=object)
+
+
 def _skip_reason(adata, gsm_id: str) -> Optional[str]:
     """Why *gsm_id* was skipped while assembling *adata*, if it was."""
     import pandas as pd
@@ -581,21 +918,20 @@ def _skip_reason(adata, gsm_id: str) -> Optional[str]:
     return str(rows["reason"].iloc[0]) if "reason" in rows.columns else "skipped"
 
 
-def _subset_genes(adata, genes: Sequence[str]):
-    """Column-subset *adata* to *genes*, given as ids or symbols.
+def _gene_keep_mask(
+    var_names: Sequence[str], symbols: Sequence[str], genes: Sequence[str], *, stacklevel: int = 3
+):
+    """Boolean mask over the gene axis for the requested ``genes`` (ids or symbols).
 
     Each requested gene is matched, in order, against ``var_names`` (exact),
-    ``var["gene_name"]`` (exact), then both case-insensitively. A symbol that
-    maps to several ids keeps all of them. The original column order is kept
-    and one warning lists anything left unmatched.
+    ``symbols`` (exact), then both case-insensitively. A symbol that maps to
+    several ids keeps all of them. One warning lists anything left unmatched.
     """
-    import warnings
-
     import numpy as np
 
     requested = [genes] if isinstance(genes, str) else [str(g) for g in genes]
-    var_names = [str(v) for v in adata.var_names]
-    symbols = [str(s) for s in adata.var["gene_name"]] if "gene_name" in adata.var.columns else []
+    var_names = [str(v) for v in var_names]
+    symbols = [str(s) for s in symbols]
 
     def _index(names):
         exact: dict = {}
@@ -629,15 +965,28 @@ def _subset_genes(adata, genes: Sequence[str]):
             f"(matched against var_names and var['gene_name']). "
             f"First few available: {example}",
             UserWarning,
-            stacklevel=3,
+            stacklevel=stacklevel,
         )
     elif missing:
         warnings.warn(
             f"{len(missing)} of {len(requested)} requested genes not found: "
             f"{missing[:5]}{'...' if len(missing) > 5 else ''}",
             UserWarning,
-            stacklevel=3,
+            stacklevel=stacklevel,
         )
+    return keep
+
+
+def _subset_genes(adata, genes: Sequence[str]):
+    """Column-subset *adata* to *genes*, given as ids or symbols.
+
+    Each requested gene is matched, in order, against ``var_names`` (exact),
+    ``var["gene_name"]`` (exact), then both case-insensitively. A symbol that
+    maps to several ids keeps all of them. The original column order is kept
+    and one warning lists anything left unmatched.
+    """
+    symbols = [str(s) for s in adata.var["gene_name"]] if "gene_name" in adata.var.columns else []
+    keep = _gene_keep_mask([str(v) for v in adata.var_names], symbols, genes, stacklevel=4)
     return adata[:, keep].copy()
 
 

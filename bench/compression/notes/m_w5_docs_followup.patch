@@ -1,0 +1,107 @@
+--- a/README.md
++++ b/README.md
+@@ -106,7 +106,7 @@
+ 
+ ## MCP server
+ 
+-`https://singlet.bio/mcp` (Streamable HTTP, stateless JSON-RPC 2.0) has 14 tools: `search_datasets`, `get_study`, `get_download_url`, `get_atlas_stats`, `get_sample_qc`, `list_bundle_files`, `get_modalities`, `get_partial_download`, `export_manifest`, `find_matched_controls`, `compare_studies`, `assess_study`, `get_cohort` and `save_cohort`. `get_study`, `get_sample_qc`, `list_bundle_files`, `get_modalities` and `get_partial_download` return a `rev` that can be sent back as `known_rev` to get `{unchanged: true}`.
++`https://singlet.bio/mcp` (Streamable HTTP, stateless JSON-RPC 2.0) has 17 tools: `search_datasets`, `get_study`, `get_download_url`, `get_atlas_stats`, `get_sample_qc`, `list_bundle_files`, `get_modalities`, `get_partial_download`, `export_manifest`, `find_matched_controls`, `compare_studies`, `assess_study`, `get_cohort`, `save_cohort`, and for studies stored in the v2 per-sample format `find_cells`, `slice_cells` and `resolve_features`. Results carry their data in `structuredContent` with a short text (`verbose: true` adds the full text), and `get_study`, `get_sample_qc`, `list_bundle_files`, `get_modalities` and `get_partial_download` return a `rev` that can be sent back as `known_rev` to get `{unchanged: true}`.
+ 
+ Most tools need no key. Only `search_datasets` is metered, and only when a question needs a fresh AI reading (10 a day anonymously, 200 with a key). `save_cohort` needs a personal API key, and so does `get_cohort` except for a link cohort opened with its share token. Keys go in `Authorization: Bearer sk_live_…` or `X-API-Key` and are charged to their owner. Client configs are documented at `/docs/mcp`.
+ 
+--- a/src/pages/Docs.tsx
++++ b/src/pages/Docs.tsx
+@@ -229,10 +229,17 @@
+               </div>
+               <h3>Files on disk</h3>
+               <p>
+-                Every study is a single <Mono>.singlet</Mono> file at{" "}
++                Studies are being moved to a per-sample layout: one immutable object per sample at{" "}
++                <Mono>https://data.singlet.bio/v2/s/&lt;GSM&gt;/&lt;digest&gt;.s2</Mono> and a manifest at{" "}
++                <Mono>https://data.singlet.bio/v2/m/&lt;GSE&gt;.json</Mono> that lists every sample, member and byte range. The
++                API tells you which layout a study has (<Mono>series.v2</Mono> in <Mono>GET /api/gse/:id</Mono>), and{" "}
++                <Mono>singlet.load</Mono> reads both the same way.
++              </p>
++              <p>
++                Until a study is moved, and for as long as its old file is kept, it is a single <Mono>.singlet</Mono> file at{" "}
+                 <Mono>https://data.singlet.bio/data/&lt;GSE&gt;/&lt;GSE&gt;.singlet</Mono>, from about 300 KB to over 20 GB
+-                (about 9 in 10 are under 1 GB). You can download it with curl and load the local path the same way. There are no per-sample
+-                files; filter on <Mono>obs["gsm_id"]</Mono> after loading, or see{" "}
++                (about 9 in 10 are under 1 GB). You can download it with curl and load the local path the same way. Inside it the samples are not
++                separate downloads: filter on <Mono>obs["gsm_id"]</Mono> after loading, or see{" "}
+                 <a href="#partial-download">Download just part of a study</a>.
+               </p>
+               <CodeBlock
+@@ -438,6 +445,13 @@
+                 always download the whole study file, including for <Mono>singlet.load("GSM…")</Mono>.
+               </p>
+               <p>
++                For a study stored per sample (see <a href="#singlet-file">Files on disk</a>), the same three endpoints answer from the
++                catalog: <Mono>index</Mono> lists each sample object and its members (with <Mono>format: "singlet-v2"</Mono>),
++                and <Mono>entry</Mono> says where a member's bytes are inside the sample object instead of inflating it. Those
++                objects never change, so a range you have once stays valid; the MCP tools <Mono>slice_cells</Mono> and{" "}
++                <Mono>find_cells</Mono> go further and give the ranges for just some cells.
++              </p>
++              <p>
+                 <Mono>GET /api/bundle/:gse/index</Mono> lists every member — per-sample files, compressed and
+                 uncompressed size — without downloading anything:
+               </p>
+@@ -860,11 +874,12 @@
+   --header "Authorization: Bearer ${KEY_PLACEHOLDER}"`}
+               />
+               <p>
+-                The server has 14 tools: <Mono>search_datasets</Mono>, <Mono>get_study</Mono>,{" "}
++                The server has 17 tools: <Mono>search_datasets</Mono>, <Mono>get_study</Mono>,{" "}
+                 <Mono>get_download_url</Mono>, <Mono>get_atlas_stats</Mono>, <Mono>get_sample_qc</Mono>,{" "}
+                 <Mono>list_bundle_files</Mono>, <Mono>get_modalities</Mono>, <Mono>get_partial_download</Mono>,{" "}
+                 <Mono>export_manifest</Mono>, <Mono>find_matched_controls</Mono>, <Mono>compare_studies</Mono>,{" "}
+-                <Mono>assess_study</Mono>, <Mono>get_cohort</Mono> and <Mono>save_cohort</Mono>. Inputs, outputs and
++                <Mono>assess_study</Mono>, <Mono>get_cohort</Mono>, <Mono>save_cohort</Mono>, and for studies stored
++                per sample <Mono>find_cells</Mono>, <Mono>slice_cells</Mono> and <Mono>resolve_features</Mono>. Inputs, outputs and
+                 key requirements for each are in the <Link to="/docs/mcp#tools">tool reference</Link>.
+               </p>
+               <p>
+--- a/src/pages/DocsMcp.tsx
++++ b/src/pages/DocsMcp.tsx
+@@ -48,6 +48,16 @@
+     gets: "A byte range, a curl command and a Python snippet that fetch that one file (count matrices need no inflate step).",
+   },
+   {
++    ask: "Which cells in GSE296768 have more than 5,000 UMIs? Give me just their counts.",
++    tools: "find_cells, slice_cells",
++    gets: "Studies stored per sample only: the matching cells as column runs per sample, then the byte ranges that cover just those cells' matrix chunks.",
++  },
++  {
++    ask: "What are rows 10, 11 and 12 of that matrix?",
++    tools: "resolve_features",
++    gets: "Studies stored per sample only: the feature names for row numbers, from the reference pack the matrix names.",
++  },
++  {
+     ask: "Find healthy control studies that match GSE200901.",
+     tools: "find_matched_controls",
+     gets: "Candidate studies with the reason they match, plus honest caveats about study-level labels.",
+@@ -67,18 +77,21 @@
+ const TOOLS: { name: string; input: string; returns: string; key: string }[] = [
+   { name: "search_datasets", input: "query, level?, limit?, page?, organism?, tissue?, disease?, assay?, min_cells?, include_unbuilt?", returns: "Matching studies or samples with a reason for each match. The only tool that can call a language model, and only when the built-in vocabulary cannot read the question; only those fresh AI readings are metered", key: "No — 10 AI readings a day without, 200 with" },
+   { name: "get_study", input: "gse_id, known_rev?", returns: "Title, abstract, groups, conditions, samples (first 60), file URL, and a rev", key: "No" },
+-  { name: "get_download_url", input: "gse_id", returns: "The .singlet URL, size and loader lines", key: "No" },
++  { name: "get_download_url", input: "gse_id, include_samples?, limit?, after?", returns: "The .singlet URL, size and loader lines; for a study stored per sample, its manifest and optionally its sample objects", key: "No" },
+   { name: "get_atlas_stats", input: "—", returns: "Studies, usable samples and cells in published files (the site's headline numbers), plus catalog metadata: samples processed, cells recorded, species, failure reasons", key: "No" },
+   { name: "get_sample_qc", input: "gse_id, gsm_ids?, known_rev?", returns: "Per-sample QC from the file itself, totals and warnings", key: "No" },
+-  { name: "list_bundle_files", input: "gse_id, gsm_id?, known_rev?", returns: "Everything inside the file, with sizes", key: "No" },
++  { name: "list_bundle_files", input: "gse_id, gsm_id?, detail?, limit?, after?, known_rev?", returns: "Everything inside the file, with sizes; for a study stored per sample, a grouped summary and one sample's files with their byte ranges", key: "No" },
+   { name: "get_modalities", input: "gse_id, gsm_id?, known_rev?", returns: "Which modalities the file carries, with Python and R readers for each", key: "No" },
+-  { name: "get_partial_download", input: "gse_id, gsm_id, file, known_rev?", returns: "Byte range, curl and Python for one file", key: "No" },
++  { name: "get_partial_download", input: "gse_id, gsm_id, file, known_rev?", returns: "Byte range, curl and Python for one file; for a study stored per sample, the member's range inside the sample's immutable object", key: "No" },
+   { name: "export_manifest", input: "query? / filters? / gse_ids?, format", returns: "TSV, JSON, curl, wget, Python or R manifest", key: "No" },
+   { name: "find_matched_controls", input: "gse_id, min_samples?, same_assay?", returns: "Candidate control studies with reasons and caveats", key: "No" },
+   { name: "compare_studies", input: "gse_ids (2–8)", returns: "Side-by-side fields and their differences", key: "No" },
+   { name: "assess_study", input: "gse_id, purpose?", returns: "Deterministic usability report and fit checks", key: "No" },
+   { name: "get_cohort", input: "id, token?", returns: "A saved, version-pinned cohort and its studies", key: "Yes for private and workspace cohorts; a share-link token (sco_…) alone opens a link cohort" },
+   { name: "save_cohort", input: "name, gse_ids, notes?, visibility?, workspace_id?", returns: "Saves up to 2,000 studies as a cohort pinned to the current catalogue", key: "Yes" },
++  { name: "find_cells", input: "gse_ids? / gsm_ids? / sample_filter?, cell_filter?, limit_samples?, after?", returns: "Per sample, the cells matching a filter on called status, UMIs, features or any numeric cells-table column, as column runs. Studies stored per sample only; reads at most 25 samples a call", key: "No" },
++  { name: "slice_cells", input: "gse_id, gsm_id, file?, runs? / indices? / range?", returns: "The byte ranges that cover just those cells in a sample's count matrices (a prefix once, then chunk runs). Studies stored per sample only", key: "No" },
++  { name: "resolve_features", input: "indices, pack? / gse_id, gsm_id, file?", returns: "Feature names for matrix row numbers (or barcodes for whitelist column numbers). Studies stored per sample only", key: "No" },
+ ];
+ 
+ function Section({ id, title, children, collapsible }: { id: string; title: string; children: React.ReactNode; collapsible?: boolean }) {

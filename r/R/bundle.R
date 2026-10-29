@@ -386,7 +386,8 @@
 #' barcode column of \code{cell_calls.tsv} may be named \code{barcode},
 #' \code{cb}, \code{cell_barcode} or \code{CB}.
 #'
-#' @param path Path to a local `.singlet` file.
+#' @param path Path to a local `.singlet` file (or to a local .s1 manifest,
+#'   \code{.../s1/m/<GSE>.json}, as returned by \code{\link{download}}).
 #' @return A \code{SingleCellExperiment} with one column per called cell
 #'   (named \code{<GSM>_<barcode>}) and one row per gene. Assays are
 #'   \code{counts} (exonic + intronic), \code{spliced} (exonic) and
@@ -409,6 +410,9 @@
 #'   \code{\link{singlet_modalities}}, \code{\link{singlet_read}}
 #' @export
 read_singlet <- function(path) {
+    if (is.character(path) && length(path) == 1L && grepl("\\.json$", path, ignore.case = TRUE)) {
+        return(.s1_load_manifest(path.expand(path), NULL))
+    }
     .read_singlet_bundle(path)
 }
 
@@ -442,11 +446,12 @@ read_singlet <- function(path) {
         sample_characteristics = get_field("sample_characteristics"),
         qc_flag = get_field("qc_flag"),
         reference_build = get_field("reference_build"),
-        tissue = get_enriched("meta_tissue"),
-        cell_type = get_enriched("meta_cell_type"),
-        disease = get_enriched("meta_disease"),
-        sex = get_enriched("meta_sex"),
-        age = get_enriched("meta_age"),
+        # curated GEO sample metadata: prefixed so it never collides with the per-cell labels (?singlet_labels)
+        geo_tissue = get_enriched("meta_tissue"),
+        geo_cell_type = get_enriched("meta_cell_type"),
+        geo_disease = get_enriched("meta_disease"),
+        geo_sex = get_enriched("meta_sex"),
+        geo_age = get_enriched("meta_age"),
         stringsAsFactors = FALSE,
         check.names = FALSE
     )

@@ -3,13 +3,14 @@
 
 .. note::
    The public per-sample host this module was written for
-   (``https://data.singlet.bio/v1``) was retired; public data is published
-   as one ``.singlet`` bundle per study. Use :func:`singlet.load`,
-   :func:`singlet.download` or :func:`singlet.open_bundle` for it, and
-   :func:`singlet.find` to search. :func:`fetch` still works against a
-   self-hosted mirror of sample directories, named by ``base_url`` or by
-   ``$SINGLET_SAMPLE_MIRROR``; with neither it raises
-   :class:`NotImplementedError`.
+   (``https://data.singlet.bio/v1``) was retired. Public data is published in
+   the per-sample format (one immutable ``.s1`` object per sample plus a study manifest
+   under ``https://data.singlet.bio/s1/``; the per-study ``.singlet`` bundle is
+   being retired). Use :func:`singlet.load`, :func:`singlet.download` or
+   :func:`singlet.open_bundle` for it, and :func:`singlet.find` to search.
+   :func:`fetch` still works against a self-hosted mirror of sample
+   directories, named by ``base_url`` or by ``$SINGLET_SAMPLE_MIRROR``; with
+   neither it raises :class:`NotImplementedError`.
 
 Sample directories are served as a flat collection of files under a
 per-accession prefix. The required entry point is ``manifest.json``
@@ -61,10 +62,10 @@ _LEGACY_ENV = "SINGLET_DATA_BASE"
 
 _RETIRED_HOST_MSG = (
     "singlet.fetch() downloaded per-sample directories from https://data.singlet.bio/v1, "
-    "which has been retired. Public data is now one .singlet bundle per study: use "
-    "singlet.load('GSE…' or 'GSM…') for an AnnData, singlet.download('GSE…') for the file, "
-    "or singlet.find('…') to search. To fetch from a self-hosted mirror of sample "
-    "directories, pass base_url= or set $SINGLET_SAMPLE_MIRROR."
+    "which has been retired. Public data is now served in the per-sample format (one object per sample, "
+    "fetched with range requests): use singlet.load('GSE…' or 'GSM…') for an AnnData, "
+    "singlet.download('GSE…') for an offline copy, or singlet.find('…') to search. To fetch from a "
+    "self-hosted mirror of sample directories, pass base_url= or set $SINGLET_SAMPLE_MIRROR."
 )
 
 

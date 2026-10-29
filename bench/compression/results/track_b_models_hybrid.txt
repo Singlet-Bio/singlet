@@ -1,0 +1,15 @@
+== pbmc_v2_typical/exon_counts.1pz nnz=2569228 cells(k>=200)=5340 baseline rank-gap+counts 4.610 b/nnz
+  theta 0.15:   509 bitmap rows absorb 44.4% of nnz | raw bitmaps 1.058 (entropy-coded 0.809) + rest 3.937 + rowlist 0.002 => hybrid raw 4.997, hybrid entropy 4.747 b/nnz
+  theta 0.25:   318 bitmap rows absorb 36.9% of nnz | raw bitmaps 0.661 (entropy-coded 0.533) + rest 4.199 + rowlist 0.001 => hybrid raw 4.861, hybrid entropy 4.733 b/nnz
+  theta 0.40:   199 bitmap rows absorb 29.1% of nnz | raw bitmaps 0.414 (entropy-coded 0.312) + rest 4.410 + rowlist 0.001 => hybrid raw 4.825, hybrid entropy 4.724 b/nnz
+  theta 0.60:   130 bitmap rows absorb 21.9% of nnz | raw bitmaps 0.270 (entropy-coded 0.170) + rest 4.554 + rowlist 0.001 => hybrid raw 4.825, hybrid entropy 4.725 b/nnz
+== tcell_5p/exon_counts.1pz nnz=10529513 cells(k>=200)=13908 baseline rank-gap+counts 5.072 b/nnz
+  theta 0.15:   830 bitmap rows absorb 39.5% of nnz | raw bitmaps 1.096 (entropy-coded 0.835) + rest 4.354 + rowlist 0.001 => hybrid raw 5.451, hybrid entropy 5.189 b/nnz
+  theta 0.25:   430 bitmap rows absorb 29.5% of nnz | raw bitmaps 0.568 (entropy-coded 0.467) + rest 4.704 + rowlist 0.000 => hybrid raw 5.273, hybrid entropy 5.172 b/nnz
+  theta 0.40:   237 bitmap rows absorb 21.5% of nnz | raw bitmaps 0.313 (entropy-coded 0.240) + rest 4.919 + rowlist 0.000 => hybrid raw 5.232, hybrid entropy 5.159 b/nnz
+  theta 0.60:   147 bitmap rows absorb 15.7% of nnz | raw bitmaps 0.194 (entropy-coded 0.122) + rest 5.025 + rowlist 0.000 => hybrid raw 5.219, hybrid entropy 5.147 b/nnz
+== brain_sn_v3_deep/exon_counts.1pz nnz=6349311 cells(k>=200)=4422 baseline rank-gap+counts 7.580 b/nnz
+  theta 0.15:   536 bitmap rows absorb  9.1% of nnz | raw bitmaps 0.373 (entropy-coded 0.282) + rest 7.371 + rowlist 0.001 => hybrid raw 7.745, hybrid entropy 7.654 b/nnz
+  theta 0.25:   163 bitmap rows absorb  4.2% of nnz | raw bitmaps 0.114 (entropy-coded 0.101) + rest 7.514 + rowlist 0.000 => hybrid raw 7.628, hybrid entropy 7.615 b/nnz
+  theta 0.40:    42 bitmap rows absorb  1.6% of nnz | raw bitmaps 0.029 (entropy-coded 0.027) + rest 7.564 + rowlist 0.000 => hybrid raw 7.593, hybrid entropy 7.590 b/nnz
+  theta 0.60:    11 bitmap rows absorb  0.6% of nnz | raw bitmaps 0.008 (entropy-coded 0.005) + rest 7.577 + rowlist 0.000 => hybrid raw 7.584, hybrid entropy 7.582 b/nnz

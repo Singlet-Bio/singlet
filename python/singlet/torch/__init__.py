@@ -5,6 +5,11 @@ Provides DataLoaders and GPU-friendly sparse tensor pipelines over ``.singlet``
 files and GEO accessions.
 
 Classes:
+    AtlasCells          IterableDataset streaming cells of any atlas filter from
+                        data.singlet.bio by HTTP range reads, with study-held-out splits
+    S1Cells             IterableDataset of block-shuffled minibatches from one .s1 object
+                        (a local file or an HTTP URL), read by range requests
+    S1Stream            Range-read access to the cells of one .s1 object (batch, cells)
     SingletDataset      Map-style dataset over a .singlet file / accession / AnnData
     DataLoader          Convenience wrapper around torch DataLoader; accepts an
                         array of .singlet files (preferred) for concatenated training
@@ -24,9 +29,11 @@ try:
     import torch as _torch
 except ImportError:
     raise ImportError(
-        "singlet.torch requires PyTorch. Install with: pip install 'singlet-bio[torch]'"
+        "singlet.torch requires PyTorch. Install with: pip install 'singlet[torch]'"
     ) from None
 
+from singlet.torch._s1stream import S1Cells, S1Stream, block_batches
+from singlet.torch._stream import AtlasCells, plan_samples, study_split
 from singlet.torch._torch import (
     DataLoader,
     OnePZDataset,
@@ -38,6 +45,12 @@ from singlet.torch._torch import (
 )
 
 __all__ = [
+    "AtlasCells",
+    "S1Cells",
+    "S1Stream",
+    "block_batches",
+    "plan_samples",
+    "study_split",
     "to_sparse_csr",
     "to_sparse_coo",
     "from_anndata",

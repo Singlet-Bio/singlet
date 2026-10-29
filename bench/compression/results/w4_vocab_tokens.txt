@@ -1,0 +1,8 @@
+100 exon-row names, JSON list of strings                                  5161 chars  ~  1290 tokens
+100 exon-row indices, JSON list of ints                                    765 chars  ~   191 tokens
+100 intron-row names                                                      5697 chars  ~  1424 tokens
+100 intron-row indices                                                     756 chars  ~   189 tokens
+100 genes as {gene_id, gene_name} objects                                 5807 chars  ~  1452 tokens
+100 gene indices (into the gene table)                                     673 chars  ~   168 tokens
+100 gene symbols only (what a resolve_features(level=gene) returns)       1307 chars  ~   327 tokens
+one-time pack descriptor {pack_id, bytes, url, sha256}                     188 chars  ~    47 tokens

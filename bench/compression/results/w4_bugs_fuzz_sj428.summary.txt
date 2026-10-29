@@ -1,0 +1,19 @@
+iterations=13812
+chunk_fix  rejected                 1251
+flip1      rejected                 1280
+flip4      rejected                 1289
+flip_fix   accepted_same            6
+flip_fix   rejected                 1260
+hdr_fix    accepted_same            125
+hdr_fix    rejected                 1152
+meta_fix   accepted_same            1
+meta_fix   rejected                 1285
+splice_fix accepted_same            9
+splice_fix rejected                 1191
+tlv_fix    accepted_diff            425
+tlv_fix    accepted_same            3
+tlv_fix    rejected                 812
+trunc      rejected                 1275
+trunc_fix  rejected                 1240
+zero_fix   accepted_same            14
+zero_fix   rejected                 1194

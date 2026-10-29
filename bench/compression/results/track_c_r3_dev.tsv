@@ -1,0 +1,4 @@
+sample	member	codec	model_tag	nnz	n_cols	payload_bytes	payload_bits_per_nnz	side_bits_nnz	bucket_bits_nnz	presence_bits_nnz	value_bits_nnz	xent_bits_nnz	total_bytes	total_bits_per_nnz	names_bytes	enc_ms	dec_ms	dec_Mnnz_s	model_bytes	matrix_ok
+pbmc_v2_typical	exon_counts.1pz	c_r2	human_exon_GSE142444	2569228	15185	1860636	5.7936	0.128981	0.0101256	4.56875	1.08574	5.79359	4710334	14.6669	2849656	16812.9	16706.4	0.153787	1034875	1
+pbmc_v2_typical	exon_counts.1pz	c_r3	human_exon_GSE142444	2569228	15185	1856128	5.77957	0.130394	0.0101256	4.55325	1.08579	5.77955	4705826	14.6529	2849656	40431.8	2628.68	0.977385	1174155	1
+pbmc_v2_typical	exon_counts.1pz	c_r2	human_exon_GSE142444	2569228	15185	1860636	5.7936	0.128981	0.0101256	4.56875	1.08574	5.79359	4710335	14.6669	2849656	16991.4	11800.1	0.217729	1034875	1

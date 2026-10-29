@@ -1,0 +1,177 @@
+{
+ "sample": "GSE311511.GSM9326201",
+ "G": 38606,
+ "NB": 736320,
+ "mtx_nnz": 1058826,
+ "mtx_total_umi": 1581356,
+ "exon_1pz": {
+  "m": 310797,
+  "n": 89070,
+  "nnz": 330461,
+  "cols_not_in_raw_whitelist": 0,
+  "gene_barcode_nnz": 327998,
+  "total": 445952,
+  "vt_code": 2
+ },
+ "intron_1pz": {
+  "m": 272191,
+  "n": 89070,
+  "nnz": 1710941,
+  "cols_not_in_raw_whitelist": 0,
+  "gene_barcode_nnz": 1674889,
+  "total": 1746742,
+  "vt_code": 1
+ },
+ "mtx_nonzero_columns": 101218,
+ "pz_columns_union": 89070,
+ "mtx_cols_in_pz": 78900,
+ "pz_cols_in_mtx_nonzero": 78900,
+ "mtx_nnz_in_pz_columns": 1035633,
+ "mtx_umi_in_pz_columns": 1558114,
+ "vs_exon+intron": {
+  "mtx_nnz": 1058826,
+  "pz_nnz": 1925866,
+  "both": 46608,
+  "mtx_only": 1012218,
+  "pz_only": 1879258,
+  "frac_mtx_nnz_also_in_pz": 0.044018563956684104,
+  "frac_pz_nnz_also_in_mtx": 0.024201060717620022,
+  "frac_equal_among_both": 0.46964040508067284,
+  "diff_mtx_minus_pz_clipped_hist": {
+   "-5": 2705,
+   "-4": 304,
+   "-3": 430,
+   "-2": 814,
+   "-1": 3154,
+   "0": 21889,
+   "1": 4153,
+   "2": 2060,
+   "3": 1598,
+   "4": 1215,
+   "5": 8286
+  },
+  "mean_diff": 1.788813079299691,
+  "umi_mtx_total": 1581356,
+  "umi_pz_total": 2192694,
+  "umi_mtx_on_both": 208456,
+  "umi_pz_on_both": 125083,
+  "cond_cost_on_pz_support": {
+   "support_entries": 1925866,
+   "plugin_bits_total": 423059.69531938137,
+   "plugin_bytes": 52882.46191492267,
+   "heldout_odd_barcodes_bits": 212697.83378460104,
+   "heldout_entries": 962025,
+   "heldout_bits_per_entry": 0.2210938736359253,
+   "plugin_bits_per_mtx_nonzero": 0.39955544661670694
+  },
+  "mtx_only_standalone": {
+   "colnnz": {
+    "raw": 102407,
+    "zstd19": 48987,
+    "xz": 48944
+   },
+   "gaps": {
+    "raw": 1767591,
+    "zstd19": 1498543,
+    "xz": 1406664
+   },
+   "vals": {
+    "raw": 1012218,
+    "zstd19": 102242,
+    "xz": 99456
+   },
+   "o0_gaps_bytes": 1385321.4964997622,
+   "o0_vals_bytes": 94375.86526921824,
+   "o0_colnnz_bytes": 47273.40297340299,
+   "total_zstd19": 1649772,
+   "total_xz": 1555064,
+   "total_o0": 1526970.7647423835
+  }
+ },
+ "vs_exon": {
+  "mtx_nnz": 1058826,
+  "pz_nnz": 327998,
+  "both": 31311,
+  "mtx_only": 1027515,
+  "pz_only": 296687,
+  "frac_mtx_nnz_also_in_pz": 0.029571430999994333,
+  "frac_pz_nnz_also_in_mtx": 0.09546094793260934,
+  "frac_equal_among_both": 0.3361757848679378,
+  "diff_mtx_minus_pz_clipped_hist": {
+   "-5": 2606,
+   "-4": 246,
+   "-3": 294,
+   "-2": 377,
+   "-1": 1033,
+   "0": 10526,
+   "1": 3302,
+   "2": 1922,
+   "3": 1545,
+   "4": 1211,
+   "5": 8249
+  },
+  "mean_diff": 2.8224266232314523,
+  "umi_mtx_total": 1581356,
+  "umi_pz_total": 445952,
+  "umi_mtx_on_both": 190380,
+  "umi_pz_on_both": 102007,
+  "cond_cost_on_pz_support": {
+   "support_entries": 327998,
+   "plugin_bits_total": 242889.45612721008,
+   "plugin_bytes": 30361.18201590126,
+   "heldout_odd_barcodes_bits": 121399.7269112472,
+   "heldout_entries": 164053,
+   "heldout_bits_per_entry": 0.7400030899236661,
+   "plugin_bits_per_mtx_nonzero": 0.22939506219833106
+  },
+  "mtx_only_standalone": {
+   "colnnz": {
+    "raw": 102473,
+    "zstd19": 49047,
+    "xz": 49012
+   },
+   "gaps": {
+    "raw": 1786787,
+    "zstd19": 1515732,
+    "xz": 1422816
+   },
+   "vals": {
+    "raw": 1027515,
+    "zstd19": 104124,
+    "xz": 100972
+   },
+   "o0_gaps_bytes": 1402418.4942529472,
+   "o0_vals_bytes": 95626.67799827931,
+   "o0_colnnz_bytes": 47322.415847649354,
+   "total_zstd19": 1668903,
+   "total_xz": 1572800,
+   "total_o0": 1545367.5880988757
+  }
+ },
+ "standalone_mtx_csc": {
+  "colnnz": {
+   "raw": 102650,
+   "zstd19": 49401,
+   "xz": 49400
+  },
+  "gaps": {
+   "raw": 1821332,
+   "zstd19": 1529669,
+   "xz": 1437612
+  },
+  "vals": {
+   "raw": 1058866,
+   "zstd19": 120956,
+   "xz": 116796
+  },
+  "o0_gaps_bytes": 1424481.9953238845,
+  "o0_vals_bytes": 113572.26579744565,
+  "o0_colnnz_bytes": 47698.39972649561,
+  "total_zstd19": 1700026,
+  "total_xz": 1603808,
+  "total_o0": 1585752.6608478257
+ },
+ "mtx_text_bytes": 15483554,
+ "mtx_text_deflate9": 3752044,
+ "mtx_text_zstd19": 2672107
+}

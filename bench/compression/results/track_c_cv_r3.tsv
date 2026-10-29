@@ -1,0 +1,5 @@
+sample	member	codec	model_tag	nnz	n_cols	payload_bytes	payload_bits_per_nnz	side_bits_nnz	bucket_bits_nnz	presence_bits_nnz	value_bits_nnz	xent_bits_nnz	total_bytes	total_bits_per_nnz	names_bytes	enc_ms	dec_ms	dec_Mnnz_s	model_bytes	matrix_ok
+pbmc_v2_typical	exon_counts.1pz	c_r3	human_exon_GSE142444	2569228	15185	1858138	5.78583	0.130216	0.0101256	4.55968	1.08579	5.78581	4707837	14.6591	2849656	24402	7060.52	0.363887	1436299	1
+pbmc_v3_lowgenes	exon_counts.1pz	c_r3	human_exon_GSE244263	1759828	71061	1213328	5.51567	0.0461544	0.0731685	4.02764	1.36868	5.51565	4357849	19.8103	3144478	44703.7	2371.22	0.74216	1174155	1
+tumor_3p	exon_counts.1pz	c_r3	human_exon_GSE145370	245117	25067	320156	10.4491	0.891926	0.266347	8.96053	0.330129	10.4489	3212168	104.837	2891969	44155.6	10520	0.0233001	1174155	1
+brain_sn_v3_intronic	exon_counts.1pz	c_r3	mouse_exon_GSE285936	1380834	78894	1647198	9.54321	0.29105	0.118397	8.76184	0.371898	9.54318	5621747	32.5702	3974506	149883	5030.32	0.274502	1399848	1

@@ -1,0 +1,109 @@
+## --B 1024
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.089 = 5.713 | empt nnz=166823   pres 7.043 cnt 0.802 = 7.845 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.886
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.901 cnt 1.427 = 5.328 | empt nnz=150251   pres 7.035 cnt 0.728 = 7.763 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.646
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.426 cnt 0.421 = 9.847 | empt nnz=102677   pres 10.637 cnt 0.270 = 10.907 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.709
+## --B 16 --n0 16 --rho 1.1
+pbmc_v2_typical        exon_c B=16    n0=16  rho=1.10 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.556 cnt 1.071 = 5.627 | empt nnz=166823   pres 6.983 cnt 0.818 = 7.802 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.802
+pbmc_v3_lowgenes       exon_c B=16    n0=16  rho=1.10 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.861 cnt 1.419 = 5.280 | empt nnz=150251   pres 7.013 cnt 0.722 = 7.735 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.600
+tumor_3p               exon_c B=16    n0=16  rho=1.10 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.302 cnt 0.397 = 9.699 | empt nnz=102677   pres 10.600 cnt 0.265 = 10.865 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.605
+## --B 64
+pbmc_v2_typical        exon_c B=64    n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.606 cnt 1.087 = 5.693 | empt nnz=166823   pres 6.990 cnt 0.808 = 7.798 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.864
+pbmc_v3_lowgenes       exon_c B=64    n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.894 cnt 1.425 = 5.318 | empt nnz=150251   pres 7.016 cnt 0.722 = 7.738 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.635
+tumor_3p               exon_c B=64    n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.344 cnt 0.409 = 9.753 | empt nnz=102677   pres 10.604 cnt 0.266 = 10.870 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.638
+## --B 256
+pbmc_v2_typical        exon_c B=256   n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.614 cnt 1.088 = 5.702 | empt nnz=166823   pres 7.010 cnt 0.800 = 7.810 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.873
+pbmc_v3_lowgenes       exon_c B=256   n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.897 cnt 1.426 = 5.323 | empt nnz=150251   pres 7.022 cnt 0.724 = 7.746 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.640
+tumor_3p               exon_c B=256   n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.374 cnt 0.413 = 9.787 | empt nnz=102677   pres 10.611 cnt 0.267 = 10.878 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.662
+## --B 4096
+pbmc_v2_typical        exon_c B=4096  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.628 cnt 1.090 = 5.718 | empt nnz=166823   pres 7.083 cnt 0.805 = 7.889 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.893
+pbmc_v3_lowgenes       exon_c B=4096  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.905 cnt 1.428 = 5.333 | empt nnz=150251   pres 7.053 cnt 0.732 = 7.785 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.652
+tumor_3p               exon_c B=4096  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.448 cnt 0.422 = 9.870 | empt nnz=102677   pres 10.686 cnt 0.273 = 10.958 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.743
+## --whole 1
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.416 cnt 1.063 = 5.479 | empt nnz=166823   pres 6.367 cnt 0.776 = 7.143 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.621
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.795 cnt 1.422 = 5.217 | empt nnz=150251   pres 6.717 cnt 0.707 = 7.425 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.516
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 8.379 cnt 0.371 = 8.750 | empt nnz=102677   pres 9.674 cnt 0.252 = 9.927 | hdr 0.402 flag 0.0160 b/nnz | ALL 9.661
+## --B 1024 --n0 16
+pbmc_v2_typical        exon_c B=1024  n0=16  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.578 cnt 1.072 = 5.651 | empt nnz=166823   pres 7.023 cnt 0.799 = 7.822 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.826
+pbmc_v3_lowgenes       exon_c B=1024  n0=16  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.870 cnt 1.419 = 5.289 | empt nnz=150251   pres 7.033 cnt 0.725 = 7.758 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.610
+tumor_3p               exon_c B=1024  n0=16  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.391 cnt 0.407 = 9.799 | empt nnz=102677   pres 10.634 cnt 0.268 = 10.902 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.679
+## --B 1024 --n0 32
+pbmc_v2_typical        exon_c B=1024  n0=32  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.594 cnt 1.079 = 5.673 | empt nnz=166823   pres 7.033 cnt 0.801 = 7.834 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.847
+pbmc_v3_lowgenes       exon_c B=1024  n0=32  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.881 cnt 1.421 = 5.302 | empt nnz=150251   pres 7.033 cnt 0.728 = 7.761 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.623
+tumor_3p               exon_c B=1024  n0=32  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.401 cnt 0.411 = 9.812 | empt nnz=102677   pres 10.635 cnt 0.269 = 10.904 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.687
+## --B 1024 --n0 128
+pbmc_v2_typical        exon_c B=1024  n0=128 rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.689 cnt 1.109 = 5.798 | empt nnz=166823   pres 7.071 cnt 0.808 = 7.879 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.967
+pbmc_v3_lowgenes       exon_c B=1024  n0=128 rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.950 cnt 1.437 = 5.388 | empt nnz=150251   pres 7.038 cnt 0.729 = 7.767 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.701
+tumor_3p               exon_c B=1024  n0=128 rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.479 cnt 0.439 = 9.918 | empt nnz=102677   pres 10.646 cnt 0.273 = 10.919 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.755
+## --B 1024 --rho 1.5
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=1.50 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.616 cnt 1.088 = 5.704 | empt nnz=166823   pres 7.026 cnt 0.800 = 7.826 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.876
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=1.50 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.898 cnt 1.425 = 5.324 | empt nnz=150251   pres 7.029 cnt 0.727 = 7.756 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.642
+tumor_3p               exon_c B=1024  n0=64  rho=1.50 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.390 cnt 0.416 = 9.806 | empt nnz=102677   pres 10.627 cnt 0.268 = 10.895 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.680
+## --B 1024 --rho 3
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=3.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.635 cnt 1.100 = 5.735 | empt nnz=166823   pres 7.060 cnt 0.805 = 7.866 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.907
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=3.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.907 cnt 1.432 = 5.339 | empt nnz=150251   pres 7.044 cnt 0.731 = 7.775 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.657
+tumor_3p               exon_c B=1024  n0=64  rho=3.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.464 cnt 0.435 = 9.899 | empt nnz=102677   pres 10.648 cnt 0.272 = 10.920 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.744
+## --B 1024 --bpo 2
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=2 gt=1 mix=1 | cells nnz=2402405  pres 4.629 cnt 1.093 = 5.722 | empt nnz=166823   pres 7.049 cnt 0.802 = 7.851 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.894
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=2 gt=1 mix=1 | cells nnz=1609577  pres 3.906 cnt 1.428 = 5.334 | empt nnz=150251   pres 7.037 cnt 0.729 = 7.766 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.652
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=2 gt=1 mix=1 | cells nnz=142440   pres 9.432 cnt 0.431 = 9.863 | empt nnz=102677   pres 10.642 cnt 0.271 = 10.913 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.720
+## --B 1024 --bpo 8
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=8 gt=1 mix=1 | cells nnz=2402405  pres 4.623 cnt 1.089 = 5.712 | empt nnz=166823   pres 7.041 cnt 0.801 = 7.842 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.884
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=8 gt=1 mix=1 | cells nnz=1609577  pres 3.900 cnt 1.426 = 5.326 | empt nnz=150251   pres 7.034 cnt 0.728 = 7.763 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.644
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=8 gt=1 mix=1 | cells nnz=142440   pres 9.425 cnt 0.419 = 9.844 | empt nnz=102677   pres 10.636 cnt 0.270 = 10.906 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.707
+## --B 1024 --gt 0 --apc 0.01
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=0 mix=1 | cells nnz=2402405  pres 4.647 cnt 1.090 = 5.738 | empt nnz=166823   pres 7.198 cnt 0.860 = 8.058 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.923
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=0 mix=1 | cells nnz=1609577  pres 3.905 cnt 1.429 = 5.333 | empt nnz=150251   pres 7.278 cnt 0.751 = 8.030 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.674
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=0 mix=1 | cells nnz=142440   pres 9.629 cnt 0.469 = 10.099 | empt nnz=102677   pres 11.004 cnt 0.294 = 11.298 | hdr 0.402 flag 0.0160 b/nnz | ALL 11.019
+## --B 1024 --gt 0 --apc 0.05
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=0 mix=1 | cells nnz=2402405  pres 4.630 cnt 1.094 = 5.724 | empt nnz=166823   pres 7.979 cnt 0.931 = 8.910 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.965
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=0 mix=1 | cells nnz=1609577  pres 3.953 cnt 1.448 = 5.402 | empt nnz=150251   pres 8.401 cnt 0.769 = 9.170 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.834
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=0 mix=1 | cells nnz=142440   pres 10.001 cnt 0.492 = 10.493 | empt nnz=102677   pres 11.910 cnt 0.310 = 12.220 | hdr 0.402 flag 0.0160 b/nnz | ALL 11.634
+## --B 1024 --gt 0 --apc 0.2
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=0 mix=1 | cells nnz=2402405  pres 4.702 cnt 1.114 = 5.816 | empt nnz=166823   pres 10.609 cnt 0.927 = 11.537 | hdr 0.034 flag 0.0002 b/nnz | ALL 6.221
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=0 mix=1 | cells nnz=1609577  pres 4.516 cnt 1.778 = 6.294 | empt nnz=150251   pres 12.741 cnt 0.788 = 13.530 | hdr 0.109 flag 0.0011 b/nnz | ALL 7.022
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=0 mix=1 | cells nnz=142440   pres 12.040 cnt 0.467 = 12.507 | empt nnz=102677   pres 16.202 cnt 0.336 = 16.538 | hdr 0.402 flag 0.0160 b/nnz | ALL 14.613
+## --B 1024 --mix 0
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=0 | cells nnz=2402405  pres 4.628 cnt 1.094 = 5.721 | empt nnz=166823   pres 7.047 cnt 0.819 = 7.867 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.895
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=0 | cells nnz=1609577  pres 3.904 cnt 1.431 = 5.335 | empt nnz=150251   pres 7.054 cnt 0.725 = 7.779 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.654
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=0 | cells nnz=142440   pres 9.427 cnt 0.421 = 9.848 | empt nnz=102677   pres 10.638 cnt 0.269 = 10.907 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.709
+## --B 1024 --rounds 1
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.089 = 5.713 | empt nnz=166823   pres 7.042 cnt 0.802 = 7.844 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.886
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.901 cnt 1.427 = 5.328 | empt nnz=150251   pres 7.034 cnt 0.728 = 7.763 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.646
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.426 cnt 0.421 = 9.847 | empt nnz=102677   pres 10.637 cnt 0.270 = 10.907 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.709
+## --B 1024 --rounds 3
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.089 = 5.713 | empt nnz=166823   pres 7.043 cnt 0.802 = 7.845 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.886
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.901 cnt 1.427 = 5.328 | empt nnz=150251   pres 7.035 cnt 0.728 = 7.763 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.646
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.426 cnt 0.421 = 9.847 | empt nnz=102677   pres 10.637 cnt 0.270 = 10.907 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.709
+## --B 1024 --ctrust 5
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.089 = 5.713 | empt nnz=166823   pres 7.045 cnt 0.801 = 7.847 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.886
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.901 cnt 1.427 = 5.328 | empt nnz=150251   pres 7.035 cnt 0.728 = 7.763 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.646
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.427 cnt 0.421 = 9.848 | empt nnz=102677   pres 10.637 cnt 0.269 = 10.907 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.709
+## --B 1024 --ctrust 80
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.089 = 5.713 | empt nnz=166823   pres 7.041 cnt 0.800 = 7.842 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.885
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.901 cnt 1.426 = 5.327 | empt nnz=150251   pres 7.034 cnt 0.728 = 7.763 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.646
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.426 cnt 0.421 = 9.847 | empt nnz=102677   pres 10.637 cnt 0.270 = 10.907 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.709
+## --B 1024 --flat 0.4
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.087 = 5.712 | empt nnz=166823   pres 7.044 cnt 0.801 = 7.846 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.884
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.900 cnt 1.426 = 5.326 | empt nnz=150251   pres 7.035 cnt 0.728 = 7.763 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.644
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.432 cnt 0.421 = 9.852 | empt nnz=102677   pres 10.638 cnt 0.270 = 10.909 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.713
+## --B 1024 --flat 1.0
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.628 cnt 1.090 = 5.717 | empt nnz=166823   pres 7.043 cnt 0.802 = 7.845 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.889
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.905 cnt 1.427 = 5.332 | empt nnz=150251   pres 7.035 cnt 0.728 = 7.763 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.650
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.426 cnt 0.420 = 9.847 | empt nnz=102677   pres 10.637 cnt 0.270 = 10.907 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.708
+## --B 1024 --perm 0
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.709 cnt 1.171 = 5.880 | empt nnz=166823   pres 7.284 cnt 0.952 = 8.237 | hdr 0.034 flag 0.0002 b/nnz | ALL 6.067
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 4.005 cnt 1.458 = 5.463 | empt nnz=150251   pres 7.250 cnt 0.780 = 8.030 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.793
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.541 cnt 0.438 = 9.979 | empt nnz=102677   pres 10.698 cnt 0.287 = 10.985 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.818
+## --B 1024 --ctx 1
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.205 = 5.830 | empt nnz=166823   pres 7.043 cnt 0.903 = 7.946 | hdr 0.034 flag 0.0002 b/nnz | ALL 6.001
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.901 cnt 1.553 = 5.455 | empt nnz=150251   pres 7.035 cnt 0.848 = 7.883 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.772
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.426 cnt 0.522 = 9.948 | empt nnz=102677   pres 10.637 cnt 0.301 = 10.938 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.781
+## --B 1024 --kappa 5
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.089 = 5.713 | empt nnz=166823   pres 7.062 cnt 0.800 = 7.863 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.887
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.901 cnt 1.427 = 5.328 | empt nnz=150251   pres 7.013 cnt 0.726 = 7.739 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.644
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.426 cnt 0.421 = 9.847 | empt nnz=102677   pres 10.702 cnt 0.269 = 10.971 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.735
+## --B 1024 --kappa 20
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.089 = 5.713 | empt nnz=166823   pres 7.049 cnt 0.800 = 7.849 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.886
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.901 cnt 1.427 = 5.328 | empt nnz=150251   pres 6.994 cnt 0.726 = 7.719 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.643
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.426 cnt 0.421 = 9.847 | empt nnz=102677   pres 10.672 cnt 0.269 = 10.941 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.723
+DONE

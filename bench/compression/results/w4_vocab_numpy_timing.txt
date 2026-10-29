@@ -1,0 +1,10 @@
+build GRCh38-2024-A names 310797 blob 14846254
+offsets index: flatnonzero(blob==0)                                        33.703 ms
+list[str] via blob.decode().split(NUL)                                    150.656 ms
+np.array(list[str], dtype=object)                                          33.519 ms
+pandas.Index(list[str])  (AnnData var_names)                               59.394 ms
+pandas.Index(...) + first get_loc (hash build)                            210.261 ms
+numpy fixed-width S59 array (scatter)                                    1976.812 ms
+lazy lookup us/name (bytes slice+decode, offsets as python lists)           2.078 us
+lazy lookup us/name (offsets as numpy arrays)                               2.659 us
+lazy lookup us/name (memoryview slice + str())                              3.016 us

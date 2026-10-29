@@ -1,0 +1,8 @@
+id	gse	gsm	note
+pbmc_v2_typical	GSE142444	GSM4227413	human PBMC, 10x v2, 5428 cells called, median UMI 716, exonic 0.46
+pbmc_v2_shallow	GSE142444	GSM4227419	human PBMC, 10x v2, 41725 cells called, median UMI 76 (very shallow, many barcodes)
+pbmc_v3_lowgenes	GSE244263	GSM7810083	human PBMC, 10x v3, 11124 cells called, median UMI 305, only 2642 genes detected (degenerate library)
+brain_sn_v3_deep	GSE285936	GSM8713125	mouse brain snRNA, 10x v3, 3288 nuclei, median UMI 1045, intronic 0.37
+brain_sn_v3_intronic	GSE285936	GSM8713120	mouse brain snRNA, 10x v3, 8743 nuclei, median UMI 117, exonic 0.09 / intronic 0.43
+tcell_5p	GSE152522	GSM4617168	human memory CD4 T cells, 10x 5', 12363 cells
+tumor_3p	GSE145370	GSM4317429	human esophageal squamous cell carcinoma tumor, 10x 3', 3820 cells

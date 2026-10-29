@@ -1,0 +1,217 @@
+{
+ "study": "GSE145370",
+ "samples": 14,
+ "junctions": {
+  "union": 400127,
+  "core": 182290,
+  "rare": 23220,
+  "local_only": 194617,
+  "core_proxy_annotated": 126948
+ },
+ "table_bytes": {
+  "core": 762999,
+  "rare": 113755,
+  "version": 261,
+  "core_bytes_per_junction": 4.186,
+  "names_zstd19_bytes_for_comparison": 1416877
+ },
+ "core_streams_bytes": {
+  "chrom_runs": 147,
+  "start_delta": 290970,
+  "length": 327449,
+  "attr": 31857,
+  "gene": 111998,
+  "n_tx": 34
+ },
+ "core_scx1_for_bytes": {
+  "start_delta": 729232,
+  "length": 455797,
+  "attr": 182362,
+  "gene": 387439,
+  "n_tx": 72
+ },
+ "core_scx1_for_total": 1754902,
+ "decode_core_ms": {
+  "cpu_ms": 31.25,
+  "wall_ms": 39.05
+ },
+ "lookup_1M_random_ids_ms": {
+  "cpu_ms": 234.38,
+  "wall_ms": 274.62
+ },
+ "names_100k_ids_ms": {
+  "cpu_ms": 250.0,
+  "wall_ms": 317.08
+ },
+ "find_100k_coords_ms": {
+  "cpu_ms": 234.38,
+  "wall_ms": 321.88
+ },
+ "scaled_core": {
+  "junctions": 1093740,
+  "bytes": 770855,
+  "decode_ms": {
+   "cpu_ms": 140.62,
+   "wall_ms": 169.62
+  }
+ },
+ "per_sample": [
+  {
+   "gsm": "GSM4317423",
+   "rows": 129853,
+   "local_rows": 18833,
+   "old_member": 1957719,
+   "old_names": 628012,
+   "new_member": 1358675,
+   "local_list": 78209,
+   "legacy_perm": 45226
+  },
+  {
+   "gsm": "GSM4317424",
+   "rows": 90181,
+   "local_rows": 8741,
+   "old_member": 1106591,
+   "old_names": 451608,
+   "new_member": 680674,
+   "local_list": 37207,
+   "legacy_perm": 25235
+  },
+  {
+   "gsm": "GSM4317425",
+   "rows": 101095,
+   "local_rows": 11281,
+   "old_member": 1259774,
+   "old_names": 512539,
+   "new_member": 773206,
+   "local_list": 48369,
+   "legacy_perm": 29451
+  },
+  {
+   "gsm": "GSM4317426",
+   "rows": 151949,
+   "local_rows": 29486,
+   "old_member": 2149214,
+   "old_names": 740985,
+   "new_member": 1432044,
+   "local_list": 124121,
+   "legacy_perm": 54378
+  },
+  {
+   "gsm": "GSM4317427",
+   "rows": 111080,
+   "local_rows": 14280,
+   "old_member": 1615250,
+   "old_names": 546150,
+   "new_member": 1094515,
+   "local_list": 58553,
+   "legacy_perm": 35283
+  },
+  {
+   "gsm": "GSM4317428",
+   "rows": 67308,
+   "local_rows": 6400,
+   "old_member": 739347,
+   "old_names": 346843,
+   "new_member": 414208,
+   "local_list": 28250,
+   "legacy_perm": 17147
+  },
+  {
+   "gsm": "GSM4317429",
+   "rows": 92802,
+   "local_rows": 11204,
+   "old_member": 1262367,
+   "old_names": 462303,
+   "new_member": 825389,
+   "local_list": 44122,
+   "legacy_perm": 29956
+  },
+  {
+   "gsm": "GSM4317430",
+   "rows": 87912,
+   "local_rows": 9959,
+   "old_member": 1023501,
+   "old_names": 440866,
+   "new_member": 607565,
+   "local_list": 42877,
+   "legacy_perm": 26106
+  },
+  {
+   "gsm": "GSM4317431",
+   "rows": 79508,
+   "local_rows": 8279,
+   "old_member": 881270,
+   "old_names": 399800,
+   "new_member": 504931,
+   "local_list": 35458,
+   "legacy_perm": 22364
+  },
+  {
+   "gsm": "GSM4317432",
+   "rows": 126409,
+   "local_rows": 19004,
+   "old_member": 1835296,
+   "old_names": 610140,
+   "new_member": 1250822,
+   "local_list": 81926,
+   "legacy_perm": 42032
+  },
+  {
+   "gsm": "GSM4317433",
+   "rows": 130160,
+   "local_rows": 22543,
+   "old_member": 1575069,
+   "old_names": 634375,
+   "new_member": 966723,
+   "local_list": 96332,
+   "legacy_perm": 44410
+  },
+  {
+   "gsm": "GSM4317434",
+   "rows": 103505,
+   "local_rows": 14029,
+   "old_member": 1209231,
+   "old_names": 517838,
+   "new_member": 716428,
+   "local_list": 59310,
+   "legacy_perm": 31313
+  },
+  {
+   "gsm": "GSM4317435",
+   "rows": 99013,
+   "local_rows": 10664,
+   "old_member": 1210730,
+   "old_names": 491074,
+   "new_member": 745352,
+   "local_list": 45493,
+   "legacy_perm": 29518
+  },
+  {
+   "gsm": "GSM4317436",
+   "rows": 86564,
+   "local_rows": 9914,
+   "old_member": 1019265,
+   "old_names": 433529,
+   "new_member": 610430,
+   "local_list": 40111,
+   "legacy_perm": 26368
+  }
+ ],
+ "study_totals": {
+  "old_member": 18844624,
+  "old_names": 7216062,
+  "new_member": 11980962,
+  "local_list": 820338,
+  "legacy_perm": 458787,
+  "rows": 1457339,
+  "local_rows": 194617
+ },
+ "names_ms_one_sample": {
+  "cpu_ms": 250.0,
+  "wall_ms": 310.05
+ },
+ "reference_cumsum_1M_u32": {
+  "cpu_ms": 0.0,
+  "wall_ms": 7.58
+ }
+}

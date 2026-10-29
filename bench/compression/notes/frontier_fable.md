@@ -1,0 +1,272 @@
+# The compression frontier for single-cell count data: final synthesis
+
+Final version, 2026-10-22. This is the curated, self-contained account of the `.singlet` compression study: the lines
+of thought, what each predicted, what the experiments measured, what finished and what did not, and what the format
+should do next. Derivations are in `theory_fable.md`, the original idea list in `brainstorm_fable.md`, and every
+number traces to a per-experiment note in this folder (`track_*.md`, `idea*.md`, `e*.md`) and a table in
+`../results/`. Unless stated otherwise, numbers are bits per nonzero of the matrix payload, and "today" means the
+production `.1pz` (VOCSC transform plus zstd level 3).
+
+## 0. Bottom line
+
+1. **Most of a `.singlet` file is not data.** In the 187 MB study bundle, 82.9% of bytes are feature names, row
+   permutations and derivable blocks, and 77.9% of each sample's bytes regenerate byte-for-byte from the reference and
+   other members. Removing them is lossless, needs no new codec, and is the largest win available: about 2.1x on the
+   14 corpus matrices, about 4.5x on the bundle.
+2. **The count payload can shrink 15-20%, and no more than a few percent beyond that.** The best bit-exact coders sit
+   15% below today across the corpus (11-24% per file). The cross-validated per-feature × depth model they implement
+   is within about 0.1 bits/nnz of everything any in-file model can reach on called cells (E1). A shipped model trained
+   on other studies adds about 1.5%.
+3. **Recursive compression has nothing left to find.** A second pass over near-entropy outputs returns 0.976-1.004
+   with general codecs and 0.987-0.996 with a context-mixing coder, and a per-chunk codec orchestrator beats the best
+   single coder by 0.003-0.18%. What remains after a good model is sampling noise: which UMIs were captured, where on
+   the transcript each fragment landed, and which ambient molecules fell into empty droplets.
+4. **Decode speed is a layout problem, not an entropy-coding problem.** A 32-lane AVX-512 rANS decoder reaches 73
+   Mnnz/s measured on a loaded laptop (about 172 at full clock) in its native row order. Converting to sorted row ids
+   halves that. Two layouts remove the sort at no size cost, and the fast decoder for them is the main unfinished
+   engineering item.
+5. **Headline projection.** Combining the measured pieces: 14 corpus matrices from 114 MB to about 46 MB (2.5x); the
+   187 MB bundle to about 37-41 MB (4.5-5x); all-called-cells transfer 2.3-22x smaller per sample, and time to the first
+   1,024 cells at 100 Mbit/s from about 1.3 s to about 0.4 s. These combine separately measured components; no single
+   codec implementing all of them was built.
+
+## 1. The question, made precise
+
+"Can `.singlet` files be compressed recursively or ultradeeply, with bit-exact fast decode?" becomes:
+
+> For a count matrix X and a decoder that legitimately knows S (the reference and everything already decoded), how
+> close can a code get to H(X | S), and how much of H(X | S) is physics rather than redundancy?
+
+Shannon's bound applies to any decoder: learned or not, recursive or not. "Recursive" has one legitimate meaning here:
+conditioning each part of the file on parts already decoded (the chain rule). Every other proposal is a way to find a
+better model q of the data. Its gain is KL(p‖q_old) − KL(p‖q_new), measurable before any coder is built. The study
+measured those gains first, then built coders for the ones that paid.
+
+## 2. Line of thought A: three kinds of bits
+
+For a cell with depth N and true expression proportions π, exactly:
+
+    H(x | N, S) = H(x | N, π) + I(x ; π | N, S)
+                = sampling entropy (which UMIs were captured)    irreducible
+                + state information (what x reveals about π)       the codec's only lever
+
+Because rows are exon or intron intervals of genes, a third term sits inside the sampling entropy: which interval of a
+gene the fragment landed in. It costs 0.5-1.3 bits per UMI on exon matrices and 1.2-2.4 on intron matrices, 10-41% of
+the payload, is not predicted by anything the decoder has, and is protocol-specific (Idea 3). On top sits redundancy:
+bytes that carry no information about X.
+
+| component | share of today's bytes | nature | measured treatment |
+|---|---|---|---|
+| feature names | 27-76% per file; 65.6% of the bundle | reference constants, identical per build | 8-byte vocabulary id; 1.7-2.5 MB once per build |
+| row permutation | 6-18% per file; 16.0% of the bundle | derivable from per-row counts | 13x smaller; not needed by a model coder |
+| colsums, column-pointer blocks | about 1% | derivable | zero, verified on 70/70 matrices |
+| barcodes | 0.5-4% | whitelist members in arbitrary order | 2.5-2.75 bytes each as whitelist index; 0.5-0.9 if columns were written in whitelist order |
+| splice_psi, most of cell_calls.tsv and summary.json | about 14% of each sample | functions of other members | regenerated byte-identically (E4) |
+| empties payload | 6-61% of payload | ambient molecules sampled into droplets | an ambient-multinomial code reaches the measured floor, 1.5-3.5 bits/nnz below today |
+| cells payload, interval split | 10-41% of payload | fragment position | irreducible; adaptive per-gene tables reach the in-sample optimum |
+| cells payload, gene multiset | the rest | UMI sampling plus state information | 15-20% below today; within about 0.1 of the in-file floor |
+
+## 3. Line of thought B: models have small leverage, and the data agree
+
+If π lies near a k-dimensional manifold, the state information a decoder can learn is bounded by the parametric
+regret (k/2)·log2 N per cell. Each prediction this implied was tested.
+
+| prediction | measurement | source |
+|---|---|---|
+| a discrete cell-type label is worth about 0.01 bits/nnz | k-topic mixtures add 0.1-0.3 over one pooled profile, nothing on shallow files; clusters add nothing to Track C's coder | Track D, Track C |
+| per-cell latent side information cannot pay for itself | NMF k=16 gains 0.3-0.4 gross, +0.13 net after 16 bytes/cell, negative on shallow cells | Idea 4 |
+| a shipped out-of-sample model is worth little over in-file adaptation | about 1.5% (Track C); a margins-only in-file prior lands on the cross-validated optimum on every file (Idea 2) | Track C, Idea 2 |
+| a pooled static model fits no file well | adding unrelated training samples made pbmc_v2_typical worse (5.35 → 6.19 presence bits); one matched sample beat the pool by up to 1.1 bits/nnz | Idea 1 |
+| the reachable state term is 0.3-1 bits/nnz for PBMC-depth cells | **0.04-0.12 bits per cell nonzero** on typical files, k_eff 0-62 (median about 20); neighbour conditioning carries it, the cell's own other half adds almost nothing | E1 |
+
+The last row is the decisive measurement. Splitting each cell's UMIs in half and predicting one half from everything
+a decoder could know saves at most 0.0-0.2 bits per held-out nonzero over a per-feature × depth model. The single
+exception (+0.35 on a degenerate library) is molecule-level burstiness, which also shows in empty droplets, not cell
+state. Each cell's idiosyncratic features are seen once and never again, so they are information, not redundancy.
+
+**The file is its own model.** The only shipped knowledge worth having is the reference vocabulary. That removes the
+L3-resident-model machinery and every cross-validation caveat from the design.
+
+## 4. Line of thought C: the frontier per file
+
+Payload bits per nonzero, names excluded, every codec bit-exact (`decode(encode(M)) == M` on all fields).
+
+| file | nnz | today | b_rans16 (Track B) | other measured | E2 (block-adaptive, ascending order) |
+|---|---|---|---|---|---|
+| pbmc_v2_typical exon | 2.57 M | 6.85 | **5.74** | 5.81 gene→interval (Idea 3); 5.79 CV per-feature × depth (Track D) | 5.84 |
+| pbmc_v2_typical intron | 1.20 M | 9.18 | **8.18** | 8.40 (Idea 3) | |
+| pbmc_v2_shallow exon | 5.30 M | 8.81 | **7.05** | 7.01 CV (Track D) | |
+| pbmc_v2_shallow intron | 1.17 M | 14.34 | **12.01** | | |
+| pbmc_v3_lowgenes exon | 1.76 M | 7.35 | 5.56 | **5.54** (Idea 3) | |
+| pbmc_v3_lowgenes intron | 1.08 M | 8.81 | **7.07** | | |
+| tcell_5p exon | 10.53 M | 6.96 | **6.02** | | |
+| brain_sn_v3_deep exon | 6.35 M | 9.44 | **8.06** | 8.07 c_r2 (Track C); 8.11 CV (Track D) | 8.18 |
+| brain_sn_v3_deep intron | 6.68 M | 8.34 | **7.26** | | |
+| brain_sn_v3_intronic exon | 1.38 M | 11.87 | **9.39** | | |
+| brain_sn_v3_intronic intron | 8.14 M | 8.45 | **7.51** | | |
+| tumor_3p exon | 0.25 M | 11.91 | **9.87** | 10.42 (Idea 3) | 10.58 |
+| **corpus** | 47.6 M | 8.43 (byte-weighted) | **−15.1%** byte-weighted, 11-24% per file | Track C c_r2 8-23% below today | |
+
+Three independent designs (static rANS over rank-space gaps, adaptive binary survival coding, gene-then-interval
+factorisation) converge on the same numbers within about 0.1 bits/nnz on every file where they overlap. That
+convergence, the E1 bound and the flat diminishing-returns curve in Track D (extrapolated asymptote only 0.05-0.2
+below the measured value) together locate the in-file frontier: **today's payload minus 15-20%, and no more than a
+few percent beyond that for any in-file model.**
+
+What is provably not available to any decoder: the sampling entropy of each cell's UMIs given its true profile, the
+fragment-position entropy within genes, and the multinomial entropy of the empties given the ambient profile. None of
+these quantities is in S. Track D's Monte-Carlo entropy of the empties matches the in-sample code length within 0.2
+bits/nnz; E1's coverage-adjusted per-cell entropy brackets the cells. There is no "ultradeep" regime for counts at
+droplet depth. The ultradeep regime exists for redundant and derived content, where the factor is 4.5x to infinite.
+
+## 5. Line of thought D: speed
+
+| decoder | payload bits/nnz | measured single-thread | estimated at 3 GHz | note |
+|---|---|---|---|---|
+| today's reader (production C++) | 8.43 | about 11 Mnnz/s incl. names | | 52% of time in a per-column sort on dense files; 86% in name parsing on sparse ones (Track A) |
+| b_rans16, native row order | 8.23 mean | **73 Mnnz/s** (up to 101) | about 172 | 32-lane AVX-512 rANS, static tables in L2 |
+| b_rans16, canonical (sorted) order | 8.23 | 34 Mnnz/s | about 80 | the post-decode sort costs as much as entropy decoding |
+| b_rans16 scalar fallback | 8.23 | 16 / 9 Mnnz/s | 36 / 22 | bit-identical to AVX-512 |
+| Idea 1 survival coder, rank-1 model | within 0.01 of its model | | 10.7-13.9 | instruction-bound, about 220 instructions per nonzero |
+| Track C adaptive binary coder | 8-23% below today | 0.6-1.4 Mnnz/s | | one binary decision per bisection step |
+| E2 block-adaptive, ascending order | 5.84 / 8.18 | | about 6 | scalar reference only |
+
+The machine was shared with up to ten agents throughout, so wall-clock figures understate a free core by 2-3x. The
+calibrated estimates come from per-thread cycle counts.
+
+Findings that matter for the format:
+
+- Static tables with rank-position × column-depth contexts are the whole model for the gap stream (adaptive mixing of
+  five more contexts gains < 0.01 bits/nnz), and rANS over them reaches the model's floor at memory-bandwidth speed.
+- The sort back to row-id order is the bottleneck. Two layouts remove it at no size cost. Track B: store the matrix in
+  the file's own frequency-class order and permute the row names once per file (coarse classes cost +0.006 bits/nnz).
+  E2: code in ascending row-id order with block-refit tables (5.84 vs 5.74 and 8.18 vs 8.06, i.e. within 0.1-0.12).
+- A fixed reference-build row order costs 1.3-4.7 bits/nnz. Per-file order must stay; only its description was waste.
+- Exact survival-function coding is instruction-bound. Fast decode wants table-driven symbols (rANS), not per-symbol
+  exp/log arithmetic.
+
+## 6. Line of thought E: policy levers larger than codec levers
+
+From the E4 audit (`e4.md`), which recomputed members and compared bytes:
+
+1. **Derived members are free if the format pins the recipe.** splice_psi from sj_counts (14/14 files, 0 ulp), names,
+   permutation, column pointers and colsums (70/70), cell_calls.tsv except the called set (21/21), 273/273 summary.json
+   numeric fields. The recipes to pin: the PSI formula and event order, the log10-UMI column, the median rule and the
+   gene-from-row-name rule.
+2. **Layout order beats tiering for latency.** Today's columns are already roughly depth-sorted, so called cells sit
+   near the front. What hurts is that names sit at the end of each file and the chunk table behind the permutation:
+   10 requests in 3 rounds before the first cell. Removing redundant blocks and putting the chunk index first is 79-97%
+   of the all-cells saving. Splitting empties into their own member adds 1-15% for most samples, and 25-40% where cells
+   and empties interleave.
+3. **Write columns in whitelist order.** Barcodes drop from 2.5 to 0.5-0.9 bytes each, and column order becomes
+   canonical.
+4. **Define identity on the decoded matrix.** Container byte identity holds only with the zstd version that wrote the
+   file (1.5.5/1.5.6 for some studies, 1.5.7 for others). A v2 format should store a digest of the decoded matrix rather
+   than rely on encoder reproducibility.
+
+Modelled latency for brain_sn_v3_deep, exon plus intron, 100 Mbit/s with 50 ms RTT:
+
+| goal | today | proposed |
+|---|---|---|
+| first 1,024 cells | 13.98 MB, 1.27 s, 10 requests | 3.42 MB, 0.37 s, 2 requests |
+| all called cells | 18.64 MB, 1.64 s | 6.69 MB, 0.64 s |
+| everything | 25.05 MB, 2.10 s | 13.29 MB, 1.16 s |
+
+## 7. The recursion question, answered
+
+- A second pass over every codec output returns 0.976-1.004 with zstd-22, xz, brotli or bzip2. The best is xz, which
+  finds the names and permutation blocks that those outputs still carry. Once names and permutation are model-side the
+  ratio is 0.992-0.999. A 300-line logistic-mixing context-mixing coder gets 0.987-0.996 (Track D).
+- A per-chunk orchestrator choosing among nine entropy coders beats the best single one by 0.003-0.18%. A
+  leave-one-study-out classifier captures nothing, because there is nothing to capture (Track D).
+- The chain-rule hierarchies that do carry information were measured directly. Cells given neighbours: 0.04-0.12 bits
+  per nonzero (E1). Introns given exons at gene level: 0.06-0.17 bits per intron gene-nonzero (Idea 3). Intervals given
+  genes are the fragment-position term, which is irreducible. Empties given cells: the ambient profile, already in the
+  best coders.
+
+The asymptote argument, in one paragraph: the expected code length of any lossless decoder that knows S is at least
+H(X | S) ≥ H(X | S, Π), where Π is the cells' true expression profiles; given Π the columns are independent
+multinomials whose entropy is fixed by the measurement process. E1 estimates that floor from each cell's own profile at
+3.4-7.6 bits per nonzero against the coders' 5.3-10. The difference is the information each cell carries about its own
+profile, and at most 0.0-0.2 bits of it is predictable from anything a decoder could hold. Our coders are therefore
+within about 0.1 bits/nnz of what any in-file model can learn. A recursive or learned second stage can only remove the
+first stage's modelling slack, which Track D measured at 0.1-2.4%. "Asymptotically
+impossible to compress further" is therefore a statement about the physics of UMI capture, and the evidence supports it.
+
+## 8. What finished and what did not
+
+| experiment | owner | status | headline |
+|---|---|---|---|
+| Track A: accounting, container, entropy-coder sweep | original session | complete | container fixes alone: 114.4 → 53.5 MB on 14 files (0.468); coder choice worth 3-5% |
+| Track B: transform kernels, decode speed | original session | complete | b_rans16: −15.1% payload, 73 Mnnz/s native measured |
+| Track C: learned out-of-sample model | original session | complete | c_r2 8-23% below today; shipped model worth about 1.5% |
+| Track D: entropy floor, recursion, oracle | original session | substantially complete | second pass ≥ 0.976; oracle gap ≤ 0.18%; empties at floor under the ambient code |
+| Idea 1: survival-gap coder | original session | complete | size within 0.01 of the model; speed 10.7-13.9 Mnnz/s, below the 20 target |
+| Idea 2: file as its own model | original session | stage 1 only | margins-only prior matches the CV optimum; ambient code 1-6% above the floor |
+| Idea 3: gene/interval, exon/intron | original session | complete | interval split irreducible; exon↔intron gain negligible |
+| Idea 4: low-rank manifold prior | original session | partial | +0.13 net on typical PBMC, negative on shallow cells; H4 (≥ 1 bit) not supported |
+| w3_coexp: within-cell hub genes | original session | stopped at stage 1 | E1 implies it will not reach its 0.3 threshold except on degenerate libraries |
+| E1: split-half predictability | this session | complete (note written afterwards) | state term 0.04-0.12 bits per cell nonzero |
+| E2: block-adaptive, canonical order | this session | partial | size on par with b_rans16; fast decoder not written |
+| E3: joint gene-interval member | this session | not run | downgraded after Idea 3's measurement |
+| E4: derivability, tiering, latency | this session | complete | 77.9% derivable; layout order is the latency lever |
+| E5: other omics members | this session | not run | plan written |
+
+The agents stopped when the account's weekly limit was reached. Every stopped agent's files are on disk and can be
+resumed by messaging it, or restarted from its note and plan.
+
+## 9. Recommended format changes, in order of value
+
+1. **Container v2, no codec change** (Track A's `a_names_perm_model` plus E4). Vocabulary id instead of names,
+   per-row counts instead of the permutation, no colsums or pointer block, barcodes as whitelist indices, chunk index at
+   the front of the member, derived members recomputed on read with pinned recipes. About 2.1x on matrices and 4.5x on
+   bundles, and the first cells arrive after 2 requests instead of 10.
+2. **Payload coder: b_rans16-style static rANS** (−15%, 73+ Mnnz/s), with the sort removed by storing frequency-class
+   order (Track B) or by finishing E2's ascending-order decoder.
+3. **Empties as a second member with the ambient code**: cells first, empties fetched on demand.
+4. **Columns in whitelist order** and a decoded-matrix digest instead of container byte identity.
+
+Not worth building: shipped models beyond the vocabulary, cell-type or latent side information, exon↔intron joint
+coding, per-chunk codec orchestration, recursive second passes.
+
+## 10. Remaining work, in priority order
+
+1. Write the fast decoder for a sort-free layout: port Track B's 32-lane rANS to E2's ascending-order streams, or add
+   frequency-class order to b_rans16, and measure on an idle machine against the 200 Mnnz/s target.
+2. Build the combined codec (container v2 plus b_rans16 payload plus ambient empties) and measure whole files and the
+   bundle, replacing the projections in §0 with one measured number.
+3. A clumped (Dirichlet-multinomial) count model, worth up to 0.5 bits/nnz on degenerate libraries and a few percent on
+   empties (Track D, E1).
+4. E5: junction counts given gene counts; heteroplasmy as integer pairs once a non-empty sample exists; ATAC.
+5. Re-run the second-pass recursion table over the final codecs (Track D's last step).
+
+## 11. Generalisation to other single-cell omics
+
+The decomposition is generic. Any sparse count matrix produced by sampling molecules has a sampling floor, a state
+term bounded by (k/2)·log2 N per cell, and redundancy on top. For ATAC (1-2 reads per open peak) the state term is
+smaller still, and per-peak × depth adaptive coding should be near-optimal. Junction counts are a subsample of gene
+UMIs and should be coded given gene counts. PSI and any ratio of integers is derived. Dense deep modalities (ADT) move
+the cost from presence to count values. For all of them the same three policy levers dominate: reference vocabulary,
+derivation, layout.
+
+## 12. Data-quality issues found along the way (outside this study's scope)
+
+- The shipped `splice_psi.1pz` files hold only 0 or 1 (PSI rounded to nearest), while the in-tree writer truncates.
+  The two disagree on 0.45-3.0% of entries, and readers who treat PSI as a fraction get a binary indicator (E4).
+- `cell_calls.tsv` never carries an EmptyDrops result: 21/21 samples are star_solo calls with a p-value sentinel of 0.
+- `compute_psi()`'s comment says donor events take priority, but the code takes the first event in sorted order
+  (1 of 9,293 junctions differs in GSM4317429).
+- The production reader spends most of its time sorting columns and parsing names, not decompressing.
+
+## 13. Document index
+
+| document | contents |
+|---|---|
+| `../PLAN.md` | study design, ground rules, corpus |
+| `brainstorm_fable.md` | the original six ideas and hypotheses H1-H4 |
+| `theory_fable.md` | derivations: decomposition, bounds, floor argument, block-adaptation regret, evidence log |
+| `frontier_fable.md` | this synthesis |
+| `track_a.md` … `track_d.md`, `idea1.md` … `idea4.md`, `idea4_pp.md`, `w3_coexp.md` | per-experiment results (original session) |
+| `e1.md`, `e2.md`, `e4.md` | per-experiment results (this session) |
+| `../plans/E1` … `E5` | investigation plans with context |
+| `../results/*.tsv` | every number above |

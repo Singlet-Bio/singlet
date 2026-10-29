@@ -1,0 +1,483 @@
+{
+ "run_a": "/mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_cc/GSM4006843/t4_r1",
+ "run_b": "/mnt/projects/debruinz_project/debruinz/singlet/bam-stream/runs_cc/GSM4006843/t4_r2",
+ "n_called": {
+  "a": 13043,
+  "b": 13098
+ },
+ "groups": {
+  "both": 13020,
+  "a_only": 23,
+  "b_only": 78
+ },
+ "knee_umi_min": {
+  "a": 984,
+  "b": 984
+ },
+ "frac_reads_in_cells": {
+  "a": 0.82772,
+  "b": 0.82819
+ },
+ "ambient_cosine_empty_reference": {
+  "p5": 0.3694,
+  "p25": 0.4433,
+  "p50": 0.4908,
+  "p75": 0.5365,
+  "p95": 0.5994,
+  "n": 2000,
+  "mean": 0.4879
+ },
+ "per_group": {
+  "both": {
+   "umi": {
+    "p5": 306.0,
+    "p25": 1642.0,
+    "p50": 3177.0,
+    "p75": 4373.0,
+    "p95": 6881.15,
+    "n": 13020,
+    "mean": 3257.8156
+   },
+   "genes": {
+    "p5": 243.0,
+    "p25": 944.0,
+    "p50": 1557.0,
+    "p75": 1964.0,
+    "p95": 2693.1,
+    "n": 13020,
+    "mean": 1496.239
+   },
+   "pct_mt": {
+    "p5": 0.3311,
+    "p25": 2.722,
+    "p50": 3.4171,
+    "p75": 4.2054,
+    "p95": 11.7872,
+    "n": 13020,
+    "mean": 4.1885
+   },
+   "doublet_score": {
+    "p5": 0.0039,
+    "p25": 0.0289,
+    "p50": 0.0799,
+    "p75": 0.1255,
+    "p95": 0.2362,
+    "n": 13020,
+    "mean": 0.0907
+   },
+   "doublet_frac": 0.0721,
+   "fdr": {
+    "p5": 0.0,
+    "p25": 0.0,
+    "p50": 0.0,
+    "p75": 0.0,
+    "p95": 0.0002,
+    "n": 2458,
+    "mean": 0.0
+   },
+   "fdr_na_frac": 0.8112,
+   "call_method": {
+    "called_v2": 13020
+   },
+   "ambient_cosine": {
+    "p5": 0.35,
+    "p25": 0.7851,
+    "p50": 0.8541,
+    "p75": 0.884,
+    "p95": 0.9122,
+    "n": 13020,
+    "mean": 0.7915
+   },
+   "singlet_demux_prob_max": {
+    "p5": 1.0,
+    "p25": 1.0,
+    "p50": 1.0,
+    "p75": 1.0,
+    "p95": 1.0,
+    "n": 13020,
+    "mean": 1.0
+   },
+   "singlet_demux_status": {
+    "cell": 13020
+   }
+  },
+  "a_only": {
+   "umi": {
+    "p5": 141.3,
+    "p25": 352.5,
+    "p50": 368.0,
+    "p75": 384.5,
+    "p95": 589.2,
+    "n": 23,
+    "mean": 367.3043
+   },
+   "genes": {
+    "p5": 115.3,
+    "p25": 264.0,
+    "p50": 279.0,
+    "p75": 295.5,
+    "p95": 389.6,
+    "n": 23,
+    "mean": 273.3043
+   },
+   "pct_mt": {
+    "p5": 0.0,
+    "p25": 0.1244,
+    "p50": 0.8333,
+    "p75": 2.2387,
+    "p95": 12.2295,
+    "n": 23,
+    "mean": 3.7549
+   },
+   "doublet_score": {
+    "p5": 0.0019,
+    "p25": 0.0027,
+    "p50": 0.0041,
+    "p75": 0.0055,
+    "p95": 0.0069,
+    "n": 23,
+    "mean": 0.0043
+   },
+   "doublet_frac": 0.0,
+   "fdr": {
+    "p5": 0.0001,
+    "p25": 0.0001,
+    "p50": 0.0002,
+    "p75": 0.0006,
+    "p95": 0.0009,
+    "n": 23,
+    "mean": 0.0004
+   },
+   "fdr_na_frac": 0.0,
+   "call_method": {
+    "called_v2": 23
+   },
+   "ambient_cosine": {
+    "p5": 0.395,
+    "p25": 0.5964,
+    "p50": 0.6345,
+    "p75": 0.6722,
+    "p95": 0.7144,
+    "n": 23,
+    "mean": 0.6052
+   },
+   "umi_in_other_run": {
+    "p5": 141.3,
+    "p25": 352.5,
+    "p50": 368.0,
+    "p75": 384.5,
+    "p95": 589.2,
+    "n": 23,
+    "mean": 367.3043
+   },
+   "singlet_demux_prob_max": {
+    "p5": 1.0,
+    "p25": 1.0,
+    "p50": 1.0,
+    "p75": 1.0,
+    "p95": 1.0,
+    "n": 23,
+    "mean": 1.0
+   },
+   "singlet_demux_status": {
+    "cell": 23
+   }
+  },
+  "b_only": {
+   "umi": {
+    "p5": 156.55,
+    "p25": 212.75,
+    "p50": 268.0,
+    "p75": 427.75,
+    "p95": 498.3,
+    "n": 78,
+    "mean": 301.8462
+   },
+   "genes": {
+    "p5": 132.85,
+    "p25": 170.25,
+    "p50": 217.0,
+    "p75": 311.25,
+    "p95": 352.35,
+    "n": 78,
+    "mean": 233.2692
+   },
+   "pct_mt": {
+    "p5": 0.0,
+    "p25": 0.0472,
+    "p50": 0.7784,
+    "p75": 1.9289,
+    "p95": 25.2698,
+    "n": 78,
+    "mean": 3.6802
+   },
+   "doublet_score": {
+    "p5": 0.0012,
+    "p25": 0.0019,
+    "p50": 0.0037,
+    "p75": 0.0048,
+    "p95": 0.0085,
+    "n": 78,
+    "mean": 0.0039
+   },
+   "doublet_frac": 0.0,
+   "fdr": {
+    "p5": 0.0002,
+    "p25": 0.0003,
+    "p50": 0.0005,
+    "p75": 0.0007,
+    "p95": 0.0009,
+    "n": 78,
+    "mean": 0.0005
+   },
+   "fdr_na_frac": 0.0,
+   "call_method": {
+    "called_v2": 78
+   },
+   "ambient_cosine": {
+    "p5": 0.2861,
+    "p25": 0.5276,
+    "p50": 0.6135,
+    "p75": 0.6739,
+    "p95": 0.7501,
+    "n": 78,
+    "mean": 0.586
+   },
+   "umi_in_other_run": {
+    "p5": 156.55,
+    "p25": 212.75,
+    "p50": 268.0,
+    "p75": 427.75,
+    "p95": 498.3,
+    "n": 78,
+    "mean": 301.8462
+   },
+   "singlet_demux_prob_max": {
+    "p5": 1.0,
+    "p25": 1.0,
+    "p50": 1.0,
+    "p75": 1.0,
+    "p95": 1.0,
+    "n": 78,
+    "mean": 1.0
+   },
+   "singlet_demux_status": {
+    "cell": 78
+   }
+  }
+ },
+ "high_quality_bars": {
+  "knee_umi_min_b": {
+   "bar_umi": 984,
+   "n_above_in_either": 10890,
+   "called_by_both": 10870,
+   "called_a_only": 0,
+   "called_b_only": 0,
+   "called_by_neither": 20
+  },
+  "umi_1000": {
+   "bar_umi": 1000,
+   "n_above_in_either": 10848,
+   "called_by_both": 10845,
+   "called_a_only": 0,
+   "called_b_only": 0,
+   "called_by_neither": 3
+  },
+  "p10_of_joint_cells": {
+   "bar_umi": 531,
+   "n_above_in_either": 12548,
+   "called_by_both": 11719,
+   "called_a_only": 2,
+   "called_b_only": 2,
+   "called_by_neither": 825
+  }
+ },
+ "celltype_confidence": {
+  "both": {
+   "p5": 0.0248,
+   "p25": 0.338,
+   "p50": 0.9654,
+   "p75": 0.9998,
+   "p95": 1.0,
+   "n": 13020,
+   "mean": 0.7059
+  },
+  "a_only": {
+   "p5": 0.0126,
+   "p25": 0.0396,
+   "p50": 0.1754,
+   "p75": 0.3614,
+   "p95": 0.6597,
+   "n": 23,
+   "mean": 0.2358
+  },
+  "b_only": {
+   "p5": 0.0225,
+   "p25": 0.0643,
+   "p50": 0.2061,
+   "p75": 0.397,
+   "p95": 0.7488,
+   "n": 78,
+   "mean": 0.2682
+  }
+ },
+ "celltype_by_group": {
+  "both": {
+   "Endothelial cells": 9495,
+   "Macrophages": 2025,
+   "T cells": 523,
+   "ILC": 361,
+   "B cells": 185,
+   "DC": 109,
+   "Myelocytes": 73,
+   "Plasma cells": 68,
+   "Erythroid": 51,
+   "Double-positive thymocytes": 50,
+   "Monocytes": 49,
+   "Fibroblasts": 15
+  },
+  "a_only": {
+   "ILC": 5,
+   "Macrophages": 5,
+   "T cells": 5,
+   "Double-positive thymocytes": 2,
+   "B cells": 2,
+   "Endothelial cells": 1,
+   "Plasma cells": 1,
+   "Myelocytes": 1,
+   "DC": 1
+  },
+  "b_only": {
+   "Macrophages": 21,
+   "T cells": 18,
+   "ILC": 12,
+   "B cells": 10,
+   "Endothelial cells": 6,
+   "Double-positive thymocytes": 3,
+   "Myelocytes": 3,
+   "Erythroid": 2,
+   "Plasma cells": 2,
+   "DC": 1
+  }
+ },
+ "downstream_hq": {
+  "bar_umi": 984,
+  "n_hq": {
+   "a": 10870,
+   "b": 10870
+  },
+  "per_type": {
+   "a": {
+    "Endothelial cells": 9035,
+    "Macrophages": 1407,
+    "ILC": 176,
+    "T cells": 97,
+    "DC": 52,
+    "B cells": 30,
+    "Monocytes": 30,
+    "Erythroid": 20,
+    "Double-positive thymocytes": 13,
+    "Fibroblasts": 3,
+    "Plasma cells": 3,
+    "Cycling cells": 1,
+    "Double-negative thymocytes": 1,
+    "HSC/MPP": 1,
+    "Mono-mac": 1
+   },
+   "b": {
+    "Endothelial cells": 9035,
+    "Macrophages": 1407,
+    "ILC": 176,
+    "T cells": 97,
+    "DC": 52,
+    "B cells": 30,
+    "Monocytes": 30,
+    "Erythroid": 20,
+    "Double-positive thymocytes": 13,
+    "Fibroblasts": 3,
+    "Plasma cells": 3,
+    "Cycling cells": 1,
+    "Double-negative thymocytes": 1,
+    "HSC/MPP": 1,
+    "Mono-mac": 1
+   }
+  },
+  "pseudobulk": {
+   "B cells": {
+    "n_a": 30,
+    "n_b": 30,
+    "pearson_log_cpm": 1.0
+   },
+   "Cycling cells": {
+    "n_a": 1,
+    "n_b": 1,
+    "pearson_log_cpm": 1.0
+   },
+   "DC": {
+    "n_a": 52,
+    "n_b": 52,
+    "pearson_log_cpm": 1.0
+   },
+   "Double-negative thymocytes": {
+    "n_a": 1,
+    "n_b": 1,
+    "pearson_log_cpm": 1.0
+   },
+   "Double-positive thymocytes": {
+    "n_a": 13,
+    "n_b": 13,
+    "pearson_log_cpm": 1.0
+   },
+   "Endothelial cells": {
+    "n_a": 9035,
+    "n_b": 9035,
+    "pearson_log_cpm": 1.0
+   },
+   "Erythroid": {
+    "n_a": 20,
+    "n_b": 20,
+    "pearson_log_cpm": 1.0
+   },
+   "Fibroblasts": {
+    "n_a": 3,
+    "n_b": 3,
+    "pearson_log_cpm": 1.0
+   },
+   "HSC/MPP": {
+    "n_a": 1,
+    "n_b": 1,
+    "pearson_log_cpm": 1.0
+   },
+   "ILC": {
+    "n_a": 176,
+    "n_b": 176,
+    "pearson_log_cpm": 1.0
+   },
+   "Macrophages": {
+    "n_a": 1407,
+    "n_b": 1407,
+    "pearson_log_cpm": 1.0
+   },
+   "Mono-mac": {
+    "n_a": 1,
+    "n_b": 1,
+    "pearson_log_cpm": 1.0
+   },
+   "Monocytes": {
+    "n_a": 30,
+    "n_b": 30,
+    "pearson_log_cpm": 1.0
+   },
+   "Plasma cells": {
+    "n_a": 3,
+    "n_b": 3,
+    "pearson_log_cpm": 1.0
+   },
+   "T cells": {
+    "n_a": 97,
+    "n_b": 97,
+    "pearson_log_cpm": 1.0
+   }
+  }
+ }
+}

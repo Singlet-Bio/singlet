@@ -147,7 +147,7 @@ class TestDownload:
         import json
         import zipfile
 
-        from singlet._loader import download
+        from singlet._loader import _download_legacy as download
 
         dest = tmp_path / "GSE001.singlet"
         member = b"{}"
@@ -191,7 +191,7 @@ class TestDownload:
                 return data
 
         with patch.object(_loader.urllib.request, "urlopen", return_value=_FakeResp()):
-            result = _loader.download("GSE001", output_dir=tmp_path, force=True)
+            result = _loader._download_legacy("GSE001", output_dir=tmp_path, force=True)
 
         assert result == dest
         assert dest.read_bytes() == new
@@ -205,7 +205,7 @@ class TestDownload:
         err = urllib.error.HTTPError("url", 404, "Not Found", {}, None)
         with patch.object(_loader.urllib.request, "urlopen", side_effect=err):
             with pytest.raises(FileNotFoundError, match="not found"):
-                _loader.download("GSE999", output_dir=tmp_path, force=True)
+                _loader._download_legacy("GSE999", output_dir=tmp_path, force=True)
 
     def test_500_raises_runtime_error(self, tmp_path):
         """Non-404 HTTP errors give RuntimeError with context."""
@@ -216,7 +216,7 @@ class TestDownload:
         err = urllib.error.HTTPError("url", 500, "Server Error", {}, None)
         with patch.object(_loader.urllib.request, "urlopen", side_effect=err):
             with pytest.raises(RuntimeError, match="Failed to download"):
-                _loader.download("GSE999", output_dir=tmp_path, force=True)
+                _loader._download_legacy("GSE999", output_dir=tmp_path, force=True)
 
 
 class TestLoad:
@@ -423,9 +423,9 @@ class TestLoadSample:
         fake_bundle = MagicMock()
         fake_bundle.to_anndata.return_value = expected
 
-        with patch("singlet._loader.download", return_value=bundle_path):
+        with patch("singlet._loader._download_legacy", return_value=bundle_path):
             with patch("singlet.bundle.SingletBundle.open", return_value=fake_bundle):
-                loaded = load("GSE999")
+                loaded = load("GSE999", legacy=True)
 
         assert loaded.shape == (3, 4)
 
@@ -551,6 +551,20 @@ def test_load_directory_gives_helpful_error(tmp_path):
         singlet.load(str(tmp_path))
 
 
+def _gene_lookup_warnings(records):
+    """The warnings singlet raises for unmatched genes, out of everything recorded.
+
+    Under ``simplefilter("always")`` the h5ad read also records third-party deprecation warnings (pandas 3.1
+    deprecates the ``future.infer_string`` and ``mode.chained_assignment`` options that anndata still reads), so
+    a test of singlet's own warning must not count every warning.
+    """
+    return [
+        r
+        for r in records
+        if issubclass(r.category, UserWarning) and "requested genes" in str(r.message)
+    ]
+
+
 def test_load_genes_warns_on_missing(tmp_path):
     """load() warns when some requested genes are not found."""
     import warnings
@@ -567,8 +581,9 @@ def test_load_genes_warns_on_missing(tmp_path):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         result = singlet.load(str(path), genes=["TP53", "TYPO_GENE"])
-        assert len(w) == 1
-        assert "TYPO_GENE" in str(w[0].message)
+    ours = _gene_lookup_warnings(w)
+    assert len(ours) == 1
+    assert "TYPO_GENE" in str(ours[0].message)
     assert result.shape == (3, 1)  # only TP53 found
 
 
@@ -588,6 +603,7 @@ def test_load_genes_warns_all_missing(tmp_path):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         result = singlet.load(str(path), genes=["FAKE1", "FAKE2"])
-        assert len(w) == 1
-        assert "None of the" in str(w[0].message)
+    ours = _gene_lookup_warnings(w)
+    assert len(ours) == 1
+    assert "None of the" in str(ours[0].message)
     assert result.shape[1] == 0
