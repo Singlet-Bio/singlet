@@ -860,6 +860,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         }
         if (amb_keys.size() == exon_csc.ncols) amb_cfg.barcode_keys = &amb_keys;
         amb_cfg.kmeans_restarts = 10;
+        amb_cfg.ensemble = 32;   // R10c: smallest M with per-cell rho >= 0.99 stream vs sorted and under a 1% read drop
         amb_cfg.threads = export_cfg.threads > 1 ? static_cast<uint32_t>(export_cfg.threads) : 0u;
         // Exon and intron gene counts enter as separate features (the soup is exon-rich, cells are 20-30% intronic);
         // contamination is estimated from the exon features, the correction acts on both and is folded back to genes.
