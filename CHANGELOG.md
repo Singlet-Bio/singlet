@@ -4,6 +4,9 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+- **`S1Stream` over HTTP accepts a range answered with status 200** when the response carries a `Content-Range` naming
+  exactly the requested slice (`rclone serve s3` answers this way). A server that ignores `Range` and sends the whole
+  object is still rejected.
 - **Your own counts as `.s1`** ([docs/s1-own-data.md](docs/s1-own-data.md)).
   - `singlet.write_s1(x, path, ...)` (AnnData, scipy sparse or dense, cells x genes) and `singlet::write_s1(x, path, ...)`
     (dgCMatrix, matrix, SingleCellExperiment or Seurat, genes x cells) store an integer count matrix with its gene ids
