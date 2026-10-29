@@ -85,6 +85,14 @@ Rule: each read's hits become a vector of (species id, hit rate) sorted by speci
 
 Why: an EM over a fixed set of reads has one answer; summing in a fixed order makes the floating-point result reproducible without changing the model. Sorting by content needs no read names and costs one sort of the non-host reads (a small fraction of a sample). A hash sample above the cap is uniform over reads, where "first 20 M" is biased toward whatever STAR emitted first.
 
+## R9. UMI error correction for junction, V(D)J and SNP evidence
+
+Today: exon and intron molecules are collapsed with a directional 1-mismatch rule (`DirectionalUmiStore`, Smith et al. 2017), but splice junctions, V(D)J gene usage and SNP evidence are deduplicated on the exact UMI. The sorted path read STAR's `UB` tag, which STARsolo writes into a coordinate-sorted BAM with its own 1-mismatch correction; the stream has only the raw `UR`. So the same alignments gave different counts by path: on GSM7901264 (5') the stream counted +3.4% junction molecules, +6.8% V(D)J and +1.1% SNP depth, all at highly expressed features (cell CGATGTAAGGTGCTAG x RPL10 junction chrX:154400626-154400701: 271 raw UMIs, 243 after STAR's correction).
+
+Rule: for each (barcode, feature) group, where the feature is a junction, a V(D)J gene or a panel SNP, keep the read count of every exact UMI during the pass and collapse at finalize with the same directional rule as exon/intron: UMIs sorted by read count descending, then packed UMI ascending; UMI *i* absorbs UMI *j* (j after i) when they differ at exactly one base and count_i >= 2 count_j - 1; each connected component is one molecule. A junction or V(D)J group emits its number of molecules. For SNPs the REF/ALT/other read counts are summed over each component and R1's majority vote runs on the merged molecule. Reads without a UMI stay one molecule each; UMIs over 21 bases are deduplicated exactly. `UB` is never read: both paths use the raw UMI and the same rule, so the counts do not depend on whether STAR sorted the BAM.
+
+Why: a UMI with one sequencing or PCR error is the same template, and counting it again inflates exactly the deepest features (where errors accumulate), which biases junction usage, clonotype abundance and allelic depth. One rule for every molecule-level output keeps them consistent with the gene counts, and doing it ourselves rather than relying on STAR's tag makes it order-free, path-independent and documented. The directional rule (rather than STAR's 1MM_All) is the one the exon/intron counts already use; agreement with STAR's `UB`-based counts is measured, not assumed.
+
 ## Gates
 
 1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, including the non-host tables (`nonhost/*`), except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings) and fields that hold paths or the sizes of those files.
@@ -105,4 +113,5 @@ Why: an EM over a fixed set of reads has one answer; summing in a fixed order ma
 | R7 canonical order | junctions done, `8ab560d`, both paths; multimapper exon `8699980`; other discovery axes still to check against the gates | to implement (match the multimapper exon rule) |
 | thread/rerun gate | met for every output including `nonhost/*` on `f4a1e95`, 3' and 5' (4 vs 16 threads, rerun) | — |
 | R8 non-host EM | done, `f4a1e95` (canonical input order, hash sample above the cap) | match if the GPU runs the non-host EM |
+| R9 UMI correction (SJ, V(D)J, SNP) | in progress on `perf/bam-stream` | to implement (same rule) |
 | shuffled-order gate | run on `f4a1e95` (GSM4006843): 43 files identical across as-written / collate / coord replays, `exon_counts` not (21-25 multimapper molecules moved between exons of one gene; gene totals equal). Fixed in `8699980` (R7 multimapper exon); rerun pending | — |
