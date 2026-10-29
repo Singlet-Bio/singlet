@@ -427,34 +427,49 @@ barcode+gene based.
 
 ### 4.2 Quality encoding strategy
 
-Three tiers, selectable per-file:
+`qual_mode` in the header, chosen at download/encode (`--quality`):
 
-| Tier | Bits/base | Storage | Variant calling | Expression |
-|---|---|---|---|---|
-| **None** | 0 | 0% overhead | Not supported | Full support |
-| **Binned-4** (default) | 2 | ~6% overhead | Good (>95% concordance) | Full support |
-| **Full Phred** | 6 | ~18% overhead | Exact | Full support |
+| Mode | `--quality` | Bits/base | Notes |
+|---|---|---|---|
+| NONE (0) | `none` | 0 | decoded as constant `F` (Q37); the `singlet download` default until 2026-10 |
+| BINNED4 (1) | `binned-legacy` | 2 | decades, decoded 6 / 15 / 25 / 37; still read, no longer written by default |
+| FULL (2) | `full` | 8 | raw Phred |
+| BINNED2 (3) | `binned2` | 1 | pass/fail at Q20 |
+| **ILLUMINA4 (4)** | `binned` (default) | 2 | decades, decoded **2 / 12 / 23 / 37** (section 4.3) |
 
-**Binned-4 is the default** — it preserves enough quality information for
-variant calling while adding minimal storage overhead.
+The decoder writes the R2 quality into the records STAR reads (FASTQ or the in-process read source); R1 (barcode + UMI)
+has no stored quality and is written as `F`. STAR's adapter clip and the pileup's SNP and mtDNA counts
+(`--min-baseq`, default 10) use the R2 quality.
 
-### 4.3 Binned-4 quality scheme
+### 4.3 ILLUMINA4 bins (from the data)
 
-Map Phred 0–41 to 4 bins:
+| Bin | Phred range | Decoded Phred |
+|---|---|---|
+| 0 | 0–9 | 2 |
+| 1 | 10–19 | 12 |
+| 2 | 20–29 | 23 |
+| 3 | ≥ 30 | 37 |
 
-| Bin | Phred range | Encoded value | Decoded Phred | Meaning |
-|---|---|---|---|---|
-| 0 | 0–9 | 00 | 6 | Low quality (below min_baseq=10) |
-| 1 | 10–19 | 01 | 15 | Marginal quality |
-| 2 | 20–29 | 10 | 25 | Good quality |
-| 3 | 30–41 | 11 | 37 | High quality |
+- The decoded values are the four NovaSeq / NextSeq 2000 (RTA3) write, so those instruments' qualities round-trip exactly.
+- The bounds are decades, so any Q10 / Q20 / Q30 cut keeps or drops exactly the bases it would on the original
+  qualities, whatever the instrument's own binning (4-level, 7-level, 8-level or full range).
+- Checked on the R2 Phred histograms of the first 5 M spots of 7 atlas runs (`bench/fq_read_source/qual_hist.sbatch`,
+  job 792288). The error-weighted mean Phred inside each bin, -10 log10(mean error), is 2–7 / 11–16 / 22–27 / 34–39,
+  so each decoded value is within the spread of what the bin holds:
 
-**The critical threshold is preserved**: bin 0 (Phred <10) vs bins 1–3
-(Phred ≥10). This is exactly the `min_baseq=10` filter used by singlify's
-SNP pileup. Binned-4 quality has >95% concordance with full-quality
-variant calls because the dominant signal is "low vs not-low."
+| Run | R2 nt | Phred levels in SRA | Bases per bin (%) | Error-weighted Q per bin | .1fq size, binned vs none | full vs none |
+|---|---|---|---|---|---|---|
+| SRR9900123 (GSM4006843) | 95 | 22 | 0.0 / 10.0 / 5.9 / 84.1 | 2 / 15.6 / 27.0 / 36.8 | +39.8% | +191% |
+| SRR14999752 (GSM5411066) | 91 | 4 | 0.0 / 2.2 / 3.5 / 94.3 | 2 / 11 / 25 / 37 | +29.9% | +36% |
+| SRR21102187 (GSM6470208) | 90 | 4 | 0.0 / 5.8 / 4.4 / 89.8 | 2 / 12 / 26 / 34 | +51.0% | +66% |
+| SRR23353990 (GSM7036403) | 98 | 7 | 0.0 / 2.5 / 3.4 / 94.1 | 2 / 12 / 24.1 / 39.1 | +29.5% | +104% |
+| SRR25376447 (GSM7656149) | 91 | 36 | 1.7 / 4.6 / 10.7 / 83.0 | 6.7 / 14.1 / 24.3 / 35.6 | +48.7% | +190% |
+| SRR25751252 (GSM6250705) | 55 | 7 | 0.0 / 4.5 / 1.6 / 93.9 | 2 / 14 / 22.4 / 35.1 | +42.2% | +97% |
+| SRR26840957 (GSM7901264) | 98 | 6 | 0.1 / 8.9 / 2.5 / 88.5 | 2 / 14 / 23.5 / 35.3 | +38.7% | +84% |
 
-At decode time, each 2-bit quality value maps to the bin center Phred value.
+The size cost is real: binned R2 quality adds 30–51% (median 40%) to a `.1fq`, close to the entropy of the bin sequence
+(most bases are in bin 3, the rest scattered). The `.1fq` is transient (deleted after processing), so this is
+scratch disk and I/O during a run, not archive. FULL costs 36–191%.
 
 ### 4.4 Quality column layout in blocks
 
@@ -467,10 +482,8 @@ For the R2/cDNA segment (where variant calls happen):
 For R1 barcode+UMI: quality is not stored (barcodes use whitelist matching,
 not quality-based error correction in our pipeline).
 
-Storage overhead for 100bp R2, binned quality:
-- 100 bases × 2 bits = 25 bytes/read
-- vs 100 bases × 8 bits = 100 bytes/read (ASCII Phred in FASTQ)
-- 4× smaller than raw quality, ~6% of total .1fq file size
+Storage for 100bp R2, binned quality: 100 bases × 2 bits = 25 bytes/read before zstd (vs 100 bytes of ASCII Phred in
+FASTQ); after zstd, +30–51% of the `.1fq` (measured, section 4.3).
 
 ---
 
