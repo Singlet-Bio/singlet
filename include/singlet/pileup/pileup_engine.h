@@ -466,6 +466,8 @@ public:
             mt_acc_.set_n_features(mt::MT_N_FEATURES);
             mt_acc_rev_.set_barcodes(barcodes_);
             mt_acc_rev_.set_n_features(mt::MT_N_FEATURES);
+            mt_acc_.set_compact_limit(kMtCompactTriplets);
+            mt_acc_rev_.set_compact_limit(kMtCompactTriplets);
         }
 
         // N18: Initialize CRISPR guide accumulator
@@ -1266,6 +1268,8 @@ public:
                 wc.mt.set_n_features(mt::MT_N_FEATURES);
                 wc.mt_rev.set_barcodes(barcodes_);
                 wc.mt_rev.set_n_features(mt::MT_N_FEATURES);
+                wc.mt.set_compact_limit(kMtCompactTriplets);
+                wc.mt_rev.set_compact_limit(kMtCompactTriplets);
             }
             // N18: CRISPR guide worker init
             if (!guide_ref_.empty()) {
@@ -1917,6 +1921,9 @@ private:
     SparseAccumulator<uint16_t> exon_acc_;
     SparseAccumulator<uint16_t> intron_acc_;
     SparseAccumulator<uint16_t> sj_acc_;
+    // chrM keeps one triplet per aligned base; fold duplicates once this many are held
+    // (memory then follows distinct (position x base, barcode), not chrM reads).
+    static constexpr size_t kMtCompactTriplets = size_t(16) << 20;
     SparseAccumulator<uint16_t> mt_acc_;   // chrM allele counts: feat = pos*4 + base
     SparseAccumulator<uint16_t> mt_acc_rev_;  // chrM reverse-strand allele counts (same layout)
     std::vector<mt::MtIndelEvent> mt_indels_;  // chrM indels captured during CIGAR walk

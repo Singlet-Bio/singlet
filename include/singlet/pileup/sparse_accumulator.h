@@ -18,6 +18,7 @@
 #include <cstring>
 #include <limits>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -46,6 +47,18 @@ public:
         rows_.push_back(feature_idx);
         cols_.push_back(barcode_idx);
         vals_.push_back(delta);
+        if (rows_.size() >= compact_at_) compact_();
+    }
+
+    // Bound memory for accumulators that take one triplet per aligned base (chrM).
+    // Once `limit` raw triplets are held, duplicates of (feature, barcode) are summed
+    // in place, so memory follows the distinct (feature, barcode) pairs instead of the
+    // reads. Sums saturate at ValT's maximum exactly as to_csc() does, and
+    // clamp(clamp(a) + b) == clamp(a + b) for non-negative counts, so to_csc() is
+    // identical with and without compaction. 0 turns it off.
+    void set_compact_limit(size_t limit) {
+        compact_limit_ = limit;
+        compact_at_ = limit ? limit : std::numeric_limits<size_t>::max();
     }
 
     // Return number of accumulated entries (before dedup)
@@ -181,9 +194,60 @@ public:
         // Update n_features if other had more
         if (other.n_features_ > n_features_) n_features_ = other.n_features_;
         other.clear();
+        if (rows_.size() >= compact_at_) compact_();
     }
 
 private:
+    // Sum duplicate (feature, barcode) triplets; leaves them grouped by barcode, then
+    // feature. The next compaction waits until the buffer has doubled so a mostly
+    // distinct buffer is not re-sorted on every increment.
+    void compact_() {
+        const size_t n = rows_.size();
+        std::vector<size_t> start(static_cast<size_t>(n_barcodes_) + 1, 0);
+        for (size_t i = 0; i < n; ++i) start[cols_[i] + 1]++;
+        for (uint32_t c = 0; c < n_barcodes_; ++c) start[c + 1] += start[c];
+        std::vector<size_t> pos(start.begin(), start.end() - 1);
+        std::vector<uint32_t> g_rows(n);
+        std::vector<ValT> g_vals(n);
+        for (size_t i = 0; i < n; ++i) {
+            size_t s = pos[cols_[i]]++;
+            g_rows[s] = rows_[i];
+            g_vals[s] = vals_[i];
+        }
+        std::vector<uint32_t>().swap(rows_);
+        std::vector<uint32_t>().swap(cols_);
+        std::vector<ValT>().swap(vals_);
+
+        using AccT = std::conditional_t<std::is_integral_v<ValT>, uint32_t, double>;
+        std::vector<AccT> acc(n_features_, AccT(0));
+        std::vector<uint8_t> seen(n_features_, 0);
+        std::vector<uint32_t> active;
+        for (uint32_t c = 0; c < n_barcodes_; ++c) {
+            active.clear();
+            for (size_t i = start[c]; i < start[c + 1]; ++i) {
+                const uint32_t r = g_rows[i];
+                if (!seen[r]) { seen[r] = 1; active.push_back(r); }
+                acc[r] += static_cast<AccT>(g_vals[i]);
+            }
+            std::sort(active.begin(), active.end());
+            for (uint32_t r : active) {
+                rows_.push_back(r);
+                cols_.push_back(c);
+                if constexpr (std::is_integral_v<ValT>)
+                    vals_.push_back(static_cast<ValT>(std::min(
+                        static_cast<uint32_t>(acc[r]),
+                        static_cast<uint32_t>(std::numeric_limits<ValT>::max()))));
+                else
+                    vals_.push_back(static_cast<ValT>(acc[r]));
+                acc[r] = AccT(0);
+                seen[r] = 0;
+            }
+        }
+        compact_at_ = std::max(compact_limit_, rows_.size() * 2);
+    }
+
+    size_t compact_limit_ = 0;
+    size_t compact_at_ = std::numeric_limits<size_t>::max();
     uint32_t n_barcodes_ = 0;
     uint32_t n_features_ = 0;
 
