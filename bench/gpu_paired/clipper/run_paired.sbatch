@@ -12,7 +12,7 @@
 # STAR and the kernel, and the comparison. Code arrives by git (BRANCH, fetched by URL into a private ref); the harness is built with the CUDA
 # image's gcc 11 (-ccbin /usr/bin/g++), never the conda compiler. Scratch is node-local /tmp and removed on exit. Results: $RES.
 set -euo pipefail
-STEP=${STEP:-unit}; N=${N:-200000}
+STEP=${STEP:-unit}; N=${N:-200000}; MODE=${MODE:-atac}   # MODE=spliced: STAR defaults (no intron/mate-gap limit), kernel --mode spliced
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
 BARE=$W/repos/singlet-py.git; BR=${BRANCH:-claude/gpu-paired-prep-f54059}
 GDIR=${GDIR:-$W/data/w11/GRCh38-2024-A-nosjdb}
@@ -38,15 +38,16 @@ wc -l $SCR/r1.fq $SCR/r2.fq; head -2 $SCR/r1.fq; head -2 $SCR/r2.fq
 head -1 $SCR/r1.fq | cut -d' ' -f1 > $RES/first_names.txt; head -1 $SCR/r2.fq | cut -d' ' -f1 >> $RES/first_names.txt
 # STAR on the same pairs (conda STAR 2.7.11b), ATAC parameters; times itself
 cd $SCR
+STARX="--alignIntronMax 1 --alignMatesGapMax 2000"; [ "$MODE" = spliced ] && STARX=""
 env LD_LIBRARY_PATH=$ENV/lib timeout 40m $ENV/bin/STAR --runThreadN 28 --genomeDir $GDIR --readFilesIn r1.fq r2.fq --outSAMtype SAM \
-  --outSAMunmapped Within --outSAMattributes NH HI AS nM --outSAMmultNmax -1 --outSAMorder PairedKeepInputOrder --alignIntronMax 1 --alignMatesGapMax 2000 --outFileNamePrefix ref_ > $RES/star_stdout.txt 2>&1
+  --outSAMunmapped Within --outSAMattributes NH HI AS nM --outSAMmultNmax -1 --outSAMorder PairedKeepInputOrder \$STARX --outFileNamePrefix ref_ > $RES/star_stdout.txt 2>&1
 cp ref_Log.final.out $RES/; grep -E "Mapping speed|Number of input|Uniquely mapped reads n|multiple loci" ref_Log.final.out || true
 # kernel
 cd $SCR/src
-timeout 40m \$B/paired_microbench --genome $GDIR --r1 $SCR/r1.fq --r2 $SCR/r2.fq --n $N --mode atac --batch 4096 --repeat 3 \
+timeout 40m \$B/paired_microbench --genome $GDIR --r1 $SCR/r1.fq --r2 $SCR/r2.fq --n $N --mode $MODE --batch 4096 --repeat 3 \
   --out $SCR/kernel.tsv --dump $SCR/win.bin 2>&1 | tee $RES/kernel_stderr.txt
 timeout 30m env LD_LIBRARY_PATH=$ENV/lib $ENV/bin/python -I \$B/compare_star_sam.py $SCR/kernel.tsv $SCR/ref_Aligned.out.sam $GDIR --show 40 2>&1 | tee $RES/compare.txt
-timeout 60m env LD_LIBRARY_PATH=$ENV/lib $ENV/bin/python -P \$B/replay_model.py $GDIR $SCR/r1.fq $SCR/r2.fq $SCR/win.bin $SCR/kernel.tsv --mode atac 2>&1 | tee $RES/replay.txt || echo "replay_model exit \$?"
+timeout 60m env LD_LIBRARY_PATH=$ENV/lib $ENV/bin/python -P \$B/replay_model.py $GDIR $SCR/r1.fq $SCR/r2.fq $SCR/win.bin $SCR/kernel.tsv --mode $MODE 2>&1 | tee $RES/replay.txt || echo "replay_model exit \$?"
 gzip -c $SCR/kernel.tsv > $RES/kernel.tsv.gz
 EOS
 apptainer exec --nv -B $W -B $SCR $IMG bash $SCR/inner.sh

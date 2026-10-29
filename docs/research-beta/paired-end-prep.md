@@ -304,3 +304,70 @@ layout; clip counts).
 - The model finds seeds by brute force on a small genome; it never ran on a real genome. `replay_model.py` is its only
   real-genome use, and it takes seeding from the kernel.
 - sjdb seeds, `peOverlap`, `CellRanger4` clipping, chimeric detection and variation are outside the model and the kernel draft.
+
+## 9. First GPU run (W11, 2026-10-29, one H100 NVL on Clipper)
+
+Everything here was measured; sections 1 and 8 above describe the state before this run (they are left as written). Scripts:
+`bench/gpu_paired/clipper/{index_nosjdb,run_paired}.sbatch`. Results (logs, `compare.txt`, `replay.txt`, the kernel TSV) are under
+`$W/results/pe1d/<jobid>/` on Clipper.
+
+**Build and unit check (job 792263, short-gpu, 29 s).** `paired_microbench.cu` compiles with nvcc 12.4 (`-arch=sm_90`) with no source change
+when the host compiler is the CUDA image's gcc 11 (`CCBIN=/usr/bin/g++`, now an option of `build.sh`); the conda gcc 16 does not work.
+`--unit fixtures/cases.txt`: all 18 cases `host ok device ok` ("0 of 36 runs differ from the model"); host check 0/18 and clip 0/18.
+No CUDA-only bug showed in the unit cases.
+
+**Index (job 792264, short-bigmem, 24 cores, 11 min).** GRCh38-2024-A `genome.fa` (the engine's FASTA), STAR 2.7.11b (the pbench conda
+build), `--genomeSAindexNbases 14 --genomeSAsparseD 2 --genomeChrBinNbits 18`, no GTF, no sjdb files written. Kept at
+`$W/data/w11/GRCh38-2024-A-nosjdb` (16.9 GB; Genome 3,138,387,968 B, SA 12,151,627,405 B). The harness's sparse-SA path (D = 2) loaded it.
+
+**Data.** The first 200,000 pairs of `atac_pbmc_5k_nextgem`, lane L001, R1 and R3 (50 and 49 bp; both mates as plain FASTQ, in a job's
+`/tmp`, deleted afterwards). STAR: `--outSAMtype SAM --outSAMunmapped Within --outSAMattributes NH HI AS nM --outSAMmultNmax -1
+--outSAMorder PairedKeepInputOrder --alignIntronMax 1 --alignMatesGapMax 2000`, 28 threads. No clipping options on either side.
+
+**Smart-seq2: not run.** No paired Smart-seq2 FASTQ is on Clipper that I found (`$W/data/*` top-level directories, `scbasecount/samples`,
+`w11/GSM4006843`: the only single-cell RNA data there are 10x, which has no genomic mate 2). The sample under `w11` is a single-file
+`.1fq`. Fetching one from SRA was not attempted. As a substitute for exercising the `--mode spliced` code path (window geometry 16 / 4 / 9,
+no mate-gap limit, junction rules on) the same 200k ATAC pairs were run in spliced mode against STAR's default parameters. That is
+**not** a spliced-RNA test: genomic reads contain almost no junctions, so the junction rules (P10, P12, P13 junction check) are barely
+exercised. The number says the spliced geometry and the no-limit mate branch agree with STAR on DNA pairs, nothing more.
+
+| | ATAC mode (job 792330; same numbers in 792300 and 792329) | spliced mode on the same ATAC pairs (job 792336) |
+|---|---|---|
+| geometry printed | `winBinNbits 16 winAnchorDistNbins 2 winFlankNbins 1` (as the doc predicted) | `16 / 9 / 4` |
+| kernel status | ok 199,584; overflow (host lane) 416 (0.21%); blob full 0; unsupported 0 | ok 199,504; overflow 496 (0.25%) |
+| STAR unique pairs (kernel-finished) | 178,870 | 178,936 |
+| **identical on STAR-unique pairs** | **178,870 / 178,870 = 100.0000%** | **178,936 / 178,936 = 100.0000%** |
+| identical on all STAR-mapped pairs | 185,754 / 185,754 | 186,017 / 186,017 |
+| STAR unmapped and kernel unmapped | 13,830 | 13,487 |
+| differences of any class (NH, tie set, alignment set, primary, kernel-unmapped, kernel-mapped-vs-unmapped) | 0 | 0 |
+| `replay_model.py`, kernel windows through the model | 19,956 / 19,956 identical (44 skipped: host lane) | 19,951 / 19,951 (49 skipped) |
+| kernel throughput | 113,000 pairs/s on one H100 (5.29 s for 600,000 pair-passes, 3 passes, batch 4096) | 60,000 pairs/s |
+| STAR 2.7.11b, 28 threads | "Mapping speed" 120 Mreads/h = 33,000 pairs/s (6 s of mapping; genome load of about 20 s excluded) | same, 120 Mreads/h |
+
+How to read it:
+- The criterion is met on this sample, with the qualification that the 416 (496) host-lane pairs are not in it: they are handed to STAR
+  by construction. Counting every one of them as a miss, the identity over all 200,000 pairs of STAR's unique class cannot be below
+  178,870 / (178,870 + 416) = 99.77% (ATAC) and 178,936 / (178,936 + 496) = 99.72% (spliced). That bound is arithmetic, not a measurement
+  (STAR's class of those pairs was not looked up). Overflow is the lever for the 99.9% target as a pipeline figure.
+- Compared per pair and per mate: FLAG, chromosome, POS, the full CIGAR including soft clips (the N in the first base of mate 1 of the
+  first pair gives `1S49M` in the kernel and `50M` in STAR is **not** what happened: the comparison reports no difference, so both agree),
+  PNEXT, NH, the tie set and the primary. Not compared: TLEN, MAPQ, SEQ/QUAL, AS and nM, records of an unmapped mate, BAM encoding (section 6, risk 9).
+- Throughput caveats: the kernel figure is kernel time only (CUDA events), after upload, no FASTQ parsing, no host lane, no output
+  copy; STAR's figure includes everything and uses a different CPU (a Clipper GPU node). The two are not a like-for-like speedup, and
+  STAR's number comes from a 6-second run. 200k pairs is also a small sample (one lane's first 200k pairs: one flow-cell tile).
+- Not exercised by this run: clipping (no `--clip*`), `--alignEndsProtrude`, end-to-end, junctions in mates (see above), multi-lane or
+  PCR-duplicate-rich reads beyond what these 200k contain, sjdb.
+
+**What failed along the way, all in the harness, none in the paired logic** (jobs 792278, 792283, 792287, 792291):
+1. `run_paired.sbatch` called `/usr/bin/time`, absent in the image (exit 127, job 792278); then a broken wall-clock line (792287). Removed.
+2. **Harness bug, kernel TSV:** `paired_microbench.cu` wrote `unmapType` from a `uint8` (255) where `compare_star_sam.py` and
+   `replay_model.py` expect STAR's -1, so every pair read as "kernel unmapped" (job 792283: 0 identical). Fixed in the writer
+   (`(int)(int8_t)hU[i]`). This is a host-side bug, not CUDA-specific; the unit cases never go through the TSV.
+3. **Comparison setup:** STAR with several threads does not keep input order, and the comparison pairs by position in the file
+   (job 792291: 0 identical, with alignments at unrelated loci). `--outSAMorder PairedKeepInputOrder` fixes it; section 7 step 4 should
+   carry it for any multi-threaded reference run.
+4. `replay_model.py` compared `iBest` of unmapped reads (kernel 0, model -1): 77 spurious differences of 19,956 in job 792300. It now
+   compares the primary only for mapped reads; job 792330 gives 0 differences.
+
+GPU time used: about 0.25 H100-hours in nine jobs (unit 792263; the run jobs 792278, 792283, 792287, 792291, 792300, 792329, 792330 and
+spliced 792336, each 2 minutes or less, three of them failures); the index job was CPU only (792264).
