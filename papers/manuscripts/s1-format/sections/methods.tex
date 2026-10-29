@@ -34,7 +34,7 @@ and $p=\nm{threadsHeadline}$, and \sone{}, AnnData with gzip and the raw CSC arr
 three timed repeats; we report the median. ``Cold'' reads evict the file from the page cache
 (\texttt{posix\_fadvise(POSIX\_FADV\_DONTNEED)}) before every repeat; ``warm'' reads, at $p=\nm{threadsHeadline}$ only,
 do not, and follow one untimed warm-up read. A read longer than 60\,s is timed once. Matrices above $4\times10^8$
-non-zeros are timed cold at $p=\nm{threadsHeadline}$ from the node's disk only, for the CSC arrays, the Cell Ranger HDF5,
+non-zeros are timed, cold and warm, at $p=\nm{threadsHeadline}$ from the node's disk only, for the CSC arrays, the Cell Ranger HDF5,
 AnnData uncompressed and with gzip, AnnData Zarr, TileDB-SOMA and both \sone{} variants. The timed interval is from
 opening the file to an in-memory SciPy CSC matrix (or the equivalent R object), and the rate is non-zeros per second.
 For \sone{} we also time the codec alone, from the member in memory to CSC arrays, through the Python binding and in a
