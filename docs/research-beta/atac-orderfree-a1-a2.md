@@ -34,3 +34,18 @@ Sample `pbmc_multiome3k_atac` (73.2 M read pairs), `singlet atac --bam` on its k
 - Cost: wall 3:37 (old) vs 4:16 (new, sorted) and 5:24 (new, collated); peak RSS 2.2 GB vs 4.8 GB (the global dedup table and the raw-barcode map).
 
 Not checked: the 5k and Multiome 10k sets, and the order-free property of A2 in a case where the prefix and the sample disagree (only the port test covers that).
+
+## 5k NextGEM ATAC (job 792257, `short-bigmem`, 1:05 h)
+
+Sample `atac_pbmc_5k_nextgem` (196.4 M read pairs), kept sorted BAM and its `samtools collate` version, old = `singlet-atacsp-pr48`, new = this branch (`a7cd1999`), no `--paired-gex`.
+
+| run | unique fragments | duplicate read pairs | peaks | cells | wall | peak RSS | fragments.tsv md5 | peaks.bed md5 |
+|---|---|---|---|---|---|---|---|---|
+| old, sorted | 102,477,773 | 93,971,077 | 118,589 | 4,707 | 8:27 | 4.3 GB | ce0d30b1... | 7c2cfa2e... |
+| new, sorted | 102,477,773 | 93,971,077 | 118,589 | 4,707 | 13:43 | 10.8 GB | ce0d30b1... | 7c2cfa2e... |
+| new, collated | 102,477,773 | 93,971,077 | 118,589 | 4,707 | 14:53 | 10.8 GB | ce0d30b1... | 7c2cfa2e... |
+| old, collated | 196,448,848 | 2 | 135,060 | 4,676 | 16:36 | 7.9 GB | 7073b1eb... | 8e616018... |
+
+`fragments.tsv.gz`, `atac_peak_counts.mtx.gz`, `peaks.bed`, `atac_barcode_metrics.tsv`, `atac_cells.tsv` are byte-identical (md5) across old-sorted, new-sorted and new-collated. Old on collated:
++91.7% fragments, +13.9% peaks, 31 fewer cells. Layout unchanged (offset 0, forward, whitelist 0; exact hit rate 0.946165 on 3,245,831 hash-sampled reads vs 0.94602 on the first 200,000), barcode counts
+identical in all four runs. `singlet atac` has no thread option, so there is no two-thread-count comparison; the order-free check is sorted vs collated input.
