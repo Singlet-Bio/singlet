@@ -203,7 +203,7 @@ static int runReal(const std::string& gdir, const std::string& r1, const std::st
             CK(cudaMemcpy(hClip.data(), dClip, nb * 6 * 8, cudaMemcpyDeviceToHost));
             for (u64 i = 0; i < nb; i++) {
                 cnt[std::min<int>(3, hSt[i])]++;
-                out << (b0 + i) << '\t' << (int)hSt[i] << '\t' << (int)hU[i] << '\t';
+                out << (b0 + i) << '\t' << (int)hSt[i] << '\t' << (int)(int8_t)hU[i] << '\t';   // unmapType is stored as uint8: 255 = STAR's -1 (mapped)
                 if (hSt[i] == 0) decodeBlob(hB.data() + i * blobCap, hBL[i], out); else out << ".\t.\t.\t.";
                 for (int k = 0; k < 6; k++) out << '\t' << hClip[i * 6 + k];
                 out << '\n';
