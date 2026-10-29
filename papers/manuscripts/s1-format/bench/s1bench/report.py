@@ -31,6 +31,7 @@ LOADER_LABELS = {
     "anndata_inmem": "AnnData in memory", "anndata_backed": "AnnData backed", "scdataset": "scDataset",
     "anndata_zarr_lazy": "AnnData Zarr", "soma_ml": "TileDB-SOMA ML", "bpcells": "BPCells (R)",
     "s1_stream": "\\textbf{.s1}", "s1_stream_canonical": ".s1, source gene order",
+    "s1_stream_seq": ".s1, one request at a time",
 }
 TIER_ORDER = ["s3_0.1g", "s3_1g", "s3_10g", "nfs", "local"]
 TIER_LABELS = {"s3_0.1g": "0.1 Gbit/s", "s3_1g": "1 Gbit/s", "s3_10g": "10 Gbit/s", "nfs": "shared filesystem (NFS)",

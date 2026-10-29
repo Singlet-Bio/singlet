@@ -47,13 +47,15 @@ combinatorial and plate protocols. A workload is a seeded sequence of minibatche
 blocks of 64 consecutive cells at random offsets, which is how block-shuffling loaders read~\cite{dascenzo2025scdataset}.
 Each loader must return each minibatch as a \texttt{torch.sparse\_csr\_tensor} of the exact counts. Loaders: AnnData in
 memory and in backed mode, AnnData Zarr read lazily, scDataset over backed AnnData, TileDB-SOMA ML, BPCells (R, with
-the result handed to PyTorch), and the \sone{} streaming reader in stored and source gene order. Files are served by a
-local S3-compatible object store (\texttt{rclone serve s3}) through a Toxiproxy proxy that limits bandwidth to 0.1, 1 or 10\,Gbit/s with 1\,ms latency, or
-1\,Gbit/s with 30\,ms latency, from the cluster's shared NFS filesystem, and from the node's own disk. The proxy applies
-the limit to each connection, so a reader that issues concurrent requests (TileDB-SOMA, with up to $p$; Zarr through
-fsspec) can draw more than the tier's bandwidth; the \sone{} reader issues one request at a time. Before each tier the proxy's ceiling with no
-limit is measured with a 1\,GiB transfer over one connection and over $p$, and recorded; results at a tier above the
-one-connection ceiling are flagged. Loaders that cannot read by range download the object
+the result handed to PyTorch), and the \sone{} streaming reader (\texttt{singlet.torch.S1Stream}) in stored and source
+gene order. The \sone{} reader plans the byte ranges of a minibatch's blocks from the chunk index and sends them together,
+up to eight at a time over HTTP; it is also run sending them one at a time. Files are served from the node's own disk,
+from the cluster's shared NFS filesystem, and by a local S3-compatible object store (\texttt{rclone serve s3}) at 0.1, 1
+or 10\,Gbit/s with 1\,ms latency, or 1\,Gbit/s with 30\,ms latency. The bandwidth is a limit on the server's total
+transfer rate, so readers that send concurrent requests (the \sone{} reader, TileDB-SOMA, Zarr through fsspec) share the
+tier's bandwidth rather than multiply it, and a Toxiproxy proxy adds the latency to every response. At each tier the
+rate through the proxy without latency is measured with a 1\,GiB transfer over one connection and over $p$, and
+recorded; results at a tier the setup does not reach over $p$ connections are flagged. Loaders that cannot read by range download the object
 first, and that time is counted; for datasets above the M tier such loaders are not run over the network tiers, and the
 transfer time of the object at the tier's bandwidth is reported instead. We record, from a new process with a cold cache, the time to open, to read the first
 minibatch and to build its tensor; then the sustained rate in cells per second over 200 minibatches after 10 warm-up

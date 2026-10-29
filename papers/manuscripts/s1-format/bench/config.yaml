@@ -55,7 +55,8 @@ minibatch:
   # time of the file (bytes * 8 / link rate) as est_download_s instead. Tier order: S < M < L < XL.
   skip_download_above_tier: {s3_0.1g: M, s3_1g: M, s3_10g: M, s3_1g_wan: M}   # estimated, not run, above M
   workers: [0, 2, 4]
-  loaders: [anndata_inmem, anndata_backed, scdataset, anndata_zarr_lazy, soma_ml, bpcells, s1_stream, s1_stream_canonical]
+  loaders: [anndata_inmem, anndata_backed, scdataset, anndata_zarr_lazy, soma_ml, bpcells, s1_stream, s1_stream_canonical,
+            s1_stream_seq]
   tiers:
     - {name: local}                       # node-local disk: the timed jobs copy the files there first (data_dir)
     - {name: nfs, root: "${S1BENCH_NFS_DATA:-}"}   # the shared project filesystem, read in place

@@ -206,10 +206,12 @@ class S1StreamLoader(Loader):
     order = "native"
     modules = ("singlet.torch", "requests")
 
+    io_threads = "auto"   # a batch's range requests sent together: 8 over HTTP, 1 for a local file
+
     def open(self, src, threads):
         from singlet.torch import S1Stream   # the package's streaming reader (local path or HTTP ranges)
 
-        self.s = S1Stream(src, member="counts", threads=threads, order=self.order)
+        self.s = S1Stream(src, member="counts", threads=threads, order=self.order, io_threads=self.io_threads)
 
     def read(self, blocks):
         return self.s.batch(blocks)
@@ -225,6 +227,11 @@ class S1StreamCanonical(S1StreamLoader):
     order = "canonical"
 
 
+class S1StreamSeq(S1StreamLoader):
+    """The same reader sending a batch's range requests one at a time, to show what sending them together buys."""
+    io_threads = 1
+
+
 LOADERS = {
     "anndata_inmem": AnndataInmem,
     "anndata_backed": AnndataBacked,
@@ -233,6 +240,7 @@ LOADERS = {
     "soma_ml": SomaMl,
     "s1_stream": S1StreamLoader,
     "s1_stream_canonical": S1StreamCanonical,
+    "s1_stream_seq": S1StreamSeq,
 }
 
 
@@ -405,7 +413,7 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
             work = cfg.data_dir / "tmp" / f"netem_{u.key}"
             keys = {f"{u.key}/{p.name}": p for p in set(files.values())}
             keys["_calib/blob.bin"] = netem.calib_blob(cfg, cfg.data_dir / "tmp")
-            with netem.object_store(cfg, keys, work) as base:
+            with netem.object_store(cfg, keys, work, gbit=tier.get("gbit")) as base:
                 ceiling = netem.calibrate(cfg, f"{base}/_calib/blob.bin", 0)
                 ceiling_par = netem.calibrate(cfg, f"{base}/_calib/blob.bin", 0, streams=threads)
                 netem.set_tier(cfg, tier)
@@ -421,8 +429,9 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
                     for seed in mb["seeds"]:
                         res = (_bpcells(cfg, files[ld], seed, threads, n_cells, url) if ld == "bpcells"
                                else _child(cfg, overrides, u.key, ld, url, seed, threads, n_cells))
-                        res["proxy_ceiling_gbit"] = ceiling            # one connection; the toxics limit each one
-                        res["proxy_ceiling_par_gbit"] = ceiling_par    # `threads` concurrent connections
-                        res["capped"] = bool(tier.get("gbit") and tier["gbit"] > ceiling)
+                        res["proxy_ceiling_gbit"] = ceiling            # one connection, under the tier's total limit
+                        res["proxy_ceiling_par_gbit"] = ceiling_par    # `threads` connections sharing that limit
+                        # the setup cannot deliver the tier even over `threads` connections (10 Gbit/s on loopback)
+                        res["capped"] = bool(tier.get("gbit") and tier["gbit"] > 1.05 * ceiling_par)
                         record(tier, ld, seed, res)
         write_tsv(rows, out)

@@ -45,12 +45,14 @@ def _wait(url: str, timeout: float = 30.0) -> None:
 
 
 @contextmanager
-def object_store(cfg: Config, files: dict[str, Path], workdir: Path) -> Iterator[str]:
-    """Start MinIO and Toxiproxy, upload `files` (key -> local path) and yield the proxied base URL."""
+def object_store(cfg: Config, files: dict[str, Path], workdir: Path, gbit: Optional[float] = None) -> Iterator[str]:
+    """Start the store and Toxiproxy, upload `files` (key -> local path) and yield the proxied base URL. With the rclone
+    store, `gbit` caps the server's total bandwidth (all connections together: a reader that opens several connections
+    shares the tier's bandwidth, it does not multiply it); Toxiproxy then adds only the latency."""
     n = cfg["netem"]
     workdir.mkdir(parents=True, exist_ok=True)
     if n.get("store", "rclone") == "rclone":
-        with _rclone_store(cfg, files, workdir) as base:
+        with _rclone_store(cfg, files, workdir, gbit) as base:
             yield base
         return
     env = {"MINIO_ROOT_USER": n["access_key"], "MINIO_ROOT_PASSWORD": n["secret_key"], "PATH": "/usr/bin:/bin"}
@@ -101,15 +103,17 @@ def _place(src: Path, dst: Path) -> None:
 
 
 @contextmanager
-def _rclone_store(cfg: Config, files: dict[str, Path], workdir: Path) -> Iterator[str]:
-    """`rclone serve s3` over workdir/s3 (bucket = a directory, anonymous access, path-style), behind Toxiproxy."""
+def _rclone_store(cfg: Config, files: dict[str, Path], workdir: Path, gbit: Optional[float] = None) -> Iterator[str]:
+    """`rclone serve s3` over workdir/s3 (bucket = a directory, anonymous access, path-style), behind Toxiproxy. `gbit`
+    becomes rclone's --bwlimit, a limit on the total of all transfers."""
     n = cfg["netem"]
     root = workdir / "s3"
     for key, p in files.items():
         _place(p, root / n["bucket"] / key)
     port = n["minio_port"]
+    bw = ["--bwlimit", f"{int(gbit * 1e9 / 8 / 1024)}K"] if gbit else []  # rclone's K is KiB/s
     srv = subprocess.Popen([n.get("rclone", "rclone"), "serve", "s3", str(root), "--addr", f"127.0.0.1:{port}",
-                            "--force-path-style", "--vfs-cache-mode", "off", "--log-level", "ERROR"],
+                            "--force-path-style", "--vfs-cache-mode", "off", "--log-level", "ERROR", *bw],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     tox = subprocess.Popen([n["toxiproxy_server"], "-port", str(n["toxiproxy_api_port"])], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL)
@@ -130,10 +134,11 @@ def _rclone_store(cfg: Config, files: dict[str, Path], workdir: Path) -> Iterato
 
 
 def set_tier(cfg: Config, tier: dict) -> None:
-    """Replace the toxics on the proxy with the tier's bandwidth (both directions) and latency."""
+    """Replace the toxics on the proxy with the tier's latency, and with its bandwidth (both directions) only for the MinIO
+    store: Toxiproxy limits each connection on its own, so with rclone the bandwidth is rclone's total limit instead."""
     for t in _api(cfg, "GET", "/proxies/s3/toxics") or []:
         _api(cfg, "DELETE", f"/proxies/s3/toxics/{t['name']}")
-    if tier.get("gbit"):
+    if tier.get("gbit") and cfg["netem"].get("store", "rclone") != "rclone":
         rate_kb = int(tier["gbit"] * 1e9 / 8 / 1000)   # toxiproxy bandwidth rate is in KB/s
         for stream in ("downstream", "upstream"):
             _api(cfg, "POST", "/proxies/s3/toxics", {"name": f"bw_{stream}", "type": "bandwidth", "stream": stream,
@@ -171,8 +176,9 @@ def _get(url: str, rng: Optional[tuple[int, int]] = None) -> int:
 
 
 def calibrate(cfg: Config, url: str, nbytes_hint: int, streams: int = 1) -> float:
-    """Gbit/s the proxy sustains with no toxics: one GET of the whole object, or `streams` concurrent range GETs that
-    split it. The tier toxics act on each connection separately, so the one-stream figure is what caps a tier."""
+    """Gbit/s the store sustains through the proxy with no latency: one GET of the whole object, or `streams` concurrent
+    range GETs that split it. Under a tier's total limit both should come out near the tier's rate; with no limit they are
+    the setup's ceiling."""
     from concurrent.futures import ThreadPoolExecutor
 
     set_tier(cfg, {})
