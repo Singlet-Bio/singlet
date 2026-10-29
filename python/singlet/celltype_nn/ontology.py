@@ -41,7 +41,9 @@ class TermSpace:
             R[i, [self.cindex[a] for a in A]] = 1.0
         self.R = R
         n_desc = R.sum(0)
-        self.ic_closure = (np.log(len(self.terms)) - np.log(np.maximum(n_desc, 1))).astype(np.float32)
+        self.ic_closure = (np.log(len(self.terms)) - np.log(np.maximum(n_desc, 1))).astype(
+            np.float32
+        )
         self.ic = self.ic_closure[[self.cindex[t] for t in self.terms]]
         self.depth_closure = np.array([len(self.o.ancestors(t)) for t in self.closure], np.float32)
         self._credit: Dict[str, np.ndarray] = {}
@@ -86,7 +88,11 @@ class TermSpace:
 
     def credit_matrix(self, targets: Sequence[str], beta: float = 1.0) -> np.ndarray:
         """Unique targets x output terms."""
-        return np.stack([self.credit(t, beta) for t in targets]) if len(targets) else np.zeros((0, len(self)), np.float32)
+        return (
+            np.stack([self.credit(t, beta) for t in targets])
+            if len(targets)
+            else np.zeros((0, len(self)), np.float32)
+        )
 
     # ------------------------------------------------------------------------------------------------ roll-up and calls
     def rollup(self, p: np.ndarray) -> np.ndarray:
@@ -101,7 +107,9 @@ class TermSpace:
         such as 'alpha-beta T cell' and 'mature alpha-beta T cell', differ only in depth)."""
         P = self.rollup(p)
         ok = P >= threshold
-        key = np.where(ok, self.ic_closure[None, :] + 1e-3 * P + 1e-6 * self.depth_closure[None, :], -np.inf)
+        key = np.where(
+            ok, self.ic_closure[None, :] + 1e-3 * P + 1e-6 * self.depth_closure[None, :], -np.inf
+        )
         j = key.argmax(1)
         return j, P[np.arange(len(j)), j]
 

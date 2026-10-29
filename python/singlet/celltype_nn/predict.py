@@ -24,8 +24,8 @@ import numpy as np
 import scipy.sparse as sps
 
 from .features import GeneVocab
-from .output import COLUMNS
 from .ontology import TermSpace
+from .output import COLUMNS
 
 TOP_K = 5
 
@@ -48,7 +48,13 @@ class CellTypePredictor:
         return cls(net, meta)
 
     def predict(
-        self, X, gene_ids: Sequence[str], species: str, tissue: Optional[str] = None, batch: int = 8192, threads: Optional[int] = None
+        self,
+        X,
+        gene_ids: Sequence[str],
+        species: str,
+        tissue: Optional[str] = None,
+        batch: int = 8192,
+        threads: Optional[int] = None,
     ) -> np.ndarray:
         """Calibrated probabilities, cells x output terms. ``X``: raw counts (cells x genes); ``gene_ids``: Ensembl ids;
         ``tissue``: the sample's tissue text (as :func:`singlet.celllabels.io.tissue_text` gives it), used by models trained
@@ -105,8 +111,12 @@ class CellTypePredictor:
             "gsm": np.full(len(col), gsm, dtype=object),
             "col": np.asarray(col, np.int64),
             "cell_type_cl": call,
-            "cell_type_label": np.array([self.space.name(c) if c else None for c in call], dtype=object),
-            "cell_type_prob": np.where(pd.isna(call), np.float32(np.nan), s["call_prob"]).astype(np.float32),
+            "cell_type_label": np.array(
+                [self.space.name(c) if c else None for c in call], dtype=object
+            ),
+            "cell_type_prob": np.where(pd.isna(call), np.float32(np.nan), s["call_prob"]).astype(
+                np.float32
+            ),
             "argmax_cl": s["argmax"],
             "argmax_prob": s["argmax_prob"],
         }

@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse as sps
-
 from singlet.celltype_nn.ensemble import SingleRRef, celltypist_crosswalk, refinement
 from singlet.celltype_nn.features import GeneVocab
 from singlet.celltype_nn.ontology import TermSpace, build_space, is_consistent
@@ -38,14 +37,23 @@ def test_credit_finer_is_free_coarser_partial_other_branch_zero(space):
 def test_rollup_and_call(space):
     P = np.zeros((2, len(space)), np.float32)
     i = space.index
-    P[0, i[CD4]], P[0, i[CD8]], P[0, i[B_CELL]] = 0.3, 0.3, 0.4  # spread over T subtypes: T cell is the call
+    P[0, i[CD4]], P[0, i[CD8]], P[0, i[B_CELL]] = (
+        0.3,
+        0.3,
+        0.4,
+    )  # spread over T subtypes: T cell is the call
     P[1, i[CD8]], P[1, i[T_CELL]] = 0.9, 0.1
     up = space.rollup(P)
-    assert np.isclose(up[0, space.cindex[T_CELL]], 0.6) and np.isclose(up[0, space.cindex[AB_T]], 0.6)
+    assert np.isclose(up[0, space.cindex[T_CELL]], 0.6) and np.isclose(
+        up[0, space.cindex[AB_T]], 0.6
+    )
     assert np.isclose(up[0, space.cindex[LYMPH]], 1.0)
     j, pj = space.call(P)
     calls = [space.closure[k] for k in j]
-    assert calls == [AB_T, CD8]  # CD4 and CD8 are both alpha-beta T cells: the call is their closest common ancestor
+    assert calls == [
+        AB_T,
+        CD8,
+    ]  # CD4 and CD8 are both alpha-beta T cells: the call is their closest common ancestor
     assert np.isclose(pj[0], 0.6) and np.isclose(pj[1], 0.9)
 
 
@@ -58,7 +66,10 @@ def test_build_space_folds_rare_terms():
 def test_refinement_needs_two_votes_below_author():
     assert refinement(T_CELL, [CD8, CD8, None]) == CD8
     assert refinement(T_CELL, [CD8, None, None]) is None
-    assert refinement(T_CELL, [CD8, CD4, None]) is None or refinement(T_CELL, [CD8, CD4, None]) != T_CELL
+    assert (
+        refinement(T_CELL, [CD8, CD4, None]) is None
+        or refinement(T_CELL, [CD8, CD4, None]) != T_CELL
+    )
     assert refinement(T_CELL, [B_CELL, B_CELL, B_CELL]) is None
 
 
@@ -85,10 +96,10 @@ def test_singler_reference_recovers_profiles():
     base = rng.gamma(1, 1, (3, G))
     rows, lab, grp = [], [], []
     for d in range(3):
-        for k, l in enumerate(labels):
+        for k, lab_ in enumerate(labels):
             for _ in range(30):
                 rows.append(rng.poisson(base[k] * 3))
-                lab.append(l)
+                lab.append(lab_)
                 grp.append(f"d{d}")
     X = sps.csr_matrix(np.log1p(np.array(rows, np.float32)))
     ref = SingleRRef.build(X, lab, grp, [f"g{i}" for i in range(G)])
@@ -155,6 +166,7 @@ def test_credit_loss_prefers_deepest_supported_term(space):
 
 
 def test_transforms_are_depth_invariant_where_claimed():
+    pytest.importorskip("torch")
     from singlet.celltype_nn.features import transform
 
     x = np.array([[0, 3, 1, 0, 5]], np.float32)

@@ -36,11 +36,17 @@ class MemberCalls:
 
 
 # --------------------------------------------------------------------------------------------------------------- guide
-def run_guide(X, symbols: Sequence[str], species: str, tissue: Optional[str], disease: Optional[str] = None) -> MemberCalls:
+def run_guide(
+    X, symbols: Sequence[str], species: str, tissue: Optional[str], disease: Optional[str] = None
+) -> MemberCalls:
     from singlet.celllabels.celltype import annotate_cell_types
 
-    r = annotate_cell_types(X, list(symbols), species=species, tissue=tissue, disease=disease, method="guide")
-    s = np.nan_to_num(r.path_score if r.path_score is not None else r.score, nan=0.0).astype(np.float32)
+    r = annotate_cell_types(
+        X, list(symbols), species=species, tissue=tissue, disease=disease, method="guide"
+    )
+    s = np.nan_to_num(r.path_score if r.path_score is not None else r.score, nan=0.0).astype(
+        np.float32
+    )
     return MemberCalls(r.cl, s)
 
 
@@ -83,7 +89,9 @@ def celltypist_models_for(species: str, tissue: Optional[str]) -> List[str]:
     return out
 
 
-def run_celltypist(X, symbols: Sequence[str], species: str, tissue: Optional[str], model_dir: Path) -> Dict[str, MemberCalls]:
+def run_celltypist(
+    X, symbols: Sequence[str], species: str, tissue: Optional[str], model_dir: Path
+) -> Dict[str, MemberCalls]:
     """Raw CellTypist labels per model (``cl`` left None; map with a crosswalk)."""
     import anndata as ad
     import celltypist
@@ -94,7 +102,9 @@ def run_celltypist(X, symbols: Sequence[str], species: str, tissue: Optional[str
     out: Dict[str, MemberCalls] = {}
     names = pd.Index([str(s) for s in symbols])
     keep = ~names.duplicated()
-    A = ad.AnnData(X=lognorm(sps.csr_matrix(X))[:, np.flatnonzero(keep)], var=pd.DataFrame(index=names[keep]))
+    A = ad.AnnData(
+        X=lognorm(sps.csr_matrix(X))[:, np.flatnonzero(keep)], var=pd.DataFrame(index=names[keep])
+    )
     for m in celltypist_models_for(species, tissue):
         p = Path(model_dir) / m
         if not p.exists():
@@ -105,7 +115,9 @@ def run_celltypist(X, symbols: Sequence[str], species: str, tissue: Optional[str
         pred = celltypist.annotate(A, model=model, majority_voting=False)
         lab = pred.predicted_labels["predicted_labels"].astype(str).to_numpy()
         prob = pred.probability_matrix.max(1).to_numpy(np.float32)
-        out[m] = MemberCalls(np.array([None] * len(lab), dtype=object), prob, raw=lab.astype(object))
+        out[m] = MemberCalls(
+            np.array([None] * len(lab), dtype=object), prob, raw=lab.astype(object)
+        )
     return out
 
 
@@ -114,7 +126,11 @@ def _norm(s: str) -> str:
 
 
 def celltypist_crosswalk(
-    model_labels: Sequence[str], author_cl: Sequence[str], onto: Optional[Ontology] = None, min_cover: float = 0.6, min_cells: int = 30
+    model_labels: Sequence[str],
+    author_cl: Sequence[str],
+    onto: Optional[Ontology] = None,
+    min_cover: float = 0.6,
+    min_cells: int = 30,
 ) -> Dict[str, str]:
     """CellTypist label -> CL id, from cells of the training split that carry both.
 
@@ -150,7 +166,10 @@ def apply_crosswalk(calls: MemberCalls, xw: Dict[str, str]) -> MemberCalls:
 
 
 def pool_celltypist(
-    calls: Dict[str, MemberCalls], crosswalks: Dict[str, Dict[str, str]], onto: Optional[Ontology] = None, n: Optional[int] = None
+    calls: Dict[str, MemberCalls],
+    crosswalks: Dict[str, Dict[str, str]],
+    onto: Optional[Ontology] = None,
+    n: Optional[int] = None,
 ) -> MemberCalls:
     """One CellTypist call per cell from several models: the mapped calls, keeping a more specific one (a descendant of the
     current call) when its model's confidence is at least 0.5. The immune model comes first, tissue models refine it."""
@@ -208,14 +227,16 @@ def _de_n(n_labels: int) -> int:
 class SingleRRef:
     """Reference for the SingleR-style member: pseudobulk profiles (log1p CP10k means) per (group, label)."""
 
-    def __init__(self, profiles: np.ndarray, labels: np.ndarray, groups: np.ndarray, genes: Sequence[str]):
+    def __init__(
+        self, profiles: np.ndarray, labels: np.ndarray, groups: np.ndarray, genes: Sequence[str]
+    ):
         self.P = np.asarray(profiles, np.float32)  # samples x genes
         self.labels = np.asarray(labels, dtype=object)
         self.groups = np.asarray(groups, dtype=object)
         self.genes = list(genes)
         self.ulabels = np.array(sorted(set(self.labels.tolist())), dtype=object)
-        self.lab_idx = {l: i for i, l in enumerate(self.ulabels)}
-        self.sample_lab = np.array([self.lab_idx[l] for l in self.labels])
+        self.lab_idx = {lab: i for i, lab in enumerate(self.ulabels)}
+        self.sample_lab = np.array([self.lab_idx[lab] for lab in self.labels])
         L = len(self.ulabels)
         med = np.stack([np.median(self.P[self.sample_lab == i], 0) for i in range(L)])
         k = _de_n(L)
@@ -229,23 +250,40 @@ class SingleRRef:
         self.union = np.unique(self.pair.reshape(-1))
 
     @classmethod
-    def build(cls, X_lognorm: sps.csr_matrix, labels: Sequence[str], groups: Sequence[str], genes: Sequence[str], min_cells: int = 10):
+    def build(
+        cls,
+        X_lognorm: sps.csr_matrix,
+        labels: Sequence[str],
+        groups: Sequence[str],
+        genes: Sequence[str],
+        min_cells: int = 10,
+    ):
         """Pseudobulk means of ``X_lognorm`` (cells x genes) per (group, label) with at least ``min_cells`` cells."""
         import pandas as pd
 
-        key = pd.Series([f"{g}\t{l}" for g, l in zip(groups, labels)])
+        key = pd.Series([f"{g}\t{lab}" for g, lab in zip(groups, labels)])
         codes, uniq = pd.factorize(key)
         n = np.bincount(codes)
-        G = sps.csr_matrix((np.ones(len(codes), np.float32), (codes, np.arange(len(codes)))), shape=(len(uniq), len(codes)))
+        G = sps.csr_matrix(
+            (np.ones(len(codes), np.float32), (codes, np.arange(len(codes)))),
+            shape=(len(uniq), len(codes)),
+        )
         sums = np.asarray((G @ X_lognorm).todense(), np.float32)
         keep = n >= min_cells
         prof = sums[keep] / n[keep, None]
         gl = [u.split("\t") for u in np.asarray(uniq)[keep]]
-        return cls(prof, np.array([x[1] for x in gl], object), np.array([x[0] for x in gl], object), genes)
+        return cls(
+            prof, np.array([x[1] for x in gl], object), np.array([x[0] for x in gl], object), genes
+        )
 
     def score(
-        self, X_lognorm: sps.csr_matrix, exclude_group: Optional[Sequence[str]] = None, quantile: float = 0.8, fine_tune: bool = True,
-        top: int = 5, chunk: int = 4096,
+        self,
+        X_lognorm: sps.csr_matrix,
+        exclude_group: Optional[Sequence[str]] = None,
+        quantile: float = 0.8,
+        fine_tune: bool = True,
+        top: int = 5,
+        chunk: int = 4096,
     ) -> MemberCalls:
         """Label per cell. ``exclude_group`` (per cell) leaves the cell's own dataset out of the reference (cross-fitting)."""
         n = X_lognorm.shape[0]
@@ -264,7 +302,11 @@ class SingleRRef:
             for i in range(L):
                 m = self.sample_lab == i
                 with np.errstate(all="ignore"):
-                    v = np.nanquantile(rho[:, m], quantile, axis=1) if m.sum() > 1 else rho[:, m][:, 0]
+                    v = (
+                        np.nanquantile(rho[:, m], quantile, axis=1)
+                        if m.sum() > 1
+                        else rho[:, m][:, 0]
+                    )
                 sc[:, i] = np.nan_to_num(v, nan=-1.0)
             Qfull = None
             for r in range(len(Q)):
@@ -272,17 +314,23 @@ class SingleRRef:
                 if fine_tune and len(cand) > 1 and sc[r, cand[0]] - sc[r, cand[1]] < 0.05:
                     if Qfull is None:
                         Qfull = np.asarray(X_lognorm[s : s + chunk].todense(), np.float32)
-                    cand = self._fine_tune(Qfull[r], cand, sc[r], excl[s + r] if excl is not None else None, quantile)
+                    cand = self._fine_tune(
+                        Qfull[r], cand, sc[r], excl[s + r] if excl is not None else None, quantile
+                    )
                 best[s + r] = self.ulabels[cand[0]]
                 # confidence: margin of the winner over the runner-up on the coarse scores, squashed to [0, 1]
                 d = sc[r, cand[0]] - (sc[r, cand[1]] if len(cand) > 1 else -1.0)
                 conf[s + r] = float(np.clip(d / 0.1, 0, 1))
         return MemberCalls(best, conf)
 
-    def _fine_tune(self, q: np.ndarray, cand: np.ndarray, sc: np.ndarray, excl, quantile: float) -> np.ndarray:
+    def _fine_tune(
+        self, q: np.ndarray, cand: np.ndarray, sc: np.ndarray, excl, quantile: float
+    ) -> np.ndarray:
         cand = list(cand)
         while len(cand) > 1:
-            genes = np.unique(np.concatenate([self.pair[a, b] for a in cand for b in cand if a != b]))
+            genes = np.unique(
+                np.concatenate([self.pair[a, b] for a in cand for b in cand if a != b])
+            )
             m = np.isin(self.sample_lab, cand)
             if excl is not None:
                 m &= self.groups != excl
@@ -292,7 +340,9 @@ class SingleRRef:
             rr = _rank_rows(self.P[m][:, genes])
             rho = (rq @ rr.T)[0]
             lab = self.sample_lab[m]
-            s = np.array([np.quantile(rho[lab == a], quantile) if (lab == a).any() else -1 for a in cand])
+            s = np.array(
+                [np.quantile(rho[lab == a], quantile) if (lab == a).any() else -1 for a in cand]
+            )
             keep = [a for a, v in zip(cand, s) if v >= s.max() - 0.05]
             if len(keep) == len(cand):
                 cand = [cand[int(np.argmax(s))]] + [a for a in cand if a != cand[int(np.argmax(s))]]
@@ -302,7 +352,9 @@ class SingleRRef:
 
 
 # ------------------------------------------------------------------------------------------------------------ consensus
-def refinement(author: str, calls: Sequence[Optional[str]], onto: Optional[Ontology] = None, min_votes: int = 2) -> Optional[str]:
+def refinement(
+    author: str, calls: Sequence[Optional[str]], onto: Optional[Ontology] = None, min_votes: int = 2
+) -> Optional[str]:
     """The ensemble's refinement of an author term: the most specific common ancestor of the member calls that are strict
     descendants of ``author``, when at least ``min_votes`` members make such a call and that ancestor is still below the author's
     term. None otherwise (the author term stays the only target)."""

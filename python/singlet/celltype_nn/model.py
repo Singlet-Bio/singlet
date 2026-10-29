@@ -19,7 +19,13 @@ import torch.nn.functional as F
 
 class CellTypeNet(nn.Module):
     def __init__(
-        self, n_genes: int, n_terms: int, hidden=(1024, 512), dropout: float = 0.2, input_dropout: float = 0.1, transform: str = "log",
+        self,
+        n_genes: int,
+        n_terms: int,
+        hidden=(1024, 512),
+        dropout: float = 0.2,
+        input_dropout: float = 0.1,
+        transform: str = "log",
         n_context: int = 0,
     ):
         super().__init__()
@@ -33,8 +39,15 @@ class CellTypeNet(nn.Module):
         self.head = nn.Linear(d, n_terms)
         self.register_buffer("temperature", torch.ones(()))
         self.transform = transform
-        self.config = dict(n_genes=n_genes, n_terms=n_terms, hidden=list(hidden), dropout=dropout, input_dropout=input_dropout,
-                           transform=transform, n_context=n_context)
+        self.config = dict(
+            n_genes=n_genes,
+            n_terms=n_terms,
+            hidden=list(hidden),
+            dropout=dropout,
+            input_dropout=input_dropout,
+            transform=transform,
+            n_context=n_context,
+        )
 
     def _inputs(self, x: torch.Tensor, ctx: Optional[torch.Tensor]) -> torch.Tensor:
         x = self.in_drop(x)
@@ -55,7 +68,12 @@ class CellTypeNet(nn.Module):
         return F.softmax(self.forward(x, ctx) / self.temperature, dim=1)
 
 
-def credit_loss(logits: torch.Tensor, credit: torch.Tensor, weight: Optional[torch.Tensor] = None, eps: float = 1e-6):
+def credit_loss(
+    logits: torch.Tensor,
+    credit: torch.Tensor,
+    weight: Optional[torch.Tensor] = None,
+    eps: float = 1e-6,
+):
     """Mean of ``-log(softmax(logits) . credit)`` over cells; ``credit`` is cells x terms (rows from TermSpace.credit)."""
     logp = F.log_softmax(logits, dim=1)
     # log sum_v p_v c_v, computed in log space for stability
@@ -93,9 +111,14 @@ def load(path, map_location="cpu"):
     m = CellTypeNet(**d["config"])
     state = dict(d["state"])
     # models saved before the context input kept the input dropout as body.0 (no parameters), so their layers sit one higher
-    if any(k.startswith("body.1.") for k in state) and not any(k.startswith("body.0.") for k in state):
+    if any(k.startswith("body.1.") for k in state) and not any(
+        k.startswith("body.0.") for k in state
+    ):
         state = {
-            (f"body.{int(k.split('.')[1]) - 1}." + k.split(".", 2)[2]) if k.startswith("body.") else k: v for k, v in state.items()
+            (f"body.{int(k.split('.')[1]) - 1}." + k.split(".", 2)[2])
+            if k.startswith("body.")
+            else k: v
+            for k, v in state.items()
         }
     m.load_state_dict(state)
     m.eval()

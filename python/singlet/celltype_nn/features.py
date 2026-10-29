@@ -27,7 +27,9 @@ import scipy.sparse as sps
 class GeneVocab:
     genes: List[str]  # human Ensembl ids, in input order
     symbols: List[str]
-    mouse: Dict[str, str] = field(default_factory=dict)  # mouse Ensembl id -> human Ensembl id (one-to-one orthologs)
+    mouse: Dict[str, str] = field(
+        default_factory=dict
+    )  # mouse Ensembl id -> human Ensembl id (one-to-one orthologs)
 
     def __post_init__(self):
         self.index = {g: i for i, g in enumerate(self.genes)}
@@ -49,7 +51,9 @@ class GeneVocab:
         """Cells x vocabulary counts (duplicates summed, missing genes zero)."""
         cols = self.columns(gene_ids, species)
         keep = np.flatnonzero(cols >= 0)
-        M = sps.csr_matrix((np.ones(len(keep), np.float32), (keep, cols[keep])), shape=(len(cols), len(self)))
+        M = sps.csr_matrix(
+            (np.ones(len(keep), np.float32), (keep, cols[keep])), shape=(len(cols), len(self))
+        )
         return sps.csr_matrix(sps.csr_matrix(X, dtype=np.float32) @ M)
 
     def to_dict(self) -> dict:
@@ -90,7 +94,11 @@ def transform(counts, kind: str = "log"):
         # rank among detected genes: number of genes with a smaller value (zeros sort first), offset by the zeros
         order = torch.argsort(t, dim=1, stable=True)
         r = torch.empty_like(t)
-        r.scatter_(1, order, torch.arange(t.shape[1], dtype=t.dtype, device=t.device).expand_as(t).contiguous())
+        r.scatter_(
+            1,
+            order,
+            torch.arange(t.shape[1], dtype=t.dtype, device=t.device).expand_as(t).contiguous(),
+        )
         z = t.shape[1] - n
         out = torch.where(t > 0, (r - z + 1) / n, torch.zeros_like(t))
     else:
@@ -121,13 +129,26 @@ class AugmentConfig:
 class Augmenter:
     """Batch augmentation on a torch device. ``intron_ratio`` is per vocabulary gene (unspliced / spliced on Singlet counts)."""
 
-    def __init__(self, n_genes: int, intron_ratio: Optional[np.ndarray], cfg: AugmentConfig, device, seed: int = 0):
+    def __init__(
+        self,
+        n_genes: int,
+        intron_ratio: Optional[np.ndarray],
+        cfg: AugmentConfig,
+        device,
+        seed: int = 0,
+    ):
         import torch
 
         self.cfg, self.device = cfg, device
         g = torch.Generator().manual_seed(seed)
-        self.bias = torch.exp(cfg.bias_sd * torch.randn(cfg.n_protocols, n_genes, generator=g)).to(device)
-        r = np.zeros(n_genes, np.float32) if intron_ratio is None else np.asarray(intron_ratio, np.float32)
+        self.bias = torch.exp(cfg.bias_sd * torch.randn(cfg.n_protocols, n_genes, generator=g)).to(
+            device
+        )
+        r = (
+            np.zeros(n_genes, np.float32)
+            if intron_ratio is None
+            else np.asarray(intron_ratio, np.float32)
+        )
         self.intron = torch.as_tensor(np.clip(r, 0, 20), device=device)
 
     def __call__(self, c):

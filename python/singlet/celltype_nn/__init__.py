@@ -21,4 +21,11 @@ from .predict import CellTypePredictor
 
 __version__ = "0.1.0"
 
-__all__ = ["COLUMNS", "CellTypePredictor", "PublicOutputError", "assert_public_safe", "write_sidecar", "__version__"]
+__all__ = [
+    "COLUMNS",
+    "CellTypePredictor",
+    "PublicOutputError",
+    "assert_public_safe",
+    "write_sidecar",
+    "__version__",
+]

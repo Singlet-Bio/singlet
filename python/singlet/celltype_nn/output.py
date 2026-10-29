@@ -58,7 +58,10 @@ def arrow_schema():
     import pyarrow as pa
 
     m = {"string": pa.string(), "int64": pa.int64(), "float32": pa.float32()}
-    return pa.schema([(n, m[t]) for n, t in COLUMNS], metadata={b"singlet_celltype_probs_schema": SCHEMA_VERSION.encode()})
+    return pa.schema(
+        [(n, m[t]) for n, t in COLUMNS],
+        metadata={b"singlet_celltype_probs_schema": SCHEMA_VERSION.encode()},
+    )
 
 
 def assert_public_safe(table) -> None:
@@ -76,7 +79,10 @@ def assert_public_safe(table) -> None:
         raise PublicOutputError(f"columns {list(df.columns)} != {names}")
     if len(df) == 0:
         return
-    if not df["gsm"].map(lambda x: isinstance(x, str) and bool(_GSM.match(x))).all() or df["gsm"].nunique() != 1:
+    if (
+        not df["gsm"].map(lambda x: isinstance(x, str) and bool(_GSM.match(x))).all()
+        or df["gsm"].nunique() != 1
+    ):
         raise PublicOutputError("gsm must be one GSM accession")
     col = df["col"].to_numpy()
     if col.dtype.kind not in "iu" or (col < 0).any() or len(np.unique(col)) != len(col):

@@ -48,7 +48,9 @@ class SampleInput:
         default_factory=dict
     )  # donor label -> DataFrame(chrom,pos,ref,alt,ad,dp); restricted
     source: str = ""
-    gene_ids: List[str] = field(default_factory=list)  # Ensembl ids of the columns of ``X`` (version suffix as stored)
+    gene_ids: List[str] = field(
+        default_factory=list
+    )  # Ensembl ids of the columns of ``X`` (version suffix as stored)
 
     @property
     def barcode_digest(self) -> str:
