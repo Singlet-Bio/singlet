@@ -1992,9 +1992,13 @@ public:
         PileupStats scratch;
         PileupStats& st = check ? scratch : stats;
         uint64_t n_done = 0;
-        std::string bseq, cr, ur, qn, rseq;
+        std::string bseq, cr, ur, rseq;
         uint64_t n_unwritten = 0; uint64_t n_bigclip = 0, n_nohook = 0;
         for (uint64_t i = 0; i < H->n_reads; ++i) {
+            // a read's record is a random access into the hand-off (rec_off, then the record) and into the barcode table: two DRAM misses
+            // per read in a loop that is serial; prefetch them a few reads ahead (no effect on the result)
+            if (i + 16 < H->n_reads) { const uint32_t r16 = H->read_rec[i + 16]; if (r16 != 0xFFFFFFFFu) __builtin_prefetch(H->rec_off + r16); }
+            if (i + 8 < H->n_reads) { const uint32_t r8 = H->read_rec[i + 8]; if (r8 != 0xFFFFFFFFu) __builtin_prefetch(H->data + H->rec_off[r8]); }
             if (!ent) {
                 bool ok = true;
                 for (int k = 0; k < 4 && ok; ++k) ok = f1.get(l1[k]) && f2.get(l2[k]);
@@ -2031,8 +2035,16 @@ public:
             if (clip & 32u) { ++n_bigclip; continue; }
             const int L2 = ent ? (int) rl + (int) ((clip >> 8) & 255) + (int) ((clip >> 16) & 255) : (int) l2[1].size();
             // R4 rRNA sample (primary; once per read), on the sequence as the BAM stores it
-            qn = "r" + std::to_string(i);
-            if (L2 >= 21 && (hash_qname(qn.c_str()) & 63) == 0) {
+            // the R4 sample is 1 read in 64 by the hash of "r<index>"; built in a stack buffer, and only for reads long enough to be sampled
+            // (std::string + to_string for every one of ~100 M reads was ~50 ns each)
+            bool rrna_sampled = false;
+            if (L2 >= 21) {
+                char qb[24]; char* q = qb + 23; *q = 0;
+                uint64_t v = i; do { *--q = (char) ('0' + v % 10); v /= 10; } while (v);
+                *--q = 'r';
+                rrna_sampled = (hash_qname(q) & 63) == 0;
+            }
+            if (rrna_sampled) {
                 ++st.rrna_reads_sampled;
                 if (clip) {
                     if (!(clip & 4u)) { ++n_nohook; continue; }

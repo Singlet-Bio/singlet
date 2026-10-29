@@ -255,6 +255,12 @@ private:
     void prepend_handoff() {
         std::vector<SigRec> sg; std::vector<AlnRec> al; std::vector<uint32_t> op; std::vector<uint8_t> sq;
         sg.reserve(ho_.n_rec);
+        // upper bounds from the hand-off's size (a record is >= 1 + 22 bytes per alignment, 4 per CIGAR operation, 1 per 2 bases), plus
+        // what the stream collected: the vectors then never reallocate (each doubling copied GBs; untouched capacity costs no memory)
+        {
+            const uint64_t bytes = ho_.n_rec ? ho_.rec_off[ho_.n_rec] : 0;
+            al.reserve(bytes / 22 + alns_.size() + 1); op.reserve(bytes / 4 + ops_.size() + 1); sq.reserve(bytes + seq_.size() + 1);
+        }
         for (uint64_t r = 0; r < ho_.n_rec; r++) {
             const uint8_t* p = ho_.data + ho_.rec_off[r];
             const int n = *p++;

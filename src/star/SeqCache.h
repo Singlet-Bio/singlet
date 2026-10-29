@@ -84,6 +84,8 @@ extern uint32 (*g_handoffReadHook)(uint64 iRead, const char *seq, uint64 len);
 //per hand-off record its summary (ReadAlign::seqCacheHandoffSummary) at g_handoffSum + g_handoffSumOff[rec], empty for an unmapped
 //sequence (its reads take the normal path); nullptr when off
 extern const uint8 *g_handoffSum;
+//alignments built by ReadAlign::seqCacheLeanAln and how many differed from alignBAM's (SINGLET_HANDOFF_LEAN=verify)
+extern std::atomic<unsigned long long> g_handoffLeanAln, g_handoffLeanBad;
 extern const uint64 *g_handoffSumOff;
 
 #endif

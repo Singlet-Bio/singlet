@@ -310,11 +310,14 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             ReadAlign *ra = new ReadAlign(P, G, trT, t);
             if (sumOn) ra->chunkOutSJ = new OutSJ(P.limitOutSJoneRead, P, G);   // scratch: one sequence's junctions at a time
             const uint64 r0 = nRec * t / nt, r1 = nRec * (t + 1) / nt;
-            std::vector<uint8> blob;
+            // ~70 bytes per record with one alignment (pbmc1k_v3: 2.3 GB for 31.8 M records): reserve, so the part grows without copying
+            // GBs at each doubling (untouched capacity costs no memory)
+            part[t].reserve((size_t) (r1 - r0) * 80);
+            partOff[t].reserve((size_t) (r1 - r0));
+            if (sumOn) { sumPartOff[t].reserve((size_t) (r1 - r0)); sumPart[t].reserve((size_t) (r1 - r0) * 40); }   // 1.06 GB for 31.8 M records
             for (uint64 r = r0; r < r1; r++) {
                 partOff[t].push_back(part[t].size());
-                blob.assign(out.blob.begin() + out.blobOff[r], out.blob.begin() + out.blobOff[r + 1]);
-                ra->seqCacheAlignRecords(out.seq.data() + out.seqOff[r], out.seqOff[r + 1] - out.seqOff[r], blob, part[t]);
+                ra->seqCacheAlignRecords(out.seq.data() + out.seqOff[r], out.seqOff[r + 1] - out.seqOff[r], out.blob.data() + out.blobOff[r], part[t]);
                 if (sumOn) {
                     sumPartOff[t].push_back(sumPart[t].size());
                     ra->seqCacheHandoffSummary(sumPart[t]);
@@ -322,6 +325,9 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
         });
         for (auto &x : th) x.join();
+        if (g_handoffLeanAln.load() > 0)   // SINGLET_HANDOFF_LEAN=verify
+            P.inOut->logMain << "ENGINE_GPU: lean alignment fields: " << g_handoffLeanAln.load() << " alignments, " << g_handoffLeanBad.load()
+                             << " differ from alignBAM's" << "\n";
         static std::vector<uint8> recAln;   // per record its alignment count (the first byte of each record)
         recAln.resize(nRec);
         for (int t = 0, r = 0; t < nt; t++)
