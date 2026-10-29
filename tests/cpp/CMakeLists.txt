@@ -125,6 +125,7 @@ add_pileup_test(test_txome_aligner)
 
 # Nonhost detection
 add_pileup_test(test_nonhost)
+add_pileup_test(test_min_sketch_mmap)
 add_pileup_test(test_nonhost_aligner)
 add_pileup_test(test_nonhost_cell_matrix)
 add_pileup_test(test_nonhost_db_build)
