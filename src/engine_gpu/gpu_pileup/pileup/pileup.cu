@@ -390,7 +390,7 @@ static int g_parts_used = 1;
 static std::vector<std::string> g_parts_log;
 // bytes per read and per tuple of each reducer's stream in a partition: an upper bound from the allocations of steps 4-7 (each read:
 // its record, flags, offsets and counts; each tuple: its emitted keys, the sort's double buffers and the collapse's per-tuple arrays)
-constexpr uint64_t kBytesRead = 96, kBytesGene = 240, kBytesSj = 160, kBytesSnp = 200, kBytesMt = 56, kBytesInd = 24;
+constexpr uint64_t kBytesRead = 64, kBytesGene = 180, kBytesSj = 110, kBytesSnp = 150, kBytesMt = 34, kBytesInd = 24;   // job 792062: measured max 56 / 153 / 95 / 131 / 28 B, + ~15%
 __host__ __device__ __forceinline__ uint32_t cell_part(int32_t bc, uint32_t K) {
     uint64_t x = (uint64_t)(uint32_t)bc + 0x9E3779B97F4A7C15ULL;
     x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL; x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL; x ^= x >> 31;
@@ -570,6 +570,9 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         return A.mark(); }();
     std::vector<std::pair<uint32_t, std::array<uint32_t, 4>>> indels;   // (global read index, indel): read order, as for K = 1
     const int jb = bits_of(std::max(nj, 1)), sb = bits_of(std::max<uint64_t>(in.par.n_snps, 1)), cb = bits_of(std::max<uint64_t>(in.ncells, 1));
+    std::vector<T3>* outv[8] = {nullptr};   // the matrices, and where each partition's rows start in them (the merge below)
+    std::vector<size_t> bnd[8];
+    if (out) { std::vector<T3>* o8[8] = {&out->exon, &out->intron, &out->amb, &out->sj, &out->snp_ad, &out->snp_dp, &out->mt, &out->mt_rev}; for (int v = 0; v < 8; v++) outv[v] = o8[v]; }
     long long ng_all = 0, n_sjt_all = 0, n_snpt_all = 0, n_mtt_all = 0, n_indt_all = 0;
     size_t peak_all = A.peak;   // each partition measures its own peak; the run reports the largest
     for (int part = 0; part < K; part++) {
@@ -581,6 +584,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, cub::CountingInputIterator<uint32_t>(0), pf, ridx, dnp, nR); });
             CK(cudaMemcpy(&nRp, dnp, 4, cudaMemcpyDeviceToHost));
         }
+        T.mark("part.select");
         const int GR = (nRp + TB - 1) / TB;
         const size_t s0 = A.mark();
         // 4 expand to read level: gene tuples + counts / offsets of the other streams
@@ -616,7 +620,8 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         peak_all = std::max(peak_all, A.peak);
         ng_all += ng; n_sjt_all += n_sjt; n_snpt_all += n_snpt; n_mtt_all += n_mtt; n_indt_all += n_indt;
         if (!out) continue;
-        // ---------------- fetch this partition's cells (not timed) ----------------
+        // ---------------- fetch this partition's cells (host; its span is marked "fetch" and left out of the GPU time) ----------------
+        for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
         if (ng > 0) {
             auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells); v.insert(v.end(), t.begin(), t.end()); };
             add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]);
@@ -636,17 +641,21 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         if (n_indt > 0) { std::vector<uint32_t> b(n_indt), ri(n_indt); std::vector<IND> d(n_indt); CK(cudaMemcpy(b.data(), in_bc, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
             CK(cudaMemcpy(d.data(), in_ind, (size_t)n_indt * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(ri.data(), in_ri, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_indt; i++) indels.push_back({ri[i], {b[i], d[i].pos, d[i].lenins >> 1, d[i].lenins & 1}}); }
+        T.mark("fetch");
     }
     A.reset(base2); A.peak = peak_all;
     T.finish();
     if (g_cell_stats) { uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_mol, &z, sizeof(z))); }
     if (!out) return;
     // ---- canonical merge: cells are disjoint across partitions; each matrix is sorted by (cell, row), indels by read (the K = 1 order)
+    // each partition's rows are sorted already: merge them (K = 1: nothing to do)
     auto byCell = [](const T3& a, const T3& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };
-    {
-        for (auto* v : {&out->exon, &out->intron, &out->amb, &out->sj, &out->snp_ad, &out->snp_dp, &out->mt, &out->mt_rev}) std::sort(v->begin(), v->end(), byCell);
-        std::stable_sort(indels.begin(), indels.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-    }
+    for (int v = 0; v < 8; v++)
+        for (size_t p = 2; p <= bnd[v].size(); p++) {
+            const size_t mid = bnd[v][p - 1], end = p < bnd[v].size() ? bnd[v][p] : outv[v]->size();
+            std::inplace_merge(outv[v]->begin(), outv[v]->begin() + mid, outv[v]->begin() + end, byCell);
+        }
+    if (K > 1) std::stable_sort(indels.begin(), indels.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (auto& e : indels) out->indels.push_back(e.second);
     if (g_cell_stats) {
         out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1));
