@@ -97,6 +97,18 @@ Rule (revised 2026-10-29 after probe 792017, ws-w3b update i): a UMI is correcte
 
 Why: a UMI with one sequencing or PCR error is the same template, and counting it again inflates exactly the deepest features. A molecule is a (cell, gene, UMI) entity, and its reads land on many features, so the gene-wide read counts are the evidence that tells an error copy (few reads next to a parent) from a second template (similar numbers). A single junction or SNP site holds only a few of a molecule's reads. In probe 792017 (GSM7901264, chr1 SNP sites and IG/TR loci) the two groupings disagreed on 50 UMI pairs out of about 210,000 molecules. Where per-feature merged and per-gene did not, the two UMIs had similar gene-wide support (median ratio 0.82, 96% >= 0.5), which points to two templates. Where per-gene merged and per-feature did not, the profile was parent and error copy (median ratio 0.2). The counts differ by only 0.02-0.06% (V(D)J 43,616 per feature vs 43,641 per gene; SNP 165,240 vs 165,276). The gap to prod/campaign's `UB`-based counts (44,097; 167,472) is STAR's lighter correction: `UB` differs from the raw UMI in 0.68% of reads. It is not the grouping.
 
+### R10b. The cell clusters of the ambient fit are seeded from the data
+
+Measured with R10 alone (`2a45dd3`, run 792059, stream vs sorted on one binary): the pools agree (profile L1 2.5e-6 on 3', 7e-4 on 5') and so does the mean contamination (0.4045 vs 0.4061; 0.1877 vs 0.1872). Per-cell rho does not: Pearson 0.79 (3') and 0.73 (5'), with mostly different cluster labels. This holds even on 5', where the two paths share 1,461 of 1,462 cells. The fit is deterministic on identical input, but its random numbers are drawn in sequence over the cell list. The PCA start vector of cell *j* is the *j*-th draw, and k-means++ picks centres by a uniform draw over the cumulative D2 of the list. One added cell therefore shifts every later draw, the clusters change, and each cell's rho follows its cluster's contamination prior.
+
+Rule (orchestrator / Zach, 2026-10-29):
+1. Every random number the fit uses for a cell comes from that cell's barcode alone: u(cell, purpose) = SplitMix64(packed barcode XOR salt(purpose)). The PCA start row of a cell is u(cell, component) - 1/2.
+2. k-means++ seeding without a shared stream. In restart *r*, the first centre is the cell with the smallest u(cell, r, 0). Each further centre *k* is the cell with the smallest -ln u(cell, r, k) / D2(cell), an exponential race that selects cells with probability proportional to D2, as k-means++ requires. A cell's chance depends only on its own barcode and its distance, so adding or dropping one cell changes the seeds only if that cell would have won.
+3. 10 restarts (Lloyd to convergence, at most 30 iterations each). The restart with the lowest within-cluster sum of squares is kept, ties by restart index.
+4. Canonical labels: clusters are numbered in ascending order of their smallest member barcode.
+
+Gate: per-cell rho, stream vs sorted, Pearson >= 0.99 on 3' and 5'; also reported, the same path against a run on 99% of the reads (a 1% read subsample removed). If restarts cannot reach the gate, the next step is a more stable clustering (consensus) or a shrinkage that lowers each cell's dependence on its cluster prior, whichever is more defensible. Accepting the instability is not an option.
+
 ## Gates
 
 1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, including the non-host tables (`nonhost/*`), except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings) and fields that hold paths or the sizes of those files.
@@ -118,5 +130,5 @@ Why: a UMI with one sequencing or PCR error is the same template, and counting i
 | thread/rerun gate | met for every output including `nonhost/*` on `f4a1e95` and `253c2c6`, 3' and 5' (4 vs 16 threads, rerun) | — |
 | R8 non-host EM | done, `f4a1e95` (canonical input order, hash sample above the cap) | match if the GPU runs the non-host EM |
 | R9 UMI correction (SJ, V(D)J, SNP) | per (cell, gene) `13d8faf` (per-feature version `253c2c6`), both paths; gates 1-2 met; vs prod: junctions within 0.03% (5') / 0.001% (3'), V(D)J -2.0% and SNP DP -1.6% on 5' (residual, see ws-w3b update h) | to implement (same rule) |
-| R10 ambient pool (5-100 UMIs, sequence ties, cells in sequence order) | to implement on `perf/bam-stream` | match if the GPU runs the ambient correction |
+| R10 ambient pool (5-100 UMIs, sequence ties, cells in sequence order) | done, `2a45dd3`: pool and mean rho path-independent; R10b (data-seeded clusters, 10 restarts) in progress | match if the GPU runs the ambient correction |
 | shuffled-order gate | met on `8699980` (791182) and `253c2c6` (791783), GSM4006843: 44 files identical across as-written / collate / coord replays. `f4a1e95` had failed on `exon_counts` (multimapper exon, fixed by R7) | — |
