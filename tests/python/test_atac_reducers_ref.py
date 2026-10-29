@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bench" / "atac_reducers"))
 import atac_ref as R  # noqa: E402
+import barcode_ref as B  # noqa: E402
 import sim  # noqa: E402
 
 KS = (1, 2, 7)
@@ -160,3 +161,68 @@ def test_unbalanced_partitions_and_empty_partition(data):
     small = R.select(rec, rec["cell"] < 3)
     ref = digest(R.run_all(small, 1, sim.CHROM_LEN, sim.IS_MITO, sim.NCELLS))
     assert digest(R.run_all(small, 7, sim.CHROM_LEN, sim.IS_MITO, sim.NCELLS)) == ref
+
+
+# ---- A1 (CPU port of the new default) ------------------------------------------------------------------------------------
+def test_a1_cpu_global_dedup_port_is_order_free_and_equals_sorted_cpu(data):
+    rec, _ = data
+    sorted_old = R.cpu_fragments(sim.coord_sorted(rec))                 # PR #48 on a sorted BAM
+    for r in (rec, sim.shuffled(rec, 3), sim.coord_sorted(rec)):
+        new = R.cpu_fragments(r, assume_sorted=False)                  # branch claude/atac-orderfree-a1-a2
+        eq(sorted_old, new)
+
+
+# ---- A2 (port of the layout choice) ---------------------------------------------------------------------------------------
+def _barcode_records(seed=5, n=6000):
+    """Multiome-style 24 bp raw barcodes: 8 bp spacer + 16 bp whitelist barcode. The first 1500 records of the (position-sorted)
+    stream are from a region with junk barcodes, as the start of chr1 can be."""
+    rng = np.random.default_rng(seed)
+    bases = np.array(list("ACGT"))
+    wl = ["".join(rng.choice(bases, 16)) for _ in range(200)]
+    recs = []
+    for i in range(n):
+        if i < 1500:
+            raw = "".join(rng.choice(bases, 24))                      # no whitelist structure
+        else:
+            raw = "".join(rng.choice(bases, 8)) + wl[rng.integers(200)]
+        recs.append((f"BC:{raw}_r{i}", raw))
+    return recs, {w for w in wl}
+
+
+def test_a2_hash_sample_choice_is_order_free_and_prefix_choice_is_not():
+    recs, wl = _barcode_records()
+    junk = {"".join(["A"] * 16)}
+    ref = B.choose(B.hash_sample(recs), [junk, wl])
+    assert ref[0] == 1 and ref[1][0] == 8 and not ref[1][1] and ref[1][2] > 0.7      # offset 8, forward, whitelist 1
+    for s in range(3):
+        sh = [recs[i] for i in np.random.default_rng(s).permutation(len(recs))]
+        assert B.choose(B.hash_sample(sh), [junk, wl]) == ref
+    # PR #48 rule with a prefix cap of 1000: the sorted order decides (junk first), a shuffled order does not
+    pre_sorted = B.choose(B.prefix_sample(recs, 1000), [junk, wl])
+    sh = [recs[i] for i in np.random.default_rng(0).permutation(len(recs))]
+    pre_shuf = B.choose(B.prefix_sample(sh, 1000), [junk, wl])
+    assert pre_sorted[1][2] < 0.1 and pre_shuf != pre_sorted
+
+
+def test_a2_hash_is_about_one_in_64():
+    n = sum(B.is_layout_sample(f"BC:AAAA_r{i}") for i in range(20000))
+    assert 200 < n < 450
+
+
+# ---- A8: peaks from called cells -------------------------------------------------------------------------------------------
+def test_a8_final_peaks_come_from_called_cells_only(data):
+    rec, planted = data
+    out = R.run_all(rec, 1, sim.CHROM_LEN, sim.IS_MITO, sim.NCELLS)
+    is_cell = out["is_cell"].astype(bool)
+    assert is_cell[: sim.N_REAL].sum() >= 55 and not is_cell[sim.N_REAL:].any()      # empties are not called
+    f = out["fragments"]
+    cells_only = R.insertion_reduce(R.insertion_emit(R.select(f, is_cell[f["cell"]]), sim.IS_MITO))
+    eq(R.peak_call(cells_only, sim.CHROM_LEN, sim.IS_MITO), out["peaks"])
+    # the first pass (all barcodes) is a different insertion table: it holds the empty droplets' fragments
+    assert out["insertions_all"]["count"].sum() > out["insertions"]["count"].sum()
+    hit = sum(any(out["peaks"]["tid"][i] == t and out["peaks"]["start"][i] - 200 <= c <= out["peaks"]["end"][i] + 200
+                  for i in range(len(out["peaks"]["tid"]))) for t, c in planted)
+    assert hit >= 0.8 * len(planted)
+    # no peak is built from a non-cell's cut sites: counts in the final matrix of non-cells are possible (they are counted against
+    # the peaks), but they do not enter the peak set
+    assert out["peak_counts"]["cell"].max() < sim.NCELLS

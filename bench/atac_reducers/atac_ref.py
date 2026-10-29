@@ -51,7 +51,7 @@ MIN_FRAG, MAX_FRAG, MIN_MAPQ = 10, 2000, 30
 SHIFT_L, SHIFT_R = 4, 5   # Tn5: start + 4, end - 5
 
 
-def cpu_fragments(rec: dict) -> dict:
+def cpu_fragments(rec: dict, assume_sorted: bool = True) -> dict:
     """Port of ATACFragmentExtractor::process_record + finalise (PR #48), records in the order given.
 
     The dedup table is cleared whenever (tid, frag_start) changes, so it only merges duplicates that are adjacent
@@ -78,7 +78,7 @@ def cpu_fragments(rec: dict) -> dict:
         if cell < 0:
             continue
         tid = int(rec["tid"][i])
-        if (tid, s) != cur:
+        if assume_sorted and (tid, s) != cur:   # assume_sorted=False: the A1 table (atac-orderfree-a1-a2 branch, the new default)
             dedup.clear()
             cur = (tid, s)
         key = (tid, s, e, cell)
@@ -476,21 +476,39 @@ def cpu_cell_metrics_and_matrix(frags: dict, peaks: dict, is_mito, ncells: int):
 # =====================================================================================================================
 # whole pipeline in partitions
 # =====================================================================================================================
-def run_all(rec: dict, K: int, chrom_len: np.ndarray, is_mito: np.ndarray, ncells: int) -> dict:
-    """Pass 1 per partition (fragments, insertion table) -> canonical merge of the insertion tables -> peak call on the
-    merged table -> pass 2 per partition (cell x peak counts) -> canonical merge. Everything returned is a function of the
-    set of records only."""
+MIN_CELL_PEAK_FRAGMENTS = 8
+
+
+def default_cell_caller(metrics: dict) -> np.ndarray:
+    """Stand-in for the host mixture cell call (call_cells_mixture): a floor on fragments in peaks. The real caller runs on the
+    host over the merged per-cell table in whitelist order (A5); only its input (peak_region_fragments) matters here."""
+    return metrics["peak_region_fragments"] >= MIN_CELL_PEAK_FRAGMENTS
+
+
+def run_all(rec: dict, K: int, chrom_len: np.ndarray, is_mito: np.ndarray, ncells: int, cell_caller=default_cell_caller) -> dict:
+    """Rule A8 (peaks from called cells). PR #48's cell call needs peaks (peak_region_fragments), so it is two-pass:
+      1. per partition: fragments and the insertion table of ALL resolved barcodes -> canonical merge -> first peak set
+      2. per-cell metrics against the first peak set -> cell call (host)
+      3. insertion tables of the CALLED cells only -> canonical merge -> final peak set
+      4. per partition: cell x peak counts against the final peak set; metrics recomputed on the final peaks (the cell set is
+         not re-called: no iteration)
+    Everything returned is a function of the set of records, for any K."""
     part = cell_part(rec["cell"], K)
-    frag_parts, ins_parts = [], []
+    frag_parts, ins_all = [], []
     for p in range(K):
         f = fragment_reduce(fragment_emit(select(rec, part == p)))
         frag_parts.append(f)
-        ins_parts.append(insertion_reduce(insertion_emit(f, is_mito)))
-    table = insertion_merge(ins_parts)          # the cross-cell table: canonical sorted multiset
+        ins_all.append(insertion_reduce(insertion_emit(f, is_mito)))
+    table_all = insertion_merge(ins_all)
+    peaks_all = peak_call(table_all, chrom_len, is_mito)
+    frags = fragment_merge(frag_parts)
+    is_cell = np.asarray(cell_caller(cell_metrics(frags, peaks_all, is_mito, ncells)), dtype=bool)
+    ins_cells = [insertion_reduce(insertion_emit(select(f, is_cell[f["cell"]]), is_mito)) for f in frag_parts]
+    table = insertion_merge(ins_cells)
     peaks = peak_call(table, chrom_len, is_mito)
     cnt_parts = [peak_count_reduce(peak_count_emit(f, peaks, is_mito)) for f in frag_parts]
-    frags = fragment_merge(frag_parts)
-    return {"fragments": frags, "insertions": table, "peaks": peaks, "peak_counts": peak_count_merge(cnt_parts),
+    return {"fragments": frags, "insertions_all": table_all, "peaks_all": peaks_all, "is_cell": is_cell.astype(np.uint8),
+            "insertions": table, "peaks": peaks, "peak_counts": peak_count_merge(cnt_parts),
             "metrics": cell_metrics(frags, peaks, is_mito, ncells)}
 
 

@@ -9,7 +9,8 @@ from atac_ref import F_MUNMAP, F_PAIRED, F_PROPER, F_READ1, F_READ2, F_REV, F_SE
 
 CHROM_LEN = np.array([300_000, 200_000, 120_000, 2_000], np.int64)   # chr1, chr2, chr3, chrM
 IS_MITO = np.array([False, False, False, True])
-NCELLS = 60
+N_REAL = 60                   # cells
+NCELLS = 100                  # barcode space: 40 more barcodes are empty droplets (a few ambient fragments each)
 READLEN = 50
 
 
@@ -19,7 +20,7 @@ def make_records(seed: int = 7, n_bg: int = 2600, n_planted: int = 12, per_peak:
     for _ in range(n_bg):
         t = rng.choice(4, p=[0.45, 0.30, 0.2, 0.05])
         flen = int(np.clip(rng.gamma(2.2, 90), 20, 700))
-        frags.append((rng.integers(NCELLS), t, rng.integers(0, CHROM_LEN[t] - flen), flen))
+        frags.append((rng.integers(N_REAL), t, rng.integers(0, CHROM_LEN[t] - flen), flen))
     planted = []
     for _ in range(n_planted):
         t = int(rng.integers(0, 3))
@@ -27,7 +28,11 @@ def make_records(seed: int = 7, n_bg: int = 2600, n_planted: int = 12, per_peak:
         planted.append((t, c))
         for _ in range(per_peak):
             flen = int(np.clip(rng.gamma(2.0, 80), 40, 600))
-            frags.append((rng.integers(NCELLS), t, c + int(rng.integers(-250, 250)), flen))
+            frags.append((rng.integers(N_REAL), t, c + int(rng.integers(-250, 250)), flen))
+    for e in range(N_REAL, NCELLS):   # empty droplets: 8-14 uniformly placed fragments, no accessibility structure
+        for _ in range(int(rng.integers(8, 15))):
+            tt = int(rng.choice(3)); flen = int(np.clip(rng.gamma(2.2, 90), 20, 700))
+            frags.append((e, tt, rng.integers(0, CHROM_LEN[tt] - flen), flen))
     # PCR duplicates of a random subset (1-4 extra copies)
     dup = [frags[i] for i in rng.choice(len(frags), len(frags) // 6, replace=False) for _ in range(int(rng.integers(1, 5)))]
     frags += dup
@@ -57,7 +62,7 @@ def make_records(seed: int = 7, n_bg: int = 2600, n_planted: int = 12, per_peak:
         elif kind == 1: flag |= F_SEC
         elif kind == 2: mtid = (t + 1) % 3
         else: flag &= ~F_PROPER
-        rows.append((int(rng.integers(NCELLS)), t, s, 300, mtid, flag, 255, qid)); qid += 1
+        rows.append((int(rng.integers(N_REAL)), t, s, 300, mtid, flag, 255, qid)); qid += 1
     a = np.array(rows, dtype=np.int64)
     rec = {"cell": a[:, 0].astype(np.int32), "tid": a[:, 1].astype(np.int32), "pos": a[:, 2].astype(np.int32),
            "tlen": a[:, 3].astype(np.int32), "mtid": a[:, 4].astype(np.int32), "flag": a[:, 5].astype(np.int32),

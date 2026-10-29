@@ -9,6 +9,9 @@
 // Spec and rules: docs/research-beta/atac-reducers-prep.md. Reference implementation and tests (numba, runnable on a laptop):
 // bench/atac_reducers/atac_ref.py, tests/python/test_atac_reducers_ref.py. Every kernel below has a one-to-one counterpart there.
 //
+// Rule A8 (two-pass peaks): run red_insertions on all fragments -> merge -> peak call -> per-cell metrics -> host cell call, then run red_insertions again
+// on the called cells' fragments only (filter F by is_cell[cell] before k_ins_count), merge, and call the final peaks; red_peak_count uses the final peaks.
+//
 // Determinism: integer sorts, scans, reduce-by-key and integer atomicAdd (commutative) only. The one floating-point stage is the Poisson
 // tail in k_grid_scores; build with -fmad=false as pileup.cu does, and compare its output to the CPU port by gate (a).
 #pragma once
