@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Build the phase 1d harness. NOT COMPILED with nvcc yet (written on a laptop without it); the host check below was compiled with
-# g++ 13.2 and passes. Run from the repo root or from here.
+# Build the phase 1d harness. Compiled with nvcc 12.4 (sm_90) on Clipper with the CUDA image's gcc 11 as host compiler. Run from the repo root or from here.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 inc="$here/../../src/engine_gpu"
@@ -11,7 +10,8 @@ g++ -std=c++17 -O1 -I"$inc" "$here/paired_unit_host.cpp" -o "$here/paired_unit_h
 
 # 2. the GPU harness (H100 = sm_90; CUDA_ARCH=sm_80 for A100)
 if command -v nvcc >/dev/null 2>&1; then
-    nvcc -std=c++17 -O3 -lineinfo -arch="${CUDA_ARCH:-sm_90}" -I"$inc" \
+    # CCBIN: host compiler for nvcc. On Clipper it must be the CUDA image's gcc 11 (CCBIN=/usr/bin/g++); the conda gcc 16 headers break nvcc 12.4.
+    nvcc -std=c++17 -O3 -lineinfo -arch="${CUDA_ARCH:-sm_90}" ${CCBIN:+-ccbin "$CCBIN"} -I"$inc" \
          "$here/paired_microbench.cu" -o "$here/paired_microbench"
     "$here/paired_microbench" --unit "$here/fixtures/cases.txt"
 else
