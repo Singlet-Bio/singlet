@@ -843,8 +843,25 @@ inline ExportStats export_results(const PileupEngine& engine,
         auto t_amb0 = std::chrono::high_resolution_clock::now();
         const bool amb_has_int = pileup_cfg.count_introns && intron_csc.data.size() > 0
                                  && intron_csc.ncols == exon_csc.ncols;
+        // order-free-rules R10: the pool is defined by each barcode's own counts (5..lower_umi UMIs; every barcode
+        // list the engine builds holds all barcodes with >= 5 reads), cap ties and the cells' order in the fit follow
+        // the barcode sequence, never the column order of the list.
+        std::vector<uint32_t> amb_seq_rank(barcodes.size());
+        {
+            std::vector<uint32_t> by_seq(barcodes.size());
+            for (uint32_t b = 0; b < by_seq.size(); ++b) by_seq[b] = b;
+            std::sort(by_seq.begin(), by_seq.end(),
+                      [&](uint32_t a, uint32_t b2) { return barcodes[a] != barcodes[b2] ? barcodes[a] < barcodes[b2] : a < b2; });
+            for (uint32_t r = 0; r < by_seq.size(); ++r) amb_seq_rank[by_seq[r]] = r;
+        }
+        std::vector<uint32_t> amb_cells = cc_result.cell_indices;
+        if (amb_seq_rank.size() == exon_csc.ncols)
+            std::sort(amb_cells.begin(), amb_cells.end(),
+                      [&](uint32_t a, uint32_t b2) { return amb_seq_rank[a] < amb_seq_rank[b2]; });
         singlet::AmbientDecontConfig amb_cfg;
         amb_cfg.lower_umi = export_cfg.lower_umi;
+        amb_cfg.pool_min_umi = 5;
+        if (amb_seq_rank.size() == exon_csc.ncols) amb_cfg.pool_tie_rank = &amb_seq_rank;
         amb_cfg.threads = export_cfg.threads > 1 ? static_cast<uint32_t>(export_cfg.threads) : 0u;
         // Exon and intron gene counts enter as separate features (the soup is exon-rich, cells are 20-30% intronic);
         // contamination is estimated from the exon features, the correction acts on both and is folded back to genes.
@@ -858,9 +875,9 @@ inline ExportStats export_results(const PileupEngine& engine,
                 zero_exon.indptr.assign(static_cast<size_t>(exon_csc.ncols) + 1, 0);
                 return collapse_to_gene_counts(zero_exon, intron_csc, engine.gene_model());
             }();
-            amb = singlet::correct_ambient_gene_level_split(amb_exon_gene, amb_intron_gene, cc_result.cell_indices, amb_cfg);
+            amb = singlet::correct_ambient_gene_level_split(amb_exon_gene, amb_intron_gene, amb_cells, amb_cfg);
         } else {
-            amb = singlet::correct_ambient_gene_level(amb_exon_gene, cc_result.cell_indices, amb_cfg);
+            amb = singlet::correct_ambient_gene_level(amb_exon_gene, amb_cells, amb_cfg);
         }
         amb_exon_gene = decltype(amb_exon_gene)();  // release the all-barcode gene matrix
         {
@@ -874,7 +891,7 @@ inline ExportStats export_results(const PileupEngine& engine,
             out_prefix + "/ambient_profile.tsv", amb.profile, ambient_feature_names);
         singlet::write_contamination_tsv(
             out_prefix + "/ambient_contamination.tsv",
-            amb.contam, cc_result.cell_indices, barcodes);
+            amb.contam, amb_cells, barcodes);
         singlet::write_ambient_json(out_prefix + "/ambient_contamination.json", amb, amb_cfg);
         const bool want_corrected = export_cfg.pipeline_mode || export_cfg.run_ambient_correction;
         if (want_corrected && amb.ok && ambient_feature_names.size() == amb.corrected.nrows)

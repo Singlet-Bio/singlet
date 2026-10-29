@@ -80,19 +80,24 @@ struct CellContamination {
 
 // ── Ambient profile estimation ───────────────────────────────────────────────
 
-/// Estimate ambient RNA profile from empty droplets (barcodes <= lower_umi).
+/// Estimate ambient RNA profile from empty droplets (barcodes with min_umi..lower_umi UMIs).
 ///
 /// @param counts        Full CSC feature x barcode matrix (all barcodes); uint16 or uint32 data.
 /// @param bc_totals     Per-barcode total UMI (size = counts.ncols).
 /// @param lower_umi     Threshold: barcodes with count <= this define ambient pool.
 /// @param n_ambient_max Maximum empty droplets to use (default 50000; highest-count ones).
+/// @param min_umi       Lower bound of the pool (order-free-rules R10 uses 5; 1 = every non-empty barcode).
+/// @param tie_rank      Optional per-barcode rank that breaks count ties at the cap (R10: barcode sequence order);
+///                      nullptr = column index.
 /// @return              AmbientProfile with per-gene fractions summing to 1.
 template <class CSC>
 inline AmbientProfile estimate_ambient(
     const CSC&                   counts,
     const std::vector<uint64_t>& bc_totals,
     uint64_t                     lower_umi,
-    int                          n_ambient_max = 50000)
+    int                          n_ambient_max = 50000,
+    uint64_t                     min_umi = 1,
+    const std::vector<uint32_t>* tie_rank = nullptr)
 {
     AmbientProfile profile;
     const uint32_t n_genes    = counts.nrows;
@@ -101,16 +106,19 @@ inline AmbientProfile estimate_ambient(
 
     profile.gene_fractions.assign(n_genes, 0.0);
 
-    // Non-zero empty barcodes, descending by count (ties by index: deterministic), capped.
+    // Empty barcodes with min_umi..lower_umi UMIs, descending by count (ties by tie_rank, else index), capped.
+    if (tie_rank && tie_rank->size() != n_barcodes) tie_rank = nullptr;
+    const uint64_t lo = std::max<uint64_t>(min_umi, 1);
     std::vector<uint32_t> empty_bcs;
     empty_bcs.reserve(n_barcodes);
     for (uint32_t b = 0; b < n_barcodes; ++b) {
-        if (bc_totals[b] > 0 && bc_totals[b] <= lower_umi)
+        if (bc_totals[b] >= lo && bc_totals[b] <= lower_umi)
             empty_bcs.push_back(b);
     }
     std::sort(empty_bcs.begin(), empty_bcs.end(),
               [&](uint32_t a, uint32_t b2) {
-                  return bc_totals[a] != bc_totals[b2] ? bc_totals[a] > bc_totals[b2] : a < b2;
+                  if (bc_totals[a] != bc_totals[b2]) return bc_totals[a] > bc_totals[b2];
+                  return tie_rank ? (*tie_rank)[a] < (*tie_rank)[b2] : a < b2;
               });
     if (static_cast<int>(empty_bcs.size()) > n_ambient_max)
         empty_bcs.resize(static_cast<size_t>(n_ambient_max));
@@ -144,8 +152,10 @@ inline AmbientProfile estimate_ambient(
 // ══════════════════════════════════════════════════════════════════════════════
 
 struct AmbientDecontConfig {
-    uint64_t lower_umi        = 100;    ///< barcodes with 1..lower_umi UMIs form the ambient pool
+    uint64_t lower_umi        = 100;    ///< barcodes with pool_min_umi..lower_umi UMIs form the ambient pool
+    uint64_t pool_min_umi     = 1;      ///< order-free-rules R10: 5 in the pipeline (export.h)
     int      n_ambient_max    = 50000;  ///< pool size cap (highest-count empty droplets)
+    const std::vector<uint32_t>* pool_tie_rank = nullptr; ///< R10: rank of each barcode column by sequence (cap ties)
     uint32_t n_clusters       = 0;      ///< 0 = auto: clamp(round(sqrt(n_cells / 20)), 2, 24); 1 when < 40 cells
     uint32_t n_hvg            = 2000;   ///< genes used for clustering
     uint32_t n_pcs            = 20;     ///< principal components used for clustering
@@ -717,7 +727,8 @@ inline AmbientCorrectionResult correct_ambient_gene_level(
         if (cell_indices[i] < B) cell_of[cell_indices[i]] = static_cast<int32_t>(i);
     std::vector<uint64_t> pool_tot = tot;
     for (uint32_t b = 0; b < B; ++b) if (cell_of[b] >= 0) pool_tot[b] = 0;
-    R.profile = estimate_ambient(gene_counts, pool_tot, cfg.lower_umi, cfg.n_ambient_max);
+    R.profile = estimate_ambient(gene_counts, pool_tot, cfg.lower_umi, cfg.n_ambient_max, cfg.pool_min_umi,
+                                 cfg.pool_tie_rank);
 
     // called-cell sub-matrix
     CellMat X;
@@ -1047,6 +1058,7 @@ inline void write_ambient_json(const std::string& outpath, const AmbientCorrecti
       << "  \"ambient_profile_n_barcodes\": " << R.profile.n_ambient_barcodes << ",\n"
       << "  \"ambient_profile_total_umis\": " << static_cast<uint64_t>(R.profile.total_ambient_umi) << ",\n"
       << "  \"ambient_profile_n_genes_detected\": " << R.n_genes_detected_pool << ",\n"
+      << "  \"ambient_pool_min_umi\": " << cfg.pool_min_umi << ",\n"
       << "  \"ambient_pool_max_umi\": " << cfg.lower_umi << ",\n"
       << "  \"prior_strength\": " << cfg.prior_strength << ",\n"
       << "  \"seconds\": " << R.seconds << "\n"
