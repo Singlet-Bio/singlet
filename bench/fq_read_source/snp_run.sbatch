@@ -30,5 +30,5 @@ export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists SINGLET_STALL_TIME
 echo "1fq bytes $(stat -c %s $SCR/s.1fq)"; grep -E "Elapsed|Maximum" $O/encode.time.txt
 /usr/bin/time -v -o $O/time.txt $BIN $SCR/s.1fq --ref-base /mnt/projects/debruinz_project/cellarium/reference \
   --genome-dir $REF/star_2.7.11b --exons $REF/genes/genes.gtf --out-prefix $O/ --threads 16 --pipeline \
-  --n-donors -1 --bam-sort-mode disk --output-format mtx --raw-matrix > $O/run.log 2>&1 || echo "exit $?" >> $O/run.log
+  --n-donors -1 --tagged-bam $SCR/possorted.bam --bam-sort-mode disk --output-format mtx --raw-matrix > $O/run.log 2>&1 || echo "exit $?" >> $O/run.log
 grep -E "Elapsed|Maximum resident" $O/time.txt; grep -E "auto-K|selected K" $O/run.log | head -5; ls $O/private
