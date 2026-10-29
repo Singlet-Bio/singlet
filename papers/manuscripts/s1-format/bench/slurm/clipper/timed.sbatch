@@ -21,6 +21,13 @@ s1_checkout
 s1_activate
 s1_netem_tools
 s1_cpp
+# S1_PKG_OVERLAY=1: the singlet package of this commit, built into this job's TMPDIR and put ahead of the env's copy, so a
+# rerun can use newer package code without reinstalling into the env that other jobs are using.
+if [ -n "${S1_PKG_OVERLAY:-}" ]; then
+  pip install -q --no-deps --no-build-isolation --target "$TMPDIR/site" "$SRC"
+  export PYTHONPATH="$TMPDIR/site:$PYTHONPATH"
+  python -c "import singlet, singlet.torch; print('singlet', singlet.__version__, singlet.__file__)"
+fi
 IFS=, read -ra DS <<<"${DS_LIST:?set DS_LIST}"
 E=${DS[${SLURM_ARRAY_TASK_ID:-0}]}
 D=${E%@*}
