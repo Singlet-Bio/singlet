@@ -10,7 +10,7 @@
 set -euo pipefail
 trap 'echo "[build] failed at line $LINENO: $BASH_COMMAND"' ERR
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; PB=$W/pipeline-benchmark
-BARE=$W/repos/singlet-py.git; BR=${BR:-fix/intron-rule-default}; SRC=$W/src/singlet-py/${BR////__}
+BARE=$W/repos/singlet-py.git; BR=${BR:-fix/intron-rule-default}; SRC=$W/src/singlet-py/$(echo $BR | sed "s#/#__#g")
 OUTNAME=${OUTNAME:-singlet-intronfix}
 git -C $BARE fetch -q --update-head-ok origin +refs/heads/$BR:refs/heads/$BR
 [ -d $SRC ] || git -C $BARE worktree add -q -f $SRC $BR
