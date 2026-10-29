@@ -72,7 +72,7 @@ Each input read becomes one fixed record:
 **Where `cell_key` comes from:**
 - **In-read barcode with a whitelist** (10x and the like): 1MM_multi correction as STARsolo does it, from the existing
   `CB_UMI_Simple` / `CB_UMI_Complex` layouts.
-- **In-read barcode without a whitelist** (Drop-seq family): the raw barcode, then knee-based or bead-error correction.
+- **In-read barcode without a whitelist** (Drop-seq family): the raw barcode, matched Exact, as STAR/singlet do today (no correction for complex or whitelist-free protocols).
 - **One file per cell or well** (plate): the file index.
 - **Spot barcode** (spatial): the barcode and its `(x, y)` from the spot list, carried as feature metadata.
 - **Combinatorial segments** (SPLiT, sci): the concatenated corrected segments.
