@@ -15,7 +15,7 @@ BR=$1; NAME=$2; shift 2; TESTS=("$@")
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; PB=$W/pipeline-benchmark
 BARE=$W/repos/singlet-py.git; SRC=$W/src/singlet-py/bb__${BR//\//__}
 git -C $BARE fetch -q --update-head-ok origin +refs/heads/$BR:refs/heads/$BR
-[ -d $SRC ] || git -C $BARE worktree add -q $SRC $BR
+[ -d $SRC ] || git -C $BARE worktree add -q --detach $SRC refs/heads/$BR
 git -C $SRC reset -q --hard refs/heads/$BR; COMMIT=$(git -C $SRC rev-parse HEAD); git -C $SRC log --oneline -1
 export PATH=$ENV/bin:$PATH CONDA_PREFIX=$ENV CMAKE_PREFIX_PATH=$ENV PKG_CONFIG_PATH=$ENV/lib/pkgconfig:$ENV/share/pkgconfig
 export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gnu-g++ LD_LIBRARY_PATH=$ENV/lib CMAKE_POLICY_VERSION_MINIMUM=3.5
