@@ -141,8 +141,7 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
             for (const auto& r : first) cands[i]->observe(r);
             auto lay = cands[i]->detect_layout();
             std::cerr << "[atac] layout on " << first.size() << " hash-sampled reads, whitelist " << i << ": offset " << lay.offset
-                      << (lay.revcomp ? " revcomp" : " forward") << ", exact hit rate " << lay.hit_rate << "
-";
+                      << (lay.revcomp ? " revcomp" : " forward") << ", exact hit rate " << lay.hit_rate << "\n";
             if (lay.hit_rate > best) { best = lay.hit_rate; bi = i; }   // ties: the earlier whitelist
         }
         cor = cands[bi].get();
@@ -150,8 +149,7 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
         for (const auto& [raw, n] : raw_counts) cor->count(raw, n);   // integer adds: iteration order does not matter
         first.clear();
         raw_counts.clear();
-        std::cerr << "[atac] using whitelist " << bi << "
-";
+        std::cerr << "[atac] using whitelist " << bi << "\n";
     };
     while (sam_read1(fp, hdr, rec) >= 0) {
         if (!ATACFragmentExtractor::is_fragment_record(rec)) continue;
@@ -161,8 +159,7 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
         ++raw_counts[std::string(raw)];
         if (AtacBarcodeCorrector::is_layout_sample(bam_get_qname(rec))) first.emplace_back(raw);
     }
-    if (raw_counts.empty()) { std::cerr << "[atac] ERROR: no barcoded fragment records
-"; return 1; }
+    if (raw_counts.empty()) { std::cerr << "[atac] ERROR: no barcoded fragment records\n"; return 1; }
     choose();
     bam_hdr_destroy(hdr);
     sam_close(fp);
