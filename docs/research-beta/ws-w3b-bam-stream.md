@@ -437,8 +437,10 @@ Cells: 3' 13,043 stream / 13,098 prod, 13,020 both (23 stream-only, 78 prod-only
 
 ### FIFO open race (production bug, separate fix)
 
-The 5' 16-thread run 790764 got 0 reads: the 1fq writer opened its FIFO with a temporary non-blocking reader, which can close before STAR opens its end; the first write then hits EPIPE, the writer exits, "Pass 2 done" still counts the block, and STAR reports "No reads processed". Present in `prod/campaign` since `37e7cbd` (June). Census (791096 + 791308, `results/noreads_classified.tsv`): 110 "No reads processed" logs, all from 2026-04-14 to 05-15 (before that change), none with the race signature; nothing requeued. Fix on branch `fix/fifo-open-race` (from `prod/campaign`): non-blocking open retried until STAR is connected, every failed write logged, pass 2 reports delivered reads only. Test 791094 compares old and new binaries with a forced STAR start delay.
+The 5' 16-thread run 790764 got 0 reads: the 1fq writer opened its FIFO with a temporary non-blocking reader, which can close before STAR opens its end; the first write then hits EPIPE, the writer exits, "Pass 2 done" still counts the block, and STAR reports "No reads processed". Present in `prod/campaign` since `37e7cbd` (June). Census (791096 + 791308, `results/noreads_classified.tsv`): 110 "No reads processed" logs, all from 2026-04-14 to 05-15 (before that change), none with the race signature; nothing requeued. Fix on branch `fix/fifo-open-race` (from `prod/campaign`): non-blocking open retried until STAR is connected, every failed write logged, pass 2 reports delivered reads only. Test 791094 (2M real reads, STAR started 5 s late): old binary exit 5, STAR got 0 reads while pass 2 logged "500000 reads"; new binary delivered all 2,000,000 reads with and without the delay, identical results. Draft PR Singlet-Bio/singlet#75 (not merged); cherry-picked into `perf/bam-stream` as `0cc9321`, `f584125` (build `singlet-bs-r11` OK).
 
 ### Clipper cost of this update
 
 About 14 node-hours (exclusive nodes; 6 R10 runs of 10-19 min, 6 r8 runs, two shuffle gates of ~35 min, builds, probes and comparisons).
+
+Clipper storage cleared after this update (run outputs, shuffle diagnostics, staged `.1fq` reads; about 15 GB). Logs and small summaries are kept in `bam-stream/` (2.4 MB).
