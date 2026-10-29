@@ -29,6 +29,14 @@ Written 2026-10-27 by the orchestrating session after a five-part audit. The evi
 - **Depth.** All reads of every run; no cap.
 - **Clusters.** Clipper first, Anvil only after Zach confirms. State the SU estimate before anything over ~1,000 SU.
 
+**GPU engine correctness** (2026-10-29)
+- **Alignment:** no regression against the frozen production-STAR baseline on the pre-registered ground-truth measures M1-M7
+  ("Increase Mapping Rate" harness, `bench/ground-truth` PREREGISTRATION.md), beyond each measure's tolerance, plus the
+  throughput gate. Byte identity to STAR is no longer required; non-STAR algorithms are allowed with their M1-M7 results.
+  No aligner change is accepted before the harness is frozen.
+- **Counting** (pileup, dedup, UMI collapse, cell calling, reducers): exact against the CPU engine under the order-free rules.
+- Single GPU only; no multi-GPU or whole-node work.
+
 **Data and release rules**
 - **Format.** `.s1` with the pz2 codec is the only data format. Nothing is named "store" or "v2".
 - **Public vs private.** Genotypes are never public. Inferred sex, ancestry and cell type are public cell metadata.
