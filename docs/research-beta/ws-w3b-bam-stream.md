@@ -377,3 +377,68 @@ New rule counters on the two samples (stream, 4 threads):
 | wall, peak RSS | 14:13, 57.5 GB | 17:18, 53.2 GB |
 
 Not run yet: the shuffled-record-order gate (it needs an unsorted STAR BAM kept in `/tmp` and a `--bam-file` mode that takes CB from CR), and the comparison with `prod/campaign`'s sorted output (jobs 790259/790260 are queued behind the per-user node limit; comparisons 790266/790267 follow).
+
+## Update 2026-10-29 (h): all three gates, the comparison with production, and R9
+
+Binaries on `perf/bam-stream`: `singlet-bs-r8` = `f4a1e95` (R8), `singlet-bs-r9` = `8699980` (R7 multimapper exon), `singlet-bs-r10` = `253c2c6` (R9). Production reference: `singlet-campaign` (`prod/campaign`, sorted BAM), jobs 790259 (3') / 790260 (5'). Samples GSM4006843 (3', 10x v2) and GSM7901264 (5').
+
+### Gate 1: threads and reruns (met)
+
+| binary | pair | identical | differ only in timings/paths/sizes | other |
+|---|---|---|---|---|
+| r8 `f4a1e95` | 3' 4 vs 16 threads (790766), rerun (790767) | 59 | 3 | 0 |
+| r8 | 5' rerun (791082 vs 790763; 791083) | 57 | 3 | 0 |
+| r10 `253c2c6` | 3' 4 vs 16 threads (791778), rerun (791779) | 59 | 3 | 0 |
+| r10 | 5' 4 vs 16 threads (791780), rerun (791781) | 57 | 3 | 0 |
+
+The three files are `read_stats.tsv` (`wall_seconds`), `star_Log.std.out` (the job's `/tmp` path) and `pileup_stats.json:/provenance/outputs/bytes_public` (the summed sizes of those files). `nonhost/*` is identical from R8 onward.
+
+### Gate 2: shuffled record order (met)
+
+One unsorted STAR BAM (teed from a real stream run, `SINGLET_TEE_STREAM_BAM`) replayed through the serial pileup with `--bam-file X --stream-unsorted` in three orders: as written, `samtools collate`, coordinate-sorted.
+
+| binary | job | identical | differ |
+|---|---|---|---|
+| r8 `f4a1e95` | 790765 | 43 | `exon_counts.1pz` in every pair |
+| r9 `8699980` | 791182 | 44 | only `read_stats` wall time and a 1-byte `bytes_public` |
+| r10 `253c2c6` | 791783 | 44 | same as r9 |
+
+Cause of the r8 failure (diagnostic 791126, `exon_order_diff.py`): replaying the same order twice was identical, but collate/coord moved 21-25 molecules between exons of the same gene (gene totals and intron equal). A multimapper whose primary alignment was intergenic took the exon of whichever secondary arrived first. R7 now says: the exon of a multimapper is the primary's if assigned, else the smallest exon index among its secondaries (`8699980`, serial, workers and the cross-worker merge). W11 must match this.
+
+### Bug found on the way: unreadable junction matrices (fixed)
+
+The serial pass grew the junction accumulator in batches of 1,000 rows and never trimmed it, so `sj_counts.1pz` and `splice_psi.1pz` carried up to 999 unnamed empty rows and the 1pz reader rejected them ("rowname count does not match"). Values were correct. Fixed in `87c6550` (trim to the junction count in `canonicalize_splice_junctions`). Every stream output written before `87c6550` (only W3b test runs; the default was not in production) has unreadable junction matrices.
+
+### Gate 3: every difference from production, by size and cause
+
+Value-level comparison (`pz2mtx.cpp` + `prod_classify.py`, job 791782; `results/prod_classify_r9_<GSM>.json`, r8 in `results/prod_classify_<GSM>.json`). Rows and barcodes matched by name; "moved" = sum |stream - prod| / prod total, over cells called by both.
+
+Cells: 3' 13,043 stream / 13,098 prod, 13,020 both (23 stream-only, 78 prod-only; update (f): none high-quality); 5' 1,462 / 1,462, 1,461 both.
+
+| output | 3' net, moved | 5' net, moved | cause |
+|---|---|---|---|
+| exon_counts | +0.000%, 2.3e-6 | +0.115%, 1.2e-3 | R6 universe (barcode ambient pool) and multimapper exon rule (R7); 5' also more reads reach called cells |
+| intron, ambiguous, polyA | < 1e-4 | < 4e-4 | same |
+| mt_heteroplasmy, mt events, mt allele counts | 0 to 1e-3 | 0 to 1e-3 | barcode universe (per-barcode reads near the call threshold) |
+| nonhost per cell | identical | identical | — |
+| sj_counts | r8 +0.050%, 5.1e-4 -> **r10 -0.001%, 9.1e-6** | r8 +3.45%, 3.3e-2 -> **r10 +0.03%, 1.2e-3** | r8: raw UMI vs STAR's corrected `UB` (below); fixed by R9 |
+| splice_psi | +0.001%, 1.4e-5 | +0.003%, 3.0e-5 | R7 canonical order |
+| vdj_gene_usage | identical (1,208) | r8 +6.74%, 6.3e-2 -> **r10 -1.99%, 3.1e-2** | R9 (see residual) |
+| private_snp_dp | r8 -0.46% -> r10 -0.51%, 5.2e-3 | r8 +1.07% -> **r10 -1.62%, 1.7e-2** | R1 (tie and non-REF/ALT molecules excluded) + R9 |
+| private_snp_ad | r8 +0.003% -> r10 -0.035% | r8 +1.54% -> **r10 -1.18%, 1.7e-2** | R1 + R9 |
+| ambient_corrected_counts | 11.7% moved | 14.6% moved | **decision item**: the ambient fit uses the R6 barcode universe (rho 0.406 stream vs 0.416 prod on 3', 0.215 vs 0.189 on 5'); Zach's open question is whether the ambient pool should be defined independently of the candidate barcode list. Not acted on |
+| everything byte-level else (48 files each) | — | — | barcode-universe columns (R6), rRNA sample (R4), junction order (R7), non-host iterations (R8), SNP (R1), ancestry on 1-5 AIMs |
+
+**Why the 5' stream counted more junction, V(D)J and SNP molecules (r8).** Same STAR alignments (identical `Log.final.out`), barcoded reads within 0.004%, yet +3.5% junctions and +6.8% V(D)J. Probe 791749 (`prod_cb_probe.sbatch`, `--sorted-bam` keeps STAR's BAM): STARsolo writes `UB` (its 1-mismatch-corrected UMI) into a coordinate-sorted BAM even though the logged attribute list shows only `CB`; the unsorted stream has only `CR`/`UR`. The sorted path deduplicated junctions, V(D)J and SNP evidence on `UB`, the stream on exact `UR`. Example: cell CGATGTAAGGTGCTAG x RPL10 junction chrX:154400626-154400701, 3,041 reads, 271 distinct `UR`, 243 distinct `UB`. Exon/intron were unaffected (own directional collapse on both paths). 3' sequencing has fewer reads per molecule, hence the small effect there.
+
+**R9** (spec in `order-free-rules.md`; `253c2c6`, unit test `tests/test_umi_r9.cpp`, 791771 passed): junctions, V(D)J and SNP evidence are collapsed per (barcode, feature) with the same directional 1-mismatch rule as exon/intron, on the raw UMI, on both paths; `UB` is never read. Effect on 3': junctions -0.05% (stream now within 0.001% of prod), SNP DP -0.05%, AD -0.04%, V(D)J unchanged. On 5': junctions -3.3% (now +0.03% vs prod), V(D)J -8.2%, SNP DP -2.7%, AD -2.7%.
+
+**Residual on 5' (after R9): the stream is now below prod for V(D)J (-2.0%) and SNP depth (-1.6%).** Not resolved. Likely a rule difference rather than a bug: STARsolo corrects UMIs within (cell, gene) with its own 1MM rule, whereas R9 collapses within (cell, feature) with the directional count criterion, and for V(D)J segments and SNP sites the feature and the gene differ. The junction counts, where the feature sits inside one gene, agree to 0.03%. A probe like 791749 at a few V(D)J segments and SNP sites would settle it (about 0.1 node-hours); not run.
+
+### FIFO open race (production bug, separate fix)
+
+The 5' 16-thread run 790764 got 0 reads: the 1fq writer opened its FIFO with a temporary non-blocking reader, which can close before STAR opens its end; the first write then hits EPIPE, the writer exits, "Pass 2 done" still counts the block, and STAR reports "No reads processed". Present in `prod/campaign` since `37e7cbd` (June). Census (791096 + 791308, `results/noreads_classified.tsv`): 110 "No reads processed" logs, all from 2026-04-14 to 05-15 (before that change), none with the race signature; nothing requeued. Fix on branch `fix/fifo-open-race` (from `prod/campaign`): non-blocking open retried until STAR is connected, every failed write logged, pass 2 reports delivered reads only. Test 791094 compares old and new binaries with a forced STAR start delay.
+
+### Clipper cost of this update
+
+About 14 node-hours (exclusive nodes; 6 R10 runs of 10-19 min, 6 r8 runs, two shuffle gates of ~35 min, builds, probes and comparisons).

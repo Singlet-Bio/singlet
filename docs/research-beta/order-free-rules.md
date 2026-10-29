@@ -111,7 +111,7 @@ Why: a UMI with one sequencing or PCR error is the same template, and counting i
 | R5 strand | done for the stream, `8ab560d` (no inline probe; aggregate reported; exit 8 on contradiction). The sorted path keeps its genome-sampled probe plus safety net, which re-reads the whole BAM | to implement |
 | R6 barcode universe | done for the stream, `b237f57`; the sorted path still refreshes from the CB-tag scan | take the list from the CPU pass-1 |
 | R7 canonical order | junctions done, `8ab560d`, both paths; multimapper exon `8699980`; other discovery axes still to check against the gates | to implement (match the multimapper exon rule) |
-| thread/rerun gate | met for every output including `nonhost/*` on `f4a1e95`, 3' and 5' (4 vs 16 threads, rerun) | — |
+| thread/rerun gate | met for every output including `nonhost/*` on `f4a1e95` and `253c2c6`, 3' and 5' (4 vs 16 threads, rerun) | — |
 | R8 non-host EM | done, `f4a1e95` (canonical input order, hash sample above the cap) | match if the GPU runs the non-host EM |
-| R9 UMI correction (SJ, V(D)J, SNP) | in progress on `perf/bam-stream` | to implement (same rule) |
-| shuffled-order gate | run on `f4a1e95` (GSM4006843): 43 files identical across as-written / collate / coord replays, `exon_counts` not (21-25 multimapper molecules moved between exons of one gene; gene totals equal). Fixed in `8699980` (R7 multimapper exon); rerun pending | — |
+| R9 UMI correction (SJ, V(D)J, SNP) | done, `253c2c6`, both paths; gates 1-2 met; vs prod: junctions within 0.03% (5') / 0.001% (3'), V(D)J -2.0% and SNP DP -1.6% on 5' (residual, see ws-w3b update h) | to implement (same rule) |
+| shuffled-order gate | met on `8699980` (791182) and `253c2c6` (791783), GSM4006843: 44 files identical across as-written / collate / coord replays. `f4a1e95` had failed on `exon_counts` (multimapper exon, fixed by R7) | — |
