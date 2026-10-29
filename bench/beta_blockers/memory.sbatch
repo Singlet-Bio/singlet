@@ -4,7 +4,7 @@
 #SBATCH --partition=short-cpu
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=300G
-#SBATCH --time=03:00:00
+#SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 #   sbatch memory.sbatch <dataset> <old-bin> <new-bin> [N]
 # What one job costs and what a node can hold. (1) old-bin alone: private genome, private non-host index.
