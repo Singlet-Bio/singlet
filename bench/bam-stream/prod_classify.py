@@ -16,8 +16,17 @@ def load(d, name):
     if not os.path.exists(p + ".mtx"):
         return None
     m = scipy.io.mmread(p + ".mtx").tocsc().astype(np.int64)
-    rows = pd.read_csv(p + ".rows.tsv", header=None, sep="\t", dtype=str, keep_default_na=False)[0].values
-    cols = pd.read_csv(p + ".cols.tsv", header=None, sep="\t", dtype=str, keep_default_na=False)[0].values
+    rows = pd.read_csv(p + ".rows.tsv", header=None, sep="\t", dtype=str, keep_default_na=False, skip_blank_lines=False)[0].fillna("").values
+    cols = pd.read_csv(p + ".cols.tsv", header=None, sep="\t", dtype=str, keep_default_na=False, skip_blank_lines=False)[0].fillna("").values
+    if len(rows) < m.shape[0]:  # rownames missing entirely: index rows by position
+        rows = np.array([f"row{i}" for i in range(m.shape[0])])
+    named = rows != ""  # padded junction rows of pre-87c6550 stream runs: unnamed and empty
+    if not named.all():
+        assert m.tocsr()[~named].nnz == 0, "unnamed rows hold counts"
+        m, rows = m.tocsr()[named].tocsc(), rows[named]
+    if pd.Index(rows).has_duplicates:  # e.g. two SNP alleles at one position: keep them apart by occurrence
+        k = pd.Series(rows).groupby(rows).cumcount().astype(str).values
+        rows = np.char.add(np.char.add(rows.astype(str), "#"), k)
     return m, rows, cols
 
 
@@ -58,6 +67,9 @@ def compare(a, b, cells):
            "cols_a": len(ca), "cols_b": len(cb), "cols_shared": len(cols),
            "row_order_equal": bool(len(ra) == len(rb) and (ra == rb).all()),
            "total_a_all": int(ma.sum()), "total_b_all": int(mb.sum())}
+    if len(rows) == 0:
+        out["row_name_examples"] = {"a": list(ra[:3]), "b": list(rb[:3])}
+        return out
     out["shared"] = stats(sub(ma, ra, ca, rows, cols), sub(mb, rb, cb, rows, cols))
     bare = pd.Index(cols).str.replace("-1$", "", regex=True)
     cc = cols[bare.isin(cells)]

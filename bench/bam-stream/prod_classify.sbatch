@@ -15,6 +15,11 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; J=$W/jobs
 INC=$W/src/singlet-py/perf__bam-stream/include
 SCR=/tmp/$USER-bsprod-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 source $W/src/singlet-agents/feat__cell-phenotype/hpc/clipper/in_runtime.sh
+# Tool-only copy of the headers: pad missing rownames instead of rejecting the file, so the junction
+# matrices of runs made before 87c6550 (up to 999 unnamed empty rows) still decode.
+mkdir -p $SCR/inc && cp -r $INC/singlet $SCR/inc/
+sed -i 's/throw PZReadError("rowname count does not match the number of rows");/rownames.resize(hdr.m);/' $SCR/inc/singlet/pileup/pz_reader.h
+INC=$SCR/inc
 $ENV/bin/x86_64-conda-linux-gnu-g++ -O2 -std=c++17 -I$INC -I$ENV/include $J/pz2mtx.cpp -L$ENV/lib -Wl,-rpath,$ENV/lib -lzstd -o $SCR/pz2mtx
 O=$W/bam-stream/prod_classify; mkdir -p $O
 for SET in ${SETS:-GSM4006843 GSM7901264}; do

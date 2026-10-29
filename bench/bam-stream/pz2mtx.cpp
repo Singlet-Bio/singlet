@@ -10,6 +10,8 @@ int main(int argc, char** argv) {
     if (argc != 3) { std::cerr << "usage: pz2mtx in.1pz out_prefix\n"; return 2; }
     try {
         singlet::pz::ReadLimits lim;
+        lim.max_rows = 1ull << 26; lim.max_nnz = 1ull << 31; lim.max_metadata_bytes = 2ull << 30;
+        lim.max_kv_entries = 1ull << 26;
         auto r = singlet::pz::read_1pz(argv[1], lim);
         std::string p = argv[2];
         FILE* f = std::fopen((p + ".mtx").c_str(), "w");
