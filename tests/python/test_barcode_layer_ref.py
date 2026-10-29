@@ -275,6 +275,36 @@ def test_complex_anchors_and_adapter_inDrop_style():
     assert B.extract_barcode(sr, "TTTTACGTAC", Q[:10], 0, 0) == (True, "ACGTAC", Q[:6])
 
 
+W1 = "GAGTGATTGCTTGTGACGCCTT"
+
+
+def test_indrop_w1_route_from_protocol_row():
+    # BC1 lists of 8..11 bases (the real inDrop BC1 set is variable length), BC2 of 8 bases
+    bc1 = ["GACGTTAC", "AACCGGTTA", "CCGGAATTCG", "TTGGCCAATTC"]
+    bc2 = ["ACGTACGT", "TGCATGCA"]
+    lay = B.build_complex_layout("indrop", [bc1, bc2])
+    assert lay.adapter == W1 and lay.adapter_mm_max == 1
+    sizes = {8: 1, 9: 1, 10: 1, 11: 1}
+    for i, b in enumerate(bc1):
+        read = b + W1 + "TGCATGCA" + "ACGTAC"
+        rb = B.get_cb_umi_complex(read, "I" * len(read), lay)
+        # index = wlAdd[len] (shorter entries before it) + 2-segment mixed radix (factor 4 for segment 1 at index 1)
+        assert rb.cb_match == 0 and rb.umi_seq == "ACGTAC" and rb.cb_index == i + 4 * 1, (b, rb)
+    # today's fixed window reads BC1 as the first 10 bases for every read: wrong for 8, 9 and 11-base BC1
+    cur = complex_layout([seg("0_0_0_9", bc1), seg("0_32_0_39", bc2)], "0_40_0_45")
+    r8 = bc1[0] + W1 + "TGCATGCA" + "ACGTAC"
+    assert B.get_cb_umi_complex(r8, "I" * len(r8), cur).cb_match < 0
+
+
+def test_indrop_shipped_whitelist_has_only_8_base_bc1():
+    # python/singlet/data/whitelists/indrop_bc1.txt holds 384 8-mers: with the W1 route a 9..11-base BC1 finds no list (-11)
+    lay = B.build_complex_layout("indrop", [["GACGTTAC"], ["ACGTACGT"]])
+    r10 = "CCGGAATTCG" + W1 + "ACGTACGT" + "ACGTAC"
+    assert B.get_cb_umi_complex(r10, "I" * len(r10), lay).cb_match == -11
+    r8 = "GACGTTAC" + W1 + "ACGTACGT" + "ACGTAC"
+    assert B.get_cb_umi_complex(r8, "I" * len(r8), lay).cb_match == 0
+
+
 def test_complex_segments_with_n_at_position_zero_in_whitelist_skipped():
     s = seg("0_0_0_3", ["NCCC", "ACCC"])
     assert s.total_size == 1
@@ -312,26 +342,53 @@ def test_adt_exact_hamming1_ambiguous_and_offsets():
     assert m.match("AACAAGACCCCTCCG" + "T") == -2 and m.match("A" + "TGCATGTCATCGGTG") == 1
 
 
-def test_adt_cell_must_be_exact_and_umi_dedup_is_by_string():
+def test_adt_cell_must_be_exact_and_umi_rule_is_r9():
     m = B.AdtMatcher(TAGS)
     cells = {"ACGTACGTACGTACGT": 7}
     r1 = "ACGTACGTACGTACGT" + "AAAAAAAAAAAA"
     recs = [B.adt_record(r1, "AACAAGACCCCTCCT", 12, cells, m),
-            B.adt_record(r1, "AACAAGACCCCTCCT", 12, cells, m),                  # same UMI: one molecule
-            B.adt_record(r1[:-1] + "C", "AACAAGACCCCTCCT", 12, cells, m),         # UMI 1 apart: its own molecule here
+            B.adt_record(r1, "AACAAGACCCCTCCT", 12, cells, m),                  # same UMI twice
+            B.adt_record(r1[:-1] + "C", "AACAAGACCCCTCCT", 12, cells, m),         # UMI 1 apart, 1 read
             B.adt_record("ACGTACGTACGTACGA" + "AAAAAAAAAAAA", "AACAAGACCCCTCCT", 12, cells, m)]   # cell 1MM: dropped
     assert recs[3] is None
-    assert B.adt_count([r for r in recs if r]) == {(7, 0): 2}
+    recs = [r for r in recs if r]
+    assert B.adt_count_exact(recs) == {(7, 0): 2}           # today's CPU counter: two distinct strings
+    assert B.adt_count(recs) == {(7, 0): 1}                 # R9: 2 >= 2*1-1, so the neighbour is an error of the first
 
 
-def test_crispr_guide_substring_and_ambiguity():
+def test_r9_rule_details():
+    r9 = B.r9_molecules
+    assert r9({"AAAAAA": 10, "AAAAAC": 5, "AAAAAG": 1, "TTTTTT": 3}) == 2
+    assert r9({"AAAAAA": 1, "AAAAAC": 1}) == 1              # 1 >= 2*1-1: equal single reads join
+    assert r9({"AAAAAA": 3, "AAAAAC": 3}) == 2              # 3 >= 5 is false: two real molecules
+    assert r9({"AAAAAA": 4, "AAAAAC": 3}) == 2              # 4 >= 5 is false
+    assert r9({"AAAAAA": 5, "AAAAAC": 3}) == 1              # 5 >= 5: the boundary joins
+    assert r9({"AAAAAA": 9, "AAAAAC": 5, "AAAACC": 1}) == 1   # chain: AAAAAA-AAAAAC-AAAACC, the ends differ at two bases
+    assert r9({"AAAAAA": 9, "AAAACC": 1}) == 2              # two bases differ: not joined
+    assert r9({"AAAAAA": 9, "AAAAAN": 1}) == 1              # N is a base of its own, one difference joins
+    assert r9({"AAAAAA": 1, "AAAAA": 1}) == 2               # different lengths never join
+    assert r9({"A" * 22: 5, "A" * 21 + "C": 5}) == 2        # over 21 bases: exact only
+    assert r9({"": 3, "AAAAAA": 1}) == 4                    # a read without a UMI is its own molecule
+    # order-free: the same multiset in any insertion order
+    d1 = {"AAAAAA": 5, "AAAAAC": 5, "AAAAAG": 1}
+    d2 = dict(reversed(list(d1.items())))
+    assert r9(d1) == r9(d2)
+
+
+def test_crispr_guide_ambiguity_and_orientation():
     guides = ["GACGGATCGGGAGATCTCCC", "TTTTGGGGCCCCAAAATTTT", "GGGAGATC"]   # guide 2 is inside guide 0
-    hit, all_hits = B.match_guide("nnGACGGATCGGGAGATCTCCCnn", guides)
-    assert (hit, all_hits) == (0, [0, 2])                     # CPU winner depends on hash order: not exactly reproducible
+    assert B.match_guide("nnGACGGATCGGGAGATCTCCCnn", guides) == (-2, [0, 2])    # two guides: ambiguous, no winner
+    assert B.match_guide("AAGGGAGATCAA", guides) == (2, [2])
     assert B.match_guide("TTTTGGGGCCCCAAAATTTT", guides) == (1, [1])
     assert B.match_guide("ACGT", guides) == (-1, [])
-    assert B.match_guide("AAGGGAGATCAA", guides + ["AAGGGAGATCAA"]) == (2, [2, 3])
-    assert B.match_guide("CCCC", ["CCCC", "CCCC"]) == (1, [1])      # a repeated sequence keeps the last id
+    assert B.match_guide("CCCC", ["CCCC", "CCCC"]) == (-2, [0, 1])           # a sequence listed twice is ambiguous
+    # a reverse-strand BAM record holds the reverse complement: restore the sequencing orientation first
+    read = "TTGACGGATCGGGAGATCTCCCTT"
+    bam_rev = B.revcomp(read)
+    assert B.match_guide(bam_rev, guides[:2]) == (-1, [])                    # the raw BAM sequence does not match
+    assert B.match_guide_bam(bam_rev, True, guides[:2]) == (0, [0])
+    assert B.match_guide_bam(read, False, guides[:2]) == (0, [0])
+    assert B.revcomp("ACGTNacgt") == "ACGTNACGT"
 
 
 # ---------------------------------------------------------------- numba batch == plain Python
@@ -394,7 +451,8 @@ def test_complex_positions_agree_with_encoder():
         segs = re.search(r'soloCBposition\\": \[(.*?)\]', blk).group(1)
         segs = re.findall(r'\\"(\d_\d+_\d_\d+)\\"', segs)
         umi = re.search(r'soloUMIposition\\": \\"(\d_\d+_\d_\d+)\\"', blk).group(1)
-        assert segs == B.PROTOCOL_ROWS[tag]["segs"] and umi == B.PROTOCOL_ROWS[tag]["umi"], tag
+        row = B.PROTOCOL_ROWS[tag]
+        assert segs == row.get("segs_current", row["segs"]) and umi == row.get("umi_current", row["umi"]), tag
     r = B.protocol_record_spec("10x-5p-v3", "adt")
     assert r["feature_read"] and r["adapter3p"] == B.TSO_5P
     assert not B.protocol_record_spec("10x-3p-v3")["feature_read"]

@@ -3,9 +3,11 @@
 Status: preparation only. Nothing here is switched on, compiled on a GPU, or run on a cluster. Written on the laptop from the
 vendored STAR 2.7.11b sources in `src/star/` and singlet's own tables. Branch `claude/gpu-barcode-layer-484c70`.
 
+Decisions of 2026-10-29 (feature-barcode UMI rule, CRISPR matching, inDrop, gate definitions) are folded in below.
+
 Deliverables:
 - `src/engine_gpu/barcode_layer_ref.py`: Python and numba reference, one function per STAR rule.
-- `tests/python/test_barcode_layer_ref.py`: 28 tests, handcrafted reads of a few KB, all passing.
+- `tests/python/test_barcode_layer_ref.py`: 31 tests, handcrafted reads of a few KB, all passing.
 - `src/engine_gpu/barcode_layer.cuh`: CUDA drafts, **not compiled**. Not included from `engine_gpu.cu` or `pileup.cu`.
 - This note.
 
@@ -19,7 +21,7 @@ Three facts decide the scope of 1c. All three are in `src/pipeline/singlet.cpp`.
 1. **Every complex or no-whitelist protocol runs with `--soloCBmatchWLtype Exact`** (7309-7316). Only `CB_UMI_Simple`
    gets `1MM_multi_Nbase_pseudocounts`. The Complex mismatch rules (-12, multi-match, EditDist_2) never run in
    production, so 1c does not need them for gate (a).
-2. **No protocol uses an adapter or a read-end anchor.** `--soloAdapterSequence` is never passed (grep: no hit).
+2. **No protocol uses an adapter or a read-end anchor today** (the inDrop W1 route of section 7a is a decided change). `--soloAdapterSequence` is never passed (grep: no hit).
    `soloCBposition` is always absolute from read start (`0_s_0_e`, `sra_encoder.h:2524-2551`; `singlet.cpp:4191` rejects
    anything else for the concatenated form). STAR can anchor on an adapter (inDrop, BD); singlet does not. inDrop's variable
    BC1 length (8-11) is therefore not handled by singlet today: it reads a fixed `0_0_0_9`.
@@ -55,7 +57,7 @@ none, and singlet does none, so gate (a) cannot be passed with it. Either drop t
 | R15 | `CB_samTagOut`: same extraction and `matchCBtoWL`, **no UMI check**. `cbSeqCorrected` = whitelist string of the first match, the raw CB with no whitelist, `"-"` otherwise | :306-322 | `get_cb_umi_simple(sam_tag_out)` |
 | R16 | Complex: UMI is extracted first (-22 if it cannot be); the UMI check runs but only blocks CB matching | :341-354 | `get_cb_umi_complex` |
 | R17 | Complex segment extraction: anchor 0 read start, 1 read end, 2 adapter start, 3 adapter end, plus a signed distance. Fails if `pos[0] < 0`, `pos[1] > size`, or `pos[0] > pos[1]`. `pos[1] == size` **passes** and `substr` clips, so the segment is one base short | SoloBarcode_extractBarcode.cpp:4-33 | `extract_barcode` |
-| R18 | Adapter (not used by singlet): first position with the fewest mismatches below `adapterMismatchesNmax` (default 1), `N` in the adapter is a wildcard, ties keep the first, -21 on failure. If every base mismatches, the position stays 0 | :332-339; SequenceFuns.cpp:352-371; parametersDefault:828 | `local_align_hamming_dist` |
+| R18 | Adapter (unused by singlet today; used by the decided inDrop W1 route, section 7a): first position with the fewest mismatches below `adapterMismatchesNmax` (default 1), `N` in the adapter is a wildcard, ties keep the first, -21 on failure. If every base mismatches, the position stays 0 | :332-339; SequenceFuns.cpp:352-371; parametersDefault:828 | `local_align_hamming_dist` |
 | R19 | Complex segment match: the extracted length must be at least `minLen`, below the table size, and have a non-empty list for that length (else -11, only the first failure is recorded). Exact or 1MM per segment through the same `matchCBtoWL`. A 1MM hit in a second segment while the first already had one gives -12 | :357-413 | `get_cb_umi_complex` |
 | R20 | Complex cell index: `sum over segments of wlFactor * (indexInLengthList + wlAdd[length])`. `wlFactor` is the product of the earlier segments' list sizes, so segment 0 varies fastest. `wlAdd[len]` is the number of entries in shorter lengths | :409; ParametersSolo.cpp:393-395; SoloBarcode.cpp:19-34 | `link_segments`, `build_segment_wl` |
 | R21 | Complex UMI homopolymer: `SoloReadBarcode` is built while `umiL` is 0 (set to the first UMI's length later, ParametersSolo.cpp:372, getCBandUMI:347-348), so all four homopolymer values are 0: **only an all-A UMI is rejected**, poly-C/G/T pass | SoloReadBarcode.cpp:16-20 | `check_umi(homopolymer_len=0)` |
@@ -77,7 +79,7 @@ silently. Positions are 0-based [start, end] on the barcode read after singlet's
 | sci-RNA-seq3 | one segment: `CB_samTagOut`, whitelist | `Exact` | whitelist index | CB at 24..33, UMI 16..23 |
 | BD Rhapsody | 3 segments `0_0_0_8`, `0_21_0_29`, `0_43_0_51`, UMI `0_52_0_59` | `Exact` per segment | R20 mixed radix (CLS1, 2, 3 lists) | linkers are not checked |
 | SPLiT-seq / Parse | segments `0_10_0_17`, `0_33_0_40`, `0_56_0_63`, UMI `0_0_0_9`, barcode read is R2 | `Exact` | R20 | linkers not checked; Rd3 is segment 0 |
-| inDrop | segments `0_0_0_9`, `0_32_0_39`, UMI `0_40_0_45` | `Exact` | R20 | fixed BC1 length, no W1 anchor |
+| inDrop v1/v2 | **W1-adapter route (decision)**: segments `0_0_2_-1`, `3_1_3_8`, UMI `3_9_3_14`, adapter `GAGTGATTGCTTGTGACGCCTT`, at most 1 adapter mismatch | `Exact` | R20 with per-length BC1 lists (`wlAdd`) | replaces today's fixed `0_0_0_9`/`0_32_0_39`/`0_40_0_45`; see section 7a |
 | Microwell-seq, SureCell | 3 segments, one shared list | `Exact` | R20 | |
 | ddSEQ | 3 segments, **no whitelist in the table** | `Exact` on discovered barcodes | concatenated raw segments, then discovery | the weakest-specified row |
 | STRT-seq, 10x ATAC, DNBelab C4 | outside this layer | | | no CB/UMI read in R1 (ATAC), or not routed through these paths; not verified |
@@ -96,6 +98,12 @@ barcodes with at least `bc_min_reads` raw reads, **5 on the unsorted stream, 100
   "no sorted BAM, so CB from CR" and refuses a missing whitelist file (`singlet.cpp:5041-5047`): that refusal is the
   guard that 1c lifts.
 
+**Gate (a) for these protocols (decision):** cell *sets* plus per-barcode counts. Concretely, at `bc_min_reads` 5 on the
+stream path: (i) the set of barcodes that reach the threshold is identical; (ii) for every barcode, the raw read count and the
+count of reads that pass the N-free test and the UMI rule are identical; (iii) after the existing reducers, each cell's UMI
+count per gene matches when cells are keyed by barcode string, not by index. Cell *index* order is checked only on the
+stream path (count descending, ties by barcode ascending), where it is deterministic. The sorted path is not gated on order.
+
 ## 4. Visium
 
 - singlet has **no spot whitelist** (`protocol.h:181-183`, licensed list not bundled). The cell set is discovered as in
@@ -110,40 +118,52 @@ barcodes with at least `bc_min_reads` raw reads, **5 on the unsorted stream, 100
 - If a spot list is ever supplied as a true whitelist, it becomes a `Simple`/`Exact` case, which is not what singlet does.
   Do not change that inside 1f without a decision.
 
-## 5. Feature barcodes (ADT, hashtag, CRISPR)
+## 5. Feature barcodes
 
-There is no `singlet.crispr` Python module; the CRISPR and ADT code is C++ (`python/singlet/` has none). Rules:
+`singlet.crispr` does not exist as a Python module on `main` or here: the guide and tag matching are C++
+(`crispr_guide.h`, `adt_matcher.h`, `adt_counter.h`); `python/singlet/celllabels/guide.py` is unrelated. Rules:
 
-- **ADT / HTO** (`singlet.cpp:8466-8590`, `adt_matcher.h`, `adt_counter.h`):
+- **ADT / HTO** (`singlet.cpp:8466-8590`, `adt_matcher.h`):
   - the cell barcode is `R1[0:bc_len]` and must be in the called-cell set **exactly** (no 1MM correction) or the read is skipped;
-  - the UMI is `R1[bc_len:]`, taken as a raw string;
+  - the UMI is `R1[bc_len:]`, a raw string;
   - the tag comes from R2. Tag length is the first tag's. For offsets 0..5 (`min(5, len - tag_len)`), exact lookup first, then a
     Hamming-1 table. Hamming-1 neighbours that are themselves tags are not stored; a neighbour shared by two tags is -2 and
-    **returns at once**, even if a later offset would match exactly;
-  - counts are the number of **distinct UMI strings** per (cell, tag). That is exact-string dedup, not R9's directional rule.
-- **CRISPR guides** (`crispr_guide.h:106-116`, `pileup_engine.h:802-815`):
-  - the guide is looked up as an exact substring of the BAM query sequence of a mapped record, after upper-casing. It runs in the
-    BAM pileup after alignment, not before; the cell is the BAM's CR;
-  - the CPU loop walks an `unordered_map`, so with two guides that both occur in a read (one guide inside another) the winner
-    depends on hash order. A guide sequence listed twice keeps the last id;
-  - a reverse-strand record carries the reverse-complemented sequence in the BAM, so a guide written in read orientation does
-    not match it. The GPU kernel must see the same orientation.
+    **returns at once**, even if a later offset would match exactly (the -2 is kept distinct from -1 in the reference).
+- **Molecule rule (decision): R9.** Per (cell, feature), two UMIs of the same length are joined when exactly one base differs
+  and the larger read count is at least `2 * smaller - 1`; a molecule is a connected component; N is a base of its own;
+  UMIs over 21 bases match exactly; a read without a UMI is a molecule. Reference: `r9_molecules`, `adt_count`; the CPU
+  source is `umi_dedup.h` (`umi3_directional_roots`, `UmiFeatureCollapse`). Boundary to remember: equal counts join only at
+  1 vs 1; 3 vs 3 stay two molecules. Today's `AdtCounter` counts distinct UMI strings (kept as `adt_count_exact`); for UMIs one
+  base apart with counts 2 and 1 the two rules give 2 and 1. **The CPU counter must be changed to R9 before gate (a) can
+  compare ADT counts**; that change is not made here.
+- **CRISPR guides (decision; both old behaviours were bugs):**
+  - the guide is matched as an exact substring of the upper-cased read **in sequencing orientation**. A BAM record of a
+    reverse-strand alignment holds the reverse complement, so it is reverse-complemented back first (any non-ACGT base
+    becomes N);
+  - a read in which two or more distinct guides occur (a guide nested in another, or one sequence listed twice) is
+    **ambiguous (-2) and not counted**. The result depends on the read and the library only, never on hash order.
+    Consequence: in a library where one guide is a substring of another, every read of the longer guide is ambiguous;
+    that is a library design problem, now visible instead of silently assigned;
+  - implemented in C++ on branch `fix/crispr-guide-orientation` (from `main`, no PR): `GuideRef::match` returns
+    `kAmbiguous`, `GuideRef::match_bam` does the orientation, both pileup call sites (`pileup_engine.h`, sequential and
+    parallel) use it, tests 8 and 9 added to `test_crispr_guide.cpp` (all 9 tests built and passed with Rtools g++;
+    `pileup_engine.h` itself needs htslib and was not compiled). Reference: `match_guide`, `match_guide_bam`, `revcomp`.
 - Hand-off guard for CRISPR: `singlet.cpp:5060` requires `config.guide_ref_path.empty()`.
 
 ## 6. Test results
 
-`python -P -m pytest tests/python/test_barcode_layer_ref.py -p no:cacheprovider --noconftest` gives **28 passed**. Python 3.11.9,
+`python -P -m pytest tests/python/test_barcode_layer_ref.py -p no:cacheprovider --noconftest` gives **31 passed**. Python 3.11.9,
 numpy 2.2.4, numba 0.64.0. Fixtures:
 
 | Class | Tests assert |
 |---|---|
 | Simple (10x) | exact; unique 1MM; no match; two Ns (-2); Exact type not correcting; one-N single hit (cbMatch 1) and two hits with and without `Nbase` (2 vs -3); candidate order and the quality kept; posterior accepted at 100 vs 1 and rejected at 10 vs 1; quality overriding counts (fewer reads, Q10 vs Q33); `oneExact` drop for `1MM_multi` without pseudocounts; N and homopolymer UMIs, and that they stay out of the exact histogram; short read padding and the fatal fixed-length case; whitelist entries with N |
 | No whitelist / samTagOut | any N-free CB accepted, N gives -2; discovery order and ties; `CB:Z` for a hit, `-`, and the raw CB; no UMI check |
-| Complex (BD, anchors) | mixed-radix index 1+3·2+9·1 = 16; Exact vs 1MM; -12 for two segments; -3 inside a segment; N under Exact (-1) and 1MM; weak UMI check (poly-A only); `pos[1] == size` one-short UMI; -22 and -11; inDrop-style adapter anchors with BC1 lengths 8/9/10 and `wlAdd`; adapter 1 vs 2 mismatches (-21); all-mismatch adapter position; read-end anchor |
+| Complex (BD, anchors) | mixed-radix index 1+3·2+9·1 = 16; Exact vs 1MM; -12 for two segments; -3 inside a segment; N under Exact (-1) and 1MM; weak UMI check (poly-A only); `pos[1] == size` one-short UMI; -22 and -11; inDrop W1 route built from the protocol row with BC1 lengths 8-11 (today's fixed window failing on them), the shipped 8-mer-only list giving -11 for longer BC1, adapter anchors with BC1 lengths 8/9/10 and `wlAdd`; adapter 1 vs 2 mismatches (-21); all-mismatch adapter position; read-end anchor |
 | Visium | header and CR handling, malformed rows, last row wins, zeros, headerless first line, `stoi` throw |
-| Feature barcodes | exact, Hamming-1, ambiguous (-2, not -1), offset window 5 vs 6, early ambiguous return, exact-only cell, exact-string UMI dedup; guide substring, two matching guides (`[0, 2]`), repeated sequence |
+| Feature barcodes | exact, Hamming-1, ambiguous (-2, not -1), offset window 5 vs 6, early ambiguous return, exact-only cell; R9 vs exact-string counting; R9 boundaries (1 vs 1 joins, 3 vs 3 and 4 vs 3 do not, 5 vs 3 does, chain, N, length, over 21 bases, no UMI, order-free); guides: nested and duplicate sequences ambiguous, reverse-strand BAM sequence restored |
 | Numba vs Python | 6000 random reads over a 360-entry list with planted neighbours: the numba two-pass version equals the plain-Python path on cell, status class and the exact histogram; both accepted and rejected posteriors occur |
-| Tables | protocol geometry equals `protocol.h`; complex positions equal `sra_encoder.h` |
+| Tables | protocol geometry equals `protocol.h`; complex positions equal `sra_encoder.h` (inDrop compared on its `segs_current`, since the row now holds the W1 route) |
 
 What the tests do **not** show: that this matches STAR on real data. No STAR binary ran. They assert the outcome that the
 cited lines produce when read carefully, nothing more. W11's first job is the real comparison (section 8).
@@ -165,6 +185,26 @@ All are in files this task did not edit.
 | `ReadAlign_outputAlignments.cpp:356-389` (`handoffReadEntry`) | builds `cr3`/`ur3` from `readBar->cbSeq`/`umiSeq` | works for samTagOut as is; Complex needs the index (above) |
 | `include/singlet/pileup/pileup_engine.h:802-815` | guide match on the BAM record | 1f: the GPU feature reducer reads the same sequence |
 
+### 7a. inDrop: cell identity changes
+
+`protocol.h:105-112` says the inDrop row is **v1/v2 with BC1 of 8-11 bases and a W1 linker**, so by the decision the W1-adapter
+route is used (STAR's own inDrop recipe: `--soloCBposition 0_0_2_-1 3_1_3_8`, `--soloUMIposition 3_9_3_14`,
+`--soloAdapterSequence GAGTGATTGCTTGTGACGCCTT`, `--soloAdapterMismatchesNmax 1`). `include/singlet/fq/indrop_detect.h`
+describes other layouts (an 8+8 v1 without linker, a split-read v2, a linker v3); those are separate cases, not in the table
+row, and are untouched here. What changes in cell identity:
+
+- BC1 is taken from the read start to the base before the best W1 hit instead of a fixed 10 bases. Reads whose BC1 is 8, 9 or
+  11 bases now get a barcode (a fixed 10-base window cuts or overruns them and matches nothing).
+- BC2 and the UMI follow the adapter end, not absolute offsets 32 and 40; a read with 2 or more W1 mismatches gets -21.
+- The cell index uses per-length BC1 lists: `wlAdd[len]` shifts the index of longer barcodes (R20).
+- **Blocking data gap:** `python/singlet/data/whitelists/indrop_bc1.txt` holds 384 entries, **all 8 bases** (`indrop_bc2.txt`
+  also 384 8-mers). The real BC1 set is variable length. With the shipped file the W1 route matches only 8-base BC1 reads and
+  gives -11 for the rest (tested). The BC1 list with its true lengths has to be installed before 1c gates inDrop. I did not
+  write one from memory.
+- Singlet code that has to follow: `sra_encoder.h:2543-2544` (positions and adapter in the metadata JSON); the
+  `use_complex_concat` test at `singlet.cpp:4191` (it requires anchor type 0, so the W1 route is native `CB_UMI_Complex`, not the
+  concat form); `--soloAdapterSequence` and `--soloAdapterMismatchesNmax`, which `singlet.cpp` never passes today.
+
 ## 8. What W11 must build and gate
 
 Build, in this order (each is a small step on the existing `k_clip` / hash / sort machinery):
@@ -184,42 +224,55 @@ Gate (a) conditions to state for each protocol class:
 - Simple: identical `cell_key` and status for every read; identical exact histogram.
 - No-whitelist: identical cell set at `bc_min_reads` 5, identical per-cell UMI counts after the existing reducer.
 - Complex: identical cell index per read.
-- ADT/HTO: identical (cell, tag, UMI-string) triples; only then consider R9.
-- CRISPR: identical assignment on reads with one matching guide; report the ambiguous reads separately.
+- ADT/HTO: identical (cell, tag) R9 molecule counts, against the CPU counter after it is changed to R9; identical (cell, tag, UMI) triples before the collapse.
+- CRISPR: identical assignment for every read, ambiguous reads included (-2), against the fixed C++ matcher; reverse-strand reads compared in sequencing orientation.
+- inDrop: identical cell index per read against native `CB_UMI_Complex` with the W1 settings (not against today's run).
+- Visium and other no-whitelist protocols: the cell-set definition in section 3.
 
 ## 9. Which protocols are hardest to make exact
 
-1. **Visium and any sorted-path no-whitelist run.** The cell list is discovered, and its order depends on a threshold and a
-   tie rule that the sorted path leaves to `std::sort`. Per-read identity is achievable; cell index identity is not. This
-   is a gate-definition problem, not a kernel problem.
-2. **ddSEQ.** No whitelist in the protocol table, three segments, and the route (discovery of the concatenated string vs
-   native Complex) depends on which files exist at run time (`singlet.cpp:6683-6840`). I could not pin it to one rule.
-3. **inDrop.** STAR can find BC1 by the W1 adapter, and the barcode length varies (8-11). singlet uses a fixed window. The
-   reference supports anchors and variable-length lists and tests them, but any future move to the adapter route changes
-   cell identity, so it is a decision, not a drop-in.
-4. **CRISPR guides.** Hash-order ties on the CPU; BAM orientation; runs after alignment on the BAM, not on the read.
-5. **BD Rhapsody and SPLiT/Parse** are mechanically easy under Exact with fixed windows. Their risk is the product list size
-   (BD 97³ is about 0.9 M, fine) and that linkers are never checked, so a read with a shifted linker is read as a valid
-   barcode window.
-6. The float posterior is exact only if the kernel reproduces the float operations; a mismatch shows up only on reads near
-   the 0.975 boundary. Gate 0 covers it.
+1. **Visium and any sorted-path no-whitelist run.** The list is discovered and the sorted path leaves tie order to `std::sort`.
+   The gate is now defined (cell sets and per-barcode counts, section 3), but cell-index identity is still not achievable there.
+2. **ddSEQ.** No whitelist in the table, three segments, and the route (discovery on the concatenated string vs native Complex)
+   depends on which files exist at run time (`singlet.cpp:6683-6840`). I could not pin it to one rule. Still the weakest row.
+3. **inDrop.** The route is decided, but the data is not there: the shipped BC1 list has only 8-mers, and cell identity changes
+   for every read, so there is no CPU baseline until a native `CB_UMI_Complex` run with W1 settings exists.
+4. **CRISPR guides.** The rule is now deterministic and implemented on the CPU side; what remains is that matching happens on
+   the BAM after alignment, so the GPU needs the mapped read's sequence and strand.
+5. **BD Rhapsody and SPLiT/Parse:** easy under Exact with fixed windows; the risks are the product-list size (BD 97^3 = 0.9 M,
+   fine) and that linkers are never checked.
+6. **The float posterior** is exact only if the kernel reproduces the float operations; a mismatch shows only near the 0.975
+   boundary. Gate 0 covers it.
+7. **10x on the stream path** (section 10, item 1): the CPU stream path does not apply the 1MM rules at all, so "exact" depends
+   on which CPU result is the reference.
 
-## 10. Open questions for the team
+## 10. Answers to the open questions, and what remains
 
-1. **`.1fq` barcode handling.** `singlet.cpp:5034` (and the comment above it) says `.1fq` barcodes are "whitelist-exact" and the pileup takes CR.
-   If so the 1MM posterior never decides a cell on that path today, and Gate 0 compares against STAR's own CB. I did not trace
-   where `sra_encoder.h` validates or corrects against the whitelist (only a match rate near 1210 is visible). Someone who knows
-   the encoder should say which it is before 1c relies on R7-R11 for 10x.
-2. **Design text.** Replace "knee-based or bead-error correction" for the Drop-seq family with "none; discovered list".
-3. **R9 and feature barcodes.** The design table makes the feature reducer's molecule key the UMI under R9's directional rule;
-   today's ADT counter uses exact-string dedup. These give different counts. Decide before the gate which one the CPU
-   reference is (I assumed today's).
-4. **`MATCH_CellRanger`.** I found it defined nowhere in the build files, so the float path applies. Check the actual compile
-   flags of the binary on Clipper.
-5. **Native Complex with per-segment lists** (`singlet.cpp:6683-6812`) versus the concat form: same cell identity by R20 when
-   the product list is built in segment order with segment 0 fastest. The concat product-file ordering was not checked
-   against R20.
+1. **Are `.1fq` barcodes whitelist-exact? No.** Traced in `include/singlet/fq/writer.h:285-299` and `protocol.h:1535-1565`. The
+   writer builds a dictionary from the protocol whitelist and looks each read's barcode up **exactly**. A hit stores the
+   dictionary index; a miss stores the sentinel index plus the **raw barcode** (`block_unknown_bc_`). Nothing is corrected or
+   dropped at encoding; the Phase 2a-wl check in `sra_encoder.h:1210-1300` only measures a match rate on up to 10 000 probe
+   spots to choose the read orientation. The multi-segment protocols (BD, SPLiT, inDrop, ddSEQ, Microwell, SureCell) skip the
+   dictionary and keep R1 verbatim. So the comment "`.1fq` barcodes are whitelist-exact" (`singlet.cpp:5034`) does not describe
+   the file. What the stream path does: STAR writes the raw barcode as `CR`; `inline_scan_cb_from_cr` (`pileup_engine.h:318-340`)
+   rejects a CR with an N, or a UMI with an N or a homopolymer (R14), then looks the CR up **exactly** in the cell list
+   (`bc_index_.lookup`). Consequence: **on the stream path the 1MM rules R4-R11 decide nothing**; a read one base away from a
+   called cell is lost, where STAR's own CB (sorted path) would rescue it, and a read with one N in the CB is lost where STAR's
+   `Nbase` rule would resolve it. I did not measure how many reads that is.
+   **Decision needed:** for 10x, gate the GPU layer against (a) the CPU stream path (exact CR) or (b) STAR's CB. The kernels
+   support both (`mm1 = 0` is the exact mode); gating each mode against its own CPU counterpart avoids the question.
+2. **Design text:** replace "knee-based or bead-error correction" for the Drop-seq family with "none; discovered list" (an edit to
+   `align-and-count-design.md`, not made here).
+3. **R9 for feature barcodes: decided, in the reference.** The C++ `AdtCounter` still has to move to R9.
+4. **`MATCH_CellRanger`:** defined in no build file I found, so the float posterior applies; confirm on the Clipper binary's flags.
+5. **Concat form vs native Complex:** same cell identity by R20 if the product list is built segment 0 fastest; the product
+   file's order was not checked. The inDrop W1 route cannot use the concat form (anchor type 2/3).
+6. **`singlet.crispr` (Python) does not exist**; the fix went into the C++ matcher (section 5).
+7. **New:** the inDrop BC1 whitelist with true lengths (section 7a).
+8. **New:** `GuideRef::match` now returns -2; a caller testing `== -1` instead of `>= 0` would treat that as a hit. The two pileup
+   call sites test `gid >= 0`; grep found no others.
 
 ## 11. Not done
 
 No STAR run, no Clipper job, no compile of the `.cuh`, no change to `pileup.cu`, `engine_gpu.cu`, `singlet.cpp` or `SeqCache*.cpp`.
+`pileup_engine.h` on the CRISPR branch was edited but not compiled (no htslib here).

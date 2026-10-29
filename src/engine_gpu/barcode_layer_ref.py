@@ -563,25 +563,93 @@ def adt_record(r1: str, r2: str, umi_len: int, cells: dict, matcher: AdtMatcher)
     return cell, tag, r1[bc_len:]
 
 
-def adt_count(records: list) -> dict:
-    """AdtCounter: per (cell, tag) the number of distinct UMI strings (exact-string dedup, not R9's directional rule)."""
+def adt_count_exact(records: list) -> dict:
+    """AdtCounter as it is today (adt_counter.h:44-53): distinct UMI strings per (cell, tag). Kept only to show the
+    difference from R9; the rule for the GPU feature reducer is adt_count."""
     seen: dict = {}
     for cell, tag, umi in records:
         seen.setdefault((cell, tag), set()).add(umi)
     return {k: len(v) for k, v in seen.items()}
 
 
+def _umi_code(c: str) -> int:
+    return {"a": 0, "c": 1, "g": 2, "t": 3, "n": 4}.get(c.lower(), 5)
+
+
+def _one_mismatch(a: str, b: str) -> bool:
+    """umi3_one_mismatch (umi_dedup.h): same length, exactly one 3-bit base group differs (N is a base of its own)."""
+    if len(a) != len(b):
+        return False
+    return sum(1 for x, y in zip(a, b) if _umi_code(x) != _umi_code(y)) == 1
+
+
+def r9_molecules(umi_counts: dict) -> int:
+    """R9 (order-free-rules.md; umi_dedup.h umi3_directional_roots, UmiFeatureCollapse::finalize) for one (cell, feature):
+    umi_counts maps raw UMI string -> read count. Two same-length UMIs are joined when exactly one base differs and the
+    larger count is >= 2 * the smaller - 1; molecules are the connected components. UMIs longer than 21 bases match
+    exactly (each distinct one is a molecule); an empty UMI is one molecule per read."""
+    mols = 0
+    short = {}
+    for u, n in umi_counts.items():
+        if not u:
+            mols += n
+        elif len(u) > 21:
+            mols += 1
+        else:
+            short[u] = n
+    keys = sorted(short, key=lambda u: (-short[u], [_umi_code(c) for c in u]))   # count descending, then packed UMI
+    root = list(range(len(keys)))
+
+    def find(x):
+        while root[x] != x:
+            root[x] = root[root[x]]
+            x = root[x]
+        return x
+
+    for i in range(len(keys)):
+        for j in range(i + 1, len(keys)):
+            if short[keys[i]] >= 2 * short[keys[j]] - 1 and _one_mismatch(keys[i], keys[j]):
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    root[rj] = ri
+    return mols + sum(1 for i in range(len(keys)) if find(i) == i)
+
+
+def adt_count(records: list) -> dict:
+    """Feature-barcode counts under R9: per (cell, tag) the number of directional-collapse molecules of the raw UMIs.
+    Decision of 2026-10-29: the same UMI rule as genes, junctions and SNPs. The CPU AdtCounter (adt_count_exact) has to
+    follow before gate (a) can compare the two."""
+    per: dict = {}
+    for cell, tag, umi in records:
+        d = per.setdefault((cell, tag), {})
+        d[umi] = d.get(umi, 0) + 1
+    return {k: r9_molecules(v) for k, v in per.items()}
+
+
 def match_guide(read_seq: str, guides: list) -> tuple[int, list]:
-    """GuideRef::match (crispr_guide.h:106-116): exact substring of the upper-cased BAM query sequence; the CPU loop walks an
-    unordered_map, so with several matching guides the winner is implementation-defined. Returns (lowest matching id,
-    all matching ids); the CPU result is only reproducible when the second list has one element. A guide sequence listed
-    twice maps to its last id (seq_to_id_[seq] = id)."""
-    seq_to_id = {}
-    for i, g in enumerate(guides):
-        seq_to_id[g.upper()] = i
+    """Guide assignment, decision of 2026-10-29 (implemented in crispr_guide.h, branch fix/crispr-guide-orientation): exact
+    substring of the upper-cased read in SEQUENCING orientation. Exactly one guide in the read: its id. None: -1. Two or
+    more distinct ids (a guide nested in another, or a sequence listed twice): -2, ambiguous, not counted. Returns
+    (id or -1 or -2, all matching ids)."""
     rs = read_seq.upper()
-    hits = sorted(i for s, i in seq_to_id.items() if s in rs)
-    return (hits[0] if hits else -1), hits
+    hits = [i for i, g in enumerate(guides) if g.upper() in rs]
+    if not hits:
+        return -1, []
+    return (hits[0] if len(hits) == 1 else -2), hits
+
+
+_COMP = {"A": "T", "C": "G", "G": "C", "T": "A"}
+
+
+def revcomp(s: str) -> str:
+    """GuideRef::reverse_complement: any base other than A/C/G/T (either case) becomes N."""
+    return "".join(_COMP.get(c.upper(), "N") for c in reversed(s))
+
+
+def match_guide_bam(bam_seq: str, reverse_strand: bool, guides: list) -> tuple[int, list]:
+    """A BAM record of a reverse-strand alignment holds the reverse complement of the read; restore the sequencing
+    orientation before matching."""
+    return match_guide(revcomp(bam_seq) if reverse_strand else bam_seq, guides)
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -787,7 +855,10 @@ PROTOCOL_ROWS = {
                         wl=["bd_cls1.txt", "bd_cls2.txt", "bd_cls3.txt"]),
     "splitseq": dict(mode="complex", segs=["0_10_0_17", "0_33_0_40", "0_56_0_63"], umi="0_0_0_9", barcode_in_r2=True,
                      wl=["splitseq_bc_rd3.txt", "splitseq_bc_rd2.txt", "splitseq_bc_rd1.txt"]),
-    "indrop": dict(mode="complex", segs=["0_0_0_9", "0_32_0_39"], umi="0_40_0_45",
+    # inDrop v1/v2 (protocol.h:105-112: BC1 8-11 bp, W1 linker, BC2 8 bp, UMI 6): decision of 2026-10-29, the W1-adapter route
+    # (STAR's documented inDrop recipe). Today's singlet reads a fixed 10-base BC1 window, segs_current/umi_current.
+    "indrop": dict(mode="complex", segs=["0_0_2_-1", "3_1_3_8"], umi="3_9_3_14", adapter="GAGTGATTGCTTGTGACGCCTT",
+                   adapter_mm_max=1, segs_current=["0_0_0_9", "0_32_0_39"], umi_current="0_40_0_45",
                    wl=["indrop_bc1.txt", "indrop_bc2.txt"]),
     "microwell-seq": dict(mode="complex", segs=["0_0_0_5", "0_21_0_26", "0_42_0_47"], umi="0_48_0_53",
                           wl=["microwell_bc1_bare.txt"] * 3),
@@ -806,3 +877,16 @@ def protocol_record_spec(tag: str, library: str = "gex") -> dict:
     row["feature_read"] = library in FEATURE_LIBRARIES
     row["library"] = library
     return row
+
+
+def build_complex_layout(tag: str, seg_seqs: list, flags: str = "Exact") -> "ComplexLayout":
+    """The ComplexLayout for a complex row of PROTOCOL_ROWS, with the given per-segment whitelist sequences."""
+    row = PROTOCOL_ROWS[tag]
+    segs = []
+    for pos, seqs in zip(row["segs"], seg_seqs):
+        sg = Segment(pos)
+        build_segment_wl(sg, seqs)
+        segs.append(sg)
+    link_segments(segs)
+    return ComplexLayout(segs, Segment(row["umi"]), flags_from_type(flags), row.get("adapter", "-"),
+                         row.get("adapter_mm_max", 1))

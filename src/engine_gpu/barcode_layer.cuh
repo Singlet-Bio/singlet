@@ -295,16 +295,16 @@ __global__ void k_bl_adt_match(const char* r2, const u64* off, u64 n, TagDev T, 
     tag_out[i] = res;
 }
 // The cell of an ADT read is its barcode matched EXACTLY against the called set (k_bl_extract_simple with mm1 = 0), the
-// UMI is R1[bc_len:]. Counting is per (cell, tag) distinct UMI: exact-string dedup on CPU today; the R9 directional rule
-// would change the numbers (see the doc, open question 3).
+// UMI is R1[bc_len:]. Molecules per (cell, tag) follow R9 (decision 2026-10-29): sort (cell, tag, packed UMI), count reads per
+// UMI, directional 1-mismatch collapse at finalize, as the gene/junction/SNP reducers do. The CPU AdtCounter still counts
+// distinct UMI strings; it has to change to R9 before gate (a) can compare.
 
-// ---- CRISPR guides: GuideRef::match ------------------------------------------------------------------------------------
-// Substring of the upper-cased query sequence. CPU walks an unordered_map, so with several matching guides its winner
-// is hash-order dependent; this kernel returns the lowest id and sets `ambiguous`, and the gate must only compare reads
-// with a single matching guide. Guides are padded to <= 64 bases; reverse-strand reads arrive reverse-complemented in the
-// BAM, so the CPU never matches them (the GPU must see the same sequence orientation as the BAM record).
+// ---- CRISPR guides: GuideRef::match (decision 2026-10-29, crispr_guide.h on branch fix/crispr-guide-orientation) -----------
+// Exact substring of the upper-cased read in SEQUENCING orientation. One guide in the read: its id; none: -1; two or more
+// distinct ids (nested guide, duplicate sequence): -2, ambiguous, never counted. The caller passes the BAM sequence
+// reverse-complemented for reverse-strand records (the kernel takes the already-oriented sequence). Guides <= 64 bases.
 __global__ void k_bl_guide_match(const char* qseq, const u64* off, u64 n, const char* guides, const u32* g_len,
-                                 u32 n_guides, u32 g_stride, i32* gid, u8* ambiguous) {
+                                 u32 n_guides, u32 g_stride, i32* gid) {
     u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x; if (i >= n) return;
     const char* s = qseq + off[i]; i32 len = (i32)(off[i + 1] - off[i]); i32 first = -1; u32 hits = 0;
     for (u32 g = 0; g < n_guides; g++) {
@@ -315,7 +315,7 @@ __global__ void k_bl_guide_match(const char* qseq, const u64* off, u64 n, const 
             if (eq) { if (first < 0) first = (i32)g; hits++; break; }
         }
     }
-    gid[i] = first; ambiguous[i] = hits > 1;
+    gid[i] = hits > 1 ? -2 : first;
 }
 
 }  // namespace bl
