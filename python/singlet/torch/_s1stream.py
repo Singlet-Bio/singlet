@@ -31,6 +31,7 @@ Example::
 from __future__ import annotations
 
 import os
+import re
 import time
 from collections.abc import Callable, Iterable, Iterator
 from typing import Optional, Union
@@ -45,6 +46,7 @@ except ImportError:  # pragma: no cover
 Fetch = Callable[[int, int], bytes]
 Source = Union[str, os.PathLike, Fetch]
 Block = tuple[int, int]
+_CONTENT_RANGE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 
 
 # --------------------------------------------------------------------------------------------------------- sources
@@ -88,14 +90,22 @@ def http_fetch(url: str, session=None, retries: int = 3) -> tuple[Fetch, int]:
             time.sleep(0.5 * 2**attempt)
         raise RuntimeError("unreachable")
 
-    r = get({"Range": "bytes=0-0"})
-    if r.status_code != 206 or "Content-Range" not in r.headers:
+    def ranged(r, a: int, b: int) -> Optional[int]:
+        """The object size if ``r`` answers bytes a-b with exactly that slice, else None. A Content-Range naming the slice is
+        what counts, not the status: some servers (``rclone serve s3``) send the slice with 200 instead of 206, while one
+        that ignores Range sends the whole object without Content-Range."""
+        m = _CONTENT_RANGE.match(r.headers.get("Content-Range", ""))
+        if not m or (int(m.group(1)), int(m.group(2))) != (a, b) or len(r.content) != b - a + 1:
+            return None
+        return None if m.group(3) == "*" else int(m.group(3))
+
+    size = ranged(get({"Range": "bytes=0-0"}), 0, 0)
+    if size is None:
         raise ValueError(f"{url} does not serve byte ranges")
-    size = int(r.headers["Content-Range"].rsplit("/", 1)[1])
 
     def fetch(off: int, ln: int) -> bytes:
         r = get({"Range": f"bytes={off}-{off + ln - 1}"})
-        if r.status_code != 206 or len(r.content) != ln:
+        if ranged(r, off, off + ln - 1) is None:
             raise IOError(f"short range read of {url} at {off} (+{ln})")
         return r.content
 

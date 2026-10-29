@@ -37,7 +37,7 @@ class Recorder:
         return [r for r in self.log if r[1].startswith(prefix)]
 
 
-def _handler(root: str, rec: Recorder, ignore_range: bool, total_override):
+def _handler(root: str, rec: Recorder, ignore_range: bool, total_override, range_status: int = 206):
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -91,7 +91,7 @@ def _handler(root: str, rec: Recorder, ignore_range: bool, total_override):
                         return
                     fh.seek(a)
                     body = fh.read(b - a + 1)
-                    self.send_response(206)
+                    self.send_response(range_status)
                     tot = total_override if total_override is not None else size
                     self.send_header("Content-Range", "bytes %d-%d/%d" % (a, b, tot))
                     self.send_header("ETag", etag)
@@ -102,7 +102,7 @@ def _handler(root: str, rec: Recorder, ignore_range: bool, total_override):
                     )
                     self.end_headers()
                     self.wfile.write(body)
-                    rec.add("GET", path, (a, b), 206, len(body))
+                    rec.add("GET", path, (a, b), range_status, len(body))
                 else:
                     body = fh.read()
                     self.send_response(200)
@@ -116,11 +116,13 @@ def _handler(root: str, rec: Recorder, ignore_range: bool, total_override):
 
 
 @contextmanager
-def serve(root: str, *, ignore_range: bool = False, total_override=None):
-    """Yield (base_url, Recorder). ``total_override`` lies about the object size in Content-Range (to test the size check)."""
+def serve(root: str, *, ignore_range: bool = False, total_override=None, range_status: int = 206):
+    """Yield (base_url, Recorder). ``total_override`` lies about the object size in Content-Range (to test the size check);
+    ``range_status=200`` answers a range with the slice and its Content-Range but status 200, as ``rclone serve s3`` does."""
     rec = Recorder()
     srv = ThreadingHTTPServer(
-        ("127.0.0.1", 0), _handler(os.path.abspath(root), rec, ignore_range, total_override)
+        ("127.0.0.1", 0),
+        _handler(os.path.abspath(root), rec, ignore_range, total_override, range_status),
     )
     th = threading.Thread(target=srv.serve_forever, daemon=True)
     th.start()
