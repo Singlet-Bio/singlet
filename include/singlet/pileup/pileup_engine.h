@@ -3359,6 +3359,9 @@ private:
     // first seen, so sj_counts / sj_features / splice_* do not depend on read order or worker count.
     void canonicalize_splice_junctions() {
         const size_t n = sj_names_.size();
+        // The serial pass grows sj_acc_ in batches of 1000 rows; trim to the named junctions so the matrix
+        // has exactly one row per name (a padded sj_counts.1pz fails to read: rownames != rows)
+        if (n > 0) sj_acc_.set_n_features(static_cast<uint32_t>(n));
         if (n < 2) return;
         std::unordered_map<std::string, int32_t> chrom_tid;
         for (size_t t = 0; t < tid_to_chrom_.size(); ++t) chrom_tid.emplace(tid_to_chrom_[t], static_cast<int32_t>(t));
