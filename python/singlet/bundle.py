@@ -2,10 +2,10 @@
 """singlet.bundle — Per-GSE .singlet bundle format (ZIP64), the legacy distribution unit.
 
 A .singlet file is a ZIP64 archive containing ALL processed GSMs for one GEO
-Series (GSE). Public distribution has moved to the v2 format (one immutable object
-per sample, docs/format-v2.md); :class:`SingletBundle` stays the reader for local
+Series (GSE). Public distribution has moved to the per-sample format (one immutable object
+per sample, docs/format-s1.md); :class:`SingletBundle` stays the reader for local
 legacy files and the packager for ``pack_gse``, and ``SingletBundle.open`` hands a
-v2 manifest, ``.s2`` object or accession to :class:`singlet.v2.bundle.V2Bundle`,
+.s1 manifest, ``.s1`` object or accession to :class:`singlet.s1.bundle.S1Bundle`,
 which has the same interface.
 
 Bundle layout::
@@ -1275,9 +1275,9 @@ def _singlet_version() -> str:
     except Exception:
         import importlib.metadata
 
-        # The distribution is "singlet-bio" on PyPI; "singlet" is what
-        # installs from before the rename were called.
-        for dist in ("singlet-bio", "singlet"):
+        # The distribution is "singlet" on PyPI; "singlet-bio" is what
+        # installs from GitHub were called before 1.1.0.
+        for dist in ("singlet", "singlet-bio"):
             try:
                 return importlib.metadata.version(dist)
             except Exception:
@@ -1381,15 +1381,15 @@ class SingletBundle:
         Returns
         -------
         SingletBundle
-            For a v2 manifest (``.json``), a ``.s2`` sample object or an accession, a
-            :class:`singlet.v2.bundle.V2Bundle` (same interface).
+            For a .s1 manifest (``.json``), a ``.s1`` sample object or an accession, a
+            :class:`singlet.s1.bundle.S1Bundle` (same interface).
         """
         if cls is SingletBundle and restricted is None:
             p = Path(str(path)).expanduser()
-            if p.exists() and p.suffix.lower() in (".json", ".s2"):
-                from singlet.v2.bundle import V2Bundle
+            if p.exists() and p.suffix.lower() in (".json", ".s1", ".s2"):
+                from singlet.s1.bundle import S1Bundle
 
-                return V2Bundle.open(p)
+                return S1Bundle.open(p)
             if not p.exists() and re.match(r"^GSE[0-9]{1,9}$", str(path).strip(), re.I):
                 from singlet._loader import open_bundle
 

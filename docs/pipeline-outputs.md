@@ -65,7 +65,7 @@ and the top-level `donor_assignments.tsv` (no longer a header-only stub).
   rows are the gene vocabulary (`gene_id_gene_name`, the vocabulary-pack order); `polya_counts` rows have inline names
   (`gene:chrom:strand:pos`), as `sj_counts`. Both have the sample's barcode columns; only called cells are nonzero.
 * `polya_sites.tsv.gz`, `sj_features.tsv.gz`, `read_qc_summary.json`: stored blobs (kind 3). `sj_features` is a candidate
-  for the shared junction table (`docs/format-v2.md` section 12): `star_sj_pass`, motif and annotation are per junction,
+  for the shared junction table (`docs/format-s1.md` section 12): `star_sj_pass`, motif and annotation are per junction,
   not per sample, except the read counts.
 * `cell_qc_metrics.tsv` has 11 more columns; the `cells`-table derivation does not cover them yet, so it falls back to
   stored until the cells table gains them (they are per-cell QC counts: tier-2 columns in `docs/CELL-ARCHITECTURE.md`).

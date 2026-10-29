@@ -257,13 +257,13 @@ class TestHighLevelIO:
         expected = np.array(adata.X.sum(axis=1)).ravel()
         np.testing.assert_allclose(loaded.obs["total_counts"].values, expected, atol=1.0)
 
-    def test_store_transpose_raises(self, tmp_path):
+    def test_s1_transpose_raises(self, tmp_path):
         from singlet._io import write_1pz
 
         adata = self._make_adata(n_genes=5, n_cells=3)
         path = tmp_path / "transpose.1pz"
-        with pytest.raises(NotImplementedError, match="store_transpose"):
-            write_1pz(adata, path, store_transpose=True)
+        with pytest.raises(NotImplementedError, match="s1_transpose"):
+            write_1pz(adata, path, s1_transpose=True)
 
     def test_info_1pz(self, tmp_path):
         from singlet._io import info_1pz, write_1pz
