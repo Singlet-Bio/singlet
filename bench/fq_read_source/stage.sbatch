@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=fqrs-stage
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=short-cpu,scavenger
+#SBATCH --requeue
 #SBATCH --nice=100
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=40G

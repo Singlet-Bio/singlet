@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=fqrs-run
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=short-cpu,scavenger
+#SBATCH --requeue
 #SBATCH --nice=100
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=96G
@@ -21,6 +22,7 @@ REF=/mnt/projects/debruinz_project/cellarium/reference; G=$REF/GRCh38-2024-A
 [ "$SET" = GSM5411066 ] && G=$REF/GRCm39-2024-A
 D=$W/data/fq-read-source/$SET
 case $IN in
+  /*) INPUT=$IN ;;   # an explicit .1fq path (or comma-separated paths)
   pooled) INPUT=$D/pooled.1fq ;;
   *) INPUT=$(ls $D/$IN/*.1fq | sort | paste -sd,) ;;
 esac

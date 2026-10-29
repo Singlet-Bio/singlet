@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=fqrs-cmp
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=short-cpu,scavenger
+#SBATCH --requeue
 #SBATCH --nice=100
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=24G
