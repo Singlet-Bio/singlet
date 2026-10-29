@@ -1,0 +1,58 @@
+[protocol_detect] 3'/5' check: R1 5'-TSO 0 / polyT 0; R2 3'-TSO 0, polyA 4, polyT 341 of 5000 spots
+[protocol_detect] 10x-3p-v2 -> 10x-5p-v2 (cDNA read looks 5': no 3'-kit TSO, poly(T) > poly(A))
+[singlet-gate] PASS_10X /tmp/debruinz-789934/SRR21102188.sra tag=10x-5p-v2 confidence=3 wl_match_rate=0.8044 gate_s=1.65805
+[singlet-download] /tmp/debruinz-789934/SRR21102188.sra → /tmp/debruinz-789934/SRR21102188.1fq
+[protocol_detect] 3'/5' check: R1 5'-TSO 0 / polyT 0; R2 3'-TSO 0, polyA 18, polyT 1374 of 20000 spots
+[protocol_detect] 10x-3p-v2 -> 10x-5p-v2 (cDNA read looks 5': no 3'-kit TSO, poly(T) > poly(A))
+[1fq-encode] Trimming over-sequenced R1: 28 → 26
+[1fq-encode] Barcode whitelist validation: 8129/10000 match (81%%) — OK
+[1fq-encode] Assay: sc-rna-5prime
+[1fq-encode] Protocol: 10x-5p-v2 (confidence: 3)
+[1fq-encode] R1 length: 26, R2 length: 90
+[1fq-encode] Total spots: 60683503
+[singlet] R2 variable-length check: median=90bp, zero=0% (0/100000 probe reads)
+[1fq-encode] BC dict: 737280 barcodes, BC=16bp, UMI=10bp
+[singlet-download] 600000 / 60683503 reads (0%)[singlet-download] 1100000 / 60683503 reads (1%)[singlet-download] 1600000 / 60683503 reads (2%)[singlet-download] 2100000 / 60683503 reads (3%)[singlet-download] 2600000 / 60683503 reads (4%)[singlet-download] 3100000 / 60683503 reads (5%)[singlet-download] 3600000 / 60683503 reads (5%)[singlet-download] 4100000 / 60683503 reads (6%)[singlet-download] 4600000 / 60683503 reads (7%)[singlet-download] 5100000 / 60683503 reads (8%)[singlet-download] 5600000 / 60683503 reads (9%)[singlet-download] 6100000 / 60683503 reads (10%)[singlet-download] 6600000 / 60683503 reads (10%)[singlet-download] 7100000 / 60683503 reads (11%)[singlet-download] 7600000 / 60683503 reads (12%)[singlet-download] 8100000 / 60683503 reads (13%)[singlet-download] 8600000 / 60683503 reads (14%)[singlet-download] 9100000 / 60683503 reads (14%)[singlet-download] 9600000 / 60683503 reads (15%)[singlet-download] 10100000 / 60683503 reads (16%)[singlet-download] 10600000 / 60683503 reads (17%)[singlet-download] 11100000 / 60683503 reads (18%)[singlet-download] 11600000 / 60683503 reads (19%)[singlet-download] 12100000 / 60683503 reads (19%)[singlet-download] 12600000 / 60683503 reads (20%)[singlet-download] 13100000 / 60683503 reads (21%)[singlet-download] 13600000 / 60683503 reads (22%)[singlet-download] 14100000 / 60683503 reads (23%)[singlet-download] 14600000 / 60683503 reads (24%)[singlet-download] 15100000 / 60683503 reads (24%)[singlet-download] 15600000 / 60683503 reads (25%)[singlet-download] 16100000 / 60683503 reads (26%)[singlet-download] 16600000 / 60683503 reads (27%)[singlet-download] 17100000 / 60683503 reads (28%)[singlet-download] 17600000 / 60683503 reads (29%)[singlet-download] 18100000 / 60683503 reads (29%)[singlet-download] 18600000 / 60683503 reads (30%)[singlet-download] 19100000 / 60683503 reads (31%)[singlet-download] 19600000 / 60683503 reads (32%)[singlet-download] 20100000 / 60683503 reads (33%)[singlet-download] 20600000 / 60683503 reads (33%)[singlet-download] 21100000 / 60683503 reads (34%)[singlet-download] 21600000 / 60683503 reads (35%)[singlet-download] 22100000 / 60683503 reads (36%)[singlet-download] 22600000 / 60683503 reads (37%)[singlet-download] 23100000 / 60683503 reads (38%)[singlet-download] 23600000 / 60683503 reads (38%)[singlet-download] 24100000 / 60683503 reads (39%)[singlet-download] 24600000 / 60683503 reads (40%)[singlet-download] 25100000 / 60683503 reads (41%)[singlet-download] 25600000 / 60683503 reads (42%)[singlet-download] 26100000 / 60683503 reads (43%)[singlet-download] 26600000 / 60683503 reads (43%)[singlet-download] 27100000 / 60683503 reads (44%)[singlet-download] 27600000 / 60683503 reads (45%)[singlet-download] 28100000 / 60683503 reads (46%)[singlet-download] 28600000 / 60683503 reads (47%)[singlet-download] 29100000 / 60683503 reads (47%)[singlet-download] 29600000 / 60683503 reads (48%)[singlet-download] 30100000 / 60683503 reads (49%)[singlet-download] 30600000 / 60683503 reads (50%)[singlet-download] 31100000 / 60683503 reads (51%)[singlet-download] 31600000 / 60683503 reads (52%)[singlet-download] 32100000 / 60683503 reads (52%)[singlet-download] 32600000 / 60683503 reads (53%)[singlet-download] 33100000 / 60683503 reads (54%)[singlet-download] 33600000 / 60683503 reads (55%)[singlet-download] 34100000 / 60683503 reads (56%)[singlet-download] 34600000 / 60683503 reads (57%)[singlet-download] 35100000 / 60683503 reads (57%)[singlet-download] 35600000 / 60683503 reads (58%)[singlet-download] 36100000 / 60683503 reads (59%)[singlet-download] 36600000 / 60683503 reads (60%)[singlet-download] 37100000 / 60683503 reads (61%)[singlet-download] 37600000 / 60683503 reads (61%)[singlet-download] 38100000 / 60683503 reads (62%)[singlet-download] 38600000 / 60683503 reads (63%)[singlet-download] 39100000 / 60683503 reads (64%)[singlet-download] 39600000 / 60683503 reads (65%)[singlet-download] 40100000 / 60683503 reads (66%)[singlet-download] 40600000 / 60683503 reads (66%)[singlet-download] 41100000 / 60683503 reads (67%)[singlet-download] 41600000 / 60683503 reads (68%)[singlet-download] 42100000 / 60683503 reads (69%)[singlet-download] 42600000 / 60683503 reads (70%)[singlet-download] 43100000 / 60683503 reads (71%)[singlet-download] 43600000 / 60683503 reads (71%)[singlet-download] 44100000 / 60683503 reads (72%)[singlet-download] 44600000 / 60683503 reads (73%)[singlet-download] 45100000 / 60683503 reads (74%)[singlet-download] 45600000 / 60683503 reads (75%)[singlet-download] 46100000 / 60683503 reads (75%)[singlet-download] 46600000 / 60683503 reads (76%)[singlet-download] 47100000 / 60683503 reads (77%)[singlet-download] 47600000 / 60683503 reads (78%)[singlet-download] 48100000 / 60683503 reads (79%)[singlet-download] 48600000 / 60683503 reads (80%)[singlet-download] 49100000 / 60683503 reads (80%)[singlet-download] 49600000 / 60683503 reads (81%)[singlet-download] 50100000 / 60683503 reads (82%)[singlet-download] 50600000 / 60683503 reads (83%)[singlet-download] 51100000 / 60683503 reads (84%)[singlet-download] 51600000 / 60683503 reads (85%)[singlet-download] 52100000 / 60683503 reads (85%)[singlet-download] 52600000 / 60683503 reads (86%)[singlet-download] 53100000 / 60683503 reads (87%)[singlet-download] 53600000 / 60683503 reads (88%)[singlet-download] 54100000 / 60683503 reads (89%)[singlet-download] 54600000 / 60683503 reads (89%)[singlet-download] 55100000 / 60683503 reads (90%)[singlet-download] 55600000 / 60683503 reads (91%)[singlet-download] 56100000 / 60683503 reads (92%)[singlet-download] 56600000 / 60683503 reads (93%)[singlet-download] 57100000 / 60683503 reads (94%)[singlet-download] 57600000 / 60683503 reads (94%)[singlet-download] 58100000 / 60683503 reads (95%)[singlet-download] 58600000 / 60683503 reads (96%)[singlet-download] 59100000 / 60683503 reads (97%)[singlet-download] 59600000 / 60683503 reads (98%)[singlet-download] 60100000 / 60683503 reads (99%)[singlet-download] 60600000 / 60683503 reads (99%)[singlet-download] 60683503 / 60683503 reads (100%)
+[singlet-download] Done: 60683503 reads, 122 blocks
+[singlet-download] Protocol: 10x-5p-v2 (confidence: 3)
+[singlet-download] Output: /tmp/debruinz-789934/SRR21102188.1fq
+
+[1fq-profile] ── Encode Performance ──
+[1fq-profile] Total: 50.739s, 60.68M reads, 14.08 GB VDB → 0.94 GB .1fq (14.9×)
+[1fq-profile] Throughput: 1.20M reads/s, 277.5 MB/s VDB, 18.6 MB/s .1fq
+[1fq-profile] Phase breakdown:
+[1fq-profile]   VDB read:     9.309s (18.3%)
+[1fq-profile]   Convert:      2.264s ( 4.5%)
+[1fq-profile]   Writer:      34.897s (68.8%) [sort+pack sync, compress+write async]
+[1fq-profile]     wait:      10.109s (19.9%) [stalled on prev async]
+[1fq-profile]     sort:      16.480s (32.5%)
+[1fq-profile]     pack:       8.276s (16.3%)
+[1fq-profile]     compress:  10.455s (async, 10.5s hidden)
+[1fq-profile]     write:     10.850s (async)
+[1fq-profile]     overlap:   11.196s hidden behind VDB read
+[1fq-profile]   Protocol:     3.235s ( 6.4%)
+[1fq-profile]   Finalize:     0.308s ( 0.6%) [metadata+index+CRC]
+[1fq-profile]   Other:        0.725s ( 1.4%)
+	Command being timed: "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-w3 download /tmp/debruinz-789934/SRR21102188.sra -o /tmp/debruinz-789934/SRR21102188.1fq --vdb-threads 4 --whitelist-dir /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists"
+	User time (seconds): 133.49
+	System time (seconds): 2.66
+	Percent of CPU this job got: 258%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:52.71
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 726040
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 117
+	Minor (reclaiming a frame) page faults: 672068
+	Voluntary context switches: 28701
+	Involuntary context switches: 651
+	Swaps: 0
+	File system inputs: 210296
+	File system outputs: 1841576
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

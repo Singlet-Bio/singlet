@@ -1,0 +1,7 @@
+brain_sn_v3_deep       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=3283431  pres 6.214 cnt 0.504 = 6.718 | empt nnz=3065880  pres 9.345 cnt 0.349 = 9.694 | hdr 0.076 flag 0.0002 b/nnz | ALL 8.232
+brain_sn_v3_intronic   exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=863248   pres 8.627 cnt 0.296 = 8.923 | empt nnz=517586   pres 9.911 cnt 0.531 = 10.442 | hdr 0.239 flag 0.0024 b/nnz | ALL 9.734
+pbmc_v2_shallow        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=3218012  pres 6.290 cnt 0.421 = 6.711 | empt nnz=2086742  pres 7.192 cnt 0.265 = 7.457 | hdr 0.102 flag 0.0065 b/nnz | ALL 7.114
+pbmc_v2_typical        exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=2402405  pres 4.624 cnt 1.089 = 5.713 | empt nnz=166823   pres 7.043 cnt 0.802 = 7.845 | hdr 0.034 flag 0.0002 b/nnz | ALL 5.886
+pbmc_v3_lowgenes       exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=1609577  pres 3.901 cnt 1.427 = 5.328 | empt nnz=150251   pres 7.035 cnt 0.728 = 7.763 | hdr 0.109 flag 0.0011 b/nnz | ALL 5.646
+tcell_5p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=9427097  pres 4.840 cnt 0.949 = 5.789 | empt nnz=1102416  pres 7.522 cnt 0.549 = 8.071 | hdr 0.027 flag 0.0005 b/nnz | ALL 6.055
+tumor_3p               exon_c B=1024  n0=64  rho=2.00 bpo=4 gt=1 mix=1 | cells nnz=142440   pres 9.426 cnt 0.421 = 9.847 | empt nnz=102677   pres 10.637 cnt 0.270 = 10.907 | hdr 0.402 flag 0.0160 b/nnz | ALL 10.709

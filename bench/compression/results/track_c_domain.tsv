@@ -1,0 +1,6 @@
+sample	member	codec	model_tag	nnz	n_cols	payload_bytes	payload_bits_per_nnz	side_bits_nnz	bucket_bits_nnz	presence_bits_nnz	value_bits_nnz	xent_bits_nnz	total_bytes	total_bits_per_nnz	names_bytes	enc_ms	dec_ms	dec_Mnnz_s	model_bytes	matrix_ok
+brain_sn_v3_deep	exon_counts.1pz	c_r2	mouse_exon_xhuman	6349311	84424	6428040	8.0992	0.154671	0.0208485	7.50381	0.419865	8.09919	10432672	13.145	4004590	47099.2	12395.2	0.512238	1250230	1
+brain_sn_v3_deep	exon_counts.1pz	c_r2_nomodel		6349311	84424	6436349	8.10967	0.154671	0.0208485	7.51421	0.419936	8.10966	10440964	13.1554	4004590	27435.6	7801.43	0.813865	0	1
+brain_sn_v3_intronic	exon_counts.1pz	c_r2	mouse_exon_xhuman	1380834	78894	1657854	9.60494	0.405728	0.118397	8.70844	0.372348	9.60492	5632400	32.6319	3974506	11234.8	5059.89	0.272898	1250230	1
+brain_sn_v3_intronic	exon_counts.1pz	c_r2_nomodel		1380834	78894	1659343	9.61357	0.405728	0.118397	8.71721	0.372215	9.61355	5633872	32.6404	3974506	13789	2260.45	0.610868	0	1
+brain_sn_v3_deep	intron_counts.1pz	c_r2	mouse_intron_xhuman	6678099	84424	6101091	7.30878	0.141646	0.0279911	6.53791	0.601224	7.30877	9376271	11.2323	3275136	15550.8	7084.13	0.942684	1015336	1

@@ -1,0 +1,66 @@
+{
+ "build": "Mmul_10",
+ "version_id": "65e22b5ade08d73e822fcb5aa256c779",
+ "chrom_rename": {},
+ "junctions": {
+  "census": 3704158,
+  "recurrent_supported_candidates": 81901,
+  "annotated_gtf": 229661,
+  "annotated_seen": 72388,
+  "core": 230861,
+  "core_annotated": 229661,
+  "core_unannotated": 1200,
+  "rare": 7859,
+  "rare_segments": 1,
+  "local": 3622711
+ },
+ "called_umi_share": {
+  "core": 0.9578719053162856,
+  "core_annotated": 0.9321768255423679,
+  "rare": 0.007451642107658174
+ },
+ "bytes": {
+  "core": 962921,
+  "rare_total": 38280,
+  "rare_largest_segment": 38280,
+  "version": 1054
+ },
+ "decode_core_ms_median_of_7": 7.7,
+ "reference_cumsum_1M_u32_ms": 1.66,
+ "rules": {
+  "core": "annotated (GTF), or unannotated with n_studies >= 3, umi_called >= 1000, a canonical motif and ambient fraction <= 0.5",
+  "rare": "unannotated with n_studies >= 3, 100 <= umi_called < 1000, a canonical motif and ambient fraction <= 0.5; one segment, or one per chromosome above 1 MiB",
+  "local": "everything else: stays in its sample object as integer coordinates"
+ },
+ "sources": {
+  "gtf": {
+   "url": "https://ftp.ensembl.org/pub/release-111/gtf/macaca_mulatta/Macaca_mulatta.Mmul_10.111.gtf.gz",
+   "sha256": "73d9d78bab366519e6ff92d9f04796b0d280c45507a2e261eacd89353809675d"
+  },
+  "genome": {
+   "url": "https://ftp.ensembl.org/pub/release-111/fasta/macaca_mulatta/dna/Macaca_mulatta.Mmul_10.dna.toplevel.fa.gz",
+   "sha256": "679dd90651c50366858152b62989c26d587340711e60622458815d19b272fd3a"
+  }
+ },
+ "packs_dir": "/mnt/projects/debruinz_project/debruinz/singlet/state/jxtab/v1-bf3a10b2e1/packs/Mmul_10",
+ "packs": [
+  {
+   "id": "15404902f4af437a70bd8102629b8f5c",
+   "kind": "junction-segment",
+   "bytes": 962921,
+   "sha256": "15404902f4af437a70bd8102629b8f5c3dbef75921096a0b466b54665f3a2424"
+  },
+  {
+   "id": "6ca7454c93acd5af7a9cff99f18ba104",
+   "kind": "junction-segment",
+   "bytes": 38280,
+   "sha256": "6ca7454c93acd5af7a9cff99f18ba104ec5c5ecd8cd4ed9fd74a6cf270f4a6ff"
+  },
+  {
+   "id": "65e22b5ade08d73e822fcb5aa256c779",
+   "kind": "junction-version",
+   "bytes": 1054,
+   "sha256": "65e22b5ade08d73e822fcb5aa256c779b14e2076089c506beac3c62fab0a5a64"
+  }
+ ]
+}

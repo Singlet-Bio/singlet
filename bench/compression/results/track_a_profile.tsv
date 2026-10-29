@@ -1,0 +1,81 @@
+sample	member	nnz	n	m	stage	ms	ns_per_nnz	pct_of_stage_sum
+tcell_5p	exon_counts.1pz	10529513	69249	310797	file read (ifstream)	17.2913	1.64217	0
+tcell_5p	exon_counts.1pz	10529513	69249	310797	validate_buffer (whole-file CRC32)	21.9528	2.08488	0.812709
+tcell_5p	exon_counts.1pz	10529513	69249	310797	perm: zstd decode	6.02113	0.571834	0.222907
+tcell_5p	exon_counts.1pz	10529513	69249	310797	perm: permutation check	2.49898	0.237331	0.092514
+tcell_5p	exon_counts.1pz	10529513	69249	310797	ptr: zstd + col counts	1.75039	0.166236	0.0648006
+tcell_5p	exon_counts.1pz	10529513	69249	310797	meta: zstd decode (names TLV)	114.532	10.8772	4.24006
+tcell_5p	exon_counts.1pz	10529513	69249	310797	meta: TLV parse / name splitting	215.151	20.4331	7.96503
+tcell_5p	exon_counts.1pz	10529513	69249	310797	indptr build	0.425945	0.0404525	0.0157688
+tcell_5p	exon_counts.1pz	10529513	69249	310797	indices/data alloc+zero	93.7745	8.90587	3.4716
+tcell_5p	exon_counts.1pz	10529513	69249	310797	chunk: zstd decode	69.2893	6.58048	2.56514
+tcell_5p	exon_counts.1pz	10529513	69249	310797	chunk: CRC32 of packed	28.0217	2.66125	1.03738
+tcell_5p	exon_counts.1pz	10529513	69249	310797	chunk: bitmap_unpack	251.084	23.8457	9.2953
+tcell_5p	exon_counts.1pz	10529513	69249	310797	chunk: bit_planes_decode (+memcpy)	288.877	27.435	10.6944
+tcell_5p	exon_counts.1pz	10529513	69249	310797	chunk: byte_unsplit	18.9716	1.80176	0.702345
+tcell_5p	exon_counts.1pz	10529513	69249	310797	column walk: varint parse + gap->row	131.876	12.5244	4.88216
+tcell_5p	exon_counts.1pz	10529513	69249	310797	column walk: std::sort(rv)	1396.09	132.588	51.6841
+tcell_5p	exon_counts.1pz	10529513	69249	310797	column walk: emit indices/data	56.8374	5.39792	2.10416
+tcell_5p	exon_counts.1pz	10529513	69249	310797	chunk: other (allocs, loop)	4.03913	0.383601	0.149532
+tcell_5p	exon_counts.1pz	10529513	69249	310797	TOTAL instrumented (excl file read)	2701.19	256.535	100
+tcell_5p	exon_counts.1pz	10529513	69249	310797	TOTAL uninstrumented read_1pz_buffer	2499.97	237.425	0
+tumor_3p	intron_counts.1pz	107364	25067	272191	file read (ifstream)	6.8529	63.8287	0
+tumor_3p	intron_counts.1pz	107364	25067	272191	validate_buffer (whole-file CRC32)	6.60293	61.5005	3.28249
+tumor_3p	intron_counts.1pz	107364	25067	272191	perm: zstd decode	5.66472	52.7618	2.81608
+tumor_3p	intron_counts.1pz	107364	25067	272191	perm: permutation check	2.29324	21.3595	1.14003
+tumor_3p	intron_counts.1pz	107364	25067	272191	ptr: zstd + col counts	0.828518	7.71691	0.411878
+tumor_3p	intron_counts.1pz	107364	25067	272191	meta: zstd decode (names TLV)	84.6455	788.397	42.0795
+tumor_3p	intron_counts.1pz	107364	25067	272191	meta: TLV parse / name splitting	95.3778	888.359	47.4148
+tumor_3p	intron_counts.1pz	107364	25067	272191	indptr build	0.0313661	0.292147	0.0155929
+tumor_3p	intron_counts.1pz	107364	25067	272191	indices/data alloc+zero	0.23421	2.18145	0.116432
+tumor_3p	intron_counts.1pz	107364	25067	272191	chunk: zstd decode	0.775424	7.22239	0.385484
+tumor_3p	intron_counts.1pz	107364	25067	272191	chunk: CRC32 of packed	0.180297	1.67931	0.0896305
+tumor_3p	intron_counts.1pz	107364	25067	272191	chunk: bitmap_unpack	1.36248	12.6903	0.677323
+tumor_3p	intron_counts.1pz	107364	25067	272191	chunk: bit_planes_decode (+memcpy)	0.893123	8.31864	0.443995
+tumor_3p	intron_counts.1pz	107364	25067	272191	chunk: byte_unsplit	0.0408726	0.380692	0.0203189
+tumor_3p	intron_counts.1pz	107364	25067	272191	column walk: varint parse + gap->row	0.123211	1.1476	0.0612513
+tumor_3p	intron_counts.1pz	107364	25067	272191	column walk: std::sort(rv)	1.42585	13.2805	0.708827
+tumor_3p	intron_counts.1pz	107364	25067	272191	column walk: emit indices/data	0	0	0
+tumor_3p	intron_counts.1pz	107364	25067	272191	chunk: other (allocs, loop)	0.676702	6.30287	0.336406
+tumor_3p	intron_counts.1pz	107364	25067	272191	TOTAL instrumented (excl file read)	201.156	1873.59	100
+tumor_3p	intron_counts.1pz	107364	25067	272191	TOTAL uninstrumented read_1pz_buffer	242.587	2259.48	0
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	file read (ifstream)	9.5118	3.7022	0
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	validate_buffer (whole-file CRC32)	12.6704	4.93158	1.58193
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	perm: zstd decode	7.36693	2.86737	0.919783
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	perm: permutation check	4.56578	1.7771	0.570051
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	ptr: zstd + col counts	0.557755	0.21709	0.0696373
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	meta: zstd decode (names TLV)	123.834	48.1991	15.4611
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	meta: TLV parse / name splitting	165.641	64.4711	20.6808
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	indptr build	0.0405	0.0157635	0.00505655
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	indices/data alloc+zero	20.6839	8.05063	2.58245
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	chunk: zstd decode	15.5519	6.05314	1.9417
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	chunk: CRC32 of packed	5.32379	2.07214	0.664691
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	chunk: bitmap_unpack	35.6353	13.87	4.44917
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	chunk: bit_planes_decode (+memcpy)	64.1716	24.977	8.01202
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	chunk: byte_unsplit	4.45989	1.73589	0.55683
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	column walk: varint parse + gap->row	26.4292	10.2868	3.29976
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	column walk: std::sort(rv)	300.784	117.072	37.5538
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	column walk: emit indices/data	12.015	4.67651	1.50011
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	chunk: other (allocs, loop)	1.21048	0.471145	0.151132
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	TOTAL instrumented (excl file read)	800.942	311.744	100
+pbmc_v2_typical	exon_counts.1pz	2569228	15185	310797	TOTAL uninstrumented read_1pz_buffer	883.761	343.979	0
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	file read (ifstream)	25.5896	3.83187	0
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	validate_buffer (whole-file CRC32)	25.2548	3.78174	1.45988
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	perm: zstd decode	8.40779	1.25901	0.486023
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	perm: permutation check	2.79796	0.418976	0.16174
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	ptr: zstd + col counts	6.79794	1.01794	0.392963
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	meta: zstd decode (names TLV)	127.731	19.1269	7.38365
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	meta: TLV parse / name splitting	194.533	29.1301	11.2452
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	indptr build	0.485089	0.0726387	0.0280411
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	indices/data alloc+zero	47.3383	7.08858	2.73644
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	chunk: zstd decode	52.2041	7.81721	3.01772
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	chunk: CRC32 of packed	20.4015	3.05499	1.17934
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	chunk: bitmap_unpack	157.23	23.5442	9.08889
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	chunk: bit_planes_decode (+memcpy)	184.413	27.6146	10.6602
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	chunk: byte_unsplit	16.9272	2.53474	0.978499
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	column walk: varint parse + gap->row	78.2036	11.7105	4.52065
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	column walk: std::sort(rv)	767.35	114.905	44.3576
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	column walk: emit indices/data	35.939	5.38162	2.07749
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	chunk: other (allocs, loop)	3.90326	0.584486	0.225632
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	TOTAL instrumented (excl file read)	1729.92	259.044	100
+brain_sn_v3_deep	intron_counts.1pz	6678099	84424	307730	TOTAL uninstrumented read_1pz_buffer	1940.07	290.513	0

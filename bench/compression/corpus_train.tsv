@@ -1,0 +1,10 @@
+id	gse	gsm	note
+h_pbmc_a	GSE165080	GSM5025728	human PBMC 10x 3p train
+h_pbmc_b	GSE165080	GSM5025740	human PBMC 10x 3p train
+h_b	GSE285335	GSM8700986	human 10x train
+h_c	GSE244515	GSM7818495	human 10x train
+h_d	GSE268210	GSM8287978	human 10x train small
+m_brain_a	GSE249382	GSM7943451	mouse brain train
+m_brain_b	GSE249382	GSM7943460	mouse brain train
+m_brain_c	GSE245201	GSM7847823	mouse brain train
+m_brain_d	GSE254360	GSM8039489	mouse brain train

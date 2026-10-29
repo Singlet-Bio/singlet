@@ -1,0 +1,9 @@
+F142444|human|h_pbmc_a,h_pbmc_b,h_b,h_c,h_d,pbmc_v3_lowgenes,tcell_5p,tumor_3p|pbmc_v2_typical,pbmc_v2_shallow
+F244263|human|h_pbmc_a,h_pbmc_b,h_b,h_c,h_d,pbmc_v2_typical,pbmc_v2_shallow,tcell_5p,tumor_3p|pbmc_v3_lowgenes
+F152522|human|h_pbmc_a,h_pbmc_b,h_b,h_c,h_d,pbmc_v2_typical,pbmc_v2_shallow,pbmc_v3_lowgenes,tumor_3p|tcell_5p
+F145370|human|h_pbmc_a,h_pbmc_b,h_b,h_c,h_d,pbmc_v2_typical,pbmc_v2_shallow,pbmc_v3_lowgenes,tcell_5p|tumor_3p
+M285936|mouse|m_brain_a,m_brain_b,m_brain_c,m_brain_d|brain_sn_v3_deep,brain_sn_v3_intronic
+IShuman|human|h_pbmc_a,h_pbmc_b,h_b,h_c,h_d,pbmc_v2_typical,pbmc_v2_shallow,pbmc_v3_lowgenes,tcell_5p,tumor_3p|pbmc_v2_typical,pbmc_v2_shallow,pbmc_v3_lowgenes,tcell_5p,tumor_3p
+ISmouse|mouse|m_brain_a,m_brain_b,m_brain_c,m_brain_d,brain_sn_v3_deep,brain_sn_v3_intronic|brain_sn_v3_deep,brain_sn_v3_intronic
+XH|human|h_pbmc_a,h_pbmc_b,h_b,h_c,h_d|pbmc_v2_typical,pbmc_v2_shallow,pbmc_v3_lowgenes,tcell_5p,tumor_3p
+XM|mouse|(human XH topics grafted by symbol)|brain_sn_v3_deep,brain_sn_v3_intronic

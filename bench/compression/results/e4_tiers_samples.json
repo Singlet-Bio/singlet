@@ -1,0 +1,48 @@
+{
+ "pbmc_v2_typical": {
+  "n_called": 5428,
+  "n_cols": 15185,
+  "cell_calls_raw": 271457,
+  "cell_calls_deflated": 46358
+ },
+ "pbmc_v2_shallow": {
+  "n_called": 41725,
+  "n_cols": 96446,
+  "cell_calls_raw": 2086307,
+  "cell_calls_deflated": 273069
+ },
+ "pbmc_v3_lowgenes": {
+  "n_called": 11124,
+  "n_cols": 71061,
+  "cell_calls_raw": 556257,
+  "cell_calls_deflated": 91955
+ },
+ "brain_sn_v3_deep": {
+  "n_called": 3288,
+  "n_cols": 84424,
+  "cell_calls_raw": 164457,
+  "cell_calls_deflated": 30387
+ },
+ "brain_sn_v3_intronic": {
+  "n_called": 8743,
+  "n_cols": 78894,
+  "cell_calls_raw": 437207,
+  "cell_calls_deflated": 70114
+ },
+ "tcell_5p": {
+  "n_called": 12363,
+  "n_cols": 69249,
+  "cell_calls_raw": 618207,
+  "cell_calls_deflated": 101644
+ },
+ "tumor_3p": {
+  "n_called": 3820,
+  "n_cols": 25067,
+  "cell_calls_raw": 191057,
+  "cell_calls_deflated": 27762,
+  "cell_calls_deflated_bundle": 27756,
+  "psi_bytes": 1636166,
+  "json_bytes": 1626,
+  "mt_bytes": 151
+ }
+}

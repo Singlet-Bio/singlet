@@ -4,6 +4,97 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+- **Cell lines carry their line as cell type.** The labeller was trained on primary tissue, so on a cultured cell line it gave
+  the nearest primary type, often wrong (K-562 cells came out as "transit amplifying cell"). With sample facts on (the
+  default), every cell of a cell-line sample now has `cell_type` / `cell_type_deepest` = the line's name and
+  `cell_type_ontology_term_id` = its Cellosaurus id (or `cultured cell` / `CL:0000010` when the GEO record does not name the
+  line); level 0, no score, no path. Python `singlet.s1.sample_facts.relabel_cell_lines`, R `load()` / `singlet_cells()`, as on
+  singlet.bio. `sample_facts=False` keeps the labeller's calls.
+- **`S1Stream` over HTTP accepts a range answered with status 200** when the response carries a `Content-Range` naming
+  exactly the requested slice (`rclone serve s3` answers this way). A server that ignores `Range` and sends the whole
+  object is still rejected.
+- **Your own counts as `.s1`** ([docs/s1-own-data.md](docs/s1-own-data.md)).
+  - `singlet.write_s1(x, path, ...)` (AnnData, scipy sparse or dense, cells x genes) and `singlet::write_s1(x, path, ...)`
+    (dgCMatrix, matrix, SingleCellExperiment or Seurat, genes x cells) store an integer count matrix with its gene ids
+    and barcodes as a `.s1` sample object with one `counts` member.
+  - Both packages call the same C++ encoder and write the same bytes when built against one zstd; the shared fixture test
+    compares the container, header, digest and decoded counts and names across builds.
+  - `singlet.read_s1()` / `singlet::read_s1()` read it back exactly. `singlet.load()`, `singlet.s1.client.load()` and R
+    `load()` read any `.s1` file that holds one count matrix and no atlas members.
+- **`singlet.torch.S1Cells` / `S1Stream`: stream minibatches from one `.s1` file**, local or over HTTP Range requests.
+  - Batches are block-shuffled: `batch_size // block_size` blocks of contiguous cells, a new order each epoch, split
+    across DataLoader workers.
+  - Each run of blocks costs one range request and one multithreaded decode straight into a `torch.sparse_csr_tensor`.
+  - `order="native"` keeps the codec's gene order (`gene_order` gives the permutation once); `"canonical"` keeps the
+    source order.
+  - `block_batches()` is the workload of the `.s1` benchmark.
+
+## [1.3.0] — 2026-10-29: sample facts in the clients
+
+- **Structured sample facts in `obs` / `colData`.** `singlet.load()`, `Study.to_anndata()` and `singlet.cells()` / `Study.cells()`
+  (R: `load()` / `singlet_load()` and `singlet_cells()`, R package 1.2.1) add, per sample and repeated on its cells, the facts the
+  singlet.bio study API (`GET /api/gse/<GSE>`, `facts`) reads from the sample's own GEO record: `tissue_type` (CELLxGENE:
+  tissue, organoid, primary cell culture, cell line), `cell_line` + `cell_line_cellosaurus_id` (Cellosaurus), `tumor_sample_type`
+  (GDC/TCGA: tumor, primary tumor, metastatic, recurrent tumor, adjacent normal), `disease` + `disease_ontology_term_id` (MONDO,
+  or `normal` / PATO:0000461 for a healthy donor), `donor_status` and `sample_kind`. Categoricals (R: factors); a field the record
+  does not state is missing, never guessed. They are fetched once per study and process when the study is read over HTTP;
+  offline (`$SINGLET_OFFLINE`), for a local study or when the API cannot be reached the columns are absent and nothing fails.
+  `sample_facts=False` (R: `sample_facts = FALSE`) skips them. New module `singlet.s1.sample_facts`.
+
+## [1.2.0] — 2026-10-28: on PyPI as `singlet`
+
+The first release on PyPI: `pip install singlet`, then `import singlet`. Wheels for CPython 3.9 to 3.13 on Linux (x86_64,
+aarch64), macOS (Intel, Apple silicon) and Windows include the compiled `.1pz` / `.s1` codec (`singlet._pz`,
+`singlet._pz2`), so reading count matrices needs no compiler.
+
+- **Distribution renamed from `singlet-bio` to `singlet`**, the import name. Releases 0.1 to 0.5 of the PyPI `singlet`
+  project are an unrelated 2017 package (github.com/iosonofabio/singlet). Extras are `singlet[torch]`, `singlet[mcp]`,
+  and so on. A GitHub install made as `singlet-bio` should be uninstalled first (`pip uninstall singlet-bio`).
+- **`singlet.torch.AtlasCells`** streams atlas cells by HTTP range reads, with study-held-out splits (PR #68).
+- **Clients:** the legacy-bundle fallback is off since the legacy files were retired; studies not in the atlas get a clear
+  message (PR #64).
+- **Release policy:** per-cell mtDNA and doublet columns are stripped from `.s1` objects (PR #65).
+
+## [1.1.0] — 2026-10-27: Research Alpha per-cell labels in the clients
+
+Users install from GitHub `main` (`pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"`,
+`remotes::install_github("Singlet-Bio/singlet", subdir = "r")`); nothing is on PyPI or CRAN yet.
+
+- **The .s1 readers now return the per-cell labels, cell calls and QC columns.** `singlet.load()`,
+  `Study.to_anndata()`, `singlet.cells()` / `Study.cells()` and `load()` of a local `.s1` object put every column of the
+  sample's `cells` table in `obs` (R: `load()` / `singlet_load()` and `singlet_cells()` in `colData`), in front of the GEO
+  sample metadata. Before, `to_anndata()` returned only GEO metadata and `cells()` only the numeric count summaries.
+  - `cell_type`, `cell_type_ontology_term_id` (CELLxGENE naming): the CL label at the default level, the deepest level
+    `<= cell_type_level` (default 2: compartment, lineage) that the labeller reached; `cell_type_level`, `cell_type_score`
+    (path score down to that level). `cell_type_min_score=` adds a path-score threshold (default 0, none).
+  - `cell_type_deepest`, `cell_type_deepest_ontology_term_id`, `cell_type_deepest_level`, `cell_type_deepest_score`: the
+    deepest (preview) call, stored as `cell_type_label` / `cell_type_cl` / `cell_type_score`; `cell_type_path` and
+    `cell_type_p1`..`p6`.
+  - `sex_chrom`, `sex_score`, `ancestry_hancestro`, `ancestry_prob`, `called`, `called_ed`, `called_ed_fdr`, and the
+    `n_umi_*`, `n_feat_*`, `cyc_*`, `qc_*`, `don_*`, `mts_*` columns; categorical columns (donor ids, cell-cycle phase) are
+    decoded from the manifest's recipes instead of being returned as codes.
+  - `qc_doublet_score` is unvalidated and hidden unless `include_unvalidated=True` (R: `include_unvalidated = TRUE`) or it
+    is named in `columns=`; `where=` can still filter on it.
+  - `cells()` / `singlet_cells()` `where` conditions can use the labels (`"cell_type == 'T cell' and sex_chrom == 'female'"`).
+  - Accuracy notes and the column reference: `docs/cell_annotation.md` section 8.
+- **R: GEO curated metadata renamed** `tissue`, `cell_type`, `disease`, `sex`, `age` -> `geo_tissue`, `geo_cell_type`,
+  `geo_disease`, `geo_sex`, `geo_age` (also for legacy bundles), so `colData$cell_type` is the per-cell label.
+  Combining studies whose `colData` columns differ now fills the missing columns with `NA`.
+- **`layers[None]`:** anndata 0.13 lists `X` itself as the layer `None` (`adata.layers[None] is adata.X`); the client
+  adds only `spliced` and `unspliced`. Nothing to drop; iterate with `[k for k in adata.layers if k is not None]`.
+- R s1 tests read the test study from the `s1/` layout again (they had been skipping since the rename).
+
+- **Per-donor germline members are no longer packed into public bundles** (2026-10-20). `pack_gse` writes the public
+  `.singlet` without the donor SNP depth matrices, per-donor genotype VCFs and coverage tables, allele-specific counts
+  and donor mitochondrial consensus/variant files, and trims `ancestry_call.json` to the group, confidence and coverage
+  counts. With `private_out_path` / `--private-out` those members are written to a *restricted sidecar* for private
+  storage; nothing is stored twice, and `SingletBundle.open(public, restricted=sidecar)` reads the two as one bundle.
+  The rules are in `singlet/_restricted.py`. `python -m singlet.bundle redact SRC DST --sidecar S` splits an existing
+  complete bundle, `restore_bundle` puts one back together, and `scripts/restrict_published_bundles.py` migrates
+  published ones (split, verify, upload the sidecar, read it back, then overwrite the public object). Manifests carry
+  `profile: "public-1"` or `"restricted-1"`. Sex, the coarse ancestry call, donor labels, doublet scores and
+  mitochondrial heteroplasmy are unchanged.
+
 ## [1.0.0] — first release
 
 Version numbers were reset to **1.0.0** before the first public release. The builds numbered 2.0.0 and 2.1.0 below were

@@ -9,9 +9,13 @@ recursive-include src/bindings *.cpp *.h *.hpp
 # only the .1pz codec headers: the extension includes nothing else (the rest of include/ is the C++ pipeline)
 include include/singlet/pileup/pz_reader.h
 include include/singlet/pileup/pz_writer.h
+# the pz2 matrix codec (header-only) and the binding helpers
+recursive-include include/singlet/pz2 *.h
 
 # Bundled package data
 recursive-include python/singlet/data *.parquet *.txt
+recursive-include python/singlet/celllabels/data *.gz
+recursive-include python/singlet/features/data *.json *.parquet
 # ...except the large 10x whitelists, which singlet.whitelists downloads on demand
 exclude python/singlet/data/whitelists/3M-february-2018.txt
 exclude python/singlet/data/whitelists/737K-august-2016.txt

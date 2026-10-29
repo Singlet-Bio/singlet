@@ -33,6 +33,8 @@ Load data:
     singlet.load(["GSE138867", "GSE146974"]) Load + concatenate several → one AnnData
     singlet.load("GSE138867", genes=["CD3E", "MS4A1"])  Gene symbols or Ensembl ids
     singlet.load_dir("/path/to/quant/GSM") Load a pipeline output directory → AnnData
+    singlet.write_s1(adata, "x.s1")        Write your own counts as a .s1 sample object
+    singlet.load("x.s1")                   ... and read it back exactly (singlet.read_s1)
 
 Format I/O:
     singlet.read_kraken2("gse_dir/")       Read kraken2 microbiome matrix
@@ -67,7 +69,7 @@ Retired (raise NotImplementedError; their hosts were never in service):
     base_url, singlet.atlas.*
 """
 
-__version__ = "1.0.0"
+__version__ = "1.3.0"
 
 from singlet._aggregate import aggregate
 from singlet._ambient_rna_score import ambient_rna_score
@@ -241,6 +243,9 @@ from singlet.fetch import default_base_url, default_cache_dir, fetch
 from singlet.find import find, find_load, set_api_key
 from singlet.pipeline import PipelineError, Run
 from singlet.pipeline import run as run_pipeline
+from singlet.s1.client import cells as cells  # per-sample objects, cell slicing
+from singlet.s1.client import open_study as open_study
+from singlet.s1.write import read_s1, write_s1
 
 __all__ = [
     # Browse
@@ -272,6 +277,8 @@ __all__ = [
     "SingletBundle",
     "MODALITIES",
     "open_bundle",
+    "write_s1",
+    "read_s1",
     # (gene_programs / project / annotate stay importable so old code gets a
     # clear NotImplementedError, but are no longer advertised.)
     # I/O

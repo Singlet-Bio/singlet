@@ -1,0 +1,21 @@
+{
+  "ancestry": "EAS",
+  "confidence": 0.997980,
+  "n_informative_aims": 10,
+  "n_covered_aims": 5,
+  "aim_panel_size": 51,
+  "populations": {
+    "AFR": 0.000000,
+    "EUR": 0.000000,
+    "EAS": 0.997980,
+    "SAS": 0.001585,
+    "AMR": 0.000435
+  },
+  "log_likelihoods": {
+    "AFR": -23.770055,
+    "EUR": -26.112165,
+    "EAS": -7.783588,
+    "SAS": -14.229035,
+    "AMR": -15.520836
+  }
+}

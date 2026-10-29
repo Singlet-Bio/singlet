@@ -1,0 +1,41 @@
+# whitelist pack sizes (bytes); pack = sorted 2-bit codes, gaps as LEB128, zstd-19 / xz-9e
+list                           n len        text        2bit gaps+zstd19     gaps+xz   gaps_rice  idx_bits
+3M-february-2018         3686400  16    62668800    14745600        6440        6064     5583325        22
+737K-april-2014           737280  14    11059200     2580480        4277        3344      956575        20
+737K-august-2016          737280  16    12533760     2949120        3241        3152     1327592        20
+737K-cratac-v1            737280  16    12533760     2949120        3241        3152     1327592        20
+bd_cls1                       97   9         970         219         198         252         157         7
+bd_cls2                       97   9         970         219         201         252         157         7
+bd_cls3                       97   9         970         219         199         252         158         7
+gex_737K-arc-v1           736320  16    12517440     2945280        8508        7276     1326111        20
+indrop_bc1                   384   8        3456         768         532         580         423         9
+indrop_bc2                   384   8        3456         768         543         576         427         9
+microwell_bc1_bare            96   6         672         144         107         156          84         7
+quartzseq2_bc               1536  15       24576        5760        4566        4484        4009        11
+scirna3_rt_bc                326  10        3586         815         655         648         536         9
+splitseq_bc_rd1              192   8        1728         384         312         356         239         8
+splitseq_bc_rd2               96   8         864         192         188         240         131         7
+splitseq_bc_rd3               96   8         864         192         188         240         131         7
+
+# per-sample cost of n barcodes, bytes (random n-subset of the list; 'file order' = arbitrary column order as today)
+list	n	2bit_packed	wl_index(file order)	sorted_gaps_rice+order_perm	sorted_gaps_rice(set only)	wl_rank_gaps_rice(set only)	bound_set_no_wl	bound_set_wl	saving_idx_vs_sortedperm	saving_idx_vs_2bit	saving_set_wl_vs_nowl	pack_zstd19	breakeven_samples_idx_vs_sortedperm	breakeven_samples_idx_vs_2bit	breakeven_samples_set
+737K-august-2016	500	2000.0	1250.0	2109.3	1546.8	750.4	1529.1	747.3	859.3	750.0	796.4	3241	3.8	4.3	4.1
+737K-august-2016	1000	4000.0	2500.0	4227.0	2977.0	1376.4	2933.8	1370.2	1727.0	1500.0	1600.6	3241	1.9	2.2	2.0
+737K-august-2016	10000	40000.0	25000.0	43230.0	25730.0	9646.8	25192.7	9545.3	18230.0	15000.0	16083.2	3241	0.2	0.2	0.2
+737K-august-2016	100000	400000.0	250000.0	428630.0	216130.0	53292.6	210411.8	52777.8	178630.0	150000.0	162837.4	3241	0.0	0.0	0.0
+3M-february-2018	500	2000.0	1375.0	2104.5	1542.0	898.0	1529.1	892.4	729.5	625.0	644.0	6440	8.8	10.3	10.0
+3M-february-2018	1000	4000.0	2750.0	4215.4	2965.4	1670.0	2933.8	1660.5	1465.4	1250.0	1295.4	6440	4.4	5.2	5.0
+3M-february-2018	10000	40000.0	27500.0	43171.0	25671.0	12497.4	25192.7	12457.5	15671.0	12500.0	13173.6	6440	0.4	0.5	0.5
+3M-february-2018	100000	400000.0	275000.0	428460.0	215960.0	83854.6	210411.8	82837.4	153460.0	125000.0	132105.4	6440	0.0	0.1	0.0
+gex_737K-arc-v1	500	2000.0	1250.0	2102.9	1540.4	750.6	1529.1	747.2	852.9	750.0	789.8	8508	10.0	11.3	10.8
+gex_737K-arc-v1	1000	4000.0	2500.0	4211.0	2961.0	1376.0	2933.8	1369.9	1711.0	1500.0	1585.0	8508	5.0	5.7	5.4
+gex_737K-arc-v1	10000	40000.0	25000.0	43150.0	25650.0	9646.8	25192.7	9542.9	18150.0	15000.0	16003.2	8508	0.5	0.6	0.5
+gex_737K-arc-v1	100000	400000.0	250000.0	428646.0	216146.0	53267.2	210411.8	52752.5	178646.0	150000.0	162878.8	8508	0.0	0.1	0.1
+
+# combinatorial protocols: component lists shipped (n, length) and bits per barcode as component indices
+splitseq (rd1,rd2,rd3)     components=[192, 96, 96] len=[8, 8, 8]  entropy 20.8 bits (fixed 22 bits = 2.75 B) vs 2-bit packed 6.00 B; component lists zstd-19: 1067 B
+BD Rhapsody (cls1-3)       components=[97, 97, 97] len=[9, 9, 9]  entropy 19.8 bits (fixed 21 bits = 2.62 B) vs 2-bit packed 6.75 B; component lists zstd-19: 923 B
+inDrop (bc1,bc2)           components=[384, 384] len=[8, 8]  entropy 17.2 bits (fixed 18 bits = 2.25 B) vs 2-bit packed 4.00 B; component lists zstd-19: 1968 B
+Microwell-seq (3 x bc1)    components=[96, 96, 96] len=[6, 6, 6]  entropy 19.8 bits (fixed 21 bits = 2.62 B) vs 2-bit packed 4.50 B; component lists zstd-19: 227 B
+Quartz-Seq2                components=[1536] len=[15]  entropy 10.6 bits (fixed 11 bits = 1.38 B) vs 2-bit packed 3.75 B; component lists zstd-19: 7088 B
+sci-RNA-seq3 RT            components=[326] len=[10]  entropy 8.3 bits (fixed 9 bits = 1.12 B) vs 2-bit packed 2.50 B; component lists zstd-19: 794 B

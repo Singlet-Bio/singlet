@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "singlet_git_sha": "unknown",
+  "singlet_version": "1.0.0",
+  "timestamp": "2026-10-27T19:48:29Z",
+  "build_flags": ["-O3", "-DNDEBUG"],
+  "command_line": [],
+  "env": {"OMP_NUM_THREADS": "", "TMPDIR": "/tmp"},
+  "host": {"node": "c100.clipper.gvsu.edu", "ram_gb": 52.5},
+  "input": {
+    "file": "sample.1fq",
+    "reads": 111842216
+  },
+  "references": {
+    "genome": {"build": "GRCh38-2024-A", "gtf": "genes.gtf"},
+    "whitelist": {"name": "None"},
+    "snp_vcf": {"name": "genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz"}
+  },
+  "parameters": {
+    "threads": 4,
+    "umi_dedup": true,
+    "umi_dedup_directional": true,
+    "pipeline": true
+  },
+  "cascade": {
+    "enabled": false,
+    "mode": "off",
+    "te_classify": "off"
+  },
+  "cell_caller": "called_v2",
+  "output": {
+    "exon_features": 310797,
+    "cells": 1462,
+    "total_umis": 5041089
+  },
+  "timings": {
+    "wall_seconds": 751.4,
+    "star_seconds": 0.0,
+    "pileup_seconds": 34.2
+  },
+  "output_schema_version": "1.0"
+}

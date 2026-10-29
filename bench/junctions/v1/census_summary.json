@@ -1,0 +1,40 @@
+{
+ "studies": 8257,
+ "studies_failed": 8,
+ "samples": 71420,
+ "samples_with_sj": 63880,
+ "member_errors": 68,
+ "sj_bytes_read": 262794017323,
+ "builds": {
+  "GRCh38-2024-A": {
+   "junctions": 957145183,
+   "umi_called": 100043856333,
+   "in_2_or_more_samples": 183442059
+  },
+  "GRCh38-GRCm39-barnyard": {
+   "junctions": 72392474,
+   "umi_called": 7202099186,
+   "in_2_or_more_samples": 12306787
+  },
+  "GRCm39-2024-A": {
+   "junctions": 331156630,
+   "umi_called": 59143819687,
+   "in_2_or_more_samples": 66247366
+  },
+  "GRCz11": {
+   "junctions": 3360032,
+   "umi_called": 271913510,
+   "in_2_or_more_samples": 763480
+  },
+  "Mmul_10": {
+   "junctions": 3704158,
+   "umi_called": 293592200,
+   "in_2_or_more_samples": 927083
+  },
+  "mRatBN7.2": {
+   "junctions": 1994551,
+   "umi_called": 177505382,
+   "in_2_or_more_samples": 449908
+  }
+ }
+}

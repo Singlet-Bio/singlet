@@ -13,24 +13,58 @@ on:
       - 'CMakeLists.txt'
       - 'pyproject.toml'
       - '.github/workflows/**'
+  # Every pull request runs, so the required `build` check always reports. A PR that touches none of the code paths
+  # (docs, bench, notes) gets only the `changes` job; the jobs that need it are skipped, which branch protection counts
+  # as passing.
   pull_request:
     branches: [main]
-    paths:
-      - 'python/**'
-      - 'include/**'
-      - 'tests/**'
-      - 'CMakeLists.txt'
-      - 'pyproject.toml'
-      - '.github/workflows/**'
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Changed files
+        id: diff
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"   # push runs are already path-filtered above
+            exit 0
+          fi
+          git diff --name-only "origin/${{ github.base_ref }}...HEAD" > changed.txt
+          cat changed.txt
+          if grep -qE '^(python/|include/|tests/|CMakeLists\.txt$|pyproject\.toml$|\.github/workflows/)' changed.txt; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: No crash dumps or large files
+        if: github.event_name == 'pull_request'
+        run: |
+          bad=0
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            case "$f" in *.stackdump|*.core|core.[0-9]*) echo "::error file=$f::crash dump committed"; bad=1;; esac
+            size=$(stat -c %s "$f")
+            if [ "$size" -gt 10485760 ]; then echo "::error file=$f::file is $size bytes (limit 10 MiB)"; bad=1; fi
+          done < changed.txt
+          exit $bad
+
   lint:
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 
@@ -50,6 +84,8 @@ jobs:
         run: pyright
 
   python-test:
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -59,7 +95,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -86,6 +122,8 @@ jobs:
           python -m coverage report --fail-under=85
 
   cpp-test:
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -113,34 +151,50 @@ jobs:
       - name: Run tests
         run: ctest --test-dir build -j$(nproc) --output-on-failure
 
+  # `build` is the required check, so it always runs: it fails when `changes` failed (a crash dump, a large file, a
+  # broken diff) instead of being skipped, and builds the wheel only when code changed.
   build:
+    needs: changes
+    if: always()
     runs-on: ubuntu-latest
     steps:
+      - name: Changed-files check passed
+        if: needs.changes.result != 'success'
+        run: |
+          echo "::error::the changes job ended with '${{ needs.changes.result }}'"
+          exit 1
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: needs.changes.outputs.code != 'false'
 
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        if: needs.changes.outputs.code != 'false'
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.11'
 
       - name: Build wheel
+        if: needs.changes.outputs.code != 'false'
         run: |
           pip install build twine --quiet
           python -m build --wheel
           twine check dist/*
 
       - name: Verify install
+        if: needs.changes.outputs.code != 'false'
         run: |
           pip install dist/*.whl
           python -c "import singlet; print(f'singlet OK: {len(singlet.catalog())} series')"
 
   security:
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 

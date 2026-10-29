@@ -1,0 +1,17 @@
+gse	profile	reference_build	created_at	singlet_version	schema	n_gsms	crc_ok	keys
+GSE316280	public-1	GRCm39-2024-A	2026-06-30T16:45:15.787232+00:00	unknown	1.0	1	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version
+GSE224972		GRCh38-2024-A	2026-06-18T19:08:50.235649+00:00	2.0.0	1.0	1	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,reference_build,schema_version,singlet_version
+GSE197064	public-1	GRCh38-2024-A	2026-06-30T18:44:15.868240+00:00	1.0.0	1.0	4	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version
+GSE248953		GRCh38-GRCm39-barnyard	2026-06-18T19:12:35.339668+00:00	2.0.0	1.0	2	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,reference_build,schema_version,singlet_version
+GSE126310	public-1	GRCh38-GRCm39-barnyard	2026-06-30T17:54:00.378502+00:00	1.0.0	1.0	1	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version
+GSE144944	public-1	GRCz11	2026-09-17T21:56:34.600500+00:00	1.0.0	1.0	1	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version
+GSE223815		GRCh38-2024-A	2026-06-18T19:37:38.431035+00:00	2.0.0	1.0	3	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,reference_build,schema_version,singlet_version
+GSE288862		GRCh38-2024-A	2026-06-18T19:15:52.298511+00:00	2.0.0	1.0	3	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,reference_build,schema_version,singlet_version
+GSE230327		GRCh38-2024-A	2026-06-18T19:28:30.602134+00:00	2.0.0	1.0	4	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,reference_build,schema_version,singlet_version
+GSE269269		GRCh38-2024-A	2026-06-18T19:33:45.633022+00:00	2.0.0	1.0	10	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,reference_build,schema_version,singlet_version
+GSE228232	public-1	GRCm39-2024-A	2026-07-10T04:49:48.322869+00:00	unknown	1.0	2	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version
+GSE309696	public-1	GRCm39-2024-A	2026-06-30T11:28:28.196795+00:00	unknown	1.0	3	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version
+GSE269895	public-1	GRCm39-2024-A	2026-06-27T04:23:02.295457+00:00	unknown	1.0	2	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version
+GSE223442	public-1	GRCm39-2024-A	2026-09-18T10:20:43.602016+00:00	unknown	1.0	3	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version
+GSE300568	public-1	GRCh38-2024-A	2026-09-18T04:25:16.280486+00:00	unknown	1.0	6	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version
+GSE171161	public-1	GRCm39-2024-A	2026-07-07T00:03:02.281132+00:00	unknown	1.0	16	True	checksums,created_at,gse_id,gsm_ids,included_files,n_gsms,profile,reference_build,schema_version,singlet_version

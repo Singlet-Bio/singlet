@@ -1,0 +1,6 @@
+file	nnz	prod_ms	t1_ps0	t1_ps1	t2_ps1	t4_ps1	t8_ps1	t4_noverify_u16	t4_with_filecrc
+corpus_w4_reader\GSM4317426_exon.1pz	597300	537.34	97.23	97.89	382.51	219.88	109.39	133.37	245.58
+corpus_w4_reader\GSM4317426_intron.1pz	656832	482.97	114.82	111.28	120.84	99.22	128.98	74.38	100.26
+corpus\tumor_3p\exon_counts.1pz	245117	440.34	45.40	70.43	77.01	38.24	26.57	23.87	22.68
+corpus\pbmc_v2_typical\exon_counts.1pz	2569228	793.60	381.01	371.53	226.53	126.75	124.72	128.59	142.86
+corpus\tcell_5p\exon_counts.1pz	10529513	2471.55	1902.50	1695.06	876.37	521.75	515.40	578.49	576.55

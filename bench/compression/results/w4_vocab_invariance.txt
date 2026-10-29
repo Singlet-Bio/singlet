@@ -1,0 +1,41 @@
+# Row-name invariance across studies (hash = sha256 over NUL-terminated names)
+
+GRCh38-2024-A            exon   rows=['310797'] studies=5 distinct_lists=1
+    212c9919323aa2d1  GSE145370/GSM4317423(10xv2,8e1803b)  GSE180661/GSM5467087(10xv3,8e1803b)  GSE135893/GSM4037297(10xv2,8e1803b)  GSE301953/GSM9092635(10x-arc-gex,8e1803b)  GSE185553/GSM5618237(splitseq,8e1803b)
+GRCh38-2024-A            intron rows=['272191'] studies=5 distinct_lists=1
+    e1e8af1e3e6d0d8d  GSE145370/GSM4317423(10xv2,8e1803b)  GSE180661/GSM5467087(10xv3,8e1803b)  GSE135893/GSM4037297(10xv2,8e1803b)  GSE301953/GSM9092635(10x-arc-gex,8e1803b)  GSE185553/GSM5618237(splitseq,8e1803b)
+GRCm39-2024-A            exon   rows=['386028'] studies=4 distinct_lists=1
+    cfe7955cdb5ee286  GSE285936/GSM8713119(10xv3,37e7cbd)  GSE241928/GSM7745727(10xv3,37e7cbd)  GSE156633/GSM4735376(10xv2,37e7cbd)  GSE222410/GSM6922987(marsseq2,37e7cbd)
+GRCm39-2024-A            intron rows=['307730'] studies=4 distinct_lists=1
+    5d3fdaee0b30c359  GSE285936/GSM8713119(10xv3,37e7cbd)  GSE241928/GSM7745727(10xv3,37e7cbd)  GSE156633/GSM4735376(10xv2,37e7cbd)  GSE222410/GSM6922987(marsseq2,37e7cbd)
+GRCh38-GRCm39-barnyard   exon   rows=['696825'] studies=3 distinct_lists=1
+    3a2872bacc066894  GSE126310/GSM3596081(10xv3-5p,8e1803b)  GSE165291/GSM5029518(10xv2,8e1803b)  GSE152058/GSM4601660(10xv3,8e1803b)
+GRCh38-GRCm39-barnyard   intron rows=['579921'] studies=3 distinct_lists=1
+    2093fdcfe5baa93a  GSE126310/GSM3596081(10xv3-5p,8e1803b)  GSE165291/GSM5029518(10xv2,8e1803b)  GSE152058/GSM4601660(10xv3,8e1803b)
+GRCz11                   exon   rows=['272316'] studies=2 distinct_lists=1
+    fef8d754873ae025  GSE144944/GSM4301250(10xv3,8e1803b)  GSE264312/GSM8215879(10xv3,8e1803b)
+GRCz11                   intron rows=['239796'] studies=2 distinct_lists=1
+    9321bf7235b33364  GSE144944/GSM4301250(10xv3,8e1803b)  GSE264312/GSM8215879(10xv3,8e1803b)
+Mmul_10                  exon   rows=['244671'] studies=2 distinct_lists=1
+    f218ab5e6b8bd59c  GSE245419/GSM7842410(10xv2,8e1803b)  GSE280441/GSM8597917(10xv3,8e1803b)
+Mmul_10                  intron rows=['209239'] studies=2 distinct_lists=1
+    7f8611256fa3c8c2  GSE245419/GSM7842410(10xv2,8e1803b)  GSE280441/GSM8597917(10xv3,8e1803b)
+mRatBN7.2                exon   rows=['243603'] studies=2 distinct_lists=1
+    26946e36410b356f  GSE216665/GSM6685496(10xv2,8e1803b)  GSE165104/GSM5026230(10xv3,8e1803b)
+mRatBN7.2                intron rows=['213041'] studies=2 distinct_lists=1
+    2e79b6e1ccc4f4f1  GSE216665/GSM6685496(10xv2,8e1803b)  GSE165104/GSM5026230(10xv3,8e1803b)
+
+# feature_vocab.json (gene table) over every study fetched
+
+GRCh38-2024-A            studies=49 distinct_gene_tables=1
+    c6c60fd98cec44cc  49 studies: GSE121080(?) GSE134355(8e1803b) GSE135893(8e1803b) GSE145370(8e1803b) GSE148829(?) GSE153319(?) GSE155488(8e1803b) GSE158955(?) GSE166782(8e1803b) GSE167297(8e1803b) GSE180268(?) GSE180661(8e1803b) ...
+GRCh38-GRCm39-barnyard   studies=8 distinct_gene_tables=1
+    7c1639a9f71f512a  8 studies: GSE126310(8e1803b) GSE152058(8e1803b) GSE155121(8e1803b) GSE165291(8e1803b) GSE207921(?) GSE224478(8e1803b) GSE291815(8e1803b) GSE298266(?)
+GRCm39-2024-A            studies=34 distinct_gene_tables=1
+    c516001b45cb8ead  34 studies: GSE148676(?) GSE156633(37e7cbd) GSE168389(?) GSE173958(?) GSE174471(?) GSE182846(?) GSE186312(?) GSE193649(?) GSE197404(37e7cbd) GSE201195(?) GSE205882(?) GSE207275(37e7cbd) ...
+GRCz11                   studies=4 distinct_gene_tables=1
+    36f1be77db9122e3  4 studies: GSE106121(8e1803b) GSE144944(8e1803b) GSE264312(8e1803b) GSE284729(8e1803b)
+Mmul_10                  studies=2 distinct_gene_tables=1
+    5d654b8802b1d39e  2 studies: GSE245419(8e1803b) GSE280441(8e1803b)
+mRatBN7.2                studies=2 distinct_gene_tables=1
+    5d9592b9e8d6ce78  2 studies: GSE165104(8e1803b) GSE216665(8e1803b)

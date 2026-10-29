@@ -1,0 +1,10 @@
+start
+Warning messages:
+1: package 'Seurat' was built under R version 4.5.1 
+2: package 'RcppEigen' was built under R version 4.5.2 
+3: replacing previous import 'Matrix::solve' by 'RcppML::solve' when loading 'singlet' 
+[1] 75.33
+Error in system.time(r <- singlet:::pz_read_1pz_raw(normalizePath("corpus_w4_reader/GSM4317426_exon.1pz"))) : 
+  object 'pz_read_1pz_raw' not found
+Timing stopped at: 0 0 0.03
+Execution halted

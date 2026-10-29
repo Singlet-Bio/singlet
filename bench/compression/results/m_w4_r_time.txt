@@ -1,0 +1,6 @@
+R heap before any load: 402 MB (packages attached)
+R 4.4.1, singlet isa: selected=avx512 best=avx512 compiled=scalar,avx2,avx512 PZ2_ISA=(unset)
+legacy bundle, one sample          min    2.31 s   R heap peak     717 MB   result     31 MB   cells 2928
+v2 local, one sample               min    0.23 s   R heap peak     546 MB   result     31 MB   cells 2928
+legacy bundle, 14-sample study     min   27.28 s   R heap peak     906 MB   result    123 MB   cells 40614
+v2 local, 14-sample study          min    2.42 s   R heap peak     856 MB   result    123 MB   cells 40614

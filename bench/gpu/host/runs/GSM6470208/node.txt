@@ -1,0 +1,5 @@
+node=c008.clipper.gvsu.edu cpus=8 set=GSM6470208 T=4 part=short-cpu jobid=789236 2026-10-27T15:46:23-04:00
+fe6110e111ae8cad9de654f72daa22fd7753768ddf8bab55f91be92d07d33c6b  /mnt/projects/debruinz_project/debruinz/singlet/jobs/w11/host/bin/singlet-timers
+loadavg=12.55 16.57 9.62
+cotenant_cpus=16
+model name	: Intel(R) Xeon(R) Gold 6230R CPU @ 2.10GHz

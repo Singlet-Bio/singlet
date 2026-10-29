@@ -1,5 +1,68 @@
 # singlet (R) — NEWS
 
+## singlet (development version)
+
+### New features
+
+- A cell-line sample's cells carry the line as cell type in `colData` (`cell_type`, `cell_type_ontology_term_id`,
+  `cell_type_deepest`): the Cellosaurus name and id from the sample's GEO record, or "cultured cell" (CL:0000010). The
+  labeller, trained on primary tissue, is unreliable on cultured lines. `sample_facts = FALSE` keeps its calls.
+- `write_s1()` writes a count matrix (dgCMatrix or matrix, genes x cells; `SingleCellExperiment`; Seurat) as a `.s1`
+  sample object with one matrix member, with the same encoder and options as `singlet.write_s1()` in Python;
+  `read_s1()` reads it back exactly as a dgCMatrix, `SingleCellExperiment` or Seurat object.
+- `load()` reads any local `.s1` file that holds one count matrix and no atlas members (a `write_s1()` file).
+
+## singlet 1.2.1
+
+- `load()` / `singlet_load()` and `singlet_cells()` add the structured sample facts of the singlet.bio study API to `colData`,
+  as factors: `tissue_type` (CELLxGENE), `cell_line` and `cell_line_cellosaurus_id` (Cellosaurus), `tumor_sample_type`
+  (GDC/TCGA), `disease` and `disease_ontology_term_id` (MONDO, or `normal` / PATO:0000461), `donor_status` and `sample_kind`.
+  They come from each sample's own GEO record (`NA` where it does not say), are fetched once per study and session for a study
+  read over HTTP, and are absent offline (`SINGLET_OFFLINE`), for a local study or when the API cannot be reached.
+  `sample_facts = FALSE` skips them. Matches the Python package 1.3.0.
+
+## singlet 1.2.0
+
+Prepared for CRAN; matches the Python package 1.2.0 (`pip install singlet`).
+
+### New features
+
+- `singlet_search_cells()` counts and locates cells across the whole atlas by cell type, chromosomal sex, genetic ancestry,
+  UMIs and genes, and by sample metadata (tissue, disease, stage, organism, assay, ...), with ontology descendants; it
+  reports how much of the atlas each sample-level filter cannot see (`$unmapped`). `singlet_cell_fields()` lists the fields
+  and their coverage.
+- `singlet_fetch_cells()` loads the cells a search matches; `singlet_cells_slice()` lists them as (GSM, 0-based columns)
+  and `singlet_gather()` loads such a list (the form the MCP tools and Python's `atlas.gather()` use).
+
+### Changes
+
+- Zstandard 1.5.6 is bundled (`src/zstd/`, BSD): installing no longer needs a system `libzstd`, only a C++17 compiler.
+- `curl` moved from Suggests to Imports: every published study is read by HTTP range requests.
+- The release policy strips per-cell mitochondrial DNA (`mts_*`) and doublet (`qc_doublet_score`) columns from every
+  published object; the documentation no longer lists them.
+- A retired or withheld object (HTTP 410) stops with the not-in-the-atlas message.
+- The local cache tree is `<cache>/s1`, as in the Python client (it was `<cache>/store`; old caches are not reused).
+- Documentation describes the per-sample `.s1` objects and manifests instead of `.singlet` bundles.
+
+## singlet 1.1.0
+
+### New features
+
+- `load()` / `singlet_load()` and `singlet_cells()` put the per-cell columns of every .s1 sample's cells table in
+  `colData`: `cell_type` and `cell_type_ontology_term_id` (the CL label at level <= 2 by default), the deepest call
+  (`cell_type_deepest*`), the CL path and per-level confidences, `sex_chrom`, `sex_score`, `ancestry_hancestro`,
+  `ancestry_prob`, `called`, `called_ed`, `called_ed_fdr`, and the QC, donor and mtDNA columns (categorical codes
+  decoded). New arguments `cell_type_level`, `cell_type_min_score` and `include_unvalidated`. See `?singlet_labels`.
+- `singlet_cells()` conditions can use those columns, e.g. `singlet_cells("GSE286650", cell_type == "T cell" & called_ed)`.
+
+### Changes
+
+- The curated GEO sample fields are now `geo_tissue`, `geo_cell_type`, `geo_disease`, `geo_sex` and `geo_age`
+  (previously `tissue`, `cell_type`, `disease`, `sex`, `age`), so `colData$cell_type` is the per-cell label.
+- `qc_doublet_score` is unvalidated and left out of `colData` unless `include_unvalidated = TRUE` or it is named in
+  `columns`.
+- Combining several studies whose `colData` columns differ fills the missing columns with `NA`.
+
 ## singlet 1.0.0
 
 ### New features

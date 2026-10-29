@@ -32,6 +32,15 @@ target_include_directories(singlet_pz INTERFACE
 )
 target_link_libraries(singlet_pz INTERFACE ${ZSTD_LIBRARY})
 
+# singlet::pz2 — store sparse-matrix codec (header-only C++17; SIMD paths are runtime-dispatched, so NO -march flags are needed)
+add_library(singlet_pz2 INTERFACE)
+add_library(Singlet::pz2 ALIAS singlet_pz2)
+target_include_directories(singlet_pz2 INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(singlet_pz2 INTERFACE ${ZSTD_LIBRARY} Threads::Threads)
+
 # singlet::fq — .1fq encoded FASTQ codec
 add_library(singlet_fq INTERFACE)
 add_library(Singlet::fq ALIAS singlet_fq)
@@ -155,7 +164,7 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 install(DIRECTORY include/singlet DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(TARGETS singlet_pz singlet_fq singlet_pileup
+install(TARGETS singlet_pz singlet_pz2 singlet_fq singlet_pileup
     EXPORT SingletTargets
 )
 install(EXPORT SingletTargets

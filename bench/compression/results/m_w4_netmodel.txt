@@ -1,0 +1,24 @@
+scenario                                                        requests          bytes   model s
+legacy one sample (whole bundle)                                       2    187,066,350      6.39
+legacy study (whole bundle)                                            1    187,066,350      6.17
+v2 one sample                                                          2      2,101,298      0.61
+v2 one sample, manifest cached (304)                                   2      2,010,651      0.60
+v2 study, 1 stream                                                    15     11,696,362      0.91
+v2 study, 4 connections (TTFB overlapped, 18 MB/s aggregate)          15     11,696,362      1.85
+v2 1,000-cell slice of one sample (two-phase plan)                     4      1,917,176      0.82
+
+per sample (v2 whole-sample plan):
+  GSM4317423 requests 1 bytes 1,077,906 (object 3,186,387)
+  GSM4317424 requests 1 bytes 551,899 (object 1,748,628)
+  GSM4317425 requests 1 bytes 707,095 (object 2,055,378)
+  GSM4317426 requests 1 bytes 2,010,651 (object 4,280,339)
+  GSM4317427 requests 1 bytes 963,424 (object 2,747,155)
+  GSM4317428 requests 1 bytes 671,403 (object 1,466,644)
+  GSM4317429 requests 1 bytes 644,376 (object 2,086,866)
+  GSM4317430 requests 1 bytes 516,426 (object 1,612,437)
+  GSM4317431 requests 1 bytes 430,303 (object 1,378,643)
+  GSM4317432 requests 1 bytes 1,138,024 (object 3,042,709)
+  GSM4317433 requests 1 bytes 1,163,094 (object 2,814,673)
+  GSM4317434 requests 1 bytes 592,833 (object 1,867,092)
+  GSM4317435 requests 1 bytes 622,913 (object 1,929,619)
+  GSM4317436 requests 1 bytes 515,368 (object 1,630,038)
