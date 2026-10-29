@@ -82,6 +82,9 @@ def run(cfg: Config, units: list[Unit], force: bool = False) -> None:
         for ln in r.stdout.splitlines():
             if ln.strip().startswith("{"):
                 j = json.loads(ln)
+                if "error" in j:
+                    rows.append({"dataset": u.id, "lang": "R", "call": j["call"], "status": "error", "note": j["error"][-500:]})
+                    continue
                 by_call.setdefault(j["call"], []).append(j)
         for call, js in by_call.items():
             rows.append({"dataset": u.id, "lang": "R", "call": call, **summary([j["seconds"] for j in js]),
