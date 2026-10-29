@@ -35,6 +35,12 @@
 #' \code{samples/<GSM>/} in priority order (bundle layouts changed across
 #' pipeline versions), and a one-line description.
 #'
+#' \strong{Research Alpha:} the published \code{.s1} sample objects carry gene counts, spliced and unspliced layers,
+#' splicing, donor assignment, non-host, V(D)J usage, cell-cycle and QC tables. Per-cell mitochondrial DNA (heteroplasmy,
+#' variants, \code{mt/} members), doublet scores and per-donor germline layers (SNP depths, allele-specific counts) are
+#' withheld by the release policy and are never in a published object; their entries remain here for local pipeline outputs.
+#' Use \code{\link{singlet_study_modalities}} for what a published study actually has.
+#'
 #' Not every bundle has every modality. Older bundles carry the counts,
 #' splicing, heteroplasmy and V(D)J matrices only; the donor, non-host and
 #' per-cell annotation outputs appear in newer ones. Always check with

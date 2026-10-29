@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 /**
  * @file _pz2.cpp
- * @brief pybind11 bindings for the v2 matrix codec (include/singlet/pz2/pz2.h): module `singlet._pz2`.
+ * @brief pybind11 bindings for the .s1 matrix codec (include/singlet/pz2/pz2.h): module `singlet._pz2`.
  *
  * Reading (zero-copy where the format allows):
  *   read_header(buf)                        -> dict           parse the 256-byte member header
@@ -872,7 +872,7 @@ static py::tuple py_select_columns(py::object indptr_o, py::object indices_o, py
 // module
 // ============================================================================
 PYBIND11_MODULE(_pz2, mod) {
-    mod.doc() = "singlet._pz2: bindings for the v2 matrix codec (pz2). See src/bindings/python/_pz2.cpp for the API.";
+    mod.doc() = "singlet._pz2: bindings for the .s1 matrix codec (pz2). See src/bindings/python/_pz2.cpp for the API.";
 
     g_pz2_error = PyErr_NewException("singlet._pz2.Pz2Error", PyExc_RuntimeError, nullptr);
     g_pz2_needrange = PyErr_NewException("singlet._pz2.NeedRange", g_pz2_error, nullptr);
@@ -948,5 +948,5 @@ PYBIND11_MODULE(_pz2, mod) {
             "names: list[str] (inline) or {'kind': 'inline'|'pack'|'pack_subset'|'cells', 'pack_id': bytes8|hex, 'pack_index': array, 'names': list[str]}.");
     mod.def("digest", &py_digest, py::arg("indptr"), py::arg("indices"), py::arg("data"), py::arg("m"), py::arg("n"), py::arg("value_type") = "auto",
             py::arg("row_names") = py::none(), py::arg("col_names") = py::none(), py::arg("kv") = py::none(),
-            "Canonical digest (docs/format-v2.md 4.6), 16 bytes.");
+            "Canonical digest (docs/format-s1.md 4.6), 16 bytes.");
 }

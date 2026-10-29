@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """singlet.manifest_gen — Emit ``manifest.json`` for a sample directory.
 
-Scans a canonical v2 sample directory and writes the v1 manifest schema
+Scans a canonical .s1 sample directory and writes the v1 manifest schema
 (see :mod:`singlet.fetch`). Every file except ``manifest.json`` itself is
 listed with its size and sha256 digest.
 

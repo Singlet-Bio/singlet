@@ -1,8 +1,7 @@
 # Python API Reference
 
-Install: `pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"`
-(needs a C++17 compiler and zstd; see [installation](../installation.md)). After
-the first PyPI release: `pip install singlet-bio`. The import name is `singlet`.
+Install: `pip install singlet` (wheels include the compiled codec; see [installation](../installation.md) for the
+development version from GitHub).
 
 ## Package: `singlet`
 
@@ -105,7 +104,7 @@ These targeted hosts that were never brought into service and now raise
 
 ## Module: `singlet.torch`
 
-PyTorch integration (`singlet-bio[torch]`).
+PyTorch integration (`singlet[torch]`).
 
 ```python
 from singlet.torch import SingletDataset, DataLoader, to_sparse_csr, from_anndata
@@ -124,7 +123,7 @@ from singlet.torch import SingletDataset, DataLoader, to_sparse_csr, from_anndat
 
 ## Module: `singlet.gpu` (experimental)
 
-`singlet-bio[gpu]` installs CuPy only. The CUDA extension the module needs
+`singlet[gpu]` installs CuPy only. The CUDA extension the module needs
 (`singlet.gpu._core`) is not built by `pip install`; see
 [the GPU install notes](../install.md). The submodules
 (`singlet.gpu.preprocess`, `.reduce`, `.tools`, `.de`, ...) are importable for
@@ -135,7 +134,7 @@ tooling, but their functions require that extension.
 ## Module: `singlet.mcp`
 
 The **local** MCP (Model Context Protocol) server, installed with
-`singlet-bio[mcp]`:
+`singlet[mcp]`:
 
 ```bash
 singlet-mcp            # stdio server (same as: python -m singlet.mcp)

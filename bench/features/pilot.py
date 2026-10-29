@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Pilot of singlet.features on a few real samples: cost per 10k cells and score sanity.
 
-    python bench/features/pilot.py --out OUT --sample GSE145370:v2:GSM4317423 --sample GSE138867:path/GSE138867.singlet:GSM4120733 ...
+    python bench/features/pilot.py --out OUT --sample GSE145370:store:GSM4317423 --sample GSE138867:path/GSE138867.singlet:GSM4120733 ...
 
 Writes the sidecars and summary rows (scripts/features_run.py layout) under OUT and ``OUT/pilot.json``: per sample the timings,
 per coarse marker-defined cell group the median of selected scores, the share of cells per cell-cycle phase with MKI67/TOP2A
@@ -159,7 +159,7 @@ def main(argv=None):
     )
     ap.add_argument("--out", required=True)
     ap.add_argument(
-        "--sample", action="append", required=True, help="GSE:v2:GSM or GSE:<bundle path>:GSM"
+        "--sample", action="append", required=True, help="GSE:store:GSM or GSE:<bundle path>:GSM"
     )
     a = ap.parse_args(argv)
     from features_run import run_sample
@@ -172,7 +172,7 @@ def main(argv=None):
         gse, rest = spec.split(":", 1)
         src, gsm = rest.rsplit(":", 1)
         t = time.perf_counter()
-        s = A.read_v2(gse, gsm) if src == "v2" else A.read_legacy(src, gsm)
+        s = A.read_store(gse, gsm) if src == "store" else A.read_legacy(src, gsm)
         read_s = time.perf_counter() - t
         info = run_sample(s, out, ("hallmark", "cell_cycle"), read_s)
         res = P.score_sample(s)  # again in memory for the diagnostics (scores are deterministic)
