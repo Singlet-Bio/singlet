@@ -543,6 +543,9 @@ def compare_star_complex(cfg, bam, sg_objs, seg_seqs, k_cell, k_st, k_umi, ul, o
     has_ur = urtag != b""
     rep["UR"] = {"records_with_UR": int(has_ur.sum()), "identical_to_raw_umi": int((has_ur & (dec == urtag)).sum())}
     rep["UR"]["identical_pct"] = pct(rep["UR"]["identical_to_raw_umi"], rep["UR"]["records_with_UR"])
+    badur = np.flatnonzero(has_ur & (dec != urtag))[:6]
+    rep["UR"]["mismatch_examples"] = [{"read": int(idx[i]), "ours": dec[i].decode(), "ours_status": int(k_st[idx[i]]), "star_UR": urtag[i].decode(),
+                                       "barcode_read": seq[off[idx[i]]:off[idx[i] + 1]].tobytes().decode()} for i in badur]
     has_ub = (ubtag != b"") & (ubtag != b"-")
     sel = has_ub & same
     ubm = io.strings_to_matrix(ubtag[sel], ul)
