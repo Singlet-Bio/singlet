@@ -267,5 +267,6 @@ H100. Every sample shows only the 7 known differences (nonhost / Unmapped read o
 | GSM7656149 | 493586b4 | 4,800 | 3,410 | peak 106 GB, unified-memory retry; R1 molecules 23.38 M -> 23.00 M under R9 |
 | GSM6470208 (10x 5' v2) | 493586b4 | 4,510 | 4,361 | no prefill (clipping) |
 | GSM6470208 (10x 5' v2) | **b50f7501** | **2,943** | **2,274** | prefill + hand-off: 108.8 M of 121.8 M reads skip BAM; rRNA sample identical (4,680 / 1,711,402) |
+| GSM4006843 | b50f7501 | 1,359 | 857 | re-staged from SRA (SRR9900123, 66.7 M reads) into `data/w11/`; 95.3% of reads skip BAM; job 792023 |
 
-Jobs 791872 (R9) and 791995 (1a). GSM4006843 was not run: its input (`data/bam-stream/`) is no longer on Clipper.
+Jobs 791872 (R9), 791995 and 792023 (1a). GSM4006843's earlier input (`data/bam-stream/`) was deleted, so it was re-staged from SRA (job 792022).
