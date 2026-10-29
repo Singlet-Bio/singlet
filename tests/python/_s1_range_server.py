@@ -41,7 +41,14 @@ class Recorder:
         return [r for r in self.log if r[1].startswith(prefix)]
 
 
-def _handler(root: str, rec: Recorder, ignore_range: bool, total_override, range_status: int = 206, delay: float = 0.0):
+def _handler(
+    root: str,
+    rec: Recorder,
+    ignore_range: bool,
+    total_override,
+    range_status: int = 206,
+    delay_s: float = 0.0,
+):
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -65,8 +72,6 @@ def _handler(root: str, rec: Recorder, ignore_range: bool, total_override, range
                 rec.inflight += 1
                 rec.max_inflight = max(rec.max_inflight, rec.inflight)
             try:
-                if delay:
-                    time.sleep(delay)  # a slow link: concurrent requests overlap here
                 self._get(path)
             finally:
                 with rec.lock:
@@ -104,6 +109,8 @@ def _handler(root: str, rec: Recorder, ignore_range: bool, total_override, range
                 return
             rng = self.headers.get("Range")
             m = _RANGE.match(rng) if rng and not ignore_range else None
+            if delay_s:  # a network round trip, paid by every request
+                time.sleep(delay_s)
             with open(fs, "rb") as fh:
                 if m:
                     a = int(m.group(1))
@@ -143,14 +150,22 @@ def _handler(root: str, rec: Recorder, ignore_range: bool, total_override, range
 
 
 @contextmanager
-def serve(root: str, *, ignore_range: bool = False, total_override=None, range_status: int = 206, delay: float = 0.0):
+def serve(
+    root: str,
+    *,
+    ignore_range: bool = False,
+    total_override=None,
+    range_status: int = 206,
+    delay_s: float = 0.0,
+):
     """Yield (base_url, Recorder). ``total_override`` lies about the object size in Content-Range (to test the size check);
     ``range_status=200`` answers a range with the slice and its Content-Range but status 200, as ``rclone serve s3`` does;
-    ``delay`` holds every GET that many seconds (a high-latency link; ``Recorder.max_inflight`` then shows the concurrency)."""
+    ``delay_s`` holds every response that long (requests are served concurrently; ``Recorder.max_inflight`` shows how many
+    were in flight at once)."""
     rec = Recorder()
     srv = ThreadingHTTPServer(
         ("127.0.0.1", 0),
-        _handler(os.path.abspath(root), rec, ignore_range, total_override, range_status, delay),
+        _handler(os.path.abspath(root), rec, ignore_range, total_override, range_status, delay_s),
     )
     th = threading.Thread(target=srv.serve_forever, daemon=True)
     th.start()
