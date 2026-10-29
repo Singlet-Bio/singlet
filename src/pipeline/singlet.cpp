@@ -93,6 +93,7 @@
 #include "singlet/pileup/run_provenance.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
 #include "singlet/fq/read_source.h"  // RunSet, format_block, StarChunkSourceT: the one .1fq decoder
+#include "singlet/fq/concat.h"       // concat_1fq: runs as one file, for consumers that read a single .1fq
 #include "singlet/version.h"        // singlet::kVersion
 
 // ── Timing helper ──
@@ -2594,6 +2595,7 @@ static void usage(const char* prog) {
         << "  --1fq FILE             Equivalent to positional .1fq argument\n"
         << "  --1fq FILE,FILE...     Several runs of one sample (same protocol and barcode dictionary), pooled as one\n"
         << "                         stream without re-encoding; positional .1fq arguments may also be repeated\n"
+        << "  --runs-dir DIR         Runs DIR/<run>.1fq for each run of --runs-used, else of --run-screen runs_kept\n"
         << "  --read-source MODE     How decoded reads reach STAR: chunk (default; decoded inside STAR's process into its\n"
         << "                         chunk buffers), fifo (FASTQ text through named pipes), file (FASTQ files in TMPDIR).\n"
         << "                         Also SINGLET_READ_SOURCE.\n"
@@ -2697,6 +2699,7 @@ int main(int argc, char* argv[]) {
     std::string sra_file;
     std::string onefq_file;
     std::vector<std::string> onefq_files;      // the sample's runs (one .1fq each), read as one stream (read_source.h)
+    std::string runs_dir;                      // --runs-dir: <dir>/<run>.1fq for each run of --runs-used / --run-screen
     std::string read_source_mode = "chunk";    // --read-source chunk|fifo|file: how decoded reads reach STAR
     if (const char* e = std::getenv("SINGLET_READ_SOURCE"); e && *e) read_source_mode = e;
     std::vector<std::string> star_extra;
@@ -2859,6 +2862,7 @@ int main(int argc, char* argv[]) {
             onefq_files.push_back(arg);  // positional .1fq argument (repeat for several runs)
         }
         else if (arg == "--read-source" && i+1 < argc) read_source_mode = argv[++i];
+        else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
         else if (arg == "--star-extra" && i+1 < argc) {
             std::istringstream iss(argv[++i]);
             std::string token;
@@ -3007,7 +3011,54 @@ int main(int argc, char* argv[]) {
     }
 
     // ── Validate ──
+    // Several runs of one sample (`A.1fq B.1fq`, `--1fq A,B`, or `--runs-dir DIR` with --runs-used / --run-screen):
+    // the decoder reads them as one stream (read_source.h RunSet), with no pooled file. Consumers that read a single
+    // .1fq (ATAC, plate and bulk assays, the feature-barcode pass) get the runs' compressed blocks concatenated into
+    // one file on the output disk (fq/concat.h, from perf/deep-samples), still without decode or re-encode.
+    if (!runs_dir.empty()) {
+        std::vector<std::string> runs = singlet::split_list(runs_used_flag);
+        if (runs.empty() && !run_screen_path.empty()) runs = singlet::runs_kept_from_screen_json(run_screen_path);
+        if (runs.empty()) {
+            std::cerr << "ERROR: --runs-dir needs --runs-used A,B,... or --run-screen screen.json (runs_kept)\n";
+            return 1;
+        }
+        if (!onefq_files.empty()) {
+            std::cerr << "ERROR: give the runs either as .1fq arguments or with --runs-dir, not both\n";
+            return 1;
+        }
+        for (const auto& r : runs) onefq_files.push_back(runs_dir + "/" + r + ".1fq");
+    }
+    if (onefq_files.size() > 1 && runs_used_flag.empty() && run_screen_path.empty()) {
+        for (const auto& f : onefq_files) {   // provenance: the run ids are the inputs' file stems
+            const auto sl = f.rfind('/');
+            std::string stem = (sl == std::string::npos) ? f : f.substr(sl + 1);
+            if (stem.size() > 4 && stem.substr(stem.size() - 4) == ".1fq") stem.resize(stem.size() - 4);
+            runs_used_flag += (runs_used_flag.empty() ? "" : ",") + stem;
+        }
+    }
+    std::string onefq_concat_path;   // the runs as one file, made on first need; removed when main() returns
+    struct ConcatCleanup {
+        std::string* p;
+        ~ConcatCleanup() {
+            if (!p->empty()) { unlink(p->c_str()); rmdir(p->substr(0, p->rfind('/')).c_str()); }
+        }
+    } concat_cleanup{&onefq_concat_path};
+    auto runs_as_one_file = [&]() -> std::string {
+        if (onefq_files.size() < 2) return onefq_file;
+        if (!onefq_concat_path.empty()) return onefq_concat_path;
+        const std::string cdir = out_prefix + "/.multi_run";
+        mkdir_p(cdir);
+        std::string path = cdir + "/sample.1fq";
+        StopWatch concat_sw;
+        auto crep = singlet::fq::concat_1fq(onefq_files, path);   // throws if the runs cannot be one stream
+        onefq_concat_path = path;
+        for (const auto& w : crep.warnings) std::cerr << "[multi-run] WARNING: " << w << "\n";
+        std::cerr << "[multi-run] " << onefq_files.size() << " runs -> " << crep.reads << " reads, " << crep.blocks
+                  << " blocks in " << concat_sw.elapsed_s() << "s (" << path << ")\n";
+        return path;
+    };
     if (!onefq_files.empty()) onefq_file = onefq_files.front();
+    const std::vector<std::string> onefq_runs_in = onefq_files;   // as given (provenance)
     if (read_source_mode != "chunk" && read_source_mode != "fifo" && read_source_mode != "file") {
         std::cerr << "ERROR: --read-source must be chunk, fifo or file (got '" << read_source_mode << "')\n";
         return 1;
@@ -4080,8 +4131,14 @@ int main(int argc, char* argv[]) {
             if (onefq_files.size() > 1) {
                 // Several runs of one sample, pooled as one stream (read_source.h): same layout and dictionary
                 if (is_atac_mode || is_smart_seq2_mode || is_bulk_rna_mode) {
-                    std::cerr << "[singlet] ERROR: several .1fq runs are supported for droplet scRNA only\n";
-                    return 1;
+                    // these paths read one .1fq: the runs' blocks concatenated (no decode, no re-encode)
+                    try {
+                        onefq_file = runs_as_one_file();
+                    } catch (const std::exception& e) {
+                        std::cerr << "[singlet] ERROR: cannot read the runs as one sample: " << e.what() << "\n";
+                        return 1;
+                    }
+                    onefq_files = {onefq_file};
                 }
                 singlet::fq::RunSet runs_check;
                 try {
@@ -7728,7 +7785,11 @@ int main(int argc, char* argv[]) {
 
     // ── N8: Populate provenance manifest ──
     export_cfg.provenance.singlet_version      = singlet::kVersion;
-    export_cfg.provenance.input_file            = onefq_file.empty() ? sra_file : onefq_file;
+    {
+        std::string in_files;  // every run of a multi-run sample, not a temporary concatenation
+        for (const auto& f : onefq_runs_in) in_files += (in_files.empty() ? "" : ",") + f;
+        export_cfg.provenance.input_file = onefq_runs_in.size() > 1 ? in_files : (onefq_file.empty() ? sra_file : onefq_file);
+    }
     export_cfg.provenance.input_reads           = stats.total_reads;
     export_cfg.provenance.genome_dir            = genome_dir;
     export_cfg.provenance.gtf_path              = config.exon_gtf_path;
@@ -7888,10 +7949,7 @@ int main(int argc, char* argv[]) {
 
             {
                 singlet::fq::Reader adt_reader;
-                adt_reader.open(onefq_file.c_str());
-                if (onefq_files.size() > 1)
-                    std::cerr << "[singlet] WARNING: feature-barcode pass reads the first of "
-                              << onefq_files.size() << " runs only\n";
+                adt_reader.open(runs_as_one_file().c_str());   // every run of a multi-run sample
                 const auto& adt_hdr = adt_reader.header();
                 uint16_t bc_len = adt_reader.bc_length();
                 uint16_t umi_len_adt = static_cast<uint16_t>(adt_reader.umi_length());
