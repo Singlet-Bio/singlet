@@ -21,7 +21,7 @@ mkdir -p $SCR/inc && cp -r $INC/singlet $SCR/inc/
 sed -i 's/throw PZReadError("rowname count does not match the number of rows");/rownames.resize(hdr.m);/' $SCR/inc/singlet/pileup/pz_reader.h
 INC=$SCR/inc
 $ENV/bin/x86_64-conda-linux-gnu-g++ -O2 -std=c++17 -I$INC -I$ENV/include $J/pz2mtx.cpp -L$ENV/lib -Wl,-rpath,$ENV/lib -lzstd -o $SCR/pz2mtx
-O=$W/bam-stream/prod_classify; mkdir -p $O
+O=$W/bam-stream/${CLS:-prod_classify}; mkdir -p $O
 for SET in ${SETS:-GSM4006843 GSM7901264}; do
   for side in A B; do
     R=$W/bam-stream/${!side}/$SET/t4_r1/out; D=$SCR/$SET/$side; mkdir -p $D
@@ -30,5 +30,6 @@ for SET in ${SETS:-GSM4006843 GSM7901264}; do
     done
   done
   in_runtime python -I $J/prod_classify.py $SCR/$SET/A $SCR/$SET/B $W/bam-stream/$A/$SET/t4_r1/out $W/bam-stream/$B/$SET/t4_r1/out $O/$SET.json
+  in_runtime python -I $J/ambient_cmp.py $W/bam-stream/$A/$SET/t4_r1/out $W/bam-stream/$B/$SET/t4_r1/out $O/$SET.ambient.json || true
   rm -rf $SCR/$SET
 done
