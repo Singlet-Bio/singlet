@@ -39,7 +39,7 @@ head -1 $SCR/r1.fq | cut -d' ' -f1 > $RES/first_names.txt; head -1 $SCR/r2.fq | 
 # STAR on the same pairs (conda STAR 2.7.11b), ATAC parameters; times itself
 cd $SCR
 env LD_LIBRARY_PATH=$ENV/lib timeout 40m $ENV/bin/STAR --runThreadN 28 --genomeDir $GDIR --readFilesIn r1.fq r2.fq --outSAMtype SAM \
-  --outSAMunmapped Within --outSAMattributes NH HI AS nM --outSAMmultNmax -1 --alignIntronMax 1 --alignMatesGapMax 2000 --outFileNamePrefix ref_ > $RES/star_stdout.txt 2>&1
+  --outSAMunmapped Within --outSAMattributes NH HI AS nM --outSAMmultNmax -1 --outSAMorder PairedKeepInputOrder --alignIntronMax 1 --alignMatesGapMax 2000 --outFileNamePrefix ref_ > $RES/star_stdout.txt 2>&1
 cp ref_Log.final.out $RES/; grep -E "Mapping speed|Number of input|Uniquely mapped reads n|multiple loci" ref_Log.final.out || true
 # kernel
 cd $SCR/src
