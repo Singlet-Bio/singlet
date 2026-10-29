@@ -56,11 +56,14 @@ def test_stream_batches_match_slices(big, order):
     )
 
 
-def test_stream_over_http_reads_only_needed_bytes(big):
+@pytest.mark.parametrize(
+    "range_status", [206, 200]
+)  # 200: the slice with Content-Range, as rclone serve s3 answers
+def test_stream_over_http_reads_only_needed_bytes(big, range_status):
     import _s1_range_server as rs
 
     p, x, _, _ = big
-    with rs.serve(str(p.parent)) as (url, rec):
+    with rs.serve(str(p.parent), range_status=range_status) as (url, rec):
         s = S1Stream(f"{url}/{p.name}", order="canonical")
         blocks = [(1500, 1564)]
         assert np.array_equal(s.batch(blocks).to_dense().numpy(), _rows(x, blocks))
@@ -68,6 +71,15 @@ def test_stream_over_http_reads_only_needed_bytes(big):
         assert s.requests <= 3
         s.batch([(0, 3000)])
         assert one < s.bytes_fetched / 4  # one block costs a fraction of reading every cell
+
+
+def test_stream_over_http_rejects_a_server_that_ignores_range(big):
+    import _s1_range_server as rs
+
+    p = big[0]
+    with rs.serve(str(p.parent), ignore_range=True) as (url, _):
+        with pytest.raises(ValueError, match="does not serve byte ranges"):
+            S1Stream(f"{url}/{p.name}")
 
 
 def test_block_batches():
