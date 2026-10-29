@@ -69,9 +69,9 @@ add_test(NAME test_pz2_multi_tu COMMAND test_pz2_multi_tu)
 
 # Cell calling / QC
 add_pileup_test(test_cell_calling)
-add_pileup_test(test_called_v2)   # C++ port of python/singlet/v2/cellcall.py vs its output (called_v2_fixture.h)
+add_pileup_test(test_called_v2)   # C++ port of python/singlet/s1/cellcall.py vs its output (called_v2_fixture.h)
 target_include_directories(test_called_v2 PRIVATE ${CMAKE_SOURCE_DIR}/tests/cpp)
-target_compile_definitions(test_called_v2 PRIVATE CV2_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/data/called_v2_golden")
+target_compile_definitions(test_called_v2 PRIVATE CV2_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/data/called_ed_golden")
 add_pileup_test(test_barcode_rank)
 add_pileup_test(test_cell_qc)
 add_pileup_test(test_tiny_dataset_guard)
@@ -96,6 +96,8 @@ add_pileup_test(test_protocol_confidence_override)
 
 # ATAC tests
 add_pileup_test(test_atac_fragment)
+add_pileup_test(test_atac_peak_caller)
+add_pileup_test(test_atac_metrics)
 add_pileup_test(test_atac_bin_counter)
 add_pileup_test(test_atac_qc)
 add_pileup_test(test_atac_cell_caller)
@@ -169,6 +171,7 @@ add_pileup_test(test_wgs_assembly)
 # Spatial
 add_pileup_test(test_visium_spatial)
 add_pileup_test(test_visium_qc)
+add_pileup_test(test_visium_tissue)
 add_pileup_test(test_spatial_barcodes)
 add_pileup_test(test_spatial_multiome)
 

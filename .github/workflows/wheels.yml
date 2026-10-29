@@ -109,7 +109,7 @@ jobs:
             CL="/IC:/zstd/include"
             LINK="/LIBPATH:C:/zstd/lib"
           CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: 'python -c "import singlet; print(singlet.__version__)"'
+          CIBW_TEST_COMMAND: 'python -c "import singlet, singlet._pz, singlet._pz2; print(singlet.__version__)"'
           MACOSX_DEPLOYMENT_TARGET: "11.0"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

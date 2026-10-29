@@ -1,7 +1,7 @@
 """Coverage of Singlet vs scBaseCount (2026-01-12 release), joined by SRA experiment (SRX).
 
 Inputs (from fetch_meta.py): META/sbc_samples.parquet, META/singlet_gsm.parquet, META/catalog_map.parquet,
-and the frozen v2 study list PLAN (plan.tsv, 8,306 studies).
+and the frozen per-sample study list PLAN (plan.tsv, 8,306 studies).
 
 Steps
   1. Singlet atlas samples = /api/gsm rows of plan studies; GSM -> SRX from Singlet's processing catalog.

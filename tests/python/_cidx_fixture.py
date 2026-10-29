@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: MIT
-"""A small cell index over two synthetic v2 studies with deterministic fake labels and per-cell features, plus the expected answers
+"""A small cell index over two synthetic per-sample studies with deterministic fake labels and per-cell features, plus the expected answers
 of a fixed list of queries, sampled cell lists and gather plans.
 
-The first study is ``_v2_synth``'s (real codec, real packs); the second (``GSE900002``) is a manifest that names the same sample
+The first study is ``_s1_synth``'s (real codec, real packs); the second (``GSE900002``) is a manifest that names the same sample
 objects under other GSMs, with other labels and features, so study ranking has something to rank.
 
-Used by ``test_v2_atlas.py`` and, as golden files, by the data Worker's tests in the website repository::
+Used by ``test_s1_atlas.py`` and, as golden files, by the data Worker's tests in the website repository::
 
     python -P tests/python/_cidx_fixture.py <website>/src/test/fixtures/cidx
 
-writes the server layout (``v2/...``) and ``expected.json`` (answers computed by ``singlet.v2.atlas``)."""
+writes the server layout (``store/...``) and ``expected.json`` (answers computed by ``singlet.s1.atlas``)."""
 
 from __future__ import annotations
 
@@ -256,8 +256,8 @@ def fake_features(root: str, synth, gsms) -> str:
 
 
 def second_study(root: str, synth) -> None:
-    """``v2/m/GSE900002.json``: the first study's manifest with other GSMs (same sample objects)."""
-    from singlet.v2 import manifest as M
+    """``s1/m/GSE900002.json``: the first study's manifest with other GSMs (same sample objects)."""
+    from singlet.s1 import manifest as M
 
     m = copy.deepcopy(synth.manifest)
     back = {v: k for k, v in COPIES.items()}
@@ -267,14 +267,14 @@ def second_study(root: str, synth) -> None:
     meta = m["study_files"]["study_meta.json"]["json"]
     meta["gse_id"] = GSE2
     meta["gsm_meta"] = {back[g]: {**v, "gsm_id": back[g]} for g, v in meta["gsm_meta"].items()}
-    p = Path(root) / "v2" / "m" / f"{GSE2}.json"
+    p = Path(root) / "s1" / "m" / f"{GSE2}.json"
     p.write_bytes(M.dumps_manifest(m))
 
 
 def build(root: str):
     """-> (synth, build result, index) with everything written under ``root`` (server layout)."""
-    import _v2_synth as synth_mod
-    from singlet.v2 import atlas
+    import _s1_synth as synth_mod
+    from singlet.s1 import atlas
 
     s = synth_mod.Synth(root).build(n_cols=600, n_called=200, chunk_cols=64)
     second_study(root, s)
@@ -337,7 +337,7 @@ def _cells_answer(idx, q, cursor=None):
 
 def expected(idx) -> dict:
     """Answers of QUERIES and PAGED (as the Worker returns them) and two gather plans."""
-    from singlet.v2 import atlas
+    from singlet.s1 import atlas
 
     out = {"version": idx.version, "queries": [], "gathers": [], "paged": None}
     for q in QUERIES:
@@ -408,9 +408,9 @@ if __name__ == "__main__":
     exp = expected(idx)
     if dest.exists():
         shutil.rmtree(dest)
-    (dest / "v2").mkdir(parents=True)
+    (dest / "s1").mkdir(parents=True)
     # sample objects are left out: the Worker does not decode them, its tests fabricate bytes of the planned sizes
-    keep = [k for k in res.objects] + ["v2/cidx/current.json"]
+    keep = [k for k in res.objects] + ["s1/cidx/current.json"]
     exp["sample_objects"] = {t["key"]: len(t["object"]) for t in s.truth.values()}
     for k in keep:
         src = Path(tmp).joinpath(*k.split("/"))

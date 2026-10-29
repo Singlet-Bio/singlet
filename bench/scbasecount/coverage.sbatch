@@ -10,4 +10,4 @@ set -euo pipefail
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
 source $WORK/src/singlet-agents/feat__cell-phenotype/hpc/clipper/in_runtime.sh
 D=$WORK/jobs/sbc
-in_runtime python $D/coverage.py $WORK/data/scbasecount/meta $WORK/state/v2/plan-09fd92b149/plan.tsv $WORK/data/scbasecount/coverage
+in_runtime python $D/coverage.py $WORK/data/scbasecount/meta $WORK/state/store/plan-09fd92b149/plan.tsv $WORK/data/scbasecount/coverage

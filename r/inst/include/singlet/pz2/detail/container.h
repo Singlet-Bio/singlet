@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// pz2 internals: member header, chunk index, names parts.  Byte layouts are specified in docs/format-v2.md section 4.
+// pz2 internals: member header, chunk index, names parts.  Byte layouts are specified in docs/format-s1.md section 4.
 #pragma once
 
 namespace singlet {

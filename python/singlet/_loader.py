@@ -2,25 +2,25 @@
 """Load Singlet datasets as AnnData.
 
 Users work with GEO accession strings (``GSE…`` / ``GSM…``) and local files.
-Public data is hosted in the v2 format (``docs/format-v2.md``)::
+Public data is hosted in the per-sample format (``docs/format-s1.md``)::
 
-    https://data.singlet.bio/v2/m/<GSE>.json         study manifest
-    https://data.singlet.bio/v2/s/<GSM>/<d>.s2       one immutable object per sample
+    https://data.singlet.bio/s1/m/<GSE>.json         study manifest
+    https://data.singlet.bio/s1/s/<GSM>/<d>.s1       one immutable object per sample
 
 (free, no authentication). :func:`load` fetches only the members it needs with
-HTTP Range requests (:mod:`singlet.v2.client`). The legacy per-study archive
+HTTP Range requests (:mod:`singlet.s1.client`). The legacy per-study archive
 ``https://data.singlet.bio/data/<GSE>/<GSE>.singlet`` is being retired: it is
 read only with an explicit ``legacy=True`` (or, as a transition aid, when
-``$SINGLET_LEGACY_FALLBACK=1`` and a study has no v2 manifest yet). A local
+``$SINGLET_LEGACY_FALLBACK=1`` and a study has no .s1 manifest yet). A local
 ``.singlet`` file always opens via :class:`singlet.SingletBundle`. The host is
 configurable with ``$SINGLET_DATA_BASE`` (default ``https://data.singlet.bio``;
 a value that already ends in ``/data`` — the form the R client documents — is
 accepted too; a directory laid out like the server works as well).
 
 Resolution priority for :func:`load`:
-  1. A local ``.singlet`` file path (also accepts ``.h5ad`` / ``.zarr`` you exported), a ``.s2`` sample object or a v2 manifest
+  1. A local ``.singlet`` file path (also accepts ``.h5ad`` / ``.zarr`` you exported), a ``.s1`` sample object or a .s1 manifest
   2. A local catalog directory (cluster use: SINGLET_CATALOG_DIR or singlet.set_catalog_dir())
-  3. The public v2 study for an accession (ranged reads; nothing is stored unless you call :func:`download`)
+  3. The public per-sample study for an accession (ranged reads; nothing is stored unless you call :func:`download`)
 
 GSM accessions are resolved to their parent GSE (via the public REST API at
 ``https://singlet.bio/api``); only that sample's members are fetched.
@@ -160,13 +160,13 @@ def _resolve_gse_path(accession: str) -> Optional[Path]:
     return None
 
 
-# Transition switch (docs/v2-migration.md): while studies are being migrated, a study without a v2 manifest is read
-# from its legacy bundle. The retirement step sets this to False; ``$SINGLET_LEGACY_FALLBACK`` overrides either way.
-_LEGACY_FALLBACK_DEFAULT = True
+# Transition switch (docs/s1-migration.md): legacy bundles are retired (data.singlet.bio answers 410 for them), so a study
+# without a .s1 manifest is not read from one. ``$SINGLET_LEGACY_FALLBACK`` still overrides either way.
+_LEGACY_FALLBACK_DEFAULT = False
 
 
 def _legacy_fallback_enabled() -> bool:
-    """Transition aid: allow the legacy bundle for studies without a v2 manifest (default on until retirement)."""
+    """Transition aid: allow the legacy bundle for studies without a .s1 manifest (off since the retirement)."""
     v = os.environ.get("SINGLET_LEGACY_FALLBACK", "").strip().lower()
     if v in ("1", "true", "yes", "on"):
         return True
@@ -185,10 +185,10 @@ def _warn_fallback(err: Exception, stacklevel: int = 3) -> None:
         )
 
 
-def _no_v2_message(err: Exception) -> str:
+def _no_s1_message(err: Exception) -> str:
     return (
-        f"{err}. Pass legacy=True to read the legacy .singlet bundle (deprecated, being retired), or unset "
-        f"SINGLET_LEGACY_FALLBACK=0 to fall back automatically while studies are migrated."
+        f"{err}. The study is not in the atlas: check the accession, or see https://singlet.bio/known-issues for studies "
+        f"Research Alpha withholds (legacy .singlet bundles are retired)."
     )
 
 
@@ -202,24 +202,24 @@ def download(
 ) -> Path:
     """Download a study for offline use.
 
-    By default this mirrors the study's v2 objects (manifest, one ``.s2`` per sample, the packs they need) under
-    ``<output_dir or cache>/v2/`` with the server's layout, verifies every sample object against the manifest's
-    sha256, and returns the path of the manifest (``.../v2/m/<GSE>.json``). :func:`load` and :func:`open_bundle`
+    By default this mirrors the study's .s1 objects (manifest, one ``.s1`` per sample, the packs they need) under
+    ``<output_dir or cache>/s1/`` with the server's layout, verifies every sample object against the manifest's
+    sha256, and returns the path of the manifest (``.../s1/m/<GSE>.json``). :func:`load` and :func:`open_bundle`
     accept that path and read the local copies without network access; :func:`load` also finds them in the default
     cache on its own. With ``legacy=True`` the legacy ``.singlet`` bundle is fetched instead.
     """
     if legacy is not True:
-        from singlet.v2 import client as _v2
+        from singlet.s1 import client as _store
 
         try:
-            return _v2.download_study(
+            return _store.download_study(
                 normalize_gse(accession), output_dir, force=force, verify=verify
             )
-        except _v2.StudyNotFound as e:
+        except _store.StudyNotFound as e:
             if legacy is None and _legacy_fallback_enabled():
                 _warn_fallback(e)
             else:
-                raise _v2.StudyNotFound(_no_v2_message(e)) from None
+                raise _store.StudyNotFound(_no_s1_message(e)) from None
     return _download_legacy(accession, output_dir, force, verify)
 
 
@@ -229,7 +229,7 @@ def _download_legacy(
     force: bool = False,
     verify: bool = True,
 ) -> Path:
-    """Download a GSE's legacy ``.singlet`` bundle from Cloudflare R2 (deprecated: the v2 format replaces it).
+    """Download a GSE's legacy ``.singlet`` bundle from Cloudflare R2 (deprecated: the per-sample format replaces it).
 
     Fetches ``https://data.singlet.bio/data/<GSE>/<GSE>.singlet`` (free, no
     auth) to the local cache. The download is path-cached: an existing file
@@ -341,6 +341,12 @@ def _download_legacy(
                 f"Dataset '{accession}' not found at {url}. "
                 f"Check the accession or use singlet.catalog() to browse available datasets."
             ) from None
+        if e.code == 410:  # retired legacy bundle: the server names the study's .s1 manifest
+            link = e.headers.get("Link", "") if e.headers else ""
+            raise FileNotFoundError(
+                f"The legacy bundle of '{accession}' is retired{(' (' + link + ')') if link else ''}. "
+                f"Load the study with singlet.load('{accession}') or singlet.download('{accession}') without legacy=True."
+            ) from None
         raise RuntimeError(f"Failed to download '{accession}' from {url}: HTTP {e.code}") from e
     except BaseException:
         tmp_dest.unlink(missing_ok=True)
@@ -366,12 +372,12 @@ def open_bundle(source: str | Path, *, force: bool = False, legacy: Optional[boo
     force : bool
         Re-download even if the bundle is already cached.
     legacy : bool, optional
-        ``True`` opens the legacy ``.singlet`` bundle of an accession (deprecated). The default opens the v2 study.
+        ``True`` opens the legacy ``.singlet`` bundle of an accession (deprecated). The default opens the per-sample study.
 
     Returns
     -------
     singlet.SingletBundle
-        For a v2 study (the default), a :class:`singlet.v2.bundle.V2Bundle` with the same interface.
+        For a per-sample study (the default), a :class:`singlet.s1.bundle.S1Bundle` with the same interface.
 
     Examples
     --------
@@ -385,10 +391,10 @@ def open_bundle(source: str | Path, *, force: bool = False, legacy: Optional[boo
 
     path = Path(str(source)).expanduser()
     if path.exists():
-        if path.suffix.lower() in (".json", ".s2"):  # a v2 manifest or sample object
-            from singlet.v2.bundle import V2Bundle
+        if path.suffix.lower() in (".json", ".s1", ".s2"):  # a .s1 manifest or sample object
+            from singlet.s1.bundle import S1Bundle
 
-            return V2Bundle.open(path)
+            return S1Bundle.open(path)
         return SingletBundle.open(path)
 
     try:
@@ -403,14 +409,14 @@ def open_bundle(source: str | Path, *, force: bool = False, legacy: Optional[boo
             raise ValueError(f"Could not resolve {accession} to a parent GSE")
         accession = parent
     if legacy is not True:
-        from singlet.v2 import client as _v2
-        from singlet.v2.bundle import V2Bundle
+        from singlet.s1 import client as _store
+        from singlet.s1.bundle import S1Bundle
 
         try:
-            return V2Bundle.open(accession, force=force)
-        except _v2.StudyNotFound as e:
+            return S1Bundle.open(accession, force=force)
+        except _store.StudyNotFound as e:
             if not (legacy is None and _legacy_fallback_enabled()):
-                raise _v2.StudyNotFound(_no_v2_message(e)) from None
+                raise _store.StudyNotFound(_no_s1_message(e)) from None
             _warn_fallback(e)
     return SingletBundle.open(_download_legacy(accession, force=force))
 
@@ -424,7 +430,7 @@ def load(
     legacy: Optional[bool] = None,
     layers: bool = True,
     modalities: Optional[str | Sequence[str]] = None,
-    **v2_options,
+    **s1_options,
 ) -> anndata.AnnData:
     """Load one or more datasets as a single AnnData.
 
@@ -433,10 +439,10 @@ def load(
     file path to read directly. Pass a list/tuple of accessions and/or
     ``.singlet`` paths to load them all and concatenate into one AnnData.
 
-    For a ``GSE`` accession, the study's v2 members are fetched with HTTP Range
+    For a ``GSE`` accession, the study's .s1 members are fetched with HTTP Range
     requests (only the matrices and cell tables the gene-level result needs) and
     assembled into one AnnData. For a ``GSM`` accession, only that sample's
-    members are fetched. A ``.s2`` sample object or a v2 manifest path is read
+    members are fetched. A ``.s1`` sample object or a .s1 manifest path is read
     from disk.
 
     Parameters
@@ -457,41 +463,49 @@ def load(
         Filter cells by obs columns, e.g. ``{"organism": "Homo sapiens"}``.
     force : bool
         Re-validate the study manifest even if it was checked a moment ago
-        (v2), or re-download the bundle (legacy).
+        (.s1), or re-download the bundle (legacy).
     legacy : bool, optional
         ``True`` reads the legacy ``.singlet`` bundle of an accession (deprecated,
-        being retired). The default reads v2.
+        being retired). The default reads the per-sample format.
     layers : bool
         Attach ``spliced`` / ``unspliced`` layers next to ``X = spliced + unspliced``
-        (v2 reader; the legacy reader always does).
+        (.s1 reader; the legacy reader always does).
     modalities : str or list of str, optional
-        Fetch only what these modalities need (v2 reader: only those members'
+        Fetch only what these modalities need (.s1 reader: only those members'
         byte ranges are downloaded). ``"counts"`` (``X`` = spliced + unspliced;
         needs the exon and intron matrices), ``"spliced"`` (``layers["spliced"]``,
         exon matrix only), ``"unspliced"`` (``layers["unspliced"]``, intron matrix
         only), ``"splice_junctions"`` and ``"psi"`` (``obsm``, junction matrix
         only; ``psi`` is the true float PSI), ``"mt"`` and ``"vdj"`` (``obsm``).
         Feature names of an ``obsm`` modality are in
-        ``uns["obsm_features"][name]``; :func:`singlet.v2.client.modality_anndata`
+        ``uns["obsm_features"][name]``; :func:`singlet.s1.client.modality_anndata`
         turns one into its own AnnData. Without ``"counts"``, ``X`` is ``None``.
         The default keeps ``counts`` + ``spliced`` + ``unspliced`` (``counts``
         alone with ``layers=False``). A modality no requested sample carries
-        raises :class:`singlet.v2.client.ModalityUnavailable` listing what the
+        raises :class:`singlet.s1.client.ModalityUnavailable` listing what the
         study has. A legacy bundle is always downloaded whole; the result is
         then subset (with a warning).
-    **v2_options
+    **s1_options
         ``samples`` (restrict a study to some GSMs), ``cell_order`` (``"legacy"``,
         ``"barcode"`` or ``"column"``), ``concurrency`` (parallel samples and
         range requests, default 4), ``threads`` (decoder threads), ``verify``
         (recompute canonical matrix digests), ``whole_max`` (bytes below which a
-        sample's members are fetched whole), ``base`` (data host).
+        sample's members are fetched whole), ``base`` (data host),
+        ``cell_type_level`` (deepest level of ``obs["cell_type"]``, default 2),
+        ``cell_type_min_score`` (extra minimum path score for it, default 0),
+        ``include_unvalidated`` (also keep ``qc_doublet_score``).
 
     Returns
     -------
     anndata.AnnData
         Count matrix with obs metadata, var gene annotations, and uns study
         info. Samples whose count matrix is empty are skipped with a warning
-        and listed in ``adata.uns["skipped_samples"]``.
+        and listed in ``adata.uns["skipped_samples"]``. For a per-sample (.s1)
+        study, ``obs`` carries the per-cell labels (``cell_type``,
+        ``cell_type_ontology_term_id``, ``sex_chrom``, ``ancestry_hancestro``,
+        ...), the cell calls (``called``, ``called_ed``) and the QC columns of
+        each sample's cells table, then the GEO sample metadata; see
+        :mod:`singlet.s1.labels`.
 
     Examples
     --------
@@ -520,7 +534,7 @@ def load(
                 legacy=legacy,
                 layers=layers,
                 modalities=modalities,
-                **v2_options,
+                **s1_options,
             )
             sub.obs["source"] = str(item)
             parts.append(sub)
@@ -567,16 +581,28 @@ def load(
         legacy=legacy,
         layers=layers,
         modalities=modalities,
-        v2_options=v2_options,
+        s1_options=s1_options,
     )
 
 
-_V2_OPTIONS = frozenset(
-    {"samples", "cell_order", "concurrency", "threads", "verify", "whole_max", "base", "verbose"}
+_STORE_OPTIONS = frozenset(
+    {
+        "samples",
+        "cell_order",
+        "concurrency",
+        "threads",
+        "verify",
+        "whole_max",
+        "base",
+        "verbose",
+        "cell_type_level",
+        "cell_type_min_score",
+        "include_unvalidated",
+    }
 )
 
 
-def _load_v2(
+def _load_store(
     accession: str,
     gsm: Optional[str],
     *,
@@ -587,10 +613,10 @@ def _load_v2(
     options: dict,
     modalities=None,
 ) -> anndata.AnnData:
-    """Gene-level AnnData of a v2 study (or of one sample of it) through :mod:`singlet.v2.client`."""
-    from singlet.v2 import client as v2
+    """Gene-level AnnData of a per-sample study (or of one sample of it) through :mod:`singlet.s1.client`."""
+    from singlet.s1 import client as _store
 
-    unknown = set(options) - _V2_OPTIONS
+    unknown = set(options) - _STORE_OPTIONS
     if unknown:
         raise TypeError(f"load() got unexpected keyword argument(s): {sorted(unknown)}")
     opts = dict(options)
@@ -598,7 +624,7 @@ def _load_v2(
     samples = opts.pop("samples", None)
     if gsm is not None:
         samples = [gsm]
-    study = v2.open_study(accession, base=base, force=force)
+    study = _store.open_study(accession, base=base, force=force)
     try:
         return study.to_anndata(
             samples,
@@ -608,7 +634,7 @@ def _load_v2(
             modalities=modalities,
             **opts,
         )
-    except v2.NoUsableSamples as e:
+    except _store.NoUsableSamples as e:
         if gsm is not None:
             raise KeyError(
                 f"Sample {gsm!r} has no usable cells in its parent GSE: {e.reasons.get(gsm, 'skipped')}. "
@@ -626,7 +652,7 @@ def _load_one(
     legacy: Optional[bool] = None,
     layers: bool = True,
     modalities: Optional[str | Sequence[str]] = None,
-    v2_options: Optional[dict] = None,
+    s1_options: Optional[dict] = None,
 ) -> anndata.AnnData:
     """Load a single dataset (accession or local ``.singlet``/file path)."""
     from singlet._io import read_1pz, read_matrix
@@ -669,17 +695,18 @@ def _load_one(
 
             bundle = SingletBundle.open(path)
             adata = _legacy_modalities(bundle.to_anndata(verbose=False), bundle, modalities)
-        elif suffix in (".s2", ".json"):  # a v2 sample object or study manifest on disk
-            from singlet.v2 import client as v2
+        elif suffix in (".s1", ".s2", ".json"):  # a .s1 sample object or study manifest on disk
+            from singlet.s1 import client as _store
 
-            return v2.load(
+            # _store.load reads atlas samples, manifests and one-matrix objects (singlet.write_s1 files) alike
+            return _store.load(
                 path,
                 genes=genes,
                 obs_filter=obs_filter,
                 layers=layers,
                 modalities=modalities,
                 force=force,
-                **(v2_options or {}),
+                **(s1_options or {}),
             )
         elif suffix == ".h5ad":
             import anndata as ad
@@ -724,22 +751,22 @@ def _load_one(
             adata = read_1pz(local_path)
         else:
             if legacy is not True:
-                from singlet.v2 import client as v2
+                from singlet.s1 import client as _store
 
                 try:
-                    return _load_v2(
+                    return _load_store(
                         gse_accession,
                         _gsm_filter,
                         genes=genes,
                         obs_filter=obs_filter,
                         force=force,
                         layers=layers,
-                        options=v2_options or {},
+                        options=s1_options or {},
                         modalities=modalities,
                     )
-                except v2.StudyNotFound as e:
+                except _store.StudyNotFound as e:
                     if not (legacy is None and _legacy_fallback_enabled()):
-                        raise v2.StudyNotFound(_no_v2_message(e)) from None
+                        raise _store.StudyNotFound(_no_s1_message(e)) from None
                     _warn_fallback(e, stacklevel=4)
             local = _download_legacy(gse_accession, force=force)
             from singlet.bundle import SingletBundle
@@ -796,15 +823,15 @@ _LEGACY_MODALITY = {
 
 def _legacy_modalities(adata, bundle, modalities):
     """``modalities=`` on a legacy bundle: the whole bundle was downloaded already, so this only shapes the result like the
-    v2 reader does (X / layers / obsm). A modality the bundle cannot supply is warned about and left out, never fatal."""
+    .s1 reader does (X / layers / obsm). A modality the bundle cannot supply is warned about and left out, never fatal."""
     if modalities is None:
         return adata
-    from singlet.v2 import client as v2
+    from singlet.s1 import client as _store
 
-    mods = v2.normalize_modalities(modalities)
+    mods = _store.normalize_modalities(modalities)
     warnings.warn(
         "this study is read from its legacy .singlet bundle, which is downloaded whole; modalities= only subsets the "
-        "result (the v2 reader fetches only the members asked for)",
+        "result (the .s1 reader fetches only the members asked for)",
         UserWarning,
         stacklevel=4,
     )
@@ -813,11 +840,11 @@ def _legacy_modalities(adata, bundle, modalities):
             del adata.layers[lname]
     if "counts" not in mods:
         adata.X = None
-    if not any(v2.MODALITIES[k].slot != "obsm" for k in mods):
+    if not any(_store.MODALITIES[k].slot != "obsm" for k in mods):
         adata = adata[:, []].copy()
     names_out = {}
     for k in mods:
-        if v2.MODALITIES[k].slot != "obsm":
+        if _store.MODALITIES[k].slot != "obsm":
             continue
         try:
             mat, names = _legacy_feature_block(adata, bundle, _LEGACY_MODALITY[k], psi=(k == "psi"))
@@ -854,7 +881,7 @@ def _legacy_feature_block(adata, bundle, legacy_name: str, *, psi: bool):
         m.sort_indices()
         names = [str(x) for x in sub.var_names]
         if psi:
-            from singlet.v2.client import _Part, _psi_part
+            from singlet.s1.client import _Part, _psi_part
 
             part, _ = _psi_part(
                 _Part(m.indptr, m.indices.astype(np.int32), m.data, len(names)), names

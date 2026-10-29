@@ -1,8 +1,8 @@
-# singlet R package — native build flags
+# singlet R package — native build flags (also used on Windows: there is no Makevars.win)
 #
-# Architecture: src/pz_io.cpp wraps the header-only C++ .1pz codec.
-# Headers are at ../inst/include/singlet/ (subset of the full C++ library).
+# src/pz_io.cpp and src/pz2_io.cpp wrap the header-only C++ .1pz / .s1 codecs in ../inst/include/singlet/.
+# Zstandard is bundled (src/zstd/, compiled once through src/zstd_unity.c), so no system libzstd is needed.
 
-PKG_CPPFLAGS = -I../inst/include
-PKG_LIBS = -lzstd
+PKG_CPPFLAGS = -I../inst/include -Izstd
+PKG_CFLAGS = -DZSTD_DISABLE_ASM=1
 CXX_STD = CXX17

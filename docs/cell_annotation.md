@@ -10,7 +10,7 @@ Validation run 2026-10-23 on Clipper; every number below comes from the artefact
 | column | type | content |
 |---|---|---|
 | `gsm` | string | sample accession |
-| `col` | int64 | column of the cell in the sample's v2 `cells` table / matrix column order (legacy bundles: its column in `exon_counts.1pz`, the order `v2/migrate.py` gives the cells table) |
+| `col` | int64 | column of the cell in the sample's store `cells` table / matrix column order (legacy bundles: its column in `exon_counts.1pz`, the order `s1/migrate.py` gives the cells table) |
 | `cell_type_cl`, `cell_type_label` | string | Cell Ontology id and name (CL 2026-06-08); null when the method abstains |
 | `cell_type_score` | float32 | confidence of the call, in [0, 1] (guide: product of the gating confidences along the path; a ranking, see 3) |
 | `sex_chrom` | string | `female` (PATO:0000383), `male` (PATO:0000384), `ambiguous` |
@@ -20,7 +20,7 @@ Validation run 2026-10-23 on Clipper; every number below comes from the artefact
 | `model_version` | string | versions of every model that produced the row |
 
 Plus `<GSM>.summary.json` for internal QC (counts per CL id, per-donor sex and ancestry, timings, and `barcode_digest`, the
-SHA-256 of the called barcodes in `col` order, so ingest can check that the rows line up with the v2 cells table).
+SHA-256 of the called barcodes in `col` order, so ingest can check that the rows line up with the .s1 cells table).
 
 **Privacy.** Genotypes, allele depths, variant positions and anything per-site never reach a label file. Ancestry reads the
 per-donor depth tables from the restricted sidecar on the compute node, in memory, and returns only a group, its HANCESTRO id and
@@ -187,7 +187,7 @@ Same 16 studies, guide only (`bench3.json`):
 
 ## 4. Chromosomal sex: 157 samples with GEO sex metadata
 
-Validation run `out/annotate_validation/run1`: 21 studies (the v2 pilot GSE145370, 12 human and 8 mouse legacy studies whose GEO
+Validation run `out/annotate_validation/run1`: 21 studies (the .s1 pilot GSE145370, 12 human and 8 mouse legacy studies whose GEO
 characteristics record sex, both sexes in each), 167 samples, 443,530 cells, through the campaign script itself
 (`scripts/annotate_campaign.py`, `scripts/annotate_validation_summary.py`).
 
@@ -303,7 +303,7 @@ million cells.
 | ancestry (incl. sidecar parsing) | 450 |
 
 With the guide as the cell-type method, one task spends about 2,040 s of wall clock per million cells, which is about 4.5
-CPU-hours per million cells at 8 threads. Reading the counts is now the largest stage. v2 studies, read by range requests, should
+CPU-hours per million cells at 8 threads. Reading the counts is now the largest stage. per-sample studies, read by range requests, should
 read faster; the legacy studies are downloaded whole.
 
 `scripts/annotate_campaign.py plan` takes its study list from `https://singlet.bio/api/manifest`. Human and mouse studies only:
@@ -370,7 +370,7 @@ Median covered sites per donor: 221k.
 **Measured cost:** 1,010 s of wall clock per million cells per 8-thread task (read 700, cell type 297, sex 7, ancestry 4).
 That is 2.2 CPU-hours per million cells, about 430 CPU-hours for the atlas.
 
-**Hand-over.** The cell index ingests these files (`singlet.v2.atlas.normalize_sidecar`). Nothing was written to R2 or D1.
+**Hand-over.** The cell index ingests these files (`singlet.s1.atlas.normalize_sidecar`). Nothing was written to R2 or D1.
 
 ## 7. Findings for other owners
 
@@ -380,6 +380,61 @@ That is 2.2 CPU-hours per million cells, about 430 CPU-hours for the atlas.
   (section 4).
 - **`ancestry_call.json`:** the pipeline's 50-marker call disagrees with a 10^5-site call on 36 of 39 donors. The website should
   stop showing it once these labels are served.
-- **data.singlet.bio:** it answers 403 to Python's default urllib User-Agent; clients must send one (the v2 transport does).
+- **data.singlet.bio:** it answers 403 to Python's default urllib User-Agent; clients must send one (the .s1 transport does).
 - **CELLxGENE truth (section 3):** Singlet's called cells and the authors' kept cells often differ. Matched fractions are listed in
   the benchmark manifest.
+
+## 8. Reading the labels from the clients
+
+The Research Alpha transcode writes the labels into every .s1 sample's `cells` table (`singlet.s1.labels_step`), next to the cell
+calls and the QC columns. Both clients put them in front of the GEO sample metadata, under names that cannot collide with it
+(`singlet.s1.labels` in Python, `?singlet_labels` in R):
+
+```python
+import singlet
+adata = singlet.load("GSE286650")                  # or singlet.open_study(...).to_anndata(), singlet.cells(...)
+adata.obs[["cell_type", "cell_type_ontology_term_id", "sex_chrom", "ancestry_hancestro", "called_ed"]]
+t = singlet.cells("GSE286650", "cell_type == 'cardiac muscle cell' and sex_chrom == 'male'")   # filter before fetching
+```
+
+```r
+sce <- singlet_load("GSE286650")
+table(sce$cell_type, sce$sex_chrom)
+tc <- singlet_cells("GSE286650", cell_type == "T cell" & called_ed)
+```
+
+| column (obs / colData) | content |
+|---|---|
+| `cell_type`, `cell_type_ontology_term_id` | CL name and id at the default level: the deepest level `k <= 2` the guide's gating reached (missing when the cell has no call) |
+| `cell_type_level`, `cell_type_score` | that level (1 compartment, 2 lineage, 3 cell type, 4+ subtype; 0 none) and its path score |
+| `cell_type_deepest`, `cell_type_deepest_ontology_term_id`, `cell_type_deepest_level`, `cell_type_deepest_score` | the labeller's deepest call (stored as `cell_type_label`, `cell_type_cl`, `cell_type_score`); levels 3+ are previews |
+| `cell_type_path`, `cell_type_p1` .. `cell_type_p6` | the deepest call's CL path (ids joined by `>`, compartment first) and each level's gating confidence |
+| `sex_chrom`, `sex_score` | `female` / `male` / `ambiguous` and its posterior |
+| `ancestry_hancestro`, `ancestry_prob` | continental HANCESTRO category of the cell's donor and its proportion |
+| `called`, `called_ed`, `called_ed_fdr` | the default cell call; the EmptyDrops call (additional, `docs/called-ed.md`) and its FDR |
+| `n_umi_*`, `n_feat_*`, `cyc_*`, `qc_*`, `don_*`, `mts_*` | counts summaries, cell cycle, QC, genotype-free donor assignment, mtDNA summary (categorical codes decoded) |
+| `organism`, `protocol`, `sample_source`, `sample_characteristics`, ... | GEO sample metadata, repeated per cell; in R the curated fields are `geo_tissue`, `geo_cell_type`, `geo_disease`, `geo_sex`, `geo_age` (named `tissue`, `cell_type`, ... before 1.1.0) |
+| `tissue_type` | CELLxGENE `tissue_type` of the sample: `tissue`, `organoid`, `primary cell culture` or `cell line` (sample facts, see below) |
+| `cell_line`, `cell_line_cellosaurus_id` | Cellosaurus name and accession (`K-562`, `CVCL_0004`); several lines joined by `; ` in the same order |
+| `tumor_sample_type` | GDC/TCGA-style `tumor`, `primary tumor`, `metastatic`, `recurrent tumor` or `adjacent normal` |
+| `disease`, `disease_ontology_term_id` | MONDO term of the donor's disease, or `normal` / `PATO:0000461` for a healthy donor |
+| `donor_status`, `sample_kind` | `healthy` / `diseased`; `primary`, `cell_line`, `stem_cell`, `organoid` or `xenograft` |
+
+The sample facts (`tissue_type` to `sample_kind`) come from the study API (`GET https://singlet.bio/api/gse/<GSE>`, field `facts` of each sample), which reads them from the sample's own GEO record only; a field the record does not state is missing (NA), never guessed. They are fetched once per study when the study is read over HTTP; with `$SINGLET_OFFLINE` set, for a local study, or when the API cannot be reached, the columns are absent. `sample_facts=False` (Python) / `sample_facts = FALSE` (R) skips them.
+
+Options (Python `to_anndata` / `cells` / `load`, R `load` / `singlet_cells`): `cell_type_level=` (default 2; 6 gives the deepest
+call), `cell_type_min_score=` (default 0: an extra minimum on the path score `p1 * ... * pk`), `include_unvalidated=` (default off).
+
+What the numbers support:
+- **Cell type:** per-study accuracy against CELLxGENE author labels is 0.84 / 0.75 / 0.43 / 0.32 at levels 1 / 2 / 3 / 4
+  (section 3), hence the default of level 2 and the "preview" status of deeper levels. Those numbers were measured on every call
+  the guide made, with only its own per-level gating thresholds (minimum score 0.02 and margin 0.01, section 2), so the clients
+  add no threshold by default. The path score ranks calls; it is optimistic above 0.9 and is not a probability. A stricter
+  `cell_type_min_score` trades coverage for agreement (calibration table, section 3: 0.47 agreement below 0.5, 0.80 above 0.9);
+  on GSE251658 (mouse), 0.5 keeps 3,432 of 7,445 lineage-level calls and moves the rest to level 1.
+- **Sex:** the sample call matches GEO metadata for 153 of 156 called samples (98.1%), and the three disagreements are GEO
+  errors (section 4).
+- **Ancestry:** continental HANCESTRO categories, computed only for human donors whose per-donor coverage tables exist (about 1%
+  of atlas cells, section 6.1); everywhere else the column is missing.
+- **`qc_doublet_score` is unvalidated** (no benchmark supports it). The clients leave it out of `obs` / `colData` unless
+  `include_unvalidated=True` or it is named in `columns=`; `where` filters can still use it.
