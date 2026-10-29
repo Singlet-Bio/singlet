@@ -19,6 +19,35 @@ int g_handoffMinQ = 0;
 uint32 (*g_handoffReadHook)(uint64, const char *, uint64) = nullptr;
 const uint8 *g_handoffSum = nullptr;
 const uint64 *g_handoffSumOff = nullptr;
+namespace {
+struct PrefillReadsStore {
+    std::vector<std::vector<char> > seq;
+    std::vector<std::vector<unsigned int> > len;
+    bool on = false;
+} g_pf;
+}
+void prefillReadsBegin(size_t nBlocks) {
+    g_pf.seq.assign(nBlocks, std::vector<char>());
+    g_pf.len.assign(nBlocks, std::vector<unsigned int>());
+    g_pf.on = true;
+}
+void prefillReadsSet(size_t block, std::vector<char> &&seq, std::vector<unsigned int> &&len) {
+    if (!g_pf.on || block >= g_pf.seq.size()) return;
+    g_pf.seq[block] = std::move(seq);
+    g_pf.len[block] = std::move(len);
+}
+void prefillReadsRelease() {
+    std::vector<std::vector<char> >().swap(g_pf.seq);
+    std::vector<std::vector<unsigned int> >().swap(g_pf.len);
+    g_pf.on = false;
+}
+bool prefillReadsTake(std::vector<std::vector<char> > &seq, std::vector<std::vector<unsigned int> > &len) {
+    if (!g_pf.on) return false;
+    seq.swap(g_pf.seq);
+    len.swap(g_pf.len);
+    prefillReadsRelease();
+    return true;
+}
 #ifdef STAR_PROFILE
 std::atomic<unsigned long long> g_prof[PROF_N];
 std::atomic<unsigned long long> g_profOutcome[6][2];

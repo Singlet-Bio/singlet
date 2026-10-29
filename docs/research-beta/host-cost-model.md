@@ -3,7 +3,7 @@
 Question: 10x 5' GSM6470208 costs 18.7 core-s per M reads on the GPU path (2,274 core-s, 121.8 M reads, 18 threads, 564 s wall). The break-even is
 12.7, so 731 core-s have to go. Where are they, and what removes them without changing an output?
 
-**Status: nothing here was compiled or run on Clipper.** Three changes are on the branch, each marked "not compiled" in section 5; W11 builds
+**Status: nothing here was compiled or run on Clipper.** Four changes are on the branch (F1-F4), each marked "not compiled" in section 5; W11 builds
 and gates them. The 5' stage split is a model calibrated to the measured total (section 2), because no stage profile of a 5' run exists.
 
 ## 1. Summary
@@ -26,8 +26,14 @@ and gates them. The 5' stage split is a model calibrated to the measured total (
   | F2 | hand-off record built without `alignBAM` | 1.5 (0.7-2.0) | yes: same fields; `SINGLET_HANDOFF_LEAN=verify` compares |
   | F3 | no blob copy, `reserve` where vectors doubled, no per-read `std::string`, prefetch in the serial hand-off pass | 0.2 (0.1-0.3) | yes |
 
-  That is about 4.2 per M reads (2.9-5.2): 18.7 -> **about 14.5 (13.5-15.8)**. **This does not reach 12.7 on its own.** Section 4 lists what has
+  | F4 | the prefill takes the cDNA reads from the decode in memory instead of parsing the R2 FASTQ (section 8) | 0.2 (0.15-0.3) | yes: same reads, same order; `SINGLET_PREFILL_MEM_VERIFY=1` compares |
+
+  That is about 4.4 per M reads (3.0-5.5): 18.7 -> **about 14.3 (13.2-15.7)**. **This does not reach 12.7 on its own.** Section 4 lists what has
   to follow; the 5' stage profile asked for in section 6 decides which.
+- **The FASTQ text round trip is mostly not removable without a new STAR input path** (section 8). Dropping only the temp files (a FIFO instead of a
+  file) swaps page-cache copies for pipe copies and adds a decode pass: about neutral. The 2.5-2.7 per M reads it costs in decode formatting,
+  copies, STAR's serial chunk reader and `readLoad` parsing can be cut by 1.5-2.0 only by delivering binary reads into STAR's chunk buffers; that is
+  designed in section 8 and not implemented (about 300 lines inside STAR, no way to build or test it offline).
 
 ## 2. Cost model
 
@@ -119,12 +125,13 @@ Savings are for GSM6470208 per M reads; "3'" is the effect on pbmc1k_v3. Rank = 
 | N1 | GPU emits each read's clip lengths; STAR skips its CPU clip for hand-off reads and `handoffReadEntry` takes the lengths from the GPU | `engine_gpu.cu` + `ReadAlign_oneRead.cpp` | 0.4-0.6 after F1 | 0 | yes | patch described, 5.1 |
 | N2 | `mapDistinct`: reserve + one copy in the record assembly, no `std::vector<uint32_t> repc` copies, `readRep`/`posOf` in one pass | `engine_gpu.cu` | 0.3-0.6 (serial 1.7 core-us per distinct sequence) | 0.4 | yes | patch described, 5.2 |
 | N3 | `seqCacheHandoffSummary`: no `Stats` per record, one `put` per field group; `classifyAlign` only for nTr>0 already | `ReadAlign_seqCache.cpp` | 0.1-0.3 | 0.1 | yes | not done |
-| N4 | FASTQ text round trip: `.1fq` decode writes R1/R2 text (26 GB for pbmc1k_v3), STAR parses it, the prefill parses R2 again | `singlet.cpp`, STAR input | 0.5-0.8 | 0.5 | yes | not done (large) |
+| N4a | the prefill's own parse of R2 (now F4) | `singlet.cpp`, `SeqCacheGpuPrefill.cpp` | 0.2 | 0.2 | yes | implemented as F4, not compiled |
+| N4b | binary reads into STAR's chunk buffers: no text formatting, pipe or page-cache copy, name rewriting, `fastqReadOneLine` parse (section 8) | STAR input path, `singlet.cpp` | 1.5-2.0 | 1.5-2.0 | yes | designed, not implemented |
 | N5 | non-host EM stops at a tolerance instead of 259 iterations; unmapped reads (12.3 M) | non-host | 0.5-1.0 | 0.1 | **no** (EM iteration count, already a known difference D4b) | not done |
 | N6 | export: skip auto-K and VB demux when one donor is evident | export | 0.5-1.0 | 0.5 | **no** (donor outputs) | not done |
 
-F1-F3 plus N1 and N2 are about 5.2 (central) and bring 5' to about 13.5: above 12.7. N4 would bring it to about the break-even. The honest
-reading: **F1 and F2 are worth doing now; whether the rest is needed depends on two numbers only a 5' profile gives** (section 6).
+F1-F4 plus N1 and N2 are about 5.4 (central) and bring 5' to about 13.3: above 12.7. N4b (1.5-2.0) would take it to about 11.3-11.8, under the
+break-even, and is the one remaining item that does. The honest reading: **F1 and F2 are worth doing now; whether the rest is needed depends on two numbers only a 5' profile gives** (section 6).
 
 ## 5. What changed on this branch
 
@@ -146,7 +153,8 @@ reading: **F1 and F2 are worth doing now; whether the rest is needed depends on 
 - `include/singlet/pileup/pileup_engine.h`: **F3.** in `gpu_handoff_pass`: prefetch of `rec_off[...]` and the record 16 and 8 reads ahead;
   the R4 sample key `"r<i>"` is built in a stack buffer and only when the read is long enough to be sampled (it was a `std::string` per read).
   The file has non-UTF-8 bytes: diff it as binary or with `git diff -a`.
-- `bench/host_cost/`: `model_localsearch.py`, `model_lean_aln.py` (laptop checks), `stage_profile_handoff.py` (the stage table above).
+- `src/pipeline/singlet.cpp`, `src/star/SeqCache.{h,cpp}`, `src/star/SeqCacheGpuPrefill.cpp`: **F4**, section 8.
+- `bench/host_cost/`: `model_localsearch.py`, `model_lean_aln.py`, `model_prefill_mem.py` (laptop checks), `stage_profile_handoff.py` (the stage table above).
 
 ### Checks done on the laptop (Python 3.11, numpy, numba)
 
@@ -157,6 +165,8 @@ reading: **F1 and F2 are worth doing now; whether the rest is needed depends on 
 - `python bench/host_cost/model_lean_aln.py`: transcription of the single-end branch of `alignBAM` against `seqCacheLeanAln`, with the C++
   integer widths: 300,000 random transcripts (junctions, annotated and unannotated, deletions, insertions, both strands, primary and not,
   clips, NH steps, MAPQ, flag AND/OR); identical fields. This checks the transcription, not the build.
+- `python bench/host_cost/model_prefill_mem.py`: the file path (records skipped when R1 or R2 is empty, duplicate counts, ACGTN text, the prefill's
+  parse) against the in-memory path (what `process_block` keeps, `appendPieces`' offsets, pool workers in any order): equal on 2,000 random block sets.
 - `python bench/host_cost/stage_profile_handoff.py <dir> <M reads>` reproduces section 2.1 from the job 791104 files.
 
 ### What W11 must build and gate
@@ -170,7 +180,10 @@ reading: **F1 and F2 are worth doing now; whether the rest is needed depends on 
    mode's BAM comes from STAR's own `alignBAM`, so any difference in F2 shows as a changed count. Only the 7 known differences should remain.
    F1 changes only how fast the clip is found: a wrong `ixBest` would change clip lengths, alignments and every count on GSM6470208.
 4. **Cost:** GSM6470208 `on` at 18 threads, core-s against 2,274 (this branch should read about 1,750; 1,550 is the break-even).
-5. **Stage profile of GSM6470208** (section 6), before and after, so the model rows become measurements.
+5. **F4:** one run with `SINGLET_PREFILL_MEM_VERIFY=1`: the log must say `cDNA reads from the decode in memory vs the FASTQ file: identical`. Then the
+   default (`ENGINE_GPU: cDNA reads taken from the decode in memory`) and `SINGLET_PREFILL_MEM=0` must give the same outputs. Peak memory should not
+   rise (the pieces exist once; the parent frees its copy after the fork).
+6. **Stage profile of GSM6470208** (section 6), before and after, so the model rows become measurements.
 
 ### Patches for the two files I did not touch
 
@@ -218,3 +231,70 @@ If `readLoad` is near 53 thread-s the clip is cheap and F1 saves little: then N4
 - **`alignBAM` replaced elsewhere** (the non-hand-off path writes real BAM records): needed for those reads.
 - **N4, N5, N6**: too large or not output-identical for a branch that cannot be compiled or run here.
 - **Skipping STAR's Solo counting** (0.6-0.7 per M): `CellReads.stats` feeds `cell_qc_metrics.tsv`.
+
+## 8. The FASTQ text round trip
+
+What happens to a read today (file-mode decode, the only mode `--engine gpu` supports, because the prefill reads the cDNA before STAR starts):
+
+1. `process_block` (18 threads) decodes the `.1fq` block and formats R1 and R2 as FASTQ text (about 256 bytes per read: names, sequence, `+`, and
+   a quality line of constant `F`), written to two files in `$TMPDIR` (26 GB for pbmc1k_v3, about 50 GB for GSM6470208).
+2. The prefill `mmap`s R2 and converts the sequence lines (F4 removes this).
+3. STAR's reader (`ReadAlignChunk::processChunks`, one thread at a time under `mutexInRead`) reads both files through `ifstream`, parses each
+   name, rewrites it (`@name iRead N fileIndex`), and copies sequence and quality lines into the chunk buffers; the workers' `readLoad` parses
+   the buffers again. STAR's own counters (job 790043): `chunkRead` 30 thread-s and `readLoad` 53 thread-s for 66.6 M reads, i.e. 1.2 per M reads.
+4. The decode itself is 1.6 core-s per M reads (job 791104), of which formatting and the kernel's write are most.
+
+**Why a FIFO instead of the files is not the fix.** The decode already has a FIFO mode (`use_fifo_decode`, off under `--engine gpu`). With it, the
+text is copied into a pipe and out of it instead of into the page cache and out of it (about the same kernel time), the `.1fq` is decoded twice
+(pass 1 for the barcodes, pass 2 for the text; 0.1-0.2 core-s per M reads for the second), and the prefill would need its reads from memory
+anyway (F4). Net: neutral within noise. Not done. What it does save is disk (26-50 GB of `$TMPDIR` and its write-back), which matters on a
+node with a small local disk and not for core-s.
+
+**What does save core-s: delivering the reads into STAR's chunk buffers in binary** (N4b, 1.5-2.0 per M reads for both 3' and 5'):
+
+- STAR's FASTQ branch of `processChunks` builds `chunkIn[imate]` with, per read, `@<id> <iReadAll> N <fileIndex>\n<seq>\n+\n<qual>\n`
+  for each mate. A `ReadSourceMem` could fill exactly these bytes from decoded blocks: names are `r<roff>` (known), the barcode read's quality
+  is `F` x length, R2's quality is `F` x length unless the `.1fq` has qualities. No `ifstream`, no `peek`, no `>>`, no `ignore`, no pipe.
+- The decoder has to live in STAR's process: STAR runs as a forked child of singlet and threads do not survive `fork`. So the `.1fq` reader and
+  `process_block`'s per-read selection (skip when R1 or R2 is empty, duplicate expansion, the 1,024-base guard of the FIFO writer) must move
+  into a small library function that both singlet (barcode pass) and STAR (chunk source) call. Today the logic is inline lambdas in a 8,900-line file
+  (three copies: file mode, FIFO pass 1, FIFO pass 2).
+- `iReadAll` numbering, `P.readFilesIndex`, the 2-stage `outFilterBySJoutStage` (off here), `readMapNumber`, and the end-of-stream handshake
+  (`noReadsLeft`) must behave as for a file. The hand-off relies on `iReadAll - 1` being the read's index in the cDNA file, which this keeps.
+- Check: SINGLET_FILE_DECODE=1 output as the reference; a 5 M-read sample; `diff` of every output including `Log.final.out` read counts.
+- Estimate: decode formatting 0.7-1.0 + kernel copies 0.4-0.6 + STAR reader parse 0.4-0.5 = 1.5-2.0 per M reads. The workers' `readLoad` stays
+  (it parses the chunk buffer), unless it too reads a binary record, which is a further 0.3-0.5 and a larger change.
+
+I did not implement it: it is a change to STAR's input loop and a refactor of the decode in `singlet.cpp`, and there is no compiler here to find
+the first typo. It is the one item that takes 5' under 12.7 by itself (to about 11.3-11.8 with F1-F4, N1 and N2).
+
+## 9. The two output-changing ideas, and what each would change
+
+**N5. Non-host EM stops at a tolerance (instead of running to convergence, 259 iterations on GSM6470208, 458 on pbmc1k_v3).**
+The non-host screen classifies the reads STAR could not map (12.3 M in GSM6470208) against viral, bacterial and fungal minimizer indices and
+estimates each species' share of those reads by EM (the "nonhost" files: `nonhost_summary.json`, `nonhost_em_abundance.tsv`, per-cell species
+records when anything is above the threshold). A coarser stopping rule gives abundance estimates that differ from the converged ones by about the
+tolerance, relatively, so:
+- *Unchanged for the usual sample:* "0 species above threshold" (GSM6470208, pbmc1k_v3) stays 0, because the converged shares are far below the cut.
+- *Changed for a borderline species:* one near the reporting threshold can fall on the other side, which flips the line in the abundance table
+  and, if it flips on, adds a per-cell species matrix for it. That is a different biological statement (a virus is or is not reported) for the
+  few samples with real infection or contamination, which are the ones the screen exists for.
+- *Already order-dependent:* the iteration count differs between runs today (known difference D4b), so the abundances are only reproducible to the
+  convergence tolerance; a coarser stop makes that spread wider but of the same kind.
+- Sizing: 12.3 M unmapped reads x 259 iterations is the EM's cost; the saving is the iterations not run (0.5-1.0 per M reads for 5').
+  Safer than a tolerance: converge on the species above a floor and freeze the rest, or run the EM on the distinct (read-group, species) pairs
+  only (identical result, fewer terms); the second would be identical in output if the EM terms are grouped exactly, and could move to the byte-identical list (untested idea).
+
+**N6. Donor demultiplexing skips auto-K and the VB fit when one donor is evident.**
+Demux fits a genotype-free mixture of donors to the cells' SNP counts: it chooses K from 1 to 16 by held-out likelihood (29 s: K=1..4 tried, "selected
+K=1" on GSM6470208 and pbmc1k_v3), then fits K donors by variational Bayes (43 s), assigns cells (called cells by the fit, the other barcodes
+afterwards), flags cross-donor doublets, assigns ambient barcodes, and writes `donor0.vcf`, `donor0_coverage.tsv` and the per-donor mt consensus
+and variants (`mt_event_caller`). Skipping both when a cheap test says one donor:
+- *Unchanged where it is right:* a single-donor sample has all cells "assigned" to donor 0, no donor doublets, and the same per-donor files (the
+  fitted VCF's genotype probabilities and the ELBO lines would not be reproduced; the called genotypes would).
+- *Wrong where it is not:* a pooled (multiplexed) sample that looks like one donor to the test (few informative SNPs, or two related donors, or one
+  donor dominating) would lose its donor labels and its cross-donor doublet calls. Related donors and shallow libraries are exactly where the held-out likelihood gain is small and the test is weakest.
+- *Downstream:* the per-donor mt consensus (`mt_event_caller`) would be called from all cells together, which is right for one donor and mixes
+  haplotypes if there were two.
+- So this one needs a decision about which libraries may skip it (declared single-donor in the metadata, e.g. a cell line or a one-donor GEO
+  sample) rather than a test on the data; for those it saves 70 s of single-threaded wall and about 0.5-1.0 core-s per M reads at 5'.

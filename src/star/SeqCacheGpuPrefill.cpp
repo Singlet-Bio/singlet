@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <cstdio>
 #include <cstdlib>
+#include <atomic>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -116,8 +117,63 @@ bool fillClip(Parameters &P, singlet_engine_gpu::Clip &c, std::string &why) {
     return true;
 }
 
-// the cDNA reads (mate 1) of every input file, as STAR reads them (sequence line of each FASTQ record)
+// appends pieces of reads (each a run of numeric sequences and their lengths) to in, in order; the pieces are freed as they are copied.
+// The copy runs on one thread per piece (a serial copy of several GB took ~15 s on one core)
+template <class L>
+void appendPieces(singlet_engine_gpu::Input &in, std::vector<std::vector<char>> &seqT, std::vector<std::vector<L>> &lenT, int nThreads) {
+    const int T = (int) seqT.size();
+    if (T == 0) return;
+    std::vector<uint64> seqAt(T + 1), offAt(T + 1);
+    seqAt[0] = in.seq.size(); offAt[0] = in.off.size();
+    for (int t = 0; t < T; t++) { seqAt[t + 1] = seqAt[t] + seqT[t].size(); offAt[t + 1] = offAt[t] + lenT[t].size(); }
+    const uint64 base = in.off.back();
+    in.seq.resize(seqAt[T]);
+    in.off.resize(offAt[T]);
+    const int nw = std::max(1, std::min(T, nThreads));   // pieces are many (one per .1fq block) or few (one per thread): a pool takes them in turn
+    std::atomic<int> next(0);
+    std::vector<std::thread> th;
+    for (int w = 0; w < nw; w++) th.emplace_back([&]() {
+        for (int t; (t = next++) < T;) {
+            if (!seqT[t].empty()) memcpy(in.seq.data() + seqAt[t], seqT[t].data(), seqT[t].size());
+            uint64 o = base + (seqAt[t] - seqAt[0]);
+            for (uint64 k = 0; k < lenT[t].size(); k++) { o += lenT[t][k]; in.off[offAt[t] + k] = o; }
+            std::vector<char>().swap(seqT[t]); std::vector<L>().swap(lenT[t]);
+        }
+    });
+    for (auto &x : th) x.join();
+}
+
+bool readSequencesFromFiles(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, int nThreads);
+
+// the cDNA reads (mate 1) of every input file, as STAR reads them (sequence line of each FASTQ record); or, when singlet's decode kept
+// them (prefillReadsBegin), those: the same reads in the same order without parsing 13 GB of text just written
+// (SINGLET_PREFILL_MEM=0 reads the files; SINGLET_PREFILL_MEM_VERIFY=1 reads both and compares, the files' result is the one used)
 bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, int nThreads) {
+    std::vector<std::vector<char>> pfSeq;
+    std::vector<std::vector<unsigned int>> pfLen;
+    const char *mo = getenv("SINGLET_PREFILL_MEM");
+    const bool have = prefillReadsTake(pfSeq, pfLen);
+    if (!have || (mo != nullptr && mo[0] == '0')) {
+        return readSequencesFromFiles(P, in, why, nThreads);
+    }
+    const char *vo = getenv("SINGLET_PREFILL_MEM_VERIFY");
+    const bool verify = vo != nullptr && vo[0] == '1';
+    if (!verify) {
+        appendPieces(in, pfSeq, pfLen, nThreads);
+        P.inOut->logMain << "ENGINE_GPU: cDNA reads taken from the decode in memory: " << in.off.size() - 1 << " reads\n" << flush;
+        return true;
+    }
+    singlet_engine_gpu::Input mem;
+    appendPieces(mem, pfSeq, pfLen, nThreads);
+    if (!readSequencesFromFiles(P, in, why, nThreads)) return false;
+    const bool same = mem.off == in.off && mem.seq == in.seq;
+    P.inOut->logMain << "ENGINE_GPU: cDNA reads from the decode in memory vs the FASTQ file: " << (same ? "identical" : "DIFFERENT (the file's are used)")
+                     << " (" << mem.off.size() - 1 << " and " << in.off.size() - 1 << " reads)\n" << flush;
+    return true;
+}
+
+// the same, from the files
+bool readSequencesFromFiles(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, int nThreads) {
     if (P.readFilesNames.empty()) { why = "no read files"; return false; }
     for (const std::string &fn : P.readFilesNames[0]) {
         struct stat st;
@@ -181,22 +237,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
             });
             for (auto &x : th) x.join();
         }
-        {   // concatenate the threads' pieces in parallel (a serial copy of several GB took ~15 s on one core)
-            std::vector<uint64> seqAt(T + 1), offAt(T + 1);
-            seqAt[0] = in.seq.size(); offAt[0] = in.off.size();
-            for (int t = 0; t < T; t++) { seqAt[t + 1] = seqAt[t] + seqT[t].size(); offAt[t + 1] = offAt[t] + lenT[t].size(); }
-            const uint64 base = in.off.back();
-            in.seq.resize(seqAt[T]);
-            in.off.resize(offAt[T]);
-            std::vector<std::thread> th;
-            for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
-                if (!seqT[t].empty()) memcpy(in.seq.data() + seqAt[t], seqT[t].data(), seqT[t].size());
-                uint64 o = base + (seqAt[t] - seqAt[0]);
-                for (uint64 k = 0; k < lenT[t].size(); k++) { o += lenT[t][k]; in.off[offAt[t] + k] = o; }
-                std::vector<char>().swap(seqT[t]); std::vector<uint64>().swap(lenT[t]);
-            });
-            for (auto &x : th) x.join();
-        }
+        appendPieces(in, seqT, lenT, T);   // the threads' pieces, concatenated in parallel
         munmap((void *) m, n);
         close(fd);
     }

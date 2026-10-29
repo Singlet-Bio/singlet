@@ -88,4 +88,13 @@ extern const uint8 *g_handoffSum;
 extern std::atomic<unsigned long long> g_handoffLeanAln, g_handoffLeanBad;
 extern const uint64 *g_handoffSumOff;
 
+//singlet --engine gpu: the cDNA reads of the .1fq decode kept in memory for the GPU prefill, so it does not parse the R2 FASTQ it was
+//just written to (SeqCacheGpuPrefill.cpp readSequences). Filled by singlet's file-mode decode in the parent, before it forks STAR (the
+//child inherits the pages); one piece per .1fq block, in block order: the reads in STAR's numeric code (A0 C1 G2 T3, other 4), back
+//to back, and each read's length. Released by the parent after the fork, and by the child when the prefill took it.
+void prefillReadsBegin(size_t nBlocks);
+void prefillReadsSet(size_t block, std::vector<char> &&seq, std::vector<unsigned int> &&len);
+void prefillReadsRelease();
+bool prefillReadsTake(std::vector<std::vector<char> > &seq, std::vector<std::vector<unsigned int> > &len);
+
 #endif

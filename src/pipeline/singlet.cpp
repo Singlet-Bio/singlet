@@ -96,6 +96,10 @@
 #ifdef SINGLET_HAVE_ENGINE_GPU
 // STAR's per-read hand-off hook (src/star/SeqCache.h; STAR's uint32 / uint64 are unsigned int / unsigned long long)
 extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsigned long long);
+// --engine gpu: the cDNA reads of the file-mode decode, kept in memory for the GPU prefill (src/star/SeqCache.h)
+void prefillReadsBegin(size_t nBlocks);
+void prefillReadsSet(size_t block, std::vector<char>&& seq, std::vector<unsigned int>&& len);
+void prefillReadsRelease();
 #endif
 #include "singlet/version.h"        // singlet::kVersion
 
@@ -4267,6 +4271,8 @@ int main(int argc, char* argv[]) {
                 uint32_t n_reads = 0;
                 std::vector<uint32_t> bc_indices;  // for barcode frequency counting (BC dict path)
                 std::unordered_map<uint64_t, uint64_t> bc_counts_packed; // non-dict path (packed 3-bit keys)
+                std::vector<char> r2num;           // --engine gpu: the R2 records' sequences (numeric 0-4), back to back
+                std::vector<uint32_t> r2lens;      // and their lengths
                 // Extra segments for CB_UMI_Complex per-segment whitelist discovery (seg 1..N-1)
                 std::vector<std::unordered_map<uint64_t, uint64_t>> extra_seg_counts;
             };
@@ -4290,6 +4296,13 @@ int main(int argc, char* argv[]) {
                 std::cerr << "[1fq-decode] ATAC: BC dict " << bc_dict_n
                           << " entries \xC3\x97 " << atac_bc_len << "bp\n";
             }
+
+            // --engine gpu: the prefill needs every cDNA read before STAR starts; keep the R2 sequences the records are written from, in
+            // memory (one piece per block, in block order), so it does not parse the R2 file again. Not for ATAC (R2 is not the cDNA
+            // there); dropped below if R1/R2 are swapped or R2 is trimmed at file level. SINGLET_PREFILL_MEM=0: off.
+            const bool collect_r2 = engine_gpu_reads && !is_atac_mode &&
+                !(getenv("SINGLET_PREFILL_MEM") && std::string(getenv("SINGLET_PREFILL_MEM")) == "0");
+            if (collect_r2) prefillReadsBegin(total_blocks);
 
             // Worker: pread + decompress + decode + format one block
             auto process_block = [&](uint32_t bi, uint64_t read_off) -> FmtBlock {
@@ -4496,6 +4509,11 @@ int main(int argc, char* argv[]) {
                         s2 += r2_seq_len;
                         *s2++ = '\n';
                         r2p = s2;
+                        if (collect_r2) {
+                            if (fb.r2num.empty()) fb.r2num.reserve(static_cast<size_t>(total_reps) * r2_max);
+                            fb.r2num.insert(fb.r2num.end(), reinterpret_cast<const char*>(r2s), reinterpret_cast<const char*>(r2s) + r2len);
+                            fb.r2lens.push_back(r2len);
+                        }
 
                         roff++;
                     }
@@ -4545,6 +4563,7 @@ int main(int argc, char* argv[]) {
                     FmtBlock fb = futures[i].get();
                     fwrite(fb.r1.data(), 1, fb.r1_len, r1_fp);
                     fwrite(fb.r2.data(), 1, fb.r2_len, r2_fp);
+                    if (collect_r2) prefillReadsSet(base + i, std::move(fb.r2num), std::move(fb.r2lens));
                     reads_written += fb.n_reads;
                     // Accumulate BC index counts (sequential — no contention)
                     if (!bc_freq.empty()) {
@@ -4957,6 +4976,8 @@ int main(int argc, char* argv[]) {
             std::swap(reads_r1, reads_r2);
             std::cerr << "[singlet] Swapped R1↔R2 for STAR (barcode was in R2)\n";
         }
+        // the prefill's in-memory reads are the decode's R2 as written: not the cDNA after a swap, and not after a file-level trim
+        if (reads_inverted || r2_clip5p > 0) prefillReadsRelease();
 
         // File-level 5' trim of the cDNA read (reads_r2 after any R1/R2 swap).
         //
@@ -6325,6 +6346,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "ERROR: fork() failed: " << strerror(errno) << "\n";
             return 1;
         }
+        if (star_pid > 0) prefillReadsRelease();   // --engine gpu: the child has the decode's reads (copy-on-write pages); this copy is not needed
 
         if (star_pid == 0) {
             // ── CHILD: call bundled STAR directly (no exec) ──
