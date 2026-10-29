@@ -44,7 +44,7 @@ with the package.
 This local server is separate from the hosted MCP endpoint at
 https://singlet.bio/mcp, which serves the live catalog and has its own tool set.
 
-Requires: pip install "singlet-bio[mcp]"
+Requires: pip install "singlet[mcp]"
 """
 
 from __future__ import annotations

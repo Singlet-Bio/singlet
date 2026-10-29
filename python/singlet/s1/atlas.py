@@ -915,10 +915,17 @@ class Ontology:
         return tuple(reversed(path))
 
 
+def _merge_anc(anc: List[str], extra: Iterable[str]) -> List[str]:
+    """The ontology's ancestors in their order, then any further ones (sorted) the labeller's path names."""
+    have = set(anc)
+    return anc + sorted(set(extra) - have)
+
+
 def make_dict(
     terms: Iterable[Optional[str]],
     ontology: Optional[Ontology],
     labels: Optional[Dict[str, str]] = None,
+    extra_anc: Optional[Dict[str, Iterable[str]]] = None,
 ) -> List[dict]:
     """Dictionary of the distinct terms (code 0 = unknown). Codes follow the ontology's primary-parent DFS order (a term and its
     descendants get neighbouring codes), else lexical order. Each entry lists every ancestor so a query term matches its
@@ -940,7 +947,9 @@ def make_dict(
                 "code": i,
                 "id": t,
                 "label": labels.get(t) or (ontology.label(t) if ontology else None) or t,
-                "anc": list(ontology.ancestors(t)) if ontology else [],
+                "anc": _merge_anc(
+                    list(ontology.ancestors(t)) if ontology else [], (extra_anc or {}).get(t, ())
+                ),
             }
         )
     if len(out) > 65535:
@@ -1002,8 +1011,12 @@ SIDECAR_COLUMNS = (
     ("ancestry_hancestro", "string"),
     ("ancestry_prob", "float32"),
     ("model_version", "string"),
+    # label schema 2 (singlet.celllabels.output): the full CL path and the confidence of each level; absent in schema-1 files
+    ("cell_type_path", "string"),
+    *((f"cell_type_p{k}", "float32") for k in range(1, 7)),
 )
 _CL_RE = re.compile(r"^CL:\d{7}$")
+_CL_PATH_RE = re.compile(r"^CL:\d{7}(>CL:\d{7}){0,5}$")
 _HANC_RE = re.compile(r"^HANCESTRO:\d{4}$")
 
 
@@ -1080,6 +1093,8 @@ def normalize_sidecar(
         "ancestry_hancestro": strcol("ancestry_hancestro", _HANC_RE),
         "ancestry_prob": fcol("ancestry_prob"),
         "model_version": strcol("model_version"),
+        "cell_type_path": strcol("cell_type_path", _CL_PATH_RE),
+        **{f"cell_type_p{k}": fcol(f"cell_type_p{k}") for k in range(1, 7)},
     }
     keep = np.ones(len(col), bool)
     if called is not None:
@@ -1098,11 +1113,14 @@ def normalize_sidecar(
     mv = sorted({x for x in data["model_version"] if x})
     meta = {
         "format": "singlet-labels",
-        "version": "1",
+        "version": "2",
         "gsm": gsm,
         "annot_version": annot_version,
         "cells_digest": cells_digest or "",
         "model_version": ";".join(mv),
+        # cell type levels the API/UI show by default; deeper levels are shipped as previews (docs/cell_annotation.md 3)
+        "cell_type_default_levels": "1,2",
+        "cell_type_preview_from_level": "3",
     }
     table = pa.table(cols).replace_schema_metadata(
         {k.encode(): str(v).encode() for k, v in meta.items()}
@@ -1202,6 +1220,8 @@ class _SampleIn:
     label_version: str = ""
     plan_members: Dict[str, dict] = field(default_factory=dict)
     error: Optional[str] = None
+    # left out of the index on purpose (no cells to index): recorded, not an error
+    skip: Optional[str] = None
 
 
 def _transport(base: Optional[str]):
@@ -1273,7 +1293,11 @@ def _load_sample(
     try:
         cm = sm.members.get("cells")
         if not cm or int(cm.get("kind", 0)) != 2:
-            sm.error = "no cells table"
+            if not any(int(m.get("kind", 0)) == 1 for m in sm.members.values()):
+                # a legacy sample without a count matrix (its bundle held only provenance/summary JSON): nothing to index
+                sm.skip = "no cells table (the sample object holds no count matrix)"
+            else:
+                sm.error = "no cells table"
             return sm
         buf = _get(t, sm.key, int(cm["off"]), int(cm["len"]))
         mv = memoryview(buf)
@@ -1510,6 +1534,8 @@ class BuildResult:
     stats: dict
     errors: List[dict]
     d1: Dict[str, List[dict]] = field(default_factory=dict)
+    # samples left out on purpose: {gsm, gse, reason}
+    skipped: List[dict] = field(default_factory=list)
 
     def d1_export(self, out_dir: Union[str, Path]) -> List[str]:
         """Per-sample aggregates for the catalog (tier 1, docs CELL-ARCHITECTURE.md): ``sample_cell_summary.csv`` (the layout of the
@@ -1581,6 +1607,25 @@ class BuildResult:
         return keys
 
 
+def _study_gsm_meta(doc: dict) -> dict:
+    """``gsm_meta`` of the manifest's ``study_meta.json``, whether the transcoder kept it as inline JSON or stored it (zstd, base64:
+    the file is not byte-reproducible with ``json.dumps``, as for most legacy bundles). {} when the study has none or it is unreadable.
+    """
+    ent = (doc.get("study_files") or {}).get("study_meta.json") or {}
+    try:
+        if "json" in ent:
+            sm = ent["json"]
+        elif "zstd_b64" in ent:
+            from .manifest import study_file_bytes
+
+            sm = json.loads(study_file_bytes(ent).decode("utf-8"))
+        else:
+            return {}
+        return dict((sm or {}).get("gsm_meta") or {})
+    except Exception:  # noqa: BLE001  metadata is optional: the samples are indexed with organism "unknown"
+        return {}
+
+
 def build_index(
     gses: Sequence[str],
     *,
@@ -1620,11 +1665,7 @@ def build_index(
             doc = json.loads(_get(t, f"s1/m/{gse}.json").decode("utf-8"))
         except Exception:  # DUAL: studies still published under the old v2/m/ prefix
             doc = json.loads(_get(t, f"v2/m/{gse}.json").decode("utf-8"))
-        gm = (
-            ((doc.get("study_files") or {}).get("study_meta.json") or {})
-            .get("json", {})
-            .get("gsm_meta", {})
-        )
+        gm = _study_gsm_meta(doc)
         av = annot_version or doc.get("annotations_default")
         for sd in doc["samples"]:
             g = sd["gsm"]
@@ -1698,7 +1739,12 @@ def build_index(
         )
     log(f"read {len(loaded)} samples in {time.time() - t0:.1f}s")
     errors = [{"gsm": s.gsm, "gse": s.gse, "error": s.error} for s in loaded if s.error]
-    ok = [s for s in loaded if not s.error and s.cols is not None]
+    skipped = [
+        {"gsm": s.gsm, "gse": s.gse, "reason": s.skip} for s in loaded if s.skip and not s.error
+    ]
+    if skipped:
+        log(f"{len(skipped)} samples left out of the index (no cells to index): {skipped[0]}")
+    ok = [s for s in loaded if not s.error and not s.skip and s.cols is not None]
 
     # ---- ordinals: keep earlier ones, append the rest in (GSE, GSM) order
     prev = _previous_ordinals(t, previous)
@@ -1729,7 +1775,14 @@ def build_index(
                 a, b = a_.cats[i], b_.cats[j]
                 if a and b and a not in ct_labels:
                     ct_labels[a] = b
-    d_ct = make_dict((x for s in ok for x in lab_list(s, "cell_type_cl")), ont, ct_labels)
+    # the labeller's guide path (label schema 2: "CL:a>CL:b>CL:c") names every level of a call, so a query for a compartment or a
+    # lineage matches its deeper calls even without an ontology file
+    ct_anc: Dict[str, set] = {}
+    for s in ok:
+        for path in lab_list(s, "cell_type_path"):
+            parts = path.split(">")
+            ct_anc.setdefault(parts[-1], set()).update(parts[:-1])
+    d_ct = make_dict((x for s in ok for x in lab_list(s, "cell_type_cl")), ont, ct_labels, ct_anc)
     d_tissue = make_dict(
         (s.tissue for s in ok),
         ont,
@@ -2087,6 +2140,7 @@ def build_index(
     stats = {
         "samples": len(ok),
         "errors": len(errors),
+        "skipped": len(skipped),
         "cells": n_rows_total,
         "shard_bytes": sum(len(objects[k]) for k in shard_list),
         "directory_bytes": len(dblob),
@@ -2135,6 +2189,7 @@ def build_index(
             "cell_feature": [f.cell_feature_row() for f in fspecs],
             "cidx_sample": d1_samples,
         },
+        skipped=skipped,
     )
 
 
@@ -2506,7 +2561,7 @@ class Index:
         d = json.loads(_get(t, version_key(version)).decode("utf-8"))
         if d.get("format") != FORMAT or int(d.get("format_version", 0)) > FORMAT_VERSION:
             raise IndexError_(
-                f"{version}: not a {FORMAT} v{FORMAT_VERSION} directory (upgrade singlet-bio)"
+                f"{version}: not a {FORMAT} v{FORMAT_VERSION} directory (upgrade singlet)"
             )
         return cls(d, t, base=base)
 

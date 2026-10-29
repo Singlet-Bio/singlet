@@ -1119,3 +1119,228 @@ The phases follow the brief's table (§6), filled in from this exploration:
 | `m1_gather.cu` | M1 |
 | `ucert.cu` | U-array build and certificate (§4.4) |
 | `distinct_fraction.py` | M2 |
+
+---
+
+## 12. Measured results (M1, M2, M10)
+
+Run on Clipper on 2026-10-27, after §9 was written. Raw data and scripts: `bench/gpu/results/{m1,m2,m10}.json` (plus
+`m1_raw.jsonl`, `m1_knee.jsonl`, `m10_runs.json`, one `m2_*.json` per sample) and `bench/gpu/jobs/*.sbatch`.
+`bench/gpu/model_measured.py` re-runs the §7 model with the substitutions below.
+
+| benchmark | measured | threshold | verdict |
+|---|---|---|---|
+| M1 gather, 32 GB / 48 GB, 32 B | 28.2 / 29.0 G sectors/s | ≥ 15 G/s; kill < 8 G/s at 48 GB | **PASS** (1.9× the gate; base scenario not killed) |
+| M2 d, 3′ ≥ 66 M | 0.474 (pbmc1k_v3), 0.515 (263 M deep), 0.392 (GSM5411066, mouse), 0.298 (GSM7036403, v2), 0.369 (neuron1k_v3); **0.658 (nuclei2k_v2)** | ≤ 0.6 | **PASS for 5 of 6; FAIL for nuclei2k_v2** |
+| M2 d, 5′ | 0.306 (pbmc5p_v1), 0.303 (GSM6470208, 121 M) | ≤ 0.7 | **PASS** |
+| M10 W, 66–70 M sample | 201 and 143 core-s (export + non-host residual, an upper bound); export alone 122 and 51 | ≤ 120 core-s | **FAIL** as bounded (see caveats) |
+
+### 12.1 M1: random-access roofline (H100 NVL, job 789081; knee 789085)
+
+**Setup.**
+- Node g050, H100 NVL 94 GB, 132 SMs, **L2 = 60 MB** (the brief and §2.3 say 50 MB).
+- Driver 610.43.02 (CUDA UMD 13.3), nvcc 12.4.131 from `nvidia/cuda:12.4.1-devel-ubuntu22.04` via `apptainer --nv`, `-arch=sm_90`.
+- Clocks: SM max 1785 MHz, memory 2619 MHz. The SM clock was 345 MHz (idle) at the first `nvidia-smi`; no clock lock was applied.
+- 3 repeats after a warm-up; medians below. The range over the 3 repeats is at most 9% of the median in any cell.
+- The whole sweep took 18 s of GPU time (knee follow-up 10 s), so M1 used about 0.01 GPU-hours, not the ~1 GPU-hour in §9.
+
+**Independent gathers, G accesses/s (1 access = one 32 B sector or less), `cudaMalloc`:**
+
+| footprint GB | 1 | 8 | 16 | 32 | 48 | 64 | 72 | 74 | 76 | 78 | 80 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 8 B | 33.9 | 32.6 | 32.0 | 32.3 | 32.4 | 32.4 | 32.0 | 31.7 | 28.9 | 23.2 | 19.5 |
+| 16 B | 31.6 | 29.2 | 29.0 | 27.9 | 28.9 | 28.9 | 28.5 | 28.3 | 23.4 | 18.2 | 14.3 |
+| **32 B** | 30.8 | 29.3 | 28.2 | **28.2** | **29.0** | 29.0 | 28.7 | 28.6 | 24.0 | 18.8 | 15.1 |
+
+- **No knee up to ~74 GB.** The rate is flat at 28–29 G/s from 8 to 74 GB, then falls gradually to 15 G/s at 80 GB. This is
+  the only knee. The design's working set (index ~38 GB plus U-array, SBK and buffers, under 60 GB) is far below it. Whether the
+  76–80 GB fall is TLB reach or HBM pressure (80 GB of 94 GB is allocated) was not separated.
+- 29 G × 32 B = 0.93 TB/s of requested sectors, 24% of the 3.9 TB/s peak. If each random access moves a 64 B burst, the
+  DRAM traffic is ~1.9 TB/s (an assumption about HBM3 burst size; not measured with a profiler).
+- **`cudaMallocAsync` pool = `cudaMalloc`** (within 1%) at every footprint, apart from one 8 B outlier at 48 GB (28.1).
+
+**Dependent pointer chase (random walk, each address depends on the loaded word), `cudaMalloc`:**
+- **Latency:** 1.03 µs per dependent step at 1 GB and **1.17 µs at 32 and 48 GB** (1 chain, 1 block of 256 threads per SM,
+  34k chains in flight). It is 1.74 µs at 80 GB. This includes some hash arithmetic. §2.3's 0.3–0.45 µs is the idle DRAM
+  latency; the loaded step is ~2.5× that.
+- **Throughput:** 28.8 G loads/s at 1 block/SM (34k chains), 31.0 at 4 blocks/SM, 31.3 at 16 (32 GB); 29.1 / 32.2 / 32.4 at
+  48 GB. Extra chains per thread add ~1 G/s at most.
+- So **34k independent chains in flight already reach ~90% of the dependent-chase rate**, which equals the gather rate. The
+  batch design (4–8 M reads in flight) is far above this. A dependent step costs latency, not throughput.
+
+**L2 persistence** (32 MB persisting window over a synthetic hot region taking 1 access in 4; max persisting size 37.5 MB):
+
+| footprint GB | 1 | 8 | 16 | 32 | 48 | 64 | 80 |
+|---|---|---|---|---|---|---|---|
+| no window, G/s | 33.0 | 31.8 | 31.3 | 31.7 | 31.0 | 31.1 | 21.5 |
+| with window, G/s | 39.6 | 37.0 | 33.5 | 35.1 | 32.1 | 31.5 | 21.5 |
+
+- **Gain: +11% at 32 GB, +4% at 48 GB, +1% at 64 GB.** The hot region is a synthetic 32 MB block, not the real SAi. The SAi's
+  top 12 levels (4^12 entries) exceed the 37.5 MB cap, so only the top ~10 levels could be pinned. Not worth engineering
+  effort before the rest is done.
+
+**Substitute in `throughput_model.py`: `RS_CLEAN = 28.2e9`** (the lower of the 32 GB and 48 GB medians, vs 23e9). The model's
+η_mem (0.25 / 0.35 / 0.50) still applies on top: it is what the full kernels achieve relative to this clean gather, and M3
+measures it.
+
+**Deviations from the §9 spec.**
+- The script was changed (see below), and the chase is a random walk with a step-dependent hash.
+- The persistence variant uses a synthetic hot region, not the real SAi first 12 levels.
+- The pool variant ran at every footprint but without a persistence window.
+- The knee follow-up (66–78 GB) is a second job.
+
+**Script changes** (`m1_gather.cu`, minimal fixes plus the specified sweeps):
+- Range reduction by `__umul64hi` instead of 64-bit `%`.
+- The chase successor depends on the step number: the original fill makes a functional graph whose chains fall into
+  ~sqrt(N)-sector cycles that fit in L2.
+- Chains are templated (1, 2, 4, 8).
+- Added the footprint, occupancy, allocator and persistence sweeps, 3 timed repeats after a warm-up, and JSON output.
+- It compiled and ran with no other fixes.
+
+### 12.2 M2: distinct-sequence fraction on real reads (jobs 789069 array, 789074 array)
+
+**Method.**
+- `singlet decode --r2` streamed the cDNA read into `distinct_fraction.py --len 90`, with no FASTQ on disk.
+- Reads shorter than 90 and reads with N are excluded and counted in the JSON. The shorter-than-90 share is 0–3.2%.
+- No clip beyond what the `.1fq` encoder applied (R2 lengths in the `.1fq` are variable).
+- LCP shares use every 16th read, capped at 2 M distinct sequences.
+- Species: mouse for neuron1k_v3 and nuclei2k_v2 per the §9 spec (the benchmark runs of these two used the GRCh38 index); GSM5411066 was run
+  against GRCm39. d is computed on the reads alone, so the index does not matter.
+
+| sample | chemistry | reads used | **d** | d@1% | d@5% | d@20% | d@50% | lcp≥32 | lcp≥50 | lcp≥70 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| pbmc1k_v3 | 3′ v3 | 65.1 M | **0.474** | 0.726 | 0.648 | 0.583 | 0.523 | 0.199 | 0.075 | 0.035 |
+| GSM7656149 (deep) | 3′ v3 | 259.5 M | **0.515** | 0.793 | 0.706 | 0.629 | 0.573 | 0.263 | 0.080 | 0.040 |
+| GSM5411066 (mouse) | 3′ v3 | 67.3 M | **0.392** | 0.681 | 0.582 | 0.500 | 0.443 | 0.188 | 0.061 | 0.028 |
+| GSM7036403 (deep) | 3′ v2 | 109.0 M | **0.298** | 0.528 | 0.423 | 0.349 | 0.314 | 0.167 | 0.076 | 0.035 |
+| neuron1k_v3 (mouse) | 3′ v3 | 90.2 M | **0.369** | 0.739 | 0.630 | 0.511 | 0.431 | 0.108 | 0.039 | 0.019 |
+| nuclei2k_v2 (mouse) | 3′ v2 nuclei | 114.5 M | **0.658** | 0.901 | 0.852 | 0.778 | 0.709 | 0.228 | 0.045 | 0.020 |
+| pbmc5p_v1 | 5′ v2 | 59.8 M | **0.306** | 0.590 | 0.465 | 0.387 | 0.341 | 0.157 | 0.120 | 0.041 |
+| GSM6470208 | 5′ v2 | 120.9 M | **0.303** | 0.529 | 0.442 | 0.375 | 0.335 | 0.281 | 0.234 | 0.090 |
+
+**Findings.**
+- **The anchor reproduces.** pbmc1k_v3 gives 0.474 against `SeqCache.h`'s 0.47.
+- **Depth.** d falls with depth (pbmc1k_v3: 0.726 at 1%, 0.523 at 50%, 0.474 at 100%). A deep sample is not worse than a
+  shallow one; GSM7656149 is the highest of the human 3′ samples at 0.515.
+- **Spread.** The 3′ samples run 0.30–0.52, except **nuclei2k_v2 at 0.658, which fails the ≤ 0.6 gate**. A6 already named
+  nuclei as the risk. The atlas-wide d depends on the nuclei share, which was not measured here.
+- **5′ is 0.30, below the model's 0.50.** Both 5′ samples agree. The cause was not investigated.
+- **LCP proxy.** Neighbour shares (≥ 32 shared leading bases) are 11–28% of the sampled distinct sequences, and 4–23% at ≥ 50.
+  It is an upper proxy for exact seed reuse in a prefix-sorted wavefront. The 5′ samples have the highest shares at ≥ 50
+  (12% and 23%), so §4.5 should help 5′ at least as much as 3′.
+
+**Cross-sample sharing (batch dedup, §4.2).**
+
+| batch (same study) | libraries | share of each library's distinct sequences seen in another | union / sum of distinct | **batch dedup gain** |
+|---|---|---|---|---|
+| Kang 2018 (GSE96583): b1A, b1B, b1C, b2stim | 4; 163–184 M reads each; d 0.205 / 0.220 / 0.233 / 0.397 | 33.9% / 34.8% / 32.6% / 15.8% | 149.5 M / 179.6 M | **1.20×** |
+| GSM6996272/3/4 | 3; shallow, 2–4 M reads each | 9.0% / 10.3% / 6.9% | 5.20 M / 5.45 M | 1.05× |
+
+- Reported, not gating. Four deep same-study libraries share 17% of their distinct sequences; shallow samples share almost
+  nothing.
+- **Not done:** the spec's "3 batches of 8 same-study 3′ samples and 1 batch of 8 5′ samples from the atlas queue" were not
+  staged. These two batches are what existed, so the 4.2b number is **≤ 1.2× for 4 deep same-study libraries**, not an atlas
+  figure. M14 (answer-table hit rate) remains the test.
+
+**Substitute: d(3′) = 0.474 (pbmc1k_v3), d(5′) = 0.31.** The 3′ sensitivity from d = 0.30 to 0.66 is in §12.4.
+
+**Script change** (`distinct_fraction.py`): reads shorter than `--len` were dropped silently; they are now counted in `reads_shorter_than_len`.
+
+### 12.3 M10: host work per sample, W (existing logs; job 789078)
+
+**Method.**
+- `m10_hostwork.py` parsed 239 `run.log` directories under `bam-stream/runs`, `pipeline-benchmark/perf`,
+  `pipeline-benchmark/runs` and `deep-perf/runs`.
+- Only 11 of them have `monitor.tsv` (cumulative cgroup CPU seconds every ~5 s): the unsorted-BAM benchmark's phase 1 runs
+  (`bam-stream/runs/*/t4_r*`) and 4 `deep-perf` runs. **The other 228 have wall timers only.**
+- Core-seconds are CPU-time deltas over the windows after STAR finishes: index, CB refresh, pileup, "non-host residual" (the
+  end of the pileup up to the start of the export) and export (the last `[export] Total` seconds plus a 10 s tail).
+- All monitored runs use `--threads 4` with the `singlet-campaign` binary and the `called_v2` caller.
+- "Export" is everything between "Exporting feature matrices" and `[export] Total`: cell calling, ambient, doublets, demux, sex
+  and ancestry, saturation, polyA, mt events, and the `.1pz` writers.
+
+**Core-seconds per sample, measured** (the GPU removes index, CB refresh and pileup, listed last):
+
+| sample | reads | export | non-host residual | **W upper = export + residual** | W per M pairs | removed by GPU |
+|---|---|---|---|---|---|---|
+| GSM4006843 (3′ v2) | 66.7 M | 121.8 | 79.1 | **200.9** | 3.0 | 185 |
+| GSM5411066 (3′ v3, mouse) | 69.6 M | 50.6 | 92.8 | **143.4** | 2.1 | 146 |
+| GSM7901264 (3′ v2) | 100.3 M | 58.1 | 147.6 | **205.7** | 2.1 | 177 |
+| GSM7036403 (3′ v2) | 111.6 M | 202.4 | 92.7 | **295.1** | 2.6 | 294 |
+| GSM6470208 (5′ v2) | 121.8 M | 90.2 | 169.6 | **259.8** | 2.1 | 610 |
+| GSM7656149 (3′ v3, deep) | 263.4 M | 468.2 | 179.7 | **647.9** | 2.5 | 650 |
+
+- **Median W (upper) = 2.3 core-s per M pairs.** At 66–70 M that is 143–201 core-s against the 120 gate: **FAIL** as bounded.
+- **Export alone** is 51–122 core-s at 66–70 M (median 1.26 per M pairs, over the six samples).
+- **Caveat on the residual.** It has no timer. It holds the non-host EM plus everything else between the pileup and the export
+  (writing, cleanup), so it overstates the non-host cost. It is included because the non-host EM stays on the CPU in §6.
+  Separating them needs an engine timer.
+- **Export is nearly serial.** Export CPU time is 1.1–1.3× its wall time (122 core-s in 97 s for GSM4006843; 468 in 426 at
+  263 M). Each sample therefore holds ~1.2 cores, and a 26-core GPU host could run ~20 samples at once.
+
+**Wall timers per caller** (seconds, `--threads 4`; the six monitored samples, one run each):
+
+| caller | range | printed as |
+|---|---|---|
+| cell calling (`called_v2`) | 2.1–18.1 | `[cell_calling] ... time=` |
+| ambient | 1.2–5.9 | `[ambient] ... time=` |
+| doublets | 1.0–4.8 | `[doublet] ... time=` |
+| sex; ancestry | 0.5–1.3; 0.02 | `[sex_calling]`; `[ancestry]` |
+| saturation curve | 0.7–2.7 | `[saturation_curve]` |
+| **demux, auto-K selection** | **12.5–310** | `[demux] auto-K: selected K=.. in .. s` |
+| export total | 31–416 | `[export] Total` |
+
+- **Demux is the largest timed caller.** The auto-K fits are 74% of the export wall at 263 M (310 of 416 s), 50% at 111 M, 58% at 66.7 M, and 30–49% on the other three samples.
+  Cell calling, ambient, doublets, sex and saturation together add 8–32 s.
+  The remainder of the export (the `.1pz` writers, mt events, `cell_qc`) has no timers.
+- **Callers with no timer:**
+  - the non-host EM (the `[nonhost]` lines print no seconds);
+  - `called_ed`: no log contains it, only `called_v2` and the older `emptydrops`;
+  - demux outside the K-selection fits (VB on called cells, back-assignment, VCF writes);
+  - the export writers (`pz_writer`, `splice_psi`, `sj_features`, `ase`, `vdj`, `cell_qc`, `metrics_summary`, `rrna`).
+  No engine timers were added in this pass.
+- **Not measured:** cells at 1k / 10k / 30k (audit "measure first" item 6).
+
+**Substitute: W = 2.3 core-s per M pairs (upper bound; 1.26 export only)**, i.e. ~150 core-s at 66 M and ~680 at 294 M. In the §7.3
+table the 66 M sample lands between the W = 120 and W = 240 rows.
+
+### 12.4 The model, re-run with the measured values
+
+`python bench/gpu/model_measured.py` (base scenario: η_mem 0.35, SIMT 0.60; "GPU stages summed" adds mapping, dedup, barcode,
+expand, pileup-tuple and non-host as in §7.2). With the original constants it reproduces §7.1 and §7.2 (98.3 / 44.1 and 78.9 / 39.0).
+
+| | original (RS 23 G/s, d 0.47 / 0.50) | measured (RS 28.2 G/s, d 0.474 / 0.31) |
+|---|---|---|
+| **mapping stage, 3′ base** | 98.3 M pairs/s | **119.6** |
+| **mapping stage, 5′ base** | 44.1 | **87.3** |
+| GPU stages summed, 3′ base | 78.9 | **95.4** |
+| GPU stages summed, 5′ base | 39.0 | **74.9** |
+| mapping, 3′ pessimistic / optimistic | 52.7 / 163.9 | 64.0 / 199.3 |
+| mapping, 5′ pessimistic / optimistic | 23.6 / 73.5 | 46.7 / 145.4 |
+
+**3′ base mapping stage against d:** d = 0.30 gives 189; 0.43 gives 132; 0.474 gives 120; 0.515 gives 110; 0.658 (nuclei2k_v2) gives 86 M
+pairs/s (GPU stages summed: 70).
+
+**End to end, per GPU (base; host = 26 cores ÷ W × pairs):**
+
+| | GPU stages summed | host, W upper (2.3 core-s per M) | host, export only (1.26) | **end to end** |
+|---|---|---|---|---|
+| 3′ | 95.4 | 11.3 | 20.6 | **11.3 (upper) to 20.6 M pairs/s** |
+| 5′ | 74.9 | 11.3 | 20.6 | **11.3 (upper) to 20.6 M pairs/s** |
+
+- **The host now binds, not the GPU.** W per M pairs is nearly constant with depth (2.1–3.0), so the host rate is ~11 M pairs/s
+  per GPU (26 cores) at any depth, 8× below the 3′ GPU stages.
+- End to end stays above the ≥ 10 M/s target (11.3 M/s upper bound, 20.6 M/s export only). That is **9–11× (upper) or 16–21×
+  (export only) a CPU node's 1.0–1.3 M pairs/s**, against the 30–60× in §7.3, which assumed the host would not bind.
+- **Campaign:** at 11.3 M pairs/s per GPU, 20.6 T pairs on 6 GPUs take 3.5 days; at 20 M/s, 2.0 days.
+- **Plan consequence.** The first host lever is demux (auto-K selection is 30–74% of the export wall). Cutting W to ~1.0 core-s
+  per M pairs would lift the host bound to ~26 M pairs/s. The non-host EM needs a timer, since its cost is hidden in the residual.
+
+### 12.5 Open items
+
+- An engine timer for the non-host EM and for the demux phases outside the K fits, to split the residual.
+- `called_ed` timers (the logs show `called_v2`).
+- M2 on the spec's 8-sample same-study batches (3′ and 5′) once the atlas queue stages them.
+- M10 at 1k / 10k / 30k cells.
+- Whether the 76–80 GB fall in the M1 sweep is TLB reach or HBM pressure; it does not affect the design.
+- M3–M9, M11–M14 and the equivalence suite remain unrun.

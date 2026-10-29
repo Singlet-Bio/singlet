@@ -13,7 +13,11 @@ singlet_cells(
   max_cells = NULL,
   as = c("sce", "seurat"),
   cache_dir = NULL,
-  modalities = NULL
+  modalities = NULL,
+  cell_type_level = 2L,
+  cell_type_min_score = 0,
+  include_unvalidated = FALSE,
+  sample_facts = TRUE
 )
 }
 \arguments{
@@ -25,7 +29,7 @@ the cell-table data frame returning a logical vector; or \code{NULL} for every c
 
 \item{samples}{GSM accessions to restrict the Series to (default all).}
 
-\item{columns}{Cell-table columns to keep in \code{colData} (default all numeric ones).}
+\item{columns}{Columns to keep in \code{colData} (default all; see \code{\link{singlet_labels}}).}
 
 \item{layers}{Also return \code{spliced} and \code{unspliced} assays.}
 
@@ -37,21 +41,36 @@ the cell-table data frame returning a logical vector; or \code{NULL} for every c
 
 \item{modalities}{Which matrices to fetch (default \code{"counts"}, plus the layers with \code{layers = TRUE}); see
 \code{\link{load}}. Only the chunk runs of those members that hold the selected cells are downloaded.}
+
+\item{cell_type_level, cell_type_min_score}{Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
+it (default 0, none); see \code{\link{singlet_labels}}.}
+
+\item{include_unvalidated}{Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).}
+
+\item{sample_facts}{Add the structured sample facts of the singlet.bio study API to \code{colData}: \code{tissue_type},
+\code{cell_line}, \code{cell_line_cellosaurus_id}, \code{tumor_sample_type}, \code{disease},
+\code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
+GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
+local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.}
 }
 \value{
 A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
-  matrix) and the cell-table columns.
+  matrix), the per-cell columns (\code{\link{singlet_labels}}) and the sample facts (\code{tissue_type}, \code{disease}, ...).
 }
 \description{
 Reads the (small) cell table of each requested sample, evaluates \code{where} on its columns
-(\code{called}, \code{n_umi_exon}, \code{n_umi_intron}, \code{n_feat_exon}, \code{n_feat_intron}, ...) and fetches only the
+(\code{called}, \code{n_umi_exon}, \code{n_umi_intron}, \code{n_feat_exon}, \code{n_feat_intron}, ..., and the per-cell labels
+of \code{\link{singlet_labels}}, e.g. \code{cell_type == "T cell" & sex_chrom == "female"}) and fetches only the
 matrix chunks that contain the selected cells (a small sample is fetched whole, in one request). Counts are at gene level
 (spliced + unspliced), as in \code{\link{load}}.
 }
 \examples{
-\dontrun{
-deep <- singlet_cells("GSE145370", n_umi_exon > 5000, samples = "GSM4317426")
+\donttest{
+if (curl::has_internet() && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+  deep <- singlet_cells("GSE307528", n_umi_exon > 500, samples = "GSM9226069",
+                        cache_dir = file.path(tempdir(), "singlet-example"))
+}
 }
 }
 \seealso{

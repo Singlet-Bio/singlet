@@ -245,8 +245,12 @@ def parse_central_directory(
     return out
 
 
-def entry_bytes(src_read, e: LegacyEntry) -> bytes:
-    """Fetch, inflate and CRC-check one archive member."""
+def entry_bytes(src_read, e: LegacyEntry, repaired: Optional[list] = None) -> bytes:
+    """Fetch, inflate and CRC-check one archive member.
+
+    With ``repaired`` (a list): a member whose central-directory CRC disagrees with its data, while its *local header* CRC and size
+    match the data, is accepted; ``e.crc32`` takes the local value and the path is appended to ``repaired``. (14 published bundles
+    have such a ``manifest.json``: the writer patched the central directory after the fact.) Anything else still fails."""
     want = 30 + e.name_len + 64 + e.csize
     buf = src_read(e.header_off, want)
     if buf[:4] != b"PK\x03\x04":
@@ -264,7 +268,19 @@ def entry_bytes(src_read, e: LegacyEntry) -> bytes:
         data = zlib.decompressobj(-15).decompress(body)
     else:
         raise LegacyError("unsupported ZIP method %d for %s" % (e.method, e.path))
-    if len(data) != e.size or (zlib.crc32(data) & 0xFFFFFFFF) != e.crc32:
+    crc = zlib.crc32(data) & 0xFFFFFFFF
+    if len(data) != e.size or crc != e.crc32:
+        (gp_flags,) = struct.unpack_from("<H", buf, 6)
+        (local_crc,) = struct.unpack_from("<I", buf, 14)
+        if (
+            repaired is not None
+            and not (gp_flags & 0x8)
+            and local_crc == crc
+            and len(data) == e.size
+        ):
+            e.crc32 = crc
+            repaired.append(e.path)
+            return data
         raise LegacyError("CRC/size mismatch reading %s" % e.path)
     return data
 
@@ -286,6 +302,10 @@ class LegacyBundle:
         self._cache: dict[str, bytes] = {}
         self.gse_hint: Optional[str] = None
         self._sample_hint: Optional[str] = None
+        self._override: dict[
+            str, bytes
+        ] = {}  # study files rewritten by a release policy (singlet.s1.policy)
+        self.crc_repaired: list = []  # members accepted on their local-header CRC (see entry_bytes)
 
     # ------------------------------------------------------------------ open
     @classmethod
@@ -361,10 +381,26 @@ class LegacyBundle:
 
     # ------------------------------------------------------------------ access
     def read(self, path: str) -> bytes:
+        if path in self._override:
+            return self._override[path]
         e = self.entries[path]
         if self.kind == "dir":
             return open(self._dirmap[path], "rb").read()
-        return entry_bytes(self.src.read, e)
+        return entry_bytes(self.src.read, e, self.crc_repaired)
+
+    def override(self, path: str, data: bytes) -> None:
+        """Serve ``data`` for ``path`` from now on (a study file rewritten by a release policy); the entry gets its size and CRC."""
+        old = self.entries.get(path)
+        self.entries[path] = LegacyEntry(
+            path,
+            len(data),
+            len(data),
+            0,
+            zlib.crc32(data) & 0xFFFFFFFF,
+            -2,
+            old.name_len if old else 0,
+        )
+        self._override[path] = bytes(data)
 
     def exists(self, path: str) -> bool:
         return path in self.entries

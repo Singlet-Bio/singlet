@@ -329,6 +329,7 @@ def test_legacy_fallback_subsets_after_download_and_warns(study_dir, env, monkey
     import singlet._loader as L
 
     monkeypatch.setenv("SINGLET_DATA_BASE", str(study_dir[0]))
+    monkeypatch.setenv("SINGLET_LEGACY_FALLBACK", "1")  # off by default since the retirement
     monkeypatch.setattr(L, "_download_legacy", lambda acc, *a, **k: pathlib.Path("legacy.singlet"))
     X = sp.csr_matrix(np.arange(1, 7).reshape(3, 2))
     full = ad.AnnData(X=X.copy())

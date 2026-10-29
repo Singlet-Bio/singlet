@@ -1275,9 +1275,9 @@ def _singlet_version() -> str:
     except Exception:
         import importlib.metadata
 
-        # The distribution is "singlet-bio" on PyPI; "singlet" is what
-        # installs from before the rename were called.
-        for dist in ("singlet-bio", "singlet"):
+        # The distribution is "singlet" on PyPI; "singlet-bio" is what
+        # installs from GitHub were called before 1.1.0.
+        for dist in ("singlet", "singlet-bio"):
             try:
                 return importlib.metadata.version(dist)
             except Exception:

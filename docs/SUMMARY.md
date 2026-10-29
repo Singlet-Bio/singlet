@@ -8,6 +8,7 @@
 - [Quickstart](quickstart.md)
 - [Running the pipeline](pipeline.md)
 - [Canonical output format](CANONICAL_OUTPUT_FORMAT.md)
+- [Training on the atlas (PyTorch streaming)](ml-ready.md)
 
 # API Reference
 

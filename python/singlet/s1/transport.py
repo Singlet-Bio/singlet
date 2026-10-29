@@ -32,6 +32,37 @@ _CONTENT_RANGE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 _RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
+def _rcvbuf() -> int:
+    """Receive buffer for data connections: 4 MiB on Windows, where a socket keeps its 64 KiB default and one connection then
+    reads about 2 MB/s at a 30 ms round trip (24-30 MB/s with 4 MiB, measured against data.singlet.bio); 0 (the system's
+    autotuning, which a fixed size would switch off) elsewhere. ``SINGLET_RCVBUF`` (bytes, 0 = system) overrides."""
+    v = os.environ.get("SINGLET_RCVBUF")
+    if v is not None and v.strip():
+        return max(0, int(v))
+    return 4 << 20 if os.name == "nt" else 0
+
+
+def _tune(sock) -> None:
+    n = _rcvbuf()
+    if n and sock is not None:
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, n)
+        except OSError:  # pragma: no cover - a platform that refuses the size keeps its own
+            pass
+
+
+class _HTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        super().connect()
+        _tune(self.sock)
+
+
+class _HTTPConnection(http.client.HTTPConnection):
+    def connect(self):
+        super().connect()
+        _tune(self.sock)
+
+
 class TransportError(RuntimeError):
     """A request failed (network, HTTP status, or a response that does not match the request)."""
 
@@ -197,9 +228,9 @@ class HttpTransport(Transport):
         c = cache.get((scheme, netloc))
         if c is None:
             if scheme == "https":
-                c = http.client.HTTPSConnection(netloc, timeout=self.timeout, context=self._ctx)
+                c = _HTTPSConnection(netloc, timeout=self.timeout, context=self._ctx)
             else:
-                c = http.client.HTTPConnection(netloc, timeout=self.timeout)
+                c = _HTTPConnection(netloc, timeout=self.timeout)
             cache[(scheme, netloc)] = c
         return c
 

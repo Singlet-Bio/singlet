@@ -30,6 +30,9 @@ import numpy as np
 ENC = bytes.maketrans(b"ACGT", b"\x00\x01\x02\x03")
 
 
+SHORT = [0]    # reads shorter than --len, dropped (counted so the dropped share is visible)
+
+
 def reads(path, length):
     fh = sys.stdin.buffer if path == "-" else (gzip.open(path, "rb") if path.endswith(".gz") else open(path, "rb"))
     with fh:
@@ -38,6 +41,8 @@ def reads(path, length):
                 s = line.rstrip()[:length]
                 if len(s) == length:
                     yield s
+                else:
+                    SHORT[0] += 1
 
 
 def digest(seq):
@@ -67,6 +72,7 @@ def main():
     res, uniq = {}, {}
     for path in a.fastq:
         keys, n_n, sample = [], 0, []
+        SHORT[0] = 0
         for s in reads(path, a.len):
             if b"N" in s:
                 n_n += 1
@@ -76,7 +82,7 @@ def main():
                 sample.append(s)        # every 16th read: a cheap, order-preserving subsample for the LCP proxy
         k = np.asarray(keys, dtype=np.uint64)
         u = np.unique(k)
-        r = {"reads": int(k.size), "reads_with_N": n_n, "d": float(u.size / max(k.size, 1))}
+        r = {"reads": int(k.size), "reads_with_N": n_n, "reads_shorter_than_len": SHORT[0], "d": float(u.size / max(k.size, 1))}
         for frac in (0.01, 0.05, 0.20, 0.50):
             m = int(k.size * frac)
             r[f"d@{int(frac * 100)}%"] = float(np.unique(k[:m]).size / max(m, 1))

@@ -73,12 +73,13 @@ RE_SAMPLE = re.compile(r"^(?:s1|store|v2)/s/(GSM\d{1,12})/([0-9a-f]{32})\.(?:s1|
 RE_PACK = re.compile(r"^(?:s1|store|v2)/ref/([0-9a-f]{32})\.pack$")
 RE_MANIFEST = re.compile(r"^(?:s1|store|v2)/m/(GSE\d{1,12})\.json$")
 RE_CELLS = re.compile(r"^s1/cells/(GSE\d{1,12})\.cells$")
+RE_ANNOT = re.compile(r"^s1/a/(GSM\d{1,12})/([0-9a-f]{32})\.parquet$")  # per-cell label sidecars (format-s1-cell-index.md 9)
 RE_LEGACY = re.compile(r"^data/(GSE\d+)/\1\.singlet$")
 REFS_INDEX_KEY = "s1/ref/index.json"
 
 KIND_NAMES = {1: "pz2", 2: "cells", 3: "stored", 4: "derived", 5: "raw"}
 BAD_STATUSES = frozenset({"failed", "migrate_failed", "verify_failed", "upload_failed", "legacy_changed", "collect_failed"})
-OK_STATUSES = frozenset({"ok", "skipped_done", "dry_ok", "dry_listed"})
+OK_STATUSES = frozenset({"ok", "skipped_done", "dry_ok", "dry_listed", "withheld"})
 
 
 def legacy_key(gse: str) -> str:
@@ -111,7 +112,7 @@ def object_headers(key: str) -> Tuple[str, str]:
     """(Content-Type, Cache-Control) for a .s1 key."""
     if key == REFS_INDEX_KEY or RE_MANIFEST.match(key):
         return "application/json", "public, max-age=300"
-    if RE_SAMPLE.match(key) or RE_PACK.match(key):
+    if RE_SAMPLE.match(key) or RE_PACK.match(key) or RE_ANNOT.match(key):
         return "application/octet-stream", "public, max-age=31536000, immutable"
     if RE_CELLS.match(key):
         return "application/octet-stream", "public, max-age=300"
@@ -233,6 +234,42 @@ class StoreBase:
         return h.hexdigest()
 
 
+_THROTTLE_CODES = frozenset({"429", "TooManyRequests", "SlowDown", "503", "ServiceUnavailable", "RequestLimitExceeded"})
+R2_RETRIES = 8  # on top of botocore's own adaptive retries
+
+
+#: network failures worth another attempt: botocore / urllib3 read timeouts and dropped connections (class names, so the check needs
+#: neither library at import time). A read timeout while streaming a body (``Body.read()``) is not retried by botocore itself.
+_TRANSIENT_NAMES = frozenset({
+    "ReadTimeoutError", "ConnectTimeoutError", "ConnectionClosedError", "EndpointConnectionError", "ResponseStreamingError",
+    "IncompleteReadError", "ProtocolError", "IncompleteRead", "ConnectionResetError", "ConnectionError",
+})
+
+
+def _throttled(e: BaseException) -> bool:
+    return _err_code(e) in _THROTTLE_CODES or _err_status(e) in (429, 503)
+
+
+def _transient(e: BaseException) -> bool:
+    return _throttled(e) or any(t.__name__ in _TRANSIENT_NAMES for t in type(e).__mro__)
+
+
+def r2_call(fn, *a, retries: int = R2_RETRIES, base: float = 1.0, cap: float = 60.0, **kw):
+    """``fn(*a, **kw)``, retried on R2 throttling (429 / 503) and on transient network failures (read timeouts, dropped
+    connections) with exponential backoff and full jitter. Anything else raises at once (a 404, a failed precondition, ...). The
+    campaign's 900 concurrent transcoders hit R2's request rate limit on HeadObject."""
+    import random
+
+    for attempt in range(retries + 1):
+        try:
+            return fn(*a, **kw)
+        except Exception as e:  # noqa: BLE001
+            if attempt == retries or not _transient(e):
+                raise
+            time.sleep(random.uniform(0, min(cap, base * 2 ** attempt)))
+    raise AssertionError("unreachable")
+
+
 class S3Store(StoreBase):
     """Buckets of one R2 account over the S3 API. `client` and `transfer_config` are injectable for tests."""
 
@@ -245,7 +282,7 @@ class S3Store(StoreBase):
     # -- reads
     def head(self, bucket: str, key: str) -> Optional[Head]:
         try:
-            r = self.c.head_object(Bucket=bucket, Key=key)
+            r = r2_call(self.c.head_object, Bucket=bucket, Key=key)
         except Exception as e:  # noqa: BLE001
             if _not_found(e):
                 return None
@@ -259,10 +296,11 @@ class S3Store(StoreBase):
         )
 
     def read_range(self, bucket: str, key: str, start: int, end: int) -> bytes:
-        return self.c.get_object(Bucket=bucket, Key=key, Range=f"bytes={start}-{end}")["Body"].read()
+        # the body is read inside the retried call: a timeout while streaming it starts the request over
+        return r2_call(lambda: self.c.get_object(Bucket=bucket, Key=key, Range=f"bytes={start}-{end}")["Body"].read())
 
     def get_bytes(self, bucket: str, key: str) -> bytes:
-        return self.c.get_object(Bucket=bucket, Key=key)["Body"].read()
+        return r2_call(lambda: self.c.get_object(Bucket=bucket, Key=key)["Body"].read())
 
     def download(self, bucket: str, key: str, path: Path, *, if_match: Optional[str] = None, size: Optional[int] = None,
                  part: int = 64 * MIB, threads: int = 8) -> None:
@@ -279,12 +317,12 @@ class S3Store(StoreBase):
         def fetch(span: Tuple[int, int]) -> None:
             a, b = span
             last: Optional[BaseException] = None
-            for attempt in range(4):
+            for attempt in range(8):  # R2 reads from Clipper drop now and then (read timeouts, short bodies)
                 try:
                     kw: Dict[str, Any] = dict(Bucket=bucket, Key=key, Range=f"bytes={a}-{b}")
                     if if_match:
                         kw["IfMatch"] = f'"{if_match}"'
-                    body = self.c.get_object(**kw)["Body"]
+                    body = r2_call(self.c.get_object, **kw)["Body"]
                     got = 0
                     with open(path, "r+b") as fh:
                         fh.seek(a)
@@ -298,7 +336,7 @@ class S3Store(StoreBase):
                     if _precondition_failed(e):
                         raise LegacyChanged(f"{key} changed while it was being read") from e
                     last = e
-                    time.sleep(min(30, 2 ** attempt))
+                    time.sleep(min(60, 2 ** attempt))
             raise IOError(f"{key} bytes {a}-{b}: {last}")
 
         if not spans:
@@ -326,7 +364,7 @@ class S3Store(StoreBase):
         extra: Dict[str, Any] = {"ContentType": content_type, "CacheControl": cache_control}
         if metadata:
             extra["Metadata"] = dict(metadata)
-        self.c.upload_file(str(path), bucket, key, ExtraArgs=extra, Config=self._transfer_config(part_size))
+        r2_call(self.c.upload_file, str(path), bucket, key, ExtraArgs=extra, Config=self._transfer_config(part_size))
         h = self.head(bucket, key)
         if h is None:
             raise IOError(f"{bucket}/{key} not found after upload")
@@ -337,14 +375,14 @@ class S3Store(StoreBase):
         kw: Dict[str, Any] = dict(Bucket=bucket, Key=key, Body=data, ContentType=content_type, CacheControl=cache_control)
         if metadata:
             kw["Metadata"] = dict(metadata)
-        return str(self.c.put_object(**kw)["ETag"]).strip('"')
+        return str(r2_call(self.c.put_object, **kw)["ETag"]).strip('"')
 
     def delete(self, bucket: str, key: str) -> None:
-        self.c.delete_object(Bucket=bucket, Key=key)
+        r2_call(self.c.delete_object, Bucket=bucket, Key=key)
 
     def bucket_exists(self, bucket: str) -> bool:
         try:
-            self.c.head_bucket(Bucket=bucket)
+            r2_call(self.c.head_bucket, Bucket=bucket)
             return True
         except Exception as e:  # noqa: BLE001
             if _not_found(e) or _err_code(e) in ("NoSuchBucket",):
@@ -362,7 +400,7 @@ class S3Store(StoreBase):
         for attempt in (0, 1):
             try:
                 if size <= self.copy_single_max:
-                    r = self.c.copy_object(Bucket=dst_bucket, Key=dst_key, CopySource=src, MetadataDirective="COPY", **sc)
+                    r = r2_call(self.c.copy_object, Bucket=dst_bucket, Key=dst_key, CopySource=src, MetadataDirective="COPY", **sc)
                     return str((r.get("CopyObjectResult") or {}).get("ETag", "")).strip('"'), False
                 return self._copy_multipart(src, dst_bucket, dst_key, size, sc), True
             except Exception as e:  # noqa: BLE001
@@ -381,7 +419,7 @@ class S3Store(StoreBase):
             extra["CacheControl"] = head.cache_control
         if head is not None and head.meta:
             extra["Metadata"] = head.meta
-        up = self.c.create_multipart_upload(Bucket=dst_bucket, Key=dst_key, **extra)
+        up = r2_call(self.c.create_multipart_upload, Bucket=dst_bucket, Key=dst_key, **extra)
         uid = up["UploadId"]
         spans = [(i + 1, a, min(a + self.copy_part, size) - 1) for i, a in enumerate(range(0, size, self.copy_part))]
 
@@ -389,7 +427,7 @@ class S3Store(StoreBase):
             n, a, b = span
             for attempt in range(4):
                 try:
-                    r = self.c.upload_part_copy(Bucket=dst_bucket, Key=dst_key, UploadId=uid, PartNumber=n,
+                    r = r2_call(self.c.upload_part_copy, Bucket=dst_bucket, Key=dst_key, UploadId=uid, PartNumber=n,
                                                 CopySource=src, CopySourceRange=f"bytes={a}-{b}")
                     return {"PartNumber": n, "ETag": r["CopyPartResult"]["ETag"]}
                 except Exception:  # noqa: BLE001
@@ -401,7 +439,7 @@ class S3Store(StoreBase):
         try:
             with cf.ThreadPoolExecutor(4) as ex:
                 parts = list(ex.map(one, spans))
-            r = self.c.complete_multipart_upload(Bucket=dst_bucket, Key=dst_key, UploadId=uid, MultipartUpload={"Parts": parts})
+            r = r2_call(self.c.complete_multipart_upload, Bucket=dst_bucket, Key=dst_key, UploadId=uid, MultipartUpload={"Parts": parts})
         except Exception:
             try:
                 self.c.abort_multipart_upload(Bucket=dst_bucket, Key=dst_key, UploadId=uid)
@@ -419,7 +457,7 @@ def make_s3_client():
     endpoint = os.environ.get("R2_ENDPOINT") or f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
     kw: Dict[str, Any] = dict(
         signature_version="s3v4",
-        retries={"max_attempts": 10, "mode": "adaptive"},
+        retries={"max_attempts": 12, "mode": "adaptive"},
         max_pool_connections=128,
         connect_timeout=30,
         read_timeout=120,
@@ -798,7 +836,7 @@ def collect_objects(root: Path, gse: str, part_size: int, pool: cf.Executor | No
             continue  # the pack index of the whole bucket: `refs-index` publishes it, a single writer
         if key.startswith("s1/ledger/"):
             continue  # the transcoder's per-member ledger: its lines go into the R2 ledger (see publish_bundle)
-        if RE_SAMPLE.match(key) or RE_PACK.match(key) or RE_CELLS.match(key):
+        if RE_SAMPLE.match(key) or RE_PACK.match(key) or RE_CELLS.match(key) or RE_ANNOT.match(key):
             candidates.append((key, p))
         else:
             warnings.append(f"ignored file outside the key grammar: {key}")
@@ -814,6 +852,9 @@ def collect_objects(root: Path, gse: str, part_size: int, pool: cf.Executor | No
         m = RE_PACK.match(key)
         if m and d.sha256[:32] != m.group(1):
             raise StudyFailure("collect_failed", "collect", f"{key}: name is not the digest16 of the pack ({d.sha256[:32]})")
+        m = RE_ANNOT.match(key)
+        if m and d.sha256[:32] != m.group(2):
+            raise StudyFailure("collect_failed", "collect", f"{key}: name is not the digest16 of the label sidecar ({d.sha256[:32]})")
         return Obj(key, p, d)
 
     objs = list(pool.map(one, candidates)) if pool is not None else [one(c) for c in candidates]
@@ -836,6 +877,17 @@ def collect_objects(root: Path, gse: str, part_size: int, pool: cf.Executor | No
         for x in (v if isinstance(v, list) else [v]):
             if isinstance(x, str) and re.fullmatch(r"[0-9a-f]{32}", x):
                 pack_keys.append(f"s1/ref/{x}.pack")
+    annot = {}
+    for s in samples:  # label sidecars the manifest references: produced, right size and sha256, for that sample
+        for ver, ent in (s.get("annotations") or {}).items():
+            k = (ent or {}).get("key")
+            o = by_key.get(k)
+            m = RE_ANNOT.match(k or "")
+            if o is None or not m or m.group(1) != s.get("gsm"):
+                raise StudyFailure("collect_failed", "collect", f"{s.get('gsm')}: annotations[{ver}] points at {k}, which was not produced")
+            if ent.get("bytes") != o.digest.size or ent.get("sha256") != o.digest.sha256:
+                raise StudyFailure("collect_failed", "collect", f"{k}: manifest size/sha256 differ from the sidecar")
+            annot[k] = True
     rm = _restricted_module().is_restricted_member
     for s in samples:  # the .s1 object of a public study must not carry per-donor germline members (the endpoint refuses them too)
         bad = [n for n in (s.get("members") or {}) if rm(n)]
@@ -844,7 +896,10 @@ def collect_objects(root: Path, gse: str, part_size: int, pool: cf.Executor | No
     unref = [o.key for o in objs if RE_SAMPLE.match(o.key) and o.key not in referenced]
     if unref:
         warnings.append(f"{len(unref)} sample objects are not in the manifest and will not be uploaded")
-    keep = [o for o in objs if o.key in referenced or not RE_SAMPLE.match(o.key)]
+    unref_a = [o.key for o in objs if RE_ANNOT.match(o.key) and o.key not in annot]
+    if unref_a:
+        warnings.append(f"{len(unref_a)} label sidecars are not in the manifest and will not be uploaded")
+    keep = [o for o in objs if (o.key in referenced or not RE_SAMPLE.match(o.key)) and (o.key in annot or not RE_ANNOT.match(o.key))]
     return Plan(root, manifest, keep, pack_keys, warnings)
 
 
@@ -1426,6 +1481,7 @@ class Ctx:
             env[k] = str(a.blas_threads)
         env["SINGLET_PZW_AUTOBUILD"] = "0"  # W3's recipes build a helper executable on Windows only; never race to do it on the cluster
         env["SINGLET_S1_RECIPES_CACHE"] = str(self.scratch / "recipes-cache")
+        env["SINGLET_S1_CACHE"] = str(self.scratch / "s1-cache")  # downloaded packs: node-local scratch, never $HOME
         self.migrate_args = _split_cmd(getattr(a, "migrate_args", None)) or []
         jt = getattr(a, "junction_table", None)
         if jt and "--junction-table" not in self.migrate_args:  # junction rows as table ids (docs/format-s1.md 12)
@@ -1433,6 +1489,23 @@ class Ctx:
         self.verify_args = _split_cmd(getattr(a, "verify_args", None)) or []
         if getattr(a, "verify_quick", False):
             self.verify_args = self.verify_args + ["--quick"]
+        # release policy (docs/s1-migration.md, Research Alpha): withheld studies are skipped here; the transcoder drops excluded samples and
+        # withheld layers, and the verifier compares the store against the policy's view of the legacy bundle
+        self.policy = None
+        pol = getattr(a, "alpha_policy", None)
+        if pol:
+            self.policy = _policy_module().Policy.load(pol)
+            self.migrate_args = self.migrate_args + ["--policy", str(Path(pol).resolve())]
+            self.verify_args = self.verify_args + ["--policy", str(Path(pol).resolve())]
+        if getattr(a, "sample_facts", None):
+            self.migrate_args = self.migrate_args + ["--sample-facts", str(Path(a.sample_facts).resolve())]
+        self.labels = bool(getattr(a, "labels", False))
+        if self.labels:
+            self.migrate_args = self.migrate_args + ["--labels", "--labels-timeout", str(a.labels_timeout),
+                                                     "--labels-max-gb", str(a.labels_max_gb)]
+            if getattr(a, "af", None):
+                self.migrate_args = self.migrate_args + ["--af", str(Path(a.af).resolve())]
+        self.restricted_bucket = getattr(a, "restricted_bucket", None)
         for k in ("R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "INGEST_TOKEN"):
             env.pop(k, None)  # the transcoder never needs credentials
         self.env = env
@@ -1505,6 +1578,66 @@ def _restricted_module():
         return _RESTRICTED_MOD
 
 
+_POLICY_MOD = None
+
+
+def _policy_module():
+    """singlet/s1/policy.py (standard library only) loaded by path, once."""
+    global _POLICY_MOD
+    with _RESTRICTED_LOCK:
+        if _POLICY_MOD is None:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location("singlet_policy_v2c", REPO / "python" / "singlet" / "s1" / "policy.py")
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = mod
+            spec.loader.exec_module(mod)
+            _POLICY_MOD = mod
+        return _POLICY_MOD
+
+
+RESTRICTED_BUCKET = "singlet-restricted"
+_DEPTH_RE = re.compile(r"^samples/(GSM\d+)/donor/donor\d+_coverage\.tsv$")
+
+
+def fetch_depth_tables(ctx: Ctx, gse: str, work: Path, events: List[dict]) -> Optional[Path]:
+    """The per-donor depth tables of the study's restricted sidecar (private bucket), and nothing else of it, into a small zip on
+    node-local scratch (deleted with the study's scratch). Members of excluded samples are not fetched. Only the central directory
+    and those members are read (ranged GETs). None when there is no sidecar or it holds no depth table."""
+    import zipfile
+
+    if str(REPO / "python") not in sys.path:
+        sys.path.insert(0, str(REPO / "python"))
+    from singlet.s1.legacy import entry_bytes, parse_central_directory
+
+    bucket = ctx.restricted_bucket
+    key = f"restricted/{gse}/{gse}.restricted.singlet"
+    h = ctx.store.head(bucket, key)
+    if h is None:
+        return None
+    tail = ctx.store.read_range(bucket, key, max(0, h.size - 262144), h.size - 1)
+
+    def rd(off: int, n: int) -> bytes:
+        return ctx.store.read_range(bucket, key, off, off + n - 1)
+
+    ents = parse_central_directory(tail, h.size - len(tail), h.size, rd)
+    want = []
+    for e in ents:
+        m = _DEPTH_RE.match(e.path)
+        if m and not (ctx.policy is not None and ctx.policy.excludes(m.group(1))):
+            want.append(e)
+    if not want:
+        return None
+    out = work / "depth-tables.zip"
+    n = 0
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED, allowZip64=True) as z:
+        for e in want:
+            z.writestr(e.path, entry_bytes(rd, e))
+            n += e.size
+    events.append({"at": iso(), "gse": gse, "event": "depth_tables", "members": len(want), "bytes": n})
+    return out
+
+
 def ensure_object(ctx: Ctx, key: str, path: Path, d: FileDigest, *, readback: str, bucket: Optional[str] = None) -> dict:
     """Make `bucket/key` hold exactly `path`: skip if it already does, else upload and check the ETag (fallback: a SHA-256
     read-back, which also accepts an ETag the server computes differently from S3's rule)."""
@@ -1538,6 +1671,19 @@ def ensure_object(ctx: Ctx, key: str, path: Path, d: FileDigest, *, readback: st
     raise StudyFailure("upload_failed", "upload", f"{key}: {type(last).__name__}: {last}")
 
 
+def _withheld_cell_data(sample: dict) -> bool:
+    """A manifest sample entry whose object still carries per-cell mtDNA or doublet data (an mt/ member, mts_* / dbl_* /
+    qc_doublet_score cells columns); the don_* donor columns are public."""
+    mm = sample.get("members") or {}
+    if any(n.startswith("mt/") or "doublet" in n for n in mm):
+        return True
+    for c in (mm.get("cells") or {}).get("columns") or []:
+        name = c if isinstance(c, str) else str((c or {}).get("name", ""))
+        if name.startswith(("mts_", "dbl_")) or ("doublet" in name and not name.startswith("don_")):
+            return True
+    return False
+
+
 def check_done(ctx: Ctx, gse: str, legacy: Head) -> Optional[dict]:
     """The result row of a study that is already migrated against exactly this legacy object, else None."""
     mh = ctx.store.head(ctx.public, manifest_key(gse))
@@ -1550,6 +1696,12 @@ def check_done(ctx: Ctx, gse: str, legacy: Head) -> Optional[dict]:
     lg = m.get("legacy") or {}
     if lg.get("etag") != legacy.etag or lg.get("bytes") != legacy.size or not m.get("samples"):
         return None
+    if ctx.policy is not None and (m.get("release_policy") or {}) != ctx.policy.manifest_block():
+        return None  # migrated under another policy version or layer list (or none): redo it
+    if ctx.labels and (m.get("transcode") or {}).get("labels") != "cells-table+sidecar/1":
+        return None  # transcoded without the labels in the cells tables: redo it
+    if ctx.policy is not None and any(_withheld_cell_data(s) for s in m["samples"]):
+        return None  # written before the policy stripped per-cell mtDNA / doublet data: redo it
 
     def present(s: dict) -> bool:
         h = ctx.store.head(ctx.public, s.get("key", ""))
@@ -1563,7 +1715,8 @@ def check_done(ctx: Ctx, gse: str, legacy: Head) -> Optional[dict]:
     return prior
 
 
-def publish_bundle(ctx: Ctx, gse: str, bundle: Path, work: Path, legacy: Optional[dict], row: dict, events: List[dict]) -> None:
+def publish_bundle(ctx: Ctx, gse: str, bundle: Path, work: Path, legacy: Optional[dict], row: dict, events: List[dict],
+                   extra_migrate: Sequence[str] = ()) -> None:
     """Migrate, validate, verify, upload, commit. `legacy` is None for a new study that has no legacy bundle."""
     a = ctx.a
     tm = row["timings"]
@@ -1577,10 +1730,17 @@ def publish_bundle(ctx: Ctx, gse: str, bundle: Path, work: Path, legacy: Optiona
 
     # 3. transcode
     row["stage"] = "migrate"
-    rc, tail, secs = run_logged(ctx.migrate_cmd + ["--bundle", str(bundle), "--out", str(out), "--gse", gse] + ctx.migrate_args,
-                                cwd=work, env=ctx.env, timeout=_tool_timeout(ctx, a.migrate_timeout), log_path=study_log)
+    rc, tail, secs = run_logged(ctx.migrate_cmd + ["--bundle", str(bundle), "--out", str(out), "--gse", gse] + ctx.migrate_args
+                                + list(extra_migrate), cwd=work, env=ctx.env, timeout=_tool_timeout(ctx, a.migrate_timeout),
+                                log_path=study_log)
     tm["migrate"] = round(secs, 2)
     ev("migrated", rc=rc, secs=round(secs, 2))
+    if rc == 3 and ctx.policy is not None:  # the policy left no sample: nothing is written, nothing refers to the study
+        raise StudyFailure("withheld", "migrate", "no sample left after the release policy")
+    audit = out / "policy-audit.json"
+    if audit.is_file() and getattr(a, "audit_dir", None):  # private audit trail: stays on the cluster, never uploaded
+        Path(a.audit_dir).mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(audit, Path(a.audit_dir) / f"{gse}.json")
     if rc != 0:
         row["tail"] = tail[-1500:]
         raise StudyFailure("migrate_failed", "migrate", f"migrate exited {rc}")
@@ -1605,6 +1765,7 @@ def publish_bundle(ctx: Ctx, gse: str, bundle: Path, work: Path, legacy: Optiona
         n_samples=sm["n_samples"], n_cells_called=sm["n_called"], members_by_kind=sm["members_by_kind"], n_members=sm["n_members"],
         s1_sample_bytes=sum(o.digest.size for o in sample_objs), manifest_bytes=md.size, manifest_sha256=md.sha256,
         s1_bytes=sum(o.digest.size for o in sample_objs) + md.size + cells_bytes,
+        s1_label_bytes=sum(o.digest.size for o in plan.objects if RE_ANNOT.match(o.key)),
         s1_pack_bytes=sum(o.digest.size for o in plan.objects if RE_PACK.match(o.key)),
         n_objects=len(plan.objects) + 1, warnings=plan.warnings[:10],
     )
@@ -1620,6 +1781,14 @@ def publish_bundle(ctx: Ctx, gse: str, bundle: Path, work: Path, legacy: Optiona
             if isinstance(rec, dict):
                 events.append({"at": iso(), "event": "migrate:" + str(rec.get("type", "line")), **{k: v for k, v in rec.items() if k not in ("at", "event")}})
                 n_mled += 1
+                if rec.get("type") == "labels":
+                    lb = row.setdefault("labels", {"samples": {}, "cells": {}, "seconds": 0.0})
+                    lb["samples"][rec.get("status")] = lb["samples"].get(rec.get("status"), 0) + 1
+                    lb["seconds"] = round(lb["seconds"] + float(rec.get("seconds") or 0), 3)
+                    for k, v in (rec.get("coverage") or {}).items():
+                        lb["cells"][k] = lb["cells"].get(k, 0) + int(v)
+                    if rec.get("status") in ("over_budget", "failed"):
+                        row.setdefault("label_notes", []).append(f"{rec.get('gsm')}: {rec.get('status')} {rec.get('reason', '')}"[:200])
     row["migrate_ledger_lines"] = n_mled
     ev("collected", n_objects=row["n_objects"], s1_bytes=row["s1_bytes"], members_by_kind=sm["members_by_kind"])
 
@@ -1716,6 +1885,9 @@ def process_study(ctx: Ctx, gse: str, provider=None) -> dict:
             row["timings"]["pack"] = round(time.time() - t, 2)
             publish_bundle(ctx, gse, bundle, work, legacy, row, events)
             return row
+        if ctx.policy is not None and ctx.policy.withholds(gse):
+            row.update(status="withheld", stage="policy")  # nothing is read or written for a withheld study
+            return row
         row["stage"] = "head"
         lk = legacy_key(gse)
         h = ctx.store.head(ctx.public, lk)
@@ -1736,7 +1908,7 @@ def process_study(ctx: Ctx, gse: str, provider=None) -> dict:
         row["stage"] = "restricted-check"
         summ = restricted_summary_remote(ctx.store, ctx.public, lk, h.size)
         row["restricted_members"] = summ["members"]
-        if summ["members"] and not a.allow_restricted:
+        if summ["members"] and not a.allow_restricted and ctx.policy is None:  # under a policy they are dropped (and verified)
             row.update(status="blocked_restricted",
                        error=f"{summ['members']} restricted members still in the public bundle; run the restrict migration first")
             return row
@@ -1771,7 +1943,20 @@ def process_study(ctx: Ctx, gse: str, provider=None) -> dict:
         events.append({"at": iso(), "gse": gse, "event": "downloaded", "bytes": h.size, "etag": h.etag, "sha256": legacy_sha,
                        "secs": row["timings"]["download"]})
         legacy = {"key": lk, "etag": h.etag, "bytes": h.size, "sha256": legacy_sha, "migrated_at": iso()}
-        publish_bundle(ctx, gse, bundle, work, legacy, row, events)
+        extra: List[str] = []
+        if ctx.labels and ctx.restricted_bucket:
+            row["stage"] = "depth-tables"
+            t = time.time()
+            try:
+                dz = fetch_depth_tables(ctx, gse, work, events)
+            except Exception as e:  # noqa: BLE001  labels are optional: the study goes on without ancestry
+                dz = None
+                row.setdefault("label_notes", []).append(f"depth tables not read: {type(e).__name__}: {e}"[:200])
+            row["timings"]["depth_tables"] = round(time.time() - t, 2)
+            if dz is not None:
+                extra = ["--restricted-sidecar", str(dz)]
+                row["depth_tables"] = True
+        publish_bundle(ctx, gse, bundle, work, legacy, row, events, extra)
     except StudyFailure as e:
         row.update(status=e.status, error=str(e)[:600])
     except Exception as e:  # noqa: BLE001  a bad study must not stop the shard
@@ -2183,6 +2368,36 @@ def cmd_refs_index(a: argparse.Namespace) -> int:
         todo.append((f"s1/ref/{p['id']}.pack", f))
     if bad:
         return 1
+    if getattr(a, "merge_prefix", None):
+        # packs published under an older prefix (the junction tables under v2/ref/): copied server-side (same bytes, same ids)
+        # and listed in the new index, so readers and the transcoder find every pack under s1/ref/
+        pre = a.merge_prefix.rstrip("/") + "/"
+        old = json.loads(store.get_bytes(a.public, pre + "index.json"))
+        have = {p["id"] for p in index["packs"]}
+        copied = 0
+        for e in old.get("packs", []):
+            if e["id"] in have:
+                continue
+            src, dst = f"{pre}{e['id']}.pack", f"s1/ref/{e['id']}.pack"
+            hs = store.head(a.public, src)
+            if hs is None or hs.size != e["bytes"]:
+                print(f"{src}: missing or of the wrong size", file=sys.stderr)
+                return 1
+            hd = store.head(a.public, dst)
+            if a.apply and (hd is None or hd.size != hs.size):
+                w.copy(a.public, src, a.public, dst, size=hs.size)
+                got = store.sha256_object(a.public, dst, hs.size)
+                if got != e["sha256"]:
+                    print(f"{dst}: sha256 after the copy differs from the index", file=sys.stderr)
+                    return 1
+                copied += 1
+            index["packs"].append(e)
+            have.add(e["id"])
+        index["format"] = "singlet-s1-packs"
+        idx_path = Path(a.scratch or tempfile.mkdtemp()) / "index.json"
+        idx_path.parent.mkdir(parents=True, exist_ok=True)
+        write_lf(idx_path, json.dumps(index, indent=1, sort_keys=False) + "\n")
+        print(f"merged {pre}index.json: {len(old.get('packs', []))} entries, {copied} packs copied to s1/ref/")
     todo.append((REFS_INDEX_KEY, idx_path))
     up = sk = 0
     for key, f in todo:
@@ -2242,6 +2457,16 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--order", choices=["size-desc", "accession"], default="size-desc", help="processing order inside the shard")
     r.add_argument("--list-only", action="store_true", help="dry: only HEAD + central directory + restricted check")
     r.add_argument("--allow-restricted", action="store_true", help="migrate bundles that still hold restricted members (NOT for the public bucket)")
+    r.add_argument("--alpha-policy", help="release policy JSON (version, withheld_studies, excluded_samples): withheld studies are "
+                                          "skipped, excluded samples and withheld layers never reach a public object (docs/s1-migration.md, Research Alpha)")
+    r.add_argument("--audit-dir", help="private per-study policy audit files (what was dropped); never uploaded")
+    r.add_argument("--sample-facts", help="JSON {gsm: {...}} for the provenance block (library-type screen results, reads available)")
+    r.add_argument("--labels", action="store_true", help="per-cell labels (cell type, sex, ancestry) computed by the transcoder")
+    r.add_argument("--af", help="1000 Genomes super-population allele frequencies (parquet) for ancestry labels")
+    r.add_argument("--restricted-bucket", default=None,
+                   help=f"private bucket with the restricted sidecars (depth tables for ancestry; e.g. {RESTRICTED_BUCKET})")
+    r.add_argument("--labels-timeout", type=float, default=1800.0)
+    r.add_argument("--labels-max-gb", type=float, default=24.0)
     r.add_argument("--workers", type=int, default=0, help="studies in flight (0 = cores - 2: a migrate process is one Python thread)")
     r.add_argument("--io-threads", type=int, default=8)
     r.add_argument("--blas-threads", type=int, default=1, help="OMP/OpenBLAS/MKL threads per transcoder process")
@@ -2320,6 +2545,8 @@ def build_parser() -> argparse.ArgumentParser:
     common(x)
     x.add_argument("--packs-dir", default=str(REPO / "python" / "singlet" / "s1" / "packs"))
     x.add_argument("--apply", action="store_true")
+    x.add_argument("--merge-prefix", help="also publish (server-side copies) every pack listed in <prefix>index.json, e.g. v2/ref/")
+    x.add_argument("--scratch", help="directory for the merged index.json")
     x.set_defaults(func=cmd_refs_index)
 
     t = sub.add_parser("retire-sql", help="step B of the retirement: SQL flipping s1_migration.status verified -> retired for the archived studies")
