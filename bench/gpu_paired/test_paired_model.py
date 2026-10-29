@@ -285,3 +285,88 @@ def test_window_geometry_on_a_human_size_genome():
     assert (P.winBinNbits, P.winFlankNbins, P.winAnchorDistNbins) == (16, 1, 2)
     P = params("spliced").derive(3_100_000_000, 18)
     assert (P.winBinNbits, P.winFlankNbins, P.winAnchorDistNbins) == (16, 4, 9)
+
+
+# ---- clipping per mate (readLoad.cpp:75-76, ClipMate_clip.cpp) ---------------------------------------------------------------
+from paired_model import MateClip, clip_mate, nucl  # noqa: E402
+from star_sam import sam_records  # noqa: E402
+
+NEXTERA = "CTGTCTCTTATACACATCT"
+
+
+def clipped(seq, **kw):
+    out, c5, c3 = clip_mate(nucl(seq), MateClip(**kw))
+    return "".join("ACGTN"[v] for v in out), c5, c3
+
+
+def test_clip_n_bases_and_after_adapter():
+    s = "ACGTACGTAC" * 3                                    # 30 bases
+    assert clipped(s, n5=4) == (s[4:], 4, 0)
+    assert clipped(s, n3=6) == (s[:-6], 0, 6)
+    assert clipped(s, n5=2, n3=3, after3=5) == (s[2:-8], 2, 8)
+    assert clipped(s, n3=3, adapter3="polyA", adMMp=0.1, after3=2)[2] >= 5   # N bases, adapter (maybe none), then 2 more
+    # a clip longer than the read empties it and clippedN becomes the length before this clip (ClipMate_clip.cpp:21-24)
+    assert clipped(s, n3=40) == ("", 0, 30)
+    assert clipped(s, n5=40, n3=3) == ("", 30, 0)
+
+
+def test_clip_after_adapter_alone_is_ignored():
+    # ClipMate_initialize.cpp:22-23 gives type -1 when N == 0 and there is no adapter; clip() then returns at :9-10
+    s = "ACGTACGTAC" * 3
+    assert clipped(s, after3=5) == (s, 0, 0)
+    assert clipped(s, after5=5) == (s, 0, 0)
+    assert clipped(s, n3=1, after3=5) == (s[:-6], 0, 6)
+
+
+def test_clip_3p_adapter_with_a_mismatch_and_polya():
+    frag = seq_chr1 = "GATTACAGGCTTAACCGGATATCGCGAT"
+    ad = list(NEXTERA)
+    ad[10] = "G" if ad[10] != "G" else "A"                   # 1 mismatch in 19: 1/18 matches <= 0.1
+    r = clipped(frag + "".join(ad), adapter3=NEXTERA, adMMp=0.1)
+    assert r == (frag, 0, 19)
+    assert clipped(frag[:-2] + "CC" + "A" * 15, adapter3="polyA", adMMp=0.1) == (frag[:-2] + "CC", 0, 15)
+    # localSearch prefers more matches within the mismatch budget: the A before the T of "GCGAT" and the T as one mismatch give
+    # 16 matches and 1 mismatch (1/16 <= 0.1), so 17 bases go, not 15 (SequenceFuns.cpp:319)
+    assert clipped(frag + "A" * 15, adapter3="polyA", adMMp=0.1)[2] == 17
+    assert clipped(frag + "".join(ad), adapter3=NEXTERA, adMMp=0.0)[2] < 19   # no mismatch allowed: the adapter is not found whole
+
+
+def test_adapter_read_through_pair_is_clipped_and_aligned(G):
+    # fragment of 40 bases: both mates read through into the Nextera adapter
+    P = params("spliced")
+    G.prepare(P)
+    frag = seq(G, "chr1", 2000, 2040)
+    m1, m2 = frag + NEXTERA, rc(frag) + NEXTERA
+    cl = (MateClip(adapter3=NEXTERA), MateClip(adapter3=NEXTERA))
+    res = map_pair(G, P, m1, m2, clip=cl)
+    t = res.transcripts[0]
+    assert res.unmapType == -1 and t.iFrag == -1 and not res.host_lane
+    assert res.read.readLength == (40, 40) and res.read.readLengthOriginal == (59, 59) and res.read.clip3 == (19, 19)
+    assert t.summary()["exons"] == [[0, 2000, 40, 0], [41, 2000, 40, 1]]
+    assert t.maxScore == 79                                   # 80 matches + ceil(log2(40) * -0.25 - 0.5) = -1
+    rec = sam_records([tuple(map(int, t.exons[i][:4])) for i in range(t.nExons)], [int(x) for x in t.canonSJ[:t.nExons - 1]], t.Str,
+                      G.chrStart[t.Chr], res.read.readLength, res.read.readLengthOriginal, res.read.clip5, res.read.clip3, res.read.Lread)
+    assert [(r["flag"], r["pos"], r["cigar"], r["pnext"]) for r in rec] == [(99, 2001, "40M19S", 2001), (147, 2001, "19S40M", 2001)]
+    # without clipping the adapter is soft-clipped by the extension instead; the clipped pair is the one STAR reports with --clip3p*
+    res0 = map_pair(G, P, m1, m2)
+    assert res0.read.readLength == (59, 59)
+
+
+def test_mate_clipped_to_nothing_goes_to_the_host_lane(G):
+    P = params("spliced")
+    G.prepare(P)
+    res = map_pair(G, P, seq(G, "chr1", 1000, 1050), rc(seq(G, "chr1", 1300, 1350)), clip=(MateClip(), MateClip(n3=60)))
+    assert res.host_lane
+
+
+def test_sam_fields_of_a_spliced_pair(G):
+    P = params("spliced")
+    G.prepare(P)
+    m1 = seq(G, "chr1", 1000, 1050) + seq(G, "chr1", 1500, 1550)
+    m2 = rc(seq(G, "chr1", 1650, 1700))
+    res = map_pair(G, P, m1, m2)
+    t = res.transcripts[0]
+    rd = res.read
+    rec = sam_records([tuple(map(int, t.exons[i][:4])) for i in range(t.nExons)], [int(x) for x in t.canonSJ[:t.nExons - 1]], t.Str,
+                      G.chrStart[t.Chr], rd.readLength, rd.readLengthOriginal, rd.clip5, rd.clip3, rd.Lread)
+    assert [(r["flag"], r["pos"], r["cigar"], r["pnext"]) for r in rec] == [(99, 1001, "50M450N50M", 1651), (147, 1651, "50M", 1001)]

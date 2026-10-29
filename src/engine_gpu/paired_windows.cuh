@@ -23,9 +23,10 @@
 // to template stitch.cuh on a `Mates` policy (readLength[], maxScoreMate[2], mateOverlapOk) and delete the copies here; the copies
 // exist only so this draft needs no edit to stitch.cuh. Every copied line outside a "PE:" marker is identical to stitch.cuh except that the M5T/M5ADD timing lines are left out.
 //
-// What is NOT covered (the driver must route these to the host lane, as for single-end): sjdb-inserted seeds are covered by the
-// shared code; peOverlap merging (--peOverlapNbasesMin > 0, ReadAlign_peOverlapMergeMap.cpp) is not; chimeric detection, variation, WASP,
-// BySJout stage 2 and clipping are not (the driver checks them, as fillParams does).
+// Clipping is per mate (clipMate below, k_pe_map applies it before the mates are combined). What is NOT covered (the driver must route
+// these to the host lane, as for single-end): sjdb-inserted seeds are covered by the shared code; peOverlap merging
+// (--peOverlapNbasesMin > 0, ReadAlign_peOverlapMergeMap.cpp), --clipAdapterType CellRanger4, chimeric detection, variation, WASP and
+// BySJout stage 2 are not (the driver checks them, as fillParams does).
 #pragma once
 #include "stitch.cuh"
 
@@ -54,6 +55,48 @@ HD inline uint combineMates(const char* m1, uint L0, const char* m2, uint L1, ch
         out[L0 + 1 + i] = c < 4 ? (char)(3 - c) : c;
     }
     return L0 + L1 + 1;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Clipping of one mate: STAR's readLoad.cpp:75-76 (5' clip, then 3' clip) with ClipMate_clip.cpp:5-78, Hamming adapter type
+// (--clip5pNbases, --clip5pAfterAdapterNbases, --clip3pNbases, --clip3pAdapterSeq, --clip3pAdapterMMp, --clip3pAfterAdapterNbases),
+// one MateClip per mate: ParametersClip_initialize.cpp:84-107 gives each mate its own value. STAR removes the clipped bases
+// before the mates are combined, so the aligner and the combined read see only [start, start + len). c5 and c3 are STAR's
+// clipMates[mate][0].clippedN and [1].clippedN, which the SAM CIGAR needs (outputTranscriptSAM.cpp:136-145, 184-186).
+// The same function as k_clip in engine_gpu.cu:77-103 (mate 1 only) except for the case marked "STAR quirk" here, which k_clip does not have.
+// Reference model: bench/gpu_paired/paired_model.py clip_mate.
+// ---------------------------------------------------------------------------------------------------------------------
+struct MateClip { uint32_t n5, after5, n3, after3, nad; double adMMp; const char* ad; };   // ad: numeric adapter (nad bases); polyA = nad 650 zeros
+struct ClipSpan { u64 start, len, c5, c3; };
+HD inline ClipSpan clipMate(const MateClip& c, const char* seq, u64 L0) {
+    u64 L = L0, s = 0, c5 = 0, c3 = 0;
+    if (c.n5 > 0) {                                  // 5' has type 0 only when N > 0 (no 5' adapter: ParametersClip_initialize.cpp:34-39)
+        const u64 Lold = L;
+        if (L > c.n5) { L -= c.n5; s += c.n5; c5 += c.n5; } else { L = 0; c5 = Lold; }                                   // :14-25
+        if (c.after5 > 0) { if (L > c.after5) { L -= c.after5; s += c.after5; c5 += c.after5; } else { L = 0; c5 = Lold; } }   // :64-75
+    }
+    if (c.n3 > 0 || c.nad > 0) {                     // STAR quirk (ClipMate_initialize.cpp:22-23, ClipMate_clip.cpp:9-10): with N == 0 and no
+        const u64 Lold = L;                          // adapter the clip has type -1 and does nothing, so AfterAdapterNbases alone is ignored
+        if (c.n3 > 0) { if (L > c.n3) { L -= c.n3; c3 += c.n3; } else { L = 0; c3 = Lold; } }
+        if (c.nad > 0) {                             // localSearch (SequenceFuns.cpp:304-326) on the 5'-clipped, N-clipped sequence
+            const char* x = seq + s;
+            u64 nMatchBest = 0, nMMbest = 0, ixBest = L;
+            for (u64 ix = 0; ix < L; ix++) {
+                u64 nMatch = 0, nMM = 0, m = (u64)c.nad < L - ix ? (u64)c.nad : L - ix;
+                for (u64 iy = 0; iy < m; iy++) {
+                    if (x[ix + iy] > 3) continue;
+                    if (x[ix + iy] == c.ad[iy]) nMatch++; else nMM++;
+                }
+                if ((nMatch > nMatchBest || (nMatch == nMatchBest && nMM < nMMbest)) && nMatch > 0 && double(nMM) / double(nMatch) <= c.adMMp) {
+                    ixBest = ix; nMatchBest = nMatch; nMMbest = nMM;
+                }
+            }
+            c3 += L - ixBest; L = ixBest;
+        }
+        if (c.after3 > 0) { if (L > c.after3) { L -= c.after3; c3 += c.after3; } else { L = 0; c3 = Lold; } }          // :64-75
+    }
+    ClipSpan r; r.start = s; r.len = L; r.c5 = c5; r.c3 = c3;
+    return r;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -445,24 +488,31 @@ template <class C> HD inline u64 dumpWindows(const WorkPE<C>& w, u64* out, u64 c
 }
 
 #ifdef __CUDACC__
-// One pair per thread: mates in two concatenated numeric buffers (STAR's code, N = 4), offsets in off1/off2.
-// blobs: n * blobCap bytes, blobLen[i] = bytes used (0 and status[i] != 0 when the pair must go to the host lane).
-// dump: n * dumpCap words (dumpLen[i] words used). unmapType[i]: STAR's unmapType, 255 when status != Ok.
+// One pair per thread: raw mates in two concatenated numeric buffers (STAR's code, N = 4), offsets in off1/off2; the clipping of
+// each mate (clip1, clip2) is applied here, as readLoad.cpp does before oneRead combines the mates.
+// blobs: n * blobCap bytes, blobLen[i] = bytes used. dump: n * dumpCap words (dumpLen[i] used). unmapType[i]: STAR's, 255 when
+// status != Ok. clipOut: 6 words per pair: readLengthOriginal of mate 1 and 2, clipped5 and clipped3 of mate 1, of mate 2.
+// A mate clipped to nothing is Status::Unsupported (host lane): STAR would combine a pair with an empty mate.
 // The lane's Work<C> and ReadBuf<C::LREAD> arrays are allocated by the caller (as k_p3's in engine_gpu.cu is).
 template <class C>
-__global__ void k_pe_map(Params P, GenomeView g, const char* m1, const u64* off1, const char* m2, const u64* off2, u64 n,
-                         WorkPE<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* blobs, u64 blobCap, u64* blobLen,
-                         u64* dump, u64 dumpCap, u64* dumpLen, uint8_t* status, uint8_t* unmapType) {
+__global__ void k_pe_map(Params P, GenomeView g, MateClip clip1, MateClip clip2, const char* m1, const u64* off1, const char* m2,
+                         const u64* off2, u64 n, WorkPE<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* blobs, u64 blobCap, u64* blobLen,
+                         u64* dump, u64 dumpCap, u64* dumpLen, uint8_t* status, uint8_t* unmapType, u64* clipOut) {
     u64 i = (u64)blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
     WorkPE<C>& w = work[i];
     ReadBuf<C::LREAD>& rb = rbuf[i];
-    uint L0 = (uint)(off1[i + 1] - off1[i]), L1 = (uint)(off2[i + 1] - off2[i]);
+    const u64 Lo1 = off1[i + 1] - off1[i], Lo2 = off2[i + 1] - off2[i];
+    ClipSpan a = clipMate(clip1, m1 + off1[i], Lo1), b = clipMate(clip2, m2 + off2[i], Lo2);
+    clipOut[6 * i + 0] = Lo1; clipOut[6 * i + 1] = Lo2; clipOut[6 * i + 2] = a.c5; clipOut[6 * i + 3] = a.c3;
+    clipOut[6 * i + 4] = b.c5; clipOut[6 * i + 5] = b.c3;
+    const uint L0 = (uint)a.len, L1 = (uint)b.len;
     char comb[C::LREAD];
     Blob blob; blob.p = blobs + i * blobCap; blob.n = 0; blob.cap = (int)blobCap; blob.full = false;
     dumpLen[i] = 0; blobLen[i] = 0; unmapType[i] = 255;
+    if (L0 == 0 || L1 == 0) { status[i] = (uint8_t)Status::Unsupported; return; }
     if (L0 + L1 + 1 > (uint)C::LREAD) { status[i] = (uint8_t)Status::Overflow; return; }
-    combineMates(m1 + off1[i], L0, m2 + off2[i], L1, comb);
+    combineMates(m1 + off1[i] + a.start, L0, m2 + off2[i] + b.start, L1, comb);
     w.wbEpoch = 0;       // first use of this Work: the winBin map starts clean (as engine_gpu.cu does per thread)
     w.nScan = 0; w.stepBudget = 0;
     Status st = mapPhase1PE(P, g, w, rb, comb, L0, L1);

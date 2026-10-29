@@ -7,8 +7,8 @@
 
 int main(int argc, char** argv) {
     if (argc < 2) { fprintf(stderr, "usage: paired_unit_host cases.txt\n"); return 1; }
-    std::map<std::string, std::string> chroms; std::vector<std::string> order; u64 gbits = 18; std::vector<Case> cases;
-    if (!parseCases(argv[1], chroms, order, gbits, cases)) { fprintf(stderr, "cannot read %s\n", argv[1]); return 1; }
+    std::map<std::string, std::string> chroms; std::vector<std::string> order; u64 gbits = 18; std::vector<Case> cases; std::vector<ClipCase> clips;
+    if (!parseCases(argv[1], chroms, order, gbits, cases, clips)) { fprintf(stderr, "cannot read %s\n", argv[1]); return 1; }
     HostGenome H;
     buildUnitGenome(H, chroms, order, gbits);
     auto w = std::make_unique<WorkPE<PeLane>>(); auto rb = std::make_unique<RBuf>();
@@ -24,5 +24,7 @@ int main(int argc, char** argv) {
         if (!ok) { printf("  kernel: %s\n", describe(*w).c_str()); bad++; }
     }
     printf("%d of %zu cases differ from the model\n", bad, cases.size());
-    return bad != 0;
+    int badClip = runClipCases(clips);
+    printf("%d of %zu clip cases differ from the model\n", badClip, clips.size());
+    return bad + badClip != 0;
 }

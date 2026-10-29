@@ -5,8 +5,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cases import build_genome, case_list, params  # noqa: E402
-from paired_model import map_pair  # noqa: E402
+from cases import build_genome, case_list, clip_cases, params  # noqa: E402
+from paired_model import MateClip, clip_mate, map_pair, nucl  # noqa: E402
 
 
 def main(out="fixtures/cases.json"):
@@ -32,7 +32,12 @@ def main(out="fixtures/cases.json"):
         json.dump(doc, f, separators=(",", ":"))
     print(out, os.path.getsize(out), "bytes,", len(cases), "cases")
     txt = out.replace(".json", ".txt")
-    write_txt(txt, G, doc, windows)
+    clips = []
+    for name, sq, kw in clip_cases(G):
+        c = MateClip(**kw)
+        out_seq, c5, c3 = clip_mate(nucl(sq), c)
+        clips.append((name, sq, c, len(out_seq), c5 if len(out_seq) else 0, c5, c3))
+    write_txt(txt, G, doc, windows, clips)
     print(txt, os.path.getsize(txt), "bytes")
 
 
@@ -40,7 +45,7 @@ def _s(x):  # unsigned 64-bit -1 sentinels as -1
     return -1 if x >= (1 << 63) else int(x)
 
 
-def write_txt(path, G, doc, windows):
+def write_txt(path, G, doc, windows, clips):
     """Line-oriented copy for the CUDA harness's unit mode (no JSON parser needed): the genome, and per case the mates, the windows
     the model built (the kernel stage under test starts from them), and the expected result."""
     L = [f"GENOME {G.gChrBinNbits} {len(G.names)}"]
@@ -62,6 +67,8 @@ def write_txt(path, G, doc, windows):
             L.append(f"TR {len(t['exons'])} {t['maxScore']} {t['nMatch']} {t['nMM']} {t['gLength']} {t['iFrag']} {t['Str']} {t['Chr']} "
                      f"{int(t['primary'])} {ex} {sj}".rstrip())
         L.append("END")
+    for name, sq, c, ln, start, c5, c3 in clips:
+        L.append(f"CLIPCASE {name} {c.n5} {c.after5} {c.n3} {c.after3} {c.adMMp} {c.adapter3} {sq} {ln} {start} {c5} {c3}")
     with open(path, "w") as f:
         f.write(chr(10).join(L) + chr(10))
 

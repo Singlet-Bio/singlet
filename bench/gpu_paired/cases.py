@@ -70,3 +70,33 @@ def case_list(G):
         ("discordant_chr", "spliced", {}, s("chr1", 1000, 1100), rc(s("chr2", 1300, 1400))),
         ("multimapper", "spliced", {}, s("chr1", 5000, 5100), rc(s("chr1", 5300, 5400))),
     ]
+
+
+NEXTERA = "CTGTCTCTTATACACATCT"
+
+
+def clip_cases(G):
+    """(name, mate sequence, MateClip kwargs) for the clipping unit check (model clip_mate against the kernel's clipMate)"""
+    f = G.text["chr1"][2000:2040]
+    mm = list(NEXTERA)
+    mm[10] = "G" if mm[10] != "G" else "A"
+    return [
+        ("n5", f, dict(n5=4)),
+        ("n3", f, dict(n3=6)),
+        ("n5_n3_after3", f, dict(n5=2, n3=3, after3=5)),
+        ("n5_after5", f, dict(n5=2, after5=3)),
+        ("emptied_n3", f, dict(n3=60)),
+        ("emptied_n5_then_n3", f, dict(n5=50, n3=3)),
+        ("after3_alone_ignored", f, dict(after3=5)),
+        ("after5_alone_ignored", f, dict(after5=5)),
+        ("adapter_exact", f + NEXTERA, dict(adapter3=NEXTERA)),
+        ("adapter_one_mismatch", f + "".join(mm), dict(adapter3=NEXTERA, adMMp=0.1)),
+        ("adapter_no_mismatch_allowed", f + "".join(mm), dict(adapter3=NEXTERA, adMMp=0.0)),
+        ("adapter_partial_at_end", f + NEXTERA[:7], dict(adapter3=NEXTERA, adMMp=0.1)),
+        ("adapter_then_after3", f + NEXTERA, dict(adapter3=NEXTERA, after3=3)),
+        ("n3_adapter_after3", f + NEXTERA + "ACGTA", dict(n3=5, adapter3=NEXTERA, after3=2)),
+        ("n5_adapter", "ACGTA" + f + NEXTERA, dict(n5=5, adapter3=NEXTERA)),
+        ("polyA", f[:-2] + "CC" + "A" * 15, dict(adapter3="polyA")),
+        ("polyA_prefers_more_matches", f + "A" * 15, dict(adapter3="polyA")),
+        ("adapter_with_N", f + NEXTERA[:8] + "N" + NEXTERA[9:], dict(adapter3=NEXTERA, adMMp=0.1)),
+    ]

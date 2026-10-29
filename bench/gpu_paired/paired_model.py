@@ -378,8 +378,99 @@ class Tr:
 class PairRead:
     r: List[np.ndarray]  # Read1[0], Read1[1] (complement), Read1[2] (reverse complement)
     Lread: int
-    readLength: Tuple[int, int]
+    readLength: Tuple[int, int]          # after clipping (STAR's readLength[])
     nmates: int
+    readLengthOriginal: Tuple[int, int] = (0, 0)
+    clip5: Tuple[int, int] = (0, 0)      # clipMates[mate][0].clippedN
+    clip3: Tuple[int, int] = (0, 0)      # clipMates[mate][1].clippedN
+
+
+@dataclass
+class MateClip:
+    """One mate's clip parameters: --clip5pNbases, --clip5pAfterAdapterNbases, --clip3pNbases, --clip3pAdapterSeq ('-' none,
+    'polyA'), --clip3pAdapterMMp, --clip3pAfterAdapterNbases (ParametersClip_initialize.cpp:84-107 hands the value of each mate
+    to its ClipMate; a single value on the command line is repeated for every mate before that, :152-163)."""
+    n5: int = 0
+    after5: int = 0
+    n3: int = 0
+    adapter3: str = "-"
+    adMMp: float = 0.1
+    after3: int = 0
+
+
+@njit(cache=True)
+def local_search(x, nx, y, ny, pMM):
+    """SequenceFuns.cpp:304-326 localSearch: the start of the best match of y at the 3' end of x (nx if none)"""
+    nMatchBest = 0
+    nMMbest = 0
+    ixBest = nx
+    for ix in range(nx):
+        nMatch = 0
+        nMM = 0
+        for iy in range(min(ny, nx - ix)):
+            if x[ix + iy] > 3:
+                continue
+            if x[ix + iy] == y[iy]:
+                nMatch += 1
+            else:
+                nMM += 1
+        if (nMatch > nMatchBest or (nMatch == nMatchBest and nMM < nMMbest)) and nMatch > 0 and float(nMM) / float(nMatch) <= pMM:
+            ixBest = ix
+            nMatchBest = nMatch
+            nMMbest = nMM
+    return ixBest
+
+
+def clip_mate(seq: np.ndarray, c: MateClip):
+    """readLoad.cpp:75-76 + ClipMate_clip.cpp:5-78 (Hamming adapter type): 5' clip, then 3' clip. Returns (clipped sequence,
+    clipped5, clipped3). STAR physically removes the clipped bases, so the aligner sees only the rest.
+    Quirk (ClipMate_initialize.cpp:22-23): a clip with no N bases and no adapter has type -1 and clip() returns at :9-10, so
+    --clip*AfterAdapterNbases alone does nothing."""
+    L = len(seq)
+    s = 0
+    c5 = 0
+    if c.n5 > 0:  # 5': type 0; no adapter (ParametersClip_initialize.cpp:34-39 refuses one)
+        Lold = L
+        if L > c.n5:
+            L -= c.n5
+            s += c.n5
+            c5 += c.n5
+        else:
+            L = 0
+            c5 = Lold
+        if c.after5 > 0:  # :64-75
+            if L > c.after5:
+                L -= c.after5
+                s += c.after5
+                c5 += c.after5
+            else:
+                L = 0
+                c5 = Lold
+    c3 = 0
+    adapter = c.adapter3 not in ("-", "")
+    if c.n3 > 0 or adapter:  # 3': type 1
+        Lold = L
+        if c.n3 > 0:  # :14-25
+            if L > c.n3:
+                L -= c.n3
+                c3 += c.n3
+            else:
+                L = 0
+                c3 = Lold
+        if adapter:  # :27-62, case 1
+            ad = np.zeros(DEF_readSeqLengthMax, dtype=np.int8) if c.adapter3 == "polyA" else nucl(c.adapter3)
+            x = np.ascontiguousarray(seq[s:s + L])
+            adN = L - int(local_search(x, L, ad, len(ad), float(c.adMMp)))
+            L -= adN
+            c3 += adN
+        if c.after3 > 0:  # :64-75
+            if L > c.after3:
+                L -= c.after3
+                c3 += c.after3
+            else:
+                L = 0
+                c3 = Lold
+    return seq[s:s + L].copy(), c5, c3
 
 
 def _comp(a: np.ndarray) -> np.ndarray:
@@ -389,22 +480,29 @@ def _comp(a: np.ndarray) -> np.ndarray:
     return out
 
 
-def build_read(m1: str, m2: Optional[str]) -> PairRead:
+def build_read(m1: str, m2: Optional[str], clip: Optional[Tuple[MateClip, MateClip]] = None) -> PairRead:
     a = nucl(m1)
-    if m2 is None:  # single end (:60)
+    b = nucl(m2) if m2 is not None else None
+    lo = (len(a), len(b) if b is not None else 0)
+    c5 = [0, 0]
+    c3 = [0, 0]
+    if clip is not None:  # readLoad.cpp:75-76, per mate, before the mates are combined
+        a, c5[0], c3[0] = clip_mate(a, clip[0])
+        if b is not None:
+            b, c5[1], c3[1] = clip_mate(b, clip[1])
+    if b is None:  # single end (:60)
         r0 = a
         L = len(a)
         rl = (L, 0)
         nm = 1
     else:  # :40-58: mate1, spacer, reverse complement of mate2
-        b = nucl(m2)
         r0 = np.concatenate([a, np.array([MARK_FRAG_SPACER_BASE], dtype=np.int8), _comp(b)[::-1]])
         L = len(a) + len(b) + 1
         rl = (len(a), len(b))
         nm = 2
     r1 = _comp(r0)  # :74 complementSeqNumbers leaves values > 3 unchanged
     r2 = r1[::-1].copy()  # :75
-    return PairRead([r0.astype(np.int8), r1.astype(np.int8), r2.astype(np.int8)], L, rl, nm)
+    return PairRead([r0.astype(np.int8), r1.astype(np.int8), r2.astype(np.int8)], L, rl, nm, lo, tuple(c5), tuple(c3))
 
 
 def quality_split(r: np.ndarray, L: int, maxNsplit: int, minLsplit: int):
@@ -1122,9 +1220,24 @@ class Result:
     transcripts: List[Tr] = field(default_factory=list)  # trMult
     primary: int = -1
     windows: List[dict] = field(default_factory=list)  # window records (Str, Chr, WA, WlastAnchor) for replay
+    host_lane: bool = False
+    read: Optional[PairRead] = None
 
     def summaries(self):
         return [t.summary() for t in self.transcripts]
+
+    def tsv(self) -> str:
+        """the transcripts field of the kernel's TSV (paired_microbench decodeBlob): Chr,Str,score,nMM,nMatch,gLength,iFrag,nExons,
+        R:G:L:mate+..., canonSJ/..., joined by '|'; '.' when there is none"""
+        if not self.transcripts:
+            return "."
+        out = []
+        for t in self.transcripts:
+            n = t.nExons
+            ex = "+".join(":".join(str(int(v)) for v in t.exons[i][:4]) for i in range(n))
+            sj = "/".join(str(int(v)) for v in t.canonSJ[:n - 1])
+            out.append(f"{t.Chr},{t.Str},{t.maxScore},{t.nMM},{t.nMatch},{t.gLength},{t.iFrag},{n},{ex},{sj}")
+        return "|".join(out)
 
 
 def map_windows(genome: Genome, P: Params, rd: PairRead, WC, WAs, WlastAnchor) -> Result:
@@ -1192,9 +1305,13 @@ def map_windows(genome: Genome, P: Params, rd: PairRead, WC, WAs, WlastAnchor) -
     return res
 
 
-def map_pair(genome: Genome, P: Params, m1: str, m2: Optional[str], seeds: Optional[Seeds] = None) -> Result:
-    """One read pair (or single-end read when m2 is None), from the sequences to STAR's final transcripts."""
-    rd = build_read(m1, m2)
+def map_pair(genome: Genome, P: Params, m1: str, m2: Optional[str], seeds: Optional[Seeds] = None, clip=None) -> Result:
+    """One read pair (or single-end read when m2 is None), from the sequences to STAR's final transcripts. clip: (MateClip,
+    MateClip) as STAR's --clip* options give them. A mate clipped to nothing makes Result.host_lane True (the GPU driver sends
+    such a pair to the host lane; the combined read would have an empty mate)."""
+    rd = build_read(m1, m2, clip)
+    if m2 is not None and min(rd.readLength) == 0:
+        return Result(unmapType=0, nW=0, host_lane=True, read=rd)
     S = seeds if seeds is not None else find_seeds(genome, P, rd)
     if rd.Lread < P.outFilterMatchNmin:
         return Result(unmapType=0, nW=0)
@@ -1204,6 +1321,7 @@ def map_pair(genome: Genome, P: Params, m1: str, m2: Optional[str], seeds: Optio
     if not W.WC:
         return Result(unmapType=0, nW=0)
     res = map_windows(genome, P, rd, W.WC, W.WA, W.WlastAnchor)
+    res.read = rd
     res.windows = [dict(Str=W.WC[i][WC_Str], Chr=W.WC[i][WC_Chr], WA=W.WA[i], WlastAnchor=int(W.WlastAnchor[i]))
                    for i in range(len(W.WC))]
     return res

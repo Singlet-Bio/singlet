@@ -14,7 +14,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.abspath(__file__)))
-from paired_model import (Genome, Params, build_read, map_windows, WC_gStart, WC_gEnd)  # noqa: E402
+from paired_model import (Genome, Params, build_read, map_windows)  # noqa: E402
 
 
 def load_star_genome(gdir):
@@ -95,27 +95,22 @@ def main(gdir, r1, r2, dump, ktsv, mode="spliced", n=20000):
         if k is None or int(k[1]) != 0 or wins[i] is None:
             skipped += 1
             continue
-        rd = build_read(m1s[i], m2s[i])
+        # the kernel's TSV columns: idx status unmap nW nTr iBest transcripts lorig1 lorig2 clip5_1 clip3_1 clip5_2 clip3_2
+        lo1, lo2, a5, a3, b5, b3 = (int(v) for v in k[7:13])
+        # STAR removes the clipped bases before the mates are combined (readLoad.cpp:75-76): cut the raw mates the same way
+        rd = build_read(m1s[i][a5:lo1 - a3], m2s[i][b5:lo2 - b3])
         WC = [[s, c, 0, 0] for (s, c, _r, _l) in wins[i]]
         res = map_windows(G, P, rd, WC, [r for (_s, _c, r, _l) in wins[i]], [l for (_s, _c, _r, l) in wins[i]])
-        # the kernel's TSV columns: idx status unmap nW nTr iBest Chr Str score nMM nMatch gLength iFrag nExons exons canonSJ
         km = (int(k[2]), int(k[3]), int(k[4]), int(k[5]))
         mm = (res.unmapType, res.nW, len(res.transcripts), res.primary)
-        ok = km == mm
-        if ok and res.primary >= 0:
-            t = res.transcripts[res.primary]
-            exs = ";".join(":".join(str(int(v)) for v in t.exons[e][:4]) for e in range(t.nExons))
-            sj = ",".join(str(int(v)) for v in t.canonSJ[:t.nExons - 1])
-            ok = (k[6:16] == [str(t.Chr), str(t.Str), str(t.maxScore), str(t.nMM), str(t.nMatch), str(t.gLength), str(t.iFrag),
-                              str(t.nExons), exs, sj])
+        ok = km == mm and k[6] == res.tsv()
         if ok:
             same += 1
         else:
             diff += 1
             if shown < 10:
                 shown += 1
-                print(f"#{i} kernel {k[2:]}  model {mm} "
-                      f"{res.transcripts[res.primary].summary() if res.primary >= 0 else ''}")
+                print(f"#{i} kernel {k[2:7]}  model {mm} {res.tsv()}")
     print(f"replayed {same + diff} pairs: {same} identical, {diff} different; {skipped} skipped (host lane or missing)")
     return 0 if diff == 0 else 1
 

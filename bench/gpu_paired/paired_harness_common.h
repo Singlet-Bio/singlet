@@ -204,7 +204,9 @@ struct Case {
 
 static char nuc(char c) { switch (c) { case 'A': return 0; case 'C': return 1; case 'G': return 2; case 'T': return 3; default: return 4; } }
 
-static bool parseCases(const std::string& file, std::map<std::string, std::string>& chroms, std::vector<std::string>& order, u64& gbits, std::vector<Case>& cases) {
+struct ClipCase { std::string name, adapter, seq; uint32_t n5, after5, n3, after3; double mmp; u64 len, start, c5, c3; };
+
+static bool parseCases(const std::string& file, std::map<std::string, std::string>& chroms, std::vector<std::string>& order, u64& gbits, std::vector<Case>& cases, std::vector<ClipCase>& clips) {
     std::ifstream in(file);
     if (!in) return false;
     std::string line; Case* c = nullptr;
@@ -213,6 +215,7 @@ static bool parseCases(const std::string& file, std::map<std::string, std::strin
         if (tag == "GENOME") { int n; ls >> gbits >> n; }
         else if (tag == "CHR") { std::string n, s; ls >> n >> s; chroms[n] = s; order.push_back(n); }
         else if (tag == "CASE") { cases.emplace_back(); c = &cases.back(); int k; ls >> c->name >> c->kind >> k; for (int i = 0; i < k; i++) { std::string key; double v; ls >> key >> v; c->ov.push_back({key, v}); } }
+        else if (tag == "CLIPCASE") { ClipCase k; ls >> k.name >> k.n5 >> k.after5 >> k.n3 >> k.after3 >> k.mmp >> k.adapter >> k.seq >> k.len >> k.start >> k.c5 >> k.c3; clips.push_back(k); }
         else if (tag == "READ") ls >> c->m1 >> c->m2;
         else if (tag == "NWIN") { c->wins.clear(); }   // the WIN lines follow, one per window (empty windows included)
         else if (tag == "WIN") {
@@ -299,4 +302,22 @@ static bool caseParams(const Case& c, u64 nGenome, u64 gbits, Params& P) {
     std::string why;
     if (!finishParams(P, nGenome, gbits, why)) { fprintf(stderr, "params: %s\n", why.c_str()); return false; }
     return true;
+}
+
+// the clipping unit check: m5::pe::clipMate against the model's clip_mate. Returns the number of differences.
+static int runClipCases(const std::vector<ClipCase>& clips) {
+    int bad = 0;
+    for (auto& k : clips) {
+        std::vector<char> seq(k.seq.size()), ad;
+        for (size_t i = 0; i < seq.size(); i++) seq[i] = nuc(k.seq[i]);
+        if (k.adapter == "polyA") ad.assign(m5::DEF_readSeqLengthMax, 0);
+        else if (k.adapter != "-") for (char ch : k.adapter) ad.push_back(nuc(ch));
+        m5::pe::MateClip c{k.n5, k.after5, k.n3, k.after3, (uint32_t)ad.size(), k.mmp, ad.data()};
+        m5::pe::ClipSpan r = m5::pe::clipMate(c, seq.data(), seq.size());
+        bool ok = r.len == k.len && (r.len == 0 || r.start == k.start) && r.c5 == k.c5 && r.c3 == k.c3;
+        printf("clip %-28s %s\n", k.name.c_str(), ok ? "ok" : "DIFF");
+        if (!ok) { printf("  kernel len %llu start %llu c5 %llu c3 %llu; model len %llu start %llu c5 %llu c3 %llu\n", (unsigned long long)r.len, (unsigned long long)r.start,
+                          (unsigned long long)r.c5, (unsigned long long)r.c3, (unsigned long long)k.len, (unsigned long long)k.start, (unsigned long long)k.c5, (unsigned long long)k.c3); bad++; }
+    }
+    return bad;
 }
