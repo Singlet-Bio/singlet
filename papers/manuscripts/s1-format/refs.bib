@@ -1,6 +1,7 @@
 % References for the .s1 manuscript.
-% Entries with a `note = {verify ...}` field were assembled from secondary sources; confirm volume, pages and DOI
-% against the publisher before submission (`make validate` in papers/ lists entries without a DOI or URL).
+% Checked 2026-10-29 against Crossref, Europe PMC, bioRxiv/arXiv APIs, PMLR, RFC Editor, NTRS, CRAN, Zenodo and the
+% projects' CITATION files. All "verify" notes resolved. Citation keys unchanged; new entries are at the end of the file.
+% Comments starting "% CHECKED:" record what was changed.
 
 % ------------------------------------------------------------------ scale and ecosystem
 @article{svensson2018exponential,
@@ -21,15 +22,17 @@
   number  = {D1},
   pages   = {D886--D900},
   year    = {2025},
-  doi     = {10.1093/nar/gkae1142},
-  note    = {verify pages and DOI}
+  doi     = {10.1093/nar/gkae1142}
 }
 
+% CHECKED: title was a made-up descriptive title; the project has no CITATION file. Cite the repository by its name.
+% TileDB-SOMA-ML is a separate repository: see new entry tiledbsomaml at the end.
 @misc{tiledbsoma,
   author       = {{TileDB, Inc.} and {Chan Zuckerberg Initiative}},
-  title        = {{TileDB-SOMA} and {TileDB-SOMA-ML}: scalable storage and loaders for single-cell data},
-  howpublished = {\url{https://github.com/single-cell-data/TileDB-SOMA}},
-  year         = {2025}
+  title        = {{TileDB-SOMA}},
+  howpublished = {Software, \url{https://github.com/single-cell-data/TileDB-SOMA}},
+  year         = {2025},
+  note         = {Version as run; see Table~1}
 }
 
 @article{virshup2024anndata,
@@ -73,44 +76,60 @@
   doi     = {10.1038/s41592-019-0654-x}
 }
 
+% CHECKED: authors and title match CRAN; added CRAN DOI. Set version and year to the version actually run
+% (\nm{ver-R} in Table 1 is the R version, not the Matrix version; current CRAN release is 1.7-6, 2026).
 @misc{bates2024matrix,
   author       = {Bates, Douglas and Maechler, Martin and Jagan, Mikael},
-  title        = {Matrix: Sparse and Dense Matrix Classes and Methods},
+  title        = {{Matrix}: Sparse and Dense Matrix Classes and Methods},
   howpublished = {R package, \url{https://CRAN.R-project.org/package=Matrix}},
-  year         = {2024}
+  year         = {2024},
+  doi          = {10.32614/CRAN.package.Matrix},
+  note         = {R package version as run}
 }
 
+% CHECKED (FIXED): wrong title and wrong second author. bioRxiv/Crossref: "Scalable high-performance single cell data
+% analysis with BPCells", Parks B, Greenleaf WJ, posted 2025-04-01, v1. No published version as of 2026-10-29.
+% (Immanuel Abdi is a co-author of the R package, not of the preprint.)
 @article{parks2025bpcells,
-  author  = {Parks, Benjamin and Abdi, Sina},
-  title   = {Scalable bit-packing compression and streaming algorithms enable high-performance single-cell analysis with {BPCells}},
+  author  = {Parks, Benjamin and Greenleaf, William J.},
+  title   = {Scalable high-performance single cell data analysis with {BPCells}},
   journal = {bioRxiv},
   year    = {2025},
-  doi     = {10.1101/2025.03.27.645853},
-  note    = {verify title}
+  doi     = {10.1101/2025.03.27.645853}
 }
 
+% CHECKED (FIXED): added the Zenodo DOI given in the project's CITATION.cff ("Zenodo DOI for all versions").
+% Note: Zenodo's API reports 10.5281/zenodo.17808614 as the v2.0.0 record and 10.5281/zenodo.17808558 as the concept DOI.
 @misc{hdf5,
   author       = {{The HDF Group}},
   title        = {Hierarchical Data Format, version 5},
-  howpublished = {\url{https://www.hdfgroup.org/HDF5/}},
-  year         = {1997--2025}
+  howpublished = {Software, \url{https://github.com/HDFGroup/hdf5}},
+  year         = {2025},
+  doi          = {10.5281/zenodo.17808614}
 }
 
+% CHECKED (FIXED): zarr-python's README cites Zenodo; concept DOI (all versions) 10.5281/zenodo.3773449.
+% Replace with the version DOI of the release actually run if preferred.
 @misc{zarr,
-  author       = {Miles, Alistair and others},
+  author       = {Miles, Alistair and Kirkham, John and Durant, Martin and Bourbeau, James and Onalan, Tarik and Hamman, Joe and Patel, Zain and others},
   title        = {zarr-developers/zarr-python},
-  howpublished = {Zenodo, \url{https://zarr.dev}},
-  year         = {2024},
-  note         = {cite the Zenodo DOI of the version used}
+  howpublished = {Software, Zenodo},
+  year         = {2025},
+  doi          = {10.5281/zenodo.3773449}
 }
 
-@article{paszke2019pytorch,
-  author  = {Paszke, Adam and Gross, Sam and Massa, Francisco and others},
-  title   = {{PyTorch}: An imperative style, high-performance deep learning library},
-  journal = {Advances in Neural Information Processing Systems},
-  volume  = {32},
-  year    = {2019},
-  url     = {https://proceedings.neurips.cc/paper/2019/hash/bdbca288fee7f92f2bfa9f7012727740-Abstract.html}
+% CHECKED (FIXED): conference paper, not a journal article; full author list from the NeurIPS proceedings BibTeX
+% (21 authors). The official proceedings BibTeX gives no page numbers. PyTorch's own CITATION.cff now prefers the
+% PyTorch 2 paper (new entry ansel2024pytorch2).
+@inproceedings{paszke2019pytorch,
+  author    = {Paszke, Adam and Gross, Sam and Massa, Francisco and Lerer, Adam and Bradbury, James and Chanan, Gregory and Killeen, Trevor and Lin, Zeming and Gimelshein, Natalia and Antiga, Luca and Desmaison, Alban and Kopf, Andreas and Yang, Edward and DeVito, Zachary and Raison, Martin and Tejani, Alykhan and Chilamkurthy, Sasank and Steiner, Benoit and Fang, Lu and Bai, Junjie and Chintala, Soumith},
+  title     = {{PyTorch}: An Imperative Style, High-Performance Deep Learning Library},
+  booktitle = {Advances in Neural Information Processing Systems 32 (NeurIPS 2019)},
+  editor    = {Wallach, H. and Larochelle, H. and Beygelzimer, A. and d'Alch{\'e}-Buc, F. and Fox, E. and Garnett, R.},
+  publisher = {Curran Associates, Inc.},
+  volume    = {32},
+  year      = {2019},
+  url       = {https://proceedings.neurips.cc/paper/2019/hash/bdbca288fee7f92f2bfa9f7012727740-Abstract.html}
 }
 
 @book{saad2003iterative,
@@ -178,16 +197,23 @@
   volume  = {15},
   pages   = {6611},
   year    = {2024},
-  doi     = {10.1038/s41467-024-51059-5},
-  note    = {verify article number}
+  doi     = {10.1038/s41467-024-51059-5}
 }
 
-@article{dascenzo2025scdataset,
-  author  = {D'Ascenzo, Davide and Cultrera di Montesano, Sebastiano},
-  title   = {{scDataset}: Scalable Data Loading for Deep Learning on Large-Scale Single-Cell Omics},
-  journal = {arXiv preprint arXiv:2506.01883},
-  year    = {2025},
-  url     = {https://arxiv.org/abs/2506.01883}
+% CHECKED (FIXED): the arXiv preprint is now published at ICML 2026 (PMLR 306:22246--22262). Key kept.
+% The published abstract says "more than two orders of magnitude" speedup over true random sampling on Tahoe-100M.
+@inproceedings{dascenzo2025scdataset,
+  author    = {D'Ascenzo, Davide and Cultrera di Montesano, Sebastiano},
+  title     = {{scDataset}: Scalable Data Loading for Deep Learning on Large-Scale Single-Cell Omics},
+  booktitle = {Proceedings of the 43rd International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {306},
+  pages     = {22246--22262},
+  publisher = {PMLR},
+  year      = {2026},
+  url       = {https://proceedings.mlr.press/v306/d-ascenzo26a.html},
+  eprint    = {2506.01883},
+  archiveprefix = {arXiv}
 }
 
 % ------------------------------------------------------------------ information theory and entropy coding
@@ -305,7 +331,9 @@
   author      = {Rice, Robert F.},
   title       = {Some practical universal noiseless coding techniques},
   institution = {Jet Propulsion Laboratory},
-  number      = {JPL Publication 79-22},
+  address     = {Pasadena, CA},
+  number      = {JPL Publication 79-22 (NASA-CR-158515)},
+  month       = mar,
   year        = {1979},
   url         = {https://ntrs.nasa.gov/citations/19790014634}
 }
@@ -363,17 +391,25 @@
 @techreport{burrows1994block,
   author      = {Burrows, Michael and Wheeler, David J.},
   title       = {A block-sorting lossless data compression algorithm},
-  institution = {Digital Systems Research Center},
+  institution = {Digital Equipment Corporation, Systems Research Center},
+  address     = {Palo Alto, CA},
+  type        = {SRC Research Report},
   number      = {124},
+  month       = may,
   year        = {1994}
 }
 
+% CHECKED: exists (Florida Tech CS Dept. technical report, Dec. 2005). Note: it reports that the top context-mixing
+% compressors are "500 to 1000 times slower than popular compressors such as gzip"; it does not support
+% "a few megabytes per second".
 @techreport{mahoney2005adaptive,
   author      = {Mahoney, Matthew V.},
   title       = {Adaptive weighing of context models for lossless data compression},
-  institution = {Florida Institute of Technology},
+  institution = {Florida Institute of Technology, Department of Computer Science},
   number      = {CS-2005-16},
-  year        = {2005}
+  month       = dec,
+  year        = {2005},
+  url         = {https://cs.fit.edu/media/TechnicalReports/cs-2005-16.pdf}
 }
 
 @misc{deutsch1996deflate,
@@ -493,8 +529,7 @@
   volume  = {21},
   pages   = {196},
   year    = {2020},
-  doi     = {10.1186/s13059-020-02096-y},
-  note    = {verify DOI}
+  doi     = {10.1186/s13059-020-02096-y}
 }
 
 @article{choudhary2022comparison,
@@ -613,7 +648,7 @@
   journal = {Cell},
   volume  = {185},
   number  = {14},
-  pages   = {2559--2575},
+  pages   = {2559--2575.e28},
   year    = {2022},
   doi     = {10.1016/j.cell.2022.05.013}
 }
@@ -656,7 +691,7 @@
   journal = {Cell Systems},
   volume  = {3},
   number  = {4},
-  pages   = {346--360},
+  pages   = {346--360.e4},
   year    = {2016},
   doi     = {10.1016/j.cels.2016.08.011}
 }
@@ -667,7 +702,7 @@
   journal = {Cell},
   volume  = {172},
   number  = {5},
-  pages   = {1091--1107},
+  pages   = {1091--1107.e17},
   year    = {2018},
   doi     = {10.1016/j.cell.2018.02.001}
 }
@@ -693,13 +728,14 @@
   doi     = {10.1038/s41586-019-0969-x}
 }
 
+% CHECKED: first three authors correct (32 authors, last Johnny Yu). Still a bioRxiv preprint (v3, 2025-05-10);
+% no published version found as of 2026-10-29.
 @article{zhang2025tahoe,
-  author  = {Zhang, Jesse and Ubas, Airol A. and de Borja, Richard and others},
+  author  = {Zhang, Jesse and Ubas, Airol A. and de Borja, Richard and Svensson, Valentine and others and Goodarzi, Hani and Yu, Johnny},
   title   = {{Tahoe-100M}: A giga-scale single-cell perturbation atlas for context-dependent gene function and cellular modeling},
   journal = {bioRxiv},
   year    = {2025},
-  doi     = {10.1101/2025.02.20.639398},
-  note    = {verify author list}
+  doi     = {10.1101/2025.02.20.639398}
 }
 
 @article{siletti2023transcriptomic,
@@ -719,7 +755,7 @@
   journal = {Cell},
   volume  = {184},
   number  = {13},
-  pages   = {3573--3587},
+  pages   = {3573--3587.e29},
   year    = {2021},
   doi     = {10.1016/j.cell.2021.04.048}
 }
@@ -771,17 +807,22 @@
   journal = {Cell Systems},
   volume  = {3},
   number  = {4},
-  pages   = {385--394},
+  pages   = {385--394.e3},
   year    = {2016},
   doi     = {10.1016/j.cels.2016.09.002}
 }
 
+% CHECKED (FIXED): added volume, issue, pages and DOI (Crossref/PubMed 40473992). First author publishes as
+% "Michelli Faria de Oliveira"; senior author Sarah E. B. Taylor.
 @article{oliveira2025highdefinition,
-  author  = {Oliveira, Michelli F. and Romero, Juan P. and Chung, Meii and others},
+  author  = {{de Oliveira}, Michelli Faria and Romero, Juan Pablo and Chung, Meii and Williams, Stephen R. and others and Taylor, Sarah E. B.},
   title   = {High-definition spatial transcriptomic profiling of immune cell populations in colorectal cancer},
   journal = {Nature Genetics},
+  volume  = {57},
+  number  = {6},
+  pages   = {1512--1523},
   year    = {2025},
-  note    = {verify volume, pages and DOI}
+  doi     = {10.1038/s41588-025-02193-3}
 }
 
 @article{stickels2021highly,
@@ -800,7 +841,7 @@
   journal = {Cell},
   volume  = {185},
   number  = {10},
-  pages   = {1777--1792},
+  pages   = {1777--1792.e21},
   year    = {2022},
   doi     = {10.1016/j.cell.2022.04.003}
 }
@@ -822,8 +863,7 @@
   volume  = {14},
   pages   = {8353},
   year    = {2023},
-  doi     = {10.1038/s41467-023-43458-x},
-  note    = {verify DOI}
+  doi     = {10.1038/s41467-023-43458-x}
 }
 
 @article{gtex2020,
@@ -837,9 +877,154 @@
   doi     = {10.1126/science.aaz1776}
 }
 
+% CHECKED (FIXED): the repository's citation page (archive.ics.uci.edu/citation) now asks for Kelly, Longjohn and
+% Nottingham, with no year. The Dua & Graff 2019 form is the superseded citation. For the dataset itself the page asks
+% for the per-dataset citation: new entry newman2008bagofwords (DOI 10.24432/C5ZG6P). Cite both, or just the dataset.
 @misc{dua2019uci,
-  author       = {Dua, Dheeru and Graff, Casey},
-  title        = {{UCI} Machine Learning Repository},
+  author       = {Kelly, Markelle and Longjohn, Rachel and Nottingham, Kolby},
+  title        = {The {UCI} Machine Learning Repository},
   howpublished = {\url{https://archive.ics.uci.edu}},
-  year         = {2019}
+  year         = {2026},
+  note         = {No year given by the repository; year of access}
+}
+
+% ================================================================== NEW ENTRIES (proposed; all verified 2026-10-29)
+% Software and format documentation
+@misc{tiledbsomaml,
+  author       = {{TileDB, Inc.} and {Chan Zuckerberg Initiative}},
+  title        = {{TileDB-SOMA-ML}: machine-learning tools for {TileDB-SOMA}},
+  howpublished = {Software, \url{https://github.com/single-cell-data/TileDB-SOMA-ML}},
+  year         = {2025},
+  note         = {Package \texttt{tiledbsoma-ml}; version as run}
+}
+
+@inproceedings{ansel2024pytorch2,
+  author    = {Ansel, Jason and Yang, Edward and He, Horace and Gimelshein, Natalia and Jain, Animesh and others and Chintala, Soumith},
+  title     = {{PyTorch} 2: Faster Machine Learning Through Dynamic {Python} Bytecode Transformation and Graph Compilation},
+  booktitle = {Proceedings of the 29th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 2 (ASPLOS '24)},
+  pages     = {929--947},
+  publisher = {ACM},
+  year      = {2024},
+  doi       = {10.1145/3620665.3640366}
+}
+
+@article{virtanen2020scipy,
+  author  = {Virtanen, Pauli and Gommers, Ralf and Oliphant, Travis E. and Haberland, Matt and Reddy, Tyler and Cournapeau, David and others},
+  title   = {{SciPy} 1.0: fundamental algorithms for scientific computing in {Python}},
+  journal = {Nature Methods},
+  volume  = {17},
+  number  = {3},
+  pages   = {261--272},
+  year    = {2020},
+  doi     = {10.1038/s41592-019-0686-2}
+}
+
+@article{papadopoulos2016tiledb,
+  author  = {Papadopoulos, Stavros and Datta, Kushal and Madden, Samuel and Mattson, Timothy},
+  title   = {The {TileDB} array data storage manager},
+  journal = {Proceedings of the VLDB Endowment},
+  volume  = {10},
+  number  = {4},
+  pages   = {349--360},
+  year    = {2016},
+  doi     = {10.14778/3025111.3025117}
+}
+
+@misc{tenx_h5,
+  author       = {{10x Genomics}},
+  title        = {Feature Barcode Matrices ({HDF5} Format), {Cell Ranger} documentation},
+  howpublished = {\url{https://www.10xgenomics.com/support/software/cell-ranger/latest/analysis/outputs/cr-outputs-h5-matrices}},
+  year         = {2025}
+}
+
+@misc{loompy,
+  author       = {{Linnarsson Lab}},
+  title        = {loompy: working with {Loom} files},
+  howpublished = {Software and file-format documentation, \url{https://linnarssonlab.org/loompy/}},
+  year         = {2025}
+}
+
+@misc{parquet,
+  author       = {{The Apache Software Foundation}},
+  title        = {Apache {Parquet} file format},
+  howpublished = {\url{https://parquet.apache.org/docs/file-format/}},
+  year         = {2025}
+}
+
+@misc{tahoe100m_hf,
+  author       = {{Tahoe Therapeutics}},
+  title        = {{Tahoe-100M} dataset (Parquet release)},
+  howpublished = {Hugging Face, \url{https://huggingface.co/datasets/tahoebio/Tahoe-100M}},
+  year         = {2025},
+  note         = {One row per cell with list columns \texttt{genes} and \texttt{expressions}}
+}
+
+@misc{newman2008bagofwords,
+  author       = {Newman, David},
+  title        = {Bag of Words},
+  howpublished = {UCI Machine Learning Repository},
+  year         = {2008},
+  doi          = {10.24432/C5ZG6P}
+}
+
+% Prior work named in the text without a citation
+@article{elias1974efficient,
+  author  = {Elias, Peter},
+  title   = {Efficient storage and retrieval by content and address of static files},
+  journal = {Journal of the ACM},
+  volume  = {21},
+  number  = {2},
+  pages   = {246--260},
+  year    = {1974},
+  doi     = {10.1145/321812.321820}
+}
+
+@article{cochrane2013facing,
+  author  = {Cochrane, Guy and Alako, Blaise and Amid, Clara and Bower, Lawrence and Cerde{\~n}o-T{\'a}rraga, Ana and Cleland, Iain and others and Zalunin, Vadim},
+  title   = {Facing growth in the {European Nucleotide Archive}},
+  journal = {Nucleic Acids Research},
+  volume  = {41},
+  number  = {D1},
+  pages   = {D30--D35},
+  year    = {2013},
+  doi     = {10.1093/nar/gks1175}
+}
+
+@article{traag2019louvain,
+  author  = {Traag, Vincent A. and Waltman, Ludo and van Eck, Nees Jan},
+  title   = {From {Louvain} to {Leiden}: guaranteeing well-connected communities},
+  journal = {Scientific Reports},
+  volume  = {9},
+  pages   = {5233},
+  year    = {2019},
+  doi     = {10.1038/s41598-019-41695-z}
+}
+
+@article{batson2019molecular,
+  author  = {Batson, Joshua and Royer, Lo{\"i}c and Webber, James},
+  title   = {Molecular cross-validation for single-cell {RNA-seq}},
+  journal = {bioRxiv},
+  year    = {2019},
+  doi     = {10.1101/786269}
+}
+
+@article{gerard2020data,
+  author  = {Gerard, David},
+  title   = {Data-based {RNA-seq} simulations by binomial thinning},
+  journal = {BMC Bioinformatics},
+  volume  = {21},
+  pages   = {206},
+  year    = {2020},
+  doi     = {10.1186/s12859-020-3450-9}
+}
+
+@article{neufeld2024inference,
+  author  = {Neufeld, Anna and Gao, Lucy L. and Popp, Joshua and Battle, Alexis and Witten, Daniela},
+  title   = {Inference after latent variable estimation for single-cell {RNA} sequencing data},
+  journal = {Biostatistics},
+  volume  = {25},
+  number  = {1},
+  pages   = {270--287},
+  year    = {2024},
+  doi     = {10.1093/biostatistics/kxac047}
 }

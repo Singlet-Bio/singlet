@@ -128,7 +128,7 @@ with every general-purpose coder (Fig.~\ref{fig:floor}d).
 % on read counts. State which model is best per protocol class from tab_floor.tsv.
 
 The reason is the data. Given a cell's expression profile, its molecules are a multinomial sample, and which molecules
-were captured is information, not redundancy~\cite{grun2014validation,svensson2020droplet}. We computed the entropy of
+were captured is information, not redundancy~\cite{townes2019feature,grun2014validation,svensson2020droplet}. We computed the entropy of
 that sample for each cell under a profile shrunk toward the cell's cluster (Section~\ref{sec:methods}): it accounts
 for a median of \nm{samplingPctMedian}\% of the \sone{} code length (range
 \nm{samplingPctLo}--\nm{samplingPctHi}\%, Fig.~\ref{fig:floor}c). The rest is what the counts reveal about the cell's own
@@ -186,7 +186,8 @@ CSC + zstd-19 & \texttt{zstandard} (\nm{ver-zstandard}) & zstd-19 & no & no & an
 fraction of non-zeros equal to one and median counts per cell. Sources and accessions in \texttt{datasets.yaml}.}
 \label{tab:datasets}
 \pgfplotstabletypeset[
-  columns={dataset,matrix,class,tier,cells,genes,nnz,density,frac_ones,counts_per_cell},
+  columns={dataset,matrix,class,tier,cells,genes,nnz,density,frac_ones,counts_per_cell,ref},
+  columns/ref/.style={string type, column name=Ref., column type=l},
   columns/dataset/.style={string type, column name=Dataset, column type=l},
   columns/matrix/.style={string type, column name=Matrix, column type=l},
   columns/class/.style={string type, column name=Protocol class, column type=l},

@@ -77,8 +77,8 @@ for describing a model, so each number is an optimistic bound for a coder that w
 expression as in sctransform~\cite{hafemeister2019normalization}; \emph{gene $\times$ depth}, a nonparametric model with,
 per gene and per quantile bin of cell depth (32 bins), a presence probability and (in 4 coarser bins) a distribution over
 values 1--63 with an Elias-gamma escape above, Krichevsky--Trofimov smoothed~\cite{krichevsky1981performance}; and
-\emph{gene $\times$ depth $\times$ cluster}, the same conditioned also on the cell's cluster. Clusters come from Leiden
-on the training half (50 principal components of log-normalised counts; at most 200{,}000 training cells, the rest
+\emph{gene $\times$ depth $\times$ cluster}, the same conditioned also on the cell's cluster. Clusters come from
+Leiden~\cite{traag2019louvain} on the training half (50 principal components of log-normalised counts; at most 200{,}000 training cells, the rest
 assigned to the nearest centroid); test cells are assigned to the nearest training centroid, and each test cell is
 charged the entropy of its label. Sparse cluster contexts back off to the gene $\times$ depth estimate with a pseudo-count
 of 8. Zero terms of the parametric models are summed per gene and depth bin at the bin's mean depth; on matrices with
@@ -87,8 +87,9 @@ at most $5\times10^7$ entries we also summed them exactly, with a largest relati
 
 \subsection{Sampling bound}
 For 2{,}000 random test cells we set the cell's profile $\pi_c$ to its normalised counts shrunk toward its cluster
-profile with a weight fitted on the training half by binomial thinning (half of each cell's molecules are held out and
-their likelihood under the shrunk profile of the other half is maximised), and computed the entropy of
+profile with a weight fitted on the training half by binomial thinning~\cite{batson2019molecular,neufeld2024inference}
+(half of each cell's molecules are held out and their likelihood under the shrunk profile of the other half is
+maximised), and computed the entropy of
 $\mathrm{Multinomial}(N_c,\pi_c)$, with $N_c$ the cell's total count, as
 $-\log_2 N_c! + \sum_g \mathbb{E}[\log_2 x_{gc}!] - N_c \sum_g \pi_{gc}\log_2\pi_{gc}$ under
 $x_{gc}\sim\mathrm{Binomial}(N_c,\pi_{gc})$, summing the binomial expectation exactly where $N_c\pi_{gc}<30$ and by a

@@ -112,13 +112,15 @@ def _tex_escape(s: str) -> str:
 # ----------------------------------------------------------------------------------------------- sections
 def datasets_table(cfg: Config, N: Numbers, out: Path) -> dict:
     st = _stage(cfg, "stats")
+    cite = {d["id"]: d.get("cite") for d in load_datasets(cfg, True)}
     rows = []
     for r in sorted(st, key=lambda r: (list(CLASS_LABELS).index(r["protocol_class"]) if r["protocol_class"] in CLASS_LABELS else 99,
                                         int(r["cells"]))):
         rows.append({"dataset": _tex_escape(r["dataset"]), "matrix": _tex_escape(r["matrix"]), "class": CLASS_LABELS.get(r["protocol_class"], r["protocol_class"]),
                      "tier": r["tier"], "cells": int(r["cells"]), "genes": int(r["genes"]), "nnz": int(r["nnz"]),
-                     "density": _f(r["density"]), "frac_ones": _f(r["frac_ones"]), "counts_per_cell": _f(r["counts_per_cell_median"])})
-    _write(rows, out / "tab_datasets.tsv", ["dataset", "matrix", "class", "tier", "cells", "genes", "nnz", "density", "frac_ones", "counts_per_cell"])
+                     "density": _f(r["density"]), "frac_ones": _f(r["frac_ones"]), "counts_per_cell": _f(r["counts_per_cell_median"]),
+                     "ref": ("\\cite{%s}" % cite[r["dataset"]]) if cite.get(r["dataset"]) else ""})
+    _write(rows, out / "tab_datasets.tsv", ["dataset", "matrix", "class", "tier", "cells", "genes", "nnz", "density", "frac_ones", "counts_per_cell", "ref"])
     N.put("nMatrices", len(st))
     N.put("nDatasets", len({r["dataset"] for r in st}))
     N.put("nProtocolClasses", len({r["protocol_class"] for r in st}))
@@ -221,9 +223,12 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
         N.put("dec-best-other-name", FORMAT_LABELS.get(best, best))
         N.put("dec-speedup-best-other", cold["s1"] / others[best], "{:.1f}")
     _write(rows, out / "tab_decode.tsv", ["format", "cold_t1", "cold_th", "warm_th"])
-    # label sides for Fig 1c: formats sorted by read rate take turns to the right and left of their point
+    # label sides for Fig 1c, chosen where the formats sit (west: label to the right of the point); others alternate
+    sides = {"h5ad_none": "west", "csc_i32": "east", "h5ad_lzf": "west", "mtx_gz": "west", "loom": "west",
+             "h5ad_gzip": "west", "rds_gz": "north west", "parquet_coo": "south west", "bpcells": "west", "zarr": "south",
+             "soma": "east", "tenx_h5": "east", "rds_xz": "north", "csc_zstd19": "east", "s1": "west", "s1_pack": "north"}
     for i, r in enumerate(sorted(trade, key=lambda r: r["mnnzs"])):
-        r["anchor"] = ("west", "east")[i % 2]
+        r["anchor"] = sides.get(r["format"], ("west", "east")[i % 2])
     _write(trade, out / "fig1c_tradeoff.tsv", ["format", "label", "group", "bits", "mnnzs", "anchor"])
     for what in ("codec", "codec_cpp"):
         for mode in cfg["s1"]["modes"]:
@@ -278,8 +283,8 @@ def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
             continue
         med = lambda k: _stats(r.get(k) for r in rs)["median"]
         rows.append({"pos": len(rows), "loader": ld, "label": LOADER_LABELS.get(ld, ld), "open": med("open_s"), "read": med("first_read_s"),
-                     "tensor": med("to_tensor_s"), "total": med("first_batch_s")})
-    _write(rows, out / "fig1b_ttfm.tsv", ["pos", "loader", "label", "open", "read", "tensor", "total"])
+                     "tensor": med("to_tensor_s"), "total": med("first_batch_s"), "group": "s1" if ld.startswith("s1") else "other"})
+    _write(rows, out / "fig1b_ttfm.tsv", ["pos", "loader", "label", "open", "read", "tensor", "total", "group"])
     tot = {r["loader"]: r["total"] for r in rows}
     if tot.get("s1_stream"):
         N.put("ttfm-s1", tot["s1_stream"], "{:.2f}")

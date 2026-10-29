@@ -24,16 +24,16 @@
 \begin{tikzpicture}
 \begin{axis}[
   title={b\quad Cold start to first minibatch},
-  xbar stacked, width=0.44\linewidth, height=7cm, bar width=8pt,
-  xmin=0, xlabel={seconds, \nm{fig1b-dataset}, object store at \nm{fig1b-tier}},
+  xbar, bar shift=0pt, width=0.44\linewidth, height=7cm, bar width=8pt,
+  xmode=log, log origin=infty, xmin=0.01, xmax=200, xlabel={seconds (log), \nm{fig1b-dataset}, object store at \nm{fig1b-tier}},
   ytick=data, yticklabels from table={\gen{fig1b_ttfm.tsv}}{label}, y dir=reverse, enlarge y limits=0.12,
   axis x line*=bottom, axis y line*=left,
-  legend style={font=\sffamily\tiny, draw=none, at={(0.98,0.02)}, anchor=south east, cells={anchor=west}},
+  val/.style={point meta=rawx, nodes near coords={\pgfmathprintnumber[fixed, precision=2]{\pgfplotspointmeta}\,s},
+    nodes near coords style={font=\sffamily\tiny, anchor=west, text=ink2}},
 ]
-\addplot[fill=ink2!60, draw=none] table[x=open, y=pos] {\gen{fig1b_ttfm.tsv}};
-\addplot[fill=dl, draw=none]      table[x=read, y=pos] {\gen{fig1b_ttfm.tsv}};
-\addplot[fill=tens, draw=none]    table[x=tensor, y=pos] {\gen{fig1b_ttfm.tsv}};
-\legend{open (metadata{,} index), read (transfer + decode), to tensor}
+\addplot[draw=none, forget plot] table[x=total, y=pos] {\gen{fig1b_ttfm.tsv}};   % sets the y ticks
+\addplot[fill=gen!70, draw=none, val, discard if not={group}{other}] table[x=total, y=pos] {\gen{fig1b_ttfm.tsv}};
+\addplot[fill=sone, draw=none, val, discard if not={group}{s1}] table[x=total, y=pos] {\gen{fig1b_ttfm.tsv}};
 \end{axis}
 \end{tikzpicture}
 
@@ -43,7 +43,7 @@
 \begin{axis}[
   title={c\quad Size against read rate, \nm{threadsHeadline} cores},
   width=0.44\linewidth, height=6.6cm,
-  xmode=log, ymode=log, xmin=2, xmax=120, ymin=5, ymax=5000,
+  xmode=log, ymode=log, xmin=2, xmax=120, ymin=2, ymax=5000,
   xlabel={stored bits per non-zero}, ylabel={cold read, million non-zeros/s},
   axis x line*=bottom, axis y line*=left,
   xtick={2,5,10,20,50,100}, xticklabels={2,5,10,20,50,100}, ytick={10,100,1000}, yticklabels={10,100,1000},
@@ -87,9 +87,9 @@
 \textbf{(a)} Stored size of the whole file (matrix, gene identifiers and barcodes) in bits per non-zero: bar, median over
 the \nm{nMatrices} matrices; whiskers, interquartile range. Grey, general-purpose formats; orange, single-cell formats
 with their own encodings; blue, \sone. Per-matrix values in Table~\ref{tab:size}.
-\textbf{(b)} Seconds from a new process to the first 512-cell minibatch as a \texttt{torch.sparse\_csr\_tensor}, cold page
-cache, medians of three seeds, split into opening the file (metadata and index), reading the requested cells (transfer and
-decode) and building the tensor. All values per tier in Table~\ref{tab:minibatch}.
+\textbf{(b)} Seconds from a new process to the first 512-cell minibatch as a \texttt{torch.sparse\_csr\_tensor} (log
+scale), cold page cache, median of three seeds, for the loaders that read by range; loaders that download the whole
+object first are not run over the network at this dataset's size. All values per tier in Table~\ref{tab:minibatch}.
 \textbf{(c)} Each format's median size against its median cold read rate on \nm{threadsHeadline} cores. Dashed: lines of
 equal effective delivery rate $R_{\mathrm{eff}}$ (Eq.~\ref{eq:reff}, million non-zeros per second) on a 1\,Gbit/s link;
 points above and left of a line deliver faster.
