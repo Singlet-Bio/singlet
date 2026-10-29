@@ -34,10 +34,9 @@ _API_BASE_DEFAULT = "https://singlet.bio/api"
 _LEVELS = ("gse", "gsm")
 
 
-# Distribution names to read the installed version from: "singlet-bio" on PyPI
-# ("singlet" there is an unrelated project), then "singlet" for installs made
-# before the rename.
-_DIST_NAMES = ("singlet-bio", "singlet")
+# Distribution names to read the installed version from: "singlet" on PyPI, then "singlet-bio" for installs made while
+# the distribution had that name.
+_DIST_NAMES = ("singlet", "singlet-bio")
 
 
 def _package_version() -> str:

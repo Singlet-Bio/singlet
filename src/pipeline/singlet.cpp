@@ -72,6 +72,7 @@
 #include "singlet/pileup/atac_peaks.h"
 #include "singlet/pileup/atac_qc.h"
 #include "singlet/pileup/atac_cell_caller.h"
+#include "singlet/pileup/atac_pipeline.h"
 #include "singlet/pileup/adt_matcher.h"
 #include "singlet/pileup/adt_counter.h"
 #include "singlet/pileup/hto_demux.h"
@@ -79,6 +80,7 @@
 #include "singlet/pileup/cascade_router.h"
 #include "singlet/pileup/cascade_stats_writer.h"
 #include "singlet/pileup/visium_qc.h"
+#include "singlet/pileup/visium_tissue.h"
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
 #include "singlet/pileup/tagged_bam.h"
@@ -2588,6 +2590,49 @@ static void usage(const char* prog) {
         << "  -h, --help             Show this help\n";
 }
 
+// `singlet atac --bam sorted.bam --out DIR [--gtf genes.gtf] [--whitelist W ...] [--paired-gex GEX_OUT_DIR]`
+// Re-runs the ATAC post-alignment (atac_pipeline.h) on a coordinate-sorted BAM whose QNAMEs carry "BC:<raw>_".
+static std::vector<std::string> default_atac_whitelists() {
+    std::vector<std::string> out;
+    char exe_buf[PATH_MAX];
+    ssize_t n = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
+    if (n <= 0) return out;
+    exe_buf[n] = '\0';
+    std::string dir(exe_buf);
+    auto sl = dir.rfind('/');
+    if (sl != std::string::npos) dir.resize(sl);
+    for (const char* f : {"737K-cratac-v1.txt.gz", "737K-cratac-v1.txt", "737K-arc-v1-atac-gex.tsv.gz"}) {
+        std::string c = dir + "/../whitelists/" + f;
+        struct stat st;
+        if (stat(c.c_str(), &st) == 0) out.push_back(c);
+    }
+    return out;
+}
+
+static int cmd_atac(int argc, char* argv[]) {
+    singlet::AtacRunOptions o;
+    for (int i = 0; i < argc; ++i) {
+        std::string a = argv[i];
+        auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : std::string(); };
+        if (a == "--bam") o.bam = next();
+        else if (a == "--out") o.out_dir = next();
+        else if (a == "--gtf" || a == "--exons") o.gtf = next();
+        else if (a == "--whitelist") o.whitelists.push_back(next());
+        else if (a == "--paired-gex") o.paired_gex_dir = next();
+        else if (a == "--min-column-fragments") o.min_column_fragments = static_cast<uint32_t>(std::stoul(next()));
+        else if (a == "--q-cutoff") o.peaks.q_cutoff = std::stod(next());
+        else { std::cerr << "singlet atac: unknown argument " << a << "\n"; return 2; }
+    }
+    if (o.bam.empty() || o.out_dir.empty()) {
+        std::cerr << "usage: singlet atac --bam sorted.bam --out DIR [--gtf genes.gtf] [--whitelist W ...]"
+                     " [--paired-gex GEX_OUT_DIR]\n";
+        return 2;
+    }
+    if (o.whitelists.empty()) o.whitelists = default_atac_whitelists();
+    ::mkdir(o.out_dir.c_str(), 0755);
+    return singlet::run_atac_from_bam(o);
+}
+
 int main(int argc, char* argv[]) {
     // ── Subcommand dispatch ──
     if (argc >= 2) {
@@ -2597,6 +2642,8 @@ int main(int argc, char* argv[]) {
                 return cmd_download(argc - 2, argv + 2);
             if (sub == "encode")
                 return cmd_encode(argc - 2, argv + 2);
+            if (sub == "atac")
+                return cmd_atac(argc - 2, argv + 2);
             if (sub == "decode")
                 return cmd_decode(argc - 2, argv + 2);
             if (sub == "archive")
@@ -2663,6 +2710,9 @@ int main(int argc, char* argv[]) {
 
     std::string feature_ref_path;    // T4: CITE-seq ADT/HTO reference CSV
     std::string tissue_positions_path; // V2: Visium tissue_positions.csv
+    std::vector<std::string> atac_whitelists; // --atac-whitelist (repeatable); default: install whitelists
+    std::string atac_paired_gex;       // --paired-gex: Multiome GEX output dir for the joint cell call
+    std::string visium_coordinates_path; // --visium-coordinates: slide spot list (barcode, array_row, array_col)
     std::string metadata_json_path;  // GEO metadata JSON for .1pz embedding
     std::string tagged_bam_path;     // G-TAGGED-BAM: output path (empty = default)
     std::string nonhost_db_path;     // NONHOST-UNMAPPED-CAPTURE: primary (viral) screening index (legacy)
@@ -2773,6 +2823,9 @@ int main(int argc, char* argv[]) {
         else if (arg == "--dedup-stats") do_dedup_stats = true;
         else if (arg == "--optical-distance" && i+1 < argc) optical_distance = std::atoi(argv[++i]);
         else if (arg == "--tissue-positions" && i+1 < argc) tissue_positions_path = argv[++i]; // V2
+        else if (arg == "--atac-whitelist" && i+1 < argc) atac_whitelists.push_back(argv[++i]);
+        else if (arg == "--paired-gex" && i+1 < argc) atac_paired_gex = argv[++i];
+        else if (arg == "--visium-coordinates" && i+1 < argc) visium_coordinates_path = argv[++i];
         else if (arg == "--visium-min-umi" && i+1 < argc) visium_min_umi = static_cast<uint32_t>(std::atoi(argv[++i])); // V3
         else if (arg == "--threads" && i+1 < argc) { star_threads = std::atoi(argv[++i]); threads_specified = true; }
         else if (arg == "--sra" && i+1 < argc) sra_file = argv[++i];
@@ -3225,6 +3278,24 @@ int main(int argc, char* argv[]) {
                 std::cerr << "[singlet] Feature-barcode-only (ADT/HTO) assay detected\n";
             if (is_visium_mode)
                 std::cerr << "[singlet] Visium spatial assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
+            // Visium: the spot list (visium-v1.txt, rebuilt from 10x public datasets) is the whitelist when installed,
+            // so STAR corrects spot barcodes. Protocol detection is unchanged: it cannot tell Visium from 3' v3.
+            if (is_visium_mode && (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")) {
+                char exe_buf[PATH_MAX];
+                ssize_t n = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
+                if (n > 0) {
+                    exe_buf[n] = '\0';
+                    std::string dir(exe_buf);
+                    dir.resize(dir.rfind('/'));
+                    const std::string c = dir + "/../whitelists/visium-v1.txt";
+                    struct stat st;
+                    if (stat(c.c_str(), &st) == 0) {
+                        whitelist_file = c;
+                        whitelist_auto_resolved = true;
+                        std::cerr << "[singlet] Visium spot list: " << c << "\n";
+                    }
+                }
+            }
             if (is_smart_seq2_mode)
                 std::cerr << "[singlet] Smart-seq2/plate assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             if (is_bulk_rna_mode)
@@ -4918,7 +4989,9 @@ int main(int argc, char* argv[]) {
 
     // ── Phase 0.9: Barcode discovery for --whitelist None / auto-resolved whitelist without --barcodes ──
     std::string auto_barcode_file;  // temp file for auto-discovered barcodes
-    if (barcode_file.empty() && (whitelist_file == "None" || whitelist_file == "none" || whitelist_auto_resolved)) {
+    // ATAC resolves barcodes after alignment against the ATAC whitelists (atac_barcodes.h), so it skips discovery.
+    if (!is_atac_mode && barcode_file.empty() &&
+        (whitelist_file == "None" || whitelist_file == "none" || whitelist_auto_resolved)) {
 
         // ── Shallow-library whitelist fallback helper ────────────────────────────
         // Called when the ≥100-reads filter produces 0 barcodes (shallow libraries
@@ -5683,40 +5756,53 @@ int main(int argc, char* argv[]) {
              thr_use_concat, thr_concat_segs, thr_concat_umi_start, thr_concat_umi_len]() {
             signal(SIGPIPE, SIG_IGN);  // prevent SIGPIPE if STAR exits before writer finishes
 
-            // FIX-FIFO-HANG: open write-only so the writer does NOT hold a read reference.
-            // Strategy: open O_RDONLY|O_NONBLOCK dummy first (completes immediately — the
-            // FIFO already has a write-end holder from mkfifo), then open O_WRONLY (blocks
-            // briefly until STAR opens the read end), then close the dummy so STAR is the
-            // SOLE reader.  When STAR dies, its fd is the last read ref → EPIPE on next
-            // fwrite() → write_ok=false → thread exits → join() returns.
+            // FIX-FIFO-HANG / FIX-FIFO-RACE: the writer must hold only write ends, so that
+            // STAR is the sole reader and its exit gives EPIPE (write_ok=false, thread
+            // exits, join() returns).  It must also not write before STAR has opened the
+            // read end: with no reader the first flush fails with EPIPE, the writer gives
+            // up, and STAR later opens an empty FIFO and maps 0 reads ("No reads
+            // processed").  The earlier dummy O_RDONLY|O_NONBLOCK reader made the
+            // O_WRONLY open return at once and was closed before STAR connected, which
+            // opened exactly that window whenever STAR started slowly.
             //
-            // The dummy open is O_NONBLOCK so it never hangs even if no reader arrives.
-            // The O_WRONLY open may block if STAR hasn't opened yet, but STAR opens its
-            // input FIFOs as part of its startup sequence which happens before any reads,
-            // so this is bounded and race-free on the normal path.
-            // Timeout guard: if STAR never starts, the SIGALRM watchdog below will _exit.
-            auto open_fifo_write_only = [](const std::string& path) -> int {
-                // Open a dummy read fd (O_NONBLOCK → immediate) so mkfifo open-counts are
-                // satisfied on both sides simultaneously.
-                int dummy = open(path.c_str(), O_RDONLY | O_NONBLOCK);
-                if (dummy < 0) {
-                    std::cerr << "[1fq-fifo] ERROR: dummy open " << path << ": "
-                              << strerror(errno) << "\n";
-                    return -1;
+            // So: open each FIFO O_WRONLY|O_NONBLOCK, which fails with ENXIO until a
+            // reader exists, retrying both FIFOs in one loop (a blocking open of R1
+            // would deadlock while STAR blocks opening R2 first), then clear O_NONBLOCK.
+            // STAR opens its read files while parsing parameters, before the genome
+            // load; the wait is capped, and the SIGALRM watchdog stays the backstop.
+            int r1_fd = -1, r2_fd = -1;
+            {
+                const auto t0 = std::chrono::steady_clock::now();
+                const auto cap = std::chrono::seconds(1800);
+                auto try_open = [](const std::string& path, int& fd) -> bool {
+                    if (fd >= 0) return true;
+                    int f = open(path.c_str(), O_WRONLY | O_NONBLOCK);
+                    if (f >= 0) {
+                        int fl = fcntl(f, F_GETFL);
+                        if (fl >= 0) fcntl(f, F_SETFL, fl & ~O_NONBLOCK);
+                        fd = f;
+                        return true;
+                    }
+                    if (errno != ENXIO && errno != EINTR) {
+                        std::cerr << "[1fq-fifo] ERROR: wronly open " << path << ": "
+                                  << strerror(errno) << "\n";
+                        fd = -2;  // hard error
+                    }
+                    return false;
+                };
+                while (true) {
+                    bool ok1 = try_open(thr_r1, r1_fd);
+                    bool ok2 = try_open(thr_r2, r2_fd);
+                    if (ok1 && ok2) break;
+                    if (r1_fd == -2 || r2_fd == -2) break;
+                    if (std::chrono::steady_clock::now() - t0 > cap) {
+                        std::cerr << "[1fq-fifo] ERROR: STAR did not open its input FIFOs within "
+                                  << cap.count() << " s\n";
+                        break;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
                 }
-                // Now open write-only (blocks until STAR opens read end, which it does
-                // immediately on startup).
-                int wfd = open(path.c_str(), O_WRONLY);
-                // Close dummy: STAR is now the sole read-reference holder.
-                close(dummy);
-                if (wfd < 0) {
-                    std::cerr << "[1fq-fifo] ERROR: wronly open " << path << ": "
-                              << strerror(errno) << "\n";
-                }
-                return wfd;
-            };
-            int r1_fd = open_fifo_write_only(thr_r1);
-            int r2_fd = open_fifo_write_only(thr_r2);
+            }
             if (r1_fd < 0 || r2_fd < 0) {
                 std::cerr << "[1fq-fifo] ERROR: open FIFOs failed\n";
                 if (r1_fd >= 0) close(r1_fd);
@@ -6008,6 +6094,7 @@ int main(int argc, char* argv[]) {
             // of the other, eliminating the blocking asymmetry.
             const uint32_t batch_size = static_cast<uint32_t>(n_thr);
             uint64_t reads_written = 0;
+            uint32_t blocks_written = 0;
             bool write_ok = true;
 
             for (uint32_t base = 0; base < total_blocks && write_ok; base += batch_size) {
@@ -6041,13 +6128,19 @@ int main(int argc, char* argv[]) {
                     if (write_ok &&
                         (fflush(r1_fp) != 0 || fflush(r2_fp) != 0))
                         write_ok = false;
-                    reads_written += fb.n_reads;
+                    // Count only blocks that reached the FIFOs.
+                    if (write_ok) { reads_written += fb.n_reads; ++blocks_written; }
+                    else std::cerr << "[1fq-fifo] ERROR: write to STAR failed at block "
+                                   << (base + i) << " after " << reads_written
+                                   << " reads: " << strerror(errno) << "\n";
                 }
             }
 
             fclose(r1_fp);
             fclose(r2_fp);
-            std::cerr << "[1fq-fifo] Pass 2 done: " << reads_written << " reads\n";
+            std::cerr << "[1fq-fifo] Pass 2 " << (write_ok ? "done" : "INCOMPLETE") << ": "
+                      << reads_written << " reads delivered (" << blocks_written << "/"
+                      << total_blocks << " blocks)\n";
         });  // end fifo_writer_thread lambda
 
         std::cerr << "[1fq-fifo] FIFO writer thread started\n";
@@ -6158,6 +6251,11 @@ int main(int argc, char* argv[]) {
                 }
             }
 
+            // Test hook: delay STAR's start (and so its open of the input FIFOs) to
+            // reproduce a slow STAR start on a loaded node.
+            if (const char* d = std::getenv("SINGLET_TEST_STAR_START_DELAY_MS"))
+                std::this_thread::sleep_for(std::chrono::milliseconds(std::atol(d)));
+
             // Build STAR args vector — identical content to the previous
             // execv call; we now pass it to star_main_impl() directly.
             std::vector<const char*> args;
@@ -6201,6 +6299,12 @@ int main(int argc, char* argv[]) {
                 args.push_back("--alignIntronMax");      args.push_back("1");
                 args.push_back("--alignMatesGapMax");    args.push_back("2000");
                 args.push_back("--alignSJDBoverhangMin"); args.push_back("999");
+                // Fragments shorter than the read length read through into the adapter; their mates protrude past
+                // each other's start. Keep them as concordant pairs (Cell Ranger ATAC trims and keeps them).
+                args.push_back("--alignEndsProtrude"); args.push_back("100"); args.push_back("ConcordantPair");
+                // Fragment ends are the reads' 5' ends (Tn5 cut sites): no 5' soft-clipping, 3' clipping still allowed
+                // (adapter read-through). Local alignment moved ~3% of fragment ends on Multiome 3k (development).
+                args.push_back("--alignEndsType"); args.push_back("Extend5pOfReads12");
 
                 // Sorted BAM output (required by ATACFragmentExtractor)
                 args.push_back("--outSAMtype");    args.push_back("BAM"); args.push_back("SortedByCoordinate");
@@ -7247,164 +7351,26 @@ int main(int argc, char* argv[]) {
 
         // ── 2c-ATAC: Fragment extraction + bin counting (ATAC mode only) ──
         if (is_atac_mode) {
-            std::cerr << "[singlet] ATAC: extracting fragments from sorted BAM...\n";
+            std::cerr << "[singlet] ATAC: fragments, peaks, QC and cells from sorted BAM...\n";
             StopWatch atac_sw;
-
-            // Build barcode → index map from discovered/user-provided barcode file
-            std::unordered_map<std::string, uint32_t> atac_bc_map;
-            if (!barcode_file.empty() && barcode_file != "None" && barcode_file != "none") {
-                std::ifstream bcf(barcode_file);
-                std::string bc;
-                uint32_t idx = 0;
-                while (std::getline(bcf, bc)) {
-                    if (!bc.empty()) atac_bc_map[bc] = idx++;
-                }
-                std::cerr << "[singlet] ATAC: loaded " << atac_bc_map.size() << " barcodes\n";
+            singlet::AtacRunOptions atac_opt;
+            atac_opt.bam = parallel_bam_path;
+            atac_opt.out_dir = out_prefix;
+            if (!config.exon_gtf_path.empty() && config.exon_gtf_path != "None" && config.exon_gtf_path != "none")
+                atac_opt.gtf = config.exon_gtf_path;
+            atac_opt.whitelists = atac_whitelists.empty() ? default_atac_whitelists() : atac_whitelists;
+            atac_opt.paired_gex_dir = atac_paired_gex;
+            if (singlet::run_atac_from_bam(atac_opt) != 0) {
+                std::cerr << "[singlet] ERROR: ATAC post-alignment failed\n";
+                return 1;
             }
-
-            // Stream BAM records through ATACFragmentExtractor
-            singlet::ATACFragmentExtractor extractor;
-            extractor.set_barcode_map(atac_bc_map);
-
-            samFile*    bam_fp  = sam_open(parallel_bam_path.c_str(), "rb");
-            bam_hdr_t*  bam_hdr_atac = sam_hdr_read(bam_fp);
-            bam1_t*     rec     = bam_init1();
-            while (sam_read1(bam_fp, bam_hdr_atac, rec) >= 0)
-                extractor.process_record(rec, bam_hdr_atac);
-            bam_destroy1(rec);
-
-            extractor.finalise();
-
-            // Build chromosome sizes from BAM header (for bin counter)
-            std::vector<std::pair<std::string, int32_t>> chrom_sizes;
-            chrom_sizes.reserve(static_cast<size_t>(bam_hdr_atac->n_targets));
-            for (int ci = 0; ci < bam_hdr_atac->n_targets; ++ci)
-                chrom_sizes.emplace_back(bam_hdr_atac->target_name[ci],
-                                         static_cast<int32_t>(bam_hdr_atac->target_len[ci]));
-
-            bam_hdr_destroy(bam_hdr_atac);
-            sam_close(bam_fp);
-
-            std::cerr << "[singlet] ATAC: " << extractor.unique_fragments()
-                      << " unique fragments (" << extractor.duplicate_fragments()
-                      << " dupes)\n";
-
-            // Bin counting (500 bp bins)
-            singlet::ATACBinCounter counter;
-            counter.set_bin_width(500);
-            counter.set_chromosome_sizes(chrom_sizes);
-            counter.count_fragments(extractor.fragments());
-
-            const size_t n_cells = atac_bc_map.size();
-            auto csc = counter.to_csc(n_cells);
-
-            // Export: matrix, features, barcodes
-            singlet::write_mtx(out_prefix + "/atac_matrix.mtx",
-                               static_cast<uint32_t>(counter.total_bins()),
-                               static_cast<uint32_t>(n_cells),
-                               csc.indptr, csc.indices, csc.data);
-            auto feat_labels = counter.bin_features();
-            singlet::write_names(out_prefix + "/atac_features.tsv", feat_labels);
-            std::vector<std::string> bc_list(n_cells);
-            for (const auto& [bc, idx] : atac_bc_map) bc_list[idx] = bc;
-            singlet::write_names(out_prefix + "/atac_barcodes.tsv", bc_list);
-
-            // ── Write fragments.tsv.gz (BED-like: chrom, start, end, barcode, count) ──
-            {
-                const auto& frags = extractor.fragments();
-                const std::string frag_path = out_prefix + "/fragments.tsv.gz";
-                gzFile ftsv = gzopen(frag_path.c_str(), "wb");
-                if (!ftsv) {
-                    std::cerr << "[singlet] ERROR: could not open " << frag_path << " for writing\n";
-                } else {
-                    char buf[4096];
-                    for (const auto& f : frags) {
-                        int n = std::snprintf(buf, sizeof(buf), "%s\t%d\t%d\t%s\t1\n",
-                                             chrom_sizes[static_cast<size_t>(f.chrom_idx)].first.c_str(),
-                                             f.start, f.end,
-                                             bc_list[f.barcode_idx].c_str());
-                        if (n > 0) gzwrite(ftsv, buf, static_cast<unsigned>(n));
-                    }
-                    gzclose(ftsv);
-                    std::cerr << "[singlet] ATAC: wrote " << frags.size()
-                              << " fragments to fragments.tsv.gz\n";
+            if (const char* keep = std::getenv("SINGLET_KEEP_ATAC_BAM")) {
+                std::string dst = std::string(keep) + "/atac_sorted.bam";
+                if (std::rename(parallel_bam_path.c_str(), dst.c_str()) != 0) {
+                    std::string cmd = "cp '" + parallel_bam_path + "' '" + dst + "'";
+                    if (std::system(cmd.c_str()) != 0) std::cerr << "[singlet] WARNING: could not keep BAM\n";
                 }
-            }
-
-            // ── A3 TSS enrichment QC ──────────────────────────────────────────────
-            singlet::ATACQCComputer qc_computer;
-            {
-                std::unordered_map<std::string, int32_t> cmap;
-                cmap.reserve(chrom_sizes.size());
-                for (int32_t ci = 0; ci < static_cast<int32_t>(chrom_sizes.size()); ++ci)
-                    cmap[chrom_sizes[static_cast<size_t>(ci)].first] = ci;
-                qc_computer.set_chrom_map(cmap);
-            }
-            if (!config.exon_gtf_path.empty() &&
-                config.exon_gtf_path != "None" && config.exon_gtf_path != "none")
-                qc_computer.load_tss_from_gtf(config.exon_gtf_path);
-            qc_computer.compute(extractor.fragments(), extractor,
-                                static_cast<uint32_t>(n_cells), &counter);
-            qc_computer.write_qc_tsv(out_prefix + "/atac_qc.tsv", bc_list);
-
-            // ── A7 Cell calling ──────────────────────────────────────────────────
-            {
-                const auto& cell_qc = qc_computer.cell_qc();
-                std::vector<uint64_t> frag_counts(n_cells);
-                std::vector<double>   tss_scores(n_cells);
-                std::vector<double>   frip_scores(n_cells);
-                for (size_t i = 0; i < n_cells; ++i) {
-                    frag_counts[i] = cell_qc[i].total_fragments;
-                    tss_scores[i]  = static_cast<double>(cell_qc[i].tss_enrichment);
-                    frip_scores[i] = static_cast<double>(cell_qc[i].frip_approx);
-                }
-                singlet::AtacCellCaller caller;
-                std::vector<singlet::AtacCellCaller::CellCallResult> call_results;
-                auto summary = caller.call_cells(bc_list, frag_counts, tss_scores,
-                                                 frip_scores, call_results);
-                std::ofstream ctsv(out_prefix + "/atac_cells.tsv");
-                ctsv << "barcode\tis_cell\tunique_fragments\ttss_enrichment"
-                        "\tfrip\tfilter_reason\n";
-                for (const auto& r : call_results)
-                    ctsv << r.barcode << '\t'
-                         << static_cast<int>(r.is_cell) << '\t'
-                         << r.unique_fragments << '\t'
-                         << r.tss_enrichment << '\t'
-                         << r.frip << '\t'
-                         << r.filter_reason << '\n';
-                std::cerr << "[singlet] ATAC: " << summary.cells_called
-                          << "/" << summary.total_barcodes
-                          << " cells called (frag_threshold=" << summary.fragment_threshold
-                          << ", median_tss=" << summary.median_tss_cells << ")\n";
-            }
-
-            // ── A-PEAKS: Peak calling from aggregate bin counts ──────────────────
-            {
-                // Sum CSC across all cells to get per-bin aggregate counts
-                std::vector<uint32_t> bin_agg(counter.total_bins(), 0u);
-                for (size_t _k = 0; _k < csc.indices.size(); ++_k)
-                    bin_agg[static_cast<size_t>(csc.indices[_k])] +=
-                        static_cast<uint32_t>(csc.data[_k]);
-
-                // Build per-bin chrom and start arrays from chromosome sizes
-                constexpr int32_t kBinWidth = 500;
-                std::vector<std::string> bin_chroms;
-                std::vector<uint32_t>   bin_starts;
-                bin_chroms.reserve(counter.total_bins());
-                bin_starts.reserve(counter.total_bins());
-                for (const auto& [chrom, clen] : chrom_sizes) {
-                    for (int32_t b = 0; static_cast<int32_t>(b * kBinWidth) < clen; ++b) {
-                        bin_chroms.push_back(chrom);
-                        bin_starts.push_back(static_cast<uint32_t>(b * kBinWidth));
-                    }
-                }
-
-                auto peaks = singlet::call_peaks(bin_agg, bin_chroms, bin_starts);
-                if (singlet::write_peaks_bed(out_prefix + "/peaks.bed", peaks))
-                    std::cerr << "[singlet] ATAC peaks: " << peaks.size()
-                              << " peaks called, wrote peaks.bed\n";
-                else
-                    std::cerr << "[singlet] ATAC peaks: write_peaks_bed failed\n";
+                std::cerr << "[singlet] ATAC: kept BAM at " << dst << "\n";
             }
 
             // Cleanup temp BAM + BAI
@@ -7421,8 +7387,7 @@ int main(int argc, char* argv[]) {
                 rmdir(dec_dir2.c_str());
             }
 
-            std::cerr << "[singlet] ATAC: " << counter.total_bins() << " bins × "
-                      << n_cells << " cells, " << atac_sw.elapsed_s() << "s\n";
+            std::cerr << "[singlet] ATAC post-alignment: " << atac_sw.elapsed_s() << "s\n";
             std::cerr << "[singlet] ATAC outputs: " << out_prefix << "\n";
             std::cerr << "[singlet] Total: " << total_sw.elapsed_s() << "s\n";
             // Nonhost EM screening: screen STAR unmapped reads
@@ -7868,38 +7833,6 @@ int main(int argc, char* argv[]) {
                     return e.run_parallel(parallel_bam_path, star_threads); })) {
                 pileup_time += retry_sw.elapsed_s();
                 strand_retried = true;
-            }
-        }
-
-        // ── 2c-sweep (experiment): SINGLET_INTRON_SWEEP=r1,r2,... re-runs the pileup on this
-        // BAM once per intron-rule value and writes <out>/intron_sweep/rules_<r>.tsv.gz
-        // (gene-level exon / intron / ambiguous per barcode). The run's own outputs are untouched.
-        if (const char* sweep = std::getenv("SINGLET_INTRON_SWEEP"); sweep && *sweep && engine_ptr) {
-            std::string dir = out_prefix + "/intron_sweep";
-            mkdir(dir.c_str(), 0755);
-            singlet::write_gene_layers_tsv(*engine_ptr, dir + "/main.tsv.gz");
-            std::string list(sweep);
-            size_t pos = 0;
-            while (pos <= list.size()) {
-                size_t comma = list.find(',', pos);
-                std::string item = list.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
-                pos = (comma == std::string::npos) ? list.size() + 1 : comma + 1;
-                if (item.empty()) continue;
-                singlet::PileupConfig scfg = config;
-                scfg.intron_rules = static_cast<uint32_t>(std::strtoul(item.c_str(), nullptr, 0));
-                scfg.reverse_strand = engine_ptr->reverse_strand();
-                scfg.auto_strand = false;
-                StopWatch sw_sweep;
-                auto se = std::make_unique<singlet::PileupEngine>(scfg);
-                se->set_molecule_dump("");
-                if (!se->load_references()) { std::cerr << "[sweep] load_references failed\n"; break; }
-                se->keep_strand_probe(*engine_ptr);
-                auto sst = se->run_parallel(parallel_bam_path, star_threads);
-                singlet::write_gene_layers_tsv(*se, dir + "/rules_" + item + ".tsv.gz");
-                std::cerr << "[sweep] rules=" << item << " S=" << sst.molecules_spliced
-                          << " U=" << sst.molecules_unspliced << " A=" << sst.molecules_ambiguous
-                          << " dropped=" << sst.molecules_dropped_multigene_umi
-                          << " in " << sw_sweep.elapsed_s() << "s\n";
             }
         }
 
@@ -8454,6 +8387,159 @@ int main(int argc, char* argv[]) {
         singlet::write_visium_qc_tsv(out_prefix + "/visium_qc.tsv", spot_records);
         singlet::log_visium_summary(qc_summary);
         std::cerr << "[visium] Per-spot QC written: " << out_prefix << "/visium_qc.tsv\n";
+
+        // ── Spot coordinates and tissue detection from counts (visium_tissue.h) ──
+        // Every column barcode is matched to the slide's spot list (exact, else unique Hamming-1). Tissue spots are
+        // detected from spot UMIs with spatial smoothing; the called set of a Visium sample is its tissue spots (the
+        // EmptyDrops call above is meaningless for spots). Outputs: spatial_positions.tsv (one row per column),
+        // spatial_summary.json (QC with thresholds), cell_calls.tsv rewritten with call_method visium_tissue.
+        if (visium_coordinates_path.empty()) {
+            char exe_buf[PATH_MAX];
+            ssize_t n = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
+            if (n > 0) {
+                exe_buf[n] = '\0';
+                std::string dir(exe_buf);
+                dir.resize(dir.rfind('/'));
+                std::string c = dir + "/../whitelists/visium-v1_coordinates.tsv";
+                struct stat st;
+                if (stat(c.c_str(), &st) == 0) visium_coordinates_path = c;
+            }
+        }
+        singlet::VisiumSlide slide;
+        if (visium_coordinates_path.empty() || !slide.load(visium_coordinates_path)) {
+            std::cerr << "[visium] No slide spot list (--visium-coordinates); spatial_positions.tsv not written\n";
+        } else if (spot_umis.size() != barcodes.size()) {
+            std::cerr << "[visium] No per-barcode UMI counts (needs --exons); tissue detection skipped\n";
+        } else {
+            const size_t ns = slide.size();
+            std::vector<int64_t> spot_of(barcodes.size(), -1);
+            std::vector<uint64_t> umis_per_spot(ns, 0);
+            std::vector<int64_t> primary(ns, -1);  // column with the most UMIs per spot
+            uint64_t umi_all = 0, umi_matched = 0;
+            for (size_t i = 0; i < barcodes.size(); ++i) {
+                umi_all += spot_umis[i];
+                const int64_t sp = slide.match(barcodes[i]);
+                spot_of[i] = sp;
+                if (sp < 0) continue;
+                umi_matched += spot_umis[i];
+                umis_per_spot[static_cast<size_t>(sp)] += spot_umis[i];
+                if (primary[sp] < 0 || spot_umis[i] > spot_umis[static_cast<size_t>(primary[sp])]) primary[sp] = static_cast<int64_t>(i);
+            }
+            auto tc = singlet::detect_tissue(slide, umis_per_spot);
+            {
+                std::ofstream sp(out_prefix + "/spatial_positions.tsv");
+                sp << "barcode\tspot\tarray_row\tarray_col\tin_tissue\ttissue_prob\tprimary\tumis";
+                if (positions_loaded) sp << "\tin_tissue_spaceranger\tpxl_row_in_fullres\tpxl_col_in_fullres";
+                sp << "\n";
+                for (size_t i = 0; i < barcodes.size(); ++i) {
+                    const int64_t k = spot_of[i];
+                    sp << barcodes[i] << '\t';
+                    if (k >= 0) {
+                        const size_t u = static_cast<size_t>(k);
+                        sp << slide.barcode[u] << '\t' << slide.row[u] << '\t' << slide.col[u] << '\t'
+                           << int(tc.in_tissue[u]) << '\t' << tc.prob[u] << '\t' << int(primary[u] == int64_t(i));
+                    } else {
+                        sp << "\tNA\tNA\t0\t0\t0";
+                    }
+                    sp << '\t' << spot_umis[i];
+                    if (positions_loaded) {
+                        const auto* c = spatial_parser.get_coordinate(barcodes[i]);
+                        if (!c) c = spatial_parser.get_coordinate(barcodes[i] + "-1");
+                        if (c) sp << '\t' << int(c->in_tissue) << '\t' << c->pixel_row << '\t' << c->pixel_col;
+                        else sp << "\tNA\tNA\tNA";
+                    }
+                    sp << '\n';
+                }
+            }
+            // Called set = primary column of each tissue spot.
+            std::unordered_set<std::string> called;
+            std::vector<double> tissue_umis, tissue_genes;
+            uint64_t umi_tissue = 0;
+            for (size_t u = 0; u < ns; ++u) {
+                if (!tc.in_tissue[u]) continue;
+                umi_tissue += umis_per_spot[u];
+                if (primary[u] >= 0) {
+                    called.insert(barcodes[static_cast<size_t>(primary[u])]);
+                    tissue_umis.push_back(static_cast<double>(spot_umis[static_cast<size_t>(primary[u])]));
+                    tissue_genes.push_back(static_cast<double>(spot_genes[static_cast<size_t>(primary[u])]));
+                }
+            }
+            {
+                // Rewrite cell_calls.tsv: is_cell / called / called_v2 = tissue spot, call_method = visium_tissue.
+                const std::string cc = out_prefix + "/cell_calls.tsv";
+                std::ifstream in(cc);
+                std::string line, outbuf;
+                if (in && std::getline(in, line)) {
+                    std::vector<std::string> h;
+                    { std::stringstream hs(line); std::string t; while (std::getline(hs, t, '\t')) h.push_back(t); }
+                    outbuf = line + "\n";
+                    while (std::getline(in, line)) {
+                        std::vector<std::string> f;
+                        { std::stringstream ls(line); std::string t; while (std::getline(ls, t, '\t')) f.push_back(t); }
+                        const bool c = !f.empty() && called.count(f[0]);
+                        for (size_t k = 0; k < h.size() && k < f.size(); ++k) {
+                            if (h[k] == "is_cell") f[k] = c ? "TRUE" : "FALSE";
+                            else if (h[k] == "called" || h[k] == "called_v2") f[k] = c ? "1" : "0";
+                            else if (h[k] == "call_method") f[k] = "visium_tissue";
+                        }
+                        for (size_t k = 0; k < f.size(); ++k) outbuf += (k ? "\t" : "") + f[k];
+                        outbuf += "\n";
+                    }
+                    in.close();
+                    std::ofstream(cc) << outbuf;
+                }
+            }
+            auto med = [](std::vector<double> v) {
+                if (v.empty()) return 0.0;
+                std::nth_element(v.begin(), v.begin() + static_cast<long>(v.size() / 2), v.end());
+                return v[v.size() / 2];
+            };
+            const double frac_on_slide = umi_all ? double(umi_matched) / umi_all : 0;
+            const double frac_in_tissue = umi_all ? double(umi_tissue) / umi_all : 0;
+            const double med_umi = med(tissue_umis), med_genes = med(tissue_genes);
+            uint32_t sr_agree = 0, sr_n = 0, sr_tissue = 0, both = 0;
+            if (positions_loaded)
+                for (size_t u = 0; u < ns; ++u) {
+                    const auto* c = spatial_parser.get_coordinate(slide.barcode[u] + "-1");
+                    if (!c) c = spatial_parser.get_coordinate(slide.barcode[u]);
+                    if (!c) continue;
+                    ++sr_n;
+                    sr_tissue += c->in_tissue;
+                    both += c->in_tissue && tc.in_tissue[u];
+                    sr_agree += (c->in_tissue != 0) == (tc.in_tissue[u] != 0);
+                }
+            struct Rule { const char* name; double v, thr; bool ge; };
+            std::vector<Rule> rules = {
+                {"fraction_umis_on_slide_spots", frac_on_slide, 0.80, true},
+                {"tissue_spots", double(tc.n_tissue), 50, true},
+                {"fraction_umis_in_tissue", frac_in_tissue, 0.50, true},
+                {"median_umis_per_tissue_spot", med_umi, 500, true},
+                {"tissue_background_separated", tc.separated ? 1.0 : 0.0, 1, true},
+            };
+            bool pass = true;
+            std::ofstream js(out_prefix + "/spatial_summary.json");
+            js << "{\n  \"schema\": \"singlet-spatial-summary/1\",\n  \"slide_spots\": " << ns
+               << ",\n  \"slide_list\": \"" << visium_coordinates_path << "\",\n  \"columns\": " << barcodes.size()
+               << ",\n  \"spots_with_reads\": " << std::count_if(primary.begin(), primary.end(), [](int64_t v) { return v >= 0; })
+               << ",\n  \"tissue_spots\": " << tc.n_tissue << ",\n  \"tissue_method\": \"count-mixture-hex-smoothing-v1\""
+               << ",\n  \"mixture\": {\"mean_log10_low\": " << tc.mean_low << ", \"mean_log10_high\": " << tc.mean_high
+               << ", \"sd_low\": " << tc.sd_low << ", \"sd_high\": " << tc.sd_high << ", \"weight_high\": " << tc.weight_high
+               << "},\n  \"median_genes_per_tissue_spot\": " << med_genes;
+            if (positions_loaded && sr_n)
+                js << ",\n  \"spaceranger\": {\"spots\": " << sr_n << ", \"in_tissue\": " << sr_tissue
+                   << ", \"agreement\": " << double(sr_agree) / sr_n << ", \"jaccard\": "
+                   << double(both) / std::max(1u, sr_tissue + tc.n_tissue - both) << "}";
+            js << ",\n  \"qc\": {\n";
+            for (const auto& r : rules) {
+                const bool ok = r.ge ? r.v >= r.thr : r.v <= r.thr;
+                pass = pass && ok;
+                js << "    \"" << r.name << "\": {\"value\": " << r.v << ", \"threshold\": " << r.thr << ", \"rule\": \""
+                   << (r.ge ? ">=" : "<=") << "\", \"pass\": " << (ok ? "true" : "false") << "},\n";
+            }
+            js << "    \"pass\": " << (pass ? "true" : "false") << "\n  }\n}\n";
+            std::cerr << "[visium] tissue spots " << tc.n_tissue << " of " << ns << " (UMIs on slide "
+                      << frac_on_slide << ", in tissue " << frac_in_tissue << "); QC " << (pass ? "PASS" : "FAIL") << "\n";
+        }
     }
 
     // ── G-TAGGED-BAM: second-pass tagged BAM output (post-pileup) ──────────

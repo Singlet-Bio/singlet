@@ -10,6 +10,7 @@
 - [Per-sample outputs for the atlas re-run](pipeline-outputs.md)
 - [Pipeline validation and benchmark](pipeline-validation.md)
 - [Canonical output format](CANONICAL_OUTPUT_FORMAT.md)
+- [Training on the atlas (PyTorch streaming)](ml-ready.md)
 
 # API Reference
 
