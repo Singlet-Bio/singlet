@@ -197,6 +197,15 @@ The aligner side is already bounded: the prefill maps distinct sequences in batc
 
 ## 5. Gates (before any protocol class is switched on)
 
+**Correctness contract (Zach, 2026-10-29).**
+- **Alignment** (seed search, windows, stitching, the paired and unspliced modes of 1d/1e): no regression against production STAR on the
+  pre-registered real-truth measures M1-M7 of the "Increase Mapping Rate" work (singlet-agents `docs/gpu-align/GROUND_TRUTH_ACCURACY_PLAN.md`,
+  `bench/ground-truth/PREREGISTRATION.md`), with its frozen harness and tolerances. Byte identity to STAR is no longer required, so a
+  phase may use a different algorithm, provided it ships its M1-M7 scores and meets the throughput gate. The harness must be frozen before
+  any aligner change is accepted. Gate (a) then compares counting on the same alignments, and the 1d kill criterion ("≥ 99.9% identical
+  primary alignments") becomes "no regression on M1-M7".
+- **Counting** (dedup, UMI collapse, pileup, reducers, cell calling): exact against the CPU engine under R1-R10, as below.
+
 For each protocol class, on real public samples with real ground truth (the benchmark rule):
 - **(a) Identity with the CPU engine** for every order-independent output, under the same parameters. This is the W11 gate
   (`gpu_pileup_gate.sbatch`, `out_equiv.py`).
