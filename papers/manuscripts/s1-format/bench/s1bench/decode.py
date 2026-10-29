@@ -8,6 +8,7 @@ separates codec speed from I/O. Each configuration runs in a fresh process pinne
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -133,10 +134,12 @@ def _cpp_rows(cfg: Config, u: Unit, thread_list: list[int], nnz: int) -> list[di
     member = d / "s1.counts.pz2"
     member.write_bytes(S2Reader(str(d / "s1.s1")).read_member("counts"))
     rows = []
+    allowed = sorted(os.sched_getaffinity(0))   # the job's cores, which on a shared node need not start at 0
     for t in thread_list:
+        cores = ",".join(map(str, allowed[:t]))
         for mode in cfg["s1"]["modes"]:
             for isa in cfg["s1"]["isas"]:
-                r = subprocess.run(["taskset", "-c", f"0-{t - 1}", str(exe), str(member), str(t), isa, mode, str(cfg["repeats"]),
+                r = subprocess.run(["taskset", "-c", cores, str(exe), str(member), str(t), isa, mode, str(cfg["repeats"]),
                                     str(cfg["warmup"])], capture_output=True, text=True)
                 row = {"dataset": u.id, "matrix": u.name, "storage": "memory", "format": "s1", "threads": t, "cache": "memory",
                        "what": "codec_cpp",

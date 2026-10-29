@@ -59,7 +59,7 @@ def main():
                 "datasets": str(tmp / "datasets.yaml"), "formats": fmts, "repeats": 1, "warmup": 0})
     cfg["threads"]["headline"] = 2
     cfg["floor"]["sampling_cells"] = 100
-    cfg["minibatch"].update({"n_batches": 5, "warmup_batches": 1, "seeds": [0], "loaders": loaders, "tiers": [{"name": "nvme"}]})
+    cfg["minibatch"].update({"n_batches": 5, "warmup_batches": 1, "seeds": [0], "loaders": loaders, "tiers": [{"name": "local"}]})
     cfg["eco"]["datasets"] = []
     (tmp / "config.yaml").write_text(yaml.safe_dump(cfg))
     base = [sys.executable, "-m", "s1bench", "--config", str(tmp / "config.yaml")]
