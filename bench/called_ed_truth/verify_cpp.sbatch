@@ -11,14 +11,14 @@
 #   MODE=build  : fetch BR (default prod/atlas-rerun) into its own worktree, build the pipeline as
 #                 pipeline-benchmark/bin/singlet-prod-cv2 (x86-64-v3, as build_prod2), run test_called_v2, build cv2_stored
 #   MODE=stored : array 0-5, cv2_stored on the run the truth-check script used, compared with its recommended call
-#                 (state/called_ed_truth/datasets/<name>.barcodes.tsv.gz) by check_cpp.py
+#                 (state/called_v2_truth/datasets/<name>.barcodes.tsv.gz) by check_cpp.py
 #   MODE=e2e    : array 0-1 (pbmc1k_v3, hgmm1k_v3), full pipeline with singlet-prod-cv2 at 8 threads, then
 #                 equiv_cpp.py against python/singlet/s1/cellcall.py (2.1) and cv2_stored on the run's own stored counts
-# Results: $W/state/called_ed_truth/cpp/
+# Results: $W/state/called_v2_truth/cpp/
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; PB=$W/pipeline-benchmark; MB=$W/modality-bench
 BARE=$W/repos/singlet-py.git; BR=${BR:-prod/atlas-rerun}; SRC=$W/src/singlet-py/cv2fix__${BR//\//__}
-OUT=$W/state/called_ed_truth/cpp; TRUTH=$W/state/called_ed_truth/datasets; DRV=$PB/bin/cv2_stored-2.1
+OUT=$W/state/called_v2_truth/cpp; TRUTH=$W/state/called_v2_truth/datasets; DRV=$PB/bin/cv2_stored-2.1
 REF=/mnt/projects/debruinz_project/cellarium/reference
 export PATH=$ENV/bin:$PATH LD_LIBRARY_PATH=$ENV/lib SINGLET_STALL_TIMEOUT=7200
 export NUMBA_NUM_THREADS=${SLURM_CPUS_PER_TASK:-16} NUMBA_CACHE_DIR=$W/cache/numba-cv2fix
