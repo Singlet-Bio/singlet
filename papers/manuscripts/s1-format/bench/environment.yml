@@ -40,6 +40,7 @@ dependencies:
   - bioconductor-singlecellexperiment
   - bioconductor-zellkonverter
   - bioconductor-rhdf5   # zellkonverter's R reader
+  - bioconductor-hdf5array  # zellkonverter readH5AD loads it
   - r-hdf5r
   - r-remotes
   - r-data.table
