@@ -1,6 +1,6 @@
 # Barcode layer preparation for phases 1c and 1f
 
-Status: preparation only. Nothing here is switched on, compiled on a GPU, or run on a cluster. Written on the laptop from the
+Status: preparation; section 12 holds the measured results (the kernels now compile and run on an H100 and were compared with STAR on real reads). Sections 1-11 were written before that, on a laptop. Written on the laptop from the
 vendored STAR 2.7.11b sources in `src/star/` and singlet's own tables. Branch `claude/gpu-barcode-layer-484c70`.
 
 Decisions of 2026-10-29 (feature-barcode UMI rule, CRISPR matching, inDrop, gate definitions) are folded in below.
@@ -272,7 +272,68 @@ Gate (a) conditions to state for each protocol class:
 8. **New:** `GuideRef::match` now returns -2; a caller testing `== -1` instead of `>= 0` would treat that as a hit. The two pileup
    call sites test `gid >= 0`; grep found no others.
 
-## 11. Not done
+## 11. Not done (as of the laptop draft; see section 12)
 
 No STAR run, no Clipper job, no compile of the `.cuh`, no change to `pileup.cu`, `engine_gpu.cu`, `singlet.cpp` or `SeqCache*.cpp`.
 `pileup_engine.h` on the CRISPR branch was edited but not compiled (no htslib here).
+
+
+## 12. Measured results (phase 1c preparation run on Clipper, 2026-10-29)
+
+Harness: `bench/barcode_layer/` (`bl_harness.cu` instantiates every kernel in `barcode_layer.cuh`; `run_class.py`, `run_features.py`,
+`jobs/*.sbatch`). nvcc 12.4, `-arch=sm_90 -fmad=false -ccbin /usr/bin/g++`, one H100 NVL. Final run: job 792476 (commit e1cf4010; earlier
+identical-code runs 792442, 792368). Real reads only; STAR is the pbench conda STAR 2.7.11b on GRCh38-2024-A with singlet's STARsolo settings
+(jobs 792395 10x, 792415 the other classes). Whether that build defines `MATCH_CellRanger` was not checked; the float posterior agreed with it
+on every read below, and a double-precision posterior changed 0 reads, so these data cannot tell the two apart.
+
+**Compile.** First nvcc pass: no errors, no warnings. No CUDA change was needed. Added `k_bl_discovered_cell` (rank lookup for no-whitelist
+protocols); discovery itself (thrust sort, reduce_by_key, threshold, rank) is in the harness.
+
+**Kernel vs reference (every read unless noted).**
+
+| Class (reads) | Kernel vs numba/Python reference | Kernel vs R11 `CbCorrector` (CPU) |
+|---|---|---|
+| 10x pbmc1k_v3, quality F (12 M) | cell and status identical, 12 M of 12 M; exact histogram identical; plain-Python path 249 197 of 249 197 | cell and status identical, 12 M |
+| 10x pbmc1k_v3, sequencer quality (12 M) | same, 12 M; Python 250 144 of 250 144 | same, 12 M |
+| Drop-seq (2.85 M) | discovered list and counts identical (91 660 barcodes at 5 reads); numpy 2.85 M; Python 200 000 of 200 000 (cell and status) | n/a |
+| BD Rhapsody (1.39 M) | Python 221 972 of 221 972 (cell, status, UMI key and length) | n/a |
+| SPLiT-seq, row geometry / STAR-recipe geometry (2.55 M) | Python 224 126 / 224 084, all identical | n/a |
+| inDrop W1 route (0.89 M) | Python 258 377 of 258 377 | n/a |
+| ADT (1 M real antibody reads, tags from the data + 2 synthetic) | 1 000 000 identical (956 087 matched, 681 ambiguous -2); 200 000 shifted reads identical | n/a |
+| Guides (1 M real cDNA reads, 43 guides incl. duplicate, nested, 60-mer, strand-restored) | 1 000 000 identical (155 ambiguous -2) | n/a |
+| Visium spot gather (3 500 cells, 4 992 spots) | 3 500 identical (3 000 found) | n/a |
+
+10x status counts (F quality): exact 11 368 597, one 1MM/N hit 96 735, posterior accepted 189 573, posterior rejected 29 902, no match 306 460,
+bad UMI 8 733. With sequencer quality: accepted 196 245, rejected 23 230. Kernel time (kernel only, no copies): extract 11 ms, resolve 11 ms,
+histogram 15 ms for 12 M reads; complex extraction 10 ms for 0.9-2.5 M reads.
+
+**Kernel vs STAR's own tags (STAR record per read, primary alignments, unmapped reads included).**
+
+| Class | Records | CB identical | Differing reads | UR identical | UB vs raw UMI |
+|---|---|---|---|---|---|
+| 10x v3, F quality, 1MM_multi_Nbase_pseudocounts | 12 000 000 | 100 % (11 654 905 same cell, 345 095 both none) | 0 | 100 % | 99.393 % equal, 0.586 % one base off, 432 reads (0.004 %) more than one base |
+| 10x v3, sequencer quality | 12 000 000 | 100 % (11 661 577 / 338 423) | 0 | 100 % | 99.393 % / 0.587 % / 432 |
+| Drop-seq (CB_samTagOut, None) | 2 854 058 | 100 % (2 836 990 same barcode, 17 068 N) | 0 | 100 % | STAR writes no UB in this mode |
+| BD Rhapsody (native Complex, Exact) | 1 388 819 | 100 % (701 758 / 687 061) | 0 | 100 % | 99.952 % equal, 335 one base, 2 more |
+| SPLiT-seq, singlet's row (33-40, 56-63) | 2 546 590 | 100 %, but only 7 reads have a cell | 0 | 100 % | n/a |
+| SPLiT-seq, STAR recipe (10, 48, 78) | 2 546 590 | 100 % (1 665 189 / 881 401) | 0 | 100 % | 99.964 % equal, 595 one base |
+| inDrop W1 route | 891 865 | 100 % but only 17 reads have a cell | 0 | 100 % of 397 413 records with a UR | n/a |
+
+Why UB differs from the raw UMI: STAR's `1MM_All` UMI collapse rewrites a UMI to its group's representative; the barcode layer carries the raw
+UMI (as designed), so UB is not a layer output. UR, the raw UMI, is identical everywhere. In inDrop, 3 reads have a 5-base UMI in both STAR and the
+kernel (R17: `pos[1] == size` passes and `substr` clips); this was first reported as a mismatch by a fixed-length decode in the harness, not a kernel
+difference.
+
+**Findings.**
+1. Reference bug fixed: `simple_record` for the no-whitelist case returned a cell for a read with a bad UMI (and -2 as cell key for an N); the
+   stream drops both (`inline_scan_cb_from_cr`). Test added (`test_nowl_record_drops_bad_umi_and_n_barcodes`), 32 tests pass.
+2. **SPLiT-seq geometry in `protocol.h`/`sra_encoder.h` does not fit the real data tested** (GSE281535, SRR31302021): with BC2 at 33-40 and BC1 at
+   56-63, 7 of 2 546 590 reads get a cell; with STAR's recipe positions 48-55 and 78-85 (30-base linkers), 65 % do. Both STAR and the kernel agree on
+   each geometry, so this is the table, not the layer. Not changed here.
+3. **inDrop**: on SRR15409581 only 17 of 891 865 reads get a cell. 494 442 fail the W1 search (the reads carry `GAGTGATTGCTTGAGACGACTT`-like
+   linkers, two mismatches from W1) and the shipped BC1 list is 8-mers only (section 7a); STAR and the kernel agree on every read. The W1 route is
+   therefore not validated on a positive example; it needs inDrop v1/v2 data with the canonical W1 and the real variable-length BC1 list.
+4. Not covered: sorted-path no-whitelist order (not reproducible), ddSEQ, Microwell/SureCell (no lists/data tried), sci-RNA-seq3, native
+   `CB_UMI_Complex` 1MM, a real Visium sample, real CRISPR guide libraries (guides here are 20-mers taken from real reads), and ADT tag tables from a
+   real feature reference (taken from the data). ENA streams were cut early for several runs; mates were cut to equal, well-formed prefixes
+   (jobs `fqcheck`), so Drop-seq is 2.85 M reads, BD 1.39 M, SPLiT 2.55 M.
