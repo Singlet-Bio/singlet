@@ -47,7 +47,10 @@ if [ -n "${S1_TORCH_INDEX:-}" ] && ! python -c "import sys, torch; sys.exit(torc
   for p in pytorch libtorch; do
     if conda list -p "$S1_ENV" "^$p\$" | grep -q "^$p "; then conda remove -q -y -p "$S1_ENV" --force "$p"; fi
   done
-  pip install -q "torch==${S1_TORCH_VERSION:-2.13.0+cu129}" --index-url "$S1_TORCH_INDEX" --extra-index-url https://pypi.org/simple
+  T="torch==${S1_TORCH_VERSION:-2.13.0+cu129}"
+  pip install -q "$T" --index-url "$S1_TORCH_INDEX" --extra-index-url https://pypi.org/simple
+  # an env update reinstalls the conda build over the wheel, and removing it takes shared files with it: rewrite them
+  pip install -q --force-reinstall --no-deps "$T" --index-url "$S1_TORCH_INDEX"
 fi
 python -c "import torch; print('torch', torch.__version__, 'cuda build', torch.version.cuda)"
 

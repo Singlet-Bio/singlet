@@ -371,7 +371,8 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
         for ld in loaders:
             fmt = "bpcells" if ld == "bpcells" else LOADERS[ld].fmt
             files[ld] = formats.get([fmt])[0].path(fdir)
-        rows = []
+        # a forced rerun of some loaders (minibatch.loaders) replaces their rows and keeps the other loaders' rows
+        rows = [r for r in read_tsv(out) if r.get("loader") not in loaders]
 
         def record(tier, ld, seed, res):
             rows.append({"dataset": u.id, "matrix": u.name, "tier": tier["name"], "gbit": tier.get("gbit", ""),

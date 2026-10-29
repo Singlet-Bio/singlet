@@ -23,6 +23,11 @@ s1_cpp
 IFS=, read -ra DS <<<"${DS_LIST:?set DS_LIST}"
 D=${DS[${SLURM_ARRAY_TASK_ID:-0}]}
 STAGES=${STAGES:-"decode sweep minibatch eco"}
+# A rerun: S1_FORCE=1 redoes stages whose results exist, S1_SET adds one --set (e.g. 'minibatch.loaders=[s1_stream]',
+# which replaces only those loaders' rows).
+FORCE=${S1_FORCE:+--force}
+SET=()
+if [ -n "${S1_SET:-}" ]; then SET=(--set "$S1_SET"); fi
 RES=${S1_RESULTS:-$S1/results}
 mkdir -p "$RES"
 if [ "$RES" != "$S1/results" ]; then  # a cross-check reads the sizes and descriptors of the main run
@@ -47,7 +52,7 @@ for st in $STAGES; do
   t0=$SECONDS
   case $st in
     sweep) s1b --set 'storages=[{name: local}]' decode --datasets "$D" --sweep --formats s1,h5ad_gzip,csc_i32 ;;
-    *) s1b "$st" --datasets "$D" ;;
+    *) s1b "${SET[@]}" "$st" --datasets "$D" $FORCE ;;
   esac
   echo "stage $st $D done in $((SECONDS - t0)) s"
 done
