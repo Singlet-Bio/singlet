@@ -26,7 +26,7 @@ A character vector of matching accessions (possibly empty).
 \description{
 Query the Singlet atlas with a free-text description and receive matching
 GEO accessions. The query is sent to the Singlet search API
-(\url{https://singlet.bio/api}); pair the result with \code{\link{load}}
+(\code{https://singlet.bio/api}); pair the result with \code{\link{load}}
 (or use \code{\link{find_load}}) to pull the matching data.
 \code{singlet_find()} is the same function.
 }

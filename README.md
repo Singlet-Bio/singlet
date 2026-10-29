@@ -7,8 +7,7 @@ catalog of re-processed GEO studies.
 **One repository. Three languages.**
 
 ```bash
-# Python — from GitHub until the first PyPI release (then: pip install singlet-bio)
-pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"
+pip install singlet                    # Python
 ```
 ```r
 remotes::install_github("Singlet-Bio/singlet", subdir = "r")  # R
@@ -17,11 +16,10 @@ remotes::install_github("Singlet-Bio/singlet", subdir = "r")  # R
 find_package(Singlet REQUIRED)         # C++
 ```
 
-The PyPI distribution is named **`singlet-bio`** (`singlet` on PyPI is an
-unrelated project); the import name is still `singlet`. Once the first
-release is published, the install is `pip install singlet-bio`.
+Wheels for Linux (x86_64, aarch64), macOS (Intel, Apple silicon) and Windows include the compiled `.1pz` / `.s1`
+codec, so no compiler is needed.
 
-Installing the Python package from source compiles a small C++ extension (the
+Installing the Python package from source (`pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"`) compiles a small C++ extension (the
 `.1pz` codec), so you need a **C++17 compiler** and **zstd** headers + library
 (`apt install build-essential libzstd-dev`, `brew install zstd`, or
 `conda install -c conda-forge zstd`). Linux, macOS and Windows are
@@ -56,6 +54,11 @@ adata = singlet.load(["GSE138867", "GSE146974"])
 
 # Subset genes by symbol or Ensembl id (var_names stay Ensembl ids)
 tcells = singlet.load("GSE138867", genes=["CD3E", "CD8A", "MS4A1"])
+
+# Per-cell labels come with every per-sample study (docs/cell_annotation.md section 8)
+adata.obs[["cell_type", "cell_type_ontology_term_id", "sex_chrom", "ancestry_hancestro", "called_ed"]]
+# ... and can select cells before anything else is downloaded
+heart = singlet.cells("GSE286650", "cell_type == 'cardiac muscle cell' and sex_chrom == 'male'")
 
 # Explore
 singlet.describe(adata)                     # quick summary stats
@@ -110,20 +113,19 @@ singlet/
 ## Installation
 
 See [docs/installation.md](docs/installation.md) for full details. The Python
-distribution is `singlet-bio` (after the first PyPI release:
-`pip install singlet-bio`); the import name is `singlet`.
+package is `pip install singlet`; the rows below install the development version from GitHub.
 
 | Install | Command |
 |---------|---------|
-| Python (core) | `pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"` |
-| Python + analysis extras | `pip install "singlet-bio[analysis] @ git+https://github.com/Singlet-Bio/singlet"` |
-| Python + PyTorch | `pip install "singlet-bio[torch] @ git+https://github.com/Singlet-Bio/singlet"` |
-| Python + local MCP server | `pip install "singlet-bio[mcp] @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python (core) | `pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python + analysis extras | `pip install "singlet[analysis] @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python + PyTorch | `pip install "singlet[torch] @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python + local MCP server | `pip install "singlet[mcp] @ git+https://github.com/Singlet-Bio/singlet"` |
 | R | `remotes::install_github("Singlet-Bio/singlet", subdir = "r")` |
 | C++ (CMake) | `find_package(Singlet COMPONENTS pz fq pileup)` |
 | Pipeline binary | `cmake -B build -DSINGLET_BUILD_PIPELINE=ON` |
 
-The GPU module (`singlet.gpu`) is experimental: `singlet-bio[gpu]` only installs
+The GPU module (`singlet.gpu`) is experimental: `singlet[gpu]` only installs
 CuPy, and the CUDA extension it needs must be built from source on a CUDA 12
 machine.
 
@@ -133,7 +135,7 @@ There are two, and they are different:
 
 - **Hosted:** `https://singlet.bio/mcp` — the live catalog, maintained by the
   site. Point an MCP client at the URL; nothing to install.
-- **Local:** `singlet-mcp` (from `singlet-bio[mcp]`) — 12 tools over the offline
+- **Local:** `singlet-mcp` (from `singlet[mcp]`) — 12 tools over the offline
   catalog snapshot bundled with the package plus live search. The old command
   name `singlet` still starts it but is deprecated, because `singlet` is also
   the pipeline binary's name.

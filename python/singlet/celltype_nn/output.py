@@ -5,7 +5,7 @@ One Parquet file per sample, ``<GSM>.celltype.parquet``, one row per called cell
 (``docs/CELL-ARCHITECTURE.md``)::
 
     gsm               string   sample accession
-    col               int64    column of the cell in the sample's v2 ``cells`` table / matrix column order
+    col               int64    column of the cell in the sample's .s1 ``cells`` table / matrix column order
     cell_type_cl      string   the call: the most specific CL term with rolled-up probability >= 0.5 (null: only the root)
     cell_type_label   string   CL name of that term
     cell_type_prob    float32  rolled-up probability of the call

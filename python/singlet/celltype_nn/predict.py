@@ -3,9 +3,9 @@
 
 ::
 
-    from singlet.celllabels import read_v2
+    from singlet.celllabels import read_s1
     from singlet.celltype_nn import CellTypePredictor
-    s = read_v2("GSE145370", "GSM4317426")
+    s = read_s1("GSE145370", "GSM4317426")
     pred = CellTypePredictor.load("model.pt")
     P = pred.predict(s.X, gene_ids, s.species)          # cells x output terms, rows sum to 1
     table = pred.table(P, gsm=s.gsm, col=s.col)        # the sidecar (singlet.celltype_nn.output)

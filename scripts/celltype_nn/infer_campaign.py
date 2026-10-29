@@ -39,10 +39,10 @@ def _samples(gse: str, bundle):
     from singlet.celllabels import io as IO
 
     if bundle is None:
-        from singlet.v2 import client as C
+        from singlet.s1 import client as C
 
         for gsm in list(C.open_study(gse).samples):
-            yield gsm, (lambda g=gsm: IO.read_v2(gse, g))
+            yield gsm, (lambda g=gsm: IO.read_s1(gse, g))
     else:
         from singlet.bundle import SingletBundle
 

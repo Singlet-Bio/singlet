@@ -11,7 +11,7 @@ Per sample and feature set, `<OUT>/<GSE>/<GSM>.features.<set>.parquet`, one row 
 | column | type | content |
 |---|---|---|
 | `gsm` | string | sample accession |
-| `col` | int64 | column of the cell in the sample's v2 `cells` table (legacy bundles: its column in `exon_counts.1pz`), unique |
+| `col` | int64 | column of the cell in the sample's store `cells` table (legacy bundles: its column in `exon_counts.1pz`), unique |
 | one per feature | float32 / uint16 | score in [0, 1], NaN = not computed; category code, 65535 = not computed |
 
 Parquet metadata `singlet_features_schema = "1"`, `feature_set`, `method_version`. `output.assert_public_safe` runs before every
@@ -84,7 +84,7 @@ Twelve samples, 90,433 called cells, laptop (one core, bundles on local disk); `
 
 | Study | Samples | Organism | Cells | Median genes | Scoring s / 10k cells |
 |---|---|---|---|---|---|
-| GSE145370 (v2, ESCC) | GSM4317426 | human | 2,928 | 184 | 8.2 (includes drawing the null sets once) |
+| GSE145370 (store, ESCC) | GSM4317426 | human | 2,928 | 184 | 8.2 (includes drawing the null sets once) |
 | GSE138867 (blood) | GSM4120733, GSM4120734 | human | 14,739 | 794-865 | 4.8-4.9 |
 | GSE294109 (ccRCC) | GSM8898802, GSM8898804 | human | 4,812 | 315-322 | 2.7-3.0 |
 | GSE293707 (blood, COVID-19) | GSM8888963 (healthy), -64, -65, -66 | human | 44,788 | 125-391 | 1.0-2.3 |
@@ -118,11 +118,11 @@ only 3-6% of G2M calls have either gene, so in samples with few cycling cells mo
 
 **Not shown by the pilot.** Hypoxia: the ccRCC samples have CA9 at zero counts, so there was no hypoxic tumour group to test;
 a positive control (a hypoxia-treated cell line or ccRCC tumour cells) is still needed before hypoxia is offered as a filter.
-GSE145370 (v2, 184 genes per cell) loses 3% of its cells to the 100-gene minimum, GSE293707's shallowest sample 29%.
+GSE145370 (store, 184 genes per cell) loses 3% of its cells to the 100-gene minimum, GSE293707's shallowest sample 29%.
 
 ## 5. Running
 
-Local, one study (v2 from data.singlet.bio, or a legacy bundle downloaded to `--scratch`):
+Local, one study (store from data.singlet.bio, or a legacy bundle downloaded to `--scratch`):
 
     PYTHONPATH=python python scripts/features_run.py run --gse GSE138867 --out out/features
     PYTHONPATH=python python scripts/features_run.py registry --out out/features
@@ -142,8 +142,8 @@ has them instead.
 2. Summaries (<= 2000 rows per request):
    `for f in $OUT/ingest/sample_cell_summary.*.json; do curl -fsS -X POST https://singlet.bio/api/ingest/sample_cell_summary -H "X-Ingest-Token: $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$f; done`
    The cell index's `--d1-export` writes the same rows from the shards; load one of the two, not both.
-3. Sidecars: `singlet.v2.atlas.normalize_feature_sidecar` (cell-index branch) validates each file against the registry and the
-   sample's cells, returns the canonical bytes and key `v2/cf/<GSM>/<set>.<d16>.parquet`; upload those to `singlet-data`
+3. Sidecars: `singlet.s1.atlas.normalize_feature_sidecar` (cell-index branch) validates each file against the registry and the
+   sample's cells, returns the canonical bytes and key `s1/cf/<GSM>/<set>.<d16>.parquet`; upload those to `singlet-data`
    (`wrangler r2 object put singlet-data/<key> --file <file> --remote`) and attach the entries to the study manifest with
    `attach_features`. The index builder reads the sidecars as shard columns.
 
@@ -176,5 +176,5 @@ libraries (the modalities vocabulary marks them; most atlas samples have none):
   to sample conditions through GEO metadata, so the per-cell value is the condition's `sample_property` (treated / control),
   not the tag name.
 - Both are `comparable = 'atlas'` categories; `sample_cell_summary` counts per category value.
-- Blocker: the v2 objects do not yet carry feature-barcode counts for most screens (the screen-atlas session is checking which
+- Blocker: the .s1 objects do not yet carry feature-barcode counts for most screens (the screen-atlas session is checking which
   studies have them).

@@ -107,10 +107,10 @@ def cmd_run(a) -> int:
         try:
             v2 = isinstance(row.get("v2_manifest_url"), str) and len(row["v2_manifest_url"]) > 0
             if v2:
-                from singlet.v2 import client as C
+                from singlet.s1 import client as C
 
                 gsms = list(C.open_study(gse).samples)
-                load = lambda g: IO.read_v2(gse, g)  # noqa: E731
+                load = lambda g: IO.read_s1(gse, g)  # noqa: E731
             else:
                 bundle = work / f"{gse}.singlet"
                 _download(f"{DATA_BASE}/data/{gse}/{gse}.singlet", bundle)
