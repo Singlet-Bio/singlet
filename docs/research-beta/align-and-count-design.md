@@ -271,7 +271,12 @@ Next steps, not started (token budget):
    certifies that "on" makes the same decisions.
 6. **ILLUMINA4 qualities** (new `.1fq`): the GPU pileup requires base qualities constant or tied to N (`snpSkipN`); per-read quality at
    SNP and chrM sites must reach the GPU before such files reach the campaign, or the GPU pileup falls back to the CPU.
-7. **Read source:** the prefill reads R2.fastq; it must iterate `fq::RunSet` / `OrderedBlocks` once perf/fq-read-source lands
+7. **W3b rules not yet mirrored (perf/bam-stream 6d7e5e3):** R9 per (cell, gene), where a gene-assigned evidence UMI takes its
+   directional root from the exon/intron molecule store (`r9_molecules`, `DirectionalUmiStore::gene_root`): the GPU's junction and SNP
+   reducers must take the root from the gene reducer's stage c. R11 CB correction on the stream (1MM against the whitelist, histogram
+   from pass 1): the hand-off pass derives CB from CR today and must apply the same correction. R10/R10b/R10c (ambient fit) are
+   CPU-side, after the pileup, so nothing is needed on the GPU. Gate (a) is rerun after both.
+8. **Read source:** the prefill reads R2.fastq; it must iterate `fq::RunSet` / `OrderedBlocks` once perf/fq-read-source lands
    (until then `--engine gpu` needs file mode).
 
 ## 7. Not in scope here
