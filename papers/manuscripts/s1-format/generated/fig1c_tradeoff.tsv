@@ -1,1 +1,16 @@
-format	label	group	bits	mnnzs
+format	label	group	bits	mnnzs	anchor
+csc_i32	CSC, int32	general	64.2754	42.964	east
+mtx_gz	MTX.gz	general	24.9082	10.3787	west
+tenx_h5	10x HDF5	general	11.8045	18.3433	east
+h5ad_none	h5ad (none)	general	64.8797	37.2171	west
+h5ad_gzip	h5ad gzip	general	18.7539	20.8726	west
+h5ad_lzf	h5ad lzf	general	39.382	30.61	west
+zarr	AnnData Zarr	general	14.9432	42.1693	south
+loom	loom	general	21.9115	2.50892	west
+soma	TileDB-SOMA	domain	14.801	23.3116	east
+parquet_coo	Parquet COO	general	17.7318	25.5355	south west
+csc_zstd19	CSC + zstd-19	general	9.66709	37.2758	east
+rds_gz	rds (gzip)	general	18.3786	19.0604	north west
+rds_xz	rds (xz)	general	8.84006	13.7144	north
+bpcells	BPCells	domain	15.9532	7.84533	west
+s1	.s1	s1	5.26881	147.707	west

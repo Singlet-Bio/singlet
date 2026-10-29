@@ -1,1 +1,6 @@
-pos	loader	label	open	read	tensor	total
+pos	loader	label	open	read	tensor	total	group
+0	anndata_zarr_lazy	AnnData Zarr	0.083798	0.187419	0.002305	0.273523	other
+1	soma_ml	TileDB-SOMA ML	5.24743	32.8073	0.009057	38.0694	other
+2	s1_stream	\textbf{.s1}	0.068173	0.036105	1e-06	0.104281	s1
+3	s1_stream_canonical	.s1, source gene order	0.06832	0.039488	2e-06	0.107713	s1
+4	s1_stream_seq	.s1, one request at a time	0.067668	0.047629	2e-06	0.11516	s1

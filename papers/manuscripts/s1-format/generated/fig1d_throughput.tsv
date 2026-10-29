@@ -1,1 +1,39 @@
 loader	label	tierpos	tier	cells_per_s	capped
+anndata_inmem	AnnData in memory	0	local	193431	0
+anndata_inmem	AnnData in memory	1	nfs	193335	0
+anndata_backed	AnnData backed	0	local	6375.31	0
+anndata_backed	AnnData backed	1	nfs	6249.36	0
+scdataset	scDataset	0	local	6086.77	0
+scdataset	scDataset	1	nfs	6096.88	0
+anndata_zarr_lazy	AnnData Zarr	0	local	4004.58	0
+anndata_zarr_lazy	AnnData Zarr	1	nfs	4239.36	0
+anndata_zarr_lazy	AnnData Zarr	2	s3_10g	3391	1
+anndata_zarr_lazy	AnnData Zarr	3	s3_1g	2199.37	0
+anndata_zarr_lazy	AnnData Zarr	4	s3_1g_wan	1769.6	0
+anndata_zarr_lazy	AnnData Zarr	5	s3_0.1g	347.272	0
+soma_ml	TileDB-SOMA ML	0	local	11176.2	0
+soma_ml	TileDB-SOMA ML	1	nfs	9132.02	0
+soma_ml	TileDB-SOMA ML	2	s3_10g	9404.99	1
+soma_ml	TileDB-SOMA ML	3	s3_1g	3747.08	0
+soma_ml	TileDB-SOMA ML	4	s3_1g_wan	3844.64	0
+soma_ml	TileDB-SOMA ML	5	s3_0.1g	575.669	0
+bpcells	BPCells (R)	0	local	5092.08	0
+bpcells	BPCells (R)	1	nfs	5124.85	0
+s1_stream	\textbf{.s1}	0	local	31478	0
+s1_stream	\textbf{.s1}	1	nfs	25366.7	0
+s1_stream	\textbf{.s1}	2	s3_10g	13455.6	1
+s1_stream	\textbf{.s1}	3	s3_1g	13966.7	0
+s1_stream	\textbf{.s1}	4	s3_1g_wan	7833.18	0
+s1_stream	\textbf{.s1}	5	s3_0.1g	7257.93	0
+s1_stream_canonical	.s1, source gene order	0	local	25976.5	0
+s1_stream_canonical	.s1, source gene order	1	nfs	21239.6	0
+s1_stream_canonical	.s1, source gene order	2	s3_10g	12103.6	1
+s1_stream_canonical	.s1, source gene order	3	s3_1g	11791.1	0
+s1_stream_canonical	.s1, source gene order	4	s3_1g_wan	7193.03	0
+s1_stream_canonical	.s1, source gene order	5	s3_0.1g	7256.48	0
+s1_stream_seq	.s1, one request at a time	0	local	29359	0
+s1_stream_seq	.s1, one request at a time	1	nfs	26099.5	0
+s1_stream_seq	.s1, one request at a time	2	s3_10g	11871.9	1
+s1_stream_seq	.s1, one request at a time	3	s3_1g	11697.3	0
+s1_stream_seq	.s1, one request at a time	4	s3_1g_wan	1715.11	0
+s1_stream_seq	.s1, one request at a time	5	s3_0.1g	7265.34	0

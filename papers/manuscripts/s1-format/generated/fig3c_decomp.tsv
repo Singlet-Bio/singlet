@@ -1,1 +1,12 @@
 pos	class	label	sampling	state	above
+0	droplet_3p	droplet 3'	3.86211	0.583997	0.375537
+1	droplet_3p_nuclei	droplet nuclei	4.0395	0.512242	0.655894
+2	droplet_5p	droplet 5'	4.11839	0.557507	0.121077
+3	droplet_probe	droplet probe	3.5471	0.430307	0.461832
+4	droplet_other	other droplet	4.71795	0.326968	0.160522
+5	combinatorial	combinatorial	4.70772	0.369124	0.2761
+6	plate_umi	plate, UMI	3.94107	1.20716	0.100576
+7	plate_reads	plate, reads	5.10989	5.82593	0
+8	spatial_seq	spatial, sequencing	4.89859	0.423209	0.213371
+9	spatial_imaging	spatial, imaging	3.92466	0.735785	0.976351
+10	multimodal	multimodal	3.95949	0.658309	0.355389

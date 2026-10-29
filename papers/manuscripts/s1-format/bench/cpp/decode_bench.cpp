@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     // isa: what was asked for; isa_used: the kernel that ran (a request the CPU cannot serve falls back, e.g. AVX-512
     // without VBMI2 runs AVX2)
     std::printf("{\"nnz\":%llu,\"threads\":%d,\"isa\":\"%s\",\"isa_used\":\"%s\",\"mode\":\"%s\",\"times\":[%s]}\n",
-                (unsigned long long)nnz, opt.threads, isa.c_str(), pz::detail::isa_name(pz::resolve_isa(opt.isa)), mode.c_str(),
+                (unsigned long long)nnz, opt.threads, isa.c_str(), pz::isa_name(pz::resolve_isa(opt.isa)), mode.c_str(),
                 times.c_str());
     return 0;
 }

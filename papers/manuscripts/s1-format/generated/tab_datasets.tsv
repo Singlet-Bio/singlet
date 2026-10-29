@@ -1,1 +1,30 @@
-dataset	matrix	class	tier	cells	genes	nnz	density	frac_ones	counts_per_cell
+dataset	matrix	class	tier	cells	genes	nnz	density	frac_ones	counts_per_cell	ref
+pbmc3k	rna	droplet 3'	S	2700	32738	2286884	0.025872	0.698494	2197	\cite{zheng2017massively}
+pbmc10k\_v3	rna	droplet 3'	S	11769	33538	24825783	0.062896	0.639504	6521	\cite{tenx_datasets}
+pbmc68k	rna	droplet 3'	M	68579	32738	37323295	0.016624	0.670731	1292	\cite{zheng2017massively}
+tabula\_sapiens	rna	droplet 3'	L	412848	58482	1119354356	0.046361	0.575124	8390	\cite{tabulasapiens2022}
+hlca\_core	rna	droplet 3'	L	584944	27402	1138668948	0.07104	0.608692	4454	\cite{sikkema2023integrated}
+brain1m	rna	droplet 3'	L	1306127	27998	2624828308	0.071778	0.64569	4226	\cite{tenx_datasets}
+siletti\_brain\_nonneuronal	rna	droplet nuclei	L	888263	58232	1962963238	0.03795	0.622956	4088	\cite{siletti2023transcriptomic}
+pbmc10k\_5p	rna	droplet 5'	S	9302	36601	14960732	0.043942	0.689363	4735	\cite{tenx_datasets}
+flex\_pbmc	rna	droplet probe	S	8958	18082	32010802	0.197624	0.508231	6812	\cite{tenx_datasets}
+baron\_pancreas	rna	other droplet	S	8569	20125	16171764	0.093776	0.616119	5075	\cite{baron2016single}
+macosko\_retina	rna	other droplet	M	49300	24658	37879696	0.03116	0.718704	744	\cite{macosko2015highly}
+mca\_microwell	rna	other droplet	L	423946	39282	266059719	0.015976	0.748248	835	\cite{han2018mapping}
+rosenberg\_splitseq	rna	combinatorial	M	156049	26894	122790641	0.029258	0.73259	995	\cite{rosenberg2018single}
+cao\_moca	rna	combinatorial	XL	2058652	26183	1251379868	0.023216	0.806131	671	\cite{cao2019single}
+tahoe\_plate	rna	combinatorial	XL	5481420	62710	8276063161	0.024077	0.752509	1944	\cite{zhang2025tahoe}
+paul\_marsseq	rna	plate, UMI	S	2730	27297	4910514	0.065895	0.647084	3101	\cite{paul2015transcriptional}
+smartseq3\_pbmc	rna	plate, UMI	S	3129	38630	6423798	0.053145	0.409697	8210	\cite{hagemannjensen2020single}
+tasic\_cortex	rna	plate, reads	M	23178	45768	214290227	0.202006	0.085863	1.71996e+06	\cite{tasic2018shared}
+tabula\_muris\_facs	rna	plate, reads	M	53760	23433	143478092	0.113893	0.105703	590339	\cite{tabulamuris2018single}
+visium\_lymph\_node	rna	spatial, sequencing	S	4039	33538	21210753	0.156583	0.544436	16853	\cite{tenx_datasets}
+slideseq2\_hippocampus	rna	spatial, sequencing	M	53208	23264	22396657	0.018093	0.800505	302	\cite{stickels2021highly}
+mosta\_e165	rna	spatial, sequencing	M	121767	28204	211994186	0.061728	0.568706	5215	\cite{chen2022spatiotemporal}
+visium\_hd\_crc	rna	spatial, sequencing	L	545913	18085	214633705	0.02174	0.888096	380	\cite{oliveira2025highdefinition}
+xenium\_breast\_rep1	rna	spatial, imaging	M	167780	313	10604415	0.201931	0.4851	164	\cite{janesick2023high}
+abc\_merfish\_zhuang1	rna	spatial, imaging	XL	4167870	1122	437227228	0.093498	0.573941	203	\cite{zhang2023molecularly}
+pbmc\_multiome	atac\_peaks	multimodal	S	11909	108377	85596796	0.06632	0.058813	19858	\cite{tenx_datasets}
+pbmc\_multiome	rna	multimodal	S	11909	36601	23508033	0.053932	0.645846	3776	\cite{tenx_datasets}
+hao\_citeseq	adt	multimodal	M	161764	228	33599680	0.911	0.126072	4572	\cite{hao2021integrated}
+hao\_citeseq	rna	multimodal	M	161764	33538	354321830	0.06531	0.619294	6835	\cite{hao2021integrated}

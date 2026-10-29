@@ -1,5 +1,5 @@
 pos	model	label	median	q1	q3	lo	hi	n	em	ep	rm	rp
-0	poisson	Poisson, per gene						0				
-1	nb	negative binomial, per gene						0				
-2	gene_depth	per gene $\times$ depth						0				
-3	cluster	per gene $\times$ depth $\times$ cluster						0				
+0	poisson	Poisson, per gene	-0.409594	-2.21122	-0.154613	-540.781	0.233236	29	1.80162	0.254981	540.372	0.64283
+1	nb	negative binomial, per gene	0.082157	0.009454	0.150831	-1.22391	0.51539	29	0.072703	0.068674	1.30606	0.433233
+2	gene_depth	per gene $\times$ depth	0.109541	-0.05962	0.285855	-1.93304	0.747443	29	0.169161	0.176314	2.04258	0.637902
+3	cluster	per gene $\times$ depth $\times$ cluster	0.18231	0.115387	0.546035	-1.91099	1.08223	29	0.066923	0.363725	2.09329	0.899915
