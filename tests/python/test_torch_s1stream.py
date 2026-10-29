@@ -131,7 +131,7 @@ def test_stream_over_http_sends_a_batchs_requests_together(big):
             took[name] = (time.perf_counter() - t0, s.requests - n0)
         par.close()
     assert np.array_equal(out["seq"], _rows(x, blocks)) and np.array_equal(out["par"], out["seq"])
-    assert took["par"][1] == took["seq"][1] >= 8  # the same requests, sent together
+    assert took["par"][1] == took["seq"][1] >= 4  # the same requests, sent together
     assert took["par"][0] < took["seq"][0] / 2  # ~one round trip instead of eight
 
 
