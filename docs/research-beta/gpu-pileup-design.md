@@ -187,7 +187,24 @@ alternated:
 | `on`, 0b560145 | 893, 913 | 13.4, 13.7 | 336, 338 s |
 | `on`, cfd66207 | **765, 760** | **11.5, 11.4** | **328, 327 s** |
 
-That is below the 12.7 break-even on pbmc1k_v3. Still to do before the flag can default on: the multi-sample gates (identity test,
+That is below the 12.7 break-even on pbmc1k_v3.
+
+**Six more samples, gate (a), cfd66207** (jobs 791172-791175; GSM7656149 on 4783428f, job 791331). Every sample passes. The
+differences are the known order, timing and memory-tier ones, plus `nonhost_em_abundance.tsv` on two samples (same order-dependent
+non-host EM as the iteration count).
+
+| sample | protocol | CPU pileup core-s | `on` core-s | wall CPU / on | hand-off |
+|---|---|---|---|---|---|
+| GSM6996272 | 10x 3' | 102 | 100 | 41 / 40 s | yes |
+| GSM6996274 | 10x 3' | 136 | 125 | 54 / 50 s | yes |
+| GSM4006843 | 10x 3' | 1,093 | 763 | 474 / 340 s | yes |
+| GSM7036403 | 10x 3' | 1,727 | 1,200 | 696 / 540 s | yes |
+| GSM6470208 | 10x 5' v2 | 4,331 | 4,114 | 575 / 461 s | no: the prefill refuses STAR's TSO clipping |
+| GSM7656149 | 10x 3' | 4,355 | 3,196 | 1,854 / 1,418 s | yes; GPU arena retried in unified memory (peak 104 GB) |
+
+GSM7656149 first failed (job 791172): its 223 M barcoded reads needed about 100 GB of GPU memory against 94 GB. The arena now throws,
+and `pileupRun` retries once in unified memory (4783428f). That is a guard; the design is up-front sizing with cell partitioning
+([align-and-count-design.md](align-and-count-design.md) section 4.4). Still to do before the flag can default on: the multi-sample gates (identity test,
 3- and 6-sample node runs, CPU path unchanged), node rate, memory and cost, and the order-dependent differences against
 prod/campaign.
 
