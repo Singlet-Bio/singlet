@@ -1,4 +1,5 @@
-// Copied unchanged from PR #61 (branch gpu/w11-prototypes, commit f84aafff), bench/gpu/m6/m6.cu: see bench/gpu/pileup/README.md there.
+// Copied from PR #61 (branch gpu/w11-prototypes, commit f84aafff), bench/gpu/m6/m6.cu: see bench/gpu/pileup/README.md there. One change
+// for singlet: an exhausted arena throws ArenaExhausted (the engine retries in managed memory) instead of exit(1).
 // Linked into singlet through ../pileup_gpu.cu (PILEUP_NO_MAIN); identity: docs/gpu-engine/exploration.md 12.13, 12.19.
 // M6: read dedup, count-key sort, UMI collapse and CSR reduce on one GPU (docs/gpu-engine/exploration.md section 9, M6).
 //
@@ -57,12 +58,14 @@ struct Agg { uint32_t count, flags, exon, intron; };
 
 // ------------------------------------------------------------------------------------------------------------------------
 // arena (bump allocation of device memory; reset between runs so timed regions contain no cudaMalloc)
+struct ArenaExhausted { size_t need, cap; };
 struct Arena {
     char* base = nullptr; size_t cap = 0, off = 0, peak = 0;
     void init(size_t c) { cap = c; CK(cudaMalloc(&base, c)); }
+    void init_managed(size_t c) { cap = c; CK(cudaMallocManaged(&base, c)); }   // unified memory: may exceed the device's
     template <class T> T* alloc(size_t n) {
         size_t b = (n * sizeof(T) + 255) & ~size_t(255); if (b == 0) b = 256;
-        if (off + b > cap) { fprintf(stderr, "arena exhausted: need %zu have %zu\n", off + b, cap); exit(1); }
+        if (off + b > cap) { fprintf(stderr, "arena exhausted: need %zu have %zu\n", off + b, cap); throw ArenaExhausted{off + b, cap}; }
         T* p = (T*)(base + off); off += b; peak = std::max(peak, off); return p;
     }
     size_t mark() const { return off; }

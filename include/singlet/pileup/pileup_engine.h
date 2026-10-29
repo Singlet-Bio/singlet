@@ -2097,7 +2097,8 @@ public:
         }
         if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
-                  << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules << "\n";
+                  << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules
+                  << (out.log.empty() ? "" : "; ") << out.log << "\n";
         return true;
     }
 #endif

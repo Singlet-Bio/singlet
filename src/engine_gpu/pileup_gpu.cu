@@ -41,8 +41,13 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // ---- device memory: one arena, sized from the free memory (the research program reserved 80 GB; pbmc1k_v3 peaks at ~25 GB
     // without the annotation bug)
     size_t freeB = 0, totB = 0; cudaMemGetInfo(&freeB, &totB);
-    const size_t cap = freeB > (size_t(3) << 30) ? freeB - (size_t(3) << 30) : freeB / 2;
-    Arena A; A.init(cap);
+    // a sample whose working set exceeds the device (GSM7656149: 223 M barcoded reads needed ~100 GB of 94) runs again in unified
+    // memory twice the device's size: the part beyond the device pages to the host, the results are the same
+    for (int attempt = 0; attempt < 2; attempt++) {
+    Arena A;
+    try {
+    if (attempt == 0) A.init(freeB > (size_t(3) << 30) ? freeB - (size_t(3) << 30) : freeB / 2);
+    else A.init_managed(2 * totB);
     Inputs in; in.nS = (int)nS; in.nA = (int)nA; in.nR = (int)nR; in.ncells = (int)par.n_barcodes; in.ulen = pi.umiLen; in.par = par;
     in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, pi.snpSkipN};
     in.EX = upload_tree(A, an.ex); in.IN = upload_tree(A, an.in); in.e2g = to_dev(A, an.e2g); in.i2g = to_dev(A, an.i2g); in.gstr = to_dev(A, an.gstr);
@@ -80,7 +85,19 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     cudaFree(A.base);
     cudaDeviceReset();
     po.msTotal = (now_s() - t0) * 1e3;
+    if (attempt > 0) po.log += "unified memory (the device arena was too small); ";
     return true;
+    } catch (const ArenaExhausted& e) {
+        cudaDeviceSynchronize();
+        cudaFree(A.base);
+        if (attempt > 0) {
+            po.log += "GPU memory: " + std::to_string(e.need >> 20) + " MB needed, " + std::to_string(e.cap >> 20) + " MB unified arena";
+            cudaDeviceReset();
+            return false;
+        }
+    }
+    }
+    return false;
 }
 
 } // namespace singlet_engine_gpu
