@@ -10,7 +10,7 @@ Purpose:
 Everything below was measured against:
 - scBaseCount's public 2026-01-12 release (`gs://arc-institute-virtual-cell-atlas/scbasecount/2026-01-12`);
 - Singlet's atlas as it is published today: legacy `.singlet` bundles and the singlet.bio catalog;
-- the frozen v2 study list `plan-09fd92b149`.
+- the frozen per-sample study list `plan-09fd92b149`.
 
 Singlet's numbers here are the published atlas, not the fixed engine on PR #22.
 
@@ -326,7 +326,7 @@ That is 16% of the overlap, more than their 8.5% share of the atlas.
 |---|---|---|---|
 | exon/intron double count (+2% to +19% per cell; fixed in #22, not in the atlas) | present | STARsolo counts each UMI once per feature set | **scBaseCount better** until the re-run |
 | 5' / wrong strand (17% of human samples >50% wrong strand) | present | strand chosen per sample from Forward vs Reverse test runs; ambiguous samples dropped | **scBaseCount better**: all three wrong-strand Singlet samples here are correct in scBaseCount |
-| cell calling (knee filter misses low-RNA cells) | `CellRanger2.2` default | `EmptyDrops_CR`; ~99% of the authors' cells | **scBaseCount better**. But it keeps **only** called cells, so its calls cannot be redone, and the ambient profile is lost. Singlet keeps every barcode with ≥100 reads, which is better for re-calling (`called_v2`) |
+| cell calling (knee filter misses low-RNA cells) | `CellRanger2.2` default | `EmptyDrops_CR`; ~99% of the authors' cells | **scBaseCount better**. But it keeps **only** called cells, so its calls cannot be redone, and the ambient profile is lost. Singlet keeps every barcode with ≥100 reads, which is better for re-calling (`called_ed`) |
 | non-GEX libraries processed as RNA (~12% of Singlet samples flagged) | screen exists (#21), not yet applied to the atlas | no screen described; release includes 892 `feature_barcoding`, 694 `vdj`, 54 `cellplex` SRX as GEX; 1,797 of Singlet's flagged GSMs are in scBaseCount, 1,669 of them labelled 3'/5' GEX | **Singlet better** once #21 is applied. Caveat: scBaseCount processes every run of an SRX, so where a GSM holds both a GEX and an ADT run it may have recovered the GEX that Singlet's first-SRR rule missed |
 | read depth | first SRR, first 30M reads (median 15% of reads) | all reads, all runs | **scBaseCount better**. New issue, not in the validation docs |
 | empty matrices in published bundles | 557 studies / 6,321 samples | none seen (every scBaseCount h5ad we read had data) | **scBaseCount better**. New issue |
@@ -352,7 +352,7 @@ That is 16% of the overlap, more than their 8.5% share of the atlas.
 3. **Chemistry by whitelist test.** Pick the whitelist (3' v2, v3, v4, 5', Multiome, Flex) with the most valid barcodes on 1M
    reads, and drop samples below 30% valid. This fixes the 1,961 5'-as-3' labels and gives a principled reject for non-10x or
    non-GEX reads.
-4. **EmptyDrops_CR (or `called_v2`) for cell calls.** Keep storing every barcode; that is Singlet's advantage.
+4. **EmptyDrops_CR (or `called_ed`) for cell calls.** Keep storing every barcode; that is Singlet's advantage.
 5. **Fix and re-export the 557 studies with empty matrices**, and add a publish-time gate: a bundle whose matrices have
    nnz = 0 while `n_cells > 0` must not publish.
 6. **Recover the 5,031 GEO samples classed "plate-based"** that scBaseCount shows are 10x GEX. Re-check the classifier where

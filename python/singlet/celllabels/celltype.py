@@ -321,6 +321,19 @@ class CellTypeResult:
     path_score: Optional[np.ndarray] = (
         None  # product of the gating confidences along the guide path (guide calls)
     )
+    level_conf: Optional[np.ndarray] = (
+        None  # cells x guide depth: the gating confidence of each step on the path (0 past the call; guide calls)
+    )
+
+    def path_cl(self) -> List[Optional[str]]:
+        """The full Cell Ontology path of each call, compartment first, joined by '>' (None where there is no call)."""
+        cache: Dict[int, Optional[str]] = {0: None}
+        out: List[Optional[str]] = []
+        for j in self.node.tolist():
+            if j not in cache:
+                cache[j] = ">".join(self.guide.cl[k] for k in self.guide.path(int(j)))
+            out.append(cache[j])
+        return out
 
     @property
     def cl(self) -> np.ndarray:
@@ -396,9 +409,12 @@ def annotate_cell_types(
         n_low_quality=int(lowq.sum()),
     )
     guide_node = node.copy()
+    lconf = np.where((np.arange(D)[None, :] < depth[:, None]) & ~lowq[:, None], conf, 0.0).astype(
+        np.float32
+    )
     if method == "guide" or idx is None:
         notes["method_used"] = "guide"
-        return CellTypeResult(g, node, gconf, "guide", guide_node, notes, pconf)
+        return CellTypeResult(g, node, gconf, "guide", guide_node, notes, pconf, lconf)
 
     # ---- self-training on the confident guide calls
     t3 = time.time()

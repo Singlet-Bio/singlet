@@ -168,6 +168,38 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// s1_write_
+Rcpp::RawVector s1_write_(Rcpp::IntegerVector p, Rcpp::IntegerVector i, Rcpp::NumericVector x, int m, int n, Rcpp::CharacterVector rownames, Rcpp::CharacterVector colnames, std::string sample_id, std::string member, std::string gene_pack, int threads);
+RcppExport SEXP _singlet_s1_write_(SEXP pSEXP, SEXP iSEXP, SEXP xSEXP, SEXP mSEXP, SEXP nSEXP, SEXP rownamesSEXP, SEXP colnamesSEXP, SEXP sample_idSEXP, SEXP memberSEXP, SEXP gene_packSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type p(pSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type i(iSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< int >::type m(mSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type rownames(rownamesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type colnames(colnamesSEXP);
+    Rcpp::traits::input_parameter< std::string >::type sample_id(sample_idSEXP);
+    Rcpp::traits::input_parameter< std::string >::type member(memberSEXP);
+    Rcpp::traits::input_parameter< std::string >::type gene_pack(gene_packSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(s1_write_(p, i, x, m, n, rownames, colnames, sample_id, member, gene_pack, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// s1_members_
+Rcpp::List s1_members_(Rcpp::RawVector head);
+RcppExport SEXP _singlet_s1_members_(SEXP headSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type head(headSEXP);
+    rcpp_result_gen = Rcpp::wrap(s1_members_(head));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_singlet_pz2_header_", (DL_FUNC) &_singlet_pz2_header_, 1},
@@ -183,6 +215,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_singlet_pz2_whitelist_barcodes_", (DL_FUNC) &_singlet_pz2_whitelist_barcodes_, 2},
     {"_singlet_pz2_cells_", (DL_FUNC) &_singlet_pz2_cells_, 3},
     {"_singlet_pz_read_1pz_raw", (DL_FUNC) &_singlet_pz_read_1pz_raw, 1},
+    {"_singlet_s1_write_", (DL_FUNC) &_singlet_s1_write_, 11},
+    {"_singlet_s1_members_", (DL_FUNC) &_singlet_s1_members_, 1},
     {NULL, NULL, 0}
 };
 

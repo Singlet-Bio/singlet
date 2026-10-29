@@ -11,7 +11,7 @@
 # Validate bin/singlet-prod (prod/atlas-rerun) against bin/singlet-fixed-det (#22) on the benchmark datasets:
 #   * gene matrices identical at 4 and 8 threads (except where #25 changes strand handling), prod 4 vs 8 identical;
 #   * pbmc5p_v1 (5') counted reverse-strand without --reverse-strand;
-#   * called_v2 from the binary == python/singlet/v2/cellcall.py on the binary's stored counts (bench/called_v2/equiv_cpp.py);
+#   * called_v2 from the binary == python/singlet/s1/cellcall.py on the binary's stored counts (bench/called_ed/equiv_cpp.py);
 #   * wall time per run (time.txt).
 # Output: $PB/runs/<dataset>/singlet-{prod,det}-t{4,8}/ and $PB/results/prod_atlas/<dataset>.*.json
 set -euo pipefail
@@ -47,11 +47,11 @@ for T in 4 8; do
 done
 python -P bench/prod_atlas/compare_runs.py $PB/runs/$ID/singlet-prod-t4 $PB/runs/$ID/singlet-prod-t8 --json $RES/$ID.prod_t4_vs_t8.json | cut -c1-1500
 python -P -c "import numpy, scipy, numba; print('[val] pbench env: numpy', numpy.__version__, 'scipy', scipy.__version__, 'numba', numba.__version__)"
-python -P bench/called_v2/equiv_cpp.py $PB/runs/$ID/singlet-prod-t4 $PB/runs/$ID/singlet-prod-t8 --json $RES/$ID.equiv_pbench.json || echo "[val] equiv (pbench env) FAILED"
+python -P bench/called_ed/equiv_cpp.py $PB/runs/$ID/singlet-prod-t4 $PB/runs/$ID/singlet-prod-t8 --json $RES/$ID.equiv_pbench.json || echo "[val] equiv (pbench env) FAILED"
 # the pinned runtime venv (numpy 2.2 / scipy 1.15 / numba 0.64), as the v2 migration uses
 if [ -f $W/src/singlet-agents/main/hpc/clipper/in_runtime.sh ]; then
   source $W/src/singlet-agents/main/hpc/clipper/in_runtime.sh
-  in_runtime bash -c "cd $SRC && python -P bench/called_v2/equiv_cpp.py $PB/runs/$ID/singlet-prod-t4 --json $RES/$ID.equiv_venv.json" || echo "[val] equiv (venv) FAILED"
+  in_runtime bash -c "cd $SRC && python -P bench/called_ed/equiv_cpp.py $PB/runs/$ID/singlet-prod-t4 --json $RES/$ID.equiv_venv.json" || echo "[val] equiv (venv) FAILED"
 fi
 grep -h "called_v2:" $PB/runs/$ID/singlet-prod-t4/run.log | head -2
 grep -h "Strand\|strand" $PB/runs/$ID/singlet-prod-t4/run.log | head -8

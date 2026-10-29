@@ -1,4 +1,4 @@
-"""Independent reference decoder for pz2 members, written ONLY from docs/format-v2.md (sections 4.1, 4.2, 4.5, 4.6, 5.1, 5.2).
+"""Independent reference decoder for pz2 members, written ONLY from docs/format-store.md (sections 4.1, 4.2, 4.5, 4.6, 5.1, 5.2).
 
 It shares no code with include/singlet/pz2 and exists to prove that the spec text is sufficient to write a decoder.  It is slow
 (pure Python, one element at a time): use it on small members.
