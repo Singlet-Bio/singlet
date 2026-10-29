@@ -234,7 +234,8 @@ private:
             if (lq != isn) qual_neq_n_++;
         }
     }
-    // the hand-off's primary alignment of record rec vs the stream's primary record: position, strand, MAPQ, CIGAR
+    // the hand-off's primary alignment of record rec vs the stream's primary record: position, strand, MAPQ, CIGAR, NH (the "on" mode's
+    // alignment decisions against the BAM STAR writes for the same read: the identity check that goes with each alignment-gate run)
     void check_primary(const bam1_t* b, uint32_t rec) {
         const uint8_t* p = ho_.data + ho_.rec_off[rec];
         const int n = *p++;
@@ -245,7 +246,8 @@ private:
             const uint8_t* cig = p + 18; p = cig + 4 * nc;
             if (flag & BAM_FSECONDARY) continue;
             const bool same = tid == b->core.tid && pos == (int32_t) b->core.pos && mapq == b->core.qual && nc == b->core.n_cigar
-                && (flag & BAM_FREVERSE) == (b->core.flag & BAM_FREVERSE) && std::memcmp(cig, bam_get_cigar(b), 4 * nc) == 0;
+                && (flag & BAM_FREVERSE) == (b->core.flag & BAM_FREVERSE) && std::memcmp(cig, bam_get_cigar(b), 4 * nc) == 0
+                && [&] { const uint8_t* t = bam_aux_get(b, "NH"); return t == nullptr || bam_aux2i(t) == (int64_t) nh; }();
             if (!same) ho_mismatch_++;
             return;
         }
