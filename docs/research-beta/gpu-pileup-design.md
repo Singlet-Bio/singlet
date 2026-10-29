@@ -270,3 +270,34 @@ H100. Every sample shows only the 7 known differences (nonhost / Unmapped read o
 | GSM4006843 | b50f7501 | 1,359 | 857 | re-staged from SRA (SRR9900123, 66.7 M reads) into `data/w11/`; 95.3% of reads skip BAM; job 792023 |
 
 Jobs 791872 (R9), 791995 and 792023 (1a). GSM4006843's earlier input (`data/bam-stream/`) was deleted, so it was re-staged from SRA (job 792022).
+
+## Phase 1b and the host-cost changes: gates (2026-10-29, measured)
+
+Binaries: 1b at 475295a6 (job 792062); 1b fixes + host-cost F1-F3 + N1/N2 at 4fe12e9f (bin38, job 792223). One H100, 18 threads.
+
+**(c) Partition invariance** (GSM7036403, K forced to 1, 2, 7, job 792223): the digest of every GPU pileup output (matrices, junction table,
+indels as a set, per-cell reads and molecules, counters) is identical, `93a9547e...`, for all three. Every output file is identical too; the
+only differing files also differ between two K = 1 runs (nonhost and Unmapped read order, timing fields). GPU time 302 / 301 / 333 ms,
+of which partition select (sizing + compaction) 100 / 96 / 104 ms; host fetch of the results ~3.1 s at every K. K = 1 now skips the
+compaction (1fd5b98d), which removes that 0.1 s.
+
+**(f) Largest sample:** GSM7656149, automatic K = 2 (estimate 46.1 / 46.2 GB, used 44.4 / 44.5 GB), peak 72 GB, no unified-memory retry;
+gate (a) passes. With the earlier coefficients it chose K = 3 (job 792062). The K = 7 estimate on GSM7036403 (4.9 GB) was below use
+(5.9 GB) until the partition scratch (24 B per read) was budgeted (1fd5b98d).
+
+**(a) with the host-cost changes** (bin38): GSM7036403, GSM7656149, GSM6470208, GSM4006843 pass (only the known differences).
+`SINGLET_HANDOFF_LEAN=verify`: 0 of 46,661,077 (GSM6470208) and 0 of 32,743,513 (pbmc1k_v3) lean alignments differ from alignBAM's, and the
+verify run's outputs equal the default's. `SINGLET_HANDOFF_CLIPCHECK=1` on GSM6470208 (28.3 M clipped reads): no read where the GPU's
+clip lengths differ from STAR's CPU clip.
+
+| sample | CPU pileup core-s | GPU pileup core-s | per M reads (GPU pileup) | before host-cost (GPU pileup) |
+|---|---|---|---|---|
+| GSM6470208 (5′) | 2,365 | **1,302** | **10.7** | 2,274 (18.7) |
+| GSM7036403 | 1,945 | 1,196 | 10.7 | 1,292 |
+| GSM7656149 | 4,315 | 2,898 | 11.0 | 3,145 |
+| GSM4006843 | 1,202 | 744 | 11.2 | 802 |
+| pbmc1k_v3 | — | 697 | 10.5 | 769 |
+
+Stage profile of GSM6470208 on a STAR_PROFILE build (job 792224, `bench/host_cost/stage_profile_handoff.py`, intervals inside STAR from
+STAR's log times): 1,480 core-s (12.15 per M reads): decode 1.08, STAR start 0.07, GPU prefill 2.48, STAR per-read pass 5.75, hand-off
+pass 0.30, GPU pileup + apply + host pass 0.35, non-host screen and writers 1.08, export 0.90 per M reads.
