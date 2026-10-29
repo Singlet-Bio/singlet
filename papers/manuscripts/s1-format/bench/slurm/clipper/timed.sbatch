@@ -72,6 +72,7 @@ cp --preserve=timestamps "$S1/data/canon/$D".*.npz "$LOCAL/canon/" 2>/dev/null |
 echo "staged $(du -sh "$LOCAL" | cut -f1) for $D in $((SECONDS - t0)) s on $(hostname), $(nproc) cores"
 export S1BENCH_DATA=$LOCAL S1BENCH_NFS_DATA=$S1/data
 s1b env >/dev/null
+mkdir -p "$RES/env" && cp "$RES/env.json" "$RES/env/$D.json"   # the host and versions of this dataset's run
 
 for st in $STAGES; do
   t0=$SECONDS
