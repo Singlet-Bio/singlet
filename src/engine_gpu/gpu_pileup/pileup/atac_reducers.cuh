@@ -142,7 +142,7 @@ __global__ void k_grid_scores(const uint64_t* key, const uint64_t* cum, int n, c
     const int b = s < 0 ? 0 : min(kBinsP, (int)(s * 100.0));
     atomicAdd(&hist[b], 1ull);   // integer, commutative
 }
-__global__ void k_cand_flag(const double* s, const float* s32, int n, double s_thresh, uint32_t* f) {
+__global__ void k_cand_flag(const double* s, int n, double s_thresh, uint32_t* f) {
     int g = blockIdx.x * blockDim.x + threadIdx.x; if (g >= n) return; f[g] = (s[g] >= 1.0 && (double)(float)s[g] >= s_thresh) ? 1u : 0u; }
 
 // Host part, in order (all small): n_positions = total_g; BH threshold from the 100001-bin histogram exactly as the CPU: raw[b] = b/100 + log10(n_ge)
@@ -194,3 +194,117 @@ static PeakCountDev red_peak_count(Arena& A, Timer& T, const FragDev& F, const u
 // per-cell metrics (read_pairs, fragments, mito_fragments, peak_region_fragments, peak_region_cutsites) are reduce-by-cell of integers over the same
 // FragDev; cells are disjoint across partitions, so the partition outputs concatenate in cell order. peak_region_fragments additionally needs
 // the overlap test (first peak with end > start, then peak start < fragment end): the same binary search as peak_of_d.
+
+// ------------------------------------------------------------------------------------------------------------------------------------
+// Added with the first compile and run (bench/atac_reducers/atac_reducers_test.cu): the pieces the draft described but did not write.
+struct AtPeak { int32_t tid, start, end, summit; float pileup, nlp, nlq; };   // atac_peak_caller.h AtacPeak
+
+__global__ void k_u32_to_u64(const uint32_t* c, int n, uint64_t* o) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) o[i] = c[i]; else if (i == n) o[n] = 0; }
+// cum[i] = insertions before entry i of the merged table (n + 1 entries)
+static uint64_t* ins_cum(Arena& A, const InsDev& I) {
+    const int n = I.n; uint64_t *c64 = A.alloc<uint64_t>(n + 1), *cum = A.alloc<uint64_t>(n + 1);
+    k_u32_to_u64<<<(n + 1 + 255) / 256, 256>>>(I.count, n, c64);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::ExclusiveSum(t, b, c64, cum, n + 1); });
+    return cum;
+}
+__global__ void k_gather_u32(const uint32_t* src, const uint32_t* idx, int n, uint32_t* o) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) o[i] = src[idx[i]]; }
+__global__ void k_gather_f64(const double* src, const uint32_t* idx, int n, double* o) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) o[i] = src[idx[i]]; }
+
+struct PeakDiag { uint32_t stride = 0; std::vector<uint32_t> g, k; std::vector<double> s; uint64_t n_positions = 0, n_cand = 0; double lambda_bg = 0, s_thresh = 0; };
+
+// Peak caller on the merged insertion table: device scoring + histogram + candidate compaction, host BH threshold and region merge over the
+// compacted candidates (the region merge is a sequential pass over the candidate list here; the flag + scan + reduce-by-key version is not written).
+// Output equals call_peaks_insertions (atac_peak_caller.h). chrom_len / skip are by contig id.
+static std::vector<AtPeak> peak_call_dev(Arena& A, Timer& T, const InsDev& I, const std::vector<int32_t>& chrom_len, const std::vector<uint8_t>& skip,
+                                         const PeakPar& P = PeakPar(), PeakDiag* dg = nullptr) {
+    std::vector<AtPeak> peaks; const int nc = (int)chrom_len.size(); if (I.n == 0) return peaks;
+    const size_t mk = A.mark();
+    const int half = P.ext / 2, lhalf = P.llocal / 2;
+    std::vector<uint32_t> goff(nc + 1, 0); double glen = 0;
+    for (int c = 0; c < nc; c++) { const uint32_t ng = skip[c] ? 0 : (uint32_t)((chrom_len[c] + P.step - 1) / P.step); goff[c + 1] = goff[c] + ng; if (!skip[c]) glen += chrom_len[c]; }
+    const int total_g = (int)goff[nc];
+    uint64_t* cum = ins_cum(A, I); uint64_t total_ins = 0; CK(cudaMemcpy(&total_ins, cum + I.n, 8, cudaMemcpyDeviceToHost));
+    const double gsize = P.genome_size > 0 ? P.genome_size : 0.87 * glen, lambda_bg = gsize > 0 ? (double)total_ins * P.ext / gsize : 0.0;
+    uint32_t* dgoff = A.alloc<uint32_t>(nc + 1); CK(cudaMemcpy(dgoff, goff.data(), (nc + 1) * 4, cudaMemcpyHostToDevice));
+    uint32_t* kout = A.alloc<uint32_t>(total_g); double* sout = A.alloc<double>(total_g);
+    unsigned long long* hist = A.alloc<unsigned long long>(kBinsP + 1); CK(cudaMemset(hist, 0, (kBinsP + 1) * 8));
+    const int TB = 256, G = (total_g + TB - 1) / TB;
+    k_grid_scores<<<G, TB>>>(I.key, cum, I.n, dgoff, nc, total_g, P.step, half, lhalf, P.ext, P.llocal, lambda_bg, kout, sout, hist);
+    CK(cudaGetLastError());
+    std::vector<unsigned long long> h(kBinsP + 1); CK(cudaMemcpy(h.data(), hist, (kBinsP + 1) * 8, cudaMemcpyDeviceToHost));
+    // BH exactly as atac_peak_caller.h
+    const uint64_t n_positions = (uint64_t)total_g; const double q_need = -std::log10(P.q_cutoff);
+    std::vector<float> qscore(kBinsP + 1, 0.f);
+    { std::vector<double> raw(kBinsP + 1, -1.0); uint64_t n_ge = 0;
+      for (int b = kBinsP; b >= 0; --b) { n_ge += h[b]; if (h[b] == 0) continue; raw[b] = b / 100.0 + std::log10((double)n_ge) - std::log10((double)n_positions); }
+      double run = 0.0; for (int b = 0; b <= kBinsP; ++b) { if (raw[b] > run) run = raw[b]; qscore[b] = (float)run; } }
+    double s_thresh = 1e9; for (int b = 0; b <= kBinsP; ++b) if (qscore[b] >= q_need) { s_thresh = b / 100.0; break; }
+    s_thresh = std::max(s_thresh, 1.0);
+    // candidates in global (contig, position) order
+    uint32_t* fl = A.alloc<uint32_t>(total_g); k_cand_flag<<<G, TB>>>(sout, total_g, s_thresh, fl);
+    uint32_t* idx = A.alloc<uint32_t>(total_g); int* dn = A.alloc<int>(4);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, cub::CountingInputIterator<uint32_t>(0), fl, idx, dn, total_g); });
+    int ncand = 0; CK(cudaMemcpy(&ncand, dn, 4, cudaMemcpyDeviceToHost));
+    std::vector<uint32_t> hg(ncand), hk(ncand); std::vector<double> hs(ncand);
+    if (ncand) {
+        uint32_t* ck = A.alloc<uint32_t>(ncand); double* cs = A.alloc<double>(ncand);
+        k_gather_u32<<<(ncand + TB - 1) / TB, TB>>>(kout, idx, ncand, ck); k_gather_f64<<<(ncand + TB - 1) / TB, TB>>>(sout, idx, ncand, cs);
+        CK(cudaMemcpy(hg.data(), idx, ncand * 4, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(hk.data(), ck, ncand * 4, cudaMemcpyDeviceToHost));
+        CK(cudaMemcpy(hs.data(), cs, ncand * 8, cudaMemcpyDeviceToHost));
+    }
+    if (dg && dg->stride) {   // strided sample of the raw scores for the host cross-check
+        const int ns = (total_g + dg->stride - 1) / dg->stride; std::vector<uint32_t> sg(ns); for (int i = 0; i < ns; i++) sg[i] = (uint32_t)i * dg->stride;
+        uint32_t* dsg = A.alloc<uint32_t>(ns); CK(cudaMemcpy(dsg, sg.data(), ns * 4, cudaMemcpyHostToDevice));
+        uint32_t* sk = A.alloc<uint32_t>(ns); double* ss = A.alloc<double>(ns);
+        k_gather_u32<<<(ns + TB - 1) / TB, TB>>>(kout, dsg, ns, sk); k_gather_f64<<<(ns + TB - 1) / TB, TB>>>(sout, dsg, ns, ss);
+        dg->g = sg; dg->k.resize(ns); dg->s.resize(ns); CK(cudaMemcpy(dg->k.data(), sk, ns * 4, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(dg->s.data(), ss, ns * 8, cudaMemcpyDeviceToHost));
+        dg->n_positions = n_positions; dg->n_cand = (uint64_t)ncand; dg->lambda_bg = lambda_bg; dg->s_thresh = s_thresh;
+    }
+    CK(cudaDeviceSynchronize());
+    // region merge over the compacted candidates (host, sequential), as call_peaks_insertions pass 2
+    AtPeak cur{}; bool open = false; int last_end = 0; int cur_tid = -1;
+    auto flush = [&]() { if (open && cur.end - cur.start >= P.min_length) peaks.push_back(cur); };
+    for (int i = 0; i < ncand; i++) {
+        const float sf = (float)hs[i]; if ((double)sf < s_thresh) continue;
+        int lo = 0, hi = nc; while (lo < hi) { int mid = (lo + hi) >> 1; if (goff[mid + 1] <= hg[i]) lo = mid + 1; else hi = mid; }
+        const int c = lo, grid = (int)(hg[i] - goff[c]); const int gs = grid * P.step, ge = std::min(gs + P.step, (int)chrom_len[c]);
+        const float qs = qscore[std::min(kBinsP, (int)(sf * 100.0f))];
+        if (open && c == cur_tid && gs - last_end <= P.max_gap) {
+            cur.end = ge; if ((float)hk[i] > cur.pileup) { cur.pileup = (float)hk[i]; cur.summit = gs + P.step / 2; }
+            cur.nlp = std::max(cur.nlp, sf); cur.nlq = std::max(cur.nlq, qs);
+        } else { flush(); cur = AtPeak{c, gs, ge, gs + P.step / 2, (float)hk[i], sf, qs}; cur_tid = c; open = true; }
+        last_end = ge;
+    }
+    flush();
+    A.reset(mk); T.mark("e.peakcall");
+    return peaks;
+}
+
+// per-cell integer counters (the cell caller's inputs) by reduce-by-cell over a FragDev (sorted cell-major): read_pairs, fragments, mito_fragments,
+// peak_region_fragments, peak_region_cutsites
+struct M5 { uint32_t v[5]; };
+struct SumM5 { __host__ __device__ M5 operator()(const M5& a, const M5& b) const { M5 r; for (int i = 0; i < 5; i++) r.v[i] = a.v[i] + b.v[i]; return r; } };
+__device__ __forceinline__ int peak_first_end_gt(const uint64_t* pe, int np, uint64_t kx) { int lo = 0, hi = np; while (lo < hi) { int mid = (lo + hi) >> 1; if (pe[mid] <= kx) lo = mid + 1; else hi = mid; } return lo; }
+__global__ void k_cm_emit(const FragDev F, const uint8_t* is_mito, const uint64_t* ps, const uint64_t* pe, int np, uint32_t* cell, M5* m) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= F.n) return;
+    const uint64_t tid = (F.hi[i] >> F.sb) & ((1ull << F.tb) - 1), start = F.hi[i] & ((1ull << F.sb) - 1), end = start + F.lo[i];
+    cell[i] = (uint32_t)(F.hi[i] >> (F.tb + F.sb)); M5 r; for (int k = 0; k < 5; k++) r.v[k] = 0; r.v[0] = F.read_pairs[i];
+    if (is_mito[tid]) { r.v[2] = 1; m[i] = r; return; }
+    r.v[1] = 1;
+    if (np) {
+        const int p1 = peak_of_d(ps, pe, np, (tid << 32) | start), p2 = peak_of_d(ps, pe, np, (tid << 32) | (end - 1));
+        r.v[4] = (p1 >= 0) + (p2 >= 0);
+        const int q = peak_first_end_gt(pe, np, (tid << 32) | start);   // first peak with end > start; overlap iff its start < end
+        r.v[3] = (p1 >= 0 || p2 >= 0 || (q < np && ps[q] < ((tid << 32) | end))) ? 1u : 0u;
+    }
+    m[i] = r;
+}
+struct CellMetricsDev { uint32_t* cell; M5* v; int n; };
+static CellMetricsDev red_cell_metrics(Arena& A, Timer& T, const FragDev& F, const uint8_t* is_mito, const uint64_t* ps, const uint64_t* pe, int np) {
+    CellMetricsDev out{nullptr, nullptr, 0}; if (F.n == 0) return out;
+    uint32_t* cell = A.alloc<uint32_t>(F.n); M5* m = A.alloc<M5>(F.n); k_cm_emit<<<(F.n + 255) / 256, 256>>>(F, is_mito, ps, pe, np, cell, m);
+    out.cell = A.alloc<uint32_t>(F.n); out.v = A.alloc<M5>(F.n); int* dn = A.alloc<int>(4);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, cell, out.cell, m, out.v, dn, SumM5(), F.n); });
+    CK(cudaMemcpy(&out.n, dn, 4, cudaMemcpyDeviceToHost)); T.mark("e.cellmetrics");
+    return out;
+}

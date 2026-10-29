@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=ao-cmp5k
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=short-cpu,short-bigmem
+#SBATCH --nice=10000
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=160G
 #SBATCH --time=03:59:00
