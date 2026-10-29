@@ -202,6 +202,25 @@ non-host EM as the iteration count).
 | GSM6470208 | 10x 5' v2 | 4,331 | 4,114 | 575 / 461 s | no: the prefill refuses STAR's TSO clipping |
 | GSM7656149 | 10x 3' | 4,355 | 3,196 | 1,854 / 1,418 s | yes; GPU arena retried in unified memory (peak 104 GB) |
 
+**One H100 with half a node** (27 cores, 350 GB, short-gpu; Zach: single GPU for now). Samples run concurrently; bin32 (4783428f).
+Core-s is the job cgroup's.
+
+| run | samples (read pairs) | mode | makespan | core-s | per M pairs | read pairs/s | peak memory | mean GPU use | job |
+|---|---|---|---|---|---|---|---|---|---|
+| 3 samples, 9 threads each | pbmc1k_v3, GSM7036403, GSM4006843 (244.9 M) | `on` | 653 s | 2,724 | 11.1 | 0.375 M | 158 GB | 8% | 791375 |
+| | | CPU pileup | 790 s | 3,883 | 15.9 | 0.310 M | 176 GB | 6% | 791375 |
+| 6 samples, 5 threads each | the 3 above plus GSM7656149, GSM6996274, GSM6470208 (634 M) | `on` | 1,726 s | 10,526 | 16.6 | 0.367 M | 286 GB | 10% | 791376 |
+| | | CPU pileup | 1,968 s | 12,741 | 20.1 | 0.322 M | 321 GB | 7% | 791377 |
+
+- Per-sample peak RSS: 43-63 GB for the 66-112 M pair samples; GSM7656149 (263 M) 116 GB; GSM6470208 26 GB.
+- The 6-sample set includes GSM6470208 (10x 5', no GPU path, 122 M pairs, about 34 core-s per M pairs on its own), which raises
+  the per-M-pairs figure.
+- The GPU is busy 7-10% of the time, and the cores average 4-6 of 27. Makespan is set by the largest sample (GSM7656149: 29 min
+  `on`, 33 min CPU pileup). Packing more small samples per GPU, or giving the largest sample more threads, would raise throughput.
+- The node script's byte-level identity check also flags files with timings (`Log.final.out`, JSON `seconds` fields such as
+  `ambient_contamination.json`, `read_stats.tsv`). The gates' `out_equiv` treats those as timing-only; a 9-thread single-sample
+  check (job 791493: CPU, `on`, CPU again) shows only the known differences.
+
 GSM7656149 first failed (job 791172): its 223 M barcoded reads needed about 100 GB of GPU memory against 94 GB. The arena now throws,
 and `pileupRun` retries once in unified memory (4783428f). That is a guard; the design is up-front sizing with cell partitioning
 ([align-and-count-design.md](align-and-count-design.md) section 4.4). Still to do before the flag can default on: the multi-sample gates (identity test,
