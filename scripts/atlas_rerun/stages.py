@@ -360,8 +360,19 @@ EXCLUDE_OUT = re.compile(r"(\.bam$|\.bai$|\.csi$|_STARtmp|\.1fq$|^Aligned|\.sam$
                          r"\.f(ast)?q(\.gz)?$)")
 
 
+# Engine exit 8: the unsorted stream's strand check failed (reads contradict the protocol orientation).
+STRAND_CONTRADICTION = 8
+
+
+def strand_retry_cmd(cmd):
+    """The compute command for the strand retry: the same run on the sorted-BAM path (idempotent)."""
+    return cmd if "--sorted-bam" in cmd else list(cmd) + ["--sorted-bam"]
+
+
 def classify_failure(rc, text, maxrss_gb=None):
     t = text.lower()
+    if rc == STRAND_CONTRADICTION:   # still contradicting after the sorted-path retry: needs a look, not a retry
+        return "strand_contradiction"
     if rc in (137, -9) or "out of memory" in t or "oom" in t or "std::bad_alloc" in t:
         return "oom"
     if rc == 124 or "stall" in t:
@@ -397,6 +408,16 @@ def compute_stage(ctx, row, attempt, threads, shared_genome=False):
             cmd += ["--run-screen", screen]
         cmd += ctx.extra
         rc, secs, txt = run(cmd, log, env=ctx.env, cwd=scr)
+        if rc == STRAND_CONTRADICTION:
+            # The unsorted stream counted in the protocol orientation, and the reads contradict it (the library is
+            # sequenced in the other orientation). A pipe cannot be re-read, so the engine asks for the sorted path,
+            # whose strand safety net re-reads the BAM and recounts with the opposite orientation. One orientation per
+            # library: the right answer is the sorted pass with the strand the data show, not a mixed mode.
+            emit(root, "strand_retry", gsm, attempt=attempt, stage="compute", first_s=round(secs, 1))
+            shutil.rmtree(out_tmp, ignore_errors=True)
+            os.makedirs(out_tmp)
+            rc2, secs2, txt = run(strand_retry_cmd(cmd), log, env=ctx.env, cwd=scr)
+            rc, secs = rc2, secs + secs2
         maxrss = parse_time_v(os.path.join(scr, "time.txt"))
         if rc != 0:
             raise StageError(classify_failure(rc, txt), txt)

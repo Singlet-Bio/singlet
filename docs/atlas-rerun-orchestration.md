@@ -236,6 +236,7 @@ start.
 | a stage fails (download, prefetch, decode, screen, pool, binary exit) | the stage's `failed` event with reason and log tail | requeue once (`retry_max: 1`), then park as `retries_exhausted(<reason>)` |
 | job killed: timeout, OOM, node failure, preemption without requeue | `squeue` loses it, `sacct` gives the state, 2 ticks in a row | `lost` with the reason → retried once, with escalation for timeout and OOM |
 | compute failed, staged reads intact | reason starts with `compute:` and `stage/<GSM>/sample.1fq` exists | only the compute stage runs again |
+| the binary exits 8 (`strand_contradiction`): on the unsorted stream the reads contradict the protocol orientation, and a pipe cannot be re-read | `compute_stage` sees rc 8 and emits `strand_retry` | the same command runs again once with `--sorted-bam`: the sorted path re-reads its BAM and recounts with the opposite orientation (a library has one orientation, so no mixed-strand mode). If the sorted run also exits 8 the failure reason is `strand_contradiction` |
 | nothing to run: no 10x run, or no run passes the screen | the stage exits 3 with `parked` | parked at once, no retry. The chained compute task is cancelled |
 | binary differs from the pin | sha256 checked at the start of every stage | `binary_mismatch` failure, so the whole campaign parks visibly. Fix the pin, then unpark |
 | staging fills | the controller sums staged bytes | no new I/O until the compute stage drains it |
