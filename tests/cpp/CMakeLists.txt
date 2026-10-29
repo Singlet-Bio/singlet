@@ -96,6 +96,8 @@ add_pileup_test(test_protocol_confidence_override)
 
 # ATAC tests
 add_pileup_test(test_atac_fragment)
+add_pileup_test(test_atac_peak_caller)
+add_pileup_test(test_atac_metrics)
 add_pileup_test(test_atac_bin_counter)
 add_pileup_test(test_atac_qc)
 add_pileup_test(test_atac_cell_caller)
@@ -169,6 +171,7 @@ add_pileup_test(test_wgs_assembly)
 # Spatial
 add_pileup_test(test_visium_spatial)
 add_pileup_test(test_visium_qc)
+add_pileup_test(test_visium_tissue)
 add_pileup_test(test_spatial_barcodes)
 add_pileup_test(test_spatial_multiome)
 
