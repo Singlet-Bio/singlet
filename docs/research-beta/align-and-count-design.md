@@ -131,46 +131,46 @@ Each is built by a sort over all cells, so results do not depend on how the read
 **One UMI rule for every UMI reducer (R9, from W3b).**
 
 W3b found that the unsorted stream collapsed junction, V(D)J and SNP molecules on the raw UR, while the sorted path had STAR's
-corrected UB. On 5′ the stream overcounted junctions by 3.4% and V(D)J by 6.8%. Rule R9 (being added to `order-free-rules.md` on
-perf/bam-stream) gives these reducers the gene reducer's collapse:
-- the molecule key is the raw UMI, and UB is ignored;
-- per (cell, feature), UMIs are joined when they are at Hamming distance 1 and `max(count) ≥ 2·min(count) − 1`;
-- a molecule is a connected component;
+corrected UB. On 5′ the stream overcounted junctions by 3.4% and V(D)J by 6.8%. Rule R9 (`order-free-rules.md`, perf/bam-stream
+253c2c65; reference code `UmiFeatureCollapse`, `umi3_directional_roots` and `SnpConsensus::finalize` in `umi_dedup.h`) gives these
+reducers the gene reducer's collapse:
+- the molecule key is the raw UMI, packed 3 bits per base (A C G T N other), so N is a base of its own; UB is never read;
+- per (cell, feature), two UMIs of the same length are joined when exactly one base differs and `max(reads) ≥ 2·min(reads) − 1`;
+- a molecule is a connected component; reads without a UMI are one molecule each; UMIs longer than 21 bases match exactly;
 - this runs at finalize, after all reads, so it is order-free;
-- the CPU's union-find visits UMIs sorted by count (descending), then packed UMI. That order picks only the root, and no output
+- the CPU's union-find visits UMIs sorted by reads (descending), then packed UMI. That order picks only the root, and no output
   depends on the root;
-- for SNP, the R1 consensus (strict maximum of REF / ALT / OTHER reads) runs over all reads of the merged molecule, not per raw
-  UMI.
+- for SNP, a UMI's weight is the sum of its REF / ALT / OTHER read counts, each clamped at 255. The R1 consensus (strict maximum,
+  a tie is ambiguous) runs over the summed counts of the merged molecule, not per raw UMI.
 
-So every reducer with a UMI molecule key in the table above uses one collapse stage: the gene reducer's (`m6.cu` stage c), keyed
-by (cell, feature). The feature is the gene, junction id, SNP site, chrM position or feature barcode. Only the per-component
-payload merge differs:
-- gene: flags OR, smallest exon / intron;
-- junction: none (count 1 per component);
+Every reducer with a UMI molecule key in the table above follows the same rule, keyed by (cell, feature), where the feature is
+the gene, junction id, SNP site or feature barcode. Only the per-component payload merge differs:
+- gene: flags OR, smallest exon / intron (2-bit packing, N as T, as `DirectionalUmiStore` has always done);
+- junction and V(D)J: none (one count per component);
 - SNP: sum of the REF / ALT / OTHER read counts, then the R1 decision;
 - feature barcode: none.
 
 chrM bases and indels stay outside R9 until the rules say otherwise.
 
-**GPU pileup change for R9** (planned; starts once W3b's R9 lands, then gate (a) against the CPU stream is rerun on all seven
-samples):
+**GPU pileup change for R9 and R7** (commit 493586b4 on gpu/engine-gpu-stream; it merges perf/bam-stream 253c2c65):
 
-| Output | Today in "on" mode | Change |
+| Output | Before (exact UMI) | Now |
 |---|---|---|
-| Junctions | `pileup.cu` step 5: exact (cell, junction, UMI) first-of-run, base-5 UMI (N distinct) | the reduced unique (cell, junction, UMI) tuples with their read counts go through stage c with the junction id in the feature bits; count components per (cell, junction). `sj_raw_sum` (the engine's `sj_hits`) is redefined to match the CPU's |
-| SNP DP / AD | step 6: exact (cell, SNP, UMI) molecules, R1 consensus per raw UMI | stage c on (cell, SNP, UMI) with read count as the edge weight; the per-UMI REF / ALT / OTHER vectors are summed per component (`k_comp_agg` with a 3×16-bit sum), then `k_moldec` |
-| V(D)J gene usage | CPU, in `gpu_handoff_pass` (`vdj_umi_.insert`, first read per exact UMI) | none on the GPU: the hand-off pass calls the same R9 accumulator W3b writes for the stream |
+| Junctions | `pileup.cu` step 5: first of each exact (cell, junction, UMI) run | reads per exact (cell, junction, UMI) run, then `k_r9`: one thread per (cell, junction) group runs the CPU's union-find sequentially (so it is order-free and exact); molecules = component roots |
+| SNP DP / AD | step 6: R1 vote per exact (cell, SNP, UMI) | class counts per exact UMI clamped at 255, weight = their sum, `k_r9` per (cell, SNP), R1 vote over each component's summed counts |
+| V(D)J gene usage | CPU (`gpu_handoff_pass`), first read per exact UMI | CPU, through the stream's R9 store (`vdj_umi_.add`, collapsed in the shared finalize) |
+| Multimapper exon (R7) | `k_resolve`: the first secondary's exon | the primary's assignment, else the smallest secondary exon index |
 
-Points to settle against the R9 text when it lands:
-- **UMI packing.** Stage c packs UMIs at 2 bits per base, with N as T, like `umi_hamming_2bit`. Steps 5 and 6 pack UMIs in base
-  5, so N is distinct. R9 must say which applies to junctions and SNPs, and the GPU follows it.
-- **Edge weight.** Junctions count reads per (cell, junction, UMI). SNPs count only reads whose base passes `min_baseq`, which
-  differs from the reads per UMI. The GPU uses whatever R9 defines.
-- **Root choice.** If R9 makes any output depend on the root, for example a representative UMI that is written out, the GPU's
-  min-label hooking needs the (count desc, packed) order as its label instead of the tuple index.
-- **The `--snp-first` gate mode** (the sorted path's first-read rule) stays, for comparison with prod/campaign only.
+The UMIs in steps 5 and 6 were already base 5 with N distinct, which matches R9's packing for 12-base UMIs. A thread per group is
+cheap because almost every group has one to a few UMIs. A pathological group of n UMIs costs n²/2 tests on one thread. If a
+sample shows that, large groups move to a block per group with the same result.
 
-This lands in the W11 GPU pileup (gpu/engine-gpu-stream) before phase 1a. Phase 1 reuses it unchanged.
+The `--snp-first` gate mode (the sorted path's first-read rule) stays, for comparison with prod/campaign only.
+
+Gate (a) against the CPU stream is rerun on the six multi-sample gate samples once the waiting Alpha GPU job has finished (build 791871, gate
+array 791872).
+
+This lands in the W11 GPU pileup before phase 1a. Phase 1 reuses it unchanged.
 
 ### 4.4 One GPU for the largest samples: size up front, partition by cell
 
