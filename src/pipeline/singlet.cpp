@@ -64,6 +64,9 @@
 #include "singlet/pileup/nonhost/nonhost_em.h"
 #include "singlet/pileup/nonhost/nonhost_aligner.h"
 #include "singlet/pileup/nonhost/nonhost_cell_matrix.h"
+#ifdef SINGLET_HAVE_ENGINE_GPU
+#include "singlet/engine_gpu.h"
+#endif
 #include "singlet/pileup/tiny_dataset_guard.h"
 #include "singlet/fq/prefix_probe.h"
 #include "singlet/pileup/mega_sort_params.h"
@@ -1430,52 +1433,72 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
     std::cerr << "[nonhost] Loading screening indices...\n";
     try {
         // ── Load viral / bacterial / fungal indices ───────────────────────────
+        // --engine gpu: the host reads only the headers and species names (MinSketchIndex::load_names); the entries go to the
+        // GPU (singlet_engine_gpu::nonhostClassify). Any failure there reloads the full indices and runs the CPU screen.
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        bool use_gpu = getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1" &&
+                       !viral_db_path.empty() && !bacterial_db_path.empty() && !fungal_db_path.empty() &&
+                       singlet_engine_gpu::available();
+#else
+        bool use_gpu = false;
+#endif
         int ref_k = 21, ref_w = 11;
-
         MinSketchIndex viral_idx(ref_k, ref_w);
-        viral_idx.finalize();
-        if (!viral_db_path.empty()) {
-            std::cerr << "[nonhost] Loading viral index: " << viral_db_path << "\n";
-            viral_idx = MinSketchIndex::load(viral_db_path);
-            ref_k = viral_idx.k(); ref_w = viral_idx.w();
-        }
-
+        MinSketchIndex microbial_idx(ref_k, ref_w);
         // fungal_species_ids: set of species_ids from the fungal index.
         // Used to assign NonHostCategory::FUNGAL instead of BACTERIAL.
         std::unordered_set<uint32_t> fungal_species_ids;
-
-        MinSketchIndex microbial_idx(ref_k, ref_w);
-        microbial_idx.finalize();
-
-        if (!bacterial_db_path.empty()) {
-            std::cerr << "[nonhost] Loading bacterial index: " << bacterial_db_path << "\n";
-            MinSketchIndex bact_idx = MinSketchIndex::load(bacterial_db_path);
-            if (microbial_idx.empty())
-                microbial_idx = std::move(bact_idx);
-            else
-                microbial_idx = MinSketchIndex::merge(microbial_idx, bact_idx);
-            ref_k = microbial_idx.k(); ref_w = microbial_idx.w();
-        }
-
-        if (!fungal_db_path.empty()) {
-            std::cerr << "[nonhost] Loading fungal index: " << fungal_db_path << "\n";
-            MinSketchIndex fung_idx = MinSketchIndex::load(fungal_db_path);
-            // Record all species_ids from the fungal index before merging
-            for (uint32_t sid = 0;
-                 sid < static_cast<uint32_t>(fung_idx.n_species_names()); ++sid)
-                if (!fung_idx.species_name(sid).empty())
-                    fungal_species_ids.insert(sid);
-            if (microbial_idx.empty())
-                microbial_idx = std::move(fung_idx);
-            else
-                microbial_idx = MinSketchIndex::merge(microbial_idx, fung_idx);
-        }
-
-        // If no viral DB, the viral slot is an empty index (correct k/w still needed)
-        if (viral_idx.empty() && !microbial_idx.empty()) {
-            viral_idx = MinSketchIndex(microbial_idx.k(), microbial_idx.w());
+        auto load_indices = [&](bool names_only) {
+            auto load = [&](const std::string& path) {
+                return names_only ? MinSketchIndex::load_names(path) : MinSketchIndex::load(path);
+            };
+            const char* what = names_only ? " (names; entries on the GPU)" : "";
+            ref_k = 21; ref_w = 11;
+            viral_idx = MinSketchIndex(ref_k, ref_w);
             viral_idx.finalize();
-        }
+            if (!viral_db_path.empty()) {
+                std::cerr << "[nonhost] Loading viral index" << what << ": " << viral_db_path << "\n";
+                viral_idx = load(viral_db_path);
+                ref_k = viral_idx.k(); ref_w = viral_idx.w();
+            }
+
+            microbial_idx = MinSketchIndex(ref_k, ref_w);
+            microbial_idx.finalize();
+            bool have_microbial = false;   // a names-only index is empty(): track what was loaded explicitly
+
+            if (!bacterial_db_path.empty()) {
+                std::cerr << "[nonhost] Loading bacterial index" << what << ": " << bacterial_db_path << "\n";
+                MinSketchIndex bact_idx = load(bacterial_db_path);
+                if (!have_microbial)
+                    microbial_idx = std::move(bact_idx);
+                else
+                    microbial_idx = MinSketchIndex::merge(microbial_idx, bact_idx);
+                have_microbial = names_only || !microbial_idx.empty();
+                ref_k = microbial_idx.k(); ref_w = microbial_idx.w();
+            }
+
+            if (!fungal_db_path.empty()) {
+                std::cerr << "[nonhost] Loading fungal index" << what << ": " << fungal_db_path << "\n";
+                MinSketchIndex fung_idx = load(fungal_db_path);
+                // Record all species_ids from the fungal index before merging
+                fungal_species_ids.clear();
+                for (uint32_t sid = 0;
+                     sid < static_cast<uint32_t>(fung_idx.n_species_names()); ++sid)
+                    if (!fung_idx.species_name(sid).empty())
+                        fungal_species_ids.insert(sid);
+                if (!have_microbial)
+                    microbial_idx = std::move(fung_idx);
+                else
+                    microbial_idx = MinSketchIndex::merge(microbial_idx, fung_idx);
+            }
+
+            // If no viral DB, the viral slot is an empty index (correct k/w still needed)
+            if (!names_only && viral_idx.empty() && !microbial_idx.empty()) {
+                viral_idx = MinSketchIndex(microbial_idx.k(), microbial_idx.w());
+                viral_idx.finalize();
+            }
+        };
+        load_indices(use_gpu);
 
         // Screener with FUNGAL species set for correct kingdom assignment
         NonHostScreener screener(viral_idx, microbial_idx, 0.05f,
@@ -1491,6 +1514,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // ── NONHOST-HOST-SUBTRACT: try to load host Bloom filter ──────────────
         HostKmerFilter host_filter;
         bool using_host_filter = false;
+        std::string host_bloom_path;
         {
             const int eff_k = !viral_idx.empty()    ? viral_idx.k()    :
                               !microbial_idx.empty() ? microbial_idx.k(): 21;
@@ -1513,8 +1537,13 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                                                            bloom_path;
 
             if (HostKmerFilter::exists(active_path)) {
-                std::cerr << "[nonhost] Loading host Bloom filter: " << active_path << "\n";
-                host_filter       = HostKmerFilter::load(active_path);
+                if (use_gpu) {
+                    std::cerr << "[nonhost] Host Bloom filter (on the GPU): " << active_path << "\n";
+                } else {
+                    std::cerr << "[nonhost] Loading host Bloom filter: " << active_path << "\n";
+                    host_filter = HostKmerFilter::load(active_path);
+                }
+                host_bloom_path   = active_path;
                 using_host_filter = true;
             } else {
                 std::cerr << "[nonhost] WARNING: host Bloom filter not found at "
@@ -1558,10 +1587,46 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // Classify with soft multi-hit threshold (EM input)
         // Use host-filtered version when Bloom filter is loaded
         std::vector<NonHostScreener::MultiHit> multi_hits;
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (use_gpu && !using_host_filter) {
+            std::cerr << "[nonhost] engine_gpu: no host Bloom filter; screening on the CPU\n";
+            use_gpu = false;
+            load_indices(false);
+        }
+        if (use_gpu) {
+            StopWatch gpu_sw;
+            int lock_fd = -1;
+            const int device = singlet_engine_gpu::lockDevice(&lock_fd);
+            const double waited = gpu_sw.elapsed_s();
+            singlet_engine_gpu::NonhostResult gr;
+            const bool ok = singlet_engine_gpu::nonhostClassify(
+                reads, {viral_db_path, bacterial_db_path, fungal_db_path, host_bloom_path}, device,
+                std::max(4, std::min(12, n_threads)), gr);
+            singlet_engine_gpu::unlockDevice(lock_fd);
+            if (ok) multi_hits = screener.classify_from_groups(gr.np, gr.key, gr.cnt, 0.25f, n_threads);
+            if (ok && multi_hits.size() == n_total) {
+                std::cerr << "[nonhost] engine_gpu: device " << device << " (waited " << waited << " s), index "
+                          << (gr.indexBytes >> 20) << " MB loaded in " << gr.secLoad << " s, " << n_total
+                          << " reads classified in " << gr.secClassify << " s (" << gr.nMinimizers << " minimizers, "
+                          << gr.nHits << " hits, " << gr.nGroups << " groups)\n";
+            } else {
+                std::cerr << "[nonhost] engine_gpu: " << (ok ? std::string("inconsistent GPU results") : gr.log)
+                          << "; screening on the CPU\n";
+                use_gpu = false;
+                multi_hits.clear();
+                load_indices(false);
+                host_filter = HostKmerFilter::load(host_bloom_path);
+            }
+        }
+        if (!use_gpu) {
+#endif
         if (using_host_filter)
             multi_hits = screener.classify_multi_batch_filtered(reads, host_filter, 0.25f, n_threads);
         else
             multi_hits = screener.classify_multi_batch(reads, 0.25f, n_threads);
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        }
+#endif
 
         // Build kingdom map (FUNGAL correctly labelled via screener.fungal_species())
         auto kingdom_map = build_kingdom_map(multi_hits, screener.fungal_species());
@@ -2587,7 +2652,8 @@ static void usage(const char* prog) {
         << "                         disk: disk-backed sort (same output, no measured time penalty)\n"
         << "  --no-clip5p            Never clip a constant 5' prefix from the cDNA read\n"
         << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
-        << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n\n"
+        << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
+        << "  --engine cpu|gpu       gpu: map each distinct cDNA sequence on the GPU (CUDA build); same outputs (default cpu)\n\n"
         << "Legacy (deprecated — archive to .1fq first, then process):\n"
         << "  --reads R2 R1          FASTQ files (use 'singlet encode' instead)\n"
         << "  --sra FILE             SRA file (use 'singlet download' instead)\n"
@@ -2851,6 +2917,23 @@ int main(int argc, char* argv[]) {
         else if (arg == "--visium-coordinates" && i+1 < argc) visium_coordinates_path = argv[++i];
         else if (arg == "--visium-min-umi" && i+1 < argc) visium_min_umi = static_cast<uint32_t>(std::atoi(argv[++i])); // V3
         else if (arg == "--threads" && i+1 < argc) { star_threads = std::atoi(argv[++i]); threads_specified = true; }
+        else if (arg == "--engine" && i+1 < argc) {
+            // gpu: STAR's mapping of each distinct cDNA sequence on the GPU, into STAR's sequence cache (src/star/
+            // SeqCacheGpuPrefill.cpp, docs/engine-gpu.md); every other stage, and every read the GPU path does not cover, runs the CPU
+            // engine's code, so outputs are those of --engine cpu. Device: SINGLET_ENGINE_GPU_DEVICE (default 0).
+            std::string eng = argv[++i];
+            if (eng == "gpu") {
+                setenv("SINGLET_ENGINE_GPU", "1", 1);
+#ifndef SINGLET_HAVE_ENGINE_GPU
+                std::cerr << "[singlet] --engine gpu: this binary was built without CUDA; using the CPU engine\n";
+#endif
+            } else if (eng == "cpu") {
+                unsetenv("SINGLET_ENGINE_GPU");
+            } else {
+                std::cerr << "[singlet] --engine must be cpu or gpu\n";
+                return 1;
+            }
+        }
         else if (arg == "--sra" && i+1 < argc) sra_file = argv[++i];
         else if (arg == "--1fq" && i+1 < argc) {
             std::istringstream iss(argv[++i]);   // comma-separated: several runs of one sample
@@ -3782,7 +3865,9 @@ int main(int argc, char* argv[]) {
     // to revert to the legacy file-based decode (writes full FASTQs to TMPDIR).
     // Pass 1: lightweight BC count + R2 prefix capture (no FASTQ files written)
     // Pass 2: full decode streamed to named FIFOs → STAR reads live from them
-    const bool use_fifo_decode = onefq_mode &&
+    // --engine gpu reads the cDNA reads before STAR does (src/star/SeqCacheGpuPrefill.cpp), so it needs the file-based decode.
+    const bool engine_gpu_reads = getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1";
+    const bool use_fifo_decode = onefq_mode && !engine_gpu_reads &&
         !(getenv("SINGLET_FILE_DECODE") &&
           std::string(getenv("SINGLET_FILE_DECODE")) == "1");
     std::thread fifo_writer_thread;    // Pass 2 writer (started after Phase 0.9)
