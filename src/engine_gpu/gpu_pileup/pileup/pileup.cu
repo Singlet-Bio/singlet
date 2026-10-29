@@ -272,7 +272,7 @@ __global__ void k_fill_mt(const ReadRec* R, const AlnRec* A, const SigRec* S, in
 __global__ void k_fill_ind(const ReadRec* R, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const IND* lists, uint32_t* o_bc, IND* o_ind,
                            const uint32_t* ridx, uint32_t* o_ri) {   // o_ri: the read's index in the full input (indels keep read order across partitions)
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) return;
-    uint32_t c = list_cnt[x.sig], b = list_off[x.sig], o = off[r]; for (uint32_t k = 0; k < c; k++) { o_bc[o + k] = (uint32_t)x.bc; o_ind[o + k] = lists[b + k]; o_ri[o + k] = ridx[r]; }
+    uint32_t c = list_cnt[x.sig], b = list_off[x.sig], o = off[r]; for (uint32_t k = 0; k < c; k++) { o_bc[o + k] = (uint32_t)x.bc; o_ind[o + k] = lists[b + k]; o_ri[o + k] = ridx ? ridx[r] : (uint32_t)r; }
 }
 // junction table: (donor key, acceptor) ordered; ids by rank
 __global__ void k_sjkey(const SJL* l, int n, uint64_t* k1, uint32_t* k2, uint32_t* idx) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return; k1[i] = ((uint64_t)(uint32_t)l[i].tid << 32) | (uint32_t)l[i].donor; k2[i] = (uint32_t)l[i].acc; idx[i] = i; }
@@ -558,15 +558,17 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             if (nR > 0) k_binsum<<<GR0, TB>>>(in.R, nR, w, (uint32_t)K, bins);
             est.assign(K, 0); CK(cudaMemcpy(est.data(), bins, K * 8, cudaMemcpyDeviceToHost));
             const unsigned long long mx = *std::max_element(est.begin(), est.end());
-            if (forced > 0 || mx <= budget) break;
+            // K > 1 also holds the partition scratch for all reads (flags, compacted reads, their index: 24 B per read)
+            const size_t scratch = K > 1 ? (size_t)nR * (4 + sizeof(ReadRec) + 4) : 0;
+            if (forced > 0 || mx + scratch <= budget) break;
         }
         if (K > kMaxParts) K = kMaxParts;   // nothing fits: the largest K, and the unified-memory retry catches the rest
         A.reset(base);
     }
     g_parts_used = K; g_parts_log.clear();
     uint32_t* pf = nullptr; ReadRec* Rp = nullptr; uint32_t* ridx = nullptr; int* dnp = nullptr;
-    const size_t base2 = [&] {   // partition scratch that outlives each partition: flags, compacted reads and their global index
-        pf = A.alloc<uint32_t>(std::max(nR, 1)); Rp = A.alloc<ReadRec>(std::max(nR, 1)); ridx = A.alloc<uint32_t>(std::max(nR, 1)); dnp = A.alloc<int>(1);
+    const size_t base2 = [&] {   // K > 1: partition scratch that outlives each partition (flags, compacted reads, their global index)
+        if (K > 1) { pf = A.alloc<uint32_t>(std::max(nR, 1)); Rp = A.alloc<ReadRec>(std::max(nR, 1)); ridx = A.alloc<uint32_t>(std::max(nR, 1)); dnp = A.alloc<int>(1); }
         return A.mark(); }();
     std::vector<std::pair<uint32_t, std::array<uint32_t, 4>>> indels;   // (global read index, indel): read order, as for K = 1
     const int jb = bits_of(std::max(nj, 1)), sb = bits_of(std::max<uint64_t>(in.par.n_snps, 1)), cb = bits_of(std::max<uint64_t>(in.ncells, 1));
@@ -578,7 +580,8 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     for (int part = 0; part < K; part++) {
         A.reset(base2); A.peak = base2;
         int nRp = 0;
-        if (nR > 0) {
+        if (K == 1) { Rp = in.R; nRp = nR; }   // one partition: the reads as they are (the kernels skip reads without a barcode)
+        else if (nR > 0) {
             k_partflag<<<GR0, TB>>>(in.R, nR, (uint32_t)K, (uint32_t)part, pf);
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, in.R, pf, Rp, dnp, nR); });
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, cub::CountingInputIterator<uint32_t>(0), pf, ridx, dnp, nR); });
