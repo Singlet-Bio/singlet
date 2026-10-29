@@ -348,8 +348,7 @@ static void test_dedup_unsorted_order() {
     bool found = false;
     for (const auto& f : ex.fragments()) if (f.start == 504) { assert(f.read_pairs == 3); found = true; }
     assert(found);
-    std::printf("  test_dedup_unsorted_order: PASS
-");
+    std::printf("  test_dedup_unsorted_order: PASS\n");
 }
 
 // A2 (NOT COMPILED when written): the layout sample is every hash-sampled record, not the first N.
@@ -364,8 +363,7 @@ static void test_layout_sample_is_hash_sample_not_prefix() {
     int in = 0;
     for (int i = 0; i < 6400; ++i) in += singlet::AtacBarcodeCorrector::is_layout_sample(("BC:AACC_r" + std::to_string(i)).c_str());
     assert(in > 40 && in < 200);   // about 1/64
-    std::printf("  test_layout_sample_is_hash_sample_not_prefix: PASS
-");
+    std::printf("  test_layout_sample_is_hash_sample_not_prefix: PASS\n");
 }
 
 int main() {
