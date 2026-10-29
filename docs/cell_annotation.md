@@ -414,6 +414,13 @@ tc <- singlet_cells("GSE286650", cell_type == "T cell" & called_ed)
 | `called`, `called_ed`, `called_ed_fdr` | the default cell call; the EmptyDrops call (additional, `docs/called-ed.md`) and its FDR |
 | `n_umi_*`, `n_feat_*`, `cyc_*`, `qc_*`, `don_*`, `mts_*` | counts summaries, cell cycle, QC, genotype-free donor assignment, mtDNA summary (categorical codes decoded) |
 | `organism`, `protocol`, `sample_source`, `sample_characteristics`, ... | GEO sample metadata, repeated per cell; in R the curated fields are `geo_tissue`, `geo_cell_type`, `geo_disease`, `geo_sex`, `geo_age` (named `tissue`, `cell_type`, ... before 1.1.0) |
+| `tissue_type` | CELLxGENE `tissue_type` of the sample: `tissue`, `organoid`, `primary cell culture` or `cell line` (sample facts, see below) |
+| `cell_line`, `cell_line_cellosaurus_id` | Cellosaurus name and accession (`K-562`, `CVCL_0004`); several lines joined by `; ` in the same order |
+| `tumor_sample_type` | GDC/TCGA-style `tumor`, `primary tumor`, `metastatic`, `recurrent tumor` or `adjacent normal` |
+| `disease`, `disease_ontology_term_id` | MONDO term of the donor's disease, or `normal` / `PATO:0000461` for a healthy donor |
+| `donor_status`, `sample_kind` | `healthy` / `diseased`; `primary`, `cell_line`, `stem_cell`, `organoid` or `xenograft` |
+
+The sample facts (`tissue_type` to `sample_kind`) come from the study API (`GET https://singlet.bio/api/gse/<GSE>`, field `facts` of each sample), which reads them from the sample's own GEO record only; a field the record does not state is missing (NA), never guessed. They are fetched once per study when the study is read over HTTP; with `$SINGLET_OFFLINE` set, for a local study, or when the API cannot be reached, the columns are absent. `sample_facts=False` (Python) / `sample_facts = FALSE` (R) skips them.
 
 Options (Python `to_anndata` / `cells` / `load`, R `load` / `singlet_cells`): `cell_type_level=` (default 2; 6 gives the deepest
 call), `cell_type_min_score=` (default 0: an extra minimum on the path score `p1 * ... * pk`), `include_unvalidated=` (default off).

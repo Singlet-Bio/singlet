@@ -1,5 +1,14 @@
 # singlet (R) — NEWS
 
+## singlet 1.2.1
+
+- `load()` / `singlet_load()` and `singlet_cells()` add the structured sample facts of the singlet.bio study API to `colData`,
+  as factors: `tissue_type` (CELLxGENE), `cell_line` and `cell_line_cellosaurus_id` (Cellosaurus), `tumor_sample_type`
+  (GDC/TCGA), `disease` and `disease_ontology_term_id` (MONDO, or `normal` / PATO:0000461), `donor_status` and `sample_kind`.
+  They come from each sample's own GEO record (`NA` where it does not say), are fetched once per study and session for a study
+  read over HTTP, and are absent offline (`SINGLET_OFFLINE`), for a local study or when the API cannot be reached.
+  `sample_facts = FALSE` skips them. Matches the Python package 1.3.0.
+
 ## singlet 1.2.0
 
 Prepared for CRAN; matches the Python package 1.2.0 (`pip install singlet`).

@@ -487,13 +487,19 @@ singlet_download <- download
 #'   an extra minimum path score for it (default 0, none). See \code{\link{singlet_labels}}.
 #' @param include_unvalidated Also keep the unvalidated \code{qc_doublet_score} in
 #'   \code{colData}; published Research Alpha objects never carry it (local outputs only).
+#' @param sample_facts Add the structured sample facts of the singlet.bio study API to \code{colData}: \code{tissue_type},
+#'   \code{cell_line}, \code{cell_line_cellosaurus_id}, \code{tumor_sample_type}, \code{disease},
+#'   \code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
+#'   GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
+#'   local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.
 #' @return A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
 #'   \code{Seurat} object (when \code{as = "seurat"}) spanning all inputs.
 #'   For a per-sample study, \code{colData} holds the per-cell labels
 #'   (\code{cell_type}, \code{cell_type_ontology_term_id}, \code{sex_chrom},
 #'   \code{ancestry_hancestro}, ...), the cell calls (\code{called},
 #'   \code{called_ed}) and the QC columns of each sample, then the GEO sample
-#'   metadata (\code{organism}, ..., \code{geo_cell_type}, \code{geo_sex}, ...);
+#'   metadata (\code{organism}, ..., \code{geo_cell_type}, \code{geo_sex}, ...),
+#'   then the sample facts (\code{tissue_type}, \code{cell_line}, \code{disease}, ...);
 #'   see \code{\link{singlet_labels}}.
 #'   Samples with no usable cells (for example an empty count matrix left by
 #'   a failed pipeline run) are skipped with a warning and listed, with the
@@ -531,9 +537,9 @@ singlet_download <- download
 #'   \code{\link{find_load}}
 #' @export
 load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, modalities = NULL, cell_type_level = 2L,
-                 cell_type_min_score = 0, include_unvalidated = FALSE) {
+                 cell_type_min_score = 0, include_unvalidated = FALSE, sample_facts = TRUE) {
     lab <- list(cell_type_level = cell_type_level, cell_type_min_score = cell_type_min_score,
-                include_unvalidated = include_unvalidated)
+                include_unvalidated = include_unvalidated, sample_facts = sample_facts)
     as <- match.arg(as)
     x <- as.character(x)
     if (length(x) == 0L) {

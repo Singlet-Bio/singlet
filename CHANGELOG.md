@@ -4,6 +4,18 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+## [1.3.0] — sample facts in the clients (not yet released)
+
+- **Structured sample facts in `obs` / `colData`.** `singlet.load()`, `Study.to_anndata()` and `singlet.cells()` / `Study.cells()`
+  (R: `load()` / `singlet_load()` and `singlet_cells()`, R package 1.2.1) add, per sample and repeated on its cells, the facts the
+  singlet.bio study API (`GET /api/gse/<GSE>`, `facts`) reads from the sample's own GEO record: `tissue_type` (CELLxGENE:
+  tissue, organoid, primary cell culture, cell line), `cell_line` + `cell_line_cellosaurus_id` (Cellosaurus), `tumor_sample_type`
+  (GDC/TCGA: tumor, primary tumor, metastatic, recurrent tumor, adjacent normal), `disease` + `disease_ontology_term_id` (MONDO,
+  or `normal` / PATO:0000461 for a healthy donor), `donor_status` and `sample_kind`. Categoricals (R: factors); a field the record
+  does not state is missing, never guessed. They are fetched once per study and process when the study is read over HTTP;
+  offline (`$SINGLET_OFFLINE`), for a local study or when the API cannot be reached the columns are absent and nothing fails.
+  `sample_facts=False` (R: `sample_facts = FALSE`) skips them. New module `singlet.s1.sample_facts`.
+
 ## [1.2.0] — 2026-10-28: on PyPI as `singlet`
 
 The first release on PyPI: `pip install singlet`, then `import singlet`. Wheels for CPython 3.9 to 3.13 on Linux (x86_64,
