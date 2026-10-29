@@ -109,6 +109,23 @@ Rule (orchestrator / Zach, 2026-10-29):
 
 Gate: per-cell rho, stream vs sorted, Pearson >= 0.99 on 3' and 5'; also reported, the same path against a run on 99% of the reads (a 1% read subsample removed). If restarts cannot reach the gate, the next step is a more stable clustering (consensus) or a shrinkage that lowers each cell's dependence on its cluster prior, whichever is more defensible. Accepting the instability is not an option.
 
+## R11. Cell barcode correction on the stream: STAR's 1MM_multi_Nbase_pseudocounts
+
+Today: STAR corrects a CB_UMI_Simple barcode against the whitelist only when it builds the sorted BAM. The stream has no CB tag; the pileup took the raw `CR` and kept it only when it was an exact cell-list entry with no N. Upstream of both paths, the `.1fq` reader rebuilt every whitelist miss as an all-N barcode, although the writer stores the raw barcode after the sentinel index. So STAR received all-N barcodes for misses, and its 1MM rules rescued nothing on either path: a read one base from a real barcode, or with one N in it, was lost (barcode-layer-prep.md section 10; reader.h decode, both paths).
+
+Rule (orchestrator / Zach, 2026-10-29: those reads are real molecules; 10x's rule; order-free):
+1. The `.1fq` reader restores the raw barcode of a whitelist miss.
+2. Exact histogram, STAR's `cbReadCountExact`: in pass 1 of the `.1fq`, before STAR starts, count every read (duplicates by their count, unmapped reads included) whose barcode is an exact whitelist entry and whose UMI has no N and is not a homopolymer.
+3. Each stream read whose UMI passes that check gets its barcode from `CR` by STAR 2.7.11b's `1MM_multi_Nbase_pseudocounts`, against the same whitelist file:
+   - two or more N: rejected;
+   - no N: an exact hit is taken; otherwise every single substitution (last base first, base codes XOR 1, 2, 3) that is a whitelist entry is a candidate, with the quality of the changed base;
+   - one N: the four bases at the N, in order A C G T; every hit is a candidate (Nbase);
+   - no candidate: rejected. One candidate: taken (pseudocount types have no exact-read requirement). Several: posterior with count = exact reads + 1, q = min(quality - 33, 33), pin = (float)(count * 10^(-q/10)), ptot and pmax float, the first candidate wins ties, accepted when ptot > 0 and pmax >= 0.975f * ptot.
+   singlet writes the barcode read with quality `F` on every base, so q = 33 for every candidate and the posterior reduces to read counts.
+4. The corrected barcode is then looked up in the cell universe (R6). The histogram is complete before the first read is corrected, so the result does not depend on read order. That is the order-free form of STAR's second pass.
+
+Why: these reads come from real cells. A sequencing error in the barcode read, or one uncalled base, does not make a molecule disappear, and 10x's rule (Cell Ranger, STARsolo `1MM_multi_Nbase_pseudocounts`) assigns them where the evidence is strong (posterior >= 0.975). Using STAR's code path and float semantics exactly makes the stream's cell assignment identical to STAR's own CB on the sorted path. Each read is checked against that tag (SINGLET_TEST_CB_CHECK=1).
+
 ## Gates
 
 1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, including the non-host tables (`nonhost/*`), except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings) and fields that hold paths or the sizes of those files.
@@ -131,4 +148,5 @@ Gate: per-cell rho, stream vs sorted, Pearson >= 0.99 on 3' and 5'; also reporte
 | R8 non-host EM | done, `f4a1e95` (canonical input order, hash sample above the cap) | match if the GPU runs the non-host EM |
 | R9 UMI correction (SJ, V(D)J, SNP) | per (cell, gene) `13d8faf` (per-feature version `253c2c6`), both paths; gates 1-2 met; vs prod: junctions within 0.03% (5') / 0.001% (3'), V(D)J -2.0% and SNP DP -1.6% on 5' (residual, see ws-w3b update h) | to implement (same rule) |
 | R10 ambient pool (5-100 UMIs, sequence ties, cells in sequence order) | done, `2a45dd3`: pool and mean rho path-independent; R10b (data-seeded clusters, 10 restarts) in progress | match if the GPU runs the ambient correction |
+| R11 stream CB correction (STAR 1MM_multi_Nbase_pseudocounts; reader restores raw barcodes) | in progress on `perf/bam-stream` | gate the GPU barcode layer against it (mm1 mode) |
 | shuffled-order gate | met on `8699980` (791182) and `253c2c6` (791783), GSM4006843: 44 files identical across as-written / collate / coord replays. `f4a1e95` had failed on `exon_counts` (multimapper exon, fixed by R7) | — |
