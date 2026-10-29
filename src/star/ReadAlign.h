@@ -34,9 +34,14 @@ class ReadAlign {
         bool seqCacheable();
         bool seqCacheEncode(std::vector<uint8> &blob);
         void seqCacheRestore(const std::vector<uint8> &blob);
+        void seqCacheRestore(const uint8 *blob);
         //singlet --engine gpu: the BAM core fields STAR writes for a read with sequence seqNum (numeric, no clipping), from its cached
         //result, appended to out (ReadAlign_seqCache.cpp); one call per distinct sequence instead of one per read
         void seqCacheAlignRecords(const char *seqNum, uint L, const std::vector<uint8> &blob, std::vector<uint8> &out);
+        //the same, from a pointer to the blob (the prefill's threads no longer copy each blob first)
+        void seqCacheAlignRecords(const char *seqNum, uint L, const uint8 *blob, std::vector<uint8> &out);
+        //the BAM core fields alignBAM would write for a single-end alignment, without building the record (ReadAlign_seqCache.cpp)
+        bool seqCacheLeanAln(Transcript const &trOut, uint nTrOut, uint trChrStart, int32 &refID, int32 &pos, uint16 &flag, uint8 &mapq, uint32 &nCig, uint32 *cig);
         //singlet GPU pileup "on": what STAR's per-read output (mapping stats, SJ.out.tab, Solo Gene) takes from the alignments of a
         //mapped sequence, appended to out after seqCacheAlignRecords (nothing for an unmapped one). A hand-off read whose sequence has
         //one is not restored from the cache: outputHandoffSummary replays it (seqCacheHandoffConfig: only where these are the sole
