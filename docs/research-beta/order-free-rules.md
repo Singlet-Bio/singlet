@@ -71,6 +71,7 @@ Why: it is decided before alignment from the full read set, so it is order-free 
 
 - Barcode axis: the R6 order everywhere (matrices, `cell_calls.tsv`, `cell_qc_metrics.tsv`, every per-barcode table).
 - Splice junctions: rows sorted by (contig index in the BAM header, donor, acceptor); `sj_names`, `sj_counts`, `sj_features`, `splice_events`, `splice_psi` all built from that order. Today rows are numbered first-seen.
+- Feature assignment of a multi-mapped read: the primary alignment's gene and exon; if the primary lies outside every gene, the smallest exon index over its secondary alignments (not the first secondary seen), in the serial pass, the region workers and the cross-worker merge. Molecules already take the smallest exon/intron index over their reads.
 - Any other feature axis built from first-seen discovery (poly-A sites, mt indel events, non-host taxa, VDJ genes) is sorted by its natural key (coordinate, or stable reference ID) before export.
 - Floating-point reductions (EmptyDrops alpha, ambient model, demux VB, non-host EM) run over inputs in that canonical order, with a fixed partition when threaded, so results are bit-identical across thread counts.
 
@@ -101,7 +102,7 @@ Why: an EM over a fixed set of reads has one answer; summing in a fixed order ma
 | R4 rRNA hash sample | done, `8ab560d`, both paths | to implement |
 | R5 strand | done for the stream, `8ab560d` (no inline probe; aggregate reported; exit 8 on contradiction). The sorted path keeps its genome-sampled probe plus safety net, which re-reads the whole BAM | to implement |
 | R6 barcode universe | done for the stream, `b237f57`; the sorted path still refreshes from the CB-tag scan | take the list from the CPU pass-1 |
-| R7 canonical order | junctions done, `8ab560d`, both paths; other discovery axes still to check against the gates | to implement |
-| thread/rerun gate | met for every pileup output, 3' and 5' (update (g) of ws-w3b); non-host EM still order-dependent | — |
+| R7 canonical order | junctions done, `8ab560d`, both paths; multimapper exon `8699980`; other discovery axes still to check against the gates | to implement (match the multimapper exon rule) |
+| thread/rerun gate | met for every output including `nonhost/*` on `f4a1e95`, 3' and 5' (4 vs 16 threads, rerun) | — |
 | R8 non-host EM | done, `f4a1e95` (canonical input order, hash sample above the cap) | match if the GPU runs the non-host EM |
-| shuffled-order gate | mode added in `f4a1e95`: `SINGLET_TEE_STREAM_BAM=<path>` saves the stream, `--bam-file <path> --stream-unsorted` replays it; not run yet | — |
+| shuffled-order gate | run on `f4a1e95` (GSM4006843): 43 files identical across as-written / collate / coord replays, `exon_counts` not (21-25 multimapper molecules moved between exons of one gene; gene totals equal). Fixed in `8699980` (R7 multimapper exon); rerun pending | — |
