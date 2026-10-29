@@ -367,10 +367,16 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
 
         stats = read_tsv(result_path(cfg, "stats", u))
         n_cells = int(stats[0]["cells"])
-        files = {}
+        # a loader whose format the write stage found not applicable (BPCells above 2^31 non-zeros) gets a row saying so
+        written = {r["format"]: r for r in read_tsv(result_path(cfg, "write", u))}
+        na, files = {}, {}
         for ld in loaders:
             fmt = "bpcells" if ld == "bpcells" else LOADERS[ld].fmt
-            files[ld] = formats.get([fmt])[0].path(fdir)
+            if written.get(fmt, {}).get("status") == "not_applicable":
+                na[ld] = written[fmt].get("note", "")
+            else:
+                files[ld] = formats.get([fmt])[0].path(fdir)
+        run_loaders = [ld for ld in loaders if ld not in na]
         # a forced rerun of some loaders (minibatch.loaders) replaces their rows and keeps the other loaders' rows
         rows = [r for r in read_tsv(out) if r.get("loader") not in loaders]
 
@@ -380,6 +386,8 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
             log(f"{u.key} {tier['name']} {ld} seed {seed}: {res.get('first_batch_s', res.get('note'))}")
 
         for tier in tier_list:
+            for ld, note in na.items():
+                record(tier, ld, "", {"status": "not_applicable", "note": note})
             if not tier.get("gbit"):
                 # a file tier: data_dir (node-local disk in the timed jobs) or a root of its own (the shared filesystem)
                 root = _expand(str(tier["root"])) if tier.get("root") else None
@@ -387,7 +395,7 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
                     log(f"{u.key}: tier {tier['name']} skipped (its root variable is not set)")
                     continue
                 tdir = (Path(root) / "formats" / u.key) if root else fdir
-                for ld in loaders:
+                for ld in run_loaders:
                     path = formats.get(["bpcells" if ld == "bpcells" else LOADERS[ld].fmt])[0].path(tdir)
                     for seed in mb["seeds"]:
                         res = (_bpcells(cfg, path, seed, threads, n_cells, None) if ld == "bpcells"
@@ -401,7 +409,7 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
                 ceiling = netem.calibrate(cfg, f"{base}/_calib/blob.bin", 0)
                 ceiling_par = netem.calibrate(cfg, f"{base}/_calib/blob.bin", 0, streams=threads)
                 netem.set_tier(cfg, tier)
-                for ld in loaders:
+                for ld in run_loaders:
                     url = f"{base}/{u.key}/{files[ld].name}"
                     if _skip_download(mb, tier, ld, u):
                         nbytes = _path_bytes(files[ld])

@@ -17,8 +17,6 @@ def format_dir(cfg: Config, u: Unit) -> Path:
 def run(cfg: Config, units: list[Unit], fmt_ids: list[str], force: bool = False, threads: int = 0) -> None:
     threads = threads or int(cfg["threads"]["headline"])
     fmts = formats.get(fmt_ids)
-    # h5ad_none first: BPCells reads it for matrices above 2^31 non-zeros
-    fmts.sort(key=lambda f: f.id != "h5ad_none")
     for u in units:
         out = result_path(cfg, "write", u)
         if out.exists() and not force:

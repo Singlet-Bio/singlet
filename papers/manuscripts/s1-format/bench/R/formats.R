@@ -1,6 +1,5 @@
 # R side of the format benchmark (called by s1bench/formats/rfmt.py).
 #   Rscript formats.R write            <fmt> <exchange_dir> <out_path> <threads>
-#   Rscript formats.R write_from_h5ad  <fmt> <h5ad> <out_path> <threads>       (BPCells, matrices above 2^31 non-zeros)
 #   Rscript formats.R read             <fmt> <path> <exchange_dir> <threads>
 #   Rscript formats.R time             <fmt> <path> <threads> <repeats> <warmup> <cold 0|1>   -> JSON seconds on the last line
 # Formats: rds_gz, rds_xz (saveRDS of a dgCMatrix), bpcells (BPCells bit-packed directory, uint32 counts).
@@ -67,13 +66,6 @@ read_fmt <- function(path, threads) {
 if (cmd == "write") {
   m <- read_exchange(args[3])
   write_fmt(m, args[4], as.integer(args[5]))
-} else if (cmd == "write_from_h5ad") {
-  stopifnot(fmt == "bpcells")
-  suppressPackageStartupMessages(library(BPCells))
-  unlink(args[4], recursive = TRUE)
-  # AnnData stores cells x genes; BPCells opens it as genes x cells.
-  mm <- convert_matrix_type(open_matrix_anndata_hdf5(args[3]), "uint32_t")
-  write_matrix_dir(mm, args[4])
 } else if (cmd == "read") {
   write_exchange(read_fmt(args[3], as.integer(args[5])), args[4])
 } else if (cmd == "time") {

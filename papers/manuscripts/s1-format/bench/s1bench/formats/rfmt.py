@@ -3,7 +3,7 @@
 Python and R exchange the canonical matrix as flat binary files in a directory (`export_for_r`): p.f64 (column
 pointers as float64, exact below 2^53), i.i32 (0-based row ids), x.i32 (counts), genes.txt, barcodes.txt. R's
 dgCMatrix holds at most 2^31 - 1 non-zeros; larger matrices are reported as not applicable for `rds_*`, which is a real
-limit of that format. BPCells has no such limit and is written from the uncompressed h5ad when the matrix is that large.
+limit of that format, and for `bpcells`: BPCells stores them, but reading one into memory gives a dgCMatrix.
 """
 
 from __future__ import annotations
@@ -59,20 +59,15 @@ class RFormat(Format):
         self.id, self.label, self.ext, self.is_dir, self.group = fid, label, ext, is_dir, group
 
     def applicable(self, c, cfg):
-        if self.id.startswith("rds") and c.nnz > INT32_MAX:
-            return f"dgCMatrix holds at most 2^31-1 non-zeros; this matrix has {c.nnz}"
+        if c.nnz > INT32_MAX:
+            held = "read into memory as a dgCMatrix, which" if self.id == "bpcells" else "dgCMatrix"
+            return f"{held} holds at most 2^31-1 non-zeros; this matrix has {c.nnz}"
         return None
 
     def write(self, c, path, threads):
         with tempfile.TemporaryDirectory(dir=path.parent) as t:
-            if c.nnz > INT32_MAX and self.id == "bpcells":
-                src = path.parent / "h5ad_none.h5ad"
-                if not src.exists():
-                    raise RuntimeError("bpcells on a >2^31 nnz matrix needs h5ad_none written first")
-                rscript("write_from_h5ad", self.id, src, path, threads)
-            else:
-                export_for_r(c, Path(t))
-                rscript("write", self.id, t, path, threads)
+            export_for_r(c, Path(t))
+            rscript("write", self.id, t, path, threads)
 
     def read(self, path, threads):
         with tempfile.TemporaryDirectory(dir=path.parent) as t:

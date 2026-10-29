@@ -21,7 +21,9 @@ AnnData \texttt{.h5ad} uncompressed and with gzip or lzf; AnnData Zarr; loom (on
 in the run budget); R \texttt{dgCMatrix} saved with \texttt{saveRDS} using gzip or xz; a TileDB-SOMA experiment; a
 BPCells matrix directory; COO triplets in Parquet with zstd; and the CSC arrays raw and with zstd level 19. Every file is
 read back and compared with the canonical matrix, counts, identifiers and barcodes; a format that fails the comparison
-is reported as a failure, not dropped. Size is the total bytes of all files of the format, divided by the number of
+is reported as a failure, not dropped. An R \texttt{dgCMatrix} holds at most $2^{31}-1$ non-zeros, so for larger
+matrices the RDS formats cannot store the matrix and BPCells, which stores it, cannot read it into memory; both are
+reported as not applicable there, and BPCells is left out of the minibatch panel for those matrices. Size is the total bytes of all files of the format, divided by the number of
 non-zeros. \sone{} files are written by the \texttt{singlet} writer with default settings; the ``shared pack'' variant
 stores gene identifiers in a separate vocabulary file whose size is not counted, as it is shared by every dataset of the
 same annotation.
