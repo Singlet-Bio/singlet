@@ -93,6 +93,17 @@ Rule: for each (barcode, feature) group, where the feature is a junction, a V(D)
 
 Why: a UMI with one sequencing or PCR error is the same template, and counting it again inflates exactly the deepest features (where errors accumulate), which biases junction usage, clonotype abundance and allelic depth. One rule for every molecule-level output keeps them consistent with the gene counts, and doing it ourselves rather than relying on STAR's tag makes it order-free, path-independent and documented. The directional rule (rather than STAR's 1MM_All) is the one the exon/intron counts already use; agreement with STAR's `UB`-based counts is measured, not assumed.
 
+## R10. Ambient (empty-droplet) pool for the ambient correction
+
+Today: the pool is every uncalled barcode of the candidate universe with 1 to 100 gene-level UMIs, capped at the 50,000 with the most UMIs, ties by column index; the called cells enter the cluster fit in column order. Both depend on the barcode list: the stream universe (R6, >= 5 raw reads) holds barcodes that the sorted path's CB-tag scan (>= 5 mapped primary CB records) does not, and the two lists order the columns differently. On GSM4006843 (3') and GSM7901264 (5') the fitted mean contamination was 0.406 (stream) vs 0.416 (sorted) and 0.215 vs 0.189, and 11.7% / 14.6% of the corrected counts moved, with identical alignments.
+
+Rule (Zach, 2026-10-29: the pool is defined independently of the candidate list):
+1. The pool is every barcode that is not a called cell and has between 5 and 100 gene-level UMIs (exon plus intron), inclusive. A barcode belongs to it or not by its own counts alone. The lower bound 5 equals the read threshold of every barcode list the engine builds (R6 pass-1 list, sorted CB-tag scan): a barcode with 5 UMIs has at least 5 barcoded primary reads, so it is in every list, and barcodes that only some lists hold (fewer than 5 mapped reads) can never enter the pool.
+2. If more than 50,000 barcodes qualify, the 50,000 with the most UMIs are kept, ties by barcode sequence ascending (never by column position).
+3. The called cells enter the cluster fit (PCA start, k-means++ seeding, per-cluster statistics) in barcode-sequence order, so the fit does not depend on how the list orders its columns. `ambient_contamination.tsv` lists cells in that order.
+
+Why: the ambient profile is the composition of the free RNA in the loading suspension, which every empty droplet samples; which droplets a barcode list happens to include, and in what order, is not a property of the sample. Droplets with 1 to 4 UMIs add almost no information to a profile built from 5-100-UMI droplets, but they are exactly the ones whose presence depends on the list. Keeping the cap, the upper bound (SoupX's 0-100 soup range) and the cell exclusion leaves the model otherwise unchanged. The fit can still differ where the called cell sets differ (cell calling depends on the universe through `called_v2`'s own pool and knee; update (f) shows none of those cells is high quality); that is measured, not hidden.
+
 ## Gates
 
 1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, including the non-host tables (`nonhost/*`), except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings) and fields that hold paths or the sizes of those files.
@@ -114,4 +125,5 @@ Why: a UMI with one sequencing or PCR error is the same template, and counting i
 | thread/rerun gate | met for every output including `nonhost/*` on `f4a1e95` and `253c2c6`, 3' and 5' (4 vs 16 threads, rerun) | — |
 | R8 non-host EM | done, `f4a1e95` (canonical input order, hash sample above the cap) | match if the GPU runs the non-host EM |
 | R9 UMI correction (SJ, V(D)J, SNP) | done, `253c2c6`, both paths; gates 1-2 met; vs prod: junctions within 0.03% (5') / 0.001% (3'), V(D)J -2.0% and SNP DP -1.6% on 5' (residual, see ws-w3b update h) | to implement (same rule) |
+| R10 ambient pool (5-100 UMIs, sequence ties, cells in sequence order) | to implement on `perf/bam-stream` | match if the GPU runs the ambient correction |
 | shuffled-order gate | met on `8699980` (791182) and `253c2c6` (791783), GSM4006843: 44 files identical across as-written / collate / coord replays. `f4a1e95` had failed on `exon_counts` (multimapper exon, fixed by R7) | — |
