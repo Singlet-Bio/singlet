@@ -1,0 +1,17 @@
+{
+  "what": "share of sample B's reads and distinct cDNA sequences (R2, exact full length) that occur in sample A; job 789785 (bench/gpu/m5/jobs/overlap.sbatch)",
+  "samples": {
+    "pbmc1k_v3": {"distinct": 31870813, "reads": 66601887, "read_length": 91, "chemistry": "3' v3, PBMC"},
+    "GSM7656149": {"distinct": 137199590, "reads": 263410684, "read_length": 91, "chemistry": "3' v3, deep"},
+    "GSM7036403": {"distinct": 34826990, "reads": 111623976, "read_length": 98, "chemistry": "3' v2"},
+    "pbmc5p_v1": {"distinct": 18506532, "reads": 60000000, "read_length": 91, "chemistry": "5' v1"},
+    "GSM6470208": {"distinct": 37133170, "reads": 121774155, "read_length": 90, "chemistry": "5' v2"}
+  },
+  "pairs": [
+    {"A": "GSM7656149", "B": "pbmc1k_v3", "shared_distinct": 6093917, "share_distinct_of_B": 0.1912, "shared_reads_of_B": 32948578, "share_reads_of_B": 0.4947},
+    {"A": "pbmc1k_v3", "B": "GSM7656149", "shared_distinct": 6093917, "share_distinct_of_B": 0.0444, "shared_reads_of_B": 86471076, "share_reads_of_B": 0.3283},
+    {"A": "GSM7036403", "B": "pbmc1k_v3", "shared_distinct": 71058, "share_distinct_of_B": 0.0022, "shared_reads_of_B": 442789, "share_reads_of_B": 0.0066},
+    {"A": "GSM6470208", "B": "pbmc5p_v1", "shared_distinct": 0, "share_distinct_of_B": 0.0, "shared_reads_of_B": 0, "share_reads_of_B": 0.0},
+    {"A": "GSM7656149+GSM7036403", "B": "pbmc1k_v3", "shared_distinct": 6124546, "share_distinct_of_B": 0.1922, "shared_reads_of_B": 33018185, "share_reads_of_B": 0.4958}
+  ]
+}

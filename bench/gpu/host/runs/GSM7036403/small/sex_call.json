@@ -1,0 +1,10 @@
+{
+  "sex": "male",
+  "confidence": 1.0000,
+  "xist_cpm": 0.0000,
+  "y_marker_cpm": 1120.9412,
+  "n_y_genes_detected": 7,
+  "xist_umis": 0,
+  "y_marker_umis": 38609,
+  "total_umis": 34443378
+}

@@ -1,0 +1,10 @@
+{
+  "sex": "unknown",
+  "confidence": 0.0000,
+  "xist_cpm": 0.0000,
+  "y_marker_cpm": 0.0000,
+  "n_y_genes_detected": 0,
+  "xist_umis": 0,
+  "y_marker_umis": 0,
+  "total_umis": 19585720
+}

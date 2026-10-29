@@ -1,0 +1,103 @@
+set=pbmc1k_v3 node=g050.clipper.gvsu.edu job=789810 2026-10-28T00:26:48-04:00 engine c4a1be3844ae5a43c35eb3124850f91d303ebbc8 m5 71b41709abd5517b
+reads=66601887 distinct=31870813
+[t] distinct 128 s
+params stardump exit=0
+index + genome arrays loaded in 23.7 s; sjdbN 386483, chr 194
+truth: 31870813 distinct reads (66601887 reads), loaded in 31.6 s
+lane A (staged): 31870813 reads, batches of 131072, work 46072 B/read (6.04 GB)
+  lane A run 0: 5399.2 ms (phase 1 1843.1, scan 324.9, phase 3 3228.6)
+  lane A run 1: 5395.5 ms (phase 1 1841.9, scan 322.2, phase 3 3229.0)
+  lane A thread cycles: seeds 53.8%, windows 8.4%, stitching 37.0%, select+encode 0.8%; 450.1 SA entries per read
+lane M (staged): 8393565 reads, batches of 131072, work 70808 B/read (9.28 GB)
+  lane M run 0: 5776.8 ms (phase 1 1300.1, scan 282.8, phase 3 4193.1)
+  lane M run 1: 5765.6 ms (phase 1 1299.0, scan 282.3, phase 3 4183.6)
+  lane M thread cycles: seeds 15.7%, windows 16.4%, stitching 67.8%, select+encode 0.2%; 1925.2 SA entries per read
+lane B (staged): 1571660 reads, batches of 32768, work 635216 B/read (20.81 GB)
+  lane B run 0: 5940.0 ms (phase 1 635.0, scan 118.4, phase 3 5183.9)
+  lane B run 1: 5949.0 ms (phase 1 633.1, scan 120.2, phase 3 5195.1)
+  lane B thread cycles: seeds 8.3%, windows 13.2%, stitching 78.5%, select+encode 0.0%; 3072.9 SA entries per read
+emitted 31763130 sequence results to /tmp/debruinz-e2e-789810/blobs.bin
+
+M5: 0 / 31870813 distinct reads identical (0.000000%), reads weighted 0 / 66601887 (0.000000%); differ 31870813 (unmapType only 0)
+    unmapped by STAR: 31870813 (0 identical), mapped: 0 (0 identical)
+    GPU lane A 5395.5 ms (31870813 reads), lane M 5765.6 ms (8393565 reads), lane B 5949.0 ms (1571660 reads) = 1.86 M distinct reads/s on the GPU
+    lane M overflow why: split=2 pc=3 win=1212548 wa=220252 wtr=635 keep=126517 blob=11695 steps=8
+    lane A overflow why: split=2 pc=3 win=8172045 wa=44565 winbin=21 wtr=8775 keep=167847 steps=307
+    heavy lane: 87132 reads (0.2734%), 2.20 s on 24 host threads, failures 0; why: win=43542 wtr=2660 keep=4788 steps=36142
+m5 exit=0
+-rw-r--r-- 1 debruinz domain users 5234250469 Oct 28 00:31 /tmp/debruinz-e2e-789810/blobs.bin
+[t] gpu 278 s
+engine ref exit=0
+SEQCACHE: on, 4096 MB in 64 shards
+SEQCACHE: lookups=66488663 hits=33442632 hit_rate=0.502982 inserts=33046030 refreshes=1678271 uncacheable=113225
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 7:17.26
+	Maximum resident set size (kbytes): 57057008
+[t] ref 716 s
+engine ref2 exit=0
+SEQCACHE: on, 4096 MB in 64 shards
+SEQCACHE: lookups=66488663 hits=33442666 hit_rate=0.502983 inserts=33045996 refreshes=1677567 uncacheable=113225
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 7:22.64
+	Maximum resident set size (kbytes): 57049432
+[t] ref2 1158 s
+engine gpu exit=0
+SEQCACHE: on, 32768 MB in 64 shards
+SEQCACHE: preloaded 31763130 sequence results (2180277444 bytes) from /tmp/debruinz-e2e-789810/blobs.bin
+SEQCACHE: lookups=66488663 hits=66006711 hit_rate=0.992751 inserts=32245082 refreshes=0 uncacheable=113224
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 6:55.96
+	Maximum resident set size (kbytes): 56995904
+[t] gpu 1574 s
+=== out_equiv ref vs ref2
+a = /tmp/debruinz-e2e-789810/ref/out
+b = /tmp/debruinz-e2e-789810/ref2/out
+  DIFF nonhost_reads.fq (75684237 vs 75684237 bytes)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 959255571 != 959255576
+  DIFF read_stats.tsv (141 vs 141 bytes)
+    2 of 3/3 lines differ
+    a: align	73921372	73921372		0	0	219.47
+    b: align	73921372	73921372		0	0	217.30
+    a: pileup	73921372	73921372		0	0	39.46
+    b: pileup	73921372	73921372		0	0	38.54
+  DIFF star_Unmapped.out.mate1 (556948817 vs 556948817 bytes)
+  DIFF star_Unmapped.out.mate2 (225446643 vs 225446643 bytes)
+files: 46 identical, 3 differ only in timings/paths, 5 differ
+RESULT: 5 differences
+  differs: ./ambient_contamination.json sizes 545 545 order-independent: DIFFERENT
+  differs: ./nonhost_reads.fq sizes 75684237 75684237 order-independent: SAME
+  differs: ./pileup_stats.json sizes 7455 7455 order-independent: DIFFERENT
+  differs: ./provenance.json sizes 1047 1047 order-independent: DIFFERENT
+  differs: ./read_stats.tsv sizes 141 141 order-independent: DIFFERENT
+  differs: ./star_Log.final.out sizes 2030 2030 order-independent: DIFFERENT
+  differs: ./star_Log.out sizes 22542 22547 order-independent: DIFFERENT
+  differs: ./star_Log.progress.out sizes 482 482 order-independent: DIFFERENT
+  differs: ./star_Unmapped.out.mate1 sizes 556948817 556948817 order-independent: SAME
+  differs: ./star_Unmapped.out.mate2 sizes 225446643 225446643 order-independent: SAME
+  differs: ./summary.json sizes 1399 1399 order-independent: DIFFERENT
+=== out_equiv ref vs gpu
+a = /tmp/debruinz-e2e-789810/ref/out
+b = /tmp/debruinz-e2e-789810/gpu/out
+  DIFF nonhost/nonhost_summary.json: /em_iterations: 458 != 462
+  DIFF nonhost_reads.fq (75684237 vs 75684237 bytes)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 959255571 != 959255676
+  DIFF read_stats.tsv (141 vs 141 bytes)
+    2 of 3/3 lines differ
+    a: align	73921372	73921372		0	0	219.47
+    b: align	73921372	73921372		0	0	201.07
+    a: pileup	73921372	73921372		0	0	39.46
+    b: pileup	73921372	73921372		0	0	37.00
+  DIFF star_Unmapped.out.mate1 (556948817 vs 556948817 bytes)
+  DIFF star_Unmapped.out.mate2 (225446643 vs 225446643 bytes)
+files: 45 identical, 3 differ only in timings/paths, 6 differ
+RESULT: 6 differences
+  differs: ./ambient_contamination.json sizes 545 545 order-independent: DIFFERENT
+  differs: ./nonhost/nonhost_summary.json sizes 496 496 order-independent: DIFFERENT
+  differs: ./nonhost_reads.fq sizes 75684237 75684237 order-independent: SAME
+  differs: ./pileup_stats.json sizes 7455 7455 order-independent: DIFFERENT
+  differs: ./provenance.json sizes 1047 1047 order-independent: DIFFERENT
+  differs: ./read_stats.tsv sizes 141 141 order-independent: DIFFERENT
+  differs: ./star_Log.final.out sizes 2030 2030 order-independent: DIFFERENT
+  differs: ./star_Log.out sizes 22542 22648 order-independent: DIFFERENT
+  differs: ./star_Log.progress.out sizes 482 482 order-independent: DIFFERENT
+  differs: ./star_Unmapped.out.mate1 sizes 556948817 556948817 order-independent: SAME
+  differs: ./star_Unmapped.out.mate2 sizes 225446643 225446643 order-independent: SAME
+  differs: ./summary.json sizes 1399 1398 order-independent: DIFFERENT
+[t] total 1613 s

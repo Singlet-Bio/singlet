@@ -1,0 +1,1822 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "cell-calling",
+ "title": "Cell calls of the published atlas vs the authors' Cell Ranger cells (Research Alpha)",
+ "engine": "alpha (published atlas)",
+ "dataset_scope": "Research Alpha: samples as currently published on singlet.bio (atlas engine v0.3.0, first SRA run, first 30M reads), stratified human/mouse x 10x 3' v2 / 3' v3 / 5' / nuclei x small/large, restricted to samples whose GEO record holds the authors' filtered matrix",
+ "status": "final",
+ "generated_at": "2026-10-26T15:29:03+00:00",
+ "owner": "alpha-bench",
+ "singlet": {
+  "version": "0.3.0 (Research Alpha atlas engine)",
+  "commit": "8e1803ba5ac9cb8038e666f06df446c9a85550b0",
+  "branch": "v0.3.0-pilot-freeze",
+  "binary": "singlet (campaign build, cellarium full_campaign)"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "0.3.0",
+   "role": "singlet",
+   "params": "published Research Alpha bundle: singlet download --max-reads 30000000 (first SRR); singlet --threads 4 --pipeline --output-format 1pz; cell calls = STARsolo CellRanger2.2 knee"
+  },
+  {
+   "name": "cellranger-authors",
+   "version": "as deposited (Cell Ranger 2-8, per study)",
+   "role": "truth",
+   "url": "https://ftp.ncbi.nlm.nih.gov/geo/samples/ (GEO sample supplementary files; exact files in alpha_samples.csv)",
+   "params": "filtered feature-barcode matrix as deposited by the authors"
+  }
+ ],
+ "code": [
+  {
+   "path": "bench/alpha/select_samples.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/81f0a6801d9d8c93d5cc647c6e41e2d3bb4ed0f8/bench/alpha/select_samples.py",
+   "role": "harness"
+  },
+  {
+   "path": "bench/alpha/alpha_compare.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/81f0a6801d9d8c93d5cc647c6e41e2d3bb4ed0f8/bench/alpha/alpha_compare.py",
+   "role": "metric"
+  },
+  {
+   "path": "bench/alpha/aggregate.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/81f0a6801d9d8c93d5cc647c6e41e2d3bb4ed0f8/bench/alpha/aggregate.py",
+   "role": "metric"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/alpha/aggregate.py",
+  "function": "compute",
+  "laptop_minutes": 1,
+  "clipper_command": "sbatch --array=0-158%12 bench/alpha/alpha_compare.sbatch"
+ },
+ "datasets": [
+  {
+   "id": "alpha_human_3p_v2_small",
+   "title": "Research Alpha samples: human, 3p_v2, small",
+   "accessions": {
+    "gsm": [
+     "GSM4634067",
+     "GSM4647123",
+     "GSM5005051",
+     "GSM5017037",
+     "GSM5870063",
+     "GSM7910989",
+     "GSM8002529",
+     "GSM8730312",
+     "GSM8751474"
+    ],
+    "other": [
+     "GSE153099",
+     "GSE153559",
+     "GSE164241",
+     "GSE164690",
+     "GSE196296",
+     "GSE248288",
+     "GSE252524",
+     "GSE286827",
+     "GSE287791"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 36753,
+   "notes": "9 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_3p_v2_large",
+   "title": "Research Alpha samples: human, 3p_v2, large",
+   "accessions": {
+    "gsm": [
+     "GSM4006845",
+     "GSM4337069",
+     "GSM4568683",
+     "GSM4848250",
+     "GSM4955761",
+     "GSM5519466",
+     "GSM6049610",
+     "GSM8502131",
+     "GSM8996539",
+     "GSM9032631"
+    ],
+    "other": [
+     "GSE135357",
+     "GSE145838",
+     "GSE151214",
+     "GSE159843",
+     "GSE162632",
+     "GSE182158",
+     "GSE201047",
+     "GSE276563",
+     "GSE297676",
+     "GSE299082"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 66958,
+   "notes": "10 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_3p_v3_small",
+   "title": "Research Alpha samples: human, 3p_v3, small",
+   "accessions": {
+    "gsm": [
+     "GSM5057687",
+     "GSM5578176",
+     "GSM6071622",
+     "GSM7500412",
+     "GSM8101603",
+     "GSM8422222",
+     "GSM8825778",
+     "GSM9228772"
+    ],
+    "other": [
+     "GSE165903",
+     "GSE184117",
+     "GSE201795",
+     "GSE235326",
+     "GSE256493",
+     "GSE273127",
+     "GSE290927",
+     "GSE307655"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 28495,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_3p_v3_large",
+   "title": "Research Alpha samples: human, 3p_v3, large",
+   "accessions": {
+    "gsm": [
+     "GSM4405014",
+     "GSM4980292",
+     "GSM6094669",
+     "GSM8067267",
+     "GSM8118468",
+     "GSM8306709",
+     "GSM8798777",
+     "GSM8899428",
+     "GSM8945748",
+     "GSM9176947"
+    ],
+    "other": [
+     "GSE135253",
+     "GSE163505",
+     "GSE202109",
+     "GSE255245",
+     "GSE260499",
+     "GSE269125",
+     "GSE289789",
+     "GSE294147",
+     "GSE295330",
+     "GSE305423"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 111513,
+   "notes": "10 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_5p_small",
+   "title": "Research Alpha samples: human, 5p, small",
+   "accessions": {
+    "gsm": [
+     "GSM5019530",
+     "GSM5261283",
+     "GSM6090513",
+     "GSM7901263",
+     "GSM7927979",
+     "GSM8564830",
+     "GSM8770264",
+     "GSM8901884",
+     "GSM9145722"
+    ],
+    "other": [
+     "GSE164789",
+     "GSE173165",
+     "GSE202052",
+     "GSE245131",
+     "GSE247824",
+     "GSE279219",
+     "GSE288581",
+     "GSE294296",
+     "GSE304243"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 26588,
+   "notes": "9 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_5p_large",
+   "title": "Research Alpha samples: human, 5p, large",
+   "accessions": {
+    "gsm": [
+     "GSM4670203",
+     "GSM5731071",
+     "GSM8207597",
+     "GSM8385341",
+     "GSM8416333",
+     "GSM8488932",
+     "GSM8608358",
+     "GSM8791443",
+     "GSM8800515",
+     "GSM9005890"
+    ],
+    "other": [
+     "GSE154386",
+     "GSE190760",
+     "GSE263931",
+     "GSE271789",
+     "GSE272993",
+     "GSE275981",
+     "GSE280982",
+     "GSE289435",
+     "GSE289864",
+     "GSE298047"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 138688,
+   "notes": "10 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_nuclei_small",
+   "title": "Research Alpha samples: human, nuclei, small",
+   "accessions": {
+    "gsm": [
+     "GSM4546547",
+     "GSM6061710",
+     "GSM6911567",
+     "GSM7889698",
+     "GSM8016257",
+     "GSM8213057",
+     "GSM8453381",
+     "GSM8619164"
+    ],
+    "other": [
+     "GSE150311",
+     "GSE201349",
+     "GSE222007",
+     "GSE247416",
+     "GSE253200",
+     "GSE264154",
+     "GSE274595",
+     "GSE281356"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 33117,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_human_nuclei_large",
+   "title": "Research Alpha samples: human, nuclei, large",
+   "accessions": {
+    "gsm": [
+     "GSM4080400",
+     "GSM4433529",
+     "GSM8013368",
+     "GSM8117730",
+     "GSM8281752",
+     "GSM9127972",
+     "GSM9210281",
+     "GSM9347611"
+    ],
+    "other": [
+     "GSE136719",
+     "GSE147564",
+     "GSE253075",
+     "GSE260461",
+     "GSE267932",
+     "GSE303481",
+     "GSE306825",
+     "GSE312510"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 211177,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_3p_v2_small",
+   "title": "Research Alpha samples: mouse, 3p_v2, small",
+   "accessions": {
+    "gsm": [
+     "GSM3874365",
+     "GSM4770465",
+     "GSM5257094",
+     "GSM5651435",
+     "GSM5883812",
+     "GSM7068147",
+     "GSM7745731",
+     "GSM8507255",
+     "GSM8567238"
+    ],
+    "other": [
+     "GSE132543",
+     "GSE157561",
+     "GSE172455",
+     "GSE186419",
+     "GSE196426",
+     "GSE226207",
+     "GSE241928",
+     "GSE276868",
+     "GSE279315"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 25743,
+   "notes": "9 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_3p_v2_large",
+   "title": "Research Alpha samples: mouse, 3p_v2, large",
+   "accessions": {
+    "gsm": [
+     "GSM3934452",
+     "GSM4103033",
+     "GSM4489569",
+     "GSM5410928",
+     "GSM5678488",
+     "GSM7158694",
+     "GSM8192612",
+     "GSM8452582",
+     "GSM9293409"
+    ],
+    "other": [
+     "GSE133531",
+     "GSE138222",
+     "GSE149068",
+     "GSE179165",
+     "GSE188387",
+     "GSE229311",
+     "GSE263461",
+     "GSE274545",
+     "GSE310290"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 63115,
+   "notes": "9 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_3p_v3_small",
+   "title": "Research Alpha samples: mouse, 3p_v3, small",
+   "accessions": {
+    "gsm": [
+     "GSM5025928",
+     "GSM5353268",
+     "GSM6307664",
+     "GSM6758185",
+     "GSM7660705",
+     "GSM8023983",
+     "GSM8123674",
+     "GSM8703560"
+    ],
+    "other": [
+     "GSE165092",
+     "GSE176032",
+     "GSE207687",
+     "GSE218884",
+     "GSE238223",
+     "GSE253602",
+     "GSE260749",
+     "GSE285504"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 35551,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_3p_v3_large",
+   "title": "Research Alpha samples: mouse, 3p_v3, large",
+   "accessions": {
+    "gsm": [
+     "GSM5556429",
+     "GSM7049154",
+     "GSM7720305",
+     "GSM7967330",
+     "GSM8286701",
+     "GSM8314324",
+     "GSM8316002",
+     "GSM8785673",
+     "GSM8899164",
+     "GSM9131348"
+    ],
+    "other": [
+     "GSE183368",
+     "GSE196778",
+     "GSE241268",
+     "GSE249931",
+     "GSE268163",
+     "GSE269395",
+     "GSE269455",
+     "GSE289171",
+     "GSE294130",
+     "GSE303604"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 110762,
+   "notes": "10 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_5p_small",
+   "title": "Research Alpha samples: mouse, 5p, small",
+   "accessions": {
+    "gsm": [
+     "GSM5472162",
+     "GSM8009873",
+     "GSM8011199",
+     "GSM8436481",
+     "GSM8554632",
+     "GSM9059662"
+    ],
+    "other": [
+     "GSE180859",
+     "GSE252891",
+     "GSE252964",
+     "GSE273752",
+     "GSE278765",
+     "GSE300404"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 22593,
+   "notes": "6 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_5p_large",
+   "title": "Research Alpha samples: mouse, 5p, large",
+   "accessions": {
+    "gsm": [
+     "GSM5516045",
+     "GSM6670824",
+     "GSM6935009",
+     "GSM8180901",
+     "GSM8252246",
+     "GSM8314416",
+     "GSM8499134",
+     "GSM8586887"
+    ],
+    "other": [
+     "GSE182005",
+     "GSE216347",
+     "GSE222901",
+     "GSE251735",
+     "GSE262874",
+     "GSE266597",
+     "GSE269399",
+     "GSE280067"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 93855,
+   "notes": "8 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_nuclei_small",
+   "title": "Research Alpha samples: mouse, nuclei, small",
+   "accessions": {
+    "gsm": [
+     "GSM4186883",
+     "GSM4460590",
+     "GSM7747722",
+     "GSM8606605",
+     "GSM8970753",
+     "GSM9140838"
+    ],
+    "other": [
+     "GSE140811",
+     "GSE148339",
+     "GSE241800",
+     "GSE280857",
+     "GSE296454",
+     "GSE304010"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 18672,
+   "notes": "6 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  },
+  {
+   "id": "alpha_mouse_nuclei_large",
+   "title": "Research Alpha samples: mouse, nuclei, large",
+   "accessions": {
+    "gsm": [
+     "GSM6672395",
+     "GSM6777767",
+     "GSM7979977",
+     "GSM8713752",
+     "GSM8979866",
+     "GSM9263480",
+     "GSM9922113"
+    ],
+    "other": [
+     "GSE216431",
+     "GSE219201",
+     "GSE250505",
+     "GSE285948",
+     "GSE296919",
+     "GSE309236",
+     "GSE342034"
+    ]
+   },
+   "truth": "the authors' filtered Cell Ranger matrix deposited in the GEO sample record",
+   "data_kind": "real",
+   "n_cells": 104318,
+   "notes": "7 samples, one per study; Singlet values are the published bundles as served by data.singlet.bio"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6487,
+    "ci": [
+     0.6044,
+     0.7197
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 135 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6097,
+    "ci": [
+     0.3694,
+     0.7691
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8937,
+    "ci": [
+     0.7446,
+     0.9839
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6349,
+    "ci": [
+     0.2284,
+     0.9083
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.7843,
+    "ci": [
+     0.527,
+     0.8559
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.7438,
+    "ci": [
+     0.3635,
+     0.8975
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6265,
+    "ci": [
+     0.4795,
+     0.7115
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.554,
+    "ci": [
+     0.2286,
+     0.9562
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.7088,
+    "ci": [
+     0.3814,
+     0.9094
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6532,
+    "ci": [
+     0.2817,
+     0.9677
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9169,
+    "ci": [
+     0.4918,
+     0.9975
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5436,
+    "ci": [
+     0.2714,
+     0.9594
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5381,
+    "ci": [
+     0.4331,
+     0.7833
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4599,
+    "ci": [
+     0.3452,
+     0.8306
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6258,
+    "ci": [
+     0.416,
+     0.7986
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6497,
+    "ci": [
+     0.3536,
+     0.8473
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_recovery",
+   "name": "Authors' cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4941,
+    "ci": [
+     0.2118,
+     0.7193
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 7 samples; CI = bootstrap over samples",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9996,
+    "ci": [
+     0.999,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 135 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9991,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9987,
+    "ci": [
+     0.9912,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9967,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.999,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9928,
+    "ci": [
+     0.9688,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.995,
+    "ci": [
+     0.9864,
+     0.9998
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9996,
+    "ci": [
+     0.8348,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_human_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9984,
+    "ci": [
+     0.9822,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9826,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9983,
+    "ci": [
+     0.9826,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9995,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9991,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9984,
+    "ci": [
+     0.9509,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9998,
+    "ci": [
+     0.9982,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9968,
+    "ci": [
+     0.9772,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision",
+   "name": "Singlet cells that are authors' cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "alpha_mouse_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9888,
+    "ci": [
+     0.9793,
+     0.9997
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "Cell Ranger and STARsolo EmptyDrops_CR agree at Jaccard 0.95-0.99 on identical reads (docs/pipeline-validation.md 4.5), so a caller that reproduces the authors' Cell Ranger cells should find at least 95% of them"
+   },
+   "notes": "median over 7 samples; CI = bootstrap over samples",
+   "pass": "pass"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 135 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9998,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9998,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_human_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_3p_v2_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_3p_v2_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 9 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_3p_v3_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9997,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_3p_v3_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9999,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 10 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_5p_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9996,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_5p_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9999,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 8 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_nuclei_small",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9993,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 6 samples; CI = bootstrap over samples",
+   "pass": "na"
+  },
+  {
+   "id": "author_cells_in_barcode_matrix",
+   "name": "Authors' cells present in Singlet's barcode matrix (>=100 reads)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "alpha_mouse_nuclei_large",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.9999,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "median over 7 samples; CI = bootstrap over samples",
+   "pass": "na"
+  }
+ ],
+ "conclusion": "On 135 Research Alpha samples, the published atlas recovers a median 65% (95% CI 60%-72%) of the cells the authors called with Cell Ranger, and 100% of its own calls are authors' cells. The calls are precise but miss low-UMI cells: a knee filter on reads capped at 30M of the first SRA run.",
+ "methods": "**Samples.** Research Alpha = samples in published bundles of studies that are not withheld, minus the samples excluded by the Alpha policy (wrong strand, non-RNA library, empty matrix), in studies downloadable now, usable and QC tier 0 (47,702 samples). From these, candidates were drawn at random (seed 7, one per study) for human and mouse, labelled 10x 3' v2, 3' v3 or 5', and kept when the GEO sample record holds a filtered matrix (.h5 or matrix/barcodes/features, no 'raw' in the name). Nuclei were recognised from the GEO text. Up to 10 samples per stratum (species x chemistry x Singlet called cells <3,000 or >=3,000), one per study.\n\n**Singlet** values are read from the bundles exactly as data.singlet.bio serves them (exon_counts, intron_counts, cell_calls, summary.json), by HTTP ranges. **Truth** is the authors' deposited Cell Ranger matrix. Barcodes are matched on the 16-mer; genes on Ensembl ID (symbol when the deposit has none).\n\n**Metrics.** Recovery = Singlet-called & author / author; precision = Singlet-called & author / Singlet-called. On cells both called: UMIs per cell (Singlet / author), per-cell gene correlation (log1p Pearson, up to 2,000 cells) after thinning both profiles of each cell to half the smaller total, against a noise floor of two independent thinnings of the authors' profile; pseudobulk Spearman over common genes. Singlet's exon or exon+intron layer is used, whichever fits the authors' pseudobulk better (Cell Ranger <7 counts exons only). reads_used / reads_available = Singlet's input reads over all SRA spots of the sample (NCBI runinfo). Values are medians over samples with bootstrap 95% CIs, pooled and per stratum.",
+ "caveats": [
+  "24 of 159 picked samples were not scored: 16 author matrix looks unfiltered (raw barcodes); 5 singlet fetch; 2 author barcodes do not match Singlet's (renamed, multiplexed or different library); 1 author fetch",
+  "Samples were limited to those whose GEO sample record holds a Cell Ranger-style filtered matrix, which favours newer, better-documented studies; the 16 strata are equally weighted, not weighted by their share of the atlas.",
+  "The authors' matrices are not uniform truth: Cell Ranger versions differ (exon-only before 7.0, introns after), and some authors filtered cells further (QC, doublets) before depositing, which lowers recovery and is not Singlet's error. The Singlet layer compared (exon or exon+intron) is chosen per sample from which one fits the authors' pseudobulk better.",
+  "Nuclei and 5' strata were assigned from GEO text (regular expressions on the sample record); some may be mislabelled.",
+  "Mouse samples were not screened for wrong-strand counting before Alpha; wrong_strand_frac is reported per sample.",
+  "reads_available counts every run of the sample in SRA (NCBI runinfo), including non-GEX runs of the same GSM where they exist; it overstates the GEX reads for multi-library samples.",
+  "The depth-matched correlation removes depth, not counting rules; it says the profiles agree at the atlas's depth, not that the atlas has the authors' depth. Both profiles are thinned to half the smaller per-cell total, so the correlations are lower than at full depth.",
+  "Published samples come from three engine builds (git 8e1803ba: 79, 37e7cbdf: 75, unknown: 5 in this set); singlet.commit names the build most samples report."
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "pooled",
+   "wall_s": 561.4024999999999,
+   "max_rss_gb": 48.6173,
+   "threads": 4,
+   "cpu_h": 0.624,
+   "notes": "median over the Alpha public samples of wall_seconds and peak_rss_gb in their summary.json (campaign, 4 threads)"
+  }
+ ],
+ "figures": [
+  {
+   "id": "cell_recovery_by_stratum",
+   "title": "Authors' cells recovered, by stratum",
+   "kind": "box",
+   "x": {
+    "label": "stratum",
+    "categories": [
+     "human|3p_v2|small",
+     "human|3p_v2|large",
+     "human|3p_v3|small",
+     "human|3p_v3|large",
+     "human|5p|small",
+     "human|5p|large",
+     "human|nuclei|small",
+     "human|nuclei|large",
+     "mouse|3p_v2|small",
+     "mouse|3p_v2|large",
+     "mouse|3p_v3|small",
+     "mouse|3p_v3|large",
+     "mouse|5p|small",
+     "mouse|5p|large",
+     "mouse|nuclei|small",
+     "mouse|nuclei|large"
+    ]
+   },
+   "y": {
+    "label": "recovery",
+    "scale": "linear"
+   },
+   "series": [
+    {
+     "name": "Singlet (published)",
+     "tool": "singlet",
+     "x": [
+      "human|3p_v2|small",
+      "human|3p_v2|large",
+      "human|3p_v3|small",
+      "human|3p_v3|large",
+      "human|5p|small",
+      "human|5p|large",
+      "human|nuclei|small",
+      "human|nuclei|large",
+      "mouse|3p_v2|small",
+      "mouse|3p_v2|large",
+      "mouse|3p_v3|small",
+      "mouse|3p_v3|large",
+      "mouse|5p|small",
+      "mouse|5p|large",
+      "mouse|nuclei|small",
+      "mouse|nuclei|large"
+     ],
+     "y": [
+      0.6097,
+      0.8937,
+      0.6349,
+      0.7843,
+      0.7438,
+      0.6265,
+      0.554,
+      0.7088,
+      0.6532,
+      0.9169,
+      0.5436,
+      0.5381,
+      0.4599,
+      0.6258,
+      0.6497,
+      0.4941
+     ]
+    }
+   ],
+   "caption": "Median over samples per stratum; the per-sample values are in the alpha_samples.csv artifact."
+  },
+  {
+   "id": "cell_precision_by_stratum",
+   "title": "Precision of Singlet's calls, by stratum",
+   "kind": "box",
+   "x": {
+    "label": "stratum",
+    "categories": [
+     "human|3p_v2|small",
+     "human|3p_v2|large",
+     "human|3p_v3|small",
+     "human|3p_v3|large",
+     "human|5p|small",
+     "human|5p|large",
+     "human|nuclei|small",
+     "human|nuclei|large",
+     "mouse|3p_v2|small",
+     "mouse|3p_v2|large",
+     "mouse|3p_v3|small",
+     "mouse|3p_v3|large",
+     "mouse|5p|small",
+     "mouse|5p|large",
+     "mouse|nuclei|small",
+     "mouse|nuclei|large"
+    ]
+   },
+   "y": {
+    "label": "precision",
+    "scale": "linear"
+   },
+   "series": [
+    {
+     "name": "Singlet (published)",
+     "tool": "singlet",
+     "x": [
+      "human|3p_v2|small",
+      "human|3p_v2|large",
+      "human|3p_v3|small",
+      "human|3p_v3|large",
+      "human|5p|small",
+      "human|5p|large",
+      "human|nuclei|small",
+      "human|nuclei|large",
+      "mouse|3p_v2|small",
+      "mouse|3p_v2|large",
+      "mouse|3p_v3|small",
+      "mouse|3p_v3|large",
+      "mouse|5p|small",
+      "mouse|5p|large",
+      "mouse|nuclei|small",
+      "mouse|nuclei|large"
+     ],
+     "y": [
+      1.0,
+      0.9987,
+      1.0,
+      1.0,
+      0.9928,
+      0.995,
+      0.9996,
+      0.9984,
+      1.0,
+      0.9983,
+      1.0,
+      1.0,
+      0.9984,
+      0.9998,
+      0.9968,
+      0.9888
+     ]
+    }
+   ],
+   "caption": "Median over samples per stratum; the per-sample values are in the alpha_samples.csv artifact."
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "alpha_samples.csv",
+   "kind": "derived",
+   "format": "csv",
+   "url": "https://data.singlet.bio/benchmarking/alpha/alpha_samples.csv",
+   "sha256": "630caeefbfd0220ea4b97bd42564249b42b17705695f48e7b4a2834017ae0043",
+   "bytes": 92444
+  }
+ ]
+}

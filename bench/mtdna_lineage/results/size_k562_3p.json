@@ -1,0 +1,33 @@
+{
+ "k562_3p/read": {
+  "n_cells": 3532,
+  "n_cell_pos": 43558493,
+  "n_nonzero_base_strand": 55602740,
+  "E1_full_tensor_strand": 31435850,
+  "E2_full_tensor_nostrand": 25557190,
+  "E3_depth_strand_plus_nonref": 14023718,
+  "n_nonref_entries": 2279211,
+  "E4_depth_plus_nonref_nostrand": 13356206
+ },
+ "k562_3p/umi1": {
+  "n_cells": 3532,
+  "n_cell_pos": 43555454,
+  "n_nonzero_base_strand": 55223725,
+  "E1_full_tensor_strand": 29583798,
+  "E2_full_tensor_nostrand": 24096134,
+  "E3_depth_strand_plus_nonref": 13054464,
+  "n_nonref_entries": 1933414,
+  "E4_depth_plus_nonref_nostrand": 12414286,
+  "E5_cell_x_variant_AD_DP": 1161679,
+  "E5_n_sites": 500,
+  "E5_nnz_dp": 1560526
+ },
+ "k562_3p/singlet_files": {
+  "private/mt_allele_counts.1pz": 181165527,
+  "private/mt_allele_counts_rev.1pz": 18323990,
+  "mt_heteroplasmy.1pz": 1136355,
+  "mt_variants.tsv": 5607,
+  "private/mt_sites.tsv": 3086361,
+  "exon_counts.1pz": 48543499
+ }
+}
