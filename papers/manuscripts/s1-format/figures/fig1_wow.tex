@@ -47,7 +47,8 @@
   xlabel={stored bits per non-zero}, ylabel={cold read, million non-zeros/s},
   axis x line*=bottom, axis y line*=left,
   xtick={2,5,10,20,50,100}, xticklabels={2,5,10,20,50,100}, ytick={10,100,1000}, yticklabels={10,100,1000},
-  lbl/.style={nodes near coords, point meta=explicit symbolic, every node near coord/.append style={font=\sffamily\tiny, anchor=west, text=ink2}},
+  lbl/.style={nodes near coords, point meta=explicit symbolic, visualization depends on={value \thisrow{anchor}\as\lblanchor},
+    every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=1.5pt}},
 ]
 % iso-lines of Eq. (1) at B = 1 Gbit/s: R_eff = R  <=>  D = 1/(1/R - b/1000), D and R in million non-zeros/s, b in bits
 \pgfplotsinvokeforeach{25,50,100,200}{
@@ -64,7 +65,9 @@
 \begin{axis}[
   title={d\quad Sustained minibatch throughput},
   width=0.44\linewidth, height=6.6cm, ymode=log,
-  xmin=-0.3, xmax=4.3, xtick={0,1,2,3,4}, xticklabels={0.1 Gbit/s, 1 Gbit/s, 10 Gbit/s, NFS, local disk},
+  xmin=-0.3, xmax=5.3, xtick={0,1,2,3,4,5},
+  xticklabels={local disk, NFS, 10 Gbit/s, 1 Gbit/s, {1 Gbit/s, 30\,ms}, 0.1 Gbit/s},
+  x tick label style={rotate=30, anchor=north east, inner sep=1pt},
   xlabel={storage tier}, ylabel={cells per second into the model},
   axis x line*=bottom, axis y line*=left,
   legend style={font=\sffamily\tiny, draw=none, at={(0.5,-0.2)}, anchor=north, legend columns=2, cells={anchor=west}},
@@ -76,7 +79,8 @@
 \addplot[dl, mark=pentagon*, mark size=1.6pt, discard if not={loader}{bpcells}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
 \addplot[sone, very thick, mark=*, mark size=1.8pt, discard if not={loader}{s1_stream}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
 \addplot[sone!60, thick, dashed, mark=o, mark size=1.6pt, discard if not={loader}{s1_stream_canonical}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
-\legend{AnnData backed, scDataset, AnnData Zarr, TileDB-SOMA ML, BPCells (R), \textbf{.s1}, {.s1, source order}}
+\addplot[sone!45, thick, dotted, mark=x, mark size=1.8pt, discard if not={loader}{s1_stream_seq}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
+\legend{AnnData backed, scDataset, AnnData Zarr, TileDB-SOMA ML, BPCells (R), \textbf{.s1}, {.s1, source order}, {.s1, one request at a time}}
 \end{axis}
 \end{tikzpicture}
 \caption{\textbf{\sone{} is the smallest format and the fastest way to get counts into a model.}
@@ -89,7 +93,10 @@ decode) and building the tensor. All values per tier in Table~\ref{tab:minibatch
 \textbf{(c)} Each format's median size against its median cold read rate on \nm{threadsHeadline} cores. Dashed: lines of
 equal effective delivery rate $R_{\mathrm{eff}}$ (Eq.~\ref{eq:reff}, million non-zeros per second) on a 1\,Gbit/s link;
 points above and left of a line deliver faster.
-\textbf{(d)} Cells per second delivered to the model after warm-up by storage tier (object store behind a
-bandwidth-limited proxy, the shared NFS filesystem, or the node's own disk), \nm{threadsHeadline} reader cores.}
+\textbf{(d)} Cells per second delivered to the model after warm-up, \nm{fig1b-dataset}, by storage tier: the node's own
+disk, the shared NFS filesystem, or an S3-compatible object store whose total bandwidth is limited (1\,ms latency unless
+stated), \nm{threadsHeadline} reader cores. Dotted: the same \sone{} reader sending a minibatch's range requests one at a
+time instead of together. Loaders that must download the whole object first are not run over the network for this
+dataset (Section~\ref{sec:methods}).}
 \label{fig:wow}
 \end{figure*}

@@ -34,7 +34,7 @@
   error bars/error bar style={ink2, line width=0.5pt}, error bars/error mark options={rotate=90, mark size=1.5pt, ink2},
 ]
 \addplot[fill=dl!75, draw=none, error bars/.cd, x dir=both, x explicit]
-  table[x=median, y=pos, x error plus=rp, x error minus=rm] {\gen{fig3b_models.tsv}};
+  table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig3b_models.tsv}};
 \end{axis}
 \end{tikzpicture}
 
@@ -73,8 +73,9 @@
 \textbf{(a)} Payload (row indices and values, no names) in bits per non-zero, median over matrices, as each idea is
 added; whiskers, interquartile range. Dashed: the shortest cross-validated code length among the count models of (b),
 per matrix.
-\textbf{(b)} Bits per non-zero each model saves relative to the \sone{} payload, median and range over matrices
-(negative: the model codes the matrix in more bits than \sone). Models are fitted on half of the cells and scored on
+\textbf{(b)} Bits per non-zero each model saves relative to the \sone{} payload, median and interquartile range over
+matrices (negative: the model codes the matrix in more bits than \sone). The Poisson model's worst cases are the
+read-count matrices, which it codes with hundreds of bits more per non-zero (Table~\ref{tab:floor}). Models are fitted on half of the cells and scored on
 the other half, zeros included, with no charge for the model itself.
 \textbf{(c)} The \sone{} payload split into the entropy of the multinomial sample of each cell's molecules given its
 cluster-shrunk profile, the remaining information in the best model's code, and \sone's margin above that model.

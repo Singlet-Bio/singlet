@@ -97,8 +97,7 @@ lossless decoder must receive; we report it per non-zero and as a fraction of th
 
 \subsection{Second-pass compression}
 Each \sone{} file was compressed again with zstd \texttt{-{}-ultra -22}, xz \texttt{-9e}, brotli \texttt{-q 11} and
-bzip2 \texttt{-9}, and on small matrices with a context-mixing compressor where available, and we report output over
-input size.
+bzip2 \texttt{-9}, and we report output over input size.
 
 \subsection{Ecosystem}
 For two datasets we timed, from a cold file, the calls of Fig.~\ref{fig:eco} and the usual reader of the same data

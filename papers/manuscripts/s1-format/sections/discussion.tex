@@ -1,0 +1,59 @@
+% Discussion. Interpretation, limitations and outlook; every number is \nm{key} from generated/numbers.tex.
+\section{Discussion}
+\label{sec:discussion}
+
+A count matrix has been treated as a generic array: stored as coordinates or compressed columns, then handed to a
+byte-level compressor that cannot see what the bytes mean. \sone{} instead codes what is known about counts. Most
+non-zeros are ones; a cell's depth sets the rate of every gene in it; and genes ranked by how many cells express them
+turn a cell's non-zeros into short gaps. With these regularities as contexts for a static entropy coder, the files are
+\nm{ratio-h5ad_gzip}$\times$ smaller than gzip-compressed AnnData and \nm{ratioBestOther}$\times$ smaller than the most
+compact general-purpose alternative, and they decode faster than any other format we measured, including uncompressed
+arrays. The payload ladder (Fig.~\ref{fig:floor}a) shows where the gain comes from: a strong general-purpose compressor
+applied to well-separated gap and value streams stops at \nm{ladder-L3_gaps_leb_zstd19} bits per non-zero, and the last
+step to \nm{ladder-L4_s1_payload} comes from modelling, not from a better back-end coder. Genomic read formats learned
+the same lesson~\cite{bonfield2022cram,numanagic2016comparison}.
+
+\paragraph{Where the bytes are read.}
+Size matters most where data move over a network. Atlases serve count matrices to thousands of users, and models that
+train on them read every cell many times. A format that is both small and fast to decode moves the bottleneck back to the
+model. Size alone is not the whole story, though: on a link with realistic latency, the number of round trips matters as
+much as the number of bytes. The index at the head of every \sone{} member lets a reader plan all of a minibatch's
+requests before sending any, and sending them together cut the time to a first minibatch by about
+\nm{concurrency-gain-first}$\times$ on a 30\,ms link. The same plan-then-fetch pattern applies to any reader of
+independently addressable chunks, and the \texttt{singlet} readers for atlas samples and for R use it as well.
+
+\paragraph{How much is left.}
+Cross-validated count models, including negative binomial and cluster-conditioned models, code the matrices a median of
+\nm{s1AboveFloorPct}\% more compactly than \sone, and they are charged nothing for describing themselves. On read-count
+protocols \sone{} codes the matrix more compactly than every model we fitted (Table~\ref{tab:floor}). The sampling bound
+explains why the margin is small: about \nm{samplingPctMedian}\% of the \sone{} code length is the multinomial sampling
+of molecules, which no lossless decoder can avoid. Knowing a cell's cluster is worth \nm{sharedBpnMedian} bits per
+non-zero before the cost of the model. Larger gains therefore require giving up losslessness, for example by
+quantising counts, or storing a model of the data rather than the data. Neither is acceptable for a primary archive,
+and the second is outside the scope of a storage format.
+
+\paragraph{Limitations.}
+\begin{itemize}\itemsep 1pt
+\item \emph{Hardware.} All timings come from \nm{threadsHeadline}--8 cores of shared cluster nodes of one type, with one of
+  our timed jobs per node and other users' jobs beside it. Absolute rates depend on the CPU and disk; the comparisons
+  between formats, measured on the same node and file, are what the conclusions rest on. On this CPU the AVX-512
+  kernel gives no gain over AVX2.
+\item \emph{Large matrices.} Above $4\times10^8$ non-zeros we timed a subset of formats, at one thread count and from
+  local disk only. The R formats, RDS and BPCells, are not applicable above $2^{31}-1$ non-zeros, because an R
+  \texttt{dgCMatrix} cannot hold such a matrix in memory. One planned dataset, a genome-wide Perturb-seq screen with
+  6.3 billion non-zeros, was excluded because writing the comparison formats needed more memory and time than the
+  campaign allowed.
+\item \emph{Network tiers.} The network tiers are a local object store with a limit on total bandwidth and added
+  latency; real object stores add variable latency and request costs. The 10\,Gbit/s tier exceeds what the test setup
+  delivers and is flagged in the tables.
+\item \emph{Scope.} \sone{} stores non-negative integer counts below $2^{32}$. Normalised or otherwise non-integer
+  matrices are rejected, not rounded. Files are immutable; adding cells means writing a new sample object.
+\item \emph{Writing.} We did not time writing. The \sone{} writer counts its tables in one pass over the matrix and then
+  codes it, but the formats differ in how much writing costs.
+\end{itemize}
+
+\paragraph{Beyond single cells.}
+Two out-of-domain count matrices, bulk RNA-seq gene counts and a bag-of-words corpus, were run as an extension. There
+\sone{} is \nm{ext-gtex_bulk-ratio-h5ad_gzip}$\times$ and \nm{ext-nytimes_bow-ratio-h5ad_gzip}$\times$ smaller than
+gzip-compressed AnnData. The same structure, heavy-tailed rank-frequency laws and many small counts, is what the codec
+exploits, so any sparse count matrix of this kind can be stored the same way.

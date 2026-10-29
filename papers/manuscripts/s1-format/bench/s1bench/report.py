@@ -18,7 +18,7 @@ from typing import Iterable, Optional
 
 import numpy as np
 
-from .util import PAPER_DIR, Config, log, read_stage
+from .util import PAPER_DIR, Config, load_datasets, log, read_stage
 
 # ----------------------------------------------------------------------------------------------- labels and orders
 FORMAT_LABELS = {
@@ -34,6 +34,7 @@ LOADER_LABELS = {
     "s1_stream_seq": ".s1, one request at a time",
 }
 TIER_ORDER = ["s3_0.1g", "s3_1g", "s3_10g", "nfs", "local"]
+FIG1D_TIERS = ["local", "nfs", "s3_10g", "s3_1g", "s3_1g_wan", "s3_0.1g"]   # fastest storage first
 TIER_LABELS = {"s3_0.1g": "0.1 Gbit/s", "s3_1g": "1 Gbit/s", "s3_10g": "10 Gbit/s", "nfs": "shared filesystem (NFS)",
                "local": "node-local disk", "s3_1g_wan": "1 Gbit/s, 30 ms"}
 CLASS_LABELS = {
@@ -61,7 +62,7 @@ def _f(v) -> Optional[float]:
 def _headline_decode(cfg: Config) -> list[dict]:
     """Decode rows of the main run from node-local disk (and the in-memory codec rows): not the thread sweep, not the
     shared-filesystem tier, which have their own tables."""
-    return [r for r in read_stage(cfg, "decode")
+    return [r for r in _stage(cfg, "decode")
             if r.get("run", "main") == "main" and r.get("storage", "local") in ("local", "memory")]
 
 
@@ -97,17 +98,24 @@ class Numbers:
         path.write_text("\n".join(lines) + "\n")
 
 
+def _stage(cfg: Config, stage: str) -> list[dict]:
+    """A stage's rows for the benchmark panel: excluded datasets (datasets.yaml `excluded`) and the out-of-domain
+    extensions are left out; the extensions are reported on their own (extension_numbers)."""
+    keep = {d["id"] for d in load_datasets(cfg) if not d.get("excluded")}
+    return [r for r in read_stage(cfg, stage) if r.get("dataset") in keep]
+
+
 def _tex_escape(s: str) -> str:
     return s.replace("_", "\\_").replace("%", "\\%").replace("&", "\\&")
 
 
 # ----------------------------------------------------------------------------------------------- sections
 def datasets_table(cfg: Config, N: Numbers, out: Path) -> dict:
-    st = read_stage(cfg, "stats")
+    st = _stage(cfg, "stats")
     rows = []
     for r in sorted(st, key=lambda r: (list(CLASS_LABELS).index(r["protocol_class"]) if r["protocol_class"] in CLASS_LABELS else 99,
                                         int(r["cells"]))):
-        rows.append({"dataset": _tex_escape(r["dataset"]), "matrix": r["matrix"], "class": CLASS_LABELS.get(r["protocol_class"], r["protocol_class"]),
+        rows.append({"dataset": _tex_escape(r["dataset"]), "matrix": _tex_escape(r["matrix"]), "class": CLASS_LABELS.get(r["protocol_class"], r["protocol_class"]),
                      "tier": r["tier"], "cells": int(r["cells"]), "genes": int(r["genes"]), "nnz": int(r["nnz"]),
                      "density": _f(r["density"]), "frac_ones": _f(r["frac_ones"]), "counts_per_cell": _f(r["counts_per_cell_median"])})
     _write(rows, out / "tab_datasets.tsv", ["dataset", "matrix", "class", "tier", "cells", "genes", "nnz", "density", "frac_ones", "counts_per_cell"])
@@ -125,7 +133,7 @@ def datasets_table(cfg: Config, N: Numbers, out: Path) -> dict:
 
 
 def size_section(cfg: Config, N: Numbers, out: Path) -> dict:
-    w = [r for r in read_stage(cfg, "write") if r.get("status") == "ok"]
+    w = [r for r in _stage(cfg, "write") if r.get("status") == "ok"]
     by_fmt = defaultdict(list)
     by_unit = defaultdict(dict)
     for r in w:
@@ -157,7 +165,7 @@ def size_section(cfg: Config, N: Numbers, out: Path) -> dict:
     # per-dataset size table (bits per non-zero), formats as columns
     tab = []
     for (ds, m), u in sorted(by_unit.items()):
-        rec = {"dataset": _tex_escape(ds) + ("" if m == "rna" else f" ({m})")}
+        rec = {"dataset": _tex_escape(ds) + ("" if m == "rna" else f" ({_tex_escape(m)})")}
         nnz = next((_f(r["nnz"]) for r in w if r["dataset"] == ds and r["matrix"] == m), None)
         for f in FORMAT_LABELS:
             rec[f] = 8 * u[f] / nnz if u.get(f) and nnz else None
@@ -205,8 +213,18 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
             trade.append({"format": f, "label": FORMAT_LABELS.get(f, f).replace("\\textbf{", "").replace("}", ""), "group": _group(f),
                           "bits": size_stats[f]["median"], "mnnzs": c4["median"]})
         N.put(f"dec-{f}-cold-t{H}", c4["median"], "{:.0f}")
+    # the fastest other format to read cold at the headline thread count, and how much faster .s1 is
+    cold = {f: _stats(pick(f, "file", H, "cold", "native" if f == "s1" else None))["median"] for f in cfg["formats"]}
+    others = {f: v for f, v in cold.items() if v and not f.startswith("s1")}
+    if others and cold.get("s1"):
+        best = max(others, key=others.get)
+        N.put("dec-best-other-name", FORMAT_LABELS.get(best, best))
+        N.put("dec-speedup-best-other", cold["s1"] / others[best], "{:.1f}")
     _write(rows, out / "tab_decode.tsv", ["format", "cold_t1", "cold_th", "warm_th"])
-    _write(trade, out / "fig1c_tradeoff.tsv", ["format", "label", "group", "bits", "mnnzs"])
+    # label sides for Fig 1c: formats sorted by read rate take turns to the right and left of their point
+    for i, r in enumerate(sorted(trade, key=lambda r: r["mnnzs"])):
+        r["anchor"] = ("west", "east")[i % 2]
+    _write(trade, out / "fig1c_tradeoff.tsv", ["format", "label", "group", "bits", "mnnzs", "anchor"])
     for what in ("codec", "codec_cpp"):
         for mode in cfg["s1"]["modes"]:
             for isa in cfg["s1"]["isas"]:
@@ -219,7 +237,7 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
 
 def wire_section(cfg: Config, N: Numbers) -> None:
     """Q5 from measured size and decode: R_eff(B) = (b/B + 1/D)^-1 for .s1 against uncompressed CSC, per matrix."""
-    w = {(r["dataset"], r["matrix"], r["format"]): r for r in read_stage(cfg, "write") if r.get("status") == "ok"}
+    w = {(r["dataset"], r["matrix"], r["format"]): r for r in _stage(cfg, "write") if r.get("status") == "ok"}
     H = int(cfg["threads"]["headline"])
     d = {(r["dataset"], r["matrix"], r["format"]): r for r in _headline_decode(cfg)
          if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "cold" and int(r["threads"]) == H
@@ -248,7 +266,7 @@ def wire_section(cfg: Config, N: Numbers) -> None:
 
 
 def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
-    mb = [r for r in read_stage(cfg, "minibatch") if r.get("status") == "ok"]
+    mb = [r for r in _stage(cfg, "minibatch") if r.get("status") == "ok"]
     rc = cfg.get("report", {}) or {}
     ds_b = rc.get("fig1b_dataset", "hlca_core")
     tier_b = rc.get("fig1b_tier", "s3_1g")
@@ -277,7 +295,7 @@ def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
     ds_d = rc.get("fig1d_dataset", ds_b)
     thr = []
     for ld in loaders:
-        for j, t in enumerate(TIER_ORDER):
+        for j, t in enumerate(FIG1D_TIERS):
             rs = [r for r in mb if r["dataset"] == ds_d and r["tier"] == t and r["loader"] == ld]
             if rs:
                 s = _stats(r.get("sustained_cells_per_s") for r in rs)
@@ -285,6 +303,23 @@ def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
                 thr.append({"loader": ld, "label": LOADER_LABELS.get(ld, ld), "tierpos": j, "tier": t, "cells_per_s": s["median"], "capped": int(capped)})
                 N.put(f"thr-{ld}-{t}", s["median"], "{:,.0f}")
     _write(thr, out / "fig1d_throughput.tsv", ["loader", "label", "tierpos", "tier", "cells_per_s", "capped"])
+    # the 30 ms tier: .s1 sending a batch's range requests together, one at a time, and Zarr (median over panel datasets)
+    for ld in ("s1_stream", "s1_stream_seq", "anndata_zarr_lazy"):
+        per_ds = [_stats(r.get("first_batch_s") for r in mb if r["tier"] == "s3_1g_wan" and r["loader"] == ld and r["dataset"] == d)["median"]
+                  for d in sorted({r["dataset"] for r in mb})]
+        N.put(f"ttfm-wan-{ld}", _stats(per_ds)["median"], "{:.2f}")
+    ratios = {"first": [], "sust": []}
+    for d in sorted({r["dataset"] for r in mb}):
+        def m(ld, k):
+            return _stats(r.get(k) for r in mb if r["dataset"] == d and r["tier"] == "s3_1g_wan" and r["loader"] == ld)["median"]
+        a, b = m("s1_stream_seq", "first_batch_s"), m("s1_stream", "first_batch_s")
+        if a and b:
+            ratios["first"].append(a / b)
+        a, b = m("s1_stream", "sustained_cells_per_s"), m("s1_stream_seq", "sustained_cells_per_s")
+        if a and b:
+            ratios["sust"].append(a / b)
+    N.put("concurrency-gain-first", _stats(ratios["first"])["median"], "{:.1f}")
+    N.put("concurrency-gain-sustained", _stats(ratios["sust"])["median"], "{:.1f}")
     # first-batch table over all panel datasets and tiers
     tab = []
     for ld in loaders:
@@ -297,8 +332,8 @@ def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
 
 
 def ladder_floor_section(cfg: Config, N: Numbers, out: Path) -> None:
-    lad = read_stage(cfg, "ladder")
-    fl = read_stage(cfg, "floor")
+    lad = _stage(cfg, "ladder")
+    fl = _stage(cfg, "floor")
     floor_by = {(r["dataset"], r["matrix"]): r for r in fl}
     vals = defaultdict(list)
     for r in lad:
@@ -374,7 +409,7 @@ def ladder_floor_section(cfg: Config, N: Numbers, out: Path) -> None:
 
 
 def second_section(cfg: Config, N: Numbers, out: Path) -> None:
-    sec = read_stage(cfg, "second")
+    sec = _stage(cfg, "second")
     rows = []
     for i, (k, lab) in enumerate(CODERS):
         s = _stats(r["ratio"] for r in sec if r["coder"] == k)
@@ -387,10 +422,18 @@ def second_section(cfg: Config, N: Numbers, out: Path) -> None:
 
 
 def eco_section(cfg: Config, N: Numbers, out: Path) -> None:
-    eco = [r for r in read_stage(cfg, "eco") if _f(r.get("median_s")) is not None]
+    eco = [r for r in _stage(cfg, "eco") if _f(r.get("median_s")) is not None]
     rows = [{"dataset": _tex_escape(r["dataset"]), "lang": r["lang"], "call": "\\texttt{" + _tex_escape(r["call"]) + "}",
              "seconds": _f(r["median_s"]), "equal": r.get("equal", "")} for r in eco]
     _write(rows, out / "tab_eco.tsv", ["dataset", "lang", "call", "seconds", "equal"])
+    # seconds per call on the first eco dataset, for the text: eco-<short key>
+    keys = {"singlet.load": "py-singlet", "anndata.read_h5ad": "py-read-h5ad", "scanpy.read_10x_h5": "py-read-10x",
+            "singlet::load(as='sce')": "r-singlet-sce", "singlet::load(as='seurat')": "r-singlet-seurat",
+            "Seurat::Read10X_h5": "r-read10x", "zellkonverter::readH5AD": "r-readh5ad", "pz2::Matrix::open + decode": "cpp-s1"}
+    first = (cfg["eco"].get("datasets") or [None])[0]
+    for r in eco:
+        if r["dataset"] == first and r["call"] in keys:
+            N.put(f"eco-{keys[r['call']]}", _f(r["median_s"]), "{:.2f}")
 
 
 def env_section(cfg: Config, N: Numbers) -> None:
@@ -412,8 +455,11 @@ def env_section(cfg: Config, N: Numbers) -> None:
     for pkg, ver in (e.get("packages") or {}).items():
         if ver:
             N.put(f"ver-{pkg}", _tex_escape(str(ver)))
-    if e.get("R"):
-        N.put("ver-R", _tex_escape(e["R"]))
+    if e.get("R"):  # e.g. "R version 4.4.3 (2025-02-28)  BPCells 0.3.1"
+        rv, bp = re.search(r"R version (\S+)", e["R"]), re.search(r"BPCells (\S+)", e["R"])
+        N.put("ver-R", rv.group(1) if rv else _tex_escape(e["R"]))
+        if bp:
+            N.put("ver-BPCells", bp.group(1))
 
 
 def _write(rows: list[dict], path: Path, cols: list[str]) -> None:
@@ -440,6 +486,24 @@ def used_keys() -> set[str]:
     return keys
 
 
+def extension_numbers(cfg: Config, N: Numbers) -> None:
+    """The out-of-domain count matrices (datasets.yaml `extensions`): .s1 size, and how much smaller it is than gzip AnnData
+    and than the best other format, per matrix (ext-<id>-...)."""
+    ext = {d["id"] for d in load_datasets(cfg, True)} - {d["id"] for d in load_datasets(cfg)}
+    w = [r for r in read_stage(cfg, "write") if r.get("dataset") in ext and r.get("status") == "ok"]
+    for ds in sorted(ext):
+        bpn = {r["format"]: _f(r.get("bits_per_nnz")) for r in w if r["dataset"] == ds}
+        s1 = bpn.get("s1")
+        if not s1:
+            continue
+        N.put(f"ext-{ds}-s1", s1, "{:.2f}")
+        if bpn.get("h5ad_gzip"):
+            N.put(f"ext-{ds}-ratio-h5ad_gzip", bpn["h5ad_gzip"] / s1, "{:.1f}")
+        others = [v for f, v in bpn.items() if v and not f.startswith("s1")]
+        if others:
+            N.put(f"ext-{ds}-ratio-best", min(others) / s1, "{:.1f}")
+
+
 def run(cfg: Config) -> int:
     out = cfg.generated_dir
     out.mkdir(parents=True, exist_ok=True)
@@ -453,6 +517,7 @@ def run(cfg: Config) -> int:
     ladder_floor_section(cfg, N, out)
     second_section(cfg, N, out)
     eco_section(cfg, N, out)
+    extension_numbers(cfg, N)
     N.write(out / "numbers.tex")
     missing = sorted(used_keys() - set(N.d))
     log(f"report: {len(N.d)} numbers defined; {len(missing)} used in the manuscript but not produced")
