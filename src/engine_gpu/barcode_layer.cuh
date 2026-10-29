@@ -271,6 +271,17 @@ __global__ void k_bl_spot_gather(const u64* cell_bc, u64 n_cells, const u64* spo
     spot_row[i] = (i32)bsearch_u64(spot_bc, n_spots, cell_bc[i]);      // -1: zeros in the coordinate table
 }
 
+// The cell of a no-whitelist read: rank of its barcode in the discovered list (vals = list sorted by barcode value, rank[i] = the
+// position of vals[i] in the count-descending list), -1 when the barcode is not in the list. Only reads that reached cbMatch 0
+// (no N, UMI check passed) are looked up; the others keep their status. The list itself is thrust sort + reduce_by_key + a
+// count threshold on the host side of the pipeline (bench/barcode_layer/bl_harness.cu mode_discover).
+__global__ void k_bl_discovered_cell(const BlRead* rd, u64 n, const u64* vals, const u32* rank, u64 n_vals, BlRecord* rec) {
+    u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x; if (i >= n) return;
+    if (rec[i].status != OK_EXACT) return;
+    i64 w = bsearch_u64(vals, n_vals, rd[i].cb_val);
+    rec[i].cell_key = w >= 0 ? (i64)rank[w] : -1;
+}
+
 // ---- feature barcodes (ADT, hashtag): AdtMatcher ----------------------------------------------------------------------
 // Host builds, with the same algorithm as AdtMatcher::build_index, two sorted tables over 2-bit window values:
 //   ex_key/ex_id   exact tag -> id (a duplicated sequence keeps the last id)
