@@ -846,6 +846,20 @@ inline ExportStats export_results(const PileupEngine& engine,
         amb_cfg.lower_umi = export_cfg.lower_umi;
         amb_cfg.pool_min_umi = 5;
         if (amb_seq_rank.size() == exon_csc.ncols) amb_cfg.pool_tie_rank = &amb_seq_rank;
+        // R10b: the fit's random numbers come from each cell's barcode (packed 2 bits per base, first base highest),
+        // 10 k-means restarts
+        std::vector<uint64_t> amb_keys(barcodes.size(), 0);
+        for (size_t b = 0; b < barcodes.size(); ++b) {
+            uint64_t k = 0;
+            const auto& s = barcodes[b];
+            for (size_t i = 0; i < s.size() && i < 32; ++i) {
+                const char c = static_cast<char>(s[i] | 32);
+                k = (k << 2) | (c == 'a' ? 0u : c == 'c' ? 1u : c == 'g' ? 2u : 3u);
+            }
+            amb_keys[b] = k;
+        }
+        if (amb_keys.size() == exon_csc.ncols) amb_cfg.barcode_keys = &amb_keys;
+        amb_cfg.kmeans_restarts = 10;
         amb_cfg.threads = export_cfg.threads > 1 ? static_cast<uint32_t>(export_cfg.threads) : 0u;
         // Exon and intron gene counts enter as separate features (the soup is exon-rich, cells are 20-30% intronic);
         // contamination is estimated from the exon features, the correction acts on both and is folded back to genes.

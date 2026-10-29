@@ -723,6 +723,7 @@ public:
                 PROF_BAM_IO_RESTART;
                 continue;
             }
+            if (test_drop_read(b)) continue;
             int32_t bc_idx = bc_index_.lookup(cb_str);
             cur_read_gene_ = UINT32_MAX;
             if (bc_idx < 0) {
@@ -2039,6 +2040,18 @@ private:
         return h;
     }
 
+    // Test hook (ws-w3b, R10b stability gate): SINGLET_TEST_DROP_READS_PCT=P skips every alignment of the reads whose
+    // name hashes into P percent, as if those reads had not been sequenced. 0 / unset = off.
+    static bool test_drop_read(const bam1_t* b) {
+        static const uint64_t pct = [] {
+            const char* e = std::getenv("SINGLET_TEST_DROP_READS_PCT");
+            return e ? static_cast<uint64_t>(std::strtoull(e, nullptr, 10)) : uint64_t(0);
+        }();
+        if (pct == 0) return false;
+        const uint64_t h = hash_qname(bam_get_qname(b)) * 0x9E3779B97F4A7C15ULL;
+        return (h >> 32) % 100 < pct;
+    }
+
     static uint64_t hash_qname(const char* s) {
         uint64_t h = 14695981039346656037ULL;
         while (*s) {
@@ -3073,6 +3086,7 @@ private:
             wc.stats.no_barcode++; return;
         }
         const char* cb_str = bam_aux2Z(cb_tag);
+        if (test_drop_read(b)) return;
         int32_t bc_idx = bc_index_.lookup(cb_str);
         wc.cur_gene = UINT32_MAX;
         if (bc_idx < 0) {

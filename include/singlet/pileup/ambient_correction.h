@@ -162,6 +162,8 @@ struct AmbientDecontConfig {
     uint32_t pca_power_iters  = 5;
     uint32_t kmeans_iters     = 30;
     uint64_t seed             = 42;
+    uint32_t kmeans_restarts  = 1;      ///< R10b: 10 in the pipeline (keyed clusters only)
+    const std::vector<uint64_t>* barcode_keys = nullptr; ///< R10b: packed barcode of each column (export.h)
     double   rho_min          = 1e-6;
     double   rho_max          = 0.5;
     double   prior_strength   = 20.0;   ///< kappa: Beta prior pseudo-UMIs, prior mean = the cluster's c_k
@@ -245,6 +247,7 @@ struct CellMat {
     std::vector<uint32_t> gene;
     std::vector<uint32_t> val;
     std::vector<double>   tot;   // per-cell UMIs
+    std::vector<uint64_t> key;   // R10b: per-cell packed barcode (empty = draws from cfg.seed)
 };
 
 /// Modified Gram-Schmidt on the columns of a row-major rows x k matrix.
@@ -322,8 +325,18 @@ inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecont
 
     const size_t kp = std::min<size_t>({cfg.n_pcs, H, n > 1 ? n - 1 : 1});
     SplitMix64 rng(cfg.seed);
+    const bool keyed = X.key.size() == n;   // R10b: draws from each cell's barcode
+    auto ukey = [&](size_t j, uint64_t salt) {
+        SplitMix64 h(X.key[j] ^ (salt * 0xD1B54A32D192ED03ULL));
+        return (static_cast<double>(h.next() >> 11) + 0.5) * (1.0 / 9007199254740992.0);
+    };
     std::vector<double> Q(n * kp);
-    for (auto& q : Q) q = rng.uniform() - 0.5;
+    if (keyed) {
+        for (size_t j = 0; j < n; ++j)
+            for (size_t c = 0; c < kp; ++c) Q[j * kp + c] = ukey(j, 0x5EED0000ULL + c) - 0.5;
+    } else {
+        for (auto& q : Q) q = rng.uniform() - 0.5;
+    }
 
     constexpr size_t NB = 32;   // fixed scatter blocks -> thread-count-independent sums
     std::vector<std::vector<double>> part(NB);
@@ -370,42 +383,86 @@ inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecont
     Y_times(Q, Z); orthonormalize(Z, H, kp);
     Yt_times(Z, E);   // n x kp embedding (rotation of the PC scores: distances are what k-means uses)
 
-    // k-means++ and Lloyd
+    // k-means++ and Lloyd. order-free-rules R10b: with per-cell keys (X.key, the packed barcode) every draw comes from
+    // the cell's own barcode (first centre: smallest u; further centres: exponential race -ln u / D2, i.e. k-means++'s
+    // D2-proportional choice), cfg.kmeans_restarts restarts keep the lowest inertia, labels follow the smallest key.
     std::vector<double> C(static_cast<size_t>(K) * kp);
-    std::vector<double> d2(n, std::numeric_limits<double>::max());
+    std::vector<double> d2(n);
     auto dist2 = [&](size_t j, size_t k) {
         double s = 0.0;
         for (size_t c = 0; c < kp; ++c) { const double d = E[j * kp + c] - C[k * kp + c]; s += d * d; }
         return s;
     };
-    size_t first = std::min<size_t>(n - 1, static_cast<size_t>(rng.uniform() * static_cast<double>(n)));
-    for (size_t c = 0; c < kp; ++c) C[c] = E[first * kp + c];
-    for (uint32_t k = 1; k < K; ++k) {
-        double tot = 0.0;
-        for (size_t j = 0; j < n; ++j) { d2[j] = std::min(d2[j], dist2(j, k - 1)); tot += d2[j]; }
-        double target = rng.uniform() * tot, acc = 0.0;
-        size_t pick = n - 1;
-        for (size_t j = 0; j < n; ++j) { acc += d2[j]; if (acc >= target && d2[j] > 0) { pick = j; break; } }
-        for (size_t c = 0; c < kp; ++c) C[static_cast<size_t>(k) * kp + c] = E[pick * kp + c];
-    }
-    std::vector<uint32_t> prev(n, std::numeric_limits<uint32_t>::max());
-    for (uint32_t it = 0; it < cfg.kmeans_iters; ++it) {
-        parallel_for(n, threads, [&](size_t j) {
-            double best = std::numeric_limits<double>::max(); uint32_t bk = 0;
-            for (uint32_t k = 0; k < K; ++k) { const double d = dist2(j, k); if (d < best) { best = d; bk = k; } }
-            cl[j] = bk;
-        });
-        if (cl == prev) break;
-        prev = cl;
-        std::vector<double> sum(static_cast<size_t>(K) * kp, 0.0);
-        std::vector<size_t> cnt(K, 0);
-        for (size_t j = 0; j < n; ++j) {
-            ++cnt[cl[j]];
-            for (size_t c = 0; c < kp; ++c) sum[static_cast<size_t>(cl[j]) * kp + c] += E[j * kp + c];
+    auto seed_centres = [&](uint32_t r) {
+        std::fill(d2.begin(), d2.end(), std::numeric_limits<double>::max());
+        size_t first = 0;
+        if (keyed) {
+            double bu = 2.0;
+            for (size_t j = 0; j < n; ++j) { const double u = ukey(j, 1 + 1024ULL * r); if (u < bu) { bu = u; first = j; } }
+        } else {
+            first = std::min<size_t>(n - 1, static_cast<size_t>(rng.uniform() * static_cast<double>(n)));
         }
-        for (uint32_t k = 0; k < K; ++k)
-            if (cnt[k] > 0)
-                for (size_t c = 0; c < kp; ++c) C[static_cast<size_t>(k) * kp + c] = sum[static_cast<size_t>(k) * kp + c] / static_cast<double>(cnt[k]);
+        for (size_t c = 0; c < kp; ++c) C[c] = E[first * kp + c];
+        for (uint32_t k = 1; k < K; ++k) {
+            double tot = 0.0;
+            for (size_t j = 0; j < n; ++j) { d2[j] = std::min(d2[j], dist2(j, k - 1)); tot += d2[j]; }
+            size_t pick = n - 1;
+            if (keyed) {
+                double best = std::numeric_limits<double>::max();
+                for (size_t j = 0; j < n; ++j) {
+                    if (!(d2[j] > 0)) continue;
+                    const double key = -std::log(ukey(j, 1 + 1024ULL * r + k)) / d2[j];
+                    if (key < best) { best = key; pick = j; }
+                }
+            } else {
+                double target = rng.uniform() * tot, acc = 0.0;
+                for (size_t j = 0; j < n; ++j) { acc += d2[j]; if (acc >= target && d2[j] > 0) { pick = j; break; } }
+            }
+            for (size_t c = 0; c < kp; ++c) C[static_cast<size_t>(k) * kp + c] = E[pick * kp + c];
+        }
+    };
+    auto lloyd = [&]() {
+        std::vector<uint32_t> prev(n, std::numeric_limits<uint32_t>::max());
+        for (uint32_t it = 0; it < cfg.kmeans_iters; ++it) {
+            parallel_for(n, threads, [&](size_t j) {
+                double best = std::numeric_limits<double>::max(); uint32_t bk = 0;
+                for (uint32_t k = 0; k < K; ++k) { const double d = dist2(j, k); if (d < best) { best = d; bk = k; } }
+                cl[j] = bk;
+            });
+            if (cl == prev) break;
+            prev = cl;
+            std::vector<double> sum(static_cast<size_t>(K) * kp, 0.0);
+            std::vector<size_t> cnt(K, 0);
+            for (size_t j = 0; j < n; ++j) {
+                ++cnt[cl[j]];
+                for (size_t c = 0; c < kp; ++c) sum[static_cast<size_t>(cl[j]) * kp + c] += E[j * kp + c];
+            }
+            for (uint32_t k = 0; k < K; ++k)
+                if (cnt[k] > 0)
+                    for (size_t c = 0; c < kp; ++c) C[static_cast<size_t>(k) * kp + c] = sum[static_cast<size_t>(k) * kp + c] / static_cast<double>(cnt[k]);
+        }
+        double inertia = 0.0;
+        for (size_t j = 0; j < n; ++j) inertia += dist2(j, cl[j]);
+        return inertia;
+    };
+    const uint32_t restarts = keyed ? std::max<uint32_t>(cfg.kmeans_restarts, 1u) : 1u;
+    std::vector<uint32_t> best_cl;
+    double best_inertia = std::numeric_limits<double>::max();
+    for (uint32_t r = 0; r < restarts; ++r) {
+        seed_centres(r);
+        const double inertia = lloyd();
+        if (inertia < best_inertia) { best_inertia = inertia; best_cl = cl; }
+    }
+    cl = best_cl;
+    if (keyed) {   // canonical labels: ascending smallest member key
+        std::vector<uint64_t> minkey(K, std::numeric_limits<uint64_t>::max());
+        for (size_t j = 0; j < n; ++j) minkey[cl[j]] = std::min(minkey[cl[j]], X.key[j]);
+        std::vector<uint32_t> order(K);
+        std::iota(order.begin(), order.end(), 0u);
+        std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return minkey[a] != minkey[b] ? minkey[a] < minkey[b] : a < b; });
+        std::vector<uint32_t> lab(K);
+        for (uint32_t r = 0; r < K; ++r) lab[order[r]] = r;
+        for (size_t j = 0; j < n; ++j) cl[j] = lab[cl[j]];
     }
     // relabel to drop empty clusters
     std::vector<int32_t> remap(K, -1);
@@ -487,6 +544,7 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
             Xc.val.insert(Xc.val.end(), X.val.begin() + static_cast<std::ptrdiff_t>(X.ptr[j]), X.val.begin() + static_cast<std::ptrdiff_t>(X.ptr[j + 1]));
             Xc.ptr.push_back(Xc.gene.size());
             Xc.tot.push_back(X.tot[j]);
+            if (X.key.size() == n) Xc.key.push_back(X.key[j]);
         }
         Xc.n_cells = static_cast<uint32_t>(core.size());
         const std::vector<uint32_t> clc = quick_cluster(Xc, cfg, thr, K);
@@ -735,6 +793,11 @@ inline AmbientCorrectionResult correct_ambient_gene_level(
     X.n_genes = G; X.n_cells = static_cast<uint32_t>(cell_indices.size());
     X.ptr.assign(cell_indices.size() + 1, 0);
     X.tot.assign(cell_indices.size(), 0.0);
+    if (cfg.barcode_keys && cfg.barcode_keys->size() == B) {
+        X.key.resize(cell_indices.size());
+        for (size_t i = 0; i < cell_indices.size(); ++i)
+            X.key[i] = cell_indices[i] < B ? (*cfg.barcode_keys)[cell_indices[i]] : 0;
+    }
     for (size_t i = 0; i < cell_indices.size(); ++i) {
         const uint32_t b = cell_indices[i];
         if (b < B)
