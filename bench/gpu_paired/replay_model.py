@@ -103,6 +103,8 @@ def main(gdir, r1, r2, dump, ktsv, mode="spliced", n=20000):
         res = map_windows(G, P, rd, WC, [r for (_s, _c, r, _l) in wins[i]], [l for (_s, _c, _r, l) in wins[i]])
         km = (int(k[2]), int(k[3]), int(k[4]), int(k[5]))
         mm = (res.unmapType, res.nW, len(res.transcripts), res.primary)
+        if res.unmapType != -1:   # the kernel reports iBest 0 for an unmapped read, the model -1: not a mapping result
+            km = km[:3] + (mm[3],)
         ok = km == mm and k[6] == res.tsv()
         if ok:
             same += 1
