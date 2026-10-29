@@ -1,10 +1,18 @@
 {
   "schema": "singlet.benchmark.index",
   "schema_version": "1.1.0",
-  "generated_at": "2026-10-26T11:21:07+00:00",
+  "generated_at": "2026-10-29T18:32:33+00:00",
   "singlet": [
     {
+      "commit": "19caf8cdef44512d237df2b69ea7168aeaa11232",
+      "version": "1.0.0"
+    },
+    {
       "commit": "bf1f5741144eb845eddec94f0417931c4533e98e",
+      "version": "1.0.0"
+    },
+    {
+      "commit": "cfe5cfa2960bf79caa09f9136c1a92aeaa3865fa",
       "version": "1.0.0"
     },
     {
@@ -73,13 +81,19 @@
     },
     {
       "capability": "doublets",
-      "title": null,
-      "file": null,
+      "title": "Expression doublets",
+      "file": "doublets.json",
+      "sha256": "aa8976cd0b75b4fc63c7842a602e61327edf5cab8124d1bd29fb90c1b01d96b7",
       "owner": "pipeline-benchmark",
-      "status": "missing",
-      "n_metrics": 0,
-      "n_pass": 0,
-      "n_fail": 0,
+      "doc_status": "draft",
+      "valid": true,
+      "generated_at": "2026-10-29T18:31:24+00:00",
+      "conclusion": "Leave-one-study-out on 17 real-label datasets, Singlet's expression doublet score has mean AUPRC 0.559, against 0.501 for its previous scorer (better on 15/17) and 0.559 for scDblFinder, a statistical tie without R. On the Kang lanes it reaches 0.585 against 0.544; on lane 2.1 as Singlet counts it, 0.701 against 0.642. Genotype doublets remain the call for pools with two or more donors.",
+      "n_caveats": 7,
+      "status": "fail",
+      "n_metrics": 21,
+      "n_pass": 19,
+      "n_fail": 2,
       "n_na": 0
     },
     {
@@ -172,13 +186,19 @@
     },
     {
       "capability": "cell-type",
-      "title": null,
-      "file": null,
+      "title": "Cell type labels",
+      "file": "cell-type.json",
+      "sha256": "4afc3457897c234bec28cc13507c16b8808d5c395f4b06d486ba49d29ec306df",
       "owner": "ensemble-classifier",
-      "status": "missing",
-      "n_metrics": 0,
-      "n_pass": 0,
-      "n_fail": 0,
+      "doc_status": "draft",
+      "valid": true,
+      "generated_at": "2026-10-25T15:55:38+00:00",
+      "conclusion": "On 16 held-out studies with curated cell types (291,331 cells), with every tool trained on the same CELLxGENE reference, Singlet labels 74.4% of cells with the right lineage against 67.1% for CellTypist, 72.9% for scANVI, 62.7% for Seurat, 70.8% for SingleR. Its calibrated call cuts wrong calls to 25.1%.",
+      "n_caveats": 5,
+      "status": "fail",
+      "n_metrics": 12,
+      "n_pass": 9,
+      "n_fail": 3,
       "n_na": 0
     },
     {

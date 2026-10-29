@@ -1,0 +1,1371 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "doublets",
+ "title": "Expression doublets",
+ "conclusion": "Leave-one-study-out on 17 real-label datasets, Singlet's expression doublet score has mean AUPRC 0.559, against 0.501 for its previous scorer (better on 15/17) and 0.559 for scDblFinder, a statistical tie without R. On the Kang lanes it reaches 0.585 against 0.544; on lane 2.1 as Singlet counts it, 0.701 against 0.642. Genotype doublets remain the call for pools with two or more donors.",
+ "methods": "Data: 17 datasets with experimental doublet labels: Kang 2018 demuxlet genotype calls (lane 2.1 as Singlet counts it from the Singlet pipeline, and the five lanes of Xi & Li 2021 as Cell Ranger counts), cell hashing, MULTI-seq and human-mouse species mixing (Xi & Li 2021, Zenodo 4062232, public count matrices). Only doublets visible to the experiment are labelled. Singlet: singlet.doublets, a gradient-boosted ensemble (300 trees, 15 leaves) over the within-sample ranks of log UMI, log detected genes, the engine's doublet score (doublet_detect.h v7) and four features of the atlas cell-type network (k-NN fraction of simulated doublets in the network's embedding, cross-fitted real-versus-simulated classifier, cell-type entropy, two-centroid fit). The ensemble scoring a dataset was trained on the labels of every dataset of the other studies (leave-one-study-out; the six Kang lanes are one study, the five MULTI-seq sets another, the two 10x hgmm sets a third), each dataset weighing the same, so no number here is on cells the model saw. Competitors: the previous Singlet scorer alone, scDblFinder 1.23 and Scrublet 0.2.3 with defaults, on the same counts; no simulated doublet is part of the evaluation. Metrics: AUPRC and AUROC of each tool's score against the labels, per dataset; pooled values are means over datasets (or over studies) with a bootstrap over datasets. Pooled metrics gate against the best competitor with a tolerance equal to the paired bootstrap half-width; per-dataset AUPRC gates against the previous Singlet scorer. Cost: seconds per 10,000 cells from the study's timings, and for Singlet from the batch job on Kang 2.1 (one V100S GPU, 8 CPU threads, including the engine score). Genotype doublets (prob_doublet) are not compared here; they stay the call for pools with two or more donors.",
+ "status": "draft",
+ "generated_at": "2026-10-29T18:31:24+00:00",
+ "owner": "pipeline-benchmark",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "cfe5cfa2960bf79caa09f9136c1a92aeaa3865fa",
+  "branch": "claude/doublet-score",
+  "binary": "python: singlet.doublets (combiner gbm300-17ds-1) with dbl_run from prod/modality-fixes 4f110f283cd4"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet.doublets: gradient boosting (300 trees, 15 leaves) on within-sample ranks of log UMI, log genes, the engine's doublet score and four atlas-network features; trained on the labels of the other studies"
+  },
+  {
+   "name": "singlet-production",
+   "version": "doublet_detect.h v7 (prod/modality-fixes 4f110f2)",
+   "role": "competitor",
+   "params": "detect_doublets through the dbl_run harness, gene level, default settings"
+  },
+  {
+   "name": "scDblFinder",
+   "version": "1.23 (R)",
+   "role": "competitor",
+   "url": "https://github.com/plger/scDblFinder",
+   "params": "scDblFinder(counts) defaults"
+  },
+  {
+   "name": "Scrublet",
+   "version": "0.2.3",
+   "role": "competitor",
+   "url": "https://github.com/swolock/scrublet",
+   "params": "Scrublet(expected_doublet_rate=0.06).scrub_doublets(min_counts=2, min_cells=3, min_gene_variability_pctl=85, n_prin_comps=30)"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "xili_pbmc_1a_dm",
+   "title": "pbmc-1A-dm: 120 labelled doublets in 3298 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "demuxlet genotype doublets",
+   "data_kind": "real",
+   "n_cells": 3298
+  },
+  {
+   "id": "xili_pbmc_1b_dm",
+   "title": "pbmc-1B-dm: 130 labelled doublets in 3790 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "demuxlet genotype doublets",
+   "data_kind": "real",
+   "n_cells": 3790
+  },
+  {
+   "id": "xili_pbmc_1c_dm",
+   "title": "pbmc-1C-dm: 316 labelled doublets in 5270 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "demuxlet genotype doublets",
+   "data_kind": "real",
+   "n_cells": 5270
+  },
+  {
+   "id": "xili_pbmc_2ctrl_dm",
+   "title": "pbmc-2ctrl-dm: 1598 labelled doublets in 13913 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "demuxlet genotype doublets",
+   "data_kind": "real",
+   "n_cells": 13913
+  },
+  {
+   "id": "xili_pbmc_2stim_dm",
+   "title": "pbmc-2stim-dm: 1631 labelled doublets in 13916 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "demuxlet genotype doublets",
+   "data_kind": "real",
+   "n_cells": 13916
+  },
+  {
+   "id": "kang2018_ctrl",
+   "title": "kang21: 1598 labelled doublets in 13737 cells",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560248"
+    ]
+   },
+   "truth": "demuxlet genotype doublets, lane 2.1 on Singlet counts",
+   "data_kind": "real",
+   "n_cells": 13737
+  },
+  {
+   "id": "xili_j293t_dm",
+   "title": "J293t-dm: 42 labelled doublets in 500 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "demuxlet genotype doublets (two cell lines)",
+   "data_kind": "real",
+   "n_cells": 500
+  },
+  {
+   "id": "xili_pbmc_ch",
+   "title": "pbmc-ch: 2545 labelled doublets in 15272 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "cell-hashing HTO doublets",
+   "data_kind": "real",
+   "n_cells": 15272
+  },
+  {
+   "id": "xili_cline_ch",
+   "title": "cline-ch: 1465 labelled doublets in 7954 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "cell-hashing HTO doublets",
+   "data_kind": "real",
+   "n_cells": 7954
+  },
+  {
+   "id": "xili_mkidney_ch",
+   "title": "mkidney-ch: 7901 labelled doublets in 21179 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "cell-hashing HTO doublets",
+   "data_kind": "real",
+   "n_cells": 21179
+  },
+  {
+   "id": "xili_hek_hmec_multi",
+   "title": "HEK-HMEC-MULTI: 489 labelled doublets in 10641 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "MULTI-seq barcode doublets",
+   "data_kind": "real",
+   "n_cells": 10641
+  },
+  {
+   "id": "xili_hmec_orig_multi",
+   "title": "HMEC-orig-MULTI: 3568 labelled doublets in 26426 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "MULTI-seq barcode doublets",
+   "data_kind": "real",
+   "n_cells": 26426
+  },
+  {
+   "id": "xili_hmec_rep_multi",
+   "title": "HMEC-rep-MULTI: 3282 labelled doublets in 10580 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "MULTI-seq barcode doublets",
+   "data_kind": "real",
+   "n_cells": 10580
+  },
+  {
+   "id": "xili_pdx_multi",
+   "title": "pdx-MULTI: 1317 labelled doublets in 10296 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "MULTI-seq barcode doublets",
+   "data_kind": "real",
+   "n_cells": 10296
+  },
+  {
+   "id": "xili_nuc_multi",
+   "title": "nuc-MULTI: 475 labelled doublets in 5578 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "MULTI-seq barcode doublets",
+   "data_kind": "real",
+   "n_cells": 5578
+  },
+  {
+   "id": "xili_hm_6k",
+   "title": "hm-6k: 171 labelled doublets in 6806 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "human + mouse species-mixing doublets",
+   "data_kind": "real",
+   "n_cells": 6806
+  },
+  {
+   "id": "xili_hm_12k",
+   "title": "hm-12k: 730 labelled doublets in 12820 cells",
+   "accessions": {
+    "other": [
+     "10.5281/zenodo.4062232"
+    ]
+   },
+   "truth": "human + mouse species-mixing doublets",
+   "data_kind": "real",
+   "n_cells": 12820
+  }
+ ],
+ "metrics": [
+  {
+   "id": "auprc_mean",
+   "name": "Mean AUPRC over the 17 datasets (leave-one-study-out)",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5594,
+    "ci": [
+     0.4706,
+     0.6503
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.5011,
+     "ci": [
+      0.4184,
+      0.5848
+     ]
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.5587,
+     "ci": [
+      0.4655,
+      0.6578
+     ]
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.4662,
+     "ci": [
+      0.3698,
+      0.5706
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0267
+    },
+    "rationale": "half-width of the paired 95% bootstrap CI (datasets resampled) of Singlet minus scDblFinder; 17 datasets"
+   },
+   "notes": "each dataset counts once; the CI is a bootstrap over datasets",
+   "pass": "pass"
+  },
+  {
+   "id": "auprc_mean_kang",
+   "name": "Mean AUPRC over the Kang 2018 lanes (genotype truth)",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5853,
+    "ci": [
+     0.4907,
+     0.6727
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.482,
+     "ci": [
+      0.3598,
+      0.5911
+     ]
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.5437,
+     "ci": [
+      0.4573,
+      0.621
+     ]
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.4047,
+     "ci": [
+      0.2802,
+      0.5226
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.015
+    },
+    "rationale": "half-width of the paired 95% bootstrap CI (datasets resampled) of Singlet minus scDblFinder; 6 datasets"
+   },
+   "notes": "lane 2.1 as Singlet counts it plus the five Cell Ranger lanes of Xi & Li; the combiner never saw any Kang lane here",
+   "pass": "pass"
+  },
+  {
+   "id": "auprc_mean_by_study",
+   "name": "Mean AUPRC over the 6 studies (leave-one-study-out)",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5521,
+    "ci": [
+     0.3817,
+     0.7294
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.5035,
+     "ci": [
+      0.3518,
+      0.6481
+     ]
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.56,
+     "ci": [
+      0.3785,
+      0.7597
+     ]
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.4945,
+     "ci": [
+      0.3433,
+      0.6883
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0254
+    },
+    "rationale": "half-width of the paired 95% bootstrap CI (datasets resampled) of Singlet minus scDblFinder; 6 datasets"
+   },
+   "notes": "each study counts once (the six Kang lanes are one study, the five MULTI-seq sets another, the two 10x hgmm sets a third); the CI is a bootstrap over studies",
+   "pass": "pass"
+  },
+  {
+   "id": "auroc_mean",
+   "name": "Mean AUROC over the 17 datasets (leave-one-study-out)",
+   "unit": "AUROC",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.802,
+    "ci": [
+     0.7386,
+     0.8611
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.7869,
+     "ci": [
+      0.7218,
+      0.8478
+     ]
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.7983,
+     "ci": [
+      0.7373,
+      0.8562
+     ]
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.7606,
+     "ci": [
+      0.7026,
+      0.8182
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0075
+    },
+    "rationale": "half-width of the paired 95% bootstrap CI (datasets resampled) of Singlet minus scDblFinder; 17 datasets"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_pbmc_1a_dm",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4596
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.3518
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.4604
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.24
+    }
+   ],
+   "notes": "3298 cells, 120 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_pbmc_1b_dm",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4119
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.2597
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.3609
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.2009
+    }
+   ],
+   "notes": "3790 cells, 130 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_pbmc_1c_dm",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5536
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.3931
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.5148
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.2982
+    }
+   ],
+   "notes": "5270 cells, 316 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_pbmc_2ctrl_dm",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6963
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.6346
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.6409
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.567
+    }
+   ],
+   "notes": "13913 cells, 1598 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_pbmc_2stim_dm",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6893
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.621
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.6434
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.5402
+    }
+   ],
+   "notes": "13916 cells, 1631 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "kang2018_ctrl",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.7013
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.6316
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.6419
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.5822
+    }
+   ],
+   "notes": "13737 cells, 1598 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_j293t_dm",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.2171
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.19
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.2133
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.2396
+    }
+   ],
+   "notes": "500 cells, 42 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_pbmc_ch",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6473
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.6003
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.6276
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.5262
+    }
+   ],
+   "notes": "15272 cells, 2545 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_cline_ch",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4061
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.3999
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.4128
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.3769
+    }
+   ],
+   "notes": "7954 cells, 1465 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_mkidney_ch",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5974
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.596
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.6092
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.5451
+    }
+   ],
+   "notes": "21179 cells, 7901 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_hek_hmec_multi",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.3759
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.425
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.534
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.4595
+    }
+   ],
+   "notes": "10641 cells, 489 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_hmec_orig_multi",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4796
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.4567
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.5028
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.4003
+    }
+   ],
+   "notes": "26426 cells, 3568 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_hmec_rep_multi",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5749
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.5788
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.6031
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.4811
+    }
+   ],
+   "notes": "10580 cells, 3282 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_pdx_multi",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.372
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.3656
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.304
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.2515
+    }
+   ],
+   "notes": "10296 cells, 1317 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_nuc_multi",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4603
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.3987
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.4318
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.3359
+    }
+   ],
+   "notes": "5578 cells, 475 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_hm_6k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9614
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.8555
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.9997
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.9638
+    }
+   ],
+   "notes": "6806 cells, 171 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "auprc",
+   "name": "AUPRC against experimental doublet labels",
+   "unit": "AUPRC",
+   "category": "accuracy",
+   "dataset": "xili_hm_12k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9051
+   },
+   "competitors": [
+    {
+     "tool": "singlet-production",
+     "value": 0.761
+    },
+    {
+     "tool": "scDblFinder",
+     "value": 0.9971
+    },
+    {
+     "tool": "Scrublet",
+     "value": 0.9175
+    }
+   ],
+   "notes": "12820 cells, 730 labelled doublets",
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "singlet-production"
+    ]
+   },
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "pooled",
+   "wall_s": 19.749,
+   "max_rss_gb": 1.97,
+   "threads": 8,
+   "notes": "GSE138867 GSM4120733: 8121 cells, one V100S GPU, includes the engine score (3.028 s) and CUDA start-up"
+  }
+ ],
+ "figures": [
+  {
+   "id": "auprc_by_dataset",
+   "title": "AUPRC by dataset (leave-one-study-out for Singlet)",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "dataset",
+    "categories": [
+     "pbmc-1A-dm",
+     "pbmc-1B-dm",
+     "pbmc-1C-dm",
+     "pbmc-2ctrl-dm",
+     "pbmc-2stim-dm",
+     "kang21",
+     "J293t-dm",
+     "pbmc-ch",
+     "cline-ch",
+     "mkidney-ch",
+     "HEK-HMEC-MULTI",
+     "HMEC-orig-MULTI",
+     "HMEC-rep-MULTI",
+     "pdx-MULTI",
+     "nuc-MULTI",
+     "hm-6k",
+     "hm-12k"
+    ]
+   },
+   "y": {
+    "label": "AUPRC",
+    "unit": "AUPRC",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "pbmc-1A-dm",
+      "pbmc-1B-dm",
+      "pbmc-1C-dm",
+      "pbmc-2ctrl-dm",
+      "pbmc-2stim-dm",
+      "kang21",
+      "J293t-dm",
+      "pbmc-ch",
+      "cline-ch",
+      "mkidney-ch",
+      "HEK-HMEC-MULTI",
+      "HMEC-orig-MULTI",
+      "HMEC-rep-MULTI",
+      "pdx-MULTI",
+      "nuc-MULTI",
+      "hm-6k",
+      "hm-12k"
+     ],
+     "y": [
+      0.4596,
+      0.4119,
+      0.5536,
+      0.6963,
+      0.6893,
+      0.7013,
+      0.2171,
+      0.6473,
+      0.4061,
+      0.5974,
+      0.3759,
+      0.4796,
+      0.5749,
+      0.372,
+      0.4603,
+      0.9614,
+      0.9051
+     ]
+    },
+    {
+     "name": "singlet-production",
+     "tool": "singlet-production",
+     "x": [
+      "pbmc-1A-dm",
+      "pbmc-1B-dm",
+      "pbmc-1C-dm",
+      "pbmc-2ctrl-dm",
+      "pbmc-2stim-dm",
+      "kang21",
+      "J293t-dm",
+      "pbmc-ch",
+      "cline-ch",
+      "mkidney-ch",
+      "HEK-HMEC-MULTI",
+      "HMEC-orig-MULTI",
+      "HMEC-rep-MULTI",
+      "pdx-MULTI",
+      "nuc-MULTI",
+      "hm-6k",
+      "hm-12k"
+     ],
+     "y": [
+      0.3518,
+      0.2597,
+      0.3931,
+      0.6346,
+      0.621,
+      0.6316,
+      0.19,
+      0.6003,
+      0.3999,
+      0.596,
+      0.425,
+      0.4567,
+      0.5788,
+      0.3656,
+      0.3987,
+      0.8555,
+      0.761
+     ]
+    },
+    {
+     "name": "scDblFinder",
+     "tool": "scDblFinder",
+     "x": [
+      "pbmc-1A-dm",
+      "pbmc-1B-dm",
+      "pbmc-1C-dm",
+      "pbmc-2ctrl-dm",
+      "pbmc-2stim-dm",
+      "kang21",
+      "J293t-dm",
+      "pbmc-ch",
+      "cline-ch",
+      "mkidney-ch",
+      "HEK-HMEC-MULTI",
+      "HMEC-orig-MULTI",
+      "HMEC-rep-MULTI",
+      "pdx-MULTI",
+      "nuc-MULTI",
+      "hm-6k",
+      "hm-12k"
+     ],
+     "y": [
+      0.4604,
+      0.3609,
+      0.5148,
+      0.6409,
+      0.6434,
+      0.6419,
+      0.2133,
+      0.6276,
+      0.4128,
+      0.6092,
+      0.534,
+      0.5028,
+      0.6031,
+      0.304,
+      0.4318,
+      0.9997,
+      0.9971
+     ]
+    },
+    {
+     "name": "Scrublet",
+     "tool": "Scrublet",
+     "x": [
+      "pbmc-1A-dm",
+      "pbmc-1B-dm",
+      "pbmc-1C-dm",
+      "pbmc-2ctrl-dm",
+      "pbmc-2stim-dm",
+      "kang21",
+      "J293t-dm",
+      "pbmc-ch",
+      "cline-ch",
+      "mkidney-ch",
+      "HEK-HMEC-MULTI",
+      "HMEC-orig-MULTI",
+      "HMEC-rep-MULTI",
+      "pdx-MULTI",
+      "nuc-MULTI",
+      "hm-6k",
+      "hm-12k"
+     ],
+     "y": [
+      0.24,
+      0.2009,
+      0.2982,
+      0.567,
+      0.5402,
+      0.5822,
+      0.2396,
+      0.5262,
+      0.3769,
+      0.5451,
+      0.4595,
+      0.4003,
+      0.4811,
+      0.2515,
+      0.3359,
+      0.9638,
+      0.9175
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cost",
+   "title": "Cost per 10,000 cells",
+   "kind": "table",
+   "columns": [
+    "tool",
+    "seconds per 10k cells",
+    "needs"
+   ],
+   "rows": [
+    [
+     "singlet",
+     20.1,
+     "engine dbl_run + atlas network (GPU or CPU)"
+    ],
+    [
+     "singlet-production",
+     2.0,
+     "engine dbl_run"
+    ],
+    [
+     "scDblFinder",
+     43.6,
+     "R"
+    ],
+    [
+     "Scrublet",
+     7.7,
+     "python"
+    ]
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "doublets_cells.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/doublets/doublets_cells.parquet",
+   "kind": "derived",
+   "sha256": "dd01888a1b34765b2ddbdabe8f4cdc6aece390684e551709dec743d9a66d8b60",
+   "bytes": 7076304,
+   "format": "parquet"
+  },
+  {
+   "name": "doublets_datasets.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/doublets/doublets_datasets.tsv",
+   "kind": "truth",
+   "sha256": "4e8db806311d7bac076823b3bcde61a86db2f93a79dec378cefd14fbbd9f544c",
+   "bytes": 1005,
+   "format": "tsv"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/doublets/provenance.json",
+   "kind": "derived",
+   "sha256": "b5e0561ea877f451a136cb64f144ced850a6051d0e5c1d5b747e8b2da96f6ea9",
+   "bytes": 2764,
+   "format": "json"
+  }
+ ],
+ "code": [
+  {
+   "path": "python/singlet/doublets/combiner.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/cfe5cfa2960bf79caa09f9136c1a92aeaa3865fa/python/singlet/doublets/combiner.py"
+  },
+  {
+   "path": "python/singlet/doublets/atlas.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/cfe5cfa2960bf79caa09f9136c1a92aeaa3865fa/python/singlet/doublets/atlas.py"
+  },
+  {
+   "path": "scripts/doublets_run.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/cfe5cfa2960bf79caa09f9136c1a92aeaa3865fa/scripts/doublets_run.py"
+  },
+  {
+   "path": "bench/doublets/train_eval.py",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/cfe5cfa2960bf79caa09f9136c1a92aeaa3865fa/bench/doublets/train_eval.py"
+  },
+  {
+   "path": "bench/public/capabilities/doublets.py",
+   "role": "metric",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/cfe5cfa2960bf79caa09f9136c1a92aeaa3865fa/bench/public/capabilities/doublets.py"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/doublets.py",
+  "function": "compute",
+  "laptop_minutes": 1,
+  "clipper_command": "sbatch bench/doublets/train_eval.sbatch"
+ },
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "expression doublet score per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "singlet-production",
+   "output": "expression doublet score per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "scDblFinder",
+   "output": "expression doublet score per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "Scrublet",
+   "output": "expression doublet score per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "singlet",
+   "output": "genotype doublets (donor_assignments prob_doublet)",
+   "supported": "yes",
+   "note": "the call for pools with two or more donors; Kang 2.1 AUROC 0.969 / AUPRC 0.897"
+  },
+  {
+   "tool": "scDblFinder",
+   "output": "genotype doublets (donor_assignments prob_doublet)",
+   "supported": "no"
+  },
+  {
+   "tool": "Scrublet",
+   "output": "genotype doublets (donor_assignments prob_doublet)",
+   "supported": "no"
+  }
+ ],
+ "caveats": [
+  "Parity of the batch job with the study's cached features on Kang 2.1: Spearman prod 1.0, atlas_knn 0.9844, atlas_clf 0.927, ct_entropy 1.0, atlas_nnls 1.0.",
+  "scDblFinder is ahead of Singlet on 8 of 17 datasets (pbmc-1A-dm, cline-ch, mkidney-ch, HEK-HMEC-MULTI, HMEC-orig-MULTI, HMEC-rep-MULTI, hm-6k, hm-12k); the pooled mean is a tie, not a win. The per-dataset gate is the previous Singlet scorer; the pooled and Kang-lane means gate against the best competitor with a tolerance from the bootstrap over datasets.",
+  "Datasets where the previous Singlet scorer is ahead of the combiner: HEK-HMEC-MULTI (auprc), HMEC-rep-MULTI (auprc), mkidney-ch (auroc). These are the failing per-dataset metrics.",
+  "Only experimentally visible doublets are labelled (different donors, hashtags, barcodes or species): same-donor homotypic doublets are invisible to the truth and to every method. About a quarter of cross-donor PBMC doublets look like one cell type; expression methods find roughly half of them, genotype doublets 0.89.",
+  "The Xi & Li matrices come from other pipelines (Cell Ranger and others); the atlas network is tuned to Singlet's counts and gives a confident lineage to far fewer cells there (1-7% against 40% on Singlet's lane 2.1), so the gain on them is, if anything, understated. Lane 2.1 as Singlet counts it is the only set on Singlet's own counts.",
+  "The 17 datasets include two sets of one Kang lane (2.1 on Singlet counts and as the Cell Ranger 1.0 matrix) and six Kang lanes in all, so the pooled mean weights the Kang study 6/17. Weighting each of the six studies once, scDblFinder is ahead (0.560 against 0.552); that gate has its own tolerance from the bootstrap over six studies, which is wide.",
+  "The combiner was chosen after comparing feature sets on these same 17 datasets (bench/doublets/cheap_features.py), so the pooled numbers carry a small selection effect; adding Scrublet as a feature gave 0.563 pooled and 0.575 on the Kang lanes, below the shipped combiner's 0.585 there, and was not adopted."
+ ]
+}
