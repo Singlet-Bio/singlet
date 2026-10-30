@@ -2900,27 +2900,6 @@ private:
         return c == "chrM" || c == "MT" || c == "chrMT";
     }
 
-    // intron_rule::kMtPrefer, shared by the serial and the parallel multimapper buffers (E = either MultiHitEntry):
-    // remember the alignment that lies in a chrM gene ...
-    template <class E>
-    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag) const {
-        if (!(config_.intron_rules & intron_rule::kMtPrefer) || gene == UINT32_MAX || !is_mt_gene(gene)) return;
-        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag;
-    }
-    // ... a read aligning equally to a chrM gene and a nuclear gene (NUMT) comes from the mitochondrial genome
-    // (hundreds of copies per cell vs. one nuclear copy), so it is counted for the chrM gene instead of dropped
-    // as gene-ambiguous.
-    template <class E>
-    bool mt_numt_tie(const E& e) const {
-        return e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.first_gene != UINT32_MAX &&
-               e.second_gene != UINT32_MAX && is_mt_gene(e.first_gene) != is_mt_gene(e.second_gene);
-    }
-    template <class E>
-    static ReadFeatures mt_rescue_features(const E& e) {
-        return ReadFeatures{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
-                            static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
-    }
-
     // Resolve a completed multi-hit entry using per-worker state
     void resolve_mm_parallel(WorkerContext& wc, typename WorkerContext::MultiHitEntry& e) {
         if (e.bc_idx < 0) return;
@@ -2968,6 +2947,27 @@ private:
     };
     static constexpr uint8_t kExonicReadFlags =
         DirectionalUmiStore::kReadExonOnly | DirectionalUmiStore::kReadTouchesExon;
+
+    // intron_rule::kMtPrefer, shared by the serial and the parallel multimapper buffers (E = either MultiHitEntry):
+    // remember the alignment that lies in a chrM gene ...
+    template <class E>
+    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag) const {
+        if (!(config_.intron_rules & intron_rule::kMtPrefer) || gene == UINT32_MAX || !is_mt_gene(gene)) return;
+        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag;
+    }
+    // ... a read aligning equally to a chrM gene and a nuclear gene (NUMT) comes from the mitochondrial genome
+    // (hundreds of copies per cell vs. one nuclear copy), so it is counted for the chrM gene instead of dropped
+    // as gene-ambiguous.
+    template <class E>
+    bool mt_numt_tie(const E& e) const {
+        return e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.first_gene != UINT32_MAX &&
+               e.second_gene != UINT32_MAX && is_mt_gene(e.first_gene) != is_mt_gene(e.second_gene);
+    }
+    template <class E>
+    static ReadFeatures mt_rescue_features(const E& e) {
+        return ReadFeatures{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
+                            static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
+    }
 
     ReadFeatures classify_read(uint32_t exon_gene, uint32_t first_exon_idx, bool exon_multigene,
                                const std::vector<uint32_t>& intron_overlaps,
