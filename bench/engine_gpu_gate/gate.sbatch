@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eng-of-gate4
+#SBATCH --job-name=eng-ir-gate
 #SBATCH --account=debruinz
 #SBATCH --partition=short-gpu
 #SBATCH --gres=gpu:nvidia_h100_nvl:1
@@ -15,17 +15,17 @@
 # (the pre-#80 classification); without it the default rules (389: kUnique, kNoSplicedIntron, kUmiGeneCR, kMtPrefer) run. RULES=default: gate (a) with them.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
-BIN=${BIN:-$W/jobs/w11/engine/bin_of/singlet-gpu}; T=${T:-18}
+BIN=${BIN:-$W/jobs/w11/engine/bin_ir/singlet-gpu}; T=${T:-18}
 if [ "${RULES:-0}" = default ]; then TASKS=("pbmc1k_v3:cpu cmp on" "GSM6470208:cpu cmp on" "GSM4006843:cpu on"); else
 TASKS=("pbmc1k_v3:cpu0 cmp0 on0" "GSM6470208:cpu0 cmp0 on0 cpuD onD" "GSM4006843:cpu0 on0"); fi
 SPEC=${TASKS[$SLURM_ARRAY_TASK_ID]}
 BARE=$W/repos/singlet-py.git
-RES=$W/jobs/w11/engine/results/gate4-$SLURM_ARRAY_JOB_ID-$SLURM_ARRAY_TASK_ID; mkdir -p $RES
-SCR=/tmp/$USER-gate4-$SLURM_JOB_ID; mkdir -p $SCR/repo
+RES=$W/jobs/w11/engine/results/gate-ir-$SLURM_ARRAY_JOB_ID-$SLURM_ARRAY_TASK_ID; mkdir -p $RES
+SCR=/tmp/$USER-gate-ir-$SLURM_JOB_ID; mkdir -p $SCR/repo
 tree() { local c; for c in $(pgrep -P $1); do tree $c; echo $c; done; }
 cleanup() { kill -TERM $(tree $$) 2>/dev/null; sleep 3; kill -KILL $(tree $$) 2>/dev/null; rm -rf $SCR; }
 trap cleanup EXIT INT TERM
-git -C $BARE archive refs/w11/engine-of bench/star_accel/out_equiv.py | tar -x -C $SCR/repo
+git -C $BARE archive refs/w11/intron-rules bench/star_accel/out_equiv.py | tar -x -C $SCR/repo
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 echo "node=$(hostname) job=$SLURM_JOB_ID bin=$(sha256sum $BIN | cut -c1-16) commit=$(cat $(dirname $BIN)/commit) $(date -Is)" | tee $RES/summary.txt

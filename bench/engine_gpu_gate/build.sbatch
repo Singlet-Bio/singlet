@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eng-of-build
+#SBATCH --job-name=eng-ir-build
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu
 #SBATCH --cpus-per-task=2
@@ -13,11 +13,11 @@
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
 BARE=$W/repos/singlet-py.git; BR=${BRANCH:-gpu/engine-gpu-order-free}; OUTD=${OUTD:-$W/jobs/w11/engine/bin}; mkdir -p $OUTD
-VARIANTS=gpu; XFLAGS=; OUTD=$W/jobs/w11/engine/bin_of; mkdir -p $OUTD   # XFLAGS: extra C++ flags, e.g. -DSTAR_PROFILE (STAR's per-phase cycle counters)
-git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/w11/engine-of
-COMMIT=$(git -C $BARE rev-parse refs/w11/engine-of); echo "COMMIT=$COMMIT"
+VARIANTS=gpu; XFLAGS=; OUTD=$W/jobs/w11/engine/bin_ir; mkdir -p $OUTD   # XFLAGS: extra C++ flags, e.g. -DSTAR_PROFILE (STAR's per-phase cycle counters)
+git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/w11/intron-rules
+COMMIT=$(git -C $BARE rev-parse refs/w11/intron-rules); echo "COMMIT=$COMMIT"
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
-git -C $BARE archive refs/w11/engine-of | tar -x -C $SCR/src
+git -C $BARE archive refs/w11/intron-rules | tar -x -C $SCR/src
 S=$SCR/src
 grep -rl --include=CMakeLists.txt -e "-march=native" $S | xargs -r sed -i 's/-march=native/-march=x86-64-v3/' || true
 grep -q "sam_hdr_destroy(bam_hdr_t" $S/src/star/bam_cat.c || \
