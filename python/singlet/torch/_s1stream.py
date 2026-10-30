@@ -81,7 +81,9 @@ def file_fetch(path: Union[str, os.PathLike]) -> tuple[Fetch, int]:
     return fetch, size
 
 
-def http_fetch(url: str, session=None, retries: int = 3, pool_size: int = 8) -> tuple[Fetch, Optional[int]]:
+def http_fetch(
+    url: str, session=None, retries: int = 3, pool_size: int = 8
+) -> tuple[Fetch, Optional[int]]:
     """A ``fetch(offset, length)`` doing HTTP Range requests on ``url``, safe from several threads (one ``urllib3`` pool of
     ``pool_size`` connections, or the ``urllib3.PoolManager`` given as ``session``). No request is made here: the object's
     size is not needed, and the first fetch (the reader's prefix) is the first round trip. Every response must carry a
@@ -89,13 +91,19 @@ def http_fetch(url: str, session=None, retries: int = 3, pool_size: int = 8) -> 
     server that ignores ``Range`` raises ``ValueError``."""
     import urllib3
 
-    pool = session if session is not None else urllib3.PoolManager(maxsize=max(1, int(pool_size)), retries=False)
+    pool = (
+        session
+        if session is not None
+        else urllib3.PoolManager(maxsize=max(1, int(pool_size)), retries=False)
+    )
     timeout = urllib3.Timeout(connect=30, read=60)
 
     def get(off: int, ln: int):
         for attempt in range(retries + 1):
             try:
-                r = pool.request("GET", url, headers={"Range": f"bytes={off}-{off + ln - 1}"}, timeout=timeout)
+                r = pool.request(
+                    "GET", url, headers={"Range": f"bytes={off}-{off + ln - 1}"}, timeout=timeout
+                )
             except urllib3.exceptions.HTTPError:  # connection refused or reset, timeout
                 if attempt == retries:
                     raise
@@ -330,11 +338,15 @@ class S1Stream:
             self._pool = ThreadPoolExecutor(self.io_threads, thread_name_prefix="s1-io")
         return [self._pool.submit(self._get, s) for s in spans]
 
-    def _decode_batch(self, ranges: list[Block], futures: list) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _decode_batch(
+        self, ranges: list[Block], futures: list
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         t0 = time.perf_counter()
         bufs = [f.result() for f in futures]  # waits for the batch's bytes
         t1 = time.perf_counter()
-        ip, idx, val = self.mem.decode_batch(ranges, bufs, mode=self.order, threads=self.threads, dtype="float32")
+        ip, idx, val = self.mem.decode_batch(
+            ranges, bufs, mode=self.order, threads=self.threads, dtype="float32"
+        )
         self.fetch_s += t1 - t0
         self.decode_s += time.perf_counter() - t1
         return ip, idx, val
@@ -354,7 +366,9 @@ class S1Stream:
     def _tensor(self, ip: np.ndarray, idx: np.ndarray, val: np.ndarray):
         import torch
 
-        it = np.int32 if ip[-1] < 2**31 else np.int64  # torch wants crow and col indices in one dtype
+        it = (
+            np.int32 if ip[-1] < 2**31 else np.int64
+        )  # torch wants crow and col indices in one dtype
         return torch.sparse_csr_tensor(
             torch.from_numpy(ip.astype(it, copy=False)),
             torch.from_numpy(idx.astype(it, copy=False)),
