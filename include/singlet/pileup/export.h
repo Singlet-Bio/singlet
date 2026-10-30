@@ -311,7 +311,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     // ── Phase 1: COO → CSC (parallel) ──
     auto csc_t0 = std::chrono::high_resolution_clock::now();
 
-    SparseAccumulator<uint8_t>::CSCMatrix snp_ad_csc, snp_dp_csc;
+    SparseAccumulator<uint16_t>::CSCMatrix snp_ad_csc, snp_dp_csc;
     SparseAccumulator<uint16_t>::CSCMatrix exon_csc, intron_csc, sj_csc, mt_csc, guide_csc, amb_csc;
 
     std::vector<std::thread> csc_threads;
