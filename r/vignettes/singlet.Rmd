@@ -164,8 +164,8 @@ Beyond gene counts, a study's samples can carry spliced and unspliced layers,
 splice junctions and PSI and V(D)J usage. Ask what a study has, then load it.
 
 ```{r modalities}
-singlet_study_modalities("GSE128639")
-sce <- singlet_load("GSE128639", modalities = c("counts", "spliced", "unspliced"))
+singlet_study_modalities("GSE144434")   # CITE-seq of human PBMC
+sce <- singlet_load("GSE144434", modalities = c("counts", "spliced", "unspliced"))
 SummarizedExperiment::assayNames(sce)
 ```
 
