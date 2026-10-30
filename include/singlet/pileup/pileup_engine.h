@@ -640,7 +640,7 @@ public:
             tee.write(hdr, b);
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (gpu_col_) {
-                const char* gcb = config_.cb_from_cr ? inline_scan_cb_from_cr(b) : inline_scan_cb(b);
+                const char* gcb = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);   // R11: the collector sees the same corrected CB as the serial loop
                 gpu_col_->add(b, (gcb && gcb[0] != '-') ? bc_index_.lookup(gcb) : -1);
             }
 #endif
