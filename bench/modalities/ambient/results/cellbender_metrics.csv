@@ -1,0 +1,17 @@
+total_raw_counts,30591943.000
+total_output_counts,25893185.000
+total_counts_removed,4698758.000
+fraction_counts_removed,0.154
+total_raw_counts_in_cells,26218329.000
+total_counts_removed_from_cells,325144.000
+fraction_counts_removed_from_cells,0.012
+average_counts_removed_per_cell,310.252
+target_fpr,0.010
+expected_cells,1000.000
+found_cells,1048.000
+output_average_counts_per_cell,24707.238
+ratio_of_found_cells_to_expected_cells,1.048
+found_empties,4952.000
+fraction_of_analyzed_droplets_that_are_nonempty,0.175
+convergence_indicator,0.787
+overall_change_in_train_elbo,6577.465

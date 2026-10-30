@@ -2121,6 +2121,9 @@ inline void write_stats_json(const std::string& path,
        << "  \"molecules_ambiguous\": " << stats.molecules_ambiguous << ",\n"
        << "  \"molecules_legacy_double\": " << stats.molecules_legacy_double << ",\n"
        << "  \"cross_gene_intron_reads\": " << stats.cross_gene_intron_reads << ",\n"
+       << "  \"mt_numt_rescued\": " << stats.mt_numt_rescued << ",\n"
+       << "  \"molecules_dropped_multigene_umi\": " << stats.molecules_dropped_multigene_umi << ",\n"
+       << "  \"intron_rules\": " << stats.intron_rules << ",\n"
        << "  \"pileup_time_s\": " << stats.wall_time_s << ",\n"
        << "  \"wall_time_s\": " << wall_time_s << "\n"
        << "}\n";

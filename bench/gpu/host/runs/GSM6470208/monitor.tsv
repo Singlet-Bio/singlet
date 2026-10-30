@@ -1,0 +1,853 @@
+t	mem_mb	anon_mb	cpu_s	read_mb	write_mb
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130383	5	1	0	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130388	390	182	5	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130393	560	122	10	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130398	856	188	15	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130403	1111	194	20	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130408	1330	172	25	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130413	1570	153	30	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130418	1820	152	35	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130423	4440	2767	43	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130428	13526	11821	49	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130433	21007	19276	55	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130438	21427	19360	76	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130443	21791	19257	96	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130448	22623	19596	117	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130453	22982	19491	137	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130458	23348	19385	158	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130463	24174	19722	179	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130468	24522	19615	199	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130473	24739	19360	220	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130478	25719	19843	241	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130483	26096	19735	261	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130488	26353	19478	282	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130493	27333	19959	303	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130498	27714	19850	323	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130503	27937	19594	344	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130508	28884	20076	365	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130513	29266	19967	385	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130518	29518	19709	405	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130523	30517	20190	427	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130528	30790	19932	447	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130533	31165	19822	468	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130538	31978	20155	489	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130543	32376	20044	509	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130548	32751	19936	530	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130553	33594	20273	551	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130558	34017	20216	572	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130563	34276	19970	592	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130568	35266	20440	613	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130573	35642	20332	633	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130578	37014	21219	654	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130583	36740	20544	674	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130588	37112	20434	695	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130593	38301	21143	716	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130598	38359	20659	736	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130604	38749	20549	757	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130609	39589	20882	778	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130614	39974	20774	798	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130619	40208	20517	818	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130624	41155	20999	839	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130629	41553	20891	860	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130634	41787	20634	880	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130639	42777	21115	901	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130644	43010	20858	921	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130649	43413	20749	941	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130654	44374	21230	962	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130659	44592	20973	982	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130664	44992	20854	1003	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130669	45738	21150	1023	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130674	46093	21002	1043	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130679	46470	20854	1064	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130684	47238	21150	1084	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130689	47599	21002	1104	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130694	47929	20854	1125	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130699	48707	21150	1146	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130704	49056	21002	1166	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130709	49895	21298	1187	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130714	50245	21150	1208	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130719	50598	21002	1228	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130724	51339	21298	1249	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130729	51658	21150	1270	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130734	51845	20854	1290	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130739	52772	21298	1311	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130744	53143	21150	1332	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130749	53382	20854	1352	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130754	54303	21298	1374	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130759	54457	21002	1394	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130764	54806	20854	1414	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130769	55733	21298	1436	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130774	55943	21002	1456	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130779	56309	20854	1476	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130784	57117	21150	1497	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130789	57489	21002	1518	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130794	57759	20855	1538	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130799	58527	21298	1559	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130804	58735	21150	1580	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130809	58936	20855	1600	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130814	59876	21298	1621	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130819	60244	21150	1641	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130824	60484	20855	1662	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130829	61421	21298	1683	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130834	61607	21002	1703	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130839	61956	20855	1723	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130844	62693	21150	1744	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130849	63064	21002	1764	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130854	63413	20855	1784	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130859	64210	21150	1805	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130864	64576	21002	1825	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130869	64945	20855	1845	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130874	65719	21150	1866	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130879	66032	21002	1886	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130884	66344	20855	1907	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130889	67112	21150	1927	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130894	67428	21002	1947	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130899	68263	21298	1969	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130905	68583	21150	1989	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130910	68926	21003	2009	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130915	69727	21298	2030	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130920	70060	21150	2051	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130925	70281	20855	2071	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130930	71249	21298	2092	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130935	71456	21003	2113	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130940	71827	20855	2133	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130945	72769	21298	2154	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130950	72987	21003	2174	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130955	73348	20855	2195	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130960	74136	21150	2216	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130965	74517	21003	2236	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130970	74886	20855	2256	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130975	75708	21150	2278	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130980	76056	21003	2298	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130985	77419	21851	2319	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130990	77205	21150	2339	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793130995	77557	21003	2360	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131000	78328	21298	2380	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131005	78714	21150	2400	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131010	78911	20855	2420	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131015	79859	21298	2441	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131020	80075	21003	2461	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131025	80451	20855	2481	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131030	81391	21298	2502	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131035	81589	21003	2523	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131040	81915	20855	2543	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131045	81437	21150	2564	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131050	81820	21003	2584	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131055	81905	20855	2604	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131060	81505	21150	2624	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131065	81873	21003	2645	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131070	81402	21298	2666	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131075	81766	21150	2687	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131080	81912	21003	2707	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131085	81467	21298	2728	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131090	81812	21150	2749	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131095	81915	21003	2769	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131100	81460	21298	2791	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131105	81812	21150	2811	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131110	81907	21003	2831	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131115	81530	21298	2853	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131120	81745	21003	2873	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131125	81919	20855	2894	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131130	81454	21150	2915	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131135	81859	21003	2936	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131140	81918	20855	2956	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131145	81610	21150	2977	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131150	81911	21003	2997	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131155	81892	21679	3018	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131160	81699	21150	3038	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131165	81775	20855	3058	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131170	81430	21298	3079	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131175	81659	21003	3099	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131180	81913	20855	3119	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131185	81447	21151	3140	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131190	81897	21003	3160	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131195	81906	20855	3180	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131200	81618	21151	3202	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131206	81907	21003	3222	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131211	81364	21298	3243	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131216	81742	21151	3264	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131221	81812	20855	3284	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131226	81484	21298	3305	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131231	81716	21003	3325	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131236	81917	20855	3346	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131241	81471	21151	3367	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131246	81877	21003	3387	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131251	81911	20855	3407	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131256	81626	21151	3428	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131261	81909	21003	3449	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131266	81414	21298	3470	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131271	81794	21151	3490	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131276	81793	20855	3510	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131281	81460	21298	3531	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131286	81677	21003	3551	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131291	81913	20855	3572	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131296	81710	21199	3592	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131301	81895	20941	3613	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131306	81909	20674	3633	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131311	63338	2124	3639	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131316	65100	2515	3644	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131321	65937	2271	3647	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131326	67376	2514	3651	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131331	68713	2457	3655	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131336	69901	2301	3659	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131341	71451	2391	3663	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131346	72815	2513	3667	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131351	74076	2135	3671	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131356	75736	2503	3675	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131361	77222	2505	3680	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131366	78587	2543	3684	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131371	79802	2298	3688	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131376	81067	2155	3692	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131381	81915	2639	3696	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131386	81901	2445	3700	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131391	81912	2529	3704	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131396	81650	2249	3708	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131402	81908	2521	3713	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131407	81649	2156	3717	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131412	81383	2136	3721	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131417	81902	2723	3725	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131422	81884	2502	3729	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131427	81699	2190	3733	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131432	81490	2146	3737	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131437	81917	2434	3741	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131442	81905	2469	3745	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131447	81906	2487	3749	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131452	81914	2533	3754	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131457	81916	2690	3757	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131462	81641	2287	3761	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131467	81917	2441	3765	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131472	81907	2490	3770	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131477	81890	2327	3774	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131482	81904	2473	3778	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131487	81907	2503	3782	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131492	81670	2178	3786	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131497	81906	2467	3790	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131502	81911	2467	3794	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131507	81913	2461	3799	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131512	81835	2261	3802	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131517	81901	2373	3806	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131522	81910	2489	3811	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131527	81904	2702	3815	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131532	81912	2583	3819	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131537	81908	2625	3823	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131542	81913	2532	3827	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131547	81918	2538	3831	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131552	81515	2127	3835	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131557	81901	2652	3839	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131562	81577	2241	3843	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131567	81572	2140	3847	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131572	81919	2417	3850	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131577	81517	2159	3855	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131582	81907	2315	3859	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131587	81769	2244	3863	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131592	81743	2253	3867	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131597	81917	2393	3871	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131602	81915	2634	3875	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131607	81909	2592	3879	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131612	81805	2253	3882	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131617	81903	2517	3887	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131622	81911	2551	3891	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131627	81912	2511	3895	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131632	81903	2668	3899	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131637	81753	2334	3903	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131642	81766	2236	3906	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131647	81498	2194	3911	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131652	81537	2156	3915	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131657	81381	2129	3919	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131662	81629	2179	3923	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131667	81909	2452	3927	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131672	81657	2267	3931	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131678	81910	2688	3935	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131683	81903	2492	3939	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131688	81912	2467	3942	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131693	81693	2183	3947	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131698	81919	2363	3950	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131703	81907	2372	3954	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131708	81901	2432	3959	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131713	81628	2164	3963	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131718	81591	2136	3967	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131723	81735	2216	3970	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131728	81903	2435	3975	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131733	81919	2476	3979	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131738	81919	2468	3983	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131743	81639	2146	3987	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131748	81809	2244	3991	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131753	81916	2456	3995	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131758	81913	2477	3999	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131763	81619	2149	4003	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131768	81901	2442	4006	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131773	81905	2535	4011	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131778	81912	2472	4015	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131783	81915	2124	4019	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131788	81884	2124	4024	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131793	81918	2124	4029	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131798	81903	2124	4034	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131803	81905	2124	4039	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131808	81911	2124	4044	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131813	81913	2124	4046	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131818	81908	2124	4048	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131823	81904	2124	4050	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131828	81906	2124	4053	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131833	81906	2124	4056	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131838	81900	2124	4058	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131843	81900	2124	4060	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131848	81911	2124	4062	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131853	81904	2124	4065	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131858	81906	2124	4068	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131863	81917	2124	4072	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131868	81917	2124	4075	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131873	81911	2124	4080	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131878	81909	2124	4084	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131883	81908	2124	4088	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131888	81883	2124	4091	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131893	81910	2124	4093	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131898	81914	2124	4095	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131903	81915	2124	4097	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131909	81912	2124	4100	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131914	81918	2124	4104	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131919	81914	2124	4109	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131924	81908	2124	4113	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131929	81916	2124	4116	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131934	81903	2124	4118	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131939	81912	2124	4121	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131944	81910	2124	4124	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131949	81918	2124	4127	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131954	81915	2124	4132	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131959	81915	2124	4137	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131964	81910	2124	4141	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131969	81912	2124	4145	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131974	81914	2124	4147	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131979	81904	2124	4149	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131984	81907	2124	4151	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131989	81903	2124	4153	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131994	81919	2124	4156	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793131999	81912	2124	4160	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132004	81912	2124	4165	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132009	81907	2124	4168	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132014	81918	2124	4173	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132019	81912	2124	4175	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132024	81912	2124	4176	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132029	81912	2124	4177	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132034	55630	2124	4180	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132039	41626	1053	4185	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132044	42825	1053	4188	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132049	46559	1053	4195	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132054	50832	1053	4204	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132059	54706	1053	4212	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132064	58934	1053	4220	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132069	63251	1053	4229	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132074	67531	1053	4237	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132079	70298	1053	4243	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132084	74508	1053	4251	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132089	78749	1053	4259	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132094	80876	1056	4270	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132099	80878	1058	4284	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132104	80886	1061	4297	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132109	80886	1061	4302	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132114	80886	1061	4307	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132119	80886	1061	4312	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132124	80886	1061	4317	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132129	80886	1061	4322	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132134	80886	1061	4327	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132139	80886	1061	4332	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132144	80886	1061	4337	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132150	80886	1061	4342	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132155	80619	793	4347	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132160	81881	2232	4374	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132165	81904	3408	4401	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132170	81918	4626	4428	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132175	81714	5733	4453	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132180	81917	6578	4482	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132185	81919	6722	4511	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132190	81914	6933	4539	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132195	81915	7231	4567	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132200	81918	7738	4595	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132205	81910	9053	4618	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132210	72538	10307	4632	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132215	71685	11504	4644	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132220	75533	13006	4657	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132225	79141	13099	4673	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132230	81634	13229	4687	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132235	81914	13353	4694	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132240	81913	13460	4701	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132245	81904	13769	4708	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132250	81846	14325	4713	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132255	81908	15001	4718	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132260	81907	15310	4723	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132265	81905	15325	4728	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132270	81910	15379	4733	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132275	81909	15394	4738	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132280	81913	15480	4743	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132285	81634	15218	4748	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132290	81634	15218	4753	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132295	81916	17147	4758	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132300	81651	19169	4763	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132305	81608	19127	4768	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132310	79592	17115	4773	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132315	79354	16877	4778	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132320	78376	15901	4783	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132325	31132	10613	4788	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132330	12070	11991	4793	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132335	20821	18265	4798	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132340	28779	21359	4803	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132345	38382	30944	4808	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132350	46909	35484	4813	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132355	52964	35484	4818	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132360	58381	40897	4823	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132365	64931	47432	4828	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132370	71492	53980	4833	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132375	59193	41604	4838	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132380	56660	37001	4843	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132386	57391	37556	4862	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132391	57574	37738	4882	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132396	59269	39461	4900	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132401	60160	40319	4909	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132406	60687	40845	4914	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132411	59903	40063	4920	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132416	59676	39836	4925	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132421	59676	39836	4930	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132426	59676	39836	4935	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132431	59676	39836	4940	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132436	59652	39782	4946	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132441	61177	40712	4950	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132446	61155	40344	4955	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132451	34482	13372	4962	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132456	34837	13727	4967	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132461	34848	13728	4972	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132466	34956	13821	4988	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132471	35276	14140	4993	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132476	36008	14641	5013	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132481	36013	14646	5018	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132486	36023	14656	5023	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132491	36025	14658	5028	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132496	36025	14658	5033	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132501	36025	14658	5038	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132506	36026	14659	5043	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132511	36052	14685	5048	
+awk: fatal: cannot open file `/sys/fs/cgroup/system.slice/slurmstepd.scope/job_789236/io.stat' for reading: No such file or directory
+1793132516	36014	14572	5053	

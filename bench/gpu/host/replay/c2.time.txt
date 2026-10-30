@@ -1,0 +1,23 @@
+	Command being timed: "/mnt/projects/debruinz_project/debruinz/singlet/jobs/w11/host/bin/singlet-timers --bam-file /tmp/debruinz-w11r-789253/full/star_Aligned.sortedByCoord.out.bam --ref-base /mnt/projects/debruinz_project/cellarium/reference --genome-dir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --exons /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/genes/genes.gtf --whitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/737K-august-2016.txt --barcodes /tmp/debruinz-w11r-789253/full/auto_barcodes.tsv --cell-calling --umi-len 10 --metadata-json /tmp/debruinz-w11r-789253/meta.json --out-prefix /tmp/debruinz-w11r-789253/rp_c2/ --threads 4 --pipeline --output-format 1pz"
+	User time (seconds): 216.49
+	System time (seconds): 19.80
+	Percent of CPU this job got: 113%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 3:27.88
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 11422876
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 8306048
+	Voluntary context switches: 1364
+	Involuntary context switches: 3943
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 645664
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

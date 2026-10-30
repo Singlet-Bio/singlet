@@ -1,0 +1,5 @@
+pos	model	label	median	q1	q3	lo	hi	n	em	ep	rm	rp
+0	poisson	Poisson, per gene						0				
+1	nb	negative binomial, per gene						0				
+2	gene_depth	per gene $\times$ depth						0				
+3	cluster	per gene $\times$ depth $\times$ cluster						0				

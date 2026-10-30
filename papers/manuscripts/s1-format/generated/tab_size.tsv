@@ -1,0 +1,1 @@
+dataset	h5ad_none	csc_i32	mtx_gz	loom	h5ad_lzf	h5ad_gzip	tenx_h5	zarr	soma	parquet_coo	rds_gz	rds_xz	csc_zstd19	bpcells	s1	s1_pack

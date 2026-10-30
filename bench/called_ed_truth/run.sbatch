@@ -13,8 +13,9 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet
+sdir() { [ -d "$1/state/$2" ] && echo "$1/state/$2" || echo "$1/state/${2/called_ed/called_v2}"; }   # state/called_ed* was renamed called_v2* on Clipper
 J=$W/jobs/called_ed_truth
-OUT=$W/state/called_ed_truth
+OUT=$(sdir "$W" called_ed_truth)
 PB=$W/pipeline-benchmark
 MB=$W/modality-bench
 PY=$W/envs/gpool/venv/bin/python
@@ -45,7 +46,7 @@ case "$MODE" in
            --truth cellranger:$PB/data/pbmc5p_v1/cellranger_vdj_v1_hs_pbmc2_5gex_protein_filtered_feature_bc_matrix.h5 ;;
     esac ;;
   revalidate)
-    RES=$W/state/called_ed/results
+    RES=$(sdir "$W" called_ed)/results
     GSE=$(ls -d $RES/GSE* | sed -n "$((TASK+1))p" | xargs -r basename)
     [ -n "$GSE" ] || { echo "no study $TASK"; exit 0; }
     $PY -P $J/revalidate.py score $RES/$GSE --data $W/data/emptydrop/$GSE --truth-cache $W/data/called_ed/truth --out $OUT/revalidate/$GSE ;;

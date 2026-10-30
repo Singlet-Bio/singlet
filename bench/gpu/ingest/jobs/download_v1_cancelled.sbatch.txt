@@ -1,0 +1,56 @@
+#!/bin/bash
+#SBATCH --job-name=w11-ing-dl
+#SBATCH --account=debruinz
+#SBATCH --partition=short-gpu
+#SBATCH --nice=10000
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=00:40:00
+#SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
+# CPU-only (no GPU gres). Read-only public access: NCBI SDL, NCBI S3 (sra-pub-run-odp), the existing `singlet download` (SRA -> .1fq),
+# and gunzip cost on FASTQ text made from real reads. Nothing is written to Cloudflare; reads stay in job /tmp.
+set -uo pipefail
+W=/mnt/projects/debruinz_project/debruinz/singlet
+D=$W/jobs/w11/ingest; OUT=$D/results/dl_$SLURM_JOB_ID; mkdir -p $OUT; R=$OUT/dl.log
+S=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $S; trap 'rm -rf $S' EXIT
+exec > >(tee -a $R) 2>&1
+echo "== node $(hostname) $(date -Is)"
+echo "== SDL (what NCBI offers per run), sizes"
+for acc in SRR21102187 SRR21102188 SRR9900123 SRR14999752 SRR26840957 SRR25376447 SRR23353990; do
+  for v in "" "&accept-alternate-locations=yes"; do
+    curl -s "https://locate.ncbi.nlm.nih.gov/sdl/2/retrieve?acc=$acc&filetype=run$v" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+for r in d['result']:
+    for f in r.get('files',[]): print('SDL', r['bundle'], f.get('object'), f.get('type'), f.get('name'), f.get('size'), [l.get('service')+':'+l.get('region','') for l in f.get('locations',[])][:3])
+    if r.get('status')!=200: print('SDL', r['bundle'], 'status', r.get('status'), r.get('msg'))
+"
+  done
+done
+echo "== ENA filereport sizes"
+for acc in SRR9900123 SRR14999752 SRR26840957 SRR25376447 SRR23353990 SRR21102187; do
+  curl -s "https://www.ebi.ac.uk/ena/portal/api/filereport?accession=$acc&result=read_run&fields=run_accession,read_count,fastq_bytes,submitted_bytes,sra_bytes&format=tsv" | tail -n 1
+done
+echo "== S3 range scaling (SRR21102188 .sra, 8 x 150 MB total split over N streams, offsets from 1.5 GB)"
+URL=https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR21102188/SRR21102188
+for N in 1 4 8 16; do
+  TOT=1200000000; PER=$((TOT/N)); t0=$(date +%s.%N)
+  for i in $(seq 0 $((N-1))); do curl -s -r $((1500000000 + (N-1)*0 + i*PER + N*7000000))-$((1500000000 + i*PER + N*7000000 + PER - 1)) -o /dev/null "$URL" & done; wait
+  t1=$(date +%s.%N); echo "NET streams=$N bytes=$TOT secs=$(echo "$t1 - $t0" | bc) MBps=$(echo "$TOT / ($t1 - $t0) / 1000000" | bc -l)"
+done
+echo "== singlet download SRR21102187 (SRA -> .1fq, VDB streaming, existing campaign tool)"
+SW=$W/pipeline-benchmark/bin/singlet-w3
+/usr/bin/time -v $SW download SRR21102187 -o $S/SRR21102187.1fq --vdb-threads 4 --whitelist-dir $W/pipeline-benchmark/whitelists 2> $OUT/download_time.txt
+tail -n 25 $OUT/download_time.txt | grep -E "Elapsed|Maximum resident|User time|System time|Percent of CPU|download|Output|Reads|Protocol|Done" | cut -c1-300
+ls -l $S/SRR21102187.1fq
+echo "== gunzip cost on FASTQ text of real reads (first 3.0 M pairs of pbmc1k_v3, re-gzipped at level 6 like ENA files)"
+Q=$W/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq
+$SW decode $Q --r1 /dev/stdout --threads 4 2>/dev/null | head -n 12000000 | gzip -6 > $S/r1.fastq.gz
+$SW decode $Q --r2 /dev/stdout --threads 4 2>/dev/null | head -n 12000000 | gzip -6 > $S/r2.fastq.gz
+ls -l $S/r1.fastq.gz $S/r2.fastq.gz
+for f in r1 r2; do
+  /usr/bin/time -f "GUNZIP $f cpu_user=%U cpu_sys=%S wall=%e" zcat $S/$f.fastq.gz > /dev/null
+done
+which pigz && for f in r1 r2; do /usr/bin/time -f "PIGZ-d $f cpu_user=%U cpu_sys=%S wall=%e" pigz -d -c $S/$f.fastq.gz > /dev/null; done
+zcat $S/r2.fastq.gz | wc -c
+echo "== done $(date -Is)"

@@ -1854,6 +1854,7 @@ def _study_to_anndata(
         d.update(_geo_obs(info, n))
         if facts:
             d.update(SF.facts_obs(facts.get(r.gsm), n))
+            SF.relabel_cell_lines(d, facts.get(r.gsm), n)
         parts.append(d)
         index.extend(f"{r.gsm}_{b}" for b in bc)
     import pandas as pd
@@ -2055,6 +2056,7 @@ def _study_cells(
         )
         if facts:
             d.update(SF.facts_obs(facts.get(r.gsm), n))
+            SF.relabel_cell_lines(d, facts.get(r.gsm), n)
         parts.append(d)
         index.extend(f"{r.gsm}_{b}" for b in bc)
     obs = L.to_frame(parts, index=pd.Index(index, dtype=object))

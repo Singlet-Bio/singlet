@@ -101,7 +101,27 @@ struct PileupConfig {
     // N22: Full-whitelist ambient profiling — gives EmptyDrops a representative empty-droplet pool
     std::string whitelist_path;         // Full barcode whitelist (e.g. 3M-february-2018.txt); empty = disabled
     uint32_t wl_ambient_ceil = 50;      // UMI ceiling: WL barcodes with ≤ this count define the ambient pool
+    // Intron-assignment rules (intron_rule::k* bits). SINGLET_INTRON_RULES overrides it
+    // (decimal or 0x hex) for experiments; see docs/pipeline-validation.md §4.4.
+    // Default 389 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer), chosen on real truth (sweep2: matches or beats every
+    // other combination on pbmc v3/v2, nuclei, hgmm, CITE against STARsolo Velocyto and alevin-fry USA).
+    uint32_t intron_rules = 389;
 };
+
+namespace intron_rule {
+// Rules on reads (applied after the read's gene and exon/intron evidence are known)
+constexpr uint32_t kUnique          = 1;    ///< a multi-mapped read (NH > 1) gives no intronic evidence
+constexpr uint32_t kContained       = 2;    ///< an intron-touching read must lie inside its gene body
+constexpr uint32_t kNoSplicedIntron = 4;    ///< a spliced read (CIGAR N) gives no intronic evidence
+constexpr uint32_t kFlank           = 8;    ///< <= 5 intronic bases of an exon-touching read are exonic (velocyto MIN_FLANK)
+constexpr uint32_t kMtPrefer        = 256;  ///< multimapper split between a chrM gene and a nuclear gene (NUMT): count the chrM gene
+constexpr uint32_t kNoExonPriority  = 16;   ///< an exonic read of gene A inside an intron of gene B is not counted
+// Rules on molecules (applied after UMI collapse, over all genes of a cell)
+constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
+constexpr uint32_t kUmiGeneAll      = 64;   ///< UMI in >1 gene of a cell: drop all its molecules (velocyto)
+constexpr uint32_t kUmiGeneCR       = 128;  ///< UMI in >1 gene of a cell: keep the gene with most reads (ties: none)
+constexpr uint32_t kMoleculeRules   = kUmiGene | kUmiGeneAll | kUmiGeneCR;
+}  // namespace intron_rule
 
 // Statistics collected during pileup
 /// Per-cell alignment QC from the BAM records of one barcode (primary, barcoded reads; lost once BAMs are deleted).
@@ -166,6 +186,9 @@ struct PileupStats {
     uint64_t molecules_unspliced = 0;
     uint64_t molecules_ambiguous = 0;
     uint64_t molecules_legacy_double = 0;  ///< would have been in both exon and intron matrices before the fix
+    uint64_t molecules_dropped_multigene_umi = 0;  ///< intron_rule::kUmiGene*: molecules of UMIs in >1 gene
+    uint32_t intron_rules = 0;                     ///< intron_rule::k* bits the run used
+    uint64_t mt_numt_rescued = 0;  ///< intron_rule::kMtPrefer: chrM/NUMT multimappers counted for the chrM gene
     uint64_t cross_gene_intron_reads = 0;  ///< exonic reads of one gene also in another gene's intron (old: counted for both)
     double wall_time_s = 0;
 };
@@ -347,7 +370,11 @@ static inline const char* inline_scan_cb_from_cr(const bam1_t* b, bool reject_n 
 
 class PileupEngine {
 public:
-    explicit PileupEngine(const PileupConfig& config) : config_(config) {}
+    explicit PileupEngine(const PileupConfig& config) : config_(config) {
+        if (const char* r = std::getenv("SINGLET_INTRON_RULES"))
+            config_.intron_rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
+        if (const char* d = std::getenv("SINGLET_MOLECULE_DUMP")) molecule_dump_ = d;
+    }
 
     // Reload only the barcode list from a new file, keeping all other references
     // (gene model, SNPs) intact. Used to refresh barcodes from STAR CB tags
@@ -539,6 +566,7 @@ public:
             uint32_t gene_idx = UINT32_MAX;     // assigned gene (primary, else a secondary's exon gene)
             uint32_t intron_idx = UINT32_MAX;   // assigned read's intron
             uint8_t read_flags = 0;             // DirectionalUmiStore::kRead* of the assigned alignment
+            uint8_t read_diag = 0;              // DirectionalUmiStore::kDiag* of the assigned alignment
             char umi[16] = {};
             uint8_t umi_len = 0;
             uint8_t nh = 0;
@@ -547,6 +575,9 @@ public:
             bool primary_assigned = false;      // gene/exon came from the primary alignment
             uint32_t first_gene  = UINT32_MAX;   // first non-intergenic gene seen
             uint32_t second_gene = UINT32_MAX;   // conflicting gene for EM rescue
+            // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
+            uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
+            uint8_t mt_flags = 0, mt_diag = 0;
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
         mm_buffer.reserve(500000);
@@ -554,6 +585,12 @@ public:
         // Lambda to resolve a completed multi-hit entry
         auto resolve_mm = [&](MultiHitEntry& e, PileupStats& st) {
             if (e.bc_idx < 0) return;
+            if (mt_numt_tie(e)) {   // chrM gene vs. its nuclear copy: count the chrM gene (see mt_numt_tie)
+                count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
+                           mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+                st.mt_numt_rescued++;
+                return;
+            }
             if (e.gene_ambiguous) {
                 // G-EM: collect for post-pileup EM rescue
                 if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
@@ -569,7 +606,8 @@ public:
             }
             // Gene-unique: first_gene is the only gene (or all intergenic)
             if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return;
-            ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags};
+            ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags,
+                            static_cast<uint8_t>(e.read_diag | DirectionalUmiStore::kDiagMulti)};
             count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
                        rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
         };
@@ -694,6 +732,7 @@ public:
                                             it->second.exon_idx = hit.exon_idx;
                                             it->second.read_flags = kExonicReadFlags;
                                         }
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
                                     }
                                     if (it->second.seen >= it->second.nh && it->second.nh > 0) {
                                         resolve_mm(it->second, stats);
@@ -712,6 +751,7 @@ public:
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
                                     }
                                 }
                             }
@@ -829,6 +869,7 @@ public:
                 if (!gpu_covers_) {   // W11 "on": classification and everything that uses it comes from the GPU (gpu_pileup_apply)
                 // Extract aligned blocks from CIGAR
                 aligned_blocks_.clear();
+                bool read_has_n = false;
                 {
                     const uint32_t* cigar = bam_get_cigar(b);
                     int32_t rpos = b->core.pos;
@@ -842,8 +883,11 @@ public:
                                 aligned_blocks_.push_back({rpos, rpos + len});
                                 rpos += len;
                                 break;
-                            case BAM_CDEL:
                             case BAM_CREF_SKIP:
+                                read_has_n = true;
+                                rpos += len;
+                                break;
+                            case BAM_CDEL:
                                 rpos += len;
                                 break;
                             case BAM_CINS:
@@ -960,6 +1004,7 @@ public:
                 ReadFeatures rf = classify_read(exon_gene, first_exon_idx, primary_multigene,
                                                 intron_overlaps, intron_gene, first_intron_idx,
                                                 stats);
+                refine_read(rf, aligned_blocks_, read_has_n, nh, tid, read_reverse, block_overlaps_);
                 if (nh == 1) cur_read_gene_ = rf.gene;   // R9: evidence UMIs are corrected within (cell, gene)
                 if (nh == 1 && config_.count_polya && !config_.reverse_strand && rf.gene != UINT32_MAX) {
                     uint64_t pk;
@@ -985,6 +1030,8 @@ public:
                         entry.exon_idx = rf.exon_idx;
                         entry.intron_idx = rf.intron_idx;
                         entry.read_flags = rf.flags;
+                        entry.read_diag = rf.diag;
+                        note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
                     }
                     if (umi_str && umi_len > 0) {
                         int clen = std::min(umi_len, 15);
@@ -1129,7 +1176,7 @@ public:
                       << mol_store_.n_molecule_groups() << " cell×gene groups, "
                       << (config_.umi_dedup_directional ? "directional" : "exact")
                       << " UMI collapse)...\n";
-            auto ms = finalize_store(mol_store_, exon_acc_, intron_acc_, amb_acc_);
+            auto ms = finalize_all({{&mol_store_, &exon_acc_, &intron_acc_, &amb_acc_}});
             add_molecule_stats(stats, ms);
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (gpu_covers_) add_molecule_stats(stats, gpu_ms_);   // W11 "on": the GPU's molecules (the CPU store is empty)
@@ -1247,6 +1294,7 @@ public:
             uint32_t gene_idx = UINT32_MAX;
             uint32_t intron_idx = UINT32_MAX;
             uint8_t read_flags = 0;
+            uint8_t read_diag = 0;
             char umi[16] = {};
             uint8_t umi_len = 0;
             uint8_t nh = 0;
@@ -1255,6 +1303,9 @@ public:
             bool primary_assigned = false;
             uint32_t first_gene  = UINT32_MAX;
             uint32_t second_gene = UINT32_MAX;  // conflicting gene for EM rescue
+            // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
+            uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
+            uint8_t mt_flags = 0, mt_diag = 0;
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
 
@@ -1457,7 +1508,7 @@ public:
         // Partial mm_buffer entries (seen < nh) are merged here across all workers,
         // BEFORE the molecule stores are finalized, so a resolved read joins the
         // store that already holds its (barcode, gene) and its UMI is counted once.
-        uint64_t xw_exon = 0;
+        uint64_t xw_exon = 0, xw_mt = 0;
         {
             std::unordered_map<uint64_t, WorkerContext::MultiHitEntry> global_mm;
             global_mm.reserve(500000);
@@ -1468,6 +1519,10 @@ public:
                     m.seen += wentry.seen;
                     if (m.nh == 0 && wentry.nh > 0) m.nh = wentry.nh;
                     if (m.bc_idx < 0 && wentry.bc_idx >= 0) m.bc_idx = wentry.bc_idx;
+                    if (wentry.mt_gene != UINT32_MAX) {
+                        m.mt_gene = wentry.mt_gene; m.mt_exon = wentry.mt_exon; m.mt_intron = wentry.mt_intron;
+                        m.mt_flags = wentry.mt_flags; m.mt_diag = wentry.mt_diag;
+                    }
                     if (m.umi_len == 0 && wentry.umi_len > 0) {
                         m.umi_len = wentry.umi_len;
                         std::memcpy(m.umi, wentry.umi, wentry.umi_len);
@@ -1501,6 +1556,7 @@ public:
                                 m.exon_idx = wentry.exon_idx;
                                 m.intron_idx = wentry.intron_idx;
                                 m.read_flags = wentry.read_flags;
+                                m.read_diag = wentry.read_diag;
                             }
                         }
                     }
@@ -1509,6 +1565,22 @@ public:
 
             PileupStats xw_stats;
             for (auto& [qh, m] : global_mm) {
+                // intron_rule::kMtPrefer (see resolve_mm_parallel): chrM gene vs. its nuclear copy
+                if (m.gene_ambiguous && m.bc_idx >= 0 && m.mt_gene != UINT32_MAX &&
+                    m.first_gene != UINT32_MAX && m.second_gene != UINT32_MAX &&
+                    is_mt_gene(m.first_gene) != is_mt_gene(m.second_gene)) {
+                    const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
+                    int target = 0;
+                    for (int w = 0; w < n_workers; ++w)
+                        if (workers[w].mol_store.has_group(bc, m.mt_gene)) { target = w; break; }
+                    auto& tw = workers[target];
+                    ReadFeatures rf{m.mt_gene, m.mt_exon, m.mt_intron, m.mt_flags,
+                                    static_cast<uint8_t>(m.mt_diag | DirectionalUmiStore::kDiagMulti)};
+                    count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, rf,
+                               m.umi_len > 0 ? m.umi : nullptr, m.umi_len);
+                    xw_mt++;
+                    continue;
+                }
                 if (m.gene_ambiguous || m.bc_idx < 0) {
                     // G-EM: collect cross-worker ambiguous reads for rescue
                     if (m.gene_ambiguous && m.bc_idx >= 0 &&
@@ -1530,12 +1602,14 @@ public:
                 for (int w = 0; w < n_workers; ++w)
                     if (workers[w].mol_store.has_group(bc, m.gene_idx)) { target = w; break; }
                 auto& tw = workers[target];
-                ReadFeatures rf{m.gene_idx, m.exon_idx, m.intron_idx, m.read_flags};
+                ReadFeatures rf{m.gene_idx, m.exon_idx, m.intron_idx, m.read_flags,
+                                static_cast<uint8_t>(m.read_diag | DirectionalUmiStore::kDiagMulti)};
                 count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, rf,
                            m.umi_len > 0 ? m.umi : nullptr, m.umi_len);
                 xw_exon++;
             }
             workers[0].stats.exon_hits += xw_stats.exon_hits;
+            workers[0].stats.mt_numt_rescued += xw_mt;
             workers[0].stats.intron_hits += xw_stats.intron_hits;
             workers[0].stats.umi_duplicate += xw_stats.umi_duplicate;
 
@@ -1546,11 +1620,11 @@ public:
         // ── UMI collapse + spliced/unspliced/ambiguous labelling (per worker) ──
         // Genes don't span chromosomes and cross-worker reads were routed above,
         // so per-worker finalize is equivalent to a global one.
-        DirectionalUmiStore::MoleculeStats mol_stats;
-        for (int w = 0; w < n_workers; ++w) {
-            mol_stats += finalize_store(workers[w].mol_store, workers[w].exon,
-                                        workers[w].intron, workers[w].amb);
-        }   // the stores are cleared after R9 has used them (below)
+        std::vector<FinalizeTarget> fin_targets;
+        for (int w = 0; w < n_workers; ++w)
+            fin_targets.push_back({&workers[w].mol_store, &workers[w].exon, &workers[w].intron, &workers[w].amb});
+        DirectionalUmiStore::MoleculeStats mol_stats = finalize_all(fin_targets);
+        // the stores are cleared after R9 has used them (below)
 
         // ── Merge worker outputs ──
         PileupStats stats;
@@ -1581,8 +1655,11 @@ public:
             stats.rrna_reads_sampled += ws.rrna_reads_sampled;
         }
         stats.cross_gene_intron_reads = 0;
-        for (int w = 0; w < n_workers; ++w)
+        stats.mt_numt_rescued = 0;
+        for (int w = 0; w < n_workers; ++w) {
             stats.cross_gene_intron_reads += workers[w].stats.cross_gene_intron_reads;
+            stats.mt_numt_rescued += workers[w].stats.mt_numt_rescued;
+        }
         add_molecule_stats(stats, mol_stats);
 
         // G-EM: merge per-worker ambiguous reads into engine's ambig_reads_
@@ -2289,6 +2366,8 @@ public:
     const StrandEvidence& strand_probe() const { return strand_probe_; }
     /// Orientation the pass counted with (after any probe flip).
     bool reverse_strand() const { return config_.reverse_strand; }
+    /// Per-molecule dump path (diagnostics; "" = none). Defaults to SINGLET_MOLECULE_DUMP.
+    void set_molecule_dump(const std::string& path) { molecule_dump_ = path; }
     /// Carry the probe record of an earlier pass over to this (retry) engine.
     void keep_strand_probe(const PileupEngine& prev) {
         strand_probed_ = prev.strand_probed_;
@@ -2312,6 +2391,7 @@ public:
 
 private:
     PileupConfig config_;
+    std::string molecule_dump_;     // SINGLET_MOLECULE_DUMP: per-molecule TSV (gz) for diagnostics
     bool strand_probed_ = false;    // Auto-strand probe reached a decision
     bool strand_flipped_ = false;   // ... and changed reverse_strand
     StrandEvidence strand_probe_;
@@ -3353,9 +3433,23 @@ private:
         return result;
     }
 
+    bool is_mt_gene(uint32_t g) const {
+        const std::string& c = gene_model_.genes()[g].chrom;
+        return c == "chrM" || c == "MT" || c == "chrMT";
+    }
+
     // Resolve a completed multi-hit entry using per-worker state
     void resolve_mm_parallel(WorkerContext& wc, typename WorkerContext::MultiHitEntry& e) {
         if (e.bc_idx < 0) return;
+        // A read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a
+        // pseudogene) comes from the mitochondrial genome (hundreds of copies per cell vs. one nuclear
+        // copy): count it for the chrM gene instead of dropping it as gene-ambiguous.
+        if (mt_numt_tie(e)) {
+            count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
+                       mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+            wc.stats.mt_numt_rescued++;
+            return;
+        }
         if (e.gene_ambiguous) {
             // G-EM: collect for post-pileup EM rescue
             if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
@@ -3370,7 +3464,8 @@ private:
             return;
         }
         if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return;
-        ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags};
+        ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags,
+                        static_cast<uint8_t>(e.read_diag | DirectionalUmiStore::kDiagMulti)};
         count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
                    rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
     }
@@ -3386,9 +3481,31 @@ private:
         uint32_t exon_idx = UINT32_MAX;
         uint32_t intron_idx = UINT32_MAX;
         uint8_t flags = 0;  // DirectionalUmiStore::kRead*
+        uint8_t diag = 0;   // DirectionalUmiStore::kDiag*
     };
     static constexpr uint8_t kExonicReadFlags =
         DirectionalUmiStore::kReadExonOnly | DirectionalUmiStore::kReadTouchesExon;
+
+    // intron_rule::kMtPrefer, shared by the serial and the parallel multimapper buffers (E = either MultiHitEntry):
+    // remember the alignment that lies in a chrM gene ...
+    template <class E>
+    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag) const {
+        if (!(config_.intron_rules & intron_rule::kMtPrefer) || gene == UINT32_MAX || !is_mt_gene(gene)) return;
+        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag;
+    }
+    // ... a read aligning equally to a chrM gene and a nuclear gene (NUMT) comes from the mitochondrial genome
+    // (hundreds of copies per cell vs. one nuclear copy), so it is counted for the chrM gene instead of dropped
+    // as gene-ambiguous.
+    template <class E>
+    bool mt_numt_tie(const E& e) const {
+        return e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.first_gene != UINT32_MAX &&
+               e.second_gene != UINT32_MAX && is_mt_gene(e.first_gene) != is_mt_gene(e.second_gene);
+    }
+    template <class E>
+    static ReadFeatures mt_rescue_features(const E& e) {
+        return ReadFeatures{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
+                            static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
+    }
 
     ReadFeatures classify_read(uint32_t exon_gene, uint32_t first_exon_idx, bool exon_multigene,
                                const std::vector<uint32_t>& intron_overlaps,
@@ -3407,7 +3524,11 @@ private:
                     other_gene_intron = true;
                 }
             }
-            if (other_gene_intron) st.cross_gene_intron_reads++;
+            if (other_gene_intron) {
+                st.cross_gene_intron_reads++;
+                if (config_.intron_rules & intron_rule::kNoExonPriority) return ReadFeatures{};
+                rf.diag |= DirectionalUmiStore::kDiagOtherGene;
+            }
             rf.flags = (rf.intron_idx == UINT32_MAX)
                 ? kExonicReadFlags
                 : static_cast<uint8_t>(DirectionalUmiStore::kReadIntron |
@@ -3418,6 +3539,67 @@ private:
             rf.flags = DirectionalUmiStore::kReadIntron;
         }
         return rf;
+    }
+
+    // Read diagnostics (kDiag*) and the read-level intron rules (intron_rule::k*).
+    // Only reads with intronic evidence are changed: a rule either drops the
+    // read (gene = none) or, for kFlank, makes a short exon overhang exonic.
+    void refine_read(ReadFeatures& rf, const std::vector<std::pair<int32_t, int32_t>>& blocks,
+                     bool has_n, int nh, int32_t tid, bool read_reverse,
+                     std::vector<uint32_t>& scratch) const {
+        if (rf.gene == UINT32_MAX) return;
+        using D = DirectionalUmiStore;
+        const uint32_t rules = config_.intron_rules;
+        const bool intronic = (rf.flags & D::kReadIntron) != 0;
+        const auto& g = gene_model_.genes()[rf.gene];
+        if (nh > 1) rf.diag |= D::kDiagMulti;
+        if (has_n) rf.diag |= D::kDiagSpliced;
+        for (const auto& [bs, be] : blocks)
+            if (bs < g.start || be > g.end) { rf.diag |= D::kDiagOutside; break; }
+        if (intronic && (rf.flags & D::kReadTouchesExon)) {
+            // intronic bases = bases inside the gene body minus bases in its (merged, sorted) exons
+            int64_t in_body = 0, in_exon = 0;
+            for (const auto& [bs, be] : blocks) {
+                in_body += std::max(0, std::min(be, g.end) - std::max(bs, g.start));
+                for (uint32_t ei : g.exon_indices) {
+                    const int32_t es = gene_model_.exon_start(ei), ee = gene_model_.exon_end(ei);
+                    if (es >= be) break;
+                    in_exon += std::max(0, std::min(be, ee) - std::max(bs, es));
+                }
+            }
+            if (in_body - in_exon <= 5) rf.diag |= D::kDiagFlank;
+        }
+        if (!molecule_dump_.empty()) {
+            // opposite-strand genes (exons or introns) under the read: diagnostics only
+            bool anti = false;
+            for (const auto& [bs, be] : blocks) {
+                for (int k = 0; k < 2 && !anti; ++k) {
+                    if (k == 0) gene_model_.query_exons(tid, bs, be, scratch);
+                    else gene_model_.query_introns(tid, bs, be, scratch);
+                    for (uint32_t idx : scratch) {
+                        uint32_t og = k == 0 ? gene_model_.exon_to_gene(idx) : gene_model_.intron_to_gene(idx);
+                        char gs = gene_model_.gene_strand(og);
+                        if (gs == '.') continue;
+                        bool expect_reverse = (gs == '-');
+                        if (config_.reverse_strand) expect_reverse = !expect_reverse;
+                        if (read_reverse != expect_reverse) { anti = true; break; }
+                    }
+                }
+                if (anti) break;
+            }
+            if (anti) rf.diag |= D::kDiagAntisense;
+        }
+        if (!intronic) return;
+        if (((rules & intron_rule::kUnique) && nh > 1) ||
+            ((rules & intron_rule::kContained) && (rf.diag & D::kDiagOutside)) ||
+            ((rules & intron_rule::kNoSplicedIntron) && has_n)) {
+            rf = ReadFeatures{};
+            return;
+        }
+        if ((rules & intron_rule::kFlank) && (rf.diag & D::kDiagFlank)) {
+            rf.flags = kExonicReadFlags;
+            rf.intron_idx = UINT32_MAX;
+        }
     }
 
     // Count one gene-assigned read. With a UMI the read joins its molecule in
@@ -3438,7 +3620,7 @@ private:
         }
         if (config_.umi_dedup && umi_str && umi_len > 0) {
             store.record_read(bc_idx, rf.gene, umi_pack_2bit(umi_str, umi_len),
-                              rf.exon_idx, rf.intron_idx, flags);
+                              rf.exon_idx, rf.intron_idx, flags, rf.diag);
             st.umi_duplicate++;  // reads recorded; molecules are subtracted at finalize
         } else if (intronic) {
             intron.increment(rf.intron_idx, bc_idx);
@@ -3460,11 +3642,108 @@ private:
             config_.umi_len, config_.umi_dedup_directional);
     }
 
-    static void add_molecule_stats(PileupStats& st, const DirectionalUmiStore::MoleculeStats& ms) {
+    // Label and emit the molecules of several stores (one per worker; each store
+    // emits into its own accumulators). With no molecule rule and no dump this is
+    // finalize_store() per store. Otherwise the molecules of all stores are
+    // collapsed first so a UMI can be checked across every gene of its cell
+    // (genes on different chromosomes live in different workers' stores).
+    struct FinalizeTarget {
+        const DirectionalUmiStore* store;
+        SparseAccumulator<uint16_t>* exon;
+        SparseAccumulator<uint16_t>* intron;
+        SparseAccumulator<uint16_t>* amb;
+    };
+    DirectionalUmiStore::MoleculeStats finalize_all(const std::vector<FinalizeTarget>& targets) const {
+        using D = DirectionalUmiStore;
+        const uint32_t mrules = config_.intron_rules & intron_rule::kMoleculeRules;
+        D::MoleculeStats st;
+        if (!mrules && molecule_dump_.empty()) {
+            for (const auto& t : targets) st += finalize_store(*t.store, *t.exon, *t.intron, *t.amb);
+            return st;
+        }
+        const bool track_amb = config_.count_introns && has_gene_model_;
+        std::vector<std::vector<D::Molecule>> mols(targets.size());
+        for (size_t i = 0; i < targets.size(); ++i)
+            targets[i].store->collapse_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+
+        // Each (bc, gene, root UMI) is one molecule, so a (bc, UMI) seen k times is in k genes.
+        struct UmiKey {
+            uint64_t umi; uint32_t bc;
+            bool operator==(const UmiKey& o) const { return umi == o.umi && bc == o.bc; }
+        };
+        struct UmiKeyHash {
+            size_t operator()(const UmiKey& k) const {
+                uint64_t h = k.umi * 0x9e3779b97f4a7c15ULL ^ (static_cast<uint64_t>(k.bc) + 0x632be59bd9b4e019ULL);
+                h ^= h >> 31; h *= 0xbf58476d1ce4e5b9ULL; h ^= h >> 29;
+                return static_cast<size_t>(h);
+            }
+        };
+        struct UmiGenes { uint32_t n_genes = 0, best_count = 0, best_gene = UINT32_MAX; bool tie = false; };
+        std::unordered_map<UmiKey, UmiGenes, UmiKeyHash> ug;
+        if (mrules) {
+            size_t n = 0;
+            for (const auto& v : mols) n += v.size();
+            ug.reserve(n);
+            for (const auto& v : mols)
+                for (const auto& m : v) {
+                    auto& u = ug[{m.umi, m.bc}];
+                    u.n_genes++;
+                    if (m.count > u.best_count) { u.best_count = m.count; u.best_gene = m.gene; u.tie = false; }
+                    else if (m.count == u.best_count) u.tie = true;
+                }
+        }
+        auto dropped = [&](const D::Molecule& m) {
+            if (!mrules) return false;
+            const auto& u = ug.find({m.umi, m.bc})->second;
+            if (u.n_genes <= 1) return false;
+            if (mrules & intron_rule::kUmiGeneCR) return u.tie || m.gene != u.best_gene;
+            if (mrules & intron_rule::kUmiGeneAll) return true;
+            return m.label() != D::MoleculeLabel::Spliced;  // kUmiGene
+        };
+
+        gzFile dump = molecule_dump_.empty() ? nullptr : gzopen(molecule_dump_.c_str(), "wb1");
+        if (dump) gzputs(dump, "barcode\tgene_id\tumi\tlabel\tflags\tdiag\treads\n");
+        std::string umi_s(static_cast<size_t>(config_.umi_len > 0 ? config_.umi_len : 12), 'N');
+        std::string line;
+        for (size_t i = 0; i < targets.size(); ++i) {
+            const auto& t = targets[i];
+            for (const auto& m : mols[i]) {
+                const bool drop = dropped(m);
+                if (drop) st.dropped++;
+                else D::emit_molecule(m, *t.exon, *t.intron,
+                                      [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st);
+                if (!dump) continue;
+                for (size_t k = 0; k < umi_s.size(); ++k) umi_s[k] = "ACGT"[(m.umi >> (2 * k)) & 3];
+                const char lab = drop ? 'D' : "SUA"[static_cast<int>(m.label())];
+                line.clear();
+                line += (m.bc < barcodes_.size() ? barcodes_[m.bc] : std::to_string(m.bc));
+                line += '\t'; line += gene_model_.gene_ids()[m.gene];
+                line += '\t'; line += umi_s;
+                line += '\t'; line += lab;
+                line += '\t'; line += std::to_string(m.flags);
+                line += '\t'; line += std::to_string(m.diag);
+                line += '\t'; line += std::to_string(m.count);
+                line += '\n';
+                gzwrite(dump, line.data(), static_cast<unsigned>(line.size()));
+            }
+        }
+        if (dump) {
+            gzclose(dump);
+            std::cerr << "[singlet-pileup] molecule dump: " << molecule_dump_ << "\n";
+        }
+        if (mrules)
+            std::cerr << "[singlet-pileup] intron rules 0x" << std::hex << config_.intron_rules << std::dec
+                      << ": " << st.dropped << " molecules of multi-gene UMIs dropped\n";
+        return st;
+    }
+
+    void add_molecule_stats(PileupStats& st, const DirectionalUmiStore::MoleculeStats& ms) const {
         st.molecules_spliced += ms.spliced;
         st.molecules_unspliced += ms.unspliced;
         st.molecules_ambiguous += ms.ambiguous;
         st.molecules_legacy_double += ms.legacy_double;
+        st.molecules_dropped_multigene_umi += ms.dropped;
+        st.intron_rules = config_.intron_rules;
         st.umi_unique = ms.total();
         // count_read() counted every recorded read in umi_duplicate
         st.umi_duplicate = st.umi_duplicate > ms.total() ? st.umi_duplicate - ms.total() : 0;
@@ -3623,6 +3902,7 @@ private:
                                             if (it->second.second_gene == UINT32_MAX)
                                                 it->second.second_gene = hit.gene_idx;
                                         }
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
                                         // Without a primary assignment, the smallest exon over the
                                         // secondaries, not the first seen (order-free-rules R7)
                                         if (!it->second.primary_assigned &&
@@ -3649,6 +3929,7 @@ private:
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
                                     }
                                 }
                             }
@@ -3758,6 +4039,7 @@ private:
         // ── Exon + Intron counting ──
         if (has_gene_model_) {
             wc.aligned_blocks.clear();
+            bool read_has_n = false;
             {
                 const uint32_t* cigar = bam_get_cigar(b);
                 int32_t rpos = b->core.pos;
@@ -3768,7 +4050,10 @@ private:
                         case BAM_CMATCH: case BAM_CEQUAL: case BAM_CDIFF:
                             wc.aligned_blocks.push_back({rpos, rpos + len});
                             rpos += len; break;
-                        case BAM_CDEL: case BAM_CREF_SKIP:
+                        case BAM_CREF_SKIP:
+                            read_has_n = true;
+                            rpos += len; break;
+                        case BAM_CDEL:
                             rpos += len; break;
                         default: break;
                     }
@@ -3861,6 +4146,7 @@ private:
             ReadFeatures rf = classify_read(exon_gene, first_exon_idx, primary_multigene,
                                             wc.intron_overlaps, intron_gene, first_intron_idx,
                                             wc.stats);
+            refine_read(rf, wc.aligned_blocks, read_has_n, nh, tid, read_reverse, wc.block_overlaps);
             if (nh == 1) wc.cur_gene = rf.gene;   // R9: evidence UMIs are corrected within (cell, gene)
             if (nh == 1 && config_.count_polya && !config_.reverse_strand && rf.gene != UINT32_MAX) {
                 uint64_t pk;
@@ -3883,6 +4169,8 @@ private:
                     entry.exon_idx = rf.exon_idx;
                     entry.intron_idx = rf.intron_idx;
                     entry.read_flags = rf.flags;
+                    entry.read_diag = rf.diag;
+                    note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
                 }
                 if (umi_str && umi_len > 0) {
                     int clen = std::min(umi_len, 15);
@@ -4099,6 +4387,58 @@ public:
         }
     }
 };
+
+/// Gene-level layers of a finished pass, one line per (barcode, gene) with any count:
+/// barcode, gene_id, exon (spliced + ambiguous), intron (unspliced), ambiguous. Barcodes with
+/// fewer than `min_umi` molecules in total are left out. Used by the SINGLET_INTRON_SWEEP
+/// experiment (src/pipeline/singlet.cpp) to compare intron rules on one alignment.
+inline bool write_gene_layers_tsv(const PileupEngine& e, const std::string& path, uint32_t min_umi = 100) {
+    const auto& gm = e.gene_model();
+    const uint32_t ng = gm.n_genes();
+    auto ex = e.exons().to_csc();
+    auto in = e.introns().to_csc();
+    auto am = e.ambiguous().to_csc();
+    gzFile f = gzopen(path.c_str(), "wb1");
+    if (!f) return false;
+    gzputs(f, "barcode\tgene_id\texon\tintron\tambiguous\n");
+    std::vector<uint32_t> ge(ng), gi(ng), ga(ng);
+    std::vector<uint32_t> touched;
+    const auto& bcs = e.barcodes();
+    std::string line;
+    for (uint32_t c = 0; c < ex.ncols; ++c) {
+        touched.clear();
+        uint64_t tot = 0;
+        auto add = [&](const auto& m, std::vector<uint32_t>& v, bool exon_rows, bool intron_rows) {
+            if (c >= m.ncols) return;
+            for (int32_t k = m.indptr[c]; k < m.indptr[c + 1]; ++k) {
+                uint32_t r = static_cast<uint32_t>(m.indices[k]);
+                uint32_t g = exon_rows ? gm.exon_to_gene(r) : intron_rows ? gm.intron_to_gene(r) : r;
+                if (g >= ng) continue;
+                if (!ge[g] && !gi[g] && !ga[g]) touched.push_back(g);
+                v[g] += m.data[k];
+            }
+        };
+        add(ex, ge, true, false);
+        add(in, gi, false, true);
+        add(am, ga, false, false);
+        for (uint32_t g : touched) tot += ge[g] + gi[g];
+        if (tot >= min_umi && c < bcs.size()) {
+            std::sort(touched.begin(), touched.end());
+            for (uint32_t g : touched) {
+                line.clear();
+                line += bcs[c]; line += '\t'; line += gm.gene_ids()[g];
+                line += '\t'; line += std::to_string(ge[g]);
+                line += '\t'; line += std::to_string(gi[g]);
+                line += '\t'; line += std::to_string(ga[g]);
+                line += '\n';
+                gzwrite(f, line.data(), static_cast<unsigned>(line.size()));
+            }
+        }
+        for (uint32_t g : touched) ge[g] = gi[g] = ga[g] = 0;
+    }
+    gzclose(f);
+    return true;
+}
 
 /// Post-pileup strand safety net. If most nuclear strand-informative reads of a
 /// finished pass are antisense to the orientation it counted with

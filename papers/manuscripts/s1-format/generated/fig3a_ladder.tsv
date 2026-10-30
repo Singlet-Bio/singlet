@@ -1,0 +1,7 @@
+pos	key	label	median	q1	q3	lo	hi	n	em	ep	rm	rp
+0	L0_csc_i32	CSC as 32-bit integers						0				
+1	L1_leb128	variable-length integers						0				
+2	L2_gaps_leb_zstd3	gaps + LEB128 + zstd-3						0				
+3	L3_gaps_leb_zstd19	gaps + LEB128 + zstd-19						0				
+4	L4_s1_payload	\textbf{.s1}						0				
+5	floor	best count model (cross-validated)						0				
