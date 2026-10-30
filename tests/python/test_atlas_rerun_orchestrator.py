@@ -339,3 +339,151 @@ def test_slurm_parsers():
         )
         < 1e-9
     )
+
+
+def test_strand_contradiction_exit_8_reruns_on_the_sorted_path():
+    import stages as S
+
+    cmd = ["singlet", "s.1fq", "--pipeline", "--genome-shared", "off"]
+    assert S.STRAND_CONTRADICTION == 8
+    assert S.strand_retry_cmd(cmd) == cmd + ["--sorted-bam"]
+    assert S.strand_retry_cmd(cmd + ["--sorted-bam"]) == cmd + ["--sorted-bam"]  # never doubled
+    assert S.strand_retry_cmd(cmd) is not cmd and cmd[-1] == "off"  # the first command is untouched
+    # still contradicting after the sorted-path retry: reported as such, not as a generic exit
+    assert S.classify_failure(8, "...") == "strand_contradiction"
+    assert S.classify_failure(137, "") == "oom"
+
+
+def _compute(tmp_path, monkeypatch, staged, rcs, pooled=False):
+    """Run compute_stage with the engine replaced by a recorder that answers `rcs` in turn."""
+    import stages as S
+
+    tmp_path.mkdir(exist_ok=True)
+    cfg = make_cfg(tmp_path)
+    cfg["pipeline"]["pooled_input"] = pooled
+    ccfg = cfg["clusters"]["clipper"]
+    ccfg.update(scratch=str(tmp_path / "scr"), stage_root=str(tmp_path / "stage"))
+    sdir = tmp_path / "stage" / "GSM1"
+    sdir.mkdir(parents=True)
+    for name in staged:
+        (sdir / name).write_text("x")
+    calls = []
+
+    def fake_run(cmd, log, env=None, cwd=None, timeout=None):
+        calls.append(list(cmd))
+        return rcs[len(calls) - 1], 1.0, "out"
+
+    monkeypatch.setattr(S, "run", fake_run)
+    monkeypatch.setattr(S, "verify_binary", lambda ctx: None)
+    monkeypatch.setattr(S, "collect_outputs", lambda *a: (str(tmp_path / "o"), None, "sha", 1))
+    ctx = S.Ctx(cfg, ccfg)
+    rc = S.compute_stage(ctx, {"gsm": "GSM1", "gse": "GSE1"}, 0, 4)
+    return rc, calls
+
+
+def test_multi_run_sample_gets_its_per_run_files_not_a_pool(tmp_path, monkeypatch):
+    rc, calls = _compute(tmp_path / "a", monkeypatch, ["SRR1.1fq", "SRR2.1fq", "screen.json"], [0])
+    cmd = calls[0]
+    assert rc == 0 and cmd[cmd.index("--runs-dir") + 1].endswith("GSM1")
+    assert "--run-screen" in cmd and not any(x.endswith("sample.1fq") for x in cmd)
+    # the legacy pooled sample (and a single-run sample) is still one positional file
+    rc, calls = _compute(tmp_path / "b", monkeypatch, ["sample.1fq", "screen.json"], [0])
+    assert calls[0][calls[0].index("--ref-base") - 1].endswith("sample.1fq") and "--runs-dir" not in calls[0]
+
+
+def test_per_run_files_without_a_screen_fail_early(tmp_path, monkeypatch):
+    rc, calls = _compute(tmp_path / "a", monkeypatch, ["SRR1.1fq", "SRR2.1fq"], [0])
+    assert rc == 1 and not calls
+
+
+def test_exit_8_in_compute_stage_reruns_once_on_the_sorted_path(tmp_path, monkeypatch):
+    rc, calls = _compute(tmp_path / "a", monkeypatch, ["sample.1fq"], [8, 0])
+    assert rc == 0 and len(calls) == 2 and "--sorted-bam" in calls[1] and "--sorted-bam" not in calls[0]
+    rc, calls = _compute(tmp_path / "b", monkeypatch, ["sample.1fq"], [8, 8])
+    assert rc == 1 and len(calls) == 2  # a second exit 8 is not retried again
+
+
+def test_job_slots_from_node_memory():
+    # deep GSM7036403 with the shared index: 33.4 GB per job, 17.8 GB index once per node (S1's measurement)
+    assert C.job_slots(512, 128, 4) == 13
+    assert C.job_slots(768, 128, 8) == 16  # cores bind first
+    assert C.job_slots(768, 256, 4) == 20  # memory binds
+    assert C.job_slots(64, 128, 4) == 1  # never zero
+    assert C.job_slots(0, 128, 4) == 32  # memory unknown: cores only
+
+
+def test_beta_target_guard():
+    import beta
+
+    ok = {"base": "https://beta.singlet.bio", "bucket": "singlet-beta-data", "database": "singlet-beta-catalog"}
+    assert beta.check_target(ok) == "https://beta.singlet.bio"
+    for bad in ({"base": "https://singlet.bio"}, {"base": "https://data.singlet.bio"}, {"bucket": "singlet-data"},
+                {"database": "singlet-catalog"}, {"bucket": None}, {"base": "https://evil.example@singlet.bio"}):
+        try:
+            beta.check_target({**ok, **bad})
+        except beta.BetaRefused:
+            continue
+        raise AssertionError("accepted %r" % bad)
+
+
+def test_beta_manifest_refuses_private_keys():
+    import beta
+
+    good = {"samples": [{"key": "s1/s/GSM1/" + "a" * 32 + ".s1"}]}
+    assert beta.check_manifest_keys(good) == [good["samples"][0]["key"]]
+    for k in ("private/GSE1/GSM1/snp.tsv", "s1/s/GSM1/private/x.s1", "restricted/GSE1/x.singlet", "GSM1.bam"):
+        try:
+            beta.check_manifest_keys({"samples": [{"key": k}]})
+        except beta.BetaRefused:
+            continue
+        raise AssertionError(k)
+
+
+def test_beta_publish_dry_run_and_real_run_with_a_stand_in_uploader(tmp_path):
+    import hashlib
+
+    import beta
+
+    cfg = make_cfg(tmp_path)
+    ccfg = cfg["clusters"]["clipper"]
+    root = ccfg["root"]
+    os.makedirs(os.path.join(root, "handoff"))
+    open(os.path.join(root, "handoff", "GSE1.json"), "w").write("{}")
+    body = b"s1-object"
+    sha = hashlib.sha256(body).hexdigest()
+    key = "s1/s/GSM1/%s.s1" % sha[:32]
+    manifest = {"gse": "GSE1", "rev": "r", "samples": [{"gsm": "GSM1", "key": key, "bytes": len(body), "sha256": sha}]}
+    producer = tmp_path / "producer.py"
+    producer_src = (
+        "import json, os, sys\n"
+        "work = sys.argv[1]\n"
+        "os.makedirs(os.path.join(work, 's1', 's', 'GSM1'), exist_ok=True)\n"
+        "open(os.path.join(work, %r), 'wb').write(BODY)\n"
+        "json.dump(%r, open(os.path.join(work, 'GSE1.manifest.json'), 'w'))\n" % (key, manifest))
+    producer.write_text("BODY = %r\n" % body + producer_src)
+    uploader = tmp_path / "beta_ingest.py"
+    uploader.write_text(
+        "import hashlib, json, re, sys\n"
+        "DIGEST_RE = re.compile(r'/([0-9a-f]{32})\\.')\n"
+        "def sha256_file(p):\n    return hashlib.sha256(open(p, 'rb').read()).hexdigest()\n"
+        "class Client:\n    def __init__(s, b, t): pass\n    def call(s, *a, **k): return 404, {}\n"
+        "if __name__ == '__main__':\n"
+        "    print(json.dumps({'gse': 'GSE1', 'uploaded': 1, 'bytes_sent': 9, 'd1_rows_written': 6})); sys.exit(0)\n")
+    cfg["beta"].update(enabled=True, uploader=str(uploader), retries=2, retry_wait_s=0,
+                       producer=[sys.executable, str(producer), "{work}"])
+    # no token: a dry run still verifies the objects locally; a real run refuses to start
+    r = beta.publish_study(cfg, ccfg, "GSE1", dry_run=True, env={})
+    assert r["status"] == "dry_run_ok" and r["objects"] == 1 and r["present"] is None
+    assert beta.publish_study(cfg, ccfg, "GSE1", env={})["status"] == "failed"
+    r = beta.publish_study(cfg, ccfg, "GSE1", env={"SINGLET_INGEST_TOKEN": "t"})
+    assert r["status"] == "published" and r["d1_rows_written"] == 6
+    # no producer configured: nothing is uploaded; a production target is refused before anything runs
+    keep = cfg["beta"]["producer"]
+    cfg["beta"]["producer"] = None
+    assert beta.publish_study(cfg, ccfg, "GSE1", env={})["status"] == "no_producer"
+    cfg["beta"]["bucket"] = "singlet-data"
+    assert beta.publish_study(cfg, ccfg, "GSE1", env={"SINGLET_INGEST_TOKEN": "t"})["status"] == "refused"
+    # an object that differs from the manifest is refused locally
+    cfg["beta"].update(bucket="singlet-beta-data", producer=keep)
+    producer.write_text(producer.read_text().replace(repr(body), repr(b"tampered")))
+    assert beta.publish_study(cfg, ccfg, "GSE1", env={"SINGLET_INGEST_TOKEN": "t"})["status"] == "refused"
