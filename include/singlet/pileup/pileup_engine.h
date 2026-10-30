@@ -841,7 +841,7 @@ public:
                     guide_seq_buf_.resize(static_cast<size_t>(qlen));
                     for (int qi = 0; qi < qlen; ++qi)
                         guide_seq_buf_[qi] = seq_nt16_str[bam_seqi(qseq, qi)];
-                    int gid = guide_ref_.match(guide_seq_buf_.data(), qlen);
+                    int gid = guide_ref_.match_bam(guide_seq_buf_.data(), qlen, (b->core.flag & BAM_FREVERSE) != 0);
                     if (gid >= 0) {
                         guide_ctr_.count(static_cast<uint32_t>(bc_idx),
                                          static_cast<uint32_t>(gid),
@@ -3487,7 +3487,7 @@ private:
                 wc.guide_seq_buf.resize(static_cast<size_t>(qlen));
                 for (int qi = 0; qi < qlen; ++qi)
                     wc.guide_seq_buf[qi] = seq_nt16_str[bam_seqi(qseq, qi)];
-                int gid = guide_ref_.match(wc.guide_seq_buf.data(), qlen);
+                int gid = guide_ref_.match_bam(wc.guide_seq_buf.data(), qlen, (b->core.flag & BAM_FREVERSE) != 0);
                 if (gid >= 0) {
                     bool should_count = true;
                     if (umi_len > 0 && umi_str)
