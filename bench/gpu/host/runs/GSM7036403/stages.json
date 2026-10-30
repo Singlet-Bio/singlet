@@ -1,0 +1,23 @@
+{
+ "dir": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/w11/host/runs/GSM7036403",
+ "star_total": 751.144,
+ "sort": 204.144,
+ "index": 9.44505,
+ "cb_refresh": 31.0983,
+ "pileup_pass": 37.7166,
+ "pileup_total": 79.5257,
+ "fq_pass1": 40.6879,
+ "ref_load": 45.2106,
+ "export_csc": 4.07023,
+ "strand_rerun_logged": false,
+ "reads": 128399687,
+ "wall": 1122.9,
+ "user_s": 2582.97,
+ "sys_s": 363.73,
+ "maxrss_kb": 57077616.0,
+ "cpu_s": 2946.7,
+ "memory_peak_mb": "81920",
+ "node": "c008.clipper.gvsu.edu",
+ "cotenant_cpus": 48,
+ "loadavg": "27.98 9.51 5.48"
+}

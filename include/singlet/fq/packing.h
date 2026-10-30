@@ -12,9 +12,12 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <vector>
+
+#include "types.h"
 
 namespace singlet::fq {
 namespace pack {
@@ -167,6 +170,46 @@ inline void unpack_qual_binned4(const uint8_t* src, uint32_t n_bases,
     for (uint32_t r = 0; r < remain; ++r) {
         dst[i + r] = centers[(src[full_bytes] >> (6 - r * 2)) & 0x03];
     }
+}
+
+// ── 4-level quality through a table: bin_of[phred] -> 0..3, phred_of[bin] -> Phred (QualMode::ILLUMINA4) ──
+
+inline void pack_qual_4level(const uint8_t* phred_src, uint32_t n_bases, uint8_t* dst, const uint8_t* bin_of) {
+    uint32_t full_bytes = n_bases / 4;
+    uint32_t i = 0;
+    for (uint32_t b = 0; b < full_bytes; ++b, i += 4)
+        dst[b] = static_cast<uint8_t>((bin_of[phred_src[i]] << 6) | (bin_of[phred_src[i + 1]] << 4) |
+                                      (bin_of[phred_src[i + 2]] << 2) | bin_of[phred_src[i + 3]]);
+    uint32_t remain = n_bases - full_bytes * 4;
+    if (remain > 0) {
+        uint8_t last = 0;
+        for (uint32_t r = 0; r < remain; ++r) last |= static_cast<uint8_t>(bin_of[phred_src[i + r]] << (6 - r * 2));
+        dst[full_bytes] = last;
+    }
+}
+
+inline void unpack_qual_4level(const uint8_t* src, uint32_t n_bases, uint8_t* dst, const uint8_t* phred_of) {
+    uint32_t full_bytes = n_bases / 4;
+    uint32_t i = 0;
+    for (uint32_t b = 0; b < full_bytes; ++b, i += 4) {
+        const uint8_t v = src[b];
+        dst[i] = phred_of[(v >> 6) & 0x03];
+        dst[i + 1] = phred_of[(v >> 4) & 0x03];
+        dst[i + 2] = phred_of[(v >> 2) & 0x03];
+        dst[i + 3] = phred_of[v & 0x03];
+    }
+    uint32_t remain = n_bases - full_bytes * 4;
+    for (uint32_t r = 0; r < remain; ++r) dst[i + r] = phred_of[(src[full_bytes] >> (6 - r * 2)) & 0x03];
+}
+
+// Phred -> ILLUMINA4 bin for every byte value (qualities above 93 cannot occur in FASTQ but are binned, not read past)
+inline const uint8_t* ilmn4_bin_table() {
+    static const auto t = [] {
+        std::array<uint8_t, 256> a{};
+        for (int q = 0; q < 256; ++q) a[q] = qual::phred_to_ilmn4(static_cast<uint8_t>(q));
+        return a;
+    }();
+    return t.data();
 }
 
 // ── Pack quality scores to binned-2 (1 bit each, pass/fail at Q20) ──

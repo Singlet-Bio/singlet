@@ -4,8 +4,8 @@
 .. note::
    The public per-sample host this module was written for
    (``https://data.singlet.bio/v1``) was retired. Public data is published in
-   the v2 format (one immutable ``.s2`` object per sample plus a study manifest
-   under ``https://data.singlet.bio/v2/``; the per-study ``.singlet`` bundle is
+   the per-sample format (one immutable ``.s1`` object per sample plus a study manifest
+   under ``https://data.singlet.bio/s1/``; the per-study ``.singlet`` bundle is
    being retired). Use :func:`singlet.load`, :func:`singlet.download` or
    :func:`singlet.open_bundle` for it, and :func:`singlet.find` to search.
    :func:`fetch` still works against a self-hosted mirror of sample
@@ -62,7 +62,7 @@ _LEGACY_ENV = "SINGLET_DATA_BASE"
 
 _RETIRED_HOST_MSG = (
     "singlet.fetch() downloaded per-sample directories from https://data.singlet.bio/v1, "
-    "which has been retired. Public data is now served in the v2 format (one object per sample, "
+    "which has been retired. Public data is now served in the per-sample format (one object per sample, "
     "fetched with range requests): use singlet.load('GSE…' or 'GSM…') for an AnnData, "
     "singlet.download('GSE…') for an offline copy, or singlet.find('…') to search. To fetch from a "
     "self-hosted mirror of sample directories, pass base_url= or set $SINGLET_SAMPLE_MIRROR."

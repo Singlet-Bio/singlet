@@ -1,0 +1,631 @@
+{
+ "dataset": "pbmc1k_v3",
+ "n_cells": 1230,
+ "singlet_molecules": 14282171,
+ "star_umis": 14043684,
+ "star_labels": {
+  "S": 7643556,
+  "U": 4785373,
+  "A": 1368737,
+  "M": 178514,
+  "E": 67504
+ },
+ "singlet_labels": {
+  "S": 9455676,
+  "U": 4632924,
+  "A": 193571
+ },
+ "cross": {
+  "S": {
+   "star_S": 7342373,
+   "star_A": 1317974,
+   "star_none": 652055,
+   "star_M": 68972,
+   "star_other_gene": 39175,
+   "star_E": 29366,
+   "star_U": 5761
+  },
+  "U": {
+   "star_U": 4296171,
+   "star_none": 163581,
+   "star_E": 96776,
+   "star_other_gene": 63519,
+   "star_S": 6898,
+   "star_M": 4186,
+   "star_A": 1793
+  },
+  "A": {
+   "star_S": 94187,
+   "star_U": 86394,
+   "star_A": 5202,
+   "star_none": 4388,
+   "star_E": 1630,
+   "star_M": 1577,
+   "star_other_gene": 193
+  },
+  "D": {}
+ },
+ "af_labels": {
+  "A": 7425853,
+  "U": 5321487,
+  "M": 2570616,
+  "S": 1095310
+ },
+ "cross_af": {
+  "S": {
+   "af_A": 6667722,
+   "af_M": 1561011,
+   "af_S": 964070,
+   "af_none": 181495,
+   "af_other_gene": 80146,
+   "af_U": 1232
+  },
+  "U": {
+   "af_U": 3728626,
+   "af_M": 516105,
+   "af_none": 251523,
+   "af_other_gene": 122753,
+   "af_A": 12356,
+   "af_S": 1561
+  },
+  "A": {
+   "af_A": 159896,
+   "af_M": 18404,
+   "af_S": 10611,
+   "af_U": 3034,
+   "af_other_gene": 976,
+   "af_none": 650
+  },
+  "D": {}
+ },
+ "singlet_U_star_x_af": {
+  "af_A": {
+   "star_A": 724,
+   "star_E": 204,
+   "star_M": 2,
+   "star_S": 3661,
+   "star_U": 7014,
+   "star_none": 747,
+   "star_other_gene": 4
+  },
+  "af_M": {
+   "star_A": 331,
+   "star_E": 26994,
+   "star_M": 3802,
+   "star_S": 759,
+   "star_U": 393229,
+   "star_none": 77930,
+   "star_other_gene": 13060
+  },
+  "af_S": {
+   "star_A": 69,
+   "star_E": 6,
+   "star_M": 3,
+   "star_S": 1256,
+   "star_U": 22,
+   "star_none": 204,
+   "star_other_gene": 1
+  },
+  "af_U": {
+   "star_A": 507,
+   "star_E": 24745,
+   "star_M": 15,
+   "star_S": 777,
+   "star_U": 3678505,
+   "star_none": 23635,
+   "star_other_gene": 442
+  },
+  "af_none": {
+   "star_A": 155,
+   "star_E": 11534,
+   "star_M": 314,
+   "star_S": 373,
+   "star_U": 193298,
+   "star_none": 38872,
+   "star_other_gene": 6977
+  },
+  "af_other_gene": {
+   "star_A": 7,
+   "star_E": 33293,
+   "star_M": 50,
+   "star_S": 72,
+   "star_U": 24103,
+   "star_none": 22193,
+   "star_other_gene": 43035
+  }
+ },
+ "singlet_U_neither_other_U": 286632,
+ "af_U_total_in_cells": 5321487,
+ "star_U_total_in_cells": 4785373,
+ "singlet_U_by_class": {
+  "star_A": {
+   "multi": 19,
+   "spliced": 41,
+   "flank": 1609,
+   "othergene": 2,
+   "antisense": 362,
+   "outside": 2,
+   "none": 137,
+   "umi_in_2plus_genes": 4,
+   "gene_overlap_same": 276,
+   "gene_overlap_anti": 1134,
+   "gene_len_ge_100kb": 391,
+   "reads_1": 1366,
+   "n": 1793
+  },
+  "star_E": {
+   "multi": 6582,
+   "spliced": 1301,
+   "flank": 260,
+   "othergene": 76,
+   "antisense": 21386,
+   "outside": 781,
+   "none": 69110,
+   "umi_in_2plus_genes": 92556,
+   "gene_overlap_same": 20669,
+   "gene_overlap_anti": 62143,
+   "gene_len_ge_100kb": 49944,
+   "reads_1": 50404,
+   "n": 96776
+  },
+  "star_M": {
+   "multi": 1074,
+   "spliced": 175,
+   "flank": 196,
+   "othergene": 2973,
+   "antisense": 477,
+   "outside": 127,
+   "none": 62,
+   "umi_in_2plus_genes": 381,
+   "gene_overlap_same": 3232,
+   "gene_overlap_anti": 1868,
+   "gene_len_ge_100kb": 989,
+   "reads_1": 2415,
+   "n": 4186
+  },
+  "star_S": {
+   "multi": 73,
+   "spliced": 1051,
+   "flank": 6586,
+   "othergene": 48,
+   "antisense": 1015,
+   "outside": 7,
+   "none": 162,
+   "umi_in_2plus_genes": 24,
+   "gene_overlap_same": 587,
+   "gene_overlap_anti": 2835,
+   "gene_len_ge_100kb": 794,
+   "reads_1": 5335,
+   "n": 6898
+  },
+  "star_U": {
+   "multi": 68641,
+   "spliced": 22621,
+   "flank": 7676,
+   "othergene": 62,
+   "antisense": 393535,
+   "outside": 3746,
+   "none": 3818720,
+   "umi_in_2plus_genes": 52673,
+   "gene_overlap_same": 934339,
+   "gene_overlap_anti": 2598361,
+   "gene_len_ge_100kb": 2468317,
+   "reads_1": 996473,
+   "n": 4296171
+  },
+  "star_none": {
+   "multi": 142538,
+   "spliced": 16831,
+   "flank": 1429,
+   "othergene": 135,
+   "antisense": 24733,
+   "outside": 9542,
+   "none": 7475,
+   "umi_in_2plus_genes": 44036,
+   "gene_overlap_same": 41497,
+   "gene_overlap_anti": 92522,
+   "gene_len_ge_100kb": 64115,
+   "reads_1": 110405,
+   "n": 163581
+  },
+  "star_other_gene": {
+   "multi": 53652,
+   "spliced": 8314,
+   "flank": 69,
+   "othergene": 96,
+   "antisense": 11141,
+   "outside": 6374,
+   "none": 3667,
+   "umi_in_2plus_genes": 62301,
+   "gene_overlap_same": 11972,
+   "gene_overlap_anti": 37040,
+   "gene_len_ge_100kb": 31867,
+   "reads_1": 53255,
+   "n": 63519
+  }
+ },
+ "singlet_U_by_af_class": {
+  "af_A": {
+   "multi": 696,
+   "spliced": 995,
+   "flank": 6224,
+   "othergene": 50,
+   "antisense": 239,
+   "outside": 33,
+   "none": 4898,
+   "umi_in_2plus_genes": 314,
+   "gene_overlap_same": 1753,
+   "gene_overlap_anti": 5356,
+   "gene_len_ge_100kb": 2873,
+   "reads_1": 5031,
+   "n": 12356
+  },
+  "af_M": {
+   "multi": 98151,
+   "spliced": 6518,
+   "flank": 2794,
+   "othergene": 2962,
+   "antisense": 392877,
+   "outside": 3133,
+   "none": 41713,
+   "umi_in_2plus_genes": 80984,
+   "gene_overlap_same": 136809,
+   "gene_overlap_anti": 452963,
+   "gene_len_ge_100kb": 229291,
+   "reads_1": 171882,
+   "n": 516105
+  },
+  "af_S": {
+   "multi": 118,
+   "spliced": 781,
+   "flank": 1429,
+   "othergene": 13,
+   "antisense": 196,
+   "outside": 1,
+   "none": 17,
+   "umi_in_2plus_genes": 8,
+   "gene_overlap_same": 144,
+   "gene_overlap_anti": 608,
+   "gene_len_ge_100kb": 165,
+   "reads_1": 1218,
+   "n": 1561
+  },
+  "af_U": {
+   "multi": 75734,
+   "spliced": 20904,
+   "flank": 6060,
+   "othergene": 15,
+   "antisense": 9071,
+   "outside": 3216,
+   "none": 3621976,
+   "umi_in_2plus_genes": 60784,
+   "gene_overlap_same": 795680,
+   "gene_overlap_anti": 2112033,
+   "gene_len_ge_100kb": 2190585,
+   "reads_1": 786325,
+   "n": 3728626
+  },
+  "af_none": {
+   "multi": 40030,
+   "spliced": 11134,
+   "flank": 1001,
+   "othergene": 243,
+   "antisense": 30121,
+   "outside": 6442,
+   "none": 180955,
+   "umi_in_2plus_genes": 26537,
+   "gene_overlap_same": 53904,
+   "gene_overlap_anti": 150978,
+   "gene_len_ge_100kb": 128675,
+   "reads_1": 160182,
+   "n": 251523
+  },
+  "af_other_gene": {
+   "multi": 57850,
+   "spliced": 10002,
+   "flank": 317,
+   "othergene": 109,
+   "antisense": 20145,
+   "outside": 7754,
+   "none": 49774,
+   "umi_in_2plus_genes": 83348,
+   "gene_overlap_same": 24282,
+   "gene_overlap_anti": 73965,
+   "gene_len_ge_100kb": 64828,
+   "reads_1": 95015,
+   "n": 122753
+  }
+ },
+ "singlet_U_neither": {
+  "multi": 181106,
+  "spliced": 24806,
+  "flank": 8960,
+  "othergene": 3328,
+  "antisense": 58732,
+  "outside": 16386,
+  "none": 56906,
+  "umi_in_2plus_genes": 173358,
+  "gene_overlap_same": 66178,
+  "gene_overlap_anti": 170832,
+  "gene_len_ge_100kb": 125314,
+  "reads_1": 205897,
+  "n": 286632
+ },
+ "singlet_U_both_agree": {
+  "multi": 52902,
+  "spliced": 17997,
+  "flank": 4871,
+  "othergene": 13,
+  "antisense": 8689,
+  "outside": 2769,
+  "none": 3598269,
+  "umi_in_2plus_genes": 34840,
+  "gene_overlap_same": 783625,
+  "gene_overlap_anti": 2085323,
+  "gene_len_ge_100kb": 2167799,
+  "reads_1": 769042,
+  "n": 3678505
+ },
+ "star_U_in_singlet": {
+  "n": 4785373,
+  "singlet_none": 390612,
+  "same_gene_label": {
+   "U": 4296171,
+   "A": 86394,
+   "S": 5761
+  },
+  "other_gene_only": 6435
+ },
+ "top_excess_genes": [
+  [
+   "ENSG00000243716",
+   "NPIPB5",
+   3576,
+   57415,
+   true,
+   false
+  ],
+  [
+   "ENSG00000185864",
+   "NPIPB4",
+   3236,
+   46246,
+   true,
+   false
+  ],
+  [
+   "ENSG00000230876",
+   "LINC00486",
+   3165,
+   101335,
+   false,
+   false
+  ],
+  [
+   "ENSG00000228716",
+   "DHFR",
+   2402,
+   28758,
+   true,
+   true
+  ],
+  [
+   "ENSG00000169246",
+   "NPIPB3",
+   2262,
+   46331,
+   true,
+   true
+  ],
+  [
+   "ENSG00000278996",
+   "ENSG00000278996",
+   2112,
+   30027,
+   false,
+   true
+  ],
+  [
+   "ENSG00000184831",
+   "APOO",
+   2085,
+   74586,
+   false,
+   false
+  ],
+  [
+   "ENSG00000280441",
+   "ENSG00000280441",
+   2069,
+   74150,
+   false,
+   true
+  ],
+  [
+   "ENSG00000171943",
+   "SRGAP2C",
+   1983,
+   208064,
+   false,
+   true
+  ],
+  [
+   "ENSG00000196369",
+   "SRGAP2B",
+   1854,
+   208264,
+   false,
+   true
+  ],
+  [
+   "ENSG00000198431",
+   "TXNRD1",
+   1474,
+   134529,
+   true,
+   true
+  ],
+  [
+   "ENSG00000266028",
+   "SRGAP2",
+   1352,
+   261091,
+   false,
+   true
+  ],
+  [
+   "ENSG00000228696",
+   "ARL17B",
+   1263,
+   86983,
+   false,
+   true
+  ],
+  [
+   "ENSG00000236383",
+   "CCDC200",
+   1201,
+   88457,
+   false,
+   true
+  ],
+  [
+   "ENSG00000185829",
+   "ARL17A",
+   1191,
+   79916,
+   true,
+   true
+  ],
+  [
+   "ENSG00000006453",
+   "BAIAP2L1",
+   1130,
+   109441,
+   false,
+   true
+  ],
+  [
+   "ENSG00000253755",
+   "IGHGP",
+   1087,
+   5211,
+   false,
+   false
+  ],
+  [
+   "ENSG00000291073",
+   "ENSG00000291073",
+   1065,
+   73762,
+   true,
+   true
+  ],
+  [
+   "ENSG00000176809",
+   "LRRC37A3",
+   1033,
+   65351,
+   false,
+   true
+  ],
+  [
+   "ENSG00000279168",
+   "ENSG00000279168",
+   1006,
+   100192,
+   true,
+   true
+  ],
+  [
+   "ENSG00000290192",
+   "ENSG00000290192",
+   982,
+   39230,
+   false,
+   true
+  ],
+  [
+   "ENSG00000138670",
+   "RASGEF1B",
+   939,
+   617852,
+   false,
+   false
+  ],
+  [
+   "ENSG00000270629",
+   "NBPF14",
+   925,
+   148358,
+   true,
+   false
+  ],
+  [
+   "ENSG00000075391",
+   "RASAL2",
+   863,
+   390044,
+   false,
+   true
+  ],
+  [
+   "ENSG00000291158",
+   "LINC00869",
+   861,
+   99508,
+   true,
+   true
+  ]
+ ],
+ "U_agreement_by_gene_class": {
+  "all": {
+   "n": 4632924,
+   "agree_frac": 0.9273130748529439
+  },
+  "long_ge_100kb": {
+   "n": 2616417,
+   "agree_frac": 0.9433958730584613
+  },
+  "short": {
+   "n": 2016507,
+   "agree_frac": 0.9064456508209493
+  },
+  "overlap_same": {
+   "n": 1012572,
+   "agree_frac": 0.922738333669112
+  },
+  "overlap_anti": {
+   "n": 2795903,
+   "agree_frac": 0.9293459036311346
+  },
+  "no_overlap": {
+   "n": 1571470,
+   "agree_frac": 0.9267049323245115
+  },
+  "multi": {
+   "n": 272579,
+   "agree_frac": 0.25182057311825196
+  },
+  "unique": {
+   "n": 4360345,
+   "agree_frac": 0.9695402542688709
+  },
+  "spliced_read": {
+   "n": 50334,
+   "agree_frac": 0.44941788850478803
+  },
+  "flank": {
+   "n": 17825,
+   "agree_frac": 0.4306311360448808
+  },
+  "antisense_overlap": {
+   "n": 452649,
+   "agree_frac": 0.8694043287403705
+  },
+  "umi_2plus_genes": {
+   "n": 251975,
+   "agree_frac": 0.20904057942256177
+  }
+ }
+}

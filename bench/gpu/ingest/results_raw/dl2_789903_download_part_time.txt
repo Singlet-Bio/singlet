@@ -1,0 +1,58 @@
+[protocol_detect] 3'/5' check: R1 5'-TSO 0 / polyT 0; R2 3'-TSO 0, polyA 1, polyT 343 of 5000 spots
+[protocol_detect] 10x-3p-v2 -> 10x-5p-v2 (cDNA read looks 5': no 3'-kit TSO, poly(T) > poly(A))
+[singlet-gate] PASS_10X SRR21102187 tag=10x-5p-v2 confidence=3 wl_match_rate=0.792 gate_s=3.96801
+[singlet-download] SRR21102187 → /tmp/debruinz-789903/part.1fq
+[protocol_detect] 3'/5' check: R1 5'-TSO 0 / polyT 0; R2 3'-TSO 0, polyA 10, polyT 1408 of 20000 spots
+[protocol_detect] 10x-3p-v2 -> 10x-5p-v2 (cDNA read looks 5': no 3'-kit TSO, poly(T) > poly(A))
+[1fq-encode] Trimming over-sequenced R1: 28 → 26
+[1fq-encode] Barcode whitelist validation: 8014/10000 match (80%%) — OK
+[1fq-encode] Assay: sc-rna-5prime
+[1fq-encode] Protocol: 10x-5p-v2 (confidence: 3)
+[1fq-encode] R1 length: 26, R2 length: 90
+[1fq-encode] Total spots: 61090652
+[singlet] R2 variable-length check: median=90bp, zero=0% (0/100000 probe reads)
+[1fq-encode] BC dict: 737280 barcodes, BC=16bp, UMI=10bp
+[singlet-download] 600000 / 4000000 reads (15%)[singlet-download] 1100000 / 4000000 reads (27%)[singlet-download] 1600000 / 4000000 reads (40%)[singlet-download] 2100000 / 4000000 reads (52%)[singlet-download] 2600000 / 4000000 reads (65%)[singlet-download] 3100000 / 4000000 reads (77%)[singlet-download] 3600000 / 4000000 reads (90%)[singlet-download] 4000000 / 4000000 reads (100%)
+[singlet-download] Done: 4000000 reads, 8 blocks
+[singlet-download] Protocol: 10x-5p-v2 (confidence: 3)
+[singlet-download] Output: /tmp/debruinz-789903/part.1fq
+
+[1fq-profile] ── Encode Performance ──
+[1fq-profile] Total: 55.156s, 4.00M reads, 0.93 GB VDB → 0.06 GB .1fq (15.1×)
+[1fq-profile] Throughput: 0.07M reads/s, 16.8 MB/s VDB, 1.1 MB/s .1fq
+[1fq-profile] Phase breakdown:
+[1fq-profile]   VDB read:    44.709s (81.1%)
+[1fq-profile]   Convert:      3.355s ( 6.1%)
+[1fq-profile]   Writer:       1.683s ( 3.1%) [sort+pack sync, compress+write async]
+[1fq-profile]     wait:       0.000s ( 0.0%) [stalled on prev async]
+[1fq-profile]     sort:       1.115s ( 2.0%)
+[1fq-profile]     pack:       0.545s ( 1.0%)
+[1fq-profile]     compress:   0.706s (async, 0.7s hidden)
+[1fq-profile]     write:      0.714s (async)
+[1fq-profile]     overlap:    1.420s hidden behind VDB read
+[1fq-profile]   Protocol:     3.688s ( 6.7%)
+[1fq-profile]   Finalize:     0.000s ( 0.0%) [metadata+index+CRC]
+[1fq-profile]   Other:        1.720s ( 3.1%)
+	Command being timed: "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-w3 download SRR21102187 -o /tmp/debruinz-789903/part.1fq --vdb-threads 4 --max-reads 4000000 --whitelist-dir /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists"
+	User time (seconds): 30.64
+	System time (seconds): 3.06
+	Percent of CPU this job got: 56%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:59.43
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 915712
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 35
+	Minor (reclaiming a frame) page faults: 348777
+	Voluntary context switches: 68423
+	Involuntary context switches: 104
+	Swaps: 0
+	File system inputs: 181368
+	File system outputs: 528536
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

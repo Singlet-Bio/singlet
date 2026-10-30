@@ -14,7 +14,9 @@
 // SINGLET_STAR_SEQCACHE_VERIFY=1 maps every hit anyway and counts results that differ.
 //
 // Structure: shards, each a ring buffer of entries (FIFO eviction, second chance: a hit on an entry
-// older than half the ring copies it to the head) plus a 2-way index of (hash, position).
+// older than half the ring copies it to the head) plus a 2-way index of (hash, position); 8-way (one
+// 128-byte line) under singlet --engine gpu, where the GPU fills the cache with every distinct sequence
+// up front and a 2-way bucket overflow would evict ~2.6% of them (re-mapped by STAR at full cost).
 // Entries hold the 2-bit packed sequence and a varint encoding of the mapping result (~110 bytes
 // with the index). SINGLET_STAR_SEQCACHE_MB sets the size (default 4096, 0 = off); ring pages are
 // only touched as entries are written, so small samples use less.
@@ -41,6 +43,7 @@ public:
     std::string stats() const;
 
     bool verify;
+    bool prefilled = false; //the GPU engine filled the cache with every distinct sequence (SeqCacheGpuPrefill.cpp)
     std::atomic<uint64> nLookup{0}, nHit{0}, nInsert{0}, nUncacheable{0}, nVerified{0}, nVerifyFail{0}, nRefresh{0};
 
 private:
@@ -51,10 +54,10 @@ private:
         uint64 head; //absolute write position
         Slot *index;
     };
-    uint64 nShards, ringBytes, indexMask;
+    uint64 nShards, ringBytes, indexMask, ways;
     Shard *shards;
 
-    SeqCache(uint64 totalBytes);
+    SeqCache(uint64 totalBytes, uint64 ways);
     bool entryMatches(Shard &s, uint64 pos, uint64 h, const char *seq, uint64 L, uint64 &blobOff, uint64 &blobLen, uint64 &entLen);
     uint64 append(Shard &s, const char *ent, uint64 entLen); //returns absolute position
 };

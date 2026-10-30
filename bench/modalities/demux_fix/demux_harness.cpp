@@ -26,7 +26,7 @@
 struct Csc {
     int32_t nrows = 0, ncols = 0;
     std::vector<int32_t> indptr, indices;
-    std::vector<uint8_t> data;
+    std::vector<uint16_t> data;
 };
 
 static bool read_mtx_gz(const std::string& path, Csc& m) {
@@ -44,7 +44,7 @@ static bool read_mtx_gz(const std::string& path, Csc& m) {
         break;
     }
     std::vector<int32_t> rows(nnz), cols(nnz);
-    std::vector<uint8_t> vals(nnz);
+    std::vector<uint16_t> vals(nnz);
     int64_t i = 0;
     while (i < nnz && fgets(buf.data(), buf.size(), f)) {
         char* p = buf.data();

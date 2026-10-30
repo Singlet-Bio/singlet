@@ -1,0 +1,139 @@
+1793189447.303331632 [nonhost] Screening enabled: viral=/mnt/projects/debruinz_project/cellarium/reference/nonhost/viral.snhskidx bacterial=/mnt/projects/debruinz_project/cellarium/reference/nonhost/bacterial.snhskidx fungal=/mnt/projects/debruinz_project/cellarium/reference/nonhost/fungal.snhskidx
+1793189447.305349030 [singlet] Whitelist 3M-february-2018.txt not found for 10x-3p-v3 — using barcode auto-discovery
+1793189447.694517142 [singlet] Default SNP panel (--pipeline): /mnt/projects/debruinz_project/cellarium/reference/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz
+1793189447.697075847 singlet v1.0.0
+1793189447.699156784 [singlet] Stall watchdog armed: 3600s
+1793189447.701419437 [singlet] Loading pileup references...
+1793189447.703515495 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq
+1793189448.076896746 [singlet] N2: protocol_id=1 (10x-3p-v3) → CB=16bp@1 UMI=12bp@17
+1793189448.079493396 [singlet] .1fq: 66601887 reads, 134 blocks, protocol_id=1, confidence=3, codec=0
+1793189450.279595968 [singlet] Genome prefetch: 16757 MB in 2.58276s
+1793189452.932498678 [1fq-pass1] Scanned 134 blocks (4.85292s)
+1793189452.956609138 [singlet] 5' prefix probe: 12194 reads, dominated prefix 0 bp, clip 0 bp (no_constant_prefix)
+1793189452.959268520 [singlet] .1fq decoded to temp files
+1793189452.961483113 [singlet] Discovered 1909 barcodes (≥100 reads) from .1fq BC dictionary (3686400 entries)
+1793189452.963980835 [singlet-pileup] Loading references...
+1793189452.966284706 [singlet-pileup] Loaded 1909 barcodes
+1793189454.170979595 [gene_model] Parsed 38606 genes, 1586950 exons from GTF
+1793189454.601174627 [gene_model] Built model: 38606 genes, 310797 exons, 272191 introns
+1793189455.274526435 [vdj_model] Found 411 VDJ genes
+1793189457.187436630 [singlet-pileup] Loaded 7352497 SNP sites
+1793189457.190308274 [singlet-pileup] Injected 51 AIM positions for ancestry (start_idx=7352497)
+1793189457.192630852 [singlet-pileup] References loaded in 4.22588s: 1909 barcodes, 7352548 SNP positions, 310797 exons, 272191 introns, 38606 genes
+1793189457.194805479 [singlet] References loaded: 9.49289s
+1793189457.197200466 [1fq-fifo] FIFOs created: /tmp/singlet_1fq_1875211/R1.fastq, /tmp/singlet_1fq_1875211/R2.fastq
+1793189457.199544356 [1fq-fifo] FIFO writer thread started
+1793189457.201846014 [singlet] /dev/shm free: 375 GB → parallel_pileup=1
+1793189457.218813822 [singlet] STAR pid=1875281, 9 threads, sorted BAM → /tmp/debruinz-engprof-790058/cpu/out//star_Aligned.sortedByCoord.out.bam
+1793189457.221555748 [singlet] Waiting for STAR to finish sorting...
+1793189457.223777026 [singlet] BAM sort strategy: disk (est BAM: 12GB, avail RAM: 160GB, limitBAMsortRAM: 32GB, bins: 200)
+1793189457.226084969 [singlet] ADAPTIVE-BAM-SORT: outTmpDir=/tmp/singlet_star_1875281 (/tmp, 1668GiB free)
+1793189457.228991804 	STAR --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --readFilesIn /tmp/singlet_1fq_1875211/R2.fastq /tmp/singlet_1fq_1875211/R1.fastq --soloType CB_samTagOut --soloCBwhitelist None --soloCBlen 16 --soloCBstart 1 --soloUMIstart 17 --soloBarcodeReadLength 0 --soloUMIlen 12 --outSAMtype BAM SortedByCoordinate --outBAMcompression 0 --limitBAMsortRAM 34359738368 --outBAMsortingBinsN 200 --outSAMattributes NH nM AS CR UR CB --outSAMunmapped None --outReadsUnmapped Fastx --outFilterScoreMin 10 --soloCBmatchWLtype Exact --runThreadN 9 --genomeLoad NoSharedMemory --outFileNamePrefix /tmp/debruinz-engprof-790058/cpu/out//star_ --outTmpDir /tmp/singlet_star_1875281
+1793189457.231346934 	STAR version: 2.7.11b   (singlet-bundled)   compiled: 2026-10-28T07:25:51 singlet-bundled
+1793189457.233623987 Oct 28 08:10:57 ..... started STAR run
+1793189457.235811357 Oct 28 08:10:57 ..... loading genome
+1793189465.336334433 Oct 28 08:11:05 ..... started mapping
+1793189678.698820506 [1fq-fifo] Pass 2 done: 66601887 reads
+1793189680.995966685 Oct 28 08:14:40 ..... finished mapping
+1793189681.746050126 Oct 28 08:14:41 ..... started sorting BAM
+1793189786.660845447 Oct 28 08:16:26 ..... finished successfully
+1793189793.122589827 [singlet] STAR completed in 335.904s
+1793189793.125253521 [singlet] Indexing BAM: /tmp/debruinz-engprof-790058/cpu/out//star_Aligned.sortedByCoord.out.bam
+1793189798.488831995 [singlet] BAM indexed in 5.36608s
+1793189801.985554665 [singlet-pileup] Loaded 153528 barcodes
+1793189801.988229580 [singlet] CB-tag barcode refresh: 153528 barcodes (>=5 CB reads) in 3.49521s
+1793189802.041247231 [singlet] Pileup: parallel (9 workers) on indexed BAM
+1793189803.012793134 [singlet-pileup] Resolved 7352548 SNPs to BAM chromosome IDs
+1793189803.035990496 [gene_model] Resolved to 39 exon chromosomes, 34 intron chromosomes
+1793189803.038235647 [vdj_model] Resolved 8 VDJ chromosomes
+1793189803.042280476 [parallel] Worker 0: 83 chroms, ~7459720 reads
+1793189803.044576446 [parallel] Worker 1: 4 chroms, ~7476477 reads
+1793189803.046919384 [parallel] Worker 2: 3 chroms, ~8354241 reads
+1793189803.049062281 [parallel] Worker 3: 3 chroms, ~8953587 reads
+1793189803.051196051 [parallel] Worker 4: 3 chroms, ~8359693 reads
+1793189803.053291991 [parallel] Worker 5: 3 chroms, ~8949237 reads
+1793189803.055405263 [parallel] Worker 6: 3 chroms, ~8367763 reads
+1793189803.057605292 [parallel] Worker 7: 3 chroms, ~8052552 reads
+1793189803.059376298 [parallel] Worker 8: 3 chroms, ~7948102 reads
+1793189825.063876103 [parallel-cross-worker] 3820081 cross-worker entries → 3039289 gene-assigned reads
+1793189832.666795210 [parallel] Processing: 14.3939s (9 workers)
+1793189832.669901347 [singlet-pileup] Done: 73921372 reads, 73921372 mapped, 60398571 barcoded, 10254235 secondary, 9133355 SNP hits, 35742568 exon hits, 16023963 intron hits, 4811034 SJ, 4439148 chrM, 353542076 mt_bases, 175894 multigene, 908150 wrong_strand, 151655 vdj_hits, UMI 15442436 unique / 36324095 dup in 29.5576s
+1793189836.063187034 [singlet] Pileup: 73921372 reads, 34.0205s (2M reads/s)
+1793189838.745870486 [nonhost] Loading screening indices...
+1793189838.748348143 [nonhost] Loading viral index: /mnt/projects/debruinz_project/cellarium/reference/nonhost/viral.snhskidx
+1793189839.838975012 [nonhost] Loading bacterial index: /mnt/projects/debruinz_project/cellarium/reference/nonhost/bacterial.snhskidx
+1793189844.595253925 [nonhost] Loading fungal index: /mnt/projects/debruinz_project/cellarium/reference/nonhost/fungal.snhskidx
+1793189880.167164686 [nonhost] Loading host Bloom filter: /mnt/projects/debruinz_project/cellarium/reference/nonhost/host_21mer.bloom
+1793189881.045490869 [nonhost] EM screening 2934750 unmapped reads (host-subtraction ON)...
+1793189896.556090318 [nonhost] EM converged in 458 iterations, 0 species above threshold
+1793189898.464245880 [nonhost] per-cell matrix: 0 cell×species records
+1793189898.832530317 [nonhost] em_species=0 viral=27006 bacterial=0 → /tmp/debruinz-engprof-790058/cpu/out//nonhost/nonhost_summary.json
+1793189899.379246897 [nonhost] Wrote classified reads → /tmp/debruinz-engprof-790058/cpu/out//nonhost_reads.fq
+1793189901.373194351 [singlet] Exporting feature matrices...
+1793189906.433374672 [export] CSC conversion: 5.05897s (8 threads)
+1793189906.439232631 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1793189906.740957346 [sex_calling] sex=male confidence=1 xist_cpm=0.0947584 y_cpm=870.166 n_y_genes=7 time=0.173991s
+1793189906.823838812 [cell_cycle] G1=153294 S=75 G2M=159 (99.8476%G1) s_genes=42 g2m_genes=52 time=0.085418s
+1793189906.832310898 [read_stats] n_cells=153528 median_dup_rate=0.454545 time=0.00857911s
+1793189906.837440550 [ancestry] EUR confidence=0.814028 n_informative=7 n_covered=4 time=0.00497103s
+1793189907.257480997 [saturation_curve] median_umis@1.0=5.54576 median_genes@1.0=4.08656 time=0.419557s
+1793189912.633013818 [cell_calling] called_v2: knee umi_min=1895 called=1134 lower=34 retain=7601 alpha=1114.58 tested=430 called_v2=1190 (+56) time=5.22936s
+1793189912.635496052 [cell_calling] n_cells=1190 cell_caller=called_v2 time=5.3e-08s
+1793189912.938116353 [metrics_summary] n_cells=1190 median_genes=2085 median_umi=7072 saturation=70.2% path=/tmp/debruinz-engprof-790058/cpu/out//metrics_summary.csv
+1793189913.698217777 [ambient] method=decontx_cluster_offgene_v1 n_ambient_barcodes=50000 total_ambient_umi=679864 n_clusters=8 mean_rho=0.0280727 median_rho=0.0137058 removed_umis=353334/14261834 n_cells=1190 corrected=yes time=0.758074s
+1793189914.930098106 [doublet] n_cells=1190 n_doublets=8 doublet_rate=0.672269% expected_rate=0.952% detectable_fraction=0.748739 hvg=8000 pcs=30 time=1.23233s
+1793189915.239332275 [cell_qc] Wrote: /tmp/debruinz-engprof-790058/cpu/out//cell_qc_metrics.tsv (153528 cells)
+1793189916.373539723 [mt] reference=reference pool-majority!=reference at 29 positions; heteroplasmic sites=26 of 17221 evaluated
+1793189916.376000918 [mt] Wrote 26 heteroplasmic mt sites to /tmp/debruinz-engprof-790058/cpu/out//mt_variants.tsv
+1793189916.408438215 [demux] Starting donor demultiplexing: 7352548 SNPs, 153528 cells
+1793189916.412897149 [vdj_counting] n_vdj_genes=411 n_hits=14005
+1793189916.434629726 [ase] 11142 het-SNP×cell entries → /tmp/debruinz-engprof-790058/cpu/out//private/ase_counts.tsv
+1793189916.468587978 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//vdj_gene_usage.1pz.tmp: 411×153528, 14005 nnz, 865826 bytes (vt=2)
+1793189916.482614751 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//mt_heteroplasmy.1pz.tmp: 26×153528, 1748 nnz, 808796 bytes (vt=2)
+1793189916.490873135 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//polya_counts.1pz.tmp: 2015×153528, 13375 nnz, 862122 bytes (vt=1)
+1793189916.492769724 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//ambiguous_counts.1pz.tmp: 38606×153528, 158074 nnz, 1324277 bytes (vt=1)
+1793189916.501170627 [polya] 22664 poly(A)-tailed reads -> 2015 sites (10 flagged internal priming), nnz=13375 time=0.0952431s
+1793189916.556905096 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//private/mt_allele_counts_rev.1pz.tmp: 66276×153528, 753714 nnz, 1392845 bytes (vt=2)
+1793189916.718653216 [demux] Covered SNPs: 616655 (from 7352548 total)
+1793189916.720547292 [demux] Core fit: 1131 cells with >= 868.35 SNP observations; 59 low-depth called cells are assigned afterwards
+1793189916.724662798 [demux] Cell filter: running VB on 1131 called cells (of 153528 total barcodes); 152397 other barcodes will be back-assigned post-convergence
+1793189916.735389336 [tpm_fpkm] n_genes=38606 max_tpm=48436.8 time=0.0390855s
+1793189916.745988762 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//sj_counts.1pz.tmp: 177136×153528, 1459954 nnz, 4444370 bytes (vt=2)
+1793189916.775677799 [demux] auto-K: 1131 cells, 73473 SNPs (seen in >= 8 cells), K in 1..16
+1793189916.830140201 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//ambient_corrected_counts.1pz.tmp: 38606×153528, 4179742 nnz, 3961082 bytes (vt=2)
+1793189916.960133740 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//exon_counts.1pz.tmp: 310797×153528, 3979682 nnz, 8773436 bytes (vt=2)
+1793189916.979860687 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//intron_counts.1pz.tmp: 272191×153528, 3557558 nnz, 7953403 bytes (vt=2)
+1793189917.077320838 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//splice_psi.1pz.tmp: 177136×153528, 913075 nnz, 3585704 bytes (vt=1)
+1793189917.089747093 [splice_psi] 17437 events, 913075 PSI entries
+1793189917.647456150 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//private/mt_allele_counts.1pz.tmp: 66276×153528, 13541293 nnz, 11087367 bytes (vt=2)
+1793189917.659813635 [sj_features] 177136 junctions, 102603 in STAR SJ.out.tab (star_sj_pass)
+1793189918.045539910 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//private/snp_ad.1pz.tmp: 7352548×153528, 1028509 nnz, 57088763 bytes (vt=1)
+1793189918.234198391 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//private/snp_dp.1pz.tmp: 7352548×153528, 3361967 nnz, 59769960 bytes (vt=1)
+1793189923.583696655 [demux] auto-K K=1: held-out ll/cell=-588.701 gain=0 z=0 distinct donors=1/1 (1.97812 s)
+1793189929.560086200 [demux] auto-K K=2: held-out ll/cell=-588.701 gain=-3.60737e-05 z=-0.565643 distinct donors=1/1 (5.97633 s)
+1793189937.358286859 [demux] auto-K K=3: held-out ll/cell=-588.701 gain=-7.64409e-05 z=-0.62021 distinct donors=1/1 (7.79924 s)
+1793189948.762902812 [demux] auto-K K=4: held-out ll/cell=-588.701 gain=-0.000120558 z=-0.673627 distinct donors=1/1 (11.4032 s)
+1793189948.765616905 [demux] auto-K: selected K=1 in 32.0406 s
+1793189961.719892172 [demux] K=1 restarts (kind:ELBO after 100 it): 0:-1.39217e+06*
+1793189987.547586207 [demux] K=1: ELBO=-1.39217e+06 (300 iters)
+1793189987.550208176 [demux] Best K=1 (ELBO=-1.39217e+06)
+1793189987.608928758 [demux] Called cells: 1190 assigned, 0 doublet, 0 unassigned
+1793189987.611172970 [demux] Ambient barcodes: 86326 assigned, 66012 unassigned
+1793189988.744380504 [demux] Wrote /tmp/debruinz-engprof-790058/cpu/out//private/donor/donor0.vcf
+1793189989.134741061 [demux] Wrote /tmp/debruinz-engprof-790058/cpu/out//private/donor/donor0_coverage.tsv
+1793189989.517278418 [mt_event_caller] Wrote /tmp/debruinz-engprof-790058/cpu/out//private/mt/donor0_mt_consensus.fa
+1793189989.519926424 [mt_event_caller] Wrote /tmp/debruinz-engprof-790058/cpu/out//private/mt/donor0_mt_variants.vcf (14 variants)
+1793189990.058442883 [mt_event_caller] Loaded 13 chrM CDS regions from GTF
+1793189990.817030614 [pz_writer] Wrote /tmp/debruinz-engprof-790058/cpu/out//mt/mt_events.1pz: 13881×153528, 431471 nnz, 1391745 bytes (vt=1)
+1793189990.971030986 [mt_event_caller] G6 complete: n_donors=1 n_loci=13881 n_events=431471 code1=199017 code2=72323 code3=53445 code4=69823 code5=1040 code6=1670 code7=4914 code8=17845 code9=11394
+1793189990.973307805 [mt_event_caller] G6 time: 1.78512s
+1793189990.975924893 [export] Total: 89.5985s
+1793189990.978408940 [rrna] fraction=0.000542873 (40/73682 sampled)
+1793189990.980629417 [export] Provenance: /tmp/debruinz-engprof-790058/cpu/out//provenance.json
+1793189990.998152082 [export] summary.json status=success cells=1190 mapping_rate=0.879764
+1793189991.000376646 [mt_reference] Wrote chrM (16569bp) from GRCh38-2024-A
+1793189991.002542230 [export] Standardization stubs written for any missing files
+1793189991.004954777 [export] Validation passed: 29/29 files OK
+1793189991.180358242 [singlet] Total: 543.486s
+1793189991.182573077 [singlet] Outputs: /tmp/debruinz-engprof-790058/cpu/out/
+exit 0

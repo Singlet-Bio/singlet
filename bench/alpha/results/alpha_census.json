@@ -1,0 +1,485 @@
+{
+ "schema": "singlet.alpha.census",
+ "schema_version": "1.0.0",
+ "engine": "alpha (published atlas)",
+ "dataset_scope": "every sample published in Research Alpha",
+ "generated_at": "2026-10-26T15:29:00+00:00",
+ "policy_version": "alpha-2026-10-26a",
+ "policy_source": "read-only census 2026-10-26 (strand rerun list, libtype screen, empty matrices); mouse strand not yet classified",
+ "sources": [
+  "singlet-catalog D1 (read-only SELECT dumps): gse, gsm, sample_qc, bundle_index",
+  "alpha-policy.json (withheld studies, excluded samples)",
+  "published bundles: samples/<GSM>/summary.json (reads used, engine build); Clipper: pipeline-benchmark/results/campaign/campaign_samples.csv (strand), cellarium processing_catalog.parquet (SRA read_count)"
+ ],
+ "levels": {
+  "bundles_before_exclusions": {
+   "studies": 8381,
+   "samples": 72386,
+   "cells": 305539646
+  },
+  "physical_after_exclusions": {
+   "studies": 7391,
+   "samples": 51879,
+   "cells": 239616764
+  },
+  "public": {
+   "studies": 7040,
+   "samples": 47702,
+   "cells": 228007964
+  },
+  "public_before_exclusions": {
+   "studies": 7355,
+   "samples": 54747,
+   "cells": 249658057
+  }
+ },
+ "withheld_studies": 990,
+ "excluded_samples": {
+  "total": 20886,
+  "by_reason_in_bundles": {
+   "strand": 7424,
+   "non_rna": 8824,
+   "empty": 6986
+  },
+  "public_samples_and_cells_removed_by_reason": {
+   "strand": {
+    "samples": 4982,
+    "cells": 16196538
+   },
+   "non_rna": {
+    "samples": 2957,
+    "cells": 7945984
+   },
+   "empty": {
+    "samples": 0,
+    "cells": 0
+   }
+  }
+ },
+ "definitions": {
+  "physical_after_exclusions": "samples in published bundles of studies not withheld, minus excluded samples (strand, non-RNA library, empty matrix)",
+  "public": "physical, in studies downloadable now, samples usable with QC tier 0 (singlet.bio's basis)",
+  "cells": "cells called by Singlet (sample_qc.n_cells_called; STARsolo CellRanger2.2 knee filter on the capped reads)"
+ },
+ "public_by_species": [
+  {
+   "name": "human",
+   "studies": 3199,
+   "samples": 27222,
+   "cells": 120442276
+  },
+  {
+   "name": "mouse",
+   "studies": 3569,
+   "samples": 18675,
+   "cells": 98583001
+  },
+  {
+   "name": "human+mouse (barnyard)",
+   "studies": 213,
+   "samples": 1499,
+   "cells": 7623574
+  },
+  {
+   "name": "zebrafish",
+   "studies": 36,
+   "samples": 115,
+   "cells": 373555
+  },
+  {
+   "name": "macaque",
+   "studies": 9,
+   "samples": 96,
+   "cells": 556821
+  },
+  {
+   "name": "rat",
+   "studies": 25,
+   "samples": 95,
+   "cells": 428737
+  }
+ ],
+ "public_by_chemistry": [
+  {
+   "name": "10x 3' v3",
+   "studies": 4712,
+   "samples": 28842,
+   "cells": 162663396
+  },
+  {
+   "name": "10x 3' v2",
+   "studies": 1624,
+   "samples": 11740,
+   "cells": 45413770
+  },
+  {
+   "name": "10x 5' (GEO-curated; counted with a 3' label)",
+   "studies": 310,
+   "samples": 2864,
+   "cells": 14210736
+  },
+  {
+   "name": "Drop-seq",
+   "studies": 125,
+   "samples": 875,
+   "cells": 152159
+  },
+  {
+   "name": "10x Multiome GEX",
+   "studies": 178,
+   "samples": 743,
+   "cells": 3185659
+  },
+  {
+   "name": "10x Visium",
+   "studies": 79,
+   "samples": 507,
+   "cells": 1241305
+  },
+  {
+   "name": "CEL-seq2",
+   "studies": 148,
+   "samples": 445,
+   "cells": 177007
+  },
+  {
+   "name": "BD Rhapsody",
+   "studies": 104,
+   "samples": 382,
+   "cells": 647605
+  },
+  {
+   "name": "MARS-seq2",
+   "studies": 130,
+   "samples": 270,
+   "cells": 120086
+  },
+  {
+   "name": "DNBelab C4",
+   "studies": 17,
+   "samples": 260,
+   "cells": 10696
+  },
+  {
+   "name": "SPLiT-seq / Parse",
+   "studies": 39,
+   "samples": 213,
+   "cells": 26733
+  },
+  {
+   "name": "Quartz-seq2",
+   "studies": 77,
+   "samples": 168,
+   "cells": 54196
+  },
+  {
+   "name": "Microwell-seq",
+   "studies": 42,
+   "samples": 122,
+   "cells": 40201
+  },
+  {
+   "name": "other",
+   "studies": 16,
+   "samples": 63,
+   "cells": 5794
+  },
+  {
+   "name": "10x 3' v1",
+   "studies": 21,
+   "samples": 54,
+   "cells": 606
+  },
+  {
+   "name": "inDrop",
+   "studies": 10,
+   "samples": 47,
+   "cells": 35876
+  },
+  {
+   "name": "Seq-Well",
+   "studies": 4,
+   "samples": 42,
+   "cells": 1488
+  },
+  {
+   "name": "SureCell",
+   "studies": 3,
+   "samples": 25,
+   "cells": 9273
+  },
+  {
+   "name": "unknown",
+   "studies": 4,
+   "samples": 11,
+   "cells": 250
+  },
+  {
+   "name": "10x 5'",
+   "studies": 6,
+   "samples": 10,
+   "cells": 6265
+  },
+  {
+   "name": "ddSEQ",
+   "studies": 3,
+   "samples": 9,
+   "cells": 841
+  },
+  {
+   "name": "sci-rna-seq3",
+   "studies": 3,
+   "samples": 9,
+   "cells": 306
+  },
+  {
+   "name": "10xv4",
+   "studies": 1,
+   "samples": 1,
+   "cells": 3716
+  }
+ ],
+ "public_by_assay_family": [
+  {
+   "name": "10x 3'",
+   "studies": 5049,
+   "samples": 34041,
+   "cells": 165051234
+  },
+  {
+   "name": "10x (version unconfirmed)",
+   "studies": 1015,
+   "samples": 5557,
+   "cells": 30595828
+  },
+  {
+   "name": "10x 5'",
+   "studies": 314,
+   "samples": 2878,
+   "cells": 14217367
+  },
+  {
+   "name": "Unknown",
+   "studies": 358,
+   "samples": 2646,
+   "cells": 12090673
+  },
+  {
+   "name": "Drop-seq / inDrop",
+   "studies": 65,
+   "samples": 558,
+   "cells": 113333
+  },
+  {
+   "name": "Spatial",
+   "studies": 80,
+   "samples": 507,
+   "cells": 1235998
+  },
+  {
+   "name": "BD Rhapsody",
+   "studies": 93,
+   "samples": 346,
+   "cells": 624101
+  },
+  {
+   "name": "10x Multiome / ATAC",
+   "studies": 98,
+   "samples": 325,
+   "cells": 1894743
+  },
+  {
+   "name": "CITE-seq",
+   "studies": 34,
+   "samples": 240,
+   "cells": 1755586
+  },
+  {
+   "name": "Smart-seq / plate-based",
+   "studies": 22,
+   "samples": 216,
+   "cells": 79487
+  },
+  {
+   "name": "Seq-Well / Microwell",
+   "studies": 11,
+   "samples": 180,
+   "cells": 13212
+  },
+  {
+   "name": "Parse / SPLiT-seq",
+   "studies": 27,
+   "samples": 116,
+   "cells": 19115
+  },
+  {
+   "name": "Not single-cell RNA",
+   "studies": 13,
+   "samples": 60,
+   "cells": 199053
+  },
+  {
+   "name": "unknown",
+   "studies": 9,
+   "samples": 32,
+   "cells": 118234
+  }
+ ],
+ "public_cells_per_sample": {
+  "n": 47702,
+  "p10": 634.0,
+  "p25": 1706.0,
+  "p50": 3493.0,
+  "p75": 6255.75,
+  "p90": 9539.900000000001,
+  "mean": 4779.840761393652
+ },
+ "public_median_genes_per_cell": {
+  "n": 47702,
+  "p10": 226.0,
+  "p25": 492.0,
+  "p50": 811.0,
+  "p75": 1226.0,
+  "p90": 1813.0,
+  "mean": 982.9016603077439
+ },
+ "public_mapping_rate": {
+  "n": 47702,
+  "p10": 0.6565659,
+  "p25": 0.75387275,
+  "p50": 0.8259624999999999,
+  "p75": 0.878504,
+  "p90": 0.9093809,
+  "mean": 0.7994178213072827
+ },
+ "public_exonic_fraction": {
+  "n": 47702,
+  "p10": 0.12092430000000001,
+  "p25": 0.232201,
+  "p50": 0.36549200000000004,
+  "p75": 0.4685215,
+  "p90": 0.5423796,
+  "mean": 0.3492313524972119
+ },
+ "reads": {
+  "coverage": {
+   "public_samples": 47631,
+   "with_reads_used": 47214,
+   "with_reads_available": 40557,
+   "with_both": 40237,
+   "summary_read_errors": {
+    "HTTPError: HTTP Error 404: Not Found": 361,
+    "bundle: HTTPError: HTTP Error 404: Not F": 38,
+    "BadZipFile: Bad magic number for file he": 17,
+    "BadZipFile: File name in directory 'samp": 1
+   }
+  },
+  "reads_used_source": "n_input_reads in each published sample's summary.json (read from the bundles)",
+  "reads_available_source": "read_count (SRA spots) in Singlet's processing catalog; checked against NCBI runinfo on the benchmark samples",
+  "reads_used": {
+   "n": 47214,
+   "p10": 26951354.900000002,
+   "p25": 30000000.0,
+   "p50": 30000000.0,
+   "p75": 30000000.0,
+   "p90": 30000000.0,
+   "mean": 28289294.650442664
+  },
+  "share_at_30M_cap": 0.8859024865505994,
+  "share_below_10M": 0.038145465328080656,
+  "reads_available": {
+   "n": 40557,
+   "p10": 59814839.2,
+   "p25": 141225882.0,
+   "p50": 283866272.0,
+   "p75": 444384538.0,
+   "p90": 646008860.6,
+   "mean": 333707940.7357053
+  },
+  "frac_reads_used": {
+   "n": 40237,
+   "p10": 0.043895520644945646,
+   "p25": 0.06524086099495097,
+   "p50": 0.10073243290670977,
+   "p75": 0.19830207156259058,
+   "p90": 0.41598483521579716,
+   "mean": 0.17998345471101998
+  },
+  "share_frac_below_0.5": 0.9196759201729752,
+  "share_frac_below_0.25": 0.8164624599249447,
+  "share_frac_above_0.9": 0.03099137609662748,
+  "frac_reads_used_histogram": {
+   "bins": [
+    0,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    0.9,
+    1.0001
+   ],
+   "counts": [
+    5527,
+    14484,
+    12841,
+    4153,
+    1508,
+    477,
+    1247
+   ]
+  },
+  "samples_with_multiple_runs": 17733,
+  "share_multiple_runs": 0.37229955281224414,
+  "note": "the campaign kept only the first SRA run and its first 30M reads; samples with several runs lost the other runs entirely"
+ },
+ "engine_builds": {
+  "git_sha": {
+   "8e1803ba5ac9cb8038e666f06df446c9a85550b0": 27881,
+   "37e7cbdfbc13238c634e051a785adb30388349e8": 18134,
+   "b1335a82d19930b08274ba4976bd556176b73521": 1199
+  },
+  "singlet_version": {
+   "0.3.0": 46015,
+   "1.0.0": 1199
+  }
+ },
+ "wall_s_per_sample_4_threads": {
+  "n": 47214,
+  "p10": 134.9107,
+  "p25": 159.868,
+  "p50": 561.4024999999999,
+  "p75": 1181.875,
+  "p90": 1872.4990000000007,
+  "mean": 788.4544463464227
+ },
+ "peak_rss_gb_per_sample": {
+  "n": 47214,
+  "p10": 11.4456,
+  "p25": 13.75055,
+  "p50": 48.6173,
+  "p75": 49.006575,
+  "p90": 49.2994,
+  "mean": 34.41685825962638
+ },
+ "strand": {
+  "wrong_strand_fraction": {
+   "n": 27578,
+   "p10": 0.020960628394662915,
+   "p25": 0.030706399200886175,
+   "p50": 0.048604353085890215,
+   "p75": 0.08587969445815938,
+   "p90": 0.1553033696589778,
+   "mean": 0.07470192017141282
+  },
+  "share_above_0.5": 0.0026243412903361255,
+  "n": 27578,
+  "note": "human samples with >50% wrong-strand reads were excluded from Alpha; mouse strand is not classified yet"
+ },
+ "caveats": [
+  "Mouse samples were not screened for wrong-strand counting (policy: 'mouse strand not yet classified'); some mouse 5' libraries in Alpha may be counted antisense.",
+  "Cell counts are Singlet's knee-filter calls on reads capped at the first 30M of the first SRA run; they undercount relative to Cell Ranger / EmptyDrops (see the cell-recovery benchmark).",
+  "Alpha matrices come from three builds of the atlas engine (engine_builds: v0.3.0 at 8e1803ba and 37e7cbdf, and b1335a8 reporting 1.0.0); all predate the molecule-count fix and double-count some molecules (+2% to +19% per cell vs the fixed engine). The campaign re-run benchmark uses 8e1803ba only.",
+  "summary.json could not be read for a few hundred samples (HTTP 404 or a moved member), most likely bundles being repacked while the census ran; they are missing from the reads distribution (see reads.coverage)."
+ ]
+}

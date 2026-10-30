@@ -4,7 +4,7 @@ per-sample cost of junction rows as table ids (+ local junctions + legacy permut
 
     python -P bench/junctions/bench_table.py <mirror root> [GSE] > bench/junctions/results_<GSE>.json
 
-The mirror is what ``singlet.v2.client.download_study`` writes. Tiers for one study (the atlas build uses studies, not samples):
+The mirror is what ``singlet.store.client.download_study`` writes. Tiers for one study (the atlas build uses studies, not samples):
 core = both ends on annotated exon boundaries (exon-pack proxy; the GTF decides at build time) or seen in >= 3 samples;
 rare = seen in exactly 2 samples; local = seen in one sample only (stays in that sample object).
 """
@@ -21,10 +21,10 @@ import scipy.sparse as sp
 
 sys.path.insert(0, "python")
 from singlet import _pz2  # noqa: E402
-from singlet.v2 import client  # noqa: E402
-from singlet.v2 import junctions as J  # noqa: E402
-from singlet.v2 import packs as P  # noqa: E402
-from singlet.v2.packs import default_store  # noqa: E402
+from singlet.store import client  # noqa: E402
+from singlet.store import junctions as J  # noqa: E402
+from singlet.store import packs as P  # noqa: E402
+from singlet.store.packs import default_store  # noqa: E402
 
 root = sys.argv[1]
 gse = sys.argv[2] if len(sys.argv) > 2 else "GSE145370"

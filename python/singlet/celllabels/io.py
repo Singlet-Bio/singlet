@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: MIT
-"""Read what one sample's annotation needs: called cells' gene counts, their ``col`` in v2 column order, sample metadata, donor
+"""Read what one sample's annotation needs: called cells' gene counts, their ``col`` in store column order, sample metadata, donor
 labels, and (restricted, optional) per-donor SNP depths.
 
 Two sources:
 
-* a v2 study (``v2/m/<GSE>.json`` on data.singlet.bio): :func:`singlet.v2.client.cells` with ``where="called"`` returns the called
+* a per-sample study (``s1/m/<GSE>.json`` on data.singlet.bio): :func:`singlet.s1.client.cells` with ``where="called"`` returns the called
   cells with their ``column`` in the sample object, which is ``col`` directly;
 * a legacy ``.singlet`` bundle on disk (studies not yet migrated): ``col`` is the cell's position among the columns of
-  ``exon_counts.1pz`` (``intron_counts.1pz`` when the exon matrix is empty), the order :mod:`singlet.v2.migrate` gives the
-  ``cells`` table, so the labels line up with the v2 object once the study is migrated.
+  ``exon_counts.1pz`` (``intron_counts.1pz`` when the exon matrix is empty), the order :mod:`singlet.s1.migrate` gives the
+  ``cells`` table, so the labels line up with the .s1 object once the study is migrated.
 
 The restricted sidecar (``restricted/<GSE>/<GSE>.restricted.singlet`` in the private bucket) is only opened when a path to it is
 given, and only ``donor/donor<k>_coverage.tsv`` is read from it: depth and allele counts per SNP, used in memory by
@@ -48,6 +48,9 @@ class SampleInput:
         default_factory=dict
     )  # donor label -> DataFrame(chrom,pos,ref,alt,ad,dp); restricted
     source: str = ""
+    gene_ids: List[str] = field(
+        default_factory=list
+    )  # Ensembl ids of the columns of ``X`` (version suffix as stored)
 
     @property
     def barcode_digest(self) -> str:
@@ -195,6 +198,7 @@ def read_legacy(
             donor = _donor_labels(b.read("donor_assignments", gsm), barcodes)
         X = sps.csr_matrix(a.X)
         genes = [str(g) for g in a.var["gene_name"]]
+        gene_ids = [str(g) for g in a.var_names]
     finally:
         b.close()
     s = SampleInput(
@@ -210,18 +214,19 @@ def read_legacy(
         meta=meta,
         donor=donor,
         source=f"legacy:{bundle_path.name}",
+        gene_ids=gene_ids,
     )
     if sidecar is not None:
         s.donor_sites = read_donor_sites(sidecar, gsm)
     return s
 
 
-def read_v2(
+def read_s1(
     gse: str, gsm: str, *, base: Optional[str] = None, sidecar: Optional[Path] = None
 ) -> SampleInput:
-    """One sample of a v2 study (data.singlet.bio by default)."""
-    from singlet.v2 import client as C
-    from singlet.v2.bundle import V2Bundle
+    """One sample of a per-sample study (data.singlet.bio by default)."""
+    from singlet.s1 import client as C
+    from singlet.s1.bundle import S1Bundle
 
     a = C.cells(gse, where="called", samples=[gsm], base=base)
     col = a.obs["column"].to_numpy(np.int64)
@@ -231,7 +236,7 @@ def read_v2(
     series_title = str(st.study_meta.get("series_title") or "")
     donor = None
     try:
-        vb = V2Bundle(st)
+        vb = S1Bundle(st)
         if "donor_assignments" in vb.modalities(gsm):
             donor = _donor_labels(vb.read("donor_assignments", gsm), barcodes)
     except (KeyError, ValueError):
@@ -248,8 +253,12 @@ def read_v2(
         disease=disease_text(meta),
         meta=meta,
         donor=donor,
-        source=f"v2:{st.rev}",
+        source=f"store:{st.rev}",
+        gene_ids=[str(g) for g in a.var_names],
     )
     if sidecar is not None:
         s.donor_sites = read_donor_sites(sidecar, gsm)
     return s
+
+
+read_v2 = read_store = read_s1  # DUAL: old names, removed in the cleanup
