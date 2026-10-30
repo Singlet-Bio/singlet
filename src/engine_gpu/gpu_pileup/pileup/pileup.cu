@@ -79,8 +79,8 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; };
-struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg; };   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 128, 256 are implemented
+struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, pad; };   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
 struct SJL { int32_t tid, donor, acc; };
 struct IND { uint32_t pos, lenins; };
@@ -115,14 +115,14 @@ __device__ __forceinline__ bool wrong_strand(const StrandPar& S, uint32_t g) {
     bool er = (gs == '-'); if (S.reverse) er = !er; return S.read_rev != er; }
 struct ExonCb {
     const StrandPar* S; const uint32_t* e2g; uint32_t ne; bool any, same; uint32_t first_idx, first_gene;
-    bool sense = false, anti = false; uint32_t blk_raw = 0, blk_ok = 0;   // engine's strand_vote (unfiltered overlaps) and block counts
+    bool sense = false, anti = false; uint32_t blk_raw = 0, blk_ok = 0, second_gene = MAXU;   // second_gene: the first accepted gene other than first_gene   // engine's strand_vote (unfiltered overlaps) and block counts
     __device__ void operator()(uint32_t idx) {
         uint32_t g = idx < ne ? e2g[idx] : MAXU;
         { char gs = g < S->ng ? S->gstr[g] : '.'; if (gs != '.') { if (S->read_rev == (gs == '-')) sense = true; else anti = true; } }
         blk_raw++;
         if (wrong_strand(*S, g)) return;
         blk_ok++;
-        if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) same = false; } };
+        if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) { same = false; if (second_gene == MAXU && g != MAXU) second_gene = g; } } };
 struct IntronCb {
     const StrandPar* S; const uint32_t* i2g; uint32_t ni; uint32_t exon_gene; bool any, same; uint32_t first_idx, first_gene, match_idx;
     __device__ void operator()(uint32_t idx) {
@@ -134,7 +134,7 @@ struct IntronCb {
 
 __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree EX, DTree IN, const uint32_t* e2g, uint32_t ne, const uint32_t* i2g, uint32_t ni, const char* gstr, uint32_t ng, DPar P, AA* out) {
     int a = blockIdx.x * blockDim.x + threadIdx.x; if (a >= nA) return;
-    AlnRec x = A[a]; bool prim = (x.flags & 2) != 0; StrandPar SP{P.stranded, P.reverse, gstr, ng, (x.flags & 1) != 0}; bool had_reject = false;
+    AlnRec x = A[a]; bool prim = (x.flags & 2) != 0; StrandPar SP{P.stranded, P.reverse, gstr, ng, (x.flags & 1) != 0}; bool had_reject = false, hasn = false;
     ExonCb ec{&SP, e2g, ne, false, true, MAXU, MAXU};
     const uint32_t* o = ops + x.ops_off; int32_t rpos = x.pos;
     for (int i = 0; i < x.n_ops; i++) {
@@ -144,9 +144,9 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
             tree_query(EX, x.tid, rpos, rpos + len, ec); rpos += len;
             if (ec.blk_raw > 0 && ec.blk_ok == 0) had_reject = true;   // a block whose exons were all on the wrong strand
         }
-        else if (op == 2 || op == 3) rpos += len;
+        else if (op == 2 || op == 3) { rpos += len; if (op == 3) hasn = true; }
     }
-    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0, MAXU};
+    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0, MAXU, hasn ? 1u : 0u, MAXU, MAXU, 0};
     r.exg = (ec.any && ec.same) ? ec.first_gene : MAXU;   // the engine's determine_exon_gene (single gene; multi-gene -> none)
     if (!prim) { if (ec.any) { if (ec.same) { r.gene = ec.first_gene; r.exon = ec.first_idx; } else r.multi = 1; } out[a] = r; return; }
     bool unique_e = ec.any && ec.same && ec.first_gene != MAXU; uint32_t exon_gene = unique_e ? ec.first_gene : MAXU; bool pm = ec.any && !unique_e;
@@ -164,6 +164,7 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
     else if (exon_gene != MAXU) { r.gene = exon_gene; r.exon = ec.first_idx; r.intron = ic.match_idx; r.flags = ic.match_idx == MAXU ? 5 : 6; }
     else if (intron_gene != MAXU) { r.gene = intron_gene; r.intron = ic.first_idx; r.flags = 2; }
     r.multi = pm; r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
+    if (pm) { r.pg_a = ec.first_gene; r.pg_b = ec.second_gene; }
     // stat (primary alignments; the engine's serial loop counters): 1 strand vote sense, 2 strand vote antisense, 4 wrong_strand
     // (no accepted exon overlap although a block had only wrong-strand exons), 8 cross_gene_intron (classify_read), 16 multigene
     r.stat = (ec.sense ? 1u : 0u) | (ec.anti ? 2u : 0u) | ((!ec.any && had_reject) ? 4u : 0u)
@@ -172,27 +173,46 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
 }
 
 // one signature -> what the engine's count_read receives (NH == 1 directly, NH > 1 through the mm_buffer state machine; R7: the primary's gene, else the smallest secondary exon)
-__global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, const AA* aa, GRes* out) {
+// intron rules (P.rules, PR #80): refine_read's read-level drops (kUnique: NH > 1, kNoSplicedIntron: CIGAR N) clear an intronic primary's gene (also in
+// aa, which the host reads back as the classify_read gene), kMtPrefer: a multimapper that ties a chrM gene with a nuclear gene counts the chrM gene
+// (note_mt_alignment / mt_numt_tie; the chrM alignment is the last one in the signature's order, as the stream's last writer)
+__global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, const uint8_t* gmt, uint32_t ngmt, DPar P, GRes* out) {
     int s = blockIdx.x * blockDim.x + threadIdx.x; if (s >= nS) return;
     SigRec sg = S[s]; GRes r{MAXU, MAXU, MAXU, 0};
+    auto is_mt = [&](uint32_t g) { return g < ngmt && gmt[g] != 0; };
     if (sg.n_aln > 0) {
         if (sg.nh == 1) {
             for (int k = 0; k < sg.n_aln; k++) if (A[sg.aln_off + k].flags & 2) {
-                AA x = aa[sg.aln_off + k]; if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; } break; }
+                AA x = aa[sg.aln_off + k];
+                if (x.gene != MAXU && (x.flags & 2) && (P.rules & 4) && x.hasn) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }
+                if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; } break; }
         } else {
-            bool amb = false, pa = false; uint32_t fg = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
+            bool amb = false, pa = false; uint32_t fg = MAXU, sec = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
+            uint32_t mg = MAXU, mex = MAXU, min_ = MAXU, mfl = 0;                                                    // the chrM gene's alignment (kMtPrefer)
             for (int k = 0; k < sg.n_aln; k++) {
                 AA x = aa[sg.aln_off + k];
                 if (A[sg.aln_off + k].flags & 2) {
-                    if (x.gene != MAXU) { gi = x.gene; ex = x.exon; in = x.intron; fl = x.flags; pa = true; }
-                    if (x.multi) amb = true;
-                    if (x.aln_gene != MAXU) { if (fg == MAXU) fg = x.aln_gene; else if (x.aln_gene != fg) amb = true; }
+                    if (x.gene != MAXU && (x.flags & 2) && (((P.rules & 1)) || ((P.rules & 4) && x.hasn))) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }   // NH > 1 here
+                    if (x.gene != MAXU) {
+                        gi = x.gene; ex = x.exon; in = x.intron; fl = x.flags; pa = true;
+                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = x.intron; mfl = x.flags; }
+                    }
+                    if (x.multi) {
+                        amb = true;
+                        if (sec == MAXU && x.pg_a != MAXU) { if (fg == MAXU) fg = x.pg_a; if (x.pg_b != MAXU) sec = x.pg_b; }
+                    }
+                    if (x.aln_gene != MAXU) { if (fg == MAXU) fg = x.aln_gene; else if (x.aln_gene != fg) { amb = true; if (sec == MAXU) sec = x.aln_gene; } }
                 } else {
                     if (x.multi) amb = true;
-                    else if (x.gene != MAXU) { if (fg == MAXU) fg = x.gene; else if (x.gene != fg) amb = true; if (!pa && (gi == MAXU || x.exon < ex)) { gi = x.gene; ex = x.exon; fl = 5; } }   // R7: else the smallest secondary exon
+                    else if (x.gene != MAXU) {
+                        if (fg == MAXU) fg = x.gene; else if (x.gene != fg) { amb = true; if (sec == MAXU) sec = x.gene; }
+                        if (!pa && (gi == MAXU || x.exon < ex)) { gi = x.gene; ex = x.exon; fl = 5; }   // R7: else the smallest secondary exon
+                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = MAXU; mfl = 5; }
+                    }
                 }
             }
-            if (!amb && fg != MAXU && gi != MAXU) { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
+            if (amb && mg != MAXU && fg != MAXU && sec != MAXU && is_mt(fg) != is_mt(sec)) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = mfl ? mfl : 5; }
+            else if (!amb && fg != MAXU && gi != MAXU) { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
         }
     }
     out[s] = r;
@@ -398,6 +418,7 @@ struct Inputs {
     int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12, wantMerges = 0; Par par; DPar dp;
     SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R;
     DTree EX, IN; uint32_t *e2g, *i2g; char* gstr; DSnp SN; uint32_t ne2g = 0, ni2g = 0, ngstr = 0;
+    uint8_t* gmt = nullptr; uint32_t ngmt = 0;   // per gene: lies on chrM (PileupInput::geneIsMt), for kMtPrefer
 };
 struct Outputs {
     struct Merge { uint32_t cell, gene; uint64_t umi, root; };
@@ -453,7 +474,7 @@ static uint32_t* gene_components(Arena& A, const GeneStore* gst, const uint32_t*
 // device. Order-free: radix sorts, integer reductions, and the R9 collapse one thread per group.
 // gene: the M6 chain (stage b: (cell, gene, UMI) sort and reduce; c: directional UMI collapse; d: per class CSR)
 static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr) {
-    Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells;
+    Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells; L.cr = (in.dp.rules & 128) != 0 && in.par.umi_dedup;
     long long ne = 0, na = 0; int it = 0;
     C[0] = C[1] = C[2] = CsrDev{nullptr, nullptr, nullptr, 0};
     if (gst) *gst = GeneStore{nullptr, nullptr, 0, L.gb, L.ub};
@@ -555,7 +576,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     AA* aa = A.alloc<AA>(std::max(nA, 1));
     k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa); T.mark("1.annotate");
     // 2 signature level
-    GRes* gr = A.alloc<GRes>(nS); k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, gr);
+    GRes* gr = A.alloc<GRes>(nS); k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, in.gmt, in.ngmt, in.dp, gr);
     uint32_t *c_sj = A.alloc<uint32_t>(nS), *c_snp = A.alloc<uint32_t>(nS), *c_mt = A.alloc<uint32_t>(nS), *c_ind = A.alloc<uint32_t>(nS);
     k_lists<false><<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, in.ops, in.seq, in.SN, in.dp, c_sj, c_snp, c_mt, c_ind, nullptr, nullptr, nullptr, nullptr);
     uint32_t *o_sj = scan_u32(A, c_sj, nS), *o_snp = scan_u32(A, c_snp, nS), *o_mt = scan_u32(A, c_mt, nS), *o_ind = scan_u32(A, c_ind, nS);
@@ -780,7 +801,7 @@ int main(int argc, char** argv) {
     fprintf(stderr, "quality check: bases where (quality < min_baseq) != (base is N): %.0f\n", meta["n_qual_neq_n"]);
     Arena A; A.init((size_t)(arena_gb * 1e9));
     Inputs in; in.nS = (int)hS.size(); in.nA = (int)hA.size(); in.nR = (int)hR.size(); in.ncells = (int)par.n_barcodes; in.ulen = ulen; in.par = par;
-    if (meta["snp_skip_n"] < 0) die("base qualities are neither constant nor tied to N: the SNP pileup quality filter cannot be reproduced from sequences"); in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, (int)meta["snp_skip_n"]};
+    if (meta["snp_skip_n"] < 0) die("base qualities are neither constant nor tied to N: the SNP pileup quality filter cannot be reproduced from sequences"); in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, (int)meta["snp_skip_n"], 0u};
     // pinned staging + timed H2D of the per-sample records
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
     in.EX = upload_tree(A, an.ex); in.IN = upload_tree(A, an.in); in.e2g = to_dev(A, an.e2g); in.i2g = to_dev(A, an.i2g); in.gstr = to_dev(A, an.gstr);

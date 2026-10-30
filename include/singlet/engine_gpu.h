@@ -115,6 +115,8 @@ struct PileupInput {
     std::vector<std::vector<PileupSnpRow>> snps;
     int stranded = 1, reverseStrand = 0, minMapq = 20, minBaseq = 10, countIntrons = 1, countSj = 1, countMt = 0, umiDedup = 1, directional = 1,
         umiLen = 12, chrmTid = -1, hasGeneModel = 1, snpSkipN = 0;
+    uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kUmiGeneCR, kMtPrefer
+    std::vector<uint8_t> geneIsMt;          // per gene: on chrM (kMtPrefer)
     int wantGeneMerges = 0;   // return PileupOutput::geneMerges (the host collapses V(D)J molecules per (cell, gene), R9)
     uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
     // records, raw pileup_rec.h structs
@@ -130,7 +132,7 @@ struct PileupOutput {
     uint64_t snpMolecules = 0, snpAmbiguous = 0, snpOther = 0;
     // the engine's PileupStats counters these outputs replace: molecule labels (DirectionalUmiStore::MoleculeStats), SNP overlaps
     // passing the quality gate (snp_hits), distinct (cell, junction, UMI) (sj_hits), chrM bases counted (mt_pileup_bases)
-    uint64_t molSpliced = 0, molUnspliced = 0, molAmbiguous = 0, molLegacyDouble = 0, snpHits = 0, sjHits = 0, mtBases = 0;
+    uint64_t molSpliced = 0, molUnspliced = 0, molAmbiguous = 0, molLegacyDouble = 0, molDropped = 0, snpHits = 0, sjHits = 0, mtBases = 0;
     // per cell (barcode column): reads recorded in the molecule store and molecules after directional collapse
     // (DirectionalUmiStore::per_cell_molecule_stats: the inputs of saturation_metrics.tsv and cell_qc_metrics.tsv)
     std::vector<uint32_t> cellReads, cellMolecules;

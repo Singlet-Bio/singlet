@@ -1864,6 +1864,9 @@ public:
         in.stranded = config_.stranded; in.reverseStrand = config_.reverse_strand; in.minMapq = config_.min_mapq; in.minBaseq = config_.min_baseq;
         in.countIntrons = config_.count_introns; in.countSj = config_.count_sj; in.countMt = config_.count_mt; in.umiDedup = config_.umi_dedup;
         in.directional = config_.umi_dedup_directional; in.umiLen = config_.umi_len; in.chrmTid = chrm_tid_; in.hasGeneModel = has_gene_model_;
+        in.intronRules = config_.intron_rules;
+        in.geneIsMt.assign(gene_model_.n_genes(), 0);
+        for (uint32_t g = 0; g < gene_model_.n_genes(); ++g) in.geneIsMt[g] = is_mt_gene(g) ? 1 : 0;
         in.wantGeneMerges = (has_vdj_ && config_.umi_dedup) ? 1 : 0;   // R9 per gene for the host's V(D)J reducer
         in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
         in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
@@ -2275,7 +2278,7 @@ public:
         stats.snp_molecules += out.snpMolecules; stats.snp_molecules_ambiguous += out.snpAmbiguous; stats.snp_molecules_other += out.snpOther;
         gpu_ms_ = DirectionalUmiStore::MoleculeStats{};
         gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
-        gpu_ms_.legacy_double = out.molLegacyDouble;
+        gpu_ms_.legacy_double = out.molLegacyDouble; gpu_ms_.dropped = out.molDropped;
         gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
         gpu_merges_.swap(out.geneMerges);
         stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;

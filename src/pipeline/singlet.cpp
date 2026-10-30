@@ -5243,15 +5243,17 @@ int main(int argc, char* argv[]) {
     }
     config.cb_from_cr = (stream_unsorted == 1);
 #ifdef SINGLET_HAVE_ENGINE_GPU
-    // The GPU pileup mirrors the classification of prod/campaign without the intron rules of PR #80 (intron_rule::k*: read-level kUnique /
-    // kNoSplicedIntron / kMtPrefer and the molecule-level kUmiGeneCR are not on the GPU yet). With any rule on, its counts would differ from the
-    // CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads).
+    // The GPU pileup mirrors the intron rules of PR #80 that are on by default (intron_rule::kUnique, kNoSplicedIntron, kUmiGeneCR, kMtPrefer; rules 389).
+    // The others (kContained, kFlank, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its counts would
+    // differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads).
     if (getenv("SINGLET_GPU_PILEUP")) {
+        constexpr uint32_t kGpuRules = 1u | 4u | 128u | 256u;
         uint32_t rules = config.intron_rules;
         if (const char* r = getenv("SINGLET_INTRON_RULES")) rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
-        if (rules != 0) {
-            std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: the GPU pileup does not implement intron rules 0x" << std::hex << rules << std::dec
-                      << " (set SINGLET_INTRON_RULES=0 for the pre-#80 classification); the CPU pileup runs on the GPU-mapped reads\n";
+        if (rules & ~kGpuRules) {
+            std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: the GPU pileup does not implement intron rules 0x" << std::hex << (rules & ~kGpuRules) << std::dec
+                      << " (of 0x" << std::hex << rules << std::dec << "); the CPU pileup runs on the GPU-mapped reads
+";
             unsetenv("SINGLET_GPU_PILEUP");
         }
     }
