@@ -105,6 +105,8 @@ bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& 
 struct PileupIv { int32_t s, e; uint32_t idx; };                        // = singlet::Interval
 struct PileupSnpRow { int32_t pos; uint32_t idx; char ref, alt; uint16_t pad; };
 struct PileupTriplet { uint32_t cell, row, val; };                      // sorted by (cell, row)
+// R9 per gene: a UMI of the (cell, gene) molecule store that the directional collapse merged into another (2-bit packed UMIs, N as T)
+struct PileupGeneMerge { uint32_t cell, gene; uint64_t umi, root; };
 struct PileupInput {
     // annotation: the engine's own interval trees as sorted arrays (the GPU replays the CPU's pre-order traversal), gene maps, SNP table
     std::vector<std::vector<PileupIv>> exonTrees, intronTrees;
@@ -113,6 +115,7 @@ struct PileupInput {
     std::vector<std::vector<PileupSnpRow>> snps;
     int stranded = 1, reverseStrand = 0, minMapq = 20, minBaseq = 10, countIntrons = 1, countSj = 1, countMt = 0, umiDedup = 1, directional = 1,
         umiLen = 12, chrmTid = -1, hasGeneModel = 1, snpSkipN = 0;
+    int wantGeneMerges = 0;   // return PileupOutput::geneMerges (the host collapses V(D)J molecules per (cell, gene), R9)
     uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
     // records, raw pileup_rec.h structs
     std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
@@ -123,6 +126,7 @@ struct PileupOutput {
     std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
     std::vector<std::array<uint32_t, 3>> sjtab;      // junction id -> (tid, donor, acceptor), ids in (tid, donor, acceptor) order
     std::vector<std::array<uint32_t, 4>> indels;     // (cell, pos, len, is_ins)
+    std::vector<PileupGeneMerge> geneMerges;         // only when wantGeneMerges; sorted by (cell, gene, umi)
     uint64_t snpMolecules = 0, snpAmbiguous = 0, snpOther = 0;
     // the engine's PileupStats counters these outputs replace: molecule labels (DirectionalUmiStore::MoleculeStats), SNP overlaps
     // passing the quality gate (snp_hits), distinct (cell, junction, UMI) (sj_hits), chrM bases counted (mt_pileup_bases)

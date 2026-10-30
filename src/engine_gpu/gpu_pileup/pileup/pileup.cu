@@ -258,11 +258,30 @@ __global__ void k_gfill(const ReadRec* R, int n, const GRes* G, const uint32_t* 
     ReadRec x = R[r]; GRes g = G[x.sig]; Rec o; o.bc = (uint32_t)x.bc; o.gene = g.gene; o.exon = g.exon; o.intron = g.intron; o.umi = umi_b2(x.umi3, ulen);
     o.flags = (uint8_t)g.flags; o.umi_len = (uint8_t)ulen; o.hasN = 0; o.direct = 0; o.pad = 0; out[off[r]] = o; }
 __global__ void k_fill_hilo(const ReadRec* R, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, int is_snp, int hb, int ulen,
-                            uint64_t* hi, uint32_t* lo, uint8_t* alt) {
+                            uint64_t* hi, uint32_t* lo, uint8_t* alt, const SigRec* S = nullptr, const GRes* G = nullptr, uint32_t* tg = nullptr) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) return;
     uint32_t c = list_cnt[x.sig], b = list_off[x.sig], o = off[r]; uint32_t u = umi_b5(x.umi3, ulen);
-    for (uint32_t k = 0; k < c; k++) { uint32_t e = lists[b + k]; hi[o + k] = ((uint64_t)x.bc << hb) | (is_snp ? (e >> 2) : e); lo[o + k] = u; if (is_snp) alt[o + k] = (uint8_t)(e & 3); }
+    // R9 per gene: the evidence gene is the unique read's gene (cur_read_gene_ is set for NH 1 only)
+    const uint32_t gene = (tg && S[x.sig].nh == 1) ? G[x.sig].gene : MAXU;
+    for (uint32_t k = 0; k < c; k++) { uint32_t e = lists[b + k]; hi[o + k] = ((uint64_t)x.bc << hb) | (is_snp ? (e >> 2) : e); lo[o + k] = u; if (is_snp) alt[o + k] = (uint8_t)(e & 3); if (tg) tg[o + k] = gene; }
 }
+// the gene reducer's molecule store, kept for the junction and SNP reducers (R9 per gene): the sorted unique (cell, gene, UMI) keys and the
+// component (root entry index) of each after the directional collapse
+struct GeneStore { const uint64_t* uk; const uint32_t* lab; int m, gb, ub; };
+__global__ void k_gather32(const uint32_t* src, const uint32_t* idx, int n, uint32_t* out) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) out[i] = src[idx[i]]; }
+// per unique (cell, feature, UMI) entry: the component of the gene store entry (cell, gene, UMI as 2 bits per base, N as T), 0xFFFFFFFF if the
+// reads had no gene or the store does not hold the UMI (r9_molecules: gene_root false)
+__global__ void k_gene_rid(const uint64_t* uh, const uint32_t* ul, const uint32_t* gmin, int m, int hb, int ulen, GeneStore gs, uint32_t* rid) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    rid[i] = 0xFFFFFFFFu; const uint32_t g = gmin[i]; if (g == MAXU) return;
+    uint32_t u5 = ul[i]; uint64_t u2 = 0; for (int k = 0; k < ulen; k++) { u2 |= (uint64_t)min(u5 % 5, 3u) << (2 * k); u5 /= 5; }
+    const uint64_t key = ((uh[i] >> hb) << (gs.gb + gs.ub)) | ((uint64_t)g << gs.ub) | u2;
+    int lo = 0, hi = gs.m; while (lo < hi) { int mid = (lo + hi) >> 1; if (gs.uk[mid] < key) lo = mid + 1; else hi = mid; }
+    if (lo < gs.m && gs.uk[lo] == key) rid[i] = gs.lab[lo];
+}
+__global__ void k_mflag(const uint32_t* lab, int m, uint32_t* f) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) f[i] = lab[i] != (uint32_t)i; }
+__global__ void k_mgather(const uint64_t* uk, const uint32_t* lab, const uint32_t* idx, int n, uint64_t* a, uint64_t* b) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x; if (j < n) { a[j] = uk[idx[j]]; b[j] = uk[lab[idx[j]]]; } }
 __global__ void k_fill_mt(const ReadRec* R, const AlnRec* A, const SigRec* S, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, uint64_t* key) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) return;
     SigRec sg = S[x.sig]; uint32_t rev = 0; for (int k = 0; k < sg.n_aln; k++) if (A[sg.aln_off + k].flags & 2) { rev = A[sg.aln_off + k].flags & 1; break; }
@@ -306,18 +325,26 @@ __global__ void k_snpw(const uint64_t* mv, int m, uint32_t* w) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return; uint32_t s = 0; for (int k = 0; k < 3; k++) s += min((uint32_t)((mv[i] >> (16 * k)) & 0xFFFF), 255u); w[i] = s; }
 // snp == 0: root[i] = 1 for component roots (molecules per group = their sum). snp == 1: the root's value is the R1 vote over the merged
 // molecule (REF: DP; ALT: DP + AD), members 0; stat: molecules, ambiguous, other.
+// rid (R9 per gene, order-free-rules.md): rid[i] != 0xFFFFFFFF marks an entry whose reads were assigned a gene and whose UMI that gene's molecule
+// store holds; rid[i] is the store's component (the index of its root entry). Such entries are one molecule per rid (the gene reducer's collapse
+// over every read of the gene in the cell); the other entries are collapsed among themselves (r9_molecules in umi_dedup.h). rid == nullptr: all.
 __global__ void k_r9(const uint32_t* gs, int ng, int m, const uint32_t* u, const uint32_t* w, const uint64_t* mv, int ulen, int directional,
-                     uint32_t* root, uint32_t* isroot, uint64_t* val, uint32_t* msum, unsigned long long* stat) {
+                     uint32_t* root, uint32_t* isroot, uint64_t* val, uint32_t* msum, unsigned long long* stat, const uint32_t* rid = nullptr) {
     int g = blockIdx.x * blockDim.x + threadIdx.x; if (g >= ng) return;
     const uint32_t s = gs[g], e = g + 1 < ng ? gs[g + 1] : (uint32_t)m;
     for (uint32_t i = s; i < e; i++) root[i] = i;
     auto find = [&](uint32_t x) { while (root[x] != x) { root[x] = root[root[x]]; x = root[x]; } return x; };
+    auto free_ = [&](uint32_t i) { return rid == nullptr || rid[i] == 0xFFFFFFFFu; };
     if (directional && e - s > 1)
-        for (uint32_t i = s; i + 1 < e; i++) for (uint32_t j = i + 1; j < e; j++) {
+        for (uint32_t i = s; i + 1 < e; i++) if (free_(i)) for (uint32_t j = i + 1; j < e; j++) if (free_(j)) {
             const uint32_t hi = max(w[i], w[j]), lo = min(w[i], w[j]);
             if (hi + 1 >= 2 * lo && umi5_one_mismatch(u[i], u[j], ulen)) { uint32_t ri = find(i), rj = find(j); if (ri != rj) root[max(ri, rj)] = min(ri, rj); }
         }
-    for (uint32_t i = s; i < e; i++) root[i] = find(i);
+    for (uint32_t i = s; i < e; i++) {
+        if (free_(i)) { root[i] = find(i); continue; }
+        uint32_t f = i; for (uint32_t j = s; j < i; j++) if (rid[j] == rid[i]) { f = j; break; }   // first entry of its gene component
+        root[i] = f;
+    }
     if (!val) { for (uint32_t i = s; i < e; i++) isroot[i] = root[i] == i; return; }
     for (uint32_t i = s; i < e; i++) { msum[3 * i] = msum[3 * i + 1] = msum[3 * i + 2] = 0; }
     for (uint32_t i = s; i < e; i++) for (int k = 0; k < 3; k++) msum[3 * root[i] + k] += min((uint32_t)((mv[i] >> (16 * k)) & 0xFFFF), 255u);
@@ -368,11 +395,13 @@ static uint32_t* sort_hilo(Arena& A, const uint64_t* hi, const uint32_t* lo, int
 
 // ------------------------------------------------------------------------------------------------------------------------
 struct Inputs {
-    int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12; Par par; DPar dp;
+    int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12, wantMerges = 0; Par par; DPar dp;
     SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R;
     DTree EX, IN; uint32_t *e2g, *i2g; char* gstr; DSnp SN; uint32_t ne2g = 0, ni2g = 0, ngstr = 0;
 };
 struct Outputs {
+    struct Merge { uint32_t cell, gene; uint64_t umi, root; };
+    std::vector<Merge> merges;   // gene store UMIs merged into another (Inputs::wantMerges)
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
     long long n_gene_tuples = 0, n_sjl = 0, n_sj_tuples = 0, n_snp_tuples = 0, n_mt_tuples = 0, n_ind_tuples = 0, n_junctions = 0;
     std::vector<uint32_t> cell_reads, cell_mol;   // per cell, when g_cell_stats
@@ -408,27 +437,43 @@ __global__ void k_binsum(const ReadRec* R, int n, const uint64_t* w, uint32_t K,
 __global__ void k_partflag(const ReadRec* R, int n, uint32_t K, uint32_t p, uint32_t* f) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n) f[r] = (R[r].bc >= 0 && cell_part(R[r].bc, K) == p) ? 1u : 0u; }
 
+// R9 per gene: for the m unique (cell, feature, UMI) entries (run structure `seg` over the n tuples sorted by `ord`), the gene store component of
+// each, from the smallest gene over the entry's reads (UmiFeatureCollapse::add); nullptr when there is no store
+static uint32_t* gene_components(Arena& A, const GeneStore* gst, const uint32_t* tg, const uint32_t* ord, const uint32_t* seg, int n, const uint64_t* uh,
+                                 const uint32_t* ul, int m, int hb, int ulen, int* dn) {
+    if (!gst || !tg || m == 0) return nullptr;
+    const int TB = 256;
+    uint32_t *gsrt = A.alloc<uint32_t>(n), *segu = A.alloc<uint32_t>(m), *gmin = A.alloc<uint32_t>(m), *rid = A.alloc<uint32_t>(m);
+    k_gather32<<<(n + TB - 1) / TB, TB>>>(tg, ord, n, gsrt);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, seg, segu, gsrt, gmin, dn + 1, cub::Min(), n); });
+    k_gene_rid<<<(m + TB - 1) / TB, TB>>>(uh, ul, gmin, m, hb, ulen, *gst, rid);
+    return rid;
+}
 // ---- the reducers: each takes its partition's tuples from the read-level expansion and returns its per-(cell, feature) result on the
 // device. Order-free: radix sorts, integer reductions, and the R9 collapse one thread per group.
 // gene: the M6 chain (stage b: (cell, gene, UMI) sort and reduce; c: directional UMI collapse; d: per class CSR)
-static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3]) {
+static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr) {
     Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells;
     long long ne = 0, na = 0; int it = 0;
     C[0] = C[1] = C[2] = CsrDev{nullptr, nullptr, nullptr, 0};
+    if (gst) *gst = GeneStore{nullptr, nullptr, 0, L.gb, L.ub};
     if (ng > 0) {
         uint64_t* uk; Agg* ag; int m = stage_b(A, T, recs, ng, 0, L, &uk, &ag); T.mark("b.end");
-        Mol M = stage_c(A, T, uk, ag, m, L, &ne, &na, &it); T.mark("c.end");
+        const uint32_t* lab = nullptr;
+        Mol M = stage_c(A, T, uk, ag, m, L, &ne, &na, &it, &lab); T.mark("c.end");
+        if (gst) *gst = GeneStore{uk, lab, m, L.gb, L.ub};
         C[0] = stage_d_one(A, M.kex, m, L); C[1] = stage_d_one(A, M.kin, m, L); C[2] = stage_d_one(A, M.kam, m, L); T.mark("d.end");
     }
 }
 // junction: (cell, junction, UMI) sort, reads per exact UMI, R9 collapse per (cell, junction); returns the (cell | junction) rows
 static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int nR, const uint32_t* r_sj, const uint32_t* o_sj, const uint32_t* c_sj,
-                        const uint32_t* l_jid, int n_sjt, int jb, int cb, uint64_t** sj_u, uint32_t** sj_n) {
+                        const uint32_t* l_jid, int n_sjt, int jb, int cb, uint64_t** sj_u, uint32_t** sj_n, const GRes* G, const GeneStore* gst) {
     const int TB = 256, GR = (nR + TB - 1) / TB, ub5 = (int)ceil(in.ulen * 2.3219280948873623) + 1;
     int n_sju = 0;
     if (n_sjt > 0) {
         uint64_t* sj_hi = A.alloc<uint64_t>(n_sjt); uint32_t* sj_lo = A.alloc<uint32_t>(n_sjt);
-        k_fill_hilo<<<GR, TB>>>(R, nR, r_sj, o_sj, c_sj, l_jid, 0, jb, in.ulen, sj_hi, sj_lo, nullptr);
+        uint32_t* tg = gst ? A.alloc<uint32_t>(n_sjt) : nullptr;
+        k_fill_hilo<<<GR, TB>>>(R, nR, r_sj, o_sj, c_sj, l_jid, 0, jb, in.ulen, sj_hi, sj_lo, nullptr, in.S, G, tg);
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sj_hi, sj_lo, n_sjt, cb + jb, ub5, &hs); const int G = (n_sjt + TB - 1) / TB;
         uint32_t* first = A.alloc<uint32_t>(n_sjt); k_runflag<<<G, TB>>>(hs, sj_lo, ord, n_sjt, first);
         uint32_t* seg = A.alloc<uint32_t>(n_sjt);
@@ -439,7 +484,8 @@ static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, 
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, seg, segu, cub::ConstantInputIterator<uint32_t>(1), w, dn, SumU32(), n_sjt); });
         uint32_t* gs; int ngr = group_starts(A, uh, m, &gs);
         uint32_t *root = A.alloc<uint32_t>(m), *isroot = A.alloc<uint32_t>(m);
-        k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, ul, w, nullptr, in.ulen, in.par.directional, root, isroot, nullptr, nullptr, nullptr);
+        uint32_t* rid = gene_components(A, gst, tg, ord, seg, n_sjt, uh, ul, m, jb, in.ulen, dn);
+        k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, ul, w, nullptr, in.ulen, in.par.directional, root, isroot, nullptr, nullptr, nullptr, rid);
         *sj_u = A.alloc<uint64_t>(m); *sj_n = A.alloc<uint32_t>(m);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, uh, *sj_u, isroot, *sj_n, dn, SumU32(), m); });
         CK(cudaMemcpy(&n_sju, dn, 4, cudaMemcpyDeviceToHost));
@@ -449,12 +495,13 @@ static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, 
 }
 // SNP: (cell, SNP, UMI) sort, class counts per exact UMI, R9 collapse per (cell, SNP), R1 vote per molecule; rows (cell | SNP) -> DP | AD << 32
 static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int nR, const uint32_t* r_snp, const uint32_t* o_snp, const uint32_t* c_snp,
-                   const uint32_t* l_snp, int n_snpt, int sb, int cb, uint64_t** sn_u, uint64_t** sn_v) {
+                   const uint32_t* l_snp, int n_snpt, int sb, int cb, uint64_t** sn_u, uint64_t** sn_v, const GRes* G, const GeneStore* gst) {
     const int TB = 256, GR = (nR + TB - 1) / TB, ub5 = (int)ceil(in.ulen * 2.3219280948873623) + 1;
     int n_snu = 0;
     if (n_snpt > 0) {
         uint64_t* sn_hi = A.alloc<uint64_t>(n_snpt); uint32_t* sn_lo = A.alloc<uint32_t>(n_snpt); uint8_t* sn_alt = A.alloc<uint8_t>(n_snpt);
-        k_fill_hilo<<<GR, TB>>>(R, nR, r_snp, o_snp, c_snp, l_snp, 1, sb, in.ulen, sn_hi, sn_lo, sn_alt);
+        uint32_t* tg = (gst && !g_snp_first) ? A.alloc<uint32_t>(n_snpt) : nullptr;
+        k_fill_hilo<<<GR, TB>>>(R, nR, r_snp, o_snp, c_snp, l_snp, 1, sb, in.ulen, sn_hi, sn_lo, sn_alt, in.S, G, tg);
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sn_hi, sn_lo, n_snpt, cb + sb, ub5, &hs); const int G = (n_snpt + TB - 1) / TB;
         uint32_t* first = A.alloc<uint32_t>(n_snpt); k_runflag<<<G, TB>>>(hs, sn_lo, ord, n_snpt, first);
         *sn_u = A.alloc<uint64_t>(n_snpt); *sn_v = A.alloc<uint64_t>(n_snpt); int* dn = A.alloc<int>(4);
@@ -475,7 +522,8 @@ static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int n
             uint32_t* w = A.alloc<uint32_t>(m); k_snpw<<<(m + TB - 1) / TB, TB>>>(mv, m, w);
             uint32_t* gs; int ngr = group_starts(A, mk, m, &gs);
             uint32_t *root = A.alloc<uint32_t>(m), *msum = A.alloc<uint32_t>(3 * (size_t)m);
-            k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, mu, w, mv, in.ulen, in.par.directional, root, nullptr, val, msum, st);
+            uint32_t* rid = gene_components(A, gst, tg, ord, seg, n_snpt, mk, mu, m, sb, in.ulen, dn);
+            k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, mu, w, mv, in.ulen, in.par.directional, root, nullptr, val, msum, st, rid);
             unsigned long long s[3]; CK(cudaMemcpy(s, st, 24, cudaMemcpyDeviceToHost));
             for (int k = 0; k < 3; k++) g_snp_stat[k] += s[k];
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, mk, *sn_u, val, *sn_v, dn, SumU64(), m); });
@@ -603,11 +651,24 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         const size_t s4 = A.mark();
         T.mark("4.expand");
         // the reducers: gene (M6 chain), junction, SNP, chrM base, chrM indel; each emits, sorts, collapses and reduces its own stream
-        CsrDev C[3]; red_gene(A, T, in, recs, ng, C);
+        CsrDev C[3]; GeneStore gst{nullptr, nullptr, 0, 0, 0}; red_gene(A, T, in, recs, ng, C, &gst);
+        const GeneStore* gsp = (in.par.umi_dedup && gst.m > 0) ? &gst : nullptr;   // R9 per gene: the junction and SNP molecules take their roots from it
+        if (out && in.wantMerges && gst.m > 0) {   // the host V(D)J reducer needs the same roots: the entries the collapse merged into another
+            const int Gm = (gst.m + TB - 1) / TB; uint32_t* mf = A.alloc<uint32_t>(gst.m); k_mflag<<<Gm, TB>>>(gst.lab, gst.m, mf);
+            uint32_t* midx = A.alloc<uint32_t>(gst.m); int* mn = A.alloc<int>(1);
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, cub::CountingInputIterator<uint32_t>(0), mf, midx, mn, gst.m); });
+            int nm = 0; CK(cudaMemcpy(&nm, mn, 4, cudaMemcpyDeviceToHost));
+            if (nm > 0) {
+                uint64_t *ma = A.alloc<uint64_t>(nm), *mb = A.alloc<uint64_t>(nm); k_mgather<<<(nm + TB - 1) / TB, TB>>>(gst.uk, gst.lab, midx, nm, ma, mb);
+                std::vector<uint64_t> ha(nm), hb2(nm); CK(cudaMemcpy(ha.data(), ma, (size_t)nm * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(hb2.data(), mb, (size_t)nm * 8, cudaMemcpyDeviceToHost));
+                const uint64_t um = (1ull << gst.ub) - 1, gm = (1ull << gst.gb) - 1;
+                for (int i = 0; i < nm; i++) out->merges.push_back({(uint32_t)(ha[i] >> (gst.gb + gst.ub)), (uint32_t)((ha[i] >> gst.ub) & gm), ha[i] & um, hb2[i] & um});
+            }
+        }
         const size_t s5 = A.mark();
-        uint64_t* sj_u = nullptr; uint32_t* sj_n = nullptr; int n_sju = red_junction(A, T, in, Rp, nRp, r_sj, o_sj, c_sj, l_jid, n_sjt, jb, cb, &sj_u, &sj_n);
+        uint64_t* sj_u = nullptr; uint32_t* sj_n = nullptr; int n_sju = red_junction(A, T, in, Rp, nRp, r_sj, o_sj, c_sj, l_jid, n_sjt, jb, cb, &sj_u, &sj_n, gr, gsp);
         const size_t s6 = A.mark();
-        uint64_t* sn_u = nullptr; uint64_t* sn_v = nullptr; int n_snu = red_snp(A, T, in, Rp, nRp, r_snp, o_snp, c_snp, l_snp, n_snpt, sb, cb, &sn_u, &sn_v);
+        uint64_t* sn_u = nullptr; uint64_t* sn_v = nullptr; int n_snu = red_snp(A, T, in, Rp, nRp, r_snp, o_snp, c_snp, l_snp, n_snpt, sb, cb, &sn_u, &sn_v, gr, gsp);
         const size_t s7 = A.mark();
         uint64_t* mt_u = nullptr; uint32_t* mt_n = nullptr; int n_mtu = red_mt(A, T, in, Rp, nRp, r_mt, o_mt, c_mt, l_mt, n_mtt, cb, &mt_u, &mt_n);
         uint32_t* in_bc = A.alloc<uint32_t>(std::max(n_indt, 1)); IND* in_ind = A.alloc<IND>(std::max(n_indt, 1)); uint32_t* in_ri = A.alloc<uint32_t>(std::max(n_indt, 1));

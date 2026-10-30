@@ -21,6 +21,7 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <tuple>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -1108,6 +1109,15 @@ public:
         snp_cons_.finalize(snp_ad_, snp_dp_, stats, config_.umi_dedup_directional, gene_roots(mol_store_));  // R1 over R9
         snp_cons_.clear();
         finalize_umi_features(sj_umi_dedup_, sj_acc_, stats.sj_hits, mol_store_);   // R9, before the molecule store
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (gpu_covers_) {   // the gene store lives on the GPU
+            if (!vdj_umi_.empty()) {
+                stats.vdj_hits += vdj_umi_.finalize([&](uint32_t bc, uint32_t f, uint32_t n) { vdj_acc_.increment(f, bc, n); },
+                                                    config_.umi_dedup_directional, GpuGeneRoots{&gpu_merges_});
+                vdj_umi_.clear();
+            }
+        } else
+#endif
         finalize_umi_features(vdj_umi_, vdj_acc_, stats.vdj_hits, mol_store_);      // is finalized below
         canonicalize_splice_junctions();               // R7
         if (config_.strand_prior_only)                  // R5: report the aggregate over all informative reads
@@ -1773,6 +1783,7 @@ public:
         in.stranded = config_.stranded; in.reverseStrand = config_.reverse_strand; in.minMapq = config_.min_mapq; in.minBaseq = config_.min_baseq;
         in.countIntrons = config_.count_introns; in.countSj = config_.count_sj; in.countMt = config_.count_mt; in.umiDedup = config_.umi_dedup;
         in.directional = config_.umi_dedup_directional; in.umiLen = config_.umi_len; in.chrmTid = chrm_tid_; in.hasGeneModel = has_gene_model_;
+        in.wantGeneMerges = (has_vdj_ && config_.umi_dedup) ? 1 : 0;   // R9 per gene for the host's V(D)J reducer
         in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
         in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
         const size_t nreads = gpu_col_->n_reads(), nsigs = gpu_col_->n_sigs(); const uint64_t inc = gpu_col_->incomplete();
@@ -1945,7 +1956,7 @@ public:
                     vdj_model_.query(a.tid, s0, e0, vdj_overlaps_);
                     if (!vdj_overlaps_.empty()) {
                         const uint32_t vg = vdj_overlaps_[0];
-                        if (config_.umi_dedup) vdj_umi_.add(static_cast<uint32_t>(rr.bc), vg, umi_str, umi_len);   // R9: counted at finalize
+                        if (config_.umi_dedup) vdj_umi_.add(static_cast<uint32_t>(rr.bc), vg, umi_str, umi_len, nh == 1 ? gene : UINT32_MAX);   // R9: counted at finalize, per (cell, gene)
                         else { vdj_acc_.increment(vg, static_cast<uint32_t>(rr.bc)); stats.vdj_hits++; }
                     }
                 }
@@ -2077,10 +2088,21 @@ public:
                 cr = bseq.substr(H->cbS - 1, H->cbL); ur = bseq.substr(H->umiS - 1, H->umiL);
             }
             bool cbok = !cr.empty() && !ur.empty() && ur[0] != ' ';
-            for (char c : cr) if (c == 'N') cbok = false;
+            const CbCorrector* const cbc = config_.cb_corrector;   // R11: as stream_cb, the CR is corrected against the whitelist
+            if (!cbc) for (char c : cr) if (c == 'N') cbok = false;
             bool homo = true;
             for (char c : ur) { if (c == 'N') cbok = false; if (c != ur[0]) homo = false; }
             if (homo) cbok = false;
+            if (cbc) {
+                if (!cbok) ++cb_status_[1];
+                else if (static_cast<int>(cr.size()) != cbc->length()) { ++cb_status_[3]; cbok = false; }
+                else {
+                    const int cst = cbc->resolve(cr.c_str(), nullptr, cb_buf_);
+                    ++cb_status_[cst + 4];
+                    if (cst < 0) cbok = false;
+                    else cr.assign(cb_buf_, static_cast<size_t>(cbc->length()));
+                }
+            }
             if (!cbok || cr[0] == '-') { st.no_barcode++; continue; }
             const int32_t bc = bc_index_.lookup(cr.c_str());
             if (bc < 0) {
@@ -2174,6 +2196,7 @@ public:
         gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
         gpu_ms_.legacy_double = out.molLegacyDouble;
         gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
+        gpu_merges_.swap(out.geneMerges);
         stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
         if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
             const SigRec* S = reinterpret_cast<const SigRec*>(in.sigs.data());
@@ -2191,6 +2214,24 @@ public:
     }
 #endif
 
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    // R9 per gene, GPU path: the CPU gene store is empty, so the V(D)J reducer takes a UMI's root from the GPU's gene store: the UMIs its
+    // directional collapse merged into another, sorted by (cell, gene, UMI); any other UMI of an assigned read is its own root
+    std::vector<singlet_engine_gpu::PileupGeneMerge> gpu_merges_;
+    struct GpuGeneRoots {
+        const std::vector<singlet_engine_gpu::PileupGeneMerge>* merges;
+        bool operator()(uint32_t bc, uint32_t gene, uint64_t umi3, uint64_t& root) const {
+            int len = 0;
+            const uint64_t p2 = umi3_to_2bit(umi3, &len);
+            root = p2;
+            const auto it = std::lower_bound(merges->begin(), merges->end(), std::make_tuple(bc, gene, p2),
+                [](const singlet_engine_gpu::PileupGeneMerge& m, const std::tuple<uint32_t, uint32_t, uint64_t>& k) {
+                    return std::tie(m.cell, m.gene, m.umi) < k; });
+            if (it != merges->end() && it->cell == bc && it->gene == gene && it->umi == p2) root = it->root;
+            return true;
+        }
+    };
+#endif
     bool gpu_covers_ = false;   // W11: SINGLET_GPU_PILEUP=on in a GPU build (always false in a CPU-only build)
     std::vector<uint32_t> gpu_cell_reads_, gpu_cell_mols_;   // W11 "on": per-cell molecule-store reads and molecules from the GPU
     // W11 "on": the per-cell saturation inputs the molecule store would give (empty when the CPU store was used)

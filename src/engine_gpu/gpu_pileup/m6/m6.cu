@@ -382,7 +382,8 @@ __global__ void k_emit(const uint64_t* uk, const uint32_t* lab, const uint32_t* 
 struct IsSet { __host__ __device__ bool operator()(const uint64_t& k) const { return k != ~0ull; } };
 
 struct Mol { uint64_t *kex, *kin, *kam; int m; };
-static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m, const Layout& L, long long* stat_edges, long long* stat_active, int* stat_iters) {
+static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m, const Layout& L, long long* stat_edges, long long* stat_active, int* stat_iters,
+                   const uint32_t** lab_out = nullptr) {   // lab_out: the component (root entry index) of each unique (cell, gene, UMI) entry
     const int TB = 256; int G = (m + TB - 1) / TB; int ub = L.ub;
     uint32_t* sf = A.alloc<uint32_t>(m); uint32_t* seg = A.alloc<uint32_t>(m); uint8_t* act = A.alloc<uint8_t>(m); int* dnum = A.alloc<int>(8);
     k_segflag<<<G, TB>>>(uk, m, ub, sf);
@@ -431,6 +432,7 @@ static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m,
         T.mark("c.cc");
     } else { T.mark("c.cand"); T.mark("c.cc"); }
     *stat_iters = iters;
+    if (lab_out) *lab_out = lab;
     uint32_t *cf = A.alloc<uint32_t>(m), *ce = A.alloc<uint32_t>(m), *ci = A.alloc<uint32_t>(m);
     k_comp_init<<<G, TB>>>(cf, ce, ci, m); k_comp_agg<<<G, TB>>>(ag, lab, m, cf, ce, ci);
     Mol M; M.m = m; M.kex = A.alloc<uint64_t>(m); M.kin = A.alloc<uint64_t>(m); M.kam = A.alloc<uint64_t>(m);
