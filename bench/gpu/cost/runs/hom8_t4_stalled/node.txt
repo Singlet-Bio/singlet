@@ -1,0 +1,12 @@
+node=c010.clipper.gvsu.edu set_count=8 T=4 tag=hom8_t4 jobid=789621 2026-10-27T22:31:25-04:00
+36e13164cea273912a87b55b1b115665f7451c2d8f21c64626923848770420b3  /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-w3
+cotenant_cpus=50
+CPU(s):                                  52
+Model name:                              Intel(R) Xeon(R) Gold 6230R CPU @ 2.10GHz
+Thread(s) per core:                      1
+Core(s) per socket:                      26
+Socket(s):                               2
+CPU(s) scaling MHz:                      37%
+50
+               total        used        free      shared  buff/cache   available
+Mem:             750           9         217           0         527         740

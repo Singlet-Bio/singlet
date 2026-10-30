@@ -1,0 +1,34 @@
+{
+ "note": "Hand-collected from the job logs in results_raw/ (job ids given per entry). Public read-only sources only; nothing written to Cloudflare.",
+ "sizes_bytes": [
+  {"run": "SRR9900123", "gsm": "GSM4006843", "pairs": 66699625, "ena_fastq_gz": [1914417338, 5566259987], "ncbi_sra": 5202642913, "ncbi_sra_lite": 2178575950, "1fq": null, "source": "ENA filereport + NCBI SDL, job 789879/789839"},
+  {"run": "SRR14999752", "gsm": "GSM5411066", "pairs": 69556631, "ena_fastq_gz": [1240956559, 2989020527], "ncbi_sra": 2623180750, "ncbi_sra_lite": 2132570850, "1fq": null},
+  {"run": "SRR26840957", "gsm": "GSM7901264", "pairs": 100334475, "ena_fastq_gz": [2031371397, 5543598536], "ncbi_sra": 4852605006, "ncbi_sra_lite": 3330189526, "1fq": null},
+  {"run": "SRR23353990", "gsm": "GSM7036403", "pairs": 111623976, "ena_fastq_gz": [1681252512, 4019428804], "ncbi_sra": 5373506169, "ncbi_sra_lite": 3459198345, "1fq": 1863009112},
+  {"run": "SRR25376447", "gsm": "GSM7656149", "pairs": 263400000, "ena_fastq_gz": null, "ena_note": "ENA read_count 0: run is not mirrored", "ncbi_sra": 26852341396, "ncbi_sra_lite": 13910933306, "1fq": 5929228022},
+  {"run": "SRR21102187", "gsm": "GSM6470208", "pairs": 61090652, "ena_fastq_gz": [2814012607], "ena_note": "one fastq.gz only, 90 bases per spot: the barcode read is not in the ENA FASTQ", "ncbi_sra": 2803774672, "ncbi_sra_lite": 2186572824, "1fq": 927664385},
+  {"run": "SRR21102188", "gsm": "GSM6470208", "pairs": 60683503, "ena_fastq_gz": [2804970066], "ncbi_sra": 2792165354, "ncbi_sra_lite": 2172414614, "1fq": 942865709}
+ ],
+ "lite_access": "SRA Lite objects: the S3 (sra-pub-zq-*) and GCS copies are requester-pays (anonymous GET = 403 / UserProjectMissing); NCBI's own host (sra-downloadb.be-md.ncbi.nlm.nih.gov, service 'ncbi' in the SDL answer) serves anonymous ranged GETs (HTTP 206). Full-quality .sra: public S3 sra-pub-run-odp (us-east-1). Job 789925.",
+ "network_MBps": {
+  "ena_https_range_1_stream_1GB": {"MBps": 0.93, "secs": 1071, "job": 789839, "note": "ENA FTP mirror over HTTPS, ranged"},
+  "ncbi_s3_1_stream_1GB": {"MBps": 11.0, "job": 789839},
+  "ncbi_s3_4_streams_1GB": {"MBps": 95.2, "job": 789839},
+  "ncbi_s3_windows_40s": {"1_stream": 28.1, "4_streams": 31.6, "8_streams": 56.2, "job": 789920, "note": "shared egress: other lab download jobs were running"},
+  "ncbi_s3_full_sra_8_streams_2.79GB": {"MBps": 186.9, "job": 789933},
+  "ncbi_host_lite_1_stream_2.17GB": {"MBps": 99.1, "job": 789926},
+  "ncbi_host_lite_8_streams_2.17GB": {"MBps": [147.3, 106.1, 234.1, 134.7], "jobs": [789926, 789928, 789933, 789934]}
+ },
+ "singlet_download_streaming_VDB": {
+  "run": "SRR21102187", "job": 789920, "spots": 61090652, "wall_s": 463.6, "user_s": 340.03, "sys_s": 21.39, "core_s_per_Mspots": 5.9, "percent_cpu": 77, "max_rss_MB": 1039,
+  "vdb_read_s": 397.4, "convert_s": 31.4, "writer_s": 24.6, "protocol_s": 3.7, "vdb_bytes_decoded_GB": 14.17, "out_1fq_bytes": 927664357,
+  "first_4M_spots": {"job": 789903, "wall_s": 59.4, "user_s": 30.64, "sys_s": 3.06, "out_bytes": 61511572}
+ },
+ "local_decode_of_downloaded_file": {
+  "whole_run_lite": {"run": "SRR21102188", "job": 789934, "spots": 60683503, "fetch_s": 16.1, "fetch_MBps": 134.7, "decode_wall_s": 52.7, "user_s": 133.49, "sys_s": 2.66, "core_s_per_Mspots": 2.24, "vdb_read_s": 9.3, "convert_s": 2.3, "writer_s": 34.9, "protocol_s": 3.2, "out_1fq_bytes": 942865700},
+  "first_4M_spots_full_sra_vs_lite": {"job": 789933, "full": {"user_s": 12.82, "sys_s": 0.83, "wall_s": 8.01, "vdb_read_s": 0.687}, "lite": {"user_s": 12.37, "sys_s": 0.74, "wall_s": 8.05, "vdb_read_s": 0.745},
+   "reads_identical": true, "md5_r1": "c83c80479b30c89385c346a36d5f5d00", "md5_r2": "d1719db905a61836643834df84257fbd", "same_md5_from_streaming_accession_job_789920": true}
+ },
+ "gunzip_of_fastq_text_from_real_reads": {"job": 789903, "pairs": 3000000, "r1_gz_bytes": 25054699, "r2_gz_bytes": 117529228, "text_bytes": 790949042, "text_bytes_per_pair": 263.7, "zcat_core_s": {"r1": 0.94, "r2": 3.47}, "core_s_per_Mpairs": 1.47, "note": "pbmc1k_v3 reads re-gzipped at level 6; inflate only, no FASTQ parse or packing"},
+ "cpu_node_pipeline_SRR21102188": {"job": 789934, "stages": {"fetch_lite_s": 16.1, "decode_to_1fq_s": 52.7, "encode_1fg_s": 6.4}, "core_s": {"decode_to_1fq": 136.2, "encode_1fg_zstd3_incl_1fq_decode": 22.3}, "bytes": {"lite": 2172414614, "1fq": 942865700, "1fg": 1065548152}, "cpu_identity_hash_equal": true, "dryrun_parts": 16}
+}

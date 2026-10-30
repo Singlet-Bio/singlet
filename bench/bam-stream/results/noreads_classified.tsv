@@ -1,0 +1,111 @@
+class	date	gsm	srr	gse	fq_reads	fq_blocks	pass2	star_input	version	log
+no_fifo	2026-04-14	GSM5093910	SRR13705650	GSE167118	5672460	12	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358646_19.log
+no_fifo	2026-04-14	GSM7431267	SRR24750172	GSE233682	1287681	3	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358646_52.log
+no_fifo	2026-04-14	GSM8225611	SRR28785509	GSE264681	13759135	28	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358646_56.log
+no_fifo	2026-04-14	GSM8829286	SRR32570919	GSE291111	7883965	16	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358646_75.log
+no_fifo	2026-04-14	GSM5812004	SRR17678607	GSE193517	1530885	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_81.log
+no_fifo	2026-04-14	GSM5812213	SRR17679132	GSE193517	1562503	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_86.log
+no_fifo	2026-04-14	GSM5812450	SRR17677796	GSE193517	1547382	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_83.log
+no_fifo	2026-04-14	GSM5812222	SRR17678685	GSE193517	1548179	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_84.log
+no_fifo	2026-04-14	GSM5812294	SRR17678026	GSE193517	1587437	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_88.log
+no_fifo	2026-04-14	GSM5812482	SRR17677788	GSE193517	1604344	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_90.log
+no_fifo	2026-04-14	GSM5812578	SRR17677887	GSE193517	1605903	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_91.log
+no_fifo	2026-04-14	GSM5812147	SRR17678321	GSE193517	1616206	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_94.log
+no_fifo	2026-04-14	GSM5812670	SRR17677867	GSE193517	1623429	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_95.log
+no_fifo	2026-04-14	GSM5812208	SRR17677611	GSE193517	1624985	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_96.log
+no_fifo	2026-04-14	GSM5812295	SRR17678025	GSE193517	1612635	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_93.log
+no_fifo	2026-04-14	GSM5811977	SRR17678231	GSE193517	1625698	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_97.log
+no_fifo	2026-04-14	GSM5812180	SRR17679139	GSE193517	1634572	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_101.log
+no_fifo	2026-04-14	GSM5812634	SRR17678188	GSE193517	1629337	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_99.log
+no_fifo	2026-04-14	GSM5812548	SRR17677746	GSE193517	1635830	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_102.log
+no_fifo	2026-04-14	GSM5811952	SRR17678232	GSE193517	1632788	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_100.log
+no_fifo	2026-04-14	GSM5812233	SRR17677610	GSE193517	1683117	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_107.log
+no_fifo	2026-04-14	GSM5812336	SRR17677473	GSE193517	1650774	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_104.log
+no_fifo	2026-04-14	GSM5812534	SRR17677752	GSE193517	1686873	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_108.log
+no_fifo	2026-04-14	GSM5812326	SRR17678010	GSE193517	1676970	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_106.log
+no_fifo	2026-04-14	GSM5812244	SRR17679125	GSE193517	1676467	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_105.log
+no_fifo	2026-04-14	GSM5812474	SRR17677935	GSE193517	1690221	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_111.log
+no_fifo	2026-04-14	GSM5812682	SRR17677709	GSE193517	1687746	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_109.log
+no_fifo	2026-04-14	GSM5812197	SRR17678470	GSE193517	1691860	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_112.log
+no_fifo	2026-04-14	GSM5812338	SRR17677471	GSE193517	1688743	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_110.log
+no_fifo	2026-04-14	GSM5812025	SRR17678475	GSE193517	1698443	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_115.log
+no_fifo	2026-04-14	GSM5812235	SRR17677608	GSE193517	1725409	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_119.log
+no_fifo	2026-04-14	GSM5812325	SRR17678011	GSE193517	1722780	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_118.log
+no_fifo	2026-04-14	GSM5812512	SRR17677782	GSE193517	1710848	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_116.log
+no_fifo	2026-04-14	GSM5812184	SRR17678697	GSE193517	1720970	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_117.log
+no_fifo	2026-04-14	GSM5812024	SRR17678476	GSE193517	1693392	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_114.log
+no_fifo	2026-04-14	GSM5812710	SRR17678176	GSE193517	1735035	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_122.log
+no_fifo	2026-04-14	GSM5811932	SRR17679087	GSE193517	1744343	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_123.log
+no_fifo	2026-04-14	GSM5812436	SRR17677422	GSE193517	1765643	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_128.log
+no_fifo	2026-04-14	GSM5812576	SRR17677889	GSE193517	1766521	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_129.log
+no_fifo	2026-04-14	GSM5812385	SRR17677813	GSE193517	1753645	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_125.log
+no_fifo	2026-04-14	GSM5812012	SRR17678214	GSE193517	1755745	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_126.log
+no_fifo	2026-04-14	GSM5812139	SRR17678718	GSE193517	1761036	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/358890_127.log
+no_fifo	2026-04-14	GSM5812574	SRR17677891	GSE193517	1767204	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359031_46.log
+no_fifo	2026-04-14	GSM5812210	SRR17679135	GSE193517	1771943	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359031_48.log
+no_fifo	2026-04-14	GSM5812464	SRR17678095	GSE193517	1791061	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359031_54.log
+no_fifo	2026-04-14	GSM5812296	SRR17678024	GSE193517	1806284	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359031_55.log
+no_fifo	2026-04-14	GSM5812662	SRR17678184	GSE193517	1786883	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359031_50.log
+no_fifo	2026-04-14	GSM5812169	SRR17677624	GSE193517	1773555	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359031_49.log
+no_fifo	2026-04-14	GSM5812369	SRR17677960	GSE193517	1788208	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359031_51.log
+no_fifo	2026-04-14	GSM5812078	SRR17678356	GSE193517	1788731	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359031_53.log
+no_fifo	2026-04-14	GSM5812249	SRR17678674	GSE193517	1788652	4	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359031_52.log
+no_fifo	2026-04-14	GSM8228240	SRR28790688	GSE265753	30104964	61	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359083_10.log
+no_fifo	2026-04-14	GSM6779140	SRR22505811	GSE219249	12911631	26	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359083_34.log
+no_fifo	2026-04-14	GSM6415296	SRR20701151	GSE210019	23518589	48	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359083_39.log
+no_fifo	2026-04-14	GSM6415294	SRR20701153	GSE210019	30343570	61	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359421_128.log
+no_fifo	2026-04-14	GSM8012161	SRR23050716	GSE252994	276018086	553	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359627_107.log
+no_fifo	2026-04-14	GSM6415297	SRR20701150	GSE210019	29979575	60	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/359627_119.log
+fifo_full	2026-04-29	GSM3587979	SRR8521712	GSE116256	231018	1	231018	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/368019_3.log
+fifo_full	2026-04-28	GSM3587979	SRR8521712	GSE116256	231018	1	231018	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/367925_11.log
+fifo_full	2026-04-29	GSM8465921	SRR30291046	GSE275121	25646074	52	25646074	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/369303_82.log
+fifo_full	2026-04-30	GSM6108411	SRR19100701	GSE202326	10994789	22	10994789	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/369714_172.log
+fifo_full	2026-04-30	GSM7920116	SRR26978589	GSE248789	29661912	60	29661912	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/370781_58.log
+fifo_full	2026-05-01	GSM7128890	SRR24023349	GSE228590	23057383	47	23057383	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/372503_147.log
+fifo_full	2026-05-02	GSM7133276	SRR24026634	GSE228590	16748485	34	16748485	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/373172_157.log
+fifo_full	2026-05-02	GSM5831585	SRR17717639	GSE194245	30908481	62	30908481	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/373598_4.log
+fifo_full	2026-05-02	GSM7130664	SRR24028108	GSE228590	22973973	46	22973973	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/373598_148.log
+fifo_full	2026-05-02	GSM7131356	SRR24028302	GSE228590	14453196	29	14453196	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/373817_107.log
+fifo_full	2026-05-04	GSM7131282	SRR24026209	GSE228590	11302514	23	11302514	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/374396_127.log
+fifo_full	2026-05-04	GSM7131645	SRR24026278	GSE228590	21465103	43	21465103	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/374396_171.log
+fifo_full	2026-05-04	GSM6600160	SRR21702116	GSE214146	13104111	27	13104111	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/374679_93.log
+fifo_full	2026-05-04	GSM5467763	SRR15218355	GSE180679	11598928	24	11598928	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/2026-04/374679_176.log
+no_fifo	2026-05-03		SRR27329891		123585775	248	None	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/trackb_l4_374163_3.log
+fifo_full	2026-05-04		SRR34789664		102151601	205	102151601	None	None	/mnt/projects/debruinz_project/singlet_pipeline/logs/trackb_l3_374524_1.log
+fifo_full	2026-05-14	GSM6594589	SRR21642802	GSE213804	123965	1	123965	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381028_2.log
+fifo_full	2026-05-14	GSM4413205	SRR11311887	GSE146972	358027	1	358027	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381028_50.log
+fifo_full	2026-05-14	GSM5176543	SRR13994966	GSE169114	1056109	3	1056109	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_16.log
+fifo_full	2026-05-14	GSM5176545	SRR13994968	GSE169114	1064377	3	1064377	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_18.log
+fifo_full	2026-05-14	GSM4413141	SRR11311823	GSE146972	1148543	3	1148543	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_49.log
+fifo_full	2026-05-14	GSM5151537	SRR13924744	GSE168626	1289965	3	1289965	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_90.log
+fifo_full	2026-05-14	GSM4413186	SRR11311868	GSE146972	1298837	3	1298837	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_94.log
+fifo_full	2026-05-14	GSM5151472	SRR13924679	GSE168626	1308270	3	1308270	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_98.log
+fifo_full	2026-05-14	GSM5151540	SRR13924747	GSE168626	1436834	3	1436834	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_124.log
+fifo_full	2026-05-14	GSM4413165	SRR11311847	GSE146972	1487767	3	1487767	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_135.log
+fifo_full	2026-05-14	GSM5151555	SRR13924762	GSE168626	1502263	4	1502263	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_140.log
+fifo_full	2026-05-14	GSM5151479	SRR13924686	GSE168626	1506446	4	1506446	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_142.log
+fifo_full	2026-05-14	GSM5151469	SRR13924676	GSE168626	1520603	4	1520603	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_146.log
+fifo_full	2026-05-14	GSM5151476	SRR13924683	GSE168626	1533399	4	1533399	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_151.log
+fifo_full	2026-05-14	GSM5151468	SRR13924675	GSE168626	1535930	4	1535930	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_154.log
+fifo_full	2026-05-14	GSM4413191	SRR11311873	GSE146972	1551384	4	1551384	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_161.log
+fifo_full	2026-05-14	GSM5151459	SRR13924666	GSE168626	1551860	4	1551860	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_162.log
+fifo_full	2026-05-14	GSM5151460	SRR13924667	GSE168626	1558653	4	1558653	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_166.log
+fifo_full	2026-05-14	GSM5151465	SRR13924672	GSE168626	1615096	4	1615096	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_187.log
+fifo_full	2026-05-14	GSM5151457	SRR13924664	GSE168626	1636890	4	1636890	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_192.log
+fifo_full	2026-05-14	GSM4413144	SRR11311826	GSE146972	1651262	4	1651262	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_195.log
+fifo_full	2026-05-14	GSM4829564	SRR12816818	GSE159423	1678574	4	1678574	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381079_200.log
+fifo_full	2026-05-14	GSM7835739	SRR26349648	GSE245074	5160095	11	5160095	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381259_26.log
+fifo_full	2026-05-14	GSM5970795	SRR18466088	GSE199344	5419861	11	5419861	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381259_59.log
+fifo_full	2026-05-14	GSM7835656	SRR26349595	GSE245074	6014840	13	6014840	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381401_136.log
+fifo_full	2026-05-14	GSM7835618	SRR26349601	GSE245074	7134059	15	7134059	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381401_337.log
+fifo_full	2026-05-14	GSM5418978	SRR15045131	GSE179485	7996964	16	7996964	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381752_190.log
+fifo_full	2026-05-14	GSM5419011	SRR15045164	GSE179485	8319501	17	8319501	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_381817_199.log
+fifo_full	2026-05-14	GSM8423525	SRR30004356	GSE248208	10995199	22	10995199	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_396611_198.log
+fifo_full	2026-05-15	GSM8028723	SRR27681174	GSE253848	11885116	24	11885116	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_404771_186.log
+fifo_full	2026-05-15	GSM8556340	SRR30893094	GSE268356	12000000	24	12000000	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_405219_194.log
+fifo_full	2026-05-15	GSM9094288	SRR34383536	GSE302019	17094001	35	17094001	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_439864_190.log
+fifo_full	2026-05-15	GSM9317235	SRR36170736,SRR36170737	GSE311112	16753340	34	16753340	None	singlet v0.3.0	/mnt/projects/debruinz_project/singlet_pipeline/logs/singlet-v3_442030_189.log
+fifo_unknown_total	2026-05-13	GSM8351160	SRR29552018		None	None	21992290	None	None	/mnt/projects/debruinz_project/singlet_pipeline/results.trash.20260515_1243/div_panel/logs/379396_37_div-panel.out
+fifo_unknown_total	2026-05-13	GSM8351160	SRR29552018		None	None	21992290	None	None	/mnt/projects/debruinz_project/singlet_pipeline/results.trash.20260515_1243/div_panel/logs/crash_fix_0.out
+fifo_unknown_total	2026-05-13	GSM8351160	SRR29552018		None	None	21992290	None	None	/mnt/projects/debruinz_project/singlet_pipeline/results.trash.20260515_1243/div_panel/logs/379621_37_div-rerun.out
+fifo_unknown_total	2026-05-13	GSM8351160	SRR29552018		None	None	21992290	None	None	/mnt/projects/debruinz_project/singlet_pipeline/results.trash.20260515_1243/div_panel/logs/379663_37_div-rerun.out

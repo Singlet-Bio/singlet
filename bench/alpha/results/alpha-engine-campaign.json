@@ -1,0 +1,1316 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "cell-calling",
+ "title": "The published atlas engine at campaign settings on public 10x data (Research Alpha)",
+ "engine": "alpha (published atlas)",
+ "dataset_scope": "7 public 10x datasets re-run with the campaign binary (v0.3.0, 8e1803ba) at the campaign settings: first 30M read pairs, --threads 4 --pipeline --output-format 1pz, human flags; this is how every Alpha sample was made",
+ "status": "final",
+ "generated_at": "2026-10-26T15:29:05+00:00",
+ "owner": "alpha-bench",
+ "singlet": {
+  "version": "0.3.0 (Research Alpha atlas engine)",
+  "commit": "8e1803ba5ac9cb8038e666f06df446c9a85550b0",
+  "branch": "v0.3.0-pilot-freeze",
+  "binary": "singlet (campaign build, cellarium full_campaign)"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "0.3.0",
+   "role": "singlet",
+   "params": "singlet-alpha-8e1803b: head 30M read pairs -> singlet encode -> singlet --threads 4 --pipeline --output-format 1pz (+ --snps --cascade auto --txome-index --te-classify on --te-db for human); cell calls = STARsolo CellRanger2.2 knee"
+  },
+  {
+   "name": "starsolo",
+   "version": "2.7.11b",
+   "role": "competitor",
+   "url": "https://github.com/alexdobin/STAR",
+   "params": "all reads; CB_UMI_Simple, --soloFeatures Gene GeneFull Velocyto --soloCellFilter EmptyDrops_CR --soloUMIdedup 1MM_CR --soloUMIfiltering MultiGeneUMI_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30"
+  },
+  {
+   "name": "cellranger-published",
+   "version": "Cell Ranger 2.1-3.0 (as published by 10x)",
+   "role": "competitor",
+   "url": "https://www.10xgenomics.com/datasets (filtered_feature_bc_matrix.h5 of each dataset)"
+  },
+  {
+   "name": "starsolo-thinning-noise-floor",
+   "version": "n/a",
+   "role": "truth",
+   "params": "two independent binomial thinnings of STARsolo Gene per cell to the shared depth"
+  },
+  {
+   "name": "adt-clusters",
+   "version": "n/a",
+   "role": "truth",
+   "params": "Leiden clusters of CLR-normalised ADT counts (published Cell Ranger h5)"
+  }
+ ],
+ "code": [
+  {
+   "path": "bench/alpha/select_samples.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/81f0a6801d9d8c93d5cc647c6e41e2d3bb4ed0f8/bench/alpha/select_samples.py",
+   "role": "harness"
+  },
+  {
+   "path": "bench/alpha/alpha_compare.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/81f0a6801d9d8c93d5cc647c6e41e2d3bb4ed0f8/bench/alpha/alpha_compare.py",
+   "role": "metric"
+  },
+  {
+   "path": "bench/alpha/aggregate.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/81f0a6801d9d8c93d5cc647c6e41e2d3bb4ed0f8/bench/alpha/aggregate.py",
+   "role": "metric"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/alpha/aggregate.py",
+  "function": "compute",
+  "laptop_minutes": 1,
+  "clipper_command": "sbatch --array=0-158%12 bench/alpha/alpha_compare.sbatch"
+ },
+ "datasets": [
+  {
+   "id": "pbmc1k_v3",
+   "title": "10x PBMC 1k, 3' v3",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"
+   },
+   "data_kind": "real",
+   "truth": "10x's published Cell Ranger cells; STARsolo on all reads"
+  },
+  {
+   "id": "pbmc1k_v2",
+   "title": "10x PBMC 1k, 3' v2",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_fastqs.tar"
+   },
+   "data_kind": "real",
+   "truth": "10x's published Cell Ranger cells; STARsolo on all reads"
+  },
+  {
+   "id": "pbmc5p_v1",
+   "title": "10x PBMC 5' v1 (first 60M read pairs)",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar"
+   },
+   "data_kind": "real",
+   "truth": "10x's published Cell Ranger cells; STARsolo on all reads"
+  },
+  {
+   "id": "pbmc1k_cite_v3",
+   "title": "10x PBMC 1k + TotalSeq-B, 3' v3",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"
+   },
+   "data_kind": "real",
+   "truth": "ADT-derived clusters; 10x's published Cell Ranger cells"
+  },
+  {
+   "id": "neuron1k_v3",
+   "title": "10x mouse E18 brain cells, 3' v3",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_fastqs.tar"
+   },
+   "data_kind": "real",
+   "truth": "10x's published Cell Ranger cells; STARsolo on all reads"
+  },
+  {
+   "id": "nuclei2k_v2",
+   "title": "10x mouse brain nuclei, 3' v2",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar"
+   },
+   "data_kind": "real",
+   "truth": "10x's published Cell Ranger cells; STARsolo on all reads"
+  },
+  {
+   "id": "hgmm1k_v3",
+   "title": "10x HEK293T + NIH3T3 barnyard, 3' v3",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"
+   },
+   "data_kind": "real",
+   "truth": "species of each cell (human/mouse UMI share); 10x's published Cell Ranger cells"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "cell_recovery_vs_cellranger",
+   "name": "10x's published cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "hgmm1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8403
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.9952,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0048
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0048 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.8413",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_precision_vs_cellranger",
+   "name": "Singlet cells that are published cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "hgmm1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 1.0,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0048
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0048 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 1.0",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_corr_depth_matched_vs_starsolo_gene",
+   "name": "Per-cell gene correlation with STARsolo Gene at equal depth",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "hgmm1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.74
+   },
+   "competitors": [
+    {
+     "tool": "starsolo-thinning-noise-floor",
+     "value": 0.7524
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat"
+   },
+   "notes": "raw (different depths): 0.906; 879 cells",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio_vs_starsolo_gene",
+   "name": "Exonic UMIs per cell, Singlet (30M reads) / STARsolo Gene (all reads)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "hgmm1k_v3",
+   "direction": "none",
+   "singlet": {
+    "value": 0.5091
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -3% to +2% of STARsolo Gene (docs/pipeline-validation.md 4.3); 10% leaves room for the atlas engine's double count"
+   },
+   "notes": "pseudobulk rho 0.9717; reads used / available 0.4754",
+   "pass": "fail"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads in the dataset",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "hgmm1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4754
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "wrong_strand_fraction",
+   "name": "Reads on the wrong strand",
+   "unit": "fraction",
+   "category": "robustness",
+   "dataset": "hgmm1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0194
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "the Alpha policy excludes samples with more than half of the strand-informative reads antisense"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "barnyard_doublet_rate",
+   "name": "Mixed-species barcodes among called cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "hgmm1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0011
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.0048
+    },
+    {
+     "tool": "cellranger-published",
+     "value": 0.0067
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0019
+    },
+    "rationale": "the STARsolo vs published Cell Ranger difference on the same dataset"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "barnyard_cross_species_frac_median",
+   "name": "Cross-species UMI share in singlets (median)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "hgmm1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.005
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.0051
+    },
+    {
+     "tool": "cellranger-published",
+     "value": 0.0045
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0006
+    },
+    "rationale": "the STARsolo vs published Cell Ranger difference on the same dataset"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cell_recovery_vs_cellranger",
+   "name": "10x's published cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "neuron1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8386
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.9585,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0532
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0532 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.8455",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_precision_vs_cellranger",
+   "name": "Singlet cells that are published cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "neuron1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9973
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.9873,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0532
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0532 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.9982",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_corr_depth_matched_vs_starsolo_gene",
+   "name": "Per-cell gene correlation with STARsolo Gene at equal depth",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "neuron1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6788
+   },
+   "competitors": [
+    {
+     "tool": "starsolo-thinning-noise-floor",
+     "value": 0.691
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat"
+   },
+   "notes": "raw (different depths): 0.9051; 1087 cells",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio_vs_starsolo_gene",
+   "name": "Exonic UMIs per cell, Singlet (30M reads) / STARsolo Gene (all reads)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "neuron1k_v3",
+   "direction": "none",
+   "singlet": {
+    "value": 0.5767
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -3% to +2% of STARsolo Gene (docs/pipeline-validation.md 4.3); 10% leaves room for the atlas engine's double count"
+   },
+   "notes": "pseudobulk rho 0.9516; reads used / available 0.3229",
+   "pass": "fail"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads in the dataset",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "neuron1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.3229
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "wrong_strand_fraction",
+   "name": "Reads on the wrong strand",
+   "unit": "fraction",
+   "category": "robustness",
+   "dataset": "neuron1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0347
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "the Alpha policy excludes samples with more than half of the strand-informative reads antisense"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cell_corr_depth_matched_vs_starsolo_gene",
+   "name": "Per-cell gene correlation with STARsolo Gene at equal depth",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "nuclei2k_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4784
+   },
+   "competitors": [
+    {
+     "tool": "starsolo-thinning-noise-floor",
+     "value": 0.4972
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat"
+   },
+   "notes": "raw (different depths): 0.8386; 1500 cells",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio_vs_starsolo_gene",
+   "name": "Exonic UMIs per cell, Singlet (30M reads) / STARsolo Gene (all reads)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "nuclei2k_v2",
+   "direction": "none",
+   "singlet": {
+    "value": 0.6929
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -3% to +2% of STARsolo Gene (docs/pipeline-validation.md 4.3); 10% leaves room for the atlas engine's double count"
+   },
+   "notes": "pseudobulk rho 0.939; reads used / available 0.2526",
+   "pass": "fail"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads in the dataset",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "nuclei2k_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.2526
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "wrong_strand_fraction",
+   "name": "Reads on the wrong strand",
+   "unit": "fraction",
+   "category": "robustness",
+   "dataset": "nuclei2k_v2",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0938
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "the Alpha policy excludes samples with more than half of the strand-informative reads antisense"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cell_recovery_vs_cellranger",
+   "name": "10x's published cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc1k_cite_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8177
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 1.0,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0111
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0111 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.8177",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_precision_vs_cellranger",
+   "name": "Singlet cells that are published cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc1k_cite_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.9889,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0111
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0111 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 1.0",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_corr_depth_matched_vs_starsolo_gene",
+   "name": "Per-cell gene correlation with STARsolo Gene at equal depth",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "pbmc1k_cite_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8202
+   },
+   "competitors": [
+    {
+     "tool": "starsolo-thinning-noise-floor",
+     "value": 0.8295
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat"
+   },
+   "notes": "raw (different depths): 0.9713; 583 cells",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio_vs_starsolo_gene",
+   "name": "Exonic UMIs per cell, Singlet (30M reads) / STARsolo Gene (all reads)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "pbmc1k_cite_v3",
+   "direction": "none",
+   "singlet": {
+    "value": 0.9472
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -3% to +2% of STARsolo Gene (docs/pipeline-validation.md 4.3); 10% leaves room for the atlas engine's double count"
+   },
+   "notes": "pseudobulk rho 0.9856; reads used / available 0.6614",
+   "pass": "pass"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads in the dataset",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "pbmc1k_cite_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6614
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "wrong_strand_fraction",
+   "name": "Reads on the wrong strand",
+   "unit": "fraction",
+   "category": "robustness",
+   "dataset": "pbmc1k_cite_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0291
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "the Alpha policy excludes samples with more than half of the strand-informative reads antisense"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "rna_clusters_ari_vs_adt",
+   "name": "RNA clusters vs ADT clusters (ARI)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "pbmc1k_cite_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5548
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.4403
+    },
+    {
+     "tool": "cellranger-published",
+     "value": 0.5727
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.1323
+    },
+    "rationale": "the STARsolo vs published Cell Ranger difference on the same cells"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cell_recovery_vs_cellranger",
+   "name": "10x's published cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc1k_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9849
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.999,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0216
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0216 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.9859",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_precision_vs_cellranger",
+   "name": "Singlet cells that are published cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc1k_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.999
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.9793,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0216
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0216 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.999",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_corr_depth_matched_vs_starsolo_gene",
+   "name": "Per-cell gene correlation with STARsolo Gene at equal depth",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "pbmc1k_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8291
+   },
+   "competitors": [
+    {
+     "tool": "starsolo-thinning-noise-floor",
+     "value": 0.8427
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat"
+   },
+   "notes": "raw (different depths): 0.974; 981 cells",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio_vs_starsolo_gene",
+   "name": "Exonic UMIs per cell, Singlet (30M reads) / STARsolo Gene (all reads)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "pbmc1k_v2",
+   "direction": "none",
+   "singlet": {
+    "value": 1.0641
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -3% to +2% of STARsolo Gene (docs/pipeline-validation.md 4.3); 10% leaves room for the atlas engine's double count"
+   },
+   "notes": "pseudobulk rho 0.979; reads used / available 0.39",
+   "pass": "pass"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads in the dataset",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "pbmc1k_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.39
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "wrong_strand_fraction",
+   "name": "Reads on the wrong strand",
+   "unit": "fraction",
+   "category": "robustness",
+   "dataset": "pbmc1k_v2",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0242
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "the Alpha policy excludes samples with more than half of the strand-informative reads antisense"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cell_recovery_vs_cellranger",
+   "name": "10x's published cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9231
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.9894,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0218
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0218 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.9247",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_precision_vs_cellranger",
+   "name": "Singlet cells that are published cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9947
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.9886,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0218
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0218 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.9947",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_corr_depth_matched_vs_starsolo_gene",
+   "name": "Per-cell gene correlation with STARsolo Gene at equal depth",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "pbmc1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8007
+   },
+   "competitors": [
+    {
+     "tool": "starsolo-thinning-noise-floor",
+     "value": 0.8092
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat"
+   },
+   "notes": "raw (different depths): 0.9511; 1128 cells",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio_vs_starsolo_gene",
+   "name": "Exonic UMIs per cell, Singlet (30M reads) / STARsolo Gene (all reads)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "pbmc1k_v3",
+   "direction": "none",
+   "singlet": {
+    "value": 0.8225
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -3% to +2% of STARsolo Gene (docs/pipeline-validation.md 4.3); 10% leaves room for the atlas engine's double count"
+   },
+   "notes": "pseudobulk rho 0.983; reads used / available 0.4504",
+   "pass": "fail"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads in the dataset",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "pbmc1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4504
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "wrong_strand_fraction",
+   "name": "Reads on the wrong strand",
+   "unit": "fraction",
+   "category": "robustness",
+   "dataset": "pbmc1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0247
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "the Alpha policy excludes samples with more than half of the strand-informative reads antisense"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cell_recovery_vs_cellranger",
+   "name": "10x's published cells recovered",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.7998
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.937,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0632
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0632 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.8014",
+   "pass": "fail"
+  },
+  {
+   "id": "cell_precision_vs_cellranger",
+   "name": "Singlet cells that are published cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9988
+   },
+   "competitors": [
+    {
+     "tool": "starsolo",
+     "value": 0.9997,
+     "note": "EmptyDrops_CR on all reads"
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "tolerance": {
+     "abs": 0.0632
+    },
+    "rationale": "1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = 0.0632 on this dataset: the disagreement of two references that both emulate Cell Ranger"
+   },
+   "notes": "same engine on all reads: 0.9986",
+   "pass": "pass"
+  },
+  {
+   "id": "cell_corr_depth_matched_vs_starsolo_gene",
+   "name": "Per-cell gene correlation with STARsolo Gene at equal depth",
+   "unit": "pearson r",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.0088
+   },
+   "competitors": [
+    {
+     "tool": "starsolo-thinning-noise-floor",
+     "value": 0.2305
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat"
+   },
+   "notes": "raw (different depths): 0.0291; 1500 cells",
+   "pass": "fail"
+  },
+  {
+   "id": "umi_per_cell_ratio_vs_starsolo_gene",
+   "name": "Exonic UMIs per cell, Singlet (30M reads) / STARsolo Gene (all reads)",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "none",
+   "singlet": {
+    "value": 0.0512
+   },
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "on identical reads the counting engine's exonic counts are within -3% to +2% of STARsolo Gene (docs/pipeline-validation.md 4.3); 10% leaves room for the atlas engine's double count"
+   },
+   "notes": "pseudobulk rho 0.4583; reads used / available 0.5",
+   "pass": "fail"
+  },
+  {
+   "id": "reads_used_over_available",
+   "name": "Reads used / reads in the dataset",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "wrong_strand_fraction",
+   "name": "Reads on the wrong strand",
+   "unit": "fraction",
+   "category": "robustness",
+   "dataset": "pbmc5p_v1",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.9215
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "the Alpha policy excludes samples with more than half of the strand-informative reads antisense"
+   },
+   "pass": "fail"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "hgmm1k_v3",
+   "wall_s": 575.66,
+   "max_rss_gb": 54.490779876708984,
+   "threads": 4,
+   "cpu_h": 0.6396,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "starsolo",
+   "dataset": "hgmm1k_v3",
+   "wall_s": 514.91,
+   "max_rss_gb": 56.283470153808594,
+   "threads": 16,
+   "cpu_h": 2.2885,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "neuron1k_v3",
+   "wall_s": 541.55,
+   "max_rss_gb": 48.87523651123047,
+   "threads": 4,
+   "cpu_h": 0.6017,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "starsolo",
+   "dataset": "neuron1k_v3",
+   "wall_s": 477.47,
+   "max_rss_gb": 28.42853546142578,
+   "threads": 16,
+   "cpu_h": 2.1221,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "nuclei2k_v2",
+   "wall_s": 1650.88,
+   "max_rss_gb": 48.91845703125,
+   "threads": 4,
+   "cpu_h": 1.8343,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "starsolo",
+   "dataset": "nuclei2k_v2",
+   "wall_s": 635.79,
+   "max_rss_gb": 27.374324798583984,
+   "threads": 16,
+   "cpu_h": 2.8257,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "pbmc1k_cite_v3",
+   "wall_s": 2725.04,
+   "max_rss_gb": 51.214141845703125,
+   "threads": 4,
+   "cpu_h": 3.0278,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "starsolo",
+   "dataset": "pbmc1k_cite_v3",
+   "wall_s": 370.3,
+   "max_rss_gb": 19.414173126220703,
+   "threads": 16,
+   "cpu_h": 1.6458,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "pbmc1k_v2",
+   "wall_s": 2902.33,
+   "max_rss_gb": 50.40169906616211,
+   "threads": 4,
+   "cpu_h": 3.2248,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "starsolo",
+   "dataset": "pbmc1k_v2",
+   "wall_s": 567.3,
+   "max_rss_gb": 18.721885681152344,
+   "threads": 16,
+   "cpu_h": 2.5213,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 1622.07,
+   "max_rss_gb": 51.32658767700195,
+   "threads": 4,
+   "cpu_h": 1.8023,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "starsolo",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 510.53,
+   "max_rss_gb": 19.43079376220703,
+   "threads": 16,
+   "cpu_h": 2.269,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "pbmc5p_v1",
+   "wall_s": 3119.68,
+   "max_rss_gb": 51.19884490966797,
+   "threads": 4,
+   "cpu_h": 3.4663,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  },
+  {
+   "tool": "starsolo",
+   "dataset": "pbmc5p_v1",
+   "wall_s": 435.51,
+   "max_rss_gb": 18.70888900756836,
+   "threads": 16,
+   "cpu_h": 1.9356,
+   "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"
+  }
+ ],
+ "figures": [
+  {
+   "id": "engine_cell_recovery",
+   "title": "Recovery of 10x's published cells",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "dataset",
+    "categories": [
+     "hgmm1k_v3",
+     "neuron1k_v3",
+     "pbmc1k_cite_v3",
+     "pbmc1k_v2",
+     "pbmc1k_v3",
+     "pbmc5p_v1"
+    ]
+   },
+   "y": {
+    "label": "recovery",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "Singlet, 30M reads (as published)",
+     "tool": "singlet",
+     "x": [
+      "hgmm1k_v3",
+      "neuron1k_v3",
+      "pbmc1k_cite_v3",
+      "pbmc1k_v2",
+      "pbmc1k_v3",
+      "pbmc5p_v1"
+     ],
+     "y": [
+      0.8403,
+      0.8386,
+      0.8177,
+      0.9849,
+      0.9231,
+      0.7998
+     ]
+    },
+    {
+     "name": "STARsolo EmptyDrops_CR, all reads",
+     "tool": "starsolo",
+     "x": [
+      "hgmm1k_v3",
+      "neuron1k_v3",
+      "pbmc1k_cite_v3",
+      "pbmc1k_v2",
+      "pbmc1k_v3",
+      "pbmc5p_v1"
+     ],
+     "y": [
+      0.9952,
+      0.9585,
+      1.0,
+      0.999,
+      0.9894,
+      0.937
+     ]
+    }
+   ]
+  }
+ ],
+ "conclusion": "Re-run exactly as the atlas was made (campaign binary, first 30M reads, 4 threads) on 7 public 10x datasets, Singlet recovers 80%-98% of 10x's published cells, against STARsolo EmptyDrops_CR on all reads. See metrics for counts, the barnyard and CITE-seq truth, and the 5' strand failure.",
+ "methods": "Seven public 10x datasets of the pipeline benchmark (docs/pipeline-validation.md 3) were re-run with the binary every Alpha sample reports (git 8e1803ba, v0.3.0-pilot-freeze), rebuilt with the benchmark's build patches, at the campaign settings of cellarium full_campaign/run_one.sbatch: the first 30M read pairs (head of the lane-sorted FASTQs, as `download --max-reads 30000000` keeps the head of a run), `--threads 4 --pipeline --output-format 1pz` and, for human, `--snps --cascade auto --txome-index --te-classify on --te-db`. STARsolo (Cell Ranger 4 emulation, EmptyDrops_CR) and 10x's published Cell Ranger matrices use all reads. Scoring reuses bench/pipeline/analysis (loaders, gene_concordance, barnyard, ADT clusters): calls vs published Cell Ranger; on cells called by Singlet and STARsolo, exonic UMIs per cell vs STARsolo Gene, per-cell log1p correlation after thinning both to half the smaller total (noise floor: two thinnings of STARsolo); barnyard purity on called cells; ARI of RNA vs ADT clusters.",
+ "caveats": [
+  "The 30M-read head of lane-sorted demo FASTQs stands in for the head of an SRA run; read order inside SRA runs can differ.",
+  "hgmm1k_v3 needed 120 GB (it was killed at the campaign's 64 GB); the campaign escalated memory per attempt in the same way.",
+  "10x's published matrices are Cell Ranger 2-3 on an older reference; STARsolo uses the campaign reference.",
+  "pbmc5p_v1 is the first 60M read pairs of the dataset, so the 30M cap is half of the benchmark input, not of the full library."
+ ],
+ "_table": [
+  {
+   "dataset": "hgmm1k_v3",
+   "alpha30m": 0.8403,
+   "baseline_full": 0.8413,
+   "starsolo": 0.9952
+  },
+  {
+   "dataset": "neuron1k_v3",
+   "alpha30m": 0.8386,
+   "baseline_full": 0.8455,
+   "starsolo": 0.9585
+  },
+  {
+   "dataset": "pbmc1k_cite_v3",
+   "alpha30m": 0.8177,
+   "baseline_full": 0.8177,
+   "starsolo": 1.0
+  },
+  {
+   "dataset": "pbmc1k_v2",
+   "alpha30m": 0.9849,
+   "baseline_full": 0.9859,
+   "starsolo": 0.999
+  },
+  {
+   "dataset": "pbmc1k_v3",
+   "alpha30m": 0.9231,
+   "baseline_full": 0.9247,
+   "starsolo": 0.9894
+  },
+  {
+   "dataset": "pbmc5p_v1",
+   "alpha30m": 0.7998,
+   "baseline_full": 0.8014,
+   "starsolo": 0.937
+  }
+ ]
+}
