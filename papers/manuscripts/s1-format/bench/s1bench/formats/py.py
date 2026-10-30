@@ -310,9 +310,10 @@ class Zarr3Shard(_ScipyTriple, Format):
         g = zarr.open_group(str(path), mode="w", zarr_format=3)
         blosc = BloscCodec(cname="zstd", clevel=5, shuffle="bitshuffle")
         n = max(1, c.nnz)
+        chunk = min(ZARR3_CHUNK, n)
+        shard = chunk * min(ZARR3_SHARD_CHUNKS, -(-n // chunk))   # a whole number of inner chunks
         for name, arr in (("data", x.data.astype(vdt)), ("indices", x.indices.astype(idt))):
-            a = g.create_array(name, shape=(c.nnz,), dtype=arr.dtype, chunks=(min(ZARR3_CHUNK, n),),
-                               shards=(min(ZARR3_CHUNK * ZARR3_SHARD_CHUNKS, -(-n // ZARR3_CHUNK) * ZARR3_CHUNK),), compressors=blosc)
+            a = g.create_array(name, shape=(c.nnz,), dtype=arr.dtype, chunks=(chunk,), shards=(shard,), compressors=blosc)
             a[:] = arr
         ip = g.create_array("indptr", shape=(c.n + 1,), dtype=np.int64, chunks=(c.n + 1,), compressors=blosc)
         ip[:] = x.indptr.astype(np.int64)

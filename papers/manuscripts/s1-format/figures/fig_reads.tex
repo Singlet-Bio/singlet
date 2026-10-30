@@ -1,0 +1,79 @@
+% Random reads over a network: latency, requests in flight and chunk size. Every value is read from generated/fignet_rtt.tsv,
+% fignet_cdf.tsv, fignet_inflight.tsv and figacc_chunk.tsv (written by `python -m s1bench report`, report_r3.py).
+\begin{figure*}[p]
+\centering
+% ---------------- (a) sustained rate against added round-trip time ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={a\quad Sustained rate against round-trip time},
+  width=0.44\linewidth, height=6.6cm, xmode=log, ymode=log, xmin=0.4, xmax=260, ymin=30, ymax=3e5,
+  xtick={0.5,1,5,10,30,100,200}, xticklabels={0,1,5,10,30,100,200},
+  xlabel={added round-trip time (ms), 1\,Gbit/s link}, ylabel={cells per second},
+  axis x line*=bottom, axis y line*=left, clip=false,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.5,-0.24)}, anchor=north, legend columns=2, cells={anchor=west}},
+]
+\addplot[sone, very thick, mark=*, mark size=1.6pt] table[x=rtt, y=s1_stream_cps] {\gen{fignet_rtt.tsv}};
+\addplot[dl, thick, mark=square*, mark size=1.3pt] table[x=rtt, y=anndata_zarr_lazy_cps] {\gen{fignet_rtt.tsv}};
+\addplot[tens, thick, mark=diamond*, mark size=1.8pt] table[x=rtt, y=zarr3_shard_cps] {\gen{fignet_rtt.tsv}};
+\addplot[dom, thick, mark=triangle*, mark size=1.6pt] table[x=rtt, y=soma_ml_cps] {\gen{fignet_rtt.tsv}};
+\legend{\sone, AnnData Zarr, Zarr v3 sharded, TileDB-SOMA ML}
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (b) per-minibatch time distribution at 30 ms ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={b\quad Time per minibatch, 30\,ms round trip},
+  width=0.44\linewidth, height=6.6cm, xmode=log, xmin=0.005, xmax=30, ymin=0, ymax=1,
+  xlabel={seconds per 512-cell minibatch}, ylabel={fraction of minibatches},
+  axis x line*=bottom, axis y line*=left,
+]
+\addplot[sone, very thick, const plot, discard if not={loader}{s1_stream}] table[x=s, y=q] {\gen{fignet_cdf.tsv}};
+\addplot[dl, thick, const plot, discard if not={loader}{anndata_zarr_lazy}] table[x=s, y=q] {\gen{fignet_cdf.tsv}};
+\addplot[tens, thick, const plot, discard if not={loader}{zarr3_shard}] table[x=s, y=q] {\gen{fignet_cdf.tsv}};
+\addplot[dom, thick, const plot, discard if not={loader}{soma_ml}] table[x=s, y=q] {\gen{fignet_cdf.tsv}};
+\end{axis}
+\end{tikzpicture}
+
+\vspace{8pt}
+% ---------------- (c) requests in flight ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={c\quad \sone{} reader: requests in flight},
+  width=0.44\linewidth, height=6.2cm, xmode=log, log basis x=2, xmin=0.8, xmax=80, ymin=0, ymax=105,
+  xtick={1,2,4,8,16,32,64}, xticklabels={1,2,4,8,16,32,64},
+  xlabel={requests at once (\texttt{io\_threads})}, ylabel={share of the 1\,Gbit/s link used (\%)},
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.98,0.05)}, anchor=south east, cells={anchor=west}},
+]
+\addplot[sone, very thick, mark=*, mark size=1.6pt, discard if not={rtt}{30}, y filter/.expression={100*y}] table[x=io, y=share] {\gen{fignet_inflight.tsv}};
+\addplot[sone!55, thick, dashed, mark=o, mark size=1.6pt, discard if not={rtt}{100}, y filter/.expression={100*y}] table[x=io, y=share] {\gen{fignet_inflight.tsv}};
+\legend{30\,ms round trip, 100\,ms round trip}
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (d) chunk budget: over-read against size ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={d\quad \sone{} chunk size: bytes fetched against file size},
+  width=0.44\linewidth, height=6.2cm, xmode=log, xmin=3000, xmax=5e5, ymin=0.9, ymax=2.6,
+  xtick={4096,16384,49152,131072,393216}, xticklabels={4k,16k,49k,131k,393k},
+  xlabel={chunk budget (non-zeros)}, ylabel={bytes fetched $\div$ bytes of the cells},
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.02,0.98)}, anchor=north west, cells={anchor=west}},
+]
+\addplot[sone, very thick, mark=*, mark size=1.5pt, discard if not={dataset}{hlca_core}] table[x=chunk, y=overread] {\gen{figacc_chunk.tsv}};
+\addplot[sone!70, thick, mark=square*, mark size=1.3pt, discard if not={dataset}{tabula_muris_facs}] table[x=chunk, y=overread] {\gen{figacc_chunk.tsv}};
+\addplot[sone!45, thick, mark=triangle*, mark size=1.5pt, discard if not={dataset}{pbmc10k_v3}] table[x=chunk, y=overread] {\gen{figacc_chunk.tsv}};
+\draw[gen!60, dashed] (axis cs:49152,0.9) -- (axis cs:49152,2.6) node[pos=0.96, anchor=north west, font=\sffamily\tiny, text=gen] {default};
+\legend{HLCA core, Tabula Muris FACS, PBMC 10k}
+\end{axis}
+\end{tikzpicture}
+\caption{\textbf{Random minibatches over a network: what latency, requests in flight and chunk size cost.}
+\nm{ns-dataset}, emulated object store limited to 1\,Gbit/s in total, \nm{threadsHeadline} reader cores, one 60-minibatch run per
+point after 5 warm-up minibatches. \textbf{(a)} Cells per second delivered against the round-trip time added to every
+request (0 = the local store's own). \textbf{(b)} Distribution of the time per minibatch at 30\,ms. \textbf{(c)} The \sone{}
+reader with 1 to 64 range requests at once (with up to 8 minibatches' requests sent ahead): share of the link carrying
+the bytes it fetched. \textbf{(d)} The \sone{} member re-encoded with chunk budgets from 4,096 to 393,216 non-zeros: bytes
+a random minibatch fetches divided by the cells' share of the file (from the chunk index, not timed); the file's size at
+each budget is in the text.}
+\label{fig:reads}
+\end{figure*}

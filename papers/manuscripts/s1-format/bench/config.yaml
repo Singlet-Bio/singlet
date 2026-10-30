@@ -64,7 +64,7 @@ minibatch:
   skip_download_above_tier: {s3_0.1g: M, s3_1g: M, s3_10g: M, s3_1g_wan: M}   # estimated, not run, above M
   fetch_factor: 1                         # scDataset: one batch per fetch (matched to the block workload)
   loaders: [anndata_inmem, anndata_backed, scdataset, anndata_zarr_lazy, soma_ml, bpcells, s1_stream, s1_stream_canonical,
-            s1_stream_seq]
+            s1_stream_seq, zarr3_shard, scdataset_default]
   tiers:
     - {name: local}                       # node-local disk: the timed jobs copy the files there first (data_dir)
     - {name: nfs, root: "${S1BENCH_NFS_DATA:-}"}   # the shared project filesystem, read in place

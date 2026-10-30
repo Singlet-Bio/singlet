@@ -24,6 +24,7 @@ from .util import PAPER_DIR, Config, load_datasets, log, read_stage
 FORMAT_LABELS = {
     "h5ad_none": "h5ad (none)", "csc_i32": "CSC, int32", "mtx_gz": "MTX.gz", "loom": "loom", "h5ad_lzf": "h5ad lzf",
     "h5ad_gzip": "h5ad gzip", "tenx_h5": "10x HDF5", "zarr": "AnnData Zarr", "soma": "TileDB-SOMA",
+    "zarr3": "Zarr v3 sharded",
     "parquet_coo": "Parquet COO", "rds_gz": "rds (gzip)", "rds_xz": "rds (xz)", "csc_zstd19": "CSC + zstd-19",
     "bpcells": "BPCells", "s1": "\\textbf{.s1}", "s1_pack": ".s1, shared gene pack",
 }
@@ -31,7 +32,8 @@ LOADER_LABELS = {
     "anndata_inmem": "AnnData in memory", "anndata_backed": "AnnData backed", "scdataset": "scDataset",
     "anndata_zarr_lazy": "AnnData Zarr", "soma_ml": "TileDB-SOMA ML", "bpcells": "BPCells (R)",
     "s1_stream": "\\textbf{.s1}", "s1_stream_canonical": ".s1, source gene order",
-    "s1_stream_seq": ".s1, one request at a time",
+    "s1_stream_seq": ".s1, one request at a time", "zarr3_shard": "Zarr v3 sharded",
+    "scdataset_default": "scDataset, fetch 16",
 }
 TIER_ORDER = ["s3_0.1g", "s3_1g", "s3_10g", "nfs", "local"]
 FIG1D_TIERS = ["local", "nfs", "s3_10g", "s3_1g", "s3_1g_wan", "s3_0.1g"]   # fastest storage first
@@ -823,6 +825,9 @@ def run(cfg: Config) -> int:
     ladder_floor_section(cfg, N, out)
     second_section(cfg, N, out)
     eco_section(cfg, N, out)
+    from . import report_r3
+
+    report_r3.run(cfg, N, out)
     extension_numbers(cfg, N)
     N.write(out / "numbers.tex")
     missing = sorted(used_keys() - set(N.d))
