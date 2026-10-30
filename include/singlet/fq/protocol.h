@@ -58,6 +58,9 @@ struct CandidateSpec {
     // For multi-whitelist protocols (e.g. BD Rhapsody CLS1/CLS2/CLS3) each entry names
     // the file for the corresponding CB segment.  Must match len(soloCBposition) exactly.
     std::vector<std::string> per_seg_whitelist_files = {};
+    // Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap; see singlet.cpp "Beta aligner profile").
+    // On only where it has been validated against the frozen ground-truth gate and the CR4 mapping-rate probe.
+    bool cr4 = false;
 };
 
 inline const std::vector<CandidateSpec>& known_protocols() {
@@ -65,8 +68,8 @@ inline const std::vector<CandidateSpec>& known_protocols() {
     //                 whitelist_file, linker, linker_offset, barcode_in_r2
     static const std::vector<CandidateSpec> specs = {
         // ── 10x Chromium ──
-        {"10x-3p-v3", 1, 28, 0, 16, 16, 12, "3M-february-2018.txt", "", 0, false},
-        {"10x-3p-v2", 2, 26, 0, 16, 16, 10, "737K-august-2016.txt", "", 0, false},
+        {"10x-3p-v3", 1, 28, 0, 16, 16, 12, "3M-february-2018.txt", "", 0, false, "", {}, true},
+        {"10x-3p-v2", 2, 26, 0, 16, 16, 10, "737K-august-2016.txt", "", 0, false, "", {}, true},
         {"10x-3p-v1", 3, 24, 0, 14, 14, 10, "737K-april-2014.txt", "", 0, false},
         {"10x-5p-v3", 4, 28, 0, 16, 16, 12, "3M-february-2018.txt", "", 0, false,
          "AAGCAGTGGTATCAACGCAGAGTACATGGG"},
