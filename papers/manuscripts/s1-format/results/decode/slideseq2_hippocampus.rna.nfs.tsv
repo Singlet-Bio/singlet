@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+slideseq2_hippocampus	rna	main	nfs	csc_i32	4	cold	file		auto	22396657	ok	0.147155	0.146628	0.147378	152.197251	3	0.147600,0.147155,0.146101	
+slideseq2_hippocampus	rna	main	nfs	mtx_gz	4	cold	file		auto	22396657	ok	1.836382	1.827566	1.841984	12.196075	3	1.847585,1.836382,1.818749	
+slideseq2_hippocampus	rna	main	nfs	tenx_h5	4	cold	file		auto	22396657	ok	0.86147	0.859113	0.873249	25.998174	3	0.885028,0.856755,0.861470	
+slideseq2_hippocampus	rna	main	nfs	h5ad_none	4	cold	file		auto	22396657	ok	0.254222	0.2532	0.523536	88.098746	3	0.792849,0.254222,0.252178	
+slideseq2_hippocampus	rna	main	nfs	h5ad_gzip	4	cold	file		auto	22396657	ok	0.747153	0.74455	1.014778	29.975997	3	1.282402,0.747153,0.741946	
+slideseq2_hippocampus	rna	main	nfs	h5ad_lzf	4	cold	file		auto	22396657	ok	0.448751	0.446072	0.717585	49.908836	3	0.986418,0.443392,0.448751	
+slideseq2_hippocampus	rna	main	nfs	zarr	4	cold	file		auto	22396657	ok	0.271728	0.264988	0.517737	82.423001	3	0.763746,0.258248,0.271728	
+slideseq2_hippocampus	rna	main	nfs	loom	4	cold	file		auto	22396657	ok	22.218633	22.192576	23.804432	1.008012	3	25.390231,22.166519,22.218633	
+slideseq2_hippocampus	rna	main	nfs	soma	4	cold	file		auto	22396657	ok	0.657061	0.641633	1.035931	34.086105	3	1.414801,0.657061,0.626204	
+slideseq2_hippocampus	rna	main	nfs	parquet_coo	4	cold	file		auto	22396657	ok	0.627399	0.604468	0.746818	35.69762	3	0.866237,0.581536,0.627399	
+slideseq2_hippocampus	rna	main	nfs	csc_zstd19	4	cold	file		auto	22396657	ok	0.321877	0.318658	0.327001	69.581411	3	0.332125,0.321877,0.315439	
+slideseq2_hippocampus	rna	main	nfs	rds_gz	4	cold	file		auto	22396657	ok	1.172944	1.128464	1.221046	19.094391	3	1.269148,1.083983,1.172944	
+slideseq2_hippocampus	rna	main	nfs	rds_xz	4	cold	file		auto	22396657	ok	1.740108	1.696742	1.789619	12.870839	3	1.839130,1.653376,1.740108	
+slideseq2_hippocampus	rna	main	nfs	bpcells	4	cold	file		auto	22396657	ok	2.785922	2.782695	4.455922	8.039227	3	6.125923,2.785922,2.779469	
+slideseq2_hippocampus	rna	main	nfs	s1	4	cold	file	native	auto	22396657	ok	0.097967	0.094813	0.882859	228.613154	3	1.667751,0.097967,0.091660	avx2
+slideseq2_hippocampus	rna	main	nfs	s1	4	cold	file	canonical	auto	22396657	ok	0.134602	0.13159	0.792445	166.391134	3	1.450288,0.134602,0.128577	avx2
+slideseq2_hippocampus	rna	main	nfs	s1_pack	4	cold	file	native	auto	22396657	ok	0.096679	0.093502	0.748206	231.66086	3	1.399733,0.096679,0.090325	avx2
+slideseq2_hippocampus	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	22396657	ok	0.132619	0.129838	0.784548	168.87952	3	1.436476,0.132619,0.127057	avx2

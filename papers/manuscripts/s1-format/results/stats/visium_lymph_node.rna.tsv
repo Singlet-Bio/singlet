@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+visium_lymph_node	rna	spatial_seq	S	umi	33538	4039	21210753	0.156583	17348.427829	16853.0	5347.0	0.544436	7870	3.303527

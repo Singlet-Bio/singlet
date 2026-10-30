@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+baron_pancreas	rna	main	nfs	csc_i32	4	cold	file		auto	16171764	ok	0.10745	0.106288	0.107472	150.504637	3	0.107450,0.107494,0.105126	
+baron_pancreas	rna	main	nfs	mtx_gz	4	cold	file		auto	16171764	ok	1.459645	1.43607	1.466028	11.079244	3	1.412495,1.459645,1.472412	
+baron_pancreas	rna	main	nfs	tenx_h5	4	cold	file		auto	16171764	ok	0.641761	0.640786	0.654821	25.199063	3	0.667881,0.639812,0.641761	
+baron_pancreas	rna	main	nfs	h5ad_none	4	cold	file		auto	16171764	ok	0.173096	0.171729	0.440664	93.42664	3	0.708233,0.170361,0.173096	
+baron_pancreas	rna	main	nfs	h5ad_gzip	4	cold	file		auto	16171764	ok	0.562308	0.558608	0.830625	28.759626	3	1.098941,0.554907,0.562308	
+baron_pancreas	rna	main	nfs	h5ad_lzf	4	cold	file		auto	16171764	ok	0.318417	0.318357	0.588469	50.788051	3	0.858520,0.318417,0.318297	
+baron_pancreas	rna	main	nfs	zarr	4	cold	file		auto	16171764	ok	0.15813	0.157592	0.43397	102.268951	3	0.709811,0.157054,0.158130	
+baron_pancreas	rna	main	nfs	loom	4	cold	file		auto	16171764	ok	4.315686	4.31565	5.973775	3.747206	3	7.631864,4.315686,4.315613	
+baron_pancreas	rna	main	nfs	soma	4	cold	file		auto	16171764	ok	0.465522	0.454332	0.884318	34.73902	3	1.303114,0.465522,0.443143	
+baron_pancreas	rna	main	nfs	parquet_coo	4	cold	file		auto	16171764	ok	0.407134	0.404673	0.575439	39.721029	3	0.743745,0.402212,0.407134	
+baron_pancreas	rna	main	nfs	csc_zstd19	4	cold	file		auto	16171764	ok	0.19628	0.194333	0.199608	82.391469	3	0.202936,0.196280,0.192386	
+baron_pancreas	rna	main	nfs	rds_gz	4	cold	file		auto	16171764	ok	0.877484	0.837458	0.922293	18.42969	3	0.967101,0.797431,0.877484	
+baron_pancreas	rna	main	nfs	rds_xz	4	cold	file		auto	16171764	ok	1.18817	1.145669	1.230256	13.610646	3	1.272342,1.103167,1.188170	
+baron_pancreas	rna	main	nfs	bpcells	4	cold	file		auto	16171764	ok	1.970209	1.963784	3.483709	8.208146	3	4.997208,1.957358,1.970209	
+baron_pancreas	rna	main	nfs	s1	4	cold	file	native	auto	16171764	ok	0.070487	0.067151	0.856792	229.428638	3	1.643097,0.070487,0.063815	avx2
+baron_pancreas	rna	main	nfs	s1	4	cold	file	canonical	auto	16171764	ok	0.092134	0.090071	0.76596	175.523482	3	1.439786,0.092134,0.088008	avx2
+baron_pancreas	rna	main	nfs	s1_pack	4	cold	file	native	auto	16171764	ok	0.069515	0.067379	0.721495	232.637771	3	1.373474,0.069515,0.065243	avx2
+baron_pancreas	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	16171764	ok	0.091084	0.088655	0.747676	177.548418	3	1.404268,0.091084,0.086227	avx2

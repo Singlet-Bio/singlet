@@ -1,0 +1,79 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+pbmc_multiome	rna	main	local	csc_i32	1	cold	file		auto	23508033	ok	0.125406	0.124909	0.126416	187.455209	3	0.127425,0.125406,0.124412	
+pbmc_multiome	rna	main	local	csc_i32	4	cold	file		auto	23508033	ok	0.129718	0.129429	0.132531	181.224797	3	0.135344,0.129718,0.129140	
+pbmc_multiome	rna	main	local	csc_i32	4	warm	file		auto	23508033	ok	0.069096	0.069047	0.070033	340.223759	3	0.070971,0.069096,0.068998	
+pbmc_multiome	rna	main	local	mtx_gz	1	cold	file		auto	23508033	ok	3.211851	3.210159	3.222649	7.319154	3	3.233447,3.208467,3.211851	
+pbmc_multiome	rna	main	local	mtx_gz	4	cold	file		auto	23508033	ok	1.938049	1.924589	1.944198	12.12974	3	1.938049,1.950348,1.911128	
+pbmc_multiome	rna	main	local	mtx_gz	4	warm	file		auto	23508033	ok	1.892231	1.890676	1.89955	12.423449	3	1.889122,1.906869,1.892231	
+pbmc_multiome	rna	main	local	tenx_h5	1	cold	file		auto	23508033	ok	0.90101	0.900143	0.915168	26.09076	3	0.929326,0.901010,0.899277	
+pbmc_multiome	rna	main	local	tenx_h5	4	cold	file		auto	23508033	ok	0.902679	0.901408	0.916413	26.042511	3	0.930147,0.902679,0.900137	
+pbmc_multiome	rna	main	local	tenx_h5	4	warm	file		auto	23508033	ok	0.886846	0.88553	0.887804	26.507443	3	0.886846,0.884213,0.888762	
+pbmc_multiome	rna	main	local	h5ad_none	1	cold	file		auto	23508033	ok	0.286864	0.286395	0.552643	81.948274	3	0.818422,0.286864,0.285925	
+pbmc_multiome	rna	main	local	h5ad_none	4	cold	file		auto	23508033	ok	0.286266	0.285907	0.55822	82.119435	3	0.830174,0.285548,0.286266	
+pbmc_multiome	rna	main	local	h5ad_none	4	warm	file		auto	23508033	ok	0.118794	0.118703	0.119521	197.889884	3	0.120249,0.118794,0.118612	
+pbmc_multiome	rna	main	local	h5ad_gzip	1	cold	file		auto	23508033	ok	0.790018	0.789899	1.057017	29.756319	3	1.324016,0.790018,0.789780	
+pbmc_multiome	rna	main	local	h5ad_gzip	4	cold	file		auto	23508033	ok	0.790915	0.790791	1.055441	29.722579	3	1.319968,0.790915,0.790668	
+pbmc_multiome	rna	main	local	h5ad_gzip	4	warm	file		auto	23508033	ok	0.765936	0.762997	0.765983	30.691893	3	0.766030,0.765936,0.760058	
+pbmc_multiome	rna	main	local	h5ad_lzf	1	cold	file		auto	23508033	ok	0.459128	0.456612	0.726866	51.201493	3	0.994604,0.454096,0.459128	
+pbmc_multiome	rna	main	local	h5ad_lzf	4	cold	file		auto	23508033	ok	0.463713	0.460624	0.72883	50.695222	3	0.993946,0.457535,0.463713	
+pbmc_multiome	rna	main	local	h5ad_lzf	4	warm	file		auto	23508033	ok	0.411296	0.410748	0.413122	57.155958	3	0.410199,0.414948,0.411296	
+pbmc_multiome	rna	main	local	zarr	1	cold	file		auto	23508033	ok	0.187441	0.187374	0.467637	125.41556	3	0.747833,0.187306,0.187441	
+pbmc_multiome	rna	main	local	zarr	4	cold	file		auto	23508033	ok	0.210849	0.202766	0.465758	111.492476	3	0.720666,0.194684,0.210849	
+pbmc_multiome	rna	main	local	zarr	4	warm	file		auto	23508033	ok	0.204041	0.181788	0.204967	115.212173	3	0.159534,0.204041,0.205894	
+pbmc_multiome	rna	main	local	loom	1	cold	file		auto	23508033	ok	9.186565	9.147001	10.496172	2.558958	3	11.805779,9.107436,9.186565	
+pbmc_multiome	rna	main	local	loom	4	cold	file		auto	23508033	ok	9.287781	9.242394	10.910108	2.531071	3	12.532435,9.197008,9.287781	
+pbmc_multiome	rna	main	local	loom	4	warm	file		auto	23508033	ok	9.274564	9.219772	9.28627	2.534678	3	9.164979,9.297976,9.274564	
+pbmc_multiome	rna	main	local	soma	1	cold	file		auto	23508033	ok	1.400471	1.399973	1.885489	16.785806	3	2.370507,1.399476,1.400471	
+pbmc_multiome	rna	main	local	soma	4	cold	file		auto	23508033	ok	0.628705	0.60684	0.939872	37.391173	3	1.251038,0.628705,0.584976	
+pbmc_multiome	rna	main	local	soma	4	warm	file		auto	23508033	ok	0.606421	0.604345	0.616163	38.765198	3	0.625906,0.606421,0.602269	
+pbmc_multiome	rna	main	local	parquet_coo	1	cold	file		auto	23508033	ok	0.726408	0.698413	0.926242	32.36204	3	1.126077,0.726408,0.670418	
+pbmc_multiome	rna	main	local	parquet_coo	4	cold	file		auto	23508033	ok	0.586346	0.560826	0.719402	40.092393	3	0.852457,0.535306,0.586346	
+pbmc_multiome	rna	main	local	parquet_coo	4	warm	file		auto	23508033	ok	0.521237	0.507564	0.544053	45.100469	3	0.493892,0.566869,0.521237	
+pbmc_multiome	rna	main	local	csc_zstd19	1	cold	file		auto	23508033	ok	0.313636	0.311828	0.317341	74.953185	3	0.321046,0.313636,0.310020	
+pbmc_multiome	rna	main	local	csc_zstd19	4	cold	file		auto	23508033	ok	0.313325	0.311322	0.315881	75.027613	3	0.318437,0.313325,0.309320	
+pbmc_multiome	rna	main	local	csc_zstd19	4	warm	file		auto	23508033	ok	0.28921	0.288844	0.29251	81.283707	3	0.295810,0.288478,0.289210	
+pbmc_multiome	rna	main	local	rds_gz	1	cold	file		auto	23508033	ok	1.231203	1.190414	1.276386	19.093543	3	1.321569,1.149625,1.231203	
+pbmc_multiome	rna	main	local	rds_gz	4	cold	file		auto	23508033	ok	1.233752	1.191796	1.275347	19.054099	3	1.316941,1.149840,1.233752	
+pbmc_multiome	rna	main	local	rds_gz	4	warm	file		auto	23508033	ok	1.135609	1.13342	1.177434	20.700813	3	1.135609,1.219259,1.131230	
+pbmc_multiome	rna	main	local	rds_xz	1	cold	file		auto	23508033	ok	1.682298	1.640829	1.727849	13.973765	3	1.773400,1.599360,1.682298	
+pbmc_multiome	rna	main	local	rds_xz	4	cold	file		auto	23508033	ok	1.686413	1.643763	1.732444	13.939667	3	1.778475,1.601114,1.686413	
+pbmc_multiome	rna	main	local	rds_xz	4	warm	file		auto	23508033	ok	1.594273	1.590577	1.635124	14.745303	3	1.594273,1.675976,1.586881	
+pbmc_multiome	rna	main	local	bpcells	1	cold	file		auto	23508033	ok	2.78089	2.734857	4.434269	8.453421	3	6.087648,2.780890,2.688825	
+pbmc_multiome	rna	main	local	bpcells	4	cold	file		auto	23508033	ok	2.731867	2.72321	4.368181	8.605117	3	6.004496,2.714554,2.731867	
+pbmc_multiome	rna	main	local	bpcells	4	warm	file		auto	23508033	ok	2.698933	2.697598	2.729889	8.710121	3	2.696264,2.698933,2.760845	
+pbmc_multiome	rna	main	local	s1	1	cold	file	native	auto	23508033	ok	0.281976	0.277174	1.179634	83.369059	3	2.077292,0.281976,0.272373	avx2
+pbmc_multiome	rna	main	local	s1	1	cold	file	canonical	auto	23508033	ok	0.438198	0.43237	1.08562	53.646997	3	1.733042,0.438198,0.426541	avx2
+pbmc_multiome	rna	main	local	s1	4	cold	file	native	auto	23508033	ok	0.10464	0.100933	0.752173	224.656328	3	1.399706,0.104640,0.097226	avx2
+pbmc_multiome	rna	main	local	s1	4	cold	file	canonical	auto	23508033	ok	0.135635	0.132636	0.789335	173.318378	3	1.443035,0.135635,0.129638	avx2
+pbmc_multiome	rna	main	local	s1	4	warm	file	native	auto	23508033	ok	0.087344	0.087307	0.089952	269.143339	3	0.092560,0.087270,0.087344	avx2
+pbmc_multiome	rna	main	local	s1	4	warm	file	canonical	auto	23508033	ok	0.127687	0.126003	0.127699	184.106985	3	0.127711,0.124320,0.127687	avx2
+pbmc_multiome	rna	main	local	s1	1	warm	codec	native	scalar	23508033	ok	0.865827	0.864906	0.868372	27.150971	3	0.870917,0.865827,0.863985	scalar
+pbmc_multiome	rna	main	local	s1	1	warm	codec	native	avx2	23508033	ok	0.278967	0.278532	0.279174	84.268288	3	0.278967,0.279382,0.278097	avx2
+pbmc_multiome	rna	main	local	s1	1	warm	codec	native	avx512	23508033	ok	0.259433	0.258347	0.260917	90.613112	3	0.262401,0.259433,0.257261	avx2
+pbmc_multiome	rna	main	local	s1	1	warm	codec	canonical	scalar	23508033	ok	1.029934	1.029563	1.032155	22.824786	3	1.034375,1.029192,1.029934	scalar
+pbmc_multiome	rna	main	local	s1	1	warm	codec	canonical	avx2	23508033	ok	0.41572	0.414237	0.416842	56.547692	3	0.417964,0.412753,0.415720	avx2
+pbmc_multiome	rna	main	local	s1	1	warm	codec	canonical	avx512	23508033	ok	0.418994	0.417259	0.420682	56.105827	3	0.422370,0.415523,0.418994	avx2
+pbmc_multiome	rna	main	local	s1	4	warm	codec	native	scalar	23508033	ok	0.224897	0.224741	0.224973	104.528091	3	0.225050,0.224585,0.224897	scalar
+pbmc_multiome	rna	main	local	s1	4	warm	codec	native	avx2	23508033	ok	0.075305	0.075205	0.07552	312.170181	3	0.075735,0.075305,0.075104	avx2
+pbmc_multiome	rna	main	local	s1	4	warm	codec	native	avx512	23508033	ok	0.075503	0.075339	0.075622	311.352749	3	0.075503,0.075175,0.075741	avx2
+pbmc_multiome	rna	main	local	s1	4	warm	codec	canonical	scalar	23508033	ok	0.263472	0.263446	0.264311	89.224021	3	0.265150,0.263420,0.263472	scalar
+pbmc_multiome	rna	main	local	s1	4	warm	codec	canonical	avx2	23508033	ok	0.11253	0.112263	0.112897	208.904299	3	0.112530,0.111996,0.113263	avx2
+pbmc_multiome	rna	main	local	s1	4	warm	codec	canonical	avx512	23508033	ok	0.112713	0.112621	0.113116	208.56597	3	0.112713,0.112530,0.113520	avx2
+pbmc_multiome	rna	main	local	s1_pack	1	cold	file	native	auto	23508033	ok	0.278995	0.275075	0.927496	84.259639	3	1.575998,0.278995,0.271155	avx2
+pbmc_multiome	rna	main	local	s1_pack	1	cold	file	canonical	auto	23508033	ok	0.435892	0.430038	1.083229	53.930806	3	1.730565,0.435892,0.424183	avx2
+pbmc_multiome	rna	main	local	s1_pack	4	cold	file	native	auto	23508033	ok	0.098082	0.096618	0.753217	239.67833	3	1.408352,0.095154,0.098082	avx2
+pbmc_multiome	rna	main	local	s1_pack	4	cold	file	canonical	auto	23508033	ok	0.135861	0.133272	0.790257	173.030077	3	1.444654,0.130683,0.135861	avx2
+pbmc_multiome	rna	main	local	s1_pack	4	warm	file	native	auto	23508033	ok	0.091409	0.087023	0.092529	257.17546	3	0.091409,0.082638,0.093650	avx2
+pbmc_multiome	rna	main	local	s1_pack	4	warm	file	canonical	auto	23508033	ok	0.129336	0.127374	0.130186	181.760054	3	0.129336,0.131037,0.125413	avx2
+pbmc_multiome	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	23508033	ok	0.882699	0.881729	0.882699	26.631992	3	0.880759,0.882699,0.882700	scalar
+pbmc_multiome	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	23508033	ok	0.237841	0.237805	0.237919	98.839279	3	0.237997,0.237841,0.237768	avx2
+pbmc_multiome	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	23508033	ok	0.24542	0.245368	0.245433	95.786949	3	0.245420,0.245446,0.245315	avx2
+pbmc_multiome	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	23508033	ok	1.044536	1.044142	1.044648	22.505718	3	1.044536,1.044760,1.043749	scalar
+pbmc_multiome	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	23508033	ok	0.437111	0.436984	0.439495	53.780465	3	0.441878,0.437111,0.436858	avx2
+pbmc_multiome	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	23508033	ok	0.427227	0.416369	0.434779	55.024689	3	0.442331,0.427227,0.405511	avx2
+pbmc_multiome	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	23508033	ok	0.221769	0.221713	0.221947	106.00234	3	0.221657,0.221769,0.222126	scalar
+pbmc_multiome	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	23508033	ok	0.062943	0.062919	0.062973	373.481293	3	0.063002,0.062943,0.062894	avx2
+pbmc_multiome	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	23508033	ok	0.062359	0.062319	0.062415	376.978993	3	0.062359,0.062471,0.062280	avx2
+pbmc_multiome	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	23508033	ok	0.264333	0.264137	0.264475	88.933402	3	0.264617,0.264333,0.263941	scalar
+pbmc_multiome	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	23508033	ok	0.103515	0.103468	0.103631	227.097841	3	0.103422,0.103746,0.103515	avx2
+pbmc_multiome	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	23508033	ok	0.103556	0.103529	0.10358	227.007928	3	0.103556,0.103605,0.103503	avx2

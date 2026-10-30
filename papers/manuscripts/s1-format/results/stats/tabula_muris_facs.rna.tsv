@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+tabula_muris_facs	rna	plate_reads	M	reads	23433	53760	143478092	0.113893	709406.361979	590339.0	2473.0	0.105703	4218817	265.808428

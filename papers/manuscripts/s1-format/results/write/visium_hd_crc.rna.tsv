@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+visium_hd_crc	rna	h5ad_none	general	214633705	18085	545913	ok	1751391896	65.279287	0	4.768827	4	NA
+visium_hd_crc	rna	csc_i32	general	214633705	18085	545913	ok	1733736782	64.621231	0	3.597842	4	NA
+visium_hd_crc	rna	mtx_gz	general	214633705	18085	545913	ok	654213927	24.384387	0	150.835191	4	NA
+visium_hd_crc	rna	tenx_h5	general	214633705	18085	545913	ok	304175685	11.337481	0	21.921322	4	NA
+visium_hd_crc	rna	h5ad_gzip	general	214633705	18085	545913	ok	510517929	19.028435	0	35.049725	4	NA
+visium_hd_crc	rna	h5ad_lzf	general	214633705	18085	545913	ok	872349443	32.51491	0	6.133376	4	NA
+visium_hd_crc	rna	zarr	general	214633705	18085	545913	ok	376457011	14.031608	0	5.806669	4	NA
+visium_hd_crc	rna	loom	general	214633705	18085	545913	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 18085x545913 entries exceeds 2e+09
+visium_hd_crc	rna	soma	domain	214633705	18085	545913	ok	393245993	14.657381	0	125.603098	4	NA
+visium_hd_crc	rna	parquet_coo	general	214633705	18085	545913	ok	428973540	15.989047	0	10.305474	4	NA
+visium_hd_crc	rna	csc_zstd19	general	214633705	18085	545913	ok	277621891	10.347746	0	295.169522	4	NA
+visium_hd_crc	rna	rds_gz	general	214633705	18085	545913	ok	466951918	17.404607	0	121.619379	4	NA
+visium_hd_crc	rna	rds_xz	general	214633705	18085	545913	ok	255123820	9.50918	0	697.752262	4	NA
+visium_hd_crc	rna	bpcells	domain	214633705	18085	545913	ok	403013920	15.021459	0	14.250477	4	NA
+visium_hd_crc	rna	s1	s1	214633705	18085	545913	ok	156701678	5.840711	0	24.289841	4	NA
+visium_hd_crc	rna	s1_pack	s1	214633705	18085	545913	ok	156654492	5.838952	289360	23.084054	4	NA

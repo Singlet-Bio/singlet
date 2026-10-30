@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+gtex_bulk	rna	zstd22	656439500	656236053	0.99969
+gtex_bulk	rna	xz9e	656439500	656207576	0.999647
+gtex_bulk	rna	brotli11	656439500	656204380	0.999642
+gtex_bulk	rna	bzip2_9	656439500	659191148	1.004192

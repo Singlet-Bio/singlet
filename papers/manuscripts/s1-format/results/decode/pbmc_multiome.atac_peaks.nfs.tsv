@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+pbmc_multiome	atac_peaks	main	nfs	csc_i32	4	cold	file		auto	85596796	ok	0.550319	0.545539	0.550541	155.540297	3	0.550319,0.550763,0.540759	
+pbmc_multiome	atac_peaks	main	nfs	mtx_gz	4	cold	file		auto	85596796	ok	6.426445	6.379155	6.433721	13.319462	3	6.440997,6.426445,6.331865	
+pbmc_multiome	atac_peaks	main	nfs	tenx_h5	4	cold	file		auto	85596796	ok	3.214253	3.21307	3.232165	26.630384	3	3.250076,3.214253,3.211886	
+pbmc_multiome	atac_peaks	main	nfs	h5ad_none	4	cold	file		auto	85596796	ok	0.848407	0.83723	1.118721	100.891191	3	1.389034,0.848407,0.826052	
+pbmc_multiome	atac_peaks	main	nfs	h5ad_gzip	4	cold	file		auto	85596796	ok	2.574131	2.568828	2.841994	33.252692	3	3.109857,2.563525,2.574131	
+pbmc_multiome	atac_peaks	main	nfs	h5ad_lzf	4	cold	file		auto	85596796	ok	1.602924	1.60064	1.877722	53.400413	3	2.152520,1.598357,1.602924	
+pbmc_multiome	atac_peaks	main	nfs	zarr	4	cold	file		auto	85596796	ok	0.863671	0.827275	1.084594	99.108076	3	1.305516,0.790879,0.863671	
+pbmc_multiome	atac_peaks	main	nfs	loom	4	cold	file		auto	85596796	ok	30.583285	30.239183	31.870835	2.79881	3	33.158385,29.895081,30.583285	
+pbmc_multiome	atac_peaks	main	nfs	soma	4	cold	file		auto	85596796	ok	2.187962	2.153102	2.487155	39.121699	3	2.786349,2.187962,2.118242	
+pbmc_multiome	atac_peaks	main	nfs	parquet_coo	4	cold	file		auto	85596796	ok	2.054191	2.005414	2.145489	41.669345	3	2.236788,1.956636,2.054191	
+pbmc_multiome	atac_peaks	main	nfs	csc_zstd19	4	cold	file		auto	85596796	ok	1.371286	1.370356	1.377161	62.420809	3	1.383037,1.369426,1.371286	
+pbmc_multiome	atac_peaks	main	nfs	rds_gz	4	cold	file		auto	85596796	ok	4.379226	4.37706	4.428274	19.546101	3	4.477323,4.379226,4.374894	
+pbmc_multiome	atac_peaks	main	nfs	rds_xz	4	cold	file		auto	85596796	ok	6.6308	6.625634	6.691505	12.908969	3	6.752210,6.630800,6.620468	
+pbmc_multiome	atac_peaks	main	nfs	bpcells	4	cold	file		auto	85596796	ok	10.956043	10.921988	12.660096	7.812748	3	14.364149,10.956043,10.887934	
+pbmc_multiome	atac_peaks	main	nfs	s1	4	cold	file	native	auto	85596796	ok	0.371679	0.368582	1.259528	230.297789	3	2.147377,0.365485,0.371679	avx2
+pbmc_multiome	atac_peaks	main	nfs	s1	4	cold	file	canonical	auto	85596796	ok	0.511008	0.510605	1.17683	167.505699	3	1.842652,0.511008,0.510202	avx2
+pbmc_multiome	atac_peaks	main	nfs	s1_pack	4	cold	file	native	auto	85596796	ok	0.35429	0.353917	1.005191	241.600951	3	1.656093,0.354290,0.353543	avx2
+pbmc_multiome	atac_peaks	main	nfs	s1_pack	4	cold	file	canonical	auto	85596796	ok	0.506318	0.503281	1.155371	169.057415	3	1.804424,0.506318,0.500244	avx2

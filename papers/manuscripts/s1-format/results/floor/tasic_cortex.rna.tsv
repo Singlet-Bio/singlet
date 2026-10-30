@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+tasic_cortex	rna	plate_reads	214290227	37	122.430126	9.892126	11.154954	11.379588	5.070189	11.387395	11.164994	10000.0	9.5592

@@ -1,0 +1,69 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+nytimes_bow	words	sweep	local	s1	1	cold	file	native	auto	69679427	ok	0.93318	0.927321	1.605297	74.668826	3	2.277414,0.921462,0.933180	avx2
+nytimes_bow	words	sweep	local	s1	1	cold	file	canonical	auto	69679427	ok	1.546891	1.543245	2.19764	45.044815	3	2.848389,1.546891,1.539598	avx2
+nytimes_bow	words	sweep	local	s1	2	cold	file	native	auto	69679427	ok	0.554733	0.552975	1.220538	125.608911	3	1.886343,0.551216,0.554733	avx2
+nytimes_bow	words	sweep	local	s1	2	cold	file	canonical	auto	69679427	ok	0.841076	0.84007	1.49364	82.845589	3	2.146204,0.839064,0.841076	avx2
+nytimes_bow	words	sweep	local	s1	4	cold	file	native	auto	69679427	ok	0.36863	0.368328	1.062568	189.022606	3	1.756505,0.368025,0.368630	avx2
+nytimes_bow	words	sweep	local	s1	4	cold	file	canonical	auto	69679427	ok	0.51811	0.516768	1.171485	134.487583	3	1.824859,0.515426,0.518110	avx2
+nytimes_bow	words	sweep	local	s1	4	warm	file	native	auto	69679427	ok	0.320083	0.319546	0.321003	217.691788	3	0.319009,0.321923,0.320083	avx2
+nytimes_bow	words	sweep	local	s1	4	warm	file	canonical	auto	69679427	ok	0.46915	0.468244	0.476335	148.522779	3	0.483519,0.467338,0.469150	avx2
+nytimes_bow	words	sweep	local	s1	8	cold	file	native	auto	69679427	ok	0.326559	0.314703	0.978073	213.374982	3	1.629587,0.302847,0.326559	avx2
+nytimes_bow	words	sweep	local	s1	8	cold	file	canonical	auto	69679427	ok	0.377828	0.373265	1.032885	184.420848	3	1.687942,0.377828,0.368702	avx2
+nytimes_bow	words	sweep	local	s1	1	warm	codec	native	scalar	69679427	ok	2.436506	2.436237	2.450706	28.59809	3	2.464906,2.436506,2.435967	scalar
+nytimes_bow	words	sweep	local	s1	1	warm	codec	native	avx2	69679427	ok	0.791847	0.790394	0.799998	87.996122	3	0.788941,0.791847,0.808150	avx2
+nytimes_bow	words	sweep	local	s1	1	warm	codec	native	avx512	69679427	ok	0.789861	0.789519	0.799498	88.217332	3	0.789177,0.789861,0.809135	avx2
+nytimes_bow	words	sweep	local	s1	1	warm	codec	canonical	scalar	69679427	ok	3.10123	3.091088	3.102223	22.468321	3	3.101230,3.080946,3.103216	scalar
+nytimes_bow	words	sweep	local	s1	1	warm	codec	canonical	avx2	69679427	ok	1.413403	1.40953	1.417303	49.299051	3	1.413403,1.421202,1.405657	avx2
+nytimes_bow	words	sweep	local	s1	1	warm	codec	canonical	avx512	69679427	ok	1.415066	1.409398	1.418484	49.241114	3	1.415066,1.421903,1.403731	avx2
+nytimes_bow	words	sweep	local	s1	2	warm	codec	native	scalar	69679427	ok	1.285451	1.261311	1.394439	54.206189	3	1.237170,1.285451,1.503426	scalar
+nytimes_bow	words	sweep	local	s1	2	warm	codec	native	avx2	69679427	ok	0.416282	0.415992	0.41646	167.385239	3	0.415703,0.416282,0.416638	avx2
+nytimes_bow	words	sweep	local	s1	2	warm	codec	native	avx512	69679427	ok	0.415639	0.414829	0.416408	167.644192	3	0.414018,0.417177,0.415639	avx2
+nytimes_bow	words	sweep	local	s1	2	warm	codec	canonical	scalar	69679427	ok	1.556861	1.55637	1.558147	44.756349	3	1.555878,1.556861,1.559432	scalar
+nytimes_bow	words	sweep	local	s1	2	warm	codec	canonical	avx2	69679427	ok	0.704553	0.704348	0.710972	98.898793	3	0.704142,0.704553,0.717391	avx2
+nytimes_bow	words	sweep	local	s1	2	warm	codec	canonical	avx512	69679427	ok	0.705659	0.704746	0.711122	98.743788	3	0.703834,0.705659,0.716585	avx2
+nytimes_bow	words	sweep	local	s1	4	warm	codec	native	scalar	69679427	ok	0.642801	0.640316	0.644936	108.399769	3	0.647072,0.637832,0.642801	scalar
+nytimes_bow	words	sweep	local	s1	4	warm	codec	native	avx2	69679427	ok	0.230697	0.230527	0.230811	302.038349	3	0.230925,0.230697,0.230356	avx2
+nytimes_bow	words	sweep	local	s1	4	warm	codec	native	avx512	69679427	ok	0.230821	0.230593	0.231433	301.87661	3	0.230821,0.232045,0.230366	avx2
+nytimes_bow	words	sweep	local	s1	4	warm	codec	canonical	scalar	69679427	ok	0.793834	0.793075	0.802226	87.77577	3	0.792317,0.793834,0.810617	scalar
+nytimes_bow	words	sweep	local	s1	4	warm	codec	canonical	avx2	69679427	ok	0.377225	0.376696	0.379221	184.715978	3	0.381217,0.377225,0.376167	avx2
+nytimes_bow	words	sweep	local	s1	4	warm	codec	canonical	avx512	69679427	ok	0.378521	0.377251	0.378547	184.083618	3	0.375981,0.378574,0.378521	avx2
+nytimes_bow	words	sweep	local	s1	8	warm	codec	native	scalar	69679427	ok	0.366564	0.363949	0.398755	190.088195	3	0.361335,0.430946,0.366564	scalar
+nytimes_bow	words	sweep	local	s1	8	warm	codec	native	avx2	69679427	ok	0.179719	0.16969	0.180727	387.713249	3	0.159660,0.181736,0.179719	avx2
+nytimes_bow	words	sweep	local	s1	8	warm	codec	native	avx512	69679427	ok	0.178609	0.175636	0.179218	390.121939	3	0.178609,0.172663,0.179827	avx2
+nytimes_bow	words	sweep	local	s1	8	warm	codec	canonical	scalar	69679427	ok	0.474369	0.467628	0.505731	146.888554	3	0.460887,0.537094,0.474369	scalar
+nytimes_bow	words	sweep	local	s1	8	warm	codec	canonical	avx2	69679427	ok	0.278546	0.255786	0.281665	250.153766	3	0.284784,0.278546,0.233025	avx2
+nytimes_bow	words	sweep	local	s1	8	warm	codec	canonical	avx512	69679427	ok	0.261859	0.260125	0.271861	266.09486	3	0.281862,0.261859,0.258390	avx2
+nytimes_bow	words	sweep	local	h5ad_gzip	1	cold	file		auto	69679427	ok	2.606606	2.570482	2.80201	26.731857	3	2.997414,2.534357,2.606606	
+nytimes_bow	words	sweep	local	h5ad_gzip	2	cold	file		auto	69679427	ok	2.450551	2.450373	2.726642	28.43419	3	3.002734,2.450551,2.450196	
+nytimes_bow	words	sweep	local	h5ad_gzip	4	cold	file		auto	69679427	ok	2.449046	2.448171	2.726044	28.451663	3	3.003041,2.449046,2.447296	
+nytimes_bow	words	sweep	local	h5ad_gzip	4	warm	file		auto	69679427	ok	2.34853	2.347959	2.351802	29.669384	3	2.355073,2.348530,2.347389	
+nytimes_bow	words	sweep	local	h5ad_gzip	8	cold	file		auto	69679427	ok	2.44804	2.447266	2.723392	28.463357	3	2.998745,2.448040,2.446492	
+nytimes_bow	words	sweep	local	csc_i32	1	cold	file		auto	69679427	ok	0.536026	0.530855	0.537027	129.992594	3	0.538028,0.536026,0.525684	
+nytimes_bow	words	sweep	local	csc_i32	2	cold	file		auto	69679427	ok	0.531849	0.5316	0.536146	131.013613	3	0.540443,0.531351,0.531849	
+nytimes_bow	words	sweep	local	csc_i32	4	cold	file		auto	69679427	ok	0.537543	0.537093	0.539666	129.625824	3	0.537543,0.541790,0.536643	
+nytimes_bow	words	sweep	local	csc_i32	4	warm	file		auto	69679427	ok	0.223467	0.223407	0.226823	311.810846	3	0.230178,0.223467,0.223347	
+nytimes_bow	words	sweep	local	csc_i32	8	cold	file		auto	69679427	ok	0.532278	0.529276	0.533437	130.907939	3	0.534596,0.532278,0.526274	
+nytimes_bow	words	sweep	memory	s1	1	memory	codec_cpp	native	scalar	69679427	ok	2.526142	2.525967	2.54395	27.583337	3	2.525791,2.526142,2.561758	scalar
+nytimes_bow	words	sweep	memory	s1	1	memory	codec_cpp	native	avx2	69679427	ok	0.789445	0.776323	0.807448	88.263814	3	0.825451,0.789445,0.763202	avx2
+nytimes_bow	words	sweep	memory	s1	1	memory	codec_cpp	native	avx512	69679427	ok	0.777231	0.77471	0.777251	89.650859	3	0.777231,0.772189,0.777272	avx2
+nytimes_bow	words	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	69679427	ok	3.219971	3.218795	3.240894	21.639768	3	3.217619,3.219971,3.261817	scalar
+nytimes_bow	words	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	69679427	ok	1.457632	1.456889	1.469005	47.803168	3	1.480379,1.456147,1.457632	avx2
+nytimes_bow	words	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	69679427	ok	1.44847	1.447503	1.453188	48.105537	3	1.457906,1.448470,1.446536	avx2
+nytimes_bow	words	sweep	memory	s1	2	memory	codec_cpp	native	scalar	69679427	ok	1.330219	1.327594	1.332609	52.381921	3	1.330219,1.324969,1.334998	scalar
+nytimes_bow	words	sweep	memory	s1	2	memory	codec_cpp	native	avx2	69679427	ok	0.392033	0.391914	0.392748	177.738678	3	0.393462,0.392033,0.391795	avx2
+nytimes_bow	words	sweep	memory	s1	2	memory	codec_cpp	native	avx512	69679427	ok	0.387851	0.387637	0.388178	179.655143	3	0.387851,0.388506,0.387423	avx2
+nytimes_bow	words	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	69679427	ok	1.685992	1.684871	1.686757	41.328445	3	1.687522,1.685992,1.683750	scalar
+nytimes_bow	words	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	69679427	ok	0.748433	0.741356	0.752845	93.10042	3	0.748433,0.734278,0.757256	avx2
+nytimes_bow	words	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	69679427	ok	0.752544	0.74509	0.755459	92.591831	3	0.752544,0.737637,0.758373	avx2
+nytimes_bow	words	sweep	memory	s1	4	memory	codec_cpp	native	scalar	69679427	ok	0.654975	0.654945	0.656527	106.384865	3	0.658079,0.654975,0.654916	scalar
+nytimes_bow	words	sweep	memory	s1	4	memory	codec_cpp	native	avx2	69679427	ok	0.200451	0.198123	0.201311	347.613267	3	0.202171,0.200451,0.195795	avx2
+nytimes_bow	words	sweep	memory	s1	4	memory	codec_cpp	native	avx512	69679427	ok	0.196652	0.196397	0.196653	354.328596	3	0.196141,0.196653,0.196652	avx2
+nytimes_bow	words	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	69679427	ok	0.82646	0.825385	0.827098	84.310707	3	0.826460,0.827736,0.824311	scalar
+nytimes_bow	words	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	69679427	ok	0.375369	0.372993	0.37546	185.629146	3	0.375551,0.370616,0.375369	avx2
+nytimes_bow	words	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	69679427	ok	0.371416	0.370561	0.372273	187.604807	3	0.373129,0.371416,0.369707	avx2
+nytimes_bow	words	sweep	memory	s1	8	memory	codec_cpp	native	scalar	69679427	ok	0.43045	0.394188	0.430809	161.875774	3	0.431168,0.430450,0.357927	scalar
+nytimes_bow	words	sweep	memory	s1	8	memory	codec_cpp	native	avx2	69679427	ok	0.1375	0.135016	0.141398	506.759469	3	0.145296,0.137500,0.132531	avx2
+nytimes_bow	words	sweep	memory	s1	8	memory	codec_cpp	native	avx512	69679427	ok	0.136598	0.135263	0.139007	510.105763	3	0.141416,0.133927,0.136598	avx2
+nytimes_bow	words	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	69679427	ok	0.539875	0.499257	0.548234	129.065852	3	0.458639,0.539875,0.556593	scalar
+nytimes_bow	words	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	69679427	ok	0.254621	0.229858	0.255752	273.659388	3	0.205095,0.254621,0.256883	avx2
+nytimes_bow	words	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	69679427	ok	0.25039	0.230432	0.251668	278.283586	3	0.210473,0.250390,0.252947	avx2

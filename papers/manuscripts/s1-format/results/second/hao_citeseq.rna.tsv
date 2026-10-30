@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+hao_citeseq	rna	zstd22	210041487	209949333	0.999561
+hao_citeseq	rna	xz9e	210041487	209942288	0.999528
+hao_citeseq	rna	brotli11	210041487	209935201	0.999494
+hao_citeseq	rna	bzip2_9	210041487	210910018	1.004135

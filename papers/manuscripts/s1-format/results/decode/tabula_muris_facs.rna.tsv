@@ -1,0 +1,79 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+tabula_muris_facs	rna	main	local	csc_i32	1	cold	file		auto	143478092	ok	1.44879	1.446171	1.461067	99.033045	3	1.448790,1.443553,1.473345	
+tabula_muris_facs	rna	main	local	csc_i32	4	cold	file		auto	143478092	ok	1.462082	1.456534	2.040628	98.132715	3	2.619173,1.462082,1.450986	
+tabula_muris_facs	rna	main	local	csc_i32	4	warm	file		auto	143478092	ok	0.443056	0.442506	0.444775	323.837691	3	0.446494,0.441957,0.443056	
+tabula_muris_facs	rna	main	local	mtx_gz	1	cold	file		auto	143478092	ok	23.080327	23.011147	23.5217	6.216467	3	23.963072,23.080327,22.941967	
+tabula_muris_facs	rna	main	local	mtx_gz	4	cold	file		auto	143478092	ok	12.885104	12.742199	14.479038	11.135191	3	12.599295,16.072972,12.885104	
+tabula_muris_facs	rna	main	local	mtx_gz	4	warm	file		auto	143478092	ok	14.139227	14.090839	14.147354	10.147521	3	14.042452,14.155482,14.139227	
+tabula_muris_facs	rna	main	local	tenx_h5	1	cold	file		auto	143478092	ok	6.23601	6.234048	6.245451	23.007997	3	6.254893,6.236010,6.232087	
+tabula_muris_facs	rna	main	local	tenx_h5	4	cold	file		auto	143478092	ok	6.27669	6.266998	6.288199	22.85888	3	6.276690,6.257307,6.299709	
+tabula_muris_facs	rna	main	local	tenx_h5	4	warm	file		auto	143478092	ok	6.206184	6.197412	6.216844	23.118569	3	6.188640,6.206184,6.227503	
+tabula_muris_facs	rna	main	local	h5ad_none	1	cold	file		auto	143478092	ok	1.901873	1.886015	2.294604	75.440397	3	2.687334,1.870157,1.901873	
+tabula_muris_facs	rna	main	local	h5ad_none	4	cold	file		auto	143478092	ok	1.853617	1.848334	2.139098	77.404373	3	2.424579,1.853617,1.843050	
+tabula_muris_facs	rna	main	local	h5ad_none	4	warm	file		auto	143478092	ok	0.643416	0.64278	0.649181	222.994405	3	0.654946,0.643416,0.642145	
+tabula_muris_facs	rna	main	local	h5ad_gzip	1	cold	file		auto	143478092	ok	5.730922	5.655281	5.932422	25.035777	3	6.133921,5.579640,5.730922	
+tabula_muris_facs	rna	main	local	h5ad_gzip	4	cold	file		auto	143478092	ok	5.846589	5.840875	6.103739	24.540477	3	6.360890,5.835161,5.846589	
+tabula_muris_facs	rna	main	local	h5ad_gzip	4	warm	file		auto	143478092	ok	5.526973	5.524472	5.533791	25.959614	3	5.540610,5.521970,5.526973	
+tabula_muris_facs	rna	main	local	h5ad_lzf	1	cold	file		auto	143478092	ok	3.440005	3.426134	3.738502	41.708688	3	4.036999,3.440005,3.412264	
+tabula_muris_facs	rna	main	local	h5ad_lzf	4	cold	file		auto	143478092	ok	3.408965	3.39775	3.682611	42.088465	3	3.956257,3.408965,3.386535	
+tabula_muris_facs	rna	main	local	h5ad_lzf	4	warm	file		auto	143478092	ok	2.652723	2.614934	2.757284	54.087095	3	2.652723,2.861844,2.577145	
+tabula_muris_facs	rna	main	local	zarr	1	cold	file		auto	143478092	ok	1.665517	1.651144	1.958168	86.146288	3	2.250819,1.665517,1.636772	
+tabula_muris_facs	rna	main	local	zarr	4	cold	file		auto	143478092	ok	1.432955	1.405283	1.689647	100.127446	3	1.946340,1.377611,1.432955	
+tabula_muris_facs	rna	main	local	zarr	4	warm	file		auto	143478092	ok	0.762286	0.751539	0.773576	188.220704	3	0.784866,0.740792,0.762286	
+tabula_muris_facs	rna	main	local	loom	1	cold	file		auto	143478092	ok	54.120496	53.905251	55.075245	2.651086	3	53.690006,54.120496,56.029994	
+tabula_muris_facs	rna	main	local	loom	4	cold	file		auto	143478092	ok	56.118764	55.049468	56.583585	2.556687	3	57.048406,53.980171,56.118764	
+tabula_muris_facs	rna	main	local	loom	4	warm	file		auto	143478092	ok	53.251991	51.063556	54.398103	2.694324	3	53.251991,55.544214,48.875121	
+tabula_muris_facs	rna	main	local	soma	1	cold	file		auto	143478092	ok	9.251346	9.219785	9.764394	15.508888	3	10.277443,9.188223,9.251346	
+tabula_muris_facs	rna	main	local	soma	4	cold	file		auto	143478092	ok	3.278744	3.213091	3.664395	43.760084	3	4.050046,3.147439,3.278744	
+tabula_muris_facs	rna	main	local	soma	4	warm	file		auto	143478092	ok	3.085746	3.0289	3.23075	46.497045	3	3.085746,3.375754,2.972054	
+tabula_muris_facs	rna	main	local	parquet_coo	1	cold	file		auto	143478092	ok	6.862415	6.703401	7.533635	20.907813	3	8.204855,6.544387,6.862415	
+tabula_muris_facs	rna	main	local	parquet_coo	4	cold	file		auto	143478092	ok	6.035286	6.021563	6.177517	23.773205	3	6.319748,6.035286,6.007840	
+tabula_muris_facs	rna	main	local	parquet_coo	4	warm	file		auto	143478092	ok	4.95716	4.952016	4.95854	28.943607	3	4.959920,4.946871,4.957160	
+tabula_muris_facs	rna	main	local	csc_zstd19	1	cold	file		auto	143478092	ok	2.285063	2.279995	2.295638	62.789544	3	2.306213,2.285063,2.274927	
+tabula_muris_facs	rna	main	local	csc_zstd19	4	cold	file		auto	143478092	ok	2.251291	2.248181	2.251811	63.731478	3	2.251291,2.245071,2.252331	
+tabula_muris_facs	rna	main	local	csc_zstd19	4	warm	file		auto	143478092	ok	2.107807	2.107571	2.108671	68.069853	3	2.107807,2.109535,2.107336	
+tabula_muris_facs	rna	main	local	rds_gz	1	cold	file		auto	143478092	ok	8.375181	8.373643	8.419367	17.131341	3	8.463552,8.375181,8.372105	
+tabula_muris_facs	rna	main	local	rds_gz	4	cold	file		auto	143478092	ok	8.363897	8.363027	8.413458	17.154454	3	8.463018,8.363897,8.362156	
+tabula_muris_facs	rna	main	local	rds_gz	4	warm	file		auto	143478092	ok	8.19572	8.193407	8.197775	17.506465	3	8.199830,8.191093,8.195720	
+tabula_muris_facs	rna	main	local	rds_xz	1	cold	file		auto	143478092	ok	13.969279	13.924541	14.698989	10.270973	3	13.969279,15.428699,13.879803	
+tabula_muris_facs	rna	main	local	rds_xz	4	cold	file		auto	143478092	ok	13.871088	13.852544	13.896022	10.34368	3	13.920956,13.871088,13.833999	
+tabula_muris_facs	rna	main	local	rds_xz	4	warm	file		auto	143478092	ok	14.071019	13.899158	14.590461	10.196709	3	13.727297,15.109903,14.071019	
+tabula_muris_facs	rna	main	local	bpcells	1	cold	file		auto	143478092	ok	18.132102	18.02211	20.040134	7.912932	3	21.948166,18.132102,17.912117	
+tabula_muris_facs	rna	main	local	bpcells	4	cold	file		auto	143478092	ok	17.577824	17.555705	19.400761	8.162449	3	21.223697,17.577824,17.533585	
+tabula_muris_facs	rna	main	local	bpcells	4	warm	file		auto	143478092	ok	17.933374	17.897106	18.345768	8.000619	3	18.758163,17.860838,17.933374	
+tabula_muris_facs	rna	main	local	s1	1	cold	file	native	auto	143478092	ok	2.340033	2.33577	3.278085	61.314557	3	4.216136,2.331508,2.340033	avx2
+tabula_muris_facs	rna	main	local	s1	1	cold	file	canonical	auto	143478092	ok	3.266161	3.220454	3.833659	43.928668	3	4.401158,3.266161,3.174748	avx2
+tabula_muris_facs	rna	main	local	s1	4	cold	file	native	auto	143478092	ok	1.034381	1.032841	1.713374	138.709105	3	2.392367,1.034381,1.031300	avx2
+tabula_muris_facs	rna	main	local	s1	4	cold	file	canonical	auto	143478092	ok	1.155172	1.059466	1.73086	124.205009	3	2.306549,0.963760,1.155172	avx2
+tabula_muris_facs	rna	main	local	s1	4	warm	file	native	auto	143478092	ok	0.656834	0.654627	0.658421	218.439003	3	0.652420,0.660008,0.656834	avx2
+tabula_muris_facs	rna	main	local	s1	4	warm	file	canonical	auto	143478092	ok	0.8106	0.810303	0.819497	177.002318	3	0.810600,0.810006,0.828394	avx2
+tabula_muris_facs	rna	main	local	s1	1	warm	codec	native	scalar	143478092	ok	5.36341	5.362536	5.391881	26.751283	3	5.363410,5.420352,5.361663	scalar
+tabula_muris_facs	rna	main	local	s1	1	warm	codec	native	avx2	143478092	ok	1.670595	1.665983	1.697153	85.884401	3	1.670595,1.723711,1.661371	avx2
+tabula_muris_facs	rna	main	local	s1	1	warm	codec	native	avx512	143478092	ok	1.599148	1.596371	1.621464	89.721591	3	1.593593,1.643781,1.599148	avx2
+tabula_muris_facs	rna	main	local	s1	1	warm	codec	canonical	scalar	143478092	ok	6.109035	6.09196	6.126237	23.486213	3	6.143439,6.109035,6.074885	scalar
+tabula_muris_facs	rna	main	local	s1	1	warm	codec	canonical	avx2	143478092	ok	2.350501	2.349574	2.375689	61.041496	3	2.350501,2.400877,2.348648	avx2
+tabula_muris_facs	rna	main	local	s1	1	warm	codec	canonical	avx512	143478092	ok	2.364076	2.355423	2.373556	60.690984	3	2.383036,2.364076,2.346770	avx2
+tabula_muris_facs	rna	main	local	s1	4	warm	codec	native	scalar	143478092	ok	1.407524	1.404377	1.410214	101.936508	3	1.401229,1.412903,1.407524	scalar
+tabula_muris_facs	rna	main	local	s1	4	warm	codec	native	avx2	143478092	ok	0.488697	0.488486	0.489115	293.592965	3	0.489533,0.488274,0.488697	avx2
+tabula_muris_facs	rna	main	local	s1	4	warm	codec	native	avx512	143478092	ok	0.488065	0.487963	0.49395	293.973114	3	0.499834,0.487862,0.488065	avx2
+tabula_muris_facs	rna	main	local	s1	4	warm	codec	canonical	scalar	143478092	ok	1.588889	1.587972	1.598229	90.300917	3	1.587055,1.607569,1.588889	scalar
+tabula_muris_facs	rna	main	local	s1	4	warm	codec	canonical	avx2	143478092	ok	0.667573	0.667408	0.668331	214.925041	3	0.669088,0.667573,0.667243	avx2
+tabula_muris_facs	rna	main	local	s1	4	warm	codec	canonical	avx512	143478092	ok	0.668701	0.668596	0.66873	214.562259	3	0.668701,0.668490,0.668758	avx2
+tabula_muris_facs	rna	main	local	s1_pack	1	cold	file	native	auto	143478092	ok	1.907948	1.886209	2.55214	75.200205	3	3.196332,1.864469,1.907948	avx2
+tabula_muris_facs	rna	main	local	s1_pack	1	cold	file	canonical	auto	143478092	ok	2.672575	2.640823	3.317269	53.685329	3	3.961963,2.672575,2.609071	avx2
+tabula_muris_facs	rna	main	local	s1_pack	4	cold	file	native	auto	143478092	ok	0.775785	0.766509	1.431266	184.945634	3	2.086748,0.757232,0.775785	avx2
+tabula_muris_facs	rna	main	local	s1_pack	4	cold	file	canonical	auto	143478092	ok	0.941675	0.939405	1.607799	152.364795	3	2.273924,0.937134,0.941675	avx2
+tabula_muris_facs	rna	main	local	s1_pack	4	warm	file	native	auto	143478092	ok	0.628895	0.628736	0.630432	228.143187	3	0.628895,0.628577,0.631970	avx2
+tabula_muris_facs	rna	main	local	s1_pack	4	warm	file	canonical	auto	143478092	ok	0.8074	0.806467	0.815732	177.703895	3	0.807400,0.805535,0.824064	avx2
+tabula_muris_facs	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	143478092	ok	5.590033	5.584389	5.595095	25.66677	3	5.590033,5.600156,5.578744	scalar
+tabula_muris_facs	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	143478092	ok	1.579209	1.576388	1.579948	90.854404	3	1.580688,1.573567,1.579209	avx2
+tabula_muris_facs	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	143478092	ok	1.591378	1.588842	1.591935	90.159655	3	1.591378,1.586305,1.592491	avx2
+tabula_muris_facs	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	143478092	ok	6.333268	6.328342	6.338833	22.654669	3	6.323415,6.333268,6.344397	scalar
+tabula_muris_facs	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	143478092	ok	2.331645	2.327605	2.333166	61.535136	3	2.323565,2.334688,2.331645	avx2
+tabula_muris_facs	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	143478092	ok	2.316344	2.31117	2.318384	61.941617	3	2.305995,2.320424,2.316344	avx2
+tabula_muris_facs	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	143478092	ok	1.399163	1.397067	1.403772	102.545659	3	1.408381,1.394971,1.399163	scalar
+tabula_muris_facs	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	143478092	ok	0.397515	0.397489	0.397548	360.937555	3	0.397515,0.397462,0.397581	avx2
+tabula_muris_facs	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	143478092	ok	0.409602	0.409523	0.409691	350.2866	3	0.409780,0.409443,0.409602	avx2
+tabula_muris_facs	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	143478092	ok	1.601256	1.592746	1.605411	89.603469	3	1.601256,1.584236,1.609567	scalar
+tabula_muris_facs	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	143478092	ok	0.580593	0.579843	0.583719	247.123358	3	0.586845,0.580593,0.579093	avx2
+tabula_muris_facs	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	143478092	ok	0.581524	0.580926	0.58254	246.727722	3	0.580328,0.583556,0.581524	avx2

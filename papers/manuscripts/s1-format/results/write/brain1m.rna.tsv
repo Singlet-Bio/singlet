@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+brain1m	rna	h5ad_none	general	2624828308	27998	1306127	ok	31587068936	96.27165	0	67.337104	4	NA
+brain1m	rna	csc_i32	general	2624828308	27998	1306127	ok	21035983827	64.113858	0	43.457204	4	NA
+brain1m	rna	mtx_gz	general	2624828308	27998	1306127	ok	8172485099	24.90825	0	1857.516328	4	NA
+brain1m	rna	tenx_h5	general	2624828308	27998	1306127	ok	3683502232	11.226646	0	306.961686	4	NA
+brain1m	rna	h5ad_gzip	general	2624828308	27998	1306127	ok	5898071405	17.976251	0	437.812109	4	NA
+brain1m	rna	h5ad_lzf	general	2624828308	27998	1306127	ok	13758549129	41.933559	0	81.901696	4	NA
+brain1m	rna	zarr	general	2624828308	27998	1306127	ok	4900070725	14.934526	0	62.842973	4	NA
+brain1m	rna	loom	general	2624828308	27998	1306127	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 27998x1306127 entries exceeds 2e+09
+brain1m	rna	soma	domain	2624828308	27998	1306127	ok	4743077741	14.45604	0	1437.616953	4	NA
+brain1m	rna	parquet_coo	general	2624828308	27998	1306127	ok	5645874512	17.2076	0	207.160338	4	NA
+brain1m	rna	csc_zstd19	general	2624828308	27998	1306127	ok	2885025289	8.793033	0	3746.949022	4	NA
+brain1m	rna	rds_gz	general	2624828308	27998	1306127	not_applicable	NA	NA	NA	NA	NA	dgCMatrix holds at most 2^31-1 non-zeros; this matrix has 2624828308
+brain1m	rna	rds_xz	general	2624828308	27998	1306127	not_applicable	NA	NA	NA	NA	NA	dgCMatrix holds at most 2^31-1 non-zeros; this matrix has 2624828308
+brain1m	rna	bpcells	domain	2624828308	27998	1306127	not_applicable	NA	NA	NA	NA	NA	read into memory as a dgCMatrix, which holds at most 2^31-1 non-zeros; this matrix has 2624828308
+brain1m	rna	s1	s1	2624828308	27998	1306127	ok	1470299761	4.481207	0	282.875827	4	NA
+brain1m	rna	s1_pack	s1	2624828308	27998	1306127	ok	1470232357	4.481001	531962	239.234388	4	NA

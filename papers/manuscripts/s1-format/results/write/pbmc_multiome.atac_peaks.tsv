@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads
+pbmc_multiome	atac_peaks	h5ad_none	general	85596796	108377	11909	ok	691957448	64.671341	0	1.605267	4
+pbmc_multiome	atac_peaks	csc_i32	general	85596796	108377	11909	ok	687684564	64.271991	0	1.799602	4
+pbmc_multiome	atac_peaks	mtx_gz	general	85596796	108377	11909	ok	257872881	24.101171	0	64.060952	4
+pbmc_multiome	atac_peaks	tenx_h5	general	85596796	108377	11909	ok	125905697	11.767328	0	11.837322	4
+pbmc_multiome	atac_peaks	h5ad_gzip	general	85596796	108377	11909	ok	179270030	16.754836	0	19.152119	4
+pbmc_multiome	atac_peaks	h5ad_lzf	general	85596796	108377	11909	ok	441750267	41.286617	0	3.210893	4
+pbmc_multiome	atac_peaks	zarr	general	85596796	108377	11909	ok	157577532	14.727423	0	4.099774	4
+pbmc_multiome	atac_peaks	loom	general	85596796	108377	11909	ok	241101458	22.53369	0	30.556596	4
+pbmc_multiome	atac_peaks	soma	domain	85596796	108377	11909	ok	157816282	14.749737	0	67.260971	4
+pbmc_multiome	atac_peaks	parquet_coo	general	85596796	108377	11909	ok	227237312	21.237927	0	6.008422	4
+pbmc_multiome	atac_peaks	csc_zstd19	general	85596796	108377	11909	ok	110794677	10.35503	0	150.802638	4
+pbmc_multiome	atac_peaks	rds_gz	general	85596796	108377	11909	ok	251728129	23.526874	0	71.55459	4
+pbmc_multiome	atac_peaks	rds_xz	general	85596796	108377	11909	ok	99804992	9.327918	0	398.160664	4
+pbmc_multiome	atac_peaks	bpcells	domain	85596796	108377	11909	ok	137947474	12.89277	0	8.484518	4
+pbmc_multiome	atac_peaks	s1	s1	85596796	108377	11909	ok	56604640	5.290351	0	8.797957	4
+pbmc_multiome	atac_peaks	s1_pack	s1	85596796	108377	11909	ok	56008592	5.234644	2588261	7.864794	4

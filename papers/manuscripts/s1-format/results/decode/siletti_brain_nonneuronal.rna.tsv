@@ -1,0 +1,39 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+siletti_brain_nonneuronal	rna	main	local	csc_i32	4	cold	file		auto	1962963238	ok	25.178572	25.155935	35.329841	77.961657	3	45.481110,25.133298,25.178572	
+siletti_brain_nonneuronal	rna	main	local	csc_i32	4	warm	file		auto	1962963238	ok	14.366225	14.362876	14.388916	136.637376	3	14.411607,14.366225,14.359528	
+siletti_brain_nonneuronal	rna	main	local	tenx_h5	4	cold	file		auto	1962963238	ok	82.703906	82.703906	82.703906	23.734831	1	82.703906	
+siletti_brain_nonneuronal	rna	main	local	tenx_h5	4	warm	file		auto	1962963238	ok	84.205516	84.205516	84.205516	23.311575	1	84.205516	
+siletti_brain_nonneuronal	rna	main	local	h5ad_none	4	cold	file		auto	1962963238	ok	23.405992	22.776997	25.329493	83.865842	3	27.252995,23.405992,22.148003	
+siletti_brain_nonneuronal	rna	main	local	h5ad_none	4	warm	file		auto	1962963238	ok	8.013006	8.002377	8.043427	244.972155	3	8.073848,8.013006,7.991749	
+siletti_brain_nonneuronal	rna	main	local	h5ad_gzip	4	cold	file		auto	1962963238	ok	63.36402	63.36402	63.36402	30.979146	1	63.364020	
+siletti_brain_nonneuronal	rna	main	local	h5ad_gzip	4	warm	file		auto	1962963238	ok	60.461105	60.461105	60.461105	32.466546	1	60.461105	
+siletti_brain_nonneuronal	rna	main	local	zarr	4	cold	file		auto	1962963238	ok	16.501157	16.48631	16.879999	118.959131	3	17.258842,16.471463,16.501157	
+siletti_brain_nonneuronal	rna	main	local	zarr	4	warm	file		auto	1962963238	ok	11.431095	11.267185	11.521708	171.721364	3	11.431095,11.612321,11.103275	
+siletti_brain_nonneuronal	rna	main	local	soma	4	cold	file		auto	1962963238	ok	45.698724	45.30514	46.865004	42.954443	3	48.031283,45.698724,44.911556	
+siletti_brain_nonneuronal	rna	main	local	soma	4	warm	file		auto	1962963238	ok	43.640948	43.446203	43.671063	44.979849	3	43.640948,43.701179,43.251459	
+siletti_brain_nonneuronal	rna	main	local	s1	4	cold	file	native	auto	1962963238	ok	8.835543	8.618184	10.038558	222.166686	3	11.241574,8.835543,8.400824	avx2
+siletti_brain_nonneuronal	rna	main	local	s1	4	cold	file	canonical	auto	1962963238	ok	11.103298	11.099284	12.119969	176.791007	3	13.136641,11.095271,11.103298	avx2
+siletti_brain_nonneuronal	rna	main	local	s1	4	warm	file	native	auto	1962963238	ok	7.416662	7.416517	7.461508	264.669373	3	7.506355,7.416372,7.416662	avx2
+siletti_brain_nonneuronal	rna	main	local	s1	4	warm	file	canonical	auto	1962963238	ok	10.259571	10.253258	10.281394	191.329954	3	10.259571,10.246945,10.303217	avx2
+siletti_brain_nonneuronal	rna	main	local	s1	4	warm	codec	native	scalar	1962963238	ok	19.019886	19.01803	19.060154	103.205836	3	19.019886,19.100421,19.016175	scalar
+siletti_brain_nonneuronal	rna	main	local	s1	4	warm	codec	native	avx2	1962963238	ok	6.387352	6.385948	6.387448	307.320339	3	6.387352,6.384545,6.387544	avx2
+siletti_brain_nonneuronal	rna	main	local	s1	4	warm	codec	native	avx512	1962963238	ok	6.366589	6.365034	6.394179	308.322592	3	6.421768,6.366589,6.363479	avx2
+siletti_brain_nonneuronal	rna	main	local	s1	4	warm	codec	canonical	scalar	1962963238	ok	21.956292	21.944153	21.985808	89.403223	3	22.015324,21.956292,21.932014	scalar
+siletti_brain_nonneuronal	rna	main	local	s1	4	warm	codec	canonical	avx2	1962963238	ok	9.18284	9.17964	9.185474	213.764292	3	9.176441,9.182840,9.188108	avx2
+siletti_brain_nonneuronal	rna	main	local	s1	4	warm	codec	canonical	avx512	1962963238	ok	9.201781	9.196139	9.221867	213.324283	3	9.190497,9.241953,9.201781	avx2
+siletti_brain_nonneuronal	rna	main	local	s1_pack	4	cold	file	native	auto	1962963238	ok	9.268811	8.881717	9.716311	211.78155	3	10.163810,8.494622,9.268811	avx2
+siletti_brain_nonneuronal	rna	main	local	s1_pack	4	cold	file	canonical	auto	1962963238	ok	11.158328	11.120228	12.016832	175.919127	3	12.875337,11.158328,11.082128	avx2
+siletti_brain_nonneuronal	rna	main	local	s1_pack	4	warm	file	native	auto	1962963238	ok	7.441359	7.441342	7.448386	263.790963	3	7.455413,7.441326,7.441359	avx2
+siletti_brain_nonneuronal	rna	main	local	s1_pack	4	warm	file	canonical	auto	1962963238	ok	10.25929	10.258421	10.260841	191.335201	3	10.259290,10.257553,10.262393	avx2
+siletti_brain_nonneuronal	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	1962963238	ok	75.912957	75.883495	76.042131	25.858079	3	76.171305,75.854033,75.912957	scalar
+siletti_brain_nonneuronal	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	1962963238	ok	21.150566	21.088045	21.220295	92.809017	3	21.025523,21.150566,21.290023	avx2
+siletti_brain_nonneuronal	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	1962963238	ok	21.114558	21.104824	21.192569	92.96729	3	21.270579,21.114558,21.095090	avx2
+siletti_brain_nonneuronal	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	1962963238	ok	88.606894	88.595575	88.70984	22.153618	3	88.606894,88.812785,88.584257	scalar
+siletti_brain_nonneuronal	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	1962963238	ok	33.105091	32.981793	33.105462	59.294905	3	33.105832,32.858495,33.105091	avx2
+siletti_brain_nonneuronal	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	1962963238	ok	33.234348	33.136153	33.258801	59.064292	3	33.234348,33.283254,33.037959	avx2
+siletti_brain_nonneuronal	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	1962963238	ok	19.035728	19.018032	19.112561	103.119946	3	19.189394,19.000336,19.035728	scalar
+siletti_brain_nonneuronal	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	1962963238	ok	5.299267	5.280695	5.299786	370.421652	3	5.262123,5.299267,5.300306	avx2
+siletti_brain_nonneuronal	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	1962963238	ok	5.298467	5.284085	5.332325	370.477581	3	5.269704,5.298467,5.366183	avx2
+siletti_brain_nonneuronal	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	1962963238	ok	22.29151	22.200857	22.310972	88.058783	3	22.291510,22.330434,22.110203	scalar
+siletti_brain_nonneuronal	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	1962963238	ok	8.429734	8.428733	8.461723	232.861824	3	8.429734,8.493713,8.427733	avx2
+siletti_brain_nonneuronal	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	1962963238	ok	8.478261	8.440679	8.502102	231.528994	3	8.478261,8.525942,8.403097	avx2

@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+pbmc_multiome	atac_peaks	multimodal	S	fragments	108377	11909	85596796	0.06632	20433.762784	19858.0	7227.0	0.058813	534	2.84293

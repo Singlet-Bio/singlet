@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads
+slideseq2_hippocampus	rna	h5ad_none	general	22396657	23264	53208	ok	183004360	65.368456	0	1.033945	4
+slideseq2_hippocampus	rna	csc_i32	general	22396657	23264	53208	ok	180571837	64.499568	0	0.472099	4
+slideseq2_hippocampus	rna	mtx_gz	general	22396657	23264	53208	ok	68224013	24.369356	0	17.469555	4
+slideseq2_hippocampus	rna	tenx_h5	general	22396657	23264	53208	ok	32833650	11.728054	0	2.278299	4
+slideseq2_hippocampus	rna	h5ad_gzip	general	22396657	23264	53208	ok	52503164	18.753929	0	3.601806	4
+slideseq2_hippocampus	rna	h5ad_lzf	general	22396657	23264	53208	ok	95310913	34.044693	0	0.728308	4
+slideseq2_hippocampus	rna	zarr	general	22396657	23264	53208	ok	40559350	14.487644	0	0.862336	4
+slideseq2_hippocampus	rna	loom	general	22396657	23264	53208	ok	101882308	36.39197	0	23.530376	4
+slideseq2_hippocampus	rna	soma	domain	22396657	23264	53208	ok	40674977	14.528946	0	16.377767	4
+slideseq2_hippocampus	rna	parquet_coo	general	22396657	23264	53208	ok	47065831	16.811734	0	1.189977	4
+slideseq2_hippocampus	rna	csc_zstd19	general	22396657	23264	53208	ok	27962593	9.988131	0	43.280277	4
+slideseq2_hippocampus	rna	rds_gz	general	22396657	23264	53208	ok	48594524	17.357778	0	14.397554	4
+slideseq2_hippocampus	rna	rds_xz	general	22396657	23264	53208	ok	25523752	9.116986	0	79.979034	4
+slideseq2_hippocampus	rna	bpcells	domain	22396657	23264	53208	ok	44822863	16.010555	0	4.830888	4
+slideseq2_hippocampus	rna	s1	s1	22396657	23264	53208	ok	15923543	5.687829	0	2.34162	4
+slideseq2_hippocampus	rna	s1_pack	s1	22396657	23264	53208	ok	15878654	5.671794	174405	1.862203	4

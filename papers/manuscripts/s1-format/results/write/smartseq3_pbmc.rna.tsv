@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads
+smartseq3_pbmc	rna	h5ad_none	general	6423798	38630	3129	ok	53510464	66.640282	0	1.168334	4
+smartseq3_pbmc	rna	csc_i32	general	6423798	38630	3129	ok	52099597	64.883232	0	0.198615	4
+smartseq3_pbmc	rna	mtx_gz	general	6423798	38630	3129	ok	21331234	26.565261	0	4.743016	4
+smartseq3_pbmc	rna	tenx_h5	general	6423798	38630	3129	ok	10841788	13.502029	0	0.676837	4
+smartseq3_pbmc	rna	h5ad_gzip	general	6423798	38630	3129	ok	17783055	22.146468	0	1.219432	4
+smartseq3_pbmc	rna	h5ad_lzf	general	6423798	38630	3129	ok	35209897	43.84932	0	0.245767	4
+smartseq3_pbmc	rna	zarr	general	6423798	38630	3129	ok	13563033	16.890983	0	0.552622	4
+smartseq3_pbmc	rna	loom	general	6423798	38630	3129	ok	21093541	26.269246	0	5.799307	4
+smartseq3_pbmc	rna	soma	domain	6423798	38630	3129	ok	13502634	16.815764	0	4.631443	4
+smartseq3_pbmc	rna	parquet_coo	general	6423798	38630	3129	ok	16264649	20.255492	0	0.37873	4
+smartseq3_pbmc	rna	csc_zstd19	general	6423798	38630	3129	ok	8883965	11.063816	0	26.960136	4
+smartseq3_pbmc	rna	rds_gz	general	6423798	38630	3129	ok	17398181	21.667158	0	5.741811	4
+smartseq3_pbmc	rna	rds_xz	general	6423798	38630	3129	ok	8002908	9.966575	0	43.064099	4
+smartseq3_pbmc	rna	bpcells	domain	6423798	38630	3129	ok	12964551	16.145652	0	3.743779	4
+smartseq3_pbmc	rna	s1	s1	6423798	38630	3129	ok	5038873	6.275257	0	1.072658	4
+smartseq3_pbmc	rna	s1_pack	s1	6423798	38630	3129	ok	4995239	6.220917	618080	0.564483	4

@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+tahoe_plate	rna	h5ad_none	general	8276063161	62710	5481420	ok	99674081240	96.349271	0	2398.333083	4	NA
+tahoe_plate	rna	csc_i32	general	8276063161	62710	5481420	ok	66357166301	64.143702	0	144.538269	4	NA
+tahoe_plate	rna	mtx_gz	general	8276063161	62710	5481420	ok	25105448278	24.26801	0	6414.374493	4	NA
+tahoe_plate	rna	tenx_h5	general	8276063161	62710	5481420	ok	11670376948	11.28109	0	973.052971	4	NA
+tahoe_plate	rna	h5ad_gzip	general	8276063161	62710	5481420	ok	18768908520	18.142837	0	1424.535838	4	NA
+tahoe_plate	rna	h5ad_lzf	general	8276063161	62710	5481420	ok	41117870572	39.746309	0	266.351397	4	NA
+tahoe_plate	rna	zarr	general	8276063161	62710	5481420	ok	14928744036	14.430769	0	209.081675	4	NA
+tahoe_plate	rna	loom	general	8276063161	62710	5481420	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 62710x5481420 entries exceeds 2e+09
+tahoe_plate	rna	soma	domain	8276063161	62710	5481420	ok	14726842240	14.235602	0	4619.279104	4	NA
+tahoe_plate	rna	parquet_coo	general	8276063161	62710	5481420	ok	18343644003	17.731758	0	413.293728	4	NA
+tahoe_plate	rna	csc_zstd19	general	8276063161	62710	5481420	ok	10116370878	9.778921	0	11629.553001	4	NA
+tahoe_plate	rna	rds_gz	general	8276063161	62710	5481420	not_applicable	NA	NA	NA	NA	NA	dgCMatrix holds at most 2^31-1 non-zeros; this matrix has 8276063161
+tahoe_plate	rna	rds_xz	general	8276063161	62710	5481420	not_applicable	NA	NA	NA	NA	NA	dgCMatrix holds at most 2^31-1 non-zeros; this matrix has 8276063161
+tahoe_plate	rna	bpcells	domain	8276063161	62710	5481420	not_applicable	NA	NA	NA	NA	NA	read into memory as a dgCMatrix, which holds at most 2^31-1 non-zeros; this matrix has 8276063161
+tahoe_plate	rna	s1	s1	8276063161	62710	5481420	ok	5185098332	5.01214	0	819.525107	4	NA
+tahoe_plate	rna	s1_pack	s1	8276063161	62710	5481420	ok	5184924026	5.011971	662281	837.437583	4	NA

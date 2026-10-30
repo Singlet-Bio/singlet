@@ -1,17 +1,19 @@
 dataset	lang	call	seconds	equal
-hlca\_core	Python	\texttt{anndata.read\_h5ad}	36.8951	True
-hlca\_core	Python	\texttt{scanpy.read\_10x\_h5}	52.9493	True
-hlca\_core	Python	\texttt{singlet.load}	30.8396	True
-hlca\_core	C++	\texttt{pz2::Matrix::open + decode}	3.19958	
-hlca\_core	R	\texttt{Seurat::Read10X\_h5}	231.947	True
-hlca\_core	R	\texttt{zellkonverter::readH5AD}	76.3894	True
-hlca\_core	R	\texttt{singlet::load(as='sce')}	34.4799	True
-hlca\_core	R	\texttt{singlet::load(as='seurat')}	84.9	True
-pbmc10k\_v3	Python	\texttt{anndata.read\_h5ad}	0.876231	True
-pbmc10k\_v3	Python	\texttt{scanpy.read\_10x\_h5}	1.25609	True
-pbmc10k\_v3	Python	\texttt{singlet.load}	0.697531	True
-pbmc10k\_v3	C++	\texttt{pz2::Matrix::open + decode}	0.066193	
-pbmc10k\_v3	R	\texttt{Seurat::Read10X\_h5}	3.799	True
-pbmc10k\_v3	R	\texttt{zellkonverter::readH5AD}	1.9026	True
-pbmc10k\_v3	R	\texttt{singlet::load(as='sce')}	0.7931	True
-pbmc10k\_v3	R	\texttt{singlet::load(as='seurat')}	2.402	True
+hlca\_core	Python	\texttt{anndata.read\_h5ad}	36.847	True
+hlca\_core	Python	\texttt{scanpy.read\_10x\_h5}	52.8097	True
+hlca\_core	Python	\texttt{singlet.load}	30.6385	True
+hlca\_core	C++	\texttt{pz2::Matrix::open + decode (member in memory)}	3.12911	
+hlca\_core	R	\texttt{Seurat::Read10X\_h5}	232.311	True
+hlca\_core	R	\texttt{CreateSeuratObject(Read10X\_h5)}	300.369	True
+hlca\_core	R	\texttt{zellkonverter::readH5AD}	76.5444	True
+hlca\_core	R	\texttt{singlet::load(as='sce')}	31.9307	True
+hlca\_core	R	\texttt{singlet::load(as='seurat')}	84.2683	True
+pbmc10k\_v3	Python	\texttt{anndata.read\_h5ad}	0.875956	True
+pbmc10k\_v3	Python	\texttt{scanpy.read\_10x\_h5}	1.2584	True
+pbmc10k\_v3	Python	\texttt{singlet.load}	0.714715	True
+pbmc10k\_v3	C++	\texttt{pz2::Matrix::open + decode (member in memory)}	0.067156	
+pbmc10k\_v3	R	\texttt{Seurat::Read10X\_h5}	3.7825	True
+pbmc10k\_v3	R	\texttt{CreateSeuratObject(Read10X\_h5)}	5.041	True
+pbmc10k\_v3	R	\texttt{zellkonverter::readH5AD}	1.8832	True
+pbmc10k\_v3	R	\texttt{singlet::load(as='sce')}	0.7576	True
+pbmc10k\_v3	R	\texttt{singlet::load(as='seurat')}	1.858	True

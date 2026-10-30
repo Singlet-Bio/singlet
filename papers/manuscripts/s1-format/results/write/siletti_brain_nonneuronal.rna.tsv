@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+siletti_brain_nonneuronal	rna	h5ad_none	general	1962963238	58232	888263	ok	15769434856	64.267876	0	33.629272	4	NA
+siletti_brain_nonneuronal	rna	csc_i32	general	1962963238	58232	888263	ok	15734838950	64.126882	0	33.818192	4	NA
+siletti_brain_nonneuronal	rna	mtx_gz	general	1962963238	58232	888263	ok	6117933346	24.933461	0	1262.783212	4	NA
+siletti_brain_nonneuronal	rna	tenx_h5	general	1962963238	58232	888263	ok	2907287215	11.848565	0	236.653205	4	NA
+siletti_brain_nonneuronal	rna	h5ad_gzip	general	1962963238	58232	888263	ok	4596598134	18.733303	0	342.758965	4	NA
+siletti_brain_nonneuronal	rna	h5ad_lzf	general	1962963238	58232	888263	ok	9746577732	39.721896	0	62.86504	4	NA
+siletti_brain_nonneuronal	rna	zarr	general	1962963238	58232	888263	ok	3666608831	14.943158	0	40.935484	4	NA
+siletti_brain_nonneuronal	rna	loom	general	1962963238	58232	888263	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 58232x888263 entries exceeds 2e+09
+siletti_brain_nonneuronal	rna	soma	domain	1962963238	58232	888263	ok	3618647149	14.747692	0	1159.363963	4	NA
+siletti_brain_nonneuronal	rna	parquet_coo	general	1962963238	58232	888263	ok	4501300152	18.344919	0	102.45942	4	NA
+siletti_brain_nonneuronal	rna	csc_zstd19	general	1962963238	58232	888263	ok	2299140427	9.37008	0	3665.421857	4	NA
+siletti_brain_nonneuronal	rna	rds_gz	general	1962963238	58232	888263	ok	4599731354	18.746072	0	1216.503169	4	NA
+siletti_brain_nonneuronal	rna	rds_xz	general	1962963238	58232	888263	ok	2085814648	8.500677	0	9483.279889	4	NA
+siletti_brain_nonneuronal	rna	bpcells	domain	1962963238	58232	888263	ok	3441023564	14.023792	0	76.908477	4	NA
+siletti_brain_nonneuronal	rna	s1	s1	1962963238	58232	888263	ok	1283925766	5.232602	0	178.749078	4	NA
+siletti_brain_nonneuronal	rna	s1_pack	s1	1962963238	58232	888263	ok	1283856696	5.232321	931712	194.861943	4	NA

@@ -1,0 +1,131 @@
+dataset	matrix	tier	gbit	latency_ms	loader	seed	threads	status	access	open_s	first_read_s	to_tensor_s	first_batch_s	batch_rows	sustained_cells_per_s	sustained_batches	peak_rss_mb	first_fetch_s	first_decode_s	first_bytes	first_requests	bytes_file	est_download_s	note	proxy_ceiling_gbit	proxy_ceiling_par_gbit	capped
+hlca_core	rna	local			anndata_inmem	0	4	ok	local	36.877181	0.004818	0.002167	37.114934	512	192548.071232	200	9468.066406	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			anndata_inmem	1	4	ok	local	36.831792	0.004865	0.002189	37.079007	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			anndata_inmem	2	4	ok	local	36.878279	0.0048	0.002111	37.119263	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			anndata_backed	0	4	ok	local	0.001535	0.104698	0.004851	0.348319	512	6425.529999	200	685.773438	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			anndata_backed	1	4	ok	local	0.001522	0.105229	0.005021	0.211619	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			anndata_backed	2	4	ok	local	0.001512	0.100726	0.005031	0.108047	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			scdataset	0	4	ok	local	0.65201	0.10841	0.003477	0.764699	512	5532.332253	200	923.019531	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			scdataset	1	4	ok	local	0.655429	0.108231	0.003688	0.864502	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			scdataset	2	4	ok	local	0.659421	0.105826	0.003579	0.771981	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			anndata_zarr_lazy	0	4	ok	local	0.00106	0.119325	0.001963	0.335454	512	3975.075726	200	686.582031	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			anndata_zarr_lazy	1	4	ok	local	0.001071	0.111789	0.001722	0.308502	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			anndata_zarr_lazy	2	4	ok	local	0.000893	0.112854	0.001869	0.143488	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			soma_ml	0	4	ok	local	0.042942	4.407498	0.033092	4.674626	512	1492.44379	200	1326.804688	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			soma_ml	1	4	ok	local	0.04711	4.517793	0.031723	4.812641	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			soma_ml	2	4	ok	local	0.041202	4.465534	0.034207	4.555326	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			bpcells	0	4	ok	local	0.846208	0.13092	0	1.445843	512	5094.744761	200	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			bpcells	1	4	ok	local	0.861381	0.126412	0	1.229353	512	5586.054542	200	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			bpcells	2	4	ok	local	0.861843	0.13497	0	1.233325	512	5016.919935	200	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			s1_stream	0	4	ok	local	0.005972	0.018732	1e-06	0.098479	512	31961.684484	200	899.40625	0.003168	0.008904	1620370	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			s1_stream	1	4	ok	local	0.005684	0.017287	1e-06	0.042206	512	NA	0	NA	0.002833	0.008096	1568293	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			s1_stream	2	4	ok	local	0.005503	0.018552	1e-06	0.024312	512	NA	0	NA	0.003062	0.009244	1536757	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			s1_stream_canonical	0	4	ok	local	0.005644	0.021484	2e-06	0.027383	512	26102.71489	200	899.167969	0.003071	0.011704	1620370	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			s1_stream_canonical	1	4	ok	local	0.005914	0.021078	1e-06	0.046261	512	NA	0	NA	0.002826	0.011377	1568293	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			s1_stream_canonical	2	4	ok	local	0.005637	0.022691	2e-06	0.028581	512	NA	0	NA	0.00284	0.013133	1536757	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			s1_stream_seq	0	4	ok	local	0.005624	0.019353	1e-06	0.025235	512	32645.167896	200	899.636719	0.003097	0.009528	1620370	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			s1_stream_seq	1	4	ok	local	0.006106	0.017878	2e-06	0.04	512	NA	0	NA	0.003053	0.00831	1568293	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	local			s1_stream_seq	2	4	ok	local	0.005476	0.01761	2e-06	0.023338	512	NA	0	NA	0.002866	0.008301	1536757	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			anndata_inmem	0	4	ok	local	37.02276	0.005373	0.00269	37.263892	512	193562.754248	200	9466.984375	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			anndata_inmem	1	4	ok	local	37.040536	0.005857	0.002669	37.303505	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			anndata_inmem	2	4	ok	local	37.127934	0.005421	0.002659	37.388147	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			anndata_backed	0	4	ok	local	0.001455	0.099047	0.004804	0.352413	512	6772.564652	200	686.128906	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			anndata_backed	1	4	ok	local	0.001463	0.098957	0.005027	0.21211	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			anndata_backed	2	4	ok	local	0.001336	0.096497	0.005058	0.103761	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			scdataset	0	4	ok	local	0.608379	0.094097	0.001781	0.705102	512	5769.129831	200	926.503906	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			scdataset	1	4	ok	local	0.602625	0.09594	0.00179	0.80627	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			scdataset	2	4	ok	local	0.602602	0.099405	0.00365	0.708953	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			anndata_zarr_lazy	0	4	ok	local	0.002988	0.165075	0.002656	1.270066	512	4048.891748	200	689.988281	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			anndata_zarr_lazy	1	4	ok	local	0.001239	0.104971	0.00181	0.34774	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			anndata_zarr_lazy	2	4	ok	local	0.001194	0.107068	0.001775	0.174024	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			soma_ml	0	4	ok	local	0.064586	4.457194	0.033057	4.796063	512	1500.706016	200	1227.847656	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			soma_ml	1	4	ok	local	0.042057	4.405018	0.031568	4.71441	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			soma_ml	2	4	ok	local	0.042531	4.383549	0.035882	4.491216	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			bpcells	0	4	ok	local	0.864081	0.129413	0	1.343288	512	5140.553	200	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			bpcells	1	4	ok	local	0.896039	0.127092	0	1.331152	512	5808.101746	200	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			bpcells	2	4	ok	local	0.863023	0.127915	0	1.24829	512	5194.362172	200	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			s1_stream	0	4	ok	local	0.006786	0.018376	1e-06	0.088526	512	34680.31504	200	900.5	0.002264	0.009474	1620370	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			s1_stream	1	4	ok	local	0.006145	0.016735	1e-06	0.042767	512	NA	0	NA	0.001954	0.008428	1568293	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			s1_stream	2	4	ok	local	0.005529	0.017805	1e-06	0.024113	512	NA	0	NA	0.001891	0.009743	1536757	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			s1_stream_canonical	0	4	ok	local	0.005835	0.021861	1e-06	0.028186	512	27606.176975	200	899.929688	0.002222	0.01271	1620370	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			s1_stream_canonical	1	4	ok	local	0.005733	0.019719	2e-06	0.046318	512	NA	0	NA	0.002067	0.011171	1568293	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			s1_stream_canonical	2	4	ok	local	0.005684	0.022078	2e-06	0.028245	512	NA	0	NA	0.001895	0.013334	1536757	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			s1_stream_seq	0	4	ok	local	0.005771	0.018276	1e-06	0.024533	512	34993.884463	200	900.003906	0.002075	0.00933	1620370	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			s1_stream_seq	1	4	ok	local	0.006203	0.018224	1e-06	0.043074	512	NA	0	NA	0.002161	0.009701	1568293	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	nfs			s1_stream_seq	2	4	ok	local	0.005561	0.017425	2e-06	0.023504	512	NA	0	NA	0.002024	0.008888	1536757	13	NA	NA	NA	NA	NA	NA
+hlca_core	rna	s3_0.1g	0.1	1	anndata_inmem		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	220.413635	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_0.1g	0.1	1	anndata_backed		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	220.413635	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_0.1g	0.1	1	scdataset		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	220.413635	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_0.1g	0.1	1	anndata_zarr_lazy	0	4	ok	range	0.143253	1.752616	0.002753	1.898623	512	315.816826	200	725.84375	NA	NA	NA	NA	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	anndata_zarr_lazy	1	4	ok	range	0.140626	1.706661	0.00178	1.849068	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	anndata_zarr_lazy	2	4	ok	range	0.084377	1.703195	0.00273	1.790303	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	soma_ml	0	4	ok	range	5.308734	12.706074	0.030409	18.045219	512	84.271376	200	1293.660156	NA	NA	NA	NA	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	soma_ml	1	4	ok	range	5.338937	11.281028	0.033188	16.653154	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	soma_ml	2	4	ok	range	5.28313	12.119697	0.036874	17.439702	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	bpcells		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2092486072	167.398886	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_0.1g	0.1	1	s1_stream	0	4	ok	range	1.215979	0.108484	2e-06	1.324466	512	5670.734527	200	903.894531	0.077308	0.016138	1620370	13	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	s1_stream	1	4	ok	range	0.116443	0.10325	3e-06	0.219697	512	NA	0	NA	0.073164	0.015925	1568293	13	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	s1_stream	2	4	ok	range	0.117522	0.094007	2e-06	0.211532	512	NA	0	NA	0.071061	0.012129	1536757	13	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	s1_stream_canonical	0	4	ok	range	0.11783	0.103227	2e-06	0.22106	512	5353.141139	200	901.613281	0.078222	0.014913	1620370	13	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	s1_stream_canonical	1	4	ok	range	0.114927	0.105312	2e-06	0.220242	512	NA	0	NA	0.072561	0.021128	1568293	13	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	s1_stream_canonical	2	4	ok	range	0.118964	0.104787	2e-06	0.223753	512	NA	0	NA	0.071987	0.02088	1536757	13	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	s1_stream_seq	0	4	ok	range	0.116028	0.102182	2e-06	0.218213	512	5691.725346	200	899.390625	0.073796	0.016263	1620370	13	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	s1_stream_seq	1	4	ok	range	1.213734	0.102595	2e-06	1.316332	512	NA	0	NA	0.072904	0.016006	1568293	13	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_0.1g	0.1	1	s1_stream_seq	2	4	ok	range	0.118635	0.090291	2e-06	0.208928	512	NA	0	NA	0.06907	0.01231	1536757	13	NA	NA	NA	0.098203	0.099997	False
+hlca_core	rna	s3_1g	1	1	anndata_inmem		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	22.041364	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_1g	1	1	anndata_backed		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	22.041364	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_1g	1	1	scdataset		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	22.041364	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_1g	1	1	anndata_zarr_lazy	0	4	ok	range	0.11649	0.293795	0.005023	0.415308	512	1770.216415	200	725.59375	NA	NA	NA	NA	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	anndata_zarr_lazy	1	4	ok	range	0.085304	0.258187	0.005979	0.349471	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	anndata_zarr_lazy	2	4	ok	range	0.083129	0.248821	0.005113	0.337063	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	soma_ml	0	4	ok	range	5.309657	7.391195	0.020484	12.721337	512	538.557759	200	1273.746094	NA	NA	NA	NA	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	soma_ml	1	4	ok	range	5.242137	6.914108	0.031736	12.187981	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	soma_ml	2	4	ok	range	5.268152	6.885949	0.032576	12.186678	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	bpcells		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2092486072	16.739889	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_1g	1	1	s1_stream	0	4	ok	range	1.171571	0.03661	2e-06	1.208183	512	14100.988782	200	901.8125	0.020714	0.007191	1620370	13	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	s1_stream	1	4	ok	range	0.071504	0.033455	1e-06	0.104961	512	NA	0	NA	0.019397	0.006925	1568293	13	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	s1_stream	2	4	ok	range	0.07094	0.036827	2e-06	0.10777	512	NA	0	NA	0.022095	0.007538	1536757	13	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	s1_stream_canonical	0	4	ok	range	0.068801	0.040089	2e-06	0.108893	512	12013.465885	200	903.191406	0.020989	0.012175	1620370	13	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	s1_stream_canonical	1	4	ok	range	0.070082	0.0372	1e-06	0.107284	512	NA	0	NA	0.019321	0.011056	1568293	13	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	s1_stream_canonical	2	4	ok	range	0.071798	0.035115	2e-06	0.106916	512	NA	0	NA	0.018858	0.009202	1536757	13	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	s1_stream_seq	0	4	ok	range	0.071366	0.052505	2e-06	0.123874	512	11005.927288	200	900.070312	0.033757	0.010745	1620370	13	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	s1_stream_seq	1	4	ok	range	0.071313	0.053758	2e-06	0.125073	512	NA	0	NA	0.034189	0.010586	1568293	13	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_1g	1	1	s1_stream_seq	2	4	ok	range	0.069828	0.048493	2e-06	0.118323	512	NA	0	NA	0.029185	0.011037	1536757	13	NA	NA	NA	0.84525	0.999503	False
+hlca_core	rna	s3_10g	10	1	anndata_inmem		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	2.204136	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_10g	10	1	anndata_backed		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	2.204136	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_10g	10	1	scdataset		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	2.204136	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_10g	10	1	anndata_zarr_lazy	0	4	ok	range	0.112034	0.185624	0.003308	0.300967	512	3237.951471	200	722.378906	NA	NA	NA	NA	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	anndata_zarr_lazy	1	4	ok	range	0.084803	0.15472	0.004304	0.243827	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	anndata_zarr_lazy	2	4	ok	range	0.083154	0.147388	0.00328	0.233823	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	soma_ml	0	4	ok	range	5.257327	7.019791	0.032429	12.309548	512	1258.390335	200	1289.5625	NA	NA	NA	NA	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	soma_ml	1	4	ok	range	5.288124	6.384044	0.034762	11.706931	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	soma_ml	2	4	ok	range	5.244551	6.329867	0.035955	11.610374	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	bpcells		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2092486072	1.673989	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_10g	10	1	s1_stream	0	4	ok	range	1.124846	0.036488	1e-06	1.161336	512	15014.203377	200	902.34375	0.02067	0.00716	1620370	13	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	s1_stream	1	4	ok	range	0.070901	0.034316	1e-06	0.105219	512	NA	0	NA	0.021091	0.006761	1568293	13	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	s1_stream	2	4	ok	range	0.069967	0.031908	2e-06	0.101877	512	NA	0	NA	0.018213	0.006707	1536757	13	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	s1_stream_canonical	0	4	ok	range	0.06906	0.035231	2e-06	0.104294	512	12587.890128	200	901.425781	0.019481	0.008941	1620370	13	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	s1_stream_canonical	1	4	ok	range	0.070721	0.034675	1e-06	0.105398	512	NA	0	NA	0.0189	0.009213	1568293	13	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	s1_stream_canonical	2	4	ok	range	0.070729	0.037208	2e-06	0.107941	512	NA	0	NA	0.0212	0.008975	1536757	13	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	s1_stream_seq	0	4	ok	range	0.069288	0.048554	2e-06	0.117844	512	10948.603469	200	898.960938	0.029951	0.010797	1620370	13	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	s1_stream_seq	1	4	ok	range	0.070332	0.053162	3e-06	0.123497	512	NA	0	NA	0.033841	0.01079	1568293	13	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_10g	10	1	s1_stream_seq	2	4	ok	range	0.072444	0.053376	2e-06	0.125823	512	NA	0	NA	0.034171	0.010613	1536757	13	NA	NA	NA	2.463088	8.928587	True
+hlca_core	rna	s3_1g_wan	1	30	anndata_inmem		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	22.041364	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_1g_wan	1	30	anndata_backed		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	22.041364	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_1g_wan	1	30	scdataset		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2755170439	22.041364	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_1g_wan	1	30	anndata_zarr_lazy	0	4	ok	range	0.139537	0.408097	0.006111	0.553746	512	1460.572103	200	727.804688	NA	NA	NA	NA	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	anndata_zarr_lazy	1	4	ok	range	0.168304	0.365358	0.005111	0.538775	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	anndata_zarr_lazy	2	4	ok	range	0.182202	0.380724	0.004184	0.56711	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	soma_ml	0	4	ok	range	6.087824	8.638348	0.033167	14.759339	512	502.995813	200	1302.507812	NA	NA	NA	NA	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	soma_ml	1	4	ok	range	6.055953	7.144498	0.031006	13.231458	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	soma_ml	2	4	ok	range	6.039269	8.229305	0.032433	14.301008	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	bpcells		4	skipped	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	2092486072	16.739889	download-first loader above tier M	NA	NA	NA
+hlca_core	rna	s3_1g_wan	1	30	s1_stream	0	4	ok	range	1.350495	0.083775	2e-06	1.434273	512	7095.053885	200	902.28125	0.052521	0.016393	1620370	13	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	s1_stream	1	4	ok	range	0.251042	0.078507	2e-06	0.329552	512	NA	0	NA	0.052511	0.014652	1568293	13	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	s1_stream	2	4	ok	range	0.250317	0.07899	2e-06	0.329311	512	NA	0	NA	0.049251	0.015981	1536757	13	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	s1_stream_canonical	0	4	ok	range	0.248369	0.072471	2e-06	0.320843	512	6608.49569	200	902.925781	0.048731	0.013637	1620370	13	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	s1_stream_canonical	1	4	ok	range	0.251184	0.067639	2e-06	0.318826	512	NA	0	NA	0.046487	0.012194	1568293	13	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	s1_stream_canonical	2	4	ok	range	0.249066	0.068342	2e-06	0.31741	512	NA	0	NA	0.048102	0.011843	1536757	13	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	s1_stream_seq	0	4	ok	range	0.249706	0.309437	2e-06	0.559147	512	1721.835462	200	899.941406	0.27997	0.016407	1620370	13	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	s1_stream_seq	1	4	ok	range	0.253368	0.31196	3e-06	0.565332	512	NA	0	NA	0.281843	0.015891	1568293	13	NA	NA	NA	0.844879	0.99955	False
+hlca_core	rna	s3_1g_wan	1	30	s1_stream_seq	2	4	ok	range	0.251923	0.31072	3e-06	0.562647	512	NA	0	NA	0.280268	0.016108	1536757	13	NA	NA	NA	0.844879	0.99955	False

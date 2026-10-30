@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+cao_moca	rna	combinatorial	XL	umi	26183	2058652	1251379868	0.023216	849.418126	671.0	519.0	0.806131	1554	1.397382

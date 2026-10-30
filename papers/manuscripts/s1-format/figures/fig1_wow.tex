@@ -42,18 +42,18 @@
 \begin{tikzpicture}
 \begin{axis}[
   title={c\quad Size against read rate, \nm{threadsHeadline} cores},
-  width=0.44\linewidth, height=6.6cm,
-  xmode=log, ymode=log, xmin=2, xmax=120, ymin=2, ymax=5000,
+  width=0.44\linewidth, height=7.4cm,
+  xmode=log, ymode=log, xmin=3, xmax=110, ymin=2, ymax=2000,
   xlabel={stored bits per non-zero}, ylabel={cold read, million non-zeros/s},
   axis x line*=bottom, axis y line*=left,
-  xtick={2,5,10,20,50,100}, xticklabels={2,5,10,20,50,100}, ytick={10,100,1000}, yticklabels={10,100,1000},
+  xtick={5,10,20,50,100}, xticklabels={5,10,20,50,100}, ytick={10,100,1000}, yticklabels={10,100,1000},
   lbl/.style={nodes near coords, point meta=explicit symbolic, visualization depends on={value \thisrow{anchor}\as\lblanchor},
     every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=1.5pt}},
 ]
 % iso-lines of Eq. (1) at B = 1 Gbit/s: R_eff = R  <=>  D = 1/(1/R - b/1000), D and R in million non-zeros/s, b in bits
 \pgfplotsinvokeforeach{25,50,100,200}{
-  \addplot[domain=2:{0.995*1000/#1}, samples=80, dashed, sone!55, forget plot]
-    {1/(1/#1 - x/1000)} node[pos=0.03, anchor=south west, font=\sffamily\tiny, text=sone!80!black] {$R_{\mathrm{eff}}=#1$};
+  \addplot[domain=3:{0.995*1000/#1}, samples=80, dashed, sone!55, forget plot]
+    {1/(1/#1 - x/1000)} node[pos=0.02, anchor=south west, font=\sffamily\tiny, text=sone!80!black] {#1};
 }
 \addplot[only marks, lbl, mark=*, mark size=1.8pt, gen, discard if not={group}{general}] table[x=bits, y=mnnzs, meta=label] {\gen{fig1c_tradeoff.tsv}};
 \addplot[only marks, lbl, mark=*, mark size=1.8pt, dom, discard if not={group}{domain}]   table[x=bits, y=mnnzs, meta=label] {\gen{fig1c_tradeoff.tsv}};
@@ -91,8 +91,8 @@ with their own encodings; blue, \sone. Per-matrix values in Table~\ref{tab:size}
 scale), cold page cache, median of three seeds, for the loaders that read by range; loaders that download the whole
 object first are not run over the network at this dataset's size. All values per tier in Table~\ref{tab:minibatch}.
 \textbf{(c)} Each format's median size against its median cold read rate on \nm{threadsHeadline} cores. Dashed: lines of
-equal effective delivery rate $R_{\mathrm{eff}}$ (Eq.~\ref{eq:reff}, million non-zeros per second) on a 1\,Gbit/s link;
-points above and left of a line deliver faster.
+equal effective delivery rate $R_{\mathrm{eff}}$ (Eq.~\ref{eq:reff}) on a 1\,Gbit/s link, labelled in million non-zeros
+per second; points above and left of a line deliver faster.
 \textbf{(d)} Cells per second delivered to the model after warm-up, \nm{fig1b-dataset}, by storage tier: the node's own
 disk, the shared NFS filesystem, or an S3-compatible object store whose total bandwidth is limited (1\,ms latency unless
 stated), \nm{threadsHeadline} reader cores. Dotted: the same \sone{} reader sending a minibatch's range requests one at a

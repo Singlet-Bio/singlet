@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+rosenberg_splitseq	rna	h5ad_none	general	122790641	26894	156049	ok	990652216	64.542523	0	3.2208	4	NA
+rosenberg_splitseq	rna	csc_i32	general	122790641	26894	156049	ok	984760801	64.158688	0	2.09496	4	NA
+rosenberg_splitseq	rna	mtx_gz	general	122790641	26894	156049	ok	381357844	24.846053	0	91.084346	4	NA
+rosenberg_splitseq	rna	tenx_h5	general	122790641	26894	156049	ok	183965535	11.985639	0	13.065455	4	NA
+rosenberg_splitseq	rna	h5ad_gzip	general	122790641	26894	156049	ok	286788070	18.684686	0	19.57337	4	NA
+rosenberg_splitseq	rna	h5ad_lzf	general	122790641	26894	156049	ok	524554037	34.175506	0	3.978329	4	NA
+rosenberg_splitseq	rna	zarr	general	122790641	26894	156049	ok	228024354	14.856139	0	3.534273	4	NA
+rosenberg_splitseq	rna	loom	general	122790641	26894	156049	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 26894x156049 entries exceeds 2e+09
+rosenberg_splitseq	rna	soma	domain	122790641	26894	156049	ok	229507891	14.952794	0	61.919782	4	NA
+rosenberg_splitseq	rna	parquet_coo	general	122790641	26894	156049	ok	263064538	17.139061	0	6.459626	4	NA
+rosenberg_splitseq	rna	csc_zstd19	general	122790641	26894	156049	ok	151108021	9.844921	0	182.17972	4	NA
+rosenberg_splitseq	rna	rds_gz	general	122790641	26894	156049	ok	267459638	17.425409	0	72.05991	4	NA
+rosenberg_splitseq	rna	rds_xz	general	122790641	26894	156049	ok	138376380	9.015435	0	479.399857	4	NA
+rosenberg_splitseq	rna	bpcells	domain	122790641	26894	156049	ok	240657651	15.679218	0	9.016538	4	NA
+rosenberg_splitseq	rna	s1	s1	122790641	26894	156049	ok	80869999	5.268805	0	11.608456	4	NA
+rosenberg_splitseq	rna	s1_pack	s1	122790641	26894	156049	ok	80822472	5.265709	200831	9.994393	4	NA

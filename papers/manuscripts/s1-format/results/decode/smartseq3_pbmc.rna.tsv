@@ -1,0 +1,79 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+smartseq3_pbmc	rna	main	local	csc_i32	1	cold	file		auto	6423798	ok	0.038821	0.038618	0.039816	165.47071	3	0.040812,0.038821,0.038415	
+smartseq3_pbmc	rna	main	local	csc_i32	4	cold	file		auto	6423798	ok	0.039674	0.039201	0.040191	161.913406	3	0.040707,0.039674,0.038728	
+smartseq3_pbmc	rna	main	local	csc_i32	4	warm	file		auto	6423798	ok	0.021892	0.021864	0.022682	293.42718	3	0.023471,0.021892,0.021836	
+smartseq3_pbmc	rna	main	local	mtx_gz	1	cold	file		auto	6423798	ok	0.910096	0.907714	0.923581	7.058377	3	0.937066,0.905333,0.910096	
+smartseq3_pbmc	rna	main	local	mtx_gz	4	cold	file		auto	6423798	ok	0.610608	0.609636	0.621146	10.520328	3	0.631685,0.610608,0.608664	
+smartseq3_pbmc	rna	main	local	mtx_gz	4	warm	file		auto	6423798	ok	0.599273	0.598879	0.600598	10.719327	3	0.601923,0.598484,0.599273	
+smartseq3_pbmc	rna	main	local	tenx_h5	1	cold	file		auto	6423798	ok	0.274296	0.27184	0.291775	23.419211	3	0.309254,0.274296,0.269384	
+smartseq3_pbmc	rna	main	local	tenx_h5	4	cold	file		auto	6423798	ok	0.273279	0.270388	0.286591	23.506401	3	0.299904,0.273279,0.267498	
+smartseq3_pbmc	rna	main	local	tenx_h5	4	warm	file		auto	6423798	ok	0.263362	0.263132	0.265667	24.391499	3	0.267971,0.262902,0.263362	
+smartseq3_pbmc	rna	main	local	h5ad_none	1	cold	file		auto	6423798	ok	0.078587	0.078514	0.410451	81.74169	3	0.742316,0.078587,0.078441	
+smartseq3_pbmc	rna	main	local	h5ad_none	4	cold	file		auto	6423798	ok	0.077847	0.077771	0.345884	82.517765	3	0.613921,0.077847,0.077694	
+smartseq3_pbmc	rna	main	local	h5ad_none	4	warm	file		auto	6423798	ok	0.057414	0.05734	0.057829	111.885681	3	0.058243,0.057414,0.057267	
+smartseq3_pbmc	rna	main	local	h5ad_gzip	1	cold	file		auto	6423798	ok	0.260595	0.260307	0.528443	24.650493	3	0.796291,0.260595,0.260019	
+smartseq3_pbmc	rna	main	local	h5ad_gzip	4	cold	file		auto	6423798	ok	0.260168	0.259789	0.531303	24.690965	3	0.802437,0.259409,0.260168	
+smartseq3_pbmc	rna	main	local	h5ad_gzip	4	warm	file		auto	6423798	ok	0.251592	0.251537	0.251621	25.532587	3	0.251592,0.251650,0.251482	
+smartseq3_pbmc	rna	main	local	h5ad_lzf	1	cold	file		auto	6423798	ok	0.149269	0.149142	0.420011	43.035095	3	0.690753,0.149269,0.149015	
+smartseq3_pbmc	rna	main	local	h5ad_lzf	4	cold	file		auto	6423798	ok	0.151321	0.150876	0.487806	42.451402	3	0.824291,0.151321,0.150431	
+smartseq3_pbmc	rna	main	local	h5ad_lzf	4	warm	file		auto	6423798	ok	0.134829	0.134462	0.135224	47.643986	3	0.135619,0.134096,0.134829	
+smartseq3_pbmc	rna	main	local	zarr	1	cold	file		auto	6423798	ok	0.066858	0.066536	0.347736	96.081242	3	0.628615,0.066213,0.066858	
+smartseq3_pbmc	rna	main	local	zarr	4	cold	file		auto	6423798	ok	0.066351	0.066324	0.343477	96.815414	3	0.620602,0.066297,0.066351	
+smartseq3_pbmc	rna	main	local	zarr	4	warm	file		auto	6423798	ok	0.052972	0.052925	0.053305	121.267258	3	0.053638,0.052878,0.052972	
+smartseq3_pbmc	rna	main	local	loom	1	cold	file		auto	6423798	ok	2.604282	2.60355	4.171605	2.466629	3	5.738927,2.602818,2.604282	
+smartseq3_pbmc	rna	main	local	loom	4	cold	file		auto	6423798	ok	2.619412	2.617437	4.249972	2.452382	3	5.880532,2.619412,2.615463	
+smartseq3_pbmc	rna	main	local	loom	4	warm	file		auto	6423798	ok	2.570769	2.566424	2.579728	2.498785	3	2.588686,2.570769,2.562079	
+smartseq3_pbmc	rna	main	local	soma	1	cold	file		auto	6423798	ok	0.456551	0.455177	0.821564	14.070281	3	1.186578,0.453804,0.456551	
+smartseq3_pbmc	rna	main	local	soma	4	cold	file		auto	6423798	ok	0.207228	0.205764	0.544616	30.998661	3	0.882003,0.204300,0.207228	
+smartseq3_pbmc	rna	main	local	soma	4	warm	file		auto	6423798	ok	0.202206	0.199142	0.203278	31.768655	3	0.202206,0.196078,0.204350	
+smartseq3_pbmc	rna	main	local	parquet_coo	1	cold	file		auto	6423798	ok	0.210548	0.207367	0.36991	30.509908	3	0.529272,0.210548,0.204185	
+smartseq3_pbmc	rna	main	local	parquet_coo	4	cold	file		auto	6423798	ok	0.185466	0.181813	0.322858	34.635923	3	0.460250,0.185466,0.178159	
+smartseq3_pbmc	rna	main	local	parquet_coo	4	warm	file		auto	6423798	ok	0.173045	0.172349	0.173634	37.122192	3	0.171653,0.174222,0.173045	
+smartseq3_pbmc	rna	main	local	csc_zstd19	1	cold	file		auto	6423798	ok	0.09086	0.090787	0.092922	70.700092	3	0.094985,0.090860,0.090714	
+smartseq3_pbmc	rna	main	local	csc_zstd19	4	cold	file		auto	6423798	ok	0.090438	0.090316	0.091811	71.029937	3	0.093184,0.090438,0.090194	
+smartseq3_pbmc	rna	main	local	csc_zstd19	4	warm	file		auto	6423798	ok	0.084687	0.084685	0.085237	75.853137	3	0.085786,0.084682,0.084687	
+smartseq3_pbmc	rna	main	local	rds_gz	1	cold	file		auto	6423798	ok	0.353233	0.3459	0.398946	18.185732	3	0.444660,0.353233,0.338567	
+smartseq3_pbmc	rna	main	local	rds_gz	4	cold	file		auto	6423798	ok	0.356783	0.347836	0.401421	18.004768	3	0.446060,0.356783,0.338888	
+smartseq3_pbmc	rna	main	local	rds_gz	4	warm	file		auto	6423798	ok	0.334613	0.33376	0.341615	19.197689	3	0.348618,0.334613,0.332907	
+smartseq3_pbmc	rna	main	local	rds_xz	1	cold	file		auto	6423798	ok	0.514531	0.507871	0.560444	12.484755	3	0.606357,0.514531,0.501210	
+smartseq3_pbmc	rna	main	local	rds_xz	4	cold	file		auto	6423798	ok	0.514753	0.506271	0.560421	12.479388	3	0.606088,0.514753,0.497790	
+smartseq3_pbmc	rna	main	local	rds_xz	4	warm	file		auto	6423798	ok	0.496501	0.495592	0.504374	12.938125	3	0.512246,0.494683,0.496501	
+smartseq3_pbmc	rna	main	local	bpcells	1	cold	file		auto	6423798	ok	0.841655	0.716718	2.274989	7.632343	3	3.708323,0.841655,0.591781	
+smartseq3_pbmc	rna	main	local	bpcells	4	cold	file		auto	6423798	ok	0.87355	0.74479	2.359437	7.35367	3	3.845325,0.873550,0.616030	
+smartseq3_pbmc	rna	main	local	bpcells	4	warm	file		auto	6423798	ok	0.824046	0.707728	0.831943	7.795439	3	0.839841,0.591411,0.824046	
+smartseq3_pbmc	rna	main	local	s1	1	cold	file	native	auto	6423798	ok	0.079251	0.078312	0.913673	81.056406	3	1.748094,0.079251,0.077372	avx2
+smartseq3_pbmc	rna	main	local	s1	1	cold	file	canonical	auto	6423798	ok	0.120145	0.119943	0.771768	53.46719	3	1.423391,0.119742,0.120145	avx2
+smartseq3_pbmc	rna	main	local	s1	4	cold	file	native	auto	6423798	ok	0.035107	0.0336	0.684931	182.978625	3	1.334755,0.035107,0.032093	avx2
+smartseq3_pbmc	rna	main	local	s1	4	cold	file	canonical	auto	6423798	ok	0.047402	0.046569	0.715843	135.516062	3	1.384284,0.047402,0.045735	avx2
+smartseq3_pbmc	rna	main	local	s1	4	warm	file	native	auto	6423798	ok	0.032777	0.031853	0.032853	195.98314	3	0.032777,0.032928,0.030928	avx2
+smartseq3_pbmc	rna	main	local	s1	4	warm	file	canonical	auto	6423798	ok	0.046363	0.045106	0.047604	138.553551	3	0.048845,0.046363,0.043849	avx2
+smartseq3_pbmc	rna	main	local	s1	1	warm	codec	native	scalar	6423798	ok	0.259631	0.259157	0.262636	24.74207	3	0.265641,0.259631,0.258684	scalar
+smartseq3_pbmc	rna	main	local	s1	1	warm	codec	native	avx2	6423798	ok	0.069888	0.06986	0.070174	91.915466	3	0.070460,0.069888,0.069832	avx2
+smartseq3_pbmc	rna	main	local	s1	1	warm	codec	native	avx512	6423798	ok	0.069039	0.069023	0.069335	93.045791	3	0.069631,0.069039,0.069006	avx2
+smartseq3_pbmc	rna	main	local	s1	1	warm	codec	canonical	scalar	6423798	ok	0.299576	0.299037	0.302186	21.442986	3	0.304795,0.299576,0.298497	scalar
+smartseq3_pbmc	rna	main	local	s1	1	warm	codec	canonical	avx2	6423798	ok	0.108414	0.10839	0.108446	59.252712	3	0.108414,0.108366,0.108479	avx2
+smartseq3_pbmc	rna	main	local	s1	1	warm	codec	canonical	avx512	6423798	ok	0.109002	0.108978	0.109137	58.932876	3	0.109002,0.108954,0.109272	avx2
+smartseq3_pbmc	rna	main	local	s1	4	warm	codec	native	scalar	6423798	ok	0.068576	0.068514	0.068765	93.673872	3	0.068954,0.068452,0.068576	scalar
+smartseq3_pbmc	rna	main	local	s1	4	warm	codec	native	avx2	6423798	ok	0.023231	0.022981	0.023677	276.520103	3	0.024123,0.023231,0.022732	avx2
+smartseq3_pbmc	rna	main	local	s1	4	warm	codec	native	avx512	6423798	ok	0.022993	0.022953	0.023356	279.377728	3	0.023719,0.022913,0.022993	avx2
+smartseq3_pbmc	rna	main	local	s1	4	warm	codec	canonical	scalar	6423798	ok	0.079191	0.079107	0.079377	81.117889	3	0.079022,0.079191,0.079562	scalar
+smartseq3_pbmc	rna	main	local	s1	4	warm	codec	canonical	avx2	6423798	ok	0.032382	0.032332	0.032686	198.377717	3	0.032990,0.032382,0.032282	avx2
+smartseq3_pbmc	rna	main	local	s1	4	warm	codec	canonical	avx512	6423798	ok	0.032663	0.032511	0.032735	196.665999	3	0.032358,0.032663,0.032806	avx2
+smartseq3_pbmc	rna	main	local	s1_pack	1	cold	file	native	auto	6423798	ok	0.079183	0.07886	0.73268	81.126297	3	1.386176,0.078537,0.079183	avx2
+smartseq3_pbmc	rna	main	local	s1_pack	1	cold	file	canonical	auto	6423798	ok	0.117677	0.11725	0.771988	54.588174	3	1.426298,0.116822,0.117677	avx2
+smartseq3_pbmc	rna	main	local	s1_pack	4	cold	file	native	auto	6423798	ok	0.038131	0.036334	0.689122	168.464708	3	1.340113,0.038131,0.034536	avx2
+smartseq3_pbmc	rna	main	local	s1_pack	4	cold	file	canonical	auto	6423798	ok	0.053404	0.048549	0.702393	120.285778	3	1.351382,0.043695,0.053404	avx2
+smartseq3_pbmc	rna	main	local	s1_pack	4	warm	file	native	auto	6423798	ok	0.030752	0.030045	0.031262	208.890259	3	0.030752,0.031771,0.029339	avx2
+smartseq3_pbmc	rna	main	local	s1_pack	4	warm	file	canonical	auto	6423798	ok	0.045418	0.044082	0.048252	141.436414	3	0.051085,0.045418,0.042745	avx2
+smartseq3_pbmc	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	6423798	ok	0.279304	0.278265	0.279832	22.999305	3	0.280359,0.279304,0.277227	scalar
+smartseq3_pbmc	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	6423798	ok	0.071504	0.071351	0.071637	89.838303	3	0.071771,0.071198,0.071504	avx2
+smartseq3_pbmc	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	6423798	ok	0.071742	0.071621	0.071831	89.540269	3	0.071500,0.071742,0.071920	avx2
+smartseq3_pbmc	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	6423798	ok	0.317083	0.309772	0.322335	20.259043	3	0.327588,0.317083,0.302461	scalar
+smartseq3_pbmc	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	6423798	ok	0.107875	0.107817	0.107966	59.548533	3	0.108058,0.107875,0.107759	avx2
+smartseq3_pbmc	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	6423798	ok	0.108283	0.108231	0.108354	59.32416	3	0.108426,0.108283,0.108178	avx2
+smartseq3_pbmc	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	6423798	ok	0.065484	0.06541	0.065566	98.097215	3	0.065484,0.065648,0.065335	scalar
+smartseq3_pbmc	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	6423798	ok	0.019195	0.019189	0.019221	334.659964	3	0.019247,0.019195,0.019184	avx2
+smartseq3_pbmc	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	6423798	ok	0.019005	0.018994	0.019013	338.005683	3	0.019021,0.018983,0.019005	avx2
+smartseq3_pbmc	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	6423798	ok	0.07702	0.076983	0.077112	83.404285	3	0.077204,0.077020,0.076945	scalar
+smartseq3_pbmc	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	6423798	ok	0.029232	0.02905	0.029355	219.752258	3	0.029478,0.028869,0.029232	avx2
+smartseq3_pbmc	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	6423798	ok	0.029219	0.028969	0.029419	219.850029	3	0.029618,0.029219,0.028719	avx2

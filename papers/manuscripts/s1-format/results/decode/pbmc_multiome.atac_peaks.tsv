@@ -1,0 +1,79 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+pbmc_multiome	atac_peaks	main	local	csc_i32	1	cold	file		auto	85596796	ok	0.878716	0.877598	0.87945	97.411198	3	0.878716,0.880183,0.876479	
+pbmc_multiome	atac_peaks	main	local	csc_i32	4	cold	file		auto	85596796	ok	0.878219	0.876144	0.878852	97.466317	3	0.878219,0.879485,0.874069	
+pbmc_multiome	atac_peaks	main	local	csc_i32	4	warm	file		auto	85596796	ok	0.245954	0.245454	0.249174	348.019696	3	0.252395,0.245954,0.244954	
+pbmc_multiome	atac_peaks	main	local	mtx_gz	1	cold	file		auto	85596796	ok	11.392647	11.390034	11.43949	7.513337	3	11.486334,11.387421,11.392647	
+pbmc_multiome	atac_peaks	main	local	mtx_gz	4	cold	file		auto	85596796	ok	6.456534	6.427648	6.499111	13.257391	3	6.541689,6.398763,6.456534	
+pbmc_multiome	atac_peaks	main	local	mtx_gz	4	warm	file		auto	85596796	ok	6.256952	6.253045	6.264483	13.68027	3	6.256952,6.249139,6.272013	
+pbmc_multiome	atac_peaks	main	local	tenx_h5	1	cold	file		auto	85596796	ok	3.225051	3.217605	3.240106	26.541222	3	3.255161,3.225051,3.210159	
+pbmc_multiome	atac_peaks	main	local	tenx_h5	4	cold	file		auto	85596796	ok	3.206054	3.205498	3.225588	26.698487	3	3.245122,3.206054,3.204943	
+pbmc_multiome	atac_peaks	main	local	tenx_h5	4	warm	file		auto	85596796	ok	3.150543	3.148559	3.151651	27.168903	3	3.152759,3.150543,3.146575	
+pbmc_multiome	atac_peaks	main	local	h5ad_none	1	cold	file		auto	85596796	ok	1.094632	1.089401	1.465456	78.196862	3	1.836280,1.094632,1.084170	
+pbmc_multiome	atac_peaks	main	local	h5ad_none	4	cold	file		auto	85596796	ok	1.070062	1.065607	1.332938	79.99238	3	1.595814,1.061153,1.070062	
+pbmc_multiome	atac_peaks	main	local	h5ad_none	4	warm	file		auto	85596796	ok	0.385871	0.384257	0.387644	221.827278	3	0.385871,0.382642,0.389416	
+pbmc_multiome	atac_peaks	main	local	h5ad_gzip	1	cold	file		auto	85596796	ok	2.566859	2.560291	2.832015	33.3469	3	3.097172,2.553724,2.566859	
+pbmc_multiome	atac_peaks	main	local	h5ad_gzip	4	cold	file		auto	85596796	ok	2.563748	2.559534	2.832776	33.387366	3	3.101804,2.555319,2.563748	
+pbmc_multiome	atac_peaks	main	local	h5ad_gzip	4	warm	file		auto	85596796	ok	2.471185	2.470863	2.474168	34.637956	3	2.470541,2.477152,2.471185	
+pbmc_multiome	atac_peaks	main	local	h5ad_lzf	1	cold	file		auto	85596796	ok	1.583987	1.583774	1.859518	54.038815	3	2.135048,1.583987,1.583561	
+pbmc_multiome	atac_peaks	main	local	h5ad_lzf	4	cold	file		auto	85596796	ok	1.590503	1.58636	1.861923	53.817426	3	2.133343,1.582216,1.590503	
+pbmc_multiome	atac_peaks	main	local	h5ad_lzf	4	warm	file		auto	85596796	ok	1.398358	1.398315	1.401738	61.212349	3	1.398358,1.405117,1.398272	
+pbmc_multiome	atac_peaks	main	local	zarr	1	cold	file		auto	85596796	ok	0.922104	0.913844	1.192762	92.827718	3	1.463420,0.922104,0.905585	
+pbmc_multiome	atac_peaks	main	local	zarr	4	cold	file		auto	85596796	ok	0.973771	0.964432	1.224106	87.902429	3	1.474441,0.955094,0.973771	
+pbmc_multiome	atac_peaks	main	local	zarr	4	warm	file		auto	85596796	ok	0.603606	0.595177	0.62431	141.809165	3	0.603606,0.586749,0.645014	
+pbmc_multiome	atac_peaks	main	local	loom	1	cold	file		auto	85596796	ok	29.933893	29.833368	31.484794	2.859528	3	33.035695,29.933893,29.732844	
+pbmc_multiome	atac_peaks	main	local	loom	4	cold	file		auto	85596796	ok	30.430703	30.176461	31.813964	2.812843	3	33.197225,29.922218,30.430703	
+pbmc_multiome	atac_peaks	main	local	loom	4	warm	file		auto	85596796	ok	29.715731	29.502151	29.722046	2.880521	3	29.288571,29.715731,29.728362	
+pbmc_multiome	atac_peaks	main	local	soma	1	cold	file		auto	85596796	ok	5.644857	5.460416	5.932828	15.163679	3	6.220799,5.275974,5.644857	
+pbmc_multiome	atac_peaks	main	local	soma	4	cold	file		auto	85596796	ok	2.068216	2.045316	2.355611	41.386783	3	2.643006,2.068216,2.022417	
+pbmc_multiome	atac_peaks	main	local	soma	4	warm	file		auto	85596796	ok	2.052425	2.018685	2.115768	41.705195	3	2.052425,2.179111,1.984945	
+pbmc_multiome	atac_peaks	main	local	parquet_coo	1	cold	file		auto	85596796	ok	2.823379	2.822675	2.988524	30.317144	3	3.153669,2.823379,2.821971	
+pbmc_multiome	atac_peaks	main	local	parquet_coo	4	cold	file		auto	85596796	ok	2.183993	2.138478	2.299	39.192797	3	2.414007,2.183993,2.092963	
+pbmc_multiome	atac_peaks	main	local	parquet_coo	4	warm	file		auto	85596796	ok	1.851363	1.812117	1.851996	46.234473	3	1.772872,1.852629,1.851363	
+pbmc_multiome	atac_peaks	main	local	csc_zstd19	1	cold	file		auto	85596796	ok	1.464053	1.444587	1.490586	58.465623	3	1.425122,1.464053,1.517119	
+pbmc_multiome	atac_peaks	main	local	csc_zstd19	4	cold	file		auto	85596796	ok	1.404168	1.403412	1.405113	60.959075	3	1.406057,1.402655,1.404168	
+pbmc_multiome	atac_peaks	main	local	csc_zstd19	4	warm	file		auto	85596796	ok	1.321495	1.317981	1.322783	64.772704	3	1.324070,1.321495,1.314467	
+pbmc_multiome	atac_peaks	main	local	rds_gz	1	cold	file		auto	85596796	ok	4.354475	4.352615	4.401555	19.6572	3	4.448634,4.354475,4.350755	
+pbmc_multiome	atac_peaks	main	local	rds_gz	4	cold	file		auto	85596796	ok	4.355133	4.352232	4.400642	19.654233	3	4.446150,4.355133,4.349331	
+pbmc_multiome	atac_peaks	main	local	rds_gz	4	warm	file		auto	85596796	ok	4.255141	4.25329	4.256531	20.116091	3	4.257922,4.251439,4.255141	
+pbmc_multiome	atac_peaks	main	local	rds_xz	1	cold	file		auto	85596796	ok	6.651874	6.642545	6.722147	12.868072	3	6.792420,6.651874,6.633215	
+pbmc_multiome	atac_peaks	main	local	rds_xz	4	cold	file		auto	85596796	ok	6.660226	6.649375	6.698862	12.851936	3	6.737498,6.660226,6.638524	
+pbmc_multiome	atac_peaks	main	local	rds_xz	4	warm	file		auto	85596796	ok	6.528041	6.527775	6.539896	13.112172	3	6.551752,6.528041,6.527508	
+pbmc_multiome	atac_peaks	main	local	bpcells	1	cold	file		auto	85596796	ok	10.896572	10.855228	12.621476	7.855388	3	14.346380,10.896572,10.813885	
+pbmc_multiome	atac_peaks	main	local	bpcells	4	cold	file		auto	85596796	ok	10.941222	10.882533	12.702322	7.823331	3	14.463422,10.941222,10.823844	
+pbmc_multiome	atac_peaks	main	local	bpcells	4	warm	file		auto	85596796	ok	10.828364	10.820262	10.835076	7.904869	3	10.841789,10.828364,10.812161	
+pbmc_multiome	atac_peaks	main	local	s1	1	cold	file	native	auto	85596796	ok	1.056023	1.047643	1.954626	81.055774	3	2.853229,1.039263,1.056023	avx2
+pbmc_multiome	atac_peaks	main	local	s1	1	cold	file	canonical	auto	85596796	ok	1.665052	1.662309	2.316498	51.407874	3	2.967943,1.665052,1.659567	avx2
+pbmc_multiome	atac_peaks	main	local	s1	4	cold	file	native	auto	85596796	ok	0.384397	0.383985	1.0459	222.678339	3	1.707403,0.384397,0.383573	avx2
+pbmc_multiome	atac_peaks	main	local	s1	4	cold	file	canonical	auto	85596796	ok	0.528045	0.527754	1.194677	162.101209	3	1.861309,0.527462,0.528045	avx2
+pbmc_multiome	atac_peaks	main	local	s1	4	warm	file	native	auto	85596796	ok	0.345044	0.343943	0.345761	248.074836	3	0.345044,0.346478,0.342843	avx2
+pbmc_multiome	atac_peaks	main	local	s1	4	warm	file	canonical	auto	85596796	ok	0.489057	0.488153	0.496832	175.024015	3	0.487248,0.489057,0.504606	avx2
+pbmc_multiome	atac_peaks	main	local	s1	1	warm	codec	native	scalar	85596796	ok	2.633782	2.633455	2.642996	32.499574	3	2.652210,2.633127,2.633782	scalar
+pbmc_multiome	atac_peaks	main	local	s1	1	warm	codec	native	avx2	85596796	ok	1.030387	0.994258	1.033809	83.072464	3	1.030387,1.037231,0.958130	avx2
+pbmc_multiome	atac_peaks	main	local	s1	1	warm	codec	native	avx512	85596796	ok	0.948353	0.943844	0.948807	90.258375	3	0.939335,0.948353,0.949261	avx2
+pbmc_multiome	atac_peaks	main	local	s1	1	warm	codec	canonical	scalar	85596796	ok	3.314313	3.313952	3.323002	25.826406	3	3.331692,3.313591,3.314313	scalar
+pbmc_multiome	atac_peaks	main	local	s1	1	warm	codec	canonical	avx2	85596796	ok	1.571432	1.568067	1.574347	54.470576	3	1.571432,1.577262,1.564702	avx2
+pbmc_multiome	atac_peaks	main	local	s1	1	warm	codec	canonical	avx512	85596796	ok	1.565539	1.561414	1.568281	54.675606	3	1.565539,1.571023,1.557289	avx2
+pbmc_multiome	atac_peaks	main	local	s1	4	warm	codec	native	scalar	85596796	ok	0.698908	0.698103	0.701054	122.472177	3	0.698908,0.697298,0.703200	scalar
+pbmc_multiome	atac_peaks	main	local	s1	4	warm	codec	native	avx2	85596796	ok	0.279868	0.279484	0.28031	305.847547	3	0.280753,0.279868,0.279100	avx2
+pbmc_multiome	atac_peaks	main	local	s1	4	warm	codec	native	avx512	85596796	ok	0.279163	0.278901	0.279787	306.619539	3	0.280412,0.279163,0.278639	avx2
+pbmc_multiome	atac_peaks	main	local	s1	4	warm	codec	canonical	scalar	85596796	ok	0.853907	0.852708	0.857685	100.241301	3	0.853907,0.851508,0.861462	scalar
+pbmc_multiome	atac_peaks	main	local	s1	4	warm	codec	canonical	avx2	85596796	ok	0.425875	0.424467	0.434218	200.990523	3	0.442560,0.425875,0.423059	avx2
+pbmc_multiome	atac_peaks	main	local	s1	4	warm	codec	canonical	avx512	85596796	ok	0.425321	0.424292	0.425903	201.252418	3	0.426486,0.423263,0.425321	avx2
+pbmc_multiome	atac_peaks	main	local	s1_pack	1	cold	file	native	auto	85596796	ok	1.045444	1.0393	1.708997	81.876042	3	2.372551,1.033155,1.045444	avx2
+pbmc_multiome	atac_peaks	main	local	s1_pack	1	cold	file	canonical	auto	85596796	ok	1.777148	1.751934	2.383168	48.165258	3	2.989187,1.777148,1.726721	avx2
+pbmc_multiome	atac_peaks	main	local	s1_pack	4	cold	file	native	auto	85596796	ok	0.370433	0.369032	1.035258	231.072	3	1.700083,0.370433,0.367630	avx2
+pbmc_multiome	atac_peaks	main	local	s1_pack	4	cold	file	canonical	auto	85596796	ok	0.518894	0.51826	1.18584	164.959943	3	1.852785,0.518894,0.517626	avx2
+pbmc_multiome	atac_peaks	main	local	s1_pack	4	warm	file	native	auto	85596796	ok	0.330319	0.330227	0.331507	259.13378	3	0.332696,0.330136,0.330319	avx2
+pbmc_multiome	atac_peaks	main	local	s1_pack	4	warm	file	canonical	auto	85596796	ok	0.477347	0.477315	0.478386	179.317759	3	0.477347,0.477284,0.479425	avx2
+pbmc_multiome	atac_peaks	main	memory	s1	1	memory	codec_cpp	native	scalar	85596796	ok	2.735277	2.734979	2.737446	31.293648	3	2.735277,2.739616,2.734682	scalar
+pbmc_multiome	atac_peaks	main	memory	s1	1	memory	codec_cpp	native	avx2	85596796	ok	0.960292	0.957522	0.960308	89.136217	3	0.960324,0.960292,0.954752	avx2
+pbmc_multiome	atac_peaks	main	memory	s1	1	memory	codec_cpp	native	avx512	85596796	ok	0.915444	0.912831	0.915547	93.503039	3	0.915650,0.915444,0.910217	avx2
+pbmc_multiome	atac_peaks	main	memory	s1	1	memory	codec_cpp	canonical	scalar	85596796	ok	3.381605	3.381367	3.38479	25.312476	3	3.381605,3.387974,3.381129	scalar
+pbmc_multiome	atac_peaks	main	memory	s1	1	memory	codec_cpp	canonical	avx2	85596796	ok	1.524753	1.524472	1.52668	56.138139	3	1.528607,1.524192,1.524753	avx2
+pbmc_multiome	atac_peaks	main	memory	s1	1	memory	codec_cpp	canonical	avx512	85596796	ok	1.637834	1.582304	1.644218	52.262193	3	1.650602,1.637834,1.526774	avx2
+pbmc_multiome	atac_peaks	main	memory	s1	4	memory	codec_cpp	native	scalar	85596796	ok	0.688639	0.688478	0.689188	124.298502	3	0.689737,0.688639,0.688318	scalar
+pbmc_multiome	atac_peaks	main	memory	s1	4	memory	codec_cpp	native	avx2	85596796	ok	0.228846	0.228828	0.228904	374.036671	3	0.228962,0.228809,0.228846	avx2
+pbmc_multiome	atac_peaks	main	memory	s1	4	memory	codec_cpp	native	avx512	85596796	ok	0.229326	0.229311	0.229391	373.253778	3	0.229326,0.229456,0.229295	avx2
+pbmc_multiome	atac_peaks	main	memory	s1	4	memory	codec_cpp	canonical	scalar	85596796	ok	0.853861	0.853779	0.85416	100.246757	3	0.853861,0.853697,0.854460	scalar
+pbmc_multiome	atac_peaks	main	memory	s1	4	memory	codec_cpp	canonical	avx2	85596796	ok	0.389366	0.389165	0.38995	219.836339	3	0.389366,0.388963,0.390534	avx2
+pbmc_multiome	atac_peaks	main	memory	s1	4	memory	codec_cpp	canonical	avx512	85596796	ok	0.38772	0.387598	0.388466	220.769617	3	0.387720,0.387475,0.389212	avx2

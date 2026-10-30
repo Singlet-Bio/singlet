@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+rosenberg_splitseq	rna	zstd22	80869999	80765683	0.99871
+rosenberg_splitseq	rna	xz9e	80869999	80760808	0.99865
+rosenberg_splitseq	rna	brotli11	80869999	80758791	0.998625
+rosenberg_splitseq	rna	bzip2_9	80869999	81157655	1.003557

@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+hao_citeseq	adt	main	nfs	csc_i32	4	cold	file		auto	33599680	ok	0.230193	0.22928	0.279333	145.962892	3	0.328472,0.228367,0.230193	
+hao_citeseq	adt	main	nfs	mtx_gz	4	cold	file		auto	33599680	ok	2.615717	2.610556	2.633735	12.845304	3	2.651753,2.605395,2.615717	
+hao_citeseq	adt	main	nfs	tenx_h5	4	cold	file		auto	33599680	ok	1.401452	1.372651	1.424361	23.974913	3	1.401452,1.447270,1.343851	
+hao_citeseq	adt	main	nfs	h5ad_none	4	cold	file		auto	33599680	ok	0.44311	0.439432	0.840495	75.826973	3	1.237880,0.435754,0.443110	
+hao_citeseq	adt	main	nfs	h5ad_gzip	4	cold	file		auto	33599680	ok	0.887507	0.884	1.269666	37.858507	3	1.651826,0.887507,0.880493	
+hao_citeseq	adt	main	nfs	h5ad_lzf	4	cold	file		auto	33599680	ok	0.63928	0.581078	0.874927	52.558655	3	1.110574,0.522876,0.639280	
+hao_citeseq	adt	main	nfs	zarr	4	cold	file		auto	33599680	ok	0.351173	0.348523	0.743966	95.678524	3	1.136760,0.345874,0.351173	
+hao_citeseq	adt	main	nfs	loom	4	cold	file		auto	33599680	ok	2.509193	2.502745	4.059315	13.390634	3	5.609437,2.509193,2.496297	
+hao_citeseq	adt	main	nfs	soma	4	cold	file		auto	33599680	ok	0.983065	0.968205	1.400135	34.178505	3	1.817204,0.983065,0.953346	
+hao_citeseq	adt	main	nfs	parquet_coo	4	cold	file		auto	33599680	ok	0.819281	0.807341	1.205792	41.011171	3	1.592302,0.795401,0.819281	
+hao_citeseq	adt	main	nfs	csc_zstd19	4	cold	file		auto	33599680	ok	0.340955	0.338809	0.354492	98.545715	3	0.368029,0.340955,0.336662	
+hao_citeseq	adt	main	nfs	rds_gz	4	cold	file		auto	33599680	ok	1.614096	1.612044	1.665647	20.816411	3	1.717198,1.614096,1.609993	
+hao_citeseq	adt	main	nfs	rds_xz	4	cold	file		auto	33599680	ok	2.191459	2.179932	2.214856	15.332102	3	2.238253,2.191459,2.168406	
+hao_citeseq	adt	main	nfs	bpcells	4	cold	file		auto	33599680	ok	4.190975	4.161287	5.921814	8.017152	3	7.652653,4.190975,4.131600	
+hao_citeseq	adt	main	nfs	s1	4	cold	file	native	auto	33599680	ok	0.170733	0.167299	0.951012	196.796275	3	1.731290,0.170733,0.163865	avx2
+hao_citeseq	adt	main	nfs	s1	4	cold	file	canonical	auto	33599680	ok	0.216557	0.211563	0.876411	155.153846	3	1.536265,0.216557,0.206570	avx2
+hao_citeseq	adt	main	nfs	s1_pack	4	cold	file	native	auto	33599680	ok	0.170834	0.167085	0.836471	196.680823	3	1.502109,0.170834,0.163337	avx2
+hao_citeseq	adt	main	nfs	s1_pack	4	cold	file	canonical	auto	33599680	ok	0.222574	0.215057	0.902453	150.959294	3	1.582331,0.222574,0.207540	avx2

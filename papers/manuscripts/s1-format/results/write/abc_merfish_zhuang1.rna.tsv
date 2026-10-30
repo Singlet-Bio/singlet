@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+abc_merfish_zhuang1	rna	h5ad_none	general	437227228	1122	4167870	ok	3815409112	69.811007	0	11.957056	4	NA
+abc_merfish_zhuang1	rna	csc_i32	general	437227228	1122	4167870	ok	3696535532	67.635962	0	8.880587	4	NA
+abc_merfish_zhuang1	rna	mtx_gz	general	437227228	1122	4167870	ok	1389741753	25.428275	0	403.610466	4	NA
+abc_merfish_zhuang1	rna	tenx_h5	general	437227228	1122	4167870	ok	645011665	11.801857	0	56.339631	4	NA
+abc_merfish_zhuang1	rna	h5ad_gzip	general	437227228	1122	4167870	ok	1035858762	18.953234	0	61.918893	4	NA
+abc_merfish_zhuang1	rna	h5ad_lzf	general	437227228	1122	4167870	ok	1649837868	30.187285	0	17.230385	4	NA
+abc_merfish_zhuang1	rna	zarr	general	437227228	1122	4167870	ok	990740211	18.127695	0	13.077913	4	NA
+abc_merfish_zhuang1	rna	loom	general	437227228	1122	4167870	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 1122x4167870 entries exceeds 2e+09
+abc_merfish_zhuang1	rna	soma	domain	437227228	1122	4167870	ok	967479653	17.702093	0	311.058861	4	NA
+abc_merfish_zhuang1	rna	parquet_coo	general	437227228	1122	4167870	ok	862468170	15.780685	0	24.812437	4	NA
+abc_merfish_zhuang1	rna	csc_zstd19	general	437227228	1122	4167870	ok	528339532	9.667093	0	717.668939	4	NA
+abc_merfish_zhuang1	rna	rds_gz	general	437227228	1122	4167870	ok	862584547	15.782815	0	301.720764	4	NA
+abc_merfish_zhuang1	rna	rds_xz	general	437227228	1122	4167870	ok	501461760	9.175307	0	2577.226723	4	NA
+abc_merfish_zhuang1	rna	bpcells	domain	437227228	1122	4167870	ok	1121915110	20.527818	0	39.344909	4	NA
+abc_merfish_zhuang1	rna	s1	s1	437227228	1122	4167870	ok	406215445	7.432574	0	176.841637	4	NA
+abc_merfish_zhuang1	rna	s1_pack	s1	437227228	1122	4167870	ok	406212783	7.432525	21318	173.727944	4	NA

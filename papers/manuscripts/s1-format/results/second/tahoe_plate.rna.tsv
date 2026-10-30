@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+tahoe_plate	rna	zstd22	5185098332	5182961397	0.999588
+tahoe_plate	rna	xz9e	5185098332	5182618096	0.999522
+tahoe_plate	rna	brotli11	5185098332	5182469111	0.999493
+tahoe_plate	rna	bzip2_9	5185098332	5206294153	1.004088

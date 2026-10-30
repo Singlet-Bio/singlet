@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+xenium_breast_rep1	rna	main	nfs	csc_i32	4	cold	file		auto	10604415	ok	0.08233	0.082044	0.082644	128.804438	3	0.081758,0.082958,0.082330	
+xenium_breast_rep1	rna	main	nfs	mtx_gz	4	cold	file		auto	10604415	ok	0.931986	0.930352	0.949453	11.378302	3	0.966921,0.931986,0.928718	
+xenium_breast_rep1	rna	main	nfs	tenx_h5	4	cold	file		auto	10604415	ok	0.472004	0.471656	0.486583	22.46679	3	0.501162,0.472004,0.471307	
+xenium_breast_rep1	rna	main	nfs	h5ad_none	4	cold	file		auto	10604415	ok	0.220414	0.219705	0.5426	48.111256	3	0.864785,0.218995,0.220414	
+xenium_breast_rep1	rna	main	nfs	h5ad_gzip	4	cold	file		auto	10604415	ok	0.425236	0.423568	0.738537	24.937694	3	1.051837,0.421899,0.425236	
+xenium_breast_rep1	rna	main	nfs	h5ad_lzf	4	cold	file		auto	10604415	ok	0.291986	0.290814	0.569475	36.318267	3	0.846964,0.291986,0.289642	
+xenium_breast_rep1	rna	main	nfs	zarr	4	cold	file		auto	10604415	ok	0.162751	0.161941	0.451906	65.157266	3	0.741061,0.162751,0.161132	
+xenium_breast_rep1	rna	main	nfs	loom	4	cold	file		auto	10604415	ok	1.914685	1.888316	3.621954	5.538466	3	5.329223,1.914685,1.861948	
+xenium_breast_rep1	rna	main	nfs	soma	4	cold	file		auto	10604415	ok	0.368725	0.354078	0.786196	28.759723	3	1.203667,0.368725,0.339431	
+xenium_breast_rep1	rna	main	nfs	parquet_coo	4	cold	file		auto	10604415	ok	0.368389	0.362193	0.509337	28.785899	3	0.650284,0.355998,0.368389	
+xenium_breast_rep1	rna	main	nfs	csc_zstd19	4	cold	file		auto	10604415	ok	0.124499	0.124093	0.127366	85.176584	3	0.130233,0.124499,0.123686	
+xenium_breast_rep1	rna	main	nfs	rds_gz	4	cold	file		auto	10604415	ok	0.612622	0.567245	0.621549	17.309875	3	0.630475,0.521868,0.612622	
+xenium_breast_rep1	rna	main	nfs	rds_xz	4	cold	file		auto	10604415	ok	0.775027	0.742793	0.798023	13.682639	3	0.821019,0.710560,0.775027	
+xenium_breast_rep1	rna	main	nfs	bpcells	4	cold	file		auto	10604415	ok	1.439726	1.419659	3.077643	7.365579	3	4.715560,1.439726,1.399591	
+xenium_breast_rep1	rna	main	nfs	s1	4	cold	file	native	auto	10604415	ok	0.066581	0.066555	0.880004	159.270925	3	1.693427,0.066581,0.066529	avx2
+xenium_breast_rep1	rna	main	nfs	s1	4	cold	file	canonical	auto	10604415	ok	0.080553	0.080408	0.75108	131.645746	3	1.421608,0.080264,0.080553	avx2
+xenium_breast_rep1	rna	main	nfs	s1_pack	4	cold	file	native	auto	10604415	ok	0.067688	0.067643	0.925884	156.66567	3	1.784079,0.067688,0.067599	avx2
+xenium_breast_rep1	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	10604415	ok	0.081622	0.081486	0.756595	129.920948	3	1.431567,0.081350,0.081622	avx2

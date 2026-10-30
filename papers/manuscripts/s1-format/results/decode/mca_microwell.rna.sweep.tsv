@@ -1,0 +1,69 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+mca_microwell	rna	sweep	local	s1	1	cold	file	native	auto	266059719	ok	3.289827	3.258711	4.061095	80.873457	3	4.832363,3.289827,3.227594	avx2
+mca_microwell	rna	sweep	local	s1	1	cold	file	canonical	auto	266059719	ok	5.163576	5.133309	5.792364	51.526257	3	6.421153,5.163576,5.103042	avx2
+mca_microwell	rna	sweep	local	s1	2	cold	file	native	auto	266059719	ok	1.912614	1.904489	2.562626	139.107924	3	3.212637,1.896364,1.912614	avx2
+mca_microwell	rna	sweep	local	s1	2	cold	file	canonical	auto	266059719	ok	2.801851	2.792062	3.469692	94.958568	3	4.137534,2.782274,2.801851	avx2
+mca_microwell	rna	sweep	local	s1	4	cold	file	native	auto	266059719	ok	1.217375	1.206658	1.879395	218.552042	3	2.541416,1.195940,1.217375	avx2
+mca_microwell	rna	sweep	local	s1	4	cold	file	canonical	auto	266059719	ok	1.648533	1.644448	2.319426	161.391832	3	2.990319,1.640364,1.648533	avx2
+mca_microwell	rna	sweep	local	s1	4	warm	file	native	auto	266059719	ok	1.083454	1.067696	1.084039	245.566196	3	1.084624,1.051937,1.083454	avx2
+mca_microwell	rna	sweep	local	s1	4	warm	file	canonical	auto	266059719	ok	1.524024	1.521374	1.524856	174.577168	3	1.518724,1.524024,1.525689	avx2
+mca_microwell	rna	sweep	local	s1	8	cold	file	native	auto	266059719	ok	0.912449	0.896849	1.599115	291.588508	3	2.285780,0.912449,0.881248	avx2
+mca_microwell	rna	sweep	local	s1	8	cold	file	canonical	auto	266059719	ok	1.113357	1.107478	1.81474	238.970668	3	2.516122,1.101599,1.113357	avx2
+mca_microwell	rna	sweep	local	s1	1	warm	codec	native	scalar	266059719	ok	9.095971	9.08649	9.163817	29.250282	3	9.095971,9.077008,9.231663	scalar
+mca_microwell	rna	sweep	local	s1	1	warm	codec	native	avx2	266059719	ok	2.893833	2.889725	2.913377	91.940235	3	2.885618,2.932921,2.893833	avx2
+mca_microwell	rna	sweep	local	s1	1	warm	codec	native	avx512	266059719	ok	2.884277	2.878688	2.900822	92.24487	3	2.873100,2.917368,2.884277	avx2
+mca_microwell	rna	sweep	local	s1	1	warm	codec	canonical	scalar	266059719	ok	11.094594	11.044887	11.178024	23.981024	3	11.094594,11.261455,10.995180	scalar
+mca_microwell	rna	sweep	local	s1	1	warm	codec	canonical	avx2	266059719	ok	4.760576	4.754102	4.779077	55.888133	3	4.797578,4.747627,4.760576	avx2
+mca_microwell	rna	sweep	local	s1	1	warm	codec	canonical	avx512	266059719	ok	4.770306	4.764126	4.788061	55.774138	3	4.805816,4.770306,4.757945	avx2
+mca_microwell	rna	sweep	local	s1	2	warm	codec	native	scalar	266059719	ok	4.676107	4.670629	4.680451	56.897693	3	4.684795,4.665151,4.676107	scalar
+mca_microwell	rna	sweep	local	s1	2	warm	codec	native	avx2	266059719	ok	1.53875	1.538212	1.550464	172.906375	3	1.538750,1.537674,1.562178	avx2
+mca_microwell	rna	sweep	local	s1	2	warm	codec	native	avx512	266059719	ok	1.53204	1.531872	1.532619	173.663671	3	1.532040,1.533197,1.531705	avx2
+mca_microwell	rna	sweep	local	s1	2	warm	codec	canonical	scalar	266059719	ok	5.606941	5.587644	5.620751	47.45185	3	5.606941,5.634561,5.568347	scalar
+mca_microwell	rna	sweep	local	s1	2	warm	codec	canonical	avx2	266059719	ok	2.471885	2.463562	2.528207	107.634331	3	2.455239,2.471885,2.584529	avx2
+mca_microwell	rna	sweep	local	s1	2	warm	codec	canonical	avx512	266059719	ok	2.44247	2.43585	2.452758	108.930592	3	2.429230,2.463046,2.442470	avx2
+mca_microwell	rna	sweep	local	s1	4	warm	codec	native	scalar	266059719	ok	2.381706	2.370804	2.387064	111.709726	3	2.359902,2.392422,2.381706	scalar
+mca_microwell	rna	sweep	local	s1	4	warm	codec	native	avx2	266059719	ok	0.840453	0.839322	0.84088	316.56721	3	0.841308,0.840453,0.838192	avx2
+mca_microwell	rna	sweep	local	s1	4	warm	codec	native	avx512	266059719	ok	0.839854	0.839493	0.839897	316.792869	3	0.839854,0.839940,0.839133	avx2
+mca_microwell	rna	sweep	local	s1	4	warm	codec	canonical	scalar	266059719	ok	2.858935	2.840623	2.873565	93.062521	3	2.822311,2.858935,2.888194	scalar
+mca_microwell	rna	sweep	local	s1	4	warm	codec	canonical	avx2	266059719	ok	1.278867	1.277673	1.286318	208.043242	3	1.278867,1.276479,1.293769	avx2
+mca_microwell	rna	sweep	local	s1	4	warm	codec	canonical	avx512	266059719	ok	1.27726	1.277174	1.278761	208.305126	3	1.277260,1.277089,1.280262	avx2
+mca_microwell	rna	sweep	local	s1	8	warm	codec	native	scalar	266059719	ok	1.311773	1.311278	1.341715	202.824505	3	1.311773,1.310782,1.371657	scalar
+mca_microwell	rna	sweep	local	s1	8	warm	codec	native	avx2	266059719	ok	0.616036	0.585454	0.620197	431.89019	3	0.554872,0.616036,0.624359	avx2
+mca_microwell	rna	sweep	local	s1	8	warm	codec	native	avx512	266059719	ok	0.569961	0.559705	0.588362	466.803766	3	0.606763,0.569961,0.549449	avx2
+mca_microwell	rna	sweep	local	s1	8	warm	codec	canonical	scalar	266059719	ok	1.536333	1.534333	1.540369	173.178459	3	1.536333,1.532333,1.544406	scalar
+mca_microwell	rna	sweep	local	s1	8	warm	codec	canonical	avx2	266059719	ok	0.840253	0.792561	0.842892	316.642256	3	0.840253,0.845531,0.744868	avx2
+mca_microwell	rna	sweep	local	s1	8	warm	codec	canonical	avx512	266059719	ok	0.820531	0.812251	0.834081	324.253248	3	0.847632,0.820531,0.803972	avx2
+mca_microwell	rna	sweep	local	h5ad_gzip	1	cold	file		auto	266059719	ok	8.353015	8.329138	8.613361	31.851939	3	8.873708,8.305262,8.353015	
+mca_microwell	rna	sweep	local	h5ad_gzip	2	cold	file		auto	266059719	ok	8.30447	8.303521	8.699147	32.038133	3	9.093823,8.304470,8.302572	
+mca_microwell	rna	sweep	local	h5ad_gzip	4	cold	file		auto	266059719	ok	8.340679	8.337333	8.625563	31.899049	3	8.910448,8.340679,8.333988	
+mca_microwell	rna	sweep	local	h5ad_gzip	4	warm	file		auto	266059719	ok	7.929553	7.927736	7.931708	33.552926	3	7.933863,7.925918,7.929553	
+mca_microwell	rna	sweep	local	h5ad_gzip	8	cold	file		auto	266059719	ok	8.464179	8.446798	8.780419	31.433613	3	9.096659,8.464179,8.429417	
+mca_microwell	rna	sweep	local	csc_i32	1	cold	file		auto	266059719	ok	2.622839	2.621432	2.655633	101.43961	3	2.622839,2.620025,2.688428	
+mca_microwell	rna	sweep	local	csc_i32	2	cold	file		auto	266059719	ok	2.429406	2.416507	2.521623	109.516362	3	2.613840,2.429406,2.403608	
+mca_microwell	rna	sweep	local	csc_i32	4	cold	file		auto	266059719	ok	2.450392	2.446016	2.453204	108.578425	3	2.456015,2.441641,2.450392	
+mca_microwell	rna	sweep	local	csc_i32	4	warm	file		auto	266059719	ok	0.802771	0.802748	0.807583	331.426566	3	0.812395,0.802771,0.802724	
+mca_microwell	rna	sweep	local	csc_i32	8	cold	file		auto	266059719	ok	2.42784	2.425851	2.434146	109.587006	3	2.440451,2.427840,2.423862	
+mca_microwell	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	266059719	ok	9.361366	9.31592	9.396325	28.421036	3	9.270474,9.431285,9.361366	scalar
+mca_microwell	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	266059719	ok	2.678367	2.670053	2.678506	99.336543	3	2.678645,2.661740,2.678367	avx2
+mca_microwell	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	266059719	ok	2.773967	2.765902	2.774447	95.91308	3	2.774928,2.757837,2.773967	avx2
+mca_microwell	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	266059719	ok	11.338578	11.291558	11.377925	23.464999	3	11.338578,11.417273,11.244538	scalar
+mca_microwell	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	266059719	ok	4.701631	4.700831	4.707947	56.588813	3	4.714264,4.701631,4.700030	avx2
+mca_microwell	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	266059719	ok	4.801781	4.785268	4.877247	55.408549	3	4.768756,4.801781,4.952712	avx2
+mca_microwell	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	266059719	ok	5.082748	5.066074	5.191323	52.345644	3	5.299897,5.082748,5.049400	scalar
+mca_microwell	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	266059719	ok	1.450281	1.444028	1.464951	183.453909	3	1.437775,1.450281,1.479622	avx2
+mca_microwell	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	266059719	ok	1.459198	1.452398	1.473882	182.332842	3	1.445597,1.459198,1.488566	avx2
+mca_microwell	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	266059719	ok	6.460993	6.294443	6.492325	41.179385	3	6.127894,6.523657,6.460993	scalar
+mca_microwell	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	266059719	ok	2.468657	2.458711	2.492262	107.775085	3	2.468657,2.515867,2.448765	avx2
+mca_microwell	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	266059719	ok	2.672927	2.63054	2.834143	99.538715	3	2.588154,2.672927,2.995359	avx2
+mca_microwell	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	266059719	ok	2.448045	2.439085	2.448525	108.682528	3	2.430125,2.449006,2.448045	scalar
+mca_microwell	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	266059719	ok	0.697541	0.697345	0.706855	381.425205	3	0.716170,0.697541,0.697150	avx2
+mca_microwell	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	266059719	ok	0.700045	0.698948	0.706301	380.06088	3	0.700045,0.697852,0.712557	avx2
+mca_microwell	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	266059719	ok	2.950161	2.911745	2.971114	90.184813	3	2.950161,2.992067,2.873328	scalar
+mca_microwell	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	266059719	ok	1.243528	1.235564	1.24842	213.955551	3	1.243528,1.227599,1.253312	avx2
+mca_microwell	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	266059719	ok	1.233797	1.230805	1.235947	215.643026	3	1.227813,1.233797,1.238097	avx2
+mca_microwell	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	266059719	ok	1.203786	1.200109	1.206896	221.019117	3	1.210006,1.196432,1.203786	scalar
+mca_microwell	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	266059719	ok	0.448092	0.438358	0.461334	593.761368	3	0.474575,0.428625,0.448092	avx2
+mca_microwell	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	266059719	ok	0.408462	0.405197	0.447266	651.369574	3	0.401933,0.486070,0.408462	avx2
+mca_microwell	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	266059719	ok	1.472132	1.462298	1.472727	180.730885	3	1.473321,1.452463,1.472132	scalar
+mca_microwell	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	266059719	ok	0.696881	0.664934	0.705408	381.786444	3	0.696881,0.632988,0.713935	avx2
+mca_microwell	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	266059719	ok	0.680173	0.656486	0.683813	391.164776	3	0.632800,0.687453,0.680173	avx2

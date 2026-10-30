@@ -1,0 +1,69 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+rosenberg_splitseq	rna	sweep	local	s1	1	cold	file	native	auto	122790641	ok	1.574141	1.537288	2.19538	78.004865	3	2.816619,1.500436,1.574141	avx2
+rosenberg_splitseq	rna	sweep	local	s1	1	cold	file	canonical	auto	122790641	ok	2.346002	2.332568	3.023953	52.340375	3	3.701904,2.346002,2.319134	avx2
+rosenberg_splitseq	rna	sweep	local	s1	2	cold	file	native	auto	122790641	ok	0.850555	0.849116	1.49981	144.365336	3	2.149065,0.850555,0.847677	avx2
+rosenberg_splitseq	rna	sweep	local	s1	2	cold	file	canonical	auto	122790641	ok	1.264942	1.262566	1.928471	97.072118	3	2.592000,1.260190,1.264942	avx2
+rosenberg_splitseq	rna	sweep	local	s1	4	cold	file	native	auto	122790641	ok	0.519086	0.518713	1.167292	236.551536	3	1.815497,0.518340,0.519086	avx2
+rosenberg_splitseq	rna	sweep	local	s1	4	cold	file	canonical	auto	122790641	ok	0.737245	0.731606	1.381736	166.553436	3	2.026227,0.725967,0.737245	avx2
+rosenberg_splitseq	rna	sweep	local	s1	4	warm	file	native	auto	122790641	ok	0.46582	0.465261	0.473817	263.60088	3	0.481814,0.465820,0.464703	avx2
+rosenberg_splitseq	rna	sweep	local	s1	4	warm	file	canonical	auto	122790641	ok	0.669974	0.669973	0.670153	183.276732	3	0.670332,0.669974,0.669973	avx2
+rosenberg_splitseq	rna	sweep	local	s1	8	cold	file	native	auto	122790641	ok	0.429055	0.416163	1.081878	286.188495	3	1.734701,0.403272,0.429055	avx2
+rosenberg_splitseq	rna	sweep	local	s1	8	cold	file	canonical	auto	122790641	ok	0.51312	0.508944	1.190145	239.301901	3	1.867170,0.513120,0.504768	avx2
+rosenberg_splitseq	rna	sweep	local	s1	1	warm	codec	native	scalar	122790641	ok	4.202214	4.192618	4.229068	29.220463	3	4.202214,4.183022,4.255921	scalar
+rosenberg_splitseq	rna	sweep	local	s1	1	warm	codec	native	avx2	122790641	ok	1.342814	1.337323	1.344768	91.442779	3	1.331832,1.346723,1.342814	avx2
+rosenberg_splitseq	rna	sweep	local	s1	1	warm	codec	native	avx512	122790641	ok	1.331716	1.331271	1.342334	92.20481	3	1.330826,1.352951,1.331716	avx2
+rosenberg_splitseq	rna	sweep	local	s1	1	warm	codec	canonical	scalar	122790641	ok	5.067364	5.066811	5.074924	24.23166	3	5.082484,5.067364,5.066259	scalar
+rosenberg_splitseq	rna	sweep	local	s1	1	warm	codec	canonical	avx2	122790641	ok	2.207644	2.200842	2.207787	55.62068	3	2.207931,2.207644,2.194041	avx2
+rosenberg_splitseq	rna	sweep	local	s1	1	warm	codec	canonical	avx512	122790641	ok	2.189582	2.185852	2.200337	56.079494	3	2.189582,2.211092,2.182122	avx2
+rosenberg_splitseq	rna	sweep	local	s1	2	warm	codec	native	scalar	122790641	ok	2.159532	2.146577	2.169926	56.859845	3	2.133622,2.180320,2.159532	scalar
+rosenberg_splitseq	rna	sweep	local	s1	2	warm	codec	native	avx2	122790641	ok	0.724457	0.723705	0.724567	169.493358	3	0.724678,0.722954,0.724457	avx2
+rosenberg_splitseq	rna	sweep	local	s1	2	warm	codec	native	avx512	122790641	ok	0.717088	0.716882	0.717302	171.235013	3	0.717516,0.716675,0.717088	avx2
+rosenberg_splitseq	rna	sweep	local	s1	2	warm	codec	canonical	scalar	122790641	ok	2.59349	2.59299	2.635578	47.345718	3	2.592491,2.677667,2.593490	scalar
+rosenberg_splitseq	rna	sweep	local	s1	2	warm	codec	canonical	avx2	122790641	ok	1.133251	1.130975	1.139468	108.352517	3	1.128699,1.145685,1.133251	avx2
+rosenberg_splitseq	rna	sweep	local	s1	2	warm	codec	canonical	avx512	122790641	ok	1.132921	1.131664	1.139731	108.384156	3	1.130408,1.146542,1.132921	avx2
+rosenberg_splitseq	rna	sweep	local	s1	4	warm	codec	native	scalar	122790641	ok	1.092915	1.090037	1.098732	112.351505	3	1.087159,1.104548,1.092915	scalar
+rosenberg_splitseq	rna	sweep	local	s1	4	warm	codec	native	avx2	122790641	ok	0.391742	0.391222	0.392615	313.447417	3	0.393488,0.391742,0.390701	avx2
+rosenberg_splitseq	rna	sweep	local	s1	4	warm	codec	native	avx512	122790641	ok	0.390006	0.389875	0.39048	314.842886	3	0.390953,0.390006,0.389745	avx2
+rosenberg_splitseq	rna	sweep	local	s1	4	warm	codec	canonical	scalar	122790641	ok	1.326946	1.311923	1.330716	92.536267	3	1.334485,1.326946,1.296899	scalar
+rosenberg_splitseq	rna	sweep	local	s1	4	warm	codec	canonical	avx2	122790641	ok	0.596213	0.595034	0.596549	205.951133	3	0.596886,0.596213,0.593855	avx2
+rosenberg_splitseq	rna	sweep	local	s1	4	warm	codec	canonical	avx512	122790641	ok	0.595991	0.595753	0.596936	206.027595	3	0.595991,0.597881,0.595514	avx2
+rosenberg_splitseq	rna	sweep	local	s1	8	warm	codec	native	scalar	122790641	ok	0.604135	0.603563	0.676665	203.250324	3	0.604135,0.749194,0.602990	scalar
+rosenberg_splitseq	rna	sweep	local	s1	8	warm	codec	native	avx2	122790641	ok	0.298248	0.291779	0.30071	411.706151	3	0.298248,0.285309,0.303171	avx2
+rosenberg_splitseq	rna	sweep	local	s1	8	warm	codec	native	avx512	122790641	ok	0.302385	0.295365	0.303234	406.074175	3	0.302385,0.288344,0.304083	avx2
+rosenberg_splitseq	rna	sweep	local	s1	8	warm	codec	canonical	scalar	122790641	ok	0.838413	0.834291	0.840351	146.455948	3	0.842288,0.838413,0.830169	scalar
+rosenberg_splitseq	rna	sweep	local	s1	8	warm	codec	canonical	avx2	122790641	ok	0.429526	0.401636	0.432872	285.874608	3	0.436217,0.373745,0.429526	avx2
+rosenberg_splitseq	rna	sweep	local	s1	8	warm	codec	canonical	avx512	122790641	ok	0.415763	0.389015	0.430727	295.337911	3	0.445691,0.362267,0.415763	avx2
+rosenberg_splitseq	rna	sweep	local	h5ad_gzip	1	cold	file		auto	122790641	ok	3.900244	3.892238	4.166816	31.482809	3	4.433388,3.900244,3.884233	
+rosenberg_splitseq	rna	sweep	local	h5ad_gzip	2	cold	file		auto	122790641	ok	3.902775	3.89599	4.208249	31.462389	3	4.513723,3.902775,3.889204	
+rosenberg_splitseq	rna	sweep	local	h5ad_gzip	4	cold	file		auto	122790641	ok	3.911897	3.904806	4.180498	31.389024	3	4.449098,3.911897,3.897714	
+rosenberg_splitseq	rna	sweep	local	h5ad_gzip	4	warm	file		auto	122790641	ok	3.747228	3.747162	3.751076	32.768394	3	3.754924,3.747096,3.747228	
+rosenberg_splitseq	rna	sweep	local	h5ad_gzip	8	cold	file		auto	122790641	ok	3.903319	3.900503	4.17169	31.458006	3	4.440062,3.903319,3.897686	
+rosenberg_splitseq	rna	sweep	local	csc_i32	1	cold	file		auto	122790641	ok	1.074347	1.07112	1.098903	114.29325	3	1.067892,1.074347,1.123458	
+rosenberg_splitseq	rna	sweep	local	csc_i32	2	cold	file		auto	122790641	ok	1.110423	1.110074	1.112103	110.580101	3	1.110423,1.113784,1.109725	
+rosenberg_splitseq	rna	sweep	local	csc_i32	4	cold	file		auto	122790641	ok	1.091231	1.085282	1.098039	112.524861	3	1.104846,1.091231,1.079333	
+rosenberg_splitseq	rna	sweep	local	csc_i32	4	warm	file		auto	122790641	ok	0.354667	0.354461	0.357469	346.214268	3	0.360271,0.354667,0.354256	
+rosenberg_splitseq	rna	sweep	local	csc_i32	8	cold	file		auto	122790641	ok	1.0606	1.052605	1.064978	115.774689	3	1.069356,1.060600,1.044609	
+rosenberg_splitseq	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	122790641	ok	4.302389	4.302307	4.306717	28.540107	3	4.311044,4.302389,4.302225	scalar
+rosenberg_splitseq	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	122790641	ok	1.283749	1.283675	1.28794	95.650038	3	1.292131,1.283749,1.283602	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	122790641	ok	1.273889	1.273816	1.278585	96.390377	3	1.283280,1.273743,1.273889	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	122790641	ok	5.207476	5.206373	5.210751	23.579684	3	5.214027,5.207476,5.205269	scalar
+rosenberg_splitseq	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	122790641	ok	2.222806	2.21737	2.289077	55.241277	3	2.211933,2.355348,2.222806	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	122790641	ok	2.186545	2.182614	2.186913	56.157381	3	2.187280,2.178683,2.186545	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	122790641	ok	2.233027	2.22312	2.241429	54.988426	3	2.233027,2.249830,2.213213	scalar
+rosenberg_splitseq	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	122790641	ok	0.649618	0.649571	0.649626	189.019764	3	0.649618,0.649525,0.649634	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	122790641	ok	0.650436	0.650303	0.650659	188.782049	3	0.650436,0.650882,0.650170	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	122790641	ok	2.693755	2.683083	2.714045	45.583448	3	2.734335,2.693755,2.672411	scalar
+rosenberg_splitseq	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	122790641	ok	1.17498	1.159984	1.176165	104.504452	3	1.174980,1.144988,1.177351	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	122790641	ok	1.158344	1.145606	1.158464	106.005333	3	1.158344,1.132868,1.158584	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	122790641	ok	1.113687	1.110733	1.115112	110.25597	3	1.113687,1.107779,1.116538	scalar
+rosenberg_splitseq	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	122790641	ok	0.330872	0.329411	0.33091	371.112216	3	0.327951,0.330949,0.330872	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	122790641	ok	0.33049	0.330349	0.330752	371.541169	3	0.330208,0.331014,0.330490	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	122790641	ok	1.354494	1.346812	1.356855	90.654252	3	1.354494,1.339129,1.359215	scalar
+rosenberg_splitseq	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	122790641	ok	0.550194	0.550132	0.553233	223.17699	3	0.556271,0.550070,0.550194	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	122790641	ok	0.562757	0.557665	0.563029	218.194782	3	0.552572,0.563301,0.562757	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	122790641	ok	0.665983	0.65207	0.685793	184.375038	3	0.638158,0.665983,0.705604	scalar
+rosenberg_splitseq	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	122790641	ok	0.263814	0.22174	0.264631	465.443991	3	0.265448,0.263814,0.179666	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	122790641	ok	0.260791	0.245385	0.263444	470.839258	3	0.229979,0.260791,0.266098	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	122790641	ok	0.709648	0.709489	0.719791	173.030349	3	0.709330,0.709648,0.729935	scalar
+rosenberg_splitseq	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	122790641	ok	0.378493	0.374093	0.38325	324.419847	3	0.369692,0.388006,0.378493	avx2
+rosenberg_splitseq	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	122790641	ok	0.375473	0.341249	0.376989	327.029216	3	0.375473,0.307024,0.378504	avx2

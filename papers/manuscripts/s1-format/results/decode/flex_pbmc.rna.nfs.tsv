@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+flex_pbmc	rna	main	nfs	csc_i32	4	cold	file		auto	32010802	ok	0.206935	0.206298	0.20894	154.69029	3	0.206935,0.210946,0.205661	
+flex_pbmc	rna	main	nfs	mtx_gz	4	cold	file		auto	32010802	ok	2.387939	2.385868	2.405433	13.405199	3	2.422926,2.383797,2.387939	
+flex_pbmc	rna	main	nfs	tenx_h5	4	cold	file		auto	32010802	ok	1.260333	1.259951	1.27561	25.398688	3	1.290887,1.259569,1.260333	
+flex_pbmc	rna	main	nfs	h5ad_none	4	cold	file		auto	32010802	ok	0.314631	0.314204	0.594838	101.740708	3	0.875045,0.314631,0.313777	
+flex_pbmc	rna	main	nfs	h5ad_gzip	4	cold	file		auto	32010802	ok	1.071171	1.069395	1.34594	29.883946	3	1.620710,1.071171,1.067620	
+flex_pbmc	rna	main	nfs	h5ad_lzf	4	cold	file		auto	32010802	ok	0.595277	0.59462	0.906981	53.774633	3	1.218684,0.595277,0.593963	
+flex_pbmc	rna	main	nfs	zarr	4	cold	file		auto	32010802	ok	0.285202	0.28486	0.568451	112.238972	3	0.851700,0.285202,0.284518	
+flex_pbmc	rna	main	nfs	loom	4	cold	file		auto	32010802	ok	6.623145	6.002137	7.717195	4.833173	3	8.811244,5.381129,6.623145	
+flex_pbmc	rna	main	nfs	soma	4	cold	file		auto	32010802	ok	0.993524	0.983026	1.275453	32.219469	3	1.557382,0.972528,0.993524	
+flex_pbmc	rna	main	nfs	parquet_coo	4	cold	file		auto	32010802	ok	0.773237	0.744577	0.902582	41.398426	3	1.031928,0.715916,0.773237	
+flex_pbmc	rna	main	nfs	csc_zstd19	4	cold	file		auto	32010802	ok	0.355913	0.352795	0.360082	89.939966	3	0.364252,0.355913,0.349678	
+flex_pbmc	rna	main	nfs	rds_gz	4	cold	file		auto	32010802	ok	1.646489	1.645112	1.688322	19.44186	3	1.730155,1.643736,1.646489	
+flex_pbmc	rna	main	nfs	rds_xz	4	cold	file		auto	32010802	ok	2.175269	2.129073	2.175892	14.715791	3	2.176516,2.082877,2.175269	
+flex_pbmc	rna	main	nfs	bpcells	4	cold	file		auto	32010802	ok	3.756123	3.742055	5.45085	8.522299	3	7.145576,3.727988,3.756123	
+flex_pbmc	rna	main	nfs	s1	4	cold	file	native	auto	32010802	ok	0.130108	0.127411	0.877233	246.032322	3	1.624358,0.130108,0.124714	avx2
+flex_pbmc	rna	main	nfs	s1	4	cold	file	canonical	auto	32010802	ok	0.168644	0.165938	0.838552	189.813402	3	1.508461,0.168644,0.163233	avx2
+flex_pbmc	rna	main	nfs	s1_pack	4	cold	file	native	auto	32010802	ok	0.128878	0.125557	0.788685	248.381236	3	1.448493,0.128878,0.122236	avx2
+flex_pbmc	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	32010802	ok	0.16713	0.164933	0.830352	191.532398	3	1.493574,0.167130,0.162737	avx2

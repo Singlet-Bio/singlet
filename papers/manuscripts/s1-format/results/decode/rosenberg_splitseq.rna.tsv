@@ -1,0 +1,76 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+rosenberg_splitseq	rna	main	local	csc_i32	1	cold	file		auto	122790641	ok	1.3008	1.186873	1.785129	94.396273	3	2.269459,1.300800,1.072947	
+rosenberg_splitseq	rna	main	local	csc_i32	4	cold	file		auto	122790641	ok	1.089181	1.081965	1.089872	112.736721	3	1.089181,1.090563,1.074749	
+rosenberg_splitseq	rna	main	local	csc_i32	4	warm	file		auto	122790641	ok	0.347787	0.347209	0.351407	353.062822	3	0.355027,0.347787,0.346630	
+rosenberg_splitseq	rna	main	local	mtx_gz	1	cold	file		auto	122790641	ok	16.960995	16.864823	17.022896	7.239589	3	17.084797,16.768652,16.960995	
+rosenberg_splitseq	rna	main	local	mtx_gz	4	cold	file		auto	122790641	ok	9.499998	9.480278	9.638753	12.925333	3	9.777507,9.460558,9.499998	
+rosenberg_splitseq	rna	main	local	mtx_gz	4	warm	file		auto	122790641	ok	9.415166	9.37883	9.421911	13.041793	3	9.415166,9.428656,9.342494	
+rosenberg_splitseq	rna	main	local	tenx_h5	1	cold	file		auto	122790641	ok	4.619347	4.617762	4.648027	26.581818	3	4.676708,4.619347,4.616178	
+rosenberg_splitseq	rna	main	local	tenx_h5	4	cold	file		auto	122790641	ok	4.632234	4.631354	4.654978	26.507865	3	4.677722,4.632234,4.630474	
+rosenberg_splitseq	rna	main	local	tenx_h5	4	warm	file		auto	122790641	ok	4.563207	4.5496	4.663369	26.908845	3	4.763530,4.563207,4.535993	
+rosenberg_splitseq	rna	main	local	h5ad_none	1	cold	file		auto	122790641	ok	1.529645	1.523886	1.927117	80.273943	3	2.324589,1.529645,1.518128	
+rosenberg_splitseq	rna	main	local	h5ad_none	4	cold	file		auto	122790641	ok	1.532054	1.531924	1.80173	80.147703	3	2.071406,1.532054,1.531794	
+rosenberg_splitseq	rna	main	local	h5ad_none	4	warm	file		auto	122790641	ok	0.551706	0.549012	0.553312	222.565532	3	0.551706,0.554918,0.546319	
+rosenberg_splitseq	rna	main	local	h5ad_gzip	1	cold	file		auto	122790641	ok	3.899656	3.892889	4.165805	31.487557	3	4.431954,3.899656,3.886122	
+rosenberg_splitseq	rna	main	local	h5ad_gzip	4	cold	file		auto	122790641	ok	3.902057	3.895347	4.168731	31.468178	3	4.435404,3.902057,3.888637	
+rosenberg_splitseq	rna	main	local	h5ad_gzip	4	warm	file		auto	122790641	ok	3.751378	3.750646	3.753531	32.732143	3	3.755684,3.751378,3.749915	
+rosenberg_splitseq	rna	main	local	h5ad_lzf	1	cold	file		auto	122790641	ok	2.344437	2.337113	2.614387	52.375324	3	2.884337,2.329789,2.344437	
+rosenberg_splitseq	rna	main	local	h5ad_lzf	4	cold	file		auto	122790641	ok	2.340603	2.333573	2.610685	52.461122	3	2.880768,2.326544,2.340603	
+rosenberg_splitseq	rna	main	local	h5ad_lzf	4	warm	file		auto	122790641	ok	2.125659	2.123677	2.126239	57.765905	3	2.125659,2.126819,2.121695	
+rosenberg_splitseq	rna	main	local	zarr	1	cold	file		auto	122790641	ok	1.012641	1.006167	1.287171	121.257771	3	1.561701,1.012641,0.999693	
+rosenberg_splitseq	rna	main	local	zarr	4	cold	file		auto	122790641	ok	0.875727	0.864653	1.102982	140.215707	3	1.330237,0.853579,0.875727	
+rosenberg_splitseq	rna	main	local	zarr	4	warm	file		auto	122790641	ok	0.699534	0.696677	0.708634	175.53193	3	0.717733,0.693820,0.699534	
+rosenberg_splitseq	rna	main	local	soma	1	cold	file		auto	122790641	ok	8.817396	8.671317	8.99164	13.925952	3	9.165883,8.525237,8.817396	
+rosenberg_splitseq	rna	main	local	soma	4	cold	file		auto	122790641	ok	2.912954	2.863075	3.293759	42.153299	3	3.674563,2.912954,2.813196	
+rosenberg_splitseq	rna	main	local	soma	4	warm	file		auto	122790641	ok	3.018261	2.930505	3.067858	40.682583	3	3.018261,3.117455,2.842749	
+rosenberg_splitseq	rna	main	local	parquet_coo	1	cold	file		auto	122790641	ok	4.092755	4.092646	4.248323	30.001953	3	4.403891,4.092755,4.092538	
+rosenberg_splitseq	rna	main	local	parquet_coo	4	cold	file		auto	122790641	ok	3.172822	3.097215	3.215787	38.700767	3	3.258752,3.021609,3.172822	
+rosenberg_splitseq	rna	main	local	parquet_coo	4	warm	file		auto	122790641	ok	2.594002	2.588367	2.614838	47.336367	3	2.594002,2.582732,2.635674	
+rosenberg_splitseq	rna	main	local	csc_zstd19	1	cold	file		auto	122790641	ok	1.85154	1.814282	2.063186	66.318105	3	1.777023,1.851540,2.274831	
+rosenberg_splitseq	rna	main	local	csc_zstd19	4	cold	file		auto	122790641	ok	1.774205	1.766985	1.777523	69.208817	3	1.780841,1.774205,1.759764	
+rosenberg_splitseq	rna	main	local	csc_zstd19	4	warm	file		auto	122790641	ok	1.656671	1.655035	1.661921	74.118925	3	1.667171,1.656671,1.653399	
+rosenberg_splitseq	rna	main	local	rds_gz	1	cold	file		auto	122790641	ok	5.990163	5.985568	6.042797	20.498714	3	6.095431,5.990163,5.980973	
+rosenberg_splitseq	rna	main	local	rds_gz	4	cold	file		auto	122790641	ok	5.990409	5.989417	6.044593	20.497874	3	6.098778,5.990409,5.988425	
+rosenberg_splitseq	rna	main	local	rds_gz	4	warm	file		auto	122790641	ok	5.889398	5.889304	5.893186	20.849437	3	5.896974,5.889398,5.889210	
+rosenberg_splitseq	rna	main	local	rds_xz	1	cold	file		auto	122790641	ok	8.757745	8.75485	8.800565	14.020806	3	8.843386,8.757745,8.751955	
+rosenberg_splitseq	rna	main	local	rds_xz	4	cold	file		auto	122790641	ok	8.849578	8.793805	8.92395	13.87531	3	8.849578,8.998321,8.738031	
+rosenberg_splitseq	rna	main	local	rds_xz	4	warm	file		auto	122790641	ok	8.586629	8.584893	8.591737	14.300216	3	8.596844,8.583158,8.586629	
+rosenberg_splitseq	rna	main	local	bpcells	1	cold	file		auto	122790641	ok	16.730363	16.710744	18.627172	7.339389	3	20.523980,16.730363,16.691124	
+rosenberg_splitseq	rna	main	local	bpcells	4	cold	file		auto	122790641	ok	16.798653	16.740068	18.538165	7.309553	3	20.277678,16.798653,16.681483	
+rosenberg_splitseq	rna	main	local	bpcells	4	warm	file		auto	122790641	ok	16.750233	16.693823	16.789237	7.330682	3	16.750233,16.637414,16.828241	
+rosenberg_splitseq	rna	main	local	s1	1	cold	file	native	auto	122790641	ok	1.48051	1.469818	2.451861	82.938068	3	3.423211,1.459127,1.480510	avx2
+rosenberg_splitseq	rna	main	local	s1	1	cold	file	canonical	auto	122790641	ok	2.329442	2.320743	2.967322	52.712465	3	3.605202,2.329442,2.312044	avx2
+rosenberg_splitseq	rna	main	local	s1	4	cold	file	native	auto	122790641	ok	0.51771	0.516525	1.17138	237.180201	3	1.825050,0.517710,0.515340	avx2
+rosenberg_splitseq	rna	main	local	s1	4	cold	file	canonical	auto	122790641	ok	0.72453	0.723834	1.38545	169.476228	3	2.046369,0.723138,0.724530	avx2
+rosenberg_splitseq	rna	main	local	s1	4	warm	file	native	auto	122790641	ok	0.463323	0.463171	0.471819	265.021573	3	0.480315,0.463020,0.463323	avx2
+rosenberg_splitseq	rna	main	local	s1	4	warm	file	canonical	auto	122790641	ok	0.669782	0.66925	0.670037	183.329191	3	0.668718,0.669782,0.670293	avx2
+rosenberg_splitseq	rna	main	local	s1	1	warm	codec	native	scalar	122790641	ok	4.183621	4.181287	4.192425	29.350323	3	4.201228,4.183621,4.178952	scalar
+rosenberg_splitseq	rna	main	local	s1	1	warm	codec	native	avx2	122790641	ok	1.33313	1.333047	1.344399	92.107057	3	1.332964,1.355668,1.333130	avx2
+rosenberg_splitseq	rna	main	local	s1	1	warm	codec	native	avx512	122790641	ok	1.348766	1.344333	1.363514	91.039257	3	1.378263,1.348766,1.339899	avx2
+rosenberg_splitseq	rna	main	local	s1	1	warm	codec	canonical	scalar	122790641	ok	5.066847	5.066303	5.074774	24.23413	3	5.082701,5.066847,5.065759	scalar
+rosenberg_splitseq	rna	main	local	s1	1	warm	codec	canonical	avx2	122790641	ok	2.19943	2.19809	2.211707	55.828382	3	2.199430,2.223983,2.196749	avx2
+rosenberg_splitseq	rna	main	local	s1	1	warm	codec	canonical	avx512	122790641	ok	2.203096	2.201496	2.215151	55.735482	3	2.203096,2.227205,2.199895	avx2
+rosenberg_splitseq	rna	main	local	s1	4	warm	codec	native	scalar	122790641	ok	1.092347	1.090416	1.096684	112.409916	3	1.088485,1.101021,1.092347	scalar
+rosenberg_splitseq	rna	main	local	s1	4	warm	codec	native	avx2	122790641	ok	0.391074	0.390918	0.393398	313.98278	3	0.391074,0.390761,0.395722	avx2
+rosenberg_splitseq	rna	main	local	s1	4	warm	codec	native	avx512	122790641	ok	0.393293	0.391411	0.399651	312.211446	3	0.406009,0.393293,0.389528	avx2
+rosenberg_splitseq	rna	main	local	s1	4	warm	codec	canonical	scalar	122790641	ok	1.302954	1.301162	1.31066	94.240162	3	1.299369,1.318365,1.302954	scalar
+rosenberg_splitseq	rna	main	local	s1	4	warm	codec	canonical	avx2	122790641	ok	0.595715	0.592858	0.596288	206.122975	3	0.596860,0.595715,0.590001	avx2
+rosenberg_splitseq	rna	main	local	s1	4	warm	codec	canonical	avx512	122790641	ok	0.598866	0.598828	0.599913	205.038684	3	0.600961,0.598866,0.598790	avx2
+rosenberg_splitseq	rna	main	local	s1_pack	1	cold	file	native	auto	122790641	ok	1.47913	1.466971	2.120125	83.015469	3	2.761120,1.479130,1.454812	avx2
+rosenberg_splitseq	rna	main	local	s1_pack	1	cold	file	canonical	auto	122790641	ok	2.330126	2.320502	2.977146	52.697003	3	3.624166,2.330126,2.310878	avx2
+rosenberg_splitseq	rna	main	local	s1_pack	4	cold	file	native	auto	122790641	ok	0.516337	0.514828	1.169603	237.810977	3	1.822870,0.516337,0.513318	avx2
+rosenberg_splitseq	rna	main	local	s1_pack	4	cold	file	canonical	auto	122790641	ok	0.743553	0.734404	1.397771	165.140297	3	2.051989,0.725254,0.743553	avx2
+rosenberg_splitseq	rna	main	local	s1_pack	4	warm	file	native	auto	122790641	ok	0.462328	0.46179	0.462855	265.592282	3	0.463382,0.461252,0.462328	avx2
+rosenberg_splitseq	rna	main	local	s1_pack	4	warm	file	canonical	auto	122790641	ok	0.670024	0.666382	0.670118	183.263007	3	0.670024,0.670211,0.662739	avx2
+rosenberg_splitseq	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	122790641	ok	4.410293	4.365189	4.447969	27.841833	3	4.485645,4.410293,4.320085	scalar
+rosenberg_splitseq	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	122790641	ok	1.264008	1.26351	1.267188	97.14388	3	1.270368,1.264008,1.263013	avx2
+rosenberg_splitseq	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	122790641	ok	1.266869	1.266776	1.270523	96.924497	3	1.274178,1.266869,1.266683	avx2
+rosenberg_splitseq	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	122790641	ok	5.235907	5.235551	5.239864	23.451647	3	5.243821,5.235195,5.235907	scalar
+rosenberg_splitseq	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	122790641	ok	2.156808	2.153321	2.157087	56.931651	3	2.156808,2.149835,2.157365	avx2
+rosenberg_splitseq	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	122790641	ok	2.198421	2.17901	2.272423	55.854016	3	2.159598,2.198421,2.346425	avx2
+rosenberg_splitseq	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	122790641	ok	1.110754	1.10807	1.111867	110.547107	3	1.110754,1.105387,1.112980	scalar
+rosenberg_splitseq	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	122790641	ok	0.324446	0.324377	0.324533	378.46249	3	0.324446,0.324309,0.324620	avx2
+rosenberg_splitseq	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	122790641	ok	0.325082	0.325049	0.325085	377.722055	3	0.325016,0.325082,0.325088	avx2
+rosenberg_splitseq	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	122790641	ok	1.351704	1.340196	1.353598	90.841368	3	1.355492,1.328688,1.351704	scalar
+rosenberg_splitseq	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	122790641	ok	0.565428	0.563252	0.567002	217.164062	3	0.561076,0.568576,0.565428	avx2
+rosenberg_splitseq	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	122790641	ok	0.547675	0.547555	0.554603	224.20348	3	0.561531,0.547435,0.547675	avx2

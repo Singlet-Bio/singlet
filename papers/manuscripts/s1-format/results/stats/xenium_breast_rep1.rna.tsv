@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+xenium_breast_rep1	rna	spatial_imaging	M	transcripts	313	167780	10604415	0.201931	191.339576	164.0	64.0	0.4851	167	3.02732

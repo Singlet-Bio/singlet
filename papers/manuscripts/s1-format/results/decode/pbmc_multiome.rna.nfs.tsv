@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+pbmc_multiome	rna	main	nfs	csc_i32	4	cold	file		auto	23508033	ok	0.148836	0.148108	0.150142	157.945451	3	0.151448,0.148836,0.147379	
+pbmc_multiome	rna	main	nfs	mtx_gz	4	cold	file		auto	23508033	ok	1.930339	1.923607	1.936218	12.17819	3	1.930339,1.942097,1.916875	
+pbmc_multiome	rna	main	nfs	tenx_h5	4	cold	file		auto	23508033	ok	0.905219	0.90477	0.91903	25.969448	3	0.932841,0.905219,0.904322	
+pbmc_multiome	rna	main	nfs	h5ad_none	4	cold	file		auto	23508033	ok	0.244709	0.243572	0.565126	96.065365	3	0.885544,0.244709,0.242434	
+pbmc_multiome	rna	main	nfs	h5ad_gzip	4	cold	file		auto	23508033	ok	0.797289	0.796576	1.061184	29.484954	3	1.325080,0.795863,0.797289	
+pbmc_multiome	rna	main	nfs	h5ad_lzf	4	cold	file		auto	23508033	ok	0.465608	0.462224	0.731729	50.488867	3	0.997850,0.458840,0.465608	
+pbmc_multiome	rna	main	nfs	zarr	4	cold	file		auto	23508033	ok	0.254052	0.245258	0.512342	92.532219	3	0.770632,0.254052,0.236463	
+pbmc_multiome	rna	main	nfs	loom	4	cold	file		auto	23508033	ok	9.42044	9.397072	11.168974	2.495428	3	12.917508,9.373703,9.420440	
+pbmc_multiome	rna	main	nfs	soma	4	cold	file		auto	23508033	ok	0.647694	0.617146	1.029538	36.294944	3	1.411381,0.647694,0.586597	
+pbmc_multiome	rna	main	nfs	parquet_coo	4	cold	file		auto	23508033	ok	0.619277	0.601592	0.73199	37.960472	3	0.844704,0.583908,0.619277	
+pbmc_multiome	rna	main	nfs	csc_zstd19	4	cold	file		auto	23508033	ok	0.308359	0.305347	0.312646	76.235818	3	0.316933,0.308359,0.302335	
+pbmc_multiome	rna	main	nfs	rds_gz	4	cold	file		auto	23508033	ok	1.239529	1.196939	1.289276	18.9653	3	1.339024,1.154349,1.239529	
+pbmc_multiome	rna	main	nfs	rds_xz	4	cold	file		auto	23508033	ok	1.688838	1.646958	1.73431	13.919646	3	1.779782,1.605078,1.688838	
+pbmc_multiome	rna	main	nfs	bpcells	4	cold	file		auto	23508033	ok	2.731291	2.723946	4.38754	8.606931	3	6.043788,2.716601,2.731291	
+pbmc_multiome	rna	main	nfs	s1	4	cold	file	native	auto	23508033	ok	0.099138	0.096782	0.862448	237.123228	3	1.625758,0.099138,0.094427	avx2
+pbmc_multiome	rna	main	nfs	s1	4	cold	file	canonical	auto	23508033	ok	0.136758	0.134111	0.79418	171.895564	3	1.451602,0.136758,0.131464	avx2
+pbmc_multiome	rna	main	nfs	s1_pack	4	cold	file	native	auto	23508033	ok	0.097997	0.095664	0.761803	239.886233	3	1.425609,0.097997,0.093331	avx2
+pbmc_multiome	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	23508033	ok	0.135119	0.132504	0.7899	173.979983	3	1.444681,0.135119,0.129890	avx2

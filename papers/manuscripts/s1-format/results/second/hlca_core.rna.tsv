@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+hlca_core	rna	zstd22	739327492	739041056	0.999613
+hlca_core	rna	xz9e	739327492	739010936	0.999572
+hlca_core	rna	brotli11	739327492	739034107	0.999603
+hlca_core	rna	bzip2_9	739327492	742413094	1.004174

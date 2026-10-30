@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+hao_citeseq	rna	h5ad_none	general	354321830	33538	161764	ok	2846445704	64.268029	0	6.606818	4	NA
+hao_citeseq	rna	csc_i32	general	354321830	33538	161764	ok	2839569412	64.112774	0	5.92605	4	NA
+hao_citeseq	rna	mtx_gz	general	354321830	33538	161764	ok	1126067463	25.424738	0	239.409879	4	NA
+hao_citeseq	rna	tenx_h5	general	354321830	33538	161764	ok	530012236	11.966798	0	40.515082	4	NA
+hao_citeseq	rna	h5ad_gzip	general	354321830	33538	161764	ok	828207237	18.699548	0	58.952289	4	NA
+hao_citeseq	rna	h5ad_lzf	general	354321830	33538	161764	ok	1758083624	39.694616	0	10.875562	4	NA
+hao_citeseq	rna	zarr	general	354321830	33538	161764	ok	677162232	15.289202	0	7.479958	4	NA
+hao_citeseq	rna	loom	general	354321830	33538	161764	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 33538x161764 entries exceeds 2e+09
+hao_citeseq	rna	soma	domain	354321830	33538	161764	ok	655541603	14.801044	0	179.958956	4	NA
+hao_citeseq	rna	parquet_coo	general	354321830	33538	161764	ok	801113969	18.087826	0	17.968316	4	NA
+hao_citeseq	rna	csc_zstd19	general	354321830	33538	161764	ok	401443336	9.063926	0	508.131797	4	NA
+hao_citeseq	rna	rds_gz	general	354321830	33538	161764	ok	818487885	18.480101	0	200.980249	4	NA
+hao_citeseq	rna	rds_xz	general	354321830	33538	161764	ok	371977804	8.398643	0	1760.264059	4	NA
+hao_citeseq	rna	bpcells	domain	354321830	33538	161764	ok	706572470	15.953236	0	19.178556	4	NA
+hao_citeseq	rna	s1	s1	354321830	33538	161764	ok	210041487	4.742389	0	33.471753	4	NA
+hao_citeseq	rna	s1_pack	s1	354321830	33538	161764	ok	209932588	4.73993	275640	35.531652	4	NA

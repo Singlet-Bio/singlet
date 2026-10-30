@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+visium_lymph_node	rna	main	nfs	csc_i32	4	cold	file		auto	21210753	ok	0.139952	0.139336	0.140973	151.556941	3	0.139952,0.141993,0.138719	
+visium_lymph_node	rna	main	nfs	mtx_gz	4	cold	file		auto	21210753	ok	1.693289	1.693091	1.704613	12.526367	3	1.715938,1.692894,1.693289	
+visium_lymph_node	rna	main	nfs	tenx_h5	4	cold	file		auto	21210753	ok	0.840618	0.839769	0.855113	25.232341	3	0.869608,0.838920,0.840618	
+visium_lymph_node	rna	main	nfs	h5ad_none	4	cold	file		auto	21210753	ok	0.224695	0.223631	0.495737	94.398112	3	0.766780,0.222567,0.224695	
+visium_lymph_node	rna	main	nfs	h5ad_gzip	4	cold	file		auto	21210753	ok	0.692335	0.689755	0.959011	30.636566	3	1.225687,0.692335,0.687176	
+visium_lymph_node	rna	main	nfs	h5ad_lzf	4	cold	file		auto	21210753	ok	0.412288	0.409974	0.680398	51.4465	3	0.948509,0.407660,0.412288	
+visium_lymph_node	rna	main	nfs	zarr	4	cold	file		auto	21210753	ok	0.201735	0.199233	0.471945	105.141891	3	0.742155,0.196731,0.201735	
+visium_lymph_node	rna	main	nfs	loom	4	cold	file		auto	21210753	ok	3.886826	3.862325	5.5627	5.457089	3	7.238574,3.837825,3.886826	
+visium_lymph_node	rna	main	nfs	soma	4	cold	file		auto	21210753	ok	0.556857	0.542889	0.940142	38.090108	3	1.323427,0.556857,0.528920	
+visium_lymph_node	rna	main	nfs	parquet_coo	4	cold	file		auto	21210753	ok	0.588843	0.552875	0.694394	36.021086	3	0.799945,0.516907,0.588843	
+visium_lymph_node	rna	main	nfs	csc_zstd19	4	cold	file		auto	21210753	ok	0.236828	0.234819	0.239834	89.56189	3	0.242840,0.236828,0.232811	
+visium_lymph_node	rna	main	nfs	rds_gz	4	cold	file		auto	21210753	ok	1.116971	1.078366	1.163671	18.98952	3	1.210371,1.039761,1.116971	
+visium_lymph_node	rna	main	nfs	rds_xz	4	cold	file		auto	21210753	ok	1.335586	1.293493	1.380499	15.881238	3	1.425412,1.251400,1.335586	
+visium_lymph_node	rna	main	nfs	bpcells	4	cold	file		auto	21210753	ok	2.558909	2.491673	4.259795	8.288984	3	5.960681,2.558909,2.424438	
+visium_lymph_node	rna	main	nfs	s1	4	cold	file	native	auto	21210753	ok	0.087176	0.085539	0.813731	243.308881	3	1.540286,0.087176,0.083903	avx2
+visium_lymph_node	rna	main	nfs	s1	4	cold	file	canonical	auto	21210753	ok	0.112013	0.109739	0.774995	189.35979	3	1.437978,0.112013,0.107464	avx2
+visium_lymph_node	rna	main	nfs	s1_pack	4	cold	file	native	auto	21210753	ok	0.085899	0.082504	0.756308	246.926294	3	1.426718,0.085899,0.079109	avx2
+visium_lymph_node	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	21210753	ok	0.111004	0.109515	0.769095	191.080661	3	1.427186,0.111004,0.108025	avx2

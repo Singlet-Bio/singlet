@@ -1,0 +1,39 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+tahoe_plate	rna	main	local	csc_i32	4	cold	file		auto	8276063161	ok	197.134335	197.134335	197.134335	41.981845	1	197.134335	
+tahoe_plate	rna	main	local	csc_i32	4	warm	file		auto	8276063161	ok	84.011224	84.011224	84.011224	98.511398	1	84.011224	
+tahoe_plate	rna	main	local	tenx_h5	4	cold	file		auto	8276063161	ok	380.796812	380.796812	380.796812	21.733541	1	380.796812	
+tahoe_plate	rna	main	local	tenx_h5	4	warm	file		auto	8276063161	ok	317.317979	317.317979	317.317979	26.081293	1	317.317979	
+tahoe_plate	rna	main	local	h5ad_none	4	cold	file		auto	8276063161	ok	259.205384	259.205384	259.205384	31.928593	1	259.205384	
+tahoe_plate	rna	main	local	h5ad_none	4	warm	file		auto	8276063161	ok	75.122853	75.122853	75.122853	110.167051	1	75.122853	
+tahoe_plate	rna	main	local	h5ad_gzip	4	cold	file		auto	8276063161	ok	309.11811	309.11811	309.11811	26.773142	1	309.118110	
+tahoe_plate	rna	main	local	h5ad_gzip	4	warm	file		auto	8276063161	ok	303.225903	303.225903	303.225903	27.293391	1	303.225903	
+tahoe_plate	rna	main	local	zarr	4	cold	file		auto	8276063161	ok	72.323303	72.323303	72.323303	114.431488	1	72.323303	
+tahoe_plate	rna	main	local	zarr	4	warm	file		auto	8276063161	ok	46.133276	46.039804	46.539796	179.394656	3	45.946332,46.133276,46.946317	
+tahoe_plate	rna	main	local	soma	4	cold	file		auto	8276063161	ok	234.531303	234.531303	234.531303	35.28767	1	234.531303	
+tahoe_plate	rna	main	local	soma	4	warm	file		auto	8276063161	ok	203.466967	203.466967	203.466967	40.675218	1	203.466967	
+tahoe_plate	rna	main	local	s1	4	cold	file	native	auto	8276063161	ok	34.57641	34.302429	35.452964	239.355768	3	36.329517,34.028448,34.576410	avx2
+tahoe_plate	rna	main	local	s1	4	cold	file	canonical	auto	8276063161	ok	46.879965	46.722762	48.002506	176.537316	3	49.125047,46.879965,46.565560	avx2
+tahoe_plate	rna	main	local	s1	4	warm	file	native	auto	8276063161	ok	30.529985	30.525055	30.556753	271.079833	3	30.529985,30.583521,30.520125	avx2
+tahoe_plate	rna	main	local	s1	4	warm	file	canonical	auto	8276063161	ok	43.184771	43.113599	43.211264	191.643094	3	43.237757,43.184771,43.042427	avx2
+tahoe_plate	rna	main	local	s1	4	warm	codec	native	scalar	8276063161	ok	72.272155	72.272155	72.272155	114.512472	1	72.272155	scalar
+tahoe_plate	rna	main	local	s1	4	warm	codec	native	avx2	8276063161	ok	26.285342	26.235128	26.516535	314.854691	3	26.747728,26.184914,26.285342	avx2
+tahoe_plate	rna	main	local	s1	4	warm	codec	native	avx512	8276063161	ok	26.278798	26.225842	26.488077	314.933095	3	26.697357,26.278798,26.172886	avx2
+tahoe_plate	rna	main	local	s1	4	warm	codec	canonical	scalar	8276063161	ok	85.005798	85.005798	85.005798	97.358808	1	85.005798	scalar
+tahoe_plate	rna	main	local	s1	4	warm	codec	canonical	avx2	8276063161	ok	38.845141	38.838356	38.963543	213.052725	3	39.081945,38.845141,38.831572	avx2
+tahoe_plate	rna	main	local	s1	4	warm	codec	canonical	avx512	8276063161	ok	38.89036	38.860836	39.066176	212.805004	3	39.241993,38.890360,38.831312	avx2
+tahoe_plate	rna	main	local	s1_pack	4	cold	file	native	auto	8276063161	ok	33.899847	33.802635	35.317255	244.132761	3	36.734663,33.899847,33.705424	avx2
+tahoe_plate	rna	main	local	s1_pack	4	cold	file	canonical	auto	8276063161	ok	47.010502	46.922835	47.793176	176.047113	3	48.575849,47.010502,46.835168	avx2
+tahoe_plate	rna	main	local	s1_pack	4	warm	file	native	auto	8276063161	ok	30.574351	30.535956	30.754031	270.68647	3	30.497561,30.933711,30.574351	avx2
+tahoe_plate	rna	main	local	s1_pack	4	warm	file	canonical	auto	8276063161	ok	42.978999	42.941412	43.013362	192.560629	3	43.047724,42.903826,42.978999	avx2
+tahoe_plate	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	8276063161	ok	289.996926	289.841354	290.002109	28.538451	3	289.996926,289.685782,290.007293	scalar
+tahoe_plate	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	8276063161	ok	85.814414	85.799901	85.965237	96.441411	3	85.785388,86.116060,85.814414	avx2
+tahoe_plate	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	8276063161	ok	84.876641	84.875164	84.972359	97.506959	3	84.876641,84.873686,85.068076	avx2
+tahoe_plate	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	8276063161	ok	342.380169	342.257597	342.428718	24.172145	3	342.380169,342.135025,342.477267	scalar
+tahoe_plate	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	8276063161	ok	140.9768	140.956394	140.990372	58.705143	3	140.935988,140.976800,141.003944	avx2
+tahoe_plate	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	8276063161	ok	139.933178	139.917416	139.995367	59.142966	3	139.933178,139.901653,140.057556	avx2
+tahoe_plate	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	8276063161	ok	77.257651	77.228615	77.287024	107.122894	3	77.199579,77.257651,77.316396	scalar
+tahoe_plate	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	8276063161	ok	25.473485	25.307115	25.675677	324.889318	3	25.140745,25.877870,25.473485	avx2
+tahoe_plate	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	8276063161	ok	22.702015	22.417915	22.894782	364.55192	3	22.702015,23.087549,22.133816	avx2
+tahoe_plate	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	8276063161	ok	91.320271	91.261433	91.460433	90.626792	3	91.600595,91.202594,91.320271	scalar
+tahoe_plate	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	8276063161	ok	39.675268	39.563089	40.616738	208.595016	3	39.675268,39.450909,41.558208	avx2
+tahoe_plate	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	8276063161	ok	39.89814	39.694154	41.027001	207.429799	3	39.898140,39.490168,42.155863	avx2

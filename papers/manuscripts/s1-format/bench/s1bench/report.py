@@ -260,9 +260,9 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
         N.put("isaBest", max(set(used), key=used.count).replace("avx", "AVX").replace("scalar", "scalar"))
     _write(rows, out / "tab_decode.tsv", ["format", "cold_t1", "cold_th", "warm_th"])
     # label sides for Fig 1c, chosen where the formats sit (west: label to the right of the point); others alternate
-    sides = {"h5ad_none": "west", "csc_i32": "east", "h5ad_lzf": "south", "mtx_gz": "west", "loom": "west",
+    sides = {"h5ad_none": "west", "csc_i32": "east", "h5ad_lzf": "south west", "mtx_gz": "west", "loom": "west",
              "h5ad_gzip": "west", "rds_gz": "east", "parquet_coo": "south west", "bpcells": "west", "zarr": "south",
-             "soma": "east", "tenx_h5": "east", "rds_xz": "north", "csc_zstd19": "north", "s1": "south", "s1_pack": "north"}
+             "soma": "east", "tenx_h5": "east", "rds_xz": "north", "csc_zstd19": "north", "s1": "north west", "s1_pack": "north"}
     for i, r in enumerate(sorted(trade, key=lambda r: r["mnnzs"])):
         r["anchor"] = sides.get(r["format"], ("west", "east")[i % 2])
     _write(trade, out / "fig1c_tradeoff.tsv", ["format", "label", "group", "bits", "mnnzs", "anchor"])

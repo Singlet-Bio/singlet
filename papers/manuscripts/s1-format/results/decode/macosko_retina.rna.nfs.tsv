@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+macosko_retina	rna	main	nfs	csc_i32	4	cold	file		auto	37879696	ok	0.241574	0.240865	0.242636	156.803476	3	0.240155,0.241574,0.243698	
+macosko_retina	rna	main	nfs	mtx_gz	4	cold	file		auto	37879696	ok	2.937684	2.931337	2.9544	12.89441	3	2.971115,2.937684,2.924990	
+macosko_retina	rna	main	nfs	tenx_h5	4	cold	file		auto	37879696	ok	1.451614	1.449853	1.468065	26.094891	3	1.484517,1.451614,1.448092	
+macosko_retina	rna	main	nfs	h5ad_none	4	cold	file		auto	37879696	ok	0.393275	0.392394	0.699494	96.318661	3	1.005713,0.393275,0.391514	
+macosko_retina	rna	main	nfs	h5ad_gzip	4	cold	file		auto	37879696	ok	1.262722	1.262572	1.53097	29.998454	3	1.799219,1.262422,1.262722	
+macosko_retina	rna	main	nfs	h5ad_lzf	4	cold	file		auto	37879696	ok	0.739162	0.736272	1.007071	51.24679	3	1.274979,0.739162,0.733381	
+macosko_retina	rna	main	nfs	zarr	4	cold	file		auto	37879696	ok	0.42604	0.399856	0.668907	88.911213	3	0.911775,0.426040,0.373673	
+macosko_retina	rna	main	nfs	loom	4	cold	file		auto	37879696	ok	23.530997	23.476266	25.126787	1.609779	3	26.722577,23.421536,23.530997	
+macosko_retina	rna	main	nfs	soma	4	cold	file		auto	37879696	ok	0.893202	0.888484	1.276739	42.408886	3	1.660276,0.893202,0.883767	
+macosko_retina	rna	main	nfs	parquet_coo	4	cold	file		auto	37879696	ok	0.976447	0.949656	1.078674	38.793381	3	1.180900,0.922865,0.976447	
+macosko_retina	rna	main	nfs	csc_zstd19	4	cold	file		auto	37879696	ok	0.494124	0.492558	0.496752	76.660342	3	0.499381,0.494124,0.490992	
+macosko_retina	rna	main	nfs	rds_gz	4	cold	file		auto	37879696	ok	1.919616	1.917052	1.9635	19.732953	3	2.007383,1.919616,1.914487	
+macosko_retina	rna	main	nfs	rds_xz	4	cold	file		auto	37879696	ok	2.772013	2.768703	2.81328	13.66505	3	2.854548,2.772013,2.765393	
+macosko_retina	rna	main	nfs	bpcells	4	cold	file		auto	37879696	ok	4.683205	4.662333	6.348847	8.088412	3	8.014489,4.683205,4.641461	
+macosko_retina	rna	main	nfs	s1	4	cold	file	native	auto	37879696	ok	0.15543	0.152621	0.981698	243.709533	3	1.807966,0.155430,0.149812	avx2
+macosko_retina	rna	main	nfs	s1	4	cold	file	canonical	auto	37879696	ok	0.217236	0.216075	0.867492	174.371183	3	1.517747,0.217236,0.214913	avx2
+macosko_retina	rna	main	nfs	s1_pack	4	cold	file	native	auto	37879696	ok	0.155138	0.150944	0.806889	244.167764	3	1.458641,0.155138,0.146750	avx2
+macosko_retina	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	37879696	ok	0.214862	0.213726	0.864822	176.298166	3	1.514782,0.214862,0.212590	avx2

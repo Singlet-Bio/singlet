@@ -1,0 +1,79 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+flex_pbmc	rna	main	local	csc_i32	1	cold	file		auto	32010802	ok	0.243491	0.241482	0.244265	131.46616	3	0.245039,0.243491,0.239473	
+flex_pbmc	rna	main	local	csc_i32	4	cold	file		auto	32010802	ok	0.238239	0.238079	0.23829	134.364169	3	0.238239,0.238340,0.237919	
+flex_pbmc	rna	main	local	csc_i32	4	warm	file		auto	32010802	ok	0.099547	0.099259	0.099926	321.565922	3	0.100306,0.099547,0.098970	
+flex_pbmc	rna	main	local	mtx_gz	1	cold	file		auto	32010802	ok	4.236769	4.211537	4.330996	7.555474	3	4.236769,4.186304,4.425223	
+flex_pbmc	rna	main	local	mtx_gz	4	cold	file		auto	32010802	ok	2.417076	2.413201	2.426535	13.243605	3	2.435995,2.417076,2.409326	
+flex_pbmc	rna	main	local	mtx_gz	4	warm	file		auto	32010802	ok	2.361043	2.361024	2.363128	13.557906	3	2.361043,2.361005,2.365214	
+flex_pbmc	rna	main	local	tenx_h5	1	cold	file		auto	32010802	ok	1.270868	1.269679	1.290136	25.188145	3	1.309404,1.270868,1.268490	
+flex_pbmc	rna	main	local	tenx_h5	4	cold	file		auto	32010802	ok	1.258071	1.257649	1.275261	25.444356	3	1.292450,1.257228,1.258071	
+flex_pbmc	rna	main	local	tenx_h5	4	warm	file		auto	32010802	ok	1.245707	1.245369	1.245787	25.6969	3	1.245868,1.245030,1.245707	
+flex_pbmc	rna	main	local	h5ad_none	1	cold	file		auto	32010802	ok	0.262543	0.261281	0.596627	121.926158	3	0.930712,0.262543,0.260019	
+flex_pbmc	rna	main	local	h5ad_none	4	cold	file		auto	32010802	ok	0.260741	0.259875	0.534907	122.768582	3	0.809073,0.260741,0.259009	
+flex_pbmc	rna	main	local	h5ad_none	4	warm	file		auto	32010802	ok	0.148117	0.148047	0.148786	216.118288	3	0.149455,0.147977,0.148117	
+flex_pbmc	rna	main	local	h5ad_gzip	1	cold	file		auto	32010802	ok	1.064365	1.062404	1.333383	30.075025	3	1.602401,1.064365,1.060443	
+flex_pbmc	rna	main	local	h5ad_gzip	4	cold	file		auto	32010802	ok	1.069039	1.067961	1.337838	29.94354	3	1.606637,1.069039,1.066884	
+flex_pbmc	rna	main	local	h5ad_gzip	4	warm	file		auto	32010802	ok	1.03367	1.032053	1.034756	30.968093	3	1.035841,1.030435,1.033670	
+flex_pbmc	rna	main	local	h5ad_lzf	1	cold	file		auto	32010802	ok	0.588272	0.584597	0.859444	54.414983	3	1.130615,0.580923,0.588272	
+flex_pbmc	rna	main	local	h5ad_lzf	4	cold	file		auto	32010802	ok	0.58843	0.58528	0.858365	54.400341	3	1.128301,0.582130,0.588430	
+flex_pbmc	rna	main	local	h5ad_lzf	4	warm	file		auto	32010802	ok	0.519893	0.519596	0.523795	61.571946	3	0.519893,0.527698,0.519298	
+flex_pbmc	rna	main	local	zarr	1	cold	file		auto	32010802	ok	0.245984	0.245351	0.556678	130.133907	3	0.867372,0.245984,0.244719	
+flex_pbmc	rna	main	local	zarr	4	cold	file		auto	32010802	ok	0.245167	0.244486	0.526925	130.567106	3	0.808682,0.245167,0.243806	
+flex_pbmc	rna	main	local	zarr	4	warm	file		auto	32010802	ok	0.190748	0.190599	0.191223	167.817063	3	0.191697,0.190748,0.190450	
+flex_pbmc	rna	main	local	loom	1	cold	file		auto	32010802	ok	6.21495	5.764878	7.17257	5.150613	3	8.130190,5.314806,6.214950	
+flex_pbmc	rna	main	local	loom	4	cold	file		auto	32010802	ok	6.142903	5.701099	7.451804	5.211022	3	8.760706,5.259294,6.142903	
+flex_pbmc	rna	main	local	loom	4	warm	file		auto	32010802	ok	5.571376	5.527396	5.826231	5.745583	3	5.483416,6.081087,5.571376	
+flex_pbmc	rna	main	local	soma	1	cold	file		auto	32010802	ok	2.204878	2.201704	2.653557	14.518172	3	3.102236,2.204878,2.198530	
+flex_pbmc	rna	main	local	soma	4	cold	file		auto	32010802	ok	0.901209	0.88337	1.251761	35.519861	3	1.602313,0.901209,0.865532	
+flex_pbmc	rna	main	local	soma	4	warm	file		auto	32010802	ok	0.860702	0.85963	0.866398	37.191499	3	0.858558,0.860702,0.872093	
+flex_pbmc	rna	main	local	parquet_coo	1	cold	file		auto	32010802	ok	1.028018	1.026957	1.177549	31.138358	3	1.327080,1.025896,1.028018	
+flex_pbmc	rna	main	local	parquet_coo	4	cold	file		auto	32010802	ok	0.774731	0.724194	0.90062	41.318622	3	1.026510,0.673656,0.774731	
+flex_pbmc	rna	main	local	parquet_coo	4	warm	file		auto	32010802	ok	0.677908	0.664866	0.691094	47.220008	3	0.677908,0.704280,0.651825	
+flex_pbmc	rna	main	local	csc_zstd19	1	cold	file		auto	32010802	ok	0.377096	0.375227	0.38204	84.887568	3	0.386983,0.377096,0.373357	
+flex_pbmc	rna	main	local	csc_zstd19	4	cold	file		auto	32010802	ok	0.382998	0.380011	0.387775	83.579599	3	0.382998,0.377025,0.392553	
+flex_pbmc	rna	main	local	csc_zstd19	4	warm	file		auto	32010802	ok	0.352969	0.352017	0.355881	90.690122	3	0.358792,0.351065,0.352969	
+flex_pbmc	rna	main	local	rds_gz	1	cold	file		auto	32010802	ok	1.642886	1.639838	1.688005	19.484495	3	1.733124,1.642886,1.636790	
+flex_pbmc	rna	main	local	rds_gz	4	cold	file		auto	32010802	ok	1.639551	1.637756	1.685309	19.524125	3	1.731067,1.639551,1.635960	
+flex_pbmc	rna	main	local	rds_gz	4	warm	file		auto	32010802	ok	1.618197	1.616504	1.619369	19.781774	3	1.620541,1.618197,1.614811	
+flex_pbmc	rna	main	local	rds_xz	1	cold	file		auto	32010802	ok	2.154514	2.110442	2.205606	14.857549	3	2.256698,2.154514,2.066369	
+flex_pbmc	rna	main	local	rds_xz	4	cold	file		auto	32010802	ok	2.083107	2.074682	2.123094	15.366856	3	2.163081,2.083107,2.066257	
+flex_pbmc	rna	main	local	rds_xz	4	warm	file		auto	32010802	ok	2.047862	2.040947	2.054816	15.631325	3	2.047862,2.061769,2.034031	
+flex_pbmc	rna	main	local	bpcells	1	cold	file		auto	32010802	ok	3.728446	3.710767	5.483413	8.58556	3	7.238379,3.693087,3.728446	
+flex_pbmc	rna	main	local	bpcells	4	cold	file		auto	32010802	ok	3.811566	3.763733	5.456113	8.398333	3	7.100659,3.715900,3.811566	
+flex_pbmc	rna	main	local	bpcells	4	warm	file		auto	32010802	ok	3.724836	3.712569	3.72839	8.593881	3	3.700302,3.724836,3.731943	
+flex_pbmc	rna	main	local	s1	1	cold	file	native	auto	32010802	ok	0.362549	0.360517	1.286578	88.293765	3	2.210607,0.362549,0.358485	avx2
+flex_pbmc	rna	main	local	s1	1	cold	file	canonical	auto	32010802	ok	0.531488	0.528741	1.224046	60.228601	3	1.916604,0.525993,0.531488	avx2
+flex_pbmc	rna	main	local	s1	4	cold	file	native	auto	32010802	ok	0.128766	0.125414	0.802514	248.596962	3	1.476261,0.128766,0.122063	avx2
+flex_pbmc	rna	main	local	s1	4	cold	file	canonical	auto	32010802	ok	0.169726	0.167338	0.860587	188.602383	3	1.551447,0.169726,0.164950	avx2
+flex_pbmc	rna	main	local	s1	4	warm	file	native	auto	32010802	ok	0.118425	0.117011	0.120348	270.305019	3	0.122272,0.115598,0.118425	avx2
+flex_pbmc	rna	main	local	s1	4	warm	file	canonical	auto	32010802	ok	0.156775	0.155114	0.158486	204.183483	3	0.160198,0.153453,0.156775	avx2
+flex_pbmc	rna	main	local	s1	1	warm	codec	native	scalar	32010802	ok	1.274243	1.27314	1.277474	25.121421	3	1.274243,1.280705,1.272036	scalar
+flex_pbmc	rna	main	local	s1	1	warm	codec	native	avx2	32010802	ok	0.341569	0.340746	0.342588	93.717005	3	0.343608,0.341569,0.339923	avx2
+flex_pbmc	rna	main	local	s1	1	warm	codec	native	avx512	32010802	ok	0.341306	0.340867	0.342356	93.789294	3	0.343406,0.341306,0.340428	avx2
+flex_pbmc	rna	main	local	s1	1	warm	codec	canonical	scalar	32010802	ok	1.441239	1.439319	1.443553	22.210616	3	1.441239,1.437400,1.445867	scalar
+flex_pbmc	rna	main	local	s1	1	warm	codec	canonical	avx2	32010802	ok	0.508007	0.506546	0.509552	63.012534	3	0.505085,0.511097,0.508007	avx2
+flex_pbmc	rna	main	local	s1	1	warm	codec	canonical	avx512	32010802	ok	0.543342	0.53169	0.544262	58.914614	3	0.520037,0.545182,0.543342	avx2
+flex_pbmc	rna	main	local	s1	4	warm	codec	native	scalar	32010802	ok	0.327865	0.327856	0.328731	97.634089	3	0.329597,0.327865,0.327848	scalar
+flex_pbmc	rna	main	local	s1	4	warm	codec	native	avx2	32010802	ok	0.105473	0.105144	0.105605	303.498892	3	0.105737,0.104816,0.105473	avx2
+flex_pbmc	rna	main	local	s1	4	warm	codec	native	avx512	32010802	ok	0.104817	0.104812	0.104909	305.39709	3	0.105002,0.104817,0.104806	avx2
+flex_pbmc	rna	main	local	s1	4	warm	codec	canonical	scalar	32010802	ok	0.368074	0.367924	0.368481	86.968294	3	0.368074,0.367774,0.368888	scalar
+flex_pbmc	rna	main	local	s1	4	warm	codec	canonical	avx2	32010802	ok	0.144043	0.143977	0.144212	222.230431	3	0.144043,0.144380,0.143910	avx2
+flex_pbmc	rna	main	local	s1	4	warm	codec	canonical	avx512	32010802	ok	0.143725	0.143616	0.143971	222.722242	3	0.144218,0.143725,0.143506	avx2
+flex_pbmc	rna	main	local	s1_pack	1	cold	file	native	auto	32010802	ok	0.364692	0.359414	1.033243	87.774998	3	1.701794,0.364692,0.354137	avx2
+flex_pbmc	rna	main	local	s1_pack	1	cold	file	canonical	auto	32010802	ok	0.530672	0.526344	1.191328	60.321218	3	1.851984,0.530672,0.522015	avx2
+flex_pbmc	rna	main	local	s1_pack	4	cold	file	native	auto	32010802	ok	0.128025	0.123902	0.806209	250.035872	3	1.484394,0.128025,0.119779	avx2
+flex_pbmc	rna	main	local	s1_pack	4	cold	file	canonical	auto	32010802	ok	0.169138	0.167492	0.849171	189.258807	3	1.529204,0.169138,0.165846	avx2
+flex_pbmc	rna	main	local	s1_pack	4	warm	file	native	auto	32010802	ok	0.115908	0.115164	0.119599	276.174265	3	0.123290,0.114421,0.115908	avx2
+flex_pbmc	rna	main	local	s1_pack	4	warm	file	canonical	auto	32010802	ok	0.155066	0.154973	0.157122	206.433646	3	0.159179,0.154881,0.155066	avx2
+flex_pbmc	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	32010802	ok	1.262163	1.261188	1.263383	25.361861	3	1.262163,1.264602,1.260214	scalar
+flex_pbmc	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	32010802	ok	0.335638	0.335616	0.335651	95.372997	3	0.335638,0.335594,0.335665	avx2
+flex_pbmc	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	32010802	ok	0.337611	0.337473	0.337686	94.815637	3	0.337761,0.337611,0.337334	avx2
+flex_pbmc	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	32010802	ok	1.424348	1.424146	1.425067	22.474004	3	1.425785,1.423944,1.424348	scalar
+flex_pbmc	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	32010802	ok	0.494861	0.494732	0.495795	64.686451	3	0.494861,0.494603,0.496729	avx2
+flex_pbmc	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	32010802	ok	0.491149	0.491065	0.492101	65.175338	3	0.490982,0.491149,0.493053	avx2
+flex_pbmc	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	32010802	ok	0.316247	0.316242	0.316321	101.220887	3	0.316236,0.316395,0.316247	scalar
+flex_pbmc	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	32010802	ok	0.085209	0.085186	0.085209	375.673955	3	0.085210,0.085163,0.085209	avx2
+flex_pbmc	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	32010802	ok	0.084791	0.084732	0.084847	377.52594	3	0.084902,0.084791,0.084672	avx2
+flex_pbmc	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	32010802	ok	0.357179	0.356982	0.357604	89.621176	3	0.357179,0.356784,0.358030	scalar
+flex_pbmc	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	32010802	ok	0.123456	0.123394	0.12346	259.289156	3	0.123464,0.123332,0.123456	avx2
+flex_pbmc	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	32010802	ok	0.123383	0.123266	0.123479	259.442565	3	0.123574,0.123383,0.123149	avx2

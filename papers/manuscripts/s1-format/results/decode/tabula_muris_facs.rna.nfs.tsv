@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+tabula_muris_facs	rna	main	nfs	csc_i32	4	cold	file		auto	143478092	ok	1.865386	1.860241	1.994481	76.91602	3	2.123576,1.855097,1.865386	
+tabula_muris_facs	rna	main	nfs	mtx_gz	4	cold	file		auto	143478092	ok	14.23608	14.13839	14.254372	10.078483	3	14.272663,14.236080,14.040700	
+tabula_muris_facs	rna	main	nfs	tenx_h5	4	cold	file		auto	143478092	ok	7.338447	7.288124	7.777475	19.551562	3	8.216503,7.338447,7.237802	
+tabula_muris_facs	rna	main	nfs	h5ad_none	4	cold	file		auto	143478092	ok	2.134197	2.134191	3.001259	67.228125	3	3.868321,2.134197,2.134185	
+tabula_muris_facs	rna	main	nfs	h5ad_gzip	4	cold	file		auto	143478092	ok	6.31888	6.318536	6.695454	22.706255	3	7.072028,6.318880,6.318192	
+tabula_muris_facs	rna	main	nfs	h5ad_lzf	4	cold	file		auto	143478092	ok	3.542535	3.511189	4.076339	40.501536	3	4.610144,3.479844,3.542535	
+tabula_muris_facs	rna	main	nfs	zarr	4	cold	file		auto	143478092	ok	2.09143	2.087887	2.392837	68.602869	3	2.694245,2.091430,2.084345	
+tabula_muris_facs	rna	main	nfs	loom	4	cold	file		auto	143478092	ok	63.44221	63.44221	63.44221	2.261556	1	63.442210	
+tabula_muris_facs	rna	main	nfs	soma	4	cold	file		auto	143478092	ok	3.7158	3.61748	4.222032	38.612972	3	4.728265,3.519160,3.715800	
+tabula_muris_facs	rna	main	nfs	parquet_coo	4	cold	file		auto	143478092	ok	7.595464	7.592406	8.116229	18.88997	3	8.636993,7.595464,7.589347	
+tabula_muris_facs	rna	main	nfs	csc_zstd19	4	cold	file		auto	143478092	ok	2.512661	2.46732	2.515825	57.10204	3	2.518988,2.421978,2.512661	
+tabula_muris_facs	rna	main	nfs	rds_gz	4	cold	file		auto	143478092	ok	8.45028	8.450213	8.570509	16.979093	3	8.690738,8.450146,8.450280	
+tabula_muris_facs	rna	main	nfs	rds_xz	4	cold	file		auto	143478092	ok	15.671012	15.663964	15.733963	9.155636	3	15.796914,15.671012,15.656915	
+tabula_muris_facs	rna	main	nfs	bpcells	4	cold	file		auto	143478092	ok	18.362217	18.342546	20.61416	7.813767	3	22.866104,18.362217,18.322875	
+tabula_muris_facs	rna	main	nfs	s1	4	cold	file	native	auto	143478092	ok	1.594985	1.58308	2.37267	89.955773	3	3.150356,1.594985,1.571175	avx2
+tabula_muris_facs	rna	main	nfs	s1	4	cold	file	canonical	auto	143478092	ok	1.709796	1.681868	2.398912	83.915326	3	3.088028,1.709796,1.653940	avx2
+tabula_muris_facs	rna	main	nfs	s1_pack	4	cold	file	native	auto	143478092	ok	1.358724	1.355031	2.123167	105.597693	3	2.887611,1.351338,1.358724	avx2
+tabula_muris_facs	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	143478092	ok	1.654966	1.629948	2.252626	86.695476	3	2.850286,1.654966,1.604929	avx2

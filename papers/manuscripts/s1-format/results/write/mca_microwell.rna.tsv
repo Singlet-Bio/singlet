@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+mca_microwell	rna	h5ad_none	general	266059719	39282	423946	ok	2168634088	65.207438	0	5.818749	4	NA
+mca_microwell	rna	csc_i32	general	266059719	39282	423946	ok	2153699404	64.758376	0	4.585473	4	NA
+mca_microwell	rna	mtx_gz	general	266059719	39282	423946	ok	817156325	24.570614	0	199.694843	4	NA
+mca_microwell	rna	tenx_h5	general	266059719	39282	423946	ok	379907748	11.423232	0	28.177374	4	NA
+mca_microwell	rna	h5ad_gzip	general	266059719	39282	423946	ok	594069107	17.86273	0	39.956112	4	NA
+mca_microwell	rna	h5ad_lzf	general	266059719	39282	423946	ok	1061503394	31.917748	0	8.368271	4	NA
+mca_microwell	rna	zarr	general	266059719	39282	423946	ok	481735174	14.485024	0	10.812764	4	NA
+mca_microwell	rna	loom	general	266059719	39282	423946	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 39282x423946 entries exceeds 2e+09
+mca_microwell	rna	soma	domain	266059719	39282	423946	ok	478857698	14.398503	0	149.166221	4	NA
+mca_microwell	rna	parquet_coo	general	266059719	39282	423946	ok	543394993	16.339038	0	14.068837	4	NA
+mca_microwell	rna	csc_zstd19	general	266059719	39282	423946	ok	311007575	9.351512	0	380.314853	4	NA
+mca_microwell	rna	rds_gz	general	266059719	39282	423946	ok	536571474	16.133866	0	147.011398	4	NA
+mca_microwell	rna	rds_xz	general	266059719	39282	423946	ok	284843384	8.564795	0	1051.523527	4	NA
+mca_microwell	rna	bpcells	domain	266059719	39282	423946	ok	545661238	16.407181	0	15.908134	4	NA
+mca_microwell	rna	s1	s1	266059719	39282	423946	ok	190054802	5.714651	0	31.341184	4	NA
+mca_microwell	rna	s1_pack	s1	266059719	39282	423946	ok	189963567	5.711908	308367	30.034365	4	NA

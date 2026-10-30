@@ -1,0 +1,76 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+hao_citeseq	rna	main	local	csc_i32	1	cold	file		auto	354321830	ok	3.6861	3.671533	4.944883	96.12377	3	3.686100,3.656965,6.203667	
+hao_citeseq	rna	main	local	csc_i32	4	cold	file		auto	354321830	ok	4.515005	4.076095	6.519084	78.476502	3	8.523162,4.515005,3.637184	
+hao_citeseq	rna	main	local	csc_i32	4	warm	file		auto	354321830	ok	1.072275	1.071233	1.07863	330.439445	3	1.084985,1.072275,1.070191	
+hao_citeseq	rna	main	local	mtx_gz	1	cold	file		auto	354321830	ok	49.426214	49.418327	49.51349	7.168703	3	49.600766,49.410439,49.426214	
+hao_citeseq	rna	main	local	mtx_gz	4	cold	file		auto	354321830	ok	27.049268	27.041516	27.067312	13.099128	3	27.085355,27.049268,27.033763	
+hao_citeseq	rna	main	local	mtx_gz	4	warm	file		auto	354321830	ok	26.553576	26.529848	26.753411	13.343658	3	26.506120,26.553576,26.953245	
+hao_citeseq	rna	main	local	tenx_h5	1	cold	file		auto	354321830	ok	13.627446	13.627396	13.673942	26.000604	3	13.720438,13.627446,13.627345	
+hao_citeseq	rna	main	local	tenx_h5	4	cold	file		auto	354321830	ok	13.603006	13.593047	13.628813	26.047318	3	13.654621,13.583089,13.603006	
+hao_citeseq	rna	main	local	tenx_h5	4	warm	file		auto	354321830	ok	13.370592	13.368843	13.374628	26.500085	3	13.367093,13.370592,13.378664	
+hao_citeseq	rna	main	local	h5ad_none	1	cold	file		auto	354321830	ok	4.555834	4.539927	4.936987	77.773209	3	5.318140,4.555834,4.524020	
+hao_citeseq	rna	main	local	h5ad_none	4	cold	file		auto	354321830	ok	4.514214	4.4999	4.860125	78.490257	3	5.206036,4.485585,4.514214	
+hao_citeseq	rna	main	local	h5ad_none	4	warm	file		auto	354321830	ok	1.505699	1.503505	1.511373	235.320457	3	1.517046,1.501310,1.505699	
+hao_citeseq	rna	main	local	h5ad_gzip	1	cold	file		auto	354321830	ok	11.310978	11.3042	11.605219	31.325481	3	11.899461,11.310978,11.297422	
+hao_citeseq	rna	main	local	h5ad_gzip	4	cold	file		auto	354321830	ok	11.291552	11.288596	11.640826	31.379373	3	11.990100,11.285639,11.291552	
+hao_citeseq	rna	main	local	h5ad_gzip	4	warm	file		auto	354321830	ok	10.926569	10.923013	10.928454	32.427546	3	10.930339,10.919457,10.926569	
+hao_citeseq	rna	main	local	h5ad_lzf	1	cold	file		auto	354321830	ok	6.529758	6.521513	6.920116	54.262631	3	7.310474,6.529758,6.513269	
+hao_citeseq	rna	main	local	h5ad_lzf	4	cold	file		auto	354321830	ok	6.477689	6.469763	6.816261	54.698806	3	7.154834,6.477689,6.461838	
+hao_citeseq	rna	main	local	h5ad_lzf	4	warm	file		auto	354321830	ok	5.808319	5.808289	5.809839	61.002472	3	5.808258,5.808319,5.811359	
+hao_citeseq	rna	main	local	zarr	1	cold	file		auto	354321830	ok	3.26921	3.257625	3.548935	108.381471	3	3.828659,3.269210,3.246040	
+hao_citeseq	rna	main	local	zarr	4	cold	file		auto	354321830	ok	2.620991	2.59082	2.872445	135.186218	3	3.123899,2.620991,2.560649	
+hao_citeseq	rna	main	local	zarr	4	warm	file		auto	354321830	ok	1.551196	1.545738	1.55808	228.418543	3	1.551196,1.540280,1.564964	
+hao_citeseq	rna	main	local	soma	1	cold	file		auto	354321830	ok	25.642329	25.497529	25.996787	13.817849	3	26.351246,25.352729,25.642329	
+hao_citeseq	rna	main	local	soma	4	cold	file		auto	354321830	ok	7.761218	7.663529	8.18352	45.652863	3	8.605821,7.565839,7.761218	
+hao_citeseq	rna	main	local	soma	4	warm	file		auto	354321830	ok	7.448475	7.435594	7.807067	47.569717	3	7.422714,7.448475,8.165658	
+hao_citeseq	rna	main	local	parquet_coo	1	cold	file		auto	354321830	ok	11.7278	11.708298	13.125258	30.212131	3	14.522715,11.727800,11.688797	
+hao_citeseq	rna	main	local	parquet_coo	4	cold	file		auto	354321830	ok	8.86133	8.776838	8.86906	39.985177	3	8.876791,8.692347,8.861330	
+hao_citeseq	rna	main	local	parquet_coo	4	warm	file		auto	354321830	ok	7.503526	7.488423	7.527749	47.220709	3	7.473320,7.551973,7.503526	
+hao_citeseq	rna	main	local	csc_zstd19	1	cold	file		auto	354321830	ok	4.37888	4.377695	4.427805	80.916093	3	4.476729,4.376509,4.378880	
+hao_citeseq	rna	main	local	csc_zstd19	4	cold	file		auto	354321830	ok	4.316839	4.314841	4.322057	82.078999	3	4.327275,4.316839,4.312843	
+hao_citeseq	rna	main	local	csc_zstd19	4	warm	file		auto	354321830	ok	4.111209	4.110848	4.126771	86.184338	3	4.142333,4.111209,4.110487	
+hao_citeseq	rna	main	local	rds_gz	1	cold	file		auto	354321830	ok	17.553484	17.542462	17.600263	20.18527	3	17.647042,17.553484,17.531440	
+hao_citeseq	rna	main	local	rds_gz	4	cold	file		auto	354321830	ok	17.575749	17.566494	17.611536	20.1597	3	17.647323,17.575749,17.557239	
+hao_citeseq	rna	main	local	rds_gz	4	warm	file		auto	354321830	ok	17.246011	17.245017	17.247325	20.545147	3	17.244023,17.246011,17.248640	
+hao_citeseq	rna	main	local	rds_xz	1	cold	file		auto	354321830	ok	22.813015	22.801425	22.845599	15.531566	3	22.878183,22.813015,22.789835	
+hao_citeseq	rna	main	local	rds_xz	4	cold	file		auto	354321830	ok	22.877257	22.8569	22.894292	15.487951	3	22.877257,22.836544,22.911327	
+hao_citeseq	rna	main	local	rds_xz	4	warm	file		auto	354321830	ok	22.617999	22.610758	22.626711	15.665481	3	22.603518,22.635424,22.617999	
+hao_citeseq	rna	main	local	bpcells	1	cold	file		auto	354321830	ok	50.810629	50.80007	52.590362	6.97338	3	54.370094,50.810629,50.789510	
+hao_citeseq	rna	main	local	bpcells	4	cold	file		auto	354321830	ok	50.48579	50.433252	52.212973	7.018249	3	53.940156,50.380715,50.485790	
+hao_citeseq	rna	main	local	bpcells	4	warm	file		auto	354321830	ok	50.245398	50.218872	50.296887	7.051827	3	50.192345,50.245398,50.348376	
+hao_citeseq	rna	main	local	s1	1	cold	file	native	auto	354321830	ok	4.052478	4.046981	5.141759	87.433378	3	6.231040,4.052478,4.041484	avx2
+hao_citeseq	rna	main	local	s1	1	cold	file	canonical	auto	354321830	ok	6.308204	6.273589	6.945592	56.168414	3	7.582979,6.308204,6.238975	avx2
+hao_citeseq	rna	main	local	s1	4	cold	file	native	auto	354321830	ok	1.434133	1.431663	2.251027	247.063446	3	3.067921,1.429194,1.434133	avx2
+hao_citeseq	rna	main	local	s1	4	cold	file	canonical	auto	354321830	ok	1.962316	1.953083	2.610319	180.563067	3	3.258322,1.943850,1.962316	avx2
+hao_citeseq	rna	main	local	s1	4	warm	file	native	auto	354321830	ok	1.287857	1.287854	1.292732	275.125118	3	1.287857,1.287851,1.297607	avx2
+hao_citeseq	rna	main	local	s1	4	warm	file	canonical	auto	354321830	ok	1.811385	1.809905	1.822365	195.608186	3	1.811385,1.808425,1.833344	avx2
+hao_citeseq	rna	main	local	s1	1	warm	codec	native	scalar	354321830	ok	12.951727	12.944388	12.979673	27.35711	3	13.007618,12.951727,12.937048	scalar
+hao_citeseq	rna	main	local	s1	1	warm	codec	native	avx2	354321830	ok	3.738466	3.732795	3.759835	94.777341	3	3.727124,3.781205,3.738466	avx2
+hao_citeseq	rna	main	local	s1	1	warm	codec	native	avx512	354321830	ok	3.730929	3.724279	3.749211	94.968794	3	3.717628,3.767494,3.730929	avx2
+hao_citeseq	rna	main	local	s1	1	warm	codec	canonical	scalar	354321830	ok	15.135976	15.132353	15.173232	23.409249	3	15.210487,15.135976,15.128730	scalar
+hao_citeseq	rna	main	local	s1	1	warm	codec	canonical	avx2	354321830	ok	5.95703	5.941745	5.973932	59.479611	3	5.990834,5.926459,5.957030	avx2
+hao_citeseq	rna	main	local	s1	1	warm	codec	canonical	avx512	354321830	ok	5.952062	5.939565	5.970011	59.529258	3	5.987961,5.927069,5.952062	avx2
+hao_citeseq	rna	main	local	s1	4	warm	codec	native	scalar	354321830	ok	3.387392	3.386494	3.395154	104.600195	3	3.385596,3.402916,3.387392	scalar
+hao_citeseq	rna	main	local	s1	4	warm	codec	native	avx2	354321830	ok	1.11564	1.11513	1.123037	317.595038	3	1.115640,1.114619,1.130434	avx2
+hao_citeseq	rna	main	local	s1	4	warm	codec	native	avx512	354321830	ok	1.114006	1.113912	1.122708	318.061089	3	1.113818,1.114006,1.131410	avx2
+hao_citeseq	rna	main	local	s1	4	warm	codec	canonical	scalar	354321830	ok	3.921056	3.919613	3.92998	90.363873	3	3.918169,3.938903,3.921056	scalar
+hao_citeseq	rna	main	local	s1	4	warm	codec	canonical	avx2	354321830	ok	1.650225	1.643846	1.656239	214.711243	3	1.650225,1.637466,1.662254	avx2
+hao_citeseq	rna	main	local	s1	4	warm	codec	canonical	avx512	354321830	ok	1.648902	1.64391	1.654594	214.883491	3	1.648902,1.638917,1.660286	avx2
+hao_citeseq	rna	main	local	s1_pack	1	cold	file	native	auto	354321830	ok	4.1059	4.073595	4.73673	86.295771	3	5.367560,4.041289,4.105900	avx2
+hao_citeseq	rna	main	local	s1_pack	1	cold	file	canonical	auto	354321830	ok	6.326441	6.293168	7.093851	56.006502	3	7.861261,6.326441,6.259895	avx2
+hao_citeseq	rna	main	local	s1_pack	4	cold	file	native	auto	354321830	ok	1.449591	1.441771	2.149616	244.428871	3	2.849640,1.449591,1.433950	avx2
+hao_citeseq	rna	main	local	s1_pack	4	cold	file	canonical	auto	354321830	ok	1.963786	1.955615	2.616763	180.427891	3	3.269739,1.947444,1.963786	avx2
+hao_citeseq	rna	main	local	s1_pack	4	warm	file	native	auto	354321830	ok	1.285019	1.28492	1.291163	275.732695	3	1.284821,1.285019,1.297307	avx2
+hao_citeseq	rna	main	local	s1_pack	4	warm	file	canonical	auto	354321830	ok	1.80851	1.807676	1.82088	195.919225	3	1.806842,1.808510,1.833250	avx2
+hao_citeseq	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	354321830	ok	13.497711	13.485126	13.498486	26.250512	3	13.472541,13.497711,13.499261	scalar
+hao_citeseq	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	354321830	ok	3.733355	3.728908	3.742809	94.907082	3	3.733355,3.752263,3.724460	avx2
+hao_citeseq	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	354321830	ok	3.771279	3.766929	3.781097	93.952696	3	3.771279,3.790915,3.762580	avx2
+hao_citeseq	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	354321830	ok	15.787078	15.771403	15.794804	22.443788	3	15.802530,15.755727,15.787078	scalar
+hao_citeseq	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	354321830	ok	5.999624	5.999385	6.011566	59.057339	3	6.023509,5.999624,5.999147	avx2
+hao_citeseq	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	354321830	ok	6.052883	6.052387	6.067397	58.537697	3	6.081911,6.051891,6.052883	avx2
+hao_citeseq	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	354321830	ok	3.369047	3.366061	3.370598	105.16975	3	3.372148,3.363076,3.369047	scalar
+hao_citeseq	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	354321830	ok	0.928268	0.928246	0.928319	381.702084	3	0.928268,0.928369,0.928223	avx2
+hao_citeseq	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	354321830	ok	0.932194	0.932138	0.932443	380.094519	3	0.932693,0.932194,0.932081	avx2
+hao_citeseq	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	354321830	ok	3.976004	3.972057	3.976989	89.115059	3	3.968110,3.977974,3.976004	scalar
+hao_citeseq	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	354321830	ok	1.519388	1.516661	1.531067	233.200361	3	1.542745,1.513934,1.519388	avx2
+hao_citeseq	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	354321830	ok	1.517366	1.514244	1.531289	233.511117	3	1.545211,1.511122,1.517366	avx2

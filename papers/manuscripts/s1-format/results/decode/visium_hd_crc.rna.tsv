@@ -1,0 +1,76 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+visium_hd_crc	rna	main	local	csc_i32	1	cold	file		auto	214633705	ok	1.75808	1.756009	1.764346	122.084118	3	1.770611,1.758080,1.753938	
+visium_hd_crc	rna	main	local	csc_i32	4	cold	file		auto	214633705	ok	1.764167	1.763662	1.772519	121.662938	3	1.780871,1.763158,1.764167	
+visium_hd_crc	rna	main	local	csc_i32	4	warm	file		auto	214633705	ok	0.628361	0.627978	0.631572	341.577094	3	0.634784,0.627596,0.628361	
+visium_hd_crc	rna	main	local	mtx_gz	1	cold	file		auto	214633705	ok	29.225444	29.168812	29.518075	7.34407	3	29.810706,29.225444,29.112180	
+visium_hd_crc	rna	main	local	mtx_gz	4	cold	file		auto	214633705	ok	16.61739	16.539443	16.666961	12.916211	3	16.716533,16.617390,16.461496	
+visium_hd_crc	rna	main	local	mtx_gz	4	warm	file		auto	214633705	ok	16.408803	16.365314	16.410938	13.0804	3	16.408803,16.321825,16.413074	
+visium_hd_crc	rna	main	local	tenx_h5	1	cold	file		auto	214633705	ok	7.868085	7.865968	8.022079	27.279026	3	8.176072,7.863851,7.868085	
+visium_hd_crc	rna	main	local	tenx_h5	4	cold	file		auto	214633705	ok	7.87931	7.871665	7.903736	27.240166	3	7.928162,7.864020,7.879310	
+visium_hd_crc	rna	main	local	tenx_h5	4	warm	file		auto	214633705	ok	7.726144	7.723692	7.729772	27.780184	3	7.726144,7.733400,7.721241	
+visium_hd_crc	rna	main	local	h5ad_none	1	cold	file		auto	214633705	ok	2.885658	2.87953	3.289972	74.379475	3	3.694286,2.873402,2.885658	
+visium_hd_crc	rna	main	local	h5ad_none	4	cold	file		auto	214633705	ok	2.884464	2.878995	3.15826	74.410248	3	3.432055,2.873526,2.884464	
+visium_hd_crc	rna	main	local	h5ad_none	4	warm	file		auto	214633705	ok	1.162021	1.151927	1.16518	184.707327	3	1.162021,1.141833,1.168340	
+visium_hd_crc	rna	main	local	h5ad_gzip	1	cold	file		auto	214633705	ok	7.123335	7.023198	7.296597	30.131069	3	7.469859,6.923061,7.123335	
+visium_hd_crc	rna	main	local	h5ad_gzip	4	cold	file		auto	214633705	ok	6.901334	6.901036	7.186273	31.100321	3	7.471213,6.901334,6.900739	
+visium_hd_crc	rna	main	local	h5ad_gzip	4	warm	file		auto	214633705	ok	6.578443	6.576645	6.585998	32.626826	3	6.593552,6.578443,6.574847	
+visium_hd_crc	rna	main	local	h5ad_lzf	1	cold	file		auto	214633705	ok	4.010346	3.971757	4.20754	53.520001	3	4.404733,3.933169,4.010346	
+visium_hd_crc	rna	main	local	h5ad_lzf	4	cold	file		auto	214633705	ok	3.864507	3.858245	4.136786	55.539737	3	4.409065,3.851984,3.864507	
+visium_hd_crc	rna	main	local	h5ad_lzf	4	warm	file		auto	214633705	ok	3.439235	3.4382	3.44351	62.4074	3	3.437166,3.447786,3.439235	
+visium_hd_crc	rna	main	local	zarr	1	cold	file		auto	214633705	ok	2.257808	2.253426	2.55739	95.062859	3	2.856972,2.249045,2.257808	
+visium_hd_crc	rna	main	local	zarr	4	cold	file		auto	214633705	ok	1.978294	1.976121	2.210357	108.494335	3	2.442420,1.973948,1.978294	
+visium_hd_crc	rna	main	local	zarr	4	warm	file		auto	214633705	ok	1.264653	1.260937	1.265868	169.717531	3	1.257222,1.267083,1.264653	
+visium_hd_crc	rna	main	local	soma	1	cold	file		auto	214633705	ok	15.512791	15.459036	16.007464	13.835918	3	16.502137,15.405280,15.512791	
+visium_hd_crc	rna	main	local	soma	4	cold	file		auto	214633705	ok	5.256811	5.057347	5.369965	40.829638	3	5.483119,5.256811,4.857884	
+visium_hd_crc	rna	main	local	soma	4	warm	file		auto	214633705	ok	5.134376	5.109559	5.178792	41.803272	3	5.084742,5.223207,5.134376	
+visium_hd_crc	rna	main	local	parquet_coo	1	cold	file		auto	214633705	ok	7.296327	7.271847	7.539558	29.41668	3	7.782790,7.296327,7.247368	
+visium_hd_crc	rna	main	local	parquet_coo	4	cold	file		auto	214633705	ok	5.76018	5.747194	5.855143	37.261631	3	5.734209,5.760180,5.950105	
+visium_hd_crc	rna	main	local	parquet_coo	4	warm	file		auto	214633705	ok	5.133853	4.985969	5.151329	41.807531	3	5.168805,5.133853,4.838086	
+visium_hd_crc	rna	main	local	csc_zstd19	1	cold	file		auto	214633705	ok	3.330662	3.32678	3.338255	64.441757	3	3.345849,3.322898,3.330662	
+visium_hd_crc	rna	main	local	csc_zstd19	4	cold	file		auto	214633705	ok	3.265187	3.256398	3.269001	65.733969	3	3.272814,3.247608,3.265187	
+visium_hd_crc	rna	main	local	csc_zstd19	4	warm	file		auto	214633705	ok	3.135376	3.135014	3.136404	68.455481	3	3.137431,3.135376,3.134651	
+visium_hd_crc	rna	main	local	rds_gz	1	cold	file		auto	214633705	ok	10.716834	10.644545	10.770612	20.027715	3	10.716834,10.824389,10.572256	
+visium_hd_crc	rna	main	local	rds_gz	4	cold	file		auto	214633705	ok	10.591146	10.587369	10.666083	20.265391	3	10.741020,10.591146,10.583592	
+visium_hd_crc	rna	main	local	rds_gz	4	warm	file		auto	214633705	ok	10.413405	10.411372	10.477121	20.61129	3	10.540837,10.409338,10.413405	
+visium_hd_crc	rna	main	local	rds_xz	1	cold	file		auto	214633705	ok	16.807976	16.687637	16.815523	12.769753	3	16.807976,16.823071,16.567297	
+visium_hd_crc	rna	main	local	rds_xz	4	cold	file		auto	214633705	ok	16.593062	16.585618	16.666116	12.935148	3	16.739170,16.593062,16.578175	
+visium_hd_crc	rna	main	local	rds_xz	4	warm	file		auto	214633705	ok	16.346278	16.33988	16.46335	13.130433	3	16.346278,16.580423,16.333481	
+visium_hd_crc	rna	main	local	bpcells	1	cold	file		auto	214633705	ok	37.560863	37.418882	39.408754	5.714291	3	41.256645,37.276901,37.560863	
+visium_hd_crc	rna	main	local	bpcells	4	cold	file		auto	214633705	ok	37.518838	37.424809	39.557563	5.720692	3	41.596287,37.518838,37.330780	
+visium_hd_crc	rna	main	local	bpcells	4	warm	file		auto	214633705	ok	37.160428	37.145007	37.261762	5.775867	3	37.363095,37.160428,37.129587	
+visium_hd_crc	rna	main	local	s1	1	cold	file	native	auto	214633705	ok	2.633635	2.605389	3.564814	81.497147	3	4.495993,2.577144,2.633635	avx2
+visium_hd_crc	rna	main	local	s1	1	cold	file	canonical	auto	214633705	ok	4.247572	4.219271	4.973284	50.530918	3	5.698996,4.247572,4.190970	avx2
+visium_hd_crc	rna	main	local	s1	4	cold	file	native	auto	214633705	ok	0.993675	0.991062	1.830236	215.999975	3	2.666798,0.988448,0.993675	avx2
+visium_hd_crc	rna	main	local	s1	4	cold	file	canonical	auto	214633705	ok	1.457635	1.426407	2.244307	147.247877	3	3.030978,1.395179,1.457635	avx2
+visium_hd_crc	rna	main	local	s1	4	warm	file	native	auto	214633705	ok	0.886208	0.885811	0.886852	242.193487	3	0.885415,0.886208,0.887497	avx2
+visium_hd_crc	rna	main	local	s1	4	warm	file	canonical	auto	214633705	ok	1.263727	1.261761	1.269639	169.841825	3	1.259796,1.263727,1.275552	avx2
+visium_hd_crc	rna	main	local	s1	1	warm	codec	native	scalar	214633705	ok	6.430538	6.41785	6.500448	33.377255	3	6.405163,6.430538,6.570357	scalar
+visium_hd_crc	rna	main	local	s1	1	warm	codec	native	avx2	214633705	ok	2.295835	2.274798	2.319347	93.488307	3	2.253761,2.342859,2.295835	avx2
+visium_hd_crc	rna	main	local	s1	1	warm	codec	native	avx512	214633705	ok	2.295328	2.266718	2.323471	93.508946	3	2.238108,2.351613,2.295328	avx2
+visium_hd_crc	rna	main	local	s1	1	warm	codec	canonical	scalar	214633705	ok	8.142742	8.111388	8.244071	26.358896	3	8.080035,8.142742,8.345400	scalar
+visium_hd_crc	rna	main	local	s1	1	warm	codec	canonical	avx2	214633705	ok	3.922432	3.905238	3.928696	54.719549	3	3.934959,3.922432,3.888045	avx2
+visium_hd_crc	rna	main	local	s1	1	warm	codec	canonical	avx512	214633705	ok	3.925674	3.908505	3.929889	54.67436	3	3.934104,3.925674,3.891337	avx2
+visium_hd_crc	rna	main	local	s1	4	warm	codec	native	scalar	214633705	ok	1.695162	1.688251	1.707104	126.61549	3	1.681341,1.719047,1.695162	scalar
+visium_hd_crc	rna	main	local	s1	4	warm	codec	native	avx2	214633705	ok	0.682078	0.67966	0.682723	314.67616	3	0.683368,0.677243,0.682078	avx2
+visium_hd_crc	rna	main	local	s1	4	warm	codec	native	avx512	214633705	ok	0.671934	0.671868	0.672183	319.426697	3	0.671802,0.672432,0.671934	avx2
+visium_hd_crc	rna	main	local	s1	4	warm	codec	canonical	scalar	214633705	ok	2.095983	2.08647	2.109418	102.4024	3	2.076957,2.122853,2.095983	scalar
+visium_hd_crc	rna	main	local	s1	4	warm	codec	canonical	avx2	214633705	ok	1.058377	1.057779	1.065735	202.795073	3	1.058377,1.057180,1.073092	avx2
+visium_hd_crc	rna	main	local	s1	4	warm	codec	canonical	avx512	214633705	ok	1.053954	1.053418	1.061877	203.646198	3	1.053954,1.052882,1.069801	avx2
+visium_hd_crc	rna	main	local	s1_pack	1	cold	file	native	auto	214633705	ok	2.67035	2.640681	3.280485	80.376618	3	3.890619,2.611012,2.670350	avx2
+visium_hd_crc	rna	main	local	s1_pack	1	cold	file	canonical	auto	214633705	ok	4.32008	4.293595	5.109638	49.682804	3	5.899195,4.320080,4.267110	avx2
+visium_hd_crc	rna	main	local	s1_pack	4	cold	file	native	auto	214633705	ok	1.021568	1.018696	1.673333	210.102304	3	2.325099,1.021568,1.015824	avx2
+visium_hd_crc	rna	main	local	s1_pack	4	cold	file	canonical	auto	214633705	ok	1.431012	1.421657	2.063044	149.987362	3	2.695076,1.431012,1.412302	avx2
+visium_hd_crc	rna	main	local	s1_pack	4	warm	file	native	auto	214633705	ok	0.901836	0.898638	0.904821	237.996362	3	0.901836,0.907805,0.895440	avx2
+visium_hd_crc	rna	main	local	s1_pack	4	warm	file	canonical	auto	214633705	ok	1.260805	1.25912	1.266855	170.235416	3	1.257434,1.260805,1.272904	avx2
+visium_hd_crc	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	214633705	ok	6.614189	6.613084	6.620341	32.450495	3	6.611979,6.614189,6.626493	scalar
+visium_hd_crc	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	214633705	ok	2.116118	2.115598	2.121942	101.428042	3	2.116118,2.115079,2.127766	avx2
+visium_hd_crc	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	214633705	ok	2.174366	2.173896	2.180169	98.710937	3	2.173426,2.185972,2.174366	avx2
+visium_hd_crc	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	214633705	ok	8.344934	8.34452	8.351109	25.72024	3	8.344934,8.344106,8.357285	scalar
+visium_hd_crc	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	214633705	ok	3.845404	3.845332	3.852848	55.815645	3	3.860293,3.845260,3.845404	avx2
+visium_hd_crc	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	214633705	ok	3.853682	3.846893	3.955458	55.695749	3	3.853682,3.840103,4.057233	avx2
+visium_hd_crc	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	214633705	ok	1.696843	1.686559	1.70388	126.49002	3	1.696843,1.710918,1.676275	scalar
+visium_hd_crc	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	214633705	ok	0.543305	0.543235	0.543332	395.05196	3	0.543305,0.543359,0.543164	avx2
+visium_hd_crc	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	214633705	ok	0.551723	0.547627	0.551767	389.024393	3	0.551723,0.543532,0.551811	avx2
+visium_hd_crc	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	214633705	ok	2.173752	2.15702	2.179531	98.738819	3	2.185309,2.140288,2.173752	scalar
+visium_hd_crc	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	214633705	ok	0.980248	0.980131	0.980333	218.958575	3	0.980418,0.980248,0.980014	avx2
+visium_hd_crc	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	214633705	ok	0.978799	0.978764	0.978813	219.282718	3	0.978799,0.978827,0.978729	avx2

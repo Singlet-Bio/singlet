@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+tasic_cortex	rna	main	nfs	csc_i32	4	cold	file		auto	214290227	ok	1.383391	1.345773	1.389665	154.902108	3	1.383391,1.395939,1.308155	
+tasic_cortex	rna	main	nfs	mtx_gz	4	cold	file		auto	214290227	ok	18.316843	18.187189	18.328732	11.699081	3	18.340621,18.316843,18.057535	
+tasic_cortex	rna	main	nfs	tenx_h5	4	cold	file		auto	214290227	ok	8.703795	8.70031	8.729996	24.620322	3	8.756198,8.703795,8.696826	
+tasic_cortex	rna	main	nfs	h5ad_none	4	cold	file		auto	214290227	ok	1.927203	1.923291	2.336193	111.192334	3	2.745183,1.919378,1.927203	
+tasic_cortex	rna	main	nfs	h5ad_gzip	4	cold	file		auto	214290227	ok	7.171314	7.163718	7.44133	29.881586	3	7.711347,7.171314,7.156121	
+tasic_cortex	rna	main	nfs	h5ad_lzf	4	cold	file		auto	214290227	ok	3.886475	3.885746	4.16577	55.137428	3	4.445066,3.885016,3.886475	
+tasic_cortex	rna	main	nfs	zarr	4	cold	file		auto	214290227	ok	1.731506	1.715111	2.010088	123.759481	3	2.288670,1.731506,1.698717	
+tasic_cortex	rna	main	nfs	loom	4	cold	file		auto	214290227	ok	36.408533	36.351486	37.731322	5.885714	3	39.054110,36.408533,36.294440	
+tasic_cortex	rna	main	nfs	soma	4	cold	file		auto	214290227	ok	4.605469	4.529355	5.19348	46.529511	3	5.781490,4.605469,4.453242	
+tasic_cortex	rna	main	nfs	parquet_coo	4	cold	file		auto	214290227	ok	5.095374	5.018277	5.143126	42.055843	3	5.190878,4.941181,5.095374	
+tasic_cortex	rna	main	nfs	csc_zstd19	4	cold	file		auto	214290227	ok	3.031084	3.030403	3.059817	70.697566	3	3.088550,3.031084,3.029722	
+tasic_cortex	rna	main	nfs	rds_gz	4	cold	file		auto	214290227	ok	12.562323	12.5604	12.611802	17.058169	3	12.661282,12.562323,12.558477	
+tasic_cortex	rna	main	nfs	rds_xz	4	cold	file		auto	214290227	ok	18.403629	18.37038	18.487625	11.643912	3	18.403629,18.337132,18.571622	
+tasic_cortex	rna	main	nfs	bpcells	4	cold	file		auto	214290227	ok	25.729813	25.728474	27.465691	8.32848	3	29.201569,25.727136,25.729813	
+tasic_cortex	rna	main	nfs	s1	4	cold	file	native	auto	214290227	ok	0.979316	0.976913	1.908557	218.816292	3	2.837799,0.974511,0.979316	avx2
+tasic_cortex	rna	main	nfs	s1	4	cold	file	canonical	auto	214290227	ok	1.250775	1.250452	1.903284	171.326006	3	2.555792,1.250129,1.250775	avx2
+tasic_cortex	rna	main	nfs	s1_pack	4	cold	file	native	auto	214290227	ok	0.974176	0.97166	1.633263	219.970845	3	2.292350,0.969145,0.974176	avx2
+tasic_cortex	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	214290227	ok	1.243056	1.241039	1.906047	172.389801	3	2.569038,1.243056,1.239022	avx2
