@@ -4,6 +4,19 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-10-30: the streaming loader at network speed
+
+- **`S1Stream` / `S1Cells` read at network speed.** On a 1 Gbit/s object store with 1 ms latency (hlca_core, 512-cell
+  batches, 4 cores), sustained throughput went from 11,000 to 60,000 cells/s, which fills about 83% of the link.
+  - A batch's runs of cells are decoded by one C++ call, `singlet._pz2.Member.decode_batch` (the GIL released, runs in
+    parallel), straight into the arrays of the tensor. Python only plans and sends the requests.
+  - Fetched bytes are used for that batch and dropped. Memory no longer grows over an epoch, and range lookups no longer slow down.
+  - HTTP ranges go through `urllib3`. `requests` capped a batch at about 0.25 Gbit/s.
+  - `S1Stream.iter_batches(batches, ahead=1)` keeps the next batches' requests in flight while one decodes. `S1Cells`
+    uses it in place of the read-ahead thread.
+  - Opening reads 256 KiB once, which holds the matrix prefix of most objects, so it is one round trip. There is no
+    separate size probe.
+
 ## [1.3.1] — 2026-10-30: `.s1` for your own counts, streaming loader
 
 - **`S1Stream` / `S1Cells` send a batch's range requests together** (`io_threads`). `"auto"` means 8 for an HTTP URL and

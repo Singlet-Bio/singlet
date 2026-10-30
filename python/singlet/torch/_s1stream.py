@@ -13,8 +13,12 @@ one at a time). These threads wait on the network; decoding uses the separate ``
 :class:`S1Cells` is an ``IterableDataset`` over an epoch of such batches. Cells are grouped in blocks of ``block_size``
 contiguous cells (the block shuffling of scDataset: random enough for SGD, and every block is one contiguous range of the
 file); each epoch shuffles the blocks and deals ``batch_size // block_size`` of them to each batch. With several DataLoader
-workers each worker opens the object itself and takes every n-th batch. ``prefetch`` batches are read ahead on a background
-thread, so fetching and decoding the next batch overlaps with the work on the current one.
+workers each worker opens the object itself and takes every n-th batch. The requests of the next ``prefetch`` batches are in
+flight while a batch decodes, so the network and the decoder work at the same time.
+
+The Python layer only plans and sends requests: a batch's runs of cells are decoded by one C++ call
+(``singlet._pz2.Member.decode_batch``, the GIL released) straight into the arrays of the tensor, and the fetched bytes are not
+kept after it.
 
 Gene order: ``order="native"`` returns the genes in the stored order (genes sorted by how many cells express them, which the
 codec uses), and :attr:`S1Stream.gene_names` / :attr:`S1Stream.gene_order` give that order once, so a model can permute its
@@ -77,54 +81,56 @@ def file_fetch(path: Union[str, os.PathLike]) -> tuple[Fetch, int]:
     return fetch, size
 
 
-def http_fetch(url: str, session=None, retries: int = 3) -> tuple[Fetch, int]:
-    """A ``fetch(offset, length)`` doing HTTP Range requests on ``url``, and the object's size. Safe from several threads:
-    each thread keeps its own connection (unless a ``session`` is given, which is then shared)."""
-    import requests
+def http_fetch(
+    url: str, session=None, retries: int = 3, pool_size: int = 8
+) -> tuple[Fetch, Optional[int]]:
+    """A ``fetch(offset, length)`` doing HTTP Range requests on ``url``, safe from several threads (one ``urllib3`` pool of
+    ``pool_size`` connections, or the ``urllib3.PoolManager`` given as ``session``). No request is made here: the object's
+    size is not needed, and the first fetch (the reader's prefix) is the first round trip. Every response must carry a
+    ``Content-Range`` naming exactly the slice asked for (a slice that runs past the end of the object is cut there); a
+    server that ignores ``Range`` raises ``ValueError``."""
+    import urllib3
 
-    local = threading.local()
+    pool = (
+        session
+        if session is not None
+        else urllib3.PoolManager(maxsize=max(1, int(pool_size)), retries=False)
+    )
+    timeout = urllib3.Timeout(connect=30, read=60)
 
-    def sess():
-        if session is not None:
-            return session
-        if not hasattr(local, "s"):
-            local.s = requests.Session()
-        return local.s
-
-    def get(headers: dict):
+    def get(off: int, ln: int):
         for attempt in range(retries + 1):
             try:
-                r = sess().get(url, headers=headers, timeout=60)
-                if r.status_code in (200, 206):
-                    return r
-                if r.status_code < 500 or attempt == retries:
-                    r.raise_for_status()
-            except (requests.ConnectionError, requests.Timeout):
+                r = pool.request(
+                    "GET", url, headers={"Range": f"bytes={off}-{off + ln - 1}"}, timeout=timeout
+                )
+            except urllib3.exceptions.HTTPError:  # connection refused or reset, timeout
                 if attempt == retries:
                     raise
+            else:
+                if r.status in (200, 206):
+                    return r
+                if r.status < 500 or attempt == retries:
+                    raise IOError(f"HTTP {r.status} for {url} (bytes {off}-{off + ln - 1})")
             time.sleep(0.5 * 2**attempt)
         raise RuntimeError("unreachable")
 
-    def ranged(r, a: int, b: int) -> Optional[int]:
-        """The object size if ``r`` answers bytes a-b with exactly that slice, else None. A Content-Range naming the slice is
-        what counts, not the status: some servers (``rclone serve s3``) send the slice with 200 instead of 206, while one
-        that ignores Range sends the whole object without Content-Range."""
-        m = _CONTENT_RANGE.match(r.headers.get("Content-Range", ""))
-        if not m or (int(m.group(1)), int(m.group(2))) != (a, b) or len(r.content) != b - a + 1:
-            return None
-        return None if m.group(3) == "*" else int(m.group(3))
-
-    size = ranged(get({"Range": "bytes=0-0"}), 0, 0)
-    if size is None:
-        raise ValueError(f"{url} does not serve byte ranges")
-
     def fetch(off: int, ln: int) -> bytes:
-        r = get({"Range": f"bytes={off}-{off + ln - 1}"})
-        if ranged(r, off, off + ln - 1) is None:
+        r = get(off, ln)
+        # A Content-Range naming the slice is what counts, not the status: some servers (rclone serve s3) send the slice with
+        # 200 instead of 206, while one that ignores Range sends the whole object without Content-Range.
+        m = _CONTENT_RANGE.match(r.headers.get("Content-Range", ""))
+        if not m:
+            raise ValueError(f"{url} does not serve byte ranges")
+        a, b, total = int(m.group(1)), int(m.group(2)), m.group(3)
+        end = off + ln - 1
+        if total != "*" and end >= int(total):  # asked past the end of the object
+            end = int(total) - 1
+        if (a, b) != (off, end) or len(r.data) != end - off + 1:
             raise IOError(f"short range read of {url} at {off} (+{ln})")
-        return r.content
+        return r.data
 
-    return fetch, size
+    return fetch, None
 
 
 def _io_threads(io_threads: Union[int, str], source: Source) -> int:
@@ -137,12 +143,12 @@ def _io_threads(io_threads: Union[int, str], source: Source) -> int:
     return n
 
 
-def _open_source(source: Source) -> tuple[Fetch, Optional[int]]:
+def _open_source(source: Source, pool_size: int = 8) -> tuple[Fetch, Optional[int]]:
     if callable(source):
         return source, None
     s = str(source)
     if s.startswith(("http://", "https://")):
-        return http_fetch(s)
+        return http_fetch(s, pool_size=pool_size)
     return file_fetch(os.path.expanduser(s))
 
 
@@ -216,7 +222,8 @@ class S1Stream:
     order
         ``"native"`` (stored gene order, see :attr:`gene_order`) or ``"canonical"`` (source gene order).
     size, prefix_hint
-        Object size if known, and the bytes read by the first request (header, member table, matrix prefix).
+        Object size if known, and the bytes read by the first request (header, member table, matrix prefix; 256 KiB holds the
+        prefix of most matrices, so opening costs one round trip).
     io_threads
         Range requests of one batch sent together: ``"auto"`` (8 for an HTTP URL, 1 for a local file or a callable) or a
         number; 1 sends them one at a time. A callable ``source`` must be safe to call from that many threads.
@@ -230,7 +237,7 @@ class S1Stream:
         threads: int = 4,
         order: str = "native",
         size: Optional[int] = None,
-        prefix_hint: int = 1 << 16,
+        prefix_hint: int = 1 << 18,
         io_threads: Union[int, str] = "auto",
     ):
         from singlet import _pz2  # type: ignore
@@ -238,17 +245,21 @@ class S1Stream:
 
         if order not in ("native", "canonical"):
             raise ValueError("order must be 'native' or 'canonical'")
-        fetch, known = _open_source(source)
+        self.io_threads = _io_threads(io_threads, source)
+        fetch, known = _open_source(source, pool_size=max(8, self.io_threads))
         self.reader = S2Reader(
             fetch, size=size if size is not None else known, prefetch=prefix_hint
         )
         if member not in self.reader.members:
             raise KeyError(f"no member {member!r} (members: {', '.join(self.reader.members)})")
         self.member, self.threads, self.order = member, int(threads), order
-        self.io_threads = _io_threads(io_threads, source)
         self._pool = None  # a ThreadPoolExecutor of io_threads workers, made on the first batch that needs it
+        # the member's first read is what the object's first read already holds of it (no request), when that is more than
+        # its 256-byte header; the opener fetches the rest of the prefix only if the matrix prefix runs past it
+        in_head = len(getattr(self.reader, "_head", b"")) - self.reader.members[member].off
         self.mem = _pz2.Member(
-            fetch=lambda off, ln: self.reader.read_range(member, off, ln), prefix_hint=prefix_hint
+            fetch=lambda off, ln: self.reader.read_range(member, off, ln),
+            prefix_hint=min(prefix_hint, in_head) if in_head > 256 else prefix_hint,
         )
         self.n_genes, self.n_cells = int(self.mem.m), int(self.mem.n)
         perm = self.mem.row_perm
@@ -299,37 +310,46 @@ class S1Stream:
         return self.reader.n_requests
 
     # ------------------------------------------------------------------ reading
-    def _fetch_ranges(self, ranges: list[Block]) -> None:
-        """Fetch the member bytes of every cell range, all requests at once on ``io_threads`` threads, and register them."""
-        want = {}
+    # A batch is planned (its runs of touching blocks, and the one member byte range each run needs), fetched (all of its
+    # requests at once on the io_threads pool), and decoded in one C++ call that writes every run straight into one CSR.
+    # The fetched bytes serve that call only; nothing is kept between batches.
+    def _plan(self, blocks: Iterable[Block]) -> tuple[list[Block], list[tuple[int, int]]]:
+        ranges = []
+        for c0, c1 in merge_blocks(blocks):
+            if not 0 <= c0 <= c1 <= self.n_cells:
+                raise IndexError(f"cells [{c0}, {c1}) outside [0, {self.n_cells})")
+            if c0 < c1:
+                ranges.append((int(c0), int(c1)))
+        spans = []
         for c0, c1 in ranges:
             p = self.mem.plan(c0, c1)
-            off, ln = int(p["byte_off"]), int(p["byte_len"])
-            if ln and not self.mem.has(off, ln):
-                want[(off, ln)] = None
-        t0 = time.perf_counter()
-        keys = list(want)
-        if self.io_threads > 1 and len(keys) > 1:
-            if self._pool is None:
-                from concurrent.futures import ThreadPoolExecutor
+            spans.append((int(p["byte_off"]), int(p["byte_len"])))
+        return ranges, spans
 
-                self._pool = ThreadPoolExecutor(self.io_threads, thread_name_prefix="s1-io")
-            bufs = list(
-                self._pool.map(lambda k: self.reader.read_range(self.member, k[0], k[1]), keys)
-            )
-        else:
-            bufs = [self.reader.read_range(self.member, off, ln) for off, ln in keys]
-        self.fetch_s += time.perf_counter() - t0
-        for (off, _), buf in zip(keys, bufs):
-            self.mem.add_range(off, buf)
+    def _get(self, span: tuple[int, int]) -> bytes:
+        off, ln = span
+        return self.reader.read_range(self.member, off, ln) if ln else b""
 
-    def _decode(self, c0: int, c1: int) -> dict:
+    def _fetch_all(self, spans: list[tuple[int, int]]) -> list:
+        """Start fetching every span (futures), or fetch them here one at a time when io_threads is 1 and nothing runs ahead."""
+        if self._pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+
+            self._pool = ThreadPoolExecutor(self.io_threads, thread_name_prefix="s1-io")
+        return [self._pool.submit(self._get, s) for s in spans]
+
+    def _decode_batch(
+        self, ranges: list[Block], futures: list
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         t0 = time.perf_counter()
-        d = self.mem.decode(
-            c0, c1, mode=self.order, threads=self.threads, dtype="float32", index_dtype="int32"
+        bufs = [f.result() for f in futures]  # waits for the batch's bytes
+        t1 = time.perf_counter()
+        ip, idx, val = self.mem.decode_batch(
+            ranges, bufs, mode=self.order, threads=self.threads, dtype="float32"
         )
-        self.decode_s += time.perf_counter() - t0
-        return d
+        self.fetch_s += t1 - t0
+        self.decode_s += time.perf_counter() - t1
+        return ip, idx, val
 
     def close(self) -> None:
         """Stop the request threads (the stream can still be used; they are made again when needed)."""
@@ -338,45 +358,58 @@ class S1Stream:
             self._pool = None
 
     def batch_arrays(self, blocks: Iterable[Block]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """CSR ``(indptr int64, indices int32, data float32)`` of the cells in ``blocks``, in the given order."""
-        ptrs, idx, val = [np.zeros(1, dtype=np.int64)], [], []
-        base = 0
-        ranges = []
-        for c0, c1 in merge_blocks(blocks):
-            if not 0 <= c0 <= c1 <= self.n_cells:
-                raise IndexError(f"cells [{c0}, {c1}) outside [0, {self.n_cells})")
-            if c0 < c1:
-                ranges.append((int(c0), int(c1)))
-        self._fetch_ranges(ranges)
-        for c0, c1 in ranges:
-            d = self._decode(c0, c1)
-            ip = np.asarray(d["indptr"], dtype=np.int64)
-            ptrs.append(ip[1:] + base)
-            base += int(ip[-1])
-            idx.append(np.asarray(d["indices"]))
-            val.append(np.asarray(d["data"], dtype=np.float32))
-        indptr = np.concatenate(ptrs)
-        indices = np.concatenate(idx) if idx else np.zeros(0, dtype=np.int32)
-        data = np.concatenate(val) if val else np.zeros(0, dtype=np.float32)
-        return indptr, indices, data
+        """CSR ``(indptr, indices int32, data float32)`` of the cells in ``blocks``, in the given order (indptr is int32 unless
+        the batch holds 2^31 non-zeros or more)."""
+        ranges, spans = self._plan(blocks)
+        return self._decode_batch(ranges, self._fetch_all(spans))
+
+    def _tensor(self, ip: np.ndarray, idx: np.ndarray, val: np.ndarray):
+        import torch
+
+        it = (
+            np.int32 if ip[-1] < 2**31 else np.int64
+        )  # torch wants crow and col indices in one dtype
+        return torch.sparse_csr_tensor(
+            torch.from_numpy(ip.astype(it, copy=False)),
+            torch.from_numpy(idx.astype(it, copy=False)),
+            torch.from_numpy(val),
+            size=(len(ip) - 1, self.n_genes),
+            check_invariants=False,
+        )
+
+    def iter_batches(self, batches: Iterable[Iterable[Block]], ahead: int = 1) -> Iterator:
+        """``batch(b)`` for each b of ``batches``, with the requests of the next ``ahead`` batches already in flight while a
+        batch decodes, so the network and the decoder work at the same time (``ahead=0``: one batch at a time)."""
+        if ahead < 0:
+            raise ValueError("ahead must be 0 or more")
+        from collections import deque
+
+        todo = iter(batches)
+        flight: deque = deque()
+
+        def launch() -> bool:
+            b = next(todo, None)
+            if b is None:
+                return False
+            ranges, spans = self._plan(b)
+            flight.append((ranges, self._fetch_all(spans)))
+            return True
+
+        for _ in range(ahead + 1):
+            if not launch():
+                break
+        while flight:
+            ranges, futs = flight.popleft()
+            if ahead:
+                launch()  # the next batch's requests go out before this one decodes
+            out = self._tensor(*self._decode_batch(ranges, futs))
+            if not ahead:
+                launch()
+            yield out
 
     def batch(self, blocks: Iterable[Block]):
         """The cells of ``blocks`` (``(c0, c1)`` ranges, concatenated in order) as a cells x genes ``torch.sparse_csr_tensor``."""
-        import torch
-
-        indptr, indices, data = self.batch_arrays(list(blocks))
-        it = (
-            np.int32 if indptr[-1] < 2**31 else np.int64
-        )  # torch wants crow and col indices in one dtype
-        crow = torch.from_numpy(indptr.astype(it, copy=False))
-        col = torch.from_numpy(indices.astype(it, copy=False))
-        return torch.sparse_csr_tensor(
-            crow,
-            col,
-            torch.from_numpy(data),
-            size=(len(indptr) - 1, self.n_genes),
-            check_invariants=False,
-        )
+        return self._tensor(*self.batch_arrays(list(blocks)))
 
     def cells(self, c0: int, c1: int):
         """Cells ``[c0, c1)`` as a scipy CSR matrix (cells x genes, float32)."""
@@ -392,8 +425,8 @@ class S1Cells(_Base):
 
     Each item is ``{"X": torch.sparse_csr_tensor (cells x genes, float32), "index": torch.LongTensor of cell (column) ids}``.
     Call :meth:`set_epoch` before each epoch for a new block order (the order is a function of ``seed`` and the epoch).
-    ``io_threads`` is passed to :class:`S1Stream`; ``prefetch`` batches (default 1, 0 for none) are read ahead on a background
-    thread of each worker.
+    ``io_threads`` is passed to :class:`S1Stream`; the requests of the next ``prefetch`` batches (default 1, 0 for none) are
+    in flight while a batch decodes.
     """
 
     def __init__(
@@ -475,19 +508,17 @@ class S1Cells(_Base):
             mine = mine[wi.id :: wi.num_workers]
         s = self.stream
 
-        def item(blocks):
+        def index(blocks):
             idx = (
                 np.concatenate([np.arange(a, b) for a, b in blocks])
                 if blocks
                 else np.zeros(0, np.int64)
             )
-            return {"X": s.batch(blocks), "index": torch.from_numpy(idx.astype(np.int64))}
+            return torch.from_numpy(idx.astype(np.int64))
 
-        if self.prefetch == 0:
-            for blocks in mine:
-                yield item(blocks)
-            return
-        yield from _read_ahead(item, mine, self.prefetch)
+        # the next `prefetch` batches' requests are in flight while a batch decodes (S1Stream.iter_batches)
+        for blocks, x in zip(mine, s.iter_batches(mine, ahead=self.prefetch)):
+            yield {"X": x, "index": index(blocks)}
 
 
 def _read_ahead(make: Callable, todo: list, depth: int) -> Iterator:
