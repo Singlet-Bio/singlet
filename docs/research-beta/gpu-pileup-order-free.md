@@ -1,7 +1,7 @@
 # GPU pileup on the order-free stream: gate (a) against the CPU engine (2026-10-30)
 
 Branch `gpu/engine-gpu-order-free` (PR #95, replaces #69), built on `prod/campaign` with #63 (unsorted stream, order-free rules R1-R11),
-#66 (`--engine gpu`), #80 and #86 merged. Contract: counting (pileup, dedup, UMI collapse, cell calls, reducers) is exactly equal to the CPU
+#66 (`--engine gpu`), #80, #82, #86, #93 merged (prod/campaign 89cb3d98). Contract: counting (pileup, dedup, UMI collapse, cell calls, reducers) is exactly equal to the CPU
 engine; alignment is held to the M1-M7 gate separately.
 
 ## What the GPU path mirrors from #63
@@ -11,18 +11,22 @@ engine; alignment is held to the M1-M7 gate separately.
 | R9 per (cell, gene) | The junction and SNP reducers take a UMI's molecule from the gene reducer's collapse (`stage_c` keeps the component of every unique (cell, gene, UMI) entry). A reducer entry whose reads were assigned a gene (NH 1, smallest gene over the entry's reads, as `UmiFeatureCollapse::add`) and whose UMI the gene store holds is one molecule per component; the other entries collapse among themselves (`r9_molecules`). `k_r9` takes `rid`, `k_gene_rid` looks the component up by binary search. V(D)J (on the host) gets the roots from the GPU: `PileupOutput::geneMerges` lists the UMIs the collapse merged into another (`PileupInput::wantGeneMerges`, only when a V(D)J model is loaded). |
 | R11 CB correction | The hand-off pass applies `CbCorrector::resolve` to CR as `stream_cb` does, and counts the same status line. The GPU collector takes the corrected CB for stream reads. File-mode `.1fq` decode (the only mode `--engine gpu` supports today) now builds STAR's exact CB histogram, as pass 1 of the FIFO path does; without it the corrector was silently off (`stream CB: CR exact (no pass-1 histogram)`). The `[cb-correct]` status counts of the GPU run equal the CPU run's, and the histograms of file mode and pass 1 agree to the read (64 216 700 on GSM4006843). |
 | R10 / R10b / R10c ambient fit | Not on the GPU: it runs in `export.h` after the pileup on the accumulators, the same code for both engines. Gate (a) compares its outputs (`ambient_*`), which are identical. |
-| R12 (binomial genotype call, #93) | **Not mirrored: #93 is not on `prod/campaign`.** TODO: the genotype call reads `snp_ad` / `snp_dp`, which the GPU produces identically, so it may need nothing on the device; confirm with gate (a) once #93 lands. If #93 changes the SNP molecule rule (R1), `red_snp` / `k_r9` must follow. |
+| R12 (binomial genotype call, #93) | Nothing on the device: it runs in `donor_demux.h` on `snp_ad` / `snp_dp`, which the GPU produces identically (gate below, run on the merged head). |
+| #86 grouped nonhost EM | Host code after the pileup, shared; `nonhost_gpu.cu` only does the screen (phases A-C). Nonhost outputs are identical in the gate. |
+| #82 binary read source | Note only (P3): `--engine gpu` still decodes the `.1fq` to FASTQ temp files (file mode); the GPU prefill could take `StarChunkSourceT` blocks instead, which would save the decode and the temp files. Not attempted. The R11 histogram is counted in the file-mode `process_block` on top of #82's `RunSet` decode. |
 
-## Not mirrored: the intron rules of #80
+## Not mirrored: the intron rules of #80 (incl. D2, chrM/NUMT tie)
 
 `prod/campaign` now defaults to `intron_rules = 389` (read-level kUnique, kNoSplicedIntron, kMtPrefer; molecule-level kUmiGeneCR). They are not
 on the GPU (`k_annotate` / `k_resolve` / the gene reducer). With any rule on, `singlet` ignores `SINGLET_GPU_PILEUP`, says so, and runs the CPU
 pileup on the GPU-mapped reads (counts correct, only the pileup saving is lost). `SINGLET_INTRON_RULES=0` restores the pre-#80 classification,
-and gate (a) below runs with it. **The Beta cost saving needs #80 on the GPU first** (follow-up).
+and gate (a) below runs with it. The GPU multimapper resolve (`k_resolve`) has the same gap D2 had on the serial path (kMtPrefer); on neuron1k_v3
+(mouse) mt-Atp6 is 16 with rules 0 on both engines and 326 619 with the default rules on both engines (the GPU run is the CPU-pileup fallback). **The Beta cost saving needs #80 on the GPU first** (follow-up).
 
 ## Gate (a): CPU engine vs `--engine gpu` + `SINGLET_GPU_PILEUP=on`, `SINGLET_INTRON_RULES=0`
 
-Same `.1fq`, 18 threads, one H100 NVL node; Clipper jobs 793026 (build 793025, commit 21da30b5, the head of this branch: #86 merged, SNP rows saturate at 16 bit).
+Same `.1fq`, 18 threads, one H100 NVL node. Clipper jobs 793026 (build 793025, commit 21da30b5: #86 merged, SNP rows saturate at 16 bit) for the three human samples and the cost table;
+jobs 793137 (build 793136, commit 6b6ae50d, merged with 89cb3d98 = #80/#82/#86/#93) for pbmc1k_v3 again and neuron1k_v3.
 "Identical" is `bench/star_accel/out_equiv.py`: sha256 of every output file.
 
 | Dataset | Reads | Files identical | Differ | genes / introns / junctions / SNP / chrM / cell calls / ambient / V(D)J | Identical |
@@ -30,6 +34,9 @@ Same `.1fq`, 18 threads, one H100 NVL node; Clipper jobs 793026 (build 793025, c
 | pbmc1k_v3 (10x 3' v3) | 66.60 M | 57 | 7 (below) | all | yes |
 | GSM4006843 (10x 3' v2) | 66.70 M | 59 | 7 (below) | all | yes |
 | GSM6470208 (10x 5' v2, 411 V(D)J genes) | 121.77 M | 55 | 7 (below) | all | yes |
+| pbmc1k_v3 on the merged head | 66.60 M | 57 | 7 | all | yes |
+| neuron1k_v3 (mouse, GRCm39), rules 0 | - | 57 | 7 | all, mt-Atp6 16 = 16 | yes |
+| neuron1k_v3, default rules (CPU-pileup fallback) | - | 57 | 6 | all, mt-Atp6 326 619 = 326 619 | yes |
 
 A first run after merging #86 differed in `snp_ad` / `snp_dp` (and what derives from them): #86 widened the CPU SNP counters to 16 bit and the GPU rows
 still saturated at 255. Fixed in 21da30b5; the table is the rerun.
