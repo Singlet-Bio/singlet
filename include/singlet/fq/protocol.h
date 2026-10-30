@@ -95,8 +95,8 @@ inline const std::vector<CandidateSpec>& known_protocols() {
          {"bd_cls1.txt", "bd_cls2.txt", "bd_cls3.txt"}},
 
         // ── SPLiT-seq / Parse ──
-        // R1=cDNA (66bp), R2 (94bp): [UMI_10bp]+[Rd3_8bp]+linker15+[Rd2_8bp]+linker15+[Rd1_8bp]
-        // Barcode in R2. Rd3 at pos 10, Rd2 at pos 33, Rd1 at pos 56
+        // R1=cDNA (66bp), R2 (94bp): [UMI_10bp]+[Rd3_8bp]+linker30+[Rd2_8bp]+linker30+[Rd1_8bp]
+        // Barcode in R2. Rd3 at pos 10, Rd2 at pos 48, Rd1 at pos 78 (STAR's recipe; sra_encoder.h writes them)
         // Three distinct barcode sets (Rd1/Rd2/Rd3 are different ligation barcodes).
         {"splitseq", 11, 66, 10, 8, 0, 10,
          "splitseq_bc_rd3.txt", "", 0, true, "",

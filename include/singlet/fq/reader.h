@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -139,6 +140,8 @@ class Reader {
         has_trimming_ = (hdr_.flags & Flags::TRIMMED) != 0;
         has_dedup_ = (hdr_.flags & Flags::DEDUPED) != 0;
         has_i2_stream_ = (hdr_.reserved[0] & ExtraStreams::HAS_I2) != 0;
+        // Test hook for A/B against binaries before order-free-rules R11: whitelist misses decoded as all N again
+        n_miss_barcodes_ = std::getenv("SINGLET_TEST_N_MISS_BARCODES") != nullptr;
         i2_decode_len_ = has_i2_stream_ ? hdr_.stream_lengths[2] : 0;
 
         // When TRIMMED flag is set, R2 is stored variable-length even if
@@ -320,7 +323,7 @@ class Reader {
                     std::memcpy(r1_base + bc_start_,
                                 bc_dict_flat_.data() + static_cast<size_t>(idx) * bc_length_,
                                 bc_length_);
-                } else if (raw_bc[i]) {
+                } else if (raw_bc[i] && !n_miss_barcodes_) {
                     std::memcpy(r1_base + bc_start_, raw_bc[i], bc_length_);   // the raw barcode, for STAR's correction
                 } else {
                     std::memset(r1_base + bc_start_, 4, bc_length_);
@@ -352,6 +355,8 @@ class Reader {
         if (ptr < end) {
             if (qual_mode_ == QualMode::BINNED4) {
                 ptr = decode_qual_column_binned4(ptr, end, blk.r2_lengths, blk.r2_qual);
+            } else if (qual_mode_ == QualMode::ILLUMINA4) {
+                ptr = decode_qual_column_ilmn4(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::BINNED2) {
                 ptr = decode_qual_column_binned2(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::FULL) {
@@ -457,7 +462,7 @@ class Reader {
                     std::memcpy(r1_base + bc_start_,
                                 bc_dict_flat_.data() + static_cast<size_t>(idx) * bc_length_,
                                 bc_length_);
-                } else if (raw_bc[i]) {
+                } else if (raw_bc[i] && !n_miss_barcodes_) {
                     std::memcpy(r1_base + bc_start_, raw_bc[i], bc_length_);
                 } else {
                     std::memset(r1_base + bc_start_, 4, bc_length_);
@@ -483,6 +488,8 @@ class Reader {
         if (ptr < end) {
             if (qual_mode_ == QualMode::BINNED4) {
                 ptr = decode_qual_column_binned4(ptr, end, blk.r2_lengths, blk.r2_qual);
+            } else if (qual_mode_ == QualMode::ILLUMINA4) {
+                ptr = decode_qual_column_ilmn4(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::BINNED2) {
                 ptr = decode_qual_column_binned2(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::FULL) {
@@ -787,6 +794,27 @@ class Reader {
         return ptr;
     }
 
+    // Decode an ILLUMINA4 quality column (2 bits/base, qual::kIlmn4Phred)
+    const uint8_t* decode_qual_column_ilmn4(const uint8_t* ptr, const uint8_t* end,
+                                            const std::vector<uint16_t>& lengths,
+                                            std::vector<uint8_t>& qual) const {
+        size_t total = 0;
+        for (uint16_t len : lengths) total += len;
+        qual.resize(total);
+        uint8_t* dst = qual.data();
+        for (uint16_t len : lengths) {
+            const uint32_t pb = pack::packed_bytes(len);
+            if (ptr + pb > end) {   // truncated block: no quality rather than a read past the buffer
+                qual.clear();
+                return end;
+            }
+            pack::unpack_qual_4level(ptr, len, dst, qual::kIlmn4Phred);
+            ptr += pb;
+            dst += len;
+        }
+        return ptr;
+    }
+
     // Decode binned-2 quality column (1 bit/base, pass/fail at Q20)
     const uint8_t* decode_qual_column_binned2(const uint8_t* ptr,
                                               const uint8_t* end,
@@ -811,6 +839,7 @@ class Reader {
     bool has_trimming_ = false;
     bool has_dedup_ = false;
     bool has_i2_stream_ = false;
+    bool n_miss_barcodes_ = false;   // SINGLET_TEST_N_MISS_BARCODES (open())
     bool verify_crc_ = true;
     uint16_t r2_decode_len_ = 0;  // 0 = variable-length R2 (trimming active)
     uint16_t i2_decode_len_ = 0;  // 0 = I2 stream absent

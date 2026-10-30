@@ -289,7 +289,9 @@ class Writer {
             uint32_t bc_idx = bc_lookup_.find(h);
             if (bc_idx != UINT32_MAX) {
                 block_bc_indices_.push_back(bc_idx);
+                ++bc_exact_;
             } else {
+                ++bc_raw_;
                 // Unknown barcode — use sentinel index (dict size)
                 block_bc_indices_.push_back(
                     static_cast<uint32_t>(cfg_.bc_dict.size()));
@@ -440,6 +442,10 @@ class Writer {
     }
 
     uint64_t total_reads_written() const { return total_reads_; }
+    // Reads whose barcode is exactly a dictionary (whitelist) entry, stored as its index, and reads whose barcode is
+    // not, stored raw (STAR corrects those; reader.h restores them as read).
+    uint64_t bc_whitelist_exact() const { return bc_exact_; }
+    uint64_t bc_raw() const { return bc_raw_; }
     uint32_t blocks_written() const {
         return static_cast<uint32_t>(block_offsets_.size());
     }
@@ -726,6 +732,15 @@ class Writer {
         // -- R2 quality --
         if (cfg_.qual_mode == QualMode::BINNED4 && !block_r2_qual_.empty()) {
             pack_qual_column(block_r2_qual_, block_r2_lengths_, raw_buf_);
+        } else if (cfg_.qual_mode == QualMode::ILLUMINA4 && !block_r2_qual_.empty()) {
+            const uint8_t* bins = pack::ilmn4_bin_table();
+            uint32_t off = 0;
+            for (uint16_t len : block_r2_lengths_) {
+                const size_t old_size = raw_buf_.size();
+                raw_buf_.resize(old_size + pack::packed_bytes(len));
+                pack::pack_qual_4level(block_r2_qual_.data() + off, len, raw_buf_.data() + old_size, bins);
+                off += len;
+            }
         } else if (cfg_.qual_mode == QualMode::BINNED2 && !block_r2_qual_.empty()) {
             pack_qual_column_binned2(block_r2_qual_, block_r2_lengths_, raw_buf_);
         } else if (cfg_.qual_mode == QualMode::FULL && !block_r2_qual_.empty()) {
@@ -1003,6 +1018,7 @@ class Writer {
     // File state
     uint64_t file_offset_ = 0;
     uint64_t total_reads_ = 0;
+    uint64_t bc_exact_ = 0, bc_raw_ = 0;
     uint32_t file_crc32_ = 0;
     std::vector<uint64_t> block_offsets_;
     std::vector<uint32_t> block_comp_sizes_;
