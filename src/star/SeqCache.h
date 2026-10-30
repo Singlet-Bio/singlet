@@ -71,6 +71,10 @@ extern uint64 g_handoffNReads;
 //running STAR's clip for a read with a record. nullptr when clipping is off. g_handoffClipCheck (SINGLET_HANDOFF_CLIPCHECK=1): run the
 //CPU clip anyway and count the reads where they differ (g_handoffClipBad)
 extern const uint16 *g_handoffClip5, *g_handoffClip3;
+//singlet --engine gpu with --clipAdapterType CellRanger4: per read (iReadAll-1) what ClipMate::clipChunk would have left for readLoad (the
+//CellRanger4 5' clip length), computed once by the prefill; clipChunk is then skipped. nullptr otherwise.
+extern const uint8 *g_cr4Info;
+extern uint64 g_cr4InfoN;
 extern bool g_handoffClipCheck;
 extern std::atomic<uint64> g_handoffClipBad;
 //per hand-off record its number of alignments (0: unmapped); STAR skips BAM output only for reads whose record has alignments

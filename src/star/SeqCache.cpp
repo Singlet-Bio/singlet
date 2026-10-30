@@ -14,6 +14,8 @@ SeqCache *g_seqCache = nullptr;
 const uint32 *g_handoffReadRecord = nullptr;
 uint64 g_handoffNReads = 0;
 const uint16 *g_handoffClip5 = nullptr, *g_handoffClip3 = nullptr;
+const uint8 *g_cr4Info = nullptr;
+uint64 g_cr4InfoN = 0;
 bool g_handoffClipCheck = false;
 std::atomic<uint64> g_handoffClipBad(0);
 const uint8 *g_handoffRecAln = nullptr;

@@ -68,6 +68,8 @@ int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOrigi
     if (readName[0]=='@') {//fastq format: read the '+' line
         readFileType=2;
         readInStream.get(clipOneMate[0].clippedInfo); //this is used if clipChunk is activated, only 5' for now
+        if (g_cr4Info != nullptr && iReadAll >= 1 && iReadAll - 1 < g_cr4InfoN)   // singlet --engine gpu: computed by the prefill
+            clipOneMate[0].clippedInfo = (char) g_cr4Info[iReadAll - 1];
         readInStream.ignore(); //ignore one char: \n
     };
 

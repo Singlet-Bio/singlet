@@ -26,12 +26,15 @@ struct Clip {
     uint32_t n5 = 0, after5 = 0, n3 = 0, after3 = 0;
     std::vector<char> ad3;           // 3' adapter, numeric; empty: none
     double adMMp = 0;
+    bool pre = false;                // the clip lengths come from the host (Input::pre5 / pre3): --clipAdapterType CellRanger4
 };
 
 struct Input {
     std::vector<char> seq;           // concatenated sequences, STAR's numeric code (A0 C1 G2 T3, other 4)
     std::vector<uint64_t> off{0};    // seq[off[i] .. off[i+1]) is sequence i
     Clip clip;
+    std::vector<uint16_t> pre5, pre3;   // with clip.pre: per read the bases STAR's CPU clip removes from its 5' and 3' ends
+    std::vector<uint8_t> cr4info;       // not read by the engine: per read STAR's CellRanger4 5' clip (what clipChunk would leave in the FASTQ)
 };
 
 struct Output {

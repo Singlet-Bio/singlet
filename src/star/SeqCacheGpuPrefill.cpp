@@ -111,7 +111,8 @@ bool fillClip(Parameters &P, singlet_engine_gpu::Clip &c, std::string &why) {
     if (c.n3 == 0 && ad3 == "-") c.after3 = 0;
     c.on = c.n5 || c.after5 || c.n3 || c.after3 || ad5 != "-" || ad3 != "-";
     if (!c.on) return true;
-    if (P.pClip.adapterType.empty() || P.pClip.adapterType[0] != "Hamming") { why = "read clipping with --clipAdapterType CellRanger4"; return false; }
+    if (!P.pClip.adapterType.empty() && P.pClip.adapterType[0] == "CellRanger4") { c.pre = true; return true; }   // clip lengths from the host (readSequences)
+    if (P.pClip.adapterType.empty() || P.pClip.adapterType[0] != "Hamming") { why = "read clipping with an unknown --clipAdapterType"; return false; }
     if (ad5 != "-") { why = "5' adapter clipping"; return false; }
     if (ad3 == "polyA") c.ad3.assign(DEF_readSeqLengthMax, 0);   // ClipMate::initialize: an all-A adapter
     else if (ad3 != "-") { c.ad3.resize(ad3.size()); convertNucleotidesToNumbers(ad3.data(), c.ad3.data(), c.ad3.size()); }
@@ -154,6 +155,8 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
         if (lines % 4 != 0) { munmap((void *) m, n); close(fd); why = fn + ": not 4-line FASTQ"; return false; }
         std::vector<std::vector<char>> seqT(T);
         std::vector<std::vector<uint64>> lenT(T);
+        std::vector<std::vector<uint16>> p5T(T), p3T(T);   // --clipAdapterType CellRanger4: the clip of each read, by ClipMate::clip
+        std::vector<std::vector<uint8>> infoT(T);
         {
             std::vector<std::thread> th;
             for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
@@ -166,6 +169,37 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                 seqT[t].reserve((b[t + 1] - b[t]) / 2 + 4096);
                 char lut[256];
                 for (int c = 0; c < 256; c++) lut[c] = nucl((unsigned char) c);
+                // CellRanger4: STAR's ClipMate::clipChunk (opal alignment of the TSO, 64 reads at a time) and readLoad's ClipMate::clip, run here
+                // once per read so the cache is keyed by the clipped sequences; the lengths go to the GPU and, as clippedInfo, to readLoad
+                const bool cr4 = in.clip.pre;
+                std::vector<std::vector<ClipMate>> cmv;
+                if (cr4) P.pClip.initializeClipMates(cmv);
+                std::vector<std::pair<const char *, uint64>> asc;
+                std::vector<uint64> numAt;
+                std::vector<char> cbuf(DEF_readSeqLengthMax + 16);
+                auto flush = [&]() {
+                    const int nb = (int) asc.size();
+                    if (nb == 0) return;
+                    ClipCR4 *cr = cmv[0][0].cr4;
+                    for (int k = 0; k < nb; k++) cr->opalFillOneSeq(k, (char *) asc[k].first, (uint32) asc[k].second);
+                    cr->opalAlign((uint8 *) cmv[0][0].adSeqNum.data(), cmv[0][0].adSeqNum.size(), nb);
+                    for (int k = 0; k < nb; k++) {
+                        const int Lm = cr->opalRes[k].endLocationTarget + 1, S = cr->opalRes[k].score;
+                        const bool L0 = S < 20 || (S == 20 && Lm > 26) || (S == 21 && Lm > 30);
+                        const uint8 info = (uint8) (L0 ? 0 : Lm);
+                        const uint64 L = asc[k].second;
+                        uint c5 = 0, c3 = 0;
+                        if (L <= DEF_readSeqLengthMax) {
+                            memcpy(cbuf.data(), seqT[t].data() + numAt[k], L);
+                            uint Lread = (uint) L;
+                            cmv[0][0].clippedInfo = (char) info;
+                            c5 = cmv[0][0].clip(Lread, cbuf.data());
+                            c3 = cmv[0][1].clip(Lread, cbuf.data());
+                        }
+                        p5T[t].push_back((uint16) std::min<uint>(c5, 65535)); p3T[t].push_back((uint16) std::min<uint>(c3, 65535)); infoT[t].push_back(info);
+                    }
+                    asc.clear(); numAt.clear();
+                };
                 auto take = [&](const char *ls, const char *le) {
                     uint64 L = le - ls;
                     while (L > 0 && ls[L - 1] == '\r') L--;
@@ -174,6 +208,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                     char *d = seqT[t].data() + at;
                     for (uint64 k = 0; k < L; k++) d[k] = lut[(unsigned char) ls[k]];
                     lenT[t].push_back(L);
+                    if (cr4) { asc.push_back({ls, L}); numAt.push_back(at); if (asc.size() == 64) flush(); }
                 };
                 for (const char *q = m + b[t]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) {
                     if ((li & 3) == 1) take(start, q);
@@ -181,6 +216,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                     start = q + 1;
                 }
                 if (t == T - 1 && lastUnterminated && (li & 3) == 1) take(start, m + n);
+                if (cr4) flush();
             });
             for (auto &x : th) x.join();
         }
@@ -200,6 +236,12 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
             });
             for (auto &x : th) x.join();
         }
+        if (in.clip.pre)
+            for (int t = 0; t < T; t++) {
+                in.pre5.insert(in.pre5.end(), p5T[t].begin(), p5T[t].end());
+                in.pre3.insert(in.pre3.end(), p3T[t].begin(), p3T[t].end());
+                in.cr4info.insert(in.cr4info.end(), infoT[t].begin(), infoT[t].end());
+            }
         munmap((void *) m, n);
         close(fd);
     }
@@ -258,6 +300,11 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it\n" << out.log;
     if (!ok) return skip("GPU mapping failed");
+    if (in.clip.pre) {   // CellRanger4: readLoad takes clippedInfo from here, clipChunk is skipped
+        static std::vector<uint8> cr4keep;
+        cr4keep.swap(in.cr4info);
+        g_cr4Info = cr4keep.data(); g_cr4InfoN = cr4keep.size();
+    }
     // a cache large enough for every result (entries are ~(32 + L/4 + blob) bytes; 3x for the ring, the 2-way index and
     // the shards' imbalance), unless SINGLET_STAR_SEQCACHE_MB was set
     uint64 nRec = out.seqOff.size() - 1;
