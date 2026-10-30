@@ -434,6 +434,12 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
             with netem.object_store(cfg, keys, work, gbit=tier.get("gbit")) as base:
                 ceiling = netem.calibrate(cfg, f"{base}/_calib/blob.bin", 0)
                 ceiling_par = netem.calibrate(cfg, f"{base}/_calib/blob.bin", 0, streams=threads)
+                # one byte of every object first: rclone's first request into a directory waits about a second while it
+                # lists it, a cost of the test setup that a real object store does not have and that would otherwise
+                # fall on whichever loader runs first
+                for k, f in keys.items():
+                    if Path(f).is_file():
+                        netem._get(f"{base}/{k}", (0, 1))
                 netem.set_tier(cfg, tier)
                 for ld in run_loaders:
                     url = f"{base}/{u.key}/{files[ld].name}"
