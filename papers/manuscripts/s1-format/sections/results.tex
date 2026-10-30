@@ -58,38 +58,71 @@ and \nm{codec_cpp-native-scalar-t1} million on one core with the portable scalar
 without AVX2, including ARM, use today; all kernels give identical output. The AVX-512 kernel needs the VBMI2
 extension, which the benchmark CPU lacks, so it was not measured.
 
-Whether a compact format pays for itself depends on the link. Fig.~\ref{fig:wow}c places every format on the size--speed
-plane with lines of equal effective delivery rate $R_{\mathrm{eff}}$ (Eq.~\eqref{eq:reff}) at 1\,Gbit/s. Using each
-format's in-memory read rate for $D$, so that reading from disk is not counted twice, \sone{} delivers non-zeros faster
-than the uncompressed arrays on \nm{wire-wins-0p1} of \nm{wire-n-0p1} matrices at 0.1\,Gbit/s, \nm{wire-wins-1} of
-\nm{wire-n-1} at 1\,Gbit/s and \nm{wire-wins-10} of \nm{wire-n-10} at 10\,Gbit/s (median gains
-\nm{wire-gain-0p1}$\times$, \nm{wire-gain-1}$\times$ and \nm{wire-gain-10}$\times$). The uncompressed arrays catch up
-only above a median of \nm{wire-crossover-gbit}\,Gbit/s per matrix, and on \nm{wire-crossover-never} of
-\nm{wire-crossover-n} matrices \sone{} decodes faster than the uncompressed arrays even from memory, so they never catch
-up. On slower links the network, not the decoder, sets the rate.
-
-For machine learning the quantity that matters is how fast sparse minibatches reach the model. Every loader read the same
-workload, minibatches of 512 cells made of eight blocks of 64 consecutive cells at random offsets, with no larger shuffle
-buffer to fill first (Section~\ref{sec:methods}). From a cold start, reading \nm{fig1b-dataset} from an object store at
-\nm{fig1b-tier}, the first minibatch is a \texttt{torch.sparse\_csr\_tensor} after \nm{ttfm-s1}\,s with \sone, against
-\nm{ttfm-best-other}\,s for the fastest alternative (\nm{ttfm-best-other-name}; Fig.~\ref{fig:wow}b,
-Table~\ref{tab:minibatch}). The \sone{} reader first fetches the member's prefix (Section~\ref{sec:how}), then only the
-chunks that hold the requested cells. Sustained throughput into the model is \nm{thr-s1_stream-s3_1g} cells per second at
-1\,Gbit/s, \nm{thr-s1_stream-nfs} from the shared filesystem and \nm{thr-s1_stream-local} from the node's own disk
-(Fig.~\ref{fig:wow}d). AnnData read wholly into memory sustains more once loaded, at the cost of reading the entire file
-first and holding it in memory.
-
-Latency, more than bandwidth, sets the cost of reading from an object store: every request waits a round trip, and
-cloud object stores take tens of milliseconds to return a first byte~\cite{durner2023exploiting}. Because the index
-locates every chunk before any is read, the \sone{} reader sends all of a minibatch's range requests together, up to
-eight at a time over HTTP. On a 1\,Gbit/s link with 30\,ms latency, the first minibatch arrives in a median of
-\nm{ttfm-wan-s1_stream}\,s over the panel, against \nm{ttfm-wan-s1_stream_seq}\,s for the same reader sending its requests
-one at a time and \nm{ttfm-wan-anndata_zarr_lazy}\,s for AnnData Zarr, whose reader also sends concurrent requests;
-sustained throughput on that link is \nm{concurrency-gain-sustained}$\times$ higher with concurrent requests than without
-(Fig.~\ref{fig:wow}d). Each tier limits the total bandwidth of all connections, so concurrent readers share the link
-rather than multiply it (Section~\ref{sec:methods}).
-
 \input{figures/fig1_wow}
+
+% =====================================================================
+\subsection{\sone{} reads at the speed of the network}
+\label{sec:network}
+
+We say a reader runs \emph{at the speed of the network} on a link of bandwidth $B$ when the link, not the reader, limits
+how fast counts arrive: the reader consumes stored bits at least as fast as the link delivers them,
+\begin{equation}
+D_p\, b \;\ge\; B ,
+\label{eq:netspeed}
+\end{equation}
+and so delivers $B/b$ non-zeros per second (Eq.~\eqref{eq:reff} with $1/D_p$ small against $b/B$; a reader that
+overlaps transfer and decoding reaches $\min(B/b,\,D_p)$). Two properties then decide how fast counts reach a model: the
+bits per non-zero $b$, because the same link carries $B/b$ of them, and the rate $D_p b$ at which the reader consumes
+stored bits, which must exceed the link's bandwidth. A large format is network-bound but delivers few non-zeros per
+second; a small format that decodes slowly is limited by its decoder below the bandwidth of common links; and a format
+that cannot be read in part must arrive whole before the first cell is available.
+
+Fig.~\ref{fig:net}a draws Eq.~\eqref{eq:reff} for every format from its median size and in-memory read rate. A 1\,Gbit/s
+link carries \nm{net-s1-at-1g} million non-zeros per second as \sone, against \nm{net-csc-at-1g} million as the
+uncompressed arrays. On \nm{threadsHeadline} cores the \sone{} reader consumes \nm{net-knee-s1}\,Gbit/s of stored bits
+(\nm{net-s1-mnnzs} million non-zeros per second at \nm{net-s1-bits} bits each), and the codec alone
+\nm{net-knee-s1-per-core}\,Gbit/s per core, so it keeps the network as the limit up to about 1\,Gbit/s on four cores and
+proportionally more on more (Fig.~\ref{fig:net}b). The fastest other format under 12 bits per non-zero,
+\nm{net-knee-compact-best-name}, consumes \nm{net-knee-compact-best}\,Gbit/s and cannot be read in part; the formats
+whose readers keep up with faster links store several times more bits per non-zero. Per matrix, \sone{} delivers
+non-zeros faster than the uncompressed arrays on \nm{wire-wins-0p1} of \nm{wire-n-0p1} matrices at 0.1\,Gbit/s,
+\nm{wire-wins-1} of \nm{wire-n-1} at 1\,Gbit/s and \nm{wire-wins-10} of \nm{wire-n-10} at 10\,Gbit/s (median gains
+\nm{wire-gain-0p1}$\times$, \nm{wire-gain-1}$\times$ and \nm{wire-gain-10}$\times$); the uncompressed arrays catch up
+only above a median of \nm{wire-crossover-gbit}\,Gbit/s, and on \nm{wire-crossover-never} of \nm{wire-crossover-n}
+matrices never, because there \sone{} decodes faster than the uncompressed arrays even from memory.
+
+A format can only be read at the speed of the network by a reader built for it. For machine learning the quantity that
+matters is how fast sparse minibatches reach the model. Every loader read the same workload, minibatches of 512 cells made
+of eight blocks of 64 consecutive cells at random offsets, with no larger shuffle buffer to fill first
+(Section~\ref{sec:methods}). The \sone{} reader plans a minibatch from the chunk index, sends its range requests together,
+and decodes every run of cells in one C++ call straight into the arrays of the \texttt{torch.sparse\_csr\_tensor}; the
+next minibatch's requests are in flight while one decodes, and its Python layer does nothing per cell. From
+\nm{fig1b-dataset} through the object store it delivers \nm{thr-s1_stream-s3_0.1g}, \nm{thr-s1_stream-s3_1g} and
+\nm{thr-s1_stream-s3_10g} cells per second at 0.1, 1 and 10\,Gbit/s (Fig.~\ref{fig:net}c), which fills
+\nm{linkuse-s3_0.1g}\% and \nm{linkuse-s3_1g}\% of the two slower links (counting the bytes of the file per cell,
+\nm{net-ds-bytes-per-cell}, and not the parts of chunks it reads beyond the requested cells); at 10\,Gbit/s the decoder on
+\nm{threadsHeadline} cores is the limit (\nm{net-ds-decoder-cells} cells per second from memory). From the node's own
+disk it delivers \nm{thr-s1_stream-local} cells per second and from the shared filesystem \nm{thr-s1_stream-nfs}
+(Fig.~\ref{fig:wow}d). AnnData Zarr delivers \nm{thr-anndata_zarr_lazy-s3_1g} and TileDB-SOMA ML \nm{thr-soma_ml-s3_1g}
+cells per second at 1\,Gbit/s. AnnData read wholly into memory sustains more once loaded, at the cost of reading the
+entire file first and holding it in memory. From a cold start the first minibatch is ready after \nm{ttfm-s1}\,s with
+\sone, against \nm{ttfm-best-other}\,s for the fastest alternative (\nm{ttfm-best-other-name}; Fig.~\ref{fig:wow}b,
+Table~\ref{tab:minibatch}).
+
+Latency, more than bandwidth, sets the cost of the first minibatch: every request waits a round trip, and cloud object
+stores take tens of milliseconds to return a first byte~\cite{durner2023exploiting}. Because the index locates every chunk
+before any is read, the \sone{} reader opens a file with one request for its prefix and then sends all of a minibatch's
+range requests together. On a 1\,Gbit/s link with 30\,ms latency the first minibatch arrives in a median of
+\nm{ttfm-wan-s1_stream}\,s over the panel, against \nm{ttfm-wan-s1_stream_seq}\,s for the same reader sending its requests
+one at a time and \nm{ttfm-wan-anndata_zarr_lazy}\,s for AnnData Zarr, whose reader also sends concurrent requests
+(Fig.~\ref{fig:net}d). The slope of each line counts the round trips paid one after another: \nm{net-rtts-s1_stream} for
+\sone, \nm{net-rtts-s1_stream_seq} one request at a time, and \nm{net-rtts-anndata_zarr_lazy} for Zarr. Sustained
+throughput on that link is \nm{concurrency-gain-sustained}$\times$ higher with concurrent requests than without (median of
+the \nm{concurrency-gain-sustained-n} panel datasets large enough that the workload reads each cell once). Each tier limits
+the total bandwidth of all connections, so concurrent readers share the link rather than multiply it
+(Section~\ref{sec:methods}).
+
+\input{figures/fig_net}
 
 % =====================================================================
 \subsection{How \sone{} stores a count matrix}

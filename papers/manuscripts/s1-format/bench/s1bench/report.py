@@ -322,6 +322,111 @@ def wire_section(cfg: Config, N: Numbers) -> None:
         N.put(f"wire-gain-{tag}", _stats(gains)["median"], "{:.1f}")
 
 
+# formats a reader cannot read in part: the whole object is fetched (or decompressed) before any cell
+WHOLE_FILE = {"mtx_gz", "rds_gz", "rds_xz", "csc_zstd19"}
+
+
+def network_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """The network figure. A reader runs at the speed of the network on a link of bandwidth B when it consumes stored bits at
+    least as fast as the link delivers them, D_p * b >= B; it then delivers B / b non-zeros per second. (a) R_eff(B) for
+    every format, from median b and in-memory D on p cores; (b) D_p * b against b, the link speed each format keeps up with;
+    (c) the measured loaders on one dataset against the network and decoder ceilings; (d) first minibatch against latency."""
+    w = {(r["dataset"], r["matrix"], r["format"]): r for r in _stage(cfg, "write") if r.get("status") == "ok"}
+    H = int(cfg["threads"]["headline"])
+    d = {(r["dataset"], r["matrix"], r["format"]): _f(r["mnnz_per_s"]) * 1e6 for r in _headline_decode(cfg)
+         if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "warm" and int(r["threads"]) == H
+         and r["mode"] in ("", "canonical")}
+    per = defaultdict(list)   # format -> [(bits per nnz, nnz/s)]
+    for k, D in d.items():
+        if k in w and D:
+            per[k[2]].append((8 * _f(w[k]["bytes"]) / _f(w[k]["nnz"]), D))
+    per.pop("s1_pack", None)   # the same codec as .s1
+    med = {f: (float(np.median([b for b, _ in v])), float(np.median([x for _, x in v]))) for f, v in per.items() if len(v) >= 5}
+    if "s1" not in med:
+        return
+    fmts = [f for f in cfg["formats"] if f in med]
+    grid = np.logspace(-2, 2, 81)   # Gbit/s
+    curves = [{"gbit": g, **{f: 1.0 / (med[f][0] / (g * 1e9) + 1.0 / med[f][1]) / 1e6 for f in fmts},
+               "s1_net": g * 1e9 / med["s1"][0] / 1e6 if g * 1e9 / med["s1"][0] / 1e6 <= 1500 else None, "s1_dec": med["s1"][1] / 1e6} for g in grid]
+    _write(curves, out / "fignet_curves.tsv", ["gbit", *fmts, "s1_net", "s1_dec"])
+    # label sides for Fig. net b, chosen where the formats sit (west: label to the right of the point)
+    sides = {"csc_i32": "east", "h5ad_none": "east", "h5ad_lzf": "west", "zarr": "west", "csc_zstd19": "north",
+             "parquet_coo": "south east", "soma": "north", "h5ad_gzip": "west", "tenx_h5": "east", "rds_gz": "south west",
+             "mtx_gz": "west", "rds_xz": "east", "bpcells": "west", "loom": "west", "s1": "south"}
+    roof = [{"format": f, "label": FORMAT_LABELS.get(f, f), "group": _group(f), "whole": int(f in WHOLE_FILE),
+             "bits": med[f][0], "mnnzs": med[f][1] / 1e6, "gbit": med[f][0] * med[f][1] / 1e9, "anchor": sides.get(f, "west")}
+            for f in fmts]
+    _write(roof, out / "fignet_roof.tsv", ["format", "label", "group", "whole", "bits", "mnnzs", "gbit", "anchor"])
+    pts = [{"format": f, "group": _group(f), "bits": b, "gbit": b * x / 1e9} for f in fmts for b, x in per[f]]
+    _write(pts, out / "fignet_roof_pts.tsv", ["format", "group", "bits", "gbit"])
+    b1, D1 = med["s1"]
+    N.put("net-s1-bits", b1, "{:.2f}")
+    N.put("net-s1-mnnzs", D1 / 1e6, "{:.0f}")
+    N.put("net-knee-s1", b1 * D1 / 1e9, "{:.1f}")
+    N.put("net-s1-at-1g", 1e9 / b1 / 1e6, "{:.0f}")   # non-zeros per second a 1 Gbit/s link carries as .s1 (millions)
+    if "csc_i32" in med:
+        N.put("net-csc-at-1g", 1e9 / med["csc_i32"][0] / 1e6, "{:.0f}")
+    # the compact formats (under 12 bits per non-zero) and the link speed their decoders keep up with
+    small = sorted((f for f in fmts if med[f][0] < 12 and f != "s1"), key=lambda f: -med[f][0] * med[f][1])
+    if small:
+        f = small[0]
+        N.put("net-knee-compact-best", med[f][0] * med[f][1] / 1e9, "{:.2f}")
+        N.put("net-knee-compact-best-name", FORMAT_LABELS.get(f, f))
+    # per core: the C++ codec in memory, source order, one thread
+    c1 = [_f(r["mnnz_per_s"]) for r in _headline_decode(cfg) if r.get("status") == "ok" and r["what"] == "codec_cpp"
+          and int(r["threads"]) == 1 and r["mode"] == "canonical" and r["isa"] == "avx2"]
+    if c1:
+        N.put("net-knee-s1-per-core", b1 * float(np.median(c1)) * 1e6 / 1e9, "{:.2f}")
+
+    # (c) one dataset: measured sustained cells/s per loader and tier, and the two ceilings for .s1
+    rc = cfg.get("report", {}) or {}
+    ds = rc.get("fig1d_dataset", rc.get("fig1b_dataset", "hlca_core"))
+    mb = [r for r in _stage(cfg, "minibatch") if r.get("status") == "ok"]
+    st = {(r["dataset"], r["matrix"]): r for r in _stage(cfg, "stats")}
+    s = st.get((ds, "rna"))
+    gb = {"s3_0.1g": 0.1, "s3_1g": 1.0, "s3_10g": 10.0}
+    rows = []
+    for ld in ("s1_stream", "s1_stream_seq", "anndata_zarr_lazy", "soma_ml"):
+        for t, g in gb.items():
+            v = _stats(r.get("sustained_cells_per_s") for r in mb if r["dataset"] == ds and r["loader"] == ld and r["tier"] == t)["median"]
+            if v:
+                rows.append({"loader": ld, "gbit": g, "cells_per_s": v})
+    _write(rows, out / "fignet_loaders.tsv", ["loader", "gbit", "cells_per_s"])
+    if s and (ds, "rna", "s1") in w:
+        cells, nnz = _f(s["cells"]), _f(s["nnz"])
+        bpc = _f(w[(ds, "rna", "s1")]["bytes"]) / cells
+        N.put("net-ds-bytes-per-cell", bpc, "{:,.0f}")
+        N.put("net-ds-cells-at-1g", 1e9 / 8 / bpc, "{:,.0f}")
+        dd = d.get((ds, "rna", "s1"))
+        if dd:
+            N.put("net-ds-decoder-cells", dd / (nnz / cells), "{:,.0f}")
+            ceil = [{"gbit": g, "net": g * 1e9 / 8 / bpc, "dec": dd / (nnz / cells)} for g in np.logspace(-1.5, 1.5, 31)]
+            _write(ceil, out / "fignet_ceilings.tsv", ["gbit", "net", "dec"])
+        loc = _stats(r.get("sustained_cells_per_s") for r in mb if r["dataset"] == ds and r["loader"] == "s1_stream" and r["tier"] == "local")["median"]
+        if loc:
+            N.put("net-ds-local-cells", loc, "{:,.0f}")
+
+    # (d) first minibatch at 1 and 30 ms (1 Gbit/s), median over the panel, and the round trips each pays in sequence
+    lat = []
+    for ld in ("s1_stream", "s1_stream_seq", "anndata_zarr_lazy"):
+        pts_ = []
+        for t, ms in (("s3_1g", 1.0), ("s3_1g_wan", 30.0)):
+            per_ds = [_stats(r.get("first_batch_s") for r in mb if r["tier"] == t and r["loader"] == ld and r["dataset"] == x)["median"]
+                      for x in sorted({r["dataset"] for r in mb})]
+            v = _stats(per_ds)["median"]
+            if v is not None:
+                pts_.append((ms, v))
+        if len(pts_) == 2:
+            (x0, y0), (x1, y1) = pts_
+            k = (y1 - y0) / ((x1 - x0) / 1000)   # seconds per second of round trip = round trips paid one after another
+            N.put(f"net-rtts-{ld}", k, "{:.0f}")
+            for ms in (0.0, 100.0):
+                lat.append({"loader": ld, "rtt_ms": ms, "first_s": y0 + (ms - x0) / 1000 * k, "measured": 0})
+            for ms, v in pts_:
+                lat.append({"loader": ld, "rtt_ms": ms, "first_s": v, "measured": 1})
+    _write(lat, out / "fignet_latency.tsv", ["loader", "rtt_ms", "first_s", "measured"])
+
+
 def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
     mb = [r for r in _stage(cfg, "minibatch") if r.get("status") == "ok"]
     rc = cfg.get("report", {}) or {}
@@ -614,6 +719,7 @@ def run(cfg: Config) -> int:
     decode_section(cfg, N, out, size_stats)
     wire_section(cfg, N)
     minibatch_section(cfg, N, out)
+    network_section(cfg, N, out)
     ladder_floor_section(cfg, N, out)
     second_section(cfg, N, out)
     eco_section(cfg, N, out)

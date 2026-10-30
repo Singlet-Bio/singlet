@@ -54,7 +54,11 @@ streaming reader (\texttt{singlet.torch.S1Stream}) in stored and source gene ord
 minibatch as a \texttt{torch.sparse\_csr\_tensor}; BPCells is timed to an R sparse matrix, without conversion to a tensor.
 scDataset and TileDB-SOMA ML use their own samplers, configured to the same workload: blocks of 64 cells, one minibatch
 per read and no larger shuffle buffer. The \sone{} reader plans the byte ranges of a minibatch's blocks from the chunk
-index and sends them together, up to eight at a time over HTTP; it is also run sending them one at a time. Files are
+index and sends them together, up to eight at a time over HTTP (\texttt{urllib3}); it is also run sending them one at a
+time. It decodes all of a minibatch's runs of cells in one call of the C++ codec, which releases Python's interpreter lock,
+decodes the runs in parallel and writes them into one CSR, and, as \texttt{singlet.torch.S1Cells} does by default, sends
+the next minibatch's requests while one decodes. TileDB-SOMA ML prefetches with its own reader; the other loaders read
+one minibatch after another, as their libraries do. Files are
 served from the node's own disk, from the cluster's shared NFS filesystem, and by a local S3-compatible object store
 (\texttt{rclone serve s3}) at 0.1, 1 or 10\,Gbit/s with 1\,ms latency, or 1\,Gbit/s with 30\,ms latency. The bandwidth
 is a single token bucket over all connections together (our own proxy, \texttt{bwproxy.py}), holding at most 5\,ms of the
@@ -68,7 +72,10 @@ counted; for datasets above the M tier such loaders are not run over the network
 object at the tier's bandwidth is reported instead, marked in Table~\ref{tab:minibatch}. We record, from a new process
 with a cold cache, the time to open, to read the first minibatch and to build its tensor (three workload seeds; we report
 medians), then, for one seed, the sustained rate in cells per second over 200 minibatches after 10 warm-up batches, and
-peak resident memory. Library imports are done before timing starts.
+peak resident memory. Library imports are done before timing starts. On a matrix of fewer than $211\times512$ cells the
+sustained workload reads some cells twice, and a reader may then serve them from memory; ratios of sustained rates use
+only the panel datasets large enough to avoid this. The share of a link a reader fills is its sustained rate times the
+file's bytes per cell, divided by the link's bandwidth.
 
 \subsection{Payload ladder}
 For each matrix we computed the payload size, in bits per non-zero over row indices and values only, of: 32-bit CSC;

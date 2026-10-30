@@ -1,0 +1,117 @@
+% Network figure: what "at the speed of the network" means, and which formats and readers get there. Every value is read from
+% generated/fignet_*.tsv (written by `python -m s1bench report`, network_section).
+\begin{figure*}[p]
+\centering
+% ---------------- (a) delivered rate against link bandwidth ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={a\quad Delivered rate against link bandwidth},
+  width=0.41\linewidth, height=6.8cm, xmode=log, ymode=log, xmin=0.01, xmax=100, ymin=0.3, ymax=1500,
+  xlabel={link bandwidth $B$ (Gbit/s)}, ylabel={non-zeros delivered, millions per second},
+  xtick={0.01,0.1,1,10,100}, xticklabels={0.01,0.1,1,10,100}, axis x line*=bottom, axis y line*=left,
+  every axis plot/.append style={no marks},
+  clip=false,
+]
+\pgfplotsinvokeforeach{0.1,1,10}{\draw[gen!35, line width=0.4pt] (axis cs:#1,0.3) -- (axis cs:#1,1500);}
+% every format, thin grey; then the ones named in the text
+\pgfplotsinvokeforeach{mtx_gz,tenx_h5,h5ad_none,h5ad_lzf,loom,soma,parquet_coo,rds_gz}{
+  \addplot[gen!45, line width=0.5pt] table[x=gbit, y=#1] {\gen{fignet_curves.tsv}};}
+\addplot[ink2, thick] table[x=gbit, y=csc_i32] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny] {CSC, int32};
+\addplot[dl, thick] table[x=gbit, y=zarr] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny, text=dl] {Zarr};
+\addplot[tens, thick, dashed] table[x=gbit, y=csc_zstd19] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny, text=tens] {zstd-19};
+\addplot[dec, thick] table[x=gbit, y=h5ad_gzip] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny, text=dec!80!black] {h5ad gzip};
+\addplot[red!65!black, thick, dashed] table[x=gbit, y=rds_xz] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny, text=red!65!black] {rds xz};
+\addplot[dom, thick] table[x=gbit, y=bpcells] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny, text=dom] {BPCells};
+\addplot[sone, densely dotted] table[x=gbit, y=s1_net] {\gen{fignet_curves.tsv}}
+  node[pos=0.22, sloped, above, font=\sffamily\tiny, text=sone] {network-bound: $B/b$};
+\addplot[sone, densely dotted] table[x=gbit, y=s1_dec] {\gen{fignet_curves.tsv}}
+  node[pos=0.02, anchor=south west, font=\sffamily\tiny, text=sone] {decoder-bound: $D_p$};
+\addplot[sone, line width=1.6pt] table[x=gbit, y=s1] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny\bfseries, text=sone] {.s1};
+\pgfplotsinvokeforeach{0.1,1,10}{\node[font=\sffamily\tiny, text=gen, anchor=south west, inner sep=1pt] at (axis cs:#1,0.32) {#1};}
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (b) the link speed each decoder keeps up with ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={b\quad Which links each format's decoder keeps up with},
+  width=0.47\linewidth, height=6.8cm, xmode=log, ymode=log, xmin=3, xmax=100, ymin=0.03, ymax=60,
+  xlabel={stored bits per non-zero $b$}, ylabel={stored bits decoded per second, $D_p\,b$ (Gbit/s)},
+  xtick={5,10,20,50,100}, xticklabels={5,10,20,50,100}, ytick={0.1,1,10}, yticklabels={0.1,1,10},
+  axis x line*=bottom, axis y line*=left, clip mode=individual,
+  lbl/.style={nodes near coords, point meta=explicit symbolic, visualization depends on={value \thisrow{anchor}\as\lblanchor},
+    every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=1.5pt}},
+]
+\fill[sone!7] (axis cs:3,1) rectangle (axis cs:8,60);
+\pgfplotsinvokeforeach{0.1,1,10}{
+  \draw[gen!70, dashed, line width=0.4pt] (axis cs:3,#1) -- (axis cs:100,#1);
+  \node[font=\sffamily\tiny, text=gen!80!black, anchor=north east, inner sep=1pt] at (axis cs:100,#1) {#1\,Gbit/s link};}
+\addplot[only marks, mark=*, mark size=0.8pt, gen!40, discard if not={group}{general}] table[x=bits, y=gbit] {\gen{fignet_roof_pts.tsv}};
+\addplot[only marks, mark=*, mark size=0.8pt, dom!40, discard if not={group}{domain}] table[x=bits, y=gbit] {\gen{fignet_roof_pts.tsv}};
+\addplot[only marks, mark=*, mark size=0.8pt, sone!45, discard if not={group}{s1}] table[x=bits, y=gbit] {\gen{fignet_roof_pts.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=1.9pt, gen!80!black, discard if not={whole}{0}, discard if not y={group}{general}]
+  table[x=bits, y=gbit, meta=label] {\gen{fignet_roof.tsv}};
+\addplot[only marks, lbl, mark=square*, mark size=1.8pt, gen!80!black, discard if not={whole}{1}]
+  table[x=bits, y=gbit, meta=label] {\gen{fignet_roof.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=1.9pt, dom, discard if not={group}{domain}] table[x=bits, y=gbit, meta=label] {\gen{fignet_roof.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=2.8pt, sone, discard if not={group}{s1}] table[x=bits, y=gbit, meta=label] {\gen{fignet_roof.tsv}};
+\node[font=\sffamily\tiny, text=sone, anchor=north west, align=left] at (axis cs:3.1,55) {small and keeps up:\\the network sets the rate};
+\end{axis}
+\end{tikzpicture}
+
+\vspace{4pt}
+% ---------------- (c) measured readers against the two ceilings ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={c\quad Measured readers, \nm{fig1b-dataset}},
+  width=0.47\linewidth, height=6.4cm, xmode=log, ymode=log, xmin=0.03, xmax=30, ymin=50, ymax=400000,
+  xlabel={link bandwidth (Gbit/s), 1\,ms latency}, ylabel={cells per second into the model (sustained)},
+  xtick={0.1,1,10}, xticklabels={0.1,1,10}, axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.5,-0.24)}, anchor=north, legend columns=2, cells={anchor=west}},
+]
+\addplot[sone, dashed, no marks, forget plot] table[x=gbit, y=net] {\gen{fignet_ceilings.tsv}}
+  node[pos=0.3, sloped, above, font=\sffamily\tiny, text=sone] {network ceiling for \sone};
+\addplot[ink2, dashed, no marks, forget plot] table[x=gbit, y=dec] {\gen{fignet_ceilings.tsv}}
+  node[pos=0.02, anchor=south west, font=\sffamily\tiny, text=ink2] {decoder ceiling, \nm{threadsHeadline} cores};
+\addplot[sone, very thick, mark=*, mark size=1.8pt, discard if not={loader}{s1_stream}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
+\addplot[sone!55, thick, dotted, mark=o, mark size=1.6pt, discard if not={loader}{s1_stream_seq}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
+\addplot[dec, mark=triangle*, mark size=1.6pt, discard if not={loader}{anndata_zarr_lazy}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
+\addplot[dom, mark=diamond*, mark size=1.6pt, discard if not={loader}{soma_ml}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
+\legend{\textbf{.s1}, {.s1, one request at a time}, AnnData Zarr, TileDB-SOMA ML}
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (d) first minibatch against latency ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={d\quad Round trips set the first minibatch},
+  width=0.47\linewidth, height=6.4cm, xmin=0, xmax=100, ymin=0,
+  xlabel={round-trip latency (ms), 1\,Gbit/s link}, ylabel={seconds to the first minibatch},
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.02,0.98)}, anchor=north west, cells={anchor=west}},
+]
+\fill[gen!10] (axis cs:10,0) rectangle (axis cs:100,1.8);
+\addplot[sone, thick, no marks, forget plot, discard if not={loader}{s1_stream}, discard if not y={measured}{0}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[sone!55, thick, dotted, no marks, forget plot, discard if not={loader}{s1_stream_seq}, discard if not y={measured}{0}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[dec, no marks, forget plot, discard if not={loader}{anndata_zarr_lazy}, discard if not y={measured}{0}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[sone, only marks, mark=*, mark size=2pt, discard if not={loader}{s1_stream}, discard if not y={measured}{1}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[sone!55, only marks, mark=o, mark size=2pt, discard if not={loader}{s1_stream_seq}, discard if not y={measured}{1}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[dec, only marks, mark=triangle*, mark size=2pt, discard if not={loader}{anndata_zarr_lazy}, discard if not y={measured}{1}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\legend{{\textbf{.s1}: \nm{net-rtts-s1_stream} round trips in sequence}, {.s1, one request at a time: \nm{net-rtts-s1_stream_seq}}, {AnnData Zarr: \nm{net-rtts-anndata_zarr_lazy}}}
+\node[font=\sffamily\tiny, text=gen!80!black, anchor=south west, align=left] at (axis cs:12,0.02) {cloud object stores:\\tens of ms to a first byte};
+\end{axis}
+\end{tikzpicture}
+\caption{\textbf{What reading at the speed of the network means, and which formats and readers do.}
+\textbf{(a)} Non-zeros delivered per second over a link of bandwidth $B$, $R_{\mathrm{eff}}=(b/B+1/D_p)^{-1}$
+(Eq.~\ref{eq:reff}), for every format, from its median size $b$ and in-memory read rate $D_p$ on \nm{threadsHeadline}
+cores over the matrices. On the left of its knee a format is network-bound and delivers $B/b$ (dotted diagonal for
+\sone): the fewer bits per non-zero, the more non-zeros the same link carries. On the right it is decoder-bound at $D_p$
+(dotted horizontal). Grey vertical lines: the tiers measured in panel c.
+\textbf{(b)} The same formats by size and by the stored bits their reader consumes per second, $D_p b$: a format keeps the
+network as the limit on every link below its point. Large points, medians; small points, single matrices; squares,
+formats that cannot be read in part. Shaded: under 8 bits per non-zero and fast enough for a 1\,Gbit/s link.
+\textbf{(c)} Sustained cells per second delivered to the model from \nm{fig1b-dataset} through the object store, against the
+two ceilings for \sone: the link's bandwidth divided by the file's \nm{net-ds-bytes-per-cell} bytes per cell (dashed
+diagonal), and the decoder's in-memory rate on \nm{threadsHeadline} cores (dashed horizontal).
+\textbf{(d)} Seconds to the first 512-cell minibatch at 1 and 30\,ms round-trip latency (points; median over the four
+panel datasets) and the straight line through them, whose slope counts the round trips a reader pays one after another.}
+\label{fig:net}
+\end{figure*}
