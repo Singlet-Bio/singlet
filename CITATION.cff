@@ -1,5 +1,9 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below. Cite the original GEO studies for the data you use."
+message: >-
+  If you use this software, cite it as below with the version you ran. If you
+  use singlet.bio data, also cite the original study of every dataset you use
+  (its paper and GEO accession) and singlet.bio (the reference below), with the
+  date you downloaded the data. Text, BibTeX and RIS: https://singlet.bio/about#cite
 type: software
 title: "singlet: Python, R and C++ client and engine for singlet.bio"
 abstract: "Client packages (Python, R) and the C++ processing engine for singlet.bio, a catalog of public GEO single-cell RNA-seq studies re-processed from raw reads with one pipeline. Data are CC0; code is MIT."
@@ -19,3 +23,13 @@ keywords:
   - GEO
   - bioinformatics
   - open data
+references:
+  - type: dataset
+    title: "singlet.bio: an open atlas of public single-cell RNA-seq studies reprocessed from raw reads"
+    authors:
+      - family-names: DeBruine
+        given-names: Zachary
+        affiliation: "Grand Valley State University"
+    version: "Singlet Research Alpha (October 2026)"
+    url: "https://singlet.bio"
+    license: CC0-1.0

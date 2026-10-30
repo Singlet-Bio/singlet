@@ -1,0 +1,31 @@
+if (!exists("meta") || is.null(meta)) meta <- packageDescription("singlet")
+
+citHeader("In a paper, cite the original study of every dataset you use (its paper and GEO accession; the Cite button on each study page at https://singlet.bio gives both), singlet.bio with its release and the date you downloaded the data, and this package with its version:")
+
+bibentry(
+  bibtype = "Misc",
+  key = "debruine2026singletbio",
+  author = person("Zachary", "DeBruine"),
+  title = "{singlet.bio}: an open atlas of public single-cell {RNA-seq} studies reprocessed from raw reads",
+  year = "2026",
+  url = "https://singlet.bio",
+  note = "Singlet Research Alpha (October 2026). Accessed YYYY-MM-DD",
+  textVersion = paste(
+    "DeBruine Z. singlet.bio: an open atlas of public single-cell RNA-seq studies reprocessed from raw reads.",
+    "Singlet Research Alpha (October 2026). https://singlet.bio (accessed YYYY-MM-DD)."
+  )
+)
+
+bibentry(
+  bibtype = "Manual",
+  key = "debruine2026singlet",
+  author = person("Zachary", "DeBruine"),
+  title = "singlet: {Python}, {R} and {C++} client and engine for {singlet.bio}",
+  year = "2026",
+  note = paste("R package version", meta$Version),
+  url = "https://github.com/Singlet-Bio/singlet",
+  textVersion = paste0(
+    "DeBruine Z. singlet: Python, R and C++ client and engine for singlet.bio. R package version ", meta$Version,
+    ". 2026. https://github.com/Singlet-Bio/singlet"
+  )
+)
