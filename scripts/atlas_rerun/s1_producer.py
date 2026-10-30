@@ -75,6 +75,7 @@ def main(argv=None):
     ap.add_argument("--repo", default=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--scratch")
+    ap.add_argument("--keep", action="store_true", help="keep the scratch tree (study.log of the transcoder) for debugging")
     ap.add_argument("--policy", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "beta-policy.json"),
                     help="release policy; the default withholds exactly what Alpha's does (singlet.s1.policy.OMITTED_LAYERS)")
     a = ap.parse_args(argv)
@@ -85,7 +86,7 @@ def main(argv=None):
         n = build_results(a.handoff, results)
         lr = os.path.join(tmp, "lr")
         cmd = [a.python, os.path.join(a.repo, "scripts", "s1_publish.py"), a.gse, "--results", results, "--catalog", a.catalog,
-               "--apply", "--policy", a.policy, "--local-root", lr, "--public", BUCKET, "--scratch", os.path.join(tmp, "scratch")]
+               "--apply", "--policy", a.policy, "--local-root", lr, "--public", BUCKET, "--scratch", os.path.join(tmp, "scratch")] + (["--keep-scratch", "--study-log-dir", os.path.join(tmp, "logs")] if a.keep else [])
         env = dict(os.environ, PYTHONPATH=os.path.join(a.repo, "python") + os.pathsep + os.environ.get("PYTHONPATH", ""))
         if subprocess.run([a.python, "-c", "import singlet._pz, singlet._pz2"], env=env).returncode != 0:
             # without the compiled reader the migrator treats every .1pz as undecodable and stores a hollow object
@@ -100,7 +101,10 @@ def main(argv=None):
         print("s1_producer: %d samples, %d objects -> %s" % (n, k, a.work))
         return 0
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        if a.keep:
+            print("s1_producer: scratch kept at %s" % tmp)
+        else:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
