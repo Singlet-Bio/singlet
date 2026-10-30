@@ -695,7 +695,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             for (int i = 0; i < n_sju; i++) out->sj.push_back(T3{(uint32_t)(k[i] >> jb), (uint32_t)(k[i] & ((1ull << jb) - 1)), std::min(c[i], 65535u)}); }
         if (n_snu > 0) { std::vector<uint64_t> k(n_snu), v(n_snu); CK(cudaMemcpy(k.data(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.data(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_snu; i++) { T3 a{(uint32_t)(k[i] >> sb), (uint32_t)(k[i] & ((1ull << sb) - 1)), 0}; uint32_t dp = (uint32_t)(v[i] & 0xFFFFFFFFu), ad = (uint32_t)(v[i] >> 32);
-                if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 255u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 255u); out->snp_ad.push_back(a); } } }
+                if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); out->snp_ad.push_back(a); } } }
         if (n_mtu > 0) { std::vector<uint64_t> k(n_mtu); std::vector<uint32_t> c(n_mtu); CK(cudaMemcpy(k.data(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_mtu;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
                 uint64_t bk = k[i] >> 1; uint64_t tot = 0, rv = 0; int j = i;
