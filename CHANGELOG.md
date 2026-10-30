@@ -4,6 +4,19 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+## [1.3.3] — 2026-10-30: `S1Cells` under forked DataLoader workers; more requests in flight
+
+- **`S1Cells` works with `DataLoader(num_workers > 0)` over HTTP.** Each worker forked from a process that had already
+  opened the object (the dataset reads its shape at construction) shared the parent's HTTP connections. Responses came
+  back interleaved and reads failed with "short range read". A worker now opens its own stream.
+- **More requests in flight by default.** `io_threads="auto"` is 32 for an HTTP URL, up from 8, and `S1Cells(prefetch=4)`
+  sends the next four minibatches' requests while one decodes, up from 1. A link is full only with bandwidth x round-trip
+  time in flight.
+  - Emulated 1 Gbit/s store, PBMC 10k, 4 cores: at a 30 ms round trip, 8 requests and one minibatch ahead deliver about
+    17,000 cells/s, and 32 requests with four ahead about 57,000.
+  - At 100 ms, 64 requests with eight ahead deliver about 42,000 cells/s, against 5,300.
+  - Requests to a local file are unchanged: one at a time.
+
 ## [1.3.2] — 2026-10-30: the streaming loader at network speed
 
 - **`S1Stream` / `S1Cells` read at network speed.** On a 1 Gbit/s object store with 1 ms latency (hlca_core, 512-cell
