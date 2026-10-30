@@ -10,13 +10,14 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet
+sdir() { [ -d "$1/state/$2" ] && echo "$1/state/$2" || echo "$1/state/${2/called_ed/called_v2}"; }   # state/called_ed* was renamed called_v2* on Clipper
 J=$W/jobs/called_ed_truth
 G=$W/modality-bench/genotype_pool
-O=$W/state/called_ed_truth/kang_genotype
+O=$(sdir "$W" called_ed_truth)/kang_genotype
 E=$W/envs/gpool
 PY=$E/venv/bin/python
 mkdir -p $O
-$PY -P $J/kang_genotype.py prep $G/singlet_modfix $W/state/called_ed_truth/datasets/kang.barcodes.tsv.gz $O
+$PY -P $J/kang_genotype.py prep $G/singlet_modfix $(sdir "$W" called_ed_truth)/datasets/kang.barcodes.tsv.gz $O
 rm -rf $O/cellsnp $O/cellsnp_aug $O/vireo
 apptainer exec --bind $W $E/cellsnp-lite.sif cellsnp-lite -s $G/singlet_k8/possorted.bam -b $O/barcodes.txt -O $O/cellsnp \
   -R $G/ref_k8/cellsnp/cellSNP.base.vcf.gz -p 16 --minMAF 0 --minCOUNT 0 --gzip --cellTAG CB --UMItag UB > $O/cellsnp.log 2>&1
