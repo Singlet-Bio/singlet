@@ -84,7 +84,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     }
     po.snpHits = (uint64_t) o.n_snp_tuples; po.sjHits = o.sj_raw_sum; po.mtBases = (uint64_t) o.n_mt_tuples;
     po.cellReads.swap(o.cell_reads); po.cellMolecules.swap(o.cell_mol);
-    po.hitsExon = o.hits[0]; po.hitsIntron = o.hits[1]; po.umiRecorded = o.hits[2];
+    po.hitsExon = o.hits[0]; po.hitsIntron = o.hits[1]; po.umiRecorded = o.hits[2]; po.mtRescued = o.hits[3];
     po.alnGene.swap(o.aa_gene); po.alnStat.swap(o.aa_stat); po.alnExonGene.swap(o.aa_exg);
     for (auto& kv : T.acc) if (kv.first != "fetch") po.msGpu += kv.second;   // "fetch": the host copying a partition's results out
     { char b[160]; snprintf(b, sizeof b, "partition select %.1f ms (in the GPU time), host fetch between partitions %.1f ms; ", T.acc.count("part.select") ? T.acc["part.select"] : 0.0, T.acc.count("fetch") ? T.acc["fetch"] : 0.0); po.log += b; }

@@ -2281,7 +2281,7 @@ public:
         gpu_ms_.legacy_double = out.molLegacyDouble; gpu_ms_.dropped = out.molDropped;
         gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
         gpu_merges_.swap(out.geneMerges);
-        stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
+        stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
         if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
             const SigRec* S = reinterpret_cast<const SigRec*>(in.sigs.data());
             for (const auto& [rec, k] : gpu_wl_pending_) {

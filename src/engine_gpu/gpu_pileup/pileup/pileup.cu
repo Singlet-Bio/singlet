@@ -211,7 +211,7 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                     }
                 }
             }
-            if (amb && mg != MAXU && fg != MAXU && sec != MAXU && is_mt(fg) != is_mt(sec)) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = mfl ? mfl : 5; }
+            if (amb && mg != MAXU && fg != MAXU && sec != MAXU && is_mt(fg) != is_mt(sec)) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
             else if (!amb && fg != MAXU && gi != MAXU) { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
         }
     }
@@ -385,6 +385,7 @@ static int group_starts(Arena& A, const uint64_t* uh, int m, uint32_t** gs) {
     int ng = 0; CK(cudaMemcpy(&ng, dn, 4, cudaMemcpyDeviceToHost)); return ng; }
 static bool g_snp_first = false;   // --snp-first: the sorted path's first-read rule (prod/campaign), for the original gate
 static unsigned long long g_snp_stat[3] = {0, 0, 0};
+__global__ void k_mtres(const ReadRec* R, int n, const GRes* G, unsigned long long* c) { int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n && R[r].bc >= 0 && (G[R[r].sig].flags & 256u)) atomicAdd(&c[3], 1ull); }
 // count_read's counters over the gene tuples: [0] exon_hits, [1] intron_hits (kReadIntron), [2] reads recorded with a UMI (umi_duplicate)
 __global__ void k_hits(const Rec* r, int n, unsigned long long* c) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
@@ -426,7 +427,7 @@ struct Outputs {
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
     long long n_gene_tuples = 0, n_sjl = 0, n_sj_tuples = 0, n_snp_tuples = 0, n_mt_tuples = 0, n_ind_tuples = 0, n_junctions = 0;
     std::vector<uint32_t> cell_reads, cell_mol;   // per cell, when g_cell_stats
-    unsigned long long hits[3] = {0, 0, 0};         // exon_hits, intron_hits, UMI reads recorded (when g_cell_stats)
+    unsigned long long hits[4] = {0, 0, 0, 0};      // exon_hits, intron_hits, UMI reads recorded, chrM/NUMT multimappers rescued (when g_cell_stats)
     std::vector<uint32_t> aa_gene, aa_exg; std::vector<uint8_t> aa_stat;   // per alignment (when g_cell_stats): classify_read gene, k_annotate stat
     unsigned long long sj_raw_sum = 0;   // distinct (cell, junction, UMI) before the 65535 clamp (the engine's stats.sj_hits)
 };
@@ -664,6 +665,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         uint32_t* goff = scan_u32(A, gf, nRp); int ng = total_of(A, gf, goff, nRp);
         Rec* recs = A.alloc<Rec>(std::max(ng, 1)); k_gfill<<<GR, TB>>>(Rp, nRp, gr, gf, goff, in.ulen, recs);
         if (g_cell_stats && ng > 0) { k_cellreads<<<(ng + TB - 1) / TB, TB>>>(recs, ng, cell_reads); k_hits<<<(ng + TB - 1) / TB, TB>>>(recs, ng, hits); }
+        if (g_cell_stats && (in.dp.rules & 256)) k_mtres<<<GR, TB>>>(Rp, nRp, gr, hits);
         uint32_t* rc = A.alloc<uint32_t>(std::max(nRp, 1));
         k_cnt<<<GR, TB>>>(Rp, nRp, c_sj, rc); uint32_t* r_sj = scan_u32(A, rc, nRp); int n_sjt = total_of(A, rc, r_sj, nRp);
         k_cnt<<<GR, TB>>>(Rp, nRp, c_snp, rc); uint32_t* r_snp = scan_u32(A, rc, nRp); int n_snpt = total_of(A, rc, r_snp, nRp);
@@ -746,7 +748,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1));
         CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->cell_mol.data(), cell_mol, out->cell_mol.size() * 4, cudaMemcpyDeviceToHost));
-        CK(cudaMemcpy(out->hits, hits, 24, cudaMemcpyDeviceToHost));
+        CK(cudaMemcpy(out->hits, hits, 32, cudaMemcpyDeviceToHost));
         std::vector<AA> h(nA);
         if (nA) CK(cudaMemcpy(h.data(), aa, (size_t)nA * sizeof(AA), cudaMemcpyDeviceToHost));
         out->aa_gene.resize(nA); out->aa_stat.resize(nA); out->aa_exg.resize(nA);
