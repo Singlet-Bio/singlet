@@ -1,0 +1,55 @@
+{
+ "dir": "runs/single/GSM7036403",
+ "pairs": 111623976,
+ "bam_records": 128399687,
+ "exit_ok": true,
+ "refs_s": 14.7406,
+ "fq_pass1_s": 10.6875,
+ "star_s": 880.05,
+ "bam_index_s": 9.70763,
+ "cb_refresh_s": 10.8694,
+ "pileup_s": 79.4837,
+ "export_s": 190.561,
+ "total_s": 1260.01,
+ "genome_prefetch_s": 3.11024,
+ "wall_s": 1260.97,
+ "user_s": 2856.44,
+ "sys_s": 348.98,
+ "max_rss_gb": 55.05336380004883,
+ "core_s": 3205.4,
+ "node": "c003.clipper.gvsu.edu",
+ "cpu_model": "Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz",
+ "cpus_on_node": "40",
+ "cotenant_cpus": "20",
+ "loadavg": "4.83 6.67 4.76",
+ "cgroup_peak_mem_gb": 110.8,
+ "cgroup_core_s": 3216.2,
+ "stage_windows": {
+  "pre_sort_incl_fq_refs_star_map": {
+   "wall_s": 645.3,
+   "core_s": 2417.0
+  },
+  "sort": {
+   "wall_s": 250.2,
+   "core_s": 214.4
+  },
+  "index_cbrefresh_pileup": {
+   "wall_s": 106.9,
+   "core_s": 286.9
+  },
+  "nonhost_load_3_indices": {
+   "wall_s": 44.4,
+   "core_s": 44.8
+  },
+  "nonhost_classify_em_write": {
+   "wall_s": 24.2,
+   "core_s": 41.4
+  },
+  "export_incl_demux": {
+   "wall_s": 189.7,
+   "core_s": 211.8
+  }
+ },
+ "nonhost_load_core_s_monitor": 44.8,
+ "nonhost_load_wall_s_monitor": 44.4
+}

@@ -1,0 +1,21 @@
+{
+  "label": "GSM4006843",
+  "device": "NVIDIA H100 NVL",
+  "qual_neq_n_bases": 285638,
+  "reads": 60873094, "signatures": 23070222, "alignments": 25894673, "barcodes": 119473, "umi_len": 10,
+  "tuples": {"gene": 55792540, "junction_instances": 3341174, "junction_tuples": 15792389, "junctions": 170321, "snp": 7401489, "mt_bases": 179639797, "mt_indels": 42928},
+  "equivalence": {"exon": {"identical_entries": 24604078, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 24604078, "cpu_nnz": 24604078, "gpu_sum": 45120052, "cpu_sum": 45120052, "identical": true},
+    "intron": {"identical_entries": 6031894, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 6031894, "cpu_nnz": 6031894, "gpu_sum": 6408333, "cpu_sum": 6408333, "identical": true},
+    "ambiguous": {"identical_entries": 39356, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 39356, "cpu_nnz": 39356, "gpu_sum": 39714, "cpu_sum": 39714, "identical": true},
+    "junctions": {"identical_entries": 8586171, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 8586171, "cpu_nnz": 8586171, "gpu_sum": 15122798, "cpu_sum": 15122798, "identical": true},
+    "snp_ad": {"identical_entries": 1656215, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 1656215, "cpu_nnz": 1656215, "gpu_sum": 1871759, "cpu_sum": 1871759, "identical": true},
+    "snp_dp": {"identical_entries": 5613873, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 5613873, "cpu_nnz": 5613873, "gpu_sum": 7099653, "cpu_sum": 7099653, "identical": true},
+    "mt": {"identical_entries": 56926070, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 56926070, "cpu_nnz": 56926070, "gpu_sum": 179639797, "cpu_sum": 179639797, "identical": true},
+    "mt_rev": {"identical_entries": 4821008, "only_gpu": 0, "only_cpu": 0, "value_diff": 0, "gpu_nnz": 4821008, "cpu_nnz": 4821008, "gpu_sum": 5497669, "cpu_sum": 5497669, "identical": true},
+    "mt_indels": {"gpu": 42928, "cpu": 42928, "identical": true}},
+  "deterministic_across_runs": true, "output_sha256": "c827d68418602a7da63e6e36e9e10384f4d712cc7c47edb2f6e261036e6d5f49",
+  "phase_median_ms": {"1.annotate": 4.386, "2.siglists": 3.805, "3.sjids": 0.728, "4.expand": 12.346, "5.sj": 2.414, "6.snp": 1.269, "7.mt": 8.704, "b.end": 0.001, "b.key": 0.743, "b.rbk": 2.800, "b.sort": 5.138, "c.cand": 5.789, "c.cc": 0.506, "c.emit": 1.655, "c.end": 0.001, "c.seg": 0.699, "d.end": 4.277},
+  "total_median_ms": 55.282, "reads_per_s": 1.101e+09, "reps": 3,
+  "h2d_records_ms": 762.3, "h2d_records_GB": 3.01, "second_run_with_fetch_s": 2.77,
+  "peak_device_memory_GB": 23.76, "resident_inputs_GB": 3.08
+}

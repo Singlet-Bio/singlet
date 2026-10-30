@@ -1,0 +1,113 @@
+% Figure 2: how .s1 stores a count matrix, from the dataset down to the bit stream. Schematic, no data values.
+\begin{figure*}[p]
+\centering
+\begin{tikzpicture}[
+  font=\sffamily\scriptsize,
+  box/.style={draw=#1!80!black, fill=#1!12, rounded corners=1.5pt, align=center, inner sep=3pt, minimum height=0.9cm},
+  box/.default=sone,
+  seg/.style={draw=white, line width=0.6pt, fill=#1, minimum height=0.75cm, inner sep=1pt, align=center, font=\sffamily\tiny},
+  lbl/.style={font=\sffamily\small\bfseries, anchor=west},
+  arr/.style={-{Stealth[length=4pt]}, thick, ink2},
+  note/.style={font=\sffamily\tiny, text=ink2, align=left},
+]
+
+% ================= (a) study level =================
+\node[lbl] at (0,0) {a\quad A dataset is a manifest, a few sample objects and shared packs};
+\node[box, minimum width=2.6cm] (man) at (1.6,-1.1) {\textbf{dataset manifest}\\JSON, a few KB\\offsets of every member};
+\node[box, minimum width=2.1cm] (s1) at (5.1,-0.6) {sample 1\textbf{.s1}};
+\node[box, minimum width=2.1cm] (s2) at (5.1,-1.6) {sample 2\textbf{.s1}};
+\node[font=\sffamily\small] at (6.55,-1.1) {$\cdots$};
+\draw[arr] (man.east) -- (s1.west);
+\draw[arr] (man.east) -- (s2.west);
+\node[box=gen, minimum width=3.1cm, dashed] (pk1) at (9.6,-0.6) {\textbf{gene vocabulary pack}\\one per annotation};
+\node[box=gen, minimum width=3.1cm, dashed] (pk2) at (9.6,-1.6) {\textbf{barcode whitelist pack}\\one per chemistry};
+\draw[arr, dashed, gen] (s1.east) -- (pk1.west);
+\draw[arr, dashed, gen] (s2.east) -- (pk2.west);
+\node[note, anchor=west] at (11.3,-1.1) {shared by every sample:\\downloaded once, cached};
+\node[note] at (5.1,-2.3) {immutable, named by SHA-256 of the content};
+
+% ================= (b) sample object =================
+\node[lbl] at (0,-3.0) {b\quad A sample object stores only what cannot be recomputed};
+\begin{scope}[yshift=-3.95cm]
+\node[seg=ink2!55, minimum width=1.2cm, anchor=west] (h) at (0,0) {header +\\member table};
+\node[seg=dl!55, minimum width=2.5cm, anchor=west] (c) at (h.east) {\textbf{cells table}\\barcode index,\\cell metadata};
+\node[seg=sone!55, minimum width=4.2cm, anchor=west] (ex) at (c.east) {\textbf{counts} (pz2)};
+\node[seg=sone!35, minimum width=3.0cm, anchor=west] (in) at (ex.east) {further modalities (pz2)};
+\node[seg=white, draw=gen, dashed, minimum width=3.6cm, anchor=west, text=ink2] (rc) at (in.east) {\textbf{recipes} for derived tables\\(e.g.\ QC metrics): \textit{0 bytes}};
+\node[note, anchor=north west, text width=16cm] at (0,-0.5) {Never stored: gene names and barcodes (packs), row permutation, column pointers and sums (derived from the matrix), every member a recipe regenerates byte for byte; the writer verifies each recipe on the sample before it drops the original.};
+\end{scope}
+
+% ================= (c) pz2 member =================
+\node[lbl] at (0,-5.45) {c\quad A matrix member: a small prefix plans any read, chunks decode independently};
+\begin{scope}[yshift=-6.85cm]
+\node[seg=ink2!60, minimum width=1.2cm, anchor=west] (ph) at (0,0) {header\\256 B};
+\node[seg=ink2!45, minimum width=1.3cm, anchor=west] (pi) at (ph.east) {chunk index\\24 B / chunk};
+\node[seg=ink2!35, minimum width=1.3cm, anchor=west] (pt) at (pi.east) {rANS\\tables};
+\node[seg=ink2!25, minimum width=1.1cm, anchor=west] (pr) at (pt.east) {row\\keys};
+\node[seg=sone!45, minimum width=1.9cm, anchor=west] (k1) at (pr.east) {chunk 1};
+\node[seg=sone!70, minimum width=1.9cm, anchor=west, text=white] (k2) at (k1.east) {\textbf{chunk 2}};
+\node[seg=sone!70, minimum width=1.9cm, anchor=west, text=white] (k3) at (k2.east) {\textbf{chunk 3}};
+\node[seg=sone!45, minimum width=1.6cm, anchor=west] (k4) at (k3.east) {$\cdots$};
+\node[seg=sone!45, minimum width=1.6cm, anchor=west] (k5) at (k4.east) {chunk $K$};
+\draw[decorate, decoration={brace, amplitude=4pt}] (ph.north west) ++(0,0.05) -- ($(pr.north east)+(0,0.05)$) node[midway, above=4pt, note, align=center] {request 1: the prefix (a few KB)};
+\draw[decorate, decoration={brace, amplitude=4pt}] (k2.north west) ++(0,0.05) -- ($(k3.north east)+(0,0.05)$) node[midway, above=4pt, note, align=center] {request 2: only the chunks with the wanted cells};
+\node[note, anchor=north west] at (0,-0.5) {Each chunk holds at most 49{,}152 non-zeros of consecutive cells (the default) and is decoded on its own; $p$ threads decode $p$ chunks at once.};
+\end{scope}
+
+% ================= (d) codec =================
+\node[lbl] at (0,-8.3) {d\quad Inside a chunk: one cell's counts become a few small symbols, coded by static rANS in 32 lanes};
+\begin{scope}[yshift=-10.0cm]
+% step 1: a cell's column
+\node[note, anchor=south, align=center] at (0.55,0.95) {\textbf{1} a cell};
+\foreach \g/\v [count=\i from 0] in {CD3E/1,MALAT1/7,ACTB/3,LYZ/0,RPL13/2,MS4A1/1}{
+  \node[font=\sffamily\tiny, anchor=east] at (0.45,0.6-\i*0.27) {\g};
+  \ifnum\v=0 \node[draw=gen!60, minimum size=0.25cm, inner sep=0, font=\sffamily\tiny, text=gen] at (0.7,0.6-\i*0.27) {\v};
+  \else \node[draw=sone, fill=sone!25, minimum size=0.25cm, inner sep=0, font=\sffamily\tiny] at (0.7,0.6-\i*0.27) {\v};\fi}
+\draw[arr] (1.0,0) -- (1.6,0);
+% step 2: reordered
+\node[note, anchor=south, align=center] at (2.35,0.95) {\textbf{2} rows by frequency};
+\foreach \g/\v [count=\i from 0] in {MALAT1/7,ACTB/3,RPL13/2,CD3E/1,LYZ/0,MS4A1/1}{
+  \node[font=\sffamily\tiny, anchor=east] at (2.3,0.6-\i*0.27) {\i\ \g};
+  \ifnum\v=0 \node[draw=gen!60, minimum size=0.25cm, inner sep=0, font=\sffamily\tiny, text=gen] at (2.55,0.6-\i*0.27) {\v};
+  \else \node[draw=sone, fill=sone!25, minimum size=0.25cm, inner sep=0, font=\sffamily\tiny] at (2.55,0.6-\i*0.27) {\v};\fi}
+\draw[arr] (2.85,0) -- (3.45,0);
+% step 3: symbols
+\node[note, anchor=south, align=center] at (4.55,0.95) {\textbf{3} gap to previous row,\\flag ``count $>$ 1'', residual};
+\node[font=\sffamily\tiny, align=left, anchor=west] at (3.55,0.05) {
+\begin{tabular}{@{}l@{\ }l@{\ }l@{}}
+row 0 & gap 0, flag 1 & resid 6\\
+row 1 & gap 0, flag 1 & resid 2\\
+row 2 & gap 0, flag 1 & resid 1\\
+row 3 & gap 0, flag 0 & \\
+row 5 & gap 1, flag 0 & \\
+\end{tabular}};
+\draw[arr] (5.75,0) -- (6.35,0);
+% step 4: context picks a table
+\node[note, anchor=south, align=center] at (7.35,0.95) {\textbf{4} context picks a table:\\(cell depth, position in list)};
+\foreach \r in {0,...,3} \foreach \c in {0,...,4} {
+  \pgfmathsetmacro{\sh}{12+8*\r+6*\c}
+  \fill[sone!\sh] (6.55+\c*0.32,0.45-\r*0.27) rectangle ++(0.3,-0.25);}
+\draw[dom, line width=1pt] (6.55+2*0.32,0.45-1*0.27) rectangle ++(0.3,-0.25);
+\node[note, align=center] at (7.35,-0.95) {tables counted once per\\matrix and stored};
+\draw[arr] (8.35,0) -- (8.95,0);
+% step 5: 32 lanes
+\node[note, anchor=south, align=center] at (10.2,0.95) {\textbf{5} 32 rANS lanes, one shared\\16-bit word stream};
+\foreach \l in {0,...,7} {
+  \draw[sone!70, line width=0.9pt] (9.1,0.55-\l*0.15) -- (10.4,0.55-\l*0.15);
+}
+\node[note] at (9.75,-0.75) {8 of 32 lanes shown};
+\draw[ink2, thick] (10.4,0.6) -- (10.6,0) -- (10.4,-0.6);
+\draw[arr] (10.6,0) -- (11.1,0);
+\foreach \w in {0,...,9} \fill[sone!\the\numexpr 30+7*\w\relax] (11.15+\w*0.22,0.12) rectangle ++(0.2,-0.24);
+\node[note] at (12.25,-0.45) {chunk bytes};
+% decode line
+\draw[-{Stealth[length=4pt]}, thick, dom] (13.3,-1.25) -- (0.2,-1.25) node[midway, below=1pt, font=\sffamily\tiny, text=dom!80!black] {decode, per symbol: one table lookup, one multiply, one add; output written straight into the caller's CSC arrays; every lane state must end where it started, an integrity check of each chunk};
+\end{scope}
+\end{tikzpicture}
+\caption{\textbf{How \sone{} stores single-cell counts.}
+\textbf{(a)} A dataset is a small manifest that points to one immutable sample object per sample. Gene identifiers and barcode whitelists can be moved into shared packs that a reader fetches once.
+\textbf{(b)} A sample object contains a cells table and one matrix member per count modality. Everything that can be recomputed is replaced by a recipe that the writer has verified on that sample.
+\textbf{(c)} A matrix member starts with a prefix (header, chunk index, entropy tables, row keys) that lets a reader plan any read; chunks of at most 49{,}152 non-zeros follow and decode independently, so any set of cells costs two range requests.
+\textbf{(d)} The codec. (1--2) Rows are numbered by how many cells express them, so frequent genes come first and the gaps between a cell's non-zeros are small. (3) Each non-zero becomes one symbol (gap class and a flag for counts above one) and, for counts above one, a residual. (4) The cell's depth and the position in its list select a probability table. (5) Thirty-two interleaved static rANS lanes write one stream; decoding is branch-free table arithmetic that SIMD units run eight or sixteen lanes at a time.}
+\label{fig:how}
+\end{figure*}

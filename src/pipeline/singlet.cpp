@@ -1557,21 +1557,42 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // when mapping rate is near-zero and nearly all reads are unmapped.
         // EM deconvolution is statistical — 20M reads is more than sufficient for
         // species-level classification (even 1M would suffice).
+        // The sample above the cap is fixed by the read name, not by file order (STAR writes unmapped reads in
+        // thread-dependent order; order-free-rules R8): keep reads whose name hash is below a threshold that
+        // halves whenever the kept set exceeds the cap. The kept set depends only on the set of reads.
         static constexpr size_t MAX_NONHOST_READS = 20'000'000;
         std::vector<std::string> reads;
+        bool nonhost_subsampled = false;
         {
+            std::vector<std::pair<uint64_t, std::string>> kept;
+            uint64_t thr = UINT64_MAX;
             std::ifstream fq(mate1_path);
             std::string name_l, seq_l, plus_l, qual_l;
             while (std::getline(fq, name_l) && std::getline(fq, seq_l) &&
                    std::getline(fq, plus_l) && std::getline(fq, qual_l)) {
-                if (!seq_l.empty()) reads.push_back(seq_l);
-                if (reads.size() >= MAX_NONHOST_READS) break;
+                if (seq_l.empty()) continue;
+                size_t e = name_l.find_first_of(" \t");
+                uint64_t h = 14695981039346656037ULL;   // FNV-1a of the read name
+                for (size_t i = 1; i < (e == std::string::npos ? name_l.size() : e); ++i) {
+                    h ^= static_cast<unsigned char>(name_l[i]); h *= 1099511628211ULL;
+                }
+                h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33;
+                if (h >= thr) continue;
+                kept.emplace_back(h, std::move(seq_l));
+                while (kept.size() > MAX_NONHOST_READS) {
+                    thr >>= 1;
+                    nonhost_subsampled = true;
+                    kept.erase(std::remove_if(kept.begin(), kept.end(),
+                                              [thr](const auto& p) { return p.first >= thr; }), kept.end());
+                }
             }
+            reads.reserve(kept.size());
+            for (auto& p : kept) reads.push_back(std::move(p.second));
         }
         const size_t n_total = reads.size();
-        if (n_total >= MAX_NONHOST_READS)
-            std::cerr << "[nonhost] Capped at " << MAX_NONHOST_READS
-                      << " reads (file larger; subsampling for EM)\n";
+        if (nonhost_subsampled)
+            std::cerr << "[nonhost] Subsampled to " << n_total
+                      << " reads by read-name hash (file above " << MAX_NONHOST_READS << ")\n";
         std::cerr << "[nonhost] EM screening " << n_total << " unmapped reads"
                   << (using_host_filter ? " (host-subtraction ON)" : "") << "...\n";
 
@@ -2773,6 +2794,7 @@ int main(int argc, char* argv[]) {
     bool threads_specified = false;
     int pileup_threads = 1;  // bgzf not useful for uncompressed pipe from STAR
     int parallel_pileup = -1; // -1=auto, 0=off, 1=on
+    int stream_unsorted = -1; // -1=auto (default: on for CB_UMI_Simple scRNA), 0=off (--sorted-bam), 1=on (--stream-unsorted). On: no sorted BAM; unsorted STAR output streamed into the serial pileup, CB from CR
     int n_donors = -1;
     int umi_len = 12;
     bool umi_len_explicit = false;  // S5-UMI-LEN: true when --umi-len given by user
@@ -2851,6 +2873,8 @@ int main(int argc, char* argv[]) {
         else if (arg == "--pileup-threads" && i+1 < argc) pileup_threads = std::atoi(argv[++i]);
         else if (arg == "--parallel-pileup") parallel_pileup = 1;
         else if (arg == "--no-parallel-pileup") parallel_pileup = 0;
+        else if (arg == "--stream-unsorted") stream_unsorted = 1;
+        else if (arg == "--sorted-bam") stream_unsorted = 0;
         else if (arg == "--output-format" && i+1 < argc) output_format = argv[++i];
         else if (arg == "--pipeline") pipeline_mode = true;
         else if (arg == "--cascade" && i+1 < argc) cascade_mode = argv[++i];
@@ -3853,6 +3877,9 @@ int main(int argc, char* argv[]) {
     // R1.fastq scan for barcode discovery — saves ~10s).
     uint32_t onefq_bc_dict_n = 0;
     std::vector<uint64_t> onefq_bc_freq;
+    // order-free-rules R11: STAR's CB_UMI_Simple whitelist correction for the stream, its exact histogram from pass 1
+    singlet::CbCorrector cb_corrector;
+    bool cb_hist_ready = false;
     std::vector<uint8_t> onefq_bc_dict_flat;
     uint16_t onefq_bc_length = 0;
     std::unordered_map<uint64_t, uint64_t> onefq_bc_counts;  // non-dict path (packed keys)
@@ -4647,10 +4674,22 @@ int main(int argc, char* argv[]) {
             if (const char* e = std::getenv("SINGLET_PASS1_THREADS"); e && std::atoi(e) > 0)
                 p1_threads = std::min(p1_threads, std::atoi(e));
             std::vector<std::vector<uint64_t>> bc_freq_t(p1_threads);
+            // R11: STAR's exact histogram (cbReadCountExact): reads whose CB is an exact whitelist hit and whose UMI has no
+            // N and is not a homopolymer, over every read of the sample (unmapped ones included), weighted by duplicates.
+            const int cbx_cb0 = detected_cb_start - 1, cbx_cbl = detected_bc_len;
+            const int cbx_umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, cbx_umil = umi_len;
+            const bool cbx_on = detected_soloType == "CB_UMI_Simple" && !has_i2_p1 && cbx_cbl > 0 && cbx_cbl <= 31
+                && cbx_umil > 0 && !whitelist_file.empty() && whitelist_file != "None" && whitelist_file != "none"
+                && cb_corrector.load_whitelist(whitelist_file) && cb_corrector.length() == cbx_cbl;
+            std::vector<std::vector<uint64_t>> cbx_dict_t(p1_threads);
+            std::vector<std::unordered_map<int64_t, uint64_t>> cbx_raw_t(p1_threads);
             std::atomic<uint32_t> p1_next{0};
             auto pass1_worker = [&](int tid) {
                 std::vector<uint64_t>& freq = bc_freq_t[tid];
                 if (!bc_freq_p1.empty()) freq.assign(bc_freq_p1.size(), 0);
+                std::vector<uint64_t>& cbx_dict = cbx_dict_t[tid];
+                auto& cbx_raw = cbx_raw_t[tid];
+                if (cbx_on && has_bc_dict_p1) cbx_dict.assign(bc_dict_n_p1, 0);
                 std::unordered_map<uint64_t, size_t> key_pos;
                 std::vector<std::unordered_map<uint64_t, size_t>> seg_pos(complex_extra_segs.size());
                 for (uint32_t bi; (bi = p1_next.fetch_add(1)) < total_blocks_p1;) {
@@ -4719,6 +4758,28 @@ int main(int argc, char* argv[]) {
                             uint32_t idx = blk_p1.bc_indices[i];
                             if (idx <= bc_dict_n_p1 && !freq.empty()) freq[idx] += repeat_p1;
                         }
+                        if (cbx_on && r1len_p1 >= cbx_cb0 + cbx_cbl && r1len_p1 >= cbx_umi0 + cbx_umil) {
+                            const uint8_t* r1p1 = blk_p1.r1_seq(i);
+                            const uint8_t* u = r1p1 + cbx_umi0;
+                            bool umi_ok = true, homo = true;
+                            for (int j = 0; j < cbx_umil; ++j) {
+                                if (u[j] > 3) { umi_ok = false; break; }
+                                if (u[j] != u[0]) homo = false;
+                            }
+                            if (umi_ok && !homo) {
+                                const uint32_t idx = (has_bc_dict_p1 && i < blk_p1.bc_indices.size())
+                                                     ? blk_p1.bc_indices[i] : UINT32_MAX;
+                                if (idx < bc_dict_n_p1 && !cbx_dict.empty()) {
+                                    cbx_dict[idx] += repeat_p1;
+                                } else {
+                                    static constexpr char kNt5[5] = {'A', 'C', 'G', 'T', 'N'};
+                                    char bcs[32];
+                                    for (int j = 0; j < cbx_cbl; ++j) bcs[j] = kNt5[std::min<uint8_t>(r1p1[cbx_cb0 + j], 4)];
+                                    const int64_t w = cb_corrector.find(bcs);
+                                    if (w >= 0) cbx_raw[w] += repeat_p1;
+                                }
+                            }
+                        }
                     }
                 }
             };
@@ -4730,6 +4791,30 @@ int main(int argc, char* argv[]) {
             }
             for (const auto& f : bc_freq_t)
                 for (size_t k = 0; k < f.size(); ++k) bc_freq_p1[k] += f[k];
+            if (cbx_on) {   // R11: fold the per-thread exact counts into the corrector, by whitelist index
+                static constexpr char kNt5[5] = {'A', 'C', 'G', 'T', 'N'};
+                const auto& dflat = reader.bc_dict_flat();
+                const uint16_t dlen = reader.bc_length();
+                uint64_t n_exact = 0;
+                if (has_bc_dict_p1 && dlen == static_cast<uint16_t>(cbx_cbl)) {
+                    std::vector<uint64_t> dsum(bc_dict_n_p1, 0);
+                    for (const auto& t : cbx_dict_t)
+                        for (size_t k = 0; k < t.size(); ++k) dsum[k] += t[k];
+                    char bcs[32];
+                    for (uint32_t k = 0; k < bc_dict_n_p1; ++k) {
+                        if (!dsum[k]) continue;
+                        for (int j = 0; j < cbx_cbl; ++j)
+                            bcs[j] = kNt5[std::min<uint8_t>(dflat[static_cast<size_t>(k) * dlen + j], 4)];
+                        const int64_t w = cb_corrector.find(bcs);
+                        if (w >= 0) { cb_corrector.add_exact(w, dsum[k]); n_exact += dsum[k]; }
+                    }
+                }
+                for (const auto& m : cbx_raw_t)
+                    for (const auto& [w, n] : m) { cb_corrector.add_exact(w, n); n_exact += n; }
+                cb_hist_ready = true;
+                std::cerr << "[1fq-pass1] R11 exact CB histogram: " << n_exact << " reads over a "
+                          << cb_corrector.size() << "-barcode whitelist\n";
+            }
             for (auto& b : p1_blocks) {
                 for (auto& s : b.probe) {
                     if (fifo_first25_r2.size() >= 20000) break;
@@ -4999,6 +5084,53 @@ int main(int argc, char* argv[]) {
         std::cerr << "[singlet] .1fq decoded to temp files\n";
     }
 
+    // ── BAM source mode: decided here because the engine copies config (cb_from_cr) when it is built ──
+    // Unsorted streaming is the default wherever the pileup does not need the sorted file: STAR's unsorted
+    // BAM goes through a pipe into the serial pileup (no sort, no index, no CB scan, no BAM on disk; about
+    // 19% less wall, docs/research-beta/ws-w3b-bam-stream.md). STAR writes its corrected CB only into a
+    // sorted BAM, so the pileup takes CB from CR (identical here: .1fq barcodes are whitelist-exact).
+    // The modes below still read the sorted BAM; --sorted-bam forces it everywhere.
+    if (stream_unsorted != 0) {
+        const char* sorted_reason = nullptr;
+        // An existing BAM is read as given. With an explicit --stream-unsorted it is treated as a saved stream
+        // (SINGLET_TEE_STREAM_BAM, any record order): serial pileup, CB from CR, protocol strand (test replay).
+        if (!bam_file.empty() && stream_unsorted != 1) sorted_reason = "the input is an existing BAM";
+        else if (!bam_file.empty()) {}
+        else if (!onefq_mode) sorted_reason = "CB from CR needs whitelist-exact .1fq barcodes";
+        else if (parallel_pileup == 1) sorted_reason = "--parallel-pileup was given";
+        else if (is_atac_mode) sorted_reason = "ATAC fragments are read from the sorted BAM";
+        else if (is_smart_seq2_mode || is_bulk_rna_mode) sorted_reason = "plate/bulk counting reads the sorted BAM";
+        else if (detected_soloType != "CB_UMI_Simple") sorted_reason = "the protocol is not CB_UMI_Simple";
+        // Same condition as the native CB_UMI_Simple STAR branch below: without a whitelist file STAR runs
+        // CB_samTagOut (auto-discovery), which the stream does not support (found by W11, job 790268).
+        else if (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")
+            sorted_reason = "no barcode whitelist file (STAR runs CB_samTagOut)";
+        else if (tagged_bam_enabled) sorted_reason = "--tagged-bam rewrites the sorted BAM";
+        else if (std::getenv("SINGLET_KEEP_STAR_BAM")) sorted_reason = "SINGLET_KEEP_STAR_BAM keeps the sorted BAM";
+        if (sorted_reason) {
+            if (stream_unsorted == 1)
+                std::cerr << "[singlet] --stream-unsorted ignored: " << sorted_reason << std::endl;
+            stream_unsorted = 0;
+        } else {
+            stream_unsorted = 1;
+            parallel_pileup = 0;
+            std::cerr << "[singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)" << std::endl;
+        }
+    }
+    config.cb_from_cr = (stream_unsorted == 1);
+    // R11: STAR's whitelist correction of CR on the stream (and the SINGLET_TEST_CB_CHECK comparison on the sorted path)
+    config.cb_corrector = (cb_hist_ready && cb_corrector.loaded()) ? &cb_corrector : nullptr;
+    if (config.cb_from_cr)
+        std::cerr << "[singlet] stream CB: " << (config.cb_corrector ? "CR corrected by STAR's 1MM_multi_Nbase_pseudocounts rule (R11)"
+                                                                     : "CR exact (no pass-1 histogram)") << "\n";
+    config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
+    // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
+    const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
+    if (engine_ptr && config.cb_from_cr) {
+        std::cerr << "ERROR: pileup engine was built before the BAM source mode was decided" << std::endl;
+        return 1;
+    }
+
     // ── Phase 0 (deferred): construct the pileup engine now that the .1fq header has set the strand ──
     if (construct_engine_early && !engine_ptr) {
         engine_ptr = std::make_unique<singlet::PileupEngine>(config);
@@ -5082,10 +5214,15 @@ int main(int argc, char* argv[]) {
         if (onefq_bc_dict_n > 0 && !onefq_bc_freq.empty() && onefq_bc_length > 0) {
             static constexpr char NUM_TO_ASCII_BC[5] = {'A','C','G','T','N'};
 
-            // Build sorted (count, barcode_string) list from BC index frequencies
+            // Build sorted (count, barcode_string) list from BC index frequencies.
+            // The sorted path replaces this list after alignment by the CB-tag refresh (>=5 primary CB
+            // records). The unsorted stream has no BAM to scan, so it takes the refresh's threshold here
+            // instead: .1fq barcodes are whitelist-exact, so raw reads >= mapped CB records and the list
+            // is a superset of the refreshed one (barcodes with 5-99 reads were otherwise lost: ~2% of
+            // barcoded reads on GSM4006843). Ties go to the smaller barcode, independent of dictionary order.
             std::vector<std::pair<uint64_t, std::string>> sorted_bcs;
             for (uint32_t idx = 0; idx < onefq_bc_dict_n; ++idx) {
-                if (onefq_bc_freq[idx] >= 100) {
+                if (onefq_bc_freq[idx] >= bc_min_reads) {
                     // Convert numeric BC to ASCII string
                     std::string bc(onefq_bc_length, ' ');
                     for (uint16_t j = 0; j < onefq_bc_length; ++j) {
@@ -5095,8 +5232,12 @@ int main(int argc, char* argv[]) {
                     sorted_bcs.emplace_back(onefq_bc_freq[idx], std::move(bc));
                 }
             }
-            std::sort(sorted_bcs.begin(), sorted_bcs.end(),
-                      [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (stream_unsorted == 1)
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+            else
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first > b.first; });
 
             // Write barcode file
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
@@ -5108,7 +5249,7 @@ int main(int argc, char* argv[]) {
             config.barcode_path = barcode_file;
 
             std::cerr << "[singlet] Discovered " << sorted_bcs.size()
-                      << " barcodes (≥100 reads) from .1fq BC dictionary ("
+                      << " barcodes (≥" << bc_min_reads << " reads) from .1fq BC dictionary ("
                       << onefq_bc_dict_n << " entries)\n";
 
             if (sorted_bcs.empty()) {
@@ -5135,7 +5276,7 @@ int main(int argc, char* argv[]) {
             static constexpr char UNPACK_BASE[5] = {'A','C','G','T','N'};
             std::vector<std::pair<uint64_t, std::string>> sorted_bcs;
             for (auto& [key, cnt] : onefq_bc_counts) {
-                if (cnt >= 100) {
+                if (cnt >= bc_min_reads) {   // see the BC-dictionary fast path above
                     // Unpack 3-bit-per-base uint64_t key to ASCII string
                     std::string bc(bc_len, ' ');
                     uint64_t k = key;
@@ -5151,8 +5292,12 @@ int main(int argc, char* argv[]) {
                     if (valid) sorted_bcs.emplace_back(cnt, std::move(bc));
                 }
             }
-            std::sort(sorted_bcs.begin(), sorted_bcs.end(),
-                      [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (stream_unsorted == 1)   // hash-map order: ties to the smaller barcode
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+            else
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first > b.first; });
 
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
             std::ofstream bc_out(auto_barcode_file);
@@ -5163,7 +5308,7 @@ int main(int argc, char* argv[]) {
             config.barcode_path = barcode_file;
 
             std::cerr << "[singlet] Discovered " << sorted_bcs.size()
-                      << " barcodes (≥100 reads) from decode-time counting ("
+                      << " barcodes (≥" << bc_min_reads << " reads) from decode-time counting ("
                       << onefq_bc_counts.size() << " unique)\n";
 
             // ── Guard 2: Barcode explosion warning ──
@@ -5954,7 +6099,7 @@ int main(int argc, char* argv[]) {
 
 
     // ── Phase 1: Set up BAM source ──
-    // Decide whether to use parallel pileup (sorted BAM to /dev/shm + indexed).
+    // Sorted path (stream_unsorted == 0, decided before the engine is built): parallel pileup (sorted BAM to /dev/shm + indexed).
     // Auto mode: enable when /dev/shm has >=10 GB free and we're running STAR.
     if (parallel_pileup == -1 && bam_file.empty()) {
         struct statvfs svfs;
@@ -6962,7 +7107,22 @@ int main(int argc, char* argv[]) {
             args.push_back("--outSAMattributes");
             args.push_back("NH"); args.push_back("nM");
             args.push_back("AS"); args.push_back("CR"); args.push_back("UR");
-            args.push_back("CB");
+            if (stream_unsorted) {
+                if (solo_type_is_sam_tag_out || use_complex || use_complex_concat) {
+                    std::cerr << "ERROR: --stream-unsorted supports CB_UMI_Simple only (this protocol uses CB_samTagOut or CB_UMI_Complex)\n";
+                    return 1;
+                }
+                // No CB: STAR allows it only in a sorted BAM; the pileup derives CB from CR (PileupConfig::cb_from_cr).
+            } else {
+                args.push_back("CB");
+            }
+            // Debug only (BAM-stream CB-correction replica test): extra STAR SAM attributes, e.g. SINGLET_EXTRA_SAM_ATTRS="CY UY".
+            if (const char *extra_attrs = std::getenv("SINGLET_EXTRA_SAM_ATTRS")) {
+                static std::vector<std::string> extra_store;   // args holds const char*: keep the strings alive
+                std::istringstream extra_ss(extra_attrs);
+                for (std::string a; extra_ss >> a;) extra_store.push_back(a);
+                for (const auto &a : extra_store) args.push_back(a.c_str());
+            }
 
             // Skip unmapped reads (pileup ignores them anyway)
             args.push_back("--outSAMunmapped"); args.push_back("None");
@@ -7115,6 +7275,32 @@ int main(int argc, char* argv[]) {
             bam_source = "/dev/fd/" + std::to_string(pipe_fd[0]);
             std::cerr << "[singlet] STAR pid=" << star_pid
                       << ", " << star_threads << " threads, pipe fd=" << pipe_fd[0] << "\n";
+            // Test only (order-free-rules shuffled-order gate): SINGLET_TEE_STREAM_BAM=<path> copies the unsorted
+            // STAR stream to a file while the pileup reads it, for replay with --bam-file <path> --stream-unsorted.
+            if (const char* tee_path = std::getenv("SINGLET_TEE_STREAM_BAM"); tee_path && *tee_path && stream_unsorted == 1) {
+                int tee_pipe[2];
+                FILE* tee_fp = std::fopen(tee_path, "wb");
+                if (tee_fp && pipe(tee_pipe) == 0) {
+                    const int src = pipe_fd[0];
+                    std::thread([src, dst = tee_pipe[1], tee_fp]() {
+                        std::vector<char> buf(1 << 20);
+                        for (ssize_t n; (n = read(src, buf.data(), buf.size())) > 0;) {
+                            std::fwrite(buf.data(), 1, static_cast<size_t>(n), tee_fp);
+                            for (ssize_t off = 0; off < n;) {
+                                ssize_t w = write(dst, buf.data() + off, static_cast<size_t>(n - off));
+                                if (w <= 0) break;
+                                off += w;
+                            }
+                        }
+                        std::fclose(tee_fp);
+                        close(dst);
+                    }).detach();
+                    bam_source = "/dev/fd/" + std::to_string(tee_pipe[0]);
+                    std::cerr << "[singlet] SINGLET_TEE_STREAM_BAM: copying the STAR stream to " << tee_path << std::endl;
+                } else if (tee_fp) {
+                    std::fclose(tee_fp);
+                }
+            }
         }
     }
 
@@ -7717,6 +7903,17 @@ int main(int argc, char* argv[]) {
         }
         // Join FIFO writer thread (if FIFO decode mode) after STAR completes
         if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
+
+        // Stream (order-free-rules R5): the pass was counted in the protocol orientation. A pipe cannot be
+        // re-read, so a library whose reads contradict that orientation goes to the sorted path, where the
+        // strand safety net re-reads the BAM. Exit 8 = strand_contradiction: rerun with --sorted-bam.
+        if (stream_unsorted == 1 && config.stranded && config.auto_strand
+            && stats.strand_sense + stats.strand_antisense >= singlet::kStrandRetryMinReads
+            && singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) > singlet::kStrandRetryFrac) {
+            std::cerr << "[singlet] ERROR: " << static_cast<int>(singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) * 100)
+                      << "% of nuclear reads are antisense to the protocol orientation; rerun with --sorted-bam (strand safety net)" << std::endl;
+            return 8;  // strand_contradiction
+        }
     }
 
     // ── BUG-MAPPING-GUARD: Warn on very low mapping rate (wrong genome) ──

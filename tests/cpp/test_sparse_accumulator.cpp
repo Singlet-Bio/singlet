@@ -153,6 +153,33 @@ int main() {
     // so Test 8's correctness (clean == static_cast path) covers the logic.
     std::cout << "Test 9 PASS: indptr clamp helper in place (see sparse_accumulator.h)\n";
 
+    // ── Test 10: bounded compaction gives the same CSC and holds memory ─────
+    {
+        const uint32_t nb = 37, nf = 500;
+        SparseAccumulator<uint16_t> plain, bounded;
+        std::vector<std::string> bcs(nb);
+        plain.set_barcodes(bcs);   plain.set_n_features(nf);
+        bounded.set_barcodes(bcs); bounded.set_n_features(nf);
+        bounded.set_compact_limit(1000);
+        uint64_t x = 88172645463325252ULL;
+        size_t peak = 0;
+        for (int i = 0; i < 600000; ++i) {   // hot cell 0 / feature 7 passes 65535: saturates
+            x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+            uint32_t f = (i % 3 == 0) ? 7 : x % nf, c = (i % 3 == 0) ? 0 : (x >> 20) % nb;
+            plain.increment(f, c);
+            bounded.increment(f, c);
+            peak = std::max(peak, bounded.nnz_raw());
+        }
+        auto a = plain.to_csc(), b = bounded.to_csc();
+        assert(a.indptr == b.indptr && a.indices == b.indices && a.data == b.data);
+        bool saturated = false;
+        for (auto v : a.data) saturated |= (v == 65535);
+        assert(saturated);
+        assert(peak <= 2 * nb * nf + 1000);   // bounded by distinct pairs, not by 600000 events
+        assert(peak < 40000);
+        std::cout << "Test 10 PASS: compaction identical to plain (peak triplets " << peak << " of 600000)\n";
+    }
+
     std::cout << "All sparse accumulator tests passed!\n";
     return 0;
 }

@@ -13,6 +13,12 @@
 the record does not state is missing (NaN in the categorical), not an empty string. Several lines or diseases are joined with
 ``"; "``, ids in the same order as the names. The facts are fetched once per study and process; with ``$SINGLET_OFFLINE`` set,
 for a study read from a local directory, or when the API cannot be reached, there are no facts and no columns are added.
+
+**Cell lines.** The labeller was trained on primary tissue, so on a cultured cell line it gives the nearest primary cell type,
+which is often wrong (K-562 cells come out as "transit amplifying cell"). :func:`relabel_cell_lines` therefore gives every cell
+of a cell-line sample its line as cell type, as singlet.bio search does: ``cell_type`` is the line's name and
+``cell_type_ontology_term_id`` its Cellosaurus id, or ``cultured cell`` / ``CL:0000010`` when the record does not name the line.
+``sample_facts=False`` keeps the labeller's calls.
 """
 
 from __future__ import annotations
@@ -122,6 +128,45 @@ def study_facts(study) -> Dict[str, dict]:
     if host in ("localhost", "::1") or host.startswith("127."):
         return {}
     return fetch_sample_facts(study.gse)
+
+
+CULTURED_CELL = ("CL:0000010", "cultured cell")
+#: the cell type columns a cell line replaces (name, id); the level, score and path of the labeller's call are cleared
+_CELL_TYPE_PAIRS = (
+    ("cell_type", "cell_type_ontology_term_id"),
+    ("cell_type_deepest", "cell_type_deepest_ontology_term_id"),
+)
+
+
+def cell_line_of(facts: Optional[dict]) -> Optional[tuple]:
+    """(id, name) of the sample's cell line: its first Cellosaurus line, else CL:0000010 for tissue_type "cell line"; None for any
+    other sample."""
+    f = facts if isinstance(facts, dict) else {}
+    for x in f.get("cell_line") if isinstance(f.get("cell_line"), list) else []:
+        if isinstance(x, dict) and (x.get("id") or x.get("name")):
+            return (str(x.get("id") or x.get("name")), str(x.get("name") or x.get("id")))
+    return CULTURED_CELL if f.get("tissue_type") == "cell line" else None
+
+
+def relabel_cell_lines(d: Dict[str, np.ndarray], facts: Optional[dict], n: int) -> None:
+    """For a cell-line sample, replace the labeller's cell type columns present in ``d`` (one sample's obs columns) by the line."""
+    line = cell_line_of(facts)
+    if line is None:
+        return
+    lid, name = line
+    for name_col, id_col in _CELL_TYPE_PAIRS:
+        if name_col in d:
+            d[name_col] = np.full(n, name, dtype=object)
+        if id_col in d:
+            d[id_col] = np.full(n, lid, dtype=object)
+    for c in ("cell_type_level", "cell_type_deepest_level"):
+        if c in d:
+            d[c] = np.zeros(n, dtype=np.int8)
+    for c in ("cell_type_score", "cell_type_deepest_score"):
+        if c in d:
+            d[c] = np.full(n, np.nan, dtype=np.float32)
+    if "cell_type_path" in d:
+        d["cell_type_path"] = np.full(n, None, dtype=object)
 
 
 def facts_obs(facts: Optional[dict], n: int) -> Dict[str, np.ndarray]:

@@ -1,0 +1,39 @@
+{
+ "cells_in_matrix": 14404,
+ "cells_with_truth_label": 13737,
+ "truth_doublets": 1598,
+ "truth_doublet_rate": 0.11632816481036616,
+ "scrublet_seconds": 18.46960473060608,
+ "singlet": {
+  "auroc": 0.829095981559452,
+  "auprc": 0.518827134060294,
+  "recall_at_truth_rate": 0.55819774718398,
+  "precision_at_truth_rate": 0.55819774718398,
+  "native_calls": 2748,
+  "native_rate": 0.20004367765887748,
+  "native_recall": 0.7058823529411765,
+  "native_precision": 0.4104803493449782
+ },
+ "scrublet": {
+  "auroc": 0.8810710645082034,
+  "auprc": 0.5875735049267682,
+  "recall_at_truth_rate": 0.6176470588235294,
+  "precision_at_truth_rate": 0.6176470588235294,
+  "native_calls": 1296,
+  "native_rate": 0.0943437431753658,
+  "native_recall": 0.548811013767209,
+  "native_precision": 0.6766975308641975
+ },
+ "vireo_geno": {
+  "auroc": 0.9500847556273747,
+  "auprc": 0.8423919286477767,
+  "recall_at_truth_rate": 0.8404255319148937,
+  "precision_at_truth_rate": 0.8404255319148937
+ },
+ "umis": {
+  "auroc": 0.8010757175359553,
+  "auprc": 0.3203131606472982,
+  "recall_at_truth_rate": 0.31852315394242803,
+  "precision_at_truth_rate": 0.31852315394242803
+ }
+}

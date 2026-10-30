@@ -14,11 +14,12 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet
+sdir() { [ -d "$1/state/$2" ] && echo "$1/state/$2" || echo "$1/state/${2/called_ed/called_v2}"; }   # state/called_ed* was renamed called_v2* on Clipper
 BRANCH=${BRANCH:-fix/called-v2-knee-bounds}
-OUT=$W/state/called_ed_fix
+OUT=$(sdir "$W" called_ed_fix)
 PB=$W/pipeline-benchmark
 MB=$W/modality-bench
-DS=$W/state/called_ed_truth/datasets
+DS=$(sdir "$W" called_ed_truth)/datasets
 PY=$W/envs/pbench/bin/python
 export NUMBA_NUM_THREADS=${SLURM_CPUS_PER_TASK:-8} NUMBA_CACHE_DIR=/tmp/${USER:-x}-numba-${SLURM_JOB_ID:-x} OMP_NUM_THREADS=4
 TASK=${SLURM_ARRAY_TASK_ID:-0}

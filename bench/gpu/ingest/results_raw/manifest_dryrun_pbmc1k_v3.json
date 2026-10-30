@@ -1,0 +1,81 @@
+{
+ "schema": "singlet-ingest-manifest/1",
+ "dry_run": true,
+ "network_calls": 0,
+ "accession": "pbmc1k_v3",
+ "format": "1fg",
+ "version": 1,
+ "codec": "zstd",
+ "codec_level": 1,
+ "object": {
+  "bucket": "DRYRUN-NO-BUCKET",
+  "key": "ingest/v1/pbmc1k_v3/pbmc1k_v3.1fg",
+  "bytes": 1527801176,
+  "content_type": "application/x-singlet-1fg"
+ },
+ "reads": {
+  "pairs": 66601887,
+  "pairs_in_source": 66601887,
+  "dropped": 0,
+  "r2_slot_bytes": 24,
+  "r2_max_len": 91,
+  "bc_len": 16,
+  "umi_len": 12,
+  "protocol_id": 1
+ },
+ "chunks": {
+  "count": 2132,
+  "max_pairs": 32768,
+  "index_offset": 1527767040,
+  "per_chunk_crc32c": true
+ },
+ "upload": {
+  "multipart": true,
+  "part_size_mib": 64,
+  "parts": 23,
+  "part_plan_head": [
+   {
+    "part": 1,
+    "offset": 0,
+    "bytes": 67366912,
+    "first_chunk": 0,
+    "chunks": 94,
+    "pairs": 2958752
+   },
+   {
+    "part": 2,
+    "offset": 67366912,
+    "bytes": 67276800,
+    "first_chunk": 94,
+    "chunks": 94,
+    "pairs": 2934464
+   },
+   {
+    "part": 3,
+    "offset": 134643712,
+    "bytes": 67743744,
+    "first_chunk": 188,
+    "chunks": 94,
+    "pairs": 2934464
+   }
+  ],
+  "part_plan_tail": [
+   {
+    "part": 23,
+    "offset": 1485230080,
+    "bytes": 42571096,
+    "first_chunk": 2072,
+    "chunks": 60,
+    "pairs": 1839743
+   }
+  ],
+  "checksum_algorithm": "CRC32C (x-amz-checksum-crc32c, per part)",
+  "resume": "a failed part is re-sent alone; parts begin on chunk boundaries"
+ },
+ "index_sha256": "21d50b1131e419bff11cf2cfbbf45accf75a61e578614612176c9ae406c9851b",
+ "source_bytes_1fq_or_sra": 1838043689,
+ "would_register": [
+  "manifest row (accession, key, bytes, pairs, n_chunks, index_sha256)",
+  "no write to Cloudflare in this dry run"
+ ]
+}

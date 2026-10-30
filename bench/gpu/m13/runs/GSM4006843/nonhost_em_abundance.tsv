@@ -1,0 +1,4 @@
+kingdom	species_id	species_name	relative_abundance	reads_assigned	mean_hit_rate	confidence
+FUNGAL	7016	NC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds	0.084205	57473	0.839223	HIGH
+FUNGAL	7001	NC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene	0.058778	40118	0.838583	HIGH
+FUNGAL	7006	NC_038868.1 Lacanobia oleracea granulovirus egt gene	0.050351	34367	0.838329	HIGH

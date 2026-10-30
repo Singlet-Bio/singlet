@@ -1,0 +1,1117 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "genetic-ancestry",
+ "title": "Genetic ancestry per donor",
+ "conclusion": "On 150 1000 Genomes individuals from 26 populations (MAGE RNA-seq thinned to single-cell donor depth, leave-out reference), Singlet's published ancestry label is correct for 86.0% at 8m read pairs, against 92.0% for somalier, 99.3% for peddy.",
+ "methods": "Truth: 150 individuals of the 1000 Genomes Project, 30 per super-population and sex-balanced, covering all 26 populations, whose lymphoblastoid lines were RNA-sequenced by MAGE (Taylor et al. 2024, PRJNA851328). The first 8M read pairs of each run were aligned once with STAR 2.7.11b to GRCh38-2024-A, then thinned to 2M and 0.5M pairs. Every tool reads the same alignments at each depth. Singlet: singlet.celllabels.ancestry, supervised admixture with fixed super-population allele frequencies at the pipeline's 1000 Genomes SNP panel. Its depth tables come from bcftools mpileup (MAPQ 255, BQ 20). The frequencies were recomputed without the 154 test individuals, so no tool sees its own answer. The published label is the super-population with proportion q >= 0.8, otherwise 'admixed'. somalier 0.3.6: extract at its hg38 sites, then ancestry against the labelled 1000 Genomes background minus the test individuals. peddy 0.4.8: bcftools call at its GRCh38 sites, then peddy with its built-in 1000 Genomes background minus the test individuals (peddy_leaveout.py). Metrics: accuracy of each tool's published label (an abstention counts as wrong), accuracy of the most likely super-population, and precision of named calls, with 95% Wilson intervals. Donor sex: Singlet's sex model on the sample's XIST and chrY gene counts, against peddy's sex check and the XIST/chrY rule.",
+ "status": "draft",
+ "generated_at": "2026-10-26T11:20:28+00:00",
+ "owner": "bench-public",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "40f0b5d22d7a17a13f919aaab7424509d1852908",
+  "branch": "claude/bench-public-cohort-485cf7",
+  "binary": "python: singlet.celllabels (ancestry 1kgp-supervised-admixture/1)"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "infer_ancestry(ad, dp, freqs): q_min 0.8, depth cap 8, >= 300 sites; leave-out 1000 Genomes frequencies"
+  },
+  {
+   "name": "somalier",
+   "version": "0.3.6",
+   "role": "competitor",
+   "url": "https://github.com/brentp/somalier",
+   "params": "somalier extract -s sites.hg38.vcf.gz; somalier ancestry --labels (1000 Genomes minus test individuals)"
+  },
+  {
+   "name": "peddy",
+   "version": "0.4.8",
+   "role": "competitor",
+   "url": "https://github.com/brentp/peddy",
+   "params": "bcftools mpileup/call -m at peddy GRCh38 sites; peddy --sites hg38, built-in 1000 Genomes background minus the test individuals"
+  },
+  {
+   "name": "xist-chrY-rule",
+   "version": "n/a",
+   "role": "competitor",
+   "params": "bulk sex: XIST > 0 and MSY = 0 female; MSY > 0 and XIST = 0 male"
+  },
+  {
+   "name": "1000genomes-panel",
+   "version": "phase 3 (20130502)",
+   "role": "truth"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "mage150",
+   "data_kind": "derived",
+   "title": "MAGE LCL RNA-seq, 150 1000 Genomes individuals (26 populations)",
+   "accessions": {
+    "srr": [
+     "SRR19762641",
+     "SRR19762460",
+     "SRR19762543",
+     "SRR19762370",
+     "SRR19762691",
+     "SRR19762562",
+     "SRR19762294",
+     "SRR19762181",
+     "SRR19762533",
+     "SRR19762428",
+     "SRR19762429",
+     "SRR19762473",
+     "SRR19762440",
+     "SRR19762441",
+     "SRR19762682",
+     "SRR19762482",
+     "SRR19762476",
+     "SRR19762438",
+     "SRR19762685",
+     "SRR19762930",
+     "SRR19762431",
+     "SRR19762693",
+     "SRR19762695",
+     "SRR19762308",
+     "SRR19762670",
+     "SRR19762455",
+     "SRR19762218",
+     "SRR19762287",
+     "SRR19762469",
+     "SRR19762465",
+     "SRR19762170",
+     "SRR19762816",
+     "SRR19762861",
+     "SRR19762795",
+     "SRR19762753",
+     "SRR19762169",
+     "SRR19762865",
+     "SRR19762812",
+     "SRR19762740",
+     "SRR19762165",
+     "SRR19762870",
+     "SRR19762741",
+     "SRR19762605",
+     "SRR19762862",
+     "SRR19762603",
+     "SRR19762358",
+     "SRR19762359",
+     "SRR19762364",
+     "SRR19762365",
+     "SRR19762302",
+     "SRR19762822",
+     "SRR19762615",
+     "SRR19762703",
+     "SRR19762361",
+     "SRR19762745",
+     "SRR19762789",
+     "SRR19762818",
+     "SRR19762579",
+     "SRR19762796",
+     "SRR19762817",
+     "SRR19762925",
+     "SRR19762205",
+     "SRR19762578",
+     "SRR19762189",
+     "SRR19762580",
+     "SRR19762891",
+     "SRR19762886",
+     "SRR19762630",
+     "SRR19762209",
+     "SRR19762201",
+     "SRR19762620",
+     "SRR19762484",
+     "SRR19762760",
+     "SRR19762486",
+     "SRR19762577",
+     "SRR19762388",
+     "SRR19762394",
+     "SRR19762391",
+     "SRR19762890",
+     "SRR19762616",
+     "SRR19762877",
+     "SRR19762892",
+     "SRR19762629",
+     "SRR19762884",
+     "SRR19762847",
+     "SRR19762389",
+     "SRR19762839",
+     "SRR19762396",
+     "SRR19762875",
+     "SRR19762706",
+     "SRR19762234",
+     "SRR19762335",
+     "SRR19762491",
+     "SRR19762220",
+     "SRR19762726",
+     "SRR19762815",
+     "SRR19762378",
+     "SRR19762765",
+     "SRR19762651",
+     "SRR19762766",
+     "SRR19762912",
+     "SRR19762221",
+     "SRR19762594",
+     "SRR19762496",
+     "SRR19762660",
+     "SRR19762647",
+     "SRR19762855",
+     "SRR19762648",
+     "SRR19762197",
+     "SRR19762770",
+     "SRR19762346",
+     "SRR19762200",
+     "SRR19762331",
+     "SRR19762548",
+     "SRR19762311",
+     "SRR19762341",
+     "SRR19762224",
+     "SRR19762774",
+     "SRR19762227",
+     "SRR19762856",
+     "SRR19762927",
+     "SRR19762243",
+     "SRR19762657",
+     "SRR19762804",
+     "SRR19762403",
+     "SRR19762662",
+     "SRR19762251",
+     "SRR19762768",
+     "SRR19762666",
+     "SRR19762274",
+     "SRR19762325",
+     "SRR19762527",
+     "SRR19762324",
+     "SRR19762228",
+     "SRR19762661",
+     "SRR19762255",
+     "SRR19762246",
+     "SRR19762424",
+     "SRR19762505",
+     "SRR19762509",
+     "SRR19762321",
+     "SRR19762420",
+     "SRR19762669",
+     "SRR19762282",
+     "SRR19762278",
+     "SRR19762319",
+     "SRR19762417",
+     "SRR19762399",
+     "SRR19762663",
+     "SRR19762923"
+    ],
+    "other": [
+     "PRJNA851328"
+    ]
+   },
+   "truth": "1000 Genomes super-population and sex of each individual",
+   "n_cells": 0
+  },
+  {
+   "id": "atlas_selfreport",
+   "data_kind": "real",
+   "title": "Atlas donors with self-reported race or ethnicity in GEO (21 donors)",
+   "accessions": {
+    "gse": "GSE144136;GSE200044",
+    "gsm": [
+     "GSM4281983",
+     "GSM4282005",
+     "GSM6005279",
+     "GSM6005280",
+     "GSM6005281",
+     "GSM6005282",
+     "GSM6005283",
+     "GSM6005284",
+     "GSM6005285",
+     "GSM6005286",
+     "GSM6005287",
+     "GSM6005288",
+     "GSM6005289",
+     "GSM6005290",
+     "GSM6005291",
+     "GSM6005293",
+     "GSM6005294",
+     "GSM6005295",
+     "GSM6005296",
+     "GSM6005297",
+     "GSM6005298"
+    ]
+   },
+   "truth": "self-reported race or ethnicity in GEO sample characteristics (a social category, not genotype)"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "accuracy.0.5m",
+   "name": "Individuals whose published label is their 1000 Genomes super-population (0.5M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.86,
+    "ci": [
+     0.7954,
+     0.9066
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "somalier",
+     "value": 0.5733,
+     "ci": [
+      0.4933,
+      0.6497
+     ]
+    },
+    {
+     "tool": "peddy",
+     "value": 0.8467,
+     "ci": [
+      0.7804,
+      0.8956
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "150 individuals; Singlet's label is 'admixed' below q = 0.8, which counts as wrong here; 95% Wilson CI",
+   "corroborated_by": [
+    "selfreport_consistency@atlas_selfreport"
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "accuracy_top.0.5m",
+   "name": "Most likely super-population correct (0.5M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9267,
+    "ci": [
+     0.8735,
+     0.9586
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "somalier",
+     "value": 0.5733,
+     "ci": [
+      0.4933,
+      0.6497
+     ]
+    },
+    {
+     "tool": "peddy",
+     "value": 0.8467,
+     "ci": [
+      0.7804,
+      0.8956
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "argmax of each tool's ancestry proportions or probabilities; no abstention",
+   "corroborated_by": [
+    "selfreport_consistency@atlas_selfreport"
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "named_precision.0.5m",
+   "name": "Named calls that are correct (0.5M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "competitors": [
+    {
+     "tool": "somalier",
+     "value": 0.5733
+    },
+    {
+     "tool": "peddy",
+     "value": 0.9071
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "corroborated_by": [
+    "selfreport_consistency@atlas_selfreport"
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "accuracy.2m",
+   "name": "Individuals whose published label is their 1000 Genomes super-population (2M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.86,
+    "ci": [
+     0.7954,
+     0.9066
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "somalier",
+     "value": 0.8867,
+     "ci": [
+      0.826,
+      0.928
+     ]
+    },
+    {
+     "tool": "peddy",
+     "value": 0.9,
+     "ci": [
+      0.8416,
+      0.9385
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "150 individuals; Singlet's label is 'admixed' below q = 0.8, which counts as wrong here; 95% Wilson CI",
+   "corroborated_by": [
+    "selfreport_consistency@atlas_selfreport"
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "accuracy_top.2m",
+   "name": "Most likely super-population correct (2M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9333,
+    "ci": [
+     0.8816,
+     0.9634
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "somalier",
+     "value": 0.8867,
+     "ci": [
+      0.826,
+      0.928
+     ]
+    },
+    {
+     "tool": "peddy",
+     "value": 0.9,
+     "ci": [
+      0.8416,
+      0.9385
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "argmax of each tool's ancestry proportions or probabilities; no abstention",
+   "corroborated_by": [
+    "selfreport_consistency@atlas_selfreport"
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "named_precision.2m",
+   "name": "Named calls that are correct (2M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "competitors": [
+    {
+     "tool": "somalier",
+     "value": 0.8867
+    },
+    {
+     "tool": "peddy",
+     "value": 0.9441
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "corroborated_by": [
+    "selfreport_consistency@atlas_selfreport"
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "accuracy.8m",
+   "name": "Individuals whose published label is their 1000 Genomes super-population (8M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.86,
+    "ci": [
+     0.7954,
+     0.9066
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "somalier",
+     "value": 0.92,
+     "ci": [
+      0.8654,
+      0.9536
+     ]
+    },
+    {
+     "tool": "peddy",
+     "value": 0.9933,
+     "ci": [
+      0.9632,
+      0.9988
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "150 individuals; Singlet's label is 'admixed' below q = 0.8, which counts as wrong here; 95% Wilson CI",
+   "corroborated_by": [
+    "selfreport_consistency@atlas_selfreport"
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "accuracy_top.8m",
+   "name": "Most likely super-population correct (8M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9333,
+    "ci": [
+     0.8816,
+     0.9634
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "somalier",
+     "value": 0.92,
+     "ci": [
+      0.8654,
+      0.9536
+     ]
+    },
+    {
+     "tool": "peddy",
+     "value": 0.9933,
+     "ci": [
+      0.9632,
+      0.9988
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "argmax of each tool's ancestry proportions or probabilities; no abstention",
+   "corroborated_by": [
+    "selfreport_consistency@atlas_selfreport"
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "named_precision.8m",
+   "name": "Named calls that are correct (8M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "competitors": [
+    {
+     "tool": "somalier",
+     "value": 0.92
+    },
+    {
+     "tool": "peddy",
+     "value": 1.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "corroborated_by": [
+    "selfreport_consistency@atlas_selfreport"
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "selfreport_consistency",
+   "name": "Named ancestry calls consistent with the donor's self-reported group",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "atlas_selfreport",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.9,
+    "rationale": "self-report is a social category, not genetic ancestry, so a minority of donors may legitimately differ; 0.9 is a judgement bar, stated before scoring"
+   },
+   "notes": "21 donors with self-report, 18 named calls, 3 admixed or no call. Consistent: white/caucasian/european -> EUR or AMR; hispanic/latino -> AMR or EUR; black/african american -> AFR; asian -> EAS or SAS; chinese/japanese/korean -> EAS.",
+   "pass": "pass"
+  },
+  {
+   "id": "donor_sex_accuracy",
+   "name": "Donor sex from RNA reads matches the 1000 Genomes record (8M read pairs)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "mage150",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9
+   },
+   "competitors": [
+    {
+     "tool": "xist-chrY-rule",
+     "value": 0.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "bulk RNA of clonal LCLs: X-chromosome heterozygosity (peddy) is weak because of X inactivation",
+   "corroborated_by": [
+    "chromosomal-sex/sample_accuracy@geo_sex21"
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "n_individuals",
+   "name": "Individuals scored",
+   "unit": "individuals",
+   "category": "coverage",
+   "dataset": "pooled",
+   "direction": "none",
+   "singlet": {
+    "value": 150
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "mage150",
+   "wall_s": 61369.9,
+   "max_rss_gb": 0.0,
+   "threads": 1,
+   "notes": "panel pileup (bcftools) + infer_ancestry, 150 individuals x 3 depths"
+  },
+  {
+   "tool": "somalier",
+   "dataset": "mage150",
+   "wall_s": 1863.0,
+   "max_rss_gb": 0.0,
+   "threads": 1,
+   "notes": "somalier extract + ancestry"
+  },
+  {
+   "tool": "peddy",
+   "dataset": "mage150",
+   "wall_s": 12762.6,
+   "max_rss_gb": 0.0,
+   "threads": 8,
+   "notes": "bcftools call at peddy sites + peddy"
+  }
+ ],
+ "figures": [
+  {
+   "id": "mage150_accuracy_by_depth",
+   "title": "Accuracy of the published label by depth",
+   "kind": "line",
+   "x": {
+    "label": "read pairs (millions)",
+    "scale": "log"
+   },
+   "y": {
+    "label": "accuracy",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      0.5,
+      2.0,
+      8.0
+     ],
+     "y": [
+      0.86,
+      0.86,
+      0.86
+     ]
+    },
+    {
+     "name": "somalier",
+     "tool": "somalier",
+     "x": [
+      0.5,
+      2.0,
+      8.0
+     ],
+     "y": [
+      0.5733,
+      0.8867,
+      0.92
+     ]
+    },
+    {
+     "name": "peddy",
+     "tool": "peddy",
+     "x": [
+      0.5,
+      2.0,
+      8.0
+     ],
+     "y": [
+      0.8467,
+      0.9,
+      0.9933
+     ]
+    }
+   ]
+  },
+  {
+   "id": "mage150_by_superpop",
+   "title": "Accuracy by super-population (8M read pairs)",
+   "kind": "table",
+   "columns": [
+    "super-population",
+    "singlet",
+    "somalier",
+    "peddy"
+   ],
+   "rows": [
+    [
+     "AFR",
+     0.933,
+     0.933,
+     1.0
+    ],
+    [
+     "AMR",
+     0.5,
+     0.767,
+     1.0
+    ],
+    [
+     "EAS",
+     1.0,
+     0.967,
+     1.0
+    ],
+    [
+     "EUR",
+     0.967,
+     0.933,
+     0.967
+    ],
+    [
+     "SAS",
+     0.9,
+     1.0,
+     1.0
+    ]
+   ]
+  },
+  {
+   "id": "mage150_confusion_singlet",
+   "title": "Singlet confusion (8M read pairs; rows truth)",
+   "kind": "heatmap",
+   "rows": [
+    "AFR",
+    "AMR",
+    "EAS",
+    "EUR",
+    "SAS"
+   ],
+   "cols": [
+    "AFR",
+    "AMR",
+    "EAS",
+    "EUR",
+    "SAS",
+    "admixed",
+    "no call"
+   ],
+   "z": [
+    [
+     28,
+     0,
+     0,
+     0,
+     0,
+     2,
+     0
+    ],
+    [
+     0,
+     15,
+     0,
+     0,
+     0,
+     15,
+     0
+    ],
+    [
+     0,
+     0,
+     30,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     29,
+     0,
+     1,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     27,
+     3,
+     0
+    ]
+   ]
+  },
+  {
+   "id": "selfreport_table",
+   "title": "Atlas donors with self-reported ancestry",
+   "kind": "table",
+   "columns": [
+    "self-reported",
+    "Singlet call",
+    "q",
+    "covered sites",
+    "consistent"
+   ],
+   "rows": [
+    [
+     "caucasian",
+     "EUR",
+     0.96,
+     619222,
+     true
+    ],
+    [
+     "caucasian",
+     "EUR",
+     0.99,
+     672518,
+     true
+    ],
+    [
+     "caucasian",
+     "EUR",
+     0.99,
+     1050029,
+     true
+    ],
+    [
+     "hispanic latino",
+     "AMR",
+     0.92,
+     971737,
+     true
+    ],
+    [
+     "hispanic/latino",
+     "admixed",
+     0.73,
+     694092,
+     null
+    ],
+    [
+     "hispanic latino",
+     "AMR",
+     0.98,
+     1078117,
+     true
+    ],
+    [
+     "white",
+     "EUR",
+     1.0,
+     1147041,
+     true
+    ],
+    [
+     "white",
+     "EUR",
+     1.0,
+     1114241,
+     true
+    ],
+    [
+     "caucasian",
+     "EUR",
+     0.99,
+     1080470,
+     true
+    ],
+    [
+     "caucasian",
+     "EUR",
+     0.84,
+     1089682,
+     true
+    ],
+    [
+     "white",
+     "AMR",
+     0.83,
+     1135943,
+     true
+    ],
+    [
+     "hispanic",
+     "AMR",
+     0.98,
+     552664,
+     true
+    ],
+    [
+     "white",
+     "EUR",
+     1.0,
+     516243,
+     true
+    ],
+    [
+     "black or african american",
+     "AFR",
+     0.83,
+     714839,
+     true
+    ],
+    [
+     "hispanic",
+     "admixed",
+     0.68,
+     1113105,
+     null
+    ],
+    [
+     "caucasian",
+     "admixed",
+     0.61,
+     1018939,
+     null
+    ],
+    [
+     "black or african american",
+     "AFR",
+     0.98,
+     696070,
+     true
+    ],
+    [
+     "caucasian",
+     "EUR",
+     1.0,
+     998671,
+     true
+    ],
+    [
+     "hispanic latino",
+     "AMR",
+     0.83,
+     354119,
+     true
+    ],
+    [
+     "white",
+     "EUR",
+     0.98,
+     1077344,
+     true
+    ],
+    [
+     "white",
+     "EUR",
+     1.0,
+     1009612,
+     true
+    ]
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "ancestry_calls.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/genetic-ancestry/ancestry_calls.tsv",
+   "kind": "derived",
+   "sha256": "ce31b5915c07ae5cc81a2e6c4bcaf6e8297adfc3d5309f3f7b78ec83a022f764",
+   "bytes": 86348,
+   "format": "tsv"
+  },
+  {
+   "name": "sex_bulk_calls.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/genetic-ancestry/sex_bulk_calls.tsv",
+   "kind": "derived",
+   "sha256": "4a764c8695c6d411c5e4f44156654b460c90b7c1a348a26b3d26c27efacb15eb",
+   "bytes": 16882,
+   "format": "tsv"
+  },
+  {
+   "name": "selfreport_calls.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/genetic-ancestry/selfreport_calls.tsv",
+   "kind": "derived",
+   "sha256": "b9c9cc2c348e434f883c09df89b60dd6446aa3c1b268cfc2c1e24fbe6046b222",
+   "bytes": 2064,
+   "format": "tsv"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/genetic-ancestry/provenance.json",
+   "kind": "derived",
+   "sha256": "dcc5c9bc35da04e8218ef7e159b75f8a4a57a73108e100707830b7b7f5eed7b7",
+   "bytes": 7250,
+   "format": "json"
+  }
+ ],
+ "code": [
+  {
+   "path": "python/singlet/celllabels/ancestry.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/40f0b5d22d7a17a13f919aaab7424509d1852908/python/singlet/celllabels/ancestry.py"
+  },
+  {
+   "path": "bench/public/sexancestry/mage.sbatch",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/40f0b5d22d7a17a13f919aaab7424509d1852908/bench/public/sexancestry/mage.sbatch"
+  },
+  {
+   "path": "bench/public/sexancestry/ancestry_af.sbatch",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/40f0b5d22d7a17a13f919aaab7424509d1852908/bench/public/sexancestry/ancestry_af.sbatch"
+  },
+  {
+   "path": "bench/public/sexancestry/ancestry_score.py",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/40f0b5d22d7a17a13f919aaab7424509d1852908/bench/public/sexancestry/ancestry_score.py"
+  },
+  {
+   "path": "bench/public/capabilities/genetic_ancestry.py",
+   "role": "metric",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/40f0b5d22d7a17a13f919aaab7424509d1852908/bench/public/capabilities/genetic_ancestry.py"
+  }
+ ],
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "ancestry per donor of a pooled single-cell library (after demultiplexing)",
+   "supported": "yes"
+  },
+  {
+   "tool": "somalier",
+   "output": "ancestry per donor of a pooled single-cell library (after demultiplexing)",
+   "supported": "partial",
+   "note": "needs a per-donor BAM, which another tool must produce"
+  },
+  {
+   "tool": "peddy",
+   "output": "ancestry per donor of a pooled single-cell library (after demultiplexing)",
+   "supported": "partial",
+   "note": "needs per-donor genotype calls"
+  },
+  {
+   "tool": "singlet",
+   "output": "admixture proportions and an explicit 'admixed' label",
+   "supported": "yes"
+  },
+  {
+   "tool": "somalier",
+   "output": "admixture proportions and an explicit 'admixed' label",
+   "supported": "no"
+  },
+  {
+   "tool": "peddy",
+   "output": "admixture proportions and an explicit 'admixed' label",
+   "supported": "no"
+  },
+  {
+   "tool": "singlet",
+   "output": "published labels with no genotype in any public file",
+   "supported": "yes"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/genetic_ancestry.py",
+  "function": "compute",
+  "laptop_minutes": 1,
+  "clipper_command": "bash bench/public/sexancestry/submit_ancestry.sh"
+ },
+ "caveats": [
+  "Bulk RNA-seq of cell lines stands in for single-cell donors: reads are thinned to 0.5M-8M pairs, the range of a donor's coverage in a single-cell library, but full-length bulk coverage spreads over more sites than 3' single-cell reads.",
+  "Depth tables come from bcftools mpileup on STAR alignments (MAPQ 255, BQ 20), the same input for every tool, not from Singlet's own pileup engine; the end-to-end single-cell runs are scored separately.",
+  "Bulk donor sex: Singlet's per-cell model calls 15 of 150 MAGE individuals ambiguous (female by 1000 Genomes). Bulk RNA of these cell lines carries both XIST and reads on chrY genes with X homologs, which the single-cell model treats as a doublet signature; the XIST/chrY rule fails on bulk for the same reason. Single-cell results are in chromosomal-sex."
+ ]
+}
