@@ -166,12 +166,30 @@ def test_read_ahead_raises_errors_and_stops_when_closed():
 def test_decode_batch_matches_one_range_at_a_time(big, order):
     p = big[0]
     s = S1Stream(str(p), order=order, threads=3)
-    ranges = [(2900, 2964), (64, 192), (1000, 1010), (5, 5), (2999, 3000)]  # out of order, an empty range, the last cell
-    bufs = [s._get((int(s.mem.plan(a, b)["byte_off"]), int(s.mem.plan(a, b)["byte_len"]))) if b > a else b"" for a, b in ranges]
+    ranges = [
+        (2900, 2964),
+        (64, 192),
+        (1000, 1010),
+        (5, 5),
+        (2999, 3000),
+    ]  # out of order, an empty range, the last cell
+    bufs = [
+        s._get((int(s.mem.plan(a, b)["byte_off"]), int(s.mem.plan(a, b)["byte_len"])))
+        if b > a
+        else b""
+        for a, b in ranges
+    ]
     ip, idx, val = s.mem.decode_batch(ranges, bufs, mode=order, threads=3, dtype="float32")
     one = [s.mem.decode(a, b, mode=order, threads=1, dtype="float32") for a, b in ranges if b > a]
     assert ip[-1] == len(idx) == len(val) == sum(int(d["nnz"]) for d in one)
-    want = sp.vstack([sp.csr_matrix((d["data"], d["indices"], d["indptr"]), shape=(len(d["indptr"]) - 1, s.n_genes)) for d in one])
+    want = sp.vstack(
+        [
+            sp.csr_matrix(
+                (d["data"], d["indices"], d["indptr"]), shape=(len(d["indptr"]) - 1, s.n_genes)
+            )
+            for d in one
+        ]
+    )
     got = sp.csr_matrix((val, idx, ip), shape=(len(ip) - 1, s.n_genes))
     assert (got != want).nnz == 0
     with pytest.raises(ValueError):
@@ -184,14 +202,18 @@ def test_stream_keeps_no_batch_bytes_and_iter_batches_matches(big):
     p, x, _, _ = big
     s = S1Stream(str(p), order="canonical", threads=2)
     ep = block_batches(3000, batch_size=256, block_size=64, seed=4)
-    head = s.mem.prefix_len + (1 << 18)  # bytes past the first read: those come from the batch's own requests
+    head = s.mem.prefix_len + (
+        1 << 18
+    )  # bytes past the first read: those come from the batch's own requests
     checked = 0
     for b in ep[:6]:
         s.batch(b)
         for c0, c1 in b:
             q = s.mem.plan(c0, c1)
             if int(q["byte_off"]) > head:
-                assert not s.mem.has(int(q["byte_off"]), int(q["byte_len"]))  # nothing of a batch is kept
+                assert not s.mem.has(
+                    int(q["byte_off"]), int(q["byte_len"])
+                )  # nothing of a batch is kept
                 checked += 1
     assert checked
     for ahead in (0, 1, 3):
