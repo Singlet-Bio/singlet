@@ -429,6 +429,39 @@ public:
         return idx;
     }
 
+    // The header (k, w) and the species-name manifest of an index file, without its entries (the GPU engine holds the entries in
+    // device memory; the host needs only the names). The result is empty() like an index with no entries.
+    static MinSketchIndex load_names(const std::string& path) {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) throw std::runtime_error("MinSketchIndex::load_names: cannot open: " + path);
+        MinSketchHeader hdr{};
+        f.read(reinterpret_cast<char*>(&hdr), sizeof(hdr));
+        if (!f || std::memcmp(hdr.magic, "SNHSKIDX", 8) != 0)
+            throw std::runtime_error("MinSketchIndex::load_names: invalid magic");
+        if (hdr.version != 1 && hdr.version != 2)
+            throw std::runtime_error("MinSketchIndex::load_names: unsupported version " +
+                                     std::to_string(hdr.version));
+        MinSketchIndex idx(static_cast<int>(hdr.k), static_cast<int>(hdr.w));
+        f.seekg(static_cast<std::streamoff>(sizeof(hdr) + hdr.n_entries * sizeof(MinSketchEntry)));
+        if (!f) throw std::runtime_error("MinSketchIndex::load_names: truncated file: " + path);
+        if (hdr.version >= 2) {
+            uint32_t n_sp = 0;
+            f.read(reinterpret_cast<char*>(&n_sp), sizeof(n_sp));
+            if (f && n_sp > 0) {
+                idx.species_names_.resize(n_sp);
+                for (uint32_t i = 0; i < n_sp; ++i) {
+                    uint16_t nlen = 0;
+                    f.read(reinterpret_cast<char*>(&nlen), sizeof(nlen));
+                    if (f && nlen > 0) {
+                        idx.species_names_[i].resize(nlen);
+                        f.read(&idx.species_names_[i][0], nlen);
+                    }
+                }
+            }
+        }
+        return idx;
+    }
+
     // ── Accessors ────────────────────────────────────────────────────────────
 
     size_t size()  const {

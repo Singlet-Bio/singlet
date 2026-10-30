@@ -1,0 +1,450 @@
+{
+ "method": "stage timers from run.log + cgroup CPU seconds (monitor.tsv) in post-mapping windows; runs at --threads 4 on Clipper CPU nodes",
+ "samples": [
+  {
+   "run": "bam-stream/runs/GSM4006843/t4_r1",
+   "reads_M": 66.7,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 86.6606,
+    "nonhost_residual_window": 65.2,
+    "cell_calling": 4.5530200480000005,
+    "ambient": 3.23514,
+    "doublet": 4.76347,
+    "sex_calling": 0.907326,
+    "ancestry": 0.00647826,
+    "saturation_curve": 2.19943,
+    "demux_autoK_selected": 50.5551,
+    "polya": 0.197584
+   },
+   "core_s_measured": {
+    "export": 121.8,
+    "nonhost_residual": 79.1,
+    "W_upper = export + nonhost_residual": 200.9,
+    "removed_by_gpu (index+cb_refresh+pileup)": 185.3
+   },
+   "W_core_s_per_M_pairs_upper": 3.01,
+   "W_core_s_per_M_pairs_export_only": 1.83
+  },
+  {
+   "run": "bam-stream/runs/GSM5411066/t4_r1",
+   "reads_M": 69.6,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 30.5831,
+    "nonhost_residual_window": 77.8,
+    "cell_calling": 4.34417003,
+    "ambient": 1.58291,
+    "doublet": 1.90411,
+    "sex_calling": 0.0221531,
+    "ancestry": 0.00233595,
+    "saturation_curve": 0.868629,
+    "demux_autoK_selected": 12.7078,
+    "polya": 0.205935
+   },
+   "core_s_measured": {
+    "export": 50.6,
+    "nonhost_residual": 92.8,
+    "W_upper = export + nonhost_residual": 143.4,
+    "removed_by_gpu (index+cb_refresh+pileup)": 146.4
+   },
+   "W_core_s_per_M_pairs_upper": 2.06,
+   "W_core_s_per_M_pairs_export_only": 0.73
+  },
+  {
+   "run": "bam-stream/runs/GSM6470208/t4_r1",
+   "reads_M": 121.8,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 60.7771,
+    "nonhost_residual_window": 230.0,
+    "cell_calling": 3.0393100299999998,
+    "ambient": 1.24892,
+    "doublet": 3.71646,
+    "sex_calling": 0.329987,
+    "ancestry": 0.00465379,
+    "saturation_curve": 0.716202,
+    "demux_autoK_selected": 29.9315,
+    "polya": null
+   },
+   "core_s_measured": {
+    "export": 90.2,
+    "nonhost_residual": 169.6,
+    "W_upper = export + nonhost_residual": 259.8,
+    "removed_by_gpu (index+cb_refresh+pileup)": 610.3
+   },
+   "W_core_s_per_M_pairs_upper": 2.13,
+   "W_core_s_per_M_pairs_export_only": 0.74
+  },
+  {
+   "run": "bam-stream/runs/GSM7036403/t4_r1",
+   "reads_M": 111.6,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 174.404,
+    "nonhost_residual_window": 87.7,
+    "cell_calling": 3.913430044,
+    "ambient": 2.1319,
+    "doublet": 3.3477,
+    "sex_calling": 0.509045,
+    "ancestry": 0.00771898,
+    "saturation_curve": 1.17816,
+    "demux_autoK_selected": 87.9554,
+    "polya": 0.462041
+   },
+   "core_s_measured": {
+    "export": 202.4,
+    "nonhost_residual": 92.7,
+    "W_upper = export + nonhost_residual": 295.1,
+    "removed_by_gpu (index+cb_refresh+pileup)": 293.9
+   },
+   "W_core_s_per_M_pairs_upper": 2.64,
+   "W_core_s_per_M_pairs_export_only": 1.81
+  },
+  {
+   "run": "bam-stream/runs/GSM7656149/t4_r1",
+   "reads_M": 263.4,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 416.165,
+    "nonhost_residual_window": 143.7,
+    "cell_calling": 18.098900032,
+    "ambient": 5.85141,
+    "doublet": 4.08607,
+    "sex_calling": 1.3442,
+    "ancestry": 0.0180626,
+    "saturation_curve": 2.6644,
+    "demux_autoK_selected": 309.813,
+    "polya": 0.442789
+   },
+   "core_s_measured": {
+    "export": 468.2,
+    "nonhost_residual": 179.7,
+    "W_upper = export + nonhost_residual": 647.9,
+    "removed_by_gpu (index+cb_refresh+pileup)": 650.0
+   },
+   "W_core_s_per_M_pairs_upper": 2.46,
+   "W_core_s_per_M_pairs_export_only": 1.78
+  },
+  {
+   "run": "bam-stream/runs/GSM7901264/t4_r1",
+   "reads_M": 100.3,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 41.129,
+    "nonhost_residual_window": 115.6,
+    "cell_calling": 2.144820031,
+    "ambient": 0.358308,
+    "doublet": 1.00904,
+    "sex_calling": 0.0787569,
+    "ancestry": 0.00281583,
+    "saturation_curve": 0.224319,
+    "demux_autoK_selected": 12.4817,
+    "polya": 0.249533
+   },
+   "core_s_measured": {
+    "export": 58.1,
+    "nonhost_residual": 147.6,
+    "W_upper = export + nonhost_residual": 205.7,
+    "removed_by_gpu (index+cb_refresh+pileup)": 177.4
+   },
+   "W_core_s_per_M_pairs_upper": 2.05,
+   "W_core_s_per_M_pairs_export_only": 0.58
+  }
+ ],
+ "all_monitored_runs": [
+  {
+   "run": "bam-stream/runs/GSM4006843/t4_r1",
+   "reads_M": 66.7,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 86.6606,
+    "nonhost_residual_window": 65.2,
+    "cell_calling": 4.5530200480000005,
+    "ambient": 3.23514,
+    "doublet": 4.76347,
+    "sex_calling": 0.907326,
+    "ancestry": 0.00647826,
+    "saturation_curve": 2.19943,
+    "demux_autoK_selected": 50.5551,
+    "polya": 0.197584
+   },
+   "core_s_measured": {
+    "export": 121.8,
+    "nonhost_residual": 79.1,
+    "W_upper = export + nonhost_residual": 200.9,
+    "removed_by_gpu (index+cb_refresh+pileup)": 185.3
+   },
+   "W_core_s_per_M_pairs_upper": 3.01,
+   "W_core_s_per_M_pairs_export_only": 1.83
+  },
+  {
+   "run": "bam-stream/runs/GSM5411066/t4_r1",
+   "reads_M": 69.6,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 30.5831,
+    "nonhost_residual_window": 77.8,
+    "cell_calling": 4.34417003,
+    "ambient": 1.58291,
+    "doublet": 1.90411,
+    "sex_calling": 0.0221531,
+    "ancestry": 0.00233595,
+    "saturation_curve": 0.868629,
+    "demux_autoK_selected": 12.7078,
+    "polya": 0.205935
+   },
+   "core_s_measured": {
+    "export": 50.6,
+    "nonhost_residual": 92.8,
+    "W_upper = export + nonhost_residual": 143.4,
+    "removed_by_gpu (index+cb_refresh+pileup)": 146.4
+   },
+   "W_core_s_per_M_pairs_upper": 2.06,
+   "W_core_s_per_M_pairs_export_only": 0.73
+  },
+  {
+   "run": "bam-stream/runs/GSM6470208/t4_r1",
+   "reads_M": 121.8,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 60.7771,
+    "nonhost_residual_window": 230.0,
+    "cell_calling": 3.0393100299999998,
+    "ambient": 1.24892,
+    "doublet": 3.71646,
+    "sex_calling": 0.329987,
+    "ancestry": 0.00465379,
+    "saturation_curve": 0.716202,
+    "demux_autoK_selected": 29.9315,
+    "polya": null
+   },
+   "core_s_measured": {
+    "export": 90.2,
+    "nonhost_residual": 169.6,
+    "W_upper = export + nonhost_residual": 259.8,
+    "removed_by_gpu (index+cb_refresh+pileup)": 610.3
+   },
+   "W_core_s_per_M_pairs_upper": 2.13,
+   "W_core_s_per_M_pairs_export_only": 0.74
+  },
+  {
+   "run": "bam-stream/runs/GSM7036403/t4_r1",
+   "reads_M": 111.6,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 174.404,
+    "nonhost_residual_window": 87.7,
+    "cell_calling": 3.913430044,
+    "ambient": 2.1319,
+    "doublet": 3.3477,
+    "sex_calling": 0.509045,
+    "ancestry": 0.00771898,
+    "saturation_curve": 1.17816,
+    "demux_autoK_selected": 87.9554,
+    "polya": 0.462041
+   },
+   "core_s_measured": {
+    "export": 202.4,
+    "nonhost_residual": 92.7,
+    "W_upper = export + nonhost_residual": 295.1,
+    "removed_by_gpu (index+cb_refresh+pileup)": 293.9
+   },
+   "W_core_s_per_M_pairs_upper": 2.64,
+   "W_core_s_per_M_pairs_export_only": 1.81
+  },
+  {
+   "run": "bam-stream/runs/GSM7036403/t4_r2",
+   "reads_M": 111.6,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 177.937,
+    "nonhost_residual_window": 62.6,
+    "cell_calling": 3.939440048,
+    "ambient": 2.11093,
+    "doublet": 3.11392,
+    "sex_calling": 0.512581,
+    "ancestry": 0.00987867,
+    "saturation_curve": 1.18321,
+    "demux_autoK_selected": 89.3411,
+    "polya": 0.380413
+   },
+   "core_s_measured": {
+    "export": 208.9,
+    "nonhost_residual": 75.6,
+    "W_upper = export + nonhost_residual": 284.5,
+    "removed_by_gpu (index+cb_refresh+pileup)": 252.4
+   },
+   "W_core_s_per_M_pairs_upper": 2.55,
+   "W_core_s_per_M_pairs_export_only": 1.87
+  },
+  {
+   "run": "bam-stream/runs/GSM7656149/t4_r1",
+   "reads_M": 263.4,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 416.165,
+    "nonhost_residual_window": 143.7,
+    "cell_calling": 18.098900032,
+    "ambient": 5.85141,
+    "doublet": 4.08607,
+    "sex_calling": 1.3442,
+    "ancestry": 0.0180626,
+    "saturation_curve": 2.6644,
+    "demux_autoK_selected": 309.813,
+    "polya": 0.442789
+   },
+   "core_s_measured": {
+    "export": 468.2,
+    "nonhost_residual": 179.7,
+    "W_upper = export + nonhost_residual": 647.9,
+    "removed_by_gpu (index+cb_refresh+pileup)": 650.0
+   },
+   "W_core_s_per_M_pairs_upper": 2.46,
+   "W_core_s_per_M_pairs_export_only": 1.78
+  },
+  {
+   "run": "bam-stream/runs/GSM7901264/t4_r1",
+   "reads_M": 100.3,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 41.129,
+    "nonhost_residual_window": 115.6,
+    "cell_calling": 2.144820031,
+    "ambient": 0.358308,
+    "doublet": 1.00904,
+    "sex_calling": 0.0787569,
+    "ancestry": 0.00281583,
+    "saturation_curve": 0.224319,
+    "demux_autoK_selected": 12.4817,
+    "polya": 0.249533
+   },
+   "core_s_measured": {
+    "export": 58.1,
+    "nonhost_residual": 147.6,
+    "W_upper = export + nonhost_residual": 205.7,
+    "removed_by_gpu (index+cb_refresh+pileup)": 177.4
+   },
+   "W_core_s_per_M_pairs_upper": 2.05,
+   "W_core_s_per_M_pairs_export_only": 0.58
+  },
+  {
+   "run": "bam-stream/runs/GSM7901264/t4_r2",
+   "reads_M": 100.3,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 41.0197,
+    "nonhost_residual_window": 110.6,
+    "cell_calling": 2.143760034,
+    "ambient": 0.355499,
+    "doublet": 1.04125,
+    "sex_calling": 0.078787,
+    "ancestry": 0.00281588,
+    "saturation_curve": 0.224257,
+    "demux_autoK_selected": 12.2793,
+    "polya": 0.185425
+   },
+   "core_s_measured": {
+    "export": 58.0,
+    "nonhost_residual": 141.6,
+    "W_upper = export + nonhost_residual": 199.6,
+    "removed_by_gpu (index+cb_refresh+pileup)": 178.2
+   },
+   "W_core_s_per_M_pairs_upper": 1.99,
+   "W_core_s_per_M_pairs_export_only": 0.58
+  },
+  {
+   "run": "deep-perf/runs/GSM7036403/b_shared",
+   "reads_M": 111.6,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 185.358,
+    "nonhost_residual_window": 72.8,
+    "cell_calling": 4.418970037,
+    "ambient": 2.30382,
+    "doublet": 3.57048,
+    "sex_calling": 0.596064,
+    "ancestry": 0.0136691,
+    "saturation_curve": 1.26019,
+    "demux_autoK_selected": 93.4861,
+    "polya": 0.393289
+   },
+   "core_s_measured": {
+    "export": 217.5,
+    "nonhost_residual": 88.7,
+    "W_upper = export + nonhost_residual": 306.2,
+    "removed_by_gpu (index+cb_refresh+pileup)": 288.0
+   },
+   "W_core_s_per_M_pairs_upper": 2.74,
+   "W_core_s_per_M_pairs_export_only": 1.95
+  },
+  {
+   "run": "deep-perf/runs/GSM7656149/b_excl",
+   "reads_M": 263.4,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 405.223,
+    "nonhost_residual_window": 159.5,
+    "cell_calling": 20.598600062000003,
+    "ambient": 4.90118,
+    "doublet": 4.12648,
+    "sex_calling": 1.54915,
+    "ancestry": 0.0375429,
+    "saturation_curve": 3.26638,
+    "demux_autoK_selected": 294.981,
+    "polya": 0.114084
+   },
+   "core_s_measured": {
+    "export": 480.2,
+    "nonhost_residual": 229.5,
+    "W_upper = export + nonhost_residual": 709.7,
+    "removed_by_gpu (index+cb_refresh+pileup)": 896.3
+   },
+   "W_core_s_per_M_pairs_upper": 2.69,
+   "W_core_s_per_M_pairs_export_only": 1.82
+  },
+  {
+   "run": "deep-perf/runs/GSM7656149/b_shared",
+   "reads_M": 263.4,
+   "threads": 4,
+   "wall_s": {
+    "export_total": 405.331,
+    "nonhost_residual_window": 155.4,
+    "cell_calling": 20.665300035999998,
+    "ambient": 6.45814,
+    "doublet": 4.63394,
+    "sex_calling": 1.57062,
+    "ancestry": 0.0462862,
+    "saturation_curve": 2.95589,
+    "demux_autoK_selected": 297.915,
+    "polya": 0.81278
+   },
+   "core_s_measured": {
+    "export": 463.3,
+    "nonhost_residual": 211.4,
+    "W_upper = export + nonhost_residual": 674.7,
+    "removed_by_gpu (index+cb_refresh+pileup)": 716.7
+   },
+   "W_core_s_per_M_pairs_upper": 2.56,
+   "W_core_s_per_M_pairs_export_only": 1.76
+  }
+ ],
+ "summary": {
+  "W_upper_core_s_66_70M": [
+   200.767,
+   143.376
+  ],
+  "W_per_M_pairs_upper_median": 2.295,
+  "W_per_M_pairs_export_only_median": 1.26,
+  "host_rate_M_pairs_s_per_gpu_26_cores_upper": 11.3,
+  "host_rate_M_pairs_s_per_gpu_26_cores_export_only": 20.6,
+  "pass_rule": "W <= 120 core-s on a 66 M sample"
+ },
+ "callers_without_timers": [
+  "non-host EM (no timer line at all)",
+  "called_ed (no run log contains it; cell_caller=called_v2 has a timer)",
+  "demux outside the auto-K fits (VB on called cells, back-assignment, VCF writes)",
+  "export writers: pz_writer, splice_psi, sj_features, mt/mt_event_caller (G6 only), ase, vdj, cell_qc, metrics_summary, rrna"
+ ],
+ "n_runs_parsed": 239
+}

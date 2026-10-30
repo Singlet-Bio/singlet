@@ -4,6 +4,18 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+- **`S1Stream` / `S1Cells` send a batch's range requests together** (`io_threads`). `"auto"` means 8 for an HTTP URL and
+  1 for a local file; `io_threads=1` sends them one at a time.
+  - Over a link with a 30 ms round trip, the eight block ranges of a minibatch cost about one round trip instead of
+    eight.
+  - `S1Cells(prefetch=1)` reads the next batch ahead on a background thread.
+  - `S2Reader`'s request and byte counters are safe to update from several threads.
+- **Cell lines carry their line as cell type.** The labeller was trained on primary tissue, so on a cultured cell line it gave
+  the nearest primary type, often wrong (K-562 cells came out as "transit amplifying cell"). With sample facts on (the
+  default), every cell of a cell-line sample now has `cell_type` / `cell_type_deepest` = the line's name and
+  `cell_type_ontology_term_id` = its Cellosaurus id (or `cultured cell` / `CL:0000010` when the GEO record does not name the
+  line); level 0, no score, no path. Python `singlet.s1.sample_facts.relabel_cell_lines`, R `load()` / `singlet_cells()`, as on
+  singlet.bio. `sample_facts=False` keeps the labeller's calls.
 - **`S1Stream` over HTTP accepts a range answered with status 200** when the response carries a `Content-Range` naming
   exactly the requested slice (`rclone serve s3` answers this way). A server that ignores `Range` and sends the whole
   object is still rejected.
@@ -23,7 +35,7 @@ All notable changes to the singlet project.
     source order.
   - `block_batches()` is the workload of the `.s1` benchmark.
 
-## [1.3.0] — sample facts in the clients (not yet released)
+## [1.3.0] — 2026-10-29: sample facts in the clients
 
 - **Structured sample facts in `obs` / `colData`.** `singlet.load()`, `Study.to_anndata()` and `singlet.cells()` / `Study.cells()`
   (R: `load()` / `singlet_load()` and `singlet_cells()`, R package 1.2.1) add, per sample and repeated on its cells, the facts the

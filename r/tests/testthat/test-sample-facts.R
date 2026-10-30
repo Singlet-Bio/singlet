@@ -61,3 +61,23 @@ test_that("fact columns become factors with NA for samples that state nothing", 
     expect_identical(as.character(cd$tumor_sample_type), c(NA, NA, "adjacent normal"))
     expect_false(is.factor(cd$gsm_id))
 })
+
+test_that("a cell-line sample's cells carry the line as cell type; other samples keep the labeller's call", {
+    n <- 3L
+    lab <- list(cell_type = c("transit amplifying cell", NA, "T cell"), cell_type_ontology_term_id = c("CL:0009010", NA, "CL:0000084"),
+                cell_type_level = c(2L, 0L, 2L), cell_type_score = c(0.9, NA, 0.8), cell_type_deepest = c("transit amplifying cell", NA, "T cell"),
+                cell_type_path = c("CL:a>CL:b", NA, "CL:c"))
+    k562 <- list(tissue_type = "cell line", cell_line = list(list(id = "CVCL_0004", name = "K-562")))
+    r <- singlet:::.sample_facts_relabel(lab, k562, n)
+    expect_equal(r$cell_type, rep("K-562", n))
+    expect_equal(r$cell_type_ontology_term_id, rep("CVCL_0004", n))
+    expect_equal(r$cell_type_deepest, rep("K-562", n))
+    expect_null(r$cell_type_deepest_ontology_term_id)
+    expect_equal(r$cell_type_level, rep(0L, n))
+    expect_true(all(is.na(r$cell_type_score)) && all(is.na(r$cell_type_path)))
+    u <- singlet:::.sample_facts_relabel(lab, list(tissue_type = "cell line"), n)
+    expect_equal(unique(u$cell_type), "cultured cell")
+    expect_equal(unique(u$cell_type_ontology_term_id), "CL:0000010")
+    expect_identical(singlet:::.sample_facts_relabel(lab, list(tissue_type = "tissue"), n), lab)
+    expect_identical(singlet:::.sample_facts_relabel(lab, NULL, n), lab)
+})

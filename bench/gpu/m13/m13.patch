@@ -1,0 +1,270 @@
+diff -u -N -r a/include/singlet/pileup/nonhost/m13_dev.h b/include/singlet/pileup/nonhost/m13_dev.h
+--- a/include/singlet/pileup/nonhost/m13_dev.h	1969-12-31 19:00:00.000000000 -0500
++++ b/include/singlet/pileup/nonhost/m13_dev.h	2026-10-28 00:02:11.922860100 -0400
+@@ -0,0 +1,93 @@
++// W11 M13 dev-build helpers (NOT part of the product): timers, per-read dumps of the non-host classifier,
++// and a loader that injects GPU per-read results in place of Phases A-C of classify_multi_batch_filtered.
++//   SINGLET_NH_DUMP=<dir>          dump raw.bin (np + both hit maps in unordered_map iteration order) and multi.bin
++//                                  (the MultiHit result, rates as float bits) for every read
++//   SINGLET_NH_GPU_RESULTS=<file>  take np and the per-(read,db) species counts from the GPU program's result file
++#pragma once
++#include <cstdint>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <ctime>
++#include <chrono>
++#include <string>
++#include <vector>
++#include <unordered_map>
++
++namespace singlet { namespace nonhost { namespace m13 {
++
++inline double wall() {
++    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
++}
++inline double cpu() {
++    timespec ts; clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
++    return ts.tv_sec + ts.tv_nsec * 1e-9;
++}
++struct Lap {
++    double w0 = wall(), c0 = cpu();
++    void lap(const char* name) {
++        double w = wall(), c = cpu();
++        std::fprintf(stderr, "[m13t] %s wall_s=%.4f cpu_s=%.4f\n", name, w - w0, c - c0);
++        w0 = w; c0 = c;
++    }
++};
++
++// Dump files. One writer per call of classify_multi_batch_filtered; opened from SINGLET_NH_DUMP.
++struct Dump {
++    FILE* raw = nullptr; FILE* multi = nullptr; bool on = false;
++    Dump() {
++        const char* d = std::getenv("SINGLET_NH_DUMP");
++        if (!d || !*d) return;
++        std::string dir(d);
++        raw = std::fopen((dir + "/raw.bin").c_str(), "wb");
++        multi = std::fopen((dir + "/multi.bin").c_str(), "wb");
++        on = raw && multi;
++    }
++    ~Dump() { if (raw) std::fclose(raw); if (multi) std::fclose(multi); }
++    static void w32(FILE* f, uint32_t v) { std::fwrite(&v, 4, 1, f); }
++    // raw.bin record per read: u32 np, u32 nv, nv*(u32 sid,u32 cnt), u32 nm, nm*(u32 sid,u32 cnt); maps in iteration order
++    void raw_read(uint32_t np, const std::unordered_map<uint32_t, uint32_t>& vh,
++                  const std::unordered_map<uint32_t, uint32_t>& mh) {
++        if (!on) return;
++        w32(raw, np);
++        w32(raw, (uint32_t)vh.size());
++        for (const auto& kv : vh) { w32(raw, kv.first); w32(raw, kv.second); }
++        w32(raw, (uint32_t)mh.size());
++        for (const auto& kv : mh) { w32(raw, kv.first); w32(raw, kv.second); }
++    }
++    // multi.bin record per read: u8 top_category, u32 nvh, nvh*(u32 sid,u32 rate_bits), u32 nmh, nmh*(...)
++    template <class MH> void multi_read(const MH& m) {
++        if (!on) return;
++        uint8_t c = (uint8_t)m.top_category; std::fwrite(&c, 1, 1, multi);
++        w32(multi, (uint32_t)m.viral_hits.size());
++        for (const auto& p : m.viral_hits) { uint32_t b; std::memcpy(&b, &p.second, 4); w32(multi, p.first); w32(multi, b); }
++        w32(multi, (uint32_t)m.microbial_hits.size());
++        for (const auto& p : m.microbial_hits) { uint32_t b; std::memcpy(&b, &p.second, 4); w32(multi, p.first); w32(multi, b); }
++    }
++};
++
++// GPU result file ("NHGPURS1"): char magic[8], u64 n_reads, u64 n_groups, u32 np[n_reads], u64 g_key[n_groups], u32 g_cnt[n_groups].
++// A group is one (read, db, species) with its hit count, in the CPU's first-insertion order:
++// key = read<<33 | db<<32 | species_id, db 0 = viral map, 1 = microbial map. Groups are sorted by read, then db, then insertion order.
++struct GpuResults {
++    uint64_t n_reads = 0, n_groups = 0;
++    std::vector<uint32_t> np, g_cnt;
++    std::vector<uint64_t> g_key;
++    bool load(const char* path) {
++        FILE* f = std::fopen(path, "rb");
++        if (!f) return false;
++        char magic[8];
++        bool ok = std::fread(magic, 1, 8, f) == 8 && std::memcmp(magic, "NHGPURS1", 8) == 0 &&
++                  std::fread(&n_reads, 8, 1, f) == 1 && std::fread(&n_groups, 8, 1, f) == 1;
++        if (ok) {
++            np.resize(n_reads); g_key.resize(n_groups); g_cnt.resize(n_groups);
++            ok = std::fread(np.data(), 4, n_reads, f) == n_reads &&
++                 std::fread(g_key.data(), 8, n_groups, f) == n_groups &&
++                 std::fread(g_cnt.data(), 4, n_groups, f) == n_groups;
++        }
++        std::fclose(f);
++        return ok;
++    }
++};
++
++}}}  // namespace singlet::nonhost::m13
+diff -u -N -r a/include/singlet/pileup/nonhost/nonhost_screener.h b/include/singlet/pileup/nonhost/nonhost_screener.h
+--- a/include/singlet/pileup/nonhost/nonhost_screener.h	2026-10-28 00:00:30.458276900 -0400
++++ b/include/singlet/pileup/nonhost/nonhost_screener.h	2026-10-28 00:02:11.843177900 -0400
+@@ -37,6 +37,7 @@
+ 
+ #include "min_sketch.h"
+ #include "host_kmer_filter.h"
++#include "m13_dev.h"
+ #include <algorithm>
+ #include <numeric>
+ #include <string>
+@@ -359,6 +360,32 @@
+ 
+         const size_t n_reads = reads.size();
+         if (n_reads == 0) return {};
++        m13::Dump m13_dump;
++        if (const char* m13_gp = std::getenv("SINGLET_NH_GPU_RESULTS")) {
++            // W11-M13: np and the per-read species counts come from the GPU program; Phase D is the unchanged host code.
++            m13::GpuResults gr;
++            if (!gr.load(m13_gp) || gr.n_reads != n_reads) {
++                std::fprintf(stderr, "[m13] GPU results unusable: %s (n_reads file=%llu engine=%zu)\n", m13_gp,
++                             (unsigned long long)gr.n_reads, n_reads);
++                std::abort();
++            }
++            std::vector<MultiHit> results(n_reads);
++            uint64_t gi = 0;
++            for (size_t ri = 0; ri < n_reads; ++ri) {
++                std::unordered_map<uint32_t, uint32_t> vh, mh;
++                while (gi < gr.n_groups && (gr.g_key[gi] >> 33) == ri) {
++                    const uint32_t sid = (uint32_t)(gr.g_key[gi] & 0xffffffffu);
++                    ((gr.g_key[gi] >> 32) & 1 ? mh : vh)[sid] = gr.g_cnt[gi];   // first-insertion order, as the CPU map
++                    ++gi;
++                }
++                const uint32_t np = gr.np[ri];
++                m13_dump.raw_read(np, vh, mh);
++                if (np != 0) results[ri] = hits_to_multi_hit(vh, mh, np, soft_threshold_multiplier);
++                m13_dump.multi_read(results[ri]);
++            }
++            if (gi != gr.n_groups) { std::fprintf(stderr, "[m13] unconsumed GPU groups\n"); std::abort(); }
++            return results;
++        }
+ #ifdef _OPENMP
+         const int nt = std::max(1, n_threads > 0 ? n_threads : omp_get_max_threads());
+ #else
+@@ -396,6 +423,9 @@
+         std::vector<std::unordered_map<uint32_t, uint32_t>> vh(n_reads), mh(n_reads);
+         viral_.batch_query_presorted(flat, vh);
+         microbial_.batch_query_presorted(flat, mh);
++        if (m13_dump.on)
++            for (size_t ri = 0; ri < n_reads; ++ri)
++                m13_dump.raw_read((uint32_t)read_mins[ri].size(), vh[ri], mh[ri]);
+ 
+         // Phase D: convert hit maps to MultiHit results in parallel
+         std::vector<MultiHit> results(n_reads);
+@@ -408,6 +438,7 @@
+             // Use n_nonhost (filtered count) as denominator — same as classify_multi_filtered
+             results[ri] = hits_to_multi_hit(vh[ri], mh[ri], np, soft_threshold_multiplier);
+         }
++        if (m13_dump.on) for (size_t ri = 0; ri < n_reads; ++ri) m13_dump.multi_read(results[ri]);
+         return results;
+     }
+ 
+diff -u -N -r a/src/pipeline/singlet.cpp b/src/pipeline/singlet.cpp
+--- a/src/pipeline/singlet.cpp	2026-10-28 00:00:30.546111000 -0400
++++ b/src/pipeline/singlet.cpp	2026-10-28 00:02:11.855140400 -0400
+@@ -64,6 +64,7 @@
+ #include "singlet/pileup/nonhost/nonhost_em.h"
+ #include "singlet/pileup/nonhost/nonhost_aligner.h"
+ #include "singlet/pileup/nonhost/nonhost_cell_matrix.h"
++#include "singlet/pileup/nonhost/m13_dev.h"
+ #include "singlet/pileup/tiny_dataset_guard.h"
+ #include "singlet/fq/prefix_probe.h"
+ #include "singlet/pileup/mega_sort_params.h"
+@@ -1413,6 +1414,13 @@
+     }
+ 
+     std::cerr << "[nonhost] Loading screening indices...\n";
++    singlet::nonhost::m13::Lap m13_lap;
++    if (const char* m13_d = getenv("SINGLET_NH_DUMP")) {
++        FILE* pf = std::fopen((std::string(m13_d) + "/params.txt").c_str(), "w");
++        if (pf) { std::fprintf(pf, "%d %d %d\n", cb_len, umi_len, n_threads); std::fclose(pf); }
++        FILE* bf = std::fopen((std::string(m13_d) + "/barcodes.txt").c_str(), "w");
++        if (bf) { for (const auto& b : valid_barcodes) std::fprintf(bf, "%s\n", b.c_str()); std::fclose(bf); }
++    }
+     try {
+         // ── Load viral / bacterial / fungal indices ───────────────────────────
+         int ref_k = 21, ref_w = 11;
+@@ -1473,6 +1481,7 @@
+             return microbial_idx.species_name(sid);
+         };
+ 
++        m13_lap.lap("load_indices");
+         // ── NONHOST-HOST-SUBTRACT: try to load host Bloom filter ──────────────
+         HostKmerFilter host_filter;
+         bool using_host_filter = false;
+@@ -1509,6 +1518,7 @@
+             }
+         }
+ 
++        m13_lap.lap("load_bloom");
+         // Read unmapped FASTQ (4 lines per record), cap at 20M reads to prevent OOM
+         // when mapping rate is near-zero and nearly all reads are unmapped.
+         // EM deconvolution is statistical — 20M reads is more than sufficient for
+@@ -1525,6 +1535,7 @@
+             }
+         }
+         const size_t n_total = reads.size();
++        m13_lap.lap("read_fastq");
+         if (n_total >= MAX_NONHOST_READS)
+             std::cerr << "[nonhost] Capped at " << MAX_NONHOST_READS
+                       << " reads (file larger; subsampling for EM)\n";
+@@ -1548,6 +1559,7 @@
+         else
+             multi_hits = screener.classify_multi_batch(reads, 0.25f, n_threads);
+ 
++        m13_lap.lap("classify");
+         // Build kingdom map (FUNGAL correctly labelled via screener.fungal_species())
+         auto kingdom_map = build_kingdom_map(multi_hits, screener.fungal_species());
+         int  n_em_iter   = 0;
+@@ -1560,6 +1572,7 @@
+                                        /*min_report_hr=*/0.30f, &n_em_iter,
+                                        /*min_abs_reads=*/min_abs_reads);
+ 
++        m13_lap.lap("em");
+         std::cerr << "[nonhost] EM converged in " << n_em_iter
+                   << " iterations, " << em_result.size() << " species above threshold\n";
+ 
+@@ -1753,6 +1766,7 @@
+             std::cerr << "[nonhost] Wrote classified reads → " << fq_out_path << "\n";
+         }
+ 
++        m13_lap.lap("rest");
+     } catch (const std::exception& e) {
+         std::cerr << "[nonhost] WARNING: screening failed: " << e.what() << "\n";
+         // Non-fatal — pipeline continues without nonhost output
+@@ -1775,6 +1789,20 @@
+ // Part of NONHOST-VIRALDB / NONHOST-MICROBIALDB DAG tasks.
+ // ════════════════════════════════════════════════════════════
+ 
++// W11-M13 dev: re-run the screening on a prepared out_prefix (star_Unmapped.out.mate1/2 present).
++//   singlet nhscreen OUT_PREFIX VIRAL BACT FUNGAL CAPTURE_DUMP_DIR   (params.txt + barcodes.txt from the capture run)
++static int cmd_nhscreen(int argc, char* argv[]) {
++    if (argc < 5) { std::cerr << "usage: nhscreen OUT VIRAL BACT FUNGAL DUMPDIR\n"; return 2; }
++    std::string out = argv[0], v = argv[1], b = argv[2], f = argv[3], dd = argv[4];
++    int cb_len = 0, umi_len = 0, thr = 1;
++    { std::ifstream pf(dd + "/params.txt"); pf >> cb_len >> umi_len >> thr; }
++    std::unordered_set<std::string> bcs;
++    { std::ifstream bf(dd + "/barcodes.txt"); std::string l; while (std::getline(bf, l)) if (!l.empty()) bcs.insert(l); }
++    if (const char* tt = getenv("NH_THREADS")) thr = std::atoi(tt);
++    run_nonhost_em_screening(v, b, f, "", out, bcs, cb_len, umi_len, thr);
++    return 0;
++}
++
+ static int cmd_build_nonhost_db(int argc, char* argv[]) {
+     using namespace singlet::nonhost;
+ 
+@@ -2605,6 +2633,8 @@
+                 return cmd_genome(argc - 2, argv + 2);
+             if (sub == "nonhost")
+                 return cmd_nonhost(argc - 2, argv + 2);
++            if (sub == "nhscreen")
++                return cmd_nhscreen(argc - 2, argv + 2);
+             if (sub == "build-nonhost-db")
+                 return cmd_build_nonhost_db(argc - 2, argv + 2);
+             if (sub == "screen-runs")
+@@ -8011,6 +8041,7 @@
+         }
+         run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
+             nonhost_ref_dir, out_prefix, nonhost_valid_bcs, detected_bc_len, umi_len, star_threads);
++        if (std::getenv("SINGLET_NH_STOP")) { std::cerr << "[m13] stopping after the non-host screen\n"; return 0; }
+     }
+ 
+     // ── Phase 3: Export ──

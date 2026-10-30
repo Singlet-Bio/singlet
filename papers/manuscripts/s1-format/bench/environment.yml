@@ -1,0 +1,53 @@
+# Conda environment for the .s1 manuscript benchmark. Pin exact versions on the cluster after the first solve
+# (`conda env export --no-builds > environment.lock.yml` and commit the lock file); `s1bench env` records what ran.
+name: s1bench
+channels: [conda-forge, bioconda, nodefaults]   # nodefaults: never the Anaconda defaults channel
+dependencies:
+  - python=3.11
+  - numpy>=1.26
+  - scipy>=1.11
+  - pandas>=2.1
+  - pyyaml
+  - h5py>=3.10
+  - anndata>=0.11
+  - scanpy>=1.10          # Leiden clustering for the floor stage, 10x readers
+  - leidenalg
+  - igraph
+  - zarr>=2.18,<3
+  - loompy>=3.0
+  - pyarrow>=15
+  - zstandard>=0.22
+  - brotli-python
+  - fsspec
+  - aiohttp              # fsspec over HTTP: zarr read lazily from the object store
+  - s3fs
+  - boto3
+  - pytorch>=2.2          # CPU build; the timed env ($S1/env-gpu) swaps in the CUDA wheel (setup.sbatch, S1_TORCH_INDEX)
+  - tiledbsoma-py>=1.14
+  - psutil
+  - requests             # singlet package dependencies not pulled in above
+  - tqdm
+  - scikit-learn
+  - pytest
+  - pybind11>=2.11
+  - cmake>=3.20
+  - cxx-compiler
+  - zstd
+  - r-base=4.4
+  - r-matrix
+  - r-rcpp               # the singlet R package
+  - r-seurat>=5
+  - bioconductor-singlecellexperiment
+  - bioconductor-zellkonverter
+  - bioconductor-rhdf5   # zellkonverter's R reader
+  - bioconductor-hdf5array  # zellkonverter readH5AD loads it
+  - r-hdf5r
+  - r-remotes
+  - r-data.table
+  - r-jsonlite
+  - pip
+  - pip:
+      - scdataset          # block-shuffling loader (D'Ascenzo and Cultrera di Montesano 2025)
+      - tiledbsoma-ml      # PyTorch loader for TileDB-SOMA
+# R packages not on conda: in R, remotes::install_github("bnprks/BPCells/r")
+# The singlet package from this commit: `pip install ../../../../` (builds singlet._pz2) and `R CMD INSTALL ../../../../r`

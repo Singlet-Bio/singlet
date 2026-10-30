@@ -1,0 +1,5 @@
+=== engine gpu: makespan 2295.152568017 s, node core-s 19939.19483
+  pbmc1k_v3: 9:44.60 wall, exit 0, engine_gpu: 66601887 reads, 31870813 distinct (107683 with N), mapped on the GPU 31676619, host lane 86511 (3.54 s), not mapped 0; upload 3.50 s, dedup 1.83 s, GPU mapping 49.80 s ENGINE_GPU: cache filled with 31763130 sequence results in 126 s (device 0) 
+  GSM7036403: 14:10.60 wall, exit 0, engine_gpu: 111623976 reads, 34826990 distinct (574330 with N), mapped on the GPU 34179429, host lane 73231 (3.03 s), not mapped 0; upload 4.55 s, dedup 3.06 s, GPU mapping 51.23 s ENGINE_GPU: cache filled with 34252660 sequence results in 175 s (device 1) 
+  GSM7656149: 38:15.12 wall, exit 0, engine_gpu: cudaMalloc(&dOut, n * (u64)C::NBLOB): out of memory ENGINE_GPU: not used (GPU mapping failed): STAR maps every read 
+  GSM6470208: 21:16.07 wall, exit 0, ENGINE_GPU: not used (read clipping (the cache key is the clipped sequence)): STAR maps every read 

@@ -1,0 +1,8 @@
+{
+  "ancestry": "insufficient_data",
+  "confidence": 0.0,
+  "n_informative_aims": 3,
+  "n_covered_aims": 0,
+  "aim_panel_size": 51,
+  "note": "fewer than 5 AIMs had coverage"
+}

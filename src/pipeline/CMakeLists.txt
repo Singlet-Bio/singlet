@@ -35,6 +35,11 @@ if(NOT _singlet_commit)
 endif()
 target_compile_definitions(singlet PRIVATE SINGLET_GIT_COMMIT="${_singlet_commit}")
 
+if(TARGET singlet_engine_gpu)
+    target_link_libraries(singlet PRIVATE singlet_engine_gpu)
+    target_compile_definitions(singlet PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
+
 if(HDF5_AVAILABLE)
     target_link_libraries(singlet PRIVATE ${HDF5_C_LIB})
     target_include_directories(singlet PRIVATE ${HDF5_C_INCLUDE})

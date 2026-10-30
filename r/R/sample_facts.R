@@ -83,3 +83,32 @@
     for (c in intersect(.sample_fact_columns, names(cd))) cd[[c]] <- factor(cd[[c]])
     cd
 }
+
+# The labeller was trained on primary tissue, so on a cultured cell line it gives the nearest primary cell type, which is often
+# wrong (K-562 cells come out as "transit amplifying cell"). A cell-line sample's cells carry its line as cell type instead, as on
+# singlet.bio: the first Cellosaurus line of its record (name, CVCL id), else "cultured cell" (CL:0000010) for tissue_type
+# "cell line". c(id, name), or NULL for any other sample.
+.sample_facts_cell_line <- function(f) {
+    if (!is.list(f)) return(NULL)
+    for (x in if (is.list(f$cell_line)) f$cell_line else list()) {
+        id <- if (is.list(x) && length(x$id)) as.character(x$id[[1L]]) else NA_character_
+        nm <- if (is.list(x) && length(x$name)) as.character(x$name[[1L]]) else NA_character_
+        if (!is.na(id) || !is.na(nm)) return(c(if (is.na(id)) nm else id, if (is.na(nm)) id else nm))
+    }
+    tt <- f$tissue_type
+    if (length(tt) && identical(as.character(tt[[1L]]), "cell line")) c("CL:0000010", "cultured cell") else NULL
+}
+
+# One sample's label columns (a named list) with the labeller's cell type replaced by the sample's cell line, if it is one.
+.sample_facts_relabel <- function(lab, f, n) {
+    line <- .sample_facts_cell_line(f)
+    if (is.null(line)) return(lab)
+    for (p in list(c("cell_type", "cell_type_ontology_term_id"), c("cell_type_deepest", "cell_type_deepest_ontology_term_id"))) {
+        if (!is.null(lab[[p[1L]]])) lab[[p[1L]]] <- rep(line[[2L]], n)
+        if (!is.null(lab[[p[2L]]])) lab[[p[2L]]] <- rep(line[[1L]], n)
+    }
+    for (c in c("cell_type_level", "cell_type_deepest_level")) if (!is.null(lab[[c]])) lab[[c]] <- rep(0L, n)
+    for (c in c("cell_type_score", "cell_type_deepest_score")) if (!is.null(lab[[c]])) lab[[c]] <- rep(NA_real_, n)
+    if (!is.null(lab$cell_type_path)) lab$cell_type_path <- rep(NA_character_, n)
+    lab
+}

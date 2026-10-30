@@ -185,6 +185,11 @@ public:
         vals_.clear();
     }
 
+    // Renumber features: row r becomes new_idx[r] (canonical feature order before export)
+    void remap_rows(const std::vector<uint32_t>& new_idx) {
+        for (auto& r : rows_) if (r < new_idx.size()) r = new_idx[r];
+    }
+
     // Merge another accumulator's COO data into this one (for parallel workers)
     void merge_from(SparseAccumulator& other) {
         if (other.rows_.empty()) return;

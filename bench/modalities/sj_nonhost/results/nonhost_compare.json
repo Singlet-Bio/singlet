@@ -1,0 +1,485 @@
+{
+ "sample": {
+  "mock": {
+   "n_cells": 14013,
+   "singlet_summary": {
+    "total_unmapped_reads": 1886673,
+    "screened_reads": 1886673,
+    "kingdoms_screened": [
+     "VIRAL",
+     "BACTERIAL",
+     "FUNGAL"
+    ],
+    "host_filter_active": true,
+    "viral_hits": 19562,
+    "bacterial_hits": 0,
+    "fungal_hits": 151019,
+    "unknown_hits": 1716092,
+    "viral_fraction": 0.010369,
+    "bacterial_fraction": 0.0,
+    "fungal_fraction": 0.080045,
+    "em_species_count": 0,
+    "em_iterations": 119,
+    "top_pathogens": []
+   },
+   "singlet_em_species": [],
+   "singlet_per_cell_file": {
+    "rows": 132499,
+    "species": "{('BACTERIAL', 33276): 3849, ('VIRAL', 8426): 3793, ('VIRAL', 8877): 2482, ('BACTERIAL', 98526): 1052, ('VIRAL', 15343): 753, ('VIRAL', 4808): 550, ('VIRAL', 7669): 476, ('BACTERIAL', 86695): 386}"
+   },
+   "kraken_conf0.0_top": [
+    {
+     "taxid": 67082,
+     "name": "BeAn 58058 virus",
+     "reads": 8834
+    },
+    {
+     "taxid": 45617,
+     "name": "Human endogenous retrovirus K",
+     "reads": 5149
+    },
+    {
+     "taxid": 694009,
+     "name": "Severe acute respiratory syndrome-related coronavirus",
+     "reads": 3914
+    },
+    {
+     "taxid": 3050337,
+     "name": "Cytomegalovirus papiinebeta3",
+     "reads": 119
+    },
+    {
+     "taxid": 10847,
+     "name": "Sinsheimervirus phiX174",
+     "reads": 64
+    },
+    {
+     "taxid": 590745,
+     "name": "Mus musculus mobilized endogenous polytropic provirus",
+     "reads": 53
+    }
+   ],
+   "kraken_conf0.1_top": [
+    {
+     "taxid": 67082,
+     "name": "BeAn 58058 virus",
+     "reads": 7967
+    },
+    {
+     "taxid": 45617,
+     "name": "Human endogenous retrovirus K",
+     "reads": 4847
+    },
+    {
+     "taxid": 694009,
+     "name": "Severe acute respiratory syndrome-related coronavirus",
+     "reads": 3902
+    },
+    {
+     "taxid": 10847,
+     "name": "Sinsheimervirus phiX174",
+     "reads": 64
+    },
+    {
+     "taxid": 3050337,
+     "name": "Cytomegalovirus papiinebeta3",
+     "reads": 59
+    },
+    {
+     "taxid": 590745,
+     "name": "Mus musculus mobilized endogenous polytropic provirus",
+     "reads": 41
+    }
+   ]
+  },
+  "dpi2": {
+   "n_cells": 11567,
+   "singlet_summary": {
+    "total_unmapped_reads": 2334542,
+    "screened_reads": 2334542,
+    "kingdoms_screened": [
+     "VIRAL",
+     "BACTERIAL",
+     "FUNGAL"
+    ],
+    "host_filter_active": true,
+    "viral_hits": 568585,
+    "bacterial_hits": 0,
+    "fungal_hits": 139904,
+    "unknown_hits": 1626053,
+    "viral_fraction": 0.243553,
+    "bacterial_fraction": 0.0,
+    "fungal_fraction": 0.059928,
+    "em_species_count": 1,
+    "em_iterations": 38,
+    "top_pathogens": [
+     {
+      "species_id": 8877,
+      "species_name": "NC_045512.2 Severe acute respiratory syndrome coronavirus 2 isolate Wuhan-Hu-1, complete genome",
+      "kingdom": "VIRAL",
+      "relative_abundance": 0.782044,
+      "reads_assigned": 554070
+     }
+    ]
+   },
+   "singlet_em_species": [
+    {
+     "kingdom": "VIRAL",
+     "species_id": 8877,
+     "species_name": "NC_045512.2 Severe acute respiratory syndrome coronavirus 2 isolate Wuhan-Hu-1, complete genome",
+     "relative_abundance": 0.782044,
+     "reads_assigned": 554070,
+     "mean_hit_rate": 0.942823,
+     "confidence": "HIGH"
+    }
+   ],
+   "singlet_per_cell_file": {
+    "rows": 149201,
+    "species": "{('VIRAL', 'NC_045512.2 Severe acute respiratory syndrome coronavirus 2 isolate Wuhan-Hu-1, complete genome'): 405793, ('BACTERIAL', '33276'): 3850, ('VIRAL', '8426'): 3435, ('VIRAL', '8910'): 3003, ('VIRAL', '15343'): 605, ('VIRAL', '4808'): 557, ('VIRAL', '7669'): 488, ('BACTERIAL', '65251'): 345}"
+   },
+   "kraken_conf0.0_top": [
+    {
+     "taxid": 694009,
+     "name": "Severe acute respiratory syndrome-related coronavirus",
+     "reads": 553261
+    },
+    {
+     "taxid": 67082,
+     "name": "BeAn 58058 virus",
+     "reads": 7843
+    },
+    {
+     "taxid": 45617,
+     "name": "Human endogenous retrovirus K",
+     "reads": 7019
+    },
+    {
+     "taxid": 2509511,
+     "name": "Sarbecovirus",
+     "reads": 335
+    },
+    {
+     "taxid": 3050337,
+     "name": "Cytomegalovirus papiinebeta3",
+     "reads": 138
+    },
+    {
+     "taxid": 590745,
+     "name": "Mus musculus mobilized endogenous polytropic provirus",
+     "reads": 63
+    }
+   ],
+   "kraken_conf0.1_top": [
+    {
+     "taxid": 694009,
+     "name": "Severe acute respiratory syndrome-related coronavirus",
+     "reads": 552807
+    },
+    {
+     "taxid": 67082,
+     "name": "BeAn 58058 virus",
+     "reads": 6990
+    },
+    {
+     "taxid": 45617,
+     "name": "Human endogenous retrovirus K",
+     "reads": 6600
+    },
+    {
+     "taxid": 2509511,
+     "name": "Sarbecovirus",
+     "reads": 584
+    },
+    {
+     "taxid": 3050337,
+     "name": "Cytomegalovirus papiinebeta3",
+     "reads": 56
+    },
+    {
+     "taxid": 590745,
+     "name": "Mus musculus mobilized endogenous polytropic provirus",
+     "reads": 52
+    }
+   ]
+  },
+  "pbmc1k_v3": {
+   "n_cells": 1136,
+   "singlet_summary": {
+    "total_unmapped_reads": 2575933,
+    "screened_reads": 2575933,
+    "kingdoms_screened": [
+     "VIRAL",
+     "BACTERIAL",
+     "FUNGAL"
+    ],
+    "host_filter_active": true,
+    "viral_hits": 21084,
+    "bacterial_hits": 0,
+    "fungal_hits": 283334,
+    "unknown_hits": 2271515,
+    "viral_fraction": 0.008185,
+    "bacterial_fraction": 0.0,
+    "fungal_fraction": 0.109993,
+    "em_species_count": 0,
+    "em_iterations": 500,
+    "top_pathogens": []
+   },
+   "singlet_em_species": [],
+   "singlet_per_cell_file": {
+    "rows": 217610,
+    "species": "{('BACTERIAL', 86695): 9904, ('BACTERIAL', 33276): 2532, ('BACTERIAL', 2115): 1291, ('BACTERIAL', 57210): 1107, ('BACTERIAL', 48080): 950, ('VIRAL', 7669): 410, ('BACTERIAL', 65812): 403, ('VIRAL', 4808): 360}"
+   },
+   "kraken_conf0.0_top": [
+    {
+     "taxid": 67082,
+     "name": "BeAn 58058 virus",
+     "reads": 23850
+    },
+    {
+     "taxid": 45617,
+     "name": "Human endogenous retrovirus K",
+     "reads": 10833
+    },
+    {
+     "taxid": 10847,
+     "name": "Sinsheimervirus phiX174",
+     "reads": 221
+    },
+    {
+     "taxid": 3050337,
+     "name": "Cytomegalovirus papiinebeta3",
+     "reads": 174
+    },
+    {
+     "taxid": 2845070,
+     "name": "Kinglevirus lutadaptatum",
+     "reads": 81
+    },
+    {
+     "taxid": 2169967,
+     "name": "Escherichia virus DE3",
+     "reads": 51
+    }
+   ],
+   "kraken_conf0.1_top": [
+    {
+     "taxid": 67082,
+     "name": "BeAn 58058 virus",
+     "reads": 20772
+    },
+    {
+     "taxid": 45617,
+     "name": "Human endogenous retrovirus K",
+     "reads": 10437
+    },
+    {
+     "taxid": 10847,
+     "name": "Sinsheimervirus phiX174",
+     "reads": 219
+    },
+    {
+     "taxid": 3050337,
+     "name": "Cytomegalovirus papiinebeta3",
+     "reads": 126
+    },
+    {
+     "taxid": 2845070,
+     "name": "Kinglevirus lutadaptatum",
+     "reads": 81
+    },
+    {
+     "taxid": 2169967,
+     "name": "Escherichia virus DE3",
+     "reads": 51
+    }
+   ]
+  }
+ },
+ "separation": {
+  "singlet_viral_all": {
+   "n_cells": 25580,
+   "AUROC": 0.6945014272492134,
+   "frac_cells_ge1_UMI_mock": 0.43045743238421463,
+   "frac_cells_ge1_UMI_dpi2": 0.7184231001988415,
+   "frac_cells_ge3_UMI_mock": 0.0415328623421109,
+   "frac_cells_ge3_UMI_dpi2": 0.23203942249502896,
+   "total_UMI_mock": 8832.0,
+   "total_UMI_dpi2": 272984.0
+  },
+  "singlet_SARSr": {
+   "n_cells": 25580,
+   "AUROC": 0.7271945437714343,
+   "frac_cells_ge1_UMI_mock": 0.0007136230642974381,
+   "frac_cells_ge1_UMI_dpi2": 0.4550877496325754,
+   "frac_cells_ge3_UMI_mock": 0.00014272461285948763,
+   "frac_cells_ge3_UMI_dpi2": 0.10123627561165384,
+   "total_UMI_mock": 17.0,
+   "total_UMI_dpi2": 261792.0
+  },
+  "kraken0.0_viral_all": {
+   "n_cells": 25580,
+   "AUROC": 0.7153653299409123,
+   "frac_cells_ge1_UMI_mock": 0.39527581531435096,
+   "frac_cells_ge1_UMI_dpi2": 0.7230051007175585,
+   "frac_cells_ge3_UMI_mock": 0.036680225504888316,
+   "frac_cells_ge3_UMI_dpi2": 0.251664217169534,
+   "total_UMI_mock": 8044.0,
+   "total_UMI_dpi2": 273638.0
+  },
+  "kraken0.0_SARSr": {
+   "n_cells": 25580,
+   "AUROC": 0.7316758060329942,
+   "frac_cells_ge1_UMI_mock": 0.0006422607578676942,
+   "frac_cells_ge1_UMI_dpi2": 0.46399239215008214,
+   "frac_cells_ge3_UMI_mock": 0.00014272461285948763,
+   "frac_cells_ge3_UMI_dpi2": 0.1030517852511455,
+   "total_UMI_mock": 16.0,
+   "total_UMI_dpi2": 263342.0
+  },
+  "kraken0.1_SARSr": {
+   "n_cells": 25580,
+   "AUROC": 0.7313732735336084,
+   "frac_cells_ge1_UMI_mock": 0.0006422607578676942,
+   "frac_cells_ge1_UMI_dpi2": 0.4633872222702516,
+   "frac_cells_ge3_UMI_mock": 0.00014272461285948763,
+   "frac_cells_ge3_UMI_dpi2": 0.10279242673121812,
+   "total_UMI_mock": 16.0,
+   "total_UMI_dpi2": 263183.0
+  },
+  "oracle_minimap2_NC_045512.2": {
+   "n_cells": 25580,
+   "AUROC": 0.7078752768759704,
+   "frac_cells_ge1_UMI_mock": 0.0004995361450082067,
+   "frac_cells_ge1_UMI_dpi2": 0.41627042448344426,
+   "frac_cells_ge3_UMI_mock": 7.136230642974381e-05,
+   "frac_cells_ge3_UMI_dpi2": 0.09112129333448604,
+   "total_UMI_mock": 13.0,
+   "total_UMI_dpi2": 233341.0
+  }
+ },
+ "dpi2_per_cell_agreement": {
+  "kraken0.0_vs_singlet": {
+   "spearman": 0.9852986228737841,
+   "cells_pos_a": 5367,
+   "cells_pos_b": 5264,
+   "cells_pos_both": 5252
+  },
+  "kraken0.0_vs_kraken0.1": {
+   "spearman": 0.9992790142160626,
+   "cells_pos_a": 5367,
+   "cells_pos_b": 5360,
+   "cells_pos_both": 5360
+  },
+  "kraken0.0_vs_oracle": {
+   "spearman": 0.9353507395823836,
+   "cells_pos_a": 5367,
+   "cells_pos_b": 4815,
+   "cells_pos_both": 4813
+  },
+  "kraken0.1_vs_singlet": {
+   "spearman": 0.9855926289376669,
+   "cells_pos_a": 5360,
+   "cells_pos_b": 5264,
+   "cells_pos_both": 5250
+  },
+  "kraken0.1_vs_oracle": {
+   "spearman": 0.9355523934245574,
+   "cells_pos_a": 5360,
+   "cells_pos_b": 4815,
+   "cells_pos_both": 4811
+  },
+  "oracle_vs_singlet": {
+   "spearman": 0.9298304227556994,
+   "cells_pos_a": 4815,
+   "cells_pos_b": 5264,
+   "cells_pos_both": 4747
+  }
+ },
+ "dpi2_vs_oracle": {
+  "singlet_k>=1": {
+   "oracle_pos": 4815,
+   "called_pos": 5264,
+   "TP": 4747,
+   "precision": 0.9017857142857143,
+   "recall": 0.985877466251298
+  },
+  "kraken0.0_k>=1": {
+   "oracle_pos": 4815,
+   "called_pos": 5367,
+   "TP": 4813,
+   "precision": 0.8967765977268493,
+   "recall": 0.9995846313603323
+  },
+  "kraken0.1_k>=1": {
+   "oracle_pos": 4815,
+   "called_pos": 5360,
+   "TP": 4811,
+   "precision": 0.8975746268656717,
+   "recall": 0.9991692627206646
+  },
+  "singlet_k>=2": {
+   "oracle_pos": 1892,
+   "called_pos": 2195,
+   "TP": 1858,
+   "precision": 0.8464692482915718,
+   "recall": 0.9820295983086681
+  },
+  "kraken0.0_k>=2": {
+   "oracle_pos": 1892,
+   "called_pos": 2244,
+   "TP": 1891,
+   "precision": 0.8426916221033868,
+   "recall": 0.9994714587737844
+  },
+  "kraken0.1_k>=2": {
+   "oracle_pos": 1892,
+   "called_pos": 2244,
+   "TP": 1891,
+   "precision": 0.8426916221033868,
+   "recall": 0.9994714587737844
+  },
+  "singlet_k>=3": {
+   "oracle_pos": 1054,
+   "called_pos": 1171,
+   "TP": 1038,
+   "precision": 0.8864218616567037,
+   "recall": 0.9848197343453511
+  },
+  "kraken0.0_k>=3": {
+   "oracle_pos": 1054,
+   "called_pos": 1192,
+   "TP": 1054,
+   "precision": 0.8842281879194631,
+   "recall": 1.0
+  },
+  "kraken0.1_k>=3": {
+   "oracle_pos": 1054,
+   "called_pos": 1189,
+   "TP": 1053,
+   "precision": 0.8856181665264928,
+   "recall": 0.9990512333965844
+  }
+ },
+ "pbmc_false_positives": {
+  "singlet_viral": {
+   "cells": 1136,
+   "cells_with_ge1_UMI": 1128,
+   "total_UMI_in_cells": 8966.0
+  },
+  "singlet_SARSr": {
+   "cells": 1136,
+   "cells_with_ge1_UMI": 0,
+   "total_UMI_in_cells": 0.0
+  },
+  "kraken0.0_viral": {
+   "cells": 1136,
+   "cells_with_ge1_UMI": 1132,
+   "total_UMI_in_cells": 22450.0
+  },
+  "kraken0.1_viral": {
+   "cells": 1136,
+   "cells_with_ge1_UMI": 1132,
+   "total_UMI_in_cells": 20239.0
+  }
+ }
+}
