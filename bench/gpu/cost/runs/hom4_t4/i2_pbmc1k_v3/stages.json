@@ -1,0 +1,21 @@
+{
+ "dir": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/w11/cost/runs/hom4_t4/i2_pbmc1k_v3",
+ "star_total": 530.805,
+ "star_map": 401.0,
+ "star_solo": 27.0,
+ "sort": 94.80499999999995,
+ "index": 5.18471,
+ "cb_refresh": 3.65305,
+ "pileup_pass": 16.1332,
+ "pileup_total": 29.5128,
+ "fq_pass1": 6.17507,
+ "ref_load": 9.19049,
+ "export_csc": 3.77936,
+ "strand_rerun_logged": false,
+ "reads": 73921372,
+ "wall": 667.45,
+ "user_s": 1823.89,
+ "sys_s": 190.4,
+ "maxrss_kb": 56363960.0,
+ "cpu_s": 2014.2900000000002
+}

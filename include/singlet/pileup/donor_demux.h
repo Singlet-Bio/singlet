@@ -153,6 +153,34 @@ static void parallel_chunks(int n, int nthreads, Fn&& fn) {
     for (auto& th : ts) th.join();
 }
 
+// Reductions (sums of floats across cells or SNPs) must not depend on how many threads
+// run them: float addition is not associative, so per-thread partial sums made the fit,
+// and through it the auto-K choice, change with --threads. parallel_det_chunks always cuts
+// [0, n) into kDetChunks pieces, whatever the thread count, and fn(chunk, begin, end) fills
+// the partial sum of that chunk; the caller adds the partials in chunk order. Threads only
+// decide which chunks they compute.
+constexpr int kDetChunks = 8;
+
+template <class Fn>
+static void parallel_det_chunks(int n, int nthreads, Fn&& fn) {
+    auto range = [n](int c, int& b, int& e) {
+        b = static_cast<int>(static_cast<int64_t>(c) * n / kDetChunks);
+        e = static_cast<int>(static_cast<int64_t>(c + 1) * n / kDetChunks);
+    };
+    nthreads = std::max(1, std::min(nthreads, kDetChunks));
+    if (nthreads == 1) {
+        for (int c = 0; c < kDetChunks; ++c) { int b, e; range(c, b, e); fn(c, b, e); }
+        return;
+    }
+    std::vector<std::thread> ts;
+    ts.reserve(nthreads);
+    for (int t = 0; t < nthreads; ++t)
+        ts.emplace_back([&, t]() {
+            for (int c = t; c < kDetChunks; c += nthreads) { int b, e; range(c, b, e); fn(c, b, e); }
+        });
+    for (auto& th : ts) th.join();
+}
+
 // ============================================================================
 // Internal: sparse AD/DP representation for covered SNPs only
 // ============================================================================
@@ -161,8 +189,8 @@ struct CoveredSNPData {
     // ad[c][k] and dp[c][k] where k is position in cell's sparse list
     struct CellSNPs {
         std::vector<int32_t> snp_idx;  // reduced SNP index (into covered_snps)
-        std::vector<uint8_t> ad;       // alt depth
-        std::vector<uint8_t> dp;       // total depth
+        std::vector<uint16_t> ad;      // alt depth
+        std::vector<uint16_t> dp;      // total depth
     };
     std::vector<CellSNPs> cells;
     int n_covered_snps;
@@ -173,8 +201,8 @@ struct CoveredSNPData {
 // Extract covered SNPs from CSC AD/DP matrices
 static CoveredSNPData extract_covered_snps(
     uint32_t n_features, uint32_t n_barcodes,
-    const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
-    const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data)
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data)
 {
     // Find SNPs with any coverage
     std::vector<bool> has_coverage(n_features, false);
@@ -207,7 +235,7 @@ static CoveredSNPData extract_covered_snps(
         // DP drives the loop (DP >= AD at every position)
         for (int32_t k = dp_indptr[j]; k < dp_indptr[j+1]; ++k) {
             int32_t snp = dp_indices[k];
-            uint8_t dp_val = dp_data[k];
+            uint16_t dp_val = dp_data[k];
             if (dp_val == 0) continue;
             int32_t ridx = snp_to_reduced[snp];
             if (ridx < 0) continue;
@@ -452,9 +480,9 @@ static void run_vb_inplace(
     std::vector<float> d2(ns * K);   // digamma(s2[j*K+k])
     std::vector<float> d12(ns * K);  // digamma(s1[j*K+k] + s2[j*K+k])
 
-    // Thread-local M-step accumulators (allocated once, cleared per iter)
-    std::vector<std::vector<float>> s1_tl(nthreads, std::vector<float>(ns * K));
-    std::vector<std::vector<float>> s2_tl(nthreads, std::vector<float>(ns * K));
+    // Per-chunk M-step accumulators (allocated once, cleared per iter)
+    std::vector<std::vector<float>> s1_tl(kDetChunks, std::vector<float>(ns * K));
+    std::vector<std::vector<float>> s2_tl(kDetChunks, std::vector<float>(ns * K));
 
     float prev_elbo = static_cast<float>(result.elbo);
     const float log_inv_k  = -std::log(static_cast<float>(K));
@@ -464,66 +492,37 @@ static void run_vb_inplace(
     for (int iter = 0; iter < max_iter; ++iter) {
 
         // ── M-step ─────────────────────────────────────────────────────────
-        if (nthreads == 1) {
-            std::fill(s1.begin(), s1.end(), s1_prior);
-            std::fill(s2.begin(), s2.end(), s2_prior);
-            for (int c = 0; c < nc; ++c) {
+        // Each chunk of cells accumulates into its own s1_tl/s2_tl (no mutex); the chunks
+        // are added in order, so the sums are the same for any thread count.
+        parallel_det_chunks(nc, nthreads, [&](int ch, int c_start, int c_end) {
+            float* s1t = s1_tl[ch].data();
+            float* s2t = s2_tl[ch].data();
+            std::fill(s1t, s1t + ns * K, 0.0f);
+            std::fill(s2t, s2t + ns * K, 0.0f);
+            for (int c = c_start; c < c_end; ++c) {
                 const auto& cell = data.cells[c];
                 const float* qc  = result.id_prob[c].data();
                 for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
                     const int   j  = cell.snp_idx[si];
                     const float ad = static_cast<float>(cell.ad[si]);
                     const float bd = static_cast<float>(cell.dp[si]) - ad;
-                    float* s1j = s1.data() + j * K;
-                    float* s2j = s2.data() + j * K;
+                    float* s1j = s1t + j * K;
+                    float* s2j = s2t + j * K;
                     for (int k = 0; k < K; ++k) {
                         s1j[k] += qc[k] * ad;
                         s2j[k] += qc[k] * bd;
                     }
                 }
             }
-        } else {
-            // Each thread accumulates into its own s1_tl/s2_tl; no mutex needed.
-            auto m_worker = [&](int t, int c_start, int c_end) {
-                float* s1t = s1_tl[t].data();
-                float* s2t = s2_tl[t].data();
-                std::fill(s1t, s1t + ns * K, 0.0f);
-                std::fill(s2t, s2t + ns * K, 0.0f);
-                for (int c = c_start; c < c_end; ++c) {
-                    const auto& cell = data.cells[c];
-                    const float* qc  = result.id_prob[c].data();
-                    for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
-                        const int   j  = cell.snp_idx[si];
-                        const float ad = static_cast<float>(cell.ad[si]);
-                        const float bd = static_cast<float>(cell.dp[si]) - ad;
-                        float* s1j = s1t + j * K;
-                        float* s2j = s2t + j * K;
-                        for (int k = 0; k < K; ++k) {
-                            s1j[k] += qc[k] * ad;
-                            s2j[k] += qc[k] * bd;
-                        }
-                    }
-                }
-            };
-            {
-                std::vector<std::thread> ts;
-                ts.reserve(nthreads);
-                for (int t = 0; t < nthreads; ++t) {
-                    const int cs = t * nc / nthreads;
-                    const int ce = (t + 1) * nc / nthreads;
-                    ts.emplace_back(m_worker, t, cs, ce);
-                }
-                for (auto& t : ts) t.join();
+        });
+        // Reduce (parallel over the flat ns*K index; each element sums chunks 0..kDetChunks-1)
+        parallel_chunks(ns * K, nthreads, [&](int, int i0, int i1) {
+            for (int i = i0; i < i1; ++i) {
+                float a = s1_prior, b = s2_prior;
+                for (int t = 0; t < kDetChunks; ++t) { a += s1_tl[t][i]; b += s2_tl[t][i]; }
+                s1[i] = a;  s2[i] = b;
             }
-            // Reduce (parallel over the flat ns*K index)
-            parallel_chunks(ns * K, nthreads, [&](int, int i0, int i1) {
-                for (int i = i0; i < i1; ++i) {
-                    float a = s1_prior, b = s2_prior;
-                    for (int t = 0; t < nthreads; ++t) { a += s1_tl[t][i]; b += s2_tl[t][i]; }
-                    s1[i] = a;  s2[i] = b;
-                }
-            });
-        }
+        });
 
         // Update beta_mu / beta_sum (stored for output)
         parallel_chunks(ns, nthreads, [&](int, int j0, int j1) {
@@ -603,11 +602,11 @@ static void run_vb_inplace(
 
         // ── ELBO ───────────────────────────────────────────────────────────
         // Partial sums per thread chunk (parallel; summed in a fixed order).
-        std::vector<double> e_part(nthreads, 0.0);
+        std::vector<double> e_part(kDetChunks, 0.0), e_part2(kDetChunks, 0.0);
 
         // E[log p(x | z, theta)] — uses precomputed d1/d2/d12 (no digamma calls here)
         // and -KL[q(z) || p(z)]
-        parallel_chunks(nc, nthreads, [&](int t, int c0, int c1) {
+        parallel_det_chunks(nc, nthreads, [&](int t, int c0, int c1) {
             double e = 0.0;
             for (int c = c0; c < c1; ++c) {
                 const auto& cell = data.cells[c];
@@ -634,7 +633,7 @@ static void run_vb_inplace(
             e_part[t] += e;
         });
         // -KL[q(theta) || p(theta)] — uses precomputed d1/d2 (3 lgamma + d1 + d2 + d12 per j,k)
-        parallel_chunks(ns, nthreads, [&](int t, int j0, int j1) {
+        parallel_det_chunks(ns, nthreads, [&](int t, int j0, int j1) {
             double e = 0.0;
             for (int j = j0; j < j1; ++j) {
                 const float* s1j  = s1.data()  + j * K;
@@ -650,10 +649,11 @@ static void run_vb_inplace(
                          - (a + b - s1_prior - s2_prior) * d12j[k];
                 }
             }
-            e_part[t] += e;
+            e_part2[t] += e;
         });
         double elbo = 0.0;
         for (double v : e_part) elbo += v;
+        for (double v : e_part2) elbo += v;
 
         result.elbo = elbo;
         result.n_iter++;
@@ -742,7 +742,7 @@ static std::vector<float> power_iteration_pca(
 
     std::vector<std::vector<float>> evecs(n_pcs_actual, std::vector<float>(ni, 0.0f));
     std::vector<float> v(ni), w(nc), v_new(ni);
-    std::vector<std::vector<float>> vtl(nthreads, std::vector<float>(ni));
+    std::vector<std::vector<float>> vtl(kDetChunks, std::vector<float>(ni));
 
     // w = X_centered * v   (n_cells)
     auto matvec = [&]() {
@@ -771,7 +771,7 @@ static std::vector<float> power_iteration_pca(
         for (int it = 0; it < n_iter; ++it) {
             matvec();
             // v_new = X_centered^T * w  (n_snps), thread-local accumulators
-            parallel_chunks(nc, nthreads, [&](int t, int c0, int c1) {
+            parallel_det_chunks(nc, nthreads, [&](int t, int c0, int c1) {
                 std::vector<float>& acc = vtl[t];
                 std::fill(acc.begin(), acc.end(), 0.0f);
                 for (int c = c0; c < c1; ++c) {
@@ -786,7 +786,7 @@ static std::vector<float> power_iteration_pca(
                 }
             });
             std::fill(v_new.begin(), v_new.end(), 0.0f);
-            for (int t = 0; t < nthreads; ++t)
+            for (int t = 0; t < kDetChunks; ++t)
                 for (int i = 0; i < ni; ++i) v_new[i] += vtl[t][i];
             // Gram-Schmidt deflation against previous eigenvectors
             for (int prev = 0; prev < pc; ++prev) {
@@ -1361,8 +1361,8 @@ static AlleleTables build_allele_tables(
         for (int it = 0; it < 3; ++it) {
             States st;
             st.set(eps, c_hom, c_het);
-            std::vector<double> num(nthreads, 0.0), den(nthreads, 0.0);
-            parallel_chunks(ns, nthreads, [&](int t, int j0, int j1) {
+            std::vector<double> num(kDetChunks, 0.0), den(kDetChunks, 0.0);
+            parallel_det_chunks(ns, nthreads, [&](int t, int j0, int j1) {
                 double nu = 0.0, de = 0.0, pg[3], eg[3];
                 for (int j = j0; j < j1; ++j)
                     for (int k = 0; k < K; ++k) {
@@ -1376,7 +1376,7 @@ static AlleleTables build_allele_tables(
                 num[t] += nu; den[t] += de;
             });
             double nu = 0.0, de = 0.0;
-            for (int t = 0; t < nthreads; ++t) { nu += num[t]; de += den[t]; }
+            for (int t = 0; t < kDetChunks; ++t) { nu += num[t]; de += den[t]; }
             if (de > 0.0)
                 eps = std::max(0.003f, std::min(0.15f, static_cast<float>(nu / de)));
         }
@@ -2057,9 +2057,9 @@ struct DemuxResult {
 // ============================================================================
 inline DemuxResult run_demux(
     uint32_t n_snps, uint32_t n_cells,
-    const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
     uint64_t /*ad_nnz*/,
-    const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data,
     uint64_t /*dp_nnz*/,
     const DonorDemuxConfig& cfg,
     const std::vector<uint32_t>& cell_indices = {}) // empty = use all barcodes (no filter)
@@ -2402,8 +2402,8 @@ struct DonorDepths {
 inline DonorDepths aggregate_donor_depths(
     const DemuxResult& demux,
     uint32_t n_snps, uint32_t n_barcodes,
-    const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
-    const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data,
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data,
     float min_prob = 0.9f)
 {
     DonorDepths depths;
@@ -2642,8 +2642,8 @@ inline bool write_donor_assignments(
 // ============================================================================
 inline DemuxResult make_single_donor_result(
     uint32_t n_snps, uint32_t n_cells,
-    const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
-    const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data)
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data)
 {
     std::cerr << "[demux] K=1 workaround: skipping VB inference, assigning all "
               << n_cells << " cells to donor0\n";

@@ -1,0 +1,1771 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "cell-type",
+ "title": "Cell type labels",
+ "conclusion": "On 16 held-out studies with curated cell types (291,331 cells), with every tool trained on the same CELLxGENE reference, Singlet labels 74.4% of cells with the right lineage against 67.1% for CellTypist, 72.9% for scANVI, 62.7% for Seurat, 70.8% for SingleR. Its calibrated call cuts wrong calls to 25.1%.",
+ "methods": "**Data.** cxg16: 16 GEO studies (66 samples, 13 human and 3 mouse) that CELLxGENE curators annotated with Cell Ontology terms. Author labels are moved onto Singlet's called cells by barcode, and only cells that both sides kept are scored (291,331 cells). Every tool reads Singlet's counts of these cells: exon plus intron, projected on one 6,000-gene vocabulary. **Reference.** Every tool learns from the same CELLxGENE Census 2025-11-08 training corpus. The corpus is a stratified sample of 2.6M primary droplet cells, and the 16 studies' collections are excluded. CellTypist and Singlet's network train on all of it; Seurat, SingleR and scANVI use a stratified subsample of at most 200 cells per term (145k human, 62k mouse cells), the scale they are designed for. Labels are the corpus's curated CL terms, so no tool needs a crosswalk. **Metrics.** Accuracy at depth d compares the depth-d ancestors of call and truth on the guide's tree (1 compartment, 2 lineage, 3 type, 4 subtype); a call that stops above depth d counts as wrong there. 'Wrong' is a call on another branch. Each study pools its samples, and values are means over studies with bootstrap CIs over studies. Calibration: ECE of each tool's probability against 'the truth lies in the call's subtree'. Abstention: area under each tool's risk-coverage curve. Robustness: depth-2 accuracy on studies whose tissue is thin in the reference. Runtime: CPU time per million cells to label a query once the reference is prepared. Singlet gives two labels per cell. The most probable term is compared with every competitor's label; the calibrated call, which backs off to the parent term when unsure, is scored for wrong calls and calibration.",
+ "status": "draft",
+ "generated_at": "2026-10-25T15:55:38+00:00",
+ "owner": "ensemble-classifier",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "19caf8cdef44512d237df2b69ea7168aeaa11232",
+  "branch": "claude/celltype-nn"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "role": "singlet",
+   "version": "1.0.0",
+   "url": "https://github.com/Singlet-Bio/singlet",
+   "params": "singlet.celltype_nn model m1_notissue (Census 2025-11-08, CL 2026-06-08): rank inputs over 6,000 genes, MLP 2048; label = argmax_cl (the most probable CL term), score = its probability"
+  },
+  {
+   "name": "singlet-call",
+   "role": "helper",
+   "version": "1.0.0",
+   "params": "the same model's published call cell_type_cl: the most specific CL term with rolled-up probability >= 0.5, prob = that rolled-up probability (cell_type_prob)"
+  },
+  {
+   "name": "CellTypist",
+   "role": "competitor",
+   "version": "1.7.1",
+   "url": "https://github.com/Teichlab/celltypist",
+   "citation": "Dominguez Conde et al., Science 2022",
+   "params": "celltypist.train(log1p CP10k, labels = CL term, use_SGD=True, mini_batch=True, balance_cell_type=True, epochs=10) on the full Census training split (2.2M human, 0.4M mouse cells); celltypist.annotate(majority_voting=False)"
+  },
+  {
+   "name": "scANVI",
+   "role": "competitor",
+   "version": "scvi-tools 1.4.2",
+   "url": "https://github.com/scverse/scvi-tools",
+   "citation": "Xu et al., Mol Syst Biol 2021",
+   "params": "SCVI(n_latent=30, n_layers=2, nb; batch = dataset; up to 100 epochs, early stopping) -> SCANVI.from_scvi_model (20 epochs); query: SCANVI.load_query_data + train(max_epochs=100, weight_decay=0); label = argmax of predict(soft=True)"
+  },
+  {
+   "name": "Seurat",
+   "role": "competitor",
+   "version": "5.0.0",
+   "url": "https://github.com/satijalab/seurat",
+   "citation": "Hao et al., Cell 2021 (Azimuth)",
+   "params": "reference: NormalizeData, FindVariableFeatures(2000), ScaleData, RunPCA(30); query: NormalizeData, FindTransferAnchors(reference.reduction='pca', dims=1:30), TransferData; label = predicted.id, prob = prediction.score.max"
+  },
+  {
+   "name": "SingleR",
+   "role": "competitor",
+   "version": "2.0.0",
+   "url": "https://bioconductor.org/packages/SingleR",
+   "citation": "Aran et al., Nat Immunol 2019",
+   "params": "SingleR(test = log1p CP10k, ref = reference log1p CP10k, labels = CL term, aggr.ref=TRUE, de.method='classic'); score = delta.next; pruned.labels kept as SingleR's own abstention"
+  },
+  {
+   "name": "singlet-guide",
+   "role": "helper",
+   "version": "1.0.0",
+   "params": "singlet.celllabels guide (marker hierarchy + kNN smoothing), the atlas's current labels"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "cxg16",
+   "title": "16 GEO studies with CELLxGENE curated cell types (66 samples)",
+   "accessions": {
+    "gse": "GSE125970;GSE130973;GSE131882;GSE144870;GSE157480;GSE161089;GSE164291;GSE166766;GSE184111;GSE185222;GSE185224;GSE185477;GSE201773;GSE260685;GSE270225;GSE280852",
+    "gsm": [
+     "GSM3587008",
+     "GSM3587009",
+     "GSM3587010",
+     "GSM3587011",
+     "GSM3587012",
+     "GSM3587013",
+     "GSM3758115",
+     "GSM3758116",
+     "GSM3758119",
+     "GSM3823939",
+     "GSM3823940",
+     "GSM3823941",
+     "GSM3823942",
+     "GSM3823943",
+     "GSM3823944",
+     "GSM4299783",
+     "GSM4299784",
+     "GSM4299785",
+     "GSM4299786",
+     "GSM4299787",
+     "GSM4299788",
+     "GSM4299789",
+     "GSM4766855",
+     "GSM4889466",
+     "GSM4889467",
+     "GSM4889468",
+     "GSM4889469",
+     "GSM5005819",
+     "GSM5005820",
+     "GSM5082289",
+     "GSM5082290",
+     "GSM5082291",
+     "GSM5082292",
+     "GSM5578032",
+     "GSM5578033",
+     "GSM5578034",
+     "GSM5578035",
+     "GSM5578036",
+     "GSM5578037",
+     "GSM5578038",
+     "GSM5578039",
+     "GSM5578040",
+     "GSM5578041",
+     "GSM5578042",
+     "GSM5578043",
+     "GSM5608427",
+     "GSM5608428",
+     "GSM5608429",
+     "GSM5608430",
+     "GSM5616002",
+     "GSM5655495",
+     "GSM5655497",
+     "GSM5655499",
+     "GSM6071111",
+     "GSM8122365",
+     "GSM8122366",
+     "GSM8122367",
+     "GSM8337506",
+     "GSM8337507",
+     "GSM8337508",
+     "GSM8337510",
+     "GSM8606565",
+     "GSM8606566",
+     "GSM8606567",
+     "GSM8606569",
+     "GSM8606570"
+    ],
+    "other": [
+     "CELLxGENE collections: see $WORK/jobs/annotate/bench_studies.json"
+    ]
+   },
+   "data_kind": "real",
+   "truth": "CELLxGENE curators' Cell Ontology terms for the authors' labels, transferred to Singlet's called cells by barcode (scripts/annotate_truth_cxg.py)",
+   "n_cells": 291331
+  }
+ ],
+ "metrics": [
+  {
+   "id": "accuracy_depth1",
+   "name": "Accuracy at Cell Ontology depth 1 (compartment)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9029,
+    "ci": [
+     0.8142,
+     0.969
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.8296,
+     "ci": [
+      0.7082,
+      0.9341
+     ]
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.8345,
+     "ci": [
+      0.7108,
+      0.9404
+     ]
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.7973,
+     "ci": [
+      0.6794,
+      0.8996
+     ]
+    },
+    {
+     "tool": "SingleR",
+     "value": 0.8555,
+     "ci": [
+      0.7422,
+      0.9469
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "notes": "mean over studies of the fraction of cells whose depth-d ancestor matches the author's; stopping early counts as wrong",
+   "pass": "pass"
+  },
+  {
+   "id": "accuracy_depth2",
+   "name": "Accuracy at Cell Ontology depth 2 (lineage)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.7436,
+    "ci": [
+     0.5939,
+     0.8765
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.671,
+     "ci": [
+      0.5334,
+      0.7992
+     ]
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.7292,
+     "ci": [
+      0.5699,
+      0.8667
+     ]
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.6275,
+     "ci": [
+      0.497,
+      0.7487
+     ]
+    },
+    {
+     "tool": "SingleR",
+     "value": 0.7076,
+     "ci": [
+      0.5585,
+      0.8316
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "notes": "mean over studies of the fraction of cells whose depth-d ancestor matches the author's; stopping early counts as wrong",
+   "pass": "pass"
+  },
+  {
+   "id": "accuracy_depth3",
+   "name": "Accuracy at Cell Ontology depth 3 (cell type)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4179,
+    "ci": [
+     0.2928,
+     0.5401
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.3764,
+     "ci": [
+      0.2712,
+      0.4913
+     ]
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.3523,
+     "ci": [
+      0.2305,
+      0.4863
+     ]
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.3316,
+     "ci": [
+      0.2354,
+      0.4346
+     ]
+    },
+    {
+     "tool": "SingleR",
+     "value": 0.3917,
+     "ci": [
+      0.2786,
+      0.5066
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "notes": "mean over studies of the fraction of cells whose depth-d ancestor matches the author's; stopping early counts as wrong",
+   "pass": "pass"
+  },
+  {
+   "id": "accuracy_depth4",
+   "name": "Accuracy at Cell Ontology depth 4 (subtype)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.4979,
+    "ci": [
+     0.3233,
+     0.6752
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.3262,
+     "ci": [
+      0.1934,
+      0.4756
+     ]
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.2886,
+     "ci": [
+      0.1564,
+      0.4337
+     ]
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.2407,
+     "ci": [
+      0.1439,
+      0.3557
+     ]
+    },
+    {
+     "tool": "SingleR",
+     "value": 0.3843,
+     "ci": [
+      0.2485,
+      0.5522
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "notes": "mean over studies of the fraction of cells whose depth-d ancestor matches the author's; stopping early counts as wrong",
+   "pass": "pass"
+  },
+  {
+   "id": "consistent",
+   "name": "Calls consistent with the author's label (same term, an ancestor or a descendant)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6194,
+    "ci": [
+     0.4965,
+     0.7393
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.5818,
+     "ci": [
+      0.4727,
+      0.6899
+     ]
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.5646,
+     "ci": [
+      0.4425,
+      0.6928
+     ]
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.5192,
+     "ci": [
+      0.4118,
+      0.6322
+     ]
+    },
+    {
+     "tool": "SingleR",
+     "value": 0.5859,
+     "ci": [
+      0.4658,
+      0.7093
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "wrong_rate",
+   "name": "Calls on another branch than the author's label",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.3736,
+    "ci": [
+     0.2562,
+     0.4981
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.3967,
+     "ci": [
+      0.2861,
+      0.5075
+     ]
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.38,
+     "ci": [
+      0.2514,
+      0.5056
+     ]
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.3687,
+     "ci": [
+      0.267,
+      0.474
+     ]
+    },
+    {
+     "tool": "SingleR",
+     "value": 0.3801,
+     "ci": [
+      0.2604,
+      0.5018
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "abstention_aurc",
+   "name": "Wrong-call rate integrated over coverage (area under the risk-coverage curve)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.2927
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.4218
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.6503
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.5606
+    },
+    {
+     "tool": "SingleR",
+     "value": 0.5188
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "notes": "cells ranked by each tool's own confidence; lower means its confidence separates right from wrong calls better",
+   "pass": "pass"
+  },
+  {
+   "id": "calibration_ece",
+   "name": "Expected calibration error of the label's probability",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.2155
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.3641
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.5139
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.1351
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat"
+    ]
+   },
+   "notes": "10 bins; a label is right when the truth lies in its subtree; SingleR gives no probability",
+   "pass": "fail"
+  },
+  {
+   "id": "call_wrong_rate",
+   "name": "Wrong calls in the published label (Singlet: the calibrated call; competitors: their label)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.2506,
+    "ci": [
+     0.137,
+     0.3776
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.3967,
+     "ci": [
+      0.2861,
+      0.5075
+     ]
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.38,
+     "ci": [
+      0.2514,
+      0.5056
+     ]
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.3687,
+     "ci": [
+      0.267,
+      0.474
+     ]
+    },
+    {
+     "tool": "SingleR",
+     "value": 0.3801,
+     "ci": [
+      0.2604,
+      0.5018
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "notes": "Singlet's call stops at a parent term when its subtypes share the probability; competitors always name one term",
+   "pass": "pass"
+  },
+  {
+   "id": "call_calibration_ece",
+   "name": "Expected calibration error of the published probability (Singlet: the call's rolled-up probability)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "cxg16",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0788
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.3641
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.5139
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.1351
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat"
+    ]
+   },
+   "notes": "10 bins; a call is right when the truth lies in its subtree",
+   "pass": "pass"
+  },
+  {
+   "id": "unseen_tissue_depth2",
+   "name": "Accuracy at depth 2 on studies whose tissue is thin in the reference",
+   "unit": "fraction",
+   "category": "robustness",
+   "dataset": "cxg16",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.5073
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 0.457
+    },
+    {
+     "tool": "scANVI",
+     "value": 0.6147
+    },
+    {
+     "tool": "Seurat",
+     "value": 0.449
+    },
+    {
+     "tool": "SingleR",
+     "value": 0.5319
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "notes": "2 studies with fewer than 20000 reference cells in their tissue group: GSE185222, GSE201773",
+   "pass": "fail"
+  },
+  {
+   "id": "cpu_seconds_per_million_cells",
+   "name": "CPU time to label a million cells (prediction, reference prepared)",
+   "unit": "s",
+   "category": "resources",
+   "dataset": "cxg16",
+   "direction": "lower",
+   "singlet": {
+    "value": 1096.009
+   },
+   "competitors": [
+    {
+     "tool": "CellTypist",
+     "value": 1947.5263
+    },
+    {
+     "tool": "scANVI",
+     "value": 144182.2126
+    },
+    {
+     "tool": "Seurat",
+     "value": 18936.7853
+    },
+    {
+     "tool": "SingleR",
+     "value": 533230.0341
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": [
+     "CellTypist",
+     "scANVI",
+     "Seurat",
+     "SingleR"
+    ]
+   },
+   "notes": "wall time x threads on Clipper CPU nodes; scANVI's query mapping runs on one H100 GPU and is counted as wall time x 1",
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "cxg16",
+   "wall_s": 45.6,
+   "cpu_h": 0.101,
+   "threads": 8,
+   "max_rss_gb": 2.92,
+   "node": "Clipper CPU",
+   "notes": "332,755 cells, prediction only (reference prepared)"
+  },
+  {
+   "tool": "singlet-call",
+   "dataset": "cxg16",
+   "wall_s": 82.7,
+   "cpu_h": 0.184,
+   "threads": 8,
+   "max_rss_gb": 2.92,
+   "node": "Clipper CPU",
+   "notes": "332,755 cells, prediction only (reference prepared)"
+  },
+  {
+   "tool": "CellTypist",
+   "dataset": "cxg16",
+   "wall_s": 81.0,
+   "cpu_h": 0.18,
+   "threads": 8,
+   "max_rss_gb": 2.48,
+   "node": "Clipper CPU",
+   "notes": "332,755 cells, prediction only (reference prepared)"
+  },
+  {
+   "tool": "scANVI",
+   "dataset": "cxg16",
+   "wall_s": 5997.2,
+   "cpu_h": 13.327,
+   "threads": 8,
+   "max_rss_gb": 3.97,
+   "node": "H100 GPU",
+   "notes": "332,755 cells, prediction only (reference prepared)"
+  },
+  {
+   "tool": "Seurat",
+   "dataset": "cxg16",
+   "wall_s": 6301.3,
+   "cpu_h": 1.75,
+   "threads": 1,
+   "max_rss_gb": 15.06,
+   "node": "Clipper CPU",
+   "notes": "332,755 cells, prediction only (reference prepared)"
+  },
+  {
+   "tool": "SingleR",
+   "dataset": "cxg16",
+   "wall_s": 22179.4,
+   "cpu_h": 49.287,
+   "threads": 8,
+   "max_rss_gb": 32.33,
+   "node": "Clipper CPU",
+   "notes": "332,755 cells, prediction only (reference prepared)"
+  },
+  {
+   "tool": "singlet-guide",
+   "dataset": "cxg16",
+   "wall_s": 124.5,
+   "cpu_h": 0.277,
+   "threads": 8,
+   "max_rss_gb": 2.92,
+   "node": "Clipper CPU",
+   "notes": "332,755 cells, prediction only (reference prepared)"
+  }
+ ],
+ "figures": [
+  {
+   "id": "accuracy_by_depth",
+   "title": "Accuracy by Cell Ontology depth (mean over 16 studies)",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "depth",
+    "categories": [
+     "d1",
+     "d2",
+     "d3",
+     "d4"
+    ]
+   },
+   "y": {
+    "label": "accuracy",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "d1",
+      "d2",
+      "d3",
+      "d4"
+     ],
+     "y": [
+      0.9029,
+      0.7436,
+      0.4179,
+      0.4979
+     ]
+    },
+    {
+     "name": "CellTypist",
+     "tool": "CellTypist",
+     "x": [
+      "d1",
+      "d2",
+      "d3",
+      "d4"
+     ],
+     "y": [
+      0.8296,
+      0.671,
+      0.3764,
+      0.3262
+     ]
+    },
+    {
+     "name": "scANVI",
+     "tool": "scANVI",
+     "x": [
+      "d1",
+      "d2",
+      "d3",
+      "d4"
+     ],
+     "y": [
+      0.8345,
+      0.7292,
+      0.3523,
+      0.2886
+     ]
+    },
+    {
+     "name": "Seurat",
+     "tool": "Seurat",
+     "x": [
+      "d1",
+      "d2",
+      "d3",
+      "d4"
+     ],
+     "y": [
+      0.7973,
+      0.6275,
+      0.3316,
+      0.2407
+     ]
+    },
+    {
+     "name": "SingleR",
+     "tool": "SingleR",
+     "x": [
+      "d1",
+      "d2",
+      "d3",
+      "d4"
+     ],
+     "y": [
+      0.8555,
+      0.7076,
+      0.3917,
+      0.3843
+     ]
+    },
+    {
+     "name": "singlet-call",
+     "tool": "singlet-call",
+     "x": [
+      "d1",
+      "d2",
+      "d3",
+      "d4"
+     ],
+     "y": [
+      0.8254,
+      0.6536,
+      0.3328,
+      0.3602
+     ]
+    },
+    {
+     "name": "singlet-guide",
+     "tool": "singlet-guide",
+     "x": [
+      "d1",
+      "d2",
+      "d3",
+      "d4"
+     ],
+     "y": [
+      0.8383,
+      0.7339,
+      0.42,
+      0.3198
+     ]
+    }
+   ]
+  },
+  {
+   "id": "accuracy_vs_wrong",
+   "title": "Lineage accuracy against wrong calls",
+   "kind": "scatter",
+   "x": {
+    "label": "wrong calls",
+    "unit": "fraction"
+   },
+   "y": {
+    "label": "accuracy at depth 2",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      0.3736
+     ],
+     "y": [
+      0.7436
+     ]
+    },
+    {
+     "name": "CellTypist",
+     "tool": "CellTypist",
+     "x": [
+      0.3967
+     ],
+     "y": [
+      0.671
+     ]
+    },
+    {
+     "name": "scANVI",
+     "tool": "scANVI",
+     "x": [
+      0.38
+     ],
+     "y": [
+      0.7292
+     ]
+    },
+    {
+     "name": "Seurat",
+     "tool": "Seurat",
+     "x": [
+      0.3687
+     ],
+     "y": [
+      0.6275
+     ]
+    },
+    {
+     "name": "SingleR",
+     "tool": "SingleR",
+     "x": [
+      0.3801
+     ],
+     "y": [
+      0.7076
+     ]
+    },
+    {
+     "name": "singlet-call",
+     "tool": "singlet-call",
+     "x": [
+      0.2506
+     ],
+     "y": [
+      0.6536
+     ]
+    },
+    {
+     "name": "singlet-guide",
+     "tool": "singlet-guide",
+     "x": [
+      0.3355
+     ],
+     "y": [
+      0.7339
+     ]
+    }
+   ]
+  },
+  {
+   "id": "reliability",
+   "title": "Reliability of the call's probability",
+   "kind": "line",
+   "x": {
+    "label": "stated probability",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "y": {
+    "label": "observed accuracy",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      0.0649,
+      0.151,
+      0.2445,
+      0.3469,
+      0.4478,
+      0.5473,
+      0.6464,
+      0.7461,
+      0.8486,
+      0.9433
+     ],
+     "y": [
+      0.466,
+      0.5353,
+      0.3699,
+      0.4204,
+      0.5045,
+      0.581,
+      0.5876,
+      0.5427,
+      0.6688,
+      0.8981
+     ]
+    },
+    {
+     "name": "CellTypist",
+     "tool": "CellTypist",
+     "x": [
+      0.0,
+      0.1478,
+      0.2493,
+      0.3574,
+      0.4453,
+      0.5222,
+      0.6516,
+      0.7485,
+      0.8567,
+      0.9997
+     ],
+     "y": [
+      0.3666,
+      0.7222,
+      0.8571,
+      0.7,
+      0.8333,
+      0.6,
+      0.7273,
+      0.6111,
+      0.5294,
+      0.6922
+     ]
+    },
+    {
+     "name": "scANVI",
+     "tool": "scANVI",
+     "x": [
+      0.0774,
+      0.1713,
+      0.2575,
+      0.3536,
+      0.4531,
+      0.5491,
+      0.6496,
+      0.7505,
+      0.8539,
+      0.9907
+     ],
+     "y": [
+      0.0,
+      0.2678,
+      0.2585,
+      0.3239,
+      0.3964,
+      0.4482,
+      0.4709,
+      0.4504,
+      0.3526,
+      0.3284
+     ]
+    },
+    {
+     "name": "Seurat",
+     "tool": "Seurat",
+     "x": [
+      0.0927,
+      0.1685,
+      0.2518,
+      0.3478,
+      0.4464,
+      0.5455,
+      0.6456,
+      0.7467,
+      0.847,
+      0.959
+     ],
+     "y": [
+      0.0746,
+      0.1285,
+      0.1978,
+      0.2722,
+      0.3245,
+      0.335,
+      0.3385,
+      0.3405,
+      0.323,
+      0.4604
+     ]
+    }
+   ]
+  },
+  {
+   "id": "per_study",
+   "title": "Per study: accuracy at depth 1/2/3 (wrong calls)",
+   "kind": "table",
+   "columns": [
+    "study",
+    "tissue",
+    "cells",
+    "singlet",
+    "CellTypist",
+    "scANVI",
+    "Seurat",
+    "SingleR",
+    "singlet-guide"
+   ],
+   "rows": [
+    [
+     "GSE125970",
+     "ascending colon epithelium;epithelium of rectum;ileal epithelium",
+     8809,
+     "1.00/0.96/0.23 (0.76)",
+     "0.99/0.82/0.49 (0.48)",
+     "0.98/0.87/0.18 (0.74)",
+     "0.91/0.79/0.23 (0.67)",
+     "0.97/0.89/0.23 (0.74)",
+     "1.00/0.79/0.15 (0.83)"
+    ],
+    [
+     "GSE130973",
+     "zone of skin",
+     7164,
+     "0.98/0.97/0.42 (0.26)",
+     "0.95/0.92/0.37 (0.22)",
+     "0.96/0.93/0.30 (0.25)",
+     "0.89/0.79/0.44 (0.18)",
+     "0.92/0.84/0.36 (0.25)",
+     "0.95/0.94/0.34 (0.26)"
+    ],
+    [
+     "GSE131882",
+     "cortex of kidney",
+     13633,
+     "1.00/1.00/0.68 (0.11)",
+     "1.00/0.99/0.80 (0.09)",
+     "1.00/0.99/0.74 (0.11)",
+     "0.99/0.99/0.67 (0.19)",
+     "0.99/1.00/0.69 (0.16)",
+     "0.85/0.85/0.76 (0.16)"
+    ],
+    [
+     "GSE144870",
+     "thymus",
+     71466,
+     "1.00/0.22/0.01 (0.48)",
+     "1.00/0.75/0.30 (0.26)",
+     "1.00/0.99/0.00 (0.18)",
+     "0.99/0.65/0.28 (0.55)",
+     "1.00/0.97/0.56 (0.27)",
+     "1.00/0.88/0.16 (0.57)"
+    ],
+    [
+     "GSE157480",
+     "bone marrow;brain;brain meninx",
+     3000,
+     "1.00/0.99/0.79 (0.31)",
+     "1.00/0.99/0.72 (0.29)",
+     "1.00/0.99/0.81 (0.22)",
+     "0.96/0.95/0.74 (0.28)",
+     "0.96/0.96/0.81 (0.23)",
+     "0.96/0.90/0.84 (0.15)"
+    ],
+    [
+     "GSE161089",
+     "respiratory basal cell",
+     4970,
+     "1.00/-/- (0.00)",
+     "0.91/-/- (0.01)",
+     "0.76/-/- (0.00)",
+     "0.97/-/- (0.00)",
+     "1.00/-/- (0.00)",
+     "1.00/-/- (0.00)"
+    ],
+    [
+     "GSE164291",
+     "fallopian tube;oviduct",
+     5467,
+     "0.73/0.18/0.10 (0.33)",
+     "0.17/0.14/0.05 (0.85)",
+     "0.20/0.18/0.09 (0.85)",
+     "0.18/0.15/0.03 (0.08)",
+     "0.25/0.18/0.09 (0.82)",
+     "0.18/0.18/0.10 (0.03)"
+    ],
+    [
+     "GSE166766",
+     "bronchial epithelial cell",
+     49280,
+     "0.98/0.75/0.49 (0.32)",
+     "0.94/0.73/0.46 (0.27)",
+     "1.00/1.00/0.56 (0.42)",
+     "0.91/0.44/0.23 (0.26)",
+     "0.97/0.35/0.25 (0.21)",
+     "1.00/0.92/0.53 (0.27)"
+    ],
+    [
+     "GSE184111",
+     "ureter",
+     23935,
+     "0.89/0.57/0.33 (0.26)",
+     "0.90/0.60/0.19 (0.30)",
+     "0.62/0.55/0.30 (0.26)",
+     "0.80/0.66/0.25 (0.26)",
+     "0.87/0.82/0.31 (0.36)",
+     "0.98/0.86/0.55 (0.33)"
+    ],
+    [
+     "GSE185222",
+     "dental pulp",
+     4686,
+     "0.37/0.70/0.60 (0.74)",
+     "0.39/0.68/0.56 (0.69)",
+     "0.38/0.68/0.55 (0.63)",
+     "0.43/0.65/0.47 (0.43)",
+     "0.43/0.68/0.55 (0.60)",
+     "0.35/0.64/0.52 (0.74)"
+    ],
+    [
+     "GSE185224",
+     "duodenal mucosa;ileal mucosa;jejunal mucosa",
+     10716,
+     "1.00/0.90/0.64 (0.27)",
+     "0.99/0.85/0.36 (0.59)",
+     "0.88/0.77/0.51 (0.34)",
+     "0.95/0.82/0.43 (0.48)",
+     "0.99/0.89/0.67 (0.31)",
+     "1.00/0.91/0.69 (0.26)"
+    ],
+    [
+     "GSE185477",
+     "caudate lobe of liver",
+     1545,
+     "0.96/0.95/0.45 (0.71)",
+     "0.95/0.91/0.42 (0.57)",
+     "0.95/0.90/0.42 (0.70)",
+     "0.89/0.78/0.34 (0.71)",
+     "0.95/0.93/0.42 (0.76)",
+     "0.89/0.88/0.45 (0.66)"
+    ],
+    [
+     "GSE201773",
+     "multiciliated ependymal cell",
+     4133,
+     "0.77/0.32/0.03 (0.84)",
+     "0.78/0.24/0.14 (0.73)",
+     "0.77/0.55/0.13 (0.74)",
+     "0.58/0.25/0.13 (0.72)",
+     "0.77/0.38/0.14 (0.71)",
+     "0.67/0.26/0.25 (0.52)"
+    ],
+    [
+     "GSE260685",
+     "ovary",
+     19380,
+     "0.84/0.80/0.23 (0.16)",
+     "0.73/0.23/0.13 (0.26)",
+     "0.96/0.01/0.00 (0.04)",
+     "0.67/0.30/0.15 (0.32)",
+     "0.88/0.30/0.15 (0.10)",
+     "0.80/0.43/0.15 (0.06)"
+    ],
+    [
+     "GSE270225",
+     "dome of urinary bladder;neck of urinary bladder;ureteral orifice",
+     28365,
+     "0.95/0.88/0.51 (0.13)",
+     "0.60/0.48/0.09 (0.48)",
+     "0.93/0.75/0.13 (0.21)",
+     "0.65/0.39/0.10 (0.34)",
+     "0.75/0.62/0.08 (0.19)",
+     "0.90/0.77/0.18 (0.21)"
+    ],
+    [
+     "GSE280852",
+     "liver",
+     21145,
+     "0.98/0.97/0.75 (0.30)",
+     "0.98/0.75/0.57 (0.25)",
+     "0.98/0.78/0.56 (0.40)",
+     "0.97/0.80/0.48 (0.43)",
+     "0.98/0.81/0.57 (0.36)",
+     "0.88/0.80/0.62 (0.32)"
+    ]
+   ]
+  },
+  {
+   "id": "pareto_accuracy_depth2_cxg16",
+   "kind": "pareto",
+   "title": "Accuracy at Cell Ontology depth 2 (lineage) against CPU-hours (cxg16)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Accuracy at Cell Ontology depth 2 (lineage)",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      0.101
+     ],
+     "y": [
+      0.7436
+     ],
+     "frontier": true
+    },
+    {
+     "name": "CellTypist",
+     "tool": "CellTypist",
+     "x": [
+      0.18
+     ],
+     "y": [
+      0.671
+     ],
+     "frontier": false
+    },
+    {
+     "name": "scANVI",
+     "tool": "scANVI",
+     "x": [
+      13.327
+     ],
+     "y": [
+      0.7292
+     ],
+     "frontier": false
+    },
+    {
+     "name": "Seurat",
+     "tool": "Seurat",
+     "x": [
+      1.75
+     ],
+     "y": [
+      0.6275
+     ],
+     "frontier": false
+    },
+    {
+     "name": "SingleR",
+     "tool": "SingleR",
+     "x": [
+      49.287
+     ],
+     "y": [
+      0.7076
+     ],
+     "frontier": false
+    }
+   ]
+  },
+  {
+   "id": "pareto_call_wrong_rate_cxg16",
+   "kind": "pareto",
+   "title": "Wrong calls in the published label (Singlet: the calibrated call; competitors: their label) against CPU-hours (cxg16)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Wrong calls in the published label (Singlet: the calibrated call; competitors: their label)",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      0.101
+     ],
+     "y": [
+      0.2506
+     ],
+     "frontier": true
+    },
+    {
+     "name": "CellTypist",
+     "tool": "CellTypist",
+     "x": [
+      0.18
+     ],
+     "y": [
+      0.3967
+     ],
+     "frontier": false
+    },
+    {
+     "name": "scANVI",
+     "tool": "scANVI",
+     "x": [
+      13.327
+     ],
+     "y": [
+      0.38
+     ],
+     "frontier": false
+    },
+    {
+     "name": "Seurat",
+     "tool": "Seurat",
+     "x": [
+      1.75
+     ],
+     "y": [
+      0.3687
+     ],
+     "frontier": false
+    },
+    {
+     "name": "SingleR",
+     "tool": "SingleR",
+     "x": [
+      49.287
+     ],
+     "y": [
+      0.3801
+     ],
+     "frontier": false
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "celltype_calls.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-type/celltype_calls.parquet",
+   "kind": "derived",
+   "sha256": "23a3d66aedb93c620387e2b40115f8389f00c9f2a9bd30e8a8eca82fcc20a8e7",
+   "bytes": 36755176,
+   "format": "parquet"
+  },
+  {
+   "name": "celltype_truth.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-type/celltype_truth.parquet",
+   "kind": "truth",
+   "sha256": "4155b1c3d639940ea077cc4fa9e9a2155ac2631dd18fb9349333a88b8479bad8",
+   "bytes": 2387083,
+   "format": "parquet"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-type/provenance.json",
+   "kind": "derived",
+   "sha256": "c3d7737e9735c7358c736a0574453caa6a310da9dfa972b14c34655e0982342b",
+   "bytes": 11499,
+   "format": "json"
+  }
+ ],
+ "code": [
+  {
+   "path": "python/singlet/celltype_nn/predict.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/python/singlet/celltype_nn/predict.py"
+  },
+  {
+   "path": "python/singlet/celltype_nn/model.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/python/singlet/celltype_nn/model.py"
+  },
+  {
+   "path": "scripts/celltype_nn/train.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/scripts/celltype_nn/train.py"
+  },
+  {
+   "path": "python/singlet/celllabels/celltype.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/python/singlet/celllabels/celltype.py"
+  },
+  {
+   "path": "scripts/celltype_nn/compete/run_py.py",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/scripts/celltype_nn/compete/run_py.py"
+  },
+  {
+   "path": "scripts/celltype_nn/compete/run_r.R",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/scripts/celltype_nn/compete/run_r.R"
+  },
+  {
+   "path": "scripts/celltype_nn/compete/export.py",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/scripts/celltype_nn/compete/export.py"
+  },
+  {
+   "path": "python/singlet/celltype_nn/benchmark.py",
+   "role": "metric",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/python/singlet/celltype_nn/benchmark.py"
+  },
+  {
+   "path": "bench/public/capabilities/cell_type.py",
+   "role": "metric",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/bench/public/capabilities/cell_type.py"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/cell_type.py",
+  "function": "compute",
+  "laptop_minutes": 10,
+  "clipper_command": "see docs/celltype_nn.md section 9 (scripts/celltype_nn/compete/*.sbatch)"
+ },
+ "caveats": [
+  "Singlet's value in the label metrics is its forced label (argmax_cl), the output every competitor gives. This column was chosen for the comparison after cxg16 was scored; the model and both columns were fixed before that. The published call (cell_type_cl) is reported separately as singlet-call.",
+  "Two training choices of the network followed a first look at cxg16: calibrating the temperature on call reliability (on held-out Census collections) and trying tissue context (not used). See docs/celltype_nn.md section 4.",
+  "Azimuth's own pretrained references cover 3 of the 16 studies' tissues; Seurat reference mapping with the shared Census reference stands for the Azimuth method on all 16.",
+  "Thymic CD34+ progenitors (GSE144870) are the network's largest loss; on the authors' own matrix of these cells it scores 0.98 at depth 2, so the loss comes from reprocessing.",
+  "Ding 2020 (7 protocols) and the 10x / mouse cohort sets listed for cell-type await the harness's Singlet counts."
+ ],
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "scANVI",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "Seurat",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "SingleR",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "singlet",
+   "output": "calibrated probability of the label",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "calibrated probability of the label",
+   "supported": "partial",
+   "note": "logistic-regression probability, ECE 0.36 on cxg16"
+  },
+  {
+   "tool": "scANVI",
+   "output": "calibrated probability of the label",
+   "supported": "partial",
+   "note": "soft prediction, ECE 0.51 on cxg16"
+  },
+  {
+   "tool": "Seurat",
+   "output": "calibrated probability of the label",
+   "supported": "partial",
+   "note": "prediction.score.max, ECE 0.14 on cxg16"
+  },
+  {
+   "tool": "SingleR",
+   "output": "calibrated probability of the label",
+   "supported": "no"
+  },
+  {
+   "tool": "singlet",
+   "output": "backs off to a parent term when unsure",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "backs off to a parent term when unsure",
+   "supported": "no"
+  },
+  {
+   "tool": "scANVI",
+   "output": "backs off to a parent term when unsure",
+   "supported": "no"
+  },
+  {
+   "tool": "Seurat",
+   "output": "backs off to a parent term when unsure",
+   "supported": "no"
+  },
+  {
+   "tool": "SingleR",
+   "output": "backs off to a parent term when unsure",
+   "supported": "partial",
+   "note": "pruned.labels: abstains (no label), never names the parent"
+  },
+  {
+   "tool": "singlet",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "partial",
+   "note": "flat probabilities over its labels, no ontology roll-up"
+  },
+  {
+   "tool": "scANVI",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "partial",
+   "note": "flat probabilities over its labels, no ontology roll-up"
+  },
+  {
+   "tool": "Seurat",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "partial",
+   "note": "flat prediction scores over its labels"
+  },
+  {
+   "tool": "SingleR",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "no"
+  },
+  {
+   "tool": "singlet",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "yes"
+  },
+  {
+   "tool": "scANVI",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "no",
+   "note": "scArches query training per sample"
+  },
+  {
+   "tool": "Seurat",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "no",
+   "note": "anchors computed against the reference per sample"
+  },
+  {
+   "tool": "SingleR",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "no",
+   "note": "correlates every cell with the reference"
+  },
+  {
+   "tool": "singlet",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "yes"
+  },
+  {
+   "tool": "scANVI",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "no",
+   "note": "needs a GPU in practice; about 5 GPU-hours per million cells here (query training per sample)"
+  },
+  {
+   "tool": "Seurat",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "no"
+  },
+  {
+   "tool": "SingleR",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "no"
+  }
+ ]
+}

@@ -32,7 +32,7 @@ static int n_pass = 0, n_fail = 0;
 struct SyntheticSNPData {
     int n_snps, n_cells;
     std::vector<int32_t> ad_indptr, ad_indices, dp_indptr, dp_indices;
-    std::vector<uint8_t> ad_data,  dp_data;
+    std::vector<uint16_t> ad_data,  dp_data;
 };
 
 static SyntheticSNPData make_synthetic(int n_cells, int n_snps, uint64_t seed = 42) {

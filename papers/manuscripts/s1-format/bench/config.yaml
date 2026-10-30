@@ -1,0 +1,81 @@
+# Benchmark configuration. Paths are relative to this file unless absolute. Override any key on the command line with
+# --set key=value (dots for nesting), e.g. --set threads.headline=8
+data_dir: ${S1BENCH_DATA:-../data}        # raw downloads, canonical matrices and format outputs (not committed)
+results_dir: ../results                   # TSV results (committed)
+generated_dir: ../generated               # tables and numbers.tex read by the manuscript (committed)
+datasets: ../datasets.yaml
+
+formats: [csc_i32, mtx_gz, tenx_h5, h5ad_none, h5ad_gzip, h5ad_lzf, zarr, loom, soma, parquet_coo, csc_zstd19,
+          rds_gz, rds_xz, bpcells, s1, s1_pack]
+loom_max_entries: 2.0e9                   # loom stores dense chunks; skip above this many matrix entries
+
+threads:
+  headline: 4
+  warm: [4]                               # warm-cache reads at these thread counts only (cold at every count)
+  sweep: [1, 2, 4, 8]                     # the timed jobs hold 8 cores of a shared node
+repeats: 3
+warmup: 1                                 # warm reads only; a cold read evicts the file before every run
+long_run_s: 60                            # a timed run longer than this is not repeated (slow readers of large matrices)
+
+# Where decode reads the format files. local = data_dir, which the timed jobs point at a copy on the node's own disk.
+# nfs = the shared project filesystem read in place (cold only; warm reads are page-cache reads either way).
+storages:
+  - {name: local}
+  - {name: nfs, root: "${S1BENCH_NFS_DATA:-}", threads: [4], caches: [cold]}
+
+s1:
+  isas: [scalar, avx2, avx512]
+  modes: [native, canonical]
+  chunk_nnz_max: 0                        # 0 = library default (49,152)
+
+floor:
+  depth_bins: 32                          # quantile bins of cell total counts (presence contexts)
+  value_depth_bins: 4                     # coarser bins for the value contexts
+  value_cap: 64                           # values >= cap are coded with an Elias-gamma escape
+  cluster_backoff: 8                      # beta of the cluster model's back-off to the per-gene x depth model
+  max_cluster_cells: 200000               # Leiden runs on at most this many training cells; the rest are assigned
+  sampling_cells: 2000
+  leiden_resolution: 1.0
+  n_pcs: 50
+  seed: 0
+
+second:
+  coders: [zstd22, xz9e, brotli11, bzip2_9]
+  cm_coder: null                          # path to cmix or paq8px; S datasets only
+  cm_max_bytes: 50000000
+
+minibatch:
+  batch_size: 512
+  block_size: 64
+  n_batches: 200
+  warmup_batches: 10
+  seeds: [0, 1, 2]                        # every seed times the first minibatch
+  sustained_seeds: [0]                    # only these also run the n_batches sustained-throughput loop
+  # Download-first loaders on slow links are not run above this size tier; the row records the computed transfer
+  # time of the file (bytes * 8 / link rate) as est_download_s instead. Tier order: S < M < L < XL.
+  skip_download_above_tier: {s3_0.1g: M, s3_1g: M, s3_10g: M, s3_1g_wan: M}   # estimated, not run, above M
+  workers: [0, 2, 4]
+  loaders: [anndata_inmem, anndata_backed, scdataset, anndata_zarr_lazy, soma_ml, bpcells, s1_stream, s1_stream_canonical]
+  tiers:
+    - {name: local}                       # node-local disk: the timed jobs copy the files there first (data_dir)
+    - {name: nfs, root: "${S1BENCH_NFS_DATA:-}"}   # the shared project filesystem, read in place
+    - {name: s3_0.1g, gbit: 0.1, latency_ms: 1}
+    - {name: s3_1g, gbit: 1, latency_ms: 1}
+    - {name: s3_10g, gbit: 10, latency_ms: 1}
+    - {name: s3_1g_wan, gbit: 1, latency_ms: 30}
+
+netem:
+  store: rclone                           # rclone (rclone serve s3) or minio
+  rclone: rclone                          # binaries on PATH or absolute paths (Clipper: module load rclone)
+  minio: minio
+  mc: mc
+  toxiproxy_server: toxiproxy-server
+  minio_port: 9900
+  toxiproxy_api_port: 8474
+  proxy_port: 9901
+  bucket: s1bench
+  access_key: s1bench
+  secret_key: s1bench-secret
+
+eco:
+  datasets: [pbmc10k_v3, hlca_core]

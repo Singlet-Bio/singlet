@@ -1,0 +1,80 @@
+set=pbmc1k_v3 node=g050.clipper.gvsu.edu job=789771 2026-10-27T23:57:27-04:00 engine c4a1be3844ae5a43c35eb3124850f91d303ebbc8 m5 71b41709abd5517b
+reads=66601887 distinct=31870813
+[t] distinct 127 s
+params stardump exit=0
+index + genome arrays loaded in 23.7 s; sjdbN 386483, chr 194
+truth: 31870813 distinct reads (66601887 reads), loaded in 31.3 s
+lane A (staged): 31870813 reads, batches of 131072, work 46072 B/read (6.04 GB)
+  lane A run 0: 5395.5 ms (phase 1 1843.7, scan 322.6, phase 3 3225.9)
+  lane A run 1: 5390.9 ms (phase 1 1841.1, scan 322.3, phase 3 3224.9)
+  lane A thread cycles: seeds 53.8%, windows 8.4%, stitching 37.0%, select+encode 0.8%; 450.1 SA entries per read
+lane M (staged): 8393565 reads, batches of 131072, work 70808 B/read (9.28 GB)
+  lane M run 0: 5761.9 ms (phase 1 1301.1, scan 282.8, phase 3 4177.2)
+  lane M run 1: 5770.9 ms (phase 1 1298.0, scan 282.8, phase 3 4189.3)
+  lane M thread cycles: seeds 15.7%, windows 16.4%, stitching 67.8%, select+encode 0.2%; 1925.2 SA entries per read
+lane B (staged): 1571660 reads, batches of 32768, work 635216 B/read (20.81 GB)
+  lane B run 0: 5956.6 ms (phase 1 633.3, scan 120.4, phase 3 5202.4)
+  lane B run 1: 5949.1 ms (phase 1 633.2, scan 119.8, phase 3 5195.6)
+  lane B thread cycles: seeds 8.3%, windows 13.2%, stitching 78.5%, select+encode 0.0%; 3072.9 SA entries per read
+emitted 31763130 sequence results to /tmp/debruinz-e2e-789771/blobs.bin
+
+M5: 0 / 31870813 distinct reads identical (0.000000%), reads weighted 0 / 66601887 (0.000000%); differ 31870813 (unmapType only 0)
+    unmapped by STAR: 31870813 (0 identical), mapped: 0 (0 identical)
+    GPU lane A 5390.9 ms (31870813 reads), lane M 5770.9 ms (8393565 reads), lane B 5949.1 ms (1571660 reads) = 1.86 M distinct reads/s on the GPU
+    lane M overflow why: split=2 pc=3 win=1212548 wa=220252 wtr=635 keep=126517 blob=11695 steps=8
+    lane A overflow why: split=2 pc=3 win=8172045 wa=44565 winbin=21 wtr=8775 keep=167847 steps=307
+    heavy lane: 87132 reads (0.2734%), 2.33 s on 24 host threads, failures 0; why: win=43542 wtr=2660 keep=4788 steps=36142
+m5 exit=0
+-rw-r--r-- 1 debruinz domain users 5234250469 Oct 28 00:02 /tmp/debruinz-e2e-789771/blobs.bin
+[t] gpu 275 s
+engine ref exit=0
+SEQCACHE: on, 4096 MB in 64 shards
+SEQCACHE: lookups=66488663 hits=33442534 hit_rate=0.502981 inserts=33046128 refreshes=1677580 uncacheable=113225
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 7:30.40
+	Maximum resident set size (kbytes): 57019252
+[t] ref 726 s
+engine verify exit=0
+SEQCACHE: on, 32768 MB in 64 shards, verify
+SEQCACHE: preloaded 31763130 sequence results (2180277444 bytes) from /tmp/debruinz-e2e-789771/blobs.bin
+SEQCACHE: lookups=66488663 hits=66004542 hit_rate=0.992719 inserts=32247251 refreshes=0 uncacheable=113225 verified=66004541 verify_mismatches=0
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 8:20.95
+	Maximum resident set size (kbytes): 56825840
+[t] verify 1227 s
+engine gpu exit=0
+SEQCACHE: on, 32768 MB in 64 shards
+SEQCACHE: preloaded 31763130 sequence results (2180277444 bytes) from /tmp/debruinz-e2e-789771/blobs.bin
+SEQCACHE: lookups=66488663 hits=66006890 hit_rate=0.992754 inserts=32244903 refreshes=0 uncacheable=113224
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 7:07.98
+	Maximum resident set size (kbytes): 56780576
+[t] gpu 1655 s
+=== out_equiv ref vs verify
+a = /tmp/debruinz-e2e-789771/ref/out
+b = /tmp/debruinz-e2e-789771/verify/out
+  DIFF nonhost_reads.fq (75684237 vs 75684237 bytes)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 959255571 != 959255850
+  DIFF read_stats.tsv (141 vs 141 bytes)
+    2 of 3/3 lines differ
+    a: align	73921372	73921372		0	0	223.98
+    b: align	73921372	73921372		0	0	278.96
+    a: pileup	73921372	73921372		0	0	37.84
+    b: pileup	73921372	73921372		0	0	38.72
+  DIFF star_Unmapped.out.mate1 (556948817 vs 556948817 bytes)
+  DIFF star_Unmapped.out.mate2 (225446643 vs 225446643 bytes)
+files: 46 identical, 3 differ only in timings/paths, 5 differ
+RESULT: 5 differences
+=== out_equiv ref vs gpu
+a = /tmp/debruinz-e2e-789771/ref/out
+b = /tmp/debruinz-e2e-789771/gpu/out
+  DIFF nonhost_reads.fq (75684237 vs 75684237 bytes)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 959255571 != 959255669
+  DIFF read_stats.tsv (141 vs 141 bytes)
+    2 of 3/3 lines differ
+    a: align	73921372	73921372		0	0	223.98
+    b: align	73921372	73921372		0	0	214.19
+    a: pileup	73921372	73921372		0	0	37.84
+    b: pileup	73921372	73921372		0	0	35.88
+  DIFF star_Unmapped.out.mate1 (556948817 vs 556948817 bytes)
+  DIFF star_Unmapped.out.mate2 (225446643 vs 225446643 bytes)
+files: 46 identical, 3 differ only in timings/paths, 5 differ
+RESULT: 5 differences
+[t] total 1669 s

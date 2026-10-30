@@ -1,0 +1,22 @@
+{
+  "total_unmapped_reads": 3035990,
+  "screened_reads": 3035990,
+  "kingdoms_screened": ["VIRAL","BACTERIAL","FUNGAL"],
+  "host_filter_active": true,
+  "viral_hits": 156728,
+  "bacterial_hits": 0,
+  "fungal_hits": 525812,
+  "unknown_hits": 2353450,
+  "viral_fraction": 0.051623,
+  "bacterial_fraction": 0.000000,
+  "fungal_fraction": 0.173193,
+  "em_species_count": 3,
+  "em_iterations": 500,
+  "per_cell_species": "em_confirmed_only",
+  "missing_reference_fasta": ["/mnt/projects/debruinz_project/cellarium/reference/nonhost/fungal_genomes/species_7016.fna", "/mnt/projects/debruinz_project/cellarium/reference/nonhost/fungal_genomes/species_7001.fna", "/mnt/projects/debruinz_project/cellarium/reference/nonhost/fungal_genomes/species_7006.fna"],
+  "top_pathogens": [
+    {"species_id": 7016, "species_name": "NC_038878.1 Human rhinovirus NAT001 polyprotein gene, complete cds", "kingdom": "FUNGAL", "relative_abundance": 0.084205, "reads_assigned": 57473},
+    {"species_id": 7001, "species_name": "NC_038863.1 Olive latent ringspot virus genomic RNA for polyprotein gene", "kingdom": "FUNGAL", "relative_abundance": 0.058778, "reads_assigned": 40118},
+    {"species_id": 7006, "species_name": "NC_038868.1 Lacanobia oleracea granulovirus egt gene", "kingdom": "FUNGAL", "relative_abundance": 0.050351, "reads_assigned": 34367}
+  ]
+}
