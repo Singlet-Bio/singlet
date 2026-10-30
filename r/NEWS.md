@@ -1,6 +1,6 @@
 # singlet (R) — NEWS
 
-## singlet (development version)
+## singlet 1.2.2
 
 ### New features
 

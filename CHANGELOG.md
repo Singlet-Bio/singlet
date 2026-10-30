@@ -4,6 +4,8 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-10-30: `.s1` for your own counts, streaming loader
+
 - **`S1Stream` / `S1Cells` send a batch's range requests together** (`io_threads`). `"auto"` means 8 for an HTTP URL and
   1 for a local file; `io_threads=1` sends them one at a time.
   - Over a link with a 30 ms round trip, the eight block ranges of a minibatch cost about one round trip instead of

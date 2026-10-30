@@ -30,7 +30,7 @@ supported (Windows needs Visual Studio Build Tools and zstd to build from source
 | Layer | Capability |
 |-------|-----------|
 | **Catalog** | Search and load re-processed GEO studies from singlet.bio as AnnData — see the site for current numbers |
-| **Format** | `.singlet` per-study bundles and the `.1pz` sparse-matrix codec |
+| **Format** | `.s1`: one object per sample, pz2-compressed matrices, plus a study manifest |
 | **Pipeline** | Raw SRA reads → aligned, deduplicated, annotated count matrices (C++ binary) |
 | **Analysis** | PCA, neighbors, Leiden, UMAP, DE, batch correction — no scanpy required |
 | **PyTorch** | Sparse DataLoaders over `.singlet` files for ML training |
