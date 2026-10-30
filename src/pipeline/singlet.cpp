@@ -96,6 +96,10 @@
 #include "singlet/fq/run_screen.h"
 #include "singlet/pileup/run_provenance.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
+#ifdef SINGLET_HAVE_ENGINE_GPU
+// STAR's per-read hand-off hook (src/star/SeqCache.h; STAR's uint32 / uint64 are unsigned int / unsigned long long)
+extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsigned long long);
+#endif
 #include "singlet/fq/read_source.h"  // RunSet, format_block, StarChunkSourceT: the one .1fq decoder
 #include "singlet/fq/concat.h"       // concat_1fq: runs as one file, for consumers that read a single .1fq
 #include "singlet/version.h"        // singlet::kVersion
@@ -4408,6 +4412,8 @@ int main(int argc, char* argv[]) {
         mkdir_p(decode_dir);
         std::string r1_tmp = decode_dir + "/R1.fastq";
         std::string r2_tmp = decode_dir + "/R2.fastq";
+        setenv("SINGLET_DECODE_R1", r1_tmp.c_str(), 1);   // W11 GPU pileup "on": barcodes and UMIs of hand-off reads
+        setenv("SINGLET_DECODE_R2", r2_tmp.c_str(), 1);
 
         if (!use_fifo_decode) {
             // ── File mode: decode all blocks to FASTQ files on /dev/shm ──
@@ -4463,7 +4469,18 @@ int main(int argc, char* argv[]) {
                 std::unordered_map<uint64_t, uint64_t> bc_counts_packed; // non-dict path (packed 3-bit keys)
                 // Extra segments for CB_UMI_Complex per-segment whitelist discovery (seg 1..N-1)
                 std::vector<std::unordered_map<uint64_t, uint64_t>> extra_seg_counts;
+                // R11: STAR's exact CB histogram of this block, by BC dictionary slot and (barcodes outside the dictionary) by whitelist index
+                std::unordered_map<uint32_t, uint64_t> cbx_dict;
+                std::unordered_map<int64_t, uint64_t> cbx_raw;
             };
+
+            // R11: STAR's exact histogram (cbReadCountExact) for the stream's CB correction, as pass 1 of the FIFO path counts it: reads whose
+            // CB is an exact whitelist hit and whose UMI has no N and is not a homopolymer, over every read STAR will see, weighted by duplicates
+            const int cbx_cb0 = detected_cb_start - 1, cbx_cbl = detected_bc_len;
+            const int cbx_umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, cbx_umil = umi_len;
+            const bool cbx_on = detected_soloType == "CB_UMI_Simple" && !is_atac_mode && cbx_cbl > 0 && cbx_cbl <= 31
+                && cbx_umil > 0 && !whitelist_file.empty() && whitelist_file != "None" && whitelist_file != "none"
+                && cb_corrector.load_whitelist(whitelist_file) && cb_corrector.length() == cbx_cbl;
 
             // ATAC: pre-load BC dict for QNAME injection (stream[0]=R1 genomic,
             // stream[1]=R3 genomic; barcode is in per-read BC dict slot or I2 stream).
@@ -4510,6 +4527,27 @@ int main(int argc, char* argv[]) {
                     if (r1len == 0 || blk.r2_len(i) == 0) continue;   // not given to STAR (format_block)
                     // Count barcodes per block for fast barcode discovery: base values (0-4, 3 bits each) packed
                     // into a uint64_t key (bc_len <= 21 fits in 63 bits)
+                    if (cbx_on && blk.r1_len(i) >= cbx_cb0 + cbx_cbl && blk.r1_len(i) >= cbx_umi0 + cbx_umil && blk.r2_len(i) > 0) {   // R11 histogram
+                        const uint8_t* r1s_x = blk.r1_seq(i);
+                        const uint8_t* u = r1s_x + cbx_umi0;
+                        bool umi_ok = true, homo = true;
+                        for (int j = 0; j < cbx_umil; ++j) {
+                            if (u[j] > 3) { umi_ok = false; break; }
+                            if (u[j] != u[0]) homo = false;
+                        }
+                        if (umi_ok && !homo) {
+                            const uint32_t idx = (has_bc_dict && i < blk.bc_indices.size()) ? blk.bc_indices[i] : UINT32_MAX;
+                            if (idx < bc_dict_n) {
+                                fb.cbx_dict[idx] += repeat;
+                            } else {
+                                static constexpr char kNt[5] = {'A', 'C', 'G', 'T', 'N'};
+                                char bcs[32];
+                                for (int j = 0; j < cbx_cbl; ++j) bcs[j] = kNt[std::min<uint8_t>(r1s_x[cbx_cb0 + j], 4)];
+                                const int64_t w = cb_corrector.find(bcs);
+                                if (w >= 0) fb.cbx_raw[w] += repeat;
+                            }
+                        }
+                    }
                     if (has_i2_stream) {
                         // ATAC 3-read: barcodes are in the I2 stream, NOT R1 genomic reads.
                         if (!blk.i2_data.empty() && i < blk.i2_lengths.size() && blk.i2_lengths[i] > 0) {
@@ -4566,6 +4604,9 @@ int main(int argc, char* argv[]) {
             std::unordered_map<uint64_t, uint64_t> merged_bc_counts;
 
             uint64_t reads_written = 0;
+            std::vector<uint64_t> cbx_dict_sum;
+            if (cbx_on && has_bc_dict) cbx_dict_sum.assign(bc_dict_n, 0);
+            std::unordered_map<int64_t, uint64_t> cbx_raw_sum;
             uint32_t batch_size = static_cast<uint32_t>(decode_threads);
             for (uint32_t base = 0; base < total_blocks; base += batch_size) {
                 uint32_t batch_end = std::min(base + batch_size, total_blocks);
@@ -4582,6 +4623,8 @@ int main(int argc, char* argv[]) {
                     fwrite(fb.r1.data(), 1, fb.r1_len, r1_fp);
                     fwrite(fb.r2.data(), 1, fb.r2_len, r2_fp);
                     reads_written += fb.n_reads;
+                    for (const auto& [k, n] : fb.cbx_dict) if (k < cbx_dict_sum.size()) cbx_dict_sum[k] += n;
+                    for (const auto& [w, n] : fb.cbx_raw) cbx_raw_sum[w] += n;
                     // Accumulate BC index counts (sequential — no contention)
                     if (!bc_freq.empty()) {
                         for (uint32_t idx : fb.bc_indices) {
@@ -4612,6 +4655,26 @@ int main(int argc, char* argv[]) {
             // Store merged barcode counts (non-BC-dict path)
             if (!merged_bc_counts.empty())
                 onefq_bc_counts = std::move(merged_bc_counts);
+
+            if (cbx_on) {   // R11: fold the exact counts into the corrector, by whitelist index
+                const auto& dflat = reader.bc_dict_flat();
+                const uint16_t dlen = reader.bc_length();
+                uint64_t n_exact = 0;
+                if (has_bc_dict && dlen == static_cast<uint16_t>(cbx_cbl)) {
+                    char bcs[32];
+                    for (uint32_t k = 0; k < bc_dict_n; ++k) {
+                        if (!cbx_dict_sum[k]) continue;
+                        for (int j = 0; j < cbx_cbl; ++j)
+                            bcs[j] = NUM_TO_ASCII[std::min<uint8_t>(dflat[static_cast<size_t>(k) * dlen + j], 4)];
+                        const int64_t w = cb_corrector.find(bcs);
+                        if (w >= 0) { cb_corrector.add_exact(w, cbx_dict_sum[k]); n_exact += cbx_dict_sum[k]; }
+                    }
+                }
+                for (const auto& [w, n] : cbx_raw_sum) { cb_corrector.add_exact(w, n); n_exact += n; }
+                cb_hist_ready = true;
+                std::cerr << "[1fq-decode] R11 exact CB histogram: " << n_exact << " reads over a "
+                          << cb_corrector.size() << "-barcode whitelist\n";
+            }
 
             fclose(r1_fp);
             fclose(r2_fp);
@@ -5133,11 +5196,39 @@ int main(int argc, char* argv[]) {
         }
     }
     config.cb_from_cr = (stream_unsorted == 1);
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    // The GPU pileup mirrors the classification of prod/campaign without the intron rules of PR #80 (intron_rule::k*: read-level kUnique /
+    // kNoSplicedIntron / kMtPrefer and the molecule-level kUmiGeneCR are not on the GPU yet). With any rule on, its counts would differ from the
+    // CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads).
+    if (getenv("SINGLET_GPU_PILEUP")) {
+        uint32_t rules = config.intron_rules;
+        if (const char* r = getenv("SINGLET_INTRON_RULES")) rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
+        if (rules != 0) {
+            std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: the GPU pileup does not implement intron rules 0x" << std::hex << rules << std::dec
+                      << " (set SINGLET_INTRON_RULES=0 for the pre-#80 classification); the CPU pileup runs on the GPU-mapped reads\n";
+            unsetenv("SINGLET_GPU_PILEUP");
+        }
+    }
+#endif
     // R11: STAR's whitelist correction of CR on the stream (and the SINGLET_TEST_CB_CHECK comparison on the sorted path)
     config.cb_corrector = (cb_hist_ready && cb_corrector.loaded()) ? &cb_corrector : nullptr;
     if (config.cb_from_cr)
         std::cerr << "[singlet] stream CB: " << (config.cb_corrector ? "CR corrected by STAR's 1MM_multi_Nbase_pseudocounts rule (R11)"
                                                                      : "CR exact (no pass-1 histogram)") << "\n";
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    // W11 GPU pileup on the stream path: the GPU prefill hands the per-sequence alignments to the pileup (SINGLET_ENGINE_GPU_HANDOFF)
+    if (stream_unsorted == 1 && getenv("SINGLET_GPU_PILEUP") && getenv("SINGLET_ENGINE_GPU") && !getenv("SINGLET_ENGINE_GPU_HANDOFF")
+        && config.out_chrm_bam.empty() && config.guide_ref_path.empty()
+        && !(getenv("SINGLET_GPU_HANDOFF") && std::string(getenv("SINGLET_GPU_HANDOFF")) == "0")) {
+        static std::string handoff_path;
+        handoff_path = out_prefix + "/.gpu_handoff.bin";
+        setenv("SINGLET_ENGINE_GPU_HANDOFF", handoff_path.c_str(), 1);
+        // "on": STAR's mapping threads count each hand-off read's bases below the pileup's base-quality threshold
+        setenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ", std::to_string(config.min_baseq).c_str(), 1);
+        // a clipped read's rRNA verdict on the whole read, computed by STAR's mapping threads (the forked aligner inherits it)
+        g_handoffReadHook = &singlet::PileupEngine::handoff_read_hook;
+    }
+#endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
     // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
     const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;

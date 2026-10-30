@@ -82,12 +82,24 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     //max number of mismatches allowed for this read
     outFilterMismatchNmaxTotal=min(P.outFilterMismatchNmax, (uint) (P.outFilterMismatchNoverReadLmax*(readLength[0]+readLength[1])));
 
+    //singlet GPU pileup "on": a hand-off read whose sequence has a summary is not mapped or restored; outputAlignments replays the summary
+    handoffSum = nullptr;
+    if (g_handoffSum != nullptr && iReadAll >= 1 && iReadAll - 1 < g_handoffNReads) {
+        const uint32 rec = g_handoffReadRecord[iReadAll - 1];
+        if (rec != 0xFFFFFFFFu && g_handoffSumOff[rec + 1] > g_handoffSumOff[rec])
+            handoffSum = g_handoffSum + g_handoffSumOff[rec];
+    };
+
     //map the read, or take its alignment from the sequence cache (SeqCache.h)
     PROF_T0(tMap);
     bool fromCache = false;
     uint64 seqHash = 0;
-    bool cacheable = g_seqCache != nullptr && seqCacheable();
-    if (cacheable) {
+    bool cacheable = handoffSum == nullptr && g_seqCache != nullptr && seqCacheable();
+    if (handoffSum != nullptr) {
+        unmapType = -1;
+        chimRecord = false;
+        peOv.yes = false;
+    } else if (cacheable) {
         seqHash = SeqCache::hashSeq(Read1[0], Lread);
         if (g_seqCache->lookup(seqHash, Read1[0], Lread, seqCacheBlob))
             fromCache = !g_seqCache->verify;
@@ -95,7 +107,9 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         g_seqCache->nUncacheable++;
     };
 
-    if (fromCache) {
+    if (handoffSum != nullptr) {
+        //outputHandoffSummary sets nTr, the stand-in alignments and trBest
+    } else if (fromCache) {
         seqCacheRestore(seqCacheBlob);
         mappedFilter();
         alignsGenOut.alBest = trBest; //as transformGenome() does when there is no transformation
@@ -145,12 +159,12 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     PROF_ADD(PROF_map, tMap);
 #ifdef STAR_PROFILE
     unsigned long long profMapCyc = __rdtsc() - tMap;
-    int profUnique = (!fromCache && unmapType==-1 && nTr==1) ? 1 : 0;
+    int profUnique = (!fromCache && handoffSum==nullptr && unmapType==-1 && nTr==1) ? 1 : 0;
     {
-        int oc = fromCache ? 5 : unmapType==-1 ? (nTr==1 ? 0 : 1) : unmapType==3 ? 2 : unmapType==1 ? 3 : 4;
+        int oc = (fromCache || handoffSum!=nullptr) ? 5 : unmapType==-1 ? (nTr==1 ? 0 : 1) : unmapType==3 ? 2 : unmapType==1 ? 3 : 4;
         g_profOutcome[oc][0] += __rdtsc() - tMap;
         g_profOutcome[oc][1]++;
-        if (!fromCache) {
+        if (!fromCache && handoffSum==nullptr) {
             for (int k=0; k<3; k++) g_profOutcomeDetail[oc][k] += profCyc[k];
             g_profOutcomeDetail[oc][3] += profCnt[0];
             g_profOutcomeDetail[oc][4] += profCnt[1];

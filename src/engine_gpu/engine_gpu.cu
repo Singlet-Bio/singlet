@@ -52,7 +52,7 @@ __global__ void k_hash(const char* seq, const u64* off, u64 n, u64* h1, u64* h2,
         a = (a ^ c) * 0x100000001B3ULL; a ^= a >> 29;
         b = (b + c + 1) * 0xFF51AFD7ED558CCDULL; b ^= b >> 31;
     }
-    h1[i] = a; h2[i] = b; hasN[i] = N;
+    h1[i] = a; h2[i] = b; hasN[i] = N | (off[i + 1] == off[i]);   // an empty (fully clipped) read is not cached either
 }
 // group boundaries after the sort, and the byte-for-byte check of every member against the group's first read
 __global__ void k_groups(const char* seq, const u64* off, const u64* h1, const u64* h2, const uint32_t* order, u64 n,
@@ -69,6 +69,42 @@ __global__ void k_groups(const char* seq, const u64* off, const u64* h1, const u
         for (u64 t = 0; same && t < la; t++) same = seq[off[a] + t] == seq[off[b] + t];
         if (!same) atomicAdd(collisions, 1ULL);
     }
+}
+
+// ---- clipping (STAR's ClipMate::clip for mate 1, Hamming adapter type; SequenceFuns.cpp localSearch), per read: the clipped
+// sequence starts at cs[i] and has cl[i] bases
+struct ClipDev { uint32_t n5, after5, n3, after3, nad; double adMMp; const char* ad; };
+__global__ void k_clip(const char* seq, const u64* off, u64 n, ClipDev c, u64* cs, u64* cl) {
+    u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    u64 s = off[i], L = off[i + 1] - off[i];
+    // 5': N bases, then NafterAd (each moves the start; a read not longer than the clip becomes empty)
+    if (c.n5 > 0) { if (L > c.n5) { L -= c.n5; s += c.n5; } else L = 0; }
+    if (c.after5 > 0) { if (L > c.after5) { L -= c.after5; s += c.after5; } else L = 0; }
+    // 3': N bases, then the adapter, then NafterAd
+    if (c.n3 > 0) { if (L > c.n3) L -= c.n3; else L = 0; }
+    if (c.nad > 0) {
+        const char* x = seq + s;
+        u64 nMatchBest = 0, nMMbest = 0, ixBest = L;
+        for (u64 ix = 0; ix < L; ix++) {
+            u64 nMatch = 0, nMM = 0, m = (u64)c.nad < L - ix ? (u64)c.nad : L - ix;
+            for (u64 iy = 0; iy < m; iy++) {
+                if (x[ix + iy] > 3) continue;
+                if (x[ix + iy] == c.ad[iy]) nMatch++; else nMM++;
+            }
+            if ((nMatch > nMatchBest || (nMatch == nMatchBest && nMM < nMMbest)) && double(nMM) / double(nMatch) <= c.adMMp) {
+                ixBest = ix; nMatchBest = nMatch; nMMbest = nMM;
+            }
+        }
+        L = ixBest;   // clippedAdN = L - ixBest
+    }
+    if (c.after3 > 0) { if (L > c.after3) L -= c.after3; else L = 0; }
+    cs[i] = s; cl[i] = L;
+}
+__global__ void k_gather_clip(const char* seq, const u64* cs, const u64* offC, u64 n, char* out) {
+    u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    for (u64 k = 0, L = offC[i + 1] - offC[i]; k < L; k++) out[offC[i] + k] = seq[cs[i] + k];
 }
 
 __global__ void k_prefix_key(const char* seq, const u64* off, const uint32_t* rep, u64 n, u64* key) {
@@ -235,6 +271,41 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     out.nReads = n;
     char* dSeq; u64* dOff;
     if (!upload(in.seq.data(), in.seq.size(), dSeq, err) || !upload((const u64*)in.off.data(), n + 1, dOff, err)) return fail(err);
+    // clipping: the reads become their clipped sequences (device copy compacted; on the host each read's span is (cs, length))
+    std::vector<u64> hcs, hoffC;
+    if (in.clip.on && n > 0) {
+        double tc = now();
+        char* dAd = nullptr;
+        if (!in.clip.ad3.empty() && !upload(in.clip.ad3.data(), in.clip.ad3.size(), dAd, err)) return fail(err);
+        ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t)in.clip.ad3.size(), in.clip.adMMp, dAd};
+        u64 *dCs, *dCl, *dOffC; char* dSeqC;
+        if (cudaMalloc(&dCs, n * 8) || cudaMalloc(&dCl, n * 8) || cudaMalloc(&dOffC, (n + 1) * 8)) return fail("out of device memory (clip)");
+        k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl);
+        cudaMemset(dOffC, 0, 8);
+        thrust::inclusive_scan(thrust::device_ptr<u64>(dCl), thrust::device_ptr<u64>(dCl + n), thrust::device_ptr<u64>(dOffC + 1));
+        u64 tot = 0;
+        if (cudaMemcpy(&tot, dOffC + n, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
+        if (cudaMalloc(&dSeqC, tot + 8)) return fail("out of device memory (clipped reads)");
+        k_gather_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dCs, dOffC, n, dSeqC);
+        hcs.resize(n); hoffC.resize(n + 1);
+        if (cudaMemcpy(hcs.data(), dCs, n * 8, cudaMemcpyDeviceToHost) != cudaSuccess
+            || cudaMemcpy(hoffC.data(), dOffC, (n + 1) * 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
+        cudaFree(dSeq); cudaFree(dOff); cudaFree(dCs); cudaFree(dCl); if (dAd) cudaFree(dAd);
+        dSeq = dSeqC; dOff = dOffC;
+        u64 nClipped = 0;
+        out.clip5.resize(n); out.clip3.resize(n);
+        for (u64 i = 0; i < n; i++) {
+            const u64 L0 = in.off[i + 1] - in.off[i], L = hoffC[i + 1] - hoffC[i], c5 = hcs[i] - in.off[i];
+            out.clip5[i] = (uint16_t) std::min<u64>(c5, 65535); out.clip3[i] = (uint16_t) std::min<u64>(L0 - L - c5, 65535);
+            nClipped += L != L0;
+        }
+        char line[200];
+        snprintf(line, sizeof line, "engine_gpu: clipping: %llu of %llu reads clipped, %.2f s\n", (unsigned long long)nClipped, (unsigned long long)n, now() - tc);
+        out.log += line;
+    }
+    // a read's (clipped) sequence on the host
+    auto rseq = [&](u64 i) { return hcs.empty() ? in.seq.data() + in.off[i] : in.seq.data() + hcs[i]; };
+    auto rlen = [&](u64 i) { return hcs.empty() ? in.off[i + 1] - in.off[i] : hoffC[i + 1] - hoffC[i]; };
     cudaDeviceSynchronize();
     out.secUpload = now() - t0;
     // ---- dedup
@@ -257,6 +328,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     cudaFree(dH1); cudaFree(dH2); cudaFree(dN); cudaFree(dOrder); cudaFree(dHead); cudaFree(dColl);
     std::vector<uint32_t> rep;   // one read per distinct sequence without N
     for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
+    // per read: the representative read of its distinct sequence (NONE for sequences with N, which STAR maps itself)
+    const uint32_t NONE = 0xFFFFFFFFu;
+    std::vector<uint32_t> readRep(n, NONE);
+    { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = hasN[order[k]] ? NONE : order[k]; readRep[order[k]] = cur; } }
     // map them in sequence order (first 32 bases), not hash order: neighbouring threads then search the same SA ranges and loci
     // (2.7x faster on pbmc1k_v3). Each sequence's result does not depend on the order.
     if (!rep.empty()) {   // keys (first 32 bases) and the stable sort on the device
@@ -269,9 +344,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         cudaFree(dRep); cudaFree(dKey);
     }
     out.secDedup = now() - t0;
+    std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
     u64 nGpuMapped = 0;
-    auto processChunk = [&](const std::vector<uint32_t>& repc) -> bool {
+    auto processChunk = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
         // ---- lanes
         double tc0 = now();
         Lane A, M, B;
@@ -306,7 +382,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                 for (u64 k; (k = next++) < repH.size();) {
                     u64 i = repH[k];
                     Blob bl{buf.data(), 0, Heavy::NBLOB, false};
-                    Status s = mapRead(P, H, *w, *b, in.seq.data() + in.off[i], (m5::uint)(in.off[i + 1] - in.off[i]), bl);
+                    Status s = mapRead(P, H, *w, *b, rseq(i), (m5::uint)rlen(i), bl);
                     hst[k] = (uint8_t)s; hout[k].assign(buf.data(), buf.data() + bl.n);
                 }
                 delete w; delete b;
@@ -315,7 +391,14 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         }
         out.secHostLane += now() - th0;
         out.nHostLane += repH.size();
-        // ---- records
+        // ---- records (reserved first: at 16 M-sequence chunks a doubling vector copied GBs)
+        {
+            u64 bytesSeq = 0, bytesBlob = A.out.size() + M.out.size() + B.out.size();
+            for (u64 k = 0; k < repc.size(); k++) bytesSeq += rlen(repc[k]);
+            for (const auto& h : hout) bytesBlob += h.size();
+            out.seq.reserve(out.seq.size() + bytesSeq); out.blob.reserve(out.blob.size() + bytesBlob);
+            out.seqOff.reserve(out.seqOff.size() + repc.size()); out.blobOff.reserve(out.blobOff.size() + repc.size());
+        }
         for (u64 k = 0; k < repc.size(); k++) {
             const uint8_t* p; u64 len; bool ok = true;
             uint32_t q = lpos[k];
@@ -327,7 +410,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             }
             if (!ok) { out.nFailed++; continue; }   // not cached: STAR maps it
             u64 i = repc[k];
-            out.seq.insert(out.seq.end(), in.seq.data() + in.off[i], in.seq.data() + in.off[i + 1]); out.seqOff.push_back(out.seq.size());
+            recOfPos[c0 + k] = (uint32_t)(out.seqOff.size() - 1);
+            out.seq.insert(out.seq.end(), rseq(i), rseq(i) + rlen(i)); out.seqOff.push_back(out.seq.size());
             out.blob.insert(out.blob.end(), p, p + len); out.blobOff.push_back(out.blob.size());
         }
         nGpuMapped += repc.size() - repH.size();
@@ -336,7 +420,13 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 CHUNK = 16u << 20;
     for (u64 c0 = 0; c0 < rep.size(); c0 += CHUNK) {
         std::vector<uint32_t> repc(rep.begin() + c0, rep.begin() + std::min<u64>(rep.size(), c0 + CHUNK));
-        if (!processChunk(repc)) return fail(err);
+        if (!processChunk(repc, c0)) return fail(err);
+    }
+    {   // per read: its record (sequence-cache result) or NONE
+        std::vector<uint32_t> posOf(n, NONE);
+        for (u64 k = 0; k < rep.size(); k++) posOf[rep[k]] = (uint32_t)k;
+        out.readRecord.assign(n, NONE);
+        for (u64 i = 0; i < n; i++) { const uint32_t r = readRep[i]; if (r != NONE) out.readRecord[i] = recOfPos[posOf[r]]; }
     }
     cudaFree(dG1); cudaFree(dSA); cudaFree(dSAi); cudaFree(dSeq); cudaFree(dOff);
     cudaFree(dcs); cudaFree(dcl); cudaFree(dcb); cudaFree(dss); cudaFree(dse); cudaFree(dsd); cudaFree(dsa);

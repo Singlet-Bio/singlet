@@ -304,6 +304,13 @@ public:
     int32_t exon_start(uint32_t exon_idx) const { return exon_starts_[exon_idx]; }
     int32_t exon_end(uint32_t exon_idx) const { return exon_ends_[exon_idx]; }
 
+    // W11 GPU pileup: read-only views of the annotation the GPU replays
+    const std::vector<IntervalTree>& exon_trees_view() const { return exon_trees_; }
+    const std::vector<IntervalTree>& intron_trees_view() const { return intron_trees_; }
+    const std::vector<uint32_t>& exon_to_gene_view() const { return exon_to_gene_; }
+    const std::vector<uint32_t>& intron_to_gene_view() const { return intron_to_gene_; }
+    const std::vector<char>& gene_strands_view() const { return gene_strands_; }
+
     // Get gene strand ('+', '-', or '.')
     char gene_strand(uint32_t gene_idx) const {
         if (gene_idx < gene_strands_.size()) return gene_strands_[gene_idx];

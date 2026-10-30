@@ -43,7 +43,7 @@ public:
     std::string stats() const;
 
     bool verify;
-    bool prefilled = false; //the GPU engine filled the cache with every distinct sequence (SeqCacheGpuPrefill.cpp)
+    bool prefilled = false; //the GPU engine filled the cache with every distinct sequence, or with hand-off summaries every unmapped one (SeqCacheGpuPrefill.cpp)
     std::atomic<uint64> nLookup{0}, nHit{0}, nInsert{0}, nUncacheable{0}, nVerified{0}, nVerifyFail{0}, nRefresh{0};
 
 private:
@@ -63,5 +63,35 @@ private:
 };
 
 extern SeqCache *g_seqCache; //set in STAR.cpp for the main mapping pass only
+//singlet GPU pileup ("on"): per read (iReadAll-1) its hand-off record, or 0xFFFFFFFF; reads with a record get no BAM records from STAR
+//(the pileup takes their alignments from the hand-off). Set by SeqCacheGpuPrefill.cpp; nullptr otherwise.
+extern const uint32 *g_handoffReadRecord;
+extern uint64 g_handoffNReads;
+//per hand-off read the bases the GPU clipped from its 5' and 3' ends (engine_gpu Output clip5 / clip3); readLoad takes them instead of
+//running STAR's clip for a read with a record. nullptr when clipping is off. g_handoffClipCheck (SINGLET_HANDOFF_CLIPCHECK=1): run the
+//CPU clip anyway and count the reads where they differ (g_handoffClipBad)
+extern const uint16 *g_handoffClip5, *g_handoffClip3;
+extern bool g_handoffClipCheck;
+extern std::atomic<uint64> g_handoffClipBad;
+//per hand-off record its number of alignments (0: unmapped); STAR skips BAM output only for reads whose record has alignments
+extern const uint8 *g_handoffRecAln;
+//and per read what the pileup took from its BAM record: CR and UR (3 bits per base, A0 C1 G2 T3 other 4, base 0 lowest) and the
+//base-quality counters of the cDNA read (bases with quality < minQ; bases where "quality < minQ" differs from "base is N"). The
+//entries live in a shared file mapping (<hand-off>.reads) that the pileup reads after STAR exits; nullptr when off.
+//flags: bit 0 written; for a clipped read (the record is its clipped sequence): bits 8-15 bases clipped at 5', 16-23 at 3', 24-31 A
+//bases in the clipped 3' tail, bit 1 the tail starts with A, bit 5 a clip over 255 bases; bits 2-4 from g_handoffReadHook
+struct HandoffReadEntry { uint64 cr3, ur3; uint16 lowQual, qualNeqN; uint32 flags; };
+static_assert(sizeof(HandoffReadEntry) == 24, "HandoffReadEntry layout is shared with the pileup");
+extern HandoffReadEntry *g_handoffReads;
+extern int g_handoffMinQ;
+//set by singlet: called for each clipped hand-off read (read index, the read as in the FASTQ, its length); returns entry flag bits 2-4
+//(bit 2 the read is in the pileup's rRNA sample, bits 3 / 4 the rRNA detector's verdict on the read / its reverse complement)
+extern uint32 (*g_handoffReadHook)(uint64 iRead, const char *seq, uint64 len);
+//per hand-off record its summary (ReadAlign::seqCacheHandoffSummary) at g_handoffSum + g_handoffSumOff[rec], empty for an unmapped
+//sequence (its reads take the normal path); nullptr when off
+extern const uint8 *g_handoffSum;
+//alignments built by ReadAlign::seqCacheLeanAln and how many differed from alignBAM's (SINGLET_HANDOFF_LEAN=verify)
+extern std::atomic<unsigned long long> g_handoffLeanAln, g_handoffLeanBad;
+extern const uint64 *g_handoffSumOff;
 
 #endif
