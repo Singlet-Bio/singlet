@@ -379,7 +379,12 @@ def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
         tab.append(rec)
     _write(tab, out / "tab_minibatch.tsv", ["loader", *TIER_ORDER, "s3_1g_wan"])
     capped = sorted({r["tier"] for r in mb if str(r.get("capped")) == "True"})
-    N.put("cappedTiers", ", ".join(TIER_LABELS.get(t, t) for t in capped) if capped else "none")
+    N.put("cappedTiers", "; ".join(TIER_LABELS.get(t, t) for t in capped) if capped else "none")
+    # the rate the proxy delivered at each tier with no latency, over `threads` connections (median over datasets)
+    for t in sorted({r["tier"] for r in mb if r.get("proxy_ceiling_par_gbit")}):
+        g = _stats(r.get("proxy_ceiling_par_gbit") for r in mb if r["tier"] == t)["median"]
+        if g is not None:
+            N.put(f"delivered-{t}", f"{g:.2f}")
 
 
 def ladder_floor_section(cfg: Config, N: Numbers, out: Path) -> None:

@@ -390,8 +390,9 @@ def run(cfg: Config, units: list[Unit], force: bool = False, overrides=(), tiers
             else:
                 files[ld] = formats.get([fmt])[0].path(fdir)
         run_loaders = [ld for ld in loaders if ld not in na]
-        # a forced rerun of some loaders (minibatch.loaders) replaces their rows and keeps the other loaders' rows
-        rows = [r for r in read_tsv(out) if r.get("loader") not in loaders]
+        # a forced rerun of some loaders (minibatch.loaders) or tiers (--tiers) replaces those rows and keeps the others
+        run_tiers = {t["name"] for t in tier_list}
+        rows = [r for r in read_tsv(out) if r.get("loader") not in loaders or r.get("tier") not in run_tiers]
 
         def record(tier, ld, seed, res):
             rows.append({"dataset": u.id, "matrix": u.name, "tier": tier["name"], "gbit": tier.get("gbit", ""),

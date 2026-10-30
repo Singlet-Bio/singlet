@@ -4,8 +4,13 @@
 
 rclone's --bwlimit lets several MiB through at full speed after an idle period, and Toxiproxy's bandwidth toxic limits
 each connection on its own, so neither models a link that every request shares. Here every byte sent toward the client,
-on any connection, takes tokens from one bucket that fills at BYTES_PER_S and holds at most BURST bytes. Bytes toward the
-server (requests) are not limited. Latency is added by Toxiproxy in front of this proxy.
+on any connection, takes tokens from one bucket that fills at BYTES_PER_S and holds at most max(64 KiB, 5 ms of the
+rate) bytes. Bytes toward the server (requests) are not limited. Latency is added by Toxiproxy in front of this proxy.
+
+The bucket may go into debt: a sender takes its tokens and then sleeps off the deficit. The event loop's timers have
+millisecond resolution, so a sleep can overshoot by about a millisecond; the overshoot refills the bucket and is spent by
+the next sender, which keeps the long-run rate at BYTES_PER_S. (Waiting for the tokens before sending, with a 64 KiB
+bucket, lost the overshoot on every step and held a 1 Gbit/s tier to about 0.4 Gbit/s.)
 """
 
 from __future__ import annotations
@@ -14,25 +19,23 @@ import asyncio
 import sys
 import time
 
-BURST = 64 * 1024   # bucket size: the most that can pass at once after idle
-CHUNK = 64 * 1024   # bytes read from the server per step
+CHUNK = 64 * 1024   # bytes read from the server, and passed on, per step
 
 
 class Bucket:
     def __init__(self, rate: float):
-        self.rate, self.tokens, self.t = float(rate), float(BURST), time.monotonic()
+        self.rate = float(rate)
+        self.burst = max(64 * 1024, 0.005 * self.rate)   # the most that can pass at once after idle
+        self.tokens, self.t = self.burst, time.monotonic()
         self.lock = asyncio.Lock()
 
     async def take(self, n: int) -> None:
         async with self.lock:   # one waiter at a time: connections share the rate in turn
-            while True:
-                now = time.monotonic()
-                self.tokens = min(BURST, self.tokens + (now - self.t) * self.rate)
-                self.t = now
-                if self.tokens >= n:
-                    self.tokens -= n
-                    return
-                await asyncio.sleep((n - self.tokens) / self.rate)
+            now = time.monotonic()
+            self.tokens = min(self.burst, self.tokens + (now - self.t) * self.rate) - n
+            self.t = now
+            if self.tokens < 0:
+                await asyncio.sleep(-self.tokens / self.rate)
 
 
 async def pipe(reader, writer, bucket=None) -> None:
@@ -42,11 +45,9 @@ async def pipe(reader, writer, bucket=None) -> None:
             if not b:
                 break
             if bucket is not None:
-                for i in range(0, len(b), BURST):
-                    part = b[i:i + BURST]
-                    await bucket.take(len(part))
-                    writer.write(part)
-                    await writer.drain()
+                await bucket.take(len(b))
+                writer.write(b)
+                await writer.drain()
             else:
                 writer.write(b)
                 await writer.drain()
