@@ -17,7 +17,8 @@ singlet_cells(
   cell_type_level = 2L,
   cell_type_min_score = 0,
   include_unvalidated = FALSE,
-  sample_facts = TRUE
+  sample_facts = TRUE,
+  io_threads = "auto"
 )
 }
 \arguments{
@@ -52,6 +53,9 @@ it (default 0, none); see \code{\link{singlet_labels}}.}
 \code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
 GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
 local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.}
+
+\item{io_threads}{Range requests in flight at once (see \code{\link{load}}): \code{"auto"} (8 over HTTP, 1 for a local
+study) or a whole number; 1 sends them one at a time.}
 }
 \value{
 A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named

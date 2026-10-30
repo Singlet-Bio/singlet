@@ -5,6 +5,7 @@ Worker does, and records every request (path, range, status, bytes sent) so test
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import threading
@@ -21,6 +22,8 @@ class Recorder:
         self.log = []  # (method, path, range, status, nbytes)
         self.fail_next = []  # list of (status) to inject, consumed in order
         self.user_agents = set()
+        self.inflight = 0  # GETs being answered now, and the most at once
+        self.max_inflight = 0
 
     def add(self, *row):
         with self.lock:
@@ -53,8 +56,29 @@ def _handler(
             pass
 
         def do_GET(self):  # noqa: N802
-            rec.user_agents.add(self.headers.get("User-Agent", ""))
             path = self.path.split("?", 1)[0]
+            if path == "/_stats":  # the recorder, for clients in another process (the R tests)
+                with rec.lock:
+                    body = json.dumps(
+                        {"requests": len(rec.log), "bytes": sum(r[4] for r in rec.log), "max_inflight": rec.max_inflight}
+                    ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            with rec.lock:
+                rec.inflight += 1
+                rec.max_inflight = max(rec.max_inflight, rec.inflight)
+            try:
+                self._get(path)
+            finally:
+                with rec.lock:
+                    rec.inflight -= 1
+
+        def _get(self, path):
+            rec.user_agents.add(self.headers.get("User-Agent", ""))
             with rec.lock:
                 inject = rec.fail_next.pop(0) if rec.fail_next else None
             if inject:
@@ -136,7 +160,8 @@ def serve(
 ):
     """Yield (base_url, Recorder). ``total_override`` lies about the object size in Content-Range (to test the size check);
     ``range_status=200`` answers a range with the slice and its Content-Range but status 200, as ``rclone serve s3`` does;
-    ``delay_s`` holds every response that long (requests are served concurrently)."""
+    ``delay_s`` holds every response that long (requests are served concurrently; ``Recorder.max_inflight`` shows how many
+    were in flight at once)."""
     rec = Recorder()
     srv = ThreadingHTTPServer(
         ("127.0.0.1", 0),
@@ -151,16 +176,42 @@ def serve(
         srv.server_close()
 
 
-if (
-    __name__ == "__main__"
-):  # python -P tests/python/_s1_range_server.py <root>  : serve until killed, print the base URL (used by the R tests)
-    import sys
+if __name__ == "__main__":
+    # python -P tests/python/_s1_range_server.py <root> [port] [--range-status 200] [--ignore-range] [--delay S] [--ttl S] [--url-file F]
+    # serves until killed, GET /_stop or --ttl seconds, and prints the base URL (used by the R tests); GET /_stats is the recorder.
+    import argparse
 
-    root = sys.argv[1]
+    ap = argparse.ArgumentParser()
+    ap.add_argument("root")
+    ap.add_argument("port", nargs="?", type=int, default=0)
+    ap.add_argument("--range-status", type=int, default=206)
+    ap.add_argument("--ignore-range", action="store_true")
+    ap.add_argument("--delay", type=float, default=0.0)
+    ap.add_argument("--ttl", type=float, default=0.0, help="exit after this many seconds (0: never)")
+    ap.add_argument("--url-file", help="also write the base URL to this file (written whole, then renamed)")
+    a = ap.parse_args()
     rec = Recorder()
-    srv = ThreadingHTTPServer(
-        ("127.0.0.1", int(sys.argv[2]) if len(sys.argv) > 2 else 0),
-        _handler(os.path.abspath(root), rec, False, None),
-    )
-    print("http://127.0.0.1:%d" % srv.server_address[1], flush=True)
+    Base = _handler(os.path.abspath(a.root), rec, a.ignore_range, None, a.range_status, a.delay)
+
+    class Stoppable(Base):
+        def do_GET(self):  # noqa: N802 - GET /_stop ends the process
+            if self.path == "/_stop":
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                self.wfile.flush()
+                threading.Timer(0.05, lambda: os._exit(0)).start()
+                return
+            super().do_GET()
+
+    srv = ThreadingHTTPServer(("127.0.0.1", a.port), Stoppable)
+    srv.daemon_threads = True
+    if a.ttl > 0:
+        threading.Timer(a.ttl, lambda: os._exit(0)).start()
+    url = "http://127.0.0.1:%d" % srv.server_address[1]
+    if a.url_file:
+        with open(a.url_file + ".part", "w") as fh:
+            fh.write(url + "\n")
+        os.replace(a.url_file + ".part", a.url_file)
+    print(url, flush=True)
     srv.serve_forever()

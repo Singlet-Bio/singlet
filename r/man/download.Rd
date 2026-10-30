@@ -5,9 +5,14 @@
 \alias{singlet_download}
 \title{Download a study for offline use and return its local path}
 \usage{
-download(accession, cache_dir = NULL, legacy = NULL)
+download(accession, cache_dir = NULL, legacy = NULL, io_threads = "auto")
 
-singlet_download(accession, cache_dir = NULL, legacy = NULL)
+singlet_download(
+  accession,
+  cache_dir = NULL,
+  legacy = NULL,
+  io_threads = "auto"
+)
 }
 \arguments{
 \item{accession}{A GEO Series accession (\code{"GSE..."}). A sample
@@ -24,6 +29,9 @@ cached needs no network in later sessions.}
 (deprecated, being retired). The default \code{NULL} downloads the per-sample format and,
 only when the environment variable \code{SINGLET_LEGACY_FALLBACK=1} is
 set and the study has no .s1 manifest yet, falls back to the legacy bundle.}
+
+\item{io_threads}{Range requests in flight at once while the objects download: \code{"auto"} (8 over HTTP, 1 from a
+local directory) or a whole number; 1 fetches one 32 MiB piece at a time.}
 }
 \value{
 The path to the local manifest (\code{.../s1/m/<GSE>.json}) or, with

@@ -14,7 +14,8 @@ load(
   cell_type_level = 2L,
   cell_type_min_score = 0,
   include_unvalidated = FALSE,
-  sample_facts = TRUE
+  sample_facts = TRUE,
+  io_threads = "auto"
 )
 
 singlet_load(
@@ -26,7 +27,8 @@ singlet_load(
   cell_type_level = 2L,
   cell_type_min_score = 0,
   include_unvalidated = FALSE,
-  sample_facts = TRUE
+  sample_facts = TRUE,
+  io_threads = "auto"
 )
 }
 \arguments{
@@ -80,6 +82,11 @@ an extra minimum path score for it (default 0, none). See \code{\link{singlet_la
 \code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
 GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
 local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.}
+
+\item{io_threads}{How many HTTP range requests are in flight at once: \code{"auto"} (default; 8 for a study read over
+HTTP, 1 for a local one) or a whole number. 1 sends them one at a time. Once a study's manifest is read, every sample's
+members and matrix chunks can be fetched in any order, so on a high-latency link several in flight hide the round trips.
+This budget is separate from the decoder's CPU threads; the result does not depend on it.}
 }
 \value{
 A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or

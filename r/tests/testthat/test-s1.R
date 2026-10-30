@@ -8,7 +8,8 @@
 #
 # If SINGLET_S1_TEST_ROOT is unset the helper tries to build it with `python` (set SINGLET_PYTHON for another interpreter);
 # without Python or the singlet package the tests skip. SINGLET_S1_TEST_URL (a server of that directory with Range support,
-# e.g. tests/python/_s1_range_server.py) enables the HTTP tests.
+# e.g. tests/python/_s1_range_server.py) enables the HTTP tests; the io_threads tests start that server themselves
+# (SINGLET_S1_RANGE_SERVER gives its path when the tests run outside the repository, as under R CMD check).
 
 s1_root <- local({
     cache <- NULL
@@ -83,7 +84,7 @@ test_that("the manifest opens from a local directory and describes the samples",
         expect_identical(st$reference_build, "GRCh38-2024-A")
         expect_match(st$samples[[G1]]$key, "^s1/s/GSM9000001/[0-9a-f]{32}\\.s1$")
         expect_output(print(st), "singlet_study GSE900001")
-        expect_error(singlet_study("GSE1", base = root), "has not been migrated")
+        expect_error(singlet_study("GSE1", base = root), "not in the atlas")
         expect_error(singlet_study("GSE1", base = root), "not in the atlas")
         expect_error(singlet_study("nonsense", base = root), "not a GEO Series")
     })
@@ -260,5 +261,180 @@ test_that("load() and singlet_cells() carry the study API's sample facts as fact
         expect_identical(unique(as.character(SummarizedExperiment::colData(sub)$tissue_type)), "cell line")
         off <- suppressWarnings(singlet:::.s1_read_study(singlet_study(GSE, base = root), G1, sample_facts = FALSE))
         expect_false(any(singlet:::.sample_fact_columns %in% colnames(SummarizedExperiment::colData(off))))
+    })
+})
+
+
+# ---------------------------------------------------------------------------
+# Concurrent range requests (io_threads) against tests/python/_s1_range_server.py
+# ---------------------------------------------------------------------------
+
+# A range server of `root` in another process (Python), stopped when the calling test ends; returns its base URL. `...` are
+# server options: "--range-status", "200" answers ranges with 200 and a Content-Range (as rclone serve s3 does);
+# "--ignore-range" sends the whole object; "--delay", "0.05" holds every request (a slow link).
+s1_serve <- function(root, ..., env = parent.frame()) {
+    skip_if_not_installed("curl")
+    py <- Sys.getenv("SINGLET_PYTHON", Sys.which("python"))
+    # SINGLET_S1_RANGE_SERVER names the script when the tests do not run from the repository (R CMD check)
+    script <- Sys.getenv("SINGLET_S1_RANGE_SERVER",
+                         file.path(testthat::test_path("..", "..", ".."), "tests", "python", "_s1_range_server.py"))
+    script <- normalizePath(script, mustWork = FALSE)
+    skip_if(!nzchar(py) || !file.exists(script), "needs Python and tests/python/_s1_range_server.py (or SINGLET_S1_RANGE_SERVER)")
+    out <- tempfile(fileext = ".url")
+    system2(py, c("-P", shQuote(script), shQuote(root), ..., "--ttl", "600", "--url-file", shQuote(out)), stdout = FALSE, stderr = FALSE,
+            wait = FALSE)
+    u <- character(0)
+    for (i in 1:150) {
+        u <- if (file.exists(out)) readLines(out, warn = FALSE) else character(0)
+        if (length(u) && grepl("^http://", u[[1L]])) break
+        Sys.sleep(0.1)
+    }
+    skip_if(!length(u) || !grepl("^http://", u[[1L]]), "the range server did not start")
+    url <- u[[1L]]
+    withr::defer(try(curl::curl_fetch_memory(paste0(url, "/_stop")), silent = TRUE), envir = env)
+    url
+}
+
+s1_server_stats <- function(url) jsonlite::fromJSON(rawToChar(curl::curl_fetch_memory(paste0(url, "/_stats"))$content))
+
+# The parts of a load that must not depend on how the bytes were fetched.
+sce_content <- function(sce) {
+    list(cn = colnames(sce), rn = rownames(sce), assays = lapply(SummarizedExperiment::assays(sce), as.matrix),
+         cd = as.data.frame(SummarizedExperiment::colData(sce)), skipped = S4Vectors::metadata(sce)$skipped_samples)
+}
+
+test_that("io_threads is \"auto\" (8 over HTTP, 1 locally) or a whole number of at least 1", {
+    expect_identical(singlet:::.s1_io_threads("auto", list(kind = "http")), 8L)
+    expect_identical(singlet:::.s1_io_threads("auto", list(kind = "dir")), 1L)
+    expect_identical(singlet:::.s1_io_threads("auto"), 1L)
+    expect_identical(singlet:::.s1_io_threads(1), 1L)
+    expect_identical(singlet:::.s1_io_threads(16L, list(kind = "http")), 16L)
+    for (bad in list(0, -1, 2.5, NA, "8", c(1, 2), NULL)) expect_error(singlet:::.s1_io_threads(bad), "io_threads")
+    expect_error(load("GSE1", io_threads = 0), "io_threads")
+})
+
+test_that("io_threads 1 and 8 load the same study over HTTP, and 8 has requests in flight together", {
+    root <- skip_if_no_s1()
+    skip_if_not_installed("SingleCellExperiment")
+    url <- s1_serve(root, "--delay", "0.05")
+    with_s1_cache({
+        # the packs, once, so that every read below asks for sample bytes only
+        suppressWarnings(singlet:::.s1_read_study(singlet_study(GSE, base = url), G1, sample_facts = FALSE))
+        res <- list()
+        for (io in c(1L, 8L)) {
+            # whole objects; the chunk path, where these small members fit in the first read (prefixes of 512 KiB); and the chunk
+            # path with 4 KiB prefixes, where most chunk runs are fetched in a second round
+            for (wm in c(48 * 1024^2, 0, -1)) {
+                withr::local_options(singlet.s1_prefix_bytes = if (wm < 0) 4096 else NULL)
+                singlet:::.s1_clear_memory()
+                st <- singlet_study(GSE, base = url, force = TRUE)
+                before <- s1_server_stats(url)
+                singlet:::.s1_stats_reset()
+                sce <- suppressWarnings(singlet:::.s1_read_study(st, c(G1, G2, G3), io_threads = io, whole_max = max(wm, 0),
+                                                                 sample_facts = FALSE))
+                after <- s1_server_stats(url)
+                res[[sprintf("%d_%.0f", io, wm)]] <- list(sce = sce_content(sce), requests = singlet:::.s1_stats()$requests,
+                                                          server = after$requests - before$requests)
+            }
+        }
+        for (wm in c("50331648", "0", "-1")) {
+            one <- res[[paste0("1_", wm)]]
+            eight <- res[[paste0("8_", wm)]]
+            expect_identical(eight$sce, one$sce)
+            expect_identical(eight$requests, one$requests)  # the same ranges, only sent together
+            expect_identical(one$server, one$requests)
+        }
+        expect_identical(res[["8_0"]]$sce, res[["8_50331648"]]$sce)
+        expect_identical(res[["8_-1"]]$sce, res[["8_50331648"]]$sce)
+        # chunk runs inside the bytes the first read already holds are not fetched again: with members smaller than the prefix,
+        # the chunk path asks for no more than the whole-object path; with 4 KiB prefixes it needs a second round
+        expect_identical(res[["1_0"]]$requests, res[["1_50331648"]]$requests)
+        expect_gt(res[["1_-1"]]$requests, res[["1_0"]]$requests)
+        x1 <- res[["8_0"]]$sce$assays$counts[, startsWith(res[["8_0"]]$sce$cn, G1)]
+        expect_equal(sum(abs(x1 - as.matrix(read_truth(root, G1)))), 0)
+        expect_identical(res[["8_0"]]$sce$skipped$gsm_id, G2)
+        # io_threads = 1 never had two requests at the server at once; io_threads = 8 did (the samples' ranges went together)
+        srv1 <- s1_serve(root, "--delay", "0.05")
+        singlet:::.s1_clear_memory()
+        suppressWarnings(singlet:::.s1_read_study(singlet_study(GSE, base = srv1, force = TRUE), c(G1, G3), io_threads = 1L, sample_facts = FALSE))
+        expect_identical(s1_server_stats(srv1)$max_inflight, 1L)
+        expect_gt(s1_server_stats(url)$max_inflight, 1L)
+        # singlet_cells() too
+        st <- singlet_study(GSE, base = url, force = TRUE)
+        c1 <- singlet_cells(st, n_umi_exon > 0 & called, samples = c(G1, G3), sample_facts = FALSE, io_threads = 1L)
+        c8 <- singlet_cells(st, n_umi_exon > 0 & called, samples = c(G1, G3), sample_facts = FALSE, io_threads = 8L)
+        expect_identical(sce_content(c8), sce_content(c1))
+    })
+})
+
+test_that("a 200 answer whose Content-Range names the requested bytes is a range answer", {
+    root <- skip_if_no_s1()
+    skip_if_not_installed("SingleCellExperiment")
+    u206 <- s1_serve(root)
+    u200 <- s1_serve(root, "--range-status", "200")
+    with_s1_cache({
+        got <- lapply(list(u206, u200), function(u) {
+            lapply(c(1L, 8L), function(io) {
+                singlet:::.s1_clear_memory()
+                sce_content(suppressWarnings(singlet:::.s1_read_study(singlet_study(GSE, base = u, force = TRUE), c(G1, G3),
+                                                                      io_threads = io, whole_max = 0, sample_facts = FALSE)))
+            })
+        })
+        expect_identical(got[[2L]][[1L]], got[[1L]][[1L]])
+        expect_identical(got[[2L]][[2L]], got[[1L]][[1L]])
+        expect_identical(got[[1L]][[2L]], got[[1L]][[1L]])
+    })
+})
+
+test_that("a server that ignores Range is refused, one request at a time or many", {
+    root <- skip_if_no_s1()
+    skip_if_not_installed("SingleCellExperiment")
+    url <- s1_serve(root, "--ignore-range")
+    with_s1_cache({
+        for (io in c(1L, 8L)) {
+            singlet:::.s1_clear_memory()
+            st <- singlet_study(GSE, base = url, force = TRUE)  # the manifest is a whole-object GET: fine
+            expect_error(singlet:::.s1_read_study(st, c(G1, G3), io_threads = io, sample_facts = FALSE), "ignored the Range header",
+                         class = "singlet_s1_integrity")
+        }
+    })
+})
+
+test_that("read_s1() reads a URL, in pieces when io_threads allows, and refuses a server that ignores Range", {
+    fix <- testthat::test_path("fixtures", "s1_write_fixture.s1")
+    dir <- normalizePath(dirname(fix), winslash = "/")
+    local <- read_s1(fix)
+    u206 <- s1_serve(dir, "--delay", "0.02")
+    u200 <- s1_serve(dir, "--range-status", "200")
+    for (u in c(u206, u200)) {
+        expect_identical(read_s1(paste0(u, "/s1_write_fixture.s1"), io_threads = 1L), local)
+        expect_identical(read_s1(paste0(u, "/s1_write_fixture.s1")), local)
+    }
+    # a member longer than the piece size goes out as several ranges in flight together, joined in order
+    withr::local_options(singlet.s1_piece_min = 64)
+    singlet:::.s1_stats_reset()
+    expect_identical(read_s1(paste0(u206, "/s1_write_fixture.s1"), io_threads = 8L), local)
+    expect_gt(singlet:::.s1_stats()$requests, 2L + 1L)
+    expect_gt(s1_server_stats(u206)$max_inflight, 1L)
+    expect_identical(read_s1(paste0(u200, "/s1_write_fixture.s1"), io_threads = 8L), local)
+    uig <- s1_serve(dir, "--ignore-range")
+    expect_error(read_s1(paste0(uig, "/s1_write_fixture.s1"), io_threads = 1L), "ignored the Range header", class = "singlet_s1_integrity")
+    expect_error(read_s1(paste0(uig, "/s1_write_fixture.s1"), io_threads = 8L), "ignored the Range header", class = "singlet_s1_integrity")
+})
+
+test_that("download() over HTTP with io_threads 8 mirrors the objects byte for byte", {
+    root <- skip_if_no_s1()
+    url <- s1_serve(root)
+    with_s1_cache({
+        withr::local_envvar(SINGLET_DATA_BASE = url)
+        withr::local_options(singlet.s1_piece_min = 1024)  # objects of a few KiB still go out in pieces
+        mp <- download(GSE, io_threads = 8L)
+        st <- singlet_study(GSE, base = root)
+        for (g in c(G1, G2, G3)) {
+            key <- st$samples[[g]]$key
+            a <- readBin(file.path(root, key), "raw", file.size(file.path(root, key)))
+            b <- file.path(dirname(dirname(mp)), "s", g, basename(key))
+            expect_identical(readBin(b, "raw", file.size(b)), a)
+        }
     })
 })

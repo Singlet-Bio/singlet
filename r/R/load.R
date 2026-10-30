@@ -383,6 +383,8 @@ set_api_key <- function(key) {
 #'   (deprecated, being retired). The default \code{NULL} downloads the per-sample format and,
 #'   only when the environment variable \code{SINGLET_LEGACY_FALLBACK=1} is
 #'   set and the study has no .s1 manifest yet, falls back to the legacy bundle.
+#' @param io_threads Range requests in flight at once while the objects download: \code{"auto"} (8 over HTTP, 1 from a
+#'   local directory) or a whole number; 1 fetches one 32 MiB piece at a time.
 #' @return The path to the local manifest (\code{.../s1/m/<GSE>.json}) or, with
 #'   \code{legacy = TRUE}, to the local \code{.singlet} file.
 #'
@@ -405,7 +407,7 @@ set_api_key <- function(key) {
 #'
 #' @seealso \code{\link{load}}, \code{\link{singlet_study}}, \code{\link{singlet_modalities}}
 #' @export
-download <- function(accession, cache_dir = NULL, legacy = NULL) {
+download <- function(accession, cache_dir = NULL, legacy = NULL, io_threads = "auto") {
     acc <- .as_accession(as.character(accession)[[1L]])
     if (is.na(acc)) {
         stop(sprintf("not a GEO accession (GSE... or GSM...): %s",
@@ -413,7 +415,7 @@ download <- function(accession, cache_dir = NULL, legacy = NULL) {
     }
     if (!isTRUE(legacy)) {
         gse <- .gse_of(acc, cache = .singlet_cache_dir(cache_dir))
-        out <- tryCatch(.s1_download(gse, cache_dir = cache_dir),
+        out <- tryCatch(.s1_download(gse, cache_dir = cache_dir, io_threads = io_threads),
                         singlet_s1_not_found = function(e) e)
         if (!inherits(out, "condition")) {
             return(out)
@@ -493,6 +495,10 @@ singlet_download <- download
 #'   \code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
 #'   GEO record does not say). Fetched once per study for a study read over HTTP; offline (\code{SINGLET_OFFLINE}), for a
 #'   local study or when the API cannot be reached the columns are absent. See \code{\link{singlet_labels}}.
+#' @param io_threads How many HTTP range requests are in flight at once: \code{"auto"} (default; 8 for a study read over
+#'   HTTP, 1 for a local one) or a whole number. 1 sends them one at a time. Once a study's manifest is read, every sample's
+#'   members and matrix chunks can be fetched in any order, so on a high-latency link several in flight hide the round trips.
+#'   This budget is separate from the decoder's CPU threads; the result does not depend on it.
 #' @return A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
 #'   \code{Seurat} object (when \code{as = "seurat"}) spanning all inputs.
 #'   For a per-sample study, \code{colData} holds the per-cell labels
@@ -538,10 +544,11 @@ singlet_download <- download
 #'   \code{\link{find_load}}
 #' @export
 load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, modalities = NULL, cell_type_level = 2L,
-                 cell_type_min_score = 0, include_unvalidated = FALSE, sample_facts = TRUE) {
+                 cell_type_min_score = 0, include_unvalidated = FALSE, sample_facts = TRUE, io_threads = "auto") {
     lab <- list(cell_type_level = cell_type_level, cell_type_min_score = cell_type_min_score,
                 include_unvalidated = include_unvalidated, sample_facts = sample_facts)
     as <- match.arg(as)
+    .s1_io_threads(io_threads)  # a bad value stops here, before any download
     x <- as.character(x)
     if (length(x) == 0L) {
         stop("load: `x` must contain at least one accession or bundle path")
@@ -597,9 +604,10 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
         gsms <- if (anyNA(gsms)) NULL else unique(gsms)
         t1 <- sel[[1L]]
         if (!is.null(t1$gse)) {
-            .s1_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities, labels = lab)
+            .s1_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities, labels = lab,
+                         io_threads = io_threads)
         } else if (!is.null(t1$manifest)) {
-            .s1_load_manifest(t1$manifest, gsms, modalities = modalities, labels = lab)
+            .s1_load_manifest(t1$manifest, gsms, modalities = modalities, labels = lab, io_threads = io_threads)
         } else if (!is.null(t1$s1)) {
             read_s1(t1$s1, as = "sce", member = .s1_user_member(t1$s1))
         } else {

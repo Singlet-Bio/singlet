@@ -11,6 +11,24 @@
   sample object with one matrix member, with the same encoder and options as `singlet.write_s1()` in Python;
   `read_s1()` reads it back exactly as a dgCMatrix, `SingleCellExperiment` or Seurat object.
 - `load()` reads any local `.s1` file that holds one count matrix and no atlas members (a `write_s1()` file).
+- Concurrent range requests: `load()`, `singlet_cells()`, `download()` and `read_s1()` take `io_threads`, the number of
+  HTTP range requests in flight at once: `"auto"` (default; 8 over HTTP, 1 for a local study or file) or a whole number, and
+  1 sends them one at a time. Once a study's manifest is read, `load()` fetches the cells tables and members of
+  `io_threads` samples together, then all their matrix chunk runs together (a run inside the first 512 KiB of its matrix,
+  already read, is not fetched again); `download()` fetches `io_threads` 32 MiB pieces
+  at a time; a long range is split into pieces of at least 8 MiB when there are fewer ranges than connections. The
+  connections come from one curl pool per process and are reused. The result does not depend on `io_threads`, and it is a
+  separate budget from the decoder's CPU `threads`. Same option and defaults as `singlet.torch.S1Stream` in Python.
+- `read_s1()` reads an `http(s)` URL as well as a local file.
+
+### Bug fixes
+
+- A 200 response whose `Content-Range` names exactly the requested bytes is taken as a range answer, as `rclone serve s3`
+  sends it; before, it was refused as a server that ignores Range. A 200 without `Content-Range` that is not the whole
+  object is still refused.
+- An integrity failure while loading a study (a server that ignores Range, a sample object replaced since the manifest)
+  stops `load()` with a `singlet_s1_integrity` error, as intended; before, it was caught as an unreadable sample and the
+  sample skipped with a warning.
 
 ## singlet 1.2.1
 
