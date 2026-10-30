@@ -246,8 +246,12 @@ class S1Stream:
             raise KeyError(f"no member {member!r} (members: {', '.join(self.reader.members)})")
         self.member, self.threads, self.order = member, int(threads), order
         self._pool = None  # a ThreadPoolExecutor of io_threads workers, made on the first batch that needs it
+        # the member's first read is what the object's first read already holds of it (no request), when that is more than
+        # its 256-byte header; the opener fetches the rest of the prefix only if the matrix prefix runs past it
+        in_head = len(getattr(self.reader, "_head", b"")) - self.reader.members[member].off
         self.mem = _pz2.Member(
-            fetch=lambda off, ln: self.reader.read_range(member, off, ln), prefix_hint=prefix_hint
+            fetch=lambda off, ln: self.reader.read_range(member, off, ln),
+            prefix_hint=min(prefix_hint, in_head) if in_head > 256 else prefix_hint,
         )
         self.n_genes, self.n_cells = int(self.mem.m), int(self.mem.n)
         perm = self.mem.row_perm
