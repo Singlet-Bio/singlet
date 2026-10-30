@@ -123,7 +123,7 @@ def test_stream_over_http_sends_a_batchs_requests_together(big):
     with rs.serve(str(p.parent), delay_s=0.05) as (url, _):
         seq = S1Stream(f"{url}/{p.name}", order="canonical", io_threads=1)
         par = S1Stream(f"{url}/{p.name}", order="canonical")
-        assert par.io_threads == 8  # "auto" over HTTP
+        assert par.io_threads == 32  # "auto" over HTTP
         out, took = {}, {}
         for name, s in (("seq", seq), ("par", par)):
             n0, t0 = s.requests, time.perf_counter()
@@ -143,6 +143,23 @@ def test_s1cells_prefetch_gives_the_same_batches(big):
     for u, v in zip(a, b):
         assert torch.equal(u["index"], v["index"])
         assert np.array_equal(u["X"].to_dense().numpy(), v["X"].to_dense().numpy())
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="DataLoader forks its workers on Linux")
+def test_s1cells_in_forked_workers_over_http(big):
+    """The dataset opens the object in the parent (for its shape); forked workers must not share that HTTP pool."""
+    import _s1_range_server as rs
+
+    p = big[0]
+    with rs.serve(str(p.parent)) as (url, _):
+        ds = S1Cells(f"{url}/{p.name}", batch_size=256, threads=1, order="canonical")
+        ref = {int(b["index"][0]): b["X"].to_dense().numpy() for b in ds}
+        dl = torch.utils.data.DataLoader(
+            ds, batch_size=None, num_workers=2, multiprocessing_context="fork"
+        )
+        got = {int(b["index"][0]): b["X"].to_dense().numpy() for b in dl}
+    assert got.keys() == ref.keys()
+    assert all(np.array_equal(got[k], ref[k]) for k in ref)
 
 
 def test_read_ahead_raises_errors_and_stops_when_closed():

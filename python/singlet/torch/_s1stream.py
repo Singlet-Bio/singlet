@@ -7,14 +7,17 @@ those cells, fetches them in one range request, decodes them on ``threads`` thre
 CSR arrays of a ``torch.sparse_csr_tensor`` (cells x genes). Nothing else of the file is read.
 
 Every chunk range is independent once the prefix is read, so a batch's range requests are sent together on ``io_threads``
-threads (``"auto"``: 8 for an HTTP URL, where each request waits a network round trip, and 1 for a local file; 1 sends them
-one at a time). These threads wait on the network; decoding uses the separate ``threads``.
+threads (``"auto"``: 32 for an HTTP URL, where each request waits a network round trip, and 1 for a local file; 1 sends
+them one at a time). These threads wait on the network; decoding uses the separate ``threads``. A reader keeps up with a link
+of bandwidth B and round-trip time RTT only with about B x RTT bytes in flight: at 100 ms and 1 Gbit/s, 12.5 MB, several
+minibatches' worth of requests.
 
 :class:`S1Cells` is an ``IterableDataset`` over an epoch of such batches. Cells are grouped in blocks of ``block_size``
 contiguous cells (the block shuffling of scDataset: random enough for SGD, and every block is one contiguous range of the
 file); each epoch shuffles the blocks and deals ``batch_size // block_size`` of them to each batch. With several DataLoader
-workers each worker opens the object itself and takes every n-th batch. The requests of the next ``prefetch`` batches are in
-flight while a batch decodes, so the network and the decoder work at the same time.
+workers each worker opens the object itself (also when the DataLoader forks it from a process that already read the
+object) and takes every n-th batch. The requests of the next ``prefetch`` batches (default 4) are in flight while a batch
+decodes, so the network and the decoder work at the same time.
 
 The Python layer only plans and sends requests: a batch's runs of cells are decoded by one C++ call
 (``singlet._pz2.Member.decode_batch``, the GIL released) straight into the arrays of the tensor, and the fetched bytes are not
@@ -134,9 +137,9 @@ def http_fetch(
 
 
 def _io_threads(io_threads: Union[int, str], source: Source) -> int:
-    """``"auto"``: 8 for an HTTP URL, 1 for a local file or a fetch callable; otherwise the number given (at least 1)."""
+    """``"auto"``: 32 for an HTTP URL, 1 for a local file or a fetch callable; otherwise the number given (at least 1)."""
     if io_threads == "auto":
-        return 8 if not callable(source) and str(source).startswith(("http://", "https://")) else 1
+        return 32 if not callable(source) and str(source).startswith(("http://", "https://")) else 1
     n = int(io_threads)
     if n < 1:
         raise ValueError("io_threads must be 'auto' or at least 1")
@@ -225,8 +228,8 @@ class S1Stream:
         Object size if known, and the bytes read by the first request (header, member table, matrix prefix; 256 KiB holds the
         prefix of most matrices, so opening costs one round trip).
     io_threads
-        Range requests of one batch sent together: ``"auto"`` (8 for an HTTP URL, 1 for a local file or a callable) or a
-        number; 1 sends them one at a time. A callable ``source`` must be safe to call from that many threads.
+        Range requests sent together: ``"auto"`` (32 for an HTTP URL, 1 for a local file or a callable) or a number; 1
+        sends them one at a time. A callable ``source`` must be safe to call from that many threads.
     """
 
     def __init__(
@@ -425,7 +428,7 @@ class S1Cells(_Base):
 
     Each item is ``{"X": torch.sparse_csr_tensor (cells x genes, float32), "index": torch.LongTensor of cell (column) ids}``.
     Call :meth:`set_epoch` before each epoch for a new block order (the order is a function of ``seed`` and the epoch).
-    ``io_threads`` is passed to :class:`S1Stream`; the requests of the next ``prefetch`` batches (default 1, 0 for none) are
+    ``io_threads`` is passed to :class:`S1Stream`; the requests of the next ``prefetch`` batches (default 4, 0 for none) are
     in flight while a batch decodes.
     """
 
@@ -442,7 +445,7 @@ class S1Cells(_Base):
         threads: int = 4,
         order: str = "native",
         io_threads: Union[int, str] = "auto",
-        prefetch: int = 1,
+        prefetch: int = 4,
     ):
         self.source = str(source)
         self.batch_size, self.block_size = int(batch_size), int(block_size)
@@ -458,7 +461,14 @@ class S1Cells(_Base):
 
     @property
     def stream(self) -> S1Stream:
+        if self._stream is not None and self._pid != os.getpid():
+            # a DataLoader worker forked after the parent opened the object: the inherited HTTP connections are shared
+            # with the parent, so the worker opens its own. The parent's stream is kept, not closed, since closing it
+            # here could shut sockets the parent still uses.
+            self._inherited = self._stream
+            self._stream = None
         if self._stream is None:
+            self._pid = os.getpid()
             self._stream = S1Stream(
                 self.source,
                 member=self.member,
@@ -475,6 +485,7 @@ class S1Cells(_Base):
     def __getstate__(self) -> dict:
         d = dict(self.__dict__)
         d["_stream"] = None  # file handles and HTTP sessions do not cross process boundaries
+        d.pop("_inherited", None)
         return d
 
     def __setstate__(self, d: dict) -> None:
