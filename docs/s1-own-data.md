@@ -81,8 +81,8 @@ for epoch in range(10):
 
 ```text
 S1Cells(source, *, batch_size=512, block_size=64, shuffle=True, seed=0, drop_last=False, member="counts",
-        threads=4, order="native", io_threads="auto", prefetch=1)
-S1Stream(source, *, member="counts", threads=4, order="native", size=None, prefix_hint=65536, io_threads="auto")
+        threads=4, order="native", io_threads="auto", prefetch=4)
+S1Stream(source, *, member="counts", threads=4, order="native", size=None, prefix_hint=262144, io_threads="auto")
     .batch(blocks) -> torch.sparse_csr_tensor        blocks: [(c0, c1), ...] cell ranges, concatenated in order
     .cells(c0, c1) -> scipy.sparse.csr_matrix
     .gene_names, .canonical_gene_names, .gene_order, .barcodes, .n_cells, .n_genes, .bytes_fetched, .requests
@@ -93,7 +93,8 @@ block_batches(n_cells, batch_size=512, block_size=64, seed=0, n_batches=None, dr
 scDataset:
 
 - Each epoch shuffles the blocks with `(seed, epoch)` and covers every cell once.
-- With several DataLoader workers, each worker opens the file itself and takes every n-th batch.
+- With several DataLoader workers, each worker opens the file itself and takes every n-th batch. This holds for forked
+  workers too: a worker does not use the connections of the process it was forked from.
 - `block_batches(..., n_batches=k)` returns a fixed number of batches of whole blocks. This is the workload of the `.s1`
   benchmark.
 
@@ -101,11 +102,13 @@ scDataset:
 tables). It then makes one range request per run of touching blocks, decodes on `threads` threads, and writes straight
 into the tensor's CSR arrays.
 
-- A batch's range requests are sent together on `io_threads` threads. `"auto"` means 8 for an HTTP URL, where every
-  request waits a network round trip, and 1 for a local file. `io_threads=1` sends them one at a time.
+- Range requests are sent together on `io_threads` threads. `"auto"` means 32 for an HTTP URL, where every request
+  waits a network round trip, and 1 for a local file. `io_threads=1` sends them one at a time.
+- A link is full only with about bandwidth x round-trip time in flight: 12.5 MB at 1 Gbit/s and 100 ms, several
+  minibatches' requests. Raise `io_threads` and `prefetch` together on a slower store.
 - These threads mostly wait on the network; decoding uses `threads`.
-- `S1Cells` reads `prefetch` batches ahead on a background thread (default 1, `prefetch=0` for none), so fetching and
-  decoding the next batch overlaps with the work on the current one. DataLoader workers each do this on their own.
+- `S1Cells` sends the requests of the next `prefetch` batches while one decodes (default 4, `prefetch=0` for none), so
+  fetching overlaps with decoding and with the work on the current batch. DataLoader workers each do this on their own.
 
 **Gene order.** `order="native"` keeps the stored gene order: genes sorted by how many cells express them, which the
 codec uses.
