@@ -7181,7 +7181,6 @@ int main(int argc, char* argv[]) {
                 else if (!detected_adapter3p.empty())             cr4_status = "adapter3p";
                 else if (r2_clip5p > 0)                           cr4_status = "clip5p";
                 else if (cr4_probe_reads <= 0)                    cr4_status = "no probe";
-                else if (!use_chunk_source && use_fifo_decode)    cr4_status = "no probe path (fifo)";
                 else                                              cr4_status = "on";
             }
             if (cr4_status == "on") {
@@ -7301,6 +7300,9 @@ int main(int argc, char* argv[]) {
                 if (cr4_status == "on") {
                     const std::string pdir = out_prefix + "/cr4_probe";
                     mkdir(pdir.c_str(), 0755);
+                    // chunk mode: the same in-process source as the main run; fifo mode: the probe decodes the first
+                    // reads of the .1fq itself, so the fifos stay untouched for the main stream; file mode: real files
+                    const bool probe_src = use_chunk_source || use_fifo_decode;
                     auto probe = [&](bool with_cr4, const char* tag) -> double {
                         static const std::set<std::string> drop = {
                             "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM",
@@ -7313,6 +7315,10 @@ int main(int argc, char* argv[]) {
                             std::string t = args[i];
                             if (t.rfind("--", 0) == 0) skipping = drop.count(t) > 0;
                             if (!skipping) pa.push_back(t);
+                            if (t == "--readFilesIn" && probe_src) {   // the probe reads the .1fq itself, not the fifos
+                                pa.push_back("/dev/null"); pa.push_back("/dev/null");
+                                skipping = true;
+                            }
                         }
                         const std::string prefix = pdir + "/" + tag + "_";
                         for (const char* t : {"--outSAMtype", "None", "--readMapNumber"}) pa.push_back(t);
@@ -7326,7 +7332,7 @@ int main(int argc, char* argv[]) {
                         if (pp == 0) {
                             int dn = open("/dev/null", O_WRONLY);
                             if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }   // STAR's progress lines must not reach the BAM pipe
-                            if (use_chunk_source) {
+                            if (probe_src) {
                                 int dthreads = std::max(2, std::min(4, star_threads / 4));
                                 g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(
                                     onefq_files, read_fmt, dthreads, /*cdna_first=*/true);
