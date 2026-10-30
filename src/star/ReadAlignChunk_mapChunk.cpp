@@ -90,7 +90,7 @@ static void sortChunkByPrefix(char** chunkIn, std::array<uint64, MAX_N_MATES> &s
 
 void ReadAlignChunk::mapChunk() {//map one chunk. Input reads stream has to be setup in RA->readInStream[ii]
     
-    for (uint32 im=0; im<1; im++) {//hardcoded mate 1 5p onyl for now
+    for (uint32 im=0; im<1 && g_cr4Info == nullptr; im++) {//hardcoded mate 1 5p onyl for now (singlet --engine gpu: the prefill has the CellRanger4 clips)
         RA->clipMates[im][0].clipChunk(chunkIn[im], chunkInSizeBytesTotal[im]);
     };
 
