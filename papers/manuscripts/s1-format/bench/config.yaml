@@ -6,7 +6,7 @@ generated_dir: ../generated               # tables and numbers.tex read by the m
 datasets: ../datasets.yaml
 # The released singlet versions the paper cites. The run measured commits whose package code (python/, src/, include/,
 # r/) is identical to these releases; results/env/*.json records the measured commit's own version string.
-release: {singlet_py: 1.3.2, singlet_r: 1.2.2}
+release: {singlet_py: 1.3.3, singlet_r: 1.2.2}
 
 formats: [csc_i32, mtx_gz, tenx_h5, h5ad_none, h5ad_gzip, h5ad_lzf, zarr, loom, soma, parquet_coo, csc_zstd19,
           rds_gz, rds_xz, bpcells, s1, s1_pack, zarr3]
