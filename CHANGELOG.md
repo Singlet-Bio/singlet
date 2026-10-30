@@ -4,6 +4,8 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-10-30: the streaming loader at network speed
+
 - **`S1Stream` / `S1Cells` read at network speed.** On a 1 Gbit/s object store with 1 ms latency (hlca_core, 512-cell
   batches, 4 cores), sustained throughput went from 11,000 to 60,000 cells/s, which fills about 83% of the link.
   - A batch's runs of cells are decoded by one C++ call, `singlet._pz2.Member.decode_batch` (the GIL released, runs in
