@@ -104,6 +104,7 @@ netsweep:
   n_batches: 60
   warmup_batches: 5
   r2_loaders: [s1_stream, anndata_zarr_lazy, zarr3_shard, anndata_inmem]
+  r2_inflight: [[32, 4], [64, 8]]                # [io_threads, minibatches ahead] for s1_stream on the real store
 
 eco:
   datasets: [pbmc10k_v3, hlca_core]

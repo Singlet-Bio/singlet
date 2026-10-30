@@ -210,13 +210,17 @@ class S1StreamLoader(Loader):
     order = "native"
     modules = ("singlet.torch", "requests")
 
-    io_threads = "auto"   # a batch's range requests sent together: 8 over HTTP, 1 for a local file
+    # a batch's range requests sent together: 8 over HTTP (the singlet 1.3.2 default, which the main tables measured; 1.3.3
+    # raised "auto" to 32), 1 for a local file
+    io_threads = "auto"
 
     def open(self, src, threads):
         from singlet.torch import S1Stream   # the package's streaming reader (local path or HTTP ranges)
 
-        self.s = S1Stream(src, member="counts", threads=threads, order=self.order,
-                          io_threads=getattr(self, "io_override", None) or self.io_threads)
+        io = getattr(self, "io_override", None) or self.io_threads
+        if io == "auto":
+            io = 8 if src.startswith("http") else 1
+        self.s = S1Stream(src, member="counts", threads=threads, order=self.order, io_threads=io)
 
     def read(self, blocks):
         return self.s.batch(blocks)
@@ -344,7 +348,9 @@ LOADERS = {
 
 # ----------------------------------------------------------------------------------------------- one measurement (child process)
 def _download(url: str, dst: Path) -> None:
-    with urllib.request.urlopen(url) as r, dst.open("wb") as f:
+    # a named client: Cloudflare refuses urllib's default User-Agent (HTTP 403 from the R2 Worker)
+    req = urllib.request.Request(url, headers={"User-Agent": "s1bench/1"})
+    with urllib.request.urlopen(req) as r, dst.open("wb") as f:
         while True:
             b = r.read(1 << 22)
             if not b:

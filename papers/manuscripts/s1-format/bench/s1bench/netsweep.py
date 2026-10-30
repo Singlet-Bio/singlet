@@ -161,11 +161,17 @@ def link(base: str, key: str, size: int, n_rtt: int = 20) -> dict:
     pool = _pool()
     url = f"{base}/{key}"
     pool.request("GET", url, headers={"Range": "bytes=0-0"})   # connection set-up and TLS, not counted
-    ts = []
-    for _ in range(n_rtt):
-        t0 = time.perf_counter()
-        pool.request("GET", url, headers={"Range": "bytes=0-0"})
-        ts.append(time.perf_counter() - t0)
+
+    def rtt(u, hdr):
+        ts = []
+        for _ in range(n_rtt):
+            t0 = time.perf_counter()
+            pool.request("GET", u, headers=hdr)
+            ts.append(time.perf_counter() - t0)
+        return ts
+
+    ts = rtt(url, {"Range": "bytes=0-0"})
+    ping = rtt(f"{base}/_ping", {})   # the Worker answers without touching the bucket: the path to the edge and back
     t0 = time.perf_counter()
     n1 = len(pool.request("GET", url).data)
     one = n1 * 8 / (time.perf_counter() - t0) / 1e9
@@ -175,6 +181,7 @@ def link(base: str, key: str, size: int, n_rtt: int = 20) -> dict:
         n8 = sum(ex.map(lambda k: len(pool.request("GET", url, headers={"Range": f"bytes={cuts[k]}-{cuts[k + 1] - 1}"}).data), range(8)))
     eight = n8 * 8 / (time.perf_counter() - t0) / 1e9
     return {"rtt_median_ms": 1e3 * float(np.median(ts)), "rtt_p90_ms": 1e3 * float(np.quantile(ts, 0.9)),
+            "edge_rtt_median_ms": 1e3 * float(np.median(ping)),
             "gbit_1conn": one, "gbit_8conn": eight, "calib_bytes": size}
 
 
@@ -194,3 +201,7 @@ def _r2(cfg: Config, u: Unit, ns: dict, go) -> None:
     for ld in loaders:
         for seed in cfg["minibatch"]["seeds"]:
             go("r2", ld, f"{base}/{prefix}/{files[ld].name}", seed=seed, extra_sets=_sets(ns), store="r2", **lk)
+    for io, ahead in ns.get("r2_inflight", []):   # the .s1 reader with more requests in flight
+        for seed in cfg["minibatch"]["seeds"]:
+            go("r2", "s1_stream", f"{base}/{prefix}/{s1.name}", seed=seed,
+               extra_sets=_sets(ns, io_threads=io, ahead=ahead), store="r2", io_threads=io, ahead=ahead, **lk)

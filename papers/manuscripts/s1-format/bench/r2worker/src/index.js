@@ -7,6 +7,7 @@ export default {
     const parts = url.pathname.split("/");
     if (parts.length < 3 || parts[1] !== env.READ_KEY) return new Response("not found", { status: 404 });
     const key = parts.slice(2).map(decodeURIComponent).join("/");
+    if (key === "_ping") return new Response("ok");   // the Worker alone, without the bucket
     if (!key) return new Response("no key", { status: 400 });
     const m = req.method;
     if (m === "GET" || m === "HEAD") return read(env, key, req, m === "HEAD");
