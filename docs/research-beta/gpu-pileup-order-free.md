@@ -22,7 +22,7 @@ and gate (a) below runs with it. **The Beta cost saving needs #80 on the GPU fir
 
 ## Gate (a): CPU engine vs `--engine gpu` + `SINGLET_GPU_PILEUP=on`, `SINGLET_INTRON_RULES=0`
 
-Same `.1fq`, 18 threads, one H100 NVL node; Clipper jobs 792991 (build 792990, commit 0f7b59e8 + collector fix; every sample run on the same binary).
+Same `.1fq`, 18 threads, one H100 NVL node; Clipper jobs 793026 (build 793025, commit 21da30b5, the head of this branch: #86 merged, SNP rows saturate at 16 bit).
 "Identical" is `bench/star_accel/out_equiv.py`: sha256 of every output file.
 
 | Dataset | Reads | Files identical | Differ | genes / introns / junctions / SNP / chrM / cell calls / ambient / V(D)J | Identical |
@@ -30,6 +30,9 @@ Same `.1fq`, 18 threads, one H100 NVL node; Clipper jobs 792991 (build 792990, c
 | pbmc1k_v3 (10x 3' v3) | 66.60 M | 57 | 7 (below) | all | yes |
 | GSM4006843 (10x 3' v2) | 66.70 M | 59 | 7 (below) | all | yes |
 | GSM6470208 (10x 5' v2, 411 V(D)J genes) | 121.77 M | 55 | 7 (below) | all | yes |
+
+A first run after merging #86 differed in `snp_ad` / `snp_dp` (and what derives from them): #86 widened the CPU SNP counters to 16 bit and the GPU rows
+still saturated at 255. Fixed in 21da30b5; the table is the rerun.
 
 The differing files, the same on every sample, are not counts: `nonhost_reads.fq` and `star_Unmapped.out.mate1/2` (same bytes, other read order),
 `star_Log.std.out`, `read_stats.tsv` (stage rows), `pileup_stats.json` (`clip5p/probe/n_reads` 12194 vs 12000 on the two 3' samples, 12201 vs 12000
@@ -43,13 +46,14 @@ With the default rules (389) CPU engine vs `--engine gpu` + `SINGLET_GPU_PILEUP=
 
 | Dataset | CPU engine, core-s (wall s) | GPU engine + GPU pileup, core-s (wall s) | core-s per M reads, CPU / GPU | GPU pileup, GPU ms / total ms |
 |---|---|---|---|---|
-| pbmc1k_v3 | 2692 (483) | 796 (344) | 40.4 / 11.9 | 1702 / 8322 |
-| GSM4006843 | 2802 (668) | 1000 (430) | 42.0 / 15.0 | 233 / 13425 |
-| GSM6470208 | 4102 (766) | 1431 (553) | 33.7 / 11.7 | 856 / 18118 |
+| pbmc1k_v3 | 2646 (448) | 812 (351) | 39.7 / 12.2 | 1715 / 8326 |
+| GSM4006843 | 2786 (665) | 1011 (462) | 41.8 / 15.2 | 233 / 13450 |
+| GSM6470208 | 4086 (746) | 1345 (537) | 33.6 / 11.0 | 857 / 18081 |
 
 core-s is the job cgroup's CPU time for the whole run (reference loading, `.1fq` decode, R11 histogram and the post-pileup stages included);
-one run per cell. W11's numbers were 10.7 (5'), 10.5-11.2 (3') and 37.5 for the CPU engine. The 3' v2 sample is 15.0, above W11's range;
-not investigated (one run, shared node).
+one run per cell. W11's numbers were 10.7 (5'), 10.5-11.2 (3') and 37.5 for the CPU engine. The 5' sample is in W11's range, pbmc1k_v3 slightly above it, and the 3' v2
+sample (15.2, 15.0 in an earlier run on the same code) well above; not investigated (the GPU pileup itself is 0.2 s of GPU time there).
+GPU wall time is the whole run, mapping on the GPU included; the pileup column is the part W11 measured.
 
 ## Reproduce
 
