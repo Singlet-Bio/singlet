@@ -133,13 +133,15 @@ def run(cfg: Config, units: list[Unit], force: bool = False) -> None:
         out = result_path(cfg, "access", u)
         if out.exists() and not force:
             continue
-        written = {r["format"]: r for r in read_tsv(result_path(cfg, "write", u)) if r.get("status") == "ok"}
+        fdir = format_dir(cfg, u)
+        # formats written and present here (a big dataset's timed run stages only some of them)
+        written = {r["format"]: r for r in read_tsv(result_path(cfg, "write", u))
+                   if r.get("status") == "ok" and r["format"] in formats.registry() and formats.get([r["format"]])[0].path(fdir).exists()}
         if "s1" not in written:
             continue
         nnz = int(written["s1"]["nnz"])
         n_cells = int(written["s1"]["cells"])
         batches = workload(n_cells, int(mb["batch_size"]), int(mb["block_size"]), int(ac["n_batches"]), 0)
-        fdir = format_dir(cfg, u)
         rows = []
         # .s1: the member's own plan, and the batch's non-zeros from the canonical indptr
         from singlet import _pz2  # type: ignore
