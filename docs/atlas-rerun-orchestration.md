@@ -113,13 +113,15 @@ clean directory, so a requeued job is safe.
    (`singlet download <.sra>`).
 4. Re-runs `screen-runs` on the full local runs. Its JSON is the authoritative `--run-screen` provenance, and its
    `runs_kept` becomes `runs_used`.
-5. Pools the kept runs into `sample.1fq`.
+5. One kept run: it becomes `sample.1fq`. Several: the per-run `<run>.1fq` files stay as they are and the engine reads them as
+   one stream (`--runs-dir <stage dir> --run-screen screen.json`, PR #82), with no decode, re-encode or pooled copy.
 
-Pooling decodes each run with `singlet decode`, then runs one `singlet encode --no-dedup --no-trim --quality none
---protocol <tag>`. These options match `download`'s defaults. This is an interim path; see §6.
+Legacy path, kept for one release: `pipeline.pooled_input: true` pools the kept runs into `sample.1fq` (`singlet decode` each
+run, then one `singlet encode --no-dedup --no-trim --quality none`). Per-run input gives the same count values as the pool
+(evidence in §8); only barcode column order differs.
 
 **Compute stage** (`stages.compute_stage`):
-* runs the pinned binary on `sample.1fq` with `--pipeline` (the SNP panel is on by default and goes to `private/`),
+* runs the pinned binary on `sample.1fq` (or `--runs-dir` for a multi-run sample) with `--pipeline` (the SNP panel is on by default and goes to `private/`),
   `--output-format 1pz`, `--bam-sort-mode disk`, a private genome (`--genome-shared off`) and `--run-screen`;
 * sets `SINGLET_REF_BASE` when the non-host screen is on (the default, as recommended in plan §9);
 * runs in node-local scratch, then copies the outputs.
@@ -236,6 +238,7 @@ start.
 | a stage fails (download, prefetch, decode, screen, pool, binary exit) | the stage's `failed` event with reason and log tail | requeue once (`retry_max: 1`), then park as `retries_exhausted(<reason>)` |
 | job killed: timeout, OOM, node failure, preemption without requeue | `squeue` loses it, `sacct` gives the state, 2 ticks in a row | `lost` with the reason → retried once, with escalation for timeout and OOM |
 | compute failed, staged reads intact | reason starts with `compute:` and `stage/<GSM>/sample.1fq` exists | only the compute stage runs again |
+| the binary exits 8 (`strand_contradiction`): on the unsorted stream the reads contradict the protocol orientation, and a pipe cannot be re-read | `compute_stage` sees rc 8 and emits `strand_retry` | the same command runs again once with `--sorted-bam`, whose strand safety net re-reads the BAM and recounts with the opposite orientation. A second exit 8 fails as `strand_contradiction` |
 | nothing to run: no 10x run, or no run passes the screen | the stage exits 3 with `parked` | parked at once, no retry. The chained compute task is cancelled |
 | binary differs from the pin | sha256 checked at the start of every stage | `binary_mismatch` failure, so the whole campaign parks visibly. Fix the pin, then unpark |
 | staging fills | the controller sums staged bytes | no new I/O until the compute stage drains it |
@@ -372,3 +375,23 @@ before anything over ~1,000 SU.
   limit.
 
 **Network.** Prefetch reached ~38 MB/s per stream (26.9 GB in 711 s).
+
+## 8. Beta channel, packing, per-run input (S6, 2026-10-30)
+
+**Node packing.** `common.job_slots` computes the concurrent jobs of a node from its memory: `(node_gb * mem_fill -
+shared_index_gb) // job_peak_gb`, capped by `cores // threads`. The inputs are in `clusters.<c>.node`: `job_peak_gb` 33.4 and
+`shared_index_gb` 17.8 (deep GSM7036403 with the shared index, #86) and `mem_fill` 0.9. A 512 GB node gives 13 jobs, a 768 GB node
+16 at 8 threads (cores bind) and 20 at 4 threads on more cores. `node_stage` reads the node's memory from `SLURM_MEM_PER_NODE` or
+`/proc/meminfo`.
+
+**Exit 8.** The compute stage reruns once on `--sorted-bam` and emits `strand_retry`; a second exit 8 fails as
+`strand_contradiction`. (Supersedes PR #85.)
+
+**Beta publishing** (`beta.py`, `orchestrator.py beta-publish --cluster C --gse G [--dry-run]`, controller `beta_pass` when
+`beta.enabled`). A finished study's hand-off goes to `beta.producer` (a command that writes `<work>/<GSE>.manifest.json` and
+the `s1/...` objects it names; the `.s1` producer of the rollout plan, W5, is not in this repository yet, so the controller
+reports `no_producer` until one is configured), then to `scripts/beta/beta_ingest.py` of the website repo
+(`beta.uploader`), which is the only writer of Beta's R2 and D1. Retried `beta.retries` times; failed studies again on later
+ticks up to `beta.max_attempts`. The target must name Beta: host, `beta.bucket` and `beta.database` contain "beta" and are not
+a production name, or nothing runs. A manifest naming a `private/`, restricted, BAM, reads or genotype key is refused.
+
