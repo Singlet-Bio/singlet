@@ -9,22 +9,18 @@ a = np.fromfile(sys.argv[1], dtype=dt)
 b = np.fromfile(sys.argv[2], dtype=dt)
 print(f"records: cpu {len(a)} gpu {len(b)}")
 
-def key(x):
-    return np.core.records.fromarrays([x["site"], x["gene"], x["bc"], x["umi"]], names="site,gene,bc,umi")
-
 def multiset_diff(x, y):
-    """records of x not matched by y (multiset difference)"""
-    xs = np.sort(x, order=["site", "gene", "bc", "umi"]); ys = np.sort(y, order=["site", "gene", "bc", "umi"])
-    ix = np.zeros(len(xs), bool)
-    j = 0
-    # merge walk
-    xk = xs.view("<u8").reshape(len(xs), 3)  # site, gene|bc, umi
-    yk = ys.view("<u8").reshape(len(ys), 3)
-    i = 0
+    """records of x not matched by y (multiset difference), both sorted by the same (site, gene|bc, umi) columns"""
+    def srt(z):
+        c = z.view("<u8").reshape(len(z), 3)
+        o = np.lexsort((c[:, 2], c[:, 1], c[:, 0]))
+        return z[o], c[o]
+    xs, xk = srt(x); ys, yk = srt(y)
+    i = j = 0
     only = []
     while i < len(xs):
-        if j >= len(ys): only.append(i); i += 1; continue
-        tx = tuple(xk[i]); ty = tuple(yk[j])
+        if j >= len(ys): only.extend(range(i, len(xs))); break
+        tx = (xk[i, 0], xk[i, 1], xk[i, 2]); ty = (yk[j, 0], yk[j, 1], yk[j, 2])
         if tx == ty: i += 1; j += 1
         elif tx < ty: only.append(i); i += 1
         else: j += 1
