@@ -64,3 +64,54 @@ records what changed. Commits are on `paper/s1-benchmark-results`.
 - DataLoader workers; NVMe hosts; other CPU architectures; real cloud object stores.
 - Write timings.
 - Test vectors for the specification, which the supplement proposes.
+
+# Internal peer review, round 2: response
+
+Three independent Opus 5.5 reviews of draft 4 (2026-10-30), written as reviewers for Nature Methods (single-cell
+infrastructure), Genome Biology (formats, compression and reproducibility) and PVLDB (storage, compression, cloud data
+systems), plus a survey of how 24 format, compression and data-systems papers present results. All three recommended
+major revision. Their reports are not in the repository.
+
+## Done in this revision (no new measurements)
+
+**Presentation**
+- Fig. 1a shows one point per matrix (size relative to `.s1`) with the median marked, instead of median bars.
+- Fig. 1d shows thread scaling from the existing sweep, instead of throughput by storage tier, which duplicated Fig. 2c
+  and joined categorical tiers with lines.
+- New Table 3 gives every format on the same matrices: median size, geometric-mean size relative to `.s1`, smallest-file
+  count, median cold read rate and fastest-read count.
+- New table of format properties beyond size and speed: reads in part over HTTP, integrity, data digest, members and
+  cells table, integer guarantee. A paragraph states what is specified but not evaluated, including that there is no
+  checksum per chunk.
+
+**Numbers and wording**
+- The "most compact alternative" ratio is now paired by matrix: on each matrix, the smallest other file. It was a ratio
+  of medians.
+- The prefix size is stated with the chunk index: 24 bytes per chunk, about half a megabyte at a billion non-zeros.
+- The `singlet` version in Table 1: the cited release's package code is the code that ran, and the version strings the
+  runs recorded are named.
+
+**Fixes**
+- The broken `\textsuperscript` in the Table 5 caption.
+- The stray "Tables" heading.
+- The 4-versus-8-cores wording.
+- The Ref column running off the page in Table 2.
+
+## Proposed (new measurements; not done yet)
+
+1. **Decode protocol.** Import each library before timing, report the first cold repeat and the median separately, and
+   rerun the decode stage. Today the first repeat includes imports, and repeats 2–3 are warmed by the RAID controller's
+   cache.
+2. **Latency.** Sweep round-trip times from 0 to 200 ms (5 or 6 values), sweep requests in flight from 1 to 64, and plot
+   per-minibatch CDFs.
+3. **A real object store.** Cloudflare R2 or S3, read from a cloud VM: measured transfers, requests per epoch, and dollars.
+4. **Random-access costs.** Over-read bytes, index bytes and requests per minibatch, and a chunk-size sweep.
+5. **Baselines.**
+   - Sharded Zarr v3.
+   - The same chunks and index with a generic codec (zstd or Blosc2), to separate the codec from the container.
+   - scDataset with its default `fetch_factor`.
+   - Loaders under DataLoader workers.
+6. **Hardware.** An AVX-512 VBMI2 CPU and an ARM CPU (codec only, cycles per non-zero).
+7. **Write.** Write time and peak memory on the timing host.
+8. **Format.** Optional per-chunk checksums, a self-contained specification of the cells table and packs, test vectors,
+   and a bit-flip experiment.

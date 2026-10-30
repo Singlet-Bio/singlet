@@ -127,9 +127,10 @@ zellkonverter \texttt{readH5AD}). Python results are compared with the canonical
 times opening and decoding a member already in memory.
 
 \subsection{Hardware, software and reproducibility}
-All timings ran on 8 cores of shared nodes of one type (\nm{cpu}, \nm{cores} cores, \nm{memGB}\,GB memory, node-local
+Every timed job had 8 cores of a shared node of one type (\nm{cpu}, \nm{cores} cores, \nm{memGB}\,GB memory, node-local
 \nm{localDisk}), ordinary cluster nodes rather than ones with fast local storage, with at most one of our timed jobs per
-node and other users' jobs beside it, and with software versions as in Table~\ref{tab:formats}. The pipeline is \texttt{python -m s1bench} in \texttt{papers/manuscripts/s1-format/bench} of
+node and other users' jobs beside it, and with software versions as in Table~\ref{tab:formats}. Readers used
+\nm{threadsHeadline} threads unless a thread count is given. The pipeline is \texttt{python -m s1bench} in \texttt{papers/manuscripts/s1-format/bench} of
 the \texttt{singlet} repository: stages \texttt{fetch}, \texttt{canon}, \texttt{write}, \texttt{decode}, \texttt{ladder},
 \texttt{floor}, \texttt{second}, \texttt{minibatch}, \texttt{eco} and \texttt{report}, with all settings in
 \texttt{config.yaml}, the software environment in \texttt{environment.yml}, and the exact versions that ran (conda

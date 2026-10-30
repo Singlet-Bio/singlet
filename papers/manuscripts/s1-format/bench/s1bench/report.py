@@ -161,9 +161,33 @@ def size_section(cfg: Config, N: Numbers, out: Path) -> dict:
         N.put("s1SmallestCount", smallest)
         others = [f for f in fmts if f not in ("s1", "s1_pack")]
         if others:
-            best = min(others, key=lambda f: stats[f]["median"] or 1e9)
+            # paired by matrix: the smallest other file on each matrix over .s1, and the format that is most often that file
+            pair, who = [], defaultdict(int)
+            for u in by_unit.values():
+                cand = {f: u[f] for f in others if u.get(f)}
+                if cand and u.get("s1"):
+                    b = min(cand, key=cand.get)
+                    pair.append(cand[b] / u["s1"])
+                    who[b] += 1
+            best = max(who, key=who.get) if who else min(others, key=lambda f: stats[f]["median"] or 1e9)
             N.put("bestOtherFormat", FORMAT_LABELS.get(best, best).replace("\\textbf{", "").replace("}", ""))
-            N.put("ratioBestOther", stats[best]["median"] / stats["s1"]["median"], "{:.1f}")
+            N.put("bestOtherFormatCount", who.get(best, 0))
+            N.put("ratioBestOther", _stats(pair)["median"], "{:.1f}")
+    # every matrix's size relative to .s1, per format (Fig. 1a: one point per matrix)
+    st_cls = {(r["dataset"], r["matrix"]): r.get("protocol_class", "") for r in _stage(cfg, "stats")}
+    pts = []
+    for row in rows:
+        f = row["format"]
+        for (ds, m), u in by_unit.items():
+            if u.get(f) and u.get("s1"):
+                pts.append({"pos": row["pos"], "format": f, "group": row["group"], "ratio": u[f] / u["s1"],
+                            "class": st_cls.get((ds, m), "")})
+    _write(pts, out / "fig1a_points.tsv", ["pos", "format", "group", "ratio", "class"])
+    for row in rows:   # the median ratio per format, for the marker over the points
+        rr = _stats(u[row["format"]] / u["s1"] for u in by_unit.values() if u.get(row["format"]) and u.get("s1"))
+        row["ratio_median"] = rr["median"]
+    _write(rows, out / "fig1a_size.tsv", ["pos", "format", "label", "group", "median", "q1", "q3", "lo", "hi", "n", "em", "ep",
+                                          "rm", "rp", "ratio_median"])
     # per-dataset size table (bits per non-zero), formats as columns
     tab = []
     for (ds, m), u in sorted(by_unit.items()):
@@ -274,6 +298,80 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
                     N.put(f"{what}-{mode}-{isa}-t{t}", s["median"], "{:.0f}")
                     N.put(f"{what}-{mode}-{isa}-t{t}-lo", s["lo"], "{:.0f}")
                     N.put(f"{what}-{mode}-{isa}-t{t}-hi", s["hi"], "{:.0f}")
+
+
+def summary_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """One row per format: median size, geometric-mean size relative to .s1, the matrices on which it is the smallest file,
+    median cold read rate on the headline cores, and the matrices on which it reads fastest (all formats on the same
+    matrices; .s1 in source gene order)."""
+    w = [r for r in _stage(cfg, "write") if r.get("status") == "ok"]
+    H = int(cfg["threads"]["headline"])
+    size = defaultdict(dict)
+    for r in w:
+        size[(r["dataset"], r["matrix"])][r["format"]] = _f(r["bytes"]) * 8 / _f(r["nnz"])
+    rate = defaultdict(dict)
+    for r in _headline_decode(cfg):
+        if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "cold" and int(r["threads"]) == H \
+                and (r["format"] != "s1" or r["mode"] == "canonical"):
+            rate[(r["dataset"], r["matrix"])][r["format"]] = _f(r["mnnz_per_s"])
+    fmts = [f for f in cfg["formats"] if f != "s1_pack" and any(f in u for u in size.values())]
+    win_size, win_rate = defaultdict(int), defaultdict(int)
+    for u in size.values():
+        c = {f: v for f, v in u.items() if f in fmts and v}
+        if c:
+            win_size[min(c, key=c.get)] += 1
+    for u in rate.values():
+        c = {f: v for f, v in u.items() if f in fmts and v}
+        if c:
+            win_rate[max(c, key=c.get)] += 1
+    n_size = sum(1 for u in size.values() if any(f in u for f in fmts))
+    n_rate = sum(1 for u in rate.values() if u)
+    rows = []
+    for f in fmts:
+        rel = [u[f] / u["s1"] for u in size.values() if u.get(f) and u.get("s1")]
+        gm = float(np.exp(np.mean(np.log(rel)))) if rel else None
+        rows.append({"format": FORMAT_LABELS.get(f, f), "bits": _stats(u.get(f) for u in size.values())["median"],
+                     "rel": gm, "smallest": f"{win_size.get(f, 0)}/{n_size}",
+                     "read": _stats(u.get(f) for u in rate.values())["median"], "fastest": f"{win_rate.get(f, 0)}/{n_rate}",
+                     "n": len(rel)})
+    rows.sort(key=lambda r: r["bits"] or 1e9)
+    _write(rows, out / "tab_summary.tsv", ["format", "bits", "rel", "smallest", "read", "fastest", "n"])
+    N.put("sumNsize", n_size)
+    N.put("sumNread", n_rate)
+
+
+def scaling_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """Read rate against threads, median over the matrices of the thread sweep: .s1 cold from disk and the codec from memory,
+    the uncompressed arrays and gzip AnnData cold from disk; and the rate a 1 Gbit/s link delivers as .s1."""
+    d = [r for r in _stage(cfg, "decode") if r.get("run") == "sweep" and r.get("status") == "ok"]
+    if not d:
+        return
+    series = {
+        "s1_codec": lambda r: r["format"] == "s1" and r["what"] == "codec" and r["mode"] == "canonical" and r["isa"] == "avx2",
+        "s1_file": lambda r: r["format"] == "s1" and r["what"] == "file" and r["cache"] == "cold" and r["mode"] == "canonical",
+        "csc_i32": lambda r: r["format"] == "csc_i32" and r["what"] == "file" and r["cache"] == "cold",
+        "h5ad_gzip": lambda r: r["format"] == "h5ad_gzip" and r["what"] == "file" and r["cache"] == "cold",
+    }
+    threads = sorted({int(r["threads"]) for r in d})
+    rows = []
+    for th in threads:
+        rec = {"threads": th}
+        for k, sel in series.items():
+            rec[k] = _stats(r["mnnz_per_s"] for r in d if int(r["threads"]) == th and sel(r))["median"]
+        rows.append(rec)
+    s1 = [r for r in _stage(cfg, "write") if r.get("status") == "ok" and r["format"] == "s1"]
+    b = _stats(_f(r["bits_per_nnz"]) for r in s1)["median"]
+    for rec in rows:   # what a 1 Gbit/s link delivers as .s1 (non-zeros per second, millions): above it, the link is the limit
+        rec["link1g"] = 1e9 / b / 1e6 if b else None
+    _write(rows, out / "fig1d_scaling.tsv", ["threads", *series, "link1g"])
+    if b:
+        N.put("scale-link-1g", 1e9 / b / 1e6, "{:.0f}")
+    for rec in rows:
+        if rec.get("s1_codec"):
+            N.put(f"scale-s1codec-t{rec['threads']}", rec["s1_codec"], "{:.0f}")
+            if b:
+                N.put(f"scale-s1codec-gbit-t{rec['threads']}", rec["s1_codec"] * 1e6 * b / 1e9, "{:.1f}")
+    N.put("scaleNmatrices", len({(r["dataset"], r["matrix"]) for r in d}))
 
 
 def wire_section(cfg: Config, N: Numbers) -> None:
@@ -717,6 +815,8 @@ def run(cfg: Config) -> int:
     datasets_table(cfg, N, out)
     size_stats = size_section(cfg, N, out)
     decode_section(cfg, N, out, size_stats)
+    summary_section(cfg, N, out)
+    scaling_section(cfg, N, out)
     wire_section(cfg, N)
     minibatch_section(cfg, N, out)
     network_section(cfg, N, out)

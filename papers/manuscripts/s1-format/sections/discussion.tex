@@ -19,8 +19,8 @@ Size matters most where data move over a network. Atlases serve count matrices t
 train on them read every cell many times. A format that is both small and fast to decode moves the bottleneck back to the
 model. Size alone is not the whole story, though: on a link with realistic latency, the number of round trips matters as
 much as the number of bytes. The index at the head of every \sone{} member lets a reader plan all of a minibatch's
-requests before sending any, and sending them together cut the time to a first minibatch by about
-\nm{concurrency-gain-first}$\times$ on a 30\,ms link. The same plan-then-fetch pattern applies to any reader of
+requests before sending any, and sending them together cut the time to a first minibatch by a median of
+\nm{concurrency-gain-first}$\times$ over the panel datasets on a 30\,ms link. The same plan-then-fetch pattern applies to any reader of
 independently addressable chunks, and the \texttt{singlet} readers for atlas samples and for R use it as well.
 
 \paragraph{How much is left.}

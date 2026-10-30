@@ -31,10 +31,10 @@ $(b_0-b)/B > 1/D_p - 1/D_{p,0}$: the transfer time saved must exceed the decode 
 
 Across the panel, \sone{} files take a median of \nm{s1BpnMedian} bits per non-zero (range
 \nm{s1BpnMin}--\nm{s1BpnMax}) with gene identifiers and barcodes included, and are the smallest file on
-\nm{s1SmallestCount} of \nm{nMatrices} matrices (Fig.~\ref{fig:wow}a, Table~\ref{tab:size}). Paired by matrix, the median
+\nm{s1SmallestCount} of \nm{nMatrices} matrices (Fig.~\ref{fig:wow}a, Tables~\ref{tab:summary} and~\ref{tab:size}). Paired by matrix, the median
 gzip-compressed AnnData file is \nm{ratio-h5ad_gzip}$\times$ larger, 10x HDF5 \nm{ratio-tenx_h5}$\times$, TileDB-SOMA
-\nm{ratio-soma}$\times$ and BPCells \nm{ratio-bpcells}$\times$; the most compact alternative, \nm{bestOtherFormat}, is
-\nm{ratioBestOther}$\times$ larger. The raw CSC arrays compressed with zstd at level 19 take \nm{size-csc_zstd19} bits per
+\nm{ratio-soma}$\times$ and BPCells \nm{ratio-bpcells}$\times$; the smallest other file on each matrix, which is
+\nm{bestOtherFormat} on \nm{bestOtherFormatCount} of them, is a median of \nm{ratioBestOther}$\times$ larger. The raw CSC arrays compressed with zstd at level 19 take \nm{size-csc_zstd19} bits per
 non-zero, so most of the gain comes from how the counts are represented and modelled, not from the entropy coder alone
 (Section~\ref{sec:floor}). With gene identifiers moved into a vocabulary pack shared by every dataset of the same
 annotation, the median falls to \nm{size-s1_pack} bits per non-zero.
@@ -57,6 +57,14 @@ million non-zeros per second on one core and \nm{codec_cpp-native-avx2-t4} milli
 and \nm{codec_cpp-native-scalar-t1} million on one core with the portable scalar decoder, which is what processors
 without AVX2, including ARM, use today; all kernels give identical output. The AVX-512 kernel needs the VBMI2
 extension, which the benchmark CPU lacks, so it was not measured.
+
+Decoding \sone{} scales with cores; reading the alternatives from disk does not (Fig.~\ref{fig:wow}d). Over the
+\nm{scaleNmatrices} matrices of the thread sweep, the codec decodes \nm{scale-s1codec-t1} million non-zeros per second from
+memory on one core, \nm{scale-s1codec-t4} million on four and \nm{scale-s1codec-t8} million on eight, which is
+\nm{scale-s1codec-gbit-t1}, \nm{scale-s1codec-gbit-t4} and \nm{scale-s1codec-gbit-t8}\,Gbit/s of stored bits; from four
+cores on it decodes faster than a 1\,Gbit/s link delivers \sone{} (\nm{scale-link-1g} million non-zeros per second). The
+uncompressed arrays read at the same rate on one core as on eight, limited by the disk, and gzip AnnData decodes on one
+thread whatever the number of cores.
 
 \input{figures/fig1_wow}
 
@@ -105,7 +113,7 @@ the same at 10\,Gbit/s as at 1\,Gbit/s, because from 1\,Gbit/s on decoding on \n
 64 cells costs the decoding of whole chunks around it, which keeps the reader below the rate at which the whole matrix
 decodes from memory (\nm{net-ds-decoder-cells} cells per second), and more cores raise this limit. From the node's own
 spinning disk, cold, it delivers \nm{thr-s1_stream-local} cells per second, where every block is a disk seek, and from
-the shared filesystem, whose servers cache, \nm{thr-s1_stream-nfs} (Fig.~\ref{fig:wow}d). AnnData Zarr delivers \nm{thr-anndata_zarr_lazy-s3_1g} and TileDB-SOMA ML \nm{thr-soma_ml-s3_1g}
+the shared filesystem, whose servers cache, \nm{thr-s1_stream-nfs} (Table~\ref{tab:minibatch}). AnnData Zarr delivers \nm{thr-anndata_zarr_lazy-s3_1g} and TileDB-SOMA ML \nm{thr-soma_ml-s3_1g}
 cells per second at 1\,Gbit/s. AnnData read wholly into memory sustains more once loaded, at the cost of reading the
 entire file first and holding it in memory. From a cold start the first minibatch is ready after \nm{ttfm-s1}\,s with
 \sone, against \nm{ttfm-best-other}\,s for the fastest alternative (\nm{ttfm-best-other-name}; Fig.~\ref{fig:wow}b,
@@ -139,9 +147,11 @@ the original (Fig.~\ref{fig:how}b).
 
 The count matrix is a \texttt{pz2} member whose prefix (header, chunk index of 24 bytes per chunk, entropy tables, and a
 key per gene that fixes the gene order) is enough to plan a read of any set of columns (Fig.~\ref{fig:how}c). The prefix
-grows with the number of genes and chunks, from a few kilobytes to about a hundred for the matrices here. Chunks of
-consecutive cells, by default at most 49{,}152 non-zeros each (a denser cell is a chunk of its own), decode independently,
-so a reader issues one or two requests for the prefix and one per contiguous run of chunks it needs.
+grows with the number of genes and chunks: the chunk index takes 24 bytes per chunk, so the prefix is a few kilobytes on
+small matrices and about half a megabyte for a matrix of a billion non-zeros, almost all of it index. Chunks of consecutive
+cells, by default at most 49{,}152 non-zeros each (a denser cell is a chunk of its own), decode independently, so a reader
+issues one request for the prefix (two when it is larger than the first read) and one per contiguous run of chunks it
+needs.
 
 The codec turns each column into a short sequence of small symbols and codes them with static rANS
 (Fig.~\ref{fig:how}d). Rows are stored in order of how many cells express them, in classes of four per doubling, so
@@ -157,6 +167,18 @@ the encoder's initial value, which detects most corruption of the entropy-coded 
 bits; the member also stores a SHA-256 digest of the canonical matrix, against which a full decode can be checked.
 
 \input{figures/fig2_how}
+
+Beyond size and speed, the layout gives a stored matrix properties the other formats leave to the systems around them
+(Table~\ref{tab:props}). A sample object is immutable and published under a prefix of its SHA-256, so a link names exact
+bytes that a reader can check without trusting the server; caches can keep it indefinitely and a paper can cite it.
+The canonical digest hashes the matrix's values, gene identifiers and barcodes rather than their encoding, so two files
+that hold the same matrix share it whatever chunking or tables wrote them, and a decoded matrix can be checked against its
+source. One object holds several matrices of a sample, its cells table and key--value metadata, and anything that can be
+recomputed from them is stored as a versioned recipe that the writer has run and checked. Gene vocabularies and barcode
+whitelists live once in shared packs, which also put every sample of one annotation in the same gene space. The writer
+rejects matrices that are not integer counts. These properties are specified (Supplementary Section~\ref{sec:spec}) but,
+apart from the round trip that checks every file exactly, not evaluated here; the format has no checksum per chunk, so a
+damaged chunk is caught only by the object's hash or a full decode against the digest.
 
 % =====================================================================
 \subsection{\sone{} is close to the code lengths of cross-validated count models}
@@ -213,13 +235,11 @@ scalar, AVX2 or AVX-512 kernel at run time.
 
 \input{figures/fig4_eco}
 
-% =====================================================================
-\subsection*{Tables}
-
 \begin{table}[h]
 \centering\small
 \caption{Formats and loaders compared. ``Cell subset'': a subset of cells can be read without reading the whole matrix.
-``Remote'': reads by HTTP range or object-store request without a local copy. Versions as run.}
+``Remote'': reads by HTTP range or object-store request without a local copy. Versions as run; for \texttt{singlet}, the
+release whose package code is the code that ran (the runs record the version strings of their commits, 1.3.0 and 1.3.1).}
 \label{tab:formats}
 \begin{tabularx}{\linewidth}{@{}l l l c c X@{}}
 \toprule
@@ -245,6 +265,7 @@ CSC + zstd-19 & \texttt{zstandard} (\nm{ver-zstandard}) & zstd-19 & no & no & an
 \caption{Benchmark matrices: protocol class, size tier (S $<$20k cells, M $<$200k, L $<$2M, XL above), shape, density,
 fraction of non-zeros equal to one and median counts per cell. Sources and accessions in \texttt{datasets.yaml}.}
 \label{tab:datasets}
+\setlength{\tabcolsep}{3.5pt}
 \pgfplotstabletypeset[
   columns={dataset,matrix,class,tier,cells,genes,nnz,density,frac_ones,counts_per_cell,ref},
   columns/ref/.style={string type, column name=Ref., column type=l},
@@ -259,6 +280,49 @@ fraction of non-zeros equal to one and median counts per cell. Sources and acces
   columns/frac_ones/.style={column name=Ones, fixed, precision=2},
   columns/counts_per_cell/.style={column name=Counts/cell, fixed, precision=0, 1000 sep={,}},
 ]{\gen{tab_datasets.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Every format on the same \nm{sumNsize} matrices. Size: median bits per non-zero of the whole file, and the
+geometric mean of its size relative to \sone{} over matrices. Smallest: matrices on which it is the smallest file. Read:
+median cold read rate on \nm{threadsHeadline} cores, million non-zeros per second (\sone{} in source gene order); fastest:
+matrices on which it reads fastest. $n$: matrices the format holds (the R formats are not applicable above $2^{31}$
+non-zeros; loom stores dense chunks and is skipped above $2\times10^{9}$ entries).}
+\label{tab:summary}
+\pgfplotstabletypeset[
+  columns={format,bits,rel,smallest,read,fastest,n},
+  columns/format/.style={string type, column name=Format, column type=l},
+  columns/bits/.style={column name={Bits/nnz}, fixed, fixed zerofill, precision=2},
+  columns/rel/.style={column name={Size vs \sone}, fixed, fixed zerofill, precision=2, postproc cell content/.append style={/pgfplots/table/@cell content/.add={}{$\times$}}},
+  columns/smallest/.style={string type, column name=Smallest, column type=r},
+  columns/read/.style={column name={Read (M/s)}, fixed, precision=0},
+  columns/fastest/.style={string type, column name=Fastest, column type=r},
+  columns/n/.style={column name=$n$, int detect},
+]{\gen{tab_summary.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{What a stored count matrix offers besides its size and read speed, as each format is specified (``opt.'':
+available as an option that writers rarely enable). Reads in part over HTTP: a reader can fetch some cells from plain
+object storage or a web server with range requests, with no server-side software. Integrity: checks a reader can apply
+to the bytes it reads. Data digest: a hash of the matrix's content (values, names) that does not depend on how it was
+encoded. Integer guarantee: the format or its writer rejects matrices that are not non-negative integer counts.}
+\label{tab:props}
+\begin{tabularx}{\linewidth}{@{}l X X l l l@{}}
+\toprule
+Format & Reads in part over HTTP & Integrity & Data digest & Several matrices + cell table & Integer guarantee \\
+\midrule
+\textbf{\sone} & yes: chunk index in the prefix, one range per run of cells & object named by its SHA-256 prefix; header CRC-32; digest per member (no checksum per chunk) & yes & yes, plus recipes and shared packs & yes \\
+h5ad, 10x HDF5, loom (HDF5) & with chunked datasets and an HDF5 range driver & Fletcher-32 per chunk (opt.) & no & yes (h5ad, loom) & no \\
+AnnData Zarr & yes: one object per chunk & CRC32C codec (opt., Zarr v3) & no & yes & no \\
+TileDB-SOMA & yes, through the TileDB library & checksum filters (opt.) & no & yes & no \\
+Parquet COO & yes: row groups and pages & page CRC-32 (opt.) & no & no & no \\
+BPCells & no (local directory) & no & no & no & no \\
+rds, MTX.gz & no (whole file) & gzip/xz stream checksums & no & no (rds: one object) & no \\
+\bottomrule
+\end{tabularx}
 \end{table}
 
 \begin{table}[h]
@@ -305,7 +369,7 @@ scalar \nm{codec_cpp-canonical-scalar-t1} / \nm{codec_cpp-canonical-scalar-t4}. 
 the four loader-panel datasets and three seeds, by storage tier (an object store whose total bandwidth is limited, 1\,ms
 latency unless stated). Above the M tier, loaders that download the whole object first are not run over the network
 tiers; for those datasets the transfer time of the object at the tier's bandwidth is used instead, and a cell that
-includes such estimates is marked 	extsuperscript{e}. ``One request at a time'': the \sone{} reader without concurrent
+includes such estimates is marked \textsuperscript{e}. ``One request at a time'': the \sone{} reader without concurrent
 range requests.}
 \label{tab:minibatch}
 \pgfplotstabletypeset[
