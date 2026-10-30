@@ -1,6 +1,6 @@
 ## Submission
 
-This is a new submission: the first CRAN release of 'singlet' (version 1.2.1), the R client for the Singlet single-cell RNA-seq
+This is a new submission: the first CRAN release of 'singlet' (version 1.2.2), the R client for the Singlet single-cell RNA-seq
 atlas (<https://singlet.bio>). The matching Python package is 'singlet' on PyPI (1.2.0; 1.3.0 adds the same sample facts).
 
 ## Test environments
