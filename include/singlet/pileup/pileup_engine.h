@@ -1948,7 +1948,7 @@ public:
         const ReadRec* R = reinterpret_cast<const ReadRec*>(in.reads.data());
         const size_t nR = in.reads.size() / sizeof(ReadRec);
         if (out.alnStat.size() != in.alns.size() / sizeof(AlnRec)) { std::cerr << "[gpu_pileup] per-alignment results missing\n"; return false; }
-        uint64_t pd[12] = {0}; const bool pdbg = std::getenv("SINGLET_POLYA_DEBUG") != nullptr;   // diagnostics: why the poly(A) rebuild keeps or drops a read
+        uint64_t pd[16] = {0}; const bool pdbg = std::getenv("SINGLET_POLYA_DEBUG") != nullptr;   // diagnostics: why the poly(A) rebuild keeps or drops a read
         static const char UMI_CH[5] = {'A', 'C', 'G', 'T', 'N'};
         static const uint8_t COMP[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
         const int ulen = in.umiLen > 0 ? in.umiLen : 0;
@@ -2013,8 +2013,10 @@ public:
                 } else if (a.n_ops >= 2 && !rev) {
                     const uint32_t c = ops[a.n_ops - 1];
                     const int cl = static_cast<int>(c >> 4);
+                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { pd[9]++; if (cl >= 6) pd[10]++; if (cl > qlen) pd[13]++; }
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
                         int na = 0; for (int i = qlen - cl; i < qlen; ++i) na += base(i) == 1;
+                        if (!(na >= 0.8 * cl)) pd[11]++; else if (base(qlen - cl) != 1) pd[12]++;
                         if (na >= 0.8 * cl && base(qlen - cl) == 1) {
                             int64_t end = a.pos;
                             for (int k = 0; k < a.n_ops; ++k) { const int op = ops[k] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += ops[k] >> 4; }
@@ -2024,8 +2026,10 @@ public:
                 } else if (a.n_ops >= 2) {
                     const uint32_t c = ops[0];
                     const int cl = static_cast<int>(c >> 4);
+                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { pd[9]++; pd[14]++; if (cl >= 6) pd[10]++; if (cl > qlen) pd[13]++; }
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
                         int nt = 0; for (int i = 0; i < cl; ++i) nt += base(i) == 8;
+                        if (!(nt >= 0.8 * cl)) pd[11]++; else if (base(cl - 1) != 8) pd[12]++;
                         if (nt >= 0.8 * cl && base(cl - 1) == 8) { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
                     }
                 }
@@ -2052,7 +2056,7 @@ public:
             }
         }
         if (pdbg) std::cerr << "[polya-debug] eligible " << pd[0] << ", clipped " << pd[1] << ": nb<2 " << pd[2] << ", cl out of range " << pd[3]
-                            << ", A-fraction " << pd[4] << ", not firstA " << pd[5] << ", kept clipped " << pd[6] << "; unclipped kept " << pd[7] << ", unclipped dropped " << pd[8] << "\n";
+                            << ", A-fraction " << pd[4] << ", not firstA " << pd[5] << ", kept clipped " << pd[6] << "; unclipped kept " << pd[7] << ", unclipped dropped " << pd[8] << ", unclipped fwd/rev with S " << pd[9] << ", S>=6 " << pd[10] << ", A-fraction fail " << pd[11] << ", first base fail " << pd[12] << ", cl>qlen " << pd[13] << ", rev " << pd[14] << "\n";
         return true;
     }
     // W11 "on": the reads STAR wrote no BAM record for (hand-off records; ReadAlign_outputAlignments.cpp): what the serial loop does
