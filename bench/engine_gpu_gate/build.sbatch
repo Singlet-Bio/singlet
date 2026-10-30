@@ -12,7 +12,7 @@
 # BRANCH (default gpu/engine-gpu) is fetched by URL into a private ref. Outputs: $W/jobs/w11/engine/bin/singlet-{gpu,cpu}.
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
-BARE=$W/repos/singlet-py.git; BR=${BRANCH:-gpu/engine-gpu-order-free}; OUTD=${OUTD:-$W/jobs/w11/engine/bin}; mkdir -p $OUTD
+BARE=$W/repos/singlet-py.git; BR=${BRANCH:-gpu/intron-rules}; OUTD=${OUTD:-$W/jobs/w11/engine/bin}; mkdir -p $OUTD
 VARIANTS=gpu; XFLAGS=; OUTD=$W/jobs/w11/engine/bin_ir; mkdir -p $OUTD   # XFLAGS: extra C++ flags, e.g. -DSTAR_PROFILE (STAR's per-phase cycle counters)
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/w11/intron-rules
 COMMIT=$(git -C $BARE rev-parse refs/w11/intron-rules); echo "COMMIT=$COMMIT"
