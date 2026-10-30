@@ -572,6 +572,9 @@ public:
             bool primary_assigned = false;      // gene/exon came from the primary alignment
             uint32_t first_gene  = UINT32_MAX;   // first non-intergenic gene seen
             uint32_t second_gene = UINT32_MAX;   // conflicting gene for EM rescue
+            // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
+            uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
+            uint8_t mt_flags = 0, mt_diag = 0;
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
         mm_buffer.reserve(500000);
@@ -579,6 +582,12 @@ public:
         // Lambda to resolve a completed multi-hit entry
         auto resolve_mm = [&](MultiHitEntry& e, PileupStats& st) {
             if (e.bc_idx < 0) return;
+            if (mt_numt_tie(e)) {   // chrM gene vs. its nuclear copy: count the chrM gene (see mt_numt_tie)
+                count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
+                           mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+                st.mt_numt_rescued++;
+                return;
+            }
             if (e.gene_ambiguous) {
                 // G-EM: collect for post-pileup EM rescue
                 if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
@@ -708,6 +717,7 @@ public:
                                             it->second.exon_idx = hit.exon_idx;
                                             it->second.read_flags = kExonicReadFlags;
                                         }
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
                                     }
                                     if (it->second.seen >= it->second.nh && it->second.nh > 0) {
                                         resolve_mm(it->second, stats);
@@ -726,6 +736,7 @@ public:
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
                                     }
                                 }
                             }
@@ -1004,6 +1015,7 @@ public:
                         entry.intron_idx = rf.intron_idx;
                         entry.read_flags = rf.flags;
                         entry.read_diag = rf.diag;
+                        note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
                     }
                     if (umi_str && umi_len > 0) {
                         int clen = std::min(umi_len, 15);
@@ -2888,18 +2900,36 @@ private:
         return c == "chrM" || c == "MT" || c == "chrMT";
     }
 
+    // intron_rule::kMtPrefer, shared by the serial and the parallel multimapper buffers (E = either MultiHitEntry):
+    // remember the alignment that lies in a chrM gene ...
+    template <class E>
+    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag) const {
+        if (!(config_.intron_rules & intron_rule::kMtPrefer) || gene == UINT32_MAX || !is_mt_gene(gene)) return;
+        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag;
+    }
+    // ... a read aligning equally to a chrM gene and a nuclear gene (NUMT) comes from the mitochondrial genome
+    // (hundreds of copies per cell vs. one nuclear copy), so it is counted for the chrM gene instead of dropped
+    // as gene-ambiguous.
+    template <class E>
+    bool mt_numt_tie(const E& e) const {
+        return e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.first_gene != UINT32_MAX &&
+               e.second_gene != UINT32_MAX && is_mt_gene(e.first_gene) != is_mt_gene(e.second_gene);
+    }
+    template <class E>
+    static ReadFeatures mt_rescue_features(const E& e) {
+        return ReadFeatures{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
+                            static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
+    }
+
     // Resolve a completed multi-hit entry using per-worker state
     void resolve_mm_parallel(WorkerContext& wc, typename WorkerContext::MultiHitEntry& e) {
         if (e.bc_idx < 0) return;
         // A read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a
         // pseudogene) comes from the mitochondrial genome (hundreds of copies per cell vs. one nuclear
         // copy): count it for the chrM gene instead of dropping it as gene-ambiguous.
-        if (e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.first_gene != UINT32_MAX &&
-            e.second_gene != UINT32_MAX && is_mt_gene(e.first_gene) != is_mt_gene(e.second_gene)) {
-            ReadFeatures rf{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
-                            static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
+        if (mt_numt_tie(e)) {
             count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
-                       rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+                       mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
             wc.stats.mt_numt_rescued++;
             return;
         }
@@ -3330,10 +3360,7 @@ private:
                                             if (it->second.second_gene == UINT32_MAX)
                                                 it->second.second_gene = hit.gene_idx;
                                         }
-                                        if ((config_.intron_rules & intron_rule::kMtPrefer) && is_mt_gene(hit.gene_idx)) {
-                                            it->second.mt_gene = hit.gene_idx; it->second.mt_exon = hit.exon_idx;
-                                            it->second.mt_flags = kExonicReadFlags;
-                                        }
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
                                         // Without a primary assignment, the smallest exon over the
                                         // secondaries, not the first seen (order-free-rules R7)
                                         if (!it->second.primary_assigned &&
@@ -3360,10 +3387,7 @@ private:
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
-                                        if ((config_.intron_rules & intron_rule::kMtPrefer) && is_mt_gene(hit.gene_idx)) {
-                                            entry.mt_gene = hit.gene_idx; entry.mt_exon = hit.exon_idx;
-                                            entry.mt_flags = kExonicReadFlags;
-                                        }
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
                                     }
                                 }
                             }
@@ -3604,10 +3628,7 @@ private:
                     entry.intron_idx = rf.intron_idx;
                     entry.read_flags = rf.flags;
                     entry.read_diag = rf.diag;
-                    if ((config_.intron_rules & intron_rule::kMtPrefer) && is_mt_gene(rf.gene)) {
-                        entry.mt_gene = rf.gene; entry.mt_exon = rf.exon_idx; entry.mt_intron = rf.intron_idx;
-                        entry.mt_flags = rf.flags; entry.mt_diag = rf.diag;
-                    }
+                    note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
                 }
                 if (umi_str && umi_len > 0) {
                     int clen = std::min(umi_len, 15);
