@@ -2456,6 +2456,30 @@ static void parse_snp_name(const std::string& name,
 }
 
 // ============================================================================
+// Genotype call for the donor VCF / coverage table: R12 (docs/research-beta/order-free-rules.md).
+// Fixed-error binomial likelihood on the donor's aggregated ref/alt molecule counts, flat prior over {0/0,0/1,1/1},
+// confident when the posterior reaches `post`, else "./.". Replaces the 0.1/0.9 cut on the VB posterior AF, which
+// called 0/1 for one alt molecule in 10-20 (false alternate alleles 0.054-0.060 on Kang vs 0.005-0.008 for
+// cellsnp-lite + vireo). Depends only on (ad, dp), so it is order-free and a GPU reducer can mirror it.
+// ============================================================================
+inline const char* call_donor_genotype(uint32_t ad, uint32_t dp, double err = 0.01, double post = 0.9)
+{
+    if (dp == 0) return "./.";
+    if (ad > dp) ad = dp;
+    const double a = static_cast<double>(ad), r = static_cast<double>(dp - ad);
+    const double l0 = r * std::log1p(-err) + a * std::log(err);
+    const double l1 = static_cast<double>(dp) * std::log(0.5);
+    const double l2 = a * std::log1p(-err) + r * std::log(err);
+    const double m = std::max(l0, std::max(l1, l2));
+    const double e0 = std::exp(l0 - m), e1 = std::exp(l1 - m), e2 = std::exp(l2 - m);
+    const double z = e0 + e1 + e2;
+    if (e0 / z >= post) return "0/0";
+    if (e1 / z >= post) return "0/1";
+    if (e2 / z >= post) return "1/1";
+    return "./.";
+}
+
+// ============================================================================
 // Write per-donor VCF files.
 // Produces: out_prefix/donor{k}.vcf for k = 0..K-1
 // FORMAT: GT:AF:AD:DP per site where the donor has any read depth.
@@ -2484,7 +2508,7 @@ inline void write_donor_vcfs(
         f << "##donorID=donor" << k << "\n";
         f << "##FILTER=<ID=PASS,Description=\"All filters passed\">\n";
         f << "##INFO=<ID=NS,Number=1,Type=Integer,Description=\"Number of donors with any coverage at site\">\n";
-        f << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype inferred from VB posterior allele frequency\">\n";
+        f << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype from the binomial posterior of the aggregated ref,alt depths (R12); ./. when not confident\">\n";
         f << "##FORMAT=<ID=AF,Number=A,Type=Float,Description=\"VB posterior allele frequency (beta_mu)\">\n";
         f << "##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Aggregated ref,alt allele depths from assigned cells\">\n";
         f << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Aggregated total depth from assigned cells\">\n";
@@ -2507,10 +2531,7 @@ inline void write_donor_vcfs(
             parse_snp_name(snp_names[orig], chrom, pos, ref, alt);
 
             // Genotype call from VB posterior AF
-            const char* gt;
-            if      (af < 0.1f) gt = "0/0";
-            else if (af > 0.9f) gt = "1/1";
-            else                gt = "0/1";
+            const char* gt = call_donor_genotype(ad_val, dp_val);
 
             uint32_t ref_val = (dp_val >= ad_val) ? dp_val - ad_val : 0;
 
@@ -2571,10 +2592,7 @@ inline void write_donor_coverages(
             std::string chrom; int32_t pos; char ref, alt;
             parse_snp_name(snp_names[orig], chrom, pos, ref, alt);
 
-            const char* gt;
-            if      (af < 0.1f) gt = "0/0";
-            else if (af > 0.9f) gt = "1/1";
-            else                gt = "0/1";
+            const char* gt = call_donor_genotype(ad_val, dp_val);
 
             char buf[256];
             int n = std::snprintf(buf, sizeof(buf),
