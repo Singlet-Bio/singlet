@@ -4018,6 +4018,14 @@ int main(int argc, char* argv[]) {
                     std::string proto_tag_meta = extract_str("tag");
                     if (!proto_tag_meta.empty())
                         std::cerr << "[singlet] .1fq metadata: protocol=" << proto_tag_meta << "\n";
+                    // .1fq files written before the SPLiT-seq fix carry 15-nt-linker positions; the
+                    // ligation linkers are 30 nt (Rd2 at 48, Rd1 at 78). Correct them on read.
+                    if (proto_tag_meta == "splitseq" && detected_cb_positions.size() == 3 &&
+                        detected_cb_positions[1] == "0_33_0_40" && detected_cb_positions[2] == "0_56_0_63") {
+                        detected_cb_positions[1] = "0_48_0_55";
+                        detected_cb_positions[2] = "0_78_0_85";
+                        std::cerr << "[singlet] .1fq metadata: splitseq positions corrected to 0_10_0_17 0_48_0_55 0_78_0_85\n";
+                    }
                     // S5-UMI-LEN: fallback tag-string → UMI length when metadata
                     // lacked soloUMIlen and user did not explicitly set --umi-len
                     if (detected_umi_len == 0 && !umi_len_explicit && !proto_tag_meta.empty()) {

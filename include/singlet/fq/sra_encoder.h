@@ -2544,10 +2544,12 @@ class SraEncoder {
                 j += "      \"soloCBposition\": [\"0_0_0_8\", \"0_21_0_29\", \"0_43_0_51\"],\n";
                 j += "      \"soloUMIposition\": \"0_52_0_59\"\n";
             } else if (canonical_tag == "splitseq") {
-                // R2 layout (stored as R1 after encode swap): [UMI_10bp][Rd3_8bp][linker15][Rd2_8bp][linker15][Rd1_8bp]
-                // All positions are absolute from read start (anchorType=0):
-                //   Rd3: 0_10_0_17  Rd2: 0_33_0_40  Rd1: 0_56_0_63  UMI: 0_0_0_9
-                j += "      \"soloCBposition\": [\"0_10_0_17\", \"0_33_0_40\", \"0_56_0_63\"],\n";
+                // R2 layout (stored as R1 after encode swap), Rosenberg 2018 / Parse:
+                //   [UMI_10bp][Rd3_8bp][linker1_30bp][Rd2_8bp][linker2_30bp][Rd1_8bp]
+                // The ligation linkers are 30 nt, so the absolute positions (anchorType=0) are
+                //   Rd3: 0_10_0_17  Rd2: 0_48_0_55  Rd1: 0_78_0_85  UMI: 0_0_0_9  (STAR's SPLiT-seq recipe).
+                // Builds before this assumed 15 nt linkers (0_33_0_40, 0_56_0_63): no read matched.
+                j += "      \"soloCBposition\": [\"0_10_0_17\", \"0_48_0_55\", \"0_78_0_85\"],\n";
                 j += "      \"soloUMIposition\": \"0_0_0_9\"\n";
             } else if (canonical_tag == "indrop") {
                 j += "      \"soloCBposition\": [\"0_0_0_9\", \"0_32_0_39\"],\n";
