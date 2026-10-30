@@ -403,4 +403,13 @@ ambiguous, sj, splice_psi, mt_heteroplasmy, vdj) have the same 118,371 barcodes 
 differ are the clip5p probe and rRNA samples (read order), the Q30 line (pool re-encoded with `--quality none`), and timings/paths.
 Compute wall 1063 s (A) vs 1016 s (B), peak RSS 37.6 GB both, and A skips the pool (245 s, one copy of the reads).
 
-Not yet run end to end on a real sample: the producer is unit-tested only (2026-10-30, the Clipper bridge was down).
+**End to end on a real sample (2026-10-30, Clipper job 793210, `bench/atlas_rerun/e2e_s1_sample.sbatch`).** GSM6470208 through the
+orchestrator's io and compute stages (per-run input, 1pz, `singlet-pc-tip`, 23 min total) and then `s1_producer.py`
+(`s1_publish.py --local-root`, worktree `bb__prod__campaign`, catalog = `data/atlas-rerun/samples.parquet`, which has `gse_id`,
+`gsm_id`, `organism`, `protocol_inferred`, `processing_status` but no series text). pack, migrate and verify exit 0 and write one
+64.9 MB `.s1` object and a manifest. **It is not publishable:** the object has `n_columns` 0, `n_called` 0 and empty `stats`
+(the migrator found no non-empty exon matrix, although `summary.json` says 10,239 cells called and the same run's mtx output has
+118,371 barcodes), and with no release policy it still carries the layers a policy withholds (`mt_heteroplasmy.1pz`,
+`mt_variants.tsv`, `ancestry_call.json`, `ambient_*`, `doublet_scores.tsv`). So nothing was sent to Beta. Needed first: the Beta
+policy (`s1_publish.py` has no `--alpha-policy` pass-through) and a migrator that reads this engine's out/ (the W5
+`PipelineDirBundle`).
