@@ -1,5 +1,5 @@
 % Figure 4: .s1 in the ecosystem. Flow chart with the calls a user runs (all in singlet 1.3.x).
-\begin{figure*}[p]
+\begin{figure*}[tbp]
 \centering
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
@@ -29,7 +29,7 @@
 
 % ---------- the objects ----------
 \node[hub, minimum width=2.9cm, minimum height=2.3cm] (obj) at (5.6,-1.7) {};
-\node[font=\sffamily\scriptsize\bfseries, text=sone!80!black] at (5.6,-0.82) {local disk or object store};
+\node[font=\sffamily\scriptsize\bfseries, text=sone!80!black] at (5.6,-0.82) {disk or object store};
 \node[draw=sone, fill=white, minimum width=2.4cm, font=\sffamily\tiny] at (5.6,-1.2) {dataset manifest (.json)};
 \node[draw=sone, fill=sone!30, minimum width=2.4cm, font=\sffamily\tiny] at (5.6,-1.6) {sample objects (.s1)};
 \node[draw=gen, fill=gen!15, minimum width=2.4cm, font=\sffamily\tiny] at (5.6,-2.0) {packs: genes, barcodes};

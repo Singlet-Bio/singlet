@@ -83,9 +83,9 @@ any set of cells with a handful of concurrent HTTP range requests. On \nm{nMatri
 \nm{nDatasets} datasets in \nm{nProtocolClasses} protocol classes, from droplet and plate single-cell data to
 sequencing- and imaging-based spatial data, \sone{} files take a median of \nm{s1BpnMedian} bits per non-zero including
 gene identifiers and barcodes: \nm{ratio-h5ad_gzip}$\times$ smaller than gzip-compressed AnnData and
-\nm{ratioBestOther}$\times$ smaller than the most compact alternative. They are also the fastest to read, at
-\nm{dec-s1-cold-t4} million non-zeros per second from a cold file on \nm{threadsHeadline} cores,
-\nm{dec-speedup-best-other}$\times$ the next fastest format. Streamed from an object store at 1\,Gbit/s, the first
+\nm{ratioBestOther}$\times$ smaller than the most compact alternative. They are also the fastest to read on
+\nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices, at a median of \nm{dec-s1-cold-t4} million non-zeros per second
+from a cold file on \nm{threadsHeadline} cores, \nm{dec-speedup-each}$\times$ the fastest other format on each matrix. Streamed from an object store at 1\,Gbit/s, the first
 512-cell minibatch reaches PyTorch in \nm{ttfm-s1}\,s, \nm{ttfm-speedup}$\times$ sooner than the fastest alternative
 loader, and sending a minibatch's range requests together rather than one at a time makes streaming over a 30\,ms link
 \nm{concurrency-gain-sustained}$\times$ faster. Cross-validated count models, including negative binomial and

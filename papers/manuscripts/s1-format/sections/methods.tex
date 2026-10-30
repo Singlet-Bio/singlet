@@ -57,11 +57,13 @@ per read and no larger shuffle buffer. The \sone{} reader plans the byte ranges 
 index and sends them together, up to eight at a time over HTTP; it is also run sending them one at a time. Files are
 served from the node's own disk, from the cluster's shared NFS filesystem, and by a local S3-compatible object store
 (\texttt{rclone serve s3}) at 0.1, 1 or 10\,Gbit/s with 1\,ms latency, or 1\,Gbit/s with 30\,ms latency. The bandwidth
-is a single token bucket over all connections together, with at most 64\,KiB of burst, so readers that send concurrent
-requests (the \sone{} reader, TileDB-SOMA, Zarr through fsspec) share the tier's bandwidth rather than multiply it; a
-Toxiproxy proxy adds the latency to every response. At each tier the rate through the proxy without latency is measured
-with a 1\,GiB transfer over one connection and over $p$, and recorded; a tier the setup does not reach over $p$
-connections (\nm{cappedTiers}) is flagged. Loaders that cannot read by range download the object first, and that time is
+is a single token bucket over all connections together (our own proxy, \texttt{bwproxy.py}), holding at most 5\,ms of the
+tier's rate or 64\,KiB, whichever is larger, so readers that send concurrent requests (the \sone{} reader, TileDB-SOMA,
+Zarr through fsspec) share the tier's bandwidth rather than multiply it; a Toxiproxy proxy adds the latency to every
+response. At each tier the rate through the proxy without latency is measured with a 1\,GiB transfer over one connection
+and over $p$, and recorded: a median of \nm{delivered-s3_0.1g}, \nm{delivered-s3_1g} and \nm{delivered-s3_10g}\,Gbit/s over
+$p$ connections at the 0.1, 1 and 10\,Gbit/s tiers. A tier the setup does not reach over $p$ connections
+(\nm{cappedTiers}) is flagged. Loaders that cannot read by range download the object first, and that time is
 counted; for datasets above the M tier such loaders are not run over the network tiers, and the transfer time of the
 object at the tier's bandwidth is reported instead, marked in Table~\ref{tab:minibatch}. We record, from a new process
 with a cold cache, the time to open, to read the first minibatch and to build its tensor (three workload seeds; we report

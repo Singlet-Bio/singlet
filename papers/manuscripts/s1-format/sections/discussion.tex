@@ -7,8 +7,8 @@ byte-level compressor that cannot see what the bytes mean. \sone{} instead codes
 non-zeros are ones; a cell's depth sets the rate of every gene in it; and genes ranked by how many cells express them
 turn a cell's non-zeros into short gaps. With these regularities as contexts for a static entropy coder, the files are
 \nm{ratio-h5ad_gzip}$\times$ smaller than gzip-compressed AnnData and \nm{ratioBestOther}$\times$ smaller than the most
-compact general-purpose alternative, and from a cold file they read a median of \nm{dec-speedup-best-other}$\times$ faster
-than the fastest other format we measured. The payload ladder (Fig.~\ref{fig:floor}a) shows where the gain comes from: a
+compact general-purpose alternative, and from a cold file they read faster than every other format we measured on
+\nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices. The payload ladder (Fig.~\ref{fig:floor}a) shows where the gain comes from: a
 strong general-purpose compressor applied to well-separated gap and value streams stops at
 \nm{ladder-L3_gaps_leb_zstd19} bits per non-zero, and the last
 step to \nm{ladder-L4_s1_payload} comes from modelling, not from a better back-end coder. Genomic read formats learned

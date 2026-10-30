@@ -43,10 +43,14 @@ Smaller files are usually slower to read; \sone{} files are not. We timed each l
 to the object it gives a user (a SciPy matrix with gene identifiers and barcodes, or an AnnData object), with the page
 cache cleared; the conversion and checks that verify the round trip are not timed for any format
 (Section~\ref{sec:methods}). In the source gene order that every other format returns, \sone{} reads
-\nm{dec-s1-cold-t4} million non-zeros per second on \nm{threadsHeadline} cores, a median of
-\nm{dec-speedup-best-other}$\times$ the fastest other format, \nm{dec-best-other-name}, paired by matrix (range
-\nm{dec-speedup-best-other-lo}--\nm{dec-speedup-best-other-hi}$\times$), against \nm{dec-h5ad_gzip-cold-t4} for gzip
-AnnData and \nm{dec-csc_i32-cold-t4} for the uncompressed arrays (Table~\ref{tab:decode}). In its stored, frequency-sorted
+\nm{dec-s1-cold-t4} million non-zeros per second on \nm{threadsHeadline} cores (median over matrices), against
+\nm{dec-zarr-cold-t4} for AnnData Zarr, \nm{dec-csc_i32-cold-t4} for the uncompressed arrays and
+\nm{dec-h5ad_gzip-cold-t4} for gzip AnnData (Table~\ref{tab:decode}). Paired by matrix against whichever other format
+reads that matrix fastest, \sone{} is faster on \nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices, by a median of
+\nm{dec-speedup-each}$\times$ (range \nm{dec-speedup-each-lo}--\nm{dec-speedup-each-hi}$\times$). The exceptions are small
+matrices, of at most \nm{dec-s1-slower-max-mnnz} million non-zeros, where the uncompressed arrays read faster; there, costs per file that do
+not grow with the number of non-zeros, such as reading gene identifiers and barcodes, are likely a larger share of the
+time. In its stored, frequency-sorted
 gene order, which a model can use directly with a fixed permutation of its input layer, it reads
 \nm{dec-s1native-cold-t4} million. The codec alone, from a member in memory, runs at \nm{codec_cpp-native-avx2-t1}
 million non-zeros per second on one core and \nm{codec_cpp-native-avx2-t4} million on \nm{threadsHeadline} with AVX2,
@@ -168,8 +172,8 @@ takes \nm{eco-py-singlet}\,s against \nm{eco-py-read-h5ad}\,s for \texttt{anndat
 \texttt{singlet::load(as = "sce")} takes \nm{eco-r-singlet-sce}\,s against \nm{eco-r-readh5ad}\,s for
 \texttt{zellkonverter::readH5AD}, and \texttt{singlet::load(as = "seurat")} takes \nm{eco-r-singlet-seurat}\,s against
 \nm{eco-r-read10x-seurat}\,s for building the same Seurat object from the 10x HDF5 file
-(\texttt{CreateSeuratObject(Read10X\_h5(\ldots))}). Table~\ref{tab:eco} gives every call on both datasets; on the larger,
-hlca\_core, the gains are smaller. The C++ codec builds without architecture flags and selects the
+(\texttt{CreateSeuratObject(Read10X\_h5(\ldots))}). Table~\ref{tab:eco} gives every call on both datasets; on the larger
+hlca\_core, with 1.1 billion non-zeros, the ratios are similar, and larger for the Seurat object. The C++ codec builds without architecture flags and selects the
 scalar, AVX2 or AVX-512 kernel at run time.
 
 \input{figures/fig4_eco}
@@ -244,10 +248,12 @@ fraction of non-zeros equal to one and median counts per cell. Sources and acces
 \begin{table}[h]
 \centering\small
 \caption{Read rate from a cold file on the node's own disk to an in-memory sparse matrix, million non-zeros per second, median
-over matrices. \sone{} rows: stored gene order. Codec-only rates (member in memory, C++): AVX-512
-\nm{codec_cpp-native-avx512-t1} / \nm{codec_cpp-native-avx512-t4}, AVX2 \nm{codec_cpp-native-avx2-t1} /
-\nm{codec_cpp-native-avx2-t4}, scalar \nm{codec_cpp-native-scalar-t1} / \nm{codec_cpp-native-scalar-t4} on 1 /
-\nm{threadsHeadline} cores; in source gene order \nm{codec_cpp-canonical-avx512-t1} / \nm{codec_cpp-canonical-avx512-t4}.}
+over matrices. The \sone{} row returns the source gene order, like every other format; the last row is \sone{} in its
+stored, frequency-sorted order. Codec-only rates (member in memory, C++) on 1 / \nm{threadsHeadline} cores, stored order:
+AVX2 \nm{codec_cpp-native-avx2-t1} / \nm{codec_cpp-native-avx2-t4}, scalar \nm{codec_cpp-native-scalar-t1} /
+\nm{codec_cpp-native-scalar-t4}; source order: AVX2 \nm{codec_cpp-canonical-avx2-t1} / \nm{codec_cpp-canonical-avx2-t4},
+scalar \nm{codec_cpp-canonical-scalar-t1} / \nm{codec_cpp-canonical-scalar-t4}. The AVX-512 kernel was not measured
+(the benchmark CPU lacks VBMI2).}
 \label{tab:decode}
 \pgfplotstabletypeset[
   columns={format,cold_t1,cold_th,warm_th},
@@ -262,19 +268,20 @@ over matrices. \sone{} rows: stored gene order. Codec-only rates (member in memo
 \centering\small
 \caption{Seconds from a cold process to the first 512-cell minibatch as a \texttt{torch.sparse\_csr\_tensor}, median over
 the four loader-panel datasets and three seeds, by storage tier (an object store whose total bandwidth is limited, 1\,ms
-latency unless stated). Above the M tier, loaders that download the whole object first are not run over the network;
-those cells are medians of the smaller datasets only. ``One request at a time'': the \sone{} reader without concurrent
+latency unless stated). Above the M tier, loaders that download the whole object first are not run over the network
+tiers; for those datasets the transfer time of the object at the tier's bandwidth is used instead, and a cell that
+includes such estimates is marked 	extsuperscript{e}. ``One request at a time'': the \sone{} reader without concurrent
 range requests.}
 \label{tab:minibatch}
 \pgfplotstabletypeset[
   columns={loader,local,nfs,s3_10g,s3_1g,s3_1g_wan,s3_0.1g},
   columns/loader/.style={string type, column name=Loader, column type=l},
-  columns/s3_0.1g/.style={column name=0.1 Gbit/s, fixed, precision=2},
-  columns/s3_1g/.style={column name=1 Gbit/s, fixed, precision=2},
-  columns/s3_10g/.style={column name=10 Gbit/s, fixed, precision=2},
-  columns/s3_1g_wan/.style={column name={1 Gbit/s, 30 ms}, fixed, precision=2},
-  columns/nfs/.style={column name=NFS, fixed, precision=2},
-  columns/local/.style={column name=Local disk, fixed, precision=2},
+  columns/s3_0.1g/.style={column name=0.1 Gbit/s, string type, column type=r},
+  columns/s3_1g/.style={column name=1 Gbit/s, string type, column type=r},
+  columns/s3_10g/.style={column name=10 Gbit/s, string type, column type=r},
+  columns/s3_1g_wan/.style={column name={1 Gbit/s, 30 ms}, string type, column type=r},
+  columns/nfs/.style={column name=NFS, string type, column type=r},
+  columns/local/.style={column name=Local disk, string type, column type=r},
 ]{\gen{tab_minibatch.tsv}}
 \end{table}
 
