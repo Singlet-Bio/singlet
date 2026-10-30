@@ -1,0 +1,23 @@
+== per-read dumps (sha256, bytes)
+raw.bin dump0 2500f26af95d0b9a1d38c0de20e06a0b75f92a73c2ebcb340bab5b96737d7220 110015760
+raw.bin dumpA 2500f26af95d0b9a1d38c0de20e06a0b75f92a73c2ebcb340bab5b96737d7220 110015760
+raw.bin dumpB 2500f26af95d0b9a1d38c0de20e06a0b75f92a73c2ebcb340bab5b96737d7220 110015760
+multi.bin dump0 3d3b3b104d4396f8758e92e4e3860da59c4418108b0dad43487e3cbb7c068d3a 95397798
+multi.bin dumpA 3d3b3b104d4396f8758e92e4e3860da59c4418108b0dad43487e3cbb7c068d3a 95397798
+multi.bin dumpB 3d3b3b104d4396f8758e92e4e3860da59c4418108b0dad43487e3cbb7c068d3a 95397798
+IDENTICAL raw.bin dump0(engine,CPU) == dumpA(replay,CPU)
+IDENTICAL raw.bin dumpA(CPU) == dumpB(GPU)
+IDENTICAL raw.bin dump0(engine,CPU) == dumpB(GPU)
+IDENTICAL multi.bin dump0(engine,CPU) == dumpA(replay,CPU)
+IDENTICAL multi.bin dumpA(CPU) == dumpB(GPU)
+IDENTICAL multi.bin dump0(engine,CPU) == dumpB(GPU)
+== nonhost outputs
+FILE nonhost/nonhost_em_abundance.tsv (91 B) engine==replayA:yes replayA==replayB:yes engine==replayB:yes
+FILE nonhost/nonhost_summary.json (497 B) engine==replayA:yes replayA==replayB:yes engine==replayB:yes
+FILE nonhost_reads.fq (124366883 B) engine==replayA:yes replayA==replayB:yes engine==replayB:yes
+FILE nonhost/nonhost_em_abundance.tsv engine==replayC:yes
+FILE nonhost/nonhost_summary.json engine==replayC:yes
+FILE nonhost_reads.fq engine==replayC:yes
+FILE nonhost/nonhost_em_abundance.tsv engine==replayD:yes
+FILE nonhost/nonhost_summary.json engine==replayD:yes
+FILE nonhost_reads.fq engine==replayD:yes

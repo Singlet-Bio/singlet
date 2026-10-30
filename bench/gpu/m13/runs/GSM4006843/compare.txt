@@ -1,0 +1,29 @@
+== per-read dumps (sha256, bytes)
+raw.bin dump0 f1f22ad4373298a0eab16ee94080795a85ee2e0f7a1b1984783048e1c817f9a9 62831504
+raw.bin dumpA f1f22ad4373298a0eab16ee94080795a85ee2e0f7a1b1984783048e1c817f9a9 62831504
+raw.bin dumpB f1f22ad4373298a0eab16ee94080795a85ee2e0f7a1b1984783048e1c817f9a9 62831504
+multi.bin dump0 b89898f4299f4830712681b8dc947c4d68c5f4d375e593fbc047bcad075f6ad6 53723534
+multi.bin dumpA b89898f4299f4830712681b8dc947c4d68c5f4d375e593fbc047bcad075f6ad6 53723534
+multi.bin dumpB b89898f4299f4830712681b8dc947c4d68c5f4d375e593fbc047bcad075f6ad6 53723534
+IDENTICAL raw.bin dump0(engine,CPU) == dumpA(replay,CPU)
+IDENTICAL raw.bin dumpA(CPU) == dumpB(GPU)
+IDENTICAL raw.bin dump0(engine,CPU) == dumpB(GPU)
+IDENTICAL multi.bin dump0(engine,CPU) == dumpA(replay,CPU)
+IDENTICAL multi.bin dumpA(CPU) == dumpB(GPU)
+IDENTICAL multi.bin dump0(engine,CPU) == dumpB(GPU)
+== nonhost outputs
+FILE nonhost/nonhost_em_abundance.tsv (407 B) engine==replayA:yes replayA==replayB:yes engine==replayB:yes
+FILE nonhost/nonhost_per_cell.1pz (661 B) engine==replayA:yes replayA==replayB:yes engine==replayB:yes
+FILE nonhost/nonhost_per_cell.tsv (1585 B) engine==replayA:yes replayA==replayB:yes engine==replayB:yes
+FILE nonhost/nonhost_summary.json (1338 B) engine==replayA:yes replayA==replayB:yes engine==replayB:yes
+FILE nonhost_reads.fq (142195608 B) engine==replayA:yes replayA==replayB:yes engine==replayB:yes
+FILE nonhost/nonhost_em_abundance.tsv engine==replayC:yes
+FILE nonhost/nonhost_per_cell.1pz engine==replayC:yes
+FILE nonhost/nonhost_per_cell.tsv engine==replayC:yes
+FILE nonhost/nonhost_summary.json engine==replayC:yes
+FILE nonhost_reads.fq engine==replayC:yes
+FILE nonhost/nonhost_em_abundance.tsv engine==replayD:yes
+FILE nonhost/nonhost_per_cell.1pz engine==replayD:yes
+FILE nonhost/nonhost_per_cell.tsv engine==replayD:yes
+FILE nonhost/nonhost_summary.json engine==replayD:yes
+FILE nonhost_reads.fq engine==replayD:yes

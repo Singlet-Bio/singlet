@@ -1,0 +1,132 @@
+--- a/include/singlet/pileup/interval_tree.h
++++ b/include/singlet/pileup/interval_tree.h
+@@ -50,6 +50,8 @@
+     }
+ 
+     size_t size() const { return n_; }
++    // pileup_dump (W11 GPU study): read-only view of the sorted interval array
++    const std::vector<Interval>& sorted_intervals() const { return intervals_; }
+ 
+ private:
+     std::vector<Interval> intervals_;
+--- a/include/singlet/pileup/gene_model.h
++++ b/include/singlet/pileup/gene_model.h
+@@ -304,6 +304,13 @@
+     int32_t exon_start(uint32_t exon_idx) const { return exon_starts_[exon_idx]; }
+     int32_t exon_end(uint32_t exon_idx) const { return exon_ends_[exon_idx]; }
+ 
++    // pileup_dump (W11 GPU study): read-only views for the dump
++    const std::vector<IntervalTree>& exon_trees_view() const { return exon_trees_; }
++    const std::vector<IntervalTree>& intron_trees_view() const { return intron_trees_; }
++    const std::vector<uint32_t>& exon_to_gene_view() const { return exon_to_gene_; }
++    const std::vector<uint32_t>& intron_to_gene_view() const { return intron_to_gene_; }
++    const std::vector<char>& gene_strands_view() const { return gene_strands_; }
++
+     // Get gene strand ('+', '-', or '.')
+     char gene_strand(uint32_t gene_idx) const {
+         if (gene_idx < gene_strands_.size()) return gene_strands_[gene_idx];
+--- a/include/singlet/pileup/pileup_engine.h
++++ b/include/singlet/pileup/pileup_engine.h
+@@ -46,6 +46,29 @@
+ #include "rrna_detect.h"
+ #include "polya_sites.h"
+ 
++// ---- W11 pileup dump (GPU study): SINGLET_PILEUP_DUMP=<dir> writes the final pileup accumulators ("truth"), the annotation
++// arrays (interval trees, gene strands, SNP table), barcodes and the effective parameters after run_parallel(); a strand re-run
++// overwrites the files. Unset, it does nothing and no output of the engine changes. ----
++#include <cstdio>
++namespace singlet { namespace pudump {
++inline const char* dir() { static const char* p = std::getenv("SINGLET_PILEUP_DUMP"); return (p && *p) ? p : nullptr; }
++inline FILE* pu_open(const char* name) { std::string p = std::string(dir()) + "/" + name; FILE* f = std::fopen(p.c_str(), "wb"); return f; }
++template <typename T> inline void w(FILE* f, const T& v) { std::fwrite(&v, sizeof(T), 1, f); }
++template <typename Acc>
++inline void write_acc(FILE* f, const Acc& acc) {      // CSC triplets (row, col, value), columns ascending, rows ascending, after to_csc (sum + clamp)
++    auto csc = acc.to_csc();
++    uint32_t nr = acc.n_features(), nc = static_cast<uint32_t>(csc.indptr.size() ? csc.indptr.size() - 1 : 0);
++    uint64_t nnz = csc.indices.size();
++    w<uint32_t>(f, nr); w<uint32_t>(f, nc); w<uint64_t>(f, nnz);
++    for (uint32_t c = 0; c < nc; ++c)
++        for (int32_t k = csc.indptr[c]; k < csc.indptr[c + 1]; ++k) {
++            uint32_t row = static_cast<uint32_t>(csc.indices[k]), val = static_cast<uint32_t>(csc.data[k]);
++            w<uint32_t>(f, row); w<uint32_t>(f, c); w<uint32_t>(f, val);
++        }
++}
++}} // namespace singlet::pudump
++// ---- end pileup dump helper ----
++
+ namespace singlet {
+ 
+ // Compact SNP site representation
+@@ -1619,6 +1642,7 @@
+                   << stats.umi_duplicate << " dup in "
+                   << stats.wall_time_s << "s\n";
+ 
++        pileup_dump(static_cast<uint32_t>(n_chroms));
+         hts_idx_destroy(idx);
+         sam_hdr_destroy(hdr);
+         hts_close(master_fp);
+@@ -1626,6 +1650,64 @@
+         return stats;
+     }
+ 
++    // ---- W11 pileup dump (see pudump above) ----
++    void pileup_dump(uint32_t n_tid) {
++        if (!pudump::dir()) return;
++        using namespace pudump;
++        FILE* f = pu_open("anno.bin");
++        if (f) {
++            std::fwrite("PUANN1\0\0", 1, 8, f);
++            const auto& et = gene_model_.exon_trees_view(); const auto& it = gene_model_.intron_trees_view();
++            w<uint32_t>(f, n_tid);
++            for (uint32_t t = 0; t < n_tid; ++t) {
++                for (int k = 0; k < 2; ++k) {
++                    const IntervalTree* tr = nullptr;
++                    if (k == 0 && t < et.size()) tr = &et[t];
++                    if (k == 1 && t < it.size()) tr = &it[t];
++                    uint64_t n = tr ? tr->sorted_intervals().size() : 0;
++                    w<uint64_t>(f, n);
++                    if (n) std::fwrite(tr->sorted_intervals().data(), sizeof(Interval), n, f);
++                }
++            }
++            auto wv = [&](const auto& v) { uint64_t n = v.size(); w<uint64_t>(f, n); if (n) std::fwrite(v.data(), sizeof(v[0]), n, f); };
++            wv(gene_model_.exon_to_gene_view()); wv(gene_model_.intron_to_gene_view()); wv(gene_model_.gene_strands_view());
++            w<uint32_t>(f, static_cast<uint32_t>(chrom_snps_.size()));
++            for (const auto& v : chrom_snps_) {
++                uint64_t n = v.size(); w<uint64_t>(f, n);
++                for (const auto& s : v) { w<int32_t>(f, s.pos); w<uint32_t>(f, s.index); w<char>(f, s.ref_allele); w<char>(f, s.alt_allele); w<uint16_t>(f, 0); }
++            }
++            std::fclose(f);
++        }
++        f = pu_open("truth.bin");
++        if (f) {
++            std::fwrite("PUTRU1\0\0", 1, 8, f);
++            write_acc(f, exon_acc_); write_acc(f, intron_acc_); write_acc(f, amb_acc_);
++            write_acc(f, sj_acc_);
++            uint32_t nn = static_cast<uint32_t>(sj_names_.size()); w<uint32_t>(f, nn);
++            for (const auto& nm : sj_names_) { uint32_t l = static_cast<uint32_t>(nm.size()); w<uint32_t>(f, l); std::fwrite(nm.data(), 1, l, f); }
++            write_acc(f, snp_ad_); write_acc(f, snp_dp_);
++            write_acc(f, mt_acc_); write_acc(f, mt_acc_rev_);
++            uint64_t ni = mt_indels_.size(); w<uint64_t>(f, ni);
++            for (const auto& e : mt_indels_) { w<uint32_t>(f, e.bc_idx); w<uint32_t>(f, e.pos); w<uint32_t>(f, static_cast<uint32_t>(e.len)); w<uint32_t>(f, e.is_ins ? 1u : 0u); }
++            w<uint64_t>(f, static_cast<uint64_t>(ambig_reads_.size()));
++            std::fclose(f);
++        }
++        f = std::fopen((std::string(dir()) + "/params.txt").c_str(), "w");
++        if (f) {
++            std::fprintf(f, "stranded %d\nreverse_strand %d\nmin_mapq %d\nmin_baseq %d\ncount_introns %d\ncount_sj %d\ncount_mt %d\numi_dedup %d\n"
++                            "umi_dedup_directional %d\numi_len %d\nchrm_tid %d\nn_snps %u\nn_barcodes %zu\nn_tid %u\nhas_gene_model %d\nn_exons %u\nn_introns %u\nn_genes %u\n",
++                         (int)config_.stranded, (int)config_.reverse_strand, config_.min_mapq, config_.min_baseq, (int)config_.count_introns, (int)config_.count_sj,
++                         (int)config_.count_mt, (int)config_.umi_dedup, (int)config_.umi_dedup_directional, config_.umi_len, chrm_tid_, n_snps_loaded_,
++                         barcodes_.size(), n_tid, (int)has_gene_model_, gene_model_.n_exons(), gene_model_.n_introns(), gene_model_.n_genes());
++            std::fclose(f);
++        }
++        f = std::fopen((std::string(dir()) + "/barcodes.txt").c_str(), "w");
++        if (f) { for (const auto& b : barcodes_) std::fprintf(f, "%s\n", b.c_str()); std::fclose(f); }
++        f = std::fopen((std::string(dir()) + "/chroms.txt").c_str(), "w");
++        if (f) { for (const auto& c : tid_to_chrom_) std::fprintf(f, "%s\n", c.c_str()); std::fclose(f); }
++        std::fprintf(stderr, "[pudump] wrote anno.bin truth.bin params.txt barcodes.txt chroms.txt -> %s\n", dir());
++    }
++
+     // Get accumulators for export
+     const SparseAccumulator<uint8_t>& snp_ad() const { return snp_ad_; }
+     const SparseAccumulator<uint8_t>& snp_dp() const { return snp_dp_; }

@@ -1,0 +1,61 @@
+label=pbmc1k_v3_2m node=g051.clipper.gvsu.edu job=789772 2026-10-27T23:57:28-04:00 MAXD=2000000
+NVIDIA H100 NVL, 610.43.02
+stardump commit c4a1be3844ae5a43c35eb3124850f91d303ebbc8 m5 sha256 71b41709abd5517b
+[t] index copy 12 s
+reads=66601887 distinct=31870813 every_k=16 selected=1991926
+[t] distinct 163 s
+stardump exit=0
+Oct 28 00:00:19 ..... started mapping
+Oct 28 00:00:28 ..... finished mapping
+Oct 28 00:00:29 ..... finished successfully
+369M	/tmp/debruinz-m5-789772-0/m5
+[t] stardump 181 s
+=== variant 0: m5 --budget-a 1024 --budget-m 2048 --budget-b 2048
+  lane M thread cycles: seeds 17.0%, windows 15.4%, stitching 67.4%, select+encode 0.2%; 1933.0 SA entries per read
+lane B (staged): 98152 reads, batches of 32768, work 635216 B/read (20.81 GB)
+  lane B run 0: 336.3 ms (phase 1 50.6, scan 10.6, phase 3 275.1)
+  lane B run 1: 330.3 ms (phase 1 48.6, scan 7.9, phase 3 273.8)
+  lane B run 2: 330.5 ms (phase 1 48.4, scan 8.0, phase 3 274.1)
+  lane B run 3: 329.5 ms (phase 1 48.4, scan 7.9, phase 3 273.2)
+  lane B thread cycles: seeds 8.5%, windows 13.4%, stitching 78.0%, select+encode 0.0%; 3080.7 SA entries per read
+
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 313.1 ms (1991926 reads), lane M 370.9 ms (524577 reads), lane B 330.3 ms (98152 reads) = 1.96 M distinct reads/s on the GPU
+    lane M overflow why: win=75712 wa=13739 wtr=43 keep=7889 blob=769
+    lane A overflow why: win=510638 wa=2792 winbin=1 wtr=546 keep=10574 steps=26
+    heavy lane: 5304 reads (0.2663%), 0.17 s on 24 host threads, failures 0; why: win=2622 wtr=143 keep=316 steps=2223
+m5 exit=0
+=== variant 1: m5 --budget-a 512 --budget-m 1024 --budget-b 2048
+  lane M thread cycles: seeds 17.0%, windows 15.5%, stitching 67.3%, select+encode 0.2%; 1939.3 SA entries per read
+lane B (staged): 99280 reads, batches of 32768, work 635216 B/read (20.81 GB)
+  lane B run 0: 397.4 ms (phase 1 59.0, scan 11.3, phase 3 327.1)
+  lane B run 1: 393.6 ms (phase 1 58.2, scan 8.8, phase 3 326.6)
+  lane B run 2: 393.8 ms (phase 1 58.8, scan 8.8, phase 3 326.2)
+  lane B run 3: 392.2 ms (phase 1 58.8, scan 8.8, phase 3 324.6)
+  lane B thread cycles: seeds 8.4%, windows 13.1%, stitching 78.4%, select+encode 0.0%; 3191.7 SA entries per read
+
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 306.1 ms (1991926 reads), lane M 367.1 ms (524915 reads), lane B 393.6 ms (99280 reads) = 1.87 M distinct reads/s on the GPU
+    lane M overflow why: win=75712 wa=14050 wtr=43 keep=7887 blob=764 steps=824
+    lane A overflow why: win=510638 wa=2792 winbin=1 wtr=532 keep=10568 steps=384
+    heavy lane: 5304 reads (0.2663%), 0.17 s on 24 host threads, failures 0; why: win=2622 wtr=143 keep=316 steps=2223
+m5 exit=0
+=== variant 2: m5m --budget-a 1024 --budget-m 2048 --budget-b 2048
+  lane M thread cycles: seeds 18.6%, windows 16.9%, stitching 64.3%, select+encode 0.1%; 1880.3 SA entries per read
+lane B (staged): 100652 reads, batches of 32768, work 635216 B/read (20.81 GB)
+  lane B run 0: 395.3 ms (phase 1 61.0, scan 11.2, phase 3 323.0)
+  lane B run 1: 388.4 ms (phase 1 60.1, scan 8.7, phase 3 319.5)
+  lane B run 2: 391.4 ms (phase 1 59.8, scan 8.7, phase 3 322.8)
+  lane B run 3: 388.4 ms (phase 1 60.2, scan 8.7, phase 3 319.4)
+  lane B thread cycles: seeds 8.7%, windows 13.2%, stitching 78.1%, select+encode 0.0%; 3176.9 SA entries per read
+
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 430.8 ms (1991926 reads), lane M 243.3 ms (331971 reads), lane B 388.4 ms (100652 reads) = 1.87 M distinct reads/s on the GPU
+    lane M overflow why: win=75712 wa=16239 wtr=43 keep=7889 blob=769
+    lane A overflow why: win=294525 wa=10594 wtr=30 keep=26818 steps=4
+    heavy lane: 5304 reads (0.2663%), 0.19 s on 24 host threads, failures 0; why: win=2622 wtr=143 keep=316 steps=2223
+m5 exit=0
+[t] total 266 s

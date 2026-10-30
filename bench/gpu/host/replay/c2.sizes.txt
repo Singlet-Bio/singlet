@@ -1,0 +1,3 @@
+/tmp/debruinz-w11r-789253/rp_c2/summary.json:  "estimated_cells": 13101,
+/tmp/debruinz-w11r-789253/rp_c2/pileup_stats.json:  "n_barcodes": 119473,
+/tmp/debruinz-w11r-789253/rp_c2/pileup_stats.json:  "n_called_cells": 13101,

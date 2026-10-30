@@ -1,0 +1,9 @@
+loader	s3_0.1g	s3_1g	s3_10g	nvme	s3_1g_wan
+AnnData in memory					
+AnnData backed					
+scDataset					
+AnnData Zarr					
+TileDB-SOMA ML					
+BPCells (R)					
+\textbf{.s1}					
+.s1, source gene order					

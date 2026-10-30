@@ -1,0 +1,55 @@
+{
+ "k562_3p": {
+  "rev_share": 0.05429074318527297,
+  "per_position_majority_strand_share": 0.9856949093199552,
+  "median_covered_bases_per_molecule": 90.0
+ },
+ "bpdcn_3p": {
+  "rev_share": 0.016653221040752647,
+  "per_position_majority_strand_share": 0.9893482932360443,
+  "median_covered_bases_per_molecule": 90.0
+ },
+ "k562_maester": {
+  "rev_share": 0.0028277620187107523,
+  "per_position_majority_strand_share": 0.999595219994428,
+  "median_covered_bases_per_molecule": 250.0
+ },
+ "bpdcn_maester": {
+  "rev_share": 0.0014416829127612302,
+  "per_position_majority_strand_share": 0.9997076032254218,
+  "median_covered_bases_per_molecule": 260.0
+ },
+ "bpdcn_clone_median_vaf_maester": {
+  "10158_T>A-6293_T>C": 1.0,
+  "1171_A>G": 1.0,
+  "11864_T>C": 1.0,
+  "1222_A>G": 1.0,
+  "1323_G>A": 1.0,
+  "1415_G>A-9753_G>A": 0.07142857142857142,
+  "15140_G>A": 1.0,
+  "15299_T>C": 1.0,
+  "15812_G>A": 1.0,
+  "2241_A>G": 0.9407051282051282,
+  "2593_G>A": 0.3333333333333333,
+  "2623_A>G": 0.7647058823529411,
+  "3628_A>G": 1.0,
+  "3988_T>C": 1.0,
+  "4104_A>G": 0.0,
+  "6185_T>C": 1.0,
+  "6205_G>A-9164_T>C": 1.0,
+  "6218_A>G": 1.0,
+  "6243_G>A": 0.3333333333333333,
+  "683_G>A": 1.0,
+  "779_T>C": 0.8875,
+  "8697_G>A": 0.8983050847457628,
+  "9321_T>C": 0.8333333333333334
+ },
+ "n_clones_median_vaf_ge_0.9": 15,
+ "gnomad_af_hom_ge_0.001": 1579,
+ "gnomad_snvs": 15770,
+ "versions": {
+  "mquad": "0.1.8",
+  "vireoSNP": "0.5.9",
+  "mgatk": "0.9.0"
+ }
+}

@@ -1,0 +1,140 @@
+diff --git a/include/singlet/pileup/pileup_engine.h b/include/singlet/pileup/pileup_engine.h
+index 5762002..6d08cc9 100644
+--- a/include/singlet/pileup/pileup_engine.h
++++ b/include/singlet/pileup/pileup_engine.h
+@@ -46,6 +46,81 @@
+ #include "rrna_detect.h"
+ #include "polya_sites.h"
+ 
++
++// ---- M6 dev patch (W11 GPU study): tuple dump. Active only when SINGLET_M6_TUPLES is set; no effect on outputs. ----
++#include <cstdio>
++#include <mutex>
++namespace singlet { namespace m6dump {
++struct Rec {                     // 32 bytes: one per-read tuple exactly as it enters UMI dedup (count_read)
++    uint32_t bc, gene, exon, intron;   // barcode index, gene, exon feature, intron feature (UINT32_MAX = none)
++    uint64_t umi;                      // umi_pack_2bit() value (N -> T), what DirectionalUmiStore keys on
++    uint8_t flags, umi_len, hasN, direct;  // kRead* bits; UMI length; UMI had a non-ACGT char; 1 = no UMI, counted directly
++    uint32_t pad;
++};
++static_assert(sizeof(Rec) == 32, "Rec");
++inline const char* path() { static const char* p = std::getenv("SINGLET_M6_TUPLES"); return (p && *p) ? p : nullptr; }
++inline std::mutex& mu() { static std::mutex m; return m; }
++inline FILE*& fp() { static FILE* f = nullptr; return f; }
++inline uint64_t& total() { static uint64_t n = 0; return n; }
++inline void flush_vec(std::vector<Rec>& v) {
++    if (v.empty()) return;
++    std::lock_guard<std::mutex> lk(mu());
++    if (fp()) { std::fwrite(v.data(), sizeof(Rec), v.size(), fp()); total() += v.size(); }
++    v.clear();
++}
++struct TL { std::vector<Rec> v; ~TL() { flush_vec(v); } };
++inline TL& tl() { thread_local TL t; return t; }
++inline void flush_thread() { flush_vec(tl().v); }
++inline void begin() {                          // (re)open and truncate; a strand re-run restarts the dump
++    if (!path()) return;
++    std::lock_guard<std::mutex> lk(mu());
++    if (fp()) std::fclose(fp());
++    fp() = std::fopen(path(), "wb");
++    const char magic[8] = {'M','6','T','U','P','1',0,0};
++    uint32_t hdr[2] = {32u, 0u};
++    if (fp()) { std::fwrite(magic, 1, 8, fp()); std::fwrite(hdr, 4, 2, fp()); }
++    total() = 0;
++}
++inline void emit(uint32_t bc, uint32_t gene, uint64_t umi, uint32_t exon, uint32_t intron, uint8_t flags,
++                 int umi_len, bool hasN, bool direct) {
++    if (!path()) return;
++    Rec r{bc, gene, exon, intron, umi, flags, static_cast<uint8_t>(umi_len), static_cast<uint8_t>(hasN), static_cast<uint8_t>(direct), 0};
++    auto& t = tl();
++    t.v.push_back(r);
++    if (t.v.size() >= (1u << 15)) flush_vec(t.v);
++}
++template <typename Acc>
++inline void write_acc(FILE* f, const Acc& acc) {      // CSC triplets (row, col, value), columns ascending, rows ascending
++    auto csc = acc.to_csc();
++    uint32_t nr = acc.n_features(), nc = static_cast<uint32_t>(csc.indptr.size() ? csc.indptr.size() - 1 : 0);
++    uint64_t nnz = csc.indices.size();
++    std::fwrite(&nr, 4, 1, f); std::fwrite(&nc, 4, 1, f); std::fwrite(&nnz, 8, 1, f);
++    for (uint32_t c = 0; c < nc; ++c)
++        for (int32_t k = csc.indptr[c]; k < csc.indptr[c + 1]; ++k) {
++            uint32_t row = static_cast<uint32_t>(csc.indices[k]), val = static_cast<uint32_t>(csc.data[k]);
++            std::fwrite(&row, 4, 1, f); std::fwrite(&c, 4, 1, f); std::fwrite(&val, 4, 1, f);
++        }
++}
++template <typename Acc>
++inline void finish(const Acc& exon, const Acc& intron, const Acc& amb, int umi_len, bool directional, uint32_t n_barcodes) {
++    if (!path()) return;
++    flush_thread();
++    std::lock_guard<std::mutex> lk(mu());
++    if (fp()) { std::fclose(fp()); fp() = nullptr; }
++    std::string tp = std::string(path()) + ".truth";
++    FILE* f = std::fopen(tp.c_str(), "wb");
++    if (!f) return;
++    const char magic[8] = {'M','6','T','R','U','1',0,0};
++    std::fwrite(magic, 1, 8, f);
++    uint32_t h[4] = {static_cast<uint32_t>(umi_len), directional ? 1u : 0u, n_barcodes, 0u};
++    std::fwrite(h, 4, 4, f);
++    write_acc(f, exon); write_acc(f, intron); write_acc(f, amb);   // exon rows = merged-exon index, intron rows = intron index, amb rows = gene
++    std::fclose(f);
++    std::fprintf(stderr, "[m6dump] %llu tuples -> %s ; truth -> %s\n", (unsigned long long)total(), path(), tp.c_str());
++}
++}} // namespace singlet::m6dump
++// ---- end M6 dev patch helper ----
++
+ namespace singlet {
+ 
+ // Compact SNP site representation
+@@ -392,6 +467,7 @@ public:
+     // Run the pileup on BAM from stdin (or file)
+     PileupStats run(const std::string& bam_path = "-") {
+         PileupStats stats;
++        m6dump::begin();
+         auto t0 = std::chrono::high_resolution_clock::now();
+ 
+         // Open BAM input
+@@ -1036,6 +1112,8 @@ public:
+             auto ms = finalize_store(mol_store_, exon_acc_, intron_acc_, amb_acc_);
+             add_molecule_stats(stats, ms);
+         }
++        m6dump::finish(exon_acc_, intron_acc_, amb_acc_, config_.umi_len, config_.umi_dedup_directional,
++                       static_cast<uint32_t>(barcodes_.size()));
+         if (config_.umi_dedup && config_.umi_dedup_directional) {
+             uint64_t exon_deduped = stats.molecules_spliced + stats.molecules_ambiguous;
+             uint64_t intron_deduped = stats.molecules_unspliced;
+@@ -1174,6 +1252,7 @@ public:
+     };
+ 
+     PileupStats run_parallel(const std::string& bam_path, int n_workers) {
++        m6dump::begin();
+         auto t0 = std::chrono::high_resolution_clock::now();
+         (void)t0;
+ 
+@@ -1529,6 +1608,8 @@ public:
+                 merge_accumulators(amb_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.amb; });
+             }
+         }
++        m6dump::finish(exon_acc_, intron_acc_, amb_acc_, config_.umi_len, config_.umi_dedup_directional,
++                       static_cast<uint32_t>(barcodes_.size()));
+ 
+         // Merge SJ: reassign indices to build global SJ list
+         merge_splice_junctions(workers);
+@@ -2758,12 +2839,19 @@ private:
+         if (intronic && !config_.count_introns) return;
+         if (intronic) st.intron_hits++; else st.exon_hits++;
+         if (config_.umi_dedup && umi_str && umi_len > 0) {
++            if (m6dump::path()) {
++                bool hn = false;
++                for (int q = 0; q < umi_len; ++q) { char ch = umi_str[q] | 32; if (ch != 'a' && ch != 'c' && ch != 'g' && ch != 't') hn = true; }
++                m6dump::emit(bc_idx, rf.gene, umi_pack_2bit(umi_str, umi_len), rf.exon_idx, rf.intron_idx, flags, umi_len, hn, false);
++            }
+             store.record_read(bc_idx, rf.gene, umi_pack_2bit(umi_str, umi_len),
+                               rf.exon_idx, rf.intron_idx, flags);
+             st.umi_duplicate++;  // reads recorded; molecules are subtracted at finalize
+         } else if (intronic) {
++            m6dump::emit(bc_idx, rf.gene, 0, rf.exon_idx, rf.intron_idx, flags, 0, false, true);
+             intron.increment(rf.intron_idx, bc_idx);
+         } else {
++            m6dump::emit(bc_idx, rf.gene, 0, rf.exon_idx, rf.intron_idx, flags, 0, false, true);
+             exon.increment(rf.exon_idx, bc_idx);
+         }
+     }
