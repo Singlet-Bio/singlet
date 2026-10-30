@@ -5251,8 +5251,7 @@ int main(int argc, char* argv[]) {
         if (const char* r = getenv("SINGLET_INTRON_RULES")) rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
         if (rules != 0) {
             std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: the GPU pileup does not implement intron rules 0x" << std::hex << rules << std::dec
-                      << " (set SINGLET_INTRON_RULES=0 for the pre-#80 classification); the CPU pileup runs on the GPU-mapped reads
-";
+                      << " (set SINGLET_INTRON_RULES=0 for the pre-#80 classification); the CPU pileup runs on the GPU-mapped reads\n";
             unsetenv("SINGLET_GPU_PILEUP");
         }
     }
