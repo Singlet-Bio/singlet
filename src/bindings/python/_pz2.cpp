@@ -30,11 +30,14 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <singlet/pz2/pz2.h>
@@ -505,6 +508,131 @@ public:
         return r;
     }
 
+    /// A minibatch in one call: the columns of every range in `ranges` ((c0, c1) pairs), concatenated in that order, as one
+    /// CSR (indptr, indices int32, data). `bufs[i]` holds member bytes [plan.byte_off, plan.byte_off + plan.byte_len) of
+    /// range i (an empty range needs an empty buffer); they are used for this call only, not kept. Ranges are decoded in
+    /// parallel on up to `threads` threads (the GIL released), each straight into its slice of the output, then packed.
+    py::tuple decode_batch(py::sequence ranges, py::sequence bufs, const std::string& mode_s, int threads, py::object dtype_o) {
+        const pz::Header& h = mx_.header();
+        bool gene = false;
+        const pz::Mode mode = parse_mode(mode_s, gene);
+        if (gene) throw py::value_error("decode_batch: mode must be 'native' or 'canonical'");
+        const size_t R = size_t(py::len(ranges));
+        if (size_t(py::len(bufs)) != R) throw py::value_error("decode_batch: ranges and bufs differ in length");
+        const DtypeSpec ds = parse_dtype(dtype_o, h.value_type);
+
+        struct Job { uint32_t c0, c1; uint64_t max_nnz, at, nnz; std::vector<int64_t> ip; };
+        std::vector<Job> jobs(R);
+        std::vector<std::unique_ptr<PyBuf>> held;  // released (with the GIL) when this call returns
+        pz::ByteSource src = snapshot();           // the prefix; the batch's bytes are added below
+        uint64_t n_cols = 0, bound = 0;
+        for (size_t i = 0; i < R; ++i) {
+            py::object ro = ranges[i];
+            py::sequence t = py::reinterpret_borrow<py::sequence>(ro);
+            if (py::len(t) != 2) throw py::value_error("decode_batch: each range is (c0, c1)");
+            const uint32_t c0 = py::cast<uint32_t>(t[0]), c1 = py::cast<uint32_t>(t[1]);
+            if (c0 > c1 || c1 > h.n) throw py::value_error("decode_batch: column range out of bounds");
+            uint64_t max_nnz = 0;
+            if (c1 > c0) {
+                const pz::ColumnPlan p = mx_.plan_columns(c0, c1);
+                py::object bo = bufs[i];
+                auto pb = std::make_unique<PyBuf>(bo);
+                if (uint64_t(pb->size()) < p.byte_len) throw py::value_error("decode_batch: buffer " + std::to_string(i) + " is shorter than its range's plan");
+                if (p.byte_len) src.add(p.byte_off, pb->data(), size_t(p.byte_len));
+                held.push_back(std::move(pb));
+                max_nnz = p.max_nnz;
+            }
+            jobs[i].c0 = c0;
+            jobs[i].c1 = c1;
+            jobs[i].max_nnz = max_nnz;
+            jobs[i].at = bound;
+            jobs[i].nnz = 0;
+            bound += max_nnz;
+            n_cols += c1 - c0;
+        }
+
+        const bool wide = bound >= (uint64_t(1) << 31);
+        py::array indptr = wide ? py::array(make_array<int64_t>(size_t(n_cols) + 1)) : py::array(make_array<int32_t>(size_t(n_cols) + 1));
+        auto indices = make_array<int32_t>(size_t(bound));
+        py::array data;
+        switch (ds.dt) {
+            case pz::DType::U8: data = make_array<uint8_t>(size_t(bound)); break;
+            case pz::DType::U16: data = make_array<uint16_t>(size_t(bound)); break;
+            case pz::DType::U32: data = make_array<uint32_t>(size_t(bound)); break;
+            case pz::DType::I32: data = make_array<int32_t>(size_t(bound)); break;
+            case pz::DType::F32: data = make_array<float>(size_t(bound)); break;
+            case pz::DType::F64: data = make_array<double>(size_t(bound)); break;
+        }
+        int32_t* idx = indices.mutable_data();
+        uint8_t* dat = static_cast<uint8_t*>(data.mutable_data());
+        void* ip_out = indptr.mutable_data();
+        const size_t esz = ds.size;
+        uint64_t total = 0;
+        {
+            py::gil_scoped_release nogil;
+            const int T = std::max(1, threads);
+            const size_t n_work = std::min<size_t>(R, size_t(T));
+            const int per = std::max(1, T / int(std::max<size_t>(n_work, 1)));  // decoder threads inside a range when ranges are few
+            std::atomic<size_t> next{0};
+            std::exception_ptr err;
+            std::mutex err_m;
+            auto work = [&]() {
+                for (size_t i; (i = next.fetch_add(1)) < R;) {
+                    Job& j = jobs[i];
+                    if (j.c1 == j.c0) continue;
+                    try {
+                        j.ip.assign(size_t(j.c1 - j.c0) + 1, 0);
+                        pz::Output out;
+                        out.indptr = j.ip.data();
+                        out.indptr_type = pz::IntType::I64;
+                        out.indptr_capacity = j.ip.size();
+                        out.indices = idx + j.at;
+                        out.indices_type = pz::IntType::I32;
+                        out.indices_capacity = size_t(j.max_nnz);
+                        out.data = dat + j.at * esz;
+                        out.data_type = ds.dt;
+                        out.data_capacity = size_t(j.max_nnz);
+                        pz::DecodeOptions opt;
+                        opt.mode = mode;
+                        opt.threads = per;
+                        j.nnz = mx_.decode_columns(src, j.c0, j.c1, out, opt);
+                        if (j.nnz > j.max_nnz) throw pz::Error(pz::Errc::Corrupt, "decoder reported more non-zeros than the plan allows");
+                    } catch (...) {
+                        std::lock_guard<std::mutex> g(err_m);
+                        if (!err) err = std::current_exception();
+                    }
+                }
+            };
+            std::vector<std::thread> pool;
+            for (size_t k = 1; k < n_work; ++k) pool.emplace_back(work);
+            work();
+            for (auto& t : pool) t.join();
+            if (err) std::rethrow_exception(err);
+            // pack the ranges' slices together, in order (each slice only moves toward the front), and write one indptr
+            uint64_t col = 0;
+            for (const Job& j : jobs) {
+                if (j.nnz && total != j.at) {
+                    std::memmove(idx + total, idx + j.at, size_t(j.nnz) * sizeof(int32_t));
+                    std::memmove(dat + total * esz, dat + j.at * esz, size_t(j.nnz) * esz);
+                }
+                const uint32_t nc = j.c1 - j.c0;
+                for (uint32_t c = 0; c < nc; ++c) {
+                    const uint64_t v = total + uint64_t(j.ip[c]);
+                    if (wide) static_cast<int64_t*>(ip_out)[col + c] = int64_t(v);
+                    else static_cast<int32_t*>(ip_out)[col + c] = int32_t(v);
+                }
+                total += j.nnz;
+                col += nc;
+            }
+            if (wide) static_cast<int64_t*>(ip_out)[col] = int64_t(total);
+            else static_cast<int32_t*>(ip_out)[col] = int32_t(total);
+        }
+        py::array idx_arr = indices;
+        shrink(idx_arr, size_t(total));
+        shrink(data, size_t(total));
+        return py::make_tuple(indptr, idx_arr, data);
+    }
+
 private:
     struct Rng { uint64_t off; const uint8_t* p; size_t n; };
     py::object fetch_;
@@ -923,7 +1051,11 @@ PYBIND11_MODULE(_pz2, mod) {
         .def("decode", &PyMember::decode, py::arg("c0") = py::none(), py::arg("c1") = py::none(), py::kw_only(), py::arg("mode") = "native",
              py::arg("threads") = 1, py::arg("dtype") = py::none(), py::arg("index_dtype") = py::none(), py::arg("isa") = py::none(),
              py::arg("cols") = py::none(), py::arg("gene_map") = py::none(), py::arg("n_genes") = 0,
-             "Decode columns [c0, c1) (default all) into freshly allocated numpy arrays; returns a dict with indptr, indices, data, n_rows, n_cols, nnz, row_perm.");
+             "Decode columns [c0, c1) (default all) into freshly allocated numpy arrays; returns a dict with indptr, indices, data, n_rows, n_cols, nnz, row_perm.")
+        .def("decode_batch", &PyMember::decode_batch, py::arg("ranges"), py::arg("bufs"), py::kw_only(), py::arg("mode") = "native",
+             py::arg("threads") = 1, py::arg("dtype") = py::none(),
+             "Decode the columns of several (c0, c1) ranges, concatenated, into one CSR (indptr, indices int32, data) in one call. "
+             "bufs[i] holds member bytes [plan(c0, c1).byte_off, + byte_len) of range i; used for this call only.");
 
     mod.def("decode", &py_decode, py::arg("source"), py::kw_only(), py::arg("mode") = "native", py::arg("threads") = 1, py::arg("dtype") = py::none(),
             py::arg("index_dtype") = py::none(), py::arg("isa") = py::none(), py::arg("cols") = py::none(), py::arg("gene_map") = py::none(),
