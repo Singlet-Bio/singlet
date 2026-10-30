@@ -360,11 +360,27 @@ def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
                 thr.append({"loader": ld, "label": LOADER_LABELS.get(ld, ld), "tierpos": j, "tier": t, "cells_per_s": s["median"], "capped": int(capped)})
                 N.put(f"thr-{ld}-{t}", s["median"], "{:,.0f}")
     _write(thr, out / "fig1d_throughput.tsv", ["loader", "label", "tierpos", "tier", "cells_per_s", "capped"])
+    # how much of each link the .s1 reader fills: cells per second x the file's bytes per cell (chunk over-read not counted)
+    st = {(r["dataset"], r["matrix"]): r for r in _stage(cfg, "stats")}
+    wr = {(r["dataset"], r["matrix"], r["format"]): r for r in _stage(cfg, "write") if r.get("status") == "ok"}
+    for t, gbit in (("s3_0.1g", 0.1), ("s3_1g", 1), ("s3_10g", 10)):
+        rs = [r for r in mb if r["dataset"] == ds_d and r["tier"] == t and r["loader"] == "s1_stream"]
+        cps = _stats(r.get("sustained_cells_per_s") for r in rs)["median"]
+        w, s = wr.get((ds_d, "rna", "s1")), st.get((ds_d, "rna"))
+        if cps and w and s:
+            N.put(f"linkuse-{t}", 100 * cps * _f(w["bytes"]) / _f(s["cells"]) * 8 / (gbit * 1e9), "{:.0f}")
     # the 30 ms tier: .s1 sending a batch's range requests together, one at a time, and Zarr (median over panel datasets)
     for ld in ("s1_stream", "s1_stream_seq", "anndata_zarr_lazy"):
         per_ds = [_stats(r.get("first_batch_s") for r in mb if r["tier"] == "s3_1g_wan" and r["loader"] == ld and r["dataset"] == d)["median"]
                   for d in sorted({r["dataset"] for r in mb})]
         N.put(f"ttfm-wan-{ld}", _stats(per_ds)["median"], "{:.2f}")
+    # sustained rates only where the workload reads each cell at most once (on a smaller matrix it wraps around, and a reader
+    # that caches what it fetched would be timed partly from memory)
+    mbc = cfg["minibatch"]
+    need = (int(mbc["n_batches"]) + int(mbc["warmup_batches"]) + 1) * int(mbc["batch_size"])
+    ncells = {}
+    for r in _stage(cfg, "stats"):
+        ncells[r["dataset"]] = max(ncells.get(r["dataset"], 0), int(_f(r["cells"]) or 0))
     ratios = {"first": [], "sust": []}
     for d in sorted({r["dataset"] for r in mb}):
         def m(ld, k):
@@ -373,10 +389,11 @@ def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
         if a and b:
             ratios["first"].append(a / b)
         a, b = m("s1_stream", "sustained_cells_per_s"), m("s1_stream_seq", "sustained_cells_per_s")
-        if a and b:
+        if a and b and ncells.get(d, 0) >= need:
             ratios["sust"].append(a / b)
     N.put("concurrency-gain-first", _stats(ratios["first"])["median"], "{:.1f}")
     N.put("concurrency-gain-sustained", _stats(ratios["sust"])["median"], "{:.1f}")
+    N.put("concurrency-gain-sustained-n", len(ratios["sust"]))
     # first-batch table: per loader and tier, the median over panel datasets of each dataset's median over seeds. Where a
     # download-first loader was not run (above the M tier) the dataset contributes the computed download time instead, a
     # lower bound, and the cell is marked with a superscript e. Cells are strings so the table can carry the mark.

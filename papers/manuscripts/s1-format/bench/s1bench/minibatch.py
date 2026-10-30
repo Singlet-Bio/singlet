@@ -217,6 +217,10 @@ class S1StreamLoader(Loader):
     def read(self, blocks):
         return self.s.batch(blocks)
 
+    def iterate(self, batches):
+        # as S1Cells reads (prefetch=1): the next batch's requests are in flight while one decodes
+        return self.s.iter_batches(batches, ahead=1)
+
     def to_tensor(self, x):
         return x
 
@@ -302,12 +306,20 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
     if mb.get("_first_only"):
         rec["sustained_batches"] = 0
         return rec
-    for b in batches[1:1 + int(mb["warmup_batches"])]:
-        L.to_tensor(L.read(b))
-    t5 = time.perf_counter()
-    cells = 0
-    for b in batches[1 + int(mb["warmup_batches"]):]:
-        cells += int(L.to_tensor(L.read(b)).size(0))
+    warm = int(mb["warmup_batches"])
+    if hasattr(L, "iterate"):  # a loader that reads ahead on its own (the .s1 reader, as S1Cells uses it)
+        it = L.iterate(batches[1:])
+        for _ in range(warm):
+            L.to_tensor(next(it))
+        t5 = time.perf_counter()
+        cells = sum(int(L.to_tensor(x).size(0)) for x in it)
+    else:
+        for b in batches[1:1 + warm]:
+            L.to_tensor(L.read(b))
+        t5 = time.perf_counter()
+        cells = 0
+        for b in batches[1 + warm:]:
+            cells += int(L.to_tensor(L.read(b)).size(0))
     t6 = time.perf_counter()
     rec.update({"sustained_cells_per_s": cells / (t6 - t5), "sustained_batches": len(batches) - 1 - int(mb["warmup_batches"])})
     try:
