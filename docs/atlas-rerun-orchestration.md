@@ -395,3 +395,10 @@ reports `no_producer` until one is configured), then to `scripts/beta/beta_inges
 ticks up to `beta.max_attempts`. The target must name Beta: host, `beta.bucket` and `beta.database` contain "beta" and are not
 a production name, or nothing runs. A manifest naming a `private/`, restricted, BAM, reads or genotype key is refused.
 
+**Evidence (2026-10-30, Clipper job 793180, `bench/atlas_rerun/perrun_vs_pooled.sbatch`).** GSM6470208 (2 runs, 121.8 M pairs),
+binary `singlet-pc-tip` (prod/campaign, #82, R11 on in both), the orchestrator's own io and compute stages, `--output-format mtx`.
+A = per-run `--runs-dir`, B = the same staged runs pooled (`pool_runs`, 245 s). All 8 count matrices (exon, intron, ambient-corrected,
+ambiguous, sj, splice_psi, mt_heteroplasmy, vdj) have the same 118,371 barcodes and 0 differing entries. 70 files identical; the 6 that
+differ are the clip5p probe and rRNA samples (read order), the Q30 line (pool re-encoded with `--quality none`), and timings/paths.
+Compute wall 1063 s (A) vs 1016 s (B), peak RSS 37.6 GB both, and A skips the pool (245 s, one copy of the reads).
+
