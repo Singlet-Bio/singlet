@@ -102,6 +102,19 @@ dd <- read_singlet_dir("samples/GSM4120733")            # a sample directory -> 
 
 `as_sce()` and `as_seurat()` convert such a directory (they need its per-gene `spliced.1pz` or `gene_counts.1pz`).
 
+## How to cite
+
+In a paper, cite the original study of every dataset you use (its paper and GEO accession; the Cite button on each study page at [singlet.bio](https://singlet.bio) gives both) and singlet.bio with its release and the date you downloaded the data. `citation("singlet")` prints the singlet.bio entry and
+this package's entry with the installed version:
+
+```r
+citation("singlet")
+```
+
+> DeBruine Z. singlet.bio: an open atlas of public single-cell RNA-seq studies reprocessed from raw reads. Singlet Research Alpha (October 2026). https://singlet.bio (accessed YYYY-MM-DD).
+
+More formats: [singlet.bio/about#cite](https://singlet.bio/about#cite).
+
 ## License
 
 MIT. The bundled Zstandard library is BSD-licensed (see `inst/COPYRIGHTS`). Atlas data is CC0.
