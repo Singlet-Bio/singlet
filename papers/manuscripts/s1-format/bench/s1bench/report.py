@@ -535,6 +535,9 @@ def env_section(cfg: Config, N: Numbers) -> None:
     for pkg, ver in (e.get("packages") or {}).items():
         if ver:
             N.put(f"ver-{pkg}", _tex_escape(str(ver)))
+    # the released singlet versions the paper cites (config `release`): their package code is the code that was measured
+    for k, ver in (cfg.get("release") or {}).items():
+        N.put(f"rel-{k}", _tex_escape(str(ver)))
     if e.get("R"):  # e.g. "R version 4.4.3 (2025-02-28)  BPCells 0.3.1"
         rv, bp = re.search(r"R version (\S+)", e["R"]), re.search(r"BPCells (\S+)", e["R"])
         N.put("ver-R", rv.group(1) if rv else _tex_escape(e["R"]))
