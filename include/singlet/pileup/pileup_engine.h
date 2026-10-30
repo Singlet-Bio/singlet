@@ -2053,6 +2053,7 @@ public:
         }
         if (pdbg) std::cerr << "[polya-debug] eligible " << pd[0] << ", clipped " << pd[1] << ": nb<2 " << pd[2] << ", cl out of range " << pd[3]
                             << ", A-fraction " << pd[4] << ", not firstA " << pd[5] << ", kept clipped " << pd[6] << "; unclipped kept " << pd[7] << ", unclipped dropped " << pd[8] << "
+
 ";
         return true;
     }
