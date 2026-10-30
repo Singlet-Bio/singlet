@@ -45,14 +45,16 @@ def _wait(url: str, timeout: float = 30.0) -> None:
 
 
 @contextmanager
-def object_store(cfg: Config, files: dict[str, Path], workdir: Path, gbit: Optional[float] = None) -> Iterator[str]:
+def object_store(cfg: Config, files: dict[str, Path], workdir: Path, gbit: Optional[float] = None,
+                 stats: Optional[Path] = None) -> Iterator[str]:
     """Start the store and Toxiproxy, upload `files` (key -> local path) and yield the proxied base URL. With the rclone
     store, `gbit` caps the server's total bandwidth (all connections together: a reader that opens several connections
-    shares the tier's bandwidth, it does not multiply it); Toxiproxy then adds only the latency."""
+    shares the tier's bandwidth, it does not multiply it); Toxiproxy then adds only the latency. With `stats`, the
+    bandwidth proxy writes the bytes and requests it has served to that file (bwproxy.py)."""
     n = cfg["netem"]
     workdir.mkdir(parents=True, exist_ok=True)
     if n.get("store", "rclone") == "rclone":
-        with _rclone_store(cfg, files, workdir, gbit) as base:
+        with _rclone_store(cfg, files, workdir, gbit, stats) as base:
             yield base
         return
     env = {"MINIO_ROOT_USER": n["access_key"], "MINIO_ROOT_PASSWORD": n["secret_key"], "PATH": "/usr/bin:/bin"}
@@ -103,7 +105,8 @@ def _place(src: Path, dst: Path) -> None:
 
 
 @contextmanager
-def _rclone_store(cfg: Config, files: dict[str, Path], workdir: Path, gbit: Optional[float] = None) -> Iterator[str]:
+def _rclone_store(cfg: Config, files: dict[str, Path], workdir: Path, gbit: Optional[float] = None,
+                  stats: Optional[Path] = None) -> Iterator[str]:
     """`rclone serve s3` over workdir/s3 (bucket = a directory, anonymous access, path-style), behind Toxiproxy (latency).
     With `gbit`, bwproxy.py sits between them and limits the total rate of all connections together, with a burst of at
     most 64 KiB (rclone's own --bwlimit lets several MiB through at full speed after idle, which flatters small reads)."""
@@ -121,7 +124,8 @@ def _rclone_store(cfg: Config, files: dict[str, Path], workdir: Path, gbit: Opti
     upstream = port
     if gbit:
         upstream = int(n.get("bwproxy_port", port + 3))
-        procs.append(subprocess.Popen([sys.executable, "-m", "s1bench.bwproxy", str(upstream), str(port), str(gbit * 1e9 / 8)],
+        procs.append(subprocess.Popen([sys.executable, "-m", "s1bench.bwproxy", str(upstream), str(port), str(gbit * 1e9 / 8),
+                                       *([str(stats)] if stats else [])],
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     tox = subprocess.Popen([n["toxiproxy_server"], "-port", str(n["toxiproxy_api_port"])], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL)

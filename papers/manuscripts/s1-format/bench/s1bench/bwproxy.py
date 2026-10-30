@@ -1,6 +1,6 @@
 """A TCP proxy that limits the total rate of all its connections together, for the network tiers (netem.py).
 
-    python -m s1bench.bwproxy LISTEN_PORT UPSTREAM_PORT BYTES_PER_S
+    python -m s1bench.bwproxy LISTEN_PORT UPSTREAM_PORT BYTES_PER_S [STATS_FILE]
 
 rclone's --bwlimit lets several MiB through at full speed after an idle period, and Toxiproxy's bandwidth toxic limits
 each connection on its own, so neither models a link that every request shares. Here every byte sent toward the client,
@@ -11,6 +11,9 @@ The bucket may go into debt: a sender takes its tokens and then sleeps off the d
 millisecond resolution, so a sleep can overshoot by about a millisecond; the overshoot refills the bucket and is spent by
 the next sender, which keeps the long-run rate at BYTES_PER_S. (Waiting for the tokens before sending, with a 64 KiB
 bucket, lost the overshoot on every step and held a 1 Gbit/s tier to about 0.4 Gbit/s.)
+
+With STATS_FILE, the proxy writes "<bytes sent to clients> <requests>" there every 0.1 s. A request is counted at each
+end of request headers (CRLF CRLF) a client sends; the readers here send only GET and HEAD requests, which have no body.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ import sys
 import time
 
 CHUNK = 64 * 1024   # bytes read from the server, and passed on, per step
+COUNT = [0, 0]      # bytes sent to clients, requests from clients
 
 
 class Bucket:
@@ -44,6 +48,10 @@ async def pipe(reader, writer, bucket=None) -> None:
             b = await reader.read(CHUNK)
             if not b:
                 break
+            if bucket is None:
+                COUNT[1] += b.count(b"\r\n\r\n")
+            else:
+                COUNT[0] += len(b)
             if bucket is not None:
                 await bucket.take(len(b))
                 writer.write(b)
@@ -60,8 +68,21 @@ async def pipe(reader, writer, bucket=None) -> None:
             pass
 
 
-async def main(listen: int, upstream: int, rate: float) -> None:
+async def write_stats(path: str) -> None:
+    import os
+
+    while True:
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            f.write(f"{COUNT[0]} {COUNT[1]}\n")
+        os.replace(tmp, path)
+        await asyncio.sleep(0.1)
+
+
+async def main(listen: int, upstream: int, rate: float, stats: str = "") -> None:
     bucket = Bucket(rate)
+    if stats:
+        asyncio.get_running_loop().create_task(write_stats(stats))
 
     async def handle(cr, cw):
         try:
@@ -77,4 +98,4 @@ async def main(listen: int, upstream: int, rate: float) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main(int(sys.argv[1]), int(sys.argv[2]), float(sys.argv[3])))
+    asyncio.run(main(int(sys.argv[1]), int(sys.argv[2]), float(sys.argv[3]), sys.argv[4] if len(sys.argv) > 4 else ""))

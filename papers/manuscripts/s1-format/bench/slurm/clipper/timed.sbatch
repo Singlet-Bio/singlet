@@ -36,6 +36,16 @@ if [ -n "${S1_PKG_OVERLAY:-}" ]; then
   export PYTHONPATH="$SITE:$PYTHONPATH"
   python -c "import singlet, singlet.torch; print('singlet', singlet.__version__, singlet.__file__)"
 fi
+# zarr-python 3 for the zarr3 format and loader only (the env keeps zarr 2 for AnnData): a side install, put first on
+# PYTHONPATH by the child processes of those configurations (decode.child_env), never by the env as a whole.
+export S1_ZARR3_SITE=$S1/site/zarr3
+(
+  flock 9
+  if [ ! -f "$S1_ZARR3_SITE/.ok" ]; then
+    rm -rf "$S1_ZARR3_SITE.part"
+    pip install -q --no-deps --target "$S1_ZARR3_SITE.part" 'zarr>=3.1,<3.2' donfig 'numcodecs>=0.15,<0.17' google-crc32c       crc32c 'typing_extensions>=4.12' && touch "$S1_ZARR3_SITE.part/.ok" && mv "$S1_ZARR3_SITE.part" "$S1_ZARR3_SITE"
+  fi
+) 9>"$S1/src/.lock-zarr3"
 IFS=, read -ra DS <<<"${DS_LIST:?set DS_LIST}"
 E=${DS[${SLURM_ARRAY_TASK_ID:-0}]}
 D=${E%@*}
@@ -82,6 +92,15 @@ export S1BENCH_DATA=$LOCAL S1BENCH_NFS_DATA=$S1/data
 s1b env >/dev/null
 mkdir -p "$RES/env" && cp "$RES/env.json" "$RES/env/$D.json"   # the host and versions of this dataset's run
 
+# the zarr3 files: written here once (in the side install's process) and kept with the other formats
+for u in "$S1/data/formats/$D".*; do
+  k=$(basename "$u")
+  if [ ! -d "$u/zarr3.zarr3" ] && [[ " $STAGES " =~ " zarr3 " ]]; then
+    PYTHONPATH="$S1_ZARR3_SITE:$PYTHONPATH" s1b "${SET[@]}" write --datasets "${k%%.*}" --formats zarr3
+    [ -d "$LOCAL/formats/$k/zarr3.zarr3" ] && cp -r "$LOCAL/formats/$k/zarr3.zarr3" "$u/"
+  fi
+done
+
 for st in $STAGES; do
   t0=$SECONDS
   case $st in
@@ -90,6 +109,10 @@ for st in $STAGES; do
     sweep) s1b "${SET[@]}" --set 'storages=[{name: local}]' decode --datasets "$D" --sweep --formats s1,h5ad_gzip,csc_i32 $FORCE ;;
     # S1_TIERS (comma-separated tier names) reruns only those tiers and keeps the other tiers' rows
     minibatch) s1b "${SET[@]}" minibatch --datasets "$D" ${S1_TIERS:+--tiers "$S1_TIERS"} $FORCE ;;
+    zarr3) ;;   # written above
+    # the real object store: S1_R2_URL and S1_R2_WRITE come from a file only the job's user can read
+    netsweep_r2) set +x; source "$S1/secrets/r2bench.env"; export S1_R2_URL S1_R2_WRITE
+      s1b "${SET[@]}" netsweep --r2 --datasets "$D" $FORCE ;;
     *) s1b "${SET[@]}" "$st" --datasets "$D" $FORCE ;;
   esac
   echo "stage $st $D done in $((SECONDS - t0)) s"

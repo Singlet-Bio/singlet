@@ -277,6 +277,59 @@ class ParquetCoo(_ScipyTriple, Format):
         return x, g, b
 
 
+ZARR3_CHUNK = 49_152          # elements per inner chunk: the .s1 library's default chunk size in non-zeros
+ZARR3_SHARD_CHUNKS = 64       # inner chunks per shard object
+
+
+def zarr3_dtypes(c: Canon) -> tuple:
+    """The narrowest unsigned types that hold the gene ids and the counts: what a careful writer of plain arrays picks."""
+    idx = np.uint16 if c.m <= 1 << 16 else np.uint32
+    vmax = int(c.data.max()) if c.nnz else 0
+    val = np.uint8 if vmax < 1 << 8 else np.uint16 if vmax < 1 << 16 else np.uint32
+    return idx, val
+
+
+class Zarr3Shard(_ScipyTriple, Format):
+    """The generic-codec control: cells x genes CSR in Zarr v3, data and indices in inner chunks of ZARR3_CHUNK elements
+    (the .s1 chunk size) packed into shard objects, Blosc zstd with bit shuffling, narrowest integer types; indptr whole.
+    It has the random-access granularity of .s1 and a general-purpose codec, so the difference between the two is the
+    codec. Needs zarr-python 3, which the benchmark env (zarr 2 for AnnData) does not have: these processes run with a
+    side install first on PYTHONPATH (S1_ZARR3_SITE; see slurm/clipper/timed.sbatch)."""
+
+    id, label, ext, is_dir = "zarr3", "Zarr v3 sharded (Blosc zstd)", ".zarr3", True
+
+    def write(self, c, path, threads):
+        import zarr
+        from zarr.codecs import BloscCodec
+
+        zarr.config.set({"async.concurrency": max(4, threads), "threading.max_workers": threads})
+        x = _cells_by_genes_csr(c)
+        idt, vdt = zarr3_dtypes(c)
+        if path.exists():
+            shutil.rmtree(path)
+        g = zarr.open_group(str(path), mode="w", zarr_format=3)
+        blosc = BloscCodec(cname="zstd", clevel=5, shuffle="bitshuffle")
+        n = max(1, c.nnz)
+        for name, arr in (("data", x.data.astype(vdt)), ("indices", x.indices.astype(idt))):
+            a = g.create_array(name, shape=(c.nnz,), dtype=arr.dtype, chunks=(min(ZARR3_CHUNK, n),),
+                               shards=(min(ZARR3_CHUNK * ZARR3_SHARD_CHUNKS, -(-n // ZARR3_CHUNK) * ZARR3_CHUNK),), compressors=blosc)
+            a[:] = arr
+        ip = g.create_array("indptr", shape=(c.n + 1,), dtype=np.int64, chunks=(c.n + 1,), compressors=blosc)
+        ip[:] = x.indptr.astype(np.int64)
+        g.attrs.update({"shape": [int(c.n), int(c.m)], "layout": "csr cells x genes"})
+        _write_names(path / "genes.txt.gz", c.genes, compress=True)
+        _write_names(path / "barcodes.txt.gz", c.barcodes, compress=True)
+
+    def load(self, path, threads):
+        import zarr
+
+        zarr.config.set({"async.concurrency": max(4, threads), "threading.max_workers": threads})
+        g = zarr.open_group(str(path), mode="r")
+        n, m = g.attrs["shape"]
+        x = sp.csr_matrix((g["data"][:], g["indices"][:], g["indptr"][:]), shape=(n, m))
+        return x.T, _read_names(path / "genes.txt.gz"), _read_names(path / "barcodes.txt.gz")
+
+
 FORMATS: list[Format] = [
     CscI32(),
     CscZstd(),
@@ -289,4 +342,5 @@ FORMATS: list[Format] = [
     Loom(),
     Soma(),
     ParquetCoo(),
+    Zarr3Shard(),
 ]

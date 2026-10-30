@@ -147,6 +147,7 @@ class ScDataset(Loader):
     fmt = "h5ad_gzip"
     own_sampler = True
     modules = ("anndata", "h5py", "scdataset")
+    default_fetch = False   # True: the package's own fetch_factor (16 batches per fetch) instead of one batch per fetch
 
     def open(self, src, threads):
         import anndata as ad
@@ -155,12 +156,14 @@ class ScDataset(Loader):
         self.a = ad.read_h5ad(src, backed="r")
         # a fetch is a view of the backed file; batches are sliced from it, and backed AnnData cannot view a view, so each
         # fetch is read into memory (the fetch_transform of the scDataset AnnData examples)
+        kw = {} if self.default_fetch else {"fetch_factor": self.fetch_factor}
         self.ds = scDataset(self.a, BlockShuffling(block_size=self.block_size), batch_size=self.batch_size,
-                            fetch_factor=self.fetch_factor, fetch_transform=lambda v: v.to_memory())
-        self.it = iter(self.ds)
+                            fetch_transform=lambda v: v.to_memory(), **kw)
+        self.src = self.ds if not self.workers else _dataloader(self.ds, self.workers)
+        self.it = iter(self.src)
 
     def read(self, blocks):
-        b = _next_epoch(self, lambda: iter(self.ds))
+        b = _next_epoch(self, lambda: iter(self.src))
         return getattr(b, "X", b)
 
 
@@ -212,14 +215,15 @@ class S1StreamLoader(Loader):
     def open(self, src, threads):
         from singlet.torch import S1Stream   # the package's streaming reader (local path or HTTP ranges)
 
-        self.s = S1Stream(src, member="counts", threads=threads, order=self.order, io_threads=self.io_threads)
+        self.s = S1Stream(src, member="counts", threads=threads, order=self.order,
+                          io_threads=getattr(self, "io_override", None) or self.io_threads)
 
     def read(self, blocks):
         return self.s.batch(blocks)
 
     def iterate(self, batches):
         # as S1Cells reads (prefetch=1): the next batch's requests are in flight while one decodes
-        return self.s.iter_batches(batches, ahead=1)
+        return self.s.iter_batches(batches, ahead=getattr(self, "ahead", 1))
 
     def to_tensor(self, x):
         return x
@@ -237,6 +241,92 @@ class S1StreamSeq(S1StreamLoader):
     io_threads = 1
 
 
+class ScDatasetDefault(ScDataset):
+    """scDataset as its documentation configures it: fetch_factor left at the package default."""
+    default_fetch = True
+
+
+def _dataloader(ds, workers: int):
+    import torch
+
+    return torch.utils.data.DataLoader(ds, batch_size=None, num_workers=workers, persistent_workers=True, prefetch_factor=2)
+
+
+class S1CellsLoader(Loader):
+    """The package's torch dataset (S1Cells, its own block sampler) under a torch DataLoader with `workers` processes, each
+    with threads // workers decode threads; workers = 0 reads in the training process."""
+
+    fmt = "s1"
+    access = "range"
+    returns_tensor = True
+    own_sampler = True
+    modules = ("singlet.torch", "torch")
+
+    def open(self, src, threads):
+        from singlet.torch import S1Cells
+
+        per = max(1, threads // max(1, self.workers))
+        self.ds = S1Cells(src, batch_size=self.batch_size, block_size=self.block_size, seed=self.seed, threads=per)
+        self.src = self.ds if not self.workers else _dataloader(self.ds, self.workers)
+        self.it = iter(self.src)
+
+    def read(self, blocks):
+        return _next_epoch(self, lambda: iter(self.src))["X"]
+
+    def to_tensor(self, x):
+        return x
+
+
+class Zarr3ShardLoader(Loader):
+    """CSR in sharded Zarr v3 (formats.Zarr3Shard): indptr read at open, then per block the data and indices slices it
+    needs, all of a batch's slices at once on a thread pool (zarr fetches the inner chunks of each slice itself)."""
+
+    fmt = "zarr3"
+    access = "range"
+    modules = ("zarr", "fsspec", "scipy.sparse")
+
+    def open(self, src, threads):
+        from concurrent.futures import ThreadPoolExecutor
+
+        import zarr
+
+        zarr.config.set({"async.concurrency": 64, "threading.max_workers": threads})
+        if src.startswith("http"):
+            store = zarr.storage.FsspecStore.from_url(src, read_only=True)
+        else:
+            store = zarr.storage.LocalStore(src, read_only=True)
+        g = zarr.open_group(store, mode="r")
+        self.shape = tuple(g.attrs["shape"])
+        self.indptr = g["indptr"][:]
+        self.d, self.ix = g["data"], g["indices"]
+        self.pool = ThreadPoolExecutor(max(8, threads))
+
+    def read(self, blocks):
+        import scipy.sparse as sp
+
+        runs = list(_merge(blocks))
+        spans = [(int(self.indptr[a]), int(self.indptr[b])) for a, b in runs]
+        fd = [self.pool.submit(lambda s=s: self.d[s[0]:s[1]]) for s in spans]
+        fi = [self.pool.submit(lambda s=s: self.ix[s[0]:s[1]]) for s in spans]
+        data = np.concatenate([f.result() for f in fd]) if fd else np.zeros(0, np.uint32)
+        ind = np.concatenate([f.result() for f in fi]) if fi else np.zeros(0, np.uint32)
+        ip = np.concatenate([[0], np.cumsum(np.concatenate([np.diff(self.indptr[a:b + 1]) for a, b in runs]))])
+        return sp.csr_matrix((data, ind, ip), shape=(len(ip) - 1, self.shape[1]))
+
+
+def _merge(blocks):
+    cur = None
+    for a, b in sorted(blocks):
+        if cur and a <= cur[1]:
+            cur = (cur[0], max(cur[1], b))
+        else:
+            if cur:
+                yield cur
+            cur = (a, b)
+    if cur:
+        yield cur
+
+
 LOADERS = {
     "anndata_inmem": AnndataInmem,
     "anndata_backed": AnndataBacked,
@@ -246,6 +336,9 @@ LOADERS = {
     "s1_stream": S1StreamLoader,
     "s1_stream_canonical": S1StreamCanonical,
     "s1_stream_seq": S1StreamSeq,
+    "scdataset_default": ScDatasetDefault,
+    "s1_cells": S1CellsLoader,
+    "zarr3_shard": Zarr3ShardLoader,
 }
 
 
@@ -277,7 +370,14 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
         importlib.import_module(m)
     L.batch_size, L.block_size, L.seed = int(mb["batch_size"]), int(mb["block_size"]), seed
     L.fetch_factor = int(mb.get("fetch_factor", 1))   # one batch per fetch: the same 8 blocks of 64 cells as every loader
+    L.workers = int(mb.get("_workers") or 0)          # DataLoader worker processes (s1_cells, scdataset)
+    if mb.get("_io_threads"):                         # the in-flight sweep (netsweep): requests at once, batches ahead
+        L.io_override = int(mb["_io_threads"])
+    if mb.get("_ahead") not in (None, ""):
+        L.ahead = int(mb["_ahead"])
     rec: dict = {"access": L.access if src.startswith("http") else "local"}
+    stats = _proxy_reader(mb.get("_proxy_stats"))
+    c0 = stats()
     t0 = time.perf_counter()
     local = src
     if src.startswith("http") and L.access == "download":
@@ -303,6 +403,9 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
         torch.cuda.synchronize()
         rec.update({"to_cuda_s": time.perf_counter() - t5, "device": torch.cuda.get_device_name(0)})
     rec.update({f"first_{k}": v for k, v in L.split().items()})
+    c1 = stats()
+    if c0 is not None and c1 is not None:   # bytes and requests the store served for the open and the first minibatch
+        rec.update({"first_proxy_bytes": c1[0] - c0[0], "first_proxy_requests": c1[1] - c0[1]})
     if mb.get("_first_only"):
         rec["sustained_batches"] = 0
         return rec
@@ -311,16 +414,28 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
         it = L.iterate(batches[1:])
         for _ in range(warm):
             L.to_tensor(next(it))
-        t5 = time.perf_counter()
-        cells = sum(int(L.to_tensor(x).size(0)) for x in it)
+        c2, t5 = stats(), time.perf_counter()
+        cells, per, last = 0, [], t5
+        for x in it:
+            cells += int(L.to_tensor(x).size(0))
+            now = time.perf_counter()
+            per.append(now - last)
+            last = now
     else:
         for b in batches[1:1 + warm]:
             L.to_tensor(L.read(b))
-        t5 = time.perf_counter()
-        cells = 0
+        c2, t5 = stats(), time.perf_counter()
+        cells, per = 0, []
         for b in batches[1 + warm:]:
+            t = time.perf_counter()
             cells += int(L.to_tensor(L.read(b)).size(0))
+            per.append(time.perf_counter() - t)
     t6 = time.perf_counter()
+    c3 = stats()
+    rec["batch_s"] = ",".join(f"{v:.5f}" for v in per)   # seconds per sustained minibatch, for the latency CDFs
+    if c2 is not None and c3 is not None:
+        nb = max(1, len(per))
+        rec.update({"proxy_bytes_per_batch": (c3[0] - c2[0]) / nb, "proxy_requests_per_batch": (c3[1] - c2[1]) / nb})
     rec.update({"sustained_cells_per_s": cells / (t6 - t5), "sustained_batches": len(batches) - 1 - int(mb["warmup_batches"])})
     try:
         import resource
@@ -331,12 +446,32 @@ def measure_one(cfg: Config, unit_key: str, loader: str, src: str, seed: int, th
     return rec
 
 
+def _proxy_reader(path):
+    """Counters of bwproxy (bytes sent to clients, requests seen), or None when the store has no counting proxy. The
+    timed region excludes these reads: they happen between the clock readings that bound each phase."""
+    if not path:
+        return lambda: None
+
+    def read():
+        time.sleep(0.25)   # the proxy writes its counters every 0.1 s
+        try:
+            b, r = Path(path).read_text().split()
+            return int(b), int(r)
+        except (OSError, ValueError):
+            return None
+
+    return read
+
+
 def _child(cfg: Config, overrides, unit_key, loader, src, seed, threads, n_cells) -> dict:
     first_only = seed not in cfg["minibatch"].get("sustained_seeds", cfg["minibatch"]["seeds"])
     cmd = [sys.executable, "-m", "s1bench", "--config", str(cfg.path), *sum((["--set", o] for o in overrides), []),
            "--set", f"minibatch._n_cells={n_cells}", "--set", f"minibatch._first_only={str(first_only).lower()}",
            "minibatch-one", unit_key, loader, src, str(seed), str(threads)]
-    r = subprocess.run(cmd, capture_output=True, text=True, cwd=BENCH_DIR, timeout=3 * 3600)
+    from .decode import child_env
+
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=BENCH_DIR, timeout=3 * 3600,
+                       env=child_env(LOADERS[loader].fmt if loader in LOADERS else ""))
     if r.returncode != 0:
         return {"status": "error", "note": (r.stderr.strip().splitlines() or ["failed"])[-1]}
     return {"status": "ok", **json.loads(r.stdout.strip().splitlines()[-1])}

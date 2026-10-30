@@ -9,7 +9,7 @@ datasets: ../datasets.yaml
 release: {singlet_py: 1.3.2, singlet_r: 1.2.2}
 
 formats: [csc_i32, mtx_gz, tenx_h5, h5ad_none, h5ad_gzip, h5ad_lzf, zarr, loom, soma, parquet_coo, csc_zstd19,
-          rds_gz, rds_xz, bpcells, s1, s1_pack]
+          rds_gz, rds_xz, bpcells, s1, s1_pack, zarr3]
 loom_max_entries: 2.0e9                   # loom stores dense chunks; skip above this many matrix entries
 
 threads:
@@ -27,8 +27,9 @@ storages:
   - {name: nfs, root: "${S1BENCH_NFS_DATA:-}", threads: [4], caches: [cold]}
 
 decode:
+  prime: true                             # import and set up each library on a tiny file before the timed reads
   big_nnz: 4.0e8                          # above this many non-zeros: big_formats only, headline threads, local disk, no sweep
-  big_formats: [csc_i32, tenx_h5, h5ad_none, h5ad_gzip, zarr, soma, s1, s1_pack]
+  big_formats: [csc_i32, tenx_h5, h5ad_none, h5ad_gzip, zarr, soma, s1, s1_pack, zarr3]
 
 s1:
   isas: [scalar, avx2, avx512]
@@ -84,6 +85,25 @@ netem:
   bucket: s1bench
   access_key: s1bench
   secret_key: s1bench-secret
+
+# Review round 3. access: random-minibatch costs from each format's index; chunk_sweep re-encodes .s1 at these budgets.
+access:
+  n_batches: 200
+  chunk_sweep: [4096, 16384, 49152, 131072, 393216]
+  sweep_datasets: [pbmc10k_v3, tabula_muris_facs, hlca_core]
+
+# netsweep: added round-trip times and requests in flight at one link rate; DataLoader workers; the real store (R2).
+netsweep:
+  gbit: 1
+  rtt_ms: [0, 5, 10, 30, 100, 200]
+  loaders: [s1_stream, anndata_zarr_lazy, soma_ml, zarr3_shard]
+  inflight_rtt_ms: [30, 100]
+  inflight: [[1, 0], [2, 1], [4, 1], [8, 1], [16, 2], [32, 4], [64, 8]]   # [io_threads, minibatches ahead]
+  workers: [0, 2, 4]
+  workers_rtt_ms: 1
+  n_batches: 60
+  warmup_batches: 5
+  r2_loaders: [s1_stream, anndata_zarr_lazy, zarr3_shard, anndata_inmem]
 
 eco:
   datasets: [pbmc10k_v3, hlca_core]

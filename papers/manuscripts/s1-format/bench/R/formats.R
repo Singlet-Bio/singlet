@@ -71,6 +71,8 @@ if (cmd == "write") {
 } else if (cmd == "time") {
   path <- args[3]; threads <- as.integer(args[4]); reps <- as.integer(args[5]); warm <- as.integer(args[6])
   cold <- args[7] == "1"
+  # packages are loaded before the clock starts, as in a script that reads a matrix (the Python formats are primed alike)
+  if (fmt == "bpcells") suppressPackageStartupMessages(library(BPCells))
   out <- c()
   for (k in seq_len(warm + reps)) {
     if (cold) evict(path)

@@ -40,6 +40,11 @@ def main(argv=None) -> int:
     p = stage("minibatch", "time to first minibatch and sustained throughput (loader panel)")
     p.add_argument("--tiers", default=None, help="comma-separated tier names (default: all)")
     stage("eco", "the Fig. 4 calls, timed")
+    stage("access", "bytes, requests and index read per random minibatch, from each format's index (untimed)")
+    p = stage("netsweep", "round-trip time, requests in flight and DataLoader workers (loader panel)")
+    p.add_argument("--r2", action="store_true", help="the real object store (S1_R2_URL) instead of the emulated grids")
+    p = stage("writecost", "seconds and peak memory to write each format")
+    p.add_argument("--formats", default=None)
     sub.add_parser("report", help="aggregate results into generated/ for the manuscript")
     stage("all", "every stage for the selected datasets, then report")
     # internal: one timed configuration in a fresh process
@@ -49,6 +54,9 @@ def main(argv=None) -> int:
     p = sub.add_parser("minibatch-one")
     p.add_argument("unit"), p.add_argument("loader"), p.add_argument("src"), p.add_argument("seed", type=int)
     p.add_argument("threads", type=int)
+
+    p = sub.add_parser("writecost-one")
+    p.add_argument("unit"), p.add_argument("fmt"), p.add_argument("threads", type=int)
 
     a = ap.parse_args(argv)
     cfg = util.load_config(a.config, a.set)
@@ -69,6 +77,12 @@ def main(argv=None) -> int:
         from . import minibatch
 
         print(json.dumps(minibatch.measure_one(cfg, a.unit, a.loader, a.src, a.seed, a.threads)))
+        return 0
+
+    if a.stage == "writecost-one":
+        from . import writecost
+
+        print(json.dumps(writecost.one(cfg, a.unit, a.fmt, a.threads)))
         return 0
 
     units = util.select_units(cfg, a.datasets, a.extensions)
@@ -109,6 +123,19 @@ def main(argv=None) -> int:
 
             panel = [u for u in units if u.dataset.get("loader_panel") and u.name == "rna"]
             minibatch.run(cfg, panel, a.force, a.set, a.tiers.split(",") if getattr(a, "tiers", None) else None)
+        elif s == "access":
+            from . import access
+
+            access.run(cfg, units, a.force)
+        elif s == "netsweep":
+            from . import netsweep
+
+            panel = [u for u in units if u.dataset.get("loader_panel") and u.name == "rna"]
+            netsweep.run(cfg, panel, a.force, a.set, r2=a.r2)
+        elif s == "writecost":
+            from . import writecost
+
+            writecost.run(cfg, units, fmts, a.force, a.set)
         elif s == "eco":
             from . import eco
 

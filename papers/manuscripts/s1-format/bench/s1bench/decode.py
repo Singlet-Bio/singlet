@@ -28,6 +28,11 @@ def _one(cfg: Config, unit_key: str, fmt_id: str, threads: int, cold: bool, extr
     reps, warm = int(cfg["repeats"]), 0 if cold else int(cfg["warmup"])
     long_s = cfg.get("long_run_s")
     before = (lambda: evict(p)) if cold else None
+    # Imports and the library's first-use set-up are not part of a read: a script that reads a matrix has them done. A
+    # tiny file of the same format is written and read once, untimed, so the timed runs start with the library loaded
+    # and without touching the timed file (decode.prime; R formats load their packages before their own timing loop).
+    if (cfg.get("decode") or {}).get("prime", True) and f.lang != "r" and not extra.get("codec_only"):
+        _prime(cfg, f, threads, extra)
     # Timed: the library's own read into memory (load), not the benchmark's conversion and checks (to_canon), which the
     # write stage's round trip already covers.
     if f.lang == "r":
@@ -48,6 +53,30 @@ def _one(cfg: Config, unit_key: str, fmt_id: str, threads: int, cold: bool, extr
     return res
 
 
+def _prime(cfg: Config, f, threads: int, extra: dict) -> None:
+    import shutil
+    import tempfile
+
+    import numpy as np
+    import scipy.sparse as sp
+
+    from .util import canon_from_scipy
+
+    rng = np.random.default_rng(0)
+    x = sp.random(60, 40, density=0.2, format="csc", random_state=rng, data_rvs=lambda k: rng.integers(1, 9, k))
+    c = canon_from_scipy(x, [f"g{i}" for i in range(60)], [f"c{j}" for j in range(40)])
+    d = Path(tempfile.mkdtemp(prefix="prime-", dir=cfg.data_dir / "tmp" if (cfg.data_dir / "tmp").is_dir() else None))
+    try:
+        q = f.path(d)
+        f.write(c, q, threads)
+        if f.id.startswith("s1"):
+            f.load(q, threads, mode=extra.get("mode", "canonical"), isa=extra.get("isa"))
+        else:
+            f.load(q, threads)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _isa_used(requested) -> str:
     """The kernel the codec actually ran: a request the CPU cannot serve falls back (AVX-512 needs VBMI2)."""
     from singlet import _pz2  # type: ignore
@@ -62,10 +91,19 @@ def _isa_used(requested) -> str:
 def _child(cfg_path: str, unit_key: str, fmt_id: str, threads: int, cold: bool, extra: dict, overrides) -> dict:
     cmd = [sys.executable, "-m", "s1bench", "--config", cfg_path, *sum((["--set", o] for o in overrides), []),
            "decode-one", unit_key, fmt_id, str(threads), str(int(cold)), json.dumps(extra)]
-    r = subprocess.run(cmd, capture_output=True, text=True, cwd=BENCH_DIR)
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=BENCH_DIR, env=child_env(fmt_id))
     if r.returncode != 0:
         return {"status": "error", "note": r.stderr.strip().splitlines()[-1] if r.stderr.strip() else "failed"}
     return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+def child_env(fmt_id: str) -> dict:
+    """The environment of a child process: zarr3 runs with the zarr-python 3 side install first on the path."""
+    env = dict(os.environ)
+    site = env.get("S1_ZARR3_SITE")
+    if fmt_id.startswith("zarr3") and site:
+        env["PYTHONPATH"] = site + os.pathsep + env.get("PYTHONPATH", "")
+    return env
 
 
 def _storages(cfg: Config) -> list[dict]:
