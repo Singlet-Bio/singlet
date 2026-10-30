@@ -1,0 +1,570 @@
+{
+ "milestone": "M13 (host step 2): non-host k-mer screen on the GPU",
+ "cpu_truth": "prod/campaign c4a1be38",
+ "section_12_9_pooled": {
+  "load_indices_per_m": 0.32,
+  "classify_per_m": 0.43,
+  "em_per_m": 0.11,
+  "nonhost_screen_share_of_W": 0.43
+ },
+ "samples": [
+  {
+   "sample": "GSM4006843",
+   "pairs": 66699625,
+   "gpu": {
+    "label": "GSM4006843",
+    "device": "NVIDIA H100 NVL",
+    "index": {
+     "entries_viral": 90310522,
+     "entries_bacterial": 411215174,
+     "entries_fungal": 1128455398,
+     "entries_bytes": 26079697504,
+     "directory_bytes": 2818572300,
+     "bloom_bytes": 386764872,
+     "resident_hbm_gb": 29.858,
+     "dir_bits": [
+      25,
+      27,
+      29
+     ],
+     "load_cold_s": 8.862,
+     "load_warm_s": 3.581,
+     "load_read_to_hbm_s": [
+      0.901,
+      2.215,
+      5.435
+     ],
+     "load_directory_build_s": [
+      0.0069,
+      0.0151,
+      0.0122
+     ],
+     "load_bloom_s": 0.277,
+     "unsorted_pairs": 0
+    },
+    "reads": {
+     "records_seen": 3035990,
+     "reads": 3035990,
+     "sequence_bytes": 274224244,
+     "host_parse_s": 0.976,
+     "reads_with_np": 2453419,
+     "reads_with_hits": 682540,
+     "minimizers_after_bloom": 24250570,
+     "occurrences": 9189747,
+     "groups": 3299953,
+     "viral_groups": 254187,
+     "microbial_groups": 3045766
+    },
+    "gpu_ms": {
+     "reps": 3,
+     "median_total": 62.557,
+     "median_h2d": 24.229,
+     "median_extract_bloom": 16.991,
+     "median_probe": 15.258,
+     "median_expand_sort_group": 2.467,
+     "median_d2h": 3.615,
+     "median_compute_only": 34.716,
+     "warmup_total": 93.058,
+     "all_total": [
+      62.643,
+      62.557,
+      62.521
+     ]
+    },
+    "reads_per_s": {
+     "total_incl_transfers": 48531337,
+     "compute_only": 87451136
+    },
+    "hbm_gb": {
+     "resident_index_and_bloom": 29.858,
+     "peak_with_classify_buffers": 31.511,
+     "classify_buffers": 1.622
+    },
+    "deterministic_across_reps": true,
+    "compare_cpu_dump": {
+     "reads": 3035990,
+     "np_mismatch": 0,
+     "viral_map_mismatch": 0,
+     "microbial_map_mismatch": 0,
+     "reads_with_any_mismatch": 0
+    },
+    "results_fnv64": "12876c5b40495222"
+   },
+   "compare": {
+    "dump_comparisons_identical": 6,
+    "differences": [],
+    "files_compared": 15,
+    "all_identical": true
+   },
+   "host_timers_engine_capture_24thr": {
+    "load_indices": {
+     "wall_s": 38.066,
+     "cpu_s": 38.0599
+    },
+    "load_bloom": {
+     "wall_s": 0.1659,
+     "cpu_s": 0.1655
+    },
+    "read_fastq": {
+     "wall_s": 0.5787,
+     "cpu_s": 0.5786
+    },
+    "classify": {
+     "wall_s": 9.675,
+     "cpu_s": 28.8753
+    },
+    "em": {
+     "wall_s": 8.0749,
+     "cpu_s": 8.0743
+    },
+    "rest": {
+     "wall_s": 3.1481,
+     "cpu_s": 3.1477
+    }
+   },
+   "host_timers_replay_cpu_4thr": {
+    "load_indices": {
+     "wall_s": 38.017,
+     "cpu_s": 38.0118
+    },
+    "load_bloom": {
+     "wall_s": 0.2812,
+     "cpu_s": 0.2809
+    },
+    "read_fastq": {
+     "wall_s": 0.788,
+     "cpu_s": 0.788
+    },
+    "classify": {
+     "wall_s": 13.4757,
+     "cpu_s": 28.4791
+    },
+    "em": {
+     "wall_s": 8.0235,
+     "cpu_s": 8.0219
+    },
+    "rest": {
+     "wall_s": 2.936,
+     "cpu_s": 2.9352
+    }
+   },
+   "host_timers_replay_gpu_results_4thr": {
+    "load_indices": {
+     "wall_s": 38.0467,
+     "cpu_s": 38.0418
+    },
+    "load_bloom": {
+     "wall_s": 0.281,
+     "cpu_s": 0.2807
+    },
+    "read_fastq": {
+     "wall_s": 0.7836,
+     "cpu_s": 0.7835
+    },
+    "classify": {
+     "wall_s": 0.6692,
+     "cpu_s": 0.6692
+    },
+    "em": {
+     "wall_s": 7.9105,
+     "cpu_s": 7.9093
+    },
+    "rest": {
+     "wall_s": 2.9691,
+     "cpu_s": 2.9687
+    }
+   },
+   "host_core_s_removed": {
+    "cpu_load_indices_s": 38.0118,
+    "cpu_classify_s": 28.4791,
+    "host_left_with_gpu_classify_s": 0.6692,
+    "removed_total_s": 65.82169999999999,
+    "removed_per_m_pairs": 0.9868376321456079,
+    "removed_classify_only_per_m_pairs": 0.4169423741137975,
+    "removed_load_only_per_m_pairs": 0.5698952580318105,
+    "label": "this job's [m13t] process-CPU timers of nhscreen replays at 4 threads (campaign setting); replay D still loads the indexes on the host (dev expedient) and keeps Phase D, EM and writers"
+   },
+   "section_12_9_same_sample": {
+    "label": "m10b timers (campaign build, core-s, from exploration.md 12.9)",
+    "pairs_m": 66.7,
+    "load_indices": 33.2,
+    "classify": 20.5,
+    "em": 4.9,
+    "load_per_m": 0.49775112443778113,
+    "classify_per_m": 0.3073463268365817
+   }
+  },
+  {
+   "sample": "GSM5411066",
+   "pairs": 69556631,
+   "gpu": {
+    "label": "GSM5411066",
+    "device": "NVIDIA H100 NVL",
+    "index": {
+     "entries_viral": 90310522,
+     "entries_bacterial": 411215174,
+     "entries_fungal": 1128455398,
+     "entries_bytes": 26079697504,
+     "directory_bytes": 2818572300,
+     "bloom_bytes": 386764872,
+     "resident_hbm_gb": 29.858,
+     "dir_bits": [
+      25,
+      27,
+      29
+     ],
+     "load_cold_s": 8.942,
+     "load_warm_s": 3.638,
+     "load_read_to_hbm_s": [
+      0.833,
+      2.172,
+      5.574
+     ],
+     "load_directory_build_s": [
+      0.0109,
+      0.0151,
+      0.0119
+     ],
+     "load_bloom_s": 0.325,
+     "unsorted_pairs": 0
+    },
+    "reads": {
+     "records_seen": 4872654,
+     "reads": 4872654,
+     "sequence_bytes": 384522472,
+     "host_parse_s": 1.656,
+     "reads_with_np": 3168710,
+     "reads_with_hits": 623655,
+     "minimizers_after_bloom": 28245585,
+     "occurrences": 14052034,
+     "groups": 6442989,
+     "viral_groups": 361144,
+     "microbial_groups": 6081845
+    },
+    "gpu_ms": {
+     "reps": 3,
+     "median_total": 85.581,
+     "median_h2d": 34.37,
+     "median_extract_bloom": 20.845,
+     "median_probe": 9.833,
+     "median_expand_sort_group": 13.79,
+     "median_d2h": 6.764,
+     "median_compute_only": 44.468,
+     "warmup_total": 136.652,
+     "all_total": [
+      85.581,
+      85.614,
+      85.486
+     ]
+    },
+    "reads_per_s": {
+     "total_incl_transfers": 56936297,
+     "compute_only": 109576323
+    },
+    "hbm_gb": {
+     "resident_index_and_bloom": 29.858,
+     "peak_with_classify_buffers": 32.106,
+     "classify_buffers": 2.217
+    },
+    "deterministic_across_reps": true,
+    "compare_cpu_dump": {
+     "reads": 4872654,
+     "np_mismatch": 0,
+     "viral_map_mismatch": 0,
+     "microbial_map_mismatch": 0,
+     "reads_with_any_mismatch": 0
+    },
+    "results_fnv64": "e5244ed10e0c1f09"
+   },
+   "compare": {
+    "dump_comparisons_identical": 6,
+    "differences": [],
+    "files_compared": 9,
+    "all_identical": true
+   },
+   "host_timers_engine_capture_24thr": {
+    "load_indices": {
+     "wall_s": 50.0209,
+     "cpu_s": 50.0137
+    },
+    "load_bloom": {
+     "wall_s": 0.3036,
+     "cpu_s": 0.3031
+    },
+    "read_fastq": {
+     "wall_s": 1.0143,
+     "cpu_s": 1.014
+    },
+    "classify": {
+     "wall_s": 12.57,
+     "cpu_s": 35.2892
+    },
+    "em": {
+     "wall_s": 13.956,
+     "cpu_s": 13.9494
+    },
+    "rest": {
+     "wall_s": 4.8132,
+     "cpu_s": 4.8105
+    }
+   },
+   "host_timers_replay_cpu_4thr": {
+    "load_indices": {
+     "wall_s": 47.1078,
+     "cpu_s": 47.0976
+    },
+    "load_bloom": {
+     "wall_s": 0.2912,
+     "cpu_s": 0.2906
+    },
+    "read_fastq": {
+     "wall_s": 1.3328,
+     "cpu_s": 1.3326
+    },
+    "classify": {
+     "wall_s": 20.0484,
+     "cpu_s": 38.2099
+    },
+    "em": {
+     "wall_s": 14.0412,
+     "cpu_s": 14.0347
+    },
+    "rest": {
+     "wall_s": 4.7124,
+     "cpu_s": 4.7102
+    }
+   },
+   "host_timers_replay_gpu_results_4thr": {
+    "load_indices": {
+     "wall_s": 47.7912,
+     "cpu_s": 47.765
+    },
+    "load_bloom": {
+     "wall_s": 0.2898,
+     "cpu_s": 0.2895
+    },
+    "read_fastq": {
+     "wall_s": 1.2736,
+     "cpu_s": 1.2721
+    },
+    "classify": {
+     "wall_s": 1.2184,
+     "cpu_s": 1.2171
+    },
+    "em": {
+     "wall_s": 13.9796,
+     "cpu_s": 13.9743
+    },
+    "rest": {
+     "wall_s": 4.6896,
+     "cpu_s": 4.6886
+    }
+   },
+   "host_core_s_removed": {
+    "cpu_load_indices_s": 47.0976,
+    "cpu_classify_s": 38.2099,
+    "host_left_with_gpu_classify_s": 1.2171,
+    "removed_total_s": 84.0904,
+    "removed_per_m_pairs": 1.2089487197848903,
+    "removed_classify_only_per_m_pairs": 0.5318371443263259,
+    "removed_load_only_per_m_pairs": 0.6771115754585642,
+    "label": "this job's [m13t] process-CPU timers of nhscreen replays at 4 threads (campaign setting); replay D still loads the indexes on the host (dev expedient) and keeps Phase D, EM and writers"
+   },
+   "section_12_9_same_sample": {
+    "label": "m10b timers (campaign build, core-s, from exploration.md 12.9)",
+    "pairs_m": 69.6,
+    "load_indices": 28.6,
+    "classify": 20.3,
+    "em": 7.8,
+    "load_per_m": 0.41091954022988514,
+    "classify_per_m": 0.2916666666666667
+   }
+  },
+  {
+   "sample": "GSM6470208",
+   "pairs": 121774155,
+   "gpu": {
+    "label": "GSM6470208",
+    "device": "NVIDIA H100 NVL",
+    "index": {
+     "entries_viral": 90310522,
+     "entries_bacterial": 411215174,
+     "entries_fungal": 1128455398,
+     "entries_bytes": 26079697504,
+     "directory_bytes": 2818572300,
+     "bloom_bytes": 386764872,
+     "resident_hbm_gb": 29.858,
+     "dir_bits": [
+      25,
+      27,
+      29
+     ],
+     "load_cold_s": 8.984,
+     "load_warm_s": 3.627,
+     "load_read_to_hbm_s": [
+      0.951,
+      2.264,
+      5.466
+     ],
+     "load_directory_build_s": [
+      0.0107,
+      0.0149,
+      0.012
+     ],
+     "load_bloom_s": 0.265,
+     "unsorted_pairs": 0
+    },
+    "reads": {
+     "records_seen": 12265634,
+     "reads": 12265634,
+     "sequence_bytes": 1103907060,
+     "host_parse_s": 3.701,
+     "reads_with_np": 7875603,
+     "reads_with_hits": 2359612,
+     "minimizers_after_bloom": 54344908,
+     "occurrences": 38291000,
+     "groups": 18479403,
+     "viral_groups": 190869,
+     "microbial_groups": 18288534
+    },
+    "gpu_ms": {
+     "reps": 3,
+     "median_total": 195.59,
+     "median_h2d": 97.546,
+     "median_extract_bloom": 45.893,
+     "median_probe": 18.011,
+     "median_expand_sort_group": 15.247,
+     "median_d2h": 18.919,
+     "median_compute_only": 79.15,
+     "warmup_total": 321.38,
+     "all_total": [
+      195.641,
+      195.59,
+      195.481
+     ]
+    },
+    "reads_per_s": {
+     "total_incl_transfers": 62711075,
+     "compute_only": 154966040
+    },
+    "hbm_gb": {
+     "resident_index_and_bloom": 29.858,
+     "peak_with_classify_buffers": 35.256,
+     "classify_buffers": 5.359
+    },
+    "deterministic_across_reps": true,
+    "compare_cpu_dump": {
+     "reads": 12265634,
+     "np_mismatch": 0,
+     "viral_map_mismatch": 0,
+     "microbial_map_mismatch": 0,
+     "reads_with_any_mismatch": 0
+    },
+    "results_fnv64": "d4a61e779f525626"
+   },
+   "compare": {
+    "dump_comparisons_identical": 6,
+    "differences": [],
+    "files_compared": 9,
+    "all_identical": true
+   },
+   "host_timers_engine_capture_24thr": {
+    "load_indices": {
+     "wall_s": 41.1421,
+     "cpu_s": 41.1369
+    },
+    "load_bloom": {
+     "wall_s": 0.2892,
+     "cpu_s": 0.2889
+    },
+    "read_fastq": {
+     "wall_s": 3.0958,
+     "cpu_s": 3.0953
+    },
+    "classify": {
+     "wall_s": 22.0486,
+     "cpu_s": 84.0616
+    },
+    "em": {
+     "wall_s": 24.6645,
+     "cpu_s": 24.6588
+    },
+    "rest": {
+     "wall_s": 11.5225,
+     "cpu_s": 11.521
+    }
+   },
+   "host_timers_replay_cpu_4thr": {
+    "load_indices": {
+     "wall_s": 40.6094,
+     "cpu_s": 40.6057
+    },
+    "load_bloom": {
+     "wall_s": 0.2843,
+     "cpu_s": 0.284
+    },
+    "read_fastq": {
+     "wall_s": 3.3527,
+     "cpu_s": 3.3524
+    },
+    "classify": {
+     "wall_s": 33.9702,
+     "cpu_s": 82.5258
+    },
+    "em": {
+     "wall_s": 24.5553,
+     "cpu_s": 24.5504
+    },
+    "rest": {
+     "wall_s": 12.6244,
+     "cpu_s": 12.6162
+    }
+   },
+   "host_timers_replay_gpu_results_4thr": {
+    "load_indices": {
+     "wall_s": 40.5008,
+     "cpu_s": 40.4963
+    },
+    "load_bloom": {
+     "wall_s": 0.2834,
+     "cpu_s": 0.2831
+    },
+    "read_fastq": {
+     "wall_s": 3.3662,
+     "cpu_s": 3.3658
+    },
+    "classify": {
+     "wall_s": 3.3539,
+     "cpu_s": 3.3535
+    },
+    "em": {
+     "wall_s": 24.4611,
+     "cpu_s": 24.4585
+    },
+    "rest": {
+     "wall_s": 11.476,
+     "cpu_s": 11.4746
+    }
+   },
+   "host_core_s_removed": {
+    "cpu_load_indices_s": 40.6057,
+    "cpu_classify_s": 82.5258,
+    "host_left_with_gpu_classify_s": 3.3535,
+    "removed_total_s": 119.778,
+    "removed_per_m_pairs": 0.9836077285857578,
+    "removed_classify_only_per_m_pairs": 0.650156841572828,
+    "removed_load_only_per_m_pairs": 0.3334508870129298,
+    "label": "this job's [m13t] process-CPU timers of nhscreen replays at 4 threads (campaign setting); replay D still loads the indexes on the host (dev expedient) and keeps Phase D, EM and writers"
+   },
+   "section_12_9_same_sample": {
+    "label": "m10b timers (campaign build, core-s, from exploration.md 12.9)",
+    "pairs_m": 121.8,
+    "load_indices": 46.2,
+    "classify": 77.2,
+    "em": 24.7,
+    "load_per_m": 0.37931034482758624,
+    "classify_per_m": 0.6338259441707718
+   }
+  }
+ ]
+}

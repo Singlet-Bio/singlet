@@ -1,0 +1,845 @@
+% References for the .s1 manuscript.
+% Entries with a `note = {verify ...}` field were assembled from secondary sources; confirm volume, pages and DOI
+% against the publisher before submission (`make validate` in papers/ lists entries without a DOI or URL).
+
+% ------------------------------------------------------------------ scale and ecosystem
+@article{svensson2018exponential,
+  author  = {Svensson, Valentine and Vento-Tormo, Roser and Teichmann, Sarah A.},
+  title   = {Exponential scaling of single-cell {RNA-seq} in the past decade},
+  journal = {Nature Protocols},
+  volume  = {13},
+  pages   = {599--604},
+  year    = {2018},
+  doi     = {10.1038/nprot.2017.149}
+}
+
+@article{czi2025cellxgene,
+  author  = {{CZI Cell Science Program} and Abdulla, Shibla and others},
+  title   = {{CZ CELL$\times$GENE Discover}: a single-cell data platform for scalable exploration, analysis and modeling of aggregated data},
+  journal = {Nucleic Acids Research},
+  volume  = {53},
+  number  = {D1},
+  pages   = {D886--D900},
+  year    = {2025},
+  doi     = {10.1093/nar/gkae1142},
+  note    = {verify pages and DOI}
+}
+
+@misc{tiledbsoma,
+  author       = {{TileDB, Inc.} and {Chan Zuckerberg Initiative}},
+  title        = {{TileDB-SOMA} and {TileDB-SOMA-ML}: scalable storage and loaders for single-cell data},
+  howpublished = {\url{https://github.com/single-cell-data/TileDB-SOMA}},
+  year         = {2025}
+}
+
+@article{virshup2024anndata,
+  author  = {Virshup, Isaac and Rybakov, Sergei and Theis, Fabian J. and Angerer, Philipp and Wolf, F. Alexander},
+  title   = {anndata: Access and store annotated data matrices},
+  journal = {Journal of Open Source Software},
+  volume  = {9},
+  number  = {101},
+  pages   = {4371},
+  year    = {2024},
+  doi     = {10.21105/joss.04371}
+}
+
+@article{wolf2018scanpy,
+  author  = {Wolf, F. Alexander and Angerer, Philipp and Theis, Fabian J.},
+  title   = {{SCANPY}: large-scale single-cell gene expression data analysis},
+  journal = {Genome Biology},
+  volume  = {19},
+  pages   = {15},
+  year    = {2018},
+  doi     = {10.1186/s13059-017-1382-0}
+}
+
+@article{hao2024dictionary,
+  author  = {Hao, Yuhan and Stuart, Tim and Kowalski, Madeline H. and others and Satija, Rahul},
+  title   = {Dictionary learning for integrative, multimodal and scalable single-cell analysis},
+  journal = {Nature Biotechnology},
+  volume  = {42},
+  pages   = {293--304},
+  year    = {2024},
+  doi     = {10.1038/s41587-023-01767-y}
+}
+
+@article{amezquita2020orchestrating,
+  author  = {Amezquita, Robert A. and Lun, Aaron T. L. and Becht, Etienne and others and Hicks, Stephanie C.},
+  title   = {Orchestrating single-cell analysis with {Bioconductor}},
+  journal = {Nature Methods},
+  volume  = {17},
+  pages   = {137--145},
+  year    = {2020},
+  doi     = {10.1038/s41592-019-0654-x}
+}
+
+@misc{bates2024matrix,
+  author       = {Bates, Douglas and Maechler, Martin and Jagan, Mikael},
+  title        = {Matrix: Sparse and Dense Matrix Classes and Methods},
+  howpublished = {R package, \url{https://CRAN.R-project.org/package=Matrix}},
+  year         = {2024}
+}
+
+@article{parks2025bpcells,
+  author  = {Parks, Benjamin and Abdi, Sina},
+  title   = {Scalable bit-packing compression and streaming algorithms enable high-performance single-cell analysis with {BPCells}},
+  journal = {bioRxiv},
+  year    = {2025},
+  doi     = {10.1101/2025.03.27.645853},
+  note    = {verify title}
+}
+
+@misc{hdf5,
+  author       = {{The HDF Group}},
+  title        = {Hierarchical Data Format, version 5},
+  howpublished = {\url{https://www.hdfgroup.org/HDF5/}},
+  year         = {1997--2025}
+}
+
+@misc{zarr,
+  author       = {Miles, Alistair and others},
+  title        = {zarr-developers/zarr-python},
+  howpublished = {Zenodo, \url{https://zarr.dev}},
+  year         = {2024},
+  note         = {cite the Zenodo DOI of the version used}
+}
+
+@article{paszke2019pytorch,
+  author  = {Paszke, Adam and Gross, Sam and Massa, Francisco and others},
+  title   = {{PyTorch}: An imperative style, high-performance deep learning library},
+  journal = {Advances in Neural Information Processing Systems},
+  volume  = {32},
+  year    = {2019},
+  url     = {https://proceedings.neurips.cc/paper/2019/hash/bdbca288fee7f92f2bfa9f7012727740-Abstract.html}
+}
+
+@book{saad2003iterative,
+  author    = {Saad, Yousef},
+  title     = {Iterative Methods for Sparse Linear Systems},
+  edition   = {2},
+  publisher = {SIAM},
+  year      = {2003},
+  doi       = {10.1137/1.9780898718003}
+}
+
+@book{davis2006direct,
+  author    = {Davis, Timothy A.},
+  title     = {Direct Methods for Sparse Linear Systems},
+  publisher = {SIAM},
+  year      = {2006},
+  doi       = {10.1137/1.9780898718881}
+}
+
+@inproceedings{boisvert1997matrix,
+  author    = {Boisvert, Ronald F. and Pozo, Roldan and Remington, Karin and Barrett, Richard F. and Dongarra, Jack J.},
+  title     = {Matrix Market: a web resource for test matrix collections},
+  booktitle = {Quality of Numerical Software},
+  pages     = {125--137},
+  publisher = {Springer},
+  year      = {1997},
+  doi       = {10.1007/978-1-5041-2940-4_9}
+}
+
+% ------------------------------------------------------------------ models and loaders
+@article{lopez2018deep,
+  author  = {Lopez, Romain and Regier, Jeffrey and Cole, Michael B. and Jordan, Michael I. and Yosef, Nir},
+  title   = {Deep generative modeling for single-cell transcriptomics},
+  journal = {Nature Methods},
+  volume  = {15},
+  pages   = {1053--1058},
+  year    = {2018},
+  doi     = {10.1038/s41592-018-0229-2}
+}
+
+@article{theodoris2023transfer,
+  author  = {Theodoris, Christina V. and Xiao, Ling and Chopra, Anant and others and Ellinor, Patrick T.},
+  title   = {Transfer learning enables predictions in network biology},
+  journal = {Nature},
+  volume  = {618},
+  pages   = {616--624},
+  year    = {2023},
+  doi     = {10.1038/s41586-023-06139-9}
+}
+
+@article{cui2024scgpt,
+  author  = {Cui, Haotian and Wang, Chloe and Maan, Hassaan and others and Wang, Bo},
+  title   = {{scGPT}: toward building a foundation model for single-cell multi-omics using generative {AI}},
+  journal = {Nature Methods},
+  volume  = {21},
+  pages   = {1470--1480},
+  year    = {2024},
+  doi     = {10.1038/s41592-024-02201-0}
+}
+
+@article{fischer2024scaling,
+  author  = {Fischer, Felix and Fischer, David S. and Mukhin, Roman and Isaev, Andrey and Biederstedt, Evan and Villani, Alexandra-Chlo{\'e} and Theis, Fabian J.},
+  title   = {{scTab}: Scaling cross-tissue single-cell annotation models},
+  journal = {Nature Communications},
+  volume  = {15},
+  pages   = {6611},
+  year    = {2024},
+  doi     = {10.1038/s41467-024-51059-5},
+  note    = {verify article number}
+}
+
+@article{dascenzo2025scdataset,
+  author  = {D'Ascenzo, Davide and Cultrera di Montesano, Sebastiano},
+  title   = {{scDataset}: Scalable Data Loading for Deep Learning on Large-Scale Single-Cell Omics},
+  journal = {arXiv preprint arXiv:2506.01883},
+  year    = {2025},
+  url     = {https://arxiv.org/abs/2506.01883}
+}
+
+% ------------------------------------------------------------------ information theory and entropy coding
+@article{shannon1948mathematical,
+  author  = {Shannon, Claude E.},
+  title   = {A mathematical theory of communication},
+  journal = {Bell System Technical Journal},
+  volume  = {27},
+  number  = {3},
+  pages   = {379--423},
+  year    = {1948},
+  doi     = {10.1002/j.1538-7305.1948.tb01338.x}
+}
+
+@book{cover2006elements,
+  author    = {Cover, Thomas M. and Thomas, Joy A.},
+  title     = {Elements of Information Theory},
+  edition   = {2},
+  publisher = {Wiley},
+  year      = {2006},
+  doi       = {10.1002/047174882X}
+}
+
+@article{krichevsky1981performance,
+  author  = {Krichevsky, Raphail E. and Trofimov, Victor K.},
+  title   = {The performance of universal encoding},
+  journal = {IEEE Transactions on Information Theory},
+  volume  = {27},
+  number  = {2},
+  pages   = {199--207},
+  year    = {1981},
+  doi     = {10.1109/TIT.1981.1056331}
+}
+
+@article{huffman1952method,
+  author  = {Huffman, David A.},
+  title   = {A method for the construction of minimum-redundancy codes},
+  journal = {Proceedings of the IRE},
+  volume  = {40},
+  number  = {9},
+  pages   = {1098--1101},
+  year    = {1952},
+  doi     = {10.1109/JRPROC.1952.273898}
+}
+
+@article{rissanen1979arithmetic,
+  author  = {Rissanen, Jorma and Langdon, Glen G.},
+  title   = {Arithmetic coding},
+  journal = {IBM Journal of Research and Development},
+  volume  = {23},
+  number  = {2},
+  pages   = {149--162},
+  year    = {1979},
+  doi     = {10.1147/rd.232.0149}
+}
+
+@article{witten1987arithmetic,
+  author  = {Witten, Ian H. and Neal, Radford M. and Cleary, John G.},
+  title   = {Arithmetic coding for data compression},
+  journal = {Communications of the ACM},
+  volume  = {30},
+  number  = {6},
+  pages   = {520--540},
+  year    = {1987},
+  doi     = {10.1145/214762.214771}
+}
+
+@article{duda2009asymmetric,
+  author  = {Duda, Jarek},
+  title   = {Asymmetric numeral systems},
+  journal = {arXiv preprint arXiv:0902.0271},
+  year    = {2009},
+  url     = {https://arxiv.org/abs/0902.0271}
+}
+
+@article{duda2013asymmetric,
+  author  = {Duda, Jarek},
+  title   = {Asymmetric numeral systems: entropy coding combining speed of {Huffman} coding with compression rate of arithmetic coding},
+  journal = {arXiv preprint arXiv:1311.2540},
+  year    = {2013},
+  url     = {https://arxiv.org/abs/1311.2540}
+}
+
+@article{giesen2014interleaved,
+  author  = {Giesen, Fabian},
+  title   = {Interleaved entropy coders},
+  journal = {arXiv preprint arXiv:1402.3392},
+  year    = {2014},
+  url     = {https://arxiv.org/abs/1402.3392}
+}
+
+@article{elias1975universal,
+  author  = {Elias, Peter},
+  title   = {Universal codeword sets and representations of the integers},
+  journal = {IEEE Transactions on Information Theory},
+  volume  = {21},
+  number  = {2},
+  pages   = {194--203},
+  year    = {1975},
+  doi     = {10.1109/TIT.1975.1055349}
+}
+
+@article{golomb1966run,
+  author  = {Golomb, Solomon W.},
+  title   = {Run-length encodings},
+  journal = {IEEE Transactions on Information Theory},
+  volume  = {12},
+  number  = {3},
+  pages   = {399--401},
+  year    = {1966},
+  doi     = {10.1109/TIT.1966.1053907}
+}
+
+@techreport{rice1979some,
+  author      = {Rice, Robert F.},
+  title       = {Some practical universal noiseless coding techniques},
+  institution = {Jet Propulsion Laboratory},
+  number      = {JPL Publication 79-22},
+  year        = {1979},
+  url         = {https://ntrs.nasa.gov/citations/19790014634}
+}
+
+@inproceedings{vigna2013quasi,
+  author    = {Vigna, Sebastiano},
+  title     = {Quasi-succinct indices},
+  booktitle = {Proceedings of the Sixth ACM International Conference on Web Search and Data Mining (WSDM)},
+  pages     = {83--92},
+  year      = {2013},
+  doi       = {10.1145/2433396.2433409}
+}
+
+@inproceedings{zukowski2006super,
+  author    = {Zukowski, Marcin and H{\'e}man, S{\'a}ndor and Nes, Niels and Boncz, Peter},
+  title     = {Super-scalar {RAM-CPU} cache compression},
+  booktitle = {Proceedings of the 22nd International Conference on Data Engineering (ICDE)},
+  pages     = {59},
+  year      = {2006},
+  doi       = {10.1109/ICDE.2006.150}
+}
+
+@article{lemire2015decoding,
+  author  = {Lemire, Daniel and Boytsov, Leonid},
+  title   = {Decoding billions of integers per second through vectorization},
+  journal = {Software: Practice and Experience},
+  volume  = {45},
+  number  = {1},
+  pages   = {1--29},
+  year    = {2015},
+  doi     = {10.1002/spe.2203}
+}
+
+@article{lemire2018stream,
+  author  = {Lemire, Daniel and Kurz, Nathan and Rupp, Christoph},
+  title   = {Stream {VByte}: Faster byte-oriented integer compression},
+  journal = {Information Processing Letters},
+  volume  = {130},
+  pages   = {1--6},
+  year    = {2018},
+  doi     = {10.1016/j.ipl.2017.09.011}
+}
+
+@article{chambi2016better,
+  author  = {Chambi, Samy and Lemire, Daniel and Kaser, Owen and Godin, Robert},
+  title   = {Better bitmap performance with {Roaring} bitmaps},
+  journal = {Software: Practice and Experience},
+  volume  = {46},
+  number  = {5},
+  pages   = {709--719},
+  year    = {2016},
+  doi     = {10.1002/spe.2325}
+}
+
+@techreport{burrows1994block,
+  author      = {Burrows, Michael and Wheeler, David J.},
+  title       = {A block-sorting lossless data compression algorithm},
+  institution = {Digital Systems Research Center},
+  number      = {124},
+  year        = {1994}
+}
+
+@techreport{mahoney2005adaptive,
+  author      = {Mahoney, Matthew V.},
+  title       = {Adaptive weighing of context models for lossless data compression},
+  institution = {Florida Institute of Technology},
+  number      = {CS-2005-16},
+  year        = {2005}
+}
+
+@misc{deutsch1996deflate,
+  author       = {Deutsch, L. Peter},
+  title        = {{DEFLATE} Compressed Data Format Specification version 1.3},
+  howpublished = {RFC 1951},
+  year         = {1996},
+  doi          = {10.17487/RFC1951}
+}
+
+@misc{collet2021zstd,
+  author       = {Collet, Yann and Kucherawy, Murray},
+  title        = {Zstandard Compression and the 'application/zstd' Media Type},
+  howpublished = {RFC 8878},
+  year         = {2021},
+  doi          = {10.17487/RFC8878}
+}
+
+@misc{alakuijala2016brotli,
+  author       = {Alakuijala, Jyrki and Szabadka, Zolt{\'a}n},
+  title        = {Brotli Compressed Data Format},
+  howpublished = {RFC 7932},
+  year         = {2016},
+  doi          = {10.17487/RFC7932}
+}
+
+% ------------------------------------------------------------------ genomic data compression
+@article{fritz2011efficient,
+  author  = {Hsi-Yang Fritz, Markus and Leinonen, Rasko and Cochrane, Guy and Birney, Ewan},
+  title   = {Efficient storage of high throughput {DNA} sequencing data using reference-based compression},
+  journal = {Genome Research},
+  volume  = {21},
+  number  = {5},
+  pages   = {734--740},
+  year    = {2011},
+  doi     = {10.1101/gr.114819.110}
+}
+
+@article{bonfield2022cram,
+  author  = {Bonfield, James K.},
+  title   = {{CRAM} 3.1: advances in the {CRAM} file format},
+  journal = {Bioinformatics},
+  volume  = {38},
+  number  = {6},
+  pages   = {1497--1503},
+  year    = {2022},
+  doi     = {10.1093/bioinformatics/btac010}
+}
+
+@article{bonfield2013compression,
+  author  = {Bonfield, James K. and Mahoney, Matthew V.},
+  title   = {Compression of {FASTQ} and {SAM} format sequencing data},
+  journal = {PLoS ONE},
+  volume  = {8},
+  number  = {3},
+  pages   = {e59190},
+  year    = {2013},
+  doi     = {10.1371/journal.pone.0059190}
+}
+
+@article{chandak2019spring,
+  author  = {Chandak, Shubham and Tatwawadi, Kedar and Ochoa, Idoia and Hernaez, Mikel and Weissman, Tsachy},
+  title   = {{SPRING}: a next-generation compressor for {FASTQ} data},
+  journal = {Bioinformatics},
+  volume  = {35},
+  number  = {15},
+  pages   = {2674--2676},
+  year    = {2019},
+  doi     = {10.1093/bioinformatics/bty1015}
+}
+
+@article{numanagic2016comparison,
+  author  = {Numanagi{\'c}, Ibrahim and Bonfield, James K. and Hach, Faraz and others and Sahinalp, S. Cenk},
+  title   = {Comparison of high-throughput sequencing data compression tools},
+  journal = {Nature Methods},
+  volume  = {13},
+  pages   = {1005--1008},
+  year    = {2016},
+  doi     = {10.1038/nmeth.4037}
+}
+
+@article{hernaez2019genomic,
+  author  = {Hernaez, Mikel and Pavlichin, Dmitri and Weissman, Tsachy and Ochoa, Idoia},
+  title   = {Genomic data compression},
+  journal = {Annual Review of Biomedical Data Science},
+  volume  = {2},
+  pages   = {19--37},
+  year    = {2019},
+  doi     = {10.1146/annurev-biodatasci-072018-021229}
+}
+
+% ------------------------------------------------------------------ count models
+@article{grun2014validation,
+  author  = {Gr{\"u}n, Dominic and Kester, Lennart and van Oudenaarden, Alexander},
+  title   = {Validation of noise models for single-cell transcriptomics},
+  journal = {Nature Methods},
+  volume  = {11},
+  pages   = {637--640},
+  year    = {2014},
+  doi     = {10.1038/nmeth.2930}
+}
+
+@article{svensson2020droplet,
+  author  = {Svensson, Valentine},
+  title   = {Droplet {scRNA-seq} is not zero-inflated},
+  journal = {Nature Biotechnology},
+  volume  = {38},
+  pages   = {147--150},
+  year    = {2020},
+  doi     = {10.1038/s41587-019-0379-5}
+}
+
+@article{kim2020demystifying,
+  author  = {Kim, Tae Hyun and Zhou, Xiang and Chen, Mengjie},
+  title   = {Demystifying ``drop-outs'' in single-cell {UMI} data},
+  journal = {Genome Biology},
+  volume  = {21},
+  pages   = {196},
+  year    = {2020},
+  doi     = {10.1186/s13059-020-02096-y},
+  note    = {verify DOI}
+}
+
+@article{choudhary2022comparison,
+  author  = {Choudhary, Saket and Satija, Rahul},
+  title   = {Comparison and evaluation of statistical error models for {scRNA-seq}},
+  journal = {Genome Biology},
+  volume  = {23},
+  pages   = {27},
+  year    = {2022},
+  doi     = {10.1186/s13059-021-02584-9}
+}
+
+@article{townes2019feature,
+  author  = {Townes, F. William and Hicks, Stephanie C. and Aryee, Martin J. and Irizarry, Rafael A.},
+  title   = {Feature selection and dimension reduction for single-cell {RNA-Seq} based on a multinomial model},
+  journal = {Genome Biology},
+  volume  = {20},
+  pages   = {295},
+  year    = {2019},
+  doi     = {10.1186/s13059-019-1861-6}
+}
+
+@article{hafemeister2019normalization,
+  author  = {Hafemeister, Christoph and Satija, Rahul},
+  title   = {Normalization and variance stabilization of single-cell {RNA-seq} data using regularized negative binomial regression},
+  journal = {Genome Biology},
+  volume  = {20},
+  pages   = {296},
+  year    = {2019},
+  doi     = {10.1186/s13059-019-1874-1}
+}
+
+@article{sarkar2021separating,
+  author  = {Sarkar, Abhishek and Stephens, Matthew},
+  title   = {Separating measurement and expression models clarifies confusion in single-cell {RNA} sequencing analysis},
+  journal = {Nature Genetics},
+  volume  = {53},
+  pages   = {770--777},
+  year    = {2021},
+  doi     = {10.1038/s41588-021-00873-4}
+}
+
+@article{robinson2010edger,
+  author  = {Robinson, Mark D. and McCarthy, Davis J. and Smyth, Gordon K.},
+  title   = {{edgeR}: a {Bioconductor} package for differential expression analysis of digital gene expression data},
+  journal = {Bioinformatics},
+  volume  = {26},
+  number  = {1},
+  pages   = {139--140},
+  year    = {2010},
+  doi     = {10.1093/bioinformatics/btp616}
+}
+
+@article{love2014moderated,
+  author  = {Love, Michael I. and Huber, Wolfgang and Anders, Simon},
+  title   = {Moderated estimation of fold change and dispersion for {RNA-seq} data with {DESeq2}},
+  journal = {Genome Biology},
+  volume  = {15},
+  pages   = {550},
+  year    = {2014},
+  doi     = {10.1186/s13059-014-0550-8}
+}
+
+@article{eraslan2019single,
+  author  = {Eraslan, G{\"o}kcen and Simon, Lukas M. and Mircea, Maria and Mueller, Nikola S. and Theis, Fabian J.},
+  title   = {Single-cell {RNA-seq} denoising using a deep count autoencoder},
+  journal = {Nature Communications},
+  volume  = {10},
+  pages   = {390},
+  year    = {2019},
+  doi     = {10.1038/s41467-018-07931-2}
+}
+
+@article{risso2018general,
+  author  = {Risso, Davide and Perraudeau, Fanny and Gribkova, Svetlana and Dudoit, Sandrine and Vert, Jean-Philippe},
+  title   = {A general and flexible method for signal extraction from single-cell {RNA-seq} data},
+  journal = {Nature Communications},
+  volume  = {9},
+  pages   = {284},
+  year    = {2018},
+  doi     = {10.1038/s41467-017-02554-5}
+}
+
+@article{furusawa2003zipf,
+  author  = {Furusawa, Chikara and Kaneko, Kunihiko},
+  title   = {Zipf's law in gene expression},
+  journal = {Physical Review Letters},
+  volume  = {90},
+  number  = {8},
+  pages   = {088102},
+  year    = {2003},
+  doi     = {10.1103/PhysRevLett.90.088102}
+}
+
+% ------------------------------------------------------------------ datasets
+@misc{tenx_datasets,
+  author       = {{10x Genomics}},
+  title        = {Public datasets},
+  howpublished = {\url{https://www.10xgenomics.com/datasets}},
+  year         = {2025}
+}
+
+@article{zheng2017massively,
+  author  = {Zheng, Grace X. Y. and Terry, Jessica M. and Belgrader, Phillip and others and Bielas, Jason H.},
+  title   = {Massively parallel digital transcriptional profiling of single cells},
+  journal = {Nature Communications},
+  volume  = {8},
+  pages   = {14049},
+  year    = {2017},
+  doi     = {10.1038/ncomms14049}
+}
+
+@article{replogle2022mapping,
+  author  = {Replogle, Joseph M. and Saunders, Reuben A. and Pogson, Angela N. and others and Weissman, Jonathan S.},
+  title   = {Mapping information-rich genotype-phenotype landscapes with genome-scale {Perturb-seq}},
+  journal = {Cell},
+  volume  = {185},
+  number  = {14},
+  pages   = {2559--2575},
+  year    = {2022},
+  doi     = {10.1016/j.cell.2022.05.013}
+}
+
+@article{tabulasapiens2022,
+  author  = {{The Tabula Sapiens Consortium}},
+  title   = {The {Tabula Sapiens}: A multiple-organ, single-cell transcriptomic atlas of humans},
+  journal = {Science},
+  volume  = {376},
+  number  = {6594},
+  pages   = {eabl4896},
+  year    = {2022},
+  doi     = {10.1126/science.abl4896}
+}
+
+@article{sikkema2023integrated,
+  author  = {Sikkema, Lisa and Ram{\'i}rez-Su{\'a}stegui, Ciro and Strobl, Daniel C. and others and Theis, Fabian J.},
+  title   = {An integrated cell atlas of the lung in health and disease},
+  journal = {Nature Medicine},
+  volume  = {29},
+  pages   = {1563--1577},
+  year    = {2023},
+  doi     = {10.1038/s41591-023-02327-2}
+}
+
+@article{macosko2015highly,
+  author  = {Macosko, Evan Z. and Basu, Anindita and Satija, Rahul and others and McCarroll, Steven A.},
+  title   = {Highly parallel genome-wide expression profiling of individual cells using nanoliter droplets},
+  journal = {Cell},
+  volume  = {161},
+  number  = {5},
+  pages   = {1202--1214},
+  year    = {2015},
+  doi     = {10.1016/j.cell.2015.05.002}
+}
+
+@article{baron2016single,
+  author  = {Baron, Maayan and Veres, Adrian and Wolock, Samuel L. and others and Yanai, Itai},
+  title   = {A single-cell transcriptomic map of the human and mouse pancreas reveals inter- and intra-cell population structure},
+  journal = {Cell Systems},
+  volume  = {3},
+  number  = {4},
+  pages   = {346--360},
+  year    = {2016},
+  doi     = {10.1016/j.cels.2016.08.011}
+}
+
+@article{han2018mapping,
+  author  = {Han, Xiaoping and Wang, Renying and Zhou, Yincong and others and Guo, Guoji},
+  title   = {Mapping the mouse cell atlas by {Microwell-seq}},
+  journal = {Cell},
+  volume  = {172},
+  number  = {5},
+  pages   = {1091--1107},
+  year    = {2018},
+  doi     = {10.1016/j.cell.2018.02.001}
+}
+
+@article{rosenberg2018single,
+  author  = {Rosenberg, Alexander B. and Roco, Charles M. and Muscat, Richard A. and others and Seelig, Georg},
+  title   = {Single-cell profiling of the developing mouse brain and spinal cord with split-pool barcoding},
+  journal = {Science},
+  volume  = {360},
+  number  = {6385},
+  pages   = {176--182},
+  year    = {2018},
+  doi     = {10.1126/science.aam8999}
+}
+
+@article{cao2019single,
+  author  = {Cao, Junyue and Spielmann, Malte and Qiu, Xiaojie and others and Shendure, Jay},
+  title   = {The single-cell transcriptional landscape of mammalian organogenesis},
+  journal = {Nature},
+  volume  = {566},
+  pages   = {496--502},
+  year    = {2019},
+  doi     = {10.1038/s41586-019-0969-x}
+}
+
+@article{zhang2025tahoe,
+  author  = {Zhang, Jesse and Ubas, Airol A. and de Borja, Richard and others},
+  title   = {{Tahoe-100M}: A giga-scale single-cell perturbation atlas for context-dependent gene function and cellular modeling},
+  journal = {bioRxiv},
+  year    = {2025},
+  doi     = {10.1101/2025.02.20.639398},
+  note    = {verify author list}
+}
+
+@article{siletti2023transcriptomic,
+  author  = {Siletti, Kimberly and Hodge, Rebecca and Mossi Albiach, Alejandro and others and Linnarsson, Sten},
+  title   = {Transcriptomic diversity of cell types across the adult human brain},
+  journal = {Science},
+  volume  = {382},
+  number  = {6667},
+  pages   = {eadd7046},
+  year    = {2023},
+  doi     = {10.1126/science.add7046}
+}
+
+@article{hao2021integrated,
+  author  = {Hao, Yuhan and Hao, Stephanie and Andersen-Nissen, Erica and others and Satija, Rahul},
+  title   = {Integrated analysis of multimodal single-cell data},
+  journal = {Cell},
+  volume  = {184},
+  number  = {13},
+  pages   = {3573--3587},
+  year    = {2021},
+  doi     = {10.1016/j.cell.2021.04.048}
+}
+
+@article{tabulamuris2018single,
+  author  = {{The Tabula Muris Consortium}},
+  title   = {Single-cell transcriptomics of 20 mouse organs creates a {Tabula Muris}},
+  journal = {Nature},
+  volume  = {562},
+  pages   = {367--372},
+  year    = {2018},
+  doi     = {10.1038/s41586-018-0590-4}
+}
+
+@article{tasic2018shared,
+  author  = {Tasic, Bosiljka and Yao, Zizhen and Graybuck, Lucas T. and others and Zeng, Hongkui},
+  title   = {Shared and distinct transcriptomic cell types across neocortical areas},
+  journal = {Nature},
+  volume  = {563},
+  pages   = {72--78},
+  year    = {2018},
+  doi     = {10.1038/s41586-018-0654-5}
+}
+
+@article{hagemannjensen2020single,
+  author  = {Hagemann-Jensen, Michael and Ziegenhain, Christoph and Chen, Ping and others and Sandberg, Rickard},
+  title   = {Single-cell {RNA} counting at allele and isoform resolution using {Smart-seq3}},
+  journal = {Nature Biotechnology},
+  volume  = {38},
+  pages   = {708--714},
+  year    = {2020},
+  doi     = {10.1038/s41587-020-0497-0}
+}
+
+@article{paul2015transcriptional,
+  author  = {Paul, Franziska and Arkin, Ya'ara and Giladi, Amir and others and Amit, Ido},
+  title   = {Transcriptional heterogeneity and lineage commitment in myeloid progenitors},
+  journal = {Cell},
+  volume  = {163},
+  number  = {7},
+  pages   = {1663--1677},
+  year    = {2015},
+  doi     = {10.1016/j.cell.2015.11.013}
+}
+
+@article{muraro2016single,
+  author  = {Muraro, Mauro J. and Dharmadhikari, Gitanjali and Gr{\"u}n, Dominic and others and van Oudenaarden, Alexander},
+  title   = {A single-cell transcriptome atlas of the human pancreas},
+  journal = {Cell Systems},
+  volume  = {3},
+  number  = {4},
+  pages   = {385--394},
+  year    = {2016},
+  doi     = {10.1016/j.cels.2016.09.002}
+}
+
+@article{oliveira2025highdefinition,
+  author  = {Oliveira, Michelli F. and Romero, Juan P. and Chung, Meii and others},
+  title   = {High-definition spatial transcriptomic profiling of immune cell populations in colorectal cancer},
+  journal = {Nature Genetics},
+  year    = {2025},
+  note    = {verify volume, pages and DOI}
+}
+
+@article{stickels2021highly,
+  author  = {Stickels, Robert R. and Murray, Evan and Kumar, Pawan and others and Chen, Fei},
+  title   = {Highly sensitive spatial transcriptomics at near-cellular resolution with {Slide-seqV2}},
+  journal = {Nature Biotechnology},
+  volume  = {39},
+  pages   = {313--319},
+  year    = {2021},
+  doi     = {10.1038/s41587-020-0739-1}
+}
+
+@article{chen2022spatiotemporal,
+  author  = {Chen, Ao and Liao, Sha and Cheng, Mengnan and others and Wang, Jian},
+  title   = {Spatiotemporal transcriptomic atlas of mouse organogenesis using {DNA} nanoball-patterned arrays},
+  journal = {Cell},
+  volume  = {185},
+  number  = {10},
+  pages   = {1777--1792},
+  year    = {2022},
+  doi     = {10.1016/j.cell.2022.04.003}
+}
+
+@article{zhang2023molecularly,
+  author  = {Zhang, Meng and Pan, Xingjie and Jung, Won and others and Zhuang, Xiaowei},
+  title   = {Molecularly defined and spatially resolved cell atlas of the whole mouse brain},
+  journal = {Nature},
+  volume  = {624},
+  pages   = {343--354},
+  year    = {2023},
+  doi     = {10.1038/s41586-023-06808-9}
+}
+
+@article{janesick2023high,
+  author  = {Janesick, Amanda and Shelansky, Robert and Gottscho, Andrew D. and others and Taylor, Sarah E. B.},
+  title   = {High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis},
+  journal = {Nature Communications},
+  volume  = {14},
+  pages   = {8353},
+  year    = {2023},
+  doi     = {10.1038/s41467-023-43458-x},
+  note    = {verify DOI}
+}
+
+@article{gtex2020,
+  author  = {{The GTEx Consortium}},
+  title   = {The {GTEx} Consortium atlas of genetic regulatory effects across human tissues},
+  journal = {Science},
+  volume  = {369},
+  number  = {6509},
+  pages   = {1318--1330},
+  year    = {2020},
+  doi     = {10.1126/science.aaz1776}
+}
+
+@misc{dua2019uci,
+  author       = {Dua, Dheeru and Graff, Casey},
+  title        = {{UCI} Machine Learning Repository},
+  howpublished = {\url{https://archive.ics.uci.edu}},
+  year         = {2019}
+}

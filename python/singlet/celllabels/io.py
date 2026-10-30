@@ -48,6 +48,9 @@ class SampleInput:
         default_factory=dict
     )  # donor label -> DataFrame(chrom,pos,ref,alt,ad,dp); restricted
     source: str = ""
+    gene_ids: List[str] = field(
+        default_factory=list
+    )  # Ensembl ids of the columns of ``X`` (version suffix as stored)
 
     @property
     def barcode_digest(self) -> str:
@@ -195,6 +198,7 @@ def read_legacy(
             donor = _donor_labels(b.read("donor_assignments", gsm), barcodes)
         X = sps.csr_matrix(a.X)
         genes = [str(g) for g in a.var["gene_name"]]
+        gene_ids = [str(g) for g in a.var_names]
     finally:
         b.close()
     s = SampleInput(
@@ -210,6 +214,7 @@ def read_legacy(
         meta=meta,
         donor=donor,
         source=f"legacy:{bundle_path.name}",
+        gene_ids=gene_ids,
     )
     if sidecar is not None:
         s.donor_sites = read_donor_sites(sidecar, gsm)
@@ -249,6 +254,7 @@ def read_s1(
         meta=meta,
         donor=donor,
         source=f"store:{st.rev}",
+        gene_ids=[str(g) for g in a.var_names],
     )
     if sidecar is not None:
         s.donor_sites = read_donor_sites(sidecar, gsm)

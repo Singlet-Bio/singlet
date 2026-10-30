@@ -37,7 +37,7 @@ static int n_pass = 0, n_fail = 0;
 struct Pool {
     int nsnp = 0, ncell = 0, K = 0;
     std::vector<int32_t> ad_ip, ad_ix, dp_ip, dp_ix;
-    std::vector<uint8_t> ad_v, dp_v;
+    std::vector<uint16_t> ad_v, dp_v;
     std::vector<int> donor;       // true donor (first donor for doublets)
     std::vector<char> dbl;        // 1 = planted heterotypic doublet
 };
@@ -268,6 +268,26 @@ int main() {
         cfg.n_donors = -1;
         DemuxResult r = run(P, cfg);
         CHECK(r.n_donors_k == 4, "concentrated doublets: no extra donor (K=4)");
+    }
+
+    std::cout << "=== identical results at any thread count ===\n";
+    {
+        Pool P = make_pool(4, 1200, 2000, 120, 0.10, 77);
+        DemuxResult ref;
+        for (int th : {1, 2, 3, 8}) {
+            DonorDemuxConfig cfg = base_cfg();
+            cfg.n_donors = -1;
+            cfg.threads = th;
+            DemuxResult r = run(P, cfg);
+            if (th == 1) { ref = r; CHECK(r.n_donors_k >= 2, "auto-K finds donors (threads=1)"); continue; }
+            bool same = r.n_donors_k == ref.n_donors_k && r.geno_error == ref.geno_error &&
+                        r.assignments.size() == ref.assignments.size();
+            for (size_t c = 0; same && c < r.assignments.size(); ++c)
+                same = r.assignments[c].label == ref.assignments[c].label &&
+                       r.assignments[c].prob_max == ref.assignments[c].prob_max &&
+                       r.assignments[c].prob_doublet == ref.assignments[c].prob_doublet;
+            CHECK(same, "auto-K and every assignment bit-identical at threads=" + std::to_string(th));
+        }
     }
 
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";

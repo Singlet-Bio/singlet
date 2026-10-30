@@ -1,0 +1,19 @@
+{
+  "total_unmapped_reads": 12265634,
+  "screened_reads": 12265634,
+  "kingdoms_screened": ["VIRAL","BACTERIAL","FUNGAL"],
+  "host_filter_active": true,
+  "viral_hits": 113095,
+  "bacterial_hits": 0,
+  "fungal_hits": 2246517,
+  "unknown_hits": 9906022,
+  "viral_fraction": 0.009220,
+  "bacterial_fraction": 0.000000,
+  "fungal_fraction": 0.183155,
+  "em_species_count": 0,
+  "em_iterations": 257,
+  "per_cell_species": "em_confirmed_only",
+  "missing_reference_fasta": [],
+  "top_pathogens": [
+  ]
+}

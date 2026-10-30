@@ -1,0 +1,15 @@
+node=c010.clipper.gvsu.edu cpus=8 set=GSM4006843 T=4 part=short-cpu jobid=789533 2026-10-27T22:04:28-04:00
+36e13164cea273912a87b55b1b115665f7451c2d8f21c64626923848770420b3  /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-w3
+-rwxr-xr-x 1 debruinz debruinz_project 12414952 Oct 27 10:11 /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-w3
+bb51b0638dd8d06b0eaafead9e512835e7aa4b12
+loadavg=17.36 25.93 26.37
+cotenant_cpus=48
+CPU(s):                                  52
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Xeon(R) Gold 6230R CPU @ 2.10GHz
+Thread(s) per core:                      1
+Core(s) per socket:                      26
+Socket(s):                               2
+CPU(s) scaling MHz:                      64%
+CPU max MHz:                             4000.0000
+8

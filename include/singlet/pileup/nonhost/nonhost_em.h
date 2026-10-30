@@ -28,6 +28,8 @@
 #include "nonhost_screener.h"  // MultiHit, NonHostCategory
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -101,64 +103,67 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
         return {};
     }
 
-    // ── Step 1: Build read → sparse (species_index, hit_rate) representation ──
-    // Only include reads with ≥1 hit above the soft threshold (as captured in MultiHit).
-    // Merge viral_hits and microbial_hits per read; take max rate if a species appears in both.
+    // ── Step 1: Group the reads by their hit pattern ──────────────────────────
+    // A read is the set of (species, hit_rate) it hits after the pre-filter, with
+    // viral and microbial rates merged by max. Reads with the same pattern contribute
+    // identical EM terms, so the EM runs over the distinct patterns with an integer
+    // multiplicity: the terms are summed per pattern in a canonical order (patterns
+    // sorted, species ascending) in double precision, which makes the result a function
+    // of the multiset of reads only, not of their order, of hash-table iteration or of
+    // the number of threads that produced them.
 
-    std::unordered_map<uint32_t, uint32_t> species_to_idx;  // species_id → sequential index
-    std::vector<uint32_t>                  idx_to_species;   // sequential index → species_id
-
-    // Per-read sparse vectors: each element = (species_idx, hit_rate)
-    // Only reads with ≥1 hit are included.
-    std::vector<std::vector<std::pair<uint32_t, float>>> read_hits;
-    read_hits.reserve(multi_hits.size());
+    using Pattern = std::vector<std::pair<uint32_t, float>>;   // (species_id, rate), species ascending
+    std::map<Pattern, uint64_t> pattern_count;
 
     for (const auto& mh : multi_hits) {
         if (mh.viral_hits.empty() && mh.microbial_hits.empty()) continue;
 
-        // Merge rates: if species appears in both viral and microbial lists (edge case),
-        // take the maximum hit_rate.
-        std::unordered_map<uint32_t, float> merged;
+        // If a species appears in both viral and microbial lists (edge case), take the maximum.
+        std::map<uint32_t, float> merged;
         for (const auto& [sid, rate] : mh.viral_hits)
             merged[sid] = std::max(merged[sid], rate);   // default-initialises to 0.0
         for (const auto& [sid, rate] : mh.microbial_hits)
             merged[sid] = std::max(merged[sid], rate);
 
-        // Pre-filter: discard species hits below the minimum hit-rate threshold.
-        // k-mer hits with hit_rate < min_prefilter_hr are almost always spurious random
-        // minimizer collisions and should not enter the EM.
-        if (min_prefilter_hr > 0.0f) {
-            for (auto it = merged.begin(); it != merged.end(); ) {
-                if (it->second < min_prefilter_hr) it = merged.erase(it);
-                else ++it;
-            }
-        }
-
-        if (merged.empty()) continue;
-
-        // Assign sequential indices to newly seen species
-        std::vector<std::pair<uint32_t, float>> sparse;
-        sparse.reserve(merged.size());
+        // Pre-filter: hits with hit_rate < min_prefilter_hr are almost always spurious
+        // random minimizer collisions and must not enter the EM.
+        Pattern pat;
+        pat.reserve(merged.size());
         for (const auto& [sid, rate] : merged) {
             if (rate <= 0.0f) continue;
-            auto it = species_to_idx.find(sid);
-            if (it == species_to_idx.end()) {
-                uint32_t k = static_cast<uint32_t>(idx_to_species.size());
-                species_to_idx.emplace(sid, k);
-                idx_to_species.push_back(sid);
-                sparse.emplace_back(k, rate);
-            } else {
-                sparse.emplace_back(it->second, rate);
-            }
+            if (min_prefilter_hr > 0.0f && rate < min_prefilter_hr) continue;
+            pat.emplace_back(sid, rate);
         }
-        if (!sparse.empty())
-            read_hits.push_back(std::move(sparse));
+        if (!pat.empty()) ++pattern_count[std::move(pat)];
+    }
+
+    // species index = rank of the species id
+    std::vector<uint32_t> idx_to_species;   // ascending species ids
+    {
+        std::set<uint32_t> ids;
+        for (const auto& [pat, cnt] : pattern_count)
+            for (const auto& [sid, rate] : pat) ids.insert(sid);
+        idx_to_species.assign(ids.begin(), ids.end());
+    }
+    struct Group { std::vector<std::pair<uint32_t, float>> hits; double count; };   // (species index, rate)
+    std::vector<Group> groups;
+    groups.reserve(pattern_count.size());
+    uint64_t n_reads_total = 0;
+    for (const auto& [pat, cnt] : pattern_count) {
+        Group g;
+        g.count = static_cast<double>(cnt);
+        n_reads_total += cnt;
+        for (const auto& [sid, rate] : pat) {
+            const auto it = std::lower_bound(idx_to_species.begin(), idx_to_species.end(), sid);
+            g.hits.emplace_back(static_cast<uint32_t>(it - idx_to_species.begin()), rate);
+        }
+        groups.push_back(std::move(g));
     }
 
     const uint32_t K = static_cast<uint32_t>(idx_to_species.size());
-    const float    N = static_cast<float>(read_hits.size());  // number of nonhost reads
+    const double   N = static_cast<double>(n_reads_total);   // number of nonhost reads
 
-    if (K == 0 || N <= 0.0f) {
+    if (K == 0 || N <= 0.0) {
         if (out_iterations) *out_iterations = 0;
         return {};
     }
@@ -168,64 +173,64 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
     // it has a hit.  Used in M-step to apply a small hit-rate-proportional pseudo-count
     // that down-weights low-specificity species (random k-mer noise) relative to
     // high-specificity species (real viral hits with broad minimizer coverage).
-    constexpr float kRegAlpha = 0.1f;  // small Dirichlet pseudo-count weight
-    std::vector<float> prior_hr(K, 0.0f);
+    constexpr double kRegAlpha = 0.1;  // small Dirichlet pseudo-count weight
+    std::vector<double> prior_hr(K, 0.0);
     {
-        std::vector<uint32_t> prior_count(K, 0u);
-        for (const auto& read_sparse : read_hits) {
-            for (const auto& [k, h] : read_sparse) {
-                prior_hr[k] += h;
-                ++prior_count[k];
+        std::vector<double> prior_count(K, 0.0);
+        for (const auto& g : groups) {
+            for (const auto& [k, h] : g.hits) {
+                prior_hr[k] += g.count * static_cast<double>(h);
+                prior_count[k] += g.count;
             }
         }
         for (uint32_t k = 0; k < K; ++k)
-            prior_hr[k] = (prior_count[k] > 0u) ? prior_hr[k] / prior_count[k] : 0.0f;
+            prior_hr[k] = (prior_count[k] > 0.0) ? prior_hr[k] / prior_count[k] : 0.0;
     }
 
     // ── Step 2: Initialise θ uniformly ──────────────────────────────────────
-    std::vector<float> theta(K, 1.0f / static_cast<float>(K));
-    std::vector<float> theta_new(K);
+    std::vector<double> theta(K, 1.0 / static_cast<double>(K));
+    std::vector<double> theta_new(K);
 
     // ── Step 3: EM iteration ─────────────────────────────────────────────────
     int iter = 0;
     for (; iter < max_iter; ++iter) {
-        std::fill(theta_new.begin(), theta_new.end(), 0.0f);
+        std::fill(theta_new.begin(), theta_new.end(), 0.0);
 
-        // E-step: for each read accumulate weighted responsibilities
-        for (const auto& read_sparse : read_hits) {
+        // E-step: for each pattern accumulate weighted responsibilities (× multiplicity)
+        for (const auto& g : groups) {
             // Denominator: Σ_j θ_j * h_ij
-            float denom = 0.0f;
-            for (const auto& [k, h] : read_sparse)
-                denom += theta[k] * h;
-            if (denom <= 0.0f) continue;  // numerical safety
+            double denom = 0.0;
+            for (const auto& [k, h] : g.hits)
+                denom += theta[k] * static_cast<double>(h);
+            if (denom <= 0.0) continue;  // numerical safety
 
-            // Accumulate: θ_new[k] += θ_k * h_ik / denom
-            for (const auto& [k, h] : read_sparse)
-                theta_new[k] += theta[k] * h / denom;
+            // Accumulate: θ_new[k] += count * θ_k * h_ik / denom
+            for (const auto& [k, h] : g.hits)
+                theta_new[k] += g.count * (theta[k] * static_cast<double>(h) / denom);
         }
 
         // M-step: apply hit-rate-weighted Dirichlet regularization and normalise.
         // theta[k] = (E[k] + alpha * prior_hr[k]) / (N + alpha * Σ prior_hr)
         // Species with high prior_hr (broad minimizer coverage) receive a larger
         // pseudo-count, penalising low-specificity noise relative to real viruses.
-        float total = N;  // Σ_k theta_new[k] = N after E-step
+        double total = N;  // Σ_k theta_new[k] = N after E-step
         for (uint32_t k = 0; k < K; ++k) {
             theta_new[k] += kRegAlpha * prior_hr[k];
-            total         += kRegAlpha * prior_hr[k];
+            total        += kRegAlpha * prior_hr[k];
         }
-        if (total > 0.0f) {
+        if (total > 0.0) {
             for (uint32_t k = 0; k < K; ++k)
                 theta_new[k] /= total;
         }
 
         // Convergence check: max |θ_new − θ_old|
-        float max_delta = 0.0f;
+        double max_delta = 0.0;
         for (uint32_t k = 0; k < K; ++k)
             max_delta = std::max(max_delta, std::abs(theta_new[k] - theta[k]));
 
         theta.swap(theta_new);
 
-        if (max_delta < tolerance) {
+        if (max_delta < static_cast<double>(tolerance)) {
             ++iter;   // report the iteration just completed
             break;
         }
@@ -234,18 +239,18 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
 
     // ── Step 4: Compute per-species stats ────────────────────────────────────
     // mean_hit_rate[k] = Σ_i (h_ik * w_ik) / Σ_i w_ik   (posterior-weighted mean)
-    std::vector<float> hit_rate_sum(K, 0.0f);
-    std::vector<float> weight_sum  (K, 0.0f);
+    std::vector<double> hit_rate_sum(K, 0.0);
+    std::vector<double> weight_sum  (K, 0.0);
 
-    for (const auto& read_sparse : read_hits) {
-        float denom = 0.0f;
-        for (const auto& [k, h] : read_sparse)
-            denom += theta[k] * h;
-        if (denom <= 0.0f) continue;
+    for (const auto& g : groups) {
+        double denom = 0.0;
+        for (const auto& [k, h] : g.hits)
+            denom += theta[k] * static_cast<double>(h);
+        if (denom <= 0.0) continue;
 
-        for (const auto& [k, h] : read_sparse) {
-            float w       = theta[k] * h / denom;
-            hit_rate_sum[k] += h * w;
+        for (const auto& [k, h] : g.hits) {
+            const double w = g.count * (theta[k] * static_cast<double>(h) / denom);
+            hit_rate_sum[k] += static_cast<double>(h) * w;
             weight_sum[k]   += w;
         }
     }
@@ -255,10 +260,10 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
     result.reserve(K);
 
     for (uint32_t k = 0; k < K; ++k) {
-        if (theta[k] < min_abundance) continue;
+        if (theta[k] < static_cast<double>(min_abundance)) continue;
 
-        const float mean_hr = (weight_sum[k] > 0.0f)
-                                  ? hit_rate_sum[k] / weight_sum[k]
+        const float mean_hr = (weight_sum[k] > 0.0)
+                                  ? static_cast<float>(hit_rate_sum[k] / weight_sum[k])
                                   : 0.0f;
 
         // Post-filter: skip species whose posterior mean hit-rate is below the
@@ -269,12 +274,12 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
         // Absolute read count gate: skip species with fewer than min_abs_reads expected reads.
         // This prevents false positives when nonhost reads are a tiny fraction of total unmapped
         // (e.g. a clean human PBMC with 10K total nonhost hits out of 2.6M unmapped reads).
-        const uint32_t n_reads_est = static_cast<uint32_t>(std::round(theta[k] * N));
+        const uint32_t n_reads_est = static_cast<uint32_t>(std::llround(theta[k] * N));
         if (min_abs_reads > 0 && n_reads_est < min_abs_reads) continue;
 
         SpeciesAbundance sa;
         sa.species_id         = idx_to_species[k];
-        sa.relative_abundance = theta[k];
+        sa.relative_abundance = static_cast<float>(theta[k]);
         sa.n_reads_assigned   = n_reads_est;
         sa.mean_hit_rate      = mean_hr;
 
@@ -293,7 +298,9 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
     // Sort descending by relative_abundance
     std::sort(result.begin(), result.end(),
               [](const SpeciesAbundance& a, const SpeciesAbundance& b) {
-                  return a.relative_abundance > b.relative_abundance;
+                  if (a.relative_abundance != b.relative_abundance)
+                      return a.relative_abundance > b.relative_abundance;
+                  return a.species_id < b.species_id;
               });
 
     return result;

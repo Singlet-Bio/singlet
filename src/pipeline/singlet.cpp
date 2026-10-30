@@ -95,6 +95,8 @@
 #include "singlet/fq/run_screen.h"
 #include "singlet/pileup/run_provenance.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
+#include "singlet/fq/read_source.h"  // RunSet, format_block, StarChunkSourceT: the one .1fq decoder
+#include "singlet/fq/concat.h"       // concat_1fq: runs as one file, for consumers that read a single .1fq
 #include "singlet/version.h"        // singlet::kVersion
 
 // ── Timing helper ──
@@ -426,7 +428,7 @@ static int cmd_download(int argc, char* argv[]) {
     std::string sra_input;    // .sra path or SRR accession
     std::string output_path;
     std::string protocol_tag;
-    std::string qual_str  = "none";   // alignment-only: quality unused by STAR CB matching
+    std::string qual_str  = "binned";   // ILLUMINA4: STAR's adapter clip and the SNP / mtDNA callers use it
     std::string codec_str = "zstd";
     int    codec_level = 4;
     uint32_t block_size = 500000;
@@ -453,7 +455,8 @@ static int cmd_download(int argc, char* argv[]) {
                 << "  -o, --output FILE    Output .1fq file [derived from input]\n\n"
                 << "Options:\n"
                 << "  --protocol TAG       Force protocol (skip auto-detect)\n"
-                << "  --quality MODE       none|binned|binned2|full (default: none — STAR does not use base quality for alignment)\n"
+                << "  --quality MODE       none|binned|binned2|full|binned-legacy (default: binned = 4 Illumina levels,\n"
+                << "                       2, 11, 25, 37; read by STAR's adapter clip and the SNP / mtDNA callers)\n"
                 << "  --no-trim            Skip polyA/adapter trimming\n"
                 << "  --codec NAME         zstd|lz4|none (default: zstd)\n"
                 << "  --codec-level N      Codec level (default: 4)\n"
@@ -523,10 +526,15 @@ static int cmd_download(int argc, char* argv[]) {
     }
 
     // Parse quality mode
-    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::BINNED4;
+    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::ILLUMINA4;
     if (qual_str == "none") qual_mode = singlet::fq::QualMode::NONE;
     else if (qual_str == "full") qual_mode = singlet::fq::QualMode::FULL;
     else if (qual_str == "binned2") qual_mode = singlet::fq::QualMode::BINNED2;
+    else if (qual_str == "binned-legacy") qual_mode = singlet::fq::QualMode::BINNED4;   // 0-9/10-19/20-29/30+
+    else if (qual_str != "binned") {
+        std::cerr << "ERROR: --quality must be none, binned, binned2, full or binned-legacy\n";
+        return 1;
+    }
 
     // Parse codec
     singlet::fq::Codec codec = singlet::fq::Codec::ZSTD;
@@ -854,7 +862,7 @@ static int cmd_encode(int argc, char* argv[]) {
                 << "  -o, --output FILE    Output .1fq file\n\n"
                 << "Options:\n"
                 << "  --protocol TAG       Force protocol (skip auto-detect)\n"
-                << "  --quality MODE       none|binned|binned2|full (default: binned)\n"
+                << "  --quality MODE       none|binned|binned2|full|binned-legacy (default: binned = 4 Illumina levels)\n"
                 << "  --no-dedup           Skip PCR duplicate collapsing\n"
                 << "  --no-trim            Skip polyA/adapter trimming\n"
                 << "  --codec NAME         zstd|lz4|none (default: zstd)\n"
@@ -911,10 +919,15 @@ static int cmd_encode(int argc, char* argv[]) {
         output_path = base + ".1fq";
     }
 
-    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::BINNED4;
+    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::ILLUMINA4;
     if (qual_str == "none") qual_mode = singlet::fq::QualMode::NONE;
     else if (qual_str == "full") qual_mode = singlet::fq::QualMode::FULL;
     else if (qual_str == "binned2") qual_mode = singlet::fq::QualMode::BINNED2;
+    else if (qual_str == "binned-legacy") qual_mode = singlet::fq::QualMode::BINNED4;   // 0-9/10-19/20-29/30+
+    else if (qual_str != "binned") {
+        std::cerr << "ERROR: --quality must be none, binned, binned2, full or binned-legacy\n";
+        return 1;
+    }
 
     singlet::fq::Codec codec = singlet::fq::Codec::ZSTD;
     if (codec_str == "lz4") codec = singlet::fq::Codec::LZ4;
@@ -1544,21 +1557,42 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // when mapping rate is near-zero and nearly all reads are unmapped.
         // EM deconvolution is statistical — 20M reads is more than sufficient for
         // species-level classification (even 1M would suffice).
+        // The sample above the cap is fixed by the read name, not by file order (STAR writes unmapped reads in
+        // thread-dependent order; order-free-rules R8): keep reads whose name hash is below a threshold that
+        // halves whenever the kept set exceeds the cap. The kept set depends only on the set of reads.
         static constexpr size_t MAX_NONHOST_READS = 20'000'000;
         std::vector<std::string> reads;
+        bool nonhost_subsampled = false;
         {
+            std::vector<std::pair<uint64_t, std::string>> kept;
+            uint64_t thr = UINT64_MAX;
             std::ifstream fq(mate1_path);
             std::string name_l, seq_l, plus_l, qual_l;
             while (std::getline(fq, name_l) && std::getline(fq, seq_l) &&
                    std::getline(fq, plus_l) && std::getline(fq, qual_l)) {
-                if (!seq_l.empty()) reads.push_back(seq_l);
-                if (reads.size() >= MAX_NONHOST_READS) break;
+                if (seq_l.empty()) continue;
+                size_t e = name_l.find_first_of(" \t");
+                uint64_t h = 14695981039346656037ULL;   // FNV-1a of the read name
+                for (size_t i = 1; i < (e == std::string::npos ? name_l.size() : e); ++i) {
+                    h ^= static_cast<unsigned char>(name_l[i]); h *= 1099511628211ULL;
+                }
+                h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33;
+                if (h >= thr) continue;
+                kept.emplace_back(h, std::move(seq_l));
+                while (kept.size() > MAX_NONHOST_READS) {
+                    thr >>= 1;
+                    nonhost_subsampled = true;
+                    kept.erase(std::remove_if(kept.begin(), kept.end(),
+                                              [thr](const auto& p) { return p.first >= thr; }), kept.end());
+                }
             }
+            reads.reserve(kept.size());
+            for (auto& p : kept) reads.push_back(std::move(p.second));
         }
         const size_t n_total = reads.size();
-        if (n_total >= MAX_NONHOST_READS)
-            std::cerr << "[nonhost] Capped at " << MAX_NONHOST_READS
-                      << " reads (file larger; subsampling for EM)\n";
+        if (nonhost_subsampled)
+            std::cerr << "[nonhost] Subsampled to " << n_total
+                      << " reads by read-name hash (file above " << MAX_NONHOST_READS << ")\n";
         std::cerr << "[nonhost] EM screening " << n_total << " unmapped reads"
                   << (using_host_filter ? " (host-subtraction ON)" : "") << "...\n";
 
@@ -2646,6 +2680,12 @@ static void usage(const char* prog) {
         << "  --sra FILE             SRA file (use 'singlet download' instead)\n"
         << "  --bam-file BAM         Read from existing BAM (debug only)\n"
         << "  --1fq FILE             Equivalent to positional .1fq argument\n"
+        << "  --1fq FILE,FILE...     Several runs of one sample (same protocol and barcode dictionary), pooled as one\n"
+        << "                         stream without re-encoding; positional .1fq arguments may also be repeated\n"
+        << "  --runs-dir DIR         Runs DIR/<run>.1fq for each run of --runs-used, else of --run-screen runs_kept\n"
+        << "  --read-source MODE     How decoded reads reach STAR: chunk (default; decoded inside STAR's process into its\n"
+        << "                         chunk buffers), fifo (FASTQ text through named pipes), file (FASTQ files in TMPDIR).\n"
+        << "                         Also SINGLET_READ_SOURCE.\n"
         << "  --star-threads N       Alias for --threads\n"
         << "  --variant-calling      Enable RNA variant calling (Smart-seq2/Bulk only)\n"
         << "  --min-coverage INT     Min depth for variant call [10]\n"
@@ -2745,11 +2785,16 @@ int main(int argc, char* argv[]) {
     std::string bam_file;
     std::string sra_file;
     std::string onefq_file;
+    std::vector<std::string> onefq_files;      // the sample's runs (one .1fq each), read as one stream (read_source.h)
+    std::string runs_dir;                      // --runs-dir: <dir>/<run>.1fq for each run of --runs-used / --run-screen
+    std::string read_source_mode = "chunk";    // --read-source chunk|fifo|file: how decoded reads reach STAR
+    if (const char* e = std::getenv("SINGLET_READ_SOURCE"); e && *e) read_source_mode = e;
     std::vector<std::string> star_extra;
     int star_threads = 0;  // 0 = auto-detect
     bool threads_specified = false;
     int pileup_threads = 1;  // bgzf not useful for uncompressed pipe from STAR
     int parallel_pileup = -1; // -1=auto, 0=off, 1=on
+    int stream_unsorted = -1; // -1=auto (default: on for CB_UMI_Simple scRNA), 0=off (--sorted-bam), 1=on (--stream-unsorted). On: no sorted BAM; unsorted STAR output streamed into the serial pileup, CB from CR
     int n_donors = -1;
     int umi_len = 12;
     bool umi_len_explicit = false;  // S5-UMI-LEN: true when --umi-len given by user
@@ -2828,6 +2873,8 @@ int main(int argc, char* argv[]) {
         else if (arg == "--pileup-threads" && i+1 < argc) pileup_threads = std::atoi(argv[++i]);
         else if (arg == "--parallel-pileup") parallel_pileup = 1;
         else if (arg == "--no-parallel-pileup") parallel_pileup = 0;
+        else if (arg == "--stream-unsorted") stream_unsorted = 1;
+        else if (arg == "--sorted-bam") stream_unsorted = 0;
         else if (arg == "--output-format" && i+1 < argc) output_format = argv[++i];
         else if (arg == "--pipeline") pipeline_mode = true;
         else if (arg == "--cascade" && i+1 < argc) cascade_mode = argv[++i];
@@ -2912,11 +2959,17 @@ int main(int argc, char* argv[]) {
             }
         }
         else if (arg == "--sra" && i+1 < argc) sra_file = argv[++i];
-        else if (arg == "--1fq" && i+1 < argc) onefq_file = argv[++i];
-        else if (arg[0] != '-' && onefq_file.empty() && arg.size() > 4 &&
-                 arg.substr(arg.size() - 4) == ".1fq") {
-            onefq_file = arg;  // positional .1fq argument
+        else if (arg == "--1fq" && i+1 < argc) {
+            std::istringstream iss(argv[++i]);   // comma-separated: several runs of one sample
+            for (std::string f; std::getline(iss, f, ',');)
+                if (!f.empty()) onefq_files.push_back(f);
         }
+        else if (arg[0] != '-' && arg.size() > 4 &&
+                 arg.substr(arg.size() - 4) == ".1fq") {
+            onefq_files.push_back(arg);  // positional .1fq argument (repeat for several runs)
+        }
+        else if (arg == "--read-source" && i+1 < argc) read_source_mode = argv[++i];
+        else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
         else if (arg == "--star-extra" && i+1 < argc) {
             std::istringstream iss(argv[++i]);
             std::string token;
@@ -3065,6 +3118,59 @@ int main(int argc, char* argv[]) {
     }
 
     // ── Validate ──
+    // Several runs of one sample (`A.1fq B.1fq`, `--1fq A,B`, or `--runs-dir DIR` with --runs-used / --run-screen):
+    // the decoder reads them as one stream (read_source.h RunSet), with no pooled file. Consumers that read a single
+    // .1fq (ATAC, plate and bulk assays, the feature-barcode pass) get the runs' compressed blocks concatenated into
+    // one file on the output disk (fq/concat.h, from perf/deep-samples), still without decode or re-encode.
+    if (!runs_dir.empty()) {
+        std::vector<std::string> runs = singlet::split_list(runs_used_flag);
+        if (runs.empty() && !run_screen_path.empty()) runs = singlet::runs_kept_from_screen_json(run_screen_path);
+        if (runs.empty()) {
+            std::cerr << "ERROR: --runs-dir needs --runs-used A,B,... or --run-screen screen.json (runs_kept)\n";
+            return 1;
+        }
+        if (!onefq_files.empty()) {
+            std::cerr << "ERROR: give the runs either as .1fq arguments or with --runs-dir, not both\n";
+            return 1;
+        }
+        for (const auto& r : runs) onefq_files.push_back(runs_dir + "/" + r + ".1fq");
+    }
+    if (onefq_files.size() > 1 && runs_used_flag.empty() && run_screen_path.empty()) {
+        for (const auto& f : onefq_files) {   // provenance: the run ids are the inputs' file stems
+            const auto sl = f.rfind('/');
+            std::string stem = (sl == std::string::npos) ? f : f.substr(sl + 1);
+            if (stem.size() > 4 && stem.substr(stem.size() - 4) == ".1fq") stem.resize(stem.size() - 4);
+            runs_used_flag += (runs_used_flag.empty() ? "" : ",") + stem;
+        }
+    }
+    std::string onefq_concat_path;   // the runs as one file, made on first need; removed when main() returns
+    struct ConcatCleanup {
+        std::string* p;
+        ~ConcatCleanup() {
+            if (!p->empty()) { unlink(p->c_str()); rmdir(p->substr(0, p->rfind('/')).c_str()); }
+        }
+    } concat_cleanup{&onefq_concat_path};
+    auto runs_as_one_file = [&]() -> std::string {
+        if (onefq_files.size() < 2) return onefq_file;
+        if (!onefq_concat_path.empty()) return onefq_concat_path;
+        const std::string cdir = out_prefix + "/.multi_run";
+        mkdir_p(cdir);
+        std::string path = cdir + "/sample.1fq";
+        StopWatch concat_sw;
+        auto crep = singlet::fq::concat_1fq(onefq_files, path);   // throws if the runs cannot be one stream
+        onefq_concat_path = path;
+        for (const auto& w : crep.warnings) std::cerr << "[multi-run] WARNING: " << w << "\n";
+        std::cerr << "[multi-run] " << onefq_files.size() << " runs -> " << crep.reads << " reads, " << crep.blocks
+                  << " blocks in " << concat_sw.elapsed_s() << "s (" << path << ")\n";
+        return path;
+    };
+    if (!onefq_files.empty()) onefq_file = onefq_files.front();
+    const std::vector<std::string> onefq_runs_in = onefq_files;   // as given (provenance)
+    if (read_source_mode != "chunk" && read_source_mode != "fifo" && read_source_mode != "file") {
+        std::cerr << "ERROR: --read-source must be chunk, fifo or file (got '" << read_source_mode << "')\n";
+        return 1;
+    }
+    if (read_source_mode == "file") setenv("SINGLET_FILE_DECODE", "1", 1);
     bool sra_mode = !sra_file.empty();
     bool onefq_mode = !onefq_file.empty();
 
@@ -3771,6 +3877,9 @@ int main(int argc, char* argv[]) {
     // R1.fastq scan for barcode discovery — saves ~10s).
     uint32_t onefq_bc_dict_n = 0;
     std::vector<uint64_t> onefq_bc_freq;
+    // order-free-rules R11: STAR's CB_UMI_Simple whitelist correction for the stream, its exact histogram from pass 1
+    singlet::CbCorrector cb_corrector;
+    bool cb_hist_ready = false;
     std::vector<uint8_t> onefq_bc_dict_flat;
     uint16_t onefq_bc_length = 0;
     std::unordered_map<uint64_t, uint64_t> onefq_bc_counts;  // non-dict path (packed keys)
@@ -4139,6 +4248,30 @@ int main(int argc, char* argv[]) {
             }
             onefq_r1_len = r1_len;
             onefq_n_reads = hdr.n_unique;
+            if (onefq_files.size() > 1) {
+                // Several runs of one sample, pooled as one stream (read_source.h): same layout and dictionary
+                if (is_atac_mode || is_smart_seq2_mode || is_bulk_rna_mode) {
+                    // these paths read one .1fq: the runs' blocks concatenated (no decode, no re-encode)
+                    try {
+                        onefq_file = runs_as_one_file();
+                    } catch (const std::exception& e) {
+                        std::cerr << "[singlet] ERROR: cannot read the runs as one sample: " << e.what() << "\n";
+                        return 1;
+                    }
+                    onefq_files = {onefq_file};
+                }
+                singlet::fq::RunSet runs_check;
+                try {
+                    runs_check.open(onefq_files);
+                } catch (const std::exception& e) {
+                    std::cerr << "[singlet] ERROR: " << e.what() << "\n";
+                    return 1;
+                }
+                onefq_n_reads = 0;
+                for (size_t f = 0; f < runs_check.n_files(); ++f) onefq_n_reads += runs_check.reader(f).total_reads();
+                std::cerr << "[singlet] .1fq: " << onefq_files.size() << " runs pooled, " << onefq_n_reads
+                          << " reads, " << runs_check.block_count() << " blocks\n";
+            }
             // Cache protocol_id for use after this block (e.g., per-segment whitelist discovery).
             onefq_protocol_id = hdr.protocol_id;
 
@@ -4302,9 +4435,14 @@ int main(int argc, char* argv[]) {
             const uint32_t bc_dict_n = reader.bc_dict_size();
             const bool has_bc_dict = reader.has_bc_dict();
 
-            const uint32_t total_blocks = reader.block_count();
-            const int fd = reader.file_descriptor();
-            const auto codec = static_cast<singlet::fq::Codec>(hdr.codec);
+            singlet::fq::RunSet runs;   // every run of the sample, one stream
+            try {
+                runs.open(onefq_files);
+            } catch (const std::exception& e) {
+                std::cerr << "[singlet] ERROR: " << e.what() << "\n";
+                _exit(1);
+            }
+            const uint32_t total_blocks = runs.block_count();
             const int decode_threads = std::min(static_cast<int>(star_threads), static_cast<int>(total_blocks));
 
             static constexpr char NUM_TO_ASCII[5] = {'A','C','G','T','N'};
@@ -4340,97 +4478,52 @@ int main(int argc, char* argv[]) {
                           << " entries \xC3\x97 " << atac_bc_len << "bp\n";
             }
 
-            // Worker: pread + decompress + decode + format one block
+            // Worker: decode one block (read_source.h), count its barcodes, format it as FASTQ text.
+            // File mode leaves the 5' clip to STAR (--clip5pNbases) and has no R2 length guard.
+            singlet::fq::FormatOptions fopt;
+            fopt.atac = is_atac_mode;
+            fopt.has_i2 = has_i2_stream;
+            fopt.atac_dict = atac_bc_dict_bytes;
+            fopt.atac_bc_len = atac_bc_len;
+            fopt.bc_dict_n = bc_dict_n;
+            if (use_complex_concat && !complex_concat_segs_all.empty()) {
+                for (const auto& seg : complex_concat_segs_all) fopt.concat.push_back({seg.start, seg.len});
+                fopt.concat_umi_start = concat_umi_start_0;
+                fopt.concat_umi_len = concat_umi_len_c;
+            }
             auto process_block = [&](uint32_t bi, uint64_t read_off) -> FmtBlock {
                 FmtBlock fb;
-                uint64_t file_off = reader.block_offset(bi);
-                uint32_t comp_size = reader.block_comp_size(bi);
-
-                singlet::fq::BlockHeader bh;
-                ::pread(fd, &bh, sizeof(bh), static_cast<off_t>(file_off));
-
-                std::vector<uint8_t> comp_buf(comp_size);
-                ::pread(fd, comp_buf.data(), comp_size,
-                        static_cast<off_t>(file_off + sizeof(bh)));
-
-                size_t est_raw = static_cast<size_t>(bh.n_reads) * 200;
-                std::vector<uint8_t> raw_buf(est_raw);
-                size_t raw_size;
-                try {
-                    raw_size = singlet::fq::compress::decompress_block(
-                        codec, comp_buf.data(), comp_size,
-                        raw_buf.data(), raw_buf.size());
-                } catch (...) {
-                    raw_buf.resize(est_raw * 4);
-                    raw_size = singlet::fq::compress::decompress_block(
-                        codec, comp_buf.data(), comp_size,
-                        raw_buf.data(), raw_buf.size());
-                }
-
                 singlet::fq::DecodedBlock blk;
-                reader.decode_payload(raw_buf.data(), raw_size, bh, blk);
-
+                runs.decode(bi, blk);
                 fb.n_reads = blk.n_reads;
-                if (has_bc_dict)
-                    fb.bc_indices = std::move(blk.bc_indices);
-                uint16_t r1_max = blk.r1_lengths.empty() ? 28 : *std::max_element(blk.r1_lengths.begin(), blk.r1_lengths.end());
-                uint16_t r2_max = blk.r2_lengths.empty() ? 91 : *std::max_element(blk.r2_lengths.begin(), blk.r2_lengths.end());
-                // Account for dup expansion
-                uint64_t total_reps = 0;
                 const bool has_dups = !blk.dup_counts.empty();
-                for (uint32_t i = 0; i < blk.n_reads; ++i)
-                    total_reps += has_dups ? blk.dup_counts[i] : 1;
-                fb.r1.resize(total_reps * (static_cast<size_t>(r1_max) * 2 + (is_atac_mode ? 55 : 30)));
-                fb.r2.resize(total_reps * (static_cast<size_t>(r2_max) * 2 + (is_atac_mode ? 55 : 30)));
-                char* r1p = fb.r1.data();
-                char* r2p = fb.r2.data();
-                bool has_qual = !blk.r2_qual.empty();
-                uint64_t roff = read_off;
-
                 for (uint32_t i = 0; i < blk.n_reads; ++i) {
                     const uint32_t repeat = has_dups ? blk.dup_counts[i] : 1;
-                    uint16_t r1len = blk.r1_len(i);
-                    uint16_t r2len = blk.r2_len(i);
-
-                    // Skip reads with zero-length R1 or R2 — STAR's readLoad
-                    // calls exitWithError when Lread < 1, producing either
-                    // "short read sequence line" or "read files are not consistent"
-                    // depending on thread timing.  Zero-length R2 is non-alignable.
-                    // Skip BOTH R1 and R2 for this read to keep files in sync.
-                    if (r1len == 0 || r2len == 0) continue;
-
-                    const uint8_t* r1s = blk.r1_seq(i);
-                    const uint8_t* r2s = blk.r2_seq(i);
-                    const uint8_t* q = has_qual ? blk.r2_quality(i) : nullptr;
-
-                    // Count barcodes per-block for fast barcode discovery
-                    // Pack base values (0-4, 3 bits each) into uint64_t key
-                    // to avoid string heap allocation (bc_len ≤ 21 fits in 63 bits)
+                    const uint16_t r1len = blk.r1_len(i);
+                    if (r1len == 0 || blk.r2_len(i) == 0) continue;   // not given to STAR (format_block)
+                    // Count barcodes per block for fast barcode discovery: base values (0-4, 3 bits each) packed
+                    // into a uint64_t key (bc_len <= 21 fits in 63 bits)
                     if (has_i2_stream) {
                         // ATAC 3-read: barcodes are in the I2 stream, NOT R1 genomic reads.
-                        // Count from I2 so atac_bc_map matches the QNAME-embedded barcodes.
-                        if (!blk.i2_data.empty() &&
-                            i < blk.i2_lengths.size() && blk.i2_lengths[i] > 0) {
+                        if (!blk.i2_data.empty() && i < blk.i2_lengths.size() && blk.i2_lengths[i] > 0) {
                             const uint8_t* bcp = blk.i2_seq(i);
                             uint16_t blen = blk.i2_len(i);
                             if (blen > 0 && blen <= 21) {
                                 uint64_t key = 0;
-                                for (uint16_t j = 0; j < blen; ++j)
-                                    key = (key << 3) | bcp[j];
+                                for (uint16_t j = 0; j < blen; ++j) key = (key << 3) | bcp[j];
                                 fb.bc_counts_packed[key] += repeat;
                             }
                         }
                     } else if (count_barcodes_in_decode && !has_bc_dict &&
                                r1len >= discover_bc_start_0 + discover_bc_len) {
+                        const uint8_t* r1s = blk.r1_seq(i);
                         uint64_t key = 0;
                         const uint8_t* bcs = r1s + discover_bc_start_0;
-                        for (int j = 0; j < discover_bc_len; ++j)
-                            key = (key << 3) | bcs[j];
+                        for (int j = 0; j < discover_bc_len; ++j) key = (key << 3) | bcs[j];
                         fb.bc_counts_packed[key] += repeat;
                         // Extra segments for CB_UMI_Complex (segs 1..N-1): same packed key
                         if (!complex_extra_segs.empty()) {
-                            if (fb.extra_seg_counts.empty())
-                                fb.extra_seg_counts.resize(complex_extra_segs.size());
+                            if (fb.extra_seg_counts.empty()) fb.extra_seg_counts.resize(complex_extra_segs.size());
                             for (size_t ex = 0; ex < complex_extra_segs.size(); ++ex) {
                                 const auto& es = complex_extra_segs[ex];
                                 if (es.r1_start < 0 || r1len < es.r1_start + es.len) continue;
@@ -4441,133 +4534,20 @@ int main(int argc, char* argv[]) {
                             }
                         }
                     }
-
-                    for (uint32_t rep = 0; rep < repeat; ++rep) {
-                        // Build ATAC QNAME prefix "BC:BARCODE_" when in ATAC mode.
-                        // Barcode source priority: I2 stream > BC dict > N-padding.
-                        char atac_qname_prefix[32] = {}; // "BC:XXXXXXXXXXXXXXXX_" max 23 chars
-                        if (is_atac_mode) {
-                            bool bc_set = false;
-                            // 1. I2 stream (3-read FASTQ encoded)
-                            if (has_i2_stream && !blk.i2_data.empty() &&
-                                i < blk.i2_lengths.size() && blk.i2_lengths[i] > 0) {
-                                const uint8_t* bcp = blk.i2_seq(i);
-                                uint16_t blen = blk.i2_len(i);
-                                int np = 0;
-                                atac_qname_prefix[np++] = 'B';
-                                atac_qname_prefix[np++] = 'C';
-                                atac_qname_prefix[np++] = ':';
-                                for (uint16_t j = 0; j < blen; ++j)
-                                    atac_qname_prefix[np++] = NUM_TO_ASCII[bcp[j]];
-                                atac_qname_prefix[np++] = '_';
-                                atac_qname_prefix[np]   = '\0';
-                                bc_set = true;
-                            }
-                            // 2. BC dict slot
-                            if (!bc_set) {
-                                uint32_t bc_idx = (!fb.bc_indices.empty() && i < fb.bc_indices.size())
-                                                  ? fb.bc_indices[i] : UINT32_MAX;
-                                if (!atac_bc_dict_bytes.empty() && atac_bc_len > 0 &&
-                                    bc_idx < bc_dict_n) {
-                                    const uint8_t* bcp = atac_bc_dict_bytes.data() +
-                                                         static_cast<size_t>(bc_idx) * atac_bc_len;
-                                    int np = 0;
-                                    atac_qname_prefix[np++] = 'B';
-                                    atac_qname_prefix[np++] = 'C';
-                                    atac_qname_prefix[np++] = ':';
-                                    for (uint16_t j = 0; j < atac_bc_len; ++j)
-                                        atac_qname_prefix[np++] = NUM_TO_ASCII[bcp[j]];
-                                    atac_qname_prefix[np++] = '_';
-                                    atac_qname_prefix[np]   = '\0';
-                                    bc_set = true;
-                                }
-                            }
-                            // 3. N-pad fallback
-                            if (!bc_set) {
-                                int np = sprintf(atac_qname_prefix, "BC:NNNNNNNNNNNNNNNN_");
-                                (void)np;
-                            }
-                        }
-
-                        // R1 record
-                        int n = is_atac_mode
-                            ? sprintf(r1p, "@%sr%lu\n", atac_qname_prefix, (unsigned long)roff)
-                            : sprintf(r1p, "@r%lu\n", (unsigned long)roff);
-                        char* s1 = r1p + n;
-                        if (use_complex_concat && !complex_concat_segs_all.empty()) {
-                            // Rewrite R1 as [seg0][seg1]...[segN][UMI] for CB_samTagOut concat
-                            int wpos = 0;
-                            for (const auto& seg : complex_concat_segs_all) {
-                                for (int j = 0; j < seg.len; ++j) {
-                                    int src = seg.start + j;
-                                    s1[wpos++] = (src < (int)r1len) ? NUM_TO_ASCII[r1s[src]] : 'N';
-                                }
-                            }
-                            for (int j = 0; j < concat_umi_len_c; ++j) {
-                                int src = concat_umi_start_0 + j;
-                                s1[wpos++] = (src < (int)r1len) ? NUM_TO_ASCII[r1s[src]] : 'N';
-                            }
-                            s1 += wpos;
-                            *s1++ = '\n'; *s1++ = '+'; *s1++ = '\n';
-                            memset(s1, 'F', wpos); s1 += wpos; *s1++ = '\n';
-                        } else {
-                            for (uint16_t j = 0; j < r1len; ++j)
-                                s1[j] = NUM_TO_ASCII[r1s[j]];
-                            s1 += r1len;
-                            *s1++ = '\n'; *s1++ = '+'; *s1++ = '\n';
-                            memset(s1, 'F', r1len);
-                            s1 += r1len;
-                            *s1++ = '\n';
-                        }
-                        r1p = s1;
-
-                        // R2 record
-                        n = is_atac_mode
-                            ? sprintf(r2p, "@%sr%lu\n", atac_qname_prefix, (unsigned long)roff)
-                            : sprintf(r2p, "@r%lu\n", (unsigned long)roff);
-                        char* s2 = r2p + n;
-                        const char* r2_seq_start = s2;
-                        for (uint16_t j = 0; j < r2len; ++j)
-                            s2[j] = NUM_TO_ASCII[r2s[j]];
-                        s2 += r2len;
-                        // seq_len derived from actual bytes written ensures quality
-                        // string length always matches sequence length per read,
-                        // even for variable-length R2 with QualMode==NONE.
-                        const uint16_t r2_seq_len =
-                            static_cast<uint16_t>(s2 - r2_seq_start);
-                        *s2++ = '\n'; *s2++ = '+'; *s2++ = '\n';
-                        if (q) {
-                            for (uint16_t j = 0; j < r2_seq_len; ++j)
-                                s2[j] = static_cast<char>(q[j] + 33);
-                        } else {
-                            memset(s2, 'F', r2_seq_len);
-                        }
-                        s2 += r2_seq_len;
-                        *s2++ = '\n';
-                        r2p = s2;
-
-                        roff++;
-                    }
                 }
-
-                fb.r1_len = static_cast<size_t>(r1p - fb.r1.data());
-                fb.r2_len = static_cast<size_t>(r2p - fb.r2.data());
+                singlet::fq::FormattedBlock fmt;
+                singlet::fq::format_block(blk, read_off, fopt, fmt);
+                if (has_bc_dict) fb.bc_indices = std::move(blk.bc_indices);
+                fb.r1 = std::move(fmt.r1);
+                fb.r2 = std::move(fmt.r2);
+                fb.r1_len = fb.r1.size();
+                fb.r2_len = fb.r2.size();
                 return fb;
             };
 
-            // Pre-compute cumulative read offsets for naming
+            // Read offsets for naming: stored reads before each block, across all runs
             std::vector<uint64_t> block_read_offsets(total_blocks);
-            {
-                uint64_t cum = 0;
-                for (uint32_t b = 0; b < total_blocks; ++b) {
-                    block_read_offsets[b] = cum;
-                    singlet::fq::BlockHeader bh;
-                    ::pread(fd, &bh, sizeof(bh),
-                            static_cast<off_t>(reader.block_offset(b)));
-                    // Include dup expansion in offset calculation
-                    cum += bh.n_reads;  // conservative; matches non-dedup case
-                }
-            }
+            for (uint32_t b = 0; b < total_blocks; ++b) block_read_offsets[b] = runs.block_read_offset(b);
 
             // BC frequency counts — populated during decode, used for
             // barcode discovery to avoid a separate R1.fastq scanning pass.
@@ -4652,9 +4632,14 @@ int main(int argc, char* argv[]) {
             auto hdr_p1      = reader.header();
             const uint32_t bc_dict_n_p1  = reader.bc_dict_size();
             const bool     has_bc_dict_p1 = reader.has_bc_dict();
-            const uint32_t total_blocks_p1 = reader.block_count();
-            const int      fd_p1    = reader.file_descriptor();
-            const auto     codec_p1 = static_cast<singlet::fq::Codec>(hdr_p1.codec);
+            singlet::fq::RunSet runs_p1;   // every run of the sample, one stream (read_source.h)
+            try {
+                runs_p1.open(onefq_files);
+            } catch (const std::exception& e) {
+                std::cerr << "[1fq-pass1] ERROR: " << e.what() << "\n";
+                _exit(1);
+            }
+            const uint32_t total_blocks_p1 = runs_p1.block_count();
             bool has_i2_p1 = is_atac_mode &&
                              (hdr_p1.reserved[0] & singlet::fq::ExtraStreams::HAS_I2) != 0;
 
@@ -4697,10 +4682,22 @@ int main(int argc, char* argv[]) {
             if (const char* e = std::getenv("SINGLET_PASS1_THREADS"); e && std::atoi(e) > 0)
                 p1_threads = std::min(p1_threads, std::atoi(e));
             std::vector<std::vector<uint64_t>> bc_freq_t(p1_threads);
+            // R11: STAR's exact histogram (cbReadCountExact): reads whose CB is an exact whitelist hit and whose UMI has no
+            // N and is not a homopolymer, over every read of the sample (unmapped ones included), weighted by duplicates.
+            const int cbx_cb0 = detected_cb_start - 1, cbx_cbl = detected_bc_len;
+            const int cbx_umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, cbx_umil = umi_len;
+            const bool cbx_on = detected_soloType == "CB_UMI_Simple" && !has_i2_p1 && cbx_cbl > 0 && cbx_cbl <= 31
+                && cbx_umil > 0 && !whitelist_file.empty() && whitelist_file != "None" && whitelist_file != "none"
+                && cb_corrector.load_whitelist(whitelist_file) && cb_corrector.length() == cbx_cbl;
+            std::vector<std::vector<uint64_t>> cbx_dict_t(p1_threads);
+            std::vector<std::unordered_map<int64_t, uint64_t>> cbx_raw_t(p1_threads);
             std::atomic<uint32_t> p1_next{0};
             auto pass1_worker = [&](int tid) {
                 std::vector<uint64_t>& freq = bc_freq_t[tid];
                 if (!bc_freq_p1.empty()) freq.assign(bc_freq_p1.size(), 0);
+                std::vector<uint64_t>& cbx_dict = cbx_dict_t[tid];
+                auto& cbx_raw = cbx_raw_t[tid];
+                if (cbx_on && has_bc_dict_p1) cbx_dict.assign(bc_dict_n_p1, 0);
                 std::unordered_map<uint64_t, size_t> key_pos;
                 std::vector<std::unordered_map<uint64_t, size_t>> seg_pos(complex_extra_segs.size());
                 for (uint32_t bi; (bi = p1_next.fetch_add(1)) < total_blocks_p1;) {
@@ -4708,28 +4705,8 @@ int main(int argc, char* argv[]) {
                     key_pos.clear();
                     for (auto& sp : seg_pos) sp.clear();
                     if (count_keys_p1 && !complex_extra_segs.empty()) out.segs.resize(complex_extra_segs.size());
-                    uint64_t file_off_p1  = reader.block_offset(bi);
-                    uint32_t comp_size_p1 = reader.block_comp_size(bi);
-                    singlet::fq::BlockHeader bh_p1;
-                    ::pread(fd_p1, &bh_p1, sizeof(bh_p1), static_cast<off_t>(file_off_p1));
-                    std::vector<uint8_t> comp_buf_p1(comp_size_p1);
-                    ::pread(fd_p1, comp_buf_p1.data(), comp_size_p1,
-                            static_cast<off_t>(file_off_p1 + sizeof(bh_p1)));
-                    size_t est_raw_p1 = static_cast<size_t>(bh_p1.n_reads) * 200;
-                    std::vector<uint8_t> raw_buf_p1(est_raw_p1);
-                    size_t raw_size_p1;
-                    try {
-                        raw_size_p1 = singlet::fq::compress::decompress_block(
-                            codec_p1, comp_buf_p1.data(), comp_size_p1,
-                            raw_buf_p1.data(), raw_buf_p1.size());
-                    } catch (...) {
-                        raw_buf_p1.resize(est_raw_p1 * 4);
-                        raw_size_p1 = singlet::fq::compress::decompress_block(
-                            codec_p1, comp_buf_p1.data(), comp_size_p1,
-                            raw_buf_p1.data(), raw_buf_p1.size());
-                    }
                     singlet::fq::DecodedBlock blk_p1;
-                    reader.decode_payload(raw_buf_p1.data(), raw_size_p1, bh_p1, blk_p1);
+                    runs_p1.decode(bi, blk_p1);
 
                     auto add_key = [](std::vector<std::pair<uint64_t, uint64_t>>& v,
                                       std::unordered_map<uint64_t, size_t>& pos, uint64_t key, uint64_t n) {
@@ -4789,6 +4766,28 @@ int main(int argc, char* argv[]) {
                             uint32_t idx = blk_p1.bc_indices[i];
                             if (idx <= bc_dict_n_p1 && !freq.empty()) freq[idx] += repeat_p1;
                         }
+                        if (cbx_on && r1len_p1 >= cbx_cb0 + cbx_cbl && r1len_p1 >= cbx_umi0 + cbx_umil) {
+                            const uint8_t* r1p1 = blk_p1.r1_seq(i);
+                            const uint8_t* u = r1p1 + cbx_umi0;
+                            bool umi_ok = true, homo = true;
+                            for (int j = 0; j < cbx_umil; ++j) {
+                                if (u[j] > 3) { umi_ok = false; break; }
+                                if (u[j] != u[0]) homo = false;
+                            }
+                            if (umi_ok && !homo) {
+                                const uint32_t idx = (has_bc_dict_p1 && i < blk_p1.bc_indices.size())
+                                                     ? blk_p1.bc_indices[i] : UINT32_MAX;
+                                if (idx < bc_dict_n_p1 && !cbx_dict.empty()) {
+                                    cbx_dict[idx] += repeat_p1;
+                                } else {
+                                    static constexpr char kNt5[5] = {'A', 'C', 'G', 'T', 'N'};
+                                    char bcs[32];
+                                    for (int j = 0; j < cbx_cbl; ++j) bcs[j] = kNt5[std::min<uint8_t>(r1p1[cbx_cb0 + j], 4)];
+                                    const int64_t w = cb_corrector.find(bcs);
+                                    if (w >= 0) cbx_raw[w] += repeat_p1;
+                                }
+                            }
+                        }
                     }
                 }
             };
@@ -4800,6 +4799,30 @@ int main(int argc, char* argv[]) {
             }
             for (const auto& f : bc_freq_t)
                 for (size_t k = 0; k < f.size(); ++k) bc_freq_p1[k] += f[k];
+            if (cbx_on) {   // R11: fold the per-thread exact counts into the corrector, by whitelist index
+                static constexpr char kNt5[5] = {'A', 'C', 'G', 'T', 'N'};
+                const auto& dflat = reader.bc_dict_flat();
+                const uint16_t dlen = reader.bc_length();
+                uint64_t n_exact = 0;
+                if (has_bc_dict_p1 && dlen == static_cast<uint16_t>(cbx_cbl)) {
+                    std::vector<uint64_t> dsum(bc_dict_n_p1, 0);
+                    for (const auto& t : cbx_dict_t)
+                        for (size_t k = 0; k < t.size(); ++k) dsum[k] += t[k];
+                    char bcs[32];
+                    for (uint32_t k = 0; k < bc_dict_n_p1; ++k) {
+                        if (!dsum[k]) continue;
+                        for (int j = 0; j < cbx_cbl; ++j)
+                            bcs[j] = kNt5[std::min<uint8_t>(dflat[static_cast<size_t>(k) * dlen + j], 4)];
+                        const int64_t w = cb_corrector.find(bcs);
+                        if (w >= 0) { cb_corrector.add_exact(w, dsum[k]); n_exact += dsum[k]; }
+                    }
+                }
+                for (const auto& m : cbx_raw_t)
+                    for (const auto& [w, n] : m) { cb_corrector.add_exact(w, n); n_exact += n; }
+                cb_hist_ready = true;
+                std::cerr << "[1fq-pass1] R11 exact CB histogram: " << n_exact << " reads over a "
+                          << cb_corrector.size() << "-barcode whitelist\n";
+            }
             for (auto& b : p1_blocks) {
                 for (auto& s : b.probe) {
                     if (fifo_first25_r2.size() >= 20000) break;
@@ -5069,6 +5092,53 @@ int main(int argc, char* argv[]) {
         std::cerr << "[singlet] .1fq decoded to temp files\n";
     }
 
+    // ── BAM source mode: decided here because the engine copies config (cb_from_cr) when it is built ──
+    // Unsorted streaming is the default wherever the pileup does not need the sorted file: STAR's unsorted
+    // BAM goes through a pipe into the serial pileup (no sort, no index, no CB scan, no BAM on disk; about
+    // 19% less wall, docs/research-beta/ws-w3b-bam-stream.md). STAR writes its corrected CB only into a
+    // sorted BAM, so the pileup takes CB from CR (identical here: .1fq barcodes are whitelist-exact).
+    // The modes below still read the sorted BAM; --sorted-bam forces it everywhere.
+    if (stream_unsorted != 0) {
+        const char* sorted_reason = nullptr;
+        // An existing BAM is read as given. With an explicit --stream-unsorted it is treated as a saved stream
+        // (SINGLET_TEE_STREAM_BAM, any record order): serial pileup, CB from CR, protocol strand (test replay).
+        if (!bam_file.empty() && stream_unsorted != 1) sorted_reason = "the input is an existing BAM";
+        else if (!bam_file.empty()) {}
+        else if (!onefq_mode) sorted_reason = "CB from CR needs whitelist-exact .1fq barcodes";
+        else if (parallel_pileup == 1) sorted_reason = "--parallel-pileup was given";
+        else if (is_atac_mode) sorted_reason = "ATAC fragments are read from the sorted BAM";
+        else if (is_smart_seq2_mode || is_bulk_rna_mode) sorted_reason = "plate/bulk counting reads the sorted BAM";
+        else if (detected_soloType != "CB_UMI_Simple") sorted_reason = "the protocol is not CB_UMI_Simple";
+        // Same condition as the native CB_UMI_Simple STAR branch below: without a whitelist file STAR runs
+        // CB_samTagOut (auto-discovery), which the stream does not support (found by W11, job 790268).
+        else if (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")
+            sorted_reason = "no barcode whitelist file (STAR runs CB_samTagOut)";
+        else if (tagged_bam_enabled) sorted_reason = "--tagged-bam rewrites the sorted BAM";
+        else if (std::getenv("SINGLET_KEEP_STAR_BAM")) sorted_reason = "SINGLET_KEEP_STAR_BAM keeps the sorted BAM";
+        if (sorted_reason) {
+            if (stream_unsorted == 1)
+                std::cerr << "[singlet] --stream-unsorted ignored: " << sorted_reason << std::endl;
+            stream_unsorted = 0;
+        } else {
+            stream_unsorted = 1;
+            parallel_pileup = 0;
+            std::cerr << "[singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)" << std::endl;
+        }
+    }
+    config.cb_from_cr = (stream_unsorted == 1);
+    // R11: STAR's whitelist correction of CR on the stream (and the SINGLET_TEST_CB_CHECK comparison on the sorted path)
+    config.cb_corrector = (cb_hist_ready && cb_corrector.loaded()) ? &cb_corrector : nullptr;
+    if (config.cb_from_cr)
+        std::cerr << "[singlet] stream CB: " << (config.cb_corrector ? "CR corrected by STAR's 1MM_multi_Nbase_pseudocounts rule (R11)"
+                                                                     : "CR exact (no pass-1 histogram)") << "\n";
+    config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
+    // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
+    const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
+    if (engine_ptr && config.cb_from_cr) {
+        std::cerr << "ERROR: pileup engine was built before the BAM source mode was decided" << std::endl;
+        return 1;
+    }
+
     // ── Phase 0 (deferred): construct the pileup engine now that the .1fq header has set the strand ──
     if (construct_engine_early && !engine_ptr) {
         engine_ptr = std::make_unique<singlet::PileupEngine>(config);
@@ -5152,10 +5222,15 @@ int main(int argc, char* argv[]) {
         if (onefq_bc_dict_n > 0 && !onefq_bc_freq.empty() && onefq_bc_length > 0) {
             static constexpr char NUM_TO_ASCII_BC[5] = {'A','C','G','T','N'};
 
-            // Build sorted (count, barcode_string) list from BC index frequencies
+            // Build sorted (count, barcode_string) list from BC index frequencies.
+            // The sorted path replaces this list after alignment by the CB-tag refresh (>=5 primary CB
+            // records). The unsorted stream has no BAM to scan, so it takes the refresh's threshold here
+            // instead: .1fq barcodes are whitelist-exact, so raw reads >= mapped CB records and the list
+            // is a superset of the refreshed one (barcodes with 5-99 reads were otherwise lost: ~2% of
+            // barcoded reads on GSM4006843). Ties go to the smaller barcode, independent of dictionary order.
             std::vector<std::pair<uint64_t, std::string>> sorted_bcs;
             for (uint32_t idx = 0; idx < onefq_bc_dict_n; ++idx) {
-                if (onefq_bc_freq[idx] >= 100) {
+                if (onefq_bc_freq[idx] >= bc_min_reads) {
                     // Convert numeric BC to ASCII string
                     std::string bc(onefq_bc_length, ' ');
                     for (uint16_t j = 0; j < onefq_bc_length; ++j) {
@@ -5165,8 +5240,12 @@ int main(int argc, char* argv[]) {
                     sorted_bcs.emplace_back(onefq_bc_freq[idx], std::move(bc));
                 }
             }
-            std::sort(sorted_bcs.begin(), sorted_bcs.end(),
-                      [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (stream_unsorted == 1)
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+            else
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first > b.first; });
 
             // Write barcode file
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
@@ -5178,7 +5257,7 @@ int main(int argc, char* argv[]) {
             config.barcode_path = barcode_file;
 
             std::cerr << "[singlet] Discovered " << sorted_bcs.size()
-                      << " barcodes (≥100 reads) from .1fq BC dictionary ("
+                      << " barcodes (≥" << bc_min_reads << " reads) from .1fq BC dictionary ("
                       << onefq_bc_dict_n << " entries)\n";
 
             if (sorted_bcs.empty()) {
@@ -5205,7 +5284,7 @@ int main(int argc, char* argv[]) {
             static constexpr char UNPACK_BASE[5] = {'A','C','G','T','N'};
             std::vector<std::pair<uint64_t, std::string>> sorted_bcs;
             for (auto& [key, cnt] : onefq_bc_counts) {
-                if (cnt >= 100) {
+                if (cnt >= bc_min_reads) {   // see the BC-dictionary fast path above
                     // Unpack 3-bit-per-base uint64_t key to ASCII string
                     std::string bc(bc_len, ' ');
                     uint64_t k = key;
@@ -5221,8 +5300,12 @@ int main(int argc, char* argv[]) {
                     if (valid) sorted_bcs.emplace_back(cnt, std::move(bc));
                 }
             }
-            std::sort(sorted_bcs.begin(), sorted_bcs.end(),
-                      [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (stream_unsorted == 1)   // hash-map order: ties to the smaller barcode
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+            else
+                std::sort(sorted_bcs.begin(), sorted_bcs.end(),
+                          [](const auto& a, const auto& b) { return a.first > b.first; });
 
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
             std::ofstream bc_out(auto_barcode_file);
@@ -5233,7 +5316,7 @@ int main(int argc, char* argv[]) {
             config.barcode_path = barcode_file;
 
             std::cerr << "[singlet] Discovered " << sorted_bcs.size()
-                      << " barcodes (≥100 reads) from decode-time counting ("
+                      << " barcodes (≥" << bc_min_reads << " reads) from decode-time counting ("
                       << onefq_bc_counts.size() << " unique)\n";
 
             // ── Guard 2: Barcode explosion warning ──
@@ -5808,7 +5891,53 @@ int main(int argc, char* argv[]) {
     // Must run AFTER Phase 0.9 (barcode discovery consumed onefq_bc_counts from Pass 1)
     // and BEFORE the STAR child fork (STAR opens FIFOs for reading; writer uses O_RDWR trick to
     // avoid deadlock — same approach as the SRA streaming path).
+    // Read source (--read-source): "chunk" decodes inside STAR's forked process straight into its chunk buffers
+    // (read_source.h, StarChunkSourceT); "fifo" writes FASTQ text into named pipes from a thread here. Both apply
+    // the 5' clip inline and give STAR the same records. Chunk needs the two-mate scRNA layout: other assays use fifo.
+    const bool use_chunk_source = use_fifo_decode && onefq_mode && read_source_mode == "chunk" &&
+                                  !is_atac_mode && !is_smart_seq2_mode && !is_bulk_rna_mode;
+    if (use_fifo_decode && onefq_mode && read_source_mode == "chunk" && !use_chunk_source)
+        std::cerr << "[1fq] --read-source chunk supports droplet scRNA only; using fifo\n";
+    singlet::fq::FormatOptions read_fmt;   // fifo and chunk modes
     if (use_fifo_decode && onefq_mode) {
+        read_fmt.clip5p = r2_clip5p;
+        read_fmt.max_r2 = 1024;   // a longer R2 is a corrupted record: STAR would stop on it
+        read_fmt.atac = is_atac_mode;
+        singlet::fq::Reader hdr_reader;
+        hdr_reader.open(onefq_file.c_str());
+        const bool has_bc_dict2 = hdr_reader.has_bc_dict();
+        read_fmt.bc_dict_n = hdr_reader.bc_dict_size();
+        read_fmt.has_i2 = is_atac_mode &&
+                          (hdr_reader.header().reserved[0] & singlet::fq::ExtraStreams::HAS_I2) != 0;
+        if (read_fmt.has_i2) {
+            read_fmt.atac_bc_len = hdr_reader.header().stream_lengths[2];
+        } else if (is_atac_mode && has_bc_dict2 && read_fmt.bc_dict_n > 0) {
+            read_fmt.atac_dict = hdr_reader.bc_dict_flat();
+            read_fmt.atac_bc_len = hdr_reader.bc_length();
+        }
+        // Guard: BC dict + multi-segment concat → decoded R1 only has segment-0 BC + UMI; all other segment
+        // positions are zero → wrong barcodes for all reads. Disable concat mode so STAR falls back to
+        // CB_UMI_Complex with the full WL. This sample needs re-downloading with the fixed encoder (no BC dict for
+        // multi-segment protocols) to produce correct concat barcodes.
+        if (use_complex_concat && !complex_concat_segs_all.empty()) {
+            if (has_bc_dict2 && complex_concat_segs_all.size() > 1) {
+                std::cerr << "[1fq-fifo] WARNING: BC dict .1fq with "
+                          << complex_concat_segs_all.size() << " concat segments — "
+                             "decoded R1 lacks segment 1.."
+                          << (complex_concat_segs_all.size() - 1) << " data; "
+                             "disabling concat rewrite; re-download to fix\n";
+            } else {
+                for (const auto& seg : complex_concat_segs_all) read_fmt.concat.push_back({seg.start, seg.len});
+                read_fmt.concat_umi_start = concat_umi_start_0;
+                read_fmt.concat_umi_len = concat_umi_len_c;
+            }
+        }
+        // The clip is applied by the decoder: STAR's --clip5pNbases fallback must not fire as well.
+        r2_clip5p = 0;
+    }
+    if (use_chunk_source)
+        std::cerr << "[1fq] read source: chunk (decoded in STAR's process, " << onefq_files.size() << " run(s))\n";
+    if (use_fifo_decode && onefq_mode && !use_chunk_source) {
         // Ensure decode directory exists (was set up in Pass 1 preamble)
         {
             std::string tmpdir_fifo = "/dev/shm";
@@ -5828,25 +5957,15 @@ int main(int argc, char* argv[]) {
         }
         std::cerr << "[1fq-fifo] FIFOs created: " << fifo_r1_path << ", " << fifo_r2_path << "\n";
 
-        // Snapshot r2_clip5p for the thread, then reset to 0 so STAR --clip5pNbases
-        // fallback does NOT fire (clipping is applied inline in the writer thread).
-        const int  thr_clip    = r2_clip5p;
-        r2_clip5p = 0;
-        // All other captures are by value for thread safety
-        const std::string thr_onefq   = onefq_file;
+        // Captures by value for thread safety (read_fmt carries the inline clip, ATAC prefix and concat rewrite)
+        const std::vector<std::string> thr_onefqs = onefq_files;
         const int         thr_threads = star_threads;
-        const bool        thr_atac    = is_atac_mode;
         const std::string thr_r1      = fifo_r1_path;
         const std::string thr_r2      = fifo_r2_path;
-        // Concat captures for CB_UMI_Complex→CB_samTagOut R1 rewriting
-        const bool thr_use_concat        = use_complex_concat;
-        const auto thr_concat_segs       = complex_concat_segs_all;
-        const int  thr_concat_umi_start  = concat_umi_start_0;
-        const int  thr_concat_umi_len    = concat_umi_len_c;
+        const singlet::fq::FormatOptions thr_fmt = read_fmt;
 
         fifo_writer_thread = std::thread(
-            [thr_onefq, thr_clip, thr_threads, thr_atac, thr_r1, thr_r2,
-             thr_use_concat, thr_concat_segs, thr_concat_umi_start, thr_concat_umi_len]() {
+            [thr_onefqs, thr_threads, thr_r1, thr_r2, thr_fmt]() {
             signal(SIGPIPE, SIG_IGN);  // prevent SIGPIPE if STAR exits before writer finishes
 
             // FIX-FIFO-HANG / FIX-FIFO-RACE: the writer must hold only write ends, so that
@@ -5918,262 +6037,18 @@ int main(int argc, char* argv[]) {
             setvbuf(r1_fp, r1_wbuf.data(), _IOFBF, r1_wbuf.size());
             setvbuf(r2_fp, r2_wbuf.data(), _IOFBF, r2_wbuf.size());
 
-            singlet::fq::Reader reader;
+            singlet::fq::RunSet runs;
             try {
-                reader.open(thr_onefq.c_str());
+                runs.open(thr_onefqs);
             } catch (const std::exception& e) {
                 std::cerr << "[1fq-fifo] ERROR: Cannot open .1fq: " << e.what() << "\n";
                 fclose(r1_fp); fclose(r2_fp);
                 return;
             }
-            reader.set_verify_crc(false);
-            auto hdr2 = reader.header();
-            const uint32_t total_blocks = reader.block_count();
-            const int      fd2   = reader.file_descriptor();
-            const auto     codec = static_cast<singlet::fq::Codec>(hdr2.codec);
-            const int      n_thr = std::min(thr_threads, static_cast<int>(total_blocks));
-            const bool  has_bc_dict2 = reader.has_bc_dict();
-            const uint32_t bc_dict_n2 = reader.bc_dict_size();
+            const uint32_t total_blocks = runs.block_count();
+            const int n_thr = std::max(1, std::min(thr_threads, static_cast<int>(std::max<uint32_t>(total_blocks, 1u))));
 
-            // Guard: BC dict + multi-segment concat → decoded R1 only has segment-0 BC + UMI;
-            // all other segment positions are zero → wrong barcodes for all reads.
-            // Disable concat mode so STAR falls back to CB_UMI_Complex with the full WL.
-            // This sample needs re-downloading with the fixed encoder (no BC dict for
-            // multi-segment protocols) to produce correct concat barcodes.
-            const bool fifo_use_concat2 = thr_use_concat &&
-                !(has_bc_dict2 && thr_concat_segs.size() > 1);
-            if (thr_use_concat && has_bc_dict2 && thr_concat_segs.size() > 1) {
-                std::cerr << "[1fq-fifo] WARNING: BC dict .1fq with "
-                          << thr_concat_segs.size() << " concat segments — "
-                             "decoded R1 lacks segment 1.."
-                          << (thr_concat_segs.size() - 1) << " data; "
-                             "disabling concat rewrite; re-download to fix\n";
-            }
-            bool has_i2_stream2 = thr_atac &&
-                                  (hdr2.reserved[0] & singlet::fq::ExtraStreams::HAS_I2) != 0;
-            std::vector<uint8_t> atac_bc_dict2;
-            uint16_t atac_bc_len2 = 0;
-            if (has_i2_stream2) {
-                atac_bc_len2 = hdr2.stream_lengths[2];
-            } else if (thr_atac && has_bc_dict2 && bc_dict_n2 > 0) {
-                atac_bc_dict2 = reader.bc_dict_flat();
-                atac_bc_len2  = reader.bc_length();
-            }
-
-            static constexpr char N2A2[5] = {'A','C','G','T','N'};
-
-            // Pre-compute cumulative read offsets (for read naming)
-            std::vector<uint64_t> block_read_offsets(total_blocks);
-            {
-                uint64_t cum = 0;
-                for (uint32_t b = 0; b < total_blocks; ++b) {
-                    block_read_offsets[b] = cum;
-                    singlet::fq::BlockHeader bh;
-                    ::pread(fd2, &bh, sizeof(bh), static_cast<off_t>(reader.block_offset(b)));
-                    cum += bh.n_reads;
-                }
-            }
-
-            struct FmtBlock2 {
-                std::vector<char> r1, r2;
-                size_t r1_len = 0, r2_len = 0;
-                uint32_t n_reads = 0;
-                std::vector<uint32_t> bc_indices;
-                std::vector<uint32_t> r1_rec_off;  // start byte of each rep's R1 record in r1
-                std::vector<uint32_t> r2_rec_off;  // start byte of each rep's R2 record in r2
-            };
-
-            // Pass 2 process_block: same FASTQ formatting as main decode,
-            // without BC counting and with inline r2_clip5p application.
-            auto process_block2 = [&](uint32_t bi, uint64_t read_off) -> FmtBlock2 {
-                FmtBlock2 fb;
-                uint64_t file_off  = reader.block_offset(bi);
-                uint32_t comp_size = reader.block_comp_size(bi);
-                singlet::fq::BlockHeader bh;
-                ::pread(fd2, &bh, sizeof(bh), static_cast<off_t>(file_off));
-                std::vector<uint8_t> comp_buf(comp_size);
-                ::pread(fd2, comp_buf.data(), comp_size,
-                        static_cast<off_t>(file_off + sizeof(bh)));
-                size_t est_raw = static_cast<size_t>(bh.n_reads) * 200;
-                std::vector<uint8_t> raw_buf(est_raw);
-                size_t raw_size;
-                try {
-                    raw_size = singlet::fq::compress::decompress_block(
-                        codec, comp_buf.data(), comp_size,
-                        raw_buf.data(), raw_buf.size());
-                } catch (...) {
-                    raw_buf.resize(est_raw * 4);
-                    raw_size = singlet::fq::compress::decompress_block(
-                        codec, comp_buf.data(), comp_size,
-                        raw_buf.data(), raw_buf.size());
-                }
-                singlet::fq::DecodedBlock blk;
-                reader.decode_payload(raw_buf.data(), raw_size, bh, blk);
-
-                fb.n_reads = blk.n_reads;
-                if (has_bc_dict2) fb.bc_indices = std::move(blk.bc_indices);
-                const bool has_dups2 = !blk.dup_counts.empty();
-
-                // FIX-FIFO-OOM: use per-read exact sum instead of max_element × total_reps.
-                // If any single read has an anomalously large R2 (e.g. a corrupted .1fq
-                // with r2_length ≈ 36,000 bp), the old max-based formula allocated
-                // total_reps × r2_max × 2 bytes which exploded to ~576 GB for 97-block
-                // sci-RNA-seq3 files. Per-read sum is strictly correct and bounded.
-                const int r2_clip = (thr_clip > 0) ? thr_clip : 0;
-                size_t r1_buf_bytes = 0;
-                size_t r2_buf_bytes = 0;
-                uint64_t total_reps = 0;
-                for (uint32_t i = 0; i < blk.n_reads; ++i) {
-                    uint16_t r1len = blk.r1_lengths.empty() ? 28 : blk.r1_len(i);
-                    uint16_t r2len = blk.r2_lengths.empty() ? 91 : blk.r2_len(i);
-                    // SIZE guard: skip reads that will also be skipped in the WRITE section.
-                    // Keeps SIZE and WRITE sections consistent, preventing any OOM from
-                    // anomalously large r2_lengths decoded from a corrupted .1fq block.
-                    if (r1len == 0 || r2len == 0 || r2len > 1024) continue;
-                    uint16_t r2len2 = (r2_clip > 0 && r2_clip < r2len)
-                                      ? static_cast<uint16_t>(r2len - r2_clip) : r2len;
-                    // For concat rewrite, R1 is always thr_concat_segs total len + umi
-                    uint16_t r1_write_len = r1len;
-                    if (fifo_use_concat2 && !thr_concat_segs.empty()) {
-                        r1_write_len = 0;
-                        for (const auto& seg : thr_concat_segs) r1_write_len += static_cast<uint16_t>(seg.len);
-                        r1_write_len += static_cast<uint16_t>(thr_concat_umi_len);
-                    }
-                    const uint32_t rpt = has_dups2 ? blk.dup_counts[i] : 1;
-                    total_reps += rpt;
-                    // Each FASTQ record: @name\nseq\n+\nqual\n
-                    // name ≈ 20 bytes for "@rNNNNNNNNN\n", overhead +20 per record
-                    r1_buf_bytes += static_cast<size_t>(rpt) *
-                        (static_cast<size_t>(r1_write_len) * 2 + (thr_atac ? 55 : 30) + 4);
-                    r2_buf_bytes += static_cast<size_t>(rpt) *
-                        (static_cast<size_t>(r2len2) * 2 + (thr_atac ? 55 : 30) + 14);
-                }
-                fb.r1.resize(r1_buf_bytes + 64);   // +64 for trailing sentinel
-                fb.r2.resize(r2_buf_bytes + 64);
-                fb.r1_rec_off.reserve(static_cast<size_t>(total_reps));
-                fb.r2_rec_off.reserve(static_cast<size_t>(total_reps));
-                char* r1p = fb.r1.data();
-                char* r2p = fb.r2.data();
-                bool has_qual = !blk.r2_qual.empty();
-                uint64_t roff = read_off;
-
-                for (uint32_t i = 0; i < blk.n_reads; ++i) {
-                    const uint32_t repeat = has_dups2 ? blk.dup_counts[i] : 1;
-                    uint16_t r1len = blk.r1_len(i);
-                    uint16_t r2len = blk.r2_len(i);
-                    if (r1len == 0 || r2len == 0) continue;
-                    // Guard: skip reads with anomalously large R2 (corrupted .1fq).
-                    // Real Illumina R2 is ≤600bp; anything >1024bp is data corruption.
-                    // The matching SIZE section conservatively allocated for these reads,
-                    // but passing them to STAR causes a FASTQ-parse fatal error.
-                    if (r2len > 1024) {
-                        roff += repeat;
-                        continue;
-                    }
-                    const uint8_t* r1s = blk.r1_seq(i);
-                    const uint8_t* r2s = blk.r2_seq(i);
-                    const uint8_t* q   = has_qual ? blk.r2_quality(i) : nullptr;
-
-                    // Inline 5' clip of R2 (cDNA read)
-                    uint16_t r2_skip = (thr_clip > 0 &&
-                                        static_cast<uint16_t>(thr_clip) < r2len)
-                                       ? static_cast<uint16_t>(thr_clip) : 0;
-
-                    for (uint32_t rep = 0; rep < repeat; ++rep) {
-                        // ATAC QNAME prefix (same logic as main decode)
-                        char atac_prefix[32] = {};
-                        if (thr_atac) {
-                            bool bc_set = false;
-                            if (has_i2_stream2 && !blk.i2_data.empty() &&
-                                i < blk.i2_lengths.size() && blk.i2_lengths[i] > 0) {
-                                const uint8_t* bcp = blk.i2_seq(i);
-                                uint16_t blen = blk.i2_len(i);
-                                int np = 0;
-                                atac_prefix[np++]='B'; atac_prefix[np++]='C'; atac_prefix[np++]=':';
-                                for (uint16_t j = 0; j < blen; ++j)
-                                    atac_prefix[np++] = N2A2[bcp[j]];
-                                atac_prefix[np++]='_'; atac_prefix[np]='\0';
-                                bc_set = true;
-                            }
-                            if (!bc_set) {
-                                uint32_t bc_idx = (!fb.bc_indices.empty() &&
-                                                   i < fb.bc_indices.size())
-                                                  ? fb.bc_indices[i] : UINT32_MAX;
-                                if (!atac_bc_dict2.empty() && atac_bc_len2 > 0 &&
-                                    bc_idx < bc_dict_n2) {
-                                    const uint8_t* bcp = atac_bc_dict2.data() +
-                                        static_cast<size_t>(bc_idx) * atac_bc_len2;
-                                    int np = 0;
-                                    atac_prefix[np++]='B'; atac_prefix[np++]='C'; atac_prefix[np++]=':';
-                                    for (uint16_t j = 0; j < atac_bc_len2; ++j)
-                                        atac_prefix[np++] = N2A2[bcp[j]];
-                                    atac_prefix[np++]='_'; atac_prefix[np]='\0';
-                                    bc_set = true;
-                                }
-                            }
-                            if (!bc_set) sprintf(atac_prefix, "BC:NNNNNNNNNNNNNNNN_");
-                        }
-
-                        // R1 record
-                        fb.r1_rec_off.push_back(static_cast<uint32_t>(r1p - fb.r1.data()));
-                        int n = thr_atac
-                            ? sprintf(r1p, "@%sr%lu\n", atac_prefix, (unsigned long)roff)
-                            : sprintf(r1p, "@r%lu\n", (unsigned long)roff);
-                        char* s1 = r1p + n;
-                        if (fifo_use_concat2 && !thr_concat_segs.empty()) {
-                            // Rewrite R1 as [seg0]...[segN][UMI] for CB_samTagOut concat
-                            int wpos = 0;
-                            for (const auto& seg : thr_concat_segs) {
-                                for (int j = 0; j < seg.len; ++j) {
-                                    int src = seg.start + j;
-                                    s1[wpos++] = (src < (int)r1len) ? N2A2[r1s[src]] : 'N';
-                                }
-                            }
-                            for (int j = 0; j < thr_concat_umi_len; ++j) {
-                                int src = thr_concat_umi_start + j;
-                                s1[wpos++] = (src < (int)r1len) ? N2A2[r1s[src]] : 'N';
-                            }
-                            s1 += wpos;
-                            *s1++ = '\n'; *s1++ = '+'; *s1++ = '\n';
-                            memset(s1, 'F', wpos); s1 += wpos; *s1++ = '\n';
-                        } else {
-                            for (uint16_t j = 0; j < r1len; ++j) s1[j] = N2A2[r1s[j]];
-                            s1 += r1len;
-                            *s1++ = '\n'; *s1++ = '+'; *s1++ = '\n';
-                            memset(s1, 'F', r1len); s1 += r1len; *s1++ = '\n';
-                        }
-                        r1p = s1;
-
-                        // R2 record (with inline 5' clip)
-                        fb.r2_rec_off.push_back(static_cast<uint32_t>(r2p - fb.r2.data()));
-                        n = thr_atac
-                            ? sprintf(r2p, "@%sr%lu\n", atac_prefix, (unsigned long)roff)
-                            : sprintf(r2p, "@r%lu\n", (unsigned long)roff);
-                        char* s2 = r2p + n;
-                        const uint8_t* r2s2 = r2s + r2_skip;
-                        const uint8_t* q2   = q ? q + r2_skip : nullptr;
-                        uint16_t r2len2 = r2len - r2_skip;
-                        for (uint16_t j = 0; j < r2len2; ++j) s2[j] = N2A2[r2s2[j]];
-                        s2 += r2len2;
-                        const uint16_t r2_seq_len2 = static_cast<uint16_t>(r2len2);
-                        *s2++ = '\n'; *s2++ = '+'; *s2++ = '\n';
-                        if (q2) {
-                            for (uint16_t j = 0; j < r2_seq_len2; ++j)
-                                s2[j] = static_cast<char>(q2[j] + 33);
-                        } else {
-                            memset(s2, 'F', r2_seq_len2);
-                        }
-                        s2 += r2_seq_len2; *s2++ = '\n';
-                        r2p = s2;
-                        roff++;
-                    }
-                }
-
-                fb.r1_len = static_cast<size_t>(r1p - fb.r1.data());
-                fb.r2_len = static_cast<size_t>(r2p - fb.r2.data());
-                return fb;
-            };  // end process_block2
-
+            // Decode + format in n_thr workers (read_source.h), written in block order.
             // Write loop: interleaved per-record writes.
             // ROOT CAUSE of previous deadlock: old code wrote _all_ R1 data for a block
             // in one fwrite(), then all R2.  For large blocks (>13K reads), the R1
@@ -6185,46 +6060,37 @@ int main(int argc, char* argv[]) {
             // approaching capacity, so it can drain both pipes and never stalls.
             // Neither pipe accumulates more than one 64-KB buffer flush of data ahead
             // of the other, eliminating the blocking asymmetry.
-            const uint32_t batch_size = static_cast<uint32_t>(n_thr);
             uint64_t reads_written = 0;
             uint32_t blocks_written = 0;
             bool write_ok = true;
-
-            for (uint32_t base = 0; base < total_blocks && write_ok; base += batch_size) {
-                uint32_t batch_end = std::min(base + batch_size, total_blocks);
-                uint32_t n_batch = batch_end - base;
-                std::vector<std::future<FmtBlock2>> futures;
-                futures.reserve(n_batch);
-                for (uint32_t b = base; b < batch_end; ++b)
-                    futures.push_back(std::async(std::launch::async,
-                                      process_block2, b, block_read_offsets[b]));
-                for (uint32_t i = 0; i < n_batch && write_ok; ++i) {
-                    FmtBlock2 fb = futures[i].get();
-
-                    // Sentinel: ensures r1_rec_off[ri+1] is always valid.
-                    fb.r1_rec_off.push_back(static_cast<uint32_t>(fb.r1_len));
-                    fb.r2_rec_off.push_back(static_cast<uint32_t>(fb.r2_len));
-
-                    const char*    r1d    = fb.r1.data();
-                    const char*    r2d    = fb.r2.data();
-                    const uint32_t n_recs = static_cast<uint32_t>(fb.r1_rec_off.size()) - 1;
-
-                    // Interleaved per-record writes: R1_i immediately followed by R2_i.
-                    for (uint32_t ri = 0; ri < n_recs && write_ok; ++ri) {
-                        const size_t r1sz = fb.r1_rec_off[ri+1] - fb.r1_rec_off[ri];
-                        const size_t r2sz = fb.r2_rec_off[ri+1] - fb.r2_rec_off[ri];
-                        if (fwrite(r1d + fb.r1_rec_off[ri], 1, r1sz, r1_fp) != r1sz ||
-                            fwrite(r2d + fb.r2_rec_off[ri], 1, r2sz, r2_fp) != r2sz)
+            {
+                singlet::fq::OrderedBlocks<singlet::fq::FormattedBlock> blocks(
+                    total_blocks, n_thr, 2u * static_cast<uint32_t>(n_thr),
+                    [&](uint32_t g, singlet::fq::FormattedBlock& fb) {
+                        singlet::fq::DecodedBlock blk;
+                        runs.decode(g, blk);
+                        singlet::fq::format_block(blk, runs.block_read_offset(g), thr_fmt, fb);
+                    });
+                singlet::fq::FormattedBlock fb;
+                uint32_t block = 0;
+                while (write_ok && blocks.next(fb, &block)) {
+                    const char* r1d = fb.r1.data();
+                    const char* r2d = fb.r2.data();
+                    const size_t n_recs = fb.n_records();
+                    for (size_t ri = 0; ri < n_recs && write_ok; ++ri) {
+                        const size_t r1sz = fb.r1_off[ri + 1] - fb.r1_off[ri];
+                        const size_t r2sz = fb.r2_off[ri + 1] - fb.r2_off[ri];
+                        if (fwrite(r1d + fb.r1_off[ri], 1, r1sz, r1_fp) != r1sz ||
+                            fwrite(r2d + fb.r2_off[ri], 1, r2sz, r2_fp) != r2sz)
                             write_ok = false;
                     }
                     // Flush both FIFOs at block boundary so STAR sees all records.
-                    if (write_ok &&
-                        (fflush(r1_fp) != 0 || fflush(r2_fp) != 0))
+                    if (write_ok && (fflush(r1_fp) != 0 || fflush(r2_fp) != 0))
                         write_ok = false;
                     // Count only blocks that reached the FIFOs.
-                    if (write_ok) { reads_written += fb.n_reads; ++blocks_written; }
+                    if (write_ok) { reads_written += fb.n_stored; ++blocks_written; }
                     else std::cerr << "[1fq-fifo] ERROR: write to STAR failed at block "
-                                   << (base + i) << " after " << reads_written
+                                   << block << " after " << reads_written
                                    << " reads: " << strerror(errno) << "\n";
                 }
             }
@@ -6241,7 +6107,7 @@ int main(int argc, char* argv[]) {
 
 
     // ── Phase 1: Set up BAM source ──
-    // Decide whether to use parallel pileup (sorted BAM to /dev/shm + indexed).
+    // Sorted path (stream_unsorted == 0, decided before the engine is built): parallel pileup (sorted BAM to /dev/shm + indexed).
     // Auto mode: enable when /dev/shm has >=10 GB free and we're running STAR.
     if (parallel_pileup == -1 && bam_file.empty()) {
         struct statvfs svfs;
@@ -6365,8 +6231,9 @@ int main(int argc, char* argv[]) {
             } else {
                 // scRNA / CITE-seq / etc: R2.fastq = cDNA, R1.fastq = barcode.
                 // STARsolo requires --readFilesIn cDNA barcode (barcode read last).
-                args.push_back(reads_r2.c_str());
-                args.push_back(reads_r1.c_str());
+                // Chunk source: STAR opens the two files but takes its reads from g_starReadSource.
+                args.push_back(use_chunk_source ? "/dev/null" : reads_r2.c_str());
+                args.push_back(use_chunk_source ? "/dev/null" : reads_r1.c_str());
             }
 
             // For gzipped FASTQ files, use zcat via --readFilesCommand.
@@ -7248,7 +7115,22 @@ int main(int argc, char* argv[]) {
             args.push_back("--outSAMattributes");
             args.push_back("NH"); args.push_back("nM");
             args.push_back("AS"); args.push_back("CR"); args.push_back("UR");
-            args.push_back("CB");
+            if (stream_unsorted) {
+                if (solo_type_is_sam_tag_out || use_complex || use_complex_concat) {
+                    std::cerr << "ERROR: --stream-unsorted supports CB_UMI_Simple only (this protocol uses CB_samTagOut or CB_UMI_Complex)\n";
+                    return 1;
+                }
+                // No CB: STAR allows it only in a sorted BAM; the pileup derives CB from CR (PileupConfig::cb_from_cr).
+            } else {
+                args.push_back("CB");
+            }
+            // Debug only (BAM-stream CB-correction replica test): extra STAR SAM attributes, e.g. SINGLET_EXTRA_SAM_ATTRS="CY UY".
+            if (const char *extra_attrs = std::getenv("SINGLET_EXTRA_SAM_ATTRS")) {
+                static std::vector<std::string> extra_store;   // args holds const char*: keep the strings alive
+                std::istringstream extra_ss(extra_attrs);
+                for (std::string a; extra_ss >> a;) extra_store.push_back(a);
+                for (const auto &a : extra_store) args.push_back(a.c_str());
+            }
 
             // Skip unmapped reads (pileup ignores them anyway)
             args.push_back("--outSAMunmapped"); args.push_back("None");
@@ -7367,6 +7249,18 @@ int main(int argc, char* argv[]) {
 
             args.push_back(nullptr);
 
+            // Chunk source: the reads are decoded by worker threads of this (forked) process and copied into
+            // STAR's chunk buffers by its reading thread (read_source.h). Threads start on STAR's first read.
+            if (use_chunk_source) {
+                // A worker decodes + formats a 500k-read block in well under the time STAR's threads take to map
+                // it, so a few workers keep up; each formatted block in flight is ~150-300 MB.
+                int dthreads = std::max(2, std::min(4, star_threads / 4));
+                if (const char* e = std::getenv("SINGLET_READ_SOURCE_THREADS"); e && std::atoi(e) > 0)
+                    dthreads = std::atoi(e);
+                g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(
+                    onefq_files, read_fmt, dthreads, /*cdna_first=*/true);
+            }
+
             // Call bundled STAR directly — no exec, no external binary needed.
             int rc = star_main_impl(
                 static_cast<int>(args.size()) - 1,
@@ -7389,6 +7283,32 @@ int main(int argc, char* argv[]) {
             bam_source = "/dev/fd/" + std::to_string(pipe_fd[0]);
             std::cerr << "[singlet] STAR pid=" << star_pid
                       << ", " << star_threads << " threads, pipe fd=" << pipe_fd[0] << "\n";
+            // Test only (order-free-rules shuffled-order gate): SINGLET_TEE_STREAM_BAM=<path> copies the unsorted
+            // STAR stream to a file while the pileup reads it, for replay with --bam-file <path> --stream-unsorted.
+            if (const char* tee_path = std::getenv("SINGLET_TEE_STREAM_BAM"); tee_path && *tee_path && stream_unsorted == 1) {
+                int tee_pipe[2];
+                FILE* tee_fp = std::fopen(tee_path, "wb");
+                if (tee_fp && pipe(tee_pipe) == 0) {
+                    const int src = pipe_fd[0];
+                    std::thread([src, dst = tee_pipe[1], tee_fp]() {
+                        std::vector<char> buf(1 << 20);
+                        for (ssize_t n; (n = read(src, buf.data(), buf.size())) > 0;) {
+                            std::fwrite(buf.data(), 1, static_cast<size_t>(n), tee_fp);
+                            for (ssize_t off = 0; off < n;) {
+                                ssize_t w = write(dst, buf.data() + off, static_cast<size_t>(n - off));
+                                if (w <= 0) break;
+                                off += w;
+                            }
+                        }
+                        std::fclose(tee_fp);
+                        close(dst);
+                    }).detach();
+                    bam_source = "/dev/fd/" + std::to_string(tee_pipe[0]);
+                    std::cerr << "[singlet] SINGLET_TEE_STREAM_BAM: copying the STAR stream to " << tee_path << std::endl;
+                } else if (tee_fp) {
+                    std::fclose(tee_fp);
+                }
+            }
         }
     }
 
@@ -7991,6 +7911,17 @@ int main(int argc, char* argv[]) {
         }
         // Join FIFO writer thread (if FIFO decode mode) after STAR completes
         if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
+
+        // Stream (order-free-rules R5): the pass was counted in the protocol orientation. A pipe cannot be
+        // re-read, so a library whose reads contradict that orientation goes to the sorted path, where the
+        // strand safety net re-reads the BAM. Exit 8 = strand_contradiction: rerun with --sorted-bam.
+        if (stream_unsorted == 1 && config.stranded && config.auto_strand
+            && stats.strand_sense + stats.strand_antisense >= singlet::kStrandRetryMinReads
+            && singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) > singlet::kStrandRetryFrac) {
+            std::cerr << "[singlet] ERROR: " << static_cast<int>(singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) * 100)
+                      << "% of nuclear reads are antisense to the protocol orientation; rerun with --sorted-bam (strand safety net)" << std::endl;
+            return 8;  // strand_contradiction
+        }
     }
 
     // ── BUG-MAPPING-GUARD: Warn on very low mapping rate (wrong genome) ──
@@ -8144,7 +8075,11 @@ int main(int argc, char* argv[]) {
 
     // ── N8: Populate provenance manifest ──
     export_cfg.provenance.singlet_version      = singlet::kVersion;
-    export_cfg.provenance.input_file            = onefq_file.empty() ? sra_file : onefq_file;
+    {
+        std::string in_files;  // every run of a multi-run sample, not a temporary concatenation
+        for (const auto& f : onefq_runs_in) in_files += (in_files.empty() ? "" : ",") + f;
+        export_cfg.provenance.input_file = onefq_runs_in.size() > 1 ? in_files : (onefq_file.empty() ? sra_file : onefq_file);
+    }
     export_cfg.provenance.input_reads           = stats.total_reads;
     export_cfg.provenance.genome_dir            = genome_dir;
     export_cfg.provenance.gtf_path              = config.exon_gtf_path;
@@ -8304,7 +8239,7 @@ int main(int argc, char* argv[]) {
 
             {
                 singlet::fq::Reader adt_reader;
-                adt_reader.open(onefq_file.c_str());
+                adt_reader.open(runs_as_one_file().c_str());   // every run of a multi-run sample
                 const auto& adt_hdr = adt_reader.header();
                 uint16_t bc_len = adt_reader.bc_length();
                 uint16_t umi_len_adt = static_cast<uint16_t>(adt_reader.umi_length());

@@ -1,0 +1,22 @@
+{
+  "soupx_leiden": {
+    "rho": 0.01,
+    "seconds": 14.8069
+  },
+  "soupx_species": {
+    "rho": null,
+    "seconds": 3.1686
+  },
+  "decontx_default": {
+    "seconds": 22.4166,
+    "mean_rho": 0.0048
+  },
+  "decontx_background": {
+    "seconds": 26.9269,
+    "mean_rho": 0.0083
+  },
+  "scdblfinder": {
+    "seconds": 4.1968,
+    "n_doublets": 17
+  }
+}
