@@ -85,8 +85,8 @@ sequencing- and imaging-based spatial data, \sone{} files take a median of \nm{s
 gene identifiers and barcodes: \nm{ratio-h5ad_gzip}$\times$ smaller than gzip-compressed AnnData and
 \nm{ratioBestOther}$\times$ smaller than the most compact alternative. They are also the fastest to read on
 \nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices, at a median of \nm{dec-s1-cold-t4} million non-zeros per second
-from a cold file on \nm{threadsHeadline} cores, \nm{dec-speedup-each}$\times$ the fastest other format on each matrix. Read over a network, \sone{} is limited by the link rather than by its reader: on \nm{threadsHeadline} cores the reader
-consumes \nm{net-knee-s1}\,Gbit/s of stored bits, so a 1\,Gbit/s link carries \nm{net-s1-at-1g} million non-zeros per
+from a cold file on \nm{threadsHeadline} cores, \nm{dec-speedup-each}$\times$ the fastest other format on each matrix. Read over a network, \sone{} is limited by the link rather than by its decoder up to about 1\,Gbit/s on
+\nm{threadsHeadline} cores, where the decoder consumes \nm{net-knee-s1}\,Gbit/s of stored bits, so a 1\,Gbit/s link carries \nm{net-s1-at-1g} million non-zeros per
 second instead of the \nm{net-csc-at-1g} million it carries as uncompressed arrays. Streamed from an object store at
 1\,Gbit/s, its PyTorch reader fills \nm{linkuse-s3_1g}\% of the link with \nm{thr-s1_stream-s3_1g} cells per second,
 the first 512-cell minibatch arrives in \nm{ttfm-s1}\,s, \nm{ttfm-speedup}$\times$ sooner than with the fastest

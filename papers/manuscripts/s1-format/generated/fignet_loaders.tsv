@@ -1,10 +1,10 @@
 loader	gbit	cells_per_s
-s1_stream	0.1	5670.73
-s1_stream	1	14101
-s1_stream	10	15014.2
-s1_stream_seq	0.1	5691.73
-s1_stream_seq	1	11005.9
-s1_stream_seq	10	10948.6
+s1_stream	0.1	7209.46
+s1_stream	1	58057.3
+s1_stream	10	57543.9
+s1_stream_seq	0.1	7197.18
+s1_stream_seq	1	23749.7
+s1_stream_seq	10	23714.7
 anndata_zarr_lazy	0.1	315.817
 anndata_zarr_lazy	1	1770.22
 anndata_zarr_lazy	10	3237.95

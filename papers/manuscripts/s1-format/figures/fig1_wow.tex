@@ -97,6 +97,7 @@ per second; points above and left of a line deliver faster.
 disk, the shared NFS filesystem, or an S3-compatible object store whose total bandwidth is limited (1\,ms latency unless
 stated), \nm{threadsHeadline} reader cores. Dotted: the same \sone{} reader sending a minibatch's range requests one at a
 time instead of together. Loaders that must download the whole object first are not run over the network for this
-dataset (Section~\ref{sec:methods}).}
+dataset (Section~\ref{sec:methods}). On local disk \sone{} reads its file cold; the two variants read the same file after it,
+partly from the disk controller's cache, which cannot be cleared, so only the first is comparable with the other loaders.}
 \label{fig:wow}
 \end{figure*}

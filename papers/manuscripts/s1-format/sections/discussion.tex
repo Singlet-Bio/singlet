@@ -50,8 +50,9 @@ margin is modest.
   the comparison formats needed more memory and time than the campaign allowed.
 \item \emph{Network tiers.} The network tiers are a local object store with a shared bandwidth limit and fixed added
   latency. Real object stores add variable latency, connection set-up, per-connection rate limits and per-request costs;
-  the 10\,Gbit/s tier exceeds what the test setup delivers and is flagged. Minibatches were read in one process; DataLoader
-  workers, which overlap reading with training, were not measured.
+  the 10\,Gbit/s tier exceeds what the test setup delivers and is flagged. Minibatches were read in one process on
+  \nm{threadsHeadline} cores; from 1\,Gbit/s on, decoding rather than the link limits the \sone{} reader there, and
+  DataLoader workers or more cores, which we did not measure, would raise that limit.
 \item \emph{Baselines.} We did not test generic codecs tuned to the same random-access granularity, such as zstd with a
   dictionary trained per matrix or Blosc2 with bit shuffling per chunk, nor stronger count models; the payload ladder
   does not separate the contributions of gene reordering, context modelling and the entropy coder.

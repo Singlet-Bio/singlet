@@ -98,12 +98,14 @@ of eight blocks of 64 consecutive cells at random offsets, with no larger shuffl
 and decodes every run of cells in one C++ call straight into the arrays of the \texttt{torch.sparse\_csr\_tensor}; the
 next minibatch's requests are in flight while one decodes, and its Python layer does nothing per cell. From
 \nm{fig1b-dataset} through the object store it delivers \nm{thr-s1_stream-s3_0.1g}, \nm{thr-s1_stream-s3_1g} and
-\nm{thr-s1_stream-s3_10g} cells per second at 0.1, 1 and 10\,Gbit/s (Fig.~\ref{fig:net}c), which fills
-\nm{linkuse-s3_0.1g}\% and \nm{linkuse-s3_1g}\% of the two slower links (counting the bytes of the file per cell,
-\nm{net-ds-bytes-per-cell}, and not the parts of chunks it reads beyond the requested cells); at 10\,Gbit/s the decoder on
-\nm{threadsHeadline} cores is the limit (\nm{net-ds-decoder-cells} cells per second from memory). From the node's own
-disk it delivers \nm{thr-s1_stream-local} cells per second and from the shared filesystem \nm{thr-s1_stream-nfs}
-(Fig.~\ref{fig:wow}d). AnnData Zarr delivers \nm{thr-anndata_zarr_lazy-s3_1g} and TileDB-SOMA ML \nm{thr-soma_ml-s3_1g}
+\nm{thr-s1_stream-s3_10g} cells per second at 0.1, 1 and 10\,Gbit/s (Fig.~\ref{fig:net}c). At 0.1\,Gbit/s it is
+network-bound, filling \nm{linkuse-s3_0.1g}\% of the link, and at 1\,Gbit/s it fills \nm{linkuse-s3_1g}\% (counting the
+file's \nm{net-ds-bytes-per-cell} bytes per cell, not the parts of chunks it reads beyond the requested cells). It delivers
+the same at 10\,Gbit/s as at 1\,Gbit/s, because from 1\,Gbit/s on decoding on \nm{threadsHeadline} cores limits it: a block of
+64 cells costs the decoding of whole chunks around it, which keeps the reader below the rate at which the whole matrix
+decodes from memory (\nm{net-ds-decoder-cells} cells per second), and more cores raise this limit. From the node's own
+spinning disk, cold, it delivers \nm{thr-s1_stream-local} cells per second, where every block is a disk seek, and from
+the shared filesystem, whose servers cache, \nm{thr-s1_stream-nfs} (Fig.~\ref{fig:wow}d). AnnData Zarr delivers \nm{thr-anndata_zarr_lazy-s3_1g} and TileDB-SOMA ML \nm{thr-soma_ml-s3_1g}
 cells per second at 1\,Gbit/s. AnnData read wholly into memory sustains more once loaded, at the cost of reading the
 entire file first and holding it in memory. From a cold start the first minibatch is ready after \nm{ttfm-s1}\,s with
 \sone, against \nm{ttfm-best-other}\,s for the fastest alternative (\nm{ttfm-best-other-name}; Fig.~\ref{fig:wow}b,

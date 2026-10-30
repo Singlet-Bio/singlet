@@ -17,15 +17,6 @@ tabula_muris_facs	rna	local			soma_ml	2	4	ok	local	0.032801	4.315883	0.03394	4.4
 tabula_muris_facs	rna	local			bpcells	0	4	ok	local	0.030379	0.530456	0	0.749946	512	4992.344737	200	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tabula_muris_facs	rna	local			bpcells	1	4	ok	local	0.030259	0.48926	0	0.708562	512	5330.007271	200	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tabula_muris_facs	rna	local			bpcells	2	4	ok	local	0.030743	0.522745	0	0.74207	512	5001.685209	200	NA	NA	NA	NA	NA	NA	NA	NA	NA
-tabula_muris_facs	rna	local			s1_stream	0	4	ok	local	0.004401	0.030372	1e-06	0.055506	512	30774.058339	200	981.128906	0.009153	0.013308	2865784	13	NA	NA	NA	NA
-tabula_muris_facs	rna	local			s1_stream	1	4	ok	local	0.004512	0.022897	1e-06	0.047121	512	NA	0	NA	0.006931	0.00973	2332297	12	NA	NA	NA	NA
-tabula_muris_facs	rna	local			s1_stream	2	4	ok	local	0.00417	0.028727	2e-06	0.033377	512	NA	0	NA	0.008908	0.01201	2880230	13	NA	NA	NA	NA
-tabula_muris_facs	rna	local			s1_stream_canonical	0	4	ok	local	0.004136	0.035236	2e-06	0.040001	512	24984.988414	200	980.546875	0.00945	0.017893	2865784	13	NA	NA	NA	NA
-tabula_muris_facs	rna	local			s1_stream_canonical	1	4	ok	local	0.004342	0.025339	2e-06	0.046494	512	NA	0	NA	0.006675	0.012327	2332297	12	NA	NA	NA	NA
-tabula_muris_facs	rna	local			s1_stream_canonical	2	4	ok	local	0.004125	0.032694	2e-06	0.037284	512	NA	0	NA	0.00857	0.016432	2880230	13	NA	NA	NA	NA
-tabula_muris_facs	rna	local			s1_stream_seq	0	4	ok	local	0.004132	0.030452	2e-06	0.035223	512	30282.306	200	981.9375	0.009081	0.013437	2865784	13	NA	NA	NA	NA
-tabula_muris_facs	rna	local			s1_stream_seq	1	4	ok	local	0.004151	0.022411	1e-06	0.04314	512	NA	0	NA	0.006977	0.00932	2332297	12	NA	NA	NA	NA
-tabula_muris_facs	rna	local			s1_stream_seq	2	4	ok	local	0.004135	0.028848	2e-06	0.033457	512	NA	0	NA	0.008378	0.012661	2880230	13	NA	NA	NA	NA
 tabula_muris_facs	rna	nfs			anndata_inmem	0	4	ok	local	5.507898	0.006922	0.008087	5.573712	512	120741.035052	200	1805.402344	NA	NA	NA	NA	NA	NA	NA	NA
 tabula_muris_facs	rna	nfs			anndata_inmem	1	4	ok	local	5.49811	0.00597	0.005772	5.555268	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tabula_muris_facs	rna	nfs			anndata_inmem	2	4	ok	local	5.515506	0.006676	0.007332	5.576034	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA
@@ -44,15 +35,6 @@ tabula_muris_facs	rna	nfs			soma_ml	2	4	ok	local	0.034789	4.31269	0.037962	4.417
 tabula_muris_facs	rna	nfs			bpcells	0	4	ok	local	0.030324	0.521416	0	0.747972	512	5028.406376	200	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tabula_muris_facs	rna	nfs			bpcells	1	4	ok	local	0.029693	0.481213	0	0.711138	512	5444.319489	200	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tabula_muris_facs	rna	nfs			bpcells	2	4	ok	local	0.02967	0.511173	0	0.730766	512	5049.043331	200	NA	NA	NA	NA	NA	NA	NA	NA	NA
-tabula_muris_facs	rna	nfs			s1_stream	0	4	ok	local	0.004387	0.02523	2e-06	0.048426	512	30864.556521	200	981.339844	0.004757	0.012677	2865784	13	NA	NA	NA	NA
-tabula_muris_facs	rna	nfs			s1_stream	1	4	ok	local	0.004499	0.01923	2e-06	0.040131	512	NA	0	NA	0.003635	0.009942	2332297	12	NA	NA	NA	NA
-tabula_muris_facs	rna	nfs			s1_stream	2	4	ok	local	0.004364	0.024281	1e-06	0.028975	512	NA	0	NA	0.004375	0.012207	2880230	13	NA	NA	NA	NA
-tabula_muris_facs	rna	nfs			s1_stream_canonical	0	4	ok	local	0.004314	0.030194	1e-06	0.034901	512	25682.277201	200	981.878906	0.004338	0.017831	2865784	13	NA	NA	NA	NA
-tabula_muris_facs	rna	nfs			s1_stream_canonical	1	4	ok	local	0.004467	0.022214	2e-06	0.044843	512	NA	0	NA	0.003449	0.012715	2332297	12	NA	NA	NA	NA
-tabula_muris_facs	rna	nfs			s1_stream_canonical	2	4	ok	local	0.004363	0.028412	2e-06	0.033101	512	NA	0	NA	0.004587	0.016242	2880230	13	NA	NA	NA	NA
-tabula_muris_facs	rna	nfs			s1_stream_seq	0	4	ok	local	0.004385	0.025952	1e-06	0.030728	512	30116.218476	200	982.316406	0.00426	0.013797	2865784	13	NA	NA	NA	NA
-tabula_muris_facs	rna	nfs			s1_stream_seq	1	4	ok	local	0.004379	0.019349	2e-06	0.041037	512	NA	0	NA	0.003732	0.009532	2332297	12	NA	NA	NA	NA
-tabula_muris_facs	rna	nfs			s1_stream_seq	2	4	ok	local	0.004413	0.024298	1e-06	0.029053	512	NA	0	NA	0.004325	0.012116	2880230	13	NA	NA	NA	NA
 tabula_muris_facs	rna	s3_0.1g	0.1	1	anndata_inmem	0	4	ok	download	43.325275	0.008218	0.008318	43.341839	512	113449.583885	200	1805.675781	NA	NA	NA	NA	38.04857	0.098239	0.099994	False
 tabula_muris_facs	rna	s3_0.1g	0.1	1	anndata_inmem	1	4	ok	download	42.623585	0.006718	0.006417	42.636723	512	NA	0	NA	NA	NA	NA	NA	37.340279	0.098239	0.099994	False
 tabula_muris_facs	rna	s3_0.1g	0.1	1	anndata_inmem	2	4	ok	download	42.661398	0.009434	0.007794	42.678645	512	NA	0	NA	NA	NA	NA	NA	37.345739	0.098239	0.099994	False
@@ -71,15 +53,6 @@ tabula_muris_facs	rna	s3_0.1g	0.1	1	soma_ml	2	4	ok	range	5.253523	15.986868	0.03
 tabula_muris_facs	rna	s3_0.1g	0.1	1	bpcells	0	4	ok	download	30.482402	0.569946	0	31.052815	512	5417.890563	200	NA	NA	NA	NA	NA	30.425247	0.098239	0.099994	False
 tabula_muris_facs	rna	s3_0.1g	0.1	1	bpcells	1	4	ok	download	29.810922	0.540511	0	30.351886	512	5092.969934	200	NA	NA	NA	NA	NA	29.755361	0.098239	0.099994	False
 tabula_muris_facs	rna	s3_0.1g	0.1	1	bpcells	2	4	ok	download	29.825289	0.554517	0	30.380683	512	5250.985504	200	NA	NA	NA	NA	NA	29.757451	0.098239	0.099994	False
-tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream	0	4	ok	range	0.417119	0.244897	1e-06	0.662018	512	4697.132881	200	986.570312	0.217615	0.016691	2865784	13	NA	0.098239	0.099994	False
-tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream	1	4	ok	range	0.069742	0.193921	1e-06	0.263665	512	NA	0	NA	0.172782	0.014282	2332297	12	NA	0.098239	0.099994	False
-tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream	2	4	ok	range	0.069753	0.240878	2e-06	0.310634	512	NA	0	NA	0.215697	0.016854	2880230	13	NA	0.098239	0.099994	False
-tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_canonical	0	4	ok	range	0.069696	0.24488	1e-06	0.314578	512	4457.328252	200	985.859375	0.213823	0.023037	2865784	13	NA	0.098239	0.099994	False
-tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_canonical	1	4	ok	range	0.06964	0.198954	2e-06	0.268597	512	NA	0	NA	0.172937	0.018857	2332297	12	NA	0.098239	0.099994	False
-tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_canonical	2	4	ok	range	0.071042	0.247208	2e-06	0.318253	512	NA	0	NA	0.216436	0.022586	2880230	13	NA	0.098239	0.099994	False
-tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_seq	0	4	ok	range	0.069269	0.242486	3e-06	0.311758	512	4621.328617	200	981.175781	0.212764	0.017175	2865784	13	NA	0.098239	0.099994	False
-tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_seq	1	4	ok	range	0.074019	0.189438	3e-06	0.26346	512	NA	0	NA	0.169513	0.012773	2332297	12	NA	0.098239	0.099994	False
-tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_seq	2	4	ok	range	0.068519	0.241002	2e-06	0.309523	512	NA	0	NA	0.215028	0.018324	2880230	13	NA	0.098239	0.099994	False
 tabula_muris_facs	rna	s3_1g	1	1	anndata_inmem	0	4	ok	download	9.742991	0.009222	0.008195	9.76042	512	109793.858262	200	1804.5	NA	NA	NA	NA	4.448184	0.846341	0.999674	False
 tabula_muris_facs	rna	s3_1g	1	1	anndata_inmem	1	4	ok	download	9.027906	0.006016	0.006015	9.03994	512	NA	0	NA	NA	NA	NA	NA	3.740325	0.846341	0.999674	False
 tabula_muris_facs	rna	s3_1g	1	1	anndata_inmem	2	4	ok	download	9.264599	0.006798	0.007299	9.278698	512	NA	0	NA	NA	NA	NA	NA	3.740007	0.846341	0.999674	False
@@ -98,15 +71,6 @@ tabula_muris_facs	rna	s3_1g	1	1	soma_ml	2	4	ok	range	5.258215	7.423006	0.030073	
 tabula_muris_facs	rna	s3_1g	1	1	bpcells	0	4	ok	download	3.759837	0.556912	0	4.317467	512	5359.783941	200	NA	NA	NA	NA	NA	3.69734	0.846341	0.999674	False
 tabula_muris_facs	rna	s3_1g	1	1	bpcells	1	4	ok	download	3.089957	0.520549	0	3.610955	512	5067.320599	200	NA	NA	NA	NA	NA	3.037846	0.846341	0.999674	False
 tabula_muris_facs	rna	s3_1g	1	1	bpcells	2	4	ok	download	3.089638	0.564248	0	3.654327	512	5196.709406	200	NA	NA	NA	NA	NA	3.036161	0.846341	0.999674	False
-tabula_muris_facs	rna	s3_1g	1	1	s1_stream	0	4	ok	range	0.417636	0.078762	8e-06	0.496408	512	17081.091782	200	984.785156	0.02771	0.02613	2865784	13	NA	0.846341	0.999674	False
-tabula_muris_facs	rna	s3_1g	1	1	s1_stream	1	4	ok	range	0.068118	0.044747	2e-06	0.112868	512	NA	0	NA	0.024907	0.012881	2332297	12	NA	0.846341	0.999674	False
-tabula_muris_facs	rna	s3_1g	1	1	s1_stream	2	4	ok	range	0.068777	0.0504	2e-06	0.11918	512	NA	0	NA	0.02605	0.016125	2880230	13	NA	0.846341	0.999674	False
-tabula_muris_facs	rna	s3_1g	1	1	s1_stream_canonical	0	4	ok	range	0.068665	0.054159	2e-06	0.122826	512	13952.273345	200	986.464844	0.025467	0.021284	2865784	13	NA	0.846341	0.999674	False
-tabula_muris_facs	rna	s3_1g	1	1	s1_stream_canonical	1	4	ok	range	0.067826	0.046357	2e-06	0.114186	512	NA	0	NA	0.021159	0.018333	2332297	12	NA	0.846341	0.999674	False
-tabula_muris_facs	rna	s3_1g	1	1	s1_stream_canonical	2	4	ok	range	0.067646	0.051422	2e-06	0.119071	512	NA	0	NA	0.02715	0.016234	2880230	13	NA	0.846341	0.999674	False
-tabula_muris_facs	rna	s3_1g	1	1	s1_stream_seq	0	4	ok	range	0.067898	0.059229	1e-06	0.127129	512	14652.55728	200	981.980469	0.033997	0.017251	2865784	13	NA	0.846341	0.999674	False
-tabula_muris_facs	rna	s3_1g	1	1	s1_stream_seq	1	4	ok	range	0.069306	0.053623	2e-06	0.122932	512	NA	0	NA	0.03455	0.012743	2332297	12	NA	0.846341	0.999674	False
-tabula_muris_facs	rna	s3_1g	1	1	s1_stream_seq	2	4	ok	range	0.067912	0.064603	2e-06	0.132518	512	NA	0	NA	0.040736	0.015728	2880230	13	NA	0.846341	0.999674	False
 tabula_muris_facs	rna	s3_10g	10	1	anndata_inmem	0	4	ok	download	6.781003	0.007127	0.007876	6.796012	512	111923.44607	200	1804.261719	NA	NA	NA	NA	1.536495	2.479081	9.124776	True
 tabula_muris_facs	rna	s3_10g	10	1	anndata_inmem	1	4	ok	download	6.12124	0.007379	0.005815	6.134436	512	NA	0	NA	NA	NA	NA	NA	0.850809	2.479081	9.124776	True
 tabula_muris_facs	rna	s3_10g	10	1	anndata_inmem	2	4	ok	download	6.235226	0.006897	0.007455	6.24958	512	NA	0	NA	NA	NA	NA	NA	0.981485	2.479081	9.124776	True
@@ -125,15 +89,6 @@ tabula_muris_facs	rna	s3_10g	10	1	soma_ml	2	4	ok	range	5.280887	6.551969	0.02148
 tabula_muris_facs	rna	s3_10g	10	1	bpcells	0	4	ok	download	1.452341	0.495617	0	1.948173	512	5363.980838	200	NA	NA	NA	NA	NA	1.425128	2.479081	9.124776	True
 tabula_muris_facs	rna	s3_10g	10	1	bpcells	1	4	ok	download	0.859192	0.477901	0	1.337312	512	5071.049362	200	NA	NA	NA	NA	NA	0.831688	2.479081	9.124776	True
 tabula_muris_facs	rna	s3_10g	10	1	bpcells	2	4	ok	download	0.76452	0.487294	0	1.252034	512	5301.209679	200	NA	NA	NA	NA	NA	0.737134	2.479081	9.124776	True
-tabula_muris_facs	rna	s3_10g	10	1	s1_stream	0	4	ok	range	0.363571	0.051298	2e-06	0.414872	512	15886.848003	200	985.613281	0.028049	0.012951	2865784	13	NA	2.479081	9.124776	True
-tabula_muris_facs	rna	s3_10g	10	1	s1_stream	1	4	ok	range	0.068875	0.039027	1e-06	0.107905	512	NA	0	NA	0.020164	0.012146	2332297	12	NA	2.479081	9.124776	True
-tabula_muris_facs	rna	s3_10g	10	1	s1_stream	2	4	ok	range	0.068214	0.047429	1e-06	0.115646	512	NA	0	NA	0.022551	0.016813	2880230	13	NA	2.479081	9.124776	True
-tabula_muris_facs	rna	s3_10g	10	1	s1_stream_canonical	0	4	ok	range	0.068189	0.050817	2e-06	0.119008	512	13927.939008	200	986.132812	0.026784	0.015847	2865784	13	NA	2.479081	9.124776	True
-tabula_muris_facs	rna	s3_10g	10	1	s1_stream_canonical	1	4	ok	range	0.069212	0.04573	2e-06	0.114945	512	NA	0	NA	0.022211	0.016629	2332297	12	NA	2.479081	9.124776	True
-tabula_muris_facs	rna	s3_10g	10	1	s1_stream_canonical	2	4	ok	range	0.06959	0.051132	2e-06	0.120725	512	NA	0	NA	0.025786	0.017097	2880230	13	NA	2.479081	9.124776	True
-tabula_muris_facs	rna	s3_10g	10	1	s1_stream_seq	0	4	ok	range	0.06806	0.064108	2e-06	0.132172	512	14582.866792	200	981.628906	0.039236	0.017219	2865784	13	NA	2.479081	9.124776	True
-tabula_muris_facs	rna	s3_10g	10	1	s1_stream_seq	1	4	ok	range	0.069548	0.055939	2e-06	0.12549	512	NA	0	NA	0.036306	0.01325	2332297	12	NA	2.479081	9.124776	True
-tabula_muris_facs	rna	s3_10g	10	1	s1_stream_seq	2	4	ok	range	0.067217	0.060493	2e-06	0.127712	512	NA	0	NA	0.036407	0.016464	2880230	13	NA	2.479081	9.124776	True
 tabula_muris_facs	rna	s3_1g_wan	1	30	anndata_inmem	0	4	ok	download	9.748208	0.006984	0.007711	9.762915	512	110469.261848	200	1804.980469	NA	NA	NA	NA	4.478348	0.843815	0.999681	False
 tabula_muris_facs	rna	s3_1g_wan	1	30	anndata_inmem	1	4	ok	download	9.03614	0.005955	0.005793	9.047891	512	NA	0	NA	NA	NA	NA	NA	3.766636	0.843815	0.999681	False
 tabula_muris_facs	rna	s3_1g_wan	1	30	anndata_inmem	2	4	ok	download	9.037792	0.006821	0.007253	9.05187	512	NA	0	NA	NA	NA	NA	NA	3.772799	0.843815	0.999681	False
@@ -152,12 +107,57 @@ tabula_muris_facs	rna	s3_1g_wan	1	30	soma_ml	2	4	ok	range	6.056268	7.376976	0.03
 tabula_muris_facs	rna	s3_1g_wan	1	30	bpcells	0	4	ok	download	4.156686	0.548284	0	4.705678	512	5479.497505	200	NA	NA	NA	NA	NA	4.091916	0.843815	0.999681	False
 tabula_muris_facs	rna	s3_1g_wan	1	30	bpcells	1	4	ok	download	3.483054	0.518372	0	4.002139	512	5068.31503	200	NA	NA	NA	NA	NA	3.418132	0.843815	0.999681	False
 tabula_muris_facs	rna	s3_1g_wan	1	30	bpcells	2	4	ok	download	3.471328	0.566596	0	4.038384	512	5239.18181	200	NA	NA	NA	NA	NA	3.415509	0.843815	0.999681	False
-tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream	0	4	ok	range	0.589358	0.081058	2e-06	0.670419	512	11927.528823	200	986.328125	0.055052	0.016052	2865784	13	NA	0.843815	0.999681	False
-tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream	1	4	ok	range	0.246226	0.072126	1e-06	0.318355	512	NA	0	NA	0.052038	0.012453	2332297	12	NA	0.843815	0.999681	False
-tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream	2	4	ok	range	0.246168	0.07728	2e-06	0.323451	512	NA	0	NA	0.052436	0.015769	2880230	13	NA	0.843815	0.999681	False
-tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_canonical	0	4	ok	range	0.24565	0.08532	2e-06	0.330972	512	10576.233784	200	987.023438	0.05361	0.02242	2865784	13	NA	0.843815	0.999681	False
-tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_canonical	1	4	ok	range	0.247425	0.07533	2e-06	0.322758	512	NA	0	NA	0.050806	0.016597	2332297	12	NA	0.843815	0.999681	False
-tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_canonical	2	4	ok	range	0.246711	0.087433	2e-06	0.334147	512	NA	0	NA	0.056152	0.02174	2880230	13	NA	0.843815	0.999681	False
-tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_seq	0	4	ok	range	0.249944	0.320171	2e-06	0.570118	512	3364.389216	200	982.152344	0.292136	0.018893	2865784	13	NA	0.843815	0.999681	False
-tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_seq	1	4	ok	range	0.252308	0.275672	2e-06	0.527983	512	NA	0	NA	0.253963	0.014169	2332297	12	NA	0.843815	0.999681	False
-tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_seq	2	4	ok	range	0.246788	0.314273	2e-06	0.561063	512	NA	0	NA	0.289126	0.016777	2880230	13	NA	0.843815	0.999681	False
+tabula_muris_facs	rna	local			s1_stream	0	4	ok	local	0.003923	0.021469	1e-06	0.04951	512	48805.872912	200	754.183594	0.009126	0.010256	2899775	9	NA	NA	NA	NA
+tabula_muris_facs	rna	local			s1_stream	1	4	ok	local	0.003856	0.017458	1e-06	0.037549	512	NA	0	NA	0.006789	0.008661	2366288	8	NA	NA	NA	NA
+tabula_muris_facs	rna	local			s1_stream	2	4	ok	local	0.003438	0.021306	2e-06	0.025162	512	NA	0	NA	0.009442	0.00993	2914221	9	NA	NA	NA	NA
+tabula_muris_facs	rna	local			s1_stream_canonical	0	4	ok	local	0.003473	0.025205	2e-06	0.029217	512	38185.91354	200	754.351562	0.009281	0.013997	2899775	9	NA	NA	NA	NA
+tabula_muris_facs	rna	local			s1_stream_canonical	1	4	ok	local	0.0034	0.021326	2e-06	0.038869	512	NA	0	NA	0.007114	0.012405	2366288	8	NA	NA	NA	NA
+tabula_muris_facs	rna	local			s1_stream_canonical	2	4	ok	local	0.003608	0.027229	2e-06	0.031312	512	NA	0	NA	0.011234	0.014048	2914221	9	NA	NA	NA	NA
+tabula_muris_facs	rna	local			s1_stream_seq	0	4	ok	local	0.003413	0.021279	2e-06	0.025236	512	56258.307048	200	755.78125	0.009317	0.010024	2899775	9	NA	NA	NA	NA
+tabula_muris_facs	rna	local			s1_stream_seq	1	4	ok	local	0.003808	0.017682	2e-06	0.037882	512	NA	0	NA	0.007226	0.008564	2366288	8	NA	NA	NA	NA
+tabula_muris_facs	rna	local			s1_stream_seq	2	4	ok	local	0.00385	0.021604	2e-06	0.025932	512	NA	0	NA	0.008955	0.010699	2914221	9	NA	NA	NA	NA
+tabula_muris_facs	rna	nfs			s1_stream	0	4	ok	local	0.003749	0.017248	2e-06	0.03691	512	61066.68839	200	755.179688	0.004663	0.010551	2899775	9	NA	NA	NA	NA
+tabula_muris_facs	rna	nfs			s1_stream	1	4	ok	local	0.0037	0.01445	1e-06	0.034629	512	NA	0	NA	0.004003	0.00853	2366288	8	NA	NA	NA	NA
+tabula_muris_facs	rna	nfs			s1_stream	2	4	ok	local	0.003632	0.02036	1e-06	0.02453	512	NA	0	NA	0.005552	0.012802	2914221	9	NA	NA	NA	NA
+tabula_muris_facs	rna	nfs			s1_stream_canonical	0	4	ok	local	0.003687	0.019576	2e-06	0.023655	512	44956.541508	200	755.417969	0.004508	0.013117	2899775	9	NA	NA	NA	NA
+tabula_muris_facs	rna	nfs			s1_stream_canonical	1	4	ok	local	0.003822	0.018961	2e-06	0.038862	512	NA	0	NA	0.004302	0.012711	2366288	8	NA	NA	NA	NA
+tabula_muris_facs	rna	nfs			s1_stream_canonical	2	4	ok	local	0.003622	0.021916	2e-06	0.025887	512	NA	0	NA	0.004841	0.015117	2914221	9	NA	NA	NA	NA
+tabula_muris_facs	rna	nfs			s1_stream_seq	0	4	ok	local	0.003842	0.016141	2e-06	0.020333	512	58985.649453	200	754.578125	0.004808	0.009473	2899775	9	NA	NA	NA	NA
+tabula_muris_facs	rna	nfs			s1_stream_seq	1	4	ok	local	0.003796	0.014937	1e-06	0.03464	512	NA	0	NA	0.004246	0.008734	2366288	8	NA	NA	NA	NA
+tabula_muris_facs	rna	nfs			s1_stream_seq	2	4	ok	local	0.003676	0.01896	2e-06	0.022982	512	NA	0	NA	0.004435	0.012592	2914221	9	NA	NA	NA	NA
+tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream	0	4	ok	range	0.023401	0.233482	1e-06	0.256886	512	2683.457135	200	757.199219	0.20625	0.0203	2899775	9	NA	0.098251	0.099994	False
+tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream	1	4	ok	range	0.022072	0.180472	2e-06	0.202547	512	NA	0	NA	0.163014	0.011541	2366288	8	NA	0.098251	0.099994	False
+tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream	2	4	ok	range	0.022596	0.233327	3e-06	0.255927	512	NA	0	NA	0.205995	0.020229	2914221	9	NA	0.098251	0.099994	False
+tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_canonical	0	4	ok	range	0.022788	0.234617	3e-06	0.257409	512	2683.727502	200	756.816406	0.205687	0.022645	2899775	9	NA	0.098251	0.099994	False
+tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_canonical	1	4	ok	range	0.021805	0.184664	2e-06	0.206472	512	NA	0	NA	0.163441	0.015273	2366288	8	NA	0.098251	0.099994	False
+tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_canonical	2	4	ok	range	0.021839	0.232247	3e-06	0.254089	512	NA	0	NA	0.205569	0.019764	2914221	9	NA	0.098251	0.099994	False
+tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_seq	0	4	ok	range	0.022478	0.229262	3e-06	0.251743	512	2678.605484	200	750.945312	0.209616	0.01664	2899775	9	NA	0.098251	0.099994	False
+tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_seq	1	4	ok	range	0.02239	0.184929	3e-06	0.207323	512	NA	0	NA	0.166709	0.015703	2366288	8	NA	0.098251	0.099994	False
+tabula_muris_facs	rna	s3_0.1g	0.1	1	s1_stream_seq	2	4	ok	range	0.021949	0.225481	2e-06	0.247433	512	NA	0	NA	0.209782	0.013202	2914221	9	NA	0.098251	0.099994	False
+tabula_muris_facs	rna	s3_1g	1	1	s1_stream	0	4	ok	range	0.007656	0.035347	1e-06	0.043006	512	26772.5041	200	765.449219	0.017897	0.01175	2899775	9	NA	0.845817	0.999288	False
+tabula_muris_facs	rna	s3_1g	1	1	s1_stream	1	4	ok	range	0.007736	0.03192	1e-06	0.039658	512	NA	0	NA	0.014174	0.012876	2366288	8	NA	0.845817	0.999288	False
+tabula_muris_facs	rna	s3_1g	1	1	s1_stream	2	4	ok	range	0.007905	0.040533	2e-06	0.048441	512	NA	0	NA	0.019488	0.015564	2914221	9	NA	0.845817	0.999288	False
+tabula_muris_facs	rna	s3_1g	1	1	s1_stream_canonical	0	4	ok	range	0.007832	0.042062	1e-06	0.049896	512	26735.321593	200	762.351562	0.014182	0.019492	2899775	9	NA	0.845817	0.999288	False
+tabula_muris_facs	rna	s3_1g	1	1	s1_stream_canonical	1	4	ok	range	0.007986	0.034172	2e-06	0.042161	512	NA	0	NA	0.011456	0.017131	2366288	8	NA	0.845817	0.999288	False
+tabula_muris_facs	rna	s3_1g	1	1	s1_stream_canonical	2	4	ok	range	0.0079	0.045143	2e-06	0.053047	512	NA	0	NA	0.012885	0.023612	2914221	9	NA	0.845817	0.999288	False
+tabula_muris_facs	rna	s3_1g	1	1	s1_stream_seq	0	4	ok	range	0.007398	0.039707	2e-06	0.047109	512	19961.689687	200	750.917969	0.026216	0.011299	2899775	9	NA	0.845817	0.999288	False
+tabula_muris_facs	rna	s3_1g	1	1	s1_stream_seq	1	4	ok	range	0.007792	0.037258	2e-06	0.045052	512	NA	0	NA	0.022647	0.01228	2366288	8	NA	0.845817	0.999288	False
+tabula_muris_facs	rna	s3_1g	1	1	s1_stream_seq	2	4	ok	range	0.007922	0.044315	2e-06	0.05224	512	NA	0	NA	0.026752	0.015031	2914221	9	NA	0.845817	0.999288	False
+tabula_muris_facs	rna	s3_10g	10	1	s1_stream	0	4	ok	range	0.007898	0.032556	2e-06	0.040457	512	49871.583856	200	760.496094	0.010722	0.016476	2899775	9	NA	2.463427	9.129213	True
+tabula_muris_facs	rna	s3_10g	10	1	s1_stream	1	4	ok	range	0.00743	0.027088	1e-06	0.03452	512	NA	0	NA	0.009213	0.012581	2366288	8	NA	2.463427	9.129213	True
+tabula_muris_facs	rna	s3_10g	10	1	s1_stream	2	4	ok	range	0.007064	0.027385	2e-06	0.034452	512	NA	0	NA	0.005757	0.015271	2914221	9	NA	2.463427	9.129213	True
+tabula_muris_facs	rna	s3_10g	10	1	s1_stream_canonical	0	4	ok	range	0.007864	0.038951	2e-06	0.046818	512	35991.515583	200	774.996094	0.008847	0.022882	2899775	9	NA	2.463427	9.129213	True
+tabula_muris_facs	rna	s3_10g	10	1	s1_stream_canonical	1	4	ok	range	0.007561	0.029476	2e-06	0.037041	512	NA	0	NA	0.009558	0.014328	2366288	8	NA	2.463427	9.129213	True
+tabula_muris_facs	rna	s3_10g	10	1	s1_stream_canonical	2	4	ok	range	0.007735	0.036648	2e-06	0.044387	512	NA	0	NA	0.009466	0.022142	2914221	9	NA	2.463427	9.129213	True
+tabula_muris_facs	rna	s3_10g	10	1	s1_stream_seq	0	4	ok	range	0.008141	0.039279	2e-06	0.047423	512	19941.186943	200	751.097656	0.025238	0.011493	2899775	9	NA	2.463427	9.129213	True
+tabula_muris_facs	rna	s3_10g	10	1	s1_stream_seq	1	4	ok	range	0.008212	0.036704	2e-06	0.044919	512	NA	0	NA	0.020549	0.014059	2366288	8	NA	2.463427	9.129213	True
+tabula_muris_facs	rna	s3_10g	10	1	s1_stream_seq	2	4	ok	range	0.007124	0.040559	2e-06	0.047686	512	NA	0	NA	0.02528	0.012782	2914221	9	NA	2.463427	9.129213	True
+tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream	0	4	ok	range	0.03652	0.068512	1e-06	0.105035	512	15815.307121	200	755.84375	0.045071	0.016203	2899775	9	NA	0.845677	0.999269	False
+tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream	1	4	ok	range	0.03732	0.063595	2e-06	0.100918	512	NA	0	NA	0.043685	0.015213	2366288	8	NA	0.845677	0.999269	False
+tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream	2	4	ok	range	0.036927	0.07624	2e-06	0.11317	512	NA	0	NA	0.055417	0.014531	2914221	9	NA	0.845677	0.999269	False
+tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_canonical	0	4	ok	range	0.037067	0.07565	3e-06	0.11272	512	15793.686937	200	758.070312	0.04672	0.022678	2899775	9	NA	0.845677	0.999269	False
+tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_canonical	1	4	ok	range	0.037111	0.068072	2e-06	0.105186	512	NA	0	NA	0.04251	0.02062	2366288	8	NA	0.845677	0.999269	False
+tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_canonical	2	4	ok	range	0.0371	0.067336	3e-06	0.10444	512	NA	0	NA	0.043976	0.014899	2914221	9	NA	0.845677	0.999269	False
+tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_seq	0	4	ok	range	0.036865	0.282052	4e-06	0.318921	512	1989.386809	200	750.03125	0.264591	0.014479	2899775	9	NA	0.845677	0.999269	False
+tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_seq	1	4	ok	range	0.036888	0.246814	3e-06	0.283705	512	NA	0	NA	0.228753	0.015313	2366288	8	NA	0.845677	0.999269	False
+tabula_muris_facs	rna	s3_1g_wan	1	30	s1_stream_seq	2	4	ok	range	0.037351	0.284095	3e-06	0.321449	512	NA	0	NA	0.261925	0.01916	2914221	9	NA	0.845677	0.999269	False

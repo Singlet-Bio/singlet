@@ -19,21 +19,21 @@ soma_ml	TileDB-SOMA ML	4	s3_1g_wan	502.996	0
 soma_ml	TileDB-SOMA ML	5	s3_0.1g	84.2714	0
 bpcells	BPCells (R)	0	local	5094.74	0
 bpcells	BPCells (R)	1	nfs	5194.36	0
-s1_stream	\textbf{.s1}	0	local	31961.7	0
-s1_stream	\textbf{.s1}	1	nfs	34680.3	0
-s1_stream	\textbf{.s1}	2	s3_10g	15014.2	1
-s1_stream	\textbf{.s1}	3	s3_1g	14101	0
-s1_stream	\textbf{.s1}	4	s3_1g_wan	7095.05	0
-s1_stream	\textbf{.s1}	5	s3_0.1g	5670.73	0
-s1_stream_canonical	.s1, source gene order	0	local	26102.7	0
-s1_stream_canonical	.s1, source gene order	1	nfs	27606.2	0
-s1_stream_canonical	.s1, source gene order	2	s3_10g	12587.9	1
-s1_stream_canonical	.s1, source gene order	3	s3_1g	12013.5	0
-s1_stream_canonical	.s1, source gene order	4	s3_1g_wan	6608.5	0
-s1_stream_canonical	.s1, source gene order	5	s3_0.1g	5353.14	0
-s1_stream_seq	.s1, one request at a time	0	local	32645.2	0
-s1_stream_seq	.s1, one request at a time	1	nfs	34993.9	0
-s1_stream_seq	.s1, one request at a time	2	s3_10g	10948.6	1
-s1_stream_seq	.s1, one request at a time	3	s3_1g	11005.9	0
-s1_stream_seq	.s1, one request at a time	4	s3_1g_wan	1721.84	0
-s1_stream_seq	.s1, one request at a time	5	s3_0.1g	5691.73	0
+s1_stream	\textbf{.s1}	0	local	22852	0
+s1_stream	\textbf{.s1}	1	nfs	68334.7	0
+s1_stream	\textbf{.s1}	2	s3_10g	57543.9	1
+s1_stream	\textbf{.s1}	3	s3_1g	58057.3	0
+s1_stream	\textbf{.s1}	4	s3_1g_wan	15738.3	0
+s1_stream	\textbf{.s1}	5	s3_0.1g	7209.46	0
+s1_stream_canonical	.s1, source gene order	0	local	29470	0
+s1_stream_canonical	.s1, source gene order	1	nfs	56040.7	0
+s1_stream_canonical	.s1, source gene order	2	s3_10g	44305.7	1
+s1_stream_canonical	.s1, source gene order	3	s3_1g	44638.7	0
+s1_stream_canonical	.s1, source gene order	4	s3_1g_wan	15750.9	0
+s1_stream_canonical	.s1, source gene order	5	s3_0.1g	7201.29	0
+s1_stream_seq	.s1, one request at a time	0	local	76113.6	0
+s1_stream_seq	.s1, one request at a time	1	nfs	71193.7	0
+s1_stream_seq	.s1, one request at a time	2	s3_10g	23714.7	1
+s1_stream_seq	.s1, one request at a time	3	s3_1g	23749.7	0
+s1_stream_seq	.s1, one request at a time	4	s3_1g_wan	2001.07	0
+s1_stream_seq	.s1, one request at a time	5	s3_0.1g	7197.18	0

@@ -15,15 +15,6 @@ tahoe_plate	rna	local			anndata_zarr_lazy	2	4	ok	NA	local	0.001151	0.17646	0.001
 tahoe_plate	rna	local			soma_ml	0	4	ok	NA	local	0.143253	5.151858	0.055394	6.757467	512	1446.987607	200	1401.46875	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	local			soma_ml	1	4	ok	NA	local	0.108852	5.042938	0.053552	5.978226	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	local			soma_ml	2	4	ok	NA	local	0.096881	4.985476	0.055547	5.158947	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
-tahoe_plate	rna	local			s1_stream	0	4	ok	NA	local	0.0195	0.01915	3e-06	0.545581	512	35798.705215	200	867.898438	0.002373	0.008825	5001928	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	local			s1_stream	1	4	ok	NA	local	0.014999	0.017938	1e-06	0.049233	512	NA	0	NA	0.00234	0.008723	5057839	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	local			s1_stream	2	4	ok	NA	local	0.015198	0.016529	1e-06	0.032274	512	NA	0	NA	0.002078	0.007717	4971415	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	local			s1_stream_canonical	0	4	ok	NA	local	0.015082	0.019938	1e-06	0.035543	512	29239.152424	200	869.183594	0.002153	0.011278	5001928	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	local			s1_stream_canonical	1	4	ok	NA	local	0.016282	0.020793	2e-06	0.054113	512	NA	0	NA	0.002546	0.011369	5057839	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	local			s1_stream_canonical	2	4	ok	NA	local	0.014932	0.019473	1e-06	0.03495	512	NA	0	NA	0.002177	0.010974	4971415	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	local			s1_stream_seq	0	4	ok	NA	local	0.014972	0.018208	1e-06	0.033714	512	36864.522335	200	867.140625	0.002161	0.009564	5001928	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	local			s1_stream_seq	1	4	ok	NA	local	0.015724	0.017082	2e-06	0.050024	512	NA	0	NA	0.00217	0.008094	5057839	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	local			s1_stream_seq	2	4	ok	NA	local	0.015067	0.016871	2e-06	0.032492	512	NA	0	NA	0.002147	0.007859	4971415	13	NA	NA	NA	NA	NA
 tahoe_plate	rna	nfs			bpcells		4	not_applicable	read into memory as a dgCMatrix, which holds at most 2^31-1 non-zeros; this matrix has 8276063161	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	nfs			anndata_inmem	0	4	ok	NA	local	297.72488	0.006932	0.001598	298.410245	512	148441.296971	200	96595.035156	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	nfs			anndata_inmem	1	4	ok	NA	local	295.557137	0.007189	0.001704	297.314065	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
@@ -40,15 +31,6 @@ tahoe_plate	rna	nfs			anndata_zarr_lazy	2	4	ok	NA	local	0.002338	0.226252	0.0026
 tahoe_plate	rna	nfs			soma_ml	0	4	ok	NA	local	0.141057	5.187022	0.054017	5.806222	512	1436.136521	200	1411.578125	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	nfs			soma_ml	1	4	ok	NA	local	0.127786	5.260758	0.054803	6.467621	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	nfs			soma_ml	2	4	ok	NA	local	0.11105	5.015896	0.055176	5.323763	512	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
-tahoe_plate	rna	nfs			s1_stream	0	4	ok	NA	local	0.020067	0.031085	1e-06	0.184546	512	22447.195254	200	870.441406	0.015794	0.008507	5001928	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	nfs			s1_stream	1	4	ok	NA	local	0.014951	0.021154	1e-06	0.053684	512	NA	0	NA	0.004292	0.00993	5057839	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	nfs			s1_stream	2	4	ok	NA	local	0.014202	0.018564	1e-06	0.033403	512	NA	0	NA	0.002978	0.009059	4971415	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	nfs			s1_stream_canonical	0	4	ok	NA	local	0.014313	0.02024	1e-06	0.035192	512	29156.946332	200	869.214844	0.001558	0.012395	5001928	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	nfs			s1_stream_canonical	1	4	ok	NA	local	0.014347	0.020634	2e-06	0.051971	512	NA	0	NA	0.001594	0.012361	5057839	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	nfs			s1_stream_canonical	2	4	ok	NA	local	0.014312	0.01912	1e-06	0.034083	512	NA	0	NA	0.001574	0.011217	4971415	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	nfs			s1_stream_seq	0	4	ok	NA	local	0.014319	0.015566	1e-06	0.030529	512	39572.742857	200	868.089844	0.001681	0.007566	5001928	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	nfs			s1_stream_seq	1	4	ok	NA	local	0.014873	0.016598	2e-06	0.046174	512	NA	0	NA	0.001581	0.008456	5057839	13	NA	NA	NA	NA	NA
-tahoe_plate	rna	nfs			s1_stream_seq	2	4	ok	NA	local	0.01445	0.016172	2e-06	0.031263	512	NA	0	NA	0.00144	0.00802	4971415	13	NA	NA	NA	NA	NA
 tahoe_plate	rna	s3_0.1g	0.1	1	bpcells		4	not_applicable	read into memory as a dgCMatrix, which holds at most 2^31-1 non-zeros; this matrix has 8276063161	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	s3_0.1g	0.1	1	anndata_inmem		4	skipped	download-first loader above tier M	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	18768908520	1501.512682	NA	NA	NA
 tahoe_plate	rna	s3_0.1g	0.1	1	anndata_backed		4	skipped	download-first loader above tier M	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	18768908520	1501.512682	NA	NA	NA
@@ -59,15 +41,6 @@ tahoe_plate	rna	s3_0.1g	0.1	1	anndata_zarr_lazy	2	4	ok	NA	range	0.110278	2.87088
 tahoe_plate	rna	s3_0.1g	0.1	1	soma_ml	0	4	ok	NA	range	5.852739	12.918855	0.049676	18.821271	512	115.594014	200	1400.453125	NA	NA	NA	NA	NA	NA	0.098155	0.099996	False
 tahoe_plate	rna	s3_0.1g	0.1	1	soma_ml	1	4	ok	NA	range	5.778255	12.7811	0.05757	18.616925	512	NA	0	NA	NA	NA	NA	NA	NA	NA	0.098155	0.099996	False
 tahoe_plate	rna	s3_0.1g	0.1	1	soma_ml	2	4	ok	NA	range	5.824746	11.445334	0.059528	17.329609	512	NA	0	NA	NA	NA	NA	NA	NA	NA	0.098155	0.099996	False
-tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream	0	4	ok	NA	range	7.93786	0.092538	2e-06	8.030401	512	7061.474932	200	870.589844	0.061693	0.014762	5001928	13	NA	NA	0.098155	0.099996	False
-tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream	1	4	ok	NA	range	0.423702	0.112821	5e-06	0.536529	512	NA	0	NA	0.064732	0.018899	5057839	13	NA	NA	0.098155	0.099996	False
-tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream	2	4	ok	NA	range	0.421518	0.074469	1e-06	0.49599	512	NA	0	NA	0.056062	0.007479	4971415	13	NA	NA	0.098155	0.099996	False
-tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_canonical	0	4	ok	NA	range	0.421344	0.087928	2e-06	0.509275	512	6443.804725	200	872.390625	0.060605	0.01508	5001928	13	NA	NA	0.098155	0.099996	False
-tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_canonical	1	4	ok	NA	range	0.420886	0.107412	3e-06	0.528302	512	NA	0	NA	0.06395	0.028032	5057839	13	NA	NA	0.098155	0.099996	False
-tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_canonical	2	4	ok	NA	range	0.419976	0.090642	2e-06	0.510622	512	NA	0	NA	0.057592	0.019687	4971415	13	NA	NA	0.098155	0.099996	False
-tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_seq	0	4	ok	NA	range	0.419848	0.100528	4e-06	0.52038	512	6190.165614	200	868.230469	0.057958	0.015663	5001928	13	NA	NA	0.098155	0.099996	False
-tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_seq	1	4	ok	NA	range	0.419576	0.093119	2e-06	0.512699	512	NA	0	NA	0.06206	0.01636	5057839	13	NA	NA	0.098155	0.099996	False
-tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_seq	2	4	ok	NA	range	0.418281	0.086078	2e-06	0.504362	512	NA	0	NA	0.055823	0.015786	4971415	13	NA	NA	0.098155	0.099996	False
 tahoe_plate	rna	s3_1g	1	1	bpcells		4	not_applicable	read into memory as a dgCMatrix, which holds at most 2^31-1 non-zeros; this matrix has 8276063161	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	s3_1g	1	1	anndata_inmem		4	skipped	download-first loader above tier M	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	18768908520	150.151268	NA	NA	NA
 tahoe_plate	rna	s3_1g	1	1	anndata_backed		4	skipped	download-first loader above tier M	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	18768908520	150.151268	NA	NA	NA
@@ -78,15 +51,6 @@ tahoe_plate	rna	s3_1g	1	1	anndata_zarr_lazy	2	4	ok	NA	range	0.085579	0.44286	0.0
 tahoe_plate	rna	s3_1g	1	1	soma_ml	0	4	ok	NA	range	5.40575	7.287926	0.053761	12.747438	512	637.576053	200	1410.101562	NA	NA	NA	NA	NA	NA	0.840905	0.999736	False
 tahoe_plate	rna	s3_1g	1	1	soma_ml	1	4	ok	NA	range	5.403055	6.899351	0.055567	12.357974	512	NA	0	NA	NA	NA	NA	NA	NA	NA	0.840905	0.999736	False
 tahoe_plate	rna	s3_1g	1	1	soma_ml	2	4	ok	NA	range	5.378405	6.850264	0.055693	12.284363	512	NA	0	NA	NA	NA	NA	NA	NA	NA	0.840905	0.999736	False
-tahoe_plate	rna	s3_1g	1	1	s1_stream	0	4	ok	NA	range	15.089368	0.033878	2e-06	15.123248	512	16997.32336	200	869.644531	0.02003	0.006639	5001928	13	NA	NA	0.840905	0.999736	False
-tahoe_plate	rna	s3_1g	1	1	s1_stream	1	4	ok	NA	range	0.118422	0.035997	1e-06	0.154421	512	NA	0	NA	0.019507	0.006943	5057839	13	NA	NA	0.840905	0.999736	False
-tahoe_plate	rna	s3_1g	1	1	s1_stream	2	4	ok	NA	range	0.116071	0.035214	1e-06	0.151287	512	NA	0	NA	0.019347	0.006779	4971415	13	NA	NA	0.840905	0.999736	False
-tahoe_plate	rna	s3_1g	1	1	s1_stream_canonical	0	4	ok	NA	range	0.118589	0.038045	2e-06	0.156636	512	14796.32245	200	871.304688	0.020012	0.009014	5001928	13	NA	NA	0.840905	0.999736	False
-tahoe_plate	rna	s3_1g	1	1	s1_stream_canonical	1	4	ok	NA	range	0.119859	0.038939	2e-06	0.158801	512	NA	0	NA	0.019713	0.009449	5057839	13	NA	NA	0.840905	0.999736	False
-tahoe_plate	rna	s3_1g	1	1	s1_stream_canonical	2	4	ok	NA	range	0.116243	0.038185	2e-06	0.154431	512	NA	0	NA	0.01958	0.009672	4971415	13	NA	NA	0.840905	0.999736	False
-tahoe_plate	rna	s3_1g	1	1	s1_stream_seq	0	4	ok	NA	range	0.114706	0.060169	3e-06	0.174879	512	10730.684713	200	867.761719	0.037254	0.011968	5001928	13	NA	NA	0.840905	0.999736	False
-tahoe_plate	rna	s3_1g	1	1	s1_stream_seq	1	4	ok	NA	range	0.118469	0.063667	2e-06	0.182139	512	NA	0	NA	0.038651	0.013271	5057839	13	NA	NA	0.840905	0.999736	False
-tahoe_plate	rna	s3_1g	1	1	s1_stream_seq	2	4	ok	NA	range	0.118229	0.061568	2e-06	0.179799	512	NA	0	NA	0.037781	0.012157	4971415	13	NA	NA	0.840905	0.999736	False
 tahoe_plate	rna	s3_10g	10	1	bpcells		4	not_applicable	read into memory as a dgCMatrix, which holds at most 2^31-1 non-zeros; this matrix has 8276063161	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	s3_10g	10	1	anndata_inmem		4	skipped	download-first loader above tier M	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	18768908520	15.015127	NA	NA	NA
 tahoe_plate	rna	s3_10g	10	1	anndata_backed		4	skipped	download-first loader above tier M	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	18768908520	15.015127	NA	NA	NA
@@ -97,15 +61,6 @@ tahoe_plate	rna	s3_10g	10	1	anndata_zarr_lazy	2	4	ok	NA	range	0.083577	0.256852	
 tahoe_plate	rna	s3_10g	10	1	soma_ml	0	4	ok	NA	range	5.380912	7.156261	0.058487	12.595661	512	1190.395803	200	1379.316406	NA	NA	NA	NA	NA	NA	2.39341	8.979329	True
 tahoe_plate	rna	s3_10g	10	1	soma_ml	1	4	ok	NA	range	5.360124	6.430905	0.059535	11.850565	512	NA	0	NA	NA	NA	NA	NA	NA	NA	2.39341	8.979329	True
 tahoe_plate	rna	s3_10g	10	1	soma_ml	2	4	ok	NA	range	5.33023	6.476908	0.056842	11.863981	512	NA	0	NA	NA	NA	NA	NA	NA	NA	2.39341	8.979329	True
-tahoe_plate	rna	s3_10g	10	1	s1_stream	0	4	ok	NA	range	7.59459	0.036355	1e-06	7.630947	512	16609.603798	200	870.160156	0.018884	0.006578	5001928	13	NA	NA	2.39341	8.979329	True
-tahoe_plate	rna	s3_10g	10	1	s1_stream	1	4	ok	NA	range	0.098546	0.036375	1e-06	0.134924	512	NA	0	NA	0.020495	0.00701	5057839	13	NA	NA	2.39341	8.979329	True
-tahoe_plate	rna	s3_10g	10	1	s1_stream	2	4	ok	NA	range	0.090381	0.034853	1e-06	0.125236	512	NA	0	NA	0.020225	0.00678	4971415	13	NA	NA	2.39341	8.979329	True
-tahoe_plate	rna	s3_10g	10	1	s1_stream_canonical	0	4	ok	NA	range	0.086291	0.037582	3e-06	0.123877	512	14992.387972	200	871.75	0.021112	0.009185	5001928	13	NA	NA	2.39341	8.979329	True
-tahoe_plate	rna	s3_10g	10	1	s1_stream_canonical	1	4	ok	NA	range	0.08945	0.037445	2e-06	0.126897	512	NA	0	NA	0.020052	0.009546	5057839	13	NA	NA	2.39341	8.979329	True
-tahoe_plate	rna	s3_10g	10	1	s1_stream_canonical	2	4	ok	NA	range	0.087792	0.037599	1e-06	0.125393	512	NA	0	NA	0.019862	0.010057	4971415	13	NA	NA	2.39341	8.979329	True
-tahoe_plate	rna	s3_10g	10	1	s1_stream_seq	0	4	ok	NA	range	0.086566	0.043283	2e-06	0.129852	512	10767.377723	200	868.042969	0.027219	0.008756	5001928	13	NA	NA	2.39341	8.979329	True
-tahoe_plate	rna	s3_10g	10	1	s1_stream_seq	1	4	ok	NA	range	0.08969	0.050273	2e-06	0.139965	512	NA	0	NA	0.031536	0.009862	5057839	13	NA	NA	2.39341	8.979329	True
-tahoe_plate	rna	s3_10g	10	1	s1_stream_seq	2	4	ok	NA	range	0.085752	0.050241	2e-06	0.135996	512	NA	0	NA	0.031151	0.01068	4971415	13	NA	NA	2.39341	8.979329	True
 tahoe_plate	rna	s3_1g_wan	1	30	bpcells		4	not_applicable	read into memory as a dgCMatrix, which holds at most 2^31-1 non-zeros; this matrix has 8276063161	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
 tahoe_plate	rna	s3_1g_wan	1	30	anndata_inmem		4	skipped	download-first loader above tier M	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	18768908520	150.151268	NA	NA	NA
 tahoe_plate	rna	s3_1g_wan	1	30	anndata_backed		4	skipped	download-first loader above tier M	download	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	18768908520	150.151268	NA	NA	NA
@@ -116,12 +71,57 @@ tahoe_plate	rna	s3_1g_wan	1	30	anndata_zarr_lazy	2	4	ok	NA	range	0.11301	0.52621
 tahoe_plate	rna	s3_1g_wan	1	30	soma_ml	0	4	ok	NA	range	6.168322	11.002156	0.059133	17.229612	512	571.260452	200	1379.609375	NA	NA	NA	NA	NA	NA	0.843459	0.999825	False
 tahoe_plate	rna	s3_1g_wan	1	30	soma_ml	1	4	ok	NA	range	6.154396	10.538809	0.057547	16.750753	512	NA	0	NA	NA	NA	NA	NA	NA	NA	0.843459	0.999825	False
 tahoe_plate	rna	s3_1g_wan	1	30	soma_ml	2	4	ok	NA	range	6.186629	10.36933	0.056616	16.612576	512	NA	0	NA	NA	NA	NA	NA	NA	NA	0.843459	0.999825	False
-tahoe_plate	rna	s3_1g_wan	1	30	s1_stream	0	4	ok	NA	range	7.78166	0.07291	2e-06	7.854573	512	8293.969073	200	869.167969	0.0507	0.009938	5001928	13	NA	NA	0.843459	0.999825	False
-tahoe_plate	rna	s3_1g_wan	1	30	s1_stream	1	4	ok	NA	range	0.297191	0.07622	2e-06	0.373413	512	NA	0	NA	0.046938	0.015337	5057839	13	NA	NA	0.843459	0.999825	False
-tahoe_plate	rna	s3_1g_wan	1	30	s1_stream	2	4	ok	NA	range	0.299654	0.070594	1e-06	0.37025	512	NA	0	NA	0.049676	0.009635	4971415	13	NA	NA	0.843459	0.999825	False
-tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_canonical	0	4	ok	NA	range	0.297108	0.07751	9e-06	0.374627	512	7514.509314	200	871.335938	0.049218	0.016165	5001928	13	NA	NA	0.843459	0.999825	False
-tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_canonical	1	4	ok	NA	range	0.296907	0.067952	2e-06	0.364862	512	NA	0	NA	0.045504	0.011195	5057839	13	NA	NA	0.843459	0.999825	False
-tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_canonical	2	4	ok	NA	range	0.297157	0.072888	2e-06	0.370047	512	NA	0	NA	0.049006	0.012869	4971415	13	NA	NA	0.843459	0.999825	False
-tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_seq	0	4	ok	NA	range	0.297348	0.30958	3e-06	0.606931	512	1685.748467	200	867.671875	0.279168	0.015831	5001928	13	NA	NA	0.843459	0.999825	False
-tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_seq	1	4	ok	NA	range	0.299987	0.311781	3e-06	0.611772	512	NA	0	NA	0.279846	0.016417	5057839	13	NA	NA	0.843459	0.999825	False
-tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_seq	2	4	ok	NA	range	0.298986	0.310085	3e-06	0.609075	512	NA	0	NA	0.278747	0.01597	4971415	13	NA	NA	0.843459	0.999825	False
+tahoe_plate	rna	local			s1_stream	0	4	ok	NA	local	0.143795	0.118291	4e-06	0.910665	512	5354.511775	200	731.425781	0.098895	0.010263	5133000	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	local			s1_stream	1	4	ok	NA	local	0.033127	0.024365	3e-06	0.076256	512	NA	0	NA	0.01193	0.008081	5188911	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	local			s1_stream	2	4	ok	NA	local	0.01929	0.013836	2e-06	0.033717	512	NA	0	NA	0.003249	0.006213	5102487	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	local			s1_stream_canonical	0	4	ok	NA	local	0.018317	0.018314	4e-06	0.037188	512	59785.567265	200	731.472656	0.003103	0.01058	5133000	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	local			s1_stream_canonical	1	4	ok	NA	local	0.01807	0.017985	3e-06	0.053211	512	NA	0	NA	0.003444	0.010194	5188911	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	local			s1_stream_canonical	2	4	ok	NA	local	0.018826	0.016893	4e-06	0.036312	512	NA	0	NA	0.003214	0.009293	5102487	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	local			s1_stream_seq	0	4	ok	NA	local	0.018766	0.013992	3e-06	0.033308	512	81713.079462	200	730.789062	0.003156	0.006474	5133000	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	local			s1_stream_seq	1	4	ok	NA	local	0.020618	0.015375	4e-06	0.052363	512	NA	0	NA	0.003485	0.007437	5188911	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	local			s1_stream_seq	2	4	ok	NA	local	0.018844	0.014107	3e-06	0.033539	512	NA	0	NA	0.003133	0.006514	5102487	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	nfs			s1_stream	0	4	ok	NA	local	0.025627	0.01465	3e-06	0.457488	512	74440.187211	200	733.898438	0.002677	0.007171	5133000	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	nfs			s1_stream	1	4	ok	NA	local	0.022492	0.014436	3e-06	0.053653	512	NA	0	NA	0.002454	0.007449	5188911	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	nfs			s1_stream	2	4	ok	NA	local	0.021081	0.014086	2e-06	0.036073	512	NA	0	NA	0.002426	0.007289	5102487	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	nfs			s1_stream_canonical	0	4	ok	NA	local	0.020517	0.016869	3e-06	0.038263	512	59765.496488	200	732.8125	0.0025	0.009873	5133000	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	nfs			s1_stream_canonical	1	4	ok	NA	local	0.019433	0.016415	3e-06	0.051963	512	NA	0	NA	0.002051	0.010037	5188911	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	nfs			s1_stream_canonical	2	4	ok	NA	local	0.019282	0.016624	4e-06	0.036819	512	NA	0	NA	0.002443	0.009801	5102487	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	nfs			s1_stream_seq	0	4	ok	NA	local	0.018766	0.013297	3e-06	0.032742	512	83452.962486	200	731.125	0.00242	0.006768	5133000	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	nfs			s1_stream_seq	1	4	ok	NA	local	0.019504	0.013044	3e-06	0.048654	512	NA	0	NA	0.002174	0.007155	5188911	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	nfs			s1_stream_seq	2	4	ok	NA	local	0.018502	0.013874	3e-06	0.033063	512	NA	0	NA	0.002461	0.007332	5102487	12	NA	NA	NA	NA	NA
+tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream	0	4	ok	NA	range	0.398021	0.070772	5e-06	0.468799	512	8840.95132	200	732.863281	0.048916	0.007647	5133000	12	NA	NA	0.098139	0.099996	False
+tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream	1	4	ok	NA	range	0.398752	0.076607	4e-06	0.475364	512	NA	0	NA	0.053923	0.008792	5188911	12	NA	NA	0.098139	0.099996	False
+tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream	2	4	ok	NA	range	0.398151	0.071566	4e-06	0.469722	512	NA	0	NA	0.046051	0.011076	5102487	12	NA	NA	0.098139	0.099996	False
+tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_canonical	0	4	ok	NA	range	0.398655	0.074345	6e-06	0.473007	512	8839.752312	200	732.707031	0.049251	0.011175	5133000	12	NA	NA	0.098139	0.099996	False
+tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_canonical	1	4	ok	NA	range	0.397562	0.07863	5e-06	0.476198	512	NA	0	NA	0.054016	0.01125	5188911	12	NA	NA	0.098139	0.099996	False
+tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_canonical	2	4	ok	NA	range	0.397124	0.075481	5e-06	0.472611	512	NA	0	NA	0.045602	0.015544	5102487	12	NA	NA	0.098139	0.099996	False
+tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_seq	0	4	ok	NA	range	0.399066	0.073717	6e-06	0.472789	512	8827.901005	200	728.875	0.053456	0.0106	5133000	12	NA	NA	0.098139	0.099996	False
+tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_seq	1	4	ok	NA	range	0.397638	0.079166	6e-06	0.47681	512	NA	0	NA	0.057668	0.011637	5188911	12	NA	NA	0.098139	0.099996	False
+tahoe_plate	rna	s3_0.1g	0.1	1	s1_stream_seq	2	4	ok	NA	range	0.397975	0.071842	9e-06	0.469827	512	NA	0	NA	0.051412	0.010836	5102487	12	NA	NA	0.098139	0.099996	False
+tahoe_plate	rna	s3_1g	1	1	s1_stream	0	4	ok	NA	range	0.079648	0.022079	3e-06	0.101731	512	56248.509141	200	733.820312	0.005151	0.006281	5133000	12	NA	NA	0.836976	0.999553	False
+tahoe_plate	rna	s3_1g	1	1	s1_stream	1	4	ok	NA	range	0.08008	0.02261	3e-06	0.102694	512	NA	0	NA	0.005873	0.006187	5188911	12	NA	NA	0.836976	0.999553	False
+tahoe_plate	rna	s3_1g	1	1	s1_stream	2	4	ok	NA	range	0.079405	0.022542	3e-06	0.101952	512	NA	0	NA	0.005425	0.006152	5102487	12	NA	NA	0.836976	0.999553	False
+tahoe_plate	rna	s3_1g	1	1	s1_stream_canonical	0	4	ok	NA	range	0.080744	0.025042	5e-06	0.105792	512	46255.87688	200	734.304688	0.004263	0.008177	5133000	12	NA	NA	0.836976	0.999553	False
+tahoe_plate	rna	s3_1g	1	1	s1_stream_canonical	1	4	ok	NA	range	0.079925	0.02516	5e-06	0.105092	512	NA	0	NA	0.005713	0.0091	5188911	12	NA	NA	0.836976	0.999553	False
+tahoe_plate	rna	s3_1g	1	1	s1_stream_canonical	2	4	ok	NA	range	0.07914	0.023932	4e-06	0.103076	512	NA	0	NA	0.005566	0.008092	5102487	12	NA	NA	0.836976	0.999553	False
+tahoe_plate	rna	s3_1g	1	1	s1_stream_seq	0	4	ok	NA	range	0.079953	0.036567	4e-06	0.116526	512	23654.480437	200	729.261719	0.021067	0.00863	5133000	12	NA	NA	0.836976	0.999553	False
+tahoe_plate	rna	s3_1g	1	1	s1_stream_seq	1	4	ok	NA	range	0.080084	0.036382	4e-06	0.116472	512	NA	0	NA	0.02067	0.008911	5188911	12	NA	NA	0.836976	0.999553	False
+tahoe_plate	rna	s3_1g	1	1	s1_stream_seq	2	4	ok	NA	range	0.080637	0.036398	5e-06	0.11704	512	NA	0	NA	0.020591	0.008974	5102487	12	NA	NA	0.836976	0.999553	False
+tahoe_plate	rna	s3_10g	10	1	s1_stream	0	4	ok	NA	range	0.056509	0.020219	3e-06	0.076732	512	56948.930777	200	732.179688	0.004124	0.006424	5133000	12	NA	NA	2.310088	8.198701	True
+tahoe_plate	rna	s3_10g	10	1	s1_stream	1	4	ok	NA	range	0.054768	0.021306	3e-06	0.076077	512	NA	0	NA	0.004952	0.006571	5188911	12	NA	NA	2.310088	8.198701	True
+tahoe_plate	rna	s3_10g	10	1	s1_stream	2	4	ok	NA	range	0.054357	0.023046	4e-06	0.077408	512	NA	0	NA	0.007083	0.007372	5102487	12	NA	NA	2.310088	8.198701	True
+tahoe_plate	rna	s3_10g	10	1	s1_stream_canonical	0	4	ok	NA	range	0.051662	0.025635	3e-06	0.077301	512	44619.357574	200	733.109375	0.006446	0.008411	5133000	12	NA	NA	2.310088	8.198701	True
+tahoe_plate	rna	s3_10g	10	1	s1_stream_canonical	1	4	ok	NA	range	0.056071	0.0251	4e-06	0.081175	512	NA	0	NA	0.004785	0.010163	5188911	12	NA	NA	2.310088	8.198701	True
+tahoe_plate	rna	s3_10g	10	1	s1_stream_canonical	2	4	ok	NA	range	0.054347	0.023116	5e-06	0.077469	512	NA	0	NA	0.005977	0.008037	5102487	12	NA	NA	2.310088	8.198701	True
+tahoe_plate	rna	s3_10g	10	1	s1_stream_seq	0	4	ok	NA	range	0.055629	0.033642	4e-06	0.089276	512	23677.033933	200	730.371094	0.020685	0.00759	5133000	12	NA	NA	2.310088	8.198701	True
+tahoe_plate	rna	s3_10g	10	1	s1_stream_seq	1	4	ok	NA	range	0.05794	0.0342	4e-06	0.092145	512	NA	0	NA	0.020551	0.008043	5188911	12	NA	NA	2.310088	8.198701	True
+tahoe_plate	rna	s3_10g	10	1	s1_stream_seq	2	4	ok	NA	range	0.057433	0.032894	5e-06	0.090333	512	NA	0	NA	0.01956	0.008295	5102487	12	NA	NA	2.310088	8.198701	True
+tahoe_plate	rna	s3_1g_wan	1	30	s1_stream	0	4	ok	NA	range	0.203855	0.054446	4e-06	0.258306	512	15786.684034	200	729.699219	0.03501	0.006232	5133000	12	NA	NA	0.834992	0.999532	False
+tahoe_plate	rna	s3_1g_wan	1	30	s1_stream	1	4	ok	NA	range	0.204528	0.058444	4e-06	0.262976	512	NA	0	NA	0.035594	0.008924	5188911	12	NA	NA	0.834992	0.999532	False
+tahoe_plate	rna	s3_1g_wan	1	30	s1_stream	2	4	ok	NA	range	0.204854	0.060009	5e-06	0.264868	512	NA	0	NA	0.034863	0.011159	5102487	12	NA	NA	0.834992	0.999532	False
+tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_canonical	0	4	ok	NA	range	0.203652	0.059065	5e-06	0.262723	512	15717.901525	200	731.261719	0.034713	0.010442	5133000	12	NA	NA	0.834992	0.999532	False
+tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_canonical	1	4	ok	NA	range	0.204728	0.059497	4e-06	0.264231	512	NA	0	NA	0.035734	0.010286	5188911	12	NA	NA	0.834992	0.999532	False
+tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_canonical	2	4	ok	NA	range	0.203738	0.059671	4e-06	0.263414	512	NA	0	NA	0.035271	0.011293	5102487	12	NA	NA	0.834992	0.999532	False
+tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_seq	0	4	ok	NA	range	0.203448	0.276679	5e-06	0.480133	512	2000.673327	200	731.6875	0.256479	0.010474	5133000	12	NA	NA	0.834992	0.999532	False
+tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_seq	1	4	ok	NA	range	0.204441	0.276656	5e-06	0.481103	512	NA	0	NA	0.256214	0.010882	5188911	12	NA	NA	0.834992	0.999532	False
+tahoe_plate	rna	s3_1g_wan	1	30	s1_stream_seq	2	4	ok	NA	range	0.202904	0.276688	5e-06	0.479598	512	NA	0	NA	0.25613	0.010849	5102487	12	NA	NA	0.834992	0.999532	False

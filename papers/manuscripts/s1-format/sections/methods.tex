@@ -75,7 +75,9 @@ medians), then, for one seed, the sustained rate in cells per second over 200 mi
 peak resident memory. Library imports are done before timing starts. On a matrix of fewer than $211\times512$ cells the
 sustained workload reads some cells twice, and a reader may then serve them from memory; ratios of sustained rates use
 only the panel datasets large enough to avoid this. The share of a link a reader fills is its sustained rate times the
-file's bytes per cell, divided by the link's bandwidth.
+file's bytes per cell, divided by the link's bandwidth. From the node's own disk each loader reads its own file, evicted from
+the page cache first; the RAID controller's cache cannot be cleared, so the three \sone{} variants, which read the same
+file, are cold only for the first of them (\sone{} with requests together), which is the one reported.
 
 \subsection{Payload ladder}
 For each matrix we computed the payload size, in bits per non-zero over row indices and values only, of: 32-bit CSC;
