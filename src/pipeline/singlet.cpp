@@ -35,6 +35,7 @@
 #include <ctime>
 #include <algorithm>
 #include <fcntl.h>
+#include <set>
 #include <fstream>
 #include <zlib.h>
 #include <atomic>
@@ -2673,6 +2674,8 @@ static void usage(const char* prog) {
         << "                         disk: disk-backed sort (same output, no measured time penalty)\n"
         << "  --no-clip5p            Never clip a constant 5' prefix from the cDNA read\n"
         << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
+        << "  --no-cr4               Do not use the Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap)\n"
+        << "  --cr4-probe-reads N    Reads for the CR4 vs no-CR4 unique-mapping probe (default 200000; 0 = skip the probe, no CR4)\n"
         << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
         << "  --engine cpu|gpu       gpu: map each distinct cDNA sequence on the GPU (CUDA build); same outputs (default cpu)\n\n"
         << "Legacy (deprecated — archive to .1fq first, then process):\n"
@@ -2839,6 +2842,8 @@ int main(int argc, char* argv[]) {
     // (Kang pool); disk sort gave identical output with no time penalty (docs/modality-benchmarks/genotype-pool.md).
     std::string bam_sort_mode = "disk";
     bool no_clip5p = false;              // --no-clip5p: never clip a constant 5' prefix from the cDNA read
+    bool no_cr4 = false;                 // --no-cr4: no Beta aligner profile (CellRanger4 clip + junction guard + mismatch cap)
+    int  cr4_probe_reads = 200000;       // --cr4-probe-reads N: reads for the CR4 vs no-CR4 mapping-rate probe (0 = no probe, CR4 off)
     bool no_adapter_clip = false;        // --no-adapter-clip: no STAR --clip3pAdapterSeq (protocol TSO / adapter)
     std::string clip5p_probe_json;       // decision of the 5' prefix probe (provenance)
     int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
@@ -2868,6 +2873,8 @@ int main(int argc, char* argv[]) {
         else if (arg == "--no-snps") no_default_snps = true;
         else if (arg == "--no-clip5p") no_clip5p = true;
         else if (arg == "--no-adapter-clip") no_adapter_clip = true;
+        else if (arg == "--no-cr4") no_cr4 = true;
+        else if (arg == "--cr4-probe-reads" && i+1 < argc) cr4_probe_reads = std::atoi(argv[++i]);
         else if (arg == "--out-prefix" && i+1 < argc) out_prefix = argv[++i];
         else if (arg == "--star-threads" && i+1 < argc) { star_threads = std::atoi(argv[++i]); threads_specified = true; }
         else if (arg == "--pileup-threads" && i+1 < argc) pileup_threads = std::atoi(argv[++i]);
@@ -7147,10 +7154,44 @@ int main(int argc, char* argv[]) {
             // --clip3pAdapterSeq (from known_protocols().adapter3p).
             // 3' protocols (10x v2/v3/v4, Drop-seq, etc.) use NO explicit adapter
             // clipping: STAR's alignment soft-clipping handles polyA naturally.
-            // NOTE: --clipAdapterType CellRanger4 was removed because STAR's
-            // CellRanger4 mode relies on quality-score heuristics that break
-            // when singlet decodes with --quality none (constant Phred=30),
-            // causing 0% mapping on mouse 10xv3 and other samples.
+            //
+            // Beta aligner profile (known_protocols().cr4; 10x 3' v2/v3 only): CellRanger4 clipping shortens Lread
+            // before STAR's relative filters (TSO/polyA read-through reads newly map), the junction guard
+            // (--alignSJoverhangMin 8, unannotated non-canonical introns removed) raises junction precision, and the
+            // mismatch-ratio cap removes the newly placed cross-species reads. Passes the frozen ground-truth gate
+            // (singlet-agents bench/ground-truth, config K5). STAR's CR4 clipping reads the sequence only, never the
+            // qualities: constant and real qualities give identical results (human pbmc1k_v3 and mouse neuron1k_v3
+            // through the .1fq path, CR4 raised unique mapping on both). A silent collapse is still guarded: the
+            // profile runs only if a short probe with it maps within 2 points of one without it (cr4_probe below).
+            std::string cr4_status = "protocol";  // why the profile is not used, or "on"
+            size_t cr4_beg = 0, cr4_end = 0;      // [beg,end) = the profile's tokens in args
+            {
+                const singlet::fq::CandidateSpec* cr4_spec = nullptr;
+                for (const auto& sp : singlet::fq::known_protocols())
+                    if (sp.tag == complex_protocol_tag) { cr4_spec = &sp; break; }
+                bool star_extra_clips = false;
+                for (const auto& a : star_extra)
+                    if (a.rfind("--clipAdapterType", 0) == 0) star_extra_clips = true;
+                if (cr4_spec == nullptr || !cr4_spec->cr4)       cr4_status = "protocol";
+                else if (no_cr4)                                  cr4_status = "--no-cr4";
+                else if (star_extra_clips)                        cr4_status = "--star-extra sets --clipAdapterType";
+                else if (!onefq_mode || is_atac_mode || use_complex || use_complex_concat
+                         || solo_type_is_sam_tag_out || reads_inverted)
+                                                                  cr4_status = "path";
+                else if (!detected_adapter3p.empty())             cr4_status = "adapter3p";
+                else if (r2_clip5p > 0)                           cr4_status = "clip5p";
+                else if (cr4_probe_reads <= 0)                    cr4_status = "no probe";
+                else if (!use_chunk_source && use_fifo_decode)    cr4_status = "no probe path (fifo)";
+                else                                              cr4_status = "on";
+            }
+            if (cr4_status == "on") {
+                cr4_beg = args.size();
+                args.push_back("--clipAdapterType");               args.push_back("CellRanger4");
+                args.push_back("--alignSJoverhangMin");            args.push_back("8");
+                args.push_back("--outFilterIntronMotifs");         args.push_back("RemoveNoncanonicalUnannotated");
+                args.push_back("--outFilterMismatchNoverLmax");    args.push_back("0.05");
+                cr4_end = args.size();
+            }
             if (!detected_adapter3p.empty() && !no_adapter_clip) {
                 args.push_back("--clip3pAdapterSeq");
                 args.push_back(detected_adapter3p.c_str());
@@ -7248,6 +7289,91 @@ int main(int argc, char* argv[]) {
             for (const auto& a : star_extra) args.push_back(a.c_str());
 
             args.push_back(nullptr);
+
+            // CR4 probe: map the first cr4_probe_reads reads twice (with and without the Beta aligner profile; no
+            // BAM, same solo arguments) and keep the profile only if its unique-mapping rate is not more than
+            // 2 points below the plain run's. Anything else (probe failure, too few reads) also drops the profile.
+            // The decision goes to <out>/cr4_probe.json (read back into provenance and QC by the parent).
+            {
+                const double kMaxDropPts = 2.0;
+                std::string pj;   // JSON body after the "enabled" key
+                bool keep = false;
+                if (cr4_status == "on") {
+                    const std::string pdir = out_prefix + "/cr4_probe";
+                    mkdir(pdir.c_str(), 0755);
+                    auto probe = [&](bool with_cr4, const char* tag) -> double {
+                        static const std::set<std::string> drop = {
+                            "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM",
+                            "--outBAMsortingBinsN", "--outBAMsortingThreadN", "--outFileNamePrefix", "--outTmpDir",
+                            "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber"};
+                        std::vector<std::string> pa;
+                        bool skipping = false;
+                        for (size_t i = 1; i + 1 < args.size(); ++i) {   // args[0] = "STAR", args.back() = nullptr
+                            if (!with_cr4 && i >= cr4_beg && i < cr4_end) continue;
+                            std::string t = args[i];
+                            if (t.rfind("--", 0) == 0) skipping = drop.count(t) > 0;
+                            if (!skipping) pa.push_back(t);
+                        }
+                        const std::string prefix = pdir + "/" + tag + "_";
+                        for (const char* t : {"--outSAMtype", "None", "--readMapNumber"}) pa.push_back(t);
+                        pa.push_back(std::to_string(cr4_probe_reads));
+                        pa.push_back("--outFileNamePrefix"); pa.push_back(prefix);
+                        std::vector<char*> pv;
+                        pv.push_back(const_cast<char*>("STAR"));
+                        for (auto& t : pa) pv.push_back(const_cast<char*>(t.c_str()));
+                        pv.push_back(nullptr);
+                        pid_t pp = fork();
+                        if (pp == 0) {
+                            int dn = open("/dev/null", O_WRONLY);
+                            if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }   // STAR's progress lines must not reach the BAM pipe
+                            if (use_chunk_source) {
+                                int dthreads = std::max(2, std::min(4, star_threads / 4));
+                                g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(
+                                    onefq_files, read_fmt, dthreads, /*cdna_first=*/true);
+                            }
+                            _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
+                        }
+                        int ws = 0;
+                        if (pp < 0 || waitpid(pp, &ws, 0) < 0 || !WIFEXITED(ws) || WEXITSTATUS(ws) != 0) return -1.0;
+                        std::ifstream lf(prefix + "Log.final.out");
+                        std::string ln;
+                        double inreads = 0, uniq = -1.0;
+                        while (std::getline(lf, ln)) {
+                            auto bar = ln.find('|');
+                            if (bar == std::string::npos) continue;
+                            if (ln.find("Number of input reads") != std::string::npos) inreads = std::atof(ln.c_str() + bar + 1);
+                            if (ln.find("Uniquely mapped reads %") != std::string::npos) uniq = std::atof(ln.c_str() + bar + 1);
+                        }
+                        if (inreads < 1000) return -1.0;   // too few reads for a rate
+                        return uniq;
+                    };
+                    const double u_off = probe(false, "plain");
+                    const double u_on  = probe(true,  "cr4");
+                    pj = ", \"probe_reads\": " + std::to_string(cr4_probe_reads) +
+                         ", \"unique_pct_plain\": " + std::to_string(u_off) +
+                         ", \"unique_pct_cr4\": " + std::to_string(u_on) + ", \"max_drop_pts\": " + std::to_string(kMaxDropPts);
+                    if (u_off < 0 || u_on < 0) {
+                        cr4_status = "probe failed";
+                    } else if (u_on < u_off - kMaxDropPts) {
+                        cr4_status = "cr4 maps " + std::to_string(u_off - u_on) + " points below plain in the probe";
+                    } else {
+                        keep = true;
+                    }
+                    std::cerr << "[singlet] CR4 probe (" << cr4_probe_reads << " reads): unique " << u_on << "% with the Beta aligner profile, "
+                              << u_off << "% without -> " << (keep ? "profile ON" : "profile OFF (" + cr4_status + ")") << "\n";
+                    if (!keep) args.erase(args.begin() + cr4_beg, args.begin() + cr4_end);
+                    std::error_code ec;   // keep the two Log.final.out; drop the solo outputs of the probes
+                    for (const char* t : {"plain", "cr4"}) {
+                        std::filesystem::remove_all(pdir + "/" + t + "_Solo.out", ec);
+                        std::filesystem::remove_all(pdir + "/" + t + "_STARgenome", ec);
+                    }
+                } else {
+                    std::cerr << "[singlet] Beta aligner profile (CellRanger4 + junction guard) off: " << cr4_status << "\n";
+                }
+                std::ofstream pjf(out_prefix + "/cr4_probe.json");
+                pjf << "{\"profile\": \"beta-cr4-sj-mm\", \"enabled\": " << (keep ? "true" : "false")
+                    << ", \"reason\": \"" << (keep ? "on" : cr4_status) << "\"" << pj << "}\n";
+            }
 
             // Chunk source: the reads are decoded by worker threads of this (forked) process and copied into
             // STAR's chunk buffers by its reading thread (read_source.h). Threads start on STAR's first read.
@@ -8739,6 +8865,12 @@ int main(int argc, char* argv[]) {
         rp.extra.emplace_back("clip5p", "{\"bases\": " + std::to_string(clip5p_applied) + ", \"disabled\": " +
                                             (no_clip5p ? "true" : "false") + ", \"probe\": " +
                                             (clip5p_probe_json.empty() ? std::string("null") : clip5p_probe_json) + "}");
+        {   // Beta aligner profile decision (written by the STAR child: cr4_probe.json)
+            std::ifstream cf(out_prefix + "/cr4_probe.json");
+            std::string cj((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
+            while (!cj.empty() && (cj.back() == '\n' || cj.back() == ' ')) cj.pop_back();
+            rp.extra.emplace_back("aligner_profile", cj.empty() ? std::string("null") : cj);
+        }
         rp.extra.emplace_back("snp_panel", "{\"source\": \"" + snp_panel_source + "\", \"path\": " +
                                                singlet::json_str(config.snp_path) + "}");
         rp.extra.emplace_back("bam_sort_mode", singlet::json_str(bam_sort_mode));
