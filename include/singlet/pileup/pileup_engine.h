@@ -2064,6 +2064,158 @@ public:
         }
         return 4u | (det.detect(f) ? 8u : 0u) | (det.detect(r) ? 16u : 0u);
     }
+    // gpu_handoff_pass for STAR's per-read entries, on all cores. The read range is cut into contiguous chunks; each chunk runs the serial
+    // loop's body with its own counters and outputs, and the chunks are merged in read order, so the collector gets the same sequence
+    // of hand-off reads and every counter the same total as the serial pass (SINGLET_HANDOFF_PASS_SERIAL=1 runs that one).
+    void gpu_pileup_pending_append(const std::vector<std::pair<uint32_t, uint32_t>>& v) { gpu_wl_pending_.insert(gpu_wl_pending_.end(), v.begin(), v.end()); }
+    bool gpu_handoff_pass_entries(PileupStats& stats, const gpupileup::Handoff* H, const gpupileup::ReadEntry* E) {
+        struct Out { uint32_t rec; int32_t bc; uint64_t u3; uint32_t clip; };
+        struct Ctx {
+            PileupStats st; uint64_t n_done = 0, n_unwritten = 0, n_bigclip = 0, n_nohook = 0, lowq = 0, neqn = 0;
+            uint64_t cb_status[8] = {}; char cb_buf[40] = {};
+            std::vector<uint32_t> cell_reads, wl_counts; std::vector<CellAlignQC> cell_qc;
+            std::vector<std::pair<uint32_t, uint32_t>> wl_pending; std::vector<Out> out;
+        };
+        auto unpack = [](uint64_t v, uint32_t L, std::string& s) {
+            static const char kB[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
+            s.resize(L); for (uint32_t j = 0; j < L; j++) s[j] = kB[(v >> (3 * j)) & 7];
+        };
+        char comp[256]; for (int i = 0; i < 256; i++) comp[i] = 'N';
+        comp[(int)'A'] = 'T'; comp[(int)'C'] = 'G'; comp[(int)'G'] = 'C'; comp[(int)'T'] = 'A';
+        const CbCorrector* const cbc = config_.cb_corrector;   // R11: as stream_cb, the CR is corrected against the whitelist
+        int nT = std::max(1, config_.threads);
+        if (const char* e = std::getenv("SINGLET_HANDOFF_PASS_THREADS")) nT = std::max(1, std::atoi(e));
+        const uint64_t N = H->n_reads;
+        if (N < (1u << 16)) nT = 1;
+        std::vector<Ctx> ctxs(nT);
+        auto work = [&](int t) {
+            Ctx& c = ctxs[t];
+            const uint64_t lo = N * t / nT, hi = N * (t + 1) / nT;
+            c.cell_reads.assign(per_cell_reads_.size(), 0); c.cell_qc.assign(per_cell_qc_.size(), CellAlignQC{});
+            c.wl_counts.assign(wl_umi_counts_.size(), 0);
+            PileupStats& st = c.st;
+            std::string cr, ur, rseq;
+            for (uint64_t i = lo; i < hi; ++i) {
+                if (i + 16 < hi) { const uint32_t r16 = H->read_rec[i + 16]; if (r16 != 0xFFFFFFFFu) __builtin_prefetch(H->rec_off + r16); }
+                if (i + 8 < hi) { const uint32_t r8 = H->read_rec[i + 8]; if (r8 != 0xFFFFFFFFu) __builtin_prefetch(H->data + H->rec_off[r8]); }
+                const uint32_t rec = H->read_rec[i];
+                if (rec == 0xFFFFFFFFu) continue;   // read with N (or not mapped on the GPU): it came through the stream
+                const uint8_t* p = H->data + H->rec_off[rec];
+                const int n = *p++;
+                if (n == 0) continue;               // unmapped: STAR writes no record (outSAMunmapped None)
+                int32_t ptid = -1; uint16_t pflag = 0, pnh = 1, pnm = 0; uint8_t pmapq = 0; uint64_t pmlen = 0; int pk = -1, nsec = 0;
+                for (int k = 0; k < n; k++) {
+                    int32_t tid, pos; uint16_t flag, nh, nm, nc; uint8_t mapq;
+                    std::memcpy(&tid, p, 4); std::memcpy(&pos, p + 4, 4); std::memcpy(&flag, p + 8, 2); mapq = p[10];
+                    std::memcpy(&nh, p + 12, 2); std::memcpy(&nm, p + 14, 2); std::memcpy(&nc, p + 16, 2);
+                    const uint8_t* cig = p + 18; p = cig + 4 * nc;
+                    if (flag & BAM_FSECONDARY) { nsec++; continue; }
+                    if (pk < 0) {
+                        pk = k; ptid = tid; pflag = flag; pnh = nh; pnm = nm; pmapq = mapq;
+                        for (int cc = 0; cc < nc; cc++) { uint32_t v; std::memcpy(&v, cig + 4 * cc, 4); const int op = v & 15; if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) pmlen += v >> 4; }
+                    }
+                }
+                st.total_reads += n; st.mapped_reads += n; st.secondary_reads += nsec;
+                if (pk < 0) continue;
+                ++c.n_done;
+                if (!(E[i].flags & 1)) { ++c.n_unwritten; continue; }
+                uint16_t rl = 0; std::memcpy(&rl, p, 2); const uint8_t* rs = p + 2;
+                const uint32_t clip = (E[i].flags & 0xFFFF00u) ? E[i].flags : 0u;
+                if (clip & 32u) { ++c.n_bigclip; continue; }
+                const int L2 = (int) rl + (int) ((clip >> 8) & 255) + (int) ((clip >> 16) & 255);
+                bool rrna_sampled = false;
+                if (L2 >= 21) {
+                    char qb[24]; char* q = qb + 23; *q = 0;
+                    uint64_t v = i; do { *--q = (char) ('0' + v % 10); v /= 10; } while (v);
+                    *--q = 'r';
+                    rrna_sampled = (hash_qname(q) & 63) == 0;
+                }
+                if (rrna_sampled) {
+                    ++st.rrna_reads_sampled;
+                    if (clip) {
+                        if (!(clip & 4u)) { ++c.n_nohook; continue; }
+                        if (clip & ((pflag & BAM_FREVERSE) ? 16u : 8u)) ++st.rrna_reads;
+                    } else { rseq.resize(L2); for (int j = 0; j < L2; j++) rseq[j] = seq_nt16_str[(rs[j >> 1] >> ((j & 1) * 4)) & 15]; }
+                    if (!clip) {
+                        if (pflag & BAM_FREVERSE) { const std::string fw = rseq; for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) fw[L2 - 1 - j]]; }
+                        if (rrna_detector_.detect(rseq)) ++st.rrna_reads;
+                    }
+                }
+                if (ptid == chrm_tid_) st.chrm_reads++;
+                unpack(E[i].cr3, H->cbL, cr); unpack(E[i].ur3, H->umiL, ur);
+                bool cbok = !cr.empty() && !ur.empty() && ur[0] != ' ';
+                if (!cbc) for (char ch : cr) if (ch == 'N') cbok = false;
+                bool homo = true;
+                for (char ch : ur) { if (ch == 'N') cbok = false; if (ch != ur[0]) homo = false; }
+                if (homo) cbok = false;
+                if (cbc) {
+                    if (!cbok) ++c.cb_status[1];
+                    else if (static_cast<int>(cr.size()) != cbc->length()) { ++c.cb_status[3]; cbok = false; }
+                    else {
+                        const int cst = cbc->resolve(cr.c_str(), nullptr, c.cb_buf);
+                        ++c.cb_status[cst + 4];
+                        if (cst < 0) cbok = false;
+                        else cr.assign(c.cb_buf, static_cast<size_t>(cbc->length()));
+                    }
+                }
+                if (!cbok || cr[0] == '-') { st.no_barcode++; continue; }
+                const int32_t bc = bc_index_.lookup(cr.c_str());
+                if (bc < 0) {
+                    if (!wl_umi_counts_.empty() && pmapq >= static_cast<uint8_t>(config_.min_mapq)) {
+                        const int32_t wl = wl_amb_index_.lookup(cr.c_str());
+                        if (wl >= 0) {
+                            c.wl_counts[static_cast<size_t>(wl)]++;
+                            if (has_gene_model_ && !wl_ambient_gene_counts_.empty()) c.wl_pending.push_back({rec, static_cast<uint32_t>(pk)});
+                        }
+                    }
+                    continue;
+                }
+                c.lowq += E[i].low_qual; c.neqn += E[i].qual_neq_n;
+                uint64_t u3 = 0;
+                for (int j = 0; j < (int) ur.size() && j < 21; j++) { const char ch = ur[j]; const uint64_t v = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; u3 |= v << (3 * j); }
+                c.out.push_back({rec, bc, u3, clip});
+                st.barcoded_reads++;
+                if (static_cast<uint32_t>(bc) < c.cell_reads.size()) c.cell_reads[static_cast<uint32_t>(bc)]++;
+                const int nh = std::max<int>(pnh, 1);
+                if (nh > 1) st.multimapper_reads++;
+                if (static_cast<uint32_t>(bc) < c.cell_qc.size()) {
+                    CellAlignQC& q = c.cell_qc[static_cast<uint32_t>(bc)];
+                    if (nh > 1) ++q.multimapped; else { ++q.unique; q.mismatches += pnm; q.aligned_bases += pmlen; }
+                }
+                const bool high = pmapq >= static_cast<uint8_t>(config_.min_mapq);
+                if (!high) st.low_mapq++;
+                if (!high && nh == 1) continue;
+                if (config_.umi_dedup && ur.empty()) st.no_umi++;
+            }
+        };
+        if (nT == 1) work(0);
+        else { std::vector<std::thread> th; for (int t = 0; t < nT; ++t) th.emplace_back(work, t); for (auto& x : th) x.join(); }
+        uint64_t n_done = 0, n_unwritten = 0, n_bigclip = 0, n_nohook = 0;
+        for (int t = 0; t < nT; ++t) {   // in read order
+            Ctx& c = ctxs[t]; const PileupStats& s = c.st;
+            stats.total_reads += s.total_reads; stats.mapped_reads += s.mapped_reads; stats.secondary_reads += s.secondary_reads;
+            stats.rrna_reads_sampled += s.rrna_reads_sampled; stats.rrna_reads += s.rrna_reads; stats.chrm_reads += s.chrm_reads;
+            stats.no_barcode += s.no_barcode; stats.barcoded_reads += s.barcoded_reads; stats.multimapper_reads += s.multimapper_reads;
+            stats.low_mapq += s.low_mapq; stats.no_umi += s.no_umi;
+            n_done += c.n_done; n_unwritten += c.n_unwritten; n_bigclip += c.n_bigclip; n_nohook += c.n_nohook;
+            for (int k = 0; k < 8; k++) cb_status_[k] += c.cb_status[k];
+            for (size_t k = 0; k < c.cell_reads.size(); k++) per_cell_reads_[k] += c.cell_reads[k];
+            for (size_t k = 0; k < c.cell_qc.size(); k++) per_cell_qc_[k].merge(c.cell_qc[k]);
+            for (size_t k = 0; k < c.wl_counts.size(); k++) wl_umi_counts_[k] += c.wl_counts[k];
+            gpu_pileup_pending_append(c.wl_pending);
+            gpu_col_->add_quality_counts64(c.lowq, c.neqn);
+            for (const Out& o : c.out) gpu_col_->add_handoff_read_u3(o.rec, o.bc, o.u3, static_cast<int>(H->umiL), o.clip);
+            std::vector<Out>().swap(c.out);
+        }
+        if (n_unwritten) { std::cerr << "[gpu_pileup] hand-off: STAR wrote no entry for " << n_unwritten << " hand-off reads\n"; return false; }
+        if (n_bigclip || n_nohook) {
+            std::cerr << "[gpu_pileup] hand-off: " << n_bigclip << " reads clipped by more than 255 bases, " << n_nohook
+                      << " sampled clipped reads without the rRNA verdict (g_handoffReadHook unset)\n";
+            return false;
+        }
+        std::cerr << "[gpu_pileup] hand-off pass: " << n_done << " reads without BAM records (barcodes and qualities from STAR's per-read entries)\n";
+        return true;
+    }
     bool gpu_handoff_pass(PileupStats& stats, bool check = false) {
         const gpupileup::Handoff* H = gpu_col_ ? gpu_col_->handoff() : nullptr;
         if (!H) return true;   // no hand-off: every read came through the stream
@@ -2072,6 +2224,14 @@ public:
         // mode) they come from the decoded R1/R2, cut as STAR cuts them
         const bool ent = !check && gpu_col_->load_handoff_reads();
         const gpupileup::ReadEntry* E = ent ? H->reads : nullptr;
+        if (ent && (std::getenv("SINGLET_HANDOFF_PASS_SERIAL") == nullptr)) {
+            // "on": the pass needs only the hand-off and STAR's per-read entries, so it runs on all cores (S8 stage 8)
+            if (gpu_col_->n_handoff_reads() != 0) {
+                std::cerr << "[gpu_pileup] hand-off: " << gpu_col_->n_handoff_reads() << " hand-off reads also came through the stream (STAR's skip set differs)\n";
+                return false;
+            }
+            return gpu_handoff_pass_entries(stats, H, E);
+        }
         gpupileup::LineReader f1(ent ? nullptr : std::getenv("SINGLET_DECODE_R1")), f2(ent ? nullptr : std::getenv("SINGLET_DECODE_R2"));
         if (!ent && (!f1.ok() || !f2.ok())) return false;
         auto unpack = [](uint64_t v, uint32_t L, std::string& s) {

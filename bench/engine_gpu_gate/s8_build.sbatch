@@ -11,12 +11,12 @@
 # S8: prod/campaign tip; also builds singlet-prof (-DSTAR_PROFILE). BRANCH (default gpu/engine-gpu) is fetched by URL into a private ref. Outputs: $W/jobs/w11/engine/bin/singlet-{gpu,cpu}.
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
-BARE=$W/repos/singlet-py.git; BR=${BRANCH:-prod/campaign}; OUTD=$W/jobs/s8/bin; mkdir -p $OUTD
-VARIANTS=gpu; XFLAGS=; OUTD=$W/jobs/s8/bin; mkdir -p $OUTD   # XFLAGS: extra C++ flags, e.g. -DSTAR_PROFILE (STAR's per-phase cycle counters)
-git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/s8/campaign
-COMMIT=$(git -C $BARE rev-parse refs/s8/campaign); echo "COMMIT=$COMMIT"
+TAG=${TAG:-campaign}; BARE=$W/repos/singlet-py.git; BR=${BRANCH:-prod/campaign}; OUTD=${OUTD:-$W/jobs/s8/bin}; mkdir -p $OUTD
+VARIANTS=${VARIANTS:-gpu prof}; XFLAGS=; OUTD=${OUTD:-$W/jobs/s8/bin}; mkdir -p $OUTD   # XFLAGS: extra C++ flags, e.g. -DSTAR_PROFILE (STAR's per-phase cycle counters)
+git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/s8/$TAG
+COMMIT=$(git -C $BARE rev-parse refs/s8/$TAG); echo "COMMIT=$COMMIT"
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
-git -C $BARE archive refs/s8/campaign | tar -x -C $SCR/src
+git -C $BARE archive refs/s8/$TAG | tar -x -C $SCR/src
 S=$SCR/src
 grep -rl --include=CMakeLists.txt -e "-march=native" $S | xargs -r sed -i 's/-march=native/-march=x86-64-v3/' || true
 grep -q "sam_hdr_destroy(bam_hdr_t" $S/src/star/bam_cat.c || \
@@ -28,7 +28,7 @@ export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gn
 # the conda libstdc++ (gcc 16) before the CUDA image's system one, which CUDA's implicit link directories would otherwise put first
 export LDFLAGS="-L$ENV/lib -Wl,-rpath,$ENV/lib"
 \$CXX --version | head -1; nvcc --version | tail -1
-for v in gpu prof; do
+for v in $VARIANTS; do
   E=ON; XF="$XFLAGS"; [ \$v = prof ] && XF="-DSTAR_PROFILE"
   cmake -S $S -B $SCR/b-\$v -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_GIT_COMMIT=$COMMIT -DSINGLET_ENGINE_GPU=\$E -DCMAKE_CXX_FLAGS="\$XF" \
     -DCMAKE_CUDA_HOST_COMPILER=\$CXX -DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler -DCMAKE_CUDA_ARCHITECTURES="80;90" > $SCR/c-\$v.log 2>&1 \

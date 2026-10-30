@@ -206,6 +206,12 @@ public:
         ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(clip);
         if (clip) n_clipped_++;
     }
+    // the same with the UMI already packed (the parallel hand-off pass packs it in its workers)
+    void add_handoff_read_u3(uint32_t rec, int32_t bc, uint64_t u3, int umi_len, uint32_t clip = 0) {
+        if (umi_len_ < 0) umi_len_ = umi_len;
+        ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(clip);
+        if (clip) n_clipped_++;
+    }
     // per read of the final input (hand-off reads first): its clip flags, 0 when not clipped
     uint32_t read_clip(size_t r) const { return r < ho_clip_.size() ? ho_clip_[r] : 0u; }
     uint64_t n_clipped() const { return n_clipped_; }
@@ -219,6 +225,7 @@ public:
     }
     // the same counters, as STAR's mapping threads counted them for a hand-off read (ReadEntry)
     void add_quality_counts(uint32_t low_qual, uint32_t qual_neq_n) { lowqual_bases_ += low_qual; qual_neq_n_ += qual_neq_n; }
+    void add_quality_counts64(uint64_t low_qual, uint64_t qual_neq_n) { lowqual_bases_ += low_qual; qual_neq_n_ += qual_neq_n; }
     size_t n_sigs() const { return sigs_.size(); }
     uint64_t incomplete() const { return incomplete_; }
     uint64_t no_umi() const { return no_umi_; }
