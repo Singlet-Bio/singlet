@@ -36,3 +36,8 @@ rules are on), but it must be fixed before the pileup is turned on again.
 
 K5 costs the GPU path ~2 core-s per M reads (the opal clip, now in the prefill's reading threads: "reading reads" 14 s instead of 8 s).
 GSM4006843 before the probe fix: 1693 core-s (25.4 / M); not rerun after it.
+
+## Merged-head check, default rules (jobs 793385 build, 793386; head 99e0ec50)
+CPU engine vs `--engine gpu`, K5 on, default intron rules (GPU pileup falls back to the CPU pileup): pbmc1k_v3 60 files identical, GSM4006843 62
+identical, 6 differ on each (`nonhost_reads.fq` and `star_Unmapped.out.mate1/2` read order, `star_Log.std.out`, `read_stats.tsv`, probe counts). Every
+count output is byte-identical. Host core-s: pbmc1k_v3 2572 (CPU) vs 1279 (GPU); GSM4006843 2975 vs 1679 (26 vs 15 core-s per M reads on pbmc1k_v3 / 45 vs 25 on GSM4006843).
