@@ -4,6 +4,7 @@ No cluster and no binary are needed: job-side events are written with common.emi
 """
 
 import json
+from pathlib import Path
 import os
 import sys
 
@@ -508,7 +509,7 @@ def test_s1_producer_copies_only_the_manifest_and_its_objects(tmp_path):
     sha = hashlib.sha256(b"x").hexdigest()
     key, lab = "s1/s/GSM1/%s.s1" % sha[:32], "s1/a/GSM1/%s.parquet" % sha[:32]
     store = tmp_path / "store"
-    for k, data in ((key, b"x"), (lab, b"y"), ("m/GSE1.json", json.dumps({"samples": [{"key": key, "labels": lab}]}).encode()),
+    for k, data in ((key, b"x"), (lab, b"y"), ("m/GSE1.json", json.dumps({"samples": [{"key": key, "labels": lab, "n_columns": 5, "n_called": 2, "stats": {"a": 1}}]}).encode()),
                     ("s/GSM9/other.s1", b"z")):
         p = store / (k[3:] if k.startswith("s1/") else k)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -518,3 +519,42 @@ def test_s1_producer_copies_only_the_manifest_and_its_objects(tmp_path):
     man = json.loads((work / "GSE1.manifest.json").read_text())
     assert man["n_samples"] == 1 and (work / "s1" / "s" / "GSM1" / (sha[:32] + ".s1")).exists()
     assert not (work / "s1" / "s" / "GSM9").exists()
+
+
+def test_beta_policy_withholds_what_alpha_withholds_and_reaches_s1_publish():
+    """The producer's default policy loads and removes every withheld layer; s1_publish passes it on to the transcoder."""
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "python"))
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "scripts"))
+    from singlet.s1 import policy as POL
+
+    pol = POL.Policy.load(os.path.join(HERE, "..", "..", "scripts", "atlas_rerun", "beta-policy.json"))
+    assert pol.version.startswith("beta-") and pol.manifest_block()["omitted_layers"] == list(POL.OMITTED_LAYERS)
+    for rel in ("mt_heteroplasmy.1pz", "mt_variants.tsv", "mt/mt_summary.tsv", "ancestry_call.json", "donor/snp_counts.tsv",
+                "snp_allele_counts.tsv", "x.vcf.gz", "possorted.bam", "ambient_profile.tsv", "doublet_scores.tsv"):
+        assert POL.omitted_layer(rel), rel
+    assert POL.omitted_layer("exon_counts.1pz") is None and POL.omitted_layer("donor/donor_assignments.tsv") is None
+    import argparse
+
+    import s1_publish as PUB
+
+    ns = argparse.Namespace(apply=True, gse="G", io_threads=1, blas_threads=1, migrate_timeout=1, verify_timeout=1,
+                            rows_dir="r", ledger_dir="l", readback="none", public="b", commit="", policy="/p/beta-policy.json",
+                            migrate_cmd=None, verify_cmd=None, pythonpath=None, local_root="x", part_size_mib=None,
+                            retry_sleep=None)
+    args = PUB.run_args(ns, "G", Path("/tmp/x"))
+    assert args[args.index("--alpha-policy") + 1] == "/p/beta-policy.json"
+
+
+def test_s1_producer_refuses_a_hollow_object(tmp_path):
+    import s1_producer as P
+
+    store = tmp_path / "s"
+    (store / "m").mkdir(parents=True)
+    (store / "m" / "GSE1.json").write_text(json.dumps({"samples": [{"gsm": "GSM1", "key": "s1/s/GSM1/a.s1", "n_columns": 0,
+                                                                   "n_called": 0, "stats": {}}]}))
+    try:
+        P.copy_store(str(store), "GSE1", str(tmp_path / "w"))
+    except SystemExit as e:
+        assert "hollow" in str(e)
+    else:
+        raise AssertionError("published a hollow object")

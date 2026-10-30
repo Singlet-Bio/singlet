@@ -50,6 +50,9 @@ def copy_store(store_root, gse, work):
         text = fh.read()
     manifest = json.loads(text)
     manifest["n_samples"] = len(manifest["samples"])
+    hollow = [x.get("gsm") for x in manifest["samples"] if not x.get("n_columns") or not x.get("n_called") or not x.get("stats")]
+    if hollow:
+        raise SystemExit("hollow sample object(s), not published: %s" % hollow)
     import re
 
     keys = [s["key"] for s in manifest["samples"]] + sorted(set(re.findall(r"s1/a/GSM\d+/[0-9a-f]{32}\.parquet", text)))
@@ -72,6 +75,8 @@ def main(argv=None):
     ap.add_argument("--repo", default=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--scratch")
+    ap.add_argument("--policy", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "beta-policy.json"),
+                    help="release policy; the default withholds exactly what Alpha's does (singlet.s1.policy.OMITTED_LAYERS)")
     a = ap.parse_args(argv)
     tmp = tempfile.mkdtemp(prefix="s1prod-", dir=a.scratch)
     try:
@@ -80,8 +85,13 @@ def main(argv=None):
         n = build_results(a.handoff, results)
         lr = os.path.join(tmp, "lr")
         cmd = [a.python, os.path.join(a.repo, "scripts", "s1_publish.py"), a.gse, "--results", results, "--catalog", a.catalog,
-               "--apply", "--local-root", lr, "--public", BUCKET, "--scratch", os.path.join(tmp, "scratch")]
+               "--apply", "--policy", a.policy, "--local-root", lr, "--public", BUCKET, "--scratch", os.path.join(tmp, "scratch")]
         env = dict(os.environ, PYTHONPATH=os.path.join(a.repo, "python") + os.pathsep + os.environ.get("PYTHONPATH", ""))
+        if subprocess.run([a.python, "-c", "import singlet._pz, singlet._pz2"], env=env).returncode != 0:
+            # without the compiled reader the migrator treats every .1pz as undecodable and stores a hollow object
+            print("%s has no compiled singlet._pz/_pz2: build it first (bench/atlas_rerun/build_s1_repo.sbatch)" % a.repo,
+                  file=sys.stderr)
+            return 5
         rc = subprocess.run(cmd, env=env).returncode
         if rc != 0:
             print("s1_publish.py exited %d (verify must pass)" % rc, file=sys.stderr)
