@@ -73,11 +73,18 @@ __global__ void k_groups(const char* seq, const u64* off, const u64* h1, const u
 
 // ---- clipping (STAR's ClipMate::clip for mate 1, Hamming adapter type; SequenceFuns.cpp localSearch), per read: the clipped
 // sequence starts at cs[i] and has cl[i] bases
-struct ClipDev { uint32_t n5, after5, n3, after3, nad; double adMMp; const char* ad; };
+struct ClipDev { uint32_t n5, after5, n3, after3, nad; double adMMp; const char* ad; const uint16_t* p5; const uint16_t* p3; };
 __global__ void k_clip(const char* seq, const u64* off, u64 n, ClipDev c, u64* cs, u64* cl) {
     u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (i >= n) return;
     u64 s = off[i], L = off[i + 1] - off[i];
+    if (c.p5) {   // clip lengths computed on the host (ClipMate::clip with the CellRanger4 clip, opal)
+        u64 a = c.p5[i], b = c.p3[i];
+        if (a > L) a = L;
+        if (b > L - a) b = L - a;
+        cs[i] = s + a; cl[i] = L - a - b;
+        return;
+    }
     // 5': N bases, then NafterAd (each moves the start; a read not longer than the clip becomes empty)
     if (c.n5 > 0) { if (L > c.n5) { L -= c.n5; s += c.n5; } else L = 0; }
     if (c.after5 > 0) { if (L > c.after5) { L -= c.after5; s += c.after5; } else L = 0; }
@@ -277,7 +284,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         double tc = now();
         char* dAd = nullptr;
         if (!in.clip.ad3.empty() && !upload(in.clip.ad3.data(), in.clip.ad3.size(), dAd, err)) return fail(err);
-        ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t)in.clip.ad3.size(), in.clip.adMMp, dAd};
+        uint16_t *dP5 = nullptr, *dP3 = nullptr;
+        if (in.clip.pre) {
+            if (in.pre5.size() != n || in.pre3.size() != n) return fail("host clip lengths do not match the reads");
+            if (!upload(in.pre5.data(), n, dP5, err) || !upload(in.pre3.data(), n, dP3, err)) return fail(err);
+        }
+        ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t)in.clip.ad3.size(), in.clip.adMMp, dAd, dP5, dP3};
         u64 *dCs, *dCl, *dOffC; char* dSeqC;
         if (cudaMalloc(&dCs, n * 8) || cudaMalloc(&dCl, n * 8) || cudaMalloc(&dOffC, (n + 1) * 8)) return fail("out of device memory (clip)");
         k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl);
@@ -290,7 +302,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         hcs.resize(n); hoffC.resize(n + 1);
         if (cudaMemcpy(hcs.data(), dCs, n * 8, cudaMemcpyDeviceToHost) != cudaSuccess
             || cudaMemcpy(hoffC.data(), dOffC, (n + 1) * 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
-        cudaFree(dSeq); cudaFree(dOff); cudaFree(dCs); cudaFree(dCl); if (dAd) cudaFree(dAd);
+        cudaFree(dSeq); cudaFree(dOff); cudaFree(dCs); cudaFree(dCl); if (dAd) cudaFree(dAd); if (dP5) cudaFree(dP5); if (dP3) cudaFree(dP3);
         dSeq = dSeqC; dOff = dOffC;
         u64 nClipped = 0;
         out.clip5.resize(n); out.clip3.resize(n);

@@ -7423,6 +7423,7 @@ int main(int argc, char* argv[]) {
                         if (pp == 0) {
                             int dn = open("/dev/null", O_WRONLY);
                             if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }   // STAR's progress lines must not reach the BAM pipe
+                            unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF");   // the probe maps 200k reads on the CPU, not through the GPU prefill
                             if (probe_src) {
                                 int dthreads = std::max(2, std::min(4, star_threads / 4));
                                 g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(
