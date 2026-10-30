@@ -11,7 +11,7 @@
 # never in this script, and nothing here prints it (no set -x).
 #   uploader: scripts/beta/beta_ingest.py of singlet-website PR #109, put at $J/beta_ingest.py
 set -eo pipefail
-W=/mnt/projects/debruinz_project/debruinz/singlet; J=$W/jobs/s6; GSM=${GSM:-GSM6470208}; R=$J/e2e_$GSM
+W=/mnt/projects/debruinz_project/debruinz/singlet; J=$W/jobs/s6; GSM=${GSM:-GSM5287666}; R=$J/e2e_$GSM
 source $W/src/singlet-agents/feat__cell-phenotype/hpc/clipper/in_runtime.sh
 GSE=$(python3 -c "import json;print(json.load(open('$R/row.json'))['gse'])")
 mkdir -p $J/beta_work; ln -sfn $R/work $J/beta_work/$GSE

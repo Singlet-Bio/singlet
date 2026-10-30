@@ -416,3 +416,14 @@ Compute wall 1063 s (A) vs 1016 s (B), peak RSS 37.6 GB both, and A skips the po
 * Release policy: `s1_publish.py --policy` (new) passes `--alpha-policy` to the transcoder; `beta-policy.json` has no withheld
   studies or excluded samples and gets the fixed layer list (genotype, mtDNA alleles, ancestry call, ambient, doublet scores,
   per-cell non-host, legacy PSI and sex call). The manifest's `release_policy.omitted_layers` records it.
+
+**Beta publish, read back (2026-10-30).** GSM5287666 (GSE173756, 1 run, 16.7 M pairs): job 793537 (io, compute, producer; 8.6 min), job
+793554 from Clipper (`publish_s1_sample.sbatch`, token from `~/.singlet/beta_ingest_token`, mode 600): dry run (0 present, 1 to upload),
+publish (19.5 MB sent, 8 D1 rows), publish again (0 rows, `rev_unchanged`), read back through beta-data.singlet.bio (manifest rev
+and object SHA-256 match), and none of the policy's withheld layers among the object's 41 members. The token is accepted by
+beta.singlet.bio and rejected by singlet.bio (401).
+
+**Beta's data Worker bundles Alpha's policy.** `workers/data/policy/alpha-policy.json` (1,416 withheld studies, 26,188 excluded
+samples) also applies on beta-data.singlet.bio, so a Beta sample that Alpha withholds is published but answers 404 (GSE200743 /
+GSM6470208 did: uploaded, in D1, not served). The uploader has no delete path, so that test study remains in Beta's R2 and D1.
+

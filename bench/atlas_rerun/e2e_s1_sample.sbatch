@@ -15,7 +15,7 @@
 # Reads, BAMs and staged files are deleted at the end; logs and the comparison stay in $W/jobs/s6/<GSM>.
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark
-GSM=${GSM:-GSM6470208}; J=$W/jobs/s6; CODE=$J/atlas_rerun; BINP=$PB/bin/${BIN:-singlet-pc-tip}
+GSM=${GSM:-GSM5287666}; J=$W/jobs/s6; CODE=$J/atlas_rerun; BINP=$PB/bin/${BIN:-singlet-pc-tip}
 R=$J/e2e_$GSM; rm -rf $R; mkdir -p $R
 export PATH=$W/envs/pbench/bin:$PATH
 source $W/src/singlet-agents/feat__cell-phenotype/hpc/clipper/in_runtime.sh
@@ -57,7 +57,7 @@ $O compute-stage --config $R/config.json --cluster clipper --batch $R/batch.json
 GSE=$(python3 -c "import json;print(json.load(open('$R/row.json'))['gse'])")
 OUTD=$R/out/$GSE/$GSM; ls $OUTD | head -40
 echo "{\"samples\": [{\"gsm\": \"$GSM\", \"state\": \"done\", \"out_dir\": \"$OUTD\"}]}" > $R/root/handoff/$GSE.json
-REPO=$W/src/singlet-py/bb__prod__campaign
+REPO=$J/s1repo
 echo "== producer"
 in_runtime python3 $CODE/s1_producer.py $GSE $R/root/handoff/$GSE.json $R/work --catalog $W/data/atlas-rerun/samples.parquet --repo $REPO --python python3 --scratch $SCR
 find $R/work -type f | xargs ls -l
