@@ -1455,6 +1455,12 @@ inline ExportStats export_results(const PileupEngine& engine,
         if (pileup_cfg.count_sj && !engine.sj_names().empty())
             write_threads.emplace_back([&]() { write_matrix("sj_counts", sj_csc, engine.sj_names()); });
         // Poly(A) site usage (polya_sites.h): sites x barcodes molecules + per-site table with internal-priming flag.
+        if (const char* pd = getenv("SINGLET_POLYA_DUMP"); pd && pileup_cfg.count_polya) {   // diagnostics: the raw (site, gene, cell, UMI hash) records, 24 bytes each
+            if (FILE* f = fopen(pd, "wb")) {
+                for (const auto& r : engine.polya_records()) { fwrite(&r.site, 8, 1, f); fwrite(&r.gene, 4, 1, f); fwrite(&r.bc, 4, 1, f); fwrite(&r.umi, 8, 1, f); }
+                fclose(f);
+            }
+        }
         if (pileup_cfg.count_polya && !engine.polya_records().empty() && engine.gene_model().n_genes() > 0)
             write_threads.emplace_back([&]() {
                 auto t_pa0 = std::chrono::high_resolution_clock::now();
