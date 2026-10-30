@@ -236,6 +236,25 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
         N.put("dec-speedup-best-other", ratios["median"], "{:.1f}")
         N.put("dec-speedup-best-other-lo", ratios["lo"], "{:.1f}")
         N.put("dec-speedup-best-other-hi", ratios["hi"], "{:.1f}")
+    # against the fastest other format on each matrix (which is not always the same format): the paired ratio, how many
+    # matrices .s1 reads fastest, and the largest matrix on which another format is faster
+    each, nnz = defaultdict(dict), {}
+    for r in d:
+        if r["what"] == "file" and r["cache"] == "cold" and int(r["threads"]) == H and r["format"] != "s1_pack" \
+                and (r["format"] != "s1" or r["mode"] == "canonical"):
+            each[(r["dataset"], r["matrix"])][r["format"]] = _f(r["mnnz_per_s"])
+            nnz[(r["dataset"], r["matrix"])] = _f(r.get("nnz"))
+    paired = {k: u["s1"] / max(v for f, v in u.items() if f != "s1" and v)
+              for k, u in each.items() if u.get("s1") and any(v for f, v in u.items() if f != "s1")}
+    if paired:
+        s = _stats(paired.values())
+        N.put("dec-speedup-each", s["median"], "{:.2f}")
+        N.put("dec-speedup-each-lo", s["lo"], "{:.2f}")
+        N.put("dec-speedup-each-hi", s["hi"], "{:.2f}")
+        N.put("dec-s1-fastest-count", sum(v > 1 for v in paired.values()), "{:d}")
+        N.put("dec-paired-n", len(paired), "{:d}")
+        slower = [nnz[k] for k, v in paired.items() if v <= 1 and nnz.get(k)]
+        N.put("dec-s1-slower-max-mnnz", max(slower) / 1e6 if slower else 0, "{:.0f}")
     used = [r.get("isa_used") for r in d if r["format"] == "s1" and r["what"] == "file" and r.get("isa_used")]
     if used:
         N.put("isaBest", max(set(used), key=used.count).replace("avx", "AVX").replace("scalar", "scalar"))
