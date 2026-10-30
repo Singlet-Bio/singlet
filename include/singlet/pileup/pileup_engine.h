@@ -535,6 +535,8 @@ public:
             mt_acc_.set_n_features(mt::MT_N_FEATURES);
             mt_acc_rev_.set_barcodes(barcodes_);
             mt_acc_rev_.set_n_features(mt::MT_N_FEATURES);
+            mt_acc_.set_compact_limit(kMtCompactTriplets);
+            mt_acc_rev_.set_compact_limit(kMtCompactTriplets);
         }
 
         // N18: Initialize CRISPR guide accumulator
@@ -1211,7 +1213,7 @@ public:
     // Per-worker mutable state (no sharing between workers)
     struct WorkerContext {
         PileupStats stats;
-        SparseAccumulator<uint8_t> snp_ad, snp_dp;
+        SparseAccumulator<uint16_t> snp_ad, snp_dp;
         SparseAccumulator<uint16_t> exon, intron;
 
         // SJ tracking: per-worker local index + names
@@ -1382,6 +1384,8 @@ public:
                 wc.mt.set_n_features(mt::MT_N_FEATURES);
                 wc.mt_rev.set_barcodes(barcodes_);
                 wc.mt_rev.set_n_features(mt::MT_N_FEATURES);
+                wc.mt.set_compact_limit(kMtCompactTriplets);
+                wc.mt_rev.set_compact_limit(kMtCompactTriplets);
             }
             // N18: CRISPR guide worker init
             if (!guide_ref_.empty()) {
@@ -1663,8 +1667,8 @@ public:
             finalize_umi_features(wc.vdj_umi, wc.vdj, stats.vdj_hits, wc.mol_store);
             wc.mol_store.clear_molecules();
         }
-        merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_ad; });
-        merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_dp; });
+        merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.snp_ad; });
+        merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.snp_dp; });
         if (config_.count_mt) {
             merge_accumulators(mt_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.mt; });
             merge_accumulators(mt_acc_rev_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.mt_rev; });
@@ -1782,8 +1786,8 @@ public:
     }
 
     // Get accumulators for export
-    const SparseAccumulator<uint8_t>& snp_ad() const { return snp_ad_; }
-    const SparseAccumulator<uint8_t>& snp_dp() const { return snp_dp_; }
+    const SparseAccumulator<uint16_t>& snp_ad() const { return snp_ad_; }
+    const SparseAccumulator<uint16_t>& snp_dp() const { return snp_dp_; }
     const SparseAccumulator<uint16_t>& exons() const { return exon_acc_; }
     const SparseAccumulator<uint16_t>& introns() const { return intron_acc_; }
     const SparseAccumulator<uint16_t>& splice_junctions() const { return sj_acc_; }
@@ -2070,11 +2074,14 @@ private:
     std::vector<char> mito_tid_;  // per tid: mitochondrial contig (excluded from strand evidence)
 
     // Accumulators
-    SparseAccumulator<uint8_t> snp_ad_;
-    SparseAccumulator<uint8_t> snp_dp_;
+    SparseAccumulator<uint16_t> snp_ad_;
+    SparseAccumulator<uint16_t> snp_dp_;
     SparseAccumulator<uint16_t> exon_acc_;
     SparseAccumulator<uint16_t> intron_acc_;
     SparseAccumulator<uint16_t> sj_acc_;
+    // chrM keeps one triplet per aligned base; fold duplicates once this many are held
+    // (memory then follows distinct (position x base, barcode), not chrM reads).
+    static constexpr size_t kMtCompactTriplets = size_t(16) << 20;
     SparseAccumulator<uint16_t> mt_acc_;   // chrM allele counts: feat = pos*4 + base
     SparseAccumulator<uint16_t> mt_acc_rev_;  // chrM reverse-strand allele counts (same layout)
     std::vector<mt::MtIndelEvent> mt_indels_;  // chrM indels captured during CIGAR walk

@@ -121,6 +121,60 @@ inline int umi_hamming_2bit(uint64_t a, uint64_t b, int umi_len) {
     return __builtin_popcountll((diff | (diff >> 1)) & 0x5555555555555555ULL);
 }
 
+/// Union every directional edge of a (barcode, gene) group.
+///
+/// `packed[r]` / `count[r]` are the UMIs in rank order (count descending, ties in any
+/// fixed order). Edge r -> t exists when r < t, hamming(r, t) == 1 and
+/// count[r] >= 2 * count[t] - 1; `parent` (union-find, size n, initialised to the
+/// identity by the caller) ends up holding the connected components, so the result
+/// does not depend on the order edges are visited. Small groups test every pair;
+/// big ones (deep genes: MALAT1, mitochondrial, ribosomal) look the 3 * umi_len
+/// single-base neighbours of each UMI up in a packed-sorted index, O(n L log n)
+/// instead of O(n^2).
+template <typename CountT>
+inline void umi_directional_union(const uint64_t* packed, const CountT* count, int n,
+                                  int umi_len, std::vector<int>& parent) {
+    auto find = [&](int x) -> int {
+        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+        return x;
+    };
+    auto join = [&](int i, int j) {
+        int ri = find(i), rj = find(j);
+        if (ri != rj) parent[rj] = ri;
+    };
+    constexpr int kBrute = 512;
+    if (n <= kBrute || umi_len > 32) {
+        for (int i = 0; i < n - 1; ++i)
+            for (int j = i + 1; j < n; ++j)
+                if (umi_hamming_2bit(packed[i], packed[j], umi_len) == 1 &&
+                    count[i] >= 2 * count[j] - 1)
+                    join(i, j);
+        return;
+    }
+    const uint64_t mask = umi_len < 32 ? (1ULL << (2 * umi_len)) - 1 : ~0ULL;
+    std::vector<std::pair<uint64_t, int>> index(n);  // (masked packed, rank)
+    for (int r = 0; r < n; ++r) index[r] = {packed[r] & mask, r};
+    std::sort(index.begin(), index.end());
+    for (int i = 0; i < n - 1; ++i) {
+        const uint64_t u = packed[i] & mask;
+        for (int p = 0; p < umi_len; ++p) {
+            const uint64_t cur = (u >> (2 * p)) & 3ULL;
+            for (uint64_t b = 0; b < 4; ++b) {
+                if (b == cur) continue;
+                const uint64_t cand = u ^ ((cur ^ b) << (2 * p));
+                auto it = std::lower_bound(index.begin(), index.end(),
+                                           std::make_pair(cand, -1));
+                // several ranks can share a masked value only if umi_len is shorter
+                // than the packed UMIs; visit all of them like the pairwise loop does
+                for (; it != index.end() && it->first == cand; ++it) {
+                    const int j = it->second;
+                    if (j > i && count[i] >= 2 * count[j] - 1) join(i, j);
+                }
+            }
+        }
+    }
+}
+
 /// Directional UMI deduplication (Smith et al. 2017).
 ///
 /// Builds a directed adjacency graph on UMIs: edge A→B if
@@ -136,30 +190,16 @@ inline uint32_t directional_dedup(
     const int n = static_cast<int>(umi_counts.size());
     if (n <= 1) return static_cast<uint32_t>(n);
 
-    // Union-Find with path compression (two-step halving)
     std::vector<int> parent(n);
     std::iota(parent.begin(), parent.end(), 0);
-
+    std::vector<uint64_t> pk(n);
+    std::vector<uint32_t> ct(n);
+    for (int i = 0; i < n; ++i) { pk[i] = umi_counts[i].first; ct[i] = umi_counts[i].second; }
+    umi_directional_union(pk.data(), ct.data(), n, umi_len, parent);
     auto find = [&](int x) -> int {
-        while (parent[x] != x) {
-            parent[x] = parent[parent[x]];  // path halving
-            x = parent[x];
-        }
+        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
         return x;
     };
-
-    // Build edges: umi_counts is sorted descending, so umi_counts[i].second >= umi_counts[j].second
-    // Directional edge i→j (i "absorbs" j) when hamming=1 AND count_i >= 2*count_j - 1
-    for (int i = 0; i < n - 1; ++i) {
-        for (int j = i + 1; j < n; ++j) {
-            if (umi_hamming_2bit(umi_counts[i].first, umi_counts[j].first, umi_len) == 1) {
-                if (umi_counts[i].second >= 2 * umi_counts[j].second - 1) {
-                    int ri = find(i), rj = find(j);
-                    if (ri != rj) parent[rj] = ri;  // root of j → root of i
-                }
-            }
-        }
-    }
 
     // Count distinct component roots
     int roots = 0;
@@ -193,14 +233,12 @@ public:
     void record(uint32_t bc_idx, uint32_t gene_idx, uint32_t exon_idx, uint64_t umi_packed) {
         uint64_t key = (static_cast<uint64_t>(bc_idx) << 32) | gene_idx;
         auto& group = groups_[key];
-        // Linear search (groups are small: typically 1-10 distinct UMIs)
-        for (auto& e : group) {
-            if (e.packed == umi_packed) {
-                e.count++;
-                return;
-            }
-        }
-        group.push_back({umi_packed, exon_idx, 1u});
+        // Kept sorted by packed UMI: binary search, so deep genes with thousands of
+        // UMIs per cell stay O(log n) per read.
+        auto it = std::lower_bound(group.begin(), group.end(), umi_packed,
+            [](const UmiEntry& e, uint64_t v) { return e.packed < v; });
+        if (it != group.end() && it->packed == umi_packed) { it->count++; return; }
+        group.insert(it, {umi_packed, exon_idx, 1u});
     }
 
     /// Apply directional dedup for all groups, emit corrected counts to accumulator.
@@ -230,31 +268,23 @@ public:
             // Sort by count descending (copy for sort)
             std::vector<UmiEntry> sorted(entries.begin(), entries.end());
             std::sort(sorted.begin(), sorted.end(),
-                [](const UmiEntry& a, const UmiEntry& b) { return a.count > b.count; });
+                [](const UmiEntry& a, const UmiEntry& b) {
+                    return a.count != b.count ? a.count > b.count : a.packed < b.packed;
+                });
 
-            // Union-Find
             const int n = static_cast<int>(sorted.size());
             std::vector<int> parent(n);
             std::iota(parent.begin(), parent.end(), 0);
-
+            {
+                std::vector<uint64_t> pk(n);
+                std::vector<uint32_t> ct(n);
+                for (int i = 0; i < n; ++i) { pk[i] = sorted[i].packed; ct[i] = sorted[i].count; }
+                umi_directional_union(pk.data(), ct.data(), n, umi_len, parent);
+            }
             auto find = [&](int x) -> int {
-                while (parent[x] != x) {
-                    parent[x] = parent[parent[x]];
-                    x = parent[x];
-                }
+                while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
                 return x;
             };
-
-            // Build directed edges: sorted[i] has higher count → absorbs sorted[j]
-            for (int i = 0; i < n - 1; ++i) {
-                for (int j = i + 1; j < n; ++j) {
-                    if (umi_hamming_2bit(sorted[i].packed, sorted[j].packed, umi_len) == 1 &&
-                        sorted[i].count >= 2 * sorted[j].count - 1) {
-                        int ri = find(i), rj = find(j);
-                        if (ri != rj) parent[rj] = ri;
-                    }
-                }
-            }
 
             // Emit one count per component root (using root's exon assignment)
             for (int i = 0; i < n; ++i) {
@@ -337,18 +367,18 @@ public:
                      uint8_t diag = 0) {
         uint64_t key = (static_cast<uint64_t>(bc_idx) << 32) | gene_idx;
         auto& group = mol_groups_[key];
-        for (auto& e : group) {
-            if (e.packed == umi_packed) {
-                e.count++;
-                e.flags |= flags;
-                e.diag |= diag;
-                // smallest index, not first seen: read order (STAR threads) must not matter
-                e.exon_idx = std::min(e.exon_idx, exon_idx);
-                e.intron_idx = std::min(e.intron_idx, intron_idx);
-                return;
-            }
+        auto it = std::lower_bound(group.begin(), group.end(), umi_packed,
+            [](const MolEntry& e, uint64_t v) { return e.packed < v; });  // sorted by packed
+        if (it != group.end() && it->packed == umi_packed) {
+            it->count++;
+            it->flags |= flags;
+            it->diag |= diag;
+            // smallest index, not first seen: read order (STAR threads) must not matter
+            it->exon_idx = std::min(it->exon_idx, exon_idx);
+            it->intron_idx = std::min(it->intron_idx, intron_idx);
+            return;
         }
-        group.push_back({umi_packed, exon_idx, intron_idx, 1u, flags, diag});
+        group.insert(it, {umi_packed, exon_idx, intron_idx, 1u, flags, diag});
     }
 
     /// True if (bc, gene) already has molecules here (used to route reads that
@@ -375,6 +405,8 @@ public:
     void collapse_molecules(int umi_len, bool directional, std::vector<Molecule>& out) const {
         std::vector<MolEntry> sorted;
         std::vector<int> parent;
+        std::vector<uint64_t> pk;
+        std::vector<uint32_t> ct;
         std::vector<Molecule> comp;
         for (const auto& [key, entries] : mol_groups_) {
             const uint32_t bc = static_cast<uint32_t>(key >> 32);
@@ -394,17 +426,13 @@ public:
             const int n = static_cast<int>(sorted.size());
             parent.resize(n);
             std::iota(parent.begin(), parent.end(), 0);
+            pk.resize(n); ct.resize(n);
+            for (int i = 0; i < n; ++i) { pk[i] = sorted[i].packed; ct[i] = sorted[i].count; }
+            umi_directional_union(pk.data(), ct.data(), n, umi_len, parent);
             auto find = [&](int x) -> int {
                 while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
                 return x;
             };
-            for (int i = 0; i < n - 1; ++i)
-                for (int j = i + 1; j < n; ++j)
-                    if (umi_hamming_2bit(sorted[i].packed, sorted[j].packed, umi_len) == 1 &&
-                        sorted[i].count >= 2 * sorted[j].count - 1) {
-                        int ri = find(i), rj = find(j);
-                        if (ri != rj) parent[rj] = ri;
-                    }
 
             // A molecule's evidence is the union over every UMI merged into it
             // (smallest feature index over the merged UMIs).
