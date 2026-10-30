@@ -1948,6 +1948,7 @@ public:
         const ReadRec* R = reinterpret_cast<const ReadRec*>(in.reads.data());
         const size_t nR = in.reads.size() / sizeof(ReadRec);
         if (out.alnStat.size() != in.alns.size() / sizeof(AlnRec)) { std::cerr << "[gpu_pileup] per-alignment results missing\n"; return false; }
+        uint64_t pd[12] = {0}; const bool pdbg = std::getenv("SINGLET_POLYA_DEBUG") != nullptr;   // diagnostics: why the poly(A) rebuild keeps or drops a read
         static const char UMI_CH[5] = {'A', 'C', 'G', 'T', 'N'};
         static const uint8_t COMP[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
         const int ulen = in.umiLen > 0 ? in.umiLen : 0;
@@ -1985,6 +1986,7 @@ public:
                 };
                 uint64_t key = 0; bool ok = false;
                 const uint32_t clip = gpu_col_ ? gpu_col_->read_clip(r) : 0u;
+                pd[0]++; if (clip) pd[1]++;
                 if (clip) {
                     // a clipped read: the BAM sequence is the whole read and its CIGAR has the clipped bases as soft clips, so the 3' soft
                     // clip (in read orientation; the BAM's last op when forward, its first when reverse) is the record's own plus the tail
@@ -1995,9 +1997,11 @@ public:
                     const int nb = a.n_ops + ((c3 > 0 && s3 == 0) ? 1 : 0) + ((c5 > 0 && (o5 & 15) != BAM_CSOFT_CLIP) ? 1 : 0);
                     const int cl = s3 + c3;
                     auto rbase = [&](int j) -> uint8_t { return (in.seq[sg.seq_off + (j >> 1)] >> ((j & 1) * 4)) & 15; };   // record, read orientation
+                    if (nb < 2) pd[2]++; else if (cl < 6 || cl > ql) pd[3]++;
                     if (nb >= 2 && cl >= 6 && cl <= ql) {
                         int na = nAt; for (int j = qlen - s3; j < qlen; ++j) na += rbase(j) == 1;
                         const bool firstA = s3 > 0 ? rbase(qlen - s3) == 1 : (clip & 2u) != 0;
+                        if (!(na >= 0.8 * cl)) pd[4]++; else if (!firstA) pd[5]++;
                         if (na >= 0.8 * cl && firstA) {
                             if (!rev) {
                                 int64_t end = a.pos;
@@ -2025,7 +2029,8 @@ public:
                         if (nt >= 0.8 * cl && base(cl - 1) == 8) { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
                     }
                 }
-                if (ok) polya_recs_.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)});
+                if (ok) { polya_recs_.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); pd[clip ? 6 : 7]++; }
+                else if (!clip) pd[8]++;
             }
             // VDJ usage: the first VDJ gene overlapping [first aligned block start, last aligned block end)
             if (has_vdj_) {
@@ -2046,6 +2051,9 @@ public:
                 }
             }
         }
+        if (pdbg) std::cerr << "[polya-debug] eligible " << pd[0] << ", clipped " << pd[1] << ": nb<2 " << pd[2] << ", cl out of range " << pd[3]
+                            << ", A-fraction " << pd[4] << ", not firstA " << pd[5] << ", kept clipped " << pd[6] << "; unclipped kept " << pd[7] << ", unclipped dropped " << pd[8] << "
+";
         return true;
     }
     // W11 "on": the reads STAR wrote no BAM record for (hand-off records; ReadAlign_outputAlignments.cpp): what the serial loop does
