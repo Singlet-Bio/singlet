@@ -18,6 +18,7 @@ from .util import Config, read_tsv
 # transfer out to the internet $0.09 per GB for the first 10 TB a month beyond the free tier.
 PRICE = {"r2": {"get": 0.36e-6, "gb": 0.0}, "s3": {"get": 0.4e-6, "gb": 0.09}}
 
+DS_LABELS = {"hlca_core": "HLCA core", "pbmc10k_v3": "PBMC 10k", "tabula_muris_facs": "Tabula Muris FACS"}
 R3_LOADERS = {"s1_stream": ".s1", "anndata_zarr_lazy": "AnnData Zarr", "soma_ml": "TileDB-SOMA ML",
               "zarr3_shard": "Zarr v3 sharded", "anndata_inmem": "h5ad gzip, downloaded", "s1_cells": ".s1 (S1Cells)",
               "scdataset": "scDataset", "scdataset_default": "scDataset, fetch 16"}
@@ -83,7 +84,7 @@ def access_section(cfg: Config, N: Numbers, out: Path) -> None:
                         "dec_rel": _f(r["decode_mnnz_s"]) / _f(base["decode_mnnz_s"]), "index_kib": _f(r["index_bytes"]) / 1024})
     _write(pts, out / "figacc_chunk.tsv", ["dataset", "chunk", "size_rel", "kib", "req", "overread", "dec_rel", "index_kib"])
     for p in pts:
-        if p["chunk"] in (4096, 393216):
+        if p["chunk"] in (4096, 49152, 393216):
             N.put(f"chunk-{p['dataset']}-{p['chunk']}-size", 100 * (p["size_rel"] - 1), "{:+.1f}")
             N.put(f"chunk-{p['dataset']}-{p['chunk']}-overread", p["overread"], "{:.1f}")
 
@@ -172,6 +173,12 @@ def netsweep_section(cfg: Config, N: Numbers, out: Path) -> None:
             N.put(f"wk-{r['loader']}-{r.get('where')}-{r['workers']}", _cps(r), "{:,.0f}")
     _write(sorted(tab, key=lambda t: (t["lid"], t["where"], t["workers"])), out / "tab_workers.tsv",
            ["loader", "lid", "where", "workers", "cps", "first", "status", "note"])
+    wide = {}
+    for t in tab:   # one row per loader and source, one column per worker count ("--" where the run failed)
+        w = wide.setdefault((t["lid"], t["where"]), {"loader": t["loader"], "where": "node disk" if t["where"] == "local" else
+                                                     f"store, {cfg['netsweep']['workers_rtt_ms']} ms"})
+        w[f"w{t['workers']}"] = f"{t['cps']:,.0f}" if t["cps"] else "--"
+    _write([wide[k] for k in sorted(wide)], out / "tab_workers_wide.tsv", ["loader", "where"] + [f"w{w}" for w in cfg["netsweep"]["workers"]])
 
 
 def r2_section(cfg: Config, N: Numbers, out: Path) -> None:
@@ -183,13 +190,16 @@ def r2_section(cfg: Config, N: Numbers, out: Path) -> None:
     stats = {r["dataset"]: int(r["cells"]) for r in _stage(cfg, "stats")} if _stage(cfg, "stats") else {}
     tab = []
     for (ds, ld), v in sorted(_group(rows).items()):
+        base = ld.split("@")[0]   # s1_stream@32x4: the .s1 reader with 32 requests and 4 minibatches in flight
         ok = [r for r in v if r.get("status") == "ok"]
         first = [_f(r.get("first_batch_s")) for r in ok if _f(r.get("first_batch_s"))]
         cps = [_cps(r) for r in ok if _cps(r)]
-        rec = {"dataset": ds, "loader": R3_LOADERS.get(ld, ld), "lid": ld, "first": float(np.median(first)) if first else None,
+        label = R3_LOADERS.get(base, base) + (f", {ld.split('@')[1].replace('x', ' requests, ')} ahead" if "@" in ld else "")
+        rec = {"dataset": DS_LABELS.get(ds, ds.replace("_", " ")), "loader": label, "lid": ld, "first": float(np.median(first)) if first else None,
                "cps": float(np.median(cps)) if cps else None, "rtt_ms": _f(v[0].get("rtt_median_ms")),
+               "edge_ms": _f(v[0].get("edge_rtt_median_ms")),
                "gbit1": _f(v[0].get("gbit_1conn")), "gbit8": _f(v[0].get("gbit_8conn"))}
-        e = emu.get((ds, ld))
+        e = emu.get((ds, base))   # requests and bytes per minibatch do not depend on how many are in flight
         cells = stats.get(ds)
         if e and cells and _f(e.get("proxy_requests_per_batch")) is not None:
             nb = cells / 512
@@ -197,7 +207,7 @@ def r2_section(cfg: Config, N: Numbers, out: Path) -> None:
             gb = _f(e["proxy_bytes_per_batch"]) * nb / 2**30
             rec.update({"req_epoch": req, "gb_epoch": gb, "usd_r2": req * PRICE["r2"]["get"] + gb * PRICE["r2"]["gb"],
                         "usd_s3": req * PRICE["s3"]["get"] + gb * PRICE["s3"]["gb"]})
-        elif ld == "anndata_inmem" and cells:
+        elif base == "anndata_inmem" and cells:
             gb = next((_f(r["bytes"]) for r in _stage(cfg, "write") if r["dataset"] == ds and r["format"] == "h5ad_gzip"), 0) / 2**30
             rec.update({"req_epoch": 1, "gb_epoch": gb, "usd_r2": PRICE["r2"]["get"], "usd_s3": PRICE["s3"]["get"] + gb * PRICE["s3"]["gb"]})
         tab.append(rec)
@@ -206,16 +216,19 @@ def r2_section(cfg: Config, N: Numbers, out: Path) -> None:
                 N.put(f"r2-{ds}-{ld}-{k}", rec[k], {"first": "{:.2f}", "cps": "{:,.0f}", "req_epoch": "{:,.0f}", "gb_epoch": "{:.2f}",
                                                      "usd_s3": "{:.3f}"}[k])
         N.put(f"r2-{ds}-rtt", rec["rtt_ms"], "{:.0f}")
+        if rec.get("edge_ms") is not None:
+            N.put(f"r2-{ds}-edge", rec["edge_ms"], "{:.0f}")
         N.put(f"r2-{ds}-gbit1", rec["gbit1"], "{:.2f}")
         N.put(f"r2-{ds}-gbit8", rec["gbit8"], "{:.2f}")
     _write(tab, out / "tab_r2.tsv", ["dataset", "loader", "lid", "first", "cps", "req_epoch", "gb_epoch", "usd_r2", "usd_s3",
-                                     "rtt_ms", "gbit1", "gbit8"])
+                                     "rtt_ms", "edge_ms", "gbit1", "gbit8"])
 
 
 def _group(rows):
     g = defaultdict(list)
     for r in rows:
-        g[(r["dataset"], r["loader"])].append(r)
+        io = r.get("io_threads")
+        g[(r["dataset"], r["loader"] + (f"@{io}x{r.get('ahead')}" if io not in (None, "") else ""))].append(r)
     return g
 
 
@@ -232,6 +245,15 @@ def writecost_section(cfg: Config, N: Numbers, out: Path) -> None:
                     "write_s": _f(r["write_s"]), "mnnz_s": n / _f(r["write_s"]) / 1e6 if n else None,
                     "extra_mb": max(0.0, extra), "peak_mb": max(_f(r["peak_rss_mb"]), _f(r.get("peak_child_rss_mb")) or 0)})
     _write(tab, out / "tab_writecost.tsv", ["dataset", "format", "fid", "write_s", "mnnz_s", "extra_mb", "peak_mb"])
+    dss = [d for d in cfg["access"]["sweep_datasets"] if any(t["dataset"] == d for t in tab)]
+    wide = {}
+    for t in tab:   # one row per format: seconds and extra memory per dataset
+        w = wide.setdefault(t["fid"], {"format": t["format"]})
+        w[f"{t['dataset']}_s"], w[f"{t['dataset']}_gb"] = t["write_s"], t["extra_mb"] / 1024
+    order = sorted(wide, key=lambda f: -(wide[f].get(f"{dss[0]}_s") or 0)) if dss else []
+    _write([wide[f] for f in order], out / "tab_writecost_wide.tsv", ["format"] + [f"{d}_{k}" for d in dss for k in ("s", "gb")])
+    for i, d in enumerate(dss):
+        N.put(f"wcds-{i}", d.replace("_", r"\_"))
     for t in tab:
         if t["fid"] in ("s1", "h5ad_gzip", "zarr", "zarr3", "soma", "csc_i32"):
             N.put(f"wc-{t['dataset']}-{t['fid']}-s", t["write_s"], "{:.1f}")

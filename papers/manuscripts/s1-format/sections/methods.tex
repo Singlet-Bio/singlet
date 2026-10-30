@@ -19,7 +19,11 @@ Every format is written from the canonical matrix by its own library with the op
 or that its documentation recommends (Table~\ref{tab:formats}): Matrix Market with gzip; the Cell Ranger HDF5 layout;
 AnnData \texttt{.h5ad} uncompressed and with gzip or lzf; AnnData Zarr; loom (only where the dense chunked layout fits
 in the run budget); R \texttt{dgCMatrix} saved with \texttt{saveRDS} using gzip or xz; a TileDB-SOMA experiment; a
-BPCells matrix directory; COO triplets in Parquet with zstd; and the CSC arrays raw and with zstd level 19. Every file is
+BPCells matrix directory; COO triplets in Parquet with zstd; and the CSC arrays raw and with zstd level 19. As a control
+with a generic codec at \sone's random-access granularity, Zarr v3 stores the CSR arrays (\texttt{data},
+\texttt{indices}) in inner chunks of 49,152 elements, the size of a \sone{} chunk, packed into shards of 64 chunks, each
+chunk compressed with Blosc (zstd level 5, bit shuffling) and in the narrowest unsigned integer type that holds it, with
+\texttt{indptr} as one chunk and gene identifiers and barcodes as gzipped text (zarr-python 3.1). Every file is
 read back and compared with the canonical matrix, counts, identifiers and barcodes; a format that fails the comparison
 is reported as a failure, not dropped. An R \texttt{dgCMatrix} holds at most $2^{31}-1$ non-zeros, so for larger
 matrices the RDS formats cannot store the matrix and BPCells, which stores it, cannot read it into memory; both are
@@ -31,9 +35,14 @@ same annotation.
 \subsection{Read speed}
 Each configuration runs in a fresh process pinned to $p$ cores (headline $p=\nm{threadsHeadline}$; every format at $p=1$
 and $p=\nm{threadsHeadline}$, and \sone{}, AnnData with gzip and the raw CSC arrays also at $p \in \{1,2,4,8\}$), with
-three timed repeats; we report the median and keep every time. ``Cold'' reads evict the file from the operating system's
+three timed repeats; we report the median and keep every time. Before the first repeat the process writes and reads a
+60-by-40 matrix in the same format, untimed, so that importing the library and its first-use set-up fall outside every
+timed read; R formats load BPCells before timing. With this, the first cold repeat takes a median of
+\nm{prot-first-over-median} times the median of the three (\nm{prot-n} configurations). ``Cold'' reads evict the file from the operating system's
 page cache (\texttt{posix\_fadvise(POSIX\_FADV\_DONTNEED)}) before every repeat; they cannot evict the disk controller's
-own cache. ``Warm'' reads, at $p=\nm{threadsHeadline}$ only, follow one untimed warm-up read. In Python a read longer
+own cache. That cache cannot be flushed from a job: a file just written reads at about 5\,GB/s after 16\,GB of other
+I/O, against 1.4\,GB/s from the disk, so ``cold'' means evicted from memory with the controller's cache in the same state
+for every repeat and format. ``Warm'' reads, at $p=\nm{threadsHeadline}$ only, follow one untimed warm-up read. In Python a read longer
 than 60\,s is timed once; in R every repeat is timed. Matrices above $4\times10^8$ non-zeros (\texttt{decode.big\_nnz} in
 \texttt{config.yaml}) are timed, cold and warm, at $p=\nm{threadsHeadline}$ from the node's disk only, for the CSC arrays,
 the Cell Ranger HDF5, AnnData uncompressed and with gzip, AnnData Zarr, TileDB-SOMA and both \sone{} variants. The timed
@@ -54,8 +63,8 @@ streaming reader (\texttt{singlet.torch.S1Stream}) in stored and source gene ord
 minibatch as a \texttt{torch.sparse\_csr\_tensor}; BPCells is timed to an R sparse matrix, without conversion to a tensor.
 scDataset and TileDB-SOMA ML use their own samplers, configured to the same workload: blocks of 64 cells, one minibatch
 per read and no larger shuffle buffer. The \sone{} reader plans the byte ranges of a minibatch's blocks from the chunk
-index and sends them together, up to eight at a time over HTTP (\texttt{urllib3}); it is also run sending them one at a
-time. It decodes all of a minibatch's runs of cells in one call of the C++ codec, which releases Python's interpreter lock,
+index and sends them together, up to eight at a time over HTTP (\texttt{urllib3}, the default of \texttt{singlet}
+1.3.2; 1.3.3 sends 32); it is also run sending them one at a time. It decodes all of a minibatch's runs of cells in one call of the C++ codec, which releases Python's interpreter lock,
 decodes the runs in parallel and writes them into one CSR, and, as \texttt{singlet.torch.S1Cells} does by default, sends
 the next minibatch's requests while one decodes. TileDB-SOMA ML prefetches with its own reader; the other loaders read
 one minibatch after another, as their libraries do. Files are
@@ -78,6 +87,38 @@ only the panel datasets large enough to avoid this. The share of a link a reader
 file's bytes per cell, divided by the link's bandwidth. From the node's own disk each loader reads its own file, evicted from
 the page cache first; the RAID controller's cache cannot be cleared, so the three \sone{} variants, which read the same
 file, are cold only for the first of them (\sone{} with requests together), which is the one reported.
+
+\subsection{Random-access costs, latency and a real object store}
+\emph{Access costs} are computed, not timed, for 200 minibatches of the workload per matrix: for \sone{} from the
+member's chunk index (the byte ranges \texttt{S1Stream} plans, with adjacent ranges merged), for the HDF5 formats from
+the chunk table of \texttt{data}, \texttt{indices} and \texttt{indptr} (\texttt{h5py} \texttt{get\_chunk\_info}), and for
+AnnData Zarr from the sizes of its chunk objects; a request is one contiguous range or one object. The over-read is the
+bytes fetched divided by the minibatch's non-zeros times the file's bytes per non-zero. For the chunk-size sweep the
+\sone{} member of three matrices is re-encoded with chunk budgets of 4,096 to 393,216 non-zeros.
+
+\emph{Latency and requests in flight.} The emulated store of the minibatch benchmark at 1\,Gbit/s, with 0, 5, 10, 30, 100
+or 200\,ms added to every response; the proxy also counts the bytes and HTTP requests it serves. Each point is one fresh
+process: the first minibatch, then 60 minibatches after 5 warm-up ones, with the time of each kept. The in-flight sweep
+runs the \sone{} reader at 30 and 100\,ms with 1 to 64 requests at once and 0 to 8 minibatches' requests sent ahead. The
+DataLoader comparison runs \texttt{S1Cells} (\texttt{singlet} 1.3.3 defaults) and scDataset with 0, 2 and 4 workers (each
+worker with an equal share of the cores, \texttt{prefetch\_factor} 2), from the node's disk and from the store at 1\,ms;
+scDataset is also run with its default \texttt{fetch\_factor} of 16, which reads 16 minibatches at once and shuffles them
+in memory.
+
+\emph{A real object store.} The files were uploaded from the cluster to a Cloudflare R2 bucket and read back from the
+timing node over the public internet through a Cloudflare Worker that serves the bucket by range (\texttt{GET} with
+\texttt{Range}, \texttt{HEAD}; source in \texttt{bench/r2worker}), as an HTTP reader without S3 signing reads a public
+bucket. Before the loaders, the link was measured: 20 one-byte range requests to an object and 20 to a route the Worker
+answers without the bucket, and the rate of reading the \sone{} file whole on one connection and in eight ranges at once.
+Each loader then read three seeds as in the minibatch benchmark, and the \sone{} reader also with 32 and 64 requests at
+once and 4 and 8 minibatches ahead. The cost of an epoch is the number of minibatches in it (cells / 512) times the
+requests and bytes per minibatch counted at the emulated store without latency, priced at R2's published rates (Class B
+reads \$0.36 per million, no egress charge) and S3 Standard's in us-east-1 (\texttt{GET} \$0.004 per 10,000, transfer out
+to the internet \$0.09 per GB), as published on 30 October 2026; free tiers are not counted. Downloading the h5ad whole is
+one request and the file's size.
+
+\emph{Writing} is timed in a fresh process per format from the canonical matrix in memory, with the library primed as for
+reads, to the node's disk; memory is the peak resident memory of the process and its children minus that before writing.
 
 \subsection{Payload ladder}
 For each matrix we computed the payload size, in bits per non-zero over row indices and values only, of: 32-bit CSC;

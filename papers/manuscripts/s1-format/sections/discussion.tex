@@ -49,12 +49,12 @@ margin is modest.
   matrices. One planned dataset, a genome-wide Perturb-seq screen with 6.3 billion non-zeros, was excluded because writing
   the comparison formats needed more memory and time than the campaign allowed.
 \item \emph{Network tiers.} The network tiers are a local object store with a shared bandwidth limit and fixed added
-  latency. Real object stores add variable latency, connection set-up, per-connection rate limits and per-request costs;
-  the 10\,Gbit/s tier exceeds what the test setup delivers and is flagged. Minibatches were read in one process on
-  \nm{threadsHeadline} cores; from 1\,Gbit/s on, decoding rather than the link limits the \sone{} reader there, and
-  DataLoader workers or more cores, which we did not measure, would raise that limit.
-\item \emph{Baselines.} We did not test generic codecs tuned to the same random-access granularity, such as zstd with a
-  dictionary trained per matrix or Blosc2 with bit shuffling per chunk, nor stronger count models; the payload ladder
+  latency; the 10\,Gbit/s tier exceeds what the test setup delivers and is flagged. The one real object store we read,
+  Cloudflare R2 through a Worker, was reached from one cluster node over one internet path, at one time of day; other
+  stores, regions and paths differ in latency and per-connection rate, and the prices are list prices without free tiers
+  or discounts.
+\item \emph{Baselines.} The generic-codec control at \sone's granularity is one configuration (sharded Zarr v3 with
+  Blosc zstd and bit shuffling); we did not test zstd with a dictionary trained per matrix, nor stronger count models; the payload ladder
   does not separate the contributions of gene reordering, context modelling and the entropy coder.
 \item \emph{Scope.} \sone{} stores non-negative integer counts below $2^{32}$; normalised or otherwise non-integer matrices
   are rejected by the writer, not rounded, which excluded one candidate dataset (the container can hold floating-point
@@ -62,8 +62,8 @@ margin is modest.
   barcodes and a cells table; richer annotations (AnnData's \texttt{obs}, \texttt{var}, \texttt{obsm} and \texttt{uns})
   are not part of the format. Reading the counts of one gene across all cells needs a full decode. Files are immutable;
   adding cells means writing a new sample object.
-\item \emph{Writing.} We did not time writing. The \sone{} writer counts its tables in one pass over the matrix and then
-  codes it, but the formats differ in how much writing costs.
+\item \emph{Writing.} Write cost was measured on three matrices, once each, from a matrix already in memory; converting
+  from a format on disk adds that format's read.
 \item \emph{Specification.} \sone{} has one implementation, in C++ with Python and R bindings over the same code; the
   format specification (Supplementary Section~\ref{sec:spec}) and test vectors are meant to make a second one possible.
 \end{itemize}

@@ -135,6 +135,65 @@ the total bandwidth of all connections, so concurrent readers share the link rat
 \input{figures/fig_net}
 
 % =====================================================================
+\subsection{What random minibatches cost over a network}
+\label{sec:reads}
+
+A random minibatch touches a few hundred cells scattered through the file, so its cost is set less by the file's size
+than by how many bytes and requests it takes to reach those cells, and by how many round trips the reader waits for one
+after another. We counted both from each format's own chunk index, without timing, over \nm{accN} matrices and 200
+minibatches each (Table~\ref{tab:access}). A minibatch costs \sone{} a median of \nm{acc-s1-kib}\,KiB in
+\nm{acc-s1-req} range requests, \nm{acc-s1-overread} times the bytes of the cells themselves, because a block of 64
+cells starts and ends inside chunks that are fetched whole. AnnData with gzip fetches \nm{acc-h5ad_gzip-kib}\,KiB in
+\nm{acc-h5ad_gzip-req} requests, the Cell Ranger HDF5 \nm{acc-tenx_h5-kib}\,KiB in \nm{acc-tenx_h5-req}, and AnnData Zarr
+\nm{acc-zarr-kib}\,KiB in \nm{acc-zarr-req}; their over-read is small or large depending on their chunking, but every
+byte they fetch is a larger file's byte. The chunk size of \sone{} sets this trade-off: on \nm{ns-dataset}, chunks of
+4,096 non-zeros instead of the default 49,152 bring the over-read from \nm{chunk-hlca_core-49152-overread} to
+\nm{chunk-hlca_core-4096-overread} and make the file \nm{chunk-hlca_core-4096-size}\% larger, and chunks of 393,216
+make it \nm{chunk-hlca_core-393216-size}\% smaller and raise the over-read to \nm{chunk-hlca_core-393216-overread}
+(Fig.~\ref{fig:reads}d).
+
+Latency multiplies. On an emulated object store limited to 1\,Gbit/s, the \sone{} reader with eight requests at once and
+the next minibatch's requests sent ahead delivers \nm{ns-s1_stream-cps-0} cells per second of \nm{ns-dataset} without
+added latency, \nm{ns-s1_stream-cps-30} at 30\,ms and \nm{ns-s1_stream-cps-100} at 100\,ms; AnnData Zarr delivers
+\nm{ns-anndata_zarr_lazy-cps-30}, Zarr v3 with shards of 64 chunks of the same size as \sone's
+\nm{ns-zarr3_shard-cps-30} and TileDB-SOMA ML \nm{ns-soma_ml-cps-30} at 30\,ms (Fig.~\ref{fig:reads}a,b). The \sone{}
+reader falls with latency because it keeps too few bytes in flight: a link of bandwidth $B$ and round-trip time $T$ is
+full only with $B\,T$ bytes requested and not yet received, 3.75\,MB at 1\,Gbit/s and 30\,ms, several minibatches' worth.
+Sending more requests at once and more minibatches ahead restores the rate (Fig.~\ref{fig:reads}c): at 30\,ms, eight
+requests fill \nm{inf-30-share-8}\% of the link and \nm{inf-30-best-io} fill \nm{inf-30-best-share}\%
+(\nm{inf-30-best-cps} cells per second, \nm{inf-30-gain} times one request at a time); at 100\,ms the best setting
+delivers \nm{inf-100-best-cps} cells per second. Since version 1.3.3 \texttt{singlet} sends 32 requests at once over HTTP
+and \texttt{S1Cells} keeps four minibatches in flight by default; the measurements above and in Table~\ref{tab:minibatch}
+use the earlier eight and one, as stated.
+
+DataLoader workers raise the rate of loaders that decode in Python. scDataset over backed AnnData delivers
+\nm{wk-scdataset-local-0} cells per second from the node's disk in the main process and \nm{wk-scdataset-local-4} with
+four workers; \texttt{S1Cells} delivers \nm{wk-s1_cells-local-0} and \nm{wk-s1_cells-local-4}, because its decoding already
+runs on all cores outside Python's interpreter lock, and splitting the cores among workers does not add any
+(Table~\ref{tab:workers}).
+
+Finally we read the files from a real object store: Cloudflare R2, through a Worker that serves the bucket by range, over
+the public internet from the cluster node (Section~\ref{sec:methods}). A one-byte range request took a median of
+\nm{r2-hlca_core-rtt}\,ms there, of which \nm{r2-hlca_core-edge}\,ms is the path to the Worker and back, and one connection
+read \nm{r2-hlca_core-gbit1}\,Gbit/s (\nm{r2-hlca_core-gbit8} over eight). From HLCA core the first minibatch arrived after
+\nm{r2-hlca_core-s1_stream-first}\,s with \sone, \nm{r2-hlca_core-anndata_zarr_lazy-first}\,s with AnnData Zarr and
+\nm{r2-hlca_core-zarr3_shard-first}\,s with sharded Zarr v3, against \nm{r2-hlca_core-anndata_inmem-first}\,s to download
+the h5ad first. Sustained, \sone{} delivered \nm{r2-hlca_core-s1_stream-cps} cells per second with the earlier defaults and
+\nm{r2-hlca_core-s1_stream@64x8-cps} with 64 requests and eight minibatches in flight, against
+\nm{r2-hlca_core-anndata_zarr_lazy-cps} for AnnData Zarr and \nm{r2-hlca_core-zarr3_shard-cps} for Zarr v3. What an epoch
+of random minibatches costs follows from the bytes and requests counted at the store (Table~\ref{tab:r2}): \sone{} reads
+\nm{r2-hlca_core-s1_stream-gb_epoch}\,GiB in \nm{r2-hlca_core-s1_stream-req_epoch} requests, which at S3's published prices
+for transfer to the internet costs \$\nm{r2-hlca_core-s1_stream-usd_s3} an epoch, against
+\$\nm{r2-hlca_core-anndata_zarr_lazy-usd_s3} for AnnData Zarr; R2 charges no egress and only for requests.
+
+Writing is the other side of a format's cost. On HLCA core the \sone{} writer took \nm{wc-hlca_core-s1-s}\,s
+(\nm{wc-hlca_core-s1-mnnzs} million non-zeros per second) and \nm{wc-hlca_core-s1-mb}\,MB of memory beyond the matrix,
+against \nm{wc-hlca_core-h5ad_gzip-s}\,s for AnnData with gzip, \nm{wc-hlca_core-zarr-s}\,s for AnnData Zarr and
+\nm{wc-hlca_core-soma-s}\,s for TileDB-SOMA (Table~\ref{tab:writecost}).
+
+\input{figures/fig_reads}
+
+% =====================================================================
 \subsection{How \sone{} stores a count matrix}
 \label{sec:how}
 
@@ -382,6 +441,73 @@ range requests.}
   columns/nfs/.style={column name=NFS, string type, column type=r},
   columns/local/.style={column name=Local disk, string type, column type=r},
 ]{\gen{tab_minibatch.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{What a random 512-cell minibatch (eight blocks of 64 cells) costs to fetch, from each format's chunk index:
+median over \nm{accN} matrices and 200 minibatches each. Over-read: bytes fetched divided by the bytes the minibatch's
+non-zeros take in that file. Index: bytes read before the first minibatch to locate chunks.}
+\label{tab:access}
+\pgfplotstabletypeset[
+  columns={format,kib,req,overread,index_kib},
+  columns/format/.style={string type, column name=Format, column type=l},
+  columns/kib/.style={column name=KiB per minibatch, fixed, precision=0, 1000 sep={,}},
+  columns/req/.style={column name=Requests, fixed, precision=0},
+  columns/overread/.style={column name=Over-read, fixed, precision=2},
+  columns/index_kib/.style={column name=Index (KiB), fixed, precision=0, 1000 sep={,}},
+]{\gen{tab_access.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Cloudflare R2 read over the internet from the cluster node: first minibatch (median of three seeds, cold
+process) and sustained cells per second, and the bytes and requests of one epoch of random minibatches with what they
+would cost at R2's and S3's published prices (Section~\ref{sec:methods}).}
+\label{tab:r2}
+\pgfplotstabletypeset[
+  columns={dataset,loader,first,cps,gb_epoch,req_epoch,usd_r2,usd_s3},
+  columns/dataset/.style={string type, column name=Matrix, column type=l},
+  columns/loader/.style={string type, column name=Loader, column type=l},
+  columns/first/.style={column name=First (s), fixed, precision=2},
+  columns/cps/.style={column name=Cells/s, fixed, precision=0, 1000 sep={,}},
+  columns/gb_epoch/.style={column name=GiB/epoch, fixed, precision=2},
+  columns/req_epoch/.style={column name=Requests/epoch, fixed, precision=0, 1000 sep={,}},
+  columns/usd_r2/.style={column name=R2 \$, fixed, precision=3},
+  columns/usd_s3/.style={column name=S3 \$, fixed, precision=3},
+]{\gen{tab_r2.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Sustained cells per second with PyTorch DataLoader workers, \nm{ns-dataset}, \nm{threadsHeadline} cores in all
+(each worker gets an equal share), from the node's disk and from the emulated store at 1\,Gbit/s.}
+\label{tab:workers}
+\pgfplotstabletypeset[
+  columns={loader,where,w0,w2,w4},
+  columns/loader/.style={string type, column name=Loader, column type=l},
+  columns/where/.style={string type, column name=Source, column type=l},
+  columns/w0/.style={string type, column name=No workers, column type=r},
+  columns/w2/.style={string type, column name=2 workers, column type=r},
+  columns/w4/.style={string type, column name=4 workers, column type=r},
+]{\gen{tab_workers_wide.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Writing each format from the canonical matrix in memory: seconds and memory beyond the matrix (peak resident
+memory of the writing process and its children minus that before writing), one run each.}
+\label{tab:writecost}
+\pgfplotstabletypeset[
+  columns={format,hlca_core_s,hlca_core_gb,tabula_muris_facs_s,tabula_muris_facs_gb,pbmc10k_v3_s,pbmc10k_v3_gb},
+  columns/format/.style={string type, column name=Format, column type=l},
+  columns/hlca_core_s/.style={column name={HLCA s}, fixed, precision=1},
+  columns/hlca_core_gb/.style={column name={GB}, fixed, precision=2},
+  columns/tabula_muris_facs_s/.style={column name={TM FACS s}, fixed, precision=1},
+  columns/tabula_muris_facs_gb/.style={column name={GB}, fixed, precision=2},
+  columns/pbmc10k_v3_s/.style={column name={PBMC 10k s}, fixed, precision=1},
+  columns/pbmc10k_v3_gb/.style={column name={GB}, fixed, precision=2},
+]{\gen{tab_writecost_wide.tsv}}
 \end{table}
 
 \begin{table}[h]
