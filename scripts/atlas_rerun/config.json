@@ -17,7 +17,8 @@
     "bucket": "singlet-beta-data",
     "database": "singlet-beta-catalog",
     "uploader": "scripts/beta/beta_ingest.py",
-    "producer": null,
+    "producer": ["python3", "{here}/s1_producer.py", "{gse}", "{handoff}", "{work}", "--catalog", "{catalog}"],
+    "catalog": null,
     "token_env": "SINGLET_INGEST_TOKEN",
     "retries": 3,
     "max_attempts": 5

@@ -389,8 +389,9 @@ shared_index_gb) // job_peak_gb`, capped by `cores // threads`. The inputs are i
 
 **Beta publishing** (`beta.py`, `orchestrator.py beta-publish --cluster C --gse G [--dry-run]`, controller `beta_pass` when
 `beta.enabled`). A finished study's hand-off goes to `beta.producer` (a command that writes `<work>/<GSE>.manifest.json` and
-the `s1/...` objects it names; the `.s1` producer of the rollout plan, W5, is not in this repository yet, so the controller
-reports `no_producer` until one is configured), then to `scripts/beta/beta_ingest.py` of the website repo
+the `s1/...` objects it names; the default is `s1_producer.py`, which reuses `scripts/s1_publish.py` against a local store:
+out/ -> pack_gse bundle -> `singlet.s1.migrate` -> `verify`, so a study is written about twice; needs `beta.catalog`, the
+processing catalog parquet; the `PipelineDirBundle` of rollout plan W5 would remove the bundle detour), then to `scripts/beta/beta_ingest.py` of the website repo
 (`beta.uploader`), which is the only writer of Beta's R2 and D1. Retried `beta.retries` times; failed studies again on later
 ticks up to `beta.max_attempts`. The target must name Beta: host, `beta.bucket` and `beta.database` contain "beta" and are not
 a production name, or nothing runs. A manifest naming a `private/`, restricted, BAM, reads or genotype key is refused.
@@ -402,3 +403,4 @@ ambiguous, sj, splice_psi, mt_heteroplasmy, vdj) have the same 118,371 barcodes 
 differ are the clip5p probe and rRNA samples (read order), the Q30 line (pool re-encoded with `--quality none`), and timings/paths.
 Compute wall 1063 s (A) vs 1016 s (B), peak RSS 37.6 GB both, and A skips the pool (245 s, one copy of the reads).
 
+Not yet run end to end on a real sample: the producer is unit-tested only (2026-10-30, the Clipper bridge was down).

@@ -7,7 +7,7 @@ Two steps, both configurable under `beta` in config.json:
   1. producer: turns the study's hand-off (`handoff/<GSE>.json`: the samples' `out_dir`s, never `private_dir`) into the
      deployment layout under a work directory: `<work>/<GSE>.manifest.json` and the objects it names
      (`<work>/s1/s/<GSM>/<d16>.s1`, `<work>/s1/a/<GSM>/<d16>.parquet`). The command is `beta.producer` with `{gse}`,
-     `{handoff}`, `{work}` filled in. The .s1 producer of the rollout plan (W5) is not part of this repository yet, so
+     `{handoff}`, `{work}` filled in. The default is `s1_producer.py`, which reuses scripts/s1_publish.py (pack_gse, migrate, verify);
      with no producer configured the study is reported as `no_producer` and nothing is uploaded.
   2. uploader: `beta_ingest.py` of the website repo (PR singlet-website#109): verifies the objects against the manifest,
      uploads what the bucket lacks, publishes the manifest and the D1 rows. It is the only writer of Beta's D1. It is
@@ -95,7 +95,7 @@ def run_producer(b, gse, handoff, work, log=print):
     cmd = b.get("producer")
     if not cmd:
         return None
-    cmd = [x.format(gse=gse, handoff=handoff, work=work) for x in cmd]
+    cmd = [x.format(gse=gse, handoff=handoff, work=work, here=C.HERE, catalog=b.get("catalog") or "") for x in cmd]
     log("[beta] producer: %s" % " ".join(cmd))
     return subprocess.run(cmd).returncode
 

@@ -487,3 +487,34 @@ def test_beta_publish_dry_run_and_real_run_with_a_stand_in_uploader(tmp_path):
     cfg["beta"].update(bucket="singlet-beta-data", producer=keep)
     producer.write_text(producer.read_text().replace(repr(body), repr(b"tampered")))
     assert beta.publish_study(cfg, ccfg, "GSE1", env={"SINGLET_INGEST_TOKEN": "t"})["status"] == "refused"
+
+
+def test_s1_producer_copies_only_the_manifest_and_its_objects(tmp_path):
+    import hashlib
+
+    import s1_producer as P
+
+    ho = tmp_path / "ho.json"
+    out = tmp_path / "o"
+    out.mkdir()
+    ho.write_text(json.dumps({"samples": [{"gsm": "GSM1", "state": "done", "out_dir": str(out)},
+                                          {"gsm": "GSM2", "state": "parked", "out_dir": str(out)}]}))
+    res = tmp_path / "res"
+    res.mkdir()
+    try:
+        assert P.build_results(str(ho), str(res)) == 1 and sorted(os.listdir(res)) == ["GSM1"]
+    except OSError:  # no symlinks on this machine
+        return
+    sha = hashlib.sha256(b"x").hexdigest()
+    key, lab = "s1/s/GSM1/%s.s1" % sha[:32], "s1/a/GSM1/%s.parquet" % sha[:32]
+    store = tmp_path / "store"
+    for k, data in ((key, b"x"), (lab, b"y"), ("m/GSE1.json", json.dumps({"samples": [{"key": key, "labels": lab}]}).encode()),
+                    ("s/GSM9/other.s1", b"z")):
+        p = store / (k[3:] if k.startswith("s1/") else k)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+    work = tmp_path / "work"
+    assert P.copy_store(str(store), "GSE1", str(work)) == 2
+    man = json.loads((work / "GSE1.manifest.json").read_text())
+    assert man["n_samples"] == 1 and (work / "s1" / "s" / "GSM1" / (sha[:32] + ".s1")).exists()
+    assert not (work / "s1" / "s" / "GSM9").exists()
