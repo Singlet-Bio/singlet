@@ -1875,6 +1875,7 @@ public:
             std::cerr << "[gpu_pileup] hand-off: " << gpu_col_->n_handoff_reads() << " reads take their alignments from the GPU prefill, "
                       << gpu_col_->handoff_mismatches() << " primary alignments differ from the stream's\n";
         gpu_col_->finish(in);
+        gpu_clip_ = gpu_col_->clips();   // gpu_host_pass rebuilds the poly(A) site of a clipped read from these, after gpu_col_ is gone
         gpu_col_.reset();
         if (in.snpSkipN < 0) { std::cerr << "[gpu_pileup] not run: base qualities neither constant nor tied to N\n"; return false; }
         std::cerr << "[gpu_pileup] " << nreads << " reads, " << nsigs << " signatures (" << inc << " incomplete groups)\n";
@@ -1935,6 +1936,7 @@ public:
     // intron and ambiguous accumulators (molecules), junctions (rows in (contig, donor, acceptor) order, the R7 order), SNP AD/DP (R1),
     // chrM allele counts and indels, and the counters those steps keep. The molecule label counts are applied after the CPU finalize.
     DirectionalUmiStore::MoleculeStats gpu_ms_{};
+    std::vector<uint32_t> gpu_clip_;   // per read of the GPU pileup's input: its hand-off clip flags (0: not clipped)
     template <typename V>
     static void gpu_put(SparseAccumulator<V>& acc, const std::vector<singlet_engine_gpu::PileupTriplet>& v) {
         for (const auto& t : v) acc.increment(t.row, t.cell, static_cast<V>(t.val));
@@ -1985,7 +1987,7 @@ public:
                     return rev ? COMP[v] : v;
                 };
                 uint64_t key = 0; bool ok = false;
-                const uint32_t clip = gpu_col_ ? gpu_col_->read_clip(r) : 0u;
+                const uint32_t clip = r < gpu_clip_.size() ? gpu_clip_[r] : 0u;
                 pd[0]++; if (clip) pd[1]++;
                 if (clip) {
                     // a clipped read: the BAM sequence is the whole read and its CIGAR has the clipped bases as soft clips, so the 3' soft

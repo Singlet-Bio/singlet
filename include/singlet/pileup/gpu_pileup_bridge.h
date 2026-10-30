@@ -207,6 +207,7 @@ public:
         if (clip) n_clipped_++;
     }
     // per read of the final input (hand-off reads first): its clip flags, 0 when not clipped
+    const std::vector<uint32_t>& clips() const { return ho_clip_; }
     uint32_t read_clip(size_t r) const { return r < ho_clip_.size() ? ho_clip_[r] : 0u; }
     uint64_t n_clipped() const { return n_clipped_; }
     // the base-quality rule of qual_check on a FASTQ record (Phred+33): BAM qualities are the FASTQ's
