@@ -160,19 +160,6 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
         groups.push_back(std::move(g));
     }
 
-    // Canonical order (R8): reads by content, species by id
-    std::sort(read_hits.begin(), read_hits.end());
-    {
-        for (const auto& rs : read_hits)
-            for (const auto& [sid, h] : rs) { (void)h; species_to_idx.emplace(sid, 0u); }
-        idx_to_species.reserve(species_to_idx.size());
-        for (const auto& [sid, k] : species_to_idx) { (void)k; idx_to_species.push_back(sid); }
-        std::sort(idx_to_species.begin(), idx_to_species.end());
-        for (uint32_t k = 0; k < idx_to_species.size(); ++k) species_to_idx[idx_to_species[k]] = k;
-        for (auto& rs : read_hits)
-            for (auto& [sid, h] : rs) { (void)h; sid = species_to_idx[sid]; }
-    }
-
     const uint32_t K = static_cast<uint32_t>(idx_to_species.size());
     const double   N = static_cast<double>(n_reads_total);   // number of nonhost reads
 
@@ -308,7 +295,7 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
         result.push_back(sa);
     }
 
-    // Sort descending by relative_abundance, ties by species_id (R8)
+    // Sort descending by relative_abundance
     std::sort(result.begin(), result.end(),
               [](const SpeciesAbundance& a, const SpeciesAbundance& b) {
                   if (a.relative_abundance != b.relative_abundance)
