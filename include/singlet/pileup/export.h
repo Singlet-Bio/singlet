@@ -464,7 +464,23 @@ inline ExportStats export_results(const PileupEngine& engine,
     // ── Phase 1.6: Sequencing saturation (N7, directional dedup path only) ──
     // Uses the DirectionalUmiStore groups built during run() — no extra BAM pass.
     std::vector<CellSaturation> sat_cells;
-    if (pileup_cfg.umi_dedup_directional && !engine.dir_exon_store().molecules_empty()) {
+    std::vector<std::pair<uint32_t, std::pair<uint64_t, uint64_t>>> gpu_sat;
+    if (pileup_cfg.umi_dedup_directional && engine.gpu_saturation(gpu_sat)) {   // W11 SINGLET_GPU_PILEUP=on: same inputs, from the GPU
+        for (const auto& [bc, ru] : gpu_sat) {
+            CellSaturation cs;
+            cs.barcode_idx = bc; cs.total_reads = ru.first; cs.unique_umis = ru.second;
+            if (cs.total_reads > 0 && cs.unique_umis > 0) {
+                cs.saturation = 1.0 - static_cast<double>(cs.unique_umis) / static_cast<double>(cs.total_reads);
+                cs.reads_per_umi = static_cast<double>(cs.total_reads) / static_cast<double>(cs.unique_umis);
+            }
+            sat_cells.push_back(cs);
+        }
+        if (!sat_cells.empty()) {
+            double med_sat = singlet::median_saturation(sat_cells);
+            singlet::write_saturation_tsv(out_prefix + "/saturation_metrics.tsv", sat_cells, barcodes);
+            std::cerr << "[saturation] median_saturation=" << med_sat << " n_cells=" << sat_cells.size() << " (GPU molecule list)\n";
+        }
+    } else if (pileup_cfg.umi_dedup_directional && !engine.dir_exon_store().molecules_empty()) {
         sat_cells = singlet::compute_saturation(
             engine.dir_exon_store(), pileup_cfg.umi_len);
         if (!sat_cells.empty()) {

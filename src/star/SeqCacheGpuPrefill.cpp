@@ -17,6 +17,10 @@
 #include "Parameters.h"
 #include "Genome.h"
 #include "InOutStreams.h"
+#include "ReadAlign.h"
+#include "Transcriptome.h"
+#include "OutSJ.h"
+#include "SequenceFuns.h"
 #include <cmath>
 #include <sys/stat.h>
 #include <sys/file.h>
@@ -95,13 +99,23 @@ bool fillParams(Parameters &P, m5::Params &Q, std::string &why) {
     return true;
 }
 
-bool noClipping(Parameters &P) {
-    for (int ip = 0; ip < 2; ip++) {
-        const ReadClipInput &c = P.pClip.in[ip];
-        if (!c.N.empty() && c.N[0] != 0) return false;
-        if (!c.NafterAd.empty() && c.NafterAd[0] != 0) return false;
-        if (!c.adSeq.empty() && c.adSeq[0] != "-") return false;
-    }
+// STAR's clipping of mate 1 for the GPU (engine_gpu.h Clip: the reads are clipped on the device before dedup, so the records are the
+// clipped sequences STAR's cache is keyed by). Supported: --clipAdapterType Hamming (CellRanger4's 5' clip is per chunk, with opal).
+bool fillClip(Parameters &P, singlet_engine_gpu::Clip &c, std::string &why) {
+    const ReadClipInput &i5 = P.pClip.in[0], &i3 = P.pClip.in[1];
+    auto at = [](const auto &v, auto d) { return v.empty() ? decltype(v[0] + d)(d) : decltype(v[0] + d)(v[0]); };
+    c.n5 = at(i5.N, 0); c.after5 = at(i5.NafterAd, 0); c.n3 = at(i3.N, 0); c.after3 = at(i3.NafterAd, 0);
+    const std::string ad5 = i5.adSeq.empty() ? "-" : i5.adSeq[0], ad3 = i3.adSeq.empty() ? "-" : i3.adSeq[0];
+    // ClipMate::initialize: a side with no N bases and no adapter does not clip at all (its NafterAd is ignored too)
+    if (c.n5 == 0 && ad5 == "-") c.after5 = 0;
+    if (c.n3 == 0 && ad3 == "-") c.after3 = 0;
+    c.on = c.n5 || c.after5 || c.n3 || c.after3 || ad5 != "-" || ad3 != "-";
+    if (!c.on) return true;
+    if (P.pClip.adapterType.empty() || P.pClip.adapterType[0] != "Hamming") { why = "read clipping with --clipAdapterType CellRanger4"; return false; }
+    if (ad5 != "-") { why = "5' adapter clipping"; return false; }
+    if (ad3 == "polyA") c.ad3.assign(DEF_readSeqLengthMax, 0);   // ClipMate::initialize: an all-A adapter
+    else if (ad3 != "-") { c.ad3.resize(ad3.size()); convertNucleotidesToNumbers(ad3.data(), c.ad3.data(), c.ad3.size()); }
+    c.adMMp = at(i3.adMMp, 0.0);
     return true;
 }
 
@@ -147,10 +161,18 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                 const char *start = m + b[t];   // start of the line that ends at the first newline of this range
                 while (start > m && start[-1] != '\n') start--;
                 const char *e = m + b[t + 1];
+                // sequence lines are under half of a FASTQ's bytes (the quality line is as long): no reallocation; bases through a
+                // table instead of one push_back each (that loop was ~170 core-s for 66 M reads)
+                seqT[t].reserve((b[t + 1] - b[t]) / 2 + 4096);
+                char lut[256];
+                for (int c = 0; c < 256; c++) lut[c] = nucl((unsigned char) c);
                 auto take = [&](const char *ls, const char *le) {
                     uint64 L = le - ls;
                     while (L > 0 && ls[L - 1] == '\r') L--;
-                    for (uint64 k = 0; k < L; k++) seqT[t].push_back(nucl((unsigned char) ls[k]));
+                    const size_t at = seqT[t].size();
+                    seqT[t].resize(at + L);
+                    char *d = seqT[t].data() + at;
+                    for (uint64 k = 0; k < L; k++) d[k] = lut[(unsigned char) ls[k]];
                     lenT[t].push_back(L);
                 };
                 for (const char *q = m + b[t]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) {
@@ -187,13 +209,13 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
 
 } // namespace
 
-void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
+void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptome *tr) {
     const char *e = getenv("SINGLET_ENGINE_GPU");
     if (e == nullptr || e[0] != '1' || cache == nullptr)
         return;
 #ifndef SINGLET_HAVE_ENGINE_GPU
     P.inOut->logMain << "ENGINE_GPU: requested, but this binary was built without CUDA (SINGLET_ENGINE_GPU=OFF): STAR maps every read\n" << flush;
-    (void) G;
+    (void) G; (void) tr;
 #else
     auto skip = [&](const std::string &why) {
         P.inOut->logMain << "ENGINE_GPU: not used (" << why << "): STAR maps every read\n" << flush;
@@ -201,7 +223,6 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
     std::string why;
     if (!singlet_engine_gpu::available(&why)) return skip(why);
     if (P.readNmates != 1) return skip("paired-end alignment");
-    if (!noClipping(P)) return skip("read clipping (the cache key is the clipped sequence)");
     if (P.readFilesCommandString != "" && P.readFilesCommandString != "-") return skip("readFilesCommand");
     m5::Params Q;
     if (!fillParams(P, Q, why)) return skip(why);
@@ -221,6 +242,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
     if (chrStart.size() < chrLength.size() + 1) return skip("chrStart size");
     time_t t0 = time(nullptr);
     singlet_engine_gpu::Input in;
+    if (!fillClip(P, in.clip, why)) return skip(why);
     if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
     time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
@@ -250,20 +272,154 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache) {
             cache = c2;
         };
     };
-    // insert, sharded by hash across threads (SeqCache is thread-safe per shard)
-    {
+    // insert, sharded by hash across threads (SeqCache is thread-safe per shard); keep(i) picks the records
+    auto insertRecords = [&](auto keep) {
         int nt = std::max(1, (int) P.runThreadN);
         std::vector<std::thread> th;
         for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
             for (uint64 i = t; i < nRec; i += nt) {
+                if (!keep(i)) continue;
                 const char *s = out.seq.data() + out.seqOff[i];
                 uint64 L = out.seqOff[i + 1] - out.seqOff[i];
                 cache->insert(SeqCache::hashSeq(s, L), s, L, out.blob.data() + out.blobOff[i], out.blobOff[i + 1] - out.blobOff[i]);
             }
         });
         for (auto &x : th) x.join();
+    };
+    // GPU pileup "on" with hand-off summaries: reads of a mapped sequence replay its summary and never look it up, so only the
+    // unmapped sequences go into the cache (after the hand-off, which tells which they are)
+    const char *gpEnv = getenv("SINGLET_GPU_PILEUP"), *hsEnv = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
+    const bool deferInsert = getenv("SINGLET_ENGINE_GPU_HANDOFF") != nullptr && gpEnv != nullptr && strcmp(gpEnv, "on") == 0
+        && !(hsEnv != nullptr && hsEnv[0] == '0') && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes);
+    if (!deferInsert) {
+        insertRecords([](uint64) { return true; });
+        cache->prefilled = true;
     }
-    cache->prefilled = true;
+    // singlet's GPU pileup (SINGLET_GPU_PILEUP): per read its record, per record the alignments STAR writes for it (core fields)
+    if (const char *hp = getenv("SINGLET_ENGINE_GPU_HANDOFF")) {
+        time_t th0 = time(nullptr);
+        const int nt = std::max(1, (int) P.runThreadN);
+        std::vector<std::vector<uint8>> part(nt);
+        std::vector<std::vector<uint64>> partOff(nt);
+        // "on": per record also the summary STAR's per-read output replays for its reads (ReadAlign::seqCacheHandoffSummary)
+        const char *gm0 = getenv("SINGLET_GPU_PILEUP"), *hs = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
+        const bool sumOn = gm0 != nullptr && strcmp(gm0, "on") == 0 && !(hs != nullptr && hs[0] == '0')
+            && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes);
+        std::vector<std::vector<uint8>> sumPart(nt);
+        std::vector<std::vector<uint64>> sumPartOff(nt);
+        std::vector<std::thread> th;
+        for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
+            Transcriptome *trT = (sumOn && tr != nullptr) ? new Transcriptome(*tr) : nullptr;
+            ReadAlign *ra = new ReadAlign(P, G, trT, t);
+            if (sumOn) ra->chunkOutSJ = new OutSJ(P.limitOutSJoneRead, P, G);   // scratch: one sequence's junctions at a time
+            const uint64 r0 = nRec * t / nt, r1 = nRec * (t + 1) / nt;
+            // ~70 bytes per record with one alignment (pbmc1k_v3: 2.3 GB for 31.8 M records): reserve, so the part grows without copying
+            // GBs at each doubling (untouched capacity costs no memory)
+            part[t].reserve((size_t) (r1 - r0) * 80);
+            partOff[t].reserve((size_t) (r1 - r0));
+            if (sumOn) { sumPartOff[t].reserve((size_t) (r1 - r0)); sumPart[t].reserve((size_t) (r1 - r0) * 40); }   // 1.06 GB for 31.8 M records
+            for (uint64 r = r0; r < r1; r++) {
+                partOff[t].push_back(part[t].size());
+                ra->seqCacheAlignRecords(out.seq.data() + out.seqOff[r], out.seqOff[r + 1] - out.seqOff[r], out.blob.data() + out.blobOff[r], part[t]);
+                if (sumOn) {
+                    sumPartOff[t].push_back(sumPart[t].size());
+                    ra->seqCacheHandoffSummary(sumPart[t]);
+                }
+            }
+        });
+        for (auto &x : th) x.join();
+        if (g_handoffLeanAln.load() > 0)   // SINGLET_HANDOFF_LEAN=verify
+            P.inOut->logMain << "ENGINE_GPU: lean alignment fields: " << g_handoffLeanAln.load() << " alignments, " << g_handoffLeanBad.load()
+                             << " differ from alignBAM's" << "\n";
+        static std::vector<uint8> recAln;   // per record its alignment count (the first byte of each record)
+        recAln.resize(nRec);
+        for (int t = 0, r = 0; t < nt; t++)
+            for (uint64 o : partOff[t]) recAln[r++] = part[t][o];
+        FILE *f = fopen(hp, "wb");
+        bool okw = f != nullptr;
+        if (okw) {
+            const char magic[8] = {'S', 'G', 'H', 'O', 'F', 'F', '0', '2'};
+            uint64 nReads = out.readRecord.size();
+            // STAR's barcode layout (SoloReadBarcode::getCBandUMI, CB_UMI_Simple): CR = bSeq[cbS-1, +cbL), UR = bSeq[umiS-1, +umiL), the
+            // barcode read padded with N to cbumiL when shorter
+            uint32 lay[6] = {(uint32) P.pSolo.cbS, (uint32) P.pSolo.cbL, (uint32) P.pSolo.umiS, (uint32) P.pSolo.umiL, (uint32) P.pSolo.cbumiL,
+                             (uint32) (P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple ? 1 : 0)};
+            okw = fwrite(magic, 1, 8, f) == 8 && fwrite(&nReads, 8, 1, f) == 1 && fwrite(&nRec, 8, 1, f) == 1 && fwrite(lay, 4, 6, f) == 6
+                && fwrite(out.readRecord.data(), 4, nReads, f) == nReads;
+            uint64 base = 0;
+            for (int t = 0; t < nt && okw; t++) {
+                for (uint64 &o : partOff[t]) o += base;
+                okw = partOff[t].empty() || fwrite(partOff[t].data(), 8, partOff[t].size(), f) == partOff[t].size();
+                base += part[t].size();
+            }
+            okw = okw && fwrite(&base, 8, 1, f) == 1;
+            for (int t = 0; t < nt && okw; t++) okw = part[t].empty() || fwrite(part[t].data(), 1, part[t].size(), f) == part[t].size();
+            okw = (fclose(f) == 0) && okw;
+            P.inOut->logMain << "ENGINE_GPU: hand-off for the GPU pileup: " << nReads << " reads, " << nRec << " records, " << base
+                             << " bytes in " << (time(nullptr) - th0) << " s -> " << hp << "\n";
+        }
+        if (!okw) { P.inOut->logMain << "ENGINE_GPU: hand-off not written (" << hp << ")\n"; unlink(hp); }
+        // "on": STAR writes no BAM records for reads with a record (the pileup has their alignments)
+        const char *gm = getenv("SINGLET_GPU_PILEUP");
+        if (okw && gm != nullptr && strcmp(gm, "on") == 0) {
+            static std::vector<uint32> keep;
+            keep.swap(out.readRecord);
+            g_handoffReadRecord = keep.data(); g_handoffNReads = keep.size(); g_handoffRecAln = recAln.data();
+            if (!out.clip5.empty()) {   // the GPU's clip lengths replace STAR's CPU clip for these reads (readLoad)
+                static std::vector<uint16> c5, c3;
+                c5.swap(out.clip5); c3.swap(out.clip3);
+                g_handoffClip5 = c5.data(); g_handoffClip3 = c3.data();
+                const char *cc = getenv("SINGLET_HANDOFF_CLIPCHECK");
+                g_handoffClipCheck = cc != nullptr && cc[0] == '1';
+            }
+            P.inOut->logMain << "ENGINE_GPU: no BAM records for the reads of the " << nRec << " hand-off records\n";
+            if (sumOn) {   // the summaries, concatenated in record order (threads hold contiguous record ranges)
+                static std::vector<uint8> sumAll;
+                static std::vector<uint64> sumOff;
+                uint64 tot = 0;
+                for (int t = 0; t < nt; t++) tot += sumPart[t].size();
+                sumAll.resize(std::max<uint64>(tot, 1)); sumOff.resize(nRec + 1);
+                uint64 base = 0, r = 0;
+                for (int t = 0; t < nt; t++) {
+                    if (!sumPart[t].empty()) memcpy(sumAll.data() + base, sumPart[t].data(), sumPart[t].size());
+                    for (uint64 o : sumPartOff[t]) sumOff[r++] = base + o;
+                    base += sumPart[t].size();
+                    std::vector<uint8>().swap(sumPart[t]);
+                }
+                sumOff[nRec] = base;
+                g_handoffSum = sumAll.data(); g_handoffSumOff = sumOff.data();
+                P.inOut->logMain << "ENGINE_GPU: hand-off summaries for STAR's per-read output: " << base << " bytes\n";
+            }
+            // and the per-read entries (barcode, UMI, quality counters) in a shared mapping, filled by the mapping threads
+            const char *mq = getenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ");
+            if (mq != nullptr && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21) {
+                const std::string rp = std::string(hp) + ".reads";
+                const size_t bytes = std::max<size_t>(1, g_handoffNReads * sizeof(HandoffReadEntry));
+                int fd = open(rp.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
+                void *m = MAP_FAILED;
+                if (fd >= 0 && ftruncate(fd, (off_t) bytes) == 0) m = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+                if (fd >= 0) close(fd);
+                if (m != MAP_FAILED) {   // the file is zero-filled: unwritten entries have flags 0
+                    g_handoffReads = (HandoffReadEntry *) m; g_handoffMinQ = atoi(mq);
+                    P.inOut->logMain << "ENGINE_GPU: per-read hand-off entries -> " << rp << "\n";
+                } else {
+                    unlink(rp.c_str());
+                }
+            }
+        }
+    }
+    if (deferInsert) {   // summaries installed: the unmapped sequences only; otherwise (hand-off not written) every record
+        uint64 nIns = 0;
+        if (g_handoffSum != nullptr && g_handoffRecAln != nullptr) {
+            insertRecords([&](uint64 i) { return g_handoffRecAln[i] == 0; });
+            for (uint64 i = 0; i < nRec; i++) nIns += g_handoffRecAln[i] == 0;
+        } else {
+            insertRecords([](uint64) { return true; });
+            nIns = nRec;
+        }
+        cache->prefilled = true;
+        P.inOut->logMain << "ENGINE_GPU: " << nIns << " of " << nRec << " sequence results in the cache (the others replay hand-off summaries)\n";
+    }
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
 #endif

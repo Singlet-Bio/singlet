@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include <array>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -17,9 +18,20 @@ namespace m5 { struct Params; struct GenomeView; }
 
 namespace singlet_engine_gpu {
 
+// STAR's read clipping for mate 1 (ClipMate::clip, --clipAdapterType Hamming), applied to every read on the GPU before dedup, so the
+// distinct sequences and the records are the clipped sequences STAR's cache is keyed by. 5': N bases, then NafterAd (STAR has no 5'
+// adapter search for Hamming). 3': N bases, then the adapter (localSearch with adMMp; "polyA" is an all-A adapter), then NafterAd.
+struct Clip {
+    bool on = false;
+    uint32_t n5 = 0, after5 = 0, n3 = 0, after3 = 0;
+    std::vector<char> ad3;           // 3' adapter, numeric; empty: none
+    double adMMp = 0;
+};
+
 struct Input {
     std::vector<char> seq;           // concatenated sequences, STAR's numeric code (A0 C1 G2 T3, other 4)
     std::vector<uint64_t> off{0};    // seq[off[i] .. off[i+1]) is sequence i
+    Clip clip;
 };
 
 struct Output {
@@ -28,6 +40,8 @@ struct Output {
     std::vector<uint64_t> seqOff{0};
     std::vector<uint8_t> blob;
     std::vector<uint64_t> blobOff{0};
+    std::vector<uint16_t> clip5, clip3;   // per input read when clipping is on: bases clipped from its 5' and 3' ends
+    std::vector<uint32_t> readRecord;   // per input read: index of its record above, or 0xFFFFFFFF (sequence with N, or not mapped)
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
     double secUpload = 0, secDedup = 0, secMapGpu = 0, secHostLane = 0;
     std::string log;
@@ -84,5 +98,47 @@ struct NonhostResult {
 // loads the three indexes and the Bloom filter into HBM (loadThreads reader threads), classifies `reads` and frees the device.
 // false on any failure (the caller then runs the CPU screen).
 bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out);
+
+// ---- pileup (pileup_gpu.cu; kernels in src/engine_gpu/gpu_pileup/, from PR #61 bench/gpu/pileup): the exon / intron / ambiguous
+// matrices, junctions, SNP AD/DP (order-free-rules R1 consensus), chrM allele counts and indels, from per-signature alignment records.
+// Record layout: src/engine_gpu/gpu_pileup/pileup/pileup_rec.h (AlnRec / SigRec / ReadRec, 16 bytes each).
+struct PileupIv { int32_t s, e; uint32_t idx; };                        // = singlet::Interval
+struct PileupSnpRow { int32_t pos; uint32_t idx; char ref, alt; uint16_t pad; };
+struct PileupTriplet { uint32_t cell, row, val; };                      // sorted by (cell, row)
+struct PileupInput {
+    // annotation: the engine's own interval trees as sorted arrays (the GPU replays the CPU's pre-order traversal), gene maps, SNP table
+    std::vector<std::vector<PileupIv>> exonTrees, intronTrees;
+    std::vector<uint32_t> exonToGene, intronToGene;
+    std::vector<char> geneStrand;
+    std::vector<std::vector<PileupSnpRow>> snps;
+    int stranded = 1, reverseStrand = 0, minMapq = 20, minBaseq = 10, countIntrons = 1, countSj = 1, countMt = 0, umiDedup = 1, directional = 1,
+        umiLen = 12, chrmTid = -1, hasGeneModel = 1, snpSkipN = 0;
+    uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
+    // records, raw pileup_rec.h structs
+    std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
+    std::vector<uint32_t> ops;
+    std::vector<uint8_t> seq;
+};
+struct PileupOutput {
+    std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
+    std::vector<std::array<uint32_t, 3>> sjtab;      // junction id -> (tid, donor, acceptor), ids in (tid, donor, acceptor) order
+    std::vector<std::array<uint32_t, 4>> indels;     // (cell, pos, len, is_ins)
+    uint64_t snpMolecules = 0, snpAmbiguous = 0, snpOther = 0;
+    // the engine's PileupStats counters these outputs replace: molecule labels (DirectionalUmiStore::MoleculeStats), SNP overlaps
+    // passing the quality gate (snp_hits), distinct (cell, junction, UMI) (sj_hits), chrM bases counted (mt_pileup_bases)
+    uint64_t molSpliced = 0, molUnspliced = 0, molAmbiguous = 0, molLegacyDouble = 0, snpHits = 0, sjHits = 0, mtBases = 0;
+    // per cell (barcode column): reads recorded in the molecule store and molecules after directional collapse
+    // (DirectionalUmiStore::per_cell_molecule_stats: the inputs of saturation_metrics.tsv and cell_qc_metrics.tsv)
+    std::vector<uint32_t> cellReads, cellMolecules;
+    // count_read's counters over the gene tuples, and per alignment the classify_read gene and the serial loop's per-alignment
+    // flags (1 strand vote sense, 2 antisense, 4 wrong_strand, 8 cross_gene_intron, 16 multigene)
+    uint64_t hitsExon = 0, hitsIntron = 0, umiRecorded = 0;
+    std::vector<uint32_t> alnGene, alnExonGene;   // alnExonGene: the engine's determine_exon_gene per alignment
+    std::vector<uint8_t> alnStat;
+    double msGpu = 0, msTotal = 0, peakGB = 0;
+    std::string log;
+};
+// Runs the pileup on `device`. NOTE: the kernels' CUDA error checks still exit the process (research code); callers isolate it.
+bool pileupRun(const PileupInput& in, int device, PileupOutput& out);
 
 } // namespace singlet_engine_gpu

@@ -95,6 +95,10 @@
 #include "singlet/fq/run_screen.h"
 #include "singlet/pileup/run_provenance.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
+#ifdef SINGLET_HAVE_ENGINE_GPU
+// STAR's per-read hand-off hook (src/star/SeqCache.h; STAR's uint32 / uint64 are unsigned int / unsigned long long)
+extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsigned long long);
+#endif
 #include "singlet/version.h"        // singlet::kVersion
 
 // ── Timing helper ──
@@ -4287,6 +4291,8 @@ int main(int argc, char* argv[]) {
         mkdir_p(decode_dir);
         std::string r1_tmp = decode_dir + "/R1.fastq";
         std::string r2_tmp = decode_dir + "/R2.fastq";
+        setenv("SINGLET_DECODE_R1", r1_tmp.c_str(), 1);   // W11 GPU pileup "on": barcodes and UMIs of hand-off reads
+        setenv("SINGLET_DECODE_R2", r2_tmp.c_str(), 1);
 
         if (!use_fifo_decode) {
             // ── File mode: decode all blocks to FASTQ files on /dev/shm ──
@@ -5185,6 +5191,20 @@ int main(int argc, char* argv[]) {
     if (config.cb_from_cr)
         std::cerr << "[singlet] stream CB: " << (config.cb_corrector ? "CR corrected by STAR's 1MM_multi_Nbase_pseudocounts rule (R11)"
                                                                      : "CR exact (no pass-1 histogram)") << "\n";
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    // W11 GPU pileup on the stream path: the GPU prefill hands the per-sequence alignments to the pileup (SINGLET_ENGINE_GPU_HANDOFF)
+    if (stream_unsorted == 1 && getenv("SINGLET_GPU_PILEUP") && getenv("SINGLET_ENGINE_GPU") && !getenv("SINGLET_ENGINE_GPU_HANDOFF")
+        && config.out_chrm_bam.empty() && config.guide_ref_path.empty()
+        && !(getenv("SINGLET_GPU_HANDOFF") && std::string(getenv("SINGLET_GPU_HANDOFF")) == "0")) {
+        static std::string handoff_path;
+        handoff_path = out_prefix + "/.gpu_handoff.bin";
+        setenv("SINGLET_ENGINE_GPU_HANDOFF", handoff_path.c_str(), 1);
+        // "on": STAR's mapping threads count each hand-off read's bases below the pileup's base-quality threshold
+        setenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ", std::to_string(config.min_baseq).c_str(), 1);
+        // a clipped read's rRNA verdict on the whole read, computed by STAR's mapping threads (the forked aligner inherits it)
+        g_handoffReadHook = &singlet::PileupEngine::handoff_read_hook;
+    }
+#endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
     // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
     const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
