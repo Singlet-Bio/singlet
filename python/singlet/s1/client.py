@@ -13,7 +13,10 @@ What is fetched.  A sample is one immutable object ``s1/s/<GSM>/<d>.s1``.  The m
 ``load`` issues HTTP Range requests for the members it needs (``cells``, ``exon_counts.1pz``, ``intron_counts.1pz`` by default; with
 ``modalities=`` only the members of those modalities, see :data:`MODALITIES` and docs/format-s1.md section 11), coalesced into one
 request per sample when they are adjacent, and never reads the member table.  Large samples switch to a two-phase plan
-(cells table first, then only the chunk runs that cover the wanted cells).  Every ranged response is checked (HTTP 206,
+(cells table first, then only the chunk runs that cover the wanted cells).  Independent requests are sent together: ``io_threads``
+(``"auto"``: 8 over HTTP, 1 for a local directory; 1 sends one request at a time) is how many one read keeps in flight, shared by
+its samples (read ``io_threads`` at a time over HTTP unless ``concurrency`` says otherwise) and their chunk runs; see
+:mod:`singlet.s1.transport` for the per-process cap.  Every ranged response is checked (HTTP 206,
 ``Content-Range`` start/end/total against the manifest size), a pz2 header must carry the digest the manifest lists, and with
 ``verify=True`` the canonical matrix digest is recomputed after decoding.
 
@@ -452,9 +455,9 @@ class _Source:
         """Bytes-like for every (off, len) range; near ranges share one request, separate requests run concurrently."""
         res: List[Any] = [b""] * len(ranges)
         co = _coalesce(ranges, gap)
-        if parallel and len(co) > 1 and self._executor() is not None:
-            futs = [self._executor().submit(self.read, a, b - a) for a, b, _ in co]
-            bufs = [f.result() for f in futs]
+        io = self.io
+        if parallel and len(co) > 1 and io is not None and io.n > 1:
+            bufs = io.map(lambda r: self._get(r[0], r[1] - r[0]), co)
         else:
             bufs = [self.read(a, b - a, parallel=parallel and len(co) == 1) for a, b, _ in co]
         for (a, b, ix), buf in zip(co, bufs):
@@ -464,8 +467,10 @@ class _Source:
                 res[i] = mv[o - a : o - a + ln]
         return res
 
-    def _executor(self) -> Optional[ThreadPoolExecutor]:
-        return None
+    io: Optional[T.IOBudget] = None  # remote sources: the read's request budget
+
+    def _get(self, off: int, length: int):  # pragma: no cover - remote sources only
+        raise NotImplementedError
 
     def close(self) -> None:
         pass
@@ -509,38 +514,33 @@ class _RemoteSource(_Source):
         transport: Transport,
         key: str,
         size: int,
-        part_pool: Optional[ThreadPoolExecutor],
+        io: Optional[T.IOBudget] = None,
         part_bytes: int = PART_BYTES,
     ):
         self.transport, self.key, self.size = transport, key, size
-        self._pool = part_pool
+        self.io = io or T.IOBudget(1)
         self.part_bytes = part_bytes
 
-    def _executor(self) -> Optional[ThreadPoolExecutor]:
-        return self._pool
+    def _get(self, off: int, length: int):
+        """One ranged request (a leaf: the caller runs it inside the budget)."""
+        return self.transport.get(self.key, (off, off + length - 1), expect_total=self.size).body
 
     def read(self, off, length, *, parallel=False):
         if length <= 0:
             return b""
         if off < 0 or off + length > self.size:
             raise S1Error(f"{self.key}: range {off}+{length} outside the {self.size}-byte object")
-        if not parallel or self._pool is None or length < 2 * self.part_bytes:
-            return self.transport.get(
-                self.key, (off, off + length - 1), expect_total=self.size
-            ).body
+        if not parallel or self.io.n == 1 or length < 2 * self.part_bytes:
+            return self.io.call(self._get, off, length)
         n_parts = -(-length // self.part_bytes)
         step = -(-length // n_parts)
         parts = [
             (off + k * step, min(off + length, off + (k + 1) * step) - 1) for k in range(n_parts)
         ]
-        futs = [
-            self._pool.submit(self.transport.get, self.key, p, expect_total=self.size)
-            for p in parts
-        ]
+        bodies = self.io.map(lambda p: self._get(p[0], p[1] - p[0] + 1), parts)
         out = bytearray(length)
         pos = 0
-        for p, f in zip(parts, futs):
-            body = f.result().body
+        for body in bodies:
             out[pos : pos + len(body)] = body
             pos += len(body)
         return out
@@ -601,12 +601,14 @@ def open_study(
     base: Optional[str] = None,
     force: bool = False,
     transport: Optional[Transport] = None,
-    concurrency: int = 4,
+    concurrency: Optional[int] = None,
+    io_threads: Union[int, str] = "auto",
     verify: Optional[bool] = None,
     _prefix: int = 0,
 ) -> "Study":
     """Open the per-sample study ``gse``: one GET of ``s1/m/<GSE>.json`` (conditional on the cached ETag), nothing else.
 
+    ``io_threads`` and ``concurrency`` are the defaults of the study's reads (:meth:`Study.to_anndata`, :meth:`Study.cells`).
     Raises :class:`StudyNotFound` when the study has no .s1 manifest."""
     from singlet._integrity import normalize_gse
 
@@ -633,6 +635,7 @@ def open_study(
                     force=force,
                     transport=transport,
                     concurrency=concurrency,
+                    io_threads=io_threads,
                     verify=verify,
                     _prefix=_prefix + 1,
                 )
@@ -655,6 +658,7 @@ def open_study(
                     force=force,
                     transport=transport,
                     concurrency=concurrency,
+                    io_threads=io_threads,
                     verify=verify,
                     _prefix=_prefix + 1,
                 )
@@ -693,7 +697,7 @@ def open_study(
                     pass
                 source = {"origin": "network", "path": str(mp), "etag": r.etag}
     _validate_manifest(doc, gse)
-    st = Study(doc, t, source, concurrency=concurrency, verify=verify)
+    st = Study(doc, t, source, concurrency=concurrency, io_threads=io_threads, verify=verify)
     st.manifest_key = key
     with _STUDY_LOCK:
         _STUDY_CACHE[ck] = (now, st)
@@ -709,7 +713,8 @@ class Study:
         transport: Transport,
         source: dict,
         *,
-        concurrency: int = 4,
+        concurrency: Optional[int] = None,
+        io_threads: Union[int, str] = "auto",
         verify: Optional[bool] = None,
     ):
         self.doc = doc
@@ -720,7 +725,9 @@ class Study:
         self.rev: str = doc.get("rev", "")
         self.reference_build: str = doc.get("reference_build", "")
         self.packs: dict = doc.get("packs") or {}
-        self.concurrency = max(1, int(concurrency))
+        # default samples per read (None: io_threads over HTTP, 4 from local files) and range requests in flight per read
+        self.concurrency: Optional[int] = None if concurrency is None else max(1, int(concurrency))
+        self.io_threads: int = T.io_threads(io_threads, transport)
         self.verify = _env_flag("SINGLET_S1_VERIFY") if verify is None else bool(verify)
         self.samples: Dict[str, SampleRef] = {}
         for sd in doc["samples"]:
@@ -729,7 +736,6 @@ class Study:
         self.gsm_ids: List[str] = list(self.samples)
         self.study_files: dict = doc.get("study_files") or {}
         self._resolver = _resolver_for(transport)
-        self._part_pool: Optional[ThreadPoolExecutor] = None
         self._lock = threading.Lock()
         self._maps: Dict[tuple, np.ndarray] = {}
         self._study_meta: Optional[dict] = None
@@ -783,13 +789,18 @@ class Study:
         return f"Study({self.gse!r}, {len(self.samples)} samples, rev={self.rev[:8]!r}, base={self.transport.base!r})"
 
     # ------------------------------------------------------------------ objects
-    def _pool(self) -> ThreadPoolExecutor:
-        with self._lock:
-            if self._part_pool is None:
-                self._part_pool = ThreadPoolExecutor(
-                    self.concurrency, thread_name_prefix="singlet-part"
-                )
-            return self._part_pool
+    def io_budget(self, io_threads: Union[None, int, str, T.IOBudget] = None) -> T.IOBudget:
+        """The request budget of one read: ``io_threads`` (default: the study's), or a budget shared with other reads."""
+        if isinstance(io_threads, T.IOBudget):
+            return io_threads
+        return T.IOBudget(
+            self.io_threads if io_threads is None else T.io_threads(io_threads, self.transport)
+        )
+
+    def sample_threads(self, concurrency: Optional[int], io: T.IOBudget, n: int) -> int:
+        """Samples one read handles at once: ``concurrency``, else the study's, else ``io.n`` over HTTP and 4 locally."""
+        c = concurrency or self.concurrency or (4 if self.transport.is_local() else io.n)
+        return max(1, min(c, n))
 
     def local_object(self, sm: SampleRef) -> Optional[str]:
         """Path of a locally stored copy of the sample object (a downloaded study or a directory mirror), if present."""
@@ -808,11 +819,11 @@ class Study:
             pass
         return None
 
-    def source_for(self, sm: SampleRef) -> _Source:
+    def source_for(self, sm: SampleRef, io: Optional[T.IOBudget] = None) -> _Source:
         p = self.local_object(sm)
         if p is not None:
             return _MmapSource(p, sm.bytes)
-        return _RemoteSource(self.transport, sm.key, sm.bytes, self._pool())
+        return _RemoteSource(self.transport, sm.key, sm.bytes, io or self.io_budget())
 
     # ------------------------------------------------------------------ gene maps
     def _gene_map(
@@ -895,9 +906,7 @@ class Study:
         return {"requests": reqs, "bytes": total, "samples": per}
 
     def close(self) -> None:
-        if self._part_pool is not None:
-            self._part_pool.shutdown(wait=False)
-            self._part_pool = None
+        """Nothing to release: requests run on the process-wide pool of :mod:`singlet.s1.transport`."""
 
 
 # ================================================================================================================= cells table
@@ -1085,6 +1094,7 @@ def _read_sample(
     whole_max: int = WHOLE_MAX_BYTES,
     verify: bool = False,
     src: Optional[_Source] = None,
+    io: Optional[T.IOBudget] = None,
 ) -> _SampleData:
     """Fetch and decode what one sample contributes.
 
@@ -1093,7 +1103,7 @@ def _read_sample(
     byte ranges (or, for large samples, their chunk runs that cover the selected cells) are read. A sample that has none of
     them is skipped; a requested member it lacks is simply absent from the result."""
     own_src = src is None
-    src = src or study.source_for(sm)
+    src = src or study.source_for(sm, io)
     if members is None:
         members = ([EXON] if want_exon else []) + ([INTRON] if want_intron else [])
     wanted = list(dict.fromkeys(members))
@@ -1161,15 +1171,21 @@ def _read_sample(
 
         parts: Dict[str, Optional[_Part]] = {EXON: None, INTRON: None}
         features: Dict[str, Tuple[_Part, List[str]]] = {}
-        opened = []
-        for name, mref in refs.items():
-            if mref.len == 0:
-                continue
-            if whole:
-                mem = _open_member(src, mref, whole=bufs[name])
+        live = [(n, r) for n, r in refs.items() if r.len]
+        if whole:
+            opened = [(r, n, _open_member(src, r, whole=bufs[n])) for n, r in live]
+        else:
+            # a prefix that stops short of a member's chunk index is topped up while opening: open the members together
+            def op(nr):
+                mem = _open_member(src, nr[1], first=prefixes[nr[0]])
+                mem.chunk_index()
+                return nr[1], nr[0], mem
+
+            if len(live) > 1 and src.io is not None and src.io.n > 1:
+                with ThreadPoolExecutor(len(live), thread_name_prefix="singlet-open") as ex:
+                    opened = list(ex.map(op, live))
             else:
-                mem = _open_member(src, mref, first=prefixes[name])
-            opened.append((mref, name, mem))
+                opened = [op(nr) for nr in live]
         # phase 2 (partial plans): the chunk runs that cover the wanted cells, all matrices at once
         run_bufs: Dict[Tuple[str, int], Any] = {}
         plans: Dict[str, Any] = {}
@@ -1625,6 +1641,7 @@ def _study_to_anndata(
     cell_order: str = "legacy",
     concurrency: Optional[int] = None,
     threads: Optional[int] = None,
+    io_threads: Union[None, int, str, T.IOBudget] = None,
     verify: Optional[bool] = None,
     whole_max: int = WHOLE_MAX_BYTES,
     verbose: bool = False,
@@ -1649,7 +1666,8 @@ def _study_to_anndata(
         _check_modalities(study, gsms, mods)
     members = _members_for(mods)
     kmap, n_genes, var_ids, var_names = _gene_axis(study, genes, mods)
-    conc = max(1, min(concurrency or study.concurrency, len(gsms)))
+    io = study.io_budget(io_threads)
+    conc = study.sample_threads(concurrency, io, len(gsms))
     ncpu = os.cpu_count() or 4
     dec_threads = threads if threads is not None else max(1, ncpu // conc)
     do_verify = study.verify if verify is None else verify
@@ -1665,9 +1683,10 @@ def _study_to_anndata(
             n_genes=n_genes,
             threads=dec_threads,
             members=members,
-            parallel_parts=(conc == 1),
+            parallel_parts=True,
             whole_max=whole_max,
             verify=do_verify,
+            io=io,
         )
 
     t0 = time.time()
@@ -1826,6 +1845,7 @@ def _study_cells(
     max_cells: Optional[int] = None,
     concurrency: Optional[int] = None,
     threads: Optional[int] = None,
+    io_threads: Union[None, int, str, T.IOBudget] = None,
     verify: Optional[bool] = None,
     whole_max: int = WHOLE_MAX_BYTES,
     called_only: bool = False,
@@ -1857,7 +1877,8 @@ def _study_cells(
         _check_modalities(study, gsms, mods)
     members = _members_for(mods)
     kmap, n_genes, var_ids, var_names = _gene_axis(study, genes, mods)
-    conc = max(1, min(concurrency or study.concurrency, len(gsms)))
+    io = study.io_budget(io_threads)
+    conc = study.sample_threads(concurrency, io, len(gsms))
     dec_threads = threads if threads is not None else max(1, (os.cpu_count() or 4) // conc)
     do_verify = study.verify if verify is None else verify
 
@@ -1883,9 +1904,10 @@ def _study_cells(
             n_genes=n_genes,
             threads=dec_threads,
             members=members,
-            parallel_parts=(conc == 1),
+            parallel_parts=True,
             whole_max=whole_max,
             verify=do_verify,
+            io=io,
         )
 
     if conc == 1:
@@ -2152,6 +2174,7 @@ def download_study(
     st = open_study(gse, base=base, force=force)
     root = (Path(output_dir) if output_dir else cache_root().parent) / "s1"
     gsms = list(samples) if samples is not None else st.gsm_ids
+    io = st.io_budget()  # one request budget for the whole download
 
     def one(g: str) -> None:
         sm = st.samples[g]
@@ -2159,7 +2182,7 @@ def download_study(
         if dest.exists() and dest.stat().st_size == sm.bytes and not force:
             return
         dest.parent.mkdir(parents=True, exist_ok=True)
-        src = _RemoteSource(st.transport, sm.key, sm.bytes, st._pool())
+        src = _RemoteSource(st.transport, sm.key, sm.bytes, io)
         tmp = dest.with_suffix(dest.suffix + f".part{os.getpid()}")
         h = hashlib.sha256()
         with open(tmp, "wb") as fh:

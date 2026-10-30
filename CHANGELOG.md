@@ -10,6 +10,22 @@ All notable changes to the singlet project.
     eight.
   - `S1Cells(prefetch=1)` reads the next batch ahead on a background thread.
   - `S2Reader`'s request and byte counters are safe to update from several threads.
+- **The atlas readers send their range requests together** (`singlet.load`, `Study.to_anndata` / `Study.cells`,
+  `atlas.gather(via="direct")`, `singlet.torch.AtlasCells`, `download_study`). Every member, chunk run and sample object is
+  addressable on its own, and over HTTP each request mostly waits a round trip (20-100 ms to the first byte on R2 or S3).
+  - New option `io_threads`: requests one read keeps in flight. `"auto"` (default) is 8 over HTTP and 1 for a local directory;
+    1 sends them one at a time. It is separate from the decode `threads`.
+  - One budget covers a read's samples and their chunk runs. Over HTTP a study read handles `io_threads` samples at once
+    (`concurrency` still overrides). `AtlasCells` shares one budget across its `prefetch` readers.
+  - In the two-phase plan, members whose prefix stops short of the chunk index are now topped up together, not one after
+    another.
+  - At most `$SINGLET_MAX_CONNECTIONS` (default 16) HTTP requests are in flight per process. They run on one shared pool, so a
+    `Study` no longer keeps a pool of its own threads.
+  - Measured from Clipper against data.singlet.bio (GSE281106): 1,024 cells from 64 samples (128 range requests) took 11.5 s at
+    `io_threads=1`, 3.0 s at 8 and 3.7 s before this change.
+- **The atlas HTTP transport accepts a range answered with status 200** when the response carries a `Content-Range` that names
+  exactly the requested bytes, as `S1Stream` does. The size and ETag checks still apply. A server that ignores `Range`
+  and sends the whole object is still refused.
 - **Cell lines carry their line as cell type.** The labeller was trained on primary tissue, so on a cultured cell line it gave
   the nearest primary type, often wrong (K-562 cells came out as "transit amplifying cell"). With sample facts on (the
   default), every cell of a cell-line sample now has `cell_type` / `cell_type_deepest` = the line's name and

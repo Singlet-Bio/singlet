@@ -10,7 +10,9 @@ its cells table, and the cells are mapped onto one fixed gene axis.
 Splits are held out by study: a study's split is a hash of ``(split_seed, GSE)``, so it is the same on every machine, worker and
 epoch, and no study contributes cells to two splits. Shuffling works at two levels: the sample order is a fresh permutation each
 epoch (``set_epoch``), and every batch draws cells from ``mix_samples`` samples held open at once (each in a random cell order),
-so a batch mixes studies instead of being one sample. Samples are read ``prefetch`` at a time in background threads.
+so a batch mixes studies instead of being one sample. Samples are read ``prefetch`` at a time in background threads, and their
+range requests are sent together, at most ``io_threads`` in flight for the dataset (``"auto"``: 8 over HTTP, 1 from a local
+directory).
 
 The labels in each batch are the Research Alpha per-cell labels (Cell Ontology path, chromosomal sex, genetic ancestry):
 predictions of the Singlet labeller, whose own per-study accuracy is documented in :mod:`singlet.s1.labels`. They are atlas
@@ -422,6 +424,10 @@ class AtlasCells(_Base):
         Samples held open at once; each batch draws its cells from all of them in proportion to what each has left.
     prefetch : int
         Samples read ahead in background threads.
+    io_threads : int or ``"auto"``
+        Range requests in flight at once, shared by the ``prefetch`` readers (each sample's cells table, matrix prefixes and chunk
+        runs are independent requests): ``"auto"`` is 8 over HTTP and 1 from a local directory; 1 sends them one at a time. A
+        process never has more than ``$SINGLET_MAX_CONNECTIONS`` (default 16) in flight; each DataLoader worker is a process.
     max_cells_per_sample : int, optional
         Keep at most this many matching cells of a sample (a seeded random subset), to bound the weight of very large samples.
     transform : ``"log1p"`` / None / callable
@@ -450,6 +456,7 @@ class AtlasCells(_Base):
         batch_size: int = 256,
         mix_samples: int = 16,
         prefetch: int = 4,
+        io_threads: Union[int, str] = "auto",
         max_cells_per_sample: Optional[int] = None,
         transform: Union[None, str, Callable] = "log1p",
         output: str = "dense",
@@ -475,6 +482,9 @@ class AtlasCells(_Base):
             max(1, int(mix_samples)),
             max(1, int(prefetch)),
         )
+        if io_threads != "auto" and int(io_threads) < 1:
+            raise ValueError("io_threads must be 'auto' or at least 1")
+        self.io_threads = io_threads
         self.max_cells_per_sample = max_cells_per_sample
         self.transform, self.output, self.levels = transform, output, tuple(int(k) for k in levels)
         self.seed, self.drop_last, self.base = int(seed), bool(drop_last), base
@@ -603,7 +613,7 @@ class AtlasCells(_Base):
         mine = order[shard :: world * nw]
         return [(self.samples["gse"].iloc[i], self.samples["gsm"].iloc[i]) for i in mine]
 
-    def _load(self, gse: str, gsm: str, threads: int) -> Optional[_Loaded]:
+    def _load(self, gse: str, gsm: str, threads: int, budget=None) -> Optional[_Loaded]:
         st = self.study(gse)
         axis = self.gene_axis
         where = self.where
@@ -620,7 +630,14 @@ class AtlasCells(_Base):
                 m[idx[keep]] = True
             return m
 
-        a = st.cells(sel, samples=[gsm], modalities="counts", columns=list(_OBS), threads=threads)
+        a = st.cells(
+            sel,
+            samples=[gsm],
+            modalities="counts",
+            columns=list(_OBS),
+            threads=threads,
+            io_threads=budget if budget is not None else self.io_threads,
+        )
         if a.n_obs == 0:
             return None
         X = remap_columns(a.X, axis.map_for(st), len(axis))
@@ -717,6 +734,11 @@ class AtlasCells(_Base):
         mine = self._my_samples()
         _ = self.gene_axis  # resolve once, before the reader threads
         threads = max(1, (os.cpu_count() or 4) // self.prefetch)
+        from singlet.s1 import transport as T
+        from singlet.s1.client import _transport_for
+
+        # one request budget for all the readers of this iterator
+        budget = T.IOBudget(T.io_threads(self.io_threads, _transport_for(self.base)))
         q: "queue.Queue" = queue.Queue(maxsize=self.prefetch)
         stop = threading.Event()
         DONE = object()
@@ -726,7 +748,7 @@ class AtlasCells(_Base):
                 if stop.is_set():
                     return
                 try:
-                    q.put(self._load(gse, gsm, threads))
+                    q.put(self._load(gse, gsm, threads, budget))
                 except (
                     Exception
                 ) as e:  # a sample that cannot be read is skipped and counted, not fatal

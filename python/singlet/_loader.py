@@ -487,8 +487,10 @@ def load(
         then subset (with a warning).
     **s1_options
         ``samples`` (restrict a study to some GSMs), ``cell_order`` (``"legacy"``,
-        ``"barcode"`` or ``"column"``), ``concurrency`` (parallel samples and
-        range requests, default 4), ``threads`` (decoder threads), ``verify``
+        ``"barcode"`` or ``"column"``), ``io_threads`` (range requests in
+        flight: ``"auto"`` is 8 over HTTP and 1 for local files; 1 sends them one
+        at a time), ``concurrency`` (samples at once, default ``io_threads`` over
+        HTTP and 4 locally), ``threads`` (decoder threads), ``verify``
         (recompute canonical matrix digests), ``whole_max`` (bytes below which a
         sample's members are fetched whole), ``base`` (data host),
         ``cell_type_level`` (deepest level of ``obs["cell_type"]``, default 2),
@@ -590,6 +592,7 @@ _STORE_OPTIONS = frozenset(
         "samples",
         "cell_order",
         "concurrency",
+        "io_threads",
         "threads",
         "verify",
         "whole_max",
