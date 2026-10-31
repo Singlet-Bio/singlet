@@ -97,6 +97,7 @@ add_pileup_test(test_atac_peaks)
 add_pileup_test(test_protocol_confidence_override)
 
 # ATAC tests
+add_pileup_test(test_stall_watchdog)
 add_pileup_test(test_atac_fragment)
 add_pileup_test(test_atac_peak_caller)
 add_pileup_test(test_atac_metrics)
