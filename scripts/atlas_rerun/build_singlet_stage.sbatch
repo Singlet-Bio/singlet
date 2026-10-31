@@ -36,6 +36,7 @@ for v in $VARIANTS; do
   grep -i "GPU engine" $SCR/c-\$v.log || true
   cmake --build $SCR/b-\$v --target singlet singlet-stage -j 8 > $SCR/b-\$v.log 2>&1 || { grep -m30 -B3 -A8 "error" $SCR/b-\$v.log || tail -40 $SCR/b-\$v.log; exit 1; }
   cp $SCR/b-\$v/src/pipeline/singlet $OUTD/singlet-\$v.new && mv $OUTD/singlet-\$v.new $OUTD/singlet-\$v
+  cp $SCR/b-\$v/singlet-stage $OUTD/singlet-stage-\$v
 done
 EOS
 apptainer exec --nv -B $W -B $SCR $IMG bash $SCR/build.sh
