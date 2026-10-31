@@ -4,6 +4,7 @@
 #include "BAMbinSortUnmapped.h"
 #include "ErrorWarning.h"
 #include "bam_cat.h"
+#include "bam_sort_budget.h"
 
 void bamSortByCoordinate (Parameters &P, ReadAlignChunk **RAchunk, Genome &genome, Solo &solo) {
     if (P.outBAMcoord) {//sort BAM if needed
@@ -26,6 +27,19 @@ void bamSortByCoordinate (Parameters &P, ReadAlignChunk **RAchunk, Genome &genom
             unmappedReadsN += RAchunk[it]->chunkOutBAMcoord->binTotalN[nBins-1];
 
         P.inOut->logMain << "Max memory needed for sorting = "<<maxMem<<endl;
+        if (maxMem>P.limitBAMsortRAM) {//the largest bin is data dependent: raise the limit when the node can hold it (bam_sort_budget.h)
+            const uint64 budget = singlet::star_sort::memory_budget_bytes();
+            const uint64 use = singlet::star_sort::resident_bytes();
+            const uint64 raised = singlet::star_sort::sort_ram_for_bin(maxMem, P.limitBAMsortRAM, budget, use);
+            if (raised > 0) {
+                std::cerr << "[star] BAM sort: largest bin needs " << maxMem << " bytes, limitBAMsortRAM " << P.limitBAMsortRAM
+                          << " -> " << raised << " (memory budget " << budget << ", in use " << use << ")
+";
+                P.inOut->logMain << "WARNING: limitBAMsortRAM raised from " << P.limitBAMsortRAM << " to " << raised << "
+";
+                P.limitBAMsortRAM = raised;
+            }
+        }
         if (maxMem>P.limitBAMsortRAM) {
             ostringstream errOut;
             errOut <<"EXITING because of fatal ERROR: not enough memory for BAM sorting: \n";
