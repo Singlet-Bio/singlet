@@ -119,9 +119,15 @@ time each spends per non-zero beyond writing the output grows as a power of how 
 \sone's size, this trend predicts the decoding rate a code that small could be expected to reach, and so how much of the
 attainable performance \sone{} captures: \sone{} decodes at \nm{trend-s1-pct}\% of that rate (95\% interval
 \nm{trend-s1-lo}--\nm{trend-s1-hi}\%, Fig.~\ref{fig:floor}b). At the floor itself the trend predicts about
-\nm{trend-floor-mnnzs} million non-zeros per second per core, \nm{trend-floor-x} times \sone's rate. By the measure of
-existing codes, a decoder for a bitstream of \sone's size could be expected to run about \nm{trend-s1-x} times faster than
-\sone's does; in size, almost nothing is left.
+\nm{trend-floor-mnnzs} million non-zeros per second per core, \nm{trend-floor-x} times \sone's rate.
+
+Most of this gap is not the entropy decoder but the gene order. \sone{} stores genes sorted by how often they are
+detected, and returning them in the source order, as every other code here does, means sorting each cell's entries after
+decoding. Decoded in its stored order, with one gene permutation for the whole matrix, \sone{} ran \nm{s1order-x} times
+faster on one core (\nm{s1order-x-lo}--\nm{s1order-x-hi} times over \nm{s1order-n} matrices, the same counts in every
+cell), at \nm{trend-native-pct}\% of the rate the trend predicts for its size (Fig.~\ref{fig:floor}b). A reader that
+accepts the stored order, as a training loader can by permuting its gene vocabulary once, therefore gets a code close to
+what the trend of existing codes allows; in size, almost nothing is left.
 
 What matters in practice is the combination: the rate at which a link delivers non-zeros (Eq.~\ref{eq:reff}). Relative to
 the ideal code, it depends on how much bandwidth each decoding core has to keep up with (Fig.~\ref{fig:floor}c). When
@@ -130,7 +136,9 @@ cores are plentiful relative to the link, as when a 32-core machine reads from a
 When few cores serve a fast link, the decoder becomes the limit: above about \nm{frac-cross-gbit}\,Gbit/s per core a larger
 but faster code such as zstd delivers more. Against the best code the trend of (b) allows at each bandwidth, \sone{}
 delivers \nm{frac-s1oftrend-0.01}\% at 0.01\,Gbit/s per core, \nm{frac-s1oftrend-0.25}\% at 0.25 and
-\nm{frac-s1oftrend-1}\% at 1\,Gbit/s. Decoding speed, not size, is where the remaining headroom lies.
+\nm{frac-s1oftrend-1}\% at 1\,Gbit/s. In its stored order \sone{} delivers \nm{frac-native-gain-0.25}\% more at
+0.25\,Gbit/s per core and \nm{frac-native-gain-1}\% more at 1\,Gbit/s. Decoding speed, not size, is where the remaining
+headroom lies.
 
 Writing is the other cost (Fig.~\ref{fig:floor}d). \sone{} wrote a 580,000-cell atlas faster than gzip-compressed AnnData,
 the 10x HDF5 file or TileDB-SOMA, but slower than formats that store raw or lightly compressed arrays, such as Zarr, BPCells and Parquet, and its writer

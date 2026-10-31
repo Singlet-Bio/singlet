@@ -7,8 +7,8 @@ and the cost is paid every time the data cross a network. \sone{} instead descri
 them. Its files are several times smaller than the formats in common use and within a few percent of the best count models
 we fitted, so in size no lossless format can improve on it by more than single-digit percentages; most of what is left in
 UMI data is the random sampling of molecules itself. Among the codes we measured, none was both as small and faster to
-decode, although the trend those codes follow suggests that a code of \sone's size could decode about
-\nm{trend-s1-x} times faster.
+decode. Returning genes in their source order costs \sone{} about a third of its decoding speed; in its stored order it
+decodes close to the rate the trend of those codes predicts for its size.
 
 The practical consequences follow from where data are read. Atlases and model-training pipelines increasingly keep data in
 cloud object storage and read the same cells many times. There, the bits per cell on the wire, the number of round trips
@@ -22,9 +22,10 @@ frequencies, is found outside single-cell biology; on bulk RNA-seq counts and on
 
 \sone{} has costs, and they set where it helps most. Its decoder spends more time per entry than byte- or bit-aligned
 codes, so it runs at the speed of the network only when there are enough cores for the link: on a fast link served by a
-few cores, a larger but faster code delivers more. A faster decoder for a bitstream like \sone's is therefore where
-the remaining headroom lies, not a smaller file; until then, \sone{} trades decoding speed for size, the right trade
-wherever each decoding core serves less than about \nm{frac-cross-gbit}\,Gbit/s of the link. Its writer needs about three times as much memory as AnnData's, which matters for the largest
+few cores, a larger but faster code delivers more. Readers that accept \sone's stored gene order avoid the per-cell
+sort that source order needs, and beyond that, going faster at the same size would take a new kind of decoder rather than
+a smaller file. \sone{} trades decoding speed for size, the right trade wherever each decoding core serves less than about
+\nm{frac-cross-gbit}\,Gbit/s of the link. Its writer needs about three times as much memory as AnnData's, which matters for the largest
 matrices. The format stores whole-number counts only and does not hold the rich cell and gene annotations of an AnnData
 object, so it complements rather than replaces such containers. It has a single implementation, for which the
 specification in the Supplement is meant to make a second possible. And our measurements have limits of their own

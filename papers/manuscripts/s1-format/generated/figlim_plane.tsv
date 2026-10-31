@@ -8,3 +8,4 @@ rans0_gaps	order-0 rANS	entropy	7.5061	79.2119	north west
 zstd3_leb_gaps	zstd-3	entropy	8.19576	200.116	west
 zstd19_leb_gaps	zstd-19	entropy	7.53744	187.075	east
 pz2_avx2	.s1	s1	5.32381	54.0177	north west
+pz2_avx2_native	{}	s1n	5.32381	82.8485	south east

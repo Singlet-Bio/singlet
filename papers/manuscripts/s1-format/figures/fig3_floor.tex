@@ -61,6 +61,8 @@
   table[x=bits, y=mnnzs, meta=label] {\gen{figlim_plane.tsv}};
 \addplot[only marks, lbl, mark=*, mark size=2.6pt, sone, draw=white, line width=0.3pt, discard if not={group}{s1}]
   table[x=bits, y=mnnzs, meta=label] {\gen{figlim_plane.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=2.2pt, sone!55, draw=white, line width=0.3pt, discard if not={group}{s1n}]
+  table[x=bits, y=mnnzs, meta=label] {\gen{figlim_plane.tsv}};
 \end{axis}
 \end{tikzpicture}
 
@@ -76,6 +78,7 @@
   legend style={font=\sffamily\tiny, draw=none, fill=none, at={(1.03,0.5)}, anchor=west, legend columns=1, cells={anchor=west}},
 ]
 \addplot[sone, line width=1.6pt, no marks] table[x=x, y=pz2_avx2] {\gen{figlim_frac.tsv}};
+\addplot[sone!55, line width=1.1pt, no marks] table[x=x, y=pz2_avx2_native] {\gen{figlim_frac.tsv}};
 \addplot[sone, dashed, thick, no marks] table[x=x, y=practical] {\gen{figlim_frac.tsv}};
 \addplot[tens, dashed, thick, no marks] table[x=x, y=trend] {\gen{figlim_frac.tsv}};
 \addplot[dec, thick, no marks] table[x=x, y=zstd19_leb_gaps] {\gen{figlim_frac.tsv}};
@@ -85,7 +88,7 @@
 \addplot[only marks, mark=none, nodes near coords, point meta=explicit symbolic, forget plot,
   every node near coord/.append style={font=\sffamily\tiny, text=gen, rotate=90, anchor=north east, inner sep=1.5pt}]
   table[x=x, y expr=1.0, meta=label] {\gen{figlim_marks.tsv}};
-\legend{\sone, {\sone's size, zstd's speed}, {best code on the trend}, {zstd-19, gap streams}, SIMD bit-packing, raw arrays}
+\legend{\sone, {\sone, stored gene order}, {\sone's size, zstd's speed}, {best code on the trend}, {zstd-19, gap streams}, SIMD bit-packing, raw arrays}
 \end{axis}
 \end{tikzpicture}\hfill
 % ---------------- (d) the cost of writing ----------------
@@ -119,9 +122,11 @@ count model; yellow: the rate at which a core only writes the decoded arrays, wh
 code lies near the ideal corner where the two meet. Purple: the trend of the other codes' frontier (time per non-zero
 beyond writing the output, a power of the bits stored relative to the floor, pooled over matrices), extrapolated to the
 floor (diamond); \sone{} decodes at \nm{trend-s1-pct}\% of the rate it predicts for \sone's size (bootstrap 95\% interval
-\nm{trend-s1-lo}--\nm{trend-s1-hi}\%).
+\nm{trend-s1-lo}--\nm{trend-s1-hi}\%). Light blue: \sone{} decoded in its stored gene order (the same counts under one
+gene permutation, without the per-cell sort that source order needs), \nm{trend-native-pct}\% of the trend.
 \textbf{(c)} Non-zeros per second a link delivers (Eq.~\ref{eq:reff} with the decoder on all cores), relative to the
-ideal code of (b), against the bandwidth each decoding core is given; median of per-matrix ratios. Dashed blue: \sone's
+ideal code of (b), against the bandwidth each decoding core is given; median of per-matrix ratios. Light blue: \sone{} in
+its stored gene order. Dashed blue: \sone's
 size decoded at the speed of the fastest entropy-coded stream measured (zstd), an estimate of a practical optimum. Dashed
 purple: at each bandwidth, the best size on the trend of (b), decoded at the trend's rate. Grey lines mark familiar set-ups.
 \textbf{(d)} Seconds to write \nm{figlim-write-dataset} from memory in each format, and the

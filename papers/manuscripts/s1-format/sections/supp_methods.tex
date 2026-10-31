@@ -138,6 +138,11 @@ states, symbols $\min(x,255)$ and an LEB128 escape stream; and zstd at levels 3 
 returns 32-bit row indices and values; the step codes add a pass that turns steps back into row indices, which is part
 of the timed work. Each code's first decode is compared with the input byte for byte. The \sone{} member is decoded with
 one thread, the AVX2 kernel and source gene order; its size is the whole member, including the chunk index and tables.
+The \texttt{s1order} stage, run later on the same node, decoded each member again in source order and in its stored order
+(row ids in the stored gene space plus the member's gene permutation, no per-cell sort), and checked that the stored-order
+output, mapped through the permutation and sorted, equals the source-order output. Its source-order rates were
+\nm{s1order-rerun-pct}\% of the first run's (median); the stored-order rate shown is the first run's source-order rate
+times the ratio measured within the second run.
 \texttt{store\_bound} only fills the two output arrays (\texttt{memset}). Every code runs pinned to one core, seven
 timed repeats after two warm-up runs, median; all matrices ran one after another in one job on one node (\nm{cpu}).
 

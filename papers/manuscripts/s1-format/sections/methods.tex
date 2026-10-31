@@ -32,7 +32,8 @@ indices and values with raw 32-bit arrays, fixed-width bytes, LEB128 varints, St
 vertical SIMD bit-packing in blocks of 256~\cite{lemire2015decoding}, an order-0 rANS coder~\cite{duda2013asymmetric}, and zstd at levels 3 and 19
 over LEB128 gap streams; the gap codes store the step between a cell's successive row indices, as \sone{} does. Each code
 was decoded into 32-bit row indices and values on one pinned core (AVX2), checked against the input, and timed seven times
-after two warm-up runs; the \sone{} member was decoded the same way. A run that only writes the output arrays gives the rate
+after two warm-up runs; the \sone{} member was decoded the same way, in source gene order and, in a second run on the same
+node, also in its stored order (Supplementary Section~\ref{sec:mkernels}). A run that only writes the output arrays gives the rate
 no decoder can exceed by much. The delivered rate of Eq.~\ref{eq:reff} assumes decoding scales with cores; the ideal code
 stores the best count model's code length and decodes at the output-writing rate. For the trend, each code's time per non-zero beyond
 writing the output was expressed relative to that writing time, and its bits relative to the matrix's floor; a power law

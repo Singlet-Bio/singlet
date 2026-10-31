@@ -21,11 +21,12 @@ from .util import Config
 KERNEL_LABELS = {
     "raw_u32": "raw arrays", "fixed_bytes": "fixed-width bytes", "leb128_gaps": "LEB128", "streamvbyte_gaps": "Stream VByte",
     "bitpack256_gaps": "SIMD bit-packing", "rans0_gaps": "order-0 rANS", "zstd3_leb_gaps": "zstd-3", "zstd19_leb_gaps": "zstd-19",
-    "pz2_avx2": ".s1",
+    "pz2_avx2": ".s1", "pz2_avx2_native": ".s1, stored order",
 }
+NATIVE = "pz2_avx2_native"   # the .s1 member in its stored gene order (s1order stage): row ids plus one permutation, no sort
 KERNEL_ANCHORS = {"raw_u32": "north", "fixed_bytes": "north west", "leb128_gaps": "north", "streamvbyte_gaps": "south west",
                   "bitpack256_gaps": "east", "rans0_gaps": "north west", "zstd3_leb_gaps": "west", "zstd19_leb_gaps": "east",
-                  "pz2_avx2": "north west"}
+                  "pz2_avx2": "north west", "pz2_avx2_native": "south east"}
 ENTROPY = ("rans0_gaps", "zstd3_leb_gaps", "zstd19_leb_gaps")   # entropy-coded streams: the fastest sets the practical optimum
 
 
@@ -41,7 +42,7 @@ def _trend_points(per: dict, floor: dict, mats: list, leave_out: str = "") -> li
     pts = []
     for k in mats:
         ts = 1e3 / per[k]["store_bound"][1]
-        cand = sorted((b, 1e3 / d - ts) for c, (b, d) in per[k].items() if c not in ("store_bound", "pz2_avx2", leave_out))
+        cand = sorted((b, 1e3 / d - ts) for c, (b, d) in per[k].items() if c not in ("store_bound", "pz2_avx2", NATIVE, leave_out))
         best = np.inf
         for b, t in cand:
             if t < best:
@@ -70,6 +71,26 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
     per = defaultdict(dict)   # (dataset, matrix) -> codec -> (bits, M nnz/s on one core)
     for r in rows:
         per[(r["dataset"], r["matrix"])][r["codec"]] = (_f(r["bits"]), _f(r["mnnz_per_s"]))
+    # stored order, timed next to a second source-order run in the s1order stage: its rate relative to that run, applied to
+    # the source-order rate of the kernels run, so both .s1 points share the other codes' timing conditions
+    rerun, native_x, native_ok = [], [], []
+    so = defaultdict(dict)
+    for r in _stage(cfg, "s1order"):
+        so[(r["dataset"], r["matrix"])][r["codec"]] = r
+    for k, v in so.items():
+        if k in per and "pz2_avx2" in per[k] and {"pz2_avx2", NATIVE} <= v.keys():
+            x = _f(v[NATIVE]["mnnz_per_s"]) / _f(v["pz2_avx2"]["mnnz_per_s"])
+            per[k][NATIVE] = (_f(v[NATIVE]["bits"]), per[k]["pz2_avx2"][1] * x)
+            native_x.append(x)
+            rerun.append(_f(v["pz2_avx2"]["mnnz_per_s"]) / per[k]["pz2_avx2"][1])
+            native_ok.append(_f(v[NATIVE]["ok"]) == 1)
+    if native_x:
+        N.put("s1order-n", len(native_x), "{:d}")
+        N.put("s1order-x", float(np.median(native_x)), "{:.1f}")
+        N.put("s1order-x-lo", float(min(native_x)), "{:.1f}")
+        N.put("s1order-x-hi", float(max(native_x)), "{:.1f}")
+        N.put("s1order-rerun-pct", float(np.median(rerun)) * 100, "{:.0f}")
+        N.put("s1order-ok", "all" if all(native_ok) else f"{sum(native_ok)} of {len(native_ok)}")
     mats = [k for k, v in per.items() if "pz2_avx2" in v and "store_bound" in v and floor.get(k)]
     codecs = [c for c in KERNEL_LABELS if all(c in per[k] for k in mats)]
     N.put("kern-n", len(mats), "{:d}")
@@ -83,10 +104,11 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
         N.put(f"kern-{c}-bits", b["median"], "{:.1f}")
         N.put(f"kern-{c}-mnnzs", d["median"], "{:.0f}")
         N.put(f"kern-{c}-gbit", b["median"] * d["median"] / 1e3, "{:.2f}")
-    plane = [{"codec": c, "label": KERNEL_LABELS[c], "group": "s1" if c == "pz2_avx2" else ("entropy" if c in ENTROPY else "fast"),
+    # the stored-order point is named in the caption: it sits next to the trend's diamond
+    plane = [{"codec": c, "label": "{}" if c == NATIVE else KERNEL_LABELS[c], "group": {"pz2_avx2": "s1", NATIVE: "s1n"}.get(c) or ("entropy" if c in ENTROPY else "fast"),
               "bits": med[c][0], "mnnzs": med[c][1], "anchor": KERNEL_ANCHORS.get(c, "west")} for c in codecs]
     _write(plane, out / "figlim_plane.tsv", ["codec", "label", "group", "bits", "mnnzs", "anchor"])
-    pts = [{"codec": c, "group": "s1" if c == "pz2_avx2" else "other", "bits": per[k][c][0], "mnnzs": per[k][c][1]}
+    pts = [{"codec": c, "group": {"pz2_avx2": "s1", NATIVE: "s1n"}.get(c, "other"), "bits": per[k][c][0], "mnnzs": per[k][c][1]}
            for k in mats for c in codecs]
     _write(pts, out / "figlim_plane_pts.tsv", ["codec", "group", "bits", "mnnzs"])
     fl = _stats(floor[k] for k in mats)["median"]
@@ -95,7 +117,7 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
     N.put("kern-store-mnnzs", sb, "{:,.0f}")
     # the frontier of the measured codes: each code that decodes faster than every code that stores fewer bits
     front, best = [], 0.0
-    for c in sorted(codecs, key=lambda c: med[c][0]):
+    for c in sorted((c for c in codecs if c != NATIVE), key=lambda c: med[c][0]):   # codes that return source order
         if med[c][1] > best:
             front.append({"codec": c, "bits": med[c][0], "mnnzs": med[c][1]})
             best = med[c][1]
@@ -117,6 +139,8 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
     # .s1's size and to the floor: what the measured codes predict any code of that size decodes at
     pts = _trend_points(per, floor, mats)
     ts, ta = _trend_fit(pts)
+    ratio_of = lambda c, s_, a_: float(np.median([per[k][c][1] / _trend_rate(per[k][c][0], floor[k], per[k]["store_bound"][1],
+                                                                             s_, a_) for k in mats]))
     ratio = lambda s_, a_, ks: float(np.median([per[k]["pz2_avx2"][1] / _trend_rate(per[k]["pz2_avx2"][0], floor[k],
                                                                                     per[k]["store_bound"][1], s_, a_) for k in ks]))
     r0 = ratio(ts, ta, mats)
@@ -127,7 +151,7 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
         pp = [p for k in ks for p in pts if p[0] == k]
         if len({p[1] for p in pp}) > 2:
             boot.append(ratio(*_trend_fit(pp), ks))
-    loo = [ratio(*_trend_fit(_trend_points(per, floor, mats, c)), mats) for c in codecs if c not in ("store_bound", "pz2_avx2")]
+    loo = [ratio(*_trend_fit(_trend_points(per, floor, mats, c)), mats) for c in codecs if c not in ("store_bound", "pz2_avx2", NATIVE)]
     N.put("trend-n", len(pts), "{:d}")
     N.put("trend-slope", -ts, "{:.1f}")
     N.put("trend-s1-pct", r0 * 100, "{:.0f}")
@@ -140,6 +164,8 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
     N.put("trend-floor-mnnzs", float(np.median(at_floor)), "{:.0f}")
     N.put("trend-floor-vs-s1-pct", float(np.median([per[k]["pz2_avx2"][1] / f for k, f in zip(mats, at_floor)])) * 100, "{:.0f}")
     N.put("trend-floor-x", float(np.median([f / per[k]["pz2_avx2"][1] for k, f in zip(mats, at_floor)])), "{:.1f}")
+    if NATIVE in codecs:
+        N.put("trend-native-pct", ratio_of(NATIVE, ts, ta) * 100, "{:.0f}")
     bgrid = np.geomspace(fl, 64, 80)
     _write([{"bits": b, "mnnzs": float(_trend_rate(b, fl, sb, ts, ta))} for b in bgrid], out / "figlim_trend.tsv", ["bits", "mnnzs"])
     _write([{"bits": fl, "mnnzs": float(_trend_rate(fl, fl, sb, ts, ta))}], out / "figlim_trend_floor.tsv", ["bits", "mnnzs"])
@@ -163,7 +189,7 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
         rec["trend"] = float(np.median([tr[k] / ideal[k] for k in mats]))
         rec["s1_of_trend"] = float(np.median([_r(*per[k]["pz2_avx2"], x) / tr[k] for k in mats]))
         curves.append(rec)
-        best_other[x] = max((rec[c], c) for c in codecs if c != "pz2_avx2")
+        best_other[x] = max((rec[c], c) for c in codecs if c not in ("pz2_avx2", NATIVE))
     _write(curves, out / "figlim_frac.tsv", ["x", *codecs, "practical", "envelope", "trend", "s1_of_trend"])
     for x, key in ((0.01, "0.01"), (0.1, "0.1"), (0.25, "0.25"), (1.0, "1")):
         rec = min(curves, key=lambda r: abs(np.log(r["x"] / x)))
@@ -172,6 +198,9 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
         N.put(f"frac-gain-{key}", (rec["practical"] / rec["pz2_avx2"] - 1) * 100, "{:.0f}")
         N.put(f"frac-trend-{key}", rec["trend"] * 100, "{:.0f}")
         N.put(f"frac-s1oftrend-{key}", rec["s1_of_trend"] * 100, "{:.0f}")
+        if NATIVE in rec:
+            N.put(f"frac-native-{key}", rec[NATIVE] * 100, "{:.0f}")
+            N.put(f"frac-native-gain-{key}", (rec[NATIVE] / rec["pz2_avx2"] - 1) * 100, "{:.0f}")
         v, c = best_other[rec["x"]]
         N.put(f"frac-bestother-{key}", v * 100, "{:.0f}")
         N.put(f"frac-bestother-{key}-name", KERNEL_LABELS[c])
