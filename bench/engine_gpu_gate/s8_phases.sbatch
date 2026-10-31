@@ -17,7 +17,7 @@ set -uo pipefail
 FAIL=0
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 BINDIR=${BINDIR:-$W/jobs/s8/bin_base2}; BINDIR_N=${BINDIR_N:?set BINDIR_N to the new build}; BINDIR_M=${BINDIR_M:-$BINDIR_N}; T=${T:-18}
-TASKS=("SRR19573735:gpuD_m gpuG_m")
+TASKS=("${S8_SAMPLE:-SRR19573735}:${S8_MODES:-gpuD_m gpuG_m}")
 SPEC=${TASKS[$SLURM_ARRAY_TASK_ID]}; s=${SPEC%%:*}; MODES=(${SPEC#*:})
 BARE=$W/repos/singlet-py.git
 # singlet resolves the barcode whitelist at <binary dir>/../whitelists; without it the run silently takes the sorted-BAM path
@@ -60,6 +60,8 @@ for m in "${MODES[@]}"; do
   case $m in gpuG*) if grep -aq "read source: chunk" $O/run.log.ts && ! ls $SCR/$s/$m/out/ 2>/dev/null | grep -q "\.fastq"; then echo "NO TEMP FASTQ (chunk source) OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: the .1fg2 GPU run did not use the chunk source ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
   grep -a "cache filled with" $O/starlog_engine.txt | cut -c1-250 | sed "s/^/$m: /" | tee -a $RES/summary.txt
   cp $SCR/$s/$m/out/*Log.final.out $O/ 2>/dev/null
+  (cd $SCR/$s/$m/out && find . -type f -printf '%s %p
+' | sort -k2) > $O/outfiles.txt
   cp $SCR/$s/$m/out/read_stats.tsv $SCR/$s/$m/out/summary.json $O/ 2>/dev/null
 done
 for m in "${MODES[@]}"; do
