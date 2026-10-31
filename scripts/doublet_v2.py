@@ -114,7 +114,7 @@ def cmd_loso(a):
 
     data = load_training("stored" if a.features != "pkg" else "pkg", a.pkgdir)
     test = load_training("pkg", a.pkgdir) if a.features == "cross" else None
-    out = Path(a.out) / ("loso_pkg" if a.features == "stored" else f"loso_{a.features}")
+    out = Path(a.out) / f"loso_{a.features}"
     out.mkdir(parents=True, exist_ok=True)
     from sklearn.metrics import average_precision_score
 
