@@ -1,0 +1,510 @@
+{
+ "ref_umis_all_barcodes_Gene": 152372,
+ "ref_umis_all_barcodes_GeneFull": 188136,
+ "ref_umis_in_called_cells_Gene": 94589,
+ "ref_umis_in_called_cells_GeneFull": 117317,
+ "ref_cells_ge1": 3293,
+ "ref_cells_ge3": 678,
+ "ref_umis_by_gene": {
+  "ORF1ab": 2381,
+  "S": 1053,
+  "ORF3a": 176,
+  "E": 4,
+  "M": 1028,
+  "ORF6": 239,
+  "ORF7a": 519,
+  "ORF7b": 8,
+  "ORF8": 274,
+  "N": 17675,
+  "ORF10": 32892,
+  "5UTR": 212,
+  "3UTR": 38128
+ },
+ "starsolo_EmptyDrops_cells": 12506,
+ "called_cells": 11567,
+ "called_cells_in_EmptyDrops": 11552,
+ "proto_kept": {
+  "proto_umis": 94562,
+  "umi_sensitivity_overlap": 0.9991,
+  "umi_ratio_total": 0.9997,
+  "cell_sensitivity_ge1": 0.9979,
+  "cells_proto_ge1": 3301,
+  "cells_ref_ge1": 3293,
+  "cellgene_pairs_ref": 6421,
+  "cellgene_pairs_proto": 6431,
+  "cellgene_recall": 0.9981,
+  "cellgene_precision_vs_ref": 0.9966,
+  "cell_precision_vs_ref": 0.9955,
+  "umi_excess_over_ref_frac": 0.0006,
+  "total_viral_per_cell": {
+   "spearman": 0.9962,
+   "pearson": 1.0
+  },
+  "per_gene": {
+   "ORF1ab": {
+    "ref_umis": 2381,
+    "proto_umis": 2379,
+    "ref_cells": 790,
+    "proto_cells": 789,
+    "spearman": 0.9981,
+    "pearson": 0.9999
+   },
+   "S": {
+    "ref_umis": 1053,
+    "proto_umis": 1053,
+    "ref_cells": 401,
+    "proto_cells": 401,
+    "spearman": 1.0,
+    "pearson": 0.9999
+   },
+   "ORF3a": {
+    "ref_umis": 176,
+    "proto_umis": 176,
+    "ref_cells": 124,
+    "proto_cells": 124,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "E": {
+    "ref_umis": 4,
+    "proto_umis": 4,
+    "ref_cells": 4,
+    "proto_cells": 4,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "M": {
+    "ref_umis": 1028,
+    "proto_umis": 1028,
+    "ref_cells": 277,
+    "proto_cells": 278,
+    "spearman": 0.9982,
+    "pearson": 0.9998
+   },
+   "ORF6": {
+    "ref_umis": 239,
+    "proto_umis": 237,
+    "ref_cells": 134,
+    "proto_cells": 133,
+    "spearman": 0.9963,
+    "pearson": 0.9988
+   },
+   "ORF7a": {
+    "ref_umis": 519,
+    "proto_umis": 519,
+    "ref_cells": 226,
+    "proto_cells": 226,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "ORF7b": {
+    "ref_umis": 8,
+    "proto_umis": 8,
+    "ref_cells": 8,
+    "proto_cells": 8,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "ORF8": {
+    "ref_umis": 274,
+    "proto_umis": 274,
+    "ref_cells": 176,
+    "proto_cells": 176,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "N": {
+    "ref_umis": 17675,
+    "proto_umis": 17668,
+    "ref_cells": 1123,
+    "proto_cells": 1126,
+    "spearman": 0.9969,
+    "pearson": 1.0
+   },
+   "ORF10": {
+    "ref_umis": 32892,
+    "proto_umis": 32886,
+    "ref_cells": 1155,
+    "proto_cells": 1157,
+    "spearman": 0.9983,
+    "pearson": 1.0
+   },
+   "5UTR": {
+    "ref_umis": 212,
+    "proto_umis": 212,
+    "ref_cells": 118,
+    "proto_cells": 118,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "3UTR": {
+    "ref_umis": 38128,
+    "proto_umis": 38118,
+    "ref_cells": 1885,
+    "proto_cells": 1891,
+    "spearman": 0.9949,
+    "pearson": 1.0
+   }
+  },
+  "cellgene_table_corr_nonzero_union": {
+   "spearman": 0.9954,
+   "pearson": 1.0
+  }
+ },
+ "proto_all_unmapped": {
+  "proto_umis": 94661,
+  "umi_sensitivity_overlap": 0.9996,
+  "umi_ratio_total": 1.0008,
+  "cell_sensitivity_ge1": 0.9991,
+  "cells_proto_ge1": 3320,
+  "cells_ref_ge1": 3293,
+  "cellgene_pairs_ref": 6421,
+  "cellgene_pairs_proto": 6456,
+  "cellgene_recall": 0.9992,
+  "cellgene_precision_vs_ref": 0.9938,
+  "cell_precision_vs_ref": 0.991,
+  "umi_excess_over_ref_frac": 0.0011,
+  "total_viral_per_cell": {
+   "spearman": 0.9944,
+   "pearson": 1.0
+  },
+  "per_gene": {
+   "ORF1ab": {
+    "ref_umis": 2381,
+    "proto_umis": 2380,
+    "ref_cells": 790,
+    "proto_cells": 790,
+    "spearman": 0.9974,
+    "pearson": 0.9999
+   },
+   "S": {
+    "ref_umis": 1053,
+    "proto_umis": 1053,
+    "ref_cells": 401,
+    "proto_cells": 401,
+    "spearman": 1.0,
+    "pearson": 0.9999
+   },
+   "ORF3a": {
+    "ref_umis": 176,
+    "proto_umis": 176,
+    "ref_cells": 124,
+    "proto_cells": 124,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "E": {
+    "ref_umis": 4,
+    "proto_umis": 4,
+    "ref_cells": 4,
+    "proto_cells": 4,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "M": {
+    "ref_umis": 1028,
+    "proto_umis": 1028,
+    "ref_cells": 277,
+    "proto_cells": 278,
+    "spearman": 0.9982,
+    "pearson": 0.9998
+   },
+   "ORF6": {
+    "ref_umis": 239,
+    "proto_umis": 238,
+    "ref_cells": 134,
+    "proto_cells": 134,
+    "spearman": 0.9925,
+    "pearson": 0.9982
+   },
+   "ORF7a": {
+    "ref_umis": 519,
+    "proto_umis": 519,
+    "ref_cells": 226,
+    "proto_cells": 226,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "ORF7b": {
+    "ref_umis": 8,
+    "proto_umis": 8,
+    "ref_cells": 8,
+    "proto_cells": 8,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "ORF8": {
+    "ref_umis": 274,
+    "proto_umis": 274,
+    "ref_cells": 176,
+    "proto_cells": 176,
+    "spearman": 1.0,
+    "pearson": 1.0
+   },
+   "N": {
+    "ref_umis": 17675,
+    "proto_umis": 17686,
+    "ref_cells": 1123,
+    "proto_cells": 1129,
+    "spearman": 0.9964,
+    "pearson": 1.0
+   },
+   "ORF10": {
+    "ref_umis": 32892,
+    "proto_umis": 32907,
+    "ref_cells": 1155,
+    "proto_cells": 1158,
+    "spearman": 0.9987,
+    "pearson": 1.0
+   },
+   "5UTR": {
+    "ref_umis": 212,
+    "proto_umis": 213,
+    "ref_cells": 118,
+    "proto_cells": 118,
+    "spearman": 1.0,
+    "pearson": 0.9993
+   },
+   "3UTR": {
+    "ref_umis": 38128,
+    "proto_umis": 38175,
+    "ref_cells": 1885,
+    "proto_cells": 1910,
+    "spearman": 0.9925,
+    "pearson": 1.0
+   }
+  },
+  "cellgene_table_corr_nonzero_union": {
+   "spearman": 0.9938,
+   "pearson": 1.0
+  }
+ },
+ "kraken2_SARSr": {
+  "umis_in_called_cells": 265002,
+  "cells_ge1": 5397,
+  "cell_sensitivity_vs_ref": 0.9933,
+  "cell_precision_vs_ref": 0.6061,
+  "umi_ratio_to_ref": 2.8016,
+  "total_viral_per_cell_vs_ref": {
+   "spearman": 0.7498,
+   "pearson": 0.9969
+  },
+  "per_gene_resolution": "none (taxon only)"
+ },
+ "kraken2_all_viral": {
+  "umis_in_called_cells": 283515,
+  "cells_ge1": 9265,
+  "cell_sensitivity_vs_ref": 0.9976,
+  "cell_precision_vs_ref": 0.3546,
+  "umi_ratio_to_ref": 2.9973,
+  "total_viral_per_cell_vs_ref": {
+   "spearman": 0.5001,
+   "pearson": 0.9969
+  },
+  "per_gene_resolution": "none (taxon only)"
+ },
+ "minimap2_oracle": {
+  "umis_in_called_cells": 234740,
+  "cells_ge1": 4847,
+  "cell_sensitivity_vs_ref": 0.8904,
+  "cell_precision_vs_ref": 0.6049,
+  "umi_ratio_to_ref": 2.4817,
+  "total_viral_per_cell_vs_ref": {
+   "spearman": 0.6849,
+   "pearson": 0.9953
+  },
+  "per_gene_resolution": "none (taxon only)"
+ },
+ "singlet_species_table_SARS2": {
+  "umis": 263657,
+  "cells_ge1": 5388,
+  "total_viral_per_cell_vs_ref": {
+   "spearman": 0.7519,
+   "pearson": 0.9969
+  },
+  "per_gene_resolution": "none"
+ },
+ "ref_viral_alignment_start_hist_1kb": {
+  "0": 1213,
+  "1000": 1417,
+  "2000": 1090,
+  "3000": 737,
+  "4000": 369,
+  "5000": 349,
+  "6000": 483,
+  "7000": 1250,
+  "8000": 422,
+  "9000": 107,
+  "10000": 187,
+  "11000": 325,
+  "12000": 443,
+  "13000": 308,
+  "14000": 440,
+  "15000": 295,
+  "16000": 223,
+  "17000": 249,
+  "18000": 208,
+  "19000": 280,
+  "20000": 655,
+  "21000": 293,
+  "22000": 649,
+  "23000": 568,
+  "24000": 1909,
+  "25000": 998,
+  "26000": 1231,
+  "27000": 6602,
+  "28000": 11034,
+  "29000": 518953
+ },
+ "ref_alignments_start_ge_29000_frac": 0.9379,
+ "ref_alignment_level": {
+  "umis_in_called_cells": 264676,
+  "cells_ge1": 5397,
+  "gene_assigned_umi_fraction": 0.3574
+ },
+ "vs_alignment_level_proto_kept": {
+  "umis": 264615,
+  "cells_ge1": 5405,
+  "cell_recall": 0.9991,
+  "cell_precision": 0.9976,
+  "umi_ratio": 0.9998,
+  "spearman": 0.998,
+  "pearson": 1.0
+ },
+ "vs_alignment_level_proto_all_unmapped": {
+  "umis": 264842,
+  "cells_ge1": 5437,
+  "cell_recall": 1.0,
+  "cell_precision": 0.9926,
+  "umi_ratio": 1.0006,
+  "spearman": 0.9955,
+  "pearson": 1.0
+ },
+ "vs_alignment_level_kraken2_SARSr": {
+  "umis": 265002,
+  "cells_ge1": 5397,
+  "cell_recall": 0.9956,
+  "cell_precision": 0.9956,
+  "umi_ratio": 1.0012,
+  "spearman": 0.9944,
+  "pearson": 1.0
+ },
+ "vs_alignment_level_kraken2_all_viral": {
+  "umis": 283515,
+  "cells_ge1": 9265,
+  "cell_recall": 0.9985,
+  "cell_precision": 0.5817,
+  "umi_ratio": 1.0712,
+  "spearman": 0.6166,
+  "pearson": 0.9999
+ },
+ "vs_alignment_level_minimap2_oracle": {
+  "umis": 234740,
+  "cells_ge1": 4847,
+  "cell_recall": 0.8964,
+  "cell_precision": 0.9981,
+  "umi_ratio": 0.8869,
+  "spearman": 0.9336,
+  "pearson": 0.9996
+ },
+ "vs_alignment_level_singlet_species_table_SARS2": {
+  "umis": 263657,
+  "cells_ge1": 5388,
+  "cell_recall": 0.9943,
+  "cell_precision": 0.9959,
+  "umi_ratio": 0.9962,
+  "spearman": 0.9938,
+  "pearson": 1.0
+ },
+ "read_level": {
+  "star_viral_aligned_reads": 553582,
+  "kraken_sars_reads": 553246,
+  "kraken_classified_any_viral": 581552,
+  "overlap": 552305,
+  "kraken_recall_of_star_aligned": 0.9977,
+  "star_recall_of_kraken_sars": 0.9983,
+  "star_aligned_in_screen_kept_reads": 553035,
+  "star_aligned_dropped_by_screen": 547
+ },
+ "sgrna": {
+  "all": {
+   "ref_umis": 147,
+   "proto_umis": 149,
+   "ref_cells": 96,
+   "proto_cells": 98,
+   "cell_sgrna_pairs_ref": 129,
+   "cell_sgrna_pairs_proto": 131,
+   "pair_recall": 0.9922,
+   "pair_precision": 0.9771,
+   "umi_sensitivity_overlap": 0.9932,
+   "ref_by_sgrna": {
+    "E": 2,
+    "M": 14,
+    "N": 42,
+    "ORF3a": 13,
+    "ORF6": 51,
+    "ORF7a": 12,
+    "ORF8": 3,
+    "S": 1,
+    "noncanonical": 9
+   },
+   "proto_by_sgrna": {
+    "E": 2,
+    "M": 13,
+    "N": 43,
+    "ORF3a": 13,
+    "ORF6": 51,
+    "ORF7a": 12,
+    "ORF8": 3,
+    "S": 1,
+    "noncanonical": 11
+   }
+  },
+  "spliced": {
+   "ref_umis": 147,
+   "proto_umis": 149,
+   "ref_cells": 96,
+   "proto_cells": 98,
+   "cell_sgrna_pairs_ref": 129,
+   "cell_sgrna_pairs_proto": 131,
+   "pair_recall": 0.9922,
+   "pair_precision": 0.9771,
+   "umi_sensitivity_overlap": 0.9932,
+   "ref_by_sgrna": {
+    "E": 2,
+    "M": 14,
+    "N": 42,
+    "ORF3a": 13,
+    "ORF6": 51,
+    "ORF7a": 12,
+    "ORF8": 3,
+    "S": 1,
+    "noncanonical": 9
+   },
+   "proto_by_sgrna": {
+    "E": 2,
+    "M": 13,
+    "N": 43,
+    "ORF3a": 13,
+    "ORF6": 51,
+    "ORF7a": 12,
+    "ORF8": 3,
+    "S": 1,
+    "noncanonical": 11
+   }
+  },
+  "clipped": {
+   "ref_umis": 0,
+   "proto_umis": 0,
+   "ref_cells": 0,
+   "proto_cells": 0,
+   "cell_sgrna_pairs_ref": 0,
+   "cell_sgrna_pairs_proto": 0,
+   "pair_recall": 0.0,
+   "pair_precision": 0.0,
+   "umi_sensitivity_overlap": 0.0,
+   "ref_by_sgrna": {},
+   "proto_by_sgrna": {}
+  }
+ }
+}

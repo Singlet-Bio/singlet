@@ -1,0 +1,86 @@
+{
+ "min_gap": 500,
+ "leader_core_end": 75,
+ "alignments": 553287,
+ "read_counts": {
+  "alignments": 553287,
+  "spliced:M": 32,
+  "spliced:noncanonical": 30,
+  "spliced:ORF6": 82,
+  "spliced:N": 85,
+  "spliced:ORF3a": 22,
+  "spliced:ORF7a": 34,
+  "spliced:S": 3,
+  "spliced:ORF8": 5,
+  "spliced:E": 2
+ },
+ "read_end_pos_min_median_max": {
+  "M": [
+   26494,
+   26507,
+   29588
+  ],
+  "noncanonical": [
+   27517,
+   29219,
+   29664
+  ],
+  "ORF6": [
+   27061,
+   27072,
+   27120
+  ],
+  "N": [
+   28278,
+   28294,
+   29704
+  ],
+  "ORF3a": [
+   25399,
+   25418,
+   25464
+  ],
+  "ORF7a": [
+   27411,
+   27419,
+   27460
+  ],
+  "S": [
+   21581,
+   21587,
+   21587
+  ],
+  "ORF8": [
+   27916,
+   27919,
+   27939
+  ],
+  "E": [
+   26266,
+   26275,
+   26275
+  ]
+ },
+ "umis_per_sgrna_all_cells": {
+  "M": 19,
+  "noncanonical": 18,
+  "ORF6": 58,
+  "N": 59,
+  "ORF3a": 17,
+  "ORF7a": 22,
+  "ORF8": 4,
+  "S": 1,
+  "E": 2
+ },
+ "cells_per_sgrna": {
+  "M": 19,
+  "noncanonical": 17,
+  "ORF6": 48,
+  "N": 50,
+  "ORF3a": 17,
+  "ORF7a": 21,
+  "ORF8": 4,
+  "S": 1,
+  "E": 2
+ }
+}
