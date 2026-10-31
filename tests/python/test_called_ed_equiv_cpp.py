@@ -43,7 +43,7 @@ def _write_mtx(path: Path, M: np.ndarray, features, barcodes):
 def _write_calls(run: Path, bc, umi_exon, umi_total, is_cell, cv2, fdr):
     with open(run / "cell_calls.tsv", "w", newline="\n") as f:
         f.write(
-            "barcode\tis_cell\tcalled\tcalled_v2\tumi_exon\tumi_total\tfdr\tpvalue\tlog_prob\tcall_method\n"
+            "barcode\tis_cell\tcalled_knee\tcalled_v2\tumi_exon\tumi_total\tfdr\tpvalue\tlog_prob\tcall_method\n"
         )
         for j, b in enumerate(bc):
             q = "NA" if np.isnan(fdr[j]) else "%.6g" % fdr[j]
@@ -51,7 +51,7 @@ def _write_calls(run: Path, bc, umi_exon, umi_total, is_cell, cv2, fdr):
                 "%s\t%s\t%d\t%d\t%d\t%d\t%s\tNA\tNA\tcalled_v2\n"
                 % (
                     b,
-                    "TRUE" if is_cell[j] else "FALSE",
+                    "TRUE" if cv2[j] else "FALSE",
                     int(is_cell[j]),
                     int(cv2[j]),
                     umi_exon[j],
@@ -150,7 +150,7 @@ def test_wrong_called_v2_fails(run_dir, tmp_path):
     out = [lines[0]]
     for ln in lines[1:]:
         f = ln.split("\t")
-        if f[1] == "FALSE" and f[3] == "1":
+        if f[2] == "0" and f[3] == "1":
             f[3] = "0"
         out.append("\t".join(f))
     (run / "cell_calls.tsv").write_text("\n".join(out) + "\n")
@@ -162,7 +162,7 @@ def test_wrong_knee_set_fails(run_dir, tmp_path):
     run = _copy(run_dir, tmp_path / "r")
     lines = (run / "cell_calls.tsv").read_text().splitlines()
     f = lines[1].split("\t")  # first barcode is ambient: mark it as a knee cell
-    f[1], f[2] = "TRUE", "1"
+    f[2] = "1"
     lines[1] = "\t".join(f)
     (run / "cell_calls.tsv").write_text("\n".join(lines) + "\n")
     r = EQ.compare(str(run))
@@ -183,3 +183,12 @@ def test_knee_rounds_half_away_from_zero():
     flags, umi_min = EQ.cellranger22(tot)
     assert umi_min == 1087
     assert flags.tolist() == [True] * 32 + [False, False]
+
+
+def test_cells_parse_reads_is_cell_as_the_call_and_called_knee_as_the_knee():
+    from singlet.s1 import cells as cells_mod
+
+    t = "barcode\tis_cell\tcalled_knee\tcalled_v2\nA\tTRUE\t1\t1\nB\tTRUE\t0\t1\nC\tFALSE\t0\t0\nD\tFALSE\t1\t0\n"
+    assert cells_mod.parse_cell_calls(t.encode()) == ["A", "B"]
+    assert cells_mod.parse_cell_calls_column(t.encode(), "called_knee") == ["A", "D"]
+    assert cells_mod.parse_cell_calls_column(t.encode(), "nope") is None
