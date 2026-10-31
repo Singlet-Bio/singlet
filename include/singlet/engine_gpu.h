@@ -7,6 +7,7 @@
 #pragma once
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <string>
 #include <vector>
 #include <array>
@@ -34,6 +35,7 @@ struct Input {
     std::vector<uint64_t> off{0};    // seq[off[i] .. off[i+1]) is sequence i
     Clip clip;
     std::vector<uint16_t> pre5, pre3;   // with clip.pre: per read the bases STAR's CPU clip removes from its 5' and 3' ends
+    std::function<void()> release;      // called by mapDistinct once its last device work is done (the caller's device lock); the host assembly of the records runs after it
     std::vector<uint8_t> cr4info;       // not read by the engine: per read STAR's CellRanger4 5' clip (what clipChunk would leave in the FASTQ)
 };
 

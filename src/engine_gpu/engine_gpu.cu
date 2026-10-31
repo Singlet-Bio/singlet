@@ -359,7 +359,11 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
     u64 nGpuMapped = 0;
-    auto processChunk = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
+    // a chunk of distinct sequences in two halves: the device lanes (gpuPart, under the caller's device lock) and the host lane and records
+    // (hostPart, after in.release(): they hold the GPU for nothing)
+    struct ChunkRes { std::vector<uint32_t> repc; Lane A, M, B; std::vector<uint8_t> lane; std::vector<uint32_t> lpos, repH, posH; u64 c0 = 0; };
+    std::vector<ChunkRes> chunks;
+    auto gpuPart = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
         // ---- lanes
         double tc0 = now();
         Lane A, M, B;
@@ -380,6 +384,13 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             lane[posB[k]] = 2; lpos[posB[k]] = (uint32_t)k;
             if (B.status[k] != (uint8_t)Status::Ok) { repH.push_back(repB[k]); posH.push_back(posB[k]); lane[posB[k]] = 3; lpos[posB[k]] = (uint32_t)(repH.size() - 1); }
         }
+        { ChunkRes cr; cr.repc = repc; cr.A = std::move(A); cr.M = std::move(M); cr.B = std::move(B); cr.lane = std::move(lane); cr.lpos = std::move(lpos);
+          cr.repH = std::move(repH); cr.posH = std::move(posH); cr.c0 = c0; chunks.push_back(std::move(cr)); }
+        return true;
+    };
+    auto hostPart = [&](ChunkRes& cr) -> bool {
+        const std::vector<uint32_t>& repc = cr.repc; const u64 c0 = cr.c0; Lane &A = cr.A, &M = cr.M, &B = cr.B;
+        const std::vector<uint8_t>& lane = cr.lane; const std::vector<uint32_t>& lpos = cr.lpos; const std::vector<uint32_t>& repH = cr.repH;
         // ---- host lane (STAR's limits)
         double th0 = now();
         std::vector<std::vector<uint8_t>> hout(repH.size()); std::vector<uint8_t> hst(repH.size(), 0);
@@ -432,17 +443,21 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 CHUNK = 16u << 20;
     for (u64 c0 = 0; c0 < rep.size(); c0 += CHUNK) {
         std::vector<uint32_t> repc(rep.begin() + c0, rep.begin() + std::min<u64>(rep.size(), c0 + CHUNK));
-        if (!processChunk(repc, c0)) return fail(err);
+        if (!gpuPart(repc, c0)) return fail(err);
     }
+    // the last device work is done: free the device buffers and let the next sample have the GPU while this one assembles its records
+    cudaDeviceSynchronize();
+    cudaFree(dG1); cudaFree(dSA); cudaFree(dSAi); cudaFree(dSeq); cudaFree(dOff);
+    cudaFree(dcs); cudaFree(dcl); cudaFree(dcb); cudaFree(dss); cudaFree(dse); cudaFree(dsd); cudaFree(dsa);
+    cudaFree(dsm); cudaFree(dsl); cudaFree(dsr); cudaFree(dst);
+    if (in.release) in.release();
+    for (auto& cr : chunks) { if (!hostPart(cr)) return fail(err); std::vector<uint32_t>().swap(cr.repc); }
     {   // per read: its record (sequence-cache result) or NONE
         std::vector<uint32_t> posOf(n, NONE);
         for (u64 k = 0; k < rep.size(); k++) posOf[rep[k]] = (uint32_t)k;
         out.readRecord.assign(n, NONE);
         for (u64 i = 0; i < n; i++) { const uint32_t r = readRep[i]; if (r != NONE) out.readRecord[i] = recOfPos[posOf[r]]; }
     }
-    cudaFree(dG1); cudaFree(dSA); cudaFree(dSAi); cudaFree(dSeq); cudaFree(dOff);
-    cudaFree(dcs); cudaFree(dcl); cudaFree(dcb); cudaFree(dss); cudaFree(dse); cudaFree(dsd); cudaFree(dsa);
-    cudaFree(dsm); cudaFree(dsl); cudaFree(dsr); cudaFree(dst);
     char line[512];
     snprintf(line, sizeof line, "engine_gpu: %llu reads, %llu distinct (%llu with N), mapped on the GPU %llu, host lane %llu (%.2f s), not mapped %llu; "
              "upload %.2f s, dedup %.2f s, GPU mapping %.2f s\n", (unsigned long long)out.nReads, (unsigned long long)out.nDistinct,
