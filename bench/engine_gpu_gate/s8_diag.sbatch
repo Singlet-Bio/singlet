@@ -15,12 +15,12 @@
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 BINDIR=${BINDIR:-$W/jobs/s8/bin}; T=${T:-18}
-TASKS=("pbmc1k_v3:gpuA gpuB")
+TASKS=("pbmc1k_v3:gpuDs gpuD")
 SPEC=${TASKS[$SLURM_ARRAY_TASK_ID]}; s=${SPEC%%:*}; MODES=(${SPEC#*:})
 BARE=$W/repos/singlet-py.git
 # singlet resolves the barcode whitelist at <binary dir>/../whitelists; without it the run silently takes the sorted-BAM path
 [ -e $BINDIR/../whitelists ] || ln -s $PB/whitelists $BINDIR/../whitelists
-RES=$W/jobs/s8/results/diag-$SLURM_ARRAY_JOB_ID-$SLURM_ARRAY_TASK_ID; mkdir -p $RES
+RES=$W/jobs/s8/results/diag-$(basename $BINDIR)-$SLURM_ARRAY_JOB_ID-$SLURM_ARRAY_TASK_ID; mkdir -p $RES
 SCR=/tmp/$USER-s8p-$SLURM_JOB_ID; mkdir -p $SCR/repo
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT INT TERM
 git -C $BARE archive refs/s8/campaign bench/star_accel/out_equiv.py | tar -x -C $SCR/repo
@@ -33,8 +33,8 @@ FQ=$PB/data/$s/$s.1fq; [ -e $FQ ] || { D=$W/data/w11/$s; [ -e $D/sample.1fq ] ||
 ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
-  unset SINGLET_GPU_PILEUP SINGLET_INTRON_RULES; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
-  case $m in cpu) ENGARG="" ;; gpuB) export SINGLET_GPU_PILEUP=on SINGLET_INTRON_RULES=0 ;; prof) export SINGLET_GPU_PILEUP=on SINGLET_INTRON_RULES=0; BIN=$BINDIR/singlet-prof ;; esac
+  unset SINGLET_GPU_PILEUP SINGLET_INTRON_RULES SINGLET_HANDOFF_PASS_SERIAL SINGLET_SOLO_PAR; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
+  case $m in cpu) ENGARG="" ;; gpuD) export SINGLET_GPU_PILEUP=on ;; gpuDs) export SINGLET_GPU_PILEUP=on SINGLET_HANDOFF_PASS_SERIAL=1 SINGLET_SOLO_PAR=0 ;; gpuB) export SINGLET_GPU_PILEUP=on SINGLET_INTRON_RULES=0 ;; prof) export SINGLET_GPU_PILEUP=on SINGLET_INTRON_RULES=0; BIN=$BINDIR/singlet-prof ;; esac
   ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb"
     while true; do
       g=$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits | tr -d ' ' | tr , '\t')

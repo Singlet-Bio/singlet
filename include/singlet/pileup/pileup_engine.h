@@ -1956,8 +1956,23 @@ public:
         static const char UMI_CH[5] = {'A', 'C', 'G', 'T', 'N'};
         static const uint8_t COMP[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
         const int ulen = in.umiLen > 0 ? in.umiLen : 0;
-        char umi[32];
-        for (size_t r = 0; r < nR; ++r) {
+        struct HostLocal {   // one chunk of reads: its counters and, in read order, its poly(A) records and V(D)J hits
+            PileupStats st; uint64_t pd[16] = {0}; std::vector<PolyARecord> polya; std::vector<uint32_t> ov;
+            struct VdjEv { uint32_t bc, vg, gene; int ulen; char umi[24]; };
+            std::vector<VdjEv> vdj;
+        };
+        // the chunks run on the job's cores (the streaming pileup is one thread; STAR has exited) and are merged in read order, so every
+        // counter and the order of the poly(A) and V(D)J records are those of the serial loop (SINGLET_HANDOFF_PASS_SERIAL=1: one chunk)
+        cpu_set_t cs; int nT = 1;
+        if (std::getenv("SINGLET_HANDOFF_PASS_SERIAL") == nullptr && sched_getaffinity(0, sizeof(cs), &cs) == 0) nT = std::max(1, std::min(CPU_COUNT(&cs), 32));
+        if (const char* e = std::getenv("SINGLET_HANDOFF_PASS_THREADS")) nT = std::max(1, std::atoi(e));
+        if (nR < (1u << 16)) nT = 1;
+        std::vector<HostLocal> hls(nT);
+        auto runChunk = [&](int t) {
+            HostLocal& L = hls[t];
+            const size_t lo = nR * t / nT, hi = nR * (t + 1) / nT;
+            char umi[32];
+            for (size_t r = lo; r < hi; ++r) {
             const ReadRec& rr = R[r];
             const SigRec& sg = S[rr.sig];
             int p = -1;
@@ -1970,10 +1985,10 @@ public:
             const uint32_t gene = out.alnGene[sg.aln_off + p];
             const bool vs = st & 1, va = st & 2;
             if (vs != va && a.tid >= 0 && static_cast<size_t>(a.tid) < mito_tid_.size() && !mito_tid_[a.tid])
-                (vs ? stats.strand_sense : stats.strand_antisense)++;
-            if (st & 4) stats.wrong_strand++;
-            if (st & 16) stats.multigene_reads++;
-            if (st & 8) stats.cross_gene_intron_reads++;
+                (vs ? L.st.strand_sense : L.st.strand_antisense)++;
+            if (st & 4) L.st.wrong_strand++;
+            if (st & 16) L.st.multigene_reads++;
+            if (st & 8) L.st.cross_gene_intron_reads++;
             for (int i = 0; i < ulen && i < 21; ++i) umi[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
             umi[std::min(ulen, 21)] = 0;
             const char* umi_str = ulen > 0 ? umi : nullptr;
@@ -1990,7 +2005,7 @@ public:
                 };
                 uint64_t key = 0; bool ok = false;
                 const uint32_t clip = r < gpu_clip_.size() ? gpu_clip_[r] : 0u;
-                pd[0]++; if (clip) pd[1]++;
+                L.pd[0]++; if (clip) L.pd[1]++;
                 if (clip) {
                     // a clipped read: the BAM sequence is the whole read and its CIGAR has the clipped bases as soft clips, so the 3' soft
                     // clip (in read orientation; the BAM's last op when forward, its first when reverse) is the record's own plus the tail
@@ -2001,11 +2016,11 @@ public:
                     const int nb = a.n_ops + ((c3 > 0 && s3 == 0) ? 1 : 0) + ((c5 > 0 && (o5 & 15) != BAM_CSOFT_CLIP) ? 1 : 0);
                     const int cl = s3 + c3;
                     auto rbase = [&](int j) -> uint8_t { return (in.seq[sg.seq_off + (j >> 1)] >> ((j & 1) * 4)) & 15; };   // record, read orientation
-                    if (nb < 2) pd[2]++; else if (cl < 6 || cl > ql) pd[3]++;
+                    if (nb < 2) L.pd[2]++; else if (cl < 6 || cl > ql) L.pd[3]++;
                     if (nb >= 2 && cl >= 6 && cl <= ql) {
                         int na = nAt; for (int j = qlen - s3; j < qlen; ++j) na += rbase(j) == 1;
                         const bool firstA = s3 > 0 ? rbase(qlen - s3) == 1 : (clip & 2u) != 0;
-                        if (!(na >= 0.8 * cl)) pd[4]++; else if (!firstA) pd[5]++;
+                        if (!(na >= 0.8 * cl)) L.pd[4]++; else if (!firstA) L.pd[5]++;
                         if (na >= 0.8 * cl && firstA) {
                             if (!rev) {
                                 int64_t end = a.pos;
@@ -2017,10 +2032,10 @@ public:
                 } else if (a.n_ops >= 2 && !rev) {
                     const uint32_t c = ops[a.n_ops - 1];
                     const int cl = static_cast<int>(c >> 4);
-                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { pd[9]++; if (cl >= 6) pd[10]++; if (cl > qlen) pd[13]++; }
+                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { L.pd[9]++; if (cl >= 6) L.pd[10]++; if (cl > qlen) L.pd[13]++; }
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
                         int na = 0; for (int i = qlen - cl; i < qlen; ++i) na += base(i) == 1;
-                        if (!(na >= 0.8 * cl)) pd[11]++; else if (base(qlen - cl) != 1) pd[12]++;
+                        if (!(na >= 0.8 * cl)) L.pd[11]++; else if (base(qlen - cl) != 1) L.pd[12]++;
                         if (na >= 0.8 * cl && base(qlen - cl) == 1) {
                             int64_t end = a.pos;
                             for (int k = 0; k < a.n_ops; ++k) { const int op = ops[k] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += ops[k] >> 4; }
@@ -2030,15 +2045,15 @@ public:
                 } else if (a.n_ops >= 2) {
                     const uint32_t c = ops[0];
                     const int cl = static_cast<int>(c >> 4);
-                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { pd[9]++; pd[14]++; if (cl >= 6) pd[10]++; if (cl > qlen) pd[13]++; }
+                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { L.pd[9]++; L.pd[14]++; if (cl >= 6) L.pd[10]++; if (cl > qlen) L.pd[13]++; }
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
                         int nt = 0; for (int i = 0; i < cl; ++i) nt += base(i) == 8;
-                        if (!(nt >= 0.8 * cl)) pd[11]++; else if (base(cl - 1) != 8) pd[12]++;
+                        if (!(nt >= 0.8 * cl)) L.pd[11]++; else if (base(cl - 1) != 8) L.pd[12]++;
                         if (nt >= 0.8 * cl && base(cl - 1) == 8) { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
                     }
                 }
-                if (ok) { polya_recs_.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); pd[clip ? 6 : 7]++; }
-                else if (!clip) pd[8]++;
+                if (ok) { L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); L.pd[clip ? 6 : 7]++; }
+                else if (!clip) L.pd[8]++;
             }
             // VDJ usage: the first VDJ gene overlapping [first aligned block start, last aligned block end)
             if (has_vdj_) {
@@ -2049,14 +2064,29 @@ public:
                     else if (op == 2 || op == 3) rpos += len;
                 }
                 if (s0 >= 0) {
-                    vdj_overlaps_.clear();
-                    vdj_model_.query(a.tid, s0, e0, vdj_overlaps_);
-                    if (!vdj_overlaps_.empty()) {
-                        const uint32_t vg = vdj_overlaps_[0];
-                        if (config_.umi_dedup) vdj_umi_.add(static_cast<uint32_t>(rr.bc), vg, umi_str, umi_len, nh == 1 ? gene : UINT32_MAX);   // R9: counted at finalize, per (cell, gene)
-                        else { vdj_acc_.increment(vg, static_cast<uint32_t>(rr.bc)); stats.vdj_hits++; }
+                    L.ov.clear();
+                    vdj_model_.query(a.tid, s0, e0, L.ov);
+                    if (!L.ov.empty()) {   // replayed in read order after the chunks (vdj_umi_ and vdj_acc_ are not thread-safe)
+                        HostLocal::VdjEv ev; ev.bc = static_cast<uint32_t>(rr.bc); ev.vg = L.ov[0]; ev.gene = nh == 1 ? gene : UINT32_MAX; ev.ulen = umi_len;
+                        std::memcpy(ev.umi, umi, sizeof(ev.umi));
+                        L.vdj.push_back(ev);
                     }
                 }
+            }
+            }
+        };
+        if (nT == 1) runChunk(0);
+        else { std::vector<std::thread> th; for (int t = 0; t < nT; ++t) th.emplace_back(runChunk, t); for (auto& x : th) x.join(); }
+        for (int t = 0; t < nT; ++t) {
+            HostLocal& L = hls[t];
+            stats.strand_sense += L.st.strand_sense; stats.strand_antisense += L.st.strand_antisense; stats.wrong_strand += L.st.wrong_strand;
+            stats.multigene_reads += L.st.multigene_reads; stats.cross_gene_intron_reads += L.st.cross_gene_intron_reads;
+            for (int k = 0; k < 16; k++) pd[k] += L.pd[k];
+            polya_recs_.insert(polya_recs_.end(), L.polya.begin(), L.polya.end());
+            for (const auto& ev : L.vdj) {
+                const char* us = ev.ulen > 0 ? ev.umi : nullptr;
+                if (config_.umi_dedup) vdj_umi_.add(ev.bc, ev.vg, us, ev.ulen, ev.gene);   // R9: counted at finalize, per (cell, gene)
+                else { vdj_acc_.increment(ev.vg, ev.bc); stats.vdj_hits++; }
             }
         }
         if (pdbg) std::cerr << "[polya-debug] eligible " << pd[0] << ", clipped " << pd[1] << ": nb<2 " << pd[2] << ", cl out of range " << pd[3]

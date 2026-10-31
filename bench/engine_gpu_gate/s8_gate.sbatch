@@ -17,7 +17,7 @@ set -uo pipefail
 FAIL=0
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 BINDIR=${BINDIR:-$W/jobs/s8/bin_base2}; BINDIR_N=${BINDIR_N:?set BINDIR_N to the new build}; BINDIR_M=${BINDIR_M:-$BINDIR_N}; T=${T:-18}
-TASKS=("pbmc1k_v3:cpu gpuD gpuD_n gpuD_m" "neuron1k_v3:cpu gpuD gpuD_n gpuD_m")
+TASKS=("pbmc1k_v3:cpu gpuD gpuD_m" "neuron1k_v3:cpu gpuD gpuD_m")
 SPEC=${TASKS[$SLURM_ARRAY_TASK_ID]}; s=${SPEC%%:*}; MODES=(${SPEC#*:})
 BARE=$W/repos/singlet-py.git
 # singlet resolves the barcode whitelist at <binary dir>/../whitelists; without it the run silently takes the sorted-BAM path
@@ -60,6 +60,6 @@ cmp2() { [ -d $SCR/$s/$1/out ] && [ -d $SCR/$s/$2/out ] || { echo "!! GATE FAIL:
   echo "=== $s $1 vs $2" | tee -a $RES/summary.txt
   python3 $SCR/repo/bench/star_accel/out_equiv.py $SCR/$s/$1/out $SCR/$s/$2/out > $RES/equiv-$1-$2.txt 2>&1
   grep -a '^  DIFF\|^files:\|^RESULT' $RES/equiv-$1-$2.txt | cut -c1-200 | head -30 | tee -a $RES/summary.txt; }
-cmp2 cpu gpuD_m; cmp2 gpuD gpuD_n; cmp2 gpuD gpuD_m
+cmp2 cpu gpuD_m; cmp2 gpuD gpuD_m
 [ $FAIL = 0 ] && echo "GATE RUN OK (identity verdicts above)" | tee -a $RES/summary.txt || echo "GATE FAILED" | tee -a $RES/summary.txt
 echo done $(date -Is) | tee -a $RES/summary.txt
