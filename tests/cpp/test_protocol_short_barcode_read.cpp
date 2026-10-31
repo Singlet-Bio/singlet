@@ -71,8 +71,9 @@ static std::vector<Spot> make_spots(const std::vector<std::string>& wl, int r1_l
     std::mt19937_64 rng(11);
     std::vector<Spot> spots(n);
     for (auto& s : spots) {
+        const std::string& bc = wl[rng() % wl.size()];   // one whitelist barcode per spot
         for (int i = 0; i < r1_len; ++i) {
-            if (i < 16 && use_wl) s.r1_seq.push_back(singlet::fq::nuc::ascii_to_num(wl[rng() % wl.size()][i]));
+            if (i < 16 && use_wl) s.r1_seq.push_back(singlet::fq::nuc::ascii_to_num(bc[static_cast<size_t>(i)]));
             else s.r1_seq.push_back(static_cast<uint8_t>(rng() % 4));
         }
         (void)umi_len;
