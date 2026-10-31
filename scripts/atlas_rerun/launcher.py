@@ -53,7 +53,13 @@ DEFAULTS = {
     "idle_exit_min": 10,
     "stage_cap_tb": 2,              # a few hours of data: 3 h x 8.2 M pairs/s x ~30 B/pair = 0.9 TB, plus a drain hiccup
     "interval_s": 120,
-    "scav_partition": "scavenger",
+    "h100_partition": "short-gpu",   # MEASURED: the scavenger partition has no H100 nodes (g050-g052 are only in gpu/short-gpu/debug-gpu); set to
+                                    # "scavenger" if the admins add them. V100S (g001-g004) and RTX 8000 (g005, g008) are in scavenger.
+    "v100_partition": "scavenger",
+    "publish": "s1-dry",            # drain --publish: dry-run | s1-dry | s1 (live Beta upload; also exports SINGLET_INGEST_TOKEN)
+    "s1_repo": "",                  # built s1 code (compiled singlet._pz) for the producer, e.g. $WORK/jobs/s6/s1repo
+    "s1_runtime": "",               # in_runtime.sh to source for the producer
+    "head_screen": True,            # fetch: 1 M-pair VDB head screen before downloading a run
     "h100_gres": "gpu:nvidia_h100_nvl:1",
     "v100_gres": "gpu:tesla_v100s:1",
     "gpu_cpus": 16,
@@ -118,6 +124,15 @@ def plan(p, bl, have):
     return out
 
 
+def s1_args(p):
+    return "".join(" --%s %s" % (k.replace("_", "-"), p[k]) for k in ("s1_repo", "s1_runtime") if p.get(k))
+
+
+def token_export():
+    """Live Beta publish: the ingest token is read from the user's mode-600 file into the job's environment only (never an argument, never printed)."""
+    return "export SINGLET_INGEST_TOKEN=\"$(tr -d '\\r\\n ' < $HOME/.singlet/beta_ingest_token)\""
+
+
 def sbatch_script(kind, a, p):
     head = ["#!/bin/bash", "#SBATCH --account=debruinz", "#SBATCH --job-name=s9-%s" % kind,
             "#SBATCH --output=%s/s9-%%x-%%j.out" % a.log_dir, "#SBATCH --no-requeue"]
@@ -127,20 +142,27 @@ def sbatch_script(kind, a, p):
     if kind == "fetch":
         hdr = ["#SBATCH --partition=%s" % p["fetch_partition"], "#SBATCH --cpus-per-task=%d" % p["fetch_cpus"], "#SBATCH --mem=16G",
                "#SBATCH --time=%s" % p["fetch_time"], "#SBATCH --signal=B:TERM@60"]
-        body = ["%s %s/fetch_worker.py %s --cap-tb %s --streams %d --decode-threads %d --idle-exit-min 20 &" %
-                (py, here, common, p["stage_cap_tb"], p["fetch_streams"], max(1, p["fetch_cpus"] // 2))]
+        body = ["%s %s/fetch_worker.py %s --cap-tb %s --streams %d --decode-threads %d --idle-exit-min 20%s &" %
+                (py, here, common, p["stage_cap_tb"], p["fetch_streams"], max(1, p["fetch_cpus"] // 2),
+                 " --head-screen" if p["head_screen"] else "")]
     elif kind in ("drain-h100", "drain-v100"):
         gres = p["h100_gres"] if kind == "drain-h100" else p["v100_gres"]
-        hdr = ["#SBATCH --partition=%s" % p["scav_partition"], "#SBATCH --gres=%s" % gres,
+        part = p["h100_partition"] if kind == "drain-h100" else p["v100_partition"]
+        hdr = ["#SBATCH --partition=%s" % part, "#SBATCH --gres=%s" % gres,
                "#SBATCH --cpus-per-task=%d" % p["gpu_cpus"], "#SBATCH --mem=128G", "#SBATCH --time=%s" % p["gpu_time"],
                "#SBATCH --signal=B:TERM@60"]
-        body = ["%s %s/drain_worker.py %s --engine gpu --threads %d --idle-exit-min %s --scratch /dev/shm &" %
-                (py, here, common, p["gpu_cpus"], p["idle_exit_min"])]
+        body = ["%s %s/drain_worker.py %s --engine gpu --threads %d --idle-exit-min %s --scratch /dev/shm --publish %s%s &" %
+                (py, here, common, p["gpu_cpus"], p["idle_exit_min"], p["publish"], s1_args(p))]
+        if p["publish"] == "s1":
+            body.insert(0, token_export())
     else:
         hdr = ["#SBATCH --partition=%s" % p["cpu_partition"], "#SBATCH --cpus-per-task=%d" % p["cpu_cores"],
                "#SBATCH --mem=%dG" % (p["cpu_cores"] * 6), "#SBATCH --time=%02d:%02d:00" % (int(p["cpu_job_h"]), round(p["cpu_job_h"] % 1 * 60)),
                "#SBATCH --signal=B:TERM@60"]
-        body = ["%s %s/drain_worker.py %s --engine cpu --threads %d --idle-exit-min %s &" % (py, here, common, p["cpu_cores"], p["idle_exit_min"])]
+        body = ["%s %s/drain_worker.py %s --engine cpu --threads %d --idle-exit-min %s --publish %s%s &" %
+                (py, here, common, p["cpu_cores"], p["idle_exit_min"], p["publish"], s1_args(p))]
+        if p["publish"] == "s1":
+            body.insert(0, token_export())
     # `--signal=B:TERM@60` signals the batch shell only; the worker runs in the background so the trap can forward SIGTERM to it
     # and wait for its clean-up (claim returned) before the 60 s grace ends.
     tail = ["pid=$!", "trap 'kill -TERM $pid 2>/dev/null; wait $pid' TERM", "wait $pid"]

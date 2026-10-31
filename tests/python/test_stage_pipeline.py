@@ -223,3 +223,50 @@ def test_range_fetcher_md5_and_retry(tmp_path):
     f = Plain("http://127.0.0.1:%d/x" % srv.server_address[1], len(data), out, 4, md5=True, retries=4)
     assert f.run() == hashlib.md5(data).hexdigest() and open(out, "rb").read() == data and fails["n"] == 2
     srv.shutdown()
+
+
+# ── per-sample Beta publish (sample_publish.py) ─────────────────────────────────────────────────────────────────────
+
+def _one_sample_manifest(gse, gsm, key_digest):
+    sf = {"feature_vocab.json": {"size": 1, "crc32": 1, "sha256": "ab" * 32}}
+    key = "s1/s/%s/%s.s1" % (gsm, key_digest)
+    return {"format": "singlet-s1", "gse": gse, "rev": "x", "study_files": sf, "samples": [{"gsm": gsm, "key": key, "bytes": 3, "sha256": "0" * 64}]}
+
+
+def test_manifest_merge_replaces_and_rev_matches_singlet():
+    import sample_publish as SP
+    a = _one_sample_manifest("GSE1", "GSM1", "a" * 32)
+    m1 = SP.merge_manifests(None, a)
+    b = _one_sample_manifest("GSE1", "GSM2", "b" * 32)
+    m2 = SP.merge_manifests(m1, b)
+    assert [s["gsm"] for s in m2["samples"]] == ["GSM1", "GSM2"] and m2["n_samples"] == 2 and m2["rev"] != m1["rev"]
+    # re-running GSM2 with the same key is idempotent; with a new digest it replaces the old object in the manifest
+    assert SP.merge_manifests(m2, b)["rev"] == m2["rev"]
+    b2 = _one_sample_manifest("GSE1", "GSM2", "c" * 32)
+    m3 = SP.merge_manifests(m2, b2)
+    assert m3["n_samples"] == 2 and m3["samples"][1]["key"].endswith("c" * 32 + ".s1")
+    # same algorithm as the manifest builder of the s1 package
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "python"))
+    try:
+        from singlet.s1 import manifest as M
+    except Exception:  # noqa: BLE001 - optional compiled dependencies not built here
+        pytest.skip("singlet.s1.manifest not importable")
+    assert SP.compute_rev([s["key"] for s in m2["samples"]], m2["study_files"]) == M.compute_rev([s["key"] for s in m2["samples"]], m2["study_files"])
+
+
+def test_study_lock_is_exclusive_and_stale_locks_expire(tmp_path):
+    import sample_publish as SP
+    with SP.StudyLock(str(tmp_path), "GSE1"):
+        with pytest.raises(TimeoutError):
+            SP.StudyLock(str(tmp_path), "GSE1", wait_s=0.5).__enter__()
+        os.utime(os.path.join(str(tmp_path), "beta", "locks", "GSE1"), (0, 0))  # holder died long ago
+        with SP.StudyLock(str(tmp_path), "GSE1", wait_s=2):
+            pass
+    assert not os.path.exists(os.path.join(str(tmp_path), "beta", "locks", "GSE1"))
+
+
+def test_publish_refuses_a_non_beta_target(tmp_path):
+    import sample_publish as SP
+    r = SP.publish_sample({"beta": {"base": "https://singlet.bio", "bucket": "singlet-data", "database": "singlet-catalog"}},
+                          {"root": str(tmp_path)}, "GSE1", "GSM1", str(tmp_path), str(tmp_path / "s"), dry_run=False)
+    assert r["status"] == "refused"

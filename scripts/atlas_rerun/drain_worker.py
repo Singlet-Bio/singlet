@@ -18,6 +18,7 @@ would be uploaded. Genotype-bearing `private/` outputs never leave the node: the
 """
 
 import argparse
+import concurrent.futures
 import json
 import os
 import shutil
@@ -86,8 +87,29 @@ def checksum_outputs(out_dir):
     return pub, n, priv
 
 
-def publish(a, man, out_dir):
-    """The upload hook. dry-run: size and hash of what a publish would send. A command is run with {gsm} {gse} {out}."""
+def publish_s1(a, cfg, ccfg, man, out_tmp, scr, claim, log_path, dry):
+    """Per-sample Beta publish (sample_publish.py): collect the public outputs exactly as the orchestrator does (private/ split off and
+    dropped with the scratch), build the `.s1` objects with s1_producer.py, upload, extend the study manifest."""
+    import types
+
+    import sample_publish as SP
+    import stages
+    ctx = types.SimpleNamespace(out_root=os.path.join(scr, "oroot"), private_root=os.path.join(scr, "priv"))
+    gse = man.get("gse") or "NA"
+    final, _priv, _sha, _man = stages.collect_outputs(ctx, gse, man["gsm"], out_tmp, claim, log_path)
+    res = SP.publish_sample(cfg, ccfg, gse, man["gsm"], final, os.path.join(scr, "pub"), dry_run=dry, s1_repo=a.s1_repo,
+                            runtime=a.s1_runtime, log=log)
+    if res["status"] not in ("published", "dry_run_ok"):
+        raise RuntimeError("beta publish: %s" % json.dumps(res)[:800])
+    return {"mode": "s1-dry" if dry else "s1", **{k: res.get(k) for k in ("status", "objects", "rev", "rev_was", "study_samples", "bytes_sent",
+                                                                          "uploaded", "present", "upload_s", "d1_rows_written")}}
+
+
+def publish(a, man, out_dir, cfg=None, ccfg=None, scr=None, claim=None):
+    """The upload hook. dry-run: size and hash of what a publish would send. s1 / s1-dry: per-sample Beta publish. Any other
+    value is a command run with {gsm} {gse} {out}."""
+    if a.publish in (["s1"], ["s1-dry"]):
+        return publish_s1(a, cfg, ccfg, man, out_dir, scr, claim, os.path.join(scr, "singlet.log"), a.publish == ["s1-dry"])
     if a.publish == ["none"]:
         return {"mode": "none"}
     if a.publish == ["dry-run"]:
@@ -103,7 +125,16 @@ def publish(a, man, out_dir):
     raise RuntimeError("publish failed rc=%s" % rc)
 
 
-def drain_one(a, cfg, ccfg, env, gsm, claim, man):
+class Job:
+    """One claimed sample between the end of its singlet run and the end of its publish."""
+
+    def __init__(self, gsm, claim, man, scr, heart, proc, t0, compute_s):
+        self.gsm, self.claim, self.man, self.scr = gsm, claim, man, scr
+        self.heart, self.proc, self.t0, self.compute_s = heart, proc, t0, compute_s
+
+
+def compute_phase(a, cfg, ccfg, env, gsm, claim, man):
+    """Claim -> singlet run. -> (message, Job|None). The GPU is busy only here; the publish of the previous sample runs meanwhile."""
     root = ccfg["root"]
     scr = os.path.join(a.scratch, "s9-drain-%s-%d" % (gsm, os.getpid()))
     shutil.rmtree(scr, ignore_errors=True)
@@ -113,6 +144,7 @@ def drain_one(a, cfg, ccfg, env, gsm, claim, man):
     heart.start()
     t0 = time.time()
     C.emit(root, "running", gsm, attempt=man.get("attempts", 1), stage="compute", engine=a.engine, via="drain")
+    keep = False
     try:
         cmd = singlet_cmd(a, ccfg, cfg, claim, man, scr)
         with open(os.path.join(scr, "singlet.log"), "w") as fh:
@@ -120,25 +152,17 @@ def drain_one(a, cfg, ccfg, env, gsm, claim, man):
             rc = proc["p"].wait()
         compute_s = time.time() - t0
         if heart.lost or not os.path.isdir(claim):
-            return "claim lost (reaped by another worker): nothing published, nothing deleted"
+            return "claim lost (reaped by another worker): nothing published, nothing deleted", None
         if rc != 0:
             tail = open(os.path.join(scr, "singlet.log")).read()[-1500:]
             C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="rc_%d" % rc, detail=tail)
             Q.release(a.stage, gsm, claim, failed=man.get("attempts", 1) >= Q.MAX_ATTEMPTS)
-            return "failed"
-        out_dir = os.path.join(scr, "out")
-        up = publish(a, man, out_dir)
-        pub, n, priv = checksum_outputs(out_dir)
-        if heart.lost or not os.path.isdir(claim):
-            return "claim lost during publish: staged reads left to the new owner"
-        heart.stop.set()
-        Q.finish(a.stage, gsm, claim)  # staged reads deleted only now: outputs are uploaded (or hooked) and checked
-        C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine=a.engine, compute_s=round(compute_s, 1),
-               wall_s=round(time.time() - t0, 1), pairs=man.get("pairs"), staged_bytes=man.get("bytes"), out_public_bytes=pub,
-               publish=up, via="drain")
-        return "done %.0fs %.3f Mpairs/s" % (compute_s, man.get("pairs", 0) / 1e6 / max(compute_s, 1e-9))
+            return "failed", None
+        keep = True
+        return "computed %.0fs %.3f Mpairs/s" % (compute_s, man.get("pairs", 0) / 1e6 / max(compute_s, 1e-9)), \
+            Job(gsm, claim, man, scr, heart, proc, t0, compute_s)
     except Q.Preempted:
-        # Slurm preempted this job (scavenger) or hit the time limit: stop the child, give the sample back with the attempt refunded.
+        # Slurm preempted this job or hit the time limit: stop the child, give the sample back with the attempt refunded.
         heart.stop.set()
         p = proc.get("p")
         if p and p.poll() is None:
@@ -148,8 +172,33 @@ def drain_one(a, cfg, ccfg, env, gsm, claim, man):
         C.emit(root, "requeued", gsm, attempt=man.get("attempts", 1), stage="compute", reason="preempted", via="drain")
         raise
     except Exception as e:  # noqa: BLE001
-        heart.stop.set()
         C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="exception", detail=repr(e))
+        if os.path.isdir(claim):
+            Q.release(a.stage, gsm, claim, failed=man.get("attempts", 1) >= Q.MAX_ATTEMPTS)
+        return "failed: %r" % e, None
+    finally:
+        if not keep:
+            heart.stop.set()
+            shutil.rmtree(scr, ignore_errors=True)
+
+
+def finish_phase(a, cfg, ccfg, job):
+    """Publish (per-sample Beta upload), then delete the staged reads and the scratch. Runs in a thread beside the next compute."""
+    root, gsm, claim, man, scr, heart = ccfg["root"], job.gsm, job.claim, job.man, job.scr, job.heart
+    try:
+        out_dir = os.path.join(scr, "out")
+        up = publish(a, man, out_dir, cfg, ccfg, scr, claim)
+        pub, n, priv = checksum_outputs(out_dir)
+        if heart.lost or not os.path.isdir(claim):
+            return "claim lost during publish: staged reads left to the new owner"
+        heart.stop.set()
+        Q.finish(a.stage, gsm, claim)  # staged reads deleted only now: outputs are uploaded (or hooked) and checked
+        C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine=a.engine, compute_s=round(job.compute_s, 1),
+               wall_s=round(time.time() - job.t0, 1), pairs=man.get("pairs"), staged_bytes=man.get("bytes"), out_public_bytes=pub,
+               publish=up, via="drain")
+        return "done (publish %.0fs after compute)" % (time.time() - job.t0 - job.compute_s)
+    except Exception as e:  # noqa: BLE001
+        C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="exception", detail=repr(e)[:1500])
         if os.path.isdir(claim):
             Q.release(a.stage, gsm, claim, failed=man.get("attempts", 1) >= Q.MAX_ATTEMPTS)
         return "failed: %r" % e
@@ -170,7 +219,9 @@ def main():
     ap.add_argument("--max-samples", type=int, default=0)
     ap.add_argument("--min-pairs", type=int, default=0)
     ap.add_argument("--max-pairs", type=int, default=0)
-    ap.add_argument("--publish", nargs="+", default=["dry-run"], help="dry-run | none | a command with {gsm} {gse} {out}")
+    ap.add_argument("--publish", nargs="+", default=["dry-run"], help="dry-run | none | s1-dry | s1 | a command with {gsm} {gse} {out}")
+    ap.add_argument("--s1-repo", help="built copy of the s1 code (compiled singlet._pz/_pz2) for s1_producer.py, e.g. $WORK/jobs/s6/s1repo")
+    ap.add_argument("--s1-runtime", help="in_runtime.sh to source: the producer then runs inside the runtime image + venv (Clipper)")
     ap.add_argument("--extra", nargs="*", default=[])
     a = ap.parse_args()
     cfg = C.load_config(a.config)
@@ -187,23 +238,52 @@ def main():
         p = m.get("pairs", 0)
         return (not a.min_pairs or p >= a.min_pairs) and (not a.max_pairs or p <= a.max_pairs)
 
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    inflight = []  # [(future, job)]: at most one publish runs beside the next sample's compute
+
+    def settle(timeout=None):
+        for fut, job in inflight:
+            log("[drain] %s %s: %s" % (a.engine, job.gsm, fut.result(timeout=timeout)))
+        inflight.clear()
+
     idle_since, n = time.time(), 0
-    while True:
-        Q.reap(a.stage, log=log)
-        c = Q.claim_ready(a.stage, accept=accept)
-        if c:
-            idle_since = time.time()
-            gsm, claim, man = c
-            man["gsm"] = gsm
-            log("[drain] %s %s: %s" % (a.engine, gsm, drain_one(a, cfg, ccfg, env, gsm, claim, man)))
-            n += 1
-            if a.max_samples and n >= a.max_samples:
-                return 0
-            continue
-        if time.time() - idle_since > a.idle_exit_min * 60:
-            log("[drain] idle %.0f min: exit after %d samples" % (a.idle_exit_min, n))
-            return 0
-        time.sleep(15)
+    try:
+        while True:
+            Q.reap(a.stage, log=log)
+            c = Q.claim_ready(a.stage, accept=accept)
+            if c:
+                idle_since = time.time()
+                gsm, claim, man = c
+                man["gsm"] = gsm
+                msg, job = compute_phase(a, cfg, ccfg, env, gsm, claim, man)
+                log("[drain] %s %s: %s" % (a.engine, gsm, msg))
+                settle()  # the previous publish (it ran while this sample computed)
+                if job:
+                    inflight.append((pool.submit(finish_phase, a, cfg, ccfg, job), job))
+                n += 1
+                if a.max_samples and n >= a.max_samples:
+                    break
+                continue
+            settle()
+            if time.time() - idle_since > a.idle_exit_min * 60:
+                log("[drain] idle %.0f min: exit after %d samples" % (a.idle_exit_min, n))
+                break
+            time.sleep(15)
+        settle()
+        return 0
+    except Q.Preempted:
+        # let a publish that is nearly done finish (it is idempotent anyway); otherwise give its sample back too
+        for fut, job in inflight:
+            try:
+                log("[drain] %s %s: %s" % (a.engine, job.gsm, fut.result(timeout=40)))
+            except concurrent.futures.TimeoutError:
+                job.heart.stop.set()
+                if os.path.isdir(job.claim):
+                    Q.release(a.stage, job.gsm, job.claim, refund=True)
+                C.emit(ccfg["root"], "requeued", job.gsm, attempt=job.man.get("attempts", 1), stage="compute", reason="preempted_in_publish", via="drain")
+        raise
+    finally:
+        pool.shutdown(wait=False)
 
 
 if __name__ == "__main__":

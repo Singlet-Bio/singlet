@@ -218,6 +218,31 @@ def decode_run(binary, sra, out, quality, vdb_threads, env, log_path):
     return rc, time.time() - t0
 
 
+def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=600):
+    """Screen the first `reads` pairs of a run BEFORE fetching it: VDB-streams just that head (`singlet download --max-reads`), then
+    `screen-runs`. -> ('keep'|'non10x'|'no_gex'|'unknown', seconds). 'unknown' (stream failed/timed out) means: fetch and let the full-run
+    screen decide. SRA files are columnar, so a byte range cannot give the head; this costs one short VDB stream, about the price
+    of 1-2% of a typical run (docs/research-beta/download-and-staging.md §3)."""
+    t0 = time.time()
+    out = os.path.join(scr, run + ".head.1fq")
+    try:
+        rc = subprocess.run([binary, "download", run, "--max-reads", str(reads), "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out],
+                            env=env, capture_output=True, timeout=timeout).returncode
+    except subprocess.TimeoutExpired:
+        return "unknown", time.time() - t0
+    if rc == 2:
+        return "non10x", time.time() - t0
+    if rc != 0 or not os.path.exists(out):
+        return "unknown", time.time() - t0
+    rc = subprocess.run([binary, "screen-runs", "--json", out + ".json", out], env=env, capture_output=True).returncode
+    for f in (out, out + ".json"):
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+    return ("no_gex" if rc == 6 else "keep" if rc == 0 else "unknown"), time.time() - t0
+
+
 def pairs_in(binary, onefq, env):
     """Read-pair count from the .1fq footer (`singlet decode --header`, as stages.read_header_reads)."""
     try:
@@ -239,6 +264,17 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
     ru0 = resource.getrusage(resource.RUSAGE_CHILDREN) if resource else None
     runs_info, raw_total = [], 0
     try:
+        if a.head_screen:
+            verdicts = {}
+            for r in item["runs"]:
+                verdicts[r], hs = head_screen(binary, r, scr, env)
+                Q.heartbeat(claim)
+                log("[head] %s %s %.0f s" % (r, verdicts[r], hs))
+            keep_runs = [r for r in item["runs"] if verdicts[r] in ("keep", "unknown")]
+            if not keep_runs:
+                Q.give_back_todo(stage, gsm, claim, retry=False)
+                return "parked_head_" + ("non10x" if "non10x" in verdicts.values() else "no_gex")
+            item = dict(item, runs=keep_runs)
         for r in item["runs"]:
             Q.heartbeat(claim)
             if a.limiter:
@@ -305,13 +341,15 @@ def main():
     ap.add_argument("--cap-tb", type=float, default=20.0, help="stop fetching while staged + incoming bytes are over this")
     ap.add_argument("--room-need-gb", type=float, default=30.0, help="free space required below the cap before taking a new item")
     ap.add_argument("--streams", type=int, default=64, help="ranged connections per run (Phase 1: ~64 saturates one 10G node)")
-    ap.add_argument("--quality", default="binned4", help="`singlet download --quality` (none|binned4|full)")
+    ap.add_argument("--quality", default="binned", help="`singlet download --quality` (none|binned4|full)")
     ap.add_argument("--decode-threads", type=int, default=2)
     ap.add_argument("--scratch", default=os.environ.get("TMPDIR", "/tmp"))
     ap.add_argument("--config", help="campaign config.json: supplies the pinned binary and whitelist dir of --cluster")
     ap.add_argument("--cluster", default="clipper")
     ap.add_argument("--binary", default=os.environ.get("SINGLET_BIN", "singlet"))
     ap.add_argument("--whitelist-dir", default=os.environ.get("SINGLET_WHITELIST_DIR"))
+    ap.add_argument("--head-screen", action="store_true",
+                    help="screen 1 M pairs of every run by a short VDB stream BEFORE downloading it (drops non-10x / non-GEX runs at ~no cost)")
     ap.add_argument("--allow-lite", action="store_true", help="also accept SRA Lite (simplified qualities) when no full .sra is reachable")
     ap.add_argument("--screen", action="store_true", default=True)
     ap.add_argument("--idle-exit-min", type=float, default=30.0)

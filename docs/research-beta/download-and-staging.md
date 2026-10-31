@@ -1,34 +1,33 @@
 # Download ceiling and the decoupled fetch → stage → drain pipeline
 
-Written 2026-10-30 by S9. Measured on Clipper (jobs only, nothing on the login node), real SRA data, ~1.3 TB downloaded in total and deleted.
-Code: `scripts/atlas_rerun/{stagequeue,fetch_worker,drain_worker,launcher}.py`, harness `scripts/atlas_rerun/dlbench/`, tests
-`tests/python/test_stage_pipeline.py`. Raw results: `$WORK/jobs/s9/results/*.jsonl` and `$WORK/jobs/s9/{e2e,scale}_<job>/`.
+Written 2026-10-30/31 by S9. Everything measured on Clipper (jobs only), real SRA data, ~1.8 TB downloaded in total and deleted.
+Code: `scripts/atlas_rerun/{stagequeue,ratecap,fetch_worker,drain_worker,sample_publish,prefilter,launcher}.py`, harness `scripts/atlas_rerun/dlbench/`,
+test jobs `e2e_stage_pipeline.sbatch`, `e2e_publish_dry.sbatch`, `fetch_tier_scale.sbatch`, `prefilter_eval.sbatch`, `headscreen_eval.sbatch`;
+tests `tests/python/test_stage_pipeline.py`. Raw results: `$WORK/jobs/s9/` (`results/*.jsonl`, `e2e_*`, `scale_*`, `pubdry_*`, `prefilter/`).
 
 ## 0. Summary
 
 | question | answer |
 |---|---|
-| How fast can Clipper pull from SRA? | **~0.9 GB/s aggregate (7.2–7.7 Gbit/s), ≈ 75 TB/day.** One node with ≥ 96 ranged streams reaches it; 2, 4 and 8 nodes add nothing. The campaign planned on 150 MB/s (13 TB/day) because it used one stream per run (`prefetch`): a single stream is 45–60 MB/s. |
-| Where is the limit? | A shared link upstream of the nodes, not our NICs (10 G bond per node), not NAT (nodes have public IPs, default route is the campus gateway) and not `port`. §1. |
-| What does the download cost in CPU? | Decoding SRA to the compact `.1fq` is **2.6 core-s per M pairs** (decode + screen, 50 samples). At the ceiling (18 M pairs/s of Lite) that is **~47 cores**: the fetch tier is CPU-bound before it is network-bound. §3. |
-| What is staged? | `.1fq` with binned qualities, zstd inside: **20 B/pair** (p10–p90: 12–28), **0.42× the SRA Lite bytes** (Lite: 48 B/pair). §3. |
-| Does the GPU outpace the network? | **No, not at this ceiling.** The network delivers 18 M pairs/s (Lite) or 12 M (full `.sra`); one H100 is 8.7–11.2 M pairs/s at S8's target (0.17 M/s per sample measured today). The earlier premise held at 150 MB/s (3 M pairs/s). §7. |
-| Calendar | Download alone: 12–14 days (Lite) to 20 days (full `.sra`) at the ceiling, 16–26 days at 0.7 GB/s. Compute then sets the calendar: 300 CPU cores = 7 M pairs/s (36 days); + one GPU at 10 M/s ≈ the network. §7. |
-| Stream straight into the GPU? | No: §8. |
-| Prototype | Queue, fetch worker, drain worker and launcher run end to end on Clipper (10 runs → 8 staged, 8 done exactly once, kill -9 mid-sample recovered). §4–6. |
+| Clipper's ceiling from SRA | **~0.9 GB/s (≈ 75 TB/day) at best, 0.65–0.77 GB/s on a busier evening**, shared by all nodes: one node with ≥ 96 ranged streams reaches it, 2/4/8 nodes add nothing. It is a campus-side limit shared with the rest of GVSU, not our NICs/NAT. **Default global cap: 0.6 GB/s** (`stage.json`, one number for all fetch jobs; 0.9 is an edit). §1, §3 |
+| What is fetched | **Full-quality `.sra`**, S3 `sra-pub-run-odp` first, NCBI host second; SRA Lite only behind `--allow-lite`. Measured: 70.2 B/pair raw. §3 |
+| What is staged | `.1fq`, zstd inside, **binned qualities: 29.4 B/pair (p10–p90 23.6–40.3) = 0.42 × the raw bytes** (Lite: 20.1 B/pair). §3 |
+| Fetch tier cost | decode + screen **3.0 core-s per M pairs** → 26 cores for the 0.6 GB/s cap (8.5 M pairs/s), 38 for 0.9. §3 |
+| Waste on non-10x / non-GEX runs | **30% of the runs of a random single-cell sample (9 of 30)** are parked after being fetched. Metadata alone cannot fix it (read lengths reject 46% of the good runs). A **1 M-pair head screen before the fetch is exact (73 of 73 runs) and costs a median 28 s**. §3 |
+| Pipeline | queue / fetch / drain / launcher run end to end; kill -9 and SIGTERM (preemption) recovered, exactly-once; **`--engine gpu` through the queue works on H100 and V100S** (S5's `singlet-gpu`, sha verified); per-sample Beta publish works in dry run on a real sample. §4–6 |
+| **Scavenger has no H100 nodes** | `sinfo`: scavenger = V100S (g001–g004), RTX 8000 (g005, g008) and CPU nodes. The three H100 nodes (g050–g052) are only in `gpu`, `short-gpu`, `debug-gpu`. The launcher defaults to `short-gpu` for H100 workers and `scavenger` for V100S; one config value flips it if the admins add them. §6 |
+| Calendar | download alone: **30 days at the 0.6 GB/s cap, 20 days at 0.9** (1.58 PB). Compute is the long pole today (a GPU worker measures ~0.1–0.2 M pairs/s end to end); it matches the cap at ≥ 1.4 M pairs/s per GPU with 6 GPUs. §7 |
 
 ## 1. Phase 1: the bandwidth ceiling
 
-Harness `dlbench/dlbench.py`: fixed 25–30 s windows, N streams of one tool, bytes counted from the allocated blocks of the node-local /tmp
-files once a second, rate = bytes between second 8–10 and the end of the window. Files deleted per test. Jobs 793532, 793553, 793563
-(`$WORK/jobs/s9/results/{single,curlmax,multi,nodes}.jsonl`); about 0.9 TB moved. Sources: NCBI SRA Lite on NCBI's own host (SDL with alternate
-locations), S3 `sra-pub-run-odp` full `.sra`; GCS Lite and S3 Lite (`sra-pub-zq-*`) are requester-pays (HTTP 400/403) and unusable.
+Harness `dlbench/dlbench.py`: fixed 25–30 s windows, N streams of one tool, bytes counted from the allocated blocks of the node-local /tmp files once a
+second, rate = bytes between second 8–10 and the end of the window. Jobs 793532, 793553, 793563, 793745 (`$WORK/jobs/s9/results/{single,curlmax,multi,nodes,tod}.jsonl`).
+Sources: NCBI SRA Lite on NCBI's own host, S3 `sra-pub-run-odp` full `.sra`; GCS Lite and S3 Lite (`sra-pub-zq-*`) are requester-pays (HTTP 400/403): unusable.
 
-**(a) Path.** Compute nodes have their own public IPs (egress IP = node IP, e.g. 35.39.212.71), default route via the campus gateway
-35.39.212.126, bond0 = 10 Gbit/s (2 × eno*np*), then 148.61.30.5 → 148.61.0.125 → 192.122.182.137 → 207.72.x (Merit) → Internet2 163.253.x. No NAT, nothing
-through `port`. sysctl `tcp_rmem` max 4 MiB, cubic: fine for 100 ms-class paths with many streams.
+**(a) Path.** Compute nodes have their own public IPs (egress IP = node IP), default route via the campus gateway 35.39.212.126, bond0 = 10 Gbit/s, then
+148.61.30.5 → 148.61.0.125 → 192.122.182.137 → 207.72.x (Merit) → Internet2. No NAT, nothing through `port`.
 
-**(b) One node, MB/s (steady state; node g008, Fri evening).**
+**(b) One node, MB/s (steady state, Fri 19:10).**
 
 | streams | NCBI Lite curl | NCBI Lite aria2 | S3 full curl | S3 full aria2 | prefetch × N runs (NCBI / S3) |
 |---|---|---|---|---|---|
@@ -40,13 +39,10 @@ through `port`. sysctl `tcp_rmem` max 4 MiB, cubic: fine for 100 ms-class paths 
 | 64 | 645 | 366 | 819 | 475 | - |
 | 96 / 128 / 192 | 884 / 795 / 939 | - | 872 / 866 / 885 | - | - |
 
-* One stream is 45–60 MB/s on either source. Rate grows linearly to ~16 streams and flattens at 0.87–0.94 GB/s from ~96 streams.
-* `aria2c` stops at 375–475 MB/s however many splits (the `-x` limit is 16 connections per URI; repeating the URI did not lift it). `prefetch` has no
-  stream option: N parallel prefetches are N streams. Many `curl --range` processes, or Python threads with keep-alive connections (the fetch worker), reach
-  the plateau. `s5cmd` works (2.8 GB in ~15 s at 8 parts) but is no better than curl.
-* One stream per file with N files (multi mode, the pipeline's pattern): NCBI curl 573 / 732 / 644 MB/s at 16 / 32 / 64 files, S3 curl 478 / 626 / 751.
+One stream is 45–60 MB/s; the rate is linear to ~16 streams and flat at 0.87–0.94 GB/s from ~96. `aria2c` stops at 375–475 MB/s (16 connections per URI), `prefetch` has no stream
+option. Many `curl --range` processes or keep-alive threads reach the plateau. Multi mode (one stream per different run, the pipeline's pattern): S3 curl 478 / 626 / 751 at 16 / 32 / 64 files.
 
-**(c) Several nodes, aggregate MB/s (curl, all nodes start the same second).**
+**(c) Several nodes, aggregate MB/s (curl, same start second).**
 
 | nodes | NCBI, 32 streams/node | NCBI, 64 | S3, 32 | S3, 64 |
 |---|---|---|---|---|
@@ -55,160 +51,154 @@ through `port`. sysctl `tcp_rmem` max 4 MiB, cubic: fine for 100 ms-class paths 
 | 4 | 857 | 902 | 883 | 909 |
 | 8 | 840 | 960 | 815 | 960 |
 
-The aggregate saturates at 0.85–0.96 GB/s from two nodes on, each node getting 1/k of it (8 nodes: 115–130 MB/s each). **The bottleneck is a shared
-~7.5 Gbit/s limit between the cluster and the Internet** (the campus/Merit uplink or its gateway); a single well-driven node already fills it. More fetch nodes
-only add redundancy.
+Saturation from two nodes on; each node gets 1/k. **The limit is a shared ~7.5 Gbit/s upstream link**; a single node fills it, more nodes only add redundancy.
 
-**(d) Time of day.** Fri 19:36–19:47 as above (cluster: 144–147 running jobs, no other downloader visible). Sat 03:00 and Sat 13:00 repeats are queued
-(jobs 793570/793571) and append to `$WORK/jobs/s9/results/tod.jsonl`; results are added to the PR when they land.
-
-**Recommended download configuration.** NCBI SRA Lite from NCBI's host (SDL with `accept-alternate-locations=yes`), S3 full `.sra` as fallback and where
-qualities matter (§9). 64–96 concurrent ranged streams in total (8 MiB blocks, keep-alive, per-block retry), as ~12 jobs × 8 streams (the CPU needs the
-jobs, not the network). Do not use `prefetch`, `aria2c` or VDB streaming. Other lab downloads share the same 0.9 GB/s; the launcher should not run next
-to them.
+**(d) Time of day.** Fri 19:36–19:47: 0.82–0.96 GB/s (table above). **Fri 22:00 (152 jobs running, `jehlee` 94 and `mulaae` 38 array jobs, plus my own small test downloads): NCBI 767 MB/s and S3 641 MB/s on one
+node, 647 MB/s aggregate over four nodes**, i.e. 20–30% lower at the same stream counts. Sat 03:00 and Sat 13:00 repeats are queued (jobs 793570, 793571) and append to `tod.jsonl`; see §10.
+The ceiling is therefore ~0.65–0.9 GB/s depending on what the rest of the campus does, which is why the default cap is 0.6.
 
 ## 2. Architecture
 
 ```
- fetch tier (CPU, ~12 jobs x 4 cores)         stage ($WORK, bounded)              compute tier (on demand)
- SDL -> ranged GETs -> node /tmp  ->  decode  ->  incoming/ --rename--> ready/ --rename--> claimed/ --> singlet --engine gpu|cpu
- md5 while downloading   .sra/.lite  .1fq        (cap: pause when over)   atomic            heartbeat    .s1 + upload (Beta) -> delete
- raw file deleted                    + screen                                                              staged reads deleted last
-                                  launcher (Slurm job, sbatch from a compute node): starts fetch jobs while todo exists,
-                                  GPU workers when backlog >= X GPU-hours, CPU workers for overflow
+ fetch tier (CPU jobs, 4 cores each)             stage ($WORK, bounded)                  drain workers (GPU/CPU, fungible, preemption-safe)
+ [head screen 1M pairs] -> SDL -> ranged GETs -> node /tmp -> decode -> incoming/ -rename-> ready/ -rename-> claimed/ -> singlet --engine gpu|cpu
+   global rate cap (stage.json, all jobs)    md5 while downloading   .sra deleted   (cap: pause when over)   atomic     heartbeat    |
+                                                                                                                         publish thread (previous sample, beside the next compute):
+                                                                                    collect -> s1_producer -> upload objects -> extend live study manifest -> delete staged reads
+ launcher (1-core Slurm job; sbatch works from compute nodes): fetch jobs while todo exists; H100 / V100S / CPU drain jobs by backlog and wait
 ```
 
-Nothing but the staged `.1fq` is shared; raw `.sra` lives in node `/tmp` for the length of its decode; outputs live in `/tmp` until uploaded.
+## 3. Fetch tier (`fetch_worker.py`) and what it costs
 
-## 3. Fetch tier (`fetch_worker.py`)
+Per sample: claim a todo item → optional head screen → wait for room under the stage cap → per run: SDL → `RangeFetcher` (threads, `pwrite`, md5 of the contiguous prefix while the rest downloads, size + md5 checked,
+each block throttled by the shared rate cap) → `singlet download <local .sra> --quality binned` → delete the raw file → `screen-runs` → `manifest.json` → rename into `ready/`.
+Sources, in order: full `.sra` on S3 `sra-pub-run-odp`, a full `.sra` on NCBI's host if the SDL lists one, SRA Lite only with `--allow-lite`.
 
-Per sample: claim a todo item → wait for room under the stage cap → per run: SDL (Lite on NCBI, else S3 full) → `RangeFetcher` (threads, `pwrite`, a
-hasher thread md5s the contiguous prefix while the rest downloads; checked against the SDL md5 and size) → `singlet download <local .sra> --quality binned`
-→ delete the raw file → `singlet screen-runs` on the staged runs → `manifest.json` (bytes, pairs, per-run bytes, `decode_core_s_per_Mpair`) → rename into `ready/`.
-Retries: 6 per block with back-off, then fall back Lite → full; a failed sample returns to `todo/` up to 3 times; a non-10x run (decode gate rc=2) or a sample
-with no GEX run is parked in `failed/<gsm>.fetch` with no further work.
+**Global rate cap (`ratecap.py`).** No daemon, no locks: each fetch worker publishes a heartbeat file in `<stage>/rate/` (`{t, active}`, every 2 s) and takes `cap / (workers downloading)` as its share, enforced by a token
+bucket shared by its download threads. A worker that is decoding gives its share to the others; a dead or preempted one drops out after 10 s. The cap is read from `<stage>/stage.json` (`rate_cap_MBps`, default 600)
+every 2 s, so **0.9 GB/s is `ratecap.write_cap_mbps(stage, 900)` or an edit of that file, no restart.** Validation (job 793706, one node, 6 workers × 16 streams): cap 150 MB/s → NIC receive 160–164 MB/s flat; raised
+to 300 mid-run → 290–330 MB/s within seconds. The wire rate is ~7% above the payload cap (TLS/TCP framing and NFS traffic are counted by the NIC), so the default 600 sits at ~640 MB/s on the wire.
 
-**Measured (job 793624, 63 runs of 1–9 GB Lite, 12 workers × 8 streams × 2 decode threads on one 24-core node; 50 staged, 13 parked):**
+**Measured, full `.sra` (job 793706: 30 runs of 1–8 GB Lite size, 21 staged, 9 parked):**
 
-| | |
-|---|---|
-| raw Lite → staged | 219 GB → 91 GB for 4.53 G pairs: **48.4 B/pair raw, 20.1 B/pair staged (ratio 0.42; per-sample p10–p90 12–28 B/pair)** |
-| decode + screen | median 3.06, volume-weighted **2.63 core-s/M pairs** (min 2.17, max 9.26) |
-| network at start | 900–946 MB/s for the first two minutes (everything downloading) |
-| network sustained | 300–690 MB/s, load 25–31 on 24 cores: **decode-bound**, 24 cores ≈ 10 M pairs/s ≈ 0.5 GB/s of Lite |
-| parked | 13 of 63 (21%): 7 non-10x gate, 6 no GEX run after the screen. Their bytes are downloaded and wasted. |
+| | full `.sra` | (SRA Lite, job 793624, 50 samples) |
+|---|---|---|
+| raw bytes | **70.2 B/pair** (189 GB for 2.69 G pairs) | 48.4 |
+| staged `.1fq` with binned qualities | **29.4 B/pair** (p10–p90 23.6–40.3) | 20.1 |
+| staged / raw | 0.42 | 0.42 |
+| decode + screen | **3.0 core-s/M pairs** (volume weighted) | 2.63 |
+| parked after the fetch | **9 of 30 (30%)** | 13 of 63 (21%) |
 
-Consequences:
+Binned qualities cost +9 B/pair over Lite's simplified ones. The old `.1fq` without qualities was 14–28 B/pair; real qualities add roughly a third.
 
-* **The fetch tier needs ~47 cores for 0.9 GB/s of Lite** (18.4 M pairs/s × 2.6), ~40 more for full `.sra` equivalently (12 M × 2.6 = 31 cores). It does not
-  need the network to be spread over many nodes: 12 jobs × 4 cores. Writing `.1fg` directly from the decoder would cut the `.1fq` writer (35 of 53 s in
-  ingest-format.md §2) but loses the qualities; see §9.
-* **Waste from the head screen.** The old flow screened the first 1 M pairs by VDB streaming before downloading. SRA files are columnar, so no cheap byte range gives
-  the head; here the whole run is fetched and the screen runs on the staged `.1fq`. With 21% of random "single-cell" runs rejected, the plan's own filtering
-  (a_empty…d_rest are GEX candidates) must keep this much lower; measure it on the first campaign wave and cap with a cheap pre-filter (ENA `library_strategy`, platform,
-  read length) if it is above ~5%.
-* **Stage traffic is small:** 18.4 M pairs/s × 20 B = 0.37 GB/s of writes to `$WORK`, 0.45 PB over the whole campaign.
+**Pre-filtering to stop the waste (measured on the 73 runs whose outcome is known: 58 staged, 9 parked at the non-10x gate, 6 parked by the GEX screen).**
+
+* *Metadata (ENA + NCBI SRA XML per-read statistics, `prefilter.py`)* is **not usable**. Many good 10x runs are stored as 2 × 150 or 2 × 101 spots (barcode and cDNA in one read); a "fixed barcode read of 26/28 nt"
+  rule rejected 27 of the 58 good runs (46%) while catching 13 of 15 bad ones; keyword rules (`vdj`, `tcr`, `perturb`) reject good GEX libraries from studies that also contain VDJ/CRISPR libraries (5 false rejects). Only
+  `library_strategy`/`platform`/`source` are safe, and the plan already applies them. Of 400 random single-cell RNA-Seq runs the length rule would drop 76%: not credible as a filter.
+* ***Head screen (`--head-screen`, default on in the launcher)***: stream the first 1 M pairs by VDB (`singlet download --max-reads 1000000`), then `screen-runs`, *before* fetching the run. Job 793716, 8 runs in parallel,
+  2 VDB threads each: **73 of 73 verdicts equal the real outcome** (58 keep, 9 non10x, 6 no_gex); wall time **median 28 s (max 68 s) for kept runs, 35 s (max 51) for no-GEX runs, 5 s (max 16) for non-10x runs**.
+  Cost-benefit: a kept run pays ~30 s × 2 threads ≈ 60 core-s; a rejected run saves its whole download (≈ 4.6 GB average at 30% rejects) and decode (3.0 core-s/M × 309 M ≈ 930 core-s). At 30% rejects the head screen
+  saves ~5× what it costs in CPU and removes the wasted bytes (≈ 30% of 1.58 PB ≈ 0.47 PB would otherwise cross the shared link). **Parked share after the head screen: ~0 by construction** (it is the same screen
+  the full run gets; a run whose stream fails or times out is `unknown` and is fetched anyway, then judged by the full screen). Not measured: the head screen inside the running fetch tier (it was tested on its own: job 793716).
+  The planned campaign list is already filtered to GEX candidates, so its reject rate is probably below the 30% of a random sample; the screen costs ~60 core-s per kept run either way.
 
 ## 4. The stage and queue (`stagequeue.py`)
 
 ```
 todo/<GSM>.json  → fetching/<GSM>.<w>/ (HB) → incoming/<GSM>.<w>/ → ready/<GSM>/ → claimed/<GSM>.<w>/ (HB) → deleting/ → gone
-                                                                                          └→ ready/ (reaped) or failed/<GSM>.<n>/ after 3 claims
+                                                                                          └→ ready/ (reaped, or SIGTERM: attempt refunded) or failed/<GSM>.<n>/ after 3 claims
 ```
 
-Every transition is one `rename()` within the same file system (atomic on Clipper's project space), so:
+Every transition is one `rename()` in the same file system (atomic on Clipper's project space): one claimant wins; `ready/` only after the manifest is written and fsynced; a dead fetch worker's item goes back to
+`todo/`; a dead drain worker's claim returns to `ready/` when its heartbeat (every `HB_STALE_S/5`, default 300 s) is stale; a paused worker whose claim was reaped notices it (`Heart.lost`) and publishes nothing;
+`finish()` renames to `deleting/` then removes. Backpressure: `wait_for_room()` blocks while ready + claimed + incoming bytes exceed the cap. Workers sweep `s9-*` scratch of dead pids at start.
 
-* **Exactly one claimant wins**; the loser sees `FileNotFoundError` and takes the next sample.
-* **No half samples:** `ready/` appears only after `manifest.json` is written and the files are fsynced; a dead fetch worker leaves an `incoming/` dir that `reap()` removes
-  and a `fetching/` claim whose item goes back to `todo/`.
-* **Crash during compute:** the claim's heartbeat (every `HB_STALE_S/5`, default 900 s/5) stops; any worker's `reap()` returns the dir to `ready/` with `attempts + 1`
-  (to `failed/` after 3). A worker that was merely paused notices that its claim directory is gone (`Heart.lost`), kills its child and publishes nothing: no sample is processed
-  and uploaded twice.
-* **Delete last:** `finish()` renames `claimed/` → `deleting/` then removes it, only after the publish hook succeeded.
-* **Backpressure:** `wait_for_room()` blocks while ready + claimed + incoming bytes (+ the next item's expected size) exceed the cap; bytes come from manifests, never a `du` walk.
-* **Scratch:** workers sweep `s9-fetch-*`/`s9-drain-*` dirs of dead pids at start (SIGKILL cannot clean /tmp; this showed up in the test).
+**Preemption (decision 2026-10-30).** On SIGTERM (Slurm preemption, time limit, `--signal=B:TERM@60` forwarded by the batch script's trap) a drain worker kills its child, returns the claim to `ready/` **with the attempt
+refunded** and emits `requeued`; a fetch worker returns its item to `todo/` untouched. A SIGKILL is the heartbeat timeout. Nothing is ever uploaded half: objects are content-addressed and re-checked by the server, the
+study manifest is written last, the staged reads are deleted only after the publish returned. **Tested on Clipper (jobs 793707 CPU, 793728 H100, 793729 V100S, 793748 H100 with the final code): 6–10 runs, cap 3 GB (fetch paused at the cap),
+worker A killed with -9 mid-sample (reaped), worker C killed with SIGTERM mid-sample (exit 143, claim back in `ready/`, attempts 0), worker B finished: every sample has exactly one `done` event, none failed, stage and /tmp empty.**
+Not tested live: a real Slurm preemption of a scavenger job (SIGTERM was sent by hand); the `--signal=B:TERM@60` trap in the launcher's batch scripts is untested on Clipper.
 
-**Tested** (`test_stage_pipeline.py`: exclusive claim, crash/attempt limit, fetch crash, backpressure, launcher policy, range fetcher with injected 503s and md5) and on
-Clipper (job 793579): 10 runs, cap 3 GB (fetch paused at the cap, resumed as the drain freed space), 8 staged, 2 parked; drain worker A killed with `-9` while holding a claim, the
-claim reaped, drain worker B finished all 8: **8 `done` events, 0 duplicates, 0 failed, stage empty**. Job 793691 repeats it with the final code.
+## 5. Drain worker, GPU and per-sample publish (`drain_worker.py`, `sample_publish.py`)
 
-## 5. Compute tier (`drain_worker.py`)
+Loop: `reap` → `claim_ready` → heartbeat → `singlet <staged .1fq | --runs-dir> … --engine gpu|cpu` (the staged `.1fq` is decoded by the CPU reader; no nvCOMP anywhere) → hand the finished sample to a **publish thread
+and claim the next sample at once**, so the GPU does not wait for the producer/upload of the previous sample (the producer + upload took 95–107 s per sample, 15–20% of a 61 M-pair GPU run) → `done` event (same events as
+`stages.compute_stage`, ledger unchanged). Scratch may be `/dev/shm`. A worker exits after `--idle-exit-min` without work.
 
-Loop: `reap` → `claim_ready` (oldest first; `--min-pairs`/`--max-pairs` let GPU workers take big samples and CPU workers small ones) → heartbeat thread → run
-`singlet <staged .1fq | --runs-dir> … --out-prefix /tmp/… --pipeline --output-format 1pz --engine gpu|cpu` (zstd-decoded on the CPU inside the reader; no nvCOMP anywhere) →
-publish hook → delete outputs and staged reads → `done` event in the orchestrator inbox (same events as `stages.compute_stage`, so the ledger is unchanged) → next. A worker
-exits after `--idle-exit-min` without work; the index lives as long as the process, but the binary reloads it per sample today.
+**`--engine gpu` through the queue** (S5's `$WORK/release-gate/bin/d9834b8a/singlet-gpu`, sha256 890fcd92… matches the file beside it): ran on an **H100 NVL (g052, `short-gpu`; jobs 793728, 793748)** and a **Tesla V100S (g001, `scavenger`; job 793729)**,
+6 small samples each (7–14 M pairs): all drained exactly once, same preemption results as above. On these small samples the GPU engine is dominated by start-up (130–210 s per sample; the V100S was as fast as the H100).
+Real sample **GSM6470208 (61.09 M pairs, 2.80 GB `.sra`) on an H100 (g051): fetch 11 s, decode + screen 81 s (2.59 core-s/M), singlet `--engine gpu` 533 s and 548 s in two runs = 0.112–0.115 M pairs/s end to end**; the number to compare with S8's later work.
 
-* **Publish hook.** Default `--publish dry-run` records what would be uploaded (public vs private bytes, files); `--publish CMD {gsm} {gse} {out}` runs the Beta uploader.
-  *Interface to settle with S6 (#97):* `s1_producer.py`/`beta-publish` work per **study** (a manifest per GSE), not per sample. To meet "nothing kept on Clipper" a
-  per-sample `.s1` producer + idempotent manifest append is needed; until then the hook is where it plugs in. Genotype-bearing `private/` files are counted, never uploaded, deleted.
-* **Per-sample fixed cost.** CPU engine, 8 threads, 7–15 M-pair samples: 119–206 s each (job 793579); a linear fit of these against the 66.6 M run (462 s at 9 threads, gpu-cr4-clip.md)
-  gives ~100 s fixed start-up (index load) + ~5 s per M pairs. At the campaign mean (309 M pairs) that is 7% on the CPU engine; it matters 3–5× more for a GPU engine that is
-  several times faster on the variable part. **S8: a resident-index "session" mode (one process, many samples) is worth ~10–25% of GPU wall.** The worker already records `compute_s`
-  per sample to measure it.
-* Not tested here: `--engine gpu` (no CUDA build in my path; the flag is passed through, the binary `mc99cpu` accepts it).
+**Per-sample Beta publish (`--publish s1` / `s1-dry`)**, built on #97 without editing it: the sample's outputs are collected exactly like the orchestrator does (`stages.collect_outputs`, private/ dropped with the scratch), a one-sample
+hand-off is made, `s1_producer.py` (→ `s1_publish.py` pack/migrate/verify, Beta policy) builds the objects (inside the runtime image via `in_runtime.sh`, with the built `s1repo`), the Beta uploader's own `Client`/`upload` primitives push
+what the bucket lacks, and then the **live study manifest** (`beta-data.singlet.bio/s1/m/<GSE>.json`, public) is extended with this sample (replacing an older entry of the same sample), `rev` recomputed with the same
+`compute_rev` as `singlet.s1.manifest` (a test asserts equality), and posted to `s1-publish` under a per-study lock. Nothing is stored on Clipper. Re-publishing the same objects reproduces the same keys and rev (no writes); **a re-run of the
+sample that is not bit-identical gets a new object key (the two GPU runs above gave rev 9510b829… and e320751d…) and replaces the old one in the manifest, which is the uploader's documented behaviour** (orphan objects stay in the bucket).
+Target checks are #97's (`beta.check_target`: Beta host/bucket/database only; manifest keys must be public `s1/…`). Verified in **dry run** on the real sample above (jobs 793741, 793749): producer ok, local SHA-256/size/key-digest checks ok,
+merged manifest for a study of 1 sample, nothing written. Found and fixed on the way: sourcing `in_runtime.sh` with `bash -c 'source "$0"'` runs the command once during the `source` (its `BASH_SOURCE == $0` guard) and
+again explicitly, so the producer ran twice; the wrapper now sources `$1`. **Not run live: no token was used.** Assumption to confirm with S6: `study_files` (feature vocab, study meta) of the newest one-sample manifest are valid for the whole study.
 
 ## 6. Launcher (`launcher.py`)
 
-A one-core Slurm job (3 h 55 min, queues its own successor with `--dependency=afterany`). `sbatch`, `squeue` and `scancel` work from compute nodes (job 793564: submit and cancel
-from a node succeeded; `scrontab` is available but unnecessary). Each tick: `reap`, read the backlog, count its own jobs by name (`s9-fetch`, `s9-drain-gpu`, `s9-drain-cpu`), decide:
+A one-core Slurm job (3 h 55 min, queues its own successor with `--dependency=afterany`); `sbatch`/`squeue`/`scancel` work from compute nodes (job 793564), `scrontab` exists but is not needed. Every submitted job has `--no-requeue`,
+`--signal=B:TERM@60` and a TERM trap that forwards to the worker. Per tick: `reap`, backlog, count its own jobs by name and pending age, decide (unit-tested as a pure function; no live submission was made):
 
-* fetch jobs: top up to `fetch_jobs` (12 × 4 cores) while `todo/` is not empty; each job pauses itself at the cap;
-* GPU worker: start one when `backlog_gpu_h = ready pairs / R_gpu / 3600 ≥ X`; at most `max_gpu` (1) running or pending;
-* CPU workers: the part of the backlog the GPU workers cannot clear within `cpu_overflow_h` (3 h) goes to 16-core `short-cpu` jobs, up to `max_cpu`;
-* `PAUSE` file in the stage stops all submissions.
+* **fetch**: `fetch_jobs` (6 × 4 cores = 24 cores of decode for 8.5 M pairs/s) while `todo/` is not empty, `--head-screen` on;
+* **H100 workers** (`s9-drain-h100`, one GPU each, up to 6 = 3 nodes × 2): start only when the backlog is ≥ X H100-hours (X = 1), partition `h100_partition` (default **`short-gpu`**, because the scavenger partition contains no H100);
+* **V100S workers** (`s9-drain-v100`, `scavenger`, up to 4): only when the H100 pool is starved, i.e. a pending H100 job has waited more than `fallback_wait_h` (1 h) and the running + young-pending capacity cannot clear the backlog in `overflow_h` (3 h);
+* **CPU workers** (`s9-drain-cpu`, 16 cores, `short-cpu`, up to 8): the remaining excess;
+* long waits therefore never block progress, and fallback workers need no cancelling: they exit after `idle_exit_min` when the stage is drained. A `PAUSE` file stops submissions. `publish` (`dry-run` | `s1-dry` | `s1`) is a pipeline value;
+  `s1` also exports the ingest token from `~/.singlet/beta_ingest_token` into the job's environment only.
 
-**Choice of X.** A GPU worker lives `queue wait + index load + backlog/R_gpu`. It never waits for data if the stage holds more than it drains while it exists, i.e. the
-backlog at start ≥ R_gpu × (queue wait + load) and fetch keeps adding at least as much as it drains. X = **1 GPU-hour** (= 0.76 TB of staged `.1fq` at 10 M pairs/s and 21 B/pair)
-covers a 15-minute start-up with a 4× margin and amortises the start-up over ≥ 1 h of work; when the network outruns the GPU (§7) the backlog is always above X and the worker simply runs for
-its 3 h 59 min and is replaced. If S8's rate goes up 3×, X in hours stays; in TB it triples.
+**X = 1 H100-hour** covers a 15-minute start-up with a 4× margin and amortises it over ≥ 1 h of work.
 
-## 7. Sizing model
+## 7. Sizing model (full `.sra`, cap 0.6 GB/s, compute as the long pole)
 
-Inputs: total 2.16 × 10¹³ pairs (1.58 PB full `.sra` at 73 B/pair; 309 M pairs per sample over 70 k samples); Lite 48.4 B/pair measured (0.66×); staged 20.1 B/pair; fetch
-decode 2.6 core-s/M; CPU engine 38.6–44.6 host core-s/M (gpu-cr4-clip.md) → 0.022–0.026 M pairs/s/core; GPU engine: 0.17 M pairs/s per sample measured today (66.6 M pairs in 386 s,
-9 threads), S8's node bound 8.7–11.2 M pairs/s per H100 (ws-w11-gpu.md), host bound 18–24 M pairs/s per node.
+Inputs: total 2.16 × 10¹³ pairs (1.58 PB at 73 B/pair; 70.2 measured); staged 29.4 B/pair; decode 3.0 core-s/M; GPU worker end to end 0.115 M pairs/s (measured above), 0.17 M pairs/s (S8, one sample, 9 threads); S8's
+host cost with everything GPU-side on: 12.5–14.4 core-s/M, GPU busy 3.6–8% (PR #107), so one 56-core H100 node (2 GPUs) is host-bound at ≈ 4 M pairs/s, 2 M per GPU; GPU-bound target 8.7–11.2 M pairs/s per H100; CPU engine 38.6–44.6 core-s/M.
 
-| quantity | value |
-|---|---|
-| network, Lite / full | 0.9 GB/s → **18.4 / 12.3 M pairs/s**; 0.7 GB/s sustained → 14.3 / 9.6 |
-| download calendar, all Lite (1.06 PB) / rollout "half-Lite" (0.96 PB) / all full (1.58 PB) | 13.6 / 12.3 / 20.3 days at 0.9 GB/s; 17.5 / 15.9 / 26.1 days at 0.7 GB/s (was 74–122 at 150 MB/s) |
-| fetch jobs | 12 × 4 cores (47 cores of decode for Lite at the ceiling; 31 for full) |
-| S8 today (PR #107, GPU engine, everything GPU-side on) | host 12.5–14.4 core-s/M, GPU busy only 3.6–8% → host-bound: one 54-core node ≈ 3.9–4.3 M pairs/s, ~half of S8's GPU-bound 8.7–11.2 |
-| compute rate needed to match the network | 18.4 M pairs/s (Lite) |
-| compute calendar | 300 CPU cores: 7 M pairs/s → 36 days; one GPU at 10 M/s: 25 days; one GPU + 300 cores: 17 M/s → 15 days; one GPU at today's 0.17 M/s per sample: not a factor until S8's speedup lands (node-level 2.5 M/s: 100 days) |
-| stage size | cap = X + start-up buffer: 0.76 TB (X = 1 GPU-h) + 1.4 TB (one hour of fetch at 18.4 M/s × 21 B while a GPU job waits in the queue) ≈ **2.2 TB; run with a 4 TB cap** (`$WORK` has 47 TB free) |
-| GPU duty cycle | stage never empty while compute < network, so ~100% of the time a GPU job exists; between jobs the queue wait is covered by the stage. When compute exceeds network (GPU + CPU > 18 M/s) the stage drains and the launcher reduces to bursts: duty = network pairs/s ÷ compute pairs/s |
-| fetch duty when compute-bound | the cap pauses fetch; its CPU and the network are idle for 1 − R_compute/R_network (46% with one GPU at 10 M/s), which is why CPU overflow workers pay |
-| stage writes | 0.37 GB/s, 0.45 PB over the campaign |
+| quantity | at the 0.6 GB/s cap | at 0.9 GB/s |
+|---|---|---|
+| network in pairs/s (70.2 B/pair) | **8.5 M** | 12.8 M |
+| download calendar, 1.58 PB | **30.5 days** | 20.3 days |
+| fetch decode cores (3.0 core-s/M) | 26 (6 jobs × 4) | 38 (10 jobs × 4) |
+| stage inflow (29.4 B/pair) | 0.25 GB/s, 0.64 PB over the campaign | 0.38 GB/s |
+| waste without the head screen (30% of a random sample) | +0.47 PB, ~+13 days of link | |
 
-**What this says about the plan.** With the ceiling at 0.9 GB/s the campaign is **compute-bound again** from the moment S8's GPU engine gets to ~10 M pairs/s per H100: the calendar
-is then max(download 12–20 d, compute 15–36 d depending on GPUs/cores), not 94–131 days. Clipper has several H100s; "single GPU per job" still allows 2–3 GPU workers in parallel
-(`max_gpu`), which is where the remaining calendar is. Anvil is not needed for bandwidth on this evidence (its network would only matter if it is not behind a similar shared link).
+Compute calendar for 2.16 × 10¹³ pairs with N GPU workers at R M pairs/s each:
+
+| R per worker | 6 workers (all 3 H100 nodes) | workers needed to match 8.5 M/s |
+|---|---|---|
+| 0.115 (measured end to end today) | 500 days | 74 |
+| 0.17 (S8, one sample) | 340 days | 50 |
+| 1.0 | 42 days | 9 |
+| 1.4 | **30 days = the cap's download time** | 6 |
+| 2.0 (host-bound at today's 14 core-s/M with 28 cores per GPU) | 21 days (network-bound at 0.9) | 4 |
+| 10 (S8 GPU-bound target) | 4 days | 1 |
+
+* **Compute is the long pole until a worker delivers ≥ 1.4 M pairs/s.** Today it is 7–12× short; this is S8's job. 300 CPU cores add 7 M pairs/s (36 days alone) and are the cheapest way to cover the gap now (CPU workers use the same queue).
+* **Stage size.** Compute-bound: the stage is always full, fetch sits at the cap and the network idles. Network-bound: the stage should hold the longest gap between GPU jobs: start-up (15 min) + a `short-gpu`/scavenger wait of up to 1 h
+  before the launcher falls back, at 8.5 M pairs/s × 29.4 B = 0.25 GB/s: **0.9 TB for 1 hour, 2 TB for 2.2 hours.** Default cap 2 TB ("a few hours"); X = 1 GPU-hour holds 0.2 TB at 2 M/s, 1.06 TB at 10 M/s.
+* **GPU duty.** Workers hold their GPU for as long as the stage has work, so duty ≈ 100% while compute-bound. In the network-bound regime duty = supply ÷ capacity (8.5 ÷ 12 for 6 GPUs at 2 M/s = 71%), carried by bursts of ≥ 1 h
+  claimed from the stage; the publish thread keeps the GPU from waiting on uploads.
+* **Spare network.** When compute-bound, lowering `fetch_jobs` or the cap costs nothing; raising the cap to 0.9 only helps once R is ≥ 2.1 per GPU (6 GPUs).
 
 ## 8. Streaming download → GPU, skipping the disk?
 
-No, and the reason is not that the GPU outpaces the network (it doesn't, §7):
+No. The network (8.5 M pairs/s at the cap, 12.8 at 0.9) is **faster than any GPU worker measured so far** (0.1–0.2 M pairs/s each, up to ~2 host-bound), so a streaming GPU would not wait for data today; and in the
+regime where it would (R ≥ 1.4 per GPU) the stage is what makes it robust: (1) the link is shared and varies by 20–30% (§1d), a streamed GPU idles on every dip; (2) the decode costs 3.0 core-s/M, i.e. 26 cores at the cap, which
+on a GPU node would compete with the host lane (12.5–14.4 core-s/M) that already limits it; (3) 30% of runs are rejected only after the head screen/decode, multi-run samples need every run before compute starts; (4) a preempted
+GPU job loses a stream but not a staged sample. The stage costs ≤ 2 TB of `$WORK` and 0.25 GB/s of writes.
 
-1. **Rates:** the network (18 M pairs/s) is ~2× one H100 (≤ 11): a streaming GPU would be fed by an uncontrolled source; any dip (other lab jobs share the 0.9 GB/s: single-stream rates were 11–56 MB/s
-   in W11's busy windows) idles it. The stage decouples that at a cost of 0.37 GB/s of writes and ~2 TB.
-2. **CPU on the GPU node:** decode is 2.6 core-s/M; at 10 M pairs/s that is 26 cores, on a node (54 cores) whose host lane for the GPU engine already needs 14–25 core-s/M and is bound at 18–24 M pairs/s.
-   Decoding there would take about half of the host lane.
-3. **Gating and retries:** 21% of random runs are rejected only after decode and screen (§3); multi-run samples need all runs' screen before any compute (pooling or `--runs-dir`).
-   Failed/retried downloads would stall the GPU.
-4. **Exactly-once/restart:** staged samples survive a GPU job ending; a stream does not.
+## 9. Decisions taken (Zach, 2026-10-30) and what is open
 
-The stage costs ~2 TB of `$WORK` and 0.4 GB/s; streaming would save neither the decode CPU nor the bytes.
+* Full-quality `.sra` (S3 primary), binned qualities in the stage ✔ (implemented, measured). No CPU-node split: the drain worker does staged input → uploaded `.s1` ✔ (the producer/upload runs in the worker's publish thread). GPU drain workers preemption-safe ✔;
+  **but scavenger has no H100** (§0): use `short-gpu` for H100 or ask GVSU to add g050–g052 to `scavenger`.
+* Rate cap 0.6 GB/s global ✔. 0.9 needs Zach's clearance with GVSU IT: one value.
+* *Open:* S6 to confirm the manifest-merge assumption (§5) and run one live publish with a token; `singlet-gpu` ran on a V100S (g001), but its speed on large samples is unmeasured (`v100_rel` = 0.3 is a guess); the GPU engine's
+  per-sample start-up (~100 s) argues for a resident-index session mode (S8); the fetch CPU (26 cores) should not be stolen by other lab jobs on `short-cpu`.
 
-## 9. Open decisions and risks
+## 10. Status of what was queued
 
-* **Qualities.** The stage keeps binned qualities (`--quality binned`; 20 B/pair; ingest-format.md measured `.1fq` without qualities 14–28 B/pair, binned adds 30–51%, format-1fq.md §4.3).
-  The SNP and mtDNA callers need them (donor false-alt 4.3% without), but **SRA Lite carries only simplified qualities**, so Lite plus binned qualities may be uninformative for them. If
-  the callers need real qualities the download is the full `.sra` (1.58 PB, 20 days at the ceiling, 12 M pairs/s) and Lite saves nothing. Decision for Zach; both paths work in the code
-  (`--quality`, and the SDL source order is one list).
-* **Per-sample upload** (S6's `beta-publish` is per study) — §5.
-* **GPU build for the drain test:** `--engine gpu` through the queue is untested; the CPU engine through the same worker is. S8's speed-up and a resident-index mode change §7's compute row, not the design.
-* **Shared link:** other lab downloads (`jehlee`, `mulaae` arrays were running) and other campus traffic share the 0.9 GB/s; the number may be lower at some hours (time-of-day repeats pending).
-  The launcher should refuse to start fetch jobs while a competing big download runs; there is no hook for this yet.
-* **Parking waste** (§3) and the `staged/raw` ratio are measured on 50 + 8 samples, not the campaign list.
-* **Stage on `$WORK`:** writes of 0.37 GB/s and many small `rename`s are modest; the cap keeps it at ≤ 4 TB. Untested: a fetch burst of several hundred small samples in a minute.
+* Time-of-day repeats Sat 03:00 / 13:00 (jobs 793570, 793571): results append to `$WORK/jobs/s9/results/tod.jsonl`; this section is updated in a follow-up commit when they land.

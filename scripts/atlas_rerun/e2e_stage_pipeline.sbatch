@@ -9,16 +9,18 @@
 # S9 Phase 2 end-to-end test of the decoupled pipeline on N real small samples, as ONE Slurm job standing in for the three tiers:
 #   fetch_worker (background) -> bounded stage (backpressure) -> drain_worker A (killed with -9 mid-sample) -> drain_worker B (reaps A's
 #   claim, drains the rest) -> dry-run publish -> staged reads and /tmp deleted. launcher.py --once --dry-run prints its decisions.
-# Env: N (samples, default 12), BIN (singlet binary), CAP_GB (stage cap, default 3), QUALITY (default binned).
+# Env: ENGINE (cpu|gpu; for gpu submit with --partition=scavenger --gres=gpu:... and BIN=.../singlet-gpu), N (samples, default 12), BIN (singlet binary), CAP_GB (stage cap, default 3), QUALITY (default binned).
 # Nothing is written to Cloudflare (publish = dry-run); reads and outputs are deleted; test root is $W/jobs/s9/e2e_$SLURM_JOB_ID.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet
 SRC=${SRC:-$W/jobs/s9/src}          # scripts/atlas_rerun copied here by the submitter (git sync is the normal route)
-N=${N:-10}; CAP_GB=${CAP_GB:-3}; QUALITY=${QUALITY:-binned}
+ENGINE=${ENGINE:-cpu}; N=${N:-10}; CAP_GB=${CAP_GB:-3}; QUALITY=${QUALITY:-binned}
 BIN=${BIN:-$W/pipeline-benchmark/bin/mc99cpu}
 T=$W/jobs/s9/e2e_$SLURM_JOB_ID; STAGE=$T/stage; mkdir -p $T/root $STAGE
 export SINGLET_BIN=$BIN S9_HB_STALE_S=45
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists
+command -v nvidia-smi >/dev/null && nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+[ -f "$(dirname $BIN)/sha256.txt" ] && { echo "binary sha256: $(sha256sum $BIN | cut -c1-16)  listed: $(grep -i "$(basename $BIN)" $(dirname $BIN)/sha256.txt | cut -c1-80)"; }
 echo "== node $(hostname) $(date -Is) N=$N cap=${CAP_GB}GB quality=$QUALITY bin=$BIN"
 
 # config: the campaign config pointed at the test root
@@ -59,14 +61,14 @@ python3 $SRC/launcher.py --stage $STAGE --config $T/config.json --once --dry-run
 du -sh /tmp/s9-fetch-* 2>/dev/null | head -2
 
 echo "== drain worker A (will be killed with -9 while it holds a claim)"
-python3 -u $SRC/drain_worker.py --stage $STAGE --engine cpu --config $T/config.json --threads 8 --idle-exit-min 1 > $T/drainA.log 2>&1 &
+python3 -u $SRC/drain_worker.py --stage $STAGE --engine $ENGINE --config $T/config.json --threads 8 --idle-exit-min 1 > $T/drainA.log 2>&1 &
 APID=$!
 for i in $(seq 1 120); do [ -n "$(ls $STAGE/claimed 2>/dev/null)" ] && break; sleep 2; done
 sleep 8; kill -9 $APID; pkill -9 -P $APID 2>/dev/null; pkill -9 -f "mc99cpu .*--out-prefix $T" 2>/dev/null; pkill -9 -f "mc99cpu .*--out-prefix /tmp/s9-drain" 2>/dev/null
 echo "killed A holding: $(ls $STAGE/claimed)"
 sleep 50   # past the shortened heartbeat timeout
 echo "== drain worker C (preemption: SIGTERM while holding a claim; the claim must come back at once, attempts not counted)"
-python3 -u $SRC/drain_worker.py --stage $STAGE --engine cpu --config $T/config.json --threads 8 --idle-exit-min 1 > $T/drainC.log 2>&1 &
+python3 -u $SRC/drain_worker.py --stage $STAGE --engine $ENGINE --config $T/config.json --threads 8 --idle-exit-min 1 > $T/drainC.log 2>&1 &
 CPID=$!
 for i in $(seq 1 60); do [ -n "$(ls $STAGE/claimed 2>/dev/null)" ] && break; sleep 2; done
 sleep 6; echo "C holds: $(ls $STAGE/claimed)"; kill -TERM $CPID; wait $CPID; echo "C exit $? ; claimed now: [$(ls $STAGE/claimed)] ready: $(ls $STAGE/ready | wc -l)"
@@ -76,7 +78,7 @@ python3 -c "
 import json,glob
 print('attempts of returned samples:', [json.load(open(f))['attempts'] for f in glob.glob('$STAGE/ready/*/manifest.json')])"
 echo "== drain worker B (reaps A's claim and drains the rest)"
-python3 -u $SRC/drain_worker.py --stage $STAGE --engine cpu --config $T/config.json --threads 8 --idle-exit-min 3 > $T/drainB.log 2>&1 &
+python3 -u $SRC/drain_worker.py --stage $STAGE --engine $ENGINE --config $T/config.json --threads 8 --idle-exit-min 3 > $T/drainB.log 2>&1 &
 BPID=$!
 wait $FPID; echo "fetch worker exit $?"
 wait $BPID; echo "drain B exit $?"
