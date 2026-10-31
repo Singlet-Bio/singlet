@@ -324,10 +324,11 @@ int star_main_impl(int argInN, char *argIn[])
 
     // aggregate output junctions
     // collapse splice junctions from different threads/chunks, and output them
-    if (P.runRestart.type != 1 && P.outSJ.yes)
+    if (P.runRestart.type != 1 && P.outSJ.yes) {
         starPhaseMark(P, "sj_output_begin");
         outputSJ(RAchunk, P);
         starPhaseMark(P, "sj_output_done");
+    }
 
     // solo counts
     starPhaseMark(P, "solo_begin");
