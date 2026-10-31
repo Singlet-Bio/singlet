@@ -213,7 +213,7 @@ def cmd_eval(a):
 
     data = S.load_training("stored")
     # --tag T (features unsuffixed) or --tag pca=T1,dst=T2 (features suffixed @pca / @dst)
-    tags = dict(t.split("=") if "=" in t else ("", t) for t in a.tag.split(",") if t)
+    tags = dict(t.split("=") if "=" in t else ("", t) for t in a.tag.split("+") if t)
     for suf, tg in tags.items():
         for n in D.STUDY:
             z = np.load(Path(a.out) / "lite" / f"feats_{tg}" / f"{n}.npz")
