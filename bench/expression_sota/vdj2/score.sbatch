@@ -22,7 +22,8 @@ else
   LIBS="pbmc2_t:TCR:cr3 pbmc2_b:BCR:cr3 pbmc10k_t:TCR:cr5 pbmc10k_b:BCR:cr5 gse145370_S133A:TCR:cr3 gse145370_S158A:TCR:cr3 gse145370_S149B:TCR:cr3 gse145370_S150B:TCR:cr3 gse145370_S135B:TCR:cr3"
 fi
 mkdir -p $V/scores
-for TAG in $TAGS; do
+for TAG in ${TAGS:-_}; do
+  [ "$TAG" = _ ] && TAG=
   spec=""
   for it in $LIBS; do
     IFS=":" read -r lib ch conv <<< "$it"
