@@ -200,19 +200,39 @@ class Distilled(Lite):
             out[s : s + block] = h @ self.W2 + self.b2
         return out
 
-    def features(self, X, gene_ids, species, *, n_sim=None, seed=0, dim=0, **_):
+    @staticmethod
+    def knn_ref(Q: np.ndarray, ref: np.ndarray, m: int, k: int, pos: np.ndarray, block: int = 4096) -> np.ndarray:
+        """Fraction of simulated doublets (rows ``>= m`` of ``ref``) among the k nearest reference rows of each query; ``pos[i]``
+        is the reference row that is query i itself (-1 if none), excluded."""
+        rq = (ref * ref).sum(1)
+        out = np.empty(len(Q))
+        for s in range(0, len(Q), block):
+            q = Q[s : s + block]
+            d = (q * q).sum(1)[:, None] + rq[None, :] - 2.0 * (q @ ref.T)
+            sel = np.flatnonzero(pos[s : s + block] >= 0)
+            d[sel, pos[s : s + block][sel]] = np.inf
+            nb = np.argpartition(d, k, axis=1)[:, :k]
+            out[s : s + block] = (nb >= m).mean(1)
+        return out
+
+    def features(self, X, gene_ids, species, *, seed=0, ref_cap=3000, sim_ratio=2, **_):
+        """``lite_knn``: fraction of simulated doublets among the nearest neighbours in the student's embedding, against a fixed
+        reference (at most ``ref_cap`` of the sample's cells and ``sim_ratio`` x as many simulated doublets), so the cost is
+        O(n * ref_cap). ``lite_entropy``: the student's entropy output."""
         rng = np.random.default_rng(seed)
         X = sp.csr_matrix(X, dtype=np.float32)
         n = X.shape[0]
         C = self.panel_counts(X, self.columns(gene_ids, species))
-        S, _ = simulate_doublets(C, int(n_sim or 2 * n), rng)
         o = self.outputs(C)
-        os_ = self.outputs(S)
-        k = max(10, int(round(0.5 * np.sqrt(n))))
-        d = dim or self.K
-        res = self.knn_fraction(np.vstack([o[:, :d], os_[:, :d]]), n, k)
-        res["lite_entropy"] = o[:, self.K].astype(np.float64)
-        return res
+        E = o[:, : self.K]
+        sub = np.sort(rng.choice(n, ref_cap, replace=False)) if n > ref_cap else np.arange(n)
+        m = len(sub)
+        S, _ = simulate_doublets(C, int(sim_ratio * m), rng)
+        ref = np.vstack([E[sub], self.outputs(S)[:, : self.K]])
+        pos = np.full(n, -1)
+        pos[sub] = np.arange(m)
+        k = max(10, int(round(0.5 * np.sqrt(m))))
+        return {"lite_knn": self.knn_ref(E, ref, m, k, pos), "lite_entropy": o[:, self.K].astype(np.float64)}
 
     @classmethod
     def load(cls, path) -> "Distilled":

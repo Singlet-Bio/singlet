@@ -219,7 +219,7 @@ def cmd_eval(a):
             z = np.load(Path(a.out) / "lite" / f"feats_{tg}" / f"{n}.npz")
             for k in z.files:
                 data[n][0][k + ("@" + suf if suf else "")] = z[k]
-    cols = BASE5 + a.combo.split(":")[1].split(",") if ":" in a.combo else COMBOS[a.combo]
+    cols = a.combo[1:].split("+") if a.combo.startswith("=") else BASE5 + a.combo.split(":")[1].split(",") if ":" in a.combo else COMBOS[a.combo]
     ap = {}
     for n in D.STUDY:
         s = D.loso_scores(data, n, cols)
