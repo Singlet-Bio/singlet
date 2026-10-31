@@ -325,11 +325,15 @@ int star_main_impl(int argInN, char *argIn[])
     // aggregate output junctions
     // collapse splice junctions from different threads/chunks, and output them
     if (P.runRestart.type != 1 && P.outSJ.yes)
+        starPhaseMark(P, "sj_output_begin");
         outputSJ(RAchunk, P);
+        starPhaseMark(P, "sj_output_done");
 
     // solo counts
+    starPhaseMark(P, "solo_begin");
     Solo soloMain(RAchunk, P, *RAchunk[0]->chunkTr);
     soloMain.processAndOutput();
+    starPhaseMark(P, "solo_done");
 
     if (P.quant.geCount.yes)
     { // output gene quantifications
@@ -363,6 +367,7 @@ int star_main_impl(int argInN, char *argIn[])
     g_statsAll.progressReport(P.inOut->logProgress);
     P.inOut->logProgress << "ALL DONE!\n"
                          << flush;
+    starPhaseMark(P, "before_log_final");
     P.inOut->logFinal.open((P.outFileNamePrefix + "Log.final.out").c_str());
     g_statsAll.reportFinal(P.inOut->logFinal);
     *P.inOut->logStdOut << timeMonthDayTime(g_statsAll.timeFinish) << " ..... finished successfully\n"
