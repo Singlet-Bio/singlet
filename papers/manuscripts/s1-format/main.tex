@@ -73,15 +73,14 @@
 \maketitle
 
 \begin{abstract}
-Single-cell and spatial transcriptomics data are stored as sparse matrices of integer counts, yet common formats
-compress them with generic tools blind to their structure. We present \sone, an open format built on what is known
-about count data: most counts are one, a cell's sequencing depth sets the level of every gene, and genes ordered by
-frequency leave small gaps between a cell's entries. A fast entropy coder exploits these patterns, and a
-small index lets any subset of cells be read from cloud storage. Across \nm{nMatrices} public
-matrices spanning droplet, plate and spatial protocols, \sone{} files were the smallest on every matrix,
-\nm{ratio-h5ad_gzip} times smaller than compressed AnnData, and the fastest to read on most. From cloud storage, \sone{}
-delivered a first training minibatch in under a second and streamed cells tens of times faster than chunked
-alternatives. \sone{} is available for Python, R and C++.
+Moving data, not computing on them, now limits large single-cell analyses and model training. We measured how
+few bits single-cell counts need and how fast integer codes decode, and used these limits to develop, with an AI coding
+assistant, a codec at the frontier of both. The resulting format, \sone, models the structure of counts and reads any subset
+of cells remotely. Across \nm{nMatrices} public matrices, \sone{} files were smallest on every matrix,
+\nm{ratio-h5ad_gzip} times smaller than compressed AnnData and within a few percent of the best count models; no measured
+code was both as small and faster to decode. From cloud storage, \sone{} delivered a first minibatch in under a
+second and streamed cells tens of times faster than chunked alternatives. Its costs are a decoder slower per core than
+byte-oriented codes and a writer needing more memory. We propose \sone{} as a standard format for single-cell counts.
 \end{abstract}
 
 \input{sections/intro}
@@ -120,6 +119,7 @@ The author declares no competing interests.
 \setcounter{section}{0}\setcounter{table}{0}\setcounter{figure}{0}\setcounter{equation}{0}
 \begin{center}\Large\bfseries Supplementary material\end{center}
 \input{sections/supp_results}
+\input{figures/fig_supp_fig1b}
 \input{figures/fig_supp_net}
 \input{figures/fig_supp_floor}
 \FloatBarrier

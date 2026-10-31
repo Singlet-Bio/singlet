@@ -4,29 +4,33 @@
 
 Single-cell studies now routinely profile hundreds of thousands to millions of cells, reference atlases hold tens of
 millions~\cite{svensson2018exponential,sikkema2023integrated,czi2025cellxgene}, and a single perturbation screen has
-reached a hundred million~\cite{zhang2025tahoe}. These data are no longer only analysed once on a laptop: they are served
-by atlases to thousands of users and streamed, minibatch by minibatch and epoch after epoch, into machine-learning models
-that read every cell many times~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}. More and more often they live in
-cloud object storage and travel over a network before they are used.
+reached a hundred million~\cite{zhang2025tahoe}. These data are no longer analysed once on a laptop. They are served by
+atlases to thousands of users and streamed, minibatch by minibatch and epoch after epoch, into machine-learning models
+that read every cell many times~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}, and more and more often they live
+in cloud object storage and cross a network before they are used. Moving the data, rather than computing on them, has
+become a bottleneck for large-scale analysis and for building AI-ready datasets.
 
-At the centre of all of this is one kind of object: a sparse matrix of whole-number counts, genes by cells, in which most
-entries are zero and most of the rest are small. Yet the formats in use, AnnData~\cite{virshup2024anndata}, the 10x
-Genomics HDF5 file, loom, Zarr and TileDB-SOMA~\cite{tiledbsoma}, store it as generic arrays and compress them with generic
-tools such as gzip or zstd, which see only bytes and know nothing about counts. The files are therefore several times
-larger than they need to be, and when data travel over a network, the size of the file and the number of requests needed to
-reach a few hundred cells, not the model, decide how fast training can go.
+For a link of a given bandwidth, the number of cells delivered per second is set by how many bits each cell takes. That
+number has a floor, the information the counts actually contain, and the formats in use stay far above it. AnnData~\cite{virshup2024anndata},
+the 10x Genomics HDF5 file, loom, Zarr and TileDB-SOMA~\cite{tiledbsoma} store a matrix of whole-number counts as generic
+arrays and compress them with tools such as gzip or zstd, which see only bytes. Today, therefore, what limits how fast
+single-cell data can be delivered is mostly how they are encoded, not the network.
 
-Count matrices are far from arbitrary. Most non-zero counts are exactly one. How deeply a cell was sequenced sets the
-expected count of every gene in it. And if genes are numbered from most to least frequently detected, the positions of
-a cell's non-zero entries become a short list of small steps. A compressor that knows these regularities can describe the
-same matrix in far fewer bits, as domain-specific formats for sequencing reads did when they replaced gzip with models of
-their data~\cite{bonfield2022cram}. The challenge is to do so while decoding fast enough that the smaller file is also the
-faster one, and while still letting a reader fetch any subset of cells directly from a remote file.
+Count matrices are far from arbitrary. Most non-zero counts are exactly one; how deeply a cell was sequenced sets the
+expected count of every gene in it; and if genes are numbered from most to least frequently detected, the positions of a
+cell's non-zero entries become a short list of small steps. A code that knows these regularities can describe the same
+matrix in far fewer bits, as domain-specific formats for sequencing reads did when they replaced gzip with models of their
+data~\cite{bonfield2022cram}. Fewer bits help only if they can be decoded as fast as the link delivers them, so two limits
+matter together: how few bits a lossless code can spend on the counts, and how fast any code can be decoded.
 
-Here we present \sone, an open format for single-cell count matrices built around these regularities, and the
-\texttt{singlet} package that reads and writes it from Python, R and C++. We compare \sone{} with every widely used format
-on \nm{nMatrices} public matrices spanning droplet, plate, combinatorial, multimodal and spatial protocols, and measure what
-matters in practice: how much storage a matrix takes, how fast it can be read, how quickly a training loader receives
-minibatches from local disk, a shared filesystem and cloud storage, and what that costs. We find that \sone{} files are the
-smallest on every matrix and among the fastest to read, that a loader reading \sone{} keeps up with a typical network link,
-and that the compression is close to what the best count models we fitted would allow.
+We set out to measure both limits on real data and to build a format that approaches them. We estimated the information
+floor with count models of the kind used in single-cell analysis, and the speed limit with the textbook integer codes a
+format could adopt, from raw arrays to entropy coders, each decoding real matrices on one core. We then developed the codec
+iteratively with an AI model, Claude (Anthropic), as a coding assistant, measuring each candidate's size and decoding
+speed against these limits. The result is \sone, an open format for single-cell count matrices, with the \texttt{singlet}
+package that reads and writes it from Python, R and C++. On \nm{nMatrices} public matrices spanning droplet, plate,
+combinatorial, multimodal and spatial protocols, \sone{} files were the smallest on every matrix and within a few percent
+of the best count models, no code we measured was both as small and faster to decode, and training loaders reading \sone{}
+from cloud storage delivered cells tens of times faster than chunked alternatives. We also report what \sone{} costs: its
+decoder is slower per core than byte-oriented codes, which matters on fast links with few cores, and its writer needs more
+memory than most.

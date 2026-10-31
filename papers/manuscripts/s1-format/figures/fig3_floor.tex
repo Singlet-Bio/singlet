@@ -1,10 +1,13 @@
-% Figure 4: how close .s1 is to count models, and what remains. Values from generated/fig3*.tsv. More: fig_supp_floor.tex.
+% Figure 4: how close .s1 is to the limits of size and decoding speed, and what it costs to write. Values from
+% generated/fig3a_ladder.tsv (ladder stage) and generated/figlim_*.tsv (kernels and writecost stages, report_limits.py).
+% More: fig_supp_floor.tex.
 \begin{figure*}[tbp]
 \centering
+% ---------------- (a) bits per non-zero as each idea is added ----------------
 \begin{tikzpicture}[baseline=(current bounding box.north)]
 \begin{axis}[
   title={a\quad From CSC to \sone, payload only},
-  xbar, bar shift=0pt, width=0.36\linewidth, height=5cm, bar width=7pt,
+  xbar, bar shift=0pt, width=0.26\linewidth, height=5.6cm, bar width=7pt,
   xmin=0, xlabel={bits per non-zero (row indices and values), median},
   ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig3a_ladder.tsv}}{label}, y dir=reverse, enlarge y limits=0.1,
   axis x line*=bottom, axis y line*=left,
@@ -22,31 +25,107 @@
   table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig3a_ladder.tsv}};
 \end{axis}
 \end{tikzpicture}\hfill
+% ---------------- (b) size against decoding speed on one core ----------------
 \begin{tikzpicture}[baseline=(current bounding box.north)]
 \begin{axis}[
-  title={b\quad Where the bits go, by protocol class},
-  xbar stacked, width=0.36\linewidth, height=5.4cm, bar width=5pt,
-  xmin=0, xlabel={bits per non-zero of the \sone{} payload, median},
-  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig3c_decomp.tsv}}{label}, y dir=reverse, enlarge y limits=0.07,
-  axis x line*=bottom, axis y line*=left,
-  legend style={font=\sffamily\tiny, draw=none, at={(0.5,-0.22)}, anchor=north, legend columns=1, cells={anchor=west}},
+  title={b\quad Size against decoding speed, one core},
+  width=0.5\linewidth, height=6.2cm, xmode=log, ymode=log, xmin=3, xmax=80, ymin=20, ymax=2500,
+  xtick={4,5,10,20,50}, xticklabels={4,5,10,20,50}, ytick={20,50,100,200,500,1000,2000}, yticklabels={20,50,100,200,500,1000,2000},
+  xlabel={stored bits per non-zero}, ylabel={decoded per core, million non-zeros/s},
+  axis x line*=bottom, axis y line*=left, clip mode=individual,
+  lbl/.style={nodes near coords, point meta=explicit symbolic, visualization depends on={value \thisrow{anchor}\as\lblanchor},
+    every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=2pt}},
 ]
-\addplot[fill=ink2!55, draw=none] table[x=sampling, y=pos] {\gen{fig3c_decomp.tsv}};
-\addplot[fill=dl!70, draw=none]   table[x=state, y=pos] {\gen{fig3c_decomp.tsv}};
-\addplot[fill=sone, draw=none]    table[x=above, y=pos] {\gen{fig3c_decomp.tsv}};
-\legend{sampling of molecules (estimated), the cell's own profile (best model $-$ sampling), \sone{} above the best model}
+% lines of equal input rate: one core decoding on such a line keeps a link of that speed full (b D = c Gbit/s)
+\pgfplotsinvokeforeach{0.3,1,3,10}{
+  \addplot[domain=3:{min(80,#1*1000/21)}, samples=2, gen!45, densely dotted, forget plot] {#1*1000/x}
+    node[pos=0.85, anchor=south, font=\sffamily\tiny, text=gen, sloped, inner sep=1pt] {#1\,Gbit/s};
+}
+\addplot[only marks, mark=*, mark size=0.6pt, gen!80!black, opacity=0.35, forget plot, discard if not={group}{other}] table[x=bits, y=mnnzs] {\gen{figlim_plane_pts.tsv}};
+\addplot[only marks, mark=*, mark size=0.7pt, sone, opacity=0.5, forget plot, discard if not={group}{s1}] table[x=bits, y=mnnzs] {\gen{figlim_plane_pts.tsv}};
+\addplot[ink2, thick, no marks, forget plot] table[x=bits, y=mnnzs] {\gen{figlim_front.tsv}};
+% the trend of the other codes, fitted on their frontier and extrapolated to the floor
+\addplot[tens, dashed, line width=0.8pt, no marks, forget plot] table[x=bits, y=mnnzs] {\gen{figlim_trend.tsv}};
+\node[anchor=north west, font=\sffamily\tiny, text=tens, inner sep=1pt, align=left] at (axis cs:11.5,300) {trend of the\\other codes};
+\addplot[only marks, mark=diamond, mark size=2.4pt, tens, thick, fill=white, forget plot] table[x=bits, y=mnnzs] {\gen{figlim_trend_floor.tsv}};
+% the floor (best count model) and the output bound (writing the decoded arrays), and the ideal code where they meet
+\addplot[dl!80!black, dashed, line width=0.6pt, no marks, forget plot] table[x=bits, y=mnnzs] {\gen{figlim_floorline.tsv}}
+  node[pos=0.03, anchor=south west, rotate=90, font=\sffamily\tiny, text=dl!80!black] {best count model};
+\addplot[dec!80!black, dashed, line width=0.6pt, no marks, forget plot] table[x=bits, y=mnnzs] {\gen{figlim_storeline.tsv}}
+  node[pos=0.1, anchor=north west, font=\sffamily\tiny, text=dec!80!black] {writing the output only};
+\addplot[only marks, mark=star, mark size=3.5pt, ink2, thick, forget plot] table[x=bits, y=mnnzs] {\gen{figlim_ideal.tsv}}
+  node[anchor=south west, font=\sffamily\tiny, text=ink2, xshift=1pt] {ideal: model size, output speed};
+\addplot[only marks, lbl, mark=*, mark size=1.9pt, gen, draw=white, line width=0.3pt, discard if not={group}{fast}]
+  table[x=bits, y=mnnzs, meta=label] {\gen{figlim_plane.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=1.9pt, dec, draw=white, line width=0.3pt, discard if not={group}{entropy}]
+  table[x=bits, y=mnnzs, meta=label] {\gen{figlim_plane.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=2.6pt, sone, draw=white, line width=0.3pt, discard if not={group}{s1}]
+  table[x=bits, y=mnnzs, meta=label] {\gen{figlim_plane.tsv}};
 \end{axis}
 \end{tikzpicture}
-\caption{\textbf{Little room is left for any lossless format.}
+
+\vspace{4pt}
+% ---------------- (c) share of the ideal code's delivered rate, against bandwidth per decoding core ----------------
+\begin{tikzpicture}[baseline=(current bounding box.north)]
+\begin{axis}[
+  title={c\quad What a link delivers, relative to the ideal code},
+  width=0.36\linewidth, height=5.6cm, xmode=log, xmin=0.01, xmax=10, ymin=0, ymax=1.02,
+  xtick={0.01,0.1,1,10}, xticklabels={0.01,0.1,1,10}, ytick={0,0.25,0.5,0.75,1}, yticklabels={0,25,50,75,100\%},
+  xlabel={link bandwidth per decoding core (Gbit/s)}, ylabel={share of the ideal code's rate},
+  axis x line*=bottom, axis y line*=left, clip=false,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(1.03,0.5)}, anchor=west, legend columns=1, cells={anchor=west}},
+]
+\addplot[sone, line width=1.6pt, no marks] table[x=x, y=pz2_avx2] {\gen{figlim_frac.tsv}};
+\addplot[sone, dashed, thick, no marks] table[x=x, y=practical] {\gen{figlim_frac.tsv}};
+\addplot[tens, dashed, thick, no marks] table[x=x, y=trend] {\gen{figlim_frac.tsv}};
+\addplot[dec, thick, no marks] table[x=x, y=zstd19_leb_gaps] {\gen{figlim_frac.tsv}};
+\addplot[ink2, thick, no marks] table[x=x, y=bitpack256_gaps] {\gen{figlim_frac.tsv}};
+\addplot[gen, thick, no marks] table[x=x, y=raw_u32] {\gen{figlim_frac.tsv}};
+\addplot[ycomb, gen!60, line width=0.4pt, no marks, forget plot] table[x=x, y expr=1.02] {\gen{figlim_marks.tsv}};
+\addplot[only marks, mark=none, nodes near coords, point meta=explicit symbolic, forget plot,
+  every node near coord/.append style={font=\sffamily\tiny, text=gen, rotate=90, anchor=north east, inner sep=1.5pt}]
+  table[x=x, y expr=1.0, meta=label] {\gen{figlim_marks.tsv}};
+\legend{\sone, {\sone's size, zstd's speed}, {best code on the trend}, {zstd-19, gap streams}, SIMD bit-packing, raw arrays}
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (d) the cost of writing ----------------
+\begin{tikzpicture}[baseline=(current bounding box.north)]
+\begin{axis}[
+  title={d\quad Writing a file, \nm{figlim-write-dataset}},
+  xbar, bar shift=0pt, width=0.24\linewidth, height=5.9cm, bar width=5pt,
+  xmode=log, log origin=infty, xmin=5, xmax=30000, xlabel={seconds to write; label: extra memory},
+  xtick={10,100,1000,10000}, xticklabels={10,100,1000,10000},
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{figlim_write.tsv}}{label}, y dir=reverse, enlarge y limits=0.05,
+  axis x line*=bottom, axis y line*=left,
+  note/.style={nodes near coords, point meta=explicit symbolic, every node near coord/.append style={font=\sffamily\tiny, anchor=west, text=ink2}},
+]
+\addplot[draw=none, forget plot] table[x=s, y=pos] {\gen{figlim_write.tsv}};
+\addplot[fill=gen!70, draw=none, note, discard if not={group}{general}] table[x=s, y=pos, meta=note] {\gen{figlim_write.tsv}};
+\addplot[fill=dom!80, draw=none, note, discard if not={group}{domain}] table[x=s, y=pos, meta=note] {\gen{figlim_write.tsv}};
+\addplot[fill=sone, draw=none, note, discard if not={group}{s1}] table[x=s, y=pos, meta=note] {\gen{figlim_write.tsv}};
+\end{axis}
+\end{tikzpicture}
+\caption{\textbf{How close \sone{} is to the limits of size and speed, and what it costs.}
 \textbf{(a)} Payload (row indices and values, without names) in bits per non-zero, median over matrices, as each idea is
 added; whiskers, interquartile range. A strong general-purpose compressor on well-separated streams stops at
-\nm{ladder-L3_gaps_leb_zstd19} bits; modelling the counts brings \sone{} to \nm{ladder-L4_s1_payload}. Dashed: the shortest
-code length of four count models fitted on half of each matrix's cells and scored on the other half, charged nothing for
-their own parameters (a reference, not a bound); it is a median of \nm{s1AboveFloorPct}\% below \sone.
-\textbf{(b)} Where the \sone{} payload goes, by protocol class: the estimated entropy of the random sampling of each
-cell's molecules (meaningful for UMI counts), which no lossless decoder can avoid; the remaining information about the
-cell's expression profile; and \sone's margin above the best model. For UMI data sampling is a median of
-\nm{samplingPctMedian}\% of the \sone{} payload. Per-model savings and a second compression pass: Supplementary
-Fig.~\ref{fig:sfloor}; values per class in Supplementary Table~\ref{tab:floor}.}
+\nm{ladder-L3_gaps_leb_zstd19} bits; modelling the counts brings \sone{} to \nm{ladder-L4_s1_payload}. Dashed: the
+shortest code length of four count models fitted on half of each matrix's cells and scored on the other half, charged
+nothing for their parameters (a reference, not a bound); it is a median of \nm{s1AboveFloorPct}\% below \sone.
+\textbf{(b)} Textbook integer codes (grey: byte- and bit-aligned; yellow: entropy-coded) and \sone, each encoding the
+matrix's own row indices and values and decoding them on one core into the arrays a reader returns, checked bit for bit;
+\nm{kern-n} matrices up to 400 million non-zeros, faint points single matrices, large points medians. Dotted: the link
+speed one core keeps up with. Black line: the frontier of the measured codes; \sone{} is its smallest end. Green: the best
+count model; yellow: the rate at which a core only writes the decoded arrays, which the fastest codes reach. No measured
+code lies near the ideal corner where the two meet. Purple: the trend of the other codes' frontier (time per non-zero
+beyond writing the output, a power of the bits stored relative to the floor, pooled over matrices), extrapolated to the
+floor (diamond); \sone{} decodes at \nm{trend-s1-pct}\% of the rate it predicts for \sone's size (bootstrap 95\% interval
+\nm{trend-s1-lo}--\nm{trend-s1-hi}\%).
+\textbf{(c)} Non-zeros per second a link delivers (Eq.~\ref{eq:reff} with the decoder on all cores), relative to the
+ideal code of (b), against the bandwidth each decoding core is given; median of per-matrix ratios. Dashed blue: \sone's
+size decoded at the speed of the fastest entropy-coded stream measured (zstd), an estimate of a practical optimum. Dashed
+purple: at each bandwidth, the best size on the trend of (b), decoded at the trend's rate. Grey lines mark familiar set-ups.
+\textbf{(d)} Seconds to write \nm{figlim-write-dataset} from memory in each format, and the
+memory the writer needs beyond the input (label). Supplementary Fig.~\ref{fig:sfloor} breaks the \sone{} payload down by
+protocol class.}
 \label{fig:floor}
 \end{figure*}

@@ -28,8 +28,18 @@
   barcodes and a cells table; richer annotations (AnnData's \texttt{obs}, \texttt{var}, \texttt{obsm} and \texttt{uns})
   are not part of the format. Reading the counts of one gene across all cells needs a full decode. Files are immutable;
   adding cells means writing a new sample object.
+\item \emph{Decoding speed per core.} On one core the \sone{} decoder runs at a fraction of the speed of byte- and
+  bit-aligned codes and of zstd (Fig.~\ref{fig:floor}b), so one core keeps up with about \nm{kern-s1-knee-gbit}\,Gbit/s
+  of link. Below about \nm{frac-cross-gbit}\,Gbit/s per decoding core \sone{} delivers more than any code we measured;
+  above it, a larger but faster code delivers more (Fig.~\ref{fig:floor}c). The decoding-limit comparison uses our own
+  implementations of the textbook codes (zstd is the library itself), compiled for AVX2 on the benchmark node; tuned
+  libraries and other processors may move each code's speed, and the ideal code it is compared with is not attainable.
+  The trend of Fig.~\ref{fig:floor}b is an empirical fit to a handful of code families, extrapolated beyond the smallest
+  of them; it summarises what existing codes achieve, not a bound on what a new decoding method could, and leaving out any
+  one code moves \sone's ratio to it between \nm{trend-s1-loo-lo} and \nm{trend-s1-loo-hi}\%.
 \item \emph{Writing.} Write cost was measured on three matrices, once each, from a matrix already in memory; converting
-  from a format on disk adds that format's read.
+  from a format on disk adds that format's read. The \sone{} writer holds the encoded matrix and the input together and
+  needed about three times as much memory beyond the input as AnnData's on the largest of them.
 \item \emph{Specification.} \sone{} has one implementation, in C++ with Python and R bindings over the same code; the
   format specification (Supplementary Section~\ref{sec:spec}) and test vectors are meant to make a second one possible.
 \end{itemize}

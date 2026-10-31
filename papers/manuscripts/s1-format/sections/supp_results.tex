@@ -54,7 +54,10 @@ and \nm{codec_cpp-native-scalar-t1} million on one core with the portable scalar
 without AVX2, including ARM, use today; all kernels give identical output. The AVX-512 kernel needs the VBMI2
 extension, which the benchmark CPU lacks, so it was not measured.
 
-Decoding \sone{} scales with cores; reading the alternatives from disk does not (Fig.~\ref{fig:wow}d). Over the
+Decoding \sone{} scales with cores (Fig.~\ref{fig:wow}d). Only \nm{par-formats-n} of the \nm{par-formats-of} formats read
+faster on four cores than on one; reading from a cold file, \sone{} was \nm{speedup-s1-t4} times faster on four cores than
+on one (\nm{speedup-s1-t8} on eight), TileDB-SOMA \nm{speedup-soma-t4}, MTX.gz (whose SciPy reader parses in parallel)
+\nm{speedup-mtx_gz-t4}, Parquet \nm{speedup-parquet_coo-t4} and sharded Zarr v3 \nm{speedup-zarr3-t4}. Over the
 \nm{scaleNmatrices} matrices of the thread sweep, the codec decodes \nm{scale-s1codec-t1} million non-zeros per second from
 memory on one core, \nm{scale-s1codec-t4} million on four and \nm{scale-s1codec-t8} million on eight, which is
 \nm{scale-s1codec-gbit-t1}, \nm{scale-s1codec-gbit-t4} and \nm{scale-s1codec-gbit-t8}\,Gbit/s of stored bits; from four
@@ -261,7 +264,7 @@ molecules, and which molecules were captured is information, not
 redundancy~\cite{townes2019feature,grun2014validation,svensson2020droplet}. For the \nm{samplingN} UMI matrices we
 estimated the entropy of that sample for 2{,}000 cells per matrix under a plug-in profile, the cell's normalised counts
 shrunk toward its cluster (Section~\ref{sec:methods}). Relative to the \sone{} payload of the whole matrix it is a median
-of \nm{samplingPctMedian}\% (range \nm{samplingPctLo}--\nm{samplingPctHi}\%, Fig.~\ref{fig:floor}b). The estimate depends
+of \nm{samplingPctMedian}\% (range \nm{samplingPctLo}--\nm{samplingPctHi}\%, Supplementary Fig.~\ref{fig:sfloor}c). The estimate depends
 on the profile estimator, which uses the cell's own counts, so it indicates rather than bounds how much of the code length
 any model of the profile can remove.
 

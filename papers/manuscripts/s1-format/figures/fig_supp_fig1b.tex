@@ -1,0 +1,15 @@
+% Supplementary figure: Fig. 1b drawn three other ways (figures/fig1b_panel.tex).
+\begin{figure*}[tbp]
+\centering
+\def\fbLog{1}\def\fbPts{0}\def\fbTitle{a\quad Log axes, quartiles}\input{figures/fig1b_panel}\hfill
+\def\fbLog{1}\def\fbPts{1}\def\fbTitle{b\quad Log axes, every matrix}\input{figures/fig1b_panel}
+
+\vspace{4pt}
+\def\fbLog{0}\def\fbPts{0}\def\fbTitle{c\quad Linear axes, quartiles}\input{figures/fig1b_panel}\hfill
+\begin{minipage}[b]{0.47\linewidth}\vspace{0pt}\end{minipage}
+\caption{\textbf{Fig.~1b drawn three other ways.} Stored size against the read rate from a cold file on
+\nm{threadsHeadline} cores. Lines through the medians in (a) and (c) span the interquartile ranges over matrices in each
+direction; faint points in (b) are single matrices. Dashed: Eq.~\ref{eq:reff} at 1\,Gbit/s, labelled in million
+non-zeros per second.}
+\label{fig:sfig1b}
+\end{figure*}

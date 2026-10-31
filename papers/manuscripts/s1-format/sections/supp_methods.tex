@@ -125,6 +125,28 @@ For each matrix we computed the payload size, in bits per non-zero over row indi
 LEB128 variable-length integers; row gaps and values as LEB128 in separate streams with zstd at levels 3 and 19; and the
 chunk payload of the \sone{} member (rANS tables, row keys and chunks, without header and names).
 
+\subsection{Decoding limits}
+\label{sec:mkernels}
+The \texttt{kernels} stage (\texttt{bench/cpp/kernel\_bench.cpp}, built with \texttt{-O3 -march=x86-64-v3}) reads each
+canonical matrix up to $4\times10^8$ non-zeros (\nm{kern-n} matrices) and the row indices of each cell as the steps
+between them (row $-$ previous row $-$ 1, the transform \sone{} uses). Each code stores two streams, steps and values:
+raw 32-bit row indices and values (decoding is a copy); fixed-width bytes (the narrowest whole number of bytes that holds
+every row index and every value); LEB128 varints; Stream VByte (two-bit length codes per value, decoded with one byte
+shuffle per four values); vertical bit-packing in blocks of 256 values, eight 32-bit lanes and one width per block,
+unpacked with AVX2 shifts; an order-0 rANS coder with one static 12-bit frequency table per stream, four interleaved
+states, symbols $\min(x,255)$ and an LEB128 escape stream; and zstd at levels 3 and 19 on the LEB128 streams. Decoding
+returns 32-bit row indices and values; the step codes add a pass that turns steps back into row indices, which is part
+of the timed work. Each code's first decode is compared with the input byte for byte. The \sone{} member is decoded with
+one thread, the AVX2 kernel and source gene order; its size is the whole member, including the chunk index and tables.
+\texttt{store\_bound} only fills the two output arrays (\texttt{memset}). Every code runs pinned to one core, seven
+timed repeats after two warm-up runs, median; all matrices ran one after another in one job on one node (\nm{cpu}).
+
+For Fig.~\ref{fig:floor}c, a code with $b$ bits per non-zero and one-core rate $D_1$ delivers, by Eq.~\ref{eq:reff} with
+the decoder on $p$ cores and a link of bandwidth $B$, $R = (b/B + 1/(pD_1))^{-1}$, so $R/p$ depends only on $x = B/p$.
+The ideal code has the best count model's cross-validated code length and the \texttt{store\_bound} rate of the same
+matrix; the practical optimum has \sone's size and the rate of the fastest entropy-coded stream (rANS or zstd) on the
+same matrix. Curves are medians over matrices of the per-matrix ratio to the ideal code.
+
 \subsection{Count models and the floor}
 For each matrix we measured the code length that count models assign to it, $\sum_{g,c} -\log_2 p(x_{gc})$ over all
 entries including zeros, divided by the number of non-zeros. Cells were split in two halves at random; each model was

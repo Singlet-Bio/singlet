@@ -305,8 +305,11 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
              "soma": "east", "tenx_h5": "east", "rds_xz": "north", "csc_zstd19": "east", "zarr3": "north west", "s1": "north west", "s1_pack": "north"}
     for i, r in enumerate(sorted(trade, key=lambda r: r["mnnzs"])):
         r["anchor"] = sides.get(r["format"], ("west", "east")[i % 2])
-    _write(trade, out / "fig1c_tradeoff.tsv", ["format", "label", "group", "bits", "mnnzs", "anchor", "bits_q1", "bits_q3",
-                                               "mnnzs_q1", "mnnzs_q3"])
+        # on linear axes the slow formats crowd near the origin; these labels move
+        r["anchor_lin"] = {"csc_zstd19": "west", "rds_gz": "west", "rds_xz": "east", "s1": "west", "h5ad_none": "south east",
+                          "csc_i32": "south east"}.get(r["format"], r["anchor"])
+    _write(trade, out / "fig1c_tradeoff.tsv", ["format", "label", "group", "bits", "mnnzs", "anchor", "anchor_lin", "bits_q1",
+                                               "bits_q3", "mnnzs_q1", "mnnzs_q3"])
     # Fig. 1b, every matrix: stored bits per non-zero against the cold read rate on the headline cores
     bits = {(r["dataset"], r["matrix"], r["format"]): 8 * _f(r["bytes"]) / _f(r["nnz"]) for r in _stage(cfg, "write")
             if r.get("status") == "ok" and _f(r.get("bytes")) and _f(r.get("nnz"))}
@@ -390,6 +393,38 @@ def scaling_section(cfg: Config, N: Numbers, out: Path) -> None:
     for rec in rows:   # what a 1 Gbit/s link delivers as .s1 (non-zeros per second, millions): above it, the link is the limit
         rec["link1g"] = 1e9 / b / 1e6 if b else None
     _write(rows, out / "fig1d_scaling.tsv", ["threads", *series, "link1g"])
+    # Fig. 1d: speed-up over one core, paired per matrix, for the formats whose readers use more than one core (a median
+    # 4-core/1-core ratio above 1.05 on the headline runs); .s1 from the thread sweep, the others at 1 and 4 cores
+    H = int(cfg["threads"]["headline"])
+    per = defaultdict(dict)
+    for r in _headline_decode(cfg):
+        if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "cold" and r["format"] != "s1_pack" \
+                and (r["format"] != "s1" or r["mode"] == "canonical"):
+            per[(r["dataset"], r["matrix"], r["format"])][int(r["threads"])] = _f(r["mnnz_per_s"])
+    ratio = defaultdict(list)
+    for (ds, m, f), v in per.items():
+        if v.get(1) and v.get(H):
+            ratio[f].append(v[H] / v[1])
+    par = sorted((f for f, v in ratio.items() if len(v) >= 5 and np.median(v) > 1.05 and f != "s1"),
+                 key=lambda f: -np.median(ratio[f]))
+    sw = defaultdict(dict)
+    for r in d:
+        if series["s1_file"](r):
+            sw[(r["dataset"], r["matrix"])][int(r["threads"])] = _f(r["mnnz_per_s"])
+    sp = []
+    for th in threads:
+        rec = {"threads": th, "ideal": th,
+               "s1": _stats(v[th] / v[1] for v in sw.values() if v.get(1) and v.get(th))["median"]}
+        for f in par:
+            rec[f] = 1.0 if th == 1 else (float(np.median(ratio[f])) if th == H else None)
+        sp.append(rec)
+    _write(sp, out / "fig1d_speedup.tsv", ["threads", "ideal", "s1", *par])
+    N.put("par-formats-n", len(par) + 1, "{:d}")
+    N.put("par-formats-of", len([f for f in ratio if len(ratio[f]) >= 5]), "{:d}")
+    N.put(f"speedup-s1-t{H}", _stats(v[H] / v[1] for v in sw.values() if v.get(1) and v.get(H))["median"], "{:.1f}")
+    N.put(f"speedup-s1-t8", _stats(v[8] / v[1] for v in sw.values() if v.get(1) and v.get(8))["median"], "{:.1f}")
+    for f in par:
+        N.put(f"speedup-{f}-t{H}", float(np.median(ratio[f])), "{:.1f}")
     if b:
         N.put("scale-link-1g", 1e9 / b / 1e6, "{:.0f}")
     for rec in rows:
@@ -855,6 +890,9 @@ def run(cfg: Config) -> int:
     from . import report_r3
 
     report_r3.run(cfg, N, out)
+    from . import report_limits
+
+    report_limits.run(cfg, N, out)
     extension_numbers(cfg, N)
     N.write(out / "numbers.tex")
     missing = sorted(used_keys() - set(N.d))
