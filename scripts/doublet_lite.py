@@ -173,7 +173,7 @@ def cmd_feats(a):
     for n in a.names or list(D.STUDY):
         X, y, genes, species = load_counts(n)
         w0, c0 = time.perf_counter(), time.process_time()
-        F = model.features(X, genes, species, n_sim=None if a.sim == 0 else a.sim * X.shape[0])
+        F = model.features(X, genes, species, n_sim=None if a.sim == 0 else a.sim * X.shape[0], space=a.space, space_dim=a.space_dim)
         cost[n] = dict(n_cells=int(X.shape[0]), wall_s=round(time.perf_counter() - w0, 2), cpu_s=round(time.process_time() - c0, 2),
                        peak_rss_mb=round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024))
         np.savez(out / f"{n}.npz", **F)
@@ -191,6 +191,8 @@ COMBOS = {
     "lite_knn": BASE5 + ["lite_knn"],
     "knn+lite_ent": BASE5 + ["atlas_knn", "lite_entropy"],
     "lite_knn+ent": BASE5 + ["lite_knn", "ct_entropy"],
+    "lk": BASE5 + ["lite_knn"],
+    "lk+ent": BASE5 + ["lite_knn", "ct_entropy"],
     "lite_both+clf": BASE5 + ["lite_knn", "lite_entropy", "atlas_clf"],
 }
 
@@ -248,6 +250,8 @@ def main():
     t.add_argument("--tag", required=True)
     t.add_argument("--sim", type=int, default=0, help="simulated doublets per cell (0 = 2)")
     t.add_argument("--names", nargs="*")
+    t.add_argument("--space", default="pca")
+    t.add_argument("--space-dim", type=int, default=0)
     e = sub.add_parser("eval")
     e.add_argument("--out", required=True)
     e.add_argument("--combo", required=True, choices=list(COMBOS))

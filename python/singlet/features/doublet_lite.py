@@ -80,6 +80,23 @@ class Lite:
         return out
 
     # ----------------------------------------------------------------------------------------------------------- features
+    def space(self, Z: np.ndarray, kind: str = "pca", d: int = 0) -> np.ndarray:
+        """Coordinates for the neighbour search: ``pca`` (as encoded); ``white`` (scaled by the within-class precision, so
+        within-type variation counts as unit noise); ``lda`` (whitened, then the ``d`` directions along which the cell type
+        means differ most)."""
+        if kind == "pca":
+            return Z
+        Y = Z @ self.L
+        if kind == "white":
+            return Y
+        if not hasattr(self, "_lda"):
+            B = self.means @ self.L
+            B = B[np.abs(self.means).max(1) < 1e3]
+            B = B - B.mean(0)
+            _, V = np.linalg.eigh(B.T @ B / len(B))
+            self._lda = V[:, ::-1].astype(np.float32)
+        return Y @ self._lda[:, : (d or self.dim)]
+
     def log_posterior(self, Z: np.ndarray) -> np.ndarray:
         """Log posterior over atlas cell types (uniform prior): Gaussian classes with a shared covariance, temperature ``temp``."""
         A = Z @ self.L
@@ -118,6 +135,8 @@ class Lite:
         *,
         n_sim: Optional[int] = None,
         seed: int = 0,
+        space: str = "pca",
+        space_dim: int = 0,
     ) -> Dict[str, np.ndarray]:
         """``{"lite_entropy": ..., "lite_knn": ...}`` for the rows of ``X`` (raw counts). ``n_sim``: simulated doublets (default
         2 n, as the atlas encoder's feature)."""
@@ -130,5 +149,5 @@ class Lite:
         S, _ = simulate_doublets(C, int(n_sim or 2 * n), rng)
         Zs = self.encode_panel(S)
         k = max(10, int(round(0.5 * np.sqrt(n))))
-        knn = self.knn_fraction(np.vstack([Z, Zs]), n, k)
+        knn = self.knn_fraction(self.space(np.vstack([Z, Zs]), space, space_dim), n, k)
         return {"lite_entropy": self.entropy(Z), "lite_knn": knn}
