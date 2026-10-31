@@ -65,7 +65,7 @@ def main(argv=None):
                         params=params, max_reads=a.max_reads,
                         log=lambda *x: print(*x, flush=True))
     res.contigs.to_csv(os.path.join(a.out, "contigs.csv"), index=False)
-    cells = CL.assign_clonotypes(CL.cell_table(res.contigs, tie_reads=params.tie_reads))
+    cells = CL.assign_clonotypes(CL.cell_table(res.contigs))
     cells.to_csv(os.path.join(a.out, "cells.csv"), index=False)
     run = {"fastqs": [os.path.basename(p) for p in r1], "r1_len": r1_len, "umi_len": umi_len, "stats": res.stats,
            "params": vars(params),

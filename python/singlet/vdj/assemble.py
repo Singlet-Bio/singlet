@@ -93,7 +93,7 @@ class Params:
         0.02  # and at least this share of the library's read-weighted median mates per molecule
     )
     j_slack: int = 2  # the read vote of the J gene stands unless the junction's end matches another J this many nt better
-    tie_reads: bool = False  # contigs of a (barcode, chain) with equal UMIs are ranked by their mates
+    ambient_rescue: str = "none"  # "cell" / "pair": give back cross-filtered chains of droplets that hold a cell (_ambient_rescue)
     v_open_frac: float = 0.0  # > 0: a V gene with a germline stop yields to an open V with >= this share of its votes
     threads: int = 8
 
@@ -602,6 +602,65 @@ def _d_gene(ref: Reference, chain: str, junction: str) -> str:
     return name
 
 
+_RECEPTOR = {"TRA": "T", "TRB": "T", "TRG": "T", "TRD": "T", "IGH": "B", "IGK": "B", "IGL": "B"}
+_PARTNERS = {"TRA": ("TRB",), "TRB": ("TRA",), "TRG": ("TRD",), "TRD": ("TRG",), "IGH": ("IGK", "IGL"), "IGK": ("IGH",),
+             "IGL": ("IGH",)}
+
+
+def _ambient_rescue(df, cand: np.ndarray, mode: str) -> np.ndarray:
+    """Row positions (into ``df``, sorted by barcode, chain, UMIs desc, reads desc) of cross-filtered contigs to keep.
+
+    The cross filter removes a junction far weaker than in its strongest barcode. In a tumour with expanded clones a real
+    member of a clone that expresses little receptor mRNA looks the same (1 UMI against a sibling cell's 20), and it is then
+    the cell's only contig of that chain: the chain is lost. Ambient mRNA in a droplet without its own receptor (a B cell, a
+    myeloid cell or an empty droplet in a T-cell library) has no contig of its own that passes the filter.
+
+    * ``cell``: a (barcode, chain) left without a kept contig gets back its strongest cross-filtered one when the barcode
+      has a kept contig (that passed the cross filter) of another chain of the same receptor: the droplet holds a cell of
+      that lineage by its own evidence.
+    * ``pair``: also when every contig of the barcode was cross-filtered, if the strongest of a chain and the strongest of
+      a partner chain are the top pair of at least one other barcode where both passed the filter (a known clone).
+    """
+    kept = df["kept"].to_numpy()
+    bc = df["bcix"].to_numpy()
+    ch = df["chain"].to_numpy()
+    nt = df["cdr3_nt"].to_numpy()
+    first = {}  # (barcode, chain) -> its strongest kept (non-ambient) contig
+    kept_chains = {}  # barcode -> chains with a kept (non-ambient) contig
+    for i in np.flatnonzero(kept):
+        first.setdefault((bc[i], ch[i]), i)
+        kept_chains.setdefault(bc[i], set()).add(ch[i])
+    best_cand = {}  # (barcode, chain) -> strongest cross-filtered candidate, when the chain has nothing kept
+    for i in np.flatnonzero(cand):
+        k = (bc[i], ch[i])
+        if ch[i] in kept_chains.get(bc[i], ()) or k in best_cand:
+            continue
+        best_cand[k] = i
+    out = []
+    for (b, c), i in best_cand.items():
+        if any(_RECEPTOR[o] == _RECEPTOR[c] for o in kept_chains.get(b, ()) if o != c):
+            out.append(i)
+    if mode == "pair":
+        # top pairs of barcodes where both chains passed the filter
+        known = set()
+        for b, chains in kept_chains.items():
+            for c in chains:
+                for p in _PARTNERS[c]:
+                    if p in chains:
+                        known.add((c, nt[first[(b, c)]], p, nt[first[(b, p)]]))
+        done = set(out)
+        for (b, c), i in best_cand.items():
+            if i in done or kept_chains.get(b):
+                continue
+            for p in _PARTNERS[c]:
+                j = best_cand.get((b, p))
+                if j is not None and (c, nt[i], p, nt[j]) in known:
+                    out += [i, j]
+                    done |= {i, j}
+                    break
+    return np.array(sorted(set(out)), dtype=np.int64)
+
+
 def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params: Params):
     import pandas as pd
 
@@ -684,7 +743,6 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
         return pd.DataFrame(columns=CONTIG_COLUMNS)
     df = pd.DataFrame(rows)
     df["barcode"] = [b + "-1" for b in S.decode(ubc[df["bcix"].to_numpy()], cb_len)]
-    top = df.groupby(["bcix", "chain"])["umis"].transform("max")
     # read support of a contig: mates per UMI against the library's typical depth (read-weighted median)
     rpu = df["reads"] / df["umis"].clip(lower=1)
     srt = np.sort(rpu.to_numpy())
@@ -696,6 +754,17 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
         & (df["reads"] >= params.min_contig_reads)
         & (rpu >= params.contig_read_frac * med)
     )
+    df = filter_contigs(df, params)
+    df["contig_id"] = df["barcode"] + "_contig_" + (df.groupby("bcix").cumcount() + 1).astype(str)
+    return df[CONTIG_COLUMNS]
+
+
+def filter_contigs(df, params: Params):
+    """``kept`` from ``high_confidence``: the share of the cell's top contig of the chain, the error-variant and the
+    cross (ambient) filters, and the ambient rescue. ``df`` needs bcix (any barcode key), chain, cdr3_nt, umis, reads and
+    high_confidence; returns it sorted by (bcix, chain, UMIs desc) with ``kept`` and ``ambient``. It works on a
+    ``contigs.csv`` as well (all contigs are written), so filter settings can be re-applied without re-assembling."""
+    top = df.groupby(["bcix", "chain"])["umis"].transform("max")
     df["kept"] = df["high_confidence"] & (df["umis"] >= params.min_frac * top)
     # error variants: a junction within 2 substitutions of a stronger one of the same cell and chain (a second real
     # chain differs in V, J and N region, i.e. at many positions)
@@ -723,12 +792,8 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
     jmax = df.groupby(["chain", "cdr3_nt"])["umis"].transform("max")
     amb = (df["umis"] < params.cross_frac * jmax) & (jmax >= params.cross_min_umis)
     df["ambient"] = amb
+    cand = df["kept"] & amb  # would be kept but for the cross filter
     df.loc[amb, "kept"] = False
-    # contig order within a (barcode, chain): UMIs, then (tie_reads) mates, so that a UMI tie goes to the better-sequenced
-    # molecule set rather than to the assembly order
-    order = ["bcix", "chain", "umis"] + (["reads"] if params.tie_reads else [])
-    df = df.sort_values(order, ascending=[True, True] + [False] * (len(order) - 2), kind="mergesort").reset_index(
-        drop=True
-    )
-    df["contig_id"] = df["barcode"] + "_contig_" + (df.groupby("bcix").cumcount() + 1).astype(str)
-    return df[CONTIG_COLUMNS]
+    if params.ambient_rescue in ("cell", "pair") and cand.any():
+        df.loc[_ambient_rescue(df, cand.to_numpy(), params.ambient_rescue), "kept"] = True
+    return df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(drop=True)

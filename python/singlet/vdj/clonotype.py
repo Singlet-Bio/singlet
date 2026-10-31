@@ -18,14 +18,12 @@ TCR = ("TRA", "TRB", "TRG", "TRD")
 BCR = ("IGH", "IGK", "IGL")
 
 
-def cell_table(contigs, max_per_chain: int = 2, tie_reads: bool = False):
-    """One row per barcode with productive kept contigs: per chain the top junctions and genes, pairing flags. Chains are
-    ranked by UMIs (and, with ``tie_reads``, by mates when UMIs tie)."""
+def cell_table(contigs, max_per_chain: int = 2):
+    """One row per barcode with productive kept contigs: per chain the top junctions and genes, pairing flags."""
     import pandas as pd
 
-    order = ["barcode", "chain", "umis"] + (["reads"] if tie_reads and "reads" in contigs else [])
     d = contigs[contigs["kept"] & contigs["productive"]].sort_values(
-        order, ascending=[True, True] + [False] * (len(order) - 2), kind="mergesort"
+        ["barcode", "chain", "umis"], ascending=[True, True, False]
     )
     d = d.assign(rank=d.groupby(["barcode", "chain"]).cumcount())
     excess = d[d["rank"] >= max_per_chain].groupby("barcode").size()
