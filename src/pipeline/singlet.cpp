@@ -3980,6 +3980,7 @@ int main(int argc, char* argv[]) {
     std::vector<std::unordered_map<uint64_t, uint64_t>> onefq_per_seg_counts;
     // Protocol id cached from .1fq header for use after onefq_mode block.
     uint8_t onefq_protocol_id = 255;
+    int onefq_r2_bound = 0;   // upper bound of the cDNA read length from the .1fq header / metadata (0: unknown); the GPU pileup is decided on it before the CPU skips its steps
 
     // ── CB_UMI_Complex → CB_samTagOut pre-concatenation state ──
     // When enabled, the decode step rewrites R1 as [seg0][seg1]...[segN][UMI],
@@ -4222,6 +4223,7 @@ int main(int argc, char* argv[]) {
             // Fallback: heuristic from R1 length if metadata didn't provide values
             // But first: detect inverted reads (barcode in R2, cDNA in R1)
             uint16_t r2_len_hdr = hdr.stream_lengths[1];
+            onefq_r2_bound = std::max<int>(onefq_r2_bound, std::max<int>(r2_len_hdr, detected_r2_len));
             // For variable-length R2, use metadata r2_length
             int r2_for_invert = (r2_len_hdr > 0) ? r2_len_hdr : detected_r2_len;
             // ATAC guard: for ATAC assays, stream[1] can legitimately be a short barcode
@@ -5267,6 +5269,18 @@ int main(int argc, char* argv[]) {
         if (rules & ~kGpuRules) {
             std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: the GPU pileup does not implement intron rules 0x" << std::hex << (rules & ~kGpuRules) << std::dec
                       << " (of 0x" << std::hex << rules << std::dec << "); the CPU pileup runs on the GPU-mapped reads\n";
+            unsetenv("SINGLET_GPU_PILEUP");
+        }
+    }
+    // The decision to run the GPU pileup is made here, before the CPU skips its steps: once the stream has been consumed without them a decline can only end
+    // the run (exit 9). Reads the per-base-quality masks cannot hold (over 128 bases), or SINGLET_GPU_PILEUP_FORCE_DECLINE=1 (the regression test of this
+    // fallback), keep the pileup on the CPU; the GPU still maps the reads.
+    if (getenv("SINGLET_GPU_PILEUP")) {
+        const char* why = nullptr;
+        if (onefq_r2_bound > 128) why = "reads over 128 bases (the per-base-quality mask holds 128)";
+        else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
+        if (why) {
+            std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: " << why << "; the CPU pileup runs on the GPU-mapped reads\n";
             unsetenv("SINGLET_GPU_PILEUP");
         }
     }
