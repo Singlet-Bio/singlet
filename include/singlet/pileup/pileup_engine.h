@@ -80,6 +80,10 @@ struct PileupConfig {
     // Stream (order-free-rules R5): count the whole pass in the protocol orientation, no first-N-reads probe;
     // strand_probe() then reports the aggregate over all informative reads.
     bool strand_prior_only = false;
+    // Stream: stop the pass early when the first reads show the library is far from the protocol orientation (antisense share above
+    // kStrandEarlyAbortFrac over at least kStrandEarlyAbortMinReads informative reads). The caller then restarts on the sorted path,
+    // whose strand probe handles any chemistry; the stats come back with strand_contradiction set. Serial run() only.
+    bool strand_early_abort = false;
     std::string snp_path;           // VCF/TSV of SNP positions
     std::string exon_gtf_path;      // GTF/BED for exon intervals (used for GeneModel)
     std::string barcode_path;       // Filtered barcode list
@@ -175,6 +179,7 @@ struct PileupStats {
     // (10x 3') orientation whatever orientation was counted (see StrandEvidence).
     uint64_t strand_sense = 0;
     uint64_t strand_antisense = 0;
+    bool strand_contradiction = false;   // run() stopped early: strand_early_abort and the stream is far from the protocol orientation
     uint64_t vdj_hits = 0;
     // G-RRNA: rRNA contamination sampling
     uint64_t rrna_reads = 0;          ///< reads identified as rRNA (sampled subset)
@@ -218,6 +223,8 @@ constexpr double kStrandProbeReverse = 0.6;         // antisense share above thi
 constexpr double kStrandProbeForward = 0.4;         // antisense share below this -> forward
 constexpr double kStrandRetryFrac = 0.5;            // safety net: wrong-strand share above this
 constexpr uint64_t kStrandRetryMinReads = 1000;
+constexpr uint64_t kStrandEarlyAbortMinReads = 200000;   // stream: informative reads before an early stop is considered
+constexpr double kStrandEarlyAbortFrac = 0.9;            // stream: counted-antisense share that stops the pass (clear, order-robust)
 
 /// Wrong-strand share of the exonic reads of a finished pass (wrong_strand over
 /// wrong_strand + exon_hits). Reads touching exons of both strands, as most chrM
@@ -232,6 +239,13 @@ inline double wrong_strand_frac(const PileupStats& s) {
 inline double counted_antisense_frac(const PileupStats& s, bool reverse) {
     uint64_t n = s.strand_sense + s.strand_antisense;
     return n ? static_cast<double>(reverse ? s.strand_sense : s.strand_antisense) / n : 0.0;
+}
+
+/// True when a stream pass should stop now and restart on the sorted path: enough informative reads, and a clear majority of them
+/// antisense to the orientation being counted.
+inline bool strand_early_abort_due(const PileupStats& s, bool reverse) {
+    return s.strand_sense + s.strand_antisense >= kStrandEarlyAbortMinReads &&
+           counted_antisense_frac(s, reverse) > kStrandEarlyAbortFrac;
 }
 
 /// mitochondrial contig names (genes on both strands; useless for the strand probe)
@@ -664,6 +678,11 @@ public:
                           << stats.exon_hits << " exon, "
                           << stats.intron_hits << " intron, "
                           << mm_buffer.size() << " mm_buf\n";
+            }
+            if (config_.strand_early_abort && (stats.total_reads & 0xFFFFF) == 0 &&
+                strand_early_abort_due(stats, config_.reverse_strand)) {
+                stats.strand_contradiction = true;   // the caller restarts on the sorted path
+                break;
             }
 
             if (b->core.flag & BAM_FUNMAP) { PROF_BAM_IO_RESTART; continue; }
