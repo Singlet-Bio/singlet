@@ -1,0 +1,18 @@
+{
+ "p0": 0.07837590220476005,
+ "median_intronic_knee": 0.20449758224620834,
+ "active": false,
+ "n_knee": 882,
+ "n_v2": 1025,
+ "n_added": 143,
+ "n_added_kept": 143,
+ "n_added_removed": 0,
+ "median_umi": {
+  "knee": 25207.0,
+  "added": 5111.0
+ },
+ "median_intronic": {
+  "added": 0.31621090799214385,
+  "pool": 0.075
+ }
+}

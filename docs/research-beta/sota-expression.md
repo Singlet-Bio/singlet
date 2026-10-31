@@ -144,7 +144,7 @@ genotype or species truth for it, so the choice rests on the datasets above and 
 v2's additions on a super-loaded hashed PBMC library are stained single cells, against 3.8% singlet recall for the knee). Users who want
 a stricter set filter on `fdr` and total UMI.
 
-**nuclei2k_v2 is a real over-call, not only a circular-truth artefact.** The pin calls 3,045 barcodes; EmptyDrops_CR calls 2,202
+**(Superseded by the hashtag result below: the over-call is smaller than this paragraph suggests.) nuclei2k_v2 over-call.** The pin calls 3,045 barcodes; EmptyDrops_CR calls 2,202
 (Gene) / 2,151 (GeneFull) and all of them are inside the v2 set (recall 1.00, precision 0.72 / 0.71, matching the gate's 0.77
 against the other reference). The 843 extras (outside EDCR Gene) have median 387 UMI, 152 genes, mito 8.9% and intronic 42%;
 the shared nuclei have 3,253 UMI, 1,762 genes, mito 2.4%, intronic 62%; ambient barcodes (20-100 UMI) have intronic 41%. Their
@@ -154,6 +154,30 @@ separate them (828 of 843 pass), so the fix needs a per-barcode test, not a thre
 likelihood against the ambient profile to the EmptyDrops test for libraries whose called cells are intron rich. Not implemented:
 no independent truth for nuclei exists in the cohort, so a change would be tuned on the same evidence it is judged by. **Open: truth for
 nuclei (a hashed or genotype-pooled snRNA-seq set).**
+
+**Nuclei truth found, and it weakens the over-call claim (2026-10-31).** Gaublomme et al. 2019 (Nat Commun 10:2907) deposit a mouse
+cortex nucleus-hashing library: RNA SRR8703773 (10x 3' v2, 26.9 M reads) and its antibody-hashtag library SRR8703774 (eight hashtags found by
+k-mer tally; the human and species-mixing runs are controlled access, so there is no human/mouse nuclei barnyard). Fetched in a Clipper job,
+Singlet (build 92095e29, GRCm39) calls 2,691 by the knee and 3,519 by called_v2 (+828: the same +30% as nuclei2k_v2's +633/+843). A barcode is hashtag-positive when
+its hashtag UMI exceeds the 99th percentile of empty droplets (66 UMI) and one tag holds >= 60%.
+
+| set | n | hashtag-positive |
+|---|---|---|
+| knee-called | 2,691 | 97.8% |
+| called_v2 additions | 828 | **64.9%** |
+| of which RNA UMI 20-100 / 100-200 / 200-400 / 400+ | 35 / 124 / 257 / 412 | 34% / 21% / 55% / **87%** |
+| uncalled barcodes at 20-50 / 50-100 / 100-200 / 200-400 RNA UMI | 22,254 / 279 / 41 / 19 | 0.9% / 11% / 51% / 68% |
+
+So about two thirds of the additions are hashtag-confirmed nuclei, and the half with >= 400 UMI is 87% confirmed; the additions below 200 UMI
+(159 barcodes) are no more hashtag-positive than uncalled barcodes of the same RNA depth. The hashtag-based precision of called_v2 is about 0.90 (knee
+0.98); EmptyDrops_CR's smaller set on nuclei2k_v2 is therefore **not** established as the truth, and "precision 0.72 against EDCR" overstates the error.
+Caveat: the antibody stains nuclear pores, so debris and ambient nuclear fragments can carry tags too; positivity does not prove an intact nucleus.
+
+The pre-registered intronic-composition test (frozen before scoring: binomial test of intronic fraction against the ambient fraction, active when
+the knee cells' median intronic fraction exceeds ambient by >= 0.15, BH 0.01, additions only) does not earn a PR. On this library it removes 329 of 828
+additions of which 48% are hashtag-positive (kept: 76%), a weak split; precision rises 0.90 to 0.94 while recall of the positives falls 5%, so F1 is
+unchanged (0.947 vs 0.947). It is inactive on pbmc1k_v3 and hgmm1k_v3 (intronic margins 0.10 and 0.13) and active on nuclei2k_v2 (removes 326 of 633).
+A UMI floor on the additions (drop < 200 UMI) would give F1 0.96, but that was found after looking at this library and is not validated.
 
 ### 3. Ambient RNA (R10c) (2026-10-31, pin d9834b8a)
 
