@@ -416,7 +416,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!runLane<LaneM>(P, D, dSeq, dOff, repM, 262144, 2048, M, err)) return false;
         std::vector<uint32_t> repB, posB;
         for (u64 k = 0; k < repM.size(); k++) if (M.status[k] != (uint8_t)Status::Ok) { repB.push_back(repM[k]); posB.push_back(posM[k]); }
-        if (!runLane<LaneB>(P, D, dSeq, dOff, repB, 65536, 2048, B, err)) return false;
+        u64 nbB = 65536;   // the heavy lane's reads in flight: its Work is the largest device allocation of the prefill (SINGLET_ENGINE_GPU_NBB)
+        if (const char* nbe = std::getenv("SINGLET_ENGINE_GPU_NBB")) nbB = std::max<u64>(1024, std::strtoull(nbe, nullptr, 10));
+        if (!runLane<LaneB>(P, D, dSeq, dOff, repB, nbB, 2048, B, err)) return false;
         out.secMapGpu += now() - tc0;
         // where each result is: 0 = A, 1 = M, 2 = B, 3 = host
         std::vector<uint8_t> lane(repc.size(), 0); std::vector<uint32_t> lpos(repc.size());
