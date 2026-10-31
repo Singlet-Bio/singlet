@@ -21,6 +21,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -109,6 +110,31 @@ struct DecodedBlock {
     }
 };
 
+// A staged read container (the .1fg2, fg2_source.h) behind Reader's and RunSet's interface: the engine opens it by path like a .1fq.
+struct StagedSource {
+    virtual ~StagedSource() = default;
+    virtual const Header& header() const = 0;                       // synthesized .1fq header (protocol, qual mode, lengths, counts)
+    virtual uint32_t block_count() const = 0;
+    virtual uint64_t stored_reads() const = 0;
+    virtual uint64_t block_read_offset(uint32_t g) const = 0;
+    virtual uint16_t bc_length() const = 0;
+    virtual bool has_bc_dict() const { return false; }               // a barcode dictionary (the .1fg2: the whitelist) with bc_indices in the blocks
+    virtual uint32_t bc_dict_size() const { return 0; }
+    virtual const std::vector<uint8_t>& bc_dict_flat() const { static const std::vector<uint8_t> e; return e; }
+    virtual void decode(uint32_t g, DecodedBlock& blk) const = 0;   // thread-safe
+    virtual std::string metadata() const = 0;                       // the source .1fq's metadata JSON
+};
+using StagedOpener = std::shared_ptr<StagedSource> (*)(const char* path);
+inline StagedOpener& staged_opener() { static StagedOpener f = nullptr; return f; }   // set by register_fg2() (fg2_source.h)
+inline bool is_staged_file(const char* path) {   // .1fg2: magic "1FG\0" (0x00474631) and version 2
+    FILE* f = std::fopen(path, "rb");
+    if (!f) return false;
+    uint8_t b[6] = {0};
+    const size_t n = std::fread(b, 1, 6, f);
+    std::fclose(f);
+    return n == 6 && b[0] == 0x31 && b[1] == 0x46 && b[2] == 0x47 && b[3] == 0x00 && b[4] == 2 && b[5] == 0;
+}
+
 class Reader {
    public:
     Reader() = default;
@@ -118,6 +144,14 @@ class Reader {
     Reader& operator=(const Reader&) = delete;
 
     void open(const char* path) {
+        if (is_staged_file(path)) {   // a .1fg2: served by the staged source
+            if (staged_opener() == nullptr) throw std::runtime_error("a .1fg2 input needs register_fg2() (fg2_source.h)");
+            staged_ = staged_opener()(path);
+            hdr_ = staged_->header();
+            has_bc_dict_ = staged_->has_bc_dict(); bc_length_ = staged_->bc_length(); current_block_ = 0;
+            if (has_bc_dict_) { bc_dict_n_ = staged_->bc_dict_size(); bc_dict_flat_ = staged_->bc_dict_flat(); }
+            return;
+        }
         fp_ = std::fopen(path, "rb");
         if (!fp_) throw std::runtime_error("Cannot open: " + std::string(path));
 
@@ -179,7 +213,8 @@ class Reader {
     }
 
     const Header& header() const { return hdr_; }
-    uint32_t block_count() const { return hdr_.block_count; }
+    uint32_t block_count() const { return staged_ ? staged_->block_count() : hdr_.block_count; }
+    const std::shared_ptr<StagedSource>& staged() const { return staged_; }
     uint64_t total_reads() const { return hdr_.n_unique; }
     bool has_bc_dict() const { return has_bc_dict_; }
     uint32_t bc_dict_size() const { return bc_dict_n_; }
@@ -211,6 +246,11 @@ class Reader {
     // Read and decode the next block. Returns false when all blocks consumed.
     bool read_block(DecodedBlock& blk) {
         blk.clear();
+        if (staged_) {
+            if (current_block_ >= staged_->block_count()) return false;
+            staged_->decode(current_block_++, blk);
+            return true;
+        }
 
         if (current_block_ >= hdr_.block_count) return false;
 
@@ -527,6 +567,7 @@ class Reader {
 
     // Read metadata JSON (if present)
     std::string read_metadata() {
+        if (staged_) return staged_->metadata();
         if (hdr_.meta_size == 0) return "";
 
         // Metadata is stored after the last data block, before the index
@@ -831,6 +872,7 @@ class Reader {
     }
 
     FILE* fp_ = nullptr;
+    std::shared_ptr<StagedSource> staged_;   // set for a .1fg2 (fp_ is then unused)
     Header hdr_;
     Codec codec_;
     SeqEncoding seq_enc_;

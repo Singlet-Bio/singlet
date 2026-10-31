@@ -101,6 +101,7 @@
 // STAR's per-read hand-off hook (src/star/SeqCache.h; STAR's uint32 / uint64 are unsigned int / unsigned long long)
 extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsigned long long);
 #endif
+#include "singlet/fq/fg2_source.h"
 #include "singlet/fq/read_source.h"  // RunSet, format_block, StarChunkSourceT: the one .1fq decoder
 #include "singlet/fq/concat.h"       // concat_1fq: runs as one file, for consumers that read a single .1fq
 #include "singlet/version.h"        // singlet::kVersion
@@ -2808,6 +2809,7 @@ static int cmd_atac(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    singlet::fq::register_fg2();   // a staged .1fg2 is read through Reader / RunSet like a .1fq
     // ── Subcommand dispatch ──
     if (argc >= 2) {
         std::string sub = argv[1];
@@ -3036,9 +3038,9 @@ int main(int argc, char* argv[]) {
             for (std::string f; std::getline(iss, f, ',');)
                 if (!f.empty()) onefq_files.push_back(f);
         }
-        else if (arg[0] != '-' && arg.size() > 4 &&
-                 arg.substr(arg.size() - 4) == ".1fq") {
-            onefq_files.push_back(arg);  // positional .1fq argument (repeat for several runs)
+        else if (arg[0] != '-' && ((arg.size() > 4 && arg.substr(arg.size() - 4) == ".1fq") ||
+                                   (arg.size() > 5 && arg.substr(arg.size() - 5) == ".1fg2"))) {
+            onefq_files.push_back(arg);  // positional .1fq (or staged .1fg2) argument (repeat for several runs of a .1fq sample)
         }
         else if (arg == "--read-source" && i+1 < argc) read_source_mode = argv[++i];
         else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
@@ -3322,8 +3324,8 @@ int main(int argc, char* argv[]) {
             if (fp_probe) {
                 singlet::fq::Header raw_hdr;
                 if (std::fread(&raw_hdr, sizeof(singlet::fq::Header), 1, fp_probe) == 1 &&
-                    raw_hdr.valid_magic()) {
-                    pid = raw_hdr.protocol_id;
+                    (raw_hdr.valid_magic() || singlet::fq::is_staged_file(onefq_file.c_str()))) {
+                    pid = singlet::fq::is_staged_file(onefq_file.c_str()) ? reinterpret_cast<const uint8_t*>(&raw_hdr)[70] : raw_hdr.protocol_id;   // .1fg2: FileHeader::protocol_id
                     // Apply metadata-json protocol override to whitelist resolution
                     if (meta_json_proto_id != 255)
                         pid = meta_json_proto_id;
