@@ -191,7 +191,7 @@ static int digest_file(const std::string& path, uint64_t* digest_out, uint64_t* 
               inflate_plane(base, ch.sec[PL_LEN], (ch.flags >> 4) & 1, plen) && inflate_plane(base, ch.sec[PL_Q], (ch.flags >> 5) & 1, pq) &&
               inflate_plane(base, ch.sec[PL_EXC], (ch.flags >> 6) & 1, pexc) && inflate_plane(base, ch.sec[PL_RAWCB], (ch.flags >> 7) & 1, praw))) return 7;
         std::vector<uint32_t> umask(ch.n_reads, 0), rawword(ch.n_reads, 0), rawmeta(ch.n_reads, 0);
-        for (size_t q = 0; q + 8 <= praw.size(); q += 8) { uint32_t w, m; std::memcpy(&w, &praw[q], 4); std::memcpy(&m, &praw[q + 4], 4); rawword[m & 0x7FFF] = w; rawmeta[m & 0x7FFF] = (m >> 15) + 1;   // +1: an entry with no N still differs from no entry }
+        for (size_t q = 0; q + 8 <= praw.size(); q += 8) { uint32_t w, m; std::memcpy(&w, &praw[q], 4); std::memcpy(&m, &praw[q + 4], 4); rawword[m & 0x7FFF] = w; rawmeta[m & 0x7FFF] = (m >> 15) + 1; }   // +1: an entry with no N still differs from no entry
         for (size_t k = 0; k < pexc.size() / 4; k++) { uint32_t e; std::memcpy(&e, &pexc[4 * k], 4); umask[exc_idx(e)] |= 1u << exc_pos(e); }
         for (uint32_t i = 0; i < ch.n_reads; i++) {
             uint32_t cb, u, sid; std::memcpy(&cb, &pcb[4 * i], 4); std::memcpy(&u, &pumi[4 * i], 4); std::memcpy(&sid, &pseq[4 * i], 4);
