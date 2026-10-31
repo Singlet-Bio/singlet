@@ -24,8 +24,8 @@ for item in sys.argv[3:]:
     r = os.path.join(runs, lib)
     gex = set(l.strip() for l in open(os.path.join(r, "gex_cells.txt")))
     lab = dict(pd.read_csv(os.path.join(r, "gex_lineage.csv"))[["barcode", "lineage"]].values)
-    allc = pd.read_csv(os.path.join(r, "singlet", "contigs.csv"))
-    m = CV.load_singlet(os.path.join(r, "singlet", "contigs.csv"), os.path.join(r, "singlet", "cells.csv"))
+    allc = pd.read_csv(os.path.join(r, os.environ.get("SDIR", "singlet"), "contigs.csv"))
+    m = CV.load_singlet(os.path.join(r, os.environ.get("SDIR", "singlet"), "contigs.csv"), os.path.join(r, os.environ.get("SDIR", "singlet"), "cells.csv"))
     m = m[m.chain.isin(keep) & m.barcode.isin(gex)]
     print("=====", lib, "ref contigs", len(ref), "method contigs on GEX cells", len(m))
     rt = ref.sort_values("umis", ascending=False).drop_duplicates(["barcode", "chain"])

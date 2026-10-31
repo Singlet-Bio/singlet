@@ -14,7 +14,7 @@ runs, data, lib, chain = sys.argv[1:5]
 vp = sys.argv[5] if len(sys.argv) > 5 else ""
 ref = CV.load_cellranger(os.path.join(data, lib, "filtered_contig_annotations.csv"))
 ref = ref[ref.chain == chain].sort_values("umis", ascending=False).drop_duplicates(["barcode", "chain"])
-m = CV.load_singlet(os.path.join(runs, lib, "singlet", "contigs.csv"))
+m = CV.load_singlet(os.path.join(runs, lib, os.environ.get("SDIR", "singlet"), "contigs.csv"))
 m = m[m.chain == chain].sort_values("umis", ascending=False).drop_duplicates(["barcode", "chain"])
 j = ref.merge(m, on=["barcode", "chain"], suffixes=("_r", "_m"))
 d = j[(j.cdr3_nt_r != j.cdr3_nt_m) & j.v_r.str.startswith(vp)]
