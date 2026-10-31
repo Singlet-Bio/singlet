@@ -87,12 +87,11 @@ void egReport(std::string& log) {
     {
         const EgDiag& d = egDiag();
         if (d.reads) {
-            snprintf(l, sizeof l, "engine_gpu trace: stage-3 warp balance: %llu reads, %.4g steps total (%.1f%% of reads 0 steps, top 1%% of reads %.1f%% of steps); warp efficiency original order %.1f%%, "
-                     "sorted by hits %.1f%%, by windows %.1f%%, oracle by steps %.1f%%
-", d.reads, d.total, 100.0 * d.zero / d.reads, 100.0 * d.top1 / std::max(1.0, d.total),
+            char lb[512]; snprintf(lb, sizeof lb, "engine_gpu trace: stage-3 warp balance: %llu reads, %.4g steps total (%.1f%% of reads 0 steps, top 1%% of reads %.1f%% of steps); warp efficiency original order %.1f%%, "
+                     "sorted by hits %.1f%%, by windows %.1f%%, oracle by steps %.1f%%\n", d.reads, d.total, 100.0 * d.zero / d.reads, 100.0 * d.top1 / std::max(1.0, d.total),
                      100.0 * d.total / (32 * std::max(1.0, d.wOrig)), 100.0 * d.total / (32 * std::max(1.0, d.wNent)), 100.0 * d.total / (32 * std::max(1.0, d.wNW)),
                      100.0 * d.total / (32 * std::max(1.0, d.wOracle)));
-            log += l;
+            log += lb;
         }
     }
     std::map<std::string, EgKRow> kr;
