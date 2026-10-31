@@ -17,7 +17,7 @@ set -uo pipefail
 FAIL=0
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 BINDIR=${BINDIR:-$W/jobs/s8/bin_base2}; BINDIR_N=${BINDIR_N:?set BINDIR_N to the new build}; BINDIR_M=${BINDIR_M:-$BINDIR_N}; T=${T:-18}
-TASKS=("SRR19421372:cpu cpuG_m gpuD_m gpuG_m" "SRR19573735:cpu cpuG_m gpuD_m gpuG_m" "SRR30477995:cpu cpuG_m gpuD_m gpuG_m")
+TASKS=("SRR19421372:cpu_m cpuG_m gpuD_m gpuG_m" "SRR19573735:cpu_m cpuG_m gpuD_m gpuG_m" "SRR30477995:cpu_m cpuG_m gpuD_m gpuG_m")
 SPEC=${TASKS[$SLURM_ARRAY_TASK_ID]}; s=${SPEC%%:*}; MODES=(${SPEC#*:})
 BARE=$W/repos/singlet-py.git
 # singlet resolves the barcode whitelist at <binary dir>/../whitelists; without it the run silently takes the sorted-BAM path
@@ -37,7 +37,7 @@ for m in "${MODES[@]}"; do
   IN=$FQ; case $m in cpuG_m|gpuG_m) IN=${FQ%.1fq}.1fg2 ;; esac
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
   unset SINGLET_GPU_PILEUP SINGLET_INTRON_RULES SINGLET_GPU_PILEUP_QUAL; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
-  case $m in cpu|cpuG_m) ENGARG="" ;; gpuD|gpuD_n|gpuD_m|gpuG_m) export SINGLET_GPU_PILEUP=on ;; gpuQ_m) export SINGLET_GPU_PILEUP=on SINGLET_GPU_PILEUP_QUAL=force ;; esac
+  case $m in cpu_m|cpuG_m) ENGARG="" ;; gpuD|gpuD_n|gpuD_m|gpuG_m) export SINGLET_GPU_PILEUP=on ;; gpuQ_m) export SINGLET_GPU_PILEUP=on SINGLET_GPU_PILEUP_QUAL=force ;; esac
   case $m in *_n) BIN=$BINDIR_N/singlet-gpu ;; *_m) BIN=$BINDIR_M/singlet-gpu ;; esac
   ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb"
     while true; do
@@ -66,6 +66,6 @@ cmp2() { [ -d $SCR/$s/$1/out ] && [ -d $SCR/$s/$2/out ] || { echo "!! GATE FAIL:
   echo "=== $s $1 vs $2" | tee -a $RES/summary.txt
   python3 $SCR/repo/bench/star_accel/out_equiv.py $SCR/$s/$1/out $SCR/$s/$2/out > $RES/equiv-$1-$2.txt 2>&1
   grep -a '^  DIFF\|^files:\|^RESULT' $RES/equiv-$1-$2.txt | cut -c1-200 | head -30 | tee -a $RES/summary.txt; }
-cmp2 cpu cpuG_m; cmp2 cpu gpuD_m; cmp2 gpuD_m gpuG_m
+cmp2 cpu_m cpuG_m; cmp2 cpu_m gpuD_m; cmp2 gpuD_m gpuG_m
 [ $FAIL = 0 ] && echo "GATE RUN OK (identity verdicts above)" | tee -a $RES/summary.txt || echo "GATE FAILED" | tee -a $RES/summary.txt
 echo done $(date -Is) | tee -a $RES/summary.txt
