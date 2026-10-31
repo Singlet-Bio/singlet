@@ -54,6 +54,16 @@ static std::string write_whitelists(std::vector<std::string>& v3, std::vector<st
         for (int i = 0; i < 20000; ++i) { v3.push_back(rand_bc(16)); f3 << v3.back() << "\n"; }
         for (int i = 0; i < 8000; ++i) { v2.push_back(rand_bc(16)); f2 << v2.back() << "\n"; }
     }
+    // Every other whitelist the protocol table names (arc-gex, visium, ...) gets its own unrelated random list, as in a real
+    // installation. A protocol whose list is missing is scored without a whitelist and can win on geometry alone, which is not the
+    // situation under test.
+    for (const auto& spec : singlet::fq::known_protocols()) {
+        if (spec.whitelist_file.empty() || spec.bc_len < 14) continue;
+        const std::string path = dir + "/" + spec.whitelist_file;
+        if (access(path.c_str(), F_OK) == 0) continue;
+        std::ofstream f(path);
+        for (int i = 0; i < 5000; ++i) f << rand_bc(spec.bc_len) << "\n";
+    }
     return dir;
 }
 
