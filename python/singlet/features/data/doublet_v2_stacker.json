@@ -1,18 +1,14 @@
 {
- "atlas_encoder": "celltype_nn/m1_notissue",
- "atlas_encoder_sha256": "b63f5b394de83e8d1523a25a5af55d69a5dbf068381cd3b4ce0f8e4f360ce59b",
- "centroids_sha256": "ad130c141cf2c3ff43fa6f46df494043bb9e73d4cfa53bd4502ccd0e3b066e84",
- "content_hash": "85de0de2d012453eddddbde6671dfbf8e1e5eb60c58c1ffeaa9c91cb0e519ac0",
+ "content_hash": "54bd13abb9b179d289a63723b8f672a90c23d4d1ac2fcc005bb33e07fe4cddc9",
+ "encoder_content_hash": "8ecf307b17413d5c9a760ed996791cb688e5cc81a26609c1f50b10da60955ea1",
  "feature_order": [
   "umi",
   "genes",
   "prod",
-  "atlas_knn",
-  "atlas_clf",
-  "ct_entropy",
-  "atlas_nnls",
   "sdfl",
-  "sdflc"
+  "sdflc",
+  "atlas_knn",
+  "atlas_entropy"
  ],
  "hgb_params": {
   "l2_regularization": 1.0,
@@ -43,6 +39,6 @@
   "hm-6k",
   "hm-12k"
  ],
- "training_scores": "bench/latent_qc + bench/expression_sota stored scores of the 17 datasets (prod, atlas_*, ct_entropy, sdfl, sdflc)",
+ "training_inputs": "the 17 datasets' inputs as computed by this package (feats); engine score: prod.npy of the study",
  "weights": "each dataset counts equally (1/n per cell, rescaled by n_cells/n_datasets)"
 }
