@@ -39,7 +39,7 @@ def score(X, variant="a", seed=0):
     m = np.asarray(Ys.mean(0)).ravel()
     off = svd.components_ @ m
     P = svd.transform(Ys) - off
-    k_cl = int(np.clip(round(np.sqrt(N) / 4), 4, 25))
+    k_cl = int(os.environ.get('SDFL_KCL', 0)) or int(np.clip(round(np.sqrt(N) / 4), 4, 25))
     cl = MiniBatchKMeans(k_cl, random_state=seed, n_init=3, batch_size=4096).fit_predict(P)
     n_art = int(min(max(2 * N, 3000), 30000))
     # heterotypic pairs (a, b from different clusters); variant c: 1/3 homotypic pairs as well
@@ -105,7 +105,7 @@ def main(names):
         d = load(n)
         with Timer() as t:
             s = score(d["X"], variant)
-        put_score(n, "sdfl" + (variant if variant != "a" else ""), s, t.s)
+        put_score(n, "sdfl" + (variant if variant != "a" else "") + os.environ.get("SDFL_TAG", ""), s, t.s)
 
 
 if __name__ == "__main__":

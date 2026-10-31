@@ -187,7 +187,16 @@ barcodes exceeds the ambient pool's by >= 0.15), a barcode added by called_v2 be
 Gaublomme library, where it gives F1 0.96 against 0.947; the expectation is F1 ~0.96 on a new set. It is to be validated on a second hashed or
 genotype-pooled nuclei set with raw reads, if one turns up, before any PR. Until then called_v2 ships unchanged for nuclei, `fdr` is available for filtering.
 
-### 3. Ambient RNA (R10c) (2026-10-31, pin d9834b8a)
+**Nuclei ambient: a real, large bug (2026-10-31).** In the Gaublomme library, Xist is expressed only in female nuclei, so Xist UMI in male-hash nuclei is ambient
+(four of the eight hashtags are female: median Xist share 0.22-0.25% of UMI; four are male: ~0.003%). With the pool's Xist share a_X = 0.151% (uncalled barcodes with
+1-100 UMI), the true contamination of the 1,344 male nuclei is Xist share / a_X = **2.3%** (UMI-weighted 2.4%). Singlet (92095e29) reports per-cell `rho_total`
+**27.6%** mean (12x), exon-basis `rho` 37% (16x), and removes 25% of the nuclei's UMIs (`bench/expression_sota/nh_xist.py`, `results/nuclei/xist_ambient.json`).
+nuclei2k_v2 shows the same signature (mean rho 29%, removed 21% of UMI). The ambient pool of a nuclei library is debris with a nuclear profile (its Xist share
+equals that of the female nuclei themselves), so "the part of a nucleus that looks like the pool" is most of the nucleus; the estimator cannot separate soup from native
+expression there. Candidate fix, not yet built: detect the case (pool profile close to the called cells' profile) and report rho as NA with the corrected matrix equal to the
+raw counts, instead of a 12x wrong number; a criterion needs the pool-to-cell similarity measured on the nuclei and cell libraries we have.
+
+### 3. Ambient RNA (R10c)### 3. Ambient RNA (R10c) (2026-10-31, pin d9834b8a)
 
 Truth 1, real tissue: **Kang b2 ctrl donor genotypes** (12,137 confident genotype singlets). A read carrying an allele the cell's donor does
 not have comes from another donor's RNA through the ambient pool; per-cell truth rho = foreign reads / expected foreign reads, error-rate
@@ -284,6 +293,12 @@ It is a slight gain over production (+0.009) and clearly below scDblFinder, with
 1.00). What scDblFinder does that this does not: doublet generation tied to cluster pairs it then scores per cluster pair, many more features
 (including per-cell kNN ratios at several k over a larger PC space and cell-type-specific doublet enrichment), and an iterative loop that
 retrains on the identified doublets. These are the next things to add; I have not tuned on the evaluation sets.
+
+**hgmm diagnosis (2026-10-31): coarse clusters do not close the gap.** Simulating heterotypic pairs from 3 or 8 k-means clusters (the orchestrator's
+suggestion; the parent total is already a feature) gives hm-6k / hm-12k AUPRC 0.89 / 0.87 (k = 3) and 0.80 / 0.81 (k = 8) against scDblFinder 1.00 / 1.00 and the default
+(sqrt(N)/4 clusters) 0.81 / 0.76, and loses elsewhere (mean over 17: 0.471 for k = 3, 0.508 for k = 8, 0.510 default; scDblFinder 0.559). The hgmm matrices of Xi & Li 2021 hold only human genes
+(ENSG, 15 k), so a human+mouse doublet is a human cell with ortholog-mapped mouse reads; the right simulation is not what scDblFinder's clustering step is
+doing, and its near-perfect score there is unexplained. Stopped here; the sdfl feature stays a stacker input, not a standalone caller.
 
 **sdfl as a stacker feature (leave-one-study-out, same recipe as #43; `bench/expression_sota/doublets/stack.py`, per dataset
 `results/doublets/stack.csv`).** The replication of `combo_prod_atlas` gives 0.5573 (reported 0.557). Adding sdfl:
