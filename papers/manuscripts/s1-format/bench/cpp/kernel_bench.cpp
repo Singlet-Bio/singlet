@@ -7,7 +7,7 @@
 //   {"codec":..., "nnz":..., "bytes":..., "encode_s":..., "ok":true, "times":[...]}
 // The codes are the textbook ones a format could adopt: raw arrays (memcpy), fixed-width bytes, LEB128 varints, Stream
 // VByte (SIMD byte-aligned varints), vertical SIMD bit-packing in blocks of 256 (the layout of the fastest published
-// integer codecs), and zstd at levels 3 and 19 over LEB128 gap streams; the gap codes store row - previous row - 1 within
+// integer codecs), an order-0 rANS entropy code, and zstd at levels 3 and 19 over LEB128 gap streams; the gap codes store row - previous row - 1 within
 // a cell, the transform .s1 uses. Two references bound the result: `store_bound` only writes the output (no input can be
 // decoded faster than the output is written), and `pz2` decodes the .s1 member itself on one thread (AVX2, canonical).
 #include <singlet/pz2/pz2.h>
@@ -239,6 +239,96 @@ static const u8* bp_dec(const u8* p, u32* out) {
     return p;
 }
 
+// ------------------------------------------------------------------ order-0 rANS (Duda 2013; byte renormalization as in ryg_rans)
+// The plainest entropy code: one symbol per value, min(x, 255), with 255 escaping to an LEB128 remainder in a side stream;
+// one static 12-bit frequency table per stream and four interleaved states. It is the same family of coder as .s1's
+// without any of its context modelling, so it marks how fast table-driven entropy decoding runs on this core.
+constexpr u32 R_SCALE = 12, R_TOT = 1u << R_SCALE, R_L = 1u << 23;
+struct Rans0 {
+    u32 freq[256], cum[257];
+    u8 slot[R_TOT];
+};
+
+static void rans_table(const u32* freq16, Rans0& t) {
+    t.cum[0] = 0;
+    for (int s = 0; s < 256; ++s) { t.freq[s] = freq16[s]; t.cum[s + 1] = t.cum[s] + t.freq[s]; }
+    for (int s = 0; s < 256; ++s)
+        for (u32 k = t.cum[s]; k < t.cum[s + 1]; ++k) t.slot[k] = u8(s);
+}
+
+// layout: n, rANS bytes, escape bytes (u64 each), 256 frequencies (u16), rANS bytes, escape bytes, 16 bytes of padding
+static void r0_enc(const std::vector<u32>& v, Bytes& out) {
+    const u64 n = v.size();
+    std::vector<u8> sym(n);
+    Bytes esc;
+    u64 cnt[256] = {0};
+    for (u64 i = 0; i < n; ++i) {
+        sym[i] = u8(std::min<u32>(v[i], 255));
+        ++cnt[sym[i]];
+        if (v[i] >= 255) leb_enc({v[i] - 255}, esc);
+    }
+    u32 f[256] = {0};
+    int64_t sum = 0;
+    for (int s = 0; s < 256; ++s) {
+        f[s] = cnt[s] ? u32(std::max<u64>(1, cnt[s] * R_TOT / std::max<u64>(n, 1))) : 0;
+        sum += f[s];
+    }
+    if (!n) { f[0] = R_TOT; sum = R_TOT; }
+    while (sum != R_TOT) {   // give the difference to (or take it from) the most frequent symbol
+        const int b = int(std::max_element(f, f + 256) - f);
+        if (sum < R_TOT) { f[b] += u32(R_TOT - sum); sum = R_TOT; }
+        else { const u32 d = u32(std::min<int64_t>(sum - R_TOT, f[b] - 1)); f[b] -= d; sum -= d; }
+    }
+    Rans0 t;
+    rans_table(f, t);
+    Bytes buf(2 * n + 64);
+    u8* const end = buf.data() + buf.size();
+    u8* p = end;
+    u32 x[4] = {R_L, R_L, R_L, R_L};
+    for (u64 i = n; i-- > 0;) {
+        u32& xs = x[i & 3];
+        const u32 s = sym[i], fs = t.freq[s];
+        const u32 xmax = ((R_L >> R_SCALE) << 8) * fs;
+        while (xs >= xmax) { *--p = u8(xs); xs >>= 8; }
+        xs = ((xs / fs) << R_SCALE) + (xs % fs) + t.cum[s];
+    }
+    for (int j = 3; j >= 0; --j) {   // state 0 ends up first, where the decoder starts
+        p -= 4;
+        for (int k = 0; k < 4; ++k) p[k] = u8(x[j] >> (8 * k));
+    }
+    const u64 hdr[3] = {n, u64(end - p), esc.size()};
+    const size_t at = out.size();
+    out.resize(at + 24 + 512);
+    std::memcpy(&out[at], hdr, 24);
+    for (int s = 0; s < 256; ++s) { const uint16_t h = uint16_t(f[s]); std::memcpy(&out[at + 24 + 2 * s], &h, 2); }
+    out.insert(out.end(), p, end);
+    out.insert(out.end(), esc.begin(), esc.end());
+    out.insert(out.end(), 16, 0);
+}
+
+static const u8* r0_dec(const u8* p, u32* out, Rans0& t) {
+    u64 hdr[3];
+    std::memcpy(hdr, p, 24);
+    u32 f[256];
+    for (int s = 0; s < 256; ++s) { uint16_t h; std::memcpy(&h, p + 24 + 2 * s, 2); f[s] = h; }
+    rans_table(f, t);
+    const u64 n = hdr[0];
+    const u8* r = p + 24 + 512;
+    const u8* e = r + hdr[1];
+    u32 x[4];
+    for (int j = 0; j < 4; ++j) { x[j] = u32(r[0]) | u32(r[1]) << 8 | u32(r[2]) << 16 | u32(r[3]) << 24; r += 4; }
+    for (u64 i = 0; i < n; ++i) {
+        u32& xs = x[i & 3];
+        const u32 m = xs & (R_TOT - 1), s = t.slot[m];
+        xs = t.freq[s] * (xs >> R_SCALE) + m - t.cum[s];
+        while (xs < R_L) xs = (xs << 8) | *r++;
+        u32 val = s;
+        if (s == 255) { u32 rem; e = leb_dec(e, &rem, 1); val += rem; }
+        out[i] = val;
+    }
+    return p + 24 + 512 + hdr[1] + hdr[2] + 16;
+}
+
 // ------------------------------------------------------------------ harness
 struct Codec {
     std::string name;
@@ -259,6 +349,7 @@ int main(int argc, char** argv) {
     const int wr = m.rows <= 256 ? 1 : m.rows <= 65536 ? 2 : 4, wv = vmax < 256 ? 1 : vmax < 65536 ? 2 : 4;
     std::vector<u32> oi(m.nnz), ov(m.nnz);
     std::vector<u8> scratch_g, scratch_v;   // zstd output, sized on first use
+    static Rans0 r0t;                       // the decoder's table, rebuilt from each stream's frequencies
 
     auto zstd_codec = [&](int level) {
         return Codec{"zstd" + std::to_string(level) + "_leb_gaps",
@@ -342,6 +433,12 @@ int main(int argc, char** argv) {
              const u8* p = svb_dec(in.data(), ri);
              gaps_to_rows(m, ri);
              svb_dec(p, vi);
+         }},
+        {"rans0_gaps", [&](Bytes& out) { r0_enc(gaps, out); r0_enc(m.val, out); },
+         [&](const Bytes& in, u32* ri, u32* vi) {
+             const u8* p = r0_dec(in.data(), ri, r0t);
+             gaps_to_rows(m, ri);
+             r0_dec(p, vi, r0t);
          }},
         {"bitpack256_gaps", [&](Bytes& out) { bp_enc(gaps, out); bp_enc(m.val, out); out.insert(out.end(), 64, 0); },
          [&](const Bytes& in, u32* ri, u32* vi) {

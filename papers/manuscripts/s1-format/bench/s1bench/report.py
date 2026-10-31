@@ -257,7 +257,8 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
             continue
         if c4["median"] and f in size_stats:
             trade.append({"format": f, "label": FORMAT_LABELS.get(f, f).replace("\\textbf{", "").replace("}", ""), "group": _group(f),
-                          "bits": size_stats[f]["median"], "mnnzs": c4["median"]})
+                          "bits": size_stats[f]["median"], "mnnzs": c4["median"], "bits_q1": size_stats[f]["q1"],
+                          "bits_q3": size_stats[f]["q3"], "mnnzs_q1": c4["q1"], "mnnzs_q3": c4["q3"]})
         N.put(f"dec-{f}-cold-t{H}", c4["median"], "{:.0f}")
     # the fastest other format to read cold at the headline thread count, and how much faster .s1 is: the median over
     # matrices of the per-matrix ratio (paired), not a ratio of medians
@@ -304,7 +305,17 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
              "soma": "east", "tenx_h5": "east", "rds_xz": "north", "csc_zstd19": "east", "zarr3": "north west", "s1": "north west", "s1_pack": "north"}
     for i, r in enumerate(sorted(trade, key=lambda r: r["mnnzs"])):
         r["anchor"] = sides.get(r["format"], ("west", "east")[i % 2])
-    _write(trade, out / "fig1c_tradeoff.tsv", ["format", "label", "group", "bits", "mnnzs", "anchor"])
+    _write(trade, out / "fig1c_tradeoff.tsv", ["format", "label", "group", "bits", "mnnzs", "anchor", "bits_q1", "bits_q3",
+                                               "mnnzs_q1", "mnnzs_q3"])
+    # Fig. 1b, every matrix: stored bits per non-zero against the cold read rate on the headline cores
+    bits = {(r["dataset"], r["matrix"], r["format"]): 8 * _f(r["bytes"]) / _f(r["nnz"]) for r in _stage(cfg, "write")
+            if r.get("status") == "ok" and _f(r.get("bytes")) and _f(r.get("nnz"))}
+    shown = {t["format"] for t in trade}
+    pts = [{"format": r["format"], "group": _group(r["format"]), "bits": bits[(r["dataset"], r["matrix"], r["format"])],
+            "mnnzs": _f(r["mnnz_per_s"])} for r in d
+           if r["what"] == "file" and r["cache"] == "cold" and int(r["threads"]) == H and r["format"] in shown
+           and (r["format"] != "s1" or r["mode"] == "canonical") and (r["dataset"], r["matrix"], r["format"]) in bits]
+    _write(pts, out / "fig1b_points.tsv", ["format", "group", "bits", "mnnzs"])
     for what in ("codec", "codec_cpp"):
         for mode in cfg["s1"]["modes"]:
             for isa in cfg["s1"]["isas"]:
@@ -554,6 +565,9 @@ def minibatch_section(cfg: Config, N: Numbers, out: Path) -> None:
         med = lambda k: _stats(r.get(k) for r in rs)["median"]
         rows.append({"pos": len(rows), "loader": ld, "label": LOADER_LABELS.get(ld, ld), "open": med("open_s"), "read": med("first_read_s"),
                      "tensor": med("to_tensor_s"), "total": med("first_batch_s"), "group": "s1" if ld.startswith("s1") else "other"})
+    rows.sort(key=lambda r: r["total"] or 1e9)   # fastest first
+    for i, r in enumerate(rows):
+        r["pos"] = i
     _write(rows, out / "fig1b_ttfm.tsv", ["pos", "loader", "label", "open", "read", "tensor", "total", "group"])
     tot = {r["loader"]: r["total"] for r in rows}
     if tot.get("s1_stream"):
