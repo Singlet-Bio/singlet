@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=s8-stage263
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=96G
+#SBATCH --partition=scavenger
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
 #SBATCH --time=02:00:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # S8: encode the deep sample GSM7656149 (.1fq, 263 M reads) as .1fg2 with S9's singlet-stage, for the memory profile of the table-fed route.
