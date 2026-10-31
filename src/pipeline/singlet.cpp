@@ -1406,6 +1406,20 @@ static int run_star_genome_op(const std::string& genome_dir,
     return WIFEXITED(wstatus) ? WEXITSTATUS(wstatus) : 1;
 }
 
+// [mem] milestone: this process's resident / peak resident / anonymous memory (GB) on stderr, for the private-memory budget
+// (docs/research-beta/cpu-engine-perf.md). Cheap (one read of /proc/self/status), no effect on any output.
+static void mem_mark(const char* what) {
+    std::ifstream f("/proc/self/status");
+    std::string l; double rss = 0, hwm = 0, anon = 0;
+    while (std::getline(f, l)) {
+        if (l.rfind("VmRSS:", 0) == 0) rss = std::atof(l.c_str() + 6) / 1048576.0;
+        else if (l.rfind("VmHWM:", 0) == 0) hwm = std::atof(l.c_str() + 6) / 1048576.0;
+        else if (l.rfind("RssAnon:", 0) == 0) anon = std::atof(l.c_str() + 8) / 1048576.0;
+    }
+    std::cerr << "[mem] " << what << ": rss " << std::fixed << std::setprecision(1) << rss << " GB, anon " << anon
+              << " GB, peak " << hwm << " GB" << std::defaultfloat << std::endl;
+}
+
 // ── NONHOST-EM: shared screening helper ──────────────────────────────────────
 // Run EM-based nonhost screening on STAR unmapped reads.
 // Reads ${out_prefix}/star_Unmapped.out.mate1, runs EM deconvolution, and writes:
@@ -8208,6 +8222,7 @@ int main(int argc, char* argv[]) {
         rmdir(decode_dir.c_str());
     }
 
+    mem_mark("after pileup run");
     if (stats.total_reads == 0) {
         std::cerr << "[singlet] ERROR: No reads processed\n";
         return 1;
@@ -8220,6 +8235,7 @@ int main(int argc, char* argv[]) {
     // runs EM deconvolution, and writes nonhost_em_abundance.tsv + nonhost_summary.json.
     // Visium flows through this path (no early return above).
     if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty()) {
+        mem_mark("before non-host");
         std::unordered_set<std::string> nonhost_valid_bcs;
         if (engine_ptr) {
             const auto& bc_vec = engine_ptr->barcodes();
@@ -8229,6 +8245,7 @@ int main(int argc, char* argv[]) {
             nonhost_ref_dir, out_prefix, nonhost_valid_bcs, detected_bc_len, umi_len, star_threads);
     }
 
+    mem_mark("before export");
     // ── Phase 3: Export ──
     alarm(1800);  // watchdog: reset at export start
     std::cerr << "[singlet] Exporting feature matrices...\n";

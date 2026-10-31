@@ -121,6 +121,41 @@ inline int umi_hamming_2bit(uint64_t a, uint64_t b, int umi_len) {
     return __builtin_popcountll((diff | (diff >> 1)) & 0x5555555555555555ULL);
 }
 
+/// The pair loop `for i < j: if hamming(i, j) == 1 && cond(i, j) join(i, j)` over n 2-bit packed UMIs, visiting the same
+/// edges in the same (i, then j ascending) order, so an order-dependent union-find ends in the same roots. Groups above
+/// 512 UMIs find the edges through a sorted index of the 3 * umi_len single-base neighbours of each UMI, O(n L log n).
+template <typename PackedAt, typename CondFn, typename JoinFn>
+inline void umi_directional_union_ordered(int n, int umi_len, PackedAt packed, CondFn cond, JoinFn join) {
+    constexpr int kBrute = 512;
+    if (n <= kBrute || umi_len > 32) {
+        for (int i = 0; i < n - 1; ++i)
+            for (int j = i + 1; j < n; ++j)
+                if (umi_hamming_2bit(packed(i), packed(j), umi_len) == 1 && cond(i, j)) join(i, j);
+        return;
+    }
+    const uint64_t mask = umi_len < 32 ? (1ULL << (2 * umi_len)) - 1 : ~0ULL;
+    std::vector<std::pair<uint64_t, int>> index(n);
+    for (int r = 0; r < n; ++r) index[r] = {packed(r) & mask, r};
+    std::sort(index.begin(), index.end());
+    std::vector<int> nb;
+    for (int i = 0; i < n - 1; ++i) {
+        const uint64_t u = packed(i) & mask;
+        nb.clear();
+        for (int p = 0; p < umi_len; ++p) {
+            const uint64_t cur = (u >> (2 * p)) & 3ULL;
+            for (uint64_t b = 0; b < 4; ++b) {
+                if (b == cur) continue;
+                const uint64_t cand = u ^ ((cur ^ b) << (2 * p));
+                for (auto it = std::lower_bound(index.begin(), index.end(), std::make_pair(cand, -1));
+                     it != index.end() && it->first == cand; ++it)
+                    if (it->second > i && cond(i, it->second)) nb.push_back(it->second);
+            }
+        }
+        std::sort(nb.begin(), nb.end());
+        for (int j : nb) join(i, j);
+    }
+}
+
 /// Union every directional edge of a (barcode, gene) group.
 ///
 /// `packed[r]` / `count[r]` are the UMIs in rank order (count descending, ties in any
@@ -499,13 +534,12 @@ public:
             std::iota(parent.begin(), parent.end(), 0);
             auto find = [&](int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
             if (directional)
-                for (int i = 0; i < n - 1; ++i)
-                    for (int j = i + 1; j < n; ++j)
-                        if (umi_hamming_2bit(sorted[i].packed, sorted[j].packed, umi_len) == 1 &&
-                            sorted[i].count >= 2 * sorted[j].count - 1) {
-                            int ri = find(i), rj = find(j);
-                            if (ri != rj) parent[rj] = ri;
-                        }
+                umi_directional_union_ordered(n, umi_len, [&](int i) { return sorted[i].packed; },
+                                              [&](int i, int j) { return sorted[i].count >= 2 * sorted[j].count - 1; },
+                                              [&](int i, int j) {
+                                                  int ri = find(i), rj = find(j);
+                                                  if (ri != rj) parent[rj] = ri;
+                                              });
             std::vector<std::pair<uint64_t, uint64_t>> roots(n);
             for (int i = 0; i < n; ++i) roots[i] = {sorted[i].packed, sorted[find(i)].packed};
             std::sort(roots.begin(), roots.end());
@@ -621,12 +655,40 @@ inline void umi3_directional_roots(size_t n, UmiAt umi, CountAt count, std::vect
     root.resize(n);
     std::iota(root.begin(), root.end(), 0u);
     auto find = [&](uint32_t x) { while (root[x] != x) { root[x] = root[root[x]]; x = root[x]; } return x; };
-    for (size_t i = 0; i + 1 < n; ++i)
-        for (size_t j = i + 1; j < n; ++j)
-            if (count(i) >= 2 * count(j) - 1 && umi3_one_mismatch(umi(i), umi(j))) {
-                const uint32_t ri = find(static_cast<uint32_t>(i)), rj = find(static_cast<uint32_t>(j));
-                if (ri != rj) root[rj] = ri;
+    constexpr size_t kBrute = 512;
+    auto join = [&](size_t i, size_t j) {
+        const uint32_t ri = find(static_cast<uint32_t>(i)), rj = find(static_cast<uint32_t>(j));
+        if (ri != rj) root[rj] = ri;
+    };
+    if (n <= kBrute) {
+        for (size_t i = 0; i + 1 < n; ++i)
+            for (size_t j = i + 1; j < n; ++j)
+                if (count(i) >= 2 * count(j) - 1 && umi3_one_mismatch(umi(i), umi(j))) join(i, j);
+    } else {
+        // Deep groups: the same joins in the same (i, then j ascending) order, found through a sorted index of the
+        // 5-7 single-group neighbours of each UMI instead of the n^2 pair loop, so the roots are identical.
+        std::vector<std::pair<uint64_t, uint32_t>> index(n);
+        for (size_t r = 0; r < n; ++r) index[r] = {umi(r), static_cast<uint32_t>(r)};
+        std::sort(index.begin(), index.end());
+        std::vector<uint32_t> nb;
+        for (size_t i = 0; i + 1 < n; ++i) {
+            const uint64_t u = umi(i);
+            const int len = (63 - __builtin_clzll(u)) / 3;
+            nb.clear();
+            for (int p = 0; p < len; ++p) {
+                const uint64_t cur = (u >> (3 * p)) & 7ULL;
+                for (uint64_t b = 0; b < 8; ++b) {
+                    if (b == cur) continue;
+                    const uint64_t cand = u ^ ((cur ^ b) << (3 * p));
+                    for (auto it = std::lower_bound(index.begin(), index.end(), std::make_pair(cand, uint32_t(0)));
+                         it != index.end() && it->first == cand; ++it)
+                        if (it->second > i && count(i) >= 2 * count(it->second) - 1) nb.push_back(it->second);
+                }
             }
+            std::sort(nb.begin(), nb.end());
+            for (uint32_t j : nb) join(i, j);
+        }
+    }
     for (size_t i = 0; i < n; ++i) root[i] = find(static_cast<uint32_t>(i));
 }
 
