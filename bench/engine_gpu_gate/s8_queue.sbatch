@@ -41,7 +41,12 @@ run_one() {   # gpu index config-dir slots threads timeline?
   [ "$(basename $D)" = "cfg_${TL%%:*}x${TL##*:}" ] && [ $g = 0 ] && [ $i = 10 ] && TLFLAG=1
   mkdir -p $d/out
   local s0=$(date +%s.%N)
-  ( cd $d && CUDA_VISIBLE_DEVICES=$g $BIN $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf --out-prefix $d/out/ \
+  local NUMACMD=""
+  if [ -n "${NUMA_PIN:-}" ]; then   # NUMA_PIN=1: the sample runs on the socket its GPU hangs off, with its memory there
+    local bus nn; bus=$(nvidia-smi --query-gpu=pci.bus_id --format=csv,noheader -i $g | tr "A-Z" "a-z" | sed "s/^0000//"); nn=$(cat /sys/bus/pci/devices/${bus}/numa_node 2>/dev/null || echo -1)
+    [ "$nn" -ge 0 ] && NUMACMD="numactl --cpunodebind=$nn --membind=$nn"
+  fi
+  ( cd $d && CUDA_VISIBLE_DEVICES=$g $NUMACMD $BIN $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf --out-prefix $d/out/ \
       --threads $T --pipeline --output-format 1pz --engine gpu $EXTRA 2>&1 | while IFS= read -r l; do printf '%(%s)T %s\n' -1 "$l"; done > $D/g${g}_$i.log ) &
   local wp=$!
   if [ "$TLFLAG" = 1 ]; then
