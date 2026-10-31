@@ -117,6 +117,9 @@ def cmd_ref_loso(a):
     q = lambda F, cols: np.column_stack([rankdata(F[c]) / len(F[c]) for c in cols])  # noqa: E731
     out = Path(a.out) / "loso_ref"
     out.mkdir(parents=True, exist_ok=True)
+    from sklearn.metrics import average_precision_score
+
+    ap = {}
     for n in a.names or names:
         tr = [m for m in names if STUDY[m] != STUDY[n] and all(c in D[m][0] for c in cols)]
         Xtr = np.vstack([q(D[m][0], cols) for m in tr])
@@ -125,8 +128,11 @@ def cmd_ref_loso(a):
         clf = HistGradientBoostingClassifier(
             max_iter=300, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0, random_state=0
         ).fit(Xtr, ytr, sample_weight=w * len(w) / len(tr))
-        np.save(out / f"{n}.npy", clf.predict_proba(q(D[n][0], cols))[:, 1])
-        print("ref loso", n, flush=True)
+        s = clf.predict_proba(q(D[n][0], cols))[:, 1]
+        np.save(out / f"{n}.npy", s)
+        ap[n] = float(average_precision_score(D[n][1], s))
+        print("ref loso", n, round(ap[n], 4), flush=True)
+    print("mean reference leave-one-study-out AUPRC", round(float(np.mean(list(ap.values()))), 4), "over", len(ap))
 
 
 def _rss_mb():

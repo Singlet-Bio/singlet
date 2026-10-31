@@ -106,6 +106,20 @@ def test_sidecar_roundtrip_and_guard(tmp_path):
 
 
 @needs_model
+def test_cell_index_records_the_method_version(tmp_path):
+    atlas = pytest.importorskip("singlet.s1.atlas")
+    feats = REG.features("doublet")
+    n = 60
+    v = np.random.default_rng(3).random(n).astype(np.float32)
+    tab = O.build_table("GSM123", np.arange(n), {"score_v2": v}, feats, REG.method_version("doublet"))
+    p = O.write_features(tab, tmp_path / "x.parquet", feats)
+    specs = atlas.load_features([f.cell_feature_row() for f in feats])
+    data, entry = atlas.normalize_feature_sidecar(p, gsm="GSM123", specs=specs, n_columns=n)
+    assert entry["method_version"] == REG.method_version("doublet") and entry["feature_set"] == "doublet"
+    assert entry["n_rows"] == n
+
+
+@needs_model
 def test_score_inputs_na_rules():
     rng = np.random.default_rng(2)
     n = 400
