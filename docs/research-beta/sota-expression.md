@@ -444,4 +444,11 @@ State of the engine at d9834b8a (read from the source, nothing run yet):
 
 Each of the three is a CPU change plus a GPU mirror (S8) and a byte-identity gate; they are separate engine PRs, not benchmarking tasks.
 
+### 8. RNA-editing panel (2026-10-31): not implemented, so not benchmarkable
+
+The engine does not write RNA-editing counts. `pileup_engine.h` mentions editing in comments only (the header summary "RNA editing (A/G) counts at REDIportal sites", the `min_baseq` comment, the `t_variant` profile label) and `rna_variant_caller.h` says
+"RNA editing is kept, downstream decides". The only site-list input is `config_.snp_path`: the SNP pileup counts ref/alt alleles per site and cell (`private/snp_ad.mtx.gz`, `snp_dp.mtx.gz`, `ase_counts.tsv`; about 7.35 M one-alternate-allele SNP sites, not a REDIportal set). There is no REDIportal list, no
+editing counter and no writer in `export.h`, and no finished run directory holds an editing file. The check stopped there by its pre-agreed stop rule. What is needed first: a REDIportal site list in the SNP-input format (version, hg38 coordinates, strand and A>G orientation), a dedicated
+editing output or a documented way to run the SNP pileup on it (opposite-strand reads), then a pre-registered comparison to a published editing index (>= 8 comparable samples or cell types). **Recommendation: drop the editing panel from the beta claims unless it is built before the freeze.**
+
 (next: VDJ, non-host, editing, HTO)
