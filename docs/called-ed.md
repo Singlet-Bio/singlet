@@ -207,7 +207,7 @@ default cell caller (`--cell-caller called_v2`; `star_solo` and `emptydrops` kee
   counts with `--soloStrand Forward`, so for 5' libraries its knee came from wrong-strand counts. Strand is only known
   after the pileup probe (#25), so passing `--soloStrand Reverse` would not cover undeclared 5' libraries.
 * `called_v2` runs on exon + intron counts per gene, keyed and sorted as in `cellcall.gene_counts`.
-* `cell_calls.tsv` has one row per barcode: `is_cell` (= `called`, what the migration reads), `called`, `called_v2`,
+* `cell_calls.tsv` has one row per barcode: `is_cell` (= `called_v2`, the call; what the migration reads as `called`), `called_knee` (the knee set the call starts from; before Beta this column was `called` and was also what `is_cell` held), `called_v2`,
   `umi_exon`, `umi_total`, `fdr`, `pvalue`, `log_prob`. The parameters (lower, retain, alpha, pool, counts) are in
   `pileup_stats.json` under `provenance.cell_call`. Downstream per-cell outputs use the `called_v2` set.
 

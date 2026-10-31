@@ -16,7 +16,7 @@ d = glob.glob("$R/out/*/*")[0]
 s = json.load(open(d + "/summary.json"))
 print("summary n_cells_called", s.get("n_cells_called"), "n_input_reads", s.get("n_input_reads"))
 rows = list(csv.DictReader(open(d + "/cell_calls.tsv"), delimiter="\t"))
-print("cell_calls rows", len(rows), {k: sum(1 for r in rows if r[k] in ("1", "TRUE")) for k in ("is_cell", "called", "called_v2")})
+print("cell_calls rows", len(rows), {k: sum(1 for r in rows if r[k] in ("1", "TRUE")) for k in ("is_cell", "called", "called_knee", "called_v2") if k in rows[0]})
 c = decode_1pz_bytes(open(d + "/exon_counts.1pz", "rb").read())
 print("exon", c.m, c.n, "nnz", c.nnz, "sum", int(c.data.sum()))
 m = json.load(open("$R/work/" + glob.glob("$R/work/*.manifest.json")[0].split("/")[-1]))["samples"][0]
