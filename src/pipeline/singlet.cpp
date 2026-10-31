@@ -1631,20 +1631,28 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         static constexpr size_t MAX_NONHOST_READS = 20'000'000;
         std::vector<std::string> reads;
         bool nonhost_subsampled = false;
+        // the classified reads are the records of mate1 with a sequence and a name hash below nh_thr (final after the pass below); the
+        // per-record outputs (nonhost_reads.fq, the per-cell matrix) must select the same records, in the same order, to line up with multi_hits
+        uint64_t nh_thr = UINT64_MAX;
+        auto nh_hash = [](const std::string& name_l) {
+            size_t e = name_l.find_first_of(" \t");
+            uint64_t h = 14695981039346656037ULL;   // FNV-1a of the read name
+            for (size_t i = 1; i < (e == std::string::npos ? name_l.size() : e); ++i) {
+                h ^= static_cast<unsigned char>(name_l[i]); h *= 1099511628211ULL;
+            }
+            h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33;
+            return h;
+        };
+        auto nh_selected = [&](const std::string& name_l, const std::string& seq_l) { return !seq_l.empty() && nh_hash(name_l) < nh_thr; };
         {
             std::vector<std::pair<uint64_t, std::string>> kept;
-            uint64_t thr = UINT64_MAX;
+            uint64_t& thr = nh_thr;
             std::ifstream fq(mate1_path);
             std::string name_l, seq_l, plus_l, qual_l;
             while (std::getline(fq, name_l) && std::getline(fq, seq_l) &&
                    std::getline(fq, plus_l) && std::getline(fq, qual_l)) {
                 if (seq_l.empty()) continue;
-                size_t e = name_l.find_first_of(" \t");
-                uint64_t h = 14695981039346656037ULL;   // FNV-1a of the read name
-                for (size_t i = 1; i < (e == std::string::npos ? name_l.size() : e); ++i) {
-                    h ^= static_cast<unsigned char>(name_l[i]); h *= 1099511628211ULL;
-                }
-                h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33;
+                const uint64_t h = nh_hash(name_l);
                 if (h >= thr) continue;
                 kept.emplace_back(h, std::move(seq_l));
                 while (kept.size() > MAX_NONHOST_READS) {
@@ -1776,7 +1784,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             struct stat mate2_st{};
             if (stat(mate2_path.c_str(), &mate2_st) == 0 && mate2_st.st_size > 0) {
                 auto tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
-                    mate1_path, mate2_path, cb_len, umi_len);
+                    mate1_path, mate2_path, cb_len, umi_len, nh_selected);
 
                 std::unordered_map<uint32_t, singlet::nonhost::NonHostCategory> kmap_cell;
                 std::unordered_map<uint32_t, std::string> snames;
@@ -1912,6 +1920,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             size_t idx_r = 0;
             while (std::getline(fq_in, name_l) && std::getline(fq_in, seq_l) &&
                    std::getline(fq_in, plus_l) && std::getline(fq_in, qual_l)) {
+                if (!nh_selected(name_l, seq_l)) continue;   // not classified (empty, or outside the name-hash sample): multi_hits has no entry
                 if (idx_r < multi_hits.size() &&
                     multi_hits[idx_r].top_category != NonHostCategory::UNKNOWN) {
                     fq_out << name_l << "\n" << seq_l << "\n"
