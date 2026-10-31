@@ -2556,10 +2556,13 @@ public:
         const double sWait = since(tL0);
         PileupOutput out;
         const auto tA1 = std::chrono::steady_clock::now();
+        // pileupRun releases the device when its device work is done; the host post-processing of the results needs no GPU
+        bool lockReleased = false; double sHeld = 0;
+        in.release = [&]() { if (!lockReleased) { lockReleased = true; sHeld = since(tA1); unlockDevice(lock_fd); } };
         const bool ok = pileupRun(in, device, out);
         const double sRun = since(tA1);
-        unlockDevice(lock_fd);
-        std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
+        in.release();
+        std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sHeld << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
         gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
         if (reads_matrix_on()) {   // reads per molecule: the GPU's sums and histogram (the CPU store is empty)
