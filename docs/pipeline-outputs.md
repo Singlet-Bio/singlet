@@ -46,6 +46,7 @@ and the top-level `donor_assignments.tsv` (no longer a header-only stub).
 | `splice_psi.mtx.gz`, `splice_psi_{features,barcodes}.tsv.gz` | | gzip files now carry `.gz` | |
 | `barnyard_classification.tsv` | table | called cells only (covered every barcode: 69k "doublets" on hgmm1k) | |
 | `nonhost/nonhost_per_cell.*` | table | written on a fresh output directory; only EM-confirmed species are counted per cell | `nonhost_summary.json` adds `per_cell_species` and `missing_reference_fasta` |
+| `nonhost/nonhost_confirmed_reads.bin` | binary (`SNCR` v1, `include/singlet/pileup/nonhost/nonhost_confirmed_reads.h`) | the cDNA reads (2-bit) with cell barcode, UMI and species id of EM-confirmed non-host species only; written only when `em_species_count > 0` and the host Bloom filter is loaded, and never a read with a host k-mer; absent on uninfected samples | the one place sequenced reads are kept |
 
 ## Pipeline defaults that changed
 
