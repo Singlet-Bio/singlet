@@ -73,6 +73,22 @@ void test_store() {
     CHECK(st2.ambiguous == 2 && st2.spliced == 1 && st2.unspliced == 4, "exact: 1 S / 4 U / 2 A");
     CHECK(ex2.total() + in2.total() == 7, "exact: exon + intron = molecules");
 
+    // reads per molecule: the sink sees every emitted molecule once, with the reads merged into it, and the counts do not move
+    {
+        CountingAcc exr, inr;
+        uint64_t reads = 0, mols = 0, hist1 = 0;
+        CountingAcc ex3, in3;
+        auto st3 = s.finalize_molecules(ex3, in3, [](uint32_t, uint32_t) {}, 10, true,
+            [&](bool intronic, uint32_t f, uint32_t bc, uint32_t n) {
+                (intronic ? inr : exr).n[{f, bc}] += static_cast<int>(n); reads += n; ++mols; hist1 += (n == 1);
+            });
+        CHECK(mols == st3.total(), "reads sink: one call per emitted molecule");
+        CHECK(reads == 12, "reads sink: 12 reads over the 6 molecules");
+        CHECK(exr.total() + inr.total() == 12, "reads sink: exon + intron reads = 12");
+        CHECK(hist1 == 4, "reads sink: four single-read molecules (AAAA, CACA, CCCC, TTTT)");
+        CHECK(ex3.total() == ex.total() && in3.total() == in.total(), "reads sink: counts unchanged");
+    }
+
     // per_cell_molecule_stats: 12 reads, 6 molecules after directional collapse
     auto pc = s.per_cell_molecule_stats(10);
     CHECK(pc[0].total_reads == 12, "saturation: 12 reads");
@@ -229,6 +245,24 @@ void run_case(const std::string& dir, bool parallel, bool directional) {
         uint64_t tot = 0;
         for (auto v : extra) tot += v;
         CHECK(tot == static_cast<uint64_t>(directional ? 3 : 2), tag + ": legacy exonic extra (mixed unspliced molecules)");
+    }
+    // reads-per-UMI matrices: same molecules, uint32 reads; the histogram holds each emitted molecule once
+    uint64_t hist_mols = 0;
+    for (const auto& [bc, h] : e.reads_per_umi_hist()) for (uint32_t v : h) hist_mols += v;
+    CHECK(hist_mols == st.umi_unique, tag + ": reads_per_umi histogram holds every molecule once");
+    const auto er = e.exon_reads().to_csc(), ir = e.intron_reads().to_csc();
+    uint64_t rd = 0; for (auto v : er.data) rd += v; for (auto v : ir.data) rd += v;
+    CHECK(rd >= st.umi_unique, tag + ": reads >= molecules");
+    const auto ec = e.exons().to_csc();
+    CHECK(er.indices == ec.indices && er.indptr == ec.indptr, tag + ": exon_reads has the exon_counts sparsity");
+    // the same run with the matrix off gives identical counts
+    singlet::PileupConfig off = cfg; off.reads_matrix = false;
+    singlet::PileupEngine e2(off);
+    if (e2.load_references()) {
+        if (parallel) e2.run_parallel(dir + "/t.bam", 2); else e2.run(dir + "/t.bam");
+        const auto ec2 = e2.exons().to_csc();
+        CHECK(ec2.indices == ec.indices && ec2.data == ec.data && ec2.indptr == ec.indptr, tag + ": counts identical with the reads matrix off");
+        CHECK(e2.exon_reads().nnz_raw() == 0 && e2.reads_per_umi_hist().empty(), tag + ": matrix off writes nothing");
     }
 }
 

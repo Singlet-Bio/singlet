@@ -22,9 +22,16 @@ PRE_SHM=$(ipcs -m | awk '/^0x/{print $2}' | sort); PRE_DEV=$(ls /dev/shm 2>/dev/
 cleanup() { kill $(jobs -p) 2>/dev/null; rm -rf $SCR
   for id in $(comm -13 <(echo "$PRE_SHM") <(ipcs -m | awk '/^0x/{print $2}' | sort)); do ipcrm -m $id 2>/dev/null && echo "removed shm segment $id"; done
   for f in $(comm -13 <(echo "$PRE_DEV") <(ls /dev/shm 2>/dev/null | sort)); do rm -rf /dev/shm/$f && echo "removed /dev/shm/$f"; done; }
-trap cleanup EXIT INT TERM
+cleanup2() { [ -n "${PRELOAD:-}" ] && $BIN genome unload $G/star_2.7.11b > /dev/null 2>&1; [ -n "${TMPDIR_RAM:-}" ] && rm -rf /dev/shm/s8q_$SLURM_JOB_ID; cleanup; }
+mps_stop() { [ -n "${MPS:-}" ] && echo quit | CUDA_MPS_PIPE_DIRECTORY=/tmp/s8mps_$SLURM_JOB_ID CUDA_MPS_LOG_DIRECTORY=/tmp/s8mpslog_$SLURM_JOB_ID nvidia-cuda-mps-control > /dev/null 2>&1; }
+trap 'mps_stop; cleanup2' EXIT INT TERM
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=7200 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH SINGLET_GPU_PILEUP=on
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
+# PRELOAD=1: the genome goes into shared memory once (`singlet genome load`), every sample attaches (N21 auto mode); TMPDIR_RAM=1: the decode temp files go to /dev/shm
+# MPS=1: a user-level CUDA MPS daemon for the node (kernels of the samples sharing a GPU run concurrently instead of time-slicing)
+if [ -n "${MPS:-}" ]; then export CUDA_MPS_PIPE_DIRECTORY=/tmp/s8mps_$SLURM_JOB_ID CUDA_MPS_LOG_DIRECTORY=/tmp/s8mpslog_$SLURM_JOB_ID; mkdir -p $CUDA_MPS_PIPE_DIRECTORY $CUDA_MPS_LOG_DIRECTORY; nvidia-cuda-mps-control -d; sleep 2; echo "MPS daemon started" | tee -a $RES/summary.txt; fi
+[ -n "${PRELOAD:-}" ] && { $BIN genome load $G/star_2.7.11b 2>&1 | tee -a $RES/summary.txt; }
+[ -n "${TMPDIR_RAM:-}" ] && { mkdir -p /dev/shm/s8q_$SLURM_JOB_ID; export TMPDIR=/dev/shm/s8q_$SLURM_JOB_ID; }
 echo "node=$(hostname) job=$SLURM_JOB_ID bin=$(cat $(dirname $BIN)/commit) sample=$s NS=$NS configs=$CONFIGS $(date -Is)" | tee $RES/summary.txt
 
 tree() { echo $1; for c in $(pgrep -P $1 2>/dev/null); do tree $c; done; }
@@ -39,8 +46,10 @@ run_one() {   # gpu index config-dir slots threads timeline?
   local wp=$!
   if [ "$TLFLAG" = 1 ]; then
     ( sleep 3; sp=$(pgrep -f "singlet-gpu $FQ.*out-prefix $d/out/" | head -1)
+      declare -A last   # per pid, the last CPU ticks seen: an exited process (STAR) keeps its share in the total
       while [ -n "$sp" ] && kill -0 $sp 2>/dev/null; do
-        t=$(date +%s.%N); c=0; for p in $(tree $sp); do c=$((c + $(awk '{print $14+$15}' /proc/$p/stat 2>/dev/null || echo 0))); done
+        t=$(date +%s.%N); c=0; for p in $(tree $sp); do v=$(awk '{print $14+$15}' /proc/$p/stat 2>/dev/null); [ -n "$v" ] && last[$p]=$v; done
+        for p in "${!last[@]}"; do c=$((c + ${last[$p]})); done
         echo "$t $c" >> $D/timeline_g${g}_$i.cpu; sleep 2
       done ) &
   fi
@@ -72,12 +81,19 @@ steady = (len(ends) - first) * READS / 1e6 / (ends[-1] - ends[first - 1]) if len
 cs = (C1 - C0) / 1e6; wait = []
 try: wait = [float(x) for x in re.findall(r"waited ([\d.e+-]+) s", open(D + "/waits.txt").read())]
 except Exception: pass
+held = [float(x) for x in re.findall(r"held it ([\d.e+-]+) s", open(D + "/waits.txt").read())] if wait else []
+pwait, pheld = [], []
+for f in glob.glob(D + "/g*_*.log"):
+    for m in re.finditer(r"device lock: waited ([\d.e+-]+) s, held ([\d.e+-]+) s", open(f, errors="replace").read()):
+        pwait.append(float(m.group(1))); pheld.append(float(m.group(2)))
+mean = lambda v: sum(v) / len(v) if v else 0
+lockutil = (sum(held) + sum(pheld)) / (2 * (T1 - T0))
 util = collections.defaultdict(list)
 for l in open(D + "/gpu.csv"):
     p = l.split()
     if len(p) == 2: i, u = p[1].split(","); util[int(i)].append(float(u))
 print(f"{S} per GPU x {T} threads, {len(ends)}/{NS} samples: makespan {T1-T0:.0f} s -> {len(ends)*READS/1e6/(T1-T0):.2f} M pairs/s; STEADY {steady:.2f} M pairs/s (after the first {first} completions); "
-      f"host {cs/(len(ends)*READS/1e6):.2f} core-s/M ({cs/(T1-T0):.1f} cores busy); sample wall mean/max {sum(walls)/len(walls):.0f}/{max(walls):.0f} s; lock wait mean/max {sum(wait)/max(len(wait),1):.0f}/{max(wait) if wait else 0:.0f} s; "
+      f"host {cs/(len(ends)*READS/1e6):.2f} core-s/M ({cs/(T1-T0):.1f} cores busy); sample wall mean/max {sum(walls)/len(walls):.0f}/{max(walls):.0f} s; lock wait mean/max {sum(wait)/max(len(wait),1):.0f}/{max(wait) if wait else 0:.0f} s; prefill lock held mean {mean(held):.0f} s, pileup lock wait/held mean {mean(pwait):.0f}/{mean(pheld):.0f} s, LOCK UTILIZATION {lockutil*100:.0f}% (sum of holds / (2 GPUs x makespan)); "
       f"GPU util {', '.join(f'{sum(v)/len(v):.0f}%' for k, v in sorted(util.items()))}")
 for f in sorted(glob.glob(D + "/timeline_*.cpu")):
     g, i = re.search(r"timeline_g(\d+)_(\d+)", f).groups()

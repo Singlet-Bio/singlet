@@ -46,7 +46,12 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     for (int attempt = 0; attempt < 2; attempt++) {
     Arena A;
     try {
-    if (attempt == 0) A.init(freeB > (size_t(3) << 30) ? freeB - (size_t(3) << 30) : freeB / 2);
+    if (attempt == 0) {
+        size_t arena = freeB > (size_t(3) << 30) ? freeB - (size_t(3) << 30) : freeB / 2;
+        // SINGLET_GPU_PILEUP_ARENA_GB: cap the arena (samples sharing the GPU; the partitions K adapt to it)
+        if (const char* ag = getenv("SINGLET_GPU_PILEUP_ARENA_GB")) arena = std::min<size_t>(arena, (size_t) (atof(ag) * (1ull << 30)));
+        A.init(arena);
+    }
     else A.init_managed(2 * totB);
     Inputs in; in.nS = (int)nS; in.nA = (int)nA; in.nR = (int)nR; in.ncells = (int)par.n_barcodes; in.ulen = pi.umiLen; in.par = par; in.wantMerges = pi.wantGeneMerges;
     in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, pi.snpSkipN, pi.intronRules, pi.useQual};
@@ -69,6 +74,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // ---- one run with outputs
     { unsigned long long z[5] = {0, 0, 0, 0, 0}; CK(cudaMemcpyToSymbol(g_molstat, z, sizeof z)); }
     g_cell_stats = true;
+    g_want_reads = pi.wantReads != 0;
     { const char* pk = getenv("SINGLET_GPU_PILEUP_PARTS"); g_force_parts = pk ? std::max(0, std::min(atoi(pk), kMaxParts)) : 0; }
     Timer T; T.start();
     Outputs o;
@@ -90,6 +96,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     for (auto& kv : T.acc) if (kv.first != "fetch") po.msGpu += kv.second;   // "fetch": the host copying a partition's results out
     { char b[160]; snprintf(b, sizeof b, "partition select %.1f ms (in the GPU time), host fetch between partitions %.1f ms; ", T.acc.count("part.select") ? T.acc["part.select"] : 0.0, T.acc.count("fetch") ? T.acc["fetch"] : 0.0); po.log += b; }
     copyT3(o.exon, po.exon); copyT3(o.intron, po.intron); copyT3(o.amb, po.amb); copyT3(o.sj, po.sj);
+    if (pi.wantReads) { copyT3(o.exon_reads, po.exonReads); copyT3(o.intron_reads, po.intronReads); po.histCell.swap(o.hist_cell); po.hist.swap(o.hist); }
     copyT3(o.snp_ad, po.snpAd); copyT3(o.snp_dp, po.snpDp); copyT3(o.mt, po.mt); copyT3(o.mt_rev, po.mtRev);
     po.sjtab = o.sjtab; po.indels = o.indels;
     {   // R9 per gene: the merged gene-store UMIs, (cell, gene, umi) order

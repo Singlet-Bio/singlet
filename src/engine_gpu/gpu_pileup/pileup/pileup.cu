@@ -431,6 +431,8 @@ struct Outputs {
     struct Merge { uint32_t cell, gene; uint64_t umi, root; };
     std::vector<Merge> merges;   // gene store UMIs merged into another (Inputs::wantMerges)
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
+    std::vector<T3> exon_reads, intron_reads;   // g_want_reads: reads per molecule summed per (cell, feature), same rows as exon / intron
+    std::vector<uint32_t> hist_cell, hist;      // g_want_reads: cells with molecules, and their kHistBins-bin reads-per-molecule histogram
     long long n_gene_tuples = 0, n_sjl = 0, n_sj_tuples = 0, n_snp_tuples = 0, n_mt_tuples = 0, n_ind_tuples = 0, n_junctions = 0;
     std::vector<uint32_t> cell_reads, cell_mol;   // per cell, when g_cell_stats
     unsigned long long hits[4] = {0, 0, 0, 0};      // exon_hits, intron_hits, UMI reads recorded, chrM/NUMT multimappers rescued (when g_cell_stats)
@@ -480,10 +482,11 @@ static uint32_t* gene_components(Arena& A, const GeneStore* gst, const uint32_t*
 // ---- the reducers: each takes its partition's tuples from the read-level expansion and returns its per-(cell, feature) result on the
 // device. Order-free: radix sorts, integer reductions, and the R9 collapse one thread per group.
 // gene: the M6 chain (stage b: (cell, gene, UMI) sort and reduce; c: directional UMI collapse; d: per class CSR)
-static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr) {
+static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr, CsrDev32 RD[2] = nullptr) {
     Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells; L.cr = (in.dp.rules & 128) != 0 && in.par.umi_dedup;
     long long ne = 0, na = 0; int it = 0;
     C[0] = C[1] = C[2] = CsrDev{nullptr, nullptr, nullptr, 0};
+    if (RD) RD[0] = RD[1] = CsrDev32{nullptr, nullptr, nullptr, 0};
     if (gst) *gst = GeneStore{nullptr, nullptr, 0, L.gb, L.ub};
     if (ng > 0) {
         uint64_t* uk; Agg* ag; int m = stage_b(A, T, recs, ng, 0, L, &uk, &ag); T.mark("b.end");
@@ -491,6 +494,7 @@ static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, Cs
         Mol M = stage_c(A, T, uk, ag, m, L, &ne, &na, &it, &lab); T.mark("c.end");
         if (gst) *gst = GeneStore{uk, lab, m, L.gb, L.ub};
         C[0] = stage_d_one(A, M.kex, m, L); C[1] = stage_d_one(A, M.kin, m, L); C[2] = stage_d_one(A, M.kam, m, L); T.mark("d.end");
+        if (RD && M.rex) { RD[0] = stage_d_reads(A, M.kex, M.rex, m, L); RD[1] = stage_d_reads(A, M.kin, M.rin, m, L); T.mark("d.reads"); }
     }
 }
 // junction: (cell, junction, UMI) sort, reads per exact UMI, R9 collapse per (cell, junction); returns the (cell | junction) rows
@@ -615,6 +619,12 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         hits = A.alloc<unsigned long long>(4); CK(cudaMemset(hits, 0, 32));
         CK(cudaMemcpyToSymbol(g_cell_mol, &cell_mol, sizeof(cell_mol)));
     }
+    uint32_t* cell_hist = nullptr;
+    if (g_want_reads) {
+        cell_hist = A.alloc<uint32_t>((size_t)std::max(in.ncells, 1) * kHistBins);
+        CK(cudaMemset(cell_hist, 0, (size_t)std::max(in.ncells, 1) * kHistBins * 4));
+        CK(cudaMemcpyToSymbol(g_cell_hist, &cell_hist, sizeof(cell_hist)));
+    }
     g_snp_stat[0] = g_snp_stat[1] = g_snp_stat[2] = 0;
     // ---- cell partitions (align-and-count design 4.4): every reducer's key starts with the cell, so the read-level stages run once
     // per partition of the cells (hash(cell) mod K) on that partition's reads; the signature-level tables above are shared. Sized up
@@ -681,7 +691,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         const size_t s4 = A.mark();
         T.mark("4.expand");
         // the reducers: gene (M6 chain), junction, SNP, chrM base, chrM indel; each emits, sorts, collapses and reduces its own stream
-        CsrDev C[3]; GeneStore gst{nullptr, nullptr, 0, 0, 0}; red_gene(A, T, in, recs, ng, C, &gst);
+        CsrDev C[3]; CsrDev32 RD[2]; GeneStore gst{nullptr, nullptr, 0, 0, 0}; red_gene(A, T, in, recs, ng, C, &gst, g_want_reads ? RD : nullptr);
         const GeneStore* gsp = (in.par.umi_dedup && gst.m > 0) ? &gst : nullptr;   // R9 per gene: the junction and SNP molecules take their roots from it
         if (out && in.wantMerges && gst.m > 0) {   // the host V(D)J reducer needs the same roots: the entries the collapse merged into another
             const int Gm = (gst.m + TB - 1) / TB; uint32_t* mf = A.alloc<uint32_t>(gst.m); k_mflag<<<Gm, TB>>>(gst.lab, gst.m, mf);
@@ -719,6 +729,15 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         if (ng > 0) {
             auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells); v.insert(v.end(), t.begin(), t.end()); };
             add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]);
+            if (g_want_reads) {
+                auto addr = [&](std::vector<T3>& v, const CsrDev32& c) {
+                    std::vector<uint32_t> ip(in.ncells + 1), ix(c.nnz), da(c.nnz);
+                    CK(cudaMemcpy(ip.data(), c.indptr, 4 * (size_t)(in.ncells + 1), cudaMemcpyDeviceToHost));
+                    if (c.nnz) { CK(cudaMemcpy(ix.data(), c.indices, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(da.data(), c.data, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); }
+                    for (int cell = 0; cell < in.ncells; cell++) for (uint32_t k = ip[cell]; k < ip[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, ix[k], da[k]});
+                };
+                addr(out->exon_reads, RD[0]); addr(out->intron_reads, RD[1]);
+            }
         }
         if (n_sju > 0) { std::vector<uint64_t> k(n_sju); std::vector<uint32_t> c(n_sju); CK(cudaMemcpy(k.data(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_sju; i++) out->sj_raw_sum += c[i];
@@ -740,6 +759,19 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     A.reset(base2); A.peak = peak_all;
     T.finish();
     if (g_cell_stats) { uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_mol, &z, sizeof(z))); }
+    if (g_want_reads) {
+        uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_hist, &z, sizeof(z)));
+        if (out) {   // only cells with molecules leave the device (the histogram is kHistBins words per barcode of the whitelist)
+            std::vector<uint32_t> h((size_t)std::max(in.ncells, 1) * kHistBins);
+            CK(cudaMemcpy(h.data(), cell_hist, h.size() * 4, cudaMemcpyDeviceToHost));
+            for (int c = 0; c < in.ncells; c++) {
+                const uint32_t* r = h.data() + (size_t)c * kHistBins; bool any = false;
+                for (int b = 0; b < kHistBins; b++) any |= r[b] != 0;
+                if (!any) continue;
+                out->hist_cell.push_back((uint32_t)c); out->hist.insert(out->hist.end(), r, r + kHistBins);
+            }
+        }
+    }
     if (!out) return;
     // ---- canonical merge: cells are disjoint across partitions; each matrix is sorted by (cell, row), indels by read (the K = 1 order)
     // each partition's rows are sorted already: merge them (K = 1: nothing to do)
@@ -751,6 +783,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         }
     if (K > 1) std::stable_sort(indels.begin(), indels.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (auto& e : indels) out->indels.push_back(e.second);
+    for (auto* v : {&out->exon_reads, &out->intron_reads}) std::sort(v->begin(), v->end(), byCell);
     if (g_cell_stats) {
         out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1));
         CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
