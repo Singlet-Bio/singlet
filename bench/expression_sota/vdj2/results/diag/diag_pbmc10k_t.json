@@ -1,0 +1,175 @@
+{
+ "lib": "pbmc10k_t",
+ "sdir": "singlet",
+ "reference_paired_cells": 4737,
+ "correct_pairing": 0.9402575469706566,
+ "stats": {
+  "read_pairs": 35165307,
+  "umis": 161805,
+  "umi_read_threshold": 7,
+  "umi_reads_median": 336.0,
+  "umis_low_support": 45267,
+  "barcodes_assembled": 6564,
+  "contigs": 12827,
+  "contigs_kept": 12457
+ },
+ "miss_classes": {
+  "TRA:diff_other": 49,
+  "TRA:diff_sub": 1,
+  "TRA:exact_ambient": 2,
+  "TRA:exact_kept_not_top": 80,
+  "TRA:exact_low_support": 2,
+  "TRA:exact_variant": 2,
+  "TRA:no_barcode": 8,
+  "TRA:no_chain": 67,
+  "TRB:diff_other": 6,
+  "TRB:exact_kept_not_top": 42,
+  "TRB:exact_low_support": 9,
+  "TRB:exact_min_frac": 1,
+  "TRB:no_barcode": 8,
+  "TRB:no_chain": 16
+ },
+ "miss_class_totals": {
+  "diff_other": 55,
+  "exact_kept_not_top": 122,
+  "no_chain": 83,
+  "no_barcode": 16,
+  "exact_low_support": 11,
+  "exact_ambient": 2,
+  "exact_variant": 2,
+  "exact_min_frac": 1,
+  "diff_sub": 1
+ },
+ "ref_umis_of_missed_by_class": {
+  "diff_other": {
+   "count": 55.0,
+   "25%": 3.0,
+   "50%": 5.0,
+   "75%": 8.0
+  },
+  "diff_sub": {
+   "count": 1.0,
+   "25%": 4.0,
+   "50%": 4.0,
+   "75%": 4.0
+  },
+  "exact_ambient": {
+   "count": 2.0,
+   "25%": 1.0,
+   "50%": 1.0,
+   "75%": 1.0
+  },
+  "exact_kept_not_top": {
+   "count": 122.0,
+   "25%": 3.0,
+   "50%": 5.0,
+   "75%": 7.75
+  },
+  "exact_low_support": {
+   "count": 11.0,
+   "25%": 5.0,
+   "50%": 8.0,
+   "75%": 10.5
+  },
+  "exact_min_frac": {
+   "count": 1.0,
+   "25%": 3.0,
+   "50%": 3.0,
+   "75%": 3.0
+  },
+  "exact_variant": {
+   "count": 2.0,
+   "25%": 3.0,
+   "50%": 4.0,
+   "75%": 5.0
+  },
+  "no_barcode": {
+   "count": 16.0,
+   "25%": 2.0,
+   "50%": 3.0,
+   "75%": 6.0
+  },
+  "no_chain": {
+   "count": 83.0,
+   "25%": 3.0,
+   "50%": 5.0,
+   "75%": 7.5
+  }
+ },
+ "ref_umis_all_tops": {
+  "count": 10065.0,
+  "25%": 4.0,
+  "50%": 7.0,
+  "75%": 12.0
+ },
+ "exact_filtered_detail": {
+  "exact_ambient": {
+   "umis": 1.0,
+   "reads": 257.0,
+   "junction_umis": 1.0,
+   "ref_umis": 1.0
+  },
+  "exact_kept_not_top": {
+   "umis": 4.0,
+   "reads": 806.5,
+   "junction_umis": 4.0,
+   "ref_umis": 5.0
+  },
+  "exact_low_support": {
+   "umis": 7.0,
+   "reads": 67.0,
+   "junction_umis": 3.0,
+   "ref_umis": 8.0
+  },
+  "exact_min_frac": {
+   "umis": 3.0,
+   "reads": 976.0,
+   "junction_umis": 3.0,
+   "ref_umis": 3.0
+  },
+  "exact_variant": {
+   "umis": 1.0,
+   "reads": 36.0,
+   "junction_umis": 1.0,
+   "ref_umis": 4.0
+  }
+ },
+ "exact_matches": 9755,
+ "v_agreement_equiv": 0.9997949769349052,
+ "v_agreement_raw": 0.9997949769349052,
+ "j_agreement": 0.9996924654023578,
+ "v_disagree_top": [
+  [
+   "TRAV8-4->TRAV13-1",
+   1
+  ],
+  [
+   "TRAV4->TRAV5",
+   1
+  ]
+ ],
+ "j_disagree_top": [
+  [
+   "TRBJ2-3->TRBJ1-3",
+   1
+  ],
+  [
+   "TRAJ13->TRAJ27",
+   1
+  ],
+  [
+   "TRBJ2-2->TRBJ1-4",
+   1
+  ]
+ ],
+ "v_raw_disagree_top": [
+  [
+   "TRAV8-4->TRAV13-1",
+   1
+  ],
+  [
+   "TRAV4->TRAV5",
+   1
+  ]
+ ]
+}

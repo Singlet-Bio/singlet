@@ -110,8 +110,15 @@ def main():
                                     k = "exact_min_frac"
                                 else:
                                     k = "exact_variant"
+                                tk = gc[gc.kept & gc.productive].sort_values("umis", ascending=False)
                                 ex_rows.append({"chain": ch, "class": k, "umis": int(e.umis), "reads": int(e.reads),
-                                                "junction_umis": int(e.junction_umis), "ref_umis": float(ru)})
+                                                "junction_umis": int(e.junction_umis), "ref_umis": float(ru),
+                                                "jmax": float(jmax[e.name]),
+                                                "other_kept": int(len(tk) > 0),
+                                                "top_umis": int(tk.umis.iloc[0]) if len(tk) else 0,
+                                                "top_reads": int(tk.reads.iloc[0]) if len(tk) else 0,
+                                                "tie": int(len(tk) > 0 and tk.umis.iloc[0] == e.umis),
+                                                "more_reads": int(len(tk) > 0 and e.reads > tk.reads.iloc[0])})
                             else:
                                 ms = gc.sort_values("umis", ascending=False)
                                 k = "diff_other"
@@ -138,7 +145,9 @@ def main():
     out["ref_umis_all_tops"] = rt.umis.describe()[["count", "25%", "50%", "75%"]].to_dict()
     if ex_rows:
         e = pd.DataFrame(ex_rows)
-        out["exact_filtered_detail"] = e.groupby("class")[["umis", "reads", "junction_umis", "ref_umis"]].median().to_dict("index")
+        out["exact_filtered_detail"] = e.groupby("class")[["umis", "reads", "junction_umis", "ref_umis", "jmax", "top_umis",
+                                                           "top_reads"]].median().to_dict("index")
+        out["exact_filtered_shares"] = e.groupby("class")[["other_kept", "tie", "more_reads"]].mean().to_dict("index")
     # gene disagreements on exact junction matches (top contigs)
     m = CV.load_singlet(os.path.join(sd, "contigs.csv"))
     m = m[m.chain.isin(keep)]
