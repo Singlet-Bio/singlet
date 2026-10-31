@@ -1,7 +1,8 @@
 #!/bin/bash
 # The `kernels` stage (decode ceiling of textbook integer codes against .s1, one pinned core), every matrix in one job so
 # every code is timed on the same node, one matrix after another:
-#   sbatch --export=ALL,S1_SHA=<sha> kernels.sbatch          (S1_FORCE=1 redoes matrices whose results exist)
+#   sbatch --export=ALL,S1_SHA=<sha> kernels.sbatch          (S1_FORCE=1 redoes matrices whose results exist;
+#                                                            S1_STAGE=entropy runs the untimed entropy stage instead)
 # The canonical matrices and .s1 files are read from the project space; only the timed decode is in memory.
 #SBATCH --job-name=s1-kernels
 #SBATCH --account=debruinz
@@ -26,5 +27,5 @@ s1_activate
 ) 9>"$S1/src/.lock-cpp-$SHA"
 echo "node $(hostname), $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)"
 t0=$SECONDS
-s1b kernels --datasets "${DS_LIST:-all}" ${S1_FORCE:+--force}
-echo "kernels done in $((SECONDS - t0)) s"
+s1b "${S1_STAGE:-kernels}" --datasets "${DS_LIST:-all}" ${S1_FORCE:+--force}
+echo "${S1_STAGE:-kernels} done in $((SECONDS - t0)) s"

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // How fast can any lossless code decode a count matrix? One core, in memory, for the `kernels` stage (Fig. limits).
-//   kernel_bench <matrix.bin> <member.pz2> <repeats> <warmup>
+//   kernel_bench <matrix.bin> <member.pz2> <repeats> <warmup> [entropy]
+// (`entropy`: no timing; each code's output once, with its order-0 and order-1 byte entropy, the order-0 entropy of the
+// step and value streams, and the .s1 member's byte entropy and size after zstd-19, for the `entropy` stage)
 // matrix.bin: u64 rows, u64 cols, u64 nnz, then indptr (cols+1 x u64), row indices (nnz x u32), values (nnz x u32), the
 // canonical genes x cells CSC of real data. Every code is encoded here, then timed decoding back into caller-owned u32
 // row indices and u32 values (the output a CSC reader needs), checked against the input, and printed as one JSON line:
@@ -18,6 +20,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -338,11 +341,42 @@ struct Codec {
 
 static double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
+// ------------------------------------------------------------------ entropy (the `entropy` mode: what is left to compress)
+static double entropy_of(const std::vector<u64>& h, u64 n) {
+    double e = 0;
+    for (u64 c : h)
+        if (c) e -= double(c) * std::log2(double(c) / double(n));
+    return e;   // total bits
+}
+
+// order-0 and order-1 (given the previous byte) entropy of a byte string, bits per byte
+static std::pair<double, double> byte_entropy(const Bytes& b) {
+    if (b.size() < 2) return {0, 0};
+    std::vector<u64> h0(256), h1(65536), hp(256);
+    for (u8 x : b) ++h0[x];
+    for (size_t i = 1; i < b.size(); ++i) { ++h1[(u32(b[i - 1]) << 8) | b[i]]; ++hp[b[i - 1]]; }
+    const double n = double(b.size());
+    return {entropy_of(h0, b.size()) / n, (entropy_of(h1, b.size() - 1) - entropy_of(hp, b.size() - 1)) / (n - 1)};
+}
+
+// order-0 entropy of a stream of integers, total bits (sorted copy: values can be large)
+static double stream_entropy(std::vector<u64> s) {
+    std::sort(s.begin(), s.end());
+    double e = 0;
+    const double n = double(s.size());
+    for (size_t i = 0, j; i < s.size(); i = j) {
+        for (j = i + 1; j < s.size() && s[j] == s[i]; ++j) {}
+        e -= double(j - i) * std::log2(double(j - i) / n);
+    }
+    return e;
+}
+
 int main(int argc, char** argv) {
     if (argc < 5) { std::fprintf(stderr, "usage: kernel_bench matrix.bin member.pz2 repeats warmup\n"); return 2; }
     svb_init();
     const Csc m = read_matrix(argv[1]);
     const int reps = std::atoi(argv[3]), warm = std::atoi(argv[4]);
+    const bool entropy_mode = argc > 5 && std::string(argv[5]) == "entropy";
     const std::vector<u32> gaps = to_gaps(m);
     u32 vmax = 0;
     for (u32 v : m.val) vmax = std::max(vmax, v);
@@ -449,6 +483,40 @@ int main(int argc, char** argv) {
         zstd_codec(3),
         zstd_codec(19),
     };
+
+    if (entropy_mode) {
+        // the streams themselves: order-0 entropy of the steps, of the values, and of (step, value) pairs, bits per non-zero
+        std::vector<u64> s(m.nnz);
+        for (u64 i = 0; i < m.nnz; ++i) s[i] = gaps[i];
+        const double hg = stream_entropy(s);
+        for (u64 i = 0; i < m.nnz; ++i) s[i] = m.val[i];
+        const double hv = stream_entropy(s);
+        for (u64 i = 0; i < m.nnz; ++i) s[i] = (u64(gaps[i]) << 32) | m.val[i];
+        const double hj = stream_entropy(std::move(s));
+        std::printf("{\"codec\":\"streams\",\"nnz\":%llu,\"h0_gap\":%.6f,\"h0_val\":%.6f,\"h0_pair\":%.6f}\n",
+                    (unsigned long long)m.nnz, hg / m.nnz, hv / m.nnz, hj / m.nnz);
+        for (const Codec& c : codecs) {
+            if (c.name == "store_bound") continue;
+            Bytes enc;
+            c.encode(enc);
+            const auto [h0, h1] = byte_entropy(enc);
+            std::printf("{\"codec\":\"%s\",\"nnz\":%llu,\"bytes\":%llu,\"h0\":%.6f,\"h1\":%.6f}\n", c.name.c_str(),
+                        (unsigned long long)m.nnz, (unsigned long long)enc.size(), h0, h1);
+            std::fflush(stdout);
+        }
+        // the .s1 member: its byte entropy, and what zstd-19 makes of it on top
+        const Bytes buf = read_file(argv[2]);
+        const auto [h0, h1] = byte_entropy(buf);
+        ZSTD_CCtx* cc = ZSTD_createCCtx();
+        ZSTD_CCtx_setParameter(cc, ZSTD_c_compressionLevel, 19);
+        ZSTD_CCtx_setParameter(cc, ZSTD_c_nbWorkers, 8);
+        Bytes z(ZSTD_compressBound(buf.size()));
+        const size_t zn = ZSTD_compress2(cc, z.data(), z.size(), buf.data(), buf.size());
+        ZSTD_freeCCtx(cc);
+        std::printf("{\"codec\":\"pz2_avx2\",\"nnz\":%llu,\"bytes\":%llu,\"h0\":%.6f,\"h1\":%.6f,\"zstd19_bytes\":%llu}\n",
+                    (unsigned long long)m.nnz, (unsigned long long)buf.size(), h0, h1, (unsigned long long)zn);
+        return 0;
+    }
 
     for (const Codec& c : codecs) {
         Bytes enc;
