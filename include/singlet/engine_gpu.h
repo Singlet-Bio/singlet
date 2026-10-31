@@ -9,6 +9,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
+#include <map>
+#include <mutex>
+#include "singlet/nvtx.h"
 #include <string>
 #include <vector>
 #include <array>
@@ -69,7 +72,10 @@ bool mapDistinct(const m5::Params& P, const m5::GenomeView& host, uint64_t saByt
 // device memory within (device memory - margin) / slots: the prefill's chunk size (SINGLET_ENGINE_GPU_CHUNK) and the pileup's arena (SINGLET_GPU_PILEUP_ARENA_GB)
 // are the knobs. SINGLET_ENGINE_GPU_DEVICE pins the device; otherwise the first free slot of the first device is taken, or the process waits for a slot of device
 // (pid mod devices). Returns the device; *lockFd is closed by unlockDevice.
-inline int lockDevice(int* lockFd) {
+// NVTX: the wait for the lock and its hold (from lockDevice to unlockDevice, which may run in another thread) are ranges of their own
+inline std::map<int, unsigned long long>& lockRanges() { static std::map<int, unsigned long long> m; return m; }
+inline std::mutex& lockRangesMutex() { static std::mutex m; return m; }
+inline int lockDeviceImpl(int* lockFd) {
     auto lockPath = [](int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
     const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
@@ -99,7 +105,24 @@ inline int lockDevice(int* lockFd) {
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
     return device;
 }
-inline void unlockDevice(int lockFd) { if (lockFd >= 0) { flock(lockFd, LOCK_UN); close(lockFd); } }
+inline int lockDevice(int* lockFd) {
+    int d;
+    { singlet::NvtxRange nvWait("device lock: wait"); d = lockDeviceImpl(lockFd); }
+    if (*lockFd >= 0) {
+        const unsigned long long id = singlet::nvtx_start("device lock: held");
+        if (id) { std::lock_guard<std::mutex> g(lockRangesMutex()); lockRanges()[*lockFd] = id; }
+    }
+    return d;
+}
+inline void unlockDevice(int lockFd) {
+    if (lockFd >= 0) {
+        unsigned long long id = 0;
+        { std::lock_guard<std::mutex> g(lockRangesMutex()); auto it = lockRanges().find(lockFd); if (it != lockRanges().end()) { id = it->second; lockRanges().erase(it); } }
+        singlet::nvtx_end(id);
+        flock(lockFd, LOCK_UN);
+        close(lockFd);
+    }
+}
 
 // ---- non-host screen (nonhost_gpu.cu): Phases A-C of NonHostScreener::classify_multi_batch_filtered on the GPU
 struct NonhostPaths { std::string viral, bacterial, fungal, bloom; };   // empty index path = index absent (as on the CPU)

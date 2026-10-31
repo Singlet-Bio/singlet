@@ -88,6 +88,7 @@
 #include "singlet/pileup/visium_tissue.h"
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
+#include "singlet/nvtx.h"
 #include "singlet/pileup/nonhost/nonhost_sample.h"
 #include "singlet/pileup/tagged_bam.h"
 #include "singlet/pileup/cb_tag_scan.h"
@@ -1458,6 +1459,7 @@ static int run_star_genome_op(const std::string& genome_dir,
 // [mem] milestone: this process's resident / peak resident / anonymous memory (GB) on stderr, for the private-memory budget
 // (docs/research-beta/cpu-engine-perf.md). Cheap (one read of /proc/self/status), no effect on any output.
 static void mem_mark(const char* what) {
+    singlet::nvtx_mark(what);
     std::ifstream f("/proc/self/status");
     std::string l; double rss = 0, hwm = 0, anon = 0;
     while (std::getline(f, l)) {
@@ -3787,6 +3789,7 @@ int main(int argc, char* argv[]) {
     // Loads barcodes, SNPs, GTF into memory BEFORE starting STAR.
     // This overlaps reference loading with STAR's genome load when using
     // --genomeLoad LoadAndKeep (genome already in shared memory).
+    singlet::nvtx_mark("main: loading pileup references");
     std::cerr << "[singlet] Loading pileup references...\n";
     StopWatch ref_sw;
 
@@ -5226,6 +5229,7 @@ int main(int argc, char* argv[]) {
             }  // end !use_fifo_decode else branch
         }
 
+        singlet::nvtx_mark("main: .1fq decoded to temp files");
         std::cerr << "[singlet] .1fq decoded to temp files\n";
     }
 
@@ -5329,6 +5333,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "ERROR: Failed to load pileup references\n";
             return 1;
         }
+        singlet::nvtx_mark("main: references loaded");
         std::cerr << "[singlet] References loaded: " << ref_sw.elapsed_s() << "s (reverse_strand="
                   << (config.reverse_strand ? "true" : "false") << ")\n";
     }
@@ -8176,6 +8181,7 @@ int main(int argc, char* argv[]) {
             ? (onefq_mode ? "STAR pipe (.1fq stream)" :
                sra_mode ? "STAR pipe (SRA stream)" : "STAR pipe")
             : "BAM file";
+        singlet::nvtx_mark("main: pileup streaming from STAR starts");
         std::cerr << "[singlet] Pileup: streaming from " << source_desc << "...\n";
         StopWatch pileup_sw;
         stats = engine_ptr->run(bam_source);
@@ -8224,6 +8230,7 @@ int main(int argc, char* argv[]) {
                     if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
                     return 3;  // exit code 3 = star_fatal
                 }
+                singlet::nvtx_mark("main: STAR completed");
                 std::cerr << "[singlet] STAR completed\n";
             } else if (WIFSIGNALED(wstatus)) {
                 std::cerr << "[singlet] ERROR: STAR killed by signal " << WTERMSIG(wstatus)
@@ -8325,8 +8332,11 @@ int main(int argc, char* argv[]) {
             const auto& bc_vec = engine_ptr->barcodes();
             nonhost_valid_bcs.insert(bc_vec.begin(), bc_vec.end());
         }
-        run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
-            nonhost_ref_dir, out_prefix, nonhost_valid_bcs, detected_bc_len, umi_len, star_threads);
+        {
+            SINGLET_NVTX("main: non-host screen");
+            run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
+                nonhost_ref_dir, out_prefix, nonhost_valid_bcs, detected_bc_len, umi_len, star_threads);
+        }
     }
 
     mem_mark("before export");

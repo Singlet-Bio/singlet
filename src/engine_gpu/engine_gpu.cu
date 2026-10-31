@@ -8,6 +8,7 @@
 // sequences through the lane cascade A → M → B (GPU, staged) → host lane (STAR's limits, same code), and return
 // (sequence, result) records.
 #include "singlet/engine_gpu.h"
+#include "singlet/nvtx.h"
 #include "stitch.cuh"
 #include <cuda_runtime.h>
 #include <thrust/device_ptr.h>
@@ -271,11 +272,13 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: a waiting host thread sleeps, not spins
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
+    singlet::NvtxChain nvch; nvch.next("mapDistinct: setup");
     // device memory in use at the phases of the call (logged: what a sample needs when several share a GPU)
     std::string memLog;
     auto memMark = [&](const char* what) { size_t f = 0, t = 0; cudaMemGetInfo(&f, &t); char b[64]; snprintf(b, sizeof b, "%s %.1f, ", what, (double) (t - f) / (1u << 30)); memLog += b; };
     memMark("start");
     // ---- index (G with 200 bytes of padding on each side, as STAR's G1)
+    nvch.next("mapDistinct: index upload");
     const u64 PAD = 200;
     GenomeView D = H;
     char* dG1; u64* dSA; u64* dSAi;
@@ -305,6 +308,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     D.chrStart = dcs; D.chrLength = dcl; D.chrBin = dcb; D.sjdbStart = dss; D.sjdbEnd = dse; D.sjDstart = dsd; D.sjAstart = dsa;
     D.sjdbMotif = dsm; D.sjdbShiftLeft = dsl; D.sjdbShiftRight = dsr; D.sjdbStrand = dst;
     // ---- reads
+    nvch.next("mapDistinct: read upload + clip");
     u64 n = in.off.size() - 1;
     out.nReads = n;
     char* dSeq; u64* dOff;
@@ -359,6 +363,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     cudaDeviceSynchronize();
     out.secUpload = now() - t0;
     // ---- dedup
+    nvch.next("mapDistinct: dedup");
     t0 = now();
     u64 *dH1, *dH2; uint8_t* dN; uint32_t *dOrder, *dHead; unsigned long long* dColl;
     if (cudaMalloc(&dH1, n * 8) || cudaMalloc(&dH2, n * 8) || cudaMalloc(&dN, n) || cudaMalloc(&dOrder, n * 4) || cudaMalloc(&dHead, n * 4)
@@ -397,12 +402,14 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     memMark("dedup");
     std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
+    nvch.end();
     u64 nGpuMapped = 0;
     // a chunk of distinct sequences in two halves: the device lanes (gpuPart, under the caller's device lock) and the host lane and records
     // (hostPart, after in.release(): they hold the GPU for nothing)
     struct ChunkRes { std::vector<uint32_t> repc; Lane A, M, B; std::vector<uint8_t> lane; std::vector<uint32_t> lpos, repH, posH; u64 c0 = 0; };
     std::vector<ChunkRes> chunks;
     auto gpuPart = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
+        SINGLET_NVTX("mapDistinct: lanes of one chunk (GPU)");
         // ---- lanes
         double tc0 = now();
         Lane A, M, B;
@@ -434,6 +441,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         return true;
     };
     auto hostPart = [&](ChunkRes& cr) -> bool {
+        SINGLET_NVTX("mapDistinct: host lane + records of one chunk");
         const std::vector<uint32_t>& repc = cr.repc; const u64 c0 = cr.c0; Lane &A = cr.A, &M = cr.M, &B = cr.B;
         const std::vector<uint8_t>& lane = cr.lane; const std::vector<uint32_t>& lpos = cr.lpos; const std::vector<uint32_t>& repH = cr.repH;
         // ---- host lane (STAR's limits)
@@ -504,7 +512,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!gpuPart(repc, c0)) return fail(err);
     }
     // the last device work is done: free the device buffers and let the next sample have the GPU while this one assembles its records
-    cudaDeviceSynchronize();
+    nvch.end();
+    { SINGLET_NVTX("mapDistinct: final sync + free"); cudaDeviceSynchronize(); }
     cudaFree(dG1); cudaFree(dSA); cudaFree(dSAi); cudaFree(dSeq); cudaFree(dOff);
     cudaFree(dcs); cudaFree(dcl); cudaFree(dcb); cudaFree(dss); cudaFree(dse); cudaFree(dsd); cudaFree(dsa);
     cudaFree(dsm); cudaFree(dsl); cudaFree(dsr); cudaFree(dst);

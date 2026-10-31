@@ -35,6 +35,7 @@
 #include "saturation.h"
 #include "saturation_curve.h"
 #include "cell_calling.h"
+#include "../nvtx.h"
 #include "called_v2.h"
 #include "sex_calling.h"
 #include "cell_cycle.h"
@@ -301,6 +302,7 @@ inline ExportStats export_results(const PileupEngine& engine,
                                   const ExportConfig& export_cfg) {
     ExportStats result;
     auto export_t0 = std::chrono::high_resolution_clock::now();
+    singlet::NvtxChain nvexp;   // NVTX: one range per phase below (SINGLET_NVTX=1)
 
     const auto& barcodes = engine.barcodes();
     const bool use_1pz  = (export_cfg.output_format == "1pz" || export_cfg.output_format == "all");
@@ -309,6 +311,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     const auto& out_prefix = export_cfg.out_prefix;
 
     // ── Phase 1: COO → CSC (parallel) ──
+    nvexp.next("export: Phase 1: COO  CSC (parallel)");
     auto csc_t0 = std::chrono::high_resolution_clock::now();
 
     SparseAccumulator<uint16_t>::CSCMatrix snp_ad_csc, snp_dp_csc;
@@ -362,6 +365,7 @@ inline ExportStats export_results(const PileupEngine& engine,
               << "s (" << result.n_csc_threads << " threads)\n";
 
     // ── Phase 1.5: Cell QC metrics (compute only; write deferred to Phase 1.8) ──
+    nvexp.next("export: Phase 1.5: Cell QC metrics (compute only write deferred to Phase 1.8)");
     // Computed from already-converted CSC matrices — no BAM re-processing.
     // Only runs when a GTF gene model with hierarchy is available.
     CellQCMetrics cell_qc;
@@ -375,6 +379,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.55: Sex calling (N14) ──
+    nvexp.next("export: Phase 1.55: Sex calling (N14)");
     // Runs when a GTF gene model is present and exon data is available.
     if (!pileup_cfg.exon_gtf_path.empty()
         && engine.gene_model().has_gene_hierarchy()
@@ -393,6 +398,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.57: Cell cycle scoring (N19) ──
+    nvexp.next("export: Phase 1.57: Cell cycle scoring (N19)");
     // Runs when a GTF gene model with hierarchy is present and exon data available.
     CellCycleResult cc_result_cycle;
     if (!pileup_cfg.exon_gtf_path.empty()
@@ -415,6 +421,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.58: Per-cell read statistics (N20) ──
+    nvexp.next("export: Phase 1.58: Per-cell read statistics (N20)");
     // Derived from per_cell_reads_ (pre-dedup barcoded reads) + CSC column sums.
     // Zero overhead: all data already in memory, no BAM re-processing.
     std::vector<CellReadStats> cell_read_stats;
@@ -442,6 +449,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.56: Ancestry classification (N13) ──
+    nvexp.next("export: Phase 1.56: Ancestry classification (N13)");
     // Uses the embedded AIM panel injected into the SNP pileup at load time.
     // Runs regardless of whether --snps was provided by the user.
     if (engine.aim_snp_start() != UINT32_MAX && snp_dp_csc.ncols > 0) {
@@ -468,6 +476,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.6: Sequencing saturation (N7, directional dedup path only) ──
+    nvexp.next("export: Phase 1.6: Sequencing saturation (N7, directional dedup path only)");
     // Uses the DirectionalUmiStore groups built during run() — no extra BAM pass.
     std::vector<CellSaturation> sat_cells;
     std::vector<std::pair<uint32_t, std::pair<uint64_t, uint64_t>>> gpu_sat;
@@ -499,6 +508,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.65: Sequencing saturation curve (G-SATCURVE) ──
+    nvexp.next("export: Phase 1.65: Sequencing saturation curve (G-SATCURVE)");
     // Analytical downsampling at 6 depth fractions using CellReadStats + exon CSC.
     // Zero pileup overhead — uses data already computed in Phase 1.58.
     if (!engine.per_cell_reads().empty() && exon_csc.ncols > 0
@@ -528,6 +538,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.7: Cell calling (N5, EmptyDrops-style) ──
+    nvexp.next("export: Phase 1.7: Cell calling (N5, EmptyDrops-style)");
     // Declare outside so Phase 1.75 (ambient correction) and N8 (provenance) can access them.
     std::vector<uint64_t> bc_totals;
     CellCallResult cc_result;
@@ -952,6 +963,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.76: Doublet detection (N12) ──
+    nvexp.next("export: Phase 1.76: Doublet detection (N12)");
     // Runs when we have called cells OR when --barcodes was provided (all barcodes
     // are treated as cells in that case, cc_result.cell_indices is empty).
     // Score: Scrublet-style simulation (8000 HVG genes of exon + intron counts, 30 PCs, simulated pair-sums, kNN) plus a
@@ -1035,6 +1047,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }  // Phase 1.76 block
 
     // ── Phase 1.8: Write unified cell_qc_metrics.tsv ──
+    nvexp.next("export: Phase 1.8: Write unified cellqcmetrics.tsv");
     // Merges data from Phase 1.5 (QC), 1.57 (cell cycle), 1.58 (read stats),
     // 1.6 (saturation), and 1.76 (doublet) into the schema-compliant TSV.
     // Aligner-level per-cell counts (lost once the BAM is deleted): STARsolo CellReads.stats (unmapped, antisense,
@@ -1143,6 +1156,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 2: mt heteroplasmy (pipeline mode) ──
+    nvexp.next("export: Phase 2: mt heteroplasmy (pipeline mode)");
     mt::MtHetResult mt_het;
     SparseAccumulator<uint16_t>::CSCMatrix mt_rev_csc;  // reverse-strand subset of mt_csc (forward = total - reverse)
     std::string mt_ref_seq;                              // chrM reference from the STAR genome (never the pool majority)
@@ -1184,6 +1198,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 3: Demux + parallel writes ──
+    nvexp.next("export: Phase 3: Demux + parallel writes");
     std::thread demux_thread;
     DemuxResult demux_result;
     if (export_cfg.pipeline_mode && !pileup_cfg.snp_path.empty() && snp_ad_csc.data.size() > 0) {
@@ -1717,6 +1732,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     std::cerr << "[export] Total: " << result.export_time_s << "s\n";
 
     // ── G-RRNA: rRNA contamination report ──
+    nvexp.next("export: G-RRNA: rRNA contamination report");
     // Written whenever pileup_stats has rRNA sampling data (always, when stats are available).
     if (export_cfg.pileup_stats != nullptr
         && export_cfg.pileup_stats->rrna_reads_sampled > 0) {
@@ -1731,6 +1747,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── N8: Provenance manifest ──
+    nvexp.next("export: N8: Provenance manifest");
     if (!export_cfg.provenance.input_file.empty()) {
         uint64_t total_umis = 0;
         for (auto v : exon_csc.data) total_umis += static_cast<uint64_t>(v);
@@ -1760,6 +1777,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     bool skip_exon_stub = false;
 
     // ── Summary JSON ── (always written; VAL2-compatible structured output)
+    nvexp.next("export: Summary JSON");
     {
         PipelineSummary summary;
         // Helper: look up user_meta key
@@ -1993,6 +2011,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── MT reference genome extraction ──
+    nvexp.next("export: MT reference genome extraction");
     // Always write mt_reference.fa — either the actual chrM sequence from the STAR
     // genome or a stub explaining why it's absent.
     if (!export_cfg.genome_dir.empty()) {
@@ -2017,6 +2036,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Standardization: write empty stubs for conditional outputs ──
+    nvexp.next("export: Standardization: write empty stubs for conditional outputs");
     // Ensures every successful run produces the EXACT same set of files.
     // Files that were already written above are skipped (exists-check).
     {
@@ -2123,6 +2143,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Post-export validation ──
+    nvexp.next("export: Post-export validation");
     // Verify all required files exist and are non-empty.
     {
         auto vr = singlet::validate_output(out_prefix);
