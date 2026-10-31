@@ -1147,8 +1147,13 @@ inline void write_contamination_tsv(
 }
 
 /// Write the run summary (ambient_contamination.json).
+///
+/// `excluded` (optional, one flag per R.contam entry): cells left out of the headline `estimated_contamination_fraction`
+/// (called doublets). The headline is the UMI-weighted ambient fraction the correction removes, over the remaining called
+/// cells; the per-cell mean the headline used to be stays under `mean_rho` / `mean_rho_cells`. Per-cell `rho_total` (the TSV's
+/// last column) is the per-cell value to show.
 inline void write_ambient_json(const std::string& outpath, const AmbientCorrectionResult& R,
-                               const AmbientDecontConfig& cfg)
+                               const AmbientDecontConfig& cfg, const std::vector<char>* excluded = nullptr)
 {
     std::ofstream o(outpath);
     if (!o.is_open()) {
@@ -1156,9 +1161,19 @@ inline void write_ambient_json(const std::string& outpath, const AmbientCorrecti
         return;
     }
     o.precision(6);
+    uint64_t h_obs = 0, h_rem = 0, h_cells = 0, h_excl = 0;
+    for (size_t i = 0; i < R.contam.size(); ++i) {
+        if (excluded && i < excluded->size() && (*excluded)[i]) { ++h_excl; continue; }
+        h_obs += R.contam[i].n_umi; h_rem += R.contam[i].n_removed; ++h_cells;
+    }
+    const double headline = h_obs ? static_cast<double>(h_rem) / static_cast<double>(h_obs) : 0.0;
     o << "{\n"
       << "  \"method\": \"" << (R.ok ? R.method : std::string("none_no_ambient_pool")) << "\",\n"
-      << "  \"estimated_contamination_fraction\": " << R.mean_rho << ",\n"
+      << "  \"estimated_contamination_fraction\": " << headline << ",\n"
+      << "  \"estimated_contamination_basis\": \"" << (excluded ? "umi_weighted_removal_excluding_called_doublets" : "umi_weighted_removal_all_called_cells") << "\",\n"
+      << "  \"n_cells_in_estimate\": " << h_cells << ",\n"
+      << "  \"n_doublets_excluded\": " << h_excl << ",\n"
+      << "  \"mean_rho_cells\": " << R.mean_rho << ",\n"
       << "  \"mean_rho\": " << R.mean_rho << ",\n"
       << "  \"median_rho\": " << R.median_rho << ",\n"
       << "  \"rho\": " << R.median_rho << ",\n"
