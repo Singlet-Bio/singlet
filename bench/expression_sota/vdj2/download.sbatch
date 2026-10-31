@@ -19,7 +19,13 @@ get() { [ -s "$2" ] || { curl -fsSL --retry 5 -o "$2.part" "$1" && mv "$2.part" 
 gse() {  # name gsm run
   local smp=$1 gsm=$2 run=$3 o=$D/gse145370_$1
   mkdir -p $o/fastqs
-  [ -s $o/filtered_contig_annotations.csv ] || { get https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4317nnn/$gsm/suppl/${gsm}_${smp}_filtered_contig_annotations.csv.gz $o/fca.csv.gz && gunzip -c $o/fca.csv.gz > $o/filtered_contig_annotations.csv && rm $o/fca.csv.gz; }
+  local f=${gsm}_${smp}_filtered_contig_annotations.csv.gz
+  for u in "https://www.ncbi.nlm.nih.gov/geo/download/?acc=$gsm&format=file&file=$f" \
+           https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4317nnn/$gsm/suppl/$f ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4317nnn/$gsm/suppl/$f; do
+    [ -s $o/filtered_contig_annotations.csv ] && break
+    get "$u" $o/fca.csv.gz && gunzip -t $o/fca.csv.gz && gunzip -c $o/fca.csv.gz > $o/filtered_contig_annotations.csv || rm -f $o/fca.csv.gz $o/filtered_contig_annotations.csv
+  done
+  rm -f $o/fca.csv.gz
   if [ ! -s $o/fastqs/${run}_S1_L001_R2_001.fastq.gz ]; then
     T=/tmp/$USER-$SLURM_JOB_ID/$run; mkdir -p $T
     prefetch -q -O $T $run && fasterq-dump -q --split-files --include-technical -e 8 -O $T $T/$run
