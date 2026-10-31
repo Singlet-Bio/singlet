@@ -2459,12 +2459,15 @@ public:
         if (!gpu_build_input(in)) return false;
         const double sBuild = since(tA0);
         int lock_fd = -1;
+        const auto tL0 = std::chrono::steady_clock::now();
         const int device = lockDevice(&lock_fd);
+        const double sWait = since(tL0);
         PileupOutput out;
         const auto tA1 = std::chrono::steady_clock::now();
         const bool ok = pileupRun(in, device, out);
         const double sRun = since(tA1);
         unlockDevice(lock_fd);
+        std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
         gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
         gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);

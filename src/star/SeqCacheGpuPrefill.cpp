@@ -10,6 +10,7 @@
 // Otherwise (and in a build without CUDA) it logs why and STAR maps every read, as in the CPU engine.
 // the port's header first: STAR's IncludeDefine.h #defines uint, PC_*, EX_* and other names the port declares
 #ifdef SINGLET_HAVE_ENGINE_GPU
+#include <chrono>
 #include "singlet/engine_gpu.h"
 #include "stitch.cuh"
 #endif
@@ -295,12 +296,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     int hostThreads = (int) P.runThreadN;
     singlet_engine_gpu::Output out;
     bool lockReleased = false;   // mapDistinct releases the device when its device work is done (the host assembly of the records needs no GPU)
-    in.release = [&]() { if (!lockReleased) { lockReleased = true; singlet_engine_gpu::unlockDevice(lockFd); } };
+    const auto tHeld0 = std::chrono::steady_clock::now(); double heldS = 0;
+    in.release = [&]() { if (!lockReleased) { lockReleased = true; heldS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tHeld0).count(); singlet_engine_gpu::unlockDevice(lockFd); } };
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     in.release();
     time_t tGpu = time(nullptr);
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
-                     << " s for it\n" << out.log;
+                     << " s for it, held it " << heldS << " s\n" << out.log;
     if (!ok) return skip("GPU mapping failed");
     if (in.clip.pre) {   // CellRanger4: readLoad takes clippedInfo from here, clipChunk is skipped
         static std::vector<uint8> cr4keep;

@@ -76,12 +76,19 @@ steady = (len(ends) - first) * READS / 1e6 / (ends[-1] - ends[first - 1]) if len
 cs = (C1 - C0) / 1e6; wait = []
 try: wait = [float(x) for x in re.findall(r"waited ([\d.e+-]+) s", open(D + "/waits.txt").read())]
 except Exception: pass
+held = [float(x) for x in re.findall(r"held it ([\d.e+-]+) s", open(D + "/waits.txt").read())] if wait else []
+pwait, pheld = [], []
+for f in glob.glob(D + "/g*_*.log"):
+    for m in re.finditer(r"device lock: waited ([\d.e+-]+) s, held ([\d.e+-]+) s", open(f, errors="replace").read()):
+        pwait.append(float(m.group(1))); pheld.append(float(m.group(2)))
+mean = lambda v: sum(v) / len(v) if v else 0
+lockutil = (sum(held) + sum(pheld)) / (2 * (T1 - T0))
 util = collections.defaultdict(list)
 for l in open(D + "/gpu.csv"):
     p = l.split()
     if len(p) == 2: i, u = p[1].split(","); util[int(i)].append(float(u))
 print(f"{S} per GPU x {T} threads, {len(ends)}/{NS} samples: makespan {T1-T0:.0f} s -> {len(ends)*READS/1e6/(T1-T0):.2f} M pairs/s; STEADY {steady:.2f} M pairs/s (after the first {first} completions); "
-      f"host {cs/(len(ends)*READS/1e6):.2f} core-s/M ({cs/(T1-T0):.1f} cores busy); sample wall mean/max {sum(walls)/len(walls):.0f}/{max(walls):.0f} s; lock wait mean/max {sum(wait)/max(len(wait),1):.0f}/{max(wait) if wait else 0:.0f} s; "
+      f"host {cs/(len(ends)*READS/1e6):.2f} core-s/M ({cs/(T1-T0):.1f} cores busy); sample wall mean/max {sum(walls)/len(walls):.0f}/{max(walls):.0f} s; lock wait mean/max {sum(wait)/max(len(wait),1):.0f}/{max(wait) if wait else 0:.0f} s; prefill lock held mean {mean(held):.0f} s, pileup lock wait/held mean {mean(pwait):.0f}/{mean(pheld):.0f} s, LOCK UTILIZATION {lockutil*100:.0f}% (sum of holds / (2 GPUs x makespan)); "
       f"GPU util {', '.join(f'{sum(v)/len(v):.0f}%' for k, v in sorted(util.items()))}")
 for f in sorted(glob.glob(D + "/timeline_*.cpu")):
     g, i = re.search(r"timeline_g(\d+)_(\d+)", f).groups()
