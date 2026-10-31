@@ -33,10 +33,8 @@ void bamSortByCoordinate (Parameters &P, ReadAlignChunk **RAchunk, Genome &genom
             const uint64 raised = singlet::star_sort::sort_ram_for_bin(maxMem, P.limitBAMsortRAM, budget, use);
             if (raised > 0) {
                 std::cerr << "[star] BAM sort: largest bin needs " << maxMem << " bytes, limitBAMsortRAM " << P.limitBAMsortRAM
-                          << " -> " << raised << " (memory budget " << budget << ", in use " << use << ")
-";
-                P.inOut->logMain << "WARNING: limitBAMsortRAM raised from " << P.limitBAMsortRAM << " to " << raised << "
-";
+                          << " -> " << raised << " (memory budget " << budget << ", in use " << use << ")\n";
+                P.inOut->logMain << "WARNING: limitBAMsortRAM raised from " << P.limitBAMsortRAM << " to " << raised << "\n";
                 P.limitBAMsortRAM = raised;
             }
         }
