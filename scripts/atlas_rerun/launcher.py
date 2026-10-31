@@ -48,12 +48,12 @@ DEFAULTS = {
                                     # is the "too big for a shared worker" class: --exclusive --mem=0, one sample alone on a whole node (both GPUs reserved)
     "multi_sample": True,           # shared H100 workers run several samples at once (multi_drain.py); the whole-node class stays drain_worker.py
     "gpu_Mpairs_per_s_multi": 1.0,  # one H100 worker with ~8 samples sharing the GPU (S8's benchmark; re-measured by the S14 gate)
-    "multi_classes_gb": [370, 720],  # multi mode: shared workers (370 G: samples up to ~(0.85*370-17.5)/0.39 = 760 M pairs) and the whole-node class
+    "multi_classes_gb": [370, 720],  # multi mode: shared workers (370 G: samples up to ~490 M pairs on the FASTQ route, ~1.0 B on the .1fg2 route) and the whole-node class
     "multi_mem_gb": 370,            # shared worker: 1 H100, ~28 cores, ~370 GB; admission keeps the sum of estimated peaks <= 85% of it
     "multi_cpus": 28,
     "multi_concurrency": 8,
     "multi_threads": 12,            # per sample (S8: best at 8 samples per GPU)
-    "multi_route": "fq",            # memory/scratch model: "fq" (temp FASTQ) or "1fg2" (table-fed prefill, no spike) once #126 and the refit are in
+    "multi_route": "auto",          # memory/scratch model per sample: "1fg2" for samples staged as .1fg2 (table-fed prefill, #126), else "fq" (temp FASTQ)
     "multi_extra_args": "--genome-shared on",  # engine arguments of the shared workers (S8's benchmark setting)
     "multi_scratch": "/tmp",        # node-local disk (373 GB); /dev/shm would count against the job's memory
     "max_v100": 4,
@@ -111,7 +111,7 @@ def count_jobs(user, name, now=None):
 def mem_class(pairs, classes, multi=None, route="fq"):
     """The smallest memory class (GB) that holds a sample of `pairs` read pairs (the largest if none does). With multi (the fraction of a worker's
     memory its admission may fill, 0.85) a class holds the sample when its estimated peak fits that fraction: the sample then runs next to others."""
-    need = C.gpu_job_mem_gb(pairs) if not multi else C.gpu_peak_gb(pairs, route) / multi
+    need = C.gpu_job_mem_gb(pairs) if not multi else C.gpu_cgroup_gb(pairs, route) / multi
     return next((c for c in sorted(classes) if c >= need), max(classes))
 
 

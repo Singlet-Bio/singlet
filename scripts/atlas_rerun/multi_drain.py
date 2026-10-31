@@ -7,7 +7,7 @@
 Why: one sample per H100 job reaches ~0.27 M pairs/s per GPU; ~8 samples sharing one GPU reach ~1.0 (S8). The account holds 3 H100s at once.
 
 Admission (Budget): a claimed sample is started only while
-  * the sum of the estimated peak RSS of the running samples + this one <= mem_frac (0.85) of the job's cgroup memory limit, and
+  * the sum of the estimated cgroup share (largest process + overhead, common.gpu_cgroup_gb) of the running samples + this one <= mem_frac (0.85) of the job's cgroup memory limit, and
   * the sum of the estimated node-local scratch bytes + this one fits in the free space of --scratch minus a margin, and
   * fewer than --concurrency samples run.
 A sample whose own estimate cannot fit an empty worker is never claimed: it waits for the whole-node exclusive class (drain_worker.py,
@@ -121,10 +121,10 @@ class Budget:
 
 
 def estimate(man, route):
-    """-> (peak_rss_gb, scratch_gb) of a staged sample. A retry after an OOM kill carries a `mem_floor_gb`."""
+    """-> (cgroup_gb, scratch_gb) of a staged sample: its share of the job's cgroup peak (common.gpu_cgroup_gb), not just the largest process. A retry after an OOM kill carries a `mem_floor_gb`."""
     r = man.get("pairs", 0)
     rt = "1fg2" if man.get("format") == "1fg2" and route == "auto" else ("fq" if route == "auto" else route)
-    return max(C.gpu_peak_gb(r, rt), man.get("mem_floor_gb", 0.0)), C.gpu_tmp_gb(r, rt)
+    return max(C.gpu_cgroup_gb(r, rt), man.get("mem_floor_gb", 0.0)), C.gpu_tmp_gb(r, rt)
 
 
 class Admitter:
@@ -318,7 +318,7 @@ def main():
     log("[multi] memory limit %.0f GB -> admit up to %.0f GB estimated peak; scratch %s %.0f GB free -> %.0f GB; %d slots x %d threads; route %s; "
         "a sample above %.0f M pairs goes to the whole-node class" % (
             mem, budget.cap_mem, a.scratch, free_tmp_gb(a.scratch), budget.cap_tmp, a.concurrency, a.threads, a.route,
-            max([p for p in range(10_000_000, 3_000_000_000, 10_000_000) if C.gpu_peak_gb(p, "fq" if a.route == "auto" else a.route) <= budget.cap_mem] or [0]) / 1e6))
+            max([p for p in range(10_000_000, 3_000_000_000, 10_000_000) if C.gpu_cgroup_gb(p, "fq" if a.route == "auto" else a.route) <= budget.cap_mem] or [0]) / 1e6))
 
     running, hol, stopping = {}, {}, threading.Event()
     n_done, idle_since, last_head_log = 0, time.time(), 0.0
