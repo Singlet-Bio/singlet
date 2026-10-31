@@ -180,12 +180,19 @@ libraries (the modalities vocabulary marks them; most atlas samples have none):
 - Blocker: the .s1 objects do not yet carry feature-barcode counts for most screens (the screen-atlas session is checking which
   studies have them).
 
-## 8. `doublet/score_v2`: a frozen cross-study doublet stacker
+## 8. `doublet/score_v2`: a frozen cross-study doublet stacker (numpy model, 0.6 MB)
 
-Code `python/singlet/features/doublet.py` (+ `doublet_atlas.py`, `doublet_sdfl.py`, `doublet_util.py`), model
-`data/doublet_v2_stacker.{npz,json}`, jobs `scripts/doublet_v2.py` + `scripts/doublet_v2.sbatch`, tests `tests/python/test_doublet_v2.py`.
-Study and recipe: `docs/latent-doublet-ambient.md` (branch study/latent-qc) and `bench/expression_sota/doublets/` (branch
-claude/expression-sota-31cf6d). No R anywhere.
+Code `python/singlet/features/doublet.py` (+ `doublet_atlas.py`, `doublet_sdfl.py`, `doublet_util.py`), model in the package
+(`data/doublet_v2_stacker.{npz,json}`, `data/doublet_v2_encoder.npz`; 615 KB together), jobs `scripts/doublet_v2.py` +
+`scripts/doublet_v2.sbatch`, encoder build `scripts/doublet_encoder_select.py` + `scripts/doublet_encoder_distill.py` (build time
+only, needs torch and the cell type network), tests `tests/python/test_doublet_v2.py`. Study and recipe: `docs/latent-doublet-ambient.md`
+(branch study/latent-qc) and `bench/expression_sota/doublets/` (branch claude/expression-sota-31cf6d). No R, no torch, nothing to
+download: numpy, scipy and scikit-learn (the stacker itself is evaluated in numpy).
+
+**Accuracy in one sentence: a statistical tie with scDblFinder, at a small size.** Leave-one-study-out mean AUPRC over the 17
+real-label datasets is 0.5537 against 0.5587 for scDblFinder: difference -0.0050, 95% CI [-0.022, +0.011] over datasets and
+[-0.033, +0.005] clustered by study. It is 0.017 below the earlier stacker that calls the 77 MB cell type network (0.5707), and 0.011
+above a stacker without any atlas feature (0.5430).
 
 **What is written.** Feature set `doublet`, one feature `doublet/score_v2` (float32 in [0, 1], higher = more doublet-like; NaN = not
 computed), one row per called cell sorted by `col`, through the same writer, guard and registry as the sets above (`comparable =
@@ -193,98 +200,82 @@ computed), one row per called cell sorted by `col`, through the same writer, gua
 sidecar is in its Parquet metadata (`method_version`), in the registry row (`cell_feature.method_version`) and, through
 `normalize_feature_sidecar` / `attach_features`, in the study's `.s1` manifest entry. `method_version` =
 `singlet-features=<pkg>;doublet=score_v2;stacker=hgb300/<sha256[:8] of the trees>(sklearn <training version>);inputs=...;
-atlas_encoder=celltype_nn/m1_notissue(<sha256[:8] of model.pt>);centroids=<sha256[:8]>;sdfl=a,c;min_cells=200`. Any change to the
-trees, the encoder or the centroids changes it. The set is not in `FEATURE_SETS` (the default run); ask for it with
-`features_run.py run --sets doublet --prod-dir <engine run dirs> [--device cuda]` and register it with
-`features_run.py registry --sets doublet`. It is the 54th feature, inside the cell index's cap of 64.
+encoder=<sha256[:8] of the encoder arrays>;atlas=ref3000x2,k2.0;sdfl=a,c/cap6000;min_cells=200`; any change to the arrays or to the
+settings changes it. The set is not in `FEATURE_SETS` (the default run); ask for it with
+`features_run.py run --sets doublet --prod-dir <engine run dirs>` and register it with `features_run.py registry --sets doublet`.
+It is the 54th feature, inside the cell index's cap of 64.
 
-**What is computed.** Nine inputs per sample, each replaced by `rank / n` over the sample's called cells:
+**What is computed.** Seven inputs per sample, each replaced by `rank / n` over the sample's called cells:
 
 | input | definition |
 |---|---|
 | `umi`, `genes` | log1p total counts, log1p detected genes |
 | `prod` | the engine's doublet score (`doublet_scores.tsv`, column `doublet_score`, of the sample's run directory; `--prod-dir DIR/<GSM>/doublet_scores.tsv`) |
-| `atlas_knn`, `atlas_clf`, `ct_entropy`, `atlas_nnls` | the cell type network `singlet.celltype_nn` (m1_notissue, trained on 2.8M CELLxGENE cells) as a fixed encoder of the real cells and 2n simulated doublets (summed counts of random pairs): fraction of simulated cells among the k = 0.5 sqrt(n) nearest neighbours in PCA-50 of its hidden layer; 5-fold cross-fitted MLP simulated vs real on the same PCA; entropy of the network's calibrated cell type distribution; relative residual drop of the best two-centroid non-negative fit over the best single one (856 atlas cell-type centroids). Port of `latent_gpu.py`; CPU or GPU (`device`) |
-| `sdfl`, `sdflc` | R-free artificial-doublet scorer in the style of scDblFinder (HVG, PCA-20, k-means, artificial doublets from cluster pairs, kNN features, two-round gradient boosting, out-of-fold scores); `sdflc` adds one third same-cluster pairs. Port of `sdfl.py`; the two variants share the PCA and clustering. The port returns exactly the values of the reference script (maximum absolute difference 0 on pbmc-1A-dm) |
+| `sdfl`, `sdflc` | R-free artificial-doublet scorer in the style of scDblFinder. Up to 6,000 cells (a random subsample for larger samples) fit the HVG (2,000), PCA (20) and k-means; artificial doublets (1 per fitting cell, at least 2,000) from pairs of different clusters (`sdflc`: one third same-cluster pairs) are summed in raw counts and projected; every cell is scored against that fixed reference by its kNN features (artificial-neighbour fraction at k = 5, 10, 20, sqrt; library size and genes relative to neighbours; distance to the nearest artificial doublet) with a 2-fold gradient-boosted classifier "artificial vs observed" (60 iterations, one round). Fitting cells get out-of-fold values, the others the mean of the two models'. Linear in cells |
+| `atlas_knn`, `atlas_entropy` | a one-hidden-layer network (1,000-gene panel, 256 hidden units, 518 KB) **distilled from the atlas cell type network** `singlet.celltype_nn` (m1_notissue, 2.8M CELLxGENE cells): its output is the network's hidden-layer embedding on 32 principal axes and its cell type entropy. Fitted on atlas reference cells only (316k cells of 856 cell types, real and summed pairs, under the network's own count augmentation), validated on held-out atlas datasets (embedding R^2 0.89, entropy R^2 0.46). `atlas_knn` = fraction of simulated doublets among the k = 55 nearest neighbours in that embedding against a fixed reference of 3,000 of the sample's cells and 6,000 simulated doublets (own row excluded), O(n) |
 
 The stacker is `HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0,
-random_state=0)`, trained once on the 17 real-label datasets (labels from genotype, hashtag, MULTI-seq and species mixing;
-182k cells), each dataset weighted equally, on the stored precomputed scores. The trained trees are kept as plain arrays with the
-feature order, the scikit-learn version that trained them (1.6.1) and a SHA-256 over the arrays (`Stacker.load` refuses a file
-whose hash differs) and evaluated in numpy, so the scores do not depend on the installed scikit-learn; the exported trees equal
-sklearn's `predict_proba` to 0.0 on kang21 and to 1e-12 in the unit test. Retraining needs scikit-learn only
-(`doublet_v2.sbatch MODE=train`). Samples with fewer than 200 called cells, other organisms (only human and mouse), or no engine
-score get NaN (`features.json` lists the set under `dropped`); cells with a non-finite input get NaN.
+random_state=0)`, trained once on the 17 real-label datasets (genotype, hashtag, MULTI-seq and species doublets; 182k cells), each
+dataset weighted equally, on the inputs as this package computes them. The trees are kept as plain arrays with the feature order,
+the scikit-learn version that trained them (1.6.1) and a SHA-256 over the arrays (`Stacker.load` refuses a file whose hash differs),
+and evaluated in numpy: the exported trees equal sklearn's `predict_proba` to 0.0 on kang21, so scores do not depend on the
+installed scikit-learn, and the arrays port directly to C++. Retraining needs scikit-learn only (`doublet_v2.sbatch MODE=feats`, then
+`MODE=train`); rebuilding the encoder needs torch and the network (`doublet_encoder_distill.py --genes 1000 --hidden 256 --k 32
+--epochs 30 --augment`). Samples with fewer than 200 called cells, other organisms (only human and mouse) or no engine score get NaN
+(`features.json` lists the set under `dropped`); cells with a non-finite input get NaN.
 
-**Evidence (hold-out only).** Leave-one-study-out over the 17 datasets (the 17 datasets form 6 studies; a dataset is scored by a
-model trained on the datasets of the other studies), mean AUPRC:
+**Evidence (hold-out only).** Leave-one-study-out over the 17 datasets (they form 6 studies; a dataset is scored by a model trained on
+the datasets of the other studies; stack.py recipe, inputs recomputed by the package for every dataset), mean AUPRC:
 
-| inputs | mean AUPRC |
-|---|---|
-| this stacker, held-out inputs recomputed by the package (what a deployment computes) | **0.5707** |
-| the same, held-out inputs from the stored scores (the stack.py recipe; the package reproduces its per-cell scores to 1e-9) | 0.5694 |
-| trained and scored on package-recomputed inputs | 0.5724 |
-| same stacker without `sdfl`, `sdflc` (stack.py `combo_prod_atlas`, from the study) | 0.5573 |
-| scDblFinder (R, from the study) | 0.5587 |
+| model | size | mean AUPRC | vs scDblFinder (0.5587): difference, 95% CI datasets / clustered by study |
+|---|---|---|---|
+| network-based stacker (9 inputs, torch, earlier version of this PR) | 77 MB | 0.5707 | +0.012, [-0.019, +0.040] / wider |
+| **this model** | **0.6 MB** | **0.5537** | **-0.005, [-0.022, +0.011] / [-0.033, +0.005]** |
+| the same with a single sdfl variant (`sdflc` only) | 0.6 MB | 0.5510 | -0.008, [-0.026, +0.009] / [-0.037, +0.004] |
+| no atlas features (umi, genes, prod, sdfl, sdflc) | 0 | 0.5430 | -0.016, [-0.042, +0.009] / [-0.060, -0.001] |
+| scDblFinder (R, from the study) | | 0.5587 | |
 
-Against scDblFinder this is a statistical tie, not a win: the mean difference is +0.012 AUPRC, 95% CI about [-0.019, +0.040] over
-the 17 datasets (study-clustered CI wider). Against the previous combiner (`combo_prod_atlas`) the paired gain is +0.011 to +0.013,
-better on 16/17 datasets. The reason to ship it is the same accuracy as scDblFinder without R.
+The frozen model's own AUPRC on the 17 datasets is not evidence: it was trained on them. The 17 labels see only heterotypic doublets
+across donors, hashtags or species. The distilled encoder is a worse neighbour-feature than the network (Spearman 0.7 with the
+network's `atlas_knn` on these datasets; its gain over no atlas feature is +0.011 against +0.028 for the network), mostly on the PBMC
+lanes. Its reference cells (CELLxGENE corpus of `celltype_nn`) were not screened against the 17 datasets here. What was tried and
+dropped: a fixed k-means codebook of atlas singles and simulated doublets as the neighbour reference (Spearman 0.05-0.14 with the
+network's `atlas_knn`, standalone AUPRC <= 0.26); PCA/Gaussian-classifier encoders of 0.14-0.76 MB (0.546-0.552); more neighbour
+features (worse: 0.51-0.54, overfits across studies). A cheaper sdfl (6,000-cell fit, 2 folds) loses nothing against the full one
+when the atlas features are held fixed (0.5688 vs 0.5693).
 
-The AUPRC of the frozen model on the 17 datasets is not evidence: it was trained on them. The 17 labels see only heterotypic
-doublets across donors, hashtags or species. The stored `sdfl`, `sdflc` and atlas scores of the training set agree with the
-package's recomputation only up to Spearman 0.89-0.98 (kang21 and pbmc-1A-dm: `sdfl` 0.92 / 0.95, `atlas_clf` 0.93 / 0.89; the
-rest of the difference is not explained: the port equals the reference script exactly, and the stored `sdfl` files were rewritten
-on 2026-10-31), which is why the package-input row is reported; it does not lower the score (0.5707 vs 0.5694).
+**Scope.** For single-donor samples. Where a pool has two or more donors, genotype doublets (`donor_assignments` `prob_doublet`, Kang
+2.1 AUROC 0.969 / AUPRC 0.897 against 0.935 / 0.698 for the network-based expression stacker, and recall 0.89 on doublets that look
+like one cell type against about 0.5) stay authoritative; this feature does not replace them, and neither catches same-donor
+homotypic doublets. It is a ranking within a sample.
 
-**Scope.** For single-donor samples. Where a pool has two or more donors, genotype doublets (`donor_assignments`
-`prob_doublet`, Kang 2.1 AUROC 0.969 / AUPRC 0.897 against 0.935 / 0.698 for the expression stacker, and recall 0.89 on doublets
-that look like one cell type against about 0.5) stay authoritative; this feature does not replace them, and neither catches
-same-donor homotypic doublets. It is a ranking within a sample.
+**Cost per sample** (Clipper `short-bigmem`, 8 threads, CPU only, `OMP_WAIT_POLICY=PASSIVE`, `doublet_v2.sbatch MODE=score`; CPU
+seconds = `time.process_time()`, all threads; whole stage = both sdfl variants + encoder features + stacker, model loading excluded):
 
-**Cost per sample** (Clipper `short-bigmem`, 8 threads, CPU only, `OMP_WAIT_POLICY=PASSIVE`; `doublet_v2.sbatch MODE=feats`
-over the 17 datasets and `MODE=score`; CPU seconds = `time.process_time()`, user + system of all threads; peak = resident set of
-the process, cumulative over datasets in the `feats` run, so only the `score` runs give a clean peak):
-
-| sample | called cells | wall s | CPU s | of which atlas / sdfl wall s | peak memory |
+| sample | called cells | wall s | CPU s | encoder / sdfl / stacker wall s | peak memory |
 |---|---|---|---|---|---|
-| pbmc-1A-dm | 3,298 | 21 | 59 | 13 / 7 | 2.1 GB |
-| kang21 | 13,737 | 54 | 201 | 38 / 15 | 2.8 GB |
-| hm-12k | 12,820 | 72 | 215 | 37 / 35 | |
-| mkidney-ch | 21,179 | 101 | 324 | 69 / 32 | 5.3 GB |
-| HMEC-orig-MULTI | 26,426 | 142 | 413 | 82 / 60 | 9.3 GB |
+| pbmc-1A-dm | 3,298 | 3.3 | 10.7 | 0.6 / 2.6 / 0.15 | 0.6 GB |
+| kang21 | 13,737 | 6.2 | 18.6 | 1.6 / 4.0 / 0.5 | 1.3 GB |
+| HMEC-orig-MULTI | 26,426 | 14.9 | 31.8 | 3.7 / 9.9 / 0.9 | 3.8 GB |
 
-About 30 CPU-seconds plus 14.5 CPU-seconds per 1,000 called cells (500 cells: 21 s; 26k: 413 s), memory 2 GB at 3k cells to 9 GB at
-26k; 1 million cells is about 4 CPU-hours. The stacker itself takes under 1 s. A first measurement on a busy node with
-spinning OpenMP threads gave 3,305 CPU-seconds for pbmc-1A-dm (the same work, 608 s wall); with passive waiting it is 59, so
-`OMP_WAIT_POLICY=PASSIVE` belongs in every job that runs this. A GPU (`short-gpu` node, `--device cuda`, kang21) did not help at
-these sizes: 62 s wall, 106 CPU-s, because the encoder and the kNN are small next to the classifier loop and sdfl, which stay
-on the CPU; ask for CPUs. For comparison the engine's own doublet score costs about 2 s per 10,000 cells.
+The network-based version took 21 s / 59 CPU-s (3.3k cells) and 54 s / 201 CPU-s (13.7k cells), 2.1-2.8 GB, so the stage is about 6
+to 9 times faster in wall time and 5.5 to 11 times cheaper in CPU time. The target of 5 s at kang21 size is missed by 1.2 s. The
+measured floor per stage: sdfl 4.0 s (two variants of about 2 s each: sparse log-normalisation and projection of all cells 0.7 s, the
+two 2-fold boosted fits 1.0 s, the kNN against the 12,000-row reference 0.75 s, the rest sparse algebra and k-means), encoder 1.6 s
+(the 1,000 x 256 forward pass of the cells and the simulated pairs, the 13.7k x 9k distance matrix with a partial sort), stacker 0.5 s
+(300 trees in numpy). A single sdfl variant would save about 2 s (4.1 s total) but costs 0.003 AUPRC more than the two (0.5510).
+Scaling is linear in nonzero counts, not exactly in cells (26k cells of a deeper cell line cost 2.4x the 13.7k PBMC sample).
+`OMP_WAIT_POLICY=PASSIVE` belongs in every job that runs this (spinning OpenMP threads on a busy node multiplied the CPU time by more than 50 in an
+earlier measurement).
 
-**Where it runs: a post-pass right after the drain, not inside it.** (1) Cost: 1-7 minutes of 8 cores per typical sample, 30-100
-times the engine's whole doublet step, would lengthen every drain task and its memory request (2-9 GB, plus the 2.8M-cell
-network and torch) for a score that is not needed to finish a sample. (2) It needs only things the drain leaves behind (the called
-cells' counts and `doublet_scores.tsv`), so it can run as a Slurm array over finished samples with sized requests (4-8 CPUs,
-16 GB up to 30k cells, more above; not tested above 26k cells), restart per sample (`done` skips written sidecars) and be re-run
-for a `score_v3` or a new encoder without touching the drain's outputs. (3) The called-cell set must be final: the score ranks
-cells within the called set, and a sidecar built on a set that is later changed (for example by the EmptyDrops calls of
-docs/called-ed.md) has to be recomputed. (4) It keeps torch and the encoder files out of the production drain image. Run it per
-study, right after its samples finish: `sbatch --array=... scripts/features_run.sbatch` with `--sets doublet --prod-dir <run
-dirs>`, `OMP_WAIT_POLICY=PASSIVE` (model files: below).
-
-**Install and model files.** `pip install "singlet[doublet]"` (the extra adds `torch>=2.0`; scikit-learn, scipy, pyarrow are core
-dependencies; the stacker's `.npz` ships in the wheel). The two large files are not in the repository: the cell type network (56 MB) and
-the atlas centroids (20 MB) are assets of the GitHub release `doublet-v2-model-b7c4a08f5397` of Singlet-Bio/singlet (public, no
-credentials; tag = first 12 hex of the sha256 of the two `sha256sum` lines). `doublet_assets.fetch` looks each file up in this order, and every candidate is checked against the pinned sha256 (after a download
-and on every use; a mismatching download or cache entry is deleted and `AssetHashError` raised, a mismatching store entry is skipped
-with a warning): (1) the content-addressed model store `$SINGLET_MODEL_STORE` (default
-`/mnt/projects/debruinz_project/debruinz/singlet/models/sha256`, files `<sha256>.npz` / `<sha256>.pt`, mode 444): the copy campaign workers on
-Clipper use; (2) the user cache `$SINGLET_DOUBLET_CACHE` (default `$XDG_CACHE_HOME/singlet/doublet_v2`, `~/.cache/singlet/doublet_v2`, or
-`%LOCALAPPDATA%` on Windows; one directory per sha256); (3) a download of the pinned release URL into that cache. The pins are also
-compared with the hashes recorded in the stacker file. The GitHub release (not yet created) is for Anvil and public reuse.
-Overrides for offline workers: `SINGLET_CELLTYPE_NN_MODEL`, `SINGLET_DOUBLET_CENTROIDS` (local copies, hash-checked too) and
-`SINGLET_DOUBLET_BASE_URL` (a mirror or `file://` directory holding the same file names). Pre-fetch on a node with network access
-with `python -c "from singlet.features import doublet_assets as A; [A.fetch(k) for k in A.ASSETS]"`.
+**Where it runs: a post-pass right after the drain, not inside it.** (1) It needs only what the drain leaves behind (the called cells'
+counts and `doublet_scores.tsv`), so it runs as a Slurm array over finished samples with small requests (2-4 CPUs, 8 GB up to 30k cells),
+restarts per sample (`done` skips written sidecars) and can be re-run for a `score_v3` without touching the drain's outputs. (2) The
+called-cell set must be final: the score ranks cells within the called set, so a sidecar built on a set that is later changed (for
+example by the EmptyDrops calls of docs/called-ed.md) has to be recomputed. (3) Cost no longer decides it: 10-30 CPU-seconds per
+typical sample would also fit inside a drain task, but the score is not needed to finish a sample. Run it per study, right after its samples finish: `sbatch --array=... scripts/features_run.sbatch`
+with `--sets doublet --prod-dir <run dirs>` and `OMP_WAIT_POLICY=PASSIVE`.
 
 **Not done / limits.** Reading the engine score from the `.s1` cells table (`dbl_doublet_score`) instead of the run directory is not
-wired (the run directory is). Neither the sidecars nor the registry rows were uploaded or registered.
+wired (the run directory is). The 5 s wall target at 13.7k cells is not met (6.2 s). Samples above 26k cells were not timed. Neither the
+sidecars nor the registry rows were uploaded or registered.
