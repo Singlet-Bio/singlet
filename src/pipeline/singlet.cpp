@@ -2862,6 +2862,7 @@ int main(int argc, char* argv[]) {
     std::string onefq_file;
     std::vector<std::string> onefq_files;      // the sample's runs (one .1fq each), read as one stream (read_source.h)
     std::string runs_dir;                      // --runs-dir: <dir>/<run>.1fq for each run of --runs-used / --run-screen
+    std::string memory_tier_cfg;               // --memory-tier / SINGLET_MEMORY_TIER: summary.json memory_tier from the configuration (empty: the measured peak RSS)
     std::string read_source_mode = "chunk";    // --read-source chunk|fifo|file: how decoded reads reach STAR
     if (const char* e = std::getenv("SINGLET_READ_SOURCE"); e && *e) read_source_mode = e;
     std::vector<std::string> star_extra;
@@ -3050,6 +3051,7 @@ int main(int argc, char* argv[]) {
             onefq_files.push_back(arg);  // positional .1fq (or staged .1fg2) argument (repeat for several runs of a .1fq sample)
         }
         else if (arg == "--read-source" && i+1 < argc) read_source_mode = argv[++i];
+        else if (arg == "--memory-tier" && i+1 < argc) memory_tier_cfg = argv[++i];
         else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
         else if (arg == "--star-extra" && i+1 < argc) {
             std::istringstream iss(argv[++i]);
@@ -8402,6 +8404,16 @@ int main(int argc, char* argv[]) {
         else if (export_cfg.peak_rss_gb < 64.0)  export_cfg.memory_tier = "Medium";
         else if (export_cfg.peak_rss_gb < 256.0) export_cfg.memory_tier = "Large";
         else                                      export_cfg.memory_tier = "XLarge";
+        // summary.json is a member of the .s1: the tier a run reports must not depend on the engine or the machine that ran it. With --memory-tier (or
+        // SINGLET_MEMORY_TIER) it is the configured value (the drain worker derives it from the sample's read count), else the measured peak RSS as before.
+        {
+            std::string tier = memory_tier_cfg;
+            if (tier.empty()) if (const char* e = std::getenv("SINGLET_MEMORY_TIER")) tier = e;
+            if (!tier.empty()) {
+                if (tier == "Small" || tier == "Medium" || tier == "Large" || tier == "XLarge") export_cfg.memory_tier = tier;
+                else std::cerr << "[singlet] WARNING: --memory-tier must be Small, Medium, Large or XLarge (got '" << tier << "'): using the measured peak RSS" << "\n";
+            }
+        }
         export_cfg.nonhost_was_screened = (!nonhost_db_path.empty() ||
                                            !bacterial_db_path.empty() ||
                                            !fungal_db_path.empty());

@@ -94,3 +94,20 @@ def test_backlog_by_class(tmp_path):
     bl = Q.backlog(stage, classify=lambda m: L.mem_class(m["pairs"], CLASSES))
     assert bl["by_class"] == {96: 130_000_000, 176: 250_000_000, 720: 1_300_000_000} and bl["pairs"] == 1_680_000_000
     assert "by_class" not in Q.backlog(stage)
+
+
+def test_memory_tier_comes_from_the_sample_not_the_process():
+    # summary.json (a member of the .s1) reports a tier; the drain worker fixes it from the read count so CPU and GPU runs of a sample agree
+    assert C.memory_tier(5e6) == "Medium" and C.memory_tier(66e6) == "Medium" and C.memory_tier(263e6) == "Large"
+    assert C.memory_tier(625e6) == "XLarge" and C.memory_tier(1.29e9) == "XLarge"
+    assert C.memory_tier(100e6) == C.memory_tier(100e6)
+
+
+def test_the_singlet_command_carries_the_tier():
+    a = types.SimpleNamespace(threads=8, engine="gpu", extra=[])
+    ccfg = {"ref_base": "/ref", "binary": "/bin/singlet"}
+    cfg = {"references": {"*": "auto"}, "pipeline": {}}
+    man = {"runs": ["SRR1"], "pairs": 263_000_000}
+    cmd = D.singlet_cmd(a, ccfg, cfg, "/claim", man, "/out")
+    assert cmd[cmd.index("--memory-tier") + 1] == "Large"
+    assert "--memory-tier" not in D.singlet_cmd(a, ccfg, cfg, "/claim", {"runs": ["SRR1"]}, "/out")   # no read count: the measured value stays
