@@ -3980,7 +3980,8 @@ int main(int argc, char* argv[]) {
     std::thread fifo_writer_thread;    // Pass 2 writer (started after Phase 0.9)
     std::string fifo_r1_path;          // original R1 stream FIFO path (before reads_inverted swap)
     std::string fifo_r2_path;          // original R2 stream FIFO path
-    std::vector<std::string> fifo_first25_r2;  // R2 seqs sampled across all blocks in Pass 1 (prefix probe)
+    std::vector<std::string> fifo_first25_r2;  // R2 seqs of the prefix probe (ContentProbeSampler), both decode modes
+    singlet::fq::ContentProbeSampler probe_sampler;
 
     // Hoisted from inner decode block so per-segment whitelist discovery
     // (Phase 0.9+) can read them after the onefq_mode block closes.
@@ -4596,6 +4597,7 @@ int main(int argc, char* argv[]) {
                     const uint32_t repeat = has_dups ? blk.dup_counts[i] : 1;
                     const uint16_t r1len = blk.r1_len(i);
                     if (r1len == 0 || blk.r2_len(i) == 0) continue;   // not given to STAR (format_block)
+                    probe_sampler.offer(blk.r1_seq(i), r1len, blk.r2_seq(i), blk.r2_len(i));   // 5' prefix probe
                     // Count barcodes per block for fast barcode discovery: base values (0-4, 3 bits each) packed
                     // into a uint64_t key (bc_len <= 21 fits in 63 bits)
                     if (cbx_on && blk.r1_len(i) >= cbx_cb0 + cbx_cbl && blk.r1_len(i) >= cbx_umi0 + cbx_umil && blk.r2_len(i) > 0) {   // R11 histogram
@@ -4801,9 +4803,6 @@ int main(int argc, char* argv[]) {
                 bc_freq_p1.resize(bc_dict_n_p1 + 1, 0);
             std::unordered_map<uint64_t, uint64_t> merged_bc_counts_p1;
 
-            const uint32_t probe_per_block_p1 =
-                std::max<uint32_t>(1u, (12000u + std::max<uint32_t>(total_blocks_p1, 1u) - 1u) /
-                                       std::max<uint32_t>(total_blocks_p1, 1u));
             const bool count_keys_p1 = !has_i2_p1 && count_barcodes_in_decode && !has_bc_dict_p1;
             if (count_keys_p1 && !complex_extra_segs.empty() && onefq_per_seg_counts.empty())
                 onefq_per_seg_counts.resize(complex_extra_segs.size());
@@ -4813,7 +4812,6 @@ int main(int argc, char* argv[]) {
             // the same keys, counts and insertion sequence as the serial loop (same iteration order downstream), the
             // dictionary counts are plain sums, and the R2 probe sample is the serial one (block order, first 20000).
             struct Pass1Block {
-                std::vector<std::string> probe;
                 std::vector<std::pair<uint64_t, uint64_t>> keys;                // packed BC (or I2) key, count
                 std::vector<std::vector<std::pair<uint64_t, uint64_t>>> segs;   // CB_UMI_Complex extra segments
             };
@@ -4856,23 +4854,13 @@ int main(int argc, char* argv[]) {
                         v[it->second].second += n;
                     };
                     const bool has_dups_p1 = !blk_p1.dup_counts.empty();
-                    const uint32_t probe_stride_p1 =
-                        std::max<uint32_t>(1u, blk_p1.n_reads / probe_per_block_p1);
                     for (uint32_t i = 0; i < blk_p1.n_reads; ++i) {
                         uint32_t repeat_p1 = has_dups_p1 ? blk_p1.dup_counts[i] : 1;
                         uint16_t r1len_p1  = blk_p1.r1_len(i);
                         uint16_t r2len_p1  = blk_p1.r2_len(i);
-                        // Sample R2 sequences spread over all blocks for constant-prefix detection
-                        // (prefix_probe.h): the .1fq is barcode-sorted, so the first reads of a block are
-                        // duplicates of a few molecules and must not be used alone.
-                        if (r2len_p1 > 0 && (i % probe_stride_p1) == 0 && out.probe.size() < 20000) {
-                            static constexpr char N2AP[5] = {'A','C','G','T','N'};
-                            const uint8_t* r2s_p1 = blk_p1.r2_seq(i);
-                            std::string seq_p1(r2len_p1, ' ');
-                            for (uint16_t j = 0; j < r2len_p1; ++j)
-                                seq_p1[j] = N2AP[r2s_p1[j]];
-                            out.probe.push_back(std::move(seq_p1));
-                        }
+                        // 5' prefix probe (prefix_probe.h): records chosen by content, the same for every route
+                        if (r1len_p1 > 0 && r2len_p1 > 0)
+                            probe_sampler.offer(blk_p1.r1_seq(i), r1len_p1, blk_p1.r2_seq(i), r2len_p1);
                         // BC counting (same logic as file-decode pass)
                         if (has_i2_p1) {
                             if (!blk_p1.i2_data.empty() && i < blk_p1.i2_lengths.size() &&
@@ -4964,11 +4952,8 @@ int main(int argc, char* argv[]) {
                 std::cerr << "[1fq-pass1] R11 exact CB histogram: " << n_exact << " reads over a "
                           << cb_corrector.size() << "-barcode whitelist\n";
             }
+            fifo_first25_r2 = probe_sampler.sequences();
             for (auto& b : p1_blocks) {
-                for (auto& s : b.probe) {
-                    if (fifo_first25_r2.size() >= 20000) break;
-                    fifo_first25_r2.push_back(std::move(s));
-                }
                 for (const auto& [key, n] : b.keys) merged_bc_counts_p1[key] += n;
                 for (size_t ex = 0; ex < b.segs.size(); ++ex)
                     for (const auto& [key, n] : b.segs[ex]) onefq_per_seg_counts[ex][key] += n;
@@ -5015,7 +5000,7 @@ int main(int argc, char* argv[]) {
             } else {
                 // File mode: sample R2 sequences at 1,000 positions spread through the decoded FASTQ
                 // (prefix_probe.h), not the first reads of a barcode-sorted file.
-                probe_seqs = singlet::fq::sample_fastq_spread(r2_tmp, 1000, 12);
+                probe_seqs = probe_sampler.sequences();
                 for (const auto& s : probe_seqs) {
                     has_seq = true;
                     if (s.size() > max_r2_len) max_r2_len = s.size();
