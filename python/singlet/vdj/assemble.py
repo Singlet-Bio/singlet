@@ -93,6 +93,8 @@ class Params:
         0.02  # and at least this share of the library's read-weighted median mates per molecule
     )
     j_slack: int = 2  # the read vote of the J gene stands unless the junction's end matches another J this many nt better
+    tie_reads: bool = False  # contigs of a (barcode, chain) with equal UMIs are ranked by their mates
+    v_open_frac: float = 0.0  # > 0: a V gene with a germline stop yields to an open V with >= this share of its votes
     threads: int = 8
 
 
@@ -104,6 +106,11 @@ class Reference:
         self.region = np.array([REGION[s.region] for s in segs], dtype=np.int8)
         self.anchor = np.array([s.anchor for s in segs], dtype=np.int32)
         self.frame = np.array([s.frame for s in segs], dtype=np.int32)
+        # V segments whose reference germline has a stop codon before Cys104 (IMGT pseudogenes and ORFs the annotation
+        # rescue keeps, e.g. IGHV4-55, IGLV1-41)
+        self.pseudo = np.array(
+            [s.region == "V" and s.anchor >= 0 and "*" in R.translate(s.seq[: s.anchor + 3], s.frame) for s in segs]
+        )
         self.km, self.sg, self.ps = K.build_index([s.seq for s in segs], K_INDEX)
         self.chains = list(R.CHAINS)
         self.chain_id = np.array([self.chains.index(c) for c in self.chain], dtype=np.int8)
@@ -502,13 +509,27 @@ def _best(values: np.ndarray, weights: np.ndarray):
     return int(u[w.argmax()])
 
 
-def _vote(meta: np.ndarray, col: int, tie_bit: int, fallback: bool = True) -> int:
+def _vote(meta: np.ndarray, col: int, tie_bit: int, fallback: bool = True, pseudo=None, pseudo_frac: float = 0.0) -> int:
     """Gene with the most k-mer hits over reads whose call for that region is not a tie; with ``fallback``, all reads
-    when every read ties (identical genes, e.g. over a short read)."""
+    when every read ties (identical genes, e.g. over a short read). With ``pseudo`` (a per-segment flag) and
+    ``pseudo_frac`` > 0, a winner whose germline has a stop codon gives way to the best open gene that has at least
+    ``pseudo_frac`` of its votes (somatic mutation lets a pseudogene paralog win the exact k-mer count)."""
     has = meta[:, col] >= 0
     clean = has & ((meta[:, 12] & tie_bit) == 0)
     use = clean if clean.any() or not fallback else has
-    return _best(meta[use, col], meta[use, col + 1].astype(float))
+    values, weights = meta[use, col], meta[use, col + 1].astype(float)
+    if pseudo is None or pseudo_frac <= 0 or len(values) == 0:
+        return _best(values, weights)
+    u, inv = np.unique(values, return_inverse=True)
+    w = np.bincount(inv.ravel(), weights=weights)
+    top = int(w.argmax())
+    if pseudo[u[top]]:
+        ok = ~pseudo[u]
+        if ok.any():
+            alt = int(np.flatnonzero(ok)[w[ok].argmax()])
+            if w[alt] >= pseudo_frac * w[top]:
+                return int(u[alt])
+    return int(u[top])
 
 
 def _mode_per_group(g: np.ndarray, n: int, values: np.ndarray, weights: np.ndarray) -> np.ndarray:
@@ -608,7 +629,7 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
         cinfo = []
         for p in range(P):
             on = mc == p
-            v = _vote(meta[on], 0, 2)
+            v = _vote(meta[on], 0, 2, pseudo=ref.pseudo, pseudo_frac=params.v_open_frac)
             j = _vote(meta[on], 3, 4)
             c = _vote(meta[on], 6, 1, fallback=False)
             cinfo.append([v, j, c, int(len(np.unique(mmol[on]))), int(on.sum())])
@@ -703,7 +724,10 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
     amb = (df["umis"] < params.cross_frac * jmax) & (jmax >= params.cross_min_umis)
     df["ambient"] = amb
     df.loc[amb, "kept"] = False
-    df = df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(
+    # contig order within a (barcode, chain): UMIs, then (tie_reads) mates, so that a UMI tie goes to the better-sequenced
+    # molecule set rather than to the assembly order
+    order = ["bcix", "chain", "umis"] + (["reads"] if params.tie_reads else [])
+    df = df.sort_values(order, ascending=[True, True] + [False] * (len(order) - 2), kind="mergesort").reset_index(
         drop=True
     )
     df["contig_id"] = df["barcode"] + "_contig_" + (df.groupby("bcix").cumcount() + 1).astype(str)

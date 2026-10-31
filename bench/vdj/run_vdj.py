@@ -59,12 +59,13 @@ def main(argv=None):
     params = A.Params(threads=a.threads)
     for kv in a.param:
         k, v = kv.split("=", 1)
-        setattr(params, k, type(getattr(params, k))(v))
+        t = type(getattr(params, k))
+        setattr(params, k, v.lower() in ("1", "true", "yes") if t is bool else t(v))
     res = A.run_library(r1, r2, ref=ref, cb_len=16, umi_len=umi_len, whitelist_codes=wl_codes,
                         params=params, max_reads=a.max_reads,
                         log=lambda *x: print(*x, flush=True))
     res.contigs.to_csv(os.path.join(a.out, "contigs.csv"), index=False)
-    cells = CL.assign_clonotypes(CL.cell_table(res.contigs))
+    cells = CL.assign_clonotypes(CL.cell_table(res.contigs, tie_reads=params.tie_reads))
     cells.to_csv(os.path.join(a.out, "cells.csv"), index=False)
     run = {"fastqs": [os.path.basename(p) for p in r1], "r1_len": r1_len, "umi_len": umi_len, "stats": res.stats,
            "params": vars(params),
