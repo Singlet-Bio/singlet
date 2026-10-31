@@ -26,7 +26,7 @@ RES=$W/jobs/s8/results/gate-$SLURM_ARRAY_JOB_ID-$SLURM_ARRAY_TASK_ID; mkdir -p $
 SCR=/tmp/$USER-s8p-$SLURM_JOB_ID; mkdir -p $SCR/repo
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT INT TERM
 git -C $BARE archive refs/s8/campaign bench/star_accel/out_equiv.py | tar -x -C $SCR/repo
-export SINGLET_STAR_PHASE_LOG=1 ${S8_SHADOW:+SINGLET_STAR_SHADOW=1} SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
+export SINGLET_STAR_PHASE_LOG=1 ${S8_TRACE:+SINGLET_ENGINE_GPU_TRACE=1} ${S8_SHADOW:+SINGLET_STAR_SHADOW=1} SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 echo "node=$(hostname) job=$SLURM_JOB_ID commit=$(cat $BINDIR/commit) T=$T $(date -Is)" | tee $RES/summary.txt
 nvidia-smi --query-gpu=name,driver_version --format=csv,noheader | tee -a $RES/summary.txt
@@ -63,7 +63,7 @@ for m in "${MODES[@]}"; do
   case $m in gpu*) if grep -aq "\[gpu_pileup\] on:" $O/run.log.ts && ! grep -aE "\[gpu_pileup\] (not run|failed|ERROR)|GPU_PILEUP ignored" $O/run.log.ts | grep -q .; then echo "GPU PILEUP OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: GPU pileup did not run cleanly ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
   case $m in gpuD*|gpuQ*) grep -aq "\[gpu_pileup\] hand-off pass:" $O/run.log.ts && echo "GPU PILEUP HAND-OFF OK" | tee -a $RES/summary.txt || { echo "!! GATE FAIL: no GPU-pileup hand-off pass ($m)" | tee -a $RES/summary.txt; FAIL=1; } ;; esac
   grep -a -e "unsorted STAR stream" -e "stream CB" -e "streaming from STAR pipe" -e "sorted path" -e "gpu_pileup\] on" -e "gpu_pileup\] hand-off" -e "ignor" -e "CR4 probe" -e "whitelist" $O/run.log.ts | cut -c1-230 | tee -a $RES/summary.txt
-  grep -ah -e "PHASE" -e "SHADOW" -e "ENGINE_GPU" -e "engine_gpu:" -e "STAR_PROFILE\|PROF" $SCR/$s/$m/out/*Log.out 2>/dev/null | cut -c1-700 | head -80 > $O/starlog_engine.txt
+  grep -ah -e "PHASE" -e "SHADOW" -e "ENGINE_GPU" -e "engine_gpu" -e "STAR_PROFILE\|PROF" $SCR/$s/$m/out/*Log.out 2>/dev/null | cut -c1-700 | head -400 > $O/starlog_engine.txt
   case $m in gpuG*) if grep -aq "sequences from the .1fg2 table" $O/starlog_engine.txt; then echo "TABLE-FED PREFILL OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: the prefill did not use the .1fg2 table ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
   case $m in gpuG*) if grep -aq "read source: chunk" $O/run.log.ts && ! ls $SCR/$s/$m/out/ 2>/dev/null | grep -q "\.fastq"; then echo "NO TEMP FASTQ (chunk source) OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: the .1fg2 GPU run did not use the chunk source ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
   grep -a "cache filled with" $O/starlog_engine.txt | cut -c1-250 | sed "s/^/$m: /" | tee -a $RES/summary.txt
