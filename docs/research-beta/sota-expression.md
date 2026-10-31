@@ -279,6 +279,14 @@ transfer to tissue (Kang) is untested; an AUC of 0.75 per read does not classify
 **Recommendation: worth a prototype**, not yet a build: use the per-read likelihood ratio inside a per-cell EM for rho, train on hgmm, test on the Kang genotype truth (foreign-allele reads give molecule labels
 there too) and on Gaublomme (Xist), and compare against the gene-level estimator on the same cells; stop if the per-cell Spearman against truth does not beat the current 0.08-0.09 on Kang.
 
+**Per-cell prototype: stopped by its own rule (2026-10-31; `soup_kang_reads.py`, `soup_em.py`, `results/nuclei/soup_em_kang.json`).** Trained only on the hgmm cross-species labels (HistGradientBoosting
+on the read features and their gene-adjusted versions; likelihood ratio = odds of the classifier / odds of the training prevalence 0.31%); per-cell EM for the ambient fraction (rho <- mean of rho LR / (rho LR + 1 - rho)); scored without any tuning on 1,587 genotype-confident Kang
+b2 ctrl cells (22.8 M reads, median 13.9 k per cell) against the genotype rho_truth. **Result: Spearman -0.012 (within cell type 0.003) against the pre-registered bar of beating Singlet's current 0.09-0.13 on the same cells (rho 0.095,
+removed fraction 0.132; within cell type 0.101 / 0.137). The prototype has no per-cell signal on Kang**, and its mean (3.6%) is 2.2x the truth (1.64%). Stated limit (orchestrator): library-level transfer, hgmm to a PBMC
+tissue library. The read features separate ambient from native molecules within hgmm (AUC 0.75) but not in a way that transfers; possible reasons not tested: the 3'-proximity signal in hgmm is partly a species-specific property of which genes
+the soup carries, Kang reads come from an older binary and 14-bp barcodes, and gene-adjustment medians are estimated from the sample itself. No further work on a per-molecule ambient likelihood unless a second labelled library (the Gaublomme
+Xist split is group-level only) can be used for training.
+
 *Proposal (worth a small experiment, not yet a build):* the one clean molecule-level truth we have is **cross-species molecules in pure cells of the hgmm library**
 (a mouse molecule in a human cell is ambient or a chimera; a human molecule in a human cell is ~99% native). Re-run hgmm1k_v3 with the tagged BAM and compare the two
 groups at read level, depth-matched: distance of the 3' end of the alignment to the annotated transcript end, internal poly-A priming (A-richness of the genome downstream of

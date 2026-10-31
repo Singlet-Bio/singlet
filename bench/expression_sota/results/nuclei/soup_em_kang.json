@@ -1,0 +1,20 @@
+{
+ "n_cells": 1587,
+ "median_reads": 13907.0,
+ "truth_mean": 0.016379667233809677,
+ "spearman_vs_truth": {
+  "rho_em": -0.01188701409218593,
+  "mean_lr": -0.0003306736989421582,
+  "mean_loglr": -0.005900244246574563,
+  "singlet_rho": 0.09478145339302238,
+  "singlet_removed": 0.13234173891735446
+ },
+ "within_celltype_spearman": {
+  "rho_em": 0.0034079861197865383,
+  "mean_loglr": 0.0048563948578242665,
+  "singlet_rho": 0.10109451667441949,
+  "singlet_removed": 0.13746194646893553
+ },
+ "mean_em_rho": 0.03558752449364197,
+ "ratio_em_to_truth": 2.1726646815012747
+}
