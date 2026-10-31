@@ -110,6 +110,7 @@ struct PileupConfig {
     std::string barcode_path;       // Filtered barcode list
     std::string out_chrm_bam;       // Output: chrM BAM
     int threads = 4;
+    int finalize_threads = 1;       // end-of-stream finalize (molecule labelling); the result does not depend on it
     int min_mapq = 20;              // Minimum mapping quality
     int min_baseq = 10;             // Minimum base quality for SNP/editing
     bool count_introns = true;      // Count intronic reads
@@ -1213,7 +1214,7 @@ public:
                       << mol_store_.n_molecule_groups() << " cell×gene groups, "
                       << (config_.umi_dedup_directional ? "directional" : "exact")
                       << " UMI collapse)...\n";
-            auto ms = finalize_all({{&mol_store_, &exon_acc_, &intron_acc_, &amb_acc_}});
+            auto ms = finalize_all({{&mol_store_, &exon_acc_, &intron_acc_, &amb_acc_, true}});
             fin_mark("molecule labelling done");
             add_molecule_stats(stats, ms);
 #ifdef SINGLET_HAVE_ENGINE_GPU
@@ -3908,10 +3909,11 @@ private:
     // collapsed first so a UMI can be checked across every gene of its cell
     // (genes on different chromosomes live in different workers' stores).
     struct FinalizeTarget {
-        const DirectionalUmiStore* store;
+        DirectionalUmiStore* store;
         SparseAccumulator<uint16_t>* exon;
         SparseAccumulator<uint16_t>* intron;
         SparseAccumulator<uint16_t>* amb;
+        bool consume = false;   // give the store's molecule groups back while collapsing (nothing reads them afterwards)
     };
     DirectionalUmiStore::MoleculeStats finalize_all(const std::vector<FinalizeTarget>& targets) const {
         using D = DirectionalUmiStore;
@@ -3924,7 +3926,10 @@ private:
         const bool track_amb = config_.count_introns && has_gene_model_;
         std::vector<std::vector<D::Molecule>> mols(targets.size());
         for (size_t i = 0; i < targets.size(); ++i)
-            targets[i].store->collapse_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+        {
+            if (targets[i].consume) targets[i].store->consume_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+            else targets[i].store->collapse_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+        }
         fin_mark("molecules collapsed");
 
         // Each (bc, gene, root UMI) is one molecule, so a (bc, UMI) seen k times is in k genes.
@@ -3939,29 +3944,47 @@ private:
                 return static_cast<size_t>(h);
             }
         };
+        // Multi-gene UMI table, in shards by barcode so that the table of one shard is all that is in memory
+        // (the whole table cost ~10 GB on a deep sample) and the shards fill on several threads. A molecule's
+        // verdict depends only on the molecules sharing its (bc, UMI), whichever order they arrive in.
         struct UmiGenes { uint32_t n_genes = 0, best_count = 0, best_gene = UINT32_MAX; bool tie = false; };
-        std::unordered_map<UmiKey, UmiGenes, UmiKeyHash> ug;
+        std::vector<std::vector<uint8_t>> drop(targets.size());
         if (mrules) {
-            size_t n = 0;
-            for (const auto& v : mols) n += v.size();
-            ug.reserve(n);
-            for (const auto& v : mols)
-                for (const auto& m : v) {
-                    auto& u = ug[{m.umi, m.bc}];
-                    u.n_genes++;
-                    if (m.count > u.best_count) { u.best_count = m.count; u.best_gene = m.gene; u.tie = false; }
-                    else if (m.count == u.best_count) u.tie = true;
+            for (size_t i = 0; i < targets.size(); ++i) drop[i].assign(mols[i].size(), 0);
+            constexpr uint32_t kShards = 16;
+            std::atomic<uint32_t> next_shard{0};
+            auto shard_worker = [&]() {
+                for (uint32_t sh; (sh = next_shard.fetch_add(1)) < kShards;) {
+                    std::unordered_map<UmiKey, UmiGenes, UmiKeyHash> ug;
+                    for (const auto& v : mols)
+                        for (const auto& m : v) {
+                            if (m.bc % kShards != sh) continue;
+                            auto& u = ug[{m.umi, m.bc}];
+                            u.n_genes++;
+                            if (m.count > u.best_count) { u.best_count = m.count; u.best_gene = m.gene; u.tie = false; }
+                            else if (m.count == u.best_count) u.tie = true;
+                        }
+                    for (size_t i = 0; i < mols.size(); ++i)
+                        for (size_t k = 0; k < mols[i].size(); ++k) {
+                            const auto& m = mols[i][k];
+                            if (m.bc % kShards != sh) continue;
+                            const auto& u = ug.find({m.umi, m.bc})->second;
+                            bool d;
+                            if (u.n_genes <= 1) d = false;
+                            else if (mrules & intron_rule::kUmiGeneCR) d = u.tie || m.gene != u.best_gene;
+                            else if (mrules & intron_rule::kUmiGeneAll) d = true;
+                            else d = m.label() != D::MoleculeLabel::Spliced;   // kUmiGene
+                            drop[i][k] = d ? 1 : 0;
+                        }
                 }
+            };
+            const int nt = std::max(1, std::min<int>(config_.finalize_threads, kShards));
+            std::vector<std::thread> pool;
+            for (int t = 1; t < nt; ++t) pool.emplace_back(shard_worker);
+            shard_worker();
+            for (auto& th : pool) th.join();
         }
         fin_mark("multi-gene UMI table built");
-        auto dropped = [&](const D::Molecule& m) {
-            if (!mrules) return false;
-            const auto& u = ug.find({m.umi, m.bc})->second;
-            if (u.n_genes <= 1) return false;
-            if (mrules & intron_rule::kUmiGeneCR) return u.tie || m.gene != u.best_gene;
-            if (mrules & intron_rule::kUmiGeneAll) return true;
-            return m.label() != D::MoleculeLabel::Spliced;  // kUmiGene
-        };
 
         gzFile dump = molecule_dump_.empty() ? nullptr : gzopen(molecule_dump_.c_str(), "wb1");
         if (dump) gzputs(dump, "barcode\tgene_id\tumi\tlabel\tflags\tdiag\treads\n");
@@ -3969,14 +3992,15 @@ private:
         std::string line;
         for (size_t i = 0; i < targets.size(); ++i) {
             const auto& t = targets[i];
-            for (const auto& m : mols[i]) {
-                const bool drop = dropped(m);
-                if (drop) st.dropped++;
+            for (size_t k = 0; k < mols[i].size(); ++k) {
+                const auto& m = mols[i][k];
+                const bool dropm = mrules && drop[i][k];
+                if (dropm) st.dropped++;
                 else D::emit_molecule(m, *t.exon, *t.intron,
                                       [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st);
                 if (!dump) continue;
                 for (size_t k = 0; k < umi_s.size(); ++k) umi_s[k] = "ACGT"[(m.umi >> (2 * k)) & 3];
-                const char lab = drop ? 'D' : "SUA"[static_cast<int>(m.label())];
+                const char lab = dropm ? 'D' : "SUA"[static_cast<int>(m.label())];
                 line.clear();
                 line += (m.bc < barcodes_.size() ? barcodes_[m.bc] : std::to_string(m.bc));
                 line += '\t'; line += gene_model_.gene_ids()[m.gene];
