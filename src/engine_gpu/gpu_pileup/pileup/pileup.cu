@@ -235,7 +235,7 @@ __global__ void k_lists(const SigRec* S, int nS, const AlnRec* A, const uint32_t
     uint32_t wsj = FILL ? c_sj[s] : 0, wsnp = FILL ? c_snp[s] : 0, wmt = FILL ? c_mt[s] : 0, wind = FILL ? c_ind[s] : 0;
     if (p >= 0) {
         AlnRec a = A[sg.aln_off + p]; bool high = a.mapq >= P.min_mapq, rev = (a.flags & 1) != 0;
-        bool sj_ok = P.count_sj && (high || sg.nh > 1);
+        bool sj_ok = P.count_sj && sg.nh <= 1;   // junction molecules from uniquely mapped alignments only, as the CPU pileup (PileupConfig::sj_unique_only)
         bool snp_ok = high && a.tid >= 0 && a.tid < SN.ntid && SN.n[a.tid] > 0;
         bool mt_ok = P.count_mt && high && a.tid == P.chrm_tid;
         const uint32_t* o = ops + a.ops_off; int32_t rpos = a.pos; int32_t qpos = 0;

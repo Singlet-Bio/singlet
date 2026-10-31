@@ -2717,6 +2717,7 @@ static void usage(const char* prog) {
         << "  --min-baseq N          Minimum base quality [10]\n"
         << "  --no-introns           Disable intron counting\n"
         << "  --no-sj                Disable splice junction extraction\n"
+        << "  --sj-all-alignments    Count junction molecules from multi-mapped reads too (default: uniquely mapped only, as STARsolo)\n"
         << "  --no-umi-dedup         Disable UMI deduplication\n"
         << "  --cell-calling         Force EmptyDrops cell calling (default: auto when no --barcodes)\n"
         << "  --no-cell-calling      Disable EmptyDrops cell calling\n"
@@ -3010,6 +3011,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--min-baseq" && i+1 < argc) config.min_baseq = std::atoi(argv[++i]);
         else if (arg == "--no-introns") config.count_introns = false;
         else if (arg == "--no-sj") config.count_sj = false;
+        else if (arg == "--sj-all-alignments") config.sj_unique_only = false;   // old junction policy: primary alignments of multi-mapped reads count
         else if (arg == "--umi-dedup-directional") config.umi_dedup_directional = true;
         else if (arg == "--no-umi-dedup-directional") { config.umi_dedup_directional = false; no_dir_dedup_explicit = true; }
         else if (arg == "--no-umi-dedup") config.umi_dedup = false;
@@ -5292,6 +5294,10 @@ int main(int argc, char* argv[]) {
     // The GPU pileup mirrors the intron rules of PR #80 that are on by default (intron_rule::kUnique, kNoSplicedIntron, kUmiGeneCR, kMtPrefer; rules 389).
     // The others (kContained, kFlank, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its counts would
     // differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads).
+    if (getenv("SINGLET_GPU_PILEUP") && !config.sj_unique_only) {
+        std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: the GPU pileup counts junction molecules from uniquely mapped alignments only (--sj-all-alignments is not implemented there); the CPU pileup runs on the GPU-mapped reads\n";
+        unsetenv("SINGLET_GPU_PILEUP");
+    }
     if (getenv("SINGLET_GPU_PILEUP")) {
         constexpr uint32_t kGpuRules = 1u | 4u | 128u | 256u;
         uint32_t rules = config.intron_rules;
