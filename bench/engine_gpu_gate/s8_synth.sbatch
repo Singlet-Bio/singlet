@@ -13,8 +13,9 @@ set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; BIN=${BIN:-$W/jobs/s8/bin_base2/singlet-gpu}; PY=$W/envs/pbench/bin/python3
 D=$PB/data/pbmc1k_v3/pbmc_1k_v3_fastqs; SCR=/tmp/$USER-s8syn-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 N=${NREADS:-8000000}
-zcat $D/pbmc_1k_v3_S1_L001_R1_001.fastq.gz | head -n $((4*N)) | gzip -1 > $SCR/R1.fastq.gz &
-zcat $D/pbmc_1k_v3_S1_L001_R2_001.fastq.gz | head -n $((4*N)) | $PY -I -c '
+set +o pipefail   # zcat gets SIGPIPE when head has its lines
+( zcat $D/pbmc_1k_v3_S1_L001_R1_001.fastq.gz | head -n $((4*N)) | gzip -1 > $SCR/R1.fastq.gz ) &
+( zcat $D/pbmc_1k_v3_S1_L001_R2_001.fastq.gz | head -n $((4*N)) | $PY -I -c '
 import sys
 out = sys.stdout
 n = 0
@@ -27,8 +28,9 @@ for hdr in sys.stdin:
             if s[p] != "N": ql[p] = "#"
         q = "".join(ql)
     out.write(hdr + seq + plus + q + "\n")
-' | gzip -1 > $SCR/R2.fastq.gz
+' | gzip -1 > $SCR/R2.fastq.gz )
 wait
+set -o pipefail
 O=$W/data/s8/synthq; mkdir -p $O
 $BIN encode --reads $SCR/R1.fastq.gz $SCR/R2.fastq.gz -o $SCR/synthq.1fq --whitelist-dir $PB/whitelists > $O/encode.log 2>&1
 mv $SCR/synthq.1fq $O/synthq.1fq; ls -l $O; grep -a "Done" $O/encode.log | tail -1
