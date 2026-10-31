@@ -1,40 +1,41 @@
-% Discussion (main text). Full limitations: supp_limitations.tex.
+% Discussion and conclusion (main text). Full limitations: Supplementary Limitations (supplement.tex).
 \section{Discussion}
 \label{sec:discussion}
 
-Single-cell count matrices have been stored as generic arrays, handed to compressors that cannot see what the bytes mean,
-and the cost is paid every time the data cross a network. \sone{} instead describes the counts with what is known about
-them. Its files are several times smaller than the formats in common use and within a few percent of the best count models
-we fitted, so in size no lossless format can improve on it by more than single-digit percentages; most of what is left in
-UMI data is the random sampling of molecules itself. Among the codes we measured, none was both as small and faster to
-decode. Returning genes in their source order costs \sone{} about a third of its decoding speed; in its stored order it
-decodes close to the rate the trend of those codes predicts for its size.
+Single-cell count matrices have been stored as generic arrays and handed to compressors that cannot see what the bytes
+mean, and the cost is paid every time the data cross a network. \sone{} instead describes the counts with what is known
+about them. Its files are several times smaller than the formats in common use and within a few percent of the best count
+models we fitted, so in size no lossless format can improve on it by more than single-digit percentages; most of what is
+left in UMI data is the random sampling of molecules itself. In speed, \sone{} sits where the trend of existing codes puts a
+code of its size, and none of the codes we measured was both as small and faster.
 
-The practical consequences follow from where data are read. Atlases and model-training pipelines increasingly keep data in
-cloud object storage and read the same cells many times. There, the bits per cell on the wire, the number of round trips
-needed to fetch a minibatch and the per-request and egress fees set both the speed and the cost of every epoch. A format
-that is small, fast to decode and readable in part moves the bottleneck from storage back to the model: in our
-measurements a training loader started from a remote \sone{} file in under a second and kept a typical network link busy
-without downloading or converting anything first. Because each sample file is named by a hash of its contents, a link or a
-citation identifies exactly the bytes that were analysed. The same structure, many small counts with heavy-tailed
-frequencies, is found outside single-cell biology; on bulk RNA-seq counts and on a text corpus stored as word counts,
-\sone{} files were also less than half the size of compressed AnnData (Supplementary Section~\ref{sec:beyond}).
+The practical consequences follow from where data are read. Atlases and training pipelines increasingly keep data in cloud
+object storage and read the same cells many times. There, the bits per cell on the wire, the round trips needed to fetch a
+minibatch, and the per-request and egress fees set both the speed and the cost of every epoch. A format that is small,
+fast to decode and readable in part moves the bottleneck from storage back to the model: a training loader started from a
+remote \sone{} file in under a second and kept the link busy without downloading or converting anything first. Because
+each sample file is named by a hash of its contents, a link or a citation identifies exactly the bytes that were analysed.
+Size and speed are not all a format offers, and Table~\ref{tab:props} compares the other properties a stored matrix needs.
 
-\sone{} has costs, and they set where it helps most. Its decoder spends more time per entry than byte- or bit-aligned
-codes, so it runs at the speed of the network only when there are enough cores for the link: on a fast link served by a
-few cores, a larger but faster code delivers more. Readers that accept \sone's stored gene order avoid the per-cell
-sort that source order needs, and beyond that, going faster at the same size would take a new kind of decoder rather than
-a smaller file. \sone{} trades decoding speed for size, the right trade wherever each decoding core serves less than about
-\nm{frac-cross-gbit}\,Gbit/s of the link. Its writer needs about three times as much memory as AnnData's, which matters for the largest
-matrices. The format stores whole-number counts only and does not hold the rich cell and gene annotations of an AnnData
-object, so it complements rather than replaces such containers. It has a single implementation, for which the
-specification in the Supplement is meant to make a second possible. And our measurements have limits of their own
-(Supplementary Section~\ref{sec:slimits}): all timings come from one type of cluster node; the network experiments used an
-object store with controlled bandwidth and latency, and the one real cloud store was read from one location; kernels for
-AVX-512 and ARM processors were not measured.
 
-Within these bounds, the case for a shared format is strong. Count matrices are the one object every single-cell analysis
-and every model trained on single-cell data reads, and \sone{} stores them close to their information content, reads them
-in part from anywhere, and returns exactly the original counts to Python, R and C++. We therefore propose \sone{} as a
-standard encoding for single-cell count matrices, for archives, atlases and training pipelines alike, and the
-\texttt{singlet} package makes it available today.
+\para{Costs and limitations}\sone's decoder spends more time per entry than byte- or bit-aligned codes, so it runs
+at the speed of the network only when there are enough cores for the link: above about \nm{frac-cross-gbit}\,Gbit/s per
+decoding core, a larger but faster code delivers more. Going faster at the same size would take a new kind of decoder, not
+a smaller file. The stored gene order that makes decoding fast means a reader permutes its gene vocabulary once; a reader
+that insists on source order pays a sort per cell. The writer needs about three times as much memory as AnnData's, which
+matters for the largest matrices. The format stores whole-number counts only and does not hold the rich annotations of an
+AnnData object, so it complements rather than replaces such containers, and it has a single implementation, for which the
+specification is meant to make a second possible. Our measurements have limits of their own: all timings come from one
+type of cluster node, the network experiments used one emulated object store and one real one read from one location, and
+kernels for AVX-512 and ARM processors were not measured (Supplementary Limitations).
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+Count matrices are the one object every single-cell analysis, and every model trained on single-cell data, reads. \sone{}
+stores them close to their information content, decodes them as fast as the existing trade-off between size and speed
+allows, reads them in part from anywhere, and returns exactly the original counts to Python, R and C++. We propose \sone{}
+as a standard encoding for single-cell count matrices in archives, atlases and training pipelines, and the
+\texttt{singlet} package makes it available today. The same structure, many small counts with heavy-tailed frequencies, is
+found beyond single cells: on bulk RNA-seq counts and on a text corpus stored as word counts, \sone{} files were also
+less than half the size of compressed AnnData (Supplementary Section~\ref{S-sec:beyond}).

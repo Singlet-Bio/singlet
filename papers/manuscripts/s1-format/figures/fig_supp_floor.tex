@@ -46,15 +46,11 @@
 \end{axis}
 \end{tikzpicture}
 \caption{\textbf{What count models and a second compression pass would save, and where the bits go.}
-\textbf{(a)} Bits per non-zero each cross-validated count model saves relative to the \sone{} payload, median and
-interquartile range over matrices (negative: the model needs more bits than \sone). The Poisson model's worst cases are
-the read-count matrices, which it codes with hundreds of bits more per non-zero (Supplementary Table~\ref{tab:floor}).
-Knowing a cell's cluster is worth a median of \nm{sharedBpnMedian} bits per non-zero.
-\textbf{(b)} Size of \sone{} after a second general-purpose compression pass, relative to \sone{} (median, range): every
-coder returns \nm{secondMin}--\nm{secondMax} of its size.
-\textbf{(c)} Where the \sone{} payload goes, by protocol class: the estimated entropy of the random sampling of each
-cell's molecules (meaningful for UMI counts), which no lossless decoder can avoid; the remaining information about the
-cell's expression profile; and \sone's margin above the best model. For UMI data sampling is a median of
-\nm{samplingPctMedian}\% of the \sone{} payload; values per class in Supplementary Table~\ref{tab:floor}.}
+\textbf{(a)} Bits per non-zero each cross-validated count model saves against the \sone{} payload, median and
+interquartile range (negative: the model needs more). Poisson's worst cases are the read-count matrices, hundreds of bits
+more per non-zero (Supplementary Table~\ref{tab:floor}).
+\textbf{(b)} \sone{} after a second general-purpose pass, relative to \sone{} (median, range).
+\textbf{(c)} The \sone{} payload by protocol class: estimated entropy of sampling each cell's molecules (meaningful for
+UMI counts), which no lossless code avoids; the rest of the cell's profile; and \sone's margin above the best model.}
 \label{fig:sfloor}
 \end{figure*}

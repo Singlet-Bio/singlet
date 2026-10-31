@@ -21,9 +21,10 @@
 \addplot[draw=none, forget plot] table[x=ratio_median, y=pos] {\gen{fig1a_size.tsv}};   % sets the y ticks
 \draw[gen!60, line width=0.4pt, dashed] (axis cs:1,-0.5) -- (axis cs:1,16.5);
 \input{\gen{fig1a_boxes.tex}}
-\addplot[only marks, mark=*, mark size=0.75pt, gen!80!black, opacity=0.5, discard if not={group}{general}] table[x=ratio, y=y] {\gen{fig1a_points.tsv}};
-\addplot[only marks, mark=*, mark size=0.75pt, dom!90!black, opacity=0.55, discard if not={group}{domain}] table[x=ratio, y=y] {\gen{fig1a_points.tsv}};
-\addplot[only marks, mark=*, mark size=0.75pt, sone, opacity=0.6, discard if not={group}{s1}] table[x=ratio, y=y] {\gen{fig1a_points.tsv}};
+\expandafter\pgfplotsinvokeforeach\expandafter{\otherformats}{
+  \addplot[only marks, mark=*, mark size=0.75pt, c-#1, opacity=0.6, discard if not={format}{#1}] table[x=ratio, y=y] {\gen{fig1a_points.tsv}};
+}
+\addplot[only marks, mark=*, mark size=0.75pt, c-s1, opacity=0.6, discard if not={format}{s1}] table[x=ratio, y=y] {\gen{fig1a_points.tsv}};
 \end{axis}
 \end{tikzpicture}\hfill
 % ---------------- (b) size vs speed with R_eff iso-lines (figures/fig1b_panel.tex) ----------------
@@ -42,8 +43,9 @@
     nodes near coords style={font=\sffamily\tiny, anchor=west, text=ink2}},
 ]
 \addplot[draw=none, forget plot] table[x=total, y=pos] {\gen{fig1b_ttfm.tsv}};   % sets the y ticks
-\addplot[fill=gen!70, draw=none, val, discard if not={group}{other}] table[x=total, y=pos] {\gen{fig1b_ttfm.tsv}};
-\addplot[fill=sone, draw=none, val, discard if not={group}{s1}] table[x=total, y=pos] {\gen{fig1b_ttfm.tsv}};
+\pgfplotsinvokeforeach{s1,zarr3,zarr,soma,h5ad_gzip,bpcells}{
+  \addplot[fill=c-#1, draw=none, val, discard if not={fmt}{#1}] table[x=total, y=pos] {\gen{fig1b_ttfm.tsv}};
+}
 \end{axis}
 \end{tikzpicture}\hfill
 % ---------------- (d) speed-up over one core, formats that decode in parallel ----------------
@@ -58,29 +60,29 @@
 ]
 \addplot[gen!70, densely dotted, no marks, forget plot] table[x=threads, y=ideal] {\gen{fig1d_speedup.tsv}}
   node[pos=0.55, sloped, above, font=\sffamily\tiny, text=gen] {ideal};
-\addplot[sone, very thick, mark=*, mark size=1.6pt] table[x=threads, y=s1] {\gen{fig1d_speedup.tsv}};
-\addplot[dom, thick, mark=triangle*, mark size=1.5pt] table[x=threads, y=soma] {\gen{fig1d_speedup.tsv}};
-\addplot[ink2, thick, mark=square*, mark size=1.2pt] table[x=threads, y=mtx_gz] {\gen{fig1d_speedup.tsv}};
-\addplot[gen, thick, mark=diamond*, mark size=1.5pt] table[x=threads, y=parquet_coo] {\gen{fig1d_speedup.tsv}};
-\addplot[tens, thick, mark=pentagon*, mark size=1.4pt] table[x=threads, y=zarr3] {\gen{fig1d_speedup.tsv}};
+\addplot[c-s1, very thick, mark=*, mark size=1.6pt] table[x=threads, y=s1] {\gen{fig1d_speedup.tsv}};
+\addplot[c-soma, thick, mark=triangle*, mark size=1.5pt] table[x=threads, y=soma] {\gen{fig1d_speedup.tsv}};
+\addplot[c-mtx_gz, thick, mark=square*, mark size=1.2pt] table[x=threads, y=mtx_gz] {\gen{fig1d_speedup.tsv}};
+\addplot[c-parquet_coo, thick, mark=diamond*, mark size=1.5pt] table[x=threads, y=parquet_coo] {\gen{fig1d_speedup.tsv}};
+\addplot[c-zarr3, thick, mark=pentagon*, mark size=1.4pt] table[x=threads, y=zarr3] {\gen{fig1d_speedup.tsv}};
 \legend{\sone, TileDB-SOMA, MTX.gz, Parquet COO, {Zarr v3, sharded}}
 \end{axis}
 \end{tikzpicture}
 \caption{\textbf{\sone{} files are the smallest on every matrix and among the fastest to read.}
 \textbf{(a)} Size of each format's file (counts, gene identifiers and barcodes) divided by the size of the \sone{} file
 of the same matrix, one point per matrix (\nm{nMatrices} matrices). Boxes: quartiles and median; whiskers: the most
-extreme matrices within 1.5 interquartile ranges (log scale). Grey, general-purpose formats; orange, single-cell formats
-with their own encodings; blue, \sone{} (bottom row: gene identifiers in a shared pack). Every point lies right of the
-dashed line: \sone{} is the smallest file on \nm{s1SmallestCount} of \nm{nMatrices} matrices; the median gzip-compressed
+extreme matrices within 1.5 interquartile ranges (log scale). Each format has one colour, the same in every panel and
+figure (HDF5 files orange to brown, Zarr green, R files red, plain arrays grey, \sone{} blue). Every point lies right of
+the dashed line: \sone{} is the smallest file on \nm{s1SmallestCount} of \nm{nMatrices} matrices; the median gzip-compressed
 AnnData file is \nm{ratio-h5ad_gzip}$\times$ larger and the smallest other file on each matrix \nm{ratioBestOther}$\times$.
 \textbf{(b)} Size against read rate from a cold file on \nm{threadsHeadline} cores: one faint point per matrix and format,
 large points the medians. Dashed: combinations that deliver the same number of non-zeros per second over a 1\,Gbit/s link
 (Eq.~\ref{eq:reff}), labelled in millions per second; up and to the left is better. \sone{} reads
 \nm{dec-s1-cold-t4} million non-zeros per second and is the fastest format on \nm{dec-s1-fastest-count} of
-\nm{dec-paired-n} matrices. Log axes and quartiles instead of points: Supplementary Fig.~\ref{fig:sfig1b}.
+\nm{dec-paired-n} matrices. Log axes and quartiles instead of points: Supplementary Fig.~\ref{S-fig:sfig1b}.
 \textbf{(c)} Seconds from a new process to the first 512-cell training minibatch, \nm{fig1b-dataset}, read from an object
 store over a \nm{fig1b-tier} link (median of three seeds). Loaders that download the whole file first are not shown;
-every loader and storage tier is in Supplementary Table~\ref{tab:minibatch}.
+every loader and storage tier is in Supplementary Table~\ref{S-tab:minibatch}.
 \textbf{(d)} Read rate from a cold file relative to one core, median of the per-matrix ratios, for the
 \nm{par-formats-n} of \nm{par-formats-of} formats whose readers use more than one core (the others read at the same rate on
 one core or four); \sone{} over the thread sweep (\nm{scaleNmatrices} matrices), the others at one and four cores.}

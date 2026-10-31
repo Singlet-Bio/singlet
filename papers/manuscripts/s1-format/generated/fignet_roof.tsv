@@ -13,5 +13,5 @@ csc_zstd19	CSC + zstd-19	general	1	9.73942	77.7957	0.757685	north
 rds_gz	rds (gzip)	general	1	18.2235	20.1365	0.366957	south west
 rds_xz	rds (xz)	general	1	8.81504	14.0538	0.123885	east
 bpcells	BPCells	domain	0	15.9819	8.16502	0.130493	west
-s1	\textbf{.s1}	s1	0	5.26881	159.523	0.840496	south
+s1	\textbf{.s1}	s1	0	5.26881	214.792	1.1317	south
 zarr3	Zarr v3 sharded	general	0	12.0106	60.7498	0.729639	west

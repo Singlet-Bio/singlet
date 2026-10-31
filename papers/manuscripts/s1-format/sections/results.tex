@@ -1,159 +1,100 @@
-% Results (main text). Numbers belong in the figures and captions; the text states what they show and why it matters.
-% The numbers behind every statement are in the Detailed results (supp_results.tex) and the supplementary tables.
+% Results (main text). Numbers belong in the figures, tables and captions; the text states what they show and why it
+% matters. The numbers behind every statement are in the Supplementary Results and Tables (supplement.tex).
 \section{Results}
 \label{sec:results}
 
 \subsection{\sone{} files are the smallest on every matrix}
 
-We compared \sone{} with the formats single-cell researchers use, from Matrix Market text files and the 10x Genomics
-HDF5 file to AnnData, loom, R objects, TileDB-SOMA and BPCells, on \nm{nMatrices} public count matrices from
-\nm{nDatasets} datasets: droplet, plate-based and combinatorial single-cell data, multimodal data and spatial data from
-both sequencing and imaging, from a thousand to more than a million cells each (Supplementary
-Tables~\ref{tab:formats} and~\ref{tab:datasets}). Every file was read back and checked against the original counts,
-gene identifiers and cell barcodes.
+\sone{} produced the smallest file on every one of the \nm{nMatrices} matrices (Fig.~\ref{fig:wow}a,
+Table~\ref{tab:main}). The typical gzip-compressed AnnData file, the most common way single-cell data are shared, was
+\nm{ratio-h5ad_gzip} times larger, and even the smallest alternative on each matrix was \nm{ratioBestOther} times larger.
+The gain does not come from a stronger general-purpose compressor: zstd at its strongest level on the raw arrays, and a
+cloud-ready Zarr layout with the same block size as \sone, both left files about twice as large. It comes from
+describing the counts. Measured against the floor of the best count model, three quarters of a gzip-compressed AnnData
+file is redundant, and at least \nm{redund-other-min}\% of every other format; for \sone{} the median is
+\nm{redund-s1}\% (Table~\ref{tab:main}).
 
-\sone{} produced the smallest file on every one of the matrices (Fig.~\ref{fig:wow}a). The typical gzip-compressed
-AnnData file, the most common way single-cell data are shared, was \nm{ratio-h5ad_gzip} times larger, and even the
-smallest alternative on each matrix was \nm{ratioBestOther} times larger. The gain does not come from a stronger
-general-purpose compressor: the best such compressor we tried on the raw arrays, and a cloud-ready Zarr layout with the
-same chunk size as \sone, both left files about twice as large (Fig.~\ref{fig:wow}a, grey). It comes from describing the
-counts themselves, as the next sections show.
+\input{sections/table_main}
 
 \subsection{Smaller files that are also faster to read}
 
-A smaller file usually costs more time to decompress. \sone{} does not pay that price: read from a cold file into a
-sparse matrix, it was the fastest format on most matrices and the only one that was both small and fast
-(Fig.~\ref{fig:wow}b). Part of the reason is that its decoder spreads the work over the available cores. Most formats do
-not decode in parallel at all; among the few that do, \sone{} gained the most from each added core (Fig.~\ref{fig:wow}d).
-For machine learning, what counts is the time until a model receives its first minibatch of cells; from cloud-style storage
-\sone{} delivered it several times sooner than any other loader that reads a file in parts (Fig.~\ref{fig:wow}c).
+A smaller file usually costs more time to decompress. \sone{} does not pay that price: read from a cold file into a sparse
+matrix, it was the fastest format on \nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices and the only one that was
+both small and fast (Fig.~\ref{fig:wow}b). Part of the reason is that its decoder spreads the work over the available
+cores. Most formats do not decode in parallel at all; among the few that do, \sone{} gained the most from each added core
+(Fig.~\ref{fig:wow}d).
 
-\input{figures/fig1_wow}
-
-\subsection{How \sone{} stores a count matrix}
-\label{sec:how}
-
-Fig.~\ref{fig:how} shows the format from a whole dataset down to individual bits (the complete specification is in
-Supplementary Section~\ref{sec:spec}). A dataset is a small manifest that lists one file per sample, each named by a
-fingerprint (cryptographic hash) of its contents, so a link always refers to exactly the same bytes and anyone can check
-them (Fig.~\ref{fig:how}a). Information shared by many samples, such as the list of gene names of a genome annotation, is
-stored once and downloaded once (Fig.~\ref{fig:how}b).
-
-Each count matrix starts with a small index that tells a reader where every block of cells lives in the file, followed by
-blocks of consecutive cells that can each be decoded on their own (Fig.~\ref{fig:how}c). To read a few hundred cells, a
-reader fetches the index once and then only the blocks it needs, with one web request per run of blocks, from a local disk,
-a web server or a cloud bucket alike.
-
-Inside a block, genes are numbered from most to least frequently detected, so each cell's non-zero entries become a
-sequence of small steps and small counts, most of them ones. Each entry is turned into one short symbol, and the
-probability of each symbol is looked up in a table chosen by two things the reader already knows: how many entries the
-cell has and how far along the gene list it is (Fig.~\ref{fig:how}d). An entropy coder (rANS~\cite{duda2013asymmetric})
-then spends close to the minimum number of bits on each symbol. Because the tables are fixed for the whole matrix, decoding
-is a few table look-ups per entry, and 32 coders run side by side so that modern processors decode eight to sixteen
-symbols at once. Writing a file ends with a full decode that must reproduce the input exactly.
-
-\input{figures/fig2_how}
 
 \subsection{\sone{} reads at the speed of the network}
 \label{sec:network}
 
-When data come over a network, the time to deliver them is the time to transfer the stored bytes plus the time to decode
-them. For a format storing $b$ bits per non-zero entry and decoding $D$ entries per second, a link of bandwidth $B$
-delivers
-\begin{equation}
-R_{\mathrm{eff}} \;=\; \left(\frac{b}{B} + \frac{1}{D}\right)^{-1}\ \text{non-zero entries per second}.
-\label{eq:reff}
-\end{equation}
-A smaller file helps only if its decoder keeps up; we say a reader runs \emph{at the speed of the network} when the link,
-not the decoder, is the limit. On four cores \sone{} keeps up with links of about 1\,Gbit/s, and with faster links on more
-cores. Because each entry takes so few bits, the same link then carries about twelve times as many entries as \sone{} as
-it does as uncompressed arrays, and more than any other format over every common link speed (Fig.~\ref{fig:net}a).
+On four cores \sone{} keeps up with links of about 1\,Gbit/s, and with faster links on more cores. Because each entry
+takes so few bits, the same link then carries about twelve times as many entries as \sone{} as it does as uncompressed
+arrays, and more than any other format over every common link speed (Fig.~\ref{fig:net}a).
 
-We then measured real training loaders reading 512-cell minibatches into PyTorch from an object store whose bandwidth we
-controlled (Fig.~\ref{fig:net}b). The \sone{} loader filled most of a 1\,Gbit/s link and delivered between thirty and a hundred times more
-cells per second than AnnData's Zarr loader or TileDB-SOMA's loader for machine learning. Network latency matters as much as
-bandwidth: every request waits a full round trip, and cloud storage adds tens of milliseconds to each. Because the \sone{}
-index locates every block before any is read, the reader sends all of a minibatch's requests at once and keeps the next
-minibatches' requests in flight. Our measurements showed that its original setting of eight concurrent requests left a
-high-latency link mostly idle; with more requests in flight the rate recovered (Fig.~\ref{fig:net}c), and \texttt{singlet}
-1.3.3 now uses these settings by default.
+Real training loaders, reading 512-cell minibatches into PyTorch from an object store whose bandwidth we controlled,
+showed the same picture (Fig.~\ref{fig:net}b). The \sone{} loader filled most of a 1\,Gbit/s link and delivered thirty to
+a hundred times more cells per second than AnnData's Zarr loader or TileDB-SOMA's loader for machine learning, and its
+first minibatch arrived several times sooner than from any other loader that reads a file in parts (Fig.~\ref{fig:wow}c).
+Latency matters as much as bandwidth: every request waits a full round trip, and cloud storage adds tens of milliseconds to
+each. Because the \sone{} index locates every block before any is read, the reader sends all of a minibatch's requests at
+once and keeps the next minibatches' requests in flight. Our measurements showed that eight concurrent requests left a
+high-latency link mostly idle; with more in flight the rate recovered (Fig.~\ref{fig:net}c), and \texttt{singlet} 1.3.3 now
+uses these settings by default.
 
-Finally, we read the files from a real cloud object store, Cloudflare R2, over the public internet (Fig.~\ref{fig:net}d).
-With \sone, the first minibatch of a 580,000-cell lung atlas arrived in under a second, while downloading the AnnData file
-first took well over a minute, and \sone{} then streamed cells tens of times faster than either Zarr layout. Because it
-moves fewer bytes in fewer requests, a full epoch of random minibatches would cost about twenty times less in data-transfer
-and request fees than with AnnData Zarr, at the prices of a provider that charges for both. \sone{} also needs no extra DataLoader worker processes to reach these rates,
-since its decoder already uses every core (Supplementary Table~\ref{tab:workers}).
+Finally, we read the files from a real cloud object store, Cloudflare R2, over the public internet
+(Fig.~\ref{fig:net}d). The first minibatch of a 580,000-cell lung atlas arrived in under a second, while downloading the
+AnnData file first took well over a minute, and \sone{} then streamed cells tens of times faster than either Zarr layout.
+Because it moves fewer bytes in fewer requests, an epoch of random minibatches would cost about twenty times less in
+transfer and request fees than with AnnData Zarr, at the prices of a provider that charges for both. \sone{} needs no
+extra DataLoader worker processes to reach these rates, since its decoder already uses every core.
 
 \input{figures/fig_net}
 
-\subsection{How close \sone{} is to the limits of size and speed}
+\subsection{\sone{} is close to the limits of size and speed}
 \label{sec:floor}
 
 How much smaller could a file be? Following the payload of a matrix as ideas are added (Fig.~\ref{fig:floor}a), storing
 the steps between entries and compressing them with the strongest general-purpose compressor shrinks the file a lot, but
-modelling the counts, as \sone{} does, removes nearly a third of what is left. As a reference for the information floor,
-we fitted count models of the kind used for single-cell analysis, including negative binomial models and models that know
-each cell's cluster, on half of each matrix's cells and measured how many bits they would need for the other
-half~\cite{hafemeister2019normalization,townes2019feature}. Even though these models were charged nothing for their own
-parameters, the best of them was only a few percent shorter than \sone. For data counted with molecular barcodes (UMIs),
-most of the remaining bits describe which molecules happened to be captured, a random sample that no lossless format can
-avoid storing (Supplementary Fig.~\ref{fig:sfloor}c). Measured against this floor, a median of \nm{redund-s1}\% of an
-\sone{} file is redundant, against \nm{redund-h5ad-gzip}\% of a gzip-compressed AnnData file and at least
-\nm{redund-other-min}\% of every other format (Supplementary Table~\ref{tab:redundancy}). A code that treats each step
-and value on its own, as general-purpose entropy coders do, cannot go below the streams' order-0 entropy,
-\nm{ent-h0-vs-floor} times the floor; \sone{} gets well below it by modelling the counts, and its bitstream leaves nothing
-for a byte-level compressor to find: zstd-19 does not shrink it (Supplementary Table~\ref{tab:entropy}). In size, any lossless format
-can improve on \sone{} by single-digit percentages at most.
+modelling the counts, as \sone{} does, removes nearly a third of what is left. The best count model, even though it was
+charged nothing for its own parameters, was only a few percent shorter than \sone. For data counted with molecular
+barcodes, most of the remaining bits describe which molecules happened to be captured, a random sample that no lossless
+format can avoid storing. Nor is anything left for a byte-level compressor: zstd-19 does not shrink an \sone{} bitstream
+at all, and a code that treats each step and value on its own cannot go below \nm{ent-h0-vs-floor} times the floor. In
+size, any lossless format can improve on \sone{} by single-digit percentages at most.
 
-How fast could a file be decoded? We encoded each matrix's own row indices and values with the integer codes a format could
-adopt, from raw arrays and byte-aligned varints to SIMD bit-packing and entropy coders, and timed each decoding back into
-the arrays a reader returns, on one core (Fig.~\ref{fig:floor}b). The codes trade size for speed along a clear frontier:
-byte- and bit-aligned codes decode at close to the rate at which a core can merely write the output, but store three to
-twelve times more bits than \sone; entropy coders reach small sizes at a fraction of that speed. \sone{} is the smallest
-end of this frontier, and no code we measured was both as small and faster. The ideal code, as small as the best count
-model and as fast as writing the output, lies far from every measured code.
+How fast could a file be decoded? Timed on one core, the integer codes trade size for speed along a clear frontier
+(Fig.~\ref{fig:floor}b). Byte- and bit-aligned codes decode at close to the rate at which a core can merely write the
+output, but store three to twelve times more bits than \sone; entropy coders reach small sizes at a fraction of that
+speed. \sone{} is the smallest end of this frontier, and no code we measured was both as small and faster. The ideal code,
+as small as the best count model and as fast as writing the output, lies far from every measured code.
 
-Is \sone{} slow for its size, or is that the price of being small? The other codes' frontier follows a simple trend: the
-time each spends per non-zero beyond writing the output grows as a power of how few bits it stores. Extrapolated to
-\sone's size, this trend predicts the decoding rate a code that small could be expected to reach, and so how much of the
-attainable performance \sone{} captures: \sone{} decodes at \nm{trend-s1-pct}\% of that rate (95\% interval
-\nm{trend-s1-lo}--\nm{trend-s1-hi}\%, Fig.~\ref{fig:floor}b). At the floor itself the trend predicts about
-\nm{trend-floor-mnnzs} million non-zeros per second per core, \nm{trend-floor-x} times \sone's rate.
+Is \sone{} slow for its size, or is that the price of being small? The time the other codes spend per entry, beyond
+writing the output, grows as a power of how few bits they store. Extrapolated to \sone's size, this trend predicts the rate
+a code that small could be expected to reach, and \sone{} decodes at \nm{trend-s1-pct}\% of it (95\% interval
+\nm{trend-s1-lo}--\nm{trend-s1-hi}\%): within the uncertainty, it lies on the trend. Reading genes in their source order
+instead of the stored order would put it at \nm{trend-source-pct}\%.
 
-Most of this gap is not the entropy decoder but the gene order. \sone{} stores genes sorted by how often they are
-detected, and returning them in the source order, as every other code here does, means sorting each cell's entries after
-decoding. Decoded in its stored order, with one gene permutation for the whole matrix, \sone{} ran \nm{s1order-x} times
-faster on one core (\nm{s1order-x-lo}--\nm{s1order-x-hi} times over \nm{s1order-n} matrices, the same counts in every
-cell), at \nm{trend-native-pct}\% of the rate the trend predicts for its size (Fig.~\ref{fig:floor}b). A reader that
-accepts the stored order, as a training loader can by permuting its gene vocabulary once, therefore gets a code close to
-what the trend of existing codes allows; in size, almost nothing is left.
-
-What matters in practice is the combination: the rate at which a link delivers non-zeros (Eq.~\ref{eq:reff}). Relative to
-the ideal code, it depends on how much bandwidth each decoding core has to keep up with (Fig.~\ref{fig:floor}c). When
-cores are plentiful relative to the link, as when a 32-core machine reads from a 1\,Gbit/s connection, \sone{} delivers
-\nm{frac-s1-32c}\% of what the ideal code would and more than any other code we measured, because size is what limits.
-When few cores serve a fast link, the decoder becomes the limit: above about \nm{frac-cross-gbit}\,Gbit/s per core a larger
-but faster code such as zstd delivers more. Against the best code the trend of (b) allows at each bandwidth, \sone{}
-delivers \nm{frac-s1oftrend-0.01}\% at 0.01\,Gbit/s per core, \nm{frac-s1oftrend-0.25}\% at 0.25 and
-\nm{frac-s1oftrend-1}\% at 1\,Gbit/s. In its stored order \sone{} delivers \nm{frac-native-gain-0.25}\% more at
-0.25\,Gbit/s per core and \nm{frac-native-gain-1}\% more at 1\,Gbit/s. Decoding speed, not size, is where the remaining
-headroom lies.
-
-Writing is the other cost (Fig.~\ref{fig:floor}d). \sone{} wrote a 580,000-cell atlas faster than gzip-compressed AnnData,
-the 10x HDF5 file or TileDB-SOMA, but slower than formats that store raw or lightly compressed arrays, such as Zarr, BPCells and Parquet, and its writer
-needed about three times
-as much memory beyond the input as AnnData's.
+What matters in practice is the rate a link delivers (Eq.~\ref{eq:reff}), and relative to the ideal code it depends on how
+much bandwidth each decoding core must keep up with (Fig.~\ref{fig:floor}c). When cores are plentiful relative to the
+link, as when a 32-core machine reads from a 1\,Gbit/s connection, \sone{} delivers \nm{frac-s1-32c}\% of what the ideal
+code would and more than any other code, because size is what limits. When few cores serve a fast link, the decoder
+becomes the limit: above about \nm{frac-cross-gbit}\,Gbit/s per core, zstd's larger but faster stream delivers more.
+Decoding speed, not size, is where the remaining headroom lies.
 
 \input{figures/fig3_floor}
 
-\subsection{Using \sone}
+\subsection{Costs and use}
+
+Writing is the price of a small file (Fig.~\ref{fig:floor}d). \sone{} wrote a 580,000-cell atlas faster than
+gzip-compressed AnnData, the 10x HDF5 file or TileDB-SOMA, but slower than formats that store raw or lightly compressed
+arrays, such as Zarr, BPCells and Parquet, and its writer needed about three times as much memory beyond the input as
+AnnData's.
 
 \sone{} files are written and read by the open-source \texttt{singlet} package (Fig.~\ref{fig:eco}). One call stores a
 matrix from AnnData, SciPy, SingleCellExperiment or Seurat, and one call loads it back as any of these, with exactly the
 original counts, gene identifiers and barcodes; loading was faster than reading the equivalent AnnData or 10x file in both
-Python and R (Supplementary Table~\ref{tab:eco}). For training, \texttt{singlet.torch.S1Cells} is a PyTorch dataset that
-streams shuffled minibatches from a local path or a URL. Write times and memory for three matrices are in Supplementary
-Table~\ref{tab:writecost}.
+Python and R. For training, \texttt{singlet.torch.S1Cells} is a PyTorch dataset that streams shuffled minibatches from a
+local path or a URL.
 
 \input{figures/fig4_eco}

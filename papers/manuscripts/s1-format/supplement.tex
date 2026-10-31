@@ -1,0 +1,38 @@
+% Supplementary material of the .s1 manuscript (main.tex), a separate document as TCBB requires. References to the main
+% text (Fig. 1, Eq. 1, Table 1) resolve through xr from main.aux; build with main.tex (see main.tex).
+\documentclass[10pt,letterpaper]{article}
+\usepackage[margin=0.9in]{geometry}
+\usepackage{newtxtext}
+\input{preamble}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\usepackage{placeins}
+\usepackage[nocompress]{cite}
+\usepackage{xr-hyper}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\externaldocument[M-]{main}   % main-text labels as M-<label>
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\theequation}{S\arabic{equation}}
+
+\title{Supplementary material for\\\sone: Single-Cell Count Matrices at the Speed of the Network}
+\author{Zachary J.\ DeBruine}
+\date{}
+
+\begin{document}
+\maketitle
+
+\input{sections/supp_results}
+\input{figures/fig_supp_fig1b}
+\input{figures/fig_supp_net}
+\input{figures/fig_supp_floor}
+\FloatBarrier
+\input{sections/supp_limitations}
+\input{sections/supp_methods}
+\clearpage
+\input{sections/supp_tables}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+\end{document}

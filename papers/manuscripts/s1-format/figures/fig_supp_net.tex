@@ -96,21 +96,16 @@
 \end{axis}
 \end{tikzpicture}
 \caption{\textbf{Reading over a network: decoder speed, round trips, latency and chunk size.}
-\textbf{(a)} Each format by its size and the stored bits its reader consumes per second, $D_p b$, on \nm{threadsHeadline}
-cores: a format keeps the network as the limit on every link below its point. Large points, medians; small points, single
-matrices; squares, formats that cannot be read in part. Shaded: under 8 bits per non-zero and fast enough for a
-1\,Gbit/s link.
-\textbf{(b)} Seconds to the first 512-cell minibatch at 1 and 30\,ms round-trip latency (points; median over the four
-loader-panel datasets) and the straight line through them, whose slope counts the round trips a reader pays one after
-another; the \sone{} reader plans every request of a minibatch from its index and sends them together.
-\textbf{(c)} Distribution of the time per minibatch at a 30\,ms round trip, \nm{ns-dataset}, 1\,Gbit/s (60 minibatches
-after 5 warm-up ones).
-\textbf{(d)} The \sone{} reader with 1 to 64 range requests at once (and up to 8 minibatches' requests sent ahead): share of
-the 1\,Gbit/s link carrying the bytes it fetched, at 30 and 100\,ms.
-\textbf{(e)} The \sone{} member of three matrices re-encoded with chunk budgets from 4,096 to 393,216 non-zeros: bytes a
-random minibatch fetches divided by the cells' share of the file, from the chunk index. On \nm{ns-dataset}, chunks of
-4,096 non-zeros bring this to \nm{chunk-hlca_core-4096-overread} and make the file \nm{chunk-hlca_core-4096-size}\% larger;
-chunks of 393,216 change its size by \nm{chunk-hlca_core-393216-size}\% and raise it to
-\nm{chunk-hlca_core-393216-overread}.}
+\textbf{(a)} Size against the stored bits each reader consumes per second, $D_p b$, on \nm{threadsHeadline} cores; a
+format is network-bound on every link below its point. Large points, medians; small, single matrices; squares, formats
+that cannot be read in part. Shaded: under 8 bits per non-zero and fast enough for 1\,Gbit/s.
+\textbf{(b)} Seconds to the first 512-cell minibatch at 1 and 30\,ms round trips (median over four datasets); the slope
+counts the round trips paid in sequence.
+\textbf{(c)} Time per minibatch at a 30\,ms round trip and 1\,Gbit/s, \nm{ns-dataset} (60 minibatches after 5 warm-up).
+\textbf{(d)} The \sone{} reader with 1 to 64 requests at once and up to 8 minibatches ahead: share of the 1\,Gbit/s link
+used, at 30 and 100\,ms.
+\textbf{(e)} Three matrices re-encoded with chunk budgets of 4,096 to 393,216 non-zeros: bytes a random minibatch fetches
+over the cells' share of the file. Chunks of 393,216 change the size of \nm{ns-dataset} by
+\nm{chunk-hlca_core-393216-size}\% and raise this to \nm{chunk-hlca_core-393216-overread}.}
 \label{fig:snet}
 \end{figure*}

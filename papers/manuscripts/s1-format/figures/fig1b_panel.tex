@@ -30,20 +30,19 @@
     node[pos=1, anchor=south west, font=\sffamily\tiny, text=sone!80!black, inner sep=1pt] {#1};
 }
 \ifnum\fbPts=1
-\addplot[only marks, mark=*, mark size=0.7pt, gen!80!black, opacity=0.35, forget plot, discard if not={group}{general}] table[x=bits, y=mnnzs] {\gen{fig1b_points.tsv}};
-\addplot[only marks, mark=*, mark size=0.7pt, dom, opacity=0.4, forget plot, discard if not={group}{domain}] table[x=bits, y=mnnzs] {\gen{fig1b_points.tsv}};
-\addplot[only marks, mark=*, mark size=0.8pt, sone, opacity=0.5, forget plot, discard if not={group}{s1}] table[x=bits, y=mnnzs] {\gen{fig1b_points.tsv}};
+\expandafter\pgfplotsinvokeforeach\expandafter{\otherformats,s1}{
+  \addplot[only marks, mark=*, mark size=0.7pt, c-#1, opacity=0.4, forget plot, discard if not={format}{#1}] table[x=bits, y=mnnzs] {\gen{fig1b_points.tsv}};
+}
 \pgfplotsset{fbmed/.style={draw=white, line width=0.4pt}}
 \else
 \pgfplotsset{fbmed/.style={iqr}}
 \fi
-\addplot[only marks, lbl, mark=*, mark size=1.8pt, gen, fbmed, discard if not={group}{general}]
+\expandafter\pgfplotsinvokeforeach\expandafter{\otherformats}{
+\addplot[only marks, lbl, mark=*, mark size=1.8pt, c-#1, fbmed, discard if not={format}{#1}]
   table[x=bits, y=mnnzs, meta=label, x error plus expr=\thisrow{bits_q3}-\thisrow{bits}, x error minus expr=\thisrow{bits}-\thisrow{bits_q1},
     y error plus expr=\thisrow{mnnzs_q3}-\thisrow{mnnzs}, y error minus expr=\thisrow{mnnzs}-\thisrow{mnnzs_q1}] {\gen{fig1c_tradeoff.tsv}};
-\addplot[only marks, lbl, mark=*, mark size=1.8pt, dom, fbmed, discard if not={group}{domain}]
-  table[x=bits, y=mnnzs, meta=label, x error plus expr=\thisrow{bits_q3}-\thisrow{bits}, x error minus expr=\thisrow{bits}-\thisrow{bits_q1},
-    y error plus expr=\thisrow{mnnzs_q3}-\thisrow{mnnzs}, y error minus expr=\thisrow{mnnzs}-\thisrow{mnnzs_q1}] {\gen{fig1c_tradeoff.tsv}};
-\addplot[only marks, lbl, mark=*, mark size=2.4pt, sone, fbmed, discard if not={group}{s1}]
+}
+\addplot[only marks, lbl, mark=*, mark size=2.4pt, c-s1, fbmed, discard if not={format}{s1}]
   table[x=bits, y=mnnzs, meta=label, x error plus expr=\thisrow{bits_q3}-\thisrow{bits}, x error minus expr=\thisrow{bits}-\thisrow{bits_q1},
     y error plus expr=\thisrow{mnnzs_q3}-\thisrow{mnnzs}, y error minus expr=\thisrow{mnnzs}-\thisrow{mnnzs_q1}] {\gen{fig1c_tradeoff.tsv}};
 \end{axis}

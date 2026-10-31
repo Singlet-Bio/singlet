@@ -1,134 +1,75 @@
-% .s1 manuscript. Build: `make s1-format` in papers/, or latexmk -pdf main.tex here.
+% .s1 manuscript, IEEE/ACM Transactions on Computational Biology and Bioinformatics (IEEEtran, compsoc journal).
 % Every result is a macro \nm{key} defined in generated/numbers.tex, and every plotted value is read from generated/*.tsv;
 % both are written by `python -m s1bench report` (bench/). A key the pipeline has not produced prints as a red [??key].
-% Preprint layout for bioRxiv and arXiv: standard TeX Live packages only, so arXiv compiles the source as submitted
-% (submit main.tex, sections/, figures/, generated/, refs.bib and the .bbl). \reviewtrue adds line numbers.
-\documentclass[11pt,letterpaper]{article}
-\newif\ifreview \reviewfalse
-\usepackage[margin=1in]{geometry}
-\usepackage[T1]{fontenc}
-\usepackage{amsmath,amssymb}
-\usepackage{newpxtext,newpxmath}
-\usepackage[scaled=0.92]{helvet}
-\usepackage{microtype}
-\usepackage{lineno}
-\ifreview\linenumbers\fi
-\usepackage{setspace}
-\setstretch{1.08}
-\usepackage{booktabs,tabularx,array}
-\usepackage{xcolor}
-\usepackage{graphicx}
-\usepackage{caption}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta,positioning,fit,calc,decorations.pathreplacing,backgrounds}
-\usepackage{pgfplots}
-\usepackage{pgfplotstable}
-\pgfplotsset{compat=1.18}
-\usepackage[numbers,sort&compress]{natbib}
+% The supplement (supplement.tex) and the format specification (spec.tex) are separate documents; references between
+% main and supplement resolve through xr, so build both twice:  latexmk -pdf supplement.tex main.tex  (run it twice).
+\documentclass[10pt,journal,compsoc]{IEEEtran}
+\input{preamble}
+\usepackage[nocompress]{cite}
+\usepackage{xr-hyper}
 \usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
-\usepackage{orcidlink}
-
-% ---------- generated numbers ----------
-\newcommand{\defnum}[2]{\expandafter\def\csname s1n@#1\endcsname{#2}}
-\newcommand{\nm}[1]{\ifcsname s1n@#1\endcsname\csname s1n@#1\endcsname\else\textcolor{red!75!black}{\text{\sffamily\footnotesize[??\detokenize{#1}]}}\fi}
-\InputIfFileExists{generated/numbers.tex}{}{}
-\newcommand{\gen}[1]{generated/#1}   % path of a generated table
-
-% ---------- house style ----------
-\newcommand{\sone}{\texttt{.s1}}
-\definecolor{sone}{HTML}{2A78D6}
-\definecolor{gen}{HTML}{8C8C8C}
-\definecolor{dom}{HTML}{D9591F}
-\definecolor{dl}{HTML}{4C9A6A}
-\definecolor{dec}{HTML}{E0A526}
-\definecolor{tens}{HTML}{8E6CC4}
-\definecolor{ink2}{HTML}{555555}
-\captionsetup{font=small,labelfont=bf}
-\emergencystretch=3em
-\usepackage{placeins}   % \FloatBarrier: main-text figures are placed before the references
-\renewcommand{\topfraction}{0.95}\renewcommand{\textfraction}{0.05}\renewcommand{\floatpagefraction}{0.7}
-\renewcommand{\dbltopfraction}{0.95}\renewcommand{\dblfloatpagefraction}{0.7}
-
-% pgfplots: read tab-separated tables; keep only rows whose column #1 equals #2 (x or y filter)
-\pgfplotsset{
-  table/col sep=tab,
-  discard if not/.style 2 args={x filter/.append code={\edef\tempa{\thisrow{#1}}\edef\tempb{#2}\ifx\tempa\tempb\else\def\pgfmathresult{nan}\fi}},
-  discard if not y/.style 2 args={y filter/.append code={\edef\tempa{\thisrow{#1}}\edef\tempb{#2}\ifx\tempa\tempb\else\def\pgfmathresult{nan}\fi}},
-  every axis/.append style={font=\sffamily\scriptsize, label style={font=\sffamily\scriptsize},
-    tick label style={font=\sffamily\tiny}, title style={font=\sffamily\small\bfseries, align=left}},
-}
-\pgfplotstableset{col sep=tab, empty cells with={--}, every head row/.style={before row=\toprule, after row=\midrule},
-  every last row/.style={after row=\bottomrule}}
-
-\newcommand{\placeholder}[1]{\textcolor{red!75!black}{[#1]}}   % text still to be supplied by the author
-
-\title{\sone: single-cell count matrices at the speed of the network}
-\author{Zachary J.\ DeBruine\\[2pt]
-  \small Department of Information Sciences and Technology, College of Computing, Grand Valley State University\\
-  \small Correspondence: \href{mailto:zacharydebruine@gmail.com}{zacharydebruine@gmail.com}}
-\newif\ifprelim \prelimfalse  % \prelimfalse once generated/ holds the final benchmark run
-\date{\small October 31, 2026}
+\newcommand{\para}[1]{\par\smallskip\noindent\textbf{#1.}\ }   % run-in paragraph heading
+\externaldocument[S-]{supplement}   % supplement labels as S-<label>, so its citation keys do not clash with ours
 
 \begin{document}
-\maketitle
+\title{\sone: Single-Cell Count Matrices at the Speed of the Network}
+\author{Zachary~J.~DeBruine%
+\IEEEcompsocitemizethanks{\IEEEcompsocthanksitem Z.\,J.~DeBruine is with the Department of Information Sciences and
+Technology, College of Computing, Grand Valley State University, Allendale, MI, USA.\protect\\
+E-mail: zacharydebruine@gmail.com}}
 
+\markboth{IEEE/ACM Transactions on Computational Biology and Bioinformatics}%
+{DeBruine: .s1: Single-Cell Count Matrices at the Speed of the Network}
+
+\IEEEtitleabstractindextext{%
 \begin{abstract}
-Moving data, not computing on them, now limits large single-cell analyses and model training. We measured how
-few bits single-cell counts need and how fast integer codes decode, and used these limits to develop, with an AI coding
-assistant, a codec at the frontier of both. The resulting format, \sone, models the structure of counts and reads any subset
-of cells remotely. Across \nm{nMatrices} public matrices, \sone{} files were smallest on every matrix,
-\nm{ratio-h5ad_gzip} times smaller than compressed AnnData and within a few percent of the best count models; no measured
-code was both as small and faster to decode. From cloud storage, \sone{} delivered a first minibatch in under a
-second and streamed cells tens of times faster than chunked alternatives. Its costs are a decoder slower per core than
-byte-oriented codes and a writer needing more memory. We propose \sone{} as a standard format for single-cell counts.
+Moving data, not computing on them, now limits large single-cell analyses and model training. We measured how few bits
+single-cell counts need and how fast integer codes decode, and used these limits to develop, with an AI coding assistant, a
+format that approaches both. The format, \sone, models the counts with a static, context-conditioned entropy coder and reads
+any subset of cells remotely. Across \nm{nMatrices} public matrices from \nm{nProtocolClasses} protocol classes, \sone{}
+files were the smallest on every matrix, \nm{ratio-h5ad_gzip} times smaller than compressed AnnData and within a few
+percent of the best count models. No measured code was both as small and faster to decode, and \sone{} decoded at the rate
+the trend of existing codes predicts for its size. From cloud storage, \sone{} delivered a first minibatch in under a second
+and streamed cells tens of times faster than chunked alternatives. Its costs are a decoder slower per core than
+byte-oriented codes and a writer that needs more memory. We propose \sone{} as a standard format for single-cell counts.
 \end{abstract}
 
+\begin{IEEEkeywords}
+Data compression, entropy coding, sparse matrices, single-cell RNA sequencing, file formats, cloud storage, machine
+learning data loading.
+\end{IEEEkeywords}}
+
+\maketitle
+\IEEEdisplaynontitleabstractindextext
+\IEEEpeerreviewmaketitle
+
 \input{sections/intro}
+\input{sections/related}
+\input{sections/format}
+\input{sections/methods}
 \input{sections/results}
 \input{sections/discussion}
-\input{sections/methods}
 
-\FloatBarrier
 \section*{Data and code availability}
-All datasets are public; accessions, file names, licences and SHA-256 checksums are listed in \texttt{datasets.yaml}
-and Table~\ref{tab:datasets}. The \sone{} codec, its Python, R and C++ interfaces (\texttt{singlet}~\nm{rel-singlet_py} for Python and \nm{rel-singlet_r} for R,
-\url{https://github.com/Singlet-Bio/singlet}), and the benchmark pipeline that produces every figure, table and number in
-this paper (\texttt{papers/manuscripts/s1-format/bench}) are open source under the MIT license. The per-stage results
-behind the figures are in \texttt{papers/manuscripts/s1-format/results}.
+All datasets are public; accessions, file names, licences and SHA-256 checksums are in \texttt{datasets.yaml} and
+Supplementary Table~\ref{S-tab:datasets}. The \sone{} codec, its Python, R and C++ interfaces (\texttt{singlet}
+\nm{rel-singlet_py} for Python and \nm{rel-singlet_r} for R, \url{https://github.com/Singlet-Bio/singlet}), and the
+benchmark pipeline that produces every figure, table and number in this paper
+(\texttt{papers/manuscripts/s1-format/bench}) are open source under the MIT license, with the per-stage results behind the
+figures in \texttt{papers/manuscripts/s1-format/results}.
 
-\section*{Acknowledgements}
-Computations ran on the Clipper cluster at Grand Valley State University. The author thanks the GVSU HPC team for their
-support.
+\section*{Acknowledgments}
+Computations ran on the Clipper cluster at Grand Valley State University; the author thanks the GVSU HPC team for their
+support. This work received no specific funding. \emph{Use of AI:} Claude (Anthropic), a large language model, was used
+as a coding assistant to develop the \sone{} codec and the benchmark pipeline, and to draft and revise the text of this
+article and its supplement. Every codec change was kept only if measured on real matrices and reproduced its input exactly;
+all results are produced by the open pipeline, and the author reviewed and takes responsibility for all content.
 
-\section*{Funding}
-This work received no specific funding.
-
-\section*{Competing interests}
-The author declares no competing interests.
-
-\bibliographystyle{unsrtnat}
+\bibliographystyle{IEEEtran}
 \bibliography{refs}
 
-% ---------- supplementary material ----------
-\clearpage
-\appendix
-\renewcommand{\thesection}{S\arabic{section}}
-\renewcommand{\thetable}{S\arabic{table}}
-\renewcommand{\thefigure}{S\arabic{figure}}
-\renewcommand{\theequation}{S\arabic{equation}}
-\setcounter{section}{0}\setcounter{table}{0}\setcounter{figure}{0}\setcounter{equation}{0}
-\begin{center}\Large\bfseries Supplementary material\end{center}
-\input{sections/supp_results}
-\input{figures/fig_supp_fig1b}
-\input{figures/fig_supp_net}
-\input{figures/fig_supp_floor}
-\FloatBarrier
-\input{sections/supp_limitations}
-\input{sections/supp_background}
-\input{sections/supp_methods}
-\clearpage
-\input{sections/supp_tables}
-\clearpage
-\input{sections/supplement_spec}
+\begin{IEEEbiographynophoto}{Zachary J. DeBruine}
+\placeholder{Biography (about 100 words) and photo, to be supplied by the author.}
+\end{IEEEbiographynophoto}
 
 \end{document}

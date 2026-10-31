@@ -5,7 +5,7 @@ h5ad_none	general	69.811	32.1887
 h5ad_gzip	general	18.9532	21.0742
 zarr	general	18.1277	52.9969
 soma	domain	17.7021	24.7368
-s1	s1	7.43257	90.3956
+s1	s1	7.43257	102.652
 zarr3	general	12.9438	45.4428
 csc_i32	general	64.2479	168.853
 mtx_gz	general	24.4384	11.9403
@@ -21,7 +21,7 @@ csc_zstd19	general	9.35744	79.3627
 rds_gz	general	18.0684	18.5252
 rds_xz	general	8.43021	13.4533
 bpcells	domain	14.7967	8.42563
-s1	s1	4.99961	175.292
+s1	s1	4.99961	230.378
 zarr3	general	11.4034	64.2758
 csc_i32	general	64.1139	62.3522
 tenx_h5	general	11.2266	25.657
@@ -29,7 +29,7 @@ h5ad_none	general	96.2716	40.3315
 h5ad_gzip	general	17.9763	23.9595
 zarr	general	14.9345	103.616
 soma	domain	14.456	30.9961
-s1	s1	4.48121	103.955
+s1	s1	4.48121	117.214
 zarr3	general	11.8724	51.2295
 csc_i32	general	64.535	69.0997
 tenx_h5	general	11.8045	21.8713
@@ -37,7 +37,7 @@ h5ad_none	general	64.9132	61.6795
 h5ad_gzip	general	19.2733	29.0654
 zarr	general	14.966	131.66
 soma	domain	15.3199	32.2408
-s1	s1	5.73625	119.732
+s1	s1	5.73625	145.689
 zarr3	general	12.5118	56.7494
 csc_i32	general	64.1328	127.948
 mtx_gz	general	23.7612	13.2523
@@ -53,7 +53,7 @@ csc_zstd19	general	8.1093	77.7809
 rds_gz	general	18.3786	19.4119
 rds_xz	general	7.32671	15.3443
 bpcells	domain	12.6492	8.77942
-s1	s1	4.46084	166.268
+s1	s1	4.46084	211.119
 zarr3	general	10.6233	68.9845
 csc_i32	general	65.124	82.1725
 mtx_gz	general	25.1153	11.5617
@@ -69,7 +69,7 @@ csc_zstd19	general	7.0522	91.5458
 rds_gz	general	11.5399	20.8163
 rds_xz	general	6.96749	15.4228
 bpcells	domain	18.0831	8.01508
-s1	s1	5.61714	133.486
+s1	s1	5.61714	155.178
 zarr3	general	9.2837	54.8438
 csc_i32	general	64.1128	75.7865
 mtx_gz	general	25.4247	12.0644
@@ -84,7 +84,7 @@ csc_zstd19	general	9.06393	70.6637
 rds_gz	general	18.4801	19.7115
 rds_xz	general	8.39864	14.9041
 bpcells	domain	15.9532	5.157
-s1	s1	4.74239	147.222
+s1	s1	4.74239	191.579
 zarr3	general	12.4326	62.8861
 csc_i32	general	64.144	99.5798
 tenx_h5	general	11.6838	26.4233
@@ -92,7 +92,7 @@ h5ad_none	general	64.282	93.2746
 h5ad_gzip	general	19.3571	30.7531
 zarr	general	14.9724	162.837
 soma	domain	15.3105	45.9074
-s1	s1	5.19433	181.01
+s1	s1	5.19433	242.537
 zarr3	general	11.7682	71.5454
 csc_i32	general	64.2883	137.414
 mtx_gz	general	24.7686	12.8152
@@ -108,7 +108,7 @@ csc_zstd19	general	9.92369	73.0782
 rds_gz	general	17.5342	19.7791
 rds_xz	general	8.91717	13.6932
 bpcells	domain	14.5111	8.09516
-s1	s1	5.47706	168.011
+s1	s1	5.47706	229.866
 zarr3	general	11.9254	64.3162
 csc_i32	general	64.7584	62.7988
 mtx_gz	general	24.5706	11.2715
@@ -123,7 +123,7 @@ csc_zstd19	general	9.35151	65.1502
 rds_gz	general	16.1339	19.2565
 rds_xz	general	8.5648	13.9975
 bpcells	domain	16.4072	4.77748
-s1	s1	5.71465	82.5523
+s1	s1	5.71465	96.909
 zarr3	general	12.1497	58.9063
 csc_i32	general	64.0812	71.302
 mtx_gz	general	23.9528	12.9507
@@ -138,7 +138,7 @@ csc_zstd19	general	9.97066	32.0898
 rds_gz	general	19.0721	18.4685
 rds_xz	general	8.76351	12.1769
 bpcells	domain	12.3626	5.60429
-s1	s1	5.412	150.715
+s1	s1	5.412	191.596
 zarr3	general	10.7945	62.0756
 csc_i32	general	64.4378	165.129
 mtx_gz	general	23.7972	10.6754
@@ -154,7 +154,7 @@ csc_zstd19	general	8.70041	77.6188
 rds_gz	general	17.1278	19.7674
 rds_xz	general	7.90078	14.715
 bpcells	domain	14.9368	6.88371
-s1	s1	4.40352	139.422
+s1	s1	4.40352	177.537
 zarr3	general	11.346	47.1592
 csc_i32	general	64.4477	176.193
 mtx_gz	general	25.4236	11.4602
@@ -170,7 +170,7 @@ csc_zstd19	general	9.63391	77.8326
 rds_gz	general	18.5533	17.9251
 rds_xz	general	8.86657	12.6646
 bpcells	domain	16.5248	8.17329
-s1	s1	4.86429	123.238
+s1	s1	4.86429	218.561
 zarr3	general	12.6602	57.1867
 csc_i32	general	64.2754	121.271
 mtx_gz	general	25.2723	12.0568
@@ -186,7 +186,7 @@ csc_zstd19	general	9.20859	76.4323
 rds_gz	general	18.6328	18.9296
 rds_xz	general	8.49974	14.2265
 bpcells	domain	16.1692	8.64753
-s1	s1	4.70668	177.222
+s1	s1	4.70668	232.833
 zarr3	general	12.3971	58.4319
 csc_i32	general	66.0699	147.782
 mtx_gz	general	26.5815	9.80668
@@ -202,7 +202,7 @@ csc_zstd19	general	10.4764	74.0829
 rds_gz	general	17.9767	18.2969
 rds_xz	general	9.73245	12.4175
 bpcells	domain	18.9534	9.44129
-s1	s1	5.49469	99.8634
+s1	s1	5.49469	143.268
 zarr3	general	13.9254	44.3094
 csc_i32	general	64.4798	135.031
 mtx_gz	general	27.1263	11.8828
@@ -217,7 +217,7 @@ csc_zstd19	general	10.034	78.3076
 rds_gz	general	17.1579	19.1129
 rds_xz	general	9.37227	13.8153
 bpcells	domain	17.7685	8.33002
-s1	s1	5.35733	157.917
+s1	s1	5.35733	229.542
 zarr3	general	14.1888	67.9271
 csc_i32	general	64.272	60.2493
 mtx_gz	general	24.1012	13.3026
@@ -233,7 +233,7 @@ csc_zstd19	general	10.355	61.5818
 rds_gz	general	23.5269	19.5952
 rds_xz	general	9.32792	12.5735
 bpcells	domain	12.8928	7.78389
-s1	s1	5.29035	146.807
+s1	s1	5.29035	200.804
 zarr3	general	11.716	57.5948
 csc_i32	general	64.3088	67.8639
 mtx_gz	general	25.1755	11.0478
@@ -249,7 +249,7 @@ csc_zstd19	general	9.48273	65.5679
 rds_gz	general	18.6518	18.6797
 rds_xz	general	8.64854	12.8894
 bpcells	domain	14.687	8.47592
-s1	s1	4.93473	139.387
+s1	s1	4.93473	175.037
 zarr3	general	12.1765	46.4429
 csc_i32	general	64.1587	112.115
 mtx_gz	general	24.8461	13.1565
@@ -264,7 +264,7 @@ csc_zstd19	general	9.84492	73.265
 rds_gz	general	17.4254	20.3646
 rds_xz	general	9.01543	14.2895
 bpcells	domain	15.6792	7.72681
-s1	s1	5.26881	175.246
+s1	s1	5.26881	248.527
 zarr3	general	12.1692	76.4475
 csc_i32	general	64.1269	83.0062
 tenx_h5	general	11.8486	23.2373
@@ -272,7 +272,7 @@ h5ad_none	general	64.2679	77.378
 h5ad_gzip	general	18.7333	29.7451
 zarr	general	14.9432	128.213
 soma	domain	14.7477	35.3348
-s1	s1	5.2326	156.686
+s1	s1	5.2326	202.143
 zarr3	general	11.8253	63.1734
 csc_i32	general	64.4996	114.378
 mtx_gz	general	24.3694	12.0222
@@ -288,7 +288,7 @@ csc_zstd19	general	9.98813	57.4821
 rds_gz	general	17.3578	17.9092
 rds_xz	general	9.11699	12.7896
 bpcells	domain	16.0106	7.98531
-s1	s1	5.68783	133.477
+s1	s1	5.68783	179.005
 zarr3	general	12.0106	66.2286
 csc_i32	general	64.8832	166.315
 mtx_gz	general	26.5653	10.4096
@@ -304,7 +304,7 @@ csc_zstd19	general	11.0638	65.3168
 rds_gz	general	21.6672	18.0787
 rds_xz	general	9.96657	12.1897
 bpcells	domain	16.1457	7.43414
-s1	s1	6.27526	136.165
+s1	s1	6.27526	176.889
 zarr3	general	12.9241	64.5323
 csc_i32	general	64.104	97.9978
 mtx_gz	general	33.1047	11.0912
@@ -320,7 +320,7 @@ csc_zstd19	general	15.7601	61.9431
 rds_gz	general	28.0095	17.1646
 rds_xz	general	14.1237	10.174
 bpcells	domain	20.6958	7.98807
-s1	s1	11.0413	152.762
+s1	s1	11.0413	189.303
 zarr3	general	16.7522	55.8105
 csc_i32	general	64.1594	79.428
 tenx_h5	general	12.344	23.2545
@@ -328,7 +328,7 @@ h5ad_none	general	64.2698	78.5095
 h5ad_gzip	general	18.9033	29.9345
 zarr	general	15.948	131.397
 soma	domain	15.3574	33.0462
-s1	s1	5.23846	148.612
+s1	s1	5.23846	199.117
 zarr3	general	12.9803	54.9283
 csc_i32	general	64.1437	47.4109
 tenx_h5	general	11.2811	28.124
@@ -336,7 +336,7 @@ h5ad_none	general	96.3493	56.258
 h5ad_gzip	general	18.1428	27.8046
 zarr	general	14.4308	127.726
 soma	domain	14.2356	34.0792
-s1	s1	5.01214	173.318
+s1	s1	5.01214	238.184
 zarr3	general	11.4748	55.5089
 csc_i32	general	64.0384	99.3001
 mtx_gz	general	31.9672	12.0238
@@ -352,7 +352,7 @@ csc_zstd19	general	13.5526	69.2875
 rds_gz	general	33.8928	17.0732
 rds_xz	general	12.5189	11.8446
 bpcells	domain	18.8245	8.23591
-s1	s1	9.5668	161.719
+s1	s1	9.5668	201.447
 zarr3	general	15.6559	69.7338
 csc_i32	general	64.6212	86.5575
 mtx_gz	general	24.3844	12.3694
@@ -367,7 +367,7 @@ csc_zstd19	general	10.3477	60.9028
 rds_gz	general	17.4046	19.425
 rds_xz	general	9.50918	12.9829
 bpcells	domain	15.0215	4.54261
-s1	s1	5.84071	132.093
+s1	s1	5.84071	169.955
 zarr3	general	11.8013	61.6802
 csc_i32	general	64.2437	130.942
 mtx_gz	general	23.8271	12.4726
@@ -383,7 +383,7 @@ csc_zstd19	general	7.88546	89.7481
 rds_gz	general	18.4096	19.0289
 rds_xz	general	7.23875	15.8146
 bpcells	domain	14.6688	8.60102
-s1	s1	3.9419	189.874
+s1	s1	3.9419	247.154
 zarr3	general	11.1961	62.6084
 csc_i32	general	65.8189	149.587
 mtx_gz	general	23.1215	11.231
@@ -399,5 +399,5 @@ csc_zstd19	general	7.30969	81.7613
 rds_gz	general	12.8254	17.3182
 rds_xz	general	6.9784	13.6877
 bpcells	domain	17.5182	7.02205
-s1	s1	5.21339	111.69
+s1	s1	5.21339	134.786
 zarr3	general	10.8366	67.6161

@@ -78,7 +78,9 @@
 \addplot[only marks, lbl, mark=*, mark size=2.4pt, sone, discard if not={group}{s1}] table[x=first, y=cps, meta=label] {\gen{figr2.tsv}};
 \end{axis}
 \end{tikzpicture}
-\caption{\textbf{\sone{} reads at the speed of the network, including from a real cloud object store.}
+\caption{\textbf{\sone{} reads at the speed of the network, for links up to about 1\,Gbit/s on four cores, including
+from a real cloud object store.} On four cores the \sone{} decoder keeps up with a link of about 1\,Gbit/s; faster links
+need more cores.
 \textbf{(a)} Non-zeros a link of a given bandwidth delivers in each format, from its median size and decode rate on
 \nm{threadsHeadline} cores (Eq.~\ref{eq:reff}). Each curve rises with the link until the decoder becomes the limit;
 \sone{} carries the most non-zeros over every link up to about \nm{wire-crossover-gbit}\,Gbit/s, where uncompressed arrays catch
@@ -97,7 +99,7 @@ request), HLCA core, median of three seeds. \sone{} delivers the first minibatch
 \nm{r2-hlca_core-s1_stream@32x4-cps} cells per second with the 1.3.3 defaults; downloading the h5ad first takes
 \nm{r2-hlca_core-anndata_inmem-first}\,s. An epoch of random minibatches costs \$\nm{r2-hlca_core-s1_stream-usd_s3} at S3's
 egress and request prices with \sone, against \$\nm{r2-hlca_core-anndata_zarr_lazy-usd_s3} with AnnData Zarr
-(Supplementary Table~\ref{tab:r2}). Latency distributions, round trips and chunk size: Supplementary
-Fig.~\ref{fig:snet}.}
+(Supplementary Table~\ref{S-tab:r2}). Latency distributions, round trips and chunk size: Supplementary
+Fig.~\ref{S-fig:snet}.}
 \label{fig:net}
 \end{figure*}

@@ -1,6 +1,5 @@
 codec	bits	mnnzs
-pz2_avx2	5.32381	54.0177
-rans0_gaps	7.5061	79.2119
+pz2_avx2	5.32381	82.8485
 zstd19_leb_gaps	7.53744	187.075
 zstd3_leb_gaps	8.19576	200.116
 bitpack256_gaps	14.0042	518.83

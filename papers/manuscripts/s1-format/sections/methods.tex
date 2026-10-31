@@ -1,54 +1,60 @@
-% Methods (main text): a summary. The full protocol is in supp_methods.tex (Supplementary Methods).
-\section{Methods}
-\label{sec:mmethods}
+% Evaluation setup (main text): a summary. The full protocol is in the Supplementary Methods (supplement.tex).
+\section{Evaluation setup}
+\label{sec:setup}\label{sec:mmethods}
 
-Full details of every step are in the Supplementary Methods (Section~\ref{sec:methods}); every number, table and figure
-is produced by one pipeline from public data (\texttt{papers/manuscripts/s1-format/bench} in the \texttt{singlet}
-repository).
+Every number, table and figure in this paper is produced by one pipeline from public data
+(\texttt{papers/manuscripts/s1-format/bench} in the \texttt{singlet} repository); full details are in the Supplementary
+Methods.
 
-\paragraph{Data.} \nm{nMatrices} count matrices from \nm{nDatasets} public datasets in \nm{nProtocolClasses} protocol
-classes (Supplementary Table~\ref{tab:datasets}) were downloaded from their primary repositories, checked against recorded
-SHA-256 digests and converted to one canonical sparse matrix with the source's gene identifiers and barcodes. Matrices
-with non-integer values were rejected rather than rounded.
+\para{Delivered rate}When data come over a network, the time to deliver them is the time to transfer the stored
+bytes plus the time to decode them. For a format storing $b$ bits per non-zero entry and decoding $D$ entries per second, a
+link of bandwidth $B$ delivers
+\begin{equation}
+R_{\mathrm{eff}} \;=\; \left(\frac{b}{B} + \frac{1}{D}\right)^{-1}\ \text{non-zero entries per second}.
+\label{eq:reff}
+\end{equation}
+The model is conservative, since a reader that overlaps transfer and decoding does better. A smaller file helps only if
+its decoder keeps up; a reader runs \emph{at the speed of the network} when the link, not the decoder, is the limit.
 
-\paragraph{Formats.} Each format was written from the canonical matrix by its own library with default or recommended
-settings (Supplementary Table~\ref{tab:formats}), read back and compared with the canonical matrix. File size includes
-gene identifiers and barcodes. A sharded Zarr v3 store with the same chunk size as \sone{} and Blosc compression served as a
-control for generic compression at the same granularity.
+\para{Data}\nm{nMatrices} count matrices from \nm{nDatasets} public datasets in \nm{nProtocolClasses} protocol
+classes (droplet, plate-based and combinatorial single-cell data, multimodal data, and spatial data from both sequencing
+and imaging, from a thousand to more than a million cells each; Supplementary Table~\ref{S-tab:datasets}) were downloaded from
+their primary repositories, checked against recorded SHA-256 digests and converted to one canonical sparse matrix with the
+source's gene identifiers and barcodes. Matrices with non-integer values were rejected rather than rounded.
 
-\paragraph{Read speed.} Each read ran in a fresh process on \nm{threadsHeadline} cores of a cluster node
-(\nm{cpu}) after the library had been loaded and used once, untimed. Files were evicted from the operating system's cache
-before each of three timed repeats; we report medians.
+\para{Formats}Each format was written from the canonical matrix by its own library with default or recommended
+settings (Supplementary Table~\ref{S-tab:formats}), read back and compared with the canonical matrix. File size includes gene
+identifiers and barcodes. A sharded Zarr v3 store with the same block size as \sone{} and Blosc compression is a control for
+generic compression at the same granularity.
 
-\paragraph{Training loaders.} Loaders read the same workload, minibatches of 512 cells made of eight blocks of 64
+\para{Read speed}Each read ran in a fresh process on \nm{threadsHeadline} cores of a cluster node (\nm{cpu}) after
+the library had been loaded and used once, untimed. Files were evicted from the operating system's cache before each of
+three timed repeats; we report medians.
+
+\para{Training loaders}Loaders read the same workload, minibatches of 512 cells made of eight blocks of 64
 consecutive cells at random offsets, into PyTorch sparse tensors, from the node's disk, a shared filesystem, and a local
-S3-compatible object store whose total bandwidth (0.1 to 10\,Gbit/s) and added latency (0 to 200\,ms) we controlled. We
-recorded the time from a new process to the first minibatch and the sustained rate. The real object store was Cloudflare
-R2, read over the public internet through a Worker that serves byte ranges; costs per epoch use the bytes and requests
-counted at the emulated store and providers' published prices.
+S3-compatible object store whose bandwidth (0.1 to 10\,Gbit/s) and added latency (0 to 200\,ms) we controlled. We recorded
+the time from a new process to the first minibatch and the sustained rate. The real object store was Cloudflare R2, read
+over the public internet; costs per epoch use the bytes and requests counted at the emulated store and providers'
+published prices.
 
-\paragraph{Decoding limits.} For every matrix up to 400 million non-zeros, a C++ benchmark encoded the matrix's row
-indices and values with raw 32-bit arrays, fixed-width bytes, LEB128 varints, Stream VByte~\cite{lemire2018stream},
-vertical SIMD bit-packing in blocks of 256~\cite{lemire2015decoding}, an order-0 rANS coder~\cite{duda2013asymmetric}, and zstd at levels 3 and 19
-over LEB128 gap streams; the gap codes store the step between a cell's successive row indices, as \sone{} does. Each code
-was decoded into 32-bit row indices and values on one pinned core (AVX2), checked against the input, and timed seven times
-after two warm-up runs; the \sone{} member was decoded the same way, in source gene order and, in a second run on the same
-node, also in its stored order (Supplementary Section~\ref{sec:mkernels}). A run that only writes the output arrays gives the rate
-no decoder can exceed by much. The delivered rate of Eq.~\ref{eq:reff} assumes decoding scales with cores; the ideal code
-stores the best count model's code length and decodes at the output-writing rate. For the trend, each code's time per non-zero beyond
-writing the output was expressed relative to that writing time, and its bits relative to the matrix's floor; a power law
-was fitted by least squares to every code other than \sone{} on each matrix's frontier, pooled over matrices, and
-evaluated at \sone's size on each matrix (median of the per-matrix ratios; interval from 1,000 bootstrap resamples of the
-matrices). An untimed run of the same program measured the order-0 and order-1 byte entropy of each code's output and
-compressed the \sone{} member with zstd-19.
+\para{Size floor}Poisson, negative binomial and nonparametric count models conditioned on cell depth, and on cell
+cluster, were fitted on half of each matrix's cells and scored on the other half, zeros
+included~\cite{hafemeister2019normalization,townes2019feature}. The shortest code length among them, charged nothing for
+the models' own parameters, is our reference for the floor; it is a reference, not a bound.
 
-\paragraph{Write cost.} Each format was written from the canonical matrix in memory, in a fresh process, recording wall
-time and the peak resident memory beyond the loaded input.
+\para{Speed frontier}For every matrix up to 400 million non-zeros, a C++ benchmark encoded the matrix's row indices
+and values with raw 32-bit arrays, fixed-width bytes, LEB128 varints, Stream VByte~\cite{lemire2018stream}, SIMD
+bit-packing in blocks of 256~\cite{lemire2015decoding}, an order-0 rANS coder~\cite{duda2013asymmetric}, and zstd at levels
+3 and 19, all over the steps between a cell's successive row indices, as \sone{} stores them. Each code, and the \sone{}
+member, was decoded into 32-bit row indices and values on one pinned core (AVX2), checked against the input, and timed seven
+times after two warm-up runs. A run that only writes the output arrays gives the rate no decoder can exceed by much; the
+\emph{ideal code} stores the floor's code length and decodes at that rate.
 
-\paragraph{Codec development.} The \sone{} codec was developed iteratively with Claude (Anthropic) as a coding assistant.
-Each candidate change was measured for size and decoding speed on real matrices, compared with the limits above, and kept
-only if the writer's full decode reproduced the input exactly.
+\para{Trend}To ask whether \sone{} is slow for its size, each code's time per non-zero beyond writing the output was
+expressed relative to that writing time, and its bits relative to the matrix's floor. A power law was fitted by least
+squares to every code other than \sone{} on each matrix's frontier, pooled over matrices, and evaluated at \sone's size on
+each matrix; we report the median of the per-matrix ratios, with an interval from 1,000 bootstrap resamples of the matrices.
 
-\paragraph{Count models.} Poisson, negative binomial and nonparametric models conditioned on cell depth, and on cell
-cluster, were fitted on half of each matrix's cells and scored on the other half, zeros included. For UMI matrices the
-entropy of sampling each cell's molecules was estimated under a plug-in expression profile.
+\para{Write cost}Each format was written from the canonical matrix in memory, in a fresh process, recording wall
+time and peak resident memory beyond the loaded input.

@@ -24,6 +24,7 @@ KERNEL_LABELS = {
     "pz2_avx2": ".s1", "pz2_avx2_native": ".s1, stored order",
 }
 NATIVE = "pz2_avx2_native"   # the .s1 member in its stored gene order (s1order stage): row ids plus one permutation, no sort
+SOURCE = "pz2_avx2_source"   # the .s1 member in source gene order (a sort per cell): reported as a number, not plotted
 KERNEL_ANCHORS = {"raw_u32": "north", "fixed_bytes": "north west", "leb128_gaps": "north", "streamvbyte_gaps": "south west",
                   "bitpack256_gaps": "east", "rans0_gaps": "north west", "zstd3_leb_gaps": "west", "zstd19_leb_gaps": "east",
                   "pz2_avx2": "north west", "pz2_avx2_native": "south east"}
@@ -42,7 +43,7 @@ def _trend_points(per: dict, floor: dict, mats: list, leave_out: str = "") -> li
     pts = []
     for k in mats:
         ts = 1e3 / per[k]["store_bound"][1]
-        cand = sorted((b, 1e3 / d - ts) for c, (b, d) in per[k].items() if c not in ("store_bound", "pz2_avx2", NATIVE, leave_out))
+        cand = sorted((b, 1e3 / d - ts) for c, (b, d) in per[k].items() if c not in ("store_bound", "pz2_avx2", NATIVE, SOURCE, leave_out))
         best = np.inf
         for b, t in cand:
             if t < best:
@@ -80,7 +81,9 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
     for k, v in so.items():
         if k in per and "pz2_avx2" in per[k] and {"pz2_avx2", NATIVE} <= v.keys():
             x = _f(v[NATIVE]["mnnz_per_s"]) / _f(v["pz2_avx2"]["mnnz_per_s"])
-            per[k][NATIVE] = (_f(v[NATIVE]["bits"]), per[k]["pz2_avx2"][1] * x)
+            # .s1 as the paper reports it (stored order); source order kept apart, for the text only
+            per[k][SOURCE] = per[k]["pz2_avx2"]
+            per[k]["pz2_avx2"] = (_f(v[NATIVE]["bits"]), per[k][SOURCE][1] * x)
             native_x.append(x)
             rerun.append(_f(v["pz2_avx2"]["mnnz_per_s"]) / per[k]["pz2_avx2"][1])
             native_ok.append(_f(v[NATIVE]["ok"]) == 1)
@@ -164,8 +167,8 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
     N.put("trend-floor-mnnzs", float(np.median(at_floor)), "{:.0f}")
     N.put("trend-floor-vs-s1-pct", float(np.median([per[k]["pz2_avx2"][1] / f for k, f in zip(mats, at_floor)])) * 100, "{:.0f}")
     N.put("trend-floor-x", float(np.median([f / per[k]["pz2_avx2"][1] for k, f in zip(mats, at_floor)])), "{:.1f}")
-    if NATIVE in codecs:
-        N.put("trend-native-pct", ratio_of(NATIVE, ts, ta) * 100, "{:.0f}")
+    if all(SOURCE in per[k] for k in mats):
+        N.put("trend-source-pct", ratio_of(SOURCE, ts, ta) * 100, "{:.0f}")
     bgrid = np.geomspace(fl, 64, 80)
     _write([{"bits": b, "mnnzs": float(_trend_rate(b, fl, sb, ts, ta))} for b in bgrid], out / "figlim_trend.tsv", ["bits", "mnnzs"])
     _write([{"bits": fl, "mnnzs": float(_trend_rate(fl, fl, sb, ts, ta))}], out / "figlim_trend_floor.tsv", ["bits", "mnnzs"])
@@ -198,9 +201,6 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
         N.put(f"frac-gain-{key}", (rec["practical"] / rec["pz2_avx2"] - 1) * 100, "{:.0f}")
         N.put(f"frac-trend-{key}", rec["trend"] * 100, "{:.0f}")
         N.put(f"frac-s1oftrend-{key}", rec["s1_of_trend"] * 100, "{:.0f}")
-        if NATIVE in rec:
-            N.put(f"frac-native-{key}", rec[NATIVE] * 100, "{:.0f}")
-            N.put(f"frac-native-gain-{key}", (rec[NATIVE] / rec["pz2_avx2"] - 1) * 100, "{:.0f}")
         v, c = best_other[rec["x"]]
         N.put(f"frac-bestother-{key}", v * 100, "{:.0f}")
         N.put(f"frac-bestother-{key}-name", KERNEL_LABELS[c])
@@ -272,6 +272,17 @@ def redundancy_section(cfg: Config, N: Numbers, out: Path) -> None:
         key = f.replace("_", "-")
         N.put(f"redund-{key}", tab[-1]["pct"], "{:.0f}")
     _write(tab, out / "tab_redundancy.tsv", ["format", "n", "bits", "excess", "pct", "pct_lo", "pct_hi"])
+    # main-text Table 1: the summary table (report.summary_section, written earlier) with the redundant share added
+    if (out / "tab_summary.tsv").exists():
+        import csv
+        share = {t["format"]: t["pct"] for t in tab}
+        with open(out / "tab_summary.tsv", newline="") as fh:
+            rows = list(csv.DictReader(fh, delimiter="\t"))
+        for r in rows:
+            r["redund"] = share.get(r["format"], np.nan)
+            if r["format"] in (FORMAT_LABELS["rds_xz"], FORMAT_LABELS["loom"]):
+                N.put("sumNr" if r["format"] == FORMAT_LABELS["rds_xz"] else "sumNloom", int(r["n"]), "{:d}")
+        _write(rows, out / "tab_main.tsv", ["format", "bits", "rel", "smallest", "read", "fastest", "redund", "n"])
     others = [t for t, f in zip(tab, sorted(by, key=lambda f: -float(np.median([v[2] for v in by[f]])))) if not f.startswith("s1")]
     if others:
         low = min(others, key=lambda t: t["pct"])

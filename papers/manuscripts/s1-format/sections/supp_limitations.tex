@@ -3,43 +3,32 @@
 \label{sec:slimits}
 
 \begin{itemize}\itemsep 1pt
-\item \emph{Hardware.} All timings come from 8 cores of shared cluster nodes of one type, with one of our timed jobs per
-  node and other users' jobs beside it, three repeats per configuration, and a disk behind a RAID controller whose cache
-  the cold reads cannot clear. Absolute rates depend on the CPU and disk; the comparisons between formats, measured on
-  the same node and file, are what the conclusions rest on. The AVX-512 kernel was not measured because the benchmark
-  CPU lacks the VBMI2 extension it needs, and processors without AVX2, including ARM, use the scalar decoder, at about a
-  third of the AVX2 rate per core.
-\item \emph{Large matrices.} Above $4\times10^8$ non-zeros we timed a subset of formats, at one thread count and from
-  local disk only. The R formats, RDS and BPCells, are reported as not applicable above $2^{31}-1$ non-zeros because
-  the benchmark reads them into an R \texttt{dgCMatrix}, which cannot hold such a matrix; BPCells itself streams larger
-  matrices. One planned dataset, a genome-wide Perturb-seq screen with 6.3 billion non-zeros, was excluded because writing
-  the comparison formats needed more memory and time than the campaign allowed.
-\item \emph{Network tiers.} The network tiers are a local object store with a shared bandwidth limit and fixed added
-  latency; the 10\,Gbit/s tier exceeds what the test setup delivers and is flagged. The one real object store we read,
-  Cloudflare R2 through a Worker, was reached from one cluster node over one internet path, at one time of day; other
-  stores, regions and paths differ in latency and per-connection rate, and the prices are list prices without free tiers
-  or discounts.
-\item \emph{Baselines.} The generic-codec control at \sone's granularity is one configuration (sharded Zarr v3 with
-  Blosc zstd and bit shuffling); we did not test zstd with a dictionary trained per matrix, nor stronger count models; the payload ladder
-  does not separate the contributions of gene reordering, context modelling and the entropy coder.
-\item \emph{Scope.} \sone{} stores non-negative integer counts below $2^{32}$; normalised or otherwise non-integer matrices
-  are rejected by the writer, not rounded, which excluded one candidate dataset (the container can hold floating-point
-  values through its generic codec, which we did not evaluate). A sample object holds count matrices, gene identifiers,
-  barcodes and a cells table; richer annotations (AnnData's \texttt{obs}, \texttt{var}, \texttt{obsm} and \texttt{uns})
-  are not part of the format. Reading the counts of one gene across all cells needs a full decode. Files are immutable;
-  adding cells means writing a new sample object.
-\item \emph{Decoding speed per core.} On one core the \sone{} decoder runs at a fraction of the speed of byte- and
-  bit-aligned codes and of zstd (Fig.~\ref{fig:floor}b), so one core keeps up with about \nm{kern-s1-knee-gbit}\,Gbit/s
-  of link. Below about \nm{frac-cross-gbit}\,Gbit/s per decoding core \sone{} delivers more than any code we measured;
-  above it, a larger but faster code delivers more (Fig.~\ref{fig:floor}c). The decoding-limit comparison uses our own
-  implementations of the textbook codes (zstd is the library itself), compiled for AVX2 on the benchmark node; tuned
-  libraries and other processors may move each code's speed, and the ideal code it is compared with is not attainable.
-  The trend of Fig.~\ref{fig:floor}b is an empirical fit to a handful of code families, extrapolated beyond the smallest
-  of them; it summarises what existing codes achieve, not a bound on what a new decoding method could, and leaving out any
-  one code moves \sone's ratio to it between \nm{trend-s1-loo-lo} and \nm{trend-s1-loo-hi}\%.
-\item \emph{Writing.} Write cost was measured on three matrices, once each, from a matrix already in memory; converting
-  from a format on disk adds that format's read. The \sone{} writer holds the encoded matrix and the input together and
-  needed about three times as much memory beyond the input as AnnData's on the largest of them.
-\item \emph{Specification.} \sone{} has one implementation, in C++ with Python and R bindings over the same code; the
-  format specification (Supplementary Section~\ref{sec:spec}) and test vectors are meant to make a second one possible.
+\item \emph{Hardware.} All timings come from 8 cores of shared cluster nodes of one type, three repeats per
+  configuration, with a RAID controller cache that cold reads cannot clear. Absolute rates depend on the CPU and disk; the
+  conclusions rest on comparisons made on the same node and file. AVX-512 was not measured (the CPU lacks VBMI2), and
+  processors without AVX2, including ARM, use the scalar decoder at about a third of the AVX2 rate per core.
+\item \emph{Large matrices.} Above $4\times10^8$ non-zeros a subset of formats was timed, at one thread count and from
+  local disk. RDS and BPCells are not applicable above $2^{31}-1$ non-zeros because the benchmark reads them into a
+  \texttt{dgCMatrix}; BPCells itself streams larger matrices. A genome-wide Perturb-seq screen (6.3 billion non-zeros)
+  was excluded because writing the comparison formats exceeded the campaign's memory and time.
+\item \emph{Networks.} The emulated tiers have a shared bandwidth limit and fixed added latency, and the 10\,Gbit/s tier
+  exceeds what the setup delivers. The one real store, R2 through a Worker, was read from one node over one path at one
+  time of day; prices are list prices without free tiers or discounts.
+\item \emph{Baselines.} The generic-codec control at \sone's granularity is one configuration (sharded Zarr v3, Blosc
+  zstd with bit shuffling); zstd with a per-matrix dictionary and stronger count models were not tested, and the payload
+  ladder does not separate gene reordering, context modelling and the entropy coder.
+\item \emph{Scope.} \sone{} stores non-negative integer counts below $2^{32}$; the writer rejects non-integer matrices,
+  which excluded one candidate dataset (the container's generic codec for floating-point values was not evaluated).
+  Richer annotations (AnnData's \texttt{obs}, \texttt{var}, \texttt{obsm}, \texttt{uns}) are not part of the format.
+  Reading one gene across all cells needs a full decode, and adding cells means writing a new immutable object.
+\item \emph{Decoding speed per core.} One core keeps up with about \nm{kern-s1-knee-gbit}\,Gbit/s of link, a fraction
+  of byte- and bit-aligned codes and zstd (Fig.~\ref{M-fig:floor}b). Above about \nm{frac-cross-gbit}\,Gbit/s per decoding
+  core a larger but faster code delivers more (Fig.~\ref{M-fig:floor}c). The textbook codes are our own AVX2
+  implementations (zstd is the library), so tuned libraries and other processors may shift them. The trend of
+  Fig.~\ref{M-fig:floor}b is an empirical fit to a few code families, extrapolated beyond the smallest; it is not a bound,
+  and leaving out any one code moves \sone's ratio to it between \nm{trend-s1-loo-lo} and \nm{trend-s1-loo-hi}\%.
+\item \emph{Writing.} Write cost was measured once on each of three matrices already in memory; converting from a file
+  adds that format's read. The \sone{} writer needed about three times AnnData's memory beyond the input on the largest.
+\item \emph{One implementation.} \sone{} has one implementation, in C++ with Python and R bindings; the specification in
+  the repository (\texttt{docs/format-s1.md}) and its test vectors are meant to make a second possible.
 \end{itemize}
