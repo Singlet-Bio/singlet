@@ -207,6 +207,25 @@ cluster shrinkage, held-out lanes); the pin is far better than that here because
 Truth 2, species mixing (hgmm1k_v3, held-out hgmm1k_v2), from S5's gate at the pin: 9 of 10 gating metrics pass; the failing one is
 the contamination-estimate bias on hgmm1k_v3 (|log2| 0.28 vs SoupX 0.038).
 
+**Which ambient number is "the estimate" (2026-10-31, pin; `bench/expression_sota/ambient_hgmm_eval.py`).** The run writes several summaries that disagree
+by a factor of two, and the headline `estimated_contamination_fraction` is the worst of them:
+
+| library | truth | `estimated_contamination_fraction` (= mean of per-cell `rho`) | median `rho` | UMI-weighted `rho` | removed / observed UMI |
+|---|---|---|---|---|---|
+| hgmm1k_v3 (species; 998 pure cells; cell-mean truth 1.14%, UMI-weighted ~0.92%) | 1.14% | 2.11% (1.85x) | 0.92% | 0.94% | 0.94% |
+| Kang b2 ctrl (genotype; pooled truth on 12,137 confident singlets 1.48%) | 1.48% | 4.71% (3.2x) | 1.51% | 2.82% | 2.82% |
+| pbmc1k_v3 | n/a | 2.71% | 1.18% | 2.29% | 2.29% |
+| nuclei2k_v2 | n/a | 29.4% | 27.1% | 21.2% | 21.2% |
+
+Per cell on hgmm1k_v3 (998 pure cells): the exon-basis `rho` has ratio 1.56 and Spearman 0.79; `rho_total` (ambient share of all UMIs, already in the TSV as its last
+column) ratio 1.17, Spearman 0.79; the realised removal fraction ratio 1.08, Spearman 0.82. On the Kang confident singlets the realised removal is 1.13x truth
+and the reported `rho` 1.36x. So the per-cell estimator is reasonable on cells that are clearly cells; the large errors are in the headline mean, which
+the low-depth and outlier cells inflate (hgmm 45 low-depth cells, Kang 16.5k called cells of which 12.1k are confident), and in the exon-basis `rho`.
+No code change that is both small and supported: switching the headline to the UMI-weighted removal fixes hgmm (1.02x) but leaves Kang at 1.9x
+because the called set includes non-singlet barcodes the truth excludes, and nuclei2k_v2 at 21% has no truth (a nuclei library with 27% median `rho`
+looks wrong, but nothing here shows it). **No ambient PR from me**: the real fix is the v2 estimator on `fix/ambient-calibration`, which its own bench still has at 7-8x on
+held-out Kang lanes. Recommendation for the site: show `rho_total` per cell, not the mean `rho`.
+
 Verdict: **at the mean-calibration level SOTA on tissue (within 0.07 of the best tool) but not on species mixing (0.28 vs 0.04)**; per-cell
 ordering is not a differentiator on this truth. Candidate engine change: calibrate the reported `rho` to the removal it applies and shrink
 rare-cluster estimates (`fix/ambient-calibration` has the code, unmerged). Not done: needs a decision on whether the 0.28 hgmm bias justifies
