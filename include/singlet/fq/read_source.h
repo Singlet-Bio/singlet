@@ -62,6 +62,15 @@ class RunSet {
             auto r = std::make_unique<Reader>();
             r->open(paths[f].c_str());
             r->set_verify_crc(false);
+            if (r->staged()) {   // a staged .1fg2 is one whole sample: its chunks are the blocks
+                if (paths.size() != 1) throw std::runtime_error("RunSet: a .1fg2 input is one file per sample");
+                staged_ = r->staged();
+                first_block_.push_back(0);
+                for (uint32_t b = 0; b < staged_->block_count(); ++b) read_offsets_.push_back(staged_->block_read_offset(b));
+                n_blocks_ = staged_->block_count(); n_stored_ = staged_->stored_reads();
+                readers_.push_back(std::move(r));
+                return;
+            }
             if (f > 0) check_compatible(*readers_[0], *r, paths[f]);
             first_block_.push_back(nb);
             for (uint32_t b = 0; b < r->block_count(); ++b) {
@@ -95,6 +104,7 @@ class RunSet {
 
     // Decode block g. Thread-safe (pread on each file, const reader state).
     void decode(uint32_t g, DecodedBlock& blk) const {
+        if (staged_) { staged_->decode(g, blk); return; }
         size_t f = static_cast<size_t>(std::upper_bound(first_block_.begin(), first_block_.end(), g) -
                                        first_block_.begin()) - 1;
         const Reader& r = *readers_[f];
@@ -142,6 +152,7 @@ class RunSet {
     }
 
     std::vector<std::string> paths_;
+    std::shared_ptr<StagedSource> staged_;   // set for a .1fg2
     std::vector<std::unique_ptr<Reader>> readers_;
     std::vector<uint32_t> first_block_;
     std::vector<uint64_t> read_offsets_;
