@@ -438,19 +438,39 @@ public:
     /// Collapse UMIs per (barcode, gene) (directional 1-Hamming when
     /// `directional`, exact otherwise) and append one Molecule per component.
     void collapse_molecules(int umi_len, bool directional, std::vector<Molecule>& out) const {
+        collapse_groups<false>(mol_groups_, umi_len, directional, out);
+    }
+
+    /// collapse_molecules() that gives each (barcode, gene) group back as soon as it is collapsed, so the group
+    /// store and its molecules never coexist in full (the finalize peak was store + molecules + the multi-gene
+    /// table). Same molecules in the same order. Afterwards the store holds no molecule groups, and the
+    /// per-cell saturation statistics (per_cell_molecule_stats()) are kept, computed before the first group goes.
+    /// Nothing may read the groups after this (gene_root(), has_group(), collapse_molecules()).
+    void consume_molecules(int umi_len, bool directional, std::vector<Molecule>& out) {
+        if (mol_groups_.empty()) return;
+        mol_cell_stats_ = per_cell_molecule_stats(umi_len);
+        mol_stats_cached_ = true;
+        collapse_groups<true>(mol_groups_, umi_len, directional, out);
+        std::unordered_map<uint64_t, std::vector<MolEntry>>().swap(mol_groups_);
+        root_cache_.clear();
+    }
+
+private:
+    template <bool Consume, class Map>
+    static void collapse_groups(Map& groups, int umi_len, bool directional, std::vector<Molecule>& out) {
         std::vector<MolEntry> sorted;
         std::vector<int> parent;
         std::vector<uint64_t> pk;
         std::vector<uint32_t> ct;
         std::vector<Molecule> comp;
-        for (const auto& [key, entries] : mol_groups_) {
+        auto process = [&](uint64_t key, const std::vector<MolEntry>& entries) {
             const uint32_t bc = static_cast<uint32_t>(key >> 32);
             const uint32_t gene = static_cast<uint32_t>(key & 0xffffffffu);
 
             if (!directional || entries.size() == 1) {
                 for (const auto& e : entries)
                     out.push_back({e.packed, bc, gene, e.exon_idx, e.intron_idx, e.count, e.flags, e.diag});
-                continue;
+                return;
             }
 
             sorted.assign(entries.begin(), entries.end());
@@ -482,8 +502,18 @@ public:
             }
             for (int i = 0; i < n; ++i)
                 if (find(i) == i) { comp[i].umi = sorted[i].packed; out.push_back(comp[i]); }
+        };
+        if constexpr (Consume) {
+            for (auto it = groups.begin(); it != groups.end();) {
+                process(it->first, it->second);
+                it = groups.erase(it);
+            }
+        } else {
+            for (const auto& [key, entries] : groups) process(key, entries);
         }
     }
+
+public:
 
     /// Emit one labelled molecule:
     ///   exon_acc.increment(exon_idx, bc)      spliced and ambiguous molecules
@@ -552,7 +582,7 @@ public:
     }
 
     size_t n_molecule_groups() const { return mol_groups_.size(); }
-    bool   molecules_empty()   const { return mol_groups_.empty(); }
+    bool   molecules_empty()   const { return mol_groups_.empty() && !mol_stats_cached_; }
     void   clear_molecules()         { mol_groups_.clear(); root_cache_.clear(); }
 
 private:
@@ -606,6 +636,7 @@ public:
 
     /// per_cell_stats() over the molecule store (record_read()).
     std::unordered_map<uint32_t, PerCellUmiStats> per_cell_molecule_stats(int umi_len) const {
+        if (mol_stats_cached_) return mol_cell_stats_;   // the groups were consumed (consume_molecules())
         std::unordered_map<uint32_t, PerCellUmiStats> result;
         std::vector<std::pair<uint64_t, uint32_t>> umi_counts;
         for (const auto& [key, entries] : mol_groups_) {
@@ -621,6 +652,10 @@ public:
         }
         return result;
     }
+
+private:
+    std::unordered_map<uint32_t, PerCellUmiStats> mol_cell_stats_;   ///< kept by consume_molecules()
+    bool mol_stats_cached_ = false;
 };
 
 // ── R9: UMI correction for junction, V(D)J and SNP evidence (docs/research-beta/order-free-rules.md) ──
