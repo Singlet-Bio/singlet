@@ -224,3 +224,31 @@ builds the exact-barcode histogram (exact whitelist hit, UMI without N and not a
 **Reading it.** The format moves barcode correction, sequence dedup and the chemistry decisions to the CPU nodes and keeps staged bytes at ≈ `.1fq`; it costs 2.2 core-s/M more in the fetch tier (≈ 70 cores more at 8.5 M pairs/s: 26 → ~46 cores at the 0.6 GB/s cap) and removes 9 of the
 14 host core-s/M that S8 measured on the GPU node. Part of the added cost is avoidable: a combined decode-and-stage pass would not write and re-read the `.1fq` (the writer was 35 of 53 s in the W11 ingest measurement, the `.1fq` read is most of pass 1); not built or measured.
 The sequence ids and the sequence table together are 15 B/read; distinct sequences are only 31% of reads on deep samples, but each costs 2-bit + ids. Quality (9.5 B/read) is the largest single plane.
+
+## 12. Combined pass `.sra` → `.1fg2` (`singlet download --stage-out`) and the raw-barcode plane
+
+`singlet download <sra> --stage-out OUT.1fg2` feeds the SRA writer's flushed blocks (after its polyA trim, `--r2-maxlen`, in SRA order, no barcode sort) to the same `stage::Encoder` as `singlet-stage`: no `.1fq` is written or re-read. The default `.1fq` path is untouched (the block sink is off unless the option is given;
+`Writer`, `SraEncoder` and `EncoderConfig` gained an optional sink). Single-run samples with a 10x R1 protocol only; other protocols exit 6 and a multi-run sample needs one histogram over all runs, so both stay on the `.1fq` route (the fetch worker's `--format 1fg2` falls back automatically).
+**`PL_RAWCB`** (new plane, S8 agreed): one 8-byte entry (raw barcode word 2 bit/base, read index, N position) for every read that was not an exact whitelist hit, so STAR's exact/corrected/no-match counts and the cell QC stay identical; 3.4–7.9% of reads, 0.2–0.5 B/read.
+
+**Measured, same local `.sra` per run (A = today's `singlet download` to the barcode-sorted `.1fq`; B = A + `singlet-stage`; C = combined), core-s per M reads, 8 runs:**
+
+| run (reads) | A baseline | B two-step | C combined | C − A |
+|---|---|---|---|---|
+| SRR19421372 (9 M) | 2.82 | – | 3.46 | +0.64 |
+| SRR19573735 (11 M) | 3.19 | – | 3.88 | +0.69 |
+| SRR30477995 (12 M) | 3.37 | – | 4.40 | +1.03 |
+| SRR19544612 (75 M) | 2.87 | 4.93 | 3.73 | +0.86 |
+| SRR12455246 (112 M) | 2.88 | 5.24 | 3.72 | +0.84 |
+| SRR19421396 (132 M) | 2.95 | 5.02 | 3.53 | +0.58 |
+| SRR19649496 (186 M) | 2.68 | 6.61 | 3.59 | +0.91 |
+| SRR19572361 (234 M) | 2.50 | 5.69 | 3.14 | +0.64 |
+
+(Baselines vary 2.5–3.4 with node load; B is not shown for the three small runs because their timing included `--verify`; it was 4.3–5.4 in the earlier plain runs.) **The combined pass costs +0.6 to +1.0 core-s/M over today (about +25%), against +1.7 to +4 for the two-step path.** It removes the `.1fq` sort, compress, write and re-read.
+In all 8 runs the order-independent digest of C equals that of B (same barcode, status, raw barcode, UMI, cDNA, qualities per read); B passes `--verify` against the `.1fq` read by read.
+
+**Bytes per read, sorted vs unsorted source (the "no barcode sort" question):** `.1fq` / B (`.1fg2` from the barcode-sorted `.1fq`) / C (SRA order):
+75 M: 33.1 / 31.5 / 34.1; 112 M: 32.0 / 28.6 / 31.1; 132 M: 26.3 / 20.4 / 23.1; 186 M: 25.9 / 19.6 / 22.7; 234 M: 23.0 / 18.6 / 21.5. Skipping the sort costs **+8 to +16%** in the `.1fg2` (the barcode and UMI planes lose their runs), but even unsorted it is 3% above to 12% below the `.1fq` (deep samples gain from the distinct-sequence table).
+Distinct-sequence fraction on these deep runs: 0.56 (75 M), 0.46 (112 M), 0.31 (132 M), 0.28 (186 M), 0.24 (234 M). Encoder table memory 3.1–4.2 GB at 75–234 M reads (64-byte in-memory slots; halving it for ≤127 nt files is possible but not done).
+
+**Open:** S8's `.1fg2` reader and the per-read identity gate (fixtures in `$WORK/jobs/s9/fixtures`); a multi-run part merge; the fetch worker's `--format 1fg2` path is written but not run against a real binary here (the drain only claims `.1fg2` samples with `--accept-1fg2`).
