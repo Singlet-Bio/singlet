@@ -151,3 +151,55 @@ class Lite:
         k = max(10, int(round(0.5 * np.sqrt(n))))
         knn = self.knn_fraction(self.space(np.vstack([Z, Zs]), space, space_dim), n, k)
         return {"lite_entropy": self.entropy(Z), "lite_knn": knn}
+
+
+class Distilled(Lite):
+    """The same panel and counts handling, with a one-hidden-layer network distilled from the atlas cell type network
+    (``scripts/doublet_distill.py``): ``out = relu(((x - mu) / sd) @ W1 + b1) @ W2 + b2`` where ``x`` is the panel's log1p CP10k profile.
+    ``out[:, :K]`` approximates the network's hidden-layer embedding projected on its global top-K principal axes (the
+    neighbour-search space of ``atlas_knn``); ``out[:, K]`` its cell type entropy (``ct_entropy``)."""
+
+    def __init__(self, a):
+        self.a = a
+        self.mu = a["mu"].astype(np.float32)
+        self.sd = a["sd"].astype(np.float32)
+        self.W1 = a["W1"].astype(np.float32)
+        self.b1 = a["b1"].astype(np.float32)
+        self.W2 = a["W2"].astype(np.float32)
+        self.b2 = a["b2"].astype(np.float32)
+        self.W = self.W1  # panel size = W.shape[0]
+        self.K = self.W2.shape[1] - 1
+        self._hum = {str(g): i for i, g in enumerate(a["panel_ids"])}
+        self._mou = {str(g): i for i, g in enumerate(a["panel_mouse"]) if str(g)}
+        self._sym = {str(s).upper(): i for i, s in enumerate(a["panel_symbols"])}
+
+    def outputs(self, C: sp.csr_matrix, block: int = 4096) -> np.ndarray:
+        out = np.empty((C.shape[0], self.K + 1), np.float32)
+        tot = np.asarray(C.sum(1)).ravel()
+        for s in range(0, C.shape[0], block):
+            d = C[s : s + block].toarray()
+            d *= (1e4 / np.maximum(tot[s : s + block], 1.0))[:, None]
+            np.log1p(d, out=d)
+            d -= self.mu
+            d /= self.sd
+            h = np.maximum(d @ self.W1 + self.b1, 0.0)
+            out[s : s + block] = h @ self.W2 + self.b2
+        return out
+
+    def features(self, X, gene_ids, species, *, n_sim=None, seed=0, dim=0, **_):
+        rng = np.random.default_rng(seed)
+        X = sp.csr_matrix(X, dtype=np.float32)
+        n = X.shape[0]
+        C = self.panel_counts(X, self.columns(gene_ids, species))
+        S, _ = simulate_doublets(C, int(n_sim or 2 * n), rng)
+        o = self.outputs(C)
+        os_ = self.outputs(S)
+        k = max(10, int(round(0.5 * np.sqrt(n))))
+        d = dim or self.K
+        knn = self.knn_fraction(np.vstack([o[:, :d], os_[:, :d]]), n, k)
+        return {"lite_entropy": o[:, self.K].astype(np.float64), "lite_knn": knn}
+
+    @classmethod
+    def load(cls, path) -> "Distilled":
+        z = np.load(path)
+        return cls({k: z[k] for k in z.files})

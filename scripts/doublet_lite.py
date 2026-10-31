@@ -164,16 +164,18 @@ def load_counts(name):
 
 def cmd_feats(a):
     from singlet.features import doublet as D
-    from singlet.features.doublet_lite import Lite
+    from singlet.features.doublet_lite import Distilled, Lite
 
-    model = Lite.load(a.model)
+    dist = "distill" in Path(a.model).name
+    model = (Distilled if dist else Lite).load(a.model)
     out = Path(a.out) / "lite" / f"feats_{a.tag}"
     out.mkdir(parents=True, exist_ok=True)
     cost = {}
     for n in a.names or list(D.STUDY):
         X, y, genes, species = load_counts(n)
         w0, c0 = time.perf_counter(), time.process_time()
-        F = model.features(X, genes, species, n_sim=None if a.sim == 0 else a.sim * X.shape[0], space=a.space, space_dim=a.space_dim)
+        kw = dict(dim=a.space_dim) if dist else dict(space=a.space, space_dim=a.space_dim)
+        F = model.features(X, genes, species, n_sim=None if a.sim == 0 else a.sim * X.shape[0], **kw)
         cost[n] = dict(n_cells=int(X.shape[0]), wall_s=round(time.perf_counter() - w0, 2), cpu_s=round(time.process_time() - c0, 2),
                        peak_rss_mb=round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024))
         np.savez(out / f"{n}.npz", **F)
