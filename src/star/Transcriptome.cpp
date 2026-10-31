@@ -15,8 +15,7 @@ Transcriptome::Transcriptome (Parameters &Pin) : P(Pin){
         trInfoDir = P.pGeOut.gDir;
     };
 
-    P.inOut->logMain << "Transcriptome: trInfoDir=" << trInfoDir << " sjdbGTFfile=" << P.pGe.sjdbGTFfile << " sjdbInsert.yes=" << P.sjdbInsert.yes << " sjdbInsert.outDir=" << P.sjdbInsert.outDir << " gDir=" << P.pGe.gDir << " transform.outQuant=" << P.pGe.transform.outQuant << "
-" << std::flush;
+    P.inOut->logMain << "Transcriptome: trInfoDir=" << trInfoDir << " sjdbGTFfile=" << P.pGe.sjdbGTFfile << " sjdbInsert.yes=" << P.sjdbInsert.yes << " sjdbInsert.outDir=" << P.sjdbInsert.outDir << " gDir=" << P.pGe.gDir << " transform.outQuant=" << P.pGe.transform.outQuant << "\n" << std::flush;
     ifstream &geStream = ifstrOpen(trInfoDir+"/geneInfo.tab", ERROR_OUT, "SOLUTION: utilize --sjdbGTFfile /path/to/annotations.gtf option at the genome generation step or mapping step", P);
     geStream >> nGe;
     geID.resize(nGe);
