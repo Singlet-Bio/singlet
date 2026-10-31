@@ -263,14 +263,12 @@ bool openTable(singlet::fq::Fg2RunSet &rs, const char *path, std::string &why) {
         char exe[4096];
         const ssize_t k = readlink("/proc/self/exe", exe, sizeof exe - 1);
         if (k > 0) { exe[k] = 0; std::string d(exe); const size_t sl = d.rfind('/'); if (sl != std::string::npos) dirs.push_back(d.substr(0, sl) + "/../whitelists"); }
-        rs.open({std::string(path)}, dirs, false);
+        rs.open({std::string(path)}, dirs, false, /*tables_only=*/true);
     } catch (const std::exception &e) { why = std::string(".1fg2 table: ") + e.what(); return false; }
     return true;
 }
 
-bool readTable(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, int nThreads, const char *path, std::vector<uint32> &unitOfRead) {
-    singlet::fq::Fg2RunSet rs;
-    if (!openTable(rs, path, why)) return false;
+bool readTable(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, int nThreads, singlet::fq::Fg2RunSet &rs, std::vector<uint32> &unitOfRead) {
     const auto &tab = rs.table();
     const uint64 nU = tab.n, nChunks = rs.block_count(), nReads = rs.stored_reads();
     if (nU == 0 || nU >= 0xFFFFFFFFull) { why = ".1fg2 table: no sequences or too many"; return false; }
@@ -380,9 +378,7 @@ bool readTable(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, i
 }
 
 // the first reads of the file STAR reads, against the table: the order and the sequences must be the ones the table describes
-bool checkTableHead(Parameters &P, const char *path, const std::vector<uint32> &unitOfRead, std::string &why) {
-    singlet::fq::Fg2RunSet rs;
-    if (!openTable(rs, path, why)) return false;
+bool checkTableHead(Parameters &P, const singlet::fq::Fg2RunSet &rs, const std::vector<uint32> &unitOfRead, std::string &why) {
     const auto &tab = rs.table();
     if (P.readFilesNames.empty() || P.readFilesNames[0].empty()) { why = "no read files"; return false; }
     std::ifstream f(P.readFilesNames[0][0]);
@@ -442,7 +438,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     bool tableMode = false;
     if (const char *fg2 = getenv("SINGLET_ENGINE_GPU_FG2"); fg2 != nullptr && fg2[0] != 0 && getenv("SINGLET_ENGINE_GPU_FG2_OFF") == nullptr) {
         std::string w2;
-        if (readTable(P, in, w2, (int) P.runThreadN, fg2, unitOfRead) && checkTableHead(P, fg2, unitOfRead, w2)) tableMode = true;
+        singlet::fq::Fg2RunSet rs;
+        if (openTable(rs, fg2, w2) && readTable(P, in, w2, (int) P.runThreadN, rs, unitOfRead) && checkTableHead(P, rs, unitOfRead, w2)) tableMode = true;
         else {
             P.inOut->logMain << "ENGINE_GPU: sequence table not used (" << w2 << "): reading the FASTQ\n" << flush;
             in = singlet_engine_gpu::Input(); unitOfRead.clear();

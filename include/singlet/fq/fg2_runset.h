@@ -19,10 +19,14 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -65,7 +69,8 @@ class Fg2RunSet {
     };
 
     // paths: exactly one .1fg2 (a sample is pooled into one file). whitelist_dirs: where the file named in the header lives.
-    void open(const std::vector<std::string>& paths, const std::vector<std::string>& whitelist_dirs, bool verify_crc = true) {
+    // tables_only: for a caller that needs the sequence table and the read -> sequence ids only (no barcode whitelist, no decode)
+    void open(const std::vector<std::string>& paths, const std::vector<std::string>& whitelist_dirs, bool verify_crc = true, bool tables_only = false) {
         if (paths.size() != 1) throw std::runtime_error("Fg2RunSet: exactly one .1fg2 file per sample");
         path_ = paths[0];
         verify_crc_ = verify_crc;
@@ -91,10 +96,12 @@ class Fg2RunSet {
         for (size_t c = 0; c < chunks_.size(); ++c) first_read_[c + 1] = first_read_[c] + chunks_[c].n;
         runs_.resize(h_.n_runs);
         if (h_.n_runs) pread_full(runs_.data(), runs_.size() * sizeof(fg2::RunEntry), h_.runs_offset);
-        load_whitelist(whitelist_dirs);
-        dict_flat_.resize(wl_.size() * h_.cb_len);
-        for (size_t k = 0; k < wl_.size(); ++k)
-            for (uint32_t j = 0; j < h_.cb_len; ++j) dict_flat_[k * h_.cb_len + j] = static_cast<uint8_t>((wl_[k] >> (2 * (h_.cb_len - 1 - j))) & 3);
+        if (!tables_only) {
+            load_whitelist(whitelist_dirs);
+            dict_flat_.resize(wl_.size() * h_.cb_len);
+            for (size_t k = 0; k < wl_.size(); ++k)
+                for (uint32_t j = 0; j < h_.cb_len; ++j) dict_flat_[k * h_.cb_len + j] = static_cast<uint8_t>((wl_[k] >> (2 * (h_.cb_len - 1 - j))) & 3);
+        }
         load_table();
         hdr_.init();
         hdr_.protocol_id = h_.protocol_id;
@@ -284,21 +291,42 @@ class Fg2RunSet {
         tab_.seq2.resize(tab_.n * tab_.slot); tab_.slen.resize(tab_.n);
         tab_.n_first.assign(tab_.n + 1, 0);
         std::vector<std::pair<uint32_t, uint8_t>> nlist;   // (global id, position)
-        for (const auto& b : blocks_) {
-            std::vector<uint8_t> stored(b.total_bytes), a, l, e;
-            pread_full(stored.data(), stored.size(), b.offset);
-            fg2::BlockHeader bh; std::memcpy(&bh, stored.data(), sizeof bh);
-            if (bh.magic != fg2::SEQB_MAGIC) throw std::runtime_error("Fg2RunSet: bad sequence block");
-            inflate(stored.data(), bh.sec[fg2::SP_SEQ2], bh.flags & 1, a);
-            inflate(stored.data(), bh.sec[fg2::SP_SLEN], (bh.flags >> 1) & 1, l);
-            inflate(stored.data(), bh.sec[fg2::SP_SEXC], (bh.flags >> 2) & 1, e);
-            std::memcpy(&tab_.seq2[bh.first_seq * tab_.slot], a.data(), a.size());
-            std::memcpy(&tab_.slen[bh.first_seq], l.data(), l.size());
-            for (size_t k = 0; k < e.size() / 4; ++k) {
-                uint32_t v; std::memcpy(&v, &e[4 * k], 4);
-                nlist.push_back({static_cast<uint32_t>(bh.first_seq) + (v & 0x7FFF), static_cast<uint8_t>(v >> 15)});
-            }
+        // the blocks are independent (each writes its own rows): inflated by several threads
+        std::vector<std::vector<std::pair<uint32_t, uint8_t>>> nl(blocks_.size());
+        std::atomic<size_t> next{0};
+        std::atomic<bool> bad{false};
+        std::string err;
+        std::mutex em;
+        auto work = [&]() {
+            try {
+                for (size_t bi; (bi = next++) < blocks_.size() && !bad;) {
+                    const auto& b = blocks_[bi];
+                    std::vector<uint8_t> stored(b.total_bytes), a, l, e;
+                    pread_full(stored.data(), stored.size(), b.offset);
+                    fg2::BlockHeader bh; std::memcpy(&bh, stored.data(), sizeof bh);
+                    if (bh.magic != fg2::SEQB_MAGIC) throw std::runtime_error("Fg2RunSet: bad sequence block");
+                    inflate(stored.data(), bh.sec[fg2::SP_SEQ2], bh.flags & 1, a);
+                    inflate(stored.data(), bh.sec[fg2::SP_SLEN], (bh.flags >> 1) & 1, l);
+                    inflate(stored.data(), bh.sec[fg2::SP_SEXC], (bh.flags >> 2) & 1, e);
+                    std::memcpy(&tab_.seq2[bh.first_seq * tab_.slot], a.data(), a.size());
+                    std::memcpy(&tab_.slen[bh.first_seq], l.data(), l.size());
+                    for (size_t k = 0; k < e.size() / 4; ++k) {
+                        uint32_t v; std::memcpy(&v, &e[4 * k], 4);
+                        nl[bi].push_back({static_cast<uint32_t>(bh.first_seq) + (v & 0x7FFF), static_cast<uint8_t>(v >> 15)});
+                    }
+                }
+            } catch (const std::exception& ex) { std::lock_guard<std::mutex> g(em); bad = true; err = ex.what(); }
+        };
+        {
+            unsigned nt = std::max(1u, std::min(16u, std::thread::hardware_concurrency()));
+            if (blocks_.size() < 4) nt = 1;
+            std::vector<std::thread> th;
+            for (unsigned t = 1; t < nt; ++t) th.emplace_back(work);
+            work();
+            for (auto& x : th) x.join();
         }
+        if (bad) throw std::runtime_error(err);
+        for (auto& v : nl) { nlist.insert(nlist.end(), v.begin(), v.end()); std::vector<std::pair<uint32_t, uint8_t>>().swap(v); }   // block order = (id, position) order
         for (const auto& np : nlist) tab_.n_first[np.first + 1]++;
         for (uint64_t i = 0; i < tab_.n; ++i) tab_.n_first[i + 1] += tab_.n_first[i];
         tab_.n_pos.resize(nlist.size());
