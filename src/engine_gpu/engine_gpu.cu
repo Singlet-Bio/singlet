@@ -260,6 +260,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     // the reads that stop after the seed stage (no hits) fill whole warps and the others share a warp with reads of similar work
     const char* bk = std::getenv("SINGLET_ENGINE_GPU_BUCKET");
     const bool bucket = !(bk != nullptr && bk[0] == '0');
+    const bool bucketDesc = bk != nullptr && bk[0] == '2';   // 2: the heaviest reads first (no tail of heavy warps at the end of the grid); default: ascending
     uint32_t* dPerm = nullptr; u64* dKey = nullptr;
     if (bucket) { EG_CK(cudaMalloc(&dPerm, NB * 4)); EG_CK(cudaMalloc(&dKey, NB * 8)); }
     devNote();
@@ -276,7 +277,8 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         if (bucket) {
             EG_KT("bucket", thrust::copy(thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dKey));
                             thrust::sequence(thrust::device_ptr<uint32_t>(dPerm), thrust::device_ptr<uint32_t>(dPerm + nb));
-                            thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm)));
+                            if (bucketDesc) thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm), thrust::greater<u64>());
+                            else thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm)));
         }
         EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, bucket ? dPerm : nullptr));
         EG_CK(cudaGetLastError());
