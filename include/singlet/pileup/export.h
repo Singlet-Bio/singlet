@@ -1254,15 +1254,13 @@ inline ExportStats export_results(const PileupEngine& engine,
                 gzFile f = gzopen(path.c_str(), "wb6");
                 if (!f) { record_failed_write("reads_per_umi_hist.tsv.gz"); return; }
                 std::string line = "barcode";
-                for (int k = 1; k < PileupEngine::kReadsHistBins; ++k) line += "	n" + std::to_string(k);
-                line += "	n" + std::to_string(PileupEngine::kReadsHistBins) + "plus
-";
+                for (int k = 1; k < PileupEngine::kReadsHistBins; ++k) line += "\tn" + std::to_string(k);
+                line += "\tn" + std::to_string(PileupEngine::kReadsHistBins) + "plus\n";
                 gzwrite(f, line.data(), static_cast<unsigned>(line.size()));
                 for (const auto& [bc, h] : engine.reads_per_umi_hist()) {
                     line = bc < barcodes.size() ? barcodes[bc] : std::to_string(bc);
-                    for (uint32_t v : h) { line += '	'; line += std::to_string(v); }
-                    line += '
-';
+                    for (uint32_t v : h) { line += '\t'; line += std::to_string(v); }
+                    line += '\n';
                     gzwrite(f, line.data(), static_cast<unsigned>(line.size()));
                 }
                 gzclose(f);
