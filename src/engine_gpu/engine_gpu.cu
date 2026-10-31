@@ -173,6 +173,9 @@ __global__ void k_pack(const uint8_t* slots, u64 slot, const uint16_t* len, cons
     for (u64 t = 0; t < len[k]; t++) packed[off[k] + t] = slots[k * slot + t];
 }
 
+static double g_devPeakGB = 0;   // largest device memory in use seen inside the lanes (GB)
+static void devNote() { size_t f = 0, t = 0; cudaMemGetInfo(&f, &t); g_devPeakGB = std::max(g_devPeakGB, (double) (t - f) / (1u << 30)); }
+
 template <class C>
 bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* dOff, const std::vector<uint32_t>& idx, u64 NB, u64 budget,
              Lane& L, std::string& err) {
@@ -187,6 +190,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     EG_CK(cudaMalloc(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>))); EG_CK(cudaMalloc(&dBst, NB));
     EG_CK(cudaMalloc(&dNent, NB * 8)); EG_CK(cudaMalloc(&dBase, NB * 8));
     u64 bitsCap = 1 << 20; EG_CK(cudaMalloc(&dBits, bitsCap * 4));
+    devNote();
     for (u64 b0 = 0; b0 < n; b0 += NB) {
         u64 nb = std::min(NB, n - b0);
         int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
@@ -207,6 +211,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
                                          ToU64(), thrust::plus<u64>());
         u64 total; EG_CK(cudaMemcpy(&total, dPoff + n, 8, cudaMemcpyDeviceToHost));
         uint8_t* dPacked; EG_CK(cudaMalloc(&dPacked, total + 1));
+        devNote();
         k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked);
         EG_CK(cudaGetLastError());
         L.out.resize(total);
@@ -266,6 +271,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: a waiting host thread sleeps, not spins
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
+    // device memory in use at the phases of the call (logged: what a sample needs when several share a GPU)
+    std::string memLog;
+    auto memMark = [&](const char* what) { size_t f = 0, t = 0; cudaMemGetInfo(&f, &t); char b[64]; snprintf(b, sizeof b, "%s %.1f, ", what, (double) (t - f) / (1u << 30)); memLog += b; };
+    memMark("start");
     // ---- index (G with 200 bytes of padding on each side, as STAR's G1)
     const u64 PAD = 200;
     GenomeView D = H;
@@ -287,6 +296,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     if (pinIdx) { cudaHostUnregister((void*)(H.G - PAD)); cudaHostUnregister((void*)H.SA); cudaHostUnregister((void*)H.SAi); }
     { char l[160]; snprintf(l, sizeof l, "engine_gpu: index upload %.2f s (%s%.2f s to pin)\n", now() - tIdx0, pinIdx ? "pinned, " : "pageable, ", tPin); out.log += l; }
     D.SA = dSA; D.SAi = dSAi;
+    memMark("index");
     u64 *dcs, *dcl, *dcb, *dss, *dse, *dsd, *dsa; uint8_t *dsm, *dsl, *dsr, *dst;
     if (!upload(H.chrStart, H.nChr + 1, dcs, err) || !upload(H.chrLength, H.nChr, dcl, err) || !upload(H.chrBin, H.chrBinN, dcb, err)
         || !upload(H.sjdbStart, H.sjdbN, dss, err) || !upload(H.sjdbEnd, H.sjdbN, dse, err) || !upload(H.sjDstart, H.sjdbN, dsd, err)
@@ -342,6 +352,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         snprintf(line, sizeof line, "engine_gpu: clipping: %llu of %llu reads clipped, %.2f s\n", (unsigned long long)nClipped, (unsigned long long)n, now() - tc);
         out.log += line;
     }
+    memMark("reads+clip");
     // a read's (clipped) sequence on the host
     auto rseq = [&](u64 i) { return hcs.empty() ? in.seq.data() + in.off[i] : in.seq.data() + hcs[i]; };
     auto rlen = [&](u64 i) { return hcs.empty() ? in.off[i + 1] - in.off[i] : hoffC[i + 1] - hoffC[i]; };
@@ -383,6 +394,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         cudaFree(dRep); cudaFree(dKey);
     }
     out.secDedup = now() - t0;
+    memMark("dedup");
     std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
     u64 nGpuMapped = 0;
@@ -394,13 +406,19 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         // ---- lanes
         double tc0 = now();
         Lane A, M, B;
-        if (!runLane<LaneA>(P, D, dSeq, dOff, repc, 262144, 1024, A, err)) return false;
+        memMark("before-laneA");
+        // reads in flight in lane A: its Work + ReadBuf are ~150 KB each (40 GB at 262144); SINGLET_ENGINE_GPU_NB trades device memory for occupancy
+        u64 nbA = 262144;
+        if (const char* ne = std::getenv("SINGLET_ENGINE_GPU_NB")) nbA = std::max<u64>(4096, std::strtoull(ne, nullptr, 10));
+        if (!runLane<LaneA>(P, D, dSeq, dOff, repc, nbA, 1024, A, err)) return false;
         std::vector<uint32_t> repM, posM;
         for (u64 k = 0; k < repc.size(); k++) if (A.status[k] != (uint8_t)Status::Ok) { repM.push_back(repc[k]); posM.push_back((uint32_t)k); }
         if (!runLane<LaneM>(P, D, dSeq, dOff, repM, 262144, 2048, M, err)) return false;
         std::vector<uint32_t> repB, posB;
         for (u64 k = 0; k < repM.size(); k++) if (M.status[k] != (uint8_t)Status::Ok) { repB.push_back(repM[k]); posB.push_back(posM[k]); }
-        if (!runLane<LaneB>(P, D, dSeq, dOff, repB, 65536, 2048, B, err)) return false;
+        u64 nbB = 65536;   // the heavy lane's reads in flight: its Work is the largest device allocation of the prefill (SINGLET_ENGINE_GPU_NBB)
+        if (const char* nbe = std::getenv("SINGLET_ENGINE_GPU_NBB")) nbB = std::max<u64>(1024, std::strtoull(nbe, nullptr, 10));
+        if (!runLane<LaneB>(P, D, dSeq, dOff, repB, nbB, 2048, B, err)) return false;
         out.secMapGpu += now() - tc0;
         // where each result is: 0 = A, 1 = M, 2 = B, 3 = host
         std::vector<uint8_t> lane(repc.size(), 0); std::vector<uint32_t> lpos(repc.size());
@@ -478,7 +496,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         nGpuMapped += repc.size() - repH.size();
         return true;
     };
-    const u64 CHUNK = 16u << 20;
+    // sequences per chunk: the lanes' device buffers scale with it (SINGLET_ENGINE_GPU_CHUNK, default 16M); samples sharing a GPU (SINGLET_ENGINE_GPU_SLOTS) want it smaller
+    u64 CHUNK = 16u << 20;
+    if (const char* ce = std::getenv("SINGLET_ENGINE_GPU_CHUNK")) CHUNK = std::max<u64>(1u << 18, std::strtoull(ce, nullptr, 10));
     for (u64 c0 = 0; c0 < rep.size(); c0 += CHUNK) {
         std::vector<uint32_t> repc(rep.begin() + c0, rep.begin() + std::min<u64>(rep.size(), c0 + CHUNK));
         if (!gpuPart(repc, c0)) return fail(err);
@@ -496,6 +516,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         out.readRecord.assign(n, NONE);
         parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { for (u64 i = lo; i < hi; i++) { const uint32_t r = readRep[i]; if (r != NONE) out.readRecord[i] = recOfPos[posOf[r]]; } });
     }
+    out.log += "engine_gpu: device memory (GB in use): " + memLog + "lanes peak " + std::to_string(g_devPeakGB) + "\n";
     char line[512];
     snprintf(line, sizeof line, "engine_gpu: %llu reads, %llu distinct (%llu with N), mapped on the GPU %llu, host lane %llu (%.2f s), not mapped %llu; "
              "upload %.2f s, dedup %.2f s, GPU mapping %.2f s\n", (unsigned long long)out.nReads, (unsigned long long)out.nDistinct,
