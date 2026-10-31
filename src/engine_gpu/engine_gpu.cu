@@ -478,7 +478,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         nGpuMapped += repc.size() - repH.size();
         return true;
     };
-    const u64 CHUNK = 16u << 20;
+    // sequences per chunk: the lanes' device buffers scale with it (SINGLET_ENGINE_GPU_CHUNK, default 16M); samples sharing a GPU (SINGLET_ENGINE_GPU_SLOTS) want it smaller
+    u64 CHUNK = 16u << 20;
+    if (const char* ce = std::getenv("SINGLET_ENGINE_GPU_CHUNK")) CHUNK = std::max<u64>(1u << 18, std::strtoull(ce, nullptr, 10));
     for (u64 c0 = 0; c0 < rep.size(); c0 += CHUNK) {
         std::vector<uint32_t> repc(rep.begin() + c0, rep.begin() + std::min<u64>(rep.size(), c0 + CHUNK));
         if (!gpuPart(repc, c0)) return fail(err);
