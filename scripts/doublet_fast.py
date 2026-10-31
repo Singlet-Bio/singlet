@@ -36,6 +36,8 @@ def main():
     ap.add_argument("--rounds", type=int, default=1)
     ap.add_argument("--ref-cap", type=int, default=3000)
     ap.add_argument("--sim-ratio", type=float, default=2)
+    ap.add_argument("--k-mult", type=float, default=1.0)
+    ap.add_argument("--dim", type=int, default=0)
     ap.add_argument("--names", nargs="*")
     a = ap.parse_args()
     out = Path(a.out) / "lite"
@@ -47,7 +49,7 @@ def main():
     for n in a.names or list(D.STUDY):
         X, y, genes, species = S.load_counts(n)
         w0, c0 = time.perf_counter(), time.process_time()
-        F = mdl.features(X, genes, species, ref_cap=a.ref_cap, sim_ratio=a.sim_ratio)
+        F = mdl.features(X, genes, species, ref_cap=a.ref_cap, sim_ratio=a.sim_ratio, k_mult=a.k_mult, dim=a.dim)
         w1, c1 = time.perf_counter(), time.process_time()
         sd = DS.score(X, tuple(a.variants), p=p) if a.variants else {}
         w2, c2 = time.perf_counter(), time.process_time()

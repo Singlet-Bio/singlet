@@ -215,7 +215,7 @@ class Distilled(Lite):
             out[s : s + block] = (nb >= m).mean(1)
         return out
 
-    def features(self, X, gene_ids, species, *, seed=0, ref_cap=3000, sim_ratio=2, **_):
+    def features(self, X, gene_ids, species, *, seed=0, ref_cap=3000, sim_ratio=2, k_mult=1.0, dim=0, **_):
         """``lite_knn``: fraction of simulated doublets among the nearest neighbours in the student's embedding, against a fixed
         reference (at most ``ref_cap`` of the sample's cells and ``sim_ratio`` x as many simulated doublets), so the cost is
         O(n * ref_cap). ``lite_entropy``: the student's entropy output."""
@@ -224,14 +224,14 @@ class Distilled(Lite):
         n = X.shape[0]
         C = self.panel_counts(X, self.columns(gene_ids, species))
         o = self.outputs(C)
-        E = o[:, : self.K]
+        E = o[:, : (dim or self.K)]
         sub = np.sort(rng.choice(n, ref_cap, replace=False)) if n > ref_cap else np.arange(n)
         m = len(sub)
         S, _ = simulate_doublets(C, int(sim_ratio * m), rng)
-        ref = np.vstack([E[sub], self.outputs(S)[:, : self.K]])
+        ref = np.vstack([E[sub], self.outputs(S)[:, : E.shape[1]]])
         pos = np.full(n, -1)
         pos[sub] = np.arange(m)
-        k = max(10, int(round(0.5 * np.sqrt(m))))
+        k = max(10, int(round(k_mult * 0.5 * np.sqrt(m))))
         return {"lite_knn": self.knn_ref(E, ref, m, k, pos), "lite_entropy": o[:, self.K].astype(np.float64)}
 
     @classmethod
