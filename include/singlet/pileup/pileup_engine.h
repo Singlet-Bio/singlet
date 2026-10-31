@@ -69,8 +69,7 @@ inline void fin_mark(const char* what) {
         }
         std::fclose(f);
     }
-    std::fprintf(stderr, "[fin] %s: %.1f s (+%.1f s), rss %.1f GB, anon %.1f GB, peak %.1f GB
-", what,
+    std::fprintf(stderr, "[fin] %s: %.1f s (+%.1f s), rss %.1f GB, anon %.1f GB, peak %.1f GB\n", what,
                  std::chrono::duration<double>(now - t0).count(), std::chrono::duration<double>(now - last).count(),
                  rss / 1048576, anon / 1048576, hwm / 1048576);
     last = now;
