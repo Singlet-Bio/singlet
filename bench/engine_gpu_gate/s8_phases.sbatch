@@ -36,6 +36,7 @@ ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
   IN=$FQ; case $m in cpuG_m|gpuG_m) IN=${FQ%.1fq}.1fg2 ;; esac
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
+  WR=${WRAP:-}; WR=${WR//@O@/$O}   # WRAP: a profiler command in front of the binary; @O@ = this mode's output directory
   unset SINGLET_GPU_PILEUP SINGLET_INTRON_RULES SINGLET_GPU_PILEUP_QUAL; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
   case $m in cpu|cpuG_m) ENGARG="" ;; gpuD|gpuD_n|gpuD_m|gpuG_m) export SINGLET_GPU_PILEUP=on ;; gpuQ_m) export SINGLET_GPU_PILEUP=on SINGLET_GPU_PILEUP_QUAL=force ;; esac
   case $m in *_n) BIN=$BINDIR_N/singlet-gpu ;; *_m) BIN=$BINDIR_M/${BINNAME:-singlet-gpu} ;; esac
@@ -48,7 +49,7 @@ for m in "${MODES[@]}"; do
   ( while true; do echo "$(date +%s.%N) $(awk '$1=="anon"||$1=="file"||$1=="shmem"||$1=="kernel"||$1=="slab"||$1=="file_mapped"{printf "%s=%.2f ", $1, $2/1073741824}' $CG/memory.stat) cur=$(awk '{printf "%.2f", $1/1073741824}' $CG/memory.current)"; sleep 2; done ) > $O/memstat.txt 2>/dev/null &
   MON2=$!
   T0=$(date +%s.%N); C0=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat)
-  ( cd $SCR/$s/$m && /usr/bin/time -v -o $O/time.txt timeout -k 30 7000 $BIN $IN --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
+  ( cd $SCR/$s/$m && /usr/bin/time -v -o $O/time.txt timeout -k 30 7000 $WR $BIN $IN --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
       --out-prefix $SCR/$s/$m/out/ --threads $T --pipeline --output-format 1pz $ENGARG 2>&1 | while IFS= read -r l; do printf '%(%s)T %s\n' -1 "$l"; done > $O/run.log.ts )
   C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON $MON2 2>/dev/null
   echo "$s $m: wall $(echo "$T1 - $T0" | bc) s, core-s $(echo "($C1 - $C0)/1000000" | bc -l | cut -c1-8), start $T0 end $T1, maxRSS $(awk -F': ' '/Maximum resident/{printf "%.1f GB", $2/1048576}' $O/time.txt)" | tee -a $RES/summary.txt
