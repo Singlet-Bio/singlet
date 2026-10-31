@@ -487,6 +487,25 @@ def parse_cell_calls_column(data: bytes, column: str) -> Optional[list]:
     return out
 
 
+def parse_cell_calls_column(data: bytes, column: str) -> Optional[list]:
+    """Barcodes whose ``column`` is true in a ``cell_calls.tsv`` (``called_knee`` in the called_v2 format: the knee set the
+    call starts from). None when the file has no barcode column or no such column."""
+    if not data.strip():
+        return None
+    lines = data.decode("utf-8", "replace").splitlines()
+    head = lines[0].split("	")
+    bcol = next((c for c in _BARCODE_COLUMNS if c in head), None)
+    if bcol is None or column not in head:
+        return None
+    bi, ci = head.index(bcol), head.index(column)
+    out = []
+    for ln in lines[1:]:
+        f = ln.split("	")
+        if ln and bi < len(f) and ci < len(f) and f[ci].strip().lower() in _TRUE_STRINGS and f[bi] != "":
+            out.append(f[bi])
+    return out
+
+
 def parse_cell_calls(data: bytes) -> Optional[list]:
     """Called-cell barcodes of a legacy ``cell_calls.tsv`` in file order (the rule of ``SingletBundle``: any barcode column
     spelling; ``is_cell`` honoured when present, else every listed barcode counts). None if no barcode column."""
