@@ -23,6 +23,8 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -34,6 +36,48 @@ namespace {
 #define EG_CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) { err = std::string(#x) + ": " + cudaGetErrorString(e_); return false; } } while (0)
 
 double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+
+// SINGLET_ENGINE_GPU_TRACE=1: the transfer ledger and the kernel times of this file, in the log. The prefill runs in the forked STAR child, which nsys
+// does not follow, so this is its profile: every cudaMemcpy (calls, bytes, host seconds, pinned or pageable host side) by source line, and the GPU time of
+// each kernel launch below (cudaEvents) by name. Off: one branch per call.
+bool egTraceOn() { static const bool on = std::getenv("SINGLET_ENGINE_GPU_TRACE") != nullptr; return on; }
+struct EgRow { unsigned long long n = 0, bytes = 0; double sec = 0; bool pinned = false; int kind = 0; };
+struct EgKRow { unsigned long long n = 0; double ms = 0; };
+struct EgPending { const char* tag; cudaEvent_t a, b; };
+std::map<int, EgRow>& egRows() { static std::map<int, EgRow> m; return m; }
+std::vector<EgPending>& egPending() { static std::vector<EgPending> v; return v; }
+cudaError_t egMemcpy(int line, void* dst, const void* src, size_t n, cudaMemcpyKind k) {
+    if (!egTraceOn()) return ::cudaMemcpy(dst, src, n, k);
+    const double t = now();
+    const cudaError_t r = ::cudaMemcpy(dst, src, n, k);
+    const double dt = now() - t;
+    bool pinned = false;
+    const void* h = k == cudaMemcpyHostToDevice ? src : (k == cudaMemcpyDeviceToHost ? dst : nullptr);
+    if (h != nullptr) { cudaPointerAttributes a; if (cudaPointerGetAttributes(&a, h) == cudaSuccess) pinned = a.type == cudaMemoryTypeHost; cudaGetLastError(); }
+    EgRow& w = egRows()[line];
+    w.n++; w.bytes += n; w.sec += dt; w.pinned = pinned; w.kind = (int) k;
+    return r;
+}
+#define cudaMemcpy(d, s, n, k) egMemcpy(__LINE__, (d), (s), (n), (k))
+#define EG_KT(tag, ...) do { cudaEvent_t a_, b_; const bool on_ = egTraceOn(); if (on_) { cudaEventCreate(&a_); cudaEventCreate(&b_); cudaEventRecord(a_); } __VA_ARGS__; if (on_) { cudaEventRecord(b_); egPending().push_back({tag, a_, b_}); } } while (0)
+void egReport(std::string& log) {
+    if (!egTraceOn()) return;
+    char l[256];
+    std::map<std::string, EgKRow> kr;
+    for (auto& e : egPending()) { float ms = 0; cudaEventSynchronize(e.b); cudaEventElapsedTime(&ms, e.a, e.b); kr[e.tag].n++; kr[e.tag].ms += ms; cudaEventDestroy(e.a); cudaEventDestroy(e.b); }
+    egPending().clear();
+    for (auto& kv : kr) { snprintf(l, sizeof l, "engine_gpu trace: kernel %s: %llu launches, %.1f ms GPU time\n", kv.first.c_str(), kv.second.n, kv.second.ms); log += l; }
+    std::vector<std::pair<int, EgRow>> v(egRows().begin(), egRows().end());
+    std::sort(v.begin(), v.end(), [](const auto& x, const auto& y) { return x.second.sec > y.second.sec; });
+    for (auto& kv : v) {
+        const EgRow& w = kv.second;
+        snprintf(l, sizeof l, "engine_gpu trace: cudaMemcpy line %d %s: %llu calls, %.3f GB, %.3f s host, %.2f GB/s, %s host memory\n", kv.first,
+                 w.kind == cudaMemcpyHostToDevice ? "H2D" : (w.kind == cudaMemcpyDeviceToHost ? "D2H" : "other"), w.n, w.bytes / 1e9, w.sec,
+                 w.sec > 0 ? w.bytes / 1e9 / w.sec : 0.0, w.pinned ? "pinned" : "pageable");
+        log += l;
+    }
+    egRows().clear();
+}
 
 //                 LREAD NSPLIT    NP     NW  NWA      NWB NEX NWTR NKEEP    NBLOB
 typedef Caps<      160,     4,   32,    16,  16,     256,  8,   8,    8,     640> LaneA;
@@ -195,14 +239,14 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     for (u64 b0 = 0; b0 < n; b0 += NB) {
         u64 nb = std::min(NB, n - b0);
         int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
-        k_p1<C><<<G, T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dNent);
+        EG_KT("p1", k_p1<C><<<G, T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dNent));
         thrust::exclusive_scan(thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dBase));
         u64 lastB, lastN; EG_CK(cudaMemcpy(&lastB, dBase + nb - 1, 8, cudaMemcpyDeviceToHost)); EG_CK(cudaMemcpy(&lastN, dNent + nb - 1, 8, cudaMemcpyDeviceToHost));
         u64 words = (lastB + lastN) / 32 + 2;
         if (words > bitsCap) { cudaFree(dBits); bitsCap = words * 2; EG_CK(cudaMalloc(&dBits, bitsCap * 4)); }
         EG_CK(cudaMemset(dBits, 0, words * 4));
-        k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
-        k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen);
+        EG_KT("p2", k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits));
+        EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen));
         EG_CK(cudaGetLastError());
     }
     EG_CK(cudaDeviceSynchronize());
@@ -213,7 +257,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         u64 total; EG_CK(cudaMemcpy(&total, dPoff + n, 8, cudaMemcpyDeviceToHost));
         uint8_t* dPacked; EG_CK(cudaMalloc(&dPacked, total + 1));
         devNote();
-        k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked);
+        EG_KT("pack", k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked));
         EG_CK(cudaGetLastError());
         L.out.resize(total);
         EG_CK(cudaMemcpy(L.out.data(), dPacked, total, cudaMemcpyDeviceToHost));
@@ -327,13 +371,13 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t)in.clip.ad3.size(), in.clip.adMMp, dAd, dP5, dP3};
         u64 *dCs, *dCl, *dOffC; char* dSeqC;
         if (cudaMalloc(&dCs, n * 8) || cudaMalloc(&dCl, n * 8) || cudaMalloc(&dOffC, (n + 1) * 8)) return fail("out of device memory (clip)");
-        k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl);
+        EG_KT("clip", k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl));
         cudaMemset(dOffC, 0, 8);
         thrust::inclusive_scan(thrust::device_ptr<u64>(dCl), thrust::device_ptr<u64>(dCl + n), thrust::device_ptr<u64>(dOffC + 1));
         u64 tot = 0;
         if (cudaMemcpy(&tot, dOffC + n, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
         if (cudaMalloc(&dSeqC, tot + 8)) return fail("out of device memory (clipped reads)");
-        k_gather_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dCs, dOffC, n, dSeqC);
+        EG_KT("gather_clip", k_gather_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dCs, dOffC, n, dSeqC));
         hcs.resize(n); hoffC.resize(n + 1);
         if (cudaMemcpy(hcs.data(), dCs, n * 8, cudaMemcpyDeviceToHost) != cudaSuccess
             || cudaMemcpy(hoffC.data(), dOffC, (n + 1) * 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
@@ -368,12 +412,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     u64 *dH1, *dH2; uint8_t* dN; uint32_t *dOrder, *dHead; unsigned long long* dColl;
     if (cudaMalloc(&dH1, n * 8) || cudaMalloc(&dH2, n * 8) || cudaMalloc(&dN, n) || cudaMalloc(&dOrder, n * 4) || cudaMalloc(&dHead, n * 4)
         || cudaMalloc(&dColl, 8)) return fail("out of device memory (dedup)");
-    k_hash<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, dH1, dH2, dN);
+    EG_KT("hash", k_hash<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, dH1, dH2, dN));
     thrust::sequence(thrust::device_ptr<uint32_t>(dOrder), thrust::device_ptr<uint32_t>(dOrder + n));
     auto keys = thrust::make_zip_iterator(thrust::make_tuple(thrust::device_ptr<u64>(dH1), thrust::device_ptr<u64>(dH2)));
     thrust::sort_by_key(keys, keys + n, thrust::device_ptr<uint32_t>(dOrder));
     cudaMemset(dColl, 0, 8);
-    k_groups<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dH1, dH2, dOrder, n, dHead, dColl);
+    EG_KT("groups", k_groups<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dH1, dH2, dOrder, n, dHead, dColl));
     unsigned long long coll = 0;
     if (cudaMemcpy(&coll, dColl, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("dedup copy");
     if (coll) return fail("hash collision between different sequences (" + std::to_string(coll) + "): GPU path not used");
@@ -393,7 +437,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         uint32_t* dRep; u64* dKey;
         if (cudaMalloc(&dRep, rep.size() * 4) || cudaMalloc(&dKey, rep.size() * 8)) return fail("out of device memory (order)");
         cudaMemcpy(dRep, rep.data(), rep.size() * 4, cudaMemcpyHostToDevice);
-        k_prefix_key<<<(unsigned)((rep.size() + 255) / 256), 256>>>(dSeq, dOff, dRep, rep.size(), dKey);
+        EG_KT("prefix_key", k_prefix_key<<<(unsigned)((rep.size() + 255) / 256), 256>>>(dSeq, dOff, dRep, rep.size(), dKey));
         thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + rep.size()), thrust::device_ptr<uint32_t>(dRep));
         if (cudaMemcpy(rep.data(), dRep, rep.size() * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
         cudaFree(dRep); cudaFree(dKey);
@@ -532,6 +576,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
              (unsigned long long)out.nWithN, (unsigned long long)nGpuMapped, (unsigned long long)out.nHostLane, out.secHostLane,
              (unsigned long long)out.nFailed, out.secUpload, out.secDedup, out.secMapGpu);
     out.log += line;
+    egReport(out.log);
     return true;
 }
 
