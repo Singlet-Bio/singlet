@@ -219,7 +219,7 @@ def cmd_eval(a):
             z = np.load(Path(a.out) / "lite" / f"feats_{tg}" / f"{n}.npz")
             for k in z.files:
                 data[n][0][k + ("@" + suf if suf else "")] = z[k]
-    cols = COMBOS[a.combo]
+    cols = BASE5 + a.combo.split(":")[1].split(",") if ":" in a.combo else COMBOS[a.combo]
     ap = {}
     for n in D.STUDY:
         s = D.loso_scores(data, n, cols)
@@ -256,7 +256,8 @@ def cmd_diag(a):
             z = np.load(Path(a.out) / "lite" / f"feats_{tag}" / f"{n}.npz")
             for k in z.files:
                 data[n][0][k + "@" + tag] = z[k]
-    names = ["atlas_knn", "atlas_clf", "ct_entropy"] + [f"{k}@{t}" for t in a.tags for k in ("lite_knn", "lite_entropy")]
+    z0 = np.load(Path(a.out) / "lite" / f"feats_{a.tags[0]}" / "pbmc-1A-dm.npz")
+    names = ["atlas_knn", "ct_entropy"] + [f"{k}@{t}" for t in a.tags for k in z0.files]
     for f in names:
         ap, au, rho = [], [], []
         for n in D.STUDY:
@@ -289,7 +290,7 @@ def main():
     t.add_argument("--space-dim", type=int, default=0)
     e = sub.add_parser("eval")
     e.add_argument("--out", required=True)
-    e.add_argument("--combo", required=True, choices=list(COMBOS))
+    e.add_argument("--combo", required=True)
     e.add_argument("--tag", default="")
     d = sub.add_parser("diag")
     d.add_argument("--out", required=True)
