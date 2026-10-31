@@ -1,0 +1,56 @@
+{
+ "pbmc1k_v3": {
+  "gpu_run": "unknown (no gpu_pileup line)",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 52,
+  "n_different": 1
+ },
+ "pbmc1k_v2": {
+  "status": "missing"
+ },
+ "neuron1k_v3": {
+  "status": "missing"
+ },
+ "hgmm1k_v3": {
+  "gpu_run": "unknown (no gpu_pileup line)",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 50,
+  "n_different": 1
+ },
+ "pbmc1k_cite_v3": {
+  "status": "missing"
+ },
+ "nuclei2k_v2": {
+  "status": "missing"
+ },
+ "pbmc5p_v1": {
+  "status": "missing"
+ },
+ "kang2018_ctrl": {
+  "status": "missing"
+ }
+}

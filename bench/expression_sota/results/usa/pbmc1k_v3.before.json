@@ -1,0 +1,65 @@
+{
+ "dataset": "pbmc1k_v3",
+ "label": "alpha-before",
+ "singlet_run": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/runs/pbmc1k_v3/singlet-public",
+ "n_cells": 1230,
+ "n_genes": 38606,
+ "unspliced_pooled_gene_r": {
+  "singlet~starsolo": {
+   "pearson_log1p": 0.9867223452538375,
+   "spearman": 0.9833623182703876
+  },
+  "singlet~alevinfry": {
+   "pearson_log1p": 0.963167440203228,
+   "spearman": 0.952352019332792
+  },
+  "starsolo~alevinfry": {
+   "pearson_log1p": 0.9691653036770451,
+   "spearman": 0.961279020276397
+  }
+ },
+ "spliced_ambiguous_pooled_gene_r": {
+  "singlet~starsolo": {
+   "pearson_log1p": 0.9577817301604528,
+   "spearman": 0.9502496193920511
+  },
+  "singlet~alevinfry": {
+   "pearson_log1p": 0.9872650200040826,
+   "spearman": 0.9848225236953666
+  },
+  "starsolo~alevinfry": {
+   "pearson_log1p": 0.9571294108571667,
+   "spearman": 0.951532489592531
+  }
+ },
+ "unspliced_cell_median_r": {
+  "singlet~starsolo": 0.9080346564460631,
+  "singlet~alevinfry": 0.7956560740753329,
+  "starsolo~alevinfry": 0.8227196855526373
+ },
+ "layer_shares": {
+  "singlet": {
+   "S": 0.6763271955219908,
+   "U": 0.3116746127035977,
+   "A": 0.011998191774411486,
+   "umi": 14146465.0
+  },
+  "starsolo": {
+   "S": 0.5539745635240048,
+   "U": 0.3468248180525605,
+   "A": 0.0992006184234348,
+   "umi": 13797666.0
+  },
+  "alevinfry": {
+   "S": 0.2129381498155547,
+   "U": 0.3175754763822883,
+   "A": 0.469486373802157,
+   "umi": 14837191.0
+  }
+ },
+ "unspliced_fraction": {
+  "singlet": 0.3116746127035977,
+  "starsolo": 0.3468248180525605,
+  "alevinfry": 0.3175754763822883
+ }
+}

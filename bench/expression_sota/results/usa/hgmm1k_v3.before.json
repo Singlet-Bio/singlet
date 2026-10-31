@@ -1,0 +1,85 @@
+{
+ "dataset": "hgmm1k_v3",
+ "label": "alpha-before",
+ "singlet_run": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/runs/hgmm1k_v3/singlet-public",
+ "n_cells": 1049,
+ "n_genes": 116904,
+ "unspliced_pooled_gene_r": {
+  "singlet~starsolo": {
+   "pearson_log1p": 0.9868826901986245,
+   "spearman": 0.9820051201112
+  },
+  "singlet~alevinfry": {
+   "pearson_log1p": 0.9589342227832193,
+   "spearman": 0.9376318503038614
+  },
+  "starsolo~alevinfry": {
+   "pearson_log1p": 0.9662359010642675,
+   "spearman": 0.9492289749214567
+  }
+ },
+ "spliced_ambiguous_pooled_gene_r": {
+  "singlet~starsolo": {
+   "pearson_log1p": 0.9483746008218781,
+   "spearman": 0.9272775981417285
+  },
+  "singlet~alevinfry": {
+   "pearson_log1p": 0.9830522707431606,
+   "spearman": 0.9754927253268476
+  },
+  "starsolo~alevinfry": {
+   "pearson_log1p": 0.9446309415682069,
+   "spearman": 0.9260537544882717
+  }
+ },
+ "unspliced_cell_median_r": {
+  "singlet~starsolo": 0.9559294444021386,
+  "singlet~alevinfry": 0.8585612320624992,
+  "starsolo~alevinfry": 0.8763111198328526
+ },
+ "layer_shares": {
+  "singlet": {
+   "S": 0.7885837083154564,
+   "U": 0.20991047720601974,
+   "A": 0.001505814478523829,
+   "umi": 32733116.0
+  },
+  "starsolo": {
+   "S": 0.6948343465026917,
+   "U": 0.2217059017144767,
+   "A": 0.08345975178283162,
+   "umi": 30922438.0
+  },
+  "alevinfry": {
+   "S": 0.1857958301213819,
+   "U": 0.21235292320992444,
+   "A": 0.6018512466686936,
+   "umi": 31823852.0
+  }
+ },
+ "unspliced_fraction": {
+  "singlet": 0.20991047720601974,
+  "starsolo": 0.2217059017144767,
+  "alevinfry": 0.21235292320992444
+ },
+ "cross_species_leak": {
+  "singlet": {
+   "intron_leak": 0.002916976255430525,
+   "exon_leak": 0.003799468055860261,
+   "pure_human": 495,
+   "pure_mouse": 529
+  },
+  "starsolo": {
+   "intron_leak": 0.002700806066448473,
+   "exon_leak": 0.0031403961208651015,
+   "pure_human": 495,
+   "pure_mouse": 530
+  },
+  "alevinfry": {
+   "intron_leak": 0.004271108813958736,
+   "exon_leak": 0.00679714954681534,
+   "pure_human": 492,
+   "pure_mouse": 529
+  }
+ }
+}

@@ -54,4 +54,49 @@ modality fix against `prod/campaign`, handed to S1.
 
 ## Results
 
-(none yet)
+### 1. Spliced / unspliced / ambiguous (2026-10-31, binary = pin d9834b8a, intron_rules 389)
+
+Fresh runs of `mc99cpu` are byte-identical to S5's gate runs of the pin (`cmp` on `intron_counts.mtx.gz`), so these are the pin's numbers.
+Competitors: STARsolo 2.7.11b Velocyto, alevin-fry 0.18 USA (existing runs). Cells = STARsolo EmptyDrops_CR calls. Driver
+`bench/expression_sota/usa_metrics.py`, outputs `bench/expression_sota/results/usa/`.
+
+Primary: pooled per-gene unspliced r (Pearson on log1p of summed UMI). Bar = the two competitors' mutual r.
+
+| dataset | Singlet~STARsolo | Singlet~alevin-fry | STARsolo~alevin-fry (bar) |
+|---|---|---|---|
+| pbmc1k_v3 | 0.987 | 0.963 | 0.969 |
+| pbmc5p_v1 | 0.982 | 0.952 | 0.965 |
+| neuron1k_v3 | 0.983 | 0.961 | 0.970 |
+| nuclei2k_v2 | 0.963 | 0.949 | 0.959 |
+| hgmm1k_v3 | 0.987 | 0.959 | 0.966 |
+
+Pass (r >= bar - 0.02) on 5/5 vs STARsolo; vs alevin-fry 5/5 within 0.02 (worst nuclei2k_v2 -0.010, pbmc5p_v1 -0.013). The "0.83 vs
+0.96" of the old result does not reproduce at the pooled-gene level on the pin. With the #80 rules off (`mc96off`, pbmc1k_v3 and
+neuron1k_v3) the pooled r is the same to 3 decimals (0.988/0.964, 0.982/0.961): the rules do not move this metric.
+
+Co-primary 1, unspliced share U/(S+A+U) (no competitor needed to read it; nuclei should be intron rich):
+
+| dataset | Singlet | STARsolo Velocyto | alevin-fry |
+|---|---|---|---|
+| pbmc1k_v3 | 0.312 | 0.347 | 0.318 |
+| pbmc5p_v1 | 0.094 | 0.101 | 0.117 |
+| neuron1k_v3 | 0.321 | 0.359 | 0.350 |
+| nuclei2k_v2 | 0.599 | 0.675 | 0.647 |
+| hgmm1k_v3 | 0.210 | 0.222 | 0.212 |
+
+Singlet's unspliced share is the lowest of the three on nuclei2k_v2 (8% below alevin-fry, 11% below STARsolo) and 10% below STARsolo
+on neuron/pbmc3'. It matches alevin-fry on pbmc1k_v3 and hgmm. The tools disagree among themselves by up to 8%, and no truth
+resolves which share is right; so this is reported, not claimed.
+
+Co-primary 2, cross-species leak on hgmm1k_v3 (fraction of intron UMI in a pure-species cell that maps to the other species; exon in brackets):
+Singlet 0.29% (0.38%), STARsolo 0.27% (0.31%), alevin-fry 0.43% (0.68%). Singlet is within 0.02 points of STARsolo and better than alevin-fry.
+
+Per-cell median r of the unspliced vector is 0.80-0.96 (3'), 0.37-0.59 (5', depth) for every tool pair; Singlet~STARsolo is the
+highest pair on 4/5 datasets.
+
+Verdict: **at SOTA by agreement and by leak; the remaining gap is the per-cell unspliced total (S5 gate: 0.21 vs 0.027 ratio
+distance on pbmc1k_v2)**, which is driven by STARsolo's Velocyto being the outlier (Singlet matches alevin-fry's share on pbmc1k_v3
+and hgmm) and by a 8-11% lower share on nuclei. No engine change proposed yet; the ambiguous layer exists (`ambiguous_counts`), no
+addition needed. A real-truth check of the share (metabolic labelling, or long reads from `bench/ground-truth`) is the open item.
+
+(next: cell calling)
