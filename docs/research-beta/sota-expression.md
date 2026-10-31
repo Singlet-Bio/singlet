@@ -114,6 +114,28 @@ distance on pbmc1k_v2)**, which is driven by STARsolo's Velocyto being the outli
 and hgmm) and by a 8-11% lower share on nuclei. No engine change proposed yet; the ambiguous layer exists (`ambiguous_counts`), no
 addition needed. A real-truth check of the share (metabolic labelling, or long reads from `bench/ground-truth`) is the open item.
 
+**Long-read truth for the unspliced layer (2026-10-31; PBMC-E pbmc1, dev split, T1 = PacBio and ONT agree; `bench/expression_sota/longread_usa/`, rule registered in `TRUTH_RULE.md` before any tool output was read).**
+Each molecule (CB + UMI) is classed from its long read(s) against the GRCh38-2024-A annotation: unspliced if >= 10 aligned bases are intronic, spliced if it crosses an annotated
+junction (2 nt), else ambiguous; Truth-R2 projects the long read onto the Illumina read window (what a short-read tool can know). 9.76 M molecules in 4,855 cells. All three tools ran at
+full depth (227.6 M read pairs; Singlet needed a padded R1 and `--protocol 10x-3p-v3`: its auto-detect of the 27-nt R1 picked the wrong protocol).
+
+| scored against Truth-R2 (pairs with >= 90% truth coverage, ~1.75 M) | Singlet | STARsolo Velocyto | alevin-fry |
+|---|---|---|---|
+| unspliced share, all truth-cell molecules | 0.312 | 0.341 | 0.328 |
+| ambiguous share | 0.017 | 0.124 | 0.381 |
+| (cell, gene) unspliced count: pair r (log1p) | 0.69 | 0.863 | 0.866 |
+| "gene has an unspliced molecule": precision / recall | **0.91** / 0.54 | 0.79 / **0.96** | 0.82 / 0.94 |
+| per-molecule recall of truth-unspliced molecules | 54.3% | 97.6% | 93.8% |
+| unspliced share in those pairs (truth 6.1-6.5%) | 3.9% | 7.6% | 7.4% |
+
+**Verdict: this is a classification choice that costs Singlet recall, and it is the largest real gap in the USA layer.** Singlet labels a molecule unspliced only if *every* read touches an intron
+and ambiguous if reads of both kinds are present. 47.5% of Truth-R2-unspliced molecules (145 k of 305 k) mix intron-touching and exon-only reads, and Singlet sends 43% of truth-unspliced molecules to
+ambiguous. Among molecules with any intron-touching read (mixed or all-intronic, 305 k), **100% are unspliced by the long read** (`mixed_check.json`): the rule "any intron-touching read means unspliced"
+has no precision cost in this data and would lift Singlet's recall of the visible unspliced molecules to ~100% (about half of all long-read-unspliced molecules show their intron outside the 89-nt R2 window,
+so no short-read tool can see them). The two competitors overshoot the Truth-R2 share by 15-25%, Singlet undershoots it by ~40%. Caveat: long reads capture only 2.8% of the molecules STARsolo calls
+unspliced (37.6% of the spliced, 31.6% of the ambiguous), so absolute shares cannot be checked, and the junction tolerance (2 nt) and the exclusion of bases covered by other same-strand genes were not varied.
+Consequence for the earlier agreement-based claim ("at SOTA by agreement"): against long-read truth Singlet is behind on unspliced pair correlation (0.69 vs 0.86) and recall, ahead on precision.
+
 ### 2. Empty droplets and cell calling (2026-10-31, pin d9834b8a)
 
 Truth that is not a cell caller (`bench/cellcall_truth`, branch `bench/cellcall-independent-truth`): Kang b2 ctrl donor genotypes
