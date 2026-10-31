@@ -17,6 +17,7 @@
 #endif
 #include "SeqCache.h"
 #include "PhaseMark.h"
+#include "HandoffShadow.h"
 #include "Parameters.h"
 #include "Genome.h"
 #include "InOutStreams.h"
@@ -628,6 +629,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 }
                 sumOff[nRec] = base;
                 g_handoffSum = sumAll.data(); g_handoffSumOff = sumOff.data();
+                if (g_shadowOn) {   // record lengths for the shadow statistics
+                    static std::vector<uint32> recLen;
+                    recLen.resize(nRec);
+                    for (uint64 r = 0; r < nRec; r++) recLen[r] = (uint32) (out.seqOff[r + 1] - out.seqOff[r]);
+                    g_handoffRecLen = recLen.data();
+                }
                 P.inOut->logMain << "ENGINE_GPU: hand-off summaries for STAR's per-read output: " << base << " bytes\n";
             }
             // and the per-read entries (barcode, UMI, quality counters) in a shared mapping, filled by the mapping threads

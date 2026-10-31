@@ -36,6 +36,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
 #include "SjdbClass.h"
 #include "sjdbInsertJunctions.h"
 #include "PhaseMark.h"
+#include "HandoffShadow.h"
 #include "Variation.h"
 #include "Solo.h"
 #include "samHeaders.h"
@@ -280,6 +281,7 @@ int star_main_impl(int argInN, char *argIn[])
     };
 
     starPhaseMark(P, "finished_mapping");
+    shadowCompare(P);   // SINGLET_STAR_SHADOW=1: bulk counters against the live per-read pass (no output change)
     time(&g_statsAll.timeFinishMap);
     *P.inOut->logStdOut << timeMonthDayTime(g_statsAll.timeFinishMap) << " ..... finished mapping\n"
                         << flush;

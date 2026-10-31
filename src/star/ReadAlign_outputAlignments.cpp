@@ -1,6 +1,7 @@
 #include "StarProfile.h"
 #include "ReadAlign.h"
 #include "SeqCache.h"
+#include "HandoffShadow.h"
 #include "GlobalVariables.h"
 #include "ErrorWarning.h"
 #include <cstdlib>
@@ -404,6 +405,8 @@ void ReadAlign::outputHandoffSummary()
 {//the mapped-read branch of outputAlignments for a hand-off read, from its sequence's summary (seqCacheHandoffSummary): mapping stats,
  //junctions, the Solo Gene annotation, then barcode and UMI and the Solo record as for any read. No SAM/BAM output (the pileup has the
  //alignments), and the read is mapped (an unmapped sequence has no summary).
+    Stats shBefore;
+    if (g_shadowOn) shBefore = statsRA;   // SINGLET_STAR_SHADOW: what this pass adds to the run statistics (HandoffShadow.h)
     const uint8 *p = handoffSum;
     uint16 n16, ng;
     memcpy(&n16, p, 2);
@@ -448,6 +451,7 @@ void ReadAlign::outputHandoffSummary()
         memcpy(chunkOutSJ->data + chunkOutSJ->N * Junction::dataSize, p, (size_t) nsj * Junction::dataSize);
         chunkOutSJ->N += nsj;
     };
+    if (g_shadowOn) shadowAddLive(shBefore, statsRA);
     PROF_ADD(PROF_outMapped, tOutMapped);
 
     PROF_T0(tOutBarcode);
