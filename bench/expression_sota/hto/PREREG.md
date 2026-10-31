@@ -139,3 +139,20 @@ hashtag caller touched I1 (the HTO table was only used to define the cell univer
 3. **Classes with fewer than 30 truth cells are not averaged into the macro F1** (and the doublets-called-singlet rate is then
    reported as undefined). If the full-library vireo again yields fewer than 30 doublets, I1's primary metric is F_S alone and the
    statement "within 0.01 of the best competitor" then says nothing about doublets; the report says so.
+
+## 11. Outcome notes for I1 (written after the single pre-registered run; nothing above was changed)
+
+* Truth: whole library, 2,902 called cells, 2,387 in the deposited HTO table, vireo median 333 SNPs per cell, 153 truth doublets
+  (42 called `doublet`, the rest prob_doublet >= 0.5), 2,381 scored. The 30-cell rule is met, so the macro F1 is the mean of F_S and F_D.
+* `results/independent_I1.json` is the pre-registered run, unedited. It is **degenerate**: the 515 called cells absent from the
+  HTO table were fed to the callers as all-zero columns, which creates a third mode (zero) in every tag; GMM, HTODemux, BFF-raw and
+  the current caller then call every real cell a doublet (0 singlets).
+* **The premise "donor = hashtag" of section 2 is false for this dataset.** Even among 476 cells with a clean dominant tag (>= 300
+  counts, second < 20% of the first) and a vireo donor, the top tag is unrelated to the genotype donor (every tag has the same donor
+  mix; the best-donor share per tag is 0.26, which is about the share of the two commonest donors, i.e. chance); vireo itself is well supported
+  (prob_max median 0.98). The eight HTOs ("Batch A-H") label batches that each contain a mixture of the donors. F_S, and hence the
+  pre-registered macro F1, therefore cannot measure demultiplexing accuracy on I1 for any caller. What remains meaningful on I1 is
+  the secondary rate (a genetic doublet called singlet), at best bounded away from 0 because a two-donor droplet with two cells of
+  the same batch carries one tag.
+* `results/independent_I1_posthoc_dropzero.json` is a **post-hoc, non-pre-registered** variant (callers see only cells with >= 1
+  count; all-zero cells are negatives). Settings and callers are the frozen ones. It is reported as descriptive only.

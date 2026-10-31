@@ -176,6 +176,7 @@ def main():
     ap.add_argument("--frozen", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--only", default=None)
+    ap.add_argument("--drop-zero", action="store_true", help="POST-HOC: callers see only cells with >= 1 tag count; all-zero cells are negatives")
     ap.add_argument("--truth-only", action="store_true", help="build and report the truth only (no caller is run)")
     a = ap.parse_args()
     fz = json.load(open(a.frozen))
@@ -183,7 +184,16 @@ def main():
     if fz.get("singlet_caller") == "bffc":
         p = fz["params"]
         callers["singlet_frozen_bffc"] = lambda X, p=p: H.bff_cluster(X, alpha=p["alpha"], beta=p["beta"], tn_rule=p["tn_rule"], t2_rule=p["t2_rule"])[0]
-    res = {"frozen": fz}
+    if a.drop_zero:
+        def wrap(fn):
+            def g(X):
+                nz = X.sum(0) > 0
+                out = np.full(X.shape[1], H.NEG, dtype=np.int64)
+                out[nz] = np.asarray(fn(X[:, nz]))
+                return out
+            return g
+        callers = {k: wrap(f) for k, f in callers.items()}
+    res = {"frozen": fz, "posthoc_drop_zero": bool(a.drop_zero)}
     competitors = ["hasheddrops", "gmm", "htodemux", "bff_raw", "bff_cluster"]
     singlet_names = [n for n in callers if n == "current" or n.startswith("singlet_frozen")]
     sets = []
