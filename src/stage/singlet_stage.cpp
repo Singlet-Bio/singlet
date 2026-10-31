@@ -79,9 +79,10 @@ struct Sha256 {
 
 // ── sequence table: open addressing over packed 2-bit sequences (N coded as A, N positions kept separately and part of the key) ───────────
 struct SeqTable {
-    static constexpr int SLOT = 32;      // 127 nt * 2 bit = 254 bits
+    static constexpr int NMB = 32;       // N-position bitmask bytes (255 bits)
+    static constexpr int SLOT = 64;      // 255 nt * 2 bit = 510 bits
     std::vector<uint8_t> data, len, hasn;
-    std::unordered_map<uint32_t, std::array<uint8_t, 16>> nmask;
+    std::unordered_map<uint32_t, std::array<uint8_t, NMB>> nmask;
     std::vector<uint32_t> ht;            // id + 1, 0 = empty
     uint64_t mask = 0;
     uint64_t n() const { return len.size(); }
@@ -91,7 +92,7 @@ struct SeqTable {
         uint64_t h = 0x243F6A8885A308D3ull, w;
         for (int i = 0; i < SLOT; i += 8) { std::memcpy(&w, slot + i, 8); h = mix(h, w); }
         h = mix(h, l);
-        if (nm) { for (int i = 0; i < 16; i += 8) { std::memcpy(&w, nm + i, 8); h = mix(h, w); } }
+        if (nm) { for (int i = 0; i < NMB; i += 8) { std::memcpy(&w, nm + i, 8); h = mix(h, w); } }
         return h;
     }
     void grow() {
@@ -113,7 +114,7 @@ struct SeqTable {
             if (!e) break;
             uint32_t id = e - 1;
             if (len[id] == l && std::memcmp(&data[(uint64_t)id * SLOT], slot, SLOT) == 0 && (bool)hasn[id] == (nm != nullptr) &&
-                (!nm || std::memcmp(nmask.at(id).data(), nm, 16) == 0)) return id;
+                (!nm || std::memcmp(nmask.at(id).data(), nm, NMB) == 0)) return id;
             p = (p + 1) & mask;
         }
         uint32_t id = (uint32_t)n();
@@ -121,7 +122,7 @@ struct SeqTable {
         data.insert(data.end(), slot, slot + SLOT);
         len.push_back(l);
         hasn.push_back(nm ? 1 : 0);
-        if (nm) { std::array<uint8_t, 16> a; std::memcpy(a.data(), nm, 16); nmask.emplace(id, a); }
+        if (nm) { std::array<uint8_t, NMB> a; std::memcpy(a.data(), nm, NMB); nmask.emplace(id, a); }
         ht[p] = id + 1;
         return id;
     }
@@ -222,7 +223,7 @@ int main(int argc, char** argv) {
                 n_in++;
                 const uint16_t r1l = blk.r1_len(i), r2l = blk.r2_len(i);
                 if (r1l < bc0 + bcl || r1l < umi0 + umil || r2l == 0) { n_dropped++; continue; }
-                if (r2l > MAX_SEQ_LEN) die(3, "cDNA longer than 127 nt (" + std::to_string(r2l) + "): not stageable");
+                if (r2l > MAX_SEQ_LEN) die(3, "cDNA longer than 255 nt (" + std::to_string(r2l) + "): not stageable");
                 const uint8_t* r1 = blk.r1_seq(i);
                 uint64_t cbkey = 0; bool cbN = false;
                 for (int j = 0; j < bcl; j++) { uint8_t c = std::min<uint8_t>(r1[bc0 + j], 4); cbN |= c > 3; cbkey = (cbkey << 3) | c; }
@@ -239,7 +240,7 @@ int main(int argc, char** argv) {
                     if (w >= 0) { hist[w]++; hist_reads++; }
                 }
                 // cDNA -> slot
-                uint8_t slot[SeqTable::SLOT] = {0}; uint8_t nm[16] = {0}; bool anyN = false;
+                uint8_t slot[SeqTable::SLOT] = {0}; uint8_t nm[SeqTable::NMB] = {0}; bool anyN = false;
                 const uint8_t* r2 = blk.r2_seq(i);
                 for (uint16_t j = 0; j < r2l; j++) { uint8_t c = r2[j]; if (c > 3) { anyN = true; nm[j >> 3] |= (uint8_t)(1u << (j & 7)); c = 0; } slot[j >> 2] |= (uint8_t)(c << (6 - 2 * (j & 3))); }
                 const uint32_t sid = tab.get_or_add(slot, (uint8_t)r2l, anyN ? nm : nullptr);

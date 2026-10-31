@@ -43,7 +43,7 @@ static int verify_file(const std::string& path, const std::vector<std::string>& 
     if (F.index_crc32c != fg2::crc32c(idx.data(), idx.size() * sizeof(IndexEntry))) { std::fprintf(stderr, "verify: bad index crc\n"); return 7; }
     const uint32_t slot = H.seq_slot;
     std::vector<uint8_t> seq2, slen, hasn;
-    std::vector<std::array<uint8_t, 16>> nms;
+    std::vector<std::array<uint8_t, 32>> nms;
     for (uint32_t b = 0; b < F.n_blocks; b++) {
         const uint8_t* base = file.data() + idx[F.n_chunks + b].offset;
         BlockHeader bh; std::memcpy(&bh, base, sizeof bh);
@@ -53,7 +53,7 @@ static int verify_file(const std::string& path, const std::vector<std::string>& 
             std::fprintf(stderr, "verify: bad sequence block %u\n", b); return 7;
         }
         seq2.insert(seq2.end(), a.begin(), a.end()); slen.insert(slen.end(), l.begin(), l.end());
-        size_t at = hasn.size(); hasn.resize(at + bh.n_seqs, 0); nms.resize(at + bh.n_seqs, std::array<uint8_t, 16>{});
+        size_t at = hasn.size(); hasn.resize(at + bh.n_seqs, 0); nms.resize(at + bh.n_seqs, std::array<uint8_t, 32>{});
         for (size_t k = 0; k < e.size() / 4; k++) {
             uint32_t v; std::memcpy(&v, &e[4 * k], 4);
             uint32_t i = v & 0x7FFF, pos = v >> 15;

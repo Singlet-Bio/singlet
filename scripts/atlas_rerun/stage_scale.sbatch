@@ -25,6 +25,6 @@ open("$T/runs.txt", "w").write("\n".join(runs) + "\n")
 print(len(runs), "runs")
 PY
 i=0
-cat $T/runs.txt | while read R; do i=$((i+1)); V=""; [ $i -le 6 ] && V="--verify"; echo "$R $V"; done | \
+cat $T/runs.txt | while read R; do i=$((i+1)); V=""; [ $i -le 6 ] && V="--verify"; echo "$R${V:+ $V}"; done | \
   xargs -P $P -L1 sh -c 'python3 '$SRC'/stage_one.py $0 --stage-bin '$B'/singlet-stage --singlet '$W'/release-gate/bin/d9834b8a/singlet-cpu --whitelist-dir '$SINGLET_WHITELIST_DIR' --scratch '$B' --cap-stage '$T'/cap $1' > $T/results.jsonl 2> $T/errors.log
 echo "== done $(date -Is) $(wc -l < $T/results.jsonl) results"

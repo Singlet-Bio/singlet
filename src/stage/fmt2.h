@@ -23,7 +23,7 @@ static constexpr uint32_t SEC_ALIGN   = 16;            // plane start alignment 
 static constexpr uint32_t CHUNK_READS = 32768;         // reads per chunk (the last one may be shorter)
 static constexpr uint32_t BLOCK_SEQS  = 32768;         // sequences per table block
 static constexpr uint32_t NO_CB       = 0xFFFFFFFFu;   // `cb` of a read without a whitelist barcode (cbst says why)
-static constexpr uint32_t MAX_SEQ_LEN = 127;           // 7-bit length as in v1; longer cDNA is refused by the encoder
+static constexpr uint32_t MAX_SEQ_LEN = 255;           // 8-bit length (v1 had 127); 2 x 150 runs are common. Longer cDNA is refused by the encoder
 
 enum Codec : uint8_t { CODEC_RAW = 0, CODEC_ZSTD = 1 };
 enum Flags : uint32_t {
@@ -64,8 +64,8 @@ static inline uint32_t exc_pos(uint32_t e) { return (e >> 17) & 0x7F; }
 // Sequence-table planes inside a block
 enum SeqPlane { SP_SEQ2 = 0, SP_SLEN = 1, SP_SEXC = 2, NSEQPLANE = 3 };
 //   SP_SEQ2 u8[n * seq_slot]  2 bit/base, first base in the high bits, zero padded; N coded as A (see SP_SEXC)
-//   SP_SLEN u8[n]             length in bases (1..127)
-//   SP_SEXC u32[n_sexc]       sorted: bits 0-14 index in block, 15-21 position of an N (one entry per N base)
+//   SP_SLEN u8[n]             length in bases (1..255)
+//   SP_SEXC u32[n_sexc]       sorted: bits 0-14 index in block, 15-22 position of an N (one entry per N base)
 // Key = the exact stored cDNA exactly as the .1fq holds it: BEFORE any 5' prefix (r2_clip5p), CR4 or 3' clip (the engine applies them on the packed codes), N and length included.
 // Order = first occurrence in the read stream (deterministic). One table per file.
 
@@ -84,7 +84,7 @@ struct FileHeader {                 // 4096 bytes at offset 0
     uint32_t block_seqs;            //  20  BLOCK_SEQS
     uint64_t n_reads;               //  24  reads stored
     uint64_t n_reads_in;            //  32  reads in the decoded runs
-    uint64_t n_dropped;             //  40  dropped (R1 or R2 length 0, R2 > 127 refused, as v1)
+    uint64_t n_dropped;             //  40  dropped (R1 or R2 length 0, cDNA > 255 refused)
     uint64_t n_unique;              //  48  rows of the sequence table
     uint32_t n_chunks;              //  56
     uint32_t n_blocks;              //  60
