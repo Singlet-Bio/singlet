@@ -3655,7 +3655,6 @@ int main(int argc, char* argv[]) {
     if (!whitelist_file.empty() && whitelist_file != "None" && whitelist_file != "none")
         config.whitelist_path = whitelist_file;
     config.threads = pileup_threads;
-    config.finalize_threads = std::max(1, star_threads);   // --threads: the finalize steps after the stream
     config.umi_len = umi_len;
     if (pipeline_mode) config.count_mt = true;
     if (pipeline_mode) config.count_polya = true;  // poly(A) site usage (3' protocols; skipped when reverse_strand)
@@ -8303,7 +8302,7 @@ int main(int argc, char* argv[]) {
     export_cfg.output_format = output_format;
     export_cfg.pipeline_mode = pipeline_mode;
     export_cfg.n_donors = n_donors;
-    export_cfg.threads = std::max(config.threads, star_threads);   // --threads (the stream path's pileup thread is 1)
+    export_cfg.threads = config.threads;
     export_cfg.genome_dir = genome_dir;
 
     // ── §3.6 fields for summary.json ──
