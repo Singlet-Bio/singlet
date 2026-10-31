@@ -188,4 +188,40 @@ ordering is not a differentiator on this truth. Candidate engine change: calibra
 rare-cluster estimates (`fix/ambient-calibration` has the code, unmerged). Not done: needs a decision on whether the 0.28 hgmm bias justifies
 a PR; the cluster shrinkage did not fix the rare-cluster ratio on held-out lanes in its own bench.
 
-(next: doublets)
+### 4. Expression doublets (2026-10-31; analysis of the #43 latent-qc results, no new compute)
+
+Source: `bench/latent_qc/doublets/results/auprc_wide.csv` (study/latent-qc, PR #43; copied to `bench/expression_sota/results/doublets/`). 17
+real-label datasets (genotype demuxlet, hashtag, MULTI-seq, species), leave-one-study-out training for the combiners, no synthetic sets.
+Paired bootstrap of the AUPRC difference vs scDblFinder (dataset resampling; study-clustered resampling in brackets):
+
+| method | mean diff vs scDblFinder | 95% CI | study-clustered CI | wins |
+|---|---|---|---|---|
+| production `detect_doublets` | -0.058 | [-0.092, -0.027] | [-0.113, -0.020] | 1/17 |
+| `combo_prod_atlas` (no R) | -0.002 | [-0.029, +0.023] | [-0.040, +0.016] | 9/17 |
+| `combo_all` (needs R + Solo) | +0.013 | [-0.002, +0.026] | [-0.010, +0.021] | 12/17 |
+
+By kind of label, mean diff vs scDblFinder [95% CI over datasets], wins:
+
+| truth | n | production | combo_prod_atlas | combo_all | scDblFinder (mean AUPRC) |
+|---|---|---|---|---|---|
+| genotype (Kang demuxlet lanes) | 6 | 0.482 | **0.580**, +0.037 [+0.017,+0.051], 5/6 | 0.574, +0.030 [+0.019,+0.039], 6/6 | 0.544 |
+| hashtag / MULTI-seq | 8 | 0.478 | 0.491, -0.012 [-0.057,+0.024], 3/8 | 0.514, +0.011 [-0.011,+0.031], 5/8 | 0.503 |
+| species mixture (hgmm) | 2 | 0.808 | 0.923, -0.076 [-0.105,-0.046], 0/2 | 0.966, -0.033 [-0.045,-0.021], 0/2 | 0.998 |
+| 293T demuxlet | 1 | 0.190 | 0.214 | 0.227 | 0.213 |
+
+Reading. Overall the combiner is a statistical tie with scDblFinder; the production score is clearly worse. Caveats: (a) the six
+genotype lanes are one study (shared donors and pool), so +0.037 is one effective sample, not six; (b) the two species datasets are
+easy heterotypic doublets that scDblFinder scores at ~1.0 and every other method loses, which is not the single-donor situation this
+feature is for; (c) the combiner is a Python model, not in the binary, and its atlas features need `singlet.celltype_nn`.
+**Against the orchestrator's rule (ship only if no worse than scDblFinder at the CI bound): `combo_prod_atlas` fails** (lower bound -0.029
+dataset-level, -0.040 study-clustered); `combo_all` is closest (-0.002 / -0.010) but needs R. A "clear CI win" is not available from the
+current feature set: the best open method gains +0.013 and its CI includes 0.
+
+Not done: a new caller. What the data say about where a gain can come from: the win is on genotype-labelled PBMC (the tissue-like case);
+hashtag cell lines and nuclei are ties; the combiners lose where one library is two easily separable populations. Candidate work (needs
+Clipper compute and a decision on scope): native (non-R) artificial-doublet kNN score as an extra feature, and a stacker trained on the
+genotype-labelled lanes of a second, independent study (the batch-1 and stim lanes are the same study) so the gain can be shown on a held-out
+study. Until then, ship nothing new for doublets: genotype doublets for pools with >= 2 donors (F1 0.77-0.87, S10), production score
+otherwise.
+
+(next: TE)
