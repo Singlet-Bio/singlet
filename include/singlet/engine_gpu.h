@@ -118,6 +118,10 @@ struct PileupInput {
     std::vector<std::vector<PileupSnpRow>> snps;
     int stranded = 1, reverseStrand = 0, minMapq = 20, minBaseq = 10, countIntrons = 1, countSj = 1, countMt = 0, umiDedup = 1, directional = 1,
         umiLen = 12, chrmTid = -1, hasGeneModel = 1, snpSkipN = 0;
+    // per-base quality: useQual = 1 when the reads' qualities are neither constant nor tied to N (snpSkipN would be -1); lowq then holds 16 bytes per read
+    // (same order as `reads`): bit i = base i of the record sequence, in the record's (original read) orientation, has quality < minBaseq
+    int useQual = 0;
+    std::vector<uint8_t> lowq;
     uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kUmiGeneCR, kMtPrefer
     std::vector<uint8_t> geneIsMt;          // per gene: on chrM (kMtPrefer)
     int wantGeneMerges = 0;   // return PileupOutput::geneMerges (the host collapses V(D)J molecules per (cell, gene), R9)

@@ -374,6 +374,17 @@ void ReadAlign::handoffReadEntry()
     }
     e.lowQual = (uint16) min(lq, (uint32) 65535); e.qualNeqN = (uint16) min(ne, (uint32) 65535);
     uint32 fl = 1;
+    if (g_handoffQMask != nullptr) {//the low-quality mask of the record: the read without its clipped ends, original orientation
+        const uint64 c5q = clipMates[0][0].clippedN, c3q = clipMates[0][1].clippedN, Lq = readLengthOriginal[0];
+        uint64 *qm = g_handoffQMask + 2 * (iReadAll - 1);
+        qm[0] = 0; qm[1] = 0;
+        if (c5q + c3q > Lq || Lq - c5q - c3q > 128) {
+            fl |= 64;//no mask
+        } else {
+            for (uint64 j = c5q; j < Lq - c3q; j++)
+                if (((int) (unsigned char) Qual0[0][j] - 33) < g_handoffMinQ) qm[(j - c5q) >> 6] |= 1ull << ((j - c5q) & 63);
+        };
+    };
     //clipped read: its record is the clipped sequence, so the pileup gets the clip lengths and what it reads from the clipped 3' tail of
     //the BAM sequence (poly(A): A count and first base; the rRNA sample: the hook's verdict on the whole read)
     const uint32 c5 = clipMates[0][0].clippedN, c3 = clipMates[0][1].clippedN;
