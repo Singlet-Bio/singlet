@@ -50,6 +50,7 @@ for m in "${MODES[@]}"; do
   C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON 2>/dev/null
   echo "$s $m: wall $(echo "$T1 - $T0" | bc) s, core-s $(echo "($C1 - $C0)/1000000" | bc -l | cut -c1-8), start $T0 end $T1, maxRSS $(awk -F': ' '/Maximum resident/{printf "%.1f GB", $2/1048576}' $O/time.txt)" | tee -a $RES/summary.txt
   grep -aq "unsorted STAR stream" $O/run.log.ts && grep -aq "Pileup: streaming from STAR pipe" $O/run.log.ts && echo "STREAM PATH OK" | tee -a $RES/summary.txt || { echo "!! GATE FAIL: STREAM PATH NOT USED ($m)" | tee -a $RES/summary.txt; FAIL=1; }
+  case $m in gpu*) if grep -aq "\[gpu_pileup\] on:" $O/run.log.ts && ! grep -aE "\[gpu_pileup\] (not run|failed|ERROR)|GPU_PILEUP ignored" $O/run.log.ts | grep -q .; then echo "GPU PILEUP OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: GPU pileup did not run cleanly ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
   case $m in gpuD*) grep -aq "\[gpu_pileup\] hand-off pass:" $O/run.log.ts && echo "GPU PILEUP HAND-OFF OK" | tee -a $RES/summary.txt || { echo "!! GATE FAIL: no GPU-pileup hand-off pass ($m)" | tee -a $RES/summary.txt; FAIL=1; } ;; esac
   grep -a -e "unsorted STAR stream" -e "stream CB" -e "streaming from STAR pipe" -e "sorted path" -e "gpu_pileup\] on" -e "gpu_pileup\] hand-off" -e "ignor" -e "CR4 probe" -e "whitelist" $O/run.log.ts | cut -c1-230 | tee -a $RES/summary.txt
   grep -ah -e "ENGINE_GPU" -e "engine_gpu:" -e "STAR_PROFILE\|PROF" $SCR/$s/$m/out/*Log.out 2>/dev/null | cut -c1-230 | head -80 > $O/starlog_engine.txt
