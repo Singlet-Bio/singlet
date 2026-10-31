@@ -113,7 +113,7 @@ def main(argv=None):
         if p and os.path.isfile(p):
             prov.append("# %s %s sha256 %s" % (name, os.path.basename(p), sha256(p)))
     prov.append("# pairs %d" % len(rows))
-    with gzip.GzipFile(a.out, "wb", compresslevel=6, mtime=0) as gz:
+    with open(a.out, "wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, compresslevel=6, mtime=0) as gz:
         for ln in prov:
             gz.write((ln + "\n").encode())
         gz.write(b"gene_a\tgene_b\tsources\tordered\n")
