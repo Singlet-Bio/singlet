@@ -1,5 +1,5 @@
 % Figure 2: how .s1 stores a count matrix, from the dataset down to the bit stream. Schematic, no data values.
-\begin{figure*}[p]
+\begin{figure*}[tbp]
 \centering
 \begin{tikzpicture}[
   font=\sffamily\scriptsize,
@@ -24,7 +24,7 @@
 \draw[arr, dashed, gen] (s1.east) -- (pk1.west);
 \draw[arr, dashed, gen] (s2.east) -- (pk2.west);
 \node[note, anchor=west] at (11.3,-1.1) {shared by every sample:\\downloaded once, cached};
-\node[note] at (5.1,-2.3) {immutable, named by SHA-256 of the content};
+\node[note] at (5.1,-2.3) {immutable, named by a hash of the content};
 
 % ================= (b) sample object =================
 \node[lbl] at (0,-3.0) {b\quad A sample object stores only what cannot be recomputed};
@@ -49,9 +49,9 @@
 \node[seg=sone!70, minimum width=1.9cm, anchor=west, text=white] (k3) at (k2.east) {\textbf{chunk 3}};
 \node[seg=sone!45, minimum width=1.6cm, anchor=west] (k4) at (k3.east) {$\cdots$};
 \node[seg=sone!45, minimum width=1.6cm, anchor=west] (k5) at (k4.east) {chunk $K$};
-\draw[decorate, decoration={brace, amplitude=4pt}] (ph.north west) ++(0,0.05) -- ($(pr.north east)+(0,0.05)$) node[midway, above=4pt, note, align=center] {request 1: the prefix (a few KB)};
+\draw[decorate, decoration={brace, amplitude=4pt}] (ph.north west) ++(0,0.05) -- ($(pr.north east)+(0,0.05)$) node[midway, above=4pt, note, align=center] {request 1: the prefix};
 \draw[decorate, decoration={brace, amplitude=4pt}] (k2.north west) ++(0,0.05) -- ($(k3.north east)+(0,0.05)$) node[midway, above=4pt, note, align=center] {request 2: only the chunks with the wanted cells};
-\node[note, anchor=north west] at (0,-0.5) {Each chunk holds at most 49{,}152 non-zeros of consecutive cells (the default) and is decoded on its own; $p$ threads decode $p$ chunks at once.};
+\node[note, anchor=north west] at (0,-0.5) {Each chunk holds consecutive cells, by default at most 49{,}152 non-zeros, and is decoded on its own; $p$ threads decode $p$ chunks at once.};
 \end{scope}
 
 % ================= (d) codec =================
@@ -107,7 +107,7 @@ row 5 & gap 1, flag 0 & \\
 \caption{\textbf{How \sone{} stores single-cell counts.}
 \textbf{(a)} A dataset is a small manifest that points to one immutable sample object per sample. Gene identifiers and barcode whitelists can be moved into shared packs that a reader fetches once.
 \textbf{(b)} A sample object contains a cells table and one matrix member per count modality. Everything that can be recomputed is replaced by a recipe that the writer has verified on that sample.
-\textbf{(c)} A matrix member starts with a prefix (header, chunk index, entropy tables, row keys) that lets a reader plan any read; chunks of at most 49{,}152 non-zeros follow and decode independently, so any set of cells costs two range requests.
+\textbf{(c)} A matrix member starts with a prefix (header, chunk index, entropy tables, row keys) that lets a reader plan any read; chunks of consecutive cells (by default at most 49{,}152 non-zeros) follow and decode independently, so any set of cells costs a prefix read and one range request per run of chunks.
 \textbf{(d)} The codec. (1--2) Rows are numbered by how many cells express them, so frequent genes come first and the gaps between a cell's non-zeros are small. (3) Each non-zero becomes one symbol (gap class and a flag for counts above one) and, for counts above one, a residual. (4) The cell's depth and the position in its list select a probability table. (5) Thirty-two interleaved static rANS lanes write one stream; decoding is branch-free table arithmetic that SIMD units run eight or sixteen lanes at a time.}
 \label{fig:how}
 \end{figure*}

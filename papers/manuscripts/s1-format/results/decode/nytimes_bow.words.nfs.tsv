@@ -1,0 +1,18 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+nytimes_bow	words	main	nfs	csc_i32	4	cold	file		auto	69679427	ok	0.464033	0.460202	0.537163	150.160524	3	0.610293,0.464033,0.456371	
+nytimes_bow	words	main	nfs	mtx_gz	4	cold	file		auto	69679427	ok	5.882965	5.880062	5.914117	11.84427	3	5.945268,5.877159,5.882965	
+nytimes_bow	words	main	nfs	tenx_h5	4	cold	file		auto	69679427	ok	2.765156	2.764802	2.787192	25.199092	3	2.809228,2.764448,2.765156	
+nytimes_bow	words	main	nfs	h5ad_none	4	cold	file		auto	69679427	ok	0.910827	0.90814	1.351493	76.501288	3	1.792158,0.910827,0.905454	
+nytimes_bow	words	main	nfs	h5ad_gzip	4	cold	file		auto	69679427	ok	2.451883	2.449707	2.783749	28.418746	3	3.115616,2.451883,2.447532	
+nytimes_bow	words	main	nfs	h5ad_lzf	4	cold	file		auto	69679427	ok	1.484204	1.47905	1.788014	46.947351	3	2.091823,1.473896,1.484204	
+nytimes_bow	words	main	nfs	zarr	4	cold	file		auto	69679427	ok	0.89398	0.866007	1.228548	77.942952	3	1.563117,0.838033,0.893980	
+nytimes_bow	words	main	nfs	soma	4	cold	file		auto	69679427	ok	2.103923	2.057042	2.51477	33.118815	3	2.925617,2.010161,2.103923	
+nytimes_bow	words	main	nfs	parquet_coo	4	cold	file		auto	69679427	ok	1.845923	1.84213	2.003999	37.747741	3	2.162075,1.838336,1.845923	
+nytimes_bow	words	main	nfs	csc_zstd19	4	cold	file		auto	69679427	ok	0.880311	0.877668	0.898032	79.153168	3	0.915753,0.880311,0.875025	
+nytimes_bow	words	main	nfs	rds_gz	4	cold	file		auto	69679427	ok	3.536493	3.533713	3.593327	19.702976	3	3.650162,3.536493,3.530934	
+nytimes_bow	words	main	nfs	rds_xz	4	cold	file		auto	69679427	ok	5.210038	5.204421	5.266067	13.374072	3	5.322096,5.210038,5.198803	
+nytimes_bow	words	main	nfs	bpcells	4	cold	file		auto	69679427	ok	12.012773	11.972595	13.784053	5.800445	3	15.555334,12.012773,11.932417	
+nytimes_bow	words	main	nfs	s1	4	cold	file	native	auto	69679427	ok	0.353811	0.350321	1.213861	196.939742	3	2.073912,0.353811,0.346832	avx2
+nytimes_bow	words	main	nfs	s1	4	cold	file	canonical	auto	69679427	ok	0.4898	0.488507	1.140185	142.261002	3	1.790570,0.487214,0.489800	avx2
+nytimes_bow	words	main	nfs	s1_pack	4	cold	file	native	auto	69679427	ok	0.340719	0.337073	1.003759	204.507315	3	1.666800,0.340719,0.333427	avx2
+nytimes_bow	words	main	nfs	s1_pack	4	cold	file	canonical	auto	69679427	ok	0.486616	0.484062	1.306698	143.191903	3	2.126781,0.486616,0.481507	avx2

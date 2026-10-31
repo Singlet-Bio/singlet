@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+paul_marsseq	rna	streams	4910514	4.683357	1.788013	6.447386	NA	NA	NA	NA	NA
+paul_marsseq	rna	raw_u32	4910514	NA	NA	NA	39284112	3.357112	2.767082	64.0	NA
+paul_marsseq	rna	fixed_bytes	4910514	NA	NA	NA	14731542	6.453524	4.680086	24.0	NA
+paul_marsseq	rna	leb128_gaps	4910514	NA	NA	NA	9870578	3.6104	3.384892	16.080725	NA
+paul_marsseq	rna	streamvbyte_gaps	4910514	NA	NA	NA	12300045	3.372503	2.849749	20.038709	NA
+paul_marsseq	rna	rans0_gaps	4910514	NA	NA	NA	4021438	7.998529	7.984304	6.551555	NA
+paul_marsseq	rna	bitpack256_gaps	4910514	NA	NA	NA	8630604	5.532544	5.051087	14.060612	NA
+paul_marsseq	rna	zstd3_leb_gaps	4910514	NA	NA	NA	4567817	7.996203	7.979844	7.441693	NA
+paul_marsseq	rna	zstd19_leb_gaps	4910514	NA	NA	NA	4131370	7.994177	7.969447	6.730652	NA
+paul_marsseq	rna	pz2_avx2	4910514	NA	NA	NA	2702754	7.999186	7.979281	4.403212	2700872

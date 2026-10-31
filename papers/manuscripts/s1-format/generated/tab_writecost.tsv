@@ -1,0 +1,51 @@
+dataset	format	fid	write_s	mnnz_s	extra_mb	peak_mb
+hlca_core	CSC, int32	csc_i32	10.6654	106.763	4344.78	13182.3
+hlca_core	MTX.gz	mtx_gz	758.018	1.50217	34755	43593.3
+hlca_core	10x HDF5	tenx_h5	136.574	8.3374	8837.29	17675.5
+hlca_core	h5ad (none)	h5ad_none	14.8041	76.916	9097.1	17936.3
+hlca_core	h5ad gzip	h5ad_gzip	205.103	5.5517	9096.71	17935.3
+hlca_core	h5ad lzf	h5ad_lzf	32.5103	35.0249	9098.89	17937.4
+hlca_core	AnnData Zarr	zarr	10.1171	112.548	9098.16	17935.7
+hlca_core	TileDB-SOMA	soma	914.866	1.24463	17144.1	25982.5
+hlca_core	Parquet COO	parquet_coo	58.6634	19.4102	4563.26	13401.9
+hlca_core	CSC + zstd-19	csc_zstd19	1570.23	0.72516	13037.1	21876.1
+hlca_core	rds (gzip)	rds_gz	723.529	1.57377	8741.05	17579.7
+hlca_core	rds (xz)	rds_xz	5932.91	0.191924	8834.16	17672.3
+hlca_core	BPCells	bpcells	35.3378	32.2224	8865.54	17704.4
+hlca_core	\textbf{.s1}	s1	118.879	9.57842	30816.8	39655
+hlca_core	.s1, shared gene pack	s1_pack	124.806	9.12354	30816.1	39655.2
+hlca_core	Zarr v3 sharded	zarr3	39.7836	28.6216	13266.8	22105.6
+pbmc10k_v3	CSC, int32	csc_i32	0.182512	136.023	95.918	352.332
+pbmc10k_v3	MTX.gz	mtx_gz	17.1101	1.45095	761.484	1017.84
+pbmc10k_v3	10x HDF5	tenx_h5	2.56032	9.69635	210.539	467.465
+pbmc10k_v3	h5ad (none)	h5ad_none	0.2434	101.996	478.59	735.219
+pbmc10k_v3	h5ad gzip	h5ad_gzip	4.0749	6.09237	478.824	735.598
+pbmc10k_v3	h5ad lzf	h5ad_lzf	0.673286	36.8726	480.223	736.297
+pbmc10k_v3	AnnData Zarr	zarr	0.313092	79.2923	470.898	727.758
+pbmc10k_v3	loom	loom	7.45599	3.32964	4271.44	4528.15
+pbmc10k_v3	TileDB-SOMA	soma	19.2751	1.28797	2707.79	2964.96
+pbmc10k_v3	Parquet COO	parquet_coo	1.22797	20.217	202.578	459.445
+pbmc10k_v3	CSC + zstd-19	csc_zstd19	44.8911	0.553022	570.336	826.562
+pbmc10k_v3	rds (gzip)	rds_gz	14.8296	1.67407	267.664	524.77
+pbmc10k_v3	rds (xz)	rds_xz	121.88	0.203691	360.602	617.02
+pbmc10k_v3	BPCells	bpcells	4.29352	5.78215	454.238	710.98
+pbmc10k_v3	\textbf{.s1}	s1	2.46837	10.0576	1053.84	1310.69
+pbmc10k_v3	.s1, shared gene pack	s1_pack	2.29554	10.8148	1054	1311.24
+pbmc10k_v3	Zarr v3 sharded	zarr3	0.904945	27.4335	516.992	773.902
+tabula_muris_facs	CSC, int32	csc_i32	0.993031	144.485	548.523	1714.72
+tabula_muris_facs	MTX.gz	mtx_gz	136.157	1.05377	4383.06	5548.77
+tabula_muris_facs	10x HDF5	tenx_h5	18.3414	7.82265	1142.16	2308.25
+tabula_muris_facs	h5ad (none)	h5ad_none	1.19295	120.272	1395.13	2561.76
+tabula_muris_facs	h5ad gzip	h5ad_gzip	30.4098	4.71815	1395.89	2561.78
+tabula_muris_facs	h5ad lzf	h5ad_lzf	3.85602	37.2089	1397.66	2563.89
+tabula_muris_facs	AnnData Zarr	zarr	1.17925	121.669	1386.19	2551.83
+tabula_muris_facs	loom	loom	43.1086	3.3283	14456.5	15623
+tabula_muris_facs	TileDB-SOMA	soma	133.352	1.07594	9312.22	10478.1
+tabula_muris_facs	Parquet COO	parquet_coo	6.2319	23.0232	658.824	1824.85
+tabula_muris_facs	CSC + zstd-19	csc_zstd19	207.387	0.691837	1877.18	3043.73
+tabula_muris_facs	rds (gzip)	rds_gz	135.7	1.05732	1171.73	2338.27
+tabula_muris_facs	rds (xz)	rds_xz	1153.81	0.124352	1263.8	2430.52
+tabula_muris_facs	BPCells	bpcells	7.46995	19.2074	1260.75	2427.14
+tabula_muris_facs	\textbf{.s1}	s1	13.4994	10.6285	4181.96	5348.01
+tabula_muris_facs	.s1, shared gene pack	s1_pack	13.6144	10.5387	4182.52	5348.89
+tabula_muris_facs	Zarr v3 sharded	zarr3	5.23307	27.4176	2160.9	3326.89

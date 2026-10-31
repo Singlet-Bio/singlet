@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+siletti_brain_nonneuronal	rna	1962963238	64.0	25.473205	8.214651	7.488623	5.207633	5.232602	1

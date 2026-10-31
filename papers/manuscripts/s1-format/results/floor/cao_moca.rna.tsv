@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+cao_moca	rna	combinatorial	1251379868	20	5.836164	5.613333	5.524551	5.403541	4.991959	5.391651	5.517287	3000.0	5.679641

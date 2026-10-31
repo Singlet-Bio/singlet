@@ -36,6 +36,8 @@ datasets:
   tier: S
   cite: zheng2017massively
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      pbmc3k_filtered_gene_bc_matrices.tar.gz: {sha256: 847d6ebd9a1ec9a768f2be7e40ca42cbfe75ebeb6d76a4c24167041699dc28b5, bytes: 7621991}
     repository: 10x Genomics datasets
     url: https://cf.10xgenomics.com/samples/cell-exp/1.1.0/pbmc3k/pbmc3k_filtered_gene_bc_matrices.tar.gz
     format: mtx_tar
@@ -54,6 +56,8 @@ datasets:
   tier: S
   cite: tenx_datasets
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      pbmc_10k_v3_filtered_feature_bc_matrix.h5: {sha256: ebc5dedc938830e20f8e1aafb893b0a9e0bf88584f3ef2d00b232dd277a188af, bytes: 37491093}
     repository: 10x Genomics datasets
     url: https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_10k_v3/pbmc_10k_v3_filtered_feature_bc_matrix.h5
     format: tenx_h5
@@ -72,6 +76,8 @@ datasets:
   tier: M
   cite: zheng2017massively
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      fresh_68k_pbmc_donor_a_filtered_gene_bc_matrices.tar.gz: {sha256: 3f35f37ff344bc9b32f97cd003ac986ebb9b5d7f31006c53dff4cb38da267931, bytes: 124442812}
     repository: 10x Genomics datasets
     url: https://cf.10xgenomics.com/samples/cell-exp/1.1.0/fresh_68k_pbmc_donor_a/fresh_68k_pbmc_donor_a_filtered_gene_bc_matrices.tar.gz
     format: mtx_tar
@@ -89,6 +95,8 @@ datasets:
   tier: L
   cite: tenx_datasets
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      1M_neurons_filtered_gene_bc_matrices_h5.h5: {sha256: 255a36ee92de25cb3568faa2c27d31fe6d0db30f285c5c977be8d6245de14044, bytes: 4216018749}
     repository: 10x Genomics datasets
     url: https://cf.10xgenomics.com/samples/cell-exp/1.3.0/1M_neurons/1M_neurons_filtered_gene_bc_matrices_h5.h5
     format: tenx_h5_v2
@@ -107,6 +115,8 @@ datasets:
   tier: L
   cite: replogle2022mapping
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      K562_gwps_raw_singlecell_01.h5ad: {sha256: b697ef7fedcec2972ec334608f86f2a29cb25e70c81b6725195f4cda60a9de2c, bytes: 65830941948}
     repository: Figshare (plus.figshare.com, record 20029387)
     url: https://ndownloader.figshare.com/files/35775507
     filename: K562_gwps_raw_singlecell_01.h5ad
@@ -131,6 +141,8 @@ datasets:
   tier: L
   cite: tabulasapiens2022
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      c4a7e716-c250-4a51-86cc-4efb1afbca96.h5ad: {sha256: 8277c55699d7cd9bf8957eada5cabfd5d2147efb3c062685a8e3e6f077a23258, bytes: 10027013683}
     repository: CZ CELLxGENE Discover (Tabula Sapiens 2022, versioned file of 2024-10-10, schema 5.2.0)
     url: https://datasets.cellxgene.cziscience.com/c4a7e716-c250-4a51-86cc-4efb1afbca96.h5ad
     file: All Cells h5ad, 483,152 cells; counts in raw/X (X is normalised)
@@ -153,6 +165,8 @@ datasets:
   tier: L
   cite: sikkema2023integrated
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      688185ad-11c2-4172-a53a-f4f1f4076860.h5ad: {sha256: 1cbdde1e513a31bdb6a3f70296e2d0612760d2af4032e239c94596ea87b44007, bytes: 5873612847}
     repository: CZ CELLxGENE Discover (dataset 066943a2-fdac-4b29-b348-40cede398e4e)
     url: https://datasets.cellxgene.cziscience.com/688185ad-11c2-4172-a53a-f4f1f4076860.h5ad
     file: An integrated cell atlas of the human lung in health and disease (core); counts in raw/X
@@ -176,6 +190,8 @@ datasets:
   tier: S
   cite: tenx_datasets
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      10k_PBMC_5pv2_nextgem_Chromium_Controller_10k_PBMC_5pv2_nextgem_Chromium_Controller_count_sample_feature_bc_matrix.h5: {sha256: 3077186c5d609b13161186d99e5f5af0ce95d0b0e92fb03bad931bb959dd3b41, bytes: 22164297}
     repository: 10x Genomics datasets (10k Human PBMCs, 5' v2.0, Chromium Controller; Cell Ranger 6.1.0 multi)
     url: https://cf.10xgenomics.com/samples/cell-vdj/6.1.0/10k_PBMC_5pv2_nextgem_Chromium_Controller_10k_PBMC_5pv2_nextgem_Chromium_Controller/10k_PBMC_5pv2_nextgem_Chromium_Controller_10k_PBMC_5pv2_nextgem_Chromium_Controller_count_sample_feature_bc_matrix.h5
     file: count/sample_feature_bc_matrix.h5 (the filtered per-sample matrix in Cell Ranger 6.x multi)
@@ -195,6 +211,8 @@ datasets:
   tier: S
   cite: tenx_datasets
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      10k_Human_PBMC_TotalSeqB_singleplex_10k_Human_PBMC_TotalSeqB_singleplex_count_sample_filtered_feature_bc_matrix.h5: {sha256: 5e7ca6f034d89b247074d273580921ba9b9b0de930e2e10f2bf1c2035a62890a, bytes: 42030353}
     repository: 10x Genomics datasets (10k Human PBMCs stained with TotalSeq-B Human Universal Cocktail, singleplex; Flex, Cell Ranger 8.0.0)
     url: https://cf.10xgenomics.com/samples/cell-exp/8.0.0/10k_Human_PBMC_TotalSeqB_singleplex_10k_Human_PBMC_TotalSeqB_singleplex/10k_Human_PBMC_TotalSeqB_singleplex_10k_Human_PBMC_TotalSeqB_singleplex_count_sample_filtered_feature_bc_matrix.h5
     file: count/sample_filtered_feature_bc_matrix.h5; Gene Expression rows only (the antibody rows are dropped)
@@ -216,6 +234,8 @@ datasets:
   tier: M
   cite: macosko2015highly
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GSE63472_P14Retina_merged_digital_expression.txt.gz: {sha256: 7600f4a7aaf2e4e7864586cd30fa729103bfd1fb71fba4e773e436c88144db23, bytes: 53118776}
     repository: GEO
     accession: GSE63472
     url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63472/suppl/GSE63472_P14Retina_merged_digital_expression.txt.gz
@@ -235,6 +255,8 @@ datasets:
   tier: S
   cite: baron2016single
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GSE84133_RAW.tar: {sha256: aed2d208d47a36658aa0e63629afe5d4144ef465a8e3d9a0f377422b1f1073dc, bytes: 29122560}
     repository: GEO
     accession: GSE84133
     url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE84nnn/GSE84133/suppl/GSE84133_RAW.tar
@@ -254,6 +276,8 @@ datasets:
   tier: L
   cite: han2018mapping
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GSE108097_RAW.tar: {sha256: 786723a64aaa04d1e91264d678468626359499942d8663a28bc3c07130bd6316, bytes: 1912115200}
     repository: GEO
     accession: GSE108097
     url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE108nnn/GSE108097/suppl/GSE108097_RAW.tar
@@ -275,6 +299,8 @@ datasets:
   tier: M
   cite: rosenberg2018single
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GSM3017261_150000_CNS_nuclei.mat.gz: {sha256: a2d60ea85e6dfefcaa3d767918842e4550a87a454f620504920b015a43d4c529, bytes: 227644053}
     repository: GEO
     accession: GSE110823
     url: https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3017nnn/GSM3017261/suppl/GSM3017261_150000_CNS_nuclei.mat.gz
@@ -296,6 +322,10 @@ datasets:
   tier: XL
   cite: cao2019single
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GSE119945_cell_annotate.csv.gz: {sha256: fbe7ada80bf3fbd537f6fc291df6dc39fde5eddbc851283b15a2afc6dc2a1ad1, bytes: 106305526}
+      GSE119945_gene_annotate.csv.gz: {sha256: 13003c4d21b1a3a2be47ef43c2037d34d18b3480d9da3f3c8618c6913ae4b0d5, bytes: 250385}
+      GSE119945_gene_count.txt.gz: {sha256: 6a957ce9532a9cfbc36b43192d97ac973d632fee75dbcb7f9a0f646c0842dbd6, bytes: 3953838019}
     repository: GEO
     accession: GSE119945
     url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/GSE119945/suppl/GSE119945_gene_count.txt.gz
@@ -318,6 +348,8 @@ datasets:
   tier: XL
   cite: zhang2025tahoe
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      plate1_filt_Vevo_Tahoe100M_WServicesFrom_ParseGigalab.h5ad: {sha256: 0c4825b4efe3d9b3fcee9388588d89a178dd655a69c9e8e0c9cc3b0c3b53890c, bytes: 19070623904}
     repository: Arc Virtual Cell Atlas (public GCS bucket arc-institute-virtual-cell-atlas; the older arc-ctc-tahoe100 bucket was retired)
     url: https://storage.googleapis.com/arc-institute-virtual-cell-atlas/tahoe100M/2025-02-25/h5ad/plate1_filt_Vevo_Tahoe100M_WServicesFrom_ParseGigalab.h5ad
     file: plate 1 h5ad, 5,481,420 cells x 62,710 genes; X is sparse float32 holding whole-number counts
@@ -341,6 +373,8 @@ datasets:
   tier: L
   cite: siletti2023transcriptomic
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      bef677f9-90fa-4cc4-a0f8-6892c6f646bb.h5ad: {sha256: 7f68c907c45983b2cc2fb05dc5182e34a64df1bd6d8e69d5ff45dd448c57640c, bytes: 4666925886}
     repository: CZ CELLxGENE Discover (Human Brain Cell Atlas v1.0, dataset b165f033-9dec-468a-9248-802fc6902a74)
     url: https://datasets.cellxgene.cziscience.com/bef677f9-90fa-4cc4-a0f8-6892c6f646bb.h5ad
     file: All non-neuronal cells h5ad (888,263 nuclei, 58,232 genes); counts in X, no raw
@@ -362,6 +396,8 @@ datasets:
   tier: S
   cite: tenx_datasets
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      pbmc_granulocyte_sorted_10k_filtered_feature_bc_matrix.h5: {sha256: 03f946fc11984e6d4e8bf9a5d5904654c3d8b6b5776e08b7962796a9cb81c48d, bytes: 162282142}
     repository: 10x Genomics datasets
     url: https://cf.10xgenomics.com/samples/cell-arc/1.0.0/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k_filtered_feature_bc_matrix.h5
     format: tenx_h5
@@ -382,6 +418,13 @@ datasets:
   tier: M
   cite: hao2021integrated
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GSM5008737_RNA_3P-barcodes.tsv.gz: {sha256: aae8e3ab848d9b80a3c52bde969e81c6696db2c778e9747603d0c24e6a86cee2, bytes: 683095}
+      GSM5008737_RNA_3P-features.tsv.gz: {sha256: 9f3a435942cab5fa1bf41aac342d17ec4818d8c20139b5bcb3713cdedfdee7d1, bytes: 233354}
+      GSM5008737_RNA_3P-matrix.mtx.gz: {sha256: 0ecba0d5463c9ecf53b1f191a4c1629cee02c99741d5e442ef3a2154b3ab0af4, bytes: 1125353463}
+      GSM5008738_ADT_3P-barcodes.tsv.gz: {sha256: aae8e3ab848d9b80a3c52bde969e81c6696db2c778e9747603d0c24e6a86cee2, bytes: 683095}
+      GSM5008738_ADT_3P-features.tsv.gz: {sha256: 9b45aa53f6db161838ff2e3b8fe012fa6d62c87f8b8df44a1035fe1fa281939b, bytes: 1373}
+      GSM5008738_ADT_3P-matrix.mtx.gz: {sha256: 56cf1f5332fe1857a46c95f1a35a0fa1870551dde3c1430f29b796f7272893b7, bytes: 104745344}
     repository: GEO
     accession: GSE164378
     url: https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5008nnn/GSM5008737/suppl/GSM5008737_RNA_3P-matrix.mtx.gz
@@ -412,6 +455,8 @@ datasets:
   tier: M
   cite: tabulamuris2018single
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      FACS.zip: {sha256: 7048a634d7beed307d5d6a77c2d38eb0a21e9006fd592f98f5a4eb6a8da56157, bytes: 303966623}
     repository: Figshare (Tabula Muris FACS, record 5829687 v2)
     url: https://ndownloader.figshare.com/files/10700143
     filename: FACS.zip
@@ -434,6 +479,8 @@ datasets:
   tier: M
   cite: tasic2018shared
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GSE115746_cells_exon_counts.csv.gz: {sha256: 5693f546dde28680d49bd7bf1255d42b0f77901aec050b94d56e54be10c00648, bytes: 334672246}
     repository: GEO
     accession: GSE115746
     url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115746/suppl/GSE115746_cells_exon_counts.csv.gz
@@ -454,6 +501,8 @@ datasets:
   tier: S
   cite: hagemannjensen2020single
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      HCA.UMIcounts.PBMC.txt: {sha256: 1dfcc7017bf3400c0b75e9ff34e579fe95d5dc0117492746a366fce0562d4c87, bytes: 242990936}
     repository: ArrayExpress
     accession: E-MTAB-8735
     url: https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/735/E-MTAB-8735/Files/HCA.UMIcounts.PBMC.txt
@@ -475,6 +524,9 @@ datasets:
   tier: S
   cite: paul2015transcriptional
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GSE72857_umitab.txt.gz: {sha256: 6f45b72b935493181f0f9fdb7343181a5eeca63d0d39ba2a2a8439ac34f08e74, bytes: 16413252}
+      paul15.h5: {sha256: 6161984f758dd464992edc23f1a8ab89b2081600130c6aa93a1ab12b3ada5bfb, bytes: 10297693}
     repository: GEO (cell names from scanpy.datasets.paul15)
     accession: GSE72857
     url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE72nnn/GSE72857/suppl/GSE72857_umitab.txt.gz
@@ -496,6 +548,8 @@ datasets:
   tier: S
   cite: muraro2016single
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GSE85241_cellsystems_dataset_4donors_updated.csv.gz: {sha256: 2f253ffb1f6d54f6bb259e862195f5c20ea3f13e00471b9864ff92773658f513, bytes: 17005498}
     repository: GEO
     accession: GSE85241
     url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE85nnn/GSE85241/suppl/GSE85241_cellsystems_dataset_4donors_updated.csv.gz
@@ -519,6 +573,8 @@ datasets:
   tier: S
   cite: tenx_datasets
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      V1_Human_Lymph_Node_filtered_feature_bc_matrix.h5: {sha256: eb883e48d9aa935d7959600153ad7ba8c7f1748302fcf56eef4c6999574bb37d, bytes: 27416993}
     repository: 10x Genomics datasets
     url: https://cf.10xgenomics.com/samples/spatial-exp/1.0.0/V1_Human_Lymph_Node/V1_Human_Lymph_Node_filtered_feature_bc_matrix.h5
     format: tenx_h5
@@ -537,6 +593,8 @@ datasets:
   tier: L
   cite: oliveira2025highdefinition
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      Visium_HD_Human_Colon_Cancer_binned_outputs.tar.gz: {sha256: a65a7fe9564cba2fb1344c4f586368cfc2cab2d5f8c934657f6994f0eeacb568, bytes: 15886623172}
     repository: 10x Genomics datasets (Visium_HD_Human_Colon_Cancer, Space Ranger 3.0.0)
     url: https://cf.10xgenomics.com/samples/spatial-exp/3.0.0/Visium_HD_Human_Colon_Cancer/Visium_HD_Human_Colon_Cancer_binned_outputs.tar.gz
     file: binned_outputs/square_008um/filtered_feature_bc_matrix.h5, streamed out of the 15.9 GB binned_outputs.tar.gz (no standalone file is offered)
@@ -557,6 +615,9 @@ datasets:
   tier: M
   cite: stickels2021highly
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      slideseqv2_mouse_hippo.tar.gz: {sha256: 55d0ca9502614efd73139f9f33de86d5f394ccc17d3b742a7e1a27cd69365c6c, bytes: 80153257}
+      slideseqv2_puck_200115_08_whole.h5ad: {sha256: 9701974bac7c97410b8c859e53d990a19b2d7e504f95ca5306f2450b530c1a01, bytes: 328111952}
     repository: Zenodo 12785822 (SVG benchmark deposit of Broad SCP815; SCP815 itself needs a login)
     url: https://zenodo.org/records/12785822/files/Slide-seqV2_stickels2020highly_stickels2021highly_Slide-seqV2_Mouse_Hippocampus_Puck_200115_08_data_whole.h5ad?download=1
     filename: slideseqv2_puck_200115_08_whole.h5ad
@@ -579,6 +640,8 @@ datasets:
   tier: M
   cite: chen2022spatiotemporal
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      E16.5_E1S1.MOSTA.h5ad: {sha256: f21a18b041d81ad49d71405e55c6e0444e2daf5f53908fb5c90d995f3f1f5338, bytes: 4762719303}
     repository: CNGB STOmicsDB
     accession: STDS0000058
     url: https://ftp.cngb.org/pub/SciRAID/stomics/STDS0000058/stomics/E16.5_E1S1.MOSTA.h5ad
@@ -601,6 +664,8 @@ datasets:
   tier: XL
   cite: zhang2023molecularly
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      Zhuang-ABCA-1-raw.h5ad: {sha256: 3082f08bd68c41b4b2f7a873af9a5b81875afba6d8d655cd549090c7beb07e9c, bytes: 1193452436}
     repository: Allen Brain Cell Atlas (AWS Open Data, s3://allen-brain-cell-atlas)
     url: https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/expression_matrices/Zhuang-ABCA-1/20230830/Zhuang-ABCA-1-raw.h5ad
     file: Zhuang-ABCA-1-raw.h5ad (release 20230830; 4,167,870 cells x 1,122 genes; X is dense float32 holding whole-number counts)
@@ -622,6 +687,8 @@ datasets:
   tier: M
   cite: janesick2023high
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      Xenium_FFPE_Human_Breast_Cancer_Rep1_cell_feature_matrix.h5: {sha256: 681e1c1dfce0e517aa63a43dcdbe25df3de81498a3684f4168c9a8e166a48404, bytes: 12148885}
     repository: 10x Genomics datasets (also GEO GSE243280)
     url: https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_cell_feature_matrix.h5
     file: cell_feature_matrix.h5; Gene Expression rows only (313 genes; control probes and codewords dropped)
@@ -643,6 +710,8 @@ extensions:
   tier: M
   cite: gtex2020
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_reads.gct.gz: {sha256: 148ab1c84609608a00772b0e1431a1f87d5bf40b63071997510181d0a684a110, bytes: 917091994}
     repository: GTEx portal (Google Cloud bucket adult-gtex)
     url: https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_reads.gct.gz
     file: GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_reads.gct.gz
@@ -662,6 +731,8 @@ extensions:
   tier: L
   cite: dua2019uci
   source:
+    checksums:   # SHA-256 and size of each downloaded file, verified by the fetch stage
+      docword.nytimes.txt.gz: {sha256: 6fc63144a5834ddcc255313625a235a85440bf5b702d06a6c676f749262e43b7, bytes: 234225967}
     repository: UCI Machine Learning Repository
     url: https://archive.ics.uci.edu/ml/machine-learning-databases/bag-of-words/docword.nytimes.txt.gz
     format: uci_bow

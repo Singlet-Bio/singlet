@@ -1,0 +1,13 @@
+loader	lid	where	workers	cps	first	status	note
+.s1 (S1Cells)	s1_cells	local	0	73981	0.111899	ok	
+.s1 (S1Cells)	s1_cells	local	2	62324.4	0.104561	ok	
+.s1 (S1Cells)	s1_cells	local	4	72162	0.155206	ok	
+.s1 (S1Cells)	s1_cells	store	0	56811.5	0.124437	ok	
+.s1 (S1Cells)	s1_cells	store	2	53499.8	0.269696	ok	
+.s1 (S1Cells)	s1_cells	store	4	59130.8	0.383219	ok	
+scDataset	scdataset	local	0	4253.6	1.88189	ok	
+scDataset	scdataset	local	2	8690.19	0.925002	ok	
+scDataset	scdataset	local	4	15648.1	0.928797	ok	
+scDataset	scdataset	store	0	6434.36	26.627	ok	
+scDataset	scdataset	store	2	9401.17	22.7926	ok	
+scDataset	scdataset	store	4	17216.1	22.8329	ok	

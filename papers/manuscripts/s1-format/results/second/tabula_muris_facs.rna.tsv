@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+tabula_muris_facs	rna	zstd22	198022527	197987856	0.999825
+tabula_muris_facs	rna	xz9e	198022527	197989804	0.999835
+tabula_muris_facs	rna	brotli11	198022527	197980508	0.999788
+tabula_muris_facs	rna	bzip2_9	198022527	198897287	1.004417

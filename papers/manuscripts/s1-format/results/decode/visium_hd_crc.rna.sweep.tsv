@@ -1,0 +1,69 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+visium_hd_crc	rna	sweep	local	s1	1	cold	file	native	auto	214633705	ok	2.904193	2.849492	2.941641	73.904777	3	2.904193,2.979090,2.794791	avx2
+visium_hd_crc	rna	sweep	local	s1	1	cold	file	canonical	auto	214633705	ok	4.672705	4.635677	4.784074	45.933497	3	4.598648,4.672705,4.895443	avx2
+visium_hd_crc	rna	sweep	local	s1	2	cold	file	native	auto	214633705	ok	2.031792	2.017274	2.034262	105.637622	3	2.002757,2.036732,2.031792	avx2
+visium_hd_crc	rna	sweep	local	s1	2	cold	file	canonical	auto	214633705	ok	2.86043	2.858431	2.96046	75.035465	3	3.060490,2.856431,2.860430	avx2
+visium_hd_crc	rna	sweep	local	s1	4	cold	file	native	auto	214633705	ok	1.308456	1.307631	1.311526	164.035843	3	1.306806,1.308456,1.314595	avx2
+visium_hd_crc	rna	sweep	local	s1	4	cold	file	canonical	auto	214633705	ok	1.741938	1.650164	2.129833	123.215501	3	1.741938,2.517727,1.558391	avx2
+visium_hd_crc	rna	sweep	local	s1	4	warm	file	native	auto	214633705	ok	1.220828	1.220636	1.221967	175.809897	3	1.220444,1.220828,1.223106	avx2
+visium_hd_crc	rna	sweep	local	s1	4	warm	file	canonical	auto	214633705	ok	1.647038	1.538528	1.652436	130.314962	3	1.430017,1.647038,1.657835	avx2
+visium_hd_crc	rna	sweep	local	s1	8	cold	file	native	auto	214633705	ok	0.923025	0.918594	1.185805	232.532891	3	0.923025,0.914164,1.448585	avx2
+visium_hd_crc	rna	sweep	local	s1	8	cold	file	canonical	auto	214633705	ok	1.204719	1.137606	1.239796	178.160755	3	1.274873,1.070492,1.204719	avx2
+visium_hd_crc	rna	sweep	local	s1	1	warm	codec	native	scalar	214633705	ok	6.633334	6.627759	6.705023	32.356836	3	6.633334,6.622184,6.776712	scalar
+visium_hd_crc	rna	sweep	local	s1	1	warm	codec	native	avx2	214633705	ok	2.457064	2.446001	2.47641	87.35374	3	2.457064,2.495756,2.434939	avx2
+visium_hd_crc	rna	sweep	local	s1	1	warm	codec	native	avx512	214633705	ok	2.636196	2.579279	2.660406	81.41795	3	2.684616,2.636196,2.522361	avx2
+visium_hd_crc	rna	sweep	local	s1	1	warm	codec	canonical	scalar	214633705	ok	8.289054	8.275592	8.291259	25.893631	3	8.262131,8.289054,8.293464	scalar
+visium_hd_crc	rna	sweep	local	s1	1	warm	codec	canonical	avx2	214633705	ok	4.45751	4.444507	4.515623	48.151028	3	4.431504,4.457510,4.573736	avx2
+visium_hd_crc	rna	sweep	local	s1	1	warm	codec	canonical	avx512	214633705	ok	4.452482	4.445549	4.466607	48.205408	3	4.480732,4.452482,4.438616	avx2
+visium_hd_crc	rna	sweep	local	s1	2	warm	codec	native	scalar	214633705	ok	3.731947	3.729772	3.744803	57.512526	3	3.727597,3.731947,3.757659	scalar
+visium_hd_crc	rna	sweep	local	s1	2	warm	codec	native	avx2	214633705	ok	1.568671	1.568164	1.598938	136.825215	3	1.568671,1.567658,1.629206	avx2
+visium_hd_crc	rna	sweep	local	s1	2	warm	codec	native	avx512	214633705	ok	1.583649	1.583372	1.587484	135.531093	3	1.583649,1.583095,1.591318	avx2
+visium_hd_crc	rna	sweep	local	s1	2	warm	codec	canonical	scalar	214633705	ok	4.562031	4.534016	4.612928	47.047844	3	4.562031,4.663825,4.506002	scalar
+visium_hd_crc	rna	sweep	local	s1	2	warm	codec	canonical	avx2	214633705	ok	2.342438	2.317628	2.416485	91.628333	3	2.292819,2.490532,2.342438	avx2
+visium_hd_crc	rna	sweep	local	s1	2	warm	codec	canonical	avx512	214633705	ok	2.305762	2.292491	2.321275	93.085793	3	2.279219,2.305762,2.336788	avx2
+visium_hd_crc	rna	sweep	local	s1	4	warm	codec	native	scalar	214633705	ok	2.044365	2.031675	2.044748	104.987934	3	2.018984,2.044365,2.045131	scalar
+visium_hd_crc	rna	sweep	local	s1	4	warm	codec	native	avx2	214633705	ok	0.891228	0.890642	0.891997	240.8293	3	0.892767,0.890056,0.891228	avx2
+visium_hd_crc	rna	sweep	local	s1	4	warm	codec	native	avx512	214633705	ok	0.928504	0.92818	0.92876	231.160702	3	0.928504,0.929016,0.927856	avx2
+visium_hd_crc	rna	sweep	local	s1	4	warm	codec	canonical	scalar	214633705	ok	2.371899	2.367028	2.378645	90.490227	3	2.362158,2.385391,2.371899	scalar
+visium_hd_crc	rna	sweep	local	s1	4	warm	codec	canonical	avx2	214633705	ok	1.326982	1.325933	1.330674	161.745718	3	1.326982,1.334366,1.324884	avx2
+visium_hd_crc	rna	sweep	local	s1	4	warm	codec	canonical	avx512	214633705	ok	1.294075	1.284854	1.303857	165.858736	3	1.275632,1.294075,1.313638	avx2
+visium_hd_crc	rna	sweep	local	s1	8	warm	codec	native	scalar	214633705	ok	1.193336	1.173723	1.195026	179.860268	3	1.154111,1.196717,1.193336	scalar
+visium_hd_crc	rna	sweep	local	s1	8	warm	codec	native	avx2	214633705	ok	0.731628	0.723911	0.732378	293.364385	3	0.733128,0.731628,0.716194	avx2
+visium_hd_crc	rna	sweep	local	s1	8	warm	codec	native	avx512	214633705	ok	0.718664	0.718344	0.719167	298.656406	3	0.719670,0.718664,0.718023	avx2
+visium_hd_crc	rna	sweep	local	s1	8	warm	codec	canonical	scalar	214633705	ok	1.351538	1.343241	1.35286	158.807025	3	1.351538,1.354182,1.334944	scalar
+visium_hd_crc	rna	sweep	local	s1	8	warm	codec	canonical	avx2	214633705	ok	0.918361	0.915825	0.918502	233.71388	3	0.918361,0.918644,0.913289	avx2
+visium_hd_crc	rna	sweep	local	s1	8	warm	codec	canonical	avx512	214633705	ok	0.924236	0.905983	0.942695	232.228274	3	0.961155,0.924236,0.887731	avx2
+visium_hd_crc	rna	sweep	local	h5ad_gzip	1	cold	file		auto	214633705	ok	9.212099	8.449595	16.21654	23.299109	3	9.212099,23.220980,7.687091	
+visium_hd_crc	rna	sweep	local	h5ad_gzip	2	cold	file		auto	214633705	ok	7.19366	7.105577	10.340464	29.836508	3	13.487267,7.193660,7.017494	
+visium_hd_crc	rna	sweep	local	h5ad_gzip	4	cold	file		auto	214633705	ok	14.405734	11.114547	16.514716	14.899185	3	14.405734,7.823360,18.623699	
+visium_hd_crc	rna	sweep	local	h5ad_gzip	4	warm	file		auto	214633705	ok	6.694408	6.693925	6.697967	32.061642	3	6.701527,6.693443,6.694408	
+visium_hd_crc	rna	sweep	local	h5ad_gzip	8	cold	file		auto	214633705	ok	7.630941	7.497671	7.672675	28.126769	3	7.630941,7.364402,7.714410	
+visium_hd_crc	rna	sweep	local	csc_i32	1	cold	file		auto	214633705	ok	3.824345	3.271865	4.032527	56.122996	3	3.824345,4.240709,2.719384	
+visium_hd_crc	rna	sweep	local	csc_i32	2	cold	file		auto	214633705	ok	2.262777	2.240086	2.726556	94.854126	3	3.190336,2.217395,2.262777	
+visium_hd_crc	rna	sweep	local	csc_i32	4	cold	file		auto	214633705	ok	2.619747	2.611784	2.628791	81.929174	3	2.637834,2.619747,2.603820	
+visium_hd_crc	rna	sweep	local	csc_i32	4	warm	file		auto	214633705	ok	0.828964	0.817338	0.832358	258.917857	3	0.835751,0.828964,0.805713	
+visium_hd_crc	rna	sweep	local	csc_i32	8	cold	file		auto	214633705	ok	6.045189	5.301502	6.850676	35.504877	3	6.045189,7.656163,4.557814	
+visium_hd_crc	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	214633705	ok	6.880511	6.793027	6.928585	31.194443	3	6.705543,6.976659,6.880511	scalar
+visium_hd_crc	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	214633705	ok	2.24391	2.220375	2.300931	95.651655	3	2.357953,2.243910,2.196839	avx2
+visium_hd_crc	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	214633705	ok	2.257408	2.234534	2.309054	95.079713	3	2.360699,2.257408,2.211661	avx2
+visium_hd_crc	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	214633705	ok	8.694302	8.672898	8.760247	24.686709	3	8.826191,8.651493,8.694302	scalar
+visium_hd_crc	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	214633705	ok	4.011007	3.96654	4.045125	53.511177	3	4.011007,3.922073,4.079243	avx2
+visium_hd_crc	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	214633705	ok	4.128725	4.080459	4.158602	51.985469	3	4.128725,4.032192,4.188479	avx2
+visium_hd_crc	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	214633705	ok	3.758794	3.69226	3.833419	57.101747	3	3.758794,3.908044,3.625725	scalar
+visium_hd_crc	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	214633705	ok	1.111528	1.111054	1.111822	193.097884	3	1.111528,1.110580,1.112116	avx2
+visium_hd_crc	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	214633705	ok	1.113409	1.112881	1.129931	192.771663	3	1.146453,1.112352,1.113409	avx2
+visium_hd_crc	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	214633705	ok	4.380359	4.331962	4.389895	48.999113	3	4.380359,4.283565,4.399431	scalar
+visium_hd_crc	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	214633705	ok	1.997037	1.980492	1.998909	107.476078	3	1.997037,2.000782,1.963948	avx2
+visium_hd_crc	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	214633705	ok	2.000549	1.985098	2.003326	107.287402	3	2.000549,2.006103,1.969648	avx2
+visium_hd_crc	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	214633705	ok	1.694092	1.687048	1.69904	126.695424	3	1.694092,1.703989,1.680005	scalar
+visium_hd_crc	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	214633705	ok	0.543157	0.543114	0.543212	395.159604	3	0.543071,0.543157,0.543267	avx2
+visium_hd_crc	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	214633705	ok	0.540374	0.540372	0.540382	397.19473	3	0.540370,0.540390,0.540374	avx2
+visium_hd_crc	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	214633705	ok	2.272672	2.265531	2.283011	94.441127	3	2.272672,2.258391,2.293351	scalar
+visium_hd_crc	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	214633705	ok	0.978776	0.978673	0.978795	219.287871	3	0.978570,0.978776,0.978815	avx2
+visium_hd_crc	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	214633705	ok	0.987021	0.986831	0.987164	217.456067	3	0.986641,0.987021,0.987306	avx2
+visium_hd_crc	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	214633705	ok	0.873528	0.871926	0.892794	245.709016	3	0.873528,0.870324,0.912060	scalar
+visium_hd_crc	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	214633705	ok	0.301325	0.298479	0.30447	712.299693	3	0.301325,0.307615,0.295633	avx2
+visium_hd_crc	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	214633705	ok	0.297298	0.294334	0.302468	721.948029	3	0.307638,0.297298,0.291370	avx2
+visium_hd_crc	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	214633705	ok	1.204532	1.15287	1.205749	178.188462	3	1.204532,1.101208,1.206966	scalar
+visium_hd_crc	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	214633705	ok	0.62541	0.604039	0.644059	343.188796	3	0.582667,0.625410,0.662708	avx2
+visium_hd_crc	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	214633705	ok	0.619564	0.60111	0.626327	346.427012	3	0.582657,0.633089,0.619564	avx2

@@ -1,0 +1,7 @@
+dataset	matrix	format	batches	bytes_per_batch	requests_per_batch	requests_p90	needed_per_batch	overread	index_bytes	file_bytes	chunk_elems
+siletti_brain_nonneuronal	rna	s1	200	955637.0	8.0	8.0	724962.344254	1.327665	1031054	1283925766	NA
+siletti_brain_nonneuronal	rna	h5ad_gzip	200	3931469.5	24.0	26.0	2595446.440178	1.493592	3014307	4596598134	59905
+siletti_brain_nonneuronal	rna	h5ad_lzf	200	8096270.5	24.0	26.0	5503356.991625	1.461551	3553280	9746577732	59905
+siletti_brain_nonneuronal	rna	h5ad_none	200	13161560.0	24.0	26.0	8904133.528203	1.457351	3553280	15769434856	59905
+siletti_brain_nonneuronal	rna	tenx_h5	200	2129676.0	25.0	26.0	1641585.370914	1.298194	1857920	2907287215	59905
+siletti_brain_nonneuronal	rna	zarr	200	18016035.0	24.0	27.0	2070332.572159	8.904747	1940318	3666608831	958479

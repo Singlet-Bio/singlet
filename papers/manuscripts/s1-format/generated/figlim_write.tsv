@@ -1,0 +1,16 @@
+pos	format	label	group	s	gb	note
+0	zarr	AnnData Zarr	general	10.1171	8.88492	9 GB
+1	csc_i32	CSC, int32	general	10.6654	4.24295	4 GB
+2	h5ad_none	h5ad (none)	general	14.8041	8.88389	9 GB
+3	h5ad_lzf	h5ad lzf	general	32.5103	8.88564	9 GB
+4	bpcells	BPCells	domain	35.3378	8.65775	9 GB
+5	zarr3	Zarr v3 sharded	general	39.7836	12.9559	13 GB
+6	parquet_coo	Parquet COO	general	58.6634	4.45631	4 GB
+7	s1	\textbf{.s1}	s1	118.879	30.0945	30 GB
+8	tenx_h5	10x HDF5	general	136.574	8.63017	9 GB
+9	h5ad_gzip	h5ad gzip	general	205.103	8.88351	9 GB
+10	rds_gz	rds (gzip)	general	723.529	8.53619	9 GB
+11	mtx_gz	MTX.gz	general	758.018	33.9404	34 GB
+12	soma	TileDB-SOMA	domain	914.866	16.7423	17 GB
+13	csc_zstd19	CSC + zstd-19	general	1570.23	12.7315	13 GB
+14	rds_xz	rds (xz)	general	5932.91	8.62711	9 GB

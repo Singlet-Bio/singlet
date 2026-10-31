@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+xenium_breast_rep1	rna	10604415	64.0	20.834347	7.231073	6.210921	5.171426	5.213248	1

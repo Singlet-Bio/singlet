@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+tabula_muris_facs	rna	143478092	64.0	29.52188	12.98594	12.606499	11.029171	11.041258	1

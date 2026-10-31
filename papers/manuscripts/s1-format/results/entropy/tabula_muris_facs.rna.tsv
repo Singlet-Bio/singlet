@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+tabula_muris_facs	rna	streams	143478092	3.984392	8.224321	12.179944	NA	NA	NA	NA	NA
+tabula_muris_facs	rna	raw_u32	143478092	NA	NA	NA	1147824736	3.907249	3.591809	64.0	NA
+tabula_muris_facs	rna	fixed_bytes	143478092	NA	NA	NA	860868552	4.916272	4.386007	48.0	NA
+tabula_muris_facs	rna	leb128_gaps	143478092	NA	NA	NA	333146761	5.748167	5.467954	18.575478	NA
+tabula_muris_facs	rna	streamvbyte_gaps	143478092	NA	NA	NA	384716693	5.311546	4.958211	21.450895	NA
+tabula_muris_facs	rna	rans0_gaps	143478092	NA	NA	NA	229143366	7.923414	7.876616	12.776494	NA
+tabula_muris_facs	rna	bitpack256_gaps	143478092	NA	NA	NA	362186892	5.971192	5.923793	20.194687	NA
+tabula_muris_facs	rna	zstd3_leb_gaps	143478092	NA	NA	NA	232801775	7.997084	7.986645	12.980478	NA
+tabula_muris_facs	rna	zstd19_leb_gaps	143478092	NA	NA	NA	225997126	7.99785	7.988683	12.601067	NA
+tabula_muris_facs	rna	pz2_avx2	143478092	NA	NA	NA	198022335	7.999106	7.997555	11.041258	197987761

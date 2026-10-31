@@ -1,0 +1,65 @@
+% .s1 manuscript, preprint (bioRxiv/arXiv) layout: plain single-column article with the same sections, figures and
+% tables as the TCBB version (main.tex). Supplement and specification are the separate supplement.tex and spec.tex.
+% Build after main.tex and supplement.tex (references to the supplement resolve through xr):
+%   latexmk -pdf supplement.tex main.tex biorxiv.tex
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{newtxtext}
+\input{preamble}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\usepackage[nocompress]{cite}
+\usepackage{xr-hyper}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\externaldocument[S-]{supplement}   % supplement labels as S-<label>
+\newcommand{\IEEEPARstart}[2]{#1#2}   % the sections are shared with the IEEEtran version
+\newcommand{\para}[1]{\par\smallskip\noindent\textbf{#1.}\ }
+
+\title{\sone: single-cell count matrices at the speed of the network}
+\author{Zachary J.\ DeBruine\\[2pt]
+  \small Department of Information Sciences and Technology, College of Computing, Grand Valley State University,
+  Allendale, MI, USA\\
+  \small Correspondence: \href{mailto:zacharydebruine@gmail.com}{zacharydebruine@gmail.com}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Moving data, not computing on them, now limits large single-cell analyses and model training. We measured how few bits
+single-cell counts need and how fast integer codes decode, and used these limits to develop, with an AI coding assistant, a
+format that approaches both. The format, \sone, models the counts with a static, context-conditioned entropy coder and reads
+any subset of cells remotely. Across \nm{nMatrices} public matrices from \nm{nProtocolClasses} protocol classes, \sone{}
+files were the smallest on every matrix, \nm{ratio-h5ad_gzip} times smaller than compressed AnnData and within a few
+percent of the best count models. No measured code was both as small and faster to decode, and \sone{} decoded at the rate
+the trend of existing codes predicts for its size. From cloud storage, \sone{} delivered a first minibatch in under a second
+and streamed cells tens of times faster than chunked alternatives. Its costs are a decoder slower per core than
+byte-oriented codes and a writer that needs more memory. We propose \sone{} as a standard format for single-cell counts.
+\end{abstract}
+
+\input{sections/intro}
+\input{sections/related}
+\input{sections/format}
+\input{sections/methods}
+\input{sections/results}
+\input{sections/discussion}
+
+\section*{Data and code availability}
+All datasets are public; accessions, file names, licences and SHA-256 checksums are in \texttt{datasets.yaml} and
+Supplementary Table~\ref{S-tab:datasets}. The \sone{} codec, its Python, R and C++ interfaces (\texttt{singlet}
+\nm{rel-singlet_py} for Python and \nm{rel-singlet_r} for R, \url{https://github.com/Singlet-Bio/singlet}), and the
+benchmark pipeline that produces every figure, table and number in this paper
+(\texttt{papers/manuscripts/s1-format/bench}) are open source under the MIT license, with the per-stage results behind the
+figures in \texttt{papers/manuscripts/s1-format/results}. The supplementary material and the format specification are
+provided as separate files.
+
+\section*{Acknowledgments}
+Computations ran on the Clipper cluster at Grand Valley State University; the author thanks the GVSU HPC team for their
+support. This work received no specific funding. Claude (Anthropic), a large language model, was used as a coding assistant
+to develop the \sone{} codec and the benchmark pipeline, and to draft and revise the text of this article and its
+supplement. Every codec change was kept only if measured on real matrices and reproduced its input exactly; all results are
+produced by the open pipeline, and the author reviewed and takes responsibility for all content.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+\end{document}

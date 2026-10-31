@@ -1,0 +1,53 @@
+% Related work (main text): prior work only; results of this paper are in results.tex.
+\section{Related work}
+\label{sec:related}
+
+\subsection{Storing count matrices}
+On disk, almost every single-cell toolkit stores the compressed sparse column (CSC)
+layout of its in-memory matrices~\cite{bates2024matrix,virtanen2020scipy}: 32-bit row indices and 32- or 64-bit values,
+64 to 96 bits per non-zero before compression, however small the counts are. Matrix Market~\cite{boisvert1997matrix}
+writes them as text; the 10x HDF5 file~\cite{zheng2017massively,tenx_h5}, loom~\cite{loompy} and
+AnnData~\cite{virshup2024anndata} (in HDF5~\cite{hdf5} or Zarr~\cite{zarr}) store them as chunked arrays; R stores
+serialized \texttt{dgCMatrix} objects. Compression is a byte-level filter, gzip, LZF, Blosc or
+zstd~\cite{deutsch1996deflate,collet2021zstd}, which knows nothing of the counts. Formats built for scale add structure:
+TileDB-SOMA~\cite{papadopoulos2016tiledb,tiledbsoma} stores tiled sparse arrays and serves the CELLxGENE
+Census~\cite{czi2025cellxgene}, BPCells~\cite{parks2025bpcells} bit-packs deltas and values for streaming reads, and
+Parquet~\cite{parquet} distributes the largest training corpora~\cite{tahoe100m_hf}. Only BPCells uses a transform
+tailored to counts, and none uses an entropy coder with a model of them.
+
+\subsection{Compressing integers}
+Inverted indexes face the same problem as CSC row indices: sorted integer lists with
+small gaps. Byte- and word-aligned codes such as Stream VByte~\cite{lemire2018stream} and SIMD bit
+packing~\cite{lemire2015decoding} decode billions of integers per second because they ignore the distribution of the
+values beyond their bit width; entropy coders spend close to $-\log_2 p$ bits per symbol~\cite{cover2006elements} at a
+higher cost per symbol. Asymmetric numeral systems~\cite{duda2013asymmetric} reach the precision of arithmetic coding
+with table look-ups, and interleaved rANS states let SIMD units decode several symbols at
+once~\cite{giesen2014interleaved}. ANS with contexts closes much of the gap between fast and small codes for inverted
+indexes~\cite{moffat2017ans,moffat2020large}, the closest precedent for the approach taken here; surveys map the
+trade-off between size and speed~\cite{pibiri2021techniques}.
+
+\subsection{Domain-specific genomic compression}
+CRAM replaced BAM's gzip blocks with per-field codecs, and CRAM~3.1 added
+rANS with 32 interleaved states and SIMD decoding, reaching files 50--70\% smaller than BAM~\cite{bonfield2022cram}.
+Benchmarks of read compressors found that how each field is modelled matters more than the back-end
+coder~\cite{numanagic2016comparison,hernaez2019genomic}, and genotype matrices have dedicated compressors that reorder
+and model them~\cite{danek2018gtc,lan2021genozip}. The lessons carry over: separate fields with different statistics,
+condition each on cheap side information, use static tables learned from the data, and code independent blocks for
+random access. We found no published entropy-coded format for count matrices.
+
+\subsection{Statistics of counts}
+UMI counts are well described as a multinomial sample of each cell's molecules, close
+to Poisson sampling given the cell's depth~\cite{townes2019feature,kim2020demystifying}, with biological variation across
+cells captured by a negative binomial~\cite{svensson2020droplet,hafemeister2019normalization}; expression across genes is
+heavy-tailed, close to Zipf's law~\cite{furusawa2003zipf}. These models say what a coder can exploit, the cell's depth
+and each gene's detection rate, and bound what it can achieve: the entropy of sampling a cell's molecules cannot be
+removed by any lossless code.
+
+\subsection{Feeding models}
+Training draws random minibatches of cells many times over. scDataset showed that fetching
+blocks of contiguous cells and shuffling within a buffer is orders of magnitude faster than random sampling at the same
+accuracy~\cite{dascenzo2025scdataset}, and the CELLxGENE Census provides a loader over
+TileDB-SOMA~\cite{tiledbsomaml}. From an object store, two costs set the ceiling: the bytes moved per cell, which the
+format sets, and the number of round trips, each of which waits tens of milliseconds~\cite{durner2023exploiting}.
+Cloud-native formats such as Zarr address the second with independently addressable chunks~\cite{abernathey2021cloud}.
+These loaders optimise access patterns over existing encodings; \sone{} changes the encoding.

@@ -1,95 +1,90 @@
-% Figure 1: the headline. Every value is read from generated/fig1*.tsv (written by `python -m s1bench report`).
-\begin{figure*}[p]
+% Figure 1: the headline. Every value is read from generated/fig1*.tsv and generated/fig1a_boxes.tex (written by
+% `python -m s1bench report`).
+% \figbox{pos}{q1}{median}{q3}{low whisker}{high whisker}{colour}: one horizontal box of panel a, in axis coordinates.
+\newcommand{\figbox}[7]{%
+  \draw[#7!80!black, line width=0.5pt] (axis cs:#5,#1) -- (axis cs:#2,#1);
+  \draw[#7!80!black, line width=0.5pt] (axis cs:#4,#1) -- (axis cs:#6,#1);
+  \draw[#7!80!black, fill=#7, fill opacity=0.18, line width=0.5pt] (axis cs:#2,{#1-0.32}) rectangle (axis cs:#4,{#1+0.32});
+  \draw[#7!70!black, line width=1.2pt] (axis cs:#3,{#1-0.32}) -- (axis cs:#3,{#1+0.32});}
+\begin{figure*}[tbp]
 \centering
-% ---------------- (a) size ----------------
+% ---------------- (a) size of every matrix relative to .s1 ----------------
 \begin{tikzpicture}
 \begin{axis}[
-  title={a\quad Stored size, whole file},
-  xbar, bar shift=0pt, width=0.44\linewidth, height=7cm, bar width=6pt,
-  xmin=0, xlabel={bits per non-zero, median over \nm{nMatrices} matrices},
-  ytick=data, yticklabels from table={\gen{fig1a_size.tsv}}{label}, y dir=reverse, enlarge y limits=0.05,
-  axis x line*=bottom, axis y line*=left,
-  error bars/error bar style={ink2, line width=0.5pt}, error bars/error mark options={rotate=90, mark size=1.5pt, ink2},
+  title={a\quad File size per matrix, relative to \sone},
+  width=0.47\linewidth, height=7.6cm, xmode=log, xmin=0.7, xmax=40,
+  xtick={1,2,5,10,20}, xticklabels={1,2,5,10,20},
+  xlabel={file size $\div$ \sone{} file size (log scale)},
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig1a_size.tsv}}{label}, y dir=reverse, enlarge y limits=0.04,
+  axis x line*=bottom, axis y line*=left, clip=false,
 ]
-\addplot[draw=none, forget plot] table[x=median, y=pos] {\gen{fig1a_size.tsv}};   % sets the y ticks
-\addplot[fill=gen!70, draw=none, discard if not={group}{general}, error bars/.cd, x dir=both, x explicit]
-  table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig1a_size.tsv}};
-\addplot[fill=dom!80, draw=none, discard if not={group}{domain}, error bars/.cd, x dir=both, x explicit]
-  table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig1a_size.tsv}};
-\addplot[fill=sone, draw=none, discard if not={group}{s1}, error bars/.cd, x dir=both, x explicit]
-  table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig1a_size.tsv}};
-\end{axis}
-\end{tikzpicture}\hfill
-% ---------------- (b) time to first minibatch ----------------
-\begin{tikzpicture}
-\begin{axis}[
-  title={b\quad Cold start to first minibatch},
-  xbar stacked, width=0.44\linewidth, height=7cm, bar width=8pt,
-  xmin=0, xlabel={seconds, \nm{fig1b-dataset}, object store at \nm{fig1b-tier}},
-  ytick=data, yticklabels from table={\gen{fig1b_ttfm.tsv}}{label}, y dir=reverse, enlarge y limits=0.12,
-  axis x line*=bottom, axis y line*=left,
-  legend style={font=\sffamily\tiny, draw=none, at={(0.98,0.02)}, anchor=south east, cells={anchor=west}},
-]
-\addplot[fill=ink2!60, draw=none] table[x=open, y=pos] {\gen{fig1b_ttfm.tsv}};
-\addplot[fill=dl, draw=none]      table[x=read, y=pos] {\gen{fig1b_ttfm.tsv}};
-\addplot[fill=tens, draw=none]    table[x=tensor, y=pos] {\gen{fig1b_ttfm.tsv}};
-\legend{open (metadata{,} index), read (transfer + decode), to tensor}
-\end{axis}
-\end{tikzpicture}
-
-\vspace{8pt}
-% ---------------- (c) size vs speed with R_eff iso-lines ----------------
-\begin{tikzpicture}
-\begin{axis}[
-  title={c\quad Size against read rate, \nm{threadsHeadline} cores},
-  width=0.44\linewidth, height=6.6cm,
-  xmode=log, ymode=log, xmin=2, xmax=120, ymin=5, ymax=5000,
-  xlabel={stored bits per non-zero}, ylabel={cold read, million non-zeros/s},
-  axis x line*=bottom, axis y line*=left,
-  xtick={2,5,10,20,50,100}, xticklabels={2,5,10,20,50,100}, ytick={10,100,1000}, yticklabels={10,100,1000},
-  lbl/.style={nodes near coords, point meta=explicit symbolic, every node near coord/.append style={font=\sffamily\tiny, anchor=west, text=ink2}},
-]
-% iso-lines of Eq. (1) at B = 1 Gbit/s: R_eff = R  <=>  D = 1/(1/R - b/1000), D and R in million non-zeros/s, b in bits
-\pgfplotsinvokeforeach{25,50,100,200}{
-  \addplot[domain=2:{0.995*1000/#1}, samples=80, dashed, sone!55, forget plot]
-    {1/(1/#1 - x/1000)} node[pos=0.03, anchor=south west, font=\sffamily\tiny, text=sone!80!black] {$R_{\mathrm{eff}}=#1$};
+\addplot[draw=none, forget plot] table[x=ratio_median, y=pos] {\gen{fig1a_size.tsv}};   % sets the y ticks
+\draw[gen!60, line width=0.4pt, dashed] (axis cs:1,-0.5) -- (axis cs:1,16.5);
+\input{\gen{fig1a_boxes.tex}}
+\expandafter\pgfplotsinvokeforeach\expandafter{\otherformats}{
+  \addplot[only marks, mark=*, mark size=0.75pt, c-#1, opacity=0.6, discard if not={format}{#1}] table[x=ratio, y=y] {\gen{fig1a_points.tsv}};
 }
-\addplot[only marks, lbl, mark=*, mark size=1.8pt, gen, discard if not={group}{general}] table[x=bits, y=mnnzs, meta=label] {\gen{fig1c_tradeoff.tsv}};
-\addplot[only marks, lbl, mark=*, mark size=1.8pt, dom, discard if not={group}{domain}]   table[x=bits, y=mnnzs, meta=label] {\gen{fig1c_tradeoff.tsv}};
-\addplot[only marks, lbl, mark=*, mark size=2.4pt, sone, discard if not={group}{s1}]      table[x=bits, y=mnnzs, meta=label] {\gen{fig1c_tradeoff.tsv}};
+\addplot[only marks, mark=*, mark size=0.75pt, c-s1, opacity=0.6, discard if not={format}{s1}] table[x=ratio, y=y] {\gen{fig1a_points.tsv}};
 \end{axis}
 \end{tikzpicture}\hfill
-% ---------------- (d) sustained throughput by storage tier ----------------
+% ---------------- (b) size vs speed with R_eff iso-lines (figures/fig1b_panel.tex) ----------------
+\def\fbLog{0}\def\fbPts{1}\def\fbTitle{b\quad Smaller and faster}\def\fbW{0.44\linewidth}\input{figures/fig1b_panel}
+
+\vspace{2pt}
+% ---------------- (c) time to first minibatch ----------------
 \begin{tikzpicture}
 \begin{axis}[
-  title={d\quad Sustained minibatch throughput},
-  width=0.44\linewidth, height=6.6cm, ymode=log,
-  xmin=-0.3, xmax=4.3, xtick={0,1,2,3,4}, xticklabels={0.1 Gbit/s, 1 Gbit/s, 10 Gbit/s, NFS, local disk},
-  xlabel={storage tier}, ylabel={cells per second into the model},
+  title={c\quad Cold start to the first minibatch},
+  xbar, bar shift=0pt, width=0.42\linewidth, height=4.1cm, bar width=5.5pt,
+  xmode=log, log origin=infty, xmin=0.01, xmax=60, xlabel={seconds (log scale)},
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig1b_ttfm.tsv}}{label}, y dir=reverse, enlarge y limits=0.1,
   axis x line*=bottom, axis y line*=left,
-  legend style={font=\sffamily\tiny, draw=none, at={(0.5,-0.2)}, anchor=north, legend columns=2, cells={anchor=west}},
+  val/.style={point meta=rawx, nodes near coords={\pgfmathprintnumber[fixed, precision=2]{\pgfplotspointmeta}\,s},
+    nodes near coords style={font=\sffamily\tiny, anchor=west, text=ink2}},
 ]
-\addplot[gen, mark=square*, mark size=1.4pt, discard if not={loader}{anndata_backed}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
-\addplot[gen!60!black, dashed, mark=square, mark size=1.4pt, discard if not={loader}{scdataset}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
-\addplot[dec, mark=triangle*, mark size=1.6pt, discard if not={loader}{anndata_zarr_lazy}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
-\addplot[dom, mark=diamond*, mark size=1.6pt, discard if not={loader}{soma_ml}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
-\addplot[dl, mark=pentagon*, mark size=1.6pt, discard if not={loader}{bpcells}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
-\addplot[sone, very thick, mark=*, mark size=1.8pt, discard if not={loader}{s1_stream}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
-\addplot[sone!60, thick, dashed, mark=o, mark size=1.6pt, discard if not={loader}{s1_stream_canonical}] table[x=tierpos, y=cells_per_s] {\gen{fig1d_throughput.tsv}};
-\legend{AnnData backed, scDataset, AnnData Zarr, TileDB-SOMA ML, BPCells (R), \textbf{.s1}, {.s1, source order}}
+\addplot[draw=none, forget plot] table[x=total, y=pos] {\gen{fig1b_ttfm.tsv}};   % sets the y ticks
+\pgfplotsinvokeforeach{s1,zarr3,zarr,soma,h5ad_gzip,bpcells}{
+  \addplot[fill=c-#1, draw=none, val, discard if not={fmt}{#1}] table[x=total, y=pos] {\gen{fig1b_ttfm.tsv}};
+}
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (d) speed-up over one core, formats that decode in parallel ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={d\quad Parallel decoding},
+  width=0.33\linewidth, height=4.1cm, xmode=log, log basis x=2, ymode=log, log basis y=2, xmin=0.85, xmax=9.5, ymin=0.9, ymax=9,
+  xtick={1,2,4,8}, xticklabels={1,2,4,8}, ytick={1,2,4,8}, yticklabels={1$\times$,2$\times$,4$\times$,8$\times$},
+  xlabel={cores}, ylabel={read rate $\div$ one core},
+  axis x line*=bottom, axis y line*=left, unbounded coords=jump,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(1.02,0.5)}, anchor=west, legend columns=1, cells={anchor=west}},
+]
+\addplot[gen!70, densely dotted, no marks, forget plot] table[x=threads, y=ideal] {\gen{fig1d_speedup.tsv}}
+  node[pos=0.55, sloped, above, font=\sffamily\tiny, text=gen] {ideal};
+\addplot[c-s1, very thick, mark=*, mark size=1.6pt] table[x=threads, y=s1] {\gen{fig1d_speedup.tsv}};
+\addplot[c-soma, thick, mark=triangle*, mark size=1.5pt] table[x=threads, y=soma] {\gen{fig1d_speedup.tsv}};
+\addplot[c-mtx_gz, thick, mark=square*, mark size=1.2pt] table[x=threads, y=mtx_gz] {\gen{fig1d_speedup.tsv}};
+\addplot[c-parquet_coo, thick, mark=diamond*, mark size=1.5pt] table[x=threads, y=parquet_coo] {\gen{fig1d_speedup.tsv}};
+\addplot[c-zarr3, thick, mark=pentagon*, mark size=1.4pt] table[x=threads, y=zarr3] {\gen{fig1d_speedup.tsv}};
+\legend{\sone, TileDB-SOMA, MTX.gz, Parquet COO, {Zarr v3, sharded}}
 \end{axis}
 \end{tikzpicture}
-\caption{\textbf{\sone{} is the smallest format and the fastest way to get counts into a model.}
-\textbf{(a)} Stored size of the whole file (matrix, gene identifiers and barcodes) in bits per non-zero: bar, median over
-the \nm{nMatrices} matrices; whiskers, interquartile range. Grey, general-purpose formats; orange, single-cell formats
-with their own encodings; blue, \sone. Per-matrix values in Table~\ref{tab:size}.
-\textbf{(b)} Seconds from a new process to the first 512-cell minibatch as a \texttt{torch.sparse\_csr\_tensor}, cold page
-cache, medians of three seeds, split into opening the file (metadata and index), reading the requested cells (transfer and
-decode) and building the tensor. All values per tier in Table~\ref{tab:minibatch}.
-\textbf{(c)} Each format's median size against its median cold read rate on \nm{threadsHeadline} cores. Dashed: lines of
-equal effective delivery rate $R_{\mathrm{eff}}$ (Eq.~\ref{eq:reff}, million non-zeros per second) on a 1\,Gbit/s link;
-points above and left of a line deliver faster.
-\textbf{(d)} Cells per second delivered to the model after warm-up by storage tier (object store behind a
-bandwidth-limited proxy, the shared NFS filesystem, or the node's own disk), \nm{threadsHeadline} reader cores.}
+\caption{\textbf{\sone{} files are the smallest on every matrix and among the fastest to read.}
+\textbf{(a)} Size of each format's file (counts, gene identifiers and barcodes) divided by the size of the \sone{} file
+of the same matrix, one point per matrix (\nm{nMatrices} matrices). Boxes: quartiles and median; whiskers: the most
+extreme matrices within 1.5 interquartile ranges (log scale). Each format has one colour, the same in every panel and
+figure (HDF5 files orange to brown, Zarr green, R files red, plain arrays grey, \sone{} blue). Every point lies right of
+the dashed line: \sone{} is the smallest file on \nm{s1SmallestCount} of \nm{nMatrices} matrices; the median gzip-compressed
+AnnData file is \nm{ratio-h5ad_gzip}$\times$ larger and the smallest other file on each matrix \nm{ratioBestOther}$\times$.
+\textbf{(b)} Size against read rate from a cold file on \nm{threadsHeadline} cores: one faint point per matrix and format,
+large points the medians. Dashed: combinations that deliver the same number of non-zeros per second over a 1\,Gbit/s link
+(Eq.~\ref{eq:reff}), labelled in millions per second; up and to the left is better. \sone{} reads
+\nm{dec-s1-cold-t4} million non-zeros per second and is the fastest format on \nm{dec-s1-fastest-count} of
+\nm{dec-paired-n} matrices. Log axes and quartiles instead of points: Supplementary Fig.~\ref{S-fig:sfig1b}.
+\textbf{(c)} Seconds from a new process to the first 512-cell training minibatch, \nm{fig1b-dataset}, read from an object
+store over a \nm{fig1b-tier} link (median of three seeds). Loaders that download the whole file first are not shown;
+every loader and storage tier is in Supplementary Table~\ref{S-tab:minibatch}.
+\textbf{(d)} Read rate from a cold file relative to one core, median of the per-matrix ratios, for the
+\nm{par-formats-n} of \nm{par-formats-of} formats whose readers use more than one core (the others read at the same rate on
+one core or four); \sone{} over the thread sweep (\nm{scaleNmatrices} matrices), the others at one and four cores.}
 \label{fig:wow}
 \end{figure*}

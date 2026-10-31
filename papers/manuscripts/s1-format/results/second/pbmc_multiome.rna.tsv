@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+pbmc_multiome	rna	zstd22	14500735	14494468	0.999568
+pbmc_multiome	rna	xz9e	14500735	14494744	0.999587
+pbmc_multiome	rna	brotli11	14500735	14500763	1.000002
+pbmc_multiome	rna	bzip2_9	14500735	14561690	1.004204

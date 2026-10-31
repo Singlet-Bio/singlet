@@ -1,9 +1,12 @@
-loader	s3_0.1g	s3_1g	s3_10g	nvme	s3_1g_wan
-AnnData in memory					
-AnnData backed					
-scDataset					
-AnnData Zarr					
-TileDB-SOMA ML					
-BPCells (R)					
-\textbf{.s1}					
-.s1, source gene order					
+loader	s3_0.1g	s3_1g	s3_10g	nfs	local	s3_1g_wan
+AnnData in memory	131.55\textsuperscript{e}	15.66\textsuperscript{e}	4.23\textsuperscript{e}	21.44	21.33	15.55\textsuperscript{e}
+AnnData backed	128.96\textsuperscript{e}	12.96\textsuperscript{e}	1.61\textsuperscript{e}	0.18	0.18	12.98\textsuperscript{e}
+scDataset	128.99\textsuperscript{e}	12.98\textsuperscript{e}	1.64\textsuperscript{e}	0.44	0.48	13.00\textsuperscript{e}
+AnnData Zarr	1.69	0.35	0.25	0.25	0.23	0.52
+TileDB-SOMA ML	18.03	12.27	11.78	4.90	4.56	13.88
+BPCells (R)	30.38\textsuperscript{e}	3.65\textsuperscript{e}	1.34\textsuperscript{e}	0.84	0.74	4.04\textsuperscript{e}
+\textbf{.s1}	0.22	0.05	0.05	0.04	0.06	0.16
+.s1, source gene order	0.22	0.06	0.05	0.02	0.03	0.16
+.s1, one request at a time	0.21	0.06	0.06	0.02	0.02	0.37
+Zarr v3 sharded	0.48	0.27	0.26	0.17	0.23	0.79
+scDataset, fetch 16	129.54\textsuperscript{e}	13.56\textsuperscript{e}	2.20\textsuperscript{e}	1.81	1.82	13.55\textsuperscript{e}

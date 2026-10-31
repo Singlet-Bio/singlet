@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+pbmc_multiome	atac_peaks	zstd22	56604640	56579971	0.999564
+pbmc_multiome	atac_peaks	xz9e	56604640	56579344	0.999553
+pbmc_multiome	atac_peaks	brotli11	56604640	56575766	0.99949
+pbmc_multiome	atac_peaks	bzip2_9	56604640	56841933	1.004192

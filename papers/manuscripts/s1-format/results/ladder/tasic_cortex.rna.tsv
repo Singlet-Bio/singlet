@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+tasic_cortex	rna	214290227	64.0	31.674142	12.164433	11.518367	9.5592	9.566789	1

@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+baron_pancreas	rna	droplet_other	S	umi	20125	8569	16171764	0.093776	5828.22523	5075.0	1847.0	0.616119	4318	3.088226

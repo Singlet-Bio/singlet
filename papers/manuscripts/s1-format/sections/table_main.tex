@@ -1,0 +1,24 @@
+% Table 1 (main text): every format on the same matrices, from generated/tab_main.tsv (report_limits.redundancy_section).
+\begin{table}[tbp]
+\centering
+\caption{Every format on the same \nm{sumNsize} matrices}
+\label{tab:main}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\pgfplotstabletypeset[
+  columns={format,bits,rel,read,fastest,redund},
+  columns/format/.style={string type, column name=Format, column type=l},
+  columns/bits/.style={column name={Bits}, fixed, fixed zerofill, precision=1},
+  columns/rel/.style={column name={$\div$\,\sone}, fixed, fixed zerofill, precision=1, postproc cell content/.append style={/pgfplots/table/@cell content/.add={}{$\times$}}},
+  columns/read/.style={column name={Read}, fixed, precision=0},
+  columns/fastest/.style={string type, column name=Fastest, column type=r},
+  columns/redund/.style={column name={Redund.}, fixed, precision=0, postproc cell content/.append style={/pgfplots/table/@cell content/.add={}{\%}}},
+]{\gen{tab_main.tsv}}
+\par\vspace{3pt}
+\begin{minipage}{\linewidth}\scriptsize
+Bits: median bits per non-zero of the whole file, gene identifiers and barcodes included. $\div$\,\sone: geometric mean
+of the file's size relative to \sone. Read: median cold read rate on \nm{threadsHeadline} cores, million non-zeros per
+second. Fastest: matrices on which the format reads fastest. Redund.: median share of the file above the floor of the best
+count model ($1-\text{floor}/\text{bits}$). R formats hold the \nm{sumNr} matrices below $2^{31}$ non-zeros and loom the
+\nm{sumNloom} it can store densely.
+\end{minipage}
+\end{table}

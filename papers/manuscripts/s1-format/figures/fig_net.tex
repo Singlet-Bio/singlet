@@ -1,0 +1,105 @@
+% Figure 3: reading over a network. Every value is read from generated/fignet_*.tsv and generated/figr2.tsv (written by
+% `python -m s1bench report`, network_section, netsweep_section and r2_section). More panels: fig_supp_net.tex.
+\begin{figure*}[tbp]
+\centering
+% ---------------- (a) delivered rate against link bandwidth ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={a\quad What a link delivers, by format},
+  width=0.44\linewidth, height=6cm, xmode=log, ymode=log, xmin=0.01, xmax=100, ymin=0.3, ymax=1500,
+  xlabel={link bandwidth (Gbit/s)}, ylabel={million non-zeros per second},
+  xtick={0.01,0.1,1,10,100}, xticklabels={0.01,0.1,1,10,100}, axis x line*=bottom, axis y line*=left,
+  every axis plot/.append style={no marks},
+  clip mode=individual,
+]
+\pgfplotsinvokeforeach{mtx_gz,tenx_h5,h5ad_none,h5ad_lzf,loom,soma,parquet_coo,rds_gz}{
+  \addplot[gen!45, line width=0.5pt] table[x=gbit, y=#1] {\gen{fignet_curves.tsv}};}
+\addplot[ink2, thick] table[x=gbit, y=csc_i32] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny] {CSC, int32};
+\addplot[dl, thick] table[x=gbit, y=zarr] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny, text=dl] {Zarr};
+\addplot[dec, thick] table[x=gbit, y=h5ad_gzip] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny, text=dec!80!black] {h5ad gzip};
+\addplot[dom, thick] table[x=gbit, y=bpcells] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny, text=dom] {BPCells};
+\addplot[sone, densely dotted] table[x=gbit, y=s1_net] {\gen{fignet_curves.tsv}}
+  node[pos=0.22, sloped, above, font=\sffamily\tiny, text=sone] {limited by the link};
+\addplot[sone, densely dotted] table[x=gbit, y=s1_dec] {\gen{fignet_curves.tsv}}
+  node[pos=0.02, anchor=south west, font=\sffamily\tiny, text=sone] {limited by the decoder};
+\addplot[sone, line width=1.6pt] table[x=gbit, y=s1] {\gen{fignet_curves.tsv}} node[pos=1, anchor=west, font=\sffamily\tiny\bfseries, text=sone] {.s1};
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (b) measured readers against link bandwidth ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={b\quad Measured training loaders},
+  width=0.44\linewidth, height=6cm, xmode=log, ymode=log, xmin=0.03, xmax=30, ymin=50, ymax=400000,
+  xlabel={link bandwidth (Gbit/s)}, ylabel={cells per second into the model},
+  xtick={0.1,1,10}, xticklabels={0.1,1,10}, axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.98,0.02)}, anchor=south east, cells={anchor=west}},
+]
+\addplot[sone, very thick, mark=*, mark size=1.8pt, discard if not={loader}{s1_stream}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
+\addplot[dl, thick, mark=square*, mark size=1.4pt, discard if not={loader}{anndata_zarr_lazy}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
+\addplot[dom, thick, mark=triangle*, mark size=1.6pt, discard if not={loader}{soma_ml}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
+\addplot[sone, dashed, no marks, forget plot] table[x=gbit, y=net] {\gen{fignet_ceilings.tsv}}
+  node[pos=0.2, sloped, above, font=\sffamily\tiny, text=sone] {link capacity, as \sone};
+\legend{\sone, AnnData Zarr, TileDB-SOMA ML}
+\end{axis}
+\end{tikzpicture}
+
+\vspace{2pt}
+% ---------------- (c) sustained rate against added round-trip time ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={c\quad Latency: rate against round-trip time},
+  width=0.44\linewidth, height=6cm, xmode=log, ymode=log, xmin=0.4, xmax=260, ymin=100, ymax=2e6,
+  xtick={0.5,1,5,10,30,100,200}, xticklabels={0,1,5,10,30,100,200}, ytick={1e2,1e3,1e4,1e5},
+  xlabel={added round-trip time (ms), 1\,Gbit/s link}, ylabel={cells per second into the model},
+  axis x line*=bottom, axis y line*=left, clip=false,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.99,0.99)}, anchor=north east, legend columns=2, cells={anchor=west}},
+]
+\addplot[sone, very thick, mark=*, mark size=1.6pt] table[x=rtt, y=s1_stream_cps] {\gen{fignet_rtt.tsv}};
+\addplot[dl, thick, mark=square*, mark size=1.3pt] table[x=rtt, y=anndata_zarr_lazy_cps] {\gen{fignet_rtt.tsv}};
+\addplot[tens, thick, mark=diamond*, mark size=1.8pt] table[x=rtt, y=zarr3_shard_cps] {\gen{fignet_rtt.tsv}};
+\addplot[dom, thick, mark=triangle*, mark size=1.6pt] table[x=rtt, y=soma_ml_cps] {\gen{fignet_rtt.tsv}};
+\addplot[only marks, mark=star, mark size=3pt, sone!70!black, thick, discard if not={io}{32}] table[x=rtt, y=cps] {\gen{fignet_inflight.tsv}};
+\legend{{\sone, 1.3.2 settings}, AnnData Zarr, {Zarr v3, sharded}, TileDB-SOMA ML, {\sone, 1.3.3 defaults}}
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (d) a real object store ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={d\quad A real cloud object store},
+  width=0.44\linewidth, height=6cm, xmode=log, ymode=log, xmin=0.3, xmax=300, ymin=150, ymax=6e5,
+  xlabel={seconds to the first minibatch}, ylabel={cells per second, sustained},
+  xtick={1,10,100}, xticklabels={1,10,100}, axis x line*=bottom, axis y line*=left,
+  lbl/.style={nodes near coords, point meta=explicit symbolic, visualization depends on={value \thisrow{anchor}\as\lblanchor},
+    every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=2pt}},
+]
+\fill[sone!7] (axis cs:0.3,1e4) rectangle (axis cs:1,6e5);
+\node[font=\sffamily\tiny, text=sone!80!black, anchor=north west, align=left] at (axis cs:0.31,5.5e5) {fast to start\\and to stream};
+\addplot[only marks, lbl, mark=*, mark size=2pt, gen!80!black, discard if not={group}{other}] table[x=first, y=cps, meta=label] {\gen{figr2.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=2.4pt, sone, discard if not={group}{s1}] table[x=first, y=cps, meta=label] {\gen{figr2.tsv}};
+\end{axis}
+\end{tikzpicture}
+\caption{\textbf{\sone{} reads at the speed of the network, for links up to about 1\,Gbit/s on four cores, including
+from a real cloud object store.} On four cores the \sone{} decoder keeps up with a link of about 1\,Gbit/s; faster links
+need more cores.
+\textbf{(a)} Non-zeros a link of a given bandwidth delivers in each format, from its median size and decode rate on
+\nm{threadsHeadline} cores (Eq.~\ref{eq:reff}). Each curve rises with the link until the decoder becomes the limit;
+\sone{} carries the most non-zeros over every link up to about \nm{wire-crossover-gbit}\,Gbit/s, where uncompressed arrays catch
+up. At 1\,Gbit/s a link carries \nm{net-s1-at-1g} million non-zeros per second as \sone{} and \nm{net-csc-at-1g} million as
+uncompressed arrays.
+\textbf{(b)} Cells per second delivered into a PyTorch model from \nm{fig1b-dataset} through an emulated object store at
+three link speeds (1\,ms latency); dashed, the link's capacity in \sone{} cells. At 1\,Gbit/s, \sone{} delivers
+\nm{thr-s1_stream-s3_1g} cells per second, AnnData Zarr \nm{thr-anndata_zarr_lazy-s3_1g} and TileDB-SOMA ML
+\nm{thr-soma_ml-s3_1g}.
+\textbf{(c)} The same store at 1\,Gbit/s with a round-trip delay added to every request, \nm{ns-dataset}. With the 8
+concurrent requests of \texttt{singlet} 1.3.2 (line), \sone{} slows with latency because too few bytes are in flight. The
+1.3.3 defaults, 32 requests and four minibatches ahead (stars), keep it near the link's capacity at 30\,ms; 64 requests
+deliver \nm{inf-30-best-cps} cells per second at 30\,ms and \nm{inf-100-best-cps} at 100\,ms.
+\textbf{(d)} Cloudflare R2 read over the public internet from a cluster node (about \nm{r2-hlca_core-rtt}\,ms per
+request), HLCA core, median of three seeds. \sone{} delivers the first minibatch in under a second and streams
+\nm{r2-hlca_core-s1_stream@32x4-cps} cells per second with the 1.3.3 defaults; downloading the h5ad first takes
+\nm{r2-hlca_core-anndata_inmem-first}\,s. An epoch of random minibatches costs \$\nm{r2-hlca_core-s1_stream-usd_s3} at S3's
+egress and request prices with \sone, against \$\nm{r2-hlca_core-anndata_zarr_lazy-usd_s3} with AnnData Zarr
+(Supplementary Table~\ref{S-tab:r2}). Latency distributions, round trips and chunk size: Supplementary
+Fig.~\ref{S-fig:snet}.}
+\label{fig:net}
+\end{figure*}

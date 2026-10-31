@@ -1,106 +1,75 @@
-% .s1 manuscript. Build: `make s1-format` in papers/, or latexmk -pdf main.tex here.
+% .s1 manuscript, IEEE/ACM Transactions on Computational Biology and Bioinformatics (IEEEtran, compsoc journal).
 % Every result is a macro \nm{key} defined in generated/numbers.tex, and every plotted value is read from generated/*.tsv;
 % both are written by `python -m s1bench report` (bench/). A key the pipeline has not produced prints as a red [??key].
-\documentclass[10pt,letterpaper]{article}
-\usepackage[margin=0.9in]{geometry}
-\usepackage[scaled=0.92]{helvet}
-\usepackage{mathpazo}
-\usepackage[T1]{fontenc}
-\usepackage{amsmath,amssymb}
-\usepackage{booktabs,tabularx,array}
-\usepackage{xcolor}
-\usepackage{graphicx}
-\usepackage{caption}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta,positioning,fit,calc,decorations.pathreplacing,backgrounds}
-\usepackage{pgfplots}
-\usepackage{pgfplotstable}
-\pgfplotsset{compat=1.18}
-\usepackage[numbers,sort&compress]{natbib}
+% The supplement (supplement.tex) and the format specification (spec.tex) are separate documents; references between
+% main and supplement resolve through xr, so build both twice:  latexmk -pdf supplement.tex main.tex  (run it twice).
+\documentclass[10pt,journal,compsoc]{IEEEtran}
+\input{preamble}
+\usepackage[nocompress]{cite}
+\usepackage{xr-hyper}
 \usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
-
-% ---------- generated numbers ----------
-\newcommand{\defnum}[2]{\expandafter\def\csname s1n@#1\endcsname{#2}}
-\newcommand{\nm}[1]{\ifcsname s1n@#1\endcsname\csname s1n@#1\endcsname\else\textcolor{red!75!black}{\text{\sffamily\footnotesize[??\detokenize{#1}]}}\fi}
-\InputIfFileExists{generated/numbers.tex}{}{}
-\newcommand{\gen}[1]{generated/#1}   % path of a generated table
-
-% ---------- house style ----------
-\newcommand{\sone}{\texttt{.s1}}
-\definecolor{sone}{HTML}{2A78D6}
-\definecolor{gen}{HTML}{8C8C8C}
-\definecolor{dom}{HTML}{D9591F}
-\definecolor{dl}{HTML}{4C9A6A}
-\definecolor{dec}{HTML}{E0A526}
-\definecolor{tens}{HTML}{8E6CC4}
-\definecolor{ink2}{HTML}{555555}
-\captionsetup{font=small,labelfont=bf}
-\emergencystretch=3em
-
-% pgfplots: read tab-separated tables; keep only rows whose column #1 equals #2 (x or y filter)
-\pgfplotsset{
-  table/col sep=tab,
-  discard if not/.style 2 args={x filter/.append code={\edef\tempa{\thisrow{#1}}\edef\tempb{#2}\ifx\tempa\tempb\else\def\pgfmathresult{nan}\fi}},
-  discard if not y/.style 2 args={y filter/.append code={\edef\tempa{\thisrow{#1}}\edef\tempb{#2}\ifx\tempa\tempb\else\def\pgfmathresult{nan}\fi}},
-  every axis/.append style={font=\sffamily\scriptsize, label style={font=\sffamily\scriptsize},
-    tick label style={font=\sffamily\tiny}, title style={font=\sffamily\small\bfseries, align=left}},
-}
-\pgfplotstableset{col sep=tab, empty cells with={--}, every head row/.style={before row=\toprule, after row=\midrule},
-  every last row/.style={after row=\bottomrule}}
-
-\title{\sone: single-cell count matrices at the speed of the network}
-\author{Zach DeBruine}
-\date{Draft, \today}
+\newcommand{\para}[1]{\par\smallskip\noindent\textbf{#1.}\ }   % run-in paragraph heading
+\externaldocument[S-]{supplement}   % supplement labels as S-<label>, so its citation keys do not clash with ours
 
 \begin{document}
-\maketitle
+\title{\sone: Single-Cell Count Matrices at the Speed of the Network}
+\author{Zachary~J.~DeBruine%
+\IEEEcompsocitemizethanks{\IEEEcompsocthanksitem Z.\,J.~DeBruine is with the Department of Information Sciences and
+Technology, College of Computing, Grand Valley State University, Allendale, MI, USA.\protect\\
+E-mail: zacharydebruine@gmail.com}}
 
+\markboth{IEEE/ACM Transactions on Computational Biology and Bioinformatics}%
+{DeBruine: .s1: Single-Cell Count Matrices at the Speed of the Network}
+
+\IEEEtitleabstractindextext{%
 \begin{abstract}
-Single-cell and spatial transcriptomics store their primary data as sparse matrices of integer counts, and the
-formats in use compress them with generic byte-level filters. We describe \sone, a storage format for count matrices
-that orders genes by frequency, codes each cell's non-zeros as small symbols under contexts every reader already knows,
-and entropy-codes them with static, 32-way interleaved rANS that decodes with SIMD instructions. On \nm{nMatrices}
-public count matrices from \nm{nDatasets} datasets and \nm{nProtocolClasses} protocol classes, from droplet and plate
-single-cell data to sequencing- and imaging-based spatial data, \sone{} files take a median of \nm{s1BpnMedian} bits per
-non-zero including gene names and barcodes, \nm{ratio-h5ad_gzip}$\times$ smaller than compressed AnnData and
-\nm{ratio-bpcells}$\times$ smaller than BPCells, and decode at \nm{codec_cpp-native-avx512-t4} million non-zeros per
-second on \nm{threadsHeadline} cores. From an object store at 1\,Gbit/s, the first 512-cell minibatch reaches PyTorch in
-\nm{ttfm-s1}\,s, \nm{ttfm-speedup}$\times$ sooner than the fastest alternative loader. Cross-validated count models,
-including negative binomial and cluster-conditioned models, code the same matrices at most \nm{s1AboveFloorPctHi}\% below
-\sone, and a sampling bound shows that about \nm{samplingPctMedian}\% of the code length is the sampling of molecules,
-which no lossless decoder can remove. \sone{} is read from Python, R and C++ by the open-source \texttt{singlet} package.
+Moving data, not computing on them, now limits large single-cell analyses and model training. We measured how few bits
+single-cell counts need and how fast integer codes decode, and used these limits to develop, with an AI coding assistant, a
+format that approaches both. The format, \sone, models the counts with a static, context-conditioned entropy coder and reads
+any subset of cells remotely. Across \nm{nMatrices} public matrices from \nm{nProtocolClasses} protocol classes, \sone{}
+files were the smallest on every matrix, \nm{ratio-h5ad_gzip} times smaller than compressed AnnData and within a few
+percent of the best count models. No measured code was both as small and faster to decode, and \sone{} decoded at the rate
+the trend of existing codes predicts for its size. From cloud storage, \sone{} delivered a first minibatch in under a second
+and streamed cells tens of times faster than chunked alternatives. Its costs are a decoder slower per core than
+byte-oriented codes and a writer that needs more memory. We propose \sone{} as a standard format for single-cell counts.
 \end{abstract}
 
-\section{Introduction}
-\label{sec:intro}
+\begin{IEEEkeywords}
+Data compression, entropy coding, sparse matrices, single-cell RNA sequencing, file formats, cloud storage, machine
+learning data loading.
+\end{IEEEkeywords}}
 
-Single-cell datasets have grown from hundreds to millions of cells per study, and the models trained on them read every
-cell many times. Yet the count matrices at the centre of the field are stored as they were a decade ago: sorted
-coordinate arrays, compressed, when they are compressed at all, with gzip or zstd applied to bytes that the compressor
-cannot interpret. The result is files several times larger than the information they hold, and loaders whose speed is
-set by bytes on disk or on the wire rather than by the model consuming them.
+\maketitle
+\IEEEdisplaynontitleabstractindextext
+\IEEEpeerreviewmaketitle
 
-This paper makes three contributions. First, a format, \sone, whose codec is built from what is known about count
-data (Section~\ref{sec:background}): most non-zeros are ones, the depth of a cell sets the rate of every gene in it, and
-genes sorted by frequency turn a cell's non-zeros into short gaps. Second, a benchmark of \sone{} against the formats and
-loaders in common use on \nm{nMatrices} public matrices spanning the protocols of the field, measured end to end:
-stored size, decode speed, time to a minibatch over realistic networks, and the calls a user runs. Third, an
-information-theoretic analysis showing how close the format comes to the best code length any count model can
-achieve, and why the remainder is out of reach for any lossless decoder. All numbers in the paper are generated by one
-pipeline in the \texttt{singlet} repository from public data (Section~\ref{sec:methods}).
-
-\input{sections/background}
-\input{sections/results}
+\input{sections/intro}
+\input{sections/related}
+\input{sections/format}
 \input{sections/methods}
+\input{sections/results}
+\input{sections/discussion}
 
-\clearpage
 \section*{Data and code availability}
-All datasets are public; accessions, file names and checksums are listed in \texttt{datasets.yaml} and
-Table~\ref{tab:datasets}. The \sone{} codec, its Python, R and C++ interfaces, and the benchmark pipeline that produces
-every figure, table and number in this paper (\texttt{papers/manuscripts/s1-format/bench}) are in the \texttt{singlet}
-repository under the MIT license.
+All datasets are public; accessions, file names, licences and SHA-256 checksums are in \texttt{datasets.yaml} and
+Supplementary Table~\ref{S-tab:datasets}. The \sone{} codec, its Python, R and C++ interfaces (\texttt{singlet}
+\nm{rel-singlet_py} for Python and \nm{rel-singlet_r} for R, \url{https://github.com/Singlet-Bio/singlet}), and the
+benchmark pipeline that produces every figure, table and number in this paper
+(\texttt{papers/manuscripts/s1-format/bench}) are open source under the MIT license, with the per-stage results behind the
+figures in \texttt{papers/manuscripts/s1-format/results}.
 
-\bibliographystyle{unsrtnat}
+\section*{Acknowledgments}
+Computations ran on the Clipper cluster at Grand Valley State University; the author thanks the GVSU HPC team for their
+support. This work received no specific funding. \emph{Use of AI:} Claude (Anthropic), a large language model, was used
+as a coding assistant to develop the \sone{} codec and the benchmark pipeline, and to draft and revise the text of this
+article and its supplement. Every codec change was kept only if measured on real matrices and reproduced its input exactly;
+all results are produced by the open pipeline, and the author reviewed and takes responsibility for all content.
+
+\bibliographystyle{IEEEtran}
 \bibliography{refs}
+
+\begin{IEEEbiographynophoto}{Zachary J. DeBruine}
+\placeholder{Biography (about 100 words) and photo, to be supplied by the author.}
+\end{IEEEbiographynophoto}
 
 \end{document}

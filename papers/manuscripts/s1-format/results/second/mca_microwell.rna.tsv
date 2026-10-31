@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+mca_microwell	rna	zstd22	190054802	189990834	0.999663
+mca_microwell	rna	xz9e	190054802	189982404	0.999619
+mca_microwell	rna	brotli11	190054802	189977851	0.999595
+mca_microwell	rna	bzip2_9	190054802	190865065	1.004263

@@ -1,268 +1,100 @@
-% Results. Every number is \nm{key} from generated/numbers.tex. The sentences state what the benchmark is designed to
-% show; after the run, check each one against the generated numbers and rewrite any the data do not support
-% (PLAN.md section 8). Comments marked CHECK name the comparison a sentence depends on.
+% Results (main text). Numbers belong in the figures, tables and captions; the text states what they show and why it
+% matters. The numbers behind every statement are in the Supplementary Results and Tables (supplement.tex).
 \section{Results}
 \label{sec:results}
 
-\subsection{Overview}
+\subsection{\sone{} files are the smallest on every matrix}
 
-We compared \sone{} with the formats single-cell practitioners use: Matrix Market with gzip, the 10x Genomics HDF5
-layout, AnnData as \texttt{.h5ad} (uncompressed, gzip and lzf) and Zarr, loom, R \texttt{dgCMatrix} serialized as
-\texttt{.rds}, TileDB-SOMA, BPCells, and COO triplets in Parquet (Table~\ref{tab:formats}). To separate what the \sone{}
-transform contributes from what a stronger general-purpose codec would give, we also stored the raw CSC arrays
-uncompressed and with zstd at level 19. The panel has \nm{nMatrices} count matrices from \nm{nDatasets} public datasets
-in \nm{nProtocolClasses} protocol classes, from \nm{fracOnesMinPct}--\nm{fracOnesMaxPct}\% of non-zeros equal to one,
-\nm{nnzTotalBillions} billion non-zeros in total (Table~\ref{tab:datasets}). Timings use \nm{threadsHeadline} cores of
-a \nm{cpu} node (Section~\ref{sec:methods}).
+\sone{} produced the smallest file on every one of the \nm{nMatrices} matrices (Fig.~\ref{fig:wow}a,
+Table~\ref{tab:main}). The typical gzip-compressed AnnData file, the most common way single-cell data are shared, was
+\nm{ratio-h5ad_gzip} times larger, and even the smallest alternative on each matrix was \nm{ratioBestOther} times larger.
+The gain does not come from a stronger general-purpose compressor: zstd at its strongest level on the raw arrays, and a
+cloud-ready Zarr layout with the same block size as \sone, both left files about twice as large. It comes from
+describing the counts. Measured against the floor of the best count model, three quarters of a gzip-compressed AnnData
+file is redundant, and at least \nm{redund-other-min}\% of every other format; for \sone{} the median is
+\nm{redund-s1}\% (Table~\ref{tab:main}).
 
-The question every benchmark answers is the one a user faces: how long until a matrix, or a minibatch of it, is ready
-in memory. For a remote file this is request latency plus transfer plus decode, and compression helps only if it
-removes more transfer time than it adds decode time. We make this explicit with the \emph{effective delivery rate}
-\begin{equation}
-R_{\mathrm{eff}}(B) \;=\; \left(\frac{b}{B} + \frac{1}{D_p}\right)^{-1}\ \text{non-zeros per second},
-\label{eq:reff}
-\end{equation}
-where $b$ is the stored size in bits per non-zero, $B$ the link bandwidth in bits per second and $D_p$ the decode rate
-on $p$ cores. A format beats a reference ($b_0$, $D_{p,0}$) on a link of bandwidth $B$ exactly when
-$(b_0-b)/B > 1/D_p - 1/D_{p,0}$: the transfer time saved must exceed the decode time added.
+\input{sections/table_main}
 
-% =====================================================================
-\subsection{\sone{} is the smallest format and is never the bottleneck}
+\subsection{Smaller files that are also faster to read}
 
-Across the panel, \sone{} files take a median of \nm{s1BpnMedian} bits per non-zero (range
-\nm{s1BpnMin}--\nm{s1BpnMax}) with gene identifiers and barcodes included, and are the smallest file on
-\nm{s1SmallestCount} of \nm{nMatrices} matrices (Fig.~\ref{fig:wow}a, Table~\ref{tab:size}). The median matrix is
-\nm{ratio-h5ad_gzip}$\times$ smaller than gzip-compressed AnnData, \nm{ratio-tenx_h5}$\times$ smaller than 10x HDF5,
-\nm{ratio-soma}$\times$ smaller than TileDB-SOMA and \nm{ratio-bpcells}$\times$ smaller than BPCells; the strongest
-alternative, \nm{bestOtherFormat}, is \nm{ratioBestOther}$\times$ larger. Applying zstd at level 19 to the raw arrays
-gives \nm{size-csc_zstd19} bits per non-zero, so most of the gain comes from the transform and the model, not from the
-entropy coder alone (Section~\ref{sec:floor}). With gene identifiers moved into a vocabulary pack shared by every
-dataset of the same annotation, the median falls to \nm{size-s1_pack} bits per non-zero.
-% CHECK: s1SmallestCount == nMatrices; if not, name the exceptions (likely the ADT or imaging matrices).
-
-Smaller files are usually slower to read. \sone{} is not: the C++ decoder reads \nm{codec_cpp-native-avx512-t1}
-million non-zeros per second on one core and \nm{codec_cpp-native-avx512-t4} million on \nm{threadsHeadline}
-(AVX-512; \nm{codec_cpp-native-avx2-t1} with AVX2 and \nm{codec_cpp-native-scalar-t1} with the portable scalar decoder
-on one core, all with identical output; Table~\ref{tab:decode}). Through the Python binding, from a cold file to a
-SciPy matrix, it reads \nm{dec-s1-cold-t4} million non-zeros per second, against \nm{dec-h5ad_gzip-cold-t4} for gzip
-AnnData and \nm{dec-csc_i32-cold-t4} for the uncompressed arrays. Fig.~\ref{fig:wow}c places every format on the
-size--speed plane with iso-lines of Eq.~\eqref{eq:reff} at 1\,Gbit/s. Measured per matrix, \sone{} delivers non-zeros
-faster than uncompressed CSC on \nm{wire-wins-0p1} of \nm{wire-n-0p1} matrices at 0.1\,Gbit/s,
-\nm{wire-wins-1} of \nm{wire-n-1} at 1\,Gbit/s and \nm{wire-wins-10} of \nm{wire-n-10} at 10\,Gbit/s (median
-gains \nm{wire-gain-0p1}$\times$, \nm{wire-gain-1}$\times$ and \nm{wire-gain-10}$\times$), so the compression pays
-for itself on every link we consider.
-
-For machine learning the quantity that matters is the time until a sparse minibatch is ready for the model. From a cold
-start, reading \nm{fig1b-dataset} from an object store at \nm{fig1b-tier}, the first 512-cell minibatch is a
-\texttt{torch.sparse\_csr\_tensor} after \nm{ttfm-s1}\,s with \sone, against \nm{ttfm-best-other}\,s for the fastest
-alternative (\nm{ttfm-best-other-name}; Fig.~\ref{fig:wow}b, Table~\ref{tab:minibatch}). The \sone{} reader needs one
-request for a few kilobytes that plan every later read and one request per run of chunks, and it moves only the chunks
-that hold the requested cells. Sustained throughput into the model is \nm{thr-s1_stream-s3_1g} cells per second at
-1\,Gbit/s, \nm{thr-s1_stream-nfs} from the shared filesystem and \nm{thr-s1_stream-local} from the node's own disk
+A smaller file usually costs more time to decompress. \sone{} does not pay that price: read from a cold file into a sparse
+matrix, it was the fastest format on \nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices and the only one that was
+both small and fast (Fig.~\ref{fig:wow}b). Part of the reason is that its decoder spreads the work over the available
+cores. Most formats do not decode in parallel at all; among the few that do, \sone{} gained the most from each added core
 (Fig.~\ref{fig:wow}d).
 
-\input{figures/fig1_wow}
 
-% =====================================================================
-\subsection{How \sone{} stores a count matrix}
+\subsection{\sone{} reads at the speed of the network}
+\label{sec:network}
 
-Fig.~\ref{fig:how} shows the format from a dataset down to the bit stream. A dataset is a small manifest that lists
-immutable sample objects named by the SHA-256 of their content (Fig.~\ref{fig:how}a). What a sample shares with other
-samples, the gene vocabulary of an annotation and the barcode whitelist of a chemistry, can live in a shared pack that
-a reader downloads once and caches. Anything that can be recomputed from the stored data is replaced by a recipe that
-the writer runs and verifies byte for byte before it drops the original (Fig.~\ref{fig:how}b).
+On four cores \sone{} keeps up with links of about 1\,Gbit/s, and with faster links on more cores. Because each entry
+takes so few bits, the same link then carries about twelve times as many entries as \sone{} as it does as uncompressed
+arrays, and more than any other format over every common link speed (Fig.~\ref{fig:net}a).
 
-The count matrix is a \texttt{pz2} member whose first few kilobytes (header, chunk index, entropy tables and row keys)
-are enough to plan a read of any set of columns (Fig.~\ref{fig:how}c). Chunks of at most 49{,}152 non-zeros decode
-independently, so a reader issues one request for the prefix and one per contiguous run of chunks it needs.
+Real training loaders, reading 512-cell minibatches into PyTorch from an object store whose bandwidth we controlled,
+showed the same picture (Fig.~\ref{fig:net}b). The \sone{} loader filled most of a 1\,Gbit/s link and delivered thirty to
+a hundred times more cells per second than AnnData's Zarr loader or TileDB-SOMA's loader for machine learning, and its
+first minibatch arrived several times sooner than from any other loader that reads a file in parts (Fig.~\ref{fig:wow}c).
+Latency matters as much as bandwidth: every request waits a full round trip, and cloud storage adds tens of milliseconds to
+each. Because the \sone{} index locates every block before any is read, the reader sends all of a minibatch's requests at
+once and keeps the next minibatches' requests in flight. Our measurements showed that eight concurrent requests left a
+high-latency link mostly idle; with more in flight the rate recovered (Fig.~\ref{fig:net}c), and \texttt{singlet} 1.3.3 now
+uses these settings by default.
 
-The codec turns each column into a short sequence of small symbols and codes them with static rANS
-(Fig.~\ref{fig:how}d). Rows are stored in order of how many cells express them, in classes of four per doubling, so
-frequent genes get small row numbers and the gaps between a cell's non-zeros are small; the order is derived from
-per-row counts that the file stores anyway, so it costs no permutation. Each non-zero becomes one symbol carrying the
-gap class and a flag for counts above one, plus a residual for those counts. The probability table for each symbol is
-selected by two contexts every reader knows at that point: how many non-zeros the cell has, and how far down the gene
-list the cell has progressed. The tables are counted once per matrix and stored, so decoding is a table lookup, a
-multiply and an add per symbol, with no model to update. Thirty-two interleaved rANS states~\cite{giesen2014interleaved}
-share one 16-bit word stream, which lets AVX2 and AVX-512 decode eight to sixteen symbols per instruction with output
-identical to the scalar decoder. After decoding, every state must return to its initial value, which doubles as an
-integrity check of every chunk.
+Finally, we read the files from a real cloud object store, Cloudflare R2, over the public internet
+(Fig.~\ref{fig:net}d). The first minibatch of a 580,000-cell lung atlas arrived in under a second, while downloading the
+AnnData file first took well over a minute, and \sone{} then streamed cells tens of times faster than either Zarr layout.
+Because it moves fewer bytes in fewer requests, an epoch of random minibatches would cost about twenty times less in
+transfer and request fees than with AnnData Zarr, at the prices of a provider that charges for both. \sone{} needs no
+extra DataLoader worker processes to reach these rates, since its decoder already uses every core.
 
-\input{figures/fig2_how}
+\input{figures/fig_net}
 
-% =====================================================================
-\subsection{\sone{} is close to the best code any count model gives}
+\subsection{\sone{} is close to the limits of size and speed}
 \label{sec:floor}
 
-We next asked how much smaller a lossless file could be. Fig.~\ref{fig:floor}a follows the payload (row indices and
-values only) as each idea is added, median over the panel. CSC as 32-bit integers costs \nm{ladder-L0_csc_i32} bits
-per non-zero; variable-length integers bring this to \nm{ladder-L1_leb128}; row gaps in separate streams with zstd
-reach \nm{ladder-L2_gaps_leb_zstd3} at level 3 and \nm{ladder-L3_gaps_leb_zstd19} at level 19. General-purpose coders
-stop there because they cannot see which gene a gap belongs to or how deep the cell is. The \sone{} payload is
-\nm{ladder-L4_s1_payload} bits per non-zero.
+How much smaller could a file be? Following the payload of a matrix as ideas are added (Fig.~\ref{fig:floor}a), storing
+the steps between entries and compressing them with the strongest general-purpose compressor shrinks the file a lot, but
+modelling the counts, as \sone{} does, removes nearly a third of what is left. The best count model, even though it was
+charged nothing for its own parameters, was only a few percent shorter than \sone. For data counted with molecular
+barcodes, most of the remaining bits describe which molecules happened to be captured, a random sample that no lossless
+format can avoid storing. Nor is anything left for a byte-level compressor: zstd-19 does not shrink an \sone{} bitstream
+at all, and a code that treats each step and value on its own cannot go below \nm{ent-h0-vs-floor} times the floor. In
+size, any lossless format can improve on \sone{} by single-digit percentages at most.
 
-To bound what is left, we fitted count models on half of each matrix's cells and measured their code length on the other
-half, with zeros included and no charge for describing the model (Section~\ref{sec:methods}): Poisson and negative
-binomial models with a depth factor per cell and parameters per gene~\cite{hafemeister2019normalization,townes2019feature},
-a nonparametric model of each gene's presence and value given the cell's depth, and the same model additionally conditioned
-on the cell's cluster. The best of these reaches \nm{ladder-floor} bits per non-zero; \sone{} is a median of
-\nm{s1AboveFloorPct}\% above it (range \nm{s1AboveFloorPctLo} to \nm{s1AboveFloorPctHi}\%) while decoding with static
-tables (Fig.~\ref{fig:floor}b, Table~\ref{tab:floor}). Knowing a cell's cluster, which is the information other cells
-hold about it, is worth \nm{sharedBpnMedian} bits per non-zero (range \nm{sharedBpnLo}--\nm{sharedBpnHi}) before the
-cost of the model, and a second compression pass over \sone{} output returns \nm{secondMin}--\nm{secondMax} of its size
-with every general-purpose coder (Fig.~\ref{fig:floor}d).
-% CHECK: sign of gain-nb; the negative binomial should cost more than the nonparametric model on UMI data and may win
-% on read counts. State which model is best per protocol class from tab_floor.tsv.
+How fast could a file be decoded? Timed on one core, the integer codes trade size for speed along a clear frontier
+(Fig.~\ref{fig:floor}b). Byte- and bit-aligned codes decode at close to the rate at which a core can merely write the
+output, but store three to twelve times more bits than \sone; entropy coders reach small sizes at a fraction of that
+speed. \sone{} is the smallest end of this frontier, and no code we measured was both as small and faster. The ideal code,
+as small as the best count model and as fast as writing the output, lies far from every measured code.
 
-The reason is the data. Given a cell's expression profile, its molecules are a multinomial sample, and which molecules
-were captured is information, not redundancy~\cite{grun2014validation,svensson2020droplet}. We computed the entropy of
-that sample for each cell under a profile shrunk toward the cell's cluster (Section~\ref{sec:methods}): it accounts
-for a median of \nm{samplingPctMedian}\% of the \sone{} code length (range
-\nm{samplingPctLo}--\nm{samplingPctHi}\%, Fig.~\ref{fig:floor}c). The rest is what the counts reveal about the cell's own
-profile, which a decoder cannot know in advance, and the small margin between \sone{} and the best model.
+Is \sone{} slow for its size, or is that the price of being small? The time the other codes spend per entry, beyond
+writing the output, grows as a power of how few bits they store. Extrapolated to \sone's size, this trend predicts the rate
+a code that small could be expected to reach, and \sone{} decodes at \nm{trend-s1-pct}\% of it (95\% interval
+\nm{trend-s1-lo}--\nm{trend-s1-hi}\%): within the uncertainty, it lies on the trend. Reading genes in their source order
+instead of the stored order would put it at \nm{trend-source-pct}\%.
+
+What matters in practice is the rate a link delivers (Eq.~\ref{eq:reff}), and relative to the ideal code it depends on how
+much bandwidth each decoding core must keep up with (Fig.~\ref{fig:floor}c). When cores are plentiful relative to the
+link, as when a 32-core machine reads from a 1\,Gbit/s connection, \sone{} delivers \nm{frac-s1-32c}\% of what the ideal
+code would and more than any other code, because size is what limits. When few cores serve a fast link, the decoder
+becomes the limit: above about \nm{frac-cross-gbit}\,Gbit/s per core, zstd's larger but faster stream delivers more.
+Decoding speed, not size, is where the remaining headroom lies.
 
 \input{figures/fig3_floor}
 
-% =====================================================================
-\subsection{\sone{} in the single-cell ecosystem}
+\subsection{Costs and use}
 
-\sone{} is read by the \texttt{singlet} package, which has Python, R and header-only C++ interfaces over the same codec
-(Fig.~\ref{fig:eco}). In Python, \texttt{singlet.load(path)} returns an AnnData object with counts in \texttt{X}, and
-\texttt{singlet.torch.DataLoader} streams sparse minibatches into PyTorch. In R, \texttt{singlet::load(path, as = "sce")}
-and \texttt{as = "seurat"} return SingleCellExperiment and Seurat objects. Each call returns exactly the counts, gene
-identifiers and barcodes of the source; Table~\ref{tab:eco} lists the time each takes against the usual reader of the
-same data. The C++ codec builds without architecture flags and selects the scalar, AVX2 or AVX-512 kernel at run time.
+Writing is the price of a small file (Fig.~\ref{fig:floor}d). \sone{} wrote a 580,000-cell atlas faster than
+gzip-compressed AnnData, the 10x HDF5 file or TileDB-SOMA, but slower than formats that store raw or lightly compressed
+arrays, such as Zarr, BPCells and Parquet, and its writer needed about three times as much memory beyond the input as
+AnnData's.
+
+\sone{} files are written and read by the open-source \texttt{singlet} package (Fig.~\ref{fig:eco}). One call stores a
+matrix from AnnData, SciPy, SingleCellExperiment or Seurat, and one call loads it back as any of these, with exactly the
+original counts, gene identifiers and barcodes; loading was faster than reading the equivalent AnnData or 10x file in both
+Python and R. For training, \texttt{singlet.torch.S1Cells} is a PyTorch dataset that streams shuffled minibatches from a
+local path or a URL.
 
 \input{figures/fig4_eco}
-
-% =====================================================================
-\subsection*{Tables}
-
-\begin{table}[h]
-\centering\small
-\caption{Formats and loaders compared. ``Cell subset'': a subset of cells can be read without reading the whole matrix.
-``Remote'': reads by HTTP range or object-store request without a local copy. Versions as run.}
-\label{tab:formats}
-\begin{tabularx}{\linewidth}{@{}l l l c c X@{}}
-\toprule
-Format & Library (version) & Compression & Cell subset & Remote & Languages \\
-\midrule
-Matrix Market & \texttt{scipy.io} (\nm{ver-scipy}) & gzip & no & no & any \\
-10x HDF5 & \texttt{h5py} (\nm{ver-h5py}) & gzip-4 + shuffle & per chunk & no & Python, R \\
-AnnData \texttt{.h5ad} & \texttt{anndata} (\nm{ver-anndata}) & none / gzip / lzf & backed mode & no & Python \\
-AnnData Zarr & \texttt{zarr} (\nm{ver-zarr}) & Blosc & per chunk & yes & Python \\
-loom & \texttt{loompy} (\nm{ver-loompy}) & gzip, dense chunks & per chunk & no & Python, R \\
-\texttt{dgCMatrix} \texttt{.rds} & R \texttt{Matrix} (\nm{ver-R}) & gzip / xz & no & no & R \\
-TileDB-SOMA & \texttt{tiledbsoma} (\nm{ver-tiledbsoma}) & zstd filters & yes & yes & Python, R \\
-BPCells & \texttt{BPCells} & bit-packing + delta & yes & no & R \\
-Parquet COO & \texttt{pyarrow} (\nm{ver-pyarrow}) & zstd & row groups & yes & any \\
-CSC + zstd-19 & \texttt{zstandard} (\nm{ver-zstandard}) & zstd-19 & no & no & any \\
-\textbf{\sone} & \texttt{singlet} (\nm{ver-singlet}) & static rANS, 32 lanes & yes (chunk) & yes & Python, R, C++ \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-\begin{table}[h]
-\centering\scriptsize
-\caption{Benchmark matrices: protocol class, size tier (S $<$20k cells, M $<$200k, L $<$2M, XL above), shape, density,
-fraction of non-zeros equal to one and median counts per cell. Sources and accessions in \texttt{datasets.yaml}.}
-\label{tab:datasets}
-\pgfplotstabletypeset[
-  columns={dataset,matrix,class,tier,cells,genes,nnz,density,frac_ones,counts_per_cell},
-  columns/dataset/.style={string type, column name=Dataset, column type=l},
-  columns/matrix/.style={string type, column name=Matrix, column type=l},
-  columns/class/.style={string type, column name=Protocol class, column type=l},
-  columns/tier/.style={string type, column name=Tier},
-  columns/cells/.style={column name=Cells, int detect, 1000 sep={,}},
-  columns/genes/.style={column name=Features, int detect, 1000 sep={,}},
-  columns/nnz/.style={column name=Non-zeros, sci, sci zerofill, precision=2},
-  columns/density/.style={column name=Density, fixed, precision=3},
-  columns/frac_ones/.style={column name=Ones, fixed, precision=2},
-  columns/counts_per_cell/.style={column name=Counts/cell, fixed, precision=0, 1000 sep={,}},
-]{\gen{tab_datasets.tsv}}
-\end{table}
-
-\begin{table}[h]
-\centering\scriptsize
-\caption{Stored size in bits per non-zero, whole file including gene identifiers and barcodes (lower is better).}
-\label{tab:size}
-\pgfplotstabletypeset[
-  columns={dataset,mtx_gz,tenx_h5,h5ad_gzip,zarr,soma,rds_xz,bpcells,csc_zstd19,s1},
-  columns/dataset/.style={string type, column name=Matrix, column type=l},
-  columns/mtx_gz/.style={column name=MTX.gz, fixed, precision=1},
-  columns/tenx_h5/.style={column name=10x h5, fixed, precision=1},
-  columns/h5ad_gzip/.style={column name=h5ad gz, fixed, precision=1},
-  columns/zarr/.style={column name=Zarr, fixed, precision=1},
-  columns/soma/.style={column name=SOMA, fixed, precision=1},
-  columns/rds_xz/.style={column name=rds xz, fixed, precision=1},
-  columns/bpcells/.style={column name=BPCells, fixed, precision=1},
-  columns/csc_zstd19/.style={column name=CSC+zstd, fixed, precision=1},
-  columns/s1/.style={column name=\textbf{.s1}, fixed, precision=2},
-]{\gen{tab_size.tsv}}
-\end{table}
-
-\begin{table}[h]
-\centering\small
-\caption{Read rate from a cold file on the node's own disk to an in-memory sparse matrix, million non-zeros per second, median
-over matrices. \sone{} rows: stored gene order. Codec-only rates (member in memory, C++): AVX-512
-\nm{codec_cpp-native-avx512-t1} / \nm{codec_cpp-native-avx512-t4}, AVX2 \nm{codec_cpp-native-avx2-t1} /
-\nm{codec_cpp-native-avx2-t4}, scalar \nm{codec_cpp-native-scalar-t1} / \nm{codec_cpp-native-scalar-t4} on 1 /
-\nm{threadsHeadline} cores; in source gene order \nm{codec_cpp-canonical-avx512-t1} / \nm{codec_cpp-canonical-avx512-t4}.}
-\label{tab:decode}
-\pgfplotstabletypeset[
-  columns={format,cold_t1,cold_th,warm_th},
-  columns/format/.style={string type, column name=Format, column type=l},
-  columns/cold_t1/.style={column name=1 core cold, fixed, precision=0},
-  columns/cold_th/.style={column name=\nm{threadsHeadline} cores cold, fixed, precision=0},
-  columns/warm_th/.style={column name=\nm{threadsHeadline} cores warm, fixed, precision=0},
-]{\gen{tab_decode.tsv}}
-\end{table}
-
-\begin{table}[h]
-\centering\small
-\caption{Seconds from a cold process to the first 512-cell minibatch as a \texttt{torch.sparse\_csr\_tensor}, median over
-the five loader-panel datasets and three seeds, by storage tier (object store through a bandwidth-limited proxy, 1\,ms
-latency unless stated).}
-\label{tab:minibatch}
-\pgfplotstabletypeset[
-  columns={loader,s3_0.1g,s3_1g,s3_10g,s3_1g_wan,nfs,local},
-  columns/loader/.style={string type, column name=Loader, column type=l},
-  columns/s3_0.1g/.style={column name=0.1 Gbit/s, fixed, precision=2},
-  columns/s3_1g/.style={column name=1 Gbit/s, fixed, precision=2},
-  columns/s3_10g/.style={column name=10 Gbit/s, fixed, precision=2},
-  columns/s3_1g_wan/.style={column name={1 Gbit/s, 30 ms}, fixed, precision=2},
-  columns/nfs/.style={column name=NFS, fixed, precision=2},
-  columns/local/.style={column name=Local disk, fixed, precision=2},
-]{\gen{tab_minibatch.tsv}}
-\end{table}
-
-\begin{table}[h]
-\centering\small
-\caption{Payload bits per non-zero of \sone{} and cross-validated code lengths of count models, median per protocol class.}
-\label{tab:floor}
-\pgfplotstabletypeset[
-  columns={class,n,s1,poisson,nb,gene_depth,cluster},
-  columns/class/.style={string type, column name=Protocol class, column type=l},
-  columns/n/.style={column name=$n$, int detect},
-  columns/s1/.style={column name=\textbf{.s1}, fixed, precision=2},
-  columns/poisson/.style={column name=Poisson, fixed, precision=2},
-  columns/nb/.style={column name=NB, fixed, precision=2},
-  columns/gene_depth/.style={column name=gene\,$\times$\,depth, fixed, precision=2},
-  columns/cluster/.style={column name=+\,cluster, fixed, precision=2},
-]{\gen{tab_floor.tsv}}
-\end{table}
-
-\begin{table}[h]
-\centering\small
-\caption{The calls of Fig.~\ref{fig:eco}, seconds from a cold file to the object (median of repeats), and whether the
-object holds exactly the source counts.}
-\label{tab:eco}
-\pgfplotstabletypeset[
-  columns={dataset,lang,call,seconds,equal},
-  columns/dataset/.style={string type, column name=Dataset, column type=l},
-  columns/lang/.style={string type, column name=Language, column type=l},
-  columns/call/.style={string type, column name=Call, column type=l},
-  columns/seconds/.style={column name=Seconds, fixed, precision=2},
-  columns/equal/.style={string type, column name=Exact},
-]{\gen{tab_eco.tsv}}
-\end{table}

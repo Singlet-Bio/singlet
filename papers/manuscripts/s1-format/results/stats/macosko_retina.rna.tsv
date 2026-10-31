@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+macosko_retina	rna	droplet_other	M	umi	24658	49300	37879696	0.03116	1287.4114	744.0	518.0	0.718704	679	1.675552

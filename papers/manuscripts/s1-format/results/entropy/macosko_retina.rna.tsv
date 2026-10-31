@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+macosko_retina	rna	streams	37879696	6.01014	1.443137	7.439165	NA	NA	NA	NA	NA
+macosko_retina	rna	raw_u32	37879696	NA	NA	NA	303037568	3.308202	2.742883	64.0	NA
+macosko_retina	rna	fixed_bytes	37879696	NA	NA	NA	151518784	5.529551	3.566758	32.0	NA
+macosko_retina	rna	leb128_gaps	37879696	NA	NA	NA	76873159	4.2542	3.870612	16.235222	NA
+macosko_retina	rna	streamvbyte_gaps	37879696	NA	NA	NA	94854881	4.024155	3.214242	20.032871	NA
+macosko_retina	rna	rans0_gaps	37879696	NA	NA	NA	35726520	7.999017	7.997022	7.54526	NA
+macosko_retina	rna	bitpack256_gaps	37879696	NA	NA	NA	58563408	6.469091	5.937565	12.368295	NA
+macosko_retina	rna	zstd3_leb_gaps	37879696	NA	NA	NA	38190612	7.997653	7.990669	8.065664	NA
+macosko_retina	rna	zstd19_leb_gaps	37879696	NA	NA	NA	35395682	7.997516	7.98956	7.475389	NA
+macosko_retina	rna	pz2_avx2	37879696	NA	NA	NA	25933502	7.999246	7.99562	5.477024	25923585

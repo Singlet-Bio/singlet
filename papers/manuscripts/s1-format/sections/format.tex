@@ -1,0 +1,37 @@
+% The .s1 format (main text). The normative specification is a separate supplementary file (spec.tex).
+\section{The \sone{} format}
+\label{sec:format}\label{sec:how}
+
+Fig.~\ref{fig:how} shows the format from a whole dataset down to individual bits; a normative specification, precise
+enough to write an independent decoder, is provided as a separate supplementary file. A dataset is a small manifest that
+lists one file per sample, each named by a cryptographic hash of its contents, so a link always refers to exactly the same
+bytes and anyone can check them (Fig.~\ref{fig:how}a). Information shared by many samples, such as the gene names of a
+genome annotation, is stored once and downloaded once (Fig.~\ref{fig:how}b). Table~\ref{tab:props} compares these properties with those of
+other formats.
+
+\subsection{Blocks for partial reads}
+Each count matrix starts with a small index that tells a reader where every block of
+cells lives in the file, followed by blocks of consecutive cells that can each be decoded on their own
+(Fig.~\ref{fig:how}c). To read a few hundred cells, a reader fetches the index once and then only the blocks it needs, with
+one request per run of blocks, from a local disk, a web server or a cloud bucket alike. Because every block is located
+before any is read, all the requests of a minibatch can be sent at once.
+
+\subsection{A model of the counts}
+Inside a block, genes are numbered from most to least frequently detected, so each
+cell's non-zero entries become a sequence of small steps and small counts, most of them ones. Each entry becomes one short
+symbol, and the probability of each symbol is looked up in a table chosen by two things the reader already knows: how many
+entries the cell has and how far along the gene list it is (Fig.~\ref{fig:how}d). An rANS entropy
+coder~\cite{duda2013asymmetric} then spends close to the minimum number of bits on each symbol. The tables are fixed for the
+whole matrix, so decoding is a few table look-ups per entry, and 32 coders run side by side so that a processor with AVX2
+decodes eight to sixteen symbols at once. Writing a file ends with a full decode that must reproduce the input exactly.
+
+\input{figures/fig2_how}
+\input{sections/table_props}
+
+\subsection{Stored gene order}
+A reader receives each cell's entries in the stored, frequency-sorted gene order, together
+with one permutation of the genes for the whole matrix. Returning them in the source order instead would mean sorting every
+cell's entries after decoding, which costs \nm{s1order-x} times the decoding time on one core; a training loader can
+instead apply the permutation once, to its gene vocabulary. Matrices from many studies are combined the same way: each
+file's permutation is composed with a map onto a shared gene axis, and entries are scattered onto that axis without
+sorting. All results in this paper read \sone{} in its stored order.

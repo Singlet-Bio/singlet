@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+rosenberg_splitseq	rna	combinatorial	122790641	28	5.345829	5.141875	5.117255	5.076848	4.707724	5.070302	5.111971	10000.0	5.24906

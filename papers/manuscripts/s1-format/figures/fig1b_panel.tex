@@ -1,0 +1,49 @@
+% Fig. 1b: stored size against cold read rate, from generated/fig1c_tradeoff.tsv (medians and quartiles per format) and
+% generated/fig1b_points.tsv (every matrix). Set before \input: \def\fbLog{1} for log axes or {0} for linear ones, and
+% \def\fbPts{1} to draw every matrix (with \def\fbPts{0} each median gets its interquartile ranges instead), and the
+% panel title in \fbTitle.
+\ifnum\fbLog=1
+  \def\fbopts{xmode=log, ymode=log, xmin=3, xmax=110, ymin=2, ymax=2000,
+    xtick={5,10,20,50,100}, xticklabels={5,10,20,50,100}, ytick={10,100,1000}, yticklabels={10,100,1000},
+    xlabel={stored bits per non-zero (log scale)}, ylabel={cold read rate, million non-zeros/s (log scale)}}
+  \def\fbiso{25,50,100,200}\def\fbxlo{3}\def\fbtop{1500}\def\fbanchor{anchor}
+\else
+  \def\fbopts{xmin=0, xmax=70, ymin=0, ymax=220, xtick={0,10,...,70}, ytick={0,50,...,200},
+    xlabel={stored bits per non-zero}, ylabel={cold read rate, million non-zeros/s}}
+  \def\fbiso{25,50,100}\def\fbxlo{0.2}\def\fbtop{205}\def\fbanchor{anchor_lin}
+\fi
+\def\fbaxis#1{\begin{axis}[#1]}
+\begin{tikzpicture}
+\expandafter\fbaxis\expandafter{\fbopts,
+  title={\fbTitle},
+  width=\ifdefined\fbW\fbW\else0.47\linewidth\fi, height=7.6cm, clip mode=individual,
+  axis x line*=bottom, axis y line*=left,
+  lbl/.style={nodes near coords, point meta=explicit symbolic, visualization depends on={value \thisrow{\fbanchor}\as\lblanchor},
+    every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=1.5pt}},
+  iqr/.style={error bars/x dir=both, error bars/y dir=both, error bars/x explicit, error bars/y explicit,
+    error bars/error bar style={line width=0.5pt, opacity=0.8}, error bars/error mark=none},
+}
+% iso-lines of Eq. (1) at B = 1 Gbit/s: R_eff = R  <=>  D = 1/(1/R - b/1000), D and R in million non-zeros/s, b in bits;
+% each ends, labelled, at the top of the plot
+\expandafter\pgfplotsinvokeforeach\expandafter{\fbiso}{
+  \addplot[domain=\fbxlo:{1000*(1/#1-1/\fbtop)}, samples=150, dashed, sone!55, forget plot] {1/(1/#1 - x/1000)}
+    node[pos=1, anchor=south west, font=\sffamily\tiny, text=sone!80!black, inner sep=1pt] {#1};
+}
+\ifnum\fbPts=1
+\expandafter\pgfplotsinvokeforeach\expandafter{\otherformats,s1}{
+  \addplot[only marks, mark=*, mark size=0.7pt, c-#1, opacity=0.4, forget plot, discard if not={format}{#1}] table[x=bits, y=mnnzs] {\gen{fig1b_points.tsv}};
+}
+\pgfplotsset{fbmed/.style={draw=white, line width=0.4pt}}
+\else
+\pgfplotsset{fbmed/.style={iqr}}
+\fi
+\expandafter\pgfplotsinvokeforeach\expandafter{\otherformats}{
+\addplot[only marks, lbl, mark=*, mark size=1.8pt, c-#1, fbmed, discard if not={format}{#1}]
+  table[x=bits, y=mnnzs, meta=label, x error plus expr=\thisrow{bits_q3}-\thisrow{bits}, x error minus expr=\thisrow{bits}-\thisrow{bits_q1},
+    y error plus expr=\thisrow{mnnzs_q3}-\thisrow{mnnzs}, y error minus expr=\thisrow{mnnzs}-\thisrow{mnnzs_q1}] {\gen{fig1c_tradeoff.tsv}};
+}
+\addplot[only marks, lbl, mark=*, mark size=2.4pt, c-s1, fbmed, discard if not={format}{s1}]
+  table[x=bits, y=mnnzs, meta=label, x error plus expr=\thisrow{bits_q3}-\thisrow{bits}, x error minus expr=\thisrow{bits}-\thisrow{bits_q1},
+    y error plus expr=\thisrow{mnnzs_q3}-\thisrow{mnnzs}, y error minus expr=\thisrow{mnnzs}-\thisrow{mnnzs_q1}] {\gen{fig1c_tradeoff.tsv}};
+\end{axis}
+\end{tikzpicture}%
