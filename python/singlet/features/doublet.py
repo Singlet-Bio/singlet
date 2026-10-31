@@ -182,12 +182,15 @@ def fit_hgb(
     )
 
 
-def loso_scores(data: Dict[str, "tuple"], name: str, cols: Sequence[str] = INPUTS) -> np.ndarray:
-    """Leave-one-study-out score of dataset ``name``: trained on every dataset of another study that has all ``cols``."""
+def loso_scores(
+    data: Dict[str, "tuple"], name: str, cols: Sequence[str] = INPUTS, test: Optional[Dict] = None
+) -> np.ndarray:
+    """Leave-one-study-out score of dataset ``name``: trained on every dataset of another study that has all ``cols``; the
+    held-out inputs come from ``test`` (same layout as ``data``) when given, otherwise from ``data``."""
     train = [
         m for m in STUDY if m in data and STUDY[m] != STUDY[name] and all(c in data[m][0] for c in cols)
     ]
-    return fit_hgb(data, train, cols).predict_proba(design(data[name][0], cols))[:, 1]
+    return fit_hgb(data, train, cols).predict_proba(design((test or data)[name][0], cols))[:, 1]
 
 
 def train_frozen(data: Dict[str, "tuple"], extra_meta: Dict) -> Stacker:
