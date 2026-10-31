@@ -33,14 +33,18 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import common as C  # noqa: E402
 import stagequeue as Q  # noqa: E402
 
 DEFAULTS = {
-    "gpu_Mpairs_per_s": 10.0,       # one H100: S8's target (node GPU bound 8.7-11.2 M pairs/s); measured end to end today: ~4 per node, host-bound
+    "gpu_Mpairs_per_s": 0.27,       # one H100 worker, one sample at a time, 16 threads: MEASURED 0.26 (pbmc1k_v3, 66.6 M) and 0.27 (GSM7656149, 263 M) M pairs/s
+                                    # (S8, quiet node); 8 samples sharing a GPU reach ~1.0. The old 10.0 was a target (node GPU bound), not a measurement.
     "v100_rel": 0.3,                # V100S speed relative to an H100 (ASSUMPTION, not measured; needs a V100S-capable CUDA build)
     "cpu_Mpairs_per_core_s": 0.025,  # CPU engine: 38.6-44.6 host core-s per M reads measured (docs/research-beta/gpu-cr4-clip.md)
     "gpu_start_h": 1.0,             # X: start an H100 worker only if it would have this many hours of work
-    "max_h100": 6,                  # 3 H100 nodes x 2 GPUs; single GPU per job
+    "max_h100": 3,                  # the account's cap: QOSMaxGRESPerUser allows 3 GPUs at once (the 3 H100 nodes have 6)
+    "gpu_mem_classes_gb": [96, 176, 248, 344, 720],  # --mem of the H100 workers; a sample goes to the smallest class that holds common.gpu_job_mem_gb(pairs)
+                                    # (96 G: up to ~115 M pairs, 176 G: ~290 M, 248 G: ~430 M, 344 G: ~640 M, 720 G: the rest, a whole node)
     "max_v100": 4,
     "fallback_wait_h": 1.0,         # a pending H100 job older than this counts as no capacity
     "overflow_h": 3.0,              # pairs the capacity cannot clear in this many hours go to the next pool
@@ -93,6 +97,25 @@ def count_jobs(user, name, now=None):
     return res
 
 
+def mem_class(pairs, classes):
+    """The smallest memory class (GB) that holds a sample of `pairs` read pairs (the largest if none does)."""
+    need = C.gpu_job_mem_gb(pairs)
+    return next((c for c in sorted(classes) if c >= need), max(classes))
+
+
+def pick_classes(n, demand, running):
+    """Memory classes for n new H100 workers. demand = {class: pairs waiting}, running = {class: workers running or pending}. Greedy: the class
+    with the most waiting pairs per worker already serving it, so every class that has work gets a worker before one gets a second."""
+    out, running = [], dict(running)
+    for _ in range(n):
+        best = max((c for c in demand if demand[c] > 0), key=lambda c: (running.get(c, 0) == 0, demand[c] / (1 + running.get(c, 0)), c), default=None)
+        if best is None:
+            break
+        out.append(best)
+        running[best] = running.get(best, 0) + 1
+    return out
+
+
 def plan(p, bl, have):
     """Pure decision function. bl = stagequeue.backlog(); have['h100'|'v100'|'cpu'] = count_jobs(...); have['fetch'] = int.
     -> how many of each worker to submit."""
@@ -105,6 +128,10 @@ def plan(p, bl, have):
     h, v, c = have["h100"], have["v100"], have["cpu"]
     want = min(p["max_h100"], int(backlog_h // p["gpu_start_h"]))
     out["h100"] = max(0, want - h["run"] - h["pend"])
+    if "by_class" in bl:   # which memory class each new worker gets
+        per = {c: x["run"] + x["pend"] for c, x in have.get("h100_by_class", {}).items()}
+        out["h100_classes"] = pick_classes(out["h100"], bl["by_class"], per)
+        out["h100"] = len(out["h100_classes"])
     young = sum(1 for a in h["ages"] if a < p["fallback_wait_h"] * 3600)
     old = h["pend"] - young
     cap_pairs = (h["run"] + young + out["h100"]) * h_rate * horizon
@@ -133,8 +160,9 @@ def token_export():
     return "export SINGLET_INGEST_TOKEN=\"$(tr -d '\\r\\n ' < $HOME/.singlet/beta_ingest_token)\""
 
 
-def sbatch_script(kind, a, p):
-    head = ["#!/bin/bash", "#SBATCH --account=debruinz", "#SBATCH --job-name=s9-%s" % kind,
+def sbatch_script(kind, a, p, mem_gb=None):
+    name = "s9-%s" % kind + ("-c%d" % mem_gb if kind == "drain-h100" and mem_gb else "")
+    head = ["#!/bin/bash", "#SBATCH --account=debruinz", "#SBATCH --job-name=%s" % name,
             "#SBATCH --output=%s/s9-%%x-%%j.out" % a.log_dir, "#SBATCH --no-requeue"]
     here = os.path.dirname(os.path.abspath(__file__))
     py = "python3 -u"
@@ -149,10 +177,10 @@ def sbatch_script(kind, a, p):
         gres = p["h100_gres"] if kind == "drain-h100" else p["v100_gres"]
         part = p["h100_partition"] if kind == "drain-h100" else p["v100_partition"]
         hdr = ["#SBATCH --partition=%s" % part, "#SBATCH --gres=%s" % gres,
-               "#SBATCH --cpus-per-task=%d" % p["gpu_cpus"], "#SBATCH --mem=128G", "#SBATCH --time=%s" % p["gpu_time"],
+               "#SBATCH --cpus-per-task=%d" % p["gpu_cpus"], "#SBATCH --mem=%dG" % (mem_gb or 128), "#SBATCH --time=%s" % p["gpu_time"],
                "#SBATCH --signal=B:TERM@60"]
-        body = ["%s %s/drain_worker.py %s --engine gpu --threads %d --idle-exit-min %s --scratch /dev/shm --publish %s%s &" %
-                (py, here, common, p["gpu_cpus"], p["idle_exit_min"], p["publish"], s1_args(p))]
+        body = ["%s %s/drain_worker.py %s --engine gpu --threads %d --idle-exit-min %s --scratch /dev/shm --mem-gb %d --publish %s%s &" %
+                (py, here, common, p["gpu_cpus"], p["idle_exit_min"], mem_gb or 128, p["publish"], s1_args(p))]
         if p["publish"] == "s1":
             body.insert(0, token_export())
     else:
@@ -169,14 +197,15 @@ def sbatch_script(kind, a, p):
     return "\n".join(head + hdr + ["set -uo pipefail"] + body + tail) + "\n"
 
 
-def submit(kind, n, a, p, dry):
+def submit(kind, n, a, p, dry, mem_classes=None):
     ids = []
-    for _ in range(n):
+    for i in range(n):
+        mem = mem_classes[i] if mem_classes and i < len(mem_classes) else None
         if dry:
-            print("[dry-run] would sbatch s9-%s" % kind)
+            print("[dry-run] would sbatch s9-%s%s" % (kind, " (%d G)" % mem if mem else ""))
             continue
-        rc, out = sh(["sbatch", "--parsable"], stdin=sbatch_script(kind, a, p))
-        print("[launcher] submitted s9-%s: %s" % (kind, out))
+        rc, out = sh(["sbatch", "--parsable"], stdin=sbatch_script(kind, a, p, mem))
+        print("[launcher] submitted s9-%s%s: %s" % (kind, " (%d G)" % mem if mem else "", out))
         ids.append(out)
     return ids
 
@@ -216,15 +245,18 @@ def main():
         if os.path.exists(os.path.join(a.stage, "PAUSE")):
             print("[launcher] PAUSE flag: nothing submitted")
         else:
-            bl = Q.backlog(a.stage)
-            have = {"h100": count_jobs(user, "s9-drain-h100"), "v100": count_jobs(user, "s9-drain-v100"),
-                    "cpu": count_jobs(user, "s9-drain-cpu")}
+            bl = Q.backlog(a.stage, classify=lambda m: mem_class(m.get("pairs", 0), p["gpu_mem_classes_gb"]))
+            by_cls = {c: count_jobs(user, "s9-drain-h100-c%d" % c) for c in p["gpu_mem_classes_gb"]}
+            legacy = count_jobs(user, "s9-drain-h100")   # workers started before the classes
+            have = {"h100": {"run": legacy["run"] + sum(x["run"] for x in by_cls.values()), "pend": legacy["pend"] + sum(x["pend"] for x in by_cls.values()),
+                             "ages": legacy["ages"] + [t for x in by_cls.values() for t in x["ages"]]},
+                    "h100_by_class": by_cls, "v100": count_jobs(user, "s9-drain-v100"), "cpu": count_jobs(user, "s9-drain-cpu")}
             f = count_jobs(user, "s9-fetch")
             have["fetch"] = f["run"] + f["pend"]
             d = plan(p, bl, have)
             print("[launcher] %s backlog=%s have=%s -> %s" % (time.strftime("%H:%M:%S"), bl, have, d), flush=True)
             for kind, key in (("fetch", "fetch"), ("drain-h100", "h100"), ("drain-v100", "v100"), ("drain-cpu", "cpu")):
-                submit(kind, d[key], a, p, a.dry_run)
+                submit(kind, d[key], a, p, a.dry_run, d.get("h100_classes") if kind == "drain-h100" else None)
         if a.once or time.time() > end:
             return 0
         time.sleep(p["interval_s"])

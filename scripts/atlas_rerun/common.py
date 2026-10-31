@@ -30,6 +30,19 @@ def node_mem_gb():
     return 0.0
 
 
+def gpu_peak_gb(reads):
+    """Largest-process RSS of one `--engine gpu` sample (the STAR child; GPU pileup on): 17.5 GB + 0.39 GB per million reads.
+    Fitted to four measured runs (S8, 1 H100, quiet node): 11.3 M -> 22.8 GB, 13.2 M -> 22.1, 66.6 M -> 43.5, 263.4 M -> 120.4 (all within 3%).
+    Beyond 263 M reads it is an extrapolation."""
+    return 17.5 + 0.39 * reads / 1e6
+
+
+def gpu_job_mem_gb(reads, margin=1.2, extra=20, step=8):
+    """What a job needs to run a sample of `reads` reads: the largest process with `margin`, plus the parent process, /dev/shm temp files and
+    page cache (`extra` GB), rounded up to `step`. A 128 GB job holds samples up to ~190 M reads."""
+    return int(math.ceil((margin * gpu_peak_gb(reads) + extra) / step) * step)
+
+
 def job_slots(node_gb, node_cores, threads, peak_gb=33.4, shared_gb=17.8, fill=0.9):
     """Concurrent sample jobs one node holds. Memory: the shared genome index is resident once per node (shared_gb), every
     job adds its private peak (peak_gb: deep GSM7036403 with the shared index measured 33.4 GB, index 17.8 GB), and
