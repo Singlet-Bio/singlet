@@ -195,6 +195,24 @@ MODALITIES: Dict[str, Modality] = {
             "Per-intron-feature UMI counts (the unspliced half of the raw matrix).",
         ),
         Modality(
+            "exon_reads",
+            "matrix",
+            ("exon_reads.1pz",),
+            "Per-exon-feature read counts of the called cells (reads merged into each UMI, summed; same rows as exon_counts).",
+        ),
+        Modality(
+            "intron_reads",
+            "matrix",
+            ("intron_reads.1pz",),
+            "Per-intron-feature read counts of the called cells (same rows as intron_counts).",
+        ),
+        Modality(
+            "reads_per_umi_hist",
+            "table",
+            ("reads_per_umi_hist.tsv.gz",),
+            "Per called cell: molecules with 1..15 and 16+ reads (16 bins).",
+        ),
+        Modality(
             "cell_calls",
             "table",
             ("cell_calls.tsv",),
@@ -767,6 +785,64 @@ def _aggregate_gene_counts(out_dir: Path, gene_order: List[str], called_bcs: Lis
 # ---------------------------------------------------------------------------
 
 
+# Reads-per-UMI members (engine output, all barcodes) are packed for the called cells only: the all-barcode copy stays in the run directory.
+_CALLED_ONLY_MEMBERS = ("exon_reads.1pz", "intron_reads.1pz", "reads_per_umi_hist.tsv.gz")
+
+
+def _called_barcodes(out_dir: Path) -> Optional[set]:
+    """Called-cell barcodes of ``out_dir/cell_calls.tsv`` (the migrator's rule, s1.cells.parse_cell_calls); None if there is no usable call list."""
+    from singlet.s1.cells import parse_cell_calls
+
+    try:
+        called = parse_cell_calls((out_dir / "cell_calls.tsv").read_bytes())
+    except OSError:
+        return None
+    return set(called) if called is not None else None
+
+
+def _called_only(rel: str, data: bytes, called: set) -> bytes:
+    """``data`` of a reads-per-UMI member restricted to the called cells: columns of a ``.1pz`` (order and values kept), rows of the histogram."""
+    if rel.endswith(".tsv.gz"):
+        import gzip
+
+        lines = gzip.decompress(data).decode("utf-8").split("
+")
+        keep = [ln for i, ln in enumerate(lines) if ln and (i == 0 or ln.split("	", 1)[0] in called)]
+        return gzip.compress(("
+".join(keep) + "
+").encode("utf-8"), 6, mtime=0)
+    import os
+    import tempfile
+
+    import numpy as np
+    import scipy.sparse as sp
+
+    from singlet._pz import read_1pz as _read, write_1pz as _write
+
+    with tempfile.TemporaryDirectory() as td:
+        src = os.path.join(td, "in.1pz")
+        dst = os.path.join(td, "out.1pz")
+        with open(src, "wb") as fh:
+            fh.write(data)
+        r = _read(src)
+        cols = np.flatnonzero(np.fromiter((c in called for c in r["colnames"]), dtype=bool, count=len(r["colnames"])))
+        mat = sp.csc_matrix((r["data"], r["indices"], r["indptr"]), shape=(r["m"], r["n"]))[:, cols].tocsc()
+        mat.sort_indices()
+        _write(
+            dst,
+            mat.indptr.astype(np.int32),
+            mat.indices.astype(np.int32),
+            mat.data.astype(np.uint32),
+            int(mat.shape[0]),
+            int(mat.shape[1]),
+            rownames=list(r["rownames"]),
+            colnames=[r["colnames"][i] for i in cols],
+            user_meta=dict(r["user_kv"]) if r["user_kv"] else None,
+        )
+        with open(dst, "rb") as fh:
+            return fh.read()
+
+
 def pack_gse(
     gse_id: str,
     results_dir: Union[str, Path],
@@ -1103,6 +1179,7 @@ def pack_gse(
             # germline information go to the restricted sidecar instead.
             # .1pz files are STORED (already zstd); everything else DEFLATED.
             # Dotfiles, raw reads (.1fq) and bulky disposable read-dumps are skipped.
+            called_set = _called_barcodes(out_dir) if out_dir.is_dir() else None
             if out_dir.is_dir():
                 for fpath in sorted(out_dir.rglob("*")):
                     if not fpath.is_file():
@@ -1128,6 +1205,8 @@ def pack_gse(
                             continue
                     with open(fpath, "rb") as fh:
                         data = fh.read()
+                    if called_set is not None and rel.as_posix() in _CALLED_ONLY_MEMBERS:
+                        data = _called_only(rel.as_posix(), data, called_set)
                     compress = (
                         zipfile.ZIP_STORED if fpath.suffix == ".1pz" else zipfile.ZIP_DEFLATED
                     )
