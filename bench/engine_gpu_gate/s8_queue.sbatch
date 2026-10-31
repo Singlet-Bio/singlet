@@ -23,10 +23,13 @@ cleanup() { kill $(jobs -p) 2>/dev/null; rm -rf $SCR
   for id in $(comm -13 <(echo "$PRE_SHM") <(ipcs -m | awk '/^0x/{print $2}' | sort)); do ipcrm -m $id 2>/dev/null && echo "removed shm segment $id"; done
   for f in $(comm -13 <(echo "$PRE_DEV") <(ls /dev/shm 2>/dev/null | sort)); do rm -rf /dev/shm/$f && echo "removed /dev/shm/$f"; done; }
 cleanup2() { [ -n "${PRELOAD:-}" ] && $BIN genome unload $G/star_2.7.11b > /dev/null 2>&1; [ -n "${TMPDIR_RAM:-}" ] && rm -rf /dev/shm/s8q_$SLURM_JOB_ID; cleanup; }
-trap cleanup2 EXIT INT TERM
+mps_stop() { [ -n "${MPS:-}" ] && echo quit | CUDA_MPS_PIPE_DIRECTORY=/tmp/s8mps_$SLURM_JOB_ID CUDA_MPS_LOG_DIRECTORY=/tmp/s8mpslog_$SLURM_JOB_ID nvidia-cuda-mps-control > /dev/null 2>&1; }
+trap 'mps_stop; cleanup2' EXIT INT TERM
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=7200 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH SINGLET_GPU_PILEUP=on
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 # PRELOAD=1: the genome goes into shared memory once (`singlet genome load`), every sample attaches (N21 auto mode); TMPDIR_RAM=1: the decode temp files go to /dev/shm
+# MPS=1: a user-level CUDA MPS daemon for the node (kernels of the samples sharing a GPU run concurrently instead of time-slicing)
+if [ -n "${MPS:-}" ]; then export CUDA_MPS_PIPE_DIRECTORY=/tmp/s8mps_$SLURM_JOB_ID CUDA_MPS_LOG_DIRECTORY=/tmp/s8mpslog_$SLURM_JOB_ID; mkdir -p $CUDA_MPS_PIPE_DIRECTORY $CUDA_MPS_LOG_DIRECTORY; nvidia-cuda-mps-control -d; sleep 2; echo "MPS daemon started" | tee -a $RES/summary.txt; fi
 [ -n "${PRELOAD:-}" ] && { $BIN genome load $G/star_2.7.11b 2>&1 | tee -a $RES/summary.txt; }
 [ -n "${TMPDIR_RAM:-}" ] && { mkdir -p /dev/shm/s8q_$SLURM_JOB_ID; export TMPDIR=/dev/shm/s8q_$SLURM_JOB_ID; }
 echo "node=$(hostname) job=$SLURM_JOB_ID bin=$(cat $(dirname $BIN)/commit) sample=$s NS=$NS configs=$CONFIGS $(date -Is)" | tee $RES/summary.txt
