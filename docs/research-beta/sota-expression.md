@@ -233,6 +233,31 @@ comparison is confounded**: pool barcodes carry 1-100 UMI, so zero-inflated shar
 labels molecules. It shows that the pool is exon-rich and low-duplication, which is also what the existing exon/intron split already uses; it does not show a
 per-molecule signature.
 
+**Molecule-level result (2026-10-31; `soup_molecules.py`, `soup_analyze.py`, `results/nuclei/hgmm_soup.json`).** hgmm1k_v3 re-run with the tagged BAM (59.3 M reads; 527 pure mouse and 467 pure human
+cells, >= 500 UMI, >= 95% one species). Ambient reads = species-X reads in pure species-Y cells (104,090 reads, every one kept); native reads = species-X reads in pure species-X cells (1/16 sample,
+2.07 M reads); same gene catalogue on both sides. Unique primary alignments with a gene and an exonic/intronic tag. AUC = P(ambient feature > native feature); gene-adjusted = minus the median of the
+native reads of the same gene; stratified by host-cell depth quartile within species and averaged over strata (ambient reads as weights).
+
+| feature | AUC raw | AUC gene-adjusted | reading |
+|---|---|---|---|
+| distance of the nearest alignment end to the gene 3' end (log) | 0.43 | **0.36** | ambient reads sit closer to the 3' end |
+| distance as a fraction of gene length | 0.39 | **0.38** | same |
+| aligned length | 0.37 | 0.37 | ambient alignments are shorter (fragmented) |
+| reads per molecule (log) | 0.41 | 0.41 | ambient molecules are sequenced fewer times |
+| spliced (CIGAR N) | 0.46 | 0.47 | slightly fewer spliced |
+| soft clip left / right | 0.52 / 0.51 | 0.52 / 0.51 | ~none |
+| mismatches nM, antisense, mean base quality | 0.50 / 0.50 / 0.48 | 0.50 / 0.50 / 0.49 | none |
+| A-richness of the 20 bp after / before the alignment (internal poly-A priming) | 0.51 / 0.50 | 0.51 / 0.51 | none |
+| **all features, logistic regression (5-fold, grouped by cell)** | | **0.716** (depth-stratified 0.714) | |
+| **all features, gradient-boosted trees** | | **0.749** (depth-stratified **0.752**) | |
+
+So the read-level difference is real and mostly about **fragmentation and 3' proximity**: ambient molecules are shorter alignments near the 3' end of the gene and have fewer duplicate reads, not internal poly-A
+priming, TSO clips or mismatches. A combined per-read AUC of 0.75, well past the 0.7 bar set for the experiment, within depth strata and with the gene held constant. Caveats: the label is "species mismatch",
+which contains the ambient molecules plus a few chimeras and doublet reads; the native class also holds ~1% ambient; the model was fit and scored on one library (grouped CV by cell, not by library), so
+transfer to tissue (Kang) is untested; an AUC of 0.75 per read does not classify single molecules (prior ~1%) but does carry information for a per-cell mixture estimate.
+**Recommendation: worth a prototype**, not yet a build: use the per-read likelihood ratio inside a per-cell EM for rho, train on hgmm, test on the Kang genotype truth (foreign-allele reads give molecule labels
+there too) and on Gaublomme (Xist), and compare against the gene-level estimator on the same cells; stop if the per-cell Spearman against truth does not beat the current 0.08-0.09 on Kang.
+
 *Proposal (worth a small experiment, not yet a build):* the one clean molecule-level truth we have is **cross-species molecules in pure cells of the hgmm library**
 (a mouse molecule in a human cell is ambient or a chimera; a human molecule in a human cell is ~99% native). Re-run hgmm1k_v3 with the tagged BAM and compare the two
 groups at read level, depth-matched: distance of the 3' end of the alignment to the annotated transcript end, internal poly-A priming (A-richness of the genome downstream of
