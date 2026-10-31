@@ -16,6 +16,7 @@
 #include "stitch.cuh"
 #endif
 #include "SeqCache.h"
+#include "PhaseMark.h"
 #include "Parameters.h"
 #include "Genome.h"
 #include "InOutStreams.h"
@@ -456,11 +457,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     if (!tableMode && !readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
     time_t tRead = time(nullptr);
+    starPhaseMark(P, "prefill_reads_read");
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
     time_t tWait = time(nullptr);
     int lockFd = -1;
     int device = singlet_engine_gpu::lockDevice(&lockFd);
     time_t tLock = time(nullptr);
+    starPhaseMark(P, "prefill_lock_acquired");
     int hostThreads = (int) P.runThreadN;
     singlet_engine_gpu::Output out;
     bool lockReleased = false;   // mapDistinct releases the device when its device work is done (the host assembly of the records needs no GPU)
@@ -469,6 +472,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     in.release();
     time_t tGpu = time(nullptr);
+    starPhaseMark(P, "prefill_mapDistinct_done");
     if (ok && tableMode) {   // per table sequence -> per read, in file order
         const uint64 nR = unitOfRead.size();
         const int nt = std::max(1, (int) P.runThreadN);
@@ -526,6 +530,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     const char *gpEnv = getenv("SINGLET_GPU_PILEUP"), *hsEnv = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
     const bool deferInsert = getenv("SINGLET_ENGINE_GPU_HANDOFF") != nullptr && gpEnv != nullptr && strcmp(gpEnv, "on") == 0
         && !(hsEnv != nullptr && hsEnv[0] == '0') && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes);
+    starPhaseMark(P, "prefill_cache_ready");
     if (!deferInsert) {
         insertRecords([](uint64) { return true; });
         cache->prefilled = true;
@@ -654,6 +659,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
         }
     }
+    starPhaseMark(P, "prefill_handoff_done");
     if (deferInsert) {   // summaries installed: the unmapped sequences only; otherwise (hand-off not written) every record
         uint64 nIns = 0;
         if (g_handoffSum != nullptr && g_handoffRecAln != nullptr) {
@@ -666,6 +672,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         cache->prefilled = true;
         P.inOut->logMain << "ENGINE_GPU: " << nIns << " of " << nRec << " sequence results in the cache (the others replay hand-off summaries)\n";
     }
+    starPhaseMark(P, "prefill_inserts_done");
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
 #endif

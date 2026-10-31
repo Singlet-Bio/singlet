@@ -35,6 +35,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
 #include "mapThreadsSpawn.h"
 #include "SjdbClass.h"
 #include "sjdbInsertJunctions.h"
+#include "PhaseMark.h"
 #include "Variation.h"
 #include "Solo.h"
 #include "samHeaders.h"
@@ -158,8 +159,10 @@ int star_main_impl(int argInN, char *argIn[])
 
     ////////////////////////////////////////////////////////////////////////
     ///////////////////////////////// Genome
+    starPhaseMark(P, "genome_load_begin");
     Genome genomeMain(P, P.pGe);
     genomeMain.genomeLoad();
+    starPhaseMark(P, "genome_loaded");
 
     if (P.pGe.transform.outYes) {
         genomeMain.Var = new Variation(P, genomeMain.chrStart, genomeMain.chrNameIndex, false);//no variation for mapGen, only for genOut
@@ -218,7 +221,9 @@ int star_main_impl(int argInN, char *argIn[])
 
     // sequence cache for the main mapping pass (after any 2-pass junction insertion)
     g_seqCache = SeqCache::create(P, genomeMain.nGenome);
+    starPhaseMark(P, "prefill_begin");
     seqCacheGpuPrefill(P, genomeMain, g_seqCache, transcriptomeMain); //singlet --engine gpu: GPU mapping results into the cache (SeqCacheGpuPrefill.cpp)
+    starPhaseMark(P, "prefill_end");
     {
         const char *fa = getenv("SINGLET_STAR_FASTASSIGN");
         g_starFastAssign = !(fa != nullptr && fa[0] == '0');
@@ -274,6 +279,7 @@ int star_main_impl(int argInN, char *argIn[])
         P.limitBAMsortRAM = genomeMain.nGenome + genomeMain.SA.lengthByte + genomeMain.SAi.lengthByte;
     };
 
+    starPhaseMark(P, "finished_mapping");
     time(&g_statsAll.timeFinishMap);
     *P.inOut->logStdOut << timeMonthDayTime(g_statsAll.timeFinishMap) << " ..... finished mapping\n"
                         << flush;
