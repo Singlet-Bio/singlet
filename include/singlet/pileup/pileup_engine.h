@@ -1131,6 +1131,8 @@ public:
         }
         PROF_BAM_IO_ACCUM;  // account for last failed sam_read1
 
+        if (gpu_covers_) std::cerr << "[gpu_pileup] stream drained
+";   // S8: log timestamps place the post-stream steps
         // ── Flush remaining multi-mapper buffer entries ──
         // These are reads where not all NH alignments appeared in the BAM
         uint64_t mm_flushed = 0;
@@ -2239,6 +2241,8 @@ public:
         // "on": STAR's mapping threads wrote each hand-off read's CR, UR and quality counters (ReadEntry); otherwise (and in check
         // mode) they come from the decoded R1/R2, cut as STAR cuts them
         const bool ent = !check && gpu_col_->load_handoff_reads();
+        std::cerr << "[gpu_pileup] hand-off pass: entries loaded
+";
         const gpupileup::ReadEntry* E = ent ? H->reads : nullptr;
         if (ent && (std::getenv("SINGLET_HANDOFF_PASS_SERIAL") == nullptr)) {
             // "on": the pass needs only the hand-off and STAR's per-read entries, so it runs on all cores (S8 stage 8)
