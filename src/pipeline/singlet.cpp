@@ -2988,6 +2988,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--umi-dedup-directional") config.umi_dedup_directional = true;
         else if (arg == "--no-umi-dedup-directional") { config.umi_dedup_directional = false; no_dir_dedup_explicit = true; }
         else if (arg == "--no-umi-dedup") config.umi_dedup = false;
+        else if (arg == "--no-reads-matrix") config.reads_matrix = false;
         else if (arg == "--reverse-strand") { config.reverse_strand = true; config.auto_strand = false; strand_from_user = true; }
         else if (arg == "--guide-ref" && i+1 < argc) config.guide_ref_path = argv[++i]; // N18: CRISPR guide CSV
         else if (arg == "--feature-ref" && i+1 < argc) feature_ref_path = argv[++i]; // T4: CITE-seq ADT/HTO reference CSV

@@ -519,30 +519,33 @@ public:
     ///   exon_acc.increment(exon_idx, bc)      spliced and ambiguous molecules
     ///   intron_acc.increment(intron_idx, bc)  unspliced molecules
     ///   on_ambiguous(bc, gene)                 ambiguous molecules (also in exon_acc)
-    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
+    ///   on_reads(intronic, feature, bc, reads) every emitted molecule, with the reads merged into it
+    ///                                          (the reads-per-UMI matrix and histogram; never touches the counts)
+    struct NoReads { void operator()(bool, uint32_t, uint32_t, uint32_t) const {} };
+    template <typename ExonAccT, typename IntronAccT, typename AmbFn, typename ReadsFn = NoReads>
     static void emit_molecule(const Molecule& m, ExonAccT& exon_acc, IntronAccT& intron_acc,
-                              AmbFn&& on_ambiguous, MoleculeStats& st) {
+                              AmbFn&& on_ambiguous, MoleculeStats& st, ReadsFn&& on_reads = ReadsFn()) {
         if ((m.flags & kReadTouchesExon) && (m.flags & kReadIntron)) st.legacy_double++;
         switch (m.label()) {
             case MoleculeLabel::Spliced:
-                exon_acc.increment(m.exon_idx, m.bc); st.spliced++; break;
+                exon_acc.increment(m.exon_idx, m.bc); on_reads(false, m.exon_idx, m.bc, m.count); st.spliced++; break;
             case MoleculeLabel::Unspliced:
-                intron_acc.increment(m.intron_idx, m.bc); st.unspliced++; break;
+                intron_acc.increment(m.intron_idx, m.bc); on_reads(true, m.intron_idx, m.bc, m.count); st.unspliced++; break;
             case MoleculeLabel::Ambiguous:
-                exon_acc.increment(m.exon_idx, m.bc); on_ambiguous(m.bc, m.gene);
+                exon_acc.increment(m.exon_idx, m.bc); on_ambiguous(m.bc, m.gene); on_reads(false, m.exon_idx, m.bc, m.count);
                 st.ambiguous++; break;
         }
     }
 
     /// Collapse UMIs, label each molecule once and emit it (emit_molecule()).
-    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
+    template <typename ExonAccT, typename IntronAccT, typename AmbFn, typename ReadsFn = NoReads>
     MoleculeStats finalize_molecules(ExonAccT& exon_acc, IntronAccT& intron_acc,
                                      AmbFn&& on_ambiguous, int umi_len,
-                                     bool directional) const {
+                                     bool directional, ReadsFn&& on_reads = ReadsFn()) const {
         MoleculeStats st;
         std::vector<Molecule> mols;
         collapse_molecules(umi_len, directional, mols);
-        for (const auto& m : mols) emit_molecule(m, exon_acc, intron_acc, on_ambiguous, st);
+        for (const auto& m : mols) emit_molecule(m, exon_acc, intron_acc, on_ambiguous, st, on_reads);
         return st;
     }
 
