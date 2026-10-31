@@ -1,0 +1,19 @@
+# #94 whitelist rates, pin d9834b8a274c5259420bdd77358e85996eac8e7a, 200,000 real reads (R2), whitelists from the pinned release dir
+SPLiT-seq SRR31302021:
+/tmp/debruinz-793802/splitseq/SRR31302021_2.fastq: 200000 reads
+geometry rd3@10,rd2@48,rd1@78: all segments exact 0.6600, all within 1MM 0.7145; per-segment exact rd3=0.8681, rd2=0.7868, rd1=0.6841
+inDrop SRR15409581:
+/tmp/debruinz-793802/indrop/SRR15409581_2.fastq: 200000 reads
+scan bc1 (len 8, 384 entries, chance 0.00586): off 0=0.2154, off 33=0.0597, off 30=0.0593, off 31=0.0505
+== splitseq encode (auto), barcode read = _2
+[singlet-encode] Done: 200000 reads, 1 blocks
+[singlet-encode] Protocol: splitseq (confidence: 2)
+== splitseq encode (splitseq), barcode read = _2
+[singlet-encode] Done: 200000 reads, 1 blocks
+[singlet-encode] Protocol: splitseq (confidence: 5)
+== indrop encode (auto), barcode read = _2
+[singlet-encode] Done: 200000 reads, 1 blocks
+[singlet-encode] Protocol: indrop (confidence: 2)
+== indrop encode (indrop), barcode read = _2
+[singlet-encode] Done: 200000 reads, 1 blocks
+[singlet-encode] Protocol: indrop (confidence: 5)

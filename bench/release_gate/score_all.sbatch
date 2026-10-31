@@ -27,7 +27,7 @@ sc $AM ambient-rna $AM/artifacts/ambient-rna
 # atac family: provenance first (binary hash, commit), then the compute modules
 AA=$RG/artifacts-atacsp
 if [ -d $AA ]; then
-  $ATACPY $PIN/bench/atac_spatial/make_provenance.py $AA $COMMIT $RG/bin/$PIN8/singlet-cpu 2>&1 | tail -3 || true
+  $ATACPY $PIN/bench/atac_spatial/make_provenance.py $AA $COMMIT $RG/bin/$PIN8/singlet-cpu --status final 2>&1 | tail -3 || true
   for c in atac multiome spatial; do sc $PIN $c $AA/$c $ATACPY; done
 fi
 ls -la $RES

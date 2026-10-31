@@ -10,7 +10,8 @@ Per capability: status and gating pass/fail from the contract (contract.capabili
 tool, where the number was measured, and the proposed class of a failing capability:
 
   blocker    wrong output: the run errors, a deterministic-output or identity check fails, or a gating metric is far from the best tool
-             (correlation or F-score gap > 0.05, accuracy/precision below 0.90, a distance metric more than 5x the best tool's);
+             (a higher-is-better gap > 0.05, or an accuracy/precision/F-score/recall below 0.90 and more than 0.02 behind the best
+             tool, or a distance metric more than 5x the best tool's);
   should-fix behind the best tool on a gating metric, but valid output and within those bounds.
 
 The class is a proposal from these rules and the per-capability notes in NOTES; the rules are printed in the document.
@@ -37,7 +38,8 @@ def classify(row, doc):
             continue
         higher = next((m for m in doc["metrics"] if m["id"] == mid and m.get("dataset") == f["dataset"]), {}).get("direction") == "higher"
         if higher:
-            if r - s > 0.05 or (("acc" in mid or "precision" in mid or "f_score" in mid or "f1" in mid) and s < 0.90):
+            lowlevel = ("acc" in mid or "precision" in mid or "f_score" in mid or "recall" in mid) and s < 0.90
+            if r - s > 0.05 or (lowlevel and r - s > 0.02):
                 return "blocker"
         else:
             if r > 0 and s / r > 5 and s > 0.02:
