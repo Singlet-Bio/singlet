@@ -602,6 +602,7 @@ static int cmd_download(int argc, char* argv[]) {
         stg = std::make_shared<stage::Encoder>();
         const std::string scratch_dir = [&]() { auto pos = stage_out.rfind('/'); return pos == std::string::npos ? std::string(".") : stage_out.substr(0, pos); }();
         const std::string run_label = sra_input.substr(sra_input.find_last_of('/') == std::string::npos ? 0 : sra_input.find_last_of('/') + 1);
+        ecfg.metadata_sink = [stg](const std::string& m) { stg->set_source_metadata(m); };   // the .1fg2 keeps the .1fq's metadata JSON verbatim
         ecfg.block_sink = [stg, whitelist_dirs, scratch_dir, run_label](const singlet::fq::StagedBlock& sb) {
             if (!sb.dict) throw std::runtime_error("--stage-out: no barcode dictionary for this protocol (use the .1fq path)");
             if (!stg->initialised()) {

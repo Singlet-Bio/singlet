@@ -75,6 +75,10 @@ int main(int argc, char** argv) {
                 sq::DecodedBlock b; fr.decode(g, b); Rec r;
                 for (uint32_t i = 0; i < b.n_reads; ++i) {
                     get(b, i, r);
+                    // dictionary semantics: bc_indices[i] < dict_n  <=>  exact hit, and then the dictionary entry is the barcode as sequenced
+                    const uint32_t bi = b.bc_indices[i];
+                    if (bi < fr.bc_dict_size()) { if (std::memcmp(&fr.bc_dict_flat()[(size_t)bi * bcl], b.r1_seq(i), bcl) != 0) { errors++; std::fprintf(stderr, "dict entry != barcode (chunk %u read %u)\n", g, i); } }
+                    else if (bi != fr.bc_dict_size()) { errors++; std::fprintf(stderr, "bad bc index\n"); }
                     uint64_t h = rec_hash(r);
                     part_digest[g] += h; part_n[g]++;
                     if (ordered) part_hashes[g].push_back(h);
@@ -97,6 +101,15 @@ int main(int argc, char** argv) {
             for (uint64_t h : part_hashes[g]) { if (k >= fq_hashes.size() || fq_hashes[k] != h) { if (bad++ < 3) std::fprintf(stderr, "ordered mismatch at read %llu\n", (unsigned long long)k); } ++k; }
         std::printf("ordered: %llu reads compared, %llu mismatches\n", (unsigned long long)k, (unsigned long long)bad);
         ok = ok && bad == 0 && k == fq_hashes.size();
+    }
+    {   // metadata: the .1fg2 carries the source .1fq's JSON verbatim (plus the encoder's own key at the end)
+        sq::Reader r0; r0.open(fqs[0].c_str());
+        std::string want = r0.read_metadata(), have = fr.metadata();
+        while (!want.empty() && (want.back() == ' ' || want.back() == '\n' || want.back() == '\r' || want.back() == '\t')) want.pop_back();
+        const std::string prefix = want.empty() ? std::string() : want.substr(0, want.size() - 1);
+        const bool meta_ok = want.empty() || have.compare(0, prefix.size(), prefix) == 0;
+        std::printf("metadata: %zu bytes in the .1fq, %zu in the .1fg2, verbatim prefix %s\n", want.size(), have.size(), meta_ok ? "OK" : "MISMATCH");
+        ok = ok && meta_ok;
     }
     std::printf("%s\n", ok ? "IDENTICAL" : "DIFFERENT");
     return ok ? 0 : 1;

@@ -116,6 +116,7 @@ struct PartHdr {
     uint64_t n_stored, n_in, n_dropped, hist_reads, n_unique, n_hist_pairs, src_bytes, recsz;
     uint32_t max_len, n_runs;
     char wl_name[64];
+    uint64_t meta_len;   // bytes of the source metadata JSON that follow the header
 };
 #pragma pack(pop)
 static constexpr uint32_t PART_MAGIC = 0x54505331u;   // "1SPT"
@@ -154,6 +155,9 @@ public:
         ready = true;
     }
     bool initialised() const { return ready; }
+
+    // The source .1fq's metadata JSON (Reader::read_metadata() / the SRA encoder's finish() argument), kept verbatim in the .1fg2: the engine configures itself from it.
+    void set_source_metadata(const std::string& m) { if (source_meta.empty()) source_meta = m; }
 
     void begin_run(const std::string& accession, uint64_t raw_bytes) {
         RunEntry re; std::memset(&re, 0, sizeof re);
@@ -299,10 +303,25 @@ public:
             std::memcpy(body.data(), &bh, sizeof bh);
             o.pad_to(ALIGN); bidx.push_back({o.off, (uint32_t)body.size(), n}); o.write(body.data(), body.size());
         }
-        char meta[1024];
-        int ml = std::snprintf(meta, sizeof meta, "{\"tool\":\"singlet-stage\",\"whitelist\":\"%s\",\"runs\":%zu,\"cb_hist_reads\":%llu,\"level\":%d}",
-                               wl_name.c_str(), runs.size(), (unsigned long long)hist_reads, level);
-        std::vector<uint8_t> mz(ZSTD_compressBound(ml)); size_t mzn = ZSTD_compress(mz.data(), mz.size(), meta, ml, level);
+        std::string meta;
+        {
+            char key[512];
+            std::snprintf(key, sizeof key, "\"s9_stage\":{\"tool\":\"singlet-stage\",\"whitelist\":\"%s\",\"runs\":%zu,\"cb_hist_reads\":%llu,\"level\":%d}",
+                          wl_name.c_str(), runs.size(), (unsigned long long)hist_reads, level);
+            // the source .1fq's metadata JSON verbatim (an object), our own key appended; without it just ours
+            std::string src = source_meta;
+            while (!src.empty() && (src.back() == ' ' || src.back() == '\n' || src.back() == '\r' || src.back() == '\t')) src.pop_back();
+            size_t lb = src.find_first_not_of(" \n\r\t");
+            if (lb != std::string::npos && src[lb] == '{' && src.back() == '}') {
+                std::string inner = src.substr(0, src.size() - 1);
+                bool empty_obj = inner.find_first_not_of(" \n\r\t{") == std::string::npos;
+                meta = inner + (empty_obj ? "" : ",") + key + "}";
+            } else {
+                meta = std::string("{") + key + "}";
+            }
+        }
+        int ml = (int)meta.size();
+        std::vector<uint8_t> mz(ZSTD_compressBound(ml)); size_t mzn = ZSTD_compress(mz.data(), mz.size(), meta.data(), ml, level);
         o.pad_to(ALIGN); H.meta_offset = o.off; H.meta_comp_size = (uint32_t)mzn; H.meta_raw_size = (uint32_t)ml; o.write(mz.data(), mzn);
         o.pad_to(16); H.runs_offset = o.off; H.n_runs = (uint32_t)runs.size(); o.write(runs.data(), runs.size() * sizeof(RunEntry));
         o.pad_to(16); H.index_offset = o.off;
@@ -350,11 +369,11 @@ public:
         PartHdr h; std::memset(&h, 0, sizeof h);
         h.magic = PART_MAGIC; h.version = 1; h.protocol_id = protocol_id; h.bcl = (uint8_t)bcl; h.bc0 = (uint8_t)bc0; h.umil = (uint8_t)umil; h.umi0 = (uint8_t)umi0;
         h.has_q = has_q; h.n_stored = n_stored; h.n_in = n_in; h.n_dropped = n_dropped; h.hist_reads = hist_reads; h.n_unique = tab.n(); h.src_bytes = src_bytes; h.recsz = recsz;
-        h.max_len = max_len; h.n_runs = (uint32_t)runs.size(); std::strncpy(h.wl_name, wl_name.c_str(), sizeof h.wl_name - 1);
+        h.max_len = max_len; h.n_runs = (uint32_t)runs.size(); std::strncpy(h.wl_name, wl_name.c_str(), sizeof h.wl_name - 1); h.meta_len = source_meta.size();
         std::vector<std::pair<uint64_t, uint64_t>> hp; for (uint64_t w = 0; w < hist.size(); w++) if (hist[w]) hp.push_back({w, hist[w]});
         h.n_hist_pairs = hp.size();
         auto W = [&](const void* p, size_t n) { if (n && std::fwrite(p, 1, n, f) != n) die(4, "part write failed"); };
-        W(&h, sizeof h); W(runs.data(), runs.size() * sizeof(RunEntry)); W(hp.data(), hp.size() * 16);
+        W(&h, sizeof h); W(source_meta.data(), source_meta.size()); W(runs.data(), runs.size() * sizeof(RunEntry)); W(hp.data(), hp.size() * 16);
         W(tab.len.data(), tab.len.size()); W(tab.hasn.data(), tab.hasn.size());
         uint64_t nn = tab.nmask.size(); W(&nn, 8);
         for (const auto& kv : tab.nmask) { W(&kv.first, 4); W(kv.second.data(), SeqTable::NMB); }
@@ -380,6 +399,7 @@ public:
         if (h.magic != PART_MAGIC || h.protocol_id != protocol_id || h.bcl != bcl || h.bc0 != bc0 || h.umil != umil || h.umi0 != umi0 || (bool)h.has_q != has_q ||
             h.recsz != recsz || wl_name != std::string(h.wl_name))
             die(6, "part " + path + " disagrees with the sample's protocol/geometry/quality mode");
+        { std::string m(h.meta_len, '\0'); if (h.meta_len) R(&m[0], h.meta_len); set_source_metadata(m); }
         std::vector<RunEntry> pr(h.n_runs); R(pr.data(), pr.size() * sizeof(RunEntry));
         for (auto& r : pr) { r.first_read += n_stored; runs.push_back(r); }
         std::vector<std::pair<uint64_t, uint64_t>> hp(h.n_hist_pairs); R(hp.data(), hp.size() * 16);
@@ -422,5 +442,6 @@ private:
     uint32_t max_len = 0;
     size_t recsz = 0;
     std::vector<uint8_t> sbuf;
+    std::string source_meta;
 };
 }  // namespace stage

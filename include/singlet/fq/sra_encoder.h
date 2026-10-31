@@ -1721,6 +1721,7 @@ class SraEncoder {
         if (cfg.sort_by_bc) wcfg.sort_by_bc = true;
         if (cfg.vdb_threads > 1) wcfg.compress_threads = cfg.vdb_threads;
         wcfg.block_sink = cfg.block_sink;   // staged output (singlet download --stage-out): no .1fq
+        wcfg.metadata_sink = cfg.metadata_sink;
 
         Writer writer;
         writer.open(cfg.output_path.c_str(), wcfg);

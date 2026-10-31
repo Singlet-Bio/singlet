@@ -115,6 +115,7 @@ struct WriterConfig {
 
     // Block sink: flush_block() hands the block to this function instead of encoding it; no file is opened (see StagedBlock)
     std::function<void(const StagedBlock&)> block_sink;
+    std::function<void(const std::string&)> metadata_sink;   // sink mode: gets finish()'s metadata JSON
 
     // ZSTD multi-threaded compression (0 = single-threaded, >0 = worker threads)
     int compress_threads = 0;
@@ -362,7 +363,10 @@ class Writer {
         if (n_reads_in_block_ > 0) {
             flush_block();
         }
-        if (sink_mode_) return;   // nothing was written to a file
+        if (sink_mode_) {   // nothing is written to a file; the metadata JSON goes to the sink
+            if (cfg_.metadata_sink) cfg_.metadata_sink(metadata_json);
+            return;
+        }
 
         // Wait for last async compress+write to complete
         if (async_flush_.valid()) async_flush_.wait();

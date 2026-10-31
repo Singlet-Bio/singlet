@@ -65,10 +65,12 @@ int main(int argc, char** argv) {
     const int bcl = r0.bc_length(), bc0 = spec->bc_offset, umil = r0.umi_length();
     const int umi0 = spec->umi_len > 0 ? spec->umi_offset : bcl;
     const bool has_q = r0.header().qual_mode != (uint8_t)sq::QualMode::NONE;
+    const std::string source_meta = r0.read_metadata();
     r0.close();
 
     stage::Encoder enc;
     enc.init(protocol_id, bcl, bc0, umil, umi0, has_q, wl_dirs, scratch);
+    enc.set_source_metadata(source_meta);
 
     for (size_t ri = 0; ri < inputs.size(); ri++) {
         sq::Reader rd; rd.open(inputs[ri].c_str());

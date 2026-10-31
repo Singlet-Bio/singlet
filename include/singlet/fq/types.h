@@ -711,6 +711,8 @@ struct EncoderConfig {
 
     // When set, flushed blocks go to this sink (no .1fq is written, no sort); see StagedBlock
     std::function<void(const StagedBlock&)> block_sink;
+    // With block_sink: receives the metadata JSON the .1fq would have embedded (the .1fg2 stores it verbatim)
+    std::function<void(const std::string&)> metadata_sink;
 
     // Parallel VDB reading threads (1=serial default)
     int vdb_threads = 1;
