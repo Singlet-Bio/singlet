@@ -9,6 +9,8 @@
 #include <pthread.h>
 #include <sys/syscall.h>
 #include <time.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <ucontext.h>
 #include <signal.h>
 #include <stdatomic.h>
@@ -22,7 +24,7 @@
 
 #define MAXF 32
 typedef struct { char name[16]; uint32_t n; uint32_t pad; uint64_t pc[MAXF]; } sample_t;
-static sample_t *ring; static size_t cap; static atomic_size_t nxt; static int active; static int period_ms = 10;
+static uint64_t *hdr; static sample_t *ring; static size_t cap; static atomic_size_t nxt; static int active; static int period_ms = 10;
 
 static __thread uintptr_t stk_hi;
 static void arm_thread(void) {
@@ -66,7 +68,36 @@ static void handler(int sig, siginfo_t *si, void *ucv) {
         fp = next;
     }
     s->n = n;
+    *(volatile uint64_t *)hdr = atomic_load(&nxt) < cap ? atomic_load(&nxt) : cap;
 }
+
+// The ring is a MAP_SHARED mmap of samples.<pid>.bin (header: u64 count), so nothing has to run at exit: the STAR child is a fork of
+// singlet that does not run destructors. A forked child opens its own file pair (pthread_atfork) and re-arms its main thread.
+static void write_maps(const char *dir) {
+    char p[1024]; snprintf(p, sizeof p, "%s/maps.%d.txt", dir, (int)getpid());
+    FILE *f = fopen(p, "w"), *m = fopen("/proc/self/maps", "r");
+    if (f && m) { char ln[1024]; while (fgets(ln, sizeof ln, m)) fputs(ln, f); }
+    if (f) fclose(f);
+    if (m) fclose(m);
+}
+
+static int open_ring(void) {
+    const char *dir = getenv("SAMPROF_OUT"); char p[1024];
+    snprintf(p, sizeof p, "%s/samples.%d.bin", dir, (int)getpid());
+    int fd = open(p, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return 0;
+    size_t bytes = 8 + cap * sizeof(sample_t);
+    if (ftruncate(fd, (off_t)bytes) != 0) { close(fd); return 0; }
+    void *base = mmap(0, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd);
+    if (base == MAP_FAILED) return 0;
+    atomic_store(&nxt, 0);
+    hdr = (uint64_t *)base; *hdr = 0; ring = (sample_t *)(hdr + 1);
+    write_maps(dir);
+    return 1;
+}
+
+static void child_init(void) { if (active && open_ring()) arm_thread(); }
 
 __attribute__((constructor)) static void start(void) {
     char exe[512]; ssize_t l = readlink("/proc/self/exe", exe, sizeof exe - 1);
@@ -74,28 +105,11 @@ __attribute__((constructor)) static void start(void) {
     exe[l] = 0;
     const char *b = strrchr(exe, '/'); b = b ? b + 1 : exe;
     if (strncmp(b, "singlet", 7) != 0 || !getenv("SAMPROF_OUT")) return;
-    cap = (size_t)4 << 20; ring = (sample_t *)calloc(cap, sizeof(sample_t));
-    if (!ring) return;
+    cap = (size_t)1500000;
+    if (!open_ring()) return;
     struct sigaction sa; memset(&sa, 0, sizeof sa);
     sa.sa_sigaction = handler; sa.sa_flags = SA_SIGINFO | SA_RESTART; sigemptyset(&sa.sa_mask);
     sigaction(SIGPROF, &sa, 0);
     const char *ms = getenv("SAMPROF_MS"); period_ms = ms ? atoi(ms) : 10; if (period_ms < 1) period_ms = 10;
-    active = 1; arm_thread();
-}
-
-__attribute__((destructor)) static void stop(void) {
-    if (!active) return;
-    signal(SIGPROF, SIG_IGN); active = 0;
-    size_t n = atomic_load(&nxt); if (n > cap) n = cap;
-    const char *dir = getenv("SAMPROF_OUT"); char p[1024];
-    snprintf(p, sizeof p, "%s/samples.%d.bin", dir, (int)getpid());
-    FILE *f = fopen(p, "wb");
-    if (f) { fwrite(&n, sizeof n, 1, f); fwrite(ring, sizeof(sample_t), n, f); fclose(f); }
-    snprintf(p, sizeof p, "%s/maps.%d.txt", dir, (int)getpid());
-    f = fopen(p, "w");
-    FILE *m = fopen("/proc/self/maps", "r");
-    if (f && m) { char ln[1024]; while (fgets(ln, sizeof ln, m)) fputs(ln, f); }
-    if (f) fclose(f);
-    if (m) fclose(m);
-    fprintf(stderr, "[samprof] %zu samples\n", n);
+    active = 1; pthread_atfork(0, 0, child_init); arm_thread();
 }
