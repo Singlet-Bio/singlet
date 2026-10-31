@@ -234,6 +234,22 @@ It is a slight gain over production (+0.009) and clearly below scDblFinder, with
 (including per-cell kNN ratios at several k over a larger PC space and cell-type-specific doublet enrichment), and an iterative loop that
 retrains on the identified doublets. These are the next things to add; I have not tuned on the evaluation sets.
 
+**sdfl as a stacker feature (leave-one-study-out, same recipe as #43; `bench/expression_sota/doublets/stack.py`, per dataset
+`results/doublets/stack.csv`).** The replication of `combo_prod_atlas` gives 0.5573 (reported 0.557). Adding sdfl:
+
+| stacker | mean AUPRC | paired gain over combo_prod_atlas (dataset CI / study-clustered CI) | wins | vs scDblFinder (0.5587) |
+|---|---|---|---|---|
+| combo_prod_atlas | 0.5573 | | | -0.001 [-0.032,+0.025] |
+| + sdfl | 0.5684 | **+0.0111** [+0.0070,+0.0150] / [+0.0066,+0.0133] | 16/17 | +0.010 [-0.020,+0.037], study-clustered [-0.033,+0.025] |
+| + sdfl + sdfl (homotypic variant) | 0.5707 | **+0.0134** [+0.0095,+0.0172] / [+0.0030,+0.0151] | 16/17 | +0.012 [-0.019,+0.040] |
+| production + umi + genes + sdfl (no atlas model) | 0.537 | | | |
+
+The sdfl feature is a real, small, consistent gain over the existing combiner (16 of 17 datasets, CIs exclude 0 at dataset and study
+level). Against scDblFinder the stacker is now nominally ahead (+0.010 to +0.012) but the CI still contains 0, so this is a tie, not the
+"clear CI win". **The hgmm gap is not closed:** hm-6k/hm-12k reach 0.95/0.91 against scDblFinder's 1.00/1.00 (-0.07 on the pair), so the
+artificial-doublet simulation is still missing the signal that makes species-mixture doublets trivial for scDblFinder. Without an
+atlas model the stacker is worse than scDblFinder (0.537). Not yet diagnosed.
+
 Not done: a better caller. What the data say about where a gain can come from: the win is on genotype-labelled PBMC (the tissue-like case);
 hashtag cell lines and nuclei are ties; the combiners lose where one library is two easily separable populations. Candidate work (needs
 Clipper compute and a decision on scope): native (non-R) artificial-doublet kNN score as an extra feature, and a stacker trained on the
