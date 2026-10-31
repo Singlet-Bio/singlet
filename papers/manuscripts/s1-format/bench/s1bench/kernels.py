@@ -27,8 +27,10 @@ def build() -> str:
     return str(exe)
 
 
-def run(cfg: Config, units: list[Unit], force: bool = False, entropy: bool = False) -> None:
-    """entropy=True is the `entropy` stage: each code's output once, untimed, with what is left to compress in it."""
+def run(cfg: Config, units: list[Unit], force: bool = False, mode: str = "") -> None:
+    """mode "entropy" is the `entropy` stage (each code's output once, untimed, with what is left to compress in it);
+    mode "s1order" is the `s1order` stage (only the .s1 member, timed in source gene order and in its stored order)."""
+    entropy = mode == "entropy"
     from singlet.s1.container import S2Reader
 
     exe = build()
@@ -37,7 +39,7 @@ def run(cfg: Config, units: list[Unit], force: bool = False, entropy: bool = Fal
     reps, warm = int(kc.get("repeats", 7)), int(kc.get("warmup", 2))
     core = sorted(os.sched_getaffinity(0))[0]
     for u in units:
-        out = result_path(cfg, "entropy" if entropy else "kernels", u)
+        out = result_path(cfg, mode or "kernels", u)
         if out.exists() and not force:
             continue
         s1 = format_dir(cfg, u) / "s1.s1"
@@ -61,7 +63,7 @@ def run(cfg: Config, units: list[Unit], force: bool = False, entropy: bool = Fal
                 f.write(S2Reader(str(s1)).read_member("counts"))
             del c
             r = subprocess.run(["taskset", "-c", str(core), exe, mat, member, str(reps), str(warm)]
-                               + (["entropy"] if entropy else []), capture_output=True, text=True)
+                               + ([mode] if mode else []), capture_output=True, text=True)
         if r.returncode != 0:
             log(f"{u.key}: kernel_bench failed: {r.stderr.strip()[-400:]}")
             continue

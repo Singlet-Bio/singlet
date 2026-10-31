@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // How fast can any lossless code decode a count matrix? One core, in memory, for the `kernels` stage (Fig. limits).
-//   kernel_bench <matrix.bin> <member.pz2> <repeats> <warmup> [entropy]
+//   kernel_bench <matrix.bin> <member.pz2> <repeats> <warmup> [entropy|s1order]
+// (`s1order`: only the .s1 member, timed in source gene order and in its stored order, for the `s1order` stage)
 // (`entropy`: no timing; each code's output once, with its order-0 and order-1 byte entropy, the order-0 entropy of the
 // step and value streams, and the .s1 member's byte entropy and size after zstd-19, for the `entropy` stage)
 // matrix.bin: u64 rows, u64 cols, u64 nnz, then indptr (cols+1 x u64), row indices (nnz x u32), values (nnz x u32), the
@@ -377,6 +378,7 @@ int main(int argc, char** argv) {
     const Csc m = read_matrix(argv[1]);
     const int reps = std::atoi(argv[3]), warm = std::atoi(argv[4]);
     const bool entropy_mode = argc > 5 && std::string(argv[5]) == "entropy";
+    const bool s1order_mode = argc > 5 && std::string(argv[5]) == "s1order";
     const std::vector<u32> gaps = to_gaps(m);
     u32 vmax = 0;
     for (u32 v : m.val) vmax = std::max(vmax, v);
@@ -519,6 +521,7 @@ int main(int argc, char** argv) {
     }
 
     for (const Codec& c : codecs) {
+        if (s1order_mode) break;
         Bytes enc;
         double t0 = now();
         c.encode(enc);
@@ -538,14 +541,20 @@ int main(int argc, char** argv) {
         std::fflush(stdout);
     }
 
-    // the .s1 member itself, one thread: its own nnz, so its rate is per non-zero of the whole matrix
+    // the .s1 member itself, one thread: its own nnz, so its rate is per non-zero of the whole matrix. Canonical mode returns
+    // source gene order (a sort per cell); `s1order` also times stored order, whose row ids map to source order through
+    // row_perm(), checked here as the same entries per cell
     const Bytes buf = read_file(argv[2]);
     pz::ByteSource src(buf);
-    for (const char* isa : {"avx2"}) {
+    std::vector<std::pair<const char*, pz::Mode>> modes = {{"avx2", pz::Mode::Canonical}};
+    if (s1order_mode) modes.push_back({"avx2_native", pz::Mode::Native});
+    std::vector<u64> canon_ptr;
+    std::vector<u32> canon_idx, canon_val;
+    for (const auto& [isa, mode] : modes) {
         pz::DecodeOptions opt;
         opt.threads = 1;
-        opt.isa = std::string(isa) == "avx2" ? pz::Isa::Avx2 : pz::Isa::Scalar;
-        opt.mode = pz::Mode::Canonical;
+        opt.isa = pz::Isa::Avx2;
+        opt.mode = mode;
         pz::Matrix m0 = pz::Matrix::open(src);
         const u64 nnz = m0.header().nnz;
         std::vector<u64> indptr(m0.header().n + 1);
@@ -562,9 +571,24 @@ int main(int argc, char** argv) {
             const double s = now() - t0;
             if (k >= warm) times += (times.empty() ? "" : ",") + std::to_string(s);
         }
-        std::printf("{\"codec\":\"pz2_%s\",\"nnz\":%llu,\"bytes\":%llu,\"encode_s\":0,\"ok\":true,\"isa_used\":\"%s\",\"times\":[%s]}\n",
-                    isa, (unsigned long long)nnz, (unsigned long long)buf.size(), pz::isa_name(pz::resolve_isa(opt.isa)),
-                    times.c_str());
+        bool ok = true;
+        if (mode == pz::Mode::Canonical) {
+            canon_ptr = indptr; canon_idx = indices; canon_val = data;
+        } else {   // map stored ids to source ids, sort each cell, compare with the canonical decode
+            const std::vector<u32>& perm = m0.row_perm();
+            std::vector<std::pair<u32, u32>> cell;
+            ok = indptr == canon_ptr;
+            for (u64 c = 0; ok && c + 1 < indptr.size(); ++c) {
+                cell.clear();
+                for (u64 i = indptr[c]; i < indptr[c + 1]; ++i) cell.push_back({perm.empty() ? indices[i] : perm[indices[i]], data[i]});
+                std::sort(cell.begin(), cell.end());
+                for (u64 i = indptr[c]; ok && i < indptr[c + 1]; ++i)
+                    ok = cell[i - indptr[c]].first == canon_idx[i] && cell[i - indptr[c]].second == canon_val[i];
+            }
+        }
+        std::printf("{\"codec\":\"pz2_%s\",\"nnz\":%llu,\"bytes\":%llu,\"encode_s\":0,\"ok\":%s,\"isa_used\":\"%s\",\"times\":[%s]}\n",
+                    isa, (unsigned long long)nnz, (unsigned long long)buf.size(), ok ? "true" : "false",
+                    pz::isa_name(pz::resolve_isa(opt.isa)), times.c_str());
         std::fflush(stdout);
     }
     return 0;

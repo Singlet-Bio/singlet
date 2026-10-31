@@ -44,6 +44,7 @@ def main(argv=None) -> int:
     p = stage("netsweep", "round-trip time, requests in flight and DataLoader workers (loader panel)")
     p.add_argument("--r2", action="store_true", help="the real object store (S1_R2_URL) instead of the emulated grids")
     stage("kernels", "one-core decode rate of textbook integer codes against the .s1 member (cpp/kernel_bench)")
+    stage("s1order", "one-core decode rate of the .s1 member in source and in stored gene order (cpp/kernel_bench)")
     stage("entropy", "byte and stream entropy of each code's output and of the .s1 member, untimed (cpp/kernel_bench)")
     p = stage("writecost", "seconds and peak memory to write each format")
     p.add_argument("--formats", default=None)
@@ -145,7 +146,11 @@ def main(argv=None) -> int:
         elif s == "entropy":
             from . import kernels
 
-            kernels.run(cfg, units, a.force, entropy=True)
+            kernels.run(cfg, units, a.force, mode="entropy")
+        elif s == "s1order":
+            from . import kernels
+
+            kernels.run(cfg, units, a.force, mode="s1order")
         elif s == "eco":
             from . import eco
 
