@@ -24,7 +24,7 @@ def test_other_members_pass_through():
     assert bundle._reads_member("exon_counts.1pz", b"abc", {"A"}) == b"abc"
 
 
-def test_histogram_modality_is_registered_after_the_counts():
+def test_reads_modalities_are_registered_after_the_counts():
     names = list(bundle.MODALITIES)
-    assert names.index("reads_per_umi_hist") == names.index("intron_counts") + 1
-    assert "exon_reads" not in bundle.MODALITIES
+    i = names.index("intron_counts")
+    assert names[i + 1 : i + 4] == ["exon_reads", "intron_reads", "reads_per_umi_hist"]
