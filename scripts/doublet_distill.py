@@ -48,6 +48,7 @@ def main():
     ap.add_argument("--hidden", type=int, default=256)
     ap.add_argument("--k", type=int, default=32)
     ap.add_argument("--epochs", type=int, default=30)
+    ap.add_argument("--augment", action="store_true", help="train on the network's own count augmentation (depth thinning, protocol bias, ambient, intron reads)")
     ap.add_argument("--model", default=os.environ.get("SINGLET_CELLTYPE_NN_MODEL"))
     a = ap.parse_args()
     torch.manual_seed(0)
@@ -101,14 +102,45 @@ def main():
     V = Vt[: a.k].T.astype(np.float32)
     del Es
     sets = {}
+    if a.augment:
+        from singlet.celltype_nn.features import AugmentConfig, Augmenter
+
+        aug = Augmenter(Xs.shape[1], np.load("/mnt/projects/debruinz_project/debruinz/singlet/data/celltype_nn/intron_ratio.npy"), AugmentConfig(), torch.device("cpu"), seed=3)
+
+    def build(idx, seed, block=4096):
+        """Augmented singles (two draws per step) and their sums, with the network's outputs on each."""
+        r = np.random.default_rng(seed)
+        xs, ys = [], []
+        for s0 in range(0, len(idx), block):
+            i = idx[s0 : s0 + block]
+            j = r.choice(idx, len(i))
+            c1 = torch.from_numpy(Xs[i].toarray().astype(np.float32))
+            c2 = torch.from_numpy(Xs[j].toarray().astype(np.float32))
+            a1, a2 = aug(c1), aug(c2)
+            for c in (a1, a2, a1 + a2):
+                with torch.no_grad():
+                    e = net.embed(transform(c, net.transform))
+                    p = F.softmax(net.head(e) / net.temperature, 1)
+                    h = -(p * torch.log(p + 1e-12)).sum(1)
+                cn = c.numpy()
+                tot = np.maximum(cn[:, panel].sum(1, keepdims=True), 1.0)
+                x = np.log1p(cn[:, panel] * (1e4 / tot)).astype(np.float32)
+                xs.append(x)
+                ys.append(np.hstack([(e.numpy() - emu) @ V, h.numpy()[:, None]]).astype(np.float32))
+        return np.vstack(xs), np.vstack(ys)
+
     for name, idx, nd in (("train", tr, len(tr)), ("val", va, len(va))):
-        D = doublets(idx, nd, 7 if name == "train" else 8)
-        C_all = sp.vstack([Xs[idx], D]).tocsr()
-        E, H = net_targets(C_all)
-        Y = np.hstack([(E - emu) @ V, H[:, None]]).astype(np.float32)
-        x = lognorm_panel(C_all[:, panel])
-        sets[name] = (x, Y, len(idx))
-        print(name, x.shape, "targets", Y.shape, f"{time.time() - t0:.0f}s", flush=True)
+        if a.augment:
+            x, Y = build(idx, 7 if name == "train" else 8)
+            sets[name] = (x, Y, len(x) // 3 * 2)  # first 2/3: singles (order is blocked, so only roughly)
+        else:
+            D = doublets(idx, nd, 7 if name == "train" else 8)
+            C_all = sp.vstack([Xs[idx], D]).tocsr()
+            E, H = net_targets(C_all)
+            Y = np.hstack([(E - emu) @ V, H[:, None]]).astype(np.float32)
+            x = lognorm_panel(C_all[:, panel])
+            sets[name] = (x, Y, len(idx))
+        print(name, sets[name][0].shape, "targets", sets[name][1].shape, f"{time.time() - t0:.0f}s", flush=True)
     xtr, ytr, ntr = sets["train"]
     mu, sd = xtr.mean(0), xtr.std(0) + 1e-3
     ysc = ytr[:, : a.k].std() + 1e-6
@@ -151,7 +183,7 @@ def main():
             print(f"epoch {ep + 1} val R2 embedding {r2_emb:.3f} entropy {r2_ent:.3f} (singles only {r2_ent_single:.3f})", flush=True)
     sdict = {k: v.numpy() for k, v in net_d.state_dict().items()}
     mouse = dict(zip(m["mouse_human"], m["mouse_ids"]))
-    f = out / f"distill_{a.genes}_{a.hidden}_{a.k}.npz"
+    f = out / f"distill{'_aug' if a.augment else ''}_{a.genes}_{a.hidden}_{a.k}.npz"
     np.savez_compressed(
         f,
         panel_ids=m["genes"][panel].astype("U15"),
