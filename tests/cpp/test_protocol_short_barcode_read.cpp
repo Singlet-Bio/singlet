@@ -74,8 +74,8 @@ static std::vector<Spot> make_spots(const std::vector<std::string>& wl, int r1_l
 }
 
 static void show(const char* what, const singlet::fq::ProtocolCandidate& r) {
-    std::fprintf(stderr, "    [%s] tag=%s wl_rate=%.3f score=%.3f conf=%d
-", what, r.tag.c_str(), r.wl_match_rate, r.score, static_cast<int>(r.confidence));
+    std::fprintf(stderr, "    [%s] tag=%s wl_rate=%.3f score=%.3f conf=%d\n", what, r.tag.c_str(), r.wl_match_rate, r.score,
+                 static_cast<int>(r.confidence));
 }
 
 int main() {
