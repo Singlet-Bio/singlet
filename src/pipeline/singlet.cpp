@@ -5321,6 +5321,12 @@ int main(int argc, char* argv[]) {
         std::cerr << "[singlet] stream CB: " << (config.cb_corrector ? "CR corrected by STAR's 1MM_multi_Nbase_pseudocounts rule (R11)"
                                                                      : "CR exact (no pass-1 histogram)") << "\n";
 #ifdef SINGLET_HAVE_ENGINE_GPU
+    // a .1fg2 input: the GPU prefill takes the distinct sequences from the file's table instead of parsing the temp FASTQ (SeqCacheGpuPrefill.cpp)
+    if (getenv("SINGLET_ENGINE_GPU") && !onefq_file.empty() && singlet::fq::is_staged_file(onefq_file.c_str())) {
+        static std::string fg2_path;
+        fg2_path = onefq_file;
+        setenv("SINGLET_ENGINE_GPU_FG2", fg2_path.c_str(), 1);
+    }
     // W11 GPU pileup on the stream path: the GPU prefill hands the per-sequence alignments to the pileup (SINGLET_ENGINE_GPU_HANDOFF)
     if (stream_unsorted == 1 && getenv("SINGLET_GPU_PILEUP") && getenv("SINGLET_ENGINE_GPU") && !getenv("SINGLET_ENGINE_GPU_HANDOFF")
         && config.out_chrm_bam.empty() && config.guide_ref_path.empty()

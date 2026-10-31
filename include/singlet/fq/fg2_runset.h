@@ -161,6 +161,18 @@ class Fg2RunSet {
         plane(fg2::PL_LEN, cp.len); plane(fg2::PL_Q, cp.q); plane(fg2::PL_EXC, cp.exc); plane(fg2::PL_RAWCB, cp.rawcb);
     }
 
+    // Only the sequence-id plane (PL_SEQ) of chunk g: the sequence id of each of its reads, in read order. Thread-safe.
+    void decode_seq_ids(uint32_t g, std::vector<uint32_t>& ids) const {
+        std::vector<uint8_t> stored(chunks_[g].total_bytes), t;
+        pread_full(stored.data(), stored.size(), chunks_[g].offset);
+        fg2::ChunkHeader ch;
+        std::memcpy(&ch, stored.data(), sizeof ch);
+        if (ch.magic != fg2::CHUNK_MAGIC) throw std::runtime_error("Fg2RunSet: bad chunk header");
+        inflate(stored.data(), ch.sec[fg2::PL_SEQ], (ch.flags >> fg2::PL_SEQ) & 1, t);
+        ids.resize(t.size() / sizeof(uint32_t));
+        if (!t.empty()) std::memcpy(ids.data(), t.data(), t.size());
+    }
+
     // Decode chunk g into a DecodedBlock. Thread-safe.
     void decode(uint32_t g, DecodedBlock& blk) const {
         ChunkPlanes cp;
