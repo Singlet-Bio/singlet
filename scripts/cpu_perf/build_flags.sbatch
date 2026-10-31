@@ -8,7 +8,7 @@
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Build one compiler-flag variant of the CPU-only singlet for the flags comparison (docs/research-beta/cpu-engine-perf.md, section 7).
-# Env: BRANCH (branch of the bare repo to build, default claude/cpu-perf-flags), VARIANT = <march>[-lto][-starpgo|-pgo], where
+# Env: PIN (build this commit instead of the branch tip; keeps variants of one source in one output dir), BRANCH (branch of the bare repo to build, default claude/cpu-perf-flags), VARIANT = <march>[-lto][-starpgo|-pgo], where
 #   <march> = v3 (-march=x86-64-v3) | zn3 (-march=znver3; Clipper has only Intel nodes, so zn3 builds cannot run there);  lto = -flto=auto on all host code;
 #   starpgo = profile-guided STAR objects only (the recipe of src/star/pgo/pgo_build.sh);  pgo = whole-program PGO (pipeline, pileup, export, STAR).
 # PGO variants build an instrumented binary, train it on the .1fq files in TRAIN (default pbmc1k_v3 neuron1k_v3), and rebuild with the profile.
@@ -18,7 +18,7 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/im
 REF=/mnt/projects/debruinz_project/cellarium/reference; G=$REF/GRCh38-2024-A
 BARE=$W/repos/singlet-py.git; BRANCH=${BRANCH:-claude/cpu-perf-flags}; VARIANT=${VARIANT:?VARIANT}; TRAIN=${TRAIN:-"pbmc1k_v3 neuron1k_v3"}
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BRANCH:refs/cpuperf/flags
-COMMIT=$(git -C $BARE rev-parse refs/cpuperf/flags); OUTD=$W/jobs/cpu-perf/${COMMIT:0:8}; mkdir -p $OUTD/bin
+COMMIT=$(git -C $BARE rev-parse ${PIN:-refs/cpuperf/flags}); OUTD=$W/jobs/cpu-perf/${COMMIT:0:8}; mkdir -p $OUTD/bin
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
 git -C $BARE archive $COMMIT | tar -x -C $SCR/src; S=$SCR/src
 grep -q "sam_hdr_destroy(bam_hdr_t" $S/src/star/bam_cat.c || \
@@ -43,15 +43,20 @@ train() {
     echo "[train] \$t \$((\$(date +%s)-s)) s"; rm -rf $SCR/t/\$t
   done
 }
-case $MODE in
-  none) cfg; bld;;
-  star) cfg "-DSINGLET_STAR_EXTRA_FLAGS=-fprofile-generate -fprofile-update=atomic" -DCMAKE_EXE_LINKER_FLAGS=-fprofile-generate; bld; train
-        cfg "-DSINGLET_STAR_EXTRA_FLAGS=-fprofile-use -fprofile-partial-training -Wno-missing-profile -Wno-error=coverage-mismatch" -DCMAKE_EXE_LINKER_FLAGS=; bld;;
-  whole) cfg -DSINGLET_PGO=generate -DSINGLET_PGO_DIR=\$B/pgo; bld; train; echo "[pgo] \$(find \$B/pgo -name '*.gcda' | wc -l) profiles"
-        cfg -DSINGLET_PGO=use -DSINGLET_PGO_DIR=\$B/pgo; bld;;
-esac
-cp \$B/src/pipeline/singlet $OUTD/bin/singlet-$VARIANT.new && mv $OUTD/bin/singlet-$VARIANT.new $OUTD/bin/singlet-$VARIANT
+s_none() { cfg; bld; }
+s_star_gen() { cfg "-DSINGLET_STAR_EXTRA_FLAGS=-fprofile-generate -fprofile-update=atomic" -DCMAKE_EXE_LINKER_FLAGS=-fprofile-generate; bld; }
+s_star_use() { cfg "-DSINGLET_STAR_EXTRA_FLAGS=-fprofile-use -fprofile-partial-training -Wno-missing-profile -Wno-error=coverage-mismatch" -DCMAKE_EXE_LINKER_FLAGS=; bld; }
+s_whole_gen() { cfg -DSINGLET_PGO=generate -DSINGLET_PGO_DIR=\$B/pgo; bld; }
+s_whole_use() { echo "[pgo] \$(find \$B/pgo -name '*.gcda' | wc -l) profiles"; cfg -DSINGLET_PGO=use -DSINGLET_PGO_DIR=\$B/pgo; bld; }
+final() { cp \$B/src/pipeline/singlet $OUTD/bin/singlet-$VARIANT.new && mv $OUTD/bin/singlet-$VARIANT.new $OUTD/bin/singlet-$VARIANT; }
+"\$@"
 EOS
-apptainer exec -B /mnt/projects/debruinz_project -B $SCR $IMG bash $SCR/build.sh
+inc() { apptainer exec -B /mnt/projects/debruinz_project -B $SCR $IMG bash $SCR/build.sh "$@"; }
+case $MODE in
+  none) inc s_none;;
+  star) inc s_star_gen; bash $SCR/build.sh train; inc s_star_use;;
+  whole) inc s_whole_gen; bash $SCR/build.sh train; inc s_whole_use;;
+esac
+inc final
 ln -sfn $PB/whitelists $OUTD/whitelists; echo $COMMIT > $OUTD/commit
 sha256sum $OUTD/bin/singlet-$VARIANT; echo "[build] ok $VARIANT $MARCH lto=$LTO mode=$MODE"
