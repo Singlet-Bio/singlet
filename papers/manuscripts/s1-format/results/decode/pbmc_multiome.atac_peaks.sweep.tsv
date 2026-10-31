@@ -1,69 +1,69 @@
 dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
-pbmc_multiome	atac_peaks	sweep	local	s1	1	cold	file	native	auto	85596796	ok	1.078034	1.070631	1.786726	79.400803	3	2.495417,1.063227,1.078034	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	1	cold	file	canonical	auto	85596796	ok	1.750108	1.730954	2.405204	48.909431	3	3.060299,1.750108,1.711800	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	2	cold	file	native	auto	85596796	ok	0.612113	0.610881	1.280818	139.838136	3	1.949522,0.609649,0.612113	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	2	cold	file	canonical	auto	85596796	ok	0.918144	0.913751	1.588831	93.228115	3	2.259518,0.909358,0.918144	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	4	cold	file	native	auto	85596796	ok	0.382177	0.382049	1.047458	223.971323	3	1.712739,0.382177,0.381920	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	4	cold	file	canonical	auto	85596796	ok	0.529436	0.528811	1.188897	161.67548	3	1.848359,0.528187,0.529436	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	file	native	auto	85596796	ok	0.346493	0.346306	0.346937	247.037385	3	0.347380,0.346119,0.346493	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	file	canonical	auto	85596796	ok	0.493414	0.492449	0.494408	173.478612	3	0.495402,0.491485,0.493414	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	8	cold	file	native	auto	85596796	ok	0.3161	0.313414	0.970701	270.790147	3	1.625302,0.316100,0.310728	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	8	cold	file	canonical	auto	85596796	ok	0.424608	0.417155	1.075957	201.590196	3	1.727307,0.424608,0.409702	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	native	scalar	85596796	ok	2.624161	2.624029	2.633429	32.61873	3	2.642697,2.623898,2.624161	scalar
-pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	native	avx2	85596796	ok	0.955646	0.951186	0.955654	89.569592	3	0.946726,0.955646,0.955663	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	native	avx512	85596796	ok	0.956593	0.951849	0.956623	89.480858	3	0.947104,0.956652,0.956593	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	canonical	scalar	85596796	ok	3.287548	3.287343	3.297812	26.036671	3	3.308076,3.287548,3.287137	scalar
-pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	canonical	avx2	85596796	ok	1.56404	1.559848	1.566643	54.728017	3	1.564040,1.569246,1.555656	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	canonical	avx512	85596796	ok	1.572189	1.568054	1.574744	54.444325	3	1.572189,1.577299,1.563919	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	native	scalar	85596796	ok	1.380955	1.368963	1.392376	61.983779	3	1.403798,1.356972,1.380955	scalar
-pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	native	avx2	85596796	ok	0.505204	0.505116	0.505296	169.430226	3	0.505388,0.505027,0.505204	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	native	avx512	85596796	ok	0.507631	0.506752	0.508371	168.620031	3	0.507631,0.509110,0.505873	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	canonical	scalar	85596796	ok	1.664711	1.66309	1.665662	51.418409	3	1.661468,1.664711,1.666613	scalar
-pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	canonical	avx2	85596796	ok	0.802897	0.801745	0.8102	106.609947	3	0.802897,0.800592,0.817502	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	canonical	avx512	85596796	ok	0.792512	0.79166	0.8014	108.006983	3	0.792512,0.790808,0.810289	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	native	scalar	85596796	ok	0.701736	0.701176	0.704694	121.978662	3	0.701736,0.700615,0.707652	scalar
-pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	native	avx2	85596796	ok	0.280897	0.280512	0.280969	304.726708	3	0.280897,0.281041,0.280127	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	native	avx512	85596796	ok	0.280717	0.279966	0.281884	304.922466	3	0.283052,0.280717,0.279216	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	canonical	scalar	85596796	ok	0.856273	0.855943	0.859435	99.96443	3	0.856273,0.855613,0.862598	scalar
-pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	canonical	avx2	85596796	ok	0.425502	0.425321	0.426657	201.166506	3	0.427812,0.425140,0.425502	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	canonical	avx512	85596796	ok	0.427159	0.426782	0.427244	200.386326	3	0.426406,0.427159,0.427329	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	native	scalar	85596796	ok	0.452881	0.428326	0.464228	189.00504	3	0.403771,0.475575,0.452881	scalar
-pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	native	avx2	85596796	ok	0.222961	0.219744	0.229383	383.908419	3	0.235805,0.222961,0.216527	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	native	avx512	85596796	ok	0.209935	0.208611	0.210446	407.73077	3	0.207287,0.210958,0.209935	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	canonical	scalar	85596796	ok	0.572737	0.565347	0.592717	149.452129	3	0.612697,0.557957,0.572737	scalar
-pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	canonical	avx2	85596796	ok	0.300681	0.285831	0.309494	284.676048	3	0.318307,0.300681,0.270980	avx2
-pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	canonical	avx512	85596796	ok	0.293243	0.28152	0.3073	291.89698	3	0.321356,0.293243,0.269796	avx2
-pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	1	cold	file		auto	85596796	ok	2.576338	2.569053	2.841626	33.224205	3	3.106914,2.561767,2.576338	
-pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	2	cold	file		auto	85596796	ok	2.575979	2.571676	2.845513	33.228835	3	3.115047,2.567373,2.575979	
-pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	4	cold	file		auto	85596796	ok	2.588793	2.577391	2.851869	33.064363	3	3.114945,2.565989,2.588793	
-pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	4	warm	file		auto	85596796	ok	2.477168	2.47584	2.478243	34.5543	3	2.474512,2.479318,2.477168	
-pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	8	cold	file		auto	85596796	ok	2.571591	2.568193	2.840031	33.285537	3	3.108471,2.564795,2.571591	
-pbmc_multiome	atac_peaks	sweep	local	csc_i32	1	cold	file		auto	85596796	ok	0.877732	0.875978	0.892518	97.520409	3	0.907304,0.877732,0.874224	
-pbmc_multiome	atac_peaks	sweep	local	csc_i32	2	cold	file		auto	85596796	ok	0.873314	0.873179	0.875066	98.013821	3	0.876819,0.873045,0.873314	
-pbmc_multiome	atac_peaks	sweep	local	csc_i32	4	cold	file		auto	85596796	ok	0.87333	0.873077	0.877875	98.012007	3	0.882420,0.872824,0.873330	
-pbmc_multiome	atac_peaks	sweep	local	csc_i32	4	warm	file		auto	85596796	ok	0.254346	0.253836	0.256393	336.536355	3	0.258440,0.254346,0.253326	
-pbmc_multiome	atac_peaks	sweep	local	csc_i32	8	cold	file		auto	85596796	ok	0.879061	0.875404	0.892034	97.372949	3	0.905007,0.879061,0.871747	
-pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	native	scalar	85596796	ok	2.741017	2.74087	2.744351	31.228116	3	2.740724,2.747685,2.741017	scalar
-pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	native	avx2	85596796	ok	0.907463	0.904921	0.907555	94.325384	3	0.907463,0.907647,0.902379	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	native	avx512	85596796	ok	0.908532	0.905968	0.908686	94.214399	3	0.908532,0.908839,0.903405	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	85596796	ok	3.39203	3.391944	3.394691	25.234681	3	3.392030,3.397351,3.391857	scalar
-pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	85596796	ok	1.528459	1.528194	1.530918	56.002023	3	1.533378,1.527929,1.528459	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	85596796	ok	1.612728	1.577433	1.62433	53.07578	3	1.542138,1.635932,1.612728	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	native	scalar	85596796	ok	1.429896	1.424607	1.431646	59.862253	3	1.419318,1.429896,1.433395	scalar
-pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	native	avx2	85596796	ok	0.454743	0.454722	0.454788	188.231146	3	0.454743,0.454832,0.454700	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	native	avx512	85596796	ok	0.460098	0.459991	0.460152	186.040357	3	0.459885,0.460098,0.460206	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	85596796	ok	1.763596	1.756901	1.78897	48.535377	3	1.750206,1.763596,1.814344	scalar
-pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	85596796	ok	0.771314	0.771199	0.771459	110.975292	3	0.771314,0.771083,0.771604	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	85596796	ok	0.766216	0.765103	0.766428	111.713663	3	0.763991,0.766641,0.766216	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	native	scalar	85596796	ok	0.69014	0.690111	0.690605	124.028162	3	0.690140,0.691071,0.690081	scalar
-pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	native	avx2	85596796	ok	0.231137	0.231133	0.231166	370.329268	3	0.231137,0.231128,0.231194	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	native	avx512	85596796	ok	0.229681	0.229641	0.229738	372.676869	3	0.229795,0.229681,0.229602	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	85596796	ok	0.856429	0.856373	0.856546	99.946167	3	0.856663,0.856429,0.856317	scalar
-pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	85596796	ok	0.387312	0.387242	0.393131	221.002179	3	0.398951,0.387173,0.387312	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	85596796	ok	0.388452	0.388024	0.388481	220.353598	3	0.387597,0.388509,0.388452	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	native	scalar	85596796	ok	0.387934	0.38593	0.388545	220.647832	3	0.387934,0.383925,0.389157	scalar
-pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	native	avx2	85596796	ok	0.150326	0.142342	0.154724	569.407794	3	0.150326,0.134358,0.159121	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	native	avx512	85596796	ok	0.162501	0.160713	0.163875	526.746272	3	0.165249,0.158925,0.162501	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	85596796	ok	0.467796	0.455812	0.492534	182.978897	3	0.467796,0.443827,0.517271	scalar
-pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	85596796	ok	0.270072	0.250116	0.289828	316.940653	3	0.309585,0.270072,0.230160	avx2
-pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	85596796	ok	0.253073	0.230876	0.256796	338.229665	3	0.253073,0.260518,0.208678	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	1	cold	file	native	auto	85596796	ok	1.05105	1.050578	1.096545	81.43935	3	1.051050,1.050106,1.142041	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	1	cold	file	canonical	auto	85596796	ok	1.811594	1.810552	1.8162	47.24943	3	1.809510,1.820806,1.811594	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	2	cold	file	native	auto	85596796	ok	0.608501	0.607739	0.611351	140.668272	3	0.614202,0.608501,0.606977	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	2	cold	file	canonical	auto	85596796	ok	0.898755	0.898029	0.8991	95.23926	3	0.898755,0.897302,0.899445	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	4	cold	file	native	auto	85596796	ok	0.386189	0.385609	0.386576	221.644765	3	0.386964,0.386189,0.385030	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	4	cold	file	canonical	auto	85596796	ok	0.528348	0.528	0.529898	162.008278	3	0.531448,0.527652,0.528348	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	file	native	auto	85596796	ok	0.342783	0.342517	0.34347	249.711654	3	0.344158,0.342783,0.342251	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	file	canonical	auto	85596796	ok	0.484783	0.484625	0.485028	176.567394	3	0.484468,0.484783,0.485274	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	8	cold	file	native	auto	85596796	ok	0.314812	0.310053	0.31533	271.898431	3	0.305295,0.314812,0.315849	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	8	cold	file	canonical	auto	85596796	ok	0.409436	0.3965	0.416855	209.060028	3	0.424273,0.383564,0.409436	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	native	scalar	85596796	ok	2.671695	2.67109	2.681171	32.038389	3	2.690648,2.670485,2.671695	scalar
+pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	native	avx2	85596796	ok	0.95744	0.957228	0.957478	89.401761	3	0.957016,0.957440,0.957517	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	native	avx512	85596796	ok	0.952807	0.949065	0.963129	89.836449	3	0.945324,0.952807,0.973451	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	canonical	scalar	85596796	ok	3.38438	3.383357	3.391813	25.291721	3	3.399247,3.382335,3.384380	scalar
+pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	canonical	avx2	85596796	ok	1.572577	1.568466	1.573573	54.430909	3	1.572577,1.574568,1.564355	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	1	warm	codec	canonical	avx512	85596796	ok	1.578627	1.575661	1.581963	54.222313	3	1.578627,1.585299,1.572696	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	native	scalar	85596796	ok	1.374016	1.368705	1.382366	62.296799	3	1.363393,1.374016,1.390716	scalar
+pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	native	avx2	85596796	ok	0.510628	0.510439	0.510872	167.630523	3	0.510628,0.511117,0.510251	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	native	avx512	85596796	ok	0.509783	0.509254	0.511329	167.908446	3	0.508726,0.509783,0.512875	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	canonical	scalar	85596796	ok	1.704516	1.689241	1.740334	50.217646	3	1.776152,1.673965,1.704516	scalar
+pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	canonical	avx2	85596796	ok	0.826969	0.822682	0.839412	103.50667	3	0.818396,0.826969,0.851856	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	2	warm	codec	canonical	avx512	85596796	ok	0.792979	0.792279	0.800784	107.943274	3	0.792979,0.791579,0.808588	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	native	scalar	85596796	ok	0.707124	0.705379	0.710117	121.049189	3	0.707124,0.703635,0.713110	scalar
+pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	native	avx2	85596796	ok	0.282041	0.280801	0.282151	303.490089	3	0.282261,0.282041,0.279560	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	native	avx512	85596796	ok	0.284301	0.284116	0.289698	301.078585	3	0.295096,0.284301,0.283931	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	canonical	scalar	85596796	ok	0.863344	0.862578	0.865304	99.145607	3	0.863344,0.861811,0.867264	scalar
+pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	canonical	avx2	85596796	ok	0.427082	0.426066	0.427171	200.422401	3	0.427082,0.425050,0.427260	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	4	warm	codec	canonical	avx512	85596796	ok	0.430844	0.430182	0.478851	198.672329	3	0.526859,0.429521,0.430844	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	native	scalar	85596796	ok	0.421643	0.40807	0.427967	203.007738	3	0.421643,0.434291,0.394496	scalar
+pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	native	avx2	85596796	ok	0.205912	0.205183	0.210662	415.695678	3	0.204453,0.205912,0.215412	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	native	avx512	85596796	ok	0.205049	0.201723	0.209272	417.445165	3	0.205049,0.213494,0.198397	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	canonical	scalar	85596796	ok	0.493834	0.489747	0.513808	173.331286	3	0.485661,0.493834,0.533783	scalar
+pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	canonical	avx2	85596796	ok	0.285868	0.278612	0.293115	299.427943	3	0.300363,0.285868,0.271357	avx2
+pbmc_multiome	atac_peaks	sweep	local	s1	8	warm	codec	canonical	avx512	85596796	ok	0.281697	0.276322	0.297759	303.861744	3	0.313821,0.281697,0.270948	avx2
+pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	1	cold	file		auto	85596796	ok	2.56287	2.560348	2.583076	33.398809	3	2.603282,2.557825,2.562870	
+pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	2	cold	file		auto	85596796	ok	2.574898	2.570222	2.578037	33.242786	3	2.581175,2.565546,2.574898	
+pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	4	cold	file		auto	85596796	ok	2.571346	2.567255	2.572205	33.288716	3	2.573065,2.563164,2.571346	
+pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	4	warm	file		auto	85596796	ok	2.475894	2.473488	2.480998	34.572081	3	2.475894,2.486103,2.471082	
+pbmc_multiome	atac_peaks	sweep	local	h5ad_gzip	8	cold	file		auto	85596796	ok	2.591884	2.584829	2.594081	33.024935	3	2.596278,2.591884,2.577775	
+pbmc_multiome	atac_peaks	sweep	local	csc_i32	1	cold	file		auto	85596796	ok	0.878331	0.87758	0.879789	97.453941	3	0.881248,0.876830,0.878331	
+pbmc_multiome	atac_peaks	sweep	local	csc_i32	2	cold	file		auto	85596796	ok	0.890187	0.888363	0.911032	96.155933	3	0.931877,0.890187,0.886538	
+pbmc_multiome	atac_peaks	sweep	local	csc_i32	4	cold	file		auto	85596796	ok	0.879363	0.876981	0.888065	97.339591	3	0.879363,0.896768,0.874599	
+pbmc_multiome	atac_peaks	sweep	local	csc_i32	4	warm	file		auto	85596796	ok	0.24618	0.245652	0.248855	347.699638	3	0.251529,0.246180,0.245123	
+pbmc_multiome	atac_peaks	sweep	local	csc_i32	8	cold	file		auto	85596796	ok	0.873674	0.872958	0.886567	97.973417	3	0.873674,0.872242,0.899461	
+pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	native	scalar	85596796	ok	2.807316	2.787873	2.889406	30.490617	3	2.768431,2.971497,2.807316	scalar
+pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	native	avx2	85596796	ok	0.904154	0.903904	0.904265	94.670594	3	0.903654,0.904154,0.904375	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	native	avx512	85596796	ok	0.894336	0.893074	0.894599	95.709885	3	0.894336,0.894863,0.891813	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	85596796	ok	3.394268	3.394055	3.394358	25.218043	3	3.393843,3.394268,3.394448	scalar
+pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	85596796	ok	1.52003	1.519578	1.520862	56.31257	3	1.521693,1.519126,1.520030	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	85596796	ok	1.516497	1.516339	1.518401	56.443762	3	1.520304,1.516497,1.516180	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	native	scalar	85596796	ok	1.432245	1.428408	1.43447	59.764074	3	1.424570,1.432245,1.436696	scalar
+pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	native	avx2	85596796	ok	0.453339	0.45329	0.45337	188.814102	3	0.453339,0.453401,0.453240	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	native	avx512	85596796	ok	0.455964	0.455947	0.456014	187.727092	3	0.455930,0.456065,0.455964	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	85596796	ok	1.755849	1.748829	2.384874	48.74952	3	1.741808,1.755849,3.013898	scalar
+pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	85596796	ok	0.783557	0.778909	0.794731	109.241314	3	0.805906,0.783557,0.774261	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	85596796	ok	0.770624	0.769305	0.787821	111.074656	3	0.805019,0.767986,0.770624	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	native	scalar	85596796	ok	0.68707	0.68682	0.687534	124.582351	3	0.687070,0.687997,0.686570	scalar
+pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	native	avx2	85596796	ok	0.23055	0.230452	0.230657	371.272158	3	0.230550,0.230764,0.230354	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	native	avx512	85596796	ok	0.229867	0.229849	0.229932	372.375313	3	0.229867,0.229997,0.229831	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	85596796	ok	0.858651	0.857834	0.858885	99.687528	3	0.857016,0.859120,0.858651	scalar
+pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	85596796	ok	0.390599	0.390075	0.39064	219.142384	3	0.389551,0.390599,0.390680	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	85596796	ok	0.389359	0.389301	0.389683	219.840291	3	0.390007,0.389244,0.389359	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	native	scalar	85596796	ok	0.37652	0.372217	0.390159	227.336651	3	0.376520,0.403798,0.367915	scalar
+pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	native	avx2	85596796	ok	0.143807	0.134299	0.147095	595.219955	3	0.150384,0.124791,0.143807	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	native	avx512	85596796	ok	0.155974	0.155574	0.157222	548.788875	3	0.155974,0.155173,0.158471	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	85596796	ok	0.473069	0.462724	0.492969	180.939347	3	0.473069,0.452378,0.512869	scalar
+pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	85596796	ok	0.212162	0.211156	0.240095	403.450175	3	0.212162,0.268028,0.210151	avx2
+pbmc_multiome	atac_peaks	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	85596796	ok	0.247889	0.230362	0.25725	345.302922	3	0.212836,0.266611,0.247889	avx2

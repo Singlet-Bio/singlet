@@ -100,7 +100,7 @@ def netsweep_section(cfg: Config, N: Numbers, out: Path) -> None:
     ds = cfg.get("report", {}).get("netsweep_dataset", "hlca_core") if isinstance(cfg.get("report"), dict) else "hlca_core"
     if ds not in {r["dataset"] for r in rows}:
         ds = sorted({r["dataset"] for r in rows})[-1]
-    N.put("ns-dataset", ds.replace("_", "\\_"))
+    N.put("ns-dataset", DS_LABELS.get(ds, ds.replace("_", r"\_")))
     lat = [r for r in rows if r["dataset"] == ds and r["grid"] == "latency"]
     rtts = sorted({int(float(r["rtt_ms"])) for r in lat})
     loaders = [ld for ld in cfg["netsweep"]["loaders"] if any(r["loader"] == ld for r in lat)]
@@ -228,7 +228,7 @@ def _group(rows):
     g = defaultdict(list)
     for r in rows:
         io = r.get("io_threads")
-        g[(r["dataset"], r["loader"] + (f"@{io}x{r.get('ahead')}" if io not in (None, "") else ""))].append(r)
+        g[(r["dataset"], r["loader"] + (f"@{io}x{r.get('ahead')}" if io not in (None, "", "NA") else ""))].append(r)
     return g
 
 

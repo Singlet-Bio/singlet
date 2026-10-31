@@ -37,3 +37,11 @@ s1_stream_seq	.s1, one request at a time	2	s3_10g	23714.7	1
 s1_stream_seq	.s1, one request at a time	3	s3_1g	23749.7	0
 s1_stream_seq	.s1, one request at a time	4	s3_1g_wan	2001.07	0
 s1_stream_seq	.s1, one request at a time	5	s3_0.1g	7197.18	0
+zarr3_shard	Zarr v3 sharded	0	local	5577.57	0
+zarr3_shard	Zarr v3 sharded	1	nfs	8427.07	0
+zarr3_shard	Zarr v3 sharded	2	s3_10g	7700.93	1
+zarr3_shard	Zarr v3 sharded	3	s3_1g	7542.05	0
+zarr3_shard	Zarr v3 sharded	4	s3_1g_wan	1408.09	0
+zarr3_shard	Zarr v3 sharded	5	s3_0.1g	2403.6	0
+scdataset_default	scDataset, fetch 16	0	local	6050.05	0
+scdataset_default	scDataset, fetch 16	1	nfs	4635.35	0

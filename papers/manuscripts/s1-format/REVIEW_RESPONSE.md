@@ -115,3 +115,48 @@ major revision. Their reports are not in the repository.
 7. **Write.** Write time and peak memory on the timing host.
 8. **Format.** Optional per-chunk checksums, a self-contained specification of the cells table and packs, test vectors,
    and a bit-flip experiment.
+
+# Internal peer review, round 3: measurements for the round-2 proposals
+
+All on Clipper. The campaign ran on the paper's branch, the decode stage on the b001–b004 nodes and the rest on the same
+hardware; `singlet` 1.3.3 (PyPI) was released during the campaign and is the package for the new loader runs.
+
+## Done
+
+1. **Decode protocol.** Before timing, each process writes and reads a 60×40 matrix in the same format, untimed. The
+   first cold repeat is now a median 1.00× the median of three (90th percentile 1.08×, 1,238 configurations). The
+   controller cache cannot be flushed from a job (a file just written reads at about 5 GB/s after 16 GB of other I/O,
+   against 1.4 GB/s from the disk). Methods says so, and "cold" is defined as evicted from memory.
+2. **Latency and requests in flight.** Added round-trip times of 0–200 ms at 1 Gbit/s, with CDFs at 30 ms and 1–64
+   requests in flight with 0–8 minibatches ahead (Fig. `fig_reads` a–c). The `.s1` reader with 1.3.2's settings fell
+   from 57,000 cells/s to 16,000 at 30 ms; 64 requests restore it to 59,000 (70% of the link). This led to **1.3.3**: 32
+   requests and four minibatches ahead by default, and a fix for `S1Cells` under forked DataLoader workers.
+3. **A real object store.** Cloudflare R2 through a Worker that serves the bucket by range (Table `tab:r2`). Read from a
+   cluster node over the public internet, **not from a cloud VM**: about 70 ms per request, 15 ms of it to the edge.
+   On HLCA core: first minibatch 0.67 s (`.s1`), 1.5 s (AnnData Zarr), 2.1 s (Zarr v3), 101 s (download the h5ad).
+   Sustained: 6,100 / 15,100 / 23,200 cells/s for `.s1` at 1.3.2 settings, 1.3.3 defaults and 64×8, against 540 and 340
+   for the two Zarr layouts. Per epoch: 0.92 GiB in 8,835 requests, $0.086 at S3 prices, against $1.76 for AnnData Zarr.
+   Limitations names the single path, time of day and list prices.
+4. **Random-access costs.** Bytes, requests and over-read per minibatch from each format's own chunk index, and a
+   chunk-size sweep on three matrices (Table `tab:access`, Fig. `fig_reads` d), 29 matrices × 200 minibatches. `.s1`:
+   761 KiB in 8 range requests, over-read 1.4. h5ad gzip: 2,533 KiB in 22 requests. AnnData Zarr: 8,164 KiB in 22,
+   over-read 7.9. On HLCA core, 4,096-non-zero chunks bring the over-read to 1.0 for an 8% larger file, and
+   393,216-non-zero chunks raise it to 2.0 for a 0.5% smaller file, so the 49,152 default stays.
+5. **Baselines.**
+   - Sharded Zarr v3 control: CSR arrays in 49,152-element chunks (one `.s1` chunk), 64 per shard, Blosc zstd with
+     bit shuffling. It is 2.3× larger than `.s1` (12.0 against 5.3 bits per non-zero) and is in Fig. 1, Table 3, the
+     minibatch table and the R2 table. This is the generic-codec-at-the-same-granularity control; we did not put a
+     generic codec inside the `.s1` container itself.
+   - scDataset with its default `fetch_factor` (16) added to the minibatch table.
+   - DataLoader workers (Table `tab:workers`): scDataset gains 3.7× with four workers; `S1Cells` gains nothing,
+     because its decoding already uses all cores.
+7. **Write.** Write time and peak memory for every format on PBMC 10k, Tabula Muris FACS and HLCA core (Table
+   `tab:writecost`). The `.s1` writer is among the faster ones (119 s on HLCA core against 205 s for h5ad gzip and
+   915 s for TileDB-SOMA). It needs more memory than most (31 GB beyond the matrix against 9 GB for h5ad gzip). The
+   text says both.
+
+## Not done
+
+6. **Hardware** (AVX-512 VBMI2 and ARM). Clipper has neither; still a limitation.
+8. **Format** (per-chunk checksums, a self-contained specification of the cells table and packs, test vectors, a
+   bit-flip experiment). This needs format work, not measurement. It remains in Limitations and future work.

@@ -1,0 +1,7 @@
+dataset	matrix	format	batches	bytes_per_batch	requests_per_batch	requests_p90	needed_per_batch	overread	index_bytes	file_bytes	chunk_elems
+xenium_breast_rep1	rna	s1	200	256884.5	8.0	8.0	21139.331513	12.722908	9711	6910623	NA
+xenium_breast_rep1	rna	h5ad_gzip	200	258028.5	22.0	23.0	66252.330621	3.897469	302655	21658437	10356
+xenium_breast_rep1	rna	h5ad_lzf	200	495872.5	22.0	23.0	112631.571656	4.421985	644261	36820196	10356
+xenium_breast_rep1	rna	h5ad_none	200	1079136.0	22.0	23.0	282435.138656	3.854994	671232	92330392	10356
+xenium_breast_rep1	rna	tenx_h5	200	164967.0	23.0	24.0	39125.882906	4.266112	246577	12790576	10356
+xenium_breast_rep1	rna	zarr	200	3329455.0	18.0	18.2	61249.374187	55.044834	236074	20022929	165694

@@ -1,79 +1,82 @@
 dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
-xenium_breast_rep1	rna	main	local	csc_i32	1	cold	file		auto	10604415	ok	0.072365	0.0713	0.074482	146.540247	3	0.076598,0.072365,0.070235	
-xenium_breast_rep1	rna	main	local	csc_i32	4	cold	file		auto	10604415	ok	0.070843	0.070762	0.071598	149.688852	3	0.072353,0.070681,0.070843	
-xenium_breast_rep1	rna	main	local	csc_i32	4	warm	file		auto	10604415	ok	0.04421	0.044054	0.044266	239.866402	3	0.044210,0.044322,0.043898	
-xenium_breast_rep1	rna	main	local	mtx_gz	1	cold	file		auto	10604415	ok	1.467746	1.46524	1.479933	7.224964	3	1.492119,1.467746,1.462734	
-xenium_breast_rep1	rna	main	local	mtx_gz	4	cold	file		auto	10604415	ok	0.954736	0.94937	0.966603	11.107165	3	0.978469,0.954736,0.944004	
-xenium_breast_rep1	rna	main	local	mtx_gz	4	warm	file		auto	10604415	ok	0.930788	0.928361	0.935077	11.39294	3	0.939366,0.930788,0.925933	
-xenium_breast_rep1	rna	main	local	tenx_h5	1	cold	file		auto	10604415	ok	0.477683	0.476239	0.494082	22.199681	3	0.510480,0.477683,0.474794	
-xenium_breast_rep1	rna	main	local	tenx_h5	4	cold	file		auto	10604415	ok	0.471651	0.471155	0.487861	22.483604	3	0.504071,0.470659,0.471651	
-xenium_breast_rep1	rna	main	local	tenx_h5	4	warm	file		auto	10604415	ok	0.46493	0.464442	0.465269	22.808615	3	0.463955,0.464930,0.465608	
-xenium_breast_rep1	rna	main	local	h5ad_none	1	cold	file		auto	10604415	ok	0.193522	0.193018	0.530713	54.796945	3	0.867903,0.193522,0.192515	
-xenium_breast_rep1	rna	main	local	h5ad_none	4	cold	file		auto	10604415	ok	0.189766	0.188332	0.461573	55.88149	3	0.733379,0.189766,0.186898	
-xenium_breast_rep1	rna	main	local	h5ad_none	4	warm	file		auto	10604415	ok	0.157247	0.155117	0.157543	67.438065	3	0.157838,0.157247,0.152988	
-xenium_breast_rep1	rna	main	local	h5ad_gzip	1	cold	file		auto	10604415	ok	0.415488	0.412228	0.687613	25.522806	3	0.959737,0.408968,0.415488	
-xenium_breast_rep1	rna	main	local	h5ad_gzip	4	cold	file		auto	10604415	ok	0.418072	0.413016	0.748885	25.365073	3	1.079699,0.407960,0.418072	
-xenium_breast_rep1	rna	main	local	h5ad_gzip	4	warm	file		auto	10604415	ok	0.396752	0.395797	0.399797	26.728059	3	0.396752,0.394842,0.402842	
-xenium_breast_rep1	rna	main	local	h5ad_lzf	1	cold	file		auto	10604415	ok	0.283029	0.28218	0.555679	37.467617	3	0.828329,0.283029,0.281332	
-xenium_breast_rep1	rna	main	local	h5ad_lzf	4	cold	file		auto	10604415	ok	0.282239	0.280721	0.555577	37.572456	3	0.828915,0.282239,0.279204	
-xenium_breast_rep1	rna	main	local	h5ad_lzf	4	warm	file		auto	10604415	ok	0.267084	0.266443	0.269383	39.704432	3	0.267084,0.271683,0.265803	
-xenium_breast_rep1	rna	main	local	zarr	1	cold	file		auto	10604415	ok	0.140087	0.140034	0.48053	75.698526	3	0.820973,0.140087,0.139981	
-xenium_breast_rep1	rna	main	local	zarr	4	cold	file		auto	10604415	ok	0.139505	0.139351	0.419573	76.014362	3	0.699641,0.139505,0.139197	
-xenium_breast_rep1	rna	main	local	zarr	4	warm	file		auto	10604415	ok	0.118038	0.117331	0.120133	89.83917	3	0.116625,0.122228,0.118038	
-xenium_breast_rep1	rna	main	local	loom	1	cold	file		auto	10604415	ok	1.83783	1.831405	3.368737	5.770075	3	4.899644,1.837830,1.824981	
-xenium_breast_rep1	rna	main	local	loom	4	cold	file		auto	10604415	ok	1.918278	1.883737	3.43446	5.528091	3	4.950641,1.918278,1.849195	
-xenium_breast_rep1	rna	main	local	loom	4	warm	file		auto	10604415	ok	1.850067	1.842587	1.883261	5.731908	3	1.916455,1.850067,1.835107	
-xenium_breast_rep1	rna	main	local	soma	1	cold	file		auto	10604415	ok	0.783296	0.782384	1.206019	13.538192	3	1.628742,0.781471,0.783296	
-xenium_breast_rep1	rna	main	local	soma	4	cold	file		auto	10604415	ok	0.368884	0.358687	0.77066	28.747278	3	1.172435,0.368884,0.348489	
-xenium_breast_rep1	rna	main	local	soma	4	warm	file		auto	10604415	ok	0.364154	0.353529	0.364454	29.120696	3	0.342905,0.364154,0.364753	
-xenium_breast_rep1	rna	main	local	parquet_coo	1	cold	file		auto	10604415	ok	0.41825	0.414279	0.622585	25.354265	3	0.826920,0.410308,0.418250	
-xenium_breast_rep1	rna	main	local	parquet_coo	4	cold	file		auto	10604415	ok	0.34097	0.339166	0.48955	31.100734	3	0.638129,0.337362,0.340970	
-xenium_breast_rep1	rna	main	local	parquet_coo	4	warm	file		auto	10604415	ok	0.334082	0.327742	0.344303	31.741937	3	0.321402,0.334082,0.354524	
-xenium_breast_rep1	rna	main	local	csc_zstd19	1	cold	file		auto	10604415	ok	0.121951	0.120928	0.124605	86.95628	3	0.127260,0.121951,0.119904	
-xenium_breast_rep1	rna	main	local	csc_zstd19	4	cold	file		auto	10604415	ok	0.12043	0.119881	0.12301	88.054422	3	0.125589,0.120430,0.119332	
-xenium_breast_rep1	rna	main	local	csc_zstd19	4	warm	file		auto	10604415	ok	0.117133	0.116719	0.117291	90.533408	3	0.117450,0.117133,0.116306	
-xenium_breast_rep1	rna	main	local	rds_gz	1	cold	file		auto	10604415	ok	0.608805	0.563821	0.619408	17.418405	3	0.630010,0.518837,0.608805	
-xenium_breast_rep1	rna	main	local	rds_gz	4	cold	file		auto	10604415	ok	0.610539	0.565089	0.620072	17.368934	3	0.629604,0.519639,0.610539	
-xenium_breast_rep1	rna	main	local	rds_gz	4	warm	file		auto	10604415	ok	0.514276	0.511428	0.56018	20.620094	3	0.514276,0.606083,0.508581	
-xenium_breast_rep1	rna	main	local	rds_xz	1	cold	file		auto	10604415	ok	0.794648	0.74395	0.802495	13.344793	3	0.810342,0.693251,0.794648	
-xenium_breast_rep1	rna	main	local	rds_xz	4	cold	file		auto	10604415	ok	0.800593	0.751091	0.8098	13.245694	3	0.819006,0.701590,0.800593	
-xenium_breast_rep1	rna	main	local	rds_xz	4	warm	file		auto	10604415	ok	0.713376	0.709771	0.755359	14.865122	3	0.706166,0.797342,0.713376	
-xenium_breast_rep1	rna	main	local	bpcells	1	cold	file		auto	10604415	ok	1.43703	1.427399	3.060557	7.379399	3	4.684085,1.417768,1.437030	
-xenium_breast_rep1	rna	main	local	bpcells	4	cold	file		auto	10604415	ok	1.494178	1.450867	3.019788	7.097155	3	4.545398,1.407556,1.494178	
-xenium_breast_rep1	rna	main	local	bpcells	4	warm	file		auto	10604415	ok	1.459147	1.413744	1.461212	7.267543	3	1.368340,1.459147,1.463277	
-xenium_breast_rep1	rna	main	local	s1	1	cold	file	native	auto	10604415	ok	0.168675	0.163076	1.068751	62.868869	3	1.968828,0.157476,0.168675	avx2
-xenium_breast_rep1	rna	main	local	s1	1	cold	file	canonical	auto	10604415	ok	0.213399	0.211399	0.892828	49.692937	3	1.572257,0.213399,0.209399	avx2
-xenium_breast_rep1	rna	main	local	s1	4	cold	file	native	auto	10604415	ok	0.066296	0.065907	0.740037	159.955479	3	1.413777,0.065519,0.066296	avx2
-xenium_breast_rep1	rna	main	local	s1	4	cold	file	canonical	auto	10604415	ok	0.078686	0.078606	0.734813	134.769148	3	1.390939,0.078527,0.078686	avx2
-xenium_breast_rep1	rna	main	local	s1	4	warm	file	native	auto	10604415	ok	0.063526	0.063037	0.06358	166.929703	3	0.063634,0.063526,0.062548	avx2
-xenium_breast_rep1	rna	main	local	s1	4	warm	file	canonical	auto	10604415	ok	0.078405	0.078029	0.081071	135.252071	3	0.083737,0.078405,0.077653	avx2
-xenium_breast_rep1	rna	main	local	s1	1	warm	codec	native	scalar	10604415	ok	0.462945	0.459461	0.463351	22.906447	3	0.462945,0.455978,0.463758	scalar
-xenium_breast_rep1	rna	main	local	s1	1	warm	codec	native	avx2	10604415	ok	0.125409	0.12491	0.128016	84.558394	3	0.125409,0.124411,0.130622	avx2
-xenium_breast_rep1	rna	main	local	s1	1	warm	codec	native	avx512	10604415	ok	0.124064	0.123553	0.126545	85.475152	3	0.124064,0.123041,0.129025	avx2
-xenium_breast_rep1	rna	main	local	s1	1	warm	codec	canonical	scalar	10604415	ok	0.505953	0.50443	0.506245	20.959301	3	0.505953,0.502907,0.506538	scalar
-xenium_breast_rep1	rna	main	local	s1	1	warm	codec	canonical	avx2	10604415	ok	0.187632	0.185756	0.189114	56.517209	3	0.187632,0.190597,0.183880	avx2
-xenium_breast_rep1	rna	main	local	s1	1	warm	codec	canonical	avx512	10604415	ok	0.181636	0.181139	0.184145	58.382669	3	0.181636,0.186653,0.180642	avx2
-xenium_breast_rep1	rna	main	local	s1	4	warm	codec	native	scalar	10604415	ok	0.117692	0.117049	0.118021	90.103301	3	0.117692,0.116407,0.118349	scalar
-xenium_breast_rep1	rna	main	local	s1	4	warm	codec	native	avx2	10604415	ok	0.038124	0.038066	0.038422	278.158178	3	0.038721,0.038124,0.038008	avx2
-xenium_breast_rep1	rna	main	local	s1	4	warm	codec	native	avx512	10604415	ok	0.038985	0.038787	0.039113	272.01041	3	0.039242,0.038588,0.038985	avx2
-xenium_breast_rep1	rna	main	local	s1	4	warm	codec	canonical	scalar	10604415	ok	0.134802	0.134122	0.135905	78.66651	3	0.133442,0.137007,0.134802	scalar
-xenium_breast_rep1	rna	main	local	s1	4	warm	codec	canonical	avx2	10604415	ok	0.052681	0.052422	0.053011	201.29677	3	0.053342,0.052681,0.052163	avx2
-xenium_breast_rep1	rna	main	local	s1	4	warm	codec	canonical	avx512	10604415	ok	0.053044	0.052843	0.053201	199.918324	3	0.053358,0.053044,0.052642	avx2
-xenium_breast_rep1	rna	main	local	s1_pack	1	cold	file	native	auto	10604415	ok	0.166422	0.163068	0.852898	63.719902	3	1.539373,0.159714,0.166422	avx2
-xenium_breast_rep1	rna	main	local	s1_pack	1	cold	file	canonical	auto	10604415	ok	0.226706	0.226427	1.153082	46.776064	3	2.079458,0.226149,0.226706	avx2
-xenium_breast_rep1	rna	main	local	s1_pack	4	cold	file	native	auto	10604415	ok	0.066362	0.066118	0.73594	159.796845	3	1.405518,0.065875,0.066362	avx2
-xenium_breast_rep1	rna	main	local	s1_pack	4	cold	file	canonical	auto	10604415	ok	0.082357	0.081558	0.764474	128.761219	3	1.446591,0.082357,0.080759	avx2
-xenium_breast_rep1	rna	main	local	s1_pack	4	warm	file	native	auto	10604415	ok	0.062993	0.062595	0.063226	168.343257	3	0.063459,0.062993,0.062197	avx2
-xenium_breast_rep1	rna	main	local	s1_pack	4	warm	file	canonical	auto	10604415	ok	0.077364	0.076704	0.077411	137.071062	3	0.077364,0.077458,0.076044	avx2
-xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	10604415	ok	0.429523	0.429246	0.429825	24.688818	3	0.428970,0.429523,0.430127	scalar
-xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	10604415	ok	0.131399	0.131207	0.131471	80.703925	3	0.131543,0.131399,0.131014	avx2
-xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	10604415	ok	0.130084	0.129943	0.130137	81.519749	3	0.130190,0.130084,0.129803	avx2
-xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	10604415	ok	0.488009	0.487513	0.488149	21.729958	3	0.488009,0.487017,0.488289	scalar
-xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	10604415	ok	0.183236	0.183187	0.183428	57.872989	3	0.183621,0.183236,0.183138	avx2
-xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	10604415	ok	0.183045	0.183005	0.183063	57.933377	3	0.183080,0.183045,0.182964	avx2
-xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	10604415	ok	0.108904	0.108856	0.10897	97.373972	3	0.108904,0.108809,0.109037	scalar
-xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	10604415	ok	0.033205	0.033064	0.033267	319.361994	3	0.033330,0.033205,0.032923	avx2
-xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	10604415	ok	0.033213	0.033211	0.033253	319.285069	3	0.033213,0.033208,0.033293	avx2
-xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	10604415	ok	0.123312	0.123278	0.123393	85.996618	3	0.123245,0.123312,0.123474	scalar
-xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	10604415	ok	0.046636	0.046586	0.047326	227.38689	3	0.046536,0.046636,0.048017	avx2
-xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	10604415	ok	0.046818	0.046785	0.047873	226.502948	3	0.046818,0.046752,0.048928	avx2
+xenium_breast_rep1	rna	main	local	csc_i32	1	cold	file		auto	10604415	ok	0.071582	0.070919	0.072354	148.144327	3	0.073126,0.071582,0.070257	
+xenium_breast_rep1	rna	main	local	csc_i32	4	cold	file		auto	10604415	ok	0.070891	0.070621	0.07167	149.58735	3	0.072449,0.070891,0.070350	
+xenium_breast_rep1	rna	main	local	csc_i32	4	warm	file		auto	10604415	ok	0.043491	0.043175	0.043873	243.829751	3	0.044254,0.043491,0.042858	
+xenium_breast_rep1	rna	main	local	mtx_gz	1	cold	file		auto	10604415	ok	1.459211	1.455409	1.57187	7.267223	3	1.459211,1.451607,1.684528	
+xenium_breast_rep1	rna	main	local	mtx_gz	4	cold	file		auto	10604415	ok	0.944211	0.940916	0.967643	11.230976	3	0.944211,0.991074,0.937621	
+xenium_breast_rep1	rna	main	local	mtx_gz	4	warm	file		auto	10604415	ok	0.9422	0.932302	0.955989	11.254953	3	0.969777,0.922404,0.942200	
+xenium_breast_rep1	rna	main	local	tenx_h5	1	cold	file		auto	10604415	ok	0.473536	0.47314	0.473545	22.394091	3	0.473536,0.472744,0.473553	
+xenium_breast_rep1	rna	main	local	tenx_h5	4	cold	file		auto	10604415	ok	0.468602	0.467667	0.468712	22.629916	3	0.468822,0.466731,0.468602	
+xenium_breast_rep1	rna	main	local	tenx_h5	4	warm	file		auto	10604415	ok	0.461672	0.461017	0.462884	22.9696	3	0.460363,0.461672,0.464096	
+xenium_breast_rep1	rna	main	local	h5ad_none	1	cold	file		auto	10604415	ok	0.265402	0.263221	0.268723	39.956057	3	0.272045,0.265402,0.261040	
+xenium_breast_rep1	rna	main	local	h5ad_none	4	cold	file		auto	10604415	ok	0.256334	0.255535	0.263874	41.369531	3	0.271414,0.256334,0.254737	
+xenium_breast_rep1	rna	main	local	h5ad_none	4	warm	file		auto	10604415	ok	0.156327	0.155796	0.157663	67.834766	3	0.159000,0.156327,0.155266	
+xenium_breast_rep1	rna	main	local	h5ad_gzip	1	cold	file		auto	10604415	ok	0.424669	0.419842	0.425103	24.971009	3	0.424669,0.415015,0.425536	
+xenium_breast_rep1	rna	main	local	h5ad_gzip	4	cold	file		auto	10604415	ok	0.422271	0.42006	0.423163	25.112844	3	0.424056,0.417850,0.422271	
+xenium_breast_rep1	rna	main	local	h5ad_gzip	4	warm	file		auto	10604415	ok	0.40068	0.400641	0.404691	26.466015	3	0.400601,0.408701,0.400680	
+xenium_breast_rep1	rna	main	local	h5ad_lzf	1	cold	file		auto	10604415	ok	0.293433	0.292993	0.296402	36.139166	3	0.299371,0.293433,0.292553	
+xenium_breast_rep1	rna	main	local	h5ad_lzf	4	cold	file		auto	10604415	ok	0.291974	0.291109	0.295253	36.319766	3	0.298532,0.290244,0.291974	
+xenium_breast_rep1	rna	main	local	h5ad_lzf	4	warm	file		auto	10604415	ok	0.271826	0.270751	0.272052	39.011773	3	0.271826,0.272277,0.269677	
+xenium_breast_rep1	rna	main	local	zarr	1	cold	file		auto	10604415	ok	0.166952	0.166526	0.168409	63.517761	3	0.169866,0.166952,0.166099	
+xenium_breast_rep1	rna	main	local	zarr	4	cold	file		auto	10604415	ok	0.164021	0.163988	0.166495	64.652665	3	0.168969,0.164021,0.163955	
+xenium_breast_rep1	rna	main	local	zarr	4	warm	file		auto	10604415	ok	0.126415	0.125766	0.12665	83.885808	3	0.126415,0.126885,0.125118	
+xenium_breast_rep1	rna	main	local	loom	1	cold	file		auto	10604415	ok	1.985085	1.961292	1.991887	5.342046	3	1.937498,1.985085,1.998688	
+xenium_breast_rep1	rna	main	local	loom	4	cold	file		auto	10604415	ok	1.893914	1.888863	1.920072	5.599205	3	1.946230,1.883811,1.893914	
+xenium_breast_rep1	rna	main	local	loom	4	warm	file		auto	10604415	ok	1.850186	1.850142	1.859493	5.731539	3	1.850098,1.850186,1.868800	
+xenium_breast_rep1	rna	main	local	soma	1	cold	file		auto	10604415	ok	0.788788	0.78625	0.806447	13.443937	3	0.824107,0.788788,0.783712	
+xenium_breast_rep1	rna	main	local	soma	4	cold	file		auto	10604415	ok	0.523868	0.516349	0.523879	20.242542	3	0.508830,0.523890,0.523868	
+xenium_breast_rep1	rna	main	local	soma	4	warm	file		auto	10604415	ok	0.362045	0.352146	0.370326	29.290304	3	0.362045,0.342246,0.378607	
+xenium_breast_rep1	rna	main	local	parquet_coo	1	cold	file		auto	10604415	ok	0.421661	0.419745	0.444381	25.149177	3	0.467101,0.417829,0.421661	
+xenium_breast_rep1	rna	main	local	parquet_coo	4	cold	file		auto	10604415	ok	0.371611	0.365444	0.371945	28.536367	3	0.359278,0.371611,0.372279	
+xenium_breast_rep1	rna	main	local	parquet_coo	4	warm	file		auto	10604415	ok	0.336364	0.334321	0.356427	31.526589	3	0.332277,0.336364,0.376489	
+xenium_breast_rep1	rna	main	local	csc_zstd19	1	cold	file		auto	10604415	ok	0.131572	0.131487	0.134869	80.597655	3	0.138166,0.131402,0.131572	
+xenium_breast_rep1	rna	main	local	csc_zstd19	4	cold	file		auto	10604415	ok	0.1297	0.12952	0.131908	81.761327	3	0.134115,0.129700,0.129341	
+xenium_breast_rep1	rna	main	local	csc_zstd19	4	warm	file		auto	10604415	ok	0.122111	0.121987	0.122582	86.842387	3	0.123053,0.122111,0.121864	
+xenium_breast_rep1	rna	main	local	rds_gz	1	cold	file		auto	10604415	ok	0.613476	0.567672	0.623242	17.285799	3	0.633009,0.521868,0.613476	
+xenium_breast_rep1	rna	main	local	rds_gz	4	cold	file		auto	10604415	ok	0.612329	0.566163	0.621446	17.318179	3	0.630563,0.519998,0.612329	
+xenium_breast_rep1	rna	main	local	rds_gz	4	warm	file		auto	10604415	ok	0.517445	0.514567	0.562884	20.493807	3	0.517445,0.608322,0.511690	
+xenium_breast_rep1	rna	main	local	rds_xz	1	cold	file		auto	10604415	ok	0.776818	0.731378	0.788571	13.651093	3	0.800324,0.685938,0.776818	
+xenium_breast_rep1	rna	main	local	rds_xz	4	cold	file		auto	10604415	ok	0.77474	0.729981	0.7851	13.687713	3	0.795460,0.685222,0.774740	
+xenium_breast_rep1	rna	main	local	rds_xz	4	warm	file		auto	10604415	ok	0.681227	0.676917	0.726703	15.566629	3	0.681227,0.772178,0.672606	
+xenium_breast_rep1	rna	main	local	bpcells	1	cold	file		auto	10604415	ok	1.4767	1.470517	1.927236	7.181156	3	2.377772,1.476700,1.464334	
+xenium_breast_rep1	rna	main	local	bpcells	4	cold	file		auto	10604415	ok	1.510159	1.509913	1.945723	7.02205	3	2.381287,1.510159,1.509667	
+xenium_breast_rep1	rna	main	local	bpcells	4	warm	file		auto	10604415	ok	1.471654	1.464602	1.493368	7.205779	3	1.471654,1.457549,1.515083	
+xenium_breast_rep1	rna	main	local	s1	1	cold	file	native	auto	10604415	ok	0.154772	0.154013	0.157138	68.516357	3	0.154772,0.153254,0.159504	avx2
+xenium_breast_rep1	rna	main	local	s1	1	cold	file	canonical	auto	10604415	ok	0.210056	0.209651	0.213195	50.483773	3	0.210056,0.209246,0.216334	avx2
+xenium_breast_rep1	rna	main	local	s1	4	cold	file	native	auto	10604415	ok	0.078676	0.078603	0.079284	134.785953	3	0.079892,0.078530,0.078676	avx2
+xenium_breast_rep1	rna	main	local	s1	4	cold	file	canonical	auto	10604415	ok	0.094945	0.090888	0.095081	111.689866	3	0.086831,0.094945,0.095217	avx2
+xenium_breast_rep1	rna	main	local	s1	4	warm	file	native	auto	10604415	ok	0.073341	0.069705	0.073736	144.589755	3	0.073341,0.066069,0.074131	avx2
+xenium_breast_rep1	rna	main	local	s1	4	warm	file	canonical	auto	10604415	ok	0.090821	0.083758	0.09136	116.761572	3	0.091900,0.090821,0.076694	avx2
+xenium_breast_rep1	rna	main	local	s1	1	warm	codec	native	scalar	10604415	ok	0.4524	0.452212	0.453202	23.440363	3	0.454004,0.452025,0.452400	scalar
+xenium_breast_rep1	rna	main	local	s1	1	warm	codec	native	avx2	10604415	ok	0.127028	0.126662	0.129785	83.480808	3	0.127028,0.126296,0.132542	avx2
+xenium_breast_rep1	rna	main	local	s1	1	warm	codec	native	avx512	10604415	ok	0.13807	0.137199	0.140014	76.804475	3	0.136327,0.141958,0.138070	avx2
+xenium_breast_rep1	rna	main	local	s1	1	warm	codec	canonical	scalar	10604415	ok	0.509117	0.507909	0.509413	20.829013	3	0.509708,0.506700,0.509117	scalar
+xenium_breast_rep1	rna	main	local	s1	1	warm	codec	canonical	avx2	10604415	ok	0.184313	0.183248	0.185786	57.534687	3	0.187259,0.184313,0.182183	avx2
+xenium_breast_rep1	rna	main	local	s1	1	warm	codec	canonical	avx512	10604415	ok	0.183915	0.183883	0.186229	57.659475	3	0.183915,0.188544,0.183852	avx2
+xenium_breast_rep1	rna	main	local	s1	4	warm	codec	native	scalar	10604415	ok	0.147689	0.133999	0.148643	71.802104	3	0.120309,0.147689,0.149596	scalar
+xenium_breast_rep1	rna	main	local	s1	4	warm	codec	native	avx2	10604415	ok	0.049754	0.044772	0.062157	213.135508	3	0.039790,0.049754,0.074559	avx2
+xenium_breast_rep1	rna	main	local	s1	4	warm	codec	native	avx512	10604415	ok	0.048852	0.048777	0.049052	217.070205	3	0.049252,0.048852,0.048701	avx2
+xenium_breast_rep1	rna	main	local	s1	4	warm	codec	canonical	scalar	10604415	ok	0.19491	0.171398	0.198795	54.406859	3	0.194910,0.202680,0.147887	scalar
+xenium_breast_rep1	rna	main	local	s1	4	warm	codec	canonical	avx2	10604415	ok	0.063969	0.063422	0.065503	165.774648	3	0.062874,0.067038,0.063969	avx2
+xenium_breast_rep1	rna	main	local	s1	4	warm	codec	canonical	avx512	10604415	ok	0.068346	0.068283	0.077269	155.157535	3	0.086193,0.068346,0.068221	avx2
+xenium_breast_rep1	rna	main	local	s1_pack	1	cold	file	native	auto	10604415	ok	0.154892	0.154057	0.156857	68.463087	3	0.154892,0.153222,0.158821	avx2
+xenium_breast_rep1	rna	main	local	s1_pack	1	cold	file	canonical	auto	10604415	ok	0.211863	0.211204	0.214865	50.053269	3	0.211863,0.210545,0.217868	avx2
+xenium_breast_rep1	rna	main	local	s1_pack	4	cold	file	native	auto	10604415	ok	0.078262	0.077882	0.079345	135.498828	3	0.080427,0.078262,0.077501	avx2
+xenium_breast_rep1	rna	main	local	s1_pack	4	cold	file	canonical	auto	10604415	ok	0.098177	0.097582	0.101509	108.013282	3	0.104841,0.096988,0.098177	avx2
+xenium_breast_rep1	rna	main	local	s1_pack	4	warm	file	native	auto	10604415	ok	0.095242	0.089261	0.096598	111.341527	3	0.095242,0.097955,0.083279	avx2
+xenium_breast_rep1	rna	main	local	s1_pack	4	warm	file	canonical	auto	10604415	ok	0.091027	0.090176	0.091427	116.497552	3	0.089325,0.091827,0.091027	avx2
+xenium_breast_rep1	rna	main	local	zarr3	1	cold	file		auto	10604415	ok	0.178349	0.174781	0.181521	59.45874	3	0.178349,0.171212,0.184692	
+xenium_breast_rep1	rna	main	local	zarr3	4	cold	file		auto	10604415	ok	0.156833	0.156327	0.176151	67.616122	3	0.156833,0.155821,0.195470	
+xenium_breast_rep1	rna	main	local	zarr3	4	warm	file		auto	10604415	ok	0.223375	0.203781	0.225057	47.473695	3	0.184187,0.226740,0.223375	
+xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	10604415	ok	0.427093	0.427055	0.427118	24.829288	3	0.427093,0.427017,0.427142	scalar
+xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	10604415	ok	0.127044	0.126953	0.127088	83.470412	3	0.126862,0.127132,0.127044	avx2
+xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	10604415	ok	0.126256	0.126202	0.126363	83.991375	3	0.126470,0.126256,0.126148	avx2
+xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	10604415	ok	0.485807	0.485436	0.485874	21.828452	3	0.485065,0.485807,0.485941	scalar
+xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	10604415	ok	0.181221	0.181175	0.181414	58.51648	3	0.181130,0.181221,0.181606	avx2
+xenium_breast_rep1	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	10604415	ok	0.18149	0.181417	0.181544	58.429748	3	0.181343,0.181490,0.181598	avx2
+xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	10604415	ok	0.108432	0.108314	0.112295	97.797836	3	0.116158,0.108196,0.108432	scalar
+xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	10604415	ok	0.04523	0.039674	0.054787	234.455339	3	0.064343,0.045230,0.034118	avx2
+xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	10604415	ok	0.032022	0.031892	0.032127	331.160296	3	0.032231,0.032022,0.031761	avx2
+xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	10604415	ok	0.122997	0.1228	0.12315	86.216859	3	0.122602,0.123304,0.122997	scalar
+xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	10604415	ok	0.045942	0.045923	0.046301	230.821797	3	0.046660,0.045905,0.045942	avx2
+xenium_breast_rep1	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	10604415	ok	0.046815	0.046814	0.046834	226.517462	3	0.046815,0.046853,0.046813	avx2

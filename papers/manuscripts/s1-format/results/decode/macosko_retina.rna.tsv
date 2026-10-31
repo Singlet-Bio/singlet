@@ -1,79 +1,82 @@
 dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
-macosko_retina	rna	main	local	csc_i32	1	cold	file		auto	37879696	ok	0.273799	0.272727	0.274926	138.348344	3	0.276052,0.273799,0.271655	
-macosko_retina	rna	main	local	csc_i32	4	cold	file		auto	37879696	ok	0.273953	0.273544	0.275609	138.270904	3	0.277265,0.273953,0.273135	
-macosko_retina	rna	main	local	csc_i32	4	warm	file		auto	37879696	ok	0.112708	0.112083	0.113267	336.086248	3	0.113826,0.112708,0.111457	
-macosko_retina	rna	main	local	mtx_gz	1	cold	file		auto	37879696	ok	5.150207	5.133197	5.163872	7.354986	3	5.177537,5.116187,5.150207	
-macosko_retina	rna	main	local	mtx_gz	4	cold	file		auto	37879696	ok	2.996454	2.971288	3.009736	12.641508	3	2.996454,2.946122,3.023018	
-macosko_retina	rna	main	local	mtx_gz	4	warm	file		auto	37879696	ok	2.924755	2.915261	2.941681	12.951409	3	2.924755,2.905768,2.958608	
-macosko_retina	rna	main	local	tenx_h5	1	cold	file		auto	37879696	ok	1.445514	1.443726	1.461533	26.205009	3	1.477552,1.445514,1.441938	
-macosko_retina	rna	main	local	tenx_h5	4	cold	file		auto	37879696	ok	1.446324	1.445371	1.46227	26.190334	3	1.478216,1.446324,1.444419	
-macosko_retina	rna	main	local	tenx_h5	4	warm	file		auto	37879696	ok	1.420333	1.419514	1.421487	26.669594	3	1.422642,1.420333,1.418696	
-macosko_retina	rna	main	local	h5ad_none	1	cold	file		auto	37879696	ok	0.325719	0.325614	0.597571	116.295591	3	0.869423,0.325719,0.325509	
-macosko_retina	rna	main	local	h5ad_none	4	cold	file		auto	37879696	ok	0.324099	0.323374	0.596764	116.876921	3	0.869428,0.324099,0.322649	
-macosko_retina	rna	main	local	h5ad_none	4	warm	file		auto	37879696	ok	0.18696	0.186752	0.188148	202.608818	3	0.189337,0.186960,0.186544	
-macosko_retina	rna	main	local	h5ad_gzip	1	cold	file		auto	37879696	ok	1.254686	1.253975	1.52578	30.190579	3	1.796875,1.254686,1.253263	
-macosko_retina	rna	main	local	h5ad_gzip	4	cold	file		auto	37879696	ok	1.255941	1.254919	1.52704	30.160399	3	1.798139,1.255941,1.253896	
-macosko_retina	rna	main	local	h5ad_gzip	4	warm	file		auto	37879696	ok	1.211962	1.210633	1.217131	31.25485	3	1.222299,1.209303,1.211962	
-macosko_retina	rna	main	local	h5ad_lzf	1	cold	file		auto	37879696	ok	0.781655	0.769605	1.021896	48.4609	3	1.262136,0.757555,0.781655	
-macosko_retina	rna	main	local	h5ad_lzf	4	cold	file		auto	37879696	ok	0.753718	0.738782	1.013219	50.257115	3	1.272721,0.753718,0.723846	
-macosko_retina	rna	main	local	h5ad_lzf	4	warm	file		auto	37879696	ok	0.666132	0.664642	0.668313	56.86515	3	0.670494,0.663151,0.666132	
-macosko_retina	rna	main	local	zarr	1	cold	file		auto	37879696	ok	0.297503	0.296929	0.582215	127.325529	3	0.866928,0.297503,0.296355	
-macosko_retina	rna	main	local	zarr	4	cold	file		auto	37879696	ok	0.348805	0.329682	0.581388	108.598502	3	0.813971,0.310558,0.348805	
-macosko_retina	rna	main	local	zarr	4	warm	file		auto	37879696	ok	0.250576	0.249935	0.271983	151.170785	3	0.249294,0.293390,0.250576	
-macosko_retina	rna	main	local	loom	1	cold	file		auto	37879696	ok	23.273494	23.140572	24.684399	1.62759	3	26.095304,23.273494,23.007649	
-macosko_retina	rna	main	local	loom	4	cold	file		auto	37879696	ok	23.662455	23.558529	24.920366	1.600835	3	26.178277,23.662455,23.454603	
-macosko_retina	rna	main	local	loom	4	warm	file		auto	37879696	ok	23.274821	23.225366	23.276792	1.627497	3	23.175910,23.274821,23.278763	
-macosko_retina	rna	main	local	soma	1	cold	file		auto	37879696	ok	2.345521	2.341863	2.828459	16.149802	3	3.311398,2.338205,2.345521	
-macosko_retina	rna	main	local	soma	4	cold	file		auto	37879696	ok	1.020662	0.972788	1.28574	37.112885	3	1.550819,0.924913,1.020662	
-macosko_retina	rna	main	local	soma	4	warm	file		auto	37879696	ok	0.884487	0.8823	0.885121	42.826719	3	0.880113,0.884487,0.885754	
-macosko_retina	rna	main	local	parquet_coo	1	cold	file		auto	37879696	ok	1.284531	1.275352	1.433399	29.489115	3	1.582266,1.266173,1.284531	
-macosko_retina	rna	main	local	parquet_coo	4	cold	file		auto	37879696	ok	0.96281	0.953939	1.091811	39.342872	3	1.220812,0.945068,0.962810	
-macosko_retina	rna	main	local	parquet_coo	4	warm	file		auto	37879696	ok	0.839232	0.833219	0.852594	45.136125	3	0.827206,0.839232,0.865956	
-macosko_retina	rna	main	local	csc_zstd19	1	cold	file		auto	37879696	ok	0.51322	0.512588	0.516456	73.807942	3	0.519692,0.513220,0.511955	
-macosko_retina	rna	main	local	csc_zstd19	4	cold	file		auto	37879696	ok	0.515288	0.514915	0.520224	73.511763	3	0.525161,0.515288,0.514542	
-macosko_retina	rna	main	local	csc_zstd19	4	warm	file		auto	37879696	ok	0.479484	0.47801	0.479702	79.001035	3	0.479484,0.476536,0.479920	
-macosko_retina	rna	main	local	rds_gz	1	cold	file		auto	37879696	ok	1.911231	1.910082	1.953044	19.819525	3	1.994856,1.911231,1.908932	
-macosko_retina	rna	main	local	rds_gz	4	cold	file		auto	37879696	ok	1.911658	1.909589	1.955178	19.815098	3	1.998699,1.911658,1.907520	
-macosko_retina	rna	main	local	rds_gz	4	warm	file		auto	37879696	ok	1.994086	1.940383	1.999599	18.996024	3	1.886681,1.994086,2.005111	
-macosko_retina	rna	main	local	rds_xz	1	cold	file		auto	37879696	ok	2.770486	2.766859	2.808531	13.672582	3	2.846576,2.770486,2.763232	
-macosko_retina	rna	main	local	rds_xz	4	cold	file		auto	37879696	ok	2.765209	2.761127	2.810064	13.698672	3	2.854919,2.765209,2.757044	
-macosko_retina	rna	main	local	rds_xz	4	warm	file		auto	37879696	ok	2.722667	2.722606	2.727395	13.91272	3	2.732124,2.722667,2.722545	
-macosko_retina	rna	main	local	bpcells	1	cold	file		auto	37879696	ok	4.607112	4.604224	6.262728	8.222004	3	7.918344,4.607112,4.601335	
-macosko_retina	rna	main	local	bpcells	4	cold	file		auto	37879696	ok	4.631951	4.624609	6.316621	8.177913	3	8.001290,4.631951,4.617266	
-macosko_retina	rna	main	local	bpcells	4	warm	file		auto	37879696	ok	4.623853	4.621104	4.647023	8.192237	3	4.670193,4.623853,4.618356	
-macosko_retina	rna	main	local	s1	1	cold	file	native	auto	37879696	ok	0.45078	0.447143	1.385076	84.031515	3	2.319372,0.450780,0.443506	avx2
-macosko_retina	rna	main	local	s1	1	cold	file	canonical	auto	37879696	ok	0.702582	0.700457	1.359799	53.914984	3	2.017016,0.702582,0.698332	avx2
-macosko_retina	rna	main	local	s1	4	cold	file	native	auto	37879696	ok	0.163699	0.160819	0.816571	231.398661	3	1.469444,0.163699,0.157939	avx2
-macosko_retina	rna	main	local	s1	4	cold	file	canonical	auto	37879696	ok	0.227091	0.225151	0.879299	166.804108	3	1.531507,0.227091,0.223212	avx2
-macosko_retina	rna	main	local	s1	4	warm	file	native	auto	37879696	ok	0.147469	0.146393	0.151174	256.865753	3	0.154879,0.145318,0.147469	avx2
-macosko_retina	rna	main	local	s1	4	warm	file	canonical	auto	37879696	ok	0.201188	0.201121	0.203847	188.280249	3	0.206507,0.201188,0.201055	avx2
-macosko_retina	rna	main	local	s1	1	warm	codec	native	scalar	37879696	ok	1.366802	1.342777	1.401644	27.714102	3	1.436485,1.366802,1.318751	scalar
-macosko_retina	rna	main	local	s1	1	warm	codec	native	avx2	37879696	ok	0.41319	0.412169	0.414952	91.676252	3	0.413190,0.411148,0.416714	avx2
-macosko_retina	rna	main	local	s1	1	warm	codec	native	avx512	37879696	ok	0.413891	0.412628	0.415527	91.521003	3	0.413891,0.411366,0.417163	avx2
-macosko_retina	rna	main	local	s1	1	warm	codec	canonical	scalar	37879696	ok	1.581581	1.581161	1.586003	23.950519	3	1.590425,1.580741,1.581581	scalar
-macosko_retina	rna	main	local	s1	1	warm	codec	canonical	avx2	37879696	ok	0.664992	0.664251	0.668135	56.962624	3	0.663509,0.671278,0.664992	avx2
-macosko_retina	rna	main	local	s1	1	warm	codec	canonical	avx512	37879696	ok	0.665173	0.663956	0.668002	56.947102	3	0.662739,0.670830,0.665173	avx2
-macosko_retina	rna	main	local	s1	4	warm	codec	native	scalar	37879696	ok	0.34556	0.345133	0.346048	109.618133	3	0.346536,0.345560,0.344705	scalar
-macosko_retina	rna	main	local	s1	4	warm	codec	native	avx2	37879696	ok	0.121073	0.120758	0.121849	312.865395	3	0.121073,0.120442,0.122625	avx2
-macosko_retina	rna	main	local	s1	4	warm	codec	native	avx512	37879696	ok	0.121007	0.120895	0.121137	313.03627	3	0.120783,0.121007,0.121267	avx2
-macosko_retina	rna	main	local	s1	4	warm	codec	canonical	scalar	37879696	ok	0.410093	0.409545	0.410538	92.368498	3	0.410093,0.408997,0.410983	scalar
-macosko_retina	rna	main	local	s1	4	warm	codec	canonical	avx2	37879696	ok	0.181468	0.181297	0.182333	208.740202	3	0.183197,0.181125,0.181468	avx2
-macosko_retina	rna	main	local	s1	4	warm	codec	canonical	avx512	37879696	ok	0.181661	0.181536	0.182057	208.518226	3	0.181661,0.182453,0.181411	avx2
-macosko_retina	rna	main	local	s1_pack	1	cold	file	native	auto	37879696	ok	0.460764	0.451316	1.109842	82.21058	3	1.758920,0.460764,0.441868	avx2
-macosko_retina	rna	main	local	s1_pack	1	cold	file	canonical	auto	37879696	ok	0.702266	0.701073	1.357273	53.93922	3	2.012279,0.702266,0.699880	avx2
-macosko_retina	rna	main	local	s1_pack	4	cold	file	native	auto	37879696	ok	0.163244	0.161494	0.828681	232.043654	3	1.494119,0.163244,0.159744	avx2
-macosko_retina	rna	main	local	s1_pack	4	cold	file	canonical	auto	37879696	ok	0.2261	0.224233	0.892249	167.535452	3	1.558398,0.222366,0.226100	avx2
-macosko_retina	rna	main	local	s1_pack	4	warm	file	native	auto	37879696	ok	0.14465	0.140694	0.148403	261.871	3	0.144650,0.136738,0.152156	avx2
-macosko_retina	rna	main	local	s1_pack	4	warm	file	canonical	auto	37879696	ok	0.207577	0.202564	0.21091	182.485032	3	0.214244,0.207577,0.197551	avx2
-macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	37879696	ok	1.345743	1.34496	1.346056	28.147793	3	1.346370,1.345743,1.344177	scalar
-macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	37879696	ok	0.389113	0.389064	0.389174	97.348832	3	0.389235,0.389113,0.389014	avx2
-macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	37879696	ok	0.385662	0.385637	0.385737	98.219934	3	0.385811,0.385613,0.385662	avx2
-macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	37879696	ok	1.610354	1.610318	1.613145	23.522589	3	1.615937,1.610282,1.610354	scalar
-macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	37879696	ok	0.655022	0.654931	0.656307	57.829655	3	0.655022,0.657591,0.654840	avx2
-macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	37879696	ok	0.654396	0.654243	0.655666	57.884975	3	0.654396,0.656936,0.654091	avx2
-macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	37879696	ok	0.339697	0.339244	0.339985	111.510246	3	0.339697,0.338790,0.340273	scalar
-macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	37879696	ok	0.099178	0.099128	0.099178	381.936478	3	0.099078,0.099178,0.099178	avx2
-macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	37879696	ok	0.099303	0.099261	0.099308	381.455706	3	0.099218,0.099303,0.099314	avx2
-macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	37879696	ok	0.406818	0.406575	0.407489	93.112144	3	0.408159,0.406818,0.406333	scalar
-macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	37879696	ok	0.166111	0.16611	0.167537	228.038456	3	0.168962,0.166110,0.166111	avx2
-macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	37879696	ok	0.168256	0.167563	0.16917	225.131324	3	0.170083,0.166870,0.168256	avx2
+macosko_retina	rna	main	local	csc_i32	1	cold	file		auto	37879696	ok	0.278296	0.276113	0.278861	136.11289	3	0.279426,0.278296,0.273930	
+macosko_retina	rna	main	local	csc_i32	4	cold	file		auto	37879696	ok	0.275662	0.275388	0.277602	137.413798	3	0.279542,0.275115,0.275662	
+macosko_retina	rna	main	local	csc_i32	4	warm	file		auto	37879696	ok	0.115415	0.115111	0.116605	328.205383	3	0.117795,0.115415,0.114807	
+macosko_retina	rna	main	local	mtx_gz	1	cold	file		auto	37879696	ok	5.174507	5.158611	5.275608	7.320445	3	5.174507,5.142715,5.376708	
+macosko_retina	rna	main	local	mtx_gz	4	cold	file		auto	37879696	ok	2.95583	2.948364	2.984274	12.815248	3	2.955830,2.940898,3.012718	
+macosko_retina	rna	main	local	mtx_gz	4	warm	file		auto	37879696	ok	2.938614	2.928674	2.957727	12.890325	3	2.938614,2.976839,2.918734	
+macosko_retina	rna	main	local	tenx_h5	1	cold	file		auto	37879696	ok	1.446373	1.444941	1.449634	26.189446	3	1.452896,1.446373,1.443509	
+macosko_retina	rna	main	local	tenx_h5	4	cold	file		auto	37879696	ok	1.449523	1.447107	1.452442	26.132523	3	1.455362,1.449523,1.444690	
+macosko_retina	rna	main	local	tenx_h5	4	warm	file		auto	37879696	ok	1.422309	1.422208	1.425062	26.632536	3	1.427814,1.422309,1.422107	
+macosko_retina	rna	main	local	h5ad_none	1	cold	file		auto	37879696	ok	0.339542	0.33884	0.344928	111.561018	3	0.350314,0.339542,0.338137	
+macosko_retina	rna	main	local	h5ad_none	4	cold	file		auto	37879696	ok	0.341793	0.339694	0.344318	110.826564	3	0.346844,0.341793,0.337596	
+macosko_retina	rna	main	local	h5ad_none	4	warm	file		auto	37879696	ok	0.19154	0.191444	0.19268	197.763572	3	0.193820,0.191347,0.191540	
+macosko_retina	rna	main	local	h5ad_gzip	1	cold	file		auto	37879696	ok	1.25366	1.253621	1.257922	30.215297	3	1.262184,1.253582,1.253660	
+macosko_retina	rna	main	local	h5ad_gzip	4	cold	file		auto	37879696	ok	1.253929	1.253361	1.256107	30.208802	3	1.258284,1.252793,1.253929	
+macosko_retina	rna	main	local	h5ad_gzip	4	warm	file		auto	37879696	ok	1.223216	1.216639	1.264517	30.967306	3	1.223216,1.210063,1.305818	
+macosko_retina	rna	main	local	h5ad_lzf	1	cold	file		auto	37879696	ok	0.755164	0.740829	0.770315	50.160875	3	0.785467,0.755164,0.726494	
+macosko_retina	rna	main	local	h5ad_lzf	4	cold	file		auto	37879696	ok	0.734712	0.730835	0.735645	51.557226	3	0.734712,0.736579,0.726958	
+macosko_retina	rna	main	local	h5ad_lzf	4	warm	file		auto	37879696	ok	0.667355	0.665602	0.66935	56.760926	3	0.671346,0.663848,0.667355	
+macosko_retina	rna	main	local	zarr	1	cold	file		auto	37879696	ok	0.310841	0.310372	0.313725	121.861875	3	0.316608,0.310841,0.309902	
+macosko_retina	rna	main	local	zarr	4	cold	file		auto	37879696	ok	0.351686	0.31796	0.363804	107.708801	3	0.284234,0.375922,0.351686	
+macosko_retina	rna	main	local	zarr	4	warm	file		auto	37879696	ok	0.331383	0.323536	0.3429	114.307786	3	0.315689,0.354417,0.331383	
+macosko_retina	rna	main	local	loom	1	cold	file		auto	37879696	ok	23.062135	23.051522	23.202246	1.642506	3	23.040909,23.342357,23.062135	
+macosko_retina	rna	main	local	loom	4	cold	file		auto	37879696	ok	23.287827	23.28492	23.302426	1.626588	3	23.282013,23.317024,23.287827	
+macosko_retina	rna	main	local	loom	4	warm	file		auto	37879696	ok	23.542728	23.383052	23.545091	1.608976	3	23.542728,23.223375,23.547455	
+macosko_retina	rna	main	local	soma	1	cold	file		auto	37879696	ok	2.368405	2.367259	2.374012	15.993756	3	2.379618,2.366112,2.368405	
+macosko_retina	rna	main	local	soma	4	cold	file		auto	37879696	ok	0.950297	0.921513	1.003737	39.860883	3	0.950297,1.057176,0.892729	
+macosko_retina	rna	main	local	soma	4	warm	file		auto	37879696	ok	0.882223	0.866125	0.890242	42.936662	3	0.882223,0.850028,0.898261	
+macosko_retina	rna	main	local	parquet_coo	1	cold	file		auto	37879696	ok	1.278138	1.271871	1.283528	29.636631	3	1.288917,1.265605,1.278138	
+macosko_retina	rna	main	local	parquet_coo	4	cold	file		auto	37879696	ok	0.987553	0.964984	0.987615	38.357139	3	0.987677,0.942415,0.987553	
+macosko_retina	rna	main	local	parquet_coo	4	warm	file		auto	37879696	ok	0.842961	0.833067	0.84373	44.936459	3	0.823173,0.842961,0.844499	
+macosko_retina	rna	main	local	csc_zstd19	1	cold	file		auto	37879696	ok	0.516603	0.515963	0.519736	73.324533	3	0.522868,0.516603,0.515323	
+macosko_retina	rna	main	local	csc_zstd19	4	cold	file		auto	37879696	ok	0.518345	0.51744	0.520847	73.078173	3	0.523350,0.518345,0.516535	
+macosko_retina	rna	main	local	csc_zstd19	4	warm	file		auto	37879696	ok	0.485342	0.483885	0.485936	78.047375	3	0.485342,0.482428,0.486529	
+macosko_retina	rna	main	local	rds_gz	1	cold	file		auto	37879696	ok	1.912055	1.910148	1.95613	19.810982	3	2.000205,1.912055,1.908241	
+macosko_retina	rna	main	local	rds_gz	4	cold	file		auto	37879696	ok	1.915141	1.912872	1.957295	19.779063	3	1.999448,1.915141,1.910604	
+macosko_retina	rna	main	local	rds_gz	4	warm	file		auto	37879696	ok	1.883446	1.882068	1.885777	20.111915	3	1.888108,1.883446,1.880691	
+macosko_retina	rna	main	local	rds_xz	1	cold	file		auto	37879696	ok	2.768973	2.766637	2.81112	13.680054	3	2.853268,2.768973,2.764301	
+macosko_retina	rna	main	local	rds_xz	4	cold	file		auto	37879696	ok	2.766307	2.761792	2.815149	13.693236	3	2.863990,2.766307,2.757278	
+macosko_retina	rna	main	local	rds_xz	4	warm	file		auto	37879696	ok	2.720663	2.720528	2.725565	13.922964	3	2.730466,2.720663,2.720392	
+macosko_retina	rna	main	local	bpcells	1	cold	file		auto	37879696	ok	4.619319	4.606387	5.120246	8.200277	3	5.621172,4.619319,4.593454	
+macosko_retina	rna	main	local	bpcells	4	cold	file		auto	37879696	ok	4.679299	4.647253	5.187057	8.095165	3	5.694814,4.679299,4.615207	
+macosko_retina	rna	main	local	bpcells	4	warm	file		auto	37879696	ok	4.633793	4.608508	4.649081	8.174664	3	4.664370,4.583222,4.633793	
+macosko_retina	rna	main	local	s1	1	cold	file	native	auto	37879696	ok	0.451904	0.447987	0.454059	83.822469	3	0.456214,0.451904,0.444069	avx2
+macosko_retina	rna	main	local	s1	1	cold	file	canonical	auto	37879696	ok	0.703108	0.701734	0.704918	53.874647	3	0.706727,0.703108,0.700359	avx2
+macosko_retina	rna	main	local	s1	4	cold	file	native	auto	37879696	ok	0.164791	0.162106	0.166474	229.865611	3	0.168158,0.164791,0.159422	avx2
+macosko_retina	rna	main	local	s1	4	cold	file	canonical	auto	37879696	ok	0.22546	0.225233	0.226288	168.010979	3	0.227116,0.225460,0.225007	avx2
+macosko_retina	rna	main	local	s1	4	warm	file	native	auto	37879696	ok	0.147153	0.144211	0.148916	257.416651	3	0.147153,0.141269,0.150678	avx2
+macosko_retina	rna	main	local	s1	4	warm	file	canonical	auto	37879696	ok	0.21545	0.214451	0.217627	175.81641	3	0.215450,0.219803,0.213453	avx2
+macosko_retina	rna	main	local	s1	1	warm	codec	native	scalar	37879696	ok	1.337921	1.336834	1.342711	28.31235	3	1.347501,1.337921,1.335748	scalar
+macosko_retina	rna	main	local	s1	1	warm	codec	native	avx2	37879696	ok	0.412325	0.411003	0.41357	91.868625	3	0.412325,0.409681,0.414815	avx2
+macosko_retina	rna	main	local	s1	1	warm	codec	native	avx512	37879696	ok	0.411436	0.410248	0.412545	92.066969	3	0.411436,0.409060,0.413654	avx2
+macosko_retina	rna	main	local	s1	1	warm	codec	canonical	scalar	37879696	ok	1.597013	1.596945	1.601083	23.719083	3	1.605153,1.596877,1.597013	scalar
+macosko_retina	rna	main	local	s1	1	warm	codec	canonical	avx2	37879696	ok	0.666813	0.665566	0.66951	56.807078	3	0.664319,0.672207,0.666813	avx2
+macosko_retina	rna	main	local	s1	1	warm	codec	canonical	avx512	37879696	ok	0.670171	0.669144	0.672926	56.522457	3	0.668117,0.675682,0.670171	avx2
+macosko_retina	rna	main	local	s1	4	warm	codec	native	scalar	37879696	ok	0.349518	0.349429	0.34996	108.376892	3	0.350402,0.349518,0.349341	scalar
+macosko_retina	rna	main	local	s1	4	warm	codec	native	avx2	37879696	ok	0.121198	0.120896	0.121208	312.543734	3	0.121218,0.120593,0.121198	avx2
+macosko_retina	rna	main	local	s1	4	warm	codec	native	avx512	37879696	ok	0.121406	0.121039	0.121608	312.008152	3	0.121406,0.120671,0.121809	avx2
+macosko_retina	rna	main	local	s1	4	warm	codec	canonical	scalar	37879696	ok	0.41469	0.413345	0.414925	91.344553	3	0.414690,0.412000,0.415160	scalar
+macosko_retina	rna	main	local	s1	4	warm	codec	canonical	avx2	37879696	ok	0.181678	0.181054	0.182014	208.499293	3	0.181678,0.182350,0.180430	avx2
+macosko_retina	rna	main	local	s1	4	warm	codec	canonical	avx512	37879696	ok	0.181591	0.181491	0.181796	208.599101	3	0.181391,0.182001,0.181591	avx2
+macosko_retina	rna	main	local	s1_pack	1	cold	file	native	auto	37879696	ok	0.451143	0.447676	0.453166	83.96391	3	0.455189,0.451143,0.444209	avx2
+macosko_retina	rna	main	local	s1_pack	1	cold	file	canonical	auto	37879696	ok	0.704709	0.703053	0.706	53.752249	3	0.707291,0.704709,0.701398	avx2
+macosko_retina	rna	main	local	s1_pack	4	cold	file	native	auto	37879696	ok	0.164829	0.161756	0.166922	229.812308	3	0.169016,0.164829,0.158683	avx2
+macosko_retina	rna	main	local	s1_pack	4	cold	file	canonical	auto	37879696	ok	0.229812	0.226649	0.230446	164.828847	3	0.231080,0.229812,0.223485	avx2
+macosko_retina	rna	main	local	s1_pack	4	warm	file	native	auto	37879696	ok	0.139975	0.137934	0.14277	270.616623	3	0.145564,0.135892,0.139975	avx2
+macosko_retina	rna	main	local	s1_pack	4	warm	file	canonical	auto	37879696	ok	0.20093	0.200872	0.204578	188.521698	3	0.208226,0.200930,0.200813	avx2
+macosko_retina	rna	main	local	zarr3	1	cold	file		auto	37879696	ok	0.606568	0.606371	0.610553	62.449261	3	0.614538,0.606568,0.606174	
+macosko_retina	rna	main	local	zarr3	4	cold	file		auto	37879696	ok	0.58896	0.549478	0.589821	64.316218	3	0.509996,0.588960,0.590681	
+macosko_retina	rna	main	local	zarr3	4	warm	file		auto	37879696	ok	0.592079	0.588358	0.616654	63.97743	3	0.641230,0.584636,0.592079	
+macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	37879696	ok	1.339084	1.338129	1.339333	28.287767	3	1.339084,1.339583,1.337175	scalar
+macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	37879696	ok	0.38424	0.384236	0.384389	98.583427	3	0.384538,0.384233,0.384240	avx2
+macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	37879696	ok	0.384601	0.38452	0.384634	98.490893	3	0.384668,0.384601,0.384438	avx2
+macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	37879696	ok	1.610003	1.609786	1.613168	23.527718	3	1.616332,1.609569,1.610003	scalar
+macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	37879696	ok	0.649425	0.649207	0.650521	58.328053	3	0.649425,0.651616,0.648990	avx2
+macosko_retina	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	37879696	ok	0.674205	0.674115	0.675414	56.184241	3	0.674205,0.676623,0.674025	avx2
+macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	37879696	ok	0.339308	0.338371	0.339584	111.638087	3	0.339859,0.339308,0.337433	scalar
+macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	37879696	ok	0.098527	0.098517	0.098527	384.460057	3	0.098527,0.098527,0.098506	avx2
+macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	37879696	ok	0.099084	0.099076	0.099192	382.298817	3	0.099300,0.099084,0.099068	avx2
+macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	37879696	ok	0.406103	0.405848	0.407114	93.27608	3	0.408125,0.405593,0.406103	scalar
+macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	37879696	ok	0.166891	0.166842	0.168519	226.972671	3	0.170146,0.166793,0.166891	avx2
+macosko_retina	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	37879696	ok	0.16608	0.166037	0.167332	228.081021	3	0.168584,0.166080,0.165994	avx2

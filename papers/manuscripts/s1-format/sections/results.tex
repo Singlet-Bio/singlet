@@ -36,7 +36,8 @@ gzip-compressed AnnData file is \nm{ratio-h5ad_gzip}$\times$ larger, 10x HDF5 \n
 \nm{ratio-soma}$\times$ and BPCells \nm{ratio-bpcells}$\times$; the smallest other file on each matrix, which is
 \nm{bestOtherFormat} on \nm{bestOtherFormatCount} of them, is a median of \nm{ratioBestOther}$\times$ larger. The raw CSC arrays compressed with zstd at level 19 take \nm{size-csc_zstd19} bits per
 non-zero, so most of the gain comes from how the counts are represented and modelled, not from the entropy coder alone
-(Section~\ref{sec:floor}). With gene identifiers moved into a vocabulary pack shared by every dataset of the same
+(Section~\ref{sec:floor}). A generic codec at \sone's random-access granularity, Zarr v3 with chunks of the same size
+compressed by Blosc with zstd and bit shuffling, takes \nm{size-zarr3} bits per non-zero, \nm{ratio-zarr3}$\times$ more. With gene identifiers moved into a vocabulary pack shared by every dataset of the same
 annotation, the median falls to \nm{size-s1_pack} bits per non-zero.
 
 Smaller files are usually slower to read; \sone{} files are not. We timed each library's own read, from opening the file
@@ -148,9 +149,9 @@ cells starts and ends inside chunks that are fetched whole. AnnData with gzip fe
 \nm{acc-zarr-kib}\,KiB in \nm{acc-zarr-req}; their over-read is small or large depending on their chunking, but every
 byte they fetch is a larger file's byte. The chunk size of \sone{} sets this trade-off: on \nm{ns-dataset}, chunks of
 4,096 non-zeros instead of the default 49,152 bring the over-read from \nm{chunk-hlca_core-49152-overread} to
-\nm{chunk-hlca_core-4096-overread} and make the file \nm{chunk-hlca_core-4096-size}\% larger, and chunks of 393,216
-make it \nm{chunk-hlca_core-393216-size}\% smaller and raise the over-read to \nm{chunk-hlca_core-393216-overread}
-(Fig.~\ref{fig:reads}d).
+\nm{chunk-hlca_core-4096-overread} and change the file's size by \nm{chunk-hlca_core-4096-size}\%, while chunks of
+393,216 change it by only \nm{chunk-hlca_core-393216-size}\% and raise the over-read to
+\nm{chunk-hlca_core-393216-overread} (Fig.~\ref{fig:reads}d).
 
 Latency multiplies. On an emulated object store limited to 1\,Gbit/s, the \sone{} reader with eight requests at once and
 the next minibatch's requests sent ahead delivers \nm{ns-s1_stream-cps-0} cells per second of \nm{ns-dataset} without
@@ -178,8 +179,8 @@ the public internet from the cluster node (Section~\ref{sec:methods}). A one-byt
 read \nm{r2-hlca_core-gbit1}\,Gbit/s (\nm{r2-hlca_core-gbit8} over eight). From HLCA core the first minibatch arrived after
 \nm{r2-hlca_core-s1_stream-first}\,s with \sone, \nm{r2-hlca_core-anndata_zarr_lazy-first}\,s with AnnData Zarr and
 \nm{r2-hlca_core-zarr3_shard-first}\,s with sharded Zarr v3, against \nm{r2-hlca_core-anndata_inmem-first}\,s to download
-the h5ad first. Sustained, \sone{} delivered \nm{r2-hlca_core-s1_stream-cps} cells per second with the earlier defaults and
-\nm{r2-hlca_core-s1_stream@64x8-cps} with 64 requests and eight minibatches in flight, against
+the h5ad first. Sustained, \sone{} delivered \nm{r2-hlca_core-s1_stream-cps} cells per second with the earlier defaults,
+\nm{r2-hlca_core-s1_stream@32x4-cps} with those of 1.3.3 and \nm{r2-hlca_core-s1_stream@64x8-cps} with 64 requests and eight minibatches in flight, against
 \nm{r2-hlca_core-anndata_zarr_lazy-cps} for AnnData Zarr and \nm{r2-hlca_core-zarr3_shard-cps} for Zarr v3. What an epoch
 of random minibatches costs follows from the bytes and requests counted at the store (Table~\ref{tab:r2}): \sone{} reads
 \nm{r2-hlca_core-s1_stream-gb_epoch}\,GiB in \nm{r2-hlca_core-s1_stream-req_epoch} requests, which at S3's published prices
@@ -187,9 +188,10 @@ for transfer to the internet costs \$\nm{r2-hlca_core-s1_stream-usd_s3} an epoch
 \$\nm{r2-hlca_core-anndata_zarr_lazy-usd_s3} for AnnData Zarr; R2 charges no egress and only for requests.
 
 Writing is the other side of a format's cost. On HLCA core the \sone{} writer took \nm{wc-hlca_core-s1-s}\,s
-(\nm{wc-hlca_core-s1-mnnzs} million non-zeros per second) and \nm{wc-hlca_core-s1-mb}\,MB of memory beyond the matrix,
-against \nm{wc-hlca_core-h5ad_gzip-s}\,s for AnnData with gzip, \nm{wc-hlca_core-zarr-s}\,s for AnnData Zarr and
-\nm{wc-hlca_core-soma-s}\,s for TileDB-SOMA (Table~\ref{tab:writecost}).
+(\nm{wc-hlca_core-s1-mnnzs} million non-zeros per second), against \nm{wc-hlca_core-h5ad_gzip-s}\,s for AnnData with
+gzip, \nm{wc-hlca_core-zarr-s}\,s for AnnData Zarr and \nm{wc-hlca_core-soma-s}\,s for TileDB-SOMA. It needs more memory:
+\nm{wc-hlca_core-s1-mb}\,MB beyond the matrix, against \nm{wc-hlca_core-h5ad_gzip-mb}\,MB for AnnData with gzip and
+\nm{wc-hlca_core-soma-mb}\,MB for TileDB-SOMA (Table~\ref{tab:writecost}).
 
 \input{figures/fig_reads}
 
@@ -332,12 +334,12 @@ fraction of non-zeros equal to one and median counts per cell. Sources and acces
   columns/matrix/.style={string type, column name=Matrix, column type=l},
   columns/class/.style={string type, column name=Protocol class, column type=l},
   columns/tier/.style={string type, column name=Tier},
-  columns/cells/.style={column name=Cells, int detect, 1000 sep={,}},
-  columns/genes/.style={column name=Features, int detect, 1000 sep={,}},
+  columns/cells/.style={column name=Cells, int detect, 1000 sep={\text{,}}},
+  columns/genes/.style={column name=Features, int detect, 1000 sep={\text{,}}},
   columns/nnz/.style={column name=Non-zeros, sci, sci zerofill, precision=2},
   columns/density/.style={column name=Density, fixed, precision=3},
   columns/frac_ones/.style={column name=Ones, fixed, precision=2},
-  columns/counts_per_cell/.style={column name=Counts/cell, fixed, precision=0, 1000 sep={,}},
+  columns/counts_per_cell/.style={column name=Counts/cell, fixed, precision=0, 1000 sep={\text{,}}},
 ]{\gen{tab_datasets.tsv}}
 \end{table}
 
@@ -452,10 +454,10 @@ non-zeros take in that file. Index: bytes read before the first minibatch to loc
 \pgfplotstabletypeset[
   columns={format,kib,req,overread,index_kib},
   columns/format/.style={string type, column name=Format, column type=l},
-  columns/kib/.style={column name=KiB per minibatch, fixed, precision=0, 1000 sep={,}},
+  columns/kib/.style={column name=KiB per minibatch, fixed, precision=0, 1000 sep={\text{,}}},
   columns/req/.style={column name=Requests, fixed, precision=0},
   columns/overread/.style={column name=Over-read, fixed, precision=2},
-  columns/index_kib/.style={column name=Index (KiB), fixed, precision=0, 1000 sep={,}},
+  columns/index_kib/.style={column name=Index (KiB), fixed, precision=0, 1000 sep={\text{,}}},
 ]{\gen{tab_access.tsv}}
 \end{table}
 
@@ -470,9 +472,9 @@ would cost at R2's and S3's published prices (Section~\ref{sec:methods}).}
   columns/dataset/.style={string type, column name=Matrix, column type=l},
   columns/loader/.style={string type, column name=Loader, column type=l},
   columns/first/.style={column name=First (s), fixed, precision=2},
-  columns/cps/.style={column name=Cells/s, fixed, precision=0, 1000 sep={,}},
+  columns/cps/.style={column name=Cells/s, fixed, precision=0, 1000 sep={\text{,}}},
   columns/gb_epoch/.style={column name=GiB/epoch, fixed, precision=2},
-  columns/req_epoch/.style={column name=Requests/epoch, fixed, precision=0, 1000 sep={,}},
+  columns/req_epoch/.style={column name=Requests/epoch, fixed, precision=0, 1000 sep={\text{,}}},
   columns/usd_r2/.style={column name=R2 \$, fixed, precision=3},
   columns/usd_s3/.style={column name=S3 \$, fixed, precision=3},
 ]{\gen{tab_r2.tsv}}
@@ -501,12 +503,12 @@ memory of the writing process and its children minus that before writing), one r
 \pgfplotstabletypeset[
   columns={format,hlca_core_s,hlca_core_gb,tabula_muris_facs_s,tabula_muris_facs_gb,pbmc10k_v3_s,pbmc10k_v3_gb},
   columns/format/.style={string type, column name=Format, column type=l},
-  columns/hlca_core_s/.style={column name={HLCA s}, fixed, precision=1},
-  columns/hlca_core_gb/.style={column name={GB}, fixed, precision=2},
-  columns/tabula_muris_facs_s/.style={column name={TM FACS s}, fixed, precision=1},
-  columns/tabula_muris_facs_gb/.style={column name={GB}, fixed, precision=2},
-  columns/pbmc10k_v3_s/.style={column name={PBMC 10k s}, fixed, precision=1},
-  columns/pbmc10k_v3_gb/.style={column name={GB}, fixed, precision=2},
+  columns/hlca_core_s/.style={column name={HLCA core s}, fixed, fixed zerofill, precision=1, 1000 sep={\text{,}}},
+  columns/hlca_core_gb/.style={column name={memory GB}, fixed, fixed zerofill, precision=2, 1000 sep={\text{,}}},
+  columns/tabula_muris_facs_s/.style={column name={TM FACS s}, fixed, fixed zerofill, precision=1, 1000 sep={\text{,}}},
+  columns/tabula_muris_facs_gb/.style={column name={memory GB}, fixed, fixed zerofill, precision=2, 1000 sep={\text{,}}},
+  columns/pbmc10k_v3_s/.style={column name={PBMC 10k s}, fixed, fixed zerofill, precision=1, 1000 sep={\text{,}}},
+  columns/pbmc10k_v3_gb/.style={column name={memory GB}, fixed, fixed zerofill, precision=2, 1000 sep={\text{,}}},
 ]{\gen{tab_writecost_wide.tsv}}
 \end{table}
 

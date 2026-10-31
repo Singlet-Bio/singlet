@@ -1,18 +1,19 @@
 dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
-mca_microwell	rna	main	nfs	csc_i32	4	cold	file		auto	266059719	ok	1.675261	1.673369	1.683196	158.816918	3	1.691132,1.675261,1.671478	
-mca_microwell	rna	main	nfs	mtx_gz	4	cold	file		auto	266059719	ok	20.611284	20.479877	20.708613	12.90845	3	20.348471,20.611284,20.805943	
-mca_microwell	rna	main	nfs	tenx_h5	4	cold	file		auto	266059719	ok	10.22589	10.185674	10.307357	26.018246	3	10.225890,10.145457,10.388823	
-mca_microwell	rna	main	nfs	h5ad_none	4	cold	file		auto	266059719	ok	2.727009	2.721578	3.113799	97.564653	3	3.500588,2.716146,2.727009	
-mca_microwell	rna	main	nfs	h5ad_gzip	4	cold	file		auto	266059719	ok	8.299975	8.298097	8.585986	32.055486	3	8.871997,8.296219,8.299975	
-mca_microwell	rna	main	nfs	h5ad_lzf	4	cold	file		auto	266059719	ok	5.126931	5.121542	5.395928	51.894535	3	5.664924,5.126931,5.116153	
-mca_microwell	rna	main	nfs	zarr	4	cold	file		auto	266059719	ok	2.083945	2.03724	2.91975	127.671161	3	3.755555,2.083945,1.990535	
-mca_microwell	rna	main	nfs	soma	4	cold	file		auto	266059719	ok	5.919678	5.793929	6.259289	44.944961	3	6.598900,5.668179,5.919678	
-mca_microwell	rna	main	nfs	parquet_coo	4	cold	file		auto	266059719	ok	6.232251	6.132889	6.273684	42.690792	3	6.315117,6.232251,6.033527	
-mca_microwell	rna	main	nfs	csc_zstd19	4	cold	file		auto	266059719	ok	3.452493	3.451428	3.461769	77.063063	3	3.471044,3.452493,3.450362	
-mca_microwell	rna	main	nfs	rds_gz	4	cold	file		auto	266059719	ok	13.005725	12.998271	13.045248	20.457123	3	13.084771,13.005725,12.990818	
-mca_microwell	rna	main	nfs	rds_xz	4	cold	file		auto	266059719	ok	18.515071	18.511449	18.589993	14.3699	3	18.664914,18.515071,18.507828	
-mca_microwell	rna	main	nfs	bpcells	4	cold	file		auto	266059719	ok	41.376241	41.337453	43.323192	6.430253	3	45.270142,41.298666,41.376241	
-mca_microwell	rna	main	nfs	s1	4	cold	file	native	auto	266059719	ok	1.165689	1.146777	2.114434	228.242393	3	3.063179,1.165689,1.127865	avx2
-mca_microwell	rna	main	nfs	s1	4	cold	file	canonical	auto	266059719	ok	1.591874	1.587944	2.246793	167.136128	3	2.901711,1.584014,1.591874	avx2
-mca_microwell	rna	main	nfs	s1_pack	4	cold	file	native	auto	266059719	ok	1.155795	1.146942	1.806728	230.196338	3	2.457661,1.138089,1.155795	avx2
-mca_microwell	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	266059719	ok	1.587914	1.582021	2.241611	167.552941	3	2.895307,1.576127,1.587914	avx2
+mca_microwell	rna	main	nfs	csc_i32	4	cold	file		auto	266059719	ok	3.208694	3.203835	3.769655	82.918394	3	4.330617,3.198976,3.208694	
+mca_microwell	rna	main	nfs	mtx_gz	4	cold	file		auto	266059719	ok	23.172647	23.150573	23.295006	11.481628	3	23.417364,23.172647,23.128498	
+mca_microwell	rna	main	nfs	tenx_h5	4	cold	file		auto	266059719	ok	12.226651	12.221117	12.281683	21.760637	3	12.336716,12.226651,12.215583	
+mca_microwell	rna	main	nfs	h5ad_none	4	cold	file		auto	266059719	ok	4.194436	4.153172	4.917399	63.431583	3	5.640361,4.194436,4.111909	
+mca_microwell	rna	main	nfs	h5ad_gzip	4	cold	file		auto	266059719	ok	9.901454	9.8777	9.996255	26.870773	3	10.091056,9.901454,9.853946	
+mca_microwell	rna	main	nfs	h5ad_lzf	4	cold	file		auto	266059719	ok	6.606486	6.606075	7.194688	40.272501	3	7.782889,6.605663,6.606486	
+mca_microwell	rna	main	nfs	zarr	4	cold	file		auto	266059719	ok	2.970803	2.727556	3.211509	89.558177	3	3.452215,2.970803,2.484309	
+mca_microwell	rna	main	nfs	soma	4	cold	file		auto	266059719	ok	8.574544	8.522614	8.754572	31.029021	3	8.574544,8.934599,8.470683	
+mca_microwell	rna	main	nfs	parquet_coo	4	cold	file		auto	266059719	ok	9.893083	9.832902	10.279886	26.893509	3	10.666689,9.772721,9.893083	
+mca_microwell	rna	main	nfs	csc_zstd19	4	cold	file		auto	266059719	ok	4.042051	4.024674	4.313943	65.822958	3	4.585836,4.042051,4.007298	
+mca_microwell	rna	main	nfs	rds_gz	4	cold	file		auto	266059719	ok	13.953875	13.903908	14.093661	19.067085	3	14.233447,13.853942,13.953875	
+mca_microwell	rna	main	nfs	rds_xz	4	cold	file		auto	266059719	ok	18.9616	18.95096	19.085239	14.031502	3	19.208878,18.961600,18.940320	
+mca_microwell	rna	main	nfs	bpcells	4	cold	file		auto	266059719	ok	55.858793	55.74001	56.518152	4.763077	3	57.177512,55.621228,55.858793	
+mca_microwell	rna	main	nfs	s1	4	cold	file	native	auto	266059719	ok	2.643246	2.035021	2.649635	100.656439	3	1.426796,2.643246,2.656025	avx2
+mca_microwell	rna	main	nfs	s1	4	cold	file	canonical	auto	266059719	ok	3.104063	3.101658	3.116447	85.71337	3	3.104063,3.099252,3.128830	avx2
+mca_microwell	rna	main	nfs	s1_pack	4	cold	file	native	auto	266059719	ok	1.330819	1.318513	1.369931	199.921828	3	1.409043,1.330819,1.306206	avx2
+mca_microwell	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	266059719	ok	1.780326	1.774051	1.791916	149.444346	3	1.803506,1.780326,1.767775	avx2
+mca_microwell	rna	main	nfs	zarr3	4	cold	file		auto	266059719	ok	4.269773	4.26006	4.277153	62.312387	3	4.284533,4.250348,4.269773	

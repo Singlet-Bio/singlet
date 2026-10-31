@@ -1,19 +1,20 @@
 dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
-paul_marsseq	rna	main	nfs	csc_i32	4	cold	file		auto	4910514	ok	0.035876	0.035579	0.036752	136.876293	3	0.037628,0.035876,0.035282	
-paul_marsseq	rna	main	nfs	mtx_gz	4	cold	file		auto	4910514	ok	0.451311	0.451161	0.465557	10.880551	3	0.479804,0.451010,0.451311	
-paul_marsseq	rna	main	nfs	tenx_h5	4	cold	file		auto	4910514	ok	0.229986	0.227997	0.243719	21.351357	3	0.257451,0.229986,0.226007	
-paul_marsseq	rna	main	nfs	h5ad_none	4	cold	file		auto	4910514	ok	0.071189	0.071182	0.342834	68.978615	3	0.614480,0.071174,0.071189	
-paul_marsseq	rna	main	nfs	h5ad_gzip	4	cold	file		auto	4910514	ok	0.185728	0.185426	0.453488	26.439256	3	0.721248,0.185124,0.185728	
-paul_marsseq	rna	main	nfs	h5ad_lzf	4	cold	file		auto	4910514	ok	0.117991	0.117827	0.388314	41.617762	3	0.658637,0.117664,0.117991	
-paul_marsseq	rna	main	nfs	zarr	4	cold	file		auto	4910514	ok	0.067346	0.066284	0.3477	72.914871	3	0.628054,0.067346,0.065222	
-paul_marsseq	rna	main	nfs	loom	4	cold	file		auto	4910514	ok	1.699435	1.689619	3.269064	2.889498	3	4.838694,1.699435,1.679804	
-paul_marsseq	rna	main	nfs	soma	4	cold	file		auto	4910514	ok	0.165781	0.165254	0.526195	29.620472	3	0.886608,0.165781,0.164728	
-paul_marsseq	rna	main	nfs	parquet_coo	4	cold	file		auto	4910514	ok	0.149883	0.14698	0.290703	32.762363	3	0.431523,0.144078,0.149883	
-paul_marsseq	rna	main	nfs	csc_zstd19	4	cold	file		auto	4910514	ok	0.059998	0.059832	0.061663	81.844375	3	0.063328,0.059998,0.059665	
-paul_marsseq	rna	main	nfs	rds_gz	4	cold	file		auto	4910514	ok	0.249782	0.243184	0.293552	19.65923	3	0.337322,0.249782,0.236587	
-paul_marsseq	rna	main	nfs	rds_xz	4	cold	file		auto	4910514	ok	0.330921	0.323187	0.374821	14.838913	3	0.418721,0.330921,0.315452	
-paul_marsseq	rna	main	nfs	bpcells	4	cold	file		auto	4910514	ok	0.735268	0.615854	2.015011	6.678533	3	3.294753,0.496440,0.735268	
-paul_marsseq	rna	main	nfs	s1	4	cold	file	native	auto	4910514	ok	0.027147	0.027088	0.683552	180.885806	3	1.339958,0.027147,0.027029	avx2
-paul_marsseq	rna	main	nfs	s1	4	cold	file	canonical	auto	4910514	ok	0.034063	0.033986	0.69096	144.161015	3	1.347858,0.034063,0.033909	avx2
-paul_marsseq	rna	main	nfs	s1_pack	4	cold	file	native	auto	4910514	ok	0.0264	0.026264	0.685751	186.005507	3	1.345102,0.026128,0.026400	avx2
-paul_marsseq	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	4910514	ok	0.033171	0.033097	0.692161	148.036885	3	1.351151,0.033171,0.033024	avx2
+paul_marsseq	rna	main	nfs	csc_i32	4	cold	file		auto	4910514	ok	0.035478	0.035285	0.036011	138.408204	3	0.036543,0.035478,0.035091	
+paul_marsseq	rna	main	nfs	mtx_gz	4	cold	file		auto	4910514	ok	0.455391	0.452918	0.462466	10.783065	3	0.469540,0.455391,0.450444	
+paul_marsseq	rna	main	nfs	tenx_h5	4	cold	file		auto	4910514	ok	0.247227	0.246905	0.249691	19.862399	3	0.252155,0.247227,0.246584	
+paul_marsseq	rna	main	nfs	h5ad_none	4	cold	file		auto	4910514	ok	0.071576	0.071284	0.073461	68.605212	3	0.075345,0.070992,0.071576	
+paul_marsseq	rna	main	nfs	h5ad_gzip	4	cold	file		auto	4910514	ok	0.186678	0.186514	0.194186	26.304789	3	0.201694,0.186678,0.186351	
+paul_marsseq	rna	main	nfs	h5ad_lzf	4	cold	file		auto	4910514	ok	0.116242	0.115871	0.123878	42.243722	3	0.131514,0.116242,0.115499	
+paul_marsseq	rna	main	nfs	zarr	4	cold	file		auto	4910514	ok	0.065076	0.064688	0.067028	75.458427	3	0.068980,0.065076,0.064301	
+paul_marsseq	rna	main	nfs	loom	4	cold	file		auto	4910514	ok	1.68771	1.679127	1.706864	2.909572	3	1.726019,1.687710,1.670544	
+paul_marsseq	rna	main	nfs	soma	4	cold	file		auto	4910514	ok	0.162455	0.162398	0.170256	30.226995	3	0.178058,0.162341,0.162455	
+paul_marsseq	rna	main	nfs	parquet_coo	4	cold	file		auto	4910514	ok	0.144898	0.143676	0.14522	33.889515	3	0.144898,0.142454,0.145543	
+paul_marsseq	rna	main	nfs	csc_zstd19	4	cold	file		auto	4910514	ok	0.062981	0.062854	0.063597	77.96861	3	0.064214,0.062981,0.062727	
+paul_marsseq	rna	main	nfs	rds_gz	4	cold	file		auto	4910514	ok	0.248295	0.242778	0.293824	19.776948	3	0.339353,0.248295,0.237261	
+paul_marsseq	rna	main	nfs	rds_xz	4	cold	file		auto	4910514	ok	0.335132	0.327737	0.380819	14.652472	3	0.426507,0.335132,0.320342	
+paul_marsseq	rna	main	nfs	bpcells	4	cold	file		auto	4910514	ok	0.723409	0.604849	0.966522	6.788022	3	1.209634,0.486290,0.723409	
+paul_marsseq	rna	main	nfs	s1	4	cold	file	native	auto	4910514	ok	0.026052	0.026025	0.028677	188.488581	3	0.031302,0.025999,0.026052	avx2
+paul_marsseq	rna	main	nfs	s1	4	cold	file	canonical	auto	4910514	ok	0.033459	0.033004	0.034398	146.76108	3	0.035337,0.033459,0.032549	avx2
+paul_marsseq	rna	main	nfs	s1_pack	4	cold	file	native	auto	4910514	ok	0.027265	0.025962	0.028773	180.104832	3	0.030281,0.024660,0.027265	avx2
+paul_marsseq	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	4910514	ok	0.032274	0.03193	0.033387	152.152144	3	0.034500,0.031586,0.032274	avx2
+paul_marsseq	rna	main	nfs	zarr3	4	cold	file		auto	4910514	ok	0.108505	0.102242	0.108917	45.256104	3	0.095978,0.108505,0.109330	

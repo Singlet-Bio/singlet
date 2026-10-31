@@ -1,39 +1,41 @@
 dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
-abc_merfish_zhuang1	rna	main	local	csc_i32	4	cold	file		auto	437227228	ok	7.953961	7.673398	8.736269	54.969747	3	9.518576,7.392835,7.953961	
-abc_merfish_zhuang1	rna	main	local	csc_i32	4	warm	file		auto	437227228	ok	1.964774	1.948756	1.967431	222.533134	3	1.970088,1.964774,1.932738	
-abc_merfish_zhuang1	rna	main	local	tenx_h5	4	cold	file		auto	437227228	ok	18.689983	18.678075	18.72121	23.393667	3	18.752438,18.666167,18.689983	
-abc_merfish_zhuang1	rna	main	local	tenx_h5	4	warm	file		auto	437227228	ok	18.438063	18.436621	18.460199	23.713295	3	18.435178,18.438063,18.482335	
-abc_merfish_zhuang1	rna	main	local	h5ad_none	4	cold	file		auto	437227228	ok	10.080939	10.079021	10.467001	43.371677	3	10.853062,10.080939,10.077102	
-abc_merfish_zhuang1	rna	main	local	h5ad_none	4	warm	file		auto	437227228	ok	6.216224	6.205534	6.23849	70.336467	3	6.260756,6.216224,6.194843	
-abc_merfish_zhuang1	rna	main	local	h5ad_gzip	4	cold	file		auto	437227228	ok	17.321938	17.27717	17.619893	25.241243	3	17.917848,17.232402,17.321938	
-abc_merfish_zhuang1	rna	main	local	h5ad_gzip	4	warm	file		auto	437227228	ok	15.518548	15.512929	15.541864	28.174493	3	15.518548,15.565179,15.507309	
-abc_merfish_zhuang1	rna	main	local	zarr	4	cold	file		auto	437227228	ok	6.351597	6.346965	6.727637	68.837365	3	7.103676,6.342332,6.351597	
-abc_merfish_zhuang1	rna	main	local	zarr	4	warm	file		auto	437227228	ok	4.863226	4.856148	4.863467	89.904765	3	4.849070,4.863226,4.863707	
-abc_merfish_zhuang1	rna	main	local	soma	4	cold	file		auto	437227228	ok	13.434711	13.427745	13.827461	32.544595	3	14.220211,13.434711,13.420779	
-abc_merfish_zhuang1	rna	main	local	soma	4	warm	file		auto	437227228	ok	13.483777	13.451708	13.530555	32.426169	3	13.419640,13.577333,13.483777	
-abc_merfish_zhuang1	rna	main	local	s1	4	cold	file	native	auto	437227228	ok	3.018528	3.01653	3.92175	144.847827	3	4.824971,3.018528,3.014532	avx2
-abc_merfish_zhuang1	rna	main	local	s1	4	cold	file	canonical	auto	437227228	ok	3.630152	3.588404	4.284519	120.443231	3	4.938886,3.546657,3.630152	avx2
-abc_merfish_zhuang1	rna	main	local	s1	4	warm	file	native	auto	437227228	ok	2.724348	2.717092	2.743402	160.488765	3	2.709837,2.762457,2.724348	avx2
-abc_merfish_zhuang1	rna	main	local	s1	4	warm	file	canonical	auto	437227228	ok	3.308534	3.292976	3.336305	132.151365	3	3.308534,3.364077,3.277419	avx2
-abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	native	scalar	437227228	ok	4.620689	4.615122	4.629679	94.623817	3	4.609555,4.638668,4.620689	scalar
-abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	native	avx2	437227228	ok	1.473605	1.473122	1.475896	296.705826	3	1.478188,1.473605,1.472639	avx2
-abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	native	avx512	437227228	ok	1.469741	1.467924	1.470451	297.48595	3	1.471162,1.466108,1.469741	avx2
-abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	canonical	scalar	437227228	ok	5.231853	5.217706	5.250409	83.570237	3	5.268964,5.231853,5.203558	scalar
-abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	canonical	avx2	437227228	ok	2.05119	2.049958	2.062937	213.157806	3	2.051190,2.074684,2.048726	avx2
-abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	canonical	avx512	437227228	ok	2.049492	2.048926	2.061334	213.334396	3	2.048360,2.073176,2.049492	avx2
-abc_merfish_zhuang1	rna	main	local	s1_pack	4	cold	file	native	auto	437227228	ok	3.002115	2.985319	3.67947	145.639742	3	4.356824,2.968522,3.002115	avx2
-abc_merfish_zhuang1	rna	main	local	s1_pack	4	cold	file	canonical	auto	437227228	ok	3.589342	3.565873	4.255665	121.812657	3	4.921988,3.542404,3.589342	avx2
-abc_merfish_zhuang1	rna	main	local	s1_pack	4	warm	file	native	auto	437227228	ok	2.713488	2.712717	2.738197	161.131089	3	2.711947,2.762907,2.713488	avx2
-abc_merfish_zhuang1	rna	main	local	s1_pack	4	warm	file	canonical	auto	437227228	ok	3.339912	3.321951	3.341733	130.909816	3	3.339912,3.343554,3.303990	avx2
-abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	437227228	ok	17.843324	17.838403	17.96707	24.503687	3	18.090815,17.843324,17.833483	scalar
-abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	437227228	ok	4.949776	4.947329	4.950819	88.33273	3	4.949776,4.951862,4.944882	avx2
-abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	437227228	ok	4.932082	4.931997	4.945707	88.649627	3	4.959332,4.931911,4.932082	avx2
-abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	437227228	ok	20.480676	20.479954	20.603013	21.348281	3	20.725351,20.480676,20.479231	scalar
-abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	437227228	ok	7.45957	7.453731	7.589457	58.612926	3	7.719345,7.447892,7.459570	avx2
-abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	437227228	ok	7.474706	7.467447	7.481588	58.494237	3	7.488471,7.460188,7.474706	avx2
-abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	437227228	ok	4.508459	4.481604	4.514668	96.979307	3	4.508459,4.520877,4.454750	scalar
-abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	437227228	ok	1.24059	1.240508	1.241494	352.434912	3	1.242397,1.240590,1.240425	avx2
-abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	437227228	ok	1.235885	1.235759	1.236756	353.776628	3	1.237628,1.235885,1.235634	avx2
-abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	437227228	ok	5.127213	5.117829	5.129581	85.275807	3	5.127213,5.131949,5.108445	scalar
-abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	437227228	ok	1.865947	1.864924	1.866398	234.319211	3	1.865947,1.863902,1.866850	avx2
-abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	437227228	ok	1.855143	1.854847	1.855625	235.683841	3	1.856107,1.855143,1.854551	avx2
+abc_merfish_zhuang1	rna	main	local	csc_i32	4	cold	file		auto	437227228	ok	6.633055	6.592993	6.753537	65.916421	3	6.874019,6.633055,6.552932	
+abc_merfish_zhuang1	rna	main	local	csc_i32	4	warm	file		auto	437227228	ok	2.530517	2.517352	2.537951	172.781794	3	2.530517,2.504186,2.545385	
+abc_merfish_zhuang1	rna	main	local	tenx_h5	4	cold	file		auto	437227228	ok	24.650111	24.640483	24.714153	17.737333	3	24.778196,24.630855,24.650111	
+abc_merfish_zhuang1	rna	main	local	tenx_h5	4	warm	file		auto	437227228	ok	24.325972	24.317244	24.342138	17.97368	3	24.308517,24.325972,24.358303	
+abc_merfish_zhuang1	rna	main	local	h5ad_none	4	cold	file		auto	437227228	ok	13.58327	13.387047	13.595136	32.188658	3	13.190825,13.583270,13.607003	
+abc_merfish_zhuang1	rna	main	local	h5ad_none	4	warm	file		auto	437227228	ok	8.297738	8.285258	8.451872	52.692336	3	8.606006,8.272777,8.297738	
+abc_merfish_zhuang1	rna	main	local	h5ad_gzip	4	cold	file		auto	437227228	ok	20.747042	20.746608	20.803329	21.074196	3	20.859616,20.746174,20.747042	
+abc_merfish_zhuang1	rna	main	local	h5ad_gzip	4	warm	file		auto	437227228	ok	19.061579	19.051884	19.071306	22.937618	3	19.081034,19.042188,19.061579	
+abc_merfish_zhuang1	rna	main	local	zarr	4	cold	file		auto	437227228	ok	8.250049	8.222527	8.267693	52.996925	3	8.250049,8.285337,8.195005	
+abc_merfish_zhuang1	rna	main	local	zarr	4	warm	file		auto	437227228	ok	5.67986	5.66887	5.687487	76.97852	3	5.695114,5.657879,5.679860	
+abc_merfish_zhuang1	rna	main	local	soma	4	cold	file		auto	437227228	ok	17.675143	17.577856	17.854549	24.736843	3	17.480569,17.675143,18.033956	
+abc_merfish_zhuang1	rna	main	local	soma	4	warm	file		auto	437227228	ok	17.489932	17.273887	17.621209	24.998795	3	17.752485,17.057842,17.489932	
+abc_merfish_zhuang1	rna	main	local	s1	4	cold	file	native	auto	437227228	ok	4.259335	4.24903	4.298022	102.651526	3	4.336708,4.238725,4.259335	avx2
+abc_merfish_zhuang1	rna	main	local	s1	4	cold	file	canonical	auto	437227228	ok	4.836822	4.761597	4.867503	90.395563	3	4.836822,4.686372,4.898184	avx2
+abc_merfish_zhuang1	rna	main	local	s1	4	warm	file	native	auto	437227228	ok	3.853632	3.834844	3.855877	113.458466	3	3.816056,3.858121,3.853632	avx2
+abc_merfish_zhuang1	rna	main	local	s1	4	warm	file	canonical	auto	437227228	ok	4.387143	4.37722	4.435377	99.661039	3	4.387143,4.483612,4.367298	avx2
+abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	native	scalar	437227228	ok	5.786958	5.785789	5.78985	75.553892	3	5.786958,5.792742,5.784619	scalar
+abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	native	avx2	437227228	ok	2.69244	2.669357	2.69393	162.390701	3	2.646273,2.692440,2.695420	avx2
+abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	native	avx512	437227228	ok	2.686441	2.677048	2.690467	162.753357	3	2.667656,2.694494,2.686441	avx2
+abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	canonical	scalar	437227228	ok	6.380647	6.373019	6.383606	68.523961	3	6.386565,6.365390,6.380647	scalar
+abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	canonical	avx2	437227228	ok	3.230931	3.227497	3.233799	135.32545	3	3.230931,3.236667,3.224063	avx2
+abc_merfish_zhuang1	rna	main	local	s1	4	warm	codec	canonical	avx512	437227228	ok	3.239314	3.238547	3.241259	134.975241	3	3.237779,3.243203,3.239314	avx2
+abc_merfish_zhuang1	rna	main	local	s1_pack	4	cold	file	native	auto	437227228	ok	4.249643	4.235018	4.330895	102.885646	3	4.412147,4.249643,4.220393	avx2
+abc_merfish_zhuang1	rna	main	local	s1_pack	4	cold	file	canonical	auto	437227228	ok	4.848639	4.838548	4.893355	90.175249	3	4.938072,4.828457,4.848639	avx2
+abc_merfish_zhuang1	rna	main	local	s1_pack	4	warm	file	native	auto	437227228	ok	4.020249	3.998546	4.020642	108.756267	3	3.976844,4.021035,4.020249	avx2
+abc_merfish_zhuang1	rna	main	local	s1_pack	4	warm	file	canonical	auto	437227228	ok	4.547834	4.54679	4.569296	96.139671	3	4.545746,4.590759,4.547834	avx2
+abc_merfish_zhuang1	rna	main	local	zarr3	4	cold	file		auto	437227228	ok	9.621488	9.61419	9.625252	45.442785	3	9.606892,9.621488,9.629016	
+abc_merfish_zhuang1	rna	main	local	zarr3	4	warm	file		auto	437227228	ok	9.577967	9.562674	9.600575	45.649272	3	9.547381,9.623182,9.577967	
+abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	437227228	ok	20.039224	19.873221	20.167022	21.818571	3	20.294820,19.707217,20.039224	scalar
+abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	437227228	ok	5.912581	5.819641	5.939026	73.948624	3	5.726700,5.965471,5.912581	avx2
+abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	437227228	ok	5.865716	5.794333	5.916633	74.539447	3	5.722950,5.967549,5.865716	avx2
+abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	437227228	ok	22.513003	22.404494	22.646847	19.421098	3	22.780691,22.513003,22.295985	scalar
+abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	437227228	ok	8.519546	8.478921	8.529578	51.320484	3	8.438296,8.519546,8.539611	avx2
+abc_merfish_zhuang1	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	437227228	ok	8.50847	8.459708	8.516656	51.387291	3	8.410945,8.508470,8.524841	avx2
+abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	437227228	ok	4.80575	4.799027	4.812549	90.980019	3	4.819347,4.805750,4.792304	scalar
+abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	437227228	ok	1.461432	1.453202	1.461998	299.177264	3	1.461432,1.462563,1.444971	avx2
+abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	437227228	ok	1.464249	1.45576	1.465114	298.601691	3	1.464249,1.465979,1.447272	avx2
+abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	437227228	ok	5.478547	5.459879	5.478967	79.807151	3	5.479387,5.478547,5.441210	scalar
+abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	437227228	ok	2.098716	2.089784	2.109169	208.330821	3	2.119621,2.098716,2.080851	avx2
+abc_merfish_zhuang1	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	437227228	ok	2.094922	2.085777	2.105402	208.708118	3	2.115882,2.094922,2.076633	avx2

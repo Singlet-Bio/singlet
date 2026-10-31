@@ -1,69 +1,69 @@
 dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
-baron_pancreas	rna	sweep	local	s1	1	cold	file	native	auto	16171764	ok	0.188135	0.186803	0.859636	85.958131	3	1.531138,0.185471,0.188135	avx2
-baron_pancreas	rna	sweep	local	s1	1	cold	file	canonical	auto	16171764	ok	0.280823	0.276674	0.94636	57.586993	3	1.611896,0.280823,0.272524	avx2
-baron_pancreas	rna	sweep	local	s1	2	cold	file	native	auto	16171764	ok	0.112093	0.109993	0.767846	144.271345	3	1.423600,0.112093,0.107894	avx2
-baron_pancreas	rna	sweep	local	s1	2	cold	file	canonical	auto	16171764	ok	0.178928	0.176717	0.826796	90.381562	3	1.474663,0.178928,0.174506	avx2
-baron_pancreas	rna	sweep	local	s1	4	cold	file	native	auto	16171764	ok	0.081977	0.074567	0.773939	197.271788	3	1.465901,0.081977,0.067158	avx2
-baron_pancreas	rna	sweep	local	s1	4	cold	file	canonical	auto	16171764	ok	0.093879	0.091508	0.742852	172.261616	3	1.391825,0.089137,0.093879	avx2
-baron_pancreas	rna	sweep	local	s1	4	warm	file	native	auto	16171764	ok	0.068821	0.065263	0.073868	234.983141	3	0.078914,0.068821,0.061705	avx2
-baron_pancreas	rna	sweep	local	s1	4	warm	file	canonical	auto	16171764	ok	0.094288	0.088175	0.098263	171.514465	3	0.102237,0.094288,0.082061	avx2
-baron_pancreas	rna	sweep	local	s1	8	cold	file	native	auto	16171764	ok	0.047899	0.045128	0.713997	337.624577	3	1.380096,0.047899,0.042357	avx2
-baron_pancreas	rna	sweep	local	s1	8	cold	file	canonical	auto	16171764	ok	0.057601	0.055193	0.711877	280.752756	3	1.366152,0.057601,0.052784	avx2
-baron_pancreas	rna	sweep	local	s1	1	warm	codec	native	scalar	16171764	ok	0.602184	0.600539	0.60238	26.855198	3	0.602184,0.602577,0.598894	scalar
-baron_pancreas	rna	sweep	local	s1	1	warm	codec	native	avx2	16171764	ok	0.173516	0.172694	0.174823	93.200522	3	0.171872,0.176131,0.173516	avx2
-baron_pancreas	rna	sweep	local	s1	1	warm	codec	native	avx512	16171764	ok	0.175406	0.174613	0.176823	92.196339	3	0.173821,0.178240,0.175406	avx2
-baron_pancreas	rna	sweep	local	s1	1	warm	codec	canonical	scalar	16171764	ok	0.691302	0.689956	0.692147	23.39319	3	0.691302,0.692992,0.688610	scalar
-baron_pancreas	rna	sweep	local	s1	1	warm	codec	canonical	avx2	16171764	ok	0.262393	0.26122	0.263647	61.631743	3	0.264900,0.262393,0.260046	avx2
-baron_pancreas	rna	sweep	local	s1	1	warm	codec	canonical	avx512	16171764	ok	0.262324	0.261166	0.264025	61.647962	3	0.265726,0.262324,0.260007	avx2
-baron_pancreas	rna	sweep	local	s1	2	warm	codec	native	scalar	16171764	ok	0.309174	0.30887	0.310387	52.306395	3	0.311600,0.308566,0.309174	scalar
-baron_pancreas	rna	sweep	local	s1	2	warm	codec	native	avx2	16171764	ok	0.096485	0.096476	0.097048	167.608653	3	0.097611,0.096467,0.096485	avx2
-baron_pancreas	rna	sweep	local	s1	2	warm	codec	native	avx512	16171764	ok	0.095965	0.095843	0.097453	168.516774	3	0.095965,0.095720,0.098941	avx2
-baron_pancreas	rna	sweep	local	s1	2	warm	codec	canonical	scalar	16171764	ok	0.353351	0.353284	0.355046	45.766869	3	0.356741,0.353351,0.353217	scalar
-baron_pancreas	rna	sweep	local	s1	2	warm	codec	canonical	avx2	16171764	ok	0.145797	0.145213	0.147356	110.919847	3	0.145797,0.144630,0.148915	avx2
-baron_pancreas	rna	sweep	local	s1	2	warm	codec	canonical	avx512	16171764	ok	0.139326	0.138982	0.140894	116.071462	3	0.139326,0.138638,0.142463	avx2
-baron_pancreas	rna	sweep	local	s1	4	warm	codec	native	scalar	16171764	ok	0.16013	0.159907	0.16046	100.99123	3	0.159684,0.160789,0.160130	scalar
-baron_pancreas	rna	sweep	local	s1	4	warm	codec	native	avx2	16171764	ok	0.052	0.051991	0.052221	310.99565	3	0.052442,0.052000,0.051982	avx2
-baron_pancreas	rna	sweep	local	s1	4	warm	codec	native	avx512	16171764	ok	0.052409	0.052243	0.052532	308.567878	3	0.052656,0.052409,0.052077	avx2
-baron_pancreas	rna	sweep	local	s1	4	warm	codec	canonical	scalar	16171764	ok	0.181593	0.181567	0.181901	89.055172	3	0.181541,0.181593,0.182209	scalar
-baron_pancreas	rna	sweep	local	s1	4	warm	codec	canonical	avx2	16171764	ok	0.073591	0.073411	0.073828	219.750896	3	0.074065,0.073591,0.073230	avx2
-baron_pancreas	rna	sweep	local	s1	4	warm	codec	canonical	avx512	16171764	ok	0.073537	0.073382	0.073651	219.912804	3	0.073537,0.073766,0.073226	avx2
-baron_pancreas	rna	sweep	local	s1	8	warm	codec	native	scalar	16171764	ok	0.084905	0.084701	0.085119	190.468869	3	0.085333,0.084497,0.084905	scalar
-baron_pancreas	rna	sweep	local	s1	8	warm	codec	native	avx2	16171764	ok	0.032747	0.032514	0.03325	493.84566	3	0.033753,0.032747,0.032281	avx2
-baron_pancreas	rna	sweep	local	s1	8	warm	codec	native	avx512	16171764	ok	0.032692	0.032374	0.032996	494.672939	3	0.033300,0.032692,0.032056	avx2
-baron_pancreas	rna	sweep	local	s1	8	warm	codec	canonical	scalar	16171764	ok	0.095523	0.095299	0.095729	169.297475	3	0.095936,0.095075,0.095523	scalar
-baron_pancreas	rna	sweep	local	s1	8	warm	codec	canonical	avx2	16171764	ok	0.041909	0.041765	0.042048	385.874786	3	0.042186,0.041620,0.041909	avx2
-baron_pancreas	rna	sweep	local	s1	8	warm	codec	canonical	avx512	16171764	ok	0.041779	0.041517	0.041858	387.082237	3	0.041938,0.041255,0.041779	avx2
-baron_pancreas	rna	sweep	local	h5ad_gzip	1	cold	file		auto	16171764	ok	0.558225	0.55458	0.82616	28.969949	3	1.094094,0.550935,0.558225	
-baron_pancreas	rna	sweep	local	h5ad_gzip	2	cold	file		auto	16171764	ok	0.558297	0.554385	0.825463	28.966214	3	1.092628,0.550472,0.558297	
-baron_pancreas	rna	sweep	local	h5ad_gzip	4	cold	file		auto	16171764	ok	0.557034	0.553088	0.824321	29.031941	3	1.091608,0.549142,0.557034	
-baron_pancreas	rna	sweep	local	h5ad_gzip	4	warm	file		auto	16171764	ok	0.536426	0.5361	0.539586	30.147244	3	0.535774,0.542746,0.536426	
-baron_pancreas	rna	sweep	local	h5ad_gzip	8	cold	file		auto	16171764	ok	0.558681	0.554907	0.827612	28.946334	3	1.096542,0.551133,0.558681	
-baron_pancreas	rna	sweep	local	csc_i32	1	cold	file		auto	16171764	ok	0.100189	0.099473	0.100383	161.412673	3	0.100576,0.100189,0.098757	
-baron_pancreas	rna	sweep	local	csc_i32	2	cold	file		auto	16171764	ok	0.101017	0.099914	0.101352	160.09009	3	0.101687,0.101017,0.098811	
-baron_pancreas	rna	sweep	local	csc_i32	4	cold	file		auto	16171764	ok	0.098941	0.098893	0.099914	163.448148	3	0.100887,0.098941,0.098845	
-baron_pancreas	rna	sweep	local	csc_i32	4	warm	file		auto	16171764	ok	0.053384	0.053329	0.053722	302.934684	3	0.054060,0.053384,0.053274	
-baron_pancreas	rna	sweep	local	csc_i32	8	cold	file		auto	16171764	ok	0.101629	0.100541	0.102127	159.124844	3	0.102624,0.101629,0.099453	
-baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	16171764	ok	0.612615	0.612585	0.612905	26.397924	3	0.612615,0.612554,0.613195	scalar
-baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	16171764	ok	0.17038	0.170371	0.170528	94.915859	3	0.170676,0.170380,0.170361	avx2
-baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	16171764	ok	0.170395	0.170378	0.170395	94.907503	3	0.170396,0.170362,0.170395	avx2
-baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	16171764	ok	0.710053	0.710036	0.710742	22.775432	3	0.710019,0.711431,0.710053	scalar
-baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	16171764	ok	0.261356	0.261213	0.261429	61.876383	3	0.261502,0.261356,0.261071	avx2
-baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	16171764	ok	0.258027	0.257991	0.258272	62.674697	3	0.258517,0.258027,0.257955	avx2
-baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	16171764	ok	0.305903	0.305566	0.306804	52.86566	3	0.305903,0.305229,0.307704	scalar
-baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	16171764	ok	0.088765	0.088731	0.08887	182.186267	3	0.088765,0.088975,0.088698	avx2
-baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	16171764	ok	0.088867	0.088687	0.088934	181.977157	3	0.089002,0.088506,0.088867	avx2
-baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	16171764	ok	0.370586	0.370383	0.370752	43.638357	3	0.370586,0.370179,0.370918	scalar
-baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	16171764	ok	0.131674	0.131403	0.133849	122.816684	3	0.136024,0.131674,0.131132	avx2
-baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	16171764	ok	0.130749	0.130742	0.130796	123.685565	3	0.130842,0.130749,0.130734	avx2
-baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	16171764	ok	0.153776	0.153747	0.153813	105.164421	3	0.153850,0.153776,0.153719	scalar
-baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	16171764	ok	0.042965	0.042964	0.042997	376.393902	3	0.043029,0.042962,0.042965	avx2
-baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	16171764	ok	0.042985	0.042968	0.043023	376.218774	3	0.043060,0.042985,0.042952	avx2
-baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	16171764	ok	0.178913	0.17872	0.178999	90.388982	3	0.178913,0.178527,0.179084	scalar
-baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	16171764	ok	0.066149	0.066125	0.06616	244.474807	3	0.066149,0.066171,0.066100	avx2
-baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	16171764	ok	0.065987	0.065975	0.066037	245.075	3	0.066088,0.065987,0.065963	avx2
-baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	16171764	ok	0.077902	0.077893	0.077997	207.591127	3	0.077884,0.078092,0.077902	scalar
-baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	16171764	ok	0.023218	0.023211	0.023461	696.518391	3	0.023705,0.023205,0.023218	avx2
-baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	16171764	ok	0.023606	0.023523	0.02373	685.070067	3	0.023854,0.023606,0.023441	avx2
-baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	16171764	ok	0.090507	0.090496	0.090565	178.679704	3	0.090623,0.090507,0.090484	scalar
-baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	16171764	ok	0.03382	0.033819	0.03394	478.171614	3	0.034060,0.033818,0.033820	avx2
-baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	16171764	ok	0.033768	0.033767	0.033821	478.90796	3	0.033873,0.033766,0.033768	avx2
+baron_pancreas	rna	sweep	local	s1	1	cold	file	native	auto	16171764	ok	0.190449	0.189826	0.191123	84.914047	3	0.190449,0.189203,0.191797	avx2
+baron_pancreas	rna	sweep	local	s1	1	cold	file	canonical	auto	16171764	ok	0.279922	0.27872	0.282593	57.772361	3	0.279922,0.285264,0.277517	avx2
+baron_pancreas	rna	sweep	local	s1	2	cold	file	native	auto	16171764	ok	0.111199	0.108829	0.112221	145.431033	3	0.113243,0.111199,0.106459	avx2
+baron_pancreas	rna	sweep	local	s1	2	cold	file	canonical	auto	16171764	ok	0.152872	0.150966	0.15362	105.786489	3	0.154368,0.152872,0.149059	avx2
+baron_pancreas	rna	sweep	local	s1	4	cold	file	native	auto	16171764	ok	0.067491	0.06396	0.068606	239.613295	3	0.069721,0.067491,0.060429	avx2
+baron_pancreas	rna	sweep	local	s1	4	cold	file	canonical	auto	16171764	ok	0.089721	0.087586	0.090637	180.245461	3	0.091552,0.089721,0.085452	avx2
+baron_pancreas	rna	sweep	local	s1	4	warm	file	native	auto	16171764	ok	0.060834	0.059986	0.062637	265.834991	3	0.064441,0.060834,0.059138	avx2
+baron_pancreas	rna	sweep	local	s1	4	warm	file	canonical	auto	16171764	ok	0.079791	0.079745	0.082967	202.675463	3	0.086142,0.079791,0.079699	avx2
+baron_pancreas	rna	sweep	local	s1	8	cold	file	native	auto	16171764	ok	0.061614	0.059347	0.062841	262.467511	3	0.064067,0.061614,0.057080	avx2
+baron_pancreas	rna	sweep	local	s1	8	cold	file	canonical	auto	16171764	ok	0.069559	0.068704	0.074271	232.488755	3	0.078983,0.069559,0.067849	avx2
+baron_pancreas	rna	sweep	local	s1	1	warm	codec	native	scalar	16171764	ok	0.61838	0.617101	0.618973	26.15184	3	0.618380,0.619566,0.615822	scalar
+baron_pancreas	rna	sweep	local	s1	1	warm	codec	native	avx2	16171764	ok	0.1774	0.176723	0.178763	91.159804	3	0.176045,0.180126,0.177400	avx2
+baron_pancreas	rna	sweep	local	s1	1	warm	codec	native	avx512	16171764	ok	0.17825	0.177388	0.179363	90.72508	3	0.176527,0.180475,0.178250	avx2
+baron_pancreas	rna	sweep	local	s1	1	warm	codec	canonical	scalar	16171764	ok	0.708189	0.706769	0.708247	22.83537	3	0.708189,0.708304,0.705350	scalar
+baron_pancreas	rna	sweep	local	s1	1	warm	codec	canonical	avx2	16171764	ok	0.26855	0.267188	0.269932	60.218926	3	0.271314,0.268550,0.265827	avx2
+baron_pancreas	rna	sweep	local	s1	1	warm	codec	canonical	avx512	16171764	ok	0.266111	0.264715	0.267312	60.770642	3	0.268513,0.266111,0.263318	avx2
+baron_pancreas	rna	sweep	local	s1	2	warm	codec	native	scalar	16171764	ok	0.314382	0.313038	0.315635	51.439885	3	0.316888,0.314382,0.311695	scalar
+baron_pancreas	rna	sweep	local	s1	2	warm	codec	native	avx2	16171764	ok	0.095096	0.094991	0.095846	170.058028	3	0.095096,0.094887,0.096597	avx2
+baron_pancreas	rna	sweep	local	s1	2	warm	codec	native	avx512	16171764	ok	0.094607	0.094451	0.094877	170.936814	3	0.095148,0.094607,0.094296	avx2
+baron_pancreas	rna	sweep	local	s1	2	warm	codec	canonical	scalar	16171764	ok	0.371077	0.370935	0.373179	43.580668	3	0.375282,0.371077,0.370794	scalar
+baron_pancreas	rna	sweep	local	s1	2	warm	codec	canonical	avx2	16171764	ok	0.13765	0.137458	0.139783	117.48486	3	0.137650,0.137267,0.141917	avx2
+baron_pancreas	rna	sweep	local	s1	2	warm	codec	canonical	avx512	16171764	ok	0.138002	0.137789	0.139572	117.185234	3	0.138002,0.137577,0.141142	avx2
+baron_pancreas	rna	sweep	local	s1	4	warm	codec	native	scalar	16171764	ok	0.161397	0.160943	0.161728	100.198742	3	0.160490,0.161397,0.162059	scalar
+baron_pancreas	rna	sweep	local	s1	4	warm	codec	native	avx2	16171764	ok	0.051276	0.051261	0.051749	315.388365	3	0.052223,0.051276,0.051247	avx2
+baron_pancreas	rna	sweep	local	s1	4	warm	codec	native	avx512	16171764	ok	0.051522	0.051352	0.051887	313.878777	3	0.052251,0.051182,0.051522	avx2
+baron_pancreas	rna	sweep	local	s1	4	warm	codec	canonical	scalar	16171764	ok	0.183505	0.183036	0.183985	88.127183	3	0.182568,0.184465,0.183505	scalar
+baron_pancreas	rna	sweep	local	s1	4	warm	codec	canonical	avx2	16171764	ok	0.07289	0.072881	0.073237	221.865319	3	0.073584,0.072871,0.072890	avx2
+baron_pancreas	rna	sweep	local	s1	4	warm	codec	canonical	avx512	16171764	ok	0.073267	0.072903	0.073397	220.724142	3	0.073527,0.072539,0.073267	avx2
+baron_pancreas	rna	sweep	local	s1	8	warm	codec	native	scalar	16171764	ok	0.11655	0.112582	0.116912	138.753532	3	0.117274,0.116550,0.108614	scalar
+baron_pancreas	rna	sweep	local	s1	8	warm	codec	native	avx2	16171764	ok	0.048002	0.045291	0.049019	336.900608	3	0.050036,0.042581,0.048002	avx2
+baron_pancreas	rna	sweep	local	s1	8	warm	codec	native	avx512	16171764	ok	0.050211	0.049197	0.050223	322.074624	3	0.050211,0.048184,0.050235	avx2
+baron_pancreas	rna	sweep	local	s1	8	warm	codec	canonical	scalar	16171764	ok	0.130207	0.129896	0.130886	124.199956	3	0.129585,0.130207,0.131564	scalar
+baron_pancreas	rna	sweep	local	s1	8	warm	codec	canonical	avx2	16171764	ok	0.058492	0.057944	0.063125	276.4771	3	0.067758,0.057396,0.058492	avx2
+baron_pancreas	rna	sweep	local	s1	8	warm	codec	canonical	avx512	16171764	ok	0.057775	0.056452	0.058686	279.908014	3	0.059597,0.057775,0.055128	avx2
+baron_pancreas	rna	sweep	local	h5ad_gzip	1	cold	file		auto	16171764	ok	0.555118	0.552562	0.556577	29.132097	3	0.555118,0.550006,0.558036	
+baron_pancreas	rna	sweep	local	h5ad_gzip	2	cold	file		auto	16171764	ok	0.55334	0.551746	0.555913	29.22571	3	0.553340,0.550151,0.558485	
+baron_pancreas	rna	sweep	local	h5ad_gzip	4	cold	file		auto	16171764	ok	0.554691	0.552179	0.555945	29.15454	3	0.554691,0.549667,0.557199	
+baron_pancreas	rna	sweep	local	h5ad_gzip	4	warm	file		auto	16171764	ok	0.533753	0.533542	0.537636	30.298232	3	0.533330,0.541519,0.533753	
+baron_pancreas	rna	sweep	local	h5ad_gzip	8	cold	file		auto	16171764	ok	0.55371	0.551438	0.555672	29.206208	3	0.553710,0.549165,0.557635	
+baron_pancreas	rna	sweep	local	csc_i32	1	cold	file		auto	16171764	ok	0.093571	0.093141	0.095514	172.829024	3	0.097458,0.093571,0.092711	
+baron_pancreas	rna	sweep	local	csc_i32	2	cold	file		auto	16171764	ok	0.095161	0.095053	0.097055	169.941453	3	0.098948,0.095161,0.094944	
+baron_pancreas	rna	sweep	local	csc_i32	4	cold	file		auto	16171764	ok	0.094064	0.093861	0.095659	171.922854	3	0.097254,0.094064,0.093657	
+baron_pancreas	rna	sweep	local	csc_i32	4	warm	file		auto	16171764	ok	0.050138	0.050079	0.050611	322.543747	3	0.051083,0.050019,0.050138	
+baron_pancreas	rna	sweep	local	csc_i32	8	cold	file		auto	16171764	ok	0.094092	0.09392	0.09542	171.872616	3	0.096748,0.094092,0.093748	
+baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	16171764	ok	0.61377	0.613515	0.614341	26.348248	3	0.613770,0.613261,0.614912	scalar
+baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	16171764	ok	0.168617	0.168594	0.168665	95.908265	3	0.168713,0.168617,0.168570	avx2
+baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	16171764	ok	0.167647	0.167614	0.167658	96.463188	3	0.167647,0.167669,0.167581	avx2
+baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	16171764	ok	0.714636	0.710991	0.741831	22.629372	3	0.707346,0.714636,0.769025	scalar
+baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	16171764	ok	0.277731	0.27766	0.278977	58.228156	3	0.277731,0.277588,0.280224	avx2
+baron_pancreas	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	16171764	ok	0.281755	0.274971	0.282211	57.396547	3	0.281755,0.282668,0.268188	avx2
+baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	16171764	ok	0.307805	0.307646	0.307829	52.538991	3	0.307487,0.307805,0.307854	scalar
+baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	16171764	ok	0.085281	0.085276	0.08537	189.629155	3	0.085281,0.085271,0.085459	avx2
+baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	16171764	ok	0.086079	0.085863	0.094637	187.871188	3	0.085646,0.103196,0.086079	avx2
+baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	16171764	ok	0.354637	0.354534	0.354997	45.600893	3	0.354430,0.354637,0.355357	scalar
+baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	16171764	ok	0.131958	0.131941	0.132013	122.552358	3	0.132068,0.131958,0.131925	avx2
+baron_pancreas	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	16171764	ok	0.131309	0.1313	0.131322	123.158078	3	0.131335,0.131309,0.131290	avx2
+baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	16171764	ok	0.155568	0.155443	0.155605	103.953024	3	0.155317,0.155568,0.155642	scalar
+baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	16171764	ok	0.043047	0.043007	0.043078	375.676911	3	0.042967,0.043108,0.043047	avx2
+baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	16171764	ok	0.043362	0.043354	0.043371	372.947835	3	0.043362,0.043380,0.043347	avx2
+baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	16171764	ok	0.179504	0.179448	0.179573	90.091385	3	0.179643,0.179504,0.179392	scalar
+baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	16171764	ok	0.066375	0.066363	0.066418	243.642395	3	0.066461,0.066352,0.066375	avx2
+baron_pancreas	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	16171764	ok	0.066165	0.06614	0.066203	244.415688	3	0.066115,0.066165,0.066242	avx2
+baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	16171764	ok	0.111091	0.110447	0.112343	145.572225	3	0.109802,0.113595,0.111091	scalar
+baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	16171764	ok	0.030503	0.030218	0.032135	530.169623	3	0.030503,0.033768,0.029933	avx2
+baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	16171764	ok	0.039877	0.036181	0.039918	405.541139	3	0.039877,0.039959,0.032485	avx2
+baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	16171764	ok	0.12221	0.116444	0.12378	132.327665	3	0.122210,0.125350,0.110678	scalar
+baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	16171764	ok	0.055455	0.054497	0.056391	291.619583	3	0.055455,0.053540,0.057328	avx2
+baron_pancreas	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	16171764	ok	0.048486	0.046952	0.048828	333.534711	3	0.049170,0.048486,0.045417	avx2

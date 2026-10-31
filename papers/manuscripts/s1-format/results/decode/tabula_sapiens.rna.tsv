@@ -1,39 +1,41 @@
 dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
-tabula_sapiens	rna	main	local	csc_i32	4	cold	file		auto	1119354356	ok	12.380415	11.914935	17.566026	90.413318	3	22.751637,12.380415,11.449456	
-tabula_sapiens	rna	main	local	csc_i32	4	warm	file		auto	1119354356	ok	3.362616	3.362447	3.384248	332.881975	3	3.405880,3.362616,3.362277	
-tabula_sapiens	rna	main	local	tenx_h5	4	cold	file		auto	1119354356	ok	42.647722	42.642649	42.685409	26.246521	3	42.723096,42.637576,42.647722	
-tabula_sapiens	rna	main	local	tenx_h5	4	warm	file		auto	1119354356	ok	42.088236	42.086324	42.102684	26.595421	3	42.117132,42.088236,42.084412	
-tabula_sapiens	rna	main	local	h5ad_none	4	cold	file		auto	1119354356	ok	12.076462	12.034029	12.49341	92.688934	3	12.910358,11.991597,12.076462	
-tabula_sapiens	rna	main	local	h5ad_none	4	warm	file		auto	1119354356	ok	4.409438	4.404167	4.430261	253.854207	3	4.451085,4.398896,4.409438	
-tabula_sapiens	rna	main	local	h5ad_gzip	4	cold	file		auto	1119354356	ok	35.703137	35.583307	36.021773	31.351709	3	36.340409,35.463476,35.703137	
-tabula_sapiens	rna	main	local	h5ad_gzip	4	warm	file		auto	1119354356	ok	34.481962	34.370196	34.487433	32.462026	3	34.492905,34.481962,34.258429	
-tabula_sapiens	rna	main	local	zarr	4	cold	file		auto	1119354356	ok	7.129603	7.120223	7.570966	157.000935	3	8.012328,7.129603,7.110843	
-tabula_sapiens	rna	main	local	zarr	4	warm	file		auto	1119354356	ok	4.348698	4.344587	4.370889	257.399893	3	4.393080,4.348698,4.340476	
-tabula_sapiens	rna	main	local	soma	4	cold	file		auto	1119354356	ok	24.580248	24.511424	24.933191	45.538773	3	25.286133,24.580248,24.442600	
-tabula_sapiens	rna	main	local	soma	4	warm	file		auto	1119354356	ok	24.086527	24.069931	24.173526	46.472219	3	24.053336,24.260525,24.086527	
-tabula_sapiens	rna	main	local	s1	4	cold	file	native	auto	1119354356	ok	4.748173	4.745909	5.660866	235.744237	3	6.573560,4.748173,4.743645	avx2
-tabula_sapiens	rna	main	local	s1	4	cold	file	canonical	auto	1119354356	ok	6.585036	6.58213	7.438209	169.984538	3	8.291381,6.585036,6.579223	avx2
-tabula_sapiens	rna	main	local	s1	4	warm	file	native	auto	1119354356	ok	4.333367	4.304449	4.343727	258.310564	3	4.354088,4.333367,4.275531	avx2
-tabula_sapiens	rna	main	local	s1	4	warm	file	canonical	auto	1119354356	ok	6.101298	6.099465	6.128987	183.461677	3	6.156676,6.097632,6.101298	avx2
-tabula_sapiens	rna	main	local	s1	4	warm	codec	native	scalar	1119354356	ok	11.391354	11.360763	11.425209	98.263502	3	11.330171,11.459065,11.391354	scalar
-tabula_sapiens	rna	main	local	s1	4	warm	codec	native	avx2	1119354356	ok	3.719739	3.708665	3.722643	300.922804	3	3.697590,3.725547,3.719739	avx2
-tabula_sapiens	rna	main	local	s1	4	warm	codec	native	avx512	1119354356	ok	3.70882	3.706118	3.733848	301.808774	3	3.703416,3.708820,3.758876	avx2
-tabula_sapiens	rna	main	local	s1	4	warm	codec	canonical	scalar	1119354356	ok	13.285765	13.263958	13.295046	84.25216	3	13.242151,13.304327,13.285765	scalar
-tabula_sapiens	rna	main	local	s1	4	warm	codec	canonical	avx2	1119354356	ok	5.592123	5.568944	5.614581	200.166252	3	5.545764,5.637039,5.592123	avx2
-tabula_sapiens	rna	main	local	s1	4	warm	codec	canonical	avx512	1119354356	ok	5.563914	5.543636	5.569016	201.181097	3	5.523359,5.563914,5.574119	avx2
-tabula_sapiens	rna	main	local	s1_pack	4	cold	file	native	auto	1119354356	ok	4.745717	4.740922	5.487872	235.866248	3	6.230028,4.736127,4.745717	avx2
-tabula_sapiens	rna	main	local	s1_pack	4	cold	file	canonical	auto	1119354356	ok	6.555857	6.549639	7.261717	170.741131	3	7.967577,6.543421,6.555857	avx2
-tabula_sapiens	rna	main	local	s1_pack	4	warm	file	native	auto	1119354356	ok	4.281722	4.279174	4.307042	261.426199	3	4.332362,4.281722,4.276626	avx2
-tabula_sapiens	rna	main	local	s1_pack	4	warm	file	canonical	auto	1119354356	ok	6.080874	6.079866	6.112884	184.077884	3	6.078858,6.144894,6.080874	avx2
-tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	1119354356	ok	44.244939	44.141935	44.263643	25.299037	3	44.244939,44.282347,44.038930	scalar
-tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	1119354356	ok	11.804957	11.780366	11.806451	94.820706	3	11.804957,11.755775,11.807946	avx2
-tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	1119354356	ok	11.814173	11.789026	11.814439	94.746738	3	11.814706,11.763878,11.814173	avx2
-tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	1119354356	ok	52.948238	52.945599	52.950296	21.14054	3	52.952354,52.942959,52.948238	scalar
-tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	1119354356	ok	19.752436	19.752116	19.860148	56.66918	3	19.967859,19.751795,19.752436	avx2
-tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	1119354356	ok	19.901114	19.8854	20.021104	56.245814	3	19.869687,19.901114,20.141095	avx2
-tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	1119354356	ok	11.137777	11.111334	11.138032	100.500697	3	11.084890,11.138287,11.137777	scalar
-tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	1119354356	ok	2.959297	2.95334	2.977171	378.25009	3	2.995046,2.947382,2.959297	avx2
-tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	1119354356	ok	2.967104	2.96063	2.985245	377.254844	3	3.003385,2.954156,2.967104	avx2
-tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	1119354356	ok	13.26914	13.259988	13.272392	84.357717	3	13.250835,13.275643,13.269140	scalar
-tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	1119354356	ok	4.970035	4.967958	4.970515	225.220618	3	4.965882,4.970035,4.970994	avx2
-tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	1119354356	ok	4.989645	4.986389	4.991107	224.33547	3	4.983132,4.989645,4.992568	avx2
+tabula_sapiens	rna	main	local	csc_i32	4	cold	file		auto	1119354356	ok	14.092696	13.722557	14.092766	79.427976	3	14.092836,14.092696,13.352417	
+tabula_sapiens	rna	main	local	csc_i32	4	warm	file		auto	1119354356	ok	5.368692	5.367966	5.388373	208.496676	3	5.408055,5.367240,5.368692	
+tabula_sapiens	rna	main	local	tenx_h5	4	cold	file		auto	1119354356	ok	48.135035	48.133424	48.13896	23.254462	3	48.142885,48.131812,48.135035	
+tabula_sapiens	rna	main	local	tenx_h5	4	warm	file		auto	1119354356	ok	47.809188	47.745083	47.891118	23.412955	3	47.973048,47.809188,47.680977	
+tabula_sapiens	rna	main	local	h5ad_none	4	cold	file		auto	1119354356	ok	14.257568	14.25696	14.466955	78.509485	3	14.676341,14.256352,14.257568	
+tabula_sapiens	rna	main	local	h5ad_none	4	warm	file		auto	1119354356	ok	6.667103	6.63531	6.668821	167.892155	3	6.667103,6.670539,6.603516	
+tabula_sapiens	rna	main	local	h5ad_gzip	4	cold	file		auto	1119354356	ok	37.393399	37.346888	37.616215	29.934545	3	37.300378,37.393399,37.839032	
+tabula_sapiens	rna	main	local	h5ad_gzip	4	warm	file		auto	1119354356	ok	35.844213	35.745177	35.896031	31.228314	3	35.844213,35.646141,35.947849	
+tabula_sapiens	rna	main	local	zarr	4	cold	file		auto	1119354356	ok	8.518902	8.507935	8.537349	131.396552	3	8.496968,8.518902,8.555796	
+tabula_sapiens	rna	main	local	zarr	4	warm	file		auto	1119354356	ok	6.14093	6.1185	6.145772	182.277664	3	6.140930,6.096070,6.150614	
+tabula_sapiens	rna	main	local	soma	4	cold	file		auto	1119354356	ok	33.872388	33.692	34.074195	33.046219	3	33.872388,33.511613,34.276002	
+tabula_sapiens	rna	main	local	soma	4	warm	file		auto	1119354356	ok	33.792267	33.639477	33.827133	33.124571	3	33.486688,33.792267,33.861999	
+tabula_sapiens	rna	main	local	s1	4	cold	file	native	auto	1119354356	ok	5.621586	5.605859	5.709294	199.117172	3	5.797001,5.621586,5.590131	avx2
+tabula_sapiens	rna	main	local	s1	4	cold	file	canonical	auto	1119354356	ok	7.532042	7.466989	7.532201	148.612339	3	7.532042,7.532360,7.401936	avx2
+tabula_sapiens	rna	main	local	s1	4	warm	file	native	auto	1119354356	ok	5.211343	5.203207	5.264376	214.791927	3	5.317410,5.195072,5.211343	avx2
+tabula_sapiens	rna	main	local	s1	4	warm	file	canonical	auto	1119354356	ok	7.071083	7.065856	7.078728	158.300268	3	7.071083,7.086373,7.060628	avx2
+tabula_sapiens	rna	main	local	s1	4	warm	codec	native	scalar	1119354356	ok	13.369658	13.355793	13.378609	83.723486	3	13.387561,13.341927,13.369658	scalar
+tabula_sapiens	rna	main	local	s1	4	warm	codec	native	avx2	1119354356	ok	4.436185	4.41733	4.451988	252.323642	3	4.398475,4.436185,4.467790	avx2
+tabula_sapiens	rna	main	local	s1	4	warm	codec	native	avx512	1119354356	ok	4.458204	4.440774	4.469783	251.077417	3	4.423345,4.458204,4.481362	avx2
+tabula_sapiens	rna	main	local	s1	4	warm	codec	canonical	scalar	1119354356	ok	14.148561	14.131489	14.22727	79.114363	3	14.114418,14.148561,14.305980	scalar
+tabula_sapiens	rna	main	local	s1	4	warm	codec	canonical	avx2	1119354356	ok	7.306926	6.821289	7.339337	153.190867	3	6.335651,7.371747,7.306926	avx2
+tabula_sapiens	rna	main	local	s1	4	warm	codec	canonical	avx512	1119354356	ok	6.26695	6.254264	6.266996	178.612304	3	6.267042,6.241578,6.266950	avx2
+tabula_sapiens	rna	main	local	s1_pack	4	cold	file	native	auto	1119354356	ok	5.488288	5.485325	5.537972	203.953281	3	5.587657,5.488288,5.482361	avx2
+tabula_sapiens	rna	main	local	s1_pack	4	cold	file	canonical	auto	1119354356	ok	7.380048	7.3681	7.429949	151.673043	3	7.479850,7.356153,7.380048	avx2
+tabula_sapiens	rna	main	local	s1_pack	4	warm	file	native	auto	1119354356	ok	5.060522	5.053821	5.087343	221.193445	3	5.060522,5.114165,5.047120	avx2
+tabula_sapiens	rna	main	local	s1_pack	4	warm	file	canonical	auto	1119354356	ok	6.996418	6.991038	6.996982	159.989644	3	6.996418,6.985659,6.997545	avx2
+tabula_sapiens	rna	main	local	zarr3	4	cold	file		auto	1119354356	ok	20.378456	20.331295	20.397005	54.928321	3	20.415555,20.284135,20.378456	
+tabula_sapiens	rna	main	local	zarr3	4	warm	file		auto	1119354356	ok	19.833463	19.656391	19.907181	56.437666	3	19.479319,19.980899,19.833463	
+tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	1119354356	ok	50.842279	50.771479	50.901736	22.016211	3	50.961192,50.842279,50.700679	scalar
+tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	1119354356	ok	14.364081	14.215557	14.483516	77.927321	3	14.364081,14.602951,14.067033	avx2
+tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	1119354356	ok	14.30395	14.203684	14.467906	78.254913	3	14.303950,14.631863,14.103417	avx2
+tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	1119354356	ok	59.611762	59.571679	59.853758	18.777408	3	59.611762,60.095755,59.531595	scalar
+tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	1119354356	ok	23.117758	22.66492	23.147363	48.419676	3	23.117758,23.176969,22.212082	avx2
+tabula_sapiens	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	1119354356	ok	22.686318	22.537314	22.952096	49.340504	3	23.217874,22.686318,22.388310	avx2
+tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	1119354356	ok	12.610944	12.511051	12.664662	88.760552	3	12.610944,12.718380,12.411158	scalar
+tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	1119354356	ok	3.572325	3.565921	3.585761	313.340571	3	3.572325,3.599196,3.559518	avx2
+tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	1119354356	ok	3.566298	3.557532	3.590175	313.870113	3	3.566298,3.614052,3.548766	avx2
+tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	1119354356	ok	14.548504	14.51863	14.63938	76.939482	3	14.730255,14.488756,14.548504	scalar
+tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	1119354356	ok	5.61926	5.616878	5.689318	199.199602	3	5.619260,5.759376,5.614496	avx2
+tabula_sapiens	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	1119354356	ok	5.777093	5.705262	5.858856	193.757372	3	5.633431,5.940620,5.777093	avx2

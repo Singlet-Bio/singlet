@@ -1,16 +1,17 @@
 format	label	group	whole	bits	mnnzs	gbit	anchor
-csc_i32	CSC, int32	general	0	64.2754	317.192	20.3877	east
-mtx_gz	MTX.gz	general	1	24.8073	12.3736	0.306957	west
-tenx_h5	10x HDF5	general	0	11.8045	25.811	0.304687	east
-h5ad_none	h5ad (none)	general	0	64.8797	194.445	12.6156	east
-h5ad_gzip	h5ad gzip	general	0	18.7539	30.9681	0.580773	west
-h5ad_lzf	h5ad lzf	general	0	39.185	57.4424	2.25088	west
-zarr	AnnData Zarr	general	0	14.9432	151.171	2.25897	west
-loom	loom	general	0	21.9115	2.78742	0.0610765	west
-soma	TileDB-SOMA	domain	0	14.801	40.6752	0.602036	north
-parquet_coo	Parquet COO	general	0	17.7249	43.7544	0.775542	south east
-csc_zstd19	CSC + zstd-19	general	1	9.73942	78.9823	0.769241	north
-rds_gz	rds (gzip)	general	1	18.2235	20.4899	0.373398	south west
-rds_xz	rds (xz)	general	1	8.81504	14.2578	0.125683	east
-bpcells	BPCells	domain	0	15.9819	8.1452	0.130176	west
-s1	\textbf{.s1}	s1	0	5.26881	183.329	0.965926	south
+csc_i32	CSC, int32	general	0	64.2754	286.459	18.4123	east
+mtx_gz	MTX.gz	general	1	24.8073	12.1231	0.300741	west
+tenx_h5	10x HDF5	general	0	11.8045	24.6737	0.291261	east
+h5ad_none	h5ad (none)	general	0	64.8797	164.611	10.6799	east
+h5ad_gzip	h5ad gzip	general	0	18.7539	30.3258	0.568727	west
+h5ad_lzf	h5ad lzf	general	0	39.185	56.4627	2.21249	west
+zarr	AnnData Zarr	general	0	14.9432	150.219	2.24475	west
+loom	loom	general	0	21.9115	2.9504	0.0646475	west
+soma	TileDB-SOMA	domain	0	14.801	35.2028	0.521038	north
+parquet_coo	Parquet COO	general	0	17.7249	39.7471	0.704513	south east
+csc_zstd19	CSC + zstd-19	general	1	9.73942	77.7957	0.757685	north
+rds_gz	rds (gzip)	general	1	18.2235	20.1365	0.366957	south west
+rds_xz	rds (xz)	general	1	8.81504	14.0538	0.123885	east
+bpcells	BPCells	domain	0	15.9819	8.16502	0.130493	west
+s1	\textbf{.s1}	s1	0	5.26881	159.523	0.840496	south
+zarr3	Zarr v3 sharded	general	0	12.0106	60.7498	0.729639	west

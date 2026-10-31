@@ -15,3 +15,4 @@ tahoe_plate	rna	rds_xz	general	8276063161	62710	5481420	not_applicable	NA	NA	NA	
 tahoe_plate	rna	bpcells	domain	8276063161	62710	5481420	not_applicable	NA	NA	NA	NA	NA	read into memory as a dgCMatrix, which holds at most 2^31-1 non-zeros; this matrix has 8276063161
 tahoe_plate	rna	s1	s1	8276063161	62710	5481420	ok	5185098332	5.01214	0	819.525107	4	NA
 tahoe_plate	rna	s1_pack	s1	8276063161	62710	5481420	ok	5184924026	5.011971	662281	837.437583	4	NA
+tahoe_plate	rna	zarr3	general	8276063161	62710	5481420	ok	11870739124	11.474769	0	2179.497186	4	NA

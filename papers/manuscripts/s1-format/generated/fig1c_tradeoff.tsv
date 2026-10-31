@@ -1,16 +1,17 @@
 format	label	group	bits	mnnzs	anchor
-csc_i32	CSC, int32	general	64.2754	114.623	east
-mtx_gz	MTX.gz	general	24.9082	12.0827	west
-tenx_h5	10x HDF5	general	11.8045	25.2111	east
-h5ad_none	h5ad (none)	general	64.8797	82.1194	west
-h5ad_gzip	h5ad gzip	general	18.7539	29.7226	west
-h5ad_lzf	h5ad lzf	general	39.382	51.2729	south west
-zarr	AnnData Zarr	general	14.9432	108.599	south
-loom	loom	general	21.9115	2.68477	west
-soma	TileDB-SOMA	domain	14.801	37.3912	east
-parquet_coo	Parquet COO	general	17.7318	38.8553	south west
-csc_zstd19	CSC + zstd-19	general	9.66709	73.2697	north
-rds_gz	rds (gzip)	general	18.3786	19.1172	east
-rds_xz	rds (xz)	general	8.84006	13.6427	north
-bpcells	BPCells	domain	15.9532	7.93792	west
-s1	.s1	s1	5.26881	162.101	north west
+csc_i32	CSC, int32	general	64.2754	99.3001	east
+mtx_gz	MTX.gz	general	24.9082	11.9812	west
+tenx_h5	10x HDF5	general	11.8045	24.2379	east
+h5ad_none	h5ad (none)	general	64.8797	73.1311	west
+h5ad_gzip	h5ad gzip	general	18.7539	29.0812	west
+h5ad_lzf	h5ad lzf	general	39.382	49.938	south west
+zarr	AnnData Zarr	general	14.9432	105.182	south
+loom	loom	general	21.9115	2.87733	west
+soma	TileDB-SOMA	domain	14.801	33.3656	east
+parquet_coo	Parquet COO	general	17.7318	35.6645	south west
+csc_zstd19	CSC + zstd-19	general	9.66709	73.1716	north
+rds_gz	rds (gzip)	general	18.3786	18.9792	east
+rds_xz	rds (xz)	general	8.84006	13.5705	north
+bpcells	BPCells	domain	15.9532	8.00158	west
+s1	.s1	s1	5.26881	147.222	north west
+zarr3	Zarr v3 sharded	general	12.0106	61.6802	west

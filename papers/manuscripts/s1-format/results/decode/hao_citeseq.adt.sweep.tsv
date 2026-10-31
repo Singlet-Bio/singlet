@@ -1,69 +1,69 @@
 dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
-hao_citeseq	adt	sweep	local	s1	1	cold	file	native	auto	33599680	ok	0.42297	0.41757	1.320107	79.437435	3	2.217243,0.422970,0.412169	avx2
-hao_citeseq	adt	sweep	local	s1	1	cold	file	canonical	auto	33599680	ok	0.602226	0.598657	1.271999	55.792476	3	1.941773,0.602226,0.595088	avx2
-hao_citeseq	adt	sweep	local	s1	2	cold	file	native	auto	33599680	ok	0.263591	0.258968	0.914081	127.469002	3	1.564572,0.263591,0.254344	avx2
-hao_citeseq	adt	sweep	local	s1	2	cold	file	canonical	auto	33599680	ok	0.353055	0.347051	1.003409	95.16846	3	1.653763,0.353055,0.341046	avx2
-hao_citeseq	adt	sweep	local	s1	4	cold	file	native	auto	33599680	ok	0.173279	0.171709	0.832728	193.905548	3	1.492178,0.173279,0.170139	avx2
-hao_citeseq	adt	sweep	local	s1	4	cold	file	canonical	auto	33599680	ok	0.221051	0.216613	0.868923	151.999584	3	1.516795,0.221051,0.212176	avx2
-hao_citeseq	adt	sweep	local	s1	4	warm	file	native	auto	33599680	ok	0.151245	0.148432	0.1544	222.15415	3	0.157554,0.145618,0.151245	avx2
-hao_citeseq	adt	sweep	local	s1	4	warm	file	canonical	auto	33599680	ok	0.194202	0.192642	0.198404	173.014519	3	0.202607,0.194202,0.191082	avx2
-hao_citeseq	adt	sweep	local	s1	8	cold	file	native	auto	33599680	ok	0.134813	0.129188	0.788765	249.231746	3	1.442716,0.134813,0.123562	avx2
-hao_citeseq	adt	sweep	local	s1	8	cold	file	canonical	auto	33599680	ok	0.154616	0.148607	0.820123	217.310829	3	1.485629,0.154616,0.142598	avx2
-hao_citeseq	adt	sweep	local	s1	1	warm	codec	native	scalar	33599680	ok	1.119471	1.118277	1.122348	30.013881	3	1.125224,1.119471,1.117084	scalar
-hao_citeseq	adt	sweep	local	s1	1	warm	codec	native	avx2	33599680	ok	0.363961	0.362634	0.3644	92.316737	3	0.363961,0.361308,0.364838	avx2
-hao_citeseq	adt	sweep	local	s1	1	warm	codec	native	avx512	33599680	ok	0.361119	0.360827	0.362226	93.043174	3	0.363333,0.361119,0.360535	avx2
-hao_citeseq	adt	sweep	local	s1	1	warm	codec	canonical	scalar	33599680	ok	1.29999	1.29991	1.305057	25.846099	3	1.310123,1.299990,1.299829	scalar
-hao_citeseq	adt	sweep	local	s1	1	warm	codec	canonical	avx2	33599680	ok	0.545106	0.543308	0.545752	61.638833	3	0.541511,0.546399,0.545106	avx2
-hao_citeseq	adt	sweep	local	s1	1	warm	codec	canonical	avx512	33599680	ok	0.544029	0.542503	0.545094	61.760824	3	0.540978,0.546159,0.544029	avx2
-hao_citeseq	adt	sweep	local	s1	2	warm	codec	native	scalar	33599680	ok	0.578289	0.577944	0.578445	58.10184	3	0.578289,0.578601,0.577598	scalar
-hao_citeseq	adt	sweep	local	s1	2	warm	codec	native	avx2	33599680	ok	0.198804	0.198568	0.19897	169.008661	3	0.198332,0.199136,0.198804	avx2
-hao_citeseq	adt	sweep	local	s1	2	warm	codec	native	avx512	33599680	ok	0.198058	0.197904	0.19876	169.645547	3	0.197749,0.199462,0.198058	avx2
-hao_citeseq	adt	sweep	local	s1	2	warm	codec	canonical	scalar	33599680	ok	0.668115	0.667038	0.668886	50.290251	3	0.668115,0.669657,0.665961	scalar
-hao_citeseq	adt	sweep	local	s1	2	warm	codec	canonical	avx2	33599680	ok	0.284391	0.284027	0.289563	118.146265	3	0.294735,0.284391,0.283663	avx2
-hao_citeseq	adt	sweep	local	s1	2	warm	codec	canonical	avx512	33599680	ok	0.284712	0.284513	0.284987	118.013063	3	0.285263,0.284314,0.284712	avx2
-hao_citeseq	adt	sweep	local	s1	4	warm	codec	native	scalar	33599680	ok	0.297523	0.297194	0.298038	112.931391	3	0.298554,0.297523,0.296865	scalar
-hao_citeseq	adt	sweep	local	s1	4	warm	codec	native	avx2	33599680	ok	0.111138	0.110882	0.111218	302.324061	3	0.111298,0.110627,0.111138	avx2
-hao_citeseq	adt	sweep	local	s1	4	warm	codec	native	avx512	33599680	ok	0.111382	0.110994	0.11142	301.660914	3	0.111458,0.110605,0.111382	avx2
-hao_citeseq	adt	sweep	local	s1	4	warm	codec	canonical	scalar	33599680	ok	0.341746	0.341727	0.342901	98.3176	3	0.344056,0.341709,0.341746	scalar
-hao_citeseq	adt	sweep	local	s1	4	warm	codec	canonical	avx2	33599680	ok	0.155652	0.154377	0.158208	215.86374	3	0.160765,0.153101,0.155652	avx2
-hao_citeseq	adt	sweep	local	s1	4	warm	codec	canonical	avx512	33599680	ok	0.155605	0.154548	0.156764	215.929063	3	0.157922,0.153492,0.155605	avx2
-hao_citeseq	adt	sweep	local	s1	8	warm	codec	native	scalar	33599680	ok	0.158552	0.158466	0.158676	211.916106	3	0.158552,0.158380,0.158800	scalar
-hao_citeseq	adt	sweep	local	s1	8	warm	codec	native	avx2	33599680	ok	0.070208	0.069857	0.07051	478.57349	3	0.070812,0.069505,0.070208	avx2
-hao_citeseq	adt	sweep	local	s1	8	warm	codec	native	avx512	33599680	ok	0.069925	0.069608	0.070339	480.507445	3	0.070753,0.069291,0.069925	avx2
-hao_citeseq	adt	sweep	local	s1	8	warm	codec	canonical	scalar	33599680	ok	0.180345	0.180187	0.180743	186.307466	3	0.181142,0.180030,0.180345	scalar
-hao_citeseq	adt	sweep	local	s1	8	warm	codec	canonical	avx2	33599680	ok	0.089861	0.08924	0.090029	373.9068	3	0.089861,0.088619,0.090198	avx2
-hao_citeseq	adt	sweep	local	s1	8	warm	codec	canonical	avx512	33599680	ok	0.090595	0.089827	0.091192	370.876069	3	0.090595,0.089058,0.091788	avx2
-hao_citeseq	adt	sweep	local	h5ad_gzip	1	cold	file		auto	33599680	ok	0.881254	0.8788	1.147493	38.127116	3	1.413731,0.881254,0.876345	
-hao_citeseq	adt	sweep	local	h5ad_gzip	2	cold	file		auto	33599680	ok	0.876502	0.873878	1.142114	38.333832	3	1.407727,0.876502,0.871255	
-hao_citeseq	adt	sweep	local	h5ad_gzip	4	cold	file		auto	33599680	ok	0.879078	0.876786	1.145251	38.221505	3	1.411424,0.879078,0.874493	
-hao_citeseq	adt	sweep	local	h5ad_gzip	4	warm	file		auto	33599680	ok	0.846322	0.844319	0.849019	39.700807	3	0.851716,0.846322,0.842316	
-hao_citeseq	adt	sweep	local	h5ad_gzip	8	cold	file		auto	33599680	ok	0.881154	0.878732	1.185028	38.131454	3	1.488903,0.881154,0.876311	
-hao_citeseq	adt	sweep	local	csc_i32	1	cold	file		auto	33599680	ok	0.36603	0.363356	0.366632	91.794878	3	0.367234,0.360681,0.366030	
-hao_citeseq	adt	sweep	local	csc_i32	2	cold	file		auto	33599680	ok	0.35909	0.358763	0.361277	93.56891	3	0.363463,0.358436,0.359090	
-hao_citeseq	adt	sweep	local	csc_i32	4	cold	file		auto	33599680	ok	0.363778	0.361713	0.365277	92.363263	3	0.366777,0.363778,0.359648	
-hao_citeseq	adt	sweep	local	csc_i32	4	warm	file		auto	33599680	ok	0.120201	0.119979	0.120833	279.529949	3	0.121464,0.120201,0.119757	
-hao_citeseq	adt	sweep	local	csc_i32	8	cold	file		auto	33599680	ok	0.361544	0.361492	0.365702	92.93379	3	0.369859,0.361544,0.361439	
-hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	native	scalar	33599680	ok	1.157406	1.155949	1.158345	29.030159	3	1.159284,1.157406,1.154492	scalar
-hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	native	avx2	33599680	ok	0.379089	0.378943	0.379149	88.632696	3	0.379209,0.379089,0.378797	avx2
-hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	native	avx512	33599680	ok	0.378251	0.37819	0.378296	88.829058	3	0.378341,0.378251,0.378128	avx2
-hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	33599680	ok	1.295571	1.293972	1.296054	25.934264	3	1.295571,1.296537,1.292374	scalar
-hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	33599680	ok	0.518852	0.518819	0.520124	64.757734	3	0.518852,0.518787,0.521397	avx2
-hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	33599680	ok	0.521814	0.52171	0.522918	64.390147	3	0.521814,0.521607,0.524022	avx2
-hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	native	scalar	33599680	ok	0.571934	0.571409	0.571986	58.747478	3	0.571934,0.572038,0.570884	scalar
-hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	native	avx2	33599680	ok	0.18919	0.189126	0.189327	177.597547	3	0.189464,0.189190,0.189061	avx2
-hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	native	avx512	33599680	ok	0.189201	0.189156	0.189254	177.587222	3	0.189306,0.189201,0.189111	avx2
-hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	33599680	ok	0.647795	0.647492	0.655131	51.867767	3	0.662468,0.647189,0.647795	scalar
-hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	33599680	ok	0.260783	0.260728	0.267673	128.841527	3	0.274563,0.260783,0.260673	avx2
-hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	33599680	ok	0.261675	0.261674	0.276149	128.402331	3	0.290623,0.261675,0.261672	avx2
-hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	native	scalar	33599680	ok	0.286689	0.286509	0.28683	117.199055	3	0.286689,0.286329,0.286972	scalar
-hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	native	avx2	33599680	ok	0.095151	0.09514	0.095178	353.119568	3	0.095206,0.095129,0.095151	avx2
-hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	native	avx512	33599680	ok	0.095313	0.09527	0.095454	352.519384	3	0.095596,0.095227,0.095313	avx2
-hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	33599680	ok	0.324586	0.324298	0.325657	103.515494	3	0.326727,0.324011,0.324586	scalar
-hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	33599680	ok	0.131525	0.131192	0.132549	255.462308	3	0.133573,0.131525,0.130860	avx2
-hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	33599680	ok	0.132882	0.131927	0.135431	252.853509	3	0.137981,0.130971,0.132882	avx2
-hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	native	scalar	33599680	ok	0.14471	0.144553	0.144756	232.186304	3	0.144395,0.144802,0.144710	scalar
-hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	native	avx2	33599680	ok	0.047973	0.047963	0.047997	700.387301	3	0.047973,0.048021,0.047952	avx2
-hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	native	avx512	33599680	ok	0.04805	0.048018	0.048053	699.264932	3	0.048050,0.048057,0.047986	avx2
-hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	33599680	ok	0.163297	0.163162	0.163905	205.758097	3	0.163297,0.164512,0.163026	scalar
-hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	33599680	ok	0.0673	0.067025	0.06783	499.252303	3	0.066750,0.068359,0.067300	avx2
-hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	33599680	ok	0.066847	0.066703	0.066875	502.635571	3	0.066903,0.066847,0.066560	avx2
+hao_citeseq	adt	sweep	local	s1	1	cold	file	native	auto	33599680	ok	0.434532	0.427755	0.435667	77.323848	3	0.436802,0.434532,0.420979	avx2
+hao_citeseq	adt	sweep	local	s1	1	cold	file	canonical	auto	33599680	ok	0.609819	0.606164	0.612496	55.097836	3	0.615173,0.609819,0.602510	avx2
+hao_citeseq	adt	sweep	local	s1	2	cold	file	native	auto	33599680	ok	0.264166	0.260685	0.264876	127.19133	3	0.265586,0.264166,0.257204	avx2
+hao_citeseq	adt	sweep	local	s1	2	cold	file	canonical	auto	33599680	ok	0.350667	0.346911	0.351467	95.816617	3	0.352267,0.350667,0.343156	avx2
+hao_citeseq	adt	sweep	local	s1	4	cold	file	native	auto	33599680	ok	0.178545	0.176204	0.180362	188.186046	3	0.182179,0.178545,0.173864	avx2
+hao_citeseq	adt	sweep	local	s1	4	cold	file	canonical	auto	33599680	ok	0.223706	0.222181	0.22423	150.195657	3	0.224754,0.223706,0.220656	avx2
+hao_citeseq	adt	sweep	local	s1	4	warm	file	native	auto	33599680	ok	0.157918	0.15717	0.160802	212.767028	3	0.163685,0.157918,0.156421	avx2
+hao_citeseq	adt	sweep	local	s1	4	warm	file	canonical	auto	33599680	ok	0.206499	0.200275	0.209798	162.710856	3	0.213097,0.206499,0.194050	avx2
+hao_citeseq	adt	sweep	local	s1	8	cold	file	native	auto	33599680	ok	0.159612	0.158203	0.162465	210.507858	3	0.159612,0.165317,0.156794	avx2
+hao_citeseq	adt	sweep	local	s1	8	cold	file	canonical	auto	33599680	ok	0.187565	0.179017	0.188053	179.136591	3	0.188542,0.187565,0.170469	avx2
+hao_citeseq	adt	sweep	local	s1	1	warm	codec	native	scalar	33599680	ok	1.152802	1.152477	1.155719	29.146096	3	1.158635,1.152802,1.152152	scalar
+hao_citeseq	adt	sweep	local	s1	1	warm	codec	native	avx2	33599680	ok	0.370575	0.370055	0.371474	90.669002	3	0.372373,0.370575,0.369535	avx2
+hao_citeseq	adt	sweep	local	s1	1	warm	codec	native	avx512	33599680	ok	0.370644	0.370193	0.371457	90.652209	3	0.372271,0.370644,0.369741	avx2
+hao_citeseq	adt	sweep	local	s1	1	warm	codec	canonical	scalar	33599680	ok	1.329551	1.329446	1.334559	25.271448	3	1.339568,1.329342,1.329551	scalar
+hao_citeseq	adt	sweep	local	s1	1	warm	codec	canonical	avx2	33599680	ok	0.553718	0.552425	0.554216	60.680077	3	0.551132,0.554713,0.553718	avx2
+hao_citeseq	adt	sweep	local	s1	1	warm	codec	canonical	avx512	33599680	ok	0.551864	0.550463	0.55244	60.883943	3	0.549062,0.553015,0.551864	avx2
+hao_citeseq	adt	sweep	local	s1	2	warm	codec	native	scalar	33599680	ok	0.598473	0.59801	0.599632	56.142355	3	0.597548,0.600792,0.598473	scalar
+hao_citeseq	adt	sweep	local	s1	2	warm	codec	native	avx2	33599680	ok	0.208206	0.207716	0.208222	161.377235	3	0.208206,0.208239,0.207227	avx2
+hao_citeseq	adt	sweep	local	s1	2	warm	codec	native	avx512	33599680	ok	0.209011	0.209009	0.209731	160.755816	3	0.209007,0.210451,0.209011	avx2
+hao_citeseq	adt	sweep	local	s1	2	warm	codec	canonical	scalar	33599680	ok	0.693476	0.691982	0.693486	48.451097	3	0.693495,0.693476,0.690488	scalar
+hao_citeseq	adt	sweep	local	s1	2	warm	codec	canonical	avx2	33599680	ok	0.292553	0.292475	0.299444	114.849773	3	0.306336,0.292397,0.292553	avx2
+hao_citeseq	adt	sweep	local	s1	2	warm	codec	canonical	avx512	33599680	ok	0.293439	0.293376	0.299076	114.503269	3	0.304714,0.293439,0.293314	avx2
+hao_citeseq	adt	sweep	local	s1	4	warm	codec	native	scalar	33599680	ok	0.312155	0.312151	0.312675	107.63776	3	0.313196,0.312155,0.312146	scalar
+hao_citeseq	adt	sweep	local	s1	4	warm	codec	native	avx2	33599680	ok	0.123317	0.122677	0.123375	272.466109	3	0.123317,0.122037,0.123433	avx2
+hao_citeseq	adt	sweep	local	s1	4	warm	codec	native	avx512	33599680	ok	0.12255	0.122541	0.122656	274.171763	3	0.122531,0.122550,0.122763	avx2
+hao_citeseq	adt	sweep	local	s1	4	warm	codec	canonical	scalar	33599680	ok	0.356613	0.356389	0.357172	94.218834	3	0.357731,0.356165,0.356613	scalar
+hao_citeseq	adt	sweep	local	s1	4	warm	codec	canonical	avx2	33599680	ok	0.168432	0.168019	0.17154	199.48554	3	0.174648,0.167606,0.168432	avx2
+hao_citeseq	adt	sweep	local	s1	4	warm	codec	canonical	avx512	33599680	ok	0.165049	0.164128	0.165503	203.57416	3	0.165958,0.163207,0.165049	avx2
+hao_citeseq	adt	sweep	local	s1	8	warm	codec	native	scalar	33599680	ok	0.235469	0.232325	0.242986	142.692499	3	0.229181,0.250502,0.235469	scalar
+hao_citeseq	adt	sweep	local	s1	8	warm	codec	native	avx2	33599680	ok	0.100134	0.09744	0.100262	335.548833	3	0.100134,0.094747,0.100391	avx2
+hao_citeseq	adt	sweep	local	s1	8	warm	codec	native	avx512	33599680	ok	0.106184	0.10496	0.106959	316.42957	3	0.107734,0.103736,0.106184	avx2
+hao_citeseq	adt	sweep	local	s1	8	warm	codec	canonical	scalar	33599680	ok	0.242119	0.236613	0.246653	138.773492	3	0.231108,0.251188,0.242119	scalar
+hao_citeseq	adt	sweep	local	s1	8	warm	codec	canonical	avx2	33599680	ok	0.127756	0.127571	0.12833	262.998879	3	0.127756,0.127386,0.128904	avx2
+hao_citeseq	adt	sweep	local	s1	8	warm	codec	canonical	avx512	33599680	ok	0.126218	0.121415	0.126976	266.202687	3	0.126218,0.116612,0.127733	avx2
+hao_citeseq	adt	sweep	local	h5ad_gzip	1	cold	file		auto	33599680	ok	0.878121	0.876879	0.878689	38.263134	3	0.878121,0.879257,0.875636	
+hao_citeseq	adt	sweep	local	h5ad_gzip	2	cold	file		auto	33599680	ok	0.891149	0.886797	0.896154	37.703766	3	0.891149,0.901158,0.882445	
+hao_citeseq	adt	sweep	local	h5ad_gzip	4	cold	file		auto	33599680	ok	0.893349	0.889683	0.895573	37.61091	3	0.893349,0.897796,0.886016	
+hao_citeseq	adt	sweep	local	h5ad_gzip	4	warm	file		auto	33599680	ok	0.853489	0.848527	0.858506	39.367434	3	0.863522,0.853489,0.843566	
+hao_citeseq	adt	sweep	local	h5ad_gzip	8	cold	file		auto	33599680	ok	0.894662	0.888977	0.895784	37.555745	3	0.894662,0.896905,0.883292	
+hao_citeseq	adt	sweep	local	csc_i32	1	cold	file		auto	33599680	ok	0.36097	0.359688	0.362849	93.081619	3	0.364727,0.360970,0.358405	
+hao_citeseq	adt	sweep	local	csc_i32	2	cold	file		auto	33599680	ok	0.367158	0.366192	0.368229	91.512778	3	0.369300,0.367158,0.365226	
+hao_citeseq	adt	sweep	local	csc_i32	4	cold	file		auto	33599680	ok	0.35975	0.359667	0.359842	93.397277	3	0.359934,0.359750,0.359584	
+hao_citeseq	adt	sweep	local	csc_i32	4	warm	file		auto	33599680	ok	0.119459	0.119224	0.120997	281.265693	3	0.122535,0.119459,0.118989	
+hao_citeseq	adt	sweep	local	csc_i32	8	cold	file		auto	33599680	ok	0.359792	0.359382	0.361069	93.386441	3	0.359792,0.362346,0.358972	
+hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	native	scalar	33599680	ok	1.139803	1.138655	1.140153	29.478498	3	1.139803,1.140503,1.137507	scalar
+hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	native	avx2	33599680	ok	0.364212	0.364212	0.364227	92.253083	3	0.364212,0.364243,0.364211	avx2
+hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	native	avx512	33599680	ok	0.366266	0.366256	0.366362	91.735733	3	0.366457,0.366266,0.366247	avx2
+hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	33599680	ok	1.278265	1.277297	1.278636	26.285379	3	1.279007,1.278265,1.276329	scalar
+hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	33599680	ok	0.507705	0.507683	0.508803	66.179533	3	0.507662,0.507705,0.509901	avx2
+hao_citeseq	adt	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	33599680	ok	0.508027	0.507987	0.509035	66.137587	3	0.507946,0.508027,0.510042	avx2
+hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	native	scalar	33599680	ok	0.597881	0.596167	0.598025	56.197939	3	0.597881,0.594453,0.598170	scalar
+hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	native	avx2	33599680	ok	0.225895	0.223447	0.247995	148.740255	3	0.225895,0.220999,0.270094	avx2
+hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	native	avx512	33599680	ok	0.186518	0.186453	0.186534	180.141756	3	0.186518,0.186551,0.186388	avx2
+hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	33599680	ok	0.67088	0.657857	0.672472	50.082995	3	0.670880,0.674064,0.644835	scalar
+hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	33599680	ok	0.257863	0.257566	0.269232	130.300508	3	0.280600,0.257269,0.257863	avx2
+hao_citeseq	adt	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	33599680	ok	0.257589	0.257498	0.283623	130.43911	3	0.309657,0.257589,0.257407	avx2
+hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	native	scalar	33599680	ok	0.301994	0.30039	0.302825	111.259429	3	0.301994,0.303656,0.298786	scalar
+hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	native	avx2	33599680	ok	0.096493	0.095372	0.102083	348.208471	3	0.094251,0.107673,0.096493	avx2
+hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	native	avx512	33599680	ok	0.106444	0.106247	0.107463	315.655932	3	0.106051,0.106444,0.108483	avx2
+hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	33599680	ok	0.327987	0.327319	0.33238	102.442109	3	0.326652,0.336774,0.327987	scalar
+hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	33599680	ok	0.147052	0.139889	0.147458	228.488426	3	0.147052,0.132727,0.147864	avx2
+hao_citeseq	adt	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	33599680	ok	0.135683	0.134559	0.145523	247.633676	3	0.155363,0.133435,0.135683	avx2
+hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	native	scalar	33599680	ok	0.157586	0.153253	0.161187	213.214879	3	0.148919,0.164788,0.157586	scalar
+hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	native	avx2	33599680	ok	0.054221	0.051406	0.055102	619.680198	3	0.048591,0.054221,0.055983	avx2
+hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	native	avx512	33599680	ok	0.047809	0.047806	0.049089	702.789851	3	0.050369,0.047802,0.047809	avx2
+hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	33599680	ok	0.173561	0.172943	0.173851	193.590035	3	0.172325,0.173561,0.174142	scalar
+hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	33599680	ok	0.06655	0.066083	0.069045	504.878738	3	0.071539,0.065615,0.066550	avx2
+hao_citeseq	adt	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	33599680	ok	0.066898	0.066393	0.067494	502.252384	3	0.068091,0.065888,0.066898	avx2
