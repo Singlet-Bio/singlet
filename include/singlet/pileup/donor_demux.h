@@ -2458,11 +2458,12 @@ static void parse_snp_name(const std::string& name,
 // ============================================================================
 // Genotype call for the donor VCF / coverage table: R12 (docs/research-beta/order-free-rules.md).
 // Fixed-error binomial likelihood on the donor's aggregated ref/alt molecule counts, flat prior over {0/0,0/1,1/1},
-// confident when the posterior reaches `post`, else "./.". Replaces the 0.1/0.9 cut on the VB posterior AF, which
+// confident when the posterior reaches `post` (0.99, the cut of the cellsnp-lite pileup and of the truth in the
+// benchmark; 0.9 left 0.4 pp of concordance on the table at equal sites), else "./.". Replaces the 0.1/0.9 cut on the VB posterior AF, which
 // called 0/1 for one alt molecule in 10-20 (false alternate alleles 0.054-0.060 on Kang vs 0.005-0.008 for
 // cellsnp-lite + vireo). Depends only on (ad, dp), so it is order-free and a GPU reducer can mirror it.
 // ============================================================================
-inline const char* call_donor_genotype(uint32_t ad, uint32_t dp, double err = 0.01, double post = 0.9)
+inline const char* call_donor_genotype(uint32_t ad, uint32_t dp, double err = 0.01, double post = 0.99)
 {
     if (dp == 0) return "./.";
     if (ad > dp) ad = dp;
