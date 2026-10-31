@@ -155,4 +155,37 @@ likelihood against the ambient profile to the EmptyDrops test for libraries whos
 no independent truth for nuclei exists in the cohort, so a change would be tuned on the same evidence it is judged by. **Open: truth for
 nuclei (a hashed or genotype-pooled snRNA-seq set).**
 
-(next: ambient)
+### 3. Ambient RNA (R10c) (2026-10-31, pin d9834b8a)
+
+Truth 1, real tissue: **Kang b2 ctrl donor genotypes** (12,137 confident genotype singlets). A read carrying an allele the cell's donor does
+not have comes from another donor's RNA through the ambient pool; per-cell truth rho = foreign reads / expected foreign reads, error-rate
+corrected (error rate 0.12%, pooled truth **1.48%**). Method: `kang_ambient_artifacts.py` (bench/public-ambient-doublets, from PR #43);
+tools were run earlier on the same raw matrix (SoupX auto, DecontX default and with 20k-droplet background, CellBender 0.3.2 default call;
+the CellBender call with `--expected-cells` did not produce output). Scoring: `bench/expression_sota/ambient_kang_eval.py`, results
+`bench/expression_sota/results/ambient/kang_ctrl_pin.json`. Implied contamination = 1 - UMI after / UMI before.
+
+| tool | mean | ratio to truth | abs log2 ratio | per-cell Spearman | worst cell-type ratio |
+|---|---|---|---|---|---|
+| **Singlet `rho` (estimate)** | 2.01% | 1.36 | 0.44 | 0.093 | NK 2.6, CD8 2.3 |
+| **Singlet corrected-counts removal** | 1.68% | **1.13** | **0.17** | 0.081 | DC 2.2, NK 2.2 |
+| SoupX | 0.95% | 0.64 | 0.64 | 0.032 | Megakaryocyte 0.2 |
+| DecontX default | 9.2% | 6.22 | 2.64 | 0.133 | DC 23 |
+| DecontX with background | 1.60% | **1.07** | **0.10** | 0.020 | CD8 3.7 |
+| CellBender (default call) | 1.07% | 0.72 | 0.47 | -0.085 | DC 0.2, NK 2.6 |
+
+On the mean, the pin's removal is 1.13x truth: second only to DecontX with background (1.07), clearly ahead of SoupX (0.64), CellBender
+(0.72) and DecontX default (6.2x). The reported `rho` is 1.36x (it over-estimates more than the amount actually removed). Every tool's
+per-cell ordering is weak against this truth (|Spearman| <= 0.13; per-cell truth is Poisson noisy), so per-cell Spearman does not
+discriminate on tissue; Singlet's 0.09 is second to DecontX default (which is 6x off on the mean). Rare clusters are over-corrected by
+2x for Singlet (DC, NK), as on the earlier Kang lanes (`fix/ambient-calibration`: 8-10x on the old estimator, 7.3-8.4x with the unmerged
+cluster shrinkage, held-out lanes); the pin is far better than that here because its corrected removal is bounded by the formula.
+
+Truth 2, species mixing (hgmm1k_v3, held-out hgmm1k_v2), from S5's gate at the pin: 9 of 10 gating metrics pass; the failing one is
+the contamination-estimate bias on hgmm1k_v3 (|log2| 0.28 vs SoupX 0.038).
+
+Verdict: **at the mean-calibration level SOTA on tissue (within 0.07 of the best tool) but not on species mixing (0.28 vs 0.04)**; per-cell
+ordering is not a differentiator on this truth. Candidate engine change: calibrate the reported `rho` to the removal it applies and shrink
+rare-cluster estimates (`fix/ambient-calibration` has the code, unmerged). Not done: needs a decision on whether the 0.28 hgmm bias justifies
+a PR; the cluster shrinkage did not fix the rare-cluster ratio on held-out lanes in its own bench.
+
+(next: doublets)
