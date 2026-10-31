@@ -43,6 +43,7 @@ def main(argv=None) -> int:
     stage("access", "bytes, requests and index read per random minibatch, from each format's index (untimed)")
     p = stage("netsweep", "round-trip time, requests in flight and DataLoader workers (loader panel)")
     p.add_argument("--r2", action="store_true", help="the real object store (S1_R2_URL) instead of the emulated grids")
+    stage("kernels", "one-core decode rate of textbook integer codes against the .s1 member (cpp/kernel_bench)")
     p = stage("writecost", "seconds and peak memory to write each format")
     p.add_argument("--formats", default=None)
     sub.add_parser("report", help="aggregate results into generated/ for the manuscript")
@@ -136,6 +137,10 @@ def main(argv=None) -> int:
             from . import writecost
 
             writecost.run(cfg, units, fmts, a.force, a.set)
+        elif s == "kernels":
+            from . import kernels
+
+            kernels.run(cfg, units, a.force)
         elif s == "eco":
             from . import eco
 
