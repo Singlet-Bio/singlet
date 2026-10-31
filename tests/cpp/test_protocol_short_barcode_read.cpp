@@ -73,6 +73,11 @@ static std::vector<Spot> make_spots(const std::vector<std::string>& wl, int r1_l
     return spots;
 }
 
+static void show(const char* what, const singlet::fq::ProtocolCandidate& r) {
+    std::fprintf(stderr, "    [%s] tag=%s wl_rate=%.3f score=%.3f conf=%d
+", what, r.tag.c_str(), r.wl_match_rate, r.score, static_cast<int>(r.confidence));
+}
+
 int main() {
     std::vector<std::string> v3, v2;
     const std::string dir = write_whitelists(v3, v2);
@@ -81,7 +86,7 @@ int main() {
     std::fprintf(stderr, "[short-bc] 27-nt v3 R1\n");
     {
         auto spots = make_spots(v3, 27, 11, true);
-        auto r = singlet::fq::detect_protocol(spots, 27, 90, dirs);
+        auto r = singlet::fq::detect_protocol(spots, 27, 90, dirs); show("27", r);
         CHECK(r.tag == "10x-3p-v3", "27-nt R1 with v3 barcodes is detected as 10x-3p-v3");
         CHECK(r.wl_match_rate > 0.5, "whitelist hit rate is high");
         CHECK(singlet::fq::protocol_wl_floor_error(r).empty(), "no floor error");
@@ -89,13 +94,13 @@ int main() {
     std::fprintf(stderr, "[short-bc] 28-nt v3 R1 (control)\n");
     {
         auto spots = make_spots(v3, 28, 12, true);
-        auto r = singlet::fq::detect_protocol(spots, 28, 90, dirs);
+        auto r = singlet::fq::detect_protocol(spots, 28, 90, dirs); show("28", r);
         CHECK(r.tag == "10x-3p-v3", "28-nt R1 is still 10x-3p-v3");
     }
     std::fprintf(stderr, "[short-bc] 26-nt v2 R1 (control)\n");
     {
         auto spots = make_spots(v2, 26, 10, true);
-        auto r = singlet::fq::detect_protocol(spots, 26, 90, dirs);
+        auto r = singlet::fq::detect_protocol(spots, 26, 90, dirs); show("26", r);
         CHECK(r.tag == "10x-3p-v2", "26-nt R1 with v2 barcodes is still 10x-3p-v2");
     }
     std::fprintf(stderr, "[short-bc] celseq2 R1\n");
