@@ -92,6 +92,7 @@
 #include "singlet/fq/sra_reader.h"
 #include "singlet/fq/lib1fq.h"
 #include "singlet/fq/sra_encoder.h"
+#include "../stage/stage_encoder.h"   // singlet download --stage-out
 #include "singlet/fq/fastq_encoder.h"
 #include "singlet/fq/run_screen.h"
 #include "singlet/pileup/run_provenance.h"
@@ -448,6 +449,8 @@ static int cmd_download(int argc, char* argv[]) {
     std::vector<std::string> whitelist_dirs;
     std::string metadata_json_path;  // GEO metadata JSON output path
     std::string swap_reads_mode = "auto";  // B-G2-1: auto|on|off|none
+    std::string stage_out;                 // --stage-out FILE: write the staged .1fg2 straight from the SRA (no .1fq)
+    bool stage_part = false;               // --stage-part: FILE is a part (one run of a multi-run sample), merged later by singlet-stage --merge-parts
 
     for (int i = 0; i < argc; ++i) {
         std::string arg = argv[i];
@@ -472,6 +475,9 @@ static int cmd_download(int argc, char* argv[]) {
                 << "  --max-reads N        Stop after N reads (0=all, default: 0)\n"
                 << "  --whitelist-dir DIR  Search dir for whitelists (repeatable)\n"
                 << "  --no-profile         Suppress profiling output\n"
+                << "  --stage-part         with --stage-out: write a part (one run of a multi-run sample) for `singlet-stage --merge-parts`\n"
+                << "  --stage-out FILE     Write the staged .1fg2 (src/stage/fmt2.h) straight from the SRA instead of a .1fq:\n"
+                << "                       no barcode sort, no .1fq written or re-read; single-run samples, 10x R1 protocols\n"
                 << "  --metadata-json FILE Write metadata JSON file (auto-fills singlet_version,\n"
                 << "                       pipeline_date, srr_ids, protocol, read_count)\n"
                 << "  --swap-reads MODE    R1\u2194R2 swap mode: auto (default)|on|off|none\n"
@@ -498,6 +504,10 @@ static int cmd_download(int argc, char* argv[]) {
             whitelist_dirs.push_back(argv[++i]);
         else if (arg == "--vdb-threads" && i+1 < argc)
             vdb_threads = std::atoi(argv[++i]);
+        else if (arg == "--stage-out" && i+1 < argc)
+            stage_out = argv[++i];
+        else if (arg == "--stage-part")
+            stage_part = true;
         else if (arg == "--max-reads" && i+1 < argc)
             max_reads = static_cast<uint64_t>(std::atoll(argv[++i]));
         else if (arg == "--no-trim") no_trim = true;
@@ -585,6 +595,36 @@ static int cmd_download(int argc, char* argv[]) {
                   << " reads (" << static_cast<int>(pct) << "%)" << std::flush;
     };
     ecfg.progress_interval = 500000;
+
+    // ── --stage-out: the SRA writer's blocks feed a stage::Encoder instead of the .1fq writer ──
+    std::shared_ptr<stage::Encoder> stg;
+    std::string stage_error;
+    if (!stage_out.empty()) {
+        stg = std::make_shared<stage::Encoder>();
+        const std::string scratch_dir = [&]() { auto pos = stage_out.rfind('/'); return pos == std::string::npos ? std::string(".") : stage_out.substr(0, pos); }();
+        const std::string run_label = sra_input.substr(sra_input.find_last_of('/') == std::string::npos ? 0 : sra_input.find_last_of('/') + 1);
+        ecfg.metadata_sink = [stg](const std::string& m) { stg->set_source_metadata(m); };   // the .1fg2 keeps the .1fq's metadata JSON verbatim
+        ecfg.block_sink = [stg, whitelist_dirs, scratch_dir, run_label](const singlet::fq::StagedBlock& sb) {
+            if (!sb.dict) throw std::runtime_error("--stage-out: no barcode dictionary for this protocol (use the .1fq path)");
+            if (!stg->initialised()) {
+                stg->init(sb.protocol_id, sb.bc_length, sb.bc_offset, sb.umi_length, sb.umi_offset,
+                          sb.qual_mode != singlet::fq::QualMode::NONE, whitelist_dirs, scratch_dir);
+                stg->begin_run(run_label, 0);
+            }
+            const size_t bcl = sb.bc_length, umil = sb.umi_length;
+            size_t unk = 0, off = 0;
+            for (uint32_t i = 0; i < sb.n_reads; ++i) {
+                const uint32_t idx = sb.bc_idx[i];
+                const uint8_t* bc;
+                if (idx < sb.bc_dict->size()) bc = (*sb.bc_dict)[idx].data();
+                else { bc = sb.unk_bc + unk * bcl; ++unk; }
+                const uint16_t r2l = sb.r2_len[i];
+                if (r2l == 0) { stg->note_dropped(); continue; }
+                stg->add_read(bc, sb.umi + static_cast<size_t>(i) * umil, sb.r2 + off, r2l, sb.r2_qual ? sb.r2_qual + off : nullptr);
+                off += r2l;
+            }
+        };
+    }
 
     // ── Pre-gate: early protocol inference to fast-reject non-10x samples ──
     // Invoked only in auto-detect mode (no explicit --protocol flag).
@@ -694,6 +734,13 @@ static int cmd_download(int argc, char* argv[]) {
     auto stats = encoder.encode(sra_input, ecfg);
 
     if (stats.exit_code != 0) return stats.exit_code;
+
+    if (stg) {
+        if (!stg->initialised()) { std::cerr << "[singlet-download] --stage-out: no reads reached the stage encoder\n"; return 2; }
+        stg->end_run();
+        if (stage_part) stg->write_part(stage_out);
+        else std::cout << stg->finish(stage_out, 3) << std::endl;
+    }
 
     std::cerr << "\n[singlet-download] Done: " << stats.total_reads << " reads"
               << ", " << stats.blocks_written << " blocks\n";

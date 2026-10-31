@@ -655,6 +655,29 @@ struct SraMetadata {
     std::vector<std::pair<std::string, std::string>> sample_attributes;
 };
 
+// One flushed block of reads, in the Writer's own layout, handed to a block sink INSTEAD of being encoded into a .1fq block (EncoderConfig::block_sink,
+// used by `singlet download --stage-out`: the staged .1fg2 is built straight from the SRA, no .1fq is written). Sequences are byte-numeric (0-3, 4 = N);
+// R2 is after polyA trimming and --r2-maxlen, exactly what the .1fq would hold; quality is raw Phred (empty when the sample has none). No barcode sort.
+struct StagedBlock {
+    uint32_t n_reads = 0;
+    uint8_t protocol_id = 0;
+    QualMode qual_mode = QualMode::NONE;
+    bool dict = false;                       // barcode-dictionary layout (barcode indices + UMI bytes); false = full R1 per read
+    uint16_t bc_offset = 0, bc_length = 0, umi_offset = 0, umi_length = 0, r1_length = 0;
+    // dict layout
+    const uint32_t* bc_idx = nullptr;        // per read: index into *bc_dict, or bc_dict->size() for a whitelist miss
+    const std::vector<std::vector<uint8_t>>* bc_dict = nullptr;
+    const uint8_t* unk_bc = nullptr;         // raw barcodes of the misses, bc_length bytes each, in read order
+    const uint8_t* umi = nullptr;            // n_reads * umi_length bytes
+    // full-R1 layout
+    const uint8_t* r1 = nullptr;             // concatenated
+    const uint16_t* r1_len = nullptr;
+    // cDNA
+    const uint8_t* r2 = nullptr;             // concatenated
+    const uint16_t* r2_len = nullptr;
+    const uint8_t* r2_qual = nullptr;        // same layout as r2, raw Phred; null when none
+};
+
 struct EncoderConfig {
     std::string output_path;
     Codec codec = Codec::ZSTD;
@@ -685,6 +708,11 @@ struct EncoderConfig {
     bool no_dedup = false;    // --no-dedup: skip PCR duplicate collapsing
     bool no_trim = false;     // --no-trim: skip polyA/adapter trimming
     bool sort_by_bc = false;  // --sort-by-bc: sort reads by barcode within blocks
+
+    // When set, flushed blocks go to this sink (no .1fq is written, no sort); see StagedBlock
+    std::function<void(const StagedBlock&)> block_sink;
+    // With block_sink: receives the metadata JSON the .1fq would have embedded (the .1fg2 stores it verbatim)
+    std::function<void(const std::string&)> metadata_sink;
 
     // Parallel VDB reading threads (1=serial default)
     int vdb_threads = 1;

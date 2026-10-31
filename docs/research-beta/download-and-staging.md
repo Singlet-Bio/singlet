@@ -202,3 +202,78 @@ GPU job loses a stream but not a staged sample. The stage costs ≤ 2 TB of `$WO
 ## 10. Status of what was queued
 
 * Time-of-day repeats Sat 03:00 / 13:00 (jobs 793570, 793571): results append to `$WORK/jobs/s9/results/tod.jsonl`; this section is updated in a follow-up commit when they land.
+
+## 11. Staged format `.1fg2` and `singlet-stage` (S9 producer, S8 readers; layout in `include/singlet/fq/fg2_format.h`, spec `staged-format-1fg2.md` on #107)
+
+The fetch tier can write a GPU-native staged file instead of `.1fq`: chunks of 32,768 reads as zstd planes (whitelist-corrected barcode index + status byte, UMI word, sequence id, length, 2-bit binned quality per base, UMI-N exceptions) and one per-sample table of
+distinct cDNA sequences (2-bit, N lists), no barcode sort, run table in the footer. `singlet-stage` (CMake target, `src/stage/singlet_stage.cpp`) reads the `.1fq` of a sample's kept runs with the engine's `Reader`, takes protocol, geometry and whitelist from `known_protocols()`,
+builds the exact-barcode histogram (exact whitelist hit, UMI without N and not a homopolymer, as `singlet.cpp` pass 1), corrects with `CbCorrector::resolve`, keys the sequence table on the cDNA exactly as the `.1fq` holds it (the engine clips later on the packed codes).
+`--verify` re-reads the written file and compares every read with the source.
+
+**Measured (job 793809: 45 runs from the earlier fetch-scale list; 37 staged, 3.91 G reads; 7 stopped at the non-10x gate, 1 protocol with no universal whitelist in R1; `--verify` on 5: 0 mismatches; plus 32.8 M reads verified on 3 more runs, job 793776):**
+
+| | value |
+|---|---|
+| raw full `.sra` / `.1fq` (binned qualities) / `.1fg2` | 75.1 / 30.1 / **28.1 B per read** (`.1fg2` = 0.93 × `.1fq`); input `.1fq` is barcode-sorted, an unsorted source adds ~2–3 B/read to the `cb`/`umi` planes |
+| where the bytes go (B/read) | q 9.5, sequence table 12.2, umi 3.0, sequence id 2.9, cb 0.35, rest < 0.1 |
+| CPU | decode `.sra` → `.1fq` **3.20 core-s/M** (unchanged); `singlet-stage` **2.18 core-s/M** (pass 1 1.59: `.1fq` decode + histogram + hash; pass 2 0.59: correct + zstd 3 + CRC) → **5.4 core-s/M in total, +68% over today's 3.2** |
+| unique cDNA fraction (distinct / reads) | 0.44 at 20–50 M reads (n = 3), 0.49 at 50–100 M (n = 18), **0.31 at ≥ 100 M reads (n = 16, up to 234 M)**; S8 had expected ~0.54 on deep samples |
+| memory | table up to 5.4 GB at 234 M reads (64-byte in-memory slots; 32 GB fetch jobs are enough) |
+| limits found | cDNA up to 151 nt occurs: the limit was raised from 127 to 255 (u8 length); GPU pileup with per-base quality handles ≤ 128 nt for now (S8 falls back to the CPU pileup above) |
+
+**Reading it.** The format moves barcode correction, sequence dedup and the chemistry decisions to the CPU nodes and keeps staged bytes at ≈ `.1fq`; it costs 2.2 core-s/M more in the fetch tier (≈ 70 cores more at 8.5 M pairs/s: 26 → ~46 cores at the 0.6 GB/s cap) and removes 9 of the
+14 host core-s/M that S8 measured on the GPU node. Part of the added cost is avoidable: a combined decode-and-stage pass would not write and re-read the `.1fq` (the writer was 35 of 53 s in the W11 ingest measurement, the `.1fq` read is most of pass 1); not built or measured.
+The sequence ids and the sequence table together are 15 B/read; distinct sequences are only 31% of reads on deep samples, but each costs 2-bit + ids. Quality (9.5 B/read) is the largest single plane.
+
+## 12. Combined pass `.sra` → `.1fg2` (`singlet download --stage-out`) and the raw-barcode plane
+
+`singlet download <sra> --stage-out OUT.1fg2` feeds the SRA writer's flushed blocks (after its polyA trim, `--r2-maxlen`, in SRA order, no barcode sort) to the same `stage::Encoder` as `singlet-stage`: no `.1fq` is written or re-read. The default `.1fq` path is untouched (the block sink is off unless the option is given;
+`Writer`, `SraEncoder` and `EncoderConfig` gained an optional sink). Single-run samples with a 10x R1 protocol only; other protocols exit 6 and a multi-run sample needs one histogram over all runs, so both stay on the `.1fq` route (the fetch worker's `--format 1fg2` falls back automatically).
+**`PL_RAWCB`** (new plane, S8 agreed): one 8-byte entry (raw barcode word 2 bit/base, read index, N position) for every read that was not an exact whitelist hit, so STAR's exact/corrected/no-match counts and the cell QC stay identical; 3.4–7.9% of reads, 0.2–0.5 B/read.
+
+**Measured, same local `.sra` per run (A = today's `singlet download` to the barcode-sorted `.1fq`; B = A + `singlet-stage`; C = combined), core-s per M reads, 8 runs:**
+
+| run (reads) | A baseline | B two-step | C combined | C − A |
+|---|---|---|---|---|
+| SRR19421372 (9 M) | 2.82 | – | 3.46 | +0.64 |
+| SRR19573735 (11 M) | 3.19 | – | 3.88 | +0.69 |
+| SRR30477995 (12 M) | 3.37 | – | 4.40 | +1.03 |
+| SRR19544612 (75 M) | 2.87 | 4.93 | 3.73 | +0.86 |
+| SRR12455246 (112 M) | 2.88 | 5.24 | 3.72 | +0.84 |
+| SRR19421396 (132 M) | 2.95 | 5.02 | 3.53 | +0.58 |
+| SRR19649496 (186 M) | 2.68 | 6.61 | 3.59 | +0.91 |
+| SRR19572361 (234 M) | 2.50 | 5.69 | 3.14 | +0.64 |
+
+(Baselines vary 2.5–3.4 with node load; B is not shown for the three small runs because their timing included `--verify`; it was 4.3–5.4 in the earlier plain runs.) **The combined pass costs +0.6 to +1.0 core-s/M over today (about +25%), against +1.7 to +4 for the two-step path.** It removes the `.1fq` sort, compress, write and re-read.
+In all 8 runs the order-independent digest of C equals that of B (same barcode, status, raw barcode, UMI, cDNA, qualities per read); B passes `--verify` against the `.1fq` read by read.
+
+**Bytes per read, sorted vs unsorted source (the "no barcode sort" question):** `.1fq` / B (`.1fg2` from the barcode-sorted `.1fq`) / C (SRA order):
+75 M: 33.1 / 31.5 / 34.1; 112 M: 32.0 / 28.6 / 31.1; 132 M: 26.3 / 20.4 / 23.1; 186 M: 25.9 / 19.6 / 22.7; 234 M: 23.0 / 18.6 / 21.5. Skipping the sort costs **+8 to +16%** in the `.1fg2` (the barcode and UMI planes lose their runs), but even unsorted it is 3% above to 12% below the `.1fq` (deep samples gain from the distinct-sequence table).
+Distinct-sequence fraction on these deep runs: 0.56 (75 M), 0.46 (112 M), 0.31 (132 M), 0.28 (186 M), 0.24 (234 M). Encoder table memory 3.1–4.2 GB at 75–234 M reads (64-byte in-memory slots; halving it for ≤127 nt files is possible but not done).
+
+**Open:** S8's `.1fg2` reader and the per-read identity gate (fixtures in `$WORK/jobs/s9/fixtures`); a multi-run part merge; the fetch worker's `--format 1fg2` path is written but not run against a real binary here (the drain only claims `.1fg2` samples with `--accept-1fg2`).
+
+## 13. Multi-run samples (parts + merge) and `Fg2RunSet`
+
+**Multi-run samples without a `.1fq`.** `singlet download <sra> --stage-out PART --stage-part` writes one run's state (exact-barcode histogram, that run's distinct-sequence table, the per-read records); `singlet-stage --merge-parts P1 P2 ... -o sample.1fg2` sums the histograms,
+re-keys the sequences into one table (ids remapped in the records) and runs the same pass 2 as a single-run sample, so the correction uses the pooled histogram and there is one table and one run table, as the two-step path. The fetch worker (`--format 1fg2`) does this for samples with several runs
+(`--stage-bin` for the merger) and falls back to `.1fq` when the protocol is not stageable.
+Gate: 5 real human 10x experiments with two runs each (job 793907; one more was refused by the non-10x gate): the pooled `.1fg2` from the parts has the same order-independent digest as the one built from the two `.1fq` by `singlet-stage` in **5 of 5**.
+Core-s per M reads (A = today's `.1fq` download of both runs; two-step = A + `singlet-stage`; parts = the per-run `--stage-part` passes; merge = `--merge-parts`):
+
+| sample (reads) | A | two-step | parts + merge | (parts / merge) | `.1fq` / two-step / parts+merge B/read | part files |
+|---|---|---|---|---|---|---|
+| ERX4607499 (23 M) | 3.92 | 6.06 | 4.39 | 3.54 / 0.85 | 25.3 / 25.3 / 29.3 | 106 B/read |
+| SRX17100977 (40 M) | 2.26 | 3.90 | 3.72 | 2.68 / 1.04 | 20.7 / 21.6 / 24.2 | 131 |
+| SRX17100975 (23 M) | 2.55 | 4.26 | 4.01 | 2.92 / 1.09 | 21.5 / 22.7 / 25.4 | 134 |
+| SRX18638740 (46 M) | 2.70 | 4.45 | 3.96 | 2.97 / 0.99 | 25.7 / 24.8 / 27.5 | 122 |
+| SRX18810412 (62 M) | 4.05 | 6.48 | 5.22 | 4.09 / 1.14 | 39.2 / 35.0 / 38.0 | 120 |
+
+The parts route costs +0.5 to +1.8 core-s/M over today (the merge step, 0.85–1.14, is a second pass 2 plus the id remap and is single-threaded) and saves 0–30% against the two-step route; for one-run samples the combined pass is cheaper (§12). Part files are node-local `/tmp` only
+(106–134 B/read: the spilled records carry a 64-byte quality slot; ~40 GB for a 300 M-read sample), deleted after the merge. Bytes per read are the unsorted-source `.1fg2` (SRA order): +3% to +15% over the sorted two-step file.
+
+**`Fg2RunSet`** (`include/singlet/fq/fg2_runset.h`, header-only, S8 integrates it into `singlet.cpp`): the `.1fg2` as a stream of `DecodedBlock`s with `RunSet`'s interface (`open`, `block_count`, `stored_reads`, `block_read_offset`, `header`, `bc_length`, `has_bc_dict` = false, `decode(g, blk)`, const and thread-safe),
+chunk g = block g. Per read the block holds the barcode as sequenced (exact hit: the whitelist entry; otherwise the `PL_RAWCB` entry with its N bases as 4) followed by the UMI (N from the exceptions), the cDNA from the in-memory distinct-sequence table (N from its N lists) and the decoded Phred of the 2-bit bins (2/11/25/37). Extra accessors for the table-fed prefill:
+`table()` (the distinct sequences in memory: 2-bit rows, lengths, N positions as CSR), `decode_planes(g, ChunkPlanes&)` (corrected barcode index, status, UMI word, sequence id, length, q bins, exceptions, raw-barcode entries), `whitelist()` (sorted unique 2-bit codes: `PL_CB` indexes it), `runs()`. It verifies the whitelist file against the header's sha256 and refuses layouts other than barcode-at-0-with-the-UMI-behind-it.
+Gate (`test_fg2_runset`, `scripts/atlas_rerun/stage_fg2_gate.sbatch`, job 793918): on the three fixtures (9.1 M, 11.3 M, 12.3 M reads; ILLUMINA4 qualities; 4 decoder threads) the decoded barcode + UMI, cDNA and quality of every read equal the `.1fq` RunSet's, in order and by order-independent digest: **IDENTICAL on 3 of 3, 0 mismatches over 32.8 M reads.**
+Format note: the raw-barcode `meta` word now carries the N-base bitmask of the barcode (bits 15-30; any number of N) instead of a position code, and `PL_CB` is the index in the sorted, de-duplicated whitelist (CbCorrector order), not the file line number.
