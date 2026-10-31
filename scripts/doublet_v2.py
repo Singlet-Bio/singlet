@@ -82,9 +82,16 @@ def cmd_loso(a):
     data = load_training()
     out = Path(a.out) / "loso_pkg"
     out.mkdir(parents=True, exist_ok=True)
+    from sklearn.metrics import average_precision_score
+
+    ap = {}
     for n in a.names or list(D.STUDY):
-        np.save(out / f"{n}.npy", D.loso_scores(data, n))
-        print("loso", n, flush=True)
+        s = D.loso_scores(data, n)
+        np.save(out / f"{n}.npy", s)
+        ap[n] = float(average_precision_score(data[n][1], s))
+        print("loso", n, round(ap[n], 4), flush=True)
+    print("mean leave-one-study-out AUPRC", round(float(np.mean(list(ap.values()))), 4), "over", len(ap))
+    (out / "auprc.json").write_text(json.dumps(ap, indent=1))
 
 
 def cmd_ref_loso(a):
