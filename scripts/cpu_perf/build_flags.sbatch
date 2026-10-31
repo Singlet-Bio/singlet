@@ -8,7 +8,7 @@
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Build one compiler-flag variant of the CPU-only singlet for the flags comparison (docs/research-beta/cpu-engine-perf.md, section 7).
-# Env: PIN (build this commit instead of the branch tip; keeps variants of one source in one output dir), BRANCH (branch of the bare repo to build, default claude/cpu-perf-flags), VARIANT = <march>[-lto][-starpgo|-pgo], where
+# Env: PIN (build this commit instead of the branch tip; keeps variants of one source in one output dir), BRANCH (branch of the bare repo to build, default claude/cpu-perf-flags), VARIANT = <march>[-lto][-starpgo|-pgo][-g] (-g: add debug info and build bin/libsamprof.so), where
 #   <march> = v3 (-march=x86-64-v3) | zn3 (-march=znver3; Clipper has only Intel nodes, so zn3 builds cannot run there);  lto = -flto=auto on all host code;
 #   starpgo = profile-guided STAR objects only (the recipe of src/star/pgo/pgo_build.sh);  pgo = whole-program PGO (pipeline, pileup, export, STAR).
 # PGO variants build an instrumented binary, train it on the .1fq files in TRAIN (default pbmc1k_v3 neuron1k_v3), and rebuild with the profile.
@@ -25,6 +25,7 @@ grep -q "sam_hdr_destroy(bam_hdr_t" $S/src/star/bam_cat.c || \
   sed -i '/^#include "htslib\/htslib\/sam.h"/a extern "C" void sam_hdr_destroy(bam_hdr_t *h);' $S/src/star/bam_cat.c
 case $VARIANT in zn3*) MARCH=-march=znver3;; *) MARCH=-march=x86-64-v3;; esac
 LTO=OFF; case $VARIANT in *-lto*) LTO=ON;; esac
+GF=""; case $VARIANT in *-g) GF="-DCMAKE_CXX_FLAGS=-g -DCMAKE_C_FLAGS=-g";; esac   # -g: debug info for the samprof sampling profiler (no codegen change)
 MODE=none; case $VARIANT in *-starpgo*) MODE=star;; *-pgo*) MODE=whole;; esac
 cat > $SCR/build.sh <<EOS
 set -euo pipefail
@@ -33,7 +34,7 @@ export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gn
 export LDFLAGS="-L$ENV/lib -Wl,-rpath,$ENV/lib" SINGLET_REF_BASE=$REF SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600
 B=$SCR/b
 cfg() { cmake -S $S -B \$B -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_GIT_COMMIT=$COMMIT -DSINGLET_ENGINE_GPU=OFF \
-        -DSINGLET_MARCH_FLAG=$MARCH -DSINGLET_LTO=$LTO "\$@" > $SCR/cfg.log 2>&1 || { tail -40 $SCR/cfg.log; exit 1; }; }
+        -DSINGLET_MARCH_FLAG=$MARCH -DSINGLET_LTO=$LTO $GF "\$@" > $SCR/cfg.log 2>&1 || { tail -40 $SCR/cfg.log; exit 1; }; }
 bld() { cmake --build \$B --target singlet -j 24 > $SCR/bld.log 2>&1 || { grep -m30 -B3 -A8 "error" $SCR/bld.log || tail -40 $SCR/bld.log; exit 1; }; }
 train() {
   for t in $TRAIN; do
@@ -48,7 +49,7 @@ s_star_gen() { cfg "-DSINGLET_STAR_EXTRA_FLAGS=-fprofile-generate -fprofile-upda
 s_star_use() { cfg "-DSINGLET_STAR_EXTRA_FLAGS=-fprofile-use -fprofile-partial-training -Wno-missing-profile -Wno-error=coverage-mismatch" -DCMAKE_EXE_LINKER_FLAGS=; bld; }
 s_whole_gen() { cfg -DSINGLET_PGO=generate -DSINGLET_PGO_DIR=\$B/pgo; bld; }
 s_whole_use() { echo "[pgo] \$(find \$B/pgo -name '*.gcda' | wc -l) profiles"; cfg -DSINGLET_PGO=use -DSINGLET_PGO_DIR=\$B/pgo; bld; }
-final() { cp \$B/src/pipeline/singlet $OUTD/bin/singlet-$VARIANT.new && mv $OUTD/bin/singlet-$VARIANT.new $OUTD/bin/singlet-$VARIANT; }
+final() { $ENV/bin/x86_64-conda-linux-gnu-gcc -O2 -fPIC -shared -o $OUTD/bin/libsamprof.so $S/scripts/cpu_perf/samprof/samprof.c; cp \$B/src/pipeline/singlet $OUTD/bin/singlet-$VARIANT.new && mv $OUTD/bin/singlet-$VARIANT.new $OUTD/bin/singlet-$VARIANT; }
 "\$@"
 EOS
 inc() { apptainer exec -B /mnt/projects/debruinz_project -B $SCR $IMG bash $SCR/build.sh "$@"; }
