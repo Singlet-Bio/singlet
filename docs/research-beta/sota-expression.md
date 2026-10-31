@@ -444,6 +444,16 @@ State of the engine at d9834b8a (read from the source, nothing run yet):
 
 Each of the three is a CPU change plus a GPU mirror (S8) and a byte-identity gate; they are separate engine PRs, not benchmarking tasks.
 
+### 6. Non-host: viral transcript identity (2026-10-31; phase 1, prototype and benchmark; full report `docs/research-beta/nonhost-transcripts.md` and `bench/expression_sota/nonhost/` on branch `bench/nonhost-transcripts`)
+
+Sample: ravindra2021 dpi2 (GSE166766 HBEC, SARS-CoV-2, 10x v3, 50 M read pairs), Singlet's 11,567 called cells. Reference ("truth-like"): STARsolo (Gene) on the full reads against GRCh38-2024-A + NC_045512.2 with the viral GFF (5'/3' UTR added).
+Findings: (1) **the reads Singlet's non-host screen keeps are enough**: a second STAR step on the 689,660 kept reads reproduces the combined-genome viral counts almost exactly (viral UMIs recovered 0.9991, cell recall 0.998, (cell, gene) recall / precision 0.998 / 0.997,
+per-cell viral UMI Spearman 0.996; the screen drops 0.10% of the viral reads STAR can place); (2) **Kraken2** (viral DB) gives taxon only, no gene or ORF, and matches species-level sensitivity (cell recall 0.9956, Spearman 0.994 vs Singlet's own species table 0.994); (3) **3' reads cannot tell ORFs apart**:
+93.8% of viral alignments start at or after nt 29,000, 3UTR / ORF10 / N hold 94% of gene-assigned UMIs (ORF10 is a position inside the 3'-coterminal block, not evidence of ORF10 expression), and only 35.7% of viral UMIs get a unique `Gene` assignment (44.3% GeneFull); (4) the **only per-cell sgRNA identity comes from leader-TRS
+junction reads**: 147 UMIs in 96 cells in the reference (ORF6 51, N 42, M 14, ORF3a 13, ORF7a 12, ORF8 3, E 2, S 1, noncanonical 9), prototype 149 UMIs / 98 cells, (cell, sgRNA) recall 0.992, precision 0.977; these are 5'-end captures (20-35 nt past the body TRS), not validated by an orthogonal assay and some may be template-switch artefacts.
+Design (report): a registered viral gene table next to `nonhost_per_cell`, a junction table, a per-species STAR index cached from the bundle's FASTA + GTF, a `terminal_block` feature for the 3' coterminal region, a cap on species per sample. Cost: the viral STAR step 2:35 and 2 GB for 2.47 M reads. Not done: no engine change, one sample and one virus (no uninfected control, so false positives on uninfected cells are untested),
+the sgRNA windows were set by hand for NC_045512.2, Kraken2 was reused from the gate rather than rerun, no HIV dataset processed.
+
 ### 8. RNA-editing panel (2026-10-31): not implemented, so not benchmarkable
 
 The engine does not write RNA-editing counts. `pileup_engine.h` mentions editing in comments only (the header summary "RNA editing (A/G) counts at REDIportal sites", the `min_baseq` comment, the `t_variant` profile label) and `rna_variant_caller.h` says
