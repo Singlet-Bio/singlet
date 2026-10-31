@@ -36,12 +36,12 @@ R, B, BIN, WL, SSB = sys.argv[1:6]
 sra = "%s/%s.sra" % (B, R)
 out = {"run": R, "sra_bytes": os.path.getsize(sra)}
 sing = BIN + "/singlet-cpu"
-p, c, w = run([sing, "download", sra, "--quality", "binned", "--vdb-threads", "2", "--no-profile", "-o", B + "/a.1fq"])
+p, c, w = run([sing, "download", sra, "--quality", "binned", "--vdb-threads", "2", "--no-profile", "--whitelist-dir", WL, "-o", B + "/a.1fq"])
 out.update(A_rc=p.returncode, A_cpu=c, A_wall=w)
 if p.returncode == 0:
     out["fq_bytes"] = os.path.getsize(B + "/a.1fq")
     p, c, w = run([SSB, "--whitelist-dir", WL, "--accessions", R, "--scratch", B, "-o", B + "/b.1fg2", B + "/a.1fq"])
-    out.update(B_stage_rc=p.returncode, B_stage_cpu=c, B_stage_wall=w)
+    out.update(B_stage_rc=p.returncode, B_stage_cpu=c, B_stage_wall=w, B_err=(p.stderr[-300:] if p.returncode else ''))
     if p.returncode == 0:
         out["B_report"] = json.loads(p.stdout.strip().splitlines()[-1])
         out["B_bytes"] = os.path.getsize(B + "/b.1fg2")
