@@ -1046,7 +1046,7 @@ inline AmbientCorrectionResult correct_ambient_gene_level_split(
                     Z.indptr[static_cast<size_t>(b) + 1] = static_cast<int32_t>(Z.indices.size());
                 }
                 R.corrected = std::move(Z);
-                for (auto& c : R.contam) { c.rho = nan; c.rho_total = nan; c.n_removed = 0; c.prior_rho = nan; }
+                for (auto& c : R.contam) { c.rho = nan; c.rho_total = nan; c.n_removed = 0; }
                 R.mean_rho = R.median_rho = R.umi_weighted_rho = nan;
                 R.umis_removed = 0;
                 R.cluster_rho.assign(R.cluster_rho.size(), nan);
