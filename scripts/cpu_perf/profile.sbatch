@@ -26,17 +26,19 @@ if [ $PACK = 1 ]; then ( while true; do echo "$(date +%s.%N) $(awk '$1=="usage_u
 if [ $PACK = 1 ]; then ( while true; do echo "@ $(date +%s)"; P=$(tree $$ | tr '
 ' ' '); ps -eLo pid=,lwp=,comm=,time= | awk -v P=" $P " 'index(P," "$1" ")'; sleep 10; done ) > $RES/threads.txt 2>/dev/null & MON2=$!; fi
 if [ $PACK = 1 ]; then ( while true; do echo "@ $(date +%s)"; for p in $(tree $$) ; do [ -r /proc/$p/smaps_rollup ] && echo "$p $(cat /proc/$p/comm) $(awk '/^(Rss|Pss|Private_Clean|Private_Dirty|Shared_Clean|Shared_Dirty|Anonymous):/{printf "%s=%s ",$1,$2}' /proc/$p/smaps_rollup)"; done; sleep 15; done ) > $RES/mem.txt 2>/dev/null & MON3=$!; fi
+GS=""; if [ "${SHARED:-0}" = 1 ]; then GS="--genome-shared on"; $BIN genome load $G/star_2.7.11b > $RES/genome_load.txt 2>&1; $BIN genome status $G/star_2.7.11b >> $RES/genome_load.txt 2>&1; fi   # SHARED=1: STAR genome in SysV shared memory, loaded once (S8's singlet genome load), runs attach
 S0=$(date +%s.%N)
 for i in $(seq 1 $PACK); do
   mkdir -p $SCR/r$i/out
   ( cd $SCR/r$i && timeout -k 30 $LIMIT /usr/bin/time -v -o $RES/time_$i.txt $BIN $FQ --ref-base $REF --genome-dir $G/star_2.7.11b \
-      --exons $G/genes/genes.gtf --out-prefix $SCR/r$i/out/ --threads $T --pipeline --output-format 1pz --engine cpu 2>&1 \
+      --exons $G/genes/genes.gtf --out-prefix $SCR/r$i/out/ --threads $T --pipeline --output-format 1pz --engine cpu $GS 2>&1 \
       | while IFS= read -r l; do printf '%s %s\n' "$(date +%s.%N)" "$l"; done > $RES/log_$i.txt; echo "exit ${PIPESTATUS[0]}" >> $RES/log_$i.txt
     cp out/star_Log.final.out $RES/final_$i.txt 2>/dev/null; cp out/star_Log.out $RES/starlog_$i.txt 2>/dev/null
     ( cd out && find . -maxdepth 2 -type f \( -name '*.mtx*' -o -name '*.1pz' -o -name '*.tsv' -o -name '*.json' \) -print0 | sort -z | xargs -0 sha256sum ) > $RES/hashes_$i.txt 2>/dev/null ) &
   PIDS="${PIDS:-} $!"
 done
 wait $PIDS; E0=$(date +%s.%N); [ -n "${MON:-}" ] && kill $MON $MON2 $MON3 2>/dev/null
+[ "${SHARED:-0}" = 1 ] && $BIN genome unload $G/star_2.7.11b >> $RES/genome_load.txt 2>&1
 echo "pack wall $(echo "$E0 - $S0" | bc) s" | tee $RES/pack_wall.txt
 rc=0
 for i in $(seq 1 $PACK); do
