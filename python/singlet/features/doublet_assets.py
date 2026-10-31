@@ -9,6 +9,8 @@ bytes may not differ.
 Where things come from, first match wins:
 
 * explicit path argument, or the offline overrides ``SINGLET_CELLTYPE_NN_MODEL`` / ``SINGLET_DOUBLET_CENTROIDS`` (still hash-checked);
+* the content-addressed model store ``$SINGLET_MODEL_STORE`` (default ``STORE_DEFAULT``, on Clipper's project space):
+  ``<store>/<sha256>.<ext>``, read-only files; used when present and hash-correct, otherwise skipped with a warning;
 * the cache: ``$SINGLET_DOUBLET_CACHE``, else ``$XDG_CACHE_HOME/singlet/doublet_v2`` (``%LOCALAPPDATA%\\singlet\\doublet_v2`` on
   Windows, ``~/.cache/singlet/doublet_v2`` otherwise), one directory per sha256;
 * a download from ``$SINGLET_DOUBLET_BASE_URL`` (default: the release ``TAG`` below; ``file://`` works for mirrors).
@@ -22,12 +24,15 @@ import hashlib
 import os
 import sys
 import urllib.request
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 ENV_CACHE = "SINGLET_DOUBLET_CACHE"
 ENV_BASE_URL = "SINGLET_DOUBLET_BASE_URL"
+ENV_STORE = "SINGLET_MODEL_STORE"
+STORE_DEFAULT = "/mnt/projects/debruinz_project/debruinz/singlet/models/sha256"
 REPO = "Singlet-Bio/singlet"
 
 
@@ -80,6 +85,10 @@ def cache_dir() -> Path:
     return Path.home() / ".cache" / "singlet" / "doublet_v2"
 
 
+def store_dir() -> Path:
+    return Path(os.environ.get(ENV_STORE) or STORE_DEFAULT)
+
+
 def check(path, asset: Asset) -> Path:
     """``path`` if its sha256 is the asset's; otherwise :class:`AssetHashError`."""
     got = sha256_file(path)
@@ -93,6 +102,7 @@ def fetch(
     *,
     override: Optional[str] = None,
     cache: Optional[Path] = None,
+    store: Optional[Path] = None,
     base_url: Optional[str] = None,
     assets: Optional[dict] = None,
 ) -> Path:
@@ -101,6 +111,12 @@ def fetch(
     asset = (assets or ASSETS)[key]
     if override:
         return check(override, asset)
+    sp = (Path(store) if store else store_dir()) / (asset.sha256 + Path(asset.name).suffix)
+    if sp.exists():
+        try:
+            return check(sp, asset)
+        except AssetHashError as e:
+            warnings.warn(f"model store entry ignored: {e}")
     d = Path(cache) if cache else cache_dir()
     dest = d / asset.sha256[:16] / asset.name
     if dest.exists():

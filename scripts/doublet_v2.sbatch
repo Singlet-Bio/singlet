@@ -34,6 +34,8 @@ CEN=$WORK/data/doublet_v2/atlas_centroids.npz
 [ -e "$CEN" ] || cp "$LQC/dbl/atlas_centroids.npz" "$CEN"
 export SINGLET_CELLTYPE_NN_MODEL=$WORK/data/celltype_nn/models/m1_notissue/model.pt SINGLET_DOUBLET_CENTROIDS=$CEN
 export SINGLET_DBL_REF=$OUT LQC=$LQC
+# only training reads the files by path; every other mode resolves them as a campaign worker does (model store, cache, release)
+[ "$MODE" = train ] || { SINGLET_CELLTYPE_NN_MODEL=; SINGLET_DOUBLET_CENTROIDS=; }
 rt() {
   apptainer exec ${NV:+--nv} --bind "$WORK,/tmp" --env "PATH=$WORK/venvs/singlet/bin:/usr/local/bin:/usr/bin:/bin" \
     --env "PYTHONPATH=$SRC/python:$WORK/venvs/ctnn-torch" --env "OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK" \

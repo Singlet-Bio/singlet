@@ -270,19 +270,21 @@ for a `score_v3` or a new encoder without touching the drain's outputs. (3) The 
 cells within the called set, and a sidecar built on a set that is later changed (for example by the EmptyDrops calls of
 docs/called-ed.md) has to be recomputed. (4) It keeps torch and the encoder files out of the production drain image. Run it per
 study, right after its samples finish: `sbatch --array=... scripts/features_run.sbatch` with `--sets doublet --prod-dir <run
-dirs>`, `OMP_WAIT_POLICY=PASSIVE` and `SINGLET_DOUBLET_CACHE` on shared storage (model files below).
+dirs>`, `OMP_WAIT_POLICY=PASSIVE` (model files: below).
 
 **Install and model files.** `pip install "singlet[doublet]"` (the extra adds `torch>=2.0`; scikit-learn, scipy, pyarrow are core
 dependencies; the stacker's `.npz` ships in the wheel). The two large files are not in the repository: the cell type network (56 MB) and
 the atlas centroids (20 MB) are assets of the GitHub release `doublet-v2-model-b7c4a08f5397` of Singlet-Bio/singlet (public, no
-credentials; tag = first 12 hex of the sha256 of the two `sha256sum` lines). `doublet_assets.fetch` downloads each on first use into
-`$SINGLET_DOUBLET_CACHE` (default `$XDG_CACHE_HOME/singlet/doublet_v2`, `~/.cache/singlet/doublet_v2`, or `%LOCALAPPDATA%` on
-Windows; one directory per sha256), checks the pinned sha256 after the download and on every use, deletes a download or cache entry
-that does not match and refuses (`AssetHashError`); the pins are also compared with the hashes recorded in the stacker file.
+credentials; tag = first 12 hex of the sha256 of the two `sha256sum` lines). `doublet_assets.fetch` looks each file up in this order, and every candidate is checked against the pinned sha256 (after a download
+and on every use; a mismatching download or cache entry is deleted and `AssetHashError` raised, a mismatching store entry is skipped
+with a warning): (1) the content-addressed model store `$SINGLET_MODEL_STORE` (default
+`/mnt/projects/debruinz_project/debruinz/singlet/models/sha256`, files `<sha256>.npz` / `<sha256>.pt`, mode 444): the copy campaign workers on
+Clipper use; (2) the user cache `$SINGLET_DOUBLET_CACHE` (default `$XDG_CACHE_HOME/singlet/doublet_v2`, `~/.cache/singlet/doublet_v2`, or
+`%LOCALAPPDATA%` on Windows; one directory per sha256); (3) a download of the pinned release URL into that cache. The pins are also
+compared with the hashes recorded in the stacker file. The GitHub release (not yet created) is for Anvil and public reuse.
 Overrides for offline workers: `SINGLET_CELLTYPE_NN_MODEL`, `SINGLET_DOUBLET_CENTROIDS` (local copies, hash-checked too) and
 `SINGLET_DOUBLET_BASE_URL` (a mirror or `file://` directory holding the same file names). Pre-fetch on a node with network access
-with `python -c "from singlet.features import doublet_assets as A; [A.fetch(k) for k in A.ASSETS]"` and point
-`SINGLET_DOUBLET_CACHE` at a shared directory.
+with `python -c "from singlet.features import doublet_assets as A; [A.fetch(k) for k in A.ASSETS]"`.
 
 **Not done / limits.** Reading the engine score from the `.s1` cells table (`dbl_doublet_score`) instead of the run directory is not
 wired (the run directory is). Neither the sidecars nor the registry rows were uploaded or registered.

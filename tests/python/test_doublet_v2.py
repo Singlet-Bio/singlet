@@ -288,3 +288,30 @@ def test_pins_agree_with_stacker_and_release_tag():
         m = D.stacker().meta
         assert m["atlas_encoder_sha256"] == A.ASSETS["encoder"].sha256
         assert m["centroids_sha256"] == A.ASSETS["centroids"].sha256
+
+
+def test_lookup_order_store_then_cache_then_url(tmp_path, monkeypatch):
+    A, src, assets = _mini_assets(tmp_path)
+    store, cache = tmp_path / "store", tmp_path / "cache"
+    store.mkdir()
+    name = assets["encoder"].name
+    ext = Path(name).suffix
+    kw = dict(cache=cache, store=store, base_url=src.as_uri(), assets=assets)
+    # nothing in the store or the cache: downloaded
+    p1 = A.fetch("encoder", **kw)
+    assert p1.parent.parent == cache
+    # store entry present: wins over the cache and the URL
+    (store / (assets["encoder"].sha256 + ext)).write_bytes((src / name).read_bytes())
+    (src / name).unlink()
+    p2 = A.fetch("encoder", **kw)
+    assert p2.parent == store
+    # corrupt store entry: skipped with a warning, the cache serves
+    (store / (assets["encoder"].sha256 + ext)).write_bytes(b"bad")
+    with pytest.warns(UserWarning, match="store"):
+        assert A.fetch("encoder", **kw) == p1
+    # the store directory comes from SINGLET_MODEL_STORE; an override beats everything
+    monkeypatch.setenv(A.ENV_STORE, str(store))
+    assert A.store_dir() == store
+    own = tmp_path / "own.pt"
+    own.write_bytes(p1.read_bytes())
+    assert A.fetch("encoder", override=str(own), **kw) == own
