@@ -36,7 +36,12 @@ ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
   IN=$FQ; case $m in cpuG_m|gpuG_m) IN=${FQ%.1fq}.1fg2 ;; esac
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
-  WR=${WRAP:-}; WR=${WR//@O@/$O}   # WRAP: a profiler command in front of the binary; @O@ = this mode's output directory
+  # WRAPMODE (--export cannot carry commas): nsys = a full trace (CUDA API, kernels, copies, NVTX, OS runtime) to $O/trace.nsys-rep; ncu = Nsight Compute on the kernels named in NCU_KERNELS
+  NS=/usr/local/cuda/bin/nsys; NC=/usr/local/cuda/bin/ncu; WR=""
+  case ${WRAPMODE:-} in
+    nsys) WR="$NS profile -o $O/trace --force-overwrite true -t cuda,nvtx,osrt --sample=none --cpuctxsw=none --cuda-memory-usage=true --trace-fork-before-exec=true --stats=false"; export SINGLET_NVTX=1 ;;
+    ncu) WR="$NC -o $O/kern --force-overwrite --target-processes all --set full -k regex:${NCU_KERNELS:-.} --launch-skip ${NCU_SKIP:-0} --launch-count ${NCU_COUNT:-1}"; export SINGLET_NVTX=1 ;;
+  esac
   unset SINGLET_GPU_PILEUP SINGLET_INTRON_RULES SINGLET_GPU_PILEUP_QUAL; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
   case $m in cpu|cpuG_m) ENGARG="" ;; gpuD|gpuD_n|gpuD_m|gpuG_m) export SINGLET_GPU_PILEUP=on ;; gpuQ_m) export SINGLET_GPU_PILEUP=on SINGLET_GPU_PILEUP_QUAL=force ;; esac
   case $m in *_n) BIN=$BINDIR_N/singlet-gpu ;; *_m) BIN=$BINDIR_M/${BINNAME:-singlet-gpu} ;; esac
@@ -69,8 +74,7 @@ for m in "${MODES[@]}"; do
 done
 for m in "${MODES[@]}"; do
   echo "== $m: STAR child phases (wall s since the first mark, CPU s of all its threads; delta = since the previous mark)" | tee -a $RES/summary.txt
-  awk '/^PHASE /{split($3,w,"=");split($4,c,"="); printf "   %-26s wall %7.1f (+%6.1f)  cpu %8.1f (+%7.1f)
-",$2,w[2],w[2]-pw,c[2],c[2]-pc; pw=w[2];pc=c[2]}' $RES/$m/starlog_engine.txt | tee -a $RES/summary.txt
+  grep -a '^PHASE' $O/starlog_engine.txt | tee -a $RES/summary.txt >/dev/null
   grep -a "SHADOW" $RES/$m/starlog_engine.txt | tee -a $RES/summary.txt
   echo "cgroup memory peak of this run: $(awk 'NR>1 {if ($5>m) m=$5} END {printf "%.1f", m/1073741824}' $RES/$m/monitor.tsv) GB" | tee -a $RES/summary.txt
 done
