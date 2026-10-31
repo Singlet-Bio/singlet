@@ -32,8 +32,7 @@ int main() {
         const size_t n = singlet::format_stall_message(buf, sizeof buf, "atac: cells and matrices", 10800);
         assert(n == std::strlen(buf));
         assert(std::string(buf) == "[singlet] STALL WATCHDOG: no progress for 10800s in phase 'atac: cells and matrices' "
-                                   "(SINGLET_STALL_TIMEOUT=10800); exiting with code 5
-");
+                                   "(SINGLET_STALL_TIMEOUT=10800); exiting with code 5\n");
         char tiny[16];
         assert(singlet::format_stall_message(tiny, sizeof tiny, "p", 5) == 15);   // truncated, still terminated
         assert(tiny[15] == 0);
