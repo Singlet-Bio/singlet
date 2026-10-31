@@ -10,6 +10,32 @@ option(SINGLET_BUILD_PIPELINE "Build singlet binary"                 OFF)
 option(SINGLET_BUILD_PYTHON   "Build Python bindings"                 OFF)
 option(SINGLET_BUILD_TESTS    "Build test suite"                      OFF)
 
+# Host-code build flags (pipeline, bundled STAR, pileup/export). Defaults keep the historical behaviour.
+#   -DSINGLET_MARCH_FLAG=-march=x86-64-v3  (or -march=znver3, ...) for the pipeline and STAR objects
+#   -DSINGLET_LTO=ON                       link-time optimisation across all host code
+#   -DSINGLET_PGO=generate|use             whole-program profile-guided build (profiles in SINGLET_PGO_DIR; the
+#                                          generate and use builds must share one build directory)
+# scripts/cpu_perf/build_flags.sbatch builds and trains the variants; see docs/research-beta/cpu-engine-perf.md.
+# The literal below is what the older build scripts rewrite with sed (-march=native -> -march=x86-64-v3).
+set(SINGLET_MARCH_FLAG "-march=native" CACHE STRING "-march flag for the pipeline and bundled STAR objects")
+option(SINGLET_LTO "Link-time optimisation of the host code" OFF)
+set(SINGLET_PGO "OFF" CACHE STRING "Whole-program PGO: OFF | generate | use")
+set(SINGLET_PGO_DIR "${CMAKE_BINARY_DIR}/pgo" CACHE PATH "Directory holding the PGO profiles")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    if(SINGLET_LTO)
+        add_compile_options(-flto=auto)
+        add_link_options(-flto=auto)
+    endif()
+    if(SINGLET_PGO STREQUAL "generate")
+        add_compile_options(-fprofile-generate=${SINGLET_PGO_DIR} -fprofile-update=atomic)
+        add_link_options(-fprofile-generate=${SINGLET_PGO_DIR})
+    elseif(SINGLET_PGO STREQUAL "use")
+        add_compile_options(-fprofile-use=${SINGLET_PGO_DIR} -fprofile-partial-training
+                            -Wno-missing-profile -Wno-error=coverage-mismatch)
+        add_link_options(-fprofile-use=${SINGLET_PGO_DIR})
+    endif()
+endif()
+
 # ─── Dependencies ─────────────────────────────────────────────────────────────
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)

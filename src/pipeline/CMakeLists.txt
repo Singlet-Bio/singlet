@@ -20,7 +20,7 @@ target_include_directories(singlet PRIVATE
     ${HTSLIB_INCLUDE_DIRS}
     ${NCBI_VDB_INCLUDE}
 )
-target_compile_options(singlet PRIVATE -O3 -march=native)
+target_compile_options(singlet PRIVATE -O3 ${SINGLET_MARCH_FLAG})
 
 # Engine git commit compiled into the binary (pileup_stats.json "provenance"). Pass -DSINGLET_GIT_COMMIT=<sha> when
 # building from a tree without .git (e.g. an rsync copy); otherwise it is read from the source tree.

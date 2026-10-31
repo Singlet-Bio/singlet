@@ -40,7 +40,7 @@ target_include_directories(singlet_star PRIVATE
 )
 
 target_compile_options(singlet_star PRIVATE
-    -O3 -march=native
+    -O3 ${SINGLET_MARCH_FLAG}
     $<$<BOOL:${SINGLET_ENABLE_PGO_USE}>:-fprofile-use=${CMAKE_SOURCE_DIR}/data/pgo_profile>
 )
 
