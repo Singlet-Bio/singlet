@@ -46,7 +46,7 @@ import json, os, sys, time
 stage = sys.argv[1]; W = "/mnt/projects/debruinz_project/debruinz/singlet"; PB = W + "/pipeline-benchmark/data"; PERF = W + "/data/atlas-rerun/perf"
 ref = os.path.getsize(PB + "/pbmc1k_v3/pbmc1k_v3.1fq") / 66.6e6          # bytes per pair of the 3' v3 reference sample
 Q = [("GSM7036403", PERF + "/GSM7036403/sample.1fq", 111.6e6), ("GSM6470208", PERF + "/GSM6470208/sample.1fq", 121.8e6),
-     ("GSM7656149", PERF + "/GSM7656149/sample.1fq", 263.4e6),
+     ("GSM7656149", PERF + "/GSM7656149/sample.1fg2", 263.4e6),
      ("PBMC1KA", PB + "/pbmc1k_v3/pbmc1k_v3.1fq", 66.6e6), ("PBMC1KB", PB + "/pbmc1k_v3/pbmc1k_v3.1fq", 66.6e6),
      ("PBMC1KC", PB + "/pbmc1k_v3/pbmc1k_v3.1fq", 66.6e6), ("PBMC5P", PB + "/pbmc5p_v1/pbmc5p_v1.1fq", None)]
 for d in ("todo", "fetching", "incoming", "ready", "claimed", "failed", "deleting"):
@@ -54,9 +54,12 @@ for d in ("todo", "fetching", "incoming", "ready", "claimed", "failed", "deletin
 t = time.time() - 1000
 for i, (gsm, path, pairs) in enumerate(Q):
     d = os.path.join(stage, "ready", gsm); os.makedirs(d)
-    os.symlink(path, os.path.join(d, "sample.1fq"))
+    fg2 = path.endswith(".1fg2")     # the deep sample is on the .1fg2 route (#126), the rest on the FASTQ route
+    os.symlink(path, os.path.join(d, "sample.1fg2" if fg2 else "sample.1fq"))
     p = int(pairs or os.path.getsize(path) / ref)
-    json.dump({"pairs": p, "bytes": os.path.getsize(path), "runs": ["sample"], "gse": "GSE_S14", "organism": "Homo sapiens"}, open(d + "/manifest.json", "w"))
+    man = {"pairs": p, "bytes": os.path.getsize(path), "runs": ["sample"], "gse": "GSE_S14", "organism": "Homo sapiens"}
+    if fg2: man.update(format="1fg2", files=["sample.1fg2"])
+    json.dump(man, open(d + "/manifest.json", "w"))
     os.utime(d, (t + i, t + i))
 PY
 }
@@ -67,12 +70,12 @@ sampler() {   # $1 tag: cgroup memory.current, /tmp used and GPU util every 5 s
 
 if [ -z "${SKIP_A:-}" ]; then
   echo "== A: single-sample worker (drain_worker.py, 16 threads)"; mkstage $T/stageA; sampler A & SP=$!
-  python3 -u $SRC/drain_worker.py --stage $T/stageA --engine gpu --config $T/config.json --threads 16 --scratch /tmp --mem-gb 0 --idle-exit-min 0.3 \
+  python3 -u $SRC/drain_worker.py --stage $T/stageA --engine gpu --config $T/config.json --threads 16 --scratch /tmp --mem-gb 0 --accept-1fg2 --idle-exit-min 0.3 \
       --publish $T/keep.sh $K/single {gsm} {out} > $T/drainA.log 2>&1; kill $SP; mv $T/root $T/rootA
   tail -12 $T/drainA.log | cut -c1-220
 fi
 echo "== B: multi-sample worker (multi_drain.py, 8 x 12 threads, --genome-shared on)"; mkstage $T/stageB; sampler B & SP=$!
-python3 -u $SRC/multi_drain.py --stage $T/stageB --config $T/config.json --concurrency 8 --threads 12 --scratch /tmp --mem-gb 370 --idle-exit-min 0.3 \
+python3 -u $SRC/multi_drain.py --stage $T/stageB --config $T/config.json --concurrency 8 --threads 12 --scratch /tmp --mem-gb 370 --route auto --accept-1fg2 --idle-exit-min 0.3 \
     --publish $T/keep.sh $K/multi {gsm} {out} > $T/drainB.log 2>&1; kill $SP
 cat $T/drainB.log | cut -c1-260
 for s in $(ls $K/multi 2>/dev/null); do ls /dev/shm | head -3; break; done
