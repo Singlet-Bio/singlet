@@ -66,6 +66,7 @@
 #include "singlet/pileup/nonhost/nonhost_em.h"
 #include "singlet/pileup/nonhost/nonhost_aligner.h"
 #include "singlet/pileup/nonhost/nonhost_cell_matrix.h"
+#include "singlet/pileup/nonhost/nonhost_confirmed_reads.h"
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
 #endif
@@ -1778,6 +1779,22 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                 cell_mat.write(out_prefix + "/nonhost");
                 std::cerr << "[nonhost] per-cell matrix: " << cell_mat.n_records()
                           << " cell\xc3\x97species records\n";
+
+                // Confirmed-species reads (nonhost_confirmed_reads.h): only with EM-confirmed species and a host filter, and never a read
+                // with a host k-mer. Absent otherwise (uninfected samples have no member).
+                if (using_host_filter && !em_confirmed.empty()) {
+                    if (!host_filter.loaded()) host_filter = HostKmerFilter::load(host_bloom_path);
+                    singlet::nonhost::ConfirmedReadsStats cst;
+                    const std::string packed = singlet::nonhost::pack_confirmed_reads(
+                        tagged, multi_hits, em_confirmed, valid_barcodes, &host_filter, cb_len, umi_len,
+                        host_filter.k(), host_filter.w(), &cst);
+                    if (!packed.empty()) {
+                        std::ofstream cr(out_prefix + "/nonhost/nonhost_confirmed_reads.bin", std::ios::binary);
+                        cr.write(packed.data(), static_cast<std::streamsize>(packed.size()));
+                    }
+                    std::cerr << "[nonhost] confirmed-species reads: " << cst.n_reads << " written, " << cst.n_excluded_host
+                              << " left out (host k-mer), " << cst.n_dropped_n << " left out (N)\n";
+                }
             }
         }
 

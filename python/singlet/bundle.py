@@ -297,6 +297,12 @@ MODALITIES: Dict[str, Modality] = {
             ("nonhost/nonhost_summary.json", "nonhost_summary.json"),
             "Non-host classification summary: reads classified, top taxa, database.",
         ),
+        Modality(
+            "nonhost_confirmed_reads",
+            "binary",
+            ("nonhost/nonhost_confirmed_reads.bin",),
+            "cDNA reads of EM-confirmed non-host species (2-bit packed) with barcode, UMI and species; no read with a host k-mer.",
+        ),
         # ── Immune repertoire ─────────────────────────────────────────────
         Modality(
             "vdj_gene_usage",
@@ -1615,6 +1621,8 @@ class SingletBundle:
             import pandas as pd
 
             return pd.read_csv(_io.BytesIO(data), sep="\t")
+        if kind == "binary":
+            return data  # raw bytes; the layout is in docs/pipeline-outputs.md
         if kind != "matrix":
             raise ValueError(f"Unknown modality kind {kind!r} for {name!r}")
 
