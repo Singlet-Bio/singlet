@@ -134,6 +134,9 @@ the pin differs from the earlier calls on 98 of 22,605 Kang barcodes and 3 of 90
 | | | EmptyDrops_CR / CellBender / Cell Ranger | | | 0.8973 / 0.8919 / 0.8985 | [-0.024,-0.011] / [-0.031,-0.016] / [-0.023,-0.009] |
 | | | knee | 0.9875 | 0.7748 | 0.8683 | [-0.058, -0.034] |
 
+| Gaublomme 2019 mouse nuclei (hashtag truth; positive = hashtag UMI above the empty-droplet p99 and one tag >= 60%) | | knee `called` | | | | precision 0.978 (2,691 called) |
+| | | **called_v2** (additions are 828 of its 3,519) | | | | precision **0.90** (additions 64.9% positive, those with >= 400 UMI 87%); caveat: the antibody stains nuclear pores, so debris and ambient nuclear fragments can be tagged too; recall not measured (no hashtag-negative real nuclei exist) |
+
 Re-confirmed: **F1 0.991 on genotype truth** (0.9905 lenient, 0.982 with damaged barcodes excluded), above every competitor with a
 CI that excludes zero; hgmm1k_v3 species truth likewise. The knee loses 0.05 F1 on both. hgmm1k_v3 "lenient" is not meaningful
 (species-shifted debris counted as cells; recall ~0.57 for every caller).
@@ -178,6 +181,11 @@ the knee cells' median intronic fraction exceeds ambient by >= 0.15, BH 0.01, ad
 additions of which 48% are hashtag-positive (kept: 76%), a weak split; precision rises 0.90 to 0.94 while recall of the positives falls 5%, so F1 is
 unchanged (0.947 vs 0.947). It is inactive on pbmc1k_v3 and hgmm1k_v3 (intronic margins 0.10 and 0.13) and active on nuclei2k_v2 (removes 326 of 633).
 A UMI floor on the additions (drop < 200 UMI) would give F1 0.96, but that was found after looking at this library and is not validated.
+
+**Pre-registered hypothesis (not shipped; orchestrator decision 2026-10-31):** in an intron-rich library (median intronic fraction of the knee-called
+barcodes exceeds the ambient pool's by >= 0.15), a barcode added by called_v2 beyond the knee is kept only if it has >= 200 UMI. Found after looking at the
+Gaublomme library, where it gives F1 0.96 against 0.947; the expectation is F1 ~0.96 on a new set. It is to be validated on a second hashed or
+genotype-pooled nuclei set with raw reads, if one turns up, before any PR. Until then called_v2 ships unchanged for nuclei, `fdr` is available for filtering.
 
 ### 3. Ambient RNA (R10c) (2026-10-31, pin d9834b8a)
 
