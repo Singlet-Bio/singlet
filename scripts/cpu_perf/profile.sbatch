@@ -25,6 +25,7 @@ echo "node=$(hostname) job=$SLURM_JOB_ID set=$S T=$T pack=$PACK bin=$BINV commit
 if [ $PACK = 1 ]; then ( while true; do echo "$(date +%s.%N) $(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat)"; sleep 1; done ) > $RES/cpu.txt & MON=$!; fi
 if [ $PACK = 1 ]; then ( while true; do echo "@ $(date +%s)"; P=$(tree $$ | tr '
 ' ' '); ps -eLo pid=,lwp=,comm=,time= | awk -v P=" $P " 'index(P," "$1" ")'; sleep 10; done ) > $RES/threads.txt 2>/dev/null & MON2=$!; fi
+if [ $PACK = 1 ]; then ( while true; do echo "@ $(date +%s)"; for p in $(tree $$) ; do [ -r /proc/$p/smaps_rollup ] && echo "$p $(cat /proc/$p/comm) $(awk '/^(Rss|Pss|Private_Clean|Private_Dirty|Shared_Clean|Shared_Dirty|Anonymous):/{printf "%s=%s ",$1,$2}' /proc/$p/smaps_rollup)"; done; sleep 15; done ) > $RES/mem.txt 2>/dev/null & MON3=$!; fi
 S0=$(date +%s.%N)
 for i in $(seq 1 $PACK); do
   mkdir -p $SCR/r$i/out
@@ -35,7 +36,7 @@ for i in $(seq 1 $PACK); do
     ( cd out && find . -maxdepth 2 -type f \( -name '*.mtx*' -o -name '*.1pz' -o -name '*.tsv' -o -name '*.json' \) -print0 | sort -z | xargs -0 sha256sum ) > $RES/hashes_$i.txt 2>/dev/null ) &
   PIDS="${PIDS:-} $!"
 done
-wait $PIDS; E0=$(date +%s.%N); [ -n "${MON:-}" ] && kill $MON $MON2 2>/dev/null
+wait $PIDS; E0=$(date +%s.%N); [ -n "${MON:-}" ] && kill $MON $MON2 $MON3 2>/dev/null
 echo "pack wall $(echo "$E0 - $S0" | bc) s" | tee $RES/pack_wall.txt
 rc=0
 for i in $(seq 1 $PACK); do
