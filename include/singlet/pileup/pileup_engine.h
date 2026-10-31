@@ -135,9 +135,13 @@ struct PileupConfig {
     uint32_t wl_ambient_ceil = 50;      // UMI ceiling: WL barcodes with ≤ this count define the ambient pool
     // Intron-assignment rules (intron_rule::k* bits). SINGLET_INTRON_RULES overrides it
     // (decimal or 0x hex) for experiments; see docs/pipeline-validation.md §4.4.
-    // Default 389 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer), chosen on real truth (sweep2: matches or beats every
-    // other combination on pbmc v3/v2, nuclei, hgmm, CITE against STARsolo Velocyto and alevin-fry USA).
-    uint32_t intron_rules = 389;
+    // Default 397 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer) + 8 (kFlank). 389 (without kFlank) was chosen on real
+    // truth (sweep2: matches or beats every other combination on pbmc v3/v2, nuclei, hgmm, CITE against STARsolo Velocyto and alevin-fry USA)
+    // under the old molecule labels. With the alevin-fry USA labels (any intron-touching read = unspliced) a read that touches an intron by
+    // <= 5 bp of an exon-touching read must not count as intron evidence: on PBMC-E long-read truth kFlank lifts the molecule precision of the
+    // unspliced call from 0.62 to 0.86 at unchanged recall (0.976 -> 0.974), (cell, gene) unspliced r from 0.81 to 0.90
+    // (docs/research-beta/sota-expression.md). The GPU pileup does not implement kFlank yet and falls back to the CPU pileup.
+    uint32_t intron_rules = 397;
 };
 
 namespace intron_rule {
