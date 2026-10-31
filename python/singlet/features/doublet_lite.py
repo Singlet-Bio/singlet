@@ -114,18 +114,26 @@ class Lite:
         return out
 
     @staticmethod
-    def knn_fraction(Z: np.ndarray, n_real: int, k: int, block: int = 2048) -> np.ndarray:
+    def knn_fraction(Z: np.ndarray, n_real: int, k: int, block: int = 2048, extra=(5, 10, 20)) -> Dict[str, np.ndarray]:
         """For each of the first ``n_real`` rows of ``Z``: fraction of its k nearest neighbours (self excluded) among rows
-        ``>= n_real`` (the simulated doublets)."""
+        ``>= n_real`` (the simulated doublets), for k and the smaller ``extra`` values."""
+        ks = sorted({int(e) for e in extra if e < k} | {k})
         sq = (Z * Z).sum(1)
-        out = np.empty(n_real)
+        out = {kk: np.empty(n_real) for kk in ks}
         for s in range(0, n_real, block):
             e = min(s + block, n_real)
             d = sq[s:e, None] + sq[None, :] - 2.0 * (Z[s:e] @ Z.T)
             d[np.arange(e - s), np.arange(s, e)] = np.inf
             nb = np.argpartition(d, k, axis=1)[:, :k]
-            out[s:e] = (nb >= n_real).mean(1)
-        return out
+            if len(ks) > 1:
+                nb = np.take_along_axis(nb, np.argsort(np.take_along_axis(d, nb, 1), axis=1), 1)
+            for kk in ks:
+                out[kk][s:e] = (nb[:, :kk] >= n_real).mean(1)
+        res = {"lite_knn": out[k]}
+        for kk in ks:
+            if kk != k:
+                res[f"lite_knn{kk}"] = out[kk]
+        return res
 
     def features(
         self,
@@ -149,8 +157,13 @@ class Lite:
         S, _ = simulate_doublets(C, int(n_sim or 2 * n), rng)
         Zs = self.encode_panel(S)
         k = max(10, int(round(0.5 * np.sqrt(n))))
-        knn = self.knn_fraction(self.space(np.vstack([Z, Zs]), space, space_dim), n, k)
-        return {"lite_entropy": self.entropy(Z), "lite_knn": knn}
+        res = self.knn_fraction(self.space(np.vstack([Z, Zs]), space, space_dim), n, k)
+        res["lite_entropy"] = self.entropy(Z)
+        A = Z @ self.L
+        B = self.means @ self.L
+        d2 = (A * A).sum(1)[:, None] + (B * B).sum(1)[None, :] - 2.0 * (A @ B.T)
+        res["lite_mind"] = d2.min(1)
+        return res
 
 
 class Distilled(Lite):
@@ -196,8 +209,9 @@ class Distilled(Lite):
         os_ = self.outputs(S)
         k = max(10, int(round(0.5 * np.sqrt(n))))
         d = dim or self.K
-        knn = self.knn_fraction(np.vstack([o[:, :d], os_[:, :d]]), n, k)
-        return {"lite_entropy": o[:, self.K].astype(np.float64), "lite_knn": knn}
+        res = self.knn_fraction(np.vstack([o[:, :d], os_[:, :d]]), n, k)
+        res["lite_entropy"] = o[:, self.K].astype(np.float64)
+        return res
 
     @classmethod
     def load(cls, path) -> "Distilled":

@@ -193,6 +193,11 @@ COMBOS = {
     "lite_knn": BASE5 + ["lite_knn"],
     "knn+lite_ent": BASE5 + ["atlas_knn", "lite_entropy"],
     "lite_knn+ent": BASE5 + ["lite_knn", "ct_entropy"],
+    "multi": BASE5 + ["lite_knn", "lite_knn5", "lite_knn10", "lite_knn20", "lite_entropy"],
+    "multi+mind": BASE5 + ["lite_knn", "lite_knn5", "lite_knn10", "lite_knn20", "lite_entropy", "lite_mind"],
+    "multi_knn": BASE5 + ["lite_knn", "lite_knn5", "lite_knn10", "lite_knn20"],
+    "both_models": BASE5 + ["lite_knn@pca", "lite_knn5@pca", "lite_knn10@pca", "lite_knn20@pca", "lite_mind@pca", "lite_knn@dst",
+                            "lite_knn5@dst", "lite_knn10@dst", "lite_knn20@dst", "lite_entropy@dst"],
     "lk": BASE5 + ["lite_knn"],
     "lk+ent": BASE5 + ["lite_knn", "ct_entropy"],
     "lite_both+clf": BASE5 + ["lite_knn", "lite_entropy", "atlas_clf"],
@@ -207,11 +212,13 @@ def cmd_eval(a):
     from singlet.features import doublet as D
 
     data = S.load_training("stored")
-    if a.tag:
+    # --tag T (features unsuffixed) or --tag pca=T1,dst=T2 (features suffixed @pca / @dst)
+    tags = dict(t.split("=") if "=" in t else ("", t) for t in a.tag.split(",") if t)
+    for suf, tg in tags.items():
         for n in D.STUDY:
-            z = np.load(Path(a.out) / "lite" / f"feats_{a.tag}" / f"{n}.npz")
+            z = np.load(Path(a.out) / "lite" / f"feats_{tg}" / f"{n}.npz")
             for k in z.files:
-                data[n][0][k] = z[k]
+                data[n][0][k + ("@" + suf if suf else "")] = z[k]
     cols = COMBOS[a.combo]
     ap = {}
     for n in D.STUDY:
@@ -219,7 +226,7 @@ def cmd_eval(a):
         ap[n] = float(average_precision_score(data[n][1], s))
     res = Path(a.out) / "lite" / "eval"
     res.mkdir(parents=True, exist_ok=True)
-    name = f"{a.combo}__{a.tag or 'stored'}"
+    name = f"{a.combo}__{(a.tag or 'stored').replace('=', '-').replace(',', '_')}"
     pd.Series(ap).to_csv(res / f"{name}.csv")
     ref = pd.read_csv(f"{S.LQC}/dbl/eval/auprc_wide.csv", index_col=0)["scdblfinder"].reindex(list(ap))
     d = pd.Series(ap) - ref
