@@ -1417,6 +1417,16 @@ public:
         if (config_.stranded && config_.auto_strand && has_gene_model_ && !strand_probed_)
             probe_strand_indexed(master_fp, hdr, idx);
 
+        // reads-per-UMI matrices are filled by finalize_all() on this thread, not per worker
+        if (reads_matrix_on()) {
+            exon_reads_acc_.set_barcodes(barcodes_);
+            exon_reads_acc_.set_n_features(gene_model_.n_exons());
+            if (config_.count_introns) {
+                intron_reads_acc_.set_barcodes(barcodes_);
+                intron_reads_acc_.set_n_features(gene_model_.n_introns());
+            }
+        }
+
         // ── Initialize per-worker contexts ──
         std::vector<WorkerContext> workers(n_workers);
         for (int w = 0; w < n_workers; ++w) {
