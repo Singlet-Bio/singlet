@@ -39,10 +39,10 @@ for m in "${MODES[@]}"; do
   unset SINGLET_GPU_PILEUP SINGLET_INTRON_RULES SINGLET_GPU_PILEUP_QUAL; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
   case $m in cpu|cpuG_m) ENGARG="" ;; gpuD|gpuD_n|gpuD_m|gpuG_m) export SINGLET_GPU_PILEUP=on ;; gpuQ_m) export SINGLET_GPU_PILEUP=on SINGLET_GPU_PILEUP_QUAL=force ;; esac
   case $m in *_n) BIN=$BINDIR_N/singlet-gpu ;; *_m) BIN=$BINDIR_M/${BINNAME:-singlet-gpu} ;; esac
-  ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb"
+  ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb\tcg_mem_bytes"
     while true; do
       g=$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits | tr -d ' ' | tr , '\t')
-      printf "%s\t%s\t%s\n" $(date +%s.%N) $(awk '$1=="usage_usec"{printf "%.2f", $2/1e6}' $CG/cpu.stat) "$g"; sleep 1
+      printf "%s\t%s\t%s\t%s\n" $(date +%s.%N) $(awk '$1=="usage_usec"{printf "%.2f", $2/1e6}' $CG/cpu.stat) "$g" "$(cat $CG/memory.current)"; sleep 1
     done ) > $O/monitor.tsv 2>/dev/null &
   MON=$!
   T0=$(date +%s.%N); C0=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat)
@@ -69,5 +69,6 @@ for m in "${MODES[@]}"; do
   awk '/^PHASE /{split($3,w,"=");split($4,c,"="); printf "   %-26s wall %7.1f (+%6.1f)  cpu %8.1f (+%7.1f)
 ",$2,w[2],w[2]-pw,c[2],c[2]-pc; pw=w[2];pc=c[2]}' $RES/$m/starlog_engine.txt | tee -a $RES/summary.txt
   grep -a "SHADOW" $RES/$m/starlog_engine.txt | tee -a $RES/summary.txt
+  echo "cgroup memory peak of this run: $(awk 'NR>1 {if ($5>m) m=$5} END {printf "%.1f", m/1073741824}' $RES/$m/monitor.tsv) GB" | tee -a $RES/summary.txt
 done
 echo done $(date -Is) | tee -a $RES/summary.txt
