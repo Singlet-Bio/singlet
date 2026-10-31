@@ -189,11 +189,16 @@ genotype-pooled nuclei set with raw reads, if one turns up, before any PR. Until
 
 **Nuclei ambient: a real, large bug (2026-10-31).** In the Gaublomme library, Xist is expressed only in female nuclei, so Xist UMI in male-hash nuclei is ambient
 (four of the eight hashtags are female: median Xist share 0.22-0.25% of UMI; four are male: ~0.003%). With the pool's Xist share a_X = 0.151% (uncalled barcodes with
-1-100 UMI), the true contamination of the 1,344 male nuclei is Xist share / a_X = **2.3%** (UMI-weighted 2.4%). Singlet (92095e29) reports per-cell `rho_total`
+1-100 UMI), the Xist-based contamination of the 1,344 male nuclei is Xist share / a_X = **<= 2.3%** (UMI-weighted 2.4%); this is an upper bound, because male nuclei have low native Xist (Zach), so the true value is lower. Singlet (92095e29) reports per-cell `rho_total`
 **27.6%** mean (12x), exon-basis `rho` 37% (16x), and removes 25% of the nuclei's UMIs (`bench/expression_sota/nh_xist.py`, `results/nuclei/xist_ambient.json`).
 nuclei2k_v2 shows the same signature (mean rho 29%, removed 21% of UMI). The ambient pool of a nuclei library is debris with a nuclear profile (its Xist share
 equals that of the female nuclei themselves), so "the part of a nucleus that looks like the pool" is most of the nucleus; the estimator cannot separate soup from native
-expression there. Candidate fix, not yet built: detect the case (pool profile close to the called cells' profile) and report rho as NA with the corrected matrix equal to the
+expression there. Second, sex-independent check (`nuc_markers.py`, `results/nuclei/markers_*.json`): genes exclusive to one brain cell class appear in nuclei of
+another class only through soup (or low native expression, so these are upper bounds). Oligodendrocyte markers (Plp1 Mbp Mobp Mog Mag Cldn11) in the 2,597 neuronal
+nuclei of the Gaublomme library: <= **9.2%** of their UMI is soup (marker share in neurons / marker share in the pool); microglia markers in neurons <= 25% (34 UMI only);
+astrocyte markers in neurons <= 69% (Slc1a2 and Aqp4 are expressed natively in neurons, so this one is uninformative). Singlet reports 27.6% (mean rho_total) there,
+at least 3x the oligodendrocyte bound and 12x the Xist bound. On nuclei2k_v2 the same check gives <= 28% (oligodendrocyte in neurons), which does **not** exclude Singlet's 23%:
+there is no sex truth in that library, so its over-estimate is shown by the Gaublomme library only. Candidate fix, not yet built: detect the case (pool profile close to the called cells' profile) and report rho as NA with the corrected matrix equal to the
 raw counts, instead of a 12x wrong number; a criterion needs the pool-to-cell similarity measured on the nuclei and cell libraries we have.
 
 ### 3. Ambient RNA (R10c)### 3. Ambient RNA (R10c) (2026-10-31, pin d9834b8a)

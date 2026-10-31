@@ -1,0 +1,68 @@
+{
+ "pool_marker_share": {
+  "neuron": 0.00540339080437458,
+  "oligo": 0.0013129952364129064,
+  "astro": 0.00038823040698193566,
+  "microglia": 1.9411520349096782e-05
+ },
+ "n_cells": 3519,
+ "classes": {
+  "neuron": {
+   "n": 2597,
+   "per_other_class": {
+    "oligo": {
+     "upper_bound_rho": 0.09208639897047328,
+     "marker_umi": 832
+    },
+    "astro": {
+     "upper_bound_rho": 0.6895017822452104,
+     "marker_umi": 1842
+    },
+    "microglia": {
+     "upper_bound_rho": 0.25453920300040345,
+     "marker_umi": 34
+    }
+   },
+   "singlet_rho_total_mean": 0.268766656103196,
+   "singlet_rho_mean": 0.36955416499807475
+  },
+  "oligo": {
+   "n": 119,
+   "per_other_class": {
+    "neuron": {
+     "upper_bound_rho": 0.09362454491526544,
+     "marker_umi": 21
+    },
+    "astro": {
+     "upper_bound_rho": 0.37230469032304686,
+     "marker_umi": 6
+    },
+    "microglia": {
+     "upper_bound_rho": 0.0,
+     "marker_umi": 0
+    }
+   },
+   "singlet_rho_total_mean": 0.4762543529411765,
+   "singlet_rho_mean": 0.4765213109243697
+  },
+  "astro": {
+   "n": 219,
+   "per_other_class": {
+    "neuron": {
+     "upper_bound_rho": 0.016620338077025485,
+     "marker_umi": 11
+    },
+    "oligo": {
+     "upper_bound_rho": 0.06839794954347744,
+     "marker_umi": 11
+    },
+    "microglia": {
+     "upper_bound_rho": 1.6823408389530232,
+     "marker_umi": 4
+    }
+   },
+   "singlet_rho_total_mean": 0.3846138767123287,
+   "singlet_rho_mean": 0.43787708675799086
+  }
+ }
+}
