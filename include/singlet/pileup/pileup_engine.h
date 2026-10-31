@@ -121,6 +121,10 @@ struct PileupConfig {
     int min_baseq = 10;             // Minimum base quality for the SNP pileup (there is no editing pileup)
     bool count_introns = true;      // Count intronic reads
     bool count_sj = true;           // Extract splice junctions
+    // Junction molecules come from uniquely mapped alignments only (NH == 1), as STARsolo's SJ feature does. The primary alignment of a
+    // multi-mapped read adds junctions that long-read truth does not support (precision 0.08 against 0.74 for the shared ones, PBMC-E
+    // pbmc1) for 0.8 points of recall. --sj-all-alignments restores the old policy (CPU pileup only).
+    bool sj_unique_only = true;
     bool umi_dedup = true;          // UMI deduplication for exon/intron
     bool umi_dedup_directional = false; // N6: directional 1-Hamming error correction (run() and run_parallel())
     bool reads_matrix = true;       // exon_reads / intron_reads matrices and the per-cell reads-per-UMI histogram (needs umi_dedup); never changes the counts
@@ -3499,12 +3503,19 @@ private:
         return false;
     }
 
+    // True when the alignment belongs to a read STAR placed at more than one locus (NH > 1). A record without NH counts as unique.
+    static bool alignment_is_multimapped(const bam1_t* b) {
+        const uint8_t* nh = bam_aux_get(b, "NH");
+        return nh && bam_aux2i(nh) > 1;
+    }
+
     // ── Splice junction extraction from CIGAR ──
     // CIGAR N operations represent introns (splice junctions).
     // For each N op: donor = ref_pos (last exonic base + 1), acceptor = ref_pos + len
     void extract_splice_junctions(bam1_t* b, int32_t tid, uint32_t bc_idx,
                                   const char* umi_str, int umi_len,
                                   PileupStats& stats) {
+        if (config_.sj_unique_only && alignment_is_multimapped(b)) return;
         const uint32_t* cigar = bam_get_cigar(b);
         int32_t ref_pos = b->core.pos;
         int n_cigar = b->core.n_cigar;
@@ -4191,6 +4202,7 @@ private:
     void extract_splice_junctions_parallel(WorkerContext& wc, bam1_t* b,
                                            int32_t tid, uint32_t bc_idx,
                                            const char* umi_str, int umi_len) {
+        if (config_.sj_unique_only && alignment_is_multimapped(b)) return;
         const uint32_t* cigar = bam_get_cigar(b);
         int32_t ref_pos = b->core.pos;
         for (int ci = 0; ci < b->core.n_cigar; ++ci) {
