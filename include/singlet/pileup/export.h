@@ -838,6 +838,11 @@ inline ExportStats export_results(const PileupEngine& engine,
     // is produced in pipeline mode or when run_ambient_correction is set; it is written by the "N11" block below.
     GeneCSC<uint32_t> ambient_corrected_csc;
     std::vector<std::string> ambient_feature_names;  ///< gene_id_gene_name, same strings as ambiguous_counts
+    // kept for the final ambient_contamination.json, which is rewritten once the doublet calls exist (headline excludes them)
+    singlet::AmbientCorrectionResult amb_saved;
+    std::vector<uint32_t> amb_saved_cells;
+    singlet::AmbientDecontConfig amb_saved_cfg;
+    bool amb_saved_have = false;
     if (!cc_result.cell_indices.empty() && exon_csc.ncols > 0 && !bc_totals.empty()
         && engine.gene_model().n_genes() > 0) {
         auto t_amb0 = std::chrono::high_resolution_clock::now();
@@ -911,6 +916,14 @@ inline ExportStats export_results(const PileupEngine& engine,
         const bool want_corrected = export_cfg.pipeline_mode || export_cfg.run_ambient_correction;
         if (want_corrected && amb.ok && ambient_feature_names.size() == amb.corrected.nrows)
             ambient_corrected_csc = std::move(amb.corrected);
+        {   // a copy without the (moved or unused) corrected matrix
+            auto keep_corrected = std::move(amb.corrected);
+            amb_saved = amb;
+            amb.corrected = std::move(keep_corrected);
+            amb_saved_cells = amb_cells;
+            amb_saved_cfg = amb_cfg;
+            amb_saved_have = true;
+        }
         auto t_amb1 = std::chrono::high_resolution_clock::now();
         double amb_s = std::chrono::duration<double>(t_amb1 - t_amb0).count();
         std::cerr << "[ambient] method=" << (amb.ok ? amb.method : std::string("none_no_ambient_pool"))
@@ -988,6 +1001,15 @@ inline ExportStats export_results(const PileupEngine& engine,
             double dbl_s = std::chrono::duration<double>(t_dbl1 - t_dbl0).count();
             uint32_t n_doublets = 0;
             for (const auto& r : dbl_results) if (r.is_doublet) ++n_doublets;
+            if (amb_saved_have && !dbl_results.empty()) {
+                std::vector<char> dflag(exon_csc.ncols, 0);
+                for (size_t di = 0; di < dbl_cell_indices.size() && di < dbl_results.size(); ++di)
+                    if (dbl_cell_indices[di] < dflag.size()) dflag[dbl_cell_indices[di]] = dbl_results[di].is_doublet ? 1 : 0;
+                std::vector<char> excl(amb_saved.contam.size(), 0);
+                for (size_t i = 0; i < excl.size() && i < amb_saved_cells.size(); ++i)
+                    if (amb_saved_cells[i] < dflag.size()) excl[i] = dflag[amb_saved_cells[i]];
+                singlet::write_ambient_json(out_prefix + "/ambient_contamination.json", amb_saved, amb_saved_cfg, &excl);
+            }
             std::cerr << "[doublet] n_cells=" << dbl_cell_indices.size()
                       << " n_doublets=" << n_doublets
                       << " doublet_rate=" << (dbl_results.empty() ? 0.0 :

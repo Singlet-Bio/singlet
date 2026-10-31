@@ -49,6 +49,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <sstream>
 #include <numeric>
 #include <string>
 #include <thread>
@@ -180,6 +181,10 @@ struct AmbientDecontConfig {
     double   outlier_z     = 5.0;       ///< robust z (MAD) of that cut; also requires rho > 2x the cluster median
     std::vector<char> estimate_features;///< optional: features allowed to inform c_k / rho (empty = all); clustering, the
                                         ///< native profiles and the correction always use every feature
+    double   intron_rich_skip = 0.45;   ///< split API: when the median intronic fraction of the called cells is at least this (nuclei
+                                        ///< libraries: 0.61 and 0.70 on nuclei2k_v2 and the Gaublomme library, against <= 0.33 on seven cell libraries),
+                                        ///< the soup cannot be told from native expression (the pool is nuclear debris: rho 12x too high on Xist
+                                        ///< truth, 25% of every nucleus's UMIs removed), so no estimate is made: rho NA, corrected = raw. 0 = off
     double   low_depth_frac = 0.1;      ///< cells below this fraction of the median depth (the ambient-like barcodes a
                                         ///< permissive cell caller keeps) are kept out of clustering and cluster statistics
     uint32_t cell_iters       = 30;     ///< per-cell EM iterations
@@ -187,6 +192,8 @@ struct AmbientDecontConfig {
 };
 
 struct AmbientCorrectionResult {
+    std::string skipped_reason;                     ///< non-empty: no estimate was made ("intron_rich_library"); rho is NaN, corrected == raw
+    double median_intronic_fraction = std::numeric_limits<double>::quiet_NaN();  ///< split API: median over called cells
     AmbientProfile                 profile;         ///< gene-level ambient profile
     std::vector<CellContamination> contam;          ///< one per called cell, in cell_indices order
     CSCu32                         corrected;       ///< genes x all barcodes; non-empty columns only for called cells
@@ -993,6 +1000,59 @@ inline AmbientCorrectionResult correct_ambient_gene_level_split(
         std::nth_element(rhos.begin(), rhos.begin() + static_cast<std::ptrdiff_t>(rhos.size() / 2), rhos.end());
         R.median_rho = rhos[rhos.size() / 2];
     }
+    // Intron-rich (nuclei) libraries: no estimate (see AmbientDecontConfig::intron_rich_skip). The pool profile is still
+    // written; the corrected matrix is the raw gene-level counts (exon + intron) of the called cells.
+    if (cfg.intron_rich_skip > 0.0 && R.ok && !cell_indices.empty()) {
+        std::vector<double> fr;
+        fr.reserve(cell_indices.size());
+        for (uint32_t b : cell_indices) {
+            if (b >= B) continue;
+            double e = 0.0, in = 0.0;
+            for (int32_t k = exon_genes.indptr[b]; k < exon_genes.indptr[b + 1]; ++k) e += static_cast<double>(exon_genes.data[k]);
+            for (int32_t k = intron_genes.indptr[b]; k < intron_genes.indptr[b + 1]; ++k) in += static_cast<double>(intron_genes.data[k]);
+            if (e + in > 0.0) fr.push_back(in / (e + in));
+        }
+        if (!fr.empty()) {
+            std::nth_element(fr.begin(), fr.begin() + static_cast<std::ptrdiff_t>(fr.size() / 2), fr.end());
+            R.median_intronic_fraction = fr[fr.size() / 2];
+            if (R.median_intronic_fraction >= cfg.intron_rich_skip) {
+                const double nan = std::numeric_limits<double>::quiet_NaN();
+                R.skipped_reason = "intron_rich_library";
+                R.method = "skipped_intron_rich_library";
+                CSCu32 Z;
+                Z.nrows = G; Z.ncols = B;
+                Z.indptr.assign(static_cast<size_t>(B) + 1, 0);
+                std::vector<char> is_cell(B, 0);
+                for (uint32_t b : cell_indices) if (b < B) is_cell[b] = 1;
+                std::vector<uint32_t> acc2(G, 0);
+                std::vector<uint32_t> touched2;
+                for (uint32_t b = 0; b < B; ++b) {
+                    if (is_cell[b]) {
+                        for (int32_t k = exon_genes.indptr[b]; k < exon_genes.indptr[b + 1]; ++k) {
+                            const uint32_t g = static_cast<uint32_t>(exon_genes.indices[k]);
+                            if (acc2[g] == 0) touched2.push_back(g);
+                            acc2[g] += static_cast<uint32_t>(exon_genes.data[k]);
+                        }
+                        for (int32_t k = intron_genes.indptr[b]; k < intron_genes.indptr[b + 1]; ++k) {
+                            const uint32_t g = static_cast<uint32_t>(intron_genes.indices[k]);
+                            if (acc2[g] == 0) touched2.push_back(g);
+                            acc2[g] += static_cast<uint32_t>(intron_genes.data[k]);
+                        }
+                        std::sort(touched2.begin(), touched2.end());
+                        touched2.erase(std::unique(touched2.begin(), touched2.end()), touched2.end());
+                        for (uint32_t g : touched2) { if (acc2[g]) { Z.indices.push_back(static_cast<int32_t>(g)); Z.data.push_back(acc2[g]); } acc2[g] = 0; }
+                        touched2.clear();
+                    }
+                    Z.indptr[static_cast<size_t>(b) + 1] = static_cast<int32_t>(Z.indices.size());
+                }
+                R.corrected = std::move(Z);
+                for (auto& c : R.contam) { c.rho = nan; c.rho_total = nan; c.n_removed = 0; }
+                R.mean_rho = R.median_rho = R.umi_weighted_rho = nan;
+                R.umis_removed = 0;
+                R.cluster_rho.assign(R.cluster_rho.size(), nan);
+            }
+        }
+    }
     return R;
 }
 
@@ -1118,6 +1178,13 @@ inline void write_ambient_profile(
         out << feature_names[g] << '\t' << profile.gene_fractions[g] << '\n';
 }
 
+inline std::string rho_str(double v) {   // NA where no estimate was made
+    if (!std::isfinite(v)) return "NA";
+    std::ostringstream o;
+    o << v;
+    return o.str();
+}
+
 /// Write per-cell contamination estimates to TSV (called cells only).
 /// Columns: barcode, rho, n_genes_used, cluster, n_umi, n_ambient_umi_removed
 inline void write_contamination_tsv(
@@ -1137,18 +1204,23 @@ inline void write_contamination_tsv(
         const uint32_t bc = cell_indices[i];
         const std::string& bc_name = (bc < barcodes.size()) ? barcodes[bc] : "?";
         out << bc_name     << '\t'
-            << contam[i].rho          << '\t'
+            << rho_str(contam[i].rho) << '\t'
             << contam[i].n_genes_used << '\t'
             << contam[i].cluster      << '\t'
             << contam[i].n_umi        << '\t'
             << contam[i].n_removed    << '\t'
-            << (contam[i].rho_total > 0.0 ? contam[i].rho_total : contam[i].rho) << '\n';
+            << rho_str(std::isfinite(contam[i].rho_total) && contam[i].rho_total > 0.0 ? contam[i].rho_total : contam[i].rho) << '\n';
     }
 }
 
 /// Write the run summary (ambient_contamination.json).
+///
+/// `excluded` (optional, one flag per R.contam entry): cells left out of the headline `estimated_contamination_fraction`
+/// (called doublets). The headline is the UMI-weighted ambient fraction the correction removes, over the remaining called
+/// cells; the per-cell mean the headline used to be stays under `mean_rho` / `mean_rho_cells`. Per-cell `rho_total` (the TSV's
+/// last column) is the per-cell value to show.
 inline void write_ambient_json(const std::string& outpath, const AmbientCorrectionResult& R,
-                               const AmbientDecontConfig& cfg)
+                               const AmbientDecontConfig& cfg, const std::vector<char>* excluded = nullptr)
 {
     std::ofstream o(outpath);
     if (!o.is_open()) {
@@ -1156,13 +1228,29 @@ inline void write_ambient_json(const std::string& outpath, const AmbientCorrecti
         return;
     }
     o.precision(6);
+    uint64_t h_obs = 0, h_rem = 0, h_cells = 0, h_excl = 0;
+    for (size_t i = 0; i < R.contam.size(); ++i) {
+        if (excluded && i < excluded->size() && (*excluded)[i]) { ++h_excl; continue; }
+        h_obs += R.contam[i].n_umi; h_rem += R.contam[i].n_removed; ++h_cells;
+    }
+    const bool skipped = !R.skipped_reason.empty();
+    const double headline = skipped ? std::numeric_limits<double>::quiet_NaN()
+                                    : (h_obs ? static_cast<double>(h_rem) / static_cast<double>(h_obs) : 0.0);
+    auto jn = [](double v) { if (!std::isfinite(v)) return std::string("null"); std::ostringstream s; s.precision(6); s << v; return s.str(); };
     o << "{\n"
       << "  \"method\": \"" << (R.ok ? R.method : std::string("none_no_ambient_pool")) << "\",\n"
-      << "  \"estimated_contamination_fraction\": " << R.mean_rho << ",\n"
-      << "  \"mean_rho\": " << R.mean_rho << ",\n"
-      << "  \"median_rho\": " << R.median_rho << ",\n"
-      << "  \"rho\": " << R.median_rho << ",\n"
-      << "  \"umi_weighted_rho\": " << R.umi_weighted_rho << ",\n"
+      << "  \"estimated_contamination_fraction\": " << jn(headline) << ",\n"
+      << "  \"estimated_contamination_basis\": \"" << (skipped ? R.skipped_reason : (excluded ? "umi_weighted_removal_excluding_called_doublets" : "umi_weighted_removal_all_called_cells")) << "\",\n"
+      << "  \"skipped_reason\": " << (skipped ? "\"" + R.skipped_reason + "\"" : std::string("null")) << ",\n"
+      << "  \"median_intronic_fraction\": " << jn(R.median_intronic_fraction) << ",\n"
+      << "  \"intron_rich_skip_threshold\": " << jn(cfg.intron_rich_skip) << ",\n"
+      << "  \"n_cells_in_estimate\": " << h_cells << ",\n"
+      << "  \"n_doublets_excluded\": " << h_excl << ",\n"
+      << "  \"mean_rho_cells\": " << jn(R.mean_rho) << ",\n"
+      << "  \"mean_rho\": " << jn(R.mean_rho) << ",\n"
+      << "  \"median_rho\": " << jn(R.median_rho) << ",\n"
+      << "  \"rho\": " << jn(R.median_rho) << ",\n"
+      << "  \"umi_weighted_rho\": " << jn(R.umi_weighted_rho) << ",\n"
       << "  \"n_cells\": " << R.contam.size() << ",\n"
       << "  \"n_clusters\": " << R.n_clusters << ",\n"
       << "  \"n_outlier_cells\": " << R.n_outlier_cells << ",\n"
