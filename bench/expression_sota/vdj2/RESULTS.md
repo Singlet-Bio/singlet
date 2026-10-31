@@ -1,7 +1,15 @@
-# vdj2: status (interim; Clipper bridge dropped before the held-out run)
+# vdj2: results
 
-Pre-registration: `PREREG.md` (commit 4ca0993b, Addendum 1 after it). **The fresh held-out set has not been run.** Nothing below
-uses it except the denominators in PREREG.md.
+Pre-registration: `PREREG.md` (commit 4ca0993b; Addenda 1 and 2 committed after it, before any held-out run).
+
+**Frozen code: `08279d8dc75bc7261439f3eb4e7b6fd86ceee001`.**
+- Defaults: `ambient_rescue="clone"`, `v_open_frac=0.3`, `orphan_max_umis=0`.
+- Human references: GENCODE/RefSeq plus 7 AIRR-C IG V genes (CC0; see `python/singlet/vdj/data/README.md`).
+
+**Held-out run (submitted once, 2026-10-31):**
+- Singlet: array 795124.
+- TRUST4: array 795125.
+- Scoring: job 795126, writing `scores/heldout.md`.
 
 ## Diagnosis (development libraries only)
 
@@ -30,7 +38,7 @@ uses it except the denominators in PREREG.md.
   IGLJ2 -> IGLJ3 (12) and IGHJ4 -> other IGHJ (25) in pbmc10k_b; the read vote past F/W118 sees mostly the shared J 3' end.
   V/J naming does not change pairing (junction nt).
 
-## Changes (python/singlet/vdj, all off by default so far)
+## Changes (python/singlet/vdj)
 
 * `filter_contigs` (refactor): the contig filters can be re-applied to a finished `contigs.csv`
   (`refilter.py`; with unchanged settings it reproduces the assembler's `kept` exactly on all 9 dev libraries).
@@ -53,8 +61,20 @@ uses it except the denominators in PREREG.md.
 The pbmc2_t ARI drop comes from 4 cells of 2,982, two of which become identical to Cell Ranger's call (`ari_check.py`);
 ARI's own bootstrap SD is 0.008.
 
-## Not done
+## Final development decisions (all 9 dev libraries; jobs 795043, 795077)
 
-* Dev scoring of S149B / S150B / S135B (TRUST4 job 794913 was running), the full re-assembly with
-  `ambient_rescue=clone, v_open_frac=0.5` (job 794973, queued), freezing the defaults, and the single held-out run
-  (`submit_heldout.sh`, SHA-pinned).
+| variant | pooled pairing (16,547 cells) | vs TRUST4 0.9104 | BCR V agreement pbmc2_b / pbmc10k_b | wrong lineage | literal dev rule | decision |
+|---|---|---|---|---|---|---|
+| clone | 0.9238 [0.920, 0.928] | +0.0134 [+0.009, +0.018] | 0.802 / 0.849 | 47/19,052 = 0.0025 (CR 0.0002) | REJECT (pbmc2_t ARI -0.011) | adopted (Addendum 1) |
+| clone + orphan <= 1 UMI | = | = | = | 24/18,982 | REJECT (F1 S158A, S135B) | rejected |
+| clone + orphan <= 2 UMI | = | = | = | 14/18,885 | REJECT (F1 S158A -0.06, S135B -0.07) | rejected |
+| AIRR-C refs | = | = | 0.782 / 0.867 | = | REJECT (pooled pairing +0.000) | - |
+| AIRR-C + v_open_frac 0.3 | = | = | 0.802 / 0.868 | = | REJECT (pooled pairing +0.000) | adopted (V agreement) |
+| AIRR-C + v_open_frac 0.5 / 0.7 | = | = | 0.798 / 0.868; 0.789 / 0.868 | = | REJECT (pooled pairing +0.000) | - |
+
+The orphan rule is in the code (off). Lone low-UMI single-chain contigs are wrong-lineage on the PBMC libraries, but often
+Cell Ranger's own contigs on the ESCC tumour libraries, so contig F1 drops beyond the tolerance there.
+
+## Held-out results
+
+(pending job 795126)
