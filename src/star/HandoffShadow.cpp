@@ -15,7 +15,7 @@ constexpr int NC = 8 + SJ_MOTIF_SIZE + 1;
 const char *NAMES[8] = {"mappedReadsU", "mappedReadsM", "mappedBases", "mappedMismatchesN", "mappedInsN", "mappedDelN", "mappedInsL", "mappedDelL"};
 struct Acc {
     uint64 c[NC] = {0};
-    double portion = 0;
+    double portion = 0, portionNoClip = 0;   // portionNoClip: the divisor is the record's (clipped) length alone
 };
 std::mutex regMutex;
 std::vector<Acc *> registry;
@@ -91,6 +91,7 @@ void shadowCompare(Parameters &P) {
             uint64 L = g_handoffRecLen[rec];
             if (g_handoffClip5 != nullptr) L += g_handoffClip5[i] + g_handoffClip3[i];
             bulk.portion += double(b[2]) / double(L);
+            bulk.portionNoClip += double(b[2]) / double(g_handoffRecLen[rec]);
         }
     }
     int bad = 0;
@@ -102,6 +103,8 @@ void shadowCompare(Parameters &P) {
         }
     }
     char buf[200];
+    snprintf(buf, sizeof buf, "live %.17g bulk(record length) %.17g (difference %.3g)", live.portion, bulk.portionNoClip, live.portion - bulk.portionNoClip);
+    log << "SHADOW mappedPortion with the record length as divisor: " << buf << (live.portion == bulk.portionNoClip ? " (bit-identical)" : " (NOT bit-identical)") << "\n";
     snprintf(buf, sizeof buf, "live %.17g bulk %.17g (difference %.3g)", live.portion, bulk.portion, live.portion - bulk.portion);
     log << "SHADOW statsRA: " << nReads << " hand-off reads, " << NC << " integer counters " << (bad ? "DIFFER" : "equal") << "; mappedPortion " << buf
         << (live.portion == bulk.portion ? " (bit-identical)" : " (NOT bit-identical)") << "\n" << std::flush;
