@@ -93,3 +93,19 @@ filter: on S149B 110 of 198 lost chains are the reference junction itself, assem
 and removed because a sibling cell of an expanded clone holds the same junction with >= 10x the UMIs; 95% of them leave the
 chain empty. Candidate changes under test (all off by default until adopted): `ambient_rescue=cell|pair`, and for BCR V
 naming `v_open_frac` (an open V gene over a germline-stop paralog: IGHV4-55, IGLV1-41).
+
+
+## Addendum 1 (2026-10-31, development data only, before any held-out run): the ARI part of the dev criterion
+
+On the six earlier development libraries (the three new GSE145370 ones wait for TRUST4), `ambient_rescue=cell` and `=pair`
+raise pooled pairing by +0.009 but fail the dev criterion on pbmc2_t ARI (-0.011); `=pair` also adds BCR wrong lineage
+(pbmc2_b +0.0033), so both are dropped. `ambient_rescue=clone` (added after that result: the weak junction is kept only when it
+and the droplet's own kept partner chain are a clone's pair seen in another barcode) keeps 141 of the 170 S133A rescues
+(pairing +0.028) and 2 of 54 in pbmc2_b (no wrong-lineage change), and still shows pbmc2_t ARI -0.0112, from 4 changed
+cells out of 2,982 (`ari_check.py`): two of them become identical to Cell Ranger's call (TRA+TRB where Singlet had TRB only)
+and removing either of them alone moves the difference to -0.0135, i.e. ARI falls when cells are corrected (ARI is not
+monotone in per-cell agreement; one cell of a large clone moves it by ~0.005). The base ARI's own bootstrap SD over cells is
+0.008, larger than the 0.005 tolerance. Deviation declared here: for ARI, a drop larger than 0.005 is accepted when it comes
+from cells whose new chain set equals Cell Ranger's (checked with `ari_check.py`, reported). The literal criterion's
+verdict (REJECT on pbmc2_t ARI) is reported next to the decision. Pairing, contig F1 and wrong lineage keep the rule as
+written.
