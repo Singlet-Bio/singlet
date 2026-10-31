@@ -14,9 +14,11 @@
 // A 2-3 bp TSO "GGG" is normal and is never clipped (length rule).
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -92,6 +94,60 @@ inline PrefixProbeResult detect_constant_prefix(const std::vector<std::string>& 
     r.prefix_len = len;
     return r;
 }
+
+/// The probe's reads, chosen by content: the kProbeReads distinct (R1, R2) records with the smallest 64-bit hash. The same
+/// records are selected whatever the input route (.1fq / .1fg2, FIFO / chunk / file decode), thread count or block order, so
+/// the clip decision and n_reads are identical for the same sample. Offer every read with both mates non-empty (codes 0-4:
+/// ACGTN); sequences() returns the R2 texts ordered by hash (the "halves" of detect_constant_prefix are hash halves).
+constexpr size_t kProbeReads = 12000;
+
+class ContentProbeSampler {
+public:
+    static uint64_t hash(const uint8_t* r1, size_t n1, const uint8_t* r2, size_t n2) {
+        uint64_t h = 0x9E3779B97F4A7C15ULL ^ (n1 * 0xff51afd7ed558ccdULL) ^ (n2 << 17);
+        auto mix = [&](const uint8_t* p, size_t n) {
+            size_t i = 0;
+            for (; i + 8 <= n; i += 8) {
+                uint64_t w; std::memcpy(&w, p + i, 8);
+                h = (h ^ w) * 0x9FB21C651E98DF25ULL; h ^= h >> 29;
+            }
+            for (; i < n; ++i) { h = (h ^ p[i]) * 0x100000001B3ULL; }
+            h ^= h >> 32;
+        };
+        mix(r1, n1); mix(r2, n2);
+        h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33; h *= 0xc4ceb9fe1a85ec53ULL; h ^= h >> 33;
+        return h;
+    }
+    /// thread-safe; the common case (hash above the current cut) costs one relaxed atomic load
+    void offer(const uint8_t* r1, size_t n1, const uint8_t* r2, size_t n2) {
+        const uint64_t h = hash(r1, n1, r2, n2);
+        if (h > cut_.load(std::memory_order_relaxed)) return;
+        std::lock_guard<std::mutex> g(mu_);
+        static constexpr char N2A[5] = {'A', 'C', 'G', 'T', 'N'};
+        std::string seq(n2, ' ');
+        for (size_t j = 0; j < n2; ++j) seq[j] = N2A[std::min<uint8_t>(r2[j], 4)];
+        kept_.emplace_back(h, std::move(seq));
+        if (kept_.size() > 2 * kProbeReads) trim();
+    }
+    std::vector<std::string> sequences() {
+        std::lock_guard<std::mutex> g(mu_);
+        trim();
+        std::vector<std::string> out;
+        out.reserve(kept_.size());
+        for (auto& e : kept_) out.push_back(e.second);
+        return out;
+    }
+private:
+    void trim() {
+        std::sort(kept_.begin(), kept_.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        kept_.erase(std::unique(kept_.begin(), kept_.end(), [](const auto& a, const auto& b) { return a.first == b.first; }), kept_.end());   // duplicate records
+        if (kept_.size() > kProbeReads) kept_.resize(kProbeReads);
+        if (kept_.size() == kProbeReads) cut_.store(kept_.back().first, std::memory_order_relaxed);
+    }
+    std::mutex mu_;
+    std::vector<std::pair<uint64_t, std::string>> kept_;
+    std::atomic<uint64_t> cut_{UINT64_MAX};
+};
 
 /// Sample reads from a FASTQ file at n_pos evenly spaced byte offsets, per_pos consecutive records each.
 /// Re-synchronises on a record boundary after each seek ('@' line followed two lines later by a '+' line).
