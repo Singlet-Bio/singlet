@@ -206,7 +206,26 @@ def _v_anchor(seq: str, frame: int) -> int:
     for i in range(frame, len(seq) - 2, 3):
         if i >= lo and seq[i : i + 3] in ("TGT", "TGC"):
             best = i
-    return best
+    return _first_cys(seq, best)
+
+
+def _first_cys(seq: str, anchor: int) -> int:
+    """Cys104 is the first of two adjacent Cys codons (IGLV2-23, IGLV2-11 end ``...Y-Y-C-C-``): the junction (CDR3
+    IMGT) starts at that first Cys, as in Cell Ranger's contigs, not at the last one."""
+    while anchor >= 3 and seq[anchor - 3 : anchor] in ("TGT", "TGC"):
+        anchor -= 3
+    return anchor
+
+
+def reanchor_v(segs: List[Segment]) -> int:
+    """Apply :func:`_first_cys` to the V segments of a loaded reference in place; returns how many moved."""
+    n = 0
+    for s in segs:
+        if s.region == "V" and s.anchor >= 0:
+            a = _first_cys(s.seq, s.anchor)
+            if a != s.anchor:
+                s.anchor, n = a, n + 1
+    return n
 
 
 def _j_anchor(seq: str):
