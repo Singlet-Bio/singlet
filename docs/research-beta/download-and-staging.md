@@ -174,6 +174,7 @@ decode 2.6 core-s/M; CPU engine 38.6–44.6 host core-s/M (gpu-cr4-clip.md) → 
 | network, Lite / full | 0.9 GB/s → **18.4 / 12.3 M pairs/s**; 0.7 GB/s sustained → 14.3 / 9.6 |
 | download calendar, all Lite (1.06 PB) / rollout "half-Lite" (0.96 PB) / all full (1.58 PB) | 13.6 / 12.3 / 20.3 days at 0.9 GB/s; 17.5 / 15.9 / 26.1 days at 0.7 GB/s (was 74–122 at 150 MB/s) |
 | fetch jobs | 12 × 4 cores (47 cores of decode for Lite at the ceiling; 31 for full) |
+| S8 today (PR #107, GPU engine, everything GPU-side on) | host 12.5–14.4 core-s/M, GPU busy only 3.6–8% → host-bound: one 54-core node ≈ 3.9–4.3 M pairs/s, ~half of S8's GPU-bound 8.7–11.2 |
 | compute rate needed to match the network | 18.4 M pairs/s (Lite) |
 | compute calendar | 300 CPU cores: 7 M pairs/s → 36 days; one GPU at 10 M/s: 25 days; one GPU + 300 cores: 17 M/s → 15 days; one GPU at today's 0.17 M/s per sample: not a factor until S8's speedup lands (node-level 2.5 M/s: 100 days) |
 | stage size | cap = X + start-up buffer: 0.76 TB (X = 1 GPU-h) + 1.4 TB (one hour of fetch at 18.4 M/s × 21 B while a GPU job waits in the queue) ≈ **2.2 TB; run with a 4 TB cap** (`$WORK` has 47 TB free) |
