@@ -126,7 +126,7 @@ Build 07e71c2d (PR #112) = d9834b8a + indexed UMI pair loops + `[mem]` markers. 
 - **Job size on Anvil `shared` (about 2 GB per core, per the brief; not verified against Anvil):** anonymous peak 36.6 GB -> 19 billed
   cores for a 4-thread job on the deep sample (shallow samples: 28-30 GB -> 14-15 cores). Nothing singlet-side changes this until the
   index leaves anonymous memory.
-- **The finalize is a serial tail:** main grows 13.6 -> 32 GB between t=3,088 and 3,341 (about 250 s, 6% of wall) after STAR
+- **The finalize is probably a serial tail (thread CPU during it not yet checked):** main grows 13.6 -> 32 GB between t=3,088 and 3,341 (about 250 s, 6% of wall) after STAR
   has exited. That is step 3 (fill the tail) material, and where a memory cut inside singlet would come from.
 
 ## 4. Not measured
