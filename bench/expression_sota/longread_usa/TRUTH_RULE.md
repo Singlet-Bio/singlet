@@ -52,3 +52,12 @@ Genes: genes with >= 1 truth molecule.
 5. Answer to "which share is closest, and is Singlet's lower share signal loss, a classification choice, or correct": decided from 2, 3, 4
    with the TRUTH-LR and TRUTH-R2 side by side; the 10-nt threshold, the exclusion of intron bases covered by overlapping same-strand
    genes, and the +-2 nt junction tolerance are the classification choices whose effect on the truth is reported.
+
+## Amendments (dated 2026-10-31; the rule and thresholds above are unchanged)
+- Long-read UB tags are 12 nt; they are truncated to the first 11 nt before the exact CB+UMI join (the study's D-31). The first scan
+  without truncation matched 2.5% of molecules (a bug, fixed before any tool output was read).
+- Singlet cannot auto-detect the 27-nt R1 (it picked "celseq2"); each R1 read was padded with a constant `A` (quality `F`) to the 28-nt
+  v3 geometry and `--protocol 10x-3p-v3` was passed. STARsolo and alevin-fry ran on the raw 27-nt R1 with an 11-nt UMI.
+- Full depth (227.6 M read pairs), not subsampled: STARsolo took 25 min, Singlet 25 min (+9 min encode), alevin-fry 6 min at 16 threads.
+- Post hoc, outside the registered plan: capture of each STARsolo class by the long reads (`capture_by_star_class`), and the mix of
+  intron-touching and exon-only R2 reads inside truth-R2-unspliced molecules (`mixed_check.py`).

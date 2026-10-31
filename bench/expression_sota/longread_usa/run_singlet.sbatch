@@ -12,8 +12,13 @@ source /mnt/projects/debruinz_project/debruinz/singlet/release-gate/jobs/rg_comm
 source /mnt/projects/debruinz_project/debruinz/singlet/expression-sota/longread_usa/code/common.sh
 O=$X/singlet; rm -rf $O; mkdir -p $O; export SINGLET_STALL_TIMEOUT=10800
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT; export TMPDIR=$SCR
-cat ${R1//,/ } > $SCR/R1.fastq.gz; cat ${R2//,/ } > $SCR/R2.fastq.gz
-/usr/bin/time -v -o $O/time_encode.txt $BIN encode --reads $SCR/R1.fastq.gz $SCR/R2.fastq.gz -o $SCR/x.1fq > $O/encode.log 2>&1 || { tail -20 $O/encode.log; exit 1; }
+# pbmc1 R1 is 27 nt (16 CB + 11 UMI); Singlet's 10x v3 geometry is 28 nt (auto-detect picked "celseq2" on the raw 27-mers).
+# Pad every R1 with a constant 'A' (quality F): UMI = 11 real bases + a constant 12th, which changes no UMI identity or collapse.
+pad() { zcat "$1" | awk 'NR%4==2{print $0 "A"; next} NR%4==0{print $0 "F"; next} {print}' | gzip -1 > "$2"; }
+i=0; for f in ${R1//,/ }; do pad $f $SCR/R1_$i.fastq.gz & i=$((i+1)); done; wait
+cat $SCR/R1_*.fastq.gz > $SCR/R1.fastq.gz; rm -f $SCR/R1_*.fastq.gz
+cat ${R2//,/ } > $SCR/R2.fastq.gz
+/usr/bin/time -v -o $O/time_encode.txt $BIN encode --reads $SCR/R1.fastq.gz $SCR/R2.fastq.gz --protocol 10x-3p-v3 -o $SCR/x.1fq > $O/encode.log 2>&1 || { tail -20 $O/encode.log; exit 1; }
 rm -f $SCR/R*.fastq.gz; tail -5 $O/encode.log
 cd $SCR
 /usr/bin/time -v -o $O/time.txt $BIN $SCR/x.1fq --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf   --out-prefix $O/ --threads 16 --pipeline --output-format mtx --raw-matrix "${ENGINE_ARGS[@]}" > $O/run.log 2>&1

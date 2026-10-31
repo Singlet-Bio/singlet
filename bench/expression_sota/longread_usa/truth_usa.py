@@ -64,7 +64,7 @@ def key1(cb: str, ub: str) -> int:
 class Models:
     def __init__(self, gtf: Path):
         t0 = time.time()
-        rx = re.compile(r'gene_id "([^"]+)"; transcript_id "([^"]+)"')
+        rxg, rxt = re.compile(r'gene_id "([^"]+)"'), re.compile(r'transcript_id "([^"]+)"')
         tx: dict[tuple[str, str], list[tuple[int, int]]] = {}
         ginfo: dict[str, tuple[str, str]] = {}
         with open(gtf) as f:
@@ -74,9 +74,8 @@ class Models:
                 p = ln.split("\t", 8)
                 if p[2] != "exon":
                     continue
-                m = rx.search(p[8])
-                gid = self.canon(m.group(1))
-                tx.setdefault((gid, m.group(2)), []).append((int(p[3]) - 1, int(p[4])))
+                gid = self.canon(rxg.search(p[8]).group(1))
+                tx.setdefault((gid, rxt.search(p[8]).group(1)), []).append((int(p[3]) - 1, int(p[4])))
                 ginfo[gid] = (p[0], p[6])
         self.gids = sorted(ginfo)
         self.idx = {g: i for i, g in enumerate(self.gids)}
@@ -272,7 +271,7 @@ def work_a(args):
                 continue
             c["primary"] += 1
             try:
-                cb, ub = r.get_tag("CB"), r.get_tag("UB")
+                cb, ub = r.get_tag("CB"), r.get_tag("UB")[:11]  # long-read UMIs are 12 nt; the study truncates to 11 (D-31)
             except KeyError:
                 c["no_tag"] += 1
                 continue
