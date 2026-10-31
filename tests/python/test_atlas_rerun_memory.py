@@ -49,7 +49,7 @@ def test_every_class_with_work_gets_a_worker_before_any_gets_a_second():
 
 
 def test_plan_starts_workers_by_class_and_respects_the_gpu_cap():
-    p = dict(L.DEFAULTS)
+    p = dict(L.DEFAULTS, multi_sample=False)
     assert p["max_h100"] == 3
     bl = {"pairs": 5e10, "samples": 100, "todo": 0, "fetching": 0, "by_class": {96: 1e10, 176: 3e10, 720: 1e10}}
     have = {"h100": {"run": 1, "pend": 0, "ages": []}, "h100_by_class": {176: {"run": 1, "pend": 0, "ages": []}},
@@ -61,12 +61,12 @@ def test_plan_starts_workers_by_class_and_respects_the_gpu_cap():
 
 def test_sbatch_script_has_the_class_memory_and_name():
     a = types.SimpleNamespace(log_dir="/tmp", stage="/stage", config="/cfg.json")
-    s = L.sbatch_script("drain-h100", a, dict(L.DEFAULTS), 176)
+    s = L.sbatch_script("drain-h100", a, dict(L.DEFAULTS, multi_sample=False), 176)
     assert "#SBATCH --mem=176G" in s and "--mem-gb 176" in s and "#SBATCH --job-name=s9-drain-h100-c176" in s
-    whole = L.sbatch_script("drain-h100", a, dict(L.DEFAULTS), 720)   # the too-big class: a whole node, alone
+    whole = L.sbatch_script("drain-h100", a, dict(L.DEFAULTS, multi_sample=False), 720)   # the too-big class: a whole node, alone
     assert "#SBATCH --exclusive" in whole and "#SBATCH --mem=0" in whole and "#SBATCH --job-name=s9-drain-h100-c720" in whole
     assert "--exclusive" not in s
-    old = L.sbatch_script("drain-v100", a, dict(L.DEFAULTS))
+    old = L.sbatch_script("drain-v100", a, dict(L.DEFAULTS, multi_sample=False))
     assert "#SBATCH --mem=128G" in old and "--mem-gb 128" in old
 
 

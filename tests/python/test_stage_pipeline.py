@@ -97,7 +97,7 @@ def J(run=0, pend=0, ages=()):
 
 
 def test_launcher_policy():
-    p = dict(L.DEFAULTS, gpu_Mpairs_per_s=10, gpu_start_h=1.0, max_h100=6, max_v100=4, v100_rel=0.3, overflow_h=3.0, fallback_wait_h=1.0,
+    p = dict(L.DEFAULTS, multi_sample=False, gpu_Mpairs_per_s=10, gpu_start_h=1.0, max_h100=6, max_v100=4, v100_rel=0.3, overflow_h=3.0, fallback_wait_h=1.0,
              cpu_cores=16, cpu_Mpairs_per_core_s=0.025, cpu_job_h=3.9, max_cpu=8, fetch_jobs=6)
     none = {"h100": J(), "v100": J(), "cpu": J(), "fetch": 0}
     H = 10e6 * 3600  # pairs of one H100-hour

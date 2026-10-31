@@ -30,11 +30,26 @@ def node_mem_gb():
     return 0.0
 
 
-def gpu_peak_gb(reads):
-    """Largest-process RSS of one `--engine gpu` sample (the STAR child; GPU pileup on): 17.5 GB + 0.39 GB per million reads.
-    Fitted to four measured runs (S8, 1 H100, quiet node): 11.3 M -> 22.8 GB, 13.2 M -> 22.1, 66.6 M -> 43.5, 263.4 M -> 120.4 (all within 3%).
-    Beyond 263 M reads it is an extrapolation."""
-    return 17.5 + 0.39 * reads / 1e6
+# Peak-RSS model of the largest process of one `--engine gpu` sample (the STAR child; GPU pileup on): intercept + slope * M reads.
+# route "fq" (staged .1fq / temp FASTQ): 17.5 GB + 0.39 GB per M reads, fitted to four measured runs (S8, 1 H100, quiet node):
+#   11.3 M -> 22.8 GB, 13.2 M -> 22.1, 66.6 M -> 43.5, 263.4 M -> 120.4 (all within 3%). Most of the slope is a transient spike in the FASTQ read pass.
+# route "1fg2" (table-fed prefill from the staged .1fg2, no temp FASTQ, #126): no spike. PROVISIONAL = the "fq" line until S8's 263 M .1fg2 profile
+#   is in (scripts/atlas_rerun/multi_drain.py logs the measured peak of every sample as `peak_rss_gb`: refit from the `done` events).
+# Node-local temp bytes per sample: the old route wrote ~320 B per read of temp FASTQ; the .1fg2 route writes none. Both write the sample's outputs.
+MEM_MODEL = {"fq": {"base_gb": 17.5, "gb_per_m": 0.39, "tmp_gb_per_m": 0.32, "tmp_base_gb": 2.0},
+             "1fg2": {"base_gb": 17.5, "gb_per_m": 0.39, "tmp_gb_per_m": 0.0, "tmp_base_gb": 2.0}}
+
+
+def gpu_peak_gb(reads, route="fq"):
+    """Largest-process RSS of one `--engine gpu` sample, GB. Beyond 263 M reads it is an extrapolation."""
+    m = MEM_MODEL[route]
+    return m["base_gb"] + m["gb_per_m"] * reads / 1e6
+
+
+def gpu_tmp_gb(reads, route="fq"):
+    """Node-local scratch (/tmp) one sample holds at its peak: temp FASTQ (route "fq") plus outputs, GB."""
+    m = MEM_MODEL[route]
+    return m["tmp_base_gb"] + m["tmp_gb_per_m"] * reads / 1e6
 
 
 def gpu_job_mem_gb(reads, margin=1.2, extra=20, step=8):
