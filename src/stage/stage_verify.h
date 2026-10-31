@@ -138,4 +138,59 @@ static int verify_file(const std::string& path, const std::vector<std::string>& 
     std::fprintf(stderr, "verify: %llu reads compared, %llu mismatches\n", (unsigned long long)nread, (unsigned long long)bad);
     return (bad || nread != H.n_reads) ? 7 : 0;
 }
+
+// --digest FILE: order-independent digest of the reads of a .1fg2 (sum over reads of a 64-bit hash of cb, status, UMI, UMI-N mask, cDNA text incl. N, quality bins).
+// Two files built from the same reads in a different order (barcode-sorted .1fq vs SRA order) have the same digest.
+static inline uint64_t h64(uint64_t h, uint64_t w) { h = (h ^ w) * 0x9E3779B97F4A7C15ull; return h ^ (h >> 31); }
+
+static int digest_file(const std::string& path, uint64_t* digest_out, uint64_t* n_out) {
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    size_t sz = (size_t)f.tellg(); f.seekg(0);
+    std::vector<uint8_t> file(sz); f.read((char*)file.data(), (std::streamsize)sz);
+    FileHeader H; std::memcpy(&H, file.data(), sizeof H);
+    Footer F; std::memcpy(&F, file.data() + sz - sizeof F, sizeof F);
+    std::vector<IndexEntry> idx(F.n_chunks + F.n_blocks);
+    std::memcpy(idx.data(), file.data() + F.index_offset, idx.size() * sizeof(IndexEntry));
+    const uint32_t slot = H.seq_slot;
+    std::vector<uint8_t> seq2, slen, hasn; std::vector<std::array<uint8_t, 32>> nms;
+    for (uint32_t b = 0; b < F.n_blocks; b++) {
+        const uint8_t* base = file.data() + idx[F.n_chunks + b].offset; BlockHeader bh; std::memcpy(&bh, base, sizeof bh);
+        std::vector<uint8_t> a, l, e;
+        if (!inflate_plane(base, bh.sec[SP_SEQ2], bh.flags & 1, a) || !inflate_plane(base, bh.sec[SP_SLEN], (bh.flags >> 1) & 1, l) ||
+            !inflate_plane(base, bh.sec[SP_SEXC], (bh.flags >> 2) & 1, e)) return 7;
+        seq2.insert(seq2.end(), a.begin(), a.end()); slen.insert(slen.end(), l.begin(), l.end());
+        size_t at = hasn.size(); hasn.resize(at + bh.n_seqs, 0); nms.resize(at + bh.n_seqs, std::array<uint8_t, 32>{});
+        for (size_t k = 0; k < e.size() / 4; k++) {
+            uint32_t v; std::memcpy(&v, &e[4 * k], 4); uint32_t i = v & 0x7FFF, pos = v >> 15;
+            hasn[at + i] = 1; nms[at + i][pos >> 3] |= (uint8_t)(1u << (pos & 7));
+        }
+    }
+    std::vector<uint64_t> sh(slen.size());
+    for (size_t id = 0; id < slen.size(); id++) {
+        uint64_t h = h64(0x1234, slen[id]);
+        for (uint32_t b = 0; b < slot; b += 8) { uint64_t w; std::memcpy(&w, &seq2[id * slot + b], 8); h = h64(h, w); }
+        if (hasn[id]) for (int b = 0; b < 32; b += 8) { uint64_t w; std::memcpy(&w, &nms[id][b], 8); h = h64(h, w); }
+        sh[id] = h;
+    }
+    uint64_t dig = 0, n = 0;
+    for (uint32_t c = 0; c < F.n_chunks; c++) {
+        const uint8_t* base = file.data() + idx[c].offset; ChunkHeader ch; std::memcpy(&ch, base, sizeof ch);
+        std::vector<uint8_t> pcb, pst, pumi, pseq, plen, pq, pexc;
+        if (!(inflate_plane(base, ch.sec[PL_CB], ch.flags & 1, pcb) && inflate_plane(base, ch.sec[PL_CBST], (ch.flags >> 1) & 1, pst) &&
+              inflate_plane(base, ch.sec[PL_UMI], (ch.flags >> 2) & 1, pumi) && inflate_plane(base, ch.sec[PL_SEQ], (ch.flags >> 3) & 1, pseq) &&
+              inflate_plane(base, ch.sec[PL_LEN], (ch.flags >> 4) & 1, plen) && inflate_plane(base, ch.sec[PL_Q], (ch.flags >> 5) & 1, pq) &&
+              inflate_plane(base, ch.sec[PL_EXC], (ch.flags >> 6) & 1, pexc))) return 7;
+        std::vector<uint32_t> umask(ch.n_reads, 0);
+        for (size_t k = 0; k < pexc.size() / 4; k++) { uint32_t e; std::memcpy(&e, &pexc[4 * k], 4); umask[exc_idx(e)] |= 1u << exc_pos(e); }
+        for (uint32_t i = 0; i < ch.n_reads; i++) {
+            uint32_t cb, u, sid; std::memcpy(&cb, &pcb[4 * i], 4); std::memcpy(&u, &pumi[4 * i], 4); std::memcpy(&sid, &pseq[4 * i], 4);
+            uint64_t h = h64(h64(h64(h64(0x9876, cb), pst[i]), u), umask[i]);
+            h = h64(h, sh[sid]);
+            if (!pq.empty()) for (uint32_t b = 0; b < slot; b += 8) { uint64_t w; std::memcpy(&w, &pq[(size_t)i * slot + b], 8); h = h64(h, w); }
+            dig += h; n++;
+        }
+    }
+    *digest_out = dig; *n_out = n;
+    return 0;
+}
 }  // namespace stage_verify

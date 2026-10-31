@@ -21,6 +21,11 @@ namespace sq = singlet::fq;
 using stage::die;
 
 int main(int argc, char** argv) {
+    for (int i = 1; i + 1 < argc; i++) if (std::string(argv[i]) == "--digest") {
+        uint64_t d = 0, n = 0; int rc = stage_verify::digest_file(argv[i + 1], &d, &n);
+        std::printf("digest=%016llx reads=%llu\n", (unsigned long long)d, (unsigned long long)n);
+        return rc;
+    }
     std::vector<std::string> wl_dirs, inputs, accs;
     std::string out_path, json_path, scratch = "/tmp";
     int level = 3;
