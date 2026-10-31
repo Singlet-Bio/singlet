@@ -277,7 +277,7 @@ struct AggOp { __host__ __device__ Agg operator()(const Agg& a, const Agg& b) co
 __global__ void k_gather_agg(const Agg* a, const uint32_t* idx, int n, Agg* o) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) o[i] = a[idx[i]]; }
 __global__ void k_iota(uint32_t* p, int n) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) p[i] = i; }
 
-struct Layout { int cb, gb, ub, ncells; int ulen; bool directional; };
+struct Layout { int cb, gb, ub, ncells; int ulen; bool directional; bool cr = false; };   // cr: intron_rule::kUmiGeneCR, the molecule rule over genes (stage_cr)
 
 // stage b: returns number of unique (cell, gene, UMI) entries; ukey / agg are arena pointers
 static int stage_b(Arena& A, Timer& T, const Rec* recs, int n, long long B, const Layout& L, uint64_t** ukey_out, Agg** agg_out) {
@@ -361,23 +361,104 @@ __global__ void k_comp_agg(const Agg* ag, const uint32_t* lab, int m, uint32_t* 
 }
 // molecule label counts, as DirectionalUmiStore::finalize_molecules' MoleculeStats: spliced, unspliced, ambiguous, legacy_double
 // (TouchesExon and Intron both set); zeroed by the caller before a run
-__device__ unsigned long long g_molstat[4];
+__device__ unsigned long long g_molstat[5];   // [4]: molecules dropped by the molecule rule (kUmiGeneCR)
 // molecules per cell (DirectionalUmiStore::per_cell_molecule_stats' unique_umis), when the caller sets it (else nullptr)
 __device__ uint32_t* g_cell_mol = nullptr;
 // roots emit one molecule: flags bit1 = exon-only read, bit2 = intron read (DirectionalUmiStore::kReadExonOnly / kReadIntron)
 __global__ void k_emit(const uint64_t* uk, const uint32_t* lab, const uint32_t* cf, const uint32_t* ce, const uint32_t* ci, int m, int gb, int ub,
-                       uint64_t* kex, uint64_t* kin, uint64_t* kam) {
+                       uint64_t* kex, uint64_t* kin, uint64_t* kam, const uint8_t* drop) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
     kex[i] = kin[i] = kam[i] = NONE64;
     if (lab[i] != (uint32_t)i) return;
     uint32_t f = cf[i]; bool e = f & 1, in = f & 2;
     uint64_t cell = uk[i] >> (gb + ub), gene = (uk[i] >> ub) & ((1ull << gb) - 1);
+    if (g_cell_mol) atomicAdd(&g_cell_mol[cell], 1u);                                    // per_cell_molecule_stats counts every molecule, dropped or not
+    if (drop && drop[i]) { atomicAdd(&g_molstat[4], 1ull); return; }                     // kUmiGeneCR: finalize_all's `dropped`
     if ((f & 4) && in) atomicAdd(&g_molstat[3], 1ull);
     atomicAdd(&g_molstat[(e && in) ? 2 : (in ? 1 : 0)], 1ull);
-    if (g_cell_mol) atomicAdd(&g_cell_mol[cell], 1u);
     if (e && in) { kex[i] = (cell << FB) | ce[i]; kam[i] = (cell << FB) | gene; }      // ambiguous: exon matrix + per-gene ambiguous count
     else if (in) kin[i] = (cell << FB) | ci[i];                                          // unspliced
     else kex[i] = (cell << FB) | ce[i];                                                  // spliced
+}
+// ---- intron_rule::kUmiGeneCR (pileup_engine.h finalize_all): a UMI in more than one gene of a cell keeps the gene whose molecule has the most reads;
+// a tie drops all of them. The UMI of a molecule is its component root in DirectionalUmiStore::collapse_molecules: the first member in (reads
+// descending, UMI ascending) order that the sequential pairwise union leaves as root. That is not always the best-supported UMI (a later
+// member joining the component through a lower-ranked root re-roots it), so the union is replayed per (cell, gene) group in the CPU's order.
+__global__ void k_cr_rankkey(const uint32_t* seg, const Agg* ag, int m, uint64_t* key, uint32_t* idx) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    key[i] = ((uint64_t)seg[i] << 32) | (uint64_t)(0xFFFFFFFFu - ag[i].count); idx[i] = i; }
+__global__ void k_cr_rankpos(const uint32_t* perm, int m, uint32_t* rp) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) rp[perm[i]] = i; }
+__device__ __forceinline__ uint32_t cr_find(uint32_t* par, uint32_t x) { while (par[x] != x) { par[x] = par[par[x]]; x = par[x]; } return x; }
+// one thread per (cell, gene) group (entries [gs, ge); the group's rank positions are the same index range): rumi[e] = UMI of the root of e's molecule
+__global__ void k_cr_roots(const uint64_t* uk, const Agg* ag, const uint32_t* perm, const uint32_t* rp, const uint32_t* sf, int m, int ub, int ulen, int directional,
+                           uint32_t* par, uint64_t* rumi) {
+    int gs = blockIdx.x * blockDim.x + threadIdx.x; if (gs >= m || !sf[gs]) return;
+    int ge = gs + 1; while (ge < m && !sf[ge]) ge++;
+    const uint64_t umask = (1ull << ub) - 1;
+    for (int p = gs; p < ge; p++) par[p] = p;
+    if (directional && ge - gs > 1)
+        for (int p = gs; p < ge; p++) {
+            const uint32_t e = perm[p]; const uint64_t ke = uk[e], u = ke & umask, hi = ke & ~umask; const uint32_t ce = ag[e].count;
+            for (int k = 0; k < ulen; k++) {
+                const uint64_t cur = (u >> (2 * k)) & 3;
+                for (uint64_t b = 0; b < 4; b++) {
+                    if (b == cur) continue;
+                    const uint64_t cand = hi | (u ^ ((cur ^ b) << (2 * k)));
+                    int lo = gs, h = ge; while (lo < h) { int mid = (lo + h) >> 1; if (uk[mid] < cand) lo = mid + 1; else h = mid; }
+                    if (lo >= ge || uk[lo] != cand) continue;
+                    const uint32_t q = rp[lo];
+                    if ((int)q > p && count_rule(ce, ag[lo].count)) { uint32_t ri = cr_find(par, p), rj = cr_find(par, q); if (ri != rj) par[rj] = ri; }
+                }
+            }
+        }
+    for (int p = gs; p < ge; p++) rumi[perm[p]] = uk[perm[cr_find(par, p)]] & umask;
+}
+__global__ void k_cr_csum(const Agg* ag, const uint32_t* lab, int m, uint32_t* csum) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) atomicAdd(&csum[lab[i]], ag[i].count); }
+__global__ void k_cr_isroot(const uint32_t* lab, int m, uint8_t* f) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) f[i] = lab[i] == (uint32_t)i; }
+__global__ void k_cr_molkey(const uint64_t* uk, const uint64_t* rumi, const uint32_t* ridx, int nr, int gb, int ub, uint64_t* key) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x; if (j >= nr) return; const uint32_t i = ridx[j];
+    key[j] = ((uk[i] >> (gb + ub)) << ub) | rumi[i]; }
+// one thread per (cell, root UMI) run of molecules: more than one gene -> keep the single best-supported molecule, a tie keeps none
+__global__ void k_cr_judge(const uint64_t* key, const uint32_t* ridx, const uint32_t* csum, const uint64_t* uk, int nr, int gb, int ub, uint8_t* drop) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x; if (j >= nr || (j > 0 && key[j] == key[j - 1])) return;
+    int e = j + 1; while (e < nr && key[e] == key[j]) e++;
+    if (e - j < 2) return;
+    uint32_t best = 0, best_gene = 0xFFFFFFFFu; bool tie = false; const uint64_t gm = (1ull << gb) - 1;
+    for (int t = j; t < e; t++) {
+        const uint32_t c = csum[ridx[t]];
+        if (c > best) { best = c; best_gene = (uint32_t)((uk[ridx[t]] >> ub) & gm); tie = false; } else if (c == best) tie = true; }
+    for (int t = j; t < e; t++) drop[ridx[t]] = tie || (uint32_t)((uk[ridx[t]] >> ub) & gm) != best_gene;
+}
+// drop[i] = 1 for the molecules (component roots i) the rule removes; the temporaries are released, drop stays
+static uint8_t* stage_cr(Arena& A, const uint64_t* uk, const Agg* ag, const uint32_t* lab, const uint32_t* seg, const uint32_t* sf, int m, const Layout& L) {
+    const int TB = 256; const int G = (m + TB - 1) / TB;
+    uint8_t* drop = A.alloc<uint8_t>(m); CK(cudaMemset(drop, 0, m));
+    const size_t mk_ = A.mark();
+    uint64_t *k0 = A.alloc<uint64_t>(m), *k1 = A.alloc<uint64_t>(m); uint32_t *p0 = A.alloc<uint32_t>(m), *p1 = A.alloc<uint32_t>(m);
+    int segbits = 1; { uint32_t sm = 0; CK(cudaMemcpy(&sm, seg + (m - 1), 4, cudaMemcpyDeviceToHost)); while ((1ull << segbits) <= (unsigned long long)sm) segbits++; }
+    k_cr_rankkey<<<G, TB>>>(seg, ag, m, k0, p0);
+    cub::DoubleBuffer<uint64_t> dk(k0, k1); cub::DoubleBuffer<uint32_t> dv(p0, p1);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dk, dv, m, 0, 32 + segbits); });   // stable: equal counts stay in UMI order
+    const uint32_t* perm = dv.Current();
+    uint32_t* rp = A.alloc<uint32_t>(m); k_cr_rankpos<<<G, TB>>>(perm, m, rp);
+    uint32_t* par = A.alloc<uint32_t>(m); uint64_t* rumi = A.alloc<uint64_t>(m);
+    k_cr_roots<<<G, TB>>>(uk, ag, perm, rp, sf, m, L.ub, L.ulen, L.directional ? 1 : 0, par, rumi);
+    uint32_t* csum = A.alloc<uint32_t>(m); CK(cudaMemset(csum, 0, (size_t)m * 4)); k_cr_csum<<<G, TB>>>(ag, lab, m, csum);
+    uint8_t* isr = A.alloc<uint8_t>(m); k_cr_isroot<<<G, TB>>>(lab, m, isr);
+    uint32_t* ridx = A.alloc<uint32_t>(m); int* dn = A.alloc<int>(1);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, cub::CountingInputIterator<uint32_t>(0), isr, ridx, dn, m); });
+    int nr = 0; CK(cudaMemcpy(&nr, dn, 4, cudaMemcpyDeviceToHost));
+    if (nr >= 2) {
+        uint64_t *mk0 = A.alloc<uint64_t>(nr), *mk1 = A.alloc<uint64_t>(nr); uint32_t* mi1 = A.alloc<uint32_t>(nr);
+        const int GR = (nr + TB - 1) / TB;
+        k_cr_molkey<<<GR, TB>>>(uk, rumi, ridx, nr, L.gb, L.ub, mk0);
+        cub::DoubleBuffer<uint64_t> mk(mk0, mk1); cub::DoubleBuffer<uint32_t> mi(ridx, mi1);
+        cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, mk, mi, nr, 0, L.cb + L.ub); });
+        k_cr_judge<<<GR, TB>>>(mk.Current(), mi.Current(), csum, uk, nr, L.gb, L.ub, drop);
+    }
+    CK(cudaDeviceSynchronize());
+    A.reset(mk_);
+    return drop;
 }
 struct IsSet { __host__ __device__ bool operator()(const uint64_t& k) const { return k != ~0ull; } };
 
@@ -436,7 +517,8 @@ static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m,
     uint32_t *cf = A.alloc<uint32_t>(m), *ce = A.alloc<uint32_t>(m), *ci = A.alloc<uint32_t>(m);
     k_comp_init<<<G, TB>>>(cf, ce, ci, m); k_comp_agg<<<G, TB>>>(ag, lab, m, cf, ce, ci);
     Mol M; M.m = m; M.kex = A.alloc<uint64_t>(m); M.kin = A.alloc<uint64_t>(m); M.kam = A.alloc<uint64_t>(m);
-    k_emit<<<G, TB>>>(uk, lab, cf, ce, ci, m, L.gb, ub, M.kex, M.kin, M.kam);
+    const uint8_t* drop = L.cr ? stage_cr(A, uk, ag, lab, seg, sf, m, L) : nullptr;
+    k_emit<<<G, TB>>>(uk, lab, cf, ce, ci, m, L.gb, ub, M.kex, M.kin, M.kam, drop);
     T.mark("c.emit");
     return M;
 }
