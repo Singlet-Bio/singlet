@@ -21,7 +21,7 @@ Read section, in source order, `chunk_reads` per chunk, struct-of-arrays, each p
 | `umi` | u32 (<= 16 nt, 2 bit/base) + `umin` flag in `exc` | UMI word |
 | `seq` | u32 | id of the read's cDNA sequence in the unique-sequence table |
 | `len` | u8 | cDNA length actually kept (variable-length trimming) |
-| `q` (optional) | 2 bits/base, `len` bases | binned quality plane (4 bins; edges in the header). Absent for `qual_mode 0` sources (the atlas `.1fq`: constant `F`) |
+| `q` | 2 bits/base, `len` bases | ILLUMINA4 binned quality (`.1fq` qual_mode 4, `docs/format-1fq.md` 4.3: Phred 0-9, 10-19, 20-29, 30+ decode to 2, 11, 25, 37). Per read, own plane and zstd frame: it cannot dedup with the sequence. Required for the atlas (the SNP and mtDNA callers and the per-read quality counters use it); absent only for `qual_mode 0` |
 | `exc` | sorted u32 list | N bases in the UMI and the cDNA, reads whose barcode raw bases are needed (uncorrectable) |
 
 Unique-sequence table, in blocks of 32768 sequences (index of block offsets in the footer): `seq2` n x slot bytes (2 bit/base, first base high, slot = 8-byte multiple >= max length),
@@ -39,9 +39,15 @@ Footer: chunk index, block index, CRC32C of the index. Multipart upload parts en
 ## Identity gate
 Run `.1fq` -> `.1fg` v2 -> engine against today's `.1fq` path on pbmc1k_v3 and neuron1k_v3: same 60 files byte-identical (only read order, timings and provenance may differ), for the CPU engine and `--engine gpu`.
 
-## Open questions for S9
+## Decisions agreed with S9 (2026-10-30)
+- No clipping in the fetch tier: the stored cDNA is what `singlet download` writes into a `.1fq` today (after its own polyA/adapter trimming); max 127 nt. The 5' prefix clip, CR4 TSO clip, 3' poly-tail and adapter clips are applied by the engine on the packed codes; distinct stored sequences can collapse after clipping and the GPU dedups again.
+- One pooled file per sample with a run table in the footer (`{accession, first_read, n_reads}`), runs concatenated in the order the screen kept; the R11 histogram is pooled over the kept runs.
+- Encoder: standalone CMake target `singlet-stage` in `src/stage/` (libzstd + header-only `include/singlet/pileup/cb_correct.h`, histogram rule of `src/pipeline/singlet.cpp` ~4640-4680 and ~4880-4895). S9 writes the encoder, plane writer, manifest and the `.1fq` -> `.1fg2` runs; S8 writes the reference decoder `dec_1fg2`, the readers and the identity harness.
+- GPU pileup and qualities: today it declines to run unless qualities are constant or tied to N; shipping q to the GPU is S8's work item and does not change the format.
+
+## Open questions (historical)
 1. Barcode correction needs the sample's whole exact-barcode histogram (STAR pass 1) before any read is corrected: the producer needs two passes over the decoded reads (or a histogram pass over the first decode, then the write). Cost on the CPU node? (v1 transform: 0.24-0.42 core-s/M.)
 2. Sequence dedup needs a hash table of up to about 35 M distinct 91-nt sequences (about 1.5-2 GB RAM). OK on the fetch node?
-3. Qualities: the atlas sources are `qual_mode 0`. Keep the `q` plane optional and absent?
+3. (answered) Qualities are required: ILLUMINA4, per read.
 4. Reads with N in the barcode, uncorrectable barcodes: `cb = 0xFFFFFFFF` with `cbst`, raw bases not stored (STAR counts them in `CBnotInPasslist` only). Agreed?
 5. Unique-sequence table scope: per sample (proposed), not per chunk.
