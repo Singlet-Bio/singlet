@@ -93,8 +93,11 @@ class Params:
         0.02  # and at least this share of the library's read-weighted median mates per molecule
     )
     j_slack: int = 2  # the read vote of the J gene stands unless the junction's end matches another J this many nt better
-    ambient_rescue: str = "none"  # "cell" / "pair" / "clone": give back cross-filtered chains of droplets that hold a cell (_ambient_rescue)
-    v_open_frac: float = 0.0  # > 0: a V gene with a germline stop yields to an open V with >= this share of its votes
+    # "none" / "cell" / "pair" / "clone": give back cross-filtered chains of droplets that hold a cell (_ambient_rescue);
+    # "clone" (default since bench/expression_sota/vdj2): only a junction that, with the droplet's own kept partner chain,
+    # forms a clone's pair seen in another barcode
+    ambient_rescue: str = "clone"
+    v_open_frac: float = 0.3  # > 0: a V gene with a germline stop yields to an open V with >= this share of its votes
     # > 0: a barcode whose only kept productive contig has <= this many UMIs is not a cell (a lone receptor molecule:
     # ambient mRNA or a stray molecule in a droplet of another lineage); no pair is lost, a pair needs two chains
     orphan_max_umis: int = 0

@@ -109,3 +109,50 @@ monotone in per-cell agreement; one cell of a large clone moves it by ~0.005). T
 from cells whose new chain set equals Cell Ranger's (checked with `ari_check.py`, reported). The literal criterion's
 verdict (REJECT on pbmc2_t ARI) is reported next to the decision. Pairing, contig F1 and wrong lineage keep the rule as
 written.
+
+
+## Addendum 2 (2026-10-31, development data only, before any held-out run): frozen settings
+
+Scores: `scores/dev_*.md`, from jobs 795043 and 795077, on all 9 development libraries.
+
+**Ambient rescue: `ambient_rescue="clone"` (new default).**
+- Pooled pairing goes from 0.9123 to 0.9249 against the base run (8 libraries: S150B's TRUST4 had not finished then).
+- With S150B included (9 libraries), pooled pairing is 0.9238 [0.920, 0.928] against TRUST4's 0.9104.
+- Literal dev rule: REJECT, because pbmc2_t ARI drops by 0.0112. Accepted under Addendum 1.
+
+**Lone-contig barcodes: `orphan_max_umis` = 0 (rule not adopted).** The rule drops a barcode whose only kept productive
+contig has at most 1 or at most 2 UMIs.
+- Wrong lineage falls from 47/19,046 to 24/18,982 (at most 1 UMI) or 14/18,885 (at most 2).
+- Contig F1 falls by more than 0.005 on GSE145370: S158A by 0.022 / 0.061 and S135B by 0.029 / 0.069, against clone.
+  Lone low-UMI chains there are often Cell Ranger contigs.
+- Dev rule: REJECT.
+- The remaining wrong-lineage rate is 0.0025, against Cell Ranger's 0.0002. That is within the goal's 0.005.
+
+**Germline references: the AIRR-C IG V additions (reference-version change).**
+- The genes and their source, versions and licence (CC0 1.0) are recorded in `python/singlet/vdj/data/README.md`.
+- No IMGT data is used.
+
+**V-gene vote: `v_open_frac` = 0.3 (new default).** Each run used the AIRR-C references plus clone rescue; the numbers are
+Cell Ranger V agreement on pbmc2_b / pbmc10k_b.
+
+| setting | pbmc2_b | pbmc10k_b |
+|---|---|---|
+| clone, old references | 0.802 | 0.849 |
+| AIRR-C only | 0.782 | 0.867 |
+| `v_open_frac` 0.3 | 0.802 | 0.868 |
+| `v_open_frac` 0.5 | 0.798 | 0.868 |
+| `v_open_frac` 0.7 | 0.789 | 0.868 |
+
+- The AIRR-C additions alone lose pbmc2_b V agreement, through IGHV3-30-3 / IGHV3-30 near-identity.
+- `v_open_frac` 0.3 restores it while keeping the pbmc10k_b gain.
+- Pairing, ARI, J agreement and wrong lineage are unchanged. Contig F1 changes by at most 0.0004.
+- TCR libraries are unaffected.
+- Literal dev rule: REJECT, because pooled pairing does not improve (+0.0000). Adopted on the V-agreement validation the
+  coordinator asked for, with no metric lost beyond the tolerance.
+
+**Frozen settings:**
+- `ambient_rescue="clone"`, `v_open_frac=0.3`, `orphan_max_umis=0`; all other parameters unchanged.
+- The packaged human references now include the AIRR-C additions.
+- The anchor follows the convention of each library's Cell Ranger version (`vdj_human_imgtcys.tsv.gz` for CR >= 5).
+- The held-out run uses these defaults, with no `PARAMS`, at the frozen SHA recorded in `RESULTS.md`.
+- Held-out pass rule: unchanged, with the Addendum 1 ARI tolerance applied in the same way.
