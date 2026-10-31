@@ -24,6 +24,7 @@
 #include <tuple>
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -52,6 +53,31 @@
 #include "polya_sites.h"
 #include "gpu_pileup_dump.h"   // W11: SINGLET_PILEUP_DUMP / SINGLET_STREAM_TEE debug hooks (no effect unless set)
 #include "gpu_pileup_bridge.h" // W11: SINGLET_GPU_PILEUP=compare (GPU builds only; no effect unless set)
+
+namespace singlet {
+// Timing and memory milestones of the end-of-stream finalize (stderr only, no effect on any output).
+inline void fin_mark(const char* what) {
+    static const auto t0 = std::chrono::steady_clock::now();
+    static auto last = t0;
+    const auto now = std::chrono::steady_clock::now();
+    double rss = 0, anon = 0, hwm = 0;
+    if (FILE* f = std::fopen("/proc/self/status", "r")) {
+        char line[256];
+        while (std::fgets(line, sizeof line, f)) {
+            double kb;
+            if (std::sscanf(line, "VmRSS: %lf", &kb) == 1) rss = kb;
+            else if (std::sscanf(line, "RssAnon: %lf", &kb) == 1) anon = kb;
+            else if (std::sscanf(line, "VmHWM: %lf", &kb) == 1) hwm = kb;
+        }
+        std::fclose(f);
+    }
+    std::fprintf(stderr, "[fin] %s: %.1f s (+%.1f s), rss %.1f GB, anon %.1f GB, peak %.1f GB
+", what,
+                 std::chrono::duration<double>(now - t0).count(), std::chrono::duration<double>(now - last).count(),
+                 rss / 1048576, anon / 1048576, hwm / 1048576);
+    last = now;
+}
+}  // namespace singlet
 
 namespace singlet {
 
@@ -1159,9 +1185,13 @@ public:
         }
 #endif
         // ── Order-free finalize (docs/research-beta/order-free-rules.md) ──
+        fin_mark("stream done, finalize starts");
         snp_cons_.finalize(snp_ad_, snp_dp_, stats, config_.umi_dedup_directional, gene_roots(mol_store_));  // R1 over R9
+        fin_mark("SNP consensus finalize");
         snp_cons_.clear();
+        fin_mark("SNP consensus freed");
         finalize_umi_features(sj_umi_dedup_, sj_acc_, stats.sj_hits, mol_store_);   // R9, before the molecule store
+        fin_mark("junction UMI finalize");
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (gpu_covers_) {   // the gene store lives on the GPU
             if (!vdj_umi_.empty()) {
@@ -1172,7 +1202,9 @@ public:
         } else
 #endif
         finalize_umi_features(vdj_umi_, vdj_acc_, stats.vdj_hits, mol_store_);      // is finalized below
+        fin_mark("VDJ UMI finalize");
         canonicalize_splice_junctions();               // R7
+        fin_mark("junctions canonicalized");
         if (config_.strand_prior_only)                  // R5: report the aggregate over all informative reads
             strand_probe_ = StrandEvidence{stats.strand_sense, stats.strand_antisense};
 
@@ -1183,6 +1215,7 @@ public:
                       << (config_.umi_dedup_directional ? "directional" : "exact")
                       << " UMI collapse)...\n";
             auto ms = finalize_all({{&mol_store_, &exon_acc_, &intron_acc_, &amb_acc_}});
+            fin_mark("molecule labelling done");
             add_molecule_stats(stats, ms);
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (gpu_covers_) add_molecule_stats(stats, gpu_ms_);   // W11 "on": the GPU's molecules (the CPU store is empty)
@@ -3893,6 +3926,7 @@ private:
         std::vector<std::vector<D::Molecule>> mols(targets.size());
         for (size_t i = 0; i < targets.size(); ++i)
             targets[i].store->collapse_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+        fin_mark("molecules collapsed");
 
         // Each (bc, gene, root UMI) is one molecule, so a (bc, UMI) seen k times is in k genes.
         struct UmiKey {
@@ -3920,6 +3954,7 @@ private:
                     else if (m.count == u.best_count) u.tie = true;
                 }
         }
+        fin_mark("multi-gene UMI table built");
         auto dropped = [&](const D::Molecule& m) {
             if (!mrules) return false;
             const auto& u = ug.find({m.umi, m.bc})->second;
