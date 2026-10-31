@@ -108,3 +108,36 @@ sample class; more than 4 packed jobs per node.
 
 `sbatch scripts/cpu_perf/build_cpu.sbatch` (`COMMIT=...`), then `scripts/cpu_perf/submit_matrix.sh`; `profile.sbatch` takes `SET T PACK BINV`.
 `summarize.py RESULTS`, `stage_profile.py DIR M`, `threads.py DIR M` summarise (run them as a `debug-cpu` job, not on the login node).
+
+## 4. Private memory per job (step 2)
+
+Deep sample GSM7656149, `--engine cpu`, 4 threads, genome in shared memory (`singlet genome load`, then
+`--genome-shared on`; STAR log: "Found genome in shared memory"), scavenger nodes (not exclusive).
+
+| | private genome (793903) | shared genome (793999) | + finalize memory cut (794032) |
+|---|---|---|---|
+| STAR process anonymous peak | 23.6 GB | 7.2 GB | 7.2 GB |
+| singlet main process anonymous peak | 32.0 GB | 32.1 GB (finalize) | 23.8 GB |
+| job peak, sum of anonymous (billed basis) | 37.2 GB | 32.1 GB | 22.5 GB |
+| billed cores at ~2 GB/core (Anvil `shared`) | 19 | 16-17 | 12 |
+| genome, charged once to the loader | | ~23 GB | ~23 GB |
+
+The finalize used to hold the molecule store (13.6 GB), the collapsed molecules (~5 GB) and the multi-gene UMI table
+(~10 GB) at once. `DirectionalUmiStore::consume_molecules()` now gives each (barcode, gene) group back as it is
+collapsed (same molecules, same order; the per-cell saturation statistics the export reads are computed first and
+kept), and the multi-gene table is built in 16 barcode shards, one in memory per thread. Counts and every other
+output are byte-identical to the previous run (all files except the five run-dependent ones); `test_umi_consume`
+covers the consume path. Node packing: with the genome shared, a node holds one ~23 GB genome plus ~22 GB per job.
+
+## 6. Post-STAR tail (step 3), first change: `--threads` reaches export and finalize
+
+`--threads` set only STAR's thread count. The stream path runs the pileup on one thread (`--pileup-threads 1`) and
+`export_cfg.threads` inherited that, so every export stage that takes a thread count (donor auto-K and VB, decontX,
+doublets) ran with 1 (auto-K ran at ~1.1 cores for ~350 s on the deep sample while 4 were held). Export and the
+multi-gene UMI shards now use `max(pileup threads, --threads)`. The demux reductions are chunked independently of the
+thread count (`parallel_det_chunks`), so donor calls do not depend on it.
+
+Deep GSM7656149, 4 threads, scavenger (non-exclusive): export 625 s -> ~400 s, auto-K 350 s -> ~200 s, pack wall
+4059 s -> 3938 s together with the memory change; outputs byte-identical to the 1-thread run (except the run-dependent
+files). Still serial and next: SNP consensus finalize 34 s, junction UMI finalize 50 s, molecule collapse ~65 s,
+multi-gene shards ~50 s (the shard scan repeats the pass 16 times; a single partition pass would be cheaper).
