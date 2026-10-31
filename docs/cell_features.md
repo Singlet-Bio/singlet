@@ -244,6 +244,36 @@ network's `atlas_knn`, standalone AUPRC <= 0.26); PCA/Gaussian-classifier encode
 features (worse: 0.51-0.54, overfits across studies). A cheaper sdfl (6,000-cell fit, 2 folds) loses nothing against the full one
 when the atlas features are held fixed (0.5688 vs 0.5693).
 
+**Leakage screen** (`scripts/doublet_leak.py`, `doublet_leak2.py`, Clipper). The encoder's reference is 316,224 cells of the
+`celltype_nn` CELLxGENE corpus (2,809,764 cells, 561 datasets; every dataset contributes). The corpus metadata has dataset UUIDs and
+titles but no GSE/GSM accessions and no barcodes (`cell_id` is the Census `soma_joinid`), so the screen is by title and by cell
+profile. *Titles*: 70 corpus datasets match study or assay keywords (PBMC, lupus, kidney, nuclei, hashing, MULTI-seq, HEK, HMEC,
+hgmm, ...); none is one of the 17 studies (Kang 2018, Stoeckius 2018, McGinnis 2019, 10x hgmm, the mouse-kidney hashing set, Xi & Li);
+the nearest, "multiplexed scRNA-seq of 1.2 million PBMCs from adult lupus samples", is the Perez et al. cohort, not Kang 2018.
+*Cells*: the 181,976 evaluation cells were projected on the 6,000-gene vocabulary and compared with all 2.81M corpus cells. Exact
+count-vector hash: **0 matches** (0 against the reference cells). Hash of the 12 most abundant genes: 729 matches (188 against the
+reference cells); these are chance collisions of low-complexity cells (the matched datasets are unrelated tissues; the hash keeps
+only 0.2-54% of cells under 20% thinning, so it is a weak detector). Near-duplicate search: for 1,000 cells per dataset, the cosine of
+log1p CP10k profiles with every cell of the 5 closest corpus datasets: **maximum 0.876, no cell at or above 0.98**, and the
+corpus neighbour is farther than the cell's nearest neighbour in its own dataset (median 0.39-0.72 against 0.42-0.85). No overlap
+was found, so nothing was dropped, the encoder was not refitted and the leave-one-study-out numbers stand. Limit: a copy of a cell
+processed by another pipeline, in a corpus dataset outside the 5 closest, would not be seen.
+
+**Scale check** (`scripts/doublet_scale.py`). The largest real sample found, GSM5594498 (GSE184652, mouse kidney, 80,846 called
+cells, 13.4M nonzeros, read from data.singlet.bio; 8 threads), whole stage, with random subsamples of the same sample:
+
+| cells | wall s | CPU s | encoder / sdfl / stacker wall s | stage peak RSS |
+|---|---|---|---|---|
+| 10,000 | 5.2 | 15.1 | 1.3 / 3.6 / 0.4 | 1.52 GB |
+| 20,000 | 6.2 | 19.9 | 2.2 / 3.3 / 0.65 | 1.54 GB |
+| 40,000 | 9.6 | 29.9 | 5.0 / 3.4 / 1.2 | 1.54 GB |
+| 80,846 | 16.7 | 55.0 | 9.1 / 5.0 / 2.5 | 1.66 GB |
+
+Time is linear in cells (sdfl flat at 3-5 s because of the 6,000-cell cap; encoder and stacker grow with n) and the peak resident
+memory of the stage stays at 1.5-1.7 GB (0.7 GB of it is the loaded sample) from 10k to 81k cells. This sample's engine
+`doublet_score` is not available in the reader used; log library size stood in for `prod` (cost does not depend on its values). The
+atlas holds 15 samples above 60,000 cells, all from this one study.
+
 **Scope.** For single-donor samples. Where a pool has two or more donors, genotype doublets (`donor_assignments` `prob_doublet`, Kang
 2.1 AUROC 0.969 / AUPRC 0.897 against 0.935 / 0.698 for the network-based expression stacker, and recall 0.89 on doublets that look
 like one cell type against about 0.5) stay authoritative; this feature does not replace them, and neither catches same-donor
@@ -277,5 +307,5 @@ typical sample would also fit inside a drain task, but the score is not needed t
 with `--sets doublet --prod-dir <run dirs>` and `OMP_WAIT_POLICY=PASSIVE`.
 
 **Not done / limits.** Reading the engine score from the `.s1` cells table (`dbl_doublet_score`) instead of the run directory is not
-wired (the run directory is). The 5 s wall target at 13.7k cells is not met (6.2 s). Samples above 26k cells were not timed. Neither the
+wired (the run directory is). The 5 s wall target at 13.7k cells is not met (6.2 s). Neither the
 sidecars nor the registry rows were uploaded or registered.
