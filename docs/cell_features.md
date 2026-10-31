@@ -227,6 +227,10 @@ model trained on the datasets of the other studies), mean AUPRC:
 | same stacker without `sdfl`, `sdflc` (stack.py `combo_prod_atlas`, from the study) | 0.5573 |
 | scDblFinder (R, from the study) | 0.5587 |
 
+Against scDblFinder this is a statistical tie, not a win: the mean difference is +0.012 AUPRC, 95% CI about [-0.019, +0.040] over
+the 17 datasets (study-clustered CI wider). Against the previous combiner (`combo_prod_atlas`) the paired gain is +0.011 to +0.013,
+better on 16/17 datasets. The reason to ship it is the same accuracy as scDblFinder without R.
+
 The AUPRC of the frozen model on the 17 datasets is not evidence: it was trained on them. The 17 labels see only heterotypic
 doublets across donors, hashtags or species. The stored `sdfl`, `sdflc` and atlas scores of the training set agree with the
 package's recomputation only up to Spearman 0.89-0.98 (kang21 and pbmc-1A-dm: `sdfl` 0.92 / 0.95, `atlas_clf` 0.93 / 0.89; the
@@ -266,10 +270,19 @@ for a `score_v3` or a new encoder without touching the drain's outputs. (3) The 
 cells within the called set, and a sidecar built on a set that is later changed (for example by the EmptyDrops calls of
 docs/called-ed.md) has to be recomputed. (4) It keeps torch and the encoder files out of the production drain image. Run it per
 study, right after its samples finish: `sbatch --array=... scripts/features_run.sbatch` with `--sets doublet --prod-dir <run
-dirs>`, `OMP_WAIT_POLICY=PASSIVE`, `SINGLET_CELLTYPE_NN_MODEL` and `SINGLET_DOUBLET_CENTROIDS` set.
+dirs>`, `OMP_WAIT_POLICY=PASSIVE` and `SINGLET_DOUBLET_CACHE` on shared storage (model files below).
 
-**Not done / limits.** The atlas centroids (20 MB, sha256 recorded in the model file) and the network file are not in the
-repository; they are located by environment variables and checked against the recorded hashes (a copy is at
-`$WORK/data/doublet_v2/atlas_centroids.npz` on Clipper). Reading the engine score from the `.s1` cells table
-(`dbl_doublet_score`) instead of the run directory is not wired (the run directory is). Neither the sidecars nor the registry rows
-were uploaded or registered.
+**Install and model files.** `pip install "singlet[doublet]"` (the extra adds `torch>=2.0`; scikit-learn, scipy, pyarrow are core
+dependencies; the stacker's `.npz` ships in the wheel). The two large files are not in the repository: the cell type network (56 MB) and
+the atlas centroids (20 MB) are assets of the GitHub release `doublet-v2-model-b7c4a08f5397` of Singlet-Bio/singlet (public, no
+credentials; tag = first 12 hex of the sha256 of the two `sha256sum` lines). `doublet_assets.fetch` downloads each on first use into
+`$SINGLET_DOUBLET_CACHE` (default `$XDG_CACHE_HOME/singlet/doublet_v2`, `~/.cache/singlet/doublet_v2`, or `%LOCALAPPDATA%` on
+Windows; one directory per sha256), checks the pinned sha256 after the download and on every use, deletes a download or cache entry
+that does not match and refuses (`AssetHashError`); the pins are also compared with the hashes recorded in the stacker file.
+Overrides for offline workers: `SINGLET_CELLTYPE_NN_MODEL`, `SINGLET_DOUBLET_CENTROIDS` (local copies, hash-checked too) and
+`SINGLET_DOUBLET_BASE_URL` (a mirror or `file://` directory holding the same file names). Pre-fetch on a node with network access
+with `python -c "from singlet.features import doublet_assets as A; [A.fetch(k) for k in A.ASSETS]"` and point
+`SINGLET_DOUBLET_CACHE` at a shared directory.
+
+**Not done / limits.** Reading the engine score from the `.s1` cells table (`dbl_doublet_score`) instead of the run directory is not
+wired (the run directory is). Neither the sidecars nor the registry rows were uploaded or registered.

@@ -286,7 +286,11 @@ def compute_inputs(
     from . import doublet_atlas as DA
     from . import doublet_sdfl as DS
 
+    from . import doublet_assets as A
+
     meta = stacker().meta
+    if meta["atlas_encoder_sha256"] != A.ASSETS["encoder"].sha256:
+        raise A.AssetHashError("the stacker was trained with another encoder than the pinned asset")
     F = basic_inputs(X)
     F["prod"] = np.asarray(prod, np.float64)
     t = time.perf_counter()

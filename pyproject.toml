@@ -51,6 +51,8 @@ dependencies = [
 [project.optional-dependencies]
 torch = ["torch>=2.0"]
 gpu = ["cupy-cuda12x>=13.0"]
+# doublet/score_v2 (docs/cell_features.md section 8): the atlas encoder runs on torch; the model files are fetched by hash on first use
+doublet = ["torch>=2.0"]
 zarr = ["zarr>=2.12"]
 tiledb = ["tiledbsoma>=1.4"]
 # The local MCP server is written against the 1.x SDK (mcp.server.Server).
@@ -66,7 +68,7 @@ analysis = [
     "igraph>=0.10",
     "leidenalg>=0.9",
 ]
-all = ["singlet[torch,gpu,zarr,tiledb,mcp,analysis]"]
+all = ["singlet[torch,doublet,gpu,zarr,tiledb,mcp,analysis]"]
 # Everything the Python test suite imports.
 test = [
     "pytest>=7.0",
@@ -103,7 +105,7 @@ where = ["python"]
 include = ["singlet*"]
 
 [tool.setuptools.package-data]
-singlet = ["celllabels/data/*.gz", "data/*.parquet", "data/whitelists/*.txt", "data/whitelists/*.tsv", "data/whitelists/*.tsv.gz", "data/whitelists/ATTRIBUTION.md", "py.typed", "features/data/*.json", "features/data/*.parquet", "_singlepress*.so", "s1/packs/*.pack", "s1/packs/index.json", "s1/recipes_data/*.zst"]
+singlet = ["celllabels/data/*.gz", "data/*.parquet", "data/whitelists/*.txt", "data/whitelists/*.tsv", "data/whitelists/*.tsv.gz", "data/whitelists/ATTRIBUTION.md", "py.typed", "features/data/*.json", "features/data/*.parquet", "features/data/*.npz","_singlepress*.so", "s1/packs/*.pack", "s1/packs/index.json", "s1/recipes_data/*.zst"]
 
 # The four large 10x whitelists (about 106 MB of 113 MB) are not shipped: singlet.whitelists
 # downloads them from the public Teichlab CDN on first use. The small ones, and 737K-april-2014

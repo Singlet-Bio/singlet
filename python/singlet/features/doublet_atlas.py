@@ -11,9 +11,9 @@ pairs). Per real cell:
                centroids over one (candidates: the 8 best single centroids)
 
 CPU and GPU: ``device`` is any torch device string ("cpu", "cuda"); values differ between devices only through float arithmetic and
-the classifier's training noise. The atlas centroids (``M``, cell types x vocabulary, 20 MB) are not in the repository: they are a
-data file located by ``SINGLET_DOUBLET_CENTROIDS`` (checked against the sha256 in the model's metadata), like the network file
-(``SINGLET_CELLTYPE_NN_MODEL``)."""
+the classifier's training noise. The atlas centroids (``M``, cell types x vocabulary, 20 MB) and the network file are not in the
+repository: ``doublet_assets`` fetches them by URL into a cache and checks their pinned sha256 (``SINGLET_DOUBLET_CENTROIDS`` /
+``SINGLET_CELLTYPE_NN_MODEL`` name local copies for offline use; they are checked too)."""
 
 from __future__ import annotations
 
@@ -132,20 +132,23 @@ def _dense(A, rows, dev):
 
 
 def load_predictor(model_path: Optional[str] = None):
+    """The cell type network, hash-checked: ``model_path`` / ``$SINGLET_CELLTYPE_NN_MODEL`` (offline override) or the pinned
+    download in the cache (``doublet_assets``)."""
     from singlet.celltype_nn import CellTypePredictor
 
-    path = model_path or os.environ.get(ENV_MODEL)
-    if not path:
-        raise RuntimeError(f"give the cell type network file (model_path or ${ENV_MODEL})")
-    return CellTypePredictor.load(path)
+    from . import doublet_assets as A
+
+    return CellTypePredictor.load(A.fetch("encoder", override=model_path or os.environ.get(ENV_MODEL)))
 
 
 def load_centroids(path: Optional[str] = None, sha256: Optional[str] = None) -> np.ndarray:
-    p = path or os.environ.get(ENV_CENTROIDS)
-    if not p:
-        raise RuntimeError(f"give the atlas centroid file (centroids or ${ENV_CENTROIDS})")
-    if sha256 and sha256_file(p) != sha256:
-        raise RuntimeError(f"{p}: sha256 differs from the one recorded with the doublet model")
+    """The atlas centroids ``M``, hash-checked like the network (``sha256``: the hash recorded with the stacker, which must be the
+    pinned one)."""
+    from . import doublet_assets as A
+
+    if sha256 and sha256 != A.ASSETS["centroids"].sha256:
+        raise A.AssetHashError("the stacker records centroids that are not the pinned asset")
+    p = A.fetch("centroids", override=path or os.environ.get(ENV_CENTROIDS))
     return np.load(p, allow_pickle=True)["M"]
 
 

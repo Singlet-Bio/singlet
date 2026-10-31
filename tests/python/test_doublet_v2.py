@@ -227,3 +227,64 @@ def test_loso_scores_reproduce_stack_py():
         ref = np.load(Path(REF) / "loso_ref" / f"{n}.npy")
         got = D.loso_scores(data, n)
         np.testing.assert_allclose(got, ref, atol=1e-9, rtol=0, err_msg=n)
+
+
+# ------------------------------------------------------------------------------------------------ pinned model-file fetch
+def _mini_assets(tmp_path):
+    import hashlib
+
+    from singlet.features import doublet_assets as A
+
+    src = tmp_path / "release"
+    src.mkdir()
+    blobs = {"centroids": b"centroid-bytes" * 100, "encoder": b"network-bytes" * 200}
+    assets = {}
+    for k, b in blobs.items():
+        name = A.ASSETS[k].name
+        (src / name).write_bytes(b)
+        assets[k] = A.Asset(name, hashlib.sha256(b).hexdigest(), len(b))
+    return A, src, assets
+
+
+def test_fetch_by_url_checks_hash_and_caches(tmp_path):
+    A, src, assets = _mini_assets(tmp_path)
+    cache = tmp_path / "cache"
+    base = src.as_uri()
+    p = A.fetch("centroids", cache=cache, base_url=base, assets=assets)
+    assert p.read_bytes() == (src / assets["centroids"].name).read_bytes() and p.parent.parent == cache
+    (src / assets["centroids"].name).unlink()  # served from the cache now: no network needed
+    assert A.fetch("centroids", cache=cache, base_url=base, assets=assets) == p
+    assert not list(cache.rglob("*.part*"))
+
+
+def test_fetch_refuses_tampered_download(tmp_path):
+    A, src, assets = _mini_assets(tmp_path)
+    (src / assets["encoder"].name).write_bytes(b"tampered" * 50)
+    cache = tmp_path / "cache"
+    with pytest.raises(A.AssetHashError):
+        A.fetch("encoder", cache=cache, base_url=src.as_uri(), assets=assets)
+    assert not [f for f in cache.rglob("*") if f.is_file()]  # nothing kept
+
+
+def test_fetch_refetches_a_damaged_cache_entry_and_checks_overrides(tmp_path):
+    A, src, assets = _mini_assets(tmp_path)
+    cache = tmp_path / "cache"
+    p = A.fetch("encoder", cache=cache, base_url=src.as_uri(), assets=assets)
+    p.write_bytes(b"bit rot")
+    again = A.fetch("encoder", cache=cache, base_url=src.as_uri(), assets=assets)
+    assert again.read_bytes() == (src / assets["encoder"].name).read_bytes()
+    bad = tmp_path / "local.pt"
+    bad.write_bytes(b"not the network")
+    with pytest.raises(A.AssetHashError):
+        A.fetch("encoder", override=str(bad), assets=assets)  # an offline override is hash-checked too
+    assert A.fetch("encoder", override=str(src / assets["encoder"].name), assets=assets)
+
+
+def test_pins_agree_with_stacker_and_release_tag():
+    from singlet.features import doublet_assets as A
+
+    assert A.TAG == "doublet-v2-model-" + A.COMBINED_SHA256[:12]
+    if HAVE_MODEL:
+        m = D.stacker().meta
+        assert m["atlas_encoder_sha256"] == A.ASSETS["encoder"].sha256
+        assert m["centroids_sha256"] == A.ASSETS["centroids"].sha256

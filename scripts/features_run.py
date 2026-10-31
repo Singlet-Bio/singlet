@@ -8,7 +8,8 @@
   collect   gather every sample's summary rows into OUT/ingest/sample_cell_summary.<k>.json, <= 2000 rows per file
 
 The ``doublet`` set (``--sets doublet``, docs/cell_features.md section 8) also needs the engine's doublet_scores.tsv per sample
-(``--prod-dir``) and the cell type network and atlas centroid files (SINGLET_CELLTYPE_NN_MODEL, SINGLET_DOUBLET_CENTROIDS);
+(``--prod-dir``) and the cell type network and atlas centroid files (fetched by sha256 into SINGLET_DOUBLET_CACHE; SINGLET_CELLTYPE_NN_MODEL and
+SINGLET_DOUBLET_CENTROIDS name local copies; `pip install singlet[doublet]`);
 ``--device cuda`` runs its encoder on a GPU.
 
 Studies: --gse GSE1 GSE2 ... or --list FILE (one study per line: "GSE" or "GSE GSM [GSM ...]" or "GSE path/to/bundle.singlet").
