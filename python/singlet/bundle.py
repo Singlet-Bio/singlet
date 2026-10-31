@@ -195,6 +195,12 @@ MODALITIES: Dict[str, Modality] = {
             "Per-intron-feature UMI counts (the unspliced half of the raw matrix).",
         ),
         Modality(
+            "reads_per_umi_hist",
+            "table",
+            ("reads_per_umi_hist.tsv.gz",),
+            "Per called cell: molecules with 1..15 and 16+ reads (16 bins).",
+        ),
+        Modality(
             "cell_calls",
             "table",
             ("cell_calls.tsv",),
@@ -767,6 +773,38 @@ def _aggregate_gene_counts(out_dir: Path, gene_order: List[str], called_bcs: Lis
 # ---------------------------------------------------------------------------
 
 
+# The engine writes reads-per-UMI members for every barcode. The reads matrices stay in the run directory (they add +69-73 percent to the .s1);
+# the per-cell histogram is packed for the called cells only (a few KB).
+_RUN_DIR_ONLY_MEMBERS = ("exon_reads.1pz", "intron_reads.1pz")
+_CALLED_ONLY_MEMBERS = ("reads_per_umi_hist.tsv.gz",)
+
+
+def _called_barcodes(out_dir: Path) -> Optional[set]:
+    """Called-cell barcodes of ``out_dir/cell_calls.tsv`` (the migrator's rule, s1.cells.parse_cell_calls); None if there is no usable call list."""
+    from singlet.s1.cells import parse_cell_calls
+
+    try:
+        called = parse_cell_calls((out_dir / "cell_calls.tsv").read_bytes())
+    except OSError:
+        return None
+    return set(called) if called is not None else None
+
+
+def _reads_member(rel: str, data: bytes, called: Optional[set]) -> Optional[bytes]:
+    """What the bundle holds of a reads-per-UMI member: None = not packed, else its bytes (the histogram restricted to the called cells)."""
+    if rel in _RUN_DIR_ONLY_MEMBERS:
+        return None
+    if rel in _CALLED_ONLY_MEMBERS:
+        if called is None:
+            return None
+        import gzip
+
+        lines = gzip.decompress(data).decode("utf-8").split("\n")
+        keep = [ln for i, ln in enumerate(lines) if ln and (i == 0 or ln.split("\t", 1)[0] in called)]
+        return gzip.compress(("\n".join(keep) + "\n").encode("utf-8"), 6, mtime=0)
+    return data
+
+
 def pack_gse(
     gse_id: str,
     results_dir: Union[str, Path],
@@ -1103,6 +1141,7 @@ def pack_gse(
             # germline information go to the restricted sidecar instead.
             # .1pz files are STORED (already zstd); everything else DEFLATED.
             # Dotfiles, raw reads (.1fq) and bulky disposable read-dumps are skipped.
+            called_set = _called_barcodes(out_dir) if out_dir.is_dir() else None
             if out_dir.is_dir():
                 for fpath in sorted(out_dir.rglob("*")):
                     if not fpath.is_file():
@@ -1128,6 +1167,9 @@ def pack_gse(
                             continue
                     with open(fpath, "rb") as fh:
                         data = fh.read()
+                    data = _reads_member(rel.as_posix(), data, called_set)
+                    if data is None:
+                        continue
                     compress = (
                         zipfile.ZIP_STORED if fpath.suffix == ".1pz" else zipfile.ZIP_DEFLATED
                     )

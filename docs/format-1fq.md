@@ -413,8 +413,8 @@ Internal flow:
 
 ### 4.1 Why quality matters for singlify
 
-singlify's pileup engine uses `min_baseq = 10` for SNP and RNA editing
-pileup. This filters low-quality bases at variant positions to avoid
+singlify's pileup engine uses `min_baseq = 10` for the SNP pileup (RNA editing
+counts are not implemented and are not shipped in Beta). This filters low-quality bases at variant positions to avoid
 false-positive allele calls. The per-donor VCF construction depends on
 accurate allele depth (AD/DP), which requires per-base quality.
 

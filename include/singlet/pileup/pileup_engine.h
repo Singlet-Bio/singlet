@@ -7,7 +7,7 @@
 // 2. Per-intron counts (UMI-deduplicated) → GeneFull = exon + intron
 // 3. Splice junction counts from CIGAR N operations
 // 4. SNP allele counts (AD/DP) at known positions (raw reads, no UMI dedup)
-// 5. RNA editing (A/G) counts at REDIportal sites
+// 5. (RNA editing counts at REDIportal sites: NOT IMPLEMENTED; there is no site list, counter or writer. Not shipped in Beta.)
 // 6. chrM reads extracted to separate BAM (for mgatk)
 //
 // Multi-mapper handling: reads with NH > 1 are counted as 1/NH fractional.
@@ -118,7 +118,7 @@ struct PileupConfig {
     int threads = 4;
     int finalize_threads = 1;       // end-of-stream finalize (molecule labelling); the result does not depend on it
     int min_mapq = 20;              // Minimum mapping quality
-    int min_baseq = 10;             // Minimum base quality for SNP/editing
+    int min_baseq = 10;             // Minimum base quality for the SNP pileup (there is no editing pileup)
     bool count_introns = true;      // Count intronic reads
     bool count_sj = true;           // Extract splice junctions
     bool umi_dedup = true;          // UMI deduplication for exon/intron
