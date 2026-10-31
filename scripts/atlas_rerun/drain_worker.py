@@ -216,8 +216,8 @@ def accept_sample(m, min_pairs=0, max_pairs=0, mem_gb=0, accept_1fg2=False, engi
     p = m.get("pairs", 0)
     if m.get("format") == "1fg2" and not accept_1fg2:
         return False   # the engine's .1fg2 reader is S8's; until its identity gate passes, such samples wait for a worker started with --accept-1fg2
-    if mem_gb and engine == "gpu" and C.gpu_job_mem_gb(p) > mem_gb:
-        return False
+    if mem_gb and engine == "gpu" and mem_gb < C.GPU_EXCLUSIVE_GB and C.gpu_job_mem_gb(p) > mem_gb:
+        return False   # a whole-node worker (mem_gb >= GPU_EXCLUSIVE_GB) takes anything: it is the largest there is
     return (not min_pairs or p >= min_pairs) and (not max_pairs or p <= max_pairs)
 
 

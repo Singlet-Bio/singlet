@@ -43,6 +43,9 @@ def gpu_job_mem_gb(reads, margin=1.2, extra=20, step=8):
     return int(math.ceil((margin * gpu_peak_gb(reads) + extra) / step) * step)
 
 
+GPU_EXCLUSIVE_GB = 700   # a worker with at least this much memory owns a whole node (--exclusive, --mem=0): the "too big for a shared worker" class
+
+
 def job_slots(node_gb, node_cores, threads, peak_gb=33.4, shared_gb=17.8, fill=0.9):
     """Concurrent sample jobs one node holds. Memory: the shared genome index is resident once per node (shared_gb), every
     job adds its private peak (peak_gb: deep GSM7036403 with the shared index measured 33.4 GB, index 17.8 GB), and

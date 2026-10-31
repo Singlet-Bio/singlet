@@ -63,6 +63,9 @@ def test_sbatch_script_has_the_class_memory_and_name():
     a = types.SimpleNamespace(log_dir="/tmp", stage="/stage", config="/cfg.json")
     s = L.sbatch_script("drain-h100", a, dict(L.DEFAULTS), 176)
     assert "#SBATCH --mem=176G" in s and "--mem-gb 176" in s and "#SBATCH --job-name=s9-drain-h100-c176" in s
+    whole = L.sbatch_script("drain-h100", a, dict(L.DEFAULTS), 720)   # the too-big class: a whole node, alone
+    assert "#SBATCH --exclusive" in whole and "#SBATCH --mem=0" in whole and "#SBATCH --job-name=s9-drain-h100-c720" in whole
+    assert "--exclusive" not in s
     old = L.sbatch_script("drain-v100", a, dict(L.DEFAULTS))
     assert "#SBATCH --mem=128G" in old and "--mem-gb 128" in old
 
@@ -73,6 +76,8 @@ def test_worker_leaves_a_sample_it_cannot_hold():
     assert not D.accept_sample(big, mem_gb=128) and D.accept_sample(small, mem_gb=128)
     assert D.accept_sample(big, mem_gb=344) and not D.accept_sample(big, mem_gb=248)
     assert D.accept_sample(big, mem_gb=0)                       # memory unknown: no filter
+    assert D.accept_sample({"pairs": 1_300_000_000}, mem_gb=720) and D.accept_sample({"pairs": 3_000_000_000}, mem_gb=720)   # the whole-node worker takes any sample
+    assert not D.accept_sample({"pairs": 1_300_000_000}, mem_gb=344)   # and no shared worker takes a p99 sample
     assert D.accept_sample(big, mem_gb=128, engine="cpu")       # the CPU engine's memory is a different model
     assert not D.accept_sample({"pairs": 1, "format": "1fg2"}, mem_gb=128)
     assert D.accept_sample({"pairs": 1, "format": "1fg2"}, mem_gb=128, accept_1fg2=True)

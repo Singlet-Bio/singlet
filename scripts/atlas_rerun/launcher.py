@@ -44,7 +44,8 @@ DEFAULTS = {
     "gpu_start_h": 1.0,             # X: start an H100 worker only if it would have this many hours of work
     "max_h100": 3,                  # the account's cap: QOSMaxGRESPerUser allows 3 GPUs at once (the 3 H100 nodes have 6)
     "gpu_mem_classes_gb": [96, 176, 248, 344, 720],  # --mem of the H100 workers; a sample goes to the smallest class that holds common.gpu_job_mem_gb(pairs)
-                                    # (96 G: up to ~115 M pairs, 176 G: ~290 M, 248 G: ~430 M, 344 G: ~640 M, 720 G: the rest, a whole node)
+                                    # (96 G: up to ~115 M pairs, 176 G: ~290 M, 248 G: ~430 M, 344 G: ~640 M). The last class (>= common.GPU_EXCLUSIVE_GB)
+                                    # is the "too big for a shared worker" class: --exclusive --mem=0, one sample alone on a whole node (both GPUs reserved)
     "max_v100": 4,
     "fallback_wait_h": 1.0,         # a pending H100 job older than this counts as no capacity
     "overflow_h": 3.0,              # pairs the capacity cannot clear in this many hours go to the next pool
@@ -162,6 +163,7 @@ def token_export():
 
 def sbatch_script(kind, a, p, mem_gb=None):
     name = "s9-%s" % kind + ("-c%d" % mem_gb if kind == "drain-h100" and mem_gb else "")
+    whole_node = bool(kind == "drain-h100" and mem_gb and mem_gb >= C.GPU_EXCLUSIVE_GB)
     head = ["#!/bin/bash", "#SBATCH --account=debruinz", "#SBATCH --job-name=%s" % name,
             "#SBATCH --output=%s/s9-%%x-%%j.out" % a.log_dir, "#SBATCH --no-requeue"]
     here = os.path.dirname(os.path.abspath(__file__))
@@ -177,8 +179,8 @@ def sbatch_script(kind, a, p, mem_gb=None):
         gres = p["h100_gres"] if kind == "drain-h100" else p["v100_gres"]
         part = p["h100_partition"] if kind == "drain-h100" else p["v100_partition"]
         hdr = ["#SBATCH --partition=%s" % part, "#SBATCH --gres=%s" % gres,
-               "#SBATCH --cpus-per-task=%d" % p["gpu_cpus"], "#SBATCH --mem=%dG" % (mem_gb or 128), "#SBATCH --time=%s" % p["gpu_time"],
-               "#SBATCH --signal=B:TERM@60"]
+               "#SBATCH --cpus-per-task=%d" % p["gpu_cpus"], "#SBATCH --mem=%s" % ("0" if whole_node else "%dG" % (mem_gb or 128)),
+               "#SBATCH --time=%s" % p["gpu_time"], "#SBATCH --signal=B:TERM@60"] + (["#SBATCH --exclusive"] if whole_node else [])
         body = ["%s %s/drain_worker.py %s --engine gpu --threads %d --idle-exit-min %s --scratch /dev/shm --mem-gb %d --publish %s%s &" %
                 (py, here, common, p["gpu_cpus"], p["idle_exit_min"], mem_gb or 128, p["publish"], s1_args(p))]
         if p["publish"] == "s1":
