@@ -17,7 +17,7 @@ set -uo pipefail
 FAIL=0
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 BINDIR=${BINDIR:-$W/jobs/s8/bin_base2}; BINDIR_N=${BINDIR_N:?set BINDIR_N to the new build}; BINDIR_M=${BINDIR_M:-$BINDIR_N}; T=${T:-18}
-TASKS=("SRR19421372:cpu cpuG gpuD_m gpuG_m" "SRR19573735:cpu cpuG gpuD_m gpuG_m" "SRR30477995:cpu cpuG gpuD_m gpuG_m")
+TASKS=("SRR19421372:cpu cpuG_m gpuD_m gpuG_m" "SRR19573735:cpu cpuG_m gpuD_m gpuG_m" "SRR30477995:cpu cpuG_m gpuD_m gpuG_m")
 SPEC=${TASKS[$SLURM_ARRAY_TASK_ID]}; s=${SPEC%%:*}; MODES=(${SPEC#*:})
 BARE=$W/repos/singlet-py.git
 # singlet resolves the barcode whitelist at <binary dir>/../whitelists; without it the run silently takes the sorted-BAM path
@@ -34,10 +34,10 @@ G=$REF/GRCh38-2024-A; [ $s = neuron1k_v3 ] && G=$REF/GRCm39-2024-A
 FQ=$W/jobs/s9/fixtures/$s.1fq; [ -e $FQ ] || FQ=$W/data/s8/$s/$s.1fq; [ -e $FQ ] || FQ=$PB/data/$s/$s.1fq; [ -e $FQ ] || { D=$W/data/w11/$s; [ -e $D/sample.1fq ] || D=$W/data/atlas-rerun/perf/$s; FQ=$D/sample.1fq; }
 ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
-  IN=$FQ; case $m in cpuG|gpuG_m) IN=${FQ%.1fq}.1fg2 ;; esac
+  IN=$FQ; case $m in cpuG_m|gpuG_m) IN=${FQ%.1fq}.1fg2 ;; esac
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
   unset SINGLET_GPU_PILEUP SINGLET_INTRON_RULES SINGLET_GPU_PILEUP_QUAL; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
-  case $m in cpu|cpuG) ENGARG="" ;; gpuD|gpuD_n|gpuD_m|gpuG_m) export SINGLET_GPU_PILEUP=on ;; gpuQ_m) export SINGLET_GPU_PILEUP=on SINGLET_GPU_PILEUP_QUAL=force ;; esac
+  case $m in cpu|cpuG_m) ENGARG="" ;; gpuD|gpuD_n|gpuD_m|gpuG_m) export SINGLET_GPU_PILEUP=on ;; gpuQ_m) export SINGLET_GPU_PILEUP=on SINGLET_GPU_PILEUP_QUAL=force ;; esac
   case $m in *_n) BIN=$BINDIR_N/singlet-gpu ;; *_m) BIN=$BINDIR_M/singlet-gpu ;; esac
   ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb"
     while true; do
@@ -56,6 +56,9 @@ for m in "${MODES[@]}"; do
   case $m in gpuD*|gpuQ*) grep -aq "\[gpu_pileup\] hand-off pass:" $O/run.log.ts && echo "GPU PILEUP HAND-OFF OK" | tee -a $RES/summary.txt || { echo "!! GATE FAIL: no GPU-pileup hand-off pass ($m)" | tee -a $RES/summary.txt; FAIL=1; } ;; esac
   grep -a -e "unsorted STAR stream" -e "stream CB" -e "streaming from STAR pipe" -e "sorted path" -e "gpu_pileup\] on" -e "gpu_pileup\] hand-off" -e "ignor" -e "CR4 probe" -e "whitelist" $O/run.log.ts | cut -c1-230 | tee -a $RES/summary.txt
   grep -ah -e "ENGINE_GPU" -e "engine_gpu:" -e "STAR_PROFILE\|PROF" $SCR/$s/$m/out/*Log.out 2>/dev/null | cut -c1-230 | head -80 > $O/starlog_engine.txt
+  case $m in gpuG*) if grep -aq "sequences from the .1fg2 table" $O/starlog_engine.txt; then echo "TABLE-FED PREFILL OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: the prefill did not use the .1fg2 table ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
+  case $m in gpuG*) if grep -aq "read source: chunk" $O/run.log.ts && ! ls $SCR/$s/$m/out/ 2>/dev/null | grep -q "\.fastq"; then echo "NO TEMP FASTQ (chunk source) OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: the .1fg2 GPU run did not use the chunk source ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
+  grep -a "cache filled with" $O/starlog_engine.txt | cut -c1-250 | sed "s/^/$m: /" | tee -a $RES/summary.txt
   cp $SCR/$s/$m/out/*Log.final.out $O/ 2>/dev/null
   cp $SCR/$s/$m/out/read_stats.tsv $SCR/$s/$m/out/summary.json $O/ 2>/dev/null
 done
@@ -63,6 +66,6 @@ cmp2() { [ -d $SCR/$s/$1/out ] && [ -d $SCR/$s/$2/out ] || { echo "!! GATE FAIL:
   echo "=== $s $1 vs $2" | tee -a $RES/summary.txt
   python3 $SCR/repo/bench/star_accel/out_equiv.py $SCR/$s/$1/out $SCR/$s/$2/out > $RES/equiv-$1-$2.txt 2>&1
   grep -a '^  DIFF\|^files:\|^RESULT' $RES/equiv-$1-$2.txt | cut -c1-200 | head -30 | tee -a $RES/summary.txt; }
-cmp2 cpu cpuG; cmp2 cpu gpuD_m; cmp2 gpuD_m gpuG_m
+cmp2 cpu cpuG_m; cmp2 cpu gpuD_m; cmp2 gpuD_m gpuG_m
 [ $FAIL = 0 ] && echo "GATE RUN OK (identity verdicts above)" | tee -a $RES/summary.txt || echo "GATE FAILED" | tee -a $RES/summary.txt
 echo done $(date -Is) | tee -a $RES/summary.txt
