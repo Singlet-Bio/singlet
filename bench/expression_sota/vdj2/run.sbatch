@@ -29,6 +29,7 @@ METHODS=${METHODS:-"singlet"}
 TAG=${TAG:-}
 REF=$SRC/python/singlet/vdj/data/vdj_human.tsv.gz
 [ "$CONV" = cr5 ] && REF=$SRC/python/singlet/vdj/data/vdj_human_imgtcys.tsv.gz
+if [ -n "${REFDIR:-}" ]; then REF=$REFDIR/$(basename $REF); fi
 echo "lib $DS $CHAINS $CONV ref $REF sha $SHA tag '$TAG' params '${PARAMS:-}'"
 TIME="/usr/bin/time -v"
 if [[ " $METHODS " == *" singlet "* ]]; then

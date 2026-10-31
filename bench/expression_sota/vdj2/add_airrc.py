@@ -51,7 +51,8 @@ def main():
     for p in a.fastas:
         for allele, seq in fasta(p):
             gene = allele.split("*")[0]
-            if not re.match(r"^IG[HKL]V\d", gene) or gene in have or set(seq) - set("ACGT"):
+            # IUIS positional names only: "NL" (not localised) genes have no GENCODE / Cell Ranger counterpart
+            if not re.match(r"^IG[HKL]V\d", gene) or "NL" in gene or gene in have or set(seq) - set("ACGT"):
                 continue
             key = (allele.split("*")[1].startswith("i") if "*" in allele else True, allele)
             if gene not in best or key < best[gene][0]:
