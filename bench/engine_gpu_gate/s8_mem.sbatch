@@ -15,7 +15,8 @@ BIN=${BIN:?set BIN}; s=${SAMPLE:-pbmc1k_v3}; G=$REF/GRCh38-2024-A; FQ=$PB/data/$
 RES=$W/jobs/s8/results/mem-$SLURM_JOB_ID; mkdir -p $RES; SCR=/tmp/$USER-s8mem-$SLURM_JOB_ID; mkdir -p $SCR; trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=7200 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH SINGLET_GPU_PILEUP=on
 echo "node=$(hostname) bin=$(cat $(dirname $BIN)/commit) $(date -Is)" | tee $RES/summary.txt
-for cfg in ${CFGS:-"16777216:0 4194304:0 1048576:0 4194304:30 4194304:24"}; do
+CFGS=${CFGS:-"16777216:0 4194304:0 1048576:0 4194304:30 4194304:24"}
+for cfg in $CFGS; do
   ch=${cfg%%:*}; ar=${cfg##*:}; D=$RES/c${ch}_a${ar}; mkdir -p $D $SCR/o
   ( while true; do echo "$(date +%s.%N) $(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | tr -d ' ')"; sleep 0.5; done ) > $D/mem.csv 2>/dev/null & MM=$!
   env SINGLET_ENGINE_GPU_CHUNK=$ch $( [ $ar != 0 ] && echo SINGLET_GPU_PILEUP_ARENA_GB=$ar ) $BIN $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
