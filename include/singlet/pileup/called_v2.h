@@ -1498,16 +1498,17 @@ GeneCounts gene_counts(const CSC& exon, const std::vector<std::string>& exon_nam
 }
 
 /// cell_calls.tsv with one row per barcode (matrix column order):
-///   barcode, is_cell (= called: the knee set, what the v2 migration reads as `called`), called, called_v2,
-///   umi_exon (knee input), umi_total (exon + intron, the called_v2 input), fdr, pvalue, log_prob (NA = not tested /
-///   not simulated), call_method.
+///   barcode, is_cell (= called_v2: the call every downstream output and the .s1 `called` flag use), called_knee (the
+///   CellRanger2.2 knee set, the input of the call; it was `is_cell` and `called` before), called_v2 (1/0, the same set
+///   as is_cell), umi_exon (knee input), umi_total (exon + intron, the called_v2 input), fdr, pvalue, log_prob
+///   (NA = not tested / not simulated), call_method.
 template <typename TotT>
 inline bool write_cell_calls_tsv(const std::string& path, const std::vector<std::string>& barcodes,
                                  const std::vector<TotT>& exon_totals, const Result& R,
                                  const std::vector<uint8_t>& called) {
     FILE* f = std::fopen(path.c_str(), "w");
     if (!f) return false;
-    std::fputs("barcode\tis_cell\tcalled\tcalled_v2\tumi_exon\tumi_total\tfdr\tpvalue\tlog_prob\tcall_method\n", f);
+    std::fputs("barcode\tis_cell\tcalled_knee\tcalled_v2\tumi_exon\tumi_total\tfdr\tpvalue\tlog_prob\tcall_method\n", f);
     auto num = [&](double v, const char* fmt) {
         if (std::isnan(v))
             std::fputs("NA", f);
@@ -1516,7 +1517,7 @@ inline bool write_cell_calls_tsv(const std::string& path, const std::vector<std:
     };
     for (size_t j = 0; j < barcodes.size() && j < R.called_v2.size(); ++j) {
         const bool c = j < called.size() && called[j];
-        std::fprintf(f, "%s\t%s\t%d\t%d\t%llu\t%lld\t", barcodes[j].c_str(), c ? "TRUE" : "FALSE", c ? 1 : 0,
+        std::fprintf(f, "%s\t%s\t%d\t%d\t%llu\t%lld\t", barcodes[j].c_str(), R.called_v2[j] ? "TRUE" : "FALSE", c ? 1 : 0,
                      R.called_v2[j] ? 1 : 0,
                      static_cast<unsigned long long>(j < exon_totals.size() ? exon_totals[j] : 0),
                      static_cast<long long>(R.totals[j]));
