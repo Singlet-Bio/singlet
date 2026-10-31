@@ -60,3 +60,17 @@ contig filters may change. Validate on the development libraries: a change is ke
 agreement on pbmc10k_b and pbmc2_b do not get worse, no development TCR metric drops by more than 0.002, and wrong-lineage does not
 increase. The held-out libraries are then re-run once with the final settings and both before and after are reported, including when
 there is no gain. Nothing is tuned on held-out data.
+
+## Addendum 1 (2026-10-31, before any held-out re-run): truth convention of the CDR3 start
+
+Found on development libraries only. For V genes that end in two adjacent Cys codons (IGLV2-23, IGLV2-11, IGLV2-5 ...), Cell Ranger 5.0
+and 6.1 (pbmc10k_5p_v2, ctrl10k) start the junction at the first Cys (the IMGT Cys104), while Cell Ranger 3.0 (pbmc5p_v1 = pbmc2, and
+the 3.0.1 GSE145370 tables) starts it at the second. The packaged Singlet reference used the last Cys. The fix (`reference._first_cys`, the
+IMGT convention) is a reference change, and it is applied as a switch of the reference file: the "fix" reference moves the V anchors of
+10 segments (8 of them immunoglobulin genes; TRAV28 is the only TCR gene). The Singlet default stays the previous convention until the
+held-out re-run; the validation rule above is then applied per truth convention: a library whose truth was made by Cell Ranger >= 5
+(pbmc10k_b, ctrl10k_b) judges the fix, a library with a 3.x truth (pbmc2_b) is the legacy-convention control, for which unchanged code is
+the correct setting and the fix is expected to lose. The held-out BCR library ctrl10k_b is Cell Ranger 6.1.0. This is a deviation from the
+rule as first written (which would reject the fix because pbmc2_b gets worse); it is declared here and the pbmc2_b regression is reported.
+The J-gene slack (`j_slack`, 2 by default) is also tried at 1 and 0 on the two development BCR libraries; only the pbmc10k_b / pbmc2_b
+rule above can adopt it.
