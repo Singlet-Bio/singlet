@@ -88,6 +88,7 @@
 #include "singlet/pileup/visium_tissue.h"
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
+#include "singlet/pileup/nonhost/nonhost_sample.h"
 #include "singlet/pileup/tagged_bam.h"
 #include "singlet/pileup/cb_tag_scan.h"
 #include "singlet/fq/sra_reader.h"
@@ -1629,34 +1630,16 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // thread-dependent order; order-free-rules R8): keep reads whose name hash is below a threshold that
         // halves whenever the kept set exceeds the cap. The kept set depends only on the set of reads.
         static constexpr size_t MAX_NONHOST_READS = 20'000'000;
-        std::vector<std::string> reads;
-        bool nonhost_subsampled = false;
+        // the classified reads are the records of mate1 selected by nonhost_sample.h; the per-record outputs (nonhost_reads.fq, the per-cell
+        // matrix) take the same records (nh_selected) so that they line up with multi_hits
+        singlet::nonhost::SampledReads nh_smp;
         {
-            std::vector<std::pair<uint64_t, std::string>> kept;
-            uint64_t thr = UINT64_MAX;
             std::ifstream fq(mate1_path);
-            std::string name_l, seq_l, plus_l, qual_l;
-            while (std::getline(fq, name_l) && std::getline(fq, seq_l) &&
-                   std::getline(fq, plus_l) && std::getline(fq, qual_l)) {
-                if (seq_l.empty()) continue;
-                size_t e = name_l.find_first_of(" \t");
-                uint64_t h = 14695981039346656037ULL;   // FNV-1a of the read name
-                for (size_t i = 1; i < (e == std::string::npos ? name_l.size() : e); ++i) {
-                    h ^= static_cast<unsigned char>(name_l[i]); h *= 1099511628211ULL;
-                }
-                h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33;
-                if (h >= thr) continue;
-                kept.emplace_back(h, std::move(seq_l));
-                while (kept.size() > MAX_NONHOST_READS) {
-                    thr >>= 1;
-                    nonhost_subsampled = true;
-                    kept.erase(std::remove_if(kept.begin(), kept.end(),
-                                              [thr](const auto& p) { return p.first >= thr; }), kept.end());
-                }
-            }
-            reads.reserve(kept.size());
-            for (auto& p : kept) reads.push_back(std::move(p.second));
+            nh_smp = singlet::nonhost::sample_reads(fq, MAX_NONHOST_READS);
         }
+        std::vector<std::string>& reads = nh_smp.reads;
+        const bool nonhost_subsampled = nh_smp.subsampled;
+        auto nh_selected = [&](const std::string& name_l, const std::string& seq_l) { return nh_smp.selected(name_l, seq_l); };
         const size_t n_total = reads.size();
         if (nonhost_subsampled)
             std::cerr << "[nonhost] Subsampled to " << n_total
@@ -1776,7 +1759,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             struct stat mate2_st{};
             if (stat(mate2_path.c_str(), &mate2_st) == 0 && mate2_st.st_size > 0) {
                 auto tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
-                    mate1_path, mate2_path, cb_len, umi_len);
+                    mate1_path, mate2_path, cb_len, umi_len, nh_selected);
 
                 std::unordered_map<uint32_t, singlet::nonhost::NonHostCategory> kmap_cell;
                 std::unordered_map<uint32_t, std::string> snames;
@@ -1908,17 +1891,9 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             std::string fq_out_path = out_prefix + "/nonhost_reads.fq";
             std::ofstream fq_out(fq_out_path);
             std::ifstream fq_in(mate1_path);
-            std::string name_l, seq_l, plus_l, qual_l;
-            size_t idx_r = 0;
-            while (std::getline(fq_in, name_l) && std::getline(fq_in, seq_l) &&
-                   std::getline(fq_in, plus_l) && std::getline(fq_in, qual_l)) {
-                if (idx_r < multi_hits.size() &&
-                    multi_hits[idx_r].top_category != NonHostCategory::UNKNOWN) {
-                    fq_out << name_l << "\n" << seq_l << "\n"
-                           << plus_l << "\n" << qual_l << "\n";
-                }
-                ++idx_r;
-            }
+            singlet::nonhost::write_classified(fq_in, fq_out, nh_smp, [&](size_t i) {
+                return i < multi_hits.size() && multi_hits[i].top_category != NonHostCategory::UNKNOWN;
+            });
             std::cerr << "[nonhost] Wrote classified reads → " << fq_out_path << "\n";
         }
 
