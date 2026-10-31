@@ -541,6 +541,13 @@ inline ExportStats export_results(const PileupEngine& engine,
         for (uint32_t j = 0; j < exon_csc.ncols; ++j)
             for (int32_t k = exon_csc.indptr[j]; k < exon_csc.indptr[j + 1]; ++k)
                 bc_totals[j] += static_cast<uint64_t>(exon_csc.data[k]);
+        // The knee (and the umi_exon column of cell_calls.tsv) stay on the legacy exonic total: exon + the unspliced molecules that
+        // also have an exon-only read (the molecule labels moved them from the exon matrix to the intron matrix), so a label
+        // change does not move the cell set.
+        {
+            const auto extra = engine.legacy_exon_extra();
+            for (uint32_t j = 0; j < exon_csc.ncols && j < extra.size(); ++j) bc_totals[j] += extra[j];
+        }
 
         // N22-GENE: EmptyDrops operates at GENE level (38k features), not exon level
         // (310k features).  Passing exon_csc directly causes systematic overcalling:
