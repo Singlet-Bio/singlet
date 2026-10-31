@@ -34,6 +34,7 @@ G=$REF/GRCh38-2024-A; [ $s = neuron1k_v3 ] && G=$REF/GRCm39-2024-A
 FQ=$W/jobs/s9/fixtures/$s.1fq; [ -e $FQ ] || FQ=$W/data/s8/$s/$s.1fq; [ -e $FQ ] || FQ=$PB/data/$s/$s.1fq; [ -e $FQ ] || { D=$W/data/w11/$s; [ -e $D/sample.1fq ] || D=$W/data/atlas-rerun/perf/$s; FQ=$D/sample.1fq; }
 ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
+  IN=$FQ; case $m in cpuG|gpuG_m) IN=${FQ%.1fq}.1fg2 ;; esac
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
   unset SINGLET_GPU_PILEUP SINGLET_INTRON_RULES SINGLET_GPU_PILEUP_QUAL; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
   case $m in cpu|cpuG) ENGARG="" ;; gpuD|gpuD_n|gpuD_m|gpuG_m) export SINGLET_GPU_PILEUP=on ;; gpuQ_m) export SINGLET_GPU_PILEUP=on SINGLET_GPU_PILEUP_QUAL=force ;; esac
