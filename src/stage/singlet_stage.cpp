@@ -1,4 +1,4 @@
-// singlet-stage: fetch-tier encoder  .1fq (one or more runs of a sample)  ->  .1fg2  (staged GPU-native read container, src/stage/fmt2.h).
+// singlet-stage: fetch-tier encoder  .1fq (one or more runs of a sample)  ->  .1fg2  (staged GPU-native read container, include/singlet/fq/fg2_format.h).
 //
 //   singlet-stage --whitelist-dir D [--whitelist-dir D2 ...] [--accessions SRR1,SRR2] [--level 3] [--scratch DIR] [--json FILE] [--verify] -o OUT.1fg2 RUN1.1fq [RUN2.1fq ...]
 //

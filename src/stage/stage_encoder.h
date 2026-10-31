@@ -1,4 +1,4 @@
-// stage::Encoder: reads of one sample -> .1fg2 (src/stage/fmt2.h). Header-only; used by singlet-stage (from .1fq) and by `singlet download --stage-out`
+// stage::Encoder: reads of one sample -> .1fg2 (include/singlet/fq/fg2_format.h). Header-only; used by singlet-stage (from .1fq) and by `singlet download --stage-out`
 // (straight from the SRA, no .1fq). The read-level logic is one code path for both:
 //   begin_run / add_read ... end_run   (pass 1: exact-barcode histogram, distinct-cDNA table, spill of the per-read records)
 //   finish(out_path)                   (pass 2: R11 barcode correction with the final histogram, planes, zstd, CRC32C, table blocks, run table, index)
@@ -23,7 +23,7 @@
 #include <singlet/fq/protocol.h>
 #include <singlet/fq/types.h>
 #include <singlet/pileup/cb_correct.h>
-#include "fmt2.h"
+#include <singlet/fq/fg2_format.h>
 
 namespace stage {
 using namespace fg2;
@@ -34,39 +34,6 @@ inline double cpu_s() {
     rusage ru; getrusage(RUSAGE_SELF, &ru);
     return ru.ru_utime.tv_sec + ru.ru_utime.tv_usec * 1e-6 + ru.ru_stime.tv_sec + ru.ru_stime.tv_usec * 1e-6;
 }
-
-struct Sha256 {
-    uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
-    uint64_t len = 0; uint8_t buf[64]; size_t nb = 0;
-    static uint32_t rr(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
-    void block(const uint8_t* p) {
-        static const uint32_t K[64] = {
-            0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-            0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-            0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-            0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2};
-        uint32_t w[64];
-        for (int i = 0; i < 16; i++) w[i] = (uint32_t)p[4*i] << 24 | (uint32_t)p[4*i+1] << 16 | (uint32_t)p[4*i+2] << 8 | p[4*i+3];
-        for (int i = 16; i < 64; i++) { uint32_t s0 = rr(w[i-15],7)^rr(w[i-15],18)^(w[i-15]>>3), s1 = rr(w[i-2],17)^rr(w[i-2],19)^(w[i-2]>>10); w[i] = w[i-16]+s0+w[i-7]+s1; }
-        uint32_t a=h[0],b=h[1],c=h[2],d=h[3],e=h[4],f=h[5],g=h[6],hh=h[7];
-        for (int i = 0; i < 64; i++) {
-            uint32_t S1 = rr(e,6)^rr(e,11)^rr(e,25), ch = (e&f)^(~e&g), t1 = hh+S1+ch+K[i]+w[i];
-            uint32_t S0 = rr(a,2)^rr(a,13)^rr(a,22), mj = (a&b)^(a&c)^(b&c), t2 = S0+mj;
-            hh=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
-        }
-        h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e; h[5]+=f; h[6]+=g; h[7]+=hh;
-    }
-    void update(const uint8_t* p, size_t n) {
-        len += n;
-        while (n) { size_t k = std::min(n, 64 - nb); std::memcpy(buf + nb, p, k); nb += k; p += k; n -= k; if (nb == 64) { block(buf); nb = 0; } }
-    }
-    void finish(uint8_t out[32]) {
-        uint64_t bits = len * 8; uint8_t pad = 0x80; update(&pad, 1); uint8_t z = 0;
-        while (nb != 56) update(&z, 1);
-        uint8_t l[8]; for (int i = 0; i < 8; i++) l[i] = (uint8_t)(bits >> (56 - 8 * i)); update(l, 8);
-        for (int i = 0; i < 8; i++) { out[4*i] = h[i] >> 24; out[4*i+1] = h[i] >> 16; out[4*i+2] = h[i] >> 8; out[4*i+3] = h[i]; }
-    }
-};
 
 // Distinct cDNA sequences: open addressing over packed 2-bit sequences (N coded as A; the N positions are part of the key).
 struct SeqTable {
@@ -238,7 +205,7 @@ public:
         flush_spill(); std::fflush(spill);
         for (uint64_t w = 0; w < hist.size(); w++) if (hist[w]) corr.add_exact((int64_t)w, hist[w]);
         double t1 = now_s(), c1 = cpu_s();
-        Sha256 sha; { std::ifstream wf(wl_path, std::ios::binary); char b[1 << 16]; while (wf.read(b, sizeof b) || wf.gcount()) sha.update((const uint8_t*)b, (size_t)wf.gcount()); }
+        fg2::Sha256 sha; { std::ifstream wf(wl_path, std::ios::binary); char b[1 << 16]; while (wf.read(b, sizeof b) || wf.gcount()) sha.update((const uint8_t*)b, (size_t)wf.gcount()); }
         uint8_t wl_sha[32]; sha.finish(wl_sha);
         const uint32_t seq_slot = (uint32_t)align_up(std::max<uint32_t>((max_len + 3) / 4, 1), 8);
         Out o; o.f = std::fopen(out_path.c_str(), "wb"); if (!o.f) die(4, "cannot create " + out_path);
@@ -278,9 +245,9 @@ public:
                 std::memcpy(&pl[PL_UMI][4 * i], &rec.umi, 4); std::memcpy(&pl[PL_SEQ][4 * i], &rec.seq, 4); pl[PL_LEN][i] = rec.len;
                 status_counts[it->second.second & 7]++; if (rec.bad) status_counts[7]++;
                 if ((it->second.second & 7) != CBST_EXACT) {   // raw barcode of every read that was not an exact whitelist hit
-                    uint32_t word = 0, nn = 0, npos = 0;
-                    for (int j = 0; j < bcl; j++) { uint32_t c = (uint32_t)((rec.cbkey >> (3 * (bcl - 1 - j))) & 7); if (c > 3) { nn++; npos = (uint32_t)j + 1; c = 0; } word = (word << 2) | c; }
-                    rawcb.push_back(word); rawcb.push_back(i | ((nn == 0 ? 0u : nn == 1 ? npos : 31u) << 15));
+                    uint32_t word = 0, nmask = 0;
+                    for (int j = 0; j < bcl; j++) { uint32_t c = (uint32_t)((rec.cbkey >> (3 * (bcl - 1 - j))) & 7); if (c > 3) { nmask |= 1u << j; c = 0; } word = (word << 2) | c; }
+                    rawcb.push_back(word); rawcb.push_back(i | (nmask << 15));
                 }
                 for (int j = 0; j < umil; j++) if ((rec.umin >> j) & 1) exc.push_back(exc_pack(i, EXC_UMI_N, (uint32_t)j));
                 if (has_q) std::memcpy(&pl[PL_Q][(size_t)i * seq_slot], &rbuf[i * recsz + sizeof rec], seq_slot);

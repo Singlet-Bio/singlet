@@ -12,7 +12,7 @@
 #include <zstd.h>
 #include <singlet/fq/reader.h>
 #include <singlet/pileup/cb_correct.h>
-#include "fmt2.h"
+#include <singlet/fq/fg2_format.h>
 
 namespace stage_verify {
 using namespace fg2;
@@ -133,11 +133,11 @@ static int verify_file(const std::string& path, const std::vector<std::string>& 
                         ok = inexc == (bool)((umin >> j) & 1);
                     }
                     if (ok) {   // raw barcode entry: present exactly for the reads that were not an exact whitelist hit, with the barcode as sequenced
-                        uint32_t word = 0, nn = 0, npos = 0;
-                        for (int j = 0; j < bcl; j++) { uint32_t c = (uint32_t)((cbkey >> (3 * (bcl - 1 - j))) & 7); if (c > 3) { nn++; npos = (uint32_t)j + 1; c = 0; } word = (word << 2) | c; }
+                        uint32_t word = 0, nmask = 0;
+                        for (int j = 0; j < bcl; j++) { uint32_t c = (uint32_t)((cbkey >> (3 * (bcl - 1 - j))) & 7); if (c > 3) { nmask |= 1u << j; c = 0; } word = (word << 2) | c; }
                         const bool want = (pst[k] & 7) != CBST_EXACT;
                         bool have = false, same = false;
-                        for (size_t q = 0; q + 1 < rawv.size(); q += 2) if ((rawv[q + 1] & 0x7FFF) == k) { have = true; same = rawv[q] == word && (rawv[q + 1] >> 15) == (nn == 0 ? 0u : nn == 1 ? npos : 31u); break; }
+                        for (size_t q = 0; q + 1 < rawv.size(); q += 2) if ((rawv[q + 1] & 0x7FFF) == k) { have = true; same = rawv[q] == word && (rawv[q + 1] >> 15) == nmask; break; }
                         ok = want == have && (!want || same);
                     }
                 }
@@ -191,7 +191,7 @@ static int digest_file(const std::string& path, uint64_t* digest_out, uint64_t* 
               inflate_plane(base, ch.sec[PL_LEN], (ch.flags >> 4) & 1, plen) && inflate_plane(base, ch.sec[PL_Q], (ch.flags >> 5) & 1, pq) &&
               inflate_plane(base, ch.sec[PL_EXC], (ch.flags >> 6) & 1, pexc) && inflate_plane(base, ch.sec[PL_RAWCB], (ch.flags >> 7) & 1, praw))) return 7;
         std::vector<uint32_t> umask(ch.n_reads, 0), rawword(ch.n_reads, 0), rawmeta(ch.n_reads, 0);
-        for (size_t q = 0; q + 8 <= praw.size(); q += 8) { uint32_t w, m; std::memcpy(&w, &praw[q], 4); std::memcpy(&m, &praw[q + 4], 4); rawword[m & 0x7FFF] = w; rawmeta[m & 0x7FFF] = (m >> 15) + 1; }
+        for (size_t q = 0; q + 8 <= praw.size(); q += 8) { uint32_t w, m; std::memcpy(&w, &praw[q], 4); std::memcpy(&m, &praw[q + 4], 4); rawword[m & 0x7FFF] = w; rawmeta[m & 0x7FFF] = (m >> 15) + 1;   // +1: an entry with no N still differs from no entry }
         for (size_t k = 0; k < pexc.size() / 4; k++) { uint32_t e; std::memcpy(&e, &pexc[4 * k], 4); umask[exc_idx(e)] |= 1u << exc_pos(e); }
         for (uint32_t i = 0; i < ch.n_reads; i++) {
             uint32_t cb, u, sid; std::memcpy(&cb, &pcb[4 * i], 4); std::memcpy(&u, &pumi[4 * i], 4); std::memcpy(&sid, &pseq[4 * i], 4);

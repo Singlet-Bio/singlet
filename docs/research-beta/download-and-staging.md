@@ -203,7 +203,7 @@ GPU job loses a stream but not a staged sample. The stage costs ≤ 2 TB of `$WO
 
 * Time-of-day repeats Sat 03:00 / 13:00 (jobs 793570, 793571): results append to `$WORK/jobs/s9/results/tod.jsonl`; this section is updated in a follow-up commit when they land.
 
-## 11. Staged format `.1fg2` and `singlet-stage` (S9 producer, S8 readers; layout in `src/stage/fmt2.h`, spec `staged-format-1fg2.md` on #107)
+## 11. Staged format `.1fg2` and `singlet-stage` (S9 producer, S8 readers; layout in `include/singlet/fq/fg2_format.h`, spec `staged-format-1fg2.md` on #107)
 
 The fetch tier can write a GPU-native staged file instead of `.1fq`: chunks of 32,768 reads as zstd planes (whitelist-corrected barcode index + status byte, UMI word, sequence id, length, 2-bit binned quality per base, UMI-N exceptions) and one per-sample table of
 distinct cDNA sequences (2-bit, N lists), no barcode sort, run table in the footer. `singlet-stage` (CMake target, `src/stage/singlet_stage.cpp`) reads the `.1fq` of a sample's kept runs with the engine's `Reader`, takes protocol, geometry and whitelist from `known_protocols()`,

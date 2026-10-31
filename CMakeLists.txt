@@ -64,6 +64,9 @@ add_executable(singlet-stage src/stage/singlet_stage.cpp)
 target_include_directories(singlet-stage PRIVATE src/stage)
 target_link_libraries(singlet-stage PRIVATE singlet_fq Threads::Threads)
 target_compile_options(singlet-stage PRIVATE -msse4.2)
+add_executable(test_fg2_runset src/stage/test_fg2_runset.cpp)   # the gate for include/singlet/fq/fg2_runset.h against the .1fq RunSet
+target_link_libraries(test_fg2_runset PRIVATE singlet_fq Threads::Threads)
+target_compile_options(test_fg2_runset PRIVATE -msse4.2)
 
 # ─── Pipeline binary (optional) ──────────────────────────────────────────────
 if(SINGLET_BUILD_PIPELINE)

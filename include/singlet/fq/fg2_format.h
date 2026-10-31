@@ -6,6 +6,7 @@
 // File:   FileHeader (4096) | read chunks (each 4096-aligned) | sequence blocks (each 4096-aligned) | run table | index | Footer
 // Reads are in source order (run by run), NO barcode sort. A read carries ids, not text; text lives in the sequence table.
 #pragma once
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -46,7 +47,8 @@ enum CbStatus : uint8_t {
 
 // Read planes inside a read chunk
 enum ReadPlane { PL_CB = 0, PL_CBST = 1, PL_UMI = 2, PL_SEQ = 3, PL_LEN = 4, PL_Q = 5, PL_EXC = 6, PL_RAWCB = 7, NPLANE = 8 };
-//   PL_CB   u32[n]            whitelist line number (0-based) of the corrected barcode, or NO_CB
+//   PL_CB   u32[n]            index of the corrected barcode in the SORTED, DE-DUPLICATED whitelist (CbCorrector order: 2-bit values ascending, an entry with an N at
+//                             position 0 skipped, N elsewhere read as A), or NO_CB. For the 10x files this equals the 0-based line number only if the file is sorted.
 //   PL_CBST u8[n]             CbStatus
 //   PL_UMI  u32[n]            UMI, 2 bit/base, first base in the high bits, N coded as A (see PL_EXC)
 //   PL_SEQ  u32[n]            global sequence id = block * BLOCK_SEQS + index in block
@@ -57,7 +59,7 @@ enum ReadPlane { PL_CB = 0, PL_CBST = 1, PL_UMI = 2, PL_SEQ = 3, PL_LEN = 4, PL_
 //   PL_EXC  u32[n_exc]        sorted by read index: bits 0-14 index in chunk, 15-16 kind, 17-23 position. Kinds: UMI_N (the UMI word holds A at pos)
 //   PL_RAWCB u32[2 * n_rawcb]  one 8-byte entry for EVERY read whose barcode was not an exact whitelist hit (cbst low 3 bits != CBST_EXACT), sorted by read:
 //                             word  = the raw barcode as read, 2 bit/base, first base in the high bits, N coded as A (<= 16 nt)
-//                             meta  = bits 0-14 read index in chunk, bits 15-19 N position + 1 (0 = no N, 1..16 = that base, 31 = two or more N)
+//                             meta  = bits 0-14 read index in chunk, bits 15-30 N-base bitmask (bit j set = barcode base j was N; any number of N)
 //                             Needed so STAR's CellReads.stats (exact / corrected / no match) and the cell QC stay identical: cb/cbst give the
 //                             corrected barcode and the class, this gives what was actually sequenced (also for NO_CB reads, whose raw barcode
 //                             the old .1fq path kept in its dictionary-miss list).
@@ -151,6 +153,40 @@ static_assert(offsetof(FileHeader, wl_sha256) == 88 && offsetof(FileHeader, stat
 static_assert(sizeof(FileHeader) == 4096, "FileHeader");
 static_assert(sizeof(RunEntry) == 56, "RunEntry");
 static_assert(sizeof(IndexEntry) == 16, "IndexEntry");
+
+struct Sha256 {
+    uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+    uint64_t len = 0; uint8_t buf[64]; size_t nb = 0;
+    static uint32_t rr(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
+    void block(const uint8_t* p) {
+        static const uint32_t K[64] = {
+            0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+            0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+            0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+            0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2};
+        uint32_t w[64];
+        for (int i = 0; i < 16; i++) w[i] = (uint32_t)p[4*i] << 24 | (uint32_t)p[4*i+1] << 16 | (uint32_t)p[4*i+2] << 8 | p[4*i+3];
+        for (int i = 16; i < 64; i++) { uint32_t s0 = rr(w[i-15],7)^rr(w[i-15],18)^(w[i-15]>>3), s1 = rr(w[i-2],17)^rr(w[i-2],19)^(w[i-2]>>10); w[i] = w[i-16]+s0+w[i-7]+s1; }
+        uint32_t a=h[0],b=h[1],c=h[2],d=h[3],e=h[4],f=h[5],g=h[6],hh=h[7];
+        for (int i = 0; i < 64; i++) {
+            uint32_t S1 = rr(e,6)^rr(e,11)^rr(e,25), ch = (e&f)^(~e&g), t1 = hh+S1+ch+K[i]+w[i];
+            uint32_t S0 = rr(a,2)^rr(a,13)^rr(a,22), mj = (a&b)^(a&c)^(b&c), t2 = S0+mj;
+            hh=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
+        }
+        h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e; h[5]+=f; h[6]+=g; h[7]+=hh;
+    }
+    void update(const uint8_t* p, size_t n) {
+        len += n;
+        while (n) { size_t k = std::min(n, 64 - nb); std::memcpy(buf + nb, p, k); nb += k; p += k; n -= k; if (nb == 64) { block(buf); nb = 0; } }
+    }
+    void finish(uint8_t out[32]) {
+        uint64_t bits = len * 8; uint8_t pad = 0x80; update(&pad, 1); uint8_t z = 0;
+        while (nb != 56) update(&z, 1);
+        uint8_t l[8]; for (int i = 0; i < 8; i++) l[i] = (uint8_t)(bits >> (56 - 8 * i)); update(l, 8);
+        for (int i = 0; i < 8; i++) { out[4*i] = h[i] >> 24; out[4*i+1] = h[i] >> 16; out[4*i+2] = h[i] >> 8; out[4*i+3] = h[i]; }
+    }
+};
+
 
 // CRC32C (Castagnoli) with the SSE4.2 instruction (as v1).
 static inline uint32_t crc32c(const void* data, size_t n, uint32_t crc = 0) {
