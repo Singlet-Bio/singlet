@@ -80,7 +80,7 @@ def main():
         prod = np.log1p(np.asarray(X.sum(1)).ravel())
     D.stacker(), D.atlas()
     rep = []
-    sizes = [int(x) for x in a.sizes.split(",") if x] + [X.shape[0]]
+    sizes = [int(x) for x in a.sizes.replace("+", ",").split(",") if x] + [X.shape[0]]
     rng = np.random.default_rng(0)
     for n in sizes:
         idx = np.sort(rng.choice(X.shape[0], n, replace=False)) if n < X.shape[0] else np.arange(X.shape[0])
