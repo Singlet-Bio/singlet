@@ -132,7 +132,12 @@ def _row_names_for(csc: Csc, rel: str, lctx: LegacyContext, opts: Options):
     """-> (codec ref, meta) for the rows of a matrix: vocabulary pack when the names equal it byte for byte, else inline."""
     if csc.rownames is None:
         return "none", "none"
-    kind = {"exon_counts.1pz": "exon", "intron_counts.1pz": "intron"}.get(rel)
+    kind = {
+        "exon_counts.1pz": "exon",
+        "intron_counts.1pz": "intron",
+        "exon_reads.1pz": "exon",  # the reads matrices have the rows of the counts matrices
+        "intron_reads.1pz": "intron",
+    }.get(rel)
     if kind and csc.m:
         pk = lctx._vocab_pack(kind)
         if pk is not None and pk.matches(csc.rownames):
