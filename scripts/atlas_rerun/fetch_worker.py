@@ -218,7 +218,7 @@ def decode_run(binary, sra, out, quality, vdb_threads, env, log_path):
     return rc, time.time() - t0
 
 
-def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=600):
+def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=600, keep_json=None):
     """Screen the first `reads` pairs of a run BEFORE fetching it: VDB-streams just that head (`singlet download --max-reads`), then
     `screen-runs`. -> ('keep'|'non10x'|'no_gex'|'unknown', seconds). 'unknown' (stream failed/timed out) means: fetch and let the full-run
     screen decide. SRA files are columnar, so a byte range cannot give the head; this costs one short VDB stream, about the price
@@ -235,12 +235,38 @@ def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=6
     if rc != 0 or not os.path.exists(out):
         return "unknown", time.time() - t0
     rc = subprocess.run([binary, "screen-runs", "--json", out + ".json", out], env=env, capture_output=True).returncode
+    if keep_json and rc == 0 and os.path.exists(out + ".json"):
+        shutil.copyfile(out + ".json", keep_json)   # the .1fg2 route has no full .1fq to screen: this 1 M-pair screen is the run's screen.json
     for f in (out, out + ".json"):
         try:
             os.remove(f)
         except OSError:
             pass
     return ("no_gex" if rc == 6 else "keep" if rc == 0 else "unknown"), time.time() - t0
+
+
+def stage_run(binary, sra, out, quality, vdb_threads, whitelist_dir, env, scr, part=False):
+    """`singlet download <local .sra> --stage-out OUT`: SRA -> .1fg2 in one pass (no .1fq, no barcode sort). -> (rc, seconds, report dict|None).
+    rc 2 = the non-10x gate (a verdict); rc 6 = protocol not stageable (no universal R1 whitelist): the caller falls back to the .1fq path."""
+    cmd = [binary, "download", sra, "--quality", quality, "--vdb-threads", str(vdb_threads), "--no-profile", "--stage-out", out,
+           "-o", os.path.join(scr, "unused.1fq")] + (["--stage-part"] if part else []) + (["--whitelist-dir", whitelist_dir] if whitelist_dir else [])
+    t0 = time.time()
+    p = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    rep = None
+    if p.returncode == 0 and part:
+        import struct
+        with open(out, "rb") as fh:   # PartHdr (src/stage/stage_encoder.h): n_stored, n_in at byte 16
+            n_stored, n_in = struct.unpack("<QQ", fh.read(32)[16:32])
+        rep = {"n_reads": n_stored, "n_in": n_in}
+    elif p.returncode == 0:
+        try:
+            rep = json.loads(p.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            rep = None
+    elif p.returncode not in (2, 6):
+        with open(os.path.join(scr, "decode.log"), "a") as fh:
+            fh.write(p.stderr[-2000:])
+    return p.returncode, time.time() - t0, rep
 
 
 def pairs_in(binary, onefq, env):
@@ -263,11 +289,12 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
     t_start = time.time()
     ru0 = resource.getrusage(resource.RUSAGE_CHILDREN) if resource else None
     runs_info, raw_total = [], 0
+    fmt, staged_files, parts, fallback_1fq = "1fq", [], [], False
     try:
         if a.head_screen:
             verdicts = {}
             for r in item["runs"]:
-                verdicts[r], hs = head_screen(binary, r, scr, env)
+                verdicts[r], hs = head_screen(binary, r, scr, env, keep_json=os.path.join(scr, "head_screen.json") if a.format == "1fg2" else None)
                 Q.heartbeat(claim)
                 log("[head] %s %s %.0f s" % (r, verdicts[r], hs))
             keep_runs = [r for r in item["runs"] if verdicts[r] in ("keep", "unknown")]
@@ -286,20 +313,68 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
                     a.limiter.set_active(False)  # decoding: this worker's share goes to the others
             Q.heartbeat(claim)
             out = os.path.join(inc, r + ".1fq")
-            rc, dsec = decode_run(binary, sra, out, a.quality, a.decode_threads, env, os.path.join(scr, "decode.log"))
+            rc, dsec, staged = None, 0.0, False
+            if a.format == "1fg2" and not fallback_1fq:
+                # SRA -> .1fg2 directly. A single-run sample goes straight to sample.1fg2; the runs of a multi-run sample become parts that are merged below into ONE file
+                # (one exact-barcode histogram, one distinct-sequence table: the pooled R11 correction of the .1fq route)
+                multi = len(item["runs"]) > 1
+                g = os.path.join(scr, "part_" + r) if multi else os.path.join(inc, "sample.1fg2")
+                rc, dsec, rep = stage_run(binary, sra, g, a.quality, a.decode_threads, a.whitelist_dir, env, scr, part=multi)
+                if rc == 0 and rep:
+                    staged, fmt = True, "1fg2"
+                    info.update(pairs=rep["n_reads"])
+                    if multi:
+                        parts.append(g)
+                    else:
+                        staged_files = ["sample.1fg2"]
+                        info.update(staged_bytes=os.path.getsize(g), n_unique=rep["n_unique"], max_len=rep["max_len"])
+                elif rc == 0:
+                    raise FetchError("stage encoder gave no report for %s" % r)
+                elif rc == 6:
+                    if parts:
+                        raise FetchError("runs of one sample disagree on stageability (protocol): %s" % r)
+                    log("[stage] %s: protocol not stageable, .1fq route" % r)
+                    fallback_1fq, rc = True, None
+                    try:
+                        os.remove(g)
+                    except OSError:
+                        pass
+            if rc is None:
+                rc, dsec = decode_run(binary, sra, out, a.quality, a.decode_threads, env, os.path.join(scr, "decode.log"))
             os.remove(sra)
             if rc not in (0, 2):  # 2 = the download's non-10x gate: a verdict, not an error; the run is simply not staged
                 raise FetchError("decode_failed rc=%s %s" % (rc, open(os.path.join(scr, "decode.log")).read()[-400:]))
             info.update(decode_s=round(dsec, 1), gated=(rc == 2))
             if rc == 0:
-                info.update(staged_bytes=os.path.getsize(out), pairs=pairs_in(binary, out, env))
+                if not staged:
+                    info.update(staged_bytes=os.path.getsize(out), pairs=pairs_in(binary, out, env))
                 raw_total += info["bytes"]
             runs_info.append(info)
+        if parts:   # multi-run sample, parts -> one pooled .1fg2
+            g = os.path.join(inc, "sample.1fg2")
+            t_m = time.time()
+            pm = subprocess.run([a.stage_bin or os.path.join(os.path.dirname(binary), "singlet-stage"), "--whitelist-dir", a.whitelist_dir or os.environ.get("SINGLET_WHITELIST_DIR", ""),
+                                 "--scratch", scr, "-o", g, "--merge-parts"] + parts, env=env, capture_output=True, text=True)
+            if pm.returncode != 0:
+                raise FetchError("merge of the run parts failed rc=%s %s" % (pm.returncode, pm.stderr[-300:]))
+            rep = json.loads(pm.stdout.strip().splitlines()[-1])
+            staged_files = ["sample.1fg2"]
+            for x in runs_info:
+                if not x["gated"]:
+                    x.update(staged_bytes=0, merge_s=round(time.time() - t_m, 1))
+            first = next(x for x in runs_info if not x["gated"])
+            first.update(staged_bytes=os.path.getsize(g), n_unique=rep["n_unique"], max_len=rep["max_len"])
+            for pth in parts:
+                os.remove(pth)
         kept = [x["run"] for x in runs_info if not x["gated"]]
         if not kept:
             Q.give_back_todo(stage, gsm, claim, retry=False)
             return "parked_non10x"
-        if a.screen:
+        if fmt == "1fg2":
+            hj = os.path.join(scr, "head_screen.json")
+            if os.path.exists(hj):
+                shutil.copyfile(hj, os.path.join(inc, "screen.json"))
+        elif a.screen:
             rc = subprocess.run([binary, "screen-runs", "--json", os.path.join(inc, "screen.json")] +
                                 [os.path.join(inc, r + ".1fq") for r in kept], env=env, capture_output=True).returncode
             if rc == 6:
@@ -310,6 +385,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
         child_cpu = ((ru1.ru_utime - ru0.ru_utime) + (ru1.ru_stime - ru0.ru_stime)) if resource else 0.0  # decode + screen (the fetch threads are ours, small)
         nbytes = Q.publish(stage, gsm, inc, claim, {
             "gse": item.get("gse"), "organism": item.get("organism"), "runs": kept, "run_info": runs_info, "pairs": pairs,
+            "format": fmt, "files": staged_files,
             "raw_bytes": raw_total, "decode_cpu_s": round(child_cpu, 1),
             "decode_core_s_per_Mpair": round(child_cpu / (pairs / 1e6), 2) if pairs else None, "fetch_total_s": round(time.time() - t_start, 1), "quality": a.quality,
             "bytes_per_pair": round(sum(x.get("staged_bytes", 0) for x in runs_info) / pairs, 2) if pairs else None,
@@ -350,6 +426,9 @@ def main():
     ap.add_argument("--whitelist-dir", default=os.environ.get("SINGLET_WHITELIST_DIR"))
     ap.add_argument("--head-screen", action="store_true",
                     help="screen 1 M pairs of every run by a short VDB stream BEFORE downloading it (drops non-10x / non-GEX runs at ~no cost)")
+    ap.add_argument("--format", choices=("1fq", "1fg2"), default="1fq",
+                    help="staged form: 1fq (barcode-sorted .1fq per run) or 1fg2 (src/stage/fmt2.h, single-run samples straight from the SRA; others fall back to 1fq)")
+    ap.add_argument("--stage-bin", help="singlet-stage binary for merging the parts of a multi-run sample (default: next to --binary)")
     ap.add_argument("--allow-lite", action="store_true", help="also accept SRA Lite (simplified qualities) when no full .sra is reachable")
     ap.add_argument("--screen", action="store_true", default=True)
     ap.add_argument("--idle-exit-min", type=float, default=30.0)

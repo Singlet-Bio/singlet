@@ -59,7 +59,10 @@ def singlet_cmd(a, ccfg, cfg, claim, man, out_tmp):
     binary = ccfg.get("binary") or cfg["binary"]["path"]
     fq = [os.path.join(claim, r + ".1fq") for r in man["runs"]]
     screen = os.path.join(claim, "screen.json")
-    reads = [fq[0]] if len(fq) == 1 and not os.path.exists(screen) else ["--runs-dir", claim]
+    if man.get("format") == "1fg2":
+        reads = [os.path.join(claim, man["files"][0])]   # one pooled .1fg2; the engine reads it by magic (S8's reader)
+    else:
+        reads = [fq[0]] if len(fq) == 1 and not os.path.exists(screen) else ["--runs-dir", claim]
     cmd = ["/usr/bin/time", "-v", "-o", os.path.join(out_tmp, "time.txt"), binary] + reads
     cmd += ["--ref-base", ccfg["ref_base"]]
     ref = cfg.get("references", {}).get(man.get("organism") or "", cfg.get("references", {}).get("*", "auto"))
@@ -222,6 +225,7 @@ def main():
     ap.add_argument("--publish", nargs="+", default=["dry-run"], help="dry-run | none | s1-dry | s1 | a command with {gsm} {gse} {out}")
     ap.add_argument("--s1-repo", help="built copy of the s1 code (compiled singlet._pz/_pz2) for s1_producer.py, e.g. $WORK/jobs/s6/s1repo")
     ap.add_argument("--s1-runtime", help="in_runtime.sh to source: the producer then runs inside the runtime image + venv (Clipper)")
+    ap.add_argument("--accept-1fg2", action="store_true", help="also claim samples staged as .1fg2 (engine with the .1fg2 reader); .1fq samples are always accepted")
     ap.add_argument("--extra", nargs="*", default=[])
     a = ap.parse_args()
     cfg = C.load_config(a.config)
@@ -236,6 +240,8 @@ def main():
 
     def accept(m):
         p = m.get("pairs", 0)
+        if m.get("format") == "1fg2" and not a.accept_1fg2:
+            return False   # the engine's .1fg2 reader is S8's; until its identity gate passes, such samples wait for a worker started with --accept-1fg2
         return (not a.min_pairs or p >= a.min_pairs) and (not a.max_pairs or p <= a.max_pairs)
 
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
