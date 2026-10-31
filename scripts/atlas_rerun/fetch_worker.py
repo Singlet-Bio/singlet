@@ -20,7 +20,10 @@ import http.client
 import json
 import os
 import re
-import resource
+try:
+    import resource
+except ImportError:  # not POSIX: the fetcher only runs on Linux; tests import the module
+    resource = None
 import shutil
 import ssl
 import subprocess
@@ -31,6 +34,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ratecap  # noqa: E402
 import stagequeue as Q  # noqa: E402
 
 BLOCK = 8 << 20
@@ -41,9 +45,14 @@ class FetchError(Exception):
     pass
 
 
-def sdl_locations(acc, tries=4):
-    """-> list of candidate sources, best first: [{'kind': 'lite'|'full', 'service', 'url', 'size', 'md5'}]. The S3/GCS Lite copies
-    are requester-pays (anonymous GET is refused), so only NCBI's own Lite host and the public-open-data full .sra are used."""
+Preempted = Q.Preempted
+
+
+def sdl_locations(acc, allow_lite=False, tries=4):
+    """-> candidate sources, best first: [{'kind': 'full'|'lite', 'service', 'url', 'size', 'md5'}].
+    Order (decision 2026-10-30: the SNP/mtDNA callers need real qualities): full-quality `.sra` on public S3 (`sra-pub-run-odp`), then a
+    full `.sra` on NCBI's own host if the SDL lists one, then (only with allow_lite) SRA Lite on NCBI's host. The S3/GCS Lite copies
+    are requester-pays and never used."""
     err = None
     for i in range(tries):
         try:
@@ -61,19 +70,27 @@ def sdl_locations(acc, tries=4):
     for f in res.get("files", []):
         lite = f["name"].endswith(".lite")
         for loc in f.get("locations", []):
-            if (lite and loc["service"] == "ncbi") or (not lite and loc["service"] == "s3" and "sra-pub-run-odp" in loc["link"]):
-                out.append({"kind": "lite" if lite else "full", "service": loc["service"], "url": loc["link"], "size": int(f["size"]),
-                            "md5": f.get("md5")})
-    out.sort(key=lambda x: x["kind"] != "lite")
+            svc, link = loc["service"], loc["link"]
+            if not lite and svc == "s3" and "sra-pub-run-odp" in link:
+                rank = 0
+            elif not lite and svc == "ncbi":
+                rank = 1
+            elif lite and svc == "ncbi" and allow_lite:
+                rank = 2
+            else:
+                continue
+            out.append((rank, {"kind": "lite" if lite else "full", "service": svc, "url": link, "size": int(f["size"]), "md5": f.get("md5")}))
+    out.sort(key=lambda x: x[0])
     if not out:
         raise FetchError("no_open_location")
-    return out
+    return [x[1] for x in out]
 
 
 class RangeFetcher:
     """N threads, each with its own keep-alive HTTPS connection, take 8 MiB blocks off a shared counter and pwrite them."""
 
-    def __init__(self, url, size, path, streams, md5=None, retries=6):
+    def __init__(self, url, size, path, streams, md5=None, retries=6, limiter=None):
+        self.limiter = limiter
         self.url, self.size, self.path, self.streams, self.retries = url, size, path, streams, retries
         self.nblocks = (size + BLOCK - 1) // BLOCK
         self.next, self.lock = 0, threading.Lock()
@@ -102,6 +119,8 @@ class RangeFetcher:
             n = r.readinto(mv[: min(len(buf), b - off + 1)])
             if not n:
                 raise FetchError("short_read")
+            if self.limiter:
+                self.limiter.acquire(n)
             os.pwrite(fd, mv[:n], off)
             off += n
         with self.lock:
@@ -164,14 +183,14 @@ class RangeFetcher:
         return self.md5.hexdigest() if self.md5 else None
 
 
-def fetch_run(acc, dest_dir, streams, log):
+def fetch_run(acc, dest_dir, streams, log, limiter=None, allow_lite=False):
     """Download one run to dest_dir (node-local). -> (path, info). Falls back from Lite to the full .sra on any failure."""
     last = None
-    for loc in sdl_locations(acc):
+    for loc in sdl_locations(acc, allow_lite):
         path = os.path.join(dest_dir, acc + (".sralite" if loc["kind"] == "lite" else ".sra"))
         t0 = time.time()
         try:
-            got = RangeFetcher(loc["url"], loc["size"], path, streams, md5=loc.get("md5")).run()
+            got = RangeFetcher(loc["url"], loc["size"], path, streams, md5=loc.get("md5"), limiter=limiter).run()
             if loc.get("md5") and got != loc["md5"]:
                 raise FetchError("md5_mismatch %s != %s" % (got, loc["md5"]))
             if os.path.getsize(path) != loc["size"]:
@@ -217,12 +236,18 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
     shutil.rmtree(scr, ignore_errors=True)
     os.makedirs(scr)
     t_start = time.time()
-    ru0 = resource.getrusage(resource.RUSAGE_CHILDREN)
+    ru0 = resource.getrusage(resource.RUSAGE_CHILDREN) if resource else None
     runs_info, raw_total = [], 0
     try:
         for r in item["runs"]:
             Q.heartbeat(claim)
-            sra, info = fetch_run(r, scr, a.streams, log)
+            if a.limiter:
+                a.limiter.set_active(True)
+            try:
+                sra, info = fetch_run(r, scr, a.streams, log, a.limiter, a.allow_lite)
+            finally:
+                if a.limiter:
+                    a.limiter.set_active(False)  # decoding: this worker's share goes to the others
             Q.heartbeat(claim)
             out = os.path.join(inc, r + ".1fq")
             rc, dsec = decode_run(binary, sra, out, a.quality, a.decode_threads, env, os.path.join(scr, "decode.log"))
@@ -245,8 +270,8 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
                 Q.give_back_todo(stage, gsm, claim, retry=False)
                 return "parked_no_gex"
         pairs = sum(x.get("pairs", 0) for x in runs_info)
-        ru1 = resource.getrusage(resource.RUSAGE_CHILDREN)
-        child_cpu = (ru1.ru_utime - ru0.ru_utime) + (ru1.ru_stime - ru0.ru_stime)  # decode + screen (the fetch threads are ours, small)
+        ru1 = resource.getrusage(resource.RUSAGE_CHILDREN) if resource else None
+        child_cpu = ((ru1.ru_utime - ru0.ru_utime) + (ru1.ru_stime - ru0.ru_stime)) if resource else 0.0  # decode + screen (the fetch threads are ours, small)
         nbytes = Q.publish(stage, gsm, inc, claim, {
             "gse": item.get("gse"), "organism": item.get("organism"), "runs": kept, "run_info": runs_info, "pairs": pairs,
             "raw_bytes": raw_total, "decode_cpu_s": round(child_cpu, 1),
@@ -256,6 +281,11 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
         log("[stage] %s ready: %.2f GB staged from %.2f GB raw, %d pairs, %.1f B/pair, decode+screen %.2f core-s/M, %.0f s total" % (
             gsm, nbytes / 1e9, raw_total / 1e9, pairs, nbytes / max(pairs, 1), child_cpu / max(pairs / 1e6, 1e-9), time.time() - t_start))
         return "ready"
+    except Preempted:
+        shutil.rmtree(inc, ignore_errors=True)
+        Q.give_back_todo(stage, gsm, claim, retry=True)  # not a failure: the item goes back untouched, attempts not counted
+        log("[fetch] %s preempted: item returned to todo" % gsm)
+        raise
     except Exception as e:  # noqa: BLE001
         shutil.rmtree(inc, ignore_errors=True)
         log("[fetch] %s FAILED: %r" % (gsm, e))
@@ -282,6 +312,7 @@ def main():
     ap.add_argument("--cluster", default="clipper")
     ap.add_argument("--binary", default=os.environ.get("SINGLET_BIN", "singlet"))
     ap.add_argument("--whitelist-dir", default=os.environ.get("SINGLET_WHITELIST_DIR"))
+    ap.add_argument("--allow-lite", action="store_true", help="also accept SRA Lite (simplified qualities) when no full .sra is reachable")
     ap.add_argument("--screen", action="store_true", default=True)
     ap.add_argument("--idle-exit-min", type=float, default=30.0)
     ap.add_argument("--max-samples", type=int, default=0)
@@ -301,6 +332,10 @@ def main():
 
     Q.init(a.stage)
     Q.sweep_scratch(a.scratch, "s9-fetch-", log)
+    a.limiter = ratecap.SharedRate(a.stage, "%s-%d" % (os.uname().nodename.split(".")[0], os.getpid()))
+    log("[fetch] global rate cap %.0f MB/s (stage.json rate_cap_MBps), shared by all fetch workers" % a.limiter.cap)
+
+    Q.install_sigterm()
     cap, idle_since, done = int(a.cap_tb * 1e12), time.time(), 0
     while True:
         Q.reap(a.stage, log=log)
@@ -321,4 +356,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Preempted:
+        print("[fetch] SIGTERM: exiting (claim already returned)", flush=True)
+        sys.exit(143)

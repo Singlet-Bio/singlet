@@ -92,22 +92,100 @@ def test_backpressure_counts_ready_claimed_incoming(tmp_path):
     assert c is not None
 
 
+def J(run=0, pend=0, ages=()):
+    return {"run": run, "pend": pend, "ages": list(ages)}
+
+
 def test_launcher_policy():
-    p = dict(L.DEFAULTS, gpu_Mpairs_per_s=40, gpu_start_h=1.0, max_gpu=1, cpu_overflow_h=3.0, cpu_cores=16, cpu_Mpairs_per_core_s=0.06,
-             cpu_job_h=3.9, max_cpu=8, fetch_jobs=4)
-    none = {"gpu": 0, "cpu": 0, "fetch": 0}
+    p = dict(L.DEFAULTS, gpu_Mpairs_per_s=10, gpu_start_h=1.0, max_h100=6, max_v100=4, v100_rel=0.3, overflow_h=3.0, fallback_wait_h=1.0,
+             cpu_cores=16, cpu_Mpairs_per_core_s=0.025, cpu_job_h=3.9, max_cpu=8, fetch_jobs=6)
+    none = {"h100": J(), "v100": J(), "cpu": J(), "fetch": 0}
+    H = 10e6 * 3600  # pairs of one H100-hour
     bl = lambda pairs, todo=0, fetching=0: dict(samples=1, pairs=pairs, bytes=0, claimed=0, todo=todo, fetching=fetching)  # noqa: E731
-    # 0.5 GPU-h waiting: no start (a GPU job would idle at the tail)
-    assert L.plan(p, bl(0.5 * 40e6 * 3600), none)["gpu"] == 0
-    # 1.2 GPU-h: start the one GPU worker; no CPU overflow
-    d = L.plan(p, bl(1.2 * 40e6 * 3600), none)
-    assert d["gpu"] == 1 and d["cpu"] == 0
-    # 10 GPU-h waiting and a GPU already running: overflow beyond 3 h goes to CPU workers
-    d = L.plan(p, bl(10 * 40e6 * 3600), dict(gpu=1, cpu=0, fetch=0))
-    assert d["gpu"] == 0 and 1 <= d["cpu"] <= 8
+    # under X: nothing (a GPU job would idle at the tail)
+    assert L.plan(p, bl(0.5 * H), none)["h100"] == 0
+    # 2.5 H100-hours: two workers, each with >= X hours; no fallback pools
+    d = L.plan(p, bl(2.5 * H), none)
+    assert (d["h100"], d["v100"], d["cpu"]) == (2, 0, 0)
+    # already two pending (young): nothing more
+    assert L.plan(p, bl(2.5 * H), dict(none, h100=J(pend=2, ages=[60, 90])))["h100"] == 0
+    # capped at max_h100 (3 nodes x 2 GPUs)
+    assert L.plan(p, bl(50 * H), none)["h100"] == 6
+    # scavenger starvation: both pending jobs have waited > 1 h and 30 h of work is waiting -> V100S then CPU take the excess
+    starved = dict(none, h100=J(pend=6, ages=[7200] * 6))
+    d = L.plan(p, bl(30 * H), starved)
+    assert d["h100"] == 0 and d["v100"] == 4 and d["cpu"] >= 1
+    # the same backlog with young pending jobs: wait, no fallback (CPU overflow only if the H100s cannot clear it in overflow_h)
+    young = dict(none, h100=J(pend=6, ages=[60] * 6))
+    d = L.plan(p, bl(30 * H), young)
+    assert d["v100"] == 0
     # fetch workers topped up to fetch_jobs while there is todo
-    assert L.plan(p, bl(0, todo=100), dict(gpu=0, cpu=0, fetch=1))["fetch"] == 3
+    assert L.plan(p, bl(0, todo=100), dict(none, fetch=2))["fetch"] == 4
     assert L.plan(p, bl(0, todo=0), none)["fetch"] == 0
+
+
+def test_preempted_claim_returns_with_attempt_refunded(tmp_path):
+    s = Q.init(str(tmp_path / "stage"))
+    todo(s, "GSM1")
+    stage_sample(s, "GSM1")
+    g, claim, man = Q.claim_ready(s, "w")
+    assert man["attempts"] == 1
+    Q.release(s, g, claim, refund=True)  # what drain_worker does on SIGTERM
+    g, claim, man = Q.claim_ready(s, "w2")
+    assert man["attempts"] == 1  # preemption does not eat the 3 attempts
+
+
+def test_global_rate_cap_is_shared(tmp_path):
+    import ratecap
+    stage = str(tmp_path / "stage")
+    os.makedirs(stage)
+    ratecap.write_cap_mbps(stage, 100)
+    a, b = ratecap.SharedRate(stage, "a-1"), ratecap.SharedRate(stage, "b-2")
+    a.set_active(True)
+    b.set_active(True)
+    a._tick()
+    assert abs(a.share_bps - 50e6) < 1e6 and abs(b.share_bps - 50e6) < 1e6  # two active workers split the cap
+    b.set_active(False)  # b is decoding: a gets it all
+    a._tick()
+    assert abs(a.share_bps - 100e6) < 1e6
+    ratecap.write_cap_mbps(stage, 900)  # raising the cap is a config edit
+    a._tick()
+    assert abs(a.share_bps - 900e6) < 1e6
+    # the bucket paces: 20 MB at 900 MB/s with 0.25 s credit finishes fast; at 10 MB/s it takes ~2 s
+    ratecap.write_cap_mbps(stage, 10)
+    a._tick()
+    t0 = time.time()
+    for _ in range(20):
+        a.acquire(1_000_000)
+    assert 1.5 < time.time() - t0 < 3.5
+    a.close()
+    b.close()
+
+
+def test_sdl_prefers_full_s3_and_skips_lite_by_default(monkeypatch):
+    import fetch_worker as F
+    doc = {"result": [{"files": [
+        {"name": "SRRX", "size": "100", "md5": "m1", "locations": [{"service": "s3", "link": "https://sra-pub-run-odp.s3.amazonaws.com/sra/SRRX/SRRX"}]},
+        {"name": "SRRX.lite", "size": "60", "md5": "m2", "locations": [
+            {"service": "ncbi", "link": "https://sra-downloadb.be-md.ncbi.nlm.nih.gov/x.lite.1"},
+            {"service": "s3", "link": "https://sra-pub-zq-3.s3.amazonaws.com/SRRX/SRRX.lite.1"},
+            {"service": "gs", "link": "https://storage.googleapis.com/sra-pub-zq-100/SRRX/SRRX.lite.1"}]}]}]}
+
+    class R:
+        def read(self, *a):
+            return json.dumps(doc).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    monkeypatch.setattr(F.urllib.request, "urlopen", lambda *a, **k: R())
+    full_only = F.sdl_locations("SRRX")
+    assert [(x["kind"], x["service"]) for x in full_only] == [("full", "s3")]
+    with_lite = F.sdl_locations("SRRX", allow_lite=True)
+    assert [(x["kind"], x["service"]) for x in with_lite] == [("full", "s3"), ("lite", "ncbi")]  # requester-pays copies never listed
 
 
 @pytest.mark.skipif(not hasattr(os, "pwrite"), reason="pwrite/pread are POSIX-only (the fetcher runs on Linux)")

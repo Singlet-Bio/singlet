@@ -24,8 +24,20 @@ import shutil
 import socket
 import time
 
-HB_STALE_S = int(os.environ.get("S9_HB_STALE_S", 900))  # tests shorten it
+HB_STALE_S = int(os.environ.get("S9_HB_STALE_S", 300))  # tests shorten it
 MAX_ATTEMPTS = 3
+class Preempted(BaseException):
+    """Raised by the SIGTERM handler of a worker (Slurm preemption or time limit). BaseException so no `except Exception` swallows it."""
+
+
+def install_sigterm():
+    import signal
+
+    def _term(*_):
+        raise Preempted()
+    signal.signal(signal.SIGTERM, _term)
+
+
 DIRS = ("todo", "fetching", "incoming", "ready", "claimed", "failed", "deleting")
 
 
@@ -192,9 +204,14 @@ def finish(stage, gsm, claim_dir):
     shutil.rmtree(gone, ignore_errors=True)
 
 
-def release(stage, gsm, claim_dir, failed=False):
-    """Hand a claim back to ready/ (e.g. worker is shutting down) or to failed/."""
+def release(stage, gsm, claim_dir, failed=False, refund=False):
+    """Hand a claim back to ready/ (e.g. worker is shutting down) or to failed/. `refund`: the claim was lost to preemption, not to a
+    failure, so it does not count as an attempt."""
     man = json.load(open(os.path.join(claim_dir, "manifest.json")))
+    if refund:
+        man["attempts"] = max(0, man.get("attempts", 1) - 1)
+        with open(os.path.join(claim_dir, "manifest.json"), "w") as f:
+            json.dump(man, f)
     dst = os.path.join(stage, "failed" if failed or man.get("attempts", 0) >= MAX_ATTEMPTS else "ready",
                        gsm if not failed and man.get("attempts", 0) < MAX_ATTEMPTS else "%s.%d" % (gsm, man.get("attempts", 0)))
     try:

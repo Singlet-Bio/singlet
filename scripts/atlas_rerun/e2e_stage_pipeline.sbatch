@@ -65,6 +65,16 @@ for i in $(seq 1 120); do [ -n "$(ls $STAGE/claimed 2>/dev/null)" ] && break; sl
 sleep 8; kill -9 $APID; pkill -9 -P $APID 2>/dev/null; pkill -9 -f "mc99cpu .*--out-prefix $T" 2>/dev/null; pkill -9 -f "mc99cpu .*--out-prefix /tmp/s9-drain" 2>/dev/null
 echo "killed A holding: $(ls $STAGE/claimed)"
 sleep 50   # past the shortened heartbeat timeout
+echo "== drain worker C (preemption: SIGTERM while holding a claim; the claim must come back at once, attempts not counted)"
+python3 -u $SRC/drain_worker.py --stage $STAGE --engine cpu --config $T/config.json --threads 8 --idle-exit-min 1 > $T/drainC.log 2>&1 &
+CPID=$!
+for i in $(seq 1 60); do [ -n "$(ls $STAGE/claimed 2>/dev/null)" ] && break; sleep 2; done
+sleep 6; echo "C holds: $(ls $STAGE/claimed)"; kill -TERM $CPID; wait $CPID; echo "C exit $? ; claimed now: [$(ls $STAGE/claimed)] ready: $(ls $STAGE/ready | wc -l)"
+cat $T/drainC.log | grep -E "drain\]|SIGTERM" | cut -c1-200
+grep -h '"attempts"' $STAGE/ready/*/manifest.json 2>/dev/null | head -0
+python3 -c "
+import json,glob
+print('attempts of returned samples:', [json.load(open(f))['attempts'] for f in glob.glob('$STAGE/ready/*/manifest.json')])"
 echo "== drain worker B (reaps A's claim and drains the rest)"
 python3 -u $SRC/drain_worker.py --stage $STAGE --engine cpu --config $T/config.json --threads 8 --idle-exit-min 3 > $T/drainB.log 2>&1 &
 BPID=$!

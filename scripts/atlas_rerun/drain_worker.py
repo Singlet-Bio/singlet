@@ -137,6 +137,16 @@ def drain_one(a, cfg, ccfg, env, gsm, claim, man):
                wall_s=round(time.time() - t0, 1), pairs=man.get("pairs"), staged_bytes=man.get("bytes"), out_public_bytes=pub,
                publish=up, via="drain")
         return "done %.0fs %.3f Mpairs/s" % (compute_s, man.get("pairs", 0) / 1e6 / max(compute_s, 1e-9))
+    except Q.Preempted:
+        # Slurm preempted this job (scavenger) or hit the time limit: stop the child, give the sample back with the attempt refunded.
+        heart.stop.set()
+        p = proc.get("p")
+        if p and p.poll() is None:
+            p.kill()
+        if os.path.isdir(claim):
+            Q.release(a.stage, gsm, claim, refund=True)
+        C.emit(root, "requeued", gsm, attempt=man.get("attempts", 1), stage="compute", reason="preempted", via="drain")
+        raise
     except Exception as e:  # noqa: BLE001
         heart.stop.set()
         C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="exception", detail=repr(e))
@@ -171,6 +181,7 @@ def main():
     env["SINGLET_REF_BASE"] = ccfg["ref_base"]
     Q.init(a.stage)
     Q.sweep_scratch(a.scratch, "s9-drain-", log)
+    Q.install_sigterm()
 
     def accept(m):
         p = m.get("pairs", 0)
@@ -196,4 +207,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Q.Preempted:
+        log("[drain] SIGTERM: claim returned to ready/, exiting")
+        sys.exit(143)
