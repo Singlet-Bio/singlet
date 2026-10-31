@@ -92,6 +92,7 @@ class Params:
     umi_read_frac: float = (
         0.02  # and at least this share of the library's read-weighted median mates per molecule
     )
+    j_slack: int = 2  # the read vote of the J gene stands unless the junction's end matches another J this many nt better
     threads: int = 8
 
 
@@ -528,7 +529,7 @@ def _mode_per_group(g: np.ndarray, n: int, values: np.ndarray, weights: np.ndarr
     return out
 
 
-def _junction_j(ref: "Reference", chain: str, junction: str, voted: int) -> int:
+def _junction_j(ref: "Reference", chain: str, junction: str, voted: int, slack: int = 2) -> int:
     """J gene of a junction by its germline 3' end: the J whose sequence up to the end of its F/W118 codon matches the
     junction's end over the longest stretch (one mismatch allowed). The part of J left of F/W118 tells paralogs apart
     (IGHJ4 ...YFDYW vs IGHJ5 ...NWFDPW) where reads past F/W118 often do not. The read vote breaks ties."""
@@ -561,7 +562,7 @@ def _junction_j(ref: "Reference", chain: str, junction: str, voted: int) -> int:
                 if mm > 1:
                     break
             n += 1
-        if n >= best - 2:
+        if n >= best - slack:
             return voted
     return cands[0]
 
@@ -627,7 +628,7 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
             junc = "".join("ACGT"[b] for b in paths[p, : plen[p]])
             v, j, c, ju, nreads = cinfo[p]
             junc_ = "".join("ACGT"[b] for b in paths[p, : plen[p]])
-            j = _junction_j(ref, chname, junc_, j)
+            j = _junction_j(ref, chname, junc_, j, params.j_slack)
             if chname == "TRB" and j >= 0:
                 # V-D2-J2 joining deletes TRBC1 (it lies between the J1 and D2 clusters), so a TRBJ2 rearrangement
                 # can only use TRBC2; TRBC1 and TRBC2 differ at a few bases, so reads often cannot tell them apart
