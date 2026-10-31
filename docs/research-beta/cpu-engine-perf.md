@@ -99,6 +99,36 @@ Reading it:
 | 6 | `.1fq` pass 1 + dictionary | CPU | 0.5-0.6 core-s/M (1.5%) | small |
 | - | STAR seed search (36% of core-s), windows, stitch | S8 (`src/star/`) | - | out of scope for the CPU track |
 
+## 3b. Deep sample and memory (GSM7656149, 263 M read pairs, T=4, scavenger so non-exclusive, 2026-10-31)
+
+Build 07e71c2d (PR #112) = d9834b8a + indexed UMI pair loops + `[mem]` markers. All count outputs identical to d9834b8a. 47.6 core-s/M,
+4,145 s wall, 12,537 core-s (d9834b8a: 12,508 user+sys, 4,216 s; the 2% is within scavenger noise). Stage split: STAR map + serial pileup
+89.5% of core-s, non-host 1.5%, export 8.1% (663 s wall at ~1.5 cores).
+
+**Memory, from `/proc/<pid>/smaps_rollup` every 15 s (`scripts/cpu_perf/mem.py`):**
+
+| phase | t (s) | STAR process, anon GB | singlet main, anon GB | total anon GB |
+|---|---|---|---|---|
+| mapping (concurrent) | 0-2,930 | 22.9 (flat from the first minutes) | 1.4 -> 13.6 (grows with reads seen) | **36.6 at the end of mapping** |
+| STAR exits, pileup finalizes | 2,930-3,340 | 3-5 (exiting) | 13.6 -> **32.0 transient** -> 25.8 | <= 36 |
+| non-host screen | 3,340-3,470 | - | 26.9 anon **+ 24.3 file-backed** (mmap'd indices, `MinSketchIndex::load`) | RSS 51.3 |
+| export | 3,470-4,145 | - | 28.0 -> 29.4 | 29.4 |
+
+- **The 53.8 GB peak RSS is not a private-memory problem.** 24.3 GB of it is the non-host indices mapped read-only from a file; they are
+  page cache (reclaimable, shared between jobs on a node) but `smaps` counts them as Private_Clean when one process maps them. The anonymous
+  peak is **36.6 GB, at the end of mapping**.
+- **Of that, 22.9 GB (63%) is STAR's genome index**, read into anonymous memory by each STAR process, not shared (the earlier "17.8 GB
+  shared" premise does not hold in this setup). It is `src/star/`, S8's code. File-backed (mmap) or node-shared index would take the
+  anonymous peak to about 14 GB on this deep sample (about 6 GB on a shallow one).
+- singlet main's own state grows with depth (13.6 GB at 263 M reads, 5-7 GB on the 66-112 M samples) and then re-allocates during the
+  end-of-stream finalize (+18 GB transient, 13.6 -> 32.0, then 25.8 retained). That transient stays under the mapping-phase peak, so it
+  does not set the job size today, but it is the floor once the index is shared: then it is the peak.
+- **Job size on Anvil `shared` (about 2 GB per core, per the brief; not verified against Anvil):** anonymous peak 36.6 GB -> 19 billed
+  cores for a 4-thread job on the deep sample (shallow samples: 28-30 GB -> 14-15 cores). Nothing singlet-side changes this until the
+  index leaves anonymous memory.
+- **The finalize is a serial tail:** main grows 13.6 -> 32 GB between t=3,088 and 3,341 (about 250 s, 6% of wall) after STAR
+  has exited. That is step 3 (fill the tail) material, and where a memory cut inside singlet would come from.
+
 ## 4. Not measured
 
 Depth hazards (lever 4); a repeat on exclusive nodes; Anvil (no runs, by instruction); the private/shared split of the 30-37 GB RSS; the 5'
