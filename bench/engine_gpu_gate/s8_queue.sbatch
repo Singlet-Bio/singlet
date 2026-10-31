@@ -75,7 +75,7 @@ run_one() {   # gpu index config-dir slots threads timeline?
       done ) &
   fi
   wait $wp
-  local nr=$(grep -a -m1 -o "1fq: [0-9]* reads" $D/g${g}_$i.log | grep -o "[0-9]*")
+  local nr=$(grep -a -m1 -o "1fq: [0-9]* reads" $D/g${g}_$i.log | grep -o "[0-9][0-9][0-9][0-9]*" | tail -1)
   echo "$g $i $s0 $(date +%s.%N) $smp ${nr:-0}" >> $D/done.tsv
   grep -a -h "waited" $d/out/*Log.out 2>/dev/null | head -1 | sed "s/^/$g $i /" >> $D/waits.txt
   rm -rf $d
