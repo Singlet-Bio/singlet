@@ -19,6 +19,7 @@ if [ "${LIBSET:-dev}" = heldout ]; then
 else
   LIBS="pbmc2_t:TCR pbmc2_b:BCR pbmc10k_t:TCR pbmc10k_b:BCR gse145370_S133A:TCR gse145370_S158A:TCR"
 fi
+[ -n "${LIBSPEC:-}" ] && LIBS=$(echo $LIBSPEC | tr + " ")
 TAG=${TAG:-}
 for it in $LIBS; do
   lib=${it%%:*}; ch=${it##*:}
