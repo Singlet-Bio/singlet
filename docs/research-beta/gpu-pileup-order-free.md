@@ -95,3 +95,36 @@ rules-0 gate.
 Assumptions not separately tested: with several chrM-gene alignments in one read the CPU keeps the last one it saw (the stream's order, taken as the signature's
 alignment order); a read-level drop applies to the primary alignment only. Both are exercised only if such reads exist in these samples, and the counts are identical.
 Not implemented on the GPU: the other rule bits (the guard sends those runs to the CPU pileup).
+
+## alevin-fry USA labels, kFlank and the legacy exonic knee input on the GPU (#128 mirrored, 2026-10-31)
+
+Branch `fix/usa-labels-gpu` (stacked on #128, `fix/usa-labels`). The default intron rules are now 397 (389 + kFlank) and the molecule labels
+are alevin-fry USA (`DirectionalUmiStore::label_of`). `singlet.cpp` accepts kFlank on the GPU (`kGpuRules` = 1 | 4 | 8 | 128 | 256), so 397
+and its subsets (e.g. 389) run the GPU pileup; any other bit still declines before the stream.
+
+| CPU (#128) | GPU |
+|---|---|
+| U = any read with kReadIntron; S = no intron read and a read with kDiagSpliced (CIGAR N); A = the rest. exon = S + A, intron = U, ambiguous = A | `k_emit` (m6.cu). The stage-b payload has 4 flag bits (exon << 28 \| intron << 4 \| flags; bit 8 = a read with a CIGAR N), OR'd by `AggOp` and `k_comp_agg`. Reads-per-UMI go to the matrix the molecule counts in. The m6 host reference and `bad_flags` (3 derived bits) follow |
+| kDiagSpliced: `refine_read`'s `has_n` of the counted alignment; the mm_buffer keeps the primary's diag, a secondary (R7) or chrM-secondary assignment has none | `k_resolve` / `refine_primary` (pileup.cu): the counted primary's `AA.hasn` -> flags bit 8; R7 and chrM-secondary assignments carry none |
+| kFlank: an exon-touching intronic read with gene-body bases minus merged-exon bases <= 5 is exonic, after the kUnique / kNoSplicedIntron drops | `k_annotate` computes the same count over the M/=/X blocks from the gene body and its `exon_indices` (uploaded only with kFlank: `PileupInput::geneStart/geneEnd/geneExonOff/geneExons/exonStart/exonEnd`) into `AA.flank`; `k_resolve` applies it after the drops (flags 5, no intron) |
+| `legacy_exon_extra`: per barcode, U molecules with an exon-only read, added to `bc_totals` (knee input) | `k_emit` counts them per cell (`g_cell_mixed` -> `PileupOutput::cellMixed`); `gpu_pileup_apply` adds them to the engine's `mixed_bc_` |
+
+Gate (Clipper jobs: build 794658, runs 794660-794667, compare 794668 / 794679; binary 03a5fac5; CPU engine vs `--engine gpu` +
+`SINGLET_GPU_PILEUP=on`, same commit, 16 threads, H100 NVL for the GPU runs). `bench/expression_sota`-style comparison of sha256 over every file:
+
+| Sample, rules | Identical | Differ (none are counts) | GPU pileup ran |
+|---|---|---|---|
+| pbmc1k_v3, 397 | 106 | 8 | yes |
+| neuron1k_v3, 397 | 106 | 8 | yes |
+| nuclei2k_v2, 397 | 106 | 8 | yes |
+| pbmc1k_v3, 389 (`SINGLET_INTRON_RULES=389`) | 106 | 8 | yes |
+
+Identical include exon / intron / ambiguous counts and reads, `cell_calls.tsv`, `filtered_feature_bc_matrix`, the raw matrix. The 8 differing
+files are the known ones: `cr4_probe/*` STAR logs (4), `ambient_contamination.json` (`seconds`), `read_stats.tsv` (stage rows, timings),
+`summary.json` (timings, `memory_tier`, peak RSS) and `pileup_stats.json` (binary sha, `seconds`, `clip5p/probe/n_reads`, byte sizes of
+log files); the molecule counters (spliced / unspliced / ambiguous / legacy_double / dropped) and exon / intron hits are equal. No run printed
+`SINGLET_GPU_PILEUP ignored` or `[gpu_pileup] failed`. 397 and 389 differ on the CPU (pbmc1k_v3: spliced 3 257 815 vs 3 193 206, unspliced
+4 737 263 vs 4 828 881), so both rule sets were exercised.
+
+Cost, pbmc1k_v3 (one run each): CPU engine 7:28 wall, 2802 core-s, pileup stage 391 s; GPU engine + GPU pileup 4:02 wall, 1001 core-s,
+pileup stage 175 s, of which `pileupRun` 9.6 s (GPU kernels 2.2 s).

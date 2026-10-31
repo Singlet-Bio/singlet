@@ -5265,11 +5265,12 @@ int main(int argc, char* argv[]) {
     }
     config.cb_from_cr = (stream_unsorted == 1);
 #ifdef SINGLET_HAVE_ENGINE_GPU
-    // The GPU pileup mirrors the intron rules of PR #80 that are on by default (intron_rule::kUnique, kNoSplicedIntron, kUmiGeneCR, kMtPrefer; rules 389).
-    // The others (kContained, kFlank, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its counts would
-    // differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads).
+    // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer; rules 397)
+    // and any subset of them (e.g. 389, without kFlank), with the alevin-fry USA molecule labels and the legacy exonic knee input (legacy_exon_extra)
+    // as the CPU pileup. The others (kContained, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its
+    // counts would differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads). Decided here, before the stream.
     if (getenv("SINGLET_GPU_PILEUP")) {
-        constexpr uint32_t kGpuRules = 1u | 4u | 128u | 256u;
+        constexpr uint32_t kGpuRules = 1u | 4u | 8u | 128u | 256u;
         uint32_t rules = config.intron_rules;
         if (const char* r = getenv("SINGLET_INTRON_RULES")) rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
         if (rules & ~kGpuRules) {
