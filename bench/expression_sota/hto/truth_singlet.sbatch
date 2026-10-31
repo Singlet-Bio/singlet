@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=hto-singlet
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=short-bigmem
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=220G
 #SBATCH --time=03:59:00

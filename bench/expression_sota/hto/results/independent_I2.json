@@ -1,0 +1,275 @@
+{
+ "frozen": {
+  "frozen_on": "2026-10-31",
+  "reason": "PREREG section 6 decision rule: the nested-LODO BFF-style family (bffc) has a lower mean held-out macro F1 than `current` (0.411 vs 0.459) and does not improve BAL3 or the cell lines on the pre-registered metric, so `current` stays the Singlet caller. Nothing in include/singlet/pileup/hto_demux.h changes.",
+  "singlet_caller": "current",
+  "params": {
+   "confident_min": 0.5,
+   "doublet_nmads": 3.0,
+   "doublet_min": 1.0,
+   "pseudo": 5.0,
+   "mixture_positive": 0.5,
+   "min_cells": 20
+  },
+  "implementation": "bench/adt/hto_lodo.py::call_hashtags (numpy reference of HtoDemux::demux); header unchanged since origin/prod/campaign 9c5eb068",
+  "competitors": {
+   "hasheddrops": {
+    "confident_min": 2.0,
+    "doublet_min": 2.0,
+    "doublet_nmads": 3.0,
+    "confident_nmads": 3.0,
+    "pseudo": 5.0
+   },
+   "gmm": {
+    "posterior": 0.5
+   },
+   "htodemux": {
+    "quantile": 0.99,
+    "k_means": "k = tags + 1, 50 starts, random_state 0, CLR margin 1"
+   },
+   "bff_raw": {
+    "seed": 0,
+    "max_peaks": 4
+   },
+   "bff_cluster": {
+    "alpha": 0.05,
+    "beta": 0.05,
+    "tn_rule": "edge",
+    "t2_rule": "top",
+    "seed": 0
+   }
+  },
+  "code": "bench/expression_sota/hto/hto_callers.py at the commit that contains this file",
+  "exploratory_not_frozen": "bffc nested-LODO choices (results/lodo_bff.json) are reported as the frontier; they are not evaluated on I1 / I2 as Singlet's caller"
+ },
+ "I2": {
+  "info": {
+   "marker_cluster_line_QC_only": {
+    "0": "THP1",
+    "1": "K562",
+    "2": "KG1",
+    "3": "HEK"
+   },
+   "marker_score": [
+    [
+     -0.47,
+     -0.08,
+     -0.23,
+     -0.3
+    ],
+    [
+     1.36,
+     -0.19,
+     -0.33,
+     0.23
+    ],
+    [
+     -0.49,
+     0.6,
+     1.04,
+     -0.3
+    ],
+    [
+     -0.47,
+     -0.25,
+     -0.35,
+     0.3
+    ]
+   ],
+   "n_doublet": 610,
+   "n": 8018,
+   "cluster_line": {
+    "0": "KG1",
+    "1": "K562",
+    "2": "THP1",
+    "3": "HEK"
+   },
+   "cluster_by_top_tag_line": [
+    [
+     0.0,
+     0.0,
+     1784.0,
+     1.0
+    ],
+    [
+     6.0,
+     1694.0,
+     213.0,
+     4.0
+    ],
+    [
+     1.0,
+     0.0,
+     16.0,
+     1657.0
+    ],
+    [
+     1877.0,
+     2.0,
+     153.0,
+     0.0
+    ]
+   ],
+   "lines": [
+    "HEK",
+    "K562",
+    "KG1",
+    "THP1"
+   ],
+   "concordance_rna_line_vs_top_tag_line": 0.9465442764578834,
+   "truth_counts": {
+    "HEK": 2032,
+    "K562": 1917,
+    "KG1": 1785,
+    "THP1": 1674,
+    "Doublet": 610
+   },
+   "tags": [
+    "HEK_A",
+    "HEK_B",
+    "HEK_C",
+    "THP1_A",
+    "THP1_B",
+    "THP1_C",
+    "K562_A",
+    "K562_B",
+    "K562_C",
+    "KG1_A",
+    "KG1_B",
+    "KG1_C"
+   ]
+  },
+  "callers": {
+   "current": {
+    "macro_f1": 0.6135294850096848,
+    "macro_f1_ci95": [
+     0.5994328501282556,
+     0.6277248587369998
+    ],
+    "F_S": 0.8795925791196799,
+    "F_D": 0.3474663908996898,
+    "F_N": NaN,
+    "dbl_called_singlet": 0.3819672131147541,
+    "dbl_called_singlet_ci95": [
+     0.3429919445819471,
+     0.4206192211948791
+    ],
+    "called_S_D_N": [
+     6337,
+     1324,
+     357
+    ]
+   },
+   "hasheddrops": {
+    "macro_f1": 0.6327198213143413,
+    "macro_f1_ci95": [
+     0.6124023613677976,
+     0.6517687404674973
+    ],
+    "F_S": 0.8344895936570862,
+    "F_D": 0.4309500489715965,
+    "F_N": NaN,
+    "dbl_called_singlet": 0.3737704918032787,
+    "dbl_called_singlet_ci95": [
+     0.33671615905245345,
+     0.41127694859038144
+    ],
+    "called_S_D_N": [
+     5709,
+     411,
+     1898
+    ]
+   },
+   "gmm": {
+    "macro_f1": 0.6231546782771588,
+    "macro_f1_ci95": [
+     0.6092939570875469,
+     0.6381343918842017
+    ],
+    "F_S": 0.8893201092424896,
+    "F_D": 0.35698924731182796,
+    "F_N": NaN,
+    "dbl_called_singlet": 0.4163934426229508,
+    "dbl_called_singlet_ci95": [
+     0.37793871961656966,
+     0.4575742336570061
+    ],
+    "called_S_D_N": [
+     6506,
+     1250,
+     262
+    ]
+   },
+   "htodemux": {
+    "macro_f1": 0.6393824485373781,
+    "macro_f1_ci95": [
+     0.6231681164798194,
+     0.6556605865789507
+    ],
+    "F_S": 0.9133802816901408,
+    "F_D": 0.36538461538461536,
+    "F_N": NaN,
+    "dbl_called_singlet": 0.44426229508196724,
+    "dbl_called_singlet_ci95": [
+     0.40421992962753833,
+     0.483170576193832
+    ],
+    "called_S_D_N": [
+     6792,
+     1054,
+     172
+    ]
+   },
+   "bff_raw": {
+    "macro_f1": 0.6820551455339319,
+    "macro_f1_ci95": [
+     0.6611576210493547,
+     0.7030109688151998
+    ],
+    "F_S": 0.8925132921396752,
+    "F_D": 0.4715969989281886,
+    "F_N": NaN,
+    "dbl_called_singlet": 0.460655737704918,
+    "dbl_called_singlet_ci95": [
+     0.4198278019657429,
+     0.49917375661089397
+    ],
+    "called_S_D_N": [
+     6510,
+     323,
+     1185
+    ]
+   },
+   "bff_cluster": {
+    "macro_f1": 0.5713344270654355,
+    "macro_f1_ci95": [
+     0.550677796464444,
+     0.5910406824855279
+    ],
+    "F_S": 0.9308044473512099,
+    "F_D": 0.211864406779661,
+    "F_N": NaN,
+    "dbl_called_singlet": 0.8540983606557377,
+    "dbl_called_singlet_ci95": [
+     0.8268909547332586,
+     0.8823552461737045
+    ],
+    "called_S_D_N": [
+     7882,
+     98,
+     38
+    ]
+   }
+  },
+  "best_competitor": "bff_raw",
+  "current_minus_best_competitor": {
+   "diff": -0.06852566052424702,
+   "paired_boot_mean": -0.06886925618714933,
+   "ci95": [
+    -0.08738074609951925,
+    -0.05231303153560506
+   ],
+   "pass_within_0.01": false
+  }
+ }
+}

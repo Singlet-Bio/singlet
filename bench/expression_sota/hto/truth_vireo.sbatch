@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=hto-vireo
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=short-bigmem
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
 #SBATCH --time=03:00:00
