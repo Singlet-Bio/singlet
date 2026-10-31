@@ -279,10 +279,72 @@ template <class F> static void parallelFor(u64 n, int nt, F fn) {
     for (auto& x : th) x.join();
 }
 
+// Large host->device copies at the PCIe rate. cudaMemcpy from pageable memory runs through the driver's staging buffers at ~5.7 GB/s (S8 ledger, one thread of
+// memcpy); here several threads fill pinned buffers (64 MB x 4) while cudaMemcpyAsync drains them on a stream, so the copy and the filling overlap.
+// SINGLET_ENGINE_GPU_FASTUP=0 turns it off. Byte-for-byte the same data reaches the device.
+struct PinStage {
+    static constexpr int NB = 4;
+    static constexpr size_t SZ = 64u << 20;
+    char* buf[NB] = {nullptr, nullptr, nullptr, nullptr};
+    cudaEvent_t ev[NB] = {nullptr, nullptr, nullptr, nullptr};
+    cudaStream_t st = nullptr;
+    bool ok = false;
+    int nt = 8;
+    double secInit = 0;
+    bool init(int threads) {
+        if (ok) return true;
+        const char* off = std::getenv("SINGLET_ENGINE_GPU_FASTUP");
+        if (off != nullptr && off[0] == '0') return false;
+        const double t0 = now();
+        nt = std::max(2, std::min(threads, 16));
+        for (int i = 0; i < NB; i++) {
+            if (cudaHostAlloc((void**) &buf[i], SZ, cudaHostAllocDefault) != cudaSuccess) { buf[i] = nullptr; release(); return false; }
+            if (cudaEventCreateWithFlags(&ev[i], cudaEventDisableTiming) != cudaSuccess) { ev[i] = nullptr; release(); return false; }
+        }
+        if (cudaStreamCreateWithFlags(&st, cudaStreamNonBlocking) != cudaSuccess) { st = nullptr; release(); return false; }
+        secInit = now() - t0;
+        ok = true;
+        return true;
+    }
+    void release() {
+        ok = false;
+        for (int i = 0; i < NB; i++) {
+            if (ev[i]) { cudaEventDestroy(ev[i]); ev[i] = nullptr; }
+            if (buf[i]) { cudaFreeHost(buf[i]); buf[i] = nullptr; }
+        }
+        if (st) { cudaStreamDestroy(st); st = nullptr; }
+    }
+    // d[0..n) = h[0..n); returns after the data is on the device
+    bool copy(void* d, const void* h, size_t n) {
+        const double t0 = now();
+        bool used[NB] = {false, false, false, false};
+        size_t off = 0; int k = 0;
+        while (off < n) {
+            const size_t c = std::min(SZ, n - off);
+            if (used[k] && cudaEventSynchronize(ev[k]) != cudaSuccess) return false;
+            const char* src = (const char*) h + off; char* dst = buf[k];
+            parallelFor(c, nt, [&](u64 lo, u64 hi) { std::memcpy(dst + lo, src + lo, hi - lo); });
+            if (cudaMemcpyAsync((char*) d + off, buf[k], c, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+            if (cudaEventRecord(ev[k], st) != cudaSuccess) return false;
+            used[k] = true; off += c; k = (k + 1) % NB;
+        }
+        if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+        if (egTraceOn()) { EgRow& w = egRows()[-1]; w.n++; w.bytes += n; w.sec += now() - t0; w.pinned = true; w.kind = (int) cudaMemcpyHostToDevice; }
+        return true;
+    }
+};
+PinStage& pinStage() { static PinStage p; return p; }
+
 template <class T> bool upload(const T* h, u64 n, T*& d, std::string& err, u64 pad = 0) {
     EG_CK(cudaMalloc(&d, (n + pad) * sizeof(T) + 8));
     if (pad) EG_CK(cudaMemset(d, 0, (n + pad) * sizeof(T) + 8));
-    if (n) EG_CK(cudaMemcpy(d, h, n * sizeof(T), cudaMemcpyHostToDevice));
+    if (n) {
+        if (n * sizeof(T) >= (32u << 20) && pinStage().ok) {
+            if (!pinStage().copy(d, h, n * sizeof(T))) { err = "fast upload: " + std::string(cudaGetErrorString(cudaGetLastError())); return false; }
+        } else {
+            EG_CK(cudaMemcpy(d, h, n * sizeof(T), cudaMemcpyHostToDevice));
+        }
+    }
     return true;
 }
 
@@ -312,10 +374,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                  Output& out) {
     std::string err;
     // on failure, release everything this process holds on the device (STAR then maps every read on the CPU)
-    auto fail = [&](const std::string& e) { out.log += "engine_gpu: " + e + "\n"; cudaDeviceReset(); return false; };
+    auto fail = [&](const std::string& e) { out.log += "engine_gpu: " + e + "\n"; pinStage().release(); cudaDeviceReset(); return false; };
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: a waiting host thread sleeps, not spins
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
+    pinStage().init(hostThreads);
+    if (pinStage().ok) { char l[96]; snprintf(l, sizeof l, "engine_gpu: pinned staging buffers ready in %.2f s\n", pinStage().secInit); out.log += l; }
     singlet::NvtxChain nvch; nvch.next("mapDistinct: setup");
     // device memory in use at the phases of the call (logged: what a sample needs when several share a GPU)
     std::string memLog;
@@ -576,6 +640,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
              (unsigned long long)out.nWithN, (unsigned long long)nGpuMapped, (unsigned long long)out.nHostLane, out.secHostLane,
              (unsigned long long)out.nFailed, out.secUpload, out.secDedup, out.secMapGpu);
     out.log += line;
+    pinStage().release();
     egReport(out.log);
     return true;
 }
