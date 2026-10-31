@@ -75,7 +75,7 @@ def lognorm_dense(C, mu=None):
 def cmd_fit(a):
     out = Path(a.out) / "lite"
     Xs = sp.load_npz(out / "sel_X.npz").tocsr()
-    m = np.load(out / "sel_meta.npz")
+    m = np.load(out / "sel_meta.npz", allow_pickle=True)
     term, dsid, terms = m["term"], m["dataset"], m["terms"]
     rng = np.random.default_rng(1)
     uds = np.unique(dsid)
