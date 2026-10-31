@@ -127,12 +127,12 @@ struct PileupInput {
     uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kUmiGeneCR, kMtPrefer
     std::vector<uint8_t> geneIsMt;          // per gene: on chrM (kMtPrefer)
     int wantGeneMerges = 0;   // return PileupOutput::geneMerges (the host collapses V(D)J molecules per (cell, gene), R9)
-    int wantReads = 0;        // return PileupOutput::exonReads / intronReads / histCell / hist (reads per molecule); 0: no extra work
     uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
     // records, raw pileup_rec.h structs
     std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
     std::vector<uint32_t> ops;
     std::vector<uint8_t> seq;
+    int wantReads = 0;        // return PileupOutput::exonReads / intronReads / histCell / hist (reads per molecule); 0: no extra work
 };
 struct PileupOutput {
     std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
