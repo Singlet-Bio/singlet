@@ -12,6 +12,7 @@
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include <chrono>
 #include "singlet/engine_gpu.h"
+#include "singlet/fq/fg2_runset.h"
 #include "stitch.cuh"
 #endif
 #include "SeqCache.h"
@@ -22,7 +23,10 @@
 #include "Transcriptome.h"
 #include "OutSJ.h"
 #include "SequenceFuns.h"
+#include <atomic>
 #include <cmath>
+#include <fstream>
+#include <thread>
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <sys/mman.h>
@@ -248,6 +252,157 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
     }
     return true;
 }
+
+// The same inputs from the .1fg2's table of distinct cDNA sequences instead of the FASTQ text: the "reads" of `in` are the table's
+// sequences (each clipped once: the clip depends on the sequence only), unitOfRead gives the sequence id of every read in file order, and
+// the per-read outputs of mapDistinct are expanded through it. `in` is left untouched when this returns false.
+bool openTable(singlet::fq::Fg2RunSet &rs, const char *path, std::string &why) {
+    try {
+        std::vector<std::string> dirs;
+        if (const char *e = getenv("SINGLET_WHITELIST_DIR")) dirs.push_back(e);
+        char exe[4096];
+        const ssize_t k = readlink("/proc/self/exe", exe, sizeof exe - 1);
+        if (k > 0) { exe[k] = 0; std::string d(exe); const size_t sl = d.rfind('/'); if (sl != std::string::npos) dirs.push_back(d.substr(0, sl) + "/../whitelists"); }
+        rs.open({std::string(path)}, dirs, false, /*tables_only=*/true);
+    } catch (const std::exception &e) { why = std::string(".1fg2 table: ") + e.what(); return false; }
+    return true;
+}
+
+bool readTable(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, int nThreads, singlet::fq::Fg2RunSet &rs, std::vector<uint32> &unitOfRead) {
+    const auto &tab = rs.table();
+    const uint64 nU = tab.n, nChunks = rs.block_count(), nReads = rs.stored_reads();
+    if (nU == 0 || nU >= 0xFFFFFFFFull) { why = ".1fg2 table: no sequences or too many"; return false; }
+    // singlet's inline 5' clip of R2 (the decoder drops the first k bases before STAR sees the read): the keys are the trimmed sequences
+    uint64 clip5p = 0;
+    if (const char *c = getenv("SINGLET_ENGINE_GPU_FG2_CLIP5P")) clip5p = (uint64) std::max(0, atoi(c));
+    if (clip5p > 0) for (uint64 u = 0; u < nU; u++) if (tab.slen[u] <= clip5p) { why = ".1fg2 table: a sequence is not longer than the 5' clip"; return false; }
+    const int T = std::max(1, nThreads);
+    std::vector<uint32> ids(nReads);
+    std::atomic<bool> bad(false);
+    {   // the sequence id of every read
+        std::vector<std::thread> th;
+        for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+            std::vector<uint32> c;
+            try {
+                for (uint64 g = t; g < nChunks; g += T) {
+                    rs.decode_seq_ids((uint32_t) g, c);
+                    const uint64 r0 = rs.block_read_offset((uint32_t) g), r1 = g + 1 < nChunks ? rs.block_read_offset((uint32_t) g + 1) : nReads;
+                    if (c.size() != r1 - r0) { bad = true; return; }
+                    memcpy(ids.data() + r0, c.data(), c.size() * sizeof(uint32));
+                }
+            } catch (...) { bad = true; }
+        });
+        for (auto &x : th) x.join();
+    }
+    if (bad) { why = ".1fg2 table: cannot read the sequence-id plane"; return false; }
+    for (uint64 i = 0; i < nReads; i++) if (ids[i] >= nU) { why = ".1fg2 table: sequence id out of range"; return false; }
+
+    std::vector<std::vector<char>> seqT(T);
+    std::vector<std::vector<uint64>> lenT(T);
+    std::vector<std::vector<uint16>> p5T(T), p3T(T);
+    std::vector<std::vector<uint8>> infoT(T);
+    {
+        std::vector<std::thread> th;
+        for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+            const uint64 u0 = nU * t / T, u1 = nU * (t + 1) / T;
+            seqT[t].reserve((size_t) ((u1 - u0) * 96 + 4096));
+            const bool cr4 = in.clip.pre;
+            std::vector<std::vector<ClipMate>> cmv;
+            if (cr4) P.pClip.initializeClipMates(cmv);
+            std::vector<std::string> lets(64);
+            std::vector<std::pair<const char *, uint64>> asc;
+            std::vector<uint64> numAt;
+            std::vector<char> cbuf(DEF_readSeqLengthMax + 16);
+            auto flush = [&]() {
+                const int nb = (int) asc.size();
+                if (nb == 0) return;
+                ClipCR4 *cr = cmv[0][0].cr4;
+                for (int k = 0; k < nb; k++) cr->opalFillOneSeq(k, (char *) asc[k].first, (uint32) asc[k].second);
+                cr->opalAlign((uint8 *) cmv[0][0].adSeqNum.data(), cmv[0][0].adSeqNum.size(), nb);
+                for (int k = 0; k < nb; k++) {
+                    const int Lm = cr->opalRes[k].endLocationTarget + 1, S = cr->opalRes[k].score;
+                    const bool L0 = S < 20 || (S == 20 && Lm > 26) || (S == 21 && Lm > 30);
+                    const uint8 info = (uint8) (L0 ? 0 : Lm);
+                    const uint64 L = asc[k].second;
+                    uint c5 = 0, c3 = 0;
+                    if (L <= DEF_readSeqLengthMax) {
+                        memcpy(cbuf.data(), seqT[t].data() + numAt[k], L);
+                        uint Lread = (uint) L;
+                        cmv[0][0].clippedInfo = (char) info;
+                        c5 = cmv[0][0].clip(Lread, cbuf.data());
+                        c3 = cmv[0][1].clip(Lread, cbuf.data());
+                    }
+                    p5T[t].push_back((uint16) std::min<uint>(c5, 65535)); p3T[t].push_back((uint16) std::min<uint>(c3, 65535)); infoT[t].push_back(info);
+                }
+                asc.clear(); numAt.clear();
+            };
+            for (uint64 u = u0; u < u1; u++) {
+                const uint64 L = tab.slen[u] - clip5p, at = seqT[t].size();
+                seqT[t].resize(at + L);
+                char *d = seqT[t].data() + at;
+                for (uint64 j = 0; j < L; j++) d[j] = (char) tab.base(u, (uint32_t) (j + clip5p));
+                for (uint64 k = tab.n_first[u]; k < tab.n_first[u + 1]; k++) if (tab.n_pos[k] >= clip5p) d[tab.n_pos[k] - clip5p] = 4;
+                lenT[t].push_back(L);
+                if (cr4) {
+                    std::string &l = lets[asc.size()];
+                    l.resize(L);
+                    for (uint64 j = 0; j < L; j++) l[j] = "ACGTN"[(int) d[j]];
+                    asc.push_back({l.data(), L}); numAt.push_back(at);
+                    if (asc.size() == 64) flush();
+                }
+            }
+            if (cr4) flush();
+        });
+        for (auto &x : th) x.join();
+    }
+    {   // concatenate the threads' pieces in parallel
+        std::vector<uint64> seqAt(T + 1), offAt(T + 1);
+        seqAt[0] = in.seq.size(); offAt[0] = in.off.size();
+        for (int t = 0; t < T; t++) { seqAt[t + 1] = seqAt[t] + seqT[t].size(); offAt[t + 1] = offAt[t] + lenT[t].size(); }
+        const uint64 base = in.off.back();
+        in.seq.resize(seqAt[T]);
+        in.off.resize(offAt[T]);
+        std::vector<std::thread> th;
+        for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+            if (!seqT[t].empty()) memcpy(in.seq.data() + seqAt[t], seqT[t].data(), seqT[t].size());
+            uint64 o = base + (seqAt[t] - seqAt[0]);
+            for (uint64 k = 0; k < lenT[t].size(); k++) { o += lenT[t][k]; in.off[offAt[t] + k] = o; }
+            std::vector<char>().swap(seqT[t]); std::vector<uint64>().swap(lenT[t]);
+        });
+        for (auto &x : th) x.join();
+    }
+    if (in.clip.pre)
+        for (int t = 0; t < T; t++) {
+            in.pre5.insert(in.pre5.end(), p5T[t].begin(), p5T[t].end());
+            in.pre3.insert(in.pre3.end(), p3T[t].begin(), p3T[t].end());
+            in.cr4info.insert(in.cr4info.end(), infoT[t].begin(), infoT[t].end());
+        }
+    unitOfRead.swap(ids);
+    return true;
+}
+
+// the first reads of the file STAR reads, against the table: the order and the sequences must be the ones the table describes
+bool checkTableHead(Parameters &P, const singlet::fq::Fg2RunSet &rs, const std::vector<uint32> &unitOfRead, std::string &why) {
+    const auto &tab = rs.table();
+    if (P.readFilesNames.empty() || P.readFilesNames[0].empty()) { why = "no read files"; return false; }
+    {   // reads from the in-process chunk source (/dev/null here) or fifos come from this very table: nothing to compare
+        struct stat st;
+        if (stat(P.readFilesNames[0][0].c_str(), &st) != 0 || !S_ISREG(st.st_mode)) return true;
+    }
+    std::ifstream f(P.readFilesNames[0][0]);
+    std::string name, seq, plus, qual;
+    for (uint64 i = 0; i < 4096 && i < unitOfRead.size(); i++) {
+        if (!(std::getline(f, name) && std::getline(f, seq) && std::getline(f, plus) && std::getline(f, qual))) { why = "the read file ends before the table's reads"; return false; }
+        while (!seq.empty() && seq.back() == '\r') seq.pop_back();
+        const uint64 u = unitOfRead[i], L = tab.slen[u];
+        if (seq.size() != L) { why = "read " + std::to_string(i) + ": length differs from the table's"; return false; }
+        for (uint64 j = 0; j < L; j++) {
+            const char c = "ACGT"[tab.base(u, (uint32_t) j)];
+            if (c != seq[j] && !(seq[j] == 'N' || seq[j] == 'n')) { why = "read " + std::to_string(i) + ": bases differ from the table's"; return false; }
+        }
+    }
+    return true;
+}
 #endif
 
 } // namespace
@@ -286,7 +441,20 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     time_t t0 = time(nullptr);
     singlet_engine_gpu::Input in;
     if (!fillClip(P, in.clip, why)) return skip(why);
-    if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
+    // SINGLET_ENGINE_GPU_FG2 (set by singlet for a .1fg2 input): the distinct sequences come from its table, with no pass over the read text
+    std::vector<uint32> unitOfRead;
+    bool tableMode = false;
+    if (const char *fg2 = getenv("SINGLET_ENGINE_GPU_FG2"); fg2 != nullptr && fg2[0] != 0 && getenv("SINGLET_ENGINE_GPU_FG2_OFF") == nullptr) {
+        std::string w2;
+        singlet::fq::Fg2RunSet rs;
+        if (openTable(rs, fg2, w2) && readTable(P, in, w2, (int) P.runThreadN, rs, unitOfRead) && checkTableHead(P, rs, unitOfRead, w2)) tableMode = true;
+        else {
+            P.inOut->logMain << "ENGINE_GPU: sequence table not used (" << w2 << "): reading the FASTQ\n" << flush;
+            in = singlet_engine_gpu::Input(); unitOfRead.clear();
+            if (!fillClip(P, in.clip, why)) return skip(why);
+        }
+    }
+    if (!tableMode && !readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
     time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
     time_t tWait = time(nullptr);
@@ -301,6 +469,22 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     in.release();
     time_t tGpu = time(nullptr);
+    if (ok && tableMode) {   // per table sequence -> per read, in file order
+        const uint64 nR = unitOfRead.size();
+        const int nt = std::max(1, (int) P.runThreadN);
+        auto expand = [&](auto &v) {
+            if (v.empty()) return;
+            std::remove_reference_t<decltype(v)> w(nR);
+            std::vector<std::thread> th;
+            for (int t = 0; t < nt; t++) th.emplace_back([&, t]() { for (uint64 i = nR * t / nt; i < nR * (t + 1) / nt; i++) w[i] = v[unitOfRead[i]]; });
+            for (auto &x : th) x.join();
+            v.swap(w);
+        };
+        expand(out.readRecord); expand(out.clip5); expand(out.clip3); expand(in.cr4info);
+        out.nReads = nR;
+        std::vector<uint32>().swap(unitOfRead);
+        P.inOut->logMain << "ENGINE_GPU: sequences from the .1fg2 table: " << nR << " reads\n" << flush;
+    }
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it, held it " << heldS << " s\n" << out.log;
     if (!ok) return skip("GPU mapping failed");
