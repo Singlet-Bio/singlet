@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -292,10 +293,12 @@ def main():
     ap.add_argument("--s1-repo")
     ap.add_argument("--s1-runtime")
     ap.add_argument("--accept-1fg2", action="store_true")
-    ap.add_argument("--extra", nargs="*", default=[])
+    ap.add_argument("--extra-args", default="--genome-shared on", help="extra engine arguments as one string; the genome is attached from shared memory "
+                    "(one resident copy per node, S8's benchmark setting) so concurrent samples do not each map the index")
     ap.add_argument("--engine-env", nargs="*", default=[], metavar="K=V", help="extra environment for every engine process (e.g. the shared device-lock permit)")
     a = ap.parse_args()
     a.engine = "gpu"
+    a.extra = shlex.split(a.extra_args)
     cfg = C.load_config(a.config)
     ccfg = C.cluster_cfg(cfg, a.cluster)
     env = dict(os.environ)

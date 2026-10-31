@@ -54,6 +54,7 @@ DEFAULTS = {
     "multi_concurrency": 8,
     "multi_threads": 12,            # per sample (S8: best at 8 samples per GPU)
     "multi_route": "fq",            # memory/scratch model: "fq" (temp FASTQ) or "1fg2" (table-fed prefill, no spike) once #126 and the refit are in
+    "multi_extra_args": "--genome-shared on",  # engine arguments of the shared workers (S8's benchmark setting)
     "multi_scratch": "/tmp",        # node-local disk (373 GB); /dev/shm would count against the job's memory
     "max_v100": 4,
     "fallback_wait_h": 1.0,         # a pending H100 job older than this counts as no capacity
@@ -194,9 +195,9 @@ def sbatch_script(kind, a, p, mem_gb=None):
                "#SBATCH --mem=%s" % ("0" if whole_node else "%dG" % (p["multi_mem_gb"] if multi else (mem_gb or 128))),
                "#SBATCH --time=%s" % p["gpu_time"], "#SBATCH --signal=B:TERM@60"] + (["#SBATCH --exclusive"] if whole_node else [])
         if multi:
-            body = ["%s %s/multi_drain.py %s --concurrency %d --threads %d --idle-exit-min %s --scratch %s --mem-gb %d --route %s --publish %s%s &" %
+            body = ["%s %s/multi_drain.py %s --concurrency %d --threads %d --idle-exit-min %s --scratch %s --mem-gb %d --route %s --extra-args \"%s\" --publish %s%s &" %
                     (py, here, common, p["multi_concurrency"], p["multi_threads"], p["idle_exit_min"], p["multi_scratch"], p["multi_mem_gb"],
-                     p["multi_route"], p["publish"], s1_args(p))]
+                     p["multi_route"], p["multi_extra_args"], p["publish"], s1_args(p))]
         else:
             body = ["%s %s/drain_worker.py %s --engine gpu --threads %d --idle-exit-min %s --scratch /dev/shm --mem-gb %d --publish %s%s &" %
                     (py, here, common, p["gpu_cpus"], p["idle_exit_min"], mem_gb or 128, p["publish"], s1_args(p))]
