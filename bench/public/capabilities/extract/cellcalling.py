@@ -36,7 +36,7 @@ def _read_calls(path: Path) -> pd.DataFrame:
 def extract_cell_calling(ctx: Ctx, out: Path) -> dict:
     sc = _read_calls(ctx.singlet / "cell_calls.tsv")
     singlet_cells = set(sc.index[sc["called_v2"].astype(int) == 1])
-    knee_cells = set(sc.index[sc["called"].astype(int) == 1])
+    knee_cells = set(sc.index[sc["called_knee" if "called_knee" in sc.columns else "called"].astype(int) == 1])   # Singlet renamed the column called -> called_knee
     edcr = set(R.starsolo_cells(ctx.star_cr))
     cb_file = ctx.runs / "cellbender-public" / "cb_cell_barcodes.csv"
     cellbender = None
