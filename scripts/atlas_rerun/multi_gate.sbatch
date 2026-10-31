@@ -12,14 +12,17 @@
 #   A  drain_worker.py   one sample at a time, 16 threads (the existing single-sample worker)  -> $K/single/<GSM>
 #   B  multi_drain.py    admission by estimated memory/scratch, 8 slots x 12 threads, --genome-shared on  -> $K/multi/<GSM>
 # then every sample's outputs are compared with bench/star_accel/out_equiv.py (B vs A) and the report gives pairs/s per GPU, peak cgroup memory,
-# peak /tmp use and the admission log. Env: BRANCH (default claude/drain-multisample-52667f), BIN (engine), SKIP_A=1 (reuse $K/single).
+# peak /tmp use and the admission log. Env: BRANCH (default claude/drain-multisample-52667f), BIN_SRC (dir with singlet-gpu + commit; default jobs/s14/bin_bbf6497d), EXPECT_COMMIT, SKIP_A=1 (reuse $K/single).
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; PERF=$W/data/atlas-rerun/perf
-BIN=${BIN:-$W/jobs/s8/bin/singlet-gpu}; BRANCH=${BRANCH:-claude/drain-multisample-52667f}
+BIN_SRC=${BIN_SRC:-$W/jobs/s14/bin_bbf6497d}; EXPECT=${EXPECT_COMMIT:-bbf6497d}; BRANCH=${BRANCH:-claude/drain-multisample-52667f}
 T=$W/jobs/s14/gate_$SLURM_JOB_ID; K=$T/keep; mkdir -p $T $K/single $K/multi
 SCR=/tmp/$USER-s14-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=7200 SINGLET_REF_BASE=/mnt/projects/debruinz_project/cellarium/reference PATH=$W/envs/pbench/bin:$PATH SINGLET_GPU_PILEUP=on
-echo "== node $(hostname) $(date -Is) bin=$BIN $(cat $(dirname $BIN)/commit 2>/dev/null)"; nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+# the engine under test: its commit is asserted, and a private copy on node-local disk is run, so nobody rebuilding the shared directory can change it mid-gate
+case "$(cat $BIN_SRC/commit 2>/dev/null)" in $EXPECT*) ;; *) echo "ABORT: $BIN_SRC/commit is '$(cat $BIN_SRC/commit 2>/dev/null)', expected $EXPECT"; exit 3;; esac
+cp $BIN_SRC/singlet-gpu $SCR/singlet-gpu; BIN=$SCR/singlet-gpu; BSHA=$(sha256sum $BIN | cut -c1-16)
+echo "== node $(hostname) $(date -Is) engine commit $(cat $BIN_SRC/commit) sha256 $BSHA"; nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#'); echo "cgroup $CG memory.max=$(cat $CG/memory.max 2>/dev/null) df /tmp: $(df -BG --output=size,avail /tmp | tail -1)"
 cd $T && git clone -q --depth 1 -b $BRANCH git@github.com:Singlet-Bio/singlet.git repo 2>&1 | tail -1; cd $T/repo && git log --oneline -1
 SRC=$T/repo/scripts/atlas_rerun
@@ -114,4 +117,6 @@ for tag, root, kd in (("A", T + "/rootA", K + "/single"), ("B", T + "/root", K +
         print("   %-11s %6.1f M pairs  compute %6.0f s  peak_rss %s GB (est %s)  scratch %.1f GB  concurrent %s" % (
             x["gsm"], x["pairs"] / 1e6, x["compute_s"], x.get("peak_rss_gb"), x.get("est_peak_gb"), (x.get("scratch_bytes") or 0) / 1e9, x.get("concurrent")))
 PY
+[ "$(sha256sum $BIN | cut -c1-16)" = "$BSHA" ] || { echo "BINARY CHANGED"; RC=1; }
+echo "engine commit $(cat $BIN_SRC/commit) sha256 $BSHA (same binary for A and B)"
 echo "gate rc=$RC $(date -Is); results in $T"
