@@ -76,13 +76,20 @@ for cfg in $CONFIGS; do
   S=${cfg%%:*}; T=${cfg##*:}; D=$RES/cfg_${S}x${T}; mkdir -p $D
   ( while true; do nvidia-smi --query-gpu=index,utilization.gpu --format=csv,noheader,nounits | tr -d ' ' | sed "s/^/$(date +%s) /"; sleep 2; done ) > $D/gpu.csv 2>/dev/null &
   GM=$!
+  # pressure-stall information every 5 s (node and this job's cgroup): time tasks spent stalled on io / memory / cpu
+  ( while true; do
+      echo "$(date +%s) io: $(head -1 /proc/pressure/io) | mem: $(head -1 /proc/pressure/memory) | cpu: $(head -1 /proc/pressure/cpu) | cg_io: $(head -1 $CG/io.pressure 2>/dev/null) | cg_mem: $(head -1 $CG/memory.pressure 2>/dev/null) | cg_cpu: $(head -1 $CG/cpu.pressure 2>/dev/null)"
+      sleep 5
+    done ) > $D/psi.log 2>/dev/null &
+  PSIPID=$!
+  cat $CG/io.stat > $D/io.stat.start 2>/dev/null
   C0=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T0=$(date +%s.%N)
   U0=$(awk '$1=="user_usec"{print $2}' $CG/cpu.stat); Y0=$(awk '$1=="system_usec"{print $2}' $CG/cpu.stat)
   for g in 0 1; do
     ( seq 1 $((NS/2)) | xargs -P $S -I{} bash -c "run_one $g {} $D $T" ) &
   done
   wait $(jobs -p | grep -v "^$GM$") 2>/dev/null
-  T1=$(date +%s.%N); C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); kill $GM 2>/dev/null
+  T1=$(date +%s.%N); C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); kill $GM $PSIPID 2>/dev/null; cat $CG/io.stat > $D/io.stat.end 2>/dev/null
   U1=$(awk '$1=="user_usec"{print $2}' $CG/cpu.stat); Y1=$(awk '$1=="system_usec"{print $2}' $CG/cpu.stat)
   echo "cgroup CPU split for ${S}x${T}: user $(( (U1-U0)/1000000 )) s, system $(( (Y1-Y0)/1000000 )) s" | tee -a $RES/summary.txt
   python3 - "$D" "$S" "$T" "$NS" "$READS" "$T0" "$T1" "$C0" "$C1" <<'PY' | tee -a $RES/summary.txt
