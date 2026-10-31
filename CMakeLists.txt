@@ -134,6 +134,14 @@ if(SINGLET_BUILD_PIPELINE)
         target_include_directories(singlet_engine_gpu PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/engine_gpu)
         target_link_libraries(singlet_engine_gpu PUBLIC CUDA::cudart_static Threads::Threads)
+        # NVTX ranges on the host side (include/singlet/nvtx.h): header-only, compiled in when the toolkit has them, active only with SINGLET_NVTX=1
+        find_path(SINGLET_NVTX_INCLUDE nvtx3/nvToolsExt.h HINTS ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
+        if(SINGLET_NVTX_INCLUDE)
+            target_compile_definitions(singlet_engine_gpu PUBLIC SINGLET_HAVE_NVTX)
+            target_include_directories(singlet_engine_gpu PUBLIC ${SINGLET_NVTX_INCLUDE})
+            target_compile_definitions(singlet_star PRIVATE SINGLET_HAVE_NVTX)
+            target_include_directories(singlet_star PRIVATE ${SINGLET_NVTX_INCLUDE})
+        endif()
         target_compile_definitions(singlet_star PRIVATE SINGLET_HAVE_ENGINE_GPU)
         target_include_directories(singlet_star PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/engine_gpu)

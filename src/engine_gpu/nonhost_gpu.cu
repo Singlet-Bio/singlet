@@ -13,6 +13,7 @@
 // (random probes into a tens-of-GB table), a4_sort.cu (cub radix sort) and b1_kmer.cu (rolling canonical 2-bit k-mers).
 // Exactness: all integer; no floating point on the GPU.
 #include "singlet/engine_gpu.h"
+#include "singlet/nvtx.h"
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
 #include <fcntl.h>
@@ -270,12 +271,14 @@ namespace singlet_engine_gpu {
 bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out) {
     out = NonhostResult();
     const double t0 = now();
+    singlet::NvtxChain nvch; nvch.next("nonhost: context");
     try {
         if (reads.size() >= (1ull << 31)) throw std::string("too many reads for this version");
         cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: waiting threads sleep, not spin
         NH_CK(cudaSetDevice(device));
         Arena A;
         // ---- the resident index (viral, bacterial, fungal) and the host Bloom filter
+        nvch.next("nonhost: index + Bloom load");
         Index vi, bi, fi;
         if (!paths.viral.empty()) load_index(paths.viral, vi, A, device, loadThreads);
         if (!paths.bacterial.empty()) load_index(paths.bacterial, bi, A, device, loadThreads);
@@ -297,6 +300,7 @@ bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& 
         out.indexBytes = (vi.n + bi.n + fi.n) * sizeof(Entry);
         const double t1 = now();
         // ---- reads to the device
+        nvch.next("nonhost: reads to the device");
         const uint32_t n = (uint32_t)reads.size();
         out.np.assign(n, 0);
         if (n == 0) { out.secClassify = now() - t1; return true; }
@@ -316,6 +320,7 @@ bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& 
             void* tmp = A.dev(tb); NH_CK(cub::DeviceScan::ExclusiveSum(tmp, tb, in, o, cnt));
         };
         // ---- extract + host subtraction
+        nvch.next("nonhost: extract + host subtraction");
         unsigned* d_err = (unsigned*)A.dev(16); NH_CK(cudaMemset(d_err, 0, 16));
         uint32_t* d_np = (uint32_t*)A.dev(n * 4ull);
         uint64_t* d_np64 = (uint64_t*)A.dev((n + 1) * 8ull);
@@ -330,6 +335,7 @@ bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& 
         k_fill<<<grd, blk>>>(d_seq, d_off, n, d_bloom, nbits, d_np, d_qoff, d_flat, d_err);
         NH_CK(cudaGetLastError());
         // ---- probe the three indexes
+        nvch.next("nonhost: probe the indexes");
         uint32_t* d_lo = (uint32_t*)A.dev(Q * 12), *d_len = (uint32_t*)A.dev(Q * 12);
         if (Q) k_probe<<<(int)std::min<uint64_t>((Q + blk - 1) / blk, 1u << 22), blk>>>(d_flat, Q, dv, db, df, d_lo, d_len);
         NH_CK(cudaGetLastError());
@@ -342,6 +348,7 @@ bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& 
         uint64_t H = 0; NH_CK(cudaMemcpy(&H, d_hoff + n, 8, cudaMemcpyDeviceToHost));
         if (H >= (1ull << 31)) throw std::string("more than 2^31 index hits in one sample");
         // ---- expand to one key per occurrence, sort, group, restore first-insertion order
+        nvch.next("nonhost: expand + sort + group");
         uint32_t G = 0;
         uint64_t* d_fkey = nullptr; uint32_t* d_fcnt = nullptr;
         if (H) {
@@ -377,6 +384,7 @@ bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& 
             NH_CK(cudaGetLastError());
         }
         // ---- results to the host
+        nvch.next("nonhost: results to the host");
         NH_CK(cudaMemcpy(out.np.data(), d_np, n * 4ull, cudaMemcpyDeviceToHost));
         out.key.resize(G); out.cnt.resize(G);
         if (G) {
