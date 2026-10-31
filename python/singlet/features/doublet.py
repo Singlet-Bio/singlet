@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: MIT
 """Feature set ``doublet``: ``doublet/score_v2``, a frozen cross-study stacker of doublet evidence (docs/cell_features.md section 8).
 
-Per sample, nine within-sample rank-normalised inputs (``rank / n`` of each, over the sample's called cells)::
+Per sample, seven within-sample rank-normalised inputs (``rank / n`` of each, over the sample's called cells)::
 
     umi           log1p total counts          genes       log1p detected genes
     prod          the engine's doublet score (``doublet_scores.tsv`` of the run directory, column doublet_score)
-    atlas_knn, atlas_clf, ct_entropy, atlas_nnls     atlas-encoder features (doublet_atlas.py)
-    sdfl, sdflc   artificial-doublet scorers without R (doublet_sdfl.py)
+    sdfl, sdflc   artificial-doublet scorers without R (doublet_sdfl.py), linear in cells
+    atlas_knn, atlas_entropy   features of a 0.5 MB encoder distilled from the atlas cell type network (doublet_atlas.py)
 
 feed a ``HistGradientBoostingClassifier`` (max_iter 300, learning_rate 0.05, max_leaf_nodes 15, l2 1.0, random_state 0) trained once
-on the 17 real-label datasets (genotype, hashtag, MULTI-seq and species doublets), each dataset weighted equally. The score is the
-predicted probability (float32 in [0, 1], higher = more doublet-like).
+on the 17 real-label datasets (genotype, hashtag, MULTI-seq and species doublets), each dataset weighted equally, on the inputs as
+this package computes them. The score is the predicted probability (float32 in [0, 1], higher = more doublet-like).
 
 The trained trees are stored as plain arrays (``data/doublet_v2_stacker.npz`` + ``.json``: sklearn version, feature order,
 content hash), evaluated by :class:`Stacker` in numpy, so the scores do not depend on the installed scikit-learn; sklearn is only
@@ -32,7 +32,7 @@ from .registry import Feature
 
 FEATURE_SET = "doublet"
 SCORE_VERSION = "v2"
-INPUTS = ("umi", "genes", "prod", "atlas_knn", "atlas_clf", "ct_entropy", "atlas_nnls", "sdfl", "sdflc")
+INPUTS = ("umi", "genes", "prod", "sdfl", "sdflc", "atlas_knn", "atlas_entropy")
 HGB_PARAMS = dict(max_iter=300, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0, random_state=0)
 MIN_CELLS = 200  # fewer called cells: no score (k-means, PCA and the neighbour features need a population)
 DATA = Path(__file__).parent / "data"
@@ -166,6 +166,18 @@ def stacker() -> Stacker:
     return _STACKER
 
 
+_ATLAS = None
+
+
+def atlas():
+    global _ATLAS
+    if _ATLAS is None:
+        from .doublet_atlas import Atlas
+
+        _ATLAS = Atlas.load()
+    return _ATLAS
+
+
 # ---------------------------------------------------------------------------------------------------------------- training
 def fit_hgb(
     data: Dict[str, "tuple"], train: Sequence[str], cols: Sequence[str] = INPUTS
@@ -216,12 +228,15 @@ def train_frozen(data: Dict[str, "tuple"], extra_meta: Dict) -> Stacker:
 
 # --------------------------------------------------------------------------------------------------------- registry / scoring
 def method_version() -> str:
+    """Hash of every array that determines the values (trees and encoder) and the settings of the algorithmic parts."""
+    from . import doublet_atlas as DA
+    from . import doublet_sdfl as DS
+
     m = stacker().meta
     return (
         f"singlet-features={__version__};doublet=score_{SCORE_VERSION};stacker=hgb300/{m['content_hash'][:8]}"
-        f"(sklearn {m['sklearn_version_trained']});inputs={','.join(INPUTS)};"
-        f"atlas_encoder={m['atlas_encoder']}({m['atlas_encoder_sha256'][:8]});centroids={m['centroids_sha256'][:8]};"
-        f"sdfl=a,c;min_cells={MIN_CELLS}"
+        f"(sklearn {m['sklearn_version_trained']});inputs={','.join(INPUTS)};encoder={atlas().content_hash()[:8]};"
+        f"atlas=ref{DA.REF_CAP}x{DA.SIM_RATIO},k{DA.K_MULT};sdfl=a,c/cap{DS.FAST.cap};min_cells={MIN_CELLS}"
     )
 
 
@@ -234,7 +249,7 @@ def features() -> List[Feature]:
             label="Doublet score (v2)",
             description=(
                 "Probability from a frozen cross-study stacker (gradient-boosted trees, trained on 17 real-label datasets) of "
-                "the within-sample ranks of the engine's doublet score, depth, genes, atlas-encoder features and two "
+                "the within-sample ranks of the engine's doublet score, depth, genes, two atlas-encoder features and two "
                 "artificial-doublet scorers; higher = more doublet-like. A within-sample ranking, not a calibrated doublet "
                 "rate. For single-donor samples; genotype doublets of pooled donors are authoritative."
             ),
@@ -278,25 +293,18 @@ def compute_inputs(
     species: Optional[str],
     prod,
     *,
-    device: str = "cpu",
-    model_path: Optional[str] = None,
-    centroids_path: Optional[str] = None,
     timings: Optional[dict] = None,
 ) -> Dict[str, np.ndarray]:
-    from . import doublet_atlas as DA
+    """The seven raw inputs of one sample (numpy / scipy / scikit-learn only)."""
     from . import doublet_sdfl as DS
 
-    from . import doublet_assets as A
-
-    meta = stacker().meta
-    if meta["atlas_encoder_sha256"] != A.ASSETS["encoder"].sha256:
-        raise A.AssetHashError("the stacker was trained with another encoder than the pinned asset")
+    enc = atlas()
+    if stacker().meta.get("encoder_content_hash") != enc.content_hash():
+        raise ValueError("the stacker was trained with another encoder than the packaged one")
     F = basic_inputs(X)
     F["prod"] = np.asarray(prod, np.float64)
     t = time.perf_counter()
-    pred = DA.load_predictor(model_path)
-    M = DA.load_centroids(centroids_path, meta["centroids_sha256"])
-    F.update(DA.features(X, gene_names, species, pred, M, device=device))
+    F.update(enc.features(X, gene_names, species))
     if timings is not None:
         timings["atlas_s"] = time.perf_counter() - t
     t = time.perf_counter()
@@ -307,7 +315,7 @@ def compute_inputs(
 
 
 def score_inputs(F: Dict[str, np.ndarray]) -> np.ndarray:
-    """Stacker score from the nine raw inputs of one sample (cells with a non-finite input get NaN)."""
+    """Stacker score from the seven raw inputs of one sample (cells with a non-finite input get NaN)."""
     n = len(F["umi"])
     out = np.full(n, np.nan, np.float32)
     ok = np.ones(n, bool)
@@ -319,15 +327,15 @@ def score_inputs(F: Dict[str, np.ndarray]) -> np.ndarray:
     return out
 
 
-def score_sample(sample, *, device: str = "cpu", timings: Optional[dict] = None, **kw):
+def score_sample(sample, *, timings: Optional[dict] = None):
     """Score one sample (a SampleInput-like object with ``X``, ``gene_names``, ``gene_ids``, ``species`` and the engine's
     per-cell doublet score as ``prod_doublet_score``, aligned to the rows of ``X``). Returns ``(values, extra)`` where
-    ``values = {"score_v2": float32 array}`` and ``extra`` holds the nine inputs (diagnostics, never written to a sidecar)."""
+    ``values = {"score_v2": float32 array}`` and ``extra`` holds the seven inputs (diagnostics, never written to a sidecar)."""
     X = sp.csr_matrix(sample.X, dtype=np.float32)
     n = X.shape[0]
     prod = getattr(sample, "prod_doublet_score", None)
     if sample.species not in SPECIES or n < MIN_CELLS or prod is None:
         return _na(n), {}
     ids = list(getattr(sample, "gene_ids", None) or []) or list(sample.gene_names)
-    F = compute_inputs(X, ids, sample.species, prod, device=device, timings=timings, **kw)
+    F = compute_inputs(X, ids, sample.species, prod, timings=timings)
     return {f"score_{SCORE_VERSION}": score_inputs(F)}, F

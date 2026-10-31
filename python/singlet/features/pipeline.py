@@ -46,11 +46,11 @@ def _empty(fs: str, n: int) -> SetResult:
     return SetResult(fs, vals, feats, REG.method_version(fs))
 
 
-def _doublet_result(sample, device: str, timings: Optional[dict]) -> SetResult:
+def _doublet_result(sample, timings: Optional[dict]) -> SetResult:
     from . import doublet as DBL
 
     t0 = time.perf_counter()
-    values, extra = DBL.score_sample(sample, device=device, timings=timings)
+    values, extra = DBL.score_sample(sample, timings=timings)
     res = SetResult("doublet", values, REG.features("doublet"), REG.method_version("doublet"))
     if not extra:
         res.dropped = {
@@ -66,12 +66,11 @@ def score_sample(
     sets: Sequence[str] = REG.FEATURE_SETS,
     *,
     timings: Optional[dict] = None,
-    device: str = "cpu",
 ) -> Dict[str, SetResult]:
     """Every requested set; ``doublet`` also needs ``sample.prod_doublet_score`` (the engine's score per row of ``X``)."""
     out: Dict[str, SetResult] = {}
     if "doublet" in sets:
-        out["doublet"] = _doublet_result(sample, device, timings)
+        out["doublet"] = _doublet_result(sample, timings)
         sets = tuple(s for s in sets if s != "doublet")
     if sets:
         out.update(_score_gene_sets(sample, sets, timings))

@@ -8,9 +8,7 @@
   collect   gather every sample's summary rows into OUT/ingest/sample_cell_summary.<k>.json, <= 2000 rows per file
 
 The ``doublet`` set (``--sets doublet``, docs/cell_features.md section 8) also needs the engine's doublet_scores.tsv per sample
-(``--prod-dir``) and the cell type network and atlas centroid files (fetched by sha256 into SINGLET_DOUBLET_CACHE; SINGLET_CELLTYPE_NN_MODEL and
-SINGLET_DOUBLET_CENTROIDS name local copies; `pip install singlet[doublet]`);
-``--device cuda`` runs its encoder on a GPU.
+(``--prod-dir``); its model (0.6 MB) is in the package, numpy / scipy / scikit-learn only.
 
 Studies: --gse GSE1 GSE2 ... or --list FILE (one study per line: "GSE" or "GSE GSM [GSM ...]" or "GSE path/to/bundle.singlet").
 per-sample studies are read from data.singlet.bio; legacy studies from a local bundle or one downloaded to --scratch (deleted after the
@@ -62,7 +60,7 @@ def done(out: Path, gse: str, gsm: str, sets) -> bool:
     )
 
 
-def run_sample(s, out: Path, sets, read_s: float, device: str = "cpu", prod_dir=None) -> dict:
+def run_sample(s, out: Path, sets, read_s: float, prod_dir=None) -> dict:
     import numpy as np
     from singlet.features import pipeline as P
     from singlet.features.output import build_table, sidecar_name, write_features
@@ -74,7 +72,7 @@ def run_sample(s, out: Path, sets, read_s: float, device: str = "cpu", prod_dir=
 
         tsv = DBL.find_prod_tsv(prod_dir, s.gse, s.gsm)
         s.prod_doublet_score = DBL.read_prod_scores(tsv, s.barcodes) if tsv else None
-    res = P.score_sample(s, sets, timings=tim, device=device)
+    res = P.score_sample(s, sets, timings=tim)
     d = out / s.gse
     order = np.argsort(s.col, kind="stable")
     col = np.asarray(s.col, np.int64)[order]
@@ -147,7 +145,7 @@ def cmd_run(a):
                     )
                 else:
                     try:
-                        info = run_sample(s, out, sets, read_s, a.device, a.prod_dir)
+                        info = run_sample(s, out, sets, read_s, a.prod_dir)
                         log(
                             gse=gse,
                             gsm=gsm,
@@ -232,7 +230,6 @@ def main(argv=None):
     r.add_argument("--ledger")
     r.add_argument("--keep-bundles", action="store_true")
     r.add_argument("--force", action="store_true")
-    r.add_argument("--device", default="cpu", help="torch device of the doublet set's atlas encoder (cpu, cuda)")
     r.add_argument(
         "--prod-dir",
         help="engine run directories for --sets doublet: DIR/<GSM>/doublet_scores.tsv (or DIR/<GSE>/<GSM>/..., DIR/<GSM>.doublet_scores.tsv)",
