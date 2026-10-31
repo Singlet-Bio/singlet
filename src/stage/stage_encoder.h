@@ -1,0 +1,375 @@
+// stage::Encoder: reads of one sample -> .1fg2 (src/stage/fmt2.h). Header-only; used by singlet-stage (from .1fq) and by `singlet download --stage-out`
+// (straight from the SRA, no .1fq). The read-level logic is one code path for both:
+//   begin_run / add_read ... end_run   (pass 1: exact-barcode histogram, distinct-cDNA table, spill of the per-read records)
+//   finish(out_path)                   (pass 2: R11 barcode correction with the final histogram, planes, zstd, CRC32C, table blocks, run table, index)
+// Protocol, geometry and whitelist come from the engine's own tables (known_protocols), the correction is singlet::CbCorrector.
+#pragma once
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <string>
+#include <unordered_map>
+#include <vector>
+#include <unistd.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <zstd.h>
+
+#include <singlet/fq/protocol.h>
+#include <singlet/fq/types.h>
+#include <singlet/pileup/cb_correct.h>
+#include "fmt2.h"
+
+namespace stage {
+using namespace fg2;
+
+[[noreturn]] inline void die(int code, const std::string& m) { std::fprintf(stderr, "[singlet-stage] %s\n", m.c_str()); std::exit(code); }
+inline double now_s() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+inline double cpu_s() {
+    rusage ru; getrusage(RUSAGE_SELF, &ru);
+    return ru.ru_utime.tv_sec + ru.ru_utime.tv_usec * 1e-6 + ru.ru_stime.tv_sec + ru.ru_stime.tv_usec * 1e-6;
+}
+
+struct Sha256 {
+    uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+    uint64_t len = 0; uint8_t buf[64]; size_t nb = 0;
+    static uint32_t rr(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
+    void block(const uint8_t* p) {
+        static const uint32_t K[64] = {
+            0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+            0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+            0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+            0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2};
+        uint32_t w[64];
+        for (int i = 0; i < 16; i++) w[i] = (uint32_t)p[4*i] << 24 | (uint32_t)p[4*i+1] << 16 | (uint32_t)p[4*i+2] << 8 | p[4*i+3];
+        for (int i = 16; i < 64; i++) { uint32_t s0 = rr(w[i-15],7)^rr(w[i-15],18)^(w[i-15]>>3), s1 = rr(w[i-2],17)^rr(w[i-2],19)^(w[i-2]>>10); w[i] = w[i-16]+s0+w[i-7]+s1; }
+        uint32_t a=h[0],b=h[1],c=h[2],d=h[3],e=h[4],f=h[5],g=h[6],hh=h[7];
+        for (int i = 0; i < 64; i++) {
+            uint32_t S1 = rr(e,6)^rr(e,11)^rr(e,25), ch = (e&f)^(~e&g), t1 = hh+S1+ch+K[i]+w[i];
+            uint32_t S0 = rr(a,2)^rr(a,13)^rr(a,22), mj = (a&b)^(a&c)^(b&c), t2 = S0+mj;
+            hh=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
+        }
+        h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e; h[5]+=f; h[6]+=g; h[7]+=hh;
+    }
+    void update(const uint8_t* p, size_t n) {
+        len += n;
+        while (n) { size_t k = std::min(n, 64 - nb); std::memcpy(buf + nb, p, k); nb += k; p += k; n -= k; if (nb == 64) { block(buf); nb = 0; } }
+    }
+    void finish(uint8_t out[32]) {
+        uint64_t bits = len * 8; uint8_t pad = 0x80; update(&pad, 1); uint8_t z = 0;
+        while (nb != 56) update(&z, 1);
+        uint8_t l[8]; for (int i = 0; i < 8; i++) l[i] = (uint8_t)(bits >> (56 - 8 * i)); update(l, 8);
+        for (int i = 0; i < 8; i++) { out[4*i] = h[i] >> 24; out[4*i+1] = h[i] >> 16; out[4*i+2] = h[i] >> 8; out[4*i+3] = h[i]; }
+    }
+};
+
+// Distinct cDNA sequences: open addressing over packed 2-bit sequences (N coded as A; the N positions are part of the key).
+struct SeqTable {
+    static constexpr int NMB = 32;       // N-position bitmask bytes (255 bits)
+    static constexpr int SLOT = 64;      // 255 nt * 2 bit = 510 bits
+    std::vector<uint8_t> data, len, hasn;
+    std::unordered_map<uint32_t, std::array<uint8_t, NMB>> nmask;
+    std::vector<uint32_t> ht;            // id + 1, 0 = empty
+    uint64_t mask = 0;
+    uint64_t n() const { return len.size(); }
+    SeqTable() { ht.assign(1u << 20, 0); mask = ht.size() - 1; }
+    static uint64_t mix(uint64_t h, uint64_t w) { h = (h ^ w) * 0x9E3779B97F4A7C15ull; return h ^ (h >> 29); }
+    static uint64_t hash(const uint8_t* slot, uint8_t l, const uint8_t* nm) {
+        uint64_t h = 0x243F6A8885A308D3ull, w;
+        for (int i = 0; i < SLOT; i += 8) { std::memcpy(&w, slot + i, 8); h = mix(h, w); }
+        h = mix(h, l);
+        if (nm) { for (int i = 0; i < NMB; i += 8) { std::memcpy(&w, nm + i, 8); h = mix(h, w); } }
+        return h;
+    }
+    void grow() {
+        std::vector<uint32_t> nt(ht.size() * 2, 0);
+        uint64_t nmk = nt.size() - 1;
+        for (uint64_t id = 0; id < n(); id++) {
+            const uint8_t* nm = hasn[id] ? nmask.at((uint32_t)id).data() : nullptr;
+            uint64_t p = hash(&data[id * SLOT], len[id], nm) & nmk;
+            while (nt[p]) p = (p + 1) & nmk;
+            nt[p] = (uint32_t)id + 1;
+        }
+        ht.swap(nt); mask = nmk;
+    }
+    uint32_t get_or_add(const uint8_t* slot, uint8_t l, const uint8_t* nm) {
+        if ((n() + 1) * 2 > ht.size()) grow();
+        uint64_t p = hash(slot, l, nm) & mask;
+        for (;;) {
+            uint32_t e = ht[p];
+            if (!e) break;
+            uint32_t id = e - 1;
+            if (len[id] == l && std::memcmp(&data[(uint64_t)id * SLOT], slot, SLOT) == 0 && (bool)hasn[id] == (nm != nullptr) &&
+                (!nm || std::memcmp(nmask.at(id).data(), nm, NMB) == 0)) return id;
+            p = (p + 1) & mask;
+        }
+        uint32_t id = (uint32_t)n();
+        if (id == 0xFFFFFFFEu) die(5, "more than 2^32-2 distinct sequences");
+        data.insert(data.end(), slot, slot + SLOT);
+        len.push_back(l);
+        hasn.push_back(nm ? 1 : 0);
+        if (nm) { std::array<uint8_t, NMB> a; std::memcpy(a.data(), nm, NMB); nmask.emplace(id, a); }
+        ht[p] = id + 1;
+        return id;
+    }
+};
+
+#pragma pack(push, 1)
+struct Rec { uint64_t cbkey; uint32_t umi; uint32_t seq; uint16_t umin; uint8_t len; uint8_t bad; };   // 20 bytes; + SLOT quality bytes if the sample has them
+#pragma pack(pop)
+
+struct Out {
+    FILE* f; uint64_t off = 0;
+    void write(const void* p, size_t n) { if (n && std::fwrite(p, 1, n, f) != n) die(4, "write failed"); off += n; }
+    void pad_to(uint64_t a) { static const uint8_t z[4096] = {0}; uint64_t t = align_up(off, a); while (off < t) write(z, std::min<uint64_t>(4096, t - off)); }
+};
+
+inline std::vector<uint8_t> pack_plane(const std::vector<uint8_t>& raw, int level, bool& rawflag) {
+    rawflag = false;
+    if (raw.empty()) return {};
+    std::vector<uint8_t> out(ZSTD_compressBound(raw.size()));
+    size_t c = ZSTD_compress(out.data(), out.size(), raw.data(), raw.size(), level);
+    if (ZSTD_isError(c) || c >= raw.size()) { rawflag = true; return raw; }
+    out.resize(c);
+    return out;
+}
+
+class Encoder {
+public:
+    singlet::CbCorrector corr;
+    uint8_t protocol_id = 0;
+    int bcl = 0, bc0 = 0, umil = 0, umi0 = 0;
+    bool has_q = false;
+    std::string wl_name;
+    uint64_t n_in = 0, n_dropped = 0, n_stored = 0, hist_reads = 0, src_bytes = 0;
+    double t_start = 0, c_start = 0;
+
+    // protocol_id -> universal single whitelist in R1, or die(6) (the caller then stays on the .1fq path)
+    void init(uint8_t pid, int bc_len, int bc_off, int umi_len, int umi_off, bool with_q, const std::vector<std::string>& wl_dirs,
+              const std::string& scratch_dir) {
+        protocol_id = pid; bcl = bc_len; bc0 = bc_off; umil = umi_len; umi0 = umi_off; has_q = with_q; scratch = scratch_dir;
+        const singlet::fq::CandidateSpec* spec = nullptr;
+        for (const auto& s : singlet::fq::known_protocols()) if (s.protocol_id == pid) { spec = &s; break; }
+        if (!spec || spec->whitelist_file.empty() || !spec->per_seg_whitelist_files.empty() || spec->barcode_in_r2)
+            die(6, "protocol " + std::to_string(pid) + " has no single universal whitelist in R1: not staged (use the .1fq path)");
+        wl_name = spec->whitelist_file;
+        for (const auto& d : wl_dirs) { std::string p = d + "/" + wl_name; if (std::ifstream(p).good()) { wl_path = p; break; } }
+        if (wl_path.empty()) die(6, "whitelist " + wl_name + " not found in the whitelist dirs");
+        if (!corr.load_whitelist(wl_path)) die(6, "cannot load whitelist " + wl_path);
+        if (bcl <= 0 || bcl > 21 || bcl != corr.length()) die(6, "barcode length " + std::to_string(bcl) + " does not match the whitelist (" + std::to_string(corr.length()) + ")");
+        if (umil <= 0 || umil > 16) die(6, "UMI length " + std::to_string(umil) + " not supported (1..16)");
+        hist.assign(corr.size(), 0);
+        recsz = sizeof(Rec) + (has_q ? SeqTable::SLOT : 0);
+        spill_path = scratch + "/s9-stage-spill-" + std::to_string(getpid());
+        spill = std::fopen(spill_path.c_str(), "wb+");
+        if (!spill) die(4, "cannot create spill file " + spill_path);
+        sbuf.reserve(recsz * 65536);
+        t_start = now_s(); c_start = cpu_s();
+        ready = true;
+    }
+    bool initialised() const { return ready; }
+
+    void begin_run(const std::string& accession, uint64_t raw_bytes) {
+        RunEntry re; std::memset(&re, 0, sizeof re);
+        std::strncpy(re.accession, accession.c_str(), sizeof re.accession - 1);
+        re.first_read = n_stored; re.raw_bytes = raw_bytes;
+        runs.push_back(re); src_bytes += raw_bytes;
+    }
+    void end_run() { runs.back().n_reads = n_stored - runs.back().first_read; }
+    void note_dropped() { n_in++; n_dropped++; }
+
+    // One read. bc[bcl] and umi[umil] byte-numeric (0-3, 4 = N), r2[r2l] byte-numeric, qual = raw Phred per base of r2 (null: all zero).
+    void add_read(const uint8_t* bc, const uint8_t* umi_in, const uint8_t* r2, uint16_t r2l, const uint8_t* qual) {
+        n_in++;
+        if (r2l > MAX_SEQ_LEN) die(3, "cDNA longer than 255 nt (" + std::to_string(r2l) + "): not stageable");
+        uint64_t cbkey = 0; bool cbN = false;
+        for (int j = 0; j < bcl; j++) { uint8_t c = std::min<uint8_t>(bc[j], 4); cbN |= c > 3; cbkey = (cbkey << 3) | c; }
+        uint32_t umi = 0; uint16_t umin = 0; bool homo = true;
+        for (int j = 0; j < umil; j++) { uint8_t c = umi_in[j]; if (c > 3) { umin |= (uint16_t)(1u << j); c = 0; } umi = (umi << 2) | c; if (umi_in[j] != umi_in[0]) homo = false; }
+        const bool bad = umin != 0 || homo;
+        if (!bad && !cbN) {
+            auto it = cbfind.find(cbkey);
+            int64_t w;
+            if (it == cbfind.end()) {
+                char s[32]; for (int j = 0; j < bcl; j++) s[j] = "ACGTN"[(cbkey >> (3 * (bcl - 1 - j))) & 7];
+                s[bcl] = 0; w = corr.find(s); cbfind.emplace(cbkey, w);
+            } else w = it->second;
+            if (w >= 0) { hist[w]++; hist_reads++; }
+        }
+        uint8_t slot[SeqTable::SLOT] = {0}; uint8_t nm[SeqTable::NMB] = {0}; bool anyN = false;
+        for (uint16_t j = 0; j < r2l; j++) { uint8_t c = r2[j]; if (c > 3) { anyN = true; nm[j >> 3] |= (uint8_t)(1u << (j & 7)); c = 0; } slot[j >> 2] |= (uint8_t)(c << (6 - 2 * (j & 3))); }
+        const uint32_t sid = tab.get_or_add(slot, (uint8_t)r2l, anyN ? nm : nullptr);
+        max_len = std::max<uint32_t>(max_len, r2l);
+        Rec rec{cbkey, umi, sid, umin, (uint8_t)r2l, (uint8_t)bad};
+        const size_t at = sbuf.size(); sbuf.resize(at + recsz);
+        std::memcpy(&sbuf[at], &rec, sizeof rec);
+        if (has_q) {
+            uint8_t* q = &sbuf[at + sizeof rec]; std::memset(q, 0, SeqTable::SLOT);
+            for (uint16_t j = 0; j < r2l; j++) {
+                uint8_t p = qual ? qual[j] : 0, b = p <= 9 ? 0 : p <= 19 ? 1 : p <= 29 ? 2 : 3;   // singlet::fq::qual::phred_to_ilmn4
+                q[j >> 2] |= (uint8_t)(b << (6 - 2 * (j & 3)));
+            }
+        }
+        n_stored++;
+        if (sbuf.size() >= recsz * 32768) flush_spill();
+    }
+
+    // Pass 2 and the file. Returns the JSON report (one line).
+    std::string finish(const std::string& out_path, int level, double extra_cpu_s = 0, double extra_wall_s = 0) {
+        flush_spill(); std::fflush(spill);
+        for (uint64_t w = 0; w < hist.size(); w++) if (hist[w]) corr.add_exact((int64_t)w, hist[w]);
+        double t1 = now_s(), c1 = cpu_s();
+        Sha256 sha; { std::ifstream wf(wl_path, std::ios::binary); char b[1 << 16]; while (wf.read(b, sizeof b) || wf.gcount()) sha.update((const uint8_t*)b, (size_t)wf.gcount()); }
+        uint8_t wl_sha[32]; sha.finish(wl_sha);
+        const uint32_t seq_slot = (uint32_t)align_up(std::max<uint32_t>((max_len + 3) / 4, 1), 8);
+        Out o; o.f = std::fopen(out_path.c_str(), "wb"); if (!o.f) die(4, "cannot create " + out_path);
+        FileHeader H; std::memset(&H, 0, sizeof H);
+        o.write(&H, sizeof H); o.pad_to(ALIGN);
+        H.chunks_offset = o.off;
+        std::vector<IndexEntry> cidx, bidx;
+        uint64_t plane_bytes[NPLANE] = {0}, status_counts[8] = {0};
+        std::unordered_map<uint64_t, std::pair<int64_t, uint8_t>> cbres;
+        std::rewind(spill);
+        std::vector<uint8_t> rbuf(recsz * CHUNK_READS);
+        uint64_t first_read = 0;
+        for (;;) {
+            size_t got = std::fread(rbuf.data(), 1, rbuf.size(), spill);
+            if (got == 0) break;
+            if (got % recsz) die(4, "spill file truncated");
+            const uint32_t n = (uint32_t)(got / recsz);
+            std::vector<uint8_t> pl[NPLANE];
+            pl[PL_CB].resize(4 * n); pl[PL_CBST].resize(n); pl[PL_UMI].resize(4 * n); pl[PL_SEQ].resize(4 * n); pl[PL_LEN].resize(n);
+            if (has_q) pl[PL_Q].assign((size_t)n * seq_slot, 0);
+            std::vector<uint32_t> exc;
+            for (uint32_t i = 0; i < n; i++) {
+                Rec rec; std::memcpy(&rec, &rbuf[i * recsz], sizeof rec);
+                auto it = cbres.find(rec.cbkey);
+                if (it == cbres.end()) {
+                    char s[32], outb[32];
+                    for (int j = 0; j < bcl; j++) s[j] = "ACGTN"[(rec.cbkey >> (3 * (bcl - 1 - j))) & 7];
+                    s[bcl] = 0;
+                    int st = corr.resolve(s, nullptr, outb);
+                    int64_t idx = st >= 0 ? corr.find(std::string(outb, bcl).c_str()) : -1;
+                    it = cbres.emplace(rec.cbkey, std::make_pair(idx, (uint8_t)(st + 4))).first;
+                }
+                const int64_t idx = it->second.first;
+                const uint8_t status = (uint8_t)(it->second.second | (rec.bad ? CBST_BAD_UMI : 0));
+                const uint32_t cb = idx >= 0 ? (uint32_t)idx : NO_CB;
+                std::memcpy(&pl[PL_CB][4 * i], &cb, 4); pl[PL_CBST][i] = status;
+                std::memcpy(&pl[PL_UMI][4 * i], &rec.umi, 4); std::memcpy(&pl[PL_SEQ][4 * i], &rec.seq, 4); pl[PL_LEN][i] = rec.len;
+                status_counts[it->second.second & 7]++; if (rec.bad) status_counts[7]++;
+                for (int j = 0; j < umil; j++) if ((rec.umin >> j) & 1) exc.push_back(exc_pack(i, EXC_UMI_N, (uint32_t)j));
+                if (has_q) std::memcpy(&pl[PL_Q][(size_t)i * seq_slot], &rbuf[i * recsz + sizeof rec], seq_slot);
+            }
+            pl[PL_EXC].resize(4 * exc.size()); if (!exc.empty()) std::memcpy(pl[PL_EXC].data(), exc.data(), 4 * exc.size());
+            std::vector<uint8_t> body; ChunkHeader ch; std::memset(&ch, 0, sizeof ch);
+            ch.magic = CHUNK_MAGIC; ch.n_reads = n; ch.n_exc = (uint32_t)exc.size(); ch.first_read = first_read;
+            body.resize(sizeof ch);
+            for (int p = 0; p < NPLANE; p++) {
+                bool rawflag; std::vector<uint8_t> st = pack_plane(pl[p], level, rawflag);
+                if (rawflag) ch.flags |= 1u << p;
+                while (body.size() % SEC_ALIGN) body.push_back(0);
+                ch.sec[p] = {(uint32_t)st.size(), (uint32_t)pl[p].size(), fg2::crc32c(st.data(), st.size()), (uint32_t)body.size()};
+                body.insert(body.end(), st.begin(), st.end());
+                plane_bytes[p] += st.size();
+            }
+            std::memcpy(body.data(), &ch, sizeof ch);
+            o.pad_to(ALIGN); cidx.push_back({o.off, (uint32_t)body.size(), n}); o.write(body.data(), body.size());
+            first_read += n;
+        }
+        std::fclose(spill); spill = nullptr; std::remove(spill_path.c_str());
+        o.pad_to(ALIGN); H.blocks_offset = o.off;
+        uint64_t seq_bytes[NSEQPLANE] = {0};
+        for (uint64_t b0 = 0; b0 < tab.n(); b0 += BLOCK_SEQS) {
+            const uint32_t n = (uint32_t)std::min<uint64_t>(BLOCK_SEQS, tab.n() - b0);
+            std::vector<uint8_t> sp[NSEQPLANE];
+            sp[SP_SEQ2].resize((size_t)n * seq_slot); sp[SP_SLEN].resize(n);
+            std::vector<uint32_t> sexc;
+            for (uint32_t i = 0; i < n; i++) {
+                const uint64_t id = b0 + i;
+                std::memcpy(&sp[SP_SEQ2][(size_t)i * seq_slot], &tab.data[id * SeqTable::SLOT], seq_slot);
+                sp[SP_SLEN][i] = tab.len[id];
+                if (tab.hasn[id]) { const auto& m = tab.nmask.at((uint32_t)id); for (uint32_t j = 0; j < tab.len[id]; j++) if ((m[j >> 3] >> (j & 7)) & 1) sexc.push_back(i | (j << 15)); }
+            }
+            sp[SP_SEXC].resize(4 * sexc.size()); if (!sexc.empty()) std::memcpy(sp[SP_SEXC].data(), sexc.data(), 4 * sexc.size());
+            std::vector<uint8_t> body; BlockHeader bh; std::memset(&bh, 0, sizeof bh);
+            bh.magic = SEQB_MAGIC; bh.n_seqs = n; bh.n_sexc = (uint32_t)sexc.size(); bh.first_seq = b0;
+            body.resize(sizeof bh);
+            for (int p = 0; p < NSEQPLANE; p++) {
+                bool rawflag; std::vector<uint8_t> st = pack_plane(sp[p], level, rawflag);
+                if (rawflag) bh.flags |= 1u << p;
+                while (body.size() % SEC_ALIGN) body.push_back(0);
+                bh.sec[p] = {(uint32_t)st.size(), (uint32_t)sp[p].size(), fg2::crc32c(st.data(), st.size()), (uint32_t)body.size()};
+                body.insert(body.end(), st.begin(), st.end());
+                seq_bytes[p] += st.size();
+            }
+            std::memcpy(body.data(), &bh, sizeof bh);
+            o.pad_to(ALIGN); bidx.push_back({o.off, (uint32_t)body.size(), n}); o.write(body.data(), body.size());
+        }
+        char meta[1024];
+        int ml = std::snprintf(meta, sizeof meta, "{\"tool\":\"singlet-stage\",\"whitelist\":\"%s\",\"runs\":%zu,\"cb_hist_reads\":%llu,\"level\":%d}",
+                               wl_name.c_str(), runs.size(), (unsigned long long)hist_reads, level);
+        std::vector<uint8_t> mz(ZSTD_compressBound(ml)); size_t mzn = ZSTD_compress(mz.data(), mz.size(), meta, ml, level);
+        o.pad_to(ALIGN); H.meta_offset = o.off; H.meta_comp_size = (uint32_t)mzn; H.meta_raw_size = (uint32_t)ml; o.write(mz.data(), mzn);
+        o.pad_to(16); H.runs_offset = o.off; H.n_runs = (uint32_t)runs.size(); o.write(runs.data(), runs.size() * sizeof(RunEntry));
+        o.pad_to(16); H.index_offset = o.off;
+        std::vector<IndexEntry> allidx = cidx; allidx.insert(allidx.end(), bidx.begin(), bidx.end());
+        o.write(allidx.data(), allidx.size() * sizeof(IndexEntry));
+        Footer F{FOOT_MAGIC, (uint32_t)cidx.size(), (uint32_t)bidx.size(), fg2::crc32c(allidx.data(), allidx.size() * sizeof(IndexEntry)), H.index_offset};
+        o.write(&F, sizeof F);
+        H.magic = FILE_MAGIC; H.version = VERSION; H.header_size = sizeof H; H.codec = CODEC_ZSTD; H.codec_level = (uint8_t)level;
+        H.flags = F_CRC | F_CB_FIXED | (has_q ? F_QPLANE : 0);
+        H.chunk_reads = CHUNK_READS; H.block_seqs = BLOCK_SEQS; H.n_reads = n_stored; H.n_reads_in = n_in; H.n_dropped = n_dropped; H.n_unique = tab.n();
+        H.n_chunks = (uint32_t)cidx.size(); H.n_blocks = (uint32_t)bidx.size(); H.seq_slot = (uint16_t)seq_slot; H.r2_max_len = (uint16_t)max_len;
+        H.r2_clip5p = 0; H.protocol_id = protocol_id; H.cb_len = (uint8_t)bcl; H.cb_start = (uint8_t)bc0; H.umi_len = (uint8_t)umil; H.umi_start = (uint8_t)umi0;
+        H.r1_len = (uint8_t)std::max(bc0 + bcl, umi0 + umil);
+        if (has_q) { H.q_edges[0] = 2; H.q_edges[1] = 11; H.q_edges[2] = 25; H.q_edges[3] = 37; H.q_bins = 4; }
+        H.wl_entries = (uint32_t)corr.size(); std::memcpy(H.wl_sha256, wl_sha, 32);
+        std::strncpy(H.wl_name, wl_name.c_str(), sizeof H.wl_name - 1);
+        H.cb_hist_reads = hist_reads; std::memcpy(H.status_counts, status_counts, sizeof status_counts);
+        H.source_bytes = src_bytes;
+        H.header_crc32c = fg2::crc32c(&H, offsetof(FileHeader, header_crc32c));
+        std::fflush(o.f); std::fseek(o.f, 0, SEEK_SET); std::fwrite(&H, 1, sizeof H, o.f); std::fclose(o.f);
+        double t2 = now_s(), c2 = cpu_s();
+        struct stat fst; stat(out_path.c_str(), &fst);
+        const double M = n_stored / 1e6;
+        char js[4096];
+        std::snprintf(js, sizeof js,
+            "{\"n_reads\":%llu,\"n_in\":%llu,\"n_dropped\":%llu,\"n_unique\":%llu,\"unique_fraction\":%.4f,\"protocol_id\":%u,\"whitelist\":\"%s\",\"cb_hist_reads\":%llu,"
+            "\"seq_slot\":%u,\"max_len\":%u,\"has_q\":%d,\"file_bytes\":%lld,\"bytes_per_read\":%.3f,\"read_plane_bytes\":{\"cb\":%llu,\"cbst\":%llu,\"umi\":%llu,\"seq\":%llu,\"len\":%llu,\"q\":%llu,\"exc\":%llu},"
+            "\"seq_table_bytes\":{\"seq2\":%llu,\"slen\":%llu,\"sexc\":%llu},\"status_counts\":[%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu],"
+            "\"encoder_wall_s\":%.2f,\"encoder_cpu_s\":%.2f,\"finish_cpu_s\":%.2f,\"core_s_per_Mreads\":%.3f,\"table_mem_mb\":%.0f}",
+            (unsigned long long)n_stored, (unsigned long long)n_in, (unsigned long long)n_dropped, (unsigned long long)tab.n(), n_stored ? (double)tab.n() / n_stored : 0.0,
+            protocol_id, wl_name.c_str(), (unsigned long long)hist_reads, seq_slot, max_len, (int)has_q, (long long)fst.st_size, n_stored ? (double)fst.st_size / n_stored : 0.0,
+            (unsigned long long)plane_bytes[PL_CB], (unsigned long long)plane_bytes[PL_CBST], (unsigned long long)plane_bytes[PL_UMI], (unsigned long long)plane_bytes[PL_SEQ],
+            (unsigned long long)plane_bytes[PL_LEN], (unsigned long long)plane_bytes[PL_Q], (unsigned long long)plane_bytes[PL_EXC],
+            (unsigned long long)seq_bytes[0], (unsigned long long)seq_bytes[1], (unsigned long long)seq_bytes[2],
+            (unsigned long long)status_counts[0], (unsigned long long)status_counts[1], (unsigned long long)status_counts[2], (unsigned long long)status_counts[3],
+            (unsigned long long)status_counts[4], (unsigned long long)status_counts[5], (unsigned long long)status_counts[6], (unsigned long long)status_counts[7],
+            t2 - t_start + extra_wall_s, c2 - c_start + extra_cpu_s, c2 - c1, M > 0 ? (c2 - c_start + extra_cpu_s) / M : 0.0, (tab.data.size() + tab.ht.size() * 4.0) / 1e6);
+        return js;
+    }
+
+private:
+    void flush_spill() {
+        if (sbuf.empty()) return;
+        if (std::fwrite(sbuf.data(), 1, sbuf.size(), spill) != sbuf.size()) die(4, "spill write failed");
+        sbuf.clear();
+    }
+    bool ready = false;
+    std::string scratch, wl_path, spill_path;
+    FILE* spill = nullptr;
+    SeqTable tab;
+    std::vector<uint64_t> hist;
+    std::unordered_map<uint64_t, int64_t> cbfind;
+    std::vector<RunEntry> runs;
+    uint32_t max_len = 0;
+    size_t recsz = 0;
+    std::vector<uint8_t> sbuf;
+};
+}  // namespace stage
