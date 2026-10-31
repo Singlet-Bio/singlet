@@ -32,7 +32,7 @@ CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-
 if [ -n "${MPS:-}" ]; then export CUDA_MPS_PIPE_DIRECTORY=/tmp/s8mps_$SLURM_JOB_ID CUDA_MPS_LOG_DIRECTORY=/tmp/s8mpslog_$SLURM_JOB_ID; mkdir -p $CUDA_MPS_PIPE_DIRECTORY $CUDA_MPS_LOG_DIRECTORY; nvidia-cuda-mps-control -d; sleep 2; echo "MPS daemon started" | tee -a $RES/summary.txt; fi
 [ -n "${PRELOAD:-}" ] && { $BIN genome load $G/star_2.7.11b 2>&1 | tee -a $RES/summary.txt; }
 [ -n "${TMPDIR_RAM:-}" ] && { mkdir -p /dev/shm/s8q_$SLURM_JOB_ID; export TMPDIR=/dev/shm/s8q_$SLURM_JOB_ID; }
-echo "node=$(hostname) job=$SLURM_JOB_ID bin=$(cat $(dirname $BIN)/commit) sample=$s NS=$NS configs=$CONFIGS $(date -Is)" | tee $RES/summary.txt
+lscpu | grep -E "Model name|NUMA|Socket|L3" | tee $RES/lscpu.txt; echo "node=$(hostname) job=$SLURM_JOB_ID bin=$(cat $(dirname $BIN)/commit) sample=$s NS=$NS configs=$CONFIGS $(date -Is)" | tee $RES/summary.txt
 
 tree() { echo $1; for c in $(pgrep -P $1 2>/dev/null); do tree $c; done; }
 export -f tree
@@ -50,7 +50,18 @@ run_one() {   # gpu index config-dir slots threads timeline?
       while [ -n "$sp" ] && kill -0 $sp 2>/dev/null; do
         t=$(date +%s.%N); c=0; for p in $(tree $sp); do v=$(awk '{print $14+$15}' /proc/$p/stat 2>/dev/null); [ -n "$v" ] && last[$p]=$v; done
         for p in "${!last[@]}"; do c=$((c + ${last[$p]})); done
-        echo "$t $c" >> $D/timeline_g${g}_$i.cpu; sleep 2
+        echo "$t $c" >> $D/timeline_g${g}_$i.cpu
+        # every ~30 s: IPC of the busiest child (STAR) over 4 s, and its memory placement by NUMA node
+        n=$((${n:-0}+1))
+        if [ $((n % 15)) = 0 ]; then
+          kp=$(for p in $(tree $sp); do [ $p != $sp ] && echo "$(awk '{print $14+$15}' /proc/$p/stat 2>/dev/null) $p"; done | sort -rn | head -1 | cut -d' ' -f2)
+          if [ -n "$kp" ]; then
+            echo "t=$t pid=$kp $(perf stat -x, -e cycles,instructions -p $kp -- sleep 4 2>&1 | tr '
+' ' ')" >> $D/perf_g${g}_$i.txt
+            numastat -p $kp 2>/dev/null | tail -3 | sed "s/^/t=$t /" >> $D/numa_g${g}_$i.txt
+          fi
+        fi
+        sleep 2
       done ) &
   fi
   wait $wp
