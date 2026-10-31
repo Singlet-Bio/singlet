@@ -46,8 +46,10 @@ run_one() {   # gpu index config-dir slots threads timeline?
   local wp=$!
   if [ "$TLFLAG" = 1 ]; then
     ( sleep 3; sp=$(pgrep -f "singlet-gpu $FQ.*out-prefix $d/out/" | head -1)
+      declare -A last   # per pid, the last CPU ticks seen: a process that exits (STAR, the forked children) keeps its share in the total
       while [ -n "$sp" ] && kill -0 $sp 2>/dev/null; do
-        t=$(date +%s.%N); c=0; for p in $(tree $sp); do c=$((c + $(awk '{print $14+$15}' /proc/$p/stat 2>/dev/null || echo 0))); done
+        t=$(date +%s.%N); c=0; for p in $(tree $sp); do v=$(awk '{print $14+$15}' /proc/$p/stat 2>/dev/null); [ -n "$v" ] && last[$p]=$v; done
+        for p in "${!last[@]}"; do c=$((c + ${last[$p]})); done
         echo "$t $c" >> $D/timeline_g${g}_$i.cpu; sleep 2
       done ) &
   fi
