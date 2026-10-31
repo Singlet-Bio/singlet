@@ -37,6 +37,13 @@ def gpu_peak_gb(reads):
     return 17.5 + 0.39 * reads / 1e6
 
 
+def memory_tier(reads):
+    """summary.json's memory_tier of a sample from its read count, not from the process that ran it (the field is a member of the .s1, so it must not
+    depend on the engine or the node): the singlet thresholds on the expected peak resident set, <8 GB Small, <64 Medium, <256 Large, else XLarge."""
+    gb = gpu_peak_gb(reads)
+    return "Small" if gb < 8 else "Medium" if gb < 64 else "Large" if gb < 256 else "XLarge"
+
+
 def gpu_job_mem_gb(reads, margin=1.2, extra=20, step=8):
     """What a job needs to run a sample of `reads` reads: the largest process with `margin`, plus the parent process, /dev/shm temp files and
     page cache (`extra` GB), rounded up to `step`. A 128 GB job holds samples up to ~190 M reads."""
