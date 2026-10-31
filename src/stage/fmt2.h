@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <nmmintrin.h>
 
 namespace fg2 {
 
@@ -32,16 +33,15 @@ enum Flags : uint32_t {
     F_CB_FIXED   = 1u << 3,   // `cb`/`cbst` are the R11 correction of this file's own exact histogram (always set by the fetch tier)
 };
 
-// Status of the barcode, 1 byte per read (the 3 bits of S8's draft, unpacked; zstd makes the empty bits free). Values are
-// CbCorrector::Status + 1 plus the read-level classes of CellReads.stats:
+// Status of the barcode, 1 byte per read: low 3 bits = CbCorrector::resolve() status + 4 (S8, 2026-10-31), bit 3 = the UMI is bad.
 enum CbStatus : uint8_t {
-    CBST_EXACT = 0,          // exact whitelist hit                         (kExact)
-    CBST_ONE_CAND = 1,       // one single-substitution candidate           (kOneCandidate)
-    CBST_POSTERIOR = 2,      // several candidates, posterior >= 0.975      (kPosterior)
-    CBST_REJECTED = 3,       // several candidates, posterior too low       (kRejected)   cb = NO_CB
-    CBST_NO_MATCH = 4,       // no candidate                                (kNoMatch)    cb = NO_CB
-    CBST_TWO_N = 5,          // two or more N in the barcode                (kTwoN)       cb = NO_CB
-    CBST_BAD_UMI = 6,        // N or homopolymer UMI: counted, not used     (cb is still set when the barcode corrects)
+    CBST_REJECTED = 0,       // resolve() -4: several candidates, posterior < 0.975        cb = NO_CB
+    CBST_TWO_N = 2,          // resolve() -2: two or more N in the barcode                 cb = NO_CB
+    CBST_NO_MATCH = 3,       // resolve() -1: no candidate                                 cb = NO_CB
+    CBST_EXACT = 4,          // resolve()  0: exact whitelist hit
+    CBST_ONE_CAND = 5,       // resolve()  1: one single-substitution candidate
+    CBST_POSTERIOR = 6,      // resolve()  2: several candidates, posterior >= 0.975
+    CBST_BAD_UMI = 8,        // flag: the UMI has an N or is a homopolymer (counted, not used; cb is still set when the barcode corrects)
 };
 
 // Read planes inside a read chunk
@@ -145,5 +145,15 @@ static_assert(offsetof(FileHeader, wl_sha256) == 88 && offsetof(FileHeader, stat
 static_assert(sizeof(FileHeader) == 4096, "FileHeader");
 static_assert(sizeof(RunEntry) == 56, "RunEntry");
 static_assert(sizeof(IndexEntry) == 16, "IndexEntry");
+
+// CRC32C (Castagnoli) with the SSE4.2 instruction (as v1).
+static inline uint32_t crc32c(const void* data, size_t n, uint32_t crc = 0) {
+    const uint8_t* p = (const uint8_t*)data; uint64_t c = ~crc;
+    while (n >= 8) { uint64_t v; std::memcpy(&v, p, 8); c = _mm_crc32_u64(c, v); p += 8; n -= 8; }
+    uint32_t c32 = (uint32_t)c;
+    while (n--) c32 = _mm_crc32_u8(c32, *p++);
+    return ~c32;
+}
+static inline uint64_t align_up(uint64_t x, uint64_t a) { return (x + a - 1) / a * a; }
 
 }  // namespace fg2

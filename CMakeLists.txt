@@ -59,6 +59,12 @@ target_include_directories(singlet_pileup INTERFACE
 )
 target_link_libraries(singlet_pileup INTERFACE singlet_pz singlet_fq Threads::Threads)
 
+# ─── singlet-stage: fetch-tier encoder .1fq -> .1fg2 (src/stage; docs/research-beta/download-and-staging.md). Engine headers + libzstd only. ───
+add_executable(singlet-stage src/stage/singlet_stage.cpp)
+target_include_directories(singlet-stage PRIVATE src/stage)
+target_link_libraries(singlet-stage PRIVATE singlet_fq Threads::Threads)
+target_compile_options(singlet-stage PRIVATE -msse4.2)
+
 # ─── Pipeline binary (optional) ──────────────────────────────────────────────
 if(SINGLET_BUILD_PIPELINE)
     find_package(OpenMP REQUIRED)
