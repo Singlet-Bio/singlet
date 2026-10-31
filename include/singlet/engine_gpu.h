@@ -144,6 +144,7 @@ struct PileupInput {
     std::vector<uint32_t> ops;
     std::vector<uint8_t> seq;
     int wantReads = 0;        // return PileupOutput::exonReads / intronReads / histCell / hist (reads per molecule); 0: no extra work
+    std::function<void()> release;   // called by pileupRun once its last device work is done (the caller's device lock); the host post-processing of the results runs after it
 };
 struct PileupOutput {
     std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
