@@ -93,7 +93,7 @@ class Params:
         0.02  # and at least this share of the library's read-weighted median mates per molecule
     )
     j_slack: int = 2  # the read vote of the J gene stands unless the junction's end matches another J this many nt better
-    ambient_rescue: str = "none"  # "cell" / "pair": give back cross-filtered chains of droplets that hold a cell (_ambient_rescue)
+    ambient_rescue: str = "none"  # "cell" / "pair" / "clone": give back cross-filtered chains of droplets that hold a cell (_ambient_rescue)
     v_open_frac: float = 0.0  # > 0: a V gene with a germline stop yields to an open V with >= this share of its votes
     threads: int = 8
 
@@ -620,6 +620,9 @@ def _ambient_rescue(df, cand: np.ndarray, mode: str) -> np.ndarray:
       that lineage by its own evidence.
     * ``pair``: also when every contig of the barcode was cross-filtered, if the strongest of a chain and the strongest of
       a partner chain are the top pair of at least one other barcode where both passed the filter (a known clone).
+    * ``clone``: only when the barcode's own kept contig of a partner chain and the cross-filtered junction are the top
+      pair of another barcode where both passed the filter: the droplet holds a member of that clone, so the weak junction
+      is its own transcript, not another cell's mRNA (which lands next to an unrelated partner chain).
     """
     kept = df["kept"].to_numpy()
     bc = df["bcix"].to_numpy()
@@ -636,18 +639,22 @@ def _ambient_rescue(df, cand: np.ndarray, mode: str) -> np.ndarray:
         if ch[i] in kept_chains.get(bc[i], ()) or k in best_cand:
             continue
         best_cand[k] = i
-    out = []
-    for (b, c), i in best_cand.items():
-        if any(_RECEPTOR[o] == _RECEPTOR[c] for o in kept_chains.get(b, ()) if o != c):
-            out.append(i)
-    if mode == "pair":
-        # top pairs of barcodes where both chains passed the filter
-        known = set()
+    known = set()  # top pairs of barcodes where both chains passed the filter
+    if mode in ("pair", "clone"):
         for b, chains in kept_chains.items():
             for c in chains:
                 for p in _PARTNERS[c]:
                     if p in chains:
                         known.add((c, nt[first[(b, c)]], p, nt[first[(b, p)]]))
+    out = []
+    for (b, c), i in best_cand.items():
+        if mode == "clone":
+            # the barcode's own (kept) partner chain and this junction are the pair of a clone seen elsewhere
+            if any((c, nt[i], p, nt[first[(b, p)]]) in known for p in _PARTNERS[c] if p in kept_chains.get(b, ())):
+                out.append(i)
+        elif any(_RECEPTOR[o] == _RECEPTOR[c] for o in kept_chains.get(b, ()) if o != c):
+            out.append(i)
+    if mode == "pair":
         done = set(out)
         for (b, c), i in best_cand.items():
             if i in done or kept_chains.get(b):
@@ -794,6 +801,6 @@ def filter_contigs(df, params: Params):
     df["ambient"] = amb
     cand = df["kept"] & amb  # would be kept but for the cross filter
     df.loc[amb, "kept"] = False
-    if params.ambient_rescue in ("cell", "pair") and cand.any():
+    if params.ambient_rescue in ("cell", "pair", "clone") and cand.any():
         df.loc[_ambient_rescue(df, cand.to_numpy(), params.ambient_rescue), "kept"] = True
     return df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(drop=True)
