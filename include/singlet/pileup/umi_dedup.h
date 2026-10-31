@@ -345,13 +345,17 @@ public:
     // record_read() keeps every read of a (barcode, gene, UMI) together with
     // what that read touched; finalize_molecules() then labels each molecule
     // exactly once (velocyto / STARsolo Velocyto rules on the collapsed gene
-    // model, see docs/pipeline-validation.md):
-    //   spliced    every read lies in exons only
-    //   unspliced  every read touches an intron (intronic or exon-intron spanning)
-    //   ambiguous  both kinds of reads
+    // model, alevin-fry USA semantics since the long-read check of docs/research-beta/sota-expression.md):
+    //   unspliced  at least one read touches an intron (intronic or exon-intron spanning)
+    //   spliced    no intron-touching read and at least one read crosses a junction (CIGAR N)
+    //   ambiguous  exon-only reads and no junction evidence (compatible with both)
+    // (before: unspliced = every read touches an intron, ambiguous = reads of both kinds, spliced = all exonic; on PBMC-E
+    // long-read truth that sent 43% of the truly unspliced molecules to ambiguous: unspliced recall 54% vs 94-98% for
+    // STARsolo Velocyto and alevin-fry, and 100% of molecules with any intron-touching read are unspliced by the long read)
     // and writes spliced + ambiguous to the exon matrix, unspliced to the intron
-    // matrix, so exon + intron counts every molecule once (= STARsolo GeneFull)
-    // and the exon matrix alone stays STARsolo Gene-like.
+    // matrix, so exon + intron counts every molecule once (= STARsolo GeneFull,
+    // unchanged by the labels), the exon matrix alone stays STARsolo Gene-like, and
+    // velocyto-style "spliced" counts are spliced + ambiguous.
 
     /// Read evidence bits passed to record_read().
     static constexpr uint8_t kReadExonOnly    = 1;  ///< all aligned bases in exons of the gene
@@ -360,11 +364,10 @@ public:
 
     enum class MoleculeLabel : uint8_t { Spliced, Unspliced, Ambiguous };
 
-    static MoleculeLabel label_of(uint8_t flags) {
-        const bool e = (flags & kReadExonOnly) != 0;
-        const bool i = (flags & kReadIntron) != 0;
-        if (e && i) return MoleculeLabel::Ambiguous;
-        return i ? MoleculeLabel::Unspliced : MoleculeLabel::Spliced;
+    /// flags: OR of kRead* over the molecule's reads; diag: OR of kDiag* (only kDiagSpliced is read here).
+    static MoleculeLabel label_of(uint8_t flags, uint8_t diag) {
+        if (flags & kReadIntron) return MoleculeLabel::Unspliced;
+        return (diag & kDiagSpliced) ? MoleculeLabel::Spliced : MoleculeLabel::Ambiguous;
     }
 
     struct MoleculeStats {
@@ -432,7 +435,7 @@ public:
         uint32_t count;       ///< reads
         uint8_t  flags;       ///< OR of kRead*
         uint8_t  diag;        ///< OR of kDiag*
-        MoleculeLabel label() const { return label_of(flags); }
+        MoleculeLabel label() const { return label_of(flags, diag); }
     };
 
     /// Collapse UMIs per (barcode, gene) (directional 1-Hamming when

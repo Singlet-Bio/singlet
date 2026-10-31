@@ -44,10 +44,11 @@ void test_store() {
     std::cout << "\n=== Part 1: DirectionalUmiStore::finalize_molecules ===\n";
     DirectionalUmiStore s;
     // gene 0, bc 0
-    s.record_read(0, 0, pk("AAAAAAAAAA"), 10, UINT32_MAX, kE);   // spliced
+    s.record_read(0, 0, pk("AAAAAAAAAA"), 10, UINT32_MAX, kE, DirectionalUmiStore::kDiagSpliced);   // spliced (junction read)
+    s.record_read(0, 0, pk("CACACACACA"), 9, UINT32_MAX, kE);     // exon-only, no junction: ambiguous
     s.record_read(0, 0, pk("CCCCCCCCCC"), 10, 20, kSpan);        // boundary read -> unspliced
     s.record_read(0, 0, pk("GGGGGGGGGG"), 11, UINT32_MAX, kE);   // exon read ...
-    s.record_read(0, 0, pk("GGGGGGGGGG"), UINT32_MAX, 21, kI);   // ... + intron read: ambiguous
+    s.record_read(0, 0, pk("GGGGGGGGGG"), UINT32_MAX, 21, kI);   // ... + intron read: unspliced (any intron-touching read)
     s.record_read(0, 0, pk("TTTTTTTTTT"), UINT32_MAX, 22, kI);   // unspliced
     // directional: 5 exonic reads of ACGTACGTAC + 1 intronic read one mismatch away
     for (int i = 0; i < 5; ++i) s.record_read(0, 0, pk("ACGTACGTAC"), 12, UINT32_MAX, kE);
@@ -56,26 +57,26 @@ void test_store() {
     CountingAcc ex, in;
     std::map<uint32_t, int> amb;
     auto st = s.finalize_molecules(ex, in, [&](uint32_t, uint32_t g) { amb[g]++; }, 10, true);
-    CHECK(st.spliced == 1, "directional: 1 spliced");
-    CHECK(st.unspliced == 2, "directional: 2 unspliced (boundary read + intronic)");
-    CHECK(st.ambiguous == 2, "directional: 2 ambiguous (same UMI, and merged 1-Hamming UMI)");
-    CHECK(st.total() == 5, "directional: 5 molecules, each once");
-    CHECK(ex.total() == 3, "exon matrix = spliced + ambiguous = 3");
-    CHECK(in.total() == 2, "intron matrix = unspliced = 2");
+    CHECK(st.spliced == 1, "directional: 1 spliced (junction read, no intron)");
+    CHECK(st.unspliced == 4, "directional: 4 unspliced (boundary read, mixed GGG, intronic, merged ACGT)");
+    CHECK(st.ambiguous == 1, "directional: 1 ambiguous (exon-only, no junction)");
+    CHECK(st.total() == 6, "directional: 6 molecules, each once");
+    CHECK(ex.total() == 2, "exon matrix = spliced + ambiguous = 2");
+    CHECK(in.total() == 4, "intron matrix = unspliced = 4");
     CHECK(ex.total() + in.total() == static_cast<int>(st.total()), "exon + intron = molecules");
-    CHECK(amb[0] == 2, "ambiguous per gene = 2");
+    CHECK(amb[0] == 1, "ambiguous per gene = 1");
     CHECK(st.legacy_double == 3, "legacy double count: boundary, GGG, merged ACGT = 3");
 
     CountingAcc ex2, in2;
     auto st2 = s.finalize_molecules(ex2, in2, [](uint32_t, uint32_t) {}, 10, false);
-    CHECK(st2.total() == 6, "exact: 1-Hamming UMIs stay separate (6 molecules)");
-    CHECK(st2.ambiguous == 1 && st2.spliced == 2 && st2.unspliced == 3, "exact: 2 S / 3 U / 1 A");
-    CHECK(ex2.total() + in2.total() == 6, "exact: exon + intron = molecules");
+    CHECK(st2.total() == 7, "exact: 1-Hamming UMIs stay separate (7 molecules)");
+    CHECK(st2.ambiguous == 2 && st2.spliced == 1 && st2.unspliced == 4, "exact: 1 S / 4 U / 2 A");
+    CHECK(ex2.total() + in2.total() == 7, "exact: exon + intron = molecules");
 
-    // per_cell_molecule_stats: 11 reads, 5 molecules after directional collapse
+    // per_cell_molecule_stats: 12 reads, 6 molecules after directional collapse
     auto pc = s.per_cell_molecule_stats(10);
-    CHECK(pc[0].total_reads == 11, "saturation: 11 reads");
-    CHECK(pc[0].unique_umis == 5, "saturation: 5 molecules");
+    CHECK(pc[0].total_reads == 12, "saturation: 12 reads");
+    CHECK(pc[0].unique_umis == 6, "saturation: 6 molecules");
 
     // Read order must not change the output: STAR emits reads in a thread-count-dependent
     // order, and a molecule's exon/intron feature used to be the first one seen.
@@ -137,7 +138,7 @@ bool write_inputs(const std::string& dir) {
 
     std::ofstream f(dir + "/t.sam");
     f << "@HD\tVN:1.6\tSO:unsorted\n@SQ\tSN:chr1\tLN:1000\n@SQ\tSN:chr2\tLN:1000\n";
-    // M1 exonic only -> spliced
+    // M1 exonic only, no junction -> ambiguous (alevin-fry USA)
     f << sam_line("m1", 0, "chr1", 120, 255, "20M", 20, "AAAAAAAAAA");
     // M2 one read across the exon1/intron boundary -> unspliced
     f << sam_line("m2", 0, "chr1", 191, 255, "20M", 20, "CCCCCCCCCC");
@@ -206,16 +207,17 @@ void run_case(const std::string& dir, bool parallel, bool directional) {
     auto st = parallel ? e.run_parallel(dir + "/t.bam", 2) : e.run(dir + "/t.bam");
     auto g = by_gene(e);
 
-    // G1 molecules: M1 S, M5 S, M2 U, M4 U, M3 A, M8 A, M7 A (directional) or S + U (exact)
-    const int s = directional ? 2 : 3, u = directional ? 2 : 3, a = directional ? 3 : 2;
+    // G1 molecules (alevin-fry USA semantics): M5 S (junction read); M1 A (exon-only, no junction); M2, M4, M3, M8 U (any
+    // intron-touching read, M3 and M8 mix exon and intron reads); M7 U merged (directional) or A (exon UMI) + U (exact)
+    const int s = 1, u = 5, a = directional ? 1 : 2;
     CHECK(g["G1"].exon == s + a, tag + ": G1 exon_counts = spliced + ambiguous");
     CHECK(g["G1"].intron == u, tag + ": G1 intron_counts = unspliced");
     CHECK(g["G1"].amb == a, tag + ": G1 ambiguous_counts");
     CHECK(g["G2"].exon == 1 && g["G2"].intron == 0, tag + ": nested G2 read counted once, for G2");
     CHECK(g["G3"].exon == 0, tag + ": gene-ambiguous multi-mapper not counted");
-    CHECK(st.molecules_spliced == static_cast<uint64_t>(s + 1), tag + ": spliced molecules (incl. G2)");
+    CHECK(st.molecules_spliced == static_cast<uint64_t>(s), tag + ": spliced molecules");
     CHECK(st.molecules_unspliced == static_cast<uint64_t>(u), tag + ": unspliced molecules");
-    CHECK(st.molecules_ambiguous == static_cast<uint64_t>(a), tag + ": ambiguous molecules");
+    CHECK(st.molecules_ambiguous == static_cast<uint64_t>(a + 1), tag + ": ambiguous molecules (incl. G2: exon-only, no junction)");
     CHECK(st.umi_unique == st.molecules_spliced + st.molecules_unspliced + st.molecules_ambiguous,
           tag + ": umi_unique = molecules");
     // pre-fix double count: M2 (boundary), M3, M8, and M7 when merged
