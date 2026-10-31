@@ -6,6 +6,7 @@
 // junctions the two counters share) for 0.8 points of recall.
 //
 // A synthetic BAM (SAM text + samtools), one barcode:
+//   (the UMIs differ in several bases: R9 merges UMIs one base apart into one molecule)
 //   read_unique   NH:1  spliced across junction A (5M10N5M at 0-based 105)
 //   read_no_nh    (no NH tag)  spliced across junction A, another UMI: a record without NH counts as unique
 //   read_multi    NH:2  spliced across junction B (5M12N5M at 0-based 105), with its secondary alignment on another locus
@@ -58,10 +59,10 @@ int main() {
         b << "BARCODE1\n";
         std::ofstream s(dir + "/t.sam");
         s << "@HD\tVN:1.6\tSO:unsorted\n@SQ\tSN:chr1\tLN:2000\n";
-        s << "read_unique\t0\tchr1\t106\t255\t5M10N5M\t*\t0\t0\tAAAAAAAAAA\t*\tNH:i:1\tCB:Z:BARCODE1\tUB:Z:UMI0000001\n";
-        s << "read_no_nh\t0\tchr1\t106\t255\t5M10N5M\t*\t0\t0\tAAAAAAAAAA\t*\tCB:Z:BARCODE1\tUB:Z:UMI0000002\n";
-        s << "read_multi\t0\tchr1\t106\t3\t5M12N5M\t*\t0\t0\tAAAAAAAAAA\t*\tNH:i:2\tHI:i:1\tCB:Z:BARCODE1\tUB:Z:UMI0000003\n";
-        s << "read_multi\t256\tchr1\t1006\t3\t10M\t*\t0\t0\tAAAAAAAAAA\t*\tNH:i:2\tHI:i:2\tCB:Z:BARCODE1\tUB:Z:UMI0000003\n";
+        s << "read_unique\t0\tchr1\t106\t255\t5M10N5M\t*\t0\t0\tAAAAAAAAAA\t*\tNH:i:1\tCB:Z:BARCODE1\tUB:Z:ACGTACGT\n";
+        s << "read_no_nh\t0\tchr1\t106\t255\t5M10N5M\t*\t0\t0\tAAAAAAAAAA\t*\tCB:Z:BARCODE1\tUB:Z:TGCATGCA\n";
+        s << "read_multi\t0\tchr1\t106\t3\t5M12N5M\t*\t0\t0\tAAAAAAAAAA\t*\tNH:i:2\tHI:i:1\tCB:Z:BARCODE1\tUB:Z:GATTCCAG\n";
+        s << "read_multi\t256\tchr1\t1006\t3\t10M\t*\t0\t0\tAAAAAAAAAA\t*\tNH:i:2\tHI:i:2\tCB:Z:BARCODE1\tUB:Z:GATTCCAG\n";
     }
     if (std::system(("samtools view -bS " + dir + "/t.sam -o " + dir + "/t.bam 2>/dev/null").c_str()) != 0) {
         std::cerr << "SKIP: samtools not available\n";
