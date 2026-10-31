@@ -8,7 +8,7 @@ A=""
 for l in pbmc2_t pbmc2_b pbmc10k_t pbmc10k_b gse145370_S133A gse145370_S158A gse145370_S149B gse145370_S150B gse145370_S135B; do
   for v in $VARIANTS; do
     tag=${v%%:*}; args=${v#*:}; args=${args//\~/ }
-    [ -d $V/$l/singlet${IN:-_base} ] || continue
+    [ -n "$NOCHECK" ] || [ -d $V/$l/singlet${IN:-_base} ] || continue
     A="$A$V/$l/singlet${IN:-_base} $V/$l/singlet$tag $args;"
   done
 done
