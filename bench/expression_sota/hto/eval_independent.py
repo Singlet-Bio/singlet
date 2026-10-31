@@ -117,8 +117,7 @@ def rna_truth(R, seed=0):
             idx = [gi[g] for g in MARKERS[genes] if g in gi]
             score[c, m] = (L[idx][:, lab == c].mean() - L[idx].mean()) / (L[idx].std() + 1e-6) if idx else 0
     r, cc = linear_sum_assignment(-score)
-    cluster_line = {int(i): names[j] for i, j in zip(r, cc)}
-    line = np.array([cluster_line[l] for l in lab], dtype=object)
+    marker_line = {int(i): names[j] for i, j in zip(r, cc)}  # QC only (Amendment 2): the marker naming swapped THP1 / KG1
     # scrublet-style cross-line doublets: simulate doublets from cells of different clusters, kNN in PCA space
     rng = np.random.default_rng(seed)
     n = C.shape[1]
@@ -133,8 +132,22 @@ def rna_truth(R, seed=0):
     _, idx = nn.kneighbors(P)
     frac = isim[idx[:, 1:]].mean(1)
     dbl = frac > 0.5
-    truth = np.where(dbl, "Doublet", line).astype(object)
-    return truth, {"cluster_line": cluster_line, "marker_score": score.round(2).tolist(), "n_doublet": int(dbl.sum()), "n": int(n)}
+    return lab, dbl, {"marker_cluster_line_QC_only": marker_line, "marker_score": score.round(2).tolist(), "n_doublet": int(dbl.sum()), "n": int(n)}
+
+
+def name_clusters(lab, dbl, Xh, lot):
+    """Amendment 2: cluster -> cell line by the one-to-one assignment (Hungarian) maximising the number of non-doublet cells whose
+    strongest tag belongs to that line; the same kind of caller-free label matching as tag -> donor on I1."""
+    fam = np.array([lot[i] for i in Xh.argmax(0)], dtype=object)
+    lines = sorted(set(lot.values()))
+    M = np.zeros((4, len(lines)))
+    for c in range(4):
+        for j, ln in enumerate(lines):
+            M[c, j] = ((lab == c) & ~dbl & (fam == ln)).sum()
+    r, cc = linear_sum_assignment(-M)
+    cl = {int(i): lines[j] for i, j in zip(r, cc)}
+    line = np.array([cl[l] for l in lab], dtype=object)
+    return np.where(dbl, "Doublet", line).astype(object), cl, M.tolist(), lines
 
 
 # --------------------------------------------------------------------------------------------------------- scoring
@@ -161,6 +174,7 @@ def main():
     ap.add_argument("--frozen", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--only", default=None)
+    ap.add_argument("--truth-only", action="store_true", help="build and report the truth only (no caller is run)")
     a = ap.parse_args()
     fz = json.load(open(a.frozen))
     callers = dict(H.CALLERS)
@@ -181,7 +195,14 @@ def main():
                                          "contingency_top_tag_by_donor": M.tolist()}))
     if a.only in (None, "I2"):
         R, tags, Xh, lot = load_i2(a)
-        truth, info = rna_truth(R)
+        lab, dbl, info = rna_truth(R)
+        truth, cl, M, lines = name_clusters(lab, dbl, Xh, lot)
+        info.update(cluster_line=cl, cluster_by_top_tag_line=M, lines=lines)
+        top_line = np.array([lot[i] for i in Xh.argmax(0)], dtype=object)
+        info["concordance_rna_line_vs_top_tag_line"] = float((truth[truth != "Doublet"] == top_line[truth != "Doublet"]).mean())
+        if a.truth_only:
+            print(json.dumps(info, indent=1, default=str))
+            return
         # tag -> line is known from the tag names; a singlet call is correct if its line equals the RNA line
         sets.append(("I2", Xh, truth, lot, {**info, "truth_counts": pd.Series(truth).value_counts().to_dict(), "tags": tags}))
     for label, X, truth, t2t, info in sets:

@@ -115,3 +115,13 @@ Found while fetching the data and checking the BFF reimplementation; none of it 
    labels used): Tn `edge`, T2 `top`. The family in section 6 gains the T2 reading as a third axis: `t2_rule` in {edge_M, top}.
    `bff_cluster` and `bff_raw` on I1 / I2 are therefore **proxies**: the claim "within 0.01 of the best competitor" is relative to
    the callers as implemented here, and the cellhashR output itself was not run.
+
+## 9. Amendment 2 (2026-10-31, after the I2 truth-only dry run, before any caller was run on I1 or I2)
+
+The truth-only run (`eval_i2_truth.sbatch`, no caller involved) showed that the marker-gene naming of the four RNA clusters swapped
+THP1 and KG1 (the clusters named THP1 / KG1 carry the KG1 / THP1 tags in 99% of their cells; HEK and K562 were right). The
+marker lists cannot separate those two myeloid lines. Fix, fixed before any caller runs: the RNA clusters (and the RNA doublet
+set) stay exactly as computed, and each cluster is **named** by the one-to-one assignment (Hungarian) to the tag family that
+holds most of its non-doublet cells, the same caller-free label matching used for tag to donor on I1. The marker naming is kept in
+the output as a QC field. The partition, the doublets and every disagreement between RNA cluster and tag remain counted as
+errors; only a swap of names is repaired. I2 is secondary and non-gating.
