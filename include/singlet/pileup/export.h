@@ -313,6 +313,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     SparseAccumulator<uint16_t>::CSCMatrix snp_ad_csc, snp_dp_csc;
     SparseAccumulator<uint16_t>::CSCMatrix exon_csc, intron_csc, sj_csc, mt_csc, guide_csc, amb_csc;
+    SparseAccumulator<uint32_t>::CSCMatrix exon_reads_csc, intron_reads_csc;   // reads per molecule, same layout as the UMI matrices
 
     std::vector<std::thread> csc_threads;
     bool need_snp_csc = !pileup_cfg.snp_path.empty() ||
@@ -325,6 +326,11 @@ inline ExportStats export_results(const PileupEngine& engine,
         csc_threads.emplace_back([&]() { mt_csc = engine.mt_alleles().to_csc(); });
     if (!pileup_cfg.exon_gtf_path.empty()) {
         csc_threads.emplace_back([&]() { exon_csc = engine.exons().to_csc(); });
+        if (engine.reads_matrix_on()) {
+            csc_threads.emplace_back([&]() { exon_reads_csc = engine.exon_reads().to_csc(); });
+            if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0)
+                csc_threads.emplace_back([&]() { intron_reads_csc = engine.intron_reads().to_csc(); });
+        }
         if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0) {
             csc_threads.emplace_back([&]() { intron_csc = engine.introns().to_csc(); });
             csc_threads.emplace_back([&]() { amb_csc = engine.ambiguous().to_csc(); });
@@ -535,6 +541,13 @@ inline ExportStats export_results(const PileupEngine& engine,
         for (uint32_t j = 0; j < exon_csc.ncols; ++j)
             for (int32_t k = exon_csc.indptr[j]; k < exon_csc.indptr[j + 1]; ++k)
                 bc_totals[j] += static_cast<uint64_t>(exon_csc.data[k]);
+        // The knee (and the umi_exon column of cell_calls.tsv) stay on the legacy exonic total: exon + the unspliced molecules that
+        // also have an exon-only read (the molecule labels moved them from the exon matrix to the intron matrix), so a label
+        // change does not move the cell set.
+        {
+            const auto extra = engine.legacy_exon_extra();
+            for (uint32_t j = 0; j < exon_csc.ncols && j < extra.size(); ++j) bc_totals[j] += extra[j];
+        }
 
         // N22-GENE: EmptyDrops operates at GENE level (38k features), not exon level
         // (310k features).  Passing exon_csc directly causes systematic overcalling:
@@ -1260,6 +1273,28 @@ inline ExportStats export_results(const PileupEngine& engine,
     // Gene model matrices
     if (!pileup_cfg.exon_gtf_path.empty()) {
         write_threads.emplace_back([&]() { write_matrix("exon_counts", exon_csc, engine.exon_names()); });
+        // Reads behind each exon / intron UMI count (same rows, columns and codec, uint32): reads_per_umi = reads / UMIs
+        if (engine.reads_matrix_on()) {
+            write_threads.emplace_back([&]() { write_matrix("exon_reads", exon_reads_csc, engine.exon_names()); });
+            if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0)
+                write_threads.emplace_back([&]() { write_matrix("intron_reads", intron_reads_csc, engine.intron_names()); });
+            write_threads.emplace_back([&]() {
+                const std::string path = out_prefix + "/reads_per_umi_hist.tsv.gz";
+                gzFile f = gzopen(path.c_str(), "wb6");
+                if (!f) { record_failed_write("reads_per_umi_hist.tsv.gz"); return; }
+                std::string line = "barcode";
+                for (int k = 1; k < PileupEngine::kReadsHistBins; ++k) line += "\tn" + std::to_string(k);
+                line += "\tn" + std::to_string(PileupEngine::kReadsHistBins) + "plus\n";
+                gzwrite(f, line.data(), static_cast<unsigned>(line.size()));
+                for (const auto& [bc, h] : engine.reads_per_umi_hist()) {
+                    line = bc < barcodes.size() ? barcodes[bc] : std::to_string(bc);
+                    for (uint32_t v : h) { line += '\t'; line += std::to_string(v); }
+                    line += '\n';
+                    gzwrite(f, line.data(), static_cast<unsigned>(line.size()));
+                }
+                gzclose(f);
+            });
+        }
         // Gene-level aggregation thread: TPM/FPKM, barnyard, h5ad/loom/mtx (no gene_counts.1pz)
         // Gene-level 1pz matrices are NOT written — they are redundant with exon_counts +
         // intron_counts and can be computed on the fly by downstream tools.

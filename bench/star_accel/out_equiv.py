@@ -19,7 +19,15 @@ from pathlib import Path
 
 VOLATILE_KEY = re.compile(r"(time|_s$|seconds|elapsed|wall|date|host|node|path|dir|prefix|file|command|cmd|pid|rss|"
                           r"version|sha|commit|started|finished|tmp|threads|input)", re.I)
-SKIP_FILE = re.compile(r"(\.log$|Log\.out$|Log\.progress\.out$|Log\.final\.out$|\.bam$|\.bai$|time\.txt$)")
+SKIP_FILE = re.compile(r"(\.log$|Log\.out$|Log\.progress\.out$|\.bam$|\.bai$|time\.txt$)")
+# STAR's Log.final.out carries the mapping statistics the pipeline consumes (summary.json mapping rate, the catalog's star_log member): compared
+# with its date and speed lines removed.
+LOG_FINAL = re.compile(r"Log\.final\.out$")
+LOG_FINAL_VOLATILE = ("Started job on", "Started mapping on", "Finished on", "Mapping speed")
+
+
+def normalize_log_final(text: str) -> list:
+    return [l.rstrip() for l in text.splitlines() if not l.strip().startswith(LOG_FINAL_VOLATILE)]
 
 
 def sha(p: Path) -> str:
@@ -65,6 +73,16 @@ def compare_dirs(a: Path, b: Path) -> int:
             continue
         if sha(a / f) == sha(b / f):
             same += 1
+            continue
+        if LOG_FINAL.search(f):
+            la, lb = normalize_log_final((a / f).read_text(errors="replace")), normalize_log_final((b / f).read_text(errors="replace"))
+            if la == lb:
+                diff_soft += 1
+                continue
+            nd = [i for i in range(min(len(la), len(lb))) if la[i] != lb[i]]
+            print(f"  DIFF {f}: {len(nd)} of {len(la)}/{len(lb)} lines differ" +
+                  "".join(f"\n    a: {la[i][:160]}\n    b: {lb[i][:160]}" for i in nd[:4]))
+            bad += 1
             continue
         if f.endswith(".json"):
             try:

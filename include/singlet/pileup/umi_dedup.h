@@ -345,13 +345,17 @@ public:
     // record_read() keeps every read of a (barcode, gene, UMI) together with
     // what that read touched; finalize_molecules() then labels each molecule
     // exactly once (velocyto / STARsolo Velocyto rules on the collapsed gene
-    // model, see docs/pipeline-validation.md):
-    //   spliced    every read lies in exons only
-    //   unspliced  every read touches an intron (intronic or exon-intron spanning)
-    //   ambiguous  both kinds of reads
+    // model, alevin-fry USA semantics since the long-read check of docs/research-beta/sota-expression.md):
+    //   unspliced  at least one read touches an intron (intronic or exon-intron spanning)
+    //   spliced    no intron-touching read and at least one read crosses a junction (CIGAR N)
+    //   ambiguous  exon-only reads and no junction evidence (compatible with both)
+    // (before: unspliced = every read touches an intron, ambiguous = reads of both kinds, spliced = all exonic; on PBMC-E
+    // long-read truth that sent 43% of the truly unspliced molecules to ambiguous: unspliced recall 54% vs 94-98% for
+    // STARsolo Velocyto and alevin-fry, and 100% of molecules with any intron-touching read are unspliced by the long read)
     // and writes spliced + ambiguous to the exon matrix, unspliced to the intron
-    // matrix, so exon + intron counts every molecule once (= STARsolo GeneFull)
-    // and the exon matrix alone stays STARsolo Gene-like.
+    // matrix, so exon + intron counts every molecule once (= STARsolo GeneFull,
+    // unchanged by the labels), the exon matrix alone stays STARsolo Gene-like, and
+    // velocyto-style "spliced" counts are spliced + ambiguous.
 
     /// Read evidence bits passed to record_read().
     static constexpr uint8_t kReadExonOnly    = 1;  ///< all aligned bases in exons of the gene
@@ -360,11 +364,10 @@ public:
 
     enum class MoleculeLabel : uint8_t { Spliced, Unspliced, Ambiguous };
 
-    static MoleculeLabel label_of(uint8_t flags) {
-        const bool e = (flags & kReadExonOnly) != 0;
-        const bool i = (flags & kReadIntron) != 0;
-        if (e && i) return MoleculeLabel::Ambiguous;
-        return i ? MoleculeLabel::Unspliced : MoleculeLabel::Spliced;
+    /// flags: OR of kRead* over the molecule's reads; diag: OR of kDiag* (only kDiagSpliced is read here).
+    static MoleculeLabel label_of(uint8_t flags, uint8_t diag) {
+        if (flags & kReadIntron) return MoleculeLabel::Unspliced;
+        return (diag & kDiagSpliced) ? MoleculeLabel::Spliced : MoleculeLabel::Ambiguous;
     }
 
     struct MoleculeStats {
@@ -432,7 +435,7 @@ public:
         uint32_t count;       ///< reads
         uint8_t  flags;       ///< OR of kRead*
         uint8_t  diag;        ///< OR of kDiag*
-        MoleculeLabel label() const { return label_of(flags); }
+        MoleculeLabel label() const { return label_of(flags, diag); }
     };
 
     /// Collapse UMIs per (barcode, gene) (directional 1-Hamming when
@@ -519,30 +522,40 @@ public:
     ///   exon_acc.increment(exon_idx, bc)      spliced and ambiguous molecules
     ///   intron_acc.increment(intron_idx, bc)  unspliced molecules
     ///   on_ambiguous(bc, gene)                 ambiguous molecules (also in exon_acc)
-    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
+    ///   on_reads(intronic, feature, bc, reads) every emitted molecule, with the reads merged into it
+    ///                                          (the reads-per-UMI matrix and histogram; never touches the counts)
+    struct NoReads { void operator()(bool, uint32_t, uint32_t, uint32_t) const {} };
+    struct NoMixed { void operator()(uint32_t) const {} };
+
+    /// `on_mixed(bc)` is called for an unspliced molecule that also has an exon-only read: the molecules the pre-USA labels
+    /// counted in the exon matrix (as ambiguous). The knee of the cell caller is validated on that legacy exonic total, so the
+    /// engine keeps a per-barcode count of them (legacy_exon_extra) and adds it back for the knee only.
+    template <typename ExonAccT, typename IntronAccT, typename AmbFn, typename ReadsFn = NoReads, typename MixFn = NoMixed>
     static void emit_molecule(const Molecule& m, ExonAccT& exon_acc, IntronAccT& intron_acc,
-                              AmbFn&& on_ambiguous, MoleculeStats& st) {
+                              AmbFn&& on_ambiguous, MoleculeStats& st, ReadsFn&& on_reads = ReadsFn(), MixFn&& on_mixed = MixFn()) {
         if ((m.flags & kReadTouchesExon) && (m.flags & kReadIntron)) st.legacy_double++;
         switch (m.label()) {
             case MoleculeLabel::Spliced:
-                exon_acc.increment(m.exon_idx, m.bc); st.spliced++; break;
+                exon_acc.increment(m.exon_idx, m.bc); on_reads(false, m.exon_idx, m.bc, m.count); st.spliced++; break;
             case MoleculeLabel::Unspliced:
-                intron_acc.increment(m.intron_idx, m.bc); st.unspliced++; break;
+                intron_acc.increment(m.intron_idx, m.bc); on_reads(true, m.intron_idx, m.bc, m.count); st.unspliced++;
+                if (m.flags & kReadExonOnly) on_mixed(m.bc);
+                break;
             case MoleculeLabel::Ambiguous:
-                exon_acc.increment(m.exon_idx, m.bc); on_ambiguous(m.bc, m.gene);
+                exon_acc.increment(m.exon_idx, m.bc); on_ambiguous(m.bc, m.gene); on_reads(false, m.exon_idx, m.bc, m.count);
                 st.ambiguous++; break;
         }
     }
 
     /// Collapse UMIs, label each molecule once and emit it (emit_molecule()).
-    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
+    template <typename ExonAccT, typename IntronAccT, typename AmbFn, typename ReadsFn = NoReads, typename MixFn = NoMixed>
     MoleculeStats finalize_molecules(ExonAccT& exon_acc, IntronAccT& intron_acc,
                                      AmbFn&& on_ambiguous, int umi_len,
-                                     bool directional) const {
+                                     bool directional, ReadsFn&& on_reads = ReadsFn(), MixFn&& on_mixed = MixFn()) const {
         MoleculeStats st;
         std::vector<Molecule> mols;
         collapse_molecules(umi_len, directional, mols);
-        for (const auto& m : mols) emit_molecule(m, exon_acc, intron_acc, on_ambiguous, st);
+        for (const auto& m : mols) emit_molecule(m, exon_acc, intron_acc, on_ambiguous, st, on_reads, on_mixed);
         return st;
     }
 

@@ -5,6 +5,7 @@
 // STAR's cache is filled with these results before mapping (src/star/SeqCacheGpuPrefill.cpp), so every later stage of the
 // engine runs unchanged and the outputs are those of the CPU engine. Plain C++ header: no CUDA types.
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
@@ -63,28 +64,38 @@ std::string deviceId(int device);   // PCI bus id, e.g. 0000:4e:00.0
 bool mapDistinct(const m5::Params& P, const m5::GenomeView& host, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device,
                  int hostThreads, Output& out);
 
-// One sample at a time per GPU (several samples in flight per node): an exclusive lock per device, named by PCI bus id so jobs that
-// see different GPUs under the same index do not wait for each other. SINGLET_ENGINE_GPU_DEVICE pins the device; otherwise the
-// first free one is taken, or the process waits for device (pid mod devices). Returns the device; *lockFd is closed by unlockDevice.
+// Samples per GPU: SINGLET_ENGINE_GPU_SLOTS (default 1 = one sample at a time) exclusive locks per device, named by PCI bus id so jobs that see different
+// GPUs under the same index do not wait for each other (slot k > 0 has ".k" appended to the lock file name). With more than one slot the caller must keep its
+// device memory within (device memory - margin) / slots: the prefill's chunk size (SINGLET_ENGINE_GPU_CHUNK) and the pileup's arena (SINGLET_GPU_PILEUP_ARENA_GB)
+// are the knobs. SINGLET_ENGINE_GPU_DEVICE pins the device; otherwise the first free slot of the first device is taken, or the process waits for a slot of device
+// (pid mod devices). Returns the device; *lockFd is closed by unlockDevice.
 inline int lockDevice(int* lockFd) {
-    auto lockPath = [](int d) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + ".lock"; };
+    auto lockPath = [](int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
+    const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
+    const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
     const int nDev = deviceCount() > 0 ? deviceCount() : 1;
     int device = -1;
     *lockFd = -1;
     if (dv != nullptr) {
         device = std::atoi(dv);
-        *lockFd = open(lockPath(device).c_str(), O_CREAT | O_RDWR, 0666);
+        for (int k = 0; k < slots; k++) {
+            int fd = open(lockPath(device, k).c_str(), O_CREAT | O_RDWR, 0666);
+            if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return device; }
+            if (fd >= 0) close(fd);
+        }
+        *lockFd = open(lockPath(device, (int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR, 0666);
         if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
         return device;
     }
-    for (int d = 0; d < nDev; d++) {
-        int fd = open(lockPath(d).c_str(), O_CREAT | O_RDWR, 0666);
-        if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return d; }
-        if (fd >= 0) close(fd);
-    }
+    for (int k = 0; k < slots; k++)
+        for (int d = 0; d < nDev; d++) {
+            int fd = open(lockPath(d, k).c_str(), O_CREAT | O_RDWR, 0666);
+            if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return d; }
+            if (fd >= 0) close(fd);
+        }
     device = (int) (getpid() % nDev);
-    *lockFd = open(lockPath(device).c_str(), O_CREAT | O_RDWR, 0666);
+    *lockFd = open(lockPath(device, (int) ((getpid() / nDev) % slots)).c_str(), O_CREAT | O_RDWR, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
     return device;
 }
@@ -124,17 +135,27 @@ struct PileupInput {
     // (same order as `reads`): bit i = base i of the record sequence, in the record's (original read) orientation, has quality < minBaseq
     int useQual = 0;
     std::vector<uint8_t> lowq;
-    uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kUmiGeneCR, kMtPrefer
+    uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer
     std::vector<uint8_t> geneIsMt;          // per gene: on chrM (kMtPrefer)
+    // kFlank (only when intronRules has it): per gene its body [geneStart, geneEnd) and its merged exons geneExons[geneExonOff[g] .. geneExonOff[g + 1])
+    // (GeneRecord::exon_indices, sorted by start), exon coordinates by exon index
+    std::vector<int32_t> geneStart, geneEnd, exonStart, exonEnd;
+    std::vector<uint32_t> geneExonOff, geneExons;
     int wantGeneMerges = 0;   // return PileupOutput::geneMerges (the host collapses V(D)J molecules per (cell, gene), R9)
     uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
     // records, raw pileup_rec.h structs
     std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
     std::vector<uint32_t> ops;
     std::vector<uint8_t> seq;
+    int wantReads = 0;        // return PileupOutput::exonReads / intronReads / histCell / hist (reads per molecule); 0: no extra work
 };
 struct PileupOutput {
     std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
+    // wantReads: reads per emitted molecule summed per (cell, row) (val = reads, uint32, same rows as exon / intron), and per cell with
+    // molecules (histCell, ascending) its histBins-bin histogram of reads per molecule in hist: k reads -> bin k-1, last bin = histBins or more
+    static constexpr int histBins = 16;
+    std::vector<PileupTriplet> exonReads, intronReads;
+    std::vector<uint32_t> histCell, hist;
     std::vector<std::array<uint32_t, 3>> sjtab;      // junction id -> (tid, donor, acceptor), ids in (tid, donor, acceptor) order
     std::vector<std::array<uint32_t, 4>> indels;     // (cell, pos, len, is_ins)
     std::vector<PileupGeneMerge> geneMerges;         // only when wantGeneMerges; sorted by (cell, gene, umi)
@@ -145,6 +166,9 @@ struct PileupOutput {
     // per cell (barcode column): reads recorded in the molecule store and molecules after directional collapse
     // (DirectionalUmiStore::per_cell_molecule_stats: the inputs of saturation_metrics.tsv and cell_qc_metrics.tsv)
     std::vector<uint32_t> cellReads, cellMolecules;
+    // per cell: unspliced molecules that also have an exon-only read (PileupEngine::legacy_exon_extra, the knee's legacy exonic total). The molecule
+    // labels are alevin-fry USA (DirectionalUmiStore::label_of): unspliced = any intron read, spliced = a junction read, ambiguous = the rest
+    std::vector<uint32_t> cellMixed;
     // count_read's counters over the gene tuples, and per alignment the classify_read gene and the serial loop's per-alignment
     // flags (1 strand vote sense, 2 antisense, 4 wrong_strand, 8 cross_gene_intron, 16 multigene)
     uint64_t hitsExon = 0, hitsIntron = 0, umiRecorded = 0;

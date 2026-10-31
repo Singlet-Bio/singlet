@@ -10,7 +10,8 @@
 //          neighbour compare of the FULL key (NW words + length), exact repair of every run of equal 40-bit keys that holds
 //          more than one sequence (small comparison sort), ids = ranks in (hash, sequence, length) order. Batches are
 //          deduplicated independently; the batch distinct lists are merged by the same procedure into global ranks.
-// Stage b  count key: (cell | gene | UMI) 64-bit key + 51-bit payload (exon, intron, flags), CUB radix sort, reduce-by-key into
+// Stage b  count key: (cell | gene | UMI) 64-bit key + 52-bit payload (exon 24, intron 24, flags 4: kReadExonOnly 1, kReadIntron 2,
+//          kReadTouchesExon 4, and 8 = a read with a CIGAR N, DirectionalUmiStore::kDiagSpliced), CUB radix sort, reduce-by-key into
 //          (count, flags OR, min exon, min intron) per exact (cell, gene, UMI). Batches pre-aggregate; a merge re-sorts the
 //          concatenated unique lists and reduces again.
 // Stage c  UMI collapse per (cell, gene): the CPU rule of include/singlet/pileup/umi_dedup.h (finalize_molecules, directional):
@@ -268,11 +269,11 @@ __global__ void k_mkkey(const Rec* r, int n, int gb, int ub, uint64_t* key, uint
     Rec x = r[i];
     key[i] = ((uint64_t)x.bc << (gb + ub)) | ((uint64_t)x.gene << ub) | x.umi;
     uint64_t e = x.exon == NONE32 ? 0xFFFFFFull : x.exon, in = x.intron == NONE32 ? 0xFFFFFFull : x.intron;
-    pay[i] = (e << 27) | (in << 3) | (x.flags & 7);
+    pay[i] = (e << 28) | (in << 4) | (x.flags & 15);
 }
 struct ToAgg { __host__ __device__ Agg operator()(const uint64_t& p) const {
-    uint32_t e = (uint32_t)((p >> 27) & 0xFFFFFF), in = (uint32_t)((p >> 3) & 0xFFFFFF);
-    return Agg{1u, (uint32_t)(p & 7), e == 0xFFFFFFu ? NONE32 : e, in == 0xFFFFFFu ? NONE32 : in}; } };
+    uint32_t e = (uint32_t)((p >> 28) & 0xFFFFFF), in = (uint32_t)((p >> 4) & 0xFFFFFF);
+    return Agg{1u, (uint32_t)(p & 15), e == 0xFFFFFFu ? NONE32 : e, in == 0xFFFFFFu ? NONE32 : in}; } };
 struct AggOp { __host__ __device__ Agg operator()(const Agg& a, const Agg& b) const { return Agg{a.count + b.count, a.flags | b.flags, a.exon < b.exon ? a.exon : b.exon, a.intron < b.intron ? a.intron : b.intron}; } };
 __global__ void k_gather_agg(const Agg* a, const uint32_t* idx, int n, Agg* o) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) o[i] = a[idx[i]]; }
 __global__ void k_iota(uint32_t* p, int n) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) p[i] = i; }
@@ -359,26 +360,48 @@ __global__ void k_comp_agg(const Agg* ag, const uint32_t* lab, int m, uint32_t* 
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
     uint32_t r = lab[i]; atomicOr(&cf[r], ag[i].flags); atomicMin(&ce[r], ag[i].exon); atomicMin(&ci[r], ag[i].intron);
 }
+// reads-per-UMI (SINGLET reads matrix; off unless the caller sets g_want_reads): reads of a molecule = sum of the exact-UMI read counts over its
+// component (DirectionalUmiStore::Molecule::count). cr[root] accumulates them; k_emit hands them to the emitted molecule's matrix slot and bins
+// them in the per-cell histogram g_cell_hist (kHistBins per cell: k reads -> bin k-1, bin kHistBins-1 = that many or more)
+static bool g_want_reads = false;
+constexpr int kHistBins = 16;
+__device__ uint32_t* g_cell_hist = nullptr;
+__global__ void k_comp_reads(const Agg* ag, const uint32_t* lab, int m, uint32_t* cr) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return; atomicAdd(&cr[lab[i]], ag[i].count); }
 // molecule label counts, as DirectionalUmiStore::finalize_molecules' MoleculeStats: spliced, unspliced, ambiguous, legacy_double
 // (TouchesExon and Intron both set); zeroed by the caller before a run
 __device__ unsigned long long g_molstat[5];   // [4]: molecules dropped by the molecule rule (kUmiGeneCR)
 // molecules per cell (DirectionalUmiStore::per_cell_molecule_stats' unique_umis), when the caller sets it (else nullptr)
 __device__ uint32_t* g_cell_mol = nullptr;
-// roots emit one molecule: flags bit1 = exon-only read, bit2 = intron read (DirectionalUmiStore::kReadExonOnly / kReadIntron)
+// per cell, when the caller sets it: unspliced molecules that also have an exon-only read (the engine's legacy_exon_extra, added to the
+// cell caller's knee input in export.h; DirectionalUmiStore::emit_molecule's on_mixed)
+__device__ uint32_t* g_cell_mixed = nullptr;
+// roots emit one molecule, labelled as DirectionalUmiStore::label_of (alevin-fry USA): flags 1 = exon-only read (kReadExonOnly), 2 = intron
+// read (kReadIntron), 4 = touches an exon (kReadTouchesExon), 8 = a read with a CIGAR N (kDiagSpliced). unspliced = any intron read;
+// spliced = no intron read and a junction read; ambiguous = the rest (exon-only, no junction). Exon matrix = spliced + ambiguous.
 __global__ void k_emit(const uint64_t* uk, const uint32_t* lab, const uint32_t* cf, const uint32_t* ce, const uint32_t* ci, int m, int gb, int ub,
-                       uint64_t* kex, uint64_t* kin, uint64_t* kam, const uint8_t* drop) {
+                       uint64_t* kex, uint64_t* kin, uint64_t* kam, const uint8_t* drop,
+                       const uint32_t* cr = nullptr, uint32_t* rex = nullptr, uint32_t* rin = nullptr) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
     kex[i] = kin[i] = kam[i] = NONE64;
     if (lab[i] != (uint32_t)i) return;
-    uint32_t f = cf[i]; bool e = f & 1, in = f & 2;
+    uint32_t f = cf[i]; bool e = f & 1, in = f & 2, sp = f & 8;
     uint64_t cell = uk[i] >> (gb + ub), gene = (uk[i] >> ub) & ((1ull << gb) - 1);
     if (g_cell_mol) atomicAdd(&g_cell_mol[cell], 1u);                                    // per_cell_molecule_stats counts every molecule, dropped or not
     if (drop && drop[i]) { atomicAdd(&g_molstat[4], 1ull); return; }                     // kUmiGeneCR: finalize_all's `dropped`
     if ((f & 4) && in) atomicAdd(&g_molstat[3], 1ull);
-    atomicAdd(&g_molstat[(e && in) ? 2 : (in ? 1 : 0)], 1ull);
-    if (e && in) { kex[i] = (cell << FB) | ce[i]; kam[i] = (cell << FB) | gene; }      // ambiguous: exon matrix + per-gene ambiguous count
-    else if (in) kin[i] = (cell << FB) | ci[i];                                          // unspliced
-    else kex[i] = (cell << FB) | ce[i];                                                  // spliced
+    atomicAdd(&g_molstat[in ? 1 : (sp ? 0 : 2)], 1ull);
+    if (in) {                                                                            // unspliced
+        kin[i] = (cell << FB) | ci[i];
+        if (e && g_cell_mixed) atomicAdd(&g_cell_mixed[cell], 1u);                      // legacy exonic extra
+    }
+    else if (sp) kex[i] = (cell << FB) | ce[i];                                          // spliced
+    else { kex[i] = (cell << FB) | ce[i]; kam[i] = (cell << FB) | gene; }               // ambiguous: exon matrix + per-gene ambiguous count
+    if (cr) {                                                                            // reads-per-UMI: this emitted molecule's reads, to the matrix it counts in
+        const uint32_t rd = cr[i];
+        if (kin[i] != NONE64) rin[i] = rd; else rex[i] = rd;
+        atomicAdd(&g_cell_hist[cell * kHistBins + min(rd, (uint32_t)kHistBins) - 1], 1u);
+    }
 }
 // ---- intron_rule::kUmiGeneCR (pileup_engine.h finalize_all): a UMI in more than one gene of a cell keeps the gene whose molecule has the most reads;
 // a tie drops all of them. The UMI of a molecule is its component root in DirectionalUmiStore::collapse_molecules: the first member in (reads
@@ -462,7 +485,7 @@ static uint8_t* stage_cr(Arena& A, const uint64_t* uk, const Agg* ag, const uint
 }
 struct IsSet { __host__ __device__ bool operator()(const uint64_t& k) const { return k != ~0ull; } };
 
-struct Mol { uint64_t *kex, *kin, *kam; int m; };
+struct Mol { uint64_t *kex, *kin, *kam; int m; uint32_t *rex = nullptr, *rin = nullptr; };
 static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m, const Layout& L, long long* stat_edges, long long* stat_active, int* stat_iters,
                    const uint32_t** lab_out = nullptr) {   // lab_out: the component (root entry index) of each unique (cell, gene, UMI) entry
     const int TB = 256; int G = (m + TB - 1) / TB; int ub = L.ub;
@@ -518,7 +541,12 @@ static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m,
     k_comp_init<<<G, TB>>>(cf, ce, ci, m); k_comp_agg<<<G, TB>>>(ag, lab, m, cf, ce, ci);
     Mol M; M.m = m; M.kex = A.alloc<uint64_t>(m); M.kin = A.alloc<uint64_t>(m); M.kam = A.alloc<uint64_t>(m);
     const uint8_t* drop = L.cr ? stage_cr(A, uk, ag, lab, seg, sf, m, L) : nullptr;
-    k_emit<<<G, TB>>>(uk, lab, cf, ce, ci, m, L.gb, ub, M.kex, M.kin, M.kam, drop);
+    uint32_t* cr = nullptr;
+    if (g_want_reads) {
+        cr = A.alloc<uint32_t>(m); M.rex = A.alloc<uint32_t>(m); M.rin = A.alloc<uint32_t>(m);
+        CK(cudaMemsetAsync(cr, 0, 4 * (size_t)m)); k_comp_reads<<<G, TB>>>(ag, lab, m, cr);
+    }
+    k_emit<<<G, TB>>>(uk, lab, cf, ce, ci, m, L.gb, ub, M.kex, M.kin, M.kam, drop, cr, M.rex, M.rin);
     T.mark("c.emit");
     return M;
 }
@@ -535,6 +563,13 @@ __global__ void k_csr_fill(const uint64_t* uq, const uint32_t* cnt, int nr, uint
     ind[j] = (uint32_t)(uq[j] & ((1ull << FB) - 1)); dat[j] = (uint16_t)min(cnt[j], 65535u);
 }
 struct CsrDev { uint32_t* indptr; uint32_t* indices; uint16_t* data; int nnz; };
+// reads matrix: the same CSR with uint32 data (a gene can hold more than 65535 reads in one cell)
+struct CsrDev32 { uint32_t* indptr; uint32_t* indices; uint32_t* data; int nnz; };
+__global__ void k_csr_fill32(const uint64_t* uq, const uint32_t* v, int nr, uint32_t* ind, uint32_t* dat) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x; if (j >= nr) return;
+    ind[j] = (uint32_t)(uq[j] & ((1ull << FB) - 1)); dat[j] = v[j];
+}
+__global__ void k_setflag(const uint64_t* k, int m, uint32_t* f) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) f[i] = k[i] != ~0ull; }
 static CsrDev stage_d_one(Arena& A, const uint64_t* keys, int m, const Layout& L) {
     const int TB = 256; int* dnum = A.alloc<int>(4);
     uint64_t* sel = A.alloc<uint64_t>(m);
@@ -550,6 +585,28 @@ static CsrDev stage_d_one(Arena& A, const uint64_t* keys, int m, const Layout& L
     C.indices = A.alloc<uint32_t>(nr); C.data = A.alloc<uint16_t>(nr); C.nnz = nr;
     k_csr_ptr<<<(L.ncells + 1 + TB - 1) / TB, TB>>>(uq, nr, L.ncells, C.indptr);
     k_csr_fill<<<(nr + TB - 1) / TB, TB>>>(uq, cnt, nr, C.indices, C.data);
+    return C;
+}
+
+// the reads matrix of one class: the emitted molecules' (key, reads) summed per key, as a CSR with the same rows as stage_d_one's
+static CsrDev32 stage_d_reads(Arena& A, const uint64_t* keys, const uint32_t* reads, int m, const Layout& L) {
+    const int TB = 256; int* dnum = A.alloc<int>(4);
+    CsrDev32 C; C.indptr = A.alloc<uint32_t>(L.ncells + 1); C.nnz = 0;
+    uint32_t* fl = A.alloc<uint32_t>(std::max(m, 1)); k_setflag<<<(m + TB - 1) / TB, TB>>>(keys, m, fl);
+    uint64_t* sk = A.alloc<uint64_t>(m); uint32_t* sv = A.alloc<uint32_t>(m);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, keys, fl, sk, dnum, m); });
+    int n = 0; CK(cudaMemcpy(&n, dnum, 4, cudaMemcpyDeviceToHost));
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, reads, fl, sv, dnum, m); });
+    if (n == 0) { CK(cudaMemset(C.indptr, 0, 4 * (L.ncells + 1))); C.indices = A.alloc<uint32_t>(1); C.data = A.alloc<uint32_t>(1); return C; }
+    uint64_t* k1 = A.alloc<uint64_t>(n); uint32_t* v1 = A.alloc<uint32_t>(n);
+    cub::DoubleBuffer<uint64_t> dk(sk, k1); cub::DoubleBuffer<uint32_t> dv(sv, v1);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dk, dv, n, 0, L.cb + FB); });
+    uint64_t* uq = A.alloc<uint64_t>(n); uint32_t* sum = A.alloc<uint32_t>(n);
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, dk.Current(), uq, dv.Current(), sum, dnum, cub::Sum(), n); });
+    int nr = 0; CK(cudaMemcpy(&nr, dnum, 4, cudaMemcpyDeviceToHost));
+    C.indices = A.alloc<uint32_t>(nr); C.data = A.alloc<uint32_t>(nr); C.nnz = nr;
+    k_csr_ptr<<<(L.ncells + 1 + TB - 1) / TB, TB>>>(uq, nr, L.ncells, C.indptr);
+    k_csr_fill32<<<(nr + TB - 1) / TB, TB>>>(uq, sum, nr, C.indices, C.data);
     return C;
 }
 
@@ -612,8 +669,8 @@ static void host_reference(const std::vector<Rec>& recs, int umi_len, bool direc
     }
     auto ham = [&](uint64_t a, uint64_t b) { uint64_t d = a ^ b; if (umi_len < 32) d &= (1ull << (2 * umi_len)) - 1; return __builtin_popcountll((d | (d >> 1)) & 0x5555555555555555ull); };
     auto emit = [&](uint32_t bc, uint32_t gene, uint8_t fl, uint32_t ex, uint32_t in) {
-        bool e = fl & 1, i = fl & 2;
-        if (e && i) { te.push_back({ex, bc, 1}); ta.push_back({gene, bc, 1}); } else if (i) ti.push_back({in, bc, 1}); else te.push_back({ex, bc, 1});
+        bool i = fl & 2, sp = fl & 8;   // label_of: U = any intron read, S = a junction read (CIGAR N), A = the rest
+        if (i) ti.push_back({in, bc, 1}); else if (sp) te.push_back({ex, bc, 1}); else { te.push_back({ex, bc, 1}); ta.push_back({gene, bc, 1}); }
     };
     for (auto& kv : groups) {
         uint32_t bc = kv.first >> 32, gene = (uint32_t)kv.first; auto& en = kv.second;
@@ -747,7 +804,7 @@ int main(int argc, char** argv) {
             const Rec& r = h[i]; maxbc = std::max(maxbc, r.bc); maxgene = std::max(maxgene, r.gene);
             if (r.exon != NONE32) maxex = std::max(maxex, r.exon); if (r.intron != NONE32) maxin = std::max(maxin, r.intron);
             ndirect += r.direct; nN += r.hasN; if (!r.direct) { umin = std::min<int>(umin, r.umi_len); umax = std::max<int>(umax, r.umi_len); }
-            bool exn = r.exon == NONE32, inn = r.intron == NONE32; uint8_t want = !exn && inn ? 5 : (!exn && !inn ? 6 : 2); if (r.flags != want) bad_flags++;
+            bool exn = r.exon == NONE32, inn = r.intron == NONE32; uint8_t want = !exn && inn ? 5 : (!exn && !inn ? 6 : 2); if ((r.flags & 7) != want) bad_flags++;   // bit 8 (CIGAR N) is not derived from the features
         }
         Truth TR; if (truthp) TR = load_truth(truthp);
         Layout L; auto bits = [](uint64_t v) { int b = 1; while ((1ull << b) <= v) b++; return b; };

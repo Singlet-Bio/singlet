@@ -46,12 +46,21 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     for (int attempt = 0; attempt < 2; attempt++) {
     Arena A;
     try {
-    if (attempt == 0) A.init(freeB > (size_t(3) << 30) ? freeB - (size_t(3) << 30) : freeB / 2);
+    if (attempt == 0) {
+        size_t arena = freeB > (size_t(3) << 30) ? freeB - (size_t(3) << 30) : freeB / 2;
+        // SINGLET_GPU_PILEUP_ARENA_GB: cap the arena (samples sharing the GPU; the partitions K adapt to it)
+        if (const char* ag = getenv("SINGLET_GPU_PILEUP_ARENA_GB")) arena = std::min<size_t>(arena, (size_t) (atof(ag) * (1ull << 30)));
+        A.init(arena);
+    }
     else A.init_managed(2 * totB);
     Inputs in; in.nS = (int)nS; in.nA = (int)nA; in.nR = (int)nR; in.ncells = (int)par.n_barcodes; in.ulen = pi.umiLen; in.par = par; in.wantMerges = pi.wantGeneMerges;
     in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, pi.snpSkipN, pi.intronRules, pi.useQual};
     in.EX = upload_tree(A, an.ex); in.IN = upload_tree(A, an.in); in.e2g = to_dev(A, an.e2g); in.i2g = to_dev(A, an.i2g); in.gstr = to_dev(A, an.gstr);
     in.gmt = to_dev(A, pi.geneIsMt); in.ngmt = (uint32_t)pi.geneIsMt.size();
+    if ((pi.intronRules & 8) && !pi.geneStart.empty()) {   // kFlank: the gene bodies and their merged exons
+        in.GM.gs = to_dev(A, pi.geneStart); in.GM.ge = to_dev(A, pi.geneEnd); in.GM.es = to_dev(A, pi.exonStart); in.GM.ee = to_dev(A, pi.exonEnd);
+        in.GM.eoff = to_dev(A, pi.geneExonOff); in.GM.ex = to_dev(A, pi.geneExons); in.GM.ng = (uint32_t)pi.geneStart.size();
+    }
     in.ne2g = (uint32_t)an.e2g.size(); in.ni2g = (uint32_t)an.i2g.size(); in.ngstr = (uint32_t)an.gstr.size();
     {
         std::vector<int32_t> P; std::vector<uint32_t> I, off(an.snp.size()), n(an.snp.size()); std::vector<char> alt, ref;
@@ -69,6 +78,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // ---- one run with outputs
     { unsigned long long z[5] = {0, 0, 0, 0, 0}; CK(cudaMemcpyToSymbol(g_molstat, z, sizeof z)); }
     g_cell_stats = true;
+    g_want_reads = pi.wantReads != 0;
     { const char* pk = getenv("SINGLET_GPU_PILEUP_PARTS"); g_force_parts = pk ? std::max(0, std::min(atoi(pk), kMaxParts)) : 0; }
     Timer T; T.start();
     Outputs o;
@@ -78,18 +88,19 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     {   // digest of everything the run returns (the partition-invariance gate compares it across K)
         Sha256 h; h.update(sha_out(o).data(), 64);
         { auto ind = o.indels; std::sort(ind.begin(), ind.end()); h.update(ind.data(), ind.size() * 16); }   // as a set: their order follows the stream's read order h.update(o.cell_reads.data(), o.cell_reads.size() * 4); h.update(o.cell_mol.data(), o.cell_mol.size() * 4);
-        h.update(o.hits, sizeof o.hits); h.update(&o.sj_raw_sum, 8); h.update(g_snp_stat, sizeof g_snp_stat);
+        h.update(o.cell_mixed.data(), o.cell_mixed.size() * 4); h.update(o.hits, sizeof o.hits); h.update(&o.sj_raw_sum, 8); h.update(g_snp_stat, sizeof g_snp_stat);
         unsigned long long ms[5]; CK(cudaMemcpyFromSymbol(ms, g_molstat, sizeof ms)); h.update(ms, sizeof ms);
         long long n[4] = {o.n_gene_tuples, o.n_sj_tuples, o.n_snp_tuples, o.n_mt_tuples}; h.update(n, sizeof n);
         po.log += "digest " + h.hex() + "; ";
     }
     po.snpHits = (uint64_t) o.n_snp_tuples; po.sjHits = o.sj_raw_sum; po.mtBases = (uint64_t) o.n_mt_tuples;
-    po.cellReads.swap(o.cell_reads); po.cellMolecules.swap(o.cell_mol);
+    po.cellReads.swap(o.cell_reads); po.cellMolecules.swap(o.cell_mol); po.cellMixed.swap(o.cell_mixed);
     po.hitsExon = o.hits[0]; po.hitsIntron = o.hits[1]; po.umiRecorded = o.hits[2]; po.mtRescued = o.hits[3];
     po.alnGene.swap(o.aa_gene); po.alnStat.swap(o.aa_stat); po.alnExonGene.swap(o.aa_exg);
     for (auto& kv : T.acc) if (kv.first != "fetch") po.msGpu += kv.second;   // "fetch": the host copying a partition's results out
     { char b[160]; snprintf(b, sizeof b, "partition select %.1f ms (in the GPU time), host fetch between partitions %.1f ms; ", T.acc.count("part.select") ? T.acc["part.select"] : 0.0, T.acc.count("fetch") ? T.acc["fetch"] : 0.0); po.log += b; }
     copyT3(o.exon, po.exon); copyT3(o.intron, po.intron); copyT3(o.amb, po.amb); copyT3(o.sj, po.sj);
+    if (pi.wantReads) { copyT3(o.exon_reads, po.exonReads); copyT3(o.intron_reads, po.intronReads); po.histCell.swap(o.hist_cell); po.hist.swap(o.hist); }
     copyT3(o.snp_ad, po.snpAd); copyT3(o.snp_dp, po.snpDp); copyT3(o.mt, po.mt); copyT3(o.mt_rev, po.mtRev);
     po.sjtab = o.sjtab; po.indels = o.indels;
     {   // R9 per gene: the merged gene-store UMIs, (cell, gene, umi) order
