@@ -46,3 +46,25 @@ GPU pileup itself: 1.7 s (pbmc1k_v3) and 0.3 s (GSM7036403) of GPU time. Prefill
 - First targets, in this order: (2)+(5)+(8) one change (STAR emits hand-off entries from the cache without the BAM stream: removes the per-read output and the pipe consumer),
   then (3)+(4) (packed reads into the prefill, clip kernel, no temp FASTQ), then the tail (6, 7).
 - Caveat on the numbers: stage boundaries come from log markers and the prefill's device-memory window; they are good to a few seconds. `utilization.gpu` is a 1 s point sample.
+
+## Step 1: three serial host passes run on the job's cores (PR #107; gate on d9834b8a, `--engine gpu` + `SINGLET_GPU_PILEUP=on`, default intron rules)
+What the timeline of pbmc1k_v3 showed (log timestamps, `SINGLET_*` diagnostics in `bench/engine_gpu_gate/s8_diag.sbatch`): after STAR's mapping the run was one core for ~85 s
+(STAR's Solo post-map, 31 s of it reading the threads' record files one after another, then the hand-off pass over every read, 41 s) and ~18 s more in `gpu_host_pass`.
+- `SoloFeature::countCBgeneUMI`: the threads' Solo record files are parsed in parallel (per-thread sinks, records placed at the CB cursors in thread order, flag counts merged in first-seen
+  order). Only under `--engine gpu` (`SINGLET_SOLO_PAR=0` for the serial loop); the CPU engine's code path is untouched. 31 s -> 3 s.
+- `gpu_handoff_pass_entries`: the hand-off pass over STAR's per-read entries, chunked and merged in read order (the streaming pileup is one thread, so the worker count comes from the
+  job's CPU set). 41 s -> 4 s. `SINGLET_HANDOFF_PASS_SERIAL=1` runs the old loop.
+- `gpu_host_pass`: strand votes, poly(A) records, V(D)J hits, chunked the same way (poly(A) records and V(D)J hits merged in read order). 17.8 s -> 1.0 s.
+
+Gate (Clipper job 793768, binaries built from d9834b8a with and without the change, H100 NVL node g051): both samples, CPU engine vs new, and old vs new `--engine gpu` + GPU pileup.
+`STREAM PATH OK`, `GPU PILEUP HAND-OFF OK`; 60 files identical, 2 differ only in timings/paths, 7 differ (`nonhost_reads.fq`, `star_Unmapped.out.mate1/2` read order; `star_Log.std.out`,
+`read_stats.tsv`, `pileup_stats.json` provenance counters, `provenance.json` whitelist path), the set the #95/#98 gates allowed. CPU engine vs `--engine gpu` additionally `summary.json` `memory_tier`.
+Every count output (matrices, polyA, junctions, chrM, SNP, ambient, cell calls) is byte-identical.
+
+| Sample (reads) | CPU engine wall s / core-s (per M) | `--engine gpu` before: wall / core-s (per M) | after: wall / core-s (per M) | GPU busy-s (% of wall), after |
+|---|---|---|---|---|
+| pbmc1k_v3 (66.6 M) | 480 / 2593 (38.9) | 375 / 946 (14.2) | **298 / 959 (14.4)** | 20 (7.0%) |
+| neuron1k_v3 (92.9 M) | 577 / 2190 (23.6) | 467 / 1162 (12.5) | **358 / 1178 (12.7)** | not measured |
+
+Wall time -21% and -23%; host core-s is unchanged (these passes were single-threaded, so they cost latency, not core-s). The remaining serial stretches on pbmc1k_v3: STAR load and CR4 probe 32 s,
+the GPU prefill 68 s, STAR's per-read pass 40 s, GPU pileup apply ~15 s, export/QC/callers 28 s, demux/writers 46 s.
