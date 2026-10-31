@@ -94,3 +94,24 @@ LODO and it is listed in `frozen.json` before the independent set is scored; it 
 
 The frozen choice and every competitor are run once on I1 and once on I2 by `eval_independent.py`; the output document is committed
 unedited (`results/independent.json`). Nothing is re-run after looking at it; a failure to run is fixed and the fix reported.
+
+## 8. Amendment 1 (2026-10-31, before any caller was run on I1 or I2 and before the LODO scores were read)
+
+Found while fetching the data and checking the BFF reimplementation; none of it depends on a hashtag-caller result on I1 / I2.
+
+1. **I2 has 12 tags, not 4**: the deposited table (GSM3501447) has HEK_A/B/C, THP1_A/B/C, K562_A/B/C, KG1_A/B/C (three tags per
+   line) plus the columns no_match, ambiguous, total_reads, bad_struct (not tags). There are no unstained lines, so I2 has no truth
+   negatives and its primary metric is the mean of F_S and F_D. A singlet call is correct if the tag's line equals the cell's RNA
+   line. Cells are the authors' deposited RNA cells (>= 500 UMIs), not Singlet's cell caller (no reads are used for I2).
+   RNA truth (`eval_independent.py::rna_truth`, fixed): log1p CP10k, top 2,000 genes by variance / mean, 20 SVD components,
+   k-means (k = 4, 20 starts, seed 0); clusters named by marker genes (listed in the script) with a one-to-one assignment;
+   cross-line doublets = cells whose 30 nearest neighbours (real cells plus as many simulated cross-cluster sums) are mostly
+   simulated (> 50%). Within-line doublets are invisible to this truth. The concordance of the RNA lines with the tag families is
+   reported as a check and is not an input.
+2. **The authors' HTO table is available for I1** (GSM2895283, fetched by Range requests), so counts come from it, as planned.
+3. **BFF reimplementation fidelity** (`fidelity.py`, `results/fidelity.json`): BFF_raw agrees with the published calls on 86-95% of
+   cells; no reading of the BFF_cluster text (the Tn and T2 definitions are ambiguous) reproduces the published doublet counts, so
+   `bff_cluster` here is a BFF-style approximation. Default reading = best mean class agreement with the published calls (no truth
+   labels used): Tn `edge`, T2 `top`. The family in section 6 gains the T2 reading as a third axis: `t2_rule` in {edge_M, top}.
+   `bff_cluster` and `bff_raw` on I1 / I2 are therefore **proxies**: the claim "within 0.01 of the best competitor" is relative to
+   the callers as implemented here, and the cellhashR output itself was not run.
