@@ -56,6 +56,7 @@
 #include <unistd.h>
 #include <vector>
 #include <filesystem>
+#include "singlet/pileup/stall_watchdog.h"
 #include "singlet/pileup/pileup_engine.h"
 #include "singlet/pileup/export.h"
 #include "singlet/pileup/species_detect.h"
@@ -2808,7 +2809,35 @@ static int cmd_atac(int argc, char* argv[]) {
     return singlet::run_atac_from_bam(o);
 }
 
+// Stream path, library far from the protocol orientation: the pipe cannot be read twice, so re-execute this same command on the sorted
+// path (--sorted-bam), whose strand probe handles any chemistry. Partial STAR output of the stopped pass is removed first. Returns only
+// if the exec fails (exit code 8, strand_contradiction, as before).
+static int g_argc = 0;
+static char** g_argv = nullptr;
+static int restart_on_sorted_path(const singlet::PileupStats& stats, bool reverse, const std::string& out_prefix, int argc, char** argv,
+                                  const std::string& when) {
+    std::cerr << "[singlet] STREAM STRAND: " << static_cast<int>(singlet::counted_antisense_frac(stats, reverse) * 100)
+              << "% of " << (stats.strand_sense + stats.strand_antisense) << " strand-informative nuclear reads are antisense to the protocol "
+              << "orientation (" << when << "); restarting on the sorted path (--sorted-bam)" << std::endl;
+    if (!argv || argc < 1) return 8;
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    for (const auto& e : fs::directory_iterator(out_prefix, ec)) {   // STAR's files of the stopped pass: star_*, the GPU hand-off file
+        const std::string n = e.path().filename().string();
+        if (n.rfind("star_", 0) == 0 || n == ".gpu_handoff.bin") fs::remove_all(e.path(), ec);
+    }
+    std::vector<char*> nargv(argv, argv + argc);
+    static char sorted_flag[] = "--sorted-bam";
+    nargv.push_back(sorted_flag);
+    nargv.push_back(nullptr);
+    setenv("SINGLET_STREAM_STRAND_RESTART", "1", 1);
+    execv("/proc/self/exe", nargv.data());
+    std::cerr << "[singlet] ERROR: restart on the sorted path failed; rerun with --sorted-bam" << std::endl;
+    return 8;
+}
+
 int main(int argc, char* argv[]) {
+    g_argc = argc; g_argv = argv;   // restart_on_sorted_path re-executes this command
     singlet::fq::register_fg2();   // a staged .1fg2 is read through Reader / RunSet like a .1fq
     // ── Subcommand dispatch ──
     if (argc >= 2) {
@@ -3654,6 +3683,7 @@ int main(int argc, char* argv[]) {
     if (!whitelist_file.empty() && whitelist_file != "None" && whitelist_file != "none")
         config.whitelist_path = whitelist_file;
     config.threads = pileup_threads;
+    config.finalize_threads = std::max(1, star_threads);   // --threads: the finalize steps after the stream
     config.umi_len = umi_len;
     if (pipeline_mode) config.count_mt = true;
     if (pipeline_mode) config.count_polya = true;  // poly(A) site usage (3' protocols; skipped when reverse_strand)
@@ -3767,17 +3797,13 @@ int main(int argc, char* argv[]) {
     //   4 = zero_cells (0 cells called; exported stub outputs)
     //   5 = stalled (SIGALRM watchdog fired — no progress for SINGLET_STALL_TIMEOUT s)
     {
-        unsigned stall_secs = 1800;
-        if (const char* env_s = std::getenv("SINGLET_STALL_TIMEOUT")) {
-            unsigned v = static_cast<unsigned>(std::atoi(env_s));
-            if (v > 0) stall_secs = v;
-        }
+        const unsigned stall_secs = singlet::stall_timeout_secs();   // every re-arm below uses the same timeout
         struct sigaction sa_alarm{};
-        sa_alarm.sa_handler = [](int) { _exit(5); };
+        sa_alarm.sa_handler = singlet::stall_alarm_handler;   // one line (phase, timeout), then exit code 5
         sigemptyset(&sa_alarm.sa_mask);
         sa_alarm.sa_flags = 0;
         sigaction(SIGALRM, &sa_alarm, nullptr);
-        alarm(stall_secs);
+        singlet::rearm_stall_watchdog("startup: references, STAR launch, mapping");
         std::cerr << "[singlet] Stall watchdog armed: " << stall_secs << "s\n";
     }
 
@@ -3983,6 +4009,7 @@ int main(int argc, char* argv[]) {
     std::vector<std::unordered_map<uint64_t, uint64_t>> onefq_per_seg_counts;
     // Protocol id cached from .1fq header for use after onefq_mode block.
     uint8_t onefq_protocol_id = 255;
+    int onefq_r2_bound = 0;   // upper bound of the cDNA read length from the .1fq header / metadata (0: unknown); the GPU pileup is decided on it before the CPU skips its steps
 
     // ── CB_UMI_Complex → CB_samTagOut pre-concatenation state ──
     // When enabled, the decode step rewrites R1 as [seg0][seg1]...[segN][UMI],
@@ -4225,6 +4252,7 @@ int main(int argc, char* argv[]) {
             // Fallback: heuristic from R1 length if metadata didn't provide values
             // But first: detect inverted reads (barcode in R2, cDNA in R1)
             uint16_t r2_len_hdr = hdr.stream_lengths[1];
+            onefq_r2_bound = std::max<int>(onefq_r2_bound, std::max<int>(r2_len_hdr, detected_r2_len));
             // For variable-length R2, use metadata r2_length
             int r2_for_invert = (r2_len_hdr > 0) ? r2_len_hdr : detected_r2_len;
             // ATAC guard: for ATAC assays, stream[1] can legitimately be a short barcode
@@ -5231,6 +5259,7 @@ int main(int argc, char* argv[]) {
     // 19% less wall, docs/research-beta/ws-w3b-bam-stream.md). STAR writes its corrected CB only into a
     // sorted BAM, so the pileup takes CB from CR (identical here: .1fq barcodes are whitelist-exact).
     // The modes below still read the sorted BAM; --sorted-bam forces it everywhere.
+    const bool stream_auto = (stream_unsorted == -1);   // not forced with --stream-unsorted: a wrong-strand library may restart on the sorted path
     if (stream_unsorted != 0) {
         const char* sorted_reason = nullptr;
         // An existing BAM is read as given. With an explicit --stream-unsorted it is treated as a saved stream
@@ -5273,6 +5302,18 @@ int main(int argc, char* argv[]) {
             unsetenv("SINGLET_GPU_PILEUP");
         }
     }
+    // The decision to run the GPU pileup is made here, before the CPU skips its steps: once the stream has been consumed without them a decline can only end
+    // the run (exit 9). Reads the per-base-quality masks cannot hold (over 128 bases), or SINGLET_GPU_PILEUP_FORCE_DECLINE=1 (the regression test of this
+    // fallback), keep the pileup on the CPU; the GPU still maps the reads.
+    if (getenv("SINGLET_GPU_PILEUP")) {
+        const char* why = nullptr;
+        if (onefq_r2_bound > 128) why = "reads over 128 bases (the per-base-quality mask holds 128)";
+        else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
+        if (why) {
+            std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: " << why << "; the CPU pileup runs on the GPU-mapped reads\n";
+            unsetenv("SINGLET_GPU_PILEUP");
+        }
+    }
 #endif
     // R11: STAR's whitelist correction of CR on the stream (and the SINGLET_TEST_CB_CHECK comparison on the sorted path)
     config.cb_corrector = (cb_hist_ready && cb_corrector.loaded()) ? &cb_corrector : nullptr;
@@ -5294,6 +5335,9 @@ int main(int argc, char* argv[]) {
     }
 #endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
+    // a stream far from the protocol orientation (Visium FFPE probes, reverse-stranded chemistries) stops after the first million reads and
+    // restarts on the sorted path; not with the GPU hand-off (the end-of-pass check below still applies) or a forced --stream-unsorted
+    config.strand_early_abort = (stream_unsorted == 1) && stream_auto && bam_file.empty() && !getenv("SINGLET_GPU_PILEUP");
     // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
     const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
     if (engine_ptr && config.cb_from_cr) {
@@ -7615,7 +7659,10 @@ int main(int argc, char* argv[]) {
         std::cerr << "[singlet] Waiting for STAR to finish sorting...\n";
         StopWatch star_sw;
         int wstatus;
-        waitpid(star_pid, &wstatus, 0);
+        // re-arm while STAR's own files change (mapping log, BAM sort temp files, the BAM): a deep sample's mapping + sort can
+        // outlast the timeout without stalling
+        singlet::wait_child_with_progress(star_pid, &wstatus, {out_prefix + "/star_Log.progress.out", out_prefix + "/star__STARtmp",
+                                          out_prefix + "/star_Aligned.sortedByCoord.out.bam"}, "waiting for STAR (mapping, BAM sort)");
         // Join FIFO writer thread now — it finishes just before STAR exits (writer
         // closes FIFOs → STAR gets EOF → STAR finishes sorting → parent wakes here).
         if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
@@ -7635,7 +7682,7 @@ int main(int argc, char* argv[]) {
                       << " (parallel path)\n";
             return 3;  // exit code 3 = star_fatal (signal)
         }
-        alarm(1800);  // watchdog: reset after STAR completes (parallel path)
+        singlet::rearm_stall_watchdog("after STAR (parallel path): BAM index, pileup, ATAC");
 
         // ── 2b: Index sorted BAM with htslib ──
         std::cerr << "[singlet] Indexing BAM: " << parallel_bam_path << "\n";
@@ -8119,7 +8166,7 @@ int main(int argc, char* argv[]) {
         StopWatch pileup_sw;
         stats = engine_ptr->run_parallel(parallel_bam_path, star_threads);
         pileup_time = pileup_sw.elapsed_s();
-        alarm(1800);  // watchdog: reset after pileup returns (parallel path)
+        singlet::rearm_stall_watchdog("after pileup (parallel path): export");
         std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, " << pileup_time << "s";
         if (stats.total_reads > 0)
             std::cerr << " (" << static_cast<int>(stats.total_reads / pileup_time / 1e6) << "M reads/s)";
@@ -8156,12 +8203,23 @@ int main(int argc, char* argv[]) {
         StopWatch pileup_sw;
         stats = engine_ptr->run(bam_source);
         pileup_time = pileup_sw.elapsed_s();
-        alarm(1800);  // watchdog: reset after pileup returns (streaming path)
+        singlet::rearm_stall_watchdog("after pileup (streaming path): export");
         std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, "
                   << pileup_time << "s";
         if (stats.total_reads > 0)
             std::cerr << " (" << static_cast<int>(stats.total_reads / pileup_time / 1e6) << "M reads/s)";
         std::cerr << "\n";
+
+        if (stats.strand_contradiction && star_pid > 0) {
+            // the pass stopped early (see PileupConfig::strand_early_abort): end STAR, then restart on the sorted path
+            kill(star_pid, SIGKILL);
+            int ws_kill;
+            waitpid(star_pid, &ws_kill, 0);
+            close(pipe_fd[0]);
+            if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
+            return restart_on_sorted_path(stats, engine_ptr->reverse_strand(), out_prefix, g_argc, g_argv, "after the first " +
+                                          std::to_string(stats.total_reads / 1000000) + "M reads");
+        }
 
         // Strand safety net: only a BAM file can be read twice (a STAR pipe cannot;
         // there the in-line probe decides alone).
@@ -8206,6 +8264,8 @@ int main(int argc, char* argv[]) {
         if (stream_unsorted == 1 && config.stranded && config.auto_strand
             && stats.strand_sense + stats.strand_antisense >= singlet::kStrandRetryMinReads
             && singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) > singlet::kStrandRetryFrac) {
+            if (stream_auto)
+                return restart_on_sorted_path(stats, engine_ptr->reverse_strand(), out_prefix, g_argc, g_argv, "at the end of the pass");
             std::cerr << "[singlet] ERROR: " << static_cast<int>(singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) * 100)
                       << "% of nuclear reads are antisense to the protocol orientation; rerun with --sorted-bam (strand safety net)" << std::endl;
             return 8;  // strand_contradiction
@@ -8294,7 +8354,7 @@ int main(int argc, char* argv[]) {
 
     mem_mark("before export");
     // ── Phase 3: Export ──
-    alarm(1800);  // watchdog: reset at export start
+    singlet::rearm_stall_watchdog("export");
     std::cerr << "[singlet] Exporting feature matrices...\n";
 
     singlet::ExportConfig export_cfg;
@@ -8302,7 +8362,7 @@ int main(int argc, char* argv[]) {
     export_cfg.output_format = output_format;
     export_cfg.pipeline_mode = pipeline_mode;
     export_cfg.n_donors = n_donors;
-    export_cfg.threads = config.threads;
+    export_cfg.threads = std::max(config.threads, star_threads);   // --threads (the stream path's pileup thread is 1)
     export_cfg.genome_dir = genome_dir;
 
     // ── §3.6 fields for summary.json ──

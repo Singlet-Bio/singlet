@@ -1,0 +1,71 @@
+{
+  "gex-counts": {
+    "note": "3 of 44 fail. hgmm1k_v3 total UMI ratio 0.0177 vs 0.0100; with R11 off 0.0104 (section 4)"
+  },
+  "spliced-unspliced": {
+    "note": "unspliced UMI totals per cell 7.5x farther from STARsolo Velocyto than the tools are from each other (pbmc1k_v2)"
+  },
+  "junctions-psi": {
+    "note": "mouse neuron1k_v3 per-cell junction totals correlate 0.92 with STARsolo SJ (0.9996 for the tools)"
+  },
+  "cell-calling": {
+    "note": "19 of 25 fail; nuclei2k_v2 precision 0.77 (called_v2 over-calls in nuclei)"
+  },
+  "ambient-rna": {
+    "note": "1 of 10 fails: contamination-estimate bias on hgmm1k_v3"
+  },
+  "hto": {
+    "note": "#87 re-measured at the pin (header compiled from the pin, held-out settings): F-scores 0.919 / 0.814 / 0.748 / 0.726 on BAL1 / BAL2 / BAL3 / cell lines, as before"
+  },
+  "non-host": {
+    "note": "2 of 10 fail by 0.002-0.005 against Kraken2 viral on the infected sample"
+  },
+  "spatial": {
+    "cls_override": "blocker",
+    "note": "Visium FFPE human breast aborts on the default stream path ('99% of nuclear reads are antisense ... rerun with --sorted-bam'); the numbers here are the --sorted-bam run. The 5 failing metrics are small gaps to STARsolo"
+  },
+  "atac": {
+    "note": "5k library on d9834b8a; 10k library on 22b5782f (tip + stall-watchdog fix, PR #114): on d9834b8a the 10k run dies with exit 5 (blocker, fixed in #114)"
+  },
+  "multiome": {
+    "note": "passes; same 10k run and caveat as atac; the 3k development library was not re-run"
+  },
+  "alignment-performance": {
+    "cls_override": "stale: failing metric passes at the pin",
+    "note": "thread_count_outputs_identical re-measured at the pin: identical, 52 of 52 data files at 4, 8 and 16 threads (pbmc1k_v3). Document and timings carried from 02aa9b9 (exclusive-node timings not re-run; S12 has a profile on shared nodes, PR #112)"
+  },
+  "download": {
+    "note": "carried; S9 measured the Clipper ceiling and the local decode (PR #108) instead of re-running dl_bench: 0.65-0.96 GB/s aggregate, 45-60 MB/s per stream, decode 2.6-3.0 core-s per M pairs on d9834b8a"
+  },
+  "donor-demux": {
+    "note": "S10 on d9834b8a (auto-K, binned .1fq, competitors re-run on its BAMs; JSON not written): K exact on 5/5 pools, ARI 0.976-0.999 vs 0.948-0.995 for vireo/souporcell given the true K; doublet F1 0.77-0.87"
+  },
+  "donor-snps": {
+    "note": "S10 on d9834b8a (JSON not written): concordance 0.9863 vs cellsnp 0.9901 and vireo 0.9772 at equal DP>=10 sites; with PR #115 (R12 cut 0.9 to 0.99) 0.9899. The gate binary does not have #115. Carried document is the 02aa9b9 one",
+    "cls_override": "blocker"
+  },
+  "mtdna": {
+    "note": "not re-run"
+  },
+  "doublets": {
+    "note": "Python combiner (not the binary); carried"
+  },
+  "adt": {
+    "note": "no result file exists on any branch"
+  },
+  "cell-type": {
+    "note": "Python model (not the binary); carried"
+  },
+  "vdj": {
+    "note": "Python assembler (not the binary); interim document; carried"
+  },
+  "crispr-guides": {
+    "note": "Python counter (not the binary); carried. #91 re-measured at the pin: guide match rate 0.340 -> 0.681 with half the reads stored reverse (A375 library, 2 M read pairs)"
+  },
+  "chromosomal-sex": {
+    "note": "Python model (not the binary); carried"
+  },
+  "genetic-ancestry": {
+    "note": "Python model (not the binary); carried"
+  }
+}

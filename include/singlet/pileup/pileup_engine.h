@@ -24,6 +24,7 @@
 #include <tuple>
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -37,6 +38,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "stall_watchdog.h"
 #include "ancestry.h"
 #include "crispr_guide.h"
 #include "gene_model.h"
@@ -51,6 +53,30 @@
 #include "polya_sites.h"
 #include "gpu_pileup_dump.h"   // W11: SINGLET_PILEUP_DUMP / SINGLET_STREAM_TEE debug hooks (no effect unless set)
 #include "gpu_pileup_bridge.h" // W11: SINGLET_GPU_PILEUP=compare (GPU builds only; no effect unless set)
+
+namespace singlet {
+// Timing and memory milestones of the end-of-stream finalize (stderr only, no effect on any output).
+inline void fin_mark(const char* what) {
+    static const auto t0 = std::chrono::steady_clock::now();
+    static auto last = t0;
+    const auto now = std::chrono::steady_clock::now();
+    double rss = 0, anon = 0, hwm = 0;
+    if (FILE* f = std::fopen("/proc/self/status", "r")) {
+        char line[256];
+        while (std::fgets(line, sizeof line, f)) {
+            double kb;
+            if (std::sscanf(line, "VmRSS: %lf", &kb) == 1) rss = kb;
+            else if (std::sscanf(line, "RssAnon: %lf", &kb) == 1) anon = kb;
+            else if (std::sscanf(line, "VmHWM: %lf", &kb) == 1) hwm = kb;
+        }
+        std::fclose(f);
+    }
+    std::fprintf(stderr, "[fin] %s: %.1f s (+%.1f s), rss %.1f GB, anon %.1f GB, peak %.1f GB\n", what,
+                 std::chrono::duration<double>(now - t0).count(), std::chrono::duration<double>(now - last).count(),
+                 rss / 1048576, anon / 1048576, hwm / 1048576);
+    last = now;
+}
+}  // namespace singlet
 
 namespace singlet {
 
@@ -79,11 +105,16 @@ struct PileupConfig {
     // Stream (order-free-rules R5): count the whole pass in the protocol orientation, no first-N-reads probe;
     // strand_probe() then reports the aggregate over all informative reads.
     bool strand_prior_only = false;
+    // Stream: stop the pass early when the first reads show the library is far from the protocol orientation (antisense share above
+    // kStrandEarlyAbortFrac over at least kStrandEarlyAbortMinReads informative reads). The caller then restarts on the sorted path,
+    // whose strand probe handles any chemistry; the stats come back with strand_contradiction set. Serial run() only.
+    bool strand_early_abort = false;
     std::string snp_path;           // VCF/TSV of SNP positions
     std::string exon_gtf_path;      // GTF/BED for exon intervals (used for GeneModel)
     std::string barcode_path;       // Filtered barcode list
     std::string out_chrm_bam;       // Output: chrM BAM
     int threads = 4;
+    int finalize_threads = 1;       // end-of-stream finalize (molecule labelling); the result does not depend on it
     int min_mapq = 20;              // Minimum mapping quality
     int min_baseq = 10;             // Minimum base quality for SNP/editing
     bool count_introns = true;      // Count intronic reads
@@ -174,6 +205,7 @@ struct PileupStats {
     // (10x 3') orientation whatever orientation was counted (see StrandEvidence).
     uint64_t strand_sense = 0;
     uint64_t strand_antisense = 0;
+    bool strand_contradiction = false;   // run() stopped early: strand_early_abort and the stream is far from the protocol orientation
     uint64_t vdj_hits = 0;
     // G-RRNA: rRNA contamination sampling
     uint64_t rrna_reads = 0;          ///< reads identified as rRNA (sampled subset)
@@ -217,6 +249,8 @@ constexpr double kStrandProbeReverse = 0.6;         // antisense share above thi
 constexpr double kStrandProbeForward = 0.4;         // antisense share below this -> forward
 constexpr double kStrandRetryFrac = 0.5;            // safety net: wrong-strand share above this
 constexpr uint64_t kStrandRetryMinReads = 1000;
+constexpr uint64_t kStrandEarlyAbortMinReads = 200000;   // stream: informative reads before an early stop is considered
+constexpr double kStrandEarlyAbortFrac = 0.9;            // stream: counted-antisense share that stops the pass (clear, order-robust)
 
 /// Wrong-strand share of the exonic reads of a finished pass (wrong_strand over
 /// wrong_strand + exon_hits). Reads touching exons of both strands, as most chrM
@@ -231,6 +265,13 @@ inline double wrong_strand_frac(const PileupStats& s) {
 inline double counted_antisense_frac(const PileupStats& s, bool reverse) {
     uint64_t n = s.strand_sense + s.strand_antisense;
     return n ? static_cast<double>(reverse ? s.strand_sense : s.strand_antisense) / n : 0.0;
+}
+
+/// True when a stream pass should stop now and restart on the sorted path: enough informative reads, and a clear majority of them
+/// antisense to the orientation being counted.
+inline bool strand_early_abort_due(const PileupStats& s, bool reverse) {
+    return s.strand_sense + s.strand_antisense >= kStrandEarlyAbortMinReads &&
+           counted_antisense_frac(s, reverse) > kStrandEarlyAbortFrac;
 }
 
 /// mitochondrial contig names (genes on both strands; useless for the strand probe)
@@ -656,12 +697,18 @@ public:
             stats.total_reads++;
 
             if (stats.total_reads % 5000000 == 0) {
+                singlet::rearm_stall_watchdog("pileup");   // progress: 5 M more reads
                 std::cerr << "[singlet-pileup] Processed " << stats.total_reads / 1000000
                           << "M reads, " << stats.barcoded_reads << " barcoded, "
                           << stats.snp_hits << " SNP hits, "
                           << stats.exon_hits << " exon, "
                           << stats.intron_hits << " intron, "
                           << mm_buffer.size() << " mm_buf\n";
+            }
+            if (config_.strand_early_abort && (stats.total_reads & 0xFFFFF) == 0 &&
+                strand_early_abort_due(stats, config_.reverse_strand)) {
+                stats.strand_contradiction = true;   // the caller restarts on the sorted path
+                break;
             }
 
             if (b->core.flag & BAM_FUNMAP) { PROF_BAM_IO_RESTART; continue; }
@@ -1157,9 +1204,13 @@ public:
         }
 #endif
         // ── Order-free finalize (docs/research-beta/order-free-rules.md) ──
+        fin_mark("stream done, finalize starts");
         snp_cons_.finalize(snp_ad_, snp_dp_, stats, config_.umi_dedup_directional, gene_roots(mol_store_));  // R1 over R9
+        fin_mark("SNP consensus finalize");
         snp_cons_.clear();
+        fin_mark("SNP consensus freed");
         finalize_umi_features(sj_umi_dedup_, sj_acc_, stats.sj_hits, mol_store_);   // R9, before the molecule store
+        fin_mark("junction UMI finalize");
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (gpu_covers_) {   // the gene store lives on the GPU
             if (!vdj_umi_.empty()) {
@@ -1170,7 +1221,9 @@ public:
         } else
 #endif
         finalize_umi_features(vdj_umi_, vdj_acc_, stats.vdj_hits, mol_store_);      // is finalized below
+        fin_mark("VDJ UMI finalize");
         canonicalize_splice_junctions();               // R7
+        fin_mark("junctions canonicalized");
         if (config_.strand_prior_only)                  // R5: report the aggregate over all informative reads
             strand_probe_ = StrandEvidence{stats.strand_sense, stats.strand_antisense};
 
@@ -1180,7 +1233,8 @@ public:
                       << mol_store_.n_molecule_groups() << " cell×gene groups, "
                       << (config_.umi_dedup_directional ? "directional" : "exact")
                       << " UMI collapse)...\n";
-            auto ms = finalize_all({{&mol_store_, &exon_acc_, &intron_acc_, &amb_acc_}});
+            auto ms = finalize_all({{&mol_store_, &exon_acc_, &intron_acc_, &amb_acc_, true}});
+            fin_mark("molecule labelling done");
             add_molecule_stats(stats, ms);
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (gpu_covers_) add_molecule_stats(stats, gpu_ms_);   // W11 "on": the GPU's molecules (the CPU store is empty)
@@ -3877,10 +3931,11 @@ private:
     // collapsed first so a UMI can be checked across every gene of its cell
     // (genes on different chromosomes live in different workers' stores).
     struct FinalizeTarget {
-        const DirectionalUmiStore* store;
+        DirectionalUmiStore* store;
         SparseAccumulator<uint16_t>* exon;
         SparseAccumulator<uint16_t>* intron;
         SparseAccumulator<uint16_t>* amb;
+        bool consume = false;   // give the store's molecule groups back while collapsing (nothing reads them afterwards)
     };
     DirectionalUmiStore::MoleculeStats finalize_all(const std::vector<FinalizeTarget>& targets) const {
         using D = DirectionalUmiStore;
@@ -3893,7 +3948,11 @@ private:
         const bool track_amb = config_.count_introns && has_gene_model_;
         std::vector<std::vector<D::Molecule>> mols(targets.size());
         for (size_t i = 0; i < targets.size(); ++i)
-            targets[i].store->collapse_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+        {
+            if (targets[i].consume) targets[i].store->consume_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+            else targets[i].store->collapse_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+        }
+        fin_mark("molecules collapsed");
 
         // Each (bc, gene, root UMI) is one molecule, so a (bc, UMI) seen k times is in k genes.
         struct UmiKey {
@@ -3907,28 +3966,47 @@ private:
                 return static_cast<size_t>(h);
             }
         };
+        // Multi-gene UMI table, in shards by barcode so that the table of one shard is all that is in memory
+        // (the whole table cost ~10 GB on a deep sample) and the shards fill on several threads. A molecule's
+        // verdict depends only on the molecules sharing its (bc, UMI), whichever order they arrive in.
         struct UmiGenes { uint32_t n_genes = 0, best_count = 0, best_gene = UINT32_MAX; bool tie = false; };
-        std::unordered_map<UmiKey, UmiGenes, UmiKeyHash> ug;
+        std::vector<std::vector<uint8_t>> drop(targets.size());
         if (mrules) {
-            size_t n = 0;
-            for (const auto& v : mols) n += v.size();
-            ug.reserve(n);
-            for (const auto& v : mols)
-                for (const auto& m : v) {
-                    auto& u = ug[{m.umi, m.bc}];
-                    u.n_genes++;
-                    if (m.count > u.best_count) { u.best_count = m.count; u.best_gene = m.gene; u.tie = false; }
-                    else if (m.count == u.best_count) u.tie = true;
+            for (size_t i = 0; i < targets.size(); ++i) drop[i].assign(mols[i].size(), 0);
+            constexpr uint32_t kShards = 16;
+            std::atomic<uint32_t> next_shard{0};
+            auto shard_worker = [&]() {
+                for (uint32_t sh; (sh = next_shard.fetch_add(1)) < kShards;) {
+                    std::unordered_map<UmiKey, UmiGenes, UmiKeyHash> ug;
+                    for (const auto& v : mols)
+                        for (const auto& m : v) {
+                            if (m.bc % kShards != sh) continue;
+                            auto& u = ug[{m.umi, m.bc}];
+                            u.n_genes++;
+                            if (m.count > u.best_count) { u.best_count = m.count; u.best_gene = m.gene; u.tie = false; }
+                            else if (m.count == u.best_count) u.tie = true;
+                        }
+                    for (size_t i = 0; i < mols.size(); ++i)
+                        for (size_t k = 0; k < mols[i].size(); ++k) {
+                            const auto& m = mols[i][k];
+                            if (m.bc % kShards != sh) continue;
+                            const auto& u = ug.find({m.umi, m.bc})->second;
+                            bool d;
+                            if (u.n_genes <= 1) d = false;
+                            else if (mrules & intron_rule::kUmiGeneCR) d = u.tie || m.gene != u.best_gene;
+                            else if (mrules & intron_rule::kUmiGeneAll) d = true;
+                            else d = m.label() != D::MoleculeLabel::Spliced;   // kUmiGene
+                            drop[i][k] = d ? 1 : 0;
+                        }
                 }
+            };
+            const int nt = std::max(1, std::min<int>(config_.finalize_threads, kShards));
+            std::vector<std::thread> pool;
+            for (int t = 1; t < nt; ++t) pool.emplace_back(shard_worker);
+            shard_worker();
+            for (auto& th : pool) th.join();
         }
-        auto dropped = [&](const D::Molecule& m) {
-            if (!mrules) return false;
-            const auto& u = ug.find({m.umi, m.bc})->second;
-            if (u.n_genes <= 1) return false;
-            if (mrules & intron_rule::kUmiGeneCR) return u.tie || m.gene != u.best_gene;
-            if (mrules & intron_rule::kUmiGeneAll) return true;
-            return m.label() != D::MoleculeLabel::Spliced;  // kUmiGene
-        };
+        fin_mark("multi-gene UMI table built");
 
         gzFile dump = molecule_dump_.empty() ? nullptr : gzopen(molecule_dump_.c_str(), "wb1");
         if (dump) gzputs(dump, "barcode\tgene_id\tumi\tlabel\tflags\tdiag\treads\n");
@@ -3936,14 +4014,15 @@ private:
         std::string line;
         for (size_t i = 0; i < targets.size(); ++i) {
             const auto& t = targets[i];
-            for (const auto& m : mols[i]) {
-                const bool drop = dropped(m);
-                if (drop) st.dropped++;
+            for (size_t k = 0; k < mols[i].size(); ++k) {
+                const auto& m = mols[i][k];
+                const bool dropm = mrules && drop[i][k];
+                if (dropm) st.dropped++;
                 else D::emit_molecule(m, *t.exon, *t.intron,
                                       [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st);
                 if (!dump) continue;
                 for (size_t k = 0; k < umi_s.size(); ++k) umi_s[k] = "ACGT"[(m.umi >> (2 * k)) & 3];
-                const char lab = drop ? 'D' : "SUA"[static_cast<int>(m.label())];
+                const char lab = dropm ? 'D' : "SUA"[static_cast<int>(m.label())];
                 line.clear();
                 line += (m.bc < barcodes_.size() ? barcodes_[m.bc] : std::to_string(m.bc));
                 line += '\t'; line += gene_model_.gene_ids()[m.gene];

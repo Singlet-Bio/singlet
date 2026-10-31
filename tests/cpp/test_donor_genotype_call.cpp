@@ -21,15 +21,17 @@ static int n_fail = 0;
 int main() {
     EXPECT(0, 0, "./.");     // no data
     EXPECT(0, 10, "0/0");
-    EXPECT(1, 10, "0/0");    // one alt molecule in ten: the old 0.1 cut called this 0/1
+    EXPECT(1, 10, "./.");    // one alt molecule in ten: the old 0.1 cut called this 0/1; posterior 0.98 is below 0.99
     EXPECT(1, 20, "0/0");
-    EXPECT(2, 10, "0/1");    // two of ten is already 0/1 under err 0.01
+    EXPECT(2, 10, "./.");    // two of ten: 0/1 has posterior 0.91, below 0.99
+    EXPECT(3, 10, "0/1");
     EXPECT(5, 10, "0/1");
     EXPECT(10, 10, "1/1");
-    EXPECT(9, 10, "1/1");    // symmetric: one ref molecule in ten
+    EXPECT(9, 10, "./.");    // symmetric: one ref molecule in ten
     EXPECT(1, 1, "./.");     // too little to decide
     EXPECT(0, 3, "./.");
-    EXPECT(0, 5, "0/0");
+    EXPECT(0, 5, "./.");     // five reference molecules reach only 0.96
+    EXPECT(0, 7, "0/0");
     EXPECT(12, 10, "1/1");   // ad > dp is clamped to dp
     if (n_fail == 0) std::cout << "all passed\n";
     return n_fail ? 1 : 0;
