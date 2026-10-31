@@ -805,12 +805,9 @@ def _called_only(rel: str, data: bytes, called: set) -> bytes:
     if rel.endswith(".tsv.gz"):
         import gzip
 
-        lines = gzip.decompress(data).decode("utf-8").split("
-")
-        keep = [ln for i, ln in enumerate(lines) if ln and (i == 0 or ln.split("	", 1)[0] in called)]
-        return gzip.compress(("
-".join(keep) + "
-").encode("utf-8"), 6, mtime=0)
+        lines = gzip.decompress(data).decode("utf-8").split("\n")
+        keep = [ln for i, ln in enumerate(lines) if ln and (i == 0 or ln.split("\t", 1)[0] in called)]
+        return gzip.compress(("\n".join(keep) + "\n").encode("utf-8"), 6, mtime=0)
     import os
     import tempfile
 
