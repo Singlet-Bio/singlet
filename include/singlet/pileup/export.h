@@ -313,6 +313,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     SparseAccumulator<uint16_t>::CSCMatrix snp_ad_csc, snp_dp_csc;
     SparseAccumulator<uint16_t>::CSCMatrix exon_csc, intron_csc, sj_csc, mt_csc, guide_csc, amb_csc;
+    SparseAccumulator<uint32_t>::CSCMatrix exon_reads_csc, intron_reads_csc;   // reads per molecule, same layout as the UMI matrices
 
     std::vector<std::thread> csc_threads;
     bool need_snp_csc = !pileup_cfg.snp_path.empty() ||
@@ -325,6 +326,11 @@ inline ExportStats export_results(const PileupEngine& engine,
         csc_threads.emplace_back([&]() { mt_csc = engine.mt_alleles().to_csc(); });
     if (!pileup_cfg.exon_gtf_path.empty()) {
         csc_threads.emplace_back([&]() { exon_csc = engine.exons().to_csc(); });
+        if (engine.reads_matrix_on()) {
+            csc_threads.emplace_back([&]() { exon_reads_csc = engine.exon_reads().to_csc(); });
+            if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0)
+                csc_threads.emplace_back([&]() { intron_reads_csc = engine.intron_reads().to_csc(); });
+        }
         if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0) {
             csc_threads.emplace_back([&]() { intron_csc = engine.introns().to_csc(); });
             csc_threads.emplace_back([&]() { amb_csc = engine.ambiguous().to_csc(); });
@@ -535,6 +541,13 @@ inline ExportStats export_results(const PileupEngine& engine,
         for (uint32_t j = 0; j < exon_csc.ncols; ++j)
             for (int32_t k = exon_csc.indptr[j]; k < exon_csc.indptr[j + 1]; ++k)
                 bc_totals[j] += static_cast<uint64_t>(exon_csc.data[k]);
+        // The knee (and the umi_exon column of cell_calls.tsv) stay on the legacy exonic total: exon + the unspliced molecules that
+        // also have an exon-only read (the molecule labels moved them from the exon matrix to the intron matrix), so a label
+        // change does not move the cell set.
+        {
+            const auto extra = engine.legacy_exon_extra();
+            for (uint32_t j = 0; j < exon_csc.ncols && j < extra.size(); ++j) bc_totals[j] += extra[j];
+        }
 
         // N22-GENE: EmptyDrops operates at GENE level (38k features), not exon level
         // (310k features).  Passing exon_csc directly causes systematic overcalling:
@@ -838,6 +851,11 @@ inline ExportStats export_results(const PileupEngine& engine,
     // is produced in pipeline mode or when run_ambient_correction is set; it is written by the "N11" block below.
     GeneCSC<uint32_t> ambient_corrected_csc;
     std::vector<std::string> ambient_feature_names;  ///< gene_id_gene_name, same strings as ambiguous_counts
+    // kept for the final ambient_contamination.json, which is rewritten once the doublet calls exist (headline excludes them)
+    singlet::AmbientCorrectionResult amb_saved;
+    std::vector<uint32_t> amb_saved_cells;
+    singlet::AmbientDecontConfig amb_saved_cfg;
+    bool amb_saved_have = false;
     if (!cc_result.cell_indices.empty() && exon_csc.ncols > 0 && !bc_totals.empty()
         && engine.gene_model().n_genes() > 0) {
         auto t_amb0 = std::chrono::high_resolution_clock::now();
@@ -911,6 +929,14 @@ inline ExportStats export_results(const PileupEngine& engine,
         const bool want_corrected = export_cfg.pipeline_mode || export_cfg.run_ambient_correction;
         if (want_corrected && amb.ok && ambient_feature_names.size() == amb.corrected.nrows)
             ambient_corrected_csc = std::move(amb.corrected);
+        {   // a copy without the (moved or unused) corrected matrix
+            auto keep_corrected = std::move(amb.corrected);
+            amb_saved = amb;
+            amb.corrected = std::move(keep_corrected);
+            amb_saved_cells = amb_cells;
+            amb_saved_cfg = amb_cfg;
+            amb_saved_have = true;
+        }
         auto t_amb1 = std::chrono::high_resolution_clock::now();
         double amb_s = std::chrono::duration<double>(t_amb1 - t_amb0).count();
         std::cerr << "[ambient] method=" << (amb.ok ? amb.method : std::string("none_no_ambient_pool"))
@@ -988,6 +1014,15 @@ inline ExportStats export_results(const PileupEngine& engine,
             double dbl_s = std::chrono::duration<double>(t_dbl1 - t_dbl0).count();
             uint32_t n_doublets = 0;
             for (const auto& r : dbl_results) if (r.is_doublet) ++n_doublets;
+            if (amb_saved_have && !dbl_results.empty()) {
+                std::vector<char> dflag(exon_csc.ncols, 0);
+                for (size_t di = 0; di < dbl_cell_indices.size() && di < dbl_results.size(); ++di)
+                    if (dbl_cell_indices[di] < dflag.size()) dflag[dbl_cell_indices[di]] = dbl_results[di].is_doublet ? 1 : 0;
+                std::vector<char> excl(amb_saved.contam.size(), 0);
+                for (size_t i = 0; i < excl.size() && i < amb_saved_cells.size(); ++i)
+                    if (amb_saved_cells[i] < dflag.size()) excl[i] = dflag[amb_saved_cells[i]];
+                singlet::write_ambient_json(out_prefix + "/ambient_contamination.json", amb_saved, amb_saved_cfg, &excl);
+            }
             std::cerr << "[doublet] n_cells=" << dbl_cell_indices.size()
                       << " n_doublets=" << n_doublets
                       << " doublet_rate=" << (dbl_results.empty() ? 0.0 :
@@ -1238,6 +1273,28 @@ inline ExportStats export_results(const PileupEngine& engine,
     // Gene model matrices
     if (!pileup_cfg.exon_gtf_path.empty()) {
         write_threads.emplace_back([&]() { write_matrix("exon_counts", exon_csc, engine.exon_names()); });
+        // Reads behind each exon / intron UMI count (same rows, columns and codec, uint32): reads_per_umi = reads / UMIs
+        if (engine.reads_matrix_on()) {
+            write_threads.emplace_back([&]() { write_matrix("exon_reads", exon_reads_csc, engine.exon_names()); });
+            if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0)
+                write_threads.emplace_back([&]() { write_matrix("intron_reads", intron_reads_csc, engine.intron_names()); });
+            write_threads.emplace_back([&]() {
+                const std::string path = out_prefix + "/reads_per_umi_hist.tsv.gz";
+                gzFile f = gzopen(path.c_str(), "wb6");
+                if (!f) { record_failed_write("reads_per_umi_hist.tsv.gz"); return; }
+                std::string line = "barcode";
+                for (int k = 1; k < PileupEngine::kReadsHistBins; ++k) line += "\tn" + std::to_string(k);
+                line += "\tn" + std::to_string(PileupEngine::kReadsHistBins) + "plus\n";
+                gzwrite(f, line.data(), static_cast<unsigned>(line.size()));
+                for (const auto& [bc, h] : engine.reads_per_umi_hist()) {
+                    line = bc < barcodes.size() ? barcodes[bc] : std::to_string(bc);
+                    for (uint32_t v : h) { line += '\t'; line += std::to_string(v); }
+                    line += '\n';
+                    gzwrite(f, line.data(), static_cast<unsigned>(line.size()));
+                }
+                gzclose(f);
+            });
+        }
         // Gene-level aggregation thread: TPM/FPKM, barnyard, h5ad/loom/mtx (no gene_counts.1pz)
         // Gene-level 1pz matrices are NOT written — they are redundant with exon_counts +
         // intron_counts and can be computed on the fly by downstream tools.

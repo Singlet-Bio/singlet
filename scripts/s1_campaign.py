@@ -955,6 +955,7 @@ def dumps_manifest(m: dict) -> bytes:
 MODALITY_MEMBERS: List[Tuple[str, Tuple[str, ...]]] = [
     ("exon_counts", ("exon_counts.1pz",)),
     ("intron_counts", ("intron_counts.1pz",)),
+    ("reads_per_umi_hist", ("reads_per_umi_hist.tsv.gz",)),
     ("cell_calls", ("cell_calls.tsv",)),
     ("cell_qc", ("cell_qc_metrics.tsv",)),
     ("junctions", ("sj_counts.1pz",)),

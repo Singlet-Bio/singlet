@@ -7,7 +7,7 @@
 // 2. Per-intron counts (UMI-deduplicated) → GeneFull = exon + intron
 // 3. Splice junction counts from CIGAR N operations
 // 4. SNP allele counts (AD/DP) at known positions (raw reads, no UMI dedup)
-// 5. RNA editing (A/G) counts at REDIportal sites
+// 5. (RNA editing counts at REDIportal sites: NOT IMPLEMENTED; there is no site list, counter or writer. Not shipped in Beta.)
 // 6. chrM reads extracted to separate BAM (for mgatk)
 //
 // Multi-mapper handling: reads with NH > 1 are counted as 1/NH fractional.
@@ -21,6 +21,8 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <array>
+#include <map>
 #include <tuple>
 #include <atomic>
 #include <chrono>
@@ -116,11 +118,12 @@ struct PileupConfig {
     int threads = 4;
     int finalize_threads = 1;       // end-of-stream finalize (molecule labelling); the result does not depend on it
     int min_mapq = 20;              // Minimum mapping quality
-    int min_baseq = 10;             // Minimum base quality for SNP/editing
+    int min_baseq = 10;             // Minimum base quality for the SNP pileup (there is no editing pileup)
     bool count_introns = true;      // Count intronic reads
     bool count_sj = true;           // Extract splice junctions
     bool umi_dedup = true;          // UMI deduplication for exon/intron
     bool umi_dedup_directional = false; // N6: directional 1-Hamming error correction (run() and run_parallel())
+    bool reads_matrix = true;       // exon_reads / intron_reads matrices and the per-cell reads-per-UMI histogram (needs umi_dedup); never changes the counts
     int umi_len = 12;               // UMI length in bases (for N6 directional Hamming)
     bool stranded = true;           // Strand-aware counting (10x Forward)
     bool reverse_strand = false;    // Invert strand filter (for 5' protocols)
@@ -135,9 +138,13 @@ struct PileupConfig {
     uint32_t wl_ambient_ceil = 50;      // UMI ceiling: WL barcodes with ≤ this count define the ambient pool
     // Intron-assignment rules (intron_rule::k* bits). SINGLET_INTRON_RULES overrides it
     // (decimal or 0x hex) for experiments; see docs/pipeline-validation.md §4.4.
-    // Default 389 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer), chosen on real truth (sweep2: matches or beats every
-    // other combination on pbmc v3/v2, nuclei, hgmm, CITE against STARsolo Velocyto and alevin-fry USA).
-    uint32_t intron_rules = 389;
+    // Default 397 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer) + 8 (kFlank). 389 (without kFlank) was chosen on real
+    // truth (sweep2: matches or beats every other combination on pbmc v3/v2, nuclei, hgmm, CITE against STARsolo Velocyto and alevin-fry USA)
+    // under the old molecule labels. With the alevin-fry USA labels (any intron-touching read = unspliced) a read that touches an intron by
+    // <= 5 bp of an exon-touching read must not count as intron evidence: on PBMC-E long-read truth kFlank lifts the molecule precision of the
+    // unspliced call from 0.62 to 0.86 at unchanged recall (0.976 -> 0.974), (cell, gene) unspliced r from 0.81 to 0.90
+    // (docs/research-beta/sota-expression.md). The GPU pileup implements kFlank and the labels too (k_annotate / k_resolve / m6 k_emit).
+    uint32_t intron_rules = 397;
 };
 
 namespace intron_rule {
@@ -566,6 +573,14 @@ public:
             if (config_.count_introns) {
                 intron_acc_.set_barcodes(barcodes_);
                 intron_acc_.set_n_features(gene_model_.n_introns());
+            }
+            if (reads_matrix_on()) {
+                exon_reads_acc_.set_barcodes(barcodes_);
+                exon_reads_acc_.set_n_features(gene_model_.n_exons());
+                if (config_.count_introns) {
+                    intron_reads_acc_.set_barcodes(barcodes_);
+                    intron_reads_acc_.set_n_features(gene_model_.n_introns());
+                }
             }
         }
 
@@ -1460,6 +1475,16 @@ public:
         if (config_.stranded && config_.auto_strand && has_gene_model_ && !strand_probed_)
             probe_strand_indexed(master_fp, hdr, idx);
 
+        // reads-per-UMI matrices are filled by finalize_all() on this thread, not per worker
+        if (reads_matrix_on()) {
+            exon_reads_acc_.set_barcodes(barcodes_);
+            exon_reads_acc_.set_n_features(gene_model_.n_exons());
+            if (config_.count_introns) {
+                intron_reads_acc_.set_barcodes(barcodes_);
+                intron_reads_acc_.set_n_features(gene_model_.n_introns());
+            }
+        }
+
         // ── Initialize per-worker contexts ──
         std::vector<WorkerContext> workers(n_workers);
         for (int w = 0; w < n_workers; ++w) {
@@ -1923,7 +1948,20 @@ public:
         in.intronRules = config_.intron_rules;
         in.geneIsMt.assign(gene_model_.n_genes(), 0);
         for (uint32_t g = 0; g < gene_model_.n_genes(); ++g) in.geneIsMt[g] = is_mt_gene(g) ? 1 : 0;
+        if (config_.intron_rules & intron_rule::kFlank) {   // refine_read's intronic-base count: gene bodies and their merged exons
+            const auto& genes = gene_model_.genes();
+            in.geneStart.reserve(genes.size()); in.geneEnd.reserve(genes.size()); in.geneExonOff.assign(1, 0);
+            for (const auto& g : genes) {
+                in.geneStart.push_back(g.start); in.geneEnd.push_back(g.end);
+                for (uint32_t ei : g.exon_indices) in.geneExons.push_back(ei);
+                in.geneExonOff.push_back(static_cast<uint32_t>(in.geneExons.size()));
+            }
+            const uint32_t ne = gene_model_.n_exons();
+            in.exonStart.resize(ne); in.exonEnd.resize(ne);
+            for (uint32_t e = 0; e < ne; ++e) { in.exonStart[e] = gene_model_.exon_start(e); in.exonEnd[e] = gene_model_.exon_end(e); }
+        }
         in.wantGeneMerges = (has_vdj_ && config_.umi_dedup) ? 1 : 0;   // R9 per gene for the host's V(D)J reducer
+        in.wantReads = reads_matrix_on() ? 1 : 0;   // reads per molecule (exon_reads / intron_reads / histogram)
         in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
         in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
         const size_t nreads = gpu_col_->n_reads(), nsigs = gpu_col_->n_sigs(); const uint64_t inc = gpu_col_->incomplete();
@@ -2524,6 +2562,11 @@ public:
         std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
         gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
+        if (reads_matrix_on()) {   // reads per molecule: the GPU's sums and histogram (the CPU store is empty)
+            gpu_put(exon_reads_acc_, out.exonReads); gpu_put(intron_reads_acc_, out.intronReads);
+            for (size_t i = 0; i < out.histCell.size(); ++i)
+                std::copy_n(out.hist.begin() + i * kReadsHistBins, kReadsHistBins, read_hist_[out.histCell[i]].begin());
+        }
         gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);
         sj_names_.clear(); sj_index_.clear();
         // the GPU's table has every junction of every signature (hand-off records include reads without a cell barcode); the CPU
@@ -2551,6 +2594,11 @@ public:
         gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
         gpu_ms_.legacy_double = out.molLegacyDouble; gpu_ms_.dropped = out.molDropped;
         gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
+        if (!out.cellMixed.empty() && !barcodes_.empty()) {   // legacy_exon_extra: the GPU's per-cell count of unspliced molecules with an exon-only read
+            if (!mixed_bc_) { mixed_n_ = barcodes_.size(); mixed_bc_.reset(new std::atomic<uint32_t>[mixed_n_]()); }
+            for (size_t c = 0; c < out.cellMixed.size() && c < mixed_n_; ++c)
+                if (out.cellMixed[c]) mixed_bc_[c].fetch_add(out.cellMixed[c], std::memory_order_relaxed);
+        }
         gpu_merges_.swap(out.geneMerges);
         stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
         if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
@@ -2666,11 +2714,26 @@ public:
     /// Ambiguous molecules per gene (rows = genes). They are also counted in exons().
     const SparseAccumulator<uint16_t>& ambiguous() const { return amb_acc_; }
 
+    /// Reads per molecule, same layout as exons() / introns() (uint32: not clamped at 65535). Empty unless reads_matrix_on().
+    bool reads_matrix_on() const { return config_.reads_matrix && config_.umi_dedup && has_gene_model_; }
+    static constexpr int kReadsHistBins = 16;   ///< bin k-1 = molecules with k reads, k = 1..15; bin 15 = 16 or more
+    const SparseAccumulator<uint32_t>& exon_reads() const { return exon_reads_acc_; }
+    const SparseAccumulator<uint32_t>& intron_reads() const { return intron_reads_acc_; }
+    /// Per-cell histogram of reads per emitted molecule, barcode-index order, nonzero cells only.
+    const std::map<uint32_t, std::array<uint32_t, kReadsHistBins>>& reads_per_umi_hist() const { return read_hist_; }
+
     // G-EM: Ambiguous reads buffered for post-pileup EM rescue
     const std::vector<em_rescue::AmbigRead>& ambig_reads() const { return ambig_reads_; }
 
 private:
     PileupConfig config_;
+    // Reads per molecule (written by finalize_all on the main thread, or put from the GPU): never read by the counting path
+    mutable SparseAccumulator<uint32_t> exon_reads_acc_, intron_reads_acc_;
+    mutable std::map<uint32_t, std::array<uint32_t, kReadsHistBins>> read_hist_;
+    void add_read_hist(uint32_t bc, uint32_t reads) const {
+        auto& h = read_hist_[bc];
+        h[std::min<uint32_t>(reads, kReadsHistBins) - 1]++;
+    }
     std::string molecule_dump_;     // SINGLET_MOLECULE_DUMP: per-molecule TSV (gz) for diagnostics
     bool strand_probed_ = false;    // Auto-strand probe reached a decision
     bool strand_flipped_ = false;   // ... and changed reverse_strand
@@ -3912,6 +3975,16 @@ private:
         }
     }
 
+    // Where each emitted molecule's reads go (reads_matrix_on(); else a no-op)
+    auto reads_sink() const {
+        const bool on = reads_matrix_on();
+        return [this, on](bool intronic, uint32_t feat, uint32_t bc, uint32_t reads) {
+            if (!on) return;
+            (intronic ? intron_reads_acc_ : exon_reads_acc_).increment(feat, bc, reads);
+            add_read_hist(bc, reads);
+        };
+    }
+
     // Label and emit every molecule of `store`; ambiguous molecules also go to
     // `amb` (per gene). Returns the label counts.
     DirectionalUmiStore::MoleculeStats finalize_store(const DirectionalUmiStore& store,
@@ -3922,7 +3995,8 @@ private:
         return store.finalize_molecules(
             exon, intron,
             [&](uint32_t bc, uint32_t gene) { if (track_amb) amb.increment(gene, bc); },
-            config_.umi_len, config_.umi_dedup_directional);
+            config_.umi_len, config_.umi_dedup_directional, reads_sink(),
+            [&](uint32_t bc) { note_mixed(bc); });
     }
 
     // Label and emit the molecules of several stores (one per worker; each store
@@ -3937,8 +4011,27 @@ private:
         SparseAccumulator<uint16_t>* amb;
         bool consume = false;   // give the store's molecule groups back while collapsing (nothing reads them afterwards)
     };
+    // Per barcode: unspliced molecules that also have an exon-only read (see DirectionalUmiStore::emit_molecule). The cell caller's
+    // knee is computed on exon + these, i.e. on the exonic total the labels gave before the alevin-fry USA semantics.
+    mutable std::unique_ptr<std::atomic<uint32_t>[]> mixed_bc_;
+    mutable size_t mixed_n_ = 0;
+    void note_mixed(uint32_t bc) const {
+        if (bc < mixed_n_) mixed_bc_[bc].fetch_add(1, std::memory_order_relaxed);
+    }
+public:
+    /// Per-barcode count of unspliced molecules with an exon-only read (empty if no molecule was finalized).
+    std::vector<uint32_t> legacy_exon_extra() const {
+        std::vector<uint32_t> v(mixed_n_, 0);
+        for (size_t i = 0; i < mixed_n_; ++i) v[i] = mixed_bc_[i].load(std::memory_order_relaxed);
+        return v;
+    }
+private:
     DirectionalUmiStore::MoleculeStats finalize_all(const std::vector<FinalizeTarget>& targets) const {
         using D = DirectionalUmiStore;
+        if (!mixed_bc_ && !barcodes_.empty()) {
+            mixed_n_ = barcodes_.size();
+            mixed_bc_.reset(new std::atomic<uint32_t>[mixed_n_]());
+        }
         const uint32_t mrules = config_.intron_rules & intron_rule::kMoleculeRules;
         D::MoleculeStats st;
         if (!mrules && molecule_dump_.empty()) {
@@ -4019,7 +4112,8 @@ private:
                 const bool dropm = mrules && drop[i][k];
                 if (dropm) st.dropped++;
                 else D::emit_molecule(m, *t.exon, *t.intron,
-                                      [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st);
+                                      [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st, reads_sink(),
+                                      [&](uint32_t bc) { note_mixed(bc); });
                 if (!dump) continue;
                 for (size_t k = 0; k < umi_s.size(); ++k) umi_s[k] = "ACGT"[(m.umi >> (2 * k)) & 3];
                 const char lab = dropm ? 'D' : "SUA"[static_cast<int>(m.label())];

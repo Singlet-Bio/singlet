@@ -5,7 +5,7 @@
 
 RUN_DIR is a `singlet` output directory written with --output-format mtx (exon_counts / intron_counts .mtx.gz with
 _features/_barcodes .tsv.gz) and the per-barcode cell_calls.tsv of the called_v2 caller. For each run the stored exon and
-intron matrices go through cellcall.gene_counts and cellcall.call with called = the is_cell column (the knee set), exactly
+intron matrices go through cellcall.gene_counts and cellcall.call with called = the called_knee column (the knee set; is_cell is the called_v2 call itself), exactly
 as the v2 migration does, and the result is compared with the called_v2 / fdr columns the binary wrote.
 
 The inputs of the call are checked too, so a change in what the binary hands the caller cannot hide behind an identical
@@ -87,11 +87,11 @@ def read_calls(run):
         head = f.readline().rstrip("\n").split("\t")
         rows = [ln.rstrip("\n").split("\t") for ln in f if ln.strip()]
     col = {h: i for i, h in enumerate(head)}
-    need = ("barcode", "is_cell", "called_v2", "fdr")
+    need = ("barcode", "is_cell", "called_knee", "called_v2", "fdr")
     if not all(k in col for k in need):
         raise SystemExit("%s: cell_calls.tsv is not the called_v2 format (%s)" % (run, head))
     bc = [r[col["barcode"]] for r in rows]
-    is_cell = np.array([r[col["is_cell"]] == "TRUE" for r in rows])
+    is_cell = np.array([r[col["called_knee"]] == "1" for r in rows])  # the knee set (named is_cell below)
     cv2 = np.array([r[col["called_v2"]] == "1" for r in rows])
     fdr = np.array([np.nan if r[col["fdr"]] == "NA" else float(r[col["fdr"]]) for r in rows])
     umi = {

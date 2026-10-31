@@ -135,17 +135,27 @@ struct PileupInput {
     // (same order as `reads`): bit i = base i of the record sequence, in the record's (original read) orientation, has quality < minBaseq
     int useQual = 0;
     std::vector<uint8_t> lowq;
-    uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kUmiGeneCR, kMtPrefer
+    uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer
     std::vector<uint8_t> geneIsMt;          // per gene: on chrM (kMtPrefer)
+    // kFlank (only when intronRules has it): per gene its body [geneStart, geneEnd) and its merged exons geneExons[geneExonOff[g] .. geneExonOff[g + 1])
+    // (GeneRecord::exon_indices, sorted by start), exon coordinates by exon index
+    std::vector<int32_t> geneStart, geneEnd, exonStart, exonEnd;
+    std::vector<uint32_t> geneExonOff, geneExons;
     int wantGeneMerges = 0;   // return PileupOutput::geneMerges (the host collapses V(D)J molecules per (cell, gene), R9)
     uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
     // records, raw pileup_rec.h structs
     std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
     std::vector<uint32_t> ops;
     std::vector<uint8_t> seq;
+    int wantReads = 0;        // return PileupOutput::exonReads / intronReads / histCell / hist (reads per molecule); 0: no extra work
 };
 struct PileupOutput {
     std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
+    // wantReads: reads per emitted molecule summed per (cell, row) (val = reads, uint32, same rows as exon / intron), and per cell with
+    // molecules (histCell, ascending) its histBins-bin histogram of reads per molecule in hist: k reads -> bin k-1, last bin = histBins or more
+    static constexpr int histBins = 16;
+    std::vector<PileupTriplet> exonReads, intronReads;
+    std::vector<uint32_t> histCell, hist;
     std::vector<std::array<uint32_t, 3>> sjtab;      // junction id -> (tid, donor, acceptor), ids in (tid, donor, acceptor) order
     std::vector<std::array<uint32_t, 4>> indels;     // (cell, pos, len, is_ins)
     std::vector<PileupGeneMerge> geneMerges;         // only when wantGeneMerges; sorted by (cell, gene, umi)
@@ -156,6 +166,9 @@ struct PileupOutput {
     // per cell (barcode column): reads recorded in the molecule store and molecules after directional collapse
     // (DirectionalUmiStore::per_cell_molecule_stats: the inputs of saturation_metrics.tsv and cell_qc_metrics.tsv)
     std::vector<uint32_t> cellReads, cellMolecules;
+    // per cell: unspliced molecules that also have an exon-only read (PileupEngine::legacy_exon_extra, the knee's legacy exonic total). The molecule
+    // labels are alevin-fry USA (DirectionalUmiStore::label_of): unspliced = any intron read, spliced = a junction read, ambiguous = the rest
+    std::vector<uint32_t> cellMixed;
     // count_read's counters over the gene tuples, and per alignment the classify_read gene and the serial loop's per-alignment
     // flags (1 strand vote sense, 2 antisense, 4 wrong_strand, 8 cross_gene_intron, 16 multigene)
     uint64_t hitsExon = 0, hitsIntron = 0, umiRecorded = 0;

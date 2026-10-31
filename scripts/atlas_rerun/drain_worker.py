@@ -210,6 +210,17 @@ def finish_phase(a, cfg, ccfg, job):
         shutil.rmtree(scr, ignore_errors=True)
 
 
+def accept_sample(m, min_pairs=0, max_pairs=0, mem_gb=0, accept_1fg2=False, engine="gpu"):
+    """May a worker with these limits take this staged sample? A GPU worker never claims a sample whose estimated memory (common.gpu_job_mem_gb)
+    exceeds its own allocation: it would be OOM-killed, and the sample would burn its attempts. Such a sample waits for a larger worker."""
+    p = m.get("pairs", 0)
+    if m.get("format") == "1fg2" and not accept_1fg2:
+        return False   # the engine's .1fg2 reader is S8's; until its identity gate passes, such samples wait for a worker started with --accept-1fg2
+    if mem_gb and engine == "gpu" and mem_gb < C.GPU_EXCLUSIVE_GB and C.gpu_job_mem_gb(p) > mem_gb:
+        return False   # a whole-node worker (mem_gb >= GPU_EXCLUSIVE_GB) takes anything: it is the largest there is
+    return (not min_pairs or p >= min_pairs) and (not max_pairs or p <= max_pairs)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage", required=True)
@@ -222,6 +233,8 @@ def main():
     ap.add_argument("--max-samples", type=int, default=0)
     ap.add_argument("--min-pairs", type=int, default=0)
     ap.add_argument("--max-pairs", type=int, default=0)
+    ap.add_argument("--mem-gb", type=float, default=-1, help="memory of this job in GB (default: the Slurm allocation, 0 = unknown: no memory filter); "
+                    "a GPU worker skips samples whose estimate (common.gpu_job_mem_gb) is larger")
     ap.add_argument("--publish", nargs="+", default=["dry-run"], help="dry-run | none | s1-dry | s1 | a command with {gsm} {gse} {out}")
     ap.add_argument("--s1-repo", help="built copy of the s1 code (compiled singlet._pz/_pz2) for s1_producer.py, e.g. $WORK/jobs/s6/s1repo")
     ap.add_argument("--s1-runtime", help="in_runtime.sh to source: the producer then runs inside the runtime image + venv (Clipper)")
@@ -238,11 +251,13 @@ def main():
     Q.sweep_scratch(a.scratch, "s9-drain-", log)
     Q.install_sigterm()
 
+    mem_gb = a.mem_gb if a.mem_gb >= 0 else (C.node_mem_gb() if os.environ.get("SLURM_MEM_PER_NODE") else 0)
+    if mem_gb:
+        log("[drain] memory %.0f GB: samples above %d M pairs are left for larger workers" % (
+            mem_gb, max([p for p in range(10_000_000, 2_000_000_000, 10_000_000) if C.gpu_job_mem_gb(p) <= mem_gb] or [0]) // 1_000_000))
+
     def accept(m):
-        p = m.get("pairs", 0)
-        if m.get("format") == "1fg2" and not a.accept_1fg2:
-            return False   # the engine's .1fg2 reader is S8's; until its identity gate passes, such samples wait for a worker started with --accept-1fg2
-        return (not a.min_pairs or p >= a.min_pairs) and (not a.max_pairs or p <= a.max_pairs)
+        return accept_sample(m, a.min_pairs, a.max_pairs, mem_gb, a.accept_1fg2, a.engine)
 
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     inflight = []  # [(future, job)]: at most one publish runs beside the next sample's compute

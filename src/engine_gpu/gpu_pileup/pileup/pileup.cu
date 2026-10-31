@@ -79,8 +79,11 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 128, 256 are implemented
-struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, pad; };   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 128, 256 are implemented
+// the gene model for kFlank (refine_read's intronic-base count): per gene its body and its merged exons (GeneRecord::exon_indices, sorted)
+struct DGene { const int32_t *gs, *ge, *es, *ee; const uint32_t *eoff, *ex; uint32_t ng; };
+// flank: an exon-touching intronic primary (flags 6) with <= 5 intronic bases (DirectionalUmiStore::kDiagFlank); applied by k_resolve under kFlank
+struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, flank; };   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
 struct SJL { int32_t tid, donor, acc; };
 struct IND { uint32_t pos, lenins; };
@@ -132,7 +135,8 @@ struct IntronCb {
         if (exon_gene != MAXU && g != exon_gene) other = true; }   // classify_read's other_gene_intron
     bool other = false; };
 
-__global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree EX, DTree IN, const uint32_t* e2g, uint32_t ne, const uint32_t* i2g, uint32_t ni, const char* gstr, uint32_t ng, DPar P, AA* out) {
+__global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree EX, DTree IN, const uint32_t* e2g, uint32_t ne, const uint32_t* i2g, uint32_t ni, const char* gstr, uint32_t ng, DPar P, AA* out,
+                           DGene GM = DGene{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0}) {
     int a = blockIdx.x * blockDim.x + threadIdx.x; if (a >= nA) return;
     AlnRec x = A[a]; bool prim = (x.flags & 2) != 0; StrandPar SP{P.stranded, P.reverse, gstr, ng, (x.flags & 1) != 0}; bool had_reject = false, hasn = false;
     ExonCb ec{&SP, e2g, ne, false, true, MAXU, MAXU};
@@ -163,6 +167,25 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
     if (pm) { }
     else if (exon_gene != MAXU) { r.gene = exon_gene; r.exon = ec.first_idx; r.intron = ic.match_idx; r.flags = ic.match_idx == MAXU ? 5 : 6; }
     else if (intron_gene != MAXU) { r.gene = intron_gene; r.intron = ic.first_idx; r.flags = 2; }
+    if ((P.rules & 8) && r.flags == 6 && r.gene < GM.ng) {
+        // refine_read (kDiagFlank): intronic bases = bases of the aligned blocks inside the gene body minus those in its merged exons
+        const int32_t gs = GM.gs[r.gene], ge = GM.ge[r.gene]; const uint32_t e0 = GM.eoff[r.gene], e1 = GM.eoff[r.gene + 1];
+        long long in_body = 0, in_exon = 0; rpos = x.pos;
+        for (int i = 0; i < x.n_ops; i++) {
+            uint32_t c = o[i]; int op = c & 15; int32_t len = (int32_t)(c >> 4);
+            if (op == 0 || op == 7 || op == 8) {
+                const int32_t bs = rpos, be = rpos + len; rpos += len;
+                in_body += max(0, min(be, ge) - max(bs, gs));
+                for (uint32_t k = e0; k < e1; k++) {
+                    const uint32_t ei = GM.ex[k]; const int32_t es = GM.es[ei], ee = GM.ee[ei];
+                    if (es >= be) break;
+                    in_exon += max(0, min(be, ee) - max(bs, es));
+                }
+            }
+            else if (op == 2 || op == 3) rpos += len;
+        }
+        r.flank = (in_body - in_exon <= 5) ? 1u : 0u;
+    }
     r.multi = pm; r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
     if (pm) { r.pg_a = ec.first_gene; r.pg_b = ec.second_gene; }
     // stat (primary alignments; the engine's serial loop counters): 1 strand vote sense, 2 strand vote antisense, 4 wrong_strand
@@ -176,6 +199,14 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
 // intron rules (P.rules, PR #80): refine_read's read-level drops (kUnique: NH > 1, kNoSplicedIntron: CIGAR N) clear an intronic primary's gene (also in
 // aa, which the host reads back as the classify_read gene), kMtPrefer: a multimapper that ties a chrM gene with a nuclear gene counts the chrM gene
 // (note_mt_alignment / mt_numt_tie; the chrM alignment is the last one in the signature's order, as the stream's last writer)
+// After the drops: kFlank (8) makes an exon-touching intronic primary with <= 5 intronic bases exonic (flags 5, no intron), and the
+// counted primary's CIGAR N goes into flags bit 8 (refine_read's kDiagSpliced, which the molecule label reads). A gene a secondary
+// assigned (R7) or a chrM secondary carries no diag, as the mm_buffer's (read_diag / mt_diag stay 0).
+__device__ __forceinline__ void refine_primary(AA& x, const DPar& P) {
+    if (x.gene == MAXU) return;
+    if ((P.rules & 8) && x.flags == 6 && x.flank) { x.flags = 5; x.intron = MAXU; }
+    if (x.hasn) x.flags |= 8u;
+}
 __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, const uint8_t* gmt, uint32_t ngmt, DPar P, GRes* out) {
     int s = blockIdx.x * blockDim.x + threadIdx.x; if (s >= nS) return;
     SigRec sg = S[s]; GRes r{MAXU, MAXU, MAXU, 0};
@@ -185,6 +216,7 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
             for (int k = 0; k < sg.n_aln; k++) if (A[sg.aln_off + k].flags & 2) {
                 AA x = aa[sg.aln_off + k];
                 if (x.gene != MAXU && (x.flags & 2) && (P.rules & 4) && x.hasn) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }
+                refine_primary(x, P);
                 if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; } break; }
         } else {
             bool amb = false, pa = false; uint32_t fg = MAXU, sec = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
@@ -193,6 +225,7 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                 AA x = aa[sg.aln_off + k];
                 if (A[sg.aln_off + k].flags & 2) {
                     if (x.gene != MAXU && (x.flags & 2) && (((P.rules & 1)) || ((P.rules & 4) && x.hasn))) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }   // NH > 1 here
+                    refine_primary(x, P);
                     if (x.gene != MAXU) {
                         gi = x.gene; ex = x.exon; in = x.intron; fl = x.flags; pa = true;
                         if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = x.intron; mfl = x.flags; }
@@ -426,13 +459,16 @@ struct Inputs {
     SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R; const uint64_t* Q = nullptr;   // Q: 16-byte low-quality mask per read (dp.use_q)
     DTree EX, IN; uint32_t *e2g, *i2g; char* gstr; DSnp SN; uint32_t ne2g = 0, ni2g = 0, ngstr = 0;
     uint8_t* gmt = nullptr; uint32_t ngmt = 0;   // per gene: lies on chrM (PileupInput::geneIsMt), for kMtPrefer
+    DGene GM{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0};   // kFlank (ng = 0: not uploaded)
 };
 struct Outputs {
     struct Merge { uint32_t cell, gene; uint64_t umi, root; };
     std::vector<Merge> merges;   // gene store UMIs merged into another (Inputs::wantMerges)
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
+    std::vector<T3> exon_reads, intron_reads;   // g_want_reads: reads per molecule summed per (cell, feature), same rows as exon / intron
+    std::vector<uint32_t> hist_cell, hist;      // g_want_reads: cells with molecules, and their kHistBins-bin reads-per-molecule histogram
     long long n_gene_tuples = 0, n_sjl = 0, n_sj_tuples = 0, n_snp_tuples = 0, n_mt_tuples = 0, n_ind_tuples = 0, n_junctions = 0;
-    std::vector<uint32_t> cell_reads, cell_mol;   // per cell, when g_cell_stats
+    std::vector<uint32_t> cell_reads, cell_mol, cell_mixed;   // per cell, when g_cell_stats (cell_mixed: unspliced molecules with an exon-only read)
     unsigned long long hits[4] = {0, 0, 0, 0};      // exon_hits, intron_hits, UMI reads recorded, chrM/NUMT multimappers rescued (when g_cell_stats)
     std::vector<uint32_t> aa_gene, aa_exg; std::vector<uint8_t> aa_stat;   // per alignment (when g_cell_stats): classify_read gene, k_annotate stat
     unsigned long long sj_raw_sum = 0;   // distinct (cell, junction, UMI) before the 65535 clamp (the engine's stats.sj_hits)
@@ -480,10 +516,11 @@ static uint32_t* gene_components(Arena& A, const GeneStore* gst, const uint32_t*
 // ---- the reducers: each takes its partition's tuples from the read-level expansion and returns its per-(cell, feature) result on the
 // device. Order-free: radix sorts, integer reductions, and the R9 collapse one thread per group.
 // gene: the M6 chain (stage b: (cell, gene, UMI) sort and reduce; c: directional UMI collapse; d: per class CSR)
-static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr) {
+static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr, CsrDev32 RD[2] = nullptr) {
     Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells; L.cr = (in.dp.rules & 128) != 0 && in.par.umi_dedup;
     long long ne = 0, na = 0; int it = 0;
     C[0] = C[1] = C[2] = CsrDev{nullptr, nullptr, nullptr, 0};
+    if (RD) RD[0] = RD[1] = CsrDev32{nullptr, nullptr, nullptr, 0};
     if (gst) *gst = GeneStore{nullptr, nullptr, 0, L.gb, L.ub};
     if (ng > 0) {
         uint64_t* uk; Agg* ag; int m = stage_b(A, T, recs, ng, 0, L, &uk, &ag); T.mark("b.end");
@@ -491,6 +528,7 @@ static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, Cs
         Mol M = stage_c(A, T, uk, ag, m, L, &ne, &na, &it, &lab); T.mark("c.end");
         if (gst) *gst = GeneStore{uk, lab, m, L.gb, L.ub};
         C[0] = stage_d_one(A, M.kex, m, L); C[1] = stage_d_one(A, M.kin, m, L); C[2] = stage_d_one(A, M.kam, m, L); T.mark("d.end");
+        if (RD && M.rex) { RD[0] = stage_d_reads(A, M.kex, M.rex, m, L); RD[1] = stage_d_reads(A, M.kin, M.rin, m, L); T.mark("d.reads"); }
     }
 }
 // junction: (cell, junction, UMI) sort, reads per exact UMI, R9 collapse per (cell, junction); returns the (cell | junction) rows
@@ -581,7 +619,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     const int TB = 256; const int nS = in.nS, nA = in.nA, nR = in.nR;
     // 1 annotate
     AA* aa = A.alloc<AA>(std::max(nA, 1));
-    k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa); T.mark("1.annotate");
+    k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa, in.GM); T.mark("1.annotate");
     // 2 signature level
     GRes* gr = A.alloc<GRes>(nS); k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, in.gmt, in.ngmt, in.dp, gr);
     uint32_t *c_sj = A.alloc<uint32_t>(nS), *c_snp = A.alloc<uint32_t>(nS), *c_mt = A.alloc<uint32_t>(nS), *c_ind = A.alloc<uint32_t>(nS);
@@ -608,12 +646,18 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     }
     T.mark("3.sjids");
     // per cell: reads and molecules recorded (saturation / cell QC), and count_read's counters; every partition adds to them
-    uint32_t* cell_reads = nullptr; uint32_t* cell_mol = nullptr; unsigned long long* hits = nullptr;
+    uint32_t* cell_reads = nullptr; uint32_t* cell_mol = nullptr; uint32_t* cell_mixed = nullptr; unsigned long long* hits = nullptr;
     if (g_cell_stats) {
-        cell_reads = A.alloc<uint32_t>(std::max(in.ncells, 1)); cell_mol = A.alloc<uint32_t>(std::max(in.ncells, 1));
-        CK(cudaMemset(cell_reads, 0, std::max(in.ncells, 1) * 4)); CK(cudaMemset(cell_mol, 0, std::max(in.ncells, 1) * 4));
+        cell_reads = A.alloc<uint32_t>(std::max(in.ncells, 1)); cell_mol = A.alloc<uint32_t>(std::max(in.ncells, 1)); cell_mixed = A.alloc<uint32_t>(std::max(in.ncells, 1));
+        CK(cudaMemset(cell_reads, 0, std::max(in.ncells, 1) * 4)); CK(cudaMemset(cell_mol, 0, std::max(in.ncells, 1) * 4)); CK(cudaMemset(cell_mixed, 0, std::max(in.ncells, 1) * 4));
         hits = A.alloc<unsigned long long>(4); CK(cudaMemset(hits, 0, 32));
-        CK(cudaMemcpyToSymbol(g_cell_mol, &cell_mol, sizeof(cell_mol)));
+        CK(cudaMemcpyToSymbol(g_cell_mol, &cell_mol, sizeof(cell_mol))); CK(cudaMemcpyToSymbol(g_cell_mixed, &cell_mixed, sizeof(cell_mixed)));
+    }
+    uint32_t* cell_hist = nullptr;
+    if (g_want_reads) {
+        cell_hist = A.alloc<uint32_t>((size_t)std::max(in.ncells, 1) * kHistBins);
+        CK(cudaMemset(cell_hist, 0, (size_t)std::max(in.ncells, 1) * kHistBins * 4));
+        CK(cudaMemcpyToSymbol(g_cell_hist, &cell_hist, sizeof(cell_hist)));
     }
     g_snp_stat[0] = g_snp_stat[1] = g_snp_stat[2] = 0;
     // ---- cell partitions (align-and-count design 4.4): every reducer's key starts with the cell, so the read-level stages run once
@@ -681,7 +725,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         const size_t s4 = A.mark();
         T.mark("4.expand");
         // the reducers: gene (M6 chain), junction, SNP, chrM base, chrM indel; each emits, sorts, collapses and reduces its own stream
-        CsrDev C[3]; GeneStore gst{nullptr, nullptr, 0, 0, 0}; red_gene(A, T, in, recs, ng, C, &gst);
+        CsrDev C[3]; CsrDev32 RD[2]; GeneStore gst{nullptr, nullptr, 0, 0, 0}; red_gene(A, T, in, recs, ng, C, &gst, g_want_reads ? RD : nullptr);
         const GeneStore* gsp = (in.par.umi_dedup && gst.m > 0) ? &gst : nullptr;   // R9 per gene: the junction and SNP molecules take their roots from it
         if (out && in.wantMerges && gst.m > 0) {   // the host V(D)J reducer needs the same roots: the entries the collapse merged into another
             const int Gm = (gst.m + TB - 1) / TB; uint32_t* mf = A.alloc<uint32_t>(gst.m); k_mflag<<<Gm, TB>>>(gst.lab, gst.m, mf);
@@ -719,6 +763,15 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         if (ng > 0) {
             auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells); v.insert(v.end(), t.begin(), t.end()); };
             add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]);
+            if (g_want_reads) {
+                auto addr = [&](std::vector<T3>& v, const CsrDev32& c) {
+                    std::vector<uint32_t> ip(in.ncells + 1), ix(c.nnz), da(c.nnz);
+                    CK(cudaMemcpy(ip.data(), c.indptr, 4 * (size_t)(in.ncells + 1), cudaMemcpyDeviceToHost));
+                    if (c.nnz) { CK(cudaMemcpy(ix.data(), c.indices, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(da.data(), c.data, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); }
+                    for (int cell = 0; cell < in.ncells; cell++) for (uint32_t k = ip[cell]; k < ip[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, ix[k], da[k]});
+                };
+                addr(out->exon_reads, RD[0]); addr(out->intron_reads, RD[1]);
+            }
         }
         if (n_sju > 0) { std::vector<uint64_t> k(n_sju); std::vector<uint32_t> c(n_sju); CK(cudaMemcpy(k.data(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_sju; i++) out->sj_raw_sum += c[i];
@@ -739,7 +792,20 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     }
     A.reset(base2); A.peak = peak_all;
     T.finish();
-    if (g_cell_stats) { uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_mol, &z, sizeof(z))); }
+    if (g_cell_stats) { uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_mol, &z, sizeof(z))); CK(cudaMemcpyToSymbol(g_cell_mixed, &z, sizeof(z))); }
+    if (g_want_reads) {
+        uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_hist, &z, sizeof(z)));
+        if (out) {   // only cells with molecules leave the device (the histogram is kHistBins words per barcode of the whitelist)
+            std::vector<uint32_t> h((size_t)std::max(in.ncells, 1) * kHistBins);
+            CK(cudaMemcpy(h.data(), cell_hist, h.size() * 4, cudaMemcpyDeviceToHost));
+            for (int c = 0; c < in.ncells; c++) {
+                const uint32_t* r = h.data() + (size_t)c * kHistBins; bool any = false;
+                for (int b = 0; b < kHistBins; b++) any |= r[b] != 0;
+                if (!any) continue;
+                out->hist_cell.push_back((uint32_t)c); out->hist.insert(out->hist.end(), r, r + kHistBins);
+            }
+        }
+    }
     if (!out) return;
     // ---- canonical merge: cells are disjoint across partitions; each matrix is sorted by (cell, row), indels by read (the K = 1 order)
     // each partition's rows are sorted already: merge them (K = 1: nothing to do)
@@ -751,10 +817,12 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         }
     if (K > 1) std::stable_sort(indels.begin(), indels.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (auto& e : indels) out->indels.push_back(e.second);
+    for (auto* v : {&out->exon_reads, &out->intron_reads}) std::sort(v->begin(), v->end(), byCell);
     if (g_cell_stats) {
-        out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1));
+        out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1)); out->cell_mixed.resize(std::max(in.ncells, 1));
         CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->cell_mol.data(), cell_mol, out->cell_mol.size() * 4, cudaMemcpyDeviceToHost));
+        CK(cudaMemcpy(out->cell_mixed.data(), cell_mixed, out->cell_mixed.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->hits, hits, 32, cudaMemcpyDeviceToHost));
         std::vector<AA> h(nA);
         if (nA) CK(cudaMemcpy(h.data(), aa, (size_t)nA * sizeof(AA), cudaMemcpyDeviceToHost));

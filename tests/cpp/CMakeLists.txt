@@ -92,6 +92,15 @@ add_pileup_test(test_umi_store_scale)
 add_pileup_test(test_umi_deep_roots)
 add_pileup_test(test_umi_consume)
 add_pileup_test(test_mt_numt_tie)
+# GPU pileup vs CPU pileup (labels, kFlank, legacy_exon_extra) under intron rules 397 and 389. Built in every configuration; it prints SKIP
+# and exits 77 (ctest: skipped) in a CPU-only build or without a usable CUDA device. The GPU engine library exists when the pipeline is built
+# with a CUDA compiler (SINGLET_ENGINE_GPU, top-level CMakeLists.txt).
+add_pileup_test(test_gpu_pileup_labels)
+set_tests_properties(test_gpu_pileup_labels PROPERTIES SKIP_RETURN_CODE 77)
+if(TARGET singlet_engine_gpu)
+    target_link_libraries(test_gpu_pileup_labels PRIVATE singlet_engine_gpu)
+    target_compile_definitions(test_gpu_pileup_labels PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
 add_pileup_test(test_strand_detect)
 add_pileup_test(test_stream_strand_restart)
 add_pileup_test(test_run_screen)
@@ -101,6 +110,7 @@ add_pileup_test(test_protocol_confidence_override)
 
 # ATAC tests
 add_pileup_test(test_stall_watchdog)
+add_pileup_test(test_nonhost_sample)
 add_pileup_test(test_atac_fragment)
 add_pileup_test(test_atac_peak_caller)
 add_pileup_test(test_atac_metrics)
@@ -240,7 +250,9 @@ add_pileup_test(test_whitelist_integrity)
 target_compile_definitions(test_whitelist_integrity PRIVATE
     WHITELIST_DIR="${CMAKE_SOURCE_DIR}/python/singlet/data/whitelists")
 add_pileup_test(test_ws2_protocol_hardening)
+add_pileup_test(test_protocol_short_barcode_read)
 add_pileup_test(test_ws4_crash_diagnostics)
+add_pileup_test(test_bam_sort_budget)
 
 # HDF5-dependent tests (h5ad, loom, molecule_info, and anything else that
 # transitively includes export.h -> h5ad_writer.h -> <hdf5.h>)

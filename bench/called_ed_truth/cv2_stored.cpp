@@ -155,10 +155,10 @@ int main(int argc, char** argv) {
         int cb = -1, cc = -1;
         for (size_t k = 0; k < head.size(); ++k) {
             if (head[k] == "barcode") cb = static_cast<int>(k);
-            if (head[k] == "called") cc = static_cast<int>(k);
+            if (head[k] == "called_knee" || (head[k] == "called" && cc < 0)) cc = static_cast<int>(k);  // called_knee since the is_cell change; older files: called
         }
         if (cb < 0 || cc < 0) {
-            std::fprintf(stderr, "cell_calls.tsv lacks barcode / called\n");
+            std::fprintf(stderr, "cell_calls.tsv lacks barcode / called_knee (called)\n");
             return 2;
         }
         std::map<std::string, size_t> pos;
