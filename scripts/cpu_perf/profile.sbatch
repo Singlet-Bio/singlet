@@ -23,6 +23,8 @@ CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-
 echo "node=$(hostname) job=$SLURM_JOB_ID set=$S T=$T pack=$PACK bin=$BINV commit=$(cat $W/jobs/cpu-perf/$CM/commit) cpus=$SLURM_CPUS_PER_TASK $(lscpu | grep 'Model name' | sed 's/  */ /g') $(date -Is)"
 [ -e $W/jobs/cpu-perf/$CM/whitelists ] || { echo "no whitelists next to the binary"; exit 2; }
 if [ $PACK = 1 ]; then ( while true; do echo "$(date +%s.%N) $(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat)"; sleep 1; done ) > $RES/cpu.txt & MON=$!; fi
+if [ $PACK = 1 ]; then ( while true; do echo "@ $(date +%s)"; P=$(tree $$ | tr '
+' ' '); ps -eLo pid=,lwp=,comm=,time= | awk -v P=" $P " 'index(P," "$1" ")'; sleep 10; done ) > $RES/threads.txt 2>/dev/null & MON2=$!; fi
 S0=$(date +%s.%N)
 for i in $(seq 1 $PACK); do
   mkdir -p $SCR/r$i/out
@@ -31,14 +33,15 @@ for i in $(seq 1 $PACK); do
       | while IFS= read -r l; do printf '%s %s\n' "$(date +%s.%N)" "$l"; done > $RES/log_$i.txt; echo "exit ${PIPESTATUS[0]}" >> $RES/log_$i.txt
     cp out/star_Log.final.out $RES/final_$i.txt 2>/dev/null; cp out/star_Log.out $RES/starlog_$i.txt 2>/dev/null
     ( cd out && find . -maxdepth 2 -type f \( -name '*.mtx*' -o -name '*.1pz' -o -name '*.tsv' -o -name '*.json' \) -print0 | sort -z | xargs -0 sha256sum ) > $RES/hashes_$i.txt 2>/dev/null ) &
+  PIDS="${PIDS:-} $!"
 done
-wait; E0=$(date +%s.%N); [ -n "${MON:-}" ] && kill $MON 2>/dev/null
+wait $PIDS; E0=$(date +%s.%N); [ -n "${MON:-}" ] && kill $MON $MON2 2>/dev/null
 echo "pack wall $(echo "$E0 - $S0" | bc) s" | tee $RES/pack_wall.txt
 rc=0
 for i in $(seq 1 $PACK); do
   L=$RES/log_$i.txt
   if grep -aq "BAM: unsorted STAR stream into the pileup" $L && grep -aq "Pileup: streaming from" $L && ! grep -aq "Pileup: parallel" $L \
-     && ! grep -aqi "whitelist.*not found\|no whitelist" $L && grep -aq "^[0-9.]* exit 0" $L; then echo "run $i: STREAM PATH OK" | tee -a $RES/stream_path.txt
+     && ! grep -aqi "whitelist.*not found\|no whitelist" $L && grep -aq "^exit 0" $L; then echo "run $i: STREAM PATH OK" | tee -a $RES/stream_path.txt
   else echo "run $i: STREAM PATH FAILED" | tee -a $RES/stream_path.txt; rc=3; fi
   grep -aE "Elapsed \(wall|Maximum resident|User time|System time" $RES/time_$i.txt | tr -s '\t' ' ' | tr '\n' ';'; echo
   grep -aE "Number of input reads" $RES/final_$i.txt

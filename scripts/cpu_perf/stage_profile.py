@@ -12,16 +12,13 @@ import json
 import re
 import sys
 
-MARKERS = [  # (regex on the log line, stage). Stream path: STAR, the serial pileup and the callers overlap between "started mapping" and "Pileup: N reads".
-    (r"\[1fq-decode\] Decoding", "decode reads (.1fq to FASTQ)"),
-    (r"\[1fq-decode\] Done", "references and barcodes"),
-    (r"\.\.\.\.\. loading genome", "STAR: genome load"),
-    (r"\.\.\.\.\. started mapping", "STAR map + streamed pileup"),
-    (r"\[singlet\] Pileup: \d+ reads", "pileup tail, finish"),
-    (r"\[singlet\] STAR completed", "after STAR (callers, QC)"),
-    (r"\[nonhost\] Loading screening", "non-host: index load"),
-    (r"\[nonhost\] EM screening", "non-host: classify"),
-    (r"\[nonhost\] EM converged", "non-host: EM, writers"),
+MARKERS = [  # (regex on the log line, stage). Stream path: STAR (decode in-process), the serial pileup and the callers overlap between "Pileup: streaming" and "Pileup: N reads".
+    (r"\[1fq\] ?\S*: \d+ reads|\.1fq: \d+ reads", "1fq header, pass 1 (CB histogram)"),
+    (r"\[singlet\] \.1fq decoded", "barcode dictionary, references"),
+    (r"\[singlet\] References loaded", "STAR start, genome load"),
+    (r"\[singlet\] Pileup: streaming from", "STAR map + serial pileup (concurrent)"),
+    (r"\[singlet\] Pileup: \d+ reads", "STAR/pileup drain"),
+    (r"\[singlet\] STAR completed", "non-host screen"),
     (r"\[singlet\] Exporting feature matrices", "export"),
 ]
 
