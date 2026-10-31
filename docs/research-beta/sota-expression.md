@@ -444,6 +444,17 @@ State of the engine at d9834b8a (read from the source, nothing run yet):
 
 Each of the three is a CPU change plus a GPU mirror (S8) and a byte-identity gate; they are separate engine PRs, not benchmarking tasks.
 
+### 5. V(D)J vs TRUST4 on held-out libraries (2026-10-31; branch `bench/vdj-heldout`, `bench/expression_sota/vdj/{PREREG,RESULTS}.md`)
+
+Pre-registered primary metric: clonotype pairing accuracy (the called heavy+light / alpha+beta pair equals the published pair) with 95% CI over cells; pass = within 0.01 of the best open competitor (TRUST4) and wrong-lineage within 0.005 of Cell Ranger's published calls. Six held-out libraries
+(1 BCR: ctrl10k_b, 436 cells; 5 TCR: ctrl10k_t, GSE145370 S133B / S135A / S149A / S150A; 17,597 cells). Singlet's assembler is the Python one (not the engine binary).
+**Result: fails the pairing rule, passes wrong-lineage.** Pairing accuracy, Singlet vs TRUST4 (difference with 95% CI): BCR 0.959 vs 0.986 (-0.028 [-0.046, -0.011]); TCR pooled 0.786 vs 0.825 (-0.039 [-0.047, -0.032]); all pooled 0.790 vs 0.829. The TCR gap sits in two GSE145370 libraries (S149A 0.742 vs 0.845, S150A 0.698 vs 0.735;
+Singlet misses a chain in ~12% of Cell Ranger's cells in both; cause not investigated on held-out reads, that would be tuning on held-out data); the other three TCR libraries are level (ctrl10k_t 0.936 vs 0.938, S135A 0.871 vs 0.876, S133B 0.925 vs 0.899). Wrong lineage vs Cell Ranger: Singlet 0.0009 (8/8,891 contigs) vs Cell Ranger 0.0001, difference +0.0008 against the limit 0.005; TRUST4 0.012 (T) and 0.058 (B) (ctrl10k only).
+Secondary: Singlet beats TRUST4 on contig F1 and clonotype ARI on all six libraries and on CDR3 accuracy on five (tie on ctrl10k_b); TRUST4 wins BCR J agreement (0.979 vs 0.954), BCR V agreement (0.869 vs 0.837) and chain recovery on every library; Singlet runs in 1.3-18 min at 8 threads vs TRUST4 11 min to 3.1 h.
+One fix, found on the development library: V genes ending in two adjacent Cys codons (IGLV2-23, IGLV2-11, ...) were anchored at the last Cys, Cell Ranger >= 5 starts the junction at the first. Moving the anchor (10 segments, `vdj_human_imgtcys.tsv.gz`, not made the default) lifted BCR pairing 0.947 to 0.970 (dev) and 0.934 to 0.959 (held-out), CDR3 accuracy 0.985 to 0.998 and 0.983 to 0.997; it regresses pbmc2_b (0.930 to 0.902) whose Cell Ranger 3.0
+truth uses the second Cys (Cell Ranger changed convention), so no single setting matches both; declared in a pre-registration addendum before the held-out rerun. Caveats: the held-out libraries were seen twice (the "after" numbers are not blind); one BCR held-out library only (436 cells); the missing IGHV1-8 / IGHV4-30-4 were not added (26/28 cells right through the paralog); the accessions of the GSE145370 and ctrl10k libraries were not re-verified.
+**Beta claim for V(D)J: faster, better contig F1 and clonotype ARI than TRUST4 and near Cell Ranger's wrong-lineage rate; NOT at TRUST4's pairing accuracy (-0.04 pooled).**
+
 ### 6. Non-host: viral transcript identity (2026-10-31; phase 1, prototype and benchmark; full report `docs/research-beta/nonhost-transcripts.md` and `bench/expression_sota/nonhost/` on branch `bench/nonhost-transcripts`)
 
 Sample: ravindra2021 dpi2 (GSE166766 HBEC, SARS-CoV-2, 10x v3, 50 M read pairs), Singlet's 11,567 called cells. Reference ("truth-like"): STARsolo (Gene) on the full reads against GRCh38-2024-A + NC_045512.2 with the viral GFF (5'/3' UTR added).
