@@ -100,8 +100,10 @@ parameters, the best of them was only a few percent shorter than \sone. For data
 most of the remaining bits describe which molecules happened to be captured, a random sample that no lossless format can
 avoid storing (Supplementary Fig.~\ref{fig:sfloor}c). Measured against this floor, a median of \nm{redund-s1}\% of an
 \sone{} file is redundant, against \nm{redund-h5ad-gzip}\% of a gzip-compressed AnnData file and at least
-\nm{redund-other-min}\% of every other format (Supplementary Table~\ref{tab:redundancy}), and the \sone{} bitstream leaves
-almost nothing for a byte-level compressor to find (Supplementary Table~\ref{tab:entropy}). In size, any lossless format
+\nm{redund-other-min}\% of every other format (Supplementary Table~\ref{tab:redundancy}). A code that treats each step
+and value on its own, as general-purpose entropy coders do, cannot go below the streams' order-0 entropy,
+\nm{ent-h0-vs-floor} times the floor; \sone{} gets well below it by modelling the counts, and its bitstream leaves nothing
+for a byte-level compressor to find: zstd-19 does not shrink it (Supplementary Table~\ref{tab:entropy}). In size, any lossless format
 can improve on \sone{} by single-digit percentages at most.
 
 How fast could a file be decoded? We encoded each matrix's own row indices and values with the integer codes a format could

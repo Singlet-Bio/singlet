@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+visium_hd_crc	rna	streams	214633705	6.640093	0.687576	7.3106	NA	NA	NA	NA	NA
+visium_hd_crc	rna	raw_u32	214633705	NA	NA	NA	1717069640	3.223379	2.661092	64.0	NA
+visium_hd_crc	rna	fixed_bytes	214633705	NA	NA	NA	858534820	5.356942	3.417211	32.0	NA
+visium_hd_crc	rna	leb128_gaps	214633705	NA	NA	NA	443470849	4.299701	3.758276	16.529402	NA
+visium_hd_crc	rna	streamvbyte_gaps	214633705	NA	NA	NA	541422645	4.098418	3.139697	20.18034	NA
+visium_hd_crc	rna	rans0_gaps	214633705	NA	NA	NA	200611655	7.994432	7.989796	7.477359	NA
+visium_hd_crc	rna	bitpack256_gaps	214633705	NA	NA	NA	334831274	6.531867	5.687711	12.4801	NA
+visium_hd_crc	rna	zstd3_leb_gaps	214633705	NA	NA	NA	217261974	7.9981	7.971387	8.097963	NA
+visium_hd_crc	rna	zstd19_leb_gaps	214633705	NA	NA	NA	205434954	7.997625	7.984787	7.657137	NA
+visium_hd_crc	rna	pz2_avx2	214633705	NA	NA	NA	156701486	7.999248	7.997406	5.840704	156580611

@@ -244,7 +244,7 @@ matrices (range in the last column). The floor is a reference, not a bound, so a
   columns={format,n,bits,excess,pct,pct_lo,pct_hi},
   columns/format/.style={string type, column name=Format, column type=l},
   columns/n/.style={column name=$n$, int detect},
-  columns/bits/.style={column name=Bits, fixed, precision=1},
+  columns/bits/.style={column name=Bits, fixed, fixed zerofill, precision=1},
   columns/excess/.style={column name=Above floor, fixed, precision=1},
   columns/pct/.style={column name=Share (\%), fixed, precision=0},
   columns/pct_lo/.style={column name=Min, fixed, precision=0},
@@ -258,14 +258,15 @@ matrices (range in the last column). The floor is a reference, not a bound, so a
 \caption{What is left to compress inside each code's output (Fig.~\ref{fig:floor}b): stored bits per non-zero, order-0
 and order-1 (given the previous byte) entropy of the output in bits per byte, and the share of the output an order-1 byte
 coder could still remove ($1-H_1/8$); medians over \nm{ent-n} matrices. Zstd-19 applied to the \sone{} member leaves
-\nm{ent-s1-zstd-pct}\% of its size.}
+\nm{ent-s1-zstd-pct}\% of its size. For reference, the order-0 entropy of the step and value streams is
+\nm{ent-h0-streams} bits per non-zero (\nm{ent-h0-pair} for step--value pairs), \nm{ent-h0-vs-floor} times the floor.}
 \label{tab:entropy}
 \pgfplotstabletypeset[
   columns={codec,bits,h0,h1,left},
   columns/codec/.style={string type, column name=Code, column type=l},
-  columns/bits/.style={column name=Bits, fixed, precision=1},
-  columns/h0/.style={column name=$H_0$, fixed, precision=2},
-  columns/h1/.style={column name=$H_1$, fixed, precision=2},
+  columns/bits/.style={column name=Bits, fixed, fixed zerofill, precision=1},
+  columns/h0/.style={column name=$H_0$, fixed, fixed zerofill, precision=2},
+  columns/h1/.style={column name=$H_1$, fixed, fixed zerofill, precision=2},
   columns/left/.style={column name=Removable (\%), fixed, precision=0},
 ]{\gen{tab_entropy.tsv}}
 \end{table}}{}
