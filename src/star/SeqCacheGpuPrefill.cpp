@@ -272,6 +272,10 @@ bool readTable(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, i
     const auto &tab = rs.table();
     const uint64 nU = tab.n, nChunks = rs.block_count(), nReads = rs.stored_reads();
     if (nU == 0 || nU >= 0xFFFFFFFFull) { why = ".1fg2 table: no sequences or too many"; return false; }
+    // singlet's inline 5' clip of R2 (the decoder drops the first k bases before STAR sees the read): the keys are the trimmed sequences
+    uint64 clip5p = 0;
+    if (const char *c = getenv("SINGLET_ENGINE_GPU_FG2_CLIP5P")) clip5p = (uint64) std::max(0, atoi(c));
+    if (clip5p > 0) for (uint64 u = 0; u < nU; u++) if (tab.slen[u] <= clip5p) { why = ".1fg2 table: a sequence is not longer than the 5' clip"; return false; }
     const int T = std::max(1, nThreads);
     std::vector<uint32> ids(nReads);
     std::atomic<bool> bad(false);
@@ -333,11 +337,11 @@ bool readTable(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, i
                 asc.clear(); numAt.clear();
             };
             for (uint64 u = u0; u < u1; u++) {
-                const uint64 L = tab.slen[u], at = seqT[t].size();
+                const uint64 L = tab.slen[u] - clip5p, at = seqT[t].size();
                 seqT[t].resize(at + L);
                 char *d = seqT[t].data() + at;
-                for (uint64 j = 0; j < L; j++) d[j] = (char) tab.base(u, (uint32_t) j);
-                for (uint64 k = tab.n_first[u]; k < tab.n_first[u + 1]; k++) d[tab.n_pos[k]] = 4;
+                for (uint64 j = 0; j < L; j++) d[j] = (char) tab.base(u, (uint32_t) (j + clip5p));
+                for (uint64 k = tab.n_first[u]; k < tab.n_first[u + 1]; k++) if (tab.n_pos[k] >= clip5p) d[tab.n_pos[k] - clip5p] = 4;
                 lenT[t].push_back(L);
                 if (cr4) {
                     std::string &l = lets[asc.size()];
@@ -381,6 +385,10 @@ bool readTable(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, i
 bool checkTableHead(Parameters &P, const singlet::fq::Fg2RunSet &rs, const std::vector<uint32> &unitOfRead, std::string &why) {
     const auto &tab = rs.table();
     if (P.readFilesNames.empty() || P.readFilesNames[0].empty()) { why = "no read files"; return false; }
+    {   // reads from the in-process chunk source (/dev/null here) or fifos come from this very table: nothing to compare
+        struct stat st;
+        if (stat(P.readFilesNames[0][0].c_str(), &st) != 0 || !S_ISREG(st.st_mode)) return true;
+    }
     std::ifstream f(P.readFilesNames[0][0]);
     std::string name, seq, plus, qual;
     for (uint64 i = 0; i < 4096 && i < unitOfRead.size(); i++) {

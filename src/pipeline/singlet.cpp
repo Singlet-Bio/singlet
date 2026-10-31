@@ -3993,7 +3993,12 @@ int main(int argc, char* argv[]) {
     // Pass 1: lightweight BC count + R2 prefix capture (no FASTQ files written)
     // Pass 2: full decode streamed to named FIFOs → STAR reads live from them
     // --engine gpu reads the cDNA reads before STAR does (src/star/SeqCacheGpuPrefill.cpp), so it needs the file-based decode.
-    const bool engine_gpu_reads = getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1";
+    // A .1fg2 input is the exception: its prefill takes the sequences from the file's table (SeqCacheGpuPrefill.cpp readTable, SINGLET_ENGINE_GPU_FG2),
+    // so the reads reach STAR through the chunk source / fifos like on the CPU engine, with no temp FASTQ (a .1fg2 has the CB_UMI_Simple layout:
+    // Fg2RunSet::open refuses any other). SINGLET_ENGINE_GPU_FG2_OFF=1 keeps the temp FASTQ.
+    const bool engine_gpu_on = getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1";
+    const bool engine_gpu_table = engine_gpu_on && onefq_mode && !getenv("SINGLET_ENGINE_GPU_FG2_OFF") && singlet::fq::is_staged_file(onefq_file.c_str());
+    const bool engine_gpu_reads = engine_gpu_on && !engine_gpu_table;
     const bool use_fifo_decode = onefq_mode && !engine_gpu_reads &&
         !(getenv("SINGLET_FILE_DECODE") &&
           std::string(getenv("SINGLET_FILE_DECODE")) == "1");
@@ -6113,6 +6118,8 @@ int main(int argc, char* argv[]) {
     singlet::fq::FormatOptions read_fmt;   // fifo and chunk modes
     if (use_fifo_decode && onefq_mode) {
         read_fmt.clip5p = r2_clip5p;
+        // the table prefill (SeqCacheGpuPrefill.cpp) trims the table's sequences by the same bases, so it keys what STAR is given
+        if (engine_gpu_table && r2_clip5p > 0) setenv("SINGLET_ENGINE_GPU_FG2_CLIP5P", std::to_string(r2_clip5p).c_str(), 1);
         read_fmt.max_r2 = 1024;   // a longer R2 is a corrupted record: STAR would stop on it
         read_fmt.atac = is_atac_mode;
         singlet::fq::Reader hdr_reader;
