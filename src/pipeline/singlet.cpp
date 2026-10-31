@@ -56,6 +56,7 @@
 #include <unistd.h>
 #include <vector>
 #include <filesystem>
+#include "singlet/pileup/stall_watchdog.h"
 #include "singlet/pileup/pileup_engine.h"
 #include "singlet/pileup/export.h"
 #include "singlet/pileup/species_detect.h"
@@ -3767,17 +3768,13 @@ int main(int argc, char* argv[]) {
     //   4 = zero_cells (0 cells called; exported stub outputs)
     //   5 = stalled (SIGALRM watchdog fired — no progress for SINGLET_STALL_TIMEOUT s)
     {
-        unsigned stall_secs = 1800;
-        if (const char* env_s = std::getenv("SINGLET_STALL_TIMEOUT")) {
-            unsigned v = static_cast<unsigned>(std::atoi(env_s));
-            if (v > 0) stall_secs = v;
-        }
+        const unsigned stall_secs = singlet::stall_timeout_secs();   // every re-arm below uses the same timeout
         struct sigaction sa_alarm{};
-        sa_alarm.sa_handler = [](int) { _exit(5); };
+        sa_alarm.sa_handler = singlet::stall_alarm_handler;   // one line (phase, timeout), then exit code 5
         sigemptyset(&sa_alarm.sa_mask);
         sa_alarm.sa_flags = 0;
         sigaction(SIGALRM, &sa_alarm, nullptr);
-        alarm(stall_secs);
+        singlet::rearm_stall_watchdog("startup: references, STAR launch, mapping");
         std::cerr << "[singlet] Stall watchdog armed: " << stall_secs << "s\n";
     }
 
@@ -7615,7 +7612,10 @@ int main(int argc, char* argv[]) {
         std::cerr << "[singlet] Waiting for STAR to finish sorting...\n";
         StopWatch star_sw;
         int wstatus;
-        waitpid(star_pid, &wstatus, 0);
+        // re-arm while STAR's own files change (mapping log, BAM sort temp files, the BAM): a deep sample's mapping + sort can
+        // outlast the timeout without stalling
+        singlet::wait_child_with_progress(star_pid, &wstatus, {out_prefix + "/star_Log.progress.out", out_prefix + "/star__STARtmp",
+                                          out_prefix + "/star_Aligned.sortedByCoord.out.bam"}, "waiting for STAR (mapping, BAM sort)");
         // Join FIFO writer thread now — it finishes just before STAR exits (writer
         // closes FIFOs → STAR gets EOF → STAR finishes sorting → parent wakes here).
         if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
@@ -7635,7 +7635,7 @@ int main(int argc, char* argv[]) {
                       << " (parallel path)\n";
             return 3;  // exit code 3 = star_fatal (signal)
         }
-        alarm(1800);  // watchdog: reset after STAR completes (parallel path)
+        singlet::rearm_stall_watchdog("after STAR (parallel path): BAM index, pileup, ATAC");
 
         // ── 2b: Index sorted BAM with htslib ──
         std::cerr << "[singlet] Indexing BAM: " << parallel_bam_path << "\n";
@@ -8119,7 +8119,7 @@ int main(int argc, char* argv[]) {
         StopWatch pileup_sw;
         stats = engine_ptr->run_parallel(parallel_bam_path, star_threads);
         pileup_time = pileup_sw.elapsed_s();
-        alarm(1800);  // watchdog: reset after pileup returns (parallel path)
+        singlet::rearm_stall_watchdog("after pileup (parallel path): export");
         std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, " << pileup_time << "s";
         if (stats.total_reads > 0)
             std::cerr << " (" << static_cast<int>(stats.total_reads / pileup_time / 1e6) << "M reads/s)";
@@ -8156,7 +8156,7 @@ int main(int argc, char* argv[]) {
         StopWatch pileup_sw;
         stats = engine_ptr->run(bam_source);
         pileup_time = pileup_sw.elapsed_s();
-        alarm(1800);  // watchdog: reset after pileup returns (streaming path)
+        singlet::rearm_stall_watchdog("after pileup (streaming path): export");
         std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, "
                   << pileup_time << "s";
         if (stats.total_reads > 0)
@@ -8294,7 +8294,7 @@ int main(int argc, char* argv[]) {
 
     mem_mark("before export");
     // ── Phase 3: Export ──
-    alarm(1800);  // watchdog: reset at export start
+    singlet::rearm_stall_watchdog("export");
     std::cerr << "[singlet] Exporting feature matrices...\n";
 
     singlet::ExportConfig export_cfg;
