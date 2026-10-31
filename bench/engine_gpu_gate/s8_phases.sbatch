@@ -26,7 +26,7 @@ RES=$W/jobs/s8/results/gate-$SLURM_ARRAY_JOB_ID-$SLURM_ARRAY_TASK_ID; mkdir -p $
 SCR=/tmp/$USER-s8p-$SLURM_JOB_ID; mkdir -p $SCR/repo
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT INT TERM
 git -C $BARE archive refs/s8/campaign bench/star_accel/out_equiv.py | tar -x -C $SCR/repo
-export SINGLET_STAR_PHASE_LOG=1 SINGLET_STAR_SHADOW=${S8_SHADOW:-1} SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
+export SINGLET_STAR_PHASE_LOG=1 ${S8_SHADOW:+SINGLET_STAR_SHADOW=1} SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 echo "node=$(hostname) job=$SLURM_JOB_ID commit=$(cat $BINDIR/commit) T=$T $(date -Is)" | tee $RES/summary.txt
 nvidia-smi --query-gpu=name,driver_version --format=csv,noheader | tee -a $RES/summary.txt
@@ -45,10 +45,12 @@ for m in "${MODES[@]}"; do
       printf "%s\t%s\t%s\t%s\n" $(date +%s.%N) $(awk '$1=="usage_usec"{printf "%.2f", $2/1e6}' $CG/cpu.stat) "$g" "$(cat $CG/memory.current)"; sleep 1
     done ) > $O/monitor.tsv 2>/dev/null &
   MON=$!
+  ( while true; do echo "$(date +%s.%N) $(awk '$1=="anon"||$1=="file"||$1=="shmem"||$1=="kernel"||$1=="slab"||$1=="file_mapped"{printf "%s=%.2f ", $1, $2/1073741824}' $CG/memory.stat) cur=$(awk '{printf "%.2f", $1/1073741824}' $CG/memory.current)"; sleep 2; done ) > $O/memstat.txt 2>/dev/null &
+  MON2=$!
   T0=$(date +%s.%N); C0=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat)
   ( cd $SCR/$s/$m && /usr/bin/time -v -o $O/time.txt timeout -k 30 7000 $BIN $IN --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
       --out-prefix $SCR/$s/$m/out/ --threads $T --pipeline --output-format 1pz $ENGARG 2>&1 | while IFS= read -r l; do printf '%(%s)T %s\n' -1 "$l"; done > $O/run.log.ts )
-  C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON 2>/dev/null
+  C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON $MON2 2>/dev/null
   echo "$s $m: wall $(echo "$T1 - $T0" | bc) s, core-s $(echo "($C1 - $C0)/1000000" | bc -l | cut -c1-8), start $T0 end $T1, maxRSS $(awk -F': ' '/Maximum resident/{printf "%.1f GB", $2/1048576}' $O/time.txt)" | tee -a $RES/summary.txt
   grep -aq "unsorted STAR stream" $O/run.log.ts && grep -aq "Pileup: streaming from STAR pipe" $O/run.log.ts && echo "STREAM PATH OK" | tee -a $RES/summary.txt || { echo "!! GATE FAIL: STREAM PATH NOT USED ($m)" | tee -a $RES/summary.txt; FAIL=1; }
   case $m in gpuD*|gpuG*) echo "quality path: $(grep -a -h "per-base quality" $O/run.log.ts | head -1 | cut -c1-120)" | tee -a $RES/summary.txt ;; esac
