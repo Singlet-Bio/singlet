@@ -202,3 +202,25 @@ GPU job loses a stream but not a staged sample. The stage costs ≤ 2 TB of `$WO
 ## 10. Status of what was queued
 
 * Time-of-day repeats Sat 03:00 / 13:00 (jobs 793570, 793571): results append to `$WORK/jobs/s9/results/tod.jsonl`; this section is updated in a follow-up commit when they land.
+
+## 11. Staged format `.1fg2` and `singlet-stage` (S9 producer, S8 readers; layout in `src/stage/fmt2.h`, spec `staged-format-1fg2.md` on #107)
+
+The fetch tier can write a GPU-native staged file instead of `.1fq`: chunks of 32,768 reads as zstd planes (whitelist-corrected barcode index + status byte, UMI word, sequence id, length, 2-bit binned quality per base, UMI-N exceptions) and one per-sample table of
+distinct cDNA sequences (2-bit, N lists), no barcode sort, run table in the footer. `singlet-stage` (CMake target, `src/stage/singlet_stage.cpp`) reads the `.1fq` of a sample's kept runs with the engine's `Reader`, takes protocol, geometry and whitelist from `known_protocols()`,
+builds the exact-barcode histogram (exact whitelist hit, UMI without N and not a homopolymer, as `singlet.cpp` pass 1), corrects with `CbCorrector::resolve`, keys the sequence table on the cDNA exactly as the `.1fq` holds it (the engine clips later on the packed codes).
+`--verify` re-reads the written file and compares every read with the source.
+
+**Measured (job 793809: 45 runs from the earlier fetch-scale list; 37 staged, 3.91 G reads; 7 stopped at the non-10x gate, 1 protocol with no universal whitelist in R1; `--verify` on 5: 0 mismatches; plus 32.8 M reads verified on 3 more runs, job 793776):**
+
+| | value |
+|---|---|
+| raw full `.sra` / `.1fq` (binned qualities) / `.1fg2` | 75.1 / 30.1 / **28.1 B per read** (`.1fg2` = 0.93 × `.1fq`); input `.1fq` is barcode-sorted, an unsorted source adds ~2–3 B/read to the `cb`/`umi` planes |
+| where the bytes go (B/read) | q 9.5, sequence table 12.2, umi 3.0, sequence id 2.9, cb 0.35, rest < 0.1 |
+| CPU | decode `.sra` → `.1fq` **3.20 core-s/M** (unchanged); `singlet-stage` **2.18 core-s/M** (pass 1 1.59: `.1fq` decode + histogram + hash; pass 2 0.59: correct + zstd 3 + CRC) → **5.4 core-s/M in total, +68% over today's 3.2** |
+| unique cDNA fraction (distinct / reads) | 0.44 at 20–50 M reads (n = 3), 0.49 at 50–100 M (n = 18), **0.31 at ≥ 100 M reads (n = 16, up to 234 M)**; S8 had expected ~0.54 on deep samples |
+| memory | table up to 5.4 GB at 234 M reads (64-byte in-memory slots; 32 GB fetch jobs are enough) |
+| limits found | cDNA up to 151 nt occurs: the limit was raised from 127 to 255 (u8 length); GPU pileup with per-base quality handles ≤ 128 nt for now (S8 falls back to the CPU pileup above) |
+
+**Reading it.** The format moves barcode correction, sequence dedup and the chemistry decisions to the CPU nodes and keeps staged bytes at ≈ `.1fq`; it costs 2.2 core-s/M more in the fetch tier (≈ 70 cores more at 8.5 M pairs/s: 26 → ~46 cores at the 0.6 GB/s cap) and removes 9 of the
+14 host core-s/M that S8 measured on the GPU node. Part of the added cost is avoidable: a combined decode-and-stage pass would not write and re-read the `.1fq` (the writer was 35 of 53 s in the W11 ingest measurement, the `.1fq` read is most of pass 1); not built or measured.
+The sequence ids and the sequence table together are 15 B/read; distinct sequences are only 31% of reads on deep samples, but each costs 2-bit + ids. Quality (9.5 B/read) is the largest single plane.
