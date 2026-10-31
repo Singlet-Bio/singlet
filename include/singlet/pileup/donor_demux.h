@@ -1821,16 +1821,24 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
         int valid_f[2] = {1, 1};
 
         auto do_fold = [&](int f) {
+            const auto tf0 = std::chrono::steady_clock::now();
+            auto fmark = [&](const char* what) {
+                std::cerr << "[demux-prof] K=" << K << " fold " << f << " " << what << ": "
+                          << std::chrono::duration<double>(std::chrono::steady_clock::now() - tf0).count() << " s
+";
+            };
             const std::vector<int> kinds = (K == 1) ? std::vector<int>{0}
                                                     : std::vector<int>(cfg.k_select_inits, 2);
             VBResult fit = fit_vb_k(D[f], K, fcfg, kinds, std::min(cfg.max_iter_pre, 30),
                                     cfg.k_select_max_iter, fcfg.threads, &pca[f],
                                     cfg.seed + 31ULL * (f + 1), true);
+            fmark("fit_vb_k");
             std::vector<double> lps, lpp;
             make_log_priors(mean_donor_weights(fit.id_prob, K), delta, lps, lpp);
             // Genotypes from the training half; the second round drops likely doublets
             // (scored in-sample) so they do not contaminate the donors.
             AlleleTables T = build_allele_tables(D[f], fit.id_prob, nullptr, nullptr, K, fcfg);
+            fmark("allele tables");
             if (K >= 2 && cfg.detect_doublets) {
                 std::vector<int> train(D[f].n_cells);
                 std::iota(train.begin(), train.end(), 0);
@@ -1839,12 +1847,14 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
                 std::vector<float> w(D[f].n_cells);
                 for (int j = 0; j < D[f].n_cells; ++j) w[j] = 1.0f - tsc[j].p_doublet;
                 T = build_allele_tables(D[f], fit.id_prob, &w, nullptr, K, fcfg, T.eps);
+                fmark("doublet round");
             }
             std::vector<int> test(D[1 - f].n_cells);
             std::iota(test.begin(), test.end(), 0);
             std::vector<CellScore> sc;
             std::vector<float> half;
             score_cells(D[1 - f], test, T, lps, lpp, fcfg.threads, sc, nullptr, &half);
+            fmark("score held-out");
             for (int j = 0; j < D[1 - f].n_cells; ++j) ll[2 * j + (1 - f)] = sc[j].ll_marg;
             valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg);
         };
