@@ -92,6 +92,9 @@ class Fg2RunSet {
         runs_.resize(h_.n_runs);
         if (h_.n_runs) pread_full(runs_.data(), runs_.size() * sizeof(fg2::RunEntry), h_.runs_offset);
         load_whitelist(whitelist_dirs);
+        dict_flat_.resize(wl_.size() * h_.cb_len);
+        for (size_t k = 0; k < wl_.size(); ++k)
+            for (uint32_t j = 0; j < h_.cb_len; ++j) dict_flat_[k * h_.cb_len + j] = static_cast<uint8_t>((wl_[k] >> (2 * (h_.cb_len - 1 - j))) & 3);
         load_table();
         hdr_.init();
         hdr_.protocol_id = h_.protocol_id;
@@ -116,13 +119,24 @@ class Fg2RunSet {
     uint32_t block_count() const { return static_cast<uint32_t>(chunks_.size()); }
     uint64_t stored_reads() const { return h_.n_reads; }
     uint64_t block_read_offset(uint32_t g) const { return first_read_[g]; }
-    bool has_bc_dict() const { return false; }
-    uint32_t bc_dict_size() const { return 0; }
+    // Dictionary mode, as a .1fq with a barcode dictionary: the dictionary is the whitelist (numeric bases, bc_length bytes per entry, PL_CB order);
+    // bc_indices[i] = the whitelist index for an exact hit and bc_dict_size() for every other read, so pass-1 style counting is the .1fq path's.
+    bool has_bc_dict() const { return true; }
+    uint32_t bc_dict_size() const { return static_cast<uint32_t>(wl_.size()); }
     uint16_t bc_length() const { return h_.cb_len; }
-    const std::vector<uint8_t>& bc_dict_flat() const { return empty_; }
+    const std::vector<uint8_t>& bc_dict_flat() const { return dict_flat_; }
 
     // ── .1fg2 specifics ──
     const fg2::FileHeader& fg2_header() const { return h_; }
+    // The source .1fq's metadata JSON, verbatim, with the encoder's own key ("s9_stage") appended (what Reader::read_metadata() gave at staging time).
+    std::string metadata() const {
+        std::vector<uint8_t> comp(h_.meta_comp_size);
+        pread_full(comp.data(), comp.size(), h_.meta_offset);
+        std::string out(h_.meta_raw_size, '\0');
+        size_t r = ZSTD_decompress(&out[0], out.size(), comp.data(), comp.size());
+        if (ZSTD_isError(r) || r != out.size()) throw std::runtime_error("Fg2RunSet: metadata block did not inflate");
+        return out;
+    }
     const SeqTable& table() const { return tab_; }
     const std::vector<uint64_t>& whitelist() const { return wl_; }          // 2-bit codes, sorted, unique: PL_CB indexes this
     const std::vector<fg2::RunEntry>& runs() const { return runs_; }       // accession, first_read, n_reads, raw_bytes per run (runs_used provenance)
@@ -157,6 +171,7 @@ class Fg2RunSet {
         blk.r1_data.assign(static_cast<size_t>(n) * r1l, 0);
         blk.r1_offsets.resize(n); blk.r1_lengths.assign(n, static_cast<uint16_t>(r1l));
         blk.r2_offsets.resize(n); blk.r2_lengths.resize(n);
+        blk.bc_indices.resize(n);
         size_t r2_total = 0;
         for (uint32_t i = 0; i < n; ++i) r2_total += cp.len[i];
         blk.r2_data.resize(r2_total);
@@ -170,9 +185,11 @@ class Fg2RunSet {
             // barcode as sequenced
             if ((cp.cbst[i] & 7) == fg2::CBST_EXACT) {
                 if (cp.cb[i] >= wl_.size()) throw std::runtime_error("Fg2RunSet: barcode index outside the whitelist");
+                blk.bc_indices[i] = cp.cb[i];
                 const uint64_t w = wl_[cp.cb[i]];
                 for (uint32_t j = 0; j < bcl; ++j) r1[j] = static_cast<uint8_t>((w >> (2 * (bcl - 1 - j))) & 3);
             } else {
+                blk.bc_indices[i] = static_cast<uint32_t>(wl_.size());   // not an exact whitelist hit: the dictionary-miss sentinel
                 while (ri + 1 < cp.rawcb.size() && (cp.rawcb[ri + 1] & 0x7FFF) < i) ri += 2;
                 if (ri + 1 >= cp.rawcb.size() || (cp.rawcb[ri + 1] & 0x7FFF) != i) throw std::runtime_error("Fg2RunSet: missing raw-barcode entry");
                 const uint32_t word = cp.rawcb[ri], nmask = cp.rawcb[ri + 1] >> 15;
@@ -287,7 +304,7 @@ class Fg2RunSet {
     std::vector<fg2::RunEntry> runs_;
     std::vector<uint64_t> wl_;
     SeqTable tab_;
-    std::vector<uint8_t> empty_;
+    std::vector<uint8_t> dict_flat_;
 };
 
 }  // namespace singlet::fq
