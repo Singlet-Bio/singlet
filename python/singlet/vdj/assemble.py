@@ -95,6 +95,9 @@ class Params:
     j_slack: int = 2  # the read vote of the J gene stands unless the junction's end matches another J this many nt better
     ambient_rescue: str = "none"  # "cell" / "pair" / "clone": give back cross-filtered chains of droplets that hold a cell (_ambient_rescue)
     v_open_frac: float = 0.0  # > 0: a V gene with a germline stop yields to an open V with >= this share of its votes
+    # > 0: a barcode whose only kept productive contig has <= this many UMIs is not a cell (a lone receptor molecule:
+    # ambient mRNA or a stray molecule in a droplet of another lineage); no pair is lost, a pair needs two chains
+    orphan_max_umis: int = 0
     threads: int = 8
 
 
@@ -803,4 +806,10 @@ def filter_contigs(df, params: Params):
     df.loc[amb, "kept"] = False
     if params.ambient_rescue in ("cell", "pair", "clone") and cand.any():
         df.loc[_ambient_rescue(df, cand.to_numpy(), params.ambient_rescue), "kept"] = True
+    if params.orphan_max_umis > 0:
+        kp = df["kept"] & df["productive"].astype(bool)
+        n_kp = kp.groupby(df["bcix"]).transform("sum")
+        orphan = kp & (n_kp == 1) & (df["umis"] <= params.orphan_max_umis)
+        df["orphan"] = orphan
+        df.loc[orphan, "kept"] = False
     return df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(drop=True)
