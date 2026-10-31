@@ -245,15 +245,20 @@ def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=6
     return ("no_gex" if rc == 6 else "keep" if rc == 0 else "unknown"), time.time() - t0
 
 
-def stage_run(binary, sra, out, quality, vdb_threads, whitelist_dir, env, scr):
+def stage_run(binary, sra, out, quality, vdb_threads, whitelist_dir, env, scr, part=False):
     """`singlet download <local .sra> --stage-out OUT`: SRA -> .1fg2 in one pass (no .1fq, no barcode sort). -> (rc, seconds, report dict|None).
     rc 2 = the non-10x gate (a verdict); rc 6 = protocol not stageable (no universal R1 whitelist): the caller falls back to the .1fq path."""
     cmd = [binary, "download", sra, "--quality", quality, "--vdb-threads", str(vdb_threads), "--no-profile", "--stage-out", out,
-           "-o", os.path.join(scr, "unused.1fq")] + (["--whitelist-dir", whitelist_dir] if whitelist_dir else [])
+           "-o", os.path.join(scr, "unused.1fq")] + (["--stage-part"] if part else []) + (["--whitelist-dir", whitelist_dir] if whitelist_dir else [])
     t0 = time.time()
     p = subprocess.run(cmd, env=env, capture_output=True, text=True)
     rep = None
-    if p.returncode == 0:
+    if p.returncode == 0 and part:
+        import struct
+        with open(out, "rb") as fh:   # PartHdr (src/stage/stage_encoder.h): n_stored, n_in at byte 16
+            n_stored, n_in = struct.unpack("<QQ", fh.read(32)[16:32])
+        rep = {"n_reads": n_stored, "n_in": n_in}
+    elif p.returncode == 0:
         try:
             rep = json.loads(p.stdout.strip().splitlines()[-1])
         except (ValueError, IndexError):
@@ -284,7 +289,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
     t_start = time.time()
     ru0 = resource.getrusage(resource.RUSAGE_CHILDREN) if resource else None
     runs_info, raw_total = [], 0
-    fmt, staged_files = "1fq", []
+    fmt, staged_files, parts, fallback_1fq = "1fq", [], [], False
     try:
         if a.head_screen:
             verdicts = {}
@@ -309,17 +314,27 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
             Q.heartbeat(claim)
             out = os.path.join(inc, r + ".1fq")
             rc, dsec, staged = None, 0.0, False
-            if a.format == "1fg2" and len(item["runs"]) == 1:
-                # single-run sample: SRA -> .1fg2 directly (a pooled multi-run sample needs one histogram over all runs: .1fq route until a part merge exists)
-                g = os.path.join(inc, "sample.1fg2")
-                rc, dsec, rep = stage_run(binary, sra, g, a.quality, a.decode_threads, a.whitelist_dir, env, scr)
+            if a.format == "1fg2" and not fallback_1fq:
+                # SRA -> .1fg2 directly. A single-run sample goes straight to sample.1fg2; the runs of a multi-run sample become parts that are merged below into ONE file
+                # (one exact-barcode histogram, one distinct-sequence table: the pooled R11 correction of the .1fq route)
+                multi = len(item["runs"]) > 1
+                g = os.path.join(scr, "part_" + r) if multi else os.path.join(inc, "sample.1fg2")
+                rc, dsec, rep = stage_run(binary, sra, g, a.quality, a.decode_threads, a.whitelist_dir, env, scr, part=multi)
                 if rc == 0 and rep:
                     staged, fmt = True, "1fg2"
-                    staged_files = ["sample.1fg2"]
-                    info.update(staged_bytes=os.path.getsize(g), pairs=rep["n_reads"], n_unique=rep["n_unique"], max_len=rep["max_len"])
+                    info.update(pairs=rep["n_reads"])
+                    if multi:
+                        parts.append(g)
+                    else:
+                        staged_files = ["sample.1fg2"]
+                        info.update(staged_bytes=os.path.getsize(g), n_unique=rep["n_unique"], max_len=rep["max_len"])
+                elif rc == 0:
+                    raise FetchError("stage encoder gave no report for %s" % r)
                 elif rc == 6:
+                    if parts:
+                        raise FetchError("runs of one sample disagree on stageability (protocol): %s" % r)
                     log("[stage] %s: protocol not stageable, .1fq route" % r)
-                    rc = None
+                    fallback_1fq, rc = True, None
                     try:
                         os.remove(g)
                     except OSError:
@@ -335,6 +350,22 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
                     info.update(staged_bytes=os.path.getsize(out), pairs=pairs_in(binary, out, env))
                 raw_total += info["bytes"]
             runs_info.append(info)
+        if parts:   # multi-run sample, parts -> one pooled .1fg2
+            g = os.path.join(inc, "sample.1fg2")
+            t_m = time.time()
+            pm = subprocess.run([a.stage_bin or os.path.join(os.path.dirname(binary), "singlet-stage"), "--whitelist-dir", a.whitelist_dir or os.environ.get("SINGLET_WHITELIST_DIR", ""),
+                                 "--scratch", scr, "-o", g, "--merge-parts"] + parts, env=env, capture_output=True, text=True)
+            if pm.returncode != 0:
+                raise FetchError("merge of the run parts failed rc=%s %s" % (pm.returncode, pm.stderr[-300:]))
+            rep = json.loads(pm.stdout.strip().splitlines()[-1])
+            staged_files = ["sample.1fg2"]
+            for x in runs_info:
+                if not x["gated"]:
+                    x.update(staged_bytes=0, merge_s=round(time.time() - t_m, 1))
+            first = next(x for x in runs_info if not x["gated"])
+            first.update(staged_bytes=os.path.getsize(g), n_unique=rep["n_unique"], max_len=rep["max_len"])
+            for pth in parts:
+                os.remove(pth)
         kept = [x["run"] for x in runs_info if not x["gated"]]
         if not kept:
             Q.give_back_todo(stage, gsm, claim, retry=False)
@@ -397,6 +428,7 @@ def main():
                     help="screen 1 M pairs of every run by a short VDB stream BEFORE downloading it (drops non-10x / non-GEX runs at ~no cost)")
     ap.add_argument("--format", choices=("1fq", "1fg2"), default="1fq",
                     help="staged form: 1fq (barcode-sorted .1fq per run) or 1fg2 (src/stage/fmt2.h, single-run samples straight from the SRA; others fall back to 1fq)")
+    ap.add_argument("--stage-bin", help="singlet-stage binary for merging the parts of a multi-run sample (default: next to --binary)")
     ap.add_argument("--allow-lite", action="store_true", help="also accept SRA Lite (simplified qualities) when no full .sra is reachable")
     ap.add_argument("--screen", action="store_true", default=True)
     ap.add_argument("--idle-exit-min", type=float, default=30.0)

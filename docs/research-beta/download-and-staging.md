@@ -252,3 +252,28 @@ In all 8 runs the order-independent digest of C equals that of B (same barcode, 
 Distinct-sequence fraction on these deep runs: 0.56 (75 M), 0.46 (112 M), 0.31 (132 M), 0.28 (186 M), 0.24 (234 M). Encoder table memory 3.1–4.2 GB at 75–234 M reads (64-byte in-memory slots; halving it for ≤127 nt files is possible but not done).
 
 **Open:** S8's `.1fg2` reader and the per-read identity gate (fixtures in `$WORK/jobs/s9/fixtures`); a multi-run part merge; the fetch worker's `--format 1fg2` path is written but not run against a real binary here (the drain only claims `.1fg2` samples with `--accept-1fg2`).
+
+## 13. Multi-run samples (parts + merge) and `Fg2RunSet`
+
+**Multi-run samples without a `.1fq`.** `singlet download <sra> --stage-out PART --stage-part` writes one run's state (exact-barcode histogram, that run's distinct-sequence table, the per-read records); `singlet-stage --merge-parts P1 P2 ... -o sample.1fg2` sums the histograms,
+re-keys the sequences into one table (ids remapped in the records) and runs the same pass 2 as a single-run sample, so the correction uses the pooled histogram and there is one table and one run table, as the two-step path. The fetch worker (`--format 1fg2`) does this for samples with several runs
+(`--stage-bin` for the merger) and falls back to `.1fq` when the protocol is not stageable.
+Gate: 5 real human 10x experiments with two runs each (job 793907; one more was refused by the non-10x gate): the pooled `.1fg2` from the parts has the same order-independent digest as the one built from the two `.1fq` by `singlet-stage` in **5 of 5**.
+Core-s per M reads (A = today's `.1fq` download of both runs; two-step = A + `singlet-stage`; parts = the per-run `--stage-part` passes; merge = `--merge-parts`):
+
+| sample (reads) | A | two-step | parts + merge | (parts / merge) | `.1fq` / two-step / parts+merge B/read | part files |
+|---|---|---|---|---|---|---|
+| ERX4607499 (23 M) | 3.92 | 6.06 | 4.39 | 3.54 / 0.85 | 25.3 / 25.3 / 29.3 | 106 B/read |
+| SRX17100977 (40 M) | 2.26 | 3.90 | 3.72 | 2.68 / 1.04 | 20.7 / 21.6 / 24.2 | 131 |
+| SRX17100975 (23 M) | 2.55 | 4.26 | 4.01 | 2.92 / 1.09 | 21.5 / 22.7 / 25.4 | 134 |
+| SRX18638740 (46 M) | 2.70 | 4.45 | 3.96 | 2.97 / 0.99 | 25.7 / 24.8 / 27.5 | 122 |
+| SRX18810412 (62 M) | 4.05 | 6.48 | 5.22 | 4.09 / 1.14 | 39.2 / 35.0 / 38.0 | 120 |
+
+The parts route costs +0.5 to +1.8 core-s/M over today (the merge step, 0.85–1.14, is a second pass 2 plus the id remap and is single-threaded) and saves 0–30% against the two-step route; for one-run samples the combined pass is cheaper (§12). Part files are node-local `/tmp` only
+(106–134 B/read: the spilled records carry a 64-byte quality slot; ~40 GB for a 300 M-read sample), deleted after the merge. Bytes per read are the unsorted-source `.1fg2` (SRA order): +3% to +15% over the sorted two-step file.
+
+**`Fg2RunSet`** (`include/singlet/fq/fg2_runset.h`, header-only, S8 integrates it into `singlet.cpp`): the `.1fg2` as a stream of `DecodedBlock`s with `RunSet`'s interface (`open`, `block_count`, `stored_reads`, `block_read_offset`, `header`, `bc_length`, `has_bc_dict` = false, `decode(g, blk)`, const and thread-safe),
+chunk g = block g. Per read the block holds the barcode as sequenced (exact hit: the whitelist entry; otherwise the `PL_RAWCB` entry with its N bases as 4) followed by the UMI (N from the exceptions), the cDNA from the in-memory distinct-sequence table (N from its N lists) and the decoded Phred of the 2-bit bins (2/11/25/37). Extra accessors for the table-fed prefill:
+`table()` (the distinct sequences in memory: 2-bit rows, lengths, N positions as CSR), `decode_planes(g, ChunkPlanes&)` (corrected barcode index, status, UMI word, sequence id, length, q bins, exceptions, raw-barcode entries), `whitelist()` (sorted unique 2-bit codes: `PL_CB` indexes it), `runs()`. It verifies the whitelist file against the header's sha256 and refuses layouts other than barcode-at-0-with-the-UMI-behind-it.
+Gate (`test_fg2_runset`, `scripts/atlas_rerun/stage_fg2_gate.sbatch`, job 793918): on the three fixtures (9.1 M, 11.3 M, 12.3 M reads; ILLUMINA4 qualities; 4 decoder threads) the decoded barcode + UMI, cDNA and quality of every read equal the `.1fq` RunSet's, in order and by order-independent digest: **IDENTICAL on 3 of 3, 0 mismatches over 32.8 M reads.**
+Format note: the raw-barcode `meta` word now carries the N-base bitmask of the barcode (bits 15-30; any number of N) instead of a position code, and `PL_CB` is the index in the sorted, de-duplicated whitelist (CbCorrector order), not the file line number.
