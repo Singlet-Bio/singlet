@@ -3919,7 +3919,8 @@ private:
         return store.finalize_molecules(
             exon, intron,
             [&](uint32_t bc, uint32_t gene) { if (track_amb) amb.increment(gene, bc); },
-            config_.umi_len, config_.umi_dedup_directional);
+            config_.umi_len, config_.umi_dedup_directional,
+            [&](uint32_t bc) { note_mixed(bc); });
     }
 
     // Label and emit the molecules of several stores (one per worker; each store
@@ -3934,8 +3935,27 @@ private:
         SparseAccumulator<uint16_t>* amb;
         bool consume = false;   // give the store's molecule groups back while collapsing (nothing reads them afterwards)
     };
+    // Per barcode: unspliced molecules that also have an exon-only read (see DirectionalUmiStore::emit_molecule). The cell caller's
+    // knee is computed on exon + these, i.e. on the exonic total the labels gave before the alevin-fry USA semantics.
+    mutable std::unique_ptr<std::atomic<uint32_t>[]> mixed_bc_;
+    mutable size_t mixed_n_ = 0;
+    void note_mixed(uint32_t bc) const {
+        if (bc < mixed_n_) mixed_bc_[bc].fetch_add(1, std::memory_order_relaxed);
+    }
+public:
+    /// Per-barcode count of unspliced molecules with an exon-only read (empty if no molecule was finalized).
+    std::vector<uint32_t> legacy_exon_extra() const {
+        std::vector<uint32_t> v(mixed_n_, 0);
+        for (size_t i = 0; i < mixed_n_; ++i) v[i] = mixed_bc_[i].load(std::memory_order_relaxed);
+        return v;
+    }
+private:
     DirectionalUmiStore::MoleculeStats finalize_all(const std::vector<FinalizeTarget>& targets) const {
         using D = DirectionalUmiStore;
+        if (!mixed_bc_ && !barcodes_.empty()) {
+            mixed_n_ = barcodes_.size();
+            mixed_bc_.reset(new std::atomic<uint32_t>[mixed_n_]());
+        }
         const uint32_t mrules = config_.intron_rules & intron_rule::kMoleculeRules;
         D::MoleculeStats st;
         if (!mrules && molecule_dump_.empty()) {
@@ -4016,7 +4036,8 @@ private:
                 const bool dropm = mrules && drop[i][k];
                 if (dropm) st.dropped++;
                 else D::emit_molecule(m, *t.exon, *t.intron,
-                                      [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st);
+                                      [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st,
+                                      [&](uint32_t bc) { note_mixed(bc); });
                 if (!dump) continue;
                 for (size_t k = 0; k < umi_s.size(); ++k) umi_s[k] = "ACGT"[(m.umi >> (2 * k)) & 3];
                 const char lab = dropm ? 'D' : "SUA"[static_cast<int>(m.label())];

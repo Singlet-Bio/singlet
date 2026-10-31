@@ -522,15 +522,22 @@ public:
     ///   exon_acc.increment(exon_idx, bc)      spliced and ambiguous molecules
     ///   intron_acc.increment(intron_idx, bc)  unspliced molecules
     ///   on_ambiguous(bc, gene)                 ambiguous molecules (also in exon_acc)
-    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
+    struct NoMixed { void operator()(uint32_t) const {} };
+
+    /// `on_mixed(bc)` is called for an unspliced molecule that also has an exon-only read: the molecules the pre-USA labels
+    /// counted in the exon matrix (as ambiguous). The knee of the cell caller is validated on that legacy exonic total, so the
+    /// engine keeps a per-barcode count of them (legacy_exon_extra) and adds it back for the knee only.
+    template <typename ExonAccT, typename IntronAccT, typename AmbFn, typename MixFn = NoMixed>
     static void emit_molecule(const Molecule& m, ExonAccT& exon_acc, IntronAccT& intron_acc,
-                              AmbFn&& on_ambiguous, MoleculeStats& st) {
+                              AmbFn&& on_ambiguous, MoleculeStats& st, MixFn&& on_mixed = MixFn()) {
         if ((m.flags & kReadTouchesExon) && (m.flags & kReadIntron)) st.legacy_double++;
         switch (m.label()) {
             case MoleculeLabel::Spliced:
                 exon_acc.increment(m.exon_idx, m.bc); st.spliced++; break;
             case MoleculeLabel::Unspliced:
-                intron_acc.increment(m.intron_idx, m.bc); st.unspliced++; break;
+                intron_acc.increment(m.intron_idx, m.bc); st.unspliced++;
+                if (m.flags & kReadExonOnly) on_mixed(m.bc);
+                break;
             case MoleculeLabel::Ambiguous:
                 exon_acc.increment(m.exon_idx, m.bc); on_ambiguous(m.bc, m.gene);
                 st.ambiguous++; break;
@@ -538,14 +545,14 @@ public:
     }
 
     /// Collapse UMIs, label each molecule once and emit it (emit_molecule()).
-    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
+    template <typename ExonAccT, typename IntronAccT, typename AmbFn, typename MixFn = NoMixed>
     MoleculeStats finalize_molecules(ExonAccT& exon_acc, IntronAccT& intron_acc,
                                      AmbFn&& on_ambiguous, int umi_len,
-                                     bool directional) const {
+                                     bool directional, MixFn&& on_mixed = MixFn()) const {
         MoleculeStats st;
         std::vector<Molecule> mols;
         collapse_molecules(umi_len, directional, mols);
-        for (const auto& m : mols) emit_molecule(m, exon_acc, intron_acc, on_ambiguous, st);
+        for (const auto& m : mols) emit_molecule(m, exon_acc, intron_acc, on_ambiguous, st, on_mixed);
         return st;
     }
 

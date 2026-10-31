@@ -224,6 +224,12 @@ void run_case(const std::string& dir, bool parallel, bool directional) {
     CHECK(st.molecules_legacy_double == static_cast<uint64_t>(directional ? 4 : 3),
           tag + ": legacy double-counted molecules");
     CHECK(st.cross_gene_intron_reads == 1, tag + ": M6 lies in another gene's intron");
+    {   // unspliced molecules that also have an exon-only read: M3, M8 and the merged M7 (directional) / M3, M8 (exact)
+        const auto extra = e.legacy_exon_extra();
+        uint64_t tot = 0;
+        for (auto v : extra) tot += v;
+        CHECK(tot == static_cast<uint64_t>(directional ? 3 : 2), tag + ": legacy exonic extra (mixed unspliced molecules)");
+    }
 }
 
 }  // namespace
