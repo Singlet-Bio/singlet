@@ -1,7 +1,0 @@
-# #91 guide matching, pin d9834b8a274c5259420bdd77358e85996eac8e7a, A375 10k CRISPR library, 2,000,000 read pairs, 50% stored reverse
-before (match):
-reads 2000000 | stored-reverse 999525 | matched 680667 (0.3403) | reverse matched 0 (0.0000 of reverse) | ambiguous 0 | guide UMIs 622433 | cells with >=1 UMI 38346 | cells with >=3 UMIs 10916 | median UMIs/cell(>=3) 41
-after (match_bam):
-reads 2000000 | stored-reverse 999525 | matched 1361175 (0.6806) | reverse matched 680508 (0.6808 of reverse) | ambiguous 0 | guide UMIs 1147644 | cells with >=1 UMI 59566 | cells with >=3 UMIs 11953 | median UMIs/cell(>=3) 69
-no reverse (reference orientation) after:
-reads 2000000 | stored-reverse 0 | matched 1361175 (0.6806) | reverse matched 0 (0.0000 of reverse) | ambiguous 0 | guide UMIs 1147644 | cells with >=1 UMI 59566 | cells with >=3 UMIs 11953 | median UMIs/cell(>=3) 69
