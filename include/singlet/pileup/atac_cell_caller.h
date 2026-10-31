@@ -273,4 +273,155 @@ class AtacCellCaller {
     Config cfg_;
 };
 
+// ---------------------------------------------------------------------------
+// Mixture-model cell calling on fragments in peaks (Cell Ranger ATAC / ARC style)
+// ---------------------------------------------------------------------------
+// Cell Ranger ATAC and ARC call cells on the number of fragments (cut sites) in peaks per barcode, separating a
+// noise population from a cell population. Here: a two-component diagonal Gaussian mixture on log10 counts, fitted by
+// EM over barcodes with at least `floor` counts (the noise mode of a 10x library sits well above 1 in peaks, so the
+// floor only removes the near-empty tail). A barcode is a cell when its posterior for the high component is >= 0.5
+// and every dimension reaches `min_count`. One dimension = ATAC alone; two = Multiome (GEX UMIs, ATAC peak counts),
+// the joint call Cell Ranger ARC makes.
+
+struct MixtureCellCall {
+    int dims = 1;
+    double mean[2][2] = {{0, 0}, {0, 0}};  // [component][dim], component 1 = cells
+    double sd[2][2] = {{1, 1}, {1, 1}};
+    double weight_cell = 0;
+    double threshold_log10 = 0;  // one dimension: the density valley used as the cut
+    uint32_t n_candidates = 0, n_cells = 0;
+    int iterations = 0;
+};
+
+namespace detail {
+
+inline double otsu_split(std::vector<double> x) {
+    std::sort(x.begin(), x.end());
+    const size_t n = x.size();
+    std::vector<double> pre(n + 1, 0.0);
+    for (size_t i = 0; i < n; ++i) pre[i + 1] = pre[i] + x[i];
+    double best = -1, thr = x.empty() ? 0 : x[n / 2];
+    for (size_t i = 1; i < n; ++i) {
+        if (x[i] == x[i - 1]) continue;
+        const double w0 = static_cast<double>(i) / n, w1 = 1 - w0;
+        const double m0 = pre[i] / i, m1 = (pre[n] - pre[i]) / (n - i);
+        const double v = w0 * w1 * (m0 - m1) * (m0 - m1);
+        if (v > best) { best = v; thr = 0.5 * (x[i - 1] + x[i]); }
+    }
+    return thr;
+}
+
+}  // namespace detail
+
+/// counts[d][i]: dimension d, barcode i. is_cell (out) sized to n barcodes.
+inline MixtureCellCall call_cells_mixture(const std::vector<std::vector<uint32_t>>& counts,
+                                          std::vector<uint8_t>& is_cell, uint32_t floor = 10,
+                                          uint32_t min_count = 100, int max_iter = 200) {
+    MixtureCellCall r;
+    r.dims = static_cast<int>(std::min<size_t>(2, counts.size()));
+    const size_t n = counts.empty() ? 0 : counts[0].size();
+    is_cell.assign(n, 0);
+    std::vector<uint32_t> idx;
+    for (size_t i = 0; i < n; ++i) {
+        bool ok = true;
+        for (int d = 0; d < r.dims; ++d) ok = ok && counts[static_cast<size_t>(d)][i] >= floor;
+        if (ok) idx.push_back(static_cast<uint32_t>(i));
+    }
+    r.n_candidates = static_cast<uint32_t>(idx.size());
+    if (idx.size() < 10) return r;
+    const size_t m = idx.size();
+    std::vector<double> x[2];
+    for (int d = 0; d < r.dims; ++d) {
+        x[d].resize(m);
+        for (size_t k = 0; k < m; ++k) x[d][k] = std::log10(static_cast<double>(counts[static_cast<size_t>(d)][idx[k]]));
+    }
+    // Initialise by an Otsu split of the last dimension (ATAC peaks).
+    const int dl = r.dims - 1;
+    const double thr0 = detail::otsu_split(x[dl]);
+    std::vector<double> post(m);
+    for (size_t k = 0; k < m; ++k) post[k] = x[dl][k] > thr0 ? 1.0 : 0.0;
+    const double kPi = 3.14159265358979323846;
+    double prev_ll = -1e300;
+    for (int it = 0; it < max_iter; ++it) {
+        // M step
+        double w1 = 0;
+        for (double p : post) w1 += p;
+        const double w0 = static_cast<double>(m) - w1;
+        if (w1 < 1 || w0 < 1) break;
+        r.weight_cell = w1 / m;
+        for (int d = 0; d < r.dims; ++d) {
+            double s0 = 0, s1 = 0;
+            for (size_t k = 0; k < m; ++k) { s1 += post[k] * x[d][k]; s0 += (1 - post[k]) * x[d][k]; }
+            r.mean[0][d] = s0 / w0;
+            r.mean[1][d] = s1 / w1;
+            double v0 = 0, v1 = 0;
+            for (size_t k = 0; k < m; ++k) {
+                v1 += post[k] * (x[d][k] - r.mean[1][d]) * (x[d][k] - r.mean[1][d]);
+                v0 += (1 - post[k]) * (x[d][k] - r.mean[0][d]) * (x[d][k] - r.mean[0][d]);
+            }
+            r.sd[0][d] = std::sqrt(std::max(v0 / w0, 1e-4));
+            r.sd[1][d] = std::sqrt(std::max(v1 / w1, 1e-4));
+        }
+        // E step
+        double ll = 0;
+        for (size_t k = 0; k < m; ++k) {
+            double lp[2];
+            for (int c = 0; c < 2; ++c) {
+                lp[c] = std::log(c ? r.weight_cell : 1 - r.weight_cell);
+                for (int d = 0; d < r.dims; ++d) {
+                    const double z = (x[d][k] - r.mean[c][d]) / r.sd[c][d];
+                    lp[c] += -0.5 * z * z - std::log(r.sd[c][d] * std::sqrt(2 * kPi));
+                }
+            }
+            const double mx = std::max(lp[0], lp[1]);
+            const double l = mx + std::log(std::exp(lp[0] - mx) + std::exp(lp[1] - mx));
+            post[k] = std::exp(lp[1] - l);
+            ll += l;
+        }
+        r.iterations = it + 1;
+        if (std::abs(ll - prev_ll) < 1e-6 * std::abs(ll)) break;
+        prev_ll = ll;
+    }
+    // Component 1 must be the high one in the ATAC dimension.
+    const bool swap = r.mean[1][dl] < r.mean[0][dl];
+    // One dimension: the Gaussian boundary sits inside the heavy right tail of the noise mode, so the call uses the
+    // valley of the smoothed log-count density between the two component means instead (developed on Multiome 3k,
+    // where the boundary admitted ~400 barcodes with 100-300 fragments in peaks that ARC does not call).
+    if (r.dims == 1) {
+        const double lo = r.mean[swap ? 1 : 0][0], hi = r.mean[swap ? 0 : 1][0];
+        constexpr int kBins = 200;
+        const double bw = 0.08;  // kernel width, decades
+        double best = 1e300, thr = 0.5 * (lo + hi);
+        for (int b = 0; b <= kBins; ++b) {
+            const double g = lo + (hi - lo) * b / kBins;
+            double dens = 0;
+            for (size_t k = 0; k < m; ++k) {
+                const double z = (x[0][k] - g) / bw;
+                if (z > -5 && z < 5) dens += std::exp(-0.5 * z * z);
+            }
+            if (dens < best) { best = dens; thr = g; }
+        }
+        r.threshold_log10 = thr;
+        for (size_t k = 0; k < m; ++k)
+            if (x[0][k] >= thr && counts[0][idx[k]] >= min_count) { is_cell[idx[k]] = 1; ++r.n_cells; }
+        if (swap) {
+            std::swap(r.mean[0][0], r.mean[1][0]); std::swap(r.sd[0][0], r.sd[1][0]);
+            r.weight_cell = 1 - r.weight_cell;
+        }
+        return r;
+    }
+    for (size_t k = 0; k < m; ++k) {
+        const double pc = swap ? 1 - post[k] : post[k];
+        bool ok = pc >= 0.5;
+        for (int d = 0; d < r.dims; ++d)
+            ok = ok && x[d][k] > r.mean[swap ? 1 : 0][d] && counts[static_cast<size_t>(d)][idx[k]] >= min_count;
+        if (ok) { is_cell[idx[k]] = 1; ++r.n_cells; }
+    }
+    if (swap) {
+        for (int d = 0; d < 2; ++d) { std::swap(r.mean[0][d], r.mean[1][d]); std::swap(r.sd[0][d], r.sd[1][d]); }
+        r.weight_cell = 1 - r.weight_cell;
+    }
+    return r;
+}
+
 }  // namespace singlet

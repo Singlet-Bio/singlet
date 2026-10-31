@@ -113,6 +113,10 @@ struct WriterConfig {
     // Improves zstd compression ratio by grouping same-BC reads together.
     bool sort_by_bc = false;
 
+    // Block sink: flush_block() hands the block to this function instead of encoding it; no file is opened (see StagedBlock)
+    std::function<void(const StagedBlock&)> block_sink;
+    std::function<void(const std::string&)> metadata_sink;   // sink mode: gets finish()'s metadata JSON
+
     // ZSTD multi-threaded compression (0 = single-threaded, >0 = worker threads)
     int compress_threads = 0;
 
@@ -138,8 +142,11 @@ class Writer {
     // Open output file and write header placeholder.
     void open(const char* path, const WriterConfig& cfg) {
         cfg_ = cfg;
-        fp_ = std::fopen(path, "wb");
-        if (!fp_) throw std::runtime_error("Cannot open for writing: " + std::string(path));
+        sink_mode_ = static_cast<bool>(cfg.block_sink);
+        if (!sink_mode_) {
+            fp_ = std::fopen(path, "wb");
+            if (!fp_) throw std::runtime_error("Cannot open for writing: " + std::string(path));
+        }
 
         // Set up barcode dictionary mode and optional I2 stream
         use_bc_dict_ = !cfg.bc_dict.empty() && cfg.bc_length > 0;
@@ -182,15 +189,17 @@ class Writer {
         if (cfg.deduped)
             hdr_.flags |= Flags::DEDUPED;
 
-        // Write header placeholder (will be rewritten at finish)
-        if (std::fwrite(&hdr_, sizeof(Header), 1, fp_) != 1) {
-            throw std::runtime_error("Failed to write header");
-        }
-        file_offset_ = sizeof(Header);
+        if (!sink_mode_) {
+            // Write header placeholder (will be rewritten at finish)
+            if (std::fwrite(&hdr_, sizeof(Header), 1, fp_) != 1) {
+                throw std::runtime_error("Failed to write header");
+            }
+            file_offset_ = sizeof(Header);
 
-        // Write barcode dictionary (compressed)
-        if (use_bc_dict_) {
-            write_bc_dict(cfg.bc_dict, cfg.bc_length);
+            // Write barcode dictionary (compressed)
+            if (use_bc_dict_) {
+                write_bc_dict(cfg.bc_dict, cfg.bc_length);
+            }
         }
 
         // Reserve block buffers
@@ -289,7 +298,9 @@ class Writer {
             uint32_t bc_idx = bc_lookup_.find(h);
             if (bc_idx != UINT32_MAX) {
                 block_bc_indices_.push_back(bc_idx);
+                ++bc_exact_;
             } else {
+                ++bc_raw_;
                 // Unknown barcode — use sentinel index (dict size)
                 block_bc_indices_.push_back(
                     static_cast<uint32_t>(cfg_.bc_dict.size()));
@@ -346,11 +357,15 @@ class Writer {
     // Finalize the file: flush remaining reads, write index + footer.
     // metadata_json: optional JSON string stored as compressed metadata block.
     void finish(const std::string& metadata_json = "") {
-        if (!fp_) return;
+        if (!fp_ && !sink_mode_) return;
 
         // Flush any remaining reads
         if (n_reads_in_block_ > 0) {
             flush_block();
+        }
+        if (sink_mode_) {   // nothing is written to a file; the metadata JSON goes to the sink
+            if (cfg_.metadata_sink) cfg_.metadata_sink(metadata_json);
+            return;
         }
 
         // Wait for last async compress+write to complete
@@ -440,6 +455,10 @@ class Writer {
     }
 
     uint64_t total_reads_written() const { return total_reads_; }
+    // Reads whose barcode is exactly a dictionary (whitelist) entry, stored as its index, and reads whose barcode is
+    // not, stored raw (STAR corrects those; reader.h restores them as read).
+    uint64_t bc_whitelist_exact() const { return bc_exact_; }
+    uint64_t bc_raw() const { return bc_raw_; }
     uint32_t blocks_written() const {
         return static_cast<uint32_t>(block_offsets_.size());
     }
@@ -652,6 +671,25 @@ class Writer {
 
     void flush_block() {
         if (n_reads_in_block_ == 0) return;
+        if (sink_mode_) {   // staged output: hand the block over as it is (no sort, no encoding, no file)
+            const uint32_t n = n_reads_in_block_;
+            if (use_bc_dict_ && block_bc_indices_.size() != n)
+                throw std::runtime_error("block sink: reads took both the barcode-dictionary and the full-R1 path; not stageable");
+            StagedBlock sb;
+            sb.n_reads = n; sb.protocol_id = cfg_.protocol_id; sb.qual_mode = cfg_.qual_mode; sb.dict = use_bc_dict_;
+            sb.bc_offset = cfg_.bc_offset; sb.bc_length = cfg_.bc_length; sb.umi_offset = cfg_.umi_offset; sb.umi_length = cfg_.umi_length;
+            sb.r1_length = cfg_.r1_length;
+            sb.bc_idx = block_bc_indices_.data(); sb.bc_dict = &cfg_.bc_dict; sb.unk_bc = block_unknown_bc_.data(); sb.umi = block_umi_seq_.data();
+            sb.r1 = block_r1_seq_.data(); sb.r1_len = block_r1_lengths_.data();
+            sb.r2 = block_r2_seq_.data(); sb.r2_len = block_r2_lengths_.data();
+            sb.r2_qual = block_r2_qual_.empty() ? nullptr : block_r2_qual_.data();
+            cfg_.block_sink(sb);
+            block_r1_seq_.clear(); block_r2_seq_.clear(); block_r1_lengths_.clear(); block_r2_lengths_.clear(); block_r2_qual_.clear();
+            block_bc_indices_.clear(); block_umi_seq_.clear(); block_unknown_bc_.clear(); block_trim_lengths_.clear(); block_dup_counts_.clear();
+            block_i2_seq_.clear(); block_i2_lengths_.clear();
+            n_reads_in_block_ = 0;
+            return;
+        }
         auto fb_start = std::chrono::high_resolution_clock::now();
 
         // Wait for previous async compress+write to complete before reusing
@@ -726,6 +764,15 @@ class Writer {
         // -- R2 quality --
         if (cfg_.qual_mode == QualMode::BINNED4 && !block_r2_qual_.empty()) {
             pack_qual_column(block_r2_qual_, block_r2_lengths_, raw_buf_);
+        } else if (cfg_.qual_mode == QualMode::ILLUMINA4 && !block_r2_qual_.empty()) {
+            const uint8_t* bins = pack::ilmn4_bin_table();
+            uint32_t off = 0;
+            for (uint16_t len : block_r2_lengths_) {
+                const size_t old_size = raw_buf_.size();
+                raw_buf_.resize(old_size + pack::packed_bytes(len));
+                pack::pack_qual_4level(block_r2_qual_.data() + off, len, raw_buf_.data() + old_size, bins);
+                off += len;
+            }
         } else if (cfg_.qual_mode == QualMode::BINNED2 && !block_r2_qual_.empty()) {
             pack_qual_column_binned2(block_r2_qual_, block_r2_lengths_, raw_buf_);
         } else if (cfg_.qual_mode == QualMode::FULL && !block_r2_qual_.empty()) {
@@ -981,6 +1028,7 @@ class Writer {
     ZSTD_CCtx* cctx_ = nullptr;
     Header hdr_;
     bool use_bc_dict_ = false;
+    bool sink_mode_ = false;   // WriterConfig::block_sink set: no file
     bool has_i2_stream_ = false;
     FlatBCMap bc_lookup_;
 
@@ -1003,6 +1051,7 @@ class Writer {
     // File state
     uint64_t file_offset_ = 0;
     uint64_t total_reads_ = 0;
+    uint64_t bc_exact_ = 0, bc_raw_ = 0;
     uint32_t file_crc32_ = 0;
     std::vector<uint64_t> block_offsets_;
     std::vector<uint32_t> block_comp_sizes_;

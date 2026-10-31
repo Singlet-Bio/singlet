@@ -195,6 +195,24 @@ MODALITIES: Dict[str, Modality] = {
             "Per-intron-feature UMI counts (the unspliced half of the raw matrix).",
         ),
         Modality(
+            "exon_reads",
+            "table",
+            ("exon_reads_delta.bin",),
+            "Reads minus UMIs per exon-feature entry of the called cells (aligned to exon_counts; singlet.s1.readsvals.reads_matrix rebuilds the reads matrix).",
+        ),
+        Modality(
+            "intron_reads",
+            "table",
+            ("intron_reads_delta.bin",),
+            "Reads minus UMIs per intron-feature entry of the called cells (aligned to intron_counts).",
+        ),
+        Modality(
+            "reads_per_umi_hist",
+            "table",
+            ("reads_per_umi_hist.tsv.gz",),
+            "Per called cell: molecules with 1..15 and 16+ reads (16 bins).",
+        ),
+        Modality(
             "cell_calls",
             "table",
             ("cell_calls.tsv",),
@@ -767,6 +785,54 @@ def _aggregate_gene_counts(out_dir: Path, gene_order: List[str], called_bcs: Lis
 # ---------------------------------------------------------------------------
 
 
+# The engine writes reads-per-UMI members for every barcode. The all-barcode reads matrices stay in the run directory (+69-73 percent in the .s1);
+# the bundle holds reads - UMIs for the called cells (_reads_delta_members) and the per-cell histogram for the called cells only (a few KB).
+_RUN_DIR_ONLY_MEMBERS = ("exon_reads.1pz", "intron_reads.1pz")
+_CALLED_ONLY_MEMBERS = ("reads_per_umi_hist.tsv.gz",)
+
+
+def _called_barcodes(out_dir: Path) -> Optional[set]:
+    """Called-cell barcodes of ``out_dir/cell_calls.tsv`` (the migrator's rule, s1.cells.parse_cell_calls); None if there is no usable call list."""
+    from singlet.s1.cells import parse_cell_calls
+
+    try:
+        called = parse_cell_calls((out_dir / "cell_calls.tsv").read_bytes())
+    except OSError:
+        return None
+    return set(called) if called is not None else None
+
+
+def _reads_member(rel: str, data: bytes, called: Optional[set]) -> Optional[bytes]:
+    """What the bundle holds of a reads-per-UMI member: None = not packed, else its bytes (the histogram restricted to the called cells)."""
+    if rel in _RUN_DIR_ONLY_MEMBERS:
+        return None
+    if rel in _CALLED_ONLY_MEMBERS:
+        if called is None:
+            return None
+        import gzip
+
+        lines = gzip.decompress(data).decode("utf-8").split("\n")
+        keep = [ln for i, ln in enumerate(lines) if ln and (i == 0 or ln.split("\t", 1)[0] in called)]
+        return gzip.compress(("\n".join(keep) + "\n").encode("utf-8"), 6, mtime=0)
+    return data
+
+
+def _reads_delta_members(out_dir: Path, called: set) -> Dict[str, bytes]:
+    """``exon_reads_delta.bin`` / ``intron_reads_delta.bin`` from the run directory's count and reads matrices (singlet.s1.readsvals); a kind whose
+    matrices do not line up (or that is missing) is left out."""
+    from singlet.s1 import readsvals as RV
+
+    out: Dict[str, bytes] = {}
+    for kind, member in RV.MEMBERS.items():
+        cf, rf = out_dir / RV.COUNTS[kind], out_dir / RV.RUN_DIR_READS[kind]
+        if not (cf.is_file() and rf.is_file()):
+            continue
+        blob = RV.from_run_dir_matrices(cf.read_bytes(), rf.read_bytes(), called)
+        if blob is not None:
+            out[member] = blob
+    return out
+
+
 def pack_gse(
     gse_id: str,
     results_dir: Union[str, Path],
@@ -1103,6 +1169,7 @@ def pack_gse(
             # germline information go to the restricted sidecar instead.
             # .1pz files are STORED (already zstd); everything else DEFLATED.
             # Dotfiles, raw reads (.1fq) and bulky disposable read-dumps are skipped.
+            called_set = _called_barcodes(out_dir) if out_dir.is_dir() else None
             if out_dir.is_dir():
                 for fpath in sorted(out_dir.rglob("*")):
                     if not fpath.is_file():
@@ -1128,6 +1195,9 @@ def pack_gse(
                             continue
                     with open(fpath, "rb") as fh:
                         data = fh.read()
+                    data = _reads_member(rel.as_posix(), data, called_set)
+                    if data is None:
+                        continue
                     compress = (
                         zipfile.ZIP_STORED if fpath.suffix == ".1pz" else zipfile.ZIP_DEFLATED
                     )
@@ -1135,6 +1205,13 @@ def pack_gse(
                     gsm_full_files.append(rel.as_posix())
                     if not restricted:
                         gsm_files.append(rel.as_posix())
+
+            # reads-per-UMI matrices go into the bundle as reads - UMIs aligned to the nonzeros of the called columns of the count matrices
+            if out_dir.is_dir() and called_set is not None:
+                for name, data in _reads_delta_members(out_dir, called_set).items():
+                    _put(f"samples/{gsm}/{name}", data, zipfile.ZIP_STORED)
+                    gsm_full_files.append(name)
+                    gsm_files.append(name)
 
             included_files[gsm] = gsm_files
             full_included[gsm] = gsm_full_files

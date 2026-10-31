@@ -1,0 +1,196 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "multiome",
+ "title": "Multiome (GEX + ATAC)",
+ "conclusion": "Singlet pairs every Multiome ATAC barcode with its GEX barcode as Cell Ranger ARC does, and its joint cell call matches ARC's at Jaccard 0.9853 vs 0.9555 for separate per-modality calls.",
+ "methods": "**Data.** 10x Multiome PBMC 10k (granulocytes sorted out), Cell Ranger ARC 2.0.0 published outputs, processed from its\nGEX and ATAC FASTQs with 10x GRCh38-2024-A. Multiome PBMC 3k was used for development and is not scored.\n\n**Singlet 1.0.0.** The GEX library goes through the standard pipeline (10x-arc-gex whitelist). The ATAC library goes\nthrough the ATAC path with `--paired-gex <GEX run>`:\n- ATAC barcodes are corrected against the ARC ATAC whitelist and translated to the gel bead's GEX barcode. The pair list\n  was rebuilt from 10x public ARC per-barcode tables. Leave-one-dataset-out, it covers 100% of the called cells of each of\n  7 public ARC runs.\n- Cells are called with a two-dimensional mixture over GEX UMIs and ATAC fragments in peaks, the joint call ARC makes.\n\n**Competitor.** The usual open-source route calls each modality separately and intersects the results:\n- GEX cells: Singlet's GEX call, EmptyDrops (called_v2);\n- ATAC cells: ArchR's default filter (\u2265 1,000 fragments, TSS enrichment \u2265 4) on Chromap + SnapATAC2 fragments from the\n  same FASTQs.\n\n**Truth.** ARC's `is_cell` and its `gex_barcode` to `atac_barcode` pairs.\n\n**Metrics.**\n- Joint cell-call Jaccard with ARC: match-or-beat against the competitor.\n- Barcode pairing accuracy: the fraction of ARC cells reported by Singlet whose ATAC barcode equals ARC's. This is a\n  threshold rule, \u2265 0.999.\n\nATAC fragment, peak and QC agreement for this library is scored under `atac`. GEX counts are scored under `gex-counts`.\n",
+ "status": "final",
+ "generated_at": "2026-10-26T16:14:32+00:00",
+ "owner": "atac-multiome-spatial",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368",
+  "branch": "claude/atac-spatial-benchmark-2ba7df",
+  "binary": "singlet-atacsp",
+  "binary_sha256": "982f5925cd05539c8000f22068cab8d48521065bbe0d74b2db191ef442b4c859",
+  "build_flags": "CMake Release, -march=x86-64-v3; this branch merged onto prod/modality-fixes 4f110f283cd4b1bc4865d1103a08b56346027da3"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet encode --reads R1 R2 [R3] --protocol 10x-atac|10x-visium; singlet x.1fq --ref-base REF --genome-dir GRCh38/GRCm39-2024-A/star_2.7.11b --exons genes.gtf --threads 16 --pipeline --output-format mtx --raw-matrix [--paired-gex GEX_RUN]"
+  },
+  {
+   "name": "chromap+snapatac2",
+   "version": "chromap 0.3.2-r518; snapatac2 2.9.0; MACS3 macs3 3.0.4",
+   "role": "competitor",
+   "url": "https://github.com/haowenz/chromap",
+   "params": "chromap --preset atac -t 16 -x GRCh38-2024-A.index -r genome.fa -1 R1 -2 R3 -b R2 --barcode-whitelist WL [--read-format bc:<window of Singlet's detected layout>] [--barcode-translate ARC pairs]; macs3 callpeak -f BED --nomodel --extsize 200 --shift -100 --keep-dup all -g hs (Signac CallPeaks); snapatac2.pp.import_fragments + metrics.tsse; cells = ArchR createArrowFiles defaults (minFrags 1000, minTSS 4)"
+  },
+  {
+   "name": "cellranger-atac/arc",
+   "version": "ATAC 1.2.0 / ARC 2.0.0",
+   "role": "truth",
+   "url": "https://www.10xgenomics.com/datasets",
+   "params": "10x published outputs"
+  },
+  {
+   "name": "per-modality-calls",
+   "version": "n/a",
+   "role": "competitor",
+   "params": "GEX cells (Singlet GEX run, called_v2 = EmptyDrops) AND ATAC cells (ArchR default filter: >= 1000 fragments, TSS enrichment >= 4, on Chromap + SnapATAC2 fragments)"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "pbmc_multiome10k",
+   "title": "10x Multiome PBMC 10k, granulocytes sorted out (ARC 2.0)",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-arc/2.0.0/pbmc_granulocyte_sorted_10k/"
+   },
+   "truth": "Cell Ranger ARC 2.0.0 published joint cell calls, barcode pairs, fragments and peaks",
+   "data_kind": "real"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "joint_cell_jaccard",
+   "name": "Joint GEX+ATAC cell calls: Jaccard with Cell Ranger ARC",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc_multiome10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9853,
+    "ci": [
+     0.9837,
+     0.987
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "per-modality-calls",
+     "value": 0.9555
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0026
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the Singlet - competitor difference (200 resamples of the 12071 called barcodes): differences smaller than this are not distinguishable on this dataset"
+   },
+   "notes": "ARC 11898, Singlet 12067, competitor 11547 cells",
+   "pass": "pass"
+  },
+  {
+   "id": "barcode_pairing",
+   "name": "ATAC to GEX barcode pairing: fraction identical to ARC",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc_multiome10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.999,
+    "rationale": "pairing is a fixed table lookup; any disagreement above 1 in 1,000 cells would be a bug, not noise"
+   },
+   "notes": "11894 ARC cells with a Singlet ATAC barcode",
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "pbmc_multiome10k",
+   "threads": 16,
+   "wall_s": 5017.2,
+   "cpu_h": 6.143,
+   "max_rss_gb": 19.42,
+   "notes": "sum of FASTQ encode, main run"
+  },
+  {
+   "tool": "chromap+snapatac2",
+   "dataset": "pbmc_multiome10k",
+   "threads": 16,
+   "wall_s": 2808.9,
+   "cpu_h": 3.135,
+   "max_rss_gb": 21.31,
+   "notes": "sum of main run, MACS3 + SnapATAC2"
+  }
+ ],
+ "figures": [],
+ "artifacts": [
+  {
+   "name": "atac_pbmc_multiome10k_barcodes.tsv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/multiome/atac_pbmc_multiome10k_barcodes.tsv.gz",
+   "kind": "derived",
+   "sha256": "4606fe2ba90478b0727ccd604cd4eb81f1a214648793467a765a52a89f3f9827",
+   "bytes": 1848757,
+   "format": "gz"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/multiome/provenance.json",
+   "kind": "derived",
+   "sha256": "ab1b945135279d3758ac5033066c03322b3382879ed39c50d5e7aa368ae4955e",
+   "bytes": 4863,
+   "format": "json"
+  }
+ ],
+ "code": [
+  {
+   "path": "include/singlet/pileup/atac_barcodes.h",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/include/singlet/pileup/atac_barcodes.h",
+   "role": "implementation"
+  },
+  {
+   "path": "include/singlet/pileup/atac_cell_caller.h",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/include/singlet/pileup/atac_cell_caller.h",
+   "role": "implementation"
+  },
+  {
+   "path": "include/singlet/pileup/atac_pipeline.h",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/include/singlet/pileup/atac_pipeline.h",
+   "role": "implementation"
+  },
+  {
+   "path": "bench/atac_spatial/make_lists.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/bench/atac_spatial/make_lists.py",
+   "role": "harness"
+  },
+  {
+   "path": "bench/atac_spatial/make_artifacts.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/bench/atac_spatial/make_artifacts.py",
+   "role": "harness"
+  },
+  {
+   "path": "bench/public/capabilities/multiome.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/bench/public/capabilities/multiome.py",
+   "role": "metric"
+  },
+  {
+   "path": "bench/public/capabilities/_atacsp.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/bench/public/capabilities/_atacsp.py",
+   "role": "metric"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/multiome.py",
+  "function": "compute",
+  "laptop_minutes": 1,
+  "clipper_command": "bash bench/atac_spatial/submit.sh"
+ },
+ "caveats": [
+  "Binary: this branch (ATAC/Visium code) merged onto prod/modality-fixes, not yet part of the singlet-campaign build the other capabilities use; the results describe the code that the merge will bring.",
+  "Barcode lists (scATAC whitelist, ARC ATAC-GEX pairs, visium-v1 spots) were rebuilt from 10x public datasets (CC BY 4.0); the 737K-cratac-v1.txt bundled before this change is a copy of the 3' v2 list and matches ~1% of scATAC barcodes.",
+  "The competitor intersects Singlet's own GEX call (EmptyDrops) with the ArchR filter on Chromap fragments; STARsolo/EmptyDrops GEX calls were not run here."
+ ]
+}

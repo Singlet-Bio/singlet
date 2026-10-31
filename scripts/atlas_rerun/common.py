@@ -14,6 +14,56 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+
+def node_mem_gb():
+    """Memory of this node in GB: the job's allocation when Slurm sets one, else the machine's MemTotal."""
+    m = os.environ.get("SLURM_MEM_PER_NODE")
+    if m and m.isdigit():
+        return int(m) / 1024.0
+    try:
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) / 1048576.0
+    except (OSError, ValueError):
+        pass
+    return 0.0
+
+
+def gpu_peak_gb(reads):
+    """Largest-process RSS of one `--engine gpu` sample (the STAR child; GPU pileup on): 17.5 GB + 0.39 GB per million reads.
+    Fitted to four measured runs (S8, 1 H100, quiet node): 11.3 M -> 22.8 GB, 13.2 M -> 22.1, 66.6 M -> 43.5, 263.4 M -> 120.4 (all within 3%).
+    Beyond 263 M reads it is an extrapolation."""
+    return 17.5 + 0.39 * reads / 1e6
+
+
+def gpu_job_mem_gb(reads, margin=1.2, extra=20, step=8):
+    """What a job needs to run a sample of `reads` reads: the largest process with `margin`, plus the parent process, /dev/shm temp files and
+    page cache (`extra` GB), rounded up to `step`. A 128 GB job holds samples up to ~190 M reads."""
+    return int(math.ceil((margin * gpu_peak_gb(reads) + extra) / step) * step)
+
+
+GPU_EXCLUSIVE_GB = 700   # a worker with at least this much memory owns a whole node (--exclusive, --mem=0): the "too big for a shared worker" class
+
+
+def job_slots(node_gb, node_cores, threads, peak_gb=33.4, shared_gb=17.8, fill=0.9):
+    """Concurrent sample jobs one node holds. Memory: the shared genome index is resident once per node (shared_gb), every
+    job adds its private peak (peak_gb: deep GSM7036403 with the shared index measured 33.4 GB, index 17.8 GB), and
+    `fill` of the node is usable, so 512 GB gives 13. Cores: threads per job. The smaller of the two; at least 1."""
+    by_mem = int((node_gb * fill - shared_gb) // peak_gb) if node_gb else 0
+    by_cpu = int(node_cores // max(1, threads))
+    return max(1, min(by_mem, by_cpu)) if by_mem > 0 else max(1, by_cpu)
+
+
+def staged_reads(sdir):
+    """True when a sample's staged reads are on disk: the pooled sample.1fq or the per-run <run>.1fq files."""
+    if os.path.exists(os.path.join(sdir, "sample.1fq")):
+        return True
+    try:
+        return any(f.endswith(".1fq") for f in os.listdir(sdir))
+    except OSError:
+        return False
+
 # ── cost model (bench/atlas_rerun/cost_model_v2.py, measured on PBMC 3' v3, Xeon Gold 6230R, 4 threads) ──────────────
 FIXED_S = 300.0  # genome/reference load, index, export: seconds per sample
 SLOPE_S_PER_M = {True: 16.8, False: 12.3}  # seconds per million read pairs, non-host screen on / off

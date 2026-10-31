@@ -1,0 +1,34 @@
+{
+ "arm": "imp_K5w",
+ "production_path": {
+  "type": "identity_check",
+  "report": "/mnt/projects/debruinz_project/debruinz/ground-truth/improvements/identity/K5/identity.json"
+ },
+ "unmapped_omitted": true,
+ "datasets": {
+  "pbmc1": {
+   "bam": "/mnt/projects/debruinz_project/debruinz/ground-truth/improvements/pbmc1/K5/Aligned.out.bam",
+   "aligner": "candidate"
+  },
+  "pbmc2": {
+   "bam": "/mnt/projects/debruinz_project/debruinz/ground-truth/improvements/pbmc2/K5/Aligned.out.bam",
+   "aligner": "candidate"
+  },
+  "wtc11": {
+   "bam": "/mnt/projects/debruinz_project/debruinz/ground-truth/improvements/wtc11/K5/Aligned.out.bam",
+   "aligner": "candidate"
+  },
+  "mix1k_human": {
+   "bam": "/mnt/projects/debruinz_project/debruinz/ground-truth/improvements/mix1k_within/human/K5/foreign.bam",
+   "aligner": "candidate"
+  },
+  "mix1k_mouse": {
+   "bam": "/mnt/projects/debruinz_project/debruinz/ground-truth/improvements/mix1k_within/mouse/K5/foreign.bam",
+   "aligner": "candidate"
+  },
+  "chm13": {
+   "bam": "/mnt/projects/debruinz_project/debruinz/ground-truth/improvements/chm13/K5/Aligned.out.bam",
+   "aligner": "candidate"
+  }
+ }
+}

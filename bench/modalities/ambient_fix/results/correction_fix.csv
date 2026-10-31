@@ -1,0 +1,2 @@
+tool,cross_species_umis_before,cross_species_umis_after,cross_species_residual_pct,own_species_removed_pct,own_removed_over_expected_own_ambient,total_removed_pct_of_umis,implied_rho_mean
+Singlet gene-level EM [final],98443.0,8254.0,8.384547403065733,0.5087194384032621,0.9467077196145041,0.953442735264921,0.010107190151467474

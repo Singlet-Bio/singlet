@@ -1,0 +1,563 @@
+STAR version=2.7.11b
+STAR compilation time,server,dir=2026-10-28T07:25:51 singlet-bundled
+STAR git: singlet-bundled
+##### Command Line:
+STAR --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --readFilesIn /tmp/singlet_1fq_1875211/R2.fastq /tmp/singlet_1fq_1875211/R1.fastq --soloType CB_samTagOut --soloCBwhitelist None --soloCBlen 16 --soloCBstart 1 --soloUMIstart 17 --soloBarcodeReadLength 0 --soloUMIlen 12 --outSAMtype BAM SortedByCoordinate --outBAMcompression 0 --limitBAMsortRAM 34359738368 --outBAMsortingBinsN 200 --outSAMattributes NH nM AS CR UR CB --outSAMunmapped None --outReadsUnmapped Fastx --outFilterScoreMin 10 --soloCBmatchWLtype Exact --runThreadN 9 --genomeLoad NoSharedMemory --outFileNamePrefix /tmp/debruinz-engprof-790058/cpu/out//star_ --outTmpDir /tmp/singlet_star_1875281
+##### Initial USER parameters from Command Line:
+outFileNamePrefix                 /tmp/debruinz-engprof-790058/cpu/out//star_
+outTmpDir                         /tmp/singlet_star_1875281
+###### All USER parameters from Command Line:
+runMode                       alignReads        ~RE-DEFINED
+genomeDir                     /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b     ~RE-DEFINED
+readFilesIn                   /tmp/singlet_1fq_1875211/R2.fastq   /tmp/singlet_1fq_1875211/R1.fastq        ~RE-DEFINED
+soloType                      CB_samTagOut     ~RE-DEFINED
+soloCBwhitelist               None        ~RE-DEFINED
+soloCBlen                     16     ~RE-DEFINED
+soloCBstart                   1     ~RE-DEFINED
+soloUMIstart                  17     ~RE-DEFINED
+soloBarcodeReadLength         0     ~RE-DEFINED
+soloUMIlen                    12     ~RE-DEFINED
+outSAMtype                    BAM   SortedByCoordinate        ~RE-DEFINED
+outBAMcompression             0     ~RE-DEFINED
+limitBAMsortRAM               34359738368     ~RE-DEFINED
+outBAMsortingBinsN            200     ~RE-DEFINED
+outSAMattributes              NH   nM   AS   CR   UR   CB        ~RE-DEFINED
+outSAMunmapped                None        ~RE-DEFINED
+outReadsUnmapped              Fastx     ~RE-DEFINED
+outFilterScoreMin             10     ~RE-DEFINED
+soloCBmatchWLtype             Exact     ~RE-DEFINED
+runThreadN                    9     ~RE-DEFINED
+genomeLoad                    NoSharedMemory     ~RE-DEFINED
+outFileNamePrefix             /tmp/debruinz-engprof-790058/cpu/out//star_     ~RE-DEFINED
+outTmpDir                     /tmp/singlet_star_1875281     ~RE-DEFINED
+##### Finished reading parameters from all sources
+
+##### Final user re-defined parameters-----------------:
+runMode                           alignReads   
+runThreadN                        9
+genomeDir                         /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b
+genomeLoad                        NoSharedMemory
+readFilesIn                       /tmp/singlet_1fq_1875211/R2.fastq   /tmp/singlet_1fq_1875211/R1.fastq   
+limitBAMsortRAM                   34359738368
+outFileNamePrefix                 /tmp/debruinz-engprof-790058/cpu/out//star_
+outTmpDir                         /tmp/singlet_star_1875281
+outReadsUnmapped                  Fastx
+outSAMtype                        BAM   SortedByCoordinate   
+outSAMattributes                  NH   nM   AS   CR   UR   CB   
+outSAMunmapped                    None   
+outBAMcompression                 0
+outBAMsortingBinsN                200
+outFilterScoreMin                 10
+soloType                          CB_samTagOut
+soloCBstart                       1
+soloUMIstart                      17
+soloCBlen                         16
+soloUMIlen                        12
+soloBarcodeReadLength             0
+soloCBwhitelist                   None   
+soloCBmatchWLtype                 Exact
+
+-------------------------------
+##### Final effective command line:
+STAR   --runMode alignReads      --runThreadN 9   --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b   --genomeLoad NoSharedMemory   --readFilesIn /tmp/singlet_1fq_1875211/R2.fastq   /tmp/singlet_1fq_1875211/R1.fastq      --limitBAMsortRAM 34359738368   --outFileNamePrefix /tmp/debruinz-engprof-790058/cpu/out//star_   --outTmpDir /tmp/singlet_star_1875281   --outReadsUnmapped Fastx   --outSAMtype BAM   SortedByCoordinate      --outSAMattributes NH   nM   AS   CR   UR   CB      --outSAMunmapped None      --outBAMcompression 0   --outBAMsortingBinsN 200   --outFilterScoreMin 10   --soloType CB_samTagOut   --soloCBstart 1   --soloUMIstart 17   --soloCBlen 16   --soloUMIlen 12   --soloBarcodeReadLength 0   --soloCBwhitelist None      --soloCBmatchWLtype Exact
+----------------------------------------
+
+Number of fastq files for each mate = 1
+ParametersSolo: --soloCellFilterType CellRanger2.2 filtering parameters:  3000 0.99 10
+Number of CBs in the whitelist = 0
+Built CB hash table with 1 slots for 0 barcodes
+Oct 28 08:10:57 ... Finished reading, sorting and deduplicating CB whitelist sequences.
+Finished loading and checking parameters
+Reading genome generation parameters:
+### /mnt/home/debruinz/.conda/envs/cellarium/bin/STAR-avx2   --runMode genomeGenerate      --runThreadN 8   --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b   --genomeFastaFiles /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/fasta/genome.fa      --genomeSAsparseD 2   --sjdbGTFfile /tmp/genes_1493056.gtf
+### GstrandBit=32
+versionGenome                 2.7.4a     ~RE-DEFINED
+genomeType                    Full     ~RE-DEFINED
+genomeFastaFiles              /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/fasta/genome.fa        ~RE-DEFINED
+genomeSAindexNbases           14     ~RE-DEFINED
+genomeChrBinNbits             18     ~RE-DEFINED
+genomeSAsparseD               2     ~RE-DEFINED
+genomeTransformType           None     ~RE-DEFINED
+genomeTransformVCF            -     ~RE-DEFINED
+sjdbOverhang                  100     ~RE-DEFINED
+sjdbFileChrStartEnd           -        ~RE-DEFINED
+sjdbGTFfile                   /tmp/genes_1493056.gtf     ~RE-DEFINED
+sjdbGTFchrPrefix              -     ~RE-DEFINED
+sjdbGTFfeatureExon            exon     ~RE-DEFINED
+sjdbGTFtagExonParentTranscripttranscript_id     ~RE-DEFINED
+sjdbGTFtagExonParentGene      gene_id     ~RE-DEFINED
+sjdbInsertSave                Basic     ~RE-DEFINED
+genomeFileSizes               3216071051   12789324355        ~RE-DEFINED
+Genome version is compatible with current STAR
+Number of real (reference) chromosomes= 194
+1	chr1	248956422	0
+2	chr10	133797422	249036800
+3	chr11	135086622	382992384
+4	chr12	133275309	518258688
+5	chr13	114364328	651689984
+6	chr14	107043718	766246912
+7	chr15	101991189	873463808
+8	chr16	90338345	975699968
+9	chr17	83257441	1066139648
+10	chr18	80373285	1149501440
+11	chr19	58617616	1229979648
+12	chr2	242193529	1288699904
+13	chr20	64444167	1530920960
+14	chr21	46709983	1595408384
+15	chr22	50818468	1642332160
+16	chr3	198295559	1693188096
+17	chr4	190214555	1891631104
+18	chr5	181538259	2081947648
+19	chr6	170805979	2263613440
+20	chr7	159345973	2434531328
+21	chr8	145138636	2593914880
+22	chr9	138394717	2739142656
+23	chrM	16569	2877554688
+24	chrX	156040895	2877816832
+25	chrY	57227415	3034054656
+26	KI270728.1	1872759	3091464192
+27	KI270727.1	448248	3093561344
+28	KI270442.1	392061	3094085632
+29	KI270729.1	280839	3094609920
+30	GL000225.1	211173	3095134208
+31	KI270743.1	210658	3095396352
+32	GL000008.2	209709	3095658496
+33	GL000009.2	201709	3095920640
+34	KI270747.1	198735	3096182784
+35	KI270722.1	194050	3096444928
+36	GL000194.1	191469	3096707072
+37	KI270742.1	186739	3096969216
+38	GL000205.2	185591	3097231360
+39	GL000195.1	182896	3097493504
+40	KI270736.1	181920	3097755648
+41	KI270733.1	179772	3098017792
+42	GL000224.1	179693	3098279936
+43	GL000219.1	179198	3098542080
+44	KI270719.1	176845	3098804224
+45	GL000216.2	176608	3099066368
+46	KI270712.1	176043	3099328512
+47	KI270706.1	175055	3099590656
+48	KI270725.1	172810	3099852800
+49	KI270744.1	168472	3100114944
+50	KI270734.1	165050	3100377088
+51	GL000213.1	164239	3100639232
+52	GL000220.1	161802	3100901376
+53	KI270715.1	161471	3101163520
+54	GL000218.1	161147	3101425664
+55	KI270749.1	158759	3101687808
+56	KI270741.1	157432	3101949952
+57	GL000221.1	155397	3102212096
+58	KI270716.1	153799	3102474240
+59	KI270731.1	150754	3102736384
+60	KI270751.1	150742	3102998528
+61	KI270750.1	148850	3103260672
+62	KI270519.1	138126	3103522816
+63	GL000214.1	137718	3103784960
+64	KI270708.1	127682	3104047104
+65	KI270730.1	112551	3104309248
+66	KI270438.1	112505	3104571392
+67	KI270737.1	103838	3104833536
+68	KI270721.1	100316	3105095680
+69	KI270738.1	99375	3105357824
+70	KI270748.1	93321	3105619968
+71	KI270435.1	92983	3105882112
+72	GL000208.1	92689	3106144256
+73	KI270538.1	91309	3106406400
+74	KI270756.1	79590	3106668544
+75	KI270739.1	73985	3106930688
+76	KI270757.1	71251	3107192832
+77	KI270709.1	66860	3107454976
+78	KI270746.1	66486	3107717120
+79	KI270753.1	62944	3107979264
+80	KI270589.1	44474	3108241408
+81	KI270726.1	43739	3108503552
+82	KI270735.1	42811	3108765696
+83	KI270711.1	42210	3109027840
+84	KI270745.1	41891	3109289984
+85	KI270714.1	41717	3109552128
+86	KI270732.1	41543	3109814272
+87	KI270713.1	40745	3110076416
+88	KI270754.1	40191	3110338560
+89	KI270710.1	40176	3110600704
+90	KI270717.1	40062	3110862848
+91	KI270724.1	39555	3111124992
+92	KI270720.1	39050	3111387136
+93	KI270723.1	38115	3111649280
+94	KI270718.1	38054	3111911424
+95	KI270317.1	37690	3112173568
+96	KI270740.1	37240	3112435712
+97	KI270755.1	36723	3112697856
+98	KI270707.1	32032	3112960000
+99	KI270579.1	31033	3113222144
+100	KI270752.1	27745	3113484288
+101	KI270512.1	22689	3113746432
+102	KI270322.1	21476	3114008576
+103	GL000226.1	15008	3114270720
+104	KI270311.1	12399	3114532864
+105	KI270366.1	8320	3114795008
+106	KI270511.1	8127	3115057152
+107	KI270448.1	7992	3115319296
+108	KI270521.1	7642	3115581440
+109	KI270581.1	7046	3115843584
+110	KI270582.1	6504	3116105728
+111	KI270515.1	6361	3116367872
+112	KI270588.1	6158	3116630016
+113	KI270591.1	5796	3116892160
+114	KI270522.1	5674	3117154304
+115	KI270507.1	5353	3117416448
+116	KI270590.1	4685	3117678592
+117	KI270584.1	4513	3117940736
+118	KI270320.1	4416	3118202880
+119	KI270382.1	4215	3118465024
+120	KI270468.1	4055	3118727168
+121	KI270467.1	3920	3118989312
+122	KI270362.1	3530	3119251456
+123	KI270517.1	3253	3119513600
+124	KI270593.1	3041	3119775744
+125	KI270528.1	2983	3120037888
+126	KI270587.1	2969	3120300032
+127	KI270364.1	2855	3120562176
+128	KI270371.1	2805	3120824320
+129	KI270333.1	2699	3121086464
+130	KI270374.1	2656	3121348608
+131	KI270411.1	2646	3121610752
+132	KI270414.1	2489	3121872896
+133	KI270510.1	2415	3122135040
+134	KI270390.1	2387	3122397184
+135	KI270375.1	2378	3122659328
+136	KI270420.1	2321	3122921472
+137	KI270509.1	2318	3123183616
+138	KI270315.1	2276	3123445760
+139	KI270302.1	2274	3123707904
+140	KI270518.1	2186	3123970048
+141	KI270530.1	2168	3124232192
+142	KI270304.1	2165	3124494336
+143	KI270418.1	2145	3124756480
+144	KI270424.1	2140	3125018624
+145	KI270417.1	2043	3125280768
+146	KI270508.1	1951	3125542912
+147	KI270303.1	1942	3125805056
+148	KI270381.1	1930	3126067200
+149	KI270529.1	1899	3126329344
+150	KI270425.1	1884	3126591488
+151	KI270396.1	1880	3126853632
+152	KI270363.1	1803	3127115776
+153	KI270386.1	1788	3127377920
+154	KI270465.1	1774	3127640064
+155	KI270383.1	1750	3127902208
+156	KI270384.1	1658	3128164352
+157	KI270330.1	1652	3128426496
+158	KI270372.1	1650	3128688640
+159	KI270548.1	1599	3128950784
+160	KI270580.1	1553	3129212928
+161	KI270387.1	1537	3129475072
+162	KI270391.1	1484	3129737216
+163	KI270305.1	1472	3129999360
+164	KI270373.1	1451	3130261504
+165	KI270422.1	1445	3130523648
+166	KI270316.1	1444	3130785792
+167	KI270340.1	1428	3131047936
+168	KI270338.1	1428	3131310080
+169	KI270583.1	1400	3131572224
+170	KI270334.1	1368	3131834368
+171	KI270429.1	1361	3132096512
+172	KI270393.1	1308	3132358656
+173	KI270516.1	1300	3132620800
+174	KI270389.1	1298	3132882944
+175	KI270466.1	1233	3133145088
+176	KI270388.1	1216	3133407232
+177	KI270544.1	1202	3133669376
+178	KI270310.1	1201	3133931520
+179	KI270412.1	1179	3134193664
+180	KI270395.1	1143	3134455808
+181	KI270376.1	1136	3134717952
+182	KI270337.1	1121	3134980096
+183	KI270335.1	1048	3135242240
+184	KI270378.1	1048	3135504384
+185	KI270379.1	1045	3135766528
+186	KI270329.1	1040	3136028672
+187	KI270419.1	1029	3136290816
+188	KI270336.1	1026	3136552960
+189	KI270312.1	998	3136815104
+190	KI270539.1	993	3137077248
+191	KI270385.1	990	3137339392
+192	KI270423.1	981	3137601536
+193	KI270392.1	971	3137863680
+194	KI270394.1	970	3138125824
+--sjdbOverhang = 100 taken from the generated genome
+Started loading the genome: Wed Oct 28 08:10:57 2026
+
+Genome: size given as a parameter = 3216071051
+SA: size given as a parameter = 12789324355
+SAindex: size given as a parameter = 1
+Read from SAindex: pGe.gSAindexNbases=14  nSAi=357913940
+nGenome=3216071051;  nSAbyte=12789324355
+GstrandBit=32   SA number of indices=3100442267
+SA_HUGEPAGES: MADV_HUGEPAGE on G, SA, SAi before loading
+Shared memory is not used for genomes. Allocated a private copy of the genome.
+Genome file size: 3216071051 bytes; state: good=1 eof=0 fail=0 bad=0
+Loading Genome ... done! state: good=1 eof=0 fail=0 bad=0; loaded 3216071051 bytes
+SA file size: 12789324355 bytes; state: good=1 eof=0 fail=0 bad=0
+Loading SA ... done! state: good=1 eof=0 fail=0 bad=0; loaded 12789324355 bytes
+Loading SAindex ... done: 1565873619 bytes
+Finished loading the genome: Wed Oct 28 08:11:04 2026
+
+Processing splice junctions database sjdbN=386483,   pGe.sjdbOverhang=100 
+alignIntronMax=alignMatesGapMax=0, the max intron size will be approximately determined by (2^winBinNbits)*winAnchorDistNbins=589824
+Loaded transcript database, nTr=226005
+Loaded exon database, nEx=1586950
+SEQCACHE: on, 4096 MB in 64 shards
+FASTASSIGN: on
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate0.thread0 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate1.thread0 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate0.thread1 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate1.thread1 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate0.thread2 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate1.thread2 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate0.thread3 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate1.thread3 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate0.thread4 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate1.thread4 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate0.thread5 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate1.thread5 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate0.thread6 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate1.thread6 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate0.thread7 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate1.thread7 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate0.thread8 ... ok
+Opening the file: /tmp/singlet_star_1875281//Unmapped.out.mate1.thread8 ... ok
+Created thread # 1
+Created thread # 2
+Created thread # 3
+Created thread # 4
+Created thread # 5
+Created thread # 6
+Created thread # 7
+Created thread # 8
+BAM sorting: 190189 mapped reads
+BAM sorting bins genomic start loci:
+1	0	633946
+2	0	7984959
+3	0	23692748
+4	0	26320282
+5	0	35421718
+6	0	44777702
+7	0	58782183
+8	0	90232460
+9	0	97416289
+10	0	113928823
+11	0	146159754
+12	0	150747795
+13	0	153360863
+14	0	153990761
+15	0	157805093
+16	0	174134987
+17	0	201193619
+18	0	223842021
+19	0	244442748
+20	1	17235247
+21	1	34987601
+22	1	69179432
+23	1	78037201
+24	1	99755784
+25	1	120354966
+26	2	1892142
+27	2	17074421
+28	2	46425573
+29	2	61964705
+30	2	65120765
+31	2	65499359
+32	2	65499507
+33	2	65499642
+34	2	65773899
+35	2	73406399
+36	2	82689646
+37	2	117035823
+38	2	128724055
+39	3	9185974
+40	3	29203728
+41	3	53039301
+42	3	56117628
+43	3	62587355
+44	3	76083511
+45	3	96279872
+46	3	112405220
+47	3	120917253
+48	4	22696142
+49	4	40659656
+50	4	46126038
+51	4	98569991
+52	5	24606670
+53	5	51881912
+54	5	69380242
+55	5	89269416
+56	5	101825000
+57	5	105707306
+58	6	40569944
+59	6	44717940
+60	6	59768892
+61	6	68087389
+62	6	72341212
+63	6	88655469
+64	7	1962190
+65	7	9156714
+66	7	18788062
+67	7	26031805
+68	7	30264172
+69	7	67782603
+70	7	85805751
+71	7	89562354
+72	8	4945657
+73	8	8377650
+74	8	18572884
+75	8	29712559
+76	8	37056713
+77	8	41690828
+78	8	47139428
+79	8	63657903
+80	8	75168307
+81	8	81510153
+82	9	12725507
+83	9	49489488
+84	10	1440046
+85	10	5690295
+86	10	9650219
+87	10	13154716
+88	10	17862919
+89	10	19680077
+90	10	39404434
+91	10	41890076
+92	10	48615914
+93	10	49491429
+94	10	54207414
+95	10	58354925
+96	11	23790274
+97	11	38881521
+98	11	55234895
+99	11	68060059
+100	11	84906507
+101	11	88857268
+102	11	88857368
+103	11	105264465
+104	11	138278975
+105	11	169806190
+106	11	196149343
+107	11	214847182
+108	11	231460774
+109	12	3783953
+110	12	21755468
+111	12	41038784
+112	12	58910989
+113	13	8254800
+114	13	33260699
+115	14	19862463
+116	14	35838348
+117	14	39313247
+118	14	46032018
+119	15	12836174
+120	15	23919370
+121	15	40462060
+122	15	50118680
+123	15	60311341
+124	15	105770206
+125	15	129726606
+126	15	154273953
+127	15	185417413
+128	15	197954051
+129	16	39454138
+130	16	70655610
+131	16	90838729
+132	16	108622579
+133	16	143349485
+134	16	168237955
+135	17	14651823
+136	17	40834242
+137	17	56504803
+138	17	71216523
+139	17	82276205
+140	17	109867244
+141	17	132468456
+142	17	142940759
+143	17	150445667
+144	17	172059169
+145	17	181237691
+146	18	18224365
+147	18	30913863
+148	18	32444833
+149	18	33275995
+150	18	35470255
+151	18	44253708
+152	18	73517569
+153	18	73517765
+154	18	108607225
+155	18	132816526
+156	18	146802412
+157	19	913224
+158	19	8034420
+159	19	22510458
+160	19	37432042
+161	19	66987857
+162	19	93130128
+163	19	103073708
+164	19	130893180
+165	19	140340428
+166	20	11804295
+167	20	43085549
+168	20	73291158
+169	20	98042699
+170	20	124359157
+171	20	144789903
+172	21	19376513
+173	21	41158719
+174	21	90836081
+175	21	120926523
+176	21	129006807
+177	21	133020954
+178	21	136850763
+179	22	2226
+180	22	3993
+181	22	6488
+182	22	7276
+183	22	7404
+184	22	8093
+185	22	8955
+186	22	9626
+187	22	9773
+188	22	10072
+189	22	11886
+190	22	15068
+191	23	1386469
+192	23	12977159
+193	23	45099797
+194	23	72272735
+195	23	101408944
+196	23	123515128
+197	23	154400595
+198	24	15882971
+Thread #1 end of input stream, nextChar=-1
+Completed: thread #7
+Completed: thread #1
+Completed: thread #0
+Joined thread # 1
+Completed: thread #4
+Completed: thread #8
+Completed: thread #2
+Joined thread # 2
+Completed: thread #6
+Completed: thread #5
+Completed: thread #3
+Joined thread # 3
+Joined thread # 4
+Joined thread # 5
+Joined thread # 6
+Joined thread # 7
+Joined thread # 8
+Oct 28 08:14:40 ..... finished mapping
+RAM after mapping:
+VmPeak:	24825052 kB; VmSize:	24655740 kB; VmHWM:	24292816 kB; VmRSS:	24292816 kB; 
+SEQCACHE: lookups=66488663 hits=33441322 hit_rate=0.502963 inserts=33047340 refreshes=1676366 uncacheable=113225
+RAM after freeing genome index memory:
+VmPeak:	24825052 kB; VmSize:	 3826020 kB; VmHWM:	24291624 kB; VmRSS:	 3463296 kB; 
+Oct 28 08:14:41 ..... started sorting BAM
+Max memory needed for sorting = 155007717
+ALL DONE!

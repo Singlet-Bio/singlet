@@ -126,6 +126,19 @@ Rule (orchestrator / Zach, 2026-10-29: those reads are real molecules; 10x's rul
 
 Why: these reads come from real cells. A sequencing error in the barcode read, or one uncalled base, does not make a molecule disappear, and 10x's rule (Cell Ranger, STARsolo `1MM_multi_Nbase_pseudocounts`) assigns them where the evidence is strong (posterior >= 0.975). Using STAR's code path and float semantics exactly makes the stream's cell assignment identical to STAR's own CB on the sorted path. Each read is checked against that tag (SINGLET_TEST_CB_CHECK=1).
 
+## R12. Donor genotype call: binomial posterior on aggregated molecule counts
+**Rule.** For each (donor, covered site), with `dp` = aggregated molecule depth and `ad` = alt molecules from that donor's assigned cells (the R1/R9 molecule counts, unchanged), set `r = dp - ad`, `e = 0.01`, and the three log-likelihoods `L0 = r*ln(1-e) + ad*ln(e)`, `L1 = dp*ln(0.5)`, `L2 = ad*ln(1-e) + r*ln(e)`. With a flat prior over {0/0, 0/1, 1/1}, GT is the genotype whose posterior is >= 0.99, else `./.`. `dp == 0` -> `./.`. The VB `af_vb` stays in the output for information but no longer decides GT.
+
+**Order-free.** The inputs are integer sums over the donor's cells (commutative), the function is pure and stateless, and ties cannot occur at posterior >= 0.99 > 0.5. The donor assignment of cells is unchanged by R12. Computation in double; the log and exp of three terms. Any threshold flip at exactly 0.99 is the only place implementations can differ, so the GPU reducer should use the same double formula (or compare in log-odds: `Lbest - ln(sum exp(L)) >= ln(0.99)`).
+
+**GPU SNP reducer needs.** Per (donor, site): the two uint32 sums `ad` and `dp` (already in the sparse donor depth tables), then a trivial epilogue kernel that applies the formula above and writes the GT code (0, 1, 2, -1). It does not need qualities, positions or strands. Gate: identical GT codes to the CPU function for every (ad, dp) with dp <= 4096 (exhaustive table), and identical `ad`/`dp` sums to the CPU path.
+
+**Evidence.** See above: false-alt 0.054 / 0.044 / 0.033 / 0.026 / 0.040 -> 0.0058 / 0.0059 / 0.0119 / 0.0034 / 0.0053 on five Kang pools, true alt kept 0.97-0.98 (at 0.9).
+
+**Threshold 0.99 (genotype-sota, 2026-10-31).** At 0.9 Singlet trailed the cellsnp-lite pileup by 0.4 pp concordance at equal DP>=10 sites on four Kang pools and on Osorio 2019 (independent 1000 Genomes truth). Re-genotyping the same aggregated (ad, dp) at 0.99 closed it: concordance 0.9899 vs 0.9901, true-alt kept 0.9880 vs 0.9880, false-alt 0.64% vs 0.61% (all five pools; Osorio 0.9871 vs 0.9873). The counts are not the issue, only the cut. 0.999 reaches 0.9917 at 3.5% fewer sites. Anchor cases: (1,10), (2,10), (9,10), (0,5) are `./.` at 0.99.
+
+Note: the `--bam-file` replay harness (the shuffled-order gate) does not apply R11, so a replay of the tee'd stream BAM has about 2% fewer barcoded reads than the stream run it came from; replay is not a reference for R11.
+
 ## Gates
 
 1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, including the non-host tables (`nonhost/*`), except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings) and fields that hold paths or the sizes of those files.

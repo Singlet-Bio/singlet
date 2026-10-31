@@ -1,0 +1,3340 @@
+{
+ "pbmc1k_v3": {
+  "public": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.021752,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.016344
+      ],
+      [
+       "alevin-fry-usa",
+       0.016344
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.972; alevin-fry USA unspliced: ratio 0.985. Basis: cells with UMI in every tool (1229). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.949168,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.963669
+      ],
+      [
+       "alevin-fry-usa",
+       0.963669
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9585; alevin-fry USA unspliced: 0.9398. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.94733,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.962703
+      ],
+      [
+       "alevin-fry-usa",
+       0.962703
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9476; alevin-fry USA unspliced: 0.9471. Basis: 24730 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.059942,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.116127
+      ],
+      [
+       "alevin-fry-usa",
+       0.116127
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.075; alevin-fry USA spliced+ambiguous: ratio 0.954. Basis: cells with UMI in every tool (1230). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.980074,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.97791
+      ],
+      [
+       "alevin-fry-usa",
+       0.97791
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9772; alevin-fry USA spliced+ambiguous: 0.9830. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.964361,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.953519
+      ],
+      [
+       "alevin-fry-usa",
+       0.953519
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9472; alevin-fry USA spliced+ambiguous: 0.9815. Basis: 22483 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.030216,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.057858
+      ],
+      [
+       "alevin-fry-usa",
+       0.057858
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.024; alevin-fry USA (S+U+A): ratio 0.964. Basis: cells with UMI in every tool (1230). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.977252,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.976566
+      ],
+      [
+       "alevin-fry-usa",
+       0.976566
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9819; alevin-fry USA (S+U+A): 0.9726. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.957307,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.944649
+      ],
+      [
+       "alevin-fry-usa",
+       0.944649
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9480; alevin-fry USA (S+U+A): 0.9667. Basis: 29545 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 9649247.0,
+    "U": 4632924.0,
+    "A": 193571.0
+   }
+  },
+  "main": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.088378,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.016344
+      ],
+      [
+       "alevin-fry-usa",
+       0.016344
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.908; alevin-fry USA unspliced: ratio 0.923. Basis: cells with UMI in every tool (1229). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.968061,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.963669
+      ],
+      [
+       "alevin-fry-usa",
+       0.963669
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9820; alevin-fry USA unspliced: 0.9541. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.969288,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.961741
+      ],
+      [
+       "alevin-fry-usa",
+       0.961741
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9850; alevin-fry USA unspliced: 0.9536. Basis: 23366 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.059736,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.116127
+      ],
+      [
+       "alevin-fry-usa",
+       0.116127
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.069; alevin-fry USA spliced+ambiguous: ratio 0.948. Basis: cells with UMI in every tool (1230). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.981263,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.97791
+      ],
+      [
+       "alevin-fry-usa",
+       0.97791
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9784; alevin-fry USA spliced+ambiguous: 0.9841. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.967803,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.953056
+      ],
+      [
+       "alevin-fry-usa",
+       0.953056
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9511; alevin-fry USA spliced+ambiguous: 0.9845. Basis: 22096 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.032723,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.057858
+      ],
+      [
+       "alevin-fry-usa",
+       0.057858
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 0.996; alevin-fry USA (S+U+A): ratio 0.940. Basis: cells with UMI in every tool (1230). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.983169,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.976566
+      ],
+      [
+       "alevin-fry-usa",
+       0.976566
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9872; alevin-fry USA (S+U+A): 0.9791. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.957608,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.943817
+      ],
+      [
+       "alevin-fry-usa",
+       0.943817
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9448; alevin-fry USA (S+U+A): 0.9704. Basis: 28656 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 9593335.0,
+    "U": 4342288.0,
+    "A": 167808.0
+   }
+  },
+  "rules_389": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.088378,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.016344
+      ],
+      [
+       "alevin-fry-usa",
+       0.016344
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.908; alevin-fry USA unspliced: ratio 0.923. Basis: cells with UMI in every tool (1229). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.968061,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.963669
+      ],
+      [
+       "alevin-fry-usa",
+       0.963669
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9820; alevin-fry USA unspliced: 0.9541. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.969288,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.961741
+      ],
+      [
+       "alevin-fry-usa",
+       0.961741
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9850; alevin-fry USA unspliced: 0.9536. Basis: 23366 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.059736,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.116127
+      ],
+      [
+       "alevin-fry-usa",
+       0.116127
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.069; alevin-fry USA spliced+ambiguous: ratio 0.948. Basis: cells with UMI in every tool (1230). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.981263,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.97791
+      ],
+      [
+       "alevin-fry-usa",
+       0.97791
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9784; alevin-fry USA spliced+ambiguous: 0.9841. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.967803,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.953056
+      ],
+      [
+       "alevin-fry-usa",
+       0.953056
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9511; alevin-fry USA spliced+ambiguous: 0.9845. Basis: 22096 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.032723,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.057858
+      ],
+      [
+       "alevin-fry-usa",
+       0.057858
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 0.996; alevin-fry USA (S+U+A): ratio 0.940. Basis: cells with UMI in every tool (1230). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.983169,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.976566
+      ],
+      [
+       "alevin-fry-usa",
+       0.976566
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9872; alevin-fry USA (S+U+A): 0.9791. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.957608,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.943817
+      ],
+      [
+       "alevin-fry-usa",
+       0.943817
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9448; alevin-fry USA (S+U+A): 0.9704. Basis: 28656 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 9593335.0,
+    "U": 4342288.0,
+    "A": 167808.0
+   }
+  }
+ },
+ "nuclei2k_v2": {
+  "public": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.027703,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.054207
+      ],
+      [
+       "alevin-fry-usa",
+       0.054207
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 1.046; alevin-fry USA unspliced: ratio 0.989. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.931231,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.964437
+      ],
+      [
+       "alevin-fry-usa",
+       0.964437
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9283; alevin-fry USA unspliced: 0.9341. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.865613,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.926045
+      ],
+      [
+       "alevin-fry-usa",
+       0.926045
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.8679; alevin-fry USA unspliced: 0.8633. Basis: 32728 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.187433,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.180891
+      ],
+      [
+       "alevin-fry-usa",
+       0.180891
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.323; alevin-fry USA spliced+ambiguous: ratio 1.100. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.882784,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.908794
+      ],
+      [
+       "alevin-fry-usa",
+       0.908794
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8666; alevin-fry USA spliced+ambiguous: 0.8989. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.86188,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.86421
+      ],
+      [
+       "alevin-fry-usa",
+       0.86421
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8209; alevin-fry USA spliced+ambiguous: 0.9028. Basis: 32533 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.06141,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.068025
+      ],
+      [
+       "alevin-fry-usa",
+       0.068025
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.100; alevin-fry USA (S+U+A): ratio 1.028. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.944841,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.960647
+      ],
+      [
+       "alevin-fry-usa",
+       0.960647
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9478; alevin-fry USA (S+U+A): 0.9419. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.867619,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.853208
+      ],
+      [
+       "alevin-fry-usa",
+       0.853208
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.8405; alevin-fry USA (S+U+A): 0.8947. Basis: 43969 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 3082473.0,
+    "U": 5087356.0,
+    "A": 232204.0
+   }
+  },
+  "main": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.095871,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.054207
+      ],
+      [
+       "alevin-fry-usa",
+       0.054207
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.933; alevin-fry USA unspliced: ratio 0.885. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.957928,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.964437
+      ],
+      [
+       "alevin-fry-usa",
+       0.964437
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9559; alevin-fry USA unspliced: 0.9600. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.916924,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.922888
+      ],
+      [
+       "alevin-fry-usa",
+       0.922888
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9366; alevin-fry USA unspliced: 0.8973. Basis: 29600 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.146488,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.180891
+      ],
+      [
+       "alevin-fry-usa",
+       0.180891
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.273; alevin-fry USA spliced+ambiguous: ratio 1.053. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.894835,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.908794
+      ],
+      [
+       "alevin-fry-usa",
+       0.908794
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8745; alevin-fry USA spliced+ambiguous: 0.9152. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.885925,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.855699
+      ],
+      [
+       "alevin-fry-usa",
+       0.855699
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8380; alevin-fry USA spliced+ambiguous: 0.9338. Basis: 29595 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.034514,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.068025
+      ],
+      [
+       "alevin-fry-usa",
+       0.068025
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.010; alevin-fry USA (S+U+A): ratio 0.942. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.964669,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.960647
+      ],
+      [
+       "alevin-fry-usa",
+       0.960647
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9654; alevin-fry USA (S+U+A): 0.9640. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.882427,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.842817
+      ],
+      [
+       "alevin-fry-usa",
+       0.842817
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.8407; alevin-fry USA (S+U+A): 0.9241. Basis: 40105 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 3047696.0,
+    "U": 4543055.0,
+    "A": 223192.0
+   }
+  },
+  "rules_389": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.095871,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.054207
+      ],
+      [
+       "alevin-fry-usa",
+       0.054207
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.933; alevin-fry USA unspliced: ratio 0.885. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.957928,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.964437
+      ],
+      [
+       "alevin-fry-usa",
+       0.964437
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9559; alevin-fry USA unspliced: 0.9600. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.916924,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.922888
+      ],
+      [
+       "alevin-fry-usa",
+       0.922888
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9366; alevin-fry USA unspliced: 0.8973. Basis: 29600 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.146488,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.180891
+      ],
+      [
+       "alevin-fry-usa",
+       0.180891
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.273; alevin-fry USA spliced+ambiguous: ratio 1.053. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.894835,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.908794
+      ],
+      [
+       "alevin-fry-usa",
+       0.908794
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8745; alevin-fry USA spliced+ambiguous: 0.9152. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.885925,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.855699
+      ],
+      [
+       "alevin-fry-usa",
+       0.855699
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8380; alevin-fry USA spliced+ambiguous: 0.9338. Basis: 29595 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.034514,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.068025
+      ],
+      [
+       "alevin-fry-usa",
+       0.068025
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.010; alevin-fry USA (S+U+A): ratio 0.942. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.964669,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.960647
+      ],
+      [
+       "alevin-fry-usa",
+       0.960647
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9654; alevin-fry USA (S+U+A): 0.9640. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.882427,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.842817
+      ],
+      [
+       "alevin-fry-usa",
+       0.842817
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.8407; alevin-fry USA (S+U+A): 0.9241. Basis: 40105 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 3047696.0,
+    "U": 4543055.0,
+    "A": 223192.0
+   }
+  }
+ },
+ "hgmm1k_v3": {
+  "public": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.027862,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.00631
+      ],
+      [
+       "alevin-fry-usa",
+       0.00631
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 1.028; alevin-fry USA unspliced: ratio 1.028. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.971192,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.973964
+      ],
+      [
+       "alevin-fry-usa",
+       0.973964
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9794; alevin-fry USA unspliced: 0.9629. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.946296,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.950719
+      ],
+      [
+       "alevin-fry-usa",
+       0.950719
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9572; alevin-fry USA unspliced: 0.9354. Basis: 47745 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.029164,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.022129
+      ],
+      [
+       "alevin-fry-usa",
+       0.022129
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.044; alevin-fry USA spliced+ambiguous: ratio 1.015. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.970225,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.954527
+      ],
+      [
+       "alevin-fry-usa",
+       0.954527
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9737; alevin-fry USA spliced+ambiguous: 0.9668. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.949961,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.928202
+      ],
+      [
+       "alevin-fry-usa",
+       0.928202
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9267; alevin-fry USA spliced+ambiguous: 0.9733. Basis: 46609 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.021617,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.009961
+      ],
+      [
+       "alevin-fry-usa",
+       0.009961
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.022; alevin-fry USA (S+U+A): ratio 1.022. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.976911,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.964171
+      ],
+      [
+       "alevin-fry-usa",
+       0.964171
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9837; alevin-fry USA (S+U+A): 0.9701. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.93446,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.904064
+      ],
+      [
+       "alevin-fry-usa",
+       0.904064
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9177; alevin-fry USA (S+U+A): 0.9513. Basis: 62232 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 25783939.0,
+    "U": 7096622.0,
+    "A": 57874.0
+   },
+   "barnyard": {
+    "n_pure_human": 495,
+    "n_pure_mouse": 544,
+    "singlet_U": 0.004741719393227092,
+    "singlet_E": 0.003976049287142866,
+    "singlet_EU": 0.004141281963731957,
+    "starsolo_velo_U": 0.002713391070904497,
+    "starsolo_gene": 0.0035819713517794907,
+    "starsolo_genefull": 0.0032755230947720385,
+    "alevinfry_U": 0.0042835483954672,
+    "alevinfry_SA": 0.006887641845182016,
+    "alevinfry_USA": 0.006334738265030927
+   }
+  },
+  "main": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.006632,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.00631
+      ],
+      [
+       "alevin-fry-usa",
+       0.00631
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.991; alevin-fry USA unspliced: ratio 0.996. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.978954,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.973964
+      ],
+      [
+       "alevin-fry-usa",
+       0.973964
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9902; alevin-fry USA unspliced: 0.9677. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.960033,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.949878
+      ],
+      [
+       "alevin-fry-usa",
+       0.949878
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9820; alevin-fry USA unspliced: 0.9381. Basis: 45580 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.026215,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.022129
+      ],
+      [
+       "alevin-fry-usa",
+       0.022129
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.040; alevin-fry USA spliced+ambiguous: ratio 1.013. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.970852,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.954527
+      ],
+      [
+       "alevin-fry-usa",
+       0.954527
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9744; alevin-fry USA spliced+ambiguous: 0.9673. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.951052,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.928055
+      ],
+      [
+       "alevin-fry-usa",
+       0.928055
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9277; alevin-fry USA spliced+ambiguous: 0.9744. Basis: 46413 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.008914,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.009961
+      ],
+      [
+       "alevin-fry-usa",
+       0.009961
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.011; alevin-fry USA (S+U+A): ratio 1.007. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.978115,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.964171
+      ],
+      [
+       "alevin-fry-usa",
+       0.964171
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9847; alevin-fry USA (S+U+A): 0.9715. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.933938,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.902924
+      ],
+      [
+       "alevin-fry-usa",
+       0.902924
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9153; alevin-fry USA (S+U+A): 0.9525. Basis: 60840 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 25630820.0,
+    "U": 6797693.0,
+    "A": 48649.0
+   },
+   "barnyard": {
+    "n_pure_human": 495,
+    "n_pure_mouse": 544,
+    "singlet_U": 0.003024254619332618,
+    "singlet_E": 0.003818724971595453,
+    "singlet_EU": 0.0036522088750204945
+   }
+  },
+  "rules_389": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.006632,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.00631
+      ],
+      [
+       "alevin-fry-usa",
+       0.00631
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.991; alevin-fry USA unspliced: ratio 0.996. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.978954,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.973964
+      ],
+      [
+       "alevin-fry-usa",
+       0.973964
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9902; alevin-fry USA unspliced: 0.9677. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.960033,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.949878
+      ],
+      [
+       "alevin-fry-usa",
+       0.949878
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9820; alevin-fry USA unspliced: 0.9381. Basis: 45580 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.026215,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.022129
+      ],
+      [
+       "alevin-fry-usa",
+       0.022129
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.040; alevin-fry USA spliced+ambiguous: ratio 1.013. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.970852,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.954527
+      ],
+      [
+       "alevin-fry-usa",
+       0.954527
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9744; alevin-fry USA spliced+ambiguous: 0.9673. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.951052,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.928055
+      ],
+      [
+       "alevin-fry-usa",
+       0.928055
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9277; alevin-fry USA spliced+ambiguous: 0.9744. Basis: 46413 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.008914,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.009961
+      ],
+      [
+       "alevin-fry-usa",
+       0.009961
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.011; alevin-fry USA (S+U+A): ratio 1.007. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.978115,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.964171
+      ],
+      [
+       "alevin-fry-usa",
+       0.964171
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9847; alevin-fry USA (S+U+A): 0.9715. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.933938,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.902924
+      ],
+      [
+       "alevin-fry-usa",
+       0.902924
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9153; alevin-fry USA (S+U+A): 0.9525. Basis: 60840 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 25630820.0,
+    "U": 6797693.0,
+    "A": 48649.0
+   },
+   "barnyard": {
+    "n_pure_human": 495,
+    "n_pure_mouse": 544,
+    "singlet_U": 0.003024254619332618,
+    "singlet_E": 0.003818724971595453,
+    "singlet_EU": 0.0036522088750204945
+   }
+  }
+ },
+ "pbmc1k_cite_v3": {
+  "public": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.038475,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.006375
+      ],
+      [
+       "alevin-fry-usa",
+       0.006375
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.960; alevin-fry USA unspliced: ratio 0.965. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.948778,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.964109
+      ],
+      [
+       "alevin-fry-usa",
+       0.964109
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9572; alevin-fry USA unspliced: 0.9403. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.943936,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.960682
+      ],
+      [
+       "alevin-fry-usa",
+       0.960682
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9438; alevin-fry USA unspliced: 0.9440. Basis: 23624 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.062595,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.119737
+      ],
+      [
+       "alevin-fry-usa",
+       0.119737
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.070; alevin-fry USA spliced+ambiguous: ratio 0.944. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.979209,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.978183
+      ],
+      [
+       "alevin-fry-usa",
+       0.978183
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9764; alevin-fry USA spliced+ambiguous: 0.9820. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.966552,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.957483
+      ],
+      [
+       "alevin-fry-usa",
+       0.957483
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9517; alevin-fry USA spliced+ambiguous: 0.9814. Basis: 21138 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.034365,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.066537
+      ],
+      [
+       "alevin-fry-usa",
+       0.066537
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.019; alevin-fry USA (S+U+A): ratio 0.951. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.97765,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.977002
+      ],
+      [
+       "alevin-fry-usa",
+       0.977002
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9820; alevin-fry USA (S+U+A): 0.9733. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.957009,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.946656
+      ],
+      [
+       "alevin-fry-usa",
+       0.946656
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9490; alevin-fry USA (S+U+A): 0.9650. Basis: 28289 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "adt_rna_spearman.total",
+     "singlet": 0.421483,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.427566
+      ],
+      [
+       "alevin-fry-usa",
+       0.414905
+      ]
+     ],
+     "pass": "fail",
+     "notes": "truth = antibody UMI (CLR) of the same cells; mean Spearman over the 11 protein-gene pairs every tool can score (CD14, CD19, CD3E, CD4, CD8A, FCGR3A, IL2RA, IL7R, NCAM1, PDCD1, TIGIT); pairs a tool cannot score (zero UMI for the gene, e.g. FUT4 in STARsolo) are excluded for all tools: FUT4; RNA = lo"
+    },
+    {
+     "id": "adt_rna_spearman.exonic",
+     "singlet": 0.38456,
+     "competitors": [
+      [
+       "starsolo-gene",
+       0.386371
+      ]
+     ],
+     "pass": "pass",
+     "notes": "truth = antibody UMI (CLR) of the same cells; mean Spearman over the 12 protein-gene pairs every tool can score (CD14, CD19, CD3E, CD4, CD8A, FCGR3A, FUT4, IL2RA, IL7R, NCAM1, PDCD1, TIGIT); pairs a tool cannot score (zero UMI for the gene, e.g. FUT4 in STARsolo) are excluded for all tools; RNA = lo"
+    }
+   ],
+   "totals": {
+    "E": 5401241.0,
+    "U": 2822901.0,
+    "A": 121089.0
+   }
+  },
+  "main": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.105367,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.006375
+      ],
+      [
+       "alevin-fry-usa",
+       0.006375
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.897; alevin-fry USA unspliced: ratio 0.903. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.967386,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.964109
+      ],
+      [
+       "alevin-fry-usa",
+       0.964109
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9812; alevin-fry USA unspliced: 0.9536. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.968581,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.959827
+      ],
+      [
+       "alevin-fry-usa",
+       0.959827
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9850; alevin-fry USA unspliced: 0.9521. Basis: 22255 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.062296,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.119737
+      ],
+      [
+       "alevin-fry-usa",
+       0.119737
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.063; alevin-fry USA spliced+ambiguous: ratio 0.939. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.980452,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.978183
+      ],
+      [
+       "alevin-fry-usa",
+       0.978183
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9777; alevin-fry USA spliced+ambiguous: 0.9832. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.969865,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.95712
+      ],
+      [
+       "alevin-fry-usa",
+       0.95712
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9553; alevin-fry USA spliced+ambiguous: 0.9844. Basis: 20812 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.043918,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.066537
+      ],
+      [
+       "alevin-fry-usa",
+       0.066537
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 0.989; alevin-fry USA (S+U+A): ratio 0.926. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.983295,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.977002
+      ],
+      [
+       "alevin-fry-usa",
+       0.977002
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9873; alevin-fry USA (S+U+A): 0.9793. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.958547,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.946073
+      ],
+      [
+       "alevin-fry-usa",
+       0.946073
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9477; alevin-fry USA (S+U+A): 0.9694. Basis: 27437 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "adt_rna_spearman.total",
+     "singlet": 0.427169,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.427566
+      ],
+      [
+       "alevin-fry-usa",
+       0.414905
+      ]
+     ],
+     "pass": "pass",
+     "notes": "truth = antibody UMI (CLR) of the same cells; mean Spearman over the 11 protein-gene pairs every tool can score (CD14, CD19, CD3E, CD4, CD8A, FCGR3A, IL2RA, IL7R, NCAM1, PDCD1, TIGIT); pairs a tool cannot score (zero UMI for the gene, e.g. FUT4 in STARsolo) are excluded for all tools: FUT4; RNA = lo"
+    },
+    {
+     "id": "adt_rna_spearman.exonic",
+     "singlet": 0.385472,
+     "competitors": [
+      [
+       "starsolo-gene",
+       0.386371
+      ]
+     ],
+     "pass": "pass",
+     "notes": "truth = antibody UMI (CLR) of the same cells; mean Spearman over the 12 protein-gene pairs every tool can score (CD14, CD19, CD3E, CD4, CD8A, FCGR3A, FUT4, IL2RA, IL7R, NCAM1, PDCD1, TIGIT); pairs a tool cannot score (zero UMI for the gene, e.g. FUT4 in STARsolo) are excluded for all tools; RNA = lo"
+    }
+   ],
+   "totals": {
+    "E": 5369606.0,
+    "U": 2645990.0,
+    "A": 106038.0
+   }
+  },
+  "rules_389": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.105367,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.006375
+      ],
+      [
+       "alevin-fry-usa",
+       0.006375
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.897; alevin-fry USA unspliced: ratio 0.903. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.967386,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.964109
+      ],
+      [
+       "alevin-fry-usa",
+       0.964109
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9812; alevin-fry USA unspliced: 0.9536. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.968581,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.959827
+      ],
+      [
+       "alevin-fry-usa",
+       0.959827
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9850; alevin-fry USA unspliced: 0.9521. Basis: 22255 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.062296,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.119737
+      ],
+      [
+       "alevin-fry-usa",
+       0.119737
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.063; alevin-fry USA spliced+ambiguous: ratio 0.939. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.980452,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.978183
+      ],
+      [
+       "alevin-fry-usa",
+       0.978183
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9777; alevin-fry USA spliced+ambiguous: 0.9832. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.969865,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.95712
+      ],
+      [
+       "alevin-fry-usa",
+       0.95712
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9553; alevin-fry USA spliced+ambiguous: 0.9844. Basis: 20812 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.043918,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.066537
+      ],
+      [
+       "alevin-fry-usa",
+       0.066537
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 0.989; alevin-fry USA (S+U+A): ratio 0.926. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.983295,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.977002
+      ],
+      [
+       "alevin-fry-usa",
+       0.977002
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9873; alevin-fry USA (S+U+A): 0.9793. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.958547,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.946073
+      ],
+      [
+       "alevin-fry-usa",
+       0.946073
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9477; alevin-fry USA (S+U+A): 0.9694. Basis: 27437 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "adt_rna_spearman.total",
+     "singlet": 0.427169,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.427566
+      ],
+      [
+       "alevin-fry-usa",
+       0.414905
+      ]
+     ],
+     "pass": "pass",
+     "notes": "truth = antibody UMI (CLR) of the same cells; mean Spearman over the 11 protein-gene pairs every tool can score (CD14, CD19, CD3E, CD4, CD8A, FCGR3A, IL2RA, IL7R, NCAM1, PDCD1, TIGIT); pairs a tool cannot score (zero UMI for the gene, e.g. FUT4 in STARsolo) are excluded for all tools: FUT4; RNA = lo"
+    },
+    {
+     "id": "adt_rna_spearman.exonic",
+     "singlet": 0.385472,
+     "competitors": [
+      [
+       "starsolo-gene",
+       0.386371
+      ]
+     ],
+     "pass": "pass",
+     "notes": "truth = antibody UMI (CLR) of the same cells; mean Spearman over the 12 protein-gene pairs every tool can score (CD14, CD19, CD3E, CD4, CD8A, FCGR3A, FUT4, IL2RA, IL7R, NCAM1, PDCD1, TIGIT); pairs a tool cannot score (zero UMI for the gene, e.g. FUT4 in STARsolo) are excluded for all tools; RNA = lo"
+    }
+   ],
+   "totals": {
+    "E": 5369606.0,
+    "U": 2645990.0,
+    "A": 106038.0
+   }
+  }
+ },
+ "pbmc1k_v2": {
+  "public": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.0608,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.027429
+      ],
+      [
+       "alevin-fry-usa",
+       0.027429
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 1.077; alevin-fry USA unspliced: ratio 1.049. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.832062,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.918924
+      ],
+      [
+       "alevin-fry-usa",
+       0.918924
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.8446; alevin-fry USA unspliced: 0.8196. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.877396,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.936845
+      ],
+      [
+       "alevin-fry-usa",
+       0.936845
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.8722; alevin-fry USA unspliced: 0.8826. Basis: 23206 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.111816,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.222666
+      ],
+      [
+       "alevin-fry-usa",
+       0.222666
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.107; alevin-fry USA spliced+ambiguous: ratio 0.885. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.972594,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.976482
+      ],
+      [
+       "alevin-fry-usa",
+       0.976482
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9719; alevin-fry USA spliced+ambiguous: 0.9732. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.954016,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.95864
+      ],
+      [
+       "alevin-fry-usa",
+       0.95864
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9420; alevin-fry USA spliced+ambiguous: 0.9660. Basis: 20016 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.081333,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.161877
+      ],
+      [
+       "alevin-fry-usa",
+       0.161877
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.080; alevin-fry USA (S+U+A): ratio 0.918. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.951916,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.965286
+      ],
+      [
+       "alevin-fry-usa",
+       0.965286
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9593; alevin-fry USA (S+U+A): 0.9446. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.934388,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.938616
+      ],
+      [
+       "alevin-fry-usa",
+       0.938616
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9337; alevin-fry USA (S+U+A): 0.9351. Basis: 27824 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 3734105.0,
+    "U": 1103020.0,
+    "A": 213958.0
+   }
+  },
+  "main": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.207246,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.027429
+      ],
+      [
+       "alevin-fry-usa",
+       0.027429
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.824; alevin-fry USA unspliced: ratio 0.802. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.91852,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.918924
+      ],
+      [
+       "alevin-fry-usa",
+       0.918924
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9403; alevin-fry USA unspliced: 0.8968. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.945231,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.933036
+      ],
+      [
+       "alevin-fry-usa",
+       0.933036
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9688; alevin-fry USA unspliced: 0.9217. Basis: 20794 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.112027,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.222666
+      ],
+      [
+       "alevin-fry-usa",
+       0.222666
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.073; alevin-fry USA spliced+ambiguous: ratio 0.858. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.979382,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.976482
+      ],
+      [
+       "alevin-fry-usa",
+       0.976482
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9789; alevin-fry USA spliced+ambiguous: 0.9798. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.965535,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.957302
+      ],
+      [
+       "alevin-fry-usa",
+       0.957302
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9532; alevin-fry USA spliced+ambiguous: 0.9779. Basis: 18915 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.085603,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.161877
+      ],
+      [
+       "alevin-fry-usa",
+       0.161877
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 0.995; alevin-fry USA (S+U+A): ratio 0.847. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.976415,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.965286
+      ],
+      [
+       "alevin-fry-usa",
+       0.965286
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9826; alevin-fry USA (S+U+A): 0.9702. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.950401,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.936777
+      ],
+      [
+       "alevin-fry-usa",
+       0.936777
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9433; alevin-fry USA (S+U+A): 0.9575. Basis: 25882 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 3616526.0,
+    "U": 842810.0,
+    "A": 174566.0
+   }
+  },
+  "rules_389": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.207246,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.027429
+      ],
+      [
+       "alevin-fry-usa",
+       0.027429
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.824; alevin-fry USA unspliced: ratio 0.802. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.91852,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.918924
+      ],
+      [
+       "alevin-fry-usa",
+       0.918924
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9403; alevin-fry USA unspliced: 0.8968. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.945231,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.933036
+      ],
+      [
+       "alevin-fry-usa",
+       0.933036
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9688; alevin-fry USA unspliced: 0.9217. Basis: 20794 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.112027,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.222666
+      ],
+      [
+       "alevin-fry-usa",
+       0.222666
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.073; alevin-fry USA spliced+ambiguous: ratio 0.858. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.979382,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.976482
+      ],
+      [
+       "alevin-fry-usa",
+       0.976482
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9789; alevin-fry USA spliced+ambiguous: 0.9798. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.965535,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.957302
+      ],
+      [
+       "alevin-fry-usa",
+       0.957302
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9532; alevin-fry USA spliced+ambiguous: 0.9779. Basis: 18915 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.085603,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.161877
+      ],
+      [
+       "alevin-fry-usa",
+       0.161877
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 0.995; alevin-fry USA (S+U+A): ratio 0.847. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.976415,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.965286
+      ],
+      [
+       "alevin-fry-usa",
+       0.965286
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9826; alevin-fry USA (S+U+A): 0.9702. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.950401,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.936777
+      ],
+      [
+       "alevin-fry-usa",
+       0.936777
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9433; alevin-fry USA (S+U+A): 0.9575. Basis: 25882 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 3616526.0,
+    "U": 842810.0,
+    "A": 174566.0
+   }
+  }
+ },
+ "neuron1k_v3": {
+  "public": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.022441,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.011198
+      ],
+      [
+       "alevin-fry-usa",
+       0.011198
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.983; alevin-fry USA unspliced: ratio 0.972. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.978311,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.986905
+      ],
+      [
+       "alevin-fry-usa",
+       0.986905
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9809; alevin-fry USA unspliced: 0.9758. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.923064,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.95134
+      ],
+      [
+       "alevin-fry-usa",
+       0.95134
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9293; alevin-fry USA unspliced: 0.9169. Basis: 31059 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.058448,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.054395
+      ],
+      [
+       "alevin-fry-usa",
+       0.054395
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.089; alevin-fry USA spliced+ambiguous: ratio 1.032. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.967243,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.955468
+      ],
+      [
+       "alevin-fry-usa",
+       0.955468
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9662; alevin-fry USA spliced+ambiguous: 0.9683. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.892954,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.872806
+      ],
+      [
+       "alevin-fry-usa",
+       0.872806
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8480; alevin-fry USA spliced+ambiguous: 0.9379. Basis: 32968 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.024301,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.031318
+      ],
+      [
+       "alevin-fry-usa",
+       0.031318
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.040; alevin-fry USA (S+U+A): ratio 1.010. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.978429,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.96929
+      ],
+      [
+       "alevin-fry-usa",
+       0.96929
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9798; alevin-fry USA (S+U+A): 0.9770. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.884049,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.852466
+      ],
+      [
+       "alevin-fry-usa",
+       0.852466
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.8443; alevin-fry USA (S+U+A): 0.9238. Basis: 43001 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 13920385.0,
+    "U": 7069898.0,
+    "A": 237891.0
+   }
+  },
+  "main": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.047517,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.011198
+      ],
+      [
+       "alevin-fry-usa",
+       0.011198
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.959; alevin-fry USA unspliced: ratio 0.948. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.984252,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.986905
+      ],
+      [
+       "alevin-fry-usa",
+       0.986905
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9882; alevin-fry USA unspliced: 0.9803. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.949989,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.949231
+      ],
+      [
+       "alevin-fry-usa",
+       0.949231
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9705; alevin-fry USA unspliced: 0.9295. Basis: 29006 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.104961,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.054395
+      ],
+      [
+       "alevin-fry-usa",
+       0.054395
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.139; alevin-fry USA spliced+ambiguous: ratio 1.083. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.961229,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.955468
+      ],
+      [
+       "alevin-fry-usa",
+       0.955468
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9596; alevin-fry USA spliced+ambiguous: 0.9629. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.903897,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.869971
+      ],
+      [
+       "alevin-fry-usa",
+       0.869971
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8572; alevin-fry USA spliced+ambiguous: 0.9506. Basis: 31984 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.048047,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.031318
+      ],
+      [
+       "alevin-fry-usa",
+       0.031318
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.065; alevin-fry USA (S+U+A): ratio 1.033. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.975921,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.96929
+      ],
+      [
+       "alevin-fry-usa",
+       0.96929
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9767; alevin-fry USA (S+U+A): 0.9752. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.891559,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.846151
+      ],
+      [
+       "alevin-fry-usa",
+       0.846151
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.8467; alevin-fry USA (S+U+A): 0.9365. Basis: 40932 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 14562427.0,
+    "U": 6894165.0,
+    "A": 212351.0
+   }
+  },
+  "rules_389": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.047517,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.011198
+      ],
+      [
+       "alevin-fry-usa",
+       0.011198
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.959; alevin-fry USA unspliced: ratio 0.948. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.984252,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.986905
+      ],
+      [
+       "alevin-fry-usa",
+       0.986905
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9882; alevin-fry USA unspliced: 0.9803. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.949989,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.949231
+      ],
+      [
+       "alevin-fry-usa",
+       0.949231
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9705; alevin-fry USA unspliced: 0.9295. Basis: 29006 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.104961,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.054395
+      ],
+      [
+       "alevin-fry-usa",
+       0.054395
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.139; alevin-fry USA spliced+ambiguous: ratio 1.083. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.961229,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.955468
+      ],
+      [
+       "alevin-fry-usa",
+       0.955468
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9596; alevin-fry USA spliced+ambiguous: 0.9629. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.903897,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.869971
+      ],
+      [
+       "alevin-fry-usa",
+       0.869971
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8572; alevin-fry USA spliced+ambiguous: 0.9506. Basis: 31984 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.048047,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.031318
+      ],
+      [
+       "alevin-fry-usa",
+       0.031318
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.065; alevin-fry USA (S+U+A): ratio 1.033. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.975921,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.96929
+      ],
+      [
+       "alevin-fry-usa",
+       0.96929
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9767; alevin-fry USA (S+U+A): 0.9752. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.891559,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.846151
+      ],
+      [
+       "alevin-fry-usa",
+       0.846151
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.8467; alevin-fry USA (S+U+A): 0.9365. Basis: 40932 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 14562427.0,
+    "U": 6894165.0,
+    "A": 212351.0
+   }
+  }
+ },
+ "pbmc5p_v1": {
+  "public": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.095231,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.199045
+      ],
+      [
+       "alevin-fry-usa",
+       0.199045
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 1.098; alevin-fry USA unspliced: ratio 0.907. Basis: cells with UMI in every tool (7452). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.885341,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.922177
+      ],
+      [
+       "alevin-fry-usa",
+       0.922177
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9082; alevin-fry USA unspliced: 0.8625. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.953296,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.961522
+      ],
+      [
+       "alevin-fry-usa",
+       0.961522
+      ]
+     ],
+     "pass": "fail",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9643; alevin-fry USA unspliced: 0.9423. Basis: 22065 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.036401,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.072602
+      ],
+      [
+       "alevin-fry-usa",
+       0.072602
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.063; alevin-fry USA spliced+ambiguous: ratio 0.989. Basis: cells with UMI in every tool (7453). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.985404,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.982672
+      ],
+      [
+       "alevin-fry-usa",
+       0.982672
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9803; alevin-fry USA spliced+ambiguous: 0.9906. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.982859,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.975882
+      ],
+      [
+       "alevin-fry-usa",
+       0.975882
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9753; alevin-fry USA spliced+ambiguous: 0.9904. Basis: 22047 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.021681,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.044452
+      ],
+      [
+       "alevin-fry-usa",
+       0.044452
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.024; alevin-fry USA (S+U+A): ratio 0.980. Basis: cells with UMI in every tool (7453). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.985819,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.983523
+      ],
+      [
+       "alevin-fry-usa",
+       0.983523
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9871; alevin-fry USA (S+U+A): 0.9845. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.969678,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.954302
+      ],
+      [
+       "alevin-fry-usa",
+       0.954302
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9636; alevin-fry USA (S+U+A): 0.9757. Basis: 26703 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 20523492.0,
+    "U": 2394367.0,
+    "A": 193805.0
+   }
+  },
+  "main": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.11605,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.199045
+      ],
+      [
+       "alevin-fry-usa",
+       0.199045
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.985; alevin-fry USA unspliced: ratio 0.805. Basis: cells with UMI in every tool (7452). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.923698,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.922177
+      ],
+      [
+       "alevin-fry-usa",
+       0.922177
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9561; alevin-fry USA unspliced: 0.8913. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.963684,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.960806
+      ],
+      [
+       "alevin-fry-usa",
+       0.960806
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9827; alevin-fry USA unspliced: 0.9446. Basis: 21438 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.036326,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.072602
+      ],
+      [
+       "alevin-fry-usa",
+       0.072602
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.057; alevin-fry USA spliced+ambiguous: ratio 0.983. Basis: cells with UMI in every tool (7453). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.986141,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.982672
+      ],
+      [
+       "alevin-fry-usa",
+       0.982672
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9810; alevin-fry USA spliced+ambiguous: 0.9912. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.983635,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.975862
+      ],
+      [
+       "alevin-fry-usa",
+       0.975862
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9762; alevin-fry USA spliced+ambiguous: 0.9911. Basis: 21972 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.02139,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.044452
+      ],
+      [
+       "alevin-fry-usa",
+       0.044452
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.007; alevin-fry USA (S+U+A): ratio 0.965. Basis: cells with UMI in every tool (7453). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.988392,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.983523
+      ],
+      [
+       "alevin-fry-usa",
+       0.983523
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9895; alevin-fry USA (S+U+A): 0.9873. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.970341,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.95403
+      ],
+      [
+       "alevin-fry-usa",
+       0.95403
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9640; alevin-fry USA (S+U+A): 0.9767. Basis: 26355 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 20387379.0,
+    "U": 2121623.0,
+    "A": 152273.0
+   }
+  },
+  "rules_389": {
+   "metrics": [
+    {
+     "id": "umi_ratio_distance.unspliced",
+     "singlet": 0.11605,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.199045
+      ],
+      [
+       "alevin-fry-usa",
+       0.199045
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.985; alevin-fry USA unspliced: ratio 0.805. Basis: cells with UMI in every tool (7452). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.unspliced",
+     "singlet": 0.923698,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.922177
+      ],
+      [
+       "alevin-fry-usa",
+       0.922177
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9561; alevin-fry USA unspliced: 0.8913. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.unspliced",
+     "singlet": 0.963684,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.960806
+      ],
+      [
+       "alevin-fry-usa",
+       0.960806
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9827; alevin-fry USA unspliced: 0.9446. Basis: 21438 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.spliced_ambiguous",
+     "singlet": 0.036326,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.072602
+      ],
+      [
+       "alevin-fry-usa",
+       0.072602
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.057; alevin-fry USA spliced+ambiguous: ratio 0.983. Basis: cells with UMI in every tool (7453). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.spliced_ambiguous",
+     "singlet": 0.986141,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.982672
+      ],
+      [
+       "alevin-fry-usa",
+       0.982672
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9810; alevin-fry USA spliced+ambiguous: 0.9912. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.spliced_ambiguous",
+     "singlet": 0.983635,
+     "competitors": [
+      [
+       "starsolo-velocyto",
+       0.975862
+      ],
+      [
+       "alevin-fry-usa",
+       0.975862
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9762; alevin-fry USA spliced+ambiguous: 0.9911. Basis: 21972 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "umi_ratio_distance.total",
+     "singlet": 0.02139,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.044452
+      ],
+      [
+       "alevin-fry-usa",
+       0.044452
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.007; alevin-fry USA (S+U+A): ratio 0.965. Basis: cells with UMI in every tool (7453). Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "gene_corr.total",
+     "singlet": 0.988392,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.983523
+      ],
+      [
+       "alevin-fry-usa",
+       0.983523
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9895; alevin-fry USA (S+U+A): 0.9873. Basis: cells common to the family. Competitor value = its mean distance to the other competitors."
+    },
+    {
+     "id": "pseudobulk_rho.total",
+     "singlet": 0.970341,
+     "competitors": [
+      [
+       "starsolo-genefull",
+       0.95403
+      ],
+      [
+       "alevin-fry-usa",
+       0.95403
+      ]
+     ],
+     "pass": "pass",
+     "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9640; alevin-fry USA (S+U+A): 0.9767. Basis: 26355 genes with any UMI. Competitor value = its mean distance to the other competitors."
+    }
+   ],
+   "totals": {
+    "E": 20387379.0,
+    "U": 2121623.0,
+    "A": 152273.0
+   }
+  }
+ }
+}

@@ -1,0 +1,44 @@
+metric	old_q0	old_q20	new_q0	new_q20	new_q20umi	new_q20_hap90	new_q20_hap85	new_q20_hap75	new_q20_hap70
+pileup_reads_used	2289411	2289411	2289411	2289411	2289411	2289411	2289411	2289411	2289411
+n_variants_public	2396	2214	71	64	5	64	64	64	64
+D_variants_ge50_het_cells	1193	1084	3	2	0	2	2	2	2
+D_variants_ge50_het_cells_frac	0.4979	0.4896	0.04225	0.03125	0	0.03125	0.03125	0.03125	0.03125
+het_matrix_nnz	438446	394515	825	731	24	731	731	731	731
+A_entries	438446	394515	825	731	24	731	731	731	731
+A_entries_with_pileup	398124	365578	825	731	24	731	731	731	731
+A_orig_pearson	0.8502	1	0.9849	1	0.9657	1	1	1	1
+A_orig_mean_abs_diff	0.007629	2.778e-08	0.00811	1.186e-07	0.07363	1.186e-07	1.186e-07	1.186e-07	1.186e-07
+A_orig_frac_within_0.01	0.8425	1	0.8376	1	0.08333	1	1	1	1
+A_same_alt_pearson	0.6971	0.7607	0.9847	1	0.9657	1	1	1	1
+A_same_alt_mean_abs_diff	0.02424	0.01929	0.008266	1.186e-07	0.07363	1.186e-07	1.186e-07	1.186e-07	1.186e-07
+A_same_alt_frac_within_0.01	0.5901	0.7007	0.8364	1	0.08333	1	1	1	1
+B_pool_pileup_variants_alt3_af1pct	1329	1329	1329	1329	1329	1329	1329	1329	1329
+B_strong_pileup_variants_alt10_af5pct	205	205	205	205	205	205	205	205	205
+B_public_variants	2396	2214	71	64	5	64	64	64	64
+B_public_supported_by_pileup	285	266	2	1	0	1	1	1	1
+B_public_precision_vs_pileup	0.1189	0.1201	0.02817	0.01562	0	0.01562	0.01562	0.01562	0.01562
+B_public_supported_alt3_any_af	2327	2212	71	64	5	64	64	64	64
+B_public_in_strong	19	19	0	0	0	0	0	0	0
+B_strong_recall_public	0.09268	0.09268	0	0	0	0	0	0	0
+B_union_variants	2510	2326	214	201	90	193	195	203	209
+B_union_precision_vs_pileup	0.1546	0.1591	0.6028	0.6169	0.8778	0.601	0.6051	0.6207	0.6316
+B_union_in_strong	102	103	100	97	73	89	91	99	101
+B_strong_recall_union	0.4976	0.5024	0.4878	0.4732	0.3561	0.4341	0.4439	0.4829	0.4927
+B_haplotype_like_sites	0	0	128	122	35	122	122	122	122
+C_mean_precision	0.6202	0.6202	0.8571	0.8657	0.8368	1	0.9235	0.8258	0.7601
+C_mean_recall	0.5152	0.5152	0.7627	0.746	0.7652	0.5104	0.6529	0.8289	0.8657
+C_mean_precision_vs_truth_af75	0.8705	0.8705	1	1	0.9889	1	1	1	0.9771
+C_mean_recall_vs_truth_af75	0.5554	0.5554	0.6865	0.6634	0.7005	0.3874	0.5396	0.7798	0.8602
+C_ref_pairs_distinguishable	28	28	28	28	28	28	28	28	28
+C_singlet_pairs_distinguishable	28	28	28	28	28	28	28	28	28
+C_pair_call_agreement	1	1	1	1	1	1	1	1	1
+C_n_pairs	28	28	28	28	28	28	28	28	28
+D_variants_with_ge5_carriers	1830	1675	49	41	2	41	41	41	41
+D_median_top_donor_share	0.2256	0.229	0.3077	0.3333	0.3364	0.3333	0.3333	0.3333	0.3333
+D_frac_variants_top_donor_ge_0.8	0	0	0	0	0	0	0	0	0
+D_expected_top_share_if_random	0.2223	0.2223	0.2223	0.2223	0.2223	0.2223	0.2223	0.2223	0.2223
+B_sites_evaluated			16598	15540	10605	15540	15540	15540	15540
+D_donor_af_table_sites			71	64	5	64	64	64	64
+D_donor_specific_sites			0	0	0	0	0	0	0
+D_max_top_af			0.02775	0.01949	0.008677	0.01949	0.01949	0.01949	0.01949
+D_sites_top_af_ge_0.05			0	0	0	0	0	0	0

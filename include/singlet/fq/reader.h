@@ -20,6 +20,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -108,6 +110,31 @@ struct DecodedBlock {
     }
 };
 
+// A staged read container (the .1fg2, fg2_source.h) behind Reader's and RunSet's interface: the engine opens it by path like a .1fq.
+struct StagedSource {
+    virtual ~StagedSource() = default;
+    virtual const Header& header() const = 0;                       // synthesized .1fq header (protocol, qual mode, lengths, counts)
+    virtual uint32_t block_count() const = 0;
+    virtual uint64_t stored_reads() const = 0;
+    virtual uint64_t block_read_offset(uint32_t g) const = 0;
+    virtual uint16_t bc_length() const = 0;
+    virtual bool has_bc_dict() const { return false; }               // a barcode dictionary (the .1fg2: the whitelist) with bc_indices in the blocks
+    virtual uint32_t bc_dict_size() const { return 0; }
+    virtual const std::vector<uint8_t>& bc_dict_flat() const { static const std::vector<uint8_t> e; return e; }
+    virtual void decode(uint32_t g, DecodedBlock& blk) const = 0;   // thread-safe
+    virtual std::string metadata() const = 0;                       // the source .1fq's metadata JSON
+};
+using StagedOpener = std::shared_ptr<StagedSource> (*)(const char* path);
+inline StagedOpener& staged_opener() { static StagedOpener f = nullptr; return f; }   // set by register_fg2() (fg2_source.h)
+inline bool is_staged_file(const char* path) {   // .1fg2: magic "1FG\0" (0x00474631) and version 2
+    FILE* f = std::fopen(path, "rb");
+    if (!f) return false;
+    uint8_t b[6] = {0};
+    const size_t n = std::fread(b, 1, 6, f);
+    std::fclose(f);
+    return n == 6 && b[0] == 0x31 && b[1] == 0x46 && b[2] == 0x47 && b[3] == 0x00 && b[4] == 2 && b[5] == 0;
+}
+
 class Reader {
    public:
     Reader() = default;
@@ -117,6 +144,14 @@ class Reader {
     Reader& operator=(const Reader&) = delete;
 
     void open(const char* path) {
+        if (is_staged_file(path)) {   // a .1fg2: served by the staged source
+            if (staged_opener() == nullptr) throw std::runtime_error("a .1fg2 input needs register_fg2() (fg2_source.h)");
+            staged_ = staged_opener()(path);
+            hdr_ = staged_->header();
+            has_bc_dict_ = staged_->has_bc_dict(); bc_length_ = staged_->bc_length(); current_block_ = 0;
+            if (has_bc_dict_) { bc_dict_n_ = staged_->bc_dict_size(); bc_dict_flat_ = staged_->bc_dict_flat(); }
+            return;
+        }
         fp_ = std::fopen(path, "rb");
         if (!fp_) throw std::runtime_error("Cannot open: " + std::string(path));
 
@@ -139,6 +174,8 @@ class Reader {
         has_trimming_ = (hdr_.flags & Flags::TRIMMED) != 0;
         has_dedup_ = (hdr_.flags & Flags::DEDUPED) != 0;
         has_i2_stream_ = (hdr_.reserved[0] & ExtraStreams::HAS_I2) != 0;
+        // Test hook for A/B against binaries before order-free-rules R11: whitelist misses decoded as all N again
+        n_miss_barcodes_ = std::getenv("SINGLET_TEST_N_MISS_BARCODES") != nullptr;
         i2_decode_len_ = has_i2_stream_ ? hdr_.stream_lengths[2] : 0;
 
         // When TRIMMED flag is set, R2 is stored variable-length even if
@@ -176,7 +213,8 @@ class Reader {
     }
 
     const Header& header() const { return hdr_; }
-    uint32_t block_count() const { return hdr_.block_count; }
+    uint32_t block_count() const { return staged_ ? staged_->block_count() : hdr_.block_count; }
+    const std::shared_ptr<StagedSource>& staged() const { return staged_; }
     uint64_t total_reads() const { return hdr_.n_unique; }
     bool has_bc_dict() const { return has_bc_dict_; }
     uint32_t bc_dict_size() const { return bc_dict_n_; }
@@ -208,6 +246,11 @@ class Reader {
     // Read and decode the next block. Returns false when all blocks consumed.
     bool read_block(DecodedBlock& blk) {
         blk.clear();
+        if (staged_) {
+            if (current_block_ >= staged_->block_count()) return false;
+            staged_->decode(current_block_++, blk);
+            return true;
+        }
 
         if (current_block_ >= hdr_.block_count) return false;
 
@@ -267,14 +310,15 @@ class Reader {
             blk.bc_indices.resize(bh.n_reads);
 
             // Phase 1: decode varint BC indices
+            std::vector<const uint8_t*> raw_bc(bh.n_reads, nullptr);
             for (uint32_t i = 0; i < bh.n_reads; ++i) {
                 uint64_t idx;
                 uint32_t consumed = pack::decode_varint(ptr, idx);
                 ptr += consumed;
                 blk.bc_indices[i] = static_cast<uint32_t>(idx);
-                // If sentinel (unknown BC), raw BC bytes follow
+                // If sentinel (unknown BC), the raw BC bytes follow: kept for Phase 3 (order-free-rules R11)
                 if (idx == bc_dict_n_) {
-                    // Skip the raw BC bytes for now (handled below)
+                    raw_bc[i] = ptr;
                     ptr += bc_length_;
                 }
             }
@@ -319,6 +363,8 @@ class Reader {
                     std::memcpy(r1_base + bc_start_,
                                 bc_dict_flat_.data() + static_cast<size_t>(idx) * bc_length_,
                                 bc_length_);
+                } else if (raw_bc[i] && !n_miss_barcodes_) {
+                    std::memcpy(r1_base + bc_start_, raw_bc[i], bc_length_);   // the raw barcode, for STAR's correction
                 } else {
                     std::memset(r1_base + bc_start_, 4, bc_length_);
                 }
@@ -349,6 +395,8 @@ class Reader {
         if (ptr < end) {
             if (qual_mode_ == QualMode::BINNED4) {
                 ptr = decode_qual_column_binned4(ptr, end, blk.r2_lengths, blk.r2_qual);
+            } else if (qual_mode_ == QualMode::ILLUMINA4) {
+                ptr = decode_qual_column_ilmn4(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::BINNED2) {
                 ptr = decode_qual_column_binned2(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::FULL) {
@@ -423,12 +471,13 @@ class Reader {
         if (has_bc_dict_) {
             uint16_t umi_len_val = umi_length();
             blk.bc_indices.resize(bh.n_reads);
+            std::vector<const uint8_t*> raw_bc(bh.n_reads, nullptr);   // R11: raw barcode of a whitelist miss
             for (uint32_t i = 0; i < bh.n_reads; ++i) {
                 uint64_t idx;
                 uint32_t consumed = pack::decode_varint(ptr, idx);
                 ptr += consumed;
                 blk.bc_indices[i] = static_cast<uint32_t>(idx);
-                if (idx == bc_dict_n_) ptr += bc_length_;
+                if (idx == bc_dict_n_) { raw_bc[i] = ptr; ptr += bc_length_; }
             }
             std::vector<uint8_t> umi_data;
             std::vector<uint32_t> umi_offsets;
@@ -453,6 +502,8 @@ class Reader {
                     std::memcpy(r1_base + bc_start_,
                                 bc_dict_flat_.data() + static_cast<size_t>(idx) * bc_length_,
                                 bc_length_);
+                } else if (raw_bc[i] && !n_miss_barcodes_) {
+                    std::memcpy(r1_base + bc_start_, raw_bc[i], bc_length_);
                 } else {
                     std::memset(r1_base + bc_start_, 4, bc_length_);
                 }
@@ -477,6 +528,8 @@ class Reader {
         if (ptr < end) {
             if (qual_mode_ == QualMode::BINNED4) {
                 ptr = decode_qual_column_binned4(ptr, end, blk.r2_lengths, blk.r2_qual);
+            } else if (qual_mode_ == QualMode::ILLUMINA4) {
+                ptr = decode_qual_column_ilmn4(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::BINNED2) {
                 ptr = decode_qual_column_binned2(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::FULL) {
@@ -514,6 +567,7 @@ class Reader {
 
     // Read metadata JSON (if present)
     std::string read_metadata() {
+        if (staged_) return staged_->metadata();
         if (hdr_.meta_size == 0) return "";
 
         // Metadata is stored after the last data block, before the index
@@ -781,6 +835,27 @@ class Reader {
         return ptr;
     }
 
+    // Decode an ILLUMINA4 quality column (2 bits/base, qual::kIlmn4Phred)
+    const uint8_t* decode_qual_column_ilmn4(const uint8_t* ptr, const uint8_t* end,
+                                            const std::vector<uint16_t>& lengths,
+                                            std::vector<uint8_t>& qual) const {
+        size_t total = 0;
+        for (uint16_t len : lengths) total += len;
+        qual.resize(total);
+        uint8_t* dst = qual.data();
+        for (uint16_t len : lengths) {
+            const uint32_t pb = pack::packed_bytes(len);
+            if (ptr + pb > end) {   // truncated block: no quality rather than a read past the buffer
+                qual.clear();
+                return end;
+            }
+            pack::unpack_qual_4level(ptr, len, dst, qual::kIlmn4Phred);
+            ptr += pb;
+            dst += len;
+        }
+        return ptr;
+    }
+
     // Decode binned-2 quality column (1 bit/base, pass/fail at Q20)
     const uint8_t* decode_qual_column_binned2(const uint8_t* ptr,
                                               const uint8_t* end,
@@ -797,6 +872,7 @@ class Reader {
     }
 
     FILE* fp_ = nullptr;
+    std::shared_ptr<StagedSource> staged_;   // set for a .1fg2 (fp_ is then unused)
     Header hdr_;
     Codec codec_;
     SeqEncoding seq_enc_;
@@ -805,6 +881,7 @@ class Reader {
     bool has_trimming_ = false;
     bool has_dedup_ = false;
     bool has_i2_stream_ = false;
+    bool n_miss_barcodes_ = false;   // SINGLET_TEST_N_MISS_BARCODES (open())
     bool verify_crc_ = true;
     uint16_t r2_decode_len_ = 0;  // 0 = variable-length R2 (trimming active)
     uint16_t i2_decode_len_ = 0;  // 0 = I2 stream absent
