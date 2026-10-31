@@ -14,6 +14,40 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+
+def node_mem_gb():
+    """Memory of this node in GB: the job's allocation when Slurm sets one, else the machine's MemTotal."""
+    m = os.environ.get("SLURM_MEM_PER_NODE")
+    if m and m.isdigit():
+        return int(m) / 1024.0
+    try:
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) / 1048576.0
+    except (OSError, ValueError):
+        pass
+    return 0.0
+
+
+def job_slots(node_gb, node_cores, threads, peak_gb=33.4, shared_gb=17.8, fill=0.9):
+    """Concurrent sample jobs one node holds. Memory: the shared genome index is resident once per node (shared_gb), every
+    job adds its private peak (peak_gb: deep GSM7036403 with the shared index measured 33.4 GB, index 17.8 GB), and
+    `fill` of the node is usable, so 512 GB gives 13. Cores: threads per job. The smaller of the two; at least 1."""
+    by_mem = int((node_gb * fill - shared_gb) // peak_gb) if node_gb else 0
+    by_cpu = int(node_cores // max(1, threads))
+    return max(1, min(by_mem, by_cpu)) if by_mem > 0 else max(1, by_cpu)
+
+
+def staged_reads(sdir):
+    """True when a sample's staged reads are on disk: the pooled sample.1fq or the per-run <run>.1fq files."""
+    if os.path.exists(os.path.join(sdir, "sample.1fq")):
+        return True
+    try:
+        return any(f.endswith(".1fq") for f in os.listdir(sdir))
+    except OSError:
+        return False
+
 # ── cost model (bench/atlas_rerun/cost_model_v2.py, measured on PBMC 3' v3, Xeon Gold 6230R, 4 threads) ──────────────
 FIXED_S = 300.0  # genome/reference load, index, export: seconds per sample
 SLOPE_S_PER_M = {True: 16.8, False: 12.3}  # seconds per million read pairs, non-host screen on / off
