@@ -53,7 +53,7 @@ enum ReadPlane { PL_CB = 0, PL_CBST = 1, PL_UMI = 2, PL_SEQ = 3, PL_LEN = 4, PL_
 //   PL_LEN  u8[n]             cDNA length of THIS read in bases (<= the sequence's slen: reads may share a sequence of a longer length? NO:
 //                             the key includes the length, so len == slen[seq]; the plane is kept so the readers need not touch the table)
 //   PL_Q    u8[n * qslot]     only if F_QPLANE. 2 bit/base binned quality, first base in the high bits, zero padded, qslot = seq_slot bytes;
-//                             bin of base i = 0..3 with edges in FileHeader::q_edges (Phred lower bounds of bins 1..3; bin 0 below the first)
+//                             bin of base i = 0..3; FileHeader::q_edges[bin] is the decoded Phred value the engine uses (compare with --min-baseq: only bin 0 is low)
 //   PL_EXC  u32[n_exc]        sorted by read index: bits 0-14 index in chunk, 15-16 kind, 17-23 position. Kinds: UMI_N (the UMI word holds A at pos)
 enum ExcKind { EXC_UMI_N = 0, EXC_RESERVED1 = 1, EXC_RESERVED2 = 2, EXC_RESERVED3 = 3 };
 static inline uint32_t exc_pack(uint32_t idx, uint32_t kind, uint32_t pos) { return idx | (kind << 15) | (pos << 17); }
@@ -66,7 +66,7 @@ enum SeqPlane { SP_SEQ2 = 0, SP_SLEN = 1, SP_SEXC = 2, NSEQPLANE = 3 };
 //   SP_SEQ2 u8[n * seq_slot]  2 bit/base, first base in the high bits, zero padded; N coded as A (see SP_SEXC)
 //   SP_SLEN u8[n]             length in bases (1..127)
 //   SP_SEXC u32[n_sexc]       sorted: bits 0-14 index in block, 15-21 position of an N (one entry per N base)
-// Key = the exact stored cDNA (R2 as trimmed) after any file-level 5' clip (r2_clip5p) and BEFORE the CR4 clip, N included, length included.
+// Key = the exact stored cDNA exactly as the .1fq holds it: BEFORE any 5' prefix (r2_clip5p), CR4 or 3' clip (the engine applies them on the packed codes), N and length included.
 // Order = first occurrence in the read stream (deterministic). One table per file.
 
 #pragma pack(push, 1)
@@ -90,10 +90,10 @@ struct FileHeader {                 // 4096 bytes at offset 0
     uint32_t n_blocks;              //  60
     uint16_t seq_slot;              //  64  bytes per sequence in SP_SEQ2 (and per read in PL_Q): 8-byte multiple >= ceil(max_len / 4)
     uint16_t r2_max_len;            //  66
-    uint16_t r2_clip5p;             //  68  bases clipped from the 5' end of every cDNA before it was keyed
+    uint16_t r2_clip5p;             //  68  always 0 (the engine's own probe decides the 5' clip; nothing is clipped before keying)
     uint8_t  protocol_id;           //  70  as the source .1fq
     uint8_t  cb_len, cb_start, umi_len, umi_start, r1_len;   // 71..75  geometry (0-based starts)
-    uint8_t  q_edges[4];            //  76  Phred lower bounds of bins 0..3 (bin 0 = [0, e1)); zero if no q plane
+    uint8_t  q_edges[4];            //  76  DECODED Phred value of bins 0..3 (ILLUMINA4: 2, 11, 25, 37; source bins <10, 10-19, 20-29, >=30); zero if no q plane
     uint8_t  q_bins;                //  80  4 or 0
     uint8_t  pad1[3];               //  81
     uint32_t wl_entries;            //  84  lines in the whitelist (valid `cb` < wl_entries)

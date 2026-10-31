@@ -378,7 +378,7 @@ int main(int argc, char** argv) {
     H.n_chunks = (uint32_t)cidx.size(); H.n_blocks = (uint32_t)bidx.size(); H.seq_slot = (uint16_t)seq_slot; H.r2_max_len = (uint16_t)max_len;
     H.r2_clip5p = 0; H.protocol_id = protocol_id; H.cb_len = (uint8_t)bcl; H.cb_start = (uint8_t)bc0; H.umi_len = (uint8_t)umil; H.umi_start = (uint8_t)umi0;
     H.r1_len = (uint8_t)std::max(bc0 + bcl, umi0 + umil);
-    if (has_q) { H.q_edges[0] = 0; H.q_edges[1] = 10; H.q_edges[2] = 20; H.q_edges[3] = 30; H.q_bins = 4; }
+    if (has_q) { H.q_edges[0] = 2; H.q_edges[1] = 11; H.q_edges[2] = 25; H.q_edges[3] = 37; H.q_bins = 4; }
     H.wl_entries = (uint32_t)corr.size(); std::memcpy(H.wl_sha256, wl_sha, 32);
     std::strncpy(H.wl_name, spec->whitelist_file.c_str(), sizeof H.wl_name - 1);
     H.cb_hist_reads = hist_reads; std::memcpy(H.status_counts, status_counts, sizeof status_counts);
