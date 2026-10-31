@@ -8,17 +8,20 @@ import collections, re, struct, subprocess, sys
 rd, binary, a2l = sys.argv[1:4]
 ms = int(sys.argv[sys.argv.index('--ms') + 1]) if '--ms' in sys.argv else 5
 top = int(sys.argv[sys.argv.index('--top') + 1]) if '--top' in sys.argv else 40
-raw = open(rd + '/samples.bin', 'rb').read()
-n = struct.unpack_from('<Q', raw, 0)[0]
+import glob
 S = 16 + 4 + 4 + 8 * 32
 recs = []
-for i in range(n):
-    o = 8 + i * S
-    name = raw[o:o + 16].split(b'\0')[0].decode(errors='replace')
-    k = struct.unpack_from('<I', raw, o + 16)[0]
-    recs.append((name, struct.unpack_from('<32Q', raw, o + 24)[:k]))
+for fnm in sorted(glob.glob(rd + '/samples.*.bin')) or [rd + '/samples.bin']:
+    pid = fnm.rsplit('samples.', 1)[-1][:-4]
+    raw = open(fnm, 'rb').read()
+    n = struct.unpack_from('<Q', raw, 0)[0]
+    for i in range(n):
+        o = 8 + i * S
+        k = struct.unpack_from('<I', raw, o + 16)[0]
+        recs.append(('pid' + pid, struct.unpack_from('<32Q', raw, o + 24)[:k]))   # the "thread" column is the process
 maps = []
-for ln in open(rd + '/maps.txt'):
+mapf = (sorted(glob.glob(rd + '/maps.*.txt')) or [rd + '/maps.txt'])[0]
+for ln in open(mapf):
     p = ln.split(None, 5)
     if len(p) < 6 or 'x' not in p[1]:
         continue
