@@ -7,6 +7,10 @@
   registry  write OUT/ingest/cell_feature.json, the cell_feature rows of every registered feature
   collect   gather every sample's summary rows into OUT/ingest/sample_cell_summary.<k>.json, <= 2000 rows per file
 
+The ``doublet`` set (``--sets doublet``, docs/cell_features.md section 8) also needs the engine's doublet_scores.tsv per sample
+(``--prod-dir``) and the cell type network and atlas centroid files (SINGLET_CELLTYPE_NN_MODEL, SINGLET_DOUBLET_CENTROIDS);
+``--device cuda`` runs its encoder on a GPU.
+
 Studies: --gse GSE1 GSE2 ... or --list FILE (one study per line: "GSE" or "GSE GSM [GSM ...]" or "GSE path/to/bundle.singlet").
 per-sample studies are read from data.singlet.bio; legacy studies from a local bundle or one downloaded to --scratch (deleted after the
 study unless --keep-bundles). --shard i --shards n takes every n-th study (Slurm arrays: scripts/features_run.sbatch). Samples
@@ -57,14 +61,19 @@ def done(out: Path, gse: str, gsm: str, sets) -> bool:
     )
 
 
-def run_sample(s, out: Path, sets, read_s: float) -> dict:
+def run_sample(s, out: Path, sets, read_s: float, device: str = "cpu", prod_dir=None) -> dict:
     import numpy as np
     from singlet.features import pipeline as P
     from singlet.features.output import build_table, sidecar_name, write_features
 
     t0 = time.perf_counter()
     tim = {"read_s": round(read_s, 3)}
-    res = P.score_sample(s, sets, timings=tim)
+    if "doublet" in sets and prod_dir and getattr(s, "prod_doublet_score", None) is None:
+        from singlet.features import doublet as DBL
+
+        tsv = DBL.find_prod_tsv(prod_dir, s.gse, s.gsm)
+        s.prod_doublet_score = DBL.read_prod_scores(tsv, s.barcodes) if tsv else None
+    res = P.score_sample(s, sets, timings=tim, device=device)
     d = out / s.gse
     order = np.argsort(s.col, kind="stable")
     col = np.asarray(s.col, np.int64)[order]
@@ -137,7 +146,7 @@ def cmd_run(a):
                     )
                 else:
                     try:
-                        info = run_sample(s, out, sets, read_s)
+                        info = run_sample(s, out, sets, read_s, a.device, a.prod_dir)
                         log(
                             gse=gse,
                             gsm=gsm,
@@ -166,7 +175,7 @@ def cmd_run(a):
 def cmd_registry(a):
     from singlet.features.registry import FEATURE_SETS, registry_rows
 
-    sets = tuple(a.sets.split(",")) if a.sets else FEATURE_SETS
+    sets = tuple(a.sets.split(",")) if a.sets else FEATURE_SETS  # the doublet set: --sets doublet (its own ingest file)
     p = Path(a.out) / "ingest" / "cell_feature.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     rows = registry_rows(sets)
@@ -222,6 +231,11 @@ def main(argv=None):
     r.add_argument("--ledger")
     r.add_argument("--keep-bundles", action="store_true")
     r.add_argument("--force", action="store_true")
+    r.add_argument("--device", default="cpu", help="torch device of the doublet set's atlas encoder (cpu, cuda)")
+    r.add_argument(
+        "--prod-dir",
+        help="engine run directories for --sets doublet: DIR/<GSM>/doublet_scores.tsv (or DIR/<GSE>/<GSM>/..., DIR/<GSM>.doublet_scores.tsv)",
+    )
     g = sub.add_parser("registry")
     g.add_argument("--out", required=True)
     g.add_argument("--sets")
