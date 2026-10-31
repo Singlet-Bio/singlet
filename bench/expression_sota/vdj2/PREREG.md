@@ -1,7 +1,8 @@
 # V(D)J to state of the art: pre-registration of a fresh held-out set (vdj2)
 
-Branch `bench/vdj-sota` (from `prod/campaign` + `bench/vdj-heldout`), written 2026-10-31 before any change to
-`python/singlet/vdj/` in this study and before anything was run on the libraries below.
+Branch `bench/vdj-sota` (from `prod/campaign` + `bench/vdj-heldout`), written 2026-10-31 before any change of the
+assembler's default behaviour in this study (options added so far are off by default) and before anything was run on the
+libraries below.
 
 ## Goal and rules
 
@@ -30,19 +31,19 @@ downloaded on 2026-10-25 by an earlier session under wrong directory names and d
 
 | id | content | chains | truth (Cell Ranger version) | convention | URL / accession | CR cells | reference-paired cells |
 |---|---|---|---|---|---|---|---|
-| gse145370_S134A | ESCC donor S134, 10x 5' V(D)J | TCR | authors' 3.0.1 | 2nd Cys | GSM4317424, SRR11094261 | @@ | @@ |
-| gse145370_S134B | ESCC donor S134, 2nd library | TCR | authors' 3.0.1 | 2nd Cys | GSM4317431, SRR11094268 | @@ | @@ |
-| gse145370_S159A | ESCC donor S159 | TCR | authors' 3.0.1 | 2nd Cys | GSM4317429, SRR11094266 | @@ | @@ |
-| gse145370_S159B | ESCC donor S159, 2nd library | TCR | authors' 3.0.1 | 2nd Cys | GSM4317436, SRR11094273 | @@ | @@ |
-| pbmc3_t | 10x `vdj_v1_hs_pbmc3` (5' v1, PBMC) | TCR | 10x 3.1.0 | 2nd Cys | cf.10xgenomics.com/samples/cell-vdj/3.1.0/vdj_v1_hs_pbmc3 | @@ | @@ |
-| ngpbmc3_t | 10x `vdj_nextgem_hs_pbmc3` (5' v1.1 Next GEM) | TCR | 10x 3.1.0 | 2nd Cys | .../3.1.0/vdj_nextgem_hs_pbmc3 | @@ | @@ |
-| pbmc1k_t | 10x `sc5p_v2_hs_PBMC_1k` (5' v2) | TCR | 10x 5.0.0 | 1st Cys | .../5.0.0/sc5p_v2_hs_PBMC_1k | @@ | @@ |
-| pbmc3_b | 10x `vdj_v1_hs_pbmc3` | BCR | 10x 3.1.0 | 2nd Cys | .../3.1.0/vdj_v1_hs_pbmc3 | @@ | @@ |
-| ngpbmc3_b | 10x `vdj_nextgem_hs_pbmc3` | BCR | 10x 3.1.0 | 2nd Cys | .../3.1.0/vdj_nextgem_hs_pbmc3 | @@ | @@ |
-| pbmc1k_b | 10x `sc5p_v2_hs_PBMC_1k` | BCR | 10x 5.0.0 | 1st Cys | .../5.0.0/sc5p_v2_hs_PBMC_1k | @@ | @@ |
-| melanoma_b | 10x `sc5p_v2_hs_melanoma_10k` (5' v2, tumour) | BCR | 10x 4.0.0 | 2nd Cys | .../4.0.0/sc5p_v2_hs_melanoma_10k | @@ | @@ |
+| gse145370_S134A | ESCC donor S134, 10x 5' V(D)J | TCR | authors' 3.0.1 | 2nd Cys | GSM4317424, SRR11094261 | 2,643 | 1,828 |
+| gse145370_S134B | ESCC donor S134, 2nd library | TCR | authors' 3.0.1 | 2nd Cys | GSM4317431, SRR11094268 | 2,100 | 1,108 |
+| gse145370_S159A | ESCC donor S159 | TCR | authors' 3.0.1 | 2nd Cys | GSM4317429, SRR11094266 | 10,536 | 7,443 |
+| gse145370_S159B | ESCC donor S159, 2nd library | TCR | authors' 3.0.1 | 2nd Cys | GSM4317436, SRR11094273 | 3,720 | 2,230 |
+| pbmc3_t | 10x `vdj_v1_hs_pbmc3` (5' v1, PBMC) | TCR | 10x 3.1.0 | 2nd Cys | cf.10xgenomics.com/samples/cell-vdj/3.1.0/vdj_v1_hs_pbmc3 | 3,925 | 3,356 |
+| ngpbmc3_t | 10x `vdj_nextgem_hs_pbmc3` (5' v1.1 Next GEM) | TCR | 10x 3.1.0 | 2nd Cys | .../3.1.0/vdj_nextgem_hs_pbmc3 | 6,648 | 5,615 |
+| pbmc1k_t | 10x `sc5p_v2_hs_PBMC_1k` (5' v2) | TCR | 10x 5.0.0 | 1st Cys | .../5.0.0/sc5p_v2_hs_PBMC_1k | 479 | 416 |
+| pbmc3_b | 10x `vdj_v1_hs_pbmc3` | BCR | 10x 3.1.0 | 2nd Cys | .../3.1.0/vdj_v1_hs_pbmc3 | 772 | 721 |
+| ngpbmc3_b | 10x `vdj_nextgem_hs_pbmc3` | BCR | 10x 3.1.0 | 2nd Cys | .../3.1.0/vdj_nextgem_hs_pbmc3 | 1,309 | 1,172 |
+| pbmc1k_b | 10x `sc5p_v2_hs_PBMC_1k` | BCR | 10x 5.0.0 | 1st Cys | .../5.0.0/sc5p_v2_hs_PBMC_1k | 83 | 81 |
+| melanoma_b | 10x `sc5p_v2_hs_melanoma_10k` (5' v2, tumour) | BCR | 10x 4.0.0 | 2nd Cys | .../4.0.0/sc5p_v2_hs_melanoma_10k | 5,644 | 5,293 |
 
-Seven TCR libraries (three Cell Ranger versions, three chemistries, tumour and blood) and four BCR libraries (three versions,
+Totals: TCR 21,996 reference-paired cells (7 libraries), BCR 7,267 (4 libraries). Seven TCR libraries (three Cell Ranger versions, three chemistries, tumour and blood) and four BCR libraries (three versions,
 including a tumour with plasma cells). The 10x libraries have the GEX matrix of the same cells (`filtered_feature_bc_matrix.h5`),
 used for the called-cell filter and the wrong-lineage labels; GSE145370 has none in the harness.
 
@@ -86,3 +87,9 @@ and the V / J disagreements). A change to `python/singlet/vdj/` or its reference
 re-run with the same code version for the baseline: pooled pairing accuracy improves, and on no development library does
 pairing accuracy, contig F1 or clonotype ARI drop by more than 0.005 or the wrong-lineage rate rise by more than 0.005
 (libraries with GEX). The dev results of every tried variant are reported.
+
+At the time of writing, the first development diagnostic (`results/diag/diag2_*_base.json`) points at the cross (ambient)
+filter: on S149B 110 of 198 lost chains are the reference junction itself, assembled with a median of 1 UMI and ~2,500 reads
+and removed because a sibling cell of an expanded clone holds the same junction with >= 10x the UMIs; 95% of them leave the
+chain empty. Candidate changes under test (all off by default until adopted): `ambient_rescue=cell|pair`, and for BCR V
+naming `v_open_frac` (an open V gene over a germline-stop paralog: IGHV4-55, IGLV1-41).
