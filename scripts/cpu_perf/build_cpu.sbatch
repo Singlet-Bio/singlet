@@ -12,7 +12,9 @@
 # The whitelists sit next to the binary (bin/../whitelists), which is what singlet auto-discovers (no SINGLET_WHITELIST_DIR).
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
-BARE=$W/repos/singlet-py.git; COMMIT=$(git -C $BARE rev-parse ${COMMIT:-d9834b8a}); OUTD=$W/jobs/cpu-perf/${COMMIT:0:8}; mkdir -p $OUTD/bin
+BARE=$W/repos/singlet-py.git
+[ -n "${BRANCH:-}" ] && { git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BRANCH:refs/cpuperf/build; COMMIT=refs/cpuperf/build; }   # BRANCH=claude/cpu-perf-c66d3f builds its tip
+COMMIT=$(git -C $BARE rev-parse ${COMMIT:-d9834b8a}); OUTD=$W/jobs/cpu-perf/${COMMIT:0:8}; mkdir -p $OUTD/bin
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
 git -C $BARE archive $COMMIT | tar -x -C $SCR/src; S=$SCR/src
 grep -rl --include=CMakeLists.txt -e "-march=native" $S | xargs -r sed -i 's/-march=native/-march=x86-64-v3/' || true
