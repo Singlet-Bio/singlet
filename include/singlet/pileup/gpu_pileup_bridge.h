@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 #include <cstring>
 #include <map>
 #include <string>
@@ -59,10 +60,13 @@ struct LineReader {
 // lowest), and the cDNA read's base-quality counters; flags bit 0 set when STAR wrote it
 struct ReadEntry { uint64_t cr3, ur3; uint16_t low_qual, qual_neq_n; uint32_t flags; };
 static_assert(sizeof(ReadEntry) == 24, "ReadEntry layout is STAR's HandoffReadEntry");
+// per-base quality of a read, for the SNP and chrM base filters: bit i = base i of the record sequence (original read orientation, 5' clip removed) has quality < min_baseq
+struct QM { uint64_t m[2]; };
 struct Handoff {
     const uint8_t* map = nullptr; size_t size = 0;
     uint64_t n_reads = 0, n_rec = 0; const uint32_t* read_rec = nullptr; const uint64_t* rec_off = nullptr; const uint8_t* data = nullptr;
     uint32_t cbS = 0, cbL = 0, umiS = 0, umiL = 0, cbumiL = 0, simple = 0;   // STAR's barcode layout (v2)
+    const QM* qmask = nullptr; size_t q_size = 0; std::string q_path;   // "on": <path>.reads.q, 16 bytes per read, written by STAR's mapping threads
     const ReadEntry* reads = nullptr; size_t reads_size = 0; std::string reads_path;   // "on": <path>.reads, written by STAR's mapping threads
     // the per-read entries, once STAR has exited ("on" only); false if there are none
     bool load_reads() {
@@ -74,6 +78,17 @@ struct Handoff {
         if (m == MAP_FAILED) return false;
         madvise(m, (size_t) st.st_size, MADV_SEQUENTIAL);
         reads = (const ReadEntry*) m; reads_size = (size_t) st.st_size;
+        return true;
+    }
+    bool load_q() {
+        if (qmask) return true;
+        if (q_path.empty()) return false;
+        int fd = open(q_path.c_str(), O_RDONLY); if (fd < 0) return false;
+        struct stat st; if (fstat(fd, &st) != 0 || (uint64_t) st.st_size != n_reads * sizeof(QM) || n_reads == 0) { close(fd); return false; }
+        void* m = mmap(nullptr, (size_t) st.st_size, PROT_READ, MAP_PRIVATE, fd, 0); close(fd);
+        if (m == MAP_FAILED) return false;
+        madvise(m, (size_t) st.st_size, MADV_SEQUENTIAL);
+        qmask = (const QM*) m; q_size = (size_t) st.st_size;
         return true;
     }
     bool load(const char* path) {
@@ -91,12 +106,13 @@ struct Handoff {
         rec_off = (const uint64_t*) (map + 48 + 4 * n_reads);
         data = (const uint8_t*) (rec_off + n_rec + 1);
         if ((size_t) (data - map) + rec_off[n_rec] > size) { unmap(); return false; }
-        reads_path = std::string(path) + ".reads";
+        reads_path = std::string(path) + ".reads"; q_path = reads_path + ".q";
         return true;
     }
     void unmap() {
         if (map) munmap((void*) map, size); map = nullptr;
         if (reads) { munmap((void*) reads, reads_size); unlink(reads_path.c_str()); } reads = nullptr;
+        if (qmask) { munmap((void*) qmask, q_size); } qmask = nullptr; if (!q_path.empty()) unlink(q_path.c_str());
     }
     ~Handoff() { unmap(); }
 };
@@ -104,6 +120,7 @@ struct Handoff {
 class Collector {
 public:
     explicit Collector(int min_baseq) : min_baseq_(min_baseq) {
+        if (const char* q = std::getenv("SINGLET_GPU_PILEUP_QUAL")) force_q_ = std::strcmp(q, "force") == 0;
         pend_.reserve(1 << 20);
         if (const char* hp = std::getenv("SINGLET_ENGINE_GPU_HANDOFF")) handoff_path_ = hp;
     }
@@ -132,7 +149,7 @@ public:
                 qual_check(b);
                 const uint32_t rec = ho_.read_rec[idx];
                 check_primary(b, rec);
-                ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(0);
+                ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(0); ho_q_.push_back(bam_mask(b));
                 ho_idx_.push_back(idx);
                 return;
             }
@@ -167,7 +184,7 @@ public:
             static const uint8_t COMP[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
             g.seq.resize(L);
             for (int i = 0; i < L; i++) g.seq[i] = rev ? COMP[bam_seqi(sq, L - 1 - i)] : (uint8_t) bam_seqi(sq, i);
-            qual_check(b);
+            qual_check(b); g.qm = bam_mask(b);
         }
         if (nh == 1 && !sec) finalize(g);
         else if (g.seen >= g.nh) { finalize(g); pend_.erase(qn); }
@@ -185,6 +202,13 @@ public:
         in.snpSkipN = (lowqual_bases_ == 0 ? 0 : (qual_neq_n_ == 0 ? 1 : -1));
         if (no_umi_ > 0) in.snpSkipN = -1;   // reads without a UMI: not reproducible from the packed UMI (never seen in the campaign data)
         if (umi_len_ > 0) in.umiLen = umi_len_;
+        if ((in.snpSkipN < 0 || force_q_) && no_umi_ == 0) {   // per-base quality: the SNP and chrM filters read each base's own quality
+            if (q_ok_ && reads_q_.size() == reads_.size() && in.nSnps <= 0x7FFFFFu) {
+                in.useQual = 1; in.snpSkipN = 0;
+                in.lowq.assign((const uint8_t*) reads_q_.data(), (const uint8_t*) (reads_q_.data() + reads_q_.size()));
+                std::cerr << "[gpu_pileup] per-base quality: low-quality masks for " << reads_q_.size() << " reads" << (force_q_ ? " (forced)" : "") << "\n";
+            } else std::cerr << "[gpu_pileup] per-base quality needed but unavailable (masks " << (q_ok_ ? "missing for some reads" : "not representable: read over 128 bases or no STAR masks") << ")\n";
+        }
     }
     size_t n_reads() const { return reads_.size() + ho_reads_.size(); }
     size_t n_handoff_reads() const { return ho_reads_.size(); }
@@ -197,25 +221,37 @@ public:
     }
     // "on", after STAR has exited: map STAR's per-read entries (handoff()->reads); false if there are none
     bool load_handoff_reads() { return handoff() != nullptr && ho_.load_reads(); }
+    // STAR's per-read low-quality masks (the hand-off's .reads.q); null if there are none
+    const QM* handoff_qmask() { return handoff() != nullptr && ho_.load_q() ? ho_.qmask : nullptr; }
     // a hand-off read that STAR wrote no BAM record for ("on"): its record, barcode column and UMI (A0 C1 G2 T3 N4, 3 bits each)
     // clip: the read's entry flags when it was clipped (STAR's HandoffReadEntry: clip lengths and the 3' tail), else 0
     void add_handoff_read(uint32_t rec, int32_t bc, const char* umi, int umi_len, uint32_t clip = 0) {
         uint64_t u3 = 0;
         if (umi_len_ < 0) umi_len_ = umi_len;
         for (int i = 0; i < umi_len && i < 21; i++) { const char c = umi[i]; const uint64_t v = c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4; u3 |= v << (3 * i); }
-        ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(clip);
+        ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(clip); q_ok_ = false;   // this path has no qualities
         if (clip) n_clipped_++;
     }
     // the same with the UMI already packed (the parallel hand-off pass packs it in its workers)
-    void add_handoff_read_u3(uint32_t rec, int32_t bc, uint64_t u3, int umi_len, uint32_t clip = 0) {
+    void add_handoff_read_u3(uint32_t rec, int32_t bc, uint64_t u3, int umi_len, uint32_t clip = 0, const QM* qm = nullptr) {
         if (umi_len_ < 0) umi_len_ = umi_len;
         ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(clip);
+        if (qm) ho_q_.push_back(*qm); else { ho_q_.push_back(QM{{0, 0}}); q_ok_ = false; }
         if (clip) n_clipped_++;
     }
     // per read of the final input (hand-off reads first): its clip flags, 0 when not clipped
     const std::vector<uint32_t>& clips() const { return ho_clip_; }
     uint32_t read_clip(size_t r) const { return r < ho_clip_.size() ? ho_clip_[r] : 0u; }
     uint64_t n_clipped() const { return n_clipped_; }
+    // the low-quality mask of a BAM record, in the read's original orientation (the signature stores the read that way); qualities missing: nothing is low
+    QM bam_mask(const bam1_t* b) {
+        QM q{{0, 0}}; const int L = b->core.l_qseq; const uint8_t* ql = bam_get_qual(b);
+        if (L <= 0 || ql[0] == 0xff) return q;
+        if (L > 128) { q_ok_ = false; return q; }
+        const bool rev = (b->core.flag & BAM_FREVERSE) != 0;
+        for (int i = 0; i < L; i++) if (ql[rev ? L - 1 - i : i] < min_baseq_) q.m[i >> 6] |= 1ull << (i & 63);
+        return q;
+    }
     // the base-quality rule of qual_check on a FASTQ record (Phred+33): BAM qualities are the FASTQ's
     void add_quality(const char* seq, const char* qual, int L) {
         for (int i = 0; i < L; i++) {
@@ -300,12 +336,14 @@ private:
         for (auto& r : reads_) r.sig += s0;
         ho_reads_.insert(ho_reads_.end(), reads_.begin(), reads_.end());
         reads_.swap(ho_reads_);
+        ho_q_.insert(ho_q_.end(), reads_q_.begin(), reads_q_.end()); reads_q_.swap(ho_q_);
         sigs_.swap(sg); alns_.swap(al); ops_.swap(op); seq_.swap(sq);
         ho_.unmap();
         unlink(handoff_path_.c_str());
     }
     std::string handoff_path_; Handoff ho_; bool ho_tried_ = false, ho_ok_ = false; uint64_t ho_mismatch_ = 0;
     std::vector<ReadRec> ho_reads_;
+    std::vector<QM> reads_q_, ho_q_; bool q_ok_ = true, force_q_ = false;   // per-read low-quality masks, parallel to reads_ and ho_reads_
     std::vector<uint32_t> ho_clip_; uint64_t n_clipped_ = 0;
     std::vector<uint64_t> ho_idx_;
 public:
@@ -341,7 +379,7 @@ private:
         }
     }
     struct Aln { int32_t tid, pos; uint8_t flags, mapq; std::vector<uint32_t> ops; };
-    struct Group { std::vector<Aln> alns; int seen = 0, nh = 0, primary = -1; int32_t bc = -1; uint64_t umi3 = 0; std::vector<uint8_t> seq; };
+    struct Group { std::vector<Aln> alns; int seen = 0, nh = 0, primary = -1; int32_t bc = -1; uint64_t umi3 = 0; std::vector<uint8_t> seq; QM qm{{0, 0}}; };
     // FNV-1a over the qname: groups a multimapper's alignments (64-bit, as the engine's mm_buffer)
     static uint64_t qname_hash(const char* q) { uint64_t h = 14695981039346656037ULL; for (; *q; ++q) { h ^= (uint8_t) *q; h *= 1099511628211ULL; } return h; }
     struct H128 { uint64_t a, b; bool operator==(const H128& o) const { return a == o.a && b == o.b; } };
@@ -368,7 +406,7 @@ private:
             for (uint32_t i = 0; i < rlen; i += 2) seq_.push_back((uint8_t) (g.seq[i] | ((i + 1 < rlen ? g.seq[i + 1] : 0) << 4)));
             sigs_.push_back(s);
         }
-        reads_.push_back(ReadRec{sid, g.bc, g.umi3});
+        reads_.push_back(ReadRec{sid, g.bc, g.umi3}); reads_q_.push_back(g.qm);
     }
 
     int min_baseq_; int umi_len_ = -1;

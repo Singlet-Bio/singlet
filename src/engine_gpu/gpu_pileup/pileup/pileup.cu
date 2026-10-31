@@ -79,7 +79,7 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 128, 256 are implemented
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 128, 256 are implemented
 struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, pad; };   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
 struct SJL { int32_t tid, donor, acc; };
@@ -251,13 +251,13 @@ __global__ void k_lists(const SigRec* S, int nS, const AlnRec* A, const uint32_t
                         // base class as SnpConsensus::base_class (order-free-rules R1): ALT if base == alt, REF if base == ref, else OTHER
                         const char bc = nt16_char(code);
                         const uint32_t cls = bc == SN.alt[SN.off[a.tid] + k] ? 1u : (bc == SN.ref[SN.off[a.tid] + k] ? 0u : 2u);
-                        if (FILL) o_snp[wsnp + nsnp] = (SN.idx[SN.off[a.tid] + k] << 2) | cls;
+                        if (FILL) o_snp[wsnp + nsnp] = (SN.idx[SN.off[a.tid] + k] << 2) | cls | (P.use_q ? ((uint32_t)(rev ? sg.rlen - 1 - qp : qp) << 25) : 0u);   // use_q: bits 25-31 = the base's index in the record (original orientation)
                         nsnp++; }
                 }
                 if (mt_ok) for (int j = 0; j < len; j++) {
                     uint32_t rp = (uint32_t)(rpos + j); if (rp >= MT_LEN) continue;
                     int bi = base_to_idx(aligned_base(seq, sg.seq_off, sg.rlen, qpos + j, rev)); if (bi < 0) continue;
-                    if (FILL) o_mt[wmt + nmt] = rp * 4 + (uint32_t)bi; nmt++; }
+                    if (FILL) o_mt[wmt + nmt] = rp * 4 + (uint32_t)bi + (P.use_q ? ((uint32_t)(rev ? sg.rlen - 1 - (qpos + j) : qpos + j) << 17) : 0u); nmt++; }   // use_q: bits 17-23 = the base's index in the record
                 rpos += len; qpos += len;
             } else if (op == 1) { if (mt_ok && (uint32_t)rpos < MT_LEN) { if (FILL) o_ind[wind + nind] = IND{(uint32_t)rpos, ((uint32_t)min(len, 0xFFFF) << 1) | 1u}; nind++; } qpos += len; }
             else if (op == 4) qpos += len;
@@ -271,6 +271,12 @@ __global__ void k_lists(const SigRec* S, int nS, const AlnRec* A, const uint32_t
 // ---- read level ----
 __device__ __forceinline__ uint32_t umi_b5(uint64_t u3, int len) { uint32_t v = 0, m = 1; for (int i = 0; i < len; i++) { v += (uint32_t)((u3 >> (3 * i)) & 7) * m; m *= 5; } return v; }
 __device__ __forceinline__ uint64_t umi_b2(uint64_t u3, int len) { uint64_t v = 0; for (int i = 0; i < len; i++) { uint64_t c = (u3 >> (3 * i)) & 7; v |= (c > 3 ? 3ull : c) << (2 * i); } return v; }
+// per-base quality (dp.use_q): a list entry of a signature (SNP: bits 25-31, chrM base: bits 17-23) belongs to a read only if the base's quality passed
+__device__ __forceinline__ bool q_pass(const uint64_t* Q, int r, uint32_t pos) { return ((Q[2 * (size_t)r + (pos >> 6)] >> (pos & 63)) & 1ull) == 0ull; }
+__global__ void k_cnt_q(const ReadRec* R, int n, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, const uint64_t* Q, int qsh, uint32_t* cnt) {
+    int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) { cnt[r] = 0; return; }
+    uint32_t c = list_cnt[x.sig], b = list_off[x.sig], m = 0; for (uint32_t k = 0; k < c; k++) m += q_pass(Q, r, (lists[b + k] >> qsh) & 127u); cnt[r] = m; }
+__global__ void k_gatherq(const uint64_t* Q, const uint32_t* ridx, int n, uint64_t* out) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) { out[2 * (size_t)i] = Q[2 * (size_t)ridx[i]]; out[2 * (size_t)i + 1] = Q[2 * (size_t)ridx[i] + 1]; } }
 __global__ void k_cnt(const ReadRec* R, int n, const uint32_t* sigcnt, uint32_t* cnt) { int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n) cnt[r] = R[r].bc >= 0 ? sigcnt[R[r].sig] : 0u; }
 __global__ void k_gflag(const ReadRec* R, int n, const GRes* G, uint32_t* f) { int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n) f[r] = (R[r].bc >= 0 && G[R[r].sig].flags != 0) ? 1u : 0u; }
 __global__ void k_gfill(const ReadRec* R, int n, const GRes* G, const uint32_t* f, const uint32_t* off, int ulen, Rec* out) {
@@ -278,12 +284,12 @@ __global__ void k_gfill(const ReadRec* R, int n, const GRes* G, const uint32_t* 
     ReadRec x = R[r]; GRes g = G[x.sig]; Rec o; o.bc = (uint32_t)x.bc; o.gene = g.gene; o.exon = g.exon; o.intron = g.intron; o.umi = umi_b2(x.umi3, ulen);
     o.flags = (uint8_t)g.flags; o.umi_len = (uint8_t)ulen; o.hasN = 0; o.direct = 0; o.pad = 0; out[off[r]] = o; }
 __global__ void k_fill_hilo(const ReadRec* R, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, int is_snp, int hb, int ulen,
-                            uint64_t* hi, uint32_t* lo, uint8_t* alt, const SigRec* S = nullptr, const GRes* G = nullptr, uint32_t* tg = nullptr) {
+                            uint64_t* hi, uint32_t* lo, uint8_t* alt, const SigRec* S = nullptr, const GRes* G = nullptr, uint32_t* tg = nullptr, const uint64_t* Q = nullptr) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) return;
     uint32_t c = list_cnt[x.sig], b = list_off[x.sig], o = off[r]; uint32_t u = umi_b5(x.umi3, ulen);
     // R9 per gene: the evidence gene is the unique read's gene (cur_read_gene_ is set for NH 1 only)
     const uint32_t gene = (tg && S[x.sig].nh == 1) ? G[x.sig].gene : MAXU;
-    for (uint32_t k = 0; k < c; k++) { uint32_t e = lists[b + k]; hi[o + k] = ((uint64_t)x.bc << hb) | (is_snp ? (e >> 2) : e); lo[o + k] = u; if (is_snp) alt[o + k] = (uint8_t)(e & 3); if (tg) tg[o + k] = gene; }
+    uint32_t w = 0; for (uint32_t k = 0; k < c; k++) { uint32_t e = lists[b + k]; if (Q && !q_pass(Q, r, (e >> 25) & 127u)) continue; hi[o + w] = ((uint64_t)x.bc << hb) | (is_snp ? ((e >> 2) & (Q ? 0x7FFFFFu : 0xFFFFFFFFu)) : e); lo[o + w] = u; if (is_snp) alt[o + w] = (uint8_t)(e & 3); if (tg) tg[o + w] = gene; w++; }
 }
 // the gene reducer's molecule store, kept for the junction and SNP reducers (R9 per gene): the sorted unique (cell, gene, UMI) keys and the
 // component (root entry index) of each after the directional collapse
@@ -302,11 +308,11 @@ __global__ void k_gene_rid(const uint64_t* uh, const uint32_t* ul, const uint32_
 __global__ void k_mflag(const uint32_t* lab, int m, uint32_t* f) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) f[i] = lab[i] != (uint32_t)i; }
 __global__ void k_mgather(const uint64_t* uk, const uint32_t* lab, const uint32_t* idx, int n, uint64_t* a, uint64_t* b) {
     int j = blockIdx.x * blockDim.x + threadIdx.x; if (j < n) { a[j] = uk[idx[j]]; b[j] = uk[lab[idx[j]]]; } }
-__global__ void k_fill_mt(const ReadRec* R, const AlnRec* A, const SigRec* S, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, uint64_t* key) {
+__global__ void k_fill_mt(const ReadRec* R, const AlnRec* A, const SigRec* S, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, uint64_t* key, const uint64_t* Q = nullptr) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) return;
     SigRec sg = S[x.sig]; uint32_t rev = 0; for (int k = 0; k < sg.n_aln; k++) if (A[sg.aln_off + k].flags & 2) { rev = A[sg.aln_off + k].flags & 1; break; }
     uint32_t c = list_cnt[x.sig], b = list_off[x.sig], o = off[r];
-    for (uint32_t k = 0; k < c; k++) key[o + k] = ((uint64_t)x.bc << 18) | ((uint64_t)lists[b + k] << 1) | rev;
+    uint32_t w = 0; for (uint32_t k = 0; k < c; k++) { const uint32_t e = lists[b + k]; if (Q && !q_pass(Q, r, (e >> 17) & 127u)) continue; key[o + w++] = ((uint64_t)x.bc << 18) | ((uint64_t)(Q ? (e & 0x1FFFFu) : e) << 1) | rev; }
 }
 __global__ void k_fill_ind(const ReadRec* R, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const IND* lists, uint32_t* o_bc, IND* o_ind,
                            const uint32_t* ridx, uint32_t* o_ri) {   // o_ri: the read's index in the full input (indels keep read order across partitions)
@@ -417,7 +423,7 @@ static uint32_t* sort_hilo(Arena& A, const uint64_t* hi, const uint32_t* lo, int
 // ------------------------------------------------------------------------------------------------------------------------
 struct Inputs {
     int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12, wantMerges = 0; Par par; DPar dp;
-    SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R;
+    SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R; const uint64_t* Q = nullptr;   // Q: 16-byte low-quality mask per read (dp.use_q)
     DTree EX, IN; uint32_t *e2g, *i2g; char* gstr; DSnp SN; uint32_t ne2g = 0, ni2g = 0, ngstr = 0;
     uint8_t* gmt = nullptr; uint32_t ngmt = 0;   // per gene: lies on chrM (PileupInput::geneIsMt), for kMtPrefer
 };
@@ -517,13 +523,13 @@ static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, 
 }
 // SNP: (cell, SNP, UMI) sort, class counts per exact UMI, R9 collapse per (cell, SNP), R1 vote per molecule; rows (cell | SNP) -> DP | AD << 32
 static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int nR, const uint32_t* r_snp, const uint32_t* o_snp, const uint32_t* c_snp,
-                   const uint32_t* l_snp, int n_snpt, int sb, int cb, uint64_t** sn_u, uint64_t** sn_v, const GRes* G, const GeneStore* gst) {
+                   const uint32_t* l_snp, int n_snpt, int sb, int cb, uint64_t** sn_u, uint64_t** sn_v, const GRes* G, const GeneStore* gst, const uint64_t* Qp = nullptr) {
     const int TB = 256, GR = (nR + TB - 1) / TB, ub5 = (int)ceil(in.ulen * 2.3219280948873623) + 1;
     int n_snu = 0;
     if (n_snpt > 0) {
         uint64_t* sn_hi = A.alloc<uint64_t>(n_snpt); uint32_t* sn_lo = A.alloc<uint32_t>(n_snpt); uint8_t* sn_alt = A.alloc<uint8_t>(n_snpt);
         uint32_t* tg = (gst && !g_snp_first) ? A.alloc<uint32_t>(n_snpt) : nullptr;
-        k_fill_hilo<<<GR, TB>>>(R, nR, r_snp, o_snp, c_snp, l_snp, 1, sb, in.ulen, sn_hi, sn_lo, sn_alt, in.S, G, tg);
+        k_fill_hilo<<<GR, TB>>>(R, nR, r_snp, o_snp, c_snp, l_snp, 1, sb, in.ulen, sn_hi, sn_lo, sn_alt, in.S, G, tg, Qp);
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sn_hi, sn_lo, n_snpt, cb + sb, ub5, &hs); const int G = (n_snpt + TB - 1) / TB;
         uint32_t* first = A.alloc<uint32_t>(n_snpt); k_runflag<<<G, TB>>>(hs, sn_lo, ord, n_snpt, first);
         *sn_u = A.alloc<uint64_t>(n_snpt); *sn_v = A.alloc<uint64_t>(n_snpt); int* dn = A.alloc<int>(4);
@@ -557,11 +563,11 @@ static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int n
 }
 // chrM base: (cell, position, base, strand) sort and run-length encode
 static int red_mt(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int nR, const uint32_t* r_mt, const uint32_t* o_mt, const uint32_t* c_mt,
-                  const uint32_t* l_mt, int n_mtt, int cb, uint64_t** mt_u, uint32_t** mt_n) {
+                  const uint32_t* l_mt, int n_mtt, int cb, uint64_t** mt_u, uint32_t** mt_n, const uint64_t* Qp = nullptr) {
     const int TB = 256, GR = (nR + TB - 1) / TB;
     int n_mtu = 0;
     if (n_mtt > 0) {
-        uint64_t* mt_key = A.alloc<uint64_t>(n_mtt); k_fill_mt<<<GR, TB>>>(R, in.Al, in.S, nR, r_mt, o_mt, c_mt, l_mt, mt_key);
+        uint64_t* mt_key = A.alloc<uint64_t>(n_mtt); k_fill_mt<<<GR, TB>>>(R, in.Al, in.S, nR, r_mt, o_mt, c_mt, l_mt, mt_key, Qp);
         uint64_t* k1 = A.alloc<uint64_t>(n_mtt); cub::DoubleBuffer<uint64_t> dk(mt_key, k1);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortKeys(t, b, dk, n_mtt, 0, cb + 18); });
         *mt_u = A.alloc<uint64_t>(n_mtt); *mt_n = A.alloc<uint32_t>(n_mtt); int* dn = A.alloc<int>(4);
@@ -629,16 +635,16 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             est.assign(K, 0); CK(cudaMemcpy(est.data(), bins, K * 8, cudaMemcpyDeviceToHost));
             const unsigned long long mx = *std::max_element(est.begin(), est.end());
             // K > 1 also holds the partition scratch for all reads (flags, compacted reads, their index: 24 B per read)
-            const size_t scratch = K > 1 ? (size_t)nR * (4 + sizeof(ReadRec) + 4) : 0;
+            const size_t scratch = K > 1 ? (size_t)nR * (4 + sizeof(ReadRec) + 4 + (in.dp.use_q ? 16 : 0)) : 0;
             if (forced > 0 || mx + scratch <= budget) break;
         }
         if (K > kMaxParts) K = kMaxParts;   // nothing fits: the largest K, and the unified-memory retry catches the rest
         A.reset(base);
     }
     g_parts_used = K; g_parts_log.clear();
-    uint32_t* pf = nullptr; ReadRec* Rp = nullptr; uint32_t* ridx = nullptr; int* dnp = nullptr;
+    uint32_t* pf = nullptr; ReadRec* Rp = nullptr; uint32_t* ridx = nullptr; int* dnp = nullptr; uint64_t* Qg = nullptr;
     const size_t base2 = [&] {   // K > 1: partition scratch that outlives each partition (flags, compacted reads, their global index)
-        if (K > 1) { pf = A.alloc<uint32_t>(std::max(nR, 1)); Rp = A.alloc<ReadRec>(std::max(nR, 1)); ridx = A.alloc<uint32_t>(std::max(nR, 1)); dnp = A.alloc<int>(1); }
+        if (K > 1) { pf = A.alloc<uint32_t>(std::max(nR, 1)); Rp = A.alloc<ReadRec>(std::max(nR, 1)); ridx = A.alloc<uint32_t>(std::max(nR, 1)); dnp = A.alloc<int>(1); if (in.dp.use_q) Qg = A.alloc<uint64_t>(2 * (size_t)std::max(nR, 1)); }
         return A.mark(); }();
     std::vector<std::pair<uint32_t, std::array<uint32_t, 4>>> indels;   // (global read index, indel): read order, as for K = 1
     const int jb = bits_of(std::max(nj, 1)), sb = bits_of(std::max<uint64_t>(in.par.n_snps, 1)), cb = bits_of(std::max<uint64_t>(in.ncells, 1));
@@ -649,13 +655,14 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     size_t peak_all = A.peak;   // each partition measures its own peak; the run reports the largest
     for (int part = 0; part < K; part++) {
         A.reset(base2); A.peak = base2;
-        int nRp = 0;
-        if (K == 1) { Rp = in.R; nRp = nR; }   // one partition: the reads as they are (the kernels skip reads without a barcode)
+        int nRp = 0; const uint64_t* Qp = nullptr;   // Qp: the partition's per-read low-quality masks (dp.use_q)
+        if (K == 1) { Rp = in.R; nRp = nR; Qp = in.dp.use_q ? in.Q : nullptr; }   // one partition: the reads as they are (the kernels skip reads without a barcode)
         else if (nR > 0) {
             k_partflag<<<GR0, TB>>>(in.R, nR, (uint32_t)K, (uint32_t)part, pf);
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, in.R, pf, Rp, dnp, nR); });
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, cub::CountingInputIterator<uint32_t>(0), pf, ridx, dnp, nR); });
             CK(cudaMemcpy(&nRp, dnp, 4, cudaMemcpyDeviceToHost));
+            if (in.dp.use_q && nRp > 0) { k_gatherq<<<(nRp + TB - 1) / TB, TB>>>(in.Q, ridx, nRp, Qg); Qp = Qg; }
         }
         T.mark("part.select");
         const int GR = (nRp + TB - 1) / TB;
@@ -668,8 +675,8 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         if (g_cell_stats && (in.dp.rules & 256)) k_mtres<<<GR, TB>>>(Rp, nRp, gr, hits);
         uint32_t* rc = A.alloc<uint32_t>(std::max(nRp, 1));
         k_cnt<<<GR, TB>>>(Rp, nRp, c_sj, rc); uint32_t* r_sj = scan_u32(A, rc, nRp); int n_sjt = total_of(A, rc, r_sj, nRp);
-        k_cnt<<<GR, TB>>>(Rp, nRp, c_snp, rc); uint32_t* r_snp = scan_u32(A, rc, nRp); int n_snpt = total_of(A, rc, r_snp, nRp);
-        k_cnt<<<GR, TB>>>(Rp, nRp, c_mt, rc); uint32_t* r_mt = scan_u32(A, rc, nRp); int n_mtt = total_of(A, rc, r_mt, nRp);
+        if (Qp) k_cnt_q<<<GR, TB>>>(Rp, nRp, o_snp, c_snp, l_snp, Qp, 25, rc); else k_cnt<<<GR, TB>>>(Rp, nRp, c_snp, rc); uint32_t* r_snp = scan_u32(A, rc, nRp); int n_snpt = total_of(A, rc, r_snp, nRp);
+        if (Qp) k_cnt_q<<<GR, TB>>>(Rp, nRp, o_mt, c_mt, l_mt, Qp, 17, rc); else k_cnt<<<GR, TB>>>(Rp, nRp, c_mt, rc); uint32_t* r_mt = scan_u32(A, rc, nRp); int n_mtt = total_of(A, rc, r_mt, nRp);
         k_cnt<<<GR, TB>>>(Rp, nRp, c_ind, rc); uint32_t* r_ind = scan_u32(A, rc, nRp); int n_indt = total_of(A, rc, r_ind, nRp);
         const size_t s4 = A.mark();
         T.mark("4.expand");
@@ -691,9 +698,9 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         const size_t s5 = A.mark();
         uint64_t* sj_u = nullptr; uint32_t* sj_n = nullptr; int n_sju = red_junction(A, T, in, Rp, nRp, r_sj, o_sj, c_sj, l_jid, n_sjt, jb, cb, &sj_u, &sj_n, gr, gsp);
         const size_t s6 = A.mark();
-        uint64_t* sn_u = nullptr; uint64_t* sn_v = nullptr; int n_snu = red_snp(A, T, in, Rp, nRp, r_snp, o_snp, c_snp, l_snp, n_snpt, sb, cb, &sn_u, &sn_v, gr, gsp);
+        uint64_t* sn_u = nullptr; uint64_t* sn_v = nullptr; int n_snu = red_snp(A, T, in, Rp, nRp, r_snp, o_snp, c_snp, l_snp, n_snpt, sb, cb, &sn_u, &sn_v, gr, gsp, Qp);
         const size_t s7 = A.mark();
-        uint64_t* mt_u = nullptr; uint32_t* mt_n = nullptr; int n_mtu = red_mt(A, T, in, Rp, nRp, r_mt, o_mt, c_mt, l_mt, n_mtt, cb, &mt_u, &mt_n);
+        uint64_t* mt_u = nullptr; uint32_t* mt_n = nullptr; int n_mtu = red_mt(A, T, in, Rp, nRp, r_mt, o_mt, c_mt, l_mt, n_mtt, cb, &mt_u, &mt_n, Qp);
         uint32_t* in_bc = A.alloc<uint32_t>(std::max(n_indt, 1)); IND* in_ind = A.alloc<IND>(std::max(n_indt, 1)); uint32_t* in_ri = A.alloc<uint32_t>(std::max(n_indt, 1));
         k_fill_ind<<<GR, TB>>>(Rp, nRp, r_ind, o_ind, c_ind, l_ind, in_bc, in_ind, ridx, in_ri);
         T.mark("7.mt");

@@ -20,6 +20,7 @@ bool g_handoffClipCheck = false;
 std::atomic<uint64> g_handoffClipBad(0);
 const uint8 *g_handoffRecAln = nullptr;
 HandoffReadEntry *g_handoffReads = nullptr;
+uint64 *g_handoffQMask = nullptr;
 int g_handoffMinQ = 0;
 uint32 (*g_handoffReadHook)(uint64, const char *, uint64) = nullptr;
 const uint8 *g_handoffSum = nullptr;

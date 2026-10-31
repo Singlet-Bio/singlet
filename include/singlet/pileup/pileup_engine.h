@@ -2117,7 +2117,7 @@ public:
     // of hand-off reads and every counter the same total as the serial pass (SINGLET_HANDOFF_PASS_SERIAL=1 runs that one).
     void gpu_pileup_pending_append(const std::vector<std::pair<uint32_t, uint32_t>>& v) { gpu_wl_pending_.insert(gpu_wl_pending_.end(), v.begin(), v.end()); }
     bool gpu_handoff_pass_entries(PileupStats& stats, const gpupileup::Handoff* H, const gpupileup::ReadEntry* E) {
-        struct Out { uint32_t rec; int32_t bc; uint64_t u3; uint32_t clip; };
+        struct Out { uint32_t rec; int32_t bc; uint64_t u3; uint32_t clip; gpupileup::QM qm; bool hasq; };
         struct Ctx {
             PileupStats st; uint64_t n_done = 0, n_unwritten = 0, n_bigclip = 0, n_nohook = 0, lowq = 0, neqn = 0;
             uint64_t cb_status[8] = {}; char cb_buf[40] = {};
@@ -2137,6 +2137,7 @@ public:
         if (const char* e = std::getenv("SINGLET_HANDOFF_PASS_THREADS")) nT = std::max(1, std::atoi(e));
         const uint64_t N = H->n_reads;
         if (N < (1u << 16)) nT = 1;
+        const gpupileup::QM* const QMs = gpu_col_->handoff_qmask();   // STAR's per-read low-quality masks (null if STAR wrote none)
         std::vector<Ctx> ctxs(nT);
         auto work = [&](int t) {
             Ctx& c = ctxs[t];
@@ -2223,7 +2224,7 @@ public:
                 c.lowq += E[i].low_qual; c.neqn += E[i].qual_neq_n;
                 uint64_t u3 = 0;
                 for (int j = 0; j < (int) ur.size() && j < 21; j++) { const char ch = ur[j]; const uint64_t v = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; u3 |= v << (3 * j); }
-                c.out.push_back({rec, bc, u3, clip});
+                c.out.push_back({rec, bc, u3, clip, QMs != nullptr ? QMs[i] : gpupileup::QM{{0, 0}}, QMs != nullptr && !(E[i].flags & 64u)});
                 st.barcoded_reads++;
                 if (static_cast<uint32_t>(bc) < c.cell_reads.size()) c.cell_reads[static_cast<uint32_t>(bc)]++;
                 const int nh = std::max<int>(pnh, 1);
@@ -2254,7 +2255,7 @@ public:
             for (size_t k = 0; k < c.wl_counts.size(); k++) wl_umi_counts_[k] += c.wl_counts[k];
             gpu_pileup_pending_append(c.wl_pending);
             gpu_col_->add_quality_counts64(c.lowq, c.neqn);
-            for (const Out& o : c.out) gpu_col_->add_handoff_read_u3(o.rec, o.bc, o.u3, static_cast<int>(H->umiL), o.clip);
+            for (const Out& o : c.out) gpu_col_->add_handoff_read_u3(o.rec, o.bc, o.u3, static_cast<int>(H->umiL), o.clip, o.hasq ? &o.qm : nullptr);
             std::vector<Out>().swap(c.out);
         }
         if (n_unwritten) { std::cerr << "[gpu_pileup] hand-off: STAR wrote no entry for " << n_unwritten << " hand-off reads\n"; return false; }

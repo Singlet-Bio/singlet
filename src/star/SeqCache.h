@@ -87,6 +87,9 @@ extern const uint8 *g_handoffRecAln;
 struct HandoffReadEntry { uint64 cr3, ur3; uint16 lowQual, qualNeqN; uint32 flags; };
 static_assert(sizeof(HandoffReadEntry) == 24, "HandoffReadEntry layout is shared with the pileup");
 extern HandoffReadEntry *g_handoffReads;
+//per hand-off read the 128-bit low-quality mask of its record (two words; bit i: base i of the record, 5' clip removed, quality < g_handoffMinQ), in a shared
+//file mapping (<hand-off>.reads.q) next to g_handoffReads; nullptr when off. Entry flag bit 6 (64): the mask is unavailable (record over 128 bases)
+extern uint64 *g_handoffQMask;
 extern int g_handoffMinQ;
 //set by singlet: called for each clipped hand-off read (read index, the read as in the FASTQ, its length); returns entry flag bits 2-4
 //(bit 2 the read is in the pileup's rRNA sample, bits 3 / 4 the rRNA detector's verdict on the read / its reverse complement)

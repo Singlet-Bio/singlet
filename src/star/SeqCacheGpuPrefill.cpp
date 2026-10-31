@@ -449,6 +449,17 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 if (m != MAP_FAILED) {   // the file is zero-filled: unwritten entries have flags 0
                     g_handoffReads = (HandoffReadEntry *) m; g_handoffMinQ = atoi(mq);
                     P.inOut->logMain << "ENGINE_GPU: per-read hand-off entries -> " << rp << "\n";
+                    const char *qe = getenv("SINGLET_HANDOFF_QMASK");   // per-base quality masks for the GPU pileup (=0: off)
+                    if (!(qe != nullptr && qe[0] == '0')) {
+                        const std::string qp = rp + ".q";
+                        const size_t qbytes = std::max<size_t>(16, g_handoffNReads * 16);
+                        int qfd = open(qp.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
+                        void *qm = MAP_FAILED;
+                        if (qfd >= 0 && ftruncate(qfd, (off_t) qbytes) == 0) qm = mmap(nullptr, qbytes, PROT_READ | PROT_WRITE, MAP_SHARED, qfd, 0);
+                        if (qfd >= 0) close(qfd);
+                        if (qm != MAP_FAILED) {g_handoffQMask = (uint64 *) qm; P.inOut->logMain << "ENGINE_GPU: per-read low-quality masks -> " << qp << "\n";}
+                        else unlink(qp.c_str());
+                    }
                 } else {
                     unlink(rp.c_str());
                 }
