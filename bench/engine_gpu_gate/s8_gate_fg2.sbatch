@@ -66,6 +66,16 @@ cmp2() { [ -d $SCR/$s/$1/out ] && [ -d $SCR/$s/$2/out ] || { echo "!! GATE FAIL:
   echo "=== $s $1 vs $2" | tee -a $RES/summary.txt
   python3 $SCR/repo/bench/star_accel/out_equiv.py $SCR/$s/$1/out $SCR/$s/$2/out > $RES/equiv-$1-$2.txt 2>&1
   grep -a '^  DIFF\|^files:\|^RESULT' $RES/equiv-$1-$2.txt | cut -c1-200 | head -30 | tee -a $RES/summary.txt; }
+# the files whose line order depends on STAR's threads (Unmapped mates, nonhost reads): the same records? (4-line records sorted as one line each)
+setcmp() {
+  for f in star_Unmapped.out.mate1 star_Unmapped.out.mate2 nonhost_reads.fq; do
+    ha=$(paste - - - - < $SCR/$s/$1/out/$f | LC_ALL=C sort -S 6G -T $SCR | md5sum | cut -c1-32)
+    hb=$(paste - - - - < $SCR/$s/$2/out/$f | LC_ALL=C sort -S 6G -T $SCR | md5sum | cut -c1-32)
+    if [ "$ha" = "$hb" ]; then echo "SAME RECORDS, ORDER MAY DIFFER: $f ($1 vs $2)" | tee -a $RES/summary.txt
+    else echo "!! GATE FAIL: $f has different records ($1 vs $2)" | tee -a $RES/summary.txt; FAIL=1; fi
+  done
+}
 cmp2 cpu_m cpuG_m; cmp2 cpu_m gpuD_m; cmp2 gpuD_m gpuG_m
+setcmp cpu_m cpuG_m; setcmp cpu_m gpuD_m; setcmp gpuD_m gpuG_m
 [ $FAIL = 0 ] && echo "GATE RUN OK (identity verdicts above)" | tee -a $RES/summary.txt || echo "GATE FAILED" | tee -a $RES/summary.txt
 echo done $(date -Is) | tee -a $RES/summary.txt
