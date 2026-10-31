@@ -215,9 +215,10 @@ __global__ void k_p2(Params P, GenomeView g, u64 n, const Work<C>* work, const u
 }
 template <class C>
 __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
-                     const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen) {
+                     const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen, const uint32_t* perm) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
+    if (perm) k = perm[k];   // work bucketing: thread t finishes read perm[t] of the batch (reads with the same amount of work share a warp); results land at the read's own slot
     Work<C>& w = work[k];
     w.stepBudget = budget;
     u64 o = b0 + k;
@@ -255,6 +256,12 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     EG_CK(cudaMalloc(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>))); EG_CK(cudaMalloc(&dBst, NB));
     EG_CK(cudaMalloc(&dNent, NB * 8)); EG_CK(cudaMalloc(&dBase, NB * 8));
     u64 bitsCap = 1 << 20; EG_CK(cudaMalloc(&dBits, bitsCap * 4));
+    // work bucketing (SINGLET_ENGINE_GPU_BUCKET=0 turns it off): stage 3 (the stitch) runs the batch's reads in the order of their stage-1 hit counts, so that
+    // the reads that stop after the seed stage (no hits) fill whole warps and the others share a warp with reads of similar work
+    const char* bk = std::getenv("SINGLET_ENGINE_GPU_BUCKET");
+    const bool bucket = !(bk != nullptr && bk[0] == '0');
+    uint32_t* dPerm = nullptr; u64* dKey = nullptr;
+    if (bucket) { EG_CK(cudaMalloc(&dPerm, NB * 4)); EG_CK(cudaMalloc(&dKey, NB * 8)); }
     devNote();
     for (u64 b0 = 0; b0 < n; b0 += NB) {
         u64 nb = std::min(NB, n - b0);
@@ -266,7 +273,12 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         if (words > bitsCap) { cudaFree(dBits); bitsCap = words * 2; EG_CK(cudaMalloc(&dBits, bitsCap * 4)); }
         EG_CK(cudaMemset(dBits, 0, words * 4));
         EG_KT("p2", k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits));
-        EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen));
+        if (bucket) {
+            EG_KT("bucket", thrust::copy(thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dKey));
+                            thrust::sequence(thrust::device_ptr<uint32_t>(dPerm), thrust::device_ptr<uint32_t>(dPerm + nb));
+                            thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm)));
+        }
+        EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, bucket ? dPerm : nullptr));
         EG_CK(cudaGetLastError());
     }
     EG_CK(cudaDeviceSynchronize());
@@ -287,6 +299,8 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     EG_CK(cudaMemcpy(L.status.data(), dSt, n, cudaMemcpyDeviceToHost)); EG_CK(cudaMemcpy(L.len.data(), dLen, n * 2, cudaMemcpyDeviceToHost));
     cudaFree(dIdx); cudaFree(dOut); cudaFree(dSt); cudaFree(dLen); cudaFree(dWork); cudaFree(dRbuf); cudaFree(dBst); cudaFree(dNent);
     cudaFree(dBase); cudaFree(dBits);
+    if (dPerm) cudaFree(dPerm);
+    if (dKey) cudaFree(dKey);
     return true;
 }
 
