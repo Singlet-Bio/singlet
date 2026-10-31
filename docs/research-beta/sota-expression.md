@@ -99,4 +99,45 @@ distance on pbmc1k_v2)**, which is driven by STARsolo's Velocyto being the outli
 and hgmm) and by a 8-11% lower share on nuclei. No engine change proposed yet; the ambiguous layer exists (`ambiguous_counts`), no
 addition needed. A real-truth check of the share (metabolic labelling, or long reads from `bench/ground-truth`) is the open item.
 
-(next: cell calling)
+### 2. Empty droplets and cell calling (2026-10-31, pin d9834b8a)
+
+Truth that is not a cell caller (`bench/cellcall_truth`, branch `bench/cellcall-independent-truth`): Kang b2 ctrl donor genotypes
+(per-barcode SNP likelihood vs the ambient donor mixture) and hgmm1k_v3 species purity; contested barcodes scored by a mixture
+estimate with bootstrap CIs. Calls re-scored from the pin's own `cell_calls.tsv` (`bench/expression_sota/cellcall_rescore.py`;
+the pin differs from the earlier calls on 98 of 22,605 Kang barcodes and 3 of 90,082 hgmm barcodes). Barcodes >= 50 UMI.
+
+| dataset (truth) | variant | caller | P | R | F1 | F1 minus called_v2 (95% CI) |
+|---|---|---|---|---|---|---|
+| Kang b2 ctrl (genotype) | lenient | **called_v2 (pin)** | 0.9905 | 0.9905 | **0.9905** | |
+| | | STARsolo EmptyDrops_CR | 0.9990 | 0.9136 | 0.9544 | [-0.040, -0.032] |
+| | | CellBender | 0.9848 | 0.9843 | 0.9846 | [-0.008, -0.003] |
+| | | Cell Ranger (authors) | 0.9989 | 0.8914 | 0.9421 | [-0.052, -0.044] |
+| | | knee (`called`) | 0.9990 | 0.8805 | 0.9360 | [-0.058, -0.050] |
+| Kang b2 ctrl | intact | **called_v2** | 0.9722 | 0.9920 | **0.9820** | |
+| | | EmptyDrops_CR / CellBender / knee | | | 0.9548 / 0.9767 / 0.9371 | all CIs below 0 |
+| hgmm1k_v3 (species) | intact | **called_v2** | 0.9585 | 0.8740 | **0.9143** | |
+| | | EmptyDrops_CR / CellBender / Cell Ranger | | | 0.8973 / 0.8919 / 0.8985 | [-0.024,-0.011] / [-0.031,-0.016] / [-0.023,-0.009] |
+| | | knee | 0.9875 | 0.7748 | 0.8683 | [-0.058, -0.034] |
+
+Re-confirmed: **F1 0.991 on genotype truth** (0.9905 lenient, 0.982 with damaged barcodes excluded), above every competitor with a
+CI that excludes zero; hgmm1k_v3 species truth likewise. The knee loses 0.05 F1 on both. hgmm1k_v3 "lenient" is not meaningful
+(species-shifted debris counted as cells; recall ~0.57 for every caller).
+
+**Which call Beta shows: `called_v2` (the pipeline default, `called_ed`), not the knee `called`.** It is the best F1 on both
+independent truths, and the knee's recall is 0.88 (Kang) and 0.77 (hgmm). I did not examine GSM6470208 itself (4,791 vs 10,239): there is no
+genotype or species truth for it, so the choice rests on the datasets above and the hashtag check in `docs/called-ed.md` (81% of
+v2's additions on a super-loaded hashed PBMC library are stained single cells, against 3.8% singlet recall for the knee). Users who want
+a stricter set filter on `fdr` and total UMI.
+
+**nuclei2k_v2 is a real over-call, not only a circular-truth artefact.** The pin calls 3,045 barcodes; EmptyDrops_CR calls 2,202
+(Gene) / 2,151 (GeneFull) and all of them are inside the v2 set (recall 1.00, precision 0.72 / 0.71, matching the gate's 0.77
+against the other reference). The 843 extras (outside EDCR Gene) have median 387 UMI, 152 genes, mito 8.9% and intronic 42%;
+the shared nuclei have 3,253 UMI, 1,762 genes, mito 2.4%, intronic 62%; ambient barcodes (20-100 UMI) have intronic 41%. Their
+intronic fraction is ambient-like, not nuclei-like, and mito is 4-6x the nuclei. By contrast in GSE157827 brain nuclei the extras
+looked like nuclei (intronic 0.60-0.64). A simple quantile "intact" filter (mito q99 / intronic q01 of the shared set) does not
+separate them (828 of 843 pass), so the fix needs a per-barcode test, not a threshold: candidate = add an intronic-fraction
+likelihood against the ambient profile to the EmptyDrops test for libraries whose called cells are intron rich. Not implemented:
+no independent truth for nuclei exists in the cohort, so a change would be tuned on the same evidence it is judged by. **Open: truth for
+nuclei (a hashed or genotype-pooled snRNA-seq set).**
+
+(next: ambient)
