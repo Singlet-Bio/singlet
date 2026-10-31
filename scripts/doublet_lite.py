@@ -233,6 +233,32 @@ def cmd_eval(a):
     print(json.dumps(rep))
 
 
+def cmd_diag(a):
+    """Single-feature mean AUPRC / AUROC over the 17 datasets and agreement with the stored atlas_knn (no stacker)."""
+    from scipy.stats import spearmanr
+    from sklearn.metrics import average_precision_score, roc_auc_score
+
+    import doublet_v2 as S
+    from singlet.features import doublet as D
+
+    data = S.load_training("stored")
+    for tag in a.tags:
+        for n in D.STUDY:
+            z = np.load(Path(a.out) / "lite" / f"feats_{tag}" / f"{n}.npz")
+            for k in z.files:
+                data[n][0][k + "@" + tag] = z[k]
+    names = ["atlas_knn", "atlas_clf", "ct_entropy"] + [f"{k}@{t}" for t in a.tags for k in ("lite_knn", "lite_entropy")]
+    for f in names:
+        ap, au, rho = [], [], []
+        for n in D.STUDY:
+            F, y = data[n]
+            ap.append(average_precision_score(y, F[f]))
+            au.append(roc_auc_score(y, F[f]))
+            ref = "atlas_knn" if "knn" in f else "ct_entropy"
+            rho.append(spearmanr(F[f], F[ref])[0])
+        print(f"{f:34s} AUPRC {np.mean(ap):.4f} AUROC {np.mean(au):.4f} rho_vs_stored {np.mean(rho):.3f}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -256,8 +282,11 @@ def main():
     e.add_argument("--out", required=True)
     e.add_argument("--combo", required=True, choices=list(COMBOS))
     e.add_argument("--tag", default="")
+    d = sub.add_parser("diag")
+    d.add_argument("--out", required=True)
+    d.add_argument("--tags", nargs="+", required=True)
     a = ap.parse_args()
-    {"select": cmd_select, "fit": cmd_fit, "feats": cmd_feats, "eval": cmd_eval}[a.cmd](a)
+    {"diag": cmd_diag, "select": cmd_select, "fit": cmd_fit, "feats": cmd_feats, "eval": cmd_eval}[a.cmd](a)
 
 
 if __name__ == "__main__":
