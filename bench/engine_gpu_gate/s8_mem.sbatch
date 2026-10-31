@@ -22,6 +22,7 @@ for cfg in $CFGS; do
   env SINGLET_ENGINE_GPU_CHUNK=$ch $( [ $ar != 0 ] && echo SINGLET_GPU_PILEUP_ARENA_GB=$ar ) $BIN $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
      --out-prefix $SCR/o/ --threads 18 --pipeline --output-format 1pz --engine gpu 2>&1 | while IFS= read -r l; do printf '%(%s)T %s\n' -1 "$l"; done > $D/run.log
   kill $MM 2>/dev/null
+  grep -a -h "device memory (GB in use)\|upload .* s, dedup\|cache filled" $SCR/o/star_Log.out 2>/dev/null | cut -c1-300 | tee -a $RES/summary.txt
   python3 - "$D" "$ch" "$ar" <<'PY' | tee -a $RES/summary.txt
 import sys, re
 D, ch, ar = sys.argv[1:4]
