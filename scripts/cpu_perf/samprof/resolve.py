@@ -68,6 +68,8 @@ def fn(pc, which):
 
 
 tot = len(recs)
+if '--cpu' in sys.argv:   # the process timer under-counts multithreaded CPU (about 1 sample per wall tick); scale to the measured total
+    ms = float(sys.argv[sys.argv.index('--cpu') + 1]) * 1000.0 / tot
 
 
 def sec(c):

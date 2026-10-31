@@ -25,7 +25,7 @@ grep -q "sam_hdr_destroy(bam_hdr_t" $S/src/star/bam_cat.c || \
   sed -i '/^#include "htslib\/htslib\/sam.h"/a extern "C" void sam_hdr_destroy(bam_hdr_t *h);' $S/src/star/bam_cat.c
 case $VARIANT in zn3*) MARCH=-march=znver3;; *) MARCH=-march=x86-64-v3;; esac
 LTO=OFF; case $VARIANT in *-lto*) LTO=ON;; esac
-GF=""; case $VARIANT in *-g) GF="-DCMAKE_CXX_FLAGS=-g -DCMAKE_C_FLAGS=-g";; esac   # -g: debug info for the samprof sampling profiler (no codegen change)
+GF=""; case $VARIANT in *-g) GF='"-DCMAKE_CXX_FLAGS=-g -fno-omit-frame-pointer" "-DCMAKE_C_FLAGS=-g -fno-omit-frame-pointer"';; esac   # -g: debug info for the samprof sampling profiler (frame pointers kept for the sampler)
 MODE=none; case $VARIANT in *-starpgo*) MODE=star;; *-pgo*) MODE=whole;; esac
 cat > $SCR/build.sh <<EOS
 set -euo pipefail
@@ -49,7 +49,7 @@ s_star_gen() { cfg "-DSINGLET_STAR_EXTRA_FLAGS=-fprofile-generate -fprofile-upda
 s_star_use() { cfg "-DSINGLET_STAR_EXTRA_FLAGS=-fprofile-use -fprofile-partial-training -Wno-missing-profile -Wno-error=coverage-mismatch" -DCMAKE_EXE_LINKER_FLAGS=; bld; }
 s_whole_gen() { cfg -DSINGLET_PGO=generate -DSINGLET_PGO_DIR=\$B/pgo; bld; }
 s_whole_use() { echo "[pgo] \$(find \$B/pgo -name '*.gcda' | wc -l) profiles"; cfg -DSINGLET_PGO=use -DSINGLET_PGO_DIR=\$B/pgo; bld; }
-final() { $ENV/bin/x86_64-conda-linux-gnu-gcc -O2 -fPIC -shared -o $OUTD/bin/libsamprof.so $S/scripts/cpu_perf/samprof/samprof.c; cp \$B/src/pipeline/singlet $OUTD/bin/singlet-$VARIANT.new && mv $OUTD/bin/singlet-$VARIANT.new $OUTD/bin/singlet-$VARIANT; }
+final() { $ENV/bin/x86_64-conda-linux-gnu-gcc -O2 -fPIC -shared -o $OUTD/bin/libsamprof.so $S/scripts/cpu_perf/samprof/samprof.c -ldl -lrt; cp \$B/src/pipeline/singlet $OUTD/bin/singlet-$VARIANT.new && mv $OUTD/bin/singlet-$VARIANT.new $OUTD/bin/singlet-$VARIANT; }
 "\$@"
 EOS
 inc() { apptainer exec -B /mnt/projects/debruinz_project -B $SCR $IMG bash $SCR/build.sh "$@"; }
