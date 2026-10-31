@@ -407,7 +407,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         double tc0 = now();
         Lane A, M, B;
         memMark("before-laneA");
-        if (!runLane<LaneA>(P, D, dSeq, dOff, repc, 262144, 1024, A, err)) return false;
+        // reads in flight in lane A: its Work + ReadBuf are ~150 KB each (40 GB at 262144); SINGLET_ENGINE_GPU_NB trades device memory for occupancy
+        u64 nbA = 262144;
+        if (const char* ne = std::getenv("SINGLET_ENGINE_GPU_NB")) nbA = std::max<u64>(4096, std::strtoull(ne, nullptr, 10));
+        if (!runLane<LaneA>(P, D, dSeq, dOff, repc, nbA, 1024, A, err)) return false;
         std::vector<uint32_t> repM, posM;
         for (u64 k = 0; k < repc.size(); k++) if (A.status[k] != (uint8_t)Status::Ok) { repM.push_back(repc[k]); posM.push_back((uint32_t)k); }
         if (!runLane<LaneM>(P, D, dSeq, dOff, repM, 262144, 2048, M, err)) return false;
