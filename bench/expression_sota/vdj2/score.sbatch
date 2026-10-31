@@ -29,7 +29,7 @@ for TAG in $TAGS; do
     REF=$SRC/python/singlet/vdj/data/vdj_human.tsv.gz
     [ "$conv" = cr5 ] && REF=$SRC/python/singlet/vdj/data/vdj_human_imgtcys.tsv.gz
     D=$WORK/data/vdjc/$lib; O=$V/runs/$lib
-    [ -s $O/singlet$TAG/contigs.csv ] || { echo "skip $lib$TAG (no run)"; continue; }
+    [ -s $O/singlet$TAG/contigs.csv ] && [ -s $O/trust4/TRUST_barcode_report.tsv ] || { echo "skip $lib$TAG (no run)"; continue; }
     python -P $SRC/bench/vdj/compare_vdj.py --reference $D/filtered_contig_annotations.csv --chains $ch --vdj-ref $REF \
       $( [ -s $O/gex_cells.txt ] && echo --gex-cells $O/gex_cells.txt ) \
       --singlet $O/singlet$TAG/contigs.csv --singlet-cells $O/singlet$TAG/cells.csv \
