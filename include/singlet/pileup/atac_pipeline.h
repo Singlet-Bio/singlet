@@ -157,6 +157,7 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
         auto raw = ATACFragmentExtractor::raw_barcode(rec);
         if (raw.empty()) continue;
         ++pass1_records;
+        if ((pass1_records & 0x7FFFFF) == 0) singlet::rearm_stall_watchdog("atac: barcode layout (pass 1 over the BAM)");   // progress every 8 M records
         ++raw_counts[std::string(raw)];
         if (AtacBarcodeCorrector::is_layout_sample(bam_get_qname(rec))) first.emplace_back(raw);
     }
@@ -171,7 +172,11 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
     ATACFragmentExtractor ex;
     ex.set_barcode_corrector(cor);
     ex.set_max_fragment_size(opt.max_fragment);
-    while (sam_read1(fp, hdr, rec) >= 0) ex.process_record(rec, hdr);
+    uint64_t pass2_records = 0;
+    while (sam_read1(fp, hdr, rec) >= 0) {
+        ex.process_record(rec, hdr);
+        if ((++pass2_records & 0x7FFFFF) == 0) singlet::rearm_stall_watchdog("atac: fragments (pass 2 over the BAM)");
+    }
     bam_destroy1(rec);
     bam_hdr_destroy(hdr);
     sam_close(fp);
@@ -182,6 +187,7 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
               << " duplicate read pairs; barcodes exact " << cs.exact << ", corrected " << cs.corrected
               << ", ambiguous " << cs.ambiguous << ", unmatched " << cs.unmatched + cs.invalid << "\n";
 
+    singlet::rearm_stall_watchdog("atac: fragments file and peaks");
     const size_t nbc = cor->size();
     std::vector<std::string> out_bc(nbc);
     for (size_t i = 0; i < nbc; ++i) out_bc[i] = cor->output_barcode(static_cast<uint32_t>(i));
