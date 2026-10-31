@@ -224,4 +224,27 @@ genotype-labelled lanes of a second, independent study (the batch-1 and stim lan
 study. Until then, ship nothing new for doublets: genotype doublets for pools with >= 2 donors (F1 0.77-0.87, S10), production score
 otherwise.
 
-(next: TE)
+### 5-7. TE, chimeric junctions, reads per UMI: what exists and what each needs (2026-10-31)
+
+State of the engine at d9834b8a (read from the source, nothing run yet):
+
+* **TE.** `--te-classify on` (needs `--cascade on` and `--te-db te_sketch.bin`) is a 21-mer sketch classifier at **Dfam family level** with
+  an EM, run on reads the cascade routes to L2 (`te_classifier.h`, `te_counter.h`, output `te_counts.1pz`). There is no genome-alignment TE
+  counting, no subfamily or locus level, and no multimapper EM over alignments. STAR's multimapper limit decides whether young L1/Alu reads
+  reach any counter at all.
+  Needed for the requested hierarchy: a TE annotation (RepeatMasker/Dfam hg38 BED with class/family/subfamily/locus) and a **separate counting
+  pass over multimapping alignments** (NH > 1) that never touches the gene counts, with locus-level counts only for uniquely mappable
+  loci (flag from a mappability track). Gate: gene matrices byte-identical with the TE pass on and off, CPU vs GPU byte-identical.
+* **Chimeric junctions.** STAR's chimeric code is compiled in (`include/singlet/star/Chimeric*.h`), but no per-cell chimeric table is
+  written. Needed: switch on `--chimSegmentMin` style detection, write (barcode, donor, acceptor, supporting UMIs), annotate against
+  Mitelman/ChimerDB/CTAT. Gate: main counts unchanged with detection on (chimeric detection can change which reads STAR reports as
+  linear, so this must be measured, not assumed).
+* **Reads per UMI.** Per-cell reads and unique UMIs already exist (`saturation.h`: `reads_per_umi` per barcode, `saturation_metrics.tsv`).
+  Missing: a reads-count matrix (cell x gene, same pz2 layout as the UMI matrix) and the per-cell histogram of reads per UMI. This is a
+  counting-stage change: the dedup step must carry the read multiplicity of each (cell, gene, UMI) it collapses.
+* **Truth.** `bench/ground-truth` and `$WORK/ground-truth/raw` (molecule-matched long reads) were named in the request but are not on
+  Clipper or in the repo. TE locus truth, and the USA share question, are blocked on that data.
+
+Each of the three is a CPU change plus a GPU mirror (S8) and a byte-identity gate; they are separate engine PRs, not benchmarking tasks.
+
+(next: VDJ, non-host, editing, HTO)
