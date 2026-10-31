@@ -62,8 +62,8 @@ static int verify_file(const std::string& path, const std::vector<std::string>& 
     }
     uint64_t bad = 0, nread = 0;
     uint32_t ci = 0, in_chunk = 0;
-    std::vector<uint8_t> pcb, pst, pumi, pseq, plen, pq, pexc;
-    std::vector<uint32_t> excv; ChunkHeader ch{};
+    std::vector<uint8_t> pcb, pst, pumi, pseq, plen, pq, pexc, praw;
+    std::vector<uint32_t> excv, rawv; ChunkHeader ch{};
     auto load_chunk = [&](uint32_t c) -> bool {
         const uint8_t* base = file.data() + idx[c].offset;
         std::memcpy(&ch, base, sizeof ch);
@@ -71,9 +71,11 @@ static int verify_file(const std::string& path, const std::vector<std::string>& 
         bool ok = inflate_plane(base, ch.sec[PL_CB], ch.flags & 1, pcb) && inflate_plane(base, ch.sec[PL_CBST], (ch.flags >> 1) & 1, pst) &&
                   inflate_plane(base, ch.sec[PL_UMI], (ch.flags >> 2) & 1, pumi) && inflate_plane(base, ch.sec[PL_SEQ], (ch.flags >> 3) & 1, pseq) &&
                   inflate_plane(base, ch.sec[PL_LEN], (ch.flags >> 4) & 1, plen) && inflate_plane(base, ch.sec[PL_Q], (ch.flags >> 5) & 1, pq) &&
-                  inflate_plane(base, ch.sec[PL_EXC], (ch.flags >> 6) & 1, pexc);
+                  inflate_plane(base, ch.sec[PL_EXC], (ch.flags >> 6) & 1, pexc) && inflate_plane(base, ch.sec[PL_RAWCB], (ch.flags >> 7) & 1, praw);
         excv.resize(pexc.size() / 4);
         if (!excv.empty()) std::memcpy(excv.data(), pexc.data(), pexc.size());
+        rawv.resize(praw.size() / 4);
+        if (!rawv.empty()) std::memcpy(rawv.data(), praw.data(), praw.size());
         return ok;
     };
     if (F.n_chunks && !load_chunk(0)) { std::fprintf(stderr, "verify: bad chunk 0\n"); return 7; }
@@ -130,6 +132,14 @@ static int verify_file(const std::string& path, const std::vector<std::string>& 
                         for (uint32_t e : excv) if (exc_idx(e) == k && exc_pos(e) == (uint32_t)j) { inexc = true; break; }
                         ok = inexc == (bool)((umin >> j) & 1);
                     }
+                    if (ok) {   // raw barcode entry: present exactly for the reads that were not an exact whitelist hit, with the barcode as sequenced
+                        uint32_t word = 0, nn = 0, npos = 0;
+                        for (int j = 0; j < bcl; j++) { uint32_t c = (uint32_t)((cbkey >> (3 * (bcl - 1 - j))) & 7); if (c > 3) { nn++; npos = (uint32_t)j + 1; c = 0; } word = (word << 2) | c; }
+                        const bool want = (pst[k] & 7) != CBST_EXACT;
+                        bool have = false, same = false;
+                        for (size_t q = 0; q + 1 < rawv.size(); q += 2) if ((rawv[q + 1] & 0x7FFF) == k) { have = true; same = rawv[q] == word && (rawv[q + 1] >> 15) == (nn == 0 ? 0u : nn == 1 ? npos : 31u); break; }
+                        ok = want == have && (!want || same);
+                    }
                 }
                 if (!ok) { bad++; if (bad <= 3) std::fprintf(stderr, "verify: mismatch at stored read %llu\n", (unsigned long long)(nread - 1)); }
             }
@@ -175,17 +185,18 @@ static int digest_file(const std::string& path, uint64_t* digest_out, uint64_t* 
     uint64_t dig = 0, n = 0;
     for (uint32_t c = 0; c < F.n_chunks; c++) {
         const uint8_t* base = file.data() + idx[c].offset; ChunkHeader ch; std::memcpy(&ch, base, sizeof ch);
-        std::vector<uint8_t> pcb, pst, pumi, pseq, plen, pq, pexc;
+        std::vector<uint8_t> pcb, pst, pumi, pseq, plen, pq, pexc, praw;
         if (!(inflate_plane(base, ch.sec[PL_CB], ch.flags & 1, pcb) && inflate_plane(base, ch.sec[PL_CBST], (ch.flags >> 1) & 1, pst) &&
               inflate_plane(base, ch.sec[PL_UMI], (ch.flags >> 2) & 1, pumi) && inflate_plane(base, ch.sec[PL_SEQ], (ch.flags >> 3) & 1, pseq) &&
               inflate_plane(base, ch.sec[PL_LEN], (ch.flags >> 4) & 1, plen) && inflate_plane(base, ch.sec[PL_Q], (ch.flags >> 5) & 1, pq) &&
-              inflate_plane(base, ch.sec[PL_EXC], (ch.flags >> 6) & 1, pexc))) return 7;
-        std::vector<uint32_t> umask(ch.n_reads, 0);
+              inflate_plane(base, ch.sec[PL_EXC], (ch.flags >> 6) & 1, pexc) && inflate_plane(base, ch.sec[PL_RAWCB], (ch.flags >> 7) & 1, praw))) return 7;
+        std::vector<uint32_t> umask(ch.n_reads, 0), rawword(ch.n_reads, 0), rawmeta(ch.n_reads, 0);
+        for (size_t q = 0; q + 8 <= praw.size(); q += 8) { uint32_t w, m; std::memcpy(&w, &praw[q], 4); std::memcpy(&m, &praw[q + 4], 4); rawword[m & 0x7FFF] = w; rawmeta[m & 0x7FFF] = (m >> 15) + 1; }
         for (size_t k = 0; k < pexc.size() / 4; k++) { uint32_t e; std::memcpy(&e, &pexc[4 * k], 4); umask[exc_idx(e)] |= 1u << exc_pos(e); }
         for (uint32_t i = 0; i < ch.n_reads; i++) {
             uint32_t cb, u, sid; std::memcpy(&cb, &pcb[4 * i], 4); std::memcpy(&u, &pumi[4 * i], 4); std::memcpy(&sid, &pseq[4 * i], 4);
             uint64_t h = h64(h64(h64(h64(0x9876, cb), pst[i]), u), umask[i]);
-            h = h64(h, sh[sid]);
+            h = h64(h64(h64(h, sh[sid]), rawword[i]), rawmeta[i]);
             if (!pq.empty()) for (uint32_t b = 0; b < slot; b += 8) { uint64_t w; std::memcpy(&w, &pq[(size_t)i * slot + b], 8); h = h64(h, w); }
             dig += h; n++;
         }

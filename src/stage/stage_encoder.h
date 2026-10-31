@@ -161,7 +161,7 @@ public:
         for (const auto& d : wl_dirs) { std::string p = d + "/" + wl_name; if (std::ifstream(p).good()) { wl_path = p; break; } }
         if (wl_path.empty()) die(6, "whitelist " + wl_name + " not found in the whitelist dirs");
         if (!corr.load_whitelist(wl_path)) die(6, "cannot load whitelist " + wl_path);
-        if (bcl <= 0 || bcl > 21 || bcl != corr.length()) die(6, "barcode length " + std::to_string(bcl) + " does not match the whitelist (" + std::to_string(corr.length()) + ")");
+        if (bcl <= 0 || bcl > 16 || bcl != corr.length()) die(6, "barcode length " + std::to_string(bcl) + " does not match the whitelist (" + std::to_string(corr.length()) + ")");
         if (umil <= 0 || umil > 16) die(6, "UMI length " + std::to_string(umil) + " not supported (1..16)");
         hist.assign(corr.size(), 0);
         recsz = sizeof(Rec) + (has_q ? SeqTable::SLOT : 0);
@@ -232,7 +232,7 @@ public:
         o.write(&H, sizeof H); o.pad_to(ALIGN);
         H.chunks_offset = o.off;
         std::vector<IndexEntry> cidx, bidx;
-        uint64_t plane_bytes[NPLANE] = {0}, status_counts[8] = {0};
+        uint64_t plane_bytes[NPLANE] = {0}, status_counts[8] = {0}, rawcb_entries = 0;
         std::unordered_map<uint64_t, std::pair<int64_t, uint8_t>> cbres;
         std::rewind(spill);
         std::vector<uint8_t> rbuf(recsz * CHUNK_READS);
@@ -245,7 +245,7 @@ public:
             std::vector<uint8_t> pl[NPLANE];
             pl[PL_CB].resize(4 * n); pl[PL_CBST].resize(n); pl[PL_UMI].resize(4 * n); pl[PL_SEQ].resize(4 * n); pl[PL_LEN].resize(n);
             if (has_q) pl[PL_Q].assign((size_t)n * seq_slot, 0);
-            std::vector<uint32_t> exc;
+            std::vector<uint32_t> exc, rawcb;
             for (uint32_t i = 0; i < n; i++) {
                 Rec rec; std::memcpy(&rec, &rbuf[i * recsz], sizeof rec);
                 auto it = cbres.find(rec.cbkey);
@@ -263,12 +263,19 @@ public:
                 std::memcpy(&pl[PL_CB][4 * i], &cb, 4); pl[PL_CBST][i] = status;
                 std::memcpy(&pl[PL_UMI][4 * i], &rec.umi, 4); std::memcpy(&pl[PL_SEQ][4 * i], &rec.seq, 4); pl[PL_LEN][i] = rec.len;
                 status_counts[it->second.second & 7]++; if (rec.bad) status_counts[7]++;
+                if ((it->second.second & 7) != CBST_EXACT) {   // raw barcode of every read that was not an exact whitelist hit
+                    uint32_t word = 0, nn = 0, npos = 0;
+                    for (int j = 0; j < bcl; j++) { uint32_t c = (uint32_t)((rec.cbkey >> (3 * (bcl - 1 - j))) & 7); if (c > 3) { nn++; npos = (uint32_t)j + 1; c = 0; } word = (word << 2) | c; }
+                    rawcb.push_back(word); rawcb.push_back(i | ((nn == 0 ? 0u : nn == 1 ? npos : 31u) << 15));
+                }
                 for (int j = 0; j < umil; j++) if ((rec.umin >> j) & 1) exc.push_back(exc_pack(i, EXC_UMI_N, (uint32_t)j));
                 if (has_q) std::memcpy(&pl[PL_Q][(size_t)i * seq_slot], &rbuf[i * recsz + sizeof rec], seq_slot);
             }
             pl[PL_EXC].resize(4 * exc.size()); if (!exc.empty()) std::memcpy(pl[PL_EXC].data(), exc.data(), 4 * exc.size());
+            pl[PL_RAWCB].resize(4 * rawcb.size()); if (!rawcb.empty()) std::memcpy(pl[PL_RAWCB].data(), rawcb.data(), 4 * rawcb.size());
+            rawcb_entries += rawcb.size() / 2;
             std::vector<uint8_t> body; ChunkHeader ch; std::memset(&ch, 0, sizeof ch);
-            ch.magic = CHUNK_MAGIC; ch.n_reads = n; ch.n_exc = (uint32_t)exc.size(); ch.first_read = first_read;
+            ch.magic = CHUNK_MAGIC; ch.n_reads = n; ch.n_exc = (uint32_t)exc.size(); ch.n_rawcb = (uint32_t)(rawcb.size() / 2); ch.first_read = first_read;
             body.resize(sizeof ch);
             for (int p = 0; p < NPLANE; p++) {
                 bool rawflag; std::vector<uint8_t> st = pack_plane(pl[p], level, rawflag);
@@ -341,13 +348,13 @@ public:
         char js[4096];
         std::snprintf(js, sizeof js,
             "{\"n_reads\":%llu,\"n_in\":%llu,\"n_dropped\":%llu,\"n_unique\":%llu,\"unique_fraction\":%.4f,\"protocol_id\":%u,\"whitelist\":\"%s\",\"cb_hist_reads\":%llu,"
-            "\"seq_slot\":%u,\"max_len\":%u,\"has_q\":%d,\"file_bytes\":%lld,\"bytes_per_read\":%.3f,\"read_plane_bytes\":{\"cb\":%llu,\"cbst\":%llu,\"umi\":%llu,\"seq\":%llu,\"len\":%llu,\"q\":%llu,\"exc\":%llu},"
+            "\"seq_slot\":%u,\"max_len\":%u,\"has_q\":%d,\"file_bytes\":%lld,\"bytes_per_read\":%.3f,\"read_plane_bytes\":{\"cb\":%llu,\"cbst\":%llu,\"umi\":%llu,\"seq\":%llu,\"len\":%llu,\"q\":%llu,\"exc\":%llu,\"rawcb\":%llu},\"rawcb_entries\":%llu,"
             "\"seq_table_bytes\":{\"seq2\":%llu,\"slen\":%llu,\"sexc\":%llu},\"status_counts\":[%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu],"
             "\"encoder_wall_s\":%.2f,\"encoder_cpu_s\":%.2f,\"finish_cpu_s\":%.2f,\"core_s_per_Mreads\":%.3f,\"table_mem_mb\":%.0f}",
             (unsigned long long)n_stored, (unsigned long long)n_in, (unsigned long long)n_dropped, (unsigned long long)tab.n(), n_stored ? (double)tab.n() / n_stored : 0.0,
             protocol_id, wl_name.c_str(), (unsigned long long)hist_reads, seq_slot, max_len, (int)has_q, (long long)fst.st_size, n_stored ? (double)fst.st_size / n_stored : 0.0,
             (unsigned long long)plane_bytes[PL_CB], (unsigned long long)plane_bytes[PL_CBST], (unsigned long long)plane_bytes[PL_UMI], (unsigned long long)plane_bytes[PL_SEQ],
-            (unsigned long long)plane_bytes[PL_LEN], (unsigned long long)plane_bytes[PL_Q], (unsigned long long)plane_bytes[PL_EXC],
+            (unsigned long long)plane_bytes[PL_LEN], (unsigned long long)plane_bytes[PL_Q], (unsigned long long)plane_bytes[PL_EXC], (unsigned long long)plane_bytes[PL_RAWCB], (unsigned long long)rawcb_entries,
             (unsigned long long)seq_bytes[0], (unsigned long long)seq_bytes[1], (unsigned long long)seq_bytes[2],
             (unsigned long long)status_counts[0], (unsigned long long)status_counts[1], (unsigned long long)status_counts[2], (unsigned long long)status_counts[3],
             (unsigned long long)status_counts[4], (unsigned long long)status_counts[5], (unsigned long long)status_counts[6], (unsigned long long)status_counts[7],

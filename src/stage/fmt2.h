@@ -45,7 +45,7 @@ enum CbStatus : uint8_t {
 };
 
 // Read planes inside a read chunk
-enum ReadPlane { PL_CB = 0, PL_CBST = 1, PL_UMI = 2, PL_SEQ = 3, PL_LEN = 4, PL_Q = 5, PL_EXC = 6, NPLANE = 7 };
+enum ReadPlane { PL_CB = 0, PL_CBST = 1, PL_UMI = 2, PL_SEQ = 3, PL_LEN = 4, PL_Q = 5, PL_EXC = 6, PL_RAWCB = 7, NPLANE = 8 };
 //   PL_CB   u32[n]            whitelist line number (0-based) of the corrected barcode, or NO_CB
 //   PL_CBST u8[n]             CbStatus
 //   PL_UMI  u32[n]            UMI, 2 bit/base, first base in the high bits, N coded as A (see PL_EXC)
@@ -55,6 +55,12 @@ enum ReadPlane { PL_CB = 0, PL_CBST = 1, PL_UMI = 2, PL_SEQ = 3, PL_LEN = 4, PL_
 //   PL_Q    u8[n * qslot]     only if F_QPLANE. 2 bit/base binned quality, first base in the high bits, zero padded, qslot = seq_slot bytes;
 //                             bin of base i = 0..3; FileHeader::q_edges[bin] is the decoded Phred value the engine uses (compare with --min-baseq: only bin 0 is low)
 //   PL_EXC  u32[n_exc]        sorted by read index: bits 0-14 index in chunk, 15-16 kind, 17-23 position. Kinds: UMI_N (the UMI word holds A at pos)
+//   PL_RAWCB u32[2 * n_rawcb]  one 8-byte entry for EVERY read whose barcode was not an exact whitelist hit (cbst low 3 bits != CBST_EXACT), sorted by read:
+//                             word  = the raw barcode as read, 2 bit/base, first base in the high bits, N coded as A (<= 16 nt)
+//                             meta  = bits 0-14 read index in chunk, bits 15-19 N position + 1 (0 = no N, 1..16 = that base, 31 = two or more N)
+//                             Needed so STAR's CellReads.stats (exact / corrected / no match) and the cell QC stay identical: cb/cbst give the
+//                             corrected barcode and the class, this gives what was actually sequenced (also for NO_CB reads, whose raw barcode
+//                             the old .1fq path kept in its dictionary-miss list).
 enum ExcKind { EXC_UMI_N = 0, EXC_RESERVED1 = 1, EXC_RESERVED2 = 2, EXC_RESERVED3 = 3 };
 static inline uint32_t exc_pack(uint32_t idx, uint32_t kind, uint32_t pos) { return idx | (kind << 15) | (pos << 17); }
 static inline uint32_t exc_idx(uint32_t e) { return e & 0x7FFF; }
@@ -113,14 +119,14 @@ struct FileHeader {                 // 4096 bytes at offset 0
     uint8_t  reserved[4096 - 324];
 };
 
-struct ChunkHeader {                // 144 bytes at the start of every read chunk
+struct ChunkHeader {                // 160 bytes at the start of every read chunk
     uint32_t magic;                 //   0  CHUNK_MAGIC
     uint32_t n_reads;               //   4
     uint32_t n_exc;                 //   8
     uint32_t flags;                 //  12  bit s set: plane s stored raw (not compressible)
     uint64_t first_read;            //  16  global index of the chunk's first read
-    uint32_t pad[2];                //  24
-    SecDesc  sec[NPLANE];           //  32  7 * 16 = 112 -> 144 total
+    uint32_t n_rawcb, pad1;         //  24  entries in PL_RAWCB
+    SecDesc  sec[NPLANE];           //  32  8 * 16 = 128 -> 160 total
 };
 
 struct BlockHeader {                // 72 bytes at the start of every sequence block (planes start at 80)
@@ -138,7 +144,7 @@ struct Footer { uint32_t magic, n_chunks, n_blocks; uint32_t index_crc32c; uint6
 #pragma pack(pop)
 
 static_assert(sizeof(SecDesc) == 16, "SecDesc");
-static_assert(sizeof(ChunkHeader) == 144, "ChunkHeader");
+static_assert(sizeof(ChunkHeader) == 160, "ChunkHeader");
 static_assert(sizeof(BlockHeader) == 72, "BlockHeader");
 static_assert(offsetof(FileHeader, header_crc32c) == 320, "FileHeader layout: crc after the last field");
 static_assert(offsetof(FileHeader, wl_sha256) == 88 && offsetof(FileHeader, status_counts) == 192 && offsetof(FileHeader, meta_offset) == 256, "FileHeader offsets");

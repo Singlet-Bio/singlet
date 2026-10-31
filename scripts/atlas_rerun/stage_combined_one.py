@@ -40,10 +40,10 @@ p, c, w = run([sing, "download", sra, "--quality", "binned", "--vdb-threads", "2
 out.update(A_rc=p.returncode, A_cpu=c, A_wall=w)
 if p.returncode == 0:
     out["fq_bytes"] = os.path.getsize(B + "/a.1fq")
-    p, c, w = run([SSB, "--whitelist-dir", WL, "--accessions", R, "--scratch", B, "-o", B + "/b.1fg2", B + "/a.1fq"])
+    p, c, w = run([SSB, "--whitelist-dir", WL, "--accessions", R, "--scratch", B, "--verify", "-o", B + "/b.1fg2", B + "/a.1fq"])
     out.update(B_stage_rc=p.returncode, B_stage_cpu=c, B_stage_wall=w, B_err=(p.stderr[-300:] if p.returncode else ''))
     if p.returncode == 0:
-        out["B_report"] = json.loads(p.stdout.strip().splitlines()[-1])
+        out["B_report"] = json.loads(p.stdout.strip().splitlines()[0])
         out["B_bytes"] = os.path.getsize(B + "/b.1fg2")
     rm(B + "/a.1fq")
 p, c, w = run([sing, "download", sra, "--quality", "binned", "--vdb-threads", "2", "--no-profile", "--stage-out", B + "/c.1fg2",
