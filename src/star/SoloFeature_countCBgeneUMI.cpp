@@ -4,6 +4,7 @@
 #include "SequenceFuns.h"
 #include "systemFunctions.h"
 #include <thread>
+#include "PhaseMark.h"
 
 void SoloFeature::countCBgeneUMI()
 {    
@@ -112,6 +113,7 @@ void SoloFeature::countCBgeneUMI()
     };
     readFlagCounts.countsAddNoCBarray(readFeatSum->readFlag.flagCountsNoCB);//add no-CB counts calculated in SoloReadFeature_record.cpp and not recorded to temp Solo files
 
+    starPhaseMark(P, "solo_records_read");
     nReadPerCBtotal.resize(nCB);
     nReadPerCBunique.resize(nCB);
     for (uint32 icb=0; icb<nCB; icb++) {
@@ -164,6 +166,7 @@ void SoloFeature::countCBgeneUMI()
     };
 
     collapseUMIall();
+    starPhaseMark(P, "solo_umi_collapsed");
         
     P.inOut->logMain << "RAM for solo feature "<< SoloFeatureTypes::Names[featureType] <<"\n"
                      <<  linuxProcMemory() << flush;        

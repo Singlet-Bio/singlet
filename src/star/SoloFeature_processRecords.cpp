@@ -4,6 +4,7 @@
 #include "SequenceFuns.h"
 #include "ErrorWarning.h"
 #include "systemFunctions.h"
+#include "PhaseMark.h"
 
 void SoloFeature::processRecords()
 {
@@ -39,7 +40,9 @@ void SoloFeature::processRecords()
         P.inOut->logMain <<"Read splice junctions for Solo SJ feature: "<< P.sjAll[0].size() <<endl;
     };
 
+    starPhaseMark(P, "solo_sumThreads_begin");
     SoloFeature::sumThreads();
+    starPhaseMark(P, "solo_sumThreads_done");
     
     //call counting method
     if (featureType==SoloFeatureTypes::Velocyto) {
@@ -60,6 +63,7 @@ void SoloFeature::processRecords()
     //if (!(pSolo.multiMap.yes.multi && (featureType==SoloFeatureTypes::Gene || featureType==SoloFeatureTypes::GeneFull)))
     //    readFeatSum->stats.V[readFeatSum->stats.yesWLmatch] += readFeatSum->stats.V[readFeatSum->stats.MultiFeature];   
 
+    starPhaseMark(P, "solo_counted");
     //output
     ofstream *statsStream = &ofstrOpen(outputPrefix+"Features.stats",ERROR_OUT, P);
     readFeatSum->statsOut(*statsStream);
@@ -70,13 +74,16 @@ void SoloFeature::processRecords()
 
     //output nU per gene per CB
     outputResults(false,  outputPrefix + "/raw/"); //unfiltered
+    starPhaseMark(P, "solo_raw_written");
     
     time(&rawTime);
     P.inOut->logMain << timeMonthDayTime(rawTime) << " ... Solo: cell filtering" <<endl;    
     cellFiltering();
+    starPhaseMark(P, "solo_cell_filtered");
     
     //summary stats output
     statsOutput();
+    starPhaseMark(P, "solo_stats_written");
     
     //delete big arrays allocated in the previous functions
     clearLarge();
