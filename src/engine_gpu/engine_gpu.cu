@@ -11,7 +11,9 @@
 #include "singlet/nvtx.h"
 #include "stitch.cuh"
 #include <cuda_runtime.h>
+#include <thrust/copy.h>
 #include <thrust/device_ptr.h>
+#include <thrust/reduce.h>
 #include <thrust/scan.h>
 #include <thrust/sort.h>
 #include <thrust/sequence.h>
@@ -148,6 +150,24 @@ __global__ void k_groups(const char* seq, const u64* off, const u64* h1, const u
         for (u64 t = 0; same && t < la; t++) same = seq[off[a] + t] == seq[off[b] + t];
         if (!same) atomicAdd(collisions, 1ULL);
     }
+}
+
+// the per-read pass of the dedup (after the sort and k_groups): per sorted position its read is order[k], head[k] marks the first of a group
+__global__ void k_dd_flags(const uint32_t* order, const uint32_t* head, const uint8_t* hasN, u64 n, uint8_t* repFlag, uint8_t* nFlag) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    const bool h = head[k] != 0, w = hasN[order[k]] != 0;
+    repFlag[k] = h && !w; nFlag[k] = h && w;
+}
+__global__ void k_dd_repofgroup(const uint32_t* order, const uint32_t* head, const uint32_t* g, const uint8_t* hasN, u64 n, uint32_t* repOfGroup) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n || !head[k]) return;
+    repOfGroup[g[k] - 1] = hasN[order[k]] ? 0xFFFFFFFFu : order[k];
+}
+__global__ void k_dd_readrep(const uint32_t* order, const uint32_t* g, const uint32_t* repOfGroup, u64 n, uint32_t* readRep) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    readRep[order[k]] = repOfGroup[g[k] - 1];
 }
 
 // ---- clipping (STAR's ClipMate::clip for mate 1, Hamming adapter type; SequenceFuns.cpp localSearch), per read: the clipped
@@ -537,27 +557,61 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     unsigned long long coll = 0;
     if (cudaMemcpy(&coll, dColl, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("dedup copy");
     if (coll) return fail("hash collision between different sequences (" + std::to_string(coll) + "): GPU path not used");
-    std::vector<uint32_t> order(n), head(n); std::vector<uint8_t> hasN(n);
-    cudaMemcpy(order.data(), dOrder, n * 4, cudaMemcpyDeviceToHost); cudaMemcpy(head.data(), dHead, n * 4, cudaMemcpyDeviceToHost);
-    cudaMemcpy(hasN.data(), dN, n, cudaMemcpyDeviceToHost);
-    cudaFree(dH1); cudaFree(dH2); cudaFree(dN); cudaFree(dOrder); cudaFree(dHead); cudaFree(dColl);
-    std::vector<uint32_t> rep;   // one read per distinct sequence without N
-    for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
-    // per read: the representative read of its distinct sequence (NONE for sequences with N, which STAR maps itself)
+    // The per-read pass of the dedup on the device (the host loops over every read cost 3.8 s of 25 s of the lock on pbmc1k_v3 and 17 s of 96 s on a 263 M-read
+    // sample, against 0.04 s / 0.16 s of kernels): the group heads, the sequences without N, the representative read of every group and of every read,
+    // and the order the distinct sequences are mapped in (first 32 bases) are computed on the GPU; only rep, readRep and the two counts come back.
+    // SINGLET_ENGINE_GPU_HOSTDEDUP=1 runs the former host loops (the identity reference).
     const uint32_t NONE = 0xFFFFFFFFu;
-    std::vector<uint32_t> readRep(n, NONE);
-    { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = hasN[order[k]] ? NONE : order[k]; readRep[order[k]] = cur; } }
-    // map them in sequence order (first 32 bases), not hash order: neighbouring threads then search the same SA ranges and loci
-    // (2.7x faster on pbmc1k_v3). Each sequence's result does not depend on the order.
-    if (!rep.empty()) {   // keys (first 32 bases) and the stable sort on the device
-        uint32_t* dRep; u64* dKey;
-        if (cudaMalloc(&dRep, rep.size() * 4) || cudaMalloc(&dKey, rep.size() * 8)) return fail("out of device memory (order)");
-        cudaMemcpy(dRep, rep.data(), rep.size() * 4, cudaMemcpyHostToDevice);
-        EG_KT("prefix_key", k_prefix_key<<<(unsigned)((rep.size() + 255) / 256), 256>>>(dSeq, dOff, dRep, rep.size(), dKey));
-        thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + rep.size()), thrust::device_ptr<uint32_t>(dRep));
-        if (cudaMemcpy(rep.data(), dRep, rep.size() * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
-        cudaFree(dRep); cudaFree(dKey);
+    std::vector<uint32_t> rep;   // one read per distinct sequence without N, in mapping order
+    std::vector<uint32_t> readRep;   // per read: the representative read of its distinct sequence (NONE for sequences with N, which STAR maps itself)
+    if (std::getenv("SINGLET_ENGINE_GPU_HOSTDEDUP") != nullptr) {
+        std::vector<uint32_t> order(n), head(n); std::vector<uint8_t> hasN(n);
+        cudaMemcpy(order.data(), dOrder, n * 4, cudaMemcpyDeviceToHost); cudaMemcpy(head.data(), dHead, n * 4, cudaMemcpyDeviceToHost);
+        cudaMemcpy(hasN.data(), dN, n, cudaMemcpyDeviceToHost);
+        for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
+        readRep.assign(n, NONE);
+        { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = hasN[order[k]] ? NONE : order[k]; readRep[order[k]] = cur; } }
+        if (!rep.empty()) {
+            uint32_t* dRep; u64* dKey;
+            if (cudaMalloc(&dRep, rep.size() * 4) || cudaMalloc(&dKey, rep.size() * 8)) return fail("out of device memory (order)");
+            cudaMemcpy(dRep, rep.data(), rep.size() * 4, cudaMemcpyHostToDevice);
+            EG_KT("prefix_key", k_prefix_key<<<(unsigned)((rep.size() + 255) / 256), 256>>>(dSeq, dOff, dRep, rep.size(), dKey));
+            thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + rep.size()), thrust::device_ptr<uint32_t>(dRep));
+            if (cudaMemcpy(rep.data(), dRep, rep.size() * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
+            cudaFree(dRep); cudaFree(dKey);
+        }
+    } else if (n > 0) {
+        uint8_t *dFlag; uint32_t *dG, *dRepOfGroup, *dReadRep, *dRep; u64* dKey;
+        if (cudaMalloc(&dFlag, 2 * n) || cudaMalloc(&dG, n * 4) || cudaMalloc(&dReadRep, n * 4) || cudaMalloc(&dRep, n * 4)) return fail("out of device memory (dedup pass)");
+        uint8_t *dRepFlag = dFlag, *dNFlag = dFlag + n;
+        const unsigned nb = (unsigned)((n + 255) / 256);
+        EG_KT("dd_flags", k_dd_flags<<<nb, 256>>>(dOrder, dHead, dN, n, dRepFlag, dNFlag));
+        thrust::inclusive_scan(thrust::device_ptr<uint32_t>(dHead), thrust::device_ptr<uint32_t>(dHead + n), thrust::device_ptr<uint32_t>(dG));
+        uint32_t nGroups = 0;
+        if (cudaMemcpy(&nGroups, dG + n - 1, 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("dedup copy");
+        if (cudaMalloc(&dRepOfGroup, (u64) nGroups * 4 + 4)) return fail("out of device memory (dedup groups)");
+        EG_KT("dd_groups", k_dd_repofgroup<<<nb, 256>>>(dOrder, dHead, dG, dN, n, dRepOfGroup));
+        EG_KT("dd_readrep", k_dd_readrep<<<nb, 256>>>(dOrder, dG, dRepOfGroup, n, dReadRep));
+        const u64 nRep = (u64) thrust::reduce(thrust::device_ptr<uint8_t>(dRepFlag), thrust::device_ptr<uint8_t>(dRepFlag + n), (u64) 0);
+        out.nWithN = (u64) thrust::reduce(thrust::device_ptr<uint8_t>(dNFlag), thrust::device_ptr<uint8_t>(dNFlag + n), (u64) 0);
+        out.nDistinct = (u64) nGroups;
+        thrust::copy_if(thrust::device_ptr<uint32_t>(dOrder), thrust::device_ptr<uint32_t>(dOrder + n), thrust::device_ptr<uint8_t>(dRepFlag),
+                        thrust::device_ptr<uint32_t>(dRep), thrust::identity<uint8_t>());
+        readRep.resize(n);
+        if (cudaMemcpy(readRep.data(), dReadRep, n * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("readRep copy");
+        rep.resize(nRep);
+        if (nRep > 0) {
+            if (cudaMalloc(&dKey, nRep * 8)) return fail("out of device memory (order)");
+            EG_KT("prefix_key", k_prefix_key<<<(unsigned)((nRep + 255) / 256), 256>>>(dSeq, dOff, dRep, nRep, dKey));
+            thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nRep), thrust::device_ptr<uint32_t>(dRep));
+            if (cudaMemcpy(rep.data(), dRep, nRep * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
+            cudaFree(dKey);
+        }
+        cudaFree(dFlag); cudaFree(dG); cudaFree(dRepOfGroup); cudaFree(dReadRep); cudaFree(dRep);
+    } else {
+        readRep.assign(n, NONE);
     }
+    cudaFree(dH1); cudaFree(dH2); cudaFree(dN); cudaFree(dOrder); cudaFree(dHead); cudaFree(dColl);
     out.secDedup = now() - t0;
     memMark("dedup");
     std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
