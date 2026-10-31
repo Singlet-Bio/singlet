@@ -272,9 +272,11 @@ def reap(stage, now=None, log=print):
     return n
 
 
-def backlog(stage):
-    """-> dict(samples, pairs, bytes) of ready/ (what drain workers can start now) and the todo/fetching counts."""
+def backlog(stage, classify=None):
+    """-> dict(samples, pairs, bytes) of ready/ (what drain workers can start now) and the todo/fetching counts.
+    classify(manifest) -> a class key (e.g. the smallest memory class that holds the sample): `by_class` then maps each key to its pairs."""
     ready = {"samples": 0, "pairs": 0, "bytes": 0}
+    by_class = {}
     rd = os.path.join(stage, "ready")
     for n in os.listdir(rd):
         try:
@@ -284,6 +286,11 @@ def backlog(stage):
         ready["samples"] += 1
         ready["pairs"] += m.get("pairs", 0)
         ready["bytes"] += m.get("bytes", 0)
+        if classify is not None:
+            k = classify(m)
+            by_class[k] = by_class.get(k, 0) + m.get("pairs", 0)
+    if classify is not None:
+        ready["by_class"] = by_class
     ready["claimed"] = len(os.listdir(os.path.join(stage, "claimed")))
     ready["todo"] = len(os.listdir(os.path.join(stage, "todo")))
     ready["fetching"] = len(os.listdir(os.path.join(stage, "fetching")))
