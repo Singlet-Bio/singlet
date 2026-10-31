@@ -1,4 +1,4 @@
-# Per-cell feature scores: gene-set activity and cell-cycle phase
+# Per-cell feature scores: gene-set activity, cell-cycle phase and doublet score
 
 Package `python/singlet/features/`, scripts `scripts/features_run.py` (+ `.sbatch`), `scripts/features_build_data.py`, pilot
 `bench/features/pilot.py`. Writes the feature sidecars of `docs/CELL-ARCHITECTURE.md` section 3; the cell index turns them into
@@ -25,6 +25,7 @@ coverage, dropped sets, timings).
 |---|---|---|
 | `hallmark` | 50 MSigDB Hallmark sets, e.g. `hallmark/hypoxia`, `hallmark/interferon_alpha_response` | score |
 | `cell_cycle` | `cell_cycle/phase` (G1, S, G2M), `cell_cycle/s_score`, `cell_cycle/g2m_score` | category, score, score |
+| `doublet` (on request, section 8) | `doublet/score_v2` | score |
 
 53 features in all: the cell index takes at most 64 per index version, so a further collection of this size needs either a new
 index version with a different selection or a larger cap there.
@@ -178,3 +179,97 @@ libraries (the modalities vocabulary marks them; most atlas samples have none):
 - Both are `comparable = 'atlas'` categories; `sample_cell_summary` counts per category value.
 - Blocker: the .s1 objects do not yet carry feature-barcode counts for most screens (the screen-atlas session is checking which
   studies have them).
+
+## 8. `doublet/score_v2`: a frozen cross-study doublet stacker
+
+Code `python/singlet/features/doublet.py` (+ `doublet_atlas.py`, `doublet_sdfl.py`, `doublet_util.py`), model
+`data/doublet_v2_stacker.{npz,json}`, jobs `scripts/doublet_v2.py` + `scripts/doublet_v2.sbatch`, tests `tests/python/test_doublet_v2.py`.
+Study and recipe: `docs/latent-doublet-ambient.md` (branch study/latent-qc) and `bench/expression_sota/doublets/` (branch
+claude/expression-sota-31cf6d). No R anywhere.
+
+**What is written.** Feature set `doublet`, one feature `doublet/score_v2` (float32 in [0, 1], higher = more doublet-like; NaN = not
+computed), one row per called cell sorted by `col`, through the same writer, guard and registry as the sets above (`comparable =
+'sample'`: it ranks cells within a sample and is not a calibrated doublet rate; thresholds 0.5 and 0.8). The version that produced a
+sidecar is in its Parquet metadata (`method_version`), in the registry row (`cell_feature.method_version`) and, through
+`normalize_feature_sidecar` / `attach_features`, in the study's `.s1` manifest entry. `method_version` =
+`singlet-features=<pkg>;doublet=score_v2;stacker=hgb300/<sha256[:8] of the trees>(sklearn <training version>);inputs=...;
+atlas_encoder=celltype_nn/m1_notissue(<sha256[:8] of model.pt>);centroids=<sha256[:8]>;sdfl=a,c;min_cells=200`. Any change to the
+trees, the encoder or the centroids changes it. The set is not in `FEATURE_SETS` (the default run); ask for it with
+`features_run.py run --sets doublet --prod-dir <engine run dirs> [--device cuda]` and register it with
+`features_run.py registry --sets doublet`. It is the 54th feature, inside the cell index's cap of 64.
+
+**What is computed.** Nine inputs per sample, each replaced by `rank / n` over the sample's called cells:
+
+| input | definition |
+|---|---|
+| `umi`, `genes` | log1p total counts, log1p detected genes |
+| `prod` | the engine's doublet score (`doublet_scores.tsv`, column `doublet_score`, of the sample's run directory; `--prod-dir DIR/<GSM>/doublet_scores.tsv`) |
+| `atlas_knn`, `atlas_clf`, `ct_entropy`, `atlas_nnls` | the cell type network `singlet.celltype_nn` (m1_notissue, trained on 2.8M CELLxGENE cells) as a fixed encoder of the real cells and 2n simulated doublets (summed counts of random pairs): fraction of simulated cells among the k = 0.5 sqrt(n) nearest neighbours in PCA-50 of its hidden layer; 5-fold cross-fitted MLP simulated vs real on the same PCA; entropy of the network's calibrated cell type distribution; relative residual drop of the best two-centroid non-negative fit over the best single one (856 atlas cell-type centroids). Port of `latent_gpu.py`; CPU or GPU (`device`) |
+| `sdfl`, `sdflc` | R-free artificial-doublet scorer in the style of scDblFinder (HVG, PCA-20, k-means, artificial doublets from cluster pairs, kNN features, two-round gradient boosting, out-of-fold scores); `sdflc` adds one third same-cluster pairs. Port of `sdfl.py`; the two variants share the PCA and clustering. The port returns exactly the values of the reference script (maximum absolute difference 0 on pbmc-1A-dm) |
+
+The stacker is `HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0,
+random_state=0)`, trained once on the 17 real-label datasets (labels from genotype, hashtag, MULTI-seq and species mixing;
+182k cells), each dataset weighted equally, on the stored precomputed scores. The trained trees are kept as plain arrays with the
+feature order, the scikit-learn version that trained them (1.6.1) and a SHA-256 over the arrays (`Stacker.load` refuses a file
+whose hash differs) and evaluated in numpy, so the scores do not depend on the installed scikit-learn; the exported trees equal
+sklearn's `predict_proba` to 0.0 on kang21 and to 1e-12 in the unit test. Retraining needs scikit-learn only
+(`doublet_v2.sbatch MODE=train`). Samples with fewer than 200 called cells, other organisms (only human and mouse), or no engine
+score get NaN (`features.json` lists the set under `dropped`); cells with a non-finite input get NaN.
+
+**Evidence (hold-out only).** Leave-one-study-out over the 17 datasets (the 17 datasets form 6 studies; a dataset is scored by a
+model trained on the datasets of the other studies), mean AUPRC:
+
+| inputs | mean AUPRC |
+|---|---|
+| this stacker, held-out inputs recomputed by the package (what a deployment computes) | **0.5707** |
+| the same, held-out inputs from the stored scores (the stack.py recipe; the package reproduces its per-cell scores to 1e-9) | 0.5694 |
+| trained and scored on package-recomputed inputs | 0.5724 |
+| same stacker without `sdfl`, `sdflc` (stack.py `combo_prod_atlas`, from the study) | 0.5573 |
+| scDblFinder (R, from the study) | 0.5587 |
+
+The AUPRC of the frozen model on the 17 datasets is not evidence: it was trained on them. The 17 labels see only heterotypic
+doublets across donors, hashtags or species. The stored `sdfl`, `sdflc` and atlas scores of the training set agree with the
+package's recomputation only up to Spearman 0.89-0.98 (kang21 and pbmc-1A-dm: `sdfl` 0.92 / 0.95, `atlas_clf` 0.93 / 0.89; the
+rest of the difference is not explained: the port equals the reference script exactly, and the stored `sdfl` files were rewritten
+on 2026-10-31), which is why the package-input row is reported; it does not lower the score (0.5707 vs 0.5694).
+
+**Scope.** For single-donor samples. Where a pool has two or more donors, genotype doublets (`donor_assignments`
+`prob_doublet`, Kang 2.1 AUROC 0.969 / AUPRC 0.897 against 0.935 / 0.698 for the expression stacker, and recall 0.89 on doublets
+that look like one cell type against about 0.5) stay authoritative; this feature does not replace them, and neither catches
+same-donor homotypic doublets. It is a ranking within a sample.
+
+**Cost per sample** (Clipper `short-bigmem`, 8 threads, CPU only, `OMP_WAIT_POLICY=PASSIVE`; `doublet_v2.sbatch MODE=feats`
+over the 17 datasets and `MODE=score`; CPU seconds = `time.process_time()`, user + system of all threads; peak = resident set of
+the process, cumulative over datasets in the `feats` run, so only the `score` runs give a clean peak):
+
+| sample | called cells | wall s | CPU s | of which atlas / sdfl wall s | peak memory |
+|---|---|---|---|---|---|
+| pbmc-1A-dm | 3,298 | 21 | 59 | 13 / 7 | 2.1 GB |
+| kang21 | 13,737 | 54 | 201 | 38 / 15 | 2.8 GB |
+| hm-12k | 12,820 | 72 | 215 | 37 / 35 | |
+| mkidney-ch | 21,179 | 101 | 324 | 69 / 32 | 5.3 GB |
+| HMEC-orig-MULTI | 26,426 | 142 | 413 | 82 / 60 | 9.3 GB |
+
+About 30 CPU-seconds plus 14.5 CPU-seconds per 1,000 called cells (500 cells: 21 s; 26k: 413 s), memory 2 GB at 3k cells to 9 GB at
+26k; 1 million cells is about 4 CPU-hours. The stacker itself takes under 1 s. A first measurement on a busy node with
+spinning OpenMP threads gave 3,305 CPU-seconds for pbmc-1A-dm (the same work, 608 s wall); with passive waiting it is 59, so
+`OMP_WAIT_POLICY=PASSIVE` belongs in every job that runs this. A GPU (`short-gpu` node, `--device cuda`, kang21) did not help at
+these sizes: 62 s wall, 106 CPU-s, because the encoder and the kNN are small next to the classifier loop and sdfl, which stay
+on the CPU; ask for CPUs. For comparison the engine's own doublet score costs about 2 s per 10,000 cells.
+
+**Where it runs: a post-pass right after the drain, not inside it.** (1) Cost: 1-7 minutes of 8 cores per typical sample, 30-100
+times the engine's whole doublet step, would lengthen every drain task and its memory request (2-9 GB, plus the 2.8M-cell
+network and torch) for a score that is not needed to finish a sample. (2) It needs only things the drain leaves behind (the called
+cells' counts and `doublet_scores.tsv`), so it can run as a Slurm array over finished samples with sized requests (4-8 CPUs,
+16 GB up to 30k cells, more above; not tested above 26k cells), restart per sample (`done` skips written sidecars) and be re-run
+for a `score_v3` or a new encoder without touching the drain's outputs. (3) The called-cell set must be final: the score ranks
+cells within the called set, and a sidecar built on a set that is later changed (for example by the EmptyDrops calls of
+docs/called-ed.md) has to be recomputed. (4) It keeps torch and the encoder files out of the production drain image. Run it per
+study, right after its samples finish: `sbatch --array=... scripts/features_run.sbatch` with `--sets doublet --prod-dir <run
+dirs>`, `OMP_WAIT_POLICY=PASSIVE`, `SINGLET_CELLTYPE_NN_MODEL` and `SINGLET_DOUBLET_CENTROIDS` set.
+
+**Not done / limits.** The atlas centroids (20 MB, sha256 recorded in the model file) and the network file are not in the
+repository; they are located by environment variables and checked against the recorded hashes (a copy is at
+`$WORK/data/doublet_v2/atlas_centroids.npz` on Clipper). Reading the engine score from the `.s1` cells table
+(`dbl_doublet_score`) instead of the run directory is not wired (the run directory is). Neither the sidecars nor the registry rows
+were uploaded or registered.
