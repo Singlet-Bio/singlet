@@ -2,7 +2,7 @@
 // Every thread gets its own CLOCK_THREAD_CPUTIME_ID timer (armed at thread start through a pthread_create wrapper) that raises SIGPROF on
 // that thread every SAMPROF_MS of its own CPU time, so each sample is exactly SAMPROF_MS of CPU and all threads are covered. (A single
 // process-wide ITIMER_PROF delivers to the main thread only and misses the workers.) The handler records the thread name and up to 32 return addresses; at exit they are
-// written to $SAMPROF_OUT/samples.bin with /proc/self/maps as maps.txt. Resolve with resolve.py. Active only in processes whose
+// written to $SAMPROF_OUT/samples.<pid>.bin with /proc/self/maps as maps.<pid>.txt (the STAR child is a fork of singlet, so one file pair per process). Resolve with resolve.py. Active only in processes whose
 // executable name starts with "singlet", so /usr/bin/time, bash and sam-dump are left alone. No source change to singlet.
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -88,10 +88,10 @@ __attribute__((destructor)) static void stop(void) {
     signal(SIGPROF, SIG_IGN); active = 0;
     size_t n = atomic_load(&nxt); if (n > cap) n = cap;
     const char *dir = getenv("SAMPROF_OUT"); char p[1024];
-    snprintf(p, sizeof p, "%s/samples.bin", dir);
+    snprintf(p, sizeof p, "%s/samples.%d.bin", dir, (int)getpid());
     FILE *f = fopen(p, "wb");
     if (f) { fwrite(&n, sizeof n, 1, f); fwrite(ring, sizeof(sample_t), n, f); fclose(f); }
-    snprintf(p, sizeof p, "%s/maps.txt", dir);
+    snprintf(p, sizeof p, "%s/maps.%d.txt", dir, (int)getpid());
     f = fopen(p, "w");
     FILE *m = fopen("/proc/self/maps", "r");
     if (f && m) { char ln[1024]; while (fgets(ln, sizeof ln, m)) fputs(ln, f); }
