@@ -21,6 +21,8 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <array>
+#include <map>
 #include <tuple>
 #include <atomic>
 #include <chrono>
@@ -90,6 +92,7 @@ struct PileupConfig {
     bool count_sj = true;           // Extract splice junctions
     bool umi_dedup = true;          // UMI deduplication for exon/intron
     bool umi_dedup_directional = false; // N6: directional 1-Hamming error correction (run() and run_parallel())
+    bool reads_matrix = true;       // exon_reads / intron_reads matrices and the per-cell reads-per-UMI histogram (needs umi_dedup); never changes the counts
     int umi_len = 12;               // UMI length in bases (for N6 directional Hamming)
     bool stranded = true;           // Strand-aware counting (10x Forward)
     bool reverse_strand = false;    // Invert strand filter (for 5' protocols)
@@ -525,6 +528,14 @@ public:
             if (config_.count_introns) {
                 intron_acc_.set_barcodes(barcodes_);
                 intron_acc_.set_n_features(gene_model_.n_introns());
+            }
+            if (reads_matrix_on()) {
+                exon_reads_acc_.set_barcodes(barcodes_);
+                exon_reads_acc_.set_n_features(gene_model_.n_exons());
+                if (config_.count_introns) {
+                    intron_reads_acc_.set_barcodes(barcodes_);
+                    intron_reads_acc_.set_n_features(gene_model_.n_introns());
+                }
             }
         }
 
@@ -1870,6 +1881,7 @@ public:
         in.geneIsMt.assign(gene_model_.n_genes(), 0);
         for (uint32_t g = 0; g < gene_model_.n_genes(); ++g) in.geneIsMt[g] = is_mt_gene(g) ? 1 : 0;
         in.wantGeneMerges = (has_vdj_ && config_.umi_dedup) ? 1 : 0;   // R9 per gene for the host's V(D)J reducer
+        in.wantReads = reads_matrix_on() ? 1 : 0;   // reads per molecule (exon_reads / intron_reads / histogram)
         in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
         in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
         const size_t nreads = gpu_col_->n_reads(), nsigs = gpu_col_->n_sigs(); const uint64_t inc = gpu_col_->incomplete();
@@ -2467,6 +2479,11 @@ public:
         unlockDevice(lock_fd);
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
         gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
+        if (reads_matrix_on()) {   // reads per molecule: the GPU's sums and histogram (the CPU store is empty)
+            gpu_put(exon_reads_acc_, out.exonReads); gpu_put(intron_reads_acc_, out.intronReads);
+            for (size_t i = 0; i < out.histCell.size(); ++i)
+                std::copy_n(out.hist.begin() + i * kReadsHistBins, kReadsHistBins, read_hist_[out.histCell[i]].begin());
+        }
         gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);
         sj_names_.clear(); sj_index_.clear();
         // the GPU's table has every junction of every signature (hand-off records include reads without a cell barcode); the CPU
@@ -2609,11 +2626,26 @@ public:
     /// Ambiguous molecules per gene (rows = genes). They are also counted in exons().
     const SparseAccumulator<uint16_t>& ambiguous() const { return amb_acc_; }
 
+    /// Reads per molecule, same layout as exons() / introns() (uint32: not clamped at 65535). Empty unless reads_matrix_on().
+    bool reads_matrix_on() const { return config_.reads_matrix && config_.umi_dedup && has_gene_model_; }
+    static constexpr int kReadsHistBins = 16;   ///< bin k-1 = molecules with k reads, k = 1..15; bin 15 = 16 or more
+    const SparseAccumulator<uint32_t>& exon_reads() const { return exon_reads_acc_; }
+    const SparseAccumulator<uint32_t>& intron_reads() const { return intron_reads_acc_; }
+    /// Per-cell histogram of reads per emitted molecule, barcode-index order, nonzero cells only.
+    const std::map<uint32_t, std::array<uint32_t, kReadsHistBins>>& reads_per_umi_hist() const { return read_hist_; }
+
     // G-EM: Ambiguous reads buffered for post-pileup EM rescue
     const std::vector<em_rescue::AmbigRead>& ambig_reads() const { return ambig_reads_; }
 
 private:
     PileupConfig config_;
+    // Reads per molecule (written by finalize_all on the main thread, or put from the GPU): never read by the counting path
+    mutable SparseAccumulator<uint32_t> exon_reads_acc_, intron_reads_acc_;
+    mutable std::map<uint32_t, std::array<uint32_t, kReadsHistBins>> read_hist_;
+    void add_read_hist(uint32_t bc, uint32_t reads) const {
+        auto& h = read_hist_[bc];
+        h[std::min<uint32_t>(reads, kReadsHistBins) - 1]++;
+    }
     std::string molecule_dump_;     // SINGLET_MOLECULE_DUMP: per-molecule TSV (gz) for diagnostics
     bool strand_probed_ = false;    // Auto-strand probe reached a decision
     bool strand_flipped_ = false;   // ... and changed reverse_strand
@@ -3855,6 +3887,16 @@ private:
         }
     }
 
+    // Where each emitted molecule's reads go (reads_matrix_on(); else a no-op)
+    auto reads_sink() const {
+        const bool on = reads_matrix_on();
+        return [this, on](bool intronic, uint32_t feat, uint32_t bc, uint32_t reads) {
+            if (!on) return;
+            (intronic ? intron_reads_acc_ : exon_reads_acc_).increment(feat, bc, reads);
+            add_read_hist(bc, reads);
+        };
+    }
+
     // Label and emit every molecule of `store`; ambiguous molecules also go to
     // `amb` (per gene). Returns the label counts.
     DirectionalUmiStore::MoleculeStats finalize_store(const DirectionalUmiStore& store,
@@ -3865,7 +3907,7 @@ private:
         return store.finalize_molecules(
             exon, intron,
             [&](uint32_t bc, uint32_t gene) { if (track_amb) amb.increment(gene, bc); },
-            config_.umi_len, config_.umi_dedup_directional);
+            config_.umi_len, config_.umi_dedup_directional, reads_sink());
     }
 
     // Label and emit the molecules of several stores (one per worker; each store
@@ -3937,7 +3979,7 @@ private:
                 const bool drop = dropped(m);
                 if (drop) st.dropped++;
                 else D::emit_molecule(m, *t.exon, *t.intron,
-                                      [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st);
+                                      [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st, reads_sink());
                 if (!dump) continue;
                 for (size_t k = 0; k < umi_s.size(); ++k) umi_s[k] = "ACGT"[(m.umi >> (2 * k)) & 3];
                 const char lab = drop ? 'D' : "SUA"[static_cast<int>(m.label())];
