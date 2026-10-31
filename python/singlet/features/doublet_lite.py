@@ -117,14 +117,15 @@ class Lite:
     def knn_fraction(Z: np.ndarray, n_real: int, k: int, block: int = 2048, extra=(5, 10, 20)) -> Dict[str, np.ndarray]:
         """For each of the first ``n_real`` rows of ``Z``: fraction of its k nearest neighbours (self excluded) among rows
         ``>= n_real`` (the simulated doublets), for k and the smaller ``extra`` values."""
-        ks = sorted({int(e) for e in extra if e < k} | {k})
+        ks = sorted({int(e) for e in extra} | {k})
+        kmax = ks[-1]
         sq = (Z * Z).sum(1)
         out = {kk: np.empty(n_real) for kk in ks}
         for s in range(0, n_real, block):
             e = min(s + block, n_real)
             d = sq[s:e, None] + sq[None, :] - 2.0 * (Z[s:e] @ Z.T)
             d[np.arange(e - s), np.arange(s, e)] = np.inf
-            nb = np.argpartition(d, k, axis=1)[:, :k]
+            nb = np.argpartition(d, kmax, axis=1)[:, :kmax]
             if len(ks) > 1:
                 nb = np.take_along_axis(nb, np.argsort(np.take_along_axis(d, nb, 1), axis=1), 1)
             for kk in ks:
