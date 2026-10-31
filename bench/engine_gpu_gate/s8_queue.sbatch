@@ -93,7 +93,7 @@ for cfg in $CONFIGS; do
   for g in 0 1; do
     ( seq 1 $((NS/2)) | xargs -P $S -I{} bash -c "run_one $g {} $D $T" ) &
   done
-  wait $(jobs -p | grep -v "^$GM$") 2>/dev/null
+  wait $(jobs -p | grep -v -x -e "$GM" -e "$PSIPID") 2>/dev/null
   T1=$(date +%s.%N); C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); kill $GM $PSIPID 2>/dev/null; cat $CG/io.stat > $D/io.stat.end 2>/dev/null
   U1=$(awk '$1=="user_usec"{print $2}' $CG/cpu.stat); Y1=$(awk '$1=="system_usec"{print $2}' $CG/cpu.stat)
   echo "cgroup CPU split for ${S}x${T}: user $(( (U1-U0)/1000000 )) s, system $(( (Y1-Y0)/1000000 )) s" | tee -a $RES/summary.txt
