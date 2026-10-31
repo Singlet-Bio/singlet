@@ -7,7 +7,7 @@ def rd(prefix, genes_first=True):
 Cc = rd(f"{run}/ambient_corrected_counts")
 cf = [l.rstrip("\n").split("\t")[0].split("_")[0] for l in gzip.open(f"{run}/ambient_corrected_counts_features.tsv.gz", "rt")]
 cb = [bare(l.split("\t")[0].strip()) for l in gzip.open(f"{run}/ambient_corrected_counts_barcodes.tsv.gz", "rt")]
-F = rd(f"{run}/filtered_feature_bc_matrix")
+F = sp.csr_matrix(sio.mmread(gzip.open(f"{run}/filtered_feature_bc_matrix/matrix.mtx.gz", "rb")))
 ff = [l.rstrip("\n").split("\t")[0] for l in gzip.open(f"{run}/filtered_feature_bc_matrix/features.tsv.gz", "rt")]
 fb = [bare(l.strip()) for l in gzip.open(f"{run}/filtered_feature_bc_matrix/barcodes.tsv.gz", "rt")]
 Cc = sp.csr_matrix(Cc); F = sp.csr_matrix(F)
