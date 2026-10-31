@@ -245,6 +245,23 @@ void run_case(const std::string& dir, bool parallel, bool directional) {
         uint64_t tot = 0;
         for (auto v : extra) tot += v;
         CHECK(tot == static_cast<uint64_t>(directional ? 3 : 2), tag + ": legacy exonic extra (mixed unspliced molecules)");
+        // the same molecules per feature (export.h's pre-USA split: legacy exon = exon + mixed_exon, legacy intron = intron -
+        // mixed_intron): all in G1, the column sums are legacy_exon_extra, and the legacy split is the old labels' (exon-only
+        // read and intron read = ambiguous, in the exon matrix): G1 exon M5, M1 + M3, M8, M7 / M5, M1, M7-exon + M3, M8 = 5
+        const auto& gm = e.gene_model();
+        const auto mx = e.mixed_exon().to_csc(), mi = e.mixed_intron().to_csc();
+        std::map<std::string, int> gx, gi;
+        for (size_t k = 0; k < mx.data.size(); ++k) gx[gm.gene_ids()[gm.exon_to_gene(static_cast<uint32_t>(mx.indices[k]))]] += mx.data[k];
+        for (size_t k = 0; k < mi.data.size(); ++k) gi[gm.gene_ids()[gm.intron_to_gene(static_cast<uint32_t>(mi.indices[k]))]] += mi.data[k];
+        const int nm = directional ? 3 : 2;
+        CHECK(gx.size() == 1 && gx["G1"] == nm && gi.size() == 1 && gi["G1"] == nm, tag + ": mixed_exon / mixed_intron hold the mixed molecules, in G1");
+        bool cols = mx.ncols == extra.size();
+        for (uint32_t j = 0; cols && j < mx.ncols; ++j) {
+            uint64_t c = 0; for (int32_t k = mx.indptr[j]; k < mx.indptr[j + 1]; ++k) c += mx.data[k];
+            cols = c == extra[j];
+        }
+        CHECK(cols, tag + ": mixed_exon column sums = legacy_exon_extra");
+        CHECK(g["G1"].exon + gx["G1"] == 5 && g["G1"].intron - gi["G1"] == u - nm, tag + ": legacy split = the pre-USA labels' (G1 exon 5)");
     }
     // reads-per-UMI matrices: same molecules, uint32 reads; the histogram holds each emitted molecule once
     uint64_t hist_mols = 0;
