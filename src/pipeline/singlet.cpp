@@ -5266,7 +5266,7 @@ int main(int argc, char* argv[]) {
     config.cb_from_cr = (stream_unsorted == 1);
 #ifdef SINGLET_HAVE_ENGINE_GPU
     // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer; rules 397)
-    // and any subset of them (e.g. 389, without kFlank), with the alevin-fry USA molecule labels and the legacy exonic knee input (legacy_exon_extra)
+    // and any subset of them (e.g. 389, without kFlank), with the alevin-fry USA molecule labels and the mixed molecules behind the pre-USA split (mixed_exon / mixed_intron)
     // as the CPU pileup. The others (kContained, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its
     // counts would differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads). Decided here, before the stream.
     if (getenv("SINGLET_GPU_PILEUP")) {
@@ -8729,6 +8729,10 @@ int main(int argc, char* argv[]) {
             auto in_csc  = config.count_introns
                 ? engine_ptr->introns().to_csc()
                 : singlet::SparseAccumulator<uint16_t>::CSCMatrix{};
+            if (config.count_introns && engine_ptr->mixed_exon().nnz_raw() > 0) {   // QC reads the pre-USA split, as export_results
+                ex_csc = singlet::csc_add_signed(ex_csc, engine_ptr->mixed_exon().to_csc(), +1);
+                in_csc = singlet::csc_add_signed(in_csc, engine_ptr->mixed_intron().to_csc(), -1);
+            }
             auto qc = singlet::compute_cell_qc(ex_csc, in_csc,
                                                engine_ptr->gene_model());
             spot_umis  = std::move(qc.total_umis);

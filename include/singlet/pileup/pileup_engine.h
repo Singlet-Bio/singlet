@@ -613,6 +613,10 @@ public:
         if (has_gene_model_ && config_.count_introns) {
             amb_acc_.set_barcodes(barcodes_);
             amb_acc_.set_n_features(gene_model_.n_genes());
+            mixed_exon_acc_.set_barcodes(barcodes_);
+            mixed_exon_acc_.set_n_features(gene_model_.n_exons());
+            mixed_intron_acc_.set_barcodes(barcodes_);
+            mixed_intron_acc_.set_n_features(gene_model_.n_introns());
         }
 
         // ── Multi-mapper gene-uniqueness buffer ──
@@ -1248,7 +1252,7 @@ public:
                       << mol_store_.n_molecule_groups() << " cell×gene groups, "
                       << (config_.umi_dedup_directional ? "directional" : "exact")
                       << " UMI collapse)...\n";
-            auto ms = finalize_all({{&mol_store_, &exon_acc_, &intron_acc_, &amb_acc_, true}});
+            auto ms = finalize_all({{&mol_store_, &exon_acc_, &intron_acc_, &amb_acc_, &mixed_exon_acc_, &mixed_intron_acc_, true}});
             fin_mark("molecule labelling done");
             add_molecule_stats(stats, ms);
 #ifdef SINGLET_HAVE_ENGINE_GPU
@@ -1349,6 +1353,8 @@ public:
         // Gene-model molecules (per worker, labelled and finalized after thread join)
         DirectionalUmiStore mol_store;
         SparseAccumulator<uint16_t> amb;  // ambiguous molecules per gene
+        // unspliced molecules with an exon-only read, at their exon / intron feature (PileupEngine::mixed_exon()/mixed_intron())
+        SparseAccumulator<uint16_t> mixed_exon, mixed_intron;
 
         // N18: CRISPR guide counts (per-worker)
         SparseAccumulator<uint16_t> guide;
@@ -1501,6 +1507,10 @@ public:
                     wc.intron.set_n_features(gene_model_.n_introns());
                     wc.amb.set_barcodes(barcodes_);
                     wc.amb.set_n_features(gene_model_.n_genes());
+                    wc.mixed_exon.set_barcodes(barcodes_);
+                    wc.mixed_exon.set_n_features(gene_model_.n_exons());
+                    wc.mixed_intron.set_barcodes(barcodes_);
+                    wc.mixed_intron.set_n_features(gene_model_.n_introns());
                 }
             }
             if (config_.count_mt) {
@@ -1707,7 +1717,8 @@ public:
         // so per-worker finalize is equivalent to a global one.
         std::vector<FinalizeTarget> fin_targets;
         for (int w = 0; w < n_workers; ++w)
-            fin_targets.push_back({&workers[w].mol_store, &workers[w].exon, &workers[w].intron, &workers[w].amb});
+            fin_targets.push_back({&workers[w].mol_store, &workers[w].exon, &workers[w].intron, &workers[w].amb,
+                                   &workers[w].mixed_exon, &workers[w].mixed_intron});
         DirectionalUmiStore::MoleculeStats mol_stats = finalize_all(fin_targets);
         // the stores are cleared after R9 has used them (below)
 
@@ -1808,6 +1819,8 @@ public:
             if (config_.count_introns) {
                 merge_accumulators(intron_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.intron; });
                 merge_accumulators(amb_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.amb; });
+                merge_accumulators(mixed_exon_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.mixed_exon; });
+                merge_accumulators(mixed_intron_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.mixed_intron; });
             }
         }
 
@@ -1995,6 +2008,8 @@ public:
         std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("exon", out.exon, gpupileup::cpu_triplets(exon_acc_), all) << "\n";
         std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("intron", out.intron, gpupileup::cpu_triplets(intron_acc_), all) << "\n";
         std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("ambiguous", out.amb, gpupileup::cpu_triplets(amb_acc_), all) << "\n";
+        std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("mixed_exon", out.mixedExon, gpupileup::cpu_triplets(mixed_exon_acc_), all) << "\n";
+        std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("mixed_intron", out.mixedIntron, gpupileup::cpu_triplets(mixed_intron_acc_), all) << "\n";
         std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("snp_ad", out.snpAd, gpupileup::cpu_triplets(snp_ad_), all) << "\n";
         std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("snp_dp", out.snpDp, gpupileup::cpu_triplets(snp_dp_), all) << "\n";
         std::cerr << "[gpu_pileup] " << gpupileup::cmp_line("mt", out.mt, gpupileup::cpu_triplets(mt_acc_), all) << "\n";
@@ -2565,6 +2580,7 @@ public:
         std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sHeld << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
         gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
+        gpu_put(mixed_exon_acc_, out.mixedExon); gpu_put(mixed_intron_acc_, out.mixedIntron);   // export.h's pre-USA exon / intron split
         if (reads_matrix_on()) {   // reads per molecule: the GPU's sums and histogram (the CPU store is empty)
             gpu_put(exon_reads_acc_, out.exonReads); gpu_put(intron_reads_acc_, out.intronReads);
             for (size_t i = 0; i < out.histCell.size(); ++i)
@@ -2716,6 +2732,10 @@ public:
     const DirectionalUmiStore& dir_exon_store() const { return mol_store_; }
     /// Ambiguous molecules per gene (rows = genes). They are also counted in exons().
     const SparseAccumulator<uint16_t>& ambiguous() const { return amb_acc_; }
+    /// Unspliced molecules with an exon-only read, per (exon, barcode) / (intron, barcode): legacy exon = exon + mixed_exon,
+    /// legacy intron = intron - mixed_intron (the split every method validated before the alevin-fry USA labels reads).
+    const SparseAccumulator<uint16_t>& mixed_exon() const { return mixed_exon_acc_; }
+    const SparseAccumulator<uint16_t>& mixed_intron() const { return mixed_intron_acc_; }
 
     /// Reads per molecule, same layout as exons() / introns() (uint32: not clamped at 65535). Empty unless reads_matrix_on().
     bool reads_matrix_on() const { return config_.reads_matrix && config_.umi_dedup && has_gene_model_; }
@@ -2935,6 +2955,10 @@ private:
     // (run() single-thread path; run_parallel() uses per-worker stores).
     DirectionalUmiStore mol_store_;
     SparseAccumulator<uint16_t> amb_acc_;  // ambiguous molecules per gene (also in exon_acc_)
+    // Unspliced molecules that also have an exon-only read ("mixed"), at m.exon_idx / m.intron_idx. The pre-USA labels counted
+    // them as ambiguous in the exon matrix; export.h rebuilds that legacy split as exon + mixed_exon / intron - mixed_intron.
+    SparseAccumulator<uint16_t> mixed_exon_acc_;
+    SparseAccumulator<uint16_t> mixed_intron_acc_;
     UmiDedup umi_dedup_;  // kept for umi_stats(); gene-model counting no longer uses it
 
     // Per-chromosome sorted SNP data (binary search, cache-friendly)
@@ -3993,13 +4017,15 @@ private:
     DirectionalUmiStore::MoleculeStats finalize_store(const DirectionalUmiStore& store,
                                                       SparseAccumulator<uint16_t>& exon,
                                                       SparseAccumulator<uint16_t>& intron,
-                                                      SparseAccumulator<uint16_t>& amb) const {
+                                                      SparseAccumulator<uint16_t>& amb,
+                                                      SparseAccumulator<uint16_t>* mixed_exon,
+                                                      SparseAccumulator<uint16_t>* mixed_intron) const {
         const bool track_amb = config_.count_introns && has_gene_model_;
         return store.finalize_molecules(
             exon, intron,
             [&](uint32_t bc, uint32_t gene) { if (track_amb) amb.increment(gene, bc); },
             config_.umi_len, config_.umi_dedup_directional, reads_sink(),
-            [&](uint32_t bc) { note_mixed(bc); });
+            [&](const DirectionalUmiStore::Molecule& m) { note_mixed(m, mixed_exon, mixed_intron); });
     }
 
     // Label and emit the molecules of several stores (one per worker; each store
@@ -4012,17 +4038,24 @@ private:
         SparseAccumulator<uint16_t>* exon;
         SparseAccumulator<uint16_t>* intron;
         SparseAccumulator<uint16_t>* amb;
+        SparseAccumulator<uint16_t>* mixed_exon = nullptr;     // unspliced molecules with an exon-only read, at m.exon_idx
+        SparseAccumulator<uint16_t>* mixed_intron = nullptr;   // ... and at m.intron_idx
         bool consume = false;   // give the store's molecule groups back while collapsing (nothing reads them afterwards)
     };
-    // Per barcode: unspliced molecules that also have an exon-only read (see DirectionalUmiStore::emit_molecule). The cell caller's
-    // knee is computed on exon + these, i.e. on the exonic total the labels gave before the alevin-fry USA semantics.
+    // Unspliced molecules that also have an exon-only read (see DirectionalUmiStore::emit_molecule): the pre-USA labels counted them
+    // in the exon matrix. Each goes to the target's mixed_exon/mixed_intron accumulators (export.h's legacy split) and to a
+    // per-barcode count (legacy_exon_extra(), the column sums of mixed_exon; kept as a cheap cross-check of the CPU and GPU paths).
     mutable std::unique_ptr<std::atomic<uint32_t>[]> mixed_bc_;
     mutable size_t mixed_n_ = 0;
-    void note_mixed(uint32_t bc) const {
-        if (bc < mixed_n_) mixed_bc_[bc].fetch_add(1, std::memory_order_relaxed);
+    void note_mixed(const DirectionalUmiStore::Molecule& m, SparseAccumulator<uint16_t>* mixed_exon,
+                    SparseAccumulator<uint16_t>* mixed_intron) const {
+        if (m.bc < mixed_n_) mixed_bc_[m.bc].fetch_add(1, std::memory_order_relaxed);
+        if (mixed_exon) mixed_exon->increment(m.exon_idx, m.bc);
+        if (mixed_intron) mixed_intron->increment(m.intron_idx, m.bc);
     }
 public:
-    /// Per-barcode count of unspliced molecules with an exon-only read (empty if no molecule was finalized).
+    /// Per-barcode count of unspliced molecules with an exon-only read (empty if no molecule was finalized); equals the column
+    /// sums of mixed_exon().
     std::vector<uint32_t> legacy_exon_extra() const {
         std::vector<uint32_t> v(mixed_n_, 0);
         for (size_t i = 0; i < mixed_n_; ++i) v[i] = mixed_bc_[i].load(std::memory_order_relaxed);
@@ -4038,7 +4071,7 @@ private:
         const uint32_t mrules = config_.intron_rules & intron_rule::kMoleculeRules;
         D::MoleculeStats st;
         if (!mrules && molecule_dump_.empty()) {
-            for (const auto& t : targets) st += finalize_store(*t.store, *t.exon, *t.intron, *t.amb);
+            for (const auto& t : targets) st += finalize_store(*t.store, *t.exon, *t.intron, *t.amb, t.mixed_exon, t.mixed_intron);
             return st;
         }
         const bool track_amb = config_.count_introns && has_gene_model_;
@@ -4116,7 +4149,7 @@ private:
                 if (dropm) st.dropped++;
                 else D::emit_molecule(m, *t.exon, *t.intron,
                                       [&](uint32_t bc, uint32_t gene) { if (track_amb) t.amb->increment(gene, bc); }, st, reads_sink(),
-                                      [&](uint32_t bc) { note_mixed(bc); });
+                                      [&](const D::Molecule& mm) { note_mixed(mm, t.mixed_exon, t.mixed_intron); });
                 if (!dump) continue;
                 for (size_t k = 0; k < umi_s.size(); ++k) umi_s[k] = "ACGT"[(m.umi >> (2 * k)) & 3];
                 const char lab = dropm ? 'D' : "SUA"[static_cast<int>(m.label())];
