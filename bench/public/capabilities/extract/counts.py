@@ -29,6 +29,8 @@ class Ctx:
         self.singlet = self.runs / "singlet-public"
         self.star_cr = self.runs / "starsolo-public-cr"
         self.star_default = self.runs / "starsolo-public-default"
+        # junctions-psi reference: STARsolo SJ with Singlet's own STAR options (MODE=reference), else the defaults run of the 10-26 result
+        self.star_reference = self.runs / "starsolo-public-reference"
         # 5' libraries: alevin-fry's expected orientation for 10xv2-5p is fw (simpleaf's own chemistry default)
         self.af = self.runs / ("alevinfry-fw" if ds == "pbmc5p_v1" else "alevinfry")
 
