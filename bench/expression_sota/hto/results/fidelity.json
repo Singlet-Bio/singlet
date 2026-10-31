@@ -1,0 +1,514 @@
+{
+ "BAL1": {
+  "raw": {
+   "class_agree": 0.9482794404549417,
+   "tag_agree_when_both_singlet": 0.9998859489051095,
+   "mine_SDN": [
+    18374,
+    3305,
+    2412
+   ],
+   "pub_SDN": [
+    17942,
+    3137,
+    3012
+   ]
+  },
+  "cluster/edge/edge_M": {
+   "class_agree": 0.9504794321530862,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    23479,
+    163,
+    449
+   ],
+   "pub_SDN": [
+    22469,
+    1276,
+    346
+   ]
+  },
+  "cluster/edge/edge_own": {
+   "class_agree": 0.9562492217010502,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    23340,
+    302,
+    449
+   ],
+   "pub_SDN": [
+    22469,
+    1276,
+    346
+   ]
+  },
+  "cluster/edge/valley": {
+   "class_agree": 0.9053588477024616,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    20478,
+    3164,
+    449
+   ],
+   "pub_SDN": [
+    22469,
+    1276,
+    346
+   ]
+  },
+  "cluster/edge/top": {
+   "class_agree": 0.9511020713129384,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    23464,
+    178,
+    449
+   ],
+   "pub_SDN": [
+    22469,
+    1276,
+    346
+   ]
+  },
+  "cluster/valley/edge_M": {
+   "class_agree": 0.7164086173259724,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    17628,
+    163,
+    6300
+   ],
+   "pub_SDN": [
+    22469,
+    1276,
+    346
+   ]
+  },
+  "cluster/valley/edge_own": {
+   "class_agree": 0.7221784068739363,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    17489,
+    302,
+    6300
+   ],
+   "pub_SDN": [
+    22469,
+    1276,
+    346
+   ]
+  },
+  "cluster/valley/valley": {
+   "class_agree": 0.672699348304346,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    14929,
+    2862,
+    6300
+   ],
+   "pub_SDN": [
+    22469,
+    1276,
+    346
+   ]
+  },
+  "cluster/valley/top": {
+   "class_agree": 0.7170312564858246,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    17613,
+    178,
+    6300
+   ],
+   "pub_SDN": [
+    22469,
+    1276,
+    346
+   ]
+  }
+ },
+ "BAL2": {
+  "raw": {
+   "class_agree": 0.9465612907188633,
+   "tag_agree_when_both_singlet": 0.9999646255615692,
+   "mine_SDN": [
+    29135,
+    5581,
+    14125
+   ],
+   "pub_SDN": [
+    30006,
+    6386,
+    12449
+   ]
+  },
+  "cluster/edge/edge_M": {
+   "class_agree": 0.717327655043918,
+   "tag_agree_when_both_singlet": 0.15107848193428997,
+   "mine_SDN": [
+    35139,
+    5887,
+    7815
+   ],
+   "pub_SDN": [
+    41999,
+    6635,
+    207
+   ]
+  },
+  "cluster/edge/edge_own": {
+   "class_agree": 0.7083188304907762,
+   "tag_agree_when_both_singlet": 0.15106540214312109,
+   "mine_SDN": [
+    34605,
+    6421,
+    7815
+   ],
+   "pub_SDN": [
+    41999,
+    6635,
+    207
+   ]
+  },
+  "cluster/edge/valley": {
+   "class_agree": 0.6588317192522676,
+   "tag_agree_when_both_singlet": 0.15189619423449938,
+   "mine_SDN": [
+    31874,
+    9152,
+    7815
+   ],
+   "pub_SDN": [
+    41999,
+    6635,
+    207
+   ]
+  },
+  "cluster/edge/top": {
+   "class_agree": 0.7693126676357978,
+   "tag_agree_when_both_singlet": 0.1547596504990938,
+   "mine_SDN": [
+    40608,
+    418,
+    7815
+   ],
+   "pub_SDN": [
+    41999,
+    6635,
+    207
+   ]
+  },
+  "cluster/valley/edge_M": {
+   "class_agree": 0.48731598452120145,
+   "tag_agree_when_both_singlet": 0.14734836456017783,
+   "mine_SDN": [
+    22252,
+    5215,
+    21374
+   ],
+   "pub_SDN": [
+    41999,
+    6635,
+    207
+   ]
+  },
+  "cluster/valley/edge_own": {
+   "class_agree": 0.480252247087488,
+   "tag_agree_when_both_singlet": 0.14715657311669128,
+   "mine_SDN": [
+    21839,
+    5628,
+    21374
+   ],
+   "pub_SDN": [
+    41999,
+    6635,
+    207
+   ]
+  },
+  "cluster/valley/valley": {
+   "class_agree": 0.4287176757232653,
+   "tag_agree_when_both_singlet": 0.14802128892870317,
+   "mine_SDN": [
+    18982,
+    8485,
+    21374
+   ],
+   "pub_SDN": [
+    41999,
+    6635,
+    207
+   ]
+  },
+  "cluster/valley/top": {
+   "class_agree": 0.5391372003030241,
+   "tag_agree_when_both_singlet": 0.15151515151515152,
+   "mine_SDN": [
+    27049,
+    418,
+    21374
+   ],
+   "pub_SDN": [
+    41999,
+    6635,
+    207
+   ]
+  }
+ },
+ "BAL3": {
+  "raw": {
+   "class_agree": 0.864202484511925,
+   "tag_agree_when_both_singlet": 0.9997527608373167,
+   "mine_SDN": [
+    26392,
+    3391,
+    32523
+   ],
+   "pub_SDN": [
+    30563,
+    5458,
+    26285
+   ]
+  },
+  "cluster/edge/edge_M": {
+   "class_agree": 0.43188456970436234,
+   "tag_agree_when_both_singlet": 0.20697286012526095,
+   "mine_SDN": [
+    26127,
+    3656,
+    32523
+   ],
+   "pub_SDN": [
+    44334,
+    17821,
+    151
+   ]
+  },
+  "cluster/edge/edge_own": {
+   "class_agree": 0.4310499791352358,
+   "tag_agree_when_both_singlet": 0.2076440145923475,
+   "mine_SDN": [
+    25427,
+    4356,
+    32523
+   ],
+   "pub_SDN": [
+    44334,
+    17821,
+    151
+   ]
+  },
+  "cluster/edge/valley": {
+   "class_agree": 0.4316759220620807,
+   "tag_agree_when_both_singlet": 0.20676192058481474,
+   "mine_SDN": [
+    26392,
+    3391,
+    32523
+   ],
+   "pub_SDN": [
+    44334,
+    17821,
+    151
+   ]
+  },
+  "cluster/edge/top": {
+   "class_agree": 0.404487529290919,
+   "tag_agree_when_both_singlet": 0.2007419953222034,
+   "mine_SDN": [
+    29530,
+    253,
+    32523
+   ],
+   "pub_SDN": [
+    44334,
+    17821,
+    151
+   ]
+  },
+  "cluster/valley/edge_M": {
+   "class_agree": 0.43188456970436234,
+   "tag_agree_when_both_singlet": 0.20697286012526095,
+   "mine_SDN": [
+    26127,
+    3656,
+    32523
+   ],
+   "pub_SDN": [
+    44334,
+    17821,
+    151
+   ]
+  },
+  "cluster/valley/edge_own": {
+   "class_agree": 0.4310499791352358,
+   "tag_agree_when_both_singlet": 0.2076440145923475,
+   "mine_SDN": [
+    25427,
+    4356,
+    32523
+   ],
+   "pub_SDN": [
+    44334,
+    17821,
+    151
+   ]
+  },
+  "cluster/valley/valley": {
+   "class_agree": 0.4316759220620807,
+   "tag_agree_when_both_singlet": 0.20676192058481474,
+   "mine_SDN": [
+    26392,
+    3391,
+    32523
+   ],
+   "pub_SDN": [
+    44334,
+    17821,
+    151
+   ]
+  },
+  "cluster/valley/top": {
+   "class_agree": 0.404487529290919,
+   "tag_agree_when_both_singlet": 0.2007419953222034,
+   "mine_SDN": [
+    29530,
+    253,
+    32523
+   ],
+   "pub_SDN": [
+    44334,
+    17821,
+    151
+   ]
+  }
+ },
+ "CL": {
+  "raw": {
+   "class_agree": 0.8995584748896187,
+   "tag_agree_when_both_singlet": 0.9995175907101754,
+   "mine_SDN": [
+    29922,
+    6997,
+    9058
+   ],
+   "pub_SDN": [
+    32730,
+    7568,
+    5679
+   ]
+  },
+  "cluster/edge/edge_M": {
+   "class_agree": 0.8288274572068643,
+   "tag_agree_when_both_singlet": 0.9936851722470038,
+   "mine_SDN": [
+    38555,
+    1889,
+    5533
+   ],
+   "pub_SDN": [
+    43490,
+    2057,
+    430
+   ]
+  },
+  "cluster/edge/edge_own": {
+   "class_agree": 0.8291102072775518,
+   "tag_agree_when_both_singlet": 0.9940771053198363,
+   "mine_SDN": [
+    38402,
+    2042,
+    5533
+   ],
+   "pub_SDN": [
+    43490,
+    2057,
+    430
+   ]
+  },
+  "cluster/edge/valley": {
+   "class_agree": 0.5252626313156579,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    22424,
+    18020,
+    5533
+   ],
+   "pub_SDN": [
+    43490,
+    2057,
+    430
+   ]
+  },
+  "cluster/edge/top": {
+   "class_agree": 0.855927963981991,
+   "tag_agree_when_both_singlet": 0.9871894409937888,
+   "mine_SDN": [
+    40161,
+    283,
+    5533
+   ],
+   "pub_SDN": [
+    43490,
+    2057,
+    430
+   ]
+  },
+  "cluster/valley/edge_M": {
+   "class_agree": 0.6644626661156665,
+   "tag_agree_when_both_singlet": 0.9995291268666756,
+   "mine_SDN": [
+    30531,
+    1475,
+    13971
+   ],
+   "pub_SDN": [
+    43490,
+    2057,
+    430
+   ]
+  },
+  "cluster/valley/edge_own": {
+   "class_agree": 0.665180416295104,
+   "tag_agree_when_both_singlet": 0.999562053631586,
+   "mine_SDN": [
+    30402,
+    1604,
+    13971
+   ],
+   "pub_SDN": [
+    43490,
+    2057,
+    430
+   ]
+  },
+  "cluster/valley/valley": {
+   "class_agree": 0.4048546012136503,
+   "tag_agree_when_both_singlet": 1.0,
+   "mine_SDN": [
+    17025,
+    14981,
+    13971
+   ],
+   "pub_SDN": [
+    43490,
+    2057,
+    430
+   ]
+  },
+  "cluster/valley/top": {
+   "class_agree": 0.6858211714552929,
+   "tag_agree_when_both_singlet": 0.9970472760310198,
+   "mine_SDN": [
+    31723,
+    283,
+    13971
+   ],
+   "pub_SDN": [
+    43490,
+    2057,
+    430
+   ]
+  }
+ }
+}

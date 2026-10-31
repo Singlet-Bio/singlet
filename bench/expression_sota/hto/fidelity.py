@@ -23,9 +23,9 @@ TAGNAME = {"BAL1": "bal1", "BAL2": "bal2", "BAL3": "bal3", "CL": "cl"}
 VARIANTS = [("raw", None, None)] + [("cluster", a, b) for a in ("edge", "valley") for b in ("edge_M", "edge_own", "valley", "top")]
 
 
-def pub_classes(col, k):
+def pub_classes(col, k, lab2idx):
     c = np.where(col == "Doublet", "D", np.where(col == "Negative", "N", "S"))
-    tag = np.array([(int(str(x).split()[-1]) - 1) % k if cl == "S" else -1 for x, cl in zip(col, c)])
+    tag = np.array([lab2idx.get(x, (int(str(x).split()[-1]) - 1) % k) if cl == "S" else -1 for x, cl in zip(col, c)])
     return c, tag
 
 
@@ -34,6 +34,9 @@ for ds, short in TAGNAME.items():
     caps, hmap = data[ds]
     P = pd.read_parquet(os.path.join(ART, f"hto_howitt2023_{short}_published.parquet"))
     allbc = [b for _, h, _ in caps for b in h.columns]
+    mp = json.load(open(os.path.join(ART, f"hto_howitt2023_{short}_map.json")))["hashtag_to_donor"]
+    don2idx = {hmap[t]: i for i, t in enumerate(caps[0][1].index)}
+    lab2idx = {lab: don2idx[d] for lab, d in mp.items() if d in don2idx}
     if len(P) == len(allbc) and (P.barcode.values == np.array(allbc)).all():
         Pa = P.reset_index(drop=True)
     else:
@@ -48,7 +51,7 @@ for ds, short in TAGNAME.items():
         mc = np.where(mine >= 0, "S", np.where(mine == H.DBL, "D", "N"))
         pcol = Pa["BFF_raw" if kind == "raw" else "BFF_cluster"].astype(object).values
         ok = pd.notna(pcol)
-        pc, ptag = pub_classes(pcol[ok], len(caps[0][1]))
+        pc, ptag = pub_classes(pcol[ok], len(caps[0][1]), lab2idx)
         agree = float((mc[ok] == pc).mean())
         both = (mc[ok] == "S") & (pc == "S")
         tagagree = float((mine[ok][both] == ptag[both]).mean()) if both.any() else float("nan")

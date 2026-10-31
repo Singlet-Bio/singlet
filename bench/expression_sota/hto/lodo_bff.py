@@ -50,7 +50,7 @@ def metrics(call, truth, t2t, hmap, tags, boot=0):
     return out
 
 
-def published(P, allbc, ntags, col):
+def published(P, allbc, ntags, col, lab2idx=None):
     Pa = P.drop_duplicates("barcode").set_index("barcode").reindex(allbc) if len(P) != len(allbc) or not (P.barcode.values == np.array(allbc)).all() else P.set_index("barcode", drop=False).reset_index(drop=True)
     v = Pa[col].astype(object).values
     out = np.full(len(v), H.NEG)
@@ -58,7 +58,7 @@ def published(P, allbc, ntags, col):
         if x == "Doublet":
             out[i] = H.DBL
         elif isinstance(x, str) and x != "Negative":
-            out[i] = (int(x.split()[-1]) - 1) % ntags
+            out[i] = lab2idx[x] if lab2idx and x in lab2idx else (int(x.split()[-1]) - 1) % ntags
     return out
 
 
@@ -96,9 +96,12 @@ def main():
         print(ds, "bff_cluster", {k: round(v, 3) for k, v in table[ds]["bff_cluster"].items() if k in ("paper_f", "dbl_singlet", "macro_f1")}, flush=True)
         if a.artifacts:
             P = pd.read_parquet(os.path.join(a.artifacts, f"hto_howitt2023_{SHORT[ds]}_published.parquet"))
+            mp = json.load(open(os.path.join(a.artifacts, f"hto_howitt2023_{SHORT[ds]}_map.json")))["hashtag_to_donor"]
+            don2idx = {hmap[t]: i for i, t in enumerate(tags)}
+            lab2idx = {lab: don2idx[d] for lab, d in mp.items() if d in don2idx}
             for col in ("BFF_raw", "BFF_cluster", "HTODemux", "hashedDrops_default", "GMMDemux"):
                 if col in P.columns:
-                    call = published(P, allbc, len(tags), col)
+                    call = published(P, allbc, len(tags), col, lab2idx)
                     table[ds]["published_" + col] = metrics(call, truth, t2t, hmap, tags, 0)
                     print(ds, "published", col, {k: round(v, 3) for k, v in table[ds]["published_" + col].items() if k in ("paper_f", "dbl_singlet", "macro_f1")}, flush=True)
     res = {"datasets": table, "grid": [list(g) for g in GRID]}
