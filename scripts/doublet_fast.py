@@ -35,6 +35,7 @@ def main():
     ap.add_argument("--folds", type=int, default=2)
     ap.add_argument("--rounds", type=int, default=1)
     ap.add_argument("--ref-cap", type=int, default=3000)
+    ap.add_argument("--sim-ratio", type=float, default=2)
     ap.add_argument("--names", nargs="*")
     a = ap.parse_args()
     out = Path(a.out) / "lite"
@@ -46,11 +47,12 @@ def main():
     for n in a.names or list(D.STUDY):
         X, y, genes, species = S.load_counts(n)
         w0, c0 = time.perf_counter(), time.process_time()
-        F = mdl.features(X, genes, species, ref_cap=a.ref_cap)
+        F = mdl.features(X, genes, species, ref_cap=a.ref_cap, sim_ratio=a.sim_ratio)
         w1, c1 = time.perf_counter(), time.process_time()
-        sd = DS.score(X, tuple(a.variants), p=p)
+        sd = DS.score(X, tuple(a.variants), p=p) if a.variants else {}
         w2, c2 = time.perf_counter(), time.process_time()
-        F["sdfl_f"] = sd["sdfl"] if "sdfl" in sd else sd["sdflc"]
+        if sd:
+            F["sdfl_f"] = sd["sdfl"] if "sdfl" in sd else sd["sdflc"]
         if "sdflc" in sd:
             F["sdflc_f"] = sd["sdflc"]
         cost[n] = dict(n_cells=int(X.shape[0]), atlas_wall=round(w1 - w0, 2), atlas_cpu=round(c1 - c0, 2),
