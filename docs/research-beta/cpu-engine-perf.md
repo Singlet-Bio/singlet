@@ -141,3 +141,24 @@ Deep GSM7656149, 4 threads, scavenger (non-exclusive): export 625 s -> ~400 s, a
 4059 s -> 3938 s together with the memory change; outputs byte-identical to the 1-thread run (except the run-dependent
 files). Still serial and next: SNP consensus finalize 34 s, junction UMI finalize 50 s, molecule collapse ~65 s,
 multi-gene shards ~50 s (the shard scan repeats the pass 16 times; a single partition pass would be cheaper).
+
+## 7. Compiler flags (LTO, PGO, -march): no measurable gain
+
+Build options `SINGLET_MARCH_FLAG`, `SINGLET_LTO`, `SINGLET_PGO=generate|use` (defaults unchanged) and
+`scripts/cpu_perf/build_flags.sbatch` build one variant per job from one commit (9e6f95aa), all `-march=x86-64-v3`. Whole-program
+PGO trains on pbmc10m + pbmc2m (the gate samples stay out of the training set; training on the full 66M-read samples took
+>2 h instrumented). Runs: `--threads 4`, shared nothing, scavenger (non-exclusive), stream path OK on every run.
+
+Outputs: every variant is byte-identical to plain v3 on pbmc1k_v3, neuron1k_v3 and the deep GSM7656149 (excluded: run-dependent
+files, as in section 4).
+
+| sample (node) | v3 | v3-lto | v3-starpgo | v3-pgo | v3-pgo-lto |
+|---|---|---|---|---|---|
+| pbmc1k_v3 wall s (g008 6230 unless noted) | 840 | 850 (g005) | 878 | 878 | 789 (g001, 6226 @2.7 GHz) |
+| neuron1k_v3 wall s | 1972 | 1988 | 2192 | 2165 | 1957 (6226) |
+| deep wall s | 3691 | 3668 | 3825 | 3451 (6226) | 3481 (6226) |
+
+The runs landed on Xeon 6230 (2.1 GHz) and 6226 (2.7 GHz) nodes, so only same-node pairs compare: on g008, STAR-only PGO and
+whole-program PGO are about 4% *slower* than plain v3 on pbmc1k_v3 and 11% slower on neuron1k_v3; the faster pgo / pgo-lto
+rows are the faster CPU. LTO alone is within 1%. Conclusion: keep the current flags. znver3 cannot be measured on Clipper (Intel
+only); same ISA level as v3, expected gain is small. An exclusive same-node A/B would be needed to resolve anything under ~5%.
