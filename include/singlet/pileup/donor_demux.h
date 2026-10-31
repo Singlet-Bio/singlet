@@ -1824,8 +1824,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             const auto tf0 = std::chrono::steady_clock::now();
             auto fmark = [&](const char* what) {
                 std::cerr << "[demux-prof] K=" << K << " fold " << f << " " << what << ": "
-                          << std::chrono::duration<double>(std::chrono::steady_clock::now() - tf0).count() << " s
-";
+                          << std::chrono::duration<double>(std::chrono::steady_clock::now() - tf0).count() << " s" << std::endl;
             };
             const std::vector<int> kinds = (K == 1) ? std::vector<int>{0}
                                                     : std::vector<int>(cfg.k_select_inits, 2);
