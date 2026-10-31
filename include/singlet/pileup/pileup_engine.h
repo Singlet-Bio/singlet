@@ -32,6 +32,7 @@
 #include <numeric>
 #include <string>
 #include <thread>
+#include <sched.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -2100,7 +2101,9 @@ public:
         char comp[256]; for (int i = 0; i < 256; i++) comp[i] = 'N';
         comp[(int)'A'] = 'T'; comp[(int)'C'] = 'G'; comp[(int)'G'] = 'C'; comp[(int)'T'] = 'A';
         const CbCorrector* const cbc = config_.cb_corrector;   // R11: as stream_cb, the CR is corrected against the whitelist
-        int nT = std::max(1, config_.threads);
+        // the streaming pileup is one thread (config_.threads); STAR has exited, so the pass may use the job's cores
+        cpu_set_t cs; int nT = std::max(1, config_.threads);
+        if (sched_getaffinity(0, sizeof(cs), &cs) == 0) nT = std::max(nT, std::min(CPU_COUNT(&cs), 32));
         if (const char* e = std::getenv("SINGLET_HANDOFF_PASS_THREADS")) nT = std::max(1, std::atoi(e));
         const uint64_t N = H->n_reads;
         if (N < (1u << 16)) nT = 1;
@@ -2419,12 +2422,17 @@ public:
     }
     bool gpu_pileup_apply(PileupStats& stats) {
         using namespace singlet_engine_gpu;
+        const auto tA0 = std::chrono::steady_clock::now();
+        auto since = [](std::chrono::steady_clock::time_point t) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count(); };
         PileupInput in;
         if (!gpu_build_input(in)) return false;
+        const double sBuild = since(tA0);
         int lock_fd = -1;
         const int device = lockDevice(&lock_fd);
         PileupOutput out;
+        const auto tA1 = std::chrono::steady_clock::now();
         const bool ok = pileupRun(in, device, out);
+        const double sRun = since(tA1);
         unlockDevice(lock_fd);
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
         gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
@@ -2465,7 +2473,9 @@ public:
             }
             gpu_wl_pending_.clear();
         }
+        const auto tA2 = std::chrono::steady_clock::now();
         if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
+        std::cerr << "[gpu_pileup] apply: build input " << sBuild << " s, pileupRun " << sRun << " s, host pass " << since(tA2) << " s" << "\n";
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
                   << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules
                   << (out.log.empty() ? "" : "; ") << out.log << "\n";
