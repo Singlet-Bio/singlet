@@ -28,6 +28,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     if (readStatus[0]==-1) {//finished with the stream
         return -1;
     };    
+    barcodeLoaded=false;
     
     if (P.outFilterBySJoutStage != 2) {
         for (uint32 im=0; im<P.readNmates; im++) {//not readNends: the barcode quality will be calculated separately
@@ -129,6 +130,10 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         transformGenome();//for now genome transformation happens after multimapper selection, and mapping filter
 
         if (!peOv.yes) {//if the alignment was not mates merged - otherwise the chimeric detection was already done
+            if (P.pCh.segmentMin>0 && P.pSolo.type>0) {//the chimeric junction line carries the read's CB/UMI: parse them now (once)
+                soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
+                barcodeLoaded=true;
+            };
             chimericDetection();
         };
 

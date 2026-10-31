@@ -62,7 +62,7 @@ void ReadAlign::outputAlignments() {
 
         //the operations below are both for mapped and unmapped reads
         PROF_T0(tOutBarcode);
-        soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
+        if (!barcodeLoaded) soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
         PROF_ADD(PROF_outBarcode, tOutBarcode);
         handoffReadEntry();
 
@@ -451,7 +451,7 @@ void ReadAlign::outputHandoffSummary()
     PROF_ADD(PROF_outMapped, tOutMapped);
 
     PROF_T0(tOutBarcode);
-    soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
+    if (!barcodeLoaded) soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
     PROF_ADD(PROF_outBarcode, tOutBarcode);
     handoffReadEntry();
 

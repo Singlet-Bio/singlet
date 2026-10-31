@@ -59,6 +59,7 @@
 #include "singlet/pileup/stall_watchdog.h"
 #include "singlet/pileup/pileup_engine.h"
 #include "singlet/pileup/export.h"
+#include "singlet/pileup/chimeric_table.h"
 #include "singlet/pileup/species_detect.h"
 #include "singlet/pileup/nonhost/min_sketch.h"
 #include "singlet/pileup/nonhost/host_kmer_filter.h"
@@ -2864,6 +2865,8 @@ int main(int argc, char* argv[]) {
     std::string read_source_mode = "chunk";    // --read-source chunk|fifo|file: how decoded reads reach STAR
     if (const char* e = std::getenv("SINGLET_READ_SOURCE"); e && *e) read_source_mode = e;
     std::vector<std::string> star_extra;
+    bool chimeric = false;                  // --chimeric: STAR chimeric detection + chimeric_junctions.tsv.gz (opt-in: disables the sequence cache, so the GPU engine runs as a CPU run)
+    std::string fusion_catalog_path;        // --fusion-catalog: output of scripts/build_fusion_catalog.py
     int star_threads = 0;  // 0 = auto-detect
     bool threads_specified = false;
     int pileup_threads = 1;  // bgzf not useful for uncompressed pipe from STAR
@@ -3049,6 +3052,14 @@ int main(int argc, char* argv[]) {
         }
         else if (arg == "--read-source" && i+1 < argc) read_source_mode = argv[++i];
         else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
+        else if (arg == "--chimeric") {
+            chimeric = true;
+            for (const char* s : {"--chimSegmentMin", "15", "--chimJunctionOverhangMin", "15", "--chimOutType", "Junctions", "--chimOutJunctionFormat", "1",
+                                  "--chimMultimapNmax", "10", "--chimMultimapScoreRange", "3", "--chimScoreJunctionNonGTAG", "-4",
+                                  "--chimNonchimScoreDropMin", "10"})
+                star_extra.push_back(s);
+        }
+        else if (arg == "--fusion-catalog" && i+1 < argc) fusion_catalog_path = argv[++i];
         else if (arg == "--star-extra" && i+1 < argc) {
             std::istringstream iss(argv[++i]);
             std::string token;
@@ -8517,6 +8528,20 @@ int main(int argc, char* argv[]) {
     }
 
     auto export_stats = singlet::export_results(*engine_ptr, config, export_cfg);
+
+    // ── chimeric / fusion junction table (opt-in) ──
+    if (chimeric) {
+        singlet::chimeric::Config cc;
+        cc.junction_path = out_prefix + "/star_Chimeric.out.junction";
+        cc.gtf_path = config.exon_gtf_path;
+        cc.catalog_path = fusion_catalog_path;
+        cc.out_path = out_prefix + "/chimeric_junctions.tsv.gz";
+        const auto cs = singlet::chimeric::write_table(engine_ptr->barcodes(), cc);
+        std::cerr << "[singlet] chimeric: " << cs.lines << " junction lines, " << cs.kept_lines << " kept, " << cs.no_barcode << " without barcode, "
+                  << cs.unmatched << " unmatched, " << cs.ambiguous << " ambiguous; " << cs.rows << " rows in " << cs.cells << " cells, "
+                  << cs.annotated << " in the catalogue" << (cs.ok ? "" : " (WRITE FAILED)") << "
+";
+    }
 
     // ── T4: CITE-seq ADT/HTO processing ──────────────────────────────────────
     // After GEX export, do a second pass through the .1fq to match ADT tags.

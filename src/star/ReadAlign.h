@@ -206,6 +206,7 @@ class ReadAlign {
         Transcript trChim[MAX_N_CHIMERAS];
         //new chimeric detection
         bool chimRecord; //true if chimeric aligment was detected
+        bool barcodeLoaded=false; //the Solo barcode of this read was parsed before chimeric detection (chimeric junction lines carry CB/UMI); output must not parse it twice
 
         struct {
             bool yes;
