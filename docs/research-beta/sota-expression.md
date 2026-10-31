@@ -136,6 +136,27 @@ so no short-read tool can see them). The two competitors overshoot the Truth-R2 
 unspliced (37.6% of the spliced, 31.6% of the ambiguous), so absolute shares cannot be checked, and the junction tolerance (2 nt) and the exclusion of bases covered by other same-strand genes were not varied.
 Consequence for the earlier agreement-based claim ("at SOTA by agreement"): against long-read truth Singlet is behind on unspliced pair correlation (0.69 vs 0.86) and recall, ahead on precision.
 
+**Engine change and final numbers (2026-10-31; draft PR Singlet-Bio/singlet#128, `fix/usa-labels`).** Decision (Zach): alevin-fry USA semantics. U = any intron-touching read; S = no intron read and a junction (CIGAR N) read;
+A = exon-only without junction evidence; `exon_counts` = S + A (velocyto-style "spliced"), `intron_counts` = U, `ambiguous_counts` = A. The first version of the labels lifted unspliced recall to 0.97 but cost precision (0.91 to 0.70):
+a per-molecule join of the engine's molecule dump with the long-read truth (agent, `longread_usa/dump_labels.py`, rules pre-registered in `RULES_USA_LABELS.md`, cells split even/odd, selection on one half, reporting on the other)
+put 75.5% of all false-U calls in molecules whose intron evidence is a read that touches the intron by <= 5 bp ("flank", mostly junction-end overhang; 98% false when combined with a junction read). The engine already had a per-read rule for that
+(`intron_rule::kFlank`, off in the default 389); the default is now 397 = 389 + kFlank. Result on the final build (2c030ed9, full pbmc1 at 227.6 M read pairs, Truth-R2, q90 pairs; competitors unchanged):
+
+| | Singlet before (d9834b8a) | Singlet, labels only | **Singlet, labels + flank (397)** | STARsolo Velocyto | alevin-fry USA |
+|---|---|---|---|---|---|
+| (cell, gene) unspliced pair r | 0.69 | 0.81 | **0.901** | 0.863 | 0.866 |
+| gene-pooled r | 0.896 | 0.918 | **0.972** | 0.951 | 0.950 |
+| "gene has an unspliced molecule" precision | 0.914 | 0.701 | **0.853** | 0.789 | 0.818 |
+| same, recall | 0.543 | 0.969 | **0.966** | 0.964 | 0.935 |
+| unspliced share in the covered pairs (truth 0.065) | 0.039 | 0.090 | 0.074 | 0.076 | 0.074 |
+
+The pre-registered bar (recall >= 0.94 with precision >= 0.79, or the best F1 beating both) is met: Singlet is ahead of both competitors on pair r, gene-pooled r and precision, level with STARsolo on recall, and its unspliced share is the closest to
+the truth. Against the dev libraries the S/U/A shares now track alevin-fry (pbmc1k_v3: S 0.218 / U 0.317 / A 0.465 vs 0.213 / 0.318 / 0.469; nuclei2k_v2 U 0.624 vs 0.647) and the pooled unspliced r vs STARsolo / alevin-fry is
+0.987 / 0.962 (pbmc1k_v3), 0.990 / 0.962 (hgmm1k_v3), 0.977 / 0.953 (nuclei2k_v2). **Known ceiling (stated for the freeze): about half of the long-read-unspliced molecules show their intron outside the 89-nt R2 window, so no short-read tool can
+see them; Truth-LR recall of any short-read tool is about 0.56-0.58 (Singlet 0.565 with the flank rule).** Long reads also capture only 2.8% of the molecules STARsolo calls unspliced, so absolute shares are floors. Side effects, gated against a base build of the same
+tip: the all-barcode gene matrix, splice-junction and poly(A) counts are byte-identical; the cell set is held by a legacy-exonic knee count (pbmc1k_v3 and hgmm1k_v3 identical, nuclei2k_v2 3,045 to 3,044); doublet scores, ambient, cell-cycle and sex
+outputs that read the exon and intron layers separately shift slightly. The GPU pileup (`SINGLET_GPU_PILEUP=on`) does not implement kFlank and the new labels and falls back to the CPU pileup.
+
 ### 2. Empty droplets and cell calling (2026-10-31, pin d9834b8a)
 
 Truth that is not a cell caller (`bench/cellcall_truth`, branch `bench/cellcall-independent-truth`): Kang b2 ctrl donor genotypes
