@@ -88,6 +88,21 @@ Singlet's unspliced share is the lowest of the three on nuclei2k_v2 (8% below al
 on neuron/pbmc3'. It matches alevin-fry on pbmc1k_v3 and hgmm. The tools disagree among themselves by up to 8%, and no truth
 resolves which share is right; so this is reported, not claimed.
 
+**U and U+A share of all UMI (orchestrator follow-up):**
+
+| dataset | Singlet U / U+A | STARsolo Velocyto U / U+A | alevin-fry U / U+A |
+|---|---|---|---|
+| pbmc1k_v3 | 0.312 / 0.324 | 0.347 / 0.446 | 0.318 / 0.787 |
+| pbmc5p_v1 | 0.094 / 0.101 | 0.101 / 0.200 | 0.117 / 0.539 |
+| neuron1k_v3 | 0.321 / 0.331 | 0.359 / 0.425 | 0.350 / 0.854 |
+| nuclei2k_v2 | 0.599 / 0.628 | 0.675 / 0.741 | 0.647 / 0.967 |
+| hgmm1k_v3 | 0.210 / 0.211 | 0.222 / 0.305 | 0.212 / 0.814 |
+
+Singlet's ambiguous layer is tiny (0.2-3% of UMI; STARsolo 7-10%, alevin-fry 32-60%) and Singlet's U+A is still below the competitors' U on
+nuclei2k_v2 (0.628 vs 0.647 / 0.675) and on neuron1k_v3 (0.331 vs 0.350 / 0.359). So the nuclei gap is **not** only a classification
+choice (molecules filed under A instead of U); Singlet files these molecules as spliced (S) under its collapsed-gene rules, e.g. reads
+that touch an exon and an intron. Whether that is right is decided by long-read truth (next).
+
 Co-primary 2, cross-species leak on hgmm1k_v3 (fraction of intron UMI in a pure-species cell that maps to the other species; exon in brackets):
 Singlet 0.29% (0.38%), STARsolo 0.27% (0.31%), alevin-fry 0.43% (0.68%). Singlet is within 0.02 points of STARsolo and better than alevin-fry.
 
