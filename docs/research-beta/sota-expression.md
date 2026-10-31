@@ -217,7 +217,24 @@ feature is for; (c) the combiner is a Python model, not in the binary, and its a
 dataset-level, -0.040 study-clustered); `combo_all` is closest (-0.002 / -0.010) but needs R. A "clear CI win" is not available from the
 current feature set: the best open method gains +0.013 and its CI includes 0.
 
-Not done: a new caller. What the data say about where a gain can come from: the win is on genotype-labelled PBMC (the tissue-like case);
+**First attempt at a native caller (2026-10-31): did not beat scDblFinder.** `bench/expression_sota/doublets/sdfl.py` is an R-free
+reimplementation of the scDblFinder idea (cluster-pair artificial doublets, kNN features at four k, gradient-boosted
+artificial-vs-observed classifier, two rounds, out-of-fold scores), unsupervised so no label leakage. Same 17 datasets and labels:
+
+| method | mean AUPRC | vs scDblFinder (95% CI over datasets) | wins | Kang 6 lanes | hgmm 2 |
+|---|---|---|---|---|---|
+| scDblFinder | 0.559 | | | 0.544 | 0.998 |
+| production `detect_doublets` | 0.501 | -0.058 | 1/17 | 0.482 | 0.808 |
+| `sdfl` heterotypic pairs | 0.510 | -0.049 [-0.087,-0.015] | 3/17 | 0.527 | 0.780 |
+| `sdfl` with 1/3 homotypic pairs | 0.489 | -0.069 [-0.114,-0.032] | 1/17 | 0.512 | 0.735 |
+| `combo_prod_atlas` (needs the atlas model) | 0.557 | -0.001 | 9/17 | 0.580 | 0.923 |
+
+It is a slight gain over production (+0.009) and clearly below scDblFinder, with the largest loss on the easy species mixtures (0.78 vs
+1.00). What scDblFinder does that this does not: doublet generation tied to cluster pairs it then scores per cluster pair, many more features
+(including per-cell kNN ratios at several k over a larger PC space and cell-type-specific doublet enrichment), and an iterative loop that
+retrains on the identified doublets. These are the next things to add; I have not tuned on the evaluation sets.
+
+Not done: a better caller. What the data say about where a gain can come from: the win is on genotype-labelled PBMC (the tissue-like case);
 hashtag cell lines and nuclei are ties; the combiners lose where one library is two easily separable populations. Candidate work (needs
 Clipper compute and a decision on scope): native (non-R) artificial-doublet kNN score as an extra feature, and a stacker trained on the
 genotype-labelled lanes of a second, independent study (the batch-1 and stim lanes are the same study) so the gain can be shown on a held-out

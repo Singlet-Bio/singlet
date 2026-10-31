@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dbl_common import load, SCORES, DATA
 out, ref, *methods = sys.argv[1:]
 names = [n for n in sorted(os.listdir(DATA)) if "synth" not in n and "homsim" not in n]
+ST = pd.read_csv(f"{os.path.dirname(SCORES)}/eval/auprc_wide.csv", index_col=0)  # stored AUPRC of methods without a .npy (scDblFinder, combiners)
 rows = []
 for n in names:
     lab = np.load(f"{DATA}/{n}/ds.npz")["label"]
@@ -16,6 +17,8 @@ for n in names:
         if os.path.exists(p):
             s = np.load(p)
             r[m] = average_precision_score(lab, s); r[m + "_auroc"] = roc_auc_score(lab, s)
+        elif m in ST.columns and n in ST.index:
+            r[m] = ST.loc[n, m]
     rows.append(r)
 D = pd.DataFrame(rows).set_index("dataset"); D.to_csv(out)
 print(D[[ref] + methods].round(3).to_string())
