@@ -1,75 +1,32 @@
-% Discussion. Interpretation, limitations and outlook; every number is \nm{key} from generated/numbers.tex.
+% Discussion (main text). Full limitations: supp_limitations.tex.
 \section{Discussion}
 \label{sec:discussion}
 
-A count matrix has been treated as a generic array: stored as coordinates or compressed columns, then handed to a
-byte-level compressor that cannot see what the bytes mean. \sone{} instead codes what is known about counts. Most
-non-zeros are ones; a cell's depth sets the rate of every gene in it; and genes ranked by how many cells express them
-turn a cell's non-zeros into short gaps. With these regularities as contexts for a static entropy coder, the files are
-\nm{ratio-h5ad_gzip}$\times$ smaller than gzip-compressed AnnData and \nm{ratioBestOther}$\times$ smaller than the most
-compact general-purpose alternative, and from a cold file they read faster than every other format we measured on
-\nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices. The payload ladder (Fig.~\ref{fig:floor}a) shows where the gain comes from: a
-strong general-purpose compressor applied to well-separated gap and value streams stops at
-\nm{ladder-L3_gaps_leb_zstd19} bits per non-zero, and the last
-step to \nm{ladder-L4_s1_payload} comes from modelling, not from a better back-end coder. Genomic read formats learned
-the same lesson~\cite{bonfield2022cram,numanagic2016comparison}.
+Single-cell count matrices have been stored as generic arrays, handed to compressors that cannot see what the bytes mean.
+\sone{} instead describes the counts with what is known about them, and this one change makes files several times smaller
+than the formats in common use while keeping them among the fastest to read. The comparison with count models shows that
+the remaining margin for any lossless format of this kind is small: most of what is left in UMI data is the random sampling
+of molecules itself.
 
-\paragraph{Where the bytes are read.}
-Size matters most where data move over a network. Atlases serve count matrices to thousands of users, and models that
-train on them read every cell many times. A format that is both small and fast to decode moves the bottleneck back to the
-model. Size alone is not the whole story, though: on a link with realistic latency, the number of round trips matters as
-much as the number of bytes. The index at the head of every \sone{} member lets a reader plan all of a minibatch's
-requests before sending any, and sending them together cut the time to a first minibatch by a median of
-\nm{concurrency-gain-first}$\times$ over the panel datasets on a 30\,ms link. The same plan-then-fetch pattern applies to any reader of
-independently addressable chunks, and the \texttt{singlet} readers for atlas samples and for R use it as well.
+The practical consequences follow from where data are read. Atlases and model-training pipelines increasingly keep data in
+cloud object storage and read the same cells many times. There, the size of each minibatch on the wire, the number of round
+trips needed to fetch it and the per-request and egress fees set both the speed and the cost of every epoch. A format that
+is small, fast to decode and readable in part moves the bottleneck from storage back to the model: in our measurements a
+training loader could start from a remote \sone{} file in under a second and keep a typical network link busy without
+downloading or converting anything first. Storage itself shrinks in proportion to file size, and because each sample file is
+named by a hash of its contents, a link or a citation identifies exactly the bytes that were analysed, which helps make
+analyses reproducible. The same structure, many small counts with heavy-tailed frequencies, is found outside single-cell
+biology; on bulk RNA-seq counts and on a text corpus stored as word counts, \sone{} files were also less than half the size
+of compressed AnnData (Supplementary Section~\ref{sec:beyond}).
 
-\paragraph{How much is left.}
-Cross-validated count models, including negative binomial and cluster-conditioned models, code the matrices a median of
-\nm{s1AboveFloorPct}\% more compactly than \sone, although they are charged nothing for describing themselves; on
-read-count protocols \sone{} is shorter than every model we fitted (Table~\ref{tab:floor}). For UMI data, the sampling
-of molecules accounts for an estimated \nm{samplingPctMedian}\% of the \sone{} code length, and knowing a cell's cluster
-is worth \nm{sharedBpnMedian} bits per non-zero before the cost of the model. These are references, not bounds. Stronger
-models of expression, such as factor models or deep generative models~\cite{lopez2018deep,townes2019feature,durif2019probabilistic},
-could code the counts more compactly, and bits-back coding turns such latent-variable models into lossless
-codes~\cite{frey1997efficient,townsend2019practical}, at a decoding cost far above a table lookup per symbol. Whether
-that trade is worth making for an archive that is read many times is open; the measurements here suggest the remaining
-margin is modest.
+Our study has limitations (Supplementary Section~\ref{sec:slimits}). All timings come from one type of cluster node, so
+absolute rates will differ on other hardware, although the comparisons between formats were made on the same node and
+files. The network experiments used an object store with controlled bandwidth and latency, and the one real cloud store was
+read from one location; other providers and paths will differ. Kernels for AVX-512 and ARM processors were not measured. The
+\sone{} writer needs more memory than most formats. The format stores whole-number counts only and does not hold the rich
+cell and gene annotations of an AnnData object, and it has a single implementation, for which the specification in the
+Supplement is meant to make a second possible.
 
-\paragraph{Limitations.}
-\begin{itemize}\itemsep 1pt
-\item \emph{Hardware.} All timings come from 8 cores of shared cluster nodes of one type, with one of our timed jobs per
-  node and other users' jobs beside it, three repeats per configuration, and a disk behind a RAID controller whose cache
-  the cold reads cannot clear. Absolute rates depend on the CPU and disk; the comparisons between formats, measured on
-  the same node and file, are what the conclusions rest on. The AVX-512 kernel was not measured because the benchmark
-  CPU lacks the VBMI2 extension it needs, and processors without AVX2, including ARM, use the scalar decoder, at about a
-  third of the AVX2 rate per core.
-\item \emph{Large matrices.} Above $4\times10^8$ non-zeros we timed a subset of formats, at one thread count and from
-  local disk only. The R formats, RDS and BPCells, are reported as not applicable above $2^{31}-1$ non-zeros because
-  the benchmark reads them into an R \texttt{dgCMatrix}, which cannot hold such a matrix; BPCells itself streams larger
-  matrices. One planned dataset, a genome-wide Perturb-seq screen with 6.3 billion non-zeros, was excluded because writing
-  the comparison formats needed more memory and time than the campaign allowed.
-\item \emph{Network tiers.} The network tiers are a local object store with a shared bandwidth limit and fixed added
-  latency; the 10\,Gbit/s tier exceeds what the test setup delivers and is flagged. The one real object store we read,
-  Cloudflare R2 through a Worker, was reached from one cluster node over one internet path, at one time of day; other
-  stores, regions and paths differ in latency and per-connection rate, and the prices are list prices without free tiers
-  or discounts.
-\item \emph{Baselines.} The generic-codec control at \sone's granularity is one configuration (sharded Zarr v3 with
-  Blosc zstd and bit shuffling); we did not test zstd with a dictionary trained per matrix, nor stronger count models; the payload ladder
-  does not separate the contributions of gene reordering, context modelling and the entropy coder.
-\item \emph{Scope.} \sone{} stores non-negative integer counts below $2^{32}$; normalised or otherwise non-integer matrices
-  are rejected by the writer, not rounded, which excluded one candidate dataset (the container can hold floating-point
-  values through its generic codec, which we did not evaluate). A sample object holds count matrices, gene identifiers,
-  barcodes and a cells table; richer annotations (AnnData's \texttt{obs}, \texttt{var}, \texttt{obsm} and \texttt{uns})
-  are not part of the format. Reading the counts of one gene across all cells needs a full decode. Files are immutable;
-  adding cells means writing a new sample object.
-\item \emph{Writing.} Write cost was measured on three matrices, once each, from a matrix already in memory; converting
-  from a format on disk adds that format's read.
-\item \emph{Specification.} \sone{} has one implementation, in C++ with Python and R bindings over the same code; the
-  format specification (Supplementary Section~\ref{sec:spec}) and test vectors are meant to make a second one possible.
-\end{itemize}
-
-\paragraph{Beyond single cells.}
-Two out-of-domain count matrices, bulk RNA-seq gene counts and a bag-of-words corpus, were run as an extension. There
-\sone{} is \nm{ext-gtex_bulk-ratio-h5ad_gzip}$\times$ and \nm{ext-nytimes_bow-ratio-h5ad_gzip}$\times$ smaller than
-gzip-compressed AnnData. The same structure, heavy-tailed rank-frequency laws and many small counts, is what the codec
-exploits, so any sparse count matrix of this kind can be stored the same way.
+As single-cell data continue to grow and move to the cloud, how they are stored becomes part of how fast and how cheaply
+they can be used. \sone{} shows that a format designed around the data can be at once smaller, faster and directly readable
+over a network, and the \texttt{singlet} package makes it available today from Python, R and C++.

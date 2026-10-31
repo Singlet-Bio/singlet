@@ -9,9 +9,9 @@ zarr	AnnData Zarr	general	14.9432	105.182	south
 loom	loom	general	21.9115	2.87733	west
 soma	TileDB-SOMA	domain	14.801	33.3656	east
 parquet_coo	Parquet COO	general	17.7318	35.6645	south west
-csc_zstd19	CSC + zstd-19	general	9.66709	73.1716	north
+csc_zstd19	CSC + zstd-19	general	9.66709	73.1716	east
 rds_gz	rds (gzip)	general	18.3786	18.9792	east
 rds_xz	rds (xz)	general	8.84006	13.5705	north
 bpcells	BPCells	domain	15.9532	8.00158	west
 s1	.s1	s1	5.26881	147.222	north west
-zarr3	Zarr v3 sharded	general	12.0106	61.6802	west
+zarr3	Zarr v3 sharded	general	12.0106	61.6802	north west

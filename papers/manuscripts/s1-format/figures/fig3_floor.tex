@@ -1,13 +1,12 @@
-% Figure 3: how far .s1 is from the best count model, and why the rest cannot be removed. Values from generated/fig3*.tsv.
-\begin{figure*}[p]
+% Figure 4: how close .s1 is to count models, and what remains. Values from generated/fig3*.tsv. More: fig_supp_floor.tex.
+\begin{figure*}[tbp]
 \centering
-% ---------------- (a) ladder ----------------
-\begin{tikzpicture}
+\begin{tikzpicture}[baseline=(current bounding box.north)]
 \begin{axis}[
   title={a\quad From CSC to \sone, payload only},
-  xbar, bar shift=0pt, width=0.3\linewidth, height=6.2cm, bar width=7pt,
+  xbar, bar shift=0pt, width=0.36\linewidth, height=5cm, bar width=7pt,
   xmin=0, xlabel={bits per non-zero (row indices and values), median},
-  ytick=data, yticklabels from table={\gen{fig3a_ladder.tsv}}{label}, y dir=reverse, enlarge y limits=0.1,
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig3a_ladder.tsv}}{label}, y dir=reverse, enlarge y limits=0.1,
   axis x line*=bottom, axis y line*=left,
   nodes near coords, every node near coord/.append style={font=\sffamily\tiny, anchor=west, /pgf/number format/fixed, /pgf/number format/precision=1},
   error bars/error bar style={ink2, line width=0.5pt}, error bars/error mark options={rotate=90, mark size=1.5pt, ink2},
@@ -23,29 +22,12 @@
   table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig3a_ladder.tsv}};
 \end{axis}
 \end{tikzpicture}\hfill
-% ---------------- (b) model gains ----------------
-\begin{tikzpicture}
+\begin{tikzpicture}[baseline=(current bounding box.north)]
 \begin{axis}[
-  title={b\quad What each count model would save},
-  xbar, bar shift=0pt, width=0.3\linewidth, height=6.2cm, bar width=7pt,
-  xlabel={\sone{} payload $-$ model code length, bits per non-zero},
-  ytick=data, yticklabels from table={\gen{fig3b_models.tsv}}{label}, y dir=reverse, enlarge y limits=0.15,
-  axis x line*=bottom, axis y line*=left, extra x ticks={0}, extra x tick style={grid=major, grid style={ink2, thin}},
-  error bars/error bar style={ink2, line width=0.5pt}, error bars/error mark options={rotate=90, mark size=1.5pt, ink2},
-]
-\addplot[fill=dl!75, draw=none, error bars/.cd, x dir=both, x explicit]
-  table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig3b_models.tsv}};
-\end{axis}
-\end{tikzpicture}
-
-\vspace{8pt}
-% ---------------- (c) decomposition by protocol class ----------------
-\begin{tikzpicture}
-\begin{axis}[
-  title={c\quad Where the bits go, by protocol class},
-  xbar stacked, width=0.32\linewidth, height=6.6cm, bar width=7pt,
+  title={b\quad Where the bits go, by protocol class},
+  xbar stacked, width=0.36\linewidth, height=5.4cm, bar width=5pt,
   xmin=0, xlabel={bits per non-zero of the \sone{} payload, median},
-  ytick=data, yticklabels from table={\gen{fig3c_decomp.tsv}}{label}, y dir=reverse, enlarge y limits=0.07,
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig3c_decomp.tsv}}{label}, y dir=reverse, enlarge y limits=0.07,
   axis x line*=bottom, axis y line*=left,
   legend style={font=\sffamily\tiny, draw=none, at={(0.5,-0.22)}, anchor=north, legend columns=1, cells={anchor=west}},
 ]
@@ -54,34 +36,17 @@
 \addplot[fill=sone, draw=none]    table[x=above, y=pos] {\gen{fig3c_decomp.tsv}};
 \legend{sampling of molecules (estimated), the cell's own profile (best model $-$ sampling), \sone{} above the best model}
 \end{axis}
-\end{tikzpicture}\hfill
-% ---------------- (d) second pass ----------------
-\begin{tikzpicture}
-\begin{axis}[
-  title={d\quad Compressing \sone{} again},
-  xbar, bar shift=0pt, width=0.32\linewidth, height=5.2cm, bar width=7pt,
-  xmin=0.98, xmax=1.02, xlabel={output size / \sone{} size},
-  xtick={0.98,0.99,1,1.01,1.02}, xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=2},
-  ytick=data, yticklabels from table={\gen{fig3d_second.tsv}}{label}, y dir=reverse, enlarge y limits=0.15,
-  axis x line*=bottom, axis y line*=left, extra x ticks={1}, extra x tick style={grid=major, grid style={ink2, thin}},
-]
-\addplot[only marks, mark=*, mark size=2pt, gen, error bars/.cd, x dir=both, x explicit]
-  table[x=median, y=pos, x error plus=rp, x error minus=rm] {\gen{fig3d_second.tsv}};
-\end{axis}
 \end{tikzpicture}
-\caption{\textbf{\sone{} is close to the code lengths of cross-validated count models, and much of what remains is the
-sampling of molecules.}
-\textbf{(a)} Payload (row indices and values, no names) in bits per non-zero, median over matrices, as each idea is
-added; whiskers, interquartile range. Dashed: the shortest cross-validated code length among the count models of (b),
-per matrix.
-\textbf{(b)} Bits per non-zero each model saves relative to the \sone{} payload, median and interquartile range over
-matrices (negative: the model codes the matrix in more bits than \sone). The Poisson model's worst cases are the
-read-count matrices, which it codes with hundreds of bits more per non-zero (Table~\ref{tab:floor}). Models are fitted on half of the cells and scored on
-the other half, zeros included, with no charge for the model itself; they are a reference, not a bound.
-\textbf{(c)} The \sone{} payload split into the estimated entropy of the multinomial sample of each cell's molecules given
-a plug-in, cluster-shrunk profile (meaningful for UMI counts only), the remaining information in the best model's code,
-and \sone's margin above that model.
-\textbf{(d)} Size of \sone{} after a second general-purpose compression pass, relative to \sone{} (median, range).
-Values per class in Table~\ref{tab:floor}.}
+\caption{\textbf{Little room is left for any lossless format.}
+\textbf{(a)} Payload (row indices and values, without names) in bits per non-zero, median over matrices, as each idea is
+added; whiskers, interquartile range. A strong general-purpose compressor on well-separated streams stops at
+\nm{ladder-L3_gaps_leb_zstd19} bits; modelling the counts brings \sone{} to \nm{ladder-L4_s1_payload}. Dashed: the shortest
+code length of four count models fitted on half of each matrix's cells and scored on the other half, charged nothing for
+their own parameters (a reference, not a bound); it is a median of \nm{s1AboveFloorPct}\% below \sone.
+\textbf{(b)} Where the \sone{} payload goes, by protocol class: the estimated entropy of the random sampling of each
+cell's molecules (meaningful for UMI counts), which no lossless decoder can avoid; the remaining information about the
+cell's expression profile; and \sone's margin above the best model. For UMI data sampling is a median of
+\nm{samplingPctMedian}\% of the \sone{} payload. Per-model savings and a second compression pass: Supplementary
+Fig.~\ref{fig:sfloor}; values per class in Supplementary Table~\ref{tab:floor}.}
 \label{fig:floor}
 \end{figure*}

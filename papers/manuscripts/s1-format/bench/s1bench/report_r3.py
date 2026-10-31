@@ -222,6 +222,14 @@ def r2_section(cfg: Config, N: Numbers, out: Path) -> None:
         N.put(f"r2-{ds}-gbit8", rec["gbit8"], "{:.2f}")
     _write(tab, out / "tab_r2.tsv", ["dataset", "loader", "lid", "first", "cps", "req_epoch", "gb_epoch", "usd_r2", "usd_s3",
                                      "rtt_ms", "edge_ms", "gbit1", "gbit8"])
+    # Fig. 3d: first minibatch against sustained rate on R2, one point per loader (HLCA core)
+    short = {"anndata_inmem": ("h5ad, downloaded first", "east", "other"),
+             "anndata_zarr_lazy": ("AnnData Zarr", "south west", "other"), "zarr3_shard": ("Zarr v3, sharded", "north west", "other"),
+             "s1_stream": (".s1, 1.3.2 settings", "west", "s1"), "s1_stream@32x4": (".s1, 1.3.3 defaults", "north west", "s1"),
+             "s1_stream@64x8": (".s1, 64 requests", "south west", "s1")}
+    pts = [{"lid": r["lid"], "first": r["first"], "cps": r["cps"], "label": short[r["lid"]][0], "anchor": short[r["lid"]][1],
+            "group": short[r["lid"]][2]} for r in tab if r["dataset"] == "HLCA core" and r["lid"] in short]
+    _write(pts, out / "figr2.tsv", ["lid", "first", "cps", "label", "anchor", "group"])
 
 
 def _group(rows):

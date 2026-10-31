@@ -1,0 +1,38 @@
+% Supplementary Figure: count-model savings and a second compression pass. Values from generated/fig3b_models.tsv, fig3d_second.tsv.
+\begin{figure*}[p]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  title={a\quad What each count model would save},
+  xbar, bar shift=0pt, width=0.36\linewidth, height=5cm, bar width=7pt,
+  xlabel={\sone{} payload $-$ model code length, bits per non-zero},
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig3b_models.tsv}}{label}, y dir=reverse, enlarge y limits=0.15,
+  axis x line*=bottom, axis y line*=left, extra x ticks={0}, extra x tick style={grid=major, grid style={ink2, thin}},
+  error bars/error bar style={ink2, line width=0.5pt}, error bars/error mark options={rotate=90, mark size=1.5pt, ink2},
+]
+\addplot[fill=dl!75, draw=none, error bars/.cd, x dir=both, x explicit]
+  table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig3b_models.tsv}};
+\end{axis}
+\end{tikzpicture}\hfill
+\begin{tikzpicture}
+\begin{axis}[
+  title={b\quad Compressing \sone{} again},
+  xbar, bar shift=0pt, width=0.36\linewidth, height=5cm, bar width=7pt,
+  xmin=0.98, xmax=1.02, xlabel={output size / \sone{} size},
+  xtick={0.98,0.99,1,1.01,1.02}, xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=2},
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig3d_second.tsv}}{label}, y dir=reverse, enlarge y limits=0.15,
+  axis x line*=bottom, axis y line*=left, extra x ticks={1}, extra x tick style={grid=major, grid style={ink2, thin}},
+]
+\addplot[only marks, mark=*, mark size=2pt, gen, error bars/.cd, x dir=both, x explicit]
+  table[x=median, y=pos, x error plus=rp, x error minus=rm] {\gen{fig3d_second.tsv}};
+\end{axis}
+\end{tikzpicture}
+\caption{\textbf{What count models and a second compression pass would save.}
+\textbf{(a)} Bits per non-zero each cross-validated count model saves relative to the \sone{} payload, median and
+interquartile range over matrices (negative: the model needs more bits than \sone). The Poisson model's worst cases are
+the read-count matrices, which it codes with hundreds of bits more per non-zero (Supplementary Table~\ref{tab:floor}).
+Knowing a cell's cluster is worth a median of \nm{sharedBpnMedian} bits per non-zero.
+\textbf{(b)} Size of \sone{} after a second general-purpose compression pass, relative to \sone{} (median, range): every
+coder returns \nm{secondMin}--\nm{secondMax} of its size.}
+\label{fig:sfloor}
+\end{figure*}
