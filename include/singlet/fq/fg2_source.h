@@ -57,6 +57,9 @@ class Fg2Source : public StagedSource {
     uint64_t stored_reads() const override { return rs_.stored_reads(); }
     uint64_t block_read_offset(uint32_t g) const override { return rs_.block_read_offset(g); }
     uint16_t bc_length() const override { return rs_.bc_length(); }
+    bool has_bc_dict() const override { return rs_.has_bc_dict(); }
+    uint32_t bc_dict_size() const override { return rs_.bc_dict_size(); }
+    const std::vector<uint8_t>& bc_dict_flat() const override { return rs_.bc_dict_flat(); }
     void decode(uint32_t g, DecodedBlock& blk) const override { rs_.decode(g, blk); }
     std::string metadata() const override { return meta_; }
     const Fg2RunSet& runset() const { return rs_; }

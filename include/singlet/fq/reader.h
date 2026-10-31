@@ -118,6 +118,9 @@ struct StagedSource {
     virtual uint64_t stored_reads() const = 0;
     virtual uint64_t block_read_offset(uint32_t g) const = 0;
     virtual uint16_t bc_length() const = 0;
+    virtual bool has_bc_dict() const { return false; }               // a barcode dictionary (the .1fg2: the whitelist) with bc_indices in the blocks
+    virtual uint32_t bc_dict_size() const { return 0; }
+    virtual const std::vector<uint8_t>& bc_dict_flat() const { static const std::vector<uint8_t> e; return e; }
     virtual void decode(uint32_t g, DecodedBlock& blk) const = 0;   // thread-safe
     virtual std::string metadata() const = 0;                       // the source .1fq's metadata JSON
 };
@@ -145,7 +148,8 @@ class Reader {
             if (staged_opener() == nullptr) throw std::runtime_error("a .1fg2 input needs register_fg2() (fg2_source.h)");
             staged_ = staged_opener()(path);
             hdr_ = staged_->header();
-            has_bc_dict_ = false; bc_length_ = staged_->bc_length(); current_block_ = 0;
+            has_bc_dict_ = staged_->has_bc_dict(); bc_length_ = staged_->bc_length(); current_block_ = 0;
+            if (has_bc_dict_) { bc_dict_n_ = staged_->bc_dict_size(); bc_dict_flat_ = staged_->bc_dict_flat(); }
             return;
         }
         fp_ = std::fopen(path, "rb");
