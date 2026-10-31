@@ -201,6 +201,23 @@ at least 3x the oligodendrocyte bound and 12x the Xist bound. On nuclei2k_v2 the
 there is no sex truth in that library, so its over-estimate is shown by the Gaublomme library only. Candidate fix, not yet built: detect the case (pool profile close to the called cells' profile) and report rho as NA with the corrected matrix equal to the
 raw counts, instead of a 12x wrong number; a criterion needs the pool-to-cell similarity measured on the nuclei and cell libraries we have.
 
+**Is the soup read-level different from cells? First look (2026-10-31, `soup_features.py`, `results/nuclei/soup_features.json`).** Per-barcode read features from
+`cell_qc_metrics.tsv`, ambient-pool barcodes (uncalled, 1-100 UMI) against called cells (>= 500 UMI); effect size = AUC (0.5 = no difference). Consistent in
+direction on all six libraries: the pool has a **higher exonic read share** (hgmm 0.88 vs 0.74, AUC 0.16; Kang 0.94 vs 0.80; Gaublomme 0.38 vs 0.23, AUC 0.19), lower
+mito share (AUC 0.62-0.83 for cells higher), more ribosomal reads in hgmm (0.24 vs 0.17) but fewer in Kang, and a **lower reads-per-UMI** than cells in every
+library (hgmm 1.44 vs 1.75, pbmc 1.8 vs 4.4, nuclei2k 6.9 vs 9.3; AUC 0.64-0.84): the ambient molecules are sequenced less, which is partly just depth.
+Mismatch rate and multimapping show no consistent difference (AUC 0.5-0.67). Intergenic reads behave opposite in cells (higher) and the pool (lower). **This
+comparison is confounded**: pool barcodes carry 1-100 UMI, so zero-inflated shares (mito, ribo, intronic) and reads per UMI move with depth alone, and nothing here
+labels molecules. It shows that the pool is exon-rich and low-duplication, which is also what the existing exon/intron split already uses; it does not show a
+per-molecule signature.
+
+*Proposal (worth a small experiment, not yet a build):* the one clean molecule-level truth we have is **cross-species molecules in pure cells of the hgmm library**
+(a mouse molecule in a human cell is ambient or a chimera; a human molecule in a human cell is ~99% native). Re-run hgmm1k_v3 with the tagged BAM and compare the two
+groups at read level, depth-matched: distance of the 3' end of the alignment to the annotated transcript end, internal poly-A priming (A-richness of the genome downstream of
+the read end), exonic/intronic status, soft-clipping and TSO-like clips, mismatch rate, reads per UMI, read-2 length. If the AUC of a logistic combination of those exceeds
+~0.7 within matched depth, a per-molecule ambient likelihood is feasible and no count-matrix tool (SoupX, DecontX, CellBender) can use it; if every feature stays near 0.5
+the idea is dead cheaply. Cost: one hgmm run with a BAM (about 10 min on 16 cores) plus a read-feature pass over the BAM; no new data.
+
 ### 3. Ambient RNA (R10c)### 3. Ambient RNA (R10c) (2026-10-31, pin d9834b8a)
 
 Truth 1, real tissue: **Kang b2 ctrl donor genotypes** (12,137 confident genotype singlets). A read carrying an allele the cell's donor does

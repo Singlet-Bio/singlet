@@ -1,0 +1,453 @@
+{
+ "hgmm1k_v3": {
+  "n_pool": 110126,
+  "n_cells": 1006,
+  "features": {
+   "exonic_reads_frac": {
+    "cells_median": 0.7390893522805377,
+    "pool_median": 0.875,
+    "auc_cells_vs_pool": 0.16004367886717433
+   },
+   "intergenic_reads_frac": {
+    "cells_median": 0.1300576813822551,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.7550171430238466
+   },
+   "unmapped_reads_frac": {
+    "cells_median": 0.03035289831645313,
+    "pool_median": 0.03225806451612903,
+    "auc_cells_vs_pool": 0.45481425595673186
+   },
+   "multimapped_reads_frac": {
+    "cells_median": 0.17008563610325986,
+    "pool_median": 0.14285714285714285,
+    "auc_cells_vs_pool": 0.512512980342163
+   },
+   "star_multimapped_reads_frac": {
+    "cells_median": 0.17008563610325986,
+    "pool_median": 0.14285714285714285,
+    "auc_cells_vs_pool": 0.512512980342163
+   },
+   "pct_mt": {
+    "cells_median": 6.42155,
+    "pool_median": 2.1739,
+    "auc_cells_vs_pool": 0.777098108189033
+   },
+   "pct_ribo": {
+    "cells_median": 17.201,
+    "pool_median": 23.6364,
+    "auc_cells_vs_pool": 0.2659595926791105
+   },
+   "intronic_pct": {
+    "cells_median": 20.962400000000002,
+    "pool_median": 7.5,
+    "auc_cells_vs_pool": 0.8544415182623454
+   },
+   "duplication_rate": {
+    "cells_median": 0.42795,
+    "pool_median": 0.3077,
+    "auc_cells_vs_pool": 0.8392323447037298
+   },
+   "saturation": {
+    "cells_median": 0.2332,
+    "pool_median": 0.1818,
+    "auc_cells_vs_pool": 0.7586454545313196
+   },
+   "mismatch_rate": {
+    "cells_median": 0.0019554999999999998,
+    "pool_median": 0.00142,
+    "auc_cells_vs_pool": 0.6699835635873231
+   },
+   "reads_per_umi": {
+    "cells_median": 1.7480604098691674,
+    "pool_median": 1.4444444444444444,
+    "auc_cells_vs_pool": 0.8392451440675815
+   },
+   "log_genes_per_umi": {
+    "cells_median": -1.361189732914184,
+    "pool_median": -0.01680711831638071,
+    "auc_cells_vs_pool": 9.227185964358411e-05
+   }
+  }
+ },
+ "kang_ctrl": {
+  "n_pool": 139188,
+  "n_cells": 15366,
+  "features": {
+   "exonic_reads_frac": {
+    "cells_median": 0.7967369803842715,
+    "pool_median": 0.9375,
+    "auc_cells_vs_pool": 0.31715685463705706
+   },
+   "mito_reads_frac": {
+    "cells_median": 0.01885972759371642,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.756904171395148
+   },
+   "intergenic_reads_frac": {
+    "cells_median": 0.09911761734564034,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.738059036324892
+   },
+   "unmapped_reads_frac": {
+    "cells_median": 0.027228062301161433,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.7455590596748398
+   },
+   "multimapped_reads_frac": {
+    "cells_median": 0.07892510624158196,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.6749485006473892
+   },
+   "star_multimapped_reads_frac": {
+    "cells_median": 0.07892510624158196,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.6749485006473892
+   },
+   "pct_mt": {
+    "cells_median": 1.8121,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.8180375556165927
+   },
+   "pct_ribo": {
+    "cells_median": 21.9136,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.7195026106887492
+   },
+   "intronic_pct": {
+    "cells_median": 11.963149999999999,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.7611600213033066
+   },
+   "duplication_rate": {
+    "cells_median": 0.8205,
+    "pool_median": 0.7857,
+    "auc_cells_vs_pool": 0.6400476496877628
+   },
+   "saturation": {
+    "cells_median": 0.7978,
+    "pool_median": 0.75,
+    "auc_cells_vs_pool": 0.6416960727698111
+   },
+   "mismatch_rate": {
+    "cells_median": 0.0064095,
+    "pool_median": 0.005695,
+    "auc_cells_vs_pool": 0.5659660967183908
+   },
+   "reads_per_umi": {
+    "cells_median": 5.572182768755951,
+    "pool_median": 4.666666666666667,
+    "auc_cells_vs_pool": 0.6400235799312628
+   },
+   "log_genes_per_umi": {
+    "cells_median": -0.7797151968684046,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.005678616139466738
+   }
+  }
+ },
+ "pbmc1k_v3": {
+  "n_pool": 150096,
+  "n_cells": 1187,
+  "features": {
+   "exonic_reads_frac": {
+    "cells_median": 0.5905816861941211,
+    "pool_median": 0.7368421052631579,
+    "auc_cells_vs_pool": 0.3012262660181674
+   },
+   "mito_reads_frac": {
+    "cells_median": 0.06631573234927009,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.7373375619777451
+   },
+   "intergenic_reads_frac": {
+    "cells_median": 0.25858750370151024,
+    "pool_median": 0.1111111111111111,
+    "auc_cells_vs_pool": 0.6776859692694738
+   },
+   "unmapped_reads_frac": {
+    "cells_median": 0.046903472204887546,
+    "pool_median": 0.07692307692307693,
+    "auc_cells_vs_pool": 0.42345384772335987
+   },
+   "multimapped_reads_frac": {
+    "cells_median": 0.07665140018684348,
+    "pool_median": 0.05555555555555555,
+    "auc_cells_vs_pool": 0.5682810684397033
+   },
+   "star_multimapped_reads_frac": {
+    "cells_median": 0.07665140018684348,
+    "pool_median": 0.05555555555555555,
+    "auc_cells_vs_pool": 0.5682810684397033
+   },
+   "pct_mt": {
+    "cells_median": 6.6923,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.7194052307506066
+   },
+   "pct_ribo": {
+    "cells_median": 17.416,
+    "pool_median": 11.1111,
+    "auc_cells_vs_pool": 0.6251240234051386
+   },
+   "intronic_pct": {
+    "cells_median": 31.1432,
+    "pool_median": 16.6667,
+    "auc_cells_vs_pool": 0.7248094524755491
+   },
+   "duplication_rate": {
+    "cells_median": 0.7727,
+    "pool_median": 0.4375,
+    "auc_cells_vs_pool": 0.7431539069137847
+   },
+   "saturation": {
+    "cells_median": 0.7207,
+    "pool_median": 0.3158,
+    "auc_cells_vs_pool": 0.7547782892907183
+   },
+   "mismatch_rate": {
+    "cells_median": 0.003757,
+    "pool_median": 0.002933,
+    "auc_cells_vs_pool": 0.6029495323917968
+   },
+   "reads_per_umi": {
+    "cells_median": 4.399699123307569,
+    "pool_median": 1.7777777777777777,
+    "auc_cells_vs_pool": 0.7431542071989962
+   },
+   "log_genes_per_umi": {
+    "cells_median": -1.1439972129903566,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.00041139915890505167
+   }
+  }
+ },
+ "neuron1k_v3": {
+  "n_pool": 182797,
+  "n_cells": 1282,
+  "features": {
+   "exonic_reads_frac": {
+    "cells_median": 0.6005963131856061,
+    "pool_median": 0.847457627118644,
+    "auc_cells_vs_pool": 0.2502010490874949
+   },
+   "mito_reads_frac": {
+    "cells_median": 0.04454322360488114,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.7767639860886918
+   },
+   "intergenic_reads_frac": {
+    "cells_median": 0.22490526991741144,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.7255231771769162
+   },
+   "unmapped_reads_frac": {
+    "cells_median": 0.029362426797652188,
+    "pool_median": 0.07317073170731707,
+    "auc_cells_vs_pool": 0.38627728454597904
+   },
+   "multimapped_reads_frac": {
+    "cells_median": 0.12301502928688798,
+    "pool_median": 0.13402061855670103,
+    "auc_cells_vs_pool": 0.49078131366527766
+   },
+   "star_multimapped_reads_frac": {
+    "cells_median": 0.12301502928688798,
+    "pool_median": 0.13402061855670103,
+    "auc_cells_vs_pool": 0.49078131366527766
+   },
+   "pct_mt": {
+    "cells_median": 5.0495,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.7533478289519169
+   },
+   "pct_ribo": {
+    "cells_median": 6.473649999999999,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.6441836385906954
+   },
+   "intronic_pct": {
+    "cells_median": 33.263149999999996,
+    "pool_median": 10.5263,
+    "auc_cells_vs_pool": 0.7611363720291685
+   },
+   "duplication_rate": {
+    "cells_median": 0.729,
+    "pool_median": 0.5833,
+    "auc_cells_vs_pool": 0.7229113419311194
+   },
+   "saturation": {
+    "cells_median": 0.66125,
+    "pool_median": 0.4615,
+    "auc_cells_vs_pool": 0.7523965425384095
+   },
+   "mismatch_rate": {
+    "cells_median": 0.001092,
+    "pool_median": 0.000697,
+    "auc_cells_vs_pool": 0.6005582615355893
+   },
+   "reads_per_umi": {
+    "cells_median": 3.690225573716434,
+    "pool_median": 2.4,
+    "auc_cells_vs_pool": 0.7229194154718929
+   },
+   "log_genes_per_umi": {
+    "cells_median": -1.1526053450382063,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.0020895364718235944
+   }
+  }
+ },
+ "nuclei2k_v2": {
+  "n_pool": 188415,
+  "n_cells": 2467,
+  "features": {
+   "exonic_reads_frac": {
+    "cells_median": 0.2790105040711045,
+    "pool_median": 0.47959183673469385,
+    "auc_cells_vs_pool": 0.36536686189608464
+   },
+   "mito_reads_frac": {
+    "cells_median": 0.024014625681705502,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.6365707050713986
+   },
+   "intergenic_reads_frac": {
+    "cells_median": 0.6523446523446523,
+    "pool_median": 0.3717948717948718,
+    "auc_cells_vs_pool": 0.620178324802662
+   },
+   "unmapped_reads_frac": {
+    "cells_median": 0.18860458981798997,
+    "pool_median": 0.26704545454545453,
+    "auc_cells_vs_pool": 0.2700821246203139
+   },
+   "multimapped_reads_frac": {
+    "cells_median": 0.040413144624978685,
+    "pool_median": 0.044642857142857144,
+    "auc_cells_vs_pool": 0.5677151546931182
+   },
+   "star_multimapped_reads_frac": {
+    "cells_median": 0.040413144624978685,
+    "pool_median": 0.044642857142857144,
+    "auc_cells_vs_pool": 0.5677151546931182
+   },
+   "pct_mt": {
+    "cells_median": 2.8023,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.6221277103285219
+   },
+   "pct_ribo": {
+    "cells_median": 0.4795,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.8007907956933978
+   },
+   "intronic_pct": {
+    "cells_median": 60.9565,
+    "pool_median": 40.0,
+    "auc_cells_vs_pool": 0.6960248670987674
+   },
+   "duplication_rate": {
+    "cells_median": 0.8922,
+    "pool_median": 0.8554,
+    "auc_cells_vs_pool": 0.7044683735022865
+   },
+   "saturation": {
+    "cells_median": 0.8542,
+    "pool_median": 0.805,
+    "auc_cells_vs_pool": 0.6893000099982639
+   },
+   "mismatch_rate": {
+    "cells_median": 0.006904,
+    "pool_median": 0.006797,
+    "auc_cells_vs_pool": 0.525482067475042
+   },
+   "reads_per_umi": {
+    "cells_median": 9.278593058467273,
+    "pool_median": 6.916666666666667,
+    "auc_cells_vs_pool": 0.7045070928077172
+   },
+   "log_genes_per_umi": {
+    "cells_median": -0.6337583691509536,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.0036724392584778095
+   }
+  }
+ },
+ "gaublomme": {
+  "n_pool": 83163,
+  "n_cells": 3007,
+  "features": {
+   "exonic_reads_frac": {
+    "cells_median": 0.23422416421095418,
+    "pool_median": 0.375,
+    "auc_cells_vs_pool": 0.19315562886162863
+   },
+   "mito_reads_frac": {
+    "cells_median": 0.0005330490405117271,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.8257704874470101
+   },
+   "intergenic_reads_frac": {
+    "cells_median": 0.6869250985545335,
+    "pool_median": 0.5333333333333333,
+    "auc_cells_vs_pool": 0.8000529057449296
+   },
+   "unmapped_reads_frac": {
+    "cells_median": 0.2261177860941501,
+    "pool_median": 0.21621621621621623,
+    "auc_cells_vs_pool": 0.5411690227782021
+   },
+   "multimapped_reads_frac": {
+    "cells_median": 0.07760910815939279,
+    "pool_median": 0.07692307692307693,
+    "auc_cells_vs_pool": 0.5069687389477701
+   },
+   "star_multimapped_reads_frac": {
+    "cells_median": 0.07760910815939279,
+    "pool_median": 0.07692307692307693,
+    "auc_cells_vs_pool": 0.5069687389477701
+   },
+   "pct_mt": {
+    "cells_median": 0.0705,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.8121926072229182
+   },
+   "pct_ribo": {
+    "cells_median": 0.1696,
+    "pool_median": 0.0,
+    "auc_cells_vs_pool": 0.9052968930949133
+   },
+   "intronic_pct": {
+    "cells_median": 69.9585,
+    "pool_median": 54.5455,
+    "auc_cells_vs_pool": 0.8136063849126837
+   },
+   "duplication_rate": {
+    "cells_median": 0.4943,
+    "pool_median": 0.459,
+    "auc_cells_vs_pool": 0.6394054442291683
+   },
+   "saturation": {
+    "cells_median": 0.3356,
+    "pool_median": 0.3118,
+    "auc_cells_vs_pool": 0.5881408287114168
+   },
+   "mismatch_rate": {
+    "cells_median": 0.005718,
+    "pool_median": 0.005219,
+    "auc_cells_vs_pool": 0.5812390785864976
+   },
+   "reads_per_umi": {
+    "cells_median": 1.9775401069518717,
+    "pool_median": 1.8484848484848484,
+    "auc_cells_vs_pool": 0.6394221914635084
+   },
+   "log_genes_per_umi": {
+    "cells_median": -0.509935774346058,
+    "pool_median": -0.07696104113612856,
+    "auc_cells_vs_pool": 0.011465145432355188
+   }
+  }
+ }
+}
