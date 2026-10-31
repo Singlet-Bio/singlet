@@ -66,11 +66,14 @@ for cfg in $CONFIGS; do
   ( while true; do nvidia-smi --query-gpu=index,utilization.gpu --format=csv,noheader,nounits | tr -d ' ' | sed "s/^/$(date +%s) /"; sleep 2; done ) > $D/gpu.csv 2>/dev/null &
   GM=$!
   C0=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T0=$(date +%s.%N)
+  U0=$(awk '$1=="user_usec"{print $2}' $CG/cpu.stat); Y0=$(awk '$1=="system_usec"{print $2}' $CG/cpu.stat)
   for g in 0 1; do
     ( seq 1 $((NS/2)) | xargs -P $S -I{} bash -c "run_one $g {} $D $T" ) &
   done
   wait $(jobs -p | grep -v "^$GM$") 2>/dev/null
   T1=$(date +%s.%N); C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); kill $GM 2>/dev/null
+  U1=$(awk '$1=="user_usec"{print $2}' $CG/cpu.stat); Y1=$(awk '$1=="system_usec"{print $2}' $CG/cpu.stat)
+  echo "cgroup CPU split for ${S}x${T}: user $(( (U1-U0)/1000000 )) s, system $(( (Y1-Y0)/1000000 )) s" | tee -a $RES/summary.txt
   python3 - "$D" "$S" "$T" "$NS" "$READS" "$T0" "$T1" "$C0" "$C1" <<'PY' | tee -a $RES/summary.txt
 import sys, re, glob, collections
 D, S, T, NS, READS, T0, T1, C0, C1 = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), *map(float, sys.argv[6:10])
