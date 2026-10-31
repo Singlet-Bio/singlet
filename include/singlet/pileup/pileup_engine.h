@@ -37,6 +37,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "stall_watchdog.h"
 #include "ancestry.h"
 #include "crispr_guide.h"
 #include "gene_model.h"
@@ -656,6 +657,7 @@ public:
             stats.total_reads++;
 
             if (stats.total_reads % 5000000 == 0) {
+                singlet::rearm_stall_watchdog("pileup");   // progress: 5 M more reads
                 std::cerr << "[singlet-pileup] Processed " << stats.total_reads / 1000000
                           << "M reads, " << stats.barcoded_reads << " barcoded, "
                           << stats.snp_hits << " SNP hits, "

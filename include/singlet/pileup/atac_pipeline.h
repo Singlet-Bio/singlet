@@ -219,7 +219,7 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
     auto peaks = call_peaks_insertions(ins, chrom_len, is_mito, opt.peaks);
     { std::vector<std::vector<int32_t>>().swap(ins); }
     write_insertion_peaks_bed(opt.out_dir + "/peaks.bed", peaks, chrom_names);
-    singlet::rearm_stall_watchdog();   // each ATAC phase is progress (a 10k library takes > 30 min in total)
+    singlet::rearm_stall_watchdog("atac: cells and matrices");   // each ATAC phase is progress (a 10k library takes > 30 min in total)
     std::cerr << "[atac] peaks: " << peaks.size() << "\n";
 
     // ── Annotation, metrics, cell calls ──
@@ -281,7 +281,7 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
         col_of[static_cast<size_t>(order[k])] = static_cast<int32_t>(k);
         col_names.push_back(out_bc[static_cast<size_t>(order[k])]);
     }
-    singlet::rearm_stall_watchdog();
+    singlet::rearm_stall_watchdog("atac: peak and gene-activity matrices");
     AtacTriplets pm, gm;
     compute_atac_metrics(frags, nbc, is_mito, ann, peaks, &col_of, &pm, &gm);
     const uint32_t ncol = static_cast<uint32_t>(order.size());
@@ -303,7 +303,7 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
         write_names(opt.out_dir + "/atac_gene_activity_barcodes.tsv.gz", col_names);
     }
 
-    singlet::rearm_stall_watchdog();
+    singlet::rearm_stall_watchdog("atac: per-barcode metrics and QC");
     // ── Per-barcode metrics and cells ──
     std::vector<int32_t> any;
     for (size_t i = 0; i < nbc; ++i) if (met[i].read_pairs > 0) any.push_back(static_cast<int32_t>(i));
