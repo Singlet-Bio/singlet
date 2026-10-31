@@ -538,7 +538,7 @@ def test_beta_policy_withholds_what_alpha_withholds_and_reaches_s1_publish():
     import s1_publish as PUB
 
     ns = argparse.Namespace(apply=True, gse="G", io_threads=1, blas_threads=1, migrate_timeout=1, verify_timeout=1,
-                            rows_dir="r", ledger_dir="l", readback="none", public="b", commit="", policy="/p/beta-policy.json",
+                            rows_dir="r", ledger_dir="l", readback="none", public="b", commit="", policy="/p/beta-policy.json", study_log_dir=None,
                             migrate_cmd=None, verify_cmd=None, pythonpath=None, local_root="x", part_size_mib=None,
                             retry_sleep=None)
     args = PUB.run_args(ns, "G", Path("/tmp/x"))
