@@ -79,17 +79,29 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     { unsigned long long z[5] = {0, 0, 0, 0, 0}; CK(cudaMemcpyToSymbol(g_molstat, z, sizeof z)); }
     g_cell_stats = true;
     g_want_reads = pi.wantReads != 0;
+    g_want_mixed = true;   // the engine's mixed_exon / mixed_intron (export.h's pre-USA exon / intron split)
     { const char* pk = getenv("SINGLET_GPU_PILEUP_PARTS"); g_force_parts = pk ? std::max(0, std::min(atoi(pk), kMaxParts)) : 0; }
+    const double tUp = now_s();
     Timer T; T.start();
     Outputs o;
     run_pipeline(A, T, in, &o);
-    { unsigned long long ms[5]; CK(cudaMemcpyFromSymbol(ms, g_molstat, sizeof ms));
-      po.molDropped = ms[4]; po.molSpliced = ms[0]; po.molUnspliced = ms[1]; po.molAmbiguous = ms[2]; po.molLegacyDouble = ms[3]; }
+    const double tRun = now_s();
+    unsigned long long ms[5]; CK(cudaMemcpyFromSymbol(ms, g_molstat, sizeof ms));
+    po.molDropped = ms[4]; po.molSpliced = ms[0]; po.molUnspliced = ms[1]; po.molAmbiguous = ms[2]; po.molLegacyDouble = ms[3];
+    po.peakGB = A.peak / 1e9;
+    // the last device work is done: free the device and let the next sample have the GPU while the host post-processing (digest, result copies) runs
+    cudaFree(A.base);
+    cudaDeviceReset();
+    const double tReset = now_s();
+    if (pi.release) pi.release();
+    { char b[200]; snprintf(b, sizeof b, "hold phases: setup+upload %.2f s, pipeline %.2f s, free+reset %.2f s; ", tUp - t0, tRun - tUp, tReset - tRun); po.log += b; }
     {   // digest of everything the run returns (the partition-invariance gate compares it across K)
         Sha256 h; h.update(sha_out(o).data(), 64);
-        { auto ind = o.indels; std::sort(ind.begin(), ind.end()); h.update(ind.data(), ind.size() * 16); }   // as a set: their order follows the stream's read order h.update(o.cell_reads.data(), o.cell_reads.size() * 4); h.update(o.cell_mol.data(), o.cell_mol.size() * 4);
+        { auto ind = o.indels; std::sort(ind.begin(), ind.end()); h.update(ind.data(), ind.size() * 16); }   // as a set: their order follows the stream's read order
+        h.update(o.cell_reads.data(), o.cell_reads.size() * 4); h.update(o.cell_mol.data(), o.cell_mol.size() * 4);
+        h.update(o.mixed_exon.data(), o.mixed_exon.size() * sizeof(T3)); h.update(o.mixed_intron.data(), o.mixed_intron.size() * sizeof(T3));
         h.update(o.cell_mixed.data(), o.cell_mixed.size() * 4); h.update(o.hits, sizeof o.hits); h.update(&o.sj_raw_sum, 8); h.update(g_snp_stat, sizeof g_snp_stat);
-        unsigned long long ms[5]; CK(cudaMemcpyFromSymbol(ms, g_molstat, sizeof ms)); h.update(ms, sizeof ms);
+        h.update(ms, sizeof ms);
         long long n[4] = {o.n_gene_tuples, o.n_sj_tuples, o.n_snp_tuples, o.n_mt_tuples}; h.update(n, sizeof n);
         po.log += "digest " + h.hex() + "; ";
     }
@@ -100,6 +112,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     for (auto& kv : T.acc) if (kv.first != "fetch") po.msGpu += kv.second;   // "fetch": the host copying a partition's results out
     { char b[160]; snprintf(b, sizeof b, "partition select %.1f ms (in the GPU time), host fetch between partitions %.1f ms; ", T.acc.count("part.select") ? T.acc["part.select"] : 0.0, T.acc.count("fetch") ? T.acc["fetch"] : 0.0); po.log += b; }
     copyT3(o.exon, po.exon); copyT3(o.intron, po.intron); copyT3(o.amb, po.amb); copyT3(o.sj, po.sj);
+    copyT3(o.mixed_exon, po.mixedExon); copyT3(o.mixed_intron, po.mixedIntron);
     if (pi.wantReads) { copyT3(o.exon_reads, po.exonReads); copyT3(o.intron_reads, po.intronReads); po.histCell.swap(o.hist_cell); po.hist.swap(o.hist); }
     copyT3(o.snp_ad, po.snpAd); copyT3(o.snp_dp, po.snpDp); copyT3(o.mt, po.mt); copyT3(o.mt_rev, po.mtRev);
     po.sjtab = o.sjtab; po.indels = o.indels;
@@ -109,11 +122,8 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
         for (size_t i = 0; i < o.merges.size(); i++) po.geneMerges[i] = PileupGeneMerge{o.merges[i].cell, o.merges[i].gene, o.merges[i].umi, o.merges[i].root};
     }
     po.snpMolecules = g_snp_stat[0]; po.snpAmbiguous = g_snp_stat[1]; po.snpOther = g_snp_stat[2];
-    po.peakGB = A.peak / 1e9;
     po.log += "cell partitions: " + std::to_string(g_parts_used) + (g_force_parts > 0 ? " (forced)" : "") + "; ";
     for (auto& l : g_parts_log) po.log += l + "; ";
-    cudaFree(A.base);
-    cudaDeviceReset();
     po.msTotal = (now_s() - t0) * 1e3;
     if (attempt > 0) po.log += "unified memory (the device arena was too small); ";
     return true;

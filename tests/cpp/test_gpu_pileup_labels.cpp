@@ -97,7 +97,7 @@ bool write_inputs(const std::string& dir) {
     return std::system(cmd.c_str()) == 0;
 }
 
-// the run's outputs as text: accumulators, molecule stats, legacy_exon_extra, and G1's per-gene sums (for the fixture checks)
+// the run's outputs as text: accumulators (incl. mixed_exon / mixed_intron), molecule stats, legacy_exon_extra, hits
 std::string run_dump(const std::string& dir, uint32_t rules) {
     singlet::PileupConfig cfg;
     cfg.barcode_path = dir + "/barcodes.tsv"; cfg.exon_gtf_path = dir + "/mini.gtf";
@@ -115,6 +115,7 @@ std::string run_dump(const std::string& dir, uint32_t rules) {
         o << "\n";
     };
     csc("exon", e.exons().to_csc()); csc("intron", e.introns().to_csc()); csc("ambiguous", e.ambiguous().to_csc());
+    csc("mixed_exon", e.mixed_exon().to_csc()); csc("mixed_intron", e.mixed_intron().to_csc());   // export.h's pre-USA split
     o << "molecules spliced " << st.molecules_spliced << " unspliced " << st.molecules_unspliced << " ambiguous " << st.molecules_ambiguous
       << " legacy_double " << st.molecules_legacy_double << " dropped " << st.molecules_dropped_multigene_umi << "\n";
     o << "legacy_exon_extra"; for (auto v : e.legacy_exon_extra()) o << ' ' << v; o << "\n";
@@ -186,7 +187,10 @@ int main(int argc, char** argv) {
         const auto C = parse(cpu), G = parse(gpu);
         cpu_by_rules[rules] = C;
         for (const char* k : {"exon indptr", "exon indices", "exon data", "intron indptr", "intron indices", "intron data",
-                              "ambiguous indptr", "ambiguous indices", "ambiguous data", "molecules", "legacy_exon_extra", "hits"}) {
+                              "ambiguous indptr", "ambiguous indices", "ambiguous data",
+                              "mixed_exon indptr", "mixed_exon indices", "mixed_exon data",
+                              "mixed_intron indptr", "mixed_intron indices", "mixed_intron data",
+                              "molecules", "legacy_exon_extra", "hits"}) {
             const bool same = C.count(k) && G.count(k) && C.at(k) == G.at(k);
             CHECK(same, tag + ": " + k + " GPU == CPU");
             if (!same) std::cout << "    CPU: " << (C.count(k) ? C.at(k) : "<none>") << "\n    GPU: " << (G.count(k) ? G.at(k) : "<none>") << "\n";
@@ -195,6 +199,8 @@ int main(int argc, char** argv) {
         const std::string& m = C.at("molecules");
         CHECK(field(m, "spliced") == 3, tag + ": 3 spliced molecules (m5, the junction + exon molecule, the spliced multimapper)");
         CHECK(sum_list(C.at("legacy_exon_extra")) == 3, tag + ": legacy_exon_extra = 3 (m3, merged m7, junction + intron)");
+        CHECK(sum_list(C.at("mixed_exon data")) == 3 && sum_list(C.at("mixed_intron data")) == 3,
+              tag + ": mixed_exon / mixed_intron hold the same 3 molecules (the pre-USA split's exon + 3 / intron - 3)");
     }
     {   // kFlank moves exactly one molecule (f5) from the intron to the exon matrix; the 6-base read and the dropped multimapper do not move
         const auto& a = cpu_by_rules[397]; const auto& b = cpu_by_rules[389];

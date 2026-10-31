@@ -148,6 +148,7 @@ struct PileupInput {
     std::vector<uint32_t> ops;
     std::vector<uint8_t> seq;
     int wantReads = 0;        // return PileupOutput::exonReads / intronReads / histCell / hist (reads per molecule); 0: no extra work
+    std::function<void()> release;   // called by pileupRun once its last device work is done (the caller's device lock); the host post-processing of the results runs after it
 };
 struct PileupOutput {
     std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
@@ -166,9 +167,12 @@ struct PileupOutput {
     // per cell (barcode column): reads recorded in the molecule store and molecules after directional collapse
     // (DirectionalUmiStore::per_cell_molecule_stats: the inputs of saturation_metrics.tsv and cell_qc_metrics.tsv)
     std::vector<uint32_t> cellReads, cellMolecules;
-    // per cell: unspliced molecules that also have an exon-only read (PileupEngine::legacy_exon_extra, the knee's legacy exonic total). The molecule
-    // labels are alevin-fry USA (DirectionalUmiStore::label_of): unspliced = any intron read, spliced = a junction read, ambiguous = the rest
+    // per cell: unspliced molecules that also have an exon-only read (PileupEngine::legacy_exon_extra). The molecule labels are alevin-fry
+    // USA (DirectionalUmiStore::label_of): unspliced = any intron read, spliced = a junction read, ambiguous = the rest
     std::vector<uint32_t> cellMixed;
+    // the same molecules per (cell, exon) and (cell, intron), rows as exon / intron (PileupEngine::mixed_exon / mixed_intron: export.h's
+    // pre-USA split, legacy exon = exon + mixedExon, legacy intron = intron - mixedIntron)
+    std::vector<PileupTriplet> mixedExon, mixedIntron;
     // count_read's counters over the gene tuples, and per alignment the classify_read gene and the serial loop's per-alignment
     // flags (1 strand vote sense, 2 antisense, 4 wrong_strand, 8 cross_gene_intron, 16 multigene)
     uint64_t hitsExon = 0, hitsIntron = 0, umiRecorded = 0;

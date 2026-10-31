@@ -268,7 +268,7 @@ __global__ void k_lists(const SigRec* S, int nS, const AlnRec* A, const uint32_t
     uint32_t wsj = FILL ? c_sj[s] : 0, wsnp = FILL ? c_snp[s] : 0, wmt = FILL ? c_mt[s] : 0, wind = FILL ? c_ind[s] : 0;
     if (p >= 0) {
         AlnRec a = A[sg.aln_off + p]; bool high = a.mapq >= P.min_mapq, rev = (a.flags & 1) != 0;
-        bool sj_ok = P.count_sj && (high || sg.nh > 1);
+        bool sj_ok = P.count_sj && sg.nh <= 1;   // junction molecules from uniquely mapped alignments only, as the CPU pileup (PileupConfig::sj_unique_only)
         bool snp_ok = high && a.tid >= 0 && a.tid < SN.ntid && SN.n[a.tid] > 0;
         bool mt_ok = P.count_mt && high && a.tid == P.chrm_tid;
         const uint32_t* o = ops + a.ops_off; int32_t rpos = a.pos; int32_t qpos = 0;
@@ -466,6 +466,7 @@ struct Outputs {
     std::vector<Merge> merges;   // gene store UMIs merged into another (Inputs::wantMerges)
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
     std::vector<T3> exon_reads, intron_reads;   // g_want_reads: reads per molecule summed per (cell, feature), same rows as exon / intron
+    std::vector<T3> mixed_exon, mixed_intron;   // g_want_mixed: unspliced molecules with an exon-only read, per (cell, exon) / (cell, intron)
     std::vector<uint32_t> hist_cell, hist;      // g_want_reads: cells with molecules, and their kHistBins-bin reads-per-molecule histogram
     long long n_gene_tuples = 0, n_sjl = 0, n_sj_tuples = 0, n_snp_tuples = 0, n_mt_tuples = 0, n_ind_tuples = 0, n_junctions = 0;
     std::vector<uint32_t> cell_reads, cell_mol, cell_mixed;   // per cell, when g_cell_stats (cell_mixed: unspliced molecules with an exon-only read)
@@ -483,7 +484,7 @@ static int g_parts_used = 1;
 static std::vector<std::string> g_parts_log;
 // bytes per read and per tuple of each reducer's stream in a partition: an upper bound from the allocations of steps 4-7 (each read:
 // its record, flags, offsets and counts; each tuple: its emitted keys, the sort's double buffers and the collapse's per-tuple arrays)
-constexpr uint64_t kBytesRead = 64, kBytesGene = 180, kBytesSj = 110, kBytesSnp = 150, kBytesMt = 34, kBytesInd = 24;   // job 792062: measured max 56 / 153 / 95 / 131 / 28 B, + ~15%
+constexpr uint64_t kBytesRead = 64, kBytesGene = 196, kBytesSj = 110, kBytesSnp = 150, kBytesMt = 34, kBytesInd = 24;   // job 792062: measured max 56 / 153 / 95 / 131 / 28 B, + ~15%; gene + 16 B for the mixed keys (g_want_mixed)
 __host__ __device__ __forceinline__ uint32_t cell_part(int32_t bc, uint32_t K) {
     uint64_t x = (uint64_t)(uint32_t)bc + 0x9E3779B97F4A7C15ULL;
     x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL; x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL; x ^= x >> 31;
@@ -516,11 +517,14 @@ static uint32_t* gene_components(Arena& A, const GeneStore* gst, const uint32_t*
 // ---- the reducers: each takes its partition's tuples from the read-level expansion and returns its per-(cell, feature) result on the
 // device. Order-free: radix sorts, integer reductions, and the R9 collapse one thread per group.
 // gene: the M6 chain (stage b: (cell, gene, UMI) sort and reduce; c: directional UMI collapse; d: per class CSR)
-static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr, CsrDev32 RD[2] = nullptr) {
+// MX (when g_want_mixed): the mixed molecules (unspliced with an exon-only read) per (cell, exon) and (cell, intron)
+static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr, CsrDev32 RD[2] = nullptr,
+                     CsrDev MX[2] = nullptr) {
     Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells; L.cr = (in.dp.rules & 128) != 0 && in.par.umi_dedup;
     long long ne = 0, na = 0; int it = 0;
     C[0] = C[1] = C[2] = CsrDev{nullptr, nullptr, nullptr, 0};
     if (RD) RD[0] = RD[1] = CsrDev32{nullptr, nullptr, nullptr, 0};
+    if (MX) MX[0] = MX[1] = CsrDev{nullptr, nullptr, nullptr, 0};
     if (gst) *gst = GeneStore{nullptr, nullptr, 0, L.gb, L.ub};
     if (ng > 0) {
         uint64_t* uk; Agg* ag; int m = stage_b(A, T, recs, ng, 0, L, &uk, &ag); T.mark("b.end");
@@ -529,6 +533,7 @@ static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, Cs
         if (gst) *gst = GeneStore{uk, lab, m, L.gb, L.ub};
         C[0] = stage_d_one(A, M.kex, m, L); C[1] = stage_d_one(A, M.kin, m, L); C[2] = stage_d_one(A, M.kam, m, L); T.mark("d.end");
         if (RD && M.rex) { RD[0] = stage_d_reads(A, M.kex, M.rex, m, L); RD[1] = stage_d_reads(A, M.kin, M.rin, m, L); T.mark("d.reads"); }
+        if (MX && M.kmxe) { MX[0] = stage_d_one(A, M.kmxe, m, L); MX[1] = stage_d_one(A, M.kmxi, m, L); T.mark("d.mixed"); }
     }
 }
 // junction: (cell, junction, UMI) sort, reads per exact UMI, R9 collapse per (cell, junction); returns the (cell | junction) rows
@@ -725,7 +730,8 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         const size_t s4 = A.mark();
         T.mark("4.expand");
         // the reducers: gene (M6 chain), junction, SNP, chrM base, chrM indel; each emits, sorts, collapses and reduces its own stream
-        CsrDev C[3]; CsrDev32 RD[2]; GeneStore gst{nullptr, nullptr, 0, 0, 0}; red_gene(A, T, in, recs, ng, C, &gst, g_want_reads ? RD : nullptr);
+        CsrDev C[3]; CsrDev32 RD[2]; CsrDev MX[2]; GeneStore gst{nullptr, nullptr, 0, 0, 0};
+        red_gene(A, T, in, recs, ng, C, &gst, g_want_reads ? RD : nullptr, g_want_mixed ? MX : nullptr);
         const GeneStore* gsp = (in.par.umi_dedup && gst.m > 0) ? &gst : nullptr;   // R9 per gene: the junction and SNP molecules take their roots from it
         if (out && in.wantMerges && gst.m > 0) {   // the host V(D)J reducer needs the same roots: the entries the collapse merged into another
             const int Gm = (gst.m + TB - 1) / TB; uint32_t* mf = A.alloc<uint32_t>(gst.m); k_mflag<<<Gm, TB>>>(gst.lab, gst.m, mf);
@@ -763,6 +769,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         if (ng > 0) {
             auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells); v.insert(v.end(), t.begin(), t.end()); };
             add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]);
+            if (g_want_mixed) { add(out->mixed_exon, MX[0]); add(out->mixed_intron, MX[1]); }
             if (g_want_reads) {
                 auto addr = [&](std::vector<T3>& v, const CsrDev32& c) {
                     std::vector<uint32_t> ip(in.ncells + 1), ix(c.nnz), da(c.nnz);
@@ -817,7 +824,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         }
     if (K > 1) std::stable_sort(indels.begin(), indels.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (auto& e : indels) out->indels.push_back(e.second);
-    for (auto* v : {&out->exon_reads, &out->intron_reads}) std::sort(v->begin(), v->end(), byCell);
+    for (auto* v : {&out->exon_reads, &out->intron_reads, &out->mixed_exon, &out->mixed_intron}) std::sort(v->begin(), v->end(), byCell);
     if (g_cell_stats) {
         out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1)); out->cell_mixed.resize(std::max(in.ncells, 1));
         CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
