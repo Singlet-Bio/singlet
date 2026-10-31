@@ -240,6 +240,7 @@ add_pileup_test(test_whitelist_integrity)
 target_compile_definitions(test_whitelist_integrity PRIVATE
     WHITELIST_DIR="${CMAKE_SOURCE_DIR}/python/singlet/data/whitelists")
 add_pileup_test(test_ws2_protocol_hardening)
+add_pileup_test(test_protocol_short_barcode_read)
 add_pileup_test(test_ws4_crash_diagnostics)
 
 # HDF5-dependent tests (h5ad, loom, molecule_info, and anything else that

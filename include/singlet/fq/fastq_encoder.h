@@ -117,6 +117,10 @@ class FastqEncoder {
                 static_cast<uint16_t>(probe_spots.empty() ? 0 : probe_spots[0].r2_len),
                 cfg.whitelist_dirs);
 
+            // A whitelist protocol whose barcodes are not in its whitelist would give garbage counts: stop.
+            if (const std::string werr = protocol_wl_floor_error(detected); !werr.empty())
+                throw std::runtime_error(werr);
+
             // ── AUTOFIX-VDB-READ-SWAP-PROTOCOL (FASTQ path) ──────────────────
             // When FASTQ files have R1=cDNA (long) and R2=CB+UMI (short),
             // detect_protocol signals this via reads_swapped=true.

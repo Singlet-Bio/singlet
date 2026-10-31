@@ -63,6 +63,16 @@ struct CandidateSpec {
     bool cr4 = false;
 };
 
+// Barcode reads shorter than a whitelist protocol's R1 by at most this many bases are still candidates for it (UMI trimmed), when at
+// least kShortBarcodeReadMinUmi UMI bases remain.
+constexpr uint16_t kShortBarcodeReadMaxTrim = 4;
+constexpr uint16_t kShortBarcodeReadMinUmi = 8;
+
+// A whitelist protocol with a barcode of at least 14 nt that was chosen by auto-detection must find its barcodes in its whitelist.
+// Random 16-mers hit a 3.6 M list about once in a million; real 10x libraries hit 50-95%. Below this rate the reads are not this
+// chemistry (or the whitelist is missing) and counts from them would be garbage.
+constexpr double kProtocolWlRateFloor = 0.02;
+
 inline const std::vector<CandidateSpec>& known_protocols() {
     // Protocol specs: tag, id, r1_len, bc_off, bc_len, umi_off, umi_len,
     //                 whitelist_file, linker, linker_offset, barcode_in_r2
@@ -550,6 +560,13 @@ ProtocolCandidate detect_protocol(
         } else if (!concat_mode && barcode_read_len > expected &&
                    barcode_read_len >= expected + 10) {
             // Over-sequenced barcode read (10+ bp extra → cDNA in R1)
+            candidates.push_back(&k);
+        } else if (!concat_mode && !k.whitelist_file.empty() && k.linker.empty() && k.bc_len >= 14 &&
+                   barcode_read_len < expected && expected - barcode_read_len <= kShortBarcodeReadMaxTrim &&
+                   barcode_read_len >= static_cast<uint16_t>(k.bc_offset + k.bc_len + kShortBarcodeReadMinUmi)) {
+            // Short barcode read: a whitelist protocol whose UMI was trimmed by 1-4 bp (GEO uploads of 26-27 bp 10x v3 R1 are
+            // common). The barcode is intact, so the whitelist hit rate decides; the encoder truncates the UMI to what is left.
+            // Without this the length alone sent such reads to a no-whitelist protocol (celseq2).
             candidates.push_back(&k);
         }
     }
@@ -1083,6 +1100,22 @@ ProtocolCandidate detect_protocol(
         best.reads_swapped = true;
 
     return best;
+}
+
+// Error text if an auto-detected protocol fails the whitelist floor, "" otherwise. Not applied to a forced/manual protocol, to protocols
+// without a whitelist, or to short barcodes (bc_len < 14: chance hits).
+inline std::string protocol_wl_floor_error(const ProtocolCandidate& d) {
+    if (d.confidence == Confidence::FORCE || d.confidence == Confidence::MANUAL) return "";
+    const CandidateSpec* spec = find_protocol_spec(d.tag);
+    if (!spec || spec->whitelist_file.empty() || spec->bc_len < 14) return "";
+    if (d.wl_match_rate >= kProtocolWlRateFloor) return "";
+    char buf[512];
+    std::snprintf(buf, sizeof buf,
+                  "protocol auto-detection chose %s but only %.2f%% of the barcode reads are in its whitelist %s (floor %.0f%%): "
+                  "the reads do not look like this chemistry, or the whitelist file is missing next to the binary. Check which file "
+                  "is the barcode read and its length, or name the protocol with --protocol.",
+                  d.tag.c_str(), d.wl_match_rate * 100.0, spec->whitelist_file.c_str(), kProtocolWlRateFloor * 100.0);
+    return buf;
 }
 
 // Check if protocol is a 3' protocol (polyA trimming appropriate)
