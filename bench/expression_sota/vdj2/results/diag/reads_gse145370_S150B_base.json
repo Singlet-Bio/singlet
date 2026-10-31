@@ -1,0 +1,32 @@
+{
+ "missing_chains_total": 8,
+ "examined": 8,
+ "umi_read_threshold": 149,
+ "classes": {
+  "some_umi_above_threshold": 7,
+  "all_umis_below_threshold": 1
+ },
+ "by_class_median": {
+  "all_umis_below_threshold": {
+   "ref_umis": 1.0,
+   "umis_seen": 5.0,
+   "reads": 8.0,
+   "max_reads_per_umi": 3.0,
+   "umis_above_thr": 0.0
+  },
+  "some_umi_above_threshold": {
+   "ref_umis": 2.0,
+   "umis_seen": 5.0,
+   "reads": 317.0,
+   "max_reads_per_umi": 302.0,
+   "umis_above_thr": 1.0
+  }
+ },
+ "max_reads_per_umi_quantiles": {
+  "0.1": 127.60000000000001,
+  "0.25": 184.0,
+  "0.5": 300.0,
+  "0.75": 485.5,
+  "0.9": 658.0
+ }
+}
