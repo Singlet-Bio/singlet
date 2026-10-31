@@ -3,13 +3,13 @@
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu
 #SBATCH --cpus-per-task=24
-#SBATCH --mem=64G
+#SBATCH --mem=96G
 #SBATCH --time=03:30:00
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Build one compiler-flag variant of the CPU-only singlet for the flags comparison (docs/research-beta/cpu-engine-perf.md, section 7).
 # Env: BRANCH (branch of the bare repo to build, default claude/cpu-perf-flags), VARIANT = <march>[-lto][-starpgo|-pgo], where
-#   <march> = v3 (-march=x86-64-v3) | zn3 (-march=znver3);  lto = -flto=auto on all host code;
+#   <march> = v3 (-march=x86-64-v3) | zn3 (-march=znver3; Clipper has only Intel nodes, so zn3 builds cannot run there);  lto = -flto=auto on all host code;
 #   starpgo = profile-guided STAR objects only (the recipe of src/star/pgo/pgo_build.sh);  pgo = whole-program PGO (pipeline, pileup, export, STAR).
 # PGO variants build an instrumented binary, train it on the .1fq files in TRAIN (default pbmc1k_v3 neuron1k_v3), and rebuild with the profile.
 # Output: $W/jobs/cpu-perf/<COMMIT8>/bin/singlet-<VARIANT> (whitelists link as in build_cpu.sbatch).
