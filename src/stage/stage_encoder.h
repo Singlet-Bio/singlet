@@ -139,6 +139,20 @@ inline std::vector<uint8_t> pack_plane(const std::vector<uint8_t>& raw, int leve
     return out;
 }
 
+// A "part" is one run's pass-1 state on disk, so a multi-run sample can be built run by run (`singlet download --stage-out F --stage-part`) and merged
+// (`singlet-stage --merge-parts`) into ONE .1fg2 with one exact-barcode histogram and one distinct-cDNA table. Layout (little endian):
+//   PartHdr | RunEntry[n_runs] | hist pairs (u64 whitelist index, u64 count) | len[n_unique] | hasn[n_unique] | n_nmask u64 + (u32 id, 32 B mask)* | data[n_unique*SLOT] | records[n_stored*recsz]
+#pragma pack(push, 1)
+struct PartHdr {
+    uint32_t magic, version;
+    uint8_t protocol_id, bcl, bc0, umil, umi0, has_q; uint16_t pad;
+    uint64_t n_stored, n_in, n_dropped, hist_reads, n_unique, n_hist_pairs, src_bytes, recsz;
+    uint32_t max_len, n_runs;
+    char wl_name[64];
+};
+#pragma pack(pop)
+static constexpr uint32_t PART_MAGIC = 0x54505331u;   // "1SPT"
+
 class Encoder {
 public:
     singlet::CbCorrector corr;
@@ -360,6 +374,69 @@ public:
             (unsigned long long)status_counts[4], (unsigned long long)status_counts[5], (unsigned long long)status_counts[6], (unsigned long long)status_counts[7],
             t2 - t_start + extra_wall_s, c2 - c_start + extra_cpu_s, c2 - c1, M > 0 ? (c2 - c_start + extra_cpu_s) / M : 0.0, (tab.data.size() + tab.ht.size() * 4.0) / 1e6);
         return js;
+    }
+
+    // Write this run's state as a part file (instead of finish()).
+    void write_part(const std::string& path) {
+        flush_spill(); std::fflush(spill);
+        FILE* f = std::fopen(path.c_str(), "wb"); if (!f) die(4, "cannot create " + path);
+        PartHdr h; std::memset(&h, 0, sizeof h);
+        h.magic = PART_MAGIC; h.version = 1; h.protocol_id = protocol_id; h.bcl = (uint8_t)bcl; h.bc0 = (uint8_t)bc0; h.umil = (uint8_t)umil; h.umi0 = (uint8_t)umi0;
+        h.has_q = has_q; h.n_stored = n_stored; h.n_in = n_in; h.n_dropped = n_dropped; h.hist_reads = hist_reads; h.n_unique = tab.n(); h.src_bytes = src_bytes; h.recsz = recsz;
+        h.max_len = max_len; h.n_runs = (uint32_t)runs.size(); std::strncpy(h.wl_name, wl_name.c_str(), sizeof h.wl_name - 1);
+        std::vector<std::pair<uint64_t, uint64_t>> hp; for (uint64_t w = 0; w < hist.size(); w++) if (hist[w]) hp.push_back({w, hist[w]});
+        h.n_hist_pairs = hp.size();
+        auto W = [&](const void* p, size_t n) { if (n && std::fwrite(p, 1, n, f) != n) die(4, "part write failed"); };
+        W(&h, sizeof h); W(runs.data(), runs.size() * sizeof(RunEntry)); W(hp.data(), hp.size() * 16);
+        W(tab.len.data(), tab.len.size()); W(tab.hasn.data(), tab.hasn.size());
+        uint64_t nn = tab.nmask.size(); W(&nn, 8);
+        for (const auto& kv : tab.nmask) { W(&kv.first, 4); W(kv.second.data(), SeqTable::NMB); }
+        W(tab.data.data(), tab.data.size());
+        std::rewind(spill);
+        std::vector<uint8_t> buf(1 << 22);
+        for (size_t got; (got = std::fread(buf.data(), 1, buf.size(), spill)) > 0;) W(buf.data(), got);
+        std::fclose(f); std::fclose(spill); spill = nullptr; std::remove(spill_path.c_str());
+    }
+
+    static PartHdr read_part_header(const std::string& path) {
+        FILE* f = std::fopen(path.c_str(), "rb"); if (!f) die(4, "cannot open part " + path);
+        PartHdr h; if (std::fread(&h, sizeof h, 1, f) != 1 || h.magic != PART_MAGIC) die(4, "not a part file: " + path);
+        std::fclose(f); return h;
+    }
+
+    // Merge a part (an earlier run of the same sample) into this encoder as if its reads had been added here: histogram summed, sequences re-keyed into
+    // this table (ids remapped in the spilled records), run entries appended with their first_read shifted.
+    void merge_part(const std::string& path) {
+        FILE* f = std::fopen(path.c_str(), "rb"); if (!f) die(4, "cannot open part " + path);
+        auto R = [&](void* p, size_t n) { if (n && std::fread(p, 1, n, f) != n) die(4, "part truncated: " + path); };
+        PartHdr h; R(&h, sizeof h);
+        if (h.magic != PART_MAGIC || h.protocol_id != protocol_id || h.bcl != bcl || h.bc0 != bc0 || h.umil != umil || h.umi0 != umi0 || (bool)h.has_q != has_q ||
+            h.recsz != recsz || wl_name != std::string(h.wl_name))
+            die(6, "part " + path + " disagrees with the sample's protocol/geometry/quality mode");
+        std::vector<RunEntry> pr(h.n_runs); R(pr.data(), pr.size() * sizeof(RunEntry));
+        for (auto& r : pr) { r.first_read += n_stored; runs.push_back(r); }
+        std::vector<std::pair<uint64_t, uint64_t>> hp(h.n_hist_pairs); R(hp.data(), hp.size() * 16);
+        for (const auto& kv : hp) { if (kv.first >= hist.size()) die(4, "part histogram index out of range"); hist[kv.first] += kv.second; }
+        hist_reads += h.hist_reads;
+        std::vector<uint8_t> plen(h.n_unique), phasn(h.n_unique); R(plen.data(), plen.size()); R(phasn.data(), phasn.size());
+        uint64_t nn; R(&nn, 8);
+        std::unordered_map<uint32_t, std::array<uint8_t, SeqTable::NMB>> pnm;
+        for (uint64_t i = 0; i < nn; i++) { uint32_t id; std::array<uint8_t, SeqTable::NMB> m; R(&id, 4); R(m.data(), SeqTable::NMB); pnm.emplace(id, m); }
+        std::vector<uint8_t> pdata(h.n_unique * SeqTable::SLOT); R(pdata.data(), pdata.size());
+        std::vector<uint32_t> remap(h.n_unique);
+        for (uint64_t id = 0; id < h.n_unique; id++)
+            remap[id] = tab.get_or_add(&pdata[id * SeqTable::SLOT], plen[id], phasn[id] ? pnm.at((uint32_t)id).data() : nullptr);
+        std::vector<uint8_t> rb(recsz * 32768);
+        for (uint64_t left = h.n_stored; left > 0;) {
+            const size_t k = (size_t)std::min<uint64_t>(left, 32768);
+            R(rb.data(), k * recsz);
+            for (size_t i = 0; i < k; i++) { Rec rec; std::memcpy(&rec, &rb[i * recsz], sizeof rec); rec.seq = remap[rec.seq]; std::memcpy(&rb[i * recsz], &rec, sizeof rec); }
+            sbuf.insert(sbuf.end(), rb.begin(), rb.begin() + k * recsz);
+            if (sbuf.size() >= recsz * 32768) flush_spill();
+            left -= k;
+        }
+        std::fclose(f);
+        n_stored += h.n_stored; n_in += h.n_in; n_dropped += h.n_dropped; src_bytes += h.src_bytes; max_len = std::max<uint32_t>(max_len, h.max_len);
     }
 
 private:

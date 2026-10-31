@@ -449,6 +449,7 @@ static int cmd_download(int argc, char* argv[]) {
     std::string metadata_json_path;  // GEO metadata JSON output path
     std::string swap_reads_mode = "auto";  // B-G2-1: auto|on|off|none
     std::string stage_out;                 // --stage-out FILE: write the staged .1fg2 straight from the SRA (no .1fq)
+    bool stage_part = false;               // --stage-part: FILE is a part (one run of a multi-run sample), merged later by singlet-stage --merge-parts
 
     for (int i = 0; i < argc; ++i) {
         std::string arg = argv[i];
@@ -473,6 +474,7 @@ static int cmd_download(int argc, char* argv[]) {
                 << "  --max-reads N        Stop after N reads (0=all, default: 0)\n"
                 << "  --whitelist-dir DIR  Search dir for whitelists (repeatable)\n"
                 << "  --no-profile         Suppress profiling output\n"
+                << "  --stage-part         with --stage-out: write a part (one run of a multi-run sample) for `singlet-stage --merge-parts`\n"
                 << "  --stage-out FILE     Write the staged .1fg2 (src/stage/fmt2.h) straight from the SRA instead of a .1fq:\n"
                 << "                       no barcode sort, no .1fq written or re-read; single-run samples, 10x R1 protocols\n"
                 << "  --metadata-json FILE Write metadata JSON file (auto-fills singlet_version,\n"
@@ -503,6 +505,8 @@ static int cmd_download(int argc, char* argv[]) {
             vdb_threads = std::atoi(argv[++i]);
         else if (arg == "--stage-out" && i+1 < argc)
             stage_out = argv[++i];
+        else if (arg == "--stage-part")
+            stage_part = true;
         else if (arg == "--max-reads" && i+1 < argc)
             max_reads = static_cast<uint64_t>(std::atoll(argv[++i]));
         else if (arg == "--no-trim") no_trim = true;
@@ -732,7 +736,8 @@ static int cmd_download(int argc, char* argv[]) {
     if (stg) {
         if (!stg->initialised()) { std::cerr << "[singlet-download] --stage-out: no reads reached the stage encoder\n"; return 2; }
         stg->end_run();
-        std::cout << stg->finish(stage_out, 3) << std::endl;
+        if (stage_part) stg->write_part(stage_out);
+        else std::cout << stg->finish(stage_out, 3) << std::endl;
     }
 
     std::cerr << "\n[singlet-download] Done: " << stats.total_reads << " reads"

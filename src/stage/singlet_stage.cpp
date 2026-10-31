@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
         std::printf("digest=%016llx reads=%llu\n", (unsigned long long)d, (unsigned long long)n);
         return rc;
     }
-    std::vector<std::string> wl_dirs, inputs, accs;
+    std::vector<std::string> wl_dirs, inputs, accs, parts;
     std::string out_path, json_path, scratch = "/tmp";
     int level = 3;
     bool do_verify = false;
@@ -39,12 +39,23 @@ int main(int argc, char** argv) {
         else if (a == "--scratch") scratch = val();
         else if (a == "--json") json_path = val();
         else if (a == "--verify") do_verify = true;
+        else if (a == "--merge-parts") { while (i + 1 < argc && argv[i + 1][0] != '-') parts.push_back(argv[++i]); }
         else if (a == "--accessions") { std::string s = val(); size_t p = 0; while (p <= s.size()) { size_t q = s.find(',', p); if (q == std::string::npos) q = s.size(); accs.push_back(s.substr(p, q - p)); p = q + 1; } }
         else if (!a.empty() && a[0] == '-') die(2, "unknown option " + a);
         else inputs.push_back(a);
     }
-    if (out_path.empty() || inputs.empty()) die(2, "usage: singlet-stage --whitelist-dir D -o OUT.1fg2 RUN1.1fq [RUN2.1fq ...]");
+    if (out_path.empty() || (inputs.empty() && parts.empty())) die(2, "usage: singlet-stage --whitelist-dir D -o OUT.1fg2 (RUN1.1fq [RUN2.1fq ...] | --merge-parts PART1 [PART2 ...])");
     if (wl_dirs.empty() && std::getenv("SINGLET_WHITELIST_DIR")) wl_dirs.push_back(std::getenv("SINGLET_WHITELIST_DIR"));
+    if (!parts.empty()) {   // multi-run sample built run by run with `singlet download --stage-out PART --stage-part`: one histogram, one table, no .1fq
+        stage::PartHdr h0 = stage::Encoder::read_part_header(parts[0]);
+        stage::Encoder enc;
+        enc.init(h0.protocol_id, h0.bcl, h0.bc0, h0.umil, h0.umi0, h0.has_q != 0, wl_dirs, scratch);
+        for (const auto& p : parts) enc.merge_part(p);
+        std::string js = enc.finish(out_path, level);
+        std::puts(js.c_str());
+        if (!json_path.empty()) { std::ofstream jf(json_path); jf << js << "\n"; }
+        return 0;
+    }
 
     sq::Reader r0; r0.open(inputs[0].c_str());
     const uint8_t protocol_id = r0.header().protocol_id;
