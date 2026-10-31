@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hto_callers as H  # noqa: E402
 
 N_BOOT = 1000
+H.MIN_CLASS = 30  # PREREG Amendment 3
 
 
 # ------------------------------------------------------------------------------------------------------------- I1
@@ -42,8 +43,9 @@ def load_i1(a):
     t.columns = ["cell", "donor"]
     t["cell"] = t["cell"].astype(str).str.replace(r"-1$", "", regex=True)
     t = t.drop_duplicates("cell").set_index("cell")["donor"].reindex(called)
+    pd_ = T.drop_duplicates(T.columns[0]).assign(c=lambda d: d.iloc[:, 0].astype(str).str.replace(r"-1$", "", regex=True)).set_index("c")["prob_doublet"].reindex(called)
     truth = np.where(t.isna(), "unassigned", t.values).astype(object)
-    truth = np.where(truth == "doublet", "Doublet", truth)
+    truth = np.where((truth == "doublet") | ((pd_.values >= 0.5) & (truth != "unassigned")) | ((pd_.values >= 0.5)), "Doublet", truth)
     return X.to_numpy(float), list(X.index), truth, {"called": len(called), "in_hto_table": int(called.isin(H_.columns).sum())}
 
 
@@ -206,6 +208,9 @@ def main():
         # tag -> line is known from the tag names; a singlet call is correct if its line equals the RNA line
         sets.append(("I2", Xh, truth, lot, {**info, "truth_counts": pd.Series(truth).value_counts().to_dict(), "tags": tags}))
     for label, X, truth, t2t, info in sets:
+        if a.truth_only:
+            print(label, json.dumps({k: v for k, v in info.items() if k != "contingency_top_tag_by_donor"}, default=str)[:3000])
+            continue
         out, calls = evaluate(X, truth, t2t, callers, label)
         best = max(competitors, key=lambda n: out[n]["macro_f1"])
         res[label] = {"info": info, "callers": out, "best_competitor": best}

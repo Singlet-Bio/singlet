@@ -30,6 +30,7 @@ import pandas as pd
 from scipy import optimize, stats
 
 NEG, DBL = -1, -2
+MIN_CLASS = 1  # minimum number of truth cells for a class to enter the macro F1 (eval_independent.py sets 30)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -329,7 +330,7 @@ def macro_f1(call, truth, tag_to_truth=None):
         ok[sing] = (t[sing] == "S") & (lut[np.clip(call[sing], 0, mx - 1)] == truth[sing])
     f = {}
     for cl in "SDN":
-        if not (t == cl).any():  # classes absent from the truth are not averaged (PREREG section 3)
+        if (t == cl).sum() < MIN_CLASS:  # classes absent from the truth (or tiny: PREREG Amendment 3) are not averaged
             f[cl] = np.nan
             continue
         tp = ((c == cl) & (t == cl) & ok).sum()
@@ -341,6 +342,8 @@ def macro_f1(call, truth, tag_to_truth=None):
 
 def genetic_doublets_called_singlet(call, truth):
     d = np.asarray(truth, dtype=object) == "Doublet"
+    if d.sum() < MIN_CLASS:
+        return float("nan")
     return float(((np.asarray(call) >= 0) & d).sum() / max(d.sum(), 1))
 
 

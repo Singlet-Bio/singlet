@@ -125,3 +125,17 @@ set) stay exactly as computed, and each cluster is **named** by the one-to-one a
 holds most of its non-doublet cells, the same caller-free label matching used for tag to donor on I1. The marker naming is kept in
 the output as a QC field. The partition, the doublets and every disagreement between RNA cluster and tag remain counted as
 errors; only a swap of names is repaired. I2 is secondary and non-gating.
+
+## 10. Amendment 3 (2026-10-31, before any caller was run on I1)
+
+First-pass genotype truth on I1 (first 200 M read pairs, Singlet pipeline, 2,915 called cells, cellSNP-lite + vireo -N 8; jobs
+794841, 794856): median 72 informative SNPs per cell, 673 cells `unassigned`, **3** cells with prob_doublet >= 0.5 and none called
+`doublet` by vireo. That is too little coverage to see genetic doublets, so it is not a doublet truth. Decisions, taken before any
+hashtag caller touched I1 (the HTO table was only used to define the cell universe, which is the Singlet cell list, never read):
+
+1. Truth is rebuilt from **the whole library** (788 M read pairs, `fetch_full.sbatch`), same pipeline and vireo settings. I1 uses
+   the full-library run only; the 200 M run is kept as a record.
+2. Truth classes on I1: doublet = vireo `doublet` or prob_doublet >= 0.5; singlet = a donor call; `unassigned` excluded.
+3. **Classes with fewer than 30 truth cells are not averaged into the macro F1** (and the doublets-called-singlet rate is then
+   reported as undefined). If the full-library vireo again yields fewer than 30 doublets, I1's primary metric is F_S alone and the
+   statement "within 0.01 of the best competitor" then says nothing about doublets; the report says so.

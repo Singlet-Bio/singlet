@@ -16,7 +16,7 @@ PANEL=/mnt/projects/debruinz_project/cellarium/reference/pileup_indices/genome1K
 export PATH=$W/envs/pbench/bin:$PATH
 rm -rf $O; mkdir -p $O
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
-/usr/bin/time -v -o $O/encode.time.txt $BIN encode --reads $D/fastq/rna_R1.fastq.gz $D/fastq/rna_R2.fastq.gz -o $SCR/s.1fq -v > $O/encode.log 2>&1
+/usr/bin/time -v -o $O/encode.time.txt $BIN encode --reads $D/fastq/rna_R1.fastq.gz $D/fastq/rna_R2.fastq.gz -o $SCR/s.1fq --no-trim -v > $O/encode.log 2>&1
 tail -15 $O/encode.log; ls -l $SCR/s.1fq; grep -E "Elapsed|Maximum" $O/encode.time.txt
 cd $SCR; export SINGLET_STALL_TIMEOUT=10800
 /usr/bin/time -v -o $O/time.txt $BIN $SCR/s.1fq --ref-base /mnt/projects/debruinz_project/cellarium/reference \
