@@ -38,7 +38,7 @@ for m in "${MODES[@]}"; do
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
   unset SINGLET_GPU_PILEUP SINGLET_INTRON_RULES SINGLET_GPU_PILEUP_QUAL; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
   case $m in cpu|cpuG_m) ENGARG="" ;; gpuD|gpuD_n|gpuD_m|gpuG_m) export SINGLET_GPU_PILEUP=on ;; gpuQ_m) export SINGLET_GPU_PILEUP=on SINGLET_GPU_PILEUP_QUAL=force ;; esac
-  case $m in *_n) BIN=$BINDIR_N/singlet-gpu ;; *_m) BIN=$BINDIR_M/singlet-gpu ;; esac
+  case $m in *_n) BIN=$BINDIR_N/singlet-gpu ;; *_m) BIN=$BINDIR_M/${BINNAME:-singlet-gpu} ;; esac
   ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb"
     while true; do
       g=$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits | tr -d ' ' | tr , '\t')
