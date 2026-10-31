@@ -1,0 +1,45 @@
+{
+ "frozen": {
+  "frozen_on": "2026-10-31",
+  "reason": "PREREG section 6 decision rule: the nested-LODO BFF-style family (bffc) has a lower mean held-out macro F1 than `current` (0.411 vs 0.459) and does not improve BAL3 or the cell lines on the pre-registered metric, so `current` stays the Singlet caller. Nothing in include/singlet/pileup/hto_demux.h changes.",
+  "singlet_caller": "current",
+  "params": {
+   "confident_min": 0.5,
+   "doublet_nmads": 3.0,
+   "doublet_min": 1.0,
+   "pseudo": 5.0,
+   "mixture_positive": 0.5,
+   "min_cells": 20
+  },
+  "implementation": "bench/adt/hto_lodo.py::call_hashtags (numpy reference of HtoDemux::demux); header unchanged since origin/prod/campaign 9c5eb068",
+  "competitors": {
+   "hasheddrops": {
+    "confident_min": 2.0,
+    "doublet_min": 2.0,
+    "doublet_nmads": 3.0,
+    "confident_nmads": 3.0,
+    "pseudo": 5.0
+   },
+   "gmm": {
+    "posterior": 0.5
+   },
+   "htodemux": {
+    "quantile": 0.99,
+    "k_means": "k = tags + 1, 50 starts, random_state 0, CLR margin 1"
+   },
+   "bff_raw": {
+    "seed": 0,
+    "max_peaks": 4
+   },
+   "bff_cluster": {
+    "alpha": 0.05,
+    "beta": 0.05,
+    "tn_rule": "edge",
+    "t2_rule": "top",
+    "seed": 0
+   }
+  },
+  "code": "bench/expression_sota/hto/hto_callers.py at the commit that contains this file",
+  "exploratory_not_frozen": "bffc nested-LODO choices (results/lodo_bff.json) are reported as the frontier; they are not evaluated on I1 / I2 as Singlet's caller"
+ }
+}
