@@ -2809,7 +2809,35 @@ static int cmd_atac(int argc, char* argv[]) {
     return singlet::run_atac_from_bam(o);
 }
 
+// Stream path, library far from the protocol orientation: the pipe cannot be read twice, so re-execute this same command on the sorted
+// path (--sorted-bam), whose strand probe handles any chemistry. Partial STAR output of the stopped pass is removed first. Returns only
+// if the exec fails (exit code 8, strand_contradiction, as before).
+static int g_argc = 0;
+static char** g_argv = nullptr;
+static int restart_on_sorted_path(const singlet::PileupStats& stats, bool reverse, const std::string& out_prefix, int argc, char** argv,
+                                  const std::string& when) {
+    std::cerr << "[singlet] STREAM STRAND: " << static_cast<int>(singlet::counted_antisense_frac(stats, reverse) * 100)
+              << "% of " << (stats.strand_sense + stats.strand_antisense) << " strand-informative nuclear reads are antisense to the protocol "
+              << "orientation (" << when << "); restarting on the sorted path (--sorted-bam)" << std::endl;
+    if (!argv || argc < 1) return 8;
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    for (const auto& e : fs::directory_iterator(out_prefix, ec)) {   // STAR's files of the stopped pass: star_*, the GPU hand-off file
+        const std::string n = e.path().filename().string();
+        if (n.rfind("star_", 0) == 0 || n == ".gpu_handoff.bin") fs::remove_all(e.path(), ec);
+    }
+    std::vector<char*> nargv(argv, argv + argc);
+    static char sorted_flag[] = "--sorted-bam";
+    nargv.push_back(sorted_flag);
+    nargv.push_back(nullptr);
+    setenv("SINGLET_STREAM_STRAND_RESTART", "1", 1);
+    execv("/proc/self/exe", nargv.data());
+    std::cerr << "[singlet] ERROR: restart on the sorted path failed; rerun with --sorted-bam" << std::endl;
+    return 8;
+}
+
 int main(int argc, char* argv[]) {
+    g_argc = argc; g_argv = argv;   // restart_on_sorted_path re-executes this command
     singlet::fq::register_fg2();   // a staged .1fg2 is read through Reader / RunSet like a .1fq
     // ── Subcommand dispatch ──
     if (argc >= 2) {
@@ -5230,6 +5258,7 @@ int main(int argc, char* argv[]) {
     // 19% less wall, docs/research-beta/ws-w3b-bam-stream.md). STAR writes its corrected CB only into a
     // sorted BAM, so the pileup takes CB from CR (identical here: .1fq barcodes are whitelist-exact).
     // The modes below still read the sorted BAM; --sorted-bam forces it everywhere.
+    const bool stream_auto = (stream_unsorted == -1);   // not forced with --stream-unsorted: a wrong-strand library may restart on the sorted path
     if (stream_unsorted != 0) {
         const char* sorted_reason = nullptr;
         // An existing BAM is read as given. With an explicit --stream-unsorted it is treated as a saved stream
@@ -5305,6 +5334,9 @@ int main(int argc, char* argv[]) {
     }
 #endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
+    // a stream far from the protocol orientation (Visium FFPE probes, reverse-stranded chemistries) stops after the first million reads and
+    // restarts on the sorted path; not with the GPU hand-off (the end-of-pass check below still applies) or a forced --stream-unsorted
+    config.strand_early_abort = (stream_unsorted == 1) && stream_auto && bam_file.empty() && !getenv("SINGLET_GPU_PILEUP");
     // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
     const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
     if (engine_ptr && config.cb_from_cr) {
@@ -8177,6 +8209,17 @@ int main(int argc, char* argv[]) {
             std::cerr << " (" << static_cast<int>(stats.total_reads / pileup_time / 1e6) << "M reads/s)";
         std::cerr << "\n";
 
+        if (stats.strand_contradiction && star_pid > 0) {
+            // the pass stopped early (see PileupConfig::strand_early_abort): end STAR, then restart on the sorted path
+            kill(star_pid, SIGKILL);
+            int ws_kill;
+            waitpid(star_pid, &ws_kill, 0);
+            close(pipe_fd[0]);
+            if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
+            return restart_on_sorted_path(stats, engine_ptr->reverse_strand(), out_prefix, g_argc, g_argv, "after the first " +
+                                          std::to_string(stats.total_reads / 1000000) + "M reads");
+        }
+
         // Strand safety net: only a BAM file can be read twice (a STAR pipe cannot;
         // there the in-line probe decides alone).
         if (!bam_file.empty() && bam_file != "-") {
@@ -8220,6 +8263,8 @@ int main(int argc, char* argv[]) {
         if (stream_unsorted == 1 && config.stranded && config.auto_strand
             && stats.strand_sense + stats.strand_antisense >= singlet::kStrandRetryMinReads
             && singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) > singlet::kStrandRetryFrac) {
+            if (stream_auto)
+                return restart_on_sorted_path(stats, engine_ptr->reverse_strand(), out_prefix, g_argc, g_argv, "at the end of the pass");
             std::cerr << "[singlet] ERROR: " << static_cast<int>(singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) * 100)
                       << "% of nuclear reads are antisense to the protocol orientation; rerun with --sorted-bam (strand safety net)" << std::endl;
             return 8;  // strand_contradiction
