@@ -12,6 +12,11 @@
 #   sbatch --array=0-7 --export=ALL,MODE=default starsolo_public.sbatch
 # MODE=cr       Cell Ranger 4+ emulation from the STARsolo manual; Gene + GeneFull + Velocyto + SJ in one pass. This is the
 #               reference for gex-counts, spliced-unspliced and cell-calling (EmptyDrops_CR) and for junctions-psi.
+# MODE=reference STARsolo SJ with the STAR options Singlet itself runs for the dataset (the junctions-psi reference since the 2026-10-31 amendment,
+#               bench/public/CONTRACT.md "junctions-psi" and docs/research-beta/junctions-psi-reference.md): --outFilterScoreMin 10 and
+#               --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts for every dataset, and for the 10x 3' v2/v3 datasets the Beta aligner profile
+#               (CellRanger4 clipping, --alignSJoverhangMin 8, --outFilterIntronMotifs RemoveNoncanonicalUnannotated, --outFilterMismatchNoverLmax 0.05).
+#               Only --soloFeatures SJ.
 # MODE=default  STAR / STARsolo defaults for everything except the chemistry (CB/UMI geometry, whitelist, strand);
 #               only --soloFeatures SJ. The second documented configuration of the competitor: its distance to MODE=cr is
 #               the tolerance for junctions-psi.
@@ -54,6 +59,7 @@ STAR --version > $O/star_version.txt
 COMMON=(--runThreadN $T --genomeDir $GENOME --readFilesIn $R2 $R1 --readFilesCommand zcat
         --soloType CB_UMI_Simple --soloCBwhitelist $WL --soloCBlen $CBLEN --soloUMIstart $UMISTART --soloUMIlen $UMILEN
         --soloBarcodeReadLength 0 --soloStrand $STRAND --outSAMtype None --outTmpDir $SCR/startmp)
+PROFILE=0; case $ID in pbmc1k_v3|pbmc1k_v2|neuron1k_v3|hgmm1k_v3|pbmc1k_cite_v3|nuclei2k_v2) PROFILE=1 ;; esac   # 10x 3' v2/v3: the Beta aligner profile is on
 case $MODE in
   cr)
     CMD=(STAR "${COMMON[@]}" --soloFeatures Gene GeneFull Velocyto SJ --soloCellFilter EmptyDrops_CR
@@ -61,6 +67,10 @@ case $MODE in
          --clipAdapterType CellRanger4 --outFilterScoreMin 30) ;;
   default)
     CMD=(STAR "${COMMON[@]}" --soloFeatures SJ) ;;
+  reference)
+    CMD=(STAR "${COMMON[@]}" --soloFeatures SJ --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --outFilterScoreMin 10)
+    [ $PROFILE = 1 ] && CMD+=(--clipAdapterType CellRanger4 --alignSJoverhangMin 8 --outFilterIntronMotifs RemoveNoncanonicalUnannotated
+                              --outFilterMismatchNoverLmax 0.05) ;;
 esac
 echo "${CMD[*]}" > $O/command.txt
 cd $O

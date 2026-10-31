@@ -4,8 +4,9 @@
     python bench/public/capabilities/junctions_psi.py ARTIFACT_DIR [--out bench/public/results/junctions-psi.json]
 
 Reference and competitor. The only tool that counts junctions per cell with UMIs is STARsolo (``--soloFeatures SJ``). It is run
-twice on the same reads: at STAR/STARsolo defaults (the reference, tool ``starsolo-sj``) and in the manual's Cell Ranger 4+
-emulation (the competitor, ``starsolo-sj-cr``). The distance between those two documented configurations of the same tool is the
+twice on the same reads: with the STAR options Singlet itself runs for the dataset (the reference, tool ``starsolo-sj``; amended
+2026-10-31, see docs/research-beta/junctions-psi-reference.md) and in the manual's Cell Ranger 4+ emulation (the competitor,
+``starsolo-sj-cr``). Until the amendment the reference was STAR at its defaults. The distance between those two documented configurations of the same tool is the
 noise a junction counter has by its settings; Singlet must be as close to the reference as the Cell Ranger configuration is.
 Why the defaults are the reference: the emulation's ``MultiGeneUMI_CR`` filter removes the UMIs of junctions that lie in
 overlapping genes (high-count junctions with zero STARsolo UMI), which is a gene-counting rule, not a junction-counting one.
@@ -34,6 +35,11 @@ STAR_CR = ("STAR --runThreadN 16 --genomeDir $GENOME --readFilesIn $R2 $R1 --rea
            "--soloCBwhitelist $WHITELIST --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMILEN --soloBarcodeReadLength 0 --soloStrand $STRAND "
            "--soloFeatures Gene GeneFull Velocyto SJ --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts "
            "--soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30 --outSAMtype None")
+STAR_REF = ("STAR --runThreadN 16 --genomeDir $GENOME --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple "
+            "--soloCBwhitelist $WHITELIST --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMILEN --soloBarcodeReadLength 0 --soloStrand $STRAND "
+            "--soloFeatures SJ --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --outFilterScoreMin 10 --outSAMtype None  (the options Singlet runs; "
+            "for the 10x 3' v2/v3 datasets also the Beta aligner profile: --clipAdapterType CellRanger4 --alignSJoverhangMin 8 "
+            "--outFilterIntronMotifs RemoveNoncanonicalUnannotated --outFilterMismatchNoverLmax 0.05; $UMILEN 12 for v3, 10 for v2 and 5'; 10x v1: CB 14, UMI 10)")
 STAR_DEF = ("STAR --runThreadN 16 --genomeDir $GENOME --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple "
             "--soloCBwhitelist $WHITELIST --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMILEN --soloBarcodeReadLength 0 --soloStrand $STRAND "
             "--soloFeatures SJ --outSAMtype None  (all other options at their defaults; $UMILEN 12 for v3, 10 for v2 and 5'; 10x v1: CB 14, UMI 10)")
@@ -41,14 +47,14 @@ SINGLET_CMD = ("singlet encode --reads R1.fastq.gz R2.fastq.gz -o s.1fq; singlet
                "--exons $REF/$SPECIES/genes/genes.gtf --out-prefix $OUT/ --threads 8 --pipeline --output-format mtx --raw-matrix  "
                "(sj_counts: molecules per junction and barcode; filtered set = star_sj_pass in sj_features.tsv)")
 
-TRUTH = ("none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; "
+TRUTH = ("none. The reference is STARsolo SJ with the STAR options Singlet itself runs (UMI counts per junction and cell) on the same reads; "
          "cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.")
 
 
 def tools() -> list[dict]:
     return [
         C.tool("singlet", "1.0.0", "singlet", SINGLET_CMD, "https://singlet.bio"),
-        C.tool("starsolo-sj", "2.7.11b", "truth", STAR_DEF, "https://github.com/alexdobin/STAR",
+        C.tool("starsolo-sj", "2.7.11b", "truth", STAR_REF, "https://github.com/alexdobin/STAR",
                "Kaminow, Yunusov, Dobin. bioRxiv 2021 (STARsolo)"),
         C.tool("starsolo-sj-cr", "2.7.11b", "competitor", STAR_CR, "https://github.com/alexdobin/STAR"),
     ]
@@ -225,7 +231,7 @@ def _conclusion(metrics, n_ds) -> str:
     j, c, p = rng("filtered_junction_jaccard"), rng("percell_junction_corr"), rng("cassette_psi_pseudobulk_r")
     gating = [m for m in metrics if m["rule"]["type"] != "informational"]
     n_pass = sum(m["pass"] == "pass" for m in gating)
-    return (f"On {n_ds} datasets, Singlet's filtered junction set overlaps STARsolo SJ (at defaults) at Jaccard {j[0]:.2f}-{j[1]:.2f}, its per-cell junction "
+    return (f"On {n_ds} datasets, Singlet's filtered junction set overlaps STARsolo SJ (same STAR options) at Jaccard {j[0]:.2f}-{j[1]:.2f}, its per-cell junction "
             f"counts correlate at a median {c[0]:.2f}-{c[1]:.2f} and cassette-exon PSI at r = {p[0]:.3f}-{p[1]:.3f} (pseudobulk). "
             f"Each is compared with STARsolo in Cell Ranger emulation measured against the same reference; {n_pass} of {len(gating)} comparisons pass. "
             f"Against the Cell Ranger emulation as reference Singlet agrees less (reported, not gated): that filter zeroes some high-count junctions.")
@@ -235,7 +241,7 @@ def _methods() -> str:
     return (
         "**Data.** The cohort's 10x datasets from FASTQs on their 2024-A references. Cells: barcodes STARsolo EmptyDrops_CR calls.\n\n"
         "**Reference and competitor.** STARsolo is the only tool that counts junctions per cell with UMIs. It runs twice on the same reads: "
-        "at STAR/STARsolo defaults (reference) and in the manual's Cell Ranger 4+ emulation (competitor). Singlet is compared with the "
+        "with the STAR options Singlet itself runs (reference; for 10x 3' v2/v3 that includes the Beta aligner profile) and in the manual's Cell Ranger 4+ emulation (competitor). Singlet is compared with the "
         "reference; the Cell Ranger-emulation run is compared with the same reference. Singlet must be at least as close as that. The "
         "emulation's MultiGeneUMI_CR filter zeroes high-count junctions in overlapping genes, so it is not the natural reference for junctions.\n\n"
         "**Filtered set.** STAR passes junctions through its outSJfilter* rules. A tool's filtered set is the junctions that pass them "
@@ -253,8 +259,20 @@ def _methods() -> str:
 
 def _caveats() -> list[str]:
     return [
-        "There is only one junction-counting tool, STARsolo. Its default-settings run is the reference and its Cell Ranger-emulation run stands in for the competitor; the metrics say how close Singlet is to STARsolo relative to how far a second STARsolo configuration is, not how accurate either is against a biological truth.",
-        "The reference choice was made after looking at pbmc1k_v3: with the Cell Ranger emulation as reference, every Singlet metric scored below the default-settings run, because MultiGeneUMI_CR gives zero UMI to some of the highest-count junctions (overlapping genes). The default settings are STARsolo's documented defaults and were used for every dataset; the other orientation is not reported as a metric.",
+        "Primary evidence for the aligner options behind the junction table is long-read truth, not this agreement. On the Illumina+PacBio/ONT library PBMC-E pbmc1 "
+        "(singlet-agents bench/ground-truth, dev split), per-junction precision / recall of STAR alone: production 0.776 / 0.872, plus CellRanger4 clipping "
+        "0.812 / 0.878, plus the junction guard (--alignSJoverhangMin 8, RemoveNoncanonicalUnannotated) 0.871 / 0.878, the shipped profile 0.882 / 0.877. The "
+        "guard adds about 6 points of precision and loses no recall; the non-canonical filter does almost all of it. Singlet's own junction table scored the same "
+        "way (junctions with at least 2 molecules in the truth cells): precision 0.941, recall 0.716, F1 0.813, equal to STARsolo with the same options. "
+        "Full tables: docs/research-beta/junctions-psi-reference.md. The absolute numbers of the second scoring are not comparable with the first (every read in "
+        "the cells counts there, only truth-bearing reads in the first).",
+        "The reference carries Singlet's STAR options (since 2026-10-31). With STAR at defaults as reference, the junction guard of the Beta aligner profile removes about "
+        "a third of the junction list and lowers every agreement metric although the removed junctions are not in the long-read truth; that run is the previous "
+        "reference (starsolo-public-default) and is kept for comparison. The Cell Ranger-emulation competitor does not carry the guard, so it is the farther from "
+        "the reference on 10x 3' v2/v3 datasets and the match_or_beat bar is easier there.",
+        "Singlet counts a junction molecule only from uniquely mapped alignments (NH == 1), as STARsolo's SJ feature does (PR on prod/campaign: sj_unique_only). "
+        "Before that rule Singlet also counted the primary alignment of multi-mapped reads: 74,131 more single-molecule junctions than STARsolo on pbmc1, with "
+        "long-read precision 0.076.",
         "Singlet and STARsolo run separate STAR alignments (Singlet's inside its pipeline), so the junction sets differ in part through alignment settings, not only counting.",
         "Singlet reports many more junctions than pass STAR's filters (most of them with a single molecule); those unfiltered junctions are excluded from every metric here.",
         "Cassette-exon PSI uses annotated GENCODE triples only; novel exons and other event types (alternative donors and acceptors) are not scored. Singlet's own splice_psi output is not evaluated here.",
@@ -276,7 +294,7 @@ def _figures(ids, metrics):
                              ("cassette_psi_pseudobulk_r", "Cassette-exon PSI correlation (pseudobulk)", "r")):
         sx, sy = series(mid, "singlet")
         cx, cy = series(mid, "comp")
-        figs.append({"id": mid, "title": title, "kind": "grouped_bar", "caption": "Higher is better. Reference: STARsolo at defaults. Competitor: STARsolo in Cell Ranger emulation, measured against the same reference.",
+        figs.append({"id": mid, "title": title, "kind": "grouped_bar", "caption": "Higher is better. Reference: STARsolo with Singlet's STAR options. Competitor: STARsolo in Cell Ranger emulation, measured against the same reference.",
                      "x": {"label": "dataset", "categories": ids}, "y": {"label": unit, "unit": unit, "scale": "linear", "min": 0, "max": 1},
                      "series": [{"name": "Singlet", "tool": "singlet", "x": sx, "y": sy},
                                 {"name": COMP_LABEL, "tool": "starsolo-sj-cr", "x": cx, "y": cy}]})

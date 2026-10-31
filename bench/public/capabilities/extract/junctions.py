@@ -93,7 +93,8 @@ def extract_junctions(ctx: Ctx, out: Path, gtf: Path) -> dict:
     # ---- load the three tools
     s_keys, s_bcs, s_M, s_pass, s_ann = load_singlet_sj(ctx.singlet)
     cr_keys, cr_bcs, cr_M = load_starsolo_sj(ctx.star_cr, cells)
-    df_keys, df_bcs, df_M = load_starsolo_sj(ctx.star_default, cells)
+    ref_run = ctx.star_reference if (ctx.star_reference / "Solo.out" / "SJ" / "raw").exists() else ctx.star_default   # see counts.Ctx
+    df_keys, df_bcs, df_M = load_starsolo_sj(ref_run, cells)
     raw = {"singlet": (s_keys, s_bcs, s_M), "starsolo_cr": (cr_keys, cr_bcs, cr_M), "starsolo_default": (df_keys, df_bcs, df_M)}
     filt = {"singlet": s_pass, "starsolo_cr": set(cr_keys), "starsolo_default": set(df_keys)}
     # annotated flag from STAR's own SJ.out.tab of the reference run (column 6) plus Singlet's flag
