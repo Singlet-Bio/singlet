@@ -171,38 +171,6 @@ auto collapse_to_gene_counts(const CSCType& exon_csc,
     return out;
 }
 
-/// Feature-level a + sign * b for two CSC matrices of the same shape (sorted row indices per column), as the accumulator's
-/// uint16: sums clamp at 65535 (as SparseAccumulator::to_csc does, so clamp(clamp(x) + y) = clamp(x + y)), differences clamp at
-/// 0, zeros are dropped. Rebuilds the pre-USA exon / intron split from the published one (run_export: legacy exon = exon +
-/// mixed_exon, legacy intron = intron - mixed_intron; mixed <= intron entrywise unless the intron entry saturated).
-template <typename CSC>
-CSC csc_add_signed(const CSC& a, const CSC& b, int sign) {
-    using V = typename std::remove_reference_t<decltype(a.data)>::value_type;
-    CSC out;
-    out.nrows = a.nrows; out.ncols = a.ncols;
-    out.indptr.assign(static_cast<size_t>(a.ncols) + 1, 0);
-    out.indices.reserve(a.indices.size() + (sign > 0 ? b.indices.size() : 0));
-    out.data.reserve(out.indices.capacity());
-    const int64_t vmax = static_cast<int64_t>(std::numeric_limits<V>::max());
-    auto push = [&](int32_t r, int64_t v) {
-        v = std::min(std::max<int64_t>(v, 0), vmax);
-        if (v == 0) return;
-        out.indices.push_back(r); out.data.push_back(static_cast<V>(v));
-    };
-    const bool bok = b.ncols == a.ncols && b.indptr.size() == a.indptr.size();
-    for (uint32_t j = 0; j < a.ncols; ++j) {
-        int32_t i = a.indptr[j], ie = a.indptr[j + 1];
-        int32_t k = bok ? b.indptr[j] : 0, ke = bok ? b.indptr[j + 1] : 0;
-        while (i < ie || k < ke) {
-            if (k >= ke || (i < ie && a.indices[i] < b.indices[k])) { push(a.indices[i], a.data[i]); ++i; }
-            else if (i >= ie || b.indices[k] < a.indices[i]) { push(b.indices[k], sign * static_cast<int64_t>(b.data[k])); ++k; }
-            else { push(a.indices[i], static_cast<int64_t>(a.data[i]) + sign * static_cast<int64_t>(b.data[k])); ++i; ++k; }
-        }
-        out.indptr[j + 1] = static_cast<int32_t>(out.indices.size());
-    }
-    return out;
-}
-
 /// Gene-level a - b (b may be null) as uint32 counts; a and b are genes × cells.
 /// Used for the spliced layer: exon_counts holds spliced + ambiguous molecules,
 /// so spliced = collapse_exon_to_gene(exon) - ambiguous.
@@ -397,6 +365,8 @@ inline ExportStats export_results(const PileupEngine& engine,
     for (auto& t : csc_threads) t.join();
     // The pre-USA split (see the declarations above): keep the USA matrices for the published layers, and rebind exon_csc /
     // intron_csc to the legacy ones for every other consumer. No mixed molecules: the two splits are the same matrices.
+    // At the uint16 cap (65535) legacy exon stays exact and legacy intron undercounts only a saturated entry, never wraps
+    // (csc_add_signed, sparse_accumulator.h; tests/cpp/test_csc_add_signed.cpp).
     if (mixed_exon_csc.ncols > 0 && mixed_exon_csc.ncols == exon_csc.ncols && intron_csc.ncols == exon_csc.ncols) {
         layer_exon_store = std::move(exon_csc); layer_intron_store = std::move(intron_csc);
         layer_exon = &layer_exon_store; layer_intron = &layer_intron_store;

@@ -262,4 +262,43 @@ private:
     std::vector<ValT> vals_;
 };
 
+/// Feature-level a + sign * b (sign +1 or -1) for two CSC matrices of the same shape (sorted row indices per column), in a's
+/// value type. Rebuilds the pre-USA exon / intron split from the published one (export.h: legacy exon = exon + mixed_exon,
+/// legacy intron = intron - mixed_intron; both uint16, saturated at 65535 by to_csc).
+///
+/// Cap behaviour (uint16; never wraps): the arithmetic is int64, then clamped to [0, 65535]; zeros are dropped.
+///  - sum: clamp(clamp(x) + clamp(y)) == clamp(x + y) for non-negative x, y, so legacy exon is EXACT at and past the cap.
+///  - difference: legacy intron = max(0, clamp(U) - clamp(M)) where U = unspliced molecules (USA labels) and M <= U the mixed
+///    ones. Exact while U <= 65535. The one inexact case is a saturated intron entry (U > 65535, which also covers every
+///    M > 65535): the result is 65535 - min(M, 65535) instead of min(U - M, 65535), an undercount, never a wrap or a
+///    negative value. Widening M to uint32 would not change it (the saturation is in U), so the mixed accumulators stay
+///    uint16.
+template <typename CSC>
+CSC csc_add_signed(const CSC& a, const CSC& b, int sign) {
+    using V = typename std::remove_reference_t<decltype(a.data)>::value_type;
+    CSC out;
+    out.nrows = a.nrows; out.ncols = a.ncols;
+    out.indptr.assign(static_cast<size_t>(a.ncols) + 1, 0);
+    out.indices.reserve(a.indices.size() + (sign > 0 ? b.indices.size() : 0));
+    out.data.reserve(out.indices.capacity());
+    const int64_t vmax = static_cast<int64_t>(std::numeric_limits<V>::max());
+    auto push = [&](int32_t r, int64_t v) {
+        v = std::min(std::max<int64_t>(v, 0), vmax);
+        if (v == 0) return;
+        out.indices.push_back(r); out.data.push_back(static_cast<V>(v));
+    };
+    const bool bok = b.ncols == a.ncols && b.indptr.size() == a.indptr.size();
+    for (uint32_t j = 0; j < a.ncols; ++j) {
+        int32_t i = a.indptr[j], ie = a.indptr[j + 1];
+        int32_t k = bok ? b.indptr[j] : 0, ke = bok ? b.indptr[j + 1] : 0;
+        while (i < ie || k < ke) {
+            if (k >= ke || (i < ie && a.indices[i] < b.indices[k])) { push(a.indices[i], a.data[i]); ++i; }
+            else if (i >= ie || b.indices[k] < a.indices[i]) { push(b.indices[k], sign * static_cast<int64_t>(b.data[k])); ++k; }
+            else { push(a.indices[i], static_cast<int64_t>(a.data[i]) + sign * static_cast<int64_t>(b.data[k])); ++i; ++k; }
+        }
+        out.indptr[j + 1] = static_cast<int32_t>(out.indices.size());
+    }
+    return out;
+}
+
 } // namespace singlet
