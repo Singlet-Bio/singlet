@@ -106,6 +106,13 @@ extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsign
 #include "singlet/fq/read_source.h"  // RunSet, format_block, StarChunkSourceT: the one .1fq decoder
 #include "singlet/fq/concat.h"       // concat_1fq: runs as one file, for consumers that read a single .1fq
 #include "singlet/version.h"        // singlet::kVersion
+#include <htslib/bgzf.h>
+#include <htslib/hfile.h>
+
+// E16 (level 5, docs/gpu-engine/fable/E16-tail.md; STAR's samHeaders "hdr" cut): sends what a BGZF writer's hFILE holds in its buffer to the fd
+// (bgzf_flush stops at the hFILE layer). Defined here because STAR's sources see its bundled, older bgzf.h, whose struct BGZF is not the
+// linked htslib's: the field is read with this htslib's layout.
+int singlet_bgzf_hflush(void* fp) { return fp != nullptr ? hflush(static_cast<BGZF*>(fp)->fp) : -1; }
 
 // ── Timing helper ──
 struct StopWatch {
