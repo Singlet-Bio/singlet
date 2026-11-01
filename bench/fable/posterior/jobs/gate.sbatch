@@ -22,7 +22,7 @@
 # for pbmc1k_v3 OUT_cpu / CRS_cpu default to E11's gate 796377): out_equiv.py, the 10 STAR Solo files by cmp, the mapping statistics of
 # star_Log.final.out, SJ.out.tab, the read-order files by sorted 4-line records, and CellReads.stats by sorted rows. Stages: s8_stages_e11.py
 # with the run's input reads.
-# Per sample: MODES_<sample> and PAIRS_<sample> override MODES and PAIRS.
+# Per sample: MODES_<sample> and PAIRS_<sample> override MODES and PAIRS; NB_<sample> sets SINGLET_ENGINE_GPU_NB (lane A reads in flight) for its runs.
 # debug-gpu: sbatch -p debug-gpu -c 8 --mem=120G --time=00:29:00 --export=ALL,T=8,SAMPLES=pbmc2m,... gate.sbatch
 set -uo pipefail
 FAIL=0
@@ -46,6 +46,7 @@ for s in "${SAMPLES[@]}"; do
   FQ=$PB/data/$s/$s.1fq
   echo "######## $s ($(ls -l $FQ | awk '{print $5}') bytes; genome $G)" | tee -a $RES0/summary.txt
   mv=MODES_$s; MS=(${!mv:-${MODES[*]}}); pv=PAIRS_$s; PS="${!pv:-${PAIRS:-cpu:gpuE5}}"
+  nbv=NB_$s; unset SINGLET_ENGINE_GPU_NB; [ -n "${!nbv:-}" ] && export SINGLET_ENGINE_GPU_NB=${!nbv} && echo "  SINGLET_ENGINE_GPU_NB=${!nbv} (lane A reads in flight, every mode of this sample)" | tee -a $RES0/summary.txt
   for m in "${MS[@]}"; do
     mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
     unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_E15_PERREAD SINGLET_E15_KEEP_ON_DEVICE; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
