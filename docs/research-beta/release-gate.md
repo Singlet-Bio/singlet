@@ -10,8 +10,8 @@ Same 22 capabilities, re-run on `prod/campaign` at 3eaa041c872fd763ab7e6dc6dce8b
 floor #124, FFPE strand fallback #117, stall watchdog #114, K5 aligner profile as shipped). Counts family, HTO, Visium, ATAC/multiome, non-host
 (Kraken2 and the minimap2 oracle re-run on the new outputs) and ambient-rna (SoupX, DecontX, CellBender re-run) are measured on this binary: 10 of 22.
 Rows computed by the Python models or measured on an earlier binary are **carried** and labelled `re-measure`: they are not counted as blockers
-until they are re-measured. Files: `bench/release_gate/results/gate2_table.md` and `.json`; jobs in `bench/release_gate/` (gate-2 variants write
-under `release-gate2/`).
+until they are re-measured. Files: `bench/release_gate/results/gate2_table.md` and `.json`; jobs in `bench/release_gate/` (`mk_gate2_jobs.py` rewrites them to write
+under `release-gate2/` and stamp the tip SHA).
 
 Result: 2 pass, 17 fail, 3 missing or incomplete (adt, chromosomal-sex, crispr-guides). Blockers on this binary: spliced-unspliced, cell-calling,
 ambient-rna, hto, spatial. Should-fix: gex-counts, non-host, atac. Re-measure: doublets, donor-demux, donor-snps, mtdna, download, cell-type, vdj,
