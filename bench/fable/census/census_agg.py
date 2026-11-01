@@ -564,6 +564,21 @@ def main():
         capsets[nm] = {"caps": cs, "overflow_share": float(o.mean()), "overflow_cycle_share": float(cascade[o].sum() / cascade.sum())}
     res["caps"] = caps
     res["capsets"] = capsets
+    # caps per class: narrow (<= 16 windows, routable after phase 1) and wide (> 16)
+    req2 = dict(req, NWAsum=F["nWAsum"].astype(np.int64))   # + aligns over all windows (a pooled align array instead of NW x NWA)
+    byc = {}
+    for cname, m in [("narrow_nWall_le16", F["nWall"] <= 16), ("wide_nWall_gt16", F["nWall"] > 16)]:
+        byc[cname] = {"reads": int(m.sum()), "caps": {k: {"99": int(np.quantile(v[m], 0.99, method="higher")),
+                                                          "99.9": int(np.quantile(v[m], 0.999, method="higher")),
+                                                          "99.99": int(np.quantile(v[m], 0.9999, method="higher")), "max": int(v[m].max())}
+                                                      for k, v in req2.items()}}
+    res["caps_by_class"] = byc
+    md += ["### Capacities by class (narrow = <= 16 windows, wide = > 16 windows)", "",
+           "| cap | narrow 99% | 99.9% | 99.99% | max | wide 99% | 99.9% | 99.99% | max |", "|---|---|---|---|---|---|---|---|---|"]
+    for k in req2:
+        a_, b_ = byc["narrow_nWall_le16"]["caps"][k], byc["wide_nWall_gt16"]["caps"][k]
+        md.append(f"| {k} | {a_['99']} | {a_['99.9']} | {a_['99.99']} | {a_['max']} | {b_['99']} | {b_['99.9']} | {b_['99.99']} | {b_['max']} |")
+    md.append("")
     md += ["## Capacities (smallest cap covering the share of distinct reads)", "", "| cap | 99% | 99.9% | 99.99% | max | today A / M / B |", "|---|---|---|---|---|---|"]
     capM = dict(zip(meta["caps"]["fields"], meta["caps"]["M"]))
     capB = dict(zip(meta["caps"]["fields"], meta["caps"]["B"]))
