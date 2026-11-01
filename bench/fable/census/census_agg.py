@@ -381,6 +381,18 @@ def main():
                         "cyc_mean": float(Wf["cyc"][m & (Wf["lane"] < 3)].mean()) if (m & (Wf["lane"] < 3)).any() else None,
                         "nTr_mean": float(Wf["nTr"][m].mean())})
     res["windows"]["by_nWA"] = per_nwa
+    for li, ln in enumerate(LANES):
+        m = Wf["lane"] == li
+        if m.any():
+            res["windows"]["steps_" + ln] = pct(wsteps[m])
+    # a chaining DP over a window's aligns costs ~ nWA*(nWA+1)/2 pair evaluations; the recursion costs its steps
+    a_ = Wf["nWA"].astype(np.float64)
+    dp = a_ * (a_ + 1) / 2
+    res["windows"]["recursion_vs_dp"] = {
+        "steps_total": float(wsteps.sum()), "dp_pairs_total": float(dp.sum()), "ratio": float(wsteps.sum() / max(dp.sum(), 1)),
+        "by_nWA_bucket": [{"nWA": f"{lo}-{hi}", "windows": int(((a_ >= lo) & (a_ <= hi)).sum()),
+                           "steps": float(wsteps[(a_ >= lo) & (a_ <= hi)].sum()), "dp_pairs": float(dp[(a_ >= lo) & (a_ <= hi)].sum())}
+                          for lo, hi in [(1, 1), (2, 2), (3, 4), (5, 8), (9, 16), (17, 50)]]}
     st = F["nSteps"].astype(np.float64)
     multi = (F["nWinStitched"] >= 2) & (st > 0)
     frac = np.where(st > 0, F["maxWinSteps"] / np.maximum(st, 1), 0)
@@ -408,6 +420,8 @@ def main():
            f"Reads with >= 2 stitched windows: {dom['reads_with_2plus_windows']:,}; the largest window holds > 50% of the read's steps in "
            f"{100 * (dom['share_max_window_gt50'] or 0):.1f}% of them, > 90% in {100 * (dom['share_max_window_gt90'] or 0):.1f}%. "
            f"Steps in the largest window / all steps (critical path of a window-parallel lane): {100 * res['window_parallel_bound']['critical_path_share']:.1f}%.", "",
+           f"Recursion steps over all windows {wsteps.sum():.3g} vs a chaining DP's pair evaluations (nWA(nWA+1)/2 per window) {dp.sum():.3g} "
+           f"(ratio {res['windows']['recursion_vs_dp']['ratio']:.2f}).", "",
            "| aligns in window | windows | steps p50 | p90 | p99 | max | share of steps | mean cycles | transcripts |", "|---|---|---|---|---|---|---|---|---|"]
     for r in per_nwa:
         md.append(f"| {r['nWA']} | {r['windows']:,} | {r['steps_p50']:g} | {r['steps_p90']:g} | {r['steps_p99']:g} | {r['steps_max']:g} | "
