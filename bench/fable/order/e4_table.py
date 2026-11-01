@@ -36,13 +36,15 @@ for k, j in rows.items():
     lo = [lane(j, x).get("order", e["p3order"]) for x in "AMB"]
     if len(set(lo)) > 1: opts.append("order " + "/".join(lo))
     elif e["p3order"] != "none": opts.append(e["p3order"])
-    if e["queue"]: opts.append("queue")
+    if e.get("queue"): opts.append("queue")
     if e.get("p3_block", 128) != 128: opts.append("p3 block %d" % e["p3_block"])
     if e.get("p3_maxreg", 0): opts.append("maxreg %d" % e["p3_maxreg"])
-    if e["fused"]: opts.append("fused " + e["fused"] + ("" if e["fused_bps"] == [0, 0, 0] else " bps " + "/".join(map(str, e["fused_bps"])))
+    if e.get("fused"): opts.append("fused " + e["fused"] + ("" if e["fused_bps"] == [0, 0, 0] else " bps " + "/".join(map(str, e["fused_bps"])))
                                + ("" if e.get("fused_lb", 1) == 1 else " lb %d" % e["fused_lb"]))
     if e["batches"] != [262144, 262144, 65536]: opts.append("batches " + "/".join(str(x // 1024) + "k" for x in e["batches"]))
-    if e["tail"]: opts.append("tail")
+    if e.get("tail"): opts.append("tail")
+    if e.get("build_flags", "default") != "default": opts.append(e["build_flags"])
+    if e.get("p3_maxreg_lanes", [-1, -1, -1]) != [-1, -1, -1]: opts.append("maxreg lanes " + "/".join("-" if r < 0 else str(r) for r in e["p3_maxreg_lanes"]))
     L = [lane(j, x) for x in "AMB"]
     tot = j["gpu_ms_median"]
     rel = (b["gpu_ms_median"] / tot) if b else float("nan")

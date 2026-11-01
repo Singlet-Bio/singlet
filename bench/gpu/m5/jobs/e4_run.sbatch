@@ -15,6 +15,8 @@
 # Threads follow --cpus-per-task, so the job also runs on debug-gpu (8 CPUs, 29 min): sbatch --partition=debug-gpu
 # --gres=gpu:nvidia_h100_nvl:1 --cpus-per-task=8 --mem=100G --time=00:29:00 --export=ALL,ROUND=3,SORTMEM=40G,DEADLINE=1560
 # DEADLINE (s since start): variants and ncu passes that would start later are skipped, so the job ends inside its limit.
+# After the merge with gpu/fable-engine the m5 source no longer has --queue / --fused (dropped: slower, E4-order.md); the
+# variants that use them fail with exit 2 on a new build. To repeat rounds 1-3 exactly, build the pre-merge commit bf8746492a.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark
 REF=/mnt/projects/debruinz_project/cellarium/reference

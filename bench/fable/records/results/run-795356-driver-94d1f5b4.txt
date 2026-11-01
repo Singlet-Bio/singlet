@@ -1,0 +1,41 @@
+device NVIDIA H100 NVL, 132 SMs; host threads 18
+dump: 31636557 records, 66601887 reads, 2782701768 sequence bytes, 2231916521 blob bytes (70.5 B per record), 194 chr, loaded in 4.6 s
+params: outFilterScoreMin 10 OverLread 0.660 MatchNmin 0 OverLread 0.660 MismatchNmax 10 NoverLmax 0.050 NoverReadLmax 1.000 MultimapNmax 10 outSAMmultNmax -1 mapqUnique 255 flagAND 65535 flagOR 0
+hand-off: 66601887 reads, 31636557 records, 2246261173 record bytes; layout cbS 1 cbL 16 umiS 17 umiL 12 cbumiL 28 simple 1
+readRecord: dump vs hand-off identical
+STARLOG ENGINE_GPU: device 0 (0000_41_00_0), waited 0 s for it, held it 24.6359 s
+STARLOG engine_gpu: index upload 3.06 s (pageable, 0.00 s to pin)
+STARLOG engine_gpu: clipping: 4206727 of 66601887 reads clipped, 1.08 s
+STARLOG engine_gpu: device memory (GB in use): start 0.5, index 16.9, reads+clip 22.9, dedup 22.9, before-laneA 22.9, before-laneA 23.0, lanes peak 64.735229
+STARLOG engine_gpu: 66601887 reads, 31741646 distinct (105089 with N), mapped on the GPU 31550987, host lane 85570 (2.51 s), not mapped 0; upload 5.26 s, dedup 3.61 s, GPU mapping 15.15 s
+STARLOG engine_gpu: E6 dump of 31636557 records -> /tmp/debruinz-e6r-795356/keep/e6dump.bin (4.1 s)
+STARLOG ENGINE_GPU: hand-off for the GPU pileup: 66601887 reads, 31636557 records, 2246261173 bytes in 5 s -> /tmp/debruinz-e6r-795356/out//.gpu_handoff.bin
+STARLOG ENGINE_GPU: no BAM records for the reads of the 31636557 hand-off records
+STARLOG ENGINE_GPU: hand-off summaries for STAR's per-read output: 1037490972 bytes
+STARLOG ENGINE_GPU: per-read hand-off entries -> /tmp/debruinz-e6r-795356/out//.gpu_handoff.bin.reads
+STARLOG ENGINE_GPU: per-read low-quality masks -> /tmp/debruinz-e6r-795356/out//.gpu_handoff.bin.reads.q
+STARLOG ENGINE_GPU: 2839242 of 31636557 sequence results in the cache (the others replay hand-off summaries)
+STARLOG ENGINE_GPU: cache filled with 31636557 sequence results in 62 s (reading reads 14 s, GPU 40 s, cache inserts 8 s; device 0)
+upload of blobs + sequences: 1.72 s (5.52 GB)
+GPU records: 31636557 records, 28797315 mapped, 32045370 alignments, 41974619 CIGAR ops, 1406636366 seq bytes, 2246261173 hand-off bytes; mate-gap 0, no-exon 0, trBest=trInit 0
+GPU time (median of 5): arrays only 37.16 ms (call wall 39.89 ms); with hand-off bytes: count 15.62 + scan 4.57 + fill 44.87 = 65.06 ms -> 486.3 M records/s
+HOP6 hand-off records: 31636557 compared, 31636557 identical, 0 differ (records without alignments in the file: 2839242); whole data block and offsets IDENTICAL (2.3 s)
+TRANSFER: pileup arrays 2.59 GB device->host 1.90 s pageable, 0.182 s pinned; blobs + sequences 5.01 GB host->device 1.72 s pageable, 0.408 s pinned
+HOP6 pileup arrays vs Collector::prepend_handoff (2.8 s on the host): SigRec 31636557 / 31636557 identical (ref 31636557), AlnRec 32045370 / 32045370 identical (ref 32045370), ops identical (41974619 vs ref 41974619), seq identical (1406636366 vs ref 1406636366 bytes) -> IDENTICAL
+HOST port (records.cuh, 18 threads): 3.58 s = 2.04 us per record per thread-equivalent 0.113 us wall; output IDENTICAL with the GPU's and the file's
+subset: 2000000 records (every 15-th): arrays 2.73 ms -> 731.4 M records/s
+barcode set: 157719 barcodes
+whitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/3M-february-2018.txt: 3686400 barcodes, 189979 / 200000 sampled CRs exact
+whitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/737K-august-2016.txt: 737280 barcodes, 3566 / 200000 sampled CRs exact
+whitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/737K-cratac-v1.txt: 737280 barcodes, 3566 / 200000 sampled CRs exact
+whitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/gex_737K-arc-v1.txt: 736320 barcodes, 243 / 200000 sampled CRs exact
+R11: whitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/3M-february-2018.txt, exact histogram of 63169750 reads from /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/records/results/run-795356/../r11_exact_hist.bin
+GPU reads [exact CR]: 897422 distinct CRs (5.74 ms on the GPU; host table 0.012 s: 3617 rejected, 736086 not in the set), per-read kernels 10.24 ms (eval 5.37, scan 0.22, scatter 4.65) -> 6503 M reads/s; 60060876 ReadRecs
+  outcomes: stream 156931, unmapped 3301393, no primary 0, unwritten 0, clip>255 0, no barcode 60549, not in set 3022138, kept 60060876; kept lowQual 719 qualNeqN 0, every kept read has a mask: yes
+HOP7 [exact CR] ReadRec vs the host transcription of gpu_handoff_pass_entries (serial, 28.3 s): 60060876 / 60060876 identical (GPU 60060876), lowq identical, outcome counts identical, quality sums identical -> IDENTICAL
+GPU reads [R11]: 897422 distinct CRs (5.74 ms on the GPU; host table 0.168 s: 491522 rejected, 170376 not in the set), per-read kernels 10.53 ms (eval 5.43, scan 0.22, scatter 4.88) -> 6326 M reads/s; 61294166 ReadRecs
+  outcomes: stream 156931, unmapped 3301393, no primary 0, unwritten 0, clip>255 0, no barcode 1496585, not in set 352812, kept 61294166; kept lowQual 2286 qualNeqN 0, every kept read has a mask: yes
+HOP7 [R11] ReadRec vs the host transcription of gpu_handoff_pass_entries (serial, 46.1 s): 61294166 / 61294166 identical (GPU 61294166), lowq identical, outcome counts identical, quality sums identical -> IDENTICAL
+  [cb-correct] of the hand-off reads (the engine's line adds the stream's primary records): exact=60342859 one_candidate=422359 posterior_accepted=881760 posterior_rejected=122015 no_match=1331654 two_N=0 bad_umi=42916
+
+E6 RESULT: hop 6 PASS (records 31636557/31636557 identical, arrays identical, host port identical, mate-gap transcripts 0); hop 7 PASS (exact CR and R11)
