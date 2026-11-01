@@ -302,8 +302,7 @@ int main(int argc, char** argv) {
         SoloWriteInfo wi2; std::string log2;
         const double tws = now();
         soloWrite(ods, S, M, res, SoloFilterParams{}, {}, wi2, log2);
-        printf("[%s] write (CellReads rows sorted): %.1f ms
-", md.c_str(), (now() - tws) * 1e3);
+        printf("[%s] write (CellReads rows sorted): %.1f ms\n", md.c_str(), (now() - tws) * 1e3);
         printf("[%s] write: %.1f ms (filter + files); nCB %llu, CellRanger2.2 nUMImax %llu nUMImin %llu, cells %llu; %s%s", md.c_str(), (twe - tw) * 1e3,
                (unsigned long long)wi.nCB, (unsigned long long)wi.nUMImax, (unsigned long long)wi.nUMImin, (unsigned long long)wi.nCells, log.c_str(), "\n");
         std::string rep;
