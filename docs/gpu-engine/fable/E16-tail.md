@@ -1,7 +1,8 @@
 # E16: the level-5 tail (tail)
 
 Experiment E16 ("tail") of the GPU aligner program. Branch `gpu/fable/tail`, from `gpu/fable-engine` at 8e54be40, with
-`gpu/fable-engine` merged in twice: at 09e74739 (E14, "probe") and at d3a335b8 (E12, "prefill", and E13, "ingest").
+`gpu/fable-engine` merged in three times: at 09e74739 (E14, "probe"), at d3a335b8 (E12, "prefill", and E13, "ingest") and at a6dfaf9b
+(E15, "posterior"). The final binary is a6dfaf9b (gate 797428).
 
 E16 shortens the stretch of a level-5 run (`SINGLET_ENGINE_GPU_E2E=5`, `--engine gpu`, `SINGLET_GPU_PILEUP=on`) that starts when
 the prefill releases the device and ends when the GPU pileup's results are in the accumulators. This document calls that stretch
@@ -52,6 +53,18 @@ The CPU engine, the default GPU path and levels 1–4 run the code they ran befo
     + E16 runs in **101.1 s and 105.1 s** (548 and 566 core-s), against 126.9 s (562 core-s) with `SINGLET_E16=0`: −23.8 s
     (−18.8 %). The tail is 8.83 s and 9.17 s against 34.40 s, and gate (a) holds (CPU vs level 5 + ingest: 60 / 2 / 7, the
     same 7).
+- **The final binary, after merging E15 (§3d, §4b):** gate 797428 (binary a6dfaf9b, node g051) has E11's binary, the final
+  binary and the CPU engine in the same job.
+  - Level 5 runs in **128.1 s and 130.8 s** (mean 129.5 s, 656.1 core-s). With `SINGLET_E16=0` it is 153.2 s (−23.7 s,
+    −15.5 %), and E11's binary takes 213.4 s (−83.9 s, −39.3 %).
+  - With E13's ingest: **102.8 s** (553.2 core-s). With E15's per-read posterior forced on (`SINGLET_E15_PERREAD=1`): 128.8 s.
+  - The tail is 9.51 s and 9.50 s against 35.62 s; 9.47 s with ingest, 9.52 s with the per-read posterior.
+  - Gate (a): CPU engine vs level 5, vs level 5 + ingest, and vs level 5 with the per-read posterior: 60 / 2 / 7 each, the same
+    7 files as CPU engine vs the default GPU path. The default GPU path, level 3 and the CPU engine match E11's kept outputs.
+  - The tail is 0.7 s longer than with d7aafb2c (8.79 s, 797398, same node): the prefill's tail +0.4 s and the input build
+    +0.35 s. The cause is E15's copy of Solo's kept inputs (1.59 GB) to page-locked host memory, made on a thread at the
+    prefill's end. With `SINGLET_E15_KEEP_ON_DEVICE=1` the tail is 8.78 s and 8.58 s, against 9.50 s and 9.52 s with the copy
+    (job 797445). The run's wall time does not show it: 126.8 s without the copy, 126.5 s with it, inside the run-to-run spread.
 - **Where the 27 s came from.** In order of size:
   - the hand-off pass and the input's build no longer copy the region (zerocopy) and no longer wait for STAR (early):
     11.4 s → 1.2 s;
@@ -65,7 +78,8 @@ The CPU engine, the default GPU path and levels 1–4 run the code they ran befo
   - the early hand-off pass (2.1 s, which the pipeline waits on for 1.0 s);
   - `pileupRun`'s GPU time (2.2 s) and its fetches between partitions (0.8 s);
   - the accumulator puts beside the host pass (1.7 s);
-  - the prefill's remaining tail (1.0 s).
+  - the prefill's remaining tail (1.0 s);
+  - since the E15 merge, E15's host copy of Solo's kept inputs at the prefill's end (0.8 s).
 
 ## 1. The tail, step by step
 
@@ -267,7 +281,7 @@ restructured on shared paths keeps its order and work when its cut is off:
 - `applyOut` in `pileup_engine.h`;
 - `gpu_rrna_detect`, which is the same detector loop moved into a member function.
 
-### 3d. After merging E12 and E13 (jobs 797377 and 797398)
+### 3d. After merging E12, E13 and E15 (jobs 797377, 797398 and 797428)
 
 Merging `gpu/fable-engine` at fe97c8b4 brought in E12 (the prefill's device phase) and E13 (ingest, off by default). Its
 `SeqCacheGpuPrefill.cpp` conflicted in four places:
@@ -307,6 +321,32 @@ been written by then. E16's bg cut moves that writing to a thread beside STAR's 
 
 Every run's exit status was 0. The fix changes nothing without ingest: gpuE5 of this binary against the CPU run in the same job
 gives the same 60 / 2 / 7, and its tail is 8.79 s.
+
+**The E15 merge.** `gpu/fable-engine` moved again during the work, to 44a6e9fa (E15: the CB posterior per read when the reads'
+CB qualities differ, or with `SINGLET_E15_PERREAD=1`). Its `SeqCacheGpuPrefill.cpp` conflicted once, in
+`seqCacheGpuAfterMapping`:
+- E15's `soloRunKept` takes a `cbQual` callback (`e11CbQual`) that reads the barcode FASTQ's quality lines through `e10f`.
+  E16's solofirst cut runs Solo's device step (`soloDev`) before the bg thread's join. The merge (a6dfaf9b) passes `cbQual` in
+  `soloDev`.
+- `e10f` stays mapped until both Solo's device step and the bg thread's join are done, because both read it. Without the per-read
+  path it is released where it was before.
+
+**Gate 797428** (binary a6dfaf9b, node g051, T = 18; modes gpuE5 base5 gpuE5x3 (`SINGLET_E16=0`) gpuE5i gpuE5x1
+(`SINGLET_E15_PERREAD=1`) cpu gpuE5b gpuD gpuE3):
+
+| comparison | identical | timing/path only | differ | the rest |
+|---|---|---|---|---|
+| cpu vs gpuE5 | 60 | 2 | 7 | the same 7 as cpu vs gpuD; sorted records equal (c115c734…, 766e191f…, 31fc9ef1…); mapping statistics, `SJ.out.tab` (126,996), CellReads.stats (323,542 rows) identical |
+| cpu vs gpuE5i (ingest) | 60 | 2 | 7 | same; the probe samples 12,194 reads as on the CPU engine |
+| cpu vs gpuE5x1 (per-read posterior) | 60 | 2 | 7 | same as cpu vs gpuE5 |
+| cpu vs gpuD | 60 | 2 | 7 | same |
+| gpuE5 vs gpuE5b | 60 | 3 | 6 | order, timings, `bytes_public`; CellReads.stats byte-identical in file order |
+| gpuE5x3 (`SINGLET_E16=0`) vs gpuE5 | 60 | 3 | 6 | same |
+| E11's kept gpuD, gpuE3, cpu vs this binary's | 60 each | 2 each | 7 each | as in 797377 |
+
+Every run's exit status was 0. The per-read run took the per-read path: 1,253,320 reads with several whitelist matches had their
+CB qualities read from the barcode FASTQ (0.03 s), and 1,096,181 of them were given a CB, as with one pq. pbmc1k_v3's CB
+qualities are all 'F', so the two paths must agree, and they do.
 
 ## 4. Timings
 
@@ -423,6 +463,53 @@ The boundary between the "STAR load" and "GPU prefill" stages comes from the eng
 move between them (x3: 7 + 20, gpuE5i: 10 + 17). Their sum is 27 s in all three runs. From the prefill's end to the run's end, the
 tail is 9 of 64 s with E16 and 34 of 89 s without.
 
+Gate 797428 (binary a6dfaf9b, E15 merged: the final binary; node g051; T = 18):
+
+| run | switch | wall s | core-s | maxRSS | tail |
+|---|---|---|---|---|---|
+| cpu | CPU engine | 395.2 | 2484.8 | 29.6 GB | |
+| gpuD | default GPU path | 201.2 | 993.4 | 43.5 GB | |
+| gpuE3 | level 3 | 194.2 | 916.0 | 61.3 GB | |
+| base5 | level 5, E11's binary | 213.4 | 681.2 | 61.0 GB | |
+| gpuE5x3 | level 5, `SINGLET_E16=0` | 153.2 | 656.7 | 61.3 GB | 35.62 s |
+| **gpuE5 / gpuE5b** | **level 5** | **128.1 / 130.8** | **651.4 / 660.8** | 61.3 GB | **9.51 / 9.50 s** |
+| gpuE5x1 | level 5, `SINGLET_E15_PERREAD=1` | 128.8 | 649.7 | 61.3 GB | 9.52 s |
+| **gpuE5i** | **level 5 + ingest** | **102.8** | **553.2** | 46.1 GB | **9.47 s** |
+
+Level 5 (mean 129.5 s, 656.1 core-s) compared with:
+- `SINGLET_E16=0`: −23.7 s (−15.5 %), −0.6 core-s;
+- E11's level 5: −83.9 s (−39.3 %), −25.2 core-s (−3.7 %);
+- the default GPU path: 1.55x faster wall, 1.51x fewer core-s;
+- the CPU engine: 3.05x faster wall, 3.79x fewer core-s.
+
+Level 5 + ingest (102.8 s, 553.2 core-s): −110.6 s (−51.8 %) against E11's level 5, and 3.84x faster wall and 4.49x fewer core-s
+than the CPU engine. gpuE5b's prefill took 32 s instead of 30 s, which is most of its 2.8 s over gpuE5.
+
+On the tail's path the steps match 797398's within 0.16 s, except for two. In the four level-5 runs with E16 (gpuE5, gpuE5b,
+gpuE5x1, gpuE5i), against 797398's gpuE5 on the same node:
+- the prefill's tail: 1.51–1.57 s against 1.16 s;
+- the input build: 0.47–0.50 s against 0.12 s.
+
+Job 797445 (same binary, same node) ran level 5 twice as it is and twice with `SINGLET_E15_KEEP_ON_DEVICE=1`. That switch keeps
+Solo's kept inputs on the device, as E11 did:
+
+| run | E15's host copy | wall s | core-s | prefill's tail | input build | tail |
+|---|---|---|---|---|---|---|
+| gpuE5 | on (1.59 GB, 1.05 s on a thread) | 127.3 | 647.1 | 1.53 s | 0.42 s | 9.50 s |
+| gpuE5b | on (1.04 s) | 125.8 | 644.6 | 1.51 s | 0.44 s | 9.52 s |
+| gpuE5x1 | off | 127.1 | 649.2 | 1.15 s | 0.12 s | 8.78 s |
+| gpuE5x2 | off | 126.6 | 644.9 | 1.15 s | 0.12 s | 8.58 s |
+
+The copy costs the tail 0.8 s in two places:
+- 0.37 s in the prefill's tail. The thread's `cudaMallocHost` of 1.59 GB runs in the same process, most likely faulting and
+  pinning pages against the tail's frees, as the first free cut slowed the loop (§5);
+- 0.3 s in the pipeline's input build. The build runs while STAR's child copies the inputs back (0.14 s) and frees the page-locked
+  memory. This was not traced further.
+
+The wall time does not show it: 126.5 s with the copy, 126.8 s without (the two runs of each are 1.6 s and 0.4 s apart). Outputs
+are unchanged: gpuE5 vs gpuE5x1 is 60 / 3 / 6, the same as gpuE5 vs gpuE5b. E15 makes the copy so that the device's memory is
+free for another sample during STAR's loop. §6 item 7 lists how to keep that without the cost.
+
 ## 5. Surprises
 
 - **The header did not reach the pipe.** `bgzf_flush` hands the compressed block to htslib's hFILE layer, whose buffer reaches
@@ -454,6 +541,9 @@ tail is 9 of 64 s with E16 and 34 of 89 s without.
 - **E16's bg cut and E13's ingest freed the same memory at different times.** Each was correct on its own branch. Merged, the
   packed reads were released while the background thread still read them, and STAR's child crashed (§3d). The gate's log checks
   did not catch it, because the pipeline itself ran on and wrote its log lines; it now checks each run's exit status.
+- **E15's host copy landed in the tail.** E15 frees Solo's kept inputs on the device during STAR's loop, so that another
+  sample can use the memory. Its thread allocates 1.59 GB of page-locked memory at the prefill's end, exactly where E16 had
+  shortened the tail, and the tail grew from 8.8 s to 9.5 s (§4b). The run's wall time did not change measurably.
 - **Zero-copy moved cost into the device reset.** With the region and the kept reads page-locked in the pileup's context, the reset
   also unpins 7 GB: 0.40–0.49 s instead of 0.11 s. resetbg moved it to the free thread, under the device lock that `pileupRun`
   took.
@@ -493,13 +583,16 @@ tail is 9 of 64 s with E16 and 34 of 89 s without.
    - genome free 0.72 s.
 
    This is not on the tail's path, but the child keeps its memory until it exits at 6.5 s.
+7. **E15's host copy of Solo's kept inputs (0.8 s of the tail, §4b).** Most of the thread's 1.04 s is the allocation: copying the
+   same 1.59 GB back takes 0.14 s. The page-locked buffers could be allocated during the prefill, while the host waits for the
+   device, so that only the copy runs at the prefill's end. Or the copy could start after STAR's loop setup.
 
 ## 7. Files touched, and why
 
 | file | change | why |
 |---|---|---|
 | `include/singlet/tail_trace.h` (new) | marks, `cuts()`, `cut(name)`, pipe-writer scan, per-thread loop timers, chunk log lock | instrumentation and switches |
-| `src/star/SeqCacheGpuPrefill.cpp` | marks; chunk, sumthreads, bg (thread, join and append in `seqCacheGpuAfterMapping`), cache (superseded by E12 at the merge), free (held buffers freed after the loop), solofirst | in scope (prefill's tail and after-mapping) |
+| `src/star/SeqCacheGpuPrefill.cpp` | marks; chunk, sumthreads, bg (thread, join and append in `seqCacheGpuAfterMapping`; with E13's ingest the packed reads held until the join), cache (superseded by E12 at the merge), free (held buffers freed after the loop), solofirst (with E15's `cbQual` since the merge) | in scope (prefill's tail and after-mapping) |
 | `src/star/STAR.cpp` | marks; chunkpar; eof (stdout to `/dev/null` after the BAM's close); per-thread loop line | STAR's loop setup and exit |
 | `src/star/ReadAlignChunk.cpp`, `ReadAlignChunk_processChunks.cpp` | chunk log lock (chunkpar); per-thread timers | chunkpar; loop trace |
 | `src/star/samHeaders.cpp` | hdr | the header to the pipe at once |
@@ -537,7 +630,9 @@ Not changed: no `Solo*.cpp`, nothing in the device kernels' arithmetic, nothing 
 | d3a335b8 | merge of `gpu/fable-engine` (E12, E13) |
 | 77f8baf1 | gate mode gpuE5i, E16 stage table per run |
 | d7aafb2c | bg with E13's ingest: the packed reads kept until the thread's join (the crash fix); gate checks exit status, mode gpuE5ib |
-| this document | the next commit |
+| 68474923 | this document (before the E15 merge) |
+| a6dfaf9b | merge of `gpu/fable-engine` (E15): `cbQual` passed in `soloDev`; `e10f` released after Solo's device step and the bg join |
+| this document's E15 update | the next commit |
 
 **Builds** (short-gpu without a GPU, ~5 min each; output `$W/jobs/fable/tail/<dir>/singlet-gpu`):
 
@@ -550,6 +645,7 @@ Not changed: no `Solo*.cpp`, nothing in the device kernels' arithmetic, nothing 
 | bin-c11 | b14fb05f (build 796944) | 797132, 797370 |
 | bin-c12 | d3a335b8 (build 797375) | 797377 |
 | bin-c13 | d7aafb2c (build 797394) | 797398 |
+| bin-c14 | a6dfaf9b (build 797427) | 797428, 797445 |
 
 **Gates** (T = 18 on short-gpu unless noted):
 
@@ -564,6 +660,8 @@ Not changed: no `Solo*.cpp`, nothing in the device kernels' arithmetic, nothing 
 | 797370 | bin-c11 | gpuE gpuE3 gpuE4 (+ comparisons with E11's kept outputs) | levels 1, 3 and 4 (§3c) |
 | 797377 | bin-c12 | gpuE5 base5 gpuE5x3 gpuE5i cpu gpuE5b gpuD gpuE gpuE3 gpuE4 | the merged build (§3d, §4b); gpuE5i crashed |
 | 797398 | bin-c13 | gpuE5i gpuE5x3 (ingest, `SINGLET_E16=0`) gpuE5 cpu gpuE5ib | the ingest fix (§3d, §4b) |
+| 797428 | bin-c14 | gpuE5 base5 gpuE5x3 (`SINGLET_E16=0`) gpuE5i gpuE5x1 (`SINGLET_E15_PERREAD=1`) cpu gpuE5b gpuD gpuE3 | the final binary (§0, §3d, §4b) |
+| 797445 | bin-c14 | gpuE5 gpuE5x1 gpuE5b gpuE5x2 (x1, x2: `SINGLET_E15_KEEP_ON_DEVICE=1`) | E15's host copy of the kept inputs and the tail (§4b) |
 
 Cancelled while queued or within a few minutes, each superseded by a later build: 796799, 796807, 796834, 796889, 796908, 796915,
 796983.
