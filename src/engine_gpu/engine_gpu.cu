@@ -893,7 +893,14 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     std::thread idxTh;   // E12: the index upload (staged, on its own stream) while the reads are uploaded, clipped and deduplicated
     struct JoinOnExit { std::thread& t; ~JoinOnExit() { if (t.joinable()) t.join(); } } idxJoin{idxTh};
     // on failure, release everything this process holds on the device (STAR then maps every read on the CPU)
-    auto fail = [&](const std::string& e) { if (idxTh.joinable()) idxTh.join(); out.log += "engine_gpu: " + e + "\n"; e9::soloKeepRelease(); out.e10.soloKept = false; cudaDeviceReset(); g_bud.reset(0, 0); return false; };
+    // E17: the staging buffers' streams, events and page-locked memory are released before the reset (their handles are stale after it, and
+    // their destructors would use them: a budget failure right after their init ended in a segmentation fault)
+    auto fail = [&](const std::string& e) {
+        if (idxTh.joinable()) idxTh.join();
+        out.log += "engine_gpu: " + e + "\n"; e9::soloKeepRelease(); out.e10.soloKept = false;
+        g_d2h = nullptr; DR.release(); SR.release(); SI.release();
+        cudaDeviceReset(); g_bud.reset(0, 0); return false;
+    };
     // E17: the sample does not fit the device memory budget (decided before the allocation that would exceed it); the caller stops the run
     // with this message unless SINGLET_ENGINE_GPU_MEM_FALLBACK=cpu lets STAR map every read
     auto failBudget = [&](const std::string& e) { out.budgetFail = true; out.budgetWhy = e; return fail("E17 budget: " + e); };
@@ -1271,7 +1278,21 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!lean && !compact(dRep, rep.size())) return fail("out of device memory (the distinct sequences)");
         dfree(dRep);
     }
-    if (lean) { dfree(dSeq); dfree(dOff); dSeq = nullptr; dOff = nullptr; }   // E17 lean: each chunk's sequences are uploaded with it (gpuPart)
+    // E17 lean: each chunk's sequences are uploaded with it (gpuPart), from the representatives' (clipped) sequences compacted here on the host in
+    // rep order (a chunk is a contiguous range of rep: one slice each)
+    singlet_engine_gpu::NoInitVector<char> leanSeq; singlet_engine_gpu::NoInitVector<u64> leanOff;
+    if (lean) {
+        dfree(dSeq); dfree(dOff); dSeq = nullptr; dOff = nullptr;
+        const double tu = now();
+        const u64 nR = rep.size();
+        leanOff.resize(nR + 1); leanOff[0] = 0;
+        parallelFor(nR, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) leanOff[k + 1] = rlen(rep[k]); });
+        for (u64 k = 0; k < nR; k++) leanOff[k + 1] += leanOff[k];
+        leanSeq.resize(leanOff[nR] + 8);
+        std::memset(leanSeq.data() + leanOff[nR], 0, 8);
+        parallelFor(nR, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) std::memcpy(leanSeq.data() + leanOff[k], rseq(rep[k]), leanOff[k + 1] - leanOff[k]); });
+        stepAdd("lean.seq.host", now() - tu);
+    }
     out.secDedup = now() - t0;
     step("dedup.order");
     memMark("dedup");
@@ -1289,7 +1310,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                  "reads and aux staged: %.1f GB, %.1f GB/s\n", tIdxEnd - tIdx0, lean ? "after the dedup (E17 lean)" : "on a second thread during the reads, clip and dedup",
                  SI.bytes / 1e9, SI.bytes / 1e9 / std::max(1e-9, SI.sec), now() - tS, SR.bytes / 1e9, SR.bytes / 1e9 / std::max(1e-9, SR.sec));
         out.log += l;
-        SI.release(); SR.release();
+        SI.release();
+        if (!lean) SR.release();   // E17 lean: the chunks' sequences are staged through it (gpuPart)
     }
     step("index.wait");
     memMark("index+distinct");
@@ -1416,13 +1438,13 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         const u64 base = lean ? 0 : c0;
         if (lean) {
             const double tu = now();
-            std::vector<u64> ho(repc.size() + 1, 0);
-            for (u64 k = 0; k < repc.size(); k++) ho[k + 1] = ho[k] + rlen(repc[k]);
-            std::vector<char> hs(ho.back() + 8);
-            parallelFor(repc.size(), hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) std::memcpy(hs.data() + ho[k], rseq(repc[k]), ho[k + 1] - ho[k]); });
+            const u64 m = repc.size(), o0 = leanOff[c0], nb = leanOff[c0 + m] - o0 + 8;   // the bytes after the chunk's last sequence too, as in rep's compaction
+            singlet_engine_gpu::NoInitVector<u64> ho(m + 1);
+            parallelFor(m + 1, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) ho[k] = leanOff[c0 + k] - o0; });
             g_bud.at = "chunk sequences";
-            if (dmal(&dSc, hs.size()) != cudaSuccess || dmal(&dOc, ho.size() * 8 + 8) != cudaSuccess) { err = "out of device memory (the chunk's sequences)"; return false; }
-            if (cudaMemcpy(dSc, hs.data(), hs.size(), cudaMemcpyHostToDevice) != cudaSuccess || cudaMemcpy(dOc, ho.data(), ho.size() * 8, cudaMemcpyHostToDevice) != cudaSuccess) {
+            if (dmal(&dSc, nb) != cudaSuccess || dmal(&dOc, ho.size() * 8 + 8) != cudaSuccess) { err = "out of device memory (the chunk's sequences)"; return false; }
+            if (staged ? !(SR.copy(dSc, leanSeq.data() + o0, nb) && SR.copy(dOc, ho.data(), ho.size() * 8) && SR.finish())
+                       : (cudaMemcpy(dSc, leanSeq.data() + o0, nb, cudaMemcpyHostToDevice) != cudaSuccess || cudaMemcpy(dOc, ho.data(), ho.size() * 8, cudaMemcpyHostToDevice) != cudaSuccess)) {
                 err = "the chunk's sequences upload"; return false;
             }
             dS = dSc; dO = dOc;
