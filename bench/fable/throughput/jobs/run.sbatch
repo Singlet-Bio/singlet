@@ -20,6 +20,7 @@
 #   m<GB>  a device memory split for S > 1 with the existing knobs (only m43 is defined: see budget() below)
 #   r<R>   rounds: K*R items (default R=1: K samples started together); the "stream" form, K workers busy for R samples each
 #   p      pin worker w to device w mod <GPUs> (SINGLET_ENGINE_GPU_DEVICE); default: the engine's first-free-slot rule
+#   f      fine sampling (0.2 s ticks, nvidia-smi every tick; default 0.5 s, nvidia-smi every second tick): the lock intervals of e18_locks.py
 #   mix    the items are MIX (default "pbmc1k_v3 pbmc5p_v1 neuron1k_v3 nuclei2k_v2"), else K*R copies of SAMPLE (pbmc1k_v3); with k1
 #          the items run alone one after another (each the reference of its sample at that T)
 # Per point $RES/<tag>/: meta.json, runs.tsv, samples.jsonl (bench/fable/throughput/e18_sampler.py: cgroup CPU and memory, per run CPU,
@@ -125,8 +126,9 @@ ident() {   # point item sample T
 }
 
 for p in "${POINTS[@]}"; do
-  if ! [[ $p =~ ^(mix)?k([0-9]+)t([0-9]+)s([0-9]+)(m([0-9]+))?(r([0-9]+))?(p)?$ ]]; then echo "!! bad point tag $p" | tee -a $S; continue; fi
+  if ! [[ $p =~ ^(mix)?k([0-9]+)t([0-9]+)s([0-9]+)(m([0-9]+))?(r([0-9]+))?(p)?(f)?$ ]]; then echo "!! bad point tag $p" | tee -a $S; continue; fi
   MIXP=${BASH_REMATCH[1]}; K=${BASH_REMATCH[2]}; T=${BASH_REMATCH[3]}; SL=${BASH_REMATCH[4]}; BG=${BASH_REMATCH[6]}; R=${BASH_REMATCH[8]:-1}; PIN=${BASH_REMATCH[9]}
+  SDT=0.5; SGE=2; [ -n "${BASH_REMATCH[10]}" ] && SDT=0.2 && SGE=1
   if [ -n "$MIXP" ]; then ITEMS=("${MIX[@]}"); else ITEMS=(); for ((j = 0; j < K * R; j++)); do ITEMS+=($SAMPLE); done; fi
   for s in $(printf "%s\n" "${ITEMS[@]}" | sort -u); do stage_input $s; done
   XENV="SINGLET_ENGINE_GPU_SLOTS=$SL"; [ -n "$BG" ] && XENV+=" $(budget $BG)"
@@ -135,7 +137,7 @@ for p in "${POINTS[@]}"; do
   mkdir -p $SCR/$p $RES0/$p; echo 0 > $SCR/$p/queue; : > $RES0/$p/runs.tsv
   printf '{"tag":"%s","k":%d,"T":%d,"slots":%d,"rounds":%d,"pin":"%s","items":"%s","env":"%s","node":"%s","gpus":%d}\n' $p $K $T $SL $R "$PIN" "${ITEMS[*]}" "$XENV" "$(hostname)" $NGPU > $RES0/$p/meta.json
   echo "######## $p: $K in flight, T=$T, items ${ITEMS[*]}; $XENV${PIN:+; pinned}; $(date -Is)" | tee -a $S
-  python3 $SCR/repo/bench/fable/throughput/e18_sampler.py $RES0/$p/samples.jsonl $CG 0.5 2 2>$RES0/$p/sampler.err &
+  python3 $SCR/repo/bench/fable/throughput/e18_sampler.py $RES0/$p/samples.jsonl $CG $SDT $SGE 2>$RES0/$p/sampler.err &
   SMP=$!
   sleep 1
   WP=()
@@ -143,7 +145,9 @@ for p in "${POINTS[@]}"; do
   wait "${WP[@]}"
   sleep 1; kill $SMP 2>/dev/null; wait $SMP 2>/dev/null
   du -sh $SCR/$p 2>/dev/null | sed 's/^/  \/tmp use of the point: /' | tee -a $S; df -h /tmp | tail -1 | sed 's/^/  /' | tee -a $S
-  python3 $SCR/repo/bench/fable/throughput/e18_point.py $RES0/$p > $RES0/$p/point.txt 2>&1; cut -c1-400 $RES0/$p/point.txt | tee -a $S
+  python3 $SCR/repo/bench/fable/throughput/e18_point.py $RES0/$p > $RES0/$p/point.txt 2>&1
+  [ -f $SCR/repo/bench/fable/throughput/e18_locks.py ] && python3 $SCR/repo/bench/fable/throughput/e18_locks.py $RES0/$p >> $RES0/$p/point.txt 2>&1
+  cut -c1-400 $RES0/$p/point.txt | tee -a $S
   # identity, the dump, references
   while IFS=$'\t' read -r i w s t0 t1 rc; do
     [ "$i" = item ] && continue
