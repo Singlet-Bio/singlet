@@ -33,6 +33,6 @@ for v in "${VS[@]}"; do
   echo "== $N-$SHA"
   awk '/Compiling entry function/ {k=$0} /bytes stack frame/ {sf=$0} \
        /Used [0-9]+ registers/ { if (k ~ /ILi160ELi4ELi32ELi16ELi16ELi256E/ && k ~ /k_p1|k_p2|k_p3|k_lane/) {
-         n = (k ~ /k_p1/) ? "k_p1" : (k ~ /k_p2/) ? "k_p2" : (k ~ /k_p3/) ? "k_p3" : (k ~ /Lb1E/) ? "k_lane<local>" : "k_lane<global>";
+         n = (k ~ /k_p1/) ? "k_p1" : (k ~ /k_p2/) ? "k_p2" : (k ~ /k_p3/) ? "k_p3" : "k_lane"; n = n ((k ~ /Lb1E/) ? "<local>" : (k ~ /Lb0E/) ? "<global>" : "");
          r = $0; sub(/.*Used/, "Used", r); s2 = sf; gsub(/^ +/, "", s2); print "  LaneA " n ": " r " | " s2 } }' $F
 done
