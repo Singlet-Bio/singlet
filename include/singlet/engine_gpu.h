@@ -43,6 +43,11 @@ struct E2EHeader {
     uint64_t oReadRecord, oSigs, oAlns, oOps, oNm, oSeq, oEntries, oQMask;   // byte offsets (oQMask 0: no masks)
     uint64_t nMateGap, nNoExon, nBadBest, nMapped;    // buildRecords' status counts
     double msGather, msBuild, msD2H;                  // device steps in mapDistinct
+    // E13 (SINGLET_ENGINE_GPU_INGEST=1, engine_gpu_ingest.h): R11's exact CB histogram for the pipeline's stream CB correction, from STAR's
+    // prefill: nR11 pairs (u64 whitelist index, u64 reads) at oR11 over an r11NWL-entry whitelist, r11Total reads; r11Magic "SGR11H01"
+    // once written (independent of magic: written before the device runs)
+    char r11Magic[8];
+    uint64_t oR11, nR11, r11NWL, r11Total;
 };
 struct E2ERegion {
     uint8_t* base = nullptr; uint64_t cap = 0; int fd = -1;   // fd: the memfd, created by the parent before the fork (inherited by STAR)
@@ -131,8 +136,8 @@ template <class T> struct NoInitAlloc : std::allocator<T> {
 template <class T> using NoInitVector = std::vector<T, NoInitAlloc<T>>;
 
 struct Input {
-    std::vector<char> seq;           // concatenated sequences, STAR's numeric code (A0 C1 G2 T3, other 4)
-    std::vector<uint64_t> off{0};    // seq[off[i] .. off[i+1]) is sequence i
+    NoInitVector<char> seq;          // concatenated sequences, STAR's numeric code (A0 C1 G2 T3, other 4); not zero-filled on resize (E13)
+    NoInitVector<uint64_t> off{0};   // seq[off[i] .. off[i+1]) is sequence i
     Clip clip;
     std::vector<uint16_t> pre5, pre3;   // with clip.pre: per read the bases STAR's CPU clip removes from its 5' and 3' ends
     std::function<void()> release;      // called by mapDistinct once its last device work is done (the caller's device lock); the host assembly of the records runs after it
@@ -158,11 +163,12 @@ struct Input {
 };
 
 struct Output {
-    // one record per distinct sequence without N: sequence (numeric), mapping result (sequence-cache encoding)
-    std::vector<char> seq;
-    std::vector<uint64_t> seqOff{0};
-    std::vector<uint8_t> blob;
-    std::vector<uint64_t> blobOff{0};
+    // one record per distinct sequence without N: sequence (numeric), mapping result (sequence-cache encoding). E12: allocated once at their
+    // final size without a zero-fill (every element is written by mapDistinct's parallel copies)
+    NoInitVector<char> seq;
+    NoInitVector<uint64_t> seqOff{0};
+    NoInitVector<uint8_t> blob;
+    NoInitVector<uint64_t> blobOff{0};
     std::vector<uint16_t> clip5, clip3;   // per input read when clipping is on: bases clipped from its 5' and 3' ends
     std::vector<uint32_t> readRecord;   // per input read: index of its record above, or 0xFFFFFFFF (sequence with N, or not mapped)
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
