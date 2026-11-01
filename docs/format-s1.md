@@ -243,7 +243,8 @@ selection.
 Pipeline outputs of version 2.2 (`cell_calls.tsv`, `docs/called-ed.md`): `is_cell` and `called_v2` are STARsolo's EmptyDrops_CR call on
 exon-only counts (what the scorer and the default selection read), `called_knee` the knee set, and `called_lowrna` (0/1) the extra
 50-500 UMI barcodes the 2.1 empty-droplet test calls (exon + intron) that `is_cell` does not. A `cells` table that stores
-`called_lowrna` as an optional bitmap keeps those low-RNA cells selectable without changing `called`. Content digest = SHA-256 over `"CEL2CANON1"` + for each
+`called_lowrna` as an optional bitmap keeps those low-RNA cells selectable without changing `called`.
+**`called_lowrna` is not a cell call.** On the Kang b2 control lane (genotype truth), about 61% of the 50-500 UMI calls are real cells (95% CI 0.46-0.76) and the 500-1000 UMI ones are as real as `is_cell`; the rest at 50-500 UMIs is ambient-like. Select on `is_cell` for cells. Content digest = SHA-256 over `"CEL2CANON1"` + for each
 column in name order: name, dtype, raw little-endian values.
 
 ## 6. Packs

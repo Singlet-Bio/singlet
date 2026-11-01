@@ -306,7 +306,7 @@ by group and UMI bin, ratio estimator over barcodes with >= 25 informative SNP U
 | called_lowrna | 500-1000 | 407 | 0.95 [0.83, 1.08] | 0.97 |
 | called_lowrna | 50-500 | 1,148 (489 decidable) | 0.61 [0.46, 0.76] | 0.94 |
 
-The 500-1000 UMI extras are as cell-like as `is_cell` itself. At 50-500 UMIs the genotype test only decides 489 of 1,148 barcodes, and
+**`called_lowrna` is not a cell call:** about 61% of its 50-500 UMI calls are real cells (CI 0.46-0.76) and the rest are ambient-like; use `is_cell` for cells. The 500-1000 UMI extras are as cell-like as `is_cell` itself. At 50-500 UMIs the genotype test only decides 489 of 1,148 barcodes, and
 about 61% of the signal is explained by real cells. The matched empty-droplet pool (no caller, 50-500 UMIs, 282 barcodes in the
 truth universe, 10 decidable) is too small to give a control estimate. Consistent with the earlier 73% figure, but not stronger.
 
