@@ -10,7 +10,9 @@
 # C combined (singlet download --stage-out, no .1fq, no sort). CPU of each, bytes B vs C (barcode-sorted vs SRA-order source), digest equality of B and C.
 # Env: RUNS (SRR list), BRANCH. singlet-cpu from build_singlet_stage.sbatch ($WORK/jobs/s9/bin); singlet-stage is rebuilt here from the branch (has --digest).
 set -uo pipefail
-W=/mnt/projects/debruinz_project/debruinz/singlet; SRC=$W/jobs/s9/src; BIN=$W/jobs/s9/bin
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
+W=/mnt/projects/debruinz_project/debruinz/singlet; SRC=$W/jobs/s9/src; BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN/singlet-cpu"
 RUNS=${RUNS:-"SRR19421372 SRR19573735 SRR30477995"}
 T=$W/jobs/s9/combined_$SLURM_JOB_ID; mkdir -p $T; B=/tmp/$USER-cmb-$SLURM_JOB_ID; mkdir -p $B; trap 'rm -rf $B' EXIT
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists

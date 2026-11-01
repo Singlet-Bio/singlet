@@ -12,9 +12,11 @@
 # without restarting anything: the NIC receive rate in the monitor must follow it.
 # Env: NW (workers, default 8), STREAMS (per worker, default 16), RUNS (todo count, default 40), CAP_GB (stage cap, default 120), CAP1/CAP2/RAISE_S.
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; SRC=$W/jobs/s9/src; R=$W/jobs/s9
 NW=${NW:-8}; STREAMS=${STREAMS:-16}; RUNS=${RUNS:-40}; CAP_GB=${CAP_GB:-120}; CAP1=${CAP1:-300}; CAP2=${CAP2:-600}; RAISE_S=${RAISE_S:-240}
-BIN=${BIN:-$W/pipeline-benchmark/bin/mc99cpu}
+BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"
 T=$R/scale_$SLURM_JOB_ID; STAGE=$T/stage; mkdir -p $STAGE
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists
 echo "== node $(hostname) $(date -Is) NW=$NW streams=$STREAMS runs=$RUNS cap=${CAP_GB}GB; other running jobs on cluster: $(squeue -h -t R | wc -l)"

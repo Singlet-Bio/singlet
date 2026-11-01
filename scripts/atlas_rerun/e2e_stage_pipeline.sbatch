@@ -12,10 +12,12 @@
 # Env: ENGINE (cpu|gpu; for gpu submit with --partition=scavenger --gres=gpu:... and BIN=.../singlet-gpu), N (samples, default 12), BIN (singlet binary), CAP_GB (stage cap, default 3), QUALITY (default binned).
 # Nothing is written to Cloudflare (publish = dry-run); reads and outputs are deleted; test root is $W/jobs/s9/e2e_$SLURM_JOB_ID.
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet
 SRC=${SRC:-$W/jobs/s9/src}          # scripts/atlas_rerun copied here by the submitter (git sync is the normal route)
 ENGINE=${ENGINE:-cpu}; N=${N:-10}; CAP_GB=${CAP_GB:-3}; QUALITY=${QUALITY:-binned}
-BIN=${BIN:-$W/pipeline-benchmark/bin/mc99cpu}
+BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"
 T=$W/jobs/s9/e2e_$SLURM_JOB_ID; STAGE=$T/stage; mkdir -p $T/root $STAGE
 export SINGLET_BIN=$BIN S9_HB_STALE_S=45
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists

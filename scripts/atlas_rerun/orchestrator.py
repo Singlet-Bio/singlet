@@ -29,6 +29,7 @@ Subcommands
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -249,6 +250,7 @@ class Controller:
         dst = os.path.join(self.root, "bin", "singlet-" + b["sha256"][:12])
         if not os.path.exists(dst) and not self.slurm.dry:
             src = self.c.get("binary_source") or b["path"]
+            C.require_pinned_binary(src, next((w for w in (b.get("commit") or "").split() if re.fullmatch(r"[0-9a-f]{7,40}", w)), None))
             got = C.sha256_file(src)
             if got != b["sha256"]:
                 raise SystemExit("binary %s has sha256 %s, config pins %s" % (src, got, b["sha256"]))

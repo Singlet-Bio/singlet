@@ -644,7 +644,11 @@ def main():
         cfg = C.load_config(a.config)
         ccfg = C.cluster_cfg(cfg, a.cluster)
         a.binary = ccfg.get("binary") or cfg["binary"]["path"]
+        C.require_pinned_binary(a.binary)
         a.whitelist_dir = a.whitelist_dir or ccfg.get("whitelist_dir")
+    if not a.config:
+        import common as C
+        C.require_pinned_binary(a.binary)
     env = dict(os.environ)
     if a.whitelist_dir:
         env["SINGLET_WHITELIST_DIR"] = a.whitelist_dir

@@ -9,6 +9,7 @@ import itertools
 import json
 import math
 import os
+import re
 import socket
 import time
 
@@ -111,6 +112,48 @@ def require_whitelists(binary, names=("3M-february-2018.txt", "737K-august-2016.
     if missing:
         raise SystemExit("[atlas_rerun] FATAL: %s not found in %s (the engine %s resolves <binary dir>/../whitelists): the campaign would silently run "
                          "the sorted-BAM pileup. Put the binary where ../whitelists exists, or symlink the directory." % (", ".join(missing), os.path.normpath(d), binary))
+
+
+PINNED_DIR = re.compile(r"^(?:.+[-_])?([0-9a-f]{7,40})$")
+PINNED_FILE = re.compile(r"^singlet-([0-9a-f]{12})$")
+
+
+def require_pinned_binary(binary, commit=None):
+    """Refuse an engine binary that is not an immutable, identified build (a shared directory such as jobs/s8/bin or pipeline-benchmark/bin is rewritten by whoever builds next:
+    a run can start with one binary and end with another). Accepted: (a) <dir>/<binary> or <dir>/bin/<binary> where <dir> is named <commit> or ends in -<commit> (7-40 hex) and holds a `commit` file that starts with
+    that commit (and with `commit` when given), or (b) a file named singlet-<12 hex> whose sha256 starts with those 12 hex (the orchestrator's content-addressed copy in
+    <root>/bin). -> the commit (a) or sha prefix (b). $S9_NO_WL_CHECK=1 skips (tests with a fake engine). Raises SystemExit(3)."""
+    if os.environ.get("S9_NO_WL_CHECK"):
+        return None
+    real = os.path.realpath(binary)
+    why = None
+    if not os.path.isfile(real):
+        why = "does not exist"
+    else:
+        m = PINNED_FILE.match(os.path.basename(real))
+        if m:
+            if sha256_file(real).startswith(m.group(1)):
+                return m.group(1)
+            why = "its name says sha256 %s but the file hashes differently" % m.group(1)
+        else:
+            d = os.path.dirname(real)
+            if os.path.basename(d) == "bin":   # <build>-<commit>/bin/singlet, whitelists at <build>-<commit>/whitelists
+                d = os.path.dirname(d)
+            m = PINNED_DIR.match(os.path.basename(d))
+            try:
+                got = open(os.path.join(d, "commit")).read().strip()
+            except OSError:
+                got = ""
+            if not m:
+                why = "its directory %r does not end in -<commit>" % os.path.basename(d)
+            elif not got.startswith(m.group(1)):
+                why = "%s/commit holds %r, not the commit %s of the directory name" % (d, got, m.group(1))
+            elif commit and not (got.startswith(commit) or commit.startswith(got[:len(commit)])):
+                why = "the build is %s, the config pins %s" % (got[:12], commit)
+            else:
+                return got
+    raise SystemExit("[atlas_rerun] FATAL: engine binary %s is not a pinned build: %s. Use <dir>-<commit>/<binary> with a `commit` file, or a content-addressed singlet-<sha12>; "
+                     "never a shared mutable directory." % (binary, why))
 
 
 def species_check(log_path):

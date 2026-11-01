@@ -9,7 +9,9 @@
 # S9: multi-run samples. ENA: human 10x-like experiments with 2-3 runs of 8-35 M reads each (N_SAMPLES of them); per sample the two-step path (one pooled
 # singlet-stage over the .1fq of every run) vs per-run parts + singlet-stage --merge-parts (stage_multirun_one.py). Needs singlet-cpu/-stage from build_singlet_stage.sbatch.
 set -uo pipefail
-W=/mnt/projects/debruinz_project/debruinz/singlet; SRC=$W/jobs/s9/src; BIN=$W/jobs/s9/bin
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
+W=/mnt/projects/debruinz_project/debruinz/singlet; SRC=$W/jobs/s9/src; BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN/singlet-cpu"
 N=${N_SAMPLES:-5}
 T=$W/jobs/s9/multirun_$SLURM_JOB_ID; mkdir -p $T; B=/tmp/$USER-mr-$SLURM_JOB_ID; mkdir -p $B; trap 'rm -rf $B' EXIT
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists

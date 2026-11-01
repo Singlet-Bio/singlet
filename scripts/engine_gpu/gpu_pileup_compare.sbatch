@@ -11,8 +11,10 @@
 # The GPU pileup inside singlet vs the CPU pileup of the same pass (SINGLET_GPU_PILEUP=compare): one sample per SET, stream path,
 # both engines' mapping (ENGINES). Prints the [gpu_pileup] lines (every covered output compared entry by entry). Outputs in job /tmp.
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
-BIN=${BIN:-$W/jobs/w11/engine/bin15/singlet-gpu}; SETS=(${SETS:-pbmc1k_v3}); T=${T:-20}; ENGINES=(${ENGINES:-gpu})
+BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"; SETS=(${SETS:-pbmc1k_v3}); T=${T:-20}; ENGINES=(${ENGINES:-gpu})
 RES=$W/jobs/w11/engine/results/pucmp-$SLURM_JOB_ID; mkdir -p $RES
 SCR=/tmp/$USER-pucmp-$SLURM_JOB_ID; mkdir -p $SCR
 tree() { local c; for c in $(pgrep -P $1); do tree $c; echo $c; done; }   # every descendant, deepest first

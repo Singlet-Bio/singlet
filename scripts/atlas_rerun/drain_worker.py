@@ -275,6 +275,7 @@ def main():
     a = ap.parse_args()
     cfg = C.load_config(a.config)
     ccfg = C.cluster_cfg(cfg, a.cluster)
+    C.require_pinned_binary(ccfg.get("binary") or cfg["binary"]["path"])
     C.require_whitelists(ccfg.get("binary") or cfg["binary"]["path"])
     env = dict(os.environ)
     if ccfg.get("whitelist_dir"):

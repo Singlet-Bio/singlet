@@ -10,9 +10,11 @@
 # (default $WORK/reference-extra/species_filters) and checks them with species_detect::detect on the first 200 k read pairs of the six pilot samples whose detection came
 # back 'unknown' (GSM5130155, GSM5171610, GSM7064234, GSM7884577, GSM8164511, GSM8183378), a human and a mouse control. Env: BRANCH (default fix/species-bloom), BIN.
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; REF=/mnt/projects/debruinz_project/cellarium/reference; PB=$W/pipeline-benchmark
 export PATH=$W/envs/pbench/bin:$PATH HOME=$W/cache/condahome
-OUT=${OUT:-$W/reference-extra/species_filters}; BIN=${BIN:-$W/jobs/s14/bin_r1new/singlet-cpu}; mkdir -p $OUT
+OUT=${OUT:-$W/reference-extra/species_filters}; BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"; mkdir -p $OUT
 T=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $T; trap 'rm -rf $T' EXIT; cd $T
 git clone -q --depth 1 -b ${BRANCH:-fix/species-bloom} git@github.com:Singlet-Bio/singlet.git repo 2>&1 | tail -1; (cd repo && git log --oneline -1)
 CXX=$W/envs/pbench/bin/x86_64-conda-linux-gnu-g++

@@ -1,7 +1,7 @@
 {
   "campaign": "atlas-rerun-2026",
   "binary": {
-    "path": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-campaign",
+    "path": "/mnt/projects/debruinz_project/debruinz/singlet/builds/PIN_COMMIT8/bin/singlet-gpu",
     "sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
     "commit": "prod/campaign 02aa9b9 (to be replaced by the pinned PGO build of step 0)"
   },

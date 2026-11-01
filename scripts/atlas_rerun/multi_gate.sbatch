@@ -18,17 +18,19 @@
 # the cgroup, /tmp use, GPU utilisation, and THE PATH CHECK: every sample must have pileup_threads == 1 (stream / GPU pileup). The engine is run from a private
 # bin/ directory with ../whitelists beside it: singlet resolves <binary dir>/../whitelists, and without it a run silently takes the sorted-BAM pileup
 # (pileup_threads = thread count), a different and slower path (S8). The workers refuse to start without it (common.require_whitelists).
-# Env: BIN_SRC (dir with singlet-gpu + commit; default jobs/s14/bin_bbf6497d), EXPECT_COMMIT (default bbf6497d), BRANCH (default claude/drain-multisample-52667f), SKIP_A16.
+# Env: BIN_SRC (dir with singlet-gpu + commit; required, no default), EXPECT_COMMIT (required), BRANCH (default claude/drain-multisample-52667f), SKIP_A16.
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark
-BIN_SRC=${BIN_SRC:-$W/jobs/s14/bin_bbf6497d}; EXPECT=${EXPECT_COMMIT:-bbf6497d}; BRANCH=${BRANCH:-claude/drain-multisample-52667f}
+BIN_SRC=${BIN_SRC:?set BIN_SRC=$W/builds/<commit8> (immutable build dir with bin/singlet-gpu and commit)}; EXPECT=${EXPECT_COMMIT:?set EXPECT_COMMIT=<commit8 of the build>}; pin "$BIN_SRC/bin/singlet-gpu"; BRANCH=${BRANCH:-claude/drain-multisample-52667f}
 T=$W/jobs/s14/gate4_$SLURM_JOB_ID; K=$T/keep; mkdir -p $T $K/multi $K/single12 $K/single16
-SCR=/tmp/$USER-s14-$SLURM_JOB_ID; mkdir -p $SCR/bin; trap 'rm -rf $SCR' EXIT
+SCR=/tmp/$USER-s14-$SLURM_JOB_ID; mkdir -p $SCR/$EXPECT/bin; trap 'rm -rf $SCR' EXIT
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=7200 SINGLET_REF_BASE=/mnt/projects/debruinz_project/cellarium/reference SINGLET_GPU_PILEUP=on
 export PATH=$W/envs/pbench/bin:$PATH
 case "$(cat $BIN_SRC/commit 2>/dev/null)" in $EXPECT*) ;; *) echo "ABORT: $BIN_SRC/commit is '$(cat $BIN_SRC/commit 2>/dev/null)', expected $EXPECT"; exit 3;; esac
-cp $BIN_SRC/singlet-gpu $SCR/bin/singlet-gpu; ln -s $PB/whitelists $SCR/whitelists; BIN=$SCR/bin/singlet-gpu; BSHA=$(sha256sum $BIN | cut -c1-16)
-echo "== node $(hostname) $(date -Is) engine commit $(cat $BIN_SRC/commit) sha256 $BSHA; whitelists next to the binary: $(ls $SCR/bin/../whitelists/ | head -3 | tr '\n' ' ')"
+cp $BIN_SRC/bin/singlet-gpu $SCR/$EXPECT/bin/singlet-gpu; cp $BIN_SRC/commit $SCR/$EXPECT/commit; ln -s $PB/whitelists $SCR/$EXPECT/whitelists; BIN=$SCR/$EXPECT/bin/singlet-gpu; pin "$BIN"; BSHA=$(sha256sum $BIN | cut -c1-16)
+echo "== node $(hostname) $(date -Is) engine commit $(cat $BIN_SRC/commit) sha256 $BSHA; whitelists next to the binary: $(ls $SCR/$EXPECT/whitelists/ | head -3 | tr '\n' ' ')"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#'); echo "cgroup $CG memory.max=$(cat $CG/memory.max 2>/dev/null) df /tmp: $(df -BG --output=size,avail /tmp | tail -1)"
 cd $T && git clone -q --depth 1 -b $BRANCH git@github.com:Singlet-Bio/singlet.git repo 2>&1 | tail -1; cd $T/repo && git log --oneline -1
