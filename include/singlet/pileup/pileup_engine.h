@@ -899,9 +899,11 @@ public:
             const char* umi_str = nullptr;
             int umi_len = 0;
             if (config_.umi_dedup) {
-                uint8_t* ub_tag = bam_aux_get(b, "UB");
+                // The raw UMI (UR), as the stream has it: STAR's UB is its own 1MM_All correction, and the pileup corrects UMIs itself (R9, order-free-rules.md),
+                // so both paths count the same UMI. UB only when a BAM carries no UR.
+                uint8_t* ub_tag = bam_aux_get(b, "UR");
                 if (!ub_tag) {
-                    ub_tag = bam_aux_get(b, "UR");
+                    ub_tag = bam_aux_get(b, "UB");
                 }
                 if (ub_tag) {
                     umi_str = bam_aux2Z(ub_tag);
@@ -4440,8 +4442,8 @@ private:
         const char* umi_str = nullptr;
         int umi_len = 0;
         if (config_.umi_dedup) {
-            uint8_t* ub_tag = bam_aux_get(b, "UB");
-            if (!ub_tag) ub_tag = bam_aux_get(b, "UR");
+            uint8_t* ub_tag = bam_aux_get(b, "UR");   // raw UMI first, as the stream and the serial sorted loop (R9)
+            if (!ub_tag) ub_tag = bam_aux_get(b, "UB");
             if (ub_tag) {
                 umi_str = bam_aux2Z(ub_tag);
                 umi_len = static_cast<int>(strlen(umi_str));
