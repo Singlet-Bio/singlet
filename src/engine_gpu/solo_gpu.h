@@ -18,6 +18,12 @@
 
 namespace e9 {
 
+// E15: the CB quality characters of the reads whose CR matches several whitelist entries with one mismatch (after the UMI check), which the
+// posterior takes per read. Called once, after the CB stage, with those reads (idx ascending; cr3[k]: read idx[k]'s CR as soloRun has it; host
+// memory): writes cbL characters per read to out[k * cbL ..] (what STAR's getCBandUMI has in cbQual: the barcode read's quality line, 'H' past
+// its end) and returns true, or false with why (the caller checks that the line it read has the read's CR)
+using CbQualFn = std::function<bool(const u32* idx, const u64* cr3, u64 n, uint8_t* out, std::string& why)>;
+
 struct SoloModel {                       // host arrays (Transcriptome.cpp, ParametersSolo.cpp)
     std::vector<u64> wl;                 // sorted, deduplicated whitelist (2 bits per base, first base highest)
     // E15: per quality character c (0..255) the posterior's factor std::pow(10.0, -qin/10.0), qin = min((char)c - QSbase, QSmax) in STAR's char
@@ -48,11 +54,7 @@ struct SoloReads {                       // per read, in read order
     u64 nHost = 0;                       // or sparse, in host memory: hostAnnS[k] is the annotation of read hostIdx[k] (a read without a record)
     const u32* hostIdx = nullptr;
     const RecAnn* hostAnnS = nullptr;
-    // E15: the CB quality characters of the reads whose CR matches several whitelist entries with one mismatch (after the UMI check), which the
-    // posterior takes per read. Called once, after the CB stage, with those reads (ascending, host memory): writes cbL characters per read to
-    // out[k * cbL ..] (what STAR's getCBandUMI has in cbQual: the barcode read's quality line, 'H' past its end) and returns true, or false with
-    // why. Not set: every candidate takes SoloParams::pq (the run's CB bases all give one qin).
-    std::function<bool(const u32* idx, u64 n, uint8_t* out, std::string& why)> cbQual;
+    CbQualFn cbQual;   // E15 (CbQualFn); not set: every candidate takes SoloParams::pq (the run's CB bases all give one qin)
 };
 struct SoloResult {
     u64 bstats[B_N] = {}, fstats[S_N] = {}, noCB[F_N] = {};
@@ -130,6 +132,6 @@ void soloKeepToHost(int device);
 // soloRun(device) on the kept arrays (on `device`, selected for the calling thread; back from the host first after soloKeepToHost) plus the
 // annotation of the reads the host mapped (sparse, host memory, ascending read index); cbQual: SoloReads::cbQual (E15); releases the kept arrays
 bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,
-                 std::string& log, const std::function<bool(const u32*, u64, uint8_t*, std::string&)>& cbQual = {});
+                 std::string& log, const CbQualFn& cbQual = {});
 
 }  // namespace e9

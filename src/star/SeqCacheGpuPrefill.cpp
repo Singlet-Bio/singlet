@@ -179,23 +179,38 @@ bool e11Posterior(Parameters &P, std::string &why) {
 }
 // E15: SoloReads::cbQual for soloRunKept: the CB span of read r's barcode quality line in the mapped barcode FASTQ (e10Barcodes kept the name
 // lines' offsets), with getCBandUMI's padding ('H' past the line's end when the read is shorter than cbumiL, soloBarcodeReadLength 0), on
-// runThreadN threads
-bool e11CbQual(Parameters &P, const uint32_t *idx, uint64 n, uint8_t *out, std::string &why) {
+// runThreadN threads. Each read's sequence line must give the CR soloRun has for it (packed as e10Barcodes packs it): the qualities are the
+// read's own
+bool e11CbQual(Parameters &P, const uint32_t *idx, const uint64_t *cr3, uint64 n, uint8_t *out, std::string &why) {
     const auto t0 = std::chrono::steady_clock::now();
     const char *m = e10f.m[1];
     const uint64 len = e10f.len[1], nReads = e10f.at[1].size();
     if (m == nullptr) { why = "the barcode FASTQ is not mapped"; return false; }
-    const uint64 cbS = P.pSolo.cbS, cbL = P.pSolo.cbL;
+    const uint64 cbS = P.pSolo.cbS, cbL = P.pSolo.cbL, bL = P.pSolo.bL, cbumiL = P.pSolo.cbumiL;
     const int T = std::max(1, (int) P.runThreadN);
-    std::vector<int> bad(T, 0);
+    std::vector<uint64> bad(T, ~0ull);   // per thread the first k whose line is missing or has another CR
     std::vector<std::thread> th;
     for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
         for (uint64 k = n * t / T; k < n * (t + 1) / T; k++) {
             const uint64 r = idx[k];
-            if (r >= nReads) { bad[t] = 1; return; }
-            const char *p = m + e10f.at[1][r], *end = m + len;
-            for (int l = 0; l < 3 && p != nullptr; l++) { p = (const char *) memchr(p, '\n', end - p); if (p != nullptr) p++; }   // name, sequence, '+'
-            if (p == nullptr) { bad[t] = 1; return; }
+            if (r >= nReads) { bad[t] = k; return; }
+            const char *p = m + e10f.at[1][r], *end = m + len, *seq = nullptr, *seqE = nullptr;
+            for (int l = 0; l < 3 && p != nullptr; l++) {   // name, sequence, '+'
+                p = (const char *) memchr(p, '\n', end - p);
+                if (p != nullptr) p++;
+                if (l == 0) seq = p;
+                if (l == 1 && p != nullptr) seqE = p - 1;
+            }
+            if (p == nullptr || seq == nullptr || seqE == nullptr) { bad[t] = k; return; }
+            uint64 Ls = seqE - seq;
+            if (Ls > 0 && (unsigned char) seq[Ls - 1] < 33) Ls--;
+            const uint64 S = (bL == 0 && Ls < cbumiL) ? cbumiL : Ls;
+            uint64 v = 0;
+            for (uint64 j = cbS - 1; j < std::min(cbS - 1 + cbL, S) && j - (cbS - 1) < 21; j++) {
+                const char c = j < Ls ? seq[j] : 'N';
+                v |= (uint64) (c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4) << (3 * (j - (cbS - 1)));
+            }
+            if (v != cr3[k]) { bad[t] = k; return; }
             const char *e = (const char *) memchr(p, '\n', end - p);
             uint64 L = (e != nullptr ? e : end) - p;
             if (L > 0 && (unsigned char) p[L - 1] < 33) L--;
@@ -204,7 +219,11 @@ bool e11CbQual(Parameters &P, const uint32_t *idx, uint64 n, uint8_t *out, std::
         }
     });
     for (auto &x : th) x.join();
-    for (int t = 0; t < T; t++) if (bad[t]) { why = "a read outside the barcode FASTQ"; return false; }
+    for (int t = 0; t < T; t++)
+        if (bad[t] != ~0ull) {
+            why = "read " + std::to_string(idx[bad[t]]) + ": no barcode FASTQ record with its CR";
+            return false;
+        }
     e11.nQualFetched += n;
     e11.sQualFetch += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     return true;
@@ -1281,8 +1300,8 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         const auto tl = std::chrono::steady_clock::now();
         e9::SoloResult res;
         std::string log;
-        std::function<bool(const uint32_t *, uint64, uint8_t *, std::string &)> cbQual;
-        if (e15q) cbQual = [&P](const uint32_t *idx, uint64 n, uint8_t *o, std::string &why) { return e11CbQual(P, idx, n, o, why); };
+        e9::CbQualFn cbQual;
+        if (e15q) cbQual = [&P](const uint32_t *idx, const uint64_t *cr3, uint64 n, uint8_t *o, std::string &why) { return e11CbQual(P, idx, cr3, n, o, why); };
         const bool ok = nHost < (1ull << 32) && g_handoffNReads < (1ull << 32)
             && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log, cbQual);
         singlet_engine_gpu::unlockDevice(lockFd);

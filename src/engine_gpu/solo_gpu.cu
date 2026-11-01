@@ -296,9 +296,17 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
             if (M.pqTab.size() != 256) throw std::runtime_error("per-read CB qualities without the quality table");
             std::vector<u32> hIdx(nMM);
             mmIdx.to(hIdx.data(), nMM);
+            Buf<u64> mmCr; mmCr.alloc(dev, nMM);   // their CRs, for the caller's check that it read their lines
+            {
+                const u32* mi = mmIdx.p; const u32* ci = crIdx.p; const u64* cr = dcr.p; u64* o = mmCr.p;
+                each(dev, nMM, [=] __host__ __device__(u64 k) { o[k] = cr[ci[mi[k]]]; });
+            }
+            std::vector<u64> hCr(nMM);
+            mmCr.to(hCr.data(), nMM);
+            mmCr.release();
             hQual.resize(nMM * S.cbL);
             std::string why;
-            if (!Rd.cbQual(hIdx.data(), nMM, hQual.data(), why)) throw std::runtime_error("CB qualities of the multi-match reads: " + why);
+            if (!Rd.cbQual(hIdx.data(), hCr.data(), nMM, hQual.data(), why)) throw std::runtime_error("CB qualities of the multi-match reads: " + why);
             mmQ.from(dev, hQual.data(), hQual.size());
             dPq.from(dev, M.pqTab.data(), 256);
         }
@@ -627,7 +635,7 @@ bool soloKeepRecords(const SoloParams& S, const SoloModel& M, const e6::RecParam
     }
 }
 bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,
-                 std::string& log, const std::function<bool(const u32*, u64, uint8_t*, std::string&)>& cbQual) {
+                 std::string& log, const CbQualFn& cbQual) {
     SoloKeep& K = g_keep;
     if (K.toHost.joinable()) K.toHost.join();   // E15: the copy to the host is done (or failed: the arrays are still on the device)
     if (device >= 0 && cudaSetDevice(device) != cudaSuccess) { cudaGetLastError(); log += "soloRunKept: cannot select the device\n"; soloKeepRelease(); return false; }
