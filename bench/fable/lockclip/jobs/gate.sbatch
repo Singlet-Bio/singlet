@@ -137,6 +137,11 @@ for s in "${SAMPLES[@]}"; do
     cp $SCR/$s/$m/out/*Log.final.out $SCR/$s/$m/out/*Log.out $O/ 2>/dev/null
     [ -f $SCR/$s/$m/CellReads.stats ] && cp $SCR/$s/$m/CellReads.stats $O/CellReads.stats && echo "  CellReads.stats kept: $(wc -l < $O/CellReads.stats) lines" | tee -a $RES0/summary.txt
     cp $SCR/$s/$m/out/read_stats.tsv $SCR/$s/$m/out/summary.json $O/ 2>/dev/null
+    if [ -f $SCR/$s/$m/out/cr4_probe.json ]; then   # E20: the probe's decision file, kept and compared byte for byte with the reference's
+      cp $SCR/$s/$m/out/cr4_probe.json $O/; cp -r $SCR/$s/$m/out/cr4_probe $O/cr4_probe_dir 2>/dev/null
+      cmp -s $O/cr4_probe.json $RS/out/cr4_probe.json && CR4V=identical || CR4V=DIFFERENT
+      echo "  cr4_probe.json $CR4V to the kept reference's: $(cat $O/cr4_probe.json)" | tee -a $RES0/summary.txt
+    else echo "  cr4_probe.json: none (the profile was not considered)" | tee -a $RES0/summary.txt; fi
     RM=$(awk -F'|' '/Number of input reads/{gsub(/[ \t]/,"",$2); printf "%.6f", $2/1e6}' $O/star_Log.final.out 2>/dev/null); RM=${RM:-1}
     python3 $SCR/repo/bench/fable/ingest/s8_stages_e13.py $O $RM > $O/stages.txt 2>&1; tee -a $RES0/summary.txt < $O/stages.txt
     [ $mm = gpuT ] && { python3 $SCR/repo/bench/fable/tail/e16_steps.py $O > $O/e16.txt 2>&1; tee -a $RES0/summary.txt < $O/e16.txt; }
