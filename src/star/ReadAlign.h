@@ -55,6 +55,10 @@ class ReadAlign {
         Transcript handoffTr[2]; //stand-ins carrying only Chr for SoloReadFeature::record (0: a mito contig, 1: another)
         void outputHandoffSummary();
         void handoffReadEntry(); //the pileup's per-read entry (g_handoffReads) of a hand-off read, after getCBandUMI
+        //singlet E9 debug dump (SINGLET_SOLO_DUMP=<dir>, off by default): per read what Solo's Gene feature saw (ReadAlign_outputAlignments.cpp)
+        int soloDumpChunk = -1;
+        void *soloDumpF = nullptr;
+        void soloDumpRead(uint64 nTrSolo);
 
         Genome &mapGen, &genOut; //mapped-to-genome structure
 
@@ -276,6 +280,8 @@ class ReadAlign {
         void recordSJ(uint64 nTrO, Transcript **trO, OutSJ *cSJ);
 
 };
+
+void soloDumpFlushAll(); //singlet E9 debug dump (SINGLET_SOLO_DUMP): writes out the threads' buffers (the STAR child leaves with _exit)
 
 #endif
 

@@ -102,6 +102,7 @@ ReadAlign::ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, in
     
     //solo
     soloRead = new SoloRead (P, iChunk);
+    soloDumpChunk = iChunk; //singlet E9 debug dump (SINGLET_SOLO_DUMP): names this thread's file
     
     //clipping
     P.pClip.initializeClipMates(clipMates);

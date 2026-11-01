@@ -4,6 +4,72 @@
 #include "GlobalVariables.h"
 #include "ErrorWarning.h"
 #include <cstdlib>
+#include <mutex>
+#include <map>
+#include <vector>
+#include <fcntl.h>
+#include <unistd.h>
+
+//singlet E9 (bench/fable/solo, docs/gpu-engine/fable/E9-solo.md), debug only: SINGLET_SOLO_DUMP=<dir> writes <dir>/solo_<chunk>.bin per
+//mapping thread, one 48-byte record per read in the thread's processing order (= the order of its Solo record file), with what Solo's Gene
+//feature saw for the read after SoloRead::record: CB and UMI (3 bits per base as handoffReadEntry packs them), the gene set (its gene when
+//it has exactly one; its size), the nTr passed to record, STAR's cbMatch / first match index / read flag, the mito and hand-off bits. Unset
+//(the default) nothing is written and nothing changes.
+struct SoloDumpRec {uint64 iRead, cr3, ur3; uint32 gene, readFlag; int32 cbMatch; uint32 cbInd0; uint16 nTr; uint8 ng, bits; uint32 pad;};
+static_assert(sizeof(SoloDumpRec) == 48, "SoloDumpRec layout");
+namespace {
+struct SoloDumpFile {int fd=-1; std::vector<char> buf;};
+std::mutex g_soloDumpMtx;
+std::map<int, SoloDumpFile*> g_soloDumpFiles;
+const char *soloDumpDir() {static const char *d = getenv("SINGLET_SOLO_DUMP"); return (d != nullptr && d[0] != 0) ? d : nullptr;}
+void soloDumpWrite(SoloDumpFile &f) {
+    size_t o = 0;
+    while (o < f.buf.size()) {ssize_t w = ::write(f.fd, f.buf.data() + o, f.buf.size() - o); if (w <= 0) break; o += (size_t) w;};
+    f.buf.clear();
+};
+uint64 soloDumpPack(const string &s) {
+    uint64 v = 0;
+    for (size_t j = 0; j < s.size() && j < 21; j++) {
+        const char c = s[j];
+        v |= (uint64) (c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4) << (3 * j);
+    };
+    return v;
+};
+}
+void soloDumpFlushAll() {
+    std::lock_guard<std::mutex> lk(g_soloDumpMtx);
+    for (auto &kv : g_soloDumpFiles) {soloDumpWrite(*kv.second); ::close(kv.second->fd); kv.second->fd = -1;};
+};
+void ReadAlign::soloDumpRead(uint64 nTrSolo) {
+    if (soloDumpDir() == nullptr || P.pSolo.type != P.pSolo.SoloTypes::CB_UMI_Simple || !P.pSolo.featureYes[SoloFeatureTypes::Gene])
+        return;
+    if (soloDumpF == nullptr) {
+        std::lock_guard<std::mutex> lk(g_soloDumpMtx);
+        SoloDumpFile *f = new SoloDumpFile;
+        f->fd = ::open((string(soloDumpDir()) + "/solo_" + to_string(soloDumpChunk) + ".bin").c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        f->buf.reserve(1 << 22);
+        g_soloDumpFiles[soloDumpChunk] = f;
+        soloDumpF = f;
+    };
+    SoloDumpFile &f = *(SoloDumpFile*) soloDumpF;
+    if (f.fd < 0) return;
+    const ReadAnnotFeature &af = readAnnot.annotFeatures[SoloFeatureTypes::Gene];
+    SoloDumpRec r = {};
+    r.iRead = iReadAll;
+    r.cr3 = soloDumpPack(soloRead->readBar->cbSeq); r.ur3 = soloDumpPack(soloRead->readBar->umiSeq);
+    r.gene = af.fSet.size() == 1 ? *af.fSet.begin() : (uint32) -1;
+    r.readFlag = soloRead->readFeat[P.pSolo.featureInd[SoloFeatureTypes::Gene]]->readFlag.flag;
+    r.cbMatch = soloRead->readBar->cbMatch;
+    r.cbInd0 = soloRead->readBar->cbMatchInd.empty() ? (uint32) -1 : (uint32) soloRead->readBar->cbMatchInd[0];
+    r.nTr = (uint16) min(nTrSolo, (uint64) 65535);
+    r.ng = (uint8) min(af.fSet.size(), (size_t) 255);
+    r.bits = (handoffSum != nullptr ? 1 : 0) | (uint8) ((af.ovType & 15) << 4);
+    for (uint64 itr = 0; itr < nTrSolo; itr++)
+        if (P.pGe.chrSet.mito.count(trMult[itr]->Chr) == 1) r.bits |= 2;
+    const char *b = (const char*) &r;
+    f.buf.insert(f.buf.end(), b, b + sizeof r);
+    if (f.buf.size() >= (1u << 22)) soloDumpWrite(f);
+};
 
 void ReadAlign::outputAlignments() {
   
@@ -77,6 +143,7 @@ void ReadAlign::outputAlignments() {
         
         PROF_T0(tOutSolo);
         soloRead->record((unmapType<0 ? nTr : 0), trMult, iReadAll, readAnnot); //need to supply nTr=0 for unmapped reads
+        if (soloDumpDir() != nullptr) soloDumpRead(unmapType<0 ? nTr : 0); //singlet E9 debug dump, off by default
         PROF_ADD(PROF_outSolo, tOutSolo);
         PROF_T0(tOutSAM);
 
@@ -465,5 +532,6 @@ void ReadAlign::outputHandoffSummary()
     for (uint64 i = 0; i < nTr; i++) trMult[i] = &handoffTr[(i == 0 && (flags & 1)) ? 0 : 1];
     trBest = trMult[0];
     soloRead->record(nTr, trMult, iReadAll, readAnnot);
+    if (soloDumpDir() != nullptr) soloDumpRead(nTr); //singlet E9 debug dump, off by default
     PROF_ADD(PROF_outSolo, tOutSolo);
 };
