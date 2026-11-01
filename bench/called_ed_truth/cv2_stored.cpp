@@ -174,7 +174,10 @@ int main(int argc, char** argv) {
         std::fclose(f);
     }
     auto t0 = std::chrono::steady_clock::now();
-    singlet::calledv2::GeneCounts X = singlet::calledv2::gene_counts(ex, exf, &in, &inf);
+    // CV2_EXON_ONLY=1: exon counts only (what STARsolo "Gene" counts), for the cell-calling comparison with EmptyDrops_CR
+    const bool exon_only = std::getenv("CV2_EXON_ONLY") && std::string(std::getenv("CV2_EXON_ONLY")) == "1";
+    singlet::calledv2::GeneCounts X = exon_only ? singlet::calledv2::gene_counts(ex, exf, nullptr, nullptr)
+                                                : singlet::calledv2::gene_counts(ex, exf, &in, &inf);
     singlet::calledv2::Result R = singlet::calledv2::call(X, called, "", singlet::calledv2::Params(), threads);
     R.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     FILE* o = std::fopen(argv[2], "w");
