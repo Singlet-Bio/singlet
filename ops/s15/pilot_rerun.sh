@@ -20,7 +20,7 @@ singlet_run() {
   while :; do
     if [ "$(echo $used | tr , '\n' | wc -l)" = 1 ]; then ra="$ST1/$used.1fq"; else ra="--runs-dir $ST1 --runs-used $used"; fi
     /usr/bin/time -v -o $out/time.txt $BINDIR/singlet-$eng $ra $GD --ref-base $REFB --out-prefix $out/out/ --threads $SINGLET_THREADS --pipeline \
-       --output-format 1pz --engine $eng --memory-tier $TIER --tagged-bam > $out/run.log 2>&1
+       --output-format 1pz --engine $eng --memory-tier $TIER > $out/run.log 2>&1
     rc=$?; grep -h '^\[species-detect\]' $out/run.log | head -1 >> $out/species.txt
     if [ $rc != 0 ] && [ -z "$GD" ] && grep -q 'requires --genome-dir' $out/run.log; then   # species detection failed: record it, then give the genome explicitly (GTF too: it is only auto-resolved from a detected genome)
       echo "AUTODETECT FAILED -> explicit genome-dir" >> $out/species.txt; cp $out/run.log $out/run_autodetect.log; GD="--genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf"; rm -rf $out/out; continue; fi
