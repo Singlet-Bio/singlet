@@ -15,7 +15,11 @@ import plan_filter as PF  # noqa: E402
 
 
 def runs_table(rows):
-    return pd.DataFrame(rows, columns=["gsm", "run_accession", "library_strategy", "library_layout", "instrument_model"])
+    d = pd.DataFrame(rows, columns=["gsm", "run_accession", "library_strategy", "library_layout", "instrument_model"])
+    d["read_count"] = 1000
+    d["base_count"] = [50000 if lay == "SINGLE" else 150000 for lay in d.library_layout]    # SINGLE: 50 nt spots
+    d.loc[d.run_accession == "R10", "base_count"] = 150000
+    return d
 
 
 def test_plan_filter_reasons_and_keeps_multiome_and_paired_10x():
@@ -26,20 +30,25 @@ def test_plan_filter_reasons_and_keeps_multiome_and_paired_10x():
         ("GSM4", "R4", "RNA-Seq", "PAIRED", "NovaSeq 6000"),
         ("GSM5", "R5", "RNA-Seq", "PAIRED", "NovaSeq 6000"), ("GSM5", "R6", "ATAC-seq", "PAIRED", "NovaSeq 6000"),     # multiome: an RNA run stays
         ("GSM6", "R7", "RNA-Seq", "SINGLE", "NextSeq 500"), ("GSM6", "R8", "RNA-Seq", "PAIRED", "NextSeq 500"),         # one paired run stays
+        ("GSM9", "R11", "RNA-Seq", "SINGLE", "NovaSeq 6000"),                                                           # long single read (set below): stays
         ("GSM7", "R9", "ChIP-Seq", "PAIRED", "NovaSeq 6000"),
         ("GSM8", "R10", "RNA-Seq", "PAIRED", "HiSeq 3000"),
     ])
-    u = pd.DataFrame({"gsm_id": ["GSM%d" % i for i in range(1, 9)], "gse_id": ["GSE1"] * 8})
+    runs.loc[runs.run_accession == "R11", "base_count"] = 150000
+    u = pd.DataFrame({"gsm_id": ["GSM%d" % i for i in range(1, 10)], "gse_id": ["GSE1"] * 9})
     kept, ex = PF.apply(u, runs, {"GSM8": "cdna_read_all_N"})
     assert dict(zip(ex.gsm, ex.reason)) == {"GSM1": "non_rna_assay:ATAC-seq", "GSM2": "single_end", "GSM3": "plate_or_longread_instrument:AB 5500xl Genetic Analyzer",
                                            "GSM7": "non_rna_assay:ChIP-Seq", "GSM8": "unrecoverable:cdna_read_all_N"}
-    assert list(kept.gsm_id) == ["GSM4", "GSM5", "GSM6"]
-    assert PF.summary(ex, 8) == {"excluded": 5, "of": 8, "by_reason": {"non_rna_assay": 2, "single_end": 1, "plate_or_longread_instrument": 1, "unrecoverable": 1}}
+    assert list(kept.gsm_id) == ["GSM4", "GSM5", "GSM6", "GSM9"]
+    assert PF.summary(ex, 9) == {"excluded": 5, "of": 9, "by_reason": {"non_rna_assay": 2, "single_end": 1, "plate_or_longread_instrument": 1, "unrecoverable": 1}}
 
 
 def test_plan_filter_without_the_columns_excludes_nothing():
     u = pd.DataFrame({"gsm_id": ["GSM1"], "gse_id": ["GSE1"]})
     kept, ex = PF.apply(u, pd.DataFrame({"gsm": ["GSM1"], "run_accession": ["R1"]}), {})
+    assert len(kept) == 1 and len(ex) == 0
+    # SINGLE layout without read / base counts cannot be judged: kept
+    kept, ex = PF.apply(u, pd.DataFrame({"gsm": ["GSM1"], "run_accession": ["R1"], "library_layout": ["SINGLE"]}), {})
     assert len(kept) == 1 and len(ex) == 0
 
 
