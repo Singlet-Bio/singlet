@@ -12,13 +12,16 @@
 # against STAR in the same job. Recipe of m5_run.sbatch: index copy, decode, distinct (MAXD = 2 M: every 16th distinct cDNA
 # sequence of pbmc1k_v3 = 1,991,926), stardump truth, then each variant with --reps 3 --json. Sequences only in job /tmp.
 # M5BIN: the binary (default: the latest build of e4_compile.sbatch). E4RUNS: "label:args;label:args;..." (default below).
+# Threads follow --cpus-per-task, so the job also runs on debug-gpu (8 CPUs, 29 min): sbatch --partition=debug-gpu
+# --gres=gpu:nvidia_h100_nvl:1 --cpus-per-task=8 --mem=100G --time=00:29:00 --export=ALL,ROUND=3,SORTMEM=40G,DEADLINE=1560
+# DEADLINE (s since start): variants and ncu passes that would start later are skipped, so the job ends inside its limit.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark
 REF=/mnt/projects/debruinz_project/cellarium/reference
 DEC=$PB/bin/singlet-w3; SD=$W/jobs/w11/bin/stardump
 O=$W/jobs/fable/order; M5=${M5BIN:-$O/bin/m5-$(cat $O/bin/latest.sha)}
 IMG=$W/images/cuda-13-devel.sif; OUT=$O/results/$SLURM_JOB_ID; mkdir -p $OUT
-MAXD=${MAXD:-2000000}
+MAXD=${MAXD:-2000000}; NT=${SLURM_CPUS_PER_TASK:-24}; DEADLINE=${DEADLINE:-999999}
 G=$REF/GRCh38-2024-A/star_2.7.11b; F=$PB/data/pbmc1k_v3/pbmc1k_v3.1fq
 SCR=/tmp/$USER-e4-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 echo "node=$(hostname) job=$SLURM_JOB_ID $(date -Is) MAXD=$MAXD"; nvidia-smi --query-gpu=name,driver_version,clocks.max.sm --format=csv,noheader
@@ -27,7 +30,7 @@ T0=$(date +%s)
 mkdir -p $SCR/idx && cp $G/Genome $G/SA $G/SAindex $G/*.txt $G/*.tab $SCR/idx/ 2>/dev/null
 echo "[t] index copy $(( $(date +%s) - T0 )) s"
 export LC_ALL=C
-$DEC decode "$F" --r2 /dev/stdout --threads 4 2>$SCR/decode.err | awk 'NR%4==2' | sort -S 60G --parallel=16 -T $SCR | uniq -c > $SCR/distinct.txt
+$DEC decode "$F" --r2 /dev/stdout --threads 4 2>$SCR/decode.err | awk 'NR%4==2' | sort -S ${SORTMEM:-60G} --parallel=$(( NT > 16 ? 16 : NT )) -T $SCR | uniq -c > $SCR/distinct.txt
 ND=$(wc -l < $SCR/distinct.txt); NR=$(awk '{s+=$1} END {print s}' $SCR/distinct.txt)
 K=$(( (ND + MAXD - 1) / MAXD )); [ $K -lt 1 ] && K=1
 awk -v k=$K '(NR-1)%k==0 {printf "@d%d_%d\n%s\n+\n", NR, $1, $2; q=$2; gsub(/./,"I",q); print q}' $SCR/distinct.txt > $SCR/distinct.fq
@@ -36,7 +39,7 @@ echo "reads=$NR distinct=$ND every_k=$K selected=$NS"; rm -f $SCR/distinct.txt
 echo "[t] distinct $(( $(date +%s) - T0 )) s"
 mkdir -p $SCR/m5 $SCR/star
 SINGLET_STAR_SEQCACHE_MB=0 STARDUMP_M5=$SCR/m5/t $SD --runMode alignReads --genomeDir $SCR/idx --readFilesIn $SCR/distinct.fq \
-  --outSAMtype None --outFilterScoreMin 10 --runThreadN 24 --genomeLoad NoSharedMemory --outFileNamePrefix $SCR/star/ > $SCR/star.out 2>&1
+  --outSAMtype None --outFilterScoreMin 10 --runThreadN $NT --genomeLoad NoSharedMemory --outFileNamePrefix $SCR/star/ > $SCR/star.out 2>&1
 echo "stardump exit=$?"; tail -2 $SCR/star.out; rm -f $SCR/distinct.fq
 echo "[t] stardump $(( $(date +%s) - T0 )) s"
 BASE="--budget-a 1024 --budget-m 2048 --budget-b 2048 --batch-a 262144 --batch-m 262144 --batch-b 65536"
@@ -59,30 +62,29 @@ R2="$R2;f40a:--presort --fused A --fused-bps-a 4 --fused-lb 4 --batch-m 32768 --
 # round 3 (ROUND=3), the E1 follow-ups: one warp per phase-3 block (--p3-block 32: a finished warp frees its slot), longest-
 # first from an atomic counter with 32-thread blocks, the control-flow signature order (sig), register caps 64 / 80, and the
 # best order with E1's batch sizes (1M / 512k / 128k). Plus ncu passes on k_p3 (active threads per instruction).
-R3="v0t:--presort --tail;b32:--presort --p3-block 32 --tail;b32desc:--presort --p3-block 32 --p3order cost-desc --tail"
-R3="$R3;q32desc:--presort --queue --p3-block 32 --p3order cost-desc --tail;qdesc:--presort --queue --p3order cost-desc --tail"
-R3="$R3;sig:--presort --p3order sig --tail;sigm:--presort --p3order-m sig --tail;r64:--presort --p3-maxreg 64 --tail"
-R3="$R3;r80:--presort --p3-maxreg 80 --tail;b32r64:--presort --p3-block 32 --p3-maxreg 64 --tail;best:--best-order --tail"
+R3="v0t:--presort --tail;b32:--presort --p3-block 32 --tail;q32desc:--presort --queue --p3-block 32 --p3order cost-desc --tail"
+R3="$R3;sig:--presort --p3order sig --tail;wdesc:--presort --p3order warp-desc --tail;b32wdesc:--presort --p3-block 32 --p3order warp-desc --tail"
+R3="$R3;qwdesc:--presort --queue --p3order warp-desc --tail;r64:--presort --p3-maxreg 64 --tail;r80:--presort --p3-maxreg 80 --tail"
+R3="$R3;b32r64:--presort --p3-block 32 --p3-maxreg 64 --tail;b32desc:--presort --p3-block 32 --p3order cost-desc --tail"
+R3="$R3;qdesc:--presort --queue --p3order cost-desc --tail;sigm:--presort --p3order-m sig --tail;best:--best-order --tail"
 R3="$R3;bestb32:--best-order --p3-block 32 --tail;bestE1:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072"
-R3="$R3;bestE1b32:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-block 32"
-# warp-granular longest-first: prefix-order warps kept whole, run heaviest first (fixed grid, one warp per block, queue)
-R3="$R3;wdesc:--presort --p3order warp-desc --tail;b32wdesc:--presort --p3-block 32 --p3order warp-desc --tail"
-R3="$R3;qwdesc:--presort --queue --p3order warp-desc --tail;v0b:--presort"
+R3="$R3;bestE1b32:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-block 32;v0b:--presort"
 # ncu (ROUND=3, or E4NCU="label|args|k_p3 launches to skip;..."): one phase-3 launch per entry, --set full plus the
 # active-threads-per-instruction metrics. With --reps 1 lane A runs 2 x 8 k_p3 launches: skip 1 = A's 2nd, skip 16 = M's 1st.
-NCUL=""; [ "${ROUND:-1}" = 3 ] && NCUL="v0A|--presort|1;v0M|--presort|16;sigA|--presort --p3order sig|1;sigM|--presort --p3order sig|16;b32A|--presort --p3-block 32|1"
+NCUL=""; [ "${ROUND:-1}" = 3 ] && NCUL="v0A|--presort|1;sigA|--presort --p3order sig|1;wdescA|--presort --p3order warp-desc|1;v0M|--presort|16;b32A|--presort --p3-block 32|1"
 NCUL=${E4NCU-$NCUL}
 [ "${ROUND:-1}" = 2 ] && DEFAULT=$R2
 [ "${ROUND:-1}" = 3 ] && DEFAULT=$R3
 IFS=';' read -ra VARS <<< "${E4RUNS:-$DEFAULT}"
 for v in "${VARS[@]}"; do
   LABEL=${v%%:*}; ARGS=${v#*:}; BIN=$M5
+  if [ $(( $(date +%s) - T0 )) -gt $DEADLINE ]; then echo "=== $LABEL: skipped (deadline $DEADLINE s)"; continue; fi
   if [[ "$ARGS" == @* ]]; then   # "@binary [args]": another build (relative names are in $O/bin)
     BIN=${ARGS%% *}; BIN=${BIN#@}; [[ "$BIN" != /* ]] && BIN=$O/bin/$BIN
     if [[ "$ARGS" == *" "* ]]; then ARGS=${ARGS#* }; else ARGS=""; fi
   fi
   echo "=== $LABEL: $ARGS (binary $BIN sha256 $(sha256sum $BIN | cut -c1-16))"
-  apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=24 $BIN --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3 $BASE $ARGS \
+  apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=$NT $BIN --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3 $BASE $ARGS \
     --label $LABEL --json $OUT/e4_$LABEL.json > $SCR/$LABEL.log 2>&1
   echo "m5 exit=$?"
   grep -E "^m5 E4-order build|^lane [AMB] \(|schedule:|run 3:|^M5:|unmapped by STAR|GPU lane A|heavy lane|assigned every|registers|DIFF" $SCR/$LABEL.log | grep -v "^DIFF" | head -30
@@ -93,6 +95,7 @@ done
 IFS=';' read -ra NV <<< "$NCUL"
 for v in "${NV[@]}"; do
   IFS='|' read -r LABEL ARGS SKIP <<< "$v"
+  if [ $(( $(date +%s) - T0 )) -gt $DEADLINE ]; then echo "=== ncu $LABEL: skipped (deadline $DEADLINE s)"; continue; fi
   echo "=== ncu $LABEL: $ARGS (k_p3 launch-skip $SKIP)"
   apptainer exec --nv -B $W -B $SCR $IMG /usr/local/cuda/bin/ncu --set full \
     --metrics smsp__thread_inst_executed_per_inst_executed.ratio,smsp__thread_inst_executed_pred_on_per_inst_executed.ratio \
