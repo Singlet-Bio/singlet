@@ -8,24 +8,23 @@
 #SBATCH --time=00:29:00
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# E15 (docs/gpu-engine/fable/E15-posterior.md): the per-read CB posterior against STAR on binned NovaSeq barcode qualities. The pipeline's
-# .1fq never carries the barcode read's qualities (STAR sees 'F' for every base), so the binned case is built here: the L001 lane (or its first NREADS reads) of
-# the sample's original FASTQs through `singlet --reads R1 R2 --engine cpu` (STAR reads them gzipped, qualities as they are; the driver reads the barcode reads uncompressed in /tmp) with
-# SINGLET_SOLO_DUMP, then bench/fable/posterior/post_test.cu (compiled here from BRANCH) runs E9's library on STAR's per-read Solo inputs with
-# the reads' CB qualities (perread) and with one 'F' quality (const, the control) and compares per read and per file with STAR's star_Solo.out.
-# Read-level data (FASTQs, dump) stay in /tmp; results/binned-<job>/ keeps STAR's star_Solo.out, its logs, the driver's log.
+# E15 (docs/gpu-engine/fable/E15-posterior.md): the per-read CB posterior against STAR on binned NovaSeq barcode qualities.
+# The pipeline never gives STAR the barcode read's own qualities: its .1fq path writes 'F' for every R1 base, and its legacy FASTQ path
+# (`--reads`) runs CB_samTagOut (no Gene counting). So STAR runs here as itself: `e15star` (jobs/starbuild.sbatch, this branch's vendored
+# STAR) on the sample's original L001 FASTQs (gzipped, read with zcat; or their first NREADS reads), with the CPU engine's STAR Solo options
+# and SINGLET_SOLO_DUMP. Then bench/fable/posterior/post_test.cu (compiled here from BRANCH) runs E9's library on STAR's per-read Solo inputs
+# with the reads' CB qualities (perread) and with one 'F' quality (const, the control) and compares per read and per file with STAR's
+# star_Solo.out. Read-level data (FASTQs, dump) stay in /tmp; results/binned-<job>/ keeps STAR's star_Solo.out, its logs, the driver's log.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif; ENV=$W/envs/pbench; BARE=$W/repos/singlet-py.git
 BINDIR=${BINDIR:-$W/jobs/fable/posterior/bin}; T=${T:-8}; NREADS=${NREADS:-0}; BR=${BRANCH:-gpu/fable/posterior}
 s=${SAMPLE:-pbmc1k_v3}; WL=${WL:-3M-february-2018.txt}; UMIL=${UMIL:-12}; G=${G:-$REF/GRCh38-2024-A}
-# the legacy FASTQ path wants a cell list for the pileup (--barcodes; STAR's Solo does not read it): E11's CPU-engine cells of pbmc1k_v3
-BC=${BC:-$W/jobs/fable/solowire/results/gate-796377/cpu/out/star_Solo.out/Gene/filtered/barcodes.tsv}
 RES=$W/jobs/fable/posterior/results/binned-$SLURM_JOB_ID; mkdir -p $RES
-SCR=/tmp/$USER-e15d-$SLURM_JOB_ID; mkdir -p $SCR/src $SCR/hts $SCR/solo $SCR/keep
-trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT INT TERM
-export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$ENV/bin:$PATH
-echo "node=$(hostname) job=$SLURM_JOB_ID bin=$BINDIR commit=$(cat $BINDIR/commit-gpu) sample=$s NREADS=$NREADS T=$T $(date -Is)" | tee $RES/summary.txt
+SCR=/tmp/$USER-e15d-$SLURM_JOB_ID; mkdir -p $SCR/src $SCR/hts $SCR/solo
+trap 'kill $(jobs -p) 2>/dev/null; rm -rf "${SCR:?}"' EXIT INT TERM
+export PATH=$ENV/bin:$PATH
+echo "node=$(hostname) job=$SLURM_JOB_ID e15star=$(cat $BINDIR/e15star.commit) sample=$s NREADS=$NREADS T=$T $(date -Is)" | tee $RES/summary.txt
 # ---- the driver
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/fable/posterior-drv
 echo "driver commit $(git -C $BARE rev-parse --short=8 refs/fable/posterior-drv)" | tee -a $RES/summary.txt
@@ -39,27 +38,25 @@ echo "compiled in $(( $(date +%s) - T0 )) s" | tee -a $RES/summary.txt
 # ---- the reads (original qualities)
 R1=$(grep -m1 "_L001_R1_" $PB/data/$s/gex_fastqs.txt); R2=${R1/_R1_/_R2_}
 T0=$(date +%s)
-if [ $NREADS -gt 0 ]; then   # the first NREADS reads, gzipped again (the legacy path always gives STAR --readFilesCommand zcat)
+if [ $NREADS -gt 0 ]; then   # the first NREADS reads, gzipped again
   zcat $R1 | head -n $((4 * NREADS)) | tee $SCR/r1.fastq | gzip -1 > $SCR/r1.fastq.gz & zcat $R2 | head -n $((4 * NREADS)) | gzip -1 > $SCR/r2.fastq.gz & wait
   GZ1=$SCR/r1.fastq.gz; GZ2=$SCR/r2.fastq.gz
 else   # the whole lane, as it is; the barcode reads uncompressed for the driver
   zcat $R1 > $SCR/r1.fastq; GZ1=$R1; GZ2=$R2
 fi
-echo "reads: STAR reads $GZ1 + $GZ2; $(( $(wc -l < $SCR/r1.fastq) / 4 )) barcode records for the driver ($(( $(date +%s) - T0 )) s)" | tee -a $RES/summary.txt
-# ---- STAR (CPU engine) with the per-read Solo dump. --reads takes the cDNA read first (it is STAR's first readFilesIn), the barcode read second
-O=$SCR/run/out; mkdir -p $O
-( while [ ! -e $O/star_Solo.out/Gene/CellReads.stats ]; do sleep 0.2; done; ln $O/star_Solo.out/Gene/CellReads.stats $SCR/keep/CellReads.stats ) &
-WATCH=$!
+echo "reads: STAR reads $GZ2 (cDNA) + $GZ1 (barcode); $(( $(wc -l < $SCR/r1.fastq) / 4 )) barcode records for the driver ($(( $(date +%s) - T0 )) s)" | tee -a $RES/summary.txt
+# ---- STAR with the per-read Solo dump: the CPU engine's STAR Solo, clip and filter options (gate 796377's command line), FASTQ input, no BAM
+O=$SCR/run; mkdir -p $O
 T0=$(date +%s)
-( cd $SCR/run && SINGLET_SOLO_DUMP=$SCR/solo timeout -k 30 1200 $BINDIR/singlet-gpu --reads $GZ2 $GZ1 --whitelist $PB/whitelists/$WL --barcodes $BC \
-    --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf --out-prefix $O/ --threads $T --pipeline --output-format 1pz \
-    --engine cpu > $RES/run.log 2>&1 ) &
-P=$!
-while kill -0 $P 2>/dev/null; do grep -q "ALL DONE" $O/star_Log.out 2>/dev/null && break; sleep 2; done
-sleep 10; pkill -TERM -f "out-prefix $O/" 2>/dev/null; sleep 5; pkill -KILL -f "out-prefix $O/" 2>/dev/null; wait $P 2>/dev/null; kill $WATCH 2>/dev/null
-echo "STAR: $(( $(date +%s) - T0 )) s; $(grep -c "ALL DONE" $O/star_Log.out) ALL DONE" | tee -a $RES/summary.txt
-grep -a -A1 "^##### Command Line" $O/star_Log.out | tail -1 | tr ' ' '\n' | grep -a -A2 "^--solo\|^--clip\|^--readFilesIn\|^--readFilesCommand" | grep -v "^--$" | paste -sd' ' | cut -c1-1500 | tee -a $RES/summary.txt
-cp -r $O/star_Solo.out $RES/; cp $SCR/keep/CellReads.stats $RES/star_Solo.out/Gene/ 2>/dev/null; cp $O/star_Log.out $O/star_Log.final.out $RES/ 2>/dev/null
+SINGLET_SOLO_DUMP=$SCR/solo timeout -k 30 1300 $BINDIR/e15star --runMode alignReads --genomeDir $G/star_2.7.11b --readFilesIn $GZ2 $GZ1 --readFilesCommand zcat \
+  --soloType CB_UMI_Simple --soloCBwhitelist $PB/whitelists/$WL --soloCBlen 16 --soloCBstart 1 --soloUMIstart 17 --soloBarcodeReadLength 0 \
+  --soloCellReadStats Standard --soloUMIlen $UMIL --outSAMtype None --clipAdapterType CellRanger4 --alignSJoverhangMin 8 \
+  --outFilterIntronMotifs RemoveNoncanonicalUnannotated --outFilterMismatchNoverLmax 0.05 --outFilterScoreMin 10 \
+  --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --runThreadN $T --genomeLoad NoSharedMemory --outFileNamePrefix $O/star_ > $RES/star.stdout 2>&1
+echo "STAR: rc $? in $(( $(date +%s) - T0 )) s; $(grep -c "ALL DONE" $O/star_Log.out) ALL DONE" | tee -a $RES/summary.txt
+grep -a -A1 "^##### Command Line" $O/star_Log.out | tail -1 | cut -c1-1500 | tee -a $RES/summary.txt
+grep -a "Number of input reads\|Uniquely mapped reads %" $O/star_Log.final.out | tee -a $RES/summary.txt
+cp -r $O/star_Solo.out $RES/; cp $O/star_Log.out $O/star_Log.final.out $RES/ 2>/dev/null
 ls -la $SCR/solo | tee -a $RES/summary.txt
 # ---- the driver
 T0=$(date +%s)
