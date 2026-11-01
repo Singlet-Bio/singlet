@@ -1,7 +1,7 @@
 # E4: phase-3 read order and batch scheduling in M5 (wave 1, questions Q5 and Q3)
 
 Branch `gpu/fable/order` (from `gpu/fable-engine` cf92cdb9). Harness: `bench/gpu/m5/m5.cu` on the 2 M pbmc1k_v3 dump set
-(every 16th distinct cDNA sequence, 1,991,926 sequences), Clipper H100 NVL, CUDA 13.3 image. Status: done (rounds 1-5).
+(every 16th distinct cDNA sequence, 1,991,926 sequences), Clipper H100 NVL, CUDA 13.3 image. Status: done (rounds 1-5; merged with `gpu/fable-engine` and measured, job 795837).
 
 ## Summary
 
@@ -27,6 +27,10 @@ Branch `gpu/fable/order` (from `gpu/fable-engine` cf92cdb9). Harness: `bench/gpu
   (E1: -11.9%); with the best order **727.8 ms (2.74 M/s, 1.20x)**; lane A's `k_p3` capped at 64 registers -5% on A. The
   per-lane best is one flag, `--e4-best`: **709.3 / 711.6 ms, 2.81 / 2.80 M/s, 1.22x** against v0 863.1 / 868.5 ms in the
   same job (round 5), at 80.6 GB of device memory.
+- **After the merge with `gpu/fable-engine`** (E5's stitch variants on, job 795837): the gate configuration runs at 704.4 /
+  703.2 ms (2.83 M/s); with `--best-order --p3-maxreg-a 64 --batch-b 131072` at **603.4 ms (3.30 M/s, 1.17x)**, identical.
+  **`-DM5_NOCLK` is not a win**: without the `clock64()` phase counters lane M's phase 3 is 22% slower (208.9 vs 171.2 ms,
+  same 79 registers), lane A +0.5%, lane B -2.6%; M5 +4.5% (734.9 / 736.3 vs 704.4 / 703.2 ms), twice measured.
 - **Expected engine gain of the best ordering plus a persistent queue: about 1.03x** (order +4.5%, queue -2%), not the
   1.2-1.5x of the study's section 4.6. The 1.2x above comes from batch sizes, i.e. memory.
 
@@ -36,7 +40,8 @@ All variants are exact by construction: a read's result depends only on the read
 time slot handles which read, and every result is written by read index. Each variant still runs the byte-for-byte comparison
 with STAR in the same job.
 
-Options added to `m5` (all off by default; the default binary behaves as before):
+Options added to `m5` (all off by default; the default binary behaves as before). `--queue` and `--fused*` were dropped
+in the merge with `gpu/fable-engine` (see "Merge with gpu/fable-engine and M5_NOCLK"); their code is in bf8746492a:
 
 | option | what it does |
 |---|---|
@@ -92,6 +97,9 @@ Fixed settings in every variant (the engine's): budgets 1024 / 2048 / 2048 steps
 | 795646 | round 4 (`ROUND=4`, debug-gpu, g052): base kernel; reference build, main variants, E2's `--compact`, combinations; ncu | `m5-1b2c82d8c8` |
 | 795647 | round 4 on short-gpu, cancelled when 795646 started | - |
 | 795757, 795758 | build of the branch tip 04398779 (`--e4-best` since 73a8bb75) and round 5 (`ROUND=5`, debug-gpu, g051: v0 and `--e4-best`, twice each) | `m5-04398779c7` (baaf12c4b93a953c) |
+| 795835, 795836 | builds of the merge e51325aa (`bench/fable/order/e4m_cc.sbatch`): default and `-DM5_NOCLK`; `-DM5_TAIL`, `-DM5_CENSUS`, `-DM5_BASELINE` (all compile) | `$W/jobs/fable/order/merge/bin/m5`, `m5n`, `m5t`, `m5c`, `m5b` |
+| 795837 | merge gate (`e4m_gate.sbatch`, debug-gpu, g051): default vs `M5_NOCLK`, with E4's flags, twice each for the plain builds | `m5`, `m5n` (e51325aadf) |
+| 795838 | the same on short-gpu, cancelled when 795837 started | - |
 
 Results (JSON per variant, logs): `$W/jobs/fable/order/results/<job>/`, copied to `bench/fable/order/results/<job>/`.
 Table: `python bench/fable/order/e4_table.py bench/fable/order/results/<job> v0 [--tail]` (round 3: baseline `v0t`).
@@ -397,6 +405,74 @@ debug-gpu, g051, `m5-04398779c7`; v0 and `--e4-best` twice each, all 1,991,926 /
 `--e4-best` runs at **709.3 / 711.6 ms (2.81 / 2.80 M distinct/s), 1.22x** the engine configuration in the same job (v0
 863.1 / 868.5 ms), as the per-lane composite of round 4 predicted (712.5 ms).
 
+## Merge with gpu/fable-engine and M5_NOCLK (jobs 795835-795837)
+
+The branch merges `gpu/fable-engine` (f1622f84): E1's tail probe (`-DM5_TAIL`), E2's census (`-DM5_CENSUS`), E5's
+`stitch.cuh` variants (S3, TR32, ENC1 on by default; `-DM5_BASELINE` restores the old paths) and E6's files. In `m5.cu`,
+E4's `p3one` / `k_p3<C, TAIL>` / `k_p3lb` carry the census buffers (one `CenP3` argument) and E1's `TAIL_BEGIN` /
+`TAIL_INFO` / `TAIL_END`; E4's `--tail` flag variable is `g_e4tail` (E1's `tail.cuh` defines `g_tail`). The persistent
+`--queue` and `--fused` kernels are dropped (slower, rounds 1-4); those flags now exit with a message. All five flavours
+compile (795835, 795836). The default `k_p3` carries no tail code (79 registers, as with `--tail` off before).
+
+`-DM5_NOCLK` (e51325aa) compiles out the `clock64()` phase counters: `M5CLK` / `M5T` / `M5ADD` (stitch.cuh), the recording
+timer (`RecClk`), the phase-1 / phase-3 start clocks, and the per-read `atomicAdd` of `w.clk[8]` into `g_clk` (m5.cu
+`p3one`, `lane_loop`). The harness then prints no cycle shares.
+
+Registers (ptxas -v, CUDA 13.3, sm_90; `bench/fable/order/results/merge/regs-<flavour>-e51325aadf.tsv`):
+
+| kernel | default (counters) | `M5_NOCLK` | `M5_TAIL` | `M5_CENSUS` | `M5_BASELINE` |
+|---|---|---|---|---|---|
+| `k_p1` A / M / B | 95 / 95 / 95 | 95 / 95 / 95 | 95 | 95 | 95 |
+| `k_p2` | 42 | 42 | 42 | 44 | 42 |
+| `k_p3` A / M / B | **79 / 79 / 79** (656 / 400 / 1744 B stack) | **79 / 79 / 79** (same stack) | 79 / 79 / 79 | 84 / 84 / 84 | 80 / 80 / 94 |
+| `k_p3<C, true>` (`--tail`) A / M / B | 79 / 79 / 80 | 79 / 79 / 79 | 79 / 79 / 80 | 94 | 94 |
+| `k_p3lb` cap 64 (128 x 8) A | 64, spills 64 / 92 B | 64, spills 100 / 140 B | | | |
+| `k_p3lb` cap 80 (128 x 6) A | 80, spills 32 / 56 B | 80, spills 32 / 36 B | | | |
+| `k_lane<A, local>` (`--mono --local`) | 88 | 104 | | | |
+
+The counters cost no registers in the default kernels: E5's changes already brought `k_p3` from 80 / 80 / 94 to 79 / 79 / 79
+(lane B 6 blocks of 128 per SM instead of 5), and `--tail`'s instantiation no longer grows (79-80, was 94).
+
+Job 795837 (debug-gpu, g051, 2 M pbmc1k_v3 set, gate budgets 1024 / 2048 / 2048 and batches 512k / 384k / 64k = `@STD` of
+`fable_gate.sbatch`; median of 3 per variant). Every variant 1,991,926 / 1,991,926 distinct (4,118,999 / 4,118,999 weighted)
+identical to STAR:
+
+| variant | build | options on top of `@STD` | A ms | M ms | B ms | total ms | M distinct/s | vs v0 |
+|---|---|---|---|---|---|---|---|---|
+| v0 | default | - | 212.7 | 268.4 | 223.2 | 704.4 | 2.83 | 1.00x |
+| v6 | default | - (repeat) | 212.6 | 267.9 | 222.6 | 703.2 | 2.83 | 1.00x |
+| v1 | `M5_NOCLK` | - | 212.2 | 305.8 | 217.0 | 734.9 | 2.71 | 0.96x |
+| v7 | `M5_NOCLK` | - (repeat) | 212.5 | 305.7 | 218.1 | 736.3 | 2.71 | 0.96x |
+| v2 | `M5_NOCLK` | `--best-order --p3-maxreg-a 64` | 200.4 | 281.7 | 218.4 | 700.6 | 2.84 | 1.01x |
+| v3 | `M5_NOCLK` | `--best-order --p3-maxreg-a 64 --batch-b 131072` | 200.2 | 282.1 | 161.2 | 643.4 | 3.10 | 1.09x |
+| v5 | `M5_NOCLK` | `--e4-best` (batches 1M / 512k / 128k) | 188.9 | 292.2 | 160.8 | 641.9 | 3.10 | 1.10x |
+| **v4** | **default** | **`--best-order --p3-maxreg-a 64 --batch-b 131072`** | **200.1** | **235.8** | **167.5** | **603.4** | **3.30** | **1.17x** |
+
+Phase 3 per lane (ms; phase 1 and the scan are within 1 ms between builds):
+
+| | A | M | B |
+|---|---|---|---|
+| default, `@STD` (v0 / v6) | 98.6 / 98.4 | 171.2 / 169.9 | 178.6 / 179.2 |
+| `M5_NOCLK`, `@STD` (v1 / v7) | 99.1 / 99.1 | **208.9 / 208.7** | 173.9 / 174.5 |
+| default, best (v4) | 87.2 | 143.9 | 129.3 |
+| `M5_NOCLK`, best (v3) | 88.1 | 189.6 | 123.3 |
+
+1. **`M5_NOCLK` is slower, not faster: M5 +4.5%** (734.9 / 736.3 vs 704.4 / 703.2 ms), reproduced within the job. Lane M's
+   phase 3 is 22% slower without the counters (208.9 vs 171.2 ms; with lane M's `nw-desc` order 189.6 vs 143.9 ms, +32%), at
+   the same 79 registers and stack; lane A is unchanged (+0.5%) and lane B 2.6% faster (173.9 vs 178.6 ms). The `clock64()`
+   reads are volatile and order the code around them; without them ptxas schedules the stitching code differently (also
+   visible under the 64-register cap, whose spills grow from 64 / 92 to 100 / 140 B), and the result depends on the lane's
+   caps: lane M (NW 64, NWA 8) loses, lane B (72.9% of its cycles in stitching) gains a little. The counters themselves
+   cost no registers. Not kept as a default; the macro stays for experiments. A per-lane switch (no
+   counters in lane B only) would save about 6 ms (1%).
+2. **E4's flags on the merged code (counters on): 603.4 ms, 3.30 M/s, 1.17x** against the merged default (v4 vs v0 / v6).
+   Lane A -5.9% (`--p3-maxreg-a 64`), lane M -12.1% (`--best-order`: prefix order, `nw-desc` in lane M), lane B -25% (one launch,
+   128k batch, 49.9 GB of B Work). The same flags with `M5_NOCLK` (v3) lose lane M's gain (282.1 ms).
+3. `--e4-best`'s bigger A / M batches (v5 vs v3, both without counters): lane A -11.3 ms (1M batch), lane M +10.1 ms (512k
+   batch): a wash in total, at 19.2 GB (A) + 8.9 GB (M) more Work. Not measured with the counters on.
+4. Compared with round 5 (pre-merge, 709.3 ms with `--e4-best`): E5's stitch variants and E4's flags compose; the gate
+   configuration of the merged code goes from 704 to 603 ms with E4's flags.
+
 ## What to keep
 
 - **`--best-order`** (= `--presort --p3order-m nw-desc`): the best exact order, -4.5% on the base kernel (831.0 vs 870.4 ms),
@@ -406,13 +482,18 @@ debug-gpu, g051, `m5-04398779c7`; v0 and `--e4-best` twice each, all 1,991,926 /
 - **`--e4-best`**: `--best-order`, lane A's `k_p3` at 64 registers, batches 1M / 512k / 128k: 709.3-711.6 ms, 2.80-2.81 M/s,
   1.22x (round 5), at 80.6 GB of device memory (H100 NVL only). Of the 22% the order is 4.5 points, the register cap on A about 1.5, and
   the batch sizes the rest.
+- **On the merged code: `--best-order --p3-maxreg-a 64 --batch-b 131072`** with the default build (counters on): 603.4 ms,
+  3.30 M/s, 1.17x the merged gate configuration (job 795837).
+- **`-DM5_NOCLK` stays off**: it compiles out the `clock64()` phase counters but makes lane M's phase 3 22% slower and M5
+  4.5% slower (job 795837). The counters cost no registers and no time; the warp-collective tail code (below) does.
 - **Keep instrumentation out of production kernels**: warp-collective timing code after the read costs 14 registers and 18%.
   The engine's `k_p3` should be checked for the same (register count of the deployed kernel vs this base: 80 in A and M).
 - **Not kept** (all exact, all measured): `--bin` and cost descending (1.30-1.31x slower), longest-first from a counter
   (1.39x), control-flow signature (1.07x), genome-locality orders (1.11-1.15x), warp-granular longest-first (+2%, -0.4% on A
   only: not worth a sort), the persistent queue inside a batch (+2%), one warp per block (0%), `--compact` (+1%). `--bin`
   should not be turned on in the engine.
-- **The fused persistent lane** stays a memory option only (`--fused`, `--fused-bps-*`, `--fused-lb`): no batch tail and
+- **The fused persistent lane** was a memory option only (`--fused`, `--fused-bps-*`, `--fused-lb`; dropped in the merge,
+  code in bf8746492a): no batch tail and
   far less Work (A and M 5x less at 3 blocks/SM; A / M / B 15x / 16x / 3.9x less at 1 block/SM), at 1.6-1.85x the time (its
   kernel also carries the tail code, so those factors are measured against the tail-code staged kernel).
 
