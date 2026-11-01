@@ -20,3 +20,18 @@ for name, m in (('low', n <= q[0]), ('mid', (n > q[0]) & (n <= q[1])), ('high', 
 H = df.human_umi.values.astype(float); M = df.mouse_umi.values.astype(float); fm = M / np.maximum(H + M, 1)
 hum = fm <= AR.PURE; mou = fm >= 1 - AR.PURE
 print('pure human', int(hum.sum()), 'pure mouse', int(mou.sum()), 'mouse share of pool', pool['pools']['1_100_top50k']['mouse_share'])
+
+# --- by species and depth decile (hgmm1k_v3, development data) ---
+H = df.human_umi.values.astype(float); M = df.mouse_umi.values.astype(float); N = H + M
+fm = M / np.maximum(N, 1)
+pure = (fm <= AR.PURE) | (fm >= 1 - AR.PURE)
+mouse_cell = (fm >= 1 - AR.PURE)[pure]
+imp = d['singlet']['imp']; tr = d['truth']; n = d['n']
+for name, m in (('human cells', ~mouse_cell), ('mouse cells', mouse_cell)):
+    print(f'{name}: n={int(m.sum())} truth {tr[m].mean():.5f} singlet {imp[m].mean():.5f} ratio {imp[m].mean()/tr[m].mean():.3f} soupx ratio {d["soupx"]["imp"][m].mean()/tr[m].mean():.3f}')
+qs = np.quantile(n, np.linspace(0, 1, 6))
+for i in range(5):
+    m = (n >= qs[i]) & (n <= qs[i + 1])
+    print(f'depth quintile {i+1}: UMIs {qs[i]:.0f}-{qs[i+1]:.0f} n={int(m.sum())} truth {tr[m].mean():.5f} singlet {imp[m].mean():.5f} ratio {imp[m].mean()/tr[m].mean():.2f} | soupx {d["soupx"]["imp"][m].mean()/tr[m].mean():.2f}')
+print('singlet implied: min %.5f p10 %.5f median %.5f p90 %.5f max %.5f; truth median %.5f p90 %.5f' % (imp.min(), *np.quantile(imp, [.1, .5, .9]), imp.max(), np.median(tr), np.quantile(tr, .9)))
+print('corr(log n, log imp) singlet %.3f soupx %.3f truth %.3f' % tuple(np.corrcoef(np.log(n), np.log(np.maximum(x, 1e-6)))[0, 1] for x in (imp, d['soupx']['imp'], tr)))
