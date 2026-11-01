@@ -611,7 +611,9 @@ inline ExportStats export_results(const PileupEngine& engine,
                                                               with_introns ? &intron_csc : nullptr,
                                                               with_introns ? &engine.intron_names() : nullptr);
             // is_cell is EmptyDrops_CR on exon-only counts (STARsolo's Gene counts), the reference tool's own input
-            calledv2::GeneCounts gx_exon = calledv2::gene_counts(exon_csc, engine.exon_names(), nullptr, nullptr);
+            calledv2::GeneCounts gx_exon = calledv2::gene_counts(
+                exon_csc, engine.exon_names(), static_cast<const decltype(exon_csc)*>(nullptr),
+                static_cast<const std::vector<std::string>*>(nullptr));
             std::string proto = export_cfg.protocol_name;
             if (proto.empty() || proto == "unknown") {
                 auto it = export_cfg.user_meta.find("protocol");
