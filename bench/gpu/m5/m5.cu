@@ -191,29 +191,46 @@ __device__ __forceinline__ void p3one(const Params& P, const GenomeView& g, u64 
     for (int c = 0; c < 8; c++) { atomicAdd(&g_clk[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
     atomicAdd(&g_scan, (unsigned long long)nEnt[k]);
 }
-template <class C>
+// TAIL = false is the base kernel (cf92cdb9): a thread returns as soon as its read is done. TAIL = true (--tail) times blocks
+// and warps. Rounds 1-3 of E4 compiled the tail code into every k_p3: 94 registers instead of the base's 80 in lanes A and M,
+// and phase 3 15-23% slower than the base build even with the timers off (job 795308, base13 vs v0raw), so it is --tail only.
+template <class C, bool TAIL>
 __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* nEnt, const u64* base,
                      const uint32_t* bits, uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap, const uint32_t* perm, Tail tl) {
-    unsigned long long t0 = 0; tailBegin(tl, t0);
-    u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
-    if (t < n) {
+    if constexpr (!TAIL) {
+        u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+        if (t >= n) return;
         u64 k = perm ? perm[t] : t;   // --bin / --p3order: threads take the batch's reads in another order (each read is independent)
         p3one<C>(P, g, b0, k, budget, work, rbuf, nEnt, base, bits, status, out, outLen, why, unmap);
+    } else {
+        unsigned long long t0 = 0; tailBegin(tl, t0);
+        u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+        if (t < n) {
+            u64 k = perm ? perm[t] : t;
+            p3one<C>(P, g, b0, k, budget, work, rbuf, nEnt, base, bits, status, out, outLen, why, unmap);
+        }
+        if (tl.blkStart) tailEnd(tl, t < n ? gtime() - t0 : 0);
     }
-    if (tl.blkStart) tailEnd(tl, t < n ? gtime() - t0 : 0);
 }
 // --p3-maxreg: the same phase 3 under __launch_bounds__(BT, MINB), i.e. at most 65536 / (BT x MINB) registers per thread
-template <class C, int BT, int MINB>
+template <class C, int BT, int MINB, bool TAIL>
 __global__ void __launch_bounds__(BT, MINB) k_p3lb(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf,
                      const u64* nEnt, const u64* base, const uint32_t* bits, uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why,
                      int8_t* unmap, const uint32_t* perm, Tail tl) {
-    unsigned long long t0 = 0; tailBegin(tl, t0);
-    u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
-    if (t < n) {
+    if constexpr (!TAIL) {
+        u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+        if (t >= n) return;
         u64 k = perm ? perm[t] : t;
         p3one<C>(P, g, b0, k, budget, work, rbuf, nEnt, base, bits, status, out, outLen, why, unmap);
+    } else {
+        unsigned long long t0 = 0; tailBegin(tl, t0);
+        u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+        if (t < n) {
+            u64 k = perm ? perm[t] : t;
+            p3one<C>(P, g, b0, k, budget, work, rbuf, nEnt, base, bits, status, out, outLen, why, unmap);
+        }
+        if (tl.blkStart) tailEnd(tl, t < n ? gtime() - t0 : 0);
     }
-    if (tl.blkStart) tailEnd(tl, t < n ? gtime() - t0 : 0);
 }
 // --queue: persistent phase 3. A grid of resident blocks; each warp takes the next reads of the batch (in perm order) from an
 // atomic counter until none are left, so the batch no longer waits for its slowest block. Results are written by read index.
@@ -439,10 +456,10 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     decltype(&k_fused<C, 1>) fk = g_fusedLb >= 5 ? k_fused<C, 5> : g_fusedLb == 4 ? k_fused<C, 4> : k_fused<C, 1>;
     // --p3-block / --p3-maxreg: block size and register cap of the phase-3 kernel (k_p1, k_p2 keep 128 / 256 threads)
     const int T3 = fused ? T : g_p3T, wpb3 = T3 / 32;
-    decltype(&k_p3<C>) p3k = k_p3<C>;
+    decltype(&k_p3<C, false>) p3k = g_tail ? k_p3<C, true> : k_p3<C, false>;
     const int maxreg = g_p3MaxRegLane[li] >= 0 ? g_p3MaxRegLane[li] : g_p3MaxReg;
-    if (maxreg == 64) p3k = T3 == 32 ? k_p3lb<C, 32, 32> : k_p3lb<C, 128, 8>;
-    else if (maxreg == 80) p3k = T3 == 32 ? k_p3lb<C, 32, 25> : k_p3lb<C, 128, 6>;
+    if (maxreg == 64) p3k = g_tail ? (T3 == 32 ? k_p3lb<C, 32, 32, true> : k_p3lb<C, 128, 8, true>) : (T3 == 32 ? k_p3lb<C, 32, 32, false> : k_p3lb<C, 128, 8, false>);
+    else if (maxreg == 80) p3k = g_tail ? (T3 == 32 ? k_p3lb<C, 32, 25, true> : k_p3lb<C, 128, 6, true>) : (T3 == 32 ? k_p3lb<C, 32, 25, false> : k_p3lb<C, 128, 6, false>);
     { cudaFuncAttributes fa; CK(cudaFuncGetAttributes(&fa, fused ? (const void*)fk : g_queue ? (const void*)k_p3q<C> : (const void*)p3k));
       L.p3Regs = fa.numRegs; L.p3Local = (int)fa.localSizeBytes; L.p3T = T3; }
     if (fused) CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, fk, T, 0));

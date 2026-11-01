@@ -73,15 +73,16 @@ R3="$R3;bestE1b32:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 1310
 # active-threads-per-instruction metrics. With --reps 1 lane A runs 2 x 8 k_p3 launches: skip 1 = A's 2nd, skip 16 = M's 1st.
 NCUL=""; [ "${ROUND:-1}" = 3 ] && NCUL="v0A|--presort|1;sigA|--presort --p3order sig|1;wdescA|--presort --p3order warp-desc|1;v0M|--presort|16;b32A|--presort --p3-block 32|1"
 NCUL=${E4NCU-$NCUL}
-# round 4 (ROUND=4): combinations of the round-3 winners: register cap 64 per lane (A, M; B keeps 94 or gets 80), the best
-# order (+ warp-desc on A), and the batch sizes 512k / 384k / 128k and E1's 1M / 512k / 128k
-R4="v0t:--presort --tail;best:--best-order;bestr64:--best-order --p3-maxreg 64;bestr64am:--best-order --p3-maxreg-a 64 --p3-maxreg-m 64"
-R4="$R4;bestwr64am:--best-order --p3order-a warp-desc --p3-maxreg-a 64 --p3-maxreg-m 64;bestr64amb80:--best-order --p3-maxreg-a 64 --p3-maxreg-m 64 --p3-maxreg-b 80"
-R4="$R4;bestv5r64am:--best-order --batch-a 524288 --batch-m 393216 --batch-b 131072 --p3-maxreg-a 64 --p3-maxreg-m 64"
+# round 4 (ROUND=4), on the build whose k_p3 has no tail code unless --tail (rounds 1-3 always had it: 94 instead of 80 registers
+# in lanes A and M, phase 3 15-23% slower than the base build). The reference build and the main variants again, then the
+# combinations of the round-3 winners: register cap 64 per lane, the best order (+ warp-desc on A), larger batches.
+R4="base13:@m5-cf92cdb987;v0raw:;v0:--presort;v0t:--presort --tail;best:--best-order;v1bin:--presort --bin;v1nw:--presort --p3order nw-desc"
+R4="$R4;sig:--presort --p3order sig;wdesc:--presort --p3order warp-desc;b32:--presort --p3-block 32;q:--presort --queue;r64:--presort --p3-maxreg 64"
+R4="$R4;bestwA:--best-order --p3order-a warp-desc;bestr64:--best-order --p3-maxreg 64;bestr64am:--best-order --p3-maxreg-a 64 --p3-maxreg-m 64"
+R4="$R4;v4bigB1:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072;v5best:--best-order --batch-a 524288 --batch-m 393216 --batch-b 131072"
 R4="$R4;bestE1:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072;bestE1r64am:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-maxreg-a 64 --p3-maxreg-m 64"
-R4="$R4;bestE1wr64am:--best-order --p3order-a warp-desc --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-maxreg-a 64 --p3-maxreg-m 64"
-R4="$R4;bestE1r64amt:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-maxreg-a 64 --p3-maxreg-m 64 --tail;v0b:--presort"
-[ "${ROUND:-1}" = 4 ] && NCUL="r64A|--presort --p3-maxreg 64|1;r64M|--presort --p3-maxreg 64|16" && NCUL=${E4NCU-$NCUL}
+R4="$R4;bestE1wr64am:--best-order --p3order-a warp-desc --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-maxreg-a 64 --p3-maxreg-m 64;v0b:--presort"
+[ "${ROUND:-1}" = 4 ] && NCUL="v0A|--presort|1;v0M|--presort|16" && NCUL=${E4NCU-$NCUL}
 [ "${ROUND:-1}" = 2 ] && DEFAULT=$R2
 [ "${ROUND:-1}" = 4 ] && DEFAULT=$R4
 [ "${ROUND:-1}" = 3 ] && DEFAULT=$R3
