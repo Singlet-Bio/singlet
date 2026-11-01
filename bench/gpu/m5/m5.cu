@@ -252,7 +252,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     long long* dScanCyc = nullptr; void* dCen = nullptr; void* dCenWin = nullptr; unsigned long long* dCenWinN = nullptr; u64 cenWinCap = 0;
 #ifdef M5_CENSUS
     CK(cudaMalloc(&dScanCyc, NB * 8)); CK(cudaMalloc(&dCen, n * sizeof(CenRead))); CK(cudaMemset(dCen, 0, n * sizeof(CenRead)));
-    cenWinCap = n * (u64)std::min(C::NW, 32) + 1024; CK(cudaMalloc(&dCenWin, cenWinCap * sizeof(CenWin))); CK(cudaMalloc(&dCenWinN, 8));
+    cenWinCap = n * (u64)C::NW + 1024; CK(cudaMalloc(&dCenWin, cenWinCap * sizeof(CenWin))); CK(cudaMalloc(&dCenWinN, 8));
 #endif
     fprintf(stderr, "lane %s (staged): %llu reads, batches of %llu, work %zu B/read (%.2f GB)\n", name, n, NB, sizeof(Work<C>),
             NB * (double)sizeof(Work<C>) / 1e9);
