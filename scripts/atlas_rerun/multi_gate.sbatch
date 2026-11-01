@@ -36,7 +36,7 @@ PY
 cat > $T/keep.sh <<'SH'
 #!/bin/bash
 # publish hook: keep the outputs for the comparison (real publish is not exercised here)
-mkdir -p "$1/$2" && cp -r "$3" "$1/$2/"
+mkdir -p "$1/$2" && cp -r "$3" "$1/$2/" && cp "$(dirname "$3")/singlet.log" "$(dirname "$3")/time.txt" "$1/$2/" 2>/dev/null; true
 SH
 chmod +x $T/keep.sh
 
