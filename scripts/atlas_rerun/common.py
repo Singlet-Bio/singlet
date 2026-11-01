@@ -88,6 +88,24 @@ def job_slots(node_gb, node_cores, threads, peak_gb=33.4, shared_gb=17.8, fill=0
     return max(1, min(by_mem, by_cpu)) if by_mem > 0 else max(1, by_cpu)
 
 
+def whitelist_dir_for(binary):
+    """Where singlet looks for its barcode whitelists: <real path of the binary>/../whitelists (it resolves /proc/self/exe)."""
+    return os.path.join(os.path.dirname(os.path.realpath(binary)), "..", "whitelists")
+
+
+def require_whitelists(binary, names=("3M-february-2018.txt", "737K-august-2016.txt")):
+    """Fail fast when the engine cannot find its whitelists. Without <binary dir>/../whitelists the run does not stop: it silently takes the sorted-BAM
+    pileup (pileup_threads > 1) instead of the stream / GPU pileup, a different and slower path with different memory and thread behaviour
+    (S8, 2026-10-31). $S9_NO_WL_CHECK=1 skips the check (tests with a fake engine). Raises SystemExit(3)."""
+    if os.environ.get("S9_NO_WL_CHECK"):
+        return
+    d = whitelist_dir_for(binary)
+    missing = [n for n in names if not os.path.isfile(os.path.join(d, n))]
+    if missing:
+        raise SystemExit("[atlas_rerun] FATAL: %s not found in %s (the engine %s resolves <binary dir>/../whitelists): the campaign would silently run "
+                         "the sorted-BAM pileup. Put the binary where ../whitelists exists, or symlink the directory." % (", ".join(missing), os.path.normpath(d), binary))
+
+
 def staged_reads(sdir):
     """True when a sample's staged reads are on disk: the pooled sample.1fq or the per-run <run>.1fq files."""
     if os.path.exists(os.path.join(sdir, "sample.1fq")):

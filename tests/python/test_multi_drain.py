@@ -142,6 +142,31 @@ def test_launcher_shared_class_and_script():
     assert d["h100"] == 3 and sorted(d["h100_classes"]) == [370, 370, 720]       # 6e10 pairs / 1.0 M/s = 16.7 h of work: all three GPUs
 
 
+def test_workers_fail_fast_without_the_whitelists(tmp_path, monkeypatch):
+    # the engine resolves <binary dir>/../whitelists; without it a run silently takes the sorted-BAM pileup (S8)
+    monkeypatch.delenv("S9_NO_WL_CHECK", raising=False)
+    (tmp_path / "bin").mkdir()
+    binary = tmp_path / "bin" / "singlet"
+    binary.write_text("x")
+    with pytest.raises(SystemExit) as e:
+        C.require_whitelists(str(binary))
+    assert "3M-february-2018.txt" in str(e.value) and "sorted-BAM" in str(e.value)
+    (tmp_path / "whitelists").mkdir()
+    (tmp_path / "whitelists" / "3M-february-2018.txt").write_text("A\n")
+    with pytest.raises(SystemExit):
+        C.require_whitelists(str(binary))            # one list is not enough
+    (tmp_path / "whitelists" / "737K-august-2016.txt").write_text("A\n")
+    C.require_whitelists(str(binary))                # complete: fine
+    monkeypatch.setenv("S9_NO_WL_CHECK", "1")
+    C.require_whitelists(str(tmp_path / "elsewhere" / "singlet"))   # bypass for tests with a fake engine
+
+
+def test_pileup_threads_reader(tmp_path):
+    assert M.pileup_threads(str(tmp_path)) is None
+    (tmp_path / "pileup_stats.json").write_text(json.dumps({"pileup_threads": 1}))
+    assert M.pileup_threads(str(tmp_path)) == 1
+
+
 # ── end to end with a fake engine ───────────────────────────────────────────────────────────────────────────────────
 
 FAKE = """#!/usr/bin/env python3
@@ -177,7 +202,7 @@ def test_drain_end_to_end(tmp_path):
         json.dump({"pairs": mp * M_, "bytes": 10, "runs": ["sample"], "gse": "GSE1"}, open(os.path.join(d, "manifest.json"), "w"))
     r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "multi_drain.py"), "--stage", stage, "--config", str(cfg), "--concurrency", "3",
                         "--scratch", str(tmp_path / "scr"), "--mem-gb", "370", "--idle-exit-min", "0.05", "--publish", "none"],
-                       capture_output=True, text=True, timeout=170)
+                       capture_output=True, text=True, timeout=170, env=dict(os.environ, S9_NO_WL_CHECK="1"))
     assert r.returncode == 0, r.stdout + r.stderr
     assert os.listdir(os.path.join(stage, "ready")) == ["GSM5"]        # 900 M pairs: left for the whole-node class, not lost, not failed
     assert sorted(os.listdir(os.path.join(stage, "failed"))) == ["GSM3.2", "GSM4.2"]   # requeued once, then failed

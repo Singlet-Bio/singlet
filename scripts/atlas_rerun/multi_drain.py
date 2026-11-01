@@ -173,6 +173,14 @@ def parse_time_v(path):
         return None
 
 
+def pileup_threads(out_dir):
+    """pileup_threads of pileup_stats.json: 1 on the stream / GPU pileup, the thread count on the sorted-BAM path (None: not found)."""
+    try:
+        return json.load(open(os.path.join(out_dir, "pileup_stats.json"))).get("pileup_threads")
+    except (OSError, ValueError):
+        return None
+
+
 def dir_bytes(path):
     n = 0
     for r, _, names in os.walk(path):
@@ -245,6 +253,9 @@ class Run(threading.Thread):
                 self.result = settle_failure(a, root, gsm, claim, man, "oom" if oom else "rc_%d" % rc, tail, self.mem_est if oom else None)
                 return
             tmp_b = dir_bytes(scr)
+            pt = pileup_threads(os.path.join(scr, "out"))
+            if pt not in (1, None):
+                log("[multi] WARNING %s: pileup_threads=%s - the sorted-BAM pileup ran, not the stream / GPU pileup (whitelists missing next to the binary?)" % (gsm, pt))
             up = D.publish(a, man, os.path.join(scr, "out"), self.cfg, self.ccfg, scr, claim)
             pub, _n, _priv = D.checksum_outputs(os.path.join(scr, "out"))
             if self.heart.lost or not os.path.isdir(claim):
@@ -255,7 +266,7 @@ class Run(threading.Thread):
             pairs = man.get("pairs", 0)
             C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine="gpu", compute_s=round(compute_s, 1),
                    wall_s=round(time.time() - self.t0, 1), pairs=pairs, staged_bytes=man.get("bytes"), out_public_bytes=pub, publish=up,
-                   peak_rss_gb=peak, est_peak_gb=round(self.mem_est, 1), scratch_bytes=tmp_b, via="multi", concurrent=man.get("_n_running"))
+                   peak_rss_gb=peak, est_peak_gb=round(self.mem_est, 1), scratch_bytes=tmp_b, pileup_threads=pt, via="multi", concurrent=man.get("_n_running"))
             self.result = "done %.0fs %.3f Mpairs/s own, peak %s GB (est %.0f), scratch %.1f GB" % (
                 compute_s, pairs / 1e6 / max(compute_s, 1e-9), "%.1f" % peak if peak else "?", self.mem_est, tmp_b / 1e9)
         except Q.Preempted:
@@ -305,6 +316,7 @@ def main():
     a.extra = shlex.split(a.extra_args)
     cfg = C.load_config(a.config)
     ccfg = C.cluster_cfg(cfg, a.cluster)
+    C.require_whitelists(ccfg.get("binary") or cfg["binary"]["path"])
     env = dict(os.environ)
     if ccfg.get("whitelist_dir"):
         env["SINGLET_WHITELIST_DIR"] = ccfg["whitelist_dir"]
