@@ -1266,6 +1266,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it, held it " << heldS << " s\n" << out.log << out.e10.log;
     decltype(in.e10.aux)().swap(in.e10.aux);
+    if (!ok && out.budgetFail) {   // E17: the sample does not fit the device memory budget: stop with the reason, unless the CPU is wanted instead
+        const char* fb = std::getenv("SINGLET_ENGINE_GPU_MEM_FALLBACK");
+        if (!(fb && std::string(fb) == "cpu"))
+            exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E17): the sample does not fit the device memory budget: " + out.budgetWhy + "\n",
+                          std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        P.inOut->logMain << "ENGINE_GPU: E17: SINGLET_ENGINE_GPU_MEM_FALLBACK=cpu: STAR maps every read (" << out.budgetWhy << ")\n";
+    }
     if (!ok) { e10f.release(); return skip("GPU mapping failed"); }
     bool e10ok = out.e10.ok;   // E10: the device wrote the entries and masks into the region and computed the per-read products
     // E11: level 5 when the engine kept Solo's inputs (then no summaries: no read with a record reaches STAR's loop); otherwise level 3
