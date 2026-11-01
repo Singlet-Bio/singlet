@@ -953,12 +953,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // the reads' phase without the index (upload and E10 entries, the clipped copy, the dedup, the compaction to the distinct sequences)
     auto readsPhase = [&](bool lean) {
         const u64 ek = lean ? 0 : ENT + QM + KEEP;
-        return std::max({RD + n0 * 28 + AUX + ENT + QM + (lean ? 0 : KEEP), RD + ek + CLIP, RD + ek + 53 * n0, RD + ek + RD + 8 * n0});
+        return std::max({RD + n0 * 28 + AUX + ENT + QM + (lean ? 0 : KEEP), RD + ek + CLIP, RD + ek + 53 * n0, lean ? 0 : RD + ek + RD + 8 * n0});   // lean: no compaction
     };
     const u64 minLanes = std::max({laneNeed(4096, 4096, laneSlotB<LaneA>(), lanePerB<LaneA, false>()),
                                    laneNeed(4096, 4096, laneSlotB<LaneM>(), lanePerB<LaneM, false>()), laneNeed(1024, 1024, laneSlotB<LaneB>(), lanePerB<LaneB, false>())});
     const u64 needNormal = ctx + TAB + SLACK + IDX + std::max(readsPhase(false), RD + ENT + QM + KEEP + minLanes);
-    const u64 needLean = ctx + TAB + SLACK + std::max(readsPhase(true), IDX + RD + minLanes);
+    const u64 needLean = ctx + TAB + SLACK + std::max(readsPhase(true), IDX + minLanes + (64ull << 20));   // lean: a chunk's sequences on the device
     const char* lnE = std::getenv("SINGLET_ENGINE_GPU_LEAN");   // E17 debug: 1 forces the lean mode, 0 the normal one (with a budget)
     const bool lean = cap && (lnE ? std::string(lnE) == "1" : needNormal > cap);
     {
@@ -1242,7 +1242,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             if (g_d2h ? !g_d2h->copy(rep.data(), dRep, nRep * 4) : cudaMemcpy(rep.data(), dRep, nRep * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
             dfree(dKey);
         }
-        if (!compact(dRep, nRep)) return fail("out of device memory (the distinct sequences)");
+        if (!lean && !compact(dRep, nRep)) return fail("out of device memory (the distinct sequences)");
         dfree(dRep);
     } else {
     std::vector<uint32_t> order(n), head(n); std::vector<uint8_t> hasN(n);
@@ -1268,9 +1268,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             if (cudaMemcpy(rep.data(), dRep, rep.size() * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
         }
         dfree(dKey);
-        if (!compact(dRep, rep.size())) return fail("out of device memory (the distinct sequences)");
+        if (!lean && !compact(dRep, rep.size())) return fail("out of device memory (the distinct sequences)");
         dfree(dRep);
     }
+    if (lean) { dfree(dSeq); dfree(dOff); dSeq = nullptr; dOff = nullptr; }   // E17 lean: each chunk's sequences are uploaded with it (gpuPart)
     out.secDedup = now() - t0;
     step("dedup.order");
     memMark("dedup");
@@ -1357,7 +1358,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                               + gbs(minLanes) + " of their smallest batches, within " + budName + budHint);
         const u64 m0 = std::min<u64>(CHUNK, std::max<u64>(1, nRep));
         if (!ceE && laneNeed(m0, nbA, slotA, perA) > avail0) {   // a smaller chunk: about 15% of the room for lane A's result slots, then balanced
-            CHUNK = std::min<u64>(CHUNK, std::max<u64>(1u << 18, (u64)((double)avail0 * 0.15) / slotA / 65536 * 65536));
+            const u64 sl = slotA + (lean ? S0 / std::max<u64>(1, n0) + 9 : 0);   // lean: the chunk's sequences too
+            CHUNK = std::min<u64>(CHUNK, std::max<u64>(1u << 18, (u64)((double)avail0 * 0.15) / sl / 65536 * 65536));
             const u64 k = std::max<u64>(1, (nRep + CHUNK - 1) / CHUNK);
             CHUNK = std::max<u64>(1u << 18, ((nRep + k - 1) / k + 4095) / 4096 * 4096);
         }
@@ -1408,16 +1410,34 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             return false;
         };
         // E17: the device holds the distinct sequences by position (compacted after the dedup): ixA / ixM / ixB, the reads repc / repM / repB (host)
+        // E17 lean: only this chunk's sequences on the device (from the host's clipped reads, the bytes the device clipped), by position in the chunk
+        const char* dS = dSeq; const u64* dO = dOff; char* dSc = nullptr; u64* dOc = nullptr;
+        struct ChunkFree { char*& s; u64*& o; ~ChunkFree() { dfree(s); dfree(o); } } chunkFree{dSc, dOc};
+        const u64 base = lean ? 0 : c0;
+        if (lean) {
+            const double tu = now();
+            std::vector<u64> ho(repc.size() + 1, 0);
+            for (u64 k = 0; k < repc.size(); k++) ho[k + 1] = ho[k] + rlen(repc[k]);
+            std::vector<char> hs(ho.back() + 8);
+            parallelFor(repc.size(), hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) std::memcpy(hs.data() + ho[k], rseq(repc[k]), ho[k + 1] - ho[k]); });
+            g_bud.at = "chunk sequences";
+            if (dmal(&dSc, hs.size()) != cudaSuccess || dmal(&dOc, ho.size() * 8 + 8) != cudaSuccess) { err = "out of device memory (the chunk's sequences)"; return false; }
+            if (cudaMemcpy(dSc, hs.data(), hs.size(), cudaMemcpyHostToDevice) != cudaSuccess || cudaMemcpy(dOc, ho.data(), ho.size() * 8, cudaMemcpyHostToDevice) != cudaSuccess) {
+                err = "the chunk's sequences upload"; return false;
+            }
+            dS = dSc; dO = dOc;
+            stepAdd("lanes.seq.h2d", now() - tu);
+        }
         std::vector<uint32_t> ixA(repc.size());
-        for (u64 k = 0; k < repc.size(); k++) ixA[k] = (uint32_t)(c0 + k);
+        for (u64 k = 0; k < repc.size(); k++) ixA[k] = (uint32_t)(base + k);
         // reads in flight per lane (nbA, nbM, nbB): Work + ReadBuf per read are 36 KB (A), 68 KB (M), 550 KB (B)
         u64 nbAc = nbA, partA = 0, nPA = 1, nPM = 1, nPB = 1;
         if (cap && !lanePlan(repc.size(), availNow(), slotA, perA, nbA, nbAset ? nbA : 4096, 4096, nbAc, partA)) return noFit("A", repc.size(), availNow());
-        if (!runLaneParts<LaneA, false, 64>(P, D, dSeq, dOff, ixA, nbAc, partA, 1024, A, err, resident, "A", NEW, nullptr, nPA)) return false;
+        if (!runLaneParts<LaneA, false, 64>(P, D, dS, dO, ixA, nbAc, partA, 1024, A, err, resident, "A", NEW, nullptr, nPA)) return false;
         if (nPA > 1) { allRes = false; resident = false; }
         double th = now();
         std::vector<uint32_t> repM, posM, ixM;
-        for (u64 k = 0; k < repc.size(); k++) if (A.status[k] != (uint8_t)Status::Ok) { repM.push_back(repc[k]); posM.push_back((uint32_t)k); ixM.push_back((uint32_t)(c0 + k)); }
+        for (u64 k = 0; k < repc.size(); k++) if (A.status[k] != (uint8_t)Status::Ok) { repM.push_back(repc[k]); posM.push_back((uint32_t)k); ixM.push_back((uint32_t)(base + k)); }
         stepAdd("lanes.host", now() - th);
         bool wM = warpM; u64 nbMc = nbM, partM = 0;
         if (cap && !repM.empty()) {   // E17: the warp lane when its stack and a batch of 32768 (or all of lane M) fit next to all its slots; else thread per read
@@ -1428,8 +1448,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             if (wM) nbMc = nb;
             else if (!lanePlan(repM.size(), av, slotM, perMt, nbM, nbMset ? nbM : 4096, 4096, nbMc, partM)) return noFit("M", repM.size(), av);
         }
-        if (!(wM ? runLaneParts<LaneM, true>(P, D, dSeq, dOff, ixM, nbMc, partM, 2048, M, err, resident, "M", NEW, nullptr, nPM)
-                 : runLaneParts<LaneM>(P, D, dSeq, dOff, ixM, nbMc, partM, 2048, M, err, resident, "M", NEW, nullptr, nPM))) return false;
+        if (!(wM ? runLaneParts<LaneM, true>(P, D, dS, dO, ixM, nbMc, partM, 2048, M, err, resident, "M", NEW, nullptr, nPM)
+                 : runLaneParts<LaneM>(P, D, dS, dO, ixM, nbMc, partM, 2048, M, err, resident, "M", NEW, nullptr, nPM))) return false;
         if (nPM > 1) { allRes = false; resident = false; }
         th = now();
         std::vector<uint32_t> repB, posB, ixB;
@@ -1457,7 +1477,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                 pool->push(v);
             };
         }
-        if (!runLaneParts<LaneB>(P, D, dSeq, dOff, ixB, nbB, partB, 2048, B, err, resident, "B", NEW, pool ? &onB : nullptr, nPB)) return false;
+        if (!runLaneParts<LaneB>(P, D, dS, dO, ixB, nbB, partB, 2048, B, err, resident, "B", NEW, pool ? &onB : nullptr, nPB)) return false;
         if (nPB > 1) { allRes = false; resident = false; }
         {
             char pl[320];
