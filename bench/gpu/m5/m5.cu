@@ -205,18 +205,26 @@ __global__ void k_p3a(Params P, GenomeView g, u64 n, Work<C>* work, const u64* b
 }
 template <class C, class LW>
 __global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* nEnt,
-                      uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap, const uint32_t* perm, int stats) {
-    extern __shared__ uint16_t wlAll[];
-    const int lane = threadIdx.x & 31;
+                      uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap, const uint32_t* perm, int stats,
+                      const u64* base, const uint32_t* bits, int inAssign) {
+    // shared memory: per warp, 32 AssignEnt (warp assignment), then C::NW window indices
+    extern __shared__ unsigned long long shAll[];
+    const int lane = threadIdx.x & 31, wib = threadIdx.x >> 5;
     const u64 wid = (blockIdx.x * (u64)blockDim.x + threadIdx.x) >> 5;
     if (wid >= n) return;   // whole warps
-    uint16_t* wl = wlAll + (threadIdx.x >> 5) * C::NW;
+    AssignEnt* E = reinterpret_cast<AssignEnt*>(shAll) + wib * 32;
+    uint16_t* wl = reinterpret_cast<uint16_t*>(reinterpret_cast<AssignEnt*>(shAll) + (blockDim.x >> 5) * 32) + wib * C::NW;
     const u64 k = perm ? perm[wid] : wid;
     Work<C>& W = work[k];
     const u64 o = b0 + k;
     Status s = (Status)status[k];
     Blob bl{out + o * C::NBLOB, 0, C::NBLOB, false};
     unsigned long long* ws = stats ? g_ws : nullptr;
+    if (inAssign && s == Status::Ok && W.stitched) {
+        const long long ta = clock64();
+        if (!warpAssign(P, g, W, bits, base[k], E)) s = Status::Overflow;
+        if (ws && lane == 0) atomicAdd(&ws[WS_CLK_ASSIGN], (unsigned long long)(clock64() - ta));
+    }
     if (s == Status::Ok) {
         W.stepBudget = budget;
         if (!W.stitched || W.nW == 0) {
@@ -246,6 +254,7 @@ __global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>
 static int g_wthreads = 64;     // --wthreads: block size of k_p3w (warps per block = /32)
 static bool g_wsort = false;    // --wsort: k_p3w takes the batch's reads by window count, most first
 static bool g_wstats = true;    // --no-wstats: no warp-lane histograms
+static bool g_wassign = false;  // --wassign: the assignment inside k_p3w, windows split over the lanes (stitch.cuh warpAssign)
 static bool g_bin = false;
 __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
@@ -298,11 +307,12 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
                     k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm, true);
                     thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
                 }
-                k_p3a<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst);
+                if (!g_wassign) k_p3a<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst);
                 cudaEventRecord(q[3]);
                 const int wt = g_wthreads; const unsigned GW = (unsigned)((nb * 32 + wt - 1) / wt);
-                k_p3w<C, LW><<<GW, wt, (wt / 32) * C::NW * sizeof(uint16_t)>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBst, dOut, dLen, dWhy, dUn,
-                                                                            g_wsort ? dPerm : nullptr, g_wstats ? 1 : 0);
+                const size_t sh = (wt / 32) * (32 * sizeof(AssignEnt) + C::NW * sizeof(uint16_t));
+                k_p3w<C, LW><<<GW, wt, sh>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBst, dOut, dLen, dWhy, dUn,
+                                             g_wsort ? dPerm : nullptr, g_wstats ? 1 : 0, dBase, dBits, g_wassign ? 1 : 0);
             } else {
                 if (g_bin) {
                     k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm);
@@ -473,6 +483,7 @@ int main(int argc, char** argv) {
         else if (a == "--wb-cfg") wbCfg = atoi(argv[++i]);   // lane B's per-lane capacities: 0 = LWB0, 1 = LWB1
         else if (a == "--wthreads") g_wthreads = atoi(argv[++i]);
         else if (a == "--wsort") g_wsort = true;
+        else if (a == "--wassign") g_wassign = true;
         else if (a == "--no-wstats") g_wstats = false;
         else if (a == "--host-emul") hostEmul = true;    // the warp lanes' algorithm emulated on the host for every read, vs the truth
         else if (a == "--tag") tag = argv[++i];
@@ -799,8 +810,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "    unmapped by STAR: %llu (%llu identical), mapped: %llu (%llu identical)\n", classN[0], classSame[0], classN[1], classSame[1]);
     fprintf(stderr, "    GPU lane A %.1f ms (%llu reads), lane M %.1f ms (%zu reads), lane B %.1f ms (%zu reads) = %.2f M distinct reads/s on the GPU\n",
             A.ms, n, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), rate / 1e6);
-    fprintf(stderr, "    E3 %s: warp M %d, warp B %d (cfg %d), wsort %d, wthreads %d; lanes M+B %.1f ms\n", tag.c_str(), (int)warpM, (int)warpB, wbCfg,
-            (int)g_wsort, g_wthreads, M.ms + B.ms);
+    fprintf(stderr, "    E3 %s: warp M %d, warp B %d (cfg %d), wsort %d, wassign %d, wthreads %d; lanes M+B %.1f ms\n", tag.c_str(), (int)warpM, (int)warpB, wbCfg,
+            (int)g_wsort, (int)g_wassign, g_wthreads, M.ms + B.ms);
     { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
       fprintf(stderr, "    lane M overflow why:"); for (int k = 0; k < 12; k++) if (whyM[k]) fprintf(stderr, " %s=%llu", wn[k], whyM[k]); fprintf(stderr, "\n"); }
     { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
@@ -836,8 +847,8 @@ int main(int argc, char** argv) {
             for (int k = 0; k < WS_N; k++) fprintf(g, "%s%llu", k ? ", " : "", L.ws[k]);
             fprintf(g, "]}%s\n", last ? "" : ",");
         };
-        fprintf(g, "{\n  \"tag\": \"%s\", \"warp_m\": %s, \"warp_b\": %s, \"wb_cfg\": %d, \"wsort\": %s, \"wthreads\": %d, \"batch\": [%lld, %lld, %lld], \"budget\": [%lld, %lld, %lld],\n",
-                tag.c_str(), warpM ? "true" : "false", warpB ? "true" : "false", wbCfg, g_wsort ? "true" : "false", g_wthreads, nbA, nbM, nbB, budgetA, budgetM, budgetB);
+        fprintf(g, "{\n  \"tag\": \"%s\", \"warp_m\": %s, \"warp_b\": %s, \"wb_cfg\": %d, \"wsort\": %s, \"wassign\": %s, \"wthreads\": %d, \"batch\": [%lld, %lld, %lld], \"budget\": [%lld, %lld, %lld],\n",
+                tag.c_str(), warpM ? "true" : "false", warpB ? "true" : "false", wbCfg, g_wsort ? "true" : "false", g_wassign ? "true" : "false", g_wthreads, nbA, nbM, nbB, budgetA, budgetM, budgetB);
         fprintf(g, "  \"distinct_reads\": %llu, \"identical_distinct\": %llu, \"gpu_ms\": %.3f, \"lanes_mb_ms\": %.3f, \"m_distinct_per_s\": %.4f, \"heavy_reads\": %zu,\n",
                 n, same, gpuMs, M.ms + B.ms, rate / 1e6, heavy.size());
         fprintf(g, "  \"host_emul\": {\"run\": %s, \"reads\": %llu, \"identical\": %llu, \"at\": [%llu, %llu, %llu], \"warp_reads\": [%llu, %llu], \"fallback\": [%llu, %llu], \"shadow_diff\": [%llu, %llu], \"mate_only\": [%llu, %llu], \"s\": %.1f},\n",

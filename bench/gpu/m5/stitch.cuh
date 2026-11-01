@@ -1774,6 +1774,82 @@ __device__ inline void warpHist(unsigned long long* ws, int base, bool valid, in
         if (lane == 0 && m) atomicAdd(&ws[base + q], (unsigned long long)__popc(m));
     }
 }
+// The assignment (assignHits) with the windows split over the lanes: window iW belongs to lane iW & 31. The warp walks the
+// read's marked SA entries 32 at a time in STAR's order (pieces, then SA order); lane q decodes the chunk's q-th entry into
+// E[q] (shared memory, one per lane); then every lane applies, in entry order, the parts (sjdb donor before acceptor) that
+// fall into its own windows. A window's aligns (WA, nWA, WALrec) depend only on the entries that fall into it, in their
+// order, and nothing else changes winBin or another window's state, so every window ends with STAR's aligns. After
+// MARKER_TOO_MANY_ANCHORS_PER_WINDOW (nW = 0) nothing is observable (the caller sees nW = 0); an overflow in an entry STAR
+// would not have reached after that marker sends the read to the next lane (exact there).
+struct AssignEnt { u64 a1D, a1A, sj; uint32_t LD, LA, rD, rA; uint16_t wD, wA; uint8_t str; };
+template <class C>
+__device__ inline bool warpAssign(const Params& P, const GenomeView& gv, Work<C>& W, const uint32_t* bits, u64 base, AssignEnt* E) {
+    const unsigned FULL = 0xffffffffu;
+    const int lane = threadIdx.x & 31;
+    const uint16_t NONE = 0xFFFF;
+    bool ok = true;
+    u64 off = base;
+    const uint nP = W.nP;
+    for (uint iP = 0; iP < nP; iP++) {
+        const uint s0 = W.PC[iP][PC_SAstart];
+        const u64 cnt = W.PC[iP][PC_SAend] - s0 + 1;
+        const uint aNrep = W.PC[iP][PC_Nrep], aFrag = W.PC[iP][PC_iFrag], aLength = W.PC[iP][PC_Length], aDir = W.PC[iP][PC_Dir];
+        const bool aAnchor = (aNrep <= P.winAnchorMultimapNmax);
+        const uint rS0 = W.PC[iP][PC_rStart], rS1 = W.Lread - (aLength + rS0);
+        for (u64 c = 0; c < cnt; c += 32) {
+            const u64 j = c + lane;
+            bool mk = false;
+            if (j < cnt) { const u64 b = off + j; mk = (bits[b >> 5] >> (b & 31)) & 1u; }
+            const unsigned m = __ballot_sync(FULL, mk);
+            if (!m) continue;
+            if (mk) {
+                AssignEnt& e = E[lane];
+                e.wD = NONE; e.wA = NONE;
+                uint a1 = packed_get(gv.SA, s0 + j, gv.saBits);
+                const uint s = a1 >> gv.GstrandBit;
+                a1 &= gv.GstrandMask;
+                if (s == 1) a1 = gv.nGenome - (aLength + a1);
+                const uint aStr = (aDir == 0) ? s : 1 - s;                 // strOf[s]
+                const uint aRstart = ((aDir == 0) == (s == 0)) ? rS0 : rS1;  // rsOf[s]
+                e.str = (uint8_t)aStr;
+                if (a1 >= gv.sjGstart) {
+                    uint a1D, aLengthD, a1A, aLengthA, isj1;
+                    if (sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) {
+                        const uint wD = wbGet(W, aStr, a1D >> P.winBinNbits), wA = wbGet(W, aStr, a1A >> P.winBinNbits);
+                        e.a1D = a1D; e.LD = (uint32_t)aLengthD; e.rD = (uint32_t)aRstart;
+                        e.a1A = a1A; e.LA = (uint32_t)aLengthA; e.rA = (uint32_t)(aRstart + aLengthD); e.sj = isj1;
+                        if (wD != uintWinBinMax) e.wD = (uint16_t)wD;
+                        if (wA != uintWinBinMax) e.wA = (uint16_t)wA;
+                    }
+                } else {
+                    const uint wD = wbGet(W, aStr, a1 >> P.winBinNbits);
+                    e.a1D = a1; e.LD = (uint32_t)aLength; e.rD = (uint32_t)aRstart; e.sj = (uint)-1;
+                    if (wD != uintWinBinMax) e.wD = (uint16_t)wD;
+                }
+            }
+            __syncwarp();
+            unsigned myD = 0, myA = 0;
+            for (int q = 0; q < 32; q++) {
+                if (!((m >> q) & 1u)) continue;
+                const AssignEnt& e = E[q];
+                if (e.wD != NONE && (e.wD & 31) == lane) myD |= 1u << q;
+                if (e.wA != NONE && (e.wA & 31) == lane) myA |= 1u << q;
+            }
+            unsigned my = myD | myA;
+            while (my && ok) {
+                const int q = __ffs((int)my) - 1; my &= my - 1;
+                const AssignEnt& e = E[q];
+                if ((myD >> q) & 1u) ok = assignAlignToWindow(P, W, e.a1D, e.LD, e.str, aNrep, aFrag, e.rD, aAnchor, e.sj);
+                if (ok && ((myA >> q) & 1u)) ok = assignAlignToWindow(P, W, e.a1A, e.LA, e.str, aNrep, aFrag, e.rA, aAnchor, e.sj);
+            }
+            __syncwarp();
+            if (!__all_sync(FULL, ok)) return false;
+            if (M5_TOO_MANY_ANCHORS(W)) return true;   // nothing observable follows (STAR goes on with nW = 0)
+        }
+        off += cnt;
+    }
+    return true;
+}
 // The warp driver: called by all 32 lanes of a warp with the same read (W after the assignment, nW > 0); wl: the warp's
 // window list (C::NW entries, shared memory); L: this lane's context (local memory). Returns WR_DONE (M holds the merge
 // for warpSelect), WR_OVERFLOW (M.ov) or WR_FALLBACK (a lane-local capacity: the caller runs mapFinish on one thread).
