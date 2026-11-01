@@ -42,6 +42,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -94,7 +95,9 @@ struct IngPrep {
     std::string why, bcWhy, clipKey;        // clipKey: the ClipMates th0 clipped with (clipKeyOf)
     singlet_engine_gpu::ingest::PackedReads reads;   // th0's decode until ingPrepare takes it into `ing`
     std::chrono::steady_clock::time_point t0;
-    double secA = 0, doneA = 0, waitA = 0, secB = 0, secC = 0, doneC = 0, clipS = 0;
+    double secA = 0, doneA = 0, waitA = 0, secB = 0, secC = 0, doneC = 0, clipS = 0, clipGroupS = 0;
+    uint64 clipDistinct = 0;                // the distinct cDNA sequences the clip ran on
+    bool fromParent = false;                // phase A ran in the pipeline's process before STAR was forked (takeParent)
     int minQ = 0;
     uint32 nw = 0;
     std::vector<uint16> pre5, pre3;
@@ -490,27 +493,85 @@ std::string clipKeyOf(const ClipMate &m5, const ClipMate &m3) {
 
 // E13 phase C: STAR's CellRanger4 clip of every packed read with the mate-1 ClipMates m5 (type 10) and m3 (type 11), as readSequences runs
 // it (ClipMate::clipChunk's opal alignment of the TSO, 64 reads at a time, and readLoad's ClipMate::clip), on T threads over contiguous
-// read ranges, each with its own copy of the ClipMates and its own ClipCR4 (opal's buffers; STAR has one per chunk)
+// read ranges, each with its own copy of the ClipMates and its own ClipCR4 (opal's buffers; STAR has one per chunk).
+// A read's clip is a function of its sequence alone (its length and bases: the opal alignment, ClipMate::clip and polyTail3p read nothing
+// else, and opal's result for one sequence does not depend on the others in its batch of 64), so it runs once per distinct sequence: the
+// reads are grouped by an exact-match hash table (64-bit hash of length and bases, then the bytes compared), the read that took the group's
+// slot is clipped and the others copy its result. Half of a 10x sample's cDNA reads repeat another one. SINGLET_ENGINE_GPU_INGEST_CLIPDEDUP=0:
+// every read is clipped.
 void cr4Clip(const singlet_engine_gpu::ingest::PackedReads &R, const ClipMate &m5, const ClipMate &m3, int T, IngPrep &W) {
     const uint64 N = R.n;
     W.pre5.assign(N, 0); W.pre3.assign(N, 0); W.info.assign(N, 0);
     const uint64 Wl = (uint64) singlet_engine_gpu::ingest::plan().maxR2 + 1;
+    const char *sq = R.seq.data();
+    const uint64_t *of = R.off.data();
+    auto par = [T](const std::function<void(int)> &f) {
+        std::vector<std::thread> th;
+        for (int t = 0; t < T; t++) th.emplace_back(f, t);
+        for (auto &x : th) x.join();
+    };
+    // the groups: rep[r] = the read whose clip read r takes (r itself for the clipped ones)
+    const char *dd = getenv("SINGLET_ENGINE_GPU_INGEST_CLIPDEDUP");
+    const bool dedup = !(dd && dd[0] == '0') && N > 0 && N < 0xFFFFFFFFull;
+    singlet_engine_gpu::NoInitVector<uint32_t> rep;
+    const auto tg = std::chrono::steady_clock::now();
+    W.clipDistinct = N;
+    if (dedup) {
+        singlet_engine_gpu::NoInitVector<uint64_t> h(N);
+        uint64 cap = 1;
+        while (cap < 2 * N) cap <<= 1;
+        const uint64 mask = cap - 1;
+        singlet_engine_gpu::NoInitVector<uint32_t> tab(cap);
+        rep.resize(N);
+        par([&](int t) {
+            for (uint64 i = cap * t / T, e = cap * (t + 1) / T; i < e; i++) tab[i] = 0;
+            for (uint64 r = N * t / T, e = N * (t + 1) / T; r < e; r++) {
+                const uint64 a = of[r], L = of[r + 1] - a;
+                uint64 x = 0x9E3779B97F4A7C15ull ^ (L * 0xC2B2AE3D27D4EB4Full), w;
+                uint64 j = 0;
+                for (; j + 8 <= L; j += 8) { memcpy(&w, sq + a + j, 8); x = (x ^ w) * 0xFF51AFD7ED558CCDull; x ^= x >> 32; }
+                if (j < L) { w = 0; memcpy(&w, sq + a + j, L - j); x = (x ^ w) * 0xFF51AFD7ED558CCDull; x ^= x >> 32; }
+                x ^= x >> 29; x *= 0xC4CEB9FE1A85EC53ull; x ^= x >> 32;
+                h[r] = x;
+            }
+        });
+        std::vector<uint64> nd(T, 0);
+        par([&](int t) {
+            uint64 n = 0;
+            for (uint64 r = N * t / T, e = N * (t + 1) / T; r < e; r++) {
+                const uint64 a = of[r], L = of[r + 1] - a;
+                for (uint64 sl = h[r] & mask;; sl = (sl + 1) & mask) {
+                    uint32_t v = __atomic_load_n(&tab[sl], __ATOMIC_ACQUIRE);
+                    if (v == 0) {
+                        if (__atomic_compare_exchange_n(&tab[sl], &v, (uint32_t) (r + 1), false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) { rep[r] = (uint32_t) r; n++; break; }
+                    }
+                    const uint64 q = v - 1;   // the read in that slot (v: the value the exchange found)
+                    if (h[q] == h[r] && of[q + 1] - of[q] == L && memcmp(sq + of[q], sq + a, L) == 0) { rep[r] = (uint32_t) q; break; }
+                }
+            }
+            nd[t] = n;
+        });
+        W.clipDistinct = 0;
+        for (uint64 x : nd) W.clipDistinct += x;
+    }
+    W.clipGroupS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tg).count();
     std::vector<double> tt(T, 0.0);
-    std::vector<std::thread> th;
-    for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+    par([&](int t) {
         const auto t0 = std::chrono::steady_clock::now();
         ClipMate c5 = m5, c3 = m3;
         ClipCR4 *cr = new ClipCR4;
         c5.cr4 = cr; c3.cr4 = cr;   // type 11 calls cr4->polyTail3p, which reads none of its members (STAR leaves that pointer unset)
         std::vector<char> asc(64 * Wl), cbuf(DEF_readSeqLengthMax + 16);
         static const char kNt[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
-        const char *sq = R.seq.data();
-        const uint64_t *of = R.off.data();
+        uint64 bat[64];
         const uint64 rE = N * (t + 1) / T;
-        for (uint64 r = N * t / T; r < rE; r += 64) {
-            const int nb = (int) std::min<uint64>(64, rE - r);
+        uint64 r = N * t / T;
+        while (r < rE) {
+            int nb = 0;
+            for (; r < rE && nb < 64; r++) if (!dedup || rep[r] == r) bat[nb++] = r;
+            if (nb == 0) break;
             for (int k = 0; k < nb; k++) {
-                const uint64 a = of[r + k], L = of[r + k + 1] - a;
+                const uint64 a = of[bat[k]], L = of[bat[k] + 1] - a;
                 char *d = asc.data() + k * Wl;
                 for (uint64 j = 0; j < L && j < Wl; j++) d[j] = kNt[(int) sq[a + j] & 7];
                 cr->opalFillOneSeq(k, d, (uint32) std::min<uint64>(L, Wl));
@@ -520,7 +581,7 @@ void cr4Clip(const singlet_engine_gpu::ingest::PackedReads &R, const ClipMate &m
                 const int Lm = cr->opalRes[k].endLocationTarget + 1, S = cr->opalRes[k].score;
                 const bool L0 = S < 20 || (S == 20 && Lm > 26) || (S == 21 && Lm > 30);
                 const uint8 info = (uint8) (L0 ? 0 : Lm);
-                const uint64 a = of[r + k], L = of[r + k + 1] - a;
+                const uint64 rr = bat[k], a = of[rr], L = of[rr + 1] - a;
                 uint c5n = 0, c3n = 0;
                 if (L <= DEF_readSeqLengthMax) {
                     memcpy(cbuf.data(), sq + a, L);
@@ -529,13 +590,20 @@ void cr4Clip(const singlet_engine_gpu::ingest::PackedReads &R, const ClipMate &m
                     c5n = c5.clip(Lread, cbuf.data());
                     c3n = c3.clip(Lread, cbuf.data());
                 }
-                W.pre5[r + k] = (uint16) std::min<uint>(c5n, 65535); W.pre3[r + k] = (uint16) std::min<uint>(c3n, 65535); W.info[r + k] = info;
+                W.pre5[rr] = (uint16) std::min<uint>(c5n, 65535); W.pre3[rr] = (uint16) std::min<uint>(c3n, 65535); W.info[rr] = info;
             }
         }
         delete cr;
         tt[t] = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     });
-    for (auto &x : th) x.join();
+    if (dedup) {
+        par([&](int t) {
+            for (uint64 r = N * t / T, e = N * (t + 1) / T; r < e; r++) {
+                const uint64 q = rep[r];
+                if (q != r) { W.pre5[r] = W.pre5[q]; W.pre3[r] = W.pre3[q]; W.info[r] = W.info[q]; }
+            }
+        });
+    }
     W.clipS = 0;
     for (double x : tt) W.clipS += x;
 }
@@ -1010,11 +1078,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         const IngPrep &W = *ingPrep;
         P.inOut->logMain << "ENGINE_GPU: E13: " << ing.n << " reads decoded from the .1fq into the packed buffers in " << W.secA << " s (" << P.runThreadN
                          << " threads; " << in.seq.size() << " cDNA bases, " << ing.qual.size() << " quality bytes, " << ing.r1.size() * 8 << " barcode-read bytes; "
-                         << (W.early ? "started with STAR's process, done " + std::to_string(W.doneA) + " s later, taken " + std::to_string(W.waitA)
-                                       + " s after STAR read its parameters" : std::string("decoded here (SINGLET_ENGINE_GPU_INGEST_EARLY=0)"))
+                         << (!W.early ? std::string("decoded here (SINGLET_ENGINE_GPU_INGEST_EARLY=0)")
+                             : (W.fromParent ? std::string("by the pipeline before it forked STAR") : "started with STAR's process, done " + std::to_string(W.doneA)
+                                + " s later") + ", taken " + std::to_string(W.waitA) + " s after STAR read its parameters")
                          << "); barcodes " << W.secB << " s (R11 " << ing.r11Total << " reads), CellRanger4 clip " << W.secC << " s ("
                          << (!W.clipPre ? std::string("none")
-                             : std::to_string(W.clipS) + " thread-s, " + (W.clipEarly ? "right after the decode with STAR's fixed CellRanger4 sequences (STAR's "
+                             : std::to_string(W.clipS) + " thread-s on " + std::to_string(W.clipDistinct) + " distinct sequences, grouped in "
+                               + std::to_string(W.clipGroupS) + " s, " + (W.clipEarly ? "right after the decode with STAR's fixed CellRanger4 sequences (STAR's "
                                "ClipMates are those), done " + std::to_string(W.doneC) + " s after STAR's process started" : std::string("after the barcodes")))
                          << (W.cr4 && !W.clipEarly ? "; the clip after the decode was not STAR's" : "") << "); "
                          << (W.early ? "the prefill waited " : "all in the prefill: ") << waited << " s\n";
@@ -1410,8 +1480,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
 }
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
-// E13 (engine_gpu_ingest.h): the pipeline's STAR child, before its CR4 probe. Phase A on a thread of its own, then with cr4 the CellRanger4
-// clip with the ClipMates ParametersClip builds for --clipAdapterType CellRanger4 and no other clip option (initialize: the 10x TSO at 5'
+// E13 (engine_gpu_ingest.h): the pipeline's STAR child, before its CR4 probe. Phase A on a thread of its own (unless the pipeline decoded the
+// reads before the fork: takeParent), then with cr4 the CellRanger4 clip with the ClipMates ParametersClip builds for --clipAdapterType CellRanger4 and no other clip option (initialize: the 10x TSO at 5'
 // unless --clip5pAdapterSeq names one, "A" (polyA) at 3'; N and NafterAd 0; the default adMMp 0.1); ingPrepare keeps it only when STAR's own
 // ClipMates give the same clipKeyOf.
 void singlet_engine_gpu::ingest::startEarly(int threads, bool cr4) {
@@ -1420,8 +1490,9 @@ void singlet_engine_gpu::ingest::startEarly(int threads, bool cr4) {
     IngPrep *W = ingPrep;
     W->pid = getpid(); W->early = true; W->cr4 = cr4; W->threads0 = std::max(1, threads);
     W->t0 = std::chrono::steady_clock::now();
+    W->fromParent = takeParent(W->reads);   // the pipeline decoded the reads before it forked this process
     W->th0 = std::thread([W]() {
-        W->okA = decodeReads(W->threads0, W->reads, W->why);
+        W->okA = W->fromParent || decodeReads(W->threads0, W->reads, W->why);
         W->doneA = ingSince(W->t0);
         if (!W->okA || !W->cr4) return;
         ClipMate m5, m3;

@@ -2,8 +2,8 @@
 // into the packed reads (singlet/engine_gpu_ingest.h) instead of reading back the FASTQ text the pipeline used to write.
 //   Phase A (decodeReads): one pass over the blocks, on the job's threads, each block into its own ranges of the final arrays (the
 //     pipeline's head scan counted every block's reads and bases): the cDNA codes and offsets (the engine's input), the cDNA quality as
-//     2-bit codes, the barcode read as 3-bit codes, and the bases per quality code. It needs nothing from STAR: the prefill's startEarly
-//     runs it in the background of STAR's process from its first moment.
+//     2-bit codes, the barcode read as 3-bit codes, and the bases per quality code. It needs nothing from STAR: the pipeline runs it
+//     right after its head scan, beside its reference load (startParent), and STAR's process inherits the result through fork().
 //   Phase B (barcodes): what needs STAR's barcode layout and whitelist: E10's per-read words (CR/UR keys, low-quality bits), E11's quality
 //     counts, R11's exact CB histogram.
 // The bytes are those the FASTQ path gave STAR (read_source.h format_block with the file-mode options: no 5' clip, no length guard; reads
@@ -21,6 +21,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <unistd.h>
 
 namespace singlet_engine_gpu {
 namespace ingest {
@@ -235,6 +236,58 @@ bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why) {
     }
     if (layoutBad) why = "a barcode read STAR would reject (length)";
     return true;
+}
+
+// ---- phase A in the pipeline's process (engine_gpu_ingest.h startParent). On the heap and never destroyed (an exit() while the thread runs
+// must not run ~thread); per pid: joined and released by the process that started it, taken by the STAR process forked after the join.
+namespace {
+struct ParentA {
+    std::thread th;
+    pid_t pid = 0;
+    int threads = 1;
+    PackedReads out;
+    bool ok = false, joined = false;
+    std::string why;
+    std::chrono::steady_clock::time_point t0;
+    double done = 0;
+};
+ParentA* parentA_ = nullptr;
+}  // namespace
+
+void startParent(int threads) {
+    if (parentA_ != nullptr || !plan().on) return;
+    ParentA* a = parentA_ = new ParentA;
+    a->pid = getpid();
+    a->threads = std::max(1, threads);
+    a->t0 = std::chrono::steady_clock::now();
+    a->th = std::thread([a]() {
+        a->ok = decodeReads(a->threads, a->out, a->why);
+        a->done = std::chrono::duration<double>(std::chrono::steady_clock::now() - a->t0).count();
+    });
+}
+bool joinParent(double& waited, std::string& log) {
+    waited = 0;
+    if (parentA_ == nullptr || parentA_->pid != getpid()) return false;
+    const auto w0 = std::chrono::steady_clock::now();
+    if (parentA_->th.joinable()) parentA_->th.join();
+    waited = std::chrono::duration<double>(std::chrono::steady_clock::now() - w0).count();
+    parentA_->joined = true;
+    if (parentA_->ok)
+        log = std::to_string(parentA_->out.n) + " reads decoded into the packed buffers in " + std::to_string(parentA_->out.sec) + " s ("
+            + std::to_string(parentA_->threads) + " threads, done " + std::to_string(parentA_->done) + " s after the head scan); STAR's process takes them";
+    else log = "the decode into the packed buffers failed (" + parentA_->why + "): STAR's process decodes the .1fq";
+    return parentA_->ok;
+}
+bool takeParent(PackedReads& out) {
+    if (parentA_ == nullptr || !parentA_->joined || !parentA_->ok || parentA_->out.n == 0) return false;
+    out.swap(parentA_->out);
+    parentA_->out.release();
+    return true;
+}
+void releaseParent() {
+    if (parentA_ == nullptr || parentA_->pid != getpid()) return;
+    if (parentA_->th.joinable()) parentA_->th.join();
+    parentA_->out.release();
 }
 
 }  // namespace ingest

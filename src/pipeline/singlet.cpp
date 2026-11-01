@@ -4694,6 +4694,10 @@ int main(int argc, char* argv[]) {
                 std::cerr << "[1fq-ingest] Scanned " << nb << " blocks: " << pl.reads() << " reads (" << stored << " stored), " << pl.bases()
                           << " cDNA bases, longest " << pl.maxR2 << "; " << fifo_first25_r2.size() << " reads in the 5' probe sample ("
                           << decode_time << "s, " << std::max(1, std::min<int>(star_threads, static_cast<int>(nb))) << "T); STAR's prefill decodes the reads (no FASTQ files)\n";
+                // the decode into the prefill's packed buffers starts now, beside the reference load; STAR's process inherits it (joinParent
+                // at the fork). SINGLET_ENGINE_GPU_INGEST_EARLY=0: STAR's prefill decodes the .1fq when it starts.
+                const char* ee = std::getenv("SINGLET_ENGINE_GPU_INGEST_EARLY");
+                if (!(ee && ee[0] == '0')) singlet_engine_gpu::ingest::startParent(star_threads);
             }
         }
 #endif
@@ -6594,8 +6598,19 @@ int main(int argc, char* argv[]) {
             std::cerr << "[singlet] Genome preload: " << (genome_preload.ok ? "" : "failed (STAR loads the files): ")
                       << genome_preload.log << "; waited " << gw.elapsed_s() << " s for it at the STAR fork\n";
         }
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (ingest_on) {   // E13: the packed reads must be complete before STAR is forked with them
+            double waited = 0;
+            std::string lg;
+            singlet_engine_gpu::ingest::joinParent(waited, lg);
+            if (!lg.empty()) std::cerr << "[1fq-ingest] " << lg << "; waited " << waited << " s for it at the STAR fork\n";
+        }
+#endif
         star_pid = fork();
         if (star_pid != 0) star_genome_preload_release();   // E14: the parent's references; the STAR child keeps the pages
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (star_pid != 0) singlet_engine_gpu::ingest::releaseParent();   // E13: likewise the packed reads
+#endif
         if (star_pid < 0) {
             std::cerr << "ERROR: fork() failed: " << strerror(errno) << "\n";
             return 1;
@@ -7710,8 +7725,8 @@ int main(int argc, char* argv[]) {
             args.push_back(nullptr);
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
-            // E13: the .1fq's reads are decoded for STAR's prefill from now on, beside the CR4 probe and STAR's genome load, and with the
-            // Beta profile STAR's CellRanger4 clip runs on them right after (the prefill takes both; engine_gpu_ingest.h).
+            // E13: the .1fq's reads (decoded by this process's parent before the fork, else from now on) go to STAR's prefill, and with
+            // the Beta profile STAR's CellRanger4 clip runs on them right away, beside the CR4 probe (engine_gpu_ingest.h).
             // SINGLET_ENGINE_GPU_INGEST_EARLY=0: the prefill decodes and clips them when it starts.
             if (ingest_on) {
                 const char* ee = std::getenv("SINGLET_ENGINE_GPU_INGEST_EARLY");

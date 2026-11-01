@@ -101,7 +101,7 @@ inline Plan& plan() { static Plan p; return p; }
 
 // ---- The decode, in three phases (SeqCacheGpuIngest.cpp; the third, STAR's CellRanger4 clip, in SeqCacheGpuPrefill.cpp):
 //   A  decodeReads: every block of plan().runs into seq, off, the quality plane, the barcode-read plane and the quality-code counts; it
-//      needs nothing from STAR, so STAR's process starts it as soon as it is forked (startEarly), beside the CR4 probe and the genome load
+//      needs nothing from STAR, so the pipeline runs it right after its head scan (startParent) and STAR's process inherits it
 //   B  barcodes: STAR's barcode layout and whitelist (known once STAR read its parameters): E10's aux words (CR/UR keys, low-quality bits
 //      from the quality plane), E11's quality counts, R11's histogram
 //   C  the CellRanger4 clip (STAR's ClipMates, ClipCR4's opal alignment of the TSO): right after A when the pipeline asks STAR for it
@@ -126,6 +126,14 @@ bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why);
 // the decode with the sequences STAR fixes for it (ParametersClip::initialize: the 10x TSO at 5', polyA at 3', no other clipping), and
 // the prefill keeps it only when STAR's own ClipMates are exactly those (otherwise it clips again, or not at all).
 void startEarly(int threads, bool cr4);
+
+// Phase A in the pipeline's own process, right after its head scan, beside its reference load and genome preload: joined before STAR is
+// forked (joinParent), so STAR's process inherits the packed reads through fork() (copy-on-write: nothing is copied) and startEarly takes
+// them (takeParent) instead of decoding; the pipeline releases its own copy right after the fork (releaseParent).
+void startParent(int threads);
+bool joinParent(double& waited, std::string& log);   // the pipeline, before forking STAR: true when the reads are decoded
+bool takeParent(PackedReads& out);                    // STAR's process: the reads the pipeline decoded before the fork
+void releaseParent();                                 // the pipeline, after the fork
 
 // ---- R11's handshake (E2EHeader::r11Magic). STAR's prefill writes the histogram into the E8 region right after its decode (publishR11);
 // the pipeline's CB corrector (cb_correct.h, set_pending) reads it the first time a correction needs the exact counts (fetchR11). That is
