@@ -106,6 +106,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     g_cell_stats = true;
     { const char* pk = getenv("SINGLET_GPU_PILEUP_PARTS"); g_force_parts = pk ? std::max(0, std::min(atoi(pk), kMaxParts)) : 0; }
     g_e16_aasplit = singlet_tail::cut("aasplit");   // E16 (level 5): the per-alignment results split on the device before their download
+    g_e16_fetchpar = singlet_tail::cut("fetchpar");
     Timer T; T.start();
     Outputs o;
     run_pipeline(A, T, in, &o);
@@ -129,8 +130,16 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     po.alnGene.swap(o.aa_gene); po.alnStat.swap(o.aa_stat); po.alnExonGene.swap(o.aa_exg);
     for (auto& kv : T.acc) if (kv.first != "fetch") po.msGpu += kv.second;   // "fetch": the host copying a partition's results out
     { char b[160]; snprintf(b, sizeof b, "partition select %.1f ms (in the GPU time), host fetch between partitions %.1f ms; ", T.acc.count("part.select") ? T.acc["part.select"] : 0.0, T.acc.count("fetch") ? T.acc["fetch"] : 0.0); po.log += b; }
+    // E16 "copypar" (level 5): the eight tuple arrays copied on threads, beside the rest of this and the device's release (joined at the end)
+    std::vector<std::thread> e16cp;
+    if (singlet_tail::cut("copypar")) {
+        const std::pair<const std::vector<T3>*, std::vector<PileupTriplet>*> cp[8] = {{&o.exon, &po.exon}, {&o.intron, &po.intron}, {&o.amb, &po.amb},
+            {&o.sj, &po.sj}, {&o.snp_ad, &po.snpAd}, {&o.snp_dp, &po.snpDp}, {&o.mt, &po.mt}, {&o.mt_rev, &po.mtRev}};
+        for (const auto& c : cp) e16cp.emplace_back([c]() { copyT3(*c.first, *c.second); });
+    } else {
     copyT3(o.exon, po.exon); copyT3(o.intron, po.intron); copyT3(o.amb, po.amb); copyT3(o.sj, po.sj);
     copyT3(o.snp_ad, po.snpAd); copyT3(o.snp_dp, po.snpDp); copyT3(o.mt, po.mt); copyT3(o.mt_rev, po.mtRev);
+    }
     po.sjtab = o.sjtab; po.indels = o.indels;
     {   // R9 per gene: the merged gene-store UMIs, (cell, gene, umi) order
         std::sort(o.merges.begin(), o.merges.end(), [](const auto& x, const auto& y) { return std::tie(x.cell, x.gene, x.umi) < std::tie(y.cell, y.gene, y.umi); });
@@ -146,6 +155,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     e16step("arena freed");
     cudaDeviceReset();
     e16step("device reset");
+    if (!e16cp.empty()) { for (auto& t : e16cp) t.join(); e16step("tuple copies joined"); }
     po.msTotal = (now_s() - t0) * 1e3;
     po.log += "e16 steps (s): " + e16 + "; ";
     if (attempt > 0) po.log += "unified memory (the device arena was too small); ";

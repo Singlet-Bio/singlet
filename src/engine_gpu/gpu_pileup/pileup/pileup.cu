@@ -25,6 +25,8 @@
 #include "pileup_rec.h"
 #include <fstream>
 #include <sstream>
+#include <functional>
+#include <thread>
 #include <tuple>
 #include <cmath>
 #include <cstdio>
@@ -402,6 +404,7 @@ __global__ void k_cellreads(const Rec* r, int n, uint32_t* out) {
 // E16 (singlet's level 5, set by the engine wrapper): the per-alignment results leave the device as the three arrays the host keeps (gene, stat,
 // exon gene: 9 bytes per alignment) instead of the 48-byte AA records split on the host
 static bool g_e16_aasplit = false;
+static bool g_e16_fetchpar = false;   // E16 "fetchpar" (singlet, level 5): a partition's outputs downloaded and converted on one thread each
 __global__ void k_e16_aa_split(const AA* __restrict__ aa, int n, uint32_t* __restrict__ gene, uint8_t* __restrict__ stat, uint32_t* __restrict__ exg) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) { gene[i] = aa[i].gene; stat[i] = (uint8_t) aa[i].stat; exg[i] = aa[i].exg; }
@@ -723,25 +726,43 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         if (!out) continue;
         // ---------------- fetch this partition's cells (host; its span is marked "fetch" and left out of the GPU time) ----------------
         for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
-        if (ng > 0) {
-            auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells); v.insert(v.end(), t.begin(), t.end()); };
-            add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]);
-        }
+        // (E16: the steps as lambdas, called in this order, or with g_e16_fetchpar on threads: each fills its own outputs in the same order)
+        auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells);
+                                                              if (g_e16_fetchpar && v.empty()) v.swap(t); else v.insert(v.end(), t.begin(), t.end()); };
+        auto fSj = [&]() {
         if (n_sju > 0) { std::vector<uint64_t> k(n_sju); std::vector<uint32_t> c(n_sju); CK(cudaMemcpy(k.data(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_sju; i++) out->sj_raw_sum += c[i];
             for (int i = 0; i < n_sju; i++) out->sj.push_back(T3{(uint32_t)(k[i] >> jb), (uint32_t)(k[i] & ((1ull << jb) - 1)), std::min(c[i], 65535u)}); }
+        };
+        auto fSn = [&]() {
         if (n_snu > 0) { std::vector<uint64_t> k(n_snu), v(n_snu); CK(cudaMemcpy(k.data(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.data(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_snu; i++) { T3 a{(uint32_t)(k[i] >> sb), (uint32_t)(k[i] & ((1ull << sb) - 1)), 0}; uint32_t dp = (uint32_t)(v[i] & 0xFFFFFFFFu), ad = (uint32_t)(v[i] >> 32);
                 if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); out->snp_ad.push_back(a); } } }
+        };
+        auto fMt = [&]() {
         if (n_mtu > 0) { std::vector<uint64_t> k(n_mtu); std::vector<uint32_t> c(n_mtu); CK(cudaMemcpy(k.data(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_mtu;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
                 uint64_t bk = k[i] >> 1; uint64_t tot = 0, rv = 0; int j = i;
                 while (j < n_mtu && (k[j] >> 1) == bk) { tot += c[j]; if (k[j] & 1) rv += c[j]; j++; }
                 uint32_t cell = (uint32_t)(bk >> 17), feat = (uint32_t)(bk & ((1u << 17) - 1));
                 out->mt.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(tot, 65535)}); if (rv > 0) out->mt_rev.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(rv, 65535)}); i = j; } }
+        };
+        auto fInd = [&]() {
         if (n_indt > 0) { std::vector<uint32_t> b(n_indt), ri(n_indt); std::vector<IND> d(n_indt); CK(cudaMemcpy(b.data(), in_bc, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
             CK(cudaMemcpy(d.data(), in_ind, (size_t)n_indt * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(ri.data(), in_ri, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_indt; i++) indels.push_back({ri[i], {b[i], d[i].pos, d[i].lenins >> 1, d[i].lenins & 1}}); }
+        };
+        if (g_e16_fetchpar) {
+            int dev = 0; cudaGetDevice(&dev);
+            std::vector<std::thread> fth;
+            auto run = [&](std::function<void()> f) { fth.emplace_back([dev, f]() { cudaSetDevice(dev); f(); }); };
+            if (ng > 0) { run([&]() { add(out->exon, C[0]); }); run([&]() { add(out->intron, C[1]); }); run([&]() { add(out->amb, C[2]); }); }
+            run(fSj); run(fSn); run(fMt); run(fInd);
+            for (auto& t : fth) t.join();
+        } else {
+            if (ng > 0) { add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]); }
+            fSj(); fSn(); fMt(); fInd();
+        }
         T.mark("fetch");
     }
     A.reset(base2); A.peak = peak_all;

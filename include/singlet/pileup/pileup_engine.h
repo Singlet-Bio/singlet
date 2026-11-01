@@ -2729,54 +2729,67 @@ public:
         singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
         std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
-        if (singlet_tail::cut("puts")) {   // E16 "puts" (level 5): one thread per accumulator (each fills its own vectors in the same order)
-            std::thread p1([&] { gpu_put(exon_acc_, out.exon); }), p2([&] { gpu_put(intron_acc_, out.intron); }), p3([&] { gpu_put(amb_acc_, out.amb); }),
-                p4([&] { gpu_put(snp_ad_, out.snpAd); }), p5([&] { gpu_put(snp_dp_, out.snpDp); }), p6([&] { gpu_put(mt_acc_rev_, out.mtRev); });
-            gpu_put(mt_acc_, out.mt);
-            p1.join(); p2.join(); p3.join(); p4.join(); p5.join(); p6.join();
-        } else {
-        gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
-        gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);
-        }
-        sj_names_.clear(); sj_index_.clear();
-        // the GPU's table has every junction of every signature (hand-off records include reads without a cell barcode); the CPU
-        // names a junction when a counted read has it, so keep the junctions with a count, in table (R7) order
-        std::vector<uint32_t> sj_new(out.sjtab.size(), UINT32_MAX);
-        for (const auto& t : out.sj) if (t.row < sj_new.size()) sj_new[t.row] = 0;
-        for (size_t j = 0; j < out.sjtab.size(); ++j) {
-            if (sj_new[j] == UINT32_MAX) continue;
-            const auto& k = out.sjtab[j];
-            sj_new[j] = static_cast<uint32_t>(sj_names_.size());
-            sj_index_[((static_cast<uint64_t>(k[0]) << 32) | k[1]) ^ (static_cast<uint64_t>(k[2]) * 0x9e3779b97f4a7c15ULL)] =
-                sj_new[j];   // keyed as extract_splice_junctions keys them
-            sj_names_.push_back(tid_to_chrom_[k[0]] + ":" + std::to_string(k[1]) + "-" + std::to_string(k[2]));
-        }
-        for (auto& t : out.sj) t.row = sj_new[t.row];
-        if (!sj_names_.empty()) {   // the CPU grows the feature count in steps of 1000 as junctions appear (extract_splice_junctions)
-            const uint32_t n = static_cast<uint32_t>(sj_names_.size());
-            sj_acc_.set_barcodes(barcodes_); sj_acc_.set_n_features(((n - 1) / 1000 + 1) * 1000);
-        }
-        gpu_put(sj_acc_, out.sj);
-        for (const auto& e : out.indels) mt_indels_.push_back(mt::MtIndelEvent{e[0], e[1], static_cast<uint16_t>(e[2]), e[3] != 0});
-        stats.snp_hits += out.snpHits; stats.sj_hits += out.sjHits; stats.mt_pileup_bases += out.mtBases;
-        stats.snp_molecules += out.snpMolecules; stats.snp_molecules_ambiguous += out.snpAmbiguous; stats.snp_molecules_other += out.snpOther;
-        gpu_ms_ = DirectionalUmiStore::MoleculeStats{};
-        gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
-        gpu_ms_.legacy_double = out.molLegacyDouble; gpu_ms_.dropped = out.molDropped;
-        gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
-        gpu_merges_.swap(out.geneMerges);
-        stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
-        if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
-            const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
-            for (const auto& [rec, k] : gpu_wl_pending_) {
-                const uint32_t g = out.alnExonGene[S[rec].aln_off + k];
-                if (g != UINT32_MAX && g < wl_ambient_gene_counts_.size()) wl_ambient_gene_counts_[g]++;
+        // the outputs into the accumulators, junction names, chrM indels, counters and WL-ambient genes; E16 "overlap" (level 5) runs them on a
+        // thread beside gpu_host_pass, which reads other parts of `out` and writes other members and counters (strand votes, poly(A), V(D)J)
+        auto applyOut = [&]() {
+            if (singlet_tail::cut("puts")) {   // E16 "puts" (level 5): one thread per accumulator (each fills its own vectors in the same order)
+                std::thread p1([&] { gpu_put(exon_acc_, out.exon); }), p2([&] { gpu_put(intron_acc_, out.intron); }), p3([&] { gpu_put(amb_acc_, out.amb); }),
+                    p4([&] { gpu_put(snp_ad_, out.snpAd); }), p5([&] { gpu_put(snp_dp_, out.snpDp); }), p6([&] { gpu_put(mt_acc_rev_, out.mtRev); });
+                gpu_put(mt_acc_, out.mt);
+                p1.join(); p2.join(); p3.join(); p4.join(); p5.join(); p6.join();
+            } else {
+            gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
+            gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);
             }
-            gpu_wl_pending_.clear();
+            sj_names_.clear(); sj_index_.clear();
+            // the GPU's table has every junction of every signature (hand-off records include reads without a cell barcode); the CPU
+            // names a junction when a counted read has it, so keep the junctions with a count, in table (R7) order
+            std::vector<uint32_t> sj_new(out.sjtab.size(), UINT32_MAX);
+            for (const auto& t : out.sj) if (t.row < sj_new.size()) sj_new[t.row] = 0;
+            for (size_t j = 0; j < out.sjtab.size(); ++j) {
+                if (sj_new[j] == UINT32_MAX) continue;
+                const auto& k = out.sjtab[j];
+                sj_new[j] = static_cast<uint32_t>(sj_names_.size());
+                sj_index_[((static_cast<uint64_t>(k[0]) << 32) | k[1]) ^ (static_cast<uint64_t>(k[2]) * 0x9e3779b97f4a7c15ULL)] =
+                    sj_new[j];   // keyed as extract_splice_junctions keys them
+                sj_names_.push_back(tid_to_chrom_[k[0]] + ":" + std::to_string(k[1]) + "-" + std::to_string(k[2]));
+            }
+            for (auto& t : out.sj) t.row = sj_new[t.row];
+            if (!sj_names_.empty()) {   // the CPU grows the feature count in steps of 1000 as junctions appear (extract_splice_junctions)
+                const uint32_t n = static_cast<uint32_t>(sj_names_.size());
+                sj_acc_.set_barcodes(barcodes_); sj_acc_.set_n_features(((n - 1) / 1000 + 1) * 1000);
+            }
+            gpu_put(sj_acc_, out.sj);
+            for (const auto& e : out.indels) mt_indels_.push_back(mt::MtIndelEvent{e[0], e[1], static_cast<uint16_t>(e[2]), e[3] != 0});
+            stats.snp_hits += out.snpHits; stats.sj_hits += out.sjHits; stats.mt_pileup_bases += out.mtBases;
+            stats.snp_molecules += out.snpMolecules; stats.snp_molecules_ambiguous += out.snpAmbiguous; stats.snp_molecules_other += out.snpOther;
+            gpu_ms_ = DirectionalUmiStore::MoleculeStats{};
+            gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
+            gpu_ms_.legacy_double = out.molLegacyDouble; gpu_ms_.dropped = out.molDropped;
+            gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
+            gpu_merges_.swap(out.geneMerges);
+            stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
+            if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
+                const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
+                for (const auto& [rec, k] : gpu_wl_pending_) {
+                    const uint32_t g = out.alnExonGene[S[rec].aln_off + k];
+                    if (g != UINT32_MAX && g < wl_ambient_gene_counts_.size()) wl_ambient_gene_counts_[g]++;
+                }
+                gpu_wl_pending_.clear();
+            }
+            singlet_tail::mark("parent: pileup results put into the accumulators");
+        };
+        auto tA2 = std::chrono::steady_clock::now();
+        if (has_gene_model_ && singlet_tail::cut("overlap")) {   // (the log's "host pass" time then includes the puts)
+            std::thread tPut(applyOut);
+            const bool okHost = gpu_host_pass(in, out, stats);
+            tPut.join();
+            if (!okHost) return false;
+        } else {
+            applyOut();
+            tA2 = std::chrono::steady_clock::now();
+            if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
         }
-        const auto tA2 = std::chrono::steady_clock::now();
-        singlet_tail::mark("parent: pileup results put into the accumulators");
-        if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
         singlet_tail::mark("parent: host pass done");
         std::cerr << "[gpu_pileup] apply: build input " << sBuild << " s, pileupRun " << sRun << " s, host pass " << since(tA2) << " s" << "\n";
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
