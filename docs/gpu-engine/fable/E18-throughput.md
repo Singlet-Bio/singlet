@@ -1,7 +1,7 @@
 # E18: samples in flight per GPU (throughput)
 
 Experiment E18 ("throughput") of the GPU aligner program. Branch `gpu/fable/throughput`, from `gpu/fable-engine` at 44a6e9fa
-(E1–E15), with `gpu/fable-engine` merged in at e0e1514a (E16, "tail") as c6ddd3d3 and at 503c07f7 (E17, "budget") as 5e55b702. The
+(E1–E15), with `gpu/fable-engine` merged in at e0e1514a (E16, "tail") as c6ddd3d3, at 503c07f7 (E17, "budget") as 5e55b702 and at dc45ef09 (E19, "release") as 6567e0fa. The
 question: how many read pairs per second does one node (2 H100 NVL, 54 usable cores, 750 GB) deliver when several samples share each
 GPU through the engine's device slots (`SINGLET_ENGINE_GPU_SLOTS`), what limits it, and which configuration the campaign should run.
 
@@ -47,11 +47,11 @@ configuration E19 is making the default. E18 changed no engine code: new bench s
   read pairs; nuclei2k_v2: 83 GB), the largest piece being each process's private 16.8 GB copy of the genome. A half node (370 GB)
   holds k = 8, the node 16 (607 GB). Device memory does not bound k: a waiting sample keeps ≤ 0.7 GB of context, and E17's lanes stay
   within the free memory.
-- **Identity holds at every k and slot count (§3):** 260 runs compared with their sample's k = 1 run in the same job: every count
+- **Identity holds at every k and slot count (§3):** 266 runs compared with their sample's k = 1 run in the same job: every count
   matrix, Solo file, `Log.final.out` statistic, `SJ.out.tab` and `CellReads.stats` identical; only E11's run-dependent files differ.
-  The mapDistinct dumps of all 41 points are identical (sha256 77d7bc20008166af). One pipeline bug surfaced, independent of k:
-  nuclei2k_v2's `nonhost_reads.fq` holds a different record set in each run, because the writer indexes the screen's subsample
-  against the whole unmapped file, whose order E16 made run-dependent (§3).
+  The mapDistinct dumps of all 44 points are identical (sha256 77d7bc20008166af). The one exception is E15's known pipeline bug
+  (E15 §5.7), independent of k: nuclei2k_v2's `nonhost_reads.fq` holds a different record set in each run, because the writer
+  indexes the screen's subsample against the whole unmapped file, whose order E16 made run-dependent (§3).
 - **Recommendation (§6): `SINGLET_ENGINE_GPU_SLOTS=2` (E17's default budget, no other memory knobs), 8 samples in flight per GPU
   where host memory allows (16 per node; ~0.7 GB per M read pairs per sample), `--threads 7`, a pool of workers that starts the
   next sample when one ends, each worker pinned to a GPU (`SINGLET_ENGINE_GPU_DEVICE` = worker mod 2).** Expected ~4.4 M pairs/s
@@ -85,8 +85,8 @@ configuration E19 is making the default. E18 changed no engine code: new bench s
   - device memory and utilisation from `nvidia-smi` (device-wide and per process);
   - lock waits and holds from the engine's own log lines (`waited … s for it, held it … s` and the pileup's, Solo's and non-host's
     equivalents) and, independently, from `/proc/locks` (the holder and waiters of each lock file at every tick).
-- **Nodes:** g050 (jobs A, B), g051 (jobs C, D, F) and g052 (job E), Xeon Gold 6238R (2 × 28 cores, 2 NUMA nodes), 750 GB, 2 H100 NVL
-  94 GB. Slurm gives 54 usable cores per node (`CPUEfctv`). Jobs A, B, C, D and F use one GPU and 28 cores (half a node; other jobs
+- **Nodes:** g050 (jobs A, B), g051 (jobs C, D, F, G) and g052 (job E), Xeon Gold 6238R (2 × 28 cores, 2 NUMA nodes), 750 GB, 2 H100 NVL
+  94 GB. Slurm gives 54 usable cores per node (`CPUEfctv`). Jobs A, B, C, D, F and G use one GPU and 28 cores (half a node; other jobs
   held the other half), job E the whole node.
 
 ## 2. The curve, per point
@@ -162,7 +162,8 @@ are in GiB (the cgroup's `memory.current` peak, `nvidia-smi`).
 | k4t7s1 | batch | 4 | 7 | 1 | 4 | **1.164** | 216.7 / 222.7 / 228.9 | 7.77 / 8.15 | 128.8 / 34.5 | 62 | 184 | 90.1 |
 | k4t7s2 | batch | 4 | 7 | 2 | 4 | **1.361** | 149.6 / 181.7 / 195.7 | 7.94 / 8.26 | 41.9 / 45.2 | 56 | 155 | 86.3 |
 
-- **The k = 3 point on three heads** (batch, T = 9, one GPU, 28 cores): 0.995 (44a6e9fa), 1.104 (E16), 1.096 (E17). E17's budget
+- **The k = 3 point on four heads** (batch, T = 9, one GPU, 28 cores): 0.995 (44a6e9fa), 1.104 (E16), 1.096 (E17), 1.124 (E19,
+  job 798052: k1t9s1 0.575, k3t9s1 1.124, k3t9s2 1.238; E19 changes defaults and log lines, no device work). E17's budget
   does not change the rate at `SLOTS=1`: its default (91.1 GB, and no more than the free memory less 2 GB) gives the lanes almost
   what E12's "free − 3 GB" gave. The slot is held 33.8 s per run at k = 3 (E16: 34.1). The single k = 1 runs held it 38.4 s at T = 7
   (E16: 36.1) and 35.6 s at T = 9 (E16: 34.0), with the prefill's lanes and `e2e.build` 0.3–0.6 s slower each; one run per point,
@@ -231,8 +232,8 @@ The run-dependent files, as in E11's gate:
 - with `m43`, `summary.json` also differs: its `memory_tier` comes from the process's VmPeak (Small < 8, Medium < 64, Large < 256 GB),
   and the arena cap moves pbmc1k_v3 from Large to Medium.
 
-**Results:** every run of every point (260 runs in jobs A–F) is identical to its sample's k = 1 run except for the run-dependent files
-and one pipeline bug in nuclei2k_v2's `nonhost_reads.fq` (below).
+**Results:** every run of every point (266 runs in jobs A–G) is identical to its sample's k = 1 run except for the run-dependent files
+and E15's known pipeline bug in nuclei2k_v2's `nonhost_reads.fq` (below).
 
 | job (engine) | runs compared | out_equiv: identical / timings-paths / differ | the differing files | `Log.final.out` stats, `SJ.out.tab`, `CellReads.stats` | E6 dumps |
 |---|---|---|---|---|---|
@@ -242,13 +243,15 @@ and one pipeline bug in nuclei2k_v2's `nonhost_reads.fq` (below).
 | 797460 C (merged, E16) | 40 (4 samples) | 60 / 3 / 6 (pbmc5p_v1: 58 / 3 / 6) | the same 3 + `nonhost_reads.fq`, `star_Unmapped.out.mate1/2` (same records, another order) | identical; the 3 read files hold the same sorted records, except nuclei2k_v2's `nonhost_reads.fq` (below) | identical |
 | 797485 D (E17), SLOTS = 1, 2, 3 | 21 | 60 / 3 / 6; with 3 slots 60 / 2 / 7 | as job C; with 3 slots also `summary.json`'s `memory_tier` (Large → Medium: the 30.4 GB budget lowers the process's VmPeak) | identical; the 3 read files hold the same sorted records | identical (10 points) |
 | 797491 F (E17), SLOTS = 1, 2 | 40 | 60 / 3 / 6 | as job C | identical; the 3 read files hold the same sorted records | identical (4 points) |
+| 798052 G (E19), SLOTS = 1, 2 | 6 | 60 / 3 / 6 | as job C | identical | identical (3 points) |
 | 798028 E (E17, the node), SLOTS = 1, 2, pinned and unpinned | 112 | 60 / 3 / 6 | as job C | identical, including the 4 unpinned runs that screened non-host reads on the CPU; the 3 read files hold the same sorted records | identical (5 points) |
 
 On 44a6e9fa even the three read-order files came out byte-identical at every k; with E16 they are written by a background thread
 and their record order varies from run to run (E11's known run-dependent set; E16's own gate lists the same three files).
 
 **One exception, not caused by k: nuclei2k_v2's `nonhost_reads.fq` holds a different set of records in each run** (528,892,150 bytes
-alone; 528,774,096 and 528,848,534 bytes in its two runs at k = 6). Every count matrix, Solo file, `CellReads.stats`, `star_Unmapped`
+alone; 528,774,096 and 528,848,534 bytes in its two runs at k = 6). It is the non-host writer bug E15 found (E15 §5.7; E19's gate
+names it). Every count matrix, Solo file, `CellReads.stats`, `star_Unmapped`
 file (same records) and the non-host screen's own outputs (`nonhost/`) are identical. The cause is in the pipeline, not the engine
 (`src/pipeline/singlet.cpp`, the non-host screen):
 - the screen classifies a subsample of `star_Unmapped.out.mate1` when it holds more than 20 M reads (by read-name hash; nuclei2k_v2:
@@ -562,8 +565,6 @@ recover part of that by overlap. The order of the levers is:
   any GPU, so 12 of 32 samples ran their prefill and non-host screen on different GPUs, 4 of 32 lost the GPU in the non-host screen
   (`resource already mapped`, `device(s) is/are busy or unavailable`) and screened on the CPU, and the node ran 7 % slower than
   pinned. The outputs stayed identical.
-- **A pipeline bug, not an engine one:** nuclei2k_v2's `nonhost_reads.fq` differs in content from run to run (§3); the writer reads
-  the unmapped file again and indexes it with the screen's subsample.
 - **More threads per sample shorten the slot hold:** the prefill's host lane runs on T − 1 threads beside the device lanes and its
   wait after the lanes falls from 1.79 s at T = 7 to 0.07 s at T = 14; the records' assembly too. Since the cores are mostly
   idle, oversubscribing T costs nothing.
@@ -587,7 +588,7 @@ In order of what they buy per GPU (pbmc1k_v3; §4 and §5):
    node (item 3) would allow more. The two-slot limit (~2.8 M pairs/s per GPU with both slots always held) is not reached at k = 8.
 5. **Keep an unpinned process on one GPU** (engine): `lockDevice` without a pin could prefer the device of the process's earlier
    phases, or the campaign's launcher pins every worker (§6), as job E's pinned points did.
-6. **`nonhost_reads.fq` (pipeline):** write the reads the screen classified (§3), so that the file is the same in every run.
+6. **`nonhost_reads.fq` (pipeline, E15 §5.7):** write the reads the screen classified (§3), so that the file is the same in every run.
 7. **Not measured here:** the mixed set with two slots and at node scale; A100; the input supply (download/convert) that II.1
    expects to bind the campaign at ~1 GB/s.
 
@@ -622,7 +623,9 @@ All new, under `bench/fable/throughput/` (no engine code, no other bench code):
 - 9bb39905: the queue model (`e18_sim.py`).
 - f68bfba9, e49211df, 7155e6c6, 3a22c200: this document's drafts.
 - 5e55b702: merge of gpu/fable-engine 503c07f7 (E17 "budget").
-- This document is the next commit.
+- e31b572d: this document (jobs A–F).
+- 6567e0fa: merge of gpu/fable-engine dc45ef09 (E19 "release": defaults, fallback lines, docs).
+- The next commit: this document with the E19 re-run (job G).
 
 **Builds** (short-gpu without a GPU, ~5 min):
 
@@ -631,6 +634,7 @@ All new, under `bench/fable/throughput/` (no engine code, no other bench code):
 | 797401 | 7a2bbb9e | 44a6e9fa (E1–E15) | `bin/singlet-gpu` | 51e0b035… |
 | 797455 | 3b93a792 | c6ddd3d3 (+ E16) | `bin-e16/singlet-gpu` | 28fe749c… |
 | 797476 | 5e55b702 | 503c07f7 (+ E17) | `bin-e17/singlet-gpu` | 23c4c79a… |
+| 798042 | 6567e0fa | dc45ef09 (+ E19) | `bin-e19/singlet-gpu` | 3ae13b01… |
 
 **Runs** (short-gpu, H100 NVL, `--nice=10000`):
 
@@ -644,6 +648,8 @@ All new, under `bench/fable/throughput/` (no engine code, no other bench code):
 | 797491 (F) | g051 | 1 / 28 / 360 GB | bin-e17 | `k1t7s1 k6t7s2r2 k8t7s2r2 k6t7s1r2` | E17 head: two slots in steady state; 33:18 |
 | 797490 | – | 2 / 54 / 730 GB | bin-e17 | – | the node job, cancelled while pending (no whole node free) to run job F first |
 | 798028 (E) | g052 | 2 / 54 / 730 GB | bin-e17 | `k1t7s1p k16t7s2r2p k12t7s2r2p k16t7s2r2 k12t7s1r2p` | the node; 51:11; waited 6 min for a whole node |
+| 798046 | g050 | 1 / 28 / 360 GB | bin-e19 | `k1t9s1 k3t9s1 k3t9s2` | void: the GPU (0000:42:00.0) failed CUDA's init in every run (`GPU probe: no usable GPU (unknown error)`), so every run took the CPU path (0.17 M pairs/s; outputs identical) |
+| 798052 (G) | g051 | 1 / 28 / 360 GB | bin-e19 | `k1t9s1 k3t9s1 k3t9s2` | E19 head: the k = 3 re-run, g050 excluded; 9:26 |
 
 **Results:** `$W/jobs/fable/throughput/results/run-<job>/`: `summary.txt` (everything below in one file), `table.md`, `dumps.tsv`,
 and per point `point.txt` / `point.json` (analysis), `locks.json`, `samples.jsonl` (the sampler), `runs.tsv`, `meta.json`,
