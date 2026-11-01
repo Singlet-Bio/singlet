@@ -16,7 +16,7 @@
 set -uo pipefail
 OLD=${OLD:?}; NEW=${NEW:?}
 W=/mnt/projects/debruinz_project/debruinz/singlet; WL=$W/pipeline-benchmark/whitelists; export PATH=$W/envs/pbench/bin:$PATH HOME=$W/cache/condahome
-T=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $T; trap 'rm -rf $T' EXIT
+T=$W/jobs/s14/untrimmed_gate_$SLURM_JOB_ID; mkdir -p $T
 UNT=$W/pilot/GSM7064234/sra/SRR23617320.sra; NORM=$W/pilot/GSM4987144/sra/SRR13296300.sra
 N="--quality binned --vdb-threads 2 --no-profile --max-reads 2000000"
 echo "OLD $($OLD --version 2>&1 | head -1) $(sha256sum $OLD | cut -c1-12)   NEW $($NEW --version 2>&1 | head -1) $(sha256sum $NEW | cut -c1-12)"
@@ -28,6 +28,7 @@ SINGLET_WHITELIST_DIR=$WL $NEW download $UNT $N -o $T/new_env.1fq > $T/new_env.l
 [ $r = 0 ] && grep -aq "PASS_10X.*tag=10x-3p-v3" $T/new_env.log && ck "2. NEW + env whitelist only: PASS_10X 10x-3p-v3, rc 0" ok || ck "2. NEW + env whitelist only: rc $r" bad
 $OLD download $UNT $N --protocol 10x-3p-v3 --whitelist-dir $WL -o $T/old_manual.1fq > $T/old_manual.log 2>&1; echo "OLD manual rc $?"
 a=$(sha256sum < $T/new_env.1fq | cut -c1-16); b=$(sha256sum < $T/old_manual.1fq | cut -c1-16)
+[ "$a" != "$b" ] && { echo "   cmp: $(cmp -l $T/new_env.1fq $T/old_manual.1fq | wc -l) differing bytes, first at $(cmp $T/new_env.1fq $T/old_manual.1fq | head -1)"; strings -n 6 $T/new_env.1fq | head -c 700 > $T/new_env.hdr; strings -n 6 $T/old_manual.1fq | head -c 700 > $T/old_manual.hdr; diff $T/new_env.hdr $T/old_manual.hdr | head -10 | cut -c1-400; }
 [ "$a" = "$b" ] && ck "3. NEW auto .1fq == OLD --protocol 10x-3p-v3 .1fq ($a), $(stat -c %s $T/new_env.1fq) bytes" ok || ck "3. .1fq differ ($a vs $b)" bad
 env -u SINGLET_WHITELIST_DIR $NEW download $UNT $N --whitelist-dir /nonexistent -o $T/new_nowl.1fq > $T/new_nowl.log 2>&1; r=$?; grep -a "singlet-gate" $T/new_nowl.log | cut -c1-260
 [ $r != 2 ] && grep -aq "gate cannot tell" $T/new_nowl.log && ck "4. NEW with no whitelist: warning and pass-through (rc $r)" ok || ck "4. NEW with no whitelist: rc $r, no warning" bad
