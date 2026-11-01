@@ -706,7 +706,7 @@ int main(int argc, char** argv) {
             LaneWork<8, 8, 8, true>* lm = new LaneWork<8, 8, 8, true>[32];
             LaneWork<8, 16, 8, true>* lb = new LaneWork<8, 16, 8, true>[32];
             std::vector<uint8_t> buf(Heavy::NBLOB);
-            auto emul = [&](auto& w, auto& b, auto* lanes, u64 budget, u64* hs, const char* R0, uint Lr, Blob& bl) -> Status {
+            auto emul = [&](auto& w, auto& b, auto* lanes, u64 budget, u64* hs, const char* R0, m5::uint Lr, Blob& bl) -> Status {
                 Status st = mapPhase1(P, H, w, b, R0, Lr);
                 if (st != Status::Ok) return st;
                 if (w.stitched && !assignAll(P, H, w)) return Status::Overflow;
@@ -722,7 +722,7 @@ int main(int argc, char** argv) {
             };
             #pragma omp for schedule(dynamic, 256)
             for (long long i = 0; i < (long long)n; i++) {
-                const char* R0 = T.rb.data() + T.roff[i]; uint Lr = T.rlen[i];
+                const char* R0 = T.rb.data() + T.roff[i]; m5::uint Lr = T.rlen[i];
                 Blob bl{buf.data(), 0, Heavy::NBLOB, false};
                 Status st = emul(*wm, *bm, lm, (u64)budgetM, hsM, R0, Lr, bl); int8_t un = (int8_t)wm->unmapType; uint8_t a = 0;
                 if (st != Status::Ok) { bl = Blob{buf.data(), 0, Heavy::NBLOB, false}; st = emul(*wb, *bb, lb, (u64)budgetB, hsB, R0, Lr, bl); un = (int8_t)wb->unmapType; a = 1; }
