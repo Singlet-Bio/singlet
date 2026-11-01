@@ -149,6 +149,7 @@ struct E11State {
     // several whitelist matches, read from the barcode FASTQ (still mapped after STAR's loop; e11CbQual). SINGLET_E15_PERREAD=1 takes this
     // path even when one pq would do (a test of it on a run with constant qualities)
     bool perRead = false;
+    std::string perReadNote;      // why the per-read path was not taken although SINGLET_E15_PERREAD=1 asked for it
     uint64 nQualFetched = 0;
     double sQualFetch = 0;
     uint32 qBase = 33;
@@ -223,6 +224,14 @@ bool e11Posterior(Parameters &P, std::string &why) {
     const char *pr = getenv("SINGLET_E15_PERREAD");
     e11.perRead = !one || (pr != nullptr && pr[0] == '1');
     e11.S.pq = e11.M.pqTab[(unsigned char) e11.cbQmin];   // used only when every CB base gives this qin
+    // E13's ingest (SINGLET_ENGINE_GPU_INGEST=1) maps no barcode FASTQ (the reads come from the .1fq, and its packed planes are released at
+    // the prefill's end), so e11CbQual would have nothing to read after STAR's loop: one pq, or level 3. The .1fq holds no R1 qualities (the
+    // decode gives every CB base 'F'), so today only the test switch asks for the per-read path there; it is ignored
+    if (e11.perRead && e10f.m[1] == nullptr) {
+        e11.perRead = false;
+        if (!one) { why = "CB qualities differ between reads, and there is no barcode FASTQ to read them from (E13 ingest)"; return false; }
+        e11.perReadNote = "; SINGLET_E15_PERREAD=1 ignored: no barcode FASTQ with E13's ingest";
+    }
     return true;
 }
 // E15: SoloReads::cbQual for soloRunKept: the CB span of read r's barcode quality line in the mapped barcode FASTQ (e10Barcodes kept the name
@@ -1181,7 +1190,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         else P.inOut->logMain << "ENGINE_GPU: E11 decode: CB+UMI qualities " << e11.q30Cb << " of " << e11.nCb << " >= Q30, RNA (whole reads) " << e11.q30Rna << " of "
                               << e11.nRna << ", CB quality characters " << e11.cbQmin << ".." << e11.cbQmax << " (posterior "
                               << (e11.perRead ? std::string("per read: the multi-match reads' CB qualities from the barcode FASTQ after STAR's loop")
-                                              : "pq " + pqStr(e11.S.pq) + " for every read") << ")\n";
+                                              : "pq " + pqStr(e11.S.pq) + " for every read") << e11.perReadNote << ")\n";
     }
     time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice

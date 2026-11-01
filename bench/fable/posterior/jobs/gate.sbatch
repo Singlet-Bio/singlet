@@ -17,10 +17,12 @@
 #   gpuE5   gpuD + SINGLET_ENGINE_GPU_E2E=5             (E11/E15 level 5; kept inputs in page-locked host memory during STAR's loop)
 #   gpuE5p  gpuE5 + SINGLET_E15_PERREAD=1               (the per-read posterior path even when one quality factor would do)
 #   gpuE5k  gpuE5 + SINGLET_E15_KEEP_ON_DEVICE=1        (E11's behaviour: kept inputs stay on the device)
+#   gpuE5i  gpuE5 + SINGLET_ENGINE_GPU_INGEST=1         (E13: the prefill decodes the .1fq; no FASTQ temp files)
+#   gpuE5ip gpuE5i + SINGLET_E15_PERREAD=1              (no barcode FASTQ to read qualities from: the switch must be ignored, one pq)
 # Every run: timestamped log, 1 s sampler of the job's cgroup CPU time and the GPU, /usr/bin/time; Gene/CellReads.stats hard-linked the moment it
 # appears (the pipeline deletes it after parsing). Then per pair (PAIRS=a:b ...; a mode not run here is taken from OUT_<mode>, a kept out/ dir;
 # for pbmc1k_v3 OUT_cpu / CRS_cpu default to E11's gate 796377): out_equiv.py, the 10 STAR Solo files by cmp, the mapping statistics of
-# star_Log.final.out, SJ.out.tab, the read-order files by sorted 4-line records, and CellReads.stats by sorted rows. Stages: s8_stages_e11.py
+# star_Log.final.out, SJ.out.tab, the read-order files by sorted 4-line records, and CellReads.stats by sorted rows. Stages: E13's s8_stages_e13.py
 # with the run's input reads.
 # Per sample: MODES_<sample> and PAIRS_<sample> override MODES and PAIRS; NB_<sample> sets SINGLET_ENGINE_GPU_NB (lane A reads in flight) for its runs.
 # debug-gpu: sbatch -p debug-gpu -c 8 --mem=120G --time=00:29:00 --export=ALL,T=8,SAMPLES=pbmc2m,... gate.sbatch
@@ -34,7 +36,7 @@ RES0=$W/jobs/fable/posterior/results/gate-$SLURM_JOB_ID; mkdir -p $RES0
 SCR=/tmp/$USER-e15g-$SLURM_JOB_ID; mkdir -p $SCR/repo
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf "${SCR:?}"' EXIT INT TERM
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/fable/posterior-gate
-git -C $BARE archive refs/fable/posterior-gate bench/star_accel/out_equiv.py bench/fable/solowire/s8_stages_e11.py | tar -x -C $SCR/repo
+git -C $BARE archive refs/fable/posterior-gate bench/star_accel/out_equiv.py bench/fable/ingest/s8_stages_e13.py | tar -x -C $SCR/repo
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 echo "node=$(hostname) job=$SLURM_JOB_ID bin=$BINDIR commit=$(cat $BINDIR/commit-gpu 2>/dev/null) scripts=$(git -C $BARE rev-parse --short=8 refs/fable/posterior-gate) T=$T samples=${SAMPLES[*]} modes=${MODES[*]} $(date -Is)" | tee $RES0/summary.txt
@@ -49,7 +51,7 @@ for s in "${SAMPLES[@]}"; do
   nbv=NB_$s; unset SINGLET_ENGINE_GPU_NB; [ -n "${!nbv:-}" ] && export SINGLET_ENGINE_GPU_NB=${!nbv} && echo "  SINGLET_ENGINE_GPU_NB=${!nbv} (lane A reads in flight, every mode of this sample)" | tee -a $RES0/summary.txt
   for m in "${MS[@]}"; do
     mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
-    unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_E15_PERREAD SINGLET_E15_KEEP_ON_DEVICE; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
+    unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_E15_PERREAD SINGLET_E15_KEEP_ON_DEVICE SINGLET_ENGINE_GPU_INGEST; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
     case $m in
       cpu) ENGARG="" ;;
       gpuD) export SINGLET_GPU_PILEUP=on ;;
@@ -57,6 +59,8 @@ for s in "${SAMPLES[@]}"; do
       gpuE5|gpuE5b) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 ;;
       gpuE5p) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_E15_PERREAD=1 ;;
       gpuE5k) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_E15_KEEP_ON_DEVICE=1 ;;
+      gpuE5i) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1 ;;
+      gpuE5ip) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1 SINGLET_E15_PERREAD=1 ;;
     esac
     ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb"
       while true; do
@@ -82,7 +86,7 @@ for s in "${SAMPLES[@]}"; do
     [ -f $SCR/$s/$m/CellReads.stats ] && cp $SCR/$s/$m/CellReads.stats $O/CellReads.stats && echo "  CellReads.stats kept: $(wc -l < $O/CellReads.stats) lines" | tee -a $RES0/summary.txt
     cp $SCR/$s/$m/out/read_stats.tsv $SCR/$s/$m/out/summary.json $O/ 2>/dev/null
     RM=$(awk -F'|' '/Number of input reads/{gsub(/[ \t]/,"",$2); printf "%.6f", $2/1e6}' $O/star_Log.final.out 2>/dev/null); RM=${RM:-66.601887}
-    python3 $SCR/repo/bench/fable/solowire/s8_stages_e11.py $O $RM > $O/stages.txt 2>&1; tee -a $RES0/summary.txt < $O/stages.txt
+    python3 $SCR/repo/bench/fable/ingest/s8_stages_e13.py $O $RM > $O/stages.txt 2>&1; tee -a $RES0/summary.txt < $O/stages.txt
     [ "${KEEPOUT:-0}" = 1 ] && rsync -a --exclude='*.bam' --exclude='*.sam' --exclude='*.cram' --exclude='*.fq*' --exclude='*.fastq*' --exclude='*.1fq' \
         --exclude='.gpu_handoff*' --exclude='*Unmapped*' --exclude='_STARtmp*' --exclude='*.reads' --exclude='*.reads.q' $SCR/$s/$m/out/ $O/out/
   done
