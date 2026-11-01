@@ -598,6 +598,112 @@ def main():
         md.append(f"| {a_lo}-{a_hi} aligns | " + " | ".join(cells) + " |")
     md.append("")
 
+    # ---- 9. overflow phase per lane: detectable from phase-1 state (windows, seeds, winBin, read length) or only in phase 3
+    PH1 = {1, 2, 3, 4, 6}          # lread, split, pc, win, winbin: k_p1 (seeds, windows, flanks)
+    ovp = []
+    for li, ln in enumerate(LANES[:3]):
+        m = (R["lane"] == li) & (R["status"] != 0)
+        if not m.any():
+            continue
+        ov = R["ov"][m]
+        st_ = R["stitched"][m] == 1   # stitched is set only when phase 1 completes
+        reads_m = R["read"][m]
+        row = {"lane": ln, "overflow_reads": int(m.sum()), "share_of_lane": float(m.sum() / max((R["lane"] == li).sum(), 1)),
+               "phase1": int((~st_).sum()), "phase3_assignment": int((st_ & (ov == 5)).sum()),
+               "phase3_stitching": int((st_ & np.isin(ov, [7, 8, 9, 11])).sum()), "phase3_other": int((st_ & np.isin(ov, [10])).sum()),
+               "by_why": {}, "wasted_cycles_phase1": float(R["cn"][m][:, 0].sum()), "wasted_cycles_phase3": float(R["cn"][m][:, 3].sum())}
+        for k in np.unique(ov):
+            mk = ov == k
+            row["by_why"][OV[k]] = {"reads": int(mk.sum()), "phase1": int((mk & ~st_).sum()), "phase3": int((mk & st_).sum()),
+                                    "wasted_cycles": float((R["cn"][m][mk, 0] + R["cn"][m][mk, 3]).sum()),
+                                    "final_lane_mix": {LN: float((lane_f[reads_m[mk]] == lj).mean()) for lj, LN in enumerate(LANES)}}
+        ovp.append(row)
+    res["overflow_phase"] = ovp
+    md += ["## Where the overflow is detected (per lane; phase 1 = k_p1 seeds/windows/flanks, phase 3 = k_p3 assignment/stitching)", "",
+           "| lane | overflow reads | share of lane | phase 1 | phase 3 assignment (wa) | phase 3 stitching (steps/wtr/keep/exons) | wasted Gcycles p1 / p3 |",
+           "|---|---|---|---|---|---|---|"]
+    for r in ovp:
+        md.append(f"| {r['lane']} | {r['overflow_reads']:,} | {100 * r['share_of_lane']:.2f}% | {r['phase1']:,} | {r['phase3_assignment']:,} | "
+                  f"{r['phase3_stitching']:,} | {r['wasted_cycles_phase1'] / 1e9:.2f} / {r['wasted_cycles_phase3'] / 1e9:.2f} |")
+    md += ["", "| lane | reason | reads | in phase 1 | in phase 3 | wasted Gcycles | finished in A / M / B / host |", "|---|---|---|---|---|---|---|"]
+    for r in ovp:
+        for k, v in sorted(r["by_why"].items(), key=lambda kv: -kv[1]["reads"]):
+            mix = " / ".join(f"{100 * v['final_lane_mix'][LN]:.1f}" for LN in LANES)
+            md.append(f"| {r['lane']} | {k} | {v['reads']:,} | {v['phase1']:,} | {v['phase3']:,} | {v['wasted_cycles'] / 1e9:.2f} | {mix} |")
+    md.append("")
+    # can a phase-1 classifier see the phase-3 overflows of lane A (i.e. route them before k_p3)?
+    A_ = R[R["lane"] == 0]
+    A_ = A_[np.argsort(A_["read"], kind="stable")]
+    ovA3 = (A_["status"] != 0) & (A_["stitched"] == 1)
+    ovA1 = (A_["status"] != 0) & (A_["stitched"] == 0)
+    cand = ~ovA1                       # reads that pass phase 1 of lane A (phase-1 overflows are routed anyway)
+    Xf = np.column_stack([F[f].astype(np.float64) for f in feats1])[cand]
+    yb = ovA3[cand].astype(np.float64)
+    det = {"lane_A_phase1_overflow": int(ovA1.sum()), "lane_A_phase3_overflow": int(ovA3.sum()), "reads_past_phase1": int(cand.sum())}
+    if yb.sum() > 0:
+        pc_ = rng.permutation(len(yb)); h = len(pc_) // 2
+        t2 = Tree(depth=8, min_leaf=100).fit(Xf[pc_[:h]], yb[pc_[:h]])
+        pp = t2.predict(Xf[pc_[h:]]); yt_ = yb[pc_[h:]]
+        order = np.argsort(-pp, kind="stable")
+        rows = []
+        for frac_ in [0.01, 0.02, 0.05, 0.1, 0.2]:
+            k = int(frac_ * len(pp)); sel = np.zeros(len(pp), bool); sel[order[:k]] = True
+            rows.append({"flag_share": frac_, "recall": float(yt_[sel].sum() / yt_.sum()), "precision": float(yt_[sel].mean())})
+        det["tree_phase1"] = rows
+        # the same with the k_p2 scan hits added
+        Xf2 = np.column_stack([Xf, F["nHits"][cand].astype(np.float64)])
+        t3 = Tree(depth=8, min_leaf=100).fit(Xf2[pc_[:h]], yb[pc_[:h]])
+        pp3 = t3.predict(Xf2[pc_[h:]]); order3 = np.argsort(-pp3, kind="stable")
+        rows3 = []
+        for frac_ in [0.01, 0.02, 0.05, 0.1, 0.2]:
+            k = int(frac_ * len(pp3)); sel = np.zeros(len(pp3), bool); sel[order3[:k]] = True
+            rows3.append({"flag_share": frac_, "recall": float(yt_[sel].sum() / yt_.sum()), "precision": float(yt_[sel].mean())})
+        det["tree_phase1_scan"] = rows3
+        det["base_rate"] = float(yb.mean())
+    res["phase3_overflow_detectability"] = det
+    md += [f"Lane A: {det['lane_A_phase1_overflow']:,} reads overflow in phase 1 (known before k_p3), {det['lane_A_phase3_overflow']:,} only in phase 3.", ""]
+    if "tree_phase1" in det:
+        md += [f"Predicting lane A's phase-3 overflow from phase-1 state (tree depth 8, held-out half; base rate {100 * det['base_rate']:.2f}% of the reads that pass phase 1):", "",
+               "| flagged share | recall (phase 1) | precision | recall (+ scan hits) | precision |", "|---|---|---|---|---|"]
+        for a_, b_ in zip(det["tree_phase1"], det["tree_phase1_scan"]):
+            md.append(f"| {100 * a_['flag_share']:.0f}% | {100 * a_['recall']:.1f}% | {100 * a_['precision']:.1f}% | {100 * b_['recall']:.1f}% | {100 * b_['precision']:.1f}% |")
+        md.append("")
+
+    # ---- 10. control-flow signatures: how many distinct per-read shapes cover the reads / the cycles (warp re-convergence)
+    stb = np.where(st >= 1, np.floor(np.log2(np.maximum(st, 1))) + 1, 0).astype(np.int64)
+
+    def lb(x):
+        x = np.asarray(x, dtype=np.float64)
+        return np.where(x >= 1, np.floor(np.log2(np.maximum(x, 1))) + 1, 0).astype(np.int64)
+
+    sigs = {
+        "exact (nWall, nWAsum, nP, stitched, unmapType, log2 nSteps)":
+            [F["nWall"], F["nWAsum"], F["nP"], F["stitched"], F["unmapType"], stb],
+        "bucketed (log2 nWall, log2 nWAsum, log2 nP, stitched, unmapType, log2 nSteps)":
+            [lb(F["nWall"]), lb(F["nWAsum"]), lb(F["nP"]), F["stitched"], F["unmapType"], stb],
+        "phase-1 only (nWall, nP, stitched)": [F["nWall"], F["nP"], F["stitched"]],
+        "phase-1 bucketed (log2 nWall, log2 nP, log2 nEntries, stitched)": [lb(F["nWall"]), lb(F["nP"]), lb(F["nEntries"]), F["stitched"]],
+    }
+    sigres = {}
+    md += ["## Control-flow signatures (distinct per-read shapes; few shapes = sorting reads by shape can re-converge warps)", "",
+           "| signature | distinct | covering 50% / 80% / 95% of reads | covering 50% / 80% / 95% of cascade cycles |", "|---|---|---|---|"]
+    for nm, cols in sigs.items():
+        key = np.column_stack([np.asarray(c).astype(np.int64) for c in cols])
+        u, inv = np.unique(key, axis=0, return_inverse=True)
+        inv = inv.ravel()
+        nr = np.bincount(inv, minlength=len(u)).astype(np.float64)
+        cy = np.bincount(inv, weights=cascade, minlength=len(u))
+
+        def cover(v):
+            o = np.sort(v)[::-1]
+            c = np.cumsum(o) / o.sum()
+            return [int(np.searchsorted(c, q) + 1) for q in (0.5, 0.8, 0.95)]
+        sigres[nm] = {"distinct": int(len(u)), "reads_cover": cover(nr), "cycles_cover": cover(cy)}
+        md.append(f"| {nm} | {len(u):,} | {' / '.join(f'{x:,}' for x in sigres[nm]['reads_cover'])} | "
+                  f"{' / '.join(f'{x:,}' for x in sigres[nm]['cycles_cover'])} |")
+    res["signatures"] = sigres
+    md.append("")
+
     json.dump(res, open(outp, "w"), indent=1)
     print("\n".join(md))
 
