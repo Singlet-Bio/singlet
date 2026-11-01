@@ -1232,6 +1232,56 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
 void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
     singlet_tail::mark("after mapping: start");
+    // E11's Solo device part (the gather of STAR's loop annotations, soloRunKept under the device lock) as a step: E16 "solofirst" (level 5) runs it
+    // first, before the other after-mapping steps, so that it holds the device before the pipeline's pileup asks for it (the BAM stream has just
+    // closed); otherwise it runs where E11 ran it
+    struct SoloDev { bool done = false; uint64 nHost = 0, starQ30 = 0, starN = 0; double sGather = 0;
+                     std::chrono::steady_clock::time_point t0, tw, tl, tr; e9::SoloResult res; std::string log; } sd;
+    auto soloDev = [&]() {
+        const auto t0 = std::chrono::steady_clock::now(); sd.t0 = t0;
+        // the Gene annotation of the reads STAR's loop mapped (ReadAlign::e11Annot: read index, packed RecAnn), in read order
+        uint64 &nHost = sd.nHost, &starQ30 = sd.starQ30, &starN = sd.starN;
+        for (int i = 0; i < (int) P.runThreadN; i++) {
+            nHost += RAchunk[i]->RA->e11Ann.size() / 2;
+            for (uint32 ix = 0; ix < 256; ix++) {   // SoloFeature_statsOutput.cpp:25-35 over STAR's loop (the reads without a record)
+                starN += RAchunk[i]->RA->qualHist[0][ix];
+                if (ix >= e11.qBase + 30) starQ30 += RAchunk[i]->RA->qualHist[0][ix];
+            }
+        }
+        std::vector<std::pair<uint64, uint64>> ha;
+        ha.reserve(nHost);
+        for (int i = 0; i < (int) P.runThreadN; i++) {
+            std::vector<uint64> &v = RAchunk[i]->RA->e11Ann;
+            for (size_t k = 0; k + 1 < v.size(); k += 2) ha.emplace_back(v[k], v[k + 1]);
+            std::vector<uint64>().swap(v);
+        }
+        std::sort(ha.begin(), ha.end());
+        std::vector<uint32_t> hostIdx(nHost);
+        std::vector<e9::RecAnn> hostAnn(nHost);
+        for (uint64 k = 0; k < nHost; k++) {
+            hostIdx[k] = (uint32_t) ha[k].first;
+            const uint64 a = ha[k].second;
+            hostAnn[k] = e9::RecAnn{(uint32_t) a, (uint16_t) (a >> 32), (uint8_t) (a >> 48), (uint8_t) (a >> 56)};
+        }
+        std::vector<std::pair<uint64, uint64>>().swap(ha);
+        sd.sGather = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        int lockFd = -1;
+        sd.tw = std::chrono::steady_clock::now();
+        singlet_engine_gpu::lockDeviceSlot(e11.device, &lockFd);
+        sd.tl = std::chrono::steady_clock::now();
+        e9::SoloResult &res = sd.res;
+        std::string &log = sd.log;
+        const bool ok = nHost < (1ull << 32) && g_handoffNReads < (1ull << 32)
+            && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log);
+        singlet_engine_gpu::unlockDevice(lockFd);
+        sd.tr = std::chrono::steady_clock::now();
+        if (!ok) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): Solo's counting on the device failed: " + log, std::cerr,
+                               P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        sd.done = true;
+        singlet_tail::mark("after mapping: Solo on the device done (gather %.3f s, device wait %.3f s, soloRunKept %.3f s)", sd.sGather,
+                           std::chrono::duration<double>(sd.tl - sd.tw).count(), std::chrono::duration<double>(sd.tr - sd.tl).count());
+    };
+    if (g_e10Level == 5 && singlet_tail::cut("solofirst")) soloDev();
     if (e16bg.on) {   // E16 bg: the thread's records into STAR's streams (the mapping threads are done with them), its RNA counts for Solo's summary
         if (e16bg.th.joinable()) e16bg.th.join();
         e16bg.on = false;
@@ -1277,45 +1327,10 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
     std::vector<uint8>().swap(e10sj);
     e10f.release();
     if (g_e10Level == 5) {   // E11: Solo's counting on the device (E9's soloRun on the kept inputs) and star_Solo.out/ from it
-        const auto t0 = std::chrono::steady_clock::now();
-        // the Gene annotation of the reads STAR's loop mapped (ReadAlign::e11Annot: read index, packed RecAnn), in read order
-        uint64 nHost = 0, starQ30 = 0, starN = 0;
-        for (int i = 0; i < (int) P.runThreadN; i++) {
-            nHost += RAchunk[i]->RA->e11Ann.size() / 2;
-            for (uint32 ix = 0; ix < 256; ix++) {   // SoloFeature_statsOutput.cpp:25-35 over STAR's loop (the reads without a record)
-                starN += RAchunk[i]->RA->qualHist[0][ix];
-                if (ix >= e11.qBase + 30) starQ30 += RAchunk[i]->RA->qualHist[0][ix];
-            }
-        }
-        std::vector<std::pair<uint64, uint64>> ha;
-        ha.reserve(nHost);
-        for (int i = 0; i < (int) P.runThreadN; i++) {
-            std::vector<uint64> &v = RAchunk[i]->RA->e11Ann;
-            for (size_t k = 0; k + 1 < v.size(); k += 2) ha.emplace_back(v[k], v[k + 1]);
-            std::vector<uint64>().swap(v);
-        }
-        std::sort(ha.begin(), ha.end());
-        std::vector<uint32_t> hostIdx(nHost);
-        std::vector<e9::RecAnn> hostAnn(nHost);
-        for (uint64 k = 0; k < nHost; k++) {
-            hostIdx[k] = (uint32_t) ha[k].first;
-            const uint64 a = ha[k].second;
-            hostAnn[k] = e9::RecAnn{(uint32_t) a, (uint16_t) (a >> 32), (uint8_t) (a >> 48), (uint8_t) (a >> 56)};
-        }
-        std::vector<std::pair<uint64, uint64>>().swap(ha);
-        const double sGather = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-        int lockFd = -1;
-        const auto tw = std::chrono::steady_clock::now();
-        singlet_engine_gpu::lockDeviceSlot(e11.device, &lockFd);
-        const auto tl = std::chrono::steady_clock::now();
-        e9::SoloResult res;
-        std::string log;
-        const bool ok = nHost < (1ull << 32) && g_handoffNReads < (1ull << 32)
-            && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log);
-        singlet_engine_gpu::unlockDevice(lockFd);
-        const auto tr = std::chrono::steady_clock::now();
-        if (!ok) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): Solo's counting on the device failed: " + log, std::cerr,
-                               P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        if (!sd.done) soloDev();
+        const uint64 nHost = sd.nHost, starQ30 = sd.starQ30, starN = sd.starN; const double sGather = sd.sGather;
+        const auto tw = sd.tw, tl = sd.tl, tr = sd.tr;
+        e9::SoloResult &res = sd.res; std::string &log = sd.log;
         // star_Solo.out/: STAR creates Gene/, raw/ and filtered/ in its Solo step (SoloFeature_processRecords.cpp, _outputResults.cpp, cellFiltering)
         const std::string pre = P.outFileNamePrefix + P.pSolo.outFileNames[0];
         for (const std::string &d : {pre, pre + "Gene/", pre + "Gene/raw/", pre + "Gene/filtered/"}) mkdir(d.c_str(), P.runDirPerm);
@@ -1323,11 +1338,12 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         sum.readN = g_statsAll.readN; sum.mappedU = g_statsAll.mappedReadsU; sum.mappedM = g_statsAll.mappedReadsM;
         sum.q30CbUmi = e11.q30Cb; sum.nCbUmi = e11.nCb; sum.q30Rna = e11.q30Rna + starQ30; sum.nRna = e11.nRna + starN; sum.qualBase = e11.qBase;
         e9::SoloWriteInfo info;
+        const auto tws = std::chrono::steady_clock::now();
         const bool okw = e9::soloWrite(pre, e11.S, e11.M, res, e11.FP, {}, info, log, &sum);
         const auto te = std::chrono::steady_clock::now();
-        singlet_tail::mark("after mapping: Solo gather %.3f s, device wait %.3f s, soloRunKept %.3f s, soloWrite %.3f s",
-                           std::chrono::duration<double>(tw - t0).count(), std::chrono::duration<double>(tl - tw).count(),
-                           std::chrono::duration<double>(tr - tl).count(), std::chrono::duration<double>(te - tr).count());
+        singlet_tail::mark("after mapping: Solo gather %.3f s, device wait %.3f s, soloRunKept %.3f s, soloWrite %.3f s", sGather,
+                           std::chrono::duration<double>(tl - tw).count(), std::chrono::duration<double>(tr - tl).count(),
+                           std::chrono::duration<double>(te - tws).count());
         if (!okw) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): star_Solo.out/ not written: " + log, std::cerr, P.inOut->logMain,
                                 EXIT_CODE_INPUT_FILES, P);
         g_e11SoloDone = true;
@@ -1337,7 +1353,7 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         P.inOut->logMain << "ENGINE_GPU: E11: Solo on the device: " << g_handoffNReads << " reads (" << nHost << " annotated by STAR's loop; RNA Q30 adjustment "
                          << e11.nNoRec << " reads without a record, " << e11.nClipped << " clipped, " << e11.sAdj << " s), " << res.nDistinctCR << " distinct CRs, "
                          << res.nKeys << " counted reads, " << res.nTuples << " distinct (CB,gene,UMI), " << res.nSeg << " (CB,gene); gather " << sGather
-                         << " s, waited " << sec(tw, tl) << " s for the device, soloRunKept " << sec(tl, tr) << " s (ms:" << ms.str() << "), write " << sec(tr, te)
+                         << " s, waited " << sec(tw, tl) << " s for the device, soloRunKept " << sec(tl, tr) << " s (ms:" << ms.str() << "), write " << sec(tws, te)
                          << " s (" << info.nCB << " CBs, " << info.nCells << " cells, nUMImax " << info.nUMImax << ", nUMImin " << info.nUMImin
                          << "); STAR's Solo step skipped\n" << log << std::flush;
     }
