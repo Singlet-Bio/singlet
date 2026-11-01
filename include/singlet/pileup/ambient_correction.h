@@ -171,6 +171,10 @@ struct AmbientDecontConfig {
     double   rho_max          = 0.5;
     double   prior_strength   = 20.0;   ///< kappa: Beta prior pseudo-UMIs, prior mean = the cluster's c_k
     double   offgene_z        = 3.0;    ///< Poisson tolerance (sd) for "not expressed above ambient" genes
+    double   cluster_rho_depth_cap = 3.0; ///< every droplet carries about the same number of ambient UMIs, so a cluster's c_k times its mean depth is
+                                        ///< about the same across clusters; c_k is capped at this multiple of (median over clusters of c_k x depth) /
+                                        ///< depth. A low-depth cluster whose weakly detected native genes pass for "not expressed" otherwise inflates
+                                        ///< its own c_k (hgmm1k_v3: 42 low-depth mouse cells at c_k 0.18 against 0.007-0.012). 0 = off
     double   phi_pseudocount  = 1e-4;   ///< per-gene pseudocount of the native profile
     bool     equal_cell_weight = false; ///< cluster profiles average cells with equal weight instead of by UMIs
     bool     outlier_round = true;      ///< refit the clusters without cells whose rho is far above their cluster's
@@ -607,7 +611,7 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
     std::vector<char> use(n, 1), offmask(G * K, 0);
     for (size_t j = 0; j < n; ++j) if (low[j]) use[j] = 0;   // offmask[g * K + k]: gene g is "not expressed" in cluster k
     std::vector<std::vector<double>> nkv(K);
-    std::vector<double> Nkv(K, 0.0), inflv(K, 1.0);
+    std::vector<double> Nkv(K, 0.0), inflv(K, 1.0), Nmean(K, 0.0);
     auto fit_clusters = [&]() {
         // A. cell-weighted gene totals per cluster
         parallel_for(K, thr, [&](size_t k) {
@@ -634,6 +638,7 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
                     for (size_t e = X.ptr[j]; e < X.ptr[j + 1]; ++e) nk[X.gene[e]] += X.val[e];
             }
             Nkv[k] = Nk; inflv[k] = infl;
+            Nmean[k] = mem.empty() ? 0.0 : Nk / static_cast<double>(mem.size());
         });
         // B. marker genes: a gene clearly above its ambient share in some cluster
         std::vector<char> strong(G * K, 0);
@@ -644,18 +649,42 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
                 if (nkv[k][g] >= e + cfg.offgene_z * std::sqrt(e * inflv[k]) + 1.0) { strong[g * K + k] = 1; ++n_strong[g]; }
             }
         // C. c_k, native profile, off-gene set
+        const bool est_all = cfg.estimate_features.size() != G;
+        std::vector<std::vector<char>> masks(K);
+        std::vector<char> have_mask_v(K, 0);
         parallel_for(K, thr, [&](size_t k) {
             auto& nk = nkv[k];
             const double Nk = Nkv[k], infl = inflv[k];
             std::vector<char> mask(G, 0);
             double Aeff = 0.0;
-            const bool est_all = cfg.estimate_features.size() != G;
             for (size_t g = 0; g < G; ++g)
                 if (n_strong[g] - strong[g * K + k] > 0 && (est_all || cfg.estimate_features[g])) { mask[g] = 1; Aeff += a[g]; }
             const bool have_mask = K > 1 && cfg.use_off_estimator && Aeff >= cfg.min_off_mass;
-            const double c = cluster_contamination(nk, Nk, infl, a, cfg,
-                                                   have_mask ? &mask : (est_all ? nullptr : &cfg.estimate_features));
-            ck[k] = c;
+            ck[k] = cluster_contamination(nk, Nk, infl, a, cfg,
+                                          have_mask ? &mask : (est_all ? nullptr : &cfg.estimate_features));
+            masks[k] = std::move(mask);
+            have_mask_v[k] = have_mask ? 1 : 0;
+        });
+        if (cfg.cluster_rho_depth_cap > 0.0 && K >= 3) {
+            // ambient UMIs per droplet: c_k x mean depth, weighted median over clusters (by cells)
+            std::vector<std::pair<double, double>> lam;   // (lambda_k, weight)
+            double wsum = 0.0;
+            for (uint32_t k = 0; k < K; ++k)
+                if (Nmean[k] > 0 && ck[k] > 0) { const double w = static_cast<double>(members[k].size()); lam.push_back({ck[k] * Nmean[k], w}); wsum += w; }
+            if (lam.size() >= 3 && wsum > 0) {
+                std::sort(lam.begin(), lam.end());
+                double acc = 0.0, med = lam.back().first;
+                for (auto& pr : lam) { acc += pr.second; if (acc >= 0.5 * wsum) { med = pr.first; break; } }
+                for (uint32_t k = 0; k < K; ++k)
+                    if (Nmean[k] > 0) ck[k] = std::min(ck[k], cfg.cluster_rho_depth_cap * med / Nmean[k]);
+            }
+        }
+        parallel_for(K, thr, [&](size_t k) {
+            auto& nk = nkv[k];
+            const double Nk = Nkv[k], infl = inflv[k];
+            const std::vector<char>& mask = masks[k];
+            const bool have_mask = have_mask_v[k] != 0;
+            const double c = ck[k];
             double tot = 0.0, A = 0.0;
             for (size_t g = 0; g < G; ++g) {
                 // native evidence only above the ambient expectation + z sd (same cut as the "not expressed" genes of
