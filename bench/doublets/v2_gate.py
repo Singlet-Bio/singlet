@@ -14,6 +14,7 @@ development datasets only, and note which of them are among its training sets (t
 """
 import argparse
 import json
+import os
 import resource
 import subprocess
 import sys
@@ -49,12 +50,12 @@ if "label" not in tab:
     tab["label"] = (np.minimum(tab.human_umi, tab.mouse_umi) / tot.clip(lower=1) >= a.minor_frac).astype(int)
 mx = run / "filtered_feature_bc_matrix"
 M = scipy.io.mmread(str(mx / "matrix.mtx.gz")).tocsr()
-bc = pd.read_csv(mx / "barcodes.tsv.gz", header=None, sep="\t")[0].astype(str).to_numpy()
+bc = pd.read_csv(mx / "barcodes.tsv.gz", header=None, sep="\t")[0].astype(str).str.replace(r"-1$", "", regex=True).to_numpy()  # 10x suffix
 feat = pd.read_csv(mx / "features.tsv.gz", header=None, sep="\t")
 ix = pd.Series(np.arange(len(bc)), index=bc).reindex(tab.barcode)
 assert ix.notna().all(), "table barcodes missing from the matrix"
 X = sp.csr_matrix(M.T.tocsr()[ix.astype(int).to_numpy()], dtype=np.float32)
-prod = D.read_prod_scores(run / "doublet_scores.tsv", tab.barcode)
+prod = D.read_prod_scores(run / "doublet_scores.tsv", tab.barcode)  # the file has the barcodes without suffix
 tm = {}
 F = D.compute_inputs(X, list(feat[0].astype(str)), a.species, prod, timings=tm)
 v2 = D.score_inputs(F)
@@ -83,7 +84,7 @@ from sklearn.metrics import average_precision_score  # noqa: E402
 TOOLS = ("combo", "prod", "scdblfinder", "scrublet")
 ap_ = {t: np.mean([average_precision_score(g.label, g[t]) for _, g in cells.groupby("dataset")]) for t in TOOLS}
 n = len(ds)
-sha = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() or "unknown"
+sha = os.environ.get("SHA") or subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() or "unknown"
 
 
 def rd(f):
