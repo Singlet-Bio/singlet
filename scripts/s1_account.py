@@ -182,7 +182,7 @@ def main(argv=None) -> int:
                 if isinstance(x, str) and re.fullmatch(r"[0-9a-f]{32}", x):
                     pack_ids.add(x)
         for name in (m.get("study_files") or {}):
-            if omitted_layer(name) or is_restricted_member(name):
+            if omitted_layer(name, pol.published) or is_restricted_member(name):
                 problems.append(f"{g}: study file {name} is a withheld layer")
         gm = gsm_meta(m)
         title = json.dumps((m.get("study") or {}).get("title") or "")
@@ -190,7 +190,7 @@ def main(argv=None) -> int:
             all_samples.append((g, s["gsm"], s["key"], sorted((s.get("members") or {}).keys())))
             for name in s.get("members") or {}:
                 n_members += 1
-                if omitted_layer(name) or is_restricted_member(name):
+                if omitted_layer(name, pol.published) or is_restricted_member(name):
                     problems.append(f"{g}/{s['gsm']}: member {name} is a withheld layer")
             meta = gm.get(s["gsm"]) or {}
             meta_org[s["gsm"]] = str(meta.get("organism") or "")
@@ -232,7 +232,7 @@ def main(argv=None) -> int:
         if inside != names:
             obj_problems.append(f"{gsm}: members differ from the manifest ({len(inside)} vs {len(names)})")
         for name in inside:
-            if omitted_layer(name) or is_restricted_member(name):
+            if omitted_layer(name, pol.published) or is_restricted_member(name):
                 obj_problems.append(f"{gsm}: object holds withheld member {name}")
         if ACC.findall(" ".join(inside)) and set(ACC.findall(" ".join(inside))) & bad_acc:
             obj_problems.append(f"{gsm}: member names carry an excluded accession")

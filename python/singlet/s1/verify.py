@@ -253,7 +253,7 @@ def _check_policy(rep: Report, policy, leg, man: dict, man_bytes: bytes, gse: st
     for s in man.get("samples", []):
         g = s.get("gsm", "")
         rep.check(not policy.excludes(g), "policy", "manifest lists an excluded sample", "policy")
-        bad = [n for n in (s.get("members") or {}) if omitted_layer(n) is not None]
+        bad = [n for n in (s.get("members") or {}) if omitted_layer(n, getattr(policy, "published", ())) is not None]
         rep.check(not bad, "policy:" + g, "withheld members in the object: %s" % bad[:3], "policy")
         prov = s.get("provenance") or {}
         rep.check(

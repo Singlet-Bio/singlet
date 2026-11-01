@@ -138,10 +138,18 @@ campaign takes the policy JSON (`version`, `withheld_studies`, `excluded_samples
   | `mtdna_alleles` | `mt/*` except `mt_summary.tsv`, `mt_heteroplasmy.1pz`, `mt_variants.tsv`, `*_mt_consensus*`, `*_mt_variants*` |
   | `ancestry_call` | `ancestry_call.json`, the legacy 50-marker AIM call (`include/singlet/pileup/ancestry.h`). Not to be read: its confidence is uncalibrated (softmax of summed read log-likelihoods, no depth cap or genotype model) and it is coverage-limited on 3' data (0-10 of the 51 markers covered on the bench host runs; a call needs only 5 informative markers). Superseded by the validated per-cell ancestry label (`singlet.celllabels.ancestry`, full 1000 Genomes panel, at least 300 sites), which is authoritative |
   | `ambient` | `ambient_contamination.*`, `ambient_profile.tsv` |
-  | `doublet_scores` | `doublet_scores.tsv` |
+  | `doublet_scores` | `doublet_scores.tsv`; a policy may lift this layer alone (`published_layers`, below) |
+  | `doublet_scores_engine` | `doublet_scores_engine.tsv` and the engine's doublet columns of `cell_qc_metrics.tsv`; never liftable |
   | `nonhost_per_cell` | `nonhost/*per_cell*`; the sample-level `nonhost_summary.json` and `nonhost_em_abundance.tsv` stay |
   | `splice_psi_legacy` | `splice_psi.1pz`; clients compute true PSI from `sj_counts` (D8) |
   | `sex_call_legacy` | `sex_call.json`, the legacy pipeline call, for every species; replaced by the validated per-cell `sex_chrom` labels |
+
+- **Published doublet scores (Beta, `beta-2026-11-01`):** the policy file may carry `"published_layers": ["doublet_scores"]`; no other layer can be lifted.
+  Under such a policy `doublet_scores.tsv` is a public member and its content is the cross-study stacker's score
+  (`singlet.features.doublet`, `scripts/atlas_rerun/doublet_stage.py`), never the engine's, which is kept privately as `doublet_scores_engine.tsv`.
+  The method, version and hashes are recorded in `doublet_stage.json` (the `method` string) and are not part of any public member name.
+  The public description of the layer is "comparable to scDblFinder" (it ties scDblFinder on the real-label benchmark, it is not shown better).
+  The engine's doublet columns of `cell_qc_metrics.tsv` are still stripped (they are the engine's score, so the cells table would otherwise carry two methods).
 
 - **Manifest:** `release_policy` holds `{name, version, omitted_layers}`, the generic layer names only. It never holds an excluded
   accession or a per-study count of them. The per-study record of what was dropped is `policy-audit.json`, next to the .s1 tree,

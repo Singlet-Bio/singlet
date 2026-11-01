@@ -134,7 +134,7 @@ def test_policy_file_is_validated(tmp_path):
 
 
 # ------------------------------------------------------------------------------------------------ synthetic bundle with every class
-def _policy_bundle(tmp_path: Path, leak: bool = False) -> Path:
+def _policy_bundle(tmp_path: Path, leak: bool = False, dbl_rows: bool = False) -> Path:
     b = TM.make_bundle(tmp_path, gse=GSE, gsms=(KEEP, DROP))
     # rewrite the study files with sample lists, then add the members the policy withholds (zipfile "a" appends; the old
     # study files are replaced by writing a fresh archive)
@@ -241,7 +241,14 @@ def _policy_bundle(tmp_path: Path, leak: bool = False) -> Path:
                 data = json.dumps(d).encode()
             z.writestr(info, data)
         for g in (KEEP, DROP):
-            for r, d in extra.items():
+            ex = dict(extra)
+            if dbl_rows:   # doublet tables over the sample's own called barcodes: the engine's column in the QC table, the stage's in doublet_scores.tsv
+                cc = next(d for i, d in items if i.filename == f"samples/{g}/cell_calls.tsv").decode().split("\n")
+                bcs = [ln.split("\t")[0] for ln in cc[1:] if ln][:5]
+                rows = "".join("%s\t%d\t%.4f\n" % (b, 100 + i, 0.1 * (i + 1)) for i, b in enumerate(bcs))
+                ex["doublet_scores.tsv"] = ("barcode\ttotal_umis\tdoublet_score\n" + rows).encode()
+                ex["cell_qc_metrics.tsv"] = ("barcode\tn_umi\tdoublet_score\n" + rows).encode()
+            for r, d in ex.items():
                 z.writestr(f"samples/{g}/{r}", d)
     return b
 
@@ -696,3 +703,33 @@ def test_sample_facts_never_carry_an_accession_into_the_manifest(tmp_path, pol):
         str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy
     )
     assert any("excluded or withheld accessions" in what for _s, _w, what in rep.items)
+
+
+def test_published_doublet_layer_transcodes_and_verifies(tmp_path):
+    """A policy with published_layers=[doublet_scores]: the member and the cells table's qc_doublet_score reach the object (one
+    method, the stage's), the engine's is_doublet call and everything else withheld stay out, and verify passes under the same view."""
+    p = tmp_path / "policy.json"
+    p.write_text(json.dumps({"version": "beta-test-1", "withheld_studies": ["GSE7"], "excluded_samples": [DROP],
+                             "published_layers": ["doublet_scores"]}))
+    policy = POL.Policy.load(str(p))
+    b = _policy_bundle(tmp_path, dbl_rows=True)
+    out = tmp_path / "out"
+    opts = MG.Options(recipes=TM.FakeRecipes(), created_at="2026-10-26T00:00:00Z", log=lambda *a: None, policy=policy)
+    res = MG.migrate_bundle(str(b), str(out), None, opts)
+    MG.write_outputs(res, opts)
+    man = json.loads((out / "s1" / "m" / f"{GSE}.json").read_text("utf-8"))
+    assert "doublet_scores" not in man["release_policy"]["omitted_layers"]
+    assert "doublet_scores_engine" in man["release_policy"]["omitted_layers"] and "ambient" in man["release_policy"]["omitted_layers"]
+    members = set(man["samples"][0]["members"])
+    assert "doublet_scores.tsv" in members and "ambient_contamination.tsv" not in members and "doublet_scores_engine.tsv" not in members
+    from singlet.s1 import recipes_tables as RT
+    from singlet.s1.sample import S1Sample
+
+    cols = list(S1Sample((out / man["samples"][0]["key"]).read_bytes()).cells().names)
+    assert not [c for c in cols if "is_doublet" in c], cols
+    # The cells-table column comes from the member: FakeRecipes derives no tsv columns, so this checks the real profiles instead. The
+    # member's columns are prefixed dbl_ and the QC table's doublet_score is an alias of dbl_doublet_score: one source, one method.
+    assert RT.PROFILES["doublet_scores.tsv"]["prefix"] == "dbl_"
+    assert RT.PROFILES["cell_qc_metrics.tsv"]["alias"]["doublet_score"] == ["dbl_doublet_score"]
+    rep = V.verify(str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy)
+    assert rep.fail == 0, rep.items
