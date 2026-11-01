@@ -1,0 +1,146 @@
+{
+ "pbmc1k_v3": {
+  "gpu_run": "GPU pileup",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 59,
+  "n_different": 1
+ },
+ "pbmc1k_v2": {
+  "gpu_run": "GPU pileup",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 59,
+  "n_different": 1
+ },
+ "neuron1k_v3": {
+  "gpu_run": "GPU pileup",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 59,
+  "n_different": 1
+ },
+ "hgmm1k_v3": {
+  "gpu_run": "GPU pileup",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 57,
+  "n_different": 1
+ },
+ "pbmc1k_cite_v3": {
+  "gpu_run": "GPU pileup",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 59,
+  "n_different": 1
+ },
+ "nuclei2k_v2": {
+  "gpu_run": "GPU pileup",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 59,
+  "n_different": 1
+ },
+ "pbmc5p_v1": {
+  "gpu_run": "GPU pileup",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 55,
+  "n_different": 1
+ },
+ "kang2018_ctrl": {
+  "gpu_run": "GPU pileup",
+  "identical": [
+   "ambient_contamination.tsv",
+   "ambient_corrected_counts.mtx.gz",
+   "ambient_corrected_counts_barcodes.tsv.gz",
+   "..."
+  ],
+  "different": [
+   {
+    "file": "read_stats.tsv"
+   }
+  ],
+  "only_cpu": [],
+  "only_gpu": [],
+  "n_identical": 59,
+  "n_different": 1
+ }
+}

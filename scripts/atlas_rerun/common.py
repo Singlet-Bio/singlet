@@ -113,6 +113,94 @@ def require_whitelists(binary, names=("3M-february-2018.txt", "737K-august-2016.
                          "the sorted-BAM pileup. Put the binary where ../whitelists exists, or symlink the directory." % (", ".join(missing), os.path.normpath(d), binary))
 
 
+def species_check(log_path):
+    """-> dict(verdict, line) from the engine's "[species-check] ... AGREE|DISAGREE|UNKNOWN" log line (singlet logs it when $SINGLET_SPECIES_FILTERS is set and a genome was
+    given), or None. Species detection only confirms the catalogue organism: a DISAGREE is recorded and flagged, never acted on."""
+    try:
+        with open(log_path, errors="replace") as fh:
+            for line in fh:
+                if line.startswith("[species-check]"):
+                    return {"verdict": line.strip().rsplit(" ", 1)[-1], "line": line.strip()[:300]}
+    except OSError:
+        pass
+    return None
+
+
+class OrganismUnmapped(Exception):
+    """The catalogue organism of a sample maps to no reference: the sample cannot be aligned (and must not fall back to species auto-detection).
+    .reason is the failed_reason the worker records: "organism_unmapped" or "mixed_species_unsupported"."""
+
+    def __init__(self, msg, reason="organism_unmapped"):
+        super().__init__(msg)
+        self.reason = reason
+
+
+# catalogue organism strings are ';'-separated lists of whatever GEO says; these tokens name no organism that was sequenced
+ORGANISM_NOISE = {"", "blank sample", "synthetic construct", "unidentified", "unclassified sequences"}
+ORGANISM_ALIASES = {"homo": "Homo sapiens", "human": "Homo sapiens", "mouse": "Mus musculus", "mus": "Mus musculus"}
+# "Homo sapiens/Mus musculus xenograft" names both
+ORGANISM_SPLIT = {"homo sapiens/mus musculus xenograft": ("Homo sapiens", "Mus musculus")}
+# Organisms next to human that are NOT mammals (pathogens, plasmids, birds, fish, reptiles, amphibians, insects): their reads are picked up by the non-host screen and the
+# sample is aligned to the human (or mouse) reference alone. Every other organism (primates, rodents, pigs, ... and any name not listed here) is "another mammal or unknown":
+# aligning those reads to GRCh38 alone would give confident wrong counts.
+NON_MAMMAL_MARKERS = ("virus", "phage", "plasmid", "herpes", "coronavirus", "bacteri", "vector", "construct")
+NON_MAMMAL_SPECIES = {
+    "Escherichia coli", "Toxoplasma gondii", "Plasmodium vivax", "Plasmodium falciparum", "Encephalitozoon intestinalis", "Gallus gallus", "Danio rerio",
+    "Melopsittacus undulatus", "Ctenopharyngodon idella", "Oreochromis mossambicus", "Ambystoma mexicanum", "Serinus canaria", "Channa argus", "Pantherophis guttatus",
+    "Anas platyrhynchos", "Pogona vitticeps", "Trachemys scripta elegans", "Drosophila melanogaster", "Xenopus laevis", "Xenopus tropicalis", "Caenorhabditis elegans",
+    "Saccharomyces cerevisiae", "Candida albicans", "Staphylococcus aureus", "Salmonella enterica", "Mycobacterium tuberculosis"}
+CORE_ORGANISMS = frozenset({"Homo sapiens", "Mus musculus"})
+
+
+def _organism_tokens(organism):
+    out = set()
+    for t in (organism or "").split(";"):
+        t = t.strip()
+        if t.lower() in ORGANISM_NOISE:
+            continue
+        if t.lower() in ORGANISM_SPLIT:
+            out.update(ORGANISM_SPLIT[t.lower()])
+        else:
+            out.add(ORGANISM_ALIASES.get(t.lower(), t))
+    return out
+
+
+def _is_non_mammal(t):
+    return t in NON_MAMMAL_SPECIES or any(m in t.lower() for m in NON_MAMMAL_MARKERS)
+
+
+def organism_set(organism):
+    """-> frozenset of organism names in a catalogue organism string: 'Mus musculus; Homo sapiens' and 'Homo sapiens; Mus musculus' are the same set,
+    'blank sample; Homo sapiens' is {'Homo sapiens'}, 'Homo; Homo sapiens' is {'Homo sapiens'}."""
+    return frozenset(_organism_tokens(organism))
+
+
+def reference_status(organism, refs):
+    """-> (reference name, None) or (None, reason). Order: an exact key of `refs`; otherwise the organism set with the non-mammal tokens (pathogens, plasmids, birds,
+    fish, ...) removed is compared with the set of every key. Another mammal next to human or mouse (or a name that is not known to be a non-mammal) gives
+    (None, "mixed_species_unsupported"); no human or mouse at all, or a set no key covers, gives (None, "organism_unmapped"). The `*` default ("auto") is never used: the
+    worker does not rely on species auto-detection (S14: its Bloom filters were not installed, 6 of 12 pilot runs came back 'unknown')."""
+    refs = refs or {}
+    o = (organism or "").strip()
+    if o in refs and refs[o] != "auto":
+        return refs[o], None
+    tokens = _organism_tokens(o)
+    core = frozenset(tokens & CORE_ORGANISMS)
+    if any(not _is_non_mammal(t) for t in tokens - CORE_ORGANISMS):
+        return None, "mixed_species_unsupported"
+    if not core:
+        return None, "organism_unmapped"
+    for k, v in refs.items():
+        if k != "*" and v != "auto" and organism_set(k) == core:
+            return v, None
+    return None, "organism_unmapped"
+
+
+def resolve_reference(organism, refs):
+    """The reference directory name (a value of config `references`) for a catalogue organism string, or None (see reference_status for why)."""
+    return reference_status(organism, refs)[0]
+
+
 def staged_reads(sdir):
     """True when a sample's staged reads are on disk: the pooled sample.1fq or the per-run <run>.1fq files."""
     if os.path.exists(os.path.join(sdir, "sample.1fq")):
@@ -193,7 +281,7 @@ def cluster_cfg(cfg, cluster):
 PLAN_COLUMNS = [
     "priority", "gsm", "gse", "wave", "study_wave", "study_rank", "sample_rank", "organism", "reference", "reads_available",
     "depth_unknown", "bases", "n_runs", "runs", "run_reads", "est_wall_s", "est_core_h", "est_su", "est_sra_bytes",
-    "size_class", "cluster",
+    "size_class", "cluster", "protocol_inferred",
 ]
 INT_COLS = {"priority", "study_rank", "sample_rank", "reads_available", "depth_unknown", "bases", "n_runs",
             "est_sra_bytes"}

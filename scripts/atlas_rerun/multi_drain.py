@@ -192,10 +192,11 @@ def dir_bytes(path):
     return n
 
 
-def settle_failure(a, root, gsm, claim, man, reason, detail="", oom_est=None):
-    """Requeue the claim once; on the last attempt move it to failed/ with the reason. Never silent: an event is written either way."""
+def settle_failure(a, root, gsm, claim, man, reason, detail="", oom_est=None, final=False):
+    """Requeue the claim once; on the last attempt (or with final=True: a retry would fail the same way) move it to failed/ with the reason. Never silent: an event is
+    written either way."""
     attempts = man.get("attempts", 1)
-    final = attempts >= a.max_attempts
+    final = final or attempts >= a.max_attempts
     try:
         if os.path.isdir(claim):
             man = json.load(open(os.path.join(claim, "manifest.json")))
@@ -256,6 +257,9 @@ class Run(threading.Thread):
             pt = pileup_threads(os.path.join(scr, "out"))
             if pt not in (1, None):
                 log("[multi] WARNING %s: pileup_threads=%s - the sorted-BAM pileup ran, not the stream / GPU pileup (whitelists missing next to the binary?)" % (gsm, pt))
+            sc = C.species_check(os.path.join(scr, "singlet.log"))
+            if sc and sc["verdict"] == "DISAGREE":
+                log("[multi] WARNING %s: %s" % (gsm, sc["line"]))
             up = D.publish(a, man, os.path.join(scr, "out"), self.cfg, self.ccfg, scr, claim)
             pub, _n, _priv = D.checksum_outputs(os.path.join(scr, "out"))
             if self.heart.lost or not os.path.isdir(claim):
@@ -272,6 +276,8 @@ class Run(threading.Thread):
         except Q.Preempted:
             keep_claim = True
             self.result = "stopped"
+        except C.OrganismUnmapped as e:   # organism_unmapped / mixed_species_unsupported: no retry
+            self.result = settle_failure(a, root, gsm, claim, man, e.reason, str(e), final=True)
         except Exception as e:  # noqa: BLE001
             self.result = settle_failure(a, root, gsm, claim, man, "exception", repr(e))
         finally:
@@ -322,6 +328,8 @@ def main():
     if ccfg.get("whitelist_dir"):
         env["SINGLET_WHITELIST_DIR"] = ccfg["whitelist_dir"]
     env["SINGLET_REF_BASE"] = ccfg["ref_base"]
+    if ccfg.get("species_filters"):   # Bloom filters of the species check (bench/species_detect); the engine logs "[species-check] ... AGREE|DISAGREE|UNKNOWN"
+        env["SINGLET_SPECIES_FILTERS"] = ccfg["species_filters"]
     env.update(kv.split("=", 1) for kv in a.engine_env)
     os.makedirs(a.scratch, exist_ok=True)
     Q.init(a.stage)
