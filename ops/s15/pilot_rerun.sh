@@ -15,13 +15,16 @@ echo "== s15 rerun $ST $GSM node=$(hostname) $(date -Is)"
 sb() { sbatch --parsable --account=debruinz --kill-on-invalid-dep=no "$@"; }
 # engine outdir runs...   Pooled runs must share a protocol: when the engine names a run that differs, drop it (recorded in runs_dropped.txt) and retry.
 singlet_run() {
-  eng=$1; out=$2; shift 2; rm -rf $out; mkdir -p $out; ST1=$P/stage_r
+  eng=$1; out=$2; shift 2; rm -rf $out; mkdir -p $out; GD=; ST1=$P/stage_r
   used=$(ls $ST1/*.1fq | xargs -n1 basename | sed s/.1fq$// | sort | paste -sd,); : > $out/runs_dropped.txt
   while :; do
     if [ "$(echo $used | tr , '\n' | wc -l)" = 1 ]; then ra="$ST1/$used.1fq"; else ra="--runs-dir $ST1 --runs-used $used"; fi
-    /usr/bin/time -v -o $out/time.txt $BINDIR/singlet-$eng $ra --genome-dir $G/star_2.7.11b --ref-base $REFB --out-prefix $out/out/ --threads $SINGLET_THREADS --pipeline \
+    /usr/bin/time -v -o $out/time.txt $BINDIR/singlet-$eng $ra $GD --ref-base $REFB --out-prefix $out/out/ --threads $SINGLET_THREADS --pipeline \
        --output-format 1pz --engine $eng --memory-tier $TIER --tagged-bam > $out/run.log 2>&1
-    rc=$?; bad=$(grep -oE 'stage_r/[A-Z0-9]+\.1fq differs from the first run in its protocol' $out/run.log | head -1 | sed 's#stage_r/##;s#\.1fq.*##')
+    rc=$?; grep -h '^\[species-detect\]' $out/run.log | head -1 >> $out/species.txt
+    if [ $rc != 0 ] && [ -z "$GD" ] && grep -q 'requires --genome-dir' $out/run.log; then   # species detection failed: record it, then give the genome explicitly (GTF too: it is only auto-resolved from a detected genome)
+      echo "AUTODETECT FAILED -> explicit genome-dir" >> $out/species.txt; cp $out/run.log $out/run_autodetect.log; GD="--genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf"; rm -rf $out/out; continue; fi
+    bad=$(grep -oE 'stage_r/[A-Z0-9]+\.1fq differs from the first run in its protocol' $out/run.log | head -1 | sed 's#stage_r/##;s#\.1fq.*##')
     [ -n "$bad" ] || break
     echo "$bad" >> $out/runs_dropped.txt; used=$(echo $used | tr , '\n' | grep -vx $bad | paste -sd,); echo "dropped $bad (protocol differs), retry with $used"; rm -rf $out/out
   done
@@ -50,6 +53,7 @@ SELF_C=%s
   singlet_run gpu $P/s1gpu_r ;;
 rclean)   # (the first-pass reads stage/fq/cap1fq belong to the competitor tools' own clean-up)  equiv of the two new runs; the .sra goes now (unless KEEPSRA: slowest to fetch, kept for another rerun); results and logs stay
   [ -d $P/s1cpu_r/out ] && [ -d $P/s1gpu_r/out ] && python3 $D/out_equiv.py $P/s1cpu_r/out $P/s1gpu_r/out > $P/equiv_r.txt 2>&1
-  rm -rf $P/stage_r; [ -e $P/KEEPSRA ] || rm -rf $P/sra
+  ok=1; for e in s1cpu_r s1gpu_r; do [ -d $P/$e/out ] && [ ! -e $P/$e/INVALID ] || ok=0; done
+  if [ $ok = 1 ]; then rm -rf $P/stage_r; [ -e $P/KEEPSRA ] || rm -rf $P/sra; else echo "a rerun did not deliver: .sra and stage_r kept"; fi
   find $P \( -name '*.bam' -o -name '*.bai' \) -delete; du -sh $P; ls $P ;;
 esac
