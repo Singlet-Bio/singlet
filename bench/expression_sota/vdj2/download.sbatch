@@ -81,7 +81,7 @@ if [ "${SET:-dev}" = bcrdev ] || [ "${SET:-dev}" = bcrho ]; then
       2.2.0/vdj_v1_hs_cd19_b/vdj_v1_hs_cd19_b_fastqs.tar -
     B=sc5p_v2_hs_B_1k_multi_5gex_b
     tenxu b1k_b 5.0.0/$B/${B}_vdj_b_filtered_contig_annotations.csv 5.0.0/$B/${B}_fastqs.tar \
-      5.0.0/$B/${B}_count_filtered_feature_bc_matrix.h5 "*[Vv][Dd][Jj]*"
+      5.0.0/$B/${B}_count_filtered_feature_bc_matrix.h5 "*B_1k_b_fastqs*"
     L="pbmc22_b cd19_b b1k_b"
   fi
 elif [ "${SET:-dev}" = dev ]; then
