@@ -139,6 +139,18 @@ Why: these reads come from real cells. A sequencing error in the barcode read, o
 
 Note: the `--bam-file` replay harness (the shuffled-order gate) does not apply R11, so a replay of the tee'd stream BAM has about 2% fewer barcoded reads than the stream run it came from; replay is not a reference for R11.
 
+## R12. UMI collapse of exon / intron molecules: seed-based directional, molecule UMI = best-supported UMI
+
+Status: implemented behind `SINGLET_UMI_COLLAPSE=seed` (off by default), measured, not made the default for the beta (2026-11-01).
+
+Today (`DirectionalUmiStore::collapse_groups`, GPU `m6.cu`): per (barcode, gene) the UMIs are sorted by reads descending then UMI ascending, an edge joins UMIs at Hamming distance 1 when `count_i >= 2 count_j - 1`, and the connected components of those edges are the molecules. The partition is a function of the (UMI, reads) multiset, so it does not depend on read order. Two things in it are not the best choice:
+1. A component can chain two well-supported UMIs 2 mismatches apart through a one-read error copy that sits one mismatch from both (A1 100 reads, A2 80 reads, B 1 read: A1->B and A2->B), merging two templates into one molecule. The directional method of Smith et al. 2017 (UMI-tools) does not: a seed claims what it reaches, and seeds do not merge.
+2. The molecule's UMI is the union-find root, which depends on the order the edges were visited and is not always the best-supported UMI. It is the key of the cross-gene rule (`kUmiGeneCR`: a UMI in more than one gene of a cell keeps the gene with most reads) and of R9's gene roots, and the GPU has to replay the pairwise union in the same order to reproduce it.
+
+Rule: rank the UMIs of a (barcode, gene) group by reads descending, UMI ascending (a total order). In rank order, a UMI that no earlier seed has claimed becomes a seed and claims every unclaimed UMI reachable from it through directional edges. A molecule is a seed with the UMIs it claimed; its UMI is the seed (the best-supported UMI of the molecule, ties to the smaller UMI), its reads, flags, diag and smallest feature indices are the union over its members. The result depends only on the (UMI, reads) multiset, and it needs no replay: the owner of a UMI is the first seed that reaches it.
+
+Measured (build 09977a3e, CPU engine, prod/campaign + PR #165): pbmc1k_v3 molecules +0.003% (15,335,599 -> 15,336,115 unique UMIs; spliced +67, unspliced +54, ambiguous +395), pbmc1k_cite_v3 +0.002%; gate-2 counts metrics identical to 4 digits on pbmc1k_v3, cite_v3 and neuron1k_v3. The effect is real but far below anything the gates see, so the beta keeps the component rule; adopting R12 later costs one change on the CPU (`umi_directional_seeds`) and one in `m6.cu` (owner by seed instead of the pairwise replay), gated on identical molecules CPU = GPU.
+
 ## Gates
 
 1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, including the non-host tables (`nonhost/*`), except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings) and fields that hold paths or the sizes of those files.
@@ -160,6 +172,7 @@ Note: the `--bam-file` replay harness (the shuffled-order gate) does not apply R
 | thread/rerun gate | met for every output including `nonhost/*` on `f4a1e95` and `253c2c6`, 3' and 5' (4 vs 16 threads, rerun) | — |
 | R8 non-host EM | done, `f4a1e95` (canonical input order, hash sample above the cap) | match if the GPU runs the non-host EM |
 | R9 UMI correction (SJ, V(D)J, SNP) | per (cell, gene) `13d8faf` (per-feature version `253c2c6`), both paths; gates 1-2 met; vs prod: junctions within 0.03% (5') / 0.001% (3'), V(D)J -2.0% and SNP DP -1.6% on 5' (residual, see ws-w3b update h) | to implement (same rule) |
+| R12 UMI collapse (seed-based directional, UMI = best-supported) | `umi_directional_seeds` behind `SINGLET_UMI_COLLAPSE=seed` (off), test `test_umi_seeds`; +0.003% molecules, not default for the beta | to implement with the default |
 | R10 ambient pool (5-100 UMIs, sequence ties, cells in sequence order) | done, `2a45dd3`: pool and mean rho path-independent; R10b (data-seeded clusters, 10 restarts) in progress | match if the GPU runs the ambient correction |
 | R11 stream CB correction (STAR 1MM_multi_Nbase_pseudocounts; reader restores raw barcodes) | in progress on `perf/bam-stream` | gate the GPU barcode layer against it (mm1 mode) |
 | shuffled-order gate | met on `8699980` (791182) and `253c2c6` (791783), GSM4006843: 44 files identical across as-written / collate / coord replays. `f4a1e95` had failed on `exon_counts` (multimapper exon, fixed by R7) | — |

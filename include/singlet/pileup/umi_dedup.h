@@ -17,6 +17,7 @@
 #include <algorithm>     // std::sort, std::iota
 #include <cstdint>
 #include <numeric>       // std::iota
+#include <cstdlib>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -208,6 +209,65 @@ inline void umi_directional_union(const uint64_t* packed, const CountT* count, i
             }
         }
     }
+}
+
+/// Seed-based directional collapse (UMI-tools "directional", Smith et al. 2017), made independent of read order.
+///
+/// `packed[r]` / `count[r]` are in rank order (count descending, packed UMI ascending: a total order of the UMI set).
+/// Seeds are taken in rank order; a UMI that no earlier seed has claimed becomes a seed and claims every unclaimed UMI
+/// reachable from it through directional edges (hamming 1, count[u] >= 2 count[v] - 1). `owner[r]` is the rank of the
+/// seed that claimed r. Because the rank order is total and fixed by the (UMI, reads) multiset, the result depends on
+/// nothing else. Unlike the connected components of umi_directional_union, two well-supported UMIs 2 mismatches apart
+/// stay two molecules when a one-read error copy sits between them (the component rule merges all three), and the
+/// molecule's UMI is its best-supported UMI, not whichever union-find root the edge order happened to leave.
+template <typename CountT>
+inline void umi_directional_seeds(const uint64_t* packed, const CountT* count, int n, int umi_len, std::vector<int>& owner) {
+    owner.assign(n, -1);
+    constexpr int kBrute = 512;
+    const bool brute = n <= kBrute || umi_len > 32;
+    const uint64_t mask = umi_len < 32 ? (1ULL << (2 * umi_len)) - 1 : ~0ULL;
+    std::vector<std::pair<uint64_t, int>> index;
+    if (!brute) {
+        index.resize(n);
+        for (int r = 0; r < n; ++r) index[r] = {packed[r] & mask, r};
+        std::sort(index.begin(), index.end());
+    }
+    std::vector<int> stack;
+    auto visit = [&](int u, int seed) {
+        if (brute) {
+            for (int v = 0; v < n; ++v)
+                if (owner[v] < 0 && umi_hamming_2bit(packed[u], packed[v], umi_len) == 1 && count[u] >= 2 * count[v] - 1) {
+                    owner[v] = seed; stack.push_back(v);
+                }
+            return;
+        }
+        const uint64_t x = packed[u] & mask;
+        for (int p = 0; p < umi_len; ++p) {
+            const uint64_t cur = (x >> (2 * p)) & 3ULL;
+            for (uint64_t b = 0; b < 4; ++b) {
+                if (b == cur) continue;
+                const uint64_t cand = x ^ ((cur ^ b) << (2 * p));
+                for (auto it = std::lower_bound(index.begin(), index.end(), std::make_pair(cand, -1));
+                     it != index.end() && it->first == cand; ++it) {
+                    const int v = it->second;
+                    if (owner[v] < 0 && count[u] >= 2 * count[v] - 1) { owner[v] = seed; stack.push_back(v); }
+                }
+            }
+        }
+    };
+    for (int i = 0; i < n; ++i) {
+        if (owner[i] >= 0) continue;
+        owner[i] = i;
+        stack.assign(1, i);
+        while (!stack.empty()) { const int u = stack.back(); stack.pop_back(); visit(u, i); }
+    }
+}
+
+/// UMI collapse rule of the molecule store: false = connected components of the directional graph (the default, as
+/// always); true = umi_directional_seeds. SINGLET_UMI_COLLAPSE=seed switches it (read once).
+inline bool umi_collapse_seed() {
+    static const bool on = [] { const char* e = getenv("SINGLET_UMI_COLLAPSE"); return e && std::string(e) == "seed"; }();
+    return on;
 }
 
 /// Directional UMI deduplication (Smith et al. 2017).
@@ -486,7 +546,11 @@ private:
             std::iota(parent.begin(), parent.end(), 0);
             pk.resize(n); ct.resize(n);
             for (int i = 0; i < n; ++i) { pk[i] = sorted[i].packed; ct[i] = sorted[i].count; }
-            umi_directional_union(pk.data(), ct.data(), n, umi_len, parent);
+            if (umi_collapse_seed()) {
+                umi_directional_seeds(pk.data(), ct.data(), n, umi_len, parent);   // parent[i] = the seed that claimed i (a seed is its own parent)
+            } else {
+                umi_directional_union(pk.data(), ct.data(), n, umi_len, parent);
+            }
             auto find = [&](int x) -> int {
                 while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
                 return x;
@@ -578,7 +642,11 @@ public:
             std::vector<int> parent(n);
             std::iota(parent.begin(), parent.end(), 0);
             auto find = [&](int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
-            if (directional)
+            if (directional && umi_collapse_seed()) {
+                std::vector<uint64_t> spk(n); std::vector<uint32_t> sct(n);
+                for (int i = 0; i < n; ++i) { spk[i] = sorted[i].packed; sct[i] = sorted[i].count; }
+                umi_directional_seeds(spk.data(), sct.data(), n, umi_len, parent);
+            } else if (directional)
                 umi_directional_union_ordered(n, umi_len, [&](int i) { return sorted[i].packed; },
                                               [&](int i, int j) { return sorted[i].count >= 2 * sorted[j].count - 1; },
                                               [&](int i, int j) {
