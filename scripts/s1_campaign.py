@@ -990,7 +990,6 @@ MODALITY_MEMBERS: List[Tuple[str, Tuple[str, ...]]] = [
     ("crispr_guides", ("crispr_guides.json",)),
     ("vdj_contigs", ("vdj_contigs.parquet",)),
     ("vdj_summary", ("vdj_summary.json",)),
-    ("doublet_scores_v2", ("doublet_scores_v2.tsv",)),
     ("atac_fragments", ("atac_fragments.tsv.gz", "fragments.tsv.gz")),
     ("atac_fragments_index", ("atac_fragments.tsv.gz.tbi", "fragments.tsv.gz.tbi")),
     ("atac_peaks", ("atac_peaks.bed", "peaks.bed")),

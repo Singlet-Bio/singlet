@@ -427,12 +427,6 @@ MODALITIES: Dict[str, Modality] = {
             "V(D)J assembly provenance: method, reference, counting and library QC.",
         ),
         Modality(
-            "doublet_scores_v2",
-            "table",
-            ("doublet_scores_v2.tsv",),
-            "Second doublet score (hybrid simulation model), reported beside doublet_scores.",
-        ),
-        Modality(
             "atac_fragments",
             "binary",
             ("atac_fragments.tsv.gz", "fragments.tsv.gz"),

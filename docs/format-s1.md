@@ -601,7 +601,6 @@ registering the name is what makes it visible.
 | `hto_counts`, `hto_classification` | `hto_counts.1pz`, `hto_classification.tsv` | `singlet.adt.members`; the engine's hashtag caller |
 | `crispr_counts`, `crispr_guides` | `crispr_counts.1pz`, `crispr_guides.json` | `singlet.crispr.members` (companion guide library) |
 | `vdj_contigs`, `vdj_summary` | `vdj_contigs.parquet`, `vdj_summary.json` | `singlet.vdj.members` (companion V(D)J library; V-gene usage stays `vdj_gene_usage`) |
-| `doublet_scores_v2` | `doublet_scores_v2.tsv` | `scripts/doublet_v2.py`; beside the engine's `doublet_scores`, which is unchanged |
 | `atac_fragments`, `atac_fragments_index`, `atac_peaks`, `atac_cells`, `atac_barcode_metrics`, `atac_summary` | `atac_fragments.tsv.gz` (engine name `fragments.tsv.gz`), its `.tbi`, `atac_peaks.bed` (`peaks.bed`), ... | engine ATAC path |
 | `atac_peak_counts`, `atac_gene_activity` | `atac_peak_counts.1pz`, `atac_gene_activity.1pz` | section 14 aligned members |
 | `spatial_positions`, `spatial_summary` | `spatial_positions.tsv` (engine name `spatial_coordinates.tsv`), `spatial_summary.json` | engine Visium path; section 14 |
