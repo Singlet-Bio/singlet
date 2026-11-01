@@ -60,6 +60,23 @@
 #define M5_ENC1
 #endif
 #endif
+// E7 (docs/gpu-engine/fable/E7-seeds.md): phase 1 as "flatqs8b" by default: the seed nest as an iterator in a persistent
+// seed kernel with lane refill (M5_SEEDFLAT + M5_P1SPLIT), the iterator in shared memory with a 64-register cap
+// (M5_SEEDSMEM, M5_P1MINB=8), the persistent windows kernel in lane B only (M5_P1WPB): lane A phase 1 0.79x, +7.1% M5,
+// identical results. STAR's nest (one thread per read, k_p1) stays reachable: -DM5_BASELINE (with the pre-E5 paths),
+// -DM5_P1NEST (E5's defaults, the nest), the probe builds (-DM5_CENSUS, -DM5_TAIL: the flat kernels have no probes), or
+// any explicit E7 variant macro (the build is then exactly the macros given, as in the E7 experiments).
+#if !defined(M5_BASELINE) && !defined(M5_P1NEST) && !defined(M5_CENSUS) && !defined(M5_TAIL) && !defined(M5_SEEDFLAT) && \
+    !defined(M5_P1SPLIT) && !defined(M5_P1WPERS) && !defined(M5_P1WPB) && !defined(M5_P1FUSE) && !defined(M5_SEEDSTEP) && \
+    !defined(M5_STEPSMEM) && !defined(M5_SEEDSMEM) && !defined(M5_P1MINB) && !defined(M5_G2) && !defined(M5_CMPU) && \
+    !defined(M5_CMPNI) && !defined(M5_PREF) && !defined(M5_PREF2) && !defined(M5_PREF3)
+#define M5_SEEDFLAT
+#define M5_P1SPLIT
+#define M5_SEEDSMEM
+#define M5_P1MINB 8
+#define M5_P1WPB
+#define M5_E7DEFAULT   // phase 1 = flatqs8b because of these defaults (reported in the build flags)
+#endif
 #ifdef M5_S3
 #ifndef M5_REFX
 #define M5_REFX
@@ -144,6 +161,11 @@ struct GenomeView {
     u64 sjGstart, sjdbOverhang, sjdbLength, sjdbN;
     const u64* sjdbStart; const u64* sjdbEnd; const u64* sjDstart; const u64* sjAstart;
     const uint8_t* sjdbMotif; const uint8_t* sjdbShiftLeft; const uint8_t* sjdbShiftRight; const uint8_t* sjdbStrand;
+#ifdef M5_G2
+    // E7 M5_G2 (device only; null on the host): the genome text 2 bits per base (word w holds positions 32w - G2OFF ..,
+    // bytes > 3 stored as 0) and a bit per 64-position block that holds a byte > 3 (N, padding, spacers)
+    const u64* G2 = nullptr; const uint32_t* NB = nullptr;
+#endif
 };
 
 // STAR's PackedArray::operator[]: an unaligned little-endian load at bit offset ii*wordLength, masked
@@ -300,7 +322,13 @@ struct Caps {
 };
 
 // read buffers: STAR's Read1[0] (bases 0..3, N = 4), Read1[1] (complement), Read1[2] (reverse complement)
+#ifdef M5_G2
+// E7 M5_G2: plus Read1[0] packed 2 bits per base, forward (p2[0], base j at bits 2(j%32) of word j/32) and reversed
+// (p2[1]: base j of the reversed read = Read1[0][L-1-j]); words past the read are 0
+template <int L> struct ReadBuf { char r[3][L + 1]; unsigned long long p2[2][L / 32 + 4]; };
+#else
 template <int L> struct ReadBuf { char r[3][L + 1]; };
+#endif
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Per-read state (ReadAlign members that mapping touches)
@@ -511,10 +539,105 @@ template <class C> HD inline bool qualitySplit(const char* r, uint L, uint maxNs
 // ---------------------------------------------------------------------------------------------------------------------
 HD inline u64 medianUint2(u64 a, u64 b) { return a / 2 + b / 2 + (a % 2 + b % 2) / 2; }
 
+#ifdef M5_G2
+// E7 M5_G2: compareSeqToGenome on the 2-bit text, 32 bases per step (device). Read1 arrays that reach the seed search are
+// {Read1[0], Read1[1], Read1[2], packed forward, packed reversed, (char*)Lread} (M5_READ1); a null [3] means the byte path.
+// Exactness: the first position where the read base and the genome byte differ is found per 32-base window; a window
+// holding a genome byte > 3 (N, padding, spacer; NB block bits) is compared byte by byte as before, so every mismatch
+// against a byte > 3 is decided by the byte code, and in the 2-bit windows every genome byte is 0..3 (the read bases in a
+// piece are 0..3: qualitySplit), where (sc > gc) is the byte comparison of the same values.
+constexpr long long G2OFF = 1024;   // position p is word (p + G2OFF) / 32 of G2; the arrays cover -G2OFF .. nGenome + G2OFF
+#define M5_READ1(name, rb, Lr) const char* name[6] = {(rb).r[0], (rb).r[1], (rb).r[2], (const char*)(rb).p2[0], (const char*)(rb).p2[1], \
+                                                     (const char*)(uintptr_t)(Lr)}
+#define M5_READ1_BYTES(name, rb) const char* name[6] = {(rb).r[0], (rb).r[1], (rb).r[2], nullptr, nullptr, nullptr}
+#ifdef __CUDA_ARCH__
+__device__ inline u64 g2Fwd(const u64* G2, i64 p) {        // genome bases p .. p+31, base p+j in bits 2j
+    const u64 gp = (u64)(p + G2OFF), w = gp >> 5; const unsigned sh = (unsigned)(gp & 31) * 2;
+    u64 v = G2[w] >> sh; if (sh) v |= G2[w + 1] << (64 - sh);
+    return v;
+}
+__device__ inline bool g2HasN(const uint32_t* NB, i64 p) { // some genome byte in p .. p+31 is > 3
+    const u64 gp = (u64)(p + G2OFF), b0 = gp >> 6, b1 = (gp + 31) >> 6;
+    return ((NB[b0 >> 5] >> (b0 & 31)) | (NB[b1 >> 5] >> (b1 & 31))) & 1;
+}
+__device__ inline u64 rdFwd(const u64* R, i64 o) {          // packed read units o .. o+31
+    const u64 w = (u64)o >> 5; const unsigned sh = (unsigned)(o & 31) * 2;
+    u64 v = R[w] >> sh; if (sh) v |= R[w + 1] << (64 - sh);
+    return v;
+}
+__device__ inline u64 rev2(u64 x) {                        // reverse the order of the 32 2-bit units
+    x = __brevll(x);
+    return ((x >> 1) & 0x5555555555555555ULL) | ((x & 0x5555555555555555ULL) << 1);
+}
+__device__ inline u64 compareSeqToGenome2(const GenomeView& g_, const char* const* s2, u64 S, u64 N, u64 L, u64 SAstr, bool dirR, bool dirG,
+                                          bool& compRes) {
+    // comparison index i (0 ..): read Read1[c][S + L + i] (dirR) or Read1[c][S - L - i], c = dirR != dirG (complement);
+    // genome G[gq + i] (dirG) or G[gq - i]
+    const u64* RA = (const u64*)s2[dirR ? 3 : 4];
+    const i64 Lr = (i64)(uintptr_t)s2[5];
+    const bool comp = dirR != dirG;
+    const i64 r0 = dirR ? (i64)(S + L) : Lr - 1 - ((i64)S - (i64)L);   // Read1[0][S-L-i] = reversed[Lr-1-S+L+i]
+    const i64 gq = dirG ? (i64)(SAstr + L) : (i64)(g_.nGenome - 1 - SAstr - L);
+    const u64 len = N - L;
+    for (u64 i = 0; i < len; i += 32) {
+        const i64 gp0 = dirG ? gq + (i64)i : gq - (i64)i - 31;   // lowest genome position of this window
+        if (g2HasN(g_.NB, gp0)) {
+            const i64 ds = dirR ? 1 : -1, dg = dirG ? 1 : -1;
+            const char* s = s2[comp ? 1 : 0] + S + (dirR ? (i64)L : -(i64)L) + (i64)i * ds;
+            const char* g = g_.G + gq + (i64)i * dg;
+            const u64 e = mn<u64>(len, i + 32);
+            for (u64 ii = i; ii < e; ii++, s += ds, g += dg) {
+                const char sc = *s, gc = *g;
+                if (sc != gc) { compRes = dirG ? sc > gc : !(sc > gc || gc > 3); return ii + L; }
+            }
+            continue;
+        }
+        u64 sw = rdFwd(RA, r0 + (i64)i); if (comp) sw = ~sw;
+        u64 gw = g2Fwd(g_.G2, gp0); if (!dirG) gw = rev2(gw);
+        u64 d = sw ^ gw; d = (d | (d >> 1)) & 0x5555555555555555ULL;
+        if (d) {
+            const unsigned j = (unsigned)(__ffsll((long long)d) - 1) >> 1;
+            if (i + j >= len) return N;
+            const unsigned sc = (unsigned)(sw >> (2 * j)) & 3, gc = (unsigned)(gw >> (2 * j)) & 3;
+            compRes = dirG ? sc > gc : sc < gc;
+            return L + i + j;
+        }
+    }
+    return N;
+}
+#endif
+#else
+#define M5_READ1(name, rb, Lr) const char* name[3] = {(rb).r[0], (rb).r[1], (rb).r[2]}
+#define M5_READ1_BYTES(name, rb) const char* name[3] = {(rb).r[0], (rb).r[1], (rb).r[2]}
+#endif
+#ifdef M5_CMPNI
+// E7 M5_CMPNI: one out-of-line copy of compareSeqToGenome instead of five inlined ones (maxMappableLength x3,
+// findMultRange, maxMappableLength2strands): lanes at different call sites run the same instructions inside it
+static HD __noinline__ u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u64 S, u64 N, u64 L, u64 iSA, bool dirR, bool& compRes) {
+#else
 HD inline u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u64 S, u64 N, u64 L, u64 iSA, bool dirR, bool& compRes) {
+#endif
     u64 SAstr = packed_get(g_.SA, iSA, g_.saBits);
     bool dirG = (SAstr >> g_.GstrandBit) == 0;
     SAstr &= g_.GstrandMask;
+#if defined(M5_G2) && defined(__CUDA_ARCH__)
+    if (g_.G2 && s2[3]) return compareSeqToGenome2(g_, s2, S, N, L, SAstr, dirR, dirG, compRes);
+#endif
+#ifdef M5_CMPU
+    // E7: the four direction cases as one loop with strides (the same bytes compared in the same order, the same result):
+    // the read runs forward (dirR) or backward through Read1[0] (dirR == dirG) or its complement Read1[1]; the genome runs
+    // forward from SAstr + L (dirG) or backward from nGenome - 1 - SAstr - L. compRes as in the case it replaces.
+    {
+        const i64 ds = dirR ? 1 : -1, dg = dirG ? 1 : -1;
+        const char* s = s2[dirR == dirG ? 0 : 1] + S + (dirR ? (i64)L : -(i64)L);
+        const char* g = g_.G + (dirG ? SAstr + L : g_.nGenome - 1 - SAstr - L);
+        for (u64 ii = L; ii < N; ii++, s += ds, g += dg) {
+            const char sc = *s, gc = *g;
+            if (sc != gc) { compRes = dirG ? sc > gc : !(sc > gc || gc > 3); return ii; }
+        }
+        return N;
+    }
+#endif
     const char* g = g_.G;
     i64 ii;
     if (dirR && dirG) {
@@ -540,6 +663,54 @@ HD inline u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u6
     }
 }
 
+#if defined(M5_PREF3) && !defined(M5_PREF2) && !defined(M5_PREF)
+#define M5_PREF
+#endif
+#if defined(M5_PREF) || defined(M5_PREF2)
+// E7 M5_PREF: binary-search prefetch. While a binary search (maxMappableLength, findMultRange) compares at the midpoint
+// i3, the SA words of both possible next midpoints are prefetched into L2, so the next step's SA read is an L2 hit and
+// only its genome read goes to DRAM. M5_PREF2 also loads those two SA values and, once the current compare is done,
+// prefetches the genome lines the next compare will start at (both children). Prefetches change no value.
+HD inline void prefSA(const GenomeView& g, u64 iSA) {
+#ifdef __CUDA_ARCH__
+    const u64* p = g.SA + ((iSA * g.saBits) >> 6);
+    asm volatile("prefetch.global.L2 [%0];" :: "l"(p));
+#else
+    (void)g; (void)iSA;
+#endif
+}
+HD inline u64 ldSA(const GenomeView& g, u64 iSA) {   // packed_get with the loads pinned where they are issued
+#ifdef __CUDA_ARCH__
+    const u64 b = iSA * g.saBits, w = b >> 6, sh = b & 63;
+    u64 a0, a1 = 0;
+    asm volatile("ld.global.nc.u64 %0, [%1];" : "=l"(a0) : "l"(g.SA + w));
+    if (sh) asm volatile("ld.global.nc.u64 %0, [%1];" : "=l"(a1) : "l"(g.SA + w + 1));   // as packed_get: word w+1 only if needed
+    u64 v = a0 >> sh; if (sh) v |= a1 << (64 - sh);
+    return v & ((1ULL << g.saBits) - 1);
+#else
+    return packed_get(g.SA, iSA, g.saBits);
+#endif
+}
+HD inline void prefG(const GenomeView& g, u64 SAv, u64 L) {   // the genome line compareSeqToGenome starts at
+#ifdef __CUDA_ARCH__
+    const bool dirG = (SAv >> g.GstrandBit) == 0; const u64 SAstr = SAv & g.GstrandMask;
+    const char* p = g.G + (dirG ? SAstr + L : g.nGenome - 1 - SAstr - L);
+    asm volatile("prefetch.global.L2 [%0];" :: "l"(p));
+#else
+    (void)g; (void)SAv; (void)L;
+#endif
+}
+#ifdef M5_PREF2
+#define M5_PREF_CHILDREN(a, mid, b, L)     const u64 pfA_ = medianUint2(a, mid), pfB_ = medianUint2(mid, b); const u64 pfSa_ = ldSA(g, pfA_), pfSb_ = ldSA(g, pfB_);
+#define M5_PREF_AFTER(L) { prefG(g, pfSa_, L); prefG(g, pfSb_, L); }
+#else
+#define M5_PREF_CHILDREN(a, mid, b, L) { prefSA(g, medianUint2(a, mid)); prefSA(g, medianUint2(mid, b)); }
+#define M5_PREF_AFTER(L)
+#endif
+#else
+#define M5_PREF_CHILDREN(a, mid, b, L)
+#define M5_PREF_AFTER(L)
+#endif
 HD inline u64 findMultRange(const GenomeView& g, u64 i3, u64 L3, u64 i1, u64 L1, u64 i1a, u64 L1a, u64 i1b, u64 L1b,
                             const char* const* s, bool dirR, u64 S) {
     bool compRes;
@@ -547,7 +718,9 @@ HD inline u64 findMultRange(const GenomeView& g, u64 i3, u64 L3, u64 i1, u64 L1,
     else if (L1a < L1) { L1b = L1a; i1b = i1a; i1a = i1; }
     while ((i1b + 1 < i1a) | (i1b > i1a + 1)) {
         u64 i1c = medianUint2(i1a, i1b);
+        M5_PREF_CHILDREN(i1a, i1c, i1b, L1b)
         u64 L1c = compareSeqToGenome(g, s, S, L3, L1b, i1c, dirR, compRes);
+        M5_PREF_AFTER(L1b)
         if (L1c == L3) i1a = i1c;
         else { i1b = i1c; L1b = L1c; }
     }
@@ -557,6 +730,9 @@ HD inline u64 findMultRange(const GenomeView& g, u64 i3, u64 L3, u64 i1, u64 L1,
 HD inline u64 maxMappableLength(const GenomeView& g, const char* const* s, u64 S, u64 N, u64 i1, u64 i2, bool dirR, u64& L, u64* ind) {
     bool compRes;
     u64 L1, L2, i3, L3, L1a, L1b, L2a, L2b, i1a, i1b, i2a, i2b;
+#if defined(M5_PREF) || defined(M5_PREF2)
+    prefSA(g, i2);   // the second compare's SA word while the first runs
+#endif
     L1 = compareSeqToGenome(g, s, S, N, L, i1, dirR, compRes);
     L2 = compareSeqToGenome(g, s, S, N, L, i2, dirR, compRes);
     L = L1 < L2 ? L1 : L2;
@@ -565,7 +741,9 @@ HD inline u64 maxMappableLength(const GenomeView& g, const char* const* s, u64 S
     i3 = i1; L3 = L1;
     while (i1 + 1 < i2) {
         i3 = medianUint2(i1, i2);
+        M5_PREF_CHILDREN(i1, i3, i2, L)
         L3 = compareSeqToGenome(g, s, S, N, L, i3, dirR, compRes);
+        M5_PREF_AFTER(L)
         if (L3 == N) break;
         if (compRes) {
             if (L3 > L1) { L1b = L1a; L1a = L1; i1b = i1a; i1a = i1; }
@@ -634,6 +812,17 @@ template <class C> HD inline uint maxMappableLength2strands(const Params& P, con
     maxLbest = 0;
     bool dirR = iDir == 0;
     uint nD = mn<uint>(pieceLengthIn, P.gSAsparseD);
+#if defined(M5_PREF3) && defined(__CUDA_ARCH__)
+    // E7 M5_PREF3: the SAi words of the passes iDist >= 1 (their first lookup, Lind = Lmax) prefetched into L2 before pass 0
+    for (uint iDist = 1; iDist < nD; iDist++) {
+        const uint pl = pieceLengthIn - iDist, Lmax = mn<uint>(P.gSAindexNbases, pl);
+        uint ind1 = 0;
+        if (dirR) { const uint ps = pieceStartIn + iDist; for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += ((uint)Read1[0][ps + ii]); } }
+        else { const uint ps = pieceStartIn - iDist; for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += (3 - ((uint)Read1[0][ps - ii])); } }
+        const u64* pp = g.SAi + (((g.saiStart[Lmax - 1] + ind1) * g.saiBits) >> 6);
+        asm volatile("prefetch.global.L2 [%0];" :: "l"(pp));
+    }
+#endif
     for (uint iDist = 0; iDist < nD; iDist++) {
         uint pieceStart;
         uint pieceLength = pieceLengthIn - iDist;
@@ -1540,7 +1729,7 @@ template <class C> HD inline Status mapPhase1(const Params& P, const GenomeView&
     // oneRead: Read1[1] = complement, Read1[2] = reverse complement
     for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
     for (uint ii = 0; ii < Lread; ii++) rb.r[2][Lread - ii - 1] = rb.r[1][ii];
-    const char* Read1[3] = {rb.r[0], rb.r[1], rb.r[2]};
+    M5_READ1_BYTES(Read1, rb);
     w.Lread = Lread;
     w.outFilterMismatchNmaxTotal = mn<uint>(P.outFilterMismatchNmax, (uint)(P.outFilterMismatchNoverReadLmax * (Lread + 0)));
     // mapOneRead
@@ -1655,6 +1844,460 @@ template <class C> HD inline Status mapPhase1(const Params& P, const GenomeView&
     }
     w.stitched = stitched;
     return Status::Ok;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// E7 (seeds): phase 1 with flat loops, for convergent warps (docs/gpu-engine/fable/E7-seeds.md). The same statements as
+// mapPhase1 in the same order per read, regrouped into three functions so that a kernel can run them as one warp-uniform
+// loop per stage:
+//   p1Setup   read set-up, qualitySplit, resetN, the seed iterator at the first statement of the nest
+//   seedNext  advances the iterator through STAR's seed-loop nest (pieces x iDir x istart x the while loop over Lmapped,
+//             then the seedSearchLmax call) to the next maxMappableLength2strands call; false at the end of the nest
+//   seedAfter what the nest does with the call's result L (flagDirMap, Lmapped += L)
+//   p1Windows the markers after the seed loop, then the windows from the anchors' SA entries as ONE loop over the entries
+//             (createExtendWindowsWithAlign at one call site), the flanks, nWall, nEntries
+// A kernel calls maxMappableLength2strands (storeAligns inside) once per seedNext; each read's calls are STAR's, in STAR's
+// order, so storeAligns sees the same sequence and PC is the same.
+// ---------------------------------------------------------------------------------------------------------------------
+enum : uint8_t { SI_PIECE, SI_START, SI_WHILE, SI_LMAX, SI_NEXT, SI_DONE };
+struct SeedIt {
+    uint ssl;                                                    // seedSearchStartLmax of this read
+    uint32_t ip, iDir, istart, Lmapped, Nstart, Lstart;
+    uint32_t pS, pL, pF;                                         // splitR[0..2][ip] of the current piece
+    uint32_t Shift, seedLength;                                  // the pending call
+    uint8_t ph; bool flagDirMap;
+};
+template <class C> HD inline Status p1Setup(const Params& P, Work<C>& w, ReadBuf<C::LREAD>& rb, const char* R0, uint Lread, SeedIt& it) {
+    w.ov = OV_NONE;
+    w.stitched = false; w.nEntries = 0;
+    if (Lread > (uint)C::LREAD || Lread == 0) { w.ov = OV_LREAD; return Status::Overflow; }
+    for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
+    for (uint ii = 0; ii < Lread; ii++) rb.r[2][Lread - ii - 1] = rb.r[1][ii];
+#ifdef M5_G2
+#pragma unroll 1
+    for (int q = 0; q < C::LREAD / 32 + 4; q++) {   // Read1[0] packed forward and reversed (units past the read: 0)
+        u64 f = 0, r = 0;
+#pragma unroll 4
+        for (int j = 0; j < 32; j++) {
+            const uint a = (uint)q * 32 + j;
+            if (a < Lread) { f |= (u64)(R0[a] & 3) << (2 * j); r |= (u64)(R0[Lread - 1 - a] & 3) << (2 * j); }
+        }
+        rb.p2[0][q] = f; rb.p2[1][q] = r;
+    }
+#endif
+    w.Lread = Lread;
+    w.outFilterMismatchNmaxTotal = mn<uint>(P.outFilterMismatchNmax, (uint)(P.outFilterMismatchNoverReadLmax * (Lread + 0)));
+    if (!qualitySplit(rb.r[0], Lread, P.maxNsplit, P.seedSplitMin, w)) return Status::Overflow;   // Lread > 0 here
+    w.mapMarker = 0; w.nA = 0; w.nP = 0; w.nW = 0; w.nTr = 0; w.nUM[0] = w.nUM[1] = 0;
+    w.storedLmin = 0; w.uniqLmax = 0; w.uniqLmaxInd = 0; w.multLmax = 0; w.multLmaxN = 0; w.multNminL = 0; w.multNmin = 0; w.multNmax = 0; w.multNmaxL = 0;
+    w.maxScoreMate[0] = 0;
+    w.trInitRLength = 0;
+    w.trBestKeep = -1; w.trBestScore = 0; w.trBestGLength = 0;
+    w.nKeep = 0; w.nWtr = 0; w.trNtotal = 0;
+    it.ssl = mn<uint>(P.seedSearchStartLmax, (uint)(P.seedSearchStartLmaxOverLread * (Lread - 1)));
+    it.ip = 0; it.ph = SI_PIECE;
+    return Status::Ok;
+}
+template <class C> HD inline bool seedNext(const Params& P, const Work<C>& w, SeedIt& it) {
+    for (;;) {
+        switch (it.ph) {
+        case SI_PIECE:   // for (ip ...) { Nstart, Lstart; flagDirMap = true; for (iDir = 0 ...) for (istart = 0 ...)
+            if (it.ip >= w.Nsplit) { it.ph = SI_DONE; return false; }
+            {
+                it.pS = (uint32_t)w.splitR[0][it.ip]; it.pL = (uint32_t)w.splitR[1][it.ip]; it.pF = (uint32_t)w.splitR[2][it.ip];
+                const uint len = it.pL;
+                const uint Nstart = P.seedSearchStartLmax > 0 && it.ssl < len ? len / it.ssl + 1 : 1;
+                it.Nstart = (uint32_t)Nstart; it.Lstart = (uint32_t)(len / Nstart);
+            }
+            it.flagDirMap = true; it.iDir = 0; it.istart = 0; it.ph = SI_START;
+            break;
+        case SI_START:   // if (flagDirMap || istart > 0) { Lmapped = 0; while ... }
+            if (it.flagDirMap || it.istart > 0) { it.Lmapped = 0; it.ph = SI_WHILE; }
+            else it.ph = SI_LMAX;
+            break;
+        case SI_WHILE: {   // while (istart * Lstart + Lmapped + seedMapMin < splitR[1][ip]) { call; Lmapped += L }
+            const uint off = (uint)it.istart * it.Lstart + it.Lmapped;
+            if (off + P.seedMapMin < (uint)it.pL) {
+                it.Shift = (uint32_t)(it.iDir == 0 ? ((uint)it.pS + off) : ((uint)it.pS + it.pL - 1 - off));
+                it.seedLength = (uint32_t)((uint)it.pL - off);
+                return true;
+            }
+            it.ph = SI_LMAX;
+            break;
+        }
+        case SI_LMAX:      // if (seedSearchLmax > 0) { call }  (its L is not used)
+            it.ph = SI_NEXT;
+            if (P.seedSearchLmax > 0) {
+                const uint sh = it.iDir == 0 ? ((uint)it.pS + (uint)it.istart * it.Lstart) : ((uint)it.pS + it.pL - (uint)it.istart * it.Lstart - 1);
+                it.Shift = (uint32_t)sh;
+                it.seedLength = (uint32_t)mn<uint>(P.seedSearchLmax, it.iDir == 0 ? ((uint)it.pS + it.pL - sh) : (sh + 1));
+                return true;
+            }
+            break;
+        case SI_NEXT:
+            if (++it.istart < it.Nstart) it.ph = SI_START;
+            else if (++it.iDir < 2) { it.istart = 0; it.ph = SI_START; }
+            else { it.ip++; it.ph = SI_PIECE; }
+            break;
+        default:
+            return false;
+        }
+    }
+}
+HD inline void seedAfter(SeedIt& it, uint L) {
+    if (it.ph != SI_WHILE) return;   // the seedSearchLmax call
+    if (it.iDir == 0 && it.istart == 0 && it.Lmapped == 0 && (uint)it.Shift + L == (uint)it.pL) it.flagDirMap = false;
+    it.Lmapped = (uint32_t)((uint)it.Lmapped + L);
+}
+// the pending call of the iterator (one call site per kernel)
+template <class C> HD inline void seedCall(const Params& P, const GenomeView& gv, Work<C>& w, const char* const* Read1, const SeedIt& it, uint& L) {
+    maxMappableLength2strands(P, gv, w, Read1, (uint)it.Shift, (uint)it.seedLength, (uint)it.iDir, L, (uint)it.pF);
+}
+#ifdef M5_SEEDSTEP
+// E7 M5_SEEDSTEP: maxMappableLength2strands (with maxMappableLength and both findMultRange calls) as a resumable state
+// machine in which every step is ONE memory operation: an SAi lookup or one compareSeqToGenome. A persistent kernel runs
+// one step per lane per iteration (the operation at one call site, mmOp), then mmAdvance, which consumes the result and
+// runs the control flow up to the next operation. The statements are those of maxMappableLength2strands,
+// maxMappableLength and findMultRange in their order, with the same values (lengths fit 32 bits: they are <= the piece
+// length); the passes' results are kept per iDist and storeAligns runs after the last pass, in iDist order, as in STAR.
+enum : uint8_t { MS_BEGIN, MS_SAI1, MS_SAI2, MS_CMP1, MS_L1, MS_L2, MS_LOOP, MS_F1, MS_F2 };
+struct MmIt {
+    u64 i1, i2, i3, i1a, i1b, i2a, i2b, fa, fb;          // maxMappableLength / findMultRange (SA indices)
+    u64 iSA1, iSA2, opIdx;                                // the pass's SAi values; the pending SAi index or SA index
+    uint32_t L, L1, L2, L3, L1a, L1b, L2a, L2b, fLb;      // maxMappableLength / findMultRange (lengths)
+    uint32_t pieceStartIn, pieceLengthIn, iFrag, nD, iDist, maxLbest, pieceStart, pieceLength, Lind, maxL, opN, opL;
+    u64 ind1;
+    uint8_t iDir, ph, opK; bool dirR, good;              // opK: 0 SAi lookup, 1 compare, 2 none (a call's start)
+};
+struct MmRes { u64 rNrep[4], rI0[4], rI1[4]; uint32_t rMaxL[4]; };   // per pass (gSAsparseD <= 4)
+HD inline void mmBegin(const Params& P, MmIt& m, const SeedIt& it) {
+    m.pieceStartIn = it.Shift; m.pieceLengthIn = it.seedLength; m.iDir = (uint8_t)it.iDir; m.iFrag = it.pF;
+    m.maxLbest = 0; m.dirR = it.iDir == 0; m.nD = (uint32_t)mn<uint>((uint)it.seedLength, P.gSAsparseD); m.iDist = 0; m.ph = MS_BEGIN; m.opK = 2;
+}
+// consume the result of the pending operation (v; cr = compRes of a compare) and run to the next one: 0 = an operation is
+// pending (m.opK, m.opIdx, m.opN, m.opL), 1 = the call is complete (m.maxLbest = maxMappableLength2strands' maxLbest),
+// -1 = overflow (storeAligns)
+template <class C> HD inline int mmAdvance(const Params& P, const GenomeView& g, Work<C>& w, const char* const* Read1, MmIt& m, MmRes& rr, u64 v, bool cr) {
+#define MM_SAI(idx, phase) { m.opK = 0; m.opIdx = (idx); m.ph = (phase); return 0; }
+#define MM_CMP(n, l, isa, phase) { m.opK = 1; m.opN = (uint32_t)(n); m.opL = (uint32_t)(l); m.opIdx = (isa); m.ph = (phase); return 0; }
+    switch (m.ph) {
+    case MS_SAI1: goto sai1;
+    case MS_SAI2: goto sai2;
+    case MS_CMP1: goto cmp1;
+    case MS_L1: goto l1;
+    case MS_L2: goto l2;
+    case MS_LOOP: goto loop;
+    case MS_F1: goto f1r;
+    case MS_F2: goto f2r;
+    default: goto pass;
+    }
+pass:   // for (iDist = 0; iDist < nD; iDist++) {
+    if (m.iDist >= m.nD) goto store;
+    {
+        m.pieceLength = m.pieceLengthIn - m.iDist;
+        const uint Lmax = mn<uint>(P.gSAindexNbases, (uint)m.pieceLength);
+        uint ind1 = 0;
+        if (m.dirR) {
+            m.pieceStart = m.pieceStartIn + m.iDist;
+            for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += ((uint)Read1[0][m.pieceStart + ii]); }
+        } else {
+            m.pieceStart = m.pieceStartIn - m.iDist;
+            for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += (3 - ((uint)Read1[0][m.pieceStart - ii])); }
+        }
+        m.ind1 = ind1; m.Lind = (uint32_t)Lmax; m.iSA1 = 0;
+        if (m.Lind > 0) MM_SAI(g.saiStart[(uint)m.Lind - 1] + (uint)m.ind1, MS_SAI1);
+        goto sai1done;
+    }
+sai1:   // while (Lind > 0) { iSA1 = SAi[...]; if (present) break; --Lind; ind1 >>= 2; }
+    m.iSA1 = v;
+    if ((m.iSA1 & g.SAiMarkAbsentMaskC) == 0) goto sai1done;
+    --m.Lind; m.ind1 = m.ind1 >> 2;
+    if (m.Lind > 0) MM_SAI(g.saiStart[(uint)m.Lind - 1] + (uint)m.ind1, MS_SAI1);
+sai1done:
+    m.good = true;
+    if (g.saiStart[(uint)m.Lind - 1] + (uint)m.ind1 + 1 < g.saiStart[m.Lind]) MM_SAI(g.saiStart[(uint)m.Lind - 1] + (uint)m.ind1 + 1, MS_SAI2);
+    m.iSA2 = g.nSA - 1; m.good = false;
+    goto decide;
+sai2:
+    if ((v & g.SAiMarkAbsentMaskC) == 0) m.iSA2 = (v & g.SAiMarkNmask) - 1;
+    else { m.iSA2 = g.nSA - 1; m.good = false; }
+decide:
+    {
+        const bool noN = (m.iSA1 & g.SAiMarkNmaskC) == 0;
+        if ((uint)m.Lind < P.gSAindexNbases && noN && m.good) {
+            rr.rI0[m.iDist] = m.iSA1; rr.rI1[m.iDist] = m.iSA2; rr.rNrep[m.iDist] = m.iSA2 - m.iSA1 + 1; m.maxL = m.Lind;
+            goto passEnd;
+        } else if (m.iSA1 == m.iSA2 && noN && m.good) {
+            rr.rI0[m.iDist] = m.iSA1; rr.rI1[m.iDist] = m.iSA1; rr.rNrep[m.iDist] = 1;
+            MM_CMP(m.pieceLength, m.Lind, m.iSA1, MS_CMP1);
+        } else {   // maxMappableLength(i1 = iSA1 & SAiMarkNmask, i2 = iSA2, L = maxL)
+            m.L = (m.good && noN) ? m.Lind : 0;
+            m.i1 = m.iSA1 & g.SAiMarkNmask; m.i2 = m.iSA2;
+            MM_CMP(m.pieceLength, m.L, m.i1, MS_L1);
+        }
+    }
+cmp1:
+    m.maxL = (uint32_t)v;
+    goto passEnd;
+l1:
+    m.L1 = (uint32_t)v;
+    MM_CMP(m.pieceLength, m.L, m.i2, MS_L2);
+l2:
+    m.L2 = (uint32_t)v;
+    m.L = m.L1 < m.L2 ? m.L1 : m.L2;
+    m.L1a = m.L1; m.L1b = m.L1; m.i1a = m.i1; m.i1b = m.i1;
+    m.L2a = m.L2; m.L2b = m.L2; m.i2a = m.i2; m.i2b = m.i2;
+    m.i3 = m.i1; m.L3 = m.L1;
+loopTop:   // while (i1 + 1 < i2) {
+    if (m.i1 + 1 < m.i2) {
+        m.i3 = medianUint2(m.i1, m.i2);
+        MM_CMP(m.pieceLength, m.L, m.i3, MS_LOOP);
+    }
+    goto loopEnd;
+loop:
+    m.L3 = (uint32_t)v;
+    if (m.L3 == m.pieceLength) goto loopEnd;
+    if (cr) {
+        if (m.L3 > m.L1) { m.L1b = m.L1a; m.L1a = m.L1; m.i1b = m.i1a; m.i1a = m.i1; }
+        m.i1 = m.i3; m.L1 = m.L3;
+    } else {
+        if (m.L3 > m.L2) { m.L2b = m.L2a; m.L2a = m.L2; m.i2b = m.i2a; m.i2a = m.i2; }
+        m.i2 = m.i3; m.L2 = m.L3;
+    }
+    m.L = m.L1 < m.L2 ? m.L1 : m.L2;
+    goto loopTop;
+loopEnd:
+    if (m.L3 < m.pieceLength) {
+        if (m.L1 > m.L2) { m.i3 = m.i1; m.L3 = m.L1; } else { m.i3 = m.i2; m.L3 = m.L2; }
+    }
+    {   // findMultRange(i3, L3, i1, L1, i1a, L1a, i1b, L1b)
+        u64 a = m.i1a, b = m.i1b; uint32_t Lb = m.L1b;
+        if (m.L1 < m.L3) { Lb = m.L1; b = m.i1; a = m.i3; }
+        else if (m.L1a < m.L1) { Lb = m.L1a; b = m.i1a; a = m.i1; }
+        m.fa = a; m.fb = b; m.fLb = Lb;
+    }
+f1Top:
+    if ((m.fb + 1 < m.fa) | (m.fb > m.fa + 1)) MM_CMP(m.L3, m.fLb, medianUint2(m.fa, m.fb), MS_F1);
+    m.i1 = m.fa;
+    {   // findMultRange(i3, L3, i2, L2, i2a, L2a, i2b, L2b)
+        u64 a = m.i2a, b = m.i2b; uint32_t Lb = m.L2b;
+        if (m.L2 < m.L3) { Lb = m.L2; b = m.i2; a = m.i3; }
+        else if (m.L2a < m.L2) { Lb = m.L2a; b = m.i2a; a = m.i2; }
+        m.fa = a; m.fb = b; m.fLb = Lb;
+    }
+    goto f2Top;
+f1r:
+    if ((uint32_t)v == m.L3) m.fa = m.opIdx; else { m.fb = m.opIdx; m.fLb = (uint32_t)v; }
+    goto f1Top;
+f2Top:
+    if ((m.fb + 1 < m.fa) | (m.fb > m.fa + 1)) MM_CMP(m.L3, m.fLb, medianUint2(m.fa, m.fb), MS_F2);
+    m.i2 = m.fa;
+    m.L = m.L3;
+    rr.rI0[m.iDist] = m.i1; rr.rI1[m.iDist] = m.i2; rr.rNrep[m.iDist] = m.i2 - m.i1 + 1; m.maxL = m.L;
+    goto passEnd;
+f2r:
+    if ((uint32_t)v == m.L3) m.fa = m.opIdx; else { m.fb = m.opIdx; m.fLb = (uint32_t)v; }
+    goto f2Top;
+passEnd:
+    if (m.maxL + m.iDist > m.maxLbest) m.maxLbest = m.maxL + m.iDist;
+    rr.rMaxL[m.iDist] = m.maxL;
+    m.iDist++;
+    goto pass;
+store:
+    for (uint iDist = 0; iDist < m.nD; iDist++) {
+        if (((uint)rr.rMaxL[iDist] + iDist) == (uint)m.maxLbest) {
+            const uint ind[2] = {rr.rI0[iDist], rr.rI1[iDist]};
+            if (!storeAligns(P, w, (uint)m.iDir, (m.dirR ? (uint)m.pieceStartIn + iDist : (uint)m.pieceStartIn - iDist), rr.rNrep[iDist], (uint)rr.rMaxL[iDist], ind,
+                             (uint)m.iFrag))
+                return -1;
+        }
+    }
+    return 1;
+#undef MM_SAI
+#undef MM_CMP
+}
+// the pending operation (one call site per kernel; none at a call's start); cr = compRes of a compare
+HD inline u64 mmOp(const GenomeView& g, const char* const* Read1, const MmIt& m, bool& cr) {
+    if (m.opK == 1) return compareSeqToGenome(g, Read1, m.pieceStart, m.opN, m.opL, m.opIdx, m.dirR, cr);
+    if (m.opK == 0) return packed_get(g.SAi, m.opIdx, g.saiBits);
+    return 0;
+}
+#endif
+// the windows from one SA entry of an anchor (the body of stitchPieces' iSA loop); returns createExtendWindowsWithAlign's
+// last status (< 0 overflow, EXIT_TOO_MANY_WINDOWS: STAR leaves this piece's iSA loop)
+template <class C> HD inline int p1Entry(const Params& P, const GenomeView& gv, Work<C>& w, uint iSA, uint aDir, uint aLength) {
+    uint a1 = packed_get(gv.SA, iSA, gv.saBits);
+    uint aStr = a1 >> gv.GstrandBit;
+    a1 &= gv.GstrandMask;
+    if (aDir == 1 && aStr == 0) aStr = 1;
+    else if (aDir == 0 && aStr == 1) a1 = gv.nGenome - (aLength + a1);
+    else if (aDir == 1 && aStr == 1) { aStr = 0; a1 = gv.nGenome - (aLength + a1); }
+    uint aX = a1, aY = 0; int na = 1;   // the anchor, or the donor and acceptor parts of an sjdb-insert alignment
+    if (a1 >= gv.sjGstart) {
+        uint a1D, aLengthD, a1A, aLengthA, sj1;
+        if (sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, sj1)) { aX = a1D; aY = a1A; na = 2; }
+        else na = 0;
+    }
+    int st = 0;
+#pragma unroll 1
+    for (int q = 0; q < na; q++) {
+        st = createExtendWindowsWithAlign(P, gv, w, q == 0 ? aX : aY, aStr);
+        if (st != 0) break;   // < 0 overflow; EXIT_TOO_MANY_WINDOWS: STAR's break skips the acceptor
+    }
+    return st;
+}
+template <class C> HD inline Status p1Windows(const Params& P, const GenomeView& gv, Work<C>& w) {
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
+    long long tc = clock64();
+#endif
+    const uint Lread = w.Lread;
+    bool stitched = false;
+    if (Lread < P.outFilterMatchNmin) {
+        w.mapMarker = MARKER_READ_TOO_SHORT; w.trInitRLength = 0; w.nW = 0;
+    } else if (w.Nsplit == 0) {
+        w.mapMarker = MARKER_NO_GOOD_PIECES; w.trInitRLength = w.splitR[1][0]; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA == 0) {
+        w.mapMarker = MARKER_ALL_PIECES_EXCEED_seedMultimapNmax; w.trInitRLength = w.multNminL; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA > 0) {
+        stitched = true;
+    }
+    if (stitched) {
+        if (w.wbEpoch == 0 || w.wbEpoch >= (1ULL << 22) - 1) { for (int i = 0; i < C::NWB; i++) w.wbKey[i] = 0; w.wbEpoch = 1; }
+        else w.wbEpoch++;
+        w.wbN = 0;
+        for (int i = 0; i < 16; i++) { w.wbBits[0][i] = 0; w.wbBits[1][i] = 0; }
+        w.nW = 0;
+        // one loop over every SA entry of every anchor (pieces in order, entries in order): one entry per iteration
+        const uint nP = w.nP;
+        uint iP = 0, iSA = 0, iSAend = 0, aDir = 0, aLength = 0;
+        bool inP = false;
+        for (;;) {
+            if (!inP) {
+                while (iP < nP && w.PC[iP][PC_Nrep] > P.winAnchorMultimapNmax) iP++;
+                if (iP >= nP) break;
+                iSA = w.PC[iP][PC_SAstart]; iSAend = w.PC[iP][PC_SAend];
+                aDir = w.PC[iP][PC_Dir]; aLength = w.PC[iP][PC_Length];
+                w.nScan += iSAend - iSA + 1;
+                inP = true;
+            }
+            const int st = p1Entry(P, gv, w, iSA, aDir, aLength);
+            if (st < 0) return Status::Overflow;
+            if (st == EXIT_TOO_MANY_WINDOWS || iSA == iSAend) { inP = false; iP++; }
+            else iSA++;
+        }
+        // flanks
+        for (uint iWin = 0; iWin < w.nW; iWin++) {
+            if (w.WC[iWin][WC_gStart] <= w.WC[iWin][WC_gEnd]) {
+                uint wb = w.WC[iWin][WC_gStart];
+                for (uint ii = 0; ii < P.winFlankNbins && wb > 0 && gv.chrBin[(wb - 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                    wb--;
+                    if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return Status::Overflow;
+                }
+                w.WC[iWin][WC_gStart] = wb;
+                wb = w.WC[iWin][WC_gEnd];
+                for (uint ii = 0; ii < P.winFlankNbins && wb + 1 < P.winBinN && gv.chrBin[(wb + 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                    wb++;
+                    if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return Status::Overflow;
+                }
+                w.WC[iWin][WC_gEnd] = wb;
+            }
+            w.nWA[iWin] = 0; w.WALrec[iWin] = 0; w.WlastAnchor[iWin] = -1;
+        }
+        w.nWall = w.nW;
+        w.nEntries = 0;
+        for (uint iP2 = 0; iP2 < w.nP; iP2++) w.nEntries += w.PC[iP2][PC_SAend] - w.PC[iP2][PC_SAstart] + 1;
+        M5CLK(w, 1, tc);
+    }
+    w.stitched = stitched;
+    return Status::Ok;
+}
+// p1Windows as a resumable iterator (persistent window kernel, M5_P1WPERS): one SA entry of an anchor, or one window's
+// flanks, per step; the same statements in the same order as p1Windows
+enum : uint8_t { WI_ENTRY, WI_FLANK };
+struct WinIt { u64 iSA, iSAend; uint32_t iP, nP, aDir, aLength, iWin; uint8_t ph; };
+template <class C> HD inline void p1WinSeek(const Params& P, Work<C>& w, WinIt& it) {   // the next anchor piece from iP on
+    while (it.iP < it.nP && w.PC[it.iP][PC_Nrep] > P.winAnchorMultimapNmax) it.iP++;
+    if (it.iP >= it.nP) { it.ph = WI_FLANK; it.iWin = 0; return; }
+    it.iSA = w.PC[it.iP][PC_SAstart]; it.iSAend = w.PC[it.iP][PC_SAend];
+    it.aDir = (uint32_t)w.PC[it.iP][PC_Dir]; it.aLength = (uint32_t)w.PC[it.iP][PC_Length];
+    w.nScan += it.iSAend - it.iSA + 1;
+}
+// the markers; false: no window to make (w.stitched = false, nothing else to do), true: the iterator is at its first step
+template <class C> HD inline bool p1WinBegin(const Params& P, Work<C>& w, WinIt& it) {
+    const uint Lread = w.Lread;
+    bool stitched = false;
+    if (Lread < P.outFilterMatchNmin) {
+        w.mapMarker = MARKER_READ_TOO_SHORT; w.trInitRLength = 0; w.nW = 0;
+    } else if (w.Nsplit == 0) {
+        w.mapMarker = MARKER_NO_GOOD_PIECES; w.trInitRLength = w.splitR[1][0]; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA == 0) {
+        w.mapMarker = MARKER_ALL_PIECES_EXCEED_seedMultimapNmax; w.trInitRLength = w.multNminL; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA > 0) {
+        stitched = true;
+    }
+    if (!stitched) { w.stitched = false; return false; }
+    if (w.wbEpoch == 0 || w.wbEpoch >= (1ULL << 22) - 1) { for (int i = 0; i < C::NWB; i++) w.wbKey[i] = 0; w.wbEpoch = 1; }
+    else w.wbEpoch++;
+    w.wbN = 0;
+    for (int i = 0; i < 16; i++) { w.wbBits[0][i] = 0; w.wbBits[1][i] = 0; }
+    w.nW = 0;
+    it.nP = (uint32_t)w.nP; it.iP = 0; it.ph = WI_ENTRY;
+    p1WinSeek(P, w, it);
+    return true;
+}
+// one step: -1 overflow, 0 more steps, 1 done (w.stitched = true, nWall, nEntries set)
+template <class C> HD inline int p1WinStep(const Params& P, const GenomeView& gv, Work<C>& w, WinIt& it) {
+    if (it.ph == WI_ENTRY) {
+        const int st = p1Entry(P, gv, w, (uint)it.iSA, it.aDir, it.aLength);
+        if (st < 0) return -1;
+        if (st == EXIT_TOO_MANY_WINDOWS || it.iSA == it.iSAend) { it.iP++; p1WinSeek(P, w, it); }
+        else it.iSA++;
+        if (it.ph == WI_ENTRY || it.iWin < w.nW) return 0;
+    } else if (it.iWin < w.nW) {
+        const uint iWin = it.iWin;
+        if (w.WC[iWin][WC_gStart] <= w.WC[iWin][WC_gEnd]) {
+            uint wb = w.WC[iWin][WC_gStart];
+            for (uint ii = 0; ii < P.winFlankNbins && wb > 0 && gv.chrBin[(wb - 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                wb--;
+                if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return -1;
+            }
+            w.WC[iWin][WC_gStart] = wb;
+            wb = w.WC[iWin][WC_gEnd];
+            for (uint ii = 0; ii < P.winFlankNbins && wb + 1 < P.winBinN && gv.chrBin[(wb + 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                wb++;
+                if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return -1;
+            }
+            w.WC[iWin][WC_gEnd] = wb;
+        }
+        w.nWA[iWin] = 0; w.WALrec[iWin] = 0; w.WlastAnchor[iWin] = -1;
+        it.iWin++;
+        if (it.iWin < w.nW) return 0;
+    }
+    w.nWall = w.nW;
+    w.nEntries = 0;
+    for (uint iP2 = 0; iP2 < w.nP; iP2++) w.nEntries += w.PC[iP2][PC_SAend] - w.PC[iP2][PC_SAstart] + 1;
+    w.stitched = true;
+    return 1;
+}
+
+// phase 1 as one call per read with the flat loops (the E7 counterpart of mapPhase1; same results)
+template <class C> HD inline Status mapPhase1Flat(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb,
+                                               const char* R0, uint Lread) {
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
+    long long tc = clock64();
+#endif
+    SeedIt it;
+    Status s = p1Setup(P, w, rb, R0, Lread, it);
+    if (s != Status::Ok) return s;
+    M5_READ1(Read1, rb, Lread);
+    while (seedNext(P, w, it)) {
+        uint L;
+        seedCall(P, gv, w, Read1, it, L);
+        if (w.ov) return Status::Overflow;
+        seedAfter(it, L);
+    }
+    M5CLK(w, 0, tc);
+    return p1Windows(P, gv, w);
 }
 
 // the assignment of one SA entry of piece iP (stitchPieces, FASTASSIGN path); false = overflow
