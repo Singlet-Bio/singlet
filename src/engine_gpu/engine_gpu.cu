@@ -122,6 +122,84 @@ __global__ void k_clip(const char* seq, const u64* off, u64 n, ClipDev c, u64* c
     if (c.after3 > 0) { if (L > c.after3) L -= c.after3; else L = 0; }
     cs[i] = s; cl[i] = L;
 }
+// ---- E20 (docs/gpu-engine/fable/E20-lockclip.md): STAR's CellRanger4 clip of mate 1 on the device, per read, as E13's cr4Clip runs it on the host
+// (SeqCacheGpuPrefill.cpp: ClipMate::clipChunk's opal alignment of the 5' adapter, then ClipMate::clip of the 5' mate, type 10, and of the 3'
+// mate, type 11, on the same buffer and length). A read's clip depends on its sequence alone, so every read is clipped (no grouping).
+// opal (src/star/opal/opal.cpp, searchDatabase_ with OPAL_MODE_OV, OPAL_SEARCH_SCORE_END), as ClipCR4 calls it: the target is the read's
+// first 91 bases (ClipCR4::readLen; numeric 0-3, anything else 4), padded with 4 when shorter; scores ClipCR4::scoreMatrix (match 1, N/N 0,
+// otherwise -2), gap open and extension 2. Each database sequence runs in its own SIMD channel, so a read's result does not depend on the others
+// of its batch. opal's 8-bit pass saturates, but with a query of at most 40 bases every H is >= -2 * 40 and every E, F >= -82 (the first row
+// and column start at 0), and H <= 40: nothing saturates, its overflow test never fires, and int arithmetic gives the same values. Per column
+// (target position) and row (query position), as the SIMD loop: E = max(H_left - 2, E_left - 2), F = max(H_up - 2, F_up - 2) (F_up starts
+// at -126, H_up and H_upleft at 0 in every column; H_left 0 and E_left -126 before the first column), H = max(F, E, H_upleft + s); the best
+// score is max(the last column's max H, the max of the last row); the end column is the last one (91 - 1) when the last column's max H
+// exceeds the last row's max over the columns before it, else the first column at which the last row's running max rose to its maximum.
+struct Cr4Dev { uint8_t q[40]; int nq; uint32_t n5, after5, n3, after3; };
+__device__ __forceinline__ uint32_t cr4PolyTail3p(const char* seq, uint32_t L) {   // ClipCR4::polyTail3p
+    if (L < 20) return 0;
+    uint32_t ib1 = L - 1; int score = 0, score1 = 0;
+    for (uint32_t ib = 1; ib <= L; ib++) {
+        if (seq[L - ib] == 0) { score += 1; if (score * 10 >= (int) ib * 7) { ib1 = ib; score1 = score; } }
+        else { score -= 2; if ((int) ib - score > 27) break; }
+    }
+    if (score1 < 20) ib1 = 0;
+    return ib1;
+}
+template <int NQ>   // NQ > 0: the query length at compile time (the 10x TSO: 30), its rows in registers; 0: c.nq (<= 40)
+__global__ void __launch_bounds__(128) k_cr4(const char* seq, const u64* off, u64 n, Cr4Dev c, uint16_t* p5, uint16_t* p3, uint8_t* info) {
+    const u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const u64 s = off[i], L = off[i + 1] - s;
+    constexpr int MQ = NQ > 0 ? NQ : 40;
+    const int nq = NQ > 0 ? NQ : c.nq;
+    int pH[MQ], pE[MQ];
+#pragma unroll
+    for (int r = 0; r < MQ; r++) { pH[r] = 0; pE[r] = -126; }
+    int maxLast = -128, bestCol = 0, prevMaxAtLast = -128, maxHLast = -128;
+    for (int col = 0; col < 91; col++) {
+        int t = 4;
+        if ((u64) col < L) { const int x = (uint8_t) seq[s + col] & 7; t = x < 4 ? x : 4; }
+        int uF = -126, uH = 0, ulH = 0, maxH = -128, H = 0;
+#pragma unroll
+        for (int r = 0; r < MQ; r++) {
+            if (NQ == 0 && r >= nq) break;
+            const int q = c.q[r];
+            const int E = max(pH[r] - 2, pE[r] - 2);
+            const int F = max(uH - 2, uF - 2);
+            const int sc = q == t ? (q == 4 ? 0 : 1) : -2;
+            H = max(max(F, E), ulH + sc);
+            maxH = max(maxH, H);
+            uF = F; uH = H; ulH = pH[r];
+            pE[r] = E; pH[r] = H;
+        }
+        const int prevMax = maxLast;
+        maxLast = max(maxLast, H);   // H: the last row's
+        if (maxLast > prevMax) bestCol = col;
+        if (col == 90) { prevMaxAtLast = prevMax; maxHLast = maxH; }
+    }
+    const int score = max(maxHLast, maxLast);
+    const int endT = maxHLast > prevMaxAtLast ? 90 : bestCol;
+    const int Lm = endT + 1;
+    const bool L0 = score < 20 || (score == 20 && Lm > 26) || (score == 21 && Lm > 30);
+    const uint32_t inf = L0 ? 0u : (uint32_t) Lm;
+    info[i] = (uint8_t) inf;
+    uint32_t c5 = 0, c3 = 0;
+    if (L <= 650) {   // DEF_readSeqLengthMax: cr4Clip clips only the reads STAR can load
+        // ClipMate::clip, type 10 (5'): N bases (no move for this type), the adapter (clippedInfo; the buffer moves), NafterAd (no move)
+        uint32_t Lr = (uint32_t) L, sh = 0, cn = 0, Lold = Lr;
+        if (c.n5 > 0) { if (Lr > c.n5) { Lr -= c.n5; cn += c.n5; } else { Lr = 0; cn = Lold; } }
+        { const uint32_t a = min((uint32_t) (char) inf, Lr); sh += a; Lr -= a; cn += a; }
+        if (c.after5 > 0) { if (Lr > c.after5) { Lr -= c.after5; cn += c.after5; } else { Lr = 0; cn = Lold; } }
+        c5 = cn;
+        // type 11 (3'): N bases, the polyA tail of the (moved) buffer's first Lr bases, NafterAd
+        cn = 0; Lold = Lr;
+        if (c.n3 > 0) { if (Lr > c.n3) { Lr -= c.n3; cn += c.n3; } else { Lr = 0; cn = Lold; } }
+        { const uint32_t a = cr4PolyTail3p(seq + s + sh, Lr); Lr -= a; cn += a; }
+        if (c.after3 > 0) { if (Lr > c.after3) { Lr -= c.after3; cn += c.after3; } else { Lr = 0; cn = Lold; } }
+        c3 = cn;
+    }
+    p5[i] = (uint16_t) min(c5, 65535u); p3[i] = (uint16_t) min(c3, 65535u);
+}
 __global__ void k_gather_clip(const char* seq, const u64* cs, const u64* offC, u64 n, char* out) {
     u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (i >= n) return;
@@ -955,7 +1033,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 TAB = ((u64)H.nChr * 2 + 1 + H.chrBinN + (u64)H.sjdbN * 4) * 8 + (u64)H.sjdbN * 4 + (24ull << 20);
     const u64 AUX = e10W ? in.e10.aux.size() * 8 : 0, ENT = e10W ? n0 * 24 : 0, QM = e10W && in.e10.wantMask ? n0 * 16 : 0;
     const u64 KEEP = e10W && in.e10.soloModel != nullptr ? n0 * 16 : 0;
-    const u64 CLIP = in.clip.on ? n0 * 28 + S0 : 0;   // per read its clipped span, length, offset and host clip lengths; the clipped copy
+    const u64 CLIP = in.clip.on ? n0 * (in.clip.dev ? 29 : 28) + S0 : 0;   // per read its clipped span, length, offset and host clip lengths (E20: and info); the clipped copy
     const u64 RD = S0 + 8 * n0;
     // the reads' phase without the index (upload and E10 entries, the clipped copy, the dedup, the compaction to the distinct sequences)
     auto readsPhase = [&](bool lean) {
@@ -968,6 +1046,13 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 needLean = ctx + TAB + SLACK + std::max(readsPhase(true), IDX + minLanes + (64ull << 20));   // lean: a chunk's sequences on the device
     const char* lnE = std::getenv("SINGLET_ENGINE_GPU_LEAN");   // E17 debug: 1 forces the lean mode, 0 the normal one (with a budget)
     const bool lean = cap && (lnE ? std::string(lnE) == "1" : needNormal > cap);
+    // E20 (docs/gpu-engine/fable/E20-lockclip.md) "split": with E8's records (e2e) and a caller that can take the device again (Input::reacquire),
+    // the device is released once the lanes are done and taken again for the records' device phase (E8's buildRecords, E10's products, E11's keep):
+    // the host lane's wait, the host assembly of the records and readRecord run without it. The lanes do not keep their results on the device
+    // (E8's records are uploaded from the host assembly, as E17's lean mode does), E10's entries and masks go to the region at the clip, and
+    // nothing but E11's keep and the context stays on the device between the two holds. SINGLET_ENGINE_GPU_SPLIT=0: one hold, as before
+    const char* spE = std::getenv("SINGLET_ENGINE_GPU_SPLIT");
+    const bool split = in.e2e != nullptr && in.e2e->base != nullptr && in.release && in.reacquire && !(spE && spE[0] == '0');
     {
         char bl[900];
         if (!cap) snprintf(bl, sizeof bl, "engine_gpu: E17 budget: none (SINGLET_ENGINE_GPU_MEM_GB=0): E12's sizes (lane B takes the free device memory less 3 GB)\n");
@@ -1116,7 +1201,52 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         char* dAd = nullptr;
         if (!in.clip.ad3.empty() && !upload(in.clip.ad3.data(), in.clip.ad3.size(), dAd, err)) return fail(err);
         uint16_t *dP5 = nullptr, *dP3 = nullptr;
-        if (in.clip.pre) {
+        if (in.clip.pre && in.clip.dev) {   // E20: STAR's CellRanger4 clip on the device (k_cr4); the 5' clip's info to the host for STAR's own reads
+            const double t4 = now();
+            const int nq = (int) in.clip.cr4q.size();
+            if (nq < 1 || nq > 40) return fail("CellRanger4 clip on the device: a 5' adapter of " + std::to_string(nq) + " bases (1-40)");
+            Cr4Dev c4{};
+            for (int r = 0; r < nq; r++) c4.q[r] = in.clip.cr4q[r];
+            c4.nq = nq; c4.n5 = in.clip.cr4n5; c4.after5 = in.clip.cr4after5; c4.n3 = in.clip.cr4n3; c4.after3 = in.clip.cr4after3;
+            uint8_t* dInfo = nullptr;
+            g_bud.at = "clip";
+            if (dmal(&dP5, n * 2) || dmal(&dP3, n * 2) || dmal(&dInfo, n + 8)) return fail("out of device memory (CellRanger4 clip)");
+            const unsigned g4 = (unsigned) ((n + 127) / 128);
+            if (nq == 30) k_cr4<30><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo);
+            else k_cr4<0><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo);
+            if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("CellRanger4 clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
+            const double tk4 = now() - t4;
+            out.cr4info.resize(n);
+            if (g_d2h ? !g_d2h->copy(out.cr4info.data(), dInfo, n) : cudaMemcpy(out.cr4info.data(), dInfo, n, cudaMemcpyDeviceToHost) != cudaSuccess)
+                return fail("CellRanger4 clip: info copy");
+            dfree(dInfo);
+            char l4[400];
+            if (in.pre5.size() == n && in.pre3.size() == n && in.cr4info.size() == n) {   // SINGLET_ENGINE_GPU_CR4_CHECK=1: the host's clip as well
+                std::vector<uint16_t> h5(n), h3(n);
+                if (cudaMemcpy(h5.data(), dP5, n * 2, cudaMemcpyDeviceToHost) != cudaSuccess || cudaMemcpy(h3.data(), dP3, n * 2, cudaMemcpyDeviceToHost) != cudaSuccess)
+                    return fail("CellRanger4 clip: check copy");
+                u64 d5 = 0, d3 = 0, dI = 0, first = n;
+                for (u64 i = 0; i < n; i++) {
+                    const bool a = h5[i] != in.pre5[i], b = h3[i] != in.pre3[i], c = out.cr4info[i] != in.cr4info[i];
+                    d5 += a; d3 += b; dI += c;
+                    if ((a || b || c) && first == n) first = i;
+                }
+                snprintf(l4, sizeof l4, "engine_gpu: E20 CellRanger4 clip check: the device's clip of %llu reads against the host's (cr4Clip): %s (5' %llu, 3' %llu, "
+                         "info %llu reads differ%s); the host's are used\n", (unsigned long long) n, d5 + d3 + dI == 0 ? "IDENTICAL" : "DIFFERENT",
+                         (unsigned long long) d5, (unsigned long long) d3, (unsigned long long) dI,
+                         first < n ? (", first read " + std::to_string(first) + ": device " + std::to_string(h5[first]) + "/" + std::to_string(h3[first]) + "/"
+                                      + std::to_string(out.cr4info[first]) + ", host " + std::to_string(in.pre5[first]) + "/" + std::to_string(in.pre3[first]) + "/"
+                                      + std::to_string(in.cr4info[first])).c_str() : "");
+                out.log += l4;
+                if (cudaMemcpy(dP5, in.pre5.data(), n * 2, cudaMemcpyHostToDevice) != cudaSuccess || cudaMemcpy(dP3, in.pre3.data(), n * 2, cudaMemcpyHostToDevice) != cudaSuccess)
+                    return fail("CellRanger4 clip: check upload");
+                std::memcpy(out.cr4info.data(), in.cr4info.data(), n);
+            }
+            snprintf(l4, sizeof l4, "engine_gpu: E20 CellRanger4 clip on the device: %llu reads, adapter %d bases, kernel %.3f s, info to the host %.3f s\n",
+                     (unsigned long long) n, nq, tk4, now() - t4 - tk4);
+            out.log += l4;
+            step("clip.cr4");
+        } else if (in.clip.pre) {
             if (in.pre5.size() != n || in.pre3.size() != n) return fail("host clip lengths do not match the reads");
             if (!upload(in.pre5.data(), n, dP5, err) || !upload(in.pre3.data(), n, dP3, err)) return fail(err);
         }
@@ -1130,7 +1260,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (e10) e10Entries(dCs, dCl);   // E10: the original reads and their clip
         cudaStreamSynchronize(0);   // E12: not the device (the index copy stream runs on)
         step("e10.entries");
-        if (lean) { entToRegion(); step("e10.entries.d2h"); }
+        if (lean || split) { entToRegion(); step("e10.entries.d2h"); }
         g_bud.at = "clip";
         cudaMemset(dOffC, 0, 8);
         thrust::inclusive_scan(TP, thrust::device_ptr<u64>(dCl), thrust::device_ptr<u64>(dCl + n), thrust::device_ptr<u64>(dOffC + 1));
@@ -1167,7 +1297,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         out.log += line;
     }
     if (e10 && !e10Done) e10Entries(nullptr, nullptr);   // E10: no clipping
-    if (lean) entToRegion();
+    if (lean || split) entToRegion();
     memMark("reads+clip");
     // a read's (clipped) sequence on the host
     auto rseq = [&](u64 i) { return hcs.empty() ? in.seq.data() + in.off[i] : in.seq.data() + hcs[i]; };
@@ -1351,7 +1481,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     constexpr u64 slotA = laneSlotB<LaneA>(), slotM = laneSlotB<LaneM>(), slotB = laneSlotB<LaneB>();
     constexpr u64 perA = lanePerB<LaneA, false>(), perMw = lanePerB<LaneM, true>(), perMt = lanePerB<LaneM, false>(), perB = lanePerB<LaneB, false>();
     const u64 RES = 112;   // E8: per sequence its packed result and offsets kept on the device for the records' gather (~70 bytes of result on pbmc1k_v3)
-    bool resident = in.e2e != nullptr && in.e2e->base != nullptr;   // E8: the lanes keep their packed results on the device (E17 lean: not)
+    bool resident = in.e2e != nullptr && in.e2e->base != nullptr && !split;   // E8: the lanes keep their packed results on the device (E17 lean: not)
     bool allRes = true;     // E17: every lane's results stayed on the device (none ran in parts)
     bool budFail = false;   // E17: a lane did not fit the budget (err says which)
     auto roomNow = [&]() -> u64 {   // E17: the budget's room now (with the default budget, also no more than the free device memory less 2 GB)
@@ -1643,6 +1773,27 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // (in.e2e). Runs after hostPart (the host lane's results and the record order exist). false: the region is left without magic and the
     // hand-off file path runs as before.
     bool gatherDev = false;   // E17: E8's gather from the device-resident results (else the host-assembled records are uploaded)
+    // E17 lean (E20 split: before the second hold): E10's entries and masks in the region: zero those of the reads without a record, list the
+    // hook's reads (the products' rules); needs readRecord
+    std::vector<uint64_t> hkPre; bool entPre = false;
+    auto entHostPass = [&](std::vector<uint64_t>& hookList) {
+        const double t0e = now();
+        singlet_engine_gpu::E2ERegion& RG = *in.e2e;
+        e6::ReadEntry* E = (e6::ReadEntry*) (RG.base + entOff); uint64_t* Mq = qmOff ? (uint64_t*) (RG.base + qmOff) : nullptr;
+        const int nt = std::max(1, std::min(hostThreads, 16));
+        std::vector<std::vector<uint64_t>> hk(nt);
+        std::vector<std::thread> th;
+        for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
+            for (u64 i = n * t / nt, e = n * (t + 1) / nt; i < e; i++) {
+                if (out.readRecord[i] == NONE) { E[i] = e6::ReadEntry{0, 0, 0, 0, 0}; if (Mq) { Mq[2 * i] = 0; Mq[2 * i + 1] = 0; } }
+                else if (E[i].flags & 4u) hk[t].push_back(i);
+            }
+        });
+        for (auto& x : th) x.join();
+        hookList.clear();
+        for (auto& v : hk) hookList.insert(hookList.end(), v.begin(), v.end());
+        stepAdd("e2e.entries.host", now() - t0e);
+    };
     auto e2eBuild = [&](std::string& why) -> bool {
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
         const u64 nRec = out.seqOff.size() - 1;
@@ -1785,20 +1936,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                 devNote();
                 const double t0e = now();
                 if (entHost) {   // E17 lean: the entries and masks are in the region: zero those of the reads without a record, list the hook's reads (products' rules)
-                    e6::ReadEntry* E = (e6::ReadEntry*) (RG.base + entOff); uint64_t* Mq = qmOff ? (uint64_t*) (RG.base + qmOff) : nullptr;
-                    const int nt = std::max(1, std::min(hostThreads, 16));
-                    std::vector<std::vector<uint64_t>> hk(nt);
-                    std::vector<std::thread> th;
-                    for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
-                        for (u64 i = n * t / nt, e = n * (t + 1) / nt; i < e; i++) {
-                            if (out.readRecord[i] == NONE) { E[i] = e6::ReadEntry{0, 0, 0, 0, 0}; if (Mq) { Mq[2 * i] = 0; Mq[2 * i + 1] = 0; } }
-                            else if (E[i].flags & 4u) hk[t].push_back(i);
-                        }
-                    });
-                    for (auto& x : th) x.join();
-                    out.e10.hookReads.clear();
-                    for (auto& v : hk) out.e10.hookReads.insert(out.e10.hookReads.end(), v.begin(), v.end());
-                    stepAdd("e2e.entries.host", now() - t0e);
+                    if (entPre) out.e10.hookReads.swap(hkPre);   // E20 split: done before the second hold (products, without the entries, left the list empty)
+                    else entHostPass(out.e10.hookReads);
                 }
                 const u64 oEn = entHost ? entOff : RG.take(n * sizeof(e6::ReadEntry)), oQm = entHost ? qmOff : dQm ? RG.take(n * 16) : 0;
                 if (!oEn || (!entHost && dQm && !oQm)) e10Off("the shared region is full");
@@ -1867,7 +2006,27 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { for (u64 i = lo; i < hi; i++) { const uint32_t r = readRep[i]; if (r != NONE) out.readRecord[i] = recOfPos[posOf[r]]; } });
     };
     // E8: the host lane and the host records first (the device still held), then the records on the device from the device-resident results
-    if (e2e) {
+    if (e2e && split) {   // E20 split: the first hold ends with the lanes; the host lane's wait, the records and readRecord without the device
+        dfree(dG1); dfree(dSA); dfree(dSAi); dG1 = nullptr; dSA = nullptr; dSAi = nullptr;
+        for (auto& cr : chunks) for (Lane* L : {&cr.A, &cr.M, &cr.B}) { dfree(L->dOut); dfree(L->dOff); L->dOut = nullptr; L->dOff = nullptr; }
+        dfree(dSeq); dfree(dOff); dSeq = nullptr; dOff = nullptr;
+        dfree(dcl); dfree(dcb); dfree(dss); dfree(dse); dfree(dsd); dfree(dsa); dfree(dsm); dfree(dsl); dfree(dsr); dfree(dst);   // dcs: buildRecords' chromosome starts
+        dcl = dcb = dss = dse = dsd = dsa = nullptr; dsm = dsl = dsr = dst = nullptr;
+        if (cudaDeviceSynchronize() != cudaSuccess) return fail(std::string("before the release: ") + cudaGetErrorString(cudaGetLastError()));
+        step("split.free");
+        memMark("released");
+        in.release(); out.split = true;
+        if (!hostAll()) return fail(err);
+        tS = now();
+        if (e10) fillReadRecord();   // E10: the products need it on the device
+        step("readRecord");
+        if (e10 && entHost) { entHostPass(hkPre); entPre = true; tS = now(); }
+        in.reacquire();
+        if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select the device again");
+        step("split.relock");
+        memMark("relocked");
+        gatherDev = false;
+    } else if (e2e) {
         if (!hostAll()) return fail(err);
         tS = now();
         if (e10) fillReadRecord();   // E10: the products need it on the device
@@ -1879,6 +2038,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             dfree(dSeq); dfree(dOff); dSeq = nullptr; dOff = nullptr;
         }
         step("index.free");
+    }
+    if (e2e) {
         std::string e2eWhy;
         if (!e2eBuild(e2eWhy)) { out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records"); }
         step("e2e.build");

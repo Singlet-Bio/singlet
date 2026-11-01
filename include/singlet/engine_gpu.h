@@ -154,6 +154,13 @@ struct Clip {
     std::vector<char> ad3;           // 3' adapter, numeric; empty: none
     double adMMp = 0;
     bool pre = false;                // the clip lengths come from the host (Input::pre5 / pre3): --clipAdapterType CellRanger4
+    // E20 (docs/gpu-engine/fable/E20-lockclip.md): with pre, the CellRanger4 clip computed on the device instead (STAR's ClipMates: the 5' mate
+    // type 10 with the adapter cr4q, numeric, and N / NafterAd cr4n5 / cr4after5; the 3' mate type 11, polyA, cr4n3 / cr4after3); per read the
+    // clip lengths and the 5' clip's info (Output::cr4info). When Input::pre5 / pre3 / cr4info are also given (SINGLET_ENGINE_GPU_CR4_CHECK=1),
+    // the device's are compared with them byte for byte and the host's are used.
+    bool dev = false;
+    std::vector<uint8_t> cr4q;
+    uint32_t cr4n5 = 0, cr4after5 = 0, cr4n3 = 0, cr4after3 = 0;
 };
 
 // an allocator that default-initializes (resize does not zero-fill): the decode's large per-read arrays are first touched by the parsing
@@ -173,7 +180,11 @@ struct Input {
     Clip clip;
     std::vector<uint16_t> pre5, pre3;   // with clip.pre: per read the bases STAR's CPU clip removes from its 5' and 3' ends
     std::function<void()> release;      // called by mapDistinct once its last device work is done (the caller's device lock); the host assembly of the records runs after it
-    std::vector<uint8_t> cr4info;       // not read by the engine: per read STAR's CellRanger4 5' clip (what clipChunk would leave in the FASTQ)
+    // E20: with e2e, mapDistinct releases the device (release) once the lanes are done and calls reacquire for the records' device phase (E8's
+    // buildRecords, E10's products, E11's keep) after the host lane and the host assembly; reacquire takes the same device again. Unset (or
+    // SINGLET_ENGINE_GPU_SPLIT=0): one hold, as before
+    std::function<void()> reacquire;
+    std::vector<uint8_t> cr4info;       // not read by the engine (E20: but compared with the device's when clip.dev): per read STAR's CellRanger4 5' clip (what clipChunk would leave in the FASTQ)
     // E8: with e2e set, mapDistinct also builds the pileup's records on the device and copies them into e2e (E2EHeader); the host lane
     // then runs before the device is released. STAR's alignBAM parameters the records need besides Params' filters:
     E2ERegion* e2e = nullptr;
@@ -202,6 +213,8 @@ struct Output {
     NoInitVector<uint8_t> blob;
     NoInitVector<uint64_t> blobOff{0};
     std::vector<uint16_t> clip5, clip3;   // per input read when clipping is on: bases clipped from its 5' and 3' ends
+    std::vector<uint8_t> cr4info;         // E20: with clip.dev, per read the CellRanger4 5' clip's info (as Input::cr4info)
+    bool split = false;                   // E20: the device was released after the lanes and taken again for the records (Input::reacquire)
     std::vector<uint32_t> readRecord;   // per input read: index of its record above, or 0xFFFFFFFF (sequence with N, or not mapped)
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
     double secUpload = 0, secDedup = 0, secMapGpu = 0, secHostLane = 0;

@@ -128,8 +128,26 @@ struct IngPrep {
     uint32 nw = 0;
     std::vector<uint16> pre5, pre3;
     std::vector<uint8> info;
+    // E20: the CellRanger4 clip on the device (mapDistinct's k_cr4) with STAR's ClipMates: the 5' adapter (numeric) and N / NafterAd of both
+    bool clipDev = false;
+    std::string clipDevWhy;
+    std::vector<uint8> cr4q;
+    uint32 cr4n5 = 0, cr4after5 = 0, cr4n3 = 0, cr4after3 = 0;
 };
 IngPrep *ingPrep = nullptr;
+// E20 (docs/gpu-engine/fable/E20-lockclip.md): STAR's CellRanger4 clip of the .1fq's reads on the device (default), instead of E13's phase C on
+// the host (cr4Clip). SINGLET_ENGINE_GPU_CR4_DEVICE=0: the host clip, as before (the fallback). SINGLET_ENGINE_GPU_CR4_CHECK=1: both, the
+// engine compares them read by read and uses the host's
+inline bool cr4DevWanted() { const char *e = getenv("SINGLET_ENGINE_GPU_CR4_DEVICE"); return !(e != nullptr && e[0] == '0'); }
+inline bool cr4Check() { const char *e = getenv("SINGLET_ENGINE_GPU_CR4_CHECK"); return e != nullptr && e[0] == '1'; }
+// the ClipMates the device clip reproduces: mate 1's 5' type 10 with an adapter of 1-40 bases (numeric 0-4) and its 3' type 11 (polyA)
+bool cr4DevFits(const ClipMate &m5, const ClipMate &m3, std::string &why) {
+    if (m5.type != 10 || m5.adSeq.empty()) { why = "the 5' clip is not CellRanger4's adapter clip"; return false; }
+    if (m3.type != 11 || m3.adSeq.empty()) { why = "the 3' clip is not CellRanger4's polyA clip"; return false; }
+    if (m5.adSeqNum.empty() || m5.adSeqNum.size() > 40) { why = "a 5' adapter of " + std::to_string(m5.adSeqNum.size()) + " bases (the device takes 1-40)"; return false; }
+    for (char c : m5.adSeqNum) if ((unsigned char) c > 4) { why = "a 5' adapter base outside A, C, G, T, N"; return false; }
+    return true;
+}
 inline bool ingPrepHere() { return ingPrep != nullptr && ingPrep->pid == getpid(); }
 inline double ingSince(std::chrono::steady_clock::time_point t) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count(); }
 void ingClipFree(IngPrep &W) {
@@ -762,7 +780,14 @@ void ingPrepare(Parameters &P, IngPrep &W) {
     if (W.clipPre) {
         std::vector<std::vector<ClipMate>> cmv;
         P.pClip.initializeClipMates(cmv);
-        if (!(W.clipEarly && W.pre5.size() == ing.n && clipKeyOf(cmv[0][0], cmv[0][1]) == W.clipKey)) {   // not th0's: clip here
+        W.clipDev = cr4DevWanted() && cr4DevFits(cmv[0][0], cmv[0][1], W.clipDevWhy);
+        if (W.clipDev) {   // E20: the device's clip (mapDistinct) from these ClipMates
+            const ClipMate &m5 = cmv[0][0], &m3 = cmv[0][1];
+            W.cr4q.assign(m5.adSeqNum.begin(), m5.adSeqNum.end());
+            W.cr4n5 = m5.N; W.cr4after5 = m5.NafterAd; W.cr4n3 = m3.N; W.cr4after3 = m3.NafterAd;
+        }
+        if (W.clipDev && !cr4Check()) { W.clipEarly = false; W.secC = 0; ingClipFree(W); }
+        else if (!(W.clipEarly && W.pre5.size() == ing.n && clipKeyOf(cmv[0][0], cmv[0][1]) == W.clipKey)) {   // not th0's: clip here
             W.clipEarly = false;
             const auto tc = std::chrono::steady_clock::now();
             cr4Clip(ing, cmv[0][0], cmv[0][1], T, W);
@@ -788,6 +813,10 @@ bool ingestReads(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
     if (!W.ok) { why = W.why; return false; }
     if (W.clipPre != in.clip.pre) { why = "the clip configuration changed"; return false; }
     if (in.clip.pre) { in.pre5.swap(W.pre5); in.pre3.swap(W.pre3); in.cr4info.swap(W.info); }
+    if (in.clip.pre && W.clipDev) {   // E20: the device clips (with the check, the host's clip above is compared with it)
+        in.clip.dev = true; in.clip.cr4q.assign(W.cr4q.begin(), W.cr4q.end());
+        in.clip.cr4n5 = W.cr4n5; in.clip.cr4after5 = W.cr4after5; in.clip.cr4n3 = W.cr4n3; in.clip.cr4after3 = W.cr4after3;
+    }
     in.seq.swap(ing.seq); in.off.swap(ing.off);
     ingSeq = in.seq.data(); ingOff = in.off.data(); ingOn = true;
     if (in.e10.on) {
@@ -1214,10 +1243,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                                 + " s later") + ", taken " + std::to_string(W.waitA) + " s after STAR read its parameters")
                          << "); barcodes " << W.secB << " s (R11 " << ing.r11Total << " reads), CellRanger4 clip " << W.secC << " s ("
                          << (!W.clipPre ? std::string("none")
-                             : std::to_string(W.clipS) + " thread-s on " + std::to_string(W.clipDistinct) + " distinct sequences, grouped in "
+                             : W.clipDev && !cr4Check() ? std::string("on the device: E20, in mapDistinct")
+                             : (W.clipDev ? std::string("E20 check: on the device and here, ") : !cr4DevWanted() ? std::string("SINGLET_ENGINE_GPU_CR4_DEVICE=0: ")
+                                : "E20: not on the device (" + W.clipDevWhy + "): ") + std::to_string(W.clipS) + " thread-s on " + std::to_string(W.clipDistinct) + " distinct sequences, grouped in "
                                + std::to_string(W.clipGroupS) + " s, " + (W.clipEarly ? "right after the decode with STAR's fixed CellRanger4 sequences (STAR's "
                                "ClipMates are those), done " + std::to_string(W.doneC) + " s after STAR's process started" : std::string("after the barcodes")))
-                         << (W.cr4 && !W.clipEarly ? "; the clip after the decode was not STAR's" : "") << "); "
+                         << (W.cr4 && !W.clipEarly && !W.clipDev ? "; the clip after the decode was not STAR's" : "") << "); "
                          << (W.early ? "the prefill waited " : "all in the prefill: ") << waited << " s\n";
     } else
     if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
@@ -1275,8 +1306,27 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                          << (singlet_engine_gpu::ingest::publishR11(e2r, ing.r11, ing.r11Total) ? "in the shared region for the pipeline" : "NOT written (region full)") << "\n";
     else if (e2r.fd >= 0 && e2r.base == nullptr) gpuFallback(P, "ENGINE_GPU: E8 not used (it needs the GPU pileup \"on\" with summaries and per-read entries, CB_UMI_Simple)");
     bool lockReleased = false;   // mapDistinct releases the device when its device work is done (the host assembly of the records needs no GPU)
-    const auto tHeld0 = std::chrono::steady_clock::now(); double heldS = 0;
-    in.release = [&]() { if (!lockReleased) { lockReleased = true; heldS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tHeld0).count(); singlet_engine_gpu::unlockDevice(lockFd); } };
+    auto tHeld0 = std::chrono::steady_clock::now(); double heldS = 0;
+    // E20 split (docs/gpu-engine/fable/E20-lockclip.md): mapDistinct may release the device after the lanes and take it again (reacquire, the same
+    // device: E11's keep and this process's context are there) for the records' device phase; heldS is the sum of the holds
+    double held1 = 0, unheld = 0, wait2 = 0;
+    std::chrono::steady_clock::time_point tRel;
+    in.release = [&]() {
+        if (lockReleased) return;
+        lockReleased = true; tRel = std::chrono::steady_clock::now();
+        const double h = std::chrono::duration<double>(tRel - tHeld0).count();
+        if (held1 == 0) held1 = h;
+        heldS += h; singlet_engine_gpu::unlockDevice(lockFd); lockFd = -1;
+        singlet_tail::mark("prefill: device released (held %.3f s)", h);
+    };
+    in.reacquire = [&]() {
+        const auto t = std::chrono::steady_clock::now();
+        singlet_engine_gpu::lockDeviceSlot(device, &lockFd);
+        tHeld0 = std::chrono::steady_clock::now();
+        wait2 = std::chrono::duration<double>(tHeld0 - t).count(); unheld = std::chrono::duration<double>(tHeld0 - tRel).count();
+        lockReleased = false;
+        singlet_tail::mark("prefill: device taken again (waited %.3f s)", wait2);
+    };
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     in.release();
     singlet_tail::mark("prefill: mapDistinct returned (device held %.3f s)", heldS);
@@ -1290,7 +1340,10 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         tqLog += b; tq = t;
     };
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
-                     << " s for it, held it " << heldS << " s\n" << out.log << out.e10.log;
+                     << " s for it, held it " << heldS << " s"
+                     << (out.split ? " (E20 split: " + std::to_string(held1) + " s to the lanes' end, released " + std::to_string(unheld) + " s for the host lane and the records, "
+                                     "waited " + std::to_string(wait2) + " s of it to take it again, " + std::to_string(heldS - held1) + " s for the records on the device)" : std::string())
+                     << "\n" << out.log << out.e10.log;
     gpuFallbackLines(out.e10.log);   // E19: the engine's own fallbacks (E8's records, E10, E11's keep) on stderr too
     if (ok) gpuFallbackLines(out.log);
     decltype(in.e10.aux)().swap(in.e10.aux);
@@ -1348,7 +1401,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     if (in.clip.pre) {   // CellRanger4: readLoad takes clippedInfo from here, clipChunk is skipped
         static std::vector<uint8> cr4keep;
-        cr4keep.swap(in.cr4info);
+        cr4keep.swap(in.clip.dev ? out.cr4info : in.cr4info);   // E20: the device's (the host's with the check: mapDistinct copied them)
         g_cr4Info = cr4keep.data(); g_cr4InfoN = cr4keep.size();
     }
     // a cache large enough for every result (entries are ~(32 + L/4 + blob) bytes; 3x for the ring, the 2-way index and
@@ -1739,7 +1792,7 @@ void singlet_engine_gpu::ingest::startEarly(int threads, bool cr4) {
     W->th0 = std::thread([W]() {
         W->okA = W->fromParent || decodeReads(W->threads0, W->reads, W->why);
         W->doneA = ingSince(W->t0);
-        if (!W->okA || !W->cr4) return;
+        if (!W->okA || !W->cr4 || (cr4DevWanted() && !cr4Check())) return;   // E20: the device clips (mapDistinct)
         ClipMate m5, m3;
         m5.type = 10; m5.initialize(0, "AAGCAGTGGTATCAACGCAGAGTACATGGG", 0, 0.1);
         m3.type = 11; m3.initialize(0, "A", 0, 0.1);

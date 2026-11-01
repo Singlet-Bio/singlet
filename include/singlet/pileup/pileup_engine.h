@@ -2766,11 +2766,24 @@ public:
         singlet_tail::mark("parent: pileupRun starts");
         const bool ok = pileupRun(in, device, out);
         const double sRun = since(tA1);
-        // E16 resetbg: the context (with the input's page-locked memory) is reset on a thread at the end, which then unlocks the device
+        // E16 resetbg: the context (with the input's page-locked memory) is reset on a thread at the end, which then unlocks the device.
+        // E20 (docs/gpu-engine/fable/E20-lockclip.md): that thread starts as soon as pileupRun returns (the device's work is done), beside the puts
+        // and the host pass, which read the input's host memory only (the reset unpins it; the input is freed after the reset, below).
+        // SINGLET_GPU_PILEUP_UNLOCK=late: E16's order (the reset and the unlock after the host pass)
         const bool e16rb = ok && out.resetDeferred;
+        const char* ulE = std::getenv("SINGLET_GPU_PILEUP_UNLOCK");
+        const bool e20ul = e16rb && !(ulE != nullptr && std::string(ulE) == "late");
+        std::chrono::steady_clock::time_point tUnl = std::chrono::steady_clock::now(); double sReset = 0;
+        struct RstJoin { std::thread t; ~RstJoin() { if (t.joinable()) t.join(); } } e20rst;   // joined before `in` goes, on every return
         if (!e16rb) unlockDevice(lock_fd);
+        else if (e20ul) e20rst.t = std::thread([device, lock_fd, &tUnl, &sReset] {
+            const auto r0 = std::chrono::steady_clock::now();
+            pileupRelease(device);
+            unlockDevice(lock_fd);
+            tUnl = std::chrono::steady_clock::now(); sReset = std::chrono::duration<double>(tUnl - r0).count();
+            singlet_tail::mark("parent (E20): device reset in %.3f s right after pileupRun, device unlocked", sReset); });
         singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
-        std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
+        if (!e20ul) std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
         // the outputs into the accumulators, junction names, chrM indels, counters and WL-ambient genes; E16 "overlap" (level 5) runs them on a
         // thread beside gpu_host_pass, which reads other parts of `out` and writes other members and counters (strand votes, poly(A), V(D)J)
@@ -2835,6 +2848,11 @@ public:
         }
         singlet_tail::mark("parent: host pass done");
         e16_rrna_join(stats);
+        if (e20ul) {   // E20: the hold is pileupRun and the reset (done on its thread long before the host pass ends)
+            e20rst.t.join();
+            std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << std::chrono::duration<double>(tUnl - tA1).count() << " s (E20: pileupRun "
+                      << sRun << " s, then the device reset " << sReset << " s on a thread beside the puts and the host pass)\n";
+        }
         std::cerr << "[gpu_pileup] apply: build input " << sBuild << " s, pileupRun " << sRun << " s, host pass " << since(tA2) << " s" << "\n";
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
                   << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules
@@ -2843,9 +2861,9 @@ public:
         // device's context goes first on that thread (the input's memory is page-locked in it), under the device lock pileupRun took
         if (singlet_tail::cut("free2") || e16rb) {
             auto* fIn = new PileupInput(std::move(in)); auto* fOut = new PileupOutput(std::move(out));
-            std::thread([fIn, fOut, e16rb, device, lock_fd] {
+            std::thread([fIn, fOut, e16rb, e20ul, device, lock_fd] {
                 const double a = singlet_tail::now();
-                if (e16rb) {
+                if (e16rb && !e20ul) {
                     pileupRelease(device);
                     unlockDevice(lock_fd);
                     singlet_tail::mark("parent (bg): device reset in %.3f s, device unlocked", singlet_tail::now() - a);
