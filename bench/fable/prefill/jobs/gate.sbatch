@@ -23,7 +23,8 @@
 # out_equiv.py, the mapping statistics of star_Log.final.out, SJ.out.tab, the read-order files by sorted 4-line records, and CellReads.stats
 # by sorted rows (CRS_<mode>: a kept copy for a mode not run here). DUMP=1: every GPU run also writes mapDistinct's records (E6 dump,
 # SINGLET_ENGINE_GPU_DUMP) to the node's /tmp, hashed (sha256) and removed after the run, and the hashes of all GPU runs are compared at
-# the end; DUMP="mode ...": only those modes dump. A mode's out/ in /tmp is removed after its run unless PAIRS names it.
+# the end; DUMP="mode ...": only those modes dump. A mode's out/ in /tmp is removed after its run unless PAIRS names it. KEEPOUT=1
+# (default) keeps every mode's out/ (no BAM/FASTQ) under $RES, KEEPOUT=0 none, KEEPOUT="mode ..." those modes'.
 set -uo pipefail
 FAIL=0
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
@@ -82,7 +83,7 @@ for m in "${MODES[@]}"; do
   [ -f $SCR/$s/$m/CellReads.stats ] && cp $SCR/$s/$m/CellReads.stats $O/CellReads.stats && echo "  CellReads.stats kept: $(wc -l < $O/CellReads.stats) lines" | tee -a $RES/summary.txt
   cp $SCR/$s/$m/out/read_stats.tsv $SCR/$s/$m/out/summary.json $O/ 2>/dev/null
   python3 $SCR/repo/bench/fable/solowire/s8_stages_e11.py $O 66.601887 > $O/stages.txt 2>&1; tee -a $RES/summary.txt < $O/stages.txt
-  [ "${KEEPOUT:-1}" = 1 ] && rsync -a --exclude='*.bam' --exclude='*.sam' --exclude='*.cram' --exclude='*.fq*' --exclude='*.fastq*' --exclude='*.1fq' \
+  { [ "${KEEPOUT:-1}" = 1 ] || [[ " ${KEEPOUT:-} " == *" $m "* ]]; } && rsync -a --exclude='*.bam' --exclude='*.sam' --exclude='*.cram' --exclude='*.fq*' --exclude='*.fastq*' --exclude='*.1fq' \
       --exclude='.gpu_handoff*' --exclude='*Unmapped*' --exclude='_STARtmp*' --exclude='*.reads' --exclude='*.reads.q' $SCR/$s/$m/out/ $O/out/
   if [ -f $SCR/dump-$m.bin ]; then   # hashed now and removed (/tmp room for the next modes); compared by hash at the end
     sha256sum $SCR/dump-$m.bin | cut -c1-64 > $SCR/dump-$m.sha
