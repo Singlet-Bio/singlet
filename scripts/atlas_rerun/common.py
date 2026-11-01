@@ -281,7 +281,7 @@ def cluster_cfg(cfg, cluster):
 PLAN_COLUMNS = [
     "priority", "gsm", "gse", "wave", "study_wave", "study_rank", "sample_rank", "organism", "reference", "reads_available",
     "depth_unknown", "bases", "n_runs", "runs", "run_reads", "est_wall_s", "est_core_h", "est_su", "est_sra_bytes",
-    "size_class", "cluster",
+    "size_class", "cluster", "protocol_inferred",
 ]
 INT_COLS = {"priority", "study_rank", "sample_rank", "reads_available", "depth_unknown", "bases", "n_runs",
             "est_sra_bytes"}
