@@ -45,6 +45,7 @@
 //  M5_TR32CHECK  count every 32-bit store that would not round-trip (g_tr32bad; must stay 0)
 //  M5_BLOBW  the output encoder gathers bytes in a register and stores 8 at a time (aligned u64 stores) instead of one
 //            byte store per byte; the same bytes, the same length, the same overflow rule
+//  M5_ENC1   encodeTr's loops are not unrolled (one inlined putV per loop instead of one per field: less code in k_p3)
 #ifdef M5_S3
 #ifndef M5_REFX
 #define M5_REFX
@@ -1444,6 +1445,23 @@ template <class T> HD inline void encodeTr(Blob& b, const T& t) {
                (i64)t.nGap, (i64)t.lGap, (i64)t.nDel, (i64)t.nIns, (i64)t.lDel, (i64)t.lIns, (i64)t.nUnique, (i64)t.nAnchor,
                (i64)t.intronMotifs[0], (i64)t.intronMotifs[1], (i64)t.intronMotifs[2],
                (i64)t.maxScore, (i64)t.iFrag, (i64)t.sjMotifStrand, (i64)(t.sjYes ? 1 : 0), (i64)(t.primaryFlag ? 1 : 0)};
+#ifdef M5_ENC1
+    // the same values in the same order, through one putV call site: each exon row's values gathered first
+#pragma unroll 1
+    for (int k = 0; k < (int)(sizeof v / sizeof v[0]); k++) b.putV(v[k]);
+#pragma unroll 1
+    for (uint iex = 0; iex < t.nExons; iex++) {
+        i64 e[EX_SIZE + 5];
+        int ne = 0;
+        for (int k = 0; k < EX_SIZE; k++) e[ne++] = (i64)t.exons[iex][k];
+        if (iex + 1 < t.nExons) {
+            e[ne++] = t.canonSJ[iex]; e[ne++] = t.sjAnnot[iex]; e[ne++] = t.sjStr[iex];
+            if (t.canonSJ[iex] >= 0) { e[ne++] = (i64)t.shiftSJ[iex][0]; e[ne++] = (i64)t.shiftSJ[iex][1]; }
+        }
+#pragma unroll 1
+        for (int k = 0; k < ne; k++) b.putV(e[k]);
+    }
+#else
     for (int k = 0; k < (int)(sizeof v / sizeof v[0]); k++) b.putV(v[k]);
     for (uint iex = 0; iex < t.nExons; iex++) {
         for (int k = 0; k < EX_SIZE; k++) b.putV((i64)t.exons[iex][k]);
@@ -1452,6 +1470,7 @@ template <class T> HD inline void encodeTr(Blob& b, const T& t) {
             if (t.canonSJ[iex] >= 0) { b.putV((i64)t.shiftSJ[iex][0]); b.putV((i64)t.shiftSJ[iex][1]); }
         }
     }
+#endif
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
