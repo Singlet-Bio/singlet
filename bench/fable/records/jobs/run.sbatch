@@ -11,22 +11,21 @@
 # E6 run: one `singlet --engine gpu` run of pbmc1k_v3 (SINGLET_GPU_PILEUP=on, the stream path) with SINGLET_ENGINE_GPU_DUMP (mapDistinct's
 # records, engine_gpu.cu) and the hand-off it writes kept by hard links (the pileup unlinks it), then the records driver against them.
 # Everything with read sequences stays in job /tmp. After the first driver run the job serves further driver runs on the same data: write a
-# commit (or "stop") into $W/jobs/fable/records/trigger and it fetches gpu/fable/records, compiles and runs the driver again (idle limit IDLE s).
+# commit (or "stop") into $W/jobs/fable/records/trigger$TAG and it fetches gpu/fable/records, compiles and runs the driver again (idle limit IDLE s).
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference; G=$REF/GRCh38-2024-A
 E6=$W/jobs/fable/records; BIN=$E6/bin/singlet-gpu; IMG=$W/images/cuda-13-devel.sif; ENV=$W/envs/pbench; BARE=$W/repos/singlet-py.git
-T=${T:-18}; IDLE=${IDLE:-1200}; DARGS=${DARGS:-}
+T=${T:-18}; IDLE=${IDLE:-1200}; DARGS=${DARGS:-}; TMAX=${TMAX:-6600}; TAG=${TAG:-}; FQ=${FQ:-$PB/data/pbmc1k_v3/pbmc1k_v3.1fq}
 RES=$E6/results/run-$SLURM_JOB_ID; mkdir -p $RES
 SCR=/tmp/$USER-e6r-$SLURM_JOB_ID; mkdir -p $SCR/out $SCR/keep $SCR/hts
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT INT TERM
 ln -s $ENV/include/htslib $SCR/hts/htslib
 # singlet resolves the barcode whitelist at <binary dir>/../whitelists; without it the run silently takes the sorted-BAM path
 [ -e $E6/whitelists ] || ln -s $PB/whitelists $E6/whitelists
-echo "node=$(hostname) job=$SLURM_JOB_ID engine commit=$(cat $E6/bin/commit) T=$T $(date -Is)" | tee $RES/summary.txt
+echo "node=$(hostname) job=$SLURM_JOB_ID engine commit=$(cat $E6/bin/commit) T=$T FQ=$FQ TAG=$TAG $(date -Is)" | tee $RES/summary.txt
 nvidia-smi --query-gpu=name,driver_version --format=csv,noheader | tee -a $RES/summary.txt
 df -h /tmp | tail -1 | tee -a $RES/summary.txt
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$ENV/bin:$PATH
-FQ=$PB/data/pbmc1k_v3/pbmc1k_v3.1fq
 # the hand-off files, hard-linked as soon as STAR's prefill creates them (same inode: the later writes land in the link too)
 ( for f in .gpu_handoff.bin .gpu_handoff.bin.reads .gpu_handoff.bin.reads.q; do
     p=""
@@ -67,8 +66,8 @@ run_driver() {
 }
 LAST=""
 run_driver
-TRIG=$E6/trigger; IDLE0=$(date +%s)
-while [ $(( $(date +%s) - IDLE0 )) -lt $IDLE ] && [ $(( $(date +%s) - T0 )) -lt 6600 ]; do
+TRIG=$E6/trigger$TAG; IDLE0=$(date +%s)
+while [ $(( $(date +%s) - IDLE0 )) -lt $IDLE ] && [ $(( $(date +%s) - T0 )) -lt $TMAX ]; do
   sleep 20
   t=$(cat $TRIG 2>/dev/null | tr -d '[:space:]')
   [ -z "$t" ] && continue
