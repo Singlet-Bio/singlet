@@ -106,8 +106,8 @@ def test_memory_tier_comes_from_the_sample_not_the_process():
 def test_the_singlet_command_carries_the_tier():
     a = types.SimpleNamespace(threads=8, engine="gpu", extra=[])
     ccfg = {"ref_base": "/ref", "binary": "/bin/singlet"}
-    cfg = {"references": {"*": "auto"}, "pipeline": {}}
-    man = {"runs": ["SRR1"], "pairs": 263_000_000}
+    cfg = {"references": {"Homo sapiens": "GRCh38-2024-A", "*": "auto"}, "pipeline": {}}
+    man = {"runs": ["SRR1"], "pairs": 263_000_000, "organism": "Homo sapiens"}
     cmd = D.singlet_cmd(a, ccfg, cfg, "/claim", man, "/out")
     assert cmd[cmd.index("--memory-tier") + 1] == "Large"
-    assert "--memory-tier" not in D.singlet_cmd(a, ccfg, cfg, "/claim", {"runs": ["SRR1"]}, "/out")   # no read count: the measured value stays
+    assert "--memory-tier" not in D.singlet_cmd(a, ccfg, cfg, "/claim", {"runs": ["SRR1"], "organism": "Homo sapiens"}, "/out")   # no read count: the measured value stays
