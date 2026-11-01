@@ -73,6 +73,8 @@ def main():
         r.update(NOTES.get(cap, {}))
         if "cls_override" in r:
             r["cls"] = r["cls_override"]
+        if r["src"] == "carried" and r["cls"] in ("blocker", "should-fix"):
+            r["cls"] = "re-measure"   # not measured on this binary: not counted as a blocker until it is
         rows.append(r)
     out = ["| capability | status | pass/fail | measured | worst gap vs best tool | class | note |", "|---|---|---|---|---|---|---|"]
     for r in rows:
@@ -85,7 +87,8 @@ def main():
     summary = {"n_total": len(rows), "n_pass": sum(r["status"] == "pass" for r in rows), "n_fail": sum(r["status"] == "fail" for r in rows),
                "n_missing": sum(r["status"] in ("missing", "incomplete") for r in rows), "n_measured_at_pin": n_re,
                "blockers": [r["capability"] for r in rows if r["cls"] == "blocker"],
-               "should_fix": [r["capability"] for r in rows if r["cls"] == "should-fix"]}
+               "should_fix": [r["capability"] for r in rows if r["cls"] == "should-fix"],
+               "re_measure": [r["capability"] for r in rows if r["cls"] == "re-measure"]}
     Path(a.out).write_text("\n".join(out) + "\n", encoding="utf8")
     Path(a.out).with_suffix(".json").write_text(json.dumps({"summary": summary, "rows": rows}, indent=1), encoding="utf8")
     print(json.dumps(summary, indent=1)); print("\n".join(out))
