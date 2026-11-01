@@ -53,7 +53,7 @@ configuration E19 is making the default. E18 changed no engine code: new bench s
   (E15 §5.7), independent of k: nuclei2k_v2's `nonhost_reads.fq` holds a different record set in each run, because the writer
   indexes the screen's subsample against the whole unmapped file, whose order E16 made run-dependent (§3).
 - **Recommendation (§6): `SINGLET_ENGINE_GPU_SLOTS=2` (E17's default budget, no other memory knobs), 8 samples in flight per GPU
-  where host memory allows (16 per node; ~0.7 GB per M read pairs per sample), `--threads 7`, a pool of workers that starts the
+  where host memory allows (16 per node; 0.6–0.7 GB per M read pairs per sample), `--threads 7`, a pool of workers that starts the
   next sample when one ends, each worker pinned to a GPU (`SINGLET_ENGINE_GPU_DEVICE` = worker mod 2).** Expected ~4.4 M pairs/s
   per node for samples like pbmc1k_v3: the campaign's ~20.6 T read pairs in ~54 node-days against ~170 on the CPU engine.
 - **E17's budget (§7)** provides what E18 found a second slot needs: one budget for the chunk, lanes and arena, sized per slot and
@@ -457,7 +457,7 @@ For the binary of the E17 head (503c07f7) or later, level 5 + ingest, on H100 NV
 |---|---|---|
 | `SINGLET_ENGINE_GPU_SLOTS` | **2** | +29–38 % over one slot at k = 6–8 in steady state (§5c); three slots add nothing over two |
 | device memory (`SINGLET_ENGINE_GPU_MEM_GB`, `CHUNK`, `NB*`, `ARENA_GB`) | **none set**: E17's default, (device memory − 2 GB) / slots = 45.5 GB | the budget sizes the chunk, the lanes and the arena per slot and keeps the lanes within the free memory; `m43` by hand is slower (§5c) |
-| samples in flight per GPU (k) | **8** (16 per node) where host memory allows, else 6–7 | one more sample per GPU is worth ~+8 % per step from k = 6 to 8 (1.86 → 2.17); host memory is ~0.7 GB per M read pairs per sample (pbmc1k_v3: 41–43 GB; §5d), so 16 samples of ~60 M pairs fill a 735 GB node; with larger samples keep the sum of their read pairs under ~1,000 M per node |
+| samples in flight per GPU (k) | **8** (16 per node) where host memory allows, else 6–7 | one more sample per GPU is worth ~+8 % per step from k = 6 to 8 (1.86 → 2.17); host memory is 0.6–0.7 GB per M read pairs per sample (pbmc1k_v3: 38–43 GB; §5d): 16 pbmc1k_v3 (1,066 M pairs in flight) peaked at 607 GB of the 730 GB cgroup, so with larger samples keep the read pairs in flight under ~1,200 M per node |
 | threads per sample (`--threads`, T) | **7** (k × T = 56 threads on 28 cores per GPU) | T only matters through the host work under the slot (the prefill's host lane runs on T − 1 threads); the cores stay under 2/3 busy at k = 8 per GPU (17 of 28 on a half node, 44 of 54 on the node) |
 | device per worker | **pinned**: `SINGLET_ENGINE_GPU_DEVICE` = worker mod GPUs | on the node 4.39 M pairs/s pinned against 4.08 unpinned, and 4 of 32 unpinned runs lost the GPU in the non-host screen and screened on the CPU (§2) |
 | scheduling | a pool of k workers per GPU, each starting its next sample when its last one ends (the stream form) | batches pay the ramp and the tail per batch: −5–10 % at k = 4, −8–15 % at k = 6–8 (span vs steady) |
