@@ -39,14 +39,14 @@ G=$REF/GRCh38-2024-A; FQ=$PB/data/$s/$s.1fq
 ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
-  unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_ENGINE_GPU_E2E_CHECK SINGLET_ENGINE_GPU_E10_CHECK; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
+  unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_ENGINE_GPU_E2E_CHECK SINGLET_ENGINE_GPU_E10_CHECK SINGLET_ENGINE_GPU_E10_R11; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
   case $m in
     cpu) ENGARG="" ;;
     gpuD) export SINGLET_GPU_PILEUP=on ;;
     gpuE) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=1 ;;
     prof) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=1; BIN=$BINDIR/singlet-prof ;;
     gpuE2) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=2 ;;
-    gpuE2c) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=2 SINGLET_ENGINE_GPU_E10_CHECK=1 ;;
+    gpuE2c) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=2 SINGLET_ENGINE_GPU_E10_CHECK=1 SINGLET_ENGINE_GPU_E10_R11=$O/r11_device.bin ;;
     gpuE3) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=3 ;;
     gpuE4) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=4 ;;
     prof3) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=3; BIN=$BINDIR/singlet-prof ;;
@@ -69,6 +69,12 @@ for m in "${MODES[@]}"; do
   grep -ah -e "ENGINE_GPU" -e "engine_gpu:" -e "STAR_PROFILE" -e "E10" -e "loading the genome" -e "started mapping" -e "finished mapping" -e "Loading SA" -e "Loading Genome" $SCR/$s/$m/out/*Log.out 2>/dev/null | cut -c1-6000 | head -120 > $O/starlog_engine.txt
   cut -c1-600 $O/starlog_engine.txt | tee -a $RES/summary.txt
   cp $SCR/$s/$m/out/*Log.final.out $SCR/$s/$m/out/*Log.out $O/ 2>/dev/null
+  if [ -f $O/r11_device.bin ]; then   # E10: the device's R11 exact CB histogram against r11_hist.cpp's (E6, job 795356 era; same .1fq and whitelist)
+    R11REF=${R11REF:-$W/jobs/fable/records/results/r11_exact_hist.bin}
+    if cmp -s $O/r11_device.bin $R11REF; then echo "  R11 exact CB histogram: device == r11_hist.cpp byte for byte ($(stat -c %s $R11REF) bytes)" | tee -a $RES/summary.txt
+    else echo "  R11 exact CB histogram: DIFFERS from $R11REF ($(stat -c %s $O/r11_device.bin) vs $(stat -c %s $R11REF) bytes)" | tee -a $RES/summary.txt
+         python3 -c "import struct,sys;a=open(sys.argv[1],'rb').read(32);b=open(sys.argv[2],'rb').read(32);print('  headers device',struct.unpack('<3Q',a[8:]),'ref',struct.unpack('<3Q',b[8:]))" $O/r11_device.bin $R11REF | tee -a $RES/summary.txt; fi
+  fi
   cp $SCR/$s/$m/out/read_stats.tsv $SCR/$s/$m/out/summary.json $O/ 2>/dev/null
   python3 $SCR/repo/bench/engine_gpu_gate/s8_stages.py $O 66.601887 > $O/stages.txt 2>&1; tee -a $RES/summary.txt < $O/stages.txt
   [ "${KEEPOUT:-1}" = 1 ] && rsync -a --exclude='*.bam' --exclude='*.sam' --exclude='*.cram' --exclude='*.fq*' --exclude='*.fastq*' --exclude='*.1fq' \
