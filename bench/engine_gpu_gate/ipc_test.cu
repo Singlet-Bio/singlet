@@ -49,8 +49,7 @@ int main(int argc, char** argv) {
         pid_t c = fork();                                // first a forked child that has not touched CUDA before the fork (the STAR prefill child)
         if (c == 0) _exit(client(argv[2]));
         int st = 0; waitpid(c, &st, 0);
-        std::printf("forked client exit %d
-", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+        std::printf("forked client exit %d\n", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
         int rc = client(argv[2]);                        // then a plain process
         return rc | (WIFEXITED(st) ? WEXITSTATUS(st) : 9);
     }
