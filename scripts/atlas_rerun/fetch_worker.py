@@ -388,13 +388,16 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
         if getattr(a, "companion_table", None):   # companion libraries (ADT/HTO/CRISPR/V(D)J): a failure is recorded, never fails the GEX sample
             comp = CP.fetch_all(a.companion_table, gsm, inc, scr, fetch_run, env, log, heartbeat=lambda: Q.heartbeat(claim), threads=a.decode_threads,
                                 streams=a.streams, limiter=a.limiter, allow_lite=a.allow_lite)
-        nbytes = Q.publish(stage, gsm, inc, claim, {
+        man = {
             "gse": item.get("gse"), "organism": item.get("organism"), "runs": kept, "run_info": runs_info, "pairs": pairs,
-            "format": fmt, "files": staged_files, "companions": comp, "companion_pairs": CP.pairs_total(comp),
+            "format": fmt, "files": staged_files,
             "raw_bytes": raw_total, "decode_cpu_s": round(child_cpu, 1),
             "decode_core_s_per_Mpair": round(child_cpu / (pairs / 1e6), 2) if pairs else None, "fetch_total_s": round(time.time() - t_start, 1), "quality": a.quality,
             "bytes_per_pair": round(sum(x.get("staged_bytes", 0) for x in runs_info) / pairs, 2) if pairs else None,
-            "stage_ratio": round(sum(x.get("staged_bytes", 0) for x in runs_info) / raw_total, 3) if raw_total else None})
+            "stage_ratio": round(sum(x.get("staged_bytes", 0) for x in runs_info) / raw_total, 3) if raw_total else None}
+        if getattr(a, "companion_table", None):   # absent otherwise: the default manifest is unchanged
+            man.update(companions=comp, companion_pairs=CP.pairs_total(comp))
+        nbytes = Q.publish(stage, gsm, inc, claim, man)
         log("[stage] %s ready: %.2f GB staged from %.2f GB raw, %d pairs, %.1f B/pair, decode+screen %.2f core-s/M, %.0f s total" % (
             gsm, nbytes / 1e9, raw_total / 1e9, pairs, nbytes / max(pairs, 1), child_cpu / max(pairs / 1e6, 1e-9), time.time() - t_start))
         return "ready"
