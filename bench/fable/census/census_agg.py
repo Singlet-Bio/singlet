@@ -719,6 +719,52 @@ def main():
     res["signatures"] = sigres
     md.append("")
 
+    # ---- 11. SIMT work efficiency of k_p3 in warps of 32 consecutive reads of a lane batch, as run and re-ordered.
+    # efficiency of a work count x = sum_warps sum_i x_i / sum_warps 32 * max_i x_i (threads idle once their read is done);
+    # an upper bound of the measured SIMT efficiency (branches inside one step diverge too)
+    def warp_eff(x, order, batch):
+        x = x[order].astype(np.float64)
+        n = len(x)
+        pad = (-n) % 32
+        xs = np.concatenate([x, np.zeros(pad)]).reshape(-1, 32)
+        den = 32.0 * xs.max(axis=1).sum()
+        return float(xs.sum() / den) if den > 0 else 1.0
+
+    simt = []
+    for li, ln in enumerate(LANES[:3]):
+        L_ = R[R["lane"] == li]
+        L_ = L_[np.argsort(L_["read"], kind="stable")]
+        if not len(L_):
+            continue
+        batch = int(meta.get("batch", [262144, 262144, 65536])[li])
+        p3 = L_["stitched"] == 1                                  # reads that reach k_p3 in this lane
+        work = {"steps": L_["nSteps"], "windows (nWall)": np.where(p3, L_["nWall"], 0), "SA hits (assignment)": L_["nHits"]}
+        keys = {
+            "as run (read order)": None,
+            "phase-1 signature (log2 nWall, log2 nP, log2 nEntries)": [lb(L_["nWall"]), lb(L_["nP"]), lb(L_["nEntries"]), L_["stitched"]],
+            "nWall, then nEntries": [L_["nWall"], L_["nEntries"]],
+            "oracle: steps": [L_["nSteps"]],
+        }
+        idx = np.arange(len(L_))
+        row = {"lane": ln, "reads": int(len(L_)), "reach_p3": int(p3.sum()), "batch": batch, "eff": {}}
+        for kn, kc in keys.items():
+            if kc is None:
+                order = idx
+            else:
+                # sort within each batch (the order a router could impose without moving reads between launches)
+                bid = idx // batch
+                order = np.lexsort(tuple(np.asarray(c).astype(np.int64) for c in kc[::-1]) + (bid,))
+            row["eff"][kn] = {wn: warp_eff(np.asarray(wv), order, batch) for wn, wv in work.items()}
+        simt.append(row)
+    res["simt_work_efficiency"] = simt
+    md += ["## SIMT work efficiency of k_p3 (warps of 32 consecutive reads; sum of work / (32 x max in warp))", "",
+           "| lane | order | steps | windows | SA hits |", "|---|---|---|---|---|"]
+    for r in simt:
+        for kn, v in r["eff"].items():
+            md.append(f"| {r['lane']} ({r['reach_p3']:,} reach k_p3) | {kn} | {100 * v['steps']:.1f}% | {100 * v['windows (nWall)']:.1f}% | "
+                      f"{100 * v['SA hits (assignment)']:.1f}% |")
+    md.append("")
+
     json.dump(res, open(outp, "w"), indent=1)
     print("\n".join(md))
 
