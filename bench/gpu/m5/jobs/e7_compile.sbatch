@@ -18,7 +18,7 @@ SCR=/tmp/$USER-e7cc-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/gpu/fable/seeds:refs/fable/seeds
 SHA=$(git -C $BARE rev-parse --short=7 refs/fable/seeds); echo "commit $SHA $(git -C $BARE log -1 --format=%s refs/fable/seeds)"
 git -C $BARE archive refs/fable/seeds bench/gpu/m5 | tar -x -C $SCR
-VARIANTS=${VARIANTS:-"flatq:-DM5_SEEDFLAT -DM5_P1SPLIT;flatq7:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_P1MINB=7;flatqs:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM;flatqs7:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=7;flatqs8:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8;flatqg7:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_G2 -DM5_P1MINB=7;flatqsg8:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_G2 -DM5_P1MINB=8"}
+VARIANTS=${VARIANTS:-"m5:;flatq:-DM5_SEEDFLAT -DM5_P1SPLIT;flatqs:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM;flatqs8:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8;flatqg7:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_G2 -DM5_P1MINB=7;flatqsg8:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_G2 -DM5_P1MINB=8;flatqw:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_P1WPERS;flatqs8w:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8 -DM5_P1WPERS"}
 IFS=';' read -ra VS <<< "$VARIANTS"
 for v in "${VS[@]}"; do
   N=${v%%:*}; FL=${v#*:}

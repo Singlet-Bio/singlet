@@ -669,8 +669,8 @@ static double probeP1(const Params& P, const GenomeView& D, const char* dRb, con
 #endif
 #endif
     std::vector<double> runs; unsigned long long cnt[3] = {0, 0, 0};
+    CK(cudaMemset(dCnt, 0, 24));   // counted in the warm-up run only
     for (int r = 0; r < reps + 1; r++) {
-        CK(cudaMemset(dCnt, 0, 24));
         cudaEventRecord(e0);
         for (u64 b0 = 0; b0 < n; b0 += NB) {
             u64 nb = std::min(NB, n - b0);

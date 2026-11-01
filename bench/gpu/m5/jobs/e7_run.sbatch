@@ -36,7 +36,7 @@ echo "[t] distinct $(( $(date +%s) - T0 )) s"; mkdir -p $SCR/m5 $SCR/star
 SINGLET_STAR_SEQCACHE_MB=0 STARDUMP_M5=$SCR/m5/t $SD --runMode alignReads --genomeDir $SCR/idx --readFilesIn $SCR/distinct.fq \
   --outSAMtype None --outFilterScoreMin 10 --runThreadN $NCPU --genomeLoad NoSharedMemory --outFileNamePrefix $SCR/star/ > $SCR/star.out 2>&1
 echo "stardump exit=$?"; rm -f $SCR/distinct.fq; echo "[t] stardump $(( $(date +%s) - T0 )) s"
-IFS='|' read -ra VARS <<< "${M5RUNS:-m5:@STD|flatp:@STD|flatpf:@STD|step:@STD|step8:@STD|stepg:@STD|stepsm:@STD|stepgsm:@STD|stepsmf:@STD|stepgsmf:@STD|stepsm6:@STD|stepgsm8:@STD|stepf:@STD|stepgf:@STD|flatpg:@STD|flatpni:@STD|stepg8:@STD|stepsm8:@STD|stepgsm6:@STD|stepgsm:@STD --p1probe|m5:@STD}"
+IFS='|' read -ra VARS <<< "${M5RUNS:-m5:@STD|flatq:@STD|flatqs8:@STD|flatqs:@STD|flatqg7:@STD|flatqsg8:@STD|flatqw:@STD|flatqs8w:@STD|m5:@STD --p1probe|flatqs8:@STD --p1probe|flatq:@STD|flatqs8:@STD|m5:@STD}"
 for vi in "${!VARS[@]}"; do
   [ $(( $(date +%s) - T0 )) -gt $TLIM ] && { echo "[t] time limit: skipping the remaining variants"; break; }
   BIN=${VARS[$vi]%%:*}; ARGS=${VARS[$vi]#*:}; ARGS=${ARGS//@STD/$STD}; L=$RES/${TAG}_${SLURM_JOB_ID}_v${vi}_$BIN
@@ -51,7 +51,7 @@ done
 NCUSET=${NCUSET:---set full}
 NCUMET=${NCUMET:-lts__t_sectors_op_read.sum,lts__t_sectors_op_write.sum,dram__bytes_read.sum,dram__bytes_write.sum,smsp__inst_executed.sum,smsp__thread_inst_executed.sum,l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum,l1tex__t_sectors_pipe_lsu_mem_global_op_st.sum,gpu__time_duration.sum}
 ND=$RES/ncu-$SLURM_JOB_ID; mkdir -p $ND
-IFS='|' read -ra NV <<< "${NCU:-m5;1;1|stepg;2;2|stepsm;2;2|stepgsm;2;2|stepgsmf;1;1}"
+IFS='|' read -ra NV <<< "${NCU:-flatqs8;2;2|flatq;2;2}"
 for ni in "${!NV[@]}"; do
   [ $(( $(date +%s) - T0 )) -gt $TLIM ] && { echo "[t] time limit: skipping the remaining ncu runs"; break; }
   IFS=';' read -r BIN SKIP CNT <<< "${NV[$ni]}"
