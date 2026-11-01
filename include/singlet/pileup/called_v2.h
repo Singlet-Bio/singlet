@@ -1486,8 +1486,9 @@ inline EdcrResult emptydrops_cr(const GeneCounts& X, const EdcrParams& P = EdcrP
 }
 
 /// cellcall.call: called_v2 from genes x barcodes counts and the knee `called` flags.
+/// `edcr_X`: counts for the EmptyDrops_CR is_cell call (the reference tool runs on exon-only Gene counts); default X.
 inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, const std::string& protocol = "",
-                   const Params& P = Params(), int threads = 1) {
+                   const Params& P = Params(), int threads = 1, const GeneCounts* edcr_X = nullptr) {
     const double nan = std::numeric_limits<double>::quiet_NaN();
     Result R;
     R.params = P;
@@ -1589,7 +1590,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
     }
     R.is_cell_method = "called_v2_cr_floor";
     {   // 2.2: the reference tool's own algorithm when the sample has barcodes at the ambient ranks it needs (45,000 and up)
-        EdcrResult er = emptydrops_cr(X, EdcrParams(), threads);
+        EdcrResult er = emptydrops_cr(edcr_X ? *edcr_X : X, EdcrParams(), threads);
         R.edcr_n_simple = er.n_simple; R.edcr_n_candidates = er.n_candidates; R.edcr_n_extra = er.n_extra; R.edcr_min_umi = er.min_umi;
         if (er.note.empty() && er.cell.size() == n) {
             R.is_cell = er.cell;

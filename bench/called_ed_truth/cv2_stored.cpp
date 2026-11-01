@@ -178,7 +178,12 @@ int main(int argc, char** argv) {
     const bool exon_only = std::getenv("CV2_EXON_ONLY") && std::string(std::getenv("CV2_EXON_ONLY")) == "1";
     singlet::calledv2::GeneCounts X = exon_only ? singlet::calledv2::gene_counts(ex, exf, static_cast<const Csc*>(nullptr), static_cast<const std::vector<std::string>*>(nullptr))
                                                 : singlet::calledv2::gene_counts(ex, exf, &in, &inf);
-    singlet::calledv2::Result R = singlet::calledv2::call(X, called, "", singlet::calledv2::Params(), threads);
+    // CV2_EXON_ONLY=2: called_v2 (2.1) on exon + intron, is_cell (EmptyDrops_CR) on exon only: what the pipeline does
+    const bool split = std::getenv("CV2_EXON_ONLY") && std::string(std::getenv("CV2_EXON_ONLY")) == "2";
+    singlet::calledv2::GeneCounts Xe;
+    if (split) Xe = singlet::calledv2::gene_counts(ex, exf, static_cast<const Csc*>(nullptr), static_cast<const std::vector<std::string>*>(nullptr));
+    if (split) X = singlet::calledv2::gene_counts(ex, exf, &in, &inf);
+    singlet::calledv2::Result R = singlet::calledv2::call(X, called, "", singlet::calledv2::Params(), threads, split ? &Xe : nullptr);
     R.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     FILE* o = std::fopen(argv[2], "w");
     std::fputs("barcode\tcalled\tis_cell\tcalled_v2\tcalled_lowrna\tumi_total\tpvalue\tfdr\n", o);

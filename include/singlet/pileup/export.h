@@ -610,13 +610,15 @@ inline ExportStats export_results(const PileupEngine& engine,
             calledv2::GeneCounts gx = calledv2::gene_counts(exon_csc, engine.exon_names(),
                                                               with_introns ? &intron_csc : nullptr,
                                                               with_introns ? &engine.intron_names() : nullptr);
+            // is_cell is EmptyDrops_CR on exon-only counts (STARsolo's Gene counts), the reference tool's own input
+            calledv2::GeneCounts gx_exon = calledv2::gene_counts(exon_csc, engine.exon_names(), nullptr, nullptr);
             std::string proto = export_cfg.protocol_name;
             if (proto.empty() || proto == "unknown") {
                 auto it = export_cfg.user_meta.find("protocol");
                 if (it != export_cfg.user_meta.end()) proto = it->second;
             }
             calledv2::Result cv = calledv2::call(gx, knee_called, proto, calledv2::Params(),
-                                                 std::max(1, export_cfg.threads));
+                                                 std::max(1, export_cfg.threads), &gx_exon);
             cv.seconds = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t_v2).count();
             cc_result = CellCallResult{};
             for (uint32_t j = 0; j < cv.is_cell.size(); ++j)
