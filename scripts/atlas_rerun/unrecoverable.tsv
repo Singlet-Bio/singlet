@@ -1,0 +1,5 @@
+# gsm	reason	evidence
+# Samples whose deposited reads cannot be processed: no run of them can be turned into counts from SRA/ENA. Excluded at plan time; the reason is recorded in plan_excluded.tsv.
+gsm	reason	evidence
+GSM4037986	cdna_read_all_N	gate PASS_10X wl 0.98, then 1fq-encode ABORT majority N-bases (100%); SRR9990755 mate fastq unreadable (job 797117, 797120)
+GSM7908441	cdna_read_all_N	gate PASS_10X wl 0.97, then 1fq-encode ABORT majority N-bases (100%); ENA fastq of SRR26881620 is 100% N (job 797117, 797120)

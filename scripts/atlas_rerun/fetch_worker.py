@@ -349,22 +349,77 @@ def vote_runs(runs, calls, run_reads):
     return main, vote, others
 
 
-def probe_run_protocol(binary, run, scr, env, whitelist_dir=None, spots=5000, vdb_threads=2, timeout=600):
+def probe_run_protocol(binary, run, scr, env, whitelist_dir=None, spots=5000, vdb_threads=2, timeout=1800, tries=2):
     """The first `spots` spots of a run through `singlet download` (its gate and protocol detection probe 5000 spots) without fetching the run: -> (tag, confidence, wl_match_rate) or (None, None, None).
-    Used for the sample vote when the head screen is off."""
+    Used for the sample vote when the head screen is off. A probe that times out (opening a big .sra under load took 60-90 s in the census, and a 600 s cap turned a real 10x sample into a
+    no-call) or dies without any verdict (rc not 0/2 and no gate line: a transient network error) is retried once with a doubled timeout; a no-call is never the first failure."""
     out = os.path.join(scr, run + ".probe.1fq")
-    try:
-        pr = subprocess.run([binary, "download", run, "--max-reads", str(spots), "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out] +
-                            (["--whitelist-dir", whitelist_dir] if whitelist_dir else []), env=env, capture_output=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return None, None, None
-    finally:
+    cmd = [binary, "download", run, "--max-reads", str(spots), "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out] + (["--whitelist-dir", whitelist_dir] if whitelist_dir else [])
+    txt = ""
+    for attempt in range(max(tries, 1)):
         try:
-            os.remove(out)
-        except OSError:
-            pass
-    txt = pr.stderr.decode("utf-8", "replace")
+            pr = subprocess.run(cmd, env=env, capture_output=True, timeout=timeout * (attempt + 1))
+        except subprocess.TimeoutExpired:
+            continue
+        finally:
+            try:
+                os.remove(out)
+            except OSError:
+                pass
+        txt = pr.stderr.decode("utf-8", "replace")
+        if pr.returncode in (0, 2) or parse_wl_rate(txt) is not None:
+            break
     return parse_protocol(txt) + (parse_wl_rate(txt),)
+
+
+def catalogue_tag(protocol_inferred):
+    """The catalogue's chemistry as an engine protocol tag ('10xv3' -> '10x-3p-v3', '10xv3_5prime' -> '10x-5p-v3', '10xv2' -> '10x-3p-v2'); None for anything that is not a plain 10x
+    gene-expression chemistry (citeseq has no version; 10x_atac, 10x_suspect, smartseq2 ... are not GEX calls)."""
+    m = re.fullmatch(r"10xv(\d)(_5prime)?", (protocol_inferred or "").lower())
+    return "10x-%s-v%s" % ("5p" if m.group(2) else "3p", m.group(1)) if m else None
+
+
+LOW_CONF_MIN_WL = 0.30   # exact whitelist hit rate of the catalogue chemistry's whitelist needed to process a run the detector could not call
+
+
+def low_conf_probe(binary, sra, tag, scr, env, whitelist_dir=None, reads=200000, timeout=1800):
+    """Would this run, read as the catalogue chemistry `tag`, be a 10x library? Decodes the first `reads` reads with `--protocol tag` (which skips the auto-detect gate) and screens them
+    (`singlet screen-runs`: per-whitelist exact hit rates, chemistry, feature-barcode look). -> dict(ok, reason, tag, chemistry, best_whitelist, wl_exact, r1_len). ok needs: the decode
+    produced reads (the encoder aborts when neither read orientation hits the whitelist), the screen keeps the run, its chemistry is in the family of `tag` (same whitelist and geometry;
+    the 3p/5p flag is not part of it), and the exact hit rate of its best whitelist is >= LOW_CONF_MIN_WL. GSM5955954 (detector wl 0.32-0.48, confidence LOW) is 95% exact as
+    10x-3p-v2; GSM5858711 (100x100, detector 0.42 against a microwell list) is 0% in both orientations as 10x v3 and stays rejected."""
+    res = {"ok": False, "tag": tag, "reason": "", "chemistry": None, "best_whitelist": None, "wl_exact": None, "r1_len": None}
+    out = os.path.join(scr, "lowconf.1fq")
+    sj = os.path.join(scr, "lowconf.json")
+    cmd = [binary, "download", sra, "--protocol", tag, "--max-reads", str(reads), "--vdb-threads", "2", "--no-profile", "-o", out] + (["--whitelist-dir", whitelist_dir] if whitelist_dir else [])
+    try:
+        pr = subprocess.run(cmd, env=env, capture_output=True, timeout=timeout)
+        if pr.returncode != 0 or not os.path.exists(out):
+            tail = pr.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
+            res["reason"] = "forced decode failed rc=%s: %s" % (pr.returncode, tail[0][:200])
+            return res
+        subprocess.run([binary, "screen-runs", "--json", sj, out], env=env, capture_output=True, timeout=timeout)
+        rep = json.load(open(sj))["runs"][0]
+    except (subprocess.TimeoutExpired, OSError, ValueError, KeyError, IndexError) as e:
+        res["reason"] = "probe error: %r" % (e,)
+        return res
+    finally:
+        for f in (out, sj):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    best = rep.get("best_whitelist") or ""
+    res.update(chemistry=rep.get("chemistry"), best_whitelist=best, r1_len=rep.get("r1_len_mode"), wl_exact=(rep.get("whitelists", {}).get(best) or {}).get("exact"))
+    if not rep.get("keep"):
+        res["reason"] = "screen dropped the run: %s" % rep.get("reason")
+    elif protocol_family(rep.get("chemistry")) != protocol_family(tag):
+        res["reason"] = "geometry does not fit the catalogue chemistry (screen: %s, catalogue: %s)" % (rep.get("chemistry"), tag)
+    elif (res["wl_exact"] or 0) < LOW_CONF_MIN_WL:
+        res["reason"] = "whitelist exact hit rate %.3f < %.2f" % (res["wl_exact"] or 0, LOW_CONF_MIN_WL)
+    else:
+        res["ok"] = True
+    return res
 
 
 def decode_run(binary, sra, out, quality, vdb_threads, env, log_path, protocol=None):
@@ -458,6 +513,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
     fmt, staged_files, parts, fallback_1fq = "1fq", [], [], False
     protocol_vote, force_protocol, companion_candidates = None, None, []
     calls = {}
+    rescue_tag, low_conf_probes, low_conf_runs = catalogue_tag(item.get("protocol_inferred")), {}, []
     try:
         if a.head_screen:
             verdicts = {}
@@ -502,34 +558,50 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
                     a.limiter.set_active(False)  # decoding: this worker's share goes to the others
             Q.heartbeat(claim)
             out = os.path.join(inc, r + ".1fq")
-            rc, dsec, staged = None, 0.0, False
-            if a.format == "1fg2" and not fallback_1fq:
-                # SRA -> .1fg2 directly. A single-run sample goes straight to sample.1fg2; the runs of a multi-run sample become parts that are merged below into ONE file
-                # (one exact-barcode histogram, one distinct-sequence table: the pooled R11 correction of the .1fq route)
-                multi = len(item["runs"]) > 1
-                g = os.path.join(scr, "part_" + r) if multi else os.path.join(inc, "sample.1fg2")
-                rc, dsec, rep = stage_run(binary, sra, g, a.quality, a.decode_threads, a.whitelist_dir, env, scr, part=multi, protocol=force_protocol)
-                if rc == 0 and rep:
-                    staged, fmt = True, "1fg2"
-                    info.update(pairs=rep["n_reads"])
-                    if multi:
-                        parts.append(g)
-                    else:
-                        staged_files = ["sample.1fg2"]
-                        info.update(staged_bytes=os.path.getsize(g), n_unique=rep["n_unique"], max_len=rep["max_len"])
-                elif rc == 0:
-                    raise FetchError("stage encoder gave no report for %s" % r)
-                elif rc == 6:
-                    if parts:
-                        raise FetchError("runs of one sample disagree on stageability (protocol): %s" % r)
-                    log("[stage] %s: protocol not stageable, .1fq route" % r)
-                    fallback_1fq, rc = True, None
-                    try:
-                        os.remove(g)
-                    except OSError:
-                        pass
-            if rc is None:
-                rc, dsec = decode_run(binary, sra, out, a.quality, a.decode_threads, env, os.path.join(scr, "decode.log"), protocol=force_protocol)
+
+            def attempt(protocol, sra=sra, info=info, r=r, out=out):
+                """decode (or stage) the run once; -> rc, seconds, staged (rc 2 = the auto-detect gate's verdict)."""
+                nonlocal fmt, staged_files, fallback_1fq
+                rc, dsec, staged = None, 0.0, False
+                if a.format == "1fg2" and not fallback_1fq:
+                    # SRA -> .1fg2 directly. A single-run sample goes straight to sample.1fg2; the runs of a multi-run sample become parts that are merged below into ONE file
+                    # (one exact-barcode histogram, one distinct-sequence table: the pooled R11 correction of the .1fq route)
+                    multi = len(item["runs"]) > 1
+                    g = os.path.join(scr, "part_" + r) if multi else os.path.join(inc, "sample.1fg2")
+                    rc, dsec, rep = stage_run(binary, sra, g, a.quality, a.decode_threads, a.whitelist_dir, env, scr, part=multi, protocol=protocol)
+                    if rc == 0 and rep:
+                        staged, fmt = True, "1fg2"
+                        info.update(pairs=rep["n_reads"])
+                        if multi:
+                            parts.append(g)
+                        else:
+                            staged_files = ["sample.1fg2"]
+                            info.update(staged_bytes=os.path.getsize(g), n_unique=rep["n_unique"], max_len=rep["max_len"])
+                    elif rc == 0:
+                        raise FetchError("stage encoder gave no report for %s" % r)
+                    elif rc == 6:
+                        if parts:
+                            raise FetchError("runs of one sample disagree on stageability (protocol): %s" % r)
+                        log("[stage] %s: protocol not stageable, .1fq route" % r)
+                        fallback_1fq, rc = True, None
+                        try:
+                            os.remove(g)
+                        except OSError:
+                            pass
+                if rc is None:
+                    rc, dsec = decode_run(binary, sra, out, a.quality, a.decode_threads, env, os.path.join(scr, "decode.log"), protocol=protocol)
+                return rc, dsec, staged
+
+            rc, dsec, staged = attempt(force_protocol)
+            if rc == 2 and not force_protocol and rescue_tag:   # the gate rejected a run of a sample the catalogue calls 10x: look at it as that chemistry before giving up
+                lp = low_conf_probe(binary, sra, rescue_tag, scr, env, a.whitelist_dir)
+                low_conf_probes[r] = lp
+                log("[lowconf] %s: gate rejected; read as %s: %s (%s)" % (r, rescue_tag, "ACCEPT" if lp["ok"] else "keep rejected", lp["reason"] or "whitelist exact %.3f" % lp["wl_exact"]))
+                if lp["ok"]:
+                    rc, dsec, staged = attempt(rescue_tag)
+                    if rc == 0:
+                        info["low_confidence_protocol"] = rescue_tag
+                        low_conf_runs.append(r)
             os.remove(sra)
             if rc not in (0, 2):  # 2 = the download's non-10x gate: a verdict, not an error; the run is simply not staged
                 raise FetchError("decode_failed rc=%s %s" % (rc, open(os.path.join(scr, "decode.log")).read()[-400:]))
@@ -583,6 +655,10 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
             "decode_core_s_per_Mpair": round(child_cpu / (pairs / 1e6), 2) if pairs else None, "fetch_total_s": round(time.time() - t_start, 1), "quality": a.quality,
             "bytes_per_pair": round(sum(x.get("staged_bytes", 0) for x in runs_info) / pairs, 2) if pairs else None,
             "stage_ratio": round(sum(x.get("staged_bytes", 0) for x in runs_info) / raw_total, 3) if raw_total else None}
+        if low_conf_runs:   # runs the detector could not call (the gate rejected them) but that read as the catalogue's 10x chemistry: processed with the catalogue protocol, filterable later
+            man["low_confidence_protocol"] = {"protocol": rescue_tag, "runs": low_conf_runs, "probes": {r: low_conf_probes[r] for r in low_conf_runs}}
+        elif low_conf_probes:   # looked at and refused: recorded for the audit
+            man["low_confidence_rejected"] = low_conf_probes
         if protocol_vote:   # absent for single-run samples and without --head-screen: the default manifest is unchanged
             man["protocol_vote"] = protocol_vote
             if companion_candidates:   # runs of another protocol family under this GSM: not staged here; the interface to the companion classification
