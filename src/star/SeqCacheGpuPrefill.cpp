@@ -1178,8 +1178,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
             if (e16bgOn && !e16bg.on) {   // E16 bg, but level 5 did not start the thread: the records are written here, as before
                 std::string wu;
-                if (!e10WriteUnmapped(P, e16bg.reads, (int) P.runThreadN, wu)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E16): " + wu + "
-",
+                if (!e10WriteUnmapped(P, e16bg.reads, (int) P.runThreadN, wu)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E16): " + wu + "\n",
                                                                                          std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
                 std::vector<uint32_t>().swap(e16bg.reads);
             }
