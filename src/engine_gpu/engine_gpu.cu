@@ -63,7 +63,7 @@ cudaError_t egMemcpy(int line, void* dst, const void* src, size_t n, cudaMemcpyK
 // warp balance of stage 3 (SINGLET_ENGINE_GPU_TRACE): per read the stitching steps (nSteps); a warp takes as long as its slowest read, so the sum over warps of
 // the largest steps is the time in step units. Efficiency = total / (32 x that sum), for the batch's reads in the order they run, in the best possible order
 // (oracle: sorted by steps) and sorted by the stage-1 hit count (the bucketing key), ascending.
-struct EgDiag { double total = 0, wOrig = 0, wOracle = 0, wNent = 0, wNW = 0; u64 reads = 0, zero = 0; double top1 = 0; };
+struct EgDiag { double clk[8] = {0, 0, 0, 0, 0, 0, 0, 0}; double total = 0, wOrig = 0, wOracle = 0, wNent = 0, wNW = 0; u64 reads = 0, zero = 0; double top1 = 0; };
 EgDiag& egDiag() { static EgDiag d; return d; }
 double egWarpMax(const std::vector<u64>& v) { double s = 0; for (size_t i = 0; i < v.size(); i += 32) { u64 m = 0; for (size_t j = i; j < std::min(v.size(), i + 32); j++) m = std::max(m, v[j]); s += (double) m; } return s; }
 void egDiagBatch(const std::vector<u64>& steps, const std::vector<u64>& nent, const std::vector<u64>& nw) {
@@ -92,6 +92,10 @@ void egReport(std::string& log) {
                      100.0 * d.total / (32 * std::max(1.0, d.wOrig)), 100.0 * d.total / (32 * std::max(1.0, d.wNent)), 100.0 * d.total / (32 * std::max(1.0, d.wNW)),
                      100.0 * d.total / (32 * std::max(1.0, d.wOracle)));
             log += lb;
+            snprintf(lb, sizeof lb, "engine_gpu trace: thread cycles by phase (G): seeds %.2f, windows %.2f, stitching %.2f (stitchAlign %.2f, finalize %.2f, copies %.2f, record %.2f), selection+encoding %.2f; %.0f cycles per stitching step"
+                     , d.clk[0] / 1e9, d.clk[1] / 1e9, d.clk[2] / 1e9, d.clk[4] / 1e9, d.clk[5] / 1e9, d.clk[6] / 1e9, d.clk[7] / 1e9, d.clk[3] / 1e9, d.clk[2] / std::max(1.0, d.total));
+            log += lb; log += "
+";
         }
     }
     std::map<std::string, EgKRow> kr;
@@ -225,10 +229,11 @@ __global__ void k_p2(Params P, GenomeView g, u64 n, const Work<C>* work, const u
     }
 }
 template <class C>
-__global__ void k_diag(u64 n, const Work<C>* work, u64* steps, u64* nw) {
+__global__ void k_diag(u64 n, const Work<C>* work, u64* steps, u64* nw, unsigned long long* clk) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
     steps[k] = work[k].nSteps; nw[k] = work[k].nW;
+    for (int i = 0; i < 8; i++) atomicAdd(&clk[i], (unsigned long long) work[k].clk[i]);
 }
 template <class C>
 __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
@@ -286,8 +291,10 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen));
         EG_CK(cudaGetLastError());
         if (egTraceOn() && !bucket) {   // warp-balance diagnostic (reads run in batch order): cost of the extra copies is outside the kernel timings
-            u64 *dSteps, *dNW; EG_CK(cudaMalloc(&dSteps, nb * 8)); EG_CK(cudaMalloc(&dNW, nb * 8));
-            k_diag<C><<<G, T>>>(nb, dWork, dSteps, dNW);
+            u64 *dSteps, *dNW; unsigned long long* dClk; EG_CK(cudaMalloc(&dSteps, nb * 8)); EG_CK(cudaMalloc(&dNW, nb * 8)); EG_CK(cudaMalloc(&dClk, 64)); EG_CK(cudaMemset(dClk, 0, 64));
+            k_diag<C><<<G, T>>>(nb, dWork, dSteps, dNW, dClk);
+            { unsigned long long hc[8]; EG_CK(cudaMemcpy(hc, dClk, 64, cudaMemcpyDeviceToHost)); for (int i = 0; i < 8; i++) egDiag().clk[i] += (double) hc[i]; }
+            cudaFree(dClk);
             std::vector<u64> hs(nb), hn(nb), hw(nb);
             EG_CK(cudaMemcpy(hs.data(), dSteps, nb * 8, cudaMemcpyDeviceToHost)); EG_CK(cudaMemcpy(hw.data(), dNW, nb * 8, cudaMemcpyDeviceToHost));
             EG_CK(cudaMemcpy(hn.data(), dNent, nb * 8, cudaMemcpyDeviceToHost));
