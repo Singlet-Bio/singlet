@@ -53,6 +53,8 @@ tenxu() {  # name dir/prefix-of-fca (rel. to cell-vdj) fastq-tar (rel.) gex-h5 (
   mkdir -p $o
   get $X/$2 $o/filtered_contig_annotations.csv
   [ "$4" = - ] || get $X/$4 $o/gex_filtered.h5
+  # an empty FASTQ (a failed earlier fetch or recompression) -> fetch again
+  [ -n "$(find $o/fastqs -name '*.fastq.gz' -size 0 2>/dev/null | head -1)" ] && rm -rf $o/fastqs
   if [ ! -d $o/fastqs ]; then
     mkdir -p $o/fastqs.part
     # streamed: multi-library tars (GEX + V(D)J, up to 43 GB) are never stored, only the V(D)J-B member is extracted
