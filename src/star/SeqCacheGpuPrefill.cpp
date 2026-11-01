@@ -295,6 +295,22 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     time_t tLock = time(nullptr);
     int hostThreads = (int) P.runThreadN;
     singlet_engine_gpu::Output out;
+    // E8 (SINGLET_ENGINE_GPU_E2E=1, docs/gpu-engine/fable/E8-e2e.md): the pipeline mapped a shared region before forking STAR (e2eRegion);
+    // mapDistinct builds the GPU pileup's records on the device into it, and the hand-off file and its record bytes are not made. Only
+    // where the hand-off "on" path with summaries and per-read entries runs; otherwise (or when the device build fails) that path runs as before.
+    singlet_engine_gpu::E2ERegion &e2r = singlet_engine_gpu::e2eRegion();
+    const char *gpE = getenv("SINGLET_GPU_PILEUP"), *hsE = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
+    bool e2eWant = e2r.fd >= 0 && singlet_engine_gpu::e2eRequested() && getenv("SINGLET_ENGINE_GPU_HANDOFF") != nullptr
+        && getenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ") != nullptr && gpE != nullptr && strcmp(gpE, "on") == 0 && !(hsE != nullptr && hsE[0] == '0')
+        && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes)
+        && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21;
+    if (e2eWant) {   // the memory object sized (sparse: only written pages exist) and mapped here; SINGLET_ENGINE_GPU_E2E_GB, default 512
+        uint64 gb = 512;
+        if (const char *g = getenv("SINGLET_ENGINE_GPU_E2E_GB")) gb = std::max<uint64>(1, strtoull(g, nullptr, 10));
+        if (!e2r.attach(gb << 30)) { e2eWant = false; P.inOut->logMain << "ENGINE_GPU: E8 not used (the shared memory object could not be mapped)" << std::endl; }
+    }
+    if (e2eWant) { in.e2e = &e2r; in.outSAMmapqUnique = P.outSAMmapqUnique; in.outSAMflagAND = P.outSAMflagAND; in.outSAMflagOR = P.outSAMflagOR; }
+    else if (e2r.fd >= 0 && e2r.base == nullptr) P.inOut->logMain << "ENGINE_GPU: E8 not used (it needs the GPU pileup \"on\" with summaries and per-read entries, CB_UMI_Simple)" << std::endl;
     bool lockReleased = false;   // mapDistinct releases the device when its device work is done (the host assembly of the records needs no GPU)
     const auto tHeld0 = std::chrono::steady_clock::now(); double heldS = 0;
     in.release = [&]() { if (!lockReleased) { lockReleased = true; heldS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tHeld0).count(); singlet_engine_gpu::unlockDevice(lockFd); } };
@@ -358,6 +374,19 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes);
         std::vector<std::vector<uint8>> sumPart(nt);
         std::vector<std::vector<uint64>> sumPartOff(nt);
+        // E8: the records are in the shared region (mapDistinct): readRecord, the per-read entries and masks are reserved next to them (else
+        // the file path runs), and per record only its summary is made here
+        bool e2eRec = out.e2eOk && sumOn;
+        uint64 e2eR = 0, e2eE = 0, e2eQ = 0;
+        const char *e2eQe = getenv("SINGLET_HANDOFF_QMASK");
+        const bool e2eQOn = !(e2eQe != nullptr && e2eQe[0] == '0');
+        if (e2eRec) {
+            const uint64 nR = out.readRecord.size();
+            e2eR = e2r.take(std::max<uint64>(1, nR) * 4); e2eE = e2r.take(std::max<uint64>(1, nR) * sizeof(HandoffReadEntry));
+            e2eQ = e2eQOn ? e2r.take(std::max<uint64>(1, nR) * 16) : 0;
+            if (!e2eR || !e2eE || (e2eQOn && !e2eQ)) { e2eRec = false; P.inOut->logMain << "ENGINE_GPU: E8: the shared region is full; the hand-off file path runs\n"; }
+            else memcpy(e2r.base + e2eR, out.readRecord.data(), nR * 4);
+        }
         std::vector<std::thread> th;
         for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
             Transcriptome *trT = (sumOn && tr != nullptr) ? new Transcriptome(*tr) : nullptr;
@@ -366,12 +395,14 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             const uint64 r0 = nRec * t / nt, r1 = nRec * (t + 1) / nt;
             // ~70 bytes per record with one alignment (pbmc1k_v3: 2.3 GB for 31.8 M records): reserve, so the part grows without copying
             // GBs at each doubling (untouched capacity costs no memory)
-            part[t].reserve((size_t) (r1 - r0) * 80);
-            partOff[t].reserve((size_t) (r1 - r0));
+            if (!e2eRec) { part[t].reserve((size_t) (r1 - r0) * 80); partOff[t].reserve((size_t) (r1 - r0)); }
             if (sumOn) { sumPartOff[t].reserve((size_t) (r1 - r0)); sumPart[t].reserve((size_t) (r1 - r0) * 40); }   // 1.06 GB for 31.8 M records
             for (uint64 r = r0; r < r1; r++) {
+                if (e2eRec) ra->seqCacheRestoreRecord(out.seq.data() + out.seqOff[r], out.seqOff[r + 1] - out.seqOff[r], out.blob.data() + out.blobOff[r]);
+                else {
                 partOff[t].push_back(part[t].size());
                 ra->seqCacheAlignRecords(out.seq.data() + out.seqOff[r], out.seqOff[r + 1] - out.seqOff[r], out.blob.data() + out.blobOff[r], part[t]);
+                }
                 if (sumOn) {
                     sumPartOff[t].push_back(sumPart[t].size());
                     ra->seqCacheHandoffSummary(sumPart[t]);
@@ -384,11 +415,15 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                              << " differ from alignBAM's" << "\n";
         static std::vector<uint8> recAln;   // per record its alignment count (the first byte of each record)
         recAln.resize(nRec);
+        if (e2eRec) for (uint64 r = 0; r < nRec; r++) recAln[r] = e2r.recAln(r);
+        else
         for (int t = 0, r = 0; t < nt; t++)
             for (uint64 o : partOff[t]) recAln[r++] = part[t][o];
-        FILE *f = fopen(hp, "wb");
-        bool okw = f != nullptr;
-        if (okw) {
+        FILE *f = e2eRec ? nullptr : fopen(hp, "wb");
+        bool okw = e2eRec || f != nullptr;
+        if (e2eRec) P.inOut->logMain << "ENGINE_GPU: E8: no hand-off file: " << nRec << " records built on the device, in the shared region; summaries in "
+                                     << (time(nullptr) - th0) << " s\n";
+        if (f != nullptr) {
             const char magic[8] = {'S', 'G', 'H', 'O', 'F', 'F', '0', '2'};
             uint64 nReads = out.readRecord.size();
             // STAR's barcode layout (SoloReadBarcode::getCBandUMI, CB_UMI_Simple): CR = bSeq[cbS-1, +cbL), UR = bSeq[umiS-1, +umiL), the
@@ -443,7 +478,19 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
             // and the per-read entries (barcode, UMI, quality counters) in a shared mapping, filled by the mapping threads
             const char *mq = getenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ");
-            if (mq != nullptr && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21) {
+            if (e2eRec) {   // E8: in the shared region (zero-filled: unwritten entries have flags 0); the magic last: the parent's pileup takes it
+                singlet_engine_gpu::E2EHeader &E2H = *e2r.hdr();
+                g_handoffReads = (HandoffReadEntry *) (e2r.base + e2eE); g_handoffMinQ = atoi(mq);
+                if (e2eQOn) g_handoffQMask = (uint64 *) (e2r.base + e2eQ);
+                E2H.nReads = g_handoffNReads; E2H.oReadRecord = e2eR; E2H.oEntries = e2eE; E2H.oQMask = e2eQ;
+                E2H.cbS = (uint32) P.pSolo.cbS; E2H.cbL = (uint32) P.pSolo.cbL; E2H.umiS = (uint32) P.pSolo.umiS; E2H.umiL = (uint32) P.pSolo.umiL;
+                E2H.cbumiL = (uint32) P.pSolo.cbumiL; E2H.simple = 1;
+                __sync_synchronize();
+                memcpy(E2H.magic, "SGE2E001", 8);
+                P.inOut->logMain << "ENGINE_GPU: E8: per-read hand-off entries" << (e2eQOn ? " and low-quality masks" : "") << " in the shared region ("
+                                 << (E2H.used >> 20) << " MB in use)\n";
+            }
+            if (!e2eRec && mq != nullptr && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21) {
                 const std::string rp = std::string(hp) + ".reads";
                 const size_t bytes = std::max<size_t>(1, g_handoffNReads * sizeof(HandoffReadEntry));
                 int fd = open(rp.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);

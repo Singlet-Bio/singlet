@@ -40,6 +40,9 @@ class ReadAlign {
         void seqCacheAlignRecords(const char *seqNum, uint L, const std::vector<uint8> &blob, std::vector<uint8> &out);
         //the same, from a pointer to the blob (the prefill's threads no longer copy each blob first)
         void seqCacheAlignRecords(const char *seqNum, uint L, const uint8 *blob, std::vector<uint8> &out);
+        //its first half: the read state of the sequence restored from its cached result, mappedFilter done (singlet E8: the summary
+        //alone, the records being built on the GPU)
+        void seqCacheRestoreRecord(const char *seqNum, uint L, const uint8 *blob);
         //the BAM core fields alignBAM would write for a single-end alignment, without building the record (ReadAlign_seqCache.cpp)
         bool seqCacheLeanAln(Transcript const &trOut, uint nTrOut, uint trChrStart, int32 &refID, int32 &pos, uint16 &flag, uint8 &mapq, uint32 &nCig, uint32 *cig);
         //singlet GPU pileup "on": what STAR's per-read output (mapping stats, SJ.out.tab, Solo Gene) takes from the alignments of a

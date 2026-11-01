@@ -230,7 +230,7 @@ void ReadAlign::seqCacheAlignRecords(const char *seqNum, uint L, const std::vect
     seqCacheAlignRecords(seqNum, L, blob.data(), out);
 }
 
-void ReadAlign::seqCacheAlignRecords(const char *seqNum, uint L, const uint8 *blob, std::vector<uint8> &out) {
+void ReadAlign::seqCacheRestoreRecord(const char *seqNum, uint L, const uint8 *blob) {
     const int lean=handoffLeanMode();
     Lread=L; readLength[0]=L; readLength[1]=0; readLengthOriginal[0]=L; readLengthOriginal[1]=0; readLengthPairOriginal=L;
     memcpy(Read1[0], seqNum, L);
@@ -246,6 +246,11 @@ void ReadAlign::seqCacheAlignRecords(const char *seqNum, uint L, const uint8 *bl
     outFilterMismatchNmaxTotal=min(P.outFilterMismatchNmax, (uint) (P.outFilterMismatchNoverReadLmax*(readLength[0]+readLength[1])));
     seqCacheRestore(blob);
     mappedFilter();
+}
+
+void ReadAlign::seqCacheAlignRecords(const char *seqNum, uint L, const uint8 *blob, std::vector<uint8> &out) {
+    const int lean=handoffLeanMode();
+    seqCacheRestoreRecord(seqNum, L, blob);
     //the record is built in a thread's buffer and appended to out once (a push_back or insert per field was ~15 calls per alignment)
     static thread_local std::vector<uint8> rec;
     rec.clear();

@@ -5332,6 +5332,12 @@ int main(int argc, char* argv[]) {
         setenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ", std::to_string(config.min_baseq).c_str(), 1);
         // a clipped read's rRNA verdict on the whole read, computed by STAR's mapping threads (the forked aligner inherits it)
         g_handoffReadHook = &singlet::PileupEngine::handoff_read_hook;
+        // E8 (SINGLET_ENGINE_GPU_E2E=1, docs/gpu-engine/fable/E8-e2e.md): a shared memory object (memfd) the forked STAR inherits; its
+        // prefill maps it and builds the pileup's records on the device into it (no hand-off file); this process maps it after the prefill.
+        if (singlet_engine_gpu::e2eRequested() && std::string(getenv("SINGLET_GPU_PILEUP")) == "on") {
+            if (singlet_engine_gpu::e2eRegion().create()) std::cerr << "[gpu_pileup] E8: records built on the device (shared memory object for STAR's prefill)\n";
+            else std::cerr << "[gpu_pileup] E8: no shared memory object (" << strerror(errno) << "); the hand-off file path is used\n";
+        }
     }
 #endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
