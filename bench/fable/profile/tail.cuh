@@ -7,12 +7,15 @@
 #pragma once
 #include <vector>
 #include <algorithm>
-struct TailRec { unsigned long long t0, t1, c0, c1; uint32_t sm, pad; };
+struct TailRec { unsigned long long t0, t1, c0, c1, nEnt, stitch; uint32_t sm, nW, steps, pad; };   // nEnt..steps: k_p3 only
 __device__ TailRec* g_tail[2];   // [0] k_p1, [1] k_p3: one record per thread of the current batch (nullptr: off)
 __device__ __forceinline__ unsigned long long tail_gt() { unsigned long long t; asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(t)); return t; }
 __device__ __forceinline__ uint32_t tail_sm() { uint32_t s; asm volatile("mov.u32 %0, %%smid;" : "=r"(s)); return s; }
 // start and end go straight to memory (nothing stays live across the kernel body, so registers and occupancy stay as in m5)
 #define TAIL_BEGIN(which, i) do { TailRec* a_ = g_tail[which]; if (a_) { a_[i].t0 = tail_gt(); a_[i].c0 = clock64(); } } while (0)
+// k_p3: SA entries of the read, windows, stitching steps, stitching + selection cycles (w.clk[2] + w.clk[3])
+#define TAIL_INFO(i, ne, nw, st, sc) do { TailRec* a_ = g_tail[1]; \
+    if (a_) { a_[i].nEnt = (ne); a_[i].nW = (nw); a_[i].steps = (st); a_[i].stitch = (sc); } } while (0)
 #define TAIL_END(which, i) do { TailRec* a_ = g_tail[which]; \
     if (a_) { const long long c_ = clock64(); a_[i].t1 = tail_gt(); a_[i].c1 = (unsigned long long)c_; a_[i].sm = tail_sm(); } } while (0)
 
@@ -81,6 +84,20 @@ struct TailHost {
         for (int k = 0; k < NBIN; k++) fprintf(stderr, "%s%.3f", k ? "," : "", curve[k] / (slots * span / NBIN));
         fprintf(stderr, "\n");
         tSpan[which] += span; tThr[which] += thr; tWarp[which] += warpA; tBlk[which] += blkA; tSlot[which] += area; tDrain[which] += drain; tCyc[which] += cyc;
+        if (which == 1) {   // the longest reads: what they spend their time on (assignment = total - stitching - selection)
+            std::vector<unsigned long long> ord(nb); for (unsigned long long i = 0; i < nb; i++) ord[i] = i;
+            std::sort(ord.begin(), ord.end(), [&](unsigned long long a, unsigned long long b) { return h[a].t1 - h[a].t0 > h[b].t1 - h[b].t0; });
+            const double ghz = thr > 0 ? cyc / thr : 1.78;
+            double cAll = 0, sAll = 0, cTop = 0, sTop = 0; const unsigned long long nTop = std::max<unsigned long long>(1, nb / 100);
+            for (unsigned long long r = 0; r < nb; r++) { const TailRec& x = h[ord[r]]; double c = (double)(x.c1 - x.c0), sc = (double)x.stitch;
+                cAll += c; sAll += sc; if (r < nTop) { cTop += c; sTop += sc; } }
+            fprintf(stderr, "TAILWHO lane=%s batch=%d stitch_select_share_all=%.4f stitch_select_share_top1pct=%.4f top1pct_thread_time_share=%.4f\n",
+                    lane, ib, sAll / cAll, sTop / cTop, cTop / cAll);
+            for (int r = 0; r < 5 && r < (int)nb; r++) { const TailRec& x = h[ord[r]];
+                fprintf(stderr, "TAILTOP lane=%s batch=%d rank=%d ms=%.3f start_ms=%.3f nEnt=%llu nW=%u steps=%u stitch_select_ms=%.3f rest_ms=%.3f\n",
+                        lane, ib, r, (x.t1 - x.t0) / 1e6, (x.t0 - tmin) / 1e6, x.nEnt, x.nW, x.steps, x.stitch / ghz / 1e6,
+                        ((double)(x.c1 - x.c0) - (double)x.stitch) / ghz / 1e6); }
+        }
         if (which == 1) {   // g_clk deltas of this batch (k_p3 adds each read's phase-1 and phase-3 counters at its end)
             unsigned long long c[8]; cudaMemcpyFromSymbol(c, g_clk, sizeof c);
             fprintf(stderr, "TAILCLK lane=%s batch=%d n=%llu seeds=%llu windows=%llu stitching=%llu select=%llu sat=%llu fin=%llu copies=%llu rec=%llu\n",
