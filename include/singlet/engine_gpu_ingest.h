@@ -104,7 +104,8 @@ inline Plan& plan() { static Plan p; return p; }
 //      needs nothing from STAR, so STAR's process starts it as soon as it is forked (startEarly), beside the CR4 probe and the genome load
 //   B  barcodes: STAR's barcode layout and whitelist (known once STAR read its parameters): E10's aux words (CR/UR keys, low-quality bits
 //      from the quality plane), E11's quality counts, R11's histogram
-//   C  the CellRanger4 clip (STAR's ClipMates): with B, on a thread STAR starts before it loads the genome (seqCacheGpuEarly)
+//   C  the CellRanger4 clip (STAR's ClipMates, ClipCR4's opal alignment of the TSO): right after A when the pipeline asks STAR for it
+//      (startEarly's cr4), else with B; B (and C when not done) on a thread STAR starts before it loads the genome (seqCacheGpuEarly)
 bool decodeReads(int threads, PackedReads& out, std::string& why);
 
 struct BarcodeConfig {
@@ -119,11 +120,12 @@ struct BarcodeConfig {
 };
 bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why);
 
-// phase A in the background of STAR's process (the forked child; its CR4 probe's grandchildren do not see it: the state is per pid)
-void startEarly(int threads);
-bool earlyHere();                                                       // started in this process
-bool takeEarly(PackedReads& out, std::string& why, double& waited);    // joins; out receives the reads
-void dropEarly();                                                       // joins and frees (a prefill that stops before its decode)
+// Phases A and (cr4) C in the background of STAR's process, called by the forked child before its CR4 probe (implemented by the prefill,
+// SeqCacheGpuPrefill.cpp, which takes the result once STAR read its parameters; the state is per pid, the probe's forked STARs do not see
+// it). cr4: the pipeline passes STAR --clipAdapterType CellRanger4 (its Beta profile, unless the probe drops it): the clip runs right after
+// the decode with the sequences STAR fixes for it (ParametersClip::initialize: the 10x TSO at 5', polyA at 3', no other clipping), and
+// the prefill keeps it only when STAR's own ClipMates are exactly those (otherwise it clips again, or not at all).
+void startEarly(int threads, bool cr4);
 
 // ---- R11's handshake (E2EHeader::r11Magic). STAR's prefill writes the histogram into the E8 region right after its decode (publishR11);
 // the pipeline's CB corrector (cb_correct.h, set_pending) reads it the first time a correction needs the exact counts (fetchR11). That is

@@ -7669,11 +7669,12 @@ int main(int argc, char* argv[]) {
             args.push_back(nullptr);
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
-            // E13: the .1fq's reads are decoded for STAR's prefill from now on, beside the CR4 probe and STAR's genome load (the prefill
-            // takes them; engine_gpu_ingest.h). SINGLET_ENGINE_GPU_INGEST_EARLY=0: the prefill decodes them when it starts.
+            // E13: the .1fq's reads are decoded for STAR's prefill from now on, beside the CR4 probe and STAR's genome load, and with the
+            // Beta profile STAR's CellRanger4 clip runs on them right after (the prefill takes both; engine_gpu_ingest.h).
+            // SINGLET_ENGINE_GPU_INGEST_EARLY=0: the prefill decodes and clips them when it starts.
             if (ingest_on) {
                 const char* ee = std::getenv("SINGLET_ENGINE_GPU_INGEST_EARLY");
-                if (!(ee && ee[0] == '0')) singlet_engine_gpu::ingest::startEarly(star_threads);
+                if (!(ee && ee[0] == '0')) singlet_engine_gpu::ingest::startEarly(star_threads, cr4_status == "on");
             }
 #endif
 

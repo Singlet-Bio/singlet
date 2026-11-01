@@ -79,15 +79,22 @@ singlet_engine_gpu::ingest::PackedReads ing;
 bool ingOn = false;
 const char *ingSeq = nullptr;
 const uint64_t *ingOff = nullptr;
-// what the prefill takes from the decode: phases A (decodeReads, from STAR's first moment: startEarly), B (barcodes) and C (the CellRanger4
-// clip) of SeqCacheGpuIngest.cpp, run on a thread seqCacheGpuEarly starts before STAR loads the genome, or by the prefill itself. On the
-// heap and never destroyed (an exit() while its thread runs must not run ~thread); per pid (the CR4 probe's forked STARs do not own it).
+// what the prefill takes from the decode: phases A (decodeReads) and B (barcodes) of SeqCacheGpuIngest.cpp and C (cr4Clip, STAR's
+// CellRanger4 clip). startEarly's thread th0 runs A from STAR's first moment, beside the CR4 probe, then C with STAR's fixed CellRanger4
+// sequences when the pipeline passes that clip; seqCacheGpuEarly's thread th (STAR's parameters read, before the genome load) runs B, and C
+// when th0 did not clip with the ClipMates STAR built; without startEarly the prefill runs all of it. On the heap and never destroyed (an
+// exit() while a thread runs must not run ~thread); per pid (the CR4 probe's forked STARs inherit the memory, not the threads).
 struct IngPrep {
-    std::thread th;
+    std::thread th0, th;
     pid_t pid = 0;
-    bool ok = false, early = false, clipPre = false;
-    std::string why, bcWhy;
-    double secA = 0, waitA = 0, secB = 0, secC = 0, clipS = 0;
+    int threads0 = 1;
+    bool early = false, cr4 = false;       // startEarly ran (with the CellRanger4 clip after the decode)
+    bool started = false;                   // ingPrepare is running or ran
+    bool okA = false, ok = false, clipPre = false, clipEarly = false;
+    std::string why, bcWhy, clipKey;        // clipKey: the ClipMates th0 clipped with (clipKeyOf)
+    singlet_engine_gpu::ingest::PackedReads reads;   // th0's decode until ingPrepare takes it into `ing`
+    std::chrono::steady_clock::time_point t0;
+    double secA = 0, doneA = 0, waitA = 0, secB = 0, secC = 0, doneC = 0, clipS = 0;
     int minQ = 0;
     uint32 nw = 0;
     std::vector<uint16> pre5, pre3;
@@ -95,12 +102,17 @@ struct IngPrep {
 };
 IngPrep *ingPrep = nullptr;
 inline bool ingPrepHere() { return ingPrep != nullptr && ingPrep->pid == getpid(); }
+inline double ingSince(std::chrono::steady_clock::time_point t) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count(); }
+void ingClipFree(IngPrep &W) {
+    std::vector<uint16>().swap(W.pre5); std::vector<uint16>().swap(W.pre3); std::vector<uint8>().swap(W.info);
+}
 void ingRelease() {
     if (ingPrepHere()) {
         if (ingPrep->th.joinable()) ingPrep->th.join();
-        std::vector<uint16>().swap(ingPrep->pre5); std::vector<uint16>().swap(ingPrep->pre3); std::vector<uint8>().swap(ingPrep->info);
+        if (ingPrep->th0.joinable()) ingPrep->th0.join();
+        ingClipFree(*ingPrep);
+        ingPrep->reads.release();
     }
-    singlet_engine_gpu::ingest::dropEarly();
     ing.release(); ingOn = false; ingSeq = nullptr; ingOff = nullptr;
 }
 // STAR's read source is free for the prefill's own (level 4/5): none set, or the pipeline's E13 chunk source over the .1fq
@@ -469,23 +481,31 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
     return true;
 }
 
-// E13 phase C: STAR's CellRanger4 clip of every packed read, as readSequences runs it (ClipMate::clipChunk's opal alignment of the TSO,
-// 64 reads at a time, and readLoad's ClipMate::clip), on T threads over contiguous read ranges
-void ingCr4(Parameters &P, IngPrep &W, int T) {
-    const uint64 N = ing.n;
+// the ClipMate fields the CellRanger4 clip depends on (ClipMate::initialize, ::clip; the opal alignment takes adSeqNum, made from adSeq)
+std::string clipKeyOf(const ClipMate &m5, const ClipMate &m3) {
+    std::ostringstream k;
+    for (const ClipMate *m : {&m5, &m3}) k << m->type << ':' << m->N << ':' << m->NafterAd << ':' << m->adSeq << ':' << m->adMMp << ';';
+    return k.str();
+}
+
+// E13 phase C: STAR's CellRanger4 clip of every packed read with the mate-1 ClipMates m5 (type 10) and m3 (type 11), as readSequences runs
+// it (ClipMate::clipChunk's opal alignment of the TSO, 64 reads at a time, and readLoad's ClipMate::clip), on T threads over contiguous
+// read ranges, each with its own copy of the ClipMates and its own ClipCR4 (opal's buffers; STAR has one per chunk)
+void cr4Clip(const singlet_engine_gpu::ingest::PackedReads &R, const ClipMate &m5, const ClipMate &m3, int T, IngPrep &W) {
+    const uint64 N = R.n;
     W.pre5.assign(N, 0); W.pre3.assign(N, 0); W.info.assign(N, 0);
     const uint64 Wl = (uint64) singlet_engine_gpu::ingest::plan().maxR2 + 1;
     std::vector<double> tt(T, 0.0);
     std::vector<std::thread> th;
     for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
         const auto t0 = std::chrono::steady_clock::now();
-        std::vector<std::vector<ClipMate>> cmv;
-        P.pClip.initializeClipMates(cmv);
-        ClipCR4 *cr = cmv[0][0].cr4;
+        ClipMate c5 = m5, c3 = m3;
+        ClipCR4 *cr = new ClipCR4;
+        c5.cr4 = cr; c3.cr4 = cr;   // type 11 calls cr4->polyTail3p, which reads none of its members (STAR leaves that pointer unset)
         std::vector<char> asc(64 * Wl), cbuf(DEF_readSeqLengthMax + 16);
         static const char kNt[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
-        const char *sq = ing.seq.data();
-        const uint64_t *of = ing.off.data();
+        const char *sq = R.seq.data();
+        const uint64_t *of = R.off.data();
         const uint64 rE = N * (t + 1) / T;
         for (uint64 r = N * t / T; r < rE; r += 64) {
             const int nb = (int) std::min<uint64>(64, rE - r);
@@ -495,23 +515,24 @@ void ingCr4(Parameters &P, IngPrep &W, int T) {
                 for (uint64 j = 0; j < L && j < Wl; j++) d[j] = kNt[(int) sq[a + j] & 7];
                 cr->opalFillOneSeq(k, d, (uint32) std::min<uint64>(L, Wl));
             }
-            cr->opalAlign((uint8 *) cmv[0][0].adSeqNum.data(), cmv[0][0].adSeqNum.size(), nb);
+            cr->opalAlign((uint8 *) c5.adSeqNum.data(), c5.adSeqNum.size(), nb);
             for (int k = 0; k < nb; k++) {
                 const int Lm = cr->opalRes[k].endLocationTarget + 1, S = cr->opalRes[k].score;
                 const bool L0 = S < 20 || (S == 20 && Lm > 26) || (S == 21 && Lm > 30);
                 const uint8 info = (uint8) (L0 ? 0 : Lm);
                 const uint64 a = of[r + k], L = of[r + k + 1] - a;
-                uint c5 = 0, c3 = 0;
+                uint c5n = 0, c3n = 0;
                 if (L <= DEF_readSeqLengthMax) {
                     memcpy(cbuf.data(), sq + a, L);
                     uint Lread = (uint) L;
-                    cmv[0][0].clippedInfo = (char) info;
-                    c5 = cmv[0][0].clip(Lread, cbuf.data());
-                    c3 = cmv[0][1].clip(Lread, cbuf.data());
+                    c5.clippedInfo = (char) info;
+                    c5n = c5.clip(Lread, cbuf.data());
+                    c3n = c3.clip(Lread, cbuf.data());
                 }
-                W.pre5[r + k] = (uint16) std::min<uint>(c5, 65535); W.pre3[r + k] = (uint16) std::min<uint>(c3, 65535); W.info[r + k] = info;
+                W.pre5[r + k] = (uint16) std::min<uint>(c5n, 65535); W.pre3[r + k] = (uint16) std::min<uint>(c3n, 65535); W.info[r + k] = info;
             }
         }
+        delete cr;
         tt[t] = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     });
     for (auto &x : th) x.join();
@@ -519,15 +540,19 @@ void ingCr4(Parameters &P, IngPrep &W, int T) {
     for (double x : tt) W.clipS += x;
 }
 
-// E13 phases A (taken from its early run, or run here), B and C, from STAR's parameters (the barcode layout and whitelist, the clip)
+// E13 phases A (taken from startEarly's thread, or run here), B and C (taken from startEarly's thread when it clipped with the ClipMates
+// STAR built, or run here), from STAR's parameters (the barcode layout and whitelist, the clip)
 void ingPrepare(Parameters &P, IngPrep &W) {
     namespace ig = singlet_engine_gpu::ingest;
     const ig::Plan &pl = ig::plan();
     const ParametersSolo &so = P.pSolo;
     const int T = std::max(1, (int) P.runThreadN);
-    if (ig::earlyHere()) {
-        W.early = true;
-        if (!ig::takeEarly(ing, W.why, W.waitA)) return;
+    if (W.early) {
+        const auto w0 = std::chrono::steady_clock::now();
+        if (W.th0.joinable()) W.th0.join();
+        W.waitA = ingSince(w0);
+        if (!W.okA) { ingClipFree(W); W.reads.release(); return; }
+        ing.swap(W.reads); W.reads.release();
     } else if (!ig::decodeReads(T, ing, W.why)) return;
     W.secA = ing.sec;
     if (so.type != so.SoloTypes::CB_UMI_Simple || so.cbL > 21 || so.umiL > 21 || so.cbS < 1 || so.umiS < 1) { W.why = "barcode layout"; ing.release(); return; }
@@ -545,12 +570,19 @@ void ingPrepare(Parameters &P, IngPrep &W) {
     if (so.cbWLyes && !so.cbWL.empty()) { c.wl = (const uint64_t *) so.cbWL.data(); c.nWL = so.cbWL.size(); }
     if (!ig::barcodes(c, ing, W.bcWhy)) { W.why = W.bcWhy; ing.release(); return; }
     W.secB = std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count();
-    const auto tc = std::chrono::steady_clock::now();
     singlet_engine_gpu::Clip clip;
     std::string cw;
     W.clipPre = fillClip(P, clip, cw) && clip.pre;
-    if (W.clipPre) ingCr4(P, W, T);
-    W.secC = std::chrono::duration<double>(std::chrono::steady_clock::now() - tc).count();
+    if (W.clipPre) {
+        std::vector<std::vector<ClipMate>> cmv;
+        P.pClip.initializeClipMates(cmv);
+        if (!(W.clipEarly && W.pre5.size() == ing.n && clipKeyOf(cmv[0][0], cmv[0][1]) == W.clipKey)) {   // not th0's: clip here
+            W.clipEarly = false;
+            const auto tc = std::chrono::steady_clock::now();
+            cr4Clip(ing, cmv[0][0], cmv[0][1], T, W);
+            W.secC = ingSince(tc);
+        }
+    } else { W.clipEarly = false; W.secC = 0; ingClipFree(W); }   // the CR4 probe dropped the profile: th0's clip is not STAR's
     W.ok = true;
 }
 
@@ -562,10 +594,11 @@ bool ingestReads(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
     if (!ingPrepHere()) {
         ingPrep = new IngPrep;
         ingPrep->pid = getpid();
-        ingPrepare(P, *ingPrep);
-    } else if (ingPrep->th.joinable()) ingPrep->th.join();
-    waited = std::chrono::duration<double>(std::chrono::steady_clock::now() - w0).count();
+    }
     IngPrep &W = *ingPrep;
+    if (!W.started) { W.started = true; ingPrepare(P, W); }
+    else if (W.th.joinable()) W.th.join();
+    waited = ingSince(w0);
     if (!W.ok) { why = W.why; return false; }
     if (W.clipPre != in.clip.pre) { why = "the clip configuration changed"; return false; }
     if (in.clip.pre) { in.pre5.swap(W.pre5); in.pre3.swap(W.pre3); in.cr4info.swap(W.info); }
@@ -977,10 +1010,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         const IngPrep &W = *ingPrep;
         P.inOut->logMain << "ENGINE_GPU: E13: " << ing.n << " reads decoded from the .1fq into the packed buffers in " << W.secA << " s (" << P.runThreadN
                          << " threads; " << in.seq.size() << " cDNA bases, " << ing.qual.size() << " quality bytes, " << ing.r1.size() * 8 << " barcode-read bytes; "
-                         << (W.early ? "started with STAR's process, taken " + std::to_string(W.waitA) + " s after STAR read its parameters"
-                                     : std::string("decoded here (SINGLET_ENGINE_GPU_INGEST_EARLY=0)"))
+                         << (W.early ? "started with STAR's process, done " + std::to_string(W.doneA) + " s later, taken " + std::to_string(W.waitA)
+                                       + " s after STAR read its parameters" : std::string("decoded here (SINGLET_ENGINE_GPU_INGEST_EARLY=0)"))
                          << "); barcodes " << W.secB << " s (R11 " << ing.r11Total << " reads), CellRanger4 clip " << W.secC << " s ("
-                         << (W.clipPre ? std::to_string(W.clipS) + " thread-s" : std::string("none")) << "); "
+                         << (!W.clipPre ? std::string("none")
+                             : std::to_string(W.clipS) + " thread-s, " + (W.clipEarly ? "right after the decode with STAR's fixed CellRanger4 sequences (STAR's "
+                               "ClipMates are those), done " + std::to_string(W.doneC) + " s after STAR's process started" : std::string("after the barcodes")))
+                         << (W.cr4 && !W.clipEarly ? "; the clip after the decode was not STAR's" : "") << "); "
                          << (W.early ? "the prefill waited " : "all in the prefill: ") << waited << " s\n";
     } else
     if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
@@ -1373,16 +1409,43 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
 #endif
 }
 
-// STAR.cpp, after its parameters and before the genome load (E13, SINGLET_ENGINE_GPU_INGEST=1): the decode's phases B and C (barcodes, the
-// CellRanger4 clip) on a thread of their own, once phase A (started with STAR's process) is done, so all of it runs beside the genome load;
-// the prefill joins it. Nothing when the decode did not start in this process (the CR4 probe's forked STARs, SINGLET_ENGINE_GPU_INGEST_EARLY=0).
+#ifdef SINGLET_HAVE_ENGINE_GPU
+// E13 (engine_gpu_ingest.h): the pipeline's STAR child, before its CR4 probe. Phase A on a thread of its own, then with cr4 the CellRanger4
+// clip with the ClipMates ParametersClip builds for --clipAdapterType CellRanger4 and no other clip option (initialize: the 10x TSO at 5'
+// unless --clip5pAdapterSeq names one, "A" (polyA) at 3'; N and NafterAd 0; the default adMMp 0.1); ingPrepare keeps it only when STAR's own
+// ClipMates give the same clipKeyOf.
+void singlet_engine_gpu::ingest::startEarly(int threads, bool cr4) {
+    if (ingPrepHere() || !plan().on) return;
+    ingPrep = new IngPrep;
+    IngPrep *W = ingPrep;
+    W->pid = getpid(); W->early = true; W->cr4 = cr4; W->threads0 = std::max(1, threads);
+    W->t0 = std::chrono::steady_clock::now();
+    W->th0 = std::thread([W]() {
+        W->okA = decodeReads(W->threads0, W->reads, W->why);
+        W->doneA = ingSince(W->t0);
+        if (!W->okA || !W->cr4) return;
+        ClipMate m5, m3;
+        m5.type = 10; m5.initialize(0, "AAGCAGTGGTATCAACGCAGAGTACATGGG", 0, 0.1);
+        m3.type = 11; m3.initialize(0, "A", 0, 0.1);
+        const auto tc = std::chrono::steady_clock::now();
+        cr4Clip(W->reads, m5, m3, W->threads0, *W);
+        W->secC = ingSince(tc); W->doneC = ingSince(W->t0);
+        W->clipKey = clipKeyOf(m5, m3); W->clipEarly = true;
+        delete m5.cr4;
+    });
+}
+#endif
+
+// STAR.cpp, after its parameters and before the genome load (E13, SINGLET_ENGINE_GPU_INGEST=1): the decode's phase B (barcodes), and C (the
+// CellRanger4 clip) unless startEarly's thread did it with STAR's ClipMates, on a thread of their own once that thread is done, so all of it
+// runs beside the genome load; the prefill joins it. Nothing when the decode did not start in this process (the CR4 probe's forked STARs,
+// SINGLET_ENGINE_GPU_INGEST_EARLY=0).
 void seqCacheGpuEarly(Parameters &P) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
     const char *e = getenv("SINGLET_ENGINE_GPU");
-    if (e == nullptr || e[0] != '1' || !singlet_engine_gpu::ingest::plan().on || !singlet_engine_gpu::ingest::earlyHere() || ingPrepHere()) return;
-    ingPrep = new IngPrep;
-    ingPrep->pid = getpid();
+    if (e == nullptr || e[0] != '1' || !singlet_engine_gpu::ingest::plan().on || !ingPrepHere() || ingPrep->started) return;
     IngPrep *W = ingPrep;
+    W->started = true;
     Parameters *pp = &P;
     W->th = std::thread([W, pp]() { ingPrepare(*pp, *W); });
 #else

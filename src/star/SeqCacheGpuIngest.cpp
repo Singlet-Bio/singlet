@@ -2,8 +2,8 @@
 // into the packed reads (singlet/engine_gpu_ingest.h) instead of reading back the FASTQ text the pipeline used to write.
 //   Phase A (decodeReads): one pass over the blocks, on the job's threads, each block into its own ranges of the final arrays (the
 //     pipeline's head scan counted every block's reads and bases): the cDNA codes and offsets (the engine's input), the cDNA quality as
-//     2-bit codes, the barcode read as 3-bit codes, and the bases per quality code. It needs nothing from STAR: startEarly runs it in the
-//     background of STAR's process from its first moment.
+//     2-bit codes, the barcode read as 3-bit codes, and the bases per quality code. It needs nothing from STAR: the prefill's startEarly
+//     runs it in the background of STAR's process from its first moment.
 //   Phase B (barcodes): what needs STAR's barcode layout and whitelist: E10's per-read words (CR/UR keys, low-quality bits), E11's quality
 //     counts, R11's exact CB histogram.
 // The bytes are those the FASTQ path gave STAR (read_source.h format_block with the file-mode options: no 5' clip, no length guard; reads
@@ -21,7 +21,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include <unistd.h>
 
 namespace singlet_engine_gpu {
 namespace ingest {
@@ -236,48 +235,6 @@ bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why) {
     }
     if (layoutBad) why = "a barcode read STAR would reject (length)";
     return true;
-}
-
-// ---- phase A in the background of STAR's process. The state lives on the heap and is never destroyed: an exit() while the thread runs
-// must not run ~thread (std::terminate). Forked grandchildren (the CR4 probe) inherit the memory but not the thread: pid is checked.
-namespace {
-struct Early {
-    std::thread th;
-    pid_t pid = 0;
-    int threads = 1;
-    PackedReads out;
-    bool ok = false;
-    std::string why;
-    std::chrono::steady_clock::time_point t0;
-};
-Early* early_ = nullptr;
-}  // namespace
-
-void startEarly(int threads) {
-    if (early_ != nullptr || !plan().on) return;
-    early_ = new Early;
-    early_->pid = getpid();
-    early_->threads = std::max(1, threads);
-    early_->t0 = std::chrono::steady_clock::now();
-    Early* e = early_;
-    e->th = std::thread([e]() { e->ok = decodeReads(e->threads, e->out, e->why); });
-}
-bool earlyHere() { return early_ != nullptr && early_->pid == getpid(); }
-bool takeEarly(PackedReads& out, std::string& why, double& waited) {
-    waited = 0;
-    if (!earlyHere()) { why = "not started"; return false; }
-    const auto w0 = std::chrono::steady_clock::now();
-    if (early_->th.joinable()) early_->th.join();
-    waited = std::chrono::duration<double>(std::chrono::steady_clock::now() - w0).count();
-    if (!early_->ok) { why = early_->why; return false; }
-    out.swap(early_->out);
-    early_->out.release();
-    return true;
-}
-void dropEarly() {
-    if (!earlyHere()) return;
-    if (early_->th.joinable()) early_->th.join();
-    early_->out.release();
 }
 
 }  // namespace ingest
