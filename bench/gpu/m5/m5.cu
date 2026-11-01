@@ -155,6 +155,7 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 //  M5_P1MINB=n __launch_bounds__(128, n) on the phase-1 kernels (register cap for occupancy)
 //  M5_CMPNI    compareSeqToGenome out of line (one copy instead of five inlined ones; stitch.cuh)
 //  M5_P1FUSE   (with M5_P1SPLIT) the windows in k_p1s, for each read as its seed search completes (no windows kernel)
+//  M5_STEPSMEM (with M5_SEEDSTEP) the stepped call's state (MmIt) in shared memory, 128 threads per block
 //  M5_SEEDSTEP (with M5_P1SPLIT) k_p1s steps maxMappableLength2strands one memory operation at a time (an SAi lookup or
 //              one compareSeqToGenome per lane per iteration, at one call site; stitch.cuh MmIt / mmAdvance)
 #ifdef M5_SEEDFLAT
@@ -194,7 +195,13 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
     int st = 0;            // 0: needs a read, 1: holds a read with a pending call, 2: the batch is exhausted, 3: seeds done
     SeedIt it;
 #ifdef M5_SEEDSTEP
+#ifdef M5_STEPSMEM
+    __shared__ MmIt smM[128];   // the call's state in shared memory (registers: temporaries only)
+    MmIt& m = smM[threadIdx.x];
+#else
     MmIt m;
+#endif
+    MmRes rr;
 #endif
     long long tc = 0;
     (void)nEnt;
@@ -239,7 +246,7 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
             // the next operation; a complete call moves the seed iterator on (the next call starts with no operation)
             bool cr = false;
             const u64 v = mmOp(g, Read1, m, cr);
-            const int r = mmAdvance(P, g, w, Read1, m, v, cr);
+            const int r = mmAdvance(P, g, w, Read1, m, rr, v, cr);
             if (r < 0) {
                 status[k] = (uint8_t)Status::Overflow; st = 0;
 #ifdef M5_P1FUSE

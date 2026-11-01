@@ -1885,8 +1885,8 @@ struct MmIt {
     uint32_t pieceStartIn, pieceLengthIn, iFrag, nD, iDist, maxLbest, pieceStart, pieceLength, Lind, maxL, opN, opL;
     u64 ind1;
     uint8_t iDir, ph, opK; bool dirR, good;              // opK: 0 SAi lookup, 1 compare, 2 none (a call's start)
-    u64 rNrep[4], rI0[4], rI1[4]; uint32_t rMaxL[4];     // per pass (gSAsparseD <= 4)
 };
+struct MmRes { u64 rNrep[4], rI0[4], rI1[4]; uint32_t rMaxL[4]; };   // per pass (gSAsparseD <= 4)
 HD inline void mmBegin(const Params& P, MmIt& m, const SeedIt& it) {
     m.pieceStartIn = it.Shift; m.pieceLengthIn = it.seedLength; m.iDir = (uint8_t)it.iDir; m.iFrag = it.pF;
     m.maxLbest = 0; m.dirR = it.iDir == 0; m.nD = (uint32_t)mn<uint>((uint)it.seedLength, P.gSAsparseD); m.iDist = 0; m.ph = MS_BEGIN; m.opK = 2;
@@ -1894,7 +1894,7 @@ HD inline void mmBegin(const Params& P, MmIt& m, const SeedIt& it) {
 // consume the result of the pending operation (v; cr = compRes of a compare) and run to the next one: 0 = an operation is
 // pending (m.opK, m.opIdx, m.opN, m.opL), 1 = the call is complete (m.maxLbest = maxMappableLength2strands' maxLbest),
 // -1 = overflow (storeAligns)
-template <class C> HD inline int mmAdvance(const Params& P, const GenomeView& g, Work<C>& w, const char* const* Read1, MmIt& m, u64 v, bool cr) {
+template <class C> HD inline int mmAdvance(const Params& P, const GenomeView& g, Work<C>& w, const char* const* Read1, MmIt& m, MmRes& rr, u64 v, bool cr) {
 #define MM_SAI(idx, phase) { m.opK = 0; m.opIdx = (idx); m.ph = (phase); return 0; }
 #define MM_CMP(n, l, isa, phase) { m.opK = 1; m.opN = (uint32_t)(n); m.opL = (uint32_t)(l); m.opIdx = (isa); m.ph = (phase); return 0; }
     switch (m.ph) {
@@ -1942,10 +1942,10 @@ decide:
     {
         const bool noN = (m.iSA1 & g.SAiMarkNmaskC) == 0;
         if ((uint)m.Lind < P.gSAindexNbases && noN && m.good) {
-            m.rI0[m.iDist] = m.iSA1; m.rI1[m.iDist] = m.iSA2; m.rNrep[m.iDist] = m.iSA2 - m.iSA1 + 1; m.maxL = m.Lind;
+            rr.rI0[m.iDist] = m.iSA1; rr.rI1[m.iDist] = m.iSA2; rr.rNrep[m.iDist] = m.iSA2 - m.iSA1 + 1; m.maxL = m.Lind;
             goto passEnd;
         } else if (m.iSA1 == m.iSA2 && noN && m.good) {
-            m.rI0[m.iDist] = m.iSA1; m.rI1[m.iDist] = m.iSA1; m.rNrep[m.iDist] = 1;
+            rr.rI0[m.iDist] = m.iSA1; rr.rI1[m.iDist] = m.iSA1; rr.rNrep[m.iDist] = 1;
             MM_CMP(m.pieceLength, m.Lind, m.iSA1, MS_CMP1);
         } else {   // maxMappableLength(i1 = iSA1 & SAiMarkNmask, i2 = iSA2, L = maxL)
             m.L = (m.good && noN) ? m.Lind : 0;
@@ -2010,21 +2010,21 @@ f2Top:
     if ((m.fb + 1 < m.fa) | (m.fb > m.fa + 1)) MM_CMP(m.L3, m.fLb, medianUint2(m.fa, m.fb), MS_F2);
     m.i2 = m.fa;
     m.L = m.L3;
-    m.rI0[m.iDist] = m.i1; m.rI1[m.iDist] = m.i2; m.rNrep[m.iDist] = m.i2 - m.i1 + 1; m.maxL = m.L;
+    rr.rI0[m.iDist] = m.i1; rr.rI1[m.iDist] = m.i2; rr.rNrep[m.iDist] = m.i2 - m.i1 + 1; m.maxL = m.L;
     goto passEnd;
 f2r:
     if ((uint32_t)v == m.L3) m.fa = m.opIdx; else { m.fb = m.opIdx; m.fLb = (uint32_t)v; }
     goto f2Top;
 passEnd:
     if (m.maxL + m.iDist > m.maxLbest) m.maxLbest = m.maxL + m.iDist;
-    m.rMaxL[m.iDist] = m.maxL;
+    rr.rMaxL[m.iDist] = m.maxL;
     m.iDist++;
     goto pass;
 store:
     for (uint iDist = 0; iDist < m.nD; iDist++) {
-        if (((uint)m.rMaxL[iDist] + iDist) == (uint)m.maxLbest) {
-            const uint ind[2] = {m.rI0[iDist], m.rI1[iDist]};
-            if (!storeAligns(P, w, (uint)m.iDir, (m.dirR ? (uint)m.pieceStartIn + iDist : (uint)m.pieceStartIn - iDist), m.rNrep[iDist], (uint)m.rMaxL[iDist], ind,
+        if (((uint)rr.rMaxL[iDist] + iDist) == (uint)m.maxLbest) {
+            const uint ind[2] = {rr.rI0[iDist], rr.rI1[iDist]};
+            if (!storeAligns(P, w, (uint)m.iDir, (m.dirR ? (uint)m.pieceStartIn + iDist : (uint)m.pieceStartIn - iDist), rr.rNrep[iDist], (uint)rr.rMaxL[iDist], ind,
                              (uint)m.iFrag))
                 return -1;
         }
