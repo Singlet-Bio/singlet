@@ -306,7 +306,12 @@ def vote_runs(runs, calls, run_reads):
     groups = {}
     for r, t in tags.items():
         groups.setdefault(protocol_family(t), []).append(r)
-    main_fam = max(groups, key=lambda f: (sum(w.get(r, 1) for r in groups[f]), f)) if groups else None
+    # The GEX sample is the family that is a KNOWN chemistry (a guessed 'agnostic-...' / UNKNOWN structure is a last resort: GSM9015940's 205 M reads of a 6+7 nt feature library, whitelist
+    # rate 0.40, outweighed the 123 M reads of its 10x v2 GEX run, whitelist rate 0.97, and the sample was parked as having no GEX) and, among those, the one with the most reads that
+    # hit the whitelist (reads x whitelist rate; an unknown rate counts as 1).
+    known = lambda f: not (f.startswith("agnostic") or f == "UNKNOWN")
+    score = lambda f: sum(w.get(r, 1) * (wl(r) if wl(r) is not None else 1.0) for r in groups[f])
+    main_fam = max(groups, key=lambda f: (known(f), score(f), f)) if groups else None
     main_conf = [r for r in groups.get(main_fam, [])]
     rates = [(wl(r), w.get(r, 1)) for r in main_conf if wl(r) is not None]
     main_wl = sum(x * y for x, y in rates) / sum(y for _, y in rates) if rates else None

@@ -184,3 +184,17 @@ def test_low_runs_follow_only_with_a_comparable_whitelist_rate():
     # nothing confident: no decision, nothing excluded
     main, vote, others = F.vote_runs(["A", "B"], {"A": ("dropseq", 1, 0.0), "B": ("celseq2", 1, 0.0)}, [5, 5])
     assert main == ["A", "B"] and vote["excluded_runs"] == [] and vote["status"] == "none"
+
+
+def test_a_guessed_structure_never_outvotes_a_known_chemistry():
+    # GSM9015940 (campaign census): a 205 M-read feature library called 'agnostic-bc6+umi7' (whitelist 0.40) next to a 123 M-read 10x v2 GEX run (whitelist 0.97).
+    calls = {"G": ("10x-3p-v2", 3, 0.9704), "F": ("agnostic-bc6+umi7", 3, 0.3978)}
+    main, vote, others = F.vote_runs(["G", "F"], calls, [123506128, 204953136])
+    assert main == ["G"] and vote["winner"] == "10x-3p-v2" and vote["main_family"] == "10x-v2"
+    assert others and others[0]["runs"] == ["F"] and others[0]["protocol_family"] == "agnostic-bc6+umi7"
+    # among known chemistries the reads that hit the whitelist count: 100 M at 0.95 beat 150 M at 0.30
+    main, vote, others = F.vote_runs(["A", "B"], {"A": ("10x-3p-v3", 3, 0.95), "B": ("10x-3p-v2", 3, 0.30)}, [100, 150])
+    assert main == ["A"] and others[0]["runs"] == ["B"]
+    # only guessed structures: the largest still wins
+    main, vote, others = F.vote_runs(["A", "B"], {"A": ("agnostic-bc6+umi7", 3, 0.4), "B": ("agnostic-bc8+umi8", 3, 0.4)}, [10, 20])
+    assert main == ["B"]
