@@ -104,27 +104,34 @@ gene body minus exons):
 reads" one: unspliced = every read intronic, ambiguous = reads of both kinds), applied to the evidence of
 every read of the molecule, after UMI collapse (merged UMIs pool their evidence):
 
-| reads of the molecule | label | written to |
+| reads of the molecule | label | gene-level matrix |
 |---|---|---|
-| at least one intron-touching read | unspliced | `intron_counts` |
-| no intron-touching read, at least one junction-crossing read (CIGAR N) | spliced | `exon_counts` |
-| exon-only reads, no junction evidence (compatible with both) | ambiguous | `exon_counts` **and** `ambiguous_counts` (gene level) |
+| at least one intron-touching read | unspliced | `unspliced_counts` |
+| no intron-touching read, at least one junction-crossing read (CIGAR N) | spliced | `spliced_counts` |
+| exon-only reads, no junction evidence (compatible with both) | ambiguous | `ambiguous_counts` |
 
-Why: against PBMC-E long-read truth (`docs/research-beta/sota-expression.md`) 100% of molecules with any
+These three gene-level matrices (and the h5ad / loom `spliced` / `unspliced` / `ambiguous` layers) carry the USA labels; each molecule
+is in exactly one of them. `exon_counts` / `intron_counts` are a different, older split, kept as the STARsolo `Gene` / `GeneFull`
+definition (below). Why two: the labels answer "is this molecule nascent?"; the exon matrix answers "how many molecules of this gene have
+an exonic read?", and a nascent molecule that also has an exon-only read is exonic evidence for expression (STARsolo Gene counts it from
+that read). One file pair cannot hold both, and writing the USA labels into `exon_counts` removed those molecules from the exonic
+matrix: the exonic UMI-ratio distance to STARsolo Gene went from 0.0225 to 0.0999 on nuclei2k_v2 (release gate 2, `72ac6555`).
+
+Why the USA labels: against PBMC-E long-read truth (`docs/research-beta/sota-expression.md`) 100% of molecules with any
 intron-touching read are unspliced, and the old rule sent 43% of the truly unspliced molecules (those that
 mix intron and exon-only reads) to ambiguous (unspliced recall 54% vs 94-98% for STARsolo Velocyto and
-alevin-fry). The total per gene (`exon_counts + intron_counts`) is unchanged. Known ceiling: about half of
-the long-read-unspliced molecules show their intron outside the R2 window, so no short-read tool sees them.
+alevin-fry). Known ceiling: about half of the long-read-unspliced molecules show their intron outside the R2 window, so no
+short-read tool sees them.
 
 What this guarantees:
 
-- `exon_counts + intron_counts` counts every molecule once. It equals STARsolo
-  `GeneFull` in definition and needs no client change.
-- `exon_counts` alone is spliced + ambiguous. That is the STARsolo `Gene` / Cell Ranger
-  (exonic) definition, so cell calling, which uses exon counts, keeps its meaning.
-- The layers are recoverable: spliced = gene(`exon_counts`) − `ambiguous_counts`; velocyto-style "spliced" is spliced + ambiguous = gene(`exon_counts`),
-  unspliced = gene(`intron_counts`). The h5ad and loom writers now emit
-  `spliced` / `unspliced` / `ambiguous` layers that sum to `X`.
+- `exon_counts` (per exon feature) = molecules with at least one exon-only read; `intron_counts` (per intron feature) = molecules whose
+  reads all touch an intron. `exon_counts + intron_counts` counts every molecule once, as STARsolo `GeneFull`, and `exon_counts` alone
+  is the STARsolo `Gene` / Cell Ranger (exonic) definition. Cell calling, cell QC, ambient and doublets read this split.
+- `spliced_counts + unspliced_counts + ambiguous_counts` also counts every molecule once, per gene, and has the same total per gene as
+  `exon_counts + intron_counts`. `unspliced_counts` is the nascent set (it includes the molecules that `exon_counts` also counts through
+  an exon-only read); velocyto-style "spliced" is `spliced_counts + ambiguous_counts`. The h5ad and loom writers emit the same three
+  matrices as `spliced` / `unspliced` / `ambiguous` layers that sum to `X`.
 - Multi-mappers resolved across workers are routed into the store that already holds
   their (barcode, gene) before any store is finalized (fixes mechanism 3). The counts
   no longer depend on the number of workers (section 4.2).

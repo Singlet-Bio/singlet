@@ -302,6 +302,7 @@ tests, the C++ readers call into the same definitions where they need them.
 | legacy member | .s1 treatment |
 |---|---|
 | `exon_counts.1pz`, `intron_counts.1pz` | pz2 matrix; names from vocabulary pack; columns from `cells` |
+| `spliced_counts.1pz`, `unspliced_counts.1pz`, `ambiguous_counts.1pz` | gene-level pz2 matrices (genes x `cells` columns) with the alevin-fry USA molecule labels: every molecule in exactly one of them. `exon_counts` is the molecules with an exon-only read and `intron_counts` the molecules whose reads all touch an intron (STARsolo Gene / GeneFull definitions), so `unspliced_counts` is not `intron_counts` (it also holds the nascent molecules that have an exon-only read) |
 | `sj_counts.1pz`, `vdj_gene_usage.1pz`, `mt_heteroplasmy.1pz`, `mt_events.1pz` | pz2 matrix (inline or pack names) |
 | `splice_psi.1pz` | derived from `sj_counts` by `psi-v1-rint`, `psi-v1-trunc` or `psi-v1-stub` (whichever reproduces the bytes) |
 | `cell_calls.tsv` | derived from the `cells` table (`cellcalls-v1`), else stored |

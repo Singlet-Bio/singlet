@@ -1315,8 +1315,11 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // Gene model matrices
     if (!pileup_cfg.exon_gtf_path.empty()) {
-        // published layer: the alevin-fry USA labels (layer_exon), not the legacy exon_csc the methods read
-        write_threads.emplace_back([&]() { write_matrix("exon_counts", *layer_exon, engine.exon_names()); });
+        // exon_counts = the legacy split (exon_csc): every molecule with at least one exon-only read, as STARsolo Gene / Cell Ranger exonic
+        // (a molecule that also has an intron-touching read is counted here from its exon-only read, and in intron_counts only when all its
+        // reads touch an intron, so exon_counts + intron_counts count every molecule once = GeneFull). The alevin-fry USA labels are the
+        // separate gene-level matrices spliced_counts / unspliced_counts / ambiguous_counts below.
+        write_threads.emplace_back([&]() { write_matrix("exon_counts", exon_csc, engine.exon_names()); });
         // Reads behind each exon / intron UMI count (same rows, columns and codec, uint32): reads_per_umi = reads / UMIs
         if (engine.reads_matrix_on()) {
             write_threads.emplace_back([&]() { write_matrix("exon_reads", exon_reads_csc, engine.exon_names()); });
@@ -1543,16 +1546,23 @@ inline ExportStats export_results(const PileupEngine& engine,
                 write_matrix("ambient_corrected_counts", ambient_corrected_csc, ambient_feature_names);
             });
         if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0) {
-            // published layers: the alevin-fry USA labels (layer_intron, amb_csc), not the legacy intron_csc the methods read
-            write_threads.emplace_back([&]() { write_matrix("intron_counts", *layer_intron, engine.intron_names()); });
-            // Ambiguous molecules (exon-only reads, no junction read) per gene. They are
-            // already inside exon_counts; spliced = gene(exon_counts) - ambiguous_counts.
+            // intron_counts = the legacy split (intron_csc): molecules whose reads all touch an intron (GeneFull = exon_counts + intron_counts).
+            write_threads.emplace_back([&]() { write_matrix("intron_counts", intron_csc, engine.intron_names()); });
+            // The alevin-fry USA molecule labels, gene level, every molecule in exactly one of them:
+            //   unspliced_counts  at least one intron-touching read
+            //   spliced_counts    no intron-touching read, at least one junction read
+            //   ambiguous_counts  exon-only reads, no junction read
+            // (velocyto-style spliced = spliced_counts + ambiguous_counts; the h5ad / loom layers are the same three matrices.)
             write_threads.emplace_back([&]() {
                 std::vector<std::string> names;
                 const auto& ids = engine.gene_ids();
                 const auto& gnames = engine.gene_names();
                 names.reserve(ids.size());
                 for (size_t i = 0; i < ids.size(); ++i) names.push_back(ids[i] + "_" + gnames[i]);
+                auto spliced_g   = gene_csc_minus(collapse_exon_to_gene(*layer_exon, engine.gene_model()), &amb_csc);
+                auto unspliced_g = collapse_intron_to_gene(*layer_intron, engine.gene_model());
+                write_matrix("spliced_counts", spliced_g, names);
+                write_matrix("unspliced_counts", unspliced_g, names);
                 write_matrix("ambiguous_counts", amb_csc, names);
             });
         }
@@ -2121,6 +2131,8 @@ inline ExportStats export_results(const PileupEngine& engine,
         write_1pz_stub("vdj_gene_usage.1pz");
         write_1pz_stub("intron_counts.1pz");
         write_1pz_stub("ambiguous_counts.1pz");
+        write_1pz_stub("spliced_counts.1pz");
+        write_1pz_stub("unspliced_counts.1pz");
         write_1pz_stub("exon_counts.1pz");
 
         // TSV stubs (header-only)
