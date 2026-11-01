@@ -106,13 +106,13 @@ static std::string blobStr(const uint8_t* p, u64 n) {
 static double median(std::vector<double> v) { if (v.empty()) return 0; std::sort(v.begin(), v.end()); return v[v.size() / 2]; }
 
 int main(int argc, char** argv) {
-    std::string dumpP, hoP, readsP, qP, bcP, wlP, r11P, json; int reps = 5; int hostThreads = 0; u64 subsetN = 2000000; bool skipRef = false;
+    std::string dumpP, hoP, readsP, qP, bcP, wlP, r11P, starLogP, json; int reps = 5; int hostThreads = 0; u64 subsetN = 2000000; bool skipRef = false;
     int mapqU = 255, fAnd = 65535, fOr = 0;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         auto nx = [&]() { return std::string(argv[++i]); };
         if (a == "--dump") dumpP = nx(); else if (a == "--handoff") hoP = nx(); else if (a == "--reads") readsP = nx(); else if (a == "--q") qP = nx();
-        else if (a == "--barcodes") bcP = nx(); else if (a == "--whitelist") wlP = nx(); else if (a == "--r11-hist") r11P = nx(); else if (a == "--json") json = nx(); else if (a == "--reps") reps = atoi(argv[++i]);
+        else if (a == "--barcodes") bcP = nx(); else if (a == "--whitelist") wlP = nx(); else if (a == "--r11-hist") r11P = nx(); else if (a == "--star-log") starLogP = nx(); else if (a == "--json") json = nx(); else if (a == "--reps") reps = atoi(argv[++i]);
         else if (a == "--host-threads") hostThreads = atoi(argv[++i]); else if (a == "--subset") subsetN = strtoull(argv[++i], nullptr, 10);
         else if (a == "--skip-ref") skipRef = true; else if (a == "--mapq-unique") mapqU = atoi(argv[++i]);
         else if (a == "--flag-and") fAnd = atoi(argv[++i]); else if (a == "--flag-or") fOr = atoi(argv[++i]);
@@ -148,6 +148,15 @@ int main(int argc, char** argv) {
     if (hRec != D.nRec || hReads != D.nReads) { fprintf(stderr, "the dump and the hand-off are not from the same run\n"); return 3; }
     const bool rrSame = memcmp(hRR, D.readRecord.data(), 4 * hReads) == 0;
     printf("readRecord: dump vs hand-off %s\n", rrSame ? "identical" : "DIFFERENT");
+    {   // the engine's own timings from STAR's log of the same run (--star-log, else <hand-off dir>/../out/star_Log.out): lines with ENGINE_GPU only
+        std::string lp = starLogP;
+        if (lp.empty()) { const size_t s = hoP.rfind('/'); lp = (s == std::string::npos ? std::string(".") : hoP.substr(0, s)) + "/../out/star_Log.out"; }
+        if (FILE* lf = fopen(lp.c_str(), "r")) {
+            char line[1024];
+            while (fgets(line, sizeof line, lf)) if (strstr(line, "ENGINE_GPU") || strstr(line, "engine_gpu")) printf("STARLOG %s", line);
+            fclose(lf);
+        } else printf("STARLOG none (%s)\n", lp.c_str());
+    }
 
     // ---- hop 6 on the GPU
     t0 = now();
