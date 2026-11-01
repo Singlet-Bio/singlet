@@ -52,6 +52,14 @@ window), so lane M never falls back. Lane B's (configuration 0: 8 exons, 16 alig
 (`mapFinish`) on lane 0 of its warp, from the same assignment state. The local memory a lane context needs (`sizeof`):
 lane M 14,008 B, lane B configuration 0 19,832 B, configuration 1 49,984 B, lane A 19,832 B.
 
+After the merge of the integration head (commit 80f366fc: E1's tail probe, E2's census, E5's exact compact variants on by
+default, E6's records) the lanes share E5's layouts: `LaneWork` has `Work`'s M5_FIN1 slot pool (one spare slot as the
+finalisation scratch instead of `fin`), the M5_SLOT0 window start (only `maxScore` of slot 0 is written), the M5_TR32
+exon rows (`copyFromAny` copies whole rows), and with M5_KEEPIX the warp merge places `keep[p]` at pool entry `NWTR + 2 + p`
+(`keepAt`). Under M5_CENSUS the warp kernel fills no census records (the census describes the baseline kernels). The E3
+statistics (`--wstats` counters and histograms, the `clock64` probes of `k_p3w`, `warpStitch`, `k_p3a` and the baseline
+`k_p3`) compile only with `-DM5_E3STATS`; the default build has none (`--no-wstats` is then a no-op).
+
 ## 2. Exactness: why every recording decision is identical
 
 The design note (study Part I 4.4) proposed two passes: pass 1 computes each window's maximum finalised score, a prefix max
@@ -226,9 +234,30 @@ Register / spill report (ptxas, commit 41a4187d, `-O3 -arch=sm_90`): `k_p3w` lan
 16 / 32 (<8,16,8>) 124-126 / 20,400 B / 0; `k_p3a` 72 / 0 B; baseline `k_p3` A/M/B 94 registers, 576 / 320 / 1,664 B, 0
 spill. Full reports: `$W/jobs/fable/warp-window/bin/ptxas_<sha>.txt` and `_summary.txt`.
 
-### 3.4 After the ballot fix (job 795739, binary 8288c0a0)
+### 3.4 After the ballot fix (job 795739, binary 8288c0a0, before the merge)
 
-(filled in below if the job ran in time)
+| variant | flags beyond the defaults | lane M ms | lane B ms | M+B ms | M+B / base | GPU ms | M distinct reads/s |
+|---|---|---:|---:|---:|---:|---:|---:|
+| base | | 315.5 | 254.4 | **569.9** | 1.000 | 802.9 | **2.481** |
+| wasgbest | `--warp-m --warp-b --wassign --wsort --wb-cfg 1 --no-wstats --wthreads 128` | 331.2 | **239.9** | 571.1 | 1.002 | 804.5 | 2.476 |
+| best128 | the same with `k_p3a` (no `--wassign`) | 315.3 | 260.6 | 575.8 | 1.010 | 809.3 | 2.461 |
+| wasgstats | wasgbest with the statistics on | 337.7 | 242.9 | 580.6 | 1.019 | 813.3 | 2.449 |
+| basebig | big batches | 323.9 | 202.1 | 526.0 | 0.923 | 746.5 | 2.668 |
+| wasgbestbig | wasgbest + big batches | 331.2 | 212.0 | 543.3 | 0.953 (1.033 vs basebig) | 763.6 | 2.609 |
+
+Identity 1,991,926 / 1,991,926 in every variant. The ballot ownership brought the in-kernel assignment from the worst to
+the best option for lane B: wasgbest's lane B (239.9 ms) is 5.7% under the baseline's (254.4), its warp kernel 192 ms
+against `k_p3`'s 208 (assignment included in both). Lane M stays 5% over (331.2 vs 315.5). Against job 795637's
+`wasgns` (the same flags before the fix, 64 threads per block) M+B fell from 584.6 to 571.1 ms. Statistics (wasgstats):
+lane M 34.3 windows per read, 71.9% of the lanes busy per round, 237 steps per read, 43 + 895 reads to lane B (exons/keep
+capacity); lane B 75.0 windows per read, 80.5% busy, 584 steps per read, 1,005 + 601 of 85,689 reads to the serial loop
+(window above 32 aligns, lane capacity). The combination that the lanes suggest, lane M as the baseline and lane B
+warp-stitched, would be 315.5 + 239.9 = 555.4 ms (0.975x); it is measured directly on the merged code (3.5, `mixed`).
+
+### 3.5 On the merged code (job 795844, binary 80f366fc)
+
+(pending: the job waits for a GPU)
+
 
 ## 4. What failed on the way, and how it was found
 
@@ -242,6 +271,12 @@ spill. Full reports: `$W/jobs/fable/warp-window/bin/ptxas_<sha>.txt` and `_summa
   795662). The CUDA-source page of the reports came out without metrics (job 795654), so no per-line attribution.
 - The in-warp assignment's 32-way ownership scan (an obvious O(32) redundancy once the thread-instruction count was
   seen); replaced by ballots (8288c0a0).
+
+- The E3 statistics were compiled into the default build at first, including two `clock64` probes and atomics in the
+  baseline `k_p3` (job 795311's report: `k_p3` 94 registers where the integration head has 80, E4's finding). After the
+  merge they are behind `-DM5_E3STATS` (default `k_p3` 79-80 registers again).
+- The merge (80f366fc): 5 conflicts in `stitch.cuh` and 13 in `m5.cu`, all kept from both sides; `e3_compile.sbatch
+  CHECK=1` compiles the e3stats / tail / census / baseline / keepix flavours next to the default one (job 795831: all ok).
 
 ## 5. Next steps
 
