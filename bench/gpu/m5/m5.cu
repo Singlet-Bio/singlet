@@ -549,6 +549,68 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     return L;
 }
 
+// E7 (--p1probe): phase 1 alone over reads idx (or all n) with lane C's capacities, timing only (median of reps after a
+// warm-up), plus how many reads would stay in lane A's capacities (status Ok, nW <= LaneA::NW): the cost of "phase 1 once
+// with lane M's window capacity" against the cascade's phase-1 time of lanes A + M
+template <class C>
+__global__ void k_p1count(u64 n, const Work<C>* work, const uint8_t* status, unsigned long long* cnt) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    if ((Status)status[k] != Status::Ok) atomicAdd(&cnt[0], 1ULL);
+    else if (work[k].stitched && work[k].nW > (m5::uint)LaneA::NW) atomicAdd(&cnt[1], 1ULL);
+    else atomicAdd(&cnt[2], 1ULL);
+}
+template <class C>
+static double probeP1(const Params& P, const GenomeView& D, const char* dRb, const u64* dRoff, const uint16_t* dRlen, u64 n, u64 NB, int reps,
+                      cudaEvent_t e0, cudaEvent_t e1, const char* name) {
+    NB = std::min<u64>(NB, std::max<u64>(n, 1));
+    Work<C>* dWork; CK(cudaMalloc(&dWork, NB * sizeof(Work<C>))); CK(cudaMemset(dWork, 0, NB * sizeof(Work<C>)));
+    ReadBuf<C::LREAD>* dRbuf; CK(cudaMalloc(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>)));
+    uint8_t* dBst; CK(cudaMalloc(&dBst, NB)); u64* dNent; CK(cudaMalloc(&dNent, NB * 8));
+    unsigned long long* dCnt; CK(cudaMalloc(&dCnt, 24));
+#ifdef M5_P1SPLIT
+    int nSm = 0, bpsS = 0; cudaDeviceGetAttribute(&nSm, cudaDevAttrMultiProcessorCount, 0);
+    CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsS, k_p1s<C>, 128, 0));
+    unsigned long long* dCtr; CK(cudaMalloc(&dCtr, 16));
+#ifdef M5_P1WPERS
+    int bpsW = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsW, k_p1wp<C>, 128, 0));
+#endif
+#endif
+    std::vector<double> runs; unsigned long long cnt[3] = {0, 0, 0};
+    for (int r = 0; r < reps + 1; r++) {
+        CK(cudaMemset(dCnt, 0, 24));
+        cudaEventRecord(e0);
+        for (u64 b0 = 0; b0 < n; b0 += NB) {
+            u64 nb = std::min(NB, n - b0);
+            int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
+#ifdef M5_P1SPLIT
+            CK(cudaMemsetAsync(dCtr, 0, 16));
+            k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dRb, dRoff, dRlen, nullptr, b0, nb, dWork, dRbuf, dBst, dCtr);
+#ifdef M5_P1WPERS
+            k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1);
+#else
+            k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent);
+#endif
+#else
+            k_p1<C><<<G, T>>>(P, D, dRb, dRoff, dRlen, nullptr, b0, nb, dWork, dRbuf, dBst, dNent);
+#endif
+            if (r == 0) k_p1count<C><<<G, T>>>(nb, dWork, dBst, dCnt);   // warm-up run only
+        }
+        cudaEventRecord(e1); CK(cudaEventSynchronize(e1)); CK(cudaGetLastError());
+        float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) runs.push_back(m);
+    }
+    CK(cudaMemcpy(cnt, dCnt, 24, cudaMemcpyDeviceToHost));
+    double med = medianv(runs);
+    fprintf(stderr, "p1probe %s: phase 1 of %llu reads with this lane's capacities in batches of %llu: %.1f ms (median of %d after a warm-up); "
+                    "overflow %llu, more than %d windows %llu, within lane A's windows %llu\n",
+            name, n, NB, med, reps, cnt[0], LaneA::NW, cnt[1], cnt[2]);
+    cudaFree(dWork); cudaFree(dRbuf); cudaFree(dBst); cudaFree(dNent); cudaFree(dCnt);
+#ifdef M5_P1SPLIT
+    cudaFree(dCtr);
+#endif
+    return med;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 static u64 fileSize(const std::string& p) { struct stat st; if (stat(p.c_str(), &st)) { perror(p.c_str()); exit(2); } return st.st_size; }
 static void readInto(const std::string& path, u64 off, char* dst, u64 n) {
@@ -633,7 +695,7 @@ static std::string blobStr(const uint8_t* p, int n) {
 static int glScore(double scale, u64 x) { return int(std::ceil(std::log2((double)x) * scale - 0.5)); }
 
 int main(int argc, char** argv) {
-    std::string gdir, truth, json, input, emit, census; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, nbM = 131072, budgetA = 0, budgetB = 0, budgetM = 0, monoBudget = 0; bool noMid = false;
+    std::string gdir, truth, json, input, emit, census; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, nbM = 131072, budgetA = 0, budgetB = 0, budgetM = 0, monoBudget = 0; bool noMid = false, p1probe = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--genome-dir") gdir = argv[++i];
@@ -654,6 +716,7 @@ int main(int argc, char** argv) {
         else if (a == "--batch-m") nbM = atoll(argv[++i]);
         else if (a == "--bin") g_bin = true;   // phase 3 threads take the reads of a batch sorted by window count / SA entries
         else if (a == "--no-mid") noMid = true;          // lanes A, B only
+        else if (a == "--p1probe") p1probe = true;      // E7: time phase 1 alone over every read with lane A's and lane M's capacities
         else if (a == "--mono-budget") monoBudget = atoll(argv[++i]);   // E1: step budget of the one-kernel lanes (--mono; default 0 = none)
         else if (a == "--input") input = argv[++i];     // "count sequence" lines (uniq -c): map these instead of the truth reads
         else if (a == "--emit") emit = argv[++i];       // write (sequence, result) for the sequence cache preload (inject/)
@@ -823,6 +886,10 @@ int main(int argc, char** argv) {
     char* dRb = toDev(T.rb); u64* dRoff = toDev(T.roff); uint16_t* dRlen = toDev(T.rlen);
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
     CK(cudaDeviceSetLimit(cudaLimitStackSize, localWork ? (int)(sizeof(Work<LaneA>) + 4096) : 16 * 1024));
+    if (p1probe) {
+        probeP1<LaneA>(P, D, dRb, dRoff, dRlen, n, (u64)nbA, reps, e0, e1, "A-all");
+        probeP1<LaneM>(P, D, dRb, dRoff, dRlen, n, (u64)nbM, reps, e0, e1, "M-all");
+    }
     LaneOut A = mono ? runLane<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, prop.multiProcessorCount * bps, nthr, reps, localWork, e0, e1, "A")
                      : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A", 0);
     std::vector<uint32_t> idxM, idxB;
