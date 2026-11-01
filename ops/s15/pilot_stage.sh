@@ -4,6 +4,7 @@
 set -uo pipefail
 ST=$1; GSM=$2
 W=/mnt/projects/debruinz_project/debruinz/singlet; PL=$W/pilot; P=$PL/$GSM; D=$W/jobs/s15
+SINGLET_THREADS=16   # the same for cpu, gpu and matched-prefix runs: outputs can depend on thread count (known engine bug, S8)
 COMMIT=337b405b; BINDIR=$D/bin/$COMMIT; REFB=/mnt/projects/debruinz_project/cellarium/reference; G=$REFB/GRCh38-2024-A
 WL=$W/pipeline-benchmark/whitelists; ENV=$W/envs/pbench; CAPPAIRS=100000000
 row=$(awk -F'\t' -v g=$GSM '$1==g' $D/samples.tsv); FIVE=$(echo "$row" | cut -f3); TIER=$(echo "$row" | cut -f5)
@@ -15,9 +16,9 @@ assert_bin() {
   ls -l $BINDIR/$1; }
 singlet_run() {   # engine outdir [reads-args...]
   eng=$1; out=$2; shift 2; rm -rf $out; mkdir -p $out
-  /usr/bin/time -v -o $out/time.txt $BINDIR/singlet-$eng "$@" --ref-base $REFB --out-prefix $out/out/ --threads ${SLURM_CPUS_PER_TASK:-16} --pipeline \
+  /usr/bin/time -v -o $out/time.txt $BINDIR/singlet-$eng "$@" --ref-base $REFB --out-prefix $out/out/ --threads $SINGLET_THREADS --pipeline \
      --output-format 1pz --engine $eng --memory-tier $TIER --tagged-bam > $out/run.log 2>&1
-  rc=$?; echo "singlet $eng rc=$rc"; grep -E "Elapsed \(wall|Maximum resident" $out/time.txt; return $rc; }
+  rc=$?; echo "$SINGLET_THREADS" > $out/threads.txt; echo "singlet $eng rc=$rc threads=$SINGLET_THREADS"; grep -E "Elapsed \(wall|Maximum resident" $out/time.txt; return $rc; }
 reads_arg() { n=$(ls $1/*.1fq | wc -l); if [ $n = 1 ]; then ls $1/*.1fq; else echo "--runs-dir $1"; fi; }
 sb() { sbatch --parsable --account=debruinz --kill-on-invalid-dep=no "$@"; }
 post_gpu() {
