@@ -103,7 +103,7 @@ ident() {   # point item sample T
   v=REF_${s}_t$T; a=${!v:-$SCR/ref/$s-t$T/out}; ca=$(dirname $a)/CellReads.stats
   [ -f $ca ] || ca=$(dirname $(dirname $a))/CellReads.stats
   if [ ! -d $a ]; then echo "  c$i ($s): no reference at T=$T" | tee -a $RES0/$p/identity.txt; return; fi
-  local I=$RES0/$p/identity.txt
+  local I=$RES0/$p/c$i/identity.txt   # per run (the runs of a point are checked IDPAR at a time); concatenated afterwards
   echo "=== $p c$i ($s, T=$T) vs $a" >> $I
   python3 $SCR/repo/bench/star_accel/out_equiv.py $a $b > $RES0/$p/c$i/equiv.txt 2>&1
   grep -a '^  DIFF\|^  only in\|^files:\|^RESULT' $RES0/$p/c$i/equiv.txt | cut -c1-220 >> $I
@@ -122,7 +122,7 @@ ident() {   # point item sample T
     elif cmp -s <(head -1 $ca) <(head -1 $cb) && cmp -s <(tail -n +2 $ca | LC_ALL=C sort) <(tail -n +2 $cb | LC_ALL=C sort); then crs="CellReads.stats same rows (order differs)"
     else crs="CellReads.stats ROWS DIFFER"; fi
   else crs="CellReads.stats not compared"; fi
-  echo "  c$i ($s): $(grep -a '^files:' $RES0/$p/c$i/equiv.txt | cut -c8-) [$(grep -a '^  DIFF' $RES0/$p/c$i/equiv.txt | sed -E 's/^  DIFF ([^ :]+).*/\1/' | tr '\n' ' ')]; $st; $sj;$recs; $crs" | tee -a $I | tee -a $S
+  echo "  c$i ($s): $(grep -a '^files:' $RES0/$p/c$i/equiv.txt | cut -c8-) [$(grep -a '^  DIFF' $RES0/$p/c$i/equiv.txt | sed -E 's/^  DIFF ([^ :]+).*/\1/' | tr '\n' ' ')]; $st; $sj;$recs; $crs" >> $I
 }
 
 for p in "${POINTS[@]}"; do
@@ -154,8 +154,13 @@ for p in "${POINTS[@]}"; do
     if [ $K = 1 ] && [ ! -d $SCR/ref/$s-t$T ] && [ $rc = 0 ]; then
       mkdir -p $SCR/ref/$s-t$T && mv $SCR/$p/c$i/out $SCR/ref/$s-t$T/out && cp $RES0/$p/c$i/CellReads.stats $SCR/ref/$s-t$T/ 2>/dev/null
       echo "  c$i ($s): kept as the reference for $s at T=$T" | tee -a $S
-    elif [ "$IDENT" = 1 ]; then ident $p $i $s $T; fi
+    elif [ "$IDENT" = 1 ]; then
+      while [ $(jobs -rp | wc -l) -ge ${IDPAR:-4} ]; do sleep 1; done
+      ident $p $i $s $T &
+    fi
   done < <(sort -n $RES0/$p/runs.tsv)
+  wait
+  for f in $(ls $RES0/$p/c*/identity.txt 2>/dev/null | sort -V); do cat $f >> $RES0/$p/identity.txt; grep -a "^  c[0-9]* (" $f | tee -a $S; done
   for f in $SCR/dump-$p-c*.bin; do
     [ -f $f ] || continue
     c=$(basename $f .bin); c=${c##*-}; s=$(awk -F'\t' -v i=${c#c} '$1==i{print $3}' $RES0/$p/runs.tsv)
