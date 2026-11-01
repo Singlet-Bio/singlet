@@ -22,8 +22,8 @@
 # appears (the pipeline deletes it after parsing). Then per pair (PAIRS=a:b ...; a mode not run here is taken from OUT_<mode>, a kept out/ dir):
 # out_equiv.py, the mapping statistics of star_Log.final.out, SJ.out.tab, the read-order files by sorted 4-line records, and CellReads.stats
 # by sorted rows (CRS_<mode>: a kept copy for a mode not run here). DUMP=1: every GPU run also writes mapDistinct's records (E6 dump,
-# SINGLET_ENGINE_GPU_DUMP) to the node's /tmp, and the dumps of all GPU runs are compared byte for byte (sha256) at the end;
-# DUMP="mode ...": only those modes dump.
+# SINGLET_ENGINE_GPU_DUMP) to the node's /tmp, hashed (sha256) and removed after the run, and the hashes of all GPU runs are compared at
+# the end; DUMP="mode ...": only those modes dump. A mode's out/ in /tmp is removed after its run unless PAIRS names it.
 set -uo pipefail
 FAIL=0
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
@@ -84,14 +84,18 @@ for m in "${MODES[@]}"; do
   python3 $SCR/repo/bench/fable/solowire/s8_stages_e11.py $O 66.601887 > $O/stages.txt 2>&1; tee -a $RES/summary.txt < $O/stages.txt
   [ "${KEEPOUT:-1}" = 1 ] && rsync -a --exclude='*.bam' --exclude='*.sam' --exclude='*.cram' --exclude='*.fq*' --exclude='*.fastq*' --exclude='*.1fq' \
       --exclude='.gpu_handoff*' --exclude='*Unmapped*' --exclude='_STARtmp*' --exclude='*.reads' --exclude='*.reads.q' $SCR/$s/$m/out/ $O/out/
-  [ -f $SCR/dump-$m.bin ] && echo "  E6 dump $m: $(stat -c %s $SCR/dump-$m.bin) bytes, sha256 $(sha256sum $SCR/dump-$m.bin | cut -c1-16)" | tee -a $RES/summary.txt
+  if [ -f $SCR/dump-$m.bin ]; then   # hashed now and removed (/tmp room for the next modes); compared by hash at the end
+    sha256sum $SCR/dump-$m.bin | cut -c1-64 > $SCR/dump-$m.sha
+    echo "  E6 dump $m: $(stat -c %s $SCR/dump-$m.bin) bytes, sha256 $(cut -c1-16 $SCR/dump-$m.sha)" | tee -a $RES/summary.txt; rm -f $SCR/dump-$m.bin
+  fi
+  [[ " ${PAIRS:-} " == *" $m:"* || " ${PAIRS:-} " == *":$m "* ]] || rm -rf $SCR/$s/$m/out   # not compared below: room in /tmp
 done
 if [ "${DUMP:-0}" != 0 ]; then
   echo "=== mapDistinct records (E6 dumps) of the GPU runs" | tee -a $RES/summary.txt
-  ref=""; for m in "${MODES[@]}"; do f=$SCR/dump-$m.bin; [ -f $f ] || continue
+  ref=""; for m in "${MODES[@]}"; do f=$SCR/dump-$m.sha; [ -f $f ] || continue
     if [ -z "$ref" ]; then ref=$m; echo "  reference $m" | tee -a $RES/summary.txt
-    elif cmp -s $SCR/dump-$ref.bin $f; then echo "  $m: records IDENTICAL to $ref (byte for byte)" | tee -a $RES/summary.txt
-    else echo "  $m: records DIFFER from $ref: $(cmp $SCR/dump-$ref.bin $f | head -1)" | tee -a $RES/summary.txt; FAIL=1; fi
+    elif cmp -s $SCR/dump-$ref.sha $f; then echo "  $m: records IDENTICAL to $ref (sha256 of the whole dump)" | tee -a $RES/summary.txt
+    else echo "  $m: records DIFFER from $ref (sha256)" | tee -a $RES/summary.txt; FAIL=1; fi
   done
 fi
 odir() { if [ -d $SCR/$s/$1/out ]; then echo $SCR/$s/$1/out; else v=OUT_$1; echo "${!v:-}"; fi; }
