@@ -159,6 +159,14 @@ template <int NEX> struct Tr {
             canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
         }
     }
+    // bytes copyFrom moves (statistics, M5_COPYSTATS): the scalar fields, then per live exon row
+    HD int copyBytes() const {
+        constexpr int hdr = sizeof(nExons) + sizeof(iFrag) + 9 * sizeof(rStart) + sizeof(primaryFlag) + 4 * sizeof(nMatch) + sizeof(maxScore)
+                          + 8 * sizeof(nGap) + sizeof(intronMotifs) + sizeof(sjMotifStrand) + sizeof(sjYes);
+        constexpr int row = sizeof(exons[0]) + sizeof(shiftSJ[0]) + sizeof(canonSJ[0]) + sizeof(sjAnnot[0]) + sizeof(sjStr[0]);
+        int ne = nExons < (uint)NEX ? (int)nExons : NEX;
+        return hdr + ne * row;
+    }
     HD void add(const Tr* t) {
         maxScore += t->maxScore; nMatch += t->nMatch; nMM += t->nMM;
         nGap += t->nGap; lGap += t->lGap; lDel += t->lDel; nDel += t->nDel; lIns += t->lIns; nIns += t->nIns;
@@ -222,7 +230,25 @@ template <class C> struct Work {
     u64 nSteps, stepBudget;    // stitching recursion steps of this read; budget (0 = none): over it, the read goes to the next lane
     long long clk[8];          // cycles: seeds, windows + assignment, stitching, selection + encoding; inside stitching:
                                // [4] stitchAlignToTranscript, [5] finalization, [6] transcript copies, [7] recording (device only)
+#ifdef M5_COPYSTATS
+    // transcript copies by kind: [0] include (stack), [1] exclude (stack), [2] finalize scratch, [3] record into a slot,
+    // [4] slot init at a window's start, [5] window -> keep, [6] keep compaction, [7] multMapSelect compaction
+    unsigned long long cpN[8], cpB[8]; long long cpClk[8];
+    unsigned long long stN[4];   // [0] recursion steps (frames visited), [1] windows stitched
+#endif
 };
+// a transcript copy (kind as above); with M5_COPYSTATS counted, its bytes and cycles summed
+#if defined(M5_COPYSTATS) && defined(__CUDA_ARCH__)
+#define M5CPY(w, kind, dst, src) do { long long t0_ = clock64(); (dst).copyFrom(src); (w).cpClk[kind] += clock64() - t0_; \
+                                      (w).cpN[kind]++; (w).cpB[kind] += (src).copyBytes(); } while (0)
+#define M5STAT(w, k) ((w).stN[k]++)
+#elif defined(M5_COPYSTATS)
+#define M5CPY(w, kind, dst, src) do { (dst).copyFrom(src); (w).cpN[kind]++; (w).cpB[kind] += (src).copyBytes(); } while (0)
+#define M5STAT(w, k) ((w).stN[k]++)
+#else
+#define M5CPY(w, kind, dst, src) (dst).copyFrom(src)
+#define M5STAT(w, k) do { } while (0)
+#endif
 #ifdef __CUDA_ARCH__
 #define M5CLK(w, k, t) do { long long t1_ = clock64(); (w).clk[k] += t1_ - (t); (t) = t1_; } while (0)
 #define M5T(t) long long t = clock64()
@@ -1096,7 +1122,7 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
             int pTr = w.slotP[w.nWinTr];
             for (int ii = (int)w.nWinTr; ii > int(iTr); ii--) w.slotP[ii] = w.slotP[ii - 1];
             w.slotP[iTr] = pTr;
-            w.slot[w.slotP[iTr]].copyFrom(trA);
+            M5CPY(w, 3, w.slot[w.slotP[iTr]], trA);
             if (w.nWinTr < P.alignTranscriptsPerWindowNmax) {
                 if (w.nWinTr + 1 > (uint)C::NWTR) { w.ov = OV_WTR; return false; }
                 w.nWinTr++;
@@ -1118,6 +1144,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
     fr[0].Score = 0; fr[0].tR2 = 0; fr[0].tG2 = 0; fr[0].phase = 0;
     while (d >= 0) {
         if (w.stepBudget && ++w.nSteps > w.stepBudget) { w.ov = OV_STEPS; return false; }
+        M5STAT(w, 0);
         Frame& F = fr[d];
         uint iA = (uint)d;
         T& trA = w.stack[d];
@@ -1125,7 +1152,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
             if (iA >= nA && F.tR2 == 0) { d--; continue; }
             if (iA >= nA) {
                 M5T(tf);
-                w.fin.copyFrom(trA);
+                M5CPY(w, 2, w.fin, trA);
                 bool okf = finalizeTranscript(P, gv, w, F.Score, F.tR2, F.tG2, w.fin, R, WA);
                 M5ADD(w, 5, tf);
                 if (!okf) return false;
@@ -1134,7 +1161,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
             // include this align
             int dScore = 0;
             T& trAi = w.stack[d + 1];
-            { M5T(tcp); trAi.copyFrom(trA); M5ADD(w, 6, tcp); }
+            { M5T(tcp); M5CPY(w, 0, trAi, trA); M5ADD(w, 6, tcp); }
             if (trA.nExons > 0) {
                 bool ovEx = false;
                 M5T(tsa);
@@ -1169,7 +1196,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
             F.phase = 2;
             if (WA[iA][WA_Anchor] != 2 || trA.nAnchor > 0) {
                 T& next = w.stack[d + 1];
-                { M5T(tcp); next.copyFrom(trA); M5ADD(w, 6, tcp); }
+                { M5T(tcp); M5CPY(w, 1, next, trA); M5ADD(w, 6, tcp); }
                 Frame& N = fr[d + 1];
                 N.Score = F.Score; N.tR2 = F.tR2; N.tG2 = F.tG2; N.phase = 0;
                 d++;
@@ -1448,8 +1475,9 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
             trA.maxScore = 0;
             if (w.trNtotal + P.alignTranscriptsPerWindowNmax >= P.alignTranscriptsPerReadNmax) break;   // STAR: warning, stop
             for (int k = 0; k <= C::NWTR; k++) w.slotP[k] = k;
-            w.slot[0].copyFrom(trA);
+            M5CPY(w, 4, w.slot[0], trA);
             w.nWinTr = 0;
+            M5STAT(w, 1);
             if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2])) return Status::Overflow;
             if (w.nWinTr == 0) continue;
             const T& t0 = w.slot[w.slotP[0]];
@@ -1461,7 +1489,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
                 const T& t = w.slot[w.slotP[k]];
                 if (t.maxScore + P.outFilterMultimapScoreRange >= runBest || (better && k == 0)) {
                     if (w.nKeep >= C::NKEEP) { w.ov = OV_KEEP; return Status::Overflow; }
-                    w.keep[w.nKeep].copyFrom(t);
+                    M5CPY(w, 5, w.keep[w.nKeep], t);
                     w.keep[w.nKeep].Chr = t0.Chr; w.keep[w.nKeep].Str = t0.Str; w.keep[w.nKeep].roStr = t0.roStr;   // multMapSelect copies [0]'s
                     w.keepWin[w.nKeep] = (int)iW1;
                     w.nKeep++;
@@ -1474,7 +1502,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
                 for (int k = 0; k < w.nKeep; k++) {
                     if (w.keep[k].maxScore + P.outFilterMultimapScoreRange >= w.trBestScore) {
                         if (k == w.trBestKeep) w.trBestKeep = j;
-                        if (j != k) { w.keep[j].copyFrom(w.keep[k]); w.keepWin[j] = w.keepWin[k]; }
+                        if (j != k) { M5CPY(w, 6, w.keep[j], w.keep[k]); w.keepWin[j] = w.keepWin[k]; }
                         j++;
                     }
                 }
@@ -1497,7 +1525,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
         w.maxScore = w.trBestScore;
         for (int k = 0; k < w.nKeep; k++) {
             if (w.keep[k].maxScore + P.outFilterMultimapScoreRange >= w.maxScore) {
-                if (k != (int)w.nTr) { w.keep[w.nTr].copyFrom(w.keep[k]); }
+                if (k != (int)w.nTr) { M5CPY(w, 7, w.keep[w.nTr], w.keep[k]); }
                 if (k == w.trBestKeep) iBest = (int)w.nTr;
                 w.nTr++;
             }

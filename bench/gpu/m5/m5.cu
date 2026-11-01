@@ -46,28 +46,70 @@ typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20
                                                                                             // alignWindowsPerReadNmax, MAX_N_EXONS, alignTranscriptsPerWindowNmax)
 // ---------------------------------------------------------------------------------------------------------------------
 __device__ unsigned long long g_clk[8], g_scan;
+#ifdef M5_COPYSTATS
+__device__ unsigned long long g_cp[32];   // [0..7] copies by kind, [8..15] bytes, [16..23] cycles, [24..27] stN
+template <class C> __device__ void flushCopyStats(Work<C>& w) {
+    for (int k = 0; k < 8; k++) {
+        atomicAdd(&g_cp[k], w.cpN[k]); atomicAdd(&g_cp[8 + k], w.cpB[k]); atomicAdd(&g_cp[16 + k], (unsigned long long)w.cpClk[k]);
+        w.cpN[k] = 0; w.cpB[k] = 0; w.cpClk[k] = 0;
+    }
+    for (int k = 0; k < 4; k++) { atomicAdd(&g_cp[24 + k], w.stN[k]); w.stN[k] = 0; }
+}
+template <class C> __device__ void zeroCopyStats(Work<C>& w) {
+    for (int k = 0; k < 8; k++) { w.cpN[k] = 0; w.cpB[k] = 0; w.cpClk[k] = 0; }
+    for (int k = 0; k < 4; k++) w.stN[k] = 0;
+}
+#endif
+// per-read transcript copy statistics of a lane (M5_COPYSTATS), relative to the stitching cycles clk[2]
+static void printCopyStats(const char* name, unsigned long long n, const unsigned long long* clk) {
+#ifdef M5_COPYSTATS
+    unsigned long long cp[32]; CK(cudaMemcpyFromSymbol(cp, g_cp, sizeof cp));
+    const char* kn[8] = {"include", "exclude", "finScratch", "record", "slotInit", "keep", "keepDrop", "select"};
+    double tn = 0, tb = 0, tc = 0;
+    fprintf(stderr, "  lane %s copies per read:", name);
+    for (int k = 0; k < 8; k++) { fprintf(stderr, " %s %.3f (%.0f B)", kn[k], (double)cp[k] / n, (double)cp[8 + k] / n); tn += cp[k]; tb += cp[8 + k]; tc += cp[16 + k]; }
+    fprintf(stderr, "\n  lane %s copies total %.3f per read, %.0f B per read, %.1f B per copy; steps %.2f per read, windows stitched %.3f per read\n",
+            name, tn / n, tb / n, tb / (tn > 0 ? tn : 1), (double)cp[24] / n, (double)cp[25] / n);
+    if (clk[2] > 0) {
+        fprintf(stderr, "  lane %s copy cycles: %.1f%% of stitching cycles (", name, 100.0 * tc / clk[2]);
+        for (int k = 0; k < 8; k++) fprintf(stderr, "%s%s %.1f%%", k ? ", " : "", kn[k], 100.0 * cp[16 + k] / clk[2]);
+        fprintf(stderr, ")\n");
+    }
+#else
+    (void)name; (void)n; (void)clk;
+#endif
+}
+static void resetCopyStats() {
+#ifdef M5_COPYSTATS
+    unsigned long long z[32] = {0}; CK(cudaMemcpyToSymbol(g_cp, z, sizeof z));
+#endif
+}
 template <class C>
 __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
-                          u64 tid, u64 nt, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap);
+                          u64 tid, u64 nt, u64 budget, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap);
 // one lane: reads idx[k] (or k), work either per thread in global memory or in local memory (LOCAL)
 template <class C, bool LOCAL>
-__global__ void k_lane(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
+__global__ void k_lane(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n, u64 budget,
                        Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap) {
     u64 tid = blockIdx.x * (u64)blockDim.x + threadIdx.x, nt = (u64)gridDim.x * blockDim.x;
     if (tid >= n) return;
     if constexpr (LOCAL) {
         Work<C> wl_; ReadBuf<C::LREAD> bl_;
-        lane_loop<C>(P, g, rb, roff, rlen, idx, n, tid, nt, &wl_, &bl_, out, outLen, status, why, unmap);
+        lane_loop<C>(P, g, rb, roff, rlen, idx, n, tid, nt, budget, &wl_, &bl_, out, outLen, status, why, unmap);
     } else {
-        lane_loop<C>(P, g, rb, roff, rlen, idx, n, tid, nt, &work[tid], &rbuf[tid], out, outLen, status, why, unmap);
+        lane_loop<C>(P, g, rb, roff, rlen, idx, n, tid, nt, budget, &work[tid], &rbuf[tid], out, outLen, status, why, unmap);
     }
 }
 template <class C>
 __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
-                          u64 tid, u64 nt, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap) {
+                          u64 tid, u64 nt, u64 budget, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap) {
     wp->wbEpoch = 0;
+    wp->stepBudget = budget;   // (local Work is uninitialised: set it, as the host lane does)
     for (int c = 0; c < 8; c++) wp->clk[c] = 0;
     wp->nScan = 0;
+#ifdef M5_COPYSTATS
+    zeroCopyStats(*wp);
+#endif
     for (u64 k = tid; k < n; k += nt) {
         u64 i = idx ? idx[k] : k;
         Blob bl{out + k * C::NBLOB, 0, C::NBLOB, false};
@@ -76,6 +118,9 @@ __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, 
     }
     for (int c = 0; c < 8; c++) atomicAdd(&g_clk[c], (unsigned long long)wp->clk[c]);
     atomicAdd(&g_scan, (unsigned long long)wp->nScan);
+#ifdef M5_COPYSTATS
+    flushCopyStats(*wp);
+#endif
 }
 
 struct LaneOut { std::vector<uint8_t> out, status, why; std::vector<uint16_t> len; std::vector<int8_t> unmap; double ms = 0; std::vector<double> runs; double phaseMs[3] = {0, 0, 0}; };
@@ -84,7 +129,7 @@ static double medianv(std::vector<double> v) { std::sort(v.begin(), v.end()); re
 
 template <class C>
 static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, const u64* dRoff, const uint16_t* dRlen, const uint32_t* dIdx,
-                       u64 n, int blocks, int nthr, int reps, bool local, cudaEvent_t e0, cudaEvent_t e1, const char* name) {
+                       u64 n, int blocks, int nthr, int reps, bool local, u64 budget, cudaEvent_t e0, cudaEvent_t e1, const char* name) {
     LaneOut L;
     u64 nt = (u64)blocks * nthr;
     if (nt > n) { nt = n; blocks = (int)((n + nthr - 1) / nthr); nt = (u64)blocks * nthr; }
@@ -99,11 +144,12 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
     unsigned long long clk[8] = {0};
     for (int r = 0; r < reps + 1; r++) {
         unsigned long long z[8] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
+        resetCopyStats();
         cudaEventRecord(e0);
         if constexpr (sizeof(Work<C>) < 200000) {
-            if (local) k_lane<C, true><<<blocks, nthr>>>(P, D, dRb, dRoff, dRlen, dIdx, n, dWork, dRbuf, dOut, dLen, dSt, dWhy, dUn);
+            if (local) k_lane<C, true><<<blocks, nthr>>>(P, D, dRb, dRoff, dRlen, dIdx, n, budget, dWork, dRbuf, dOut, dLen, dSt, dWhy, dUn);
         }
-        if (!local)       k_lane<C, false><<<blocks, nthr>>>(P, D, dRb, dRoff, dRlen, dIdx, n, dWork, dRbuf, dOut, dLen, dSt, dWhy, dUn);
+        if (!local)       k_lane<C, false><<<blocks, nthr>>>(P, D, dRb, dRoff, dRlen, dIdx, n, budget, dWork, dRbuf, dOut, dLen, dSt, dWhy, dUn);
         cudaEventRecord(e1); CK(cudaEventSynchronize(e1)); CK(cudaGetLastError());
         float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) L.runs.push_back(m);
         fprintf(stderr, "  lane %s run %d: %.1f ms\n", name, r, m);
@@ -113,6 +159,9 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
     { double t = (double)clk[0] + clk[1] + clk[2] + clk[3]; if (t > 0)
         fprintf(stderr, "  lane %s thread cycles: seeds %.1f%%, windows %.1f%%, stitching %.1f%%, select+encode %.1f%%\n", name,
                 100 * clk[0] / t, 100 * clk[1] / t, 100 * clk[2] / t, 100 * clk[3] / t); }
+    if (clk[2] > 0) fprintf(stderr, "  lane %s inside stitching: stitchAlignToTranscript %.1f%%, finalization %.1f%% (of which recording %.1f%%), copies %.1f%%\n",
+                            name, 100.0 * clk[4] / clk[2], 100.0 * clk[5] / clk[2], 100.0 * clk[7] / clk[2], 100.0 * clk[6] / clk[2]);
+    printCopyStats(name, n, clk);
     L.ms = medianv(L.runs);
     L.out.resize(n * (u64)C::NBLOB); L.status.resize(n); L.why.resize(n); L.len.resize(n); L.unmap.resize(n);
     CK(cudaMemcpy(L.out.data(), dOut, L.out.size(), cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.len.data(), dLen, n * 2, cudaMemcpyDeviceToHost));
@@ -167,6 +216,9 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     status[k] = (uint8_t)s; why[o] = (uint8_t)w.ov; outLen[o] = (uint16_t)bl.n; unmap[o] = (int8_t)w.unmapType;
     for (int c = 0; c < 8; c++) { atomicAdd(&g_clk[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
     atomicAdd(&g_scan, (unsigned long long)nEnt[k]);
+#ifdef M5_COPYSTATS
+    flushCopyStats(w);
+#endif
 }
 // cost key of each read after phase 1, for --bin: windows, then SA entries to assign (reads that need no phase 3 first)
 template <class C>
@@ -201,6 +253,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     unsigned long long clk[8] = {0}, scan = 0; double phMs[3] = {0, 0, 0};
     for (int r = 0; r < reps + 1; r++) {
         unsigned long long z[8] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
+        resetCopyStats();
         double ph[3] = {0, 0, 0};
         cudaEventRecord(e0);
         for (u64 b0 = 0; b0 < n; b0 += NB) {
@@ -237,6 +290,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
                 name, 100 * clk[0] / t, 100 * clk[1] / t, 100 * clk[2] / t, 100 * clk[3] / t, (double)scan / n); }
     if (clk[2] > 0) fprintf(stderr, "  lane %s inside stitching: stitchAlignToTranscript %.1f%%, finalization %.1f%% (of which recording %.1f%%), copies %.1f%%\n",
                             name, 100.0 * clk[4] / clk[2], 100.0 * clk[5] / clk[2], 100.0 * clk[7] / clk[2], 100.0 * clk[6] / clk[2]);
+    printCopyStats(name, n, clk);
     L.ms = medianv(L.runs);
     L.phaseMs[0] = phMs[0]; L.phaseMs[1] = phMs[1]; L.phaseMs[2] = phMs[2];
     L.out.resize(n * (u64)C::NBLOB); L.status.resize(n); L.why.resize(n); L.len.resize(n); L.unmap.resize(n);
@@ -507,7 +561,7 @@ int main(int argc, char** argv) {
     char* dRb = toDev(T.rb); u64* dRoff = toDev(T.roff); uint16_t* dRlen = toDev(T.rlen);
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
     CK(cudaDeviceSetLimit(cudaLimitStackSize, localWork ? (int)(sizeof(Work<LaneA>) + 4096) : 16 * 1024));
-    LaneOut A = mono ? runLane<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, prop.multiProcessorCount * bps, nthr, reps, localWork, e0, e1, "A")
+    LaneOut A = mono ? runLane<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, prop.multiProcessorCount * bps, nthr, reps, localWork, (u64)budgetA, e0, e1, "A")
                      : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A");
     std::vector<uint32_t> idxM, idxB;
     for (u64 i = 0; i < n; i++) if (A.status[i] != (uint8_t)Status::Ok) idxM.push_back((uint32_t)i);
@@ -522,7 +576,7 @@ int main(int argc, char** argv) {
     LaneOut B;
     if (!idxB.empty()) {
         uint32_t* dIdx = toDev(idxB);
-        B = mono ? runLane<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), prop.multiProcessorCount * bpsB, nthrB, reps, false, e0, e1, "B")
+        B = mono ? runLane<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), prop.multiProcessorCount * bpsB, nthrB, reps, false, (u64)budgetB, e0, e1, "B")
                  : runStaged<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), (u64)nbB, (u64)budgetB, reps, e0, e1, "B");
         CK(cudaFree(dIdx));
     }
