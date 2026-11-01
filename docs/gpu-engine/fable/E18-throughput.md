@@ -10,43 +10,54 @@ configuration E19 is making the default. E18 changed no engine code: new bench s
 
 ## 0. Answer in brief
 
-- **The curve (pbmc1k_v3, one H100 NVL, 28 cores, `SLOTS=1`, M read pairs/s):**
+- **The curve (pbmc1k_v3, one H100 NVL, 28 cores, M read pairs/s; batch at k ≤ 4 unless "stream", steady state for streams):**
 
   | samples in flight k | 1 | 2 | 3 | 4 | 6 | 8 | limit |
   |---|---|---|---|---|---|---|---|
-  | 44a6e9fa (E15) | 0.44–0.49 | 0.80 | 1.00 | 1.09–1.12 batch, **1.16** stream | **1.27** stream | – | 1.62 |
-  | merged head (E16) | 0.52 (T = 7), 0.57 (T = 9) | – | **1.10** | – | **1.40** stream (1.33 over the span) | **1.57** stream (1.44) | 1.84 |
+  | 44a6e9fa (E15), `SLOTS=1` | 0.44–0.49 | 0.80 | 1.00 | 1.09–1.12, **1.16** stream | **1.27** stream | – | 1.62 |
+  | E16 head, `SLOTS=1` | 0.52 (T = 7), 0.57 (T = 9) | – | **1.10** | – | **1.40** stream | **1.57** stream | 1.84 |
+  | E17 head, `SLOTS=1` | 0.52–0.54 (T = 7), 0.61 (T = 14) | 0.97 | **1.10** | 1.16 | **1.44** stream | – | ~1.84 |
+  | **E17 head, `SLOTS=2`** | – | 0.99 | 1.21 | 1.36 | **1.86** stream | **2.17** stream | ~2.8 |
 
-  **The node (2 GPUs, 54 cores): @@ M pairs/s** at @@, against 1.38–1.44 M pairs/s for the CPU engine on the same node (54–56
-  cores / 39 core-s per M).
-- **The bottleneck is the device slot, not the cores, the host memory bandwidth or the device memory (§5a).** With `SLOTS=1`
-  each sample holds the GPU 41.1 s on 44a6e9fa and 36.1 s on the merged head (T = 7), against 11.6 s of kernels. The limit per GPU
-  is 66.6 M pairs / held time: 1.62 and 1.84 M pairs/s. The cores are mostly idle (8.0 core-s per M pairs per run, flat in k:
-  ~10 of 28 cores at k = 4).
-- **Per phase, at k = 1 (§4):** of the 36.1 s held on the merged head, ~7.9 s is host work with the device idle that could run
+  **The node (2 GPUs, 54 cores): @@E**, against 1.38–1.44 M pairs/s for the CPU engine on the same node (54–56 cores / 39 core-s
+  per M).
+- **With one slot the bottleneck is the device slot, not the cores, the host memory bandwidth or the device memory (§5a).** Each
+  sample holds the GPU 41.1 s on 44a6e9fa and 36.1 s on the E16 head (T = 7), against 11.6 s of kernels. The limit per GPU is
+  66.6 M pairs / held time: 1.62 and 1.84 M pairs/s. The cores are mostly idle (8.0 core-s per M pairs per run, flat in k: 10–17
+  of 28 cores).
+- **Per phase, at k = 1 (§4):** of the 36.1 s held on the E16 head, ~7.9 s is host work with the device idle that could run
   outside the slot without changing any device work:
   - the prefill's host lane wait, record assembly and `readRecord` between lane B and `e2e.build` (5.7 s);
   - since E16's `resetbg`, the pileup's slot is held 2.2 s past `pileupRun` through the accumulator puts and the host pass (the log
     reports 4.1 s held; the sampler sees 6.3 s).
-  E16 already took 5 s off the hold (pileup digest and uploads 9.0 → 6.3 s, zero-copy hand-off pass 3.9 → 2.5 s). With the slot held
-  only around device work the limit is ~2.4 M pairs/s per GPU; with the index, the non-host index and a context resident (a
-  persistent per-GPU process) ~3.0.
+  E16 already took 5 s off the hold against 44a6e9fa's 41.1 s (pileup 9.0 → 6.3 s, zero-copy hand-off pass 3.9 → 2.5 s). With the
+  slot held only around device work the one-slot limit is ~2.4 M pairs/s per GPU; with the index, the non-host index and a context
+  resident (a persistent per-GPU process) ~3.0.
 - **Below the limit the samples form a convoy (§5b).** At k = 4 the slot is idle 31 % of the steady window although every run
-  waits 70–100 s for it: the samples leave their device phases together, run their host-only tails (53 s) and starts (31 s)
-  together, and nobody needs the device meanwhile. A FIFO queue model built from the k = 1 profile alone reproduces every
-  measured point within 2–5 % (the measured waits per phase match the FIFO model, not the random-order one) and says a FIFO slot needs k ≈ 10–12 per GPU to come within 6 %
-  of its limit. **Serving later phases first would reach the limit at k = 5** (model): a change to `lockDevice` worth as much as
-  E16.
-- **`SLOTS=2` with the `m43` memory split gains 0–8 % (§5c):** two prefills time-slice the device (36–43 s each), and the split
-  itself slows a prefill alone from 18.2 to 27.4 s.
-- **What bounds k is host memory (§5d):** ~35 GB per sample in flight on 44a6e9fa and ~43 GB on the merged head, the largest piece
-  being each process's private 16.8 GB copy of the genome. Device memory does not bound k with `SLOTS=1` (a waiting sample keeps ≤ 0.7 GB of context).
-- **Identity holds at every k (§3):** @@ runs compared with their sample's k = 1 run: every count matrix, Solo file and
-  `CellReads.stats` identical; only E11's run-dependent files differ. The mapDistinct dumps of all @@ points are identical
-  (sha256 77d7bc20008166af).
-- **Recommendation (§6):** @@
-- **For E17 (§7):** no budget is needed at `SLOTS=1`; for 2 slots, A100 and big genomes the budget must cover a 26.4 GB base before
-  the lanes, lane B and the arena that today take free − 3 GB, a fixed 24.9 GB non-host index, and ~0.7 GB per waiting sample.
+  waits 70–100 s for it: the samples leave their device phases together, run their host-only tails and starts together, and nobody
+  needs the device meanwhile. A FIFO queue model built from the k = 1 profile alone reproduces every one-slot point within 1–5 %
+  (k = 8 on the E16 head: model 1.582, measured 1.567) and says a FIFO slot needs k ≈ 10–12 per GPU to come within 6 % of its
+  limit. Serving later phases first would reach the limit at k = 5 (model).
+- **Two slots pay since E17 (§5c): +29 % at k = 6 and +38 % at k = 8 in steady state, 2.17 M pairs/s per GPU**, past the one-slot
+  limit, with nothing set but `SINGLET_ENGINE_GPU_SLOTS=2` (E17's budget gives each process 45.5 GB). Two slots let a second sample
+  use the device during the first's host work under its slot and the convoy's gaps. With E15's hand-made split (`m43`) two slots
+  gained 0–8 %, because the split slowed a prefill alone from 18.2 to 27.4 s. Three slots add nothing over two at k = 3.
+- **What bounds k is host memory (§5d):** ~35 GB per pbmc1k_v3 sample in flight on 44a6e9fa and 41–43 GB since E16 (~0.7 GB per M
+  read pairs; nuclei2k_v2: 83 GB), the largest piece being each process's private 16.8 GB copy of the genome. A half node (370 GB)
+  holds k = 8. Device memory does not bound k: a waiting sample keeps ≤ 0.7 GB of context, and E17's lanes stay within the free
+  memory.
+- **Identity holds at every k and slot count (§3):** @@N runs compared with their sample's k = 1 run in the same job: every count
+  matrix, Solo file, `Log.final.out` statistic, `SJ.out.tab` and `CellReads.stats` identical; only E11's run-dependent files differ.
+  The mapDistinct dumps of all @@P points are identical (sha256 77d7bc20008166af). One pipeline bug surfaced, independent of k:
+  nuclei2k_v2's `nonhost_reads.fq` holds a different record set in each run, because the writer indexes the screen's subsample
+  against the whole unmapped file, whose order E16 made run-dependent (§3).
+- **Recommendation (§6): `SINGLET_ENGINE_GPU_SLOTS=2` (E17's default budget, no other memory knobs), 8 samples in flight per GPU
+  where host memory allows (16 per node; ~0.7 GB per M read pairs per sample), `--threads 7`, a pool of workers that starts the
+  next sample when one ends, @@PIN.** Expected: @@E, the campaign's ~20.6 T read pairs in ~@@D node-days against ~170 on the CPU
+  engine.
+- **E17's budget (§7)** provides what E18 found a second slot needs: one budget for the chunk, lanes and arena, sized per slot and
+  capped by the free memory. What it does not cover: the non-host screen's fixed 25–29 GB (outside the budget, so 4 slots would not
+  fit) and the host memory per sample, which is what bounds k.
 
 ## 1. Setup
 
@@ -72,9 +83,9 @@ configuration E19 is making the default. E18 changed no engine code: new bench s
   - device memory and utilisation from `nvidia-smi` (device-wide and per process);
   - lock waits and holds from the engine's own log lines (`waited … s for it, held it … s` and the pileup's, Solo's and non-host's
     equivalents) and, independently, from `/proc/locks` (the holder and waiters of each lock file at every tick).
-- **Nodes:** g050 (jobs A, B), g051 (job C) and @@ (job D), Xeon Gold 6238R (2 × 28 cores, 2 NUMA nodes), 750 GB, 2 H100 NVL 94 GB.
-  Slurm gives 54 usable cores per node (`CPUEfctv`). Jobs A, B and C use one GPU and 28 cores (half a node; other jobs may hold the
-  other half), job D the whole node.
+- **Nodes:** g050 (jobs A, B), g051 (jobs C, D, F) and @@ (job E), Xeon Gold 6238R (2 × 28 cores, 2 NUMA nodes), 750 GB, 2 H100 NVL 94 GB.
+  Slurm gives 54 usable cores per node (`CPUEfctv`). Jobs A, B, C, D and F use one GPU and 28 cores (half a node; other jobs held the
+  other half), job E the whole node.
 
 ## 2. The curve, per point
 
@@ -157,6 +168,23 @@ are in GiB (the cgroup's `memory.current` peak, `nvidia-smi`).
 - **With E17, two slots pay (§5c): +10 % at k = 3 and +17 % at k = 4** against `SLOTS=1` in the same job, using only
   `SINGLET_ENGINE_GPU_SLOTS=2`.
 
+**E17 head, steady state with one and two slots, job 797491 (F), node g051** (held %: each slot's lock in the steady window):
+
+| point | form | k | T | slots | runs | **pairs/s (M)** span / steady | wall s min / mean / max | core-s/M runs / cgroup | lock wait / held s | held % | host peak GB | device peak GB |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| k1t7s1 | – | 1 | 7 | 1 | 1 | **0.537** | 123.9 | 7.69 / 8.12 | 1.6 / 35.8 | 28 | 52 | 89.3 |
+| k6t7s1r2 | stream | 6 | 7 | 1 | 12 | **1.355 / 1.441** | 275.3 / 289.5 / 314.4 | 7.78 / 8.16 | 208.7 / 34.5 | 72 | 267 | 90.1 |
+| k6t7s2r2 | stream | 6 | 7 | 2 | 12 | **1.686 / 1.862** | 201.0 / 231.9 / 258.1 | 8.03 / 8.34 | 115.8 / 46.6 | 58 + 47 | 275 | 89.1 |
+| k8t7s2r2 | stream | 8 | 7 | 2 | 16 | **1.847 / 2.167** | 219.2 / 279.1 / 343.3 | 8.06 / 8.37 | 147.2 / 47.4 | 80 + 68 | 342 | 89.2 |
+
+- **Two slots at k = 6–8 in steady state: 1.86 and 2.17 M pairs/s per GPU, +29 % over one slot at k = 6 (1.441) and +38 % at k = 8
+  (E16 head, one slot: 1.567).** k = 8 with two slots is past the one-slot limit (1.84). Every run identical (§3), no fallback, the
+  device at 89.1–89.2 GB.
+- The cores stay mostly idle: 14.9 cores (k = 6) and 17.1 cores (k = 8) of 28 in the steady window, 8.0–8.1 core-s per M pairs per
+  run (one slot: 7.8).
+- Host memory with two slots is the same per sample: k = 8 peaked at 342 GB of the 370 GB cgroup (anon 283 + shmem 48 = 330).
+- The other GPU of g051 ran E19's gate (797474) until 13:52 and an s15 job (797746) after it.
+
 ## 3. Identity
 
 Every run of a point with k > 1 is compared with the k = 1 run of the same sample at the same T in the same job (the reference; job C
@@ -184,7 +212,7 @@ The run-dependent files, as in E11's gate:
 | 797443 B (44a6e9fa) | 24 | 63 / 3 / 3 | as above | identical | identical |
 | 797460 C (merged, E16) | 40 (4 samples) | 60 / 3 / 6 (pbmc5p_v1: 58 / 3 / 6) | the same 3 + `nonhost_reads.fq`, `star_Unmapped.out.mate1/2` (same records, another order) | identical; the 3 read files hold the same sorted records, except nuclei2k_v2's `nonhost_reads.fq` (below) | identical |
 | 797485 D (E17), SLOTS = 1, 2, 3 | 21 | 60 / 3 / 6; with 3 slots 60 / 2 / 7 | as job C; with 3 slots also `summary.json`'s `memory_tier` (Large → Medium: the 30.4 GB budget lowers the process's VmPeak) | identical; the 3 read files hold the same sorted records | identical (10 points) |
-| 797491 F (E17), SLOTS = 1, 2 | @@ | @@ | @@ | @@ | @@ |
+| 797491 F (E17), SLOTS = 1, 2 | 40 | 60 / 3 / 6 | as job C | identical; the 3 read files hold the same sorted records | identical (4 points) |
 | @@ E (E17, the node) | @@ | @@ | @@ | @@ | @@ |
 
 On 44a6e9fa even the three read-order files came out byte-identical at every k; with E16 they are written by a background thread
@@ -317,7 +345,7 @@ Three consequences:
 - **Batch starts cost 5–10 %** against the stream form at the same k (k = 4: 1.093–1.120 batch, 1.159 stream): the ramp (31 s
   before the first prefill) and the tail (53 s after the last non-host) are paid once per batch.
 
-### 5c. Two slots per GPU: no gain with a hand-made split on 44a6e9fa, +10–17 % with E17's budget
+### 5c. Two slots per GPU: no gain with a hand-made split on 44a6e9fa, +10–38 % with E17's budget
 
 `SINGLET_ENGINE_GPU_SLOTS=2` lets two samples hold the device at once. Each must then stay within about half the device. On 44a6e9fa
 that took the hand-made split `m43` (§7); on the E17 head the budget does it alone, (device memory − 2 GB) / slots: 45.5 GB for two
@@ -342,7 +370,23 @@ slots, 30.4 GB for three (job 797485). All points below are batch, one GPU, 28 c
 - **Three slots fit but add nothing over two at k = 3**: lean mode at 30.4 GB (13 chunks of 2.4 M) and three-way time-slicing.
 - **Device memory:** 44.8–45.1 GB per process with two slots and 29.7–30.8 GB with three (the non-host screen's 28.5 GB outside the
   budget), 86.3–87.4 GB for the device. No sample failed or fell back; every output identical to the k = 1 run (§3).
-- At larger k the comparison is in steady state on one GPU (job F, §2) and on the node (job E).
+
+**In steady state (stream, T = 7, one GPU, 28 cores; job 797491 and, for one slot at k = 8, the E16 head's job 797460):**
+
+| k | one slot | **two slots** (E17 budget 45.5 GB) | gain | slot-held share of the window, two slots | GPU util | cores |
+|---|---|---|---|---|---|---|
+| 6 | 1.441 (E17), 1.398 (E16) | **1.862** | +29 % | 58 % + 47 % | 46 % (one slot: 35 %) | 14.9 (one slot: 10.8) |
+| 8 | 1.567 (E16) | **2.167** | +38 % | 80 % + 68 % | 59 % (one slot: 42 %) | 17.1 (one slot: 11.4) |
+
+- **Two slots pass the one-slot limit** (1.84 M pairs/s). A sample holds a slot 47.4 s at k = 8 (34.5 s with one slot), because
+  its device phases share the GPU with the other slot's, but two samples hold slots at once: 1.48 slot-seconds per second in the
+  window. With both slots always held the limit would be 2 × 66.6 M / 47.4 s ≈ 2.8 M pairs/s per GPU.
+- The waits shrink where the convoy hurt most: at k = 8 a run waits 42 / 52 / 9 / 8 s for its prefill / Solo / pileup /
+  non-host slot, against 46 / 59 / 23 / 23 s with one slot at k = 6 (job F).
+- The device does more work per second (utilisation 59 % against 42 %), with the same kernels: the gain is the overlap of one
+  sample's host work under its slot and its transfers with the other's kernels, and the convoy's gaps filled by a second sample.
+- The device memory stays within the budget at every k: 89.1–89.2 GB for the device, waiting samples' contexts included (with the
+  default budget the lanes also take no more than the free memory less 2 GB).
 
 ### 5d. What bounds k: host memory
 
@@ -373,37 +417,43 @@ slots, 30.4 GB for three (job 797485). All points below are batch, one GPU, 28 c
 
 ## 6. Recommendation for the campaign
 
-For the binary of the merged head (or later), level 5 + ingest, on H100 NVL nodes:
+For the binary of the E17 head (503c07f7) or later, level 5 + ingest, on H100 NVL nodes:
 
 | knob | value | why |
 |---|---|---|
-| `SINGLET_ENGINE_GPU_SLOTS` | **1** (the default) | a second slot gains 0–8 % and needs a hand-tuned memory split (§5c) |
-| samples in flight per GPU (k) | **@@** (@@ per node) | a FIFO slot needs many samples to stay busy (§5b); host memory allows ~43 GB per sample on the merged head (§5d) |
-| threads per sample (`--threads`, T) | **7** (oversubscribed: k × T ≈ @@ threads on @@ cores) | T only matters through the host work under the slot (the prefill's host lane runs on T − 1 threads); below 7 the hold grows, above it the cores contend at round starts |
-| device per worker | **pinned**: `SINGLET_ENGINE_GPU_DEVICE` = worker mod GPUs | @@ |
-| scheduling | a pool of k workers per GPU, each starting its next sample when its last one ends (the stream form) | batches pay the 31 s ramp and the 53 s tail per batch: −5–10 % |
-| memory knobs (`CHUNK`, `NB*`, `ARENA_GB`) | **none** | with one slot, lane B and the arena may take the whole device |
+| `SINGLET_ENGINE_GPU_SLOTS` | **2** | +29–38 % over one slot at k = 6–8 in steady state (§5c); three slots add nothing over two |
+| device memory (`SINGLET_ENGINE_GPU_MEM_GB`, `CHUNK`, `NB*`, `ARENA_GB`) | **none set**: E17's default, (device memory − 2 GB) / slots = 45.5 GB | the budget sizes the chunk, the lanes and the arena per slot and keeps the lanes within the free memory; `m43` by hand is slower (§5c) |
+| samples in flight per GPU (k) | **8** (16 per node) where host memory allows, else 6–7 | one more sample per GPU is worth ~+8 % per step from k = 6 to 8 (1.86 → 2.17); host memory is ~0.7 GB per M read pairs per sample (pbmc1k_v3: 41–43 GB; §5d), so 16 samples of ~60 M pairs fill a 735 GB node; with larger samples keep the sum of their read pairs under ~1,000 M per node |
+| threads per sample (`--threads`, T) | **7** (k × T = 56 threads on 28 cores per GPU) | T only matters through the host work under the slot (the prefill's host lane runs on T − 1 threads); the cores stay under 2/3 busy at k = 8 (17 of 28) |
+| device per worker | @@PIN | @@PINWHY |
+| scheduling | a pool of k workers per GPU, each starting its next sample when its last one ends (the stream form) | batches pay the ramp and the tail per batch: −5–10 % at k = 4, −8–15 % at k = 6–8 (span vs steady) |
 
-**Expected:** @@ M pairs/s per node for 3' samples like pbmc1k_v3, i.e. the campaign's ~20.6 T read pairs in ~@@ node-days, against
-~170 node-days on the CPU engine (1.4 M pairs/s per node).
+**Expected:** ~2.2 M pairs/s per GPU in steady state for 3' samples like pbmc1k_v3 (measured 2.17 on one GPU), @@E. The campaign's
+~20.6 T read pairs then take ~@@D node-days, against ~170 node-days on the CPU engine (1.4 M pairs/s per node). Samples whose slot
+holds are longer per read pair (the mixed set's neuron1k_v3 pileup, nuclei2k_v2's prefill: 0.59 s per M pairs against 0.54, §2) run
+~10 % slower.
 
 **What would change the recommendation:**
-- a priority in `lockDevice` (§5b): the same rate at k = 5 per GPU, half the host memory;
-- holding the slot only around device work (§4): ~2.4 M pairs/s per GPU, so 4.5–4.8 per node;
-- a persistent per-GPU process (resident indexes and context, one genome copy per node): ~3 M pairs/s per GPU and 2–3x more samples
-  in flight per node.
+- holding the slot only around device work (§4, ~7.9 s per sample on the E16 head): the one-slot limit 1.84 → ~2.4 M pairs/s per
+  GPU, and less host work under a slot for the second slot to hide;
+- a priority in `lockDevice` (§5b): the one-slot limit at k = 5 per GPU in the model, i.e. fewer samples in flight for the same rate;
+- a persistent per-GPU process (resident indexes and context, one genome copy per node): ~3 M pairs/s per GPU with one slot, and
+  2–3x more samples in flight per node by host memory.
 
-## 7. What E17's budget must provide
+## 7. What E17's budget must provide, and what it provides
 
-With `SLOTS=1` (the recommendation) no budget is needed for one H100: one process holds the device at a time, the holder's phases
-end with `cudaDeviceReset`, and a waiting sample keeps at most a ~0.7 GB CUDA context (5.0 GB at most for 5 waiters at k = 6, §5d),
-which lane B and the arena absorb because they size themselves from free memory. A budget becomes necessary for `SLOTS ≥ 2` (two
-device phases at once), for A100-80/40, and for the barnyard genome. Since waiting samples' contexts add up with k, the budget
-should count them (k × ~0.7 GB) rather than assume an empty device.
+E18 measured the device memory per phase before E17 existed (44a6e9fa and the E16 head; the table below). E17 (503c07f7) landed
+during E18, and jobs 797485 (D) and 797491 (F) ran its binary with its default budget.
 
-The numbers it has to work with (pbmc1k_v3, GRCh38, H100 NVL 94 GB; engine memory marks are device-wide, from `cudaMemGetInfo`):
+With one slot no budget is needed on one H100: one process holds the device at a time, the holder's phases end with
+`cudaDeviceReset`, and a waiting sample keeps at most a ~0.7 GB CUDA context (5.0 GB at most for 5 waiters at k = 6, §5d), which
+lane B and the arena absorb because they size themselves from free memory. A budget is necessary for `SLOTS ≥ 2` (two device phases
+at once), which since E17 is the faster configuration (§5c), and for A100-80/40 and big genomes.
 
-| phase | device memory | what sets it | knob today |
+The numbers it had to work with, before E17 (pbmc1k_v3, GRCh38, H100 NVL 94 GB, one slot; engine memory marks are device-wide, from
+`cudaMemGetInfo`):
+
+| phase | device memory | what sets it | knob before E17 |
 |---|---|---|---|
 | prefill before the lanes | **26.4 GB** = index 16.4 + reads/clip 9.5 + context 0.5 | genome size; reads per chunk | `SINGLET_ENGINE_GPU_CHUNK` (reads part only) |
 | lane A Work | 36 KB per read in a batch: 19.1 GB at the default 524,288 | batch | `SINGLET_ENGINE_GPU_NB` |
@@ -416,46 +466,52 @@ The numbers it has to work with (pbmc1k_v3, GRCh38, H100 NVL 94 GB; engine memor
 | pileup | arena **free − 3 GB** (92 GB here); used 26.4 GB (est 27.9) for pbmc1k_v3 | free memory; reads | `SINGLET_GPU_PILEUP_ARENA_GB` (cap; cell partitions K adapt) |
 | non-host | **24.9 GB index, fixed** + ~3.9 GB work = 28.8 GB peak | the index | **none** |
 
-- **What a slot needs:** with `SLOTS = s` each process must stay within (94 − margin) / s. Two slots (44–45 GB each) work with
-  today's knobs, as the split `m43`:
+- **What a slot needs:** with `SLOTS = s` each process must stay within (device − margin) / s. Before E17, two slots (44–45 GB each)
+  took the hand-made split `m43`:
   `SINGLET_ENGINE_GPU_CHUNK=4194304 SINGLET_ENGINE_GPU_NB=274432 SINGLET_ENGINE_GPU_NBM=155648 SINGLET_ENGINE_GPU_NBB=21504 SINGLET_GPU_PILEUP_ARENA_GB=38`.
-  Measured per-process device peaks 43.6–45.2 GB; two processes together 84.7–88.4 GB; identical outputs.
-  - Its cost alone: the prefill holds 27.4 s instead of 18.2 s (k1t14s1m43 vs k1t14s1): the smaller lanes run more batches
-    (lane B 7.5 s instead of 3.0 s), and the chunk of 4 M reads adds rounds.
-- **Three slots do not fit:** (94 − 3) / 3 = 30 GB, but the prefill holds 26.4 GB before its first lane, and the non-host screen
-  needs 28.8 GB with no knob.
-- **What E17 should provide, in order of use for the campaign:**
-  1. One budget variable (`SINGLET_ENGINE_GPU_MEM_GB`, or derived as (device − margin) / slots) that sets the chunk, the three
-     lane batches and the pileup arena together, instead of five variables tuned by hand (`m43` is that by hand for 2 slots).
-  2. Lane B and the pileup arena sized from the budget, not from free memory. Today a second process that starts its prefill while
-     another holds the device sees the other's allocations, so free − 3 GB is a race (harmless only with `SLOTS=1`).
-  3. The non-host index inside the budget: it is a fixed 24.9 GB (with ~4 GB of work) and the floor for any slot. It is also loaded
-     from the host on every sample (3.6 s under the lock, §4).
-  4. The base before the lanes (26.4 GB): the index (16.4 GB) is the floor for GRCh38; reads/clip (9.5 GB) scale with the chunk.
-     A barnyard or a larger genome raises the index part, and the budget must then shrink the lanes, not fail (hgmm1k_v3, E15).
-  5. The measured peak per phase in the log, so that a slot split can be checked from one run.
-- **What E18 says the budget is for:** not for samples in flight on one H100 (`SLOTS=2` gains 0–8 % over `SLOTS=1` at the same k,
-  §5), but for A100-40/80, for big genomes, and for a future design in which phases of two samples overlap on purpose (one
-  sample's transfers under another's kernels), which needs both to fit at once.
+  Measured per-process device peaks 43.6–45.2 GB; two processes together 84.7–88.4 GB; identical outputs. Its cost alone: the
+  prefill held 27.4 s instead of 18.2 s (k1t14s1m43 vs k1t14s1): lane B 7.5 s instead of 3.0 s, and the 4 M-read chunk added rounds.
+- **What E17 had to provide, in order of use for the campaign, and what it does (E18's measurements on the E17 head):**
+  1. **One budget for the chunk, the three lane batches and the pileup arena,** instead of five variables tuned by hand. *Provided:*
+     `SINGLET_ENGINE_GPU_MEM_GB`, by default (device − 2 GB) / slots = 45.5 GB for two slots and 30.4 GB for three. Per process
+     44.8–45.1 GB with two slots and 29.7–30.8 GB with three, the device at 86.3–89.2 GB at every k up to 8, every output identical.
+  2. **Lane B and the arena sized from the budget, not from the free memory** (a second process starting its prefill sees the
+     other's allocations, so "free − 3 GB" was a race). *Provided,* and with the default budget the lanes also take no more than the
+     free memory less 2 GB, which absorbs the waiting samples' contexts (k × ~0.7 GB). An explicit `SINGLET_ENGINE_GPU_MEM_GB` has no
+     such cap (the tally counts the process's own allocations), so with s slots and w waiting samples it should stay under
+     (device − 2 GB − w × 0.7 GB) / s.
+  3. **The non-host index inside the budget.** *Not provided:* it stays a fixed 24.9 GB (with ~4 GB of work) outside the budget,
+     loaded from the host for every sample (3.6 s under the slot, §4). It fits up to three slots (30.4 GB); four slots (22.8 GB each)
+     would not.
+  4. **The base before the lanes** (26.4 GB: the 16.4 GB index, the reads and clip): *provided* by E17's lean mode (the index after
+     the dedup, one chunk's sequences on the device), which three slots use; a barnyard runs at level 5 (E17).
+  5. **The measured peak per phase in the log.** *Provided* for the prefill (the tally's peak and where) and the pileup (arena, budget,
+     peak); the hand-off pass, Solo and the non-host screen still log no peak.
+- **What E18 says the budget is for:** samples in flight on one H100 (`SLOTS=2`, +29–38 % at k = 6–8), A100-40/80 and big genomes.
+  The next step it enables is phases of two samples overlapping on purpose (one sample's transfers under another's kernels).
+- **What bounds k is not on the device:** host memory (§5d) — ~0.7 GB per M read pairs per sample, 16.8 GB of it a private genome
+  copy per process.
 
 ## 8. Against II.1's targets and the CPU engine
 
 | | target / reference | E18 measured |
 |---|---|---|
-| end to end per H100 (brief, II.1 §2.1.4) | ≥ 10 M pairs/s; P1 kill < 5 M/s | **1.40** (k = 6) – **1.57** (k = 8) M pairs/s per GPU in steady state on the merged head; the slot's limit 1.84 |
-| node (II.1 §2.1.4) | ≥ 20 M pairs/s | **@@ M pairs/s** (2 GPUs, 54 cores) |
+| end to end per H100 (brief, II.1 §2.1.4) | ≥ 10 M pairs/s; P1 kill < 5 M/s | **2.17 M pairs/s per GPU** in steady state (E17 head, two slots, k = 8); one slot: 1.44–1.57 at k = 6–8, limit 1.84 |
+| node (II.1 §2.1.4) | ≥ 20 M pairs/s | **@@E** |
 | node, projected in Part I if cores bind | GPU path 2.65–3.07 M pairs/s | cores do not bind: the GPU slot does |
-| II.13's balance point | ~3 samples in flight per GPU at 8.5 core-s/M and ~25 GPU-s per sample | the slot is held 36–41 s per sample (not 25), and at k = 3–6 a FIFO slot sits idle 30–40 % of the time in a convoy: k = 3 gives 1.0–1.1 M pairs/s, 60 % of the limit |
-| host core-s per M pairs | ≤ 12.7 (cloud break-even, 54-core node); not worse than the CPU path | **7.7–8.5** per run (`time`), 8.2–9.7 for the whole cgroup with the sampler, flat in k |
+| II.13's balance point | ~3 samples in flight per GPU at 8.5 core-s/M and ~25 GPU-s per sample | the slot is held 36–41 s per sample (not 25), and at k = 3–6 a FIFO slot sits idle 30–40 % of the time in a convoy: k = 3 gives 1.0–1.1 M pairs/s, 60 % of the one-slot limit; the balance point is k = 8 with two slots |
+| host core-s per M pairs | ≤ 12.7 (cloud break-even, 54-core node); not worse than the CPU path | **7.7–8.4** per run (`time`), 8.2–9.7 for the whole cgroup with the sampler, flat in k and slots |
 | CPU engine node throughput | 54–56 cores / 36–40 core-s per M ≈ 1.35–1.56 M pairs/s (1.44 at 56 / 39) | GPU node **@@x** that, using @@ of 54 cores |
-| peak device memory per sample (II.1 §2.2) | ≤ 30 GB for two samples per H100 NVL | 90.4 GB (lane B and the arena take free memory); 43.6–45.2 GB under `m43` |
+| peak device memory per sample (II.1 §2.2) | ≤ 30 GB for two samples per H100 NVL | one slot: 89–90 GB (the budget is the device); two slots: 44.8–45.1 GB (E17's 45.5 GB budget); three slots: 29.7–30.8 GB (30.4 GB, lean) |
 
 **Where the remaining distance to 10 M pairs/s per GPU is:** at 66.6 M pairs per sample, 10 M pairs/s means 6.7 s of exclusive device
 time per sample. The kernels alone are 11.6 s (§4), so even a slot held only for kernels gives ≤ 5.7 M pairs/s per GPU at today's
-kernel speed; the slot is held 3.1x the kernel time on the merged head (3.5x on 44a6e9fa). The order of the levers is therefore:
-1. hold the slot only around device work (§4: ~7.9 s on the merged head, → ~2.4 M pairs/s per GPU);
-2. a persistent per-GPU process with the index, the non-host index and a context resident (~6 s more, → ~3 M pairs/s);
-3. a slot order that keeps it busy at small k (§5b), so that the limit is reached with the samples host memory allows;
+kernel speed; one slot is held 3.1x the kernel time on the E16 head (3.5x on 44a6e9fa). Two slots (2.17 M pairs/s at k = 8) already
+recover part of that by overlap. The order of the levers is:
+1. hold the slot only around device work (§4: ~7.9 s on the E16 head; one slot → ~2.4 M pairs/s per GPU, and less host work under a
+   slot for two slots to hide);
+2. a persistent per-GPU process with the index, the non-host index and a context resident (~6 s more, → ~3 M pairs/s with one slot);
+3. a slot order that keeps the device busy at small k (§5b), so that the limit is reached with the samples host memory allows;
 4. then the kernels (the M5 lanes are 8.2 of the 11.6 s; II.11 puts the exact port near its ceiling, so past ~4–5 M pairs/s per GPU
    the gain is in contract 2).
 
@@ -468,8 +524,11 @@ kernel speed; the slot is held 3.1x the kernel time on the merged head (3.5x on 
 - **A convoy keeps the slot idle 31 % of the time at k = 4** although every run waits 70–100 s for it (§5b). Samples
   synchronise through the lock; the naive "k = life / held" bound (3.7) is off by 2x.
 - **Priority inversion:** Solo needs the device for 0.7 s and waited up to 56 s behind other samples' 23 s prefills.
-- **`SLOTS=2` buys almost nothing** (0 to +8 %, §5c): two prefills on one device time-slice (36–43 s each instead of 18–25 s
-  alone), and the memory split makes each one slower even alone (27.4 s against 18.2 s).
+- **Two slots went from nothing to +38 % with E17** (§5c): with E15's hand-made split they gained 0–8 %, because the split made a
+  prefill alone 9 s slower; with E17's budget and nothing else set, 2.17 M pairs/s per GPU at k = 8, past the one-slot limit. Two
+  prefills at once still time-slice (35–36 s each against 17.5 s alone): the gain is overlap, not parallel kernels.
+- **A pipeline bug, not an engine one:** nuclei2k_v2's `nonhost_reads.fq` differs in content from run to run (§3); the writer reads
+  the unmapped file again and indexes it with the screen's subsample.
 - **More threads per sample shorten the slot hold:** the prefill's host lane runs on T − 1 threads beside the device lanes and its
   wait after the lanes falls from 1.79 s at T = 7 to 0.07 s at T = 14; the records' assembly too. Since the cores are mostly
   idle, oversubscribing T costs nothing.
@@ -480,18 +539,19 @@ kernel speed; the slot is held 3.1x the kernel time on the merged head (3.5x on 
 
 In order of what they buy per GPU (pbmc1k_v3; §4 and §5):
 1. **Hold the slot only around device work** (engine, not E18's scope): release after lane B's download and take the slot again for
-   `e2e.build` (−5.7 s); reset and unlock right after `pileupRun`, before the puts and the host pass (−2.2 s on the merged head);
-   read the non-host index into page-locked memory before taking the slot. On the merged head: 36.1 → ~28 s held, 1.84 → ~2.4 M
-   pairs/s per GPU.
+   `e2e.build` (−5.7 s); reset and unlock right after `pileupRun`, before the puts and the host pass (−2.2 s on the E16 head);
+   read the non-host index into page-locked memory before taking the slot. On the E16 head: 36.1 → ~28 s held, one slot's limit
+   1.84 → ~2.4 M pairs/s per GPU; with two slots, less host work under a slot to hide.
 2. **A priority in `lockDevice`:** later phases before new prefills. Reaches the slot's limit at k = 5–6 instead of 8 in the model
    (§5b), so fewer samples in flight (host memory) for the same throughput.
 3. **A persistent per-GPU process** (E14's recommendation: preload once, fork per sample): index, non-host index and a context
    resident; no per-sample context create/reset, no 16.8 GB genome copy per sample. ~22 s held → ~3 M pairs/s per GPU and 2–3x more
    samples in flight per node by host memory.
-4. **E17's budget** for `SLOTS ≥ 2`, A100 and big genomes (§7). On one H100 with today's phases, a second slot is not where the
-   throughput is.
-5. **Not measured here:** other samples' mixes at node scale beyond the mixed set; A100; the input supply (download/convert) that
-   II.1 expects to bind the campaign at ~1 GB/s.
+4. **Two slots at larger k and with the levers above:** k = 8 per GPU is where host memory stops a half node; one shared genome per
+   node (item 3) would allow more. The two-slot limit (~2.8 M pairs/s per GPU with both slots always held) is not reached at k = 8.
+5. **`nonhost_reads.fq` (pipeline):** write the reads the screen classified (§3), so that the file is the same in every run.
+6. **Not measured here:** the mixed set with two slots and at node scale; A100; the input supply (download/convert) that II.1
+   expects to bind the campaign at ~1 GB/s.
 
 ## 11. Files touched
 
@@ -542,8 +602,10 @@ All new, under `bench/fable/throughput/` (no engine code, no other bench code):
 | 797423 (A) | g050 | 1 / 28 / 370 GB | bin | `k1t28s1 k1t14s1 k1t9s1 k1t7s1 k2t14s1 k3t9s1 k4t7s1 k4t14s1 k1t14s1m43 k2t14s2m43 k3t9s2m43 k4t7s2m43` | 43:43 |
 | 797443 (B) | g050 | 1 / 28 / 370 GB | bin | `k1t7s1f k4t7s1r3 k6t7s1r2` | cancelled after `k6t7s1r2` when E16 landed (its mixed-set points are void); a build ran beside it on the same node during `k6t7s1r2` |
 | 797460 (C) | g051 | 1 / 28 / 370 GB | bin-e16 | `k1t7s1f k1t9s1 k3t9s1 k6t7s1r2 k8t7s1r2 mixk1t7s1 mixk6t7s1r2` | E16 head; 1:00:17; E17's gate jobs on the node's other GPU |
-| 797485 (D) | g051 | 1 / 28 / 370 GB | bin-e17 | `k1t7s1f k1t9s1 k1t14s1 k2t14s1 k2t14s2 k3t9s1 k3t9s2 k3t9s3 k4t7s1 k4t7s2` | E17 head: the k = 3 re-run, the slot points with the budget's defaults; @@ |
-| @@ (E) | @@ | 2 / 54 / @@ GB | bin-e17 | @@ | the node |
+| 797485 (D) | g051 | 1 / 28 / 370 GB | bin-e17 | `k1t7s1f k1t9s1 k1t14s1 k2t14s1 k2t14s2 k3t9s1 k3t9s2 k3t9s3 k4t7s1 k4t7s2` | E17 head: the k = 3 re-run, the slot points with the budget's defaults; 32:16 |
+| 797491 (F) | g051 | 1 / 28 / 360 GB | bin-e17 | `k1t7s1 k6t7s2r2 k8t7s2r2 k6t7s1r2` | E17 head: two slots in steady state; 33:18 |
+| 797490 | – | 2 / 54 / 730 GB | bin-e17 | – | the node job, cancelled while pending (no whole node free) to run job F first |
+| @@ (E) | @@ | 2 / 54 / 730 GB | bin-e17 | `k1t7s1p k16t7s2r2p k12t7s2r2p k16t7s2r2 k12t7s1r2p` | the node; @@ |
 
 **Results:** `$W/jobs/fable/throughput/results/run-<job>/`: `summary.txt` (everything below in one file), `table.md`, `dumps.tsv`,
 and per point `point.txt` / `point.json` (analysis), `locks.json`, `samples.jsonl` (the sampler), `runs.tsv`, `meta.json`,
