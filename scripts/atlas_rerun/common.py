@@ -113,6 +113,19 @@ def require_whitelists(binary, names=("3M-february-2018.txt", "737K-august-2016.
                          "the sorted-BAM pileup. Put the binary where ../whitelists exists, or symlink the directory." % (", ".join(missing), os.path.normpath(d), binary))
 
 
+def species_check(log_path):
+    """-> dict(verdict, line) from the engine's "[species-check] ... AGREE|DISAGREE|UNKNOWN" log line (singlet logs it when $SINGLET_SPECIES_FILTERS is set and a genome was
+    given), or None. Species detection only confirms the catalogue organism: a DISAGREE is recorded and flagged, never acted on."""
+    try:
+        with open(log_path, errors="replace") as fh:
+            for line in fh:
+                if line.startswith("[species-check]"):
+                    return {"verdict": line.strip().rsplit(" ", 1)[-1], "line": line.strip()[:300]}
+    except OSError:
+        pass
+    return None
+
+
 def staged_reads(sdir):
     """True when a sample's staged reads are on disk: the pooled sample.1fq or the per-run <run>.1fq files."""
     if os.path.exists(os.path.join(sdir, "sample.1fq")):
