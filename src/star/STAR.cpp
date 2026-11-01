@@ -20,6 +20,7 @@ extern "C" void __gcov_dump(void);
 #include "SeqCache.h"
 void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptome *tr);
 void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk); //singlet E10 (SeqCacheGpuPrefill.cpp)
+extern bool g_e11SoloDone; //singlet E11 (SeqCacheGpuPrefill.cpp): star_Solo.out/ was written from the device's counts
 #include "StarAccel.h"
 #include "Stats.h"
 #include "genomeGenerate.h"
@@ -328,6 +329,7 @@ int star_main_impl(int argInN, char *argIn[])
 
     // solo counts
     Solo soloMain(RAchunk, P, *RAchunk[0]->chunkTr);
+    if (!g_e11SoloDone) //singlet E11 (SINGLET_ENGINE_GPU_E2E=5): counted on the device
     soloMain.processAndOutput();
 
     if (P.quant.geCount.yes)

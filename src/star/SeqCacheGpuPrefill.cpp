@@ -13,6 +13,7 @@
 #include <chrono>
 #include "singlet/engine_gpu.h"
 #include "stitch.cuh"
+#include "solo_gpu.h"   // E11: E9's Solo library (before STAR's headers, like stitch.cuh)
 #endif
 #include "SeqCache.h"
 #include "Parameters.h"
@@ -26,6 +27,8 @@
 #include "GlobalVariables.h"
 #include "Stats.h"
 #include "star_api.h"
+#include "ErrorWarning.h"
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <cmath>
@@ -44,8 +47,13 @@
 
 // E10 (SINGLET_ENGINE_GPU_E2E >= 3, docs/gpu-engine/fable/E10-hostloop.md): what STAR's per-read loop still does for a read with a GPU record
 // (ReadAlign_oneRead.cpp, ReadAlign_outputAlignments.cpp). 0: everything (E8); 3: readLoad, the barcode and the Solo record only (the
-// device computed its Log.final.out counters, junctions and Unmapped.out records); 4: such reads are not given to STAR at all
+// device computed its Log.final.out counters, junctions and Unmapped.out records); 4: such reads are not given to STAR at all; 5: as 4, and
+// Solo counts on the device (E11)
 int g_e10Level = 0;
+// E11 (SINGLET_ENGINE_GPU_E2E=5, docs/gpu-engine/fable/E11-solowire.md): E9's soloRun counted every read on the device after mapping and wrote
+// star_Solo.out/; STAR.cpp then skips Solo::processAndOutput. At level 5 STAR's loop (the reads without a record) hands over the Gene
+// annotation of each read (ReadAlign::e11Annot) instead of writing Solo's records
+bool g_e11SoloDone = false;
 
 namespace {
 
@@ -75,6 +83,80 @@ struct E10Check {           // SINGLET_ENGINE_GPU_E10_CHECK=1 at level 2: STAR's
     const HandoffReadEntry *dev = nullptr;
     const uint64 *devQ = nullptr;
 } e10chk;
+// E11 (level 5): STARsolo's Gene counting on the device with E9's library. The configuration E9 ports (e11Config), the decode's quality counts
+// for Gene/Summary.csv and the posterior's quality, and what soloRunKept takes after mapping
+struct E11State {
+    bool want = false;            // level 5 requested, E10 on and STAR's Solo configuration is the one E9 ports
+    bool ready = false;           // and the decode's checks passed and the engine kept the Solo inputs on the device: level 5 runs
+    std::string why;              // why not
+    e9::SoloModel M;
+    e9::SoloParams S;
+    e9::SoloFilterParams FP;
+    // the decode: the cDNA read's quality characters over whole reads (>= readQualityScoreBase + 30, all), the barcode read's CB and UMI
+    // spans (SoloReadBarcode::getCBandUMI's qualHist) and the lowest and highest quality character of the CB span (the posterior's quality,
+    // SoloReadFeature_inputRecords.cpp:87-89: exact with one constant pq only when every CB base gives the same qin)
+    uint64 q30Rna = 0, nRna = 0, q30Cb = 0, nCb = 0;
+    int cbQmin = 256, cbQmax = -1;
+    uint32 qBase = 33;
+    double sAdj = 0;              // the RNA count adjustment (clipped spans, reads without a record)
+    int device = -1;              // the device that holds the kept inputs
+    uint64 nNoRec = 0, nClipped = 0;
+} e11;
+// the Solo configuration E9's library reproduces byte for byte (E9-solo.md section 1); anything else: STAR's Solo counts (level 3)
+bool e11Config(Parameters &P, Transcriptome *tr, std::string &why) {
+    const ParametersSolo &s = P.pSolo;
+    if (tr == nullptr || !P.quant.gene.yes || tr->nTr == 0 || tr->nGe == 0) { why = "no transcript model"; return false; }
+    if (s.type != s.SoloTypes::CB_UMI_Simple || s.CBtype.type != 1) { why = "soloType"; return false; }
+    if (s.nFeatures != 1 || s.features[0] != SoloFeatureTypes::Gene) { why = "soloFeatures other than Gene"; return false; }
+    if (!s.cbWLyes || s.cbWL.empty() || s.cbWL.size() >= (1ull << 22)) { why = "whitelist"; return false; }
+    if (!(s.CBmatchWL.mm1 && s.CBmatchWL.mm1_multi && s.CBmatchWL.mm1_multi_pc && s.CBmatchWL.mm1_multi_Nbase && !s.CBmatchWL.oneExact && !s.CBmatchWL.EditDist_2)) {
+        why = "soloCBmatchWLtype other than 1MM_multi_Nbase_pseudocounts"; return false;
+    }
+    if (s.umiDedup.types.size() != 1 || s.umiDedup.types[0] != UMIdedup::All) { why = "soloUMIdedup other than 1MM_All"; return false; }
+    if (s.multiMap.yes.multi || s.multiMap.types.size() != 1 || s.multiMap.types[0] != MultiMappers::Unique) { why = "soloMultiMappers other than Unique"; return false; }
+    if (s.umiFiltering.yes || s.umiFiltering.MultiGeneUMI || s.umiFiltering.MultiGeneUMI_All || s.umiFiltering.MultiGeneUMI_CR) { why = "soloUMIfiltering"; return false; }
+    if (s.cellFilter.type.empty() || s.cellFilter.type[0] != "CellRanger2.2") { why = "soloCellFilter other than CellRanger2.2"; return false; }
+    if (!s.readStats.yes) { why = "no soloCellReadStats"; return false; }
+    if (s.samAttrYes || s.readInfoYes[SoloFeatureTypes::Gene]) { why = "CB/UB BAM attributes"; return false; }
+    if (s.outFileNames.size() < 4 || s.outFileNames[1] != "features.tsv" || s.outFileNames[2] != "barcodes.tsv" || s.outFileNames[3] != "matrix.mtx"
+        || s.outFormat.featuresGeneField3 != "Gene Expression" || (!s.clusterCBfile.empty() && s.clusterCBfile != "-")) { why = "Solo output names"; return false; }
+    if (s.cbL > 21 || s.umiL > 12 || tr->nGe >= (1u << 17)) { why = "CB/UMI length or gene count over E9's key widths"; return false; }
+    if (P.pGe.chrSet.mito.size() > 4) { why = "more than 4 mitochondrial contigs"; return false; }
+    if (P.readQualityScoreBase > 255) { why = "readQualityScoreBase"; return false; }
+    e9::SoloModel &M = e11.M;
+    e9::SoloParams &S = e11.S;
+    M.wl.assign(s.cbWL.begin(), s.cbWL.end());
+    const uint64 n = tr->nTr;
+    M.trS.assign(tr->trS, tr->trS + n); M.trE.assign(tr->trE, tr->trE + n); M.trEmax.assign(tr->trEmax, tr->trEmax + n);
+    M.trExI.assign(tr->trExI, tr->trExI + n); M.trGene.assign(tr->trGene, tr->trGene + n);
+    M.trExN.assign(tr->trExN, tr->trExN + n); M.trStr.assign(tr->trStr, tr->trStr + n);
+    M.exSE.assign(tr->exSE, tr->exSE + 2 * (uint64) tr->nEx);
+    M.geID = tr->geID; M.geName = tr->geName;
+    S.cbL = (uint32) s.cbL; S.umiL = (uint32) s.umiL; S.strand = s.strand; S.wlN = (uint32) M.wl.size(); S.nGe = tr->nGe;
+    S.cbMinP = s.cbMinP; S.umiMaskLow = s.umiMaskLow;
+    for (uint32 jj = 0; jj < 4; jj++) { S.homo[jj] = 0; for (uint32 ii = 0; ii < S.umiL; ii++) S.homo[jj] = (S.homo[jj] << 2) + jj; }   // SoloReadBarcode.cpp:15-19
+    S.nMito = 0;
+    for (uint64 c : P.pGe.chrSet.mito) S.mitoChr[S.nMito++] = (int64_t) c;
+    S.pq = 0;   // after the decode (e11Posterior)
+    e11.FP.nExpectedCells = s.cellFilter.knee.nExpectedCells; e11.FP.maxPercentile = s.cellFilter.knee.maxPercentile; e11.FP.maxMinRatio = s.cellFilter.knee.maxMinRatio;
+    e11.qBase = (uint32) P.readQualityScoreBase;
+    return true;
+}
+// the posterior's pq from the decode's CB qualities: STAR takes the quality character of the read's CB base at the mismatch (qin = min(q - QSbase,
+// QSmax)); one value for every read when every CB base has q >= QSbase + QSmax, or one constant character
+bool e11Posterior(Parameters &P, std::string &why) {
+    const ParametersSolo &s = P.pSolo;
+    if (e11.cbQmax < 0) { why = "no CB qualities"; return false; }
+    if (!(e11.cbQmin >= (int) s.QSbase + (int) s.QSmax || e11.cbQmin == e11.cbQmax)) {
+        why = "CB base qualities vary below QSbase + QSmax (" + std::to_string(e11.cbQmin) + ".." + std::to_string(e11.cbQmax) + "): the posterior is per read";
+        return false;
+    }
+    char qin = (char) e11.cbQmin;
+    qin -= s.QSbase;
+    qin = qin < s.QSmax ? qin : s.QSmax;
+    e11.S.pq = std::pow(10.0, -qin / 10.0);
+    return true;
+}
 
 // STAR's numeric code (SequenceFuns.cpp nucl_to_num)
 inline char nucl(unsigned char c) {
@@ -201,6 +283,10 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
         uint32 nw = 0;
         uint64_t *aux = nullptr;
         std::vector<int> e10BadT(T, 0);
+        // E11: per thread the cDNA read's quality characters >= readQualityScoreBase + 30 and all (Gene/Summary.csv's "Q30 Bases in RNA read")
+        const bool e11q = e11.want;
+        const unsigned e11q30 = e11.qBase + 30;
+        std::vector<uint64> e11q30T(T, 0), e11nT(T, 0);
         if (e10) {
             uint64 mx = 0;
             for (int t = 0; t < T; t++) mx = std::max(mx, mxT[t]);
@@ -289,6 +375,11 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                         uint64_t *w = aux + r * (2 + (uint64) nw) + 2;
                         for (uint64 j = 0; j < L; j++)
                             if ((int) (unsigned char) ls[j] - 33 < e10MinQ) w[j >> 6] |= 1ull << (j & 63);
+                        if (e11q) {
+                            uint64 c = 0;
+                            for (uint64 j = 0; j < L; j++) c += (unsigned char) ls[j] >= e11q30;
+                            e11q30T[t] += c; e11nT[t] += L;
+                        }
                     }
                 };
                 for (const char *q = m + b[t]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) {
@@ -328,6 +419,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
         if (e10q) {
             int bad = 0;
             for (int t = 0; t < T; t++) bad |= e10BadT[t];
+            if (e11q) for (int t = 0; t < T; t++) { e11.q30Rna += e11q30T[t]; e11.nRna += e11nT[t]; }
             if (bad) { in.e10.on = false; std::vector<uint64_t>().swap(in.e10.aux); e10f.release();
                        e10DecodeWhy = (bad & 1) ? "a cDNA base other than ACGTN" : "a quality line longer than 256"; }
         }
@@ -375,6 +467,12 @@ bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
     const uint64 bL = P.pSolo.bL, cbumiL = P.pSolo.cbumiL, cbS = P.pSolo.cbS, cbL = P.pSolo.cbL, umiS = P.pSolo.umiS, umiL = P.pSolo.umiL;
     std::vector<int> badT(T, 0);
     uint64_t *aux = in.e10.aux.data();
+    // E11: per thread getCBandUMI's qualHist of the CB and UMI spans (the quality line padded with 'H' to cbumiL, like the sequence with N),
+    // bases >= readQualityScoreBase + 30 and all, and the lowest and highest character of the CB span (the posterior's quality)
+    const bool e11q = e11.want;
+    const unsigned e11q30 = e11.qBase + 30;
+    std::vector<uint64> q30T(T, 0), nqT(T, 0);
+    std::vector<int> qminT(T, 256), qmaxT(T, -1);
     {
         std::vector<std::thread> th;
         for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
@@ -385,6 +483,21 @@ bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
             auto line = [&](const char *ls, const char *le) {
                 const uint64 r = li >> 2;
                 if ((li & 3) == 0) { e10f.at[1][r] = (uint64) (ls - m); return; }
+                if ((li & 3) == 3 && e11q) {
+                    uint64 L = le - ls;
+                    if (L > 0 && (unsigned char) ls[L - 1] < 33) L--;
+                    const uint64 S = (bL == 0 && L < cbumiL) ? cbumiL : L;
+                    auto qc = [&](uint64 j) { return j < L ? (unsigned) (unsigned char) ls[j] : (unsigned) 'H'; };
+                    uint64 c = 0, nq = 0;
+                    for (uint64 j = cbS - 1; j < std::min(cbS - 1 + cbL, S); j++) {
+                        const unsigned q = qc(j);
+                        c += q >= e11q30; nq++;
+                        qminT[t] = std::min(qminT[t], (int) q); qmaxT[t] = std::max(qmaxT[t], (int) q);
+                    }
+                    for (uint64 j = umiS - 1; j < std::min(umiS - 1 + umiL, S); j++) { c += qc(j) >= e11q30; nq++; }
+                    q30T[t] += c; nqT[t] += nq;
+                    return;
+                }
                 if ((li & 3) != 1) return;
                 uint64 L = le - ls;
                 if (L > 0 && (unsigned char) ls[L - 1] < 33) L--;
@@ -413,6 +526,11 @@ bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
         for (auto &x : th) x.join();
     }
     for (int t = 0; t < T; t++) if (badT[t]) { munmap((void *) m, n); why = "a barcode read STAR would reject (length)"; return false; }
+    if (e11q)
+        for (int t = 0; t < T; t++) {
+            e11.q30Cb += q30T[t]; e11.nCb += nqT[t];
+            e11.cbQmin = std::min(e11.cbQmin, qminT[t]); e11.cbQmax = std::max(e11.cbQmax, qmaxT[t]);
+        }
     e10f.m[1] = m; e10f.len[1] = n;
     return true;
 }
@@ -527,6 +645,53 @@ bool e10BuildSource(Parameters &P, const uint32 *readRecord, uint64 nReads, std:
     }
     return true;
 }
+
+// E11: Gene/Summary.csv's "Q30 Bases in RNA read" is STAR's qualHist (ReadAlign_oneRead.cpp:34-38): per read the cDNA quality characters in
+// [clip5, L - clip3). The decode counted whole reads; here a read with a record keeps only that span (its clip: the GPU's, which readLoad
+// would have taken) and a read without one keeps nothing (STAR's loop counts it, with its own clip)
+bool e11RnaAdjust(Parameters &P, std::string &why) {
+    const auto t0 = std::chrono::steady_clock::now();
+    const uint64 N = g_handoffNReads;
+    const int T = std::max(1, (int) P.runThreadN);
+    const unsigned q30 = e11.qBase + 30;
+    if (e10f.m[0] == nullptr || e10f.at[0].size() != N) { why = "the cDNA file is not mapped"; return false; }
+    std::vector<uint64> dq(T, 0), dn(T, 0), nNo(T, 0), nCl(T, 0);
+    std::vector<int> bad(T, 0);
+    std::vector<std::thread> th;
+    for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+        const char *m = e10f.m[0], *end = m + e10f.len[0];
+        for (uint64 r = N * t / T; r < N * (t + 1) / T; r++) {
+            const bool rec = g_handoffReadRecord[r] != 0xFFFFFFFFu;
+            uint64 c5 = 0, c3 = 0;
+            if (rec) {
+                if (g_handoffClip5 == nullptr) continue;
+                c5 = g_handoffClip5[r]; c3 = g_handoffClip3[r];
+                if (c5 + c3 == 0) continue;
+                nCl[t]++;
+            } else nNo[t]++;
+            const char *p = m + e10f.at[0][r];   // the name line; the quality line is the fourth
+            for (int k = 0; k < 3 && p != nullptr; k++) { p = (const char *) memchr(p, '\n', end - p); if (p != nullptr) p++; }
+            if (p == nullptr || p > end) { bad[t] = 1; return; }
+            const char *q1 = (const char *) memchr(p, '\n', end - p);
+            if (q1 == nullptr) q1 = end;
+            uint64 L = q1 - p;
+            if (L > 0 && (unsigned char) p[L - 1] < 33) L--;
+            const uint64 s0 = rec ? std::min<uint64>(c5, L) : 0, s1 = rec ? (L >= c3 ? L - c3 : 0) : 0;
+            uint64 h = 0, hs = 0, ns = 0;
+            for (uint64 j = 0; j < L; j++) {
+                const uint64 x = (unsigned char) p[j] >= q30;
+                h += x;
+                if (j >= s0 && j < s1) { hs += x; ns++; }
+            }
+            dq[t] += h - hs; dn[t] += L - ns;
+        }
+    });
+    for (auto &x : th) x.join();
+    for (int t = 0; t < T; t++) if (bad[t]) { why = "a cDNA quality line could not be read back"; return false; }
+    for (int t = 0; t < T; t++) { e11.q30Rna -= dq[t]; e11.nRna -= dn[t]; e11.nNoRec += nNo[t]; e11.nClipped += nCl[t]; }
+    e11.sAdj = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    return true;
+}
 #endif
 
 } // namespace
@@ -594,6 +759,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
         }
         if (e10Level >= 2 && !in.e10.on) P.inOut->logMain << "ENGINE_GPU: E10 (level " << e10Level << ") not used: " << w << "\n";
+        // E11 (level 5): the Solo configuration E9 ports; otherwise level 3, where STAR's Solo still counts every read
+        if (e10Level >= 5) {
+            std::string w5 = in.e10.on ? "" : "E10 not used";
+            if (in.e10.on && e11Config(P, tr, w5)) e11.want = true;
+            else { e11.why = w5; P.inOut->logMain << "ENGINE_GPU: E11 (level 5) not used: " << w5 << "\n"; }
+        }
     }
     if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
     if (e10Level >= 2 && in.e10.on) {
@@ -607,6 +778,14 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     } else if (e10Level >= 2 && !in.e10.on) {
         if (!e10DecodeWhy.empty()) P.inOut->logMain << "ENGINE_GPU: E10 decode: not used: " << e10DecodeWhy << "\n";
         e10f.release();
+    }
+    if (e11.want) {   // E11: the engine keeps Solo's inputs on the device (the reads' CR/UR, the records' Gene annotation, the read -> record map)
+        std::string w5;
+        if (!in.e10.on) w5 = "E10 not used";
+        else if (e11Posterior(P, w5)) { in.e10.soloModel = &e11.M; in.e10.soloParams = &e11.S; }
+        if (in.e10.soloModel == nullptr) { e11.want = false; e11.why = w5; P.inOut->logMain << "ENGINE_GPU: E11 (level 5) not used: " << w5 << "\n"; }
+        else P.inOut->logMain << "ENGINE_GPU: E11 decode: CB+UMI qualities " << e11.q30Cb << " of " << e11.nCb << " >= Q30, RNA (whole reads) " << e11.q30Rna << " of "
+                              << e11.nRna << ", CB quality characters " << e11.cbQmin << ".." << e11.cbQmax << " (posterior pq " << e11.S.pq << ")\n";
     }
     time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
@@ -643,6 +822,14 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     std::vector<uint64_t>().swap(in.e10.aux);
     if (!ok) { e10f.release(); return skip("GPU mapping failed"); }
     bool e10ok = out.e10.ok;   // E10: the device wrote the entries and masks into the region and computed the per-read products
+    // E11: level 5 when the engine kept Solo's inputs (then no summaries: no read with a record reaches STAR's loop); otherwise level 3
+    e11.ready = e11.want && e10ok && out.e10.soloKept;
+    if (e11.want && !e11.ready) {
+        e11.why = !e10ok ? "E10 products not made" : "the engine did not keep Solo's inputs";
+        P.inOut->logMain << "ENGINE_GPU: E11 (level 5) not used: " << e11.why << "\n";
+        e9::soloKeepRelease();
+    }
+    e11.device = device;
     if (const char *rp = getenv("SINGLET_ENGINE_GPU_E10_R11"); rp != nullptr && !out.e10.r11.empty()) {   // the histogram in r11_hist.cpp's format
         FILE *f = fopen(rp, "wb");
         uint64 nnz = 0;
@@ -729,7 +916,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         }
         e10ok = e10ok && e2eRec;
         // E10 level 4: no read with a record reaches STAR's loop, so no summaries are needed
-        const bool e10NoSum = e10ok && e10Level >= 4 && g_starReadSource == nullptr;
+        const bool e10NoSum = e10ok && (e10Level == 4 || (e10Level >= 5 && e11.ready)) && g_starReadSource == nullptr;
         std::vector<std::thread> th;
         for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
             Transcriptome *trT = (sumOn && tr != nullptr) ? new Transcriptome(*tr) : nullptr;
@@ -909,17 +1096,29 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             g_statsAll.addStats(S);
             e10sj.swap(out.e10.sj); e10nSJ = out.e10.nSJ;
             g_e10Level = 3;
-            if (e10Level >= 4 && g_starReadSource == nullptr) {
-                if (e10BuildSource(P, g_handoffReadRecord, g_handoffNReads, w)) { g_starReadSource = &e10src; g_e10Level = 4; }
+            if (e10Level >= 4 && g_starReadSource == nullptr && (e10Level == 4 || e11.ready)) {
+                if (e10BuildSource(P, g_handoffReadRecord, g_handoffNReads, w)) { g_starReadSource = &e10src; g_e10Level = e10Level >= 5 ? 5 : 4; }
+                else if (e10Level >= 5) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): level 5's read source could not be built (" + w
+                                                      + ") and the reads with a record have no summaries\n", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
                 else P.inOut->logMain << "ENGINE_GPU: E10 level 4 not used (" << w << "): level 3\n";
+            }
+            if (g_e10Level == 5) {   // E11: Gene/Summary.csv's RNA Q30 counts of the reads with a record over STAR's span [clip5, L - clip3)
+                std::string w5;
+                if (!e11RnaAdjust(P, w5)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + w5 + "\n", std::cerr, P.inOut->logMain,
+                                                        EXIT_CODE_INPUT_FILES, P);
             }
             P.inOut->logMain << "ENGINE_GPU: E10 level " << g_e10Level << ": " << S.readN << " reads with a record (" << S.mappedReadsU << " unique, " << S.mappedReadsM
                              << " multi, " << S.unmappedAll << " unmapped: " << out.e10.unmappedReads.size() << " Unmapped.out records written), " << e10nSJ
-                             << " junctions from the device; " << (g_e10Level == 4 ? std::to_string(e10src.iRead.size()) + " reads without a record go to STAR's loop" : "STAR's loop keeps readLoad, the barcode and the Solo record of these reads")
+                             << " junctions from the device; " << (g_e10Level >= 4 ? std::to_string(e10src.iRead.size()) + " reads without a record go to STAR's loop" : "STAR's loop keeps readLoad, the barcode and the Solo record of these reads")
                              << " (" << std::chrono::duration<double>(std::chrono::steady_clock::now() - t3).count() << " s)\n";
         } else {
             P.inOut->logMain << "ENGINE_GPU: E10 level 3 not used (" << w << "); STAR's loop does the per-read work\n";
         }
+    }
+    if (e11.ready && g_e10Level != 5) {   // E11: level 5 not reached (E10's region or products): STAR's Solo counts every read
+        P.inOut->logMain << "ENGINE_GPU: E11 (level 5) not used: E10 runs at level " << g_e10Level << "\n";
+        e11.ready = false;
+        e9::soloKeepRelease();
     }
     if (g_e10Level < 4) { std::vector<uint32_t>().swap(out.e10.unmappedReads); }
     if (deferInsert && g_e10Level >= 3) {   // E10: no read with a record looks the cache up (unmapped records: the device counted them)
@@ -977,6 +1176,68 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
     }
     std::vector<uint8>().swap(e10sj);
     e10f.release();
+    if (g_e10Level == 5) {   // E11: Solo's counting on the device (E9's soloRun on the kept inputs) and star_Solo.out/ from it
+        const auto t0 = std::chrono::steady_clock::now();
+        // the Gene annotation of the reads STAR's loop mapped (ReadAlign::e11Annot: read index, packed RecAnn), in read order
+        uint64 nHost = 0, starQ30 = 0, starN = 0;
+        for (int i = 0; i < (int) P.runThreadN; i++) {
+            nHost += RAchunk[i]->RA->e11Ann.size() / 2;
+            for (uint32 ix = 0; ix < 256; ix++) {   // SoloFeature_statsOutput.cpp:25-35 over STAR's loop (the reads without a record)
+                starN += RAchunk[i]->RA->qualHist[0][ix];
+                if (ix >= e11.qBase + 30) starQ30 += RAchunk[i]->RA->qualHist[0][ix];
+            }
+        }
+        std::vector<std::pair<uint64, uint64>> ha;
+        ha.reserve(nHost);
+        for (int i = 0; i < (int) P.runThreadN; i++) {
+            std::vector<uint64> &v = RAchunk[i]->RA->e11Ann;
+            for (size_t k = 0; k + 1 < v.size(); k += 2) ha.emplace_back(v[k], v[k + 1]);
+            std::vector<uint64>().swap(v);
+        }
+        std::sort(ha.begin(), ha.end());
+        std::vector<uint32_t> hostIdx(nHost);
+        std::vector<e9::RecAnn> hostAnn(nHost);
+        for (uint64 k = 0; k < nHost; k++) {
+            hostIdx[k] = (uint32_t) ha[k].first;
+            const uint64 a = ha[k].second;
+            hostAnn[k] = e9::RecAnn{(uint32_t) a, (uint16_t) (a >> 32), (uint8_t) (a >> 48), (uint8_t) (a >> 56)};
+        }
+        std::vector<std::pair<uint64, uint64>>().swap(ha);
+        const double sGather = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        int lockFd = -1;
+        const auto tw = std::chrono::steady_clock::now();
+        singlet_engine_gpu::lockDeviceSlot(e11.device, &lockFd);
+        const auto tl = std::chrono::steady_clock::now();
+        e9::SoloResult res;
+        std::string log;
+        const bool ok = nHost < (1ull << 32) && g_handoffNReads < (1ull << 32)
+            && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log);
+        singlet_engine_gpu::unlockDevice(lockFd);
+        const auto tr = std::chrono::steady_clock::now();
+        if (!ok) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): Solo's counting on the device failed: " + log, std::cerr,
+                               P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        // star_Solo.out/: STAR creates Gene/, raw/ and filtered/ in its Solo step (SoloFeature_processRecords.cpp, _outputResults.cpp, cellFiltering)
+        const std::string pre = P.outFileNamePrefix + P.pSolo.outFileNames[0];
+        for (const std::string &d : {pre, pre + "Gene/", pre + "Gene/raw/", pre + "Gene/filtered/"}) mkdir(d.c_str(), P.runDirPerm);
+        e9::SoloSummaryIn sum;
+        sum.readN = g_statsAll.readN; sum.mappedU = g_statsAll.mappedReadsU; sum.mappedM = g_statsAll.mappedReadsM;
+        sum.q30CbUmi = e11.q30Cb; sum.nCbUmi = e11.nCb; sum.q30Rna = e11.q30Rna + starQ30; sum.nRna = e11.nRna + starN; sum.qualBase = e11.qBase;
+        e9::SoloWriteInfo info;
+        const bool okw = e9::soloWrite(pre, e11.S, e11.M, res, e11.FP, {}, info, log, &sum);
+        const auto te = std::chrono::steady_clock::now();
+        if (!okw) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): star_Solo.out/ not written: " + log, std::cerr, P.inOut->logMain,
+                                EXIT_CODE_INPUT_FILES, P);
+        g_e11SoloDone = true;
+        auto sec = [](std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) { return std::chrono::duration<double>(b - a).count(); };
+        std::ostringstream ms;
+        for (auto &kv : res.ms) ms << " " << kv.first << " " << kv.second;
+        P.inOut->logMain << "ENGINE_GPU: E11: Solo on the device: " << g_handoffNReads << " reads (" << nHost << " annotated by STAR's loop; RNA Q30 adjustment "
+                         << e11.nNoRec << " reads without a record, " << e11.nClipped << " clipped, " << e11.sAdj << " s), " << res.nDistinctCR << " distinct CRs, "
+                         << res.nKeys << " counted reads, " << res.nTuples << " distinct (CB,gene,UMI), " << res.nSeg << " (CB,gene); gather " << sGather
+                         << " s, waited " << sec(tw, tl) << " s for the device, soloRunKept " << sec(tl, tr) << " s (ms:" << ms.str() << "), write " << sec(tr, te)
+                         << " s (" << info.nCB << " CBs, " << info.nCells << " cells, nUMImax " << info.nUMImax << ", nUMImin " << info.nUMImin
+                         << "); STAR's Solo step skipped\n" << log << std::flush;
+    }
 #else
     (void) P; (void) RAchunk;
 #endif

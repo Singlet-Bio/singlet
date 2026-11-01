@@ -11,6 +11,7 @@
 #include "stitch.cuh"
 #include "records_gpu.h"   // E8: the pileup's records from the device-resident results (SINGLET_ENGINE_GPU_E2E=1)
 #include "hostloop_gpu.h"  // E10: per-read entries and the per-read products of STAR's loop (SINGLET_ENGINE_GPU_E2E >= 2)
+#include "solo_gpu.h"      // E11: STARsolo's inputs kept on the device for soloRun after STAR's loop (SINGLET_ENGINE_GPU_E2E=5)
 #include <cuda_runtime.h>
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
@@ -321,7 +322,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                  Output& out) {
     std::string err;
     // on failure, release everything this process holds on the device (STAR then maps every read on the CPU)
-    auto fail = [&](const std::string& e) { out.log += "engine_gpu: " + e + "\n"; cudaDeviceReset(); return false; };
+    auto fail = [&](const std::string& e) { out.log += "engine_gpu: " + e + "\n"; e9::soloKeepRelease(); out.e10.soloKept = false; cudaDeviceReset(); return false; };
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: a waiting host thread sleeps, not spins
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
@@ -369,6 +370,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     e6::ReadEntry* dEnt = nullptr; uint64_t* dQm = nullptr; uint64_t* dAux = nullptr; bool e10Done = false;
     auto e10Off = [&](const std::string& why) {
         if (e10) out.e10.log += "engine_gpu: E10 not used (" + why + "); STAR's loop does the per-read work\n";
+        if (!why.empty()) { e9::soloKeepRelease(); out.e10.soloKept = false; }   // E11: nothing to count on the device without E10
         e10 = false; cudaGetLastError();
         if (dEnt) cudaFree(dEnt); if (dQm) cudaFree(dQm); if (dAux) cudaFree(dAux); dEnt = nullptr; dQm = nullptr; dAux = nullptr;
     };
@@ -398,6 +400,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                 out.e10.msR11 = msr;
             } else { cudaGetLastError(); out.e10.log += "engine_gpu: E10: R11 histogram not computed (" + wr + ")\n"; }
             if (dWL) cudaFree(dWL); if (dH) cudaFree(dH);
+        }
+        if (in.e10.soloModel != nullptr) {   // E11: the CR/UR of every read, contiguous, kept for soloRun after STAR's loop
+            std::string ws;
+            if (!e9::soloKeepReads(dAux, 2 + (u64) in.e10.nw, n, ws)) out.e10.log += "engine_gpu: E11: the reads' CR/UR not kept (" + ws + ")\n";
         }
         cudaFree(dAux); dAux = nullptr;
     };
@@ -741,6 +747,21 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                                  (unsigned long long) out.e10.unmappedReads.size(), (unsigned long long) out.e10.hookReads.size(), out.e10.msD2H,
                                  pin2 ? "page-locked" : "pageable");
                         out.e10.log += l2;
+                        // E11: the records' Gene annotation (Solo's stage (b), while the blobs are here) and the read -> record map, kept
+                        if (in.e10.soloModel != nullptr && in.e10.soloParams != nullptr && e9::soloKeep().reads) {
+                            std::string ws;
+                            if (e9::soloKeepRecords(*in.e10.soloParams, *in.e10.soloModel, RP, dBlob, (const uint64_t*) dBOff, (const uint64_t*) dSOff, nRec,
+                                                    dRR, n, ws)) {
+                                const e9::SoloKeep& K = e9::soloKeep();
+                                out.e10.soloKept = K.nOverflow == 0;
+                                char l3[300];
+                                snprintf(l3, sizeof l3, "engine_gpu: E11: Solo inputs kept on the device: CR/UR of %llu reads (%.1f ms), Gene annotation of %llu records "
+                                         "and the read -> record map (%.1f ms, %llu exon overflows), %.2f GB\n", (unsigned long long) K.n, K.msReads,
+                                         (unsigned long long) K.nRec, K.msRecs, (unsigned long long) K.nOverflow, (K.n * 20.0 + K.nRec * 8.0) / 1e9);
+                                out.e10.log += l3;
+                                if (!out.e10.soloKept) e9::soloKeepRelease();
+                            } else out.e10.log += "engine_gpu: E11: the records' Gene annotation not kept (" + ws + ")\n";
+                        } else if (in.e10.soloModel != nullptr) { e9::soloKeepRelease(); out.e10.log += "engine_gpu: E11: Solo inputs not kept\n"; }
                     }
                 }
             }

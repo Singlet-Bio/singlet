@@ -40,6 +40,10 @@ template <class T> struct Buf {
         else { p = (T*)malloc(b); if (!p) throw std::runtime_error("host allocation failed"); }
     }
     void zero() { if (!n) return; if (dev) CK(cudaMemset(p, 0, n * sizeof(T))); else memset(p, 0, n * sizeof(T)); }
+    // a device array the caller owns, used in place (E11: the arrays mapDistinct kept)
+    void alias(const T* q, u64 cnt) { release(); dev = true; p = const_cast<T*>(q); n = cnt; own = false; }
+    // the caller's array: in place when it is already on the device (onDev), else as from()
+    void in(bool d, bool onDev, const T* h, u64 cnt) { if (onDev) alias(h, cnt); else from(d, h, cnt); }
     void from(bool d, const T* h, u64 cnt) {
         if (!d) { release(); dev = false; p = const_cast<T*>(h); n = cnt; own = false; return; }
         alloc(d, cnt);
@@ -158,6 +162,9 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
         const u64 N = Rd.n, nRec = R.nRec;
         if (W >= (1u << (64 - GENE_BITS - UMI_BITS - 1)) || S.nGe >= (1u << GENE_BITS) || 2 * S.umiL > UMI_BITS)
             throw std::runtime_error("whitelist, genes or UMI length do not fit the (CB, gene, UMI) key");
+        if ((R.dev || Rd.dev) && !dev) throw std::runtime_error("device-resident inputs need soloRun(device)");
+        for (u64 k = 0; k < Rd.nHost; k++)
+            if (Rd.hostIdx[k] >= N || (k > 0 && Rd.hostIdx[k] <= Rd.hostIdx[k - 1])) throw std::runtime_error("host annotations: read index out of order or range");
         Tmp tmp;
 
         // ---- upload (model, records, reads)
@@ -167,34 +174,52 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
         dTrExI.from(dev, M.trExI.data(), M.trExI.size()); dTrGene.from(dev, M.trGene.data(), M.trGene.size()); dExSE.from(dev, M.exSE.data(), M.exSE.size());
         dTrExN.from(dev, M.trExN.data(), M.trExN.size()); dTrStr.from(dev, M.trStr.data(), M.trStr.size());
         const TrModel TM{dTrS.p, dTrE.p, dTrEmax.p, dTrExI.p, dTrExN.p, dTrStr.p, dTrGene.p, dExSE.p, (u32)M.trS.size()};
-        Buf<uint8_t> dBlob; Buf<u64> dBlobOff, dSeqOff;
-        dBlob.from(dev, R.blob, R.blobBytes); dBlobOff.from(dev, R.blobOff, nRec + 1); dSeqOff.from(dev, R.seqOff, nRec + 1);
+        Buf<uint8_t> dBlob; Buf<u64> dBlobOff, dSeqOff; Buf<RecAnn> recAnn;
+        if (R.recAnn) recAnn.in(dev, R.dev, R.recAnn, nRec);   // E11: per-record annotation already made (soloKeepRecords)
+        else { dBlob.in(dev, R.dev, R.blob, R.blobBytes); dBlobOff.in(dev, R.dev, R.blobOff, nRec + 1); dSeqOff.in(dev, R.dev, R.seqOff, nRec + 1); }
         Buf<u64> dCr3, dUr3; Buf<u32> dRec; Buf<RecAnn> dHost;
-        dCr3.from(dev, Rd.cr3, N); dUr3.from(dev, Rd.ur3, N); dRec.from(dev, Rd.rec, N);
+        dCr3.in(dev, Rd.dev, Rd.cr3, N); dUr3.in(dev, Rd.dev, Rd.ur3, N); dRec.in(dev, Rd.dev, Rd.rec, N);
         if (Rd.hostAnn) dHost.from(dev, Rd.hostAnn, N);
-        Buf<u64> cnt; cnt.alloc(dev, 8); cnt.zero();   // 0: records with an exon overflow, 1: counted reads
+        Buf<u32> dHostIdx; Buf<RecAnn> dHostS;   // sparse host annotations (host memory: uploaded)
+        if (Rd.nHost) { dHostIdx.from(dev, Rd.hostIdx, Rd.nHost); dHostS.from(dev, Rd.hostAnnS, Rd.nHost); }
+        Buf<u64> cnt; cnt.alloc(dev, 8); cnt.zero();   // 0: records with an exon overflow, 1: counted reads, 2: reads without a record, 3: bad host index
         lap("upload");
 
         // ---- stage (b): per record its Gene annotation, per read its record's (or the host's)
-        Buf<RecAnn> recAnn; recAnn.alloc(dev, nRec);
         Buf<RecAnn> readAnn; readAnn.alloc(dev, N);
         {
-            const uint8_t* blob = dBlob.p; const u64* bo = dBlobOff.p; const u64* so = dSeqOff.p; RecAnn* ra = recAnn.p;
-            const e6::RecParams RP = R.RP; const TrModel tm = TM; const SoloParams s = S; u64* c = cnt.p;
-            each(dev, nRec, [=] __host__ __device__(u64 r) {
-                const RecAnn a = recAnnotate(RP, blob + bo[r], so[r + 1] - so[r], tm, s);
-                ra[r] = a;
-                if (a.bits & RA_OVERFLOW) addU64(c, 1);
-            });
-            const u32* rec = dRec.p; const RecAnn* host = dHost.p; RecAnn* ann = readAnn.p; const RecAnn* rac = recAnn.p;
+            if (!R.recAnn) {
+                recAnn.alloc(dev, nRec);
+                const uint8_t* blob = dBlob.p; const u64* bo = dBlobOff.p; const u64* so = dSeqOff.p; RecAnn* ra = recAnn.p;
+                const e6::RecParams RP = R.RP; const TrModel tm = TM; const SoloParams s = S; u64* c = cnt.p;
+                each(dev, nRec, [=] __host__ __device__(u64 r) {
+                    const RecAnn a = recAnnotate(RP, blob + bo[r], so[r + 1] - so[r], tm, s);
+                    ra[r] = a;
+                    if (a.bits & RA_OVERFLOW) addU64(c, 1);
+                });
+            }
+            const u32* rec = dRec.p; const RecAnn* host = dHost.p; RecAnn* ann = readAnn.p; const RecAnn* rac = recAnn.p; u64* c = cnt.p;
             each(dev, N, [=] __host__ __device__(u64 i) {
                 const u32 r = rec[i];
                 RecAnn a{0xFFFFFFFFu, 0, 0, 0};
-                if (r != 0xFFFFFFFFu) a = rac[r]; else if (host) a = host[i];
+                if (r != 0xFFFFFFFFu) a = rac[r]; else { addU64(c + 2, 1); if (host) a = host[i]; }
                 ann[i] = a;
             });
+            if (Rd.nHost) {   // E11: the reads the host mapped, sparse
+                const u32* hi = dHostIdx.p; const RecAnn* ha = dHostS.p;
+                each(dev, Rd.nHost, [=] __host__ __device__(u64 k) {
+                    const u32 i = hi[k];
+                    if (rec[i] != 0xFFFFFFFFu) addU64(c + 3, 1);
+                    ann[i] = ha[k];
+                });
+            }
         }
-        recAnn.release();
+        recAnn.release(); dHostIdx.release(); dHostS.release();
+        if (Rd.nHost) {
+            const u64 nNone = cnt.get(2), nBad = cnt.get(3);
+            if (nNone != Rd.nHost || nBad) throw std::runtime_error("host annotations: " + std::to_string(Rd.nHost) + " given, " + std::to_string(nNone)
+                                                                    + " reads without a record, " + std::to_string(nBad) + " given for reads with a record");
+        }
         lap("gene");
 
         // ---- stage (a): per distinct CR the whitelist matches; per read the UMI check, Barcodes.stats, the exact histogram; the posterior
@@ -442,8 +467,90 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
         return true;
     } catch (const std::exception& e) {
         log += std::string("soloRun failed: ") + e.what() + "\n";
+        if (dev) cudaGetLastError();
         return false;
     }
+}
+
+// ================================================================================================ E11: the engine's keep API
+namespace {
+SoloKeep g_keep;
+double msSince(std::chrono::steady_clock::time_point t) { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count(); }
+}
+SoloKeep& soloKeep() { return g_keep; }
+void soloKeepRelease() {
+    SoloKeep& K = g_keep;
+    if (K.cr3) cudaFree(K.cr3);
+    if (K.ur3) cudaFree(K.ur3);
+    if (K.rec) cudaFree(K.rec);
+    if (K.recAnn) cudaFree(K.recAnn);
+    K = SoloKeep{};
+}
+bool soloKeepReads(const u64* dAux, u64 stride, u64 n, std::string& log) {
+    try {
+        const auto t0 = std::chrono::steady_clock::now();
+        SoloKeep& K = g_keep;
+        if (K.cr3) cudaFree(K.cr3);
+        if (K.ur3) cudaFree(K.ur3);
+        K.cr3 = K.ur3 = nullptr; K.reads = false;
+        CK(cudaMalloc(&K.cr3, std::max<u64>(1, n) * 8));
+        CK(cudaMalloc(&K.ur3, std::max<u64>(1, n) * 8));
+        u64* c = K.cr3; u64* u = K.ur3; const u64 st = stride;
+        each(true, n, [=] __host__ __device__(u64 i) { c[i] = dAux[i * st]; u[i] = dAux[i * st + 1]; });
+        CK(cudaDeviceSynchronize());
+        K.n = n; K.reads = true; K.msReads = msSince(t0);
+        return true;
+    } catch (const std::exception& e) {
+        log += std::string("soloKeepReads failed: ") + e.what() + "\n";
+        cudaGetLastError(); soloKeepRelease();
+        return false;
+    }
+}
+bool soloKeepRecords(const SoloParams& S, const SoloModel& M, const e6::RecParams& RP, const uint8_t* dBlob, const u64* dBlobOff, const u64* dSeqOff,
+                     u64 nRec, const u32* dRec, u64 n, std::string& log) {
+    try {
+        const auto t0 = std::chrono::steady_clock::now();
+        SoloKeep& K = g_keep;
+        if (!K.reads || K.n != n) throw std::runtime_error("the reads were not kept");
+        if (K.rec) cudaFree(K.rec);
+        if (K.recAnn) cudaFree(K.recAnn);
+        K.rec = nullptr; K.recAnn = nullptr; K.recs = false;
+        Buf<u64> dTrS, dTrE, dTrEmax; Buf<u32> dTrExI, dTrGene, dExSE; Buf<uint16_t> dTrExN; Buf<uint8_t> dTrStr;
+        dTrS.from(true, M.trS.data(), M.trS.size()); dTrE.from(true, M.trE.data(), M.trE.size()); dTrEmax.from(true, M.trEmax.data(), M.trEmax.size());
+        dTrExI.from(true, M.trExI.data(), M.trExI.size()); dTrGene.from(true, M.trGene.data(), M.trGene.size()); dExSE.from(true, M.exSE.data(), M.exSE.size());
+        dTrExN.from(true, M.trExN.data(), M.trExN.size()); dTrStr.from(true, M.trStr.data(), M.trStr.size());
+        const TrModel tm{dTrS.p, dTrE.p, dTrEmax.p, dTrExI.p, dTrExN.p, dTrStr.p, dTrGene.p, dExSE.p, (u32)M.trS.size()};
+        CK(cudaMalloc(&K.rec, std::max<u64>(1, n) * 4));
+        CK(cudaMalloc(&K.recAnn, std::max<u64>(1, nRec) * sizeof(RecAnn)));
+        if (n) CK(cudaMemcpy(K.rec, dRec, n * 4, cudaMemcpyDeviceToDevice));
+        Buf<u64> cnt; cnt.alloc(true, 1); cnt.zero();
+        RecAnn* ra = K.recAnn; u64* c = cnt.p; const SoloParams s = S; const e6::RecParams rp = RP;
+        each(true, nRec, [=] __host__ __device__(u64 r) {
+            const RecAnn a = recAnnotate(rp, dBlob + dBlobOff[r], dSeqOff[r + 1] - dSeqOff[r], tm, s);
+            ra[r] = a;
+            if (a.bits & RA_OVERFLOW) addU64(c, 1);
+        });
+        CK(cudaDeviceSynchronize());
+        K.nOverflow = cnt.get(0); K.nRec = nRec; K.recs = true; K.msRecs = msSince(t0);
+        return true;
+    } catch (const std::exception& e) {
+        log += std::string("soloKeepRecords failed: ") + e.what() + "\n";
+        cudaGetLastError(); soloKeepRelease();
+        return false;
+    }
+}
+bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,
+                 std::string& log) {
+    SoloKeep& K = g_keep;
+    if (device >= 0 && cudaSetDevice(device) != cudaSuccess) { cudaGetLastError(); log += "soloRunKept: cannot select the device\n"; soloKeepRelease(); return false; }
+    if (!K.reads || !K.recs) { log += "soloRunKept: the inputs were not kept on the device\n"; soloKeepRelease(); return false; }
+    if (K.nOverflow) { log += "soloRunKept: " + std::to_string(K.nOverflow) + " records with more exons than the port's limit\n"; soloKeepRelease(); return false; }
+    SoloRecs R; R.nRec = K.nRec; R.dev = true; R.recAnn = K.recAnn;
+    SoloReads Rd; Rd.n = K.n; Rd.dev = true; Rd.cr3 = K.cr3; Rd.ur3 = K.ur3; Rd.rec = K.rec; Rd.nHost = nHost; Rd.hostIdx = hostIdx; Rd.hostAnnS = hostAnn;
+    const bool ok = soloRun(true, S, M, R, Rd, out, false, log);
+    out.nRecOverflow = K.nOverflow;
+    soloKeepRelease();
+    return ok;
 }
 
 // ================================================================================================ writers (host)
@@ -483,7 +590,7 @@ const char* const kFlagNames[F_N] = {"cbMatch", "cbPerfect", "cbMMunique", "cbMM
 }  // namespace
 
 bool soloWrite(const std::string& pre, const SoloParams& S, const SoloModel& M, const SoloResult& r, const SoloFilterParams& FP,
-               const std::vector<u32>& order, SoloWriteInfo& info, std::string& log) {
+               const std::vector<u32>& order, SoloWriteInfo& info, std::string& log, const SoloSummaryIn* sum) {
     const u32 W = (u32)M.wl.size();
     const u64 nP = r.cbIdx.size();
     const std::string g = pre + "Gene/";
@@ -597,6 +704,58 @@ bool soloWrite(const std::string& pre, const SoloParams& S, const SoloModel& M, 
             s += '\t'; appendU(s, v[CV_nUMI]); s += '\t'; appendU(s, v[CV_nGene]); s += "\t0\t0\n";
         }
         ok &= writeFile(g + "CellReads.stats", s, log);
+    }
+    // Summary.csv (SoloFeature_statsOutput.cpp:7-74; the cell numbers of cellFiltering.cpp:77-125). Doubles as ostream prints them (%g, 6 digits);
+    // the means are uint64 divisions (SoloFilteredCells.h); Unique multimappers only, so the Unique+Multiple gene line is "NoMulti".
+    if (sum != nullptr) {
+        std::string s;
+        auto num = [&](const char* k, u64 v) { s += k; s += ','; appendU(s, v); s += '\n'; };
+        auto dbl = [&](const char* k, double v) { char b[64]; snprintf(b, sizeof b, "%g", v); s += k; s += ','; s += b; s += '\n'; };
+        u64 nInvB = 0;
+        for (u32 i = 0; i < 9; i++) nInvB += r.bstats[i];   // SoloReadBarcodeStats::numInvalidBarcodes: the first nine rows
+        const u64 nInvF = r.fstats[S_noTooManyWLmatches] + r.fstats[S_noMMtoWLwithoutExact];
+        const u64 uniqF = r.fstats[S_yessubWLmatch_UniqueFeature];
+        num("Number of Reads", sum->readN);
+        dbl("Reads With Valid Barcodes", 1.0 - double(nInvB + nInvF) / sum->readN);
+        dbl("Sequencing Saturation", 1.0 - double(r.fstats[S_yesUMIs]) / uniqF);
+        dbl("Q30 Bases in CB+UMI", double(sum->q30CbUmi) / sum->nCbUmi);
+        dbl("Q30 Bases in RNA read", double(sum->q30Rna) / sum->nRna);
+        dbl("Reads Mapped to Genome: Unique+Multiple", double(sum->mappedU + sum->mappedM) / sum->readN);
+        dbl("Reads Mapped to Genome: Unique", double(sum->mappedU) / sum->readN);
+        s += "Reads Mapped to Gene: Unique+Multiple Gene,NoMulti\n";
+        dbl("Reads Mapped to Gene: Unique Gene", double(uniqF) / sum->readN);
+        // filtered cells (nCells == 0: cellFiltering returns with every statistic 0)
+        u64 nCellsF = 0, nReadIn = 0, nUMIin = 0, nGeneIn = 0, medRead = 0, medUMI = 0, medGene = 0, nGeneDet = 0;
+        if (nCells > 0) {
+            std::vector<u32> rd, gn;
+            std::vector<char> det(S.nGe, 0);
+            for (u32 icb = 0; icb < nCB; icb++) {
+                if (!keep[icb]) continue;
+                const u32* v = &r.cbVal[(u64)indCB[icb] * CBV];
+                nCellsF++; nUMIin += v[CV_nUMI]; nReadIn += v[CV_nReadUnique];
+                rd.push_back(v[CV_nReadUnique]);
+                const u64 e = segE(icb);
+                u32 ng1 = 0;   // cellFiltering.cpp:91-99: the cell's genes with a count > 0
+                for (u64 k = segB[icb]; k < e; k++)
+                    if (r.segCount[k] > 0) { ng1++; if (r.segGene[k] < S.nGe) det[r.segGene[k]] = 1; }
+                nGeneIn += ng1; gn.push_back(ng1);
+            }
+            std::sort(rd.begin(), rd.end()); std::sort(gn.begin(), gn.end());
+            medRead = rd[nCellsF / 2]; medGene = gn[nCellsF / 2]; medUMI = sorted[nCellsF / 2];
+            for (char d : det) nGeneDet += d != 0;
+        }
+        num("Estimated Number of Cells", nCellsF);
+        num("Unique Reads in Cells Mapped to Gene", nReadIn);
+        dbl("Fraction of Unique Reads in Cells", double(nReadIn) / uniqF);
+        num("Mean Reads per Cell", nCellsF ? nReadIn / nCellsF : 0);
+        num("Median Reads per Cell", medRead);
+        num("UMIs in Cells", nUMIin);
+        num("Mean UMI per Cell", nCellsF ? nUMIin / nCellsF : 0);
+        num("Median UMI per Cell", medUMI);
+        num("Mean Gene per Cell", nCellsF ? nGeneIn / nCellsF : 0);
+        num("Median Gene per Cell", medGene);
+        num("Total Gene Detected", nGeneDet);
+        ok &= writeFile(g + "Summary.csv", s, log);
     }
     return ok;
 }

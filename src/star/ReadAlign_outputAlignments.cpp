@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+extern int g_e10Level; //singlet E10/E11 (SeqCacheGpuPrefill.cpp)
+
 //singlet E9 (bench/fable/solo, docs/gpu-engine/fable/E9-solo.md), debug only: SINGLET_SOLO_DUMP=<dir> writes <dir>/solo_<chunk>.bin per
 //mapping thread, one 48-byte record per read in the thread's processing order (= the order of its Solo record file), with what Solo's Gene
 //feature saw for the read after SoloRead::record: CB and UMI (3 bits per base as handoffReadEntry packs them), the gene set (its gene when
@@ -71,6 +73,20 @@ void ReadAlign::soloDumpRead(uint64 nTrSolo) {
     if (f.buf.size() >= (1u << 22)) soloDumpWrite(f);
 };
 
+//singlet E11 (docs/gpu-engine/fable/E11-solowire.md): at level 5 the Solo record of a read STAR maps is replaced by its Gene annotation, as
+//E9's library takes it (solo.cuh RecAnn; the fields of soloDumpRead): gene (when the gene set has one), nTr, the gene set's size capped at 2,
+//bit 0 an alignment on a mitochondrial contig, bit 1 exonic. Packed gene | nTr << 32 | ng << 48 | bits << 56
+void ReadAlign::e11Annot(uint64 nTrSolo) {
+    const ReadAnnotFeature &af = readAnnot.annotFeatures[SoloFeatureTypes::Gene];
+    const uint64 gene = af.fSet.size() == 1 ? (uint64) *af.fSet.begin() : 0xFFFFFFFFull;
+    const uint64 nTr1 = min(nTrSolo, (uint64) 65535), ng = min(af.fSet.size(), (size_t) 2);
+    uint64 bits = (af.ovType & 15) == ReadAnnotFeature::exonic ? 2 : 0;
+    for (uint64 itr = 0; itr < nTrSolo; itr++)
+        if (P.pGe.chrSet.mito.count(trMult[itr]->Chr) == 1) bits |= 1;
+    e11Ann.push_back(iReadAll - 1);
+    e11Ann.push_back(gene | nTr1 << 32 | ng << 48 | bits << 56);
+};
+
 void ReadAlign::outputAlignments() {
   
     outBAMbytes=0;
@@ -88,6 +104,7 @@ void ReadAlign::outputAlignments() {
     };
     if (e10Skip) {//singlet E10: an unmapped read with a GPU record: counted and written to Unmapped.out on the device; the barcode and the Solo record
         soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
+        if (g_e10Level >= 5) e11Annot(0); else //singlet E11
         soloRead->record(0, trMult, iReadAll, readAnnot);
         return;
     };
@@ -149,6 +166,7 @@ void ReadAlign::outputAlignments() {
         };        
         
         PROF_T0(tOutSolo);
+        if (g_e10Level >= 5) e11Annot(unmapType<0 ? nTr : 0); else //singlet E11: Solo counts on the device
         soloRead->record((unmapType<0 ? nTr : 0), trMult, iReadAll, readAnnot); //need to supply nTr=0 for unmapped reads
         if (soloDumpDir() != nullptr) soloDumpRead(unmapType<0 ? nTr : 0); //singlet E9 debug dump, off by default
         PROF_ADD(PROF_outSolo, tOutSolo);
@@ -542,6 +560,7 @@ void ReadAlign::outputHandoffSummary()
     };
     for (uint64 i = 0; i < nTr; i++) trMult[i] = &handoffTr[(i == 0 && (flags & 1)) ? 0 : 1];
     trBest = trMult[0];
+    if (g_e10Level >= 5) e11Annot(nTr); else //singlet E11
     soloRead->record(nTr, trMult, iReadAll, readAnnot);
     if (soloDumpDir() != nullptr) soloDumpRead(nTr); //singlet E9 debug dump, off by default
     PROF_ADD(PROF_outSolo, tOutSolo);

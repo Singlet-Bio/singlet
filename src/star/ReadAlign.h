@@ -61,6 +61,10 @@ class ReadAlign {
         int soloDumpChunk = -1;
         void *soloDumpF = nullptr;
         void soloDumpRead(uint64 nTrSolo);
+        //singlet E11 (g_e10Level == 5, SINGLET_ENGINE_GPU_E2E=5): Solo counts on the device after mapping (SeqCacheGpuPrefill.cpp); for each read
+        //this loop maps, what SoloReadFeature::record takes from it for the Gene feature replaces the record: (iReadAll - 1, packed annotation)
+        std::vector<uint64> e11Ann;
+        void e11Annot(uint64 nTrSolo);
 
         Genome &mapGen, &genOut; //mapped-to-genome structure
 

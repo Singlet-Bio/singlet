@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 namespace m5 { struct Params; struct GenomeView; }
+namespace e9 { struct SoloModel; struct SoloParams; }   // E11: src/engine_gpu/solo_gpu.h
 
 namespace singlet_engine_gpu {
 
@@ -97,7 +98,11 @@ inline E2ERegion& e2eRegion() { static E2ERegion r; return r; }
 //       SJ.out.tab's junctions, the list of unmapped reads (STAR's loop still does them too; SINGLET_ENGINE_GPU_E10_CHECK=1 compares the entries)
 //   3 = STAR's loop takes them from the device: for a read with a record it keeps only readLoad, the barcode and the Solo record
 //   4 = reads with a record are not given to STAR at all (only the reads with N and the host lane's failures are); STAR Solo misses them
-inline int e2eLevel() { const char* e = std::getenv("SINGLET_ENGINE_GPU_E2E"); return (e != nullptr && e[0] >= '1' && e[0] <= '4') ? e[0] - '0' : 0; }
+//   5 = E11 (docs/gpu-engine/fable/E11-solowire.md): level 4 with STARsolo on the device (E9's library): mapDistinct keeps the reads' CR/UR,
+//       the read -> record map and the records' Gene annotation on the device; after STAR's loop (which maps the reads without a record and
+//       records their annotation instead of Solo's record) soloRun counts every read on the device and writes star_Solo.out; STAR's Solo
+//       post-map step does not run. Where E9's port does not cover the Solo options, level 5 runs as level 3 (STAR's Solo sees every read).
+inline int e2eLevel() { const char* e = std::getenv("SINGLET_ENGINE_GPU_E2E"); return (e != nullptr && e[0] >= '1' && e[0] <= '5') ? e[0] - '0' : 0; }
 inline bool e2eRequested() { return e2eLevel() >= 1; }
 
 // STAR's read clipping for mate 1 (ClipMate::clip, --clipAdapterType Hamming), applied to every read on the GPU before dedup, so the
@@ -133,6 +138,8 @@ struct Input {
         bool hook = false;               // g_handoffReadHook is set: sampled clipped reads get entry bit 2 and the host's detector bits 3-4
         // R11's exact CB histogram (bench/fable/records/r11_hist.cpp): STAR's whitelist (ParametersSolo::cbWL: sorted 2-bit keys), CB and UMI lengths
         const uint64_t* wl = nullptr; uint64_t nWL = 0; uint32_t cbL = 0, umiL = 0;
+        // E11 (level 5): with these set, mapDistinct keeps on the device what soloRun needs after STAR's loop (e9::soloKeep)
+        const e9::SoloModel* soloModel = nullptr; const e9::SoloParams* soloParams = nullptr;
     } e10;
 };
 
@@ -168,6 +175,8 @@ struct Output {
         std::vector<uint32_t> r11;
         uint64_t r11Total = 0;
         double msR11 = 0;
+        // E11: the Solo inputs are kept on the device (e9::soloKeep: CR/UR per read, read -> record, the records' Gene annotation)
+        bool soloKept = false;
         std::string log;
     } e10;
     std::string log;
@@ -220,6 +229,21 @@ inline int lockDevice(int* lockFd) {
     return device;
 }
 inline void unlockDevice(int lockFd) { if (lockFd >= 0) { flock(lockFd, LOCK_UN); close(lockFd); } }
+// a slot of one given device (E11: the sample's second, short use of the device that holds its kept Solo inputs, after STAR's loop): the first
+// free slot, or a wait for slot (pid mod slots). *lockFd is closed by unlockDevice.
+inline void lockDeviceSlot(int device, int* lockFd) {
+    const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
+    const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
+    auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
+    *lockFd = -1;
+    for (int k = 0; k < slots; k++) {
+        int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR, 0666);
+        if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return; }
+        if (fd >= 0) close(fd);
+    }
+    *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR, 0666);
+    if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
+}
 
 // ---- non-host screen (nonhost_gpu.cu): Phases A-C of NonHostScreener::classify_multi_batch_filtered on the GPU
 struct NonhostPaths { std::string viral, bacterial, fungal, bloom; };   // empty index path = index absent (as on the CPU)

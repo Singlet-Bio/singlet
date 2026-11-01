@@ -1,4 +1,6 @@
-// E9: STARsolo's Gene outputs from the device records and the per-read entries (docs/gpu-engine/fable/E9-solo.md). Not wired into the engine.
+// E9: STARsolo's Gene outputs from the device records and the per-read entries (docs/gpu-engine/fable/E9-solo.md). Wired into the engine by
+// E11 (docs/gpu-engine/fable/E11-solowire.md, SINGLET_ENGINE_GPU_E2E=5): the keep API at the end holds on the device what soloRun needs after
+// STAR's loop, soloRunKept runs it there, soloWrite writes STAR's files (and Gene/Summary.csv when given SoloSummaryIn).
 //   soloRun:   stage (b) per record the Gene annotation (classifyAlign on the record's blob), per read its record's annotation (or the host's
 //              for a read the host mapped); stage (a) per distinct CR the whitelist matches, per read the UMI check, Barcodes.stats and the
 //              exact-match histogram, per distinct multi-match CR the posterior; stage (c) per read Solo's record/inputRecords rule: flags,
@@ -24,6 +26,8 @@ struct SoloModel {                       // host arrays (Transcriptome.cpp, Para
 };
 struct SoloRecs {                        // the distinct sequences' records (mapDistinct's blobs)
     u64 nRec = 0;
+    bool dev = false;                    // the pointers below are device pointers, used in place (soloRun(device) only)
+    const RecAnn* recAnn = nullptr;      // per record its Gene annotation, already computed (soloKeepRecords): the blobs are not read
     const uint8_t* blob = nullptr; u64 blobBytes = 0;   // blobBytes includes >= 16 bytes of padding
     const u64* blobOff = nullptr;        // nRec + 1
     const u64* seqOff = nullptr;         // nRec + 1 (record sequence length = seqOff[r+1] - seqOff[r])
@@ -31,10 +35,14 @@ struct SoloRecs {                        // the distinct sequences' records (map
 };
 struct SoloReads {                       // per read, in read order
     u64 n = 0;
+    bool dev = false;                    // cr3, ur3, rec are device pointers, used in place (soloRun(device) only)
     const u64* cr3 = nullptr;            // CR, 3 bits per base (HandoffReadEntry packing)
     const u64* ur3 = nullptr;            // UR
     const u32* rec = nullptr;            // record index, 0xFFFFFFFF: no record (the host mapped the read)
     const RecAnn* hostAnn = nullptr;     // the host's annotation for reads without a record (indexed by read)
+    u64 nHost = 0;                       // or sparse, in host memory: hostAnnS[k] is the annotation of read hostIdx[k] (a read without a record)
+    const u32* hostIdx = nullptr;
+    const RecAnn* hostAnnS = nullptr;
 };
 struct SoloResult {
     u64 bstats[B_N] = {}, fstats[S_N] = {}, noCB[F_N] = {};
@@ -71,9 +79,34 @@ E9HD inline u32 recordFlag(const RecAnn& a, i32 cbm) {
 
 struct SoloFilterParams { double nExpectedCells = 3000, maxPercentile = 0.99, maxMinRatio = 10; };   // CellRanger2.2 3000 0.99 10
 struct SoloWriteInfo { u64 nCB = 0, nCells = 0, nUMImin = 0, nUMImax = 0; };
+// Gene/Summary.csv (SoloFeature_statsOutput.cpp:7-74) needs, besides the counts, STAR's mapping counters (g_statsAll) and the Q30 base counts of
+// the CB+UMI (SoloReadBarcode::qualHist) and of the RNA read inside its clip (ReadAlign::qualHist); bases with quality >= base + 30 and all bases
+struct SoloSummaryIn { u64 readN = 0, mappedU = 0, mappedM = 0, q30CbUmi = 0, nCbUmi = 0, q30Rna = 0, nRna = 0; u32 qualBase = 33; };
 // outPrefix = the star_Solo.out/ directory (with the trailing '/'). rowInsertOrder: the CellReads.stats keys in the order STAR's
-// unordered_map received them (empty: rows sorted by whitelist index).
+// unordered_map received them (empty: rows sorted by whitelist index). sum: also Gene/Summary.csv.
 bool soloWrite(const std::string& outPrefix, const SoloParams& S, const SoloModel& M, const SoloResult& r, const SoloFilterParams& FP,
-               const std::vector<u32>& rowInsertOrder, SoloWriteInfo& info, std::string& log);
+               const std::vector<u32>& rowInsertOrder, SoloWriteInfo& info, std::string& log, const SoloSummaryIn* sum = nullptr);
+
+// ---- E11: the engine's use. mapDistinct keeps on the device, while it holds it, what soloRun needs after STAR's loop (the records leave the
+// device before the loop); soloRunKept runs soloRun(device) on them once STAR has mapped the reads without a record.
+struct SoloKeep {
+    bool reads = false, recs = false;    // soloKeepReads / soloKeepRecords done
+    u64 n = 0, nRec = 0, nOverflow = 0;  // reads, records, records with an exon overflow (must be 0)
+    u64 *cr3 = nullptr, *ur3 = nullptr;  // device, per read
+    u32* rec = nullptr;                  // device, per read: its record or 0xFFFFFFFF
+    RecAnn* recAnn = nullptr;            // device, per record
+    double msReads = 0, msRecs = 0;      // the two steps (ms, device included)
+};
+SoloKeep& soloKeep();
+// per read CR and UR from E10's aux words (device; `stride` words per read, cr3 and ur3 first) into contiguous device arrays
+bool soloKeepReads(const u64* dAux, u64 stride, u64 n, std::string& log);
+// per record its Gene annotation (stage (b) on the blobs, while they are on the device) and a copy of the read -> record map (device)
+bool soloKeepRecords(const SoloParams& S, const SoloModel& M, const e6::RecParams& RP, const uint8_t* dBlob, const u64* dBlobOff, const u64* dSeqOff,
+                     u64 nRec, const u32* dRec, u64 n, std::string& log);
+void soloKeepRelease();
+// soloRun(device) on the kept arrays (on `device`, selected for the calling thread) plus the annotation of the reads the host mapped (sparse,
+// host memory, ascending read index); releases the kept arrays
+bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,
+                 std::string& log);
 
 }  // namespace e9
