@@ -12,11 +12,12 @@
     xlabel={stored bits per non-zero}, ylabel={cold read rate, million non-zeros/s}}
   \def\fbiso{25,50,100}\def\fbxlo{0.2}\def\fbtop{205}\def\fbanchor{anchor_lin}
 \fi
+% Inside another tikzpicture (Fig. 1), \fbAxisOpts gives the axis position and size and no picture is opened here.
 \def\fbaxis#1{\begin{axis}[#1]}
-\begin{tikzpicture}
-\expandafter\fbaxis\expandafter{\fbopts,
-  title={\fbTitle},
-  width=\ifdefined\fbW\fbW\else0.47\linewidth\fi, height=7.6cm, clip mode=individual,
+\ifdefined\fbAxisOpts\else\begin{tikzpicture}\def\fbAxisOpts{width=0.47\linewidth, height=7.6cm}\fi
+\edef\fbAll{\unexpanded\expandafter{\fbopts},\unexpanded\expandafter{\fbAxisOpts}}
+\expandafter\fbaxis\expandafter{\fbAll,
+  title={\fbTitle}, clip mode=individual,
   axis x line*=bottom, axis y line*=left,
   lbl/.style={nodes near coords, point meta=explicit symbolic, visualization depends on={value \thisrow{\fbanchor}\as\lblanchor},
     every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=1.5pt}},
@@ -27,8 +28,10 @@
 % each ends, labelled, at the top of the plot
 \expandafter\pgfplotsinvokeforeach\expandafter{\fbiso}{
   \addplot[domain=\fbxlo:{1000*(1/#1-1/\fbtop)}, samples=150, dashed, sone!55, forget plot] {1/(1/#1 - x/1000)}
-    node[pos=1, anchor=south west, font=\sffamily\tiny, text=sone!80!black, inner sep=1pt] {#1};
+    node[pos=1, anchor=south west, font=\sffamily\tiny, text=sone!80!black, inner sep=1pt] {#1\,M/s};
 }
+\node[anchor=north west, font=\sffamily\tiny, text=sone!80!black, align=left, inner sep=1pt] at (rel axis cs:0.55,0.89)
+  {dashed: non-zeros per second\\delivered over a 1\,Gbit/s link};
 \ifnum\fbPts=1
 \expandafter\pgfplotsinvokeforeach\expandafter{\otherformats,s1}{
   \addplot[only marks, mark=*, mark size=0.7pt, c-#1, opacity=0.4, forget plot, discard if not={format}{#1}] table[x=bits, y=mnnzs] {\gen{fig1b_points.tsv}};
@@ -46,4 +49,4 @@
   table[x=bits, y=mnnzs, meta=label, x error plus expr=\thisrow{bits_q3}-\thisrow{bits}, x error minus expr=\thisrow{bits}-\thisrow{bits_q1},
     y error plus expr=\thisrow{mnnzs_q3}-\thisrow{mnnzs}, y error minus expr=\thisrow{mnnzs}-\thisrow{mnnzs_q1}] {\gen{fig1c_tradeoff.tsv}};
 \end{axis}
-\end{tikzpicture}%
+\ifdefined\fbInPicture\else\end{tikzpicture}\let\fbAxisOpts\undefined\fi%

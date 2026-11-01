@@ -1,0 +1,13 @@
+% Abstract, shared by main.tex (TCBB) and biorxiv.tex. About 200 words.
+The Gene Expression Omnibus holds sequencing data from more than three billion cells, and efforts to make them AI-ready
+now spend more time moving count matrices than computing on them. We measured how few bits these counts need and how fast
+they can be decoded, then built \sone{} to approach both limits. A \sone{} dataset is a manifest of content-addressed
+sample files, each opening with an index to blocks of cells, so a reader fetches only the cells it needs by HTTP range
+request. Within a block, genes are numbered by detection frequency, so each cell becomes small steps and small counts,
+which an rANS coder encodes with tables chosen by the cell's depth and position along the gene list, in 32 lanes for SIMD
+decoding. On \nm{nMatrices} public matrices, \sone{} files were the smallest on every one, \nm{ratioBestOther} times
+smaller than the best alternative and within a few percent of cross-validated count models; in UMI data most remaining
+bits are molecular sampling, irreducible given each cell's expression rates. On four cores \sone{} read fastest on
+\nm{dec-s1-fastest-count}, and from a real cloud object store it delivered a first PyTorch minibatch in under a second and
+streamed cells tens of times faster than Zarr, though per core its decoder is slower than byte-oriented codes. The codec
+was developed with Claude 5.5-generation models (Anthropic).

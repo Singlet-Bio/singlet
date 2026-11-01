@@ -2,8 +2,8 @@
 \section{The \sone{} format}
 \label{sec:format}\label{sec:how}
 
-Fig.~\ref{fig:how} shows the format from a whole dataset down to individual bits; a normative specification, precise
-enough to write an independent decoder, is provided as a separate supplementary file. A dataset is a small manifest that
+Fig.~\ref{fig:how} shows the format from a whole dataset down to individual bits; the full specification is a separate
+supplementary file. A dataset is a small manifest that
 lists one file per sample, each named by a cryptographic hash of its contents, so a link always refers to exactly the same
 bytes and anyone can check them (Fig.~\ref{fig:how}a). Information shared by many samples, such as the gene names of a
 genome annotation, is stored once and downloaded once (Fig.~\ref{fig:how}b). Table~\ref{tab:props} compares these properties with those of

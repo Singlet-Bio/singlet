@@ -1,24 +1,35 @@
-% Table 1 (main text): every format on the same matrices, from generated/tab_main.tsv (report_limits.redundancy_section).
-\begin{table}[tbp]
+% Table 2 (main text): every format on the same matrices, from generated/tab_main.tsv (report_limits.redundancy_section).
+\begin{table*}[tbp]
 \centering
 \caption{Every format on the same \nm{sumNsize} matrices}
 \label{tab:main}
-\footnotesize\setlength{\tabcolsep}{4pt}
+\footnotesize\setlength{\tabcolsep}{5pt}
 \pgfplotstabletypeset[
-  columns={format,bits,rel,read,fastest,redund},
+  columns={format,bits,rel,cr,read,fastest,read1,fastest1,redund},
+  every head row/.style={before row={\toprule
+    & \multicolumn{3}{c}{Size} & \multicolumn{2}{c}{Four cores} & \multicolumn{2}{c}{One core} & \\
+    \cmidrule(lr){2-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}}, after row=\midrule},
+  every last row/.style={after row=\bottomrule},
   columns/format/.style={string type, column name=Format, column type=l},
-  columns/bits/.style={column name={Bits}, fixed, fixed zerofill, precision=1},
-  columns/rel/.style={column name={$\div$\,\sone}, fixed, fixed zerofill, precision=1, postproc cell content/.append style={/pgfplots/table/@cell content/.add={}{$\times$}}},
-  columns/read/.style={column name={Read}, fixed, precision=0},
+  columns/bits/.style={column name={Bits per non-zero}, fixed, fixed zerofill, precision=1},
+  columns/rel/.style={column name={Size $\div$ \sone}, fixed, fixed zerofill, precision=1, postproc cell content/.append style={/pgfplots/table/@cell content/.add={}{$\times$}}},
+  columns/cr/.style={column name={Compression}, fixed, fixed zerofill, precision=1, postproc cell content/.append style={/pgfplots/table/@cell content/.add={}{$\times$}}},
+  columns/read/.style={column name={Read rate}, fixed, precision=0},
   columns/fastest/.style={string type, column name=Fastest, column type=r},
-  columns/redund/.style={column name={Redund.}, fixed, precision=0, postproc cell content/.append style={/pgfplots/table/@cell content/.add={}{\%}}},
+  columns/read1/.style={column name={Read rate}, fixed, precision=0},
+  columns/fastest1/.style={string type, column name=Fastest, column type=r},
+  columns/redund/.style={column name={Redundancy}, fixed, precision=0, postproc cell content/.append style={/pgfplots/table/@cell content/.add={}{\%}}},
 ]{\gen{tab_main.tsv}}
 \par\vspace{3pt}
 \begin{minipage}{\linewidth}\scriptsize
-Bits: median bits per non-zero of the whole file, gene identifiers and barcodes included. $\div$\,\sone: geometric mean
-of the file's size relative to \sone. Read: median cold read rate on \nm{threadsHeadline} cores, million non-zeros per
-second. Fastest: matrices on which the format reads fastest. Redund.: median share of the file above the floor of the best
-count model ($1-\text{floor}/\text{bits}$). R formats hold the \nm{sumNr} matrices below $2^{31}$ non-zeros and loom the
-\nm{sumNloom} it can store densely.
+Bits per non-zero: median over matrices, for the whole file with gene identifiers and barcodes. Size $\div$ \sone:
+geometric mean of the file's size relative to the \sone{} file of the same matrix. Compression: median ratio of the size
+of uncompressed CSC arrays with 32-bit indices and values to the file's size. Read rate: median cold read rate into an
+in-memory sparse matrix, million non-zeros per second, on four cores and on one core. Fastest: matrices on which the
+format read fastest (one core: the \nm{dec-paired1-n} matrices measured on one core for every format). Redundancy: the
+share of the file that a code as short as the best count model we fitted would not need, $1-L/S$, where $S$ is the file's
+size and $L$ the cross-validated code length of that model on the same matrix (Section~\ref{sec:floor}); median over
+matrices. R formats hold the \nm{sumNr} matrices below $2^{31}$ non-zeros and loom the \nm{sumNloom} it can store
+densely.
 \end{minipage}
-\end{table}
+\end{table*}

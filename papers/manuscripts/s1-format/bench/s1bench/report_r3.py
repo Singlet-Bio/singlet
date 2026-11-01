@@ -102,6 +102,13 @@ def netsweep_section(cfg: Config, N: Numbers, out: Path) -> None:
         ds = sorted({r["dataset"] for r in rows})[-1]
     N.put("ns-dataset", DS_LABELS.get(ds, ds.replace("_", r"\_")))
     lat = [r for r in rows if r["dataset"] == ds and r["grid"] == "latency"]
+    # one .s1: where the netsweep133 stage measured the singlet 1.3.3 defaults (32 requests in flight, four minibatches
+    # ahead) at every round-trip time, those rows replace the .s1 rows of the latency grid (run with 1.3.2's 8 requests)
+    v133 = [r for r in _rows(cfg, "netsweep133") if r.get("status") == "ok" and r["dataset"] == ds and r.get("grid") == "inflight"
+            and int(float(r.get("io_threads") or 0)) == 32 and int(float(r.get("ahead") or 0)) == 4]
+    if v133:
+        lat = [r for r in lat if r["loader"] != "s1_stream"] + v133
+        N.put("ns-s1-version", "1.3.3")
     rtts = sorted({int(float(r["rtt_ms"])) for r in lat})
     loaders = [ld for ld in cfg["netsweep"]["loaders"] if any(r["loader"] == ld for r in lat)]
     curve = []
@@ -223,13 +230,14 @@ def r2_section(cfg: Config, N: Numbers, out: Path) -> None:
     _write(tab, out / "tab_r2.tsv", ["dataset", "loader", "lid", "first", "cps", "req_epoch", "gb_epoch", "usd_r2", "usd_s3",
                                      "rtt_ms", "edge_ms", "gbit1", "gbit8"])
     # Fig. 3d: first minibatch against sustained rate on R2, one point per loader (HLCA core)
-    short = {"anndata_inmem": ("h5ad, downloaded first", "east", "other"),
-             "anndata_zarr_lazy": ("AnnData Zarr", "south west", "other"), "zarr3_shard": ("Zarr v3, sharded", "north west", "other"),
-             "s1_stream": (".s1, 1.3.2 settings", "west", "s1"), "s1_stream@32x4": (".s1, 1.3.3 defaults", "north west", "s1"),
-             "s1_stream@64x8": (".s1, 64 requests", "south west", "s1")}
+    # (one .s1: the singlet 1.3.3 defaults, 32 requests in flight and four minibatches ahead; fmt: the format's colour)
+    short = {"anndata_inmem": ("h5ad, downloaded first", "east", "other", "h5ad_gzip"),
+             "anndata_zarr_lazy": ("AnnData Zarr", "south west", "other", "zarr"),
+             "zarr3_shard": ("Zarr v3, sharded", "north west", "other", "zarr3"),
+             "s1_stream@32x4": (".s1", "west", "s1", "s1")}
     pts = [{"lid": r["lid"], "first": r["first"], "cps": r["cps"], "label": short[r["lid"]][0], "anchor": short[r["lid"]][1],
-            "group": short[r["lid"]][2]} for r in tab if r["dataset"] == "HLCA core" and r["lid"] in short]
-    _write(pts, out / "figr2.tsv", ["lid", "first", "cps", "label", "anchor", "group"])
+            "group": short[r["lid"]][2], "fmt": short[r["lid"]][3]} for r in tab if r["dataset"] == "HLCA core" and r["lid"] in short]
+    _write(pts, out / "figr2.tsv", ["lid", "first", "cps", "label", "anchor", "group", "fmt"])
 
 
 def _group(rows):
@@ -269,7 +277,29 @@ def writecost_section(cfg: Config, N: Numbers, out: Path) -> None:
             N.put(f"wc-{t['dataset']}-{t['fid']}-mb", t["extra_mb"], "{:,.0f}")
 
 
+def cores_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """The thread sweep to a whole cluster node (stage sweep44: 1 to 44 cores, an exclusive 48-core bigmem node): .s1 read
+    cold from disk, per matrix, and the link it keeps up with, b x D(p) for that matrix's stored bits b; medians."""
+    rows = [r for r in _rows(cfg, "sweep44/decode", ".sweep") if r.get("status") == "ok" and r["format"] == "s1"
+            and r["what"] == "file" and r["cache"] == "cold" and r["mode"] == "native"]
+    if not rows:
+        return
+    bits = {r["dataset"] + "." + r["matrix"]: _f(r["bits_per_nnz"]) for r in _stage(cfg, "write")
+            if r.get("status") == "ok" and r["format"] == "s1"}
+    tab = []
+    for p in sorted({int(r["threads"]) for r in rows}):
+        d = [(r["dataset"] + "." + r["matrix"], _f(r["mnnz_per_s"])) for r in rows if int(r["threads"]) == p]
+        gbit = [bits[k] * v * 1e6 / 1e9 for k, v in d if bits.get(k) and v]
+        tab.append({"threads": p, "mnnzs": float(np.median([v for _, v in d])), "gbit": float(np.median(gbit)), "n": len(d)})
+        N.put(f"core-{p}-mnnzs", tab[-1]["mnnzs"], "{:.0f}")
+        N.put(f"core-{p}-gbit", tab[-1]["gbit"], "{:.1f}")
+    N.put("core-max", tab[-1]["threads"])
+    N.put("core-n", min(t["n"] for t in tab))
+    _write(tab, out / "fig_cores.tsv", ["threads", "mnnzs", "gbit", "n"])
+
+
 def run(cfg: Config, N: Numbers, out: Path) -> None:
+    cores_section(cfg, N, out)
     protocol_section(cfg, N, out)
     access_section(cfg, N, out)
     netsweep_section(cfg, N, out)

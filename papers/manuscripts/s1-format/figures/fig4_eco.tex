@@ -49,7 +49,7 @@
 \node[code] at (11.8,-1.0) {from singlet.torch import S1Cells\\ds = S1Cells("https://.../pbmc10k.s1", batch\_size=512)\\for b in DataLoader(ds, batch\_size=None): b["X"]};
 \node[code] at (11.8,-2.0) {sce <- singlet::load("pbmc10k.s1", as = "sce")};
 \node[code] at (11.8,-3.0) {so \ <- singlet::load("pbmc10k.s1", as = "seurat")};
-\node[code] at (11.8,-4.0) {auto m = pz2::Matrix::open(src);\\m.decode\_columns(src, c0, c1, out);};
+\node[code] at (11.8,-4.0) {// header-only C++ library:\\// decode cells c0..c1 into CSC arrays};
 
 % ---------- writer calls ----------
 \node[code] at (-1.45,-4.6) {singlet.write\_s1(adata, "sample.s1")\ \ \ \ \ \ \ \ \# Python\\singlet::write\_s1(sce, "sample.s1")\ \ \ \ \ \ \ \ \ \# R};

@@ -1,7 +1,5 @@
-lid	first	cps	label	anchor	group
-anndata_inmem	101.109	216119	h5ad, downloaded first	east	other
-anndata_zarr_lazy	1.49693	537.039	AnnData Zarr	south west	other
-s1_stream	0.670323	6130.29	.s1, 1.3.2 settings	west	s1
-s1_stream@32x4	0.629988	15089.5	.s1, 1.3.3 defaults	north west	s1
-s1_stream@64x8	0.588232	23177.2	.s1, 64 requests	south west	s1
-zarr3_shard	2.08753	340.135	Zarr v3, sharded	north west	other
+lid	first	cps	label	anchor	group	fmt
+anndata_inmem	101.109	216119	h5ad, downloaded first	east	other	h5ad_gzip
+anndata_zarr_lazy	1.49693	537.039	AnnData Zarr	south west	other	zarr
+s1_stream@32x4	0.629988	15089.5	.s1	west	s1	s1
+zarr3_shard	2.08753	340.135	Zarr v3, sharded	north west	other	zarr3

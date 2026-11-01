@@ -1,20 +1,10 @@
-% Evaluation setup (main text): a summary. The full protocol is in the Supplementary Methods (supplement.tex).
-\section{Evaluation setup}
+% Methods (main text, after the Discussion): a summary. The full protocol is in the Supplementary Methods (supplement.tex).
+\section{Methods}
 \label{sec:setup}\label{sec:mmethods}
 
 Every number, table and figure in this paper is produced by one pipeline from public data
 (\texttt{papers/manuscripts/s1-format/bench} in the \texttt{singlet} repository); full details are in the Supplementary
 Methods.
-
-\para{Delivered rate}When data come over a network, the time to deliver them is the time to transfer the stored
-bytes plus the time to decode them. For a format storing $b$ bits per non-zero entry and decoding $D$ entries per second, a
-link of bandwidth $B$ delivers
-\begin{equation}
-R_{\mathrm{eff}} \;=\; \left(\frac{b}{B} + \frac{1}{D}\right)^{-1}\ \text{non-zero entries per second}.
-\label{eq:reff}
-\end{equation}
-The model is conservative, since a reader that overlaps transfer and decoding does better. A smaller file helps only if
-its decoder keeps up; a reader runs \emph{at the speed of the network} when the link, not the decoder, is the limit.
 
 \para{Data}\nm{nMatrices} count matrices from \nm{nDatasets} public datasets in \nm{nProtocolClasses} protocol
 classes (droplet, plate-based and combinatorial single-cell data, multimodal data, and spatial data from both sequencing

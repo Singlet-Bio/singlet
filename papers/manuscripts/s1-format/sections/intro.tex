@@ -2,19 +2,21 @@
 \section{Introduction}
 \label{sec:intro}
 
-\IEEEPARstart{S}{ingle-cell} studies now routinely profile hundreds of thousands to millions of cells, reference atlases
-hold tens of millions~\cite{svensson2018exponential,sikkema2023integrated,czi2025cellxgene}, and a single perturbation
-screen has reached a hundred million~\cite{zhang2025tahoe}. These data are no longer analysed once on a laptop. Atlases
-serve them to thousands of users, and machine-learning models stream them minibatch by minibatch, reading every cell many
-times~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}. More and more often they live in cloud object storage and
-cross a network before they are used. Moving the data, rather than computing on them, has become a bottleneck for
-large-scale analysis and for building AI-ready datasets.
+\IEEEPARstart{T}{he} Gene Expression Omnibus~\cite{barrett2013geo} already holds sequencing data from more than three
+billion single cells, and the field keeps growing: reference atlases hold tens of millions of
+cells~\cite{svensson2018exponential,sikkema2023integrated,czi2025cellxgene} and a single perturbation screen has reached a
+hundred million~\cite{zhang2025tahoe}. Several efforts are now reprocessing this archive into uniform, AI-ready datasets
+that atlases serve to thousands of users and that machine-learning models stream minibatch by minibatch, reading every
+cell many times~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}. Those data live in cloud object storage and
+cross a network before they are used, so the data structure that holds them, not the model or the processor, has become
+the bottleneck of this infrastructure.
 
-For a link of a given bandwidth, the number of cells delivered per second is set by how many bits each cell takes. That
-number has a floor, the information the counts actually contain, and the formats in use stay far above it.
-AnnData~\cite{virshup2024anndata}, the 10x Genomics HDF5 file, loom, Zarr and TileDB-SOMA~\cite{tiledbsoma} store a
-matrix of whole-number counts as generic arrays and compress them with tools such as gzip or zstd, which see only bytes.
-What limits how fast single-cell data can be delivered today is therefore mostly how they are encoded, not the network.
+What a link delivers per second is set by two things a format controls: how many bits each cell takes and how many round
+trips a reader needs to find them. The first has a floor, the information the counts actually contain, and the formats in
+use stay far above it. AnnData~\cite{virshup2024anndata}, the 10x Genomics HDF5 file, loom, Zarr and
+TileDB-SOMA~\cite{tiledbsoma} store a matrix of whole-number counts as generic arrays and compress them with tools such
+as gzip or zstd, which see only bytes. What limits how fast single-cell data can be delivered today is therefore mostly
+how they are encoded, not the network.
 
 Count matrices are far from arbitrary. Most non-zero counts are exactly one; how deeply a cell was sequenced sets the
 expected count of every gene in it; and if genes are numbered from most to least frequently detected, the positions of a
@@ -36,11 +38,12 @@ summarises the outcome. This paper makes four contributions:
 \item \emph{A benchmark.} We compare \sone{} with fifteen storage formats and settings on matrices from
   \nm{nProtocolClasses} protocol classes, from cold reads to training loaders on emulated and real cloud storage, with
   every number produced by one open pipeline (Section~\ref{sec:setup}).
-\item \emph{Findings.} \sone{} files are the smallest on every matrix and within a few percent of the best count models; no
+\item \emph{Findings.} \sone{} files are the smallest on every matrix and within a few percent of the best count models we
+  fitted; no
   measured code was both as small and faster to decode; and from cloud storage \sone{} keeps a network link busy where
   chunked formats leave it idle (Section~\ref{sec:results}). We also report its costs.
 \end{itemize}
-The codec was developed iteratively with an AI model, Claude (Anthropic), as a coding assistant, with every candidate
-change measured against the limits above.
+The codec was developed iteratively with Claude 5.5-generation models (Anthropic), with every candidate change measured
+against the limits above.
 
 \input{figures/fig1_wow}

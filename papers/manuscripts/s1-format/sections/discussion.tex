@@ -5,7 +5,7 @@
 Single-cell count matrices have been stored as generic arrays and handed to compressors that cannot see what the bytes
 mean, and the cost is paid every time the data cross a network. \sone{} instead describes the counts with what is known
 about them. Its files are several times smaller than the formats in common use and within a few percent of the best count
-models we fitted, so in size no lossless format can improve on it by more than single-digit percentages; most of what is
+models we fitted, so by that reference a lossless format could make it smaller by single-digit percentages at most; most of what is
 left in UMI data is the random sampling of molecules itself. In speed, \sone{} sits where the trend of existing codes puts a
 code of its size, and none of the codes we measured was both as small and faster.
 
@@ -24,15 +24,20 @@ decoding core, a larger but faster code delivers more. Going faster at the same 
 a smaller file. The stored gene order that makes decoding fast means a reader permutes its gene vocabulary once; a reader
 that insists on source order pays a sort per cell. The writer needs about three times as much memory as AnnData's, which
 matters for the largest matrices. The format stores whole-number counts only and does not hold the rich annotations of an
-AnnData object, so it complements rather than replaces such containers, and it has a single implementation, for which the
-specification is meant to make a second possible. Our measurements have limits of their own: all timings come from one
+AnnData object, so it complements rather than replaces such containers.
+
+\sone{} is a format for storing and moving counts, not for computing on them in place. Its entries cannot be traversed
+or indexed without decoding, so an analysis decodes the blocks it needs into an in-memory structure (CSC arrays, an
+AnnData object or a PyTorch tensor), whereas most of the formats we compared, uncompressed HDF5 or Zarr arrays among
+them, can be memory-mapped and traversed as stored. \sone{} addresses the cost of moving data across networks and
+storing them, not the memory an analysis needs while it runs. Because blocks decode independently and quickly, an
+out-of-core analysis can instead stream a matrix block by block, holding only the cells it is working on.
+
+Our measurements have limits of their own: all timings come from one
 type of cluster node, the network experiments used one emulated object store and one real one read from one location, and
 kernels for AVX-512 and ARM processors were not measured (Supplementary Limitations).
 
-\section{Conclusion}
-\label{sec:conclusion}
-
-Count matrices are the one object every single-cell analysis, and every model trained on single-cell data, reads. \sone{}
+\para{Conclusion}\label{sec:conclusion}Count matrices are the one object every single-cell analysis, and every model trained on single-cell data, reads. \sone{}
 stores them close to their information content, decodes them as fast as the existing trade-off between size and speed
 allows, reads them in part from anywhere, and returns exactly the original counts to Python, R and C++. We propose \sone{}
 as a standard encoding for single-cell count matrices in archives, atlases and training pipelines, and the
