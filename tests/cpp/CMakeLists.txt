@@ -94,6 +94,7 @@ add_pileup_test(test_umi_store_scale)
 add_pileup_test(test_umi_deep_roots)
 add_pileup_test(test_umi_consume)
 add_pileup_test(test_mt_numt_tie)
+add_pileup_test(test_pileup_workers)   # run_parallel: counts independent of the worker count
 # GPU pileup vs CPU pileup (labels, kFlank, legacy_exon_extra) under intron rules 397 and 389. Built in every configuration; it prints SKIP
 # and exits 77 (ctest: skipped) in a CPU-only build or without a usable CUDA device. The GPU engine library exists when the pipeline is built
 # with a CUDA compiler (SINGLET_ENGINE_GPU, top-level CMakeLists.txt).
