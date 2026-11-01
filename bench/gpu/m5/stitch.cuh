@@ -515,6 +515,21 @@ HD inline u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u6
     u64 SAstr = packed_get(g_.SA, iSA, g_.saBits);
     bool dirG = (SAstr >> g_.GstrandBit) == 0;
     SAstr &= g_.GstrandMask;
+#ifdef M5_CMPU
+    // E7: the four direction cases as one loop with strides (the same bytes compared in the same order, the same result):
+    // the read runs forward (dirR) or backward through Read1[0] (dirR == dirG) or its complement Read1[1]; the genome runs
+    // forward from SAstr + L (dirG) or backward from nGenome - 1 - SAstr - L. compRes as in the case it replaces.
+    {
+        const i64 ds = dirR ? 1 : -1, dg = dirG ? 1 : -1;
+        const char* s = s2[dirR == dirG ? 0 : 1] + S + (dirR ? (i64)L : -(i64)L);
+        const char* g = g_.G + (dirG ? SAstr + L : g_.nGenome - 1 - SAstr - L);
+        for (u64 ii = L; ii < N; ii++, s += ds, g += dg) {
+            const char sc = *s, gc = *g;
+            if (sc != gc) { compRes = dirG ? sc > gc : !(sc > gc || gc > 3); return ii; }
+        }
+        return N;
+    }
+#endif
     const char* g = g_.G;
     i64 ii;
     if (dirR && dirG) {
@@ -1655,6 +1670,209 @@ template <class C> HD inline Status mapPhase1(const Params& P, const GenomeView&
     }
     w.stitched = stitched;
     return Status::Ok;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// E7 (seeds): phase 1 with flat loops, for convergent warps (docs/gpu-engine/fable/E7-seeds.md). The same statements as
+// mapPhase1 in the same order per read, regrouped into three functions so that a kernel can run them as one warp-uniform
+// loop per stage:
+//   p1Setup   read set-up, qualitySplit, resetN, the seed iterator at the first statement of the nest
+//   seedNext  advances the iterator through STAR's seed-loop nest (pieces x iDir x istart x the while loop over Lmapped,
+//             then the seedSearchLmax call) to the next maxMappableLength2strands call; false at the end of the nest
+//   seedAfter what the nest does with the call's result L (flagDirMap, Lmapped += L)
+//   p1Windows the markers after the seed loop, then the windows from the anchors' SA entries as ONE loop over the entries
+//             (createExtendWindowsWithAlign at one call site), the flanks, nWall, nEntries
+// A kernel calls maxMappableLength2strands (storeAligns inside) once per seedNext; each read's calls are STAR's, in STAR's
+// order, so storeAligns sees the same sequence and PC is the same.
+// ---------------------------------------------------------------------------------------------------------------------
+enum : uint8_t { SI_PIECE, SI_START, SI_WHILE, SI_LMAX, SI_NEXT, SI_DONE };
+struct SeedIt {
+    uint ssl;                                                    // seedSearchStartLmax of this read
+    uint32_t ip, iDir, istart, Lmapped, Nstart, Lstart;
+    uint32_t pS, pL, pF;                                         // splitR[0..2][ip] of the current piece
+    uint32_t Shift, seedLength;                                  // the pending call
+    uint8_t ph; bool flagDirMap;
+};
+template <class C> HD inline Status p1Setup(const Params& P, Work<C>& w, ReadBuf<C::LREAD>& rb, const char* R0, uint Lread, SeedIt& it) {
+    w.ov = OV_NONE;
+    w.stitched = false; w.nEntries = 0;
+    if (Lread > (uint)C::LREAD || Lread == 0) { w.ov = OV_LREAD; return Status::Overflow; }
+    for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
+    for (uint ii = 0; ii < Lread; ii++) rb.r[2][Lread - ii - 1] = rb.r[1][ii];
+    w.Lread = Lread;
+    w.outFilterMismatchNmaxTotal = mn<uint>(P.outFilterMismatchNmax, (uint)(P.outFilterMismatchNoverReadLmax * (Lread + 0)));
+    if (!qualitySplit(rb.r[0], Lread, P.maxNsplit, P.seedSplitMin, w)) return Status::Overflow;   // Lread > 0 here
+    w.mapMarker = 0; w.nA = 0; w.nP = 0; w.nW = 0; w.nTr = 0; w.nUM[0] = w.nUM[1] = 0;
+    w.storedLmin = 0; w.uniqLmax = 0; w.uniqLmaxInd = 0; w.multLmax = 0; w.multLmaxN = 0; w.multNminL = 0; w.multNmin = 0; w.multNmax = 0; w.multNmaxL = 0;
+    w.maxScoreMate[0] = 0;
+    w.trInitRLength = 0;
+    w.trBestKeep = -1; w.trBestScore = 0; w.trBestGLength = 0;
+    w.nKeep = 0; w.nWtr = 0; w.trNtotal = 0;
+    it.ssl = mn<uint>(P.seedSearchStartLmax, (uint)(P.seedSearchStartLmaxOverLread * (Lread - 1)));
+    it.ip = 0; it.ph = SI_PIECE;
+    return Status::Ok;
+}
+template <class C> HD inline bool seedNext(const Params& P, const Work<C>& w, SeedIt& it) {
+    for (;;) {
+        switch (it.ph) {
+        case SI_PIECE:   // for (ip ...) { Nstart, Lstart; flagDirMap = true; for (iDir = 0 ...) for (istart = 0 ...)
+            if (it.ip >= w.Nsplit) { it.ph = SI_DONE; return false; }
+            {
+                it.pS = (uint32_t)w.splitR[0][it.ip]; it.pL = (uint32_t)w.splitR[1][it.ip]; it.pF = (uint32_t)w.splitR[2][it.ip];
+                const uint len = it.pL;
+                const uint Nstart = P.seedSearchStartLmax > 0 && it.ssl < len ? len / it.ssl + 1 : 1;
+                it.Nstart = (uint32_t)Nstart; it.Lstart = (uint32_t)(len / Nstart);
+            }
+            it.flagDirMap = true; it.iDir = 0; it.istart = 0; it.ph = SI_START;
+            break;
+        case SI_START:   // if (flagDirMap || istart > 0) { Lmapped = 0; while ... }
+            if (it.flagDirMap || it.istart > 0) { it.Lmapped = 0; it.ph = SI_WHILE; }
+            else it.ph = SI_LMAX;
+            break;
+        case SI_WHILE: {   // while (istart * Lstart + Lmapped + seedMapMin < splitR[1][ip]) { call; Lmapped += L }
+            const uint off = (uint)it.istart * it.Lstart + it.Lmapped;
+            if (off + P.seedMapMin < (uint)it.pL) {
+                it.Shift = (uint32_t)(it.iDir == 0 ? ((uint)it.pS + off) : ((uint)it.pS + it.pL - 1 - off));
+                it.seedLength = (uint32_t)((uint)it.pL - off);
+                return true;
+            }
+            it.ph = SI_LMAX;
+            break;
+        }
+        case SI_LMAX:      // if (seedSearchLmax > 0) { call }  (its L is not used)
+            it.ph = SI_NEXT;
+            if (P.seedSearchLmax > 0) {
+                const uint sh = it.iDir == 0 ? ((uint)it.pS + (uint)it.istart * it.Lstart) : ((uint)it.pS + it.pL - (uint)it.istart * it.Lstart - 1);
+                it.Shift = (uint32_t)sh;
+                it.seedLength = (uint32_t)mn<uint>(P.seedSearchLmax, it.iDir == 0 ? ((uint)it.pS + it.pL - sh) : (sh + 1));
+                return true;
+            }
+            break;
+        case SI_NEXT:
+            if (++it.istart < it.Nstart) it.ph = SI_START;
+            else if (++it.iDir < 2) { it.istart = 0; it.ph = SI_START; }
+            else { it.ip++; it.ph = SI_PIECE; }
+            break;
+        default:
+            return false;
+        }
+    }
+}
+HD inline void seedAfter(SeedIt& it, uint L) {
+    if (it.ph != SI_WHILE) return;   // the seedSearchLmax call
+    if (it.iDir == 0 && it.istart == 0 && it.Lmapped == 0 && (uint)it.Shift + L == (uint)it.pL) it.flagDirMap = false;
+    it.Lmapped = (uint32_t)((uint)it.Lmapped + L);
+}
+// the pending call of the iterator (one call site per kernel)
+template <class C> HD inline void seedCall(const Params& P, const GenomeView& gv, Work<C>& w, const char* const* Read1, const SeedIt& it, uint& L) {
+    maxMappableLength2strands(P, gv, w, Read1, (uint)it.Shift, (uint)it.seedLength, (uint)it.iDir, L, (uint)it.pF);
+}
+// the windows from one SA entry of an anchor (the body of stitchPieces' iSA loop); returns createExtendWindowsWithAlign's
+// last status (< 0 overflow, EXIT_TOO_MANY_WINDOWS: STAR leaves this piece's iSA loop)
+template <class C> HD inline int p1Entry(const Params& P, const GenomeView& gv, Work<C>& w, uint iSA, uint aDir, uint aLength) {
+    uint a1 = packed_get(gv.SA, iSA, gv.saBits);
+    uint aStr = a1 >> gv.GstrandBit;
+    a1 &= gv.GstrandMask;
+    if (aDir == 1 && aStr == 0) aStr = 1;
+    else if (aDir == 0 && aStr == 1) a1 = gv.nGenome - (aLength + a1);
+    else if (aDir == 1 && aStr == 1) { aStr = 0; a1 = gv.nGenome - (aLength + a1); }
+    uint aX = a1, aY = 0; int na = 1;   // the anchor, or the donor and acceptor parts of an sjdb-insert alignment
+    if (a1 >= gv.sjGstart) {
+        uint a1D, aLengthD, a1A, aLengthA, sj1;
+        if (sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, sj1)) { aX = a1D; aY = a1A; na = 2; }
+        else na = 0;
+    }
+    int st = 0;
+#pragma unroll 1
+    for (int q = 0; q < na; q++) {
+        st = createExtendWindowsWithAlign(P, gv, w, q == 0 ? aX : aY, aStr);
+        if (st != 0) break;   // < 0 overflow; EXIT_TOO_MANY_WINDOWS: STAR's break skips the acceptor
+    }
+    return st;
+}
+template <class C> HD inline Status p1Windows(const Params& P, const GenomeView& gv, Work<C>& w) {
+#ifdef __CUDA_ARCH__
+    long long tc = clock64();
+#endif
+    const uint Lread = w.Lread;
+    bool stitched = false;
+    if (Lread < P.outFilterMatchNmin) {
+        w.mapMarker = MARKER_READ_TOO_SHORT; w.trInitRLength = 0; w.nW = 0;
+    } else if (w.Nsplit == 0) {
+        w.mapMarker = MARKER_NO_GOOD_PIECES; w.trInitRLength = w.splitR[1][0]; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA == 0) {
+        w.mapMarker = MARKER_ALL_PIECES_EXCEED_seedMultimapNmax; w.trInitRLength = w.multNminL; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA > 0) {
+        stitched = true;
+    }
+    if (stitched) {
+        if (w.wbEpoch == 0 || w.wbEpoch >= (1ULL << 22) - 1) { for (int i = 0; i < C::NWB; i++) w.wbKey[i] = 0; w.wbEpoch = 1; }
+        else w.wbEpoch++;
+        w.wbN = 0;
+        for (int i = 0; i < 16; i++) { w.wbBits[0][i] = 0; w.wbBits[1][i] = 0; }
+        w.nW = 0;
+        // one loop over every SA entry of every anchor (pieces in order, entries in order): one entry per iteration
+        const uint nP = w.nP;
+        uint iP = 0, iSA = 0, iSAend = 0, aDir = 0, aLength = 0;
+        bool inP = false;
+        for (;;) {
+            if (!inP) {
+                while (iP < nP && w.PC[iP][PC_Nrep] > P.winAnchorMultimapNmax) iP++;
+                if (iP >= nP) break;
+                iSA = w.PC[iP][PC_SAstart]; iSAend = w.PC[iP][PC_SAend];
+                aDir = w.PC[iP][PC_Dir]; aLength = w.PC[iP][PC_Length];
+                w.nScan += iSAend - iSA + 1;
+                inP = true;
+            }
+            const int st = p1Entry(P, gv, w, iSA, aDir, aLength);
+            if (st < 0) return Status::Overflow;
+            if (st == EXIT_TOO_MANY_WINDOWS || iSA == iSAend) { inP = false; iP++; }
+            else iSA++;
+        }
+        // flanks
+        for (uint iWin = 0; iWin < w.nW; iWin++) {
+            if (w.WC[iWin][WC_gStart] <= w.WC[iWin][WC_gEnd]) {
+                uint wb = w.WC[iWin][WC_gStart];
+                for (uint ii = 0; ii < P.winFlankNbins && wb > 0 && gv.chrBin[(wb - 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                    wb--;
+                    if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return Status::Overflow;
+                }
+                w.WC[iWin][WC_gStart] = wb;
+                wb = w.WC[iWin][WC_gEnd];
+                for (uint ii = 0; ii < P.winFlankNbins && wb + 1 < P.winBinN && gv.chrBin[(wb + 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                    wb++;
+                    if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return Status::Overflow;
+                }
+                w.WC[iWin][WC_gEnd] = wb;
+            }
+            w.nWA[iWin] = 0; w.WALrec[iWin] = 0; w.WlastAnchor[iWin] = -1;
+        }
+        w.nWall = w.nW;
+        w.nEntries = 0;
+        for (uint iP2 = 0; iP2 < w.nP; iP2++) w.nEntries += w.PC[iP2][PC_SAend] - w.PC[iP2][PC_SAstart] + 1;
+        M5CLK(w, 1, tc);
+    }
+    w.stitched = stitched;
+    return Status::Ok;
+}
+// phase 1 as one call per read with the flat loops (the E7 counterpart of mapPhase1; same results)
+template <class C> HD inline Status mapPhase1Flat(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb,
+                                               const char* R0, uint Lread) {
+#ifdef __CUDA_ARCH__
+    long long tc = clock64();
+#endif
+    SeedIt it;
+    Status s = p1Setup(P, w, rb, R0, Lread, it);
+    if (s != Status::Ok) return s;
+    const char* Read1[3] = {rb.r[0], rb.r[1], rb.r[2]};
+    while (seedNext(P, w, it)) {
+        uint L;
+        seedCall(P, gv, w, Read1, it, L);
+        if (w.ov) return Status::Overflow;
+        seedAfter(it, L);
+    }
+    M5CLK(w, 0, tc);
+    return p1Windows(P, gv, w);
 }
 
 // the assignment of one SA entry of piece iP (stitchPieces, FASTASSIGN path); false = overflow

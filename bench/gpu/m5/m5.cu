@@ -89,7 +89,7 @@ __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, 
     atomicAdd(&g_scan, (unsigned long long)wp->nScan);
 }
 
-struct LaneOut { std::vector<uint8_t> out, status, why; std::vector<uint16_t> len; std::vector<int8_t> unmap; double ms = 0; std::vector<double> runs; double phaseMs[3] = {0, 0, 0};
+struct LaneOut { std::vector<uint8_t> out, status, why; std::vector<uint16_t> len; std::vector<int8_t> unmap; double ms = 0; std::vector<double> runs; double phaseMs[4] = {0, 0, 0, 0};
 #ifdef M5_CENSUS
                  std::vector<CenRead> cen; std::vector<CenWin> win; unsigned long long winN = 0;
 #endif
@@ -141,11 +141,106 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 // staged lane: per batch of reads (one Work per read), phase 1 (thread per read), the assignment scan (warp per read,
 // lanes over consecutive SA entries: coalesced) marking the entries that do something, phase 3 (thread per read:
 // assignments in STAR's order from the marks, then stitching, selection, encoding)
+//
+// E7 (seeds, docs/gpu-engine/fable/E7-seeds.md), compile-time, each exact:
+//  M5_CMPU     compareSeqToGenome's four direction cases as one strided loop (stitch.cuh)
+//  M5_SEEDFLAT phase 1 with flat loops: the seed-loop nest as an iterator, one maxMappableLength2strands call per loop
+//              iteration at one call site; the window creation as one loop over the anchors' SA entries (implies M5_CMPU)
+//  M5_P1SPLIT  (with M5_SEEDFLAT) phase 1 as two kernels: k_p1s, persistent warps that make one seed call per lane per
+//              iteration and refill a lane with the batch's next read as soon as its read is done (warp-aggregated
+//              atomic counter), then k_p1w, the windows (thread per read)
+//  M5_P1MINB=n __launch_bounds__(128, n) on the phase-1 kernels (register cap for occupancy)
+#ifdef M5_SEEDFLAT
+#ifndef M5_CMPU
+#define M5_CMPU
+#endif
+#if defined(M5_CENSUS) || defined(M5_TAIL)
+#error "M5_SEEDFLAT: no census / tail probes"
+#endif
+#endif
+#if defined(M5_P1SPLIT) && !defined(M5_SEEDFLAT)
+#error "M5_P1SPLIT needs M5_SEEDFLAT"
+#endif
+#ifdef M5_P1MINB
+#define M5_P1_BOUNDS __launch_bounds__(128, M5_P1MINB)
+#else
+#define M5_P1_BOUNDS
+#endif
+#ifdef M5_P1SPLIT
+// seeds: persistent warps; every iteration each lane with a read makes its read's next maxMappableLength2strands call
 template <class C>
-__global__ void k_p1(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 b0, u64 n,
+__global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx,
+                                   u64 b0, u64 n, Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* status, unsigned long long* ctr) {
+    const unsigned FULL = 0xffffffffu, lane = threadIdx.x & 31;
+    u64 k = 0;
+    int st = 0;            // 0: needs a read, 1: holds a read with a pending call, 2: the batch is exhausted
+    SeedIt it;
+    long long tc = 0;
+    for (;;) {
+        // refill: the lanes without a read take the batch's next reads (consecutive per warp); a read without any call
+        // (or one that overflows at set-up) is finished at once and its lane takes another
+        for (;;) {
+            const unsigned need = __ballot_sync(FULL, st == 0);
+            if (!need) break;
+            const int leader = __ffs((int)need) - 1;
+            unsigned long long base = 0;
+            if ((int)lane == leader) base = atomicAdd(ctr, (unsigned long long)__popc(need));
+            base = __shfl_sync(FULL, base, leader);
+            if (st == 0) {
+                k = base + __popc(need & ((1u << lane) - 1));
+                if (k >= n) st = 2;
+                else {
+                    tc = clock64();
+                    const u64 i = idx ? idx[b0 + k] : b0 + k;
+                    Work<C>& w = work[k];
+                    const Status s = p1Setup(P, w, rbuf[k], rb + roff[i], rlen[i], it);
+                    if (s != Status::Ok) status[k] = (uint8_t)s;
+                    else if (seedNext(P, w, it)) st = 1;
+                    else { status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; }
+                }
+            }
+        }
+        if (__all_sync(FULL, st == 2)) break;
+        if (st == 1) {
+            Work<C>& w = work[k];
+            const char* Read1[3] = {rbuf[k].r[0], rbuf[k].r[1], rbuf[k].r[2]};
+            m5::uint L;
+            seedCall(P, g, w, Read1, it, L);
+            if (w.ov) { status[k] = (uint8_t)Status::Overflow; st = 0; }
+            else {
+                seedAfter(it, L);
+                if (!seedNext(P, w, it)) { status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; st = 0; }
+            }
+        }
+    }
+}
+// windows from the anchors and flanks, thread per read (reads that overflowed in k_p1s are skipped)
+template <class C>
+__global__ void M5_P1_BOUNDS k_p1w(Params P, GenomeView g, u64 n, Work<C>* work, uint8_t* status, u64* nEnt) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    Work<C>& w = work[k];
+    Status s = (Status)status[k];
+    if (s == Status::Ok) s = p1Windows(P, g, w);
+    status[k] = (uint8_t)s;
+    nEnt[k] = (s == Status::Ok && w.stitched) ? w.nEntries : 0;
+}
+#endif
+template <class C>
+__global__ void M5_P1_BOUNDS k_p1(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 b0, u64 n,
                      Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* status, u64* nEnt) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
+#ifdef M5_SEEDFLAT
+    {
+        const u64 i = idx ? idx[b0 + k] : b0 + k;
+        Work<C>& w = work[k];
+        const Status s = mapPhase1Flat(P, g, w, rbuf[k], rb + roff[i], rlen[i]);
+        status[k] = (uint8_t)s;
+        nEnt[k] = (s == Status::Ok && w.stitched) ? w.nEntries : 0;
+        return;
+    }
+#endif
     TAIL_BEGIN(0, k);
     u64 i = idx ? idx[b0 + k] : b0 + k;
     Work<C>& w = work[k];
@@ -269,8 +364,17 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
 #endif
     fprintf(stderr, "lane %s (staged): %llu reads, batches of %llu, work %zu B/read (%.2f GB)\n", name, n, NB, sizeof(Work<C>),
             NB * (double)sizeof(Work<C>) / 1e9);
-    cudaEvent_t q[4]; for (auto& e : q) cudaEventCreate(&e);
-    unsigned long long clk[8] = {0}, scan = 0; double phMs[3] = {0, 0, 0};
+    cudaEvent_t q[5]; for (auto& e : q) cudaEventCreate(&e);
+    unsigned long long clk[8] = {0}, scan = 0; double phMs[4] = {0, 0, 0, 0};
+#ifdef M5_P1SPLIT
+    int nSm = 0, bpsS = 0; cudaDeviceGetAttribute(&nSm, cudaDevAttrMultiProcessorCount, 0);
+    CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsS, k_p1s<C>, 128, 0));
+    unsigned long long* dCtr; CK(cudaMalloc(&dCtr, 8));
+    { int b1 = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&b1, k_p1w<C>, 128, 0));
+      fprintf(stderr, "  lane %s: k_p1s persistent, %d blocks of 128 per SM (%d threads); k_p1w %d blocks per SM\n", name, bpsS, nSm * bpsS * 128, b1); }
+#else
+    { int b1 = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&b1, k_p1<C>, 128, 0)); fprintf(stderr, "  lane %s: k_p1 %d blocks of 128 per SM\n", name, b1); }
+#endif
 #ifdef M5_TAIL
     TailHost tail; { int sms = 0; cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0); tail.init(NB, name, sms); }
     int bps1 = 0, bps3 = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bps1, k_p1<C>, 128, 0));
@@ -281,14 +385,22 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
 #ifdef M5_TAIL
         tail.arm(r == reps);
 #endif
-        double ph[3] = {0, 0, 0};
+        double ph[4] = {0, 0, 0, 0};
         if (dCenWinN) CK(cudaMemset(dCenWinN, 0, 8));
         cudaEventRecord(e0);
         for (u64 b0 = 0; b0 < n; b0 += NB) {
             u64 nb = std::min(NB, n - b0);
             int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
+#ifdef M5_P1SPLIT
+            CK(cudaMemsetAsync(dCtr, 0, 8));
+            cudaEventRecord(q[0]);
+            k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dRb, dRoff, dRlen, dIdx, b0, nb, dWork, dRbuf, dBst, dCtr);
+            cudaEventRecord(q[4]);
+            k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent);
+#else
             cudaEventRecord(q[0]);
             k_p1<C><<<G, T>>>(P, D, dRb, dRoff, dRlen, dIdx, b0, nb, dWork, dRbuf, dBst, dNent);
+#endif
             cudaEventRecord(q[1]);
             thrust::exclusive_scan(thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dBase));
             u64 lastB, lastN; CK(cudaMemcpy(&lastB, dBase + nb - 1, 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(&lastN, dNent + nb - 1, 8, cudaMemcpyDeviceToHost));
@@ -314,14 +426,17 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             CK(cudaEventSynchronize(q[3])); CK(cudaGetLastError());
             float m; cudaEventElapsedTime(&m, q[0], q[1]); ph[0] += m; cudaEventElapsedTime(&m, q[1], q[2]); ph[1] += m;
             cudaEventElapsedTime(&m, q[2], q[3]); ph[2] += m;
+#ifdef M5_P1SPLIT
+            cudaEventElapsedTime(&m, q[0], q[4]); ph[3] += m;
+#endif
 #ifdef M5_TAIL
             if (r + 1 == reps) tail.events(e0, q, (int)(b0 / NB), nb);   // event times from the rep before the analysed one (no host work in between)
             if (r == reps) { tail.batch(0, nb, T, bps1, (int)(b0 / NB)); tail.batch(1, nb, T, bps3, (int)(b0 / NB)); }
 #endif
         }
         cudaEventRecord(e1); CK(cudaEventSynchronize(e1));
-        float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) { L.runs.push_back(m); for (int k = 0; k < 3; k++) phMs[k] += ph[k] / reps; }
-        fprintf(stderr, "  lane %s run %d: %.1f ms (phase 1 %.1f, scan %.1f, phase 3 %.1f)\n", name, r, m, ph[0], ph[1], ph[2]);
+        float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) { L.runs.push_back(m); for (int k = 0; k < 4; k++) phMs[k] += ph[k] / reps; }
+        fprintf(stderr, "  lane %s run %d: %.1f ms (phase 1 %.1f, scan %.1f, phase 3 %.1f; seeds kernel %.1f)\n", name, r, m, ph[0], ph[1], ph[2], ph[3]);
     }
 #ifdef M5_TAIL
     tail.summary(); tail.release();
@@ -333,7 +448,11 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     if (clk[2] > 0) fprintf(stderr, "  lane %s inside stitching: stitchAlignToTranscript %.1f%%, finalization %.1f%% (of which recording %.1f%%), copies %.1f%%\n",
                             name, 100.0 * clk[4] / clk[2], 100.0 * clk[5] / clk[2], 100.0 * clk[7] / clk[2], 100.0 * clk[6] / clk[2]);
     L.ms = medianv(L.runs);
-    L.phaseMs[0] = phMs[0]; L.phaseMs[1] = phMs[1]; L.phaseMs[2] = phMs[2];
+    L.phaseMs[0] = phMs[0]; L.phaseMs[1] = phMs[1]; L.phaseMs[2] = phMs[2]; L.phaseMs[3] = phMs[3];
+    fprintf(stderr, "  lane %s phases (mean of timed runs): phase 1 %.2f ms (seeds kernel %.2f), scan %.2f, phase 3 %.2f\n", name, phMs[0], phMs[3], phMs[1], phMs[2]);
+#ifdef M5_P1SPLIT
+    cudaFree(dCtr);
+#endif
     L.out.resize(n * (u64)C::NBLOB); L.status.resize(n); L.why.resize(n); L.len.resize(n); L.unmap.resize(n);
     CK(cudaMemcpy(L.out.data(), dOut, L.out.size(), cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.len.data(), dLen, n * 2, cudaMemcpyDeviceToHost));
     CK(cudaMemcpy(L.status.data(), dSt, n, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.why.data(), dWhy, n, cudaMemcpyDeviceToHost));
@@ -814,8 +933,8 @@ int main(int argc, char** argv) {
         fprintf(f, "],\n  \"gpu_distinct_reads_per_s\": %.0f,\n  \"heavy_reads\": %zu,\n  \"heavy_host_s\": %.3f,\n  \"heavy_host_threads\": %d,\n  \"heavy_failures\": %llu,\n  \"heavy_why\": {",
                 rate, heavy.size(), heavySec, nHostThreads, heavyFail);
         bool first = true; for (int k = 0; k < 12; k++) if (whyCount[k]) { fprintf(f, "%s\"%s\": %llu", first ? "" : ", ", whyName[k], whyCount[k]); first = false; }
-        fprintf(f, "},\n  \"lane_a_ms\": %.3f,\n  \"lane_m_ms\": %.3f,\n  \"lane_m_reads\": %zu,\n  \"lane_b_ms\": %.3f,\n  \"lane_b_reads\": %zu,\n  \"lane_a_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_b_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_a_local\": %s,\n  \"work_bytes\": [%zu, %zu],\n  \"index_load_s\": %.1f\n}\n",
-                A.ms, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), A.phaseMs[0], A.phaseMs[1], A.phaseMs[2], B.phaseMs[0], B.phaseMs[1], B.phaseMs[2], localWork ? "true" : "false", sizeof(Work<LaneA>), sizeof(Work<LaneB>), tIndex);
+        fprintf(f, "},\n  \"lane_a_ms\": %.3f,\n  \"lane_m_ms\": %.3f,\n  \"lane_m_reads\": %zu,\n  \"lane_b_ms\": %.3f,\n  \"lane_b_reads\": %zu,\n  \"lane_a_phase_ms\": [%.3f, %.3f, %.3f, %.3f],\n  \"lane_m_phase_ms\": [%.3f, %.3f, %.3f, %.3f],\n  \"lane_b_phase_ms\": [%.3f, %.3f, %.3f, %.3f],\n  \"lane_a_local\": %s,\n  \"work_bytes\": [%zu, %zu],\n  \"index_load_s\": %.1f\n}\n",
+                A.ms, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), A.phaseMs[0], A.phaseMs[1], A.phaseMs[2], A.phaseMs[3], M.phaseMs[0], M.phaseMs[1], M.phaseMs[2], M.phaseMs[3], B.phaseMs[0], B.phaseMs[1], B.phaseMs[2], B.phaseMs[3], localWork ? "true" : "false", sizeof(Work<LaneA>), sizeof(Work<LaneB>), tIndex);
         fclose(f);
     }
     return 0;
