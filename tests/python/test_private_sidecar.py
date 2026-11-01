@@ -34,6 +34,7 @@ def out(tmp_path):
     _w(d, "donor_assignments.tsv", b"barcode\tdonor\nAAAC\td0\n")           # public
     _w(d, "ambient_profile.tsv", b"gene\tp\nA\t0.1\n")
     _w(d, "doublet_scores.tsv", b"barcode\tscore\nAAAC\t0.2\n")
+    _w(d, "doublet_scores_engine.tsv", b"barcode\tscore\nAAAC\t0.1\n")
     _w(d, "sex_call.json", b'{"sex":"F"}')
     _w(d, "exon_counts.1pz", b"x" * 100)                                    # public
     _w(d, "cell_calls.tsv", b"barcode\tis_cell\nAAAC\ttrue\n")              # public
@@ -45,7 +46,7 @@ def out(tmp_path):
 def test_select_takes_withheld_and_listed_layers_only(out):
     got = set(PS.select(out))
     assert "private/snp_ad.mtx.gz" in got and "donor/donor0_coverage.tsv" in got and "private/donor/donor0.vcf" in got
-    assert {"ambient_profile.tsv", "doublet_scores.tsv", "sex_call.json"} <= got
+    assert {"ambient_profile.tsv", "doublet_scores.tsv", "doublet_scores_engine.tsv", "sex_call.json"} <= got
     for public in ("donor_assignments.tsv", "exon_counts.1pz", "cell_calls.tsv", "star_Unmapped.out.mate1", "nonhost_reads.fq"):
         assert public not in got
 

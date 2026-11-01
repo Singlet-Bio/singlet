@@ -27,7 +27,7 @@ import tarfile
 VERSION = 1
 PRESET = 6
 EXTRA_LAYERS = {
-    "ambient_contamination.tsv", "ambient_contamination.json", "ambient_profile.tsv", "doublet_scores.tsv",
+    "ambient_contamination.tsv", "ambient_contamination.json", "ambient_profile.tsv", "doublet_scores.tsv", "doublet_scores_engine.tsv", "doublet_stage.json",
     "splice_psi.1pz", "splice_events.tsv", "sex_call.json", "ancestry_call.json",
     "mt_heteroplasmy.mtx.gz", "mt_heteroplasmy_barcodes.tsv.gz", "mt_heteroplasmy_features.tsv.gz", "mt_variants.tsv", "mt_reference.fa",
 }
@@ -48,7 +48,7 @@ def is_withheld(rel):
     if rel == "ase_counts.tsv":
         return True
     name = rel.rsplit("/", 1)[-1]
-    return name.startswith("snp_") or bool(_VCF.search(name))
+    return name.startswith("snp_") or bool(_VCF.search(name)) or name == "doublet_scores_engine.tsv"
 
 
 def select(out_dir):
