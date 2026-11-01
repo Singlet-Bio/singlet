@@ -984,6 +984,7 @@ inline ExportStats export_results(const PileupEngine& engine,
                   << " n_clusters=" << amb.n_clusters
                   << " mean_rho=" << amb.mean_rho
                   << " median_rho=" << amb.median_rho
+                  << " depth_gamma=" << amb.depth_gamma << " prior_reads=" << amb.prior_reads << " clusters_capped=" << amb.n_clusters_capped
                   << " removed_umis=" << amb.umis_removed << "/" << amb.umis_observed
                   << " n_cells=" << amb.contam.size()
                   << " corrected=" << (ambient_corrected_csc.data.empty() ? "no" : "yes")
