@@ -101,6 +101,13 @@ class Params:
     # > 0: a barcode whose only kept productive contig has <= this many UMIs is not a cell (a lone receptor molecule:
     # ambient mRNA or a stray molecule in a droplet of another lineage); no pair is lost, a pair needs two chains
     orphan_max_umis: int = 0
+    # > 0: an IG junction removed by the cross filter comes back when it is the strongest high-confidence contig of its
+    # barcode and chain and has >= this many UMIs (B cells of a clone that also has plasma cells)
+    ig_top_min_umis: int = 2
+    ig_top_paired: bool = True  # ig_top_min_umis gives back a chain only where the barcode holds the partner chain too
+    ig_top_light_only: bool = True  # ig_top_min_umis gives back light chains only (not an ambient plasma-cell IGH)
+    # > 0: an IG contig whose barcode holds no kept partner chain is ambient when its junction is in >= this many barcodes
+    ig_lone_spread: int = 5
     threads: int = 8
 
 
@@ -809,6 +816,46 @@ def filter_contigs(df, params: Params):
     df.loc[amb, "kept"] = False
     if params.ambient_rescue in ("cell", "pair", "clone") and cand.any():
         df.loc[_ambient_rescue(df, cand.to_numpy(), params.ambient_rescue), "kept"] = True
+    if params.ig_top_min_umis > 0 and cand.any():
+        # IG mRNA per cell spans > 100x (plasma cells vs B cells), so a B cell of an expanded clone that contains plasma
+        # cells holds the clone's junction at < 10% of the plasma cell's UMIs: the strongest contig of its own barcode
+        # and chain is that cell's receptor, unless it is a few stray molecules (ambient IG in other droplets: 1-2 UMIs)
+        # a B cell has one heavy and one light chain: the strongest of its class (heavy, or light: IGK and IGL together),
+        # and none where one of the class is kept already (a second light chain at ambient level is another cell's)
+        cls = (df["chain"] == "IGH").map({True: "H", False: "L"})
+        hc = df["high_confidence"].astype(bool)
+        top_hc = df["umis"].where(hc).groupby([df["bcix"], cls]).transform("max")
+        has = df["kept"].groupby([df["bcix"], cls]).transform("any")
+        give = (
+            cand
+            & df["chain"].isin(("IGH", "IGK", "IGL"))
+            & (df["umis"] == top_hc)
+            & (df["umis"] >= params.ig_top_min_umis)
+            & ~has
+        )
+        if params.ig_top_light_only:
+            give &= df["chain"].isin(("IGK", "IGL"))
+        if params.ig_top_paired:
+            # only in a droplet that holds a B cell: the partner chain (heavy for a light chain, light for a heavy one)
+            # is kept or given back too
+            ok = df["kept"] | give
+            h = (ok & (df["chain"] == "IGH")).groupby(df["bcix"]).transform("any")
+            l_ = (ok & df["chain"].isin(("IGK", "IGL"))).groupby(df["bcix"]).transform("any")
+            give &= ((df["chain"] == "IGH") & l_) | (df["chain"].isin(("IGK", "IGL")) & h)
+        df.loc[give, "kept"] = True
+    if params.ig_lone_spread > 0:
+        # ambient IG spread: a junction present in many droplets (a plasma clone's light chain in thousands of barcodes at
+        # 1-9 UMIs) is a real chain where its barcode also holds the partner chain; alone (heavy without light or light
+        # without heavy) it is ambient, the same molecule in another cell's droplet
+        ig = df["chain"].isin(("IGH", "IGK", "IGL"))
+        n_bc = df[ig].groupby(["chain", "cdr3_nt"])["bcix"].transform("nunique").reindex(df.index).fillna(0)
+        kp = df["kept"] & df["productive"].astype(bool)
+        heavy = (kp & (df["chain"] == "IGH")).groupby(df["bcix"]).transform("any")
+        light = (kp & df["chain"].isin(("IGK", "IGL"))).groupby(df["bcix"]).transform("any")
+        lone = ig & ((df["chain"] == "IGH") & ~light | df["chain"].isin(("IGK", "IGL")) & ~heavy)
+        drop = df["kept"] & lone & (n_bc >= params.ig_lone_spread)
+        df["ig_lone"] = drop
+        df.loc[drop, "kept"] = False
     if params.orphan_max_umis > 0:
         kp = df["kept"] & df["productive"].astype(bool)
         n_kp = kp.groupby(df["bcix"]).transform("sum")

@@ -1,0 +1,306 @@
+{
+ "lib": "gse145370_S133A",
+ "sdir": "singlet_base",
+ "reference_paired_cells": 3483,
+ "correct_pairing": 0.8575940281366637,
+ "stats": {
+  "read_pairs": 32524053,
+  "umis": 278518,
+  "umi_read_threshold": 15,
+  "umi_reads_median": 723.0,
+  "umis_low_support": 206319,
+  "barcodes_assembled": 8373,
+  "contigs": 15063,
+  "contigs_kept": 14029
+ },
+ "miss_classes": {
+  "TRA:diff_other": 72,
+  "TRA:diff_sub": 1,
+  "TRA:exact_ambient": 80,
+  "TRA:exact_kept_not_top": 64,
+  "TRA:exact_low_support": 2,
+  "TRA:exact_min_frac": 1,
+  "TRA:exact_variant": 1,
+  "TRA:no_chain": 32,
+  "TRB:diff_other": 96,
+  "TRB:diff_sub": 1,
+  "TRB:exact_ambient": 73,
+  "TRB:exact_kept_not_top": 79,
+  "TRB:exact_min_frac": 2,
+  "TRB:no_chain": 12
+ },
+ "miss_class_totals": {
+  "no_chain": 44,
+  "exact_ambient": 153,
+  "diff_other": 168,
+  "exact_kept_not_top": 143,
+  "exact_min_frac": 3,
+  "exact_low_support": 2,
+  "diff_sub": 2,
+  "exact_variant": 1
+ },
+ "ref_umis_of_missed_by_class": {
+  "diff_other": {
+   "count": 168.0,
+   "25%": 2.0,
+   "50%": 3.0,
+   "75%": 5.0
+  },
+  "diff_sub": {
+   "count": 2.0,
+   "25%": 2.0,
+   "50%": 2.0,
+   "75%": 2.0
+  },
+  "exact_ambient": {
+   "count": 153.0,
+   "25%": 1.0,
+   "50%": 1.0,
+   "75%": 2.0
+  },
+  "exact_kept_not_top": {
+   "count": 143.0,
+   "25%": 1.0,
+   "50%": 2.0,
+   "75%": 4.0
+  },
+  "exact_low_support": {
+   "count": 2.0,
+   "25%": 1.0,
+   "50%": 1.0,
+   "75%": 1.0
+  },
+  "exact_min_frac": {
+   "count": 3.0,
+   "25%": 1.5,
+   "50%": 2.0,
+   "75%": 4.5
+  },
+  "exact_variant": {
+   "count": 1.0,
+   "25%": 2.0,
+   "50%": 2.0,
+   "75%": 2.0
+  },
+  "no_chain": {
+   "count": 44.0,
+   "25%": 1.0,
+   "50%": 1.0,
+   "75%": 2.0
+  }
+ },
+ "ref_umis_all_tops": {
+  "count": 8900.0,
+  "25%": 2.0,
+  "50%": 3.0,
+  "75%": 6.0
+ },
+ "exact_filtered_detail": {
+  "exact_ambient": {
+   "umis": 1.0,
+   "reads": 665.0,
+   "junction_umis": 1.0,
+   "ref_umis": 1.0,
+   "jmax": 17.0,
+   "top_umis": 0.0,
+   "top_reads": 0.0
+  },
+  "exact_kept_not_top": {
+   "umis": 2.0,
+   "reads": 922.0,
+   "junction_umis": 2.0,
+   "ref_umis": 2.0,
+   "jmax": 4.0,
+   "top_umis": 3.0,
+   "top_reads": 1550.0
+  },
+  "exact_low_support": {
+   "umis": 3.0,
+   "reads": 77.5,
+   "junction_umis": 1.0,
+   "ref_umis": 1.0,
+   "jmax": 4.0,
+   "top_umis": 0.0,
+   "top_reads": 0.0
+  },
+  "exact_min_frac": {
+   "umis": 1.0,
+   "reads": 1666.0,
+   "junction_umis": 1.0,
+   "ref_umis": 2.0,
+   "jmax": 1.0,
+   "top_umis": 9.0,
+   "top_reads": 3602.0
+  },
+  "exact_variant": {
+   "umis": 1.0,
+   "reads": 95.0,
+   "junction_umis": 1.0,
+   "ref_umis": 2.0,
+   "jmax": 1.0,
+   "top_umis": 2.0,
+   "top_reads": 795.0
+  }
+ },
+ "exact_filtered_shares": {
+  "exact_ambient": {
+   "other_kept": 0.0784313725490196,
+   "tie": 0.05228758169934641,
+   "more_reads": 0.0718954248366013
+  },
+  "exact_kept_not_top": {
+   "other_kept": 1.0,
+   "tie": 0.3916083916083916,
+   "more_reads": 0.3006993006993007
+  },
+  "exact_low_support": {
+   "other_kept": 0.0,
+   "tie": 0.0,
+   "more_reads": 0.0
+  },
+  "exact_min_frac": {
+   "other_kept": 1.0,
+   "tie": 0.0,
+   "more_reads": 0.0
+  },
+  "exact_variant": {
+   "other_kept": 1.0,
+   "tie": 0.0,
+   "more_reads": 0.0
+  }
+ },
+ "exact_matches": 8244,
+ "v_agreement_equiv": 0.9972100921882582,
+ "v_agreement_raw": 0.9972100921882582,
+ "j_agreement": 0.999878699660359,
+ "v_disagree_top": [
+  [
+   "TRBV7-2->TRBV11-2",
+   1
+  ],
+  [
+   "TRAV3->TRAV12-1",
+   1
+  ],
+  [
+   "TRAV12-3->TRAV3",
+   1
+  ],
+  [
+   "TRAV16->TRAV6",
+   1
+  ],
+  [
+   "TRAV23DV6->TRAV1-2",
+   1
+  ],
+  [
+   "TRAV8-4->TRAV26-1",
+   1
+  ],
+  [
+   "TRBV19->TRBV21-1",
+   1
+  ],
+  [
+   "TRBV19->TRBV5-6",
+   1
+  ],
+  [
+   "TRBV30->TRBV10-3",
+   1
+  ],
+  [
+   "TRAV26-1->TRAV6",
+   1
+  ],
+  [
+   "TRAV4->TRAV1-1",
+   1
+  ],
+  [
+   "TRAV12-3->TRAV9-2",
+   1
+  ],
+  [
+   "TRAV8-2->TRAV8-4",
+   1
+  ],
+  [
+   "TRAV3->TRAV4",
+   1
+  ],
+  [
+   "TRAV13-2->TRAV1-1",
+   1
+  ]
+ ],
+ "j_disagree_top": [
+  [
+   "TRBJ2-5->TRBJ2-7",
+   1
+  ]
+ ],
+ "v_raw_disagree_top": [
+  [
+   "TRBV7-2->TRBV11-2",
+   1
+  ],
+  [
+   "TRAV3->TRAV12-1",
+   1
+  ],
+  [
+   "TRAV12-3->TRAV3",
+   1
+  ],
+  [
+   "TRAV16->TRAV6",
+   1
+  ],
+  [
+   "TRAV23DV6->TRAV1-2",
+   1
+  ],
+  [
+   "TRAV8-4->TRAV26-1",
+   1
+  ],
+  [
+   "TRBV19->TRBV21-1",
+   1
+  ],
+  [
+   "TRBV19->TRBV5-6",
+   1
+  ],
+  [
+   "TRBV30->TRBV10-3",
+   1
+  ],
+  [
+   "TRAV26-1->TRAV6",
+   1
+  ],
+  [
+   "TRAV4->TRAV1-1",
+   1
+  ],
+  [
+   "TRAV12-3->TRAV9-2",
+   1
+  ],
+  [
+   "TRAV8-2->TRAV8-4",
+   1
+  ],
+  [
+   "TRAV3->TRAV4",
+   1
+  ],
+  [
+   "TRAV13-2->TRAV1-1",
+   1
+  ]
+ ]
+}

@@ -7,7 +7,7 @@
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 # One library per array task: Singlet (and/or TRUST4) on the same FASTQs and 16 threads, into
-# ${VROOT:-$WORK/expression-sota/vdj2}/runs/<lib> (VROOT redirects a reproduction away from the original runs)/{singlet<TAG>,trust4}.
+# $WORK/expression-sota/vdj2/runs/<lib>/{singlet<TAG>,trust4}.
 #   sbatch --array=0-2 --export=ALL,LIBSPEC="lib:TCR:cr3+lib:BCR:cr5",METHODS="singlet trust4",TAG=,PARAMS="--param x=y" run.sbatch
 # cr3 / cr5 = the Cell Ranger version convention of the library's truth (PREREG.md rule 3): Cell Ranger >= 5 starts the
 # junction at the first of two adjacent Cys codons (reference vdj_human_imgtcys.tsv.gz), 3.x / 4.x at the second
