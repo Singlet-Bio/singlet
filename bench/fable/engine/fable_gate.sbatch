@@ -30,7 +30,7 @@ echo "[t] distinct $(( $(date +%s) - T0 )) s"; mkdir -p $SCR/m5 $SCR/star
 SINGLET_STAR_SEQCACHE_MB=0 STARDUMP_M5=$SCR/m5/t $SD --runMode alignReads --genomeDir $SCR/idx --readFilesIn $SCR/distinct.fq \
   --outSAMtype None --outFilterScoreMin 10 --runThreadN $NCPU --genomeLoad NoSharedMemory --outFileNamePrefix $SCR/star/ > $SCR/star.out 2>&1
 echo "stardump exit=$?"; rm -f $SCR/distinct.fq; echo "[t] stardump $(( $(date +%s) - T0 )) s"
-IFS='|' read -ra VARS <<< "${M5RUNS:-m5b:@STD|m5:@STD|m5:@STD --best-order --p3-maxreg-a 64 --batch-b 131072}"
+IFS='|' read -ra VARS <<< "${M5RUNS:-m5b:@STD|m5:@STD|m5:@STD --best-order --p3-maxreg-a 64 --batch-b 131072|m5:@STD --best-order --p3-maxreg-a 64 --batch-b 131072 --warp-m --wsort --wthreads 128}"
 for vi in "${!VARS[@]}"; do
   BIN=${VARS[$vi]%%:*}; ARGS=${VARS[$vi]#*:}; ARGS=${ARGS//@STD/$STD}; L=$RES/${TAG}_${SLURM_JOB_ID}_v${vi}_$BIN
   echo "=== variant $vi: $BIN $ARGS"
