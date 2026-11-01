@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: MIT
-"""spliced-unspliced: Singlet's unspliced and spliced+ambiguous layers against STARsolo Velocyto and alevin-fry USA.
+"""spliced-unspliced: Singlet's unspliced calls against long-read truth (primary), and against STARsolo Velocyto and alevin-fry USA (secondary).
+
+Amendment (gate 3, after the long-read truth became available): the primary metric is the precision, recall and F1 of the
+unspliced calls against the long-read truth (>= 10 aligned intronic bases of the gene, TRUTH-LR of expression-sota/longread_usa),
+on PBMC-E (Singlet, STARsolo Velocyto, alevin-fry USA, match-or-beat the best) and on the MuSC dev cells (Singlet only,
+reported). Agreement with Velocyto and alevin-fry USA (UMI ratio, correlation, rank correlation, below) is kept as secondary
+and no longer gates, because two short-read tools cannot show which of them is right.
 
     python bench/public/capabilities/spliced_unspliced.py ARTIFACT_DIR [--out bench/public/results/spliced-unspliced.json]
 
@@ -68,6 +74,48 @@ def _load(artifact_dir: Path):
     return ids, cells, genes, res
 
 
+LR_TOOLS = {"singlet": ("Singlet", "singlet"), "starsolo": ("STARsolo Velocyto", "starsolo-velocyto"),
+            "alevinfry": ("alevin-fry USA", "alevin-fry-usa")}
+LR_STATS = (("precision", "Unspliced precision against long-read truth"), ("recall", "Unspliced recall against long-read truth"),
+            ("f1", "Unspliced F1 against long-read truth"))
+LR_BASIS = "(cell, gene) pairs with a long-read-truth molecule: does the cell have an unspliced molecule of the gene (truth: >= 10 intronic bases)"
+
+
+def _longread_metrics(artifact_dir: Path) -> tuple[list[dict], dict, dict]:
+    """Primary metrics from longread_usa.json: {"pbmc_e": score_usa.json, "musc_dev": score_musc.json}. Returns (metrics, n_cells, notes)."""
+    p = artifact_dir / "longread_usa.json"
+    if not p.exists():
+        return [], {}, {}
+    lr = json.loads(p.read_text())
+    metrics, n_cells, notes = [], {}, {}
+    pe = lr.get("pbmc_e")
+    if pe:
+        ds = "longread_pbmc_e"
+        n_cells[ds] = int(pe.get("truth_cells", 0))
+        notes[ds] = "PBMC-E: PacBio and ONT long reads of the same cells as the short reads; truth class per molecule = U if >= 10 aligned intronic bases."
+        common = pe["clsLR"]["common"]
+        val = {t: common[t]["truth_pairs_all"]["has_unspliced"] for t in LR_TOOLS if t in common}
+        for key, name in LR_STATS:
+            comps = [{"tool": LR_TOOLS[t][1], "value": val[t][key]} for t in ("starsolo", "alevinfry") if t in val]
+            metrics.append(C.metric(f"unspliced_{key}_lr", name, "fraction", "accuracy", ds, "higher", val["singlet"][key], None, comps,
+                                    C.match_rule(None, None),
+                                    notes=f"Basis: {LR_BASIS}. Cells: the {n_cells[ds]} truth cells every tool reports. "
+                                          + "; ".join(f"{LR_TOOLS[t][0]} {val[t][key]:.4f}" for t in val) + "."))
+    mu = lr.get("musc_dev")
+    if mu:
+        ds = "longread_musc"
+        n_cells[ds] = int(mu.get("truth_cells", 0))
+        notes[ds] = (f"MuSC (mouse muscle stem cells, ONT long reads, 10x v2): {n_cells[ds]} dev cells. Recall is capped by the length of "
+                     "the cDNA read (R2): an unspliced molecule whose intronic part is not on R2 cannot be seen from the short read.")
+        st = mu["dev"]["mol"]
+        for key, name in LR_STATS:
+            metrics.append(C.metric(f"unspliced_{key}_lr", name, "fraction", "accuracy", ds, "higher", st[key], None, [],
+                                    {"type": "informational"},
+                                    notes="Molecule level (CB, UMI, gene) against the long-read truth, dev cells only; Singlet only (no other tool "
+                                          "keeps a per-molecule label). Reported, not gated: 78 cells, no competitor."))
+    return metrics, n_cells, notes
+
+
 def shares(df) -> dict:
     """Pooled S / U / A share per tool over the cells every tool has."""
     out = {}
@@ -87,7 +135,13 @@ def compute(artifact_dir: Path) -> dict:
             st = F.collect(d, spec, cells[d], genes[d], k)
             if st is not None:
                 stats.append(st)
-    metrics = C.stamp(F.build_metrics(stats))
+    secondary = F.build_metrics(stats)
+    for m in secondary:   # agreement with the other short-read tools no longer gates
+        m["rule"] = {"type": "informational"}
+        m["competitors"] = []   # per-reference values stay in the notes
+        m["notes"] = (m.get("notes", "") + " Secondary since the long-read amendment: agreement between short-read tools, not accuracy.").strip()
+    lr_metrics, lr_n, lr_notes = _longread_metrics(artifact_dir)
+    metrics = C.stamp(lr_metrics + secondary)
     sh = {d: shares(cells[d]) for d in ids}
     for d in ids:
         s = sh[d]
@@ -103,7 +157,8 @@ def compute(artifact_dir: Path) -> dict:
         "methods": _methods(),
         "status": "draft", "generated_at": C.now(), "owner": C.OWNER, "singlet": C.singlet_block(),
         "tools": tools(),
-        "datasets": C.dataset_entries(ids, {d: TRUTH for d in ids}, {d: len(cells[d]) for d in ids}),
+        "datasets": C.dataset_entries(ids + list(lr_n), {**{d: TRUTH for d in ids}, **{d: "long-read (PacBio/ONT) USA class per molecule" for d in lr_n}},
+                                      {**{d: len(cells[d]) for d in ids}, **lr_n}, lr_notes),
         "metrics": metrics, "resources": resources, "figures": _figures(ids, sh),
         "artifacts": C.artifact_entries(artifact_dir, CAP, {}),
         "code": C.code_entries({
@@ -148,7 +203,12 @@ def _methods() -> str:
         "rest of the molecules, so those two layers are gated. The ambiguous share of each tool is reported.\n\n"
         "**Measures, for every pair of tools.** The distance of the median per-cell UMI ratio from 1 (|ln ratio|); the median over cells of "
         "the Pearson r of log1p counts over genes; the Spearman rho of pseudobulk gene counts.\n\n"
-        "**Gate.** Singlet's mean value against the two competitors (STARsolo Velocyto and alevin-fry USA) must be as good as the "
+        "**Primary (amendment).** Long-read truth: for each molecule the class of its primary long-read alignment (U: >= 10 aligned intronic bases of "
+        "the gene; S: not U and an annotated junction within 2 nt; A otherwise). Precision, recall and F1 of the call cell has an unspliced molecule "
+        "of this gene over the (cell, gene) pairs the truth covers, on PBMC-E for Singlet, STARsolo Velocyto and alevin-fry USA (match-or-beat the "
+        "best tool, strict), and at molecule level on the 78 MuSC dev cells for Singlet (reported). Recall is capped by R2 length."
+        "\n\n"
+        "**Secondary: agreement.** Singlet's mean value against the two competitors (STARsolo Velocyto and alevin-fry USA) must be as good as the "
         "competitors' value against each other, within the half-width of the paired bootstrap 95% CI of the difference: Singlet is gated "
         "as a member of the cloud of existing tools. Per-reference values are in each metric's notes. All settings were fixed before the "
         "metrics were computed."
