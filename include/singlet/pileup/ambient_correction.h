@@ -177,7 +177,7 @@ struct AmbientDecontConfig {
                                         ///< the prior strength comes from the spread of the cells around that trend (method of moments). false = flat
                                         ///< Gamma prior with mean c_k and off_prior_reads pseudo-reads
     double   prior_reads_min = 1.0, prior_reads_max = 50.0;  ///< bounds of the estimated prior strength (pseudo-reads of the off-gene set)
-    double   cluster_rho_cap = 3.0;     ///< a cluster whose c_k is more than this multiple of the cross-cluster median (scaled to the cluster's depth with
+    double   cluster_rho_cap = 1.5;     ///< a cluster whose c_k is more than this multiple of the cross-cluster median (scaled to the cluster's depth with
                                         ///< the fitted trend exponent) is capped there and refit: weakly expressed native genes of a small shallow cluster
                                         ///< pass for "not expressed", which raises its c_k, which hides more native genes (hgmm1k_v3: 42 shallow mouse
                                         ///< cells at c_k 0.18 against 0.007-0.012 elsewhere). 0 = off
