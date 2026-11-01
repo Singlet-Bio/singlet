@@ -1,0 +1,562 @@
+// E9: STARsolo's Gene outputs on the GPU (or the host, same source). See solo_gpu.h and docs/gpu-engine/fable/E9-solo.md.
+#include "solo_gpu.h"
+#include <cub/cub.cuh>
+#include <cuda_runtime.h>
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <parallel/algorithm>
+#include <stdexcept>
+#include <sys/stat.h>
+#include <unordered_map>
+#include <utility>
+
+namespace e9 {
+namespace {
+
+inline void ck(cudaError_t e, const char* what, int line) {
+    if (e != cudaSuccess) throw std::runtime_error(std::string("CUDA ") + what + " (solo_gpu.cu:" + std::to_string(line) + "): " + cudaGetErrorString(e));
+}
+#define CK(x) ck((x), #x, __LINE__)
+
+// a device or host array (host mode: inputs alias the caller's arrays)
+template <class T> struct Buf {
+    T* p = nullptr; u64 n = 0; bool dev = false, own = false;
+    Buf() {}
+    Buf(const Buf&) = delete;
+    Buf& operator=(const Buf&) = delete;
+    ~Buf() { release(); }
+    void release() {
+        if (p && own) { if (dev) cudaFree(p); else free(p); }
+        p = nullptr; n = 0; own = false;
+    }
+    void alloc(bool d, u64 cnt) {
+        release(); dev = d; n = cnt; own = true;
+        const u64 b = std::max<u64>(1, cnt) * sizeof(T);
+        if (dev) CK(cudaMalloc(&p, b));
+        else { p = (T*)malloc(b); if (!p) throw std::runtime_error("host allocation failed"); }
+    }
+    void zero() { if (!n) return; if (dev) CK(cudaMemset(p, 0, n * sizeof(T))); else memset(p, 0, n * sizeof(T)); }
+    void from(bool d, const T* h, u64 cnt) {
+        if (!d) { release(); dev = false; p = const_cast<T*>(h); n = cnt; own = false; return; }
+        alloc(d, cnt);
+        if (cnt) CK(cudaMemcpy(p, h, cnt * sizeof(T), cudaMemcpyHostToDevice));
+    }
+    void to(T* h, u64 cnt) const {
+        if (!cnt) return;
+        if (dev) CK(cudaMemcpy(h, p, cnt * sizeof(T), cudaMemcpyDeviceToHost)); else memcpy(h, p, cnt * sizeof(T));
+    }
+    T get(u64 i) const { T v; if (dev) CK(cudaMemcpy(&v, p + i, sizeof(T), cudaMemcpyDeviceToHost)); else v = p[i]; return v; }
+};
+
+template <class F> __global__ void kEach(u64 n, F f) {
+    for (u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x; i < n; i += (u64)gridDim.x * blockDim.x) f(i);
+}
+// one rule per item, on the device (a grid-stride kernel) or the host (OpenMP)
+template <class F> void each(bool dev, u64 n, F f) {
+    if (n == 0) return;
+    if (dev) {
+        const unsigned b = 256;
+        u64 g = (n + b - 1) / b;
+        if (g > (1u << 20)) g = 1u << 20;
+        kEach<<<(unsigned)g, b>>>(n, f);
+        CK(cudaGetLastError());
+    } else {
+#pragma omp parallel for schedule(dynamic, 4096)
+        for (long long i = 0; i < (long long)n; i++) f((u64)i);
+    }
+}
+
+struct Tmp {
+    void* p = nullptr; size_t n = 0;
+    ~Tmp() { if (p) cudaFree(p); }
+    void* need(size_t b) { if (b > n) { if (p) cudaFree(p); p = nullptr; CK(cudaMalloc(&p, std::max<size_t>(b, 1))); n = b; } return p; }
+};
+
+void sortKeys(bool dev, Buf<u64>& k, u64 n, int endBit, Tmp& tmp) {
+    if (n < 2) return;
+    if (!dev) { __gnu_parallel::sort(k.p, k.p + n); return; }
+    Buf<u64> alt; alt.alloc(true, k.n);
+    cub::DoubleBuffer<u64> db(k.p, alt.p);
+    size_t b = 0;
+    CK(cub::DeviceRadixSort::SortKeys(nullptr, b, db, (int)n, 0, endBit));
+    CK(cub::DeviceRadixSort::SortKeys(tmp.need(b), b, db, (int)n, 0, endBit));
+    if (db.Current() != k.p) std::swap(k.p, alt.p);
+}
+void sortPairs(bool dev, Buf<u64>& k, Buf<u32>& v, u64 n, int endBit, Tmp& tmp) {
+    if (n < 2) return;
+    if (!dev) {
+        std::vector<std::pair<u64, u32>> kv(n);
+        for (u64 i = 0; i < n; i++) kv[i] = {k.p[i], v.p[i]};
+        __gnu_parallel::sort(kv.begin(), kv.end());
+        for (u64 i = 0; i < n; i++) { k.p[i] = kv[i].first; v.p[i] = kv[i].second; }
+        return;
+    }
+    Buf<u64> ka; ka.alloc(true, k.n);
+    Buf<u32> va; va.alloc(true, v.n);
+    cub::DoubleBuffer<u64> dk(k.p, ka.p);
+    cub::DoubleBuffer<u32> dv(v.p, va.p);
+    size_t b = 0;
+    CK(cub::DeviceRadixSort::SortPairs(nullptr, b, dk, dv, (int)n, 0, endBit));
+    CK(cub::DeviceRadixSort::SortPairs(tmp.need(b), b, dk, dv, (int)n, 0, endBit));
+    if (dk.Current() != k.p) std::swap(k.p, ka.p);
+    if (dv.Current() != v.p) std::swap(v.p, va.p);
+}
+u64 uniqueKeys(bool dev, const Buf<u64>& in, u64 n, Buf<u64>& out, Tmp& tmp) {
+    out.alloc(dev, n);
+    if (n == 0) return 0;
+    if (!dev) return (u64)(std::unique_copy(in.p, in.p + n, out.p) - out.p);
+    Buf<u64> cnt; cnt.alloc(true, 1);
+    size_t b = 0;
+    CK(cub::DeviceSelect::Unique(nullptr, b, in.p, out.p, cnt.p, (int)n));
+    CK(cub::DeviceSelect::Unique(tmp.need(b), b, in.p, out.p, cnt.p, (int)n));
+    return cnt.get(0);
+}
+// exclusive prefix sum of n values (out has n + 1 entries; out[n] = total)
+u64 exclusiveScan(bool dev, const Buf<u32>& in, u64 n, Buf<u32>& out, Tmp& tmp) {
+    out.alloc(dev, n + 1);
+    if (!dev) { u64 s = 0; for (u64 i = 0; i < n; i++) { out.p[i] = (u32)s; s += in.p[i]; } out.p[n] = (u32)s; return s; }
+    // in has n + 1 entries with in[n] = 0 so out[n] is the total
+    size_t b = 0;
+    CK(cub::DeviceScan::ExclusiveSum(nullptr, b, in.p, out.p, (int)(n + 1)));
+    CK(cub::DeviceScan::ExclusiveSum(tmp.need(b), b, in.p, out.p, (int)(n + 1)));
+    return out.get(n);
+}
+void inclusiveScan(bool dev, const Buf<u32>& in, u64 n, Buf<u32>& out, Tmp& tmp) {
+    out.alloc(dev, n);
+    if (n == 0) return;
+    if (!dev) { u64 s = 0; for (u64 i = 0; i < n; i++) { s += in.p[i]; out.p[i] = (u32)s; } return; }
+    size_t b = 0;
+    CK(cub::DeviceScan::InclusiveSum(nullptr, b, in.p, out.p, (int)n));
+    CK(cub::DeviceScan::InclusiveSum(tmp.need(b), b, in.p, out.p, (int)n));
+}
+
+E9HD inline u64 lowerBound(const u64* a, u64 n, u64 x) {
+    u64 lo = 0, hi = n;
+    while (lo < hi) { const u64 m = (lo + hi) >> 1; if (a[m] < x) lo = m + 1; else hi = m; }
+    return lo;
+}
+
+}  // namespace
+
+bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs& R, const SoloReads& Rd, SoloResult& out, bool keep, std::string& log) {
+    try {
+        using clk = std::chrono::steady_clock;
+        auto t0 = clk::now();
+        auto lap = [&](const char* name) {
+            if (dev) CK(cudaDeviceSynchronize());
+            const auto t = clk::now();
+            out.ms.push_back({name, std::chrono::duration<double, std::milli>(t - t0).count()});
+            t0 = t;
+        };
+        SoloParams S = S0;
+        const u32 W = (u32)M.wl.size();
+        S.wlN = W;
+        const u64 N = Rd.n, nRec = R.nRec;
+        if (W >= (1u << (64 - GENE_BITS - UMI_BITS - 1)) || S.nGe >= (1u << GENE_BITS) || 2 * S.umiL > UMI_BITS)
+            throw std::runtime_error("whitelist, genes or UMI length do not fit the (CB, gene, UMI) key");
+        Tmp tmp;
+
+        // ---- upload (model, records, reads)
+        Buf<u64> dWl, dTrS, dTrE, dTrEmax; Buf<u32> dTrExI, dTrGene, dExSE; Buf<uint16_t> dTrExN; Buf<uint8_t> dTrStr;
+        dWl.from(dev, M.wl.data(), W);
+        dTrS.from(dev, M.trS.data(), M.trS.size()); dTrE.from(dev, M.trE.data(), M.trE.size()); dTrEmax.from(dev, M.trEmax.data(), M.trEmax.size());
+        dTrExI.from(dev, M.trExI.data(), M.trExI.size()); dTrGene.from(dev, M.trGene.data(), M.trGene.size()); dExSE.from(dev, M.exSE.data(), M.exSE.size());
+        dTrExN.from(dev, M.trExN.data(), M.trExN.size()); dTrStr.from(dev, M.trStr.data(), M.trStr.size());
+        const TrModel TM{dTrS.p, dTrE.p, dTrEmax.p, dTrExI.p, dTrExN.p, dTrStr.p, dTrGene.p, dExSE.p, (u32)M.trS.size()};
+        Buf<uint8_t> dBlob; Buf<u64> dBlobOff, dSeqOff;
+        dBlob.from(dev, R.blob, R.blobBytes); dBlobOff.from(dev, R.blobOff, nRec + 1); dSeqOff.from(dev, R.seqOff, nRec + 1);
+        Buf<u64> dCr3, dUr3; Buf<u32> dRec; Buf<RecAnn> dHost;
+        dCr3.from(dev, Rd.cr3, N); dUr3.from(dev, Rd.ur3, N); dRec.from(dev, Rd.rec, N);
+        if (Rd.hostAnn) dHost.from(dev, Rd.hostAnn, N);
+        Buf<u64> cnt; cnt.alloc(dev, 8); cnt.zero();   // 0: records with an exon overflow, 1: counted reads
+        lap("upload");
+
+        // ---- stage (b): per record its Gene annotation, per read its record's (or the host's)
+        Buf<RecAnn> recAnn; recAnn.alloc(dev, nRec);
+        Buf<RecAnn> readAnn; readAnn.alloc(dev, N);
+        {
+            const uint8_t* blob = dBlob.p; const u64* bo = dBlobOff.p; const u64* so = dSeqOff.p; RecAnn* ra = recAnn.p;
+            const e6::RecParams RP = R.RP; const TrModel tm = TM; const SoloParams s = S; u64* c = cnt.p;
+            each(dev, nRec, [=] __host__ __device__(u64 r) {
+                const RecAnn a = recAnnotate(RP, blob + bo[r], so[r + 1] - so[r], tm, s);
+                ra[r] = a;
+                if (a.bits & RA_OVERFLOW) addU64(c, 1);
+            });
+            const u32* rec = dRec.p; const RecAnn* host = dHost.p; RecAnn* ann = readAnn.p; const RecAnn* rac = recAnn.p;
+            each(dev, N, [=] __host__ __device__(u64 i) {
+                const u32 r = rec[i];
+                RecAnn a{0xFFFFFFFFu, 0, 0, 0};
+                if (r != 0xFFFFFFFFu) a = rac[r]; else if (host) a = host[i];
+                ann[i] = a;
+            });
+        }
+        recAnn.release();
+        lap("gene");
+
+        // ---- stage (a): per distinct CR the whitelist matches; per read the UMI check, Barcodes.stats, the exact histogram; the posterior
+        Buf<u64> crk; crk.alloc(dev, N);
+        {
+            const u64* cr3 = dCr3.p; u64* k = crk.p; const u64 mk = e6::mask3(S.cbL);
+            each(dev, N, [=] __host__ __device__(u64 i) { k[i] = cr3[i] & mk; });
+        }
+        Buf<u64> dcr; u64 D = 0;
+        {
+            Buf<u64> crs; crs.alloc(dev, N);
+            if (dev) CK(cudaMemcpy(crs.p, crk.p, N * 8, cudaMemcpyDeviceToDevice)); else memcpy(crs.p, crk.p, N * 8);
+            sortKeys(dev, crs, N, (int)(3 * S.cbL), tmp);
+            D = uniqueKeys(dev, crs, N, dcr, tmp);
+        }
+        out.nDistinctCR = D;
+        Buf<i32> dcbm; dcbm.alloc(dev, D);
+        Buf<u32> nC; nC.alloc(dev, D + 1); nC.zero();
+        {
+            const u64* cr = dcr.p; i32* m = dcbm.p; u32* nc = nC.p; const u64* wl = dWl.p; const u32 cbL = S.cbL;
+            each(dev, D, [=] __host__ __device__(u64 d) { u32 n; m[d] = matchCBtoWL(cr[d], cbL, wl, W, nullptr, n); nc[d] = n; });
+        }
+        Buf<u32> cOff;
+        const u64 nCand = exclusiveScan(dev, nC, D, cOff, tmp);
+        out.nCand = nCand;
+        Buf<u32> cand; cand.alloc(dev, nCand);
+        {
+            const u64* cr = dcr.p; const u32* co = cOff.p; u32* cd = cand.p; const u64* wl = dWl.p; const u32 cbL = S.cbL;
+            each(dev, D, [=] __host__ __device__(u64 d) { u32 n; matchCBtoWL(cr[d], cbL, wl, W, cd + co[d], n); });
+        }
+        Buf<u32> crIdx, umi, exact; Buf<int8_t> cbmR; Buf<u64> bst;
+        crIdx.alloc(dev, N); umi.alloc(dev, N); cbmR.alloc(dev, N); exact.alloc(dev, W); exact.zero(); bst.alloc(dev, B_N); bst.zero();
+        {
+            const u64* k = crk.p; const u64* cr = dcr.p; const u64 Dn = D; const u64* ur3 = dUr3.p; const i32* m = dcbm.p; const u32* co = cOff.p;
+            const u32* cd = cand.p; u32* ci = crIdx.p; u32* um = umi.p; int8_t* cb = cbmR.p; u32* ex = exact.p; u64* bs = bst.p; const SoloParams s = S;
+            each(dev, N, [=] __host__ __device__(u64 i) {
+                const u64 d = lowerBound(cr, Dn, k[i]);
+                ci[i] = (u32)d;
+                u64 ub = 0;
+                const i32 uc = checkUMI(ur3[i], s, ub);
+                const i32 cbm = uc != 0 ? uc : m[d];   // getCBandUMI: a bad UMI replaces cbMatch (SoloReadBarcode_getCBandUMI.cpp:290-302)
+                cb[i] = (int8_t)cbm;
+                um[i] = (u32)ub;
+                incAgg(bs, (u32)barcodeStat(cbm));
+                if (cbm == 0) addU32(&ex[cd[co[d]]], 1);   // cbReadCountExact (addStats case 0)
+            });
+        }
+        crk.release();
+        Buf<i32> chosen; chosen.alloc(dev, D);
+        {
+            const i32* m = dcbm.p; const u32* co = cOff.p; const u32* nc = nC.p; const u32* cd = cand.p; const u32* ex = exact.p; i32* ch = chosen.p;
+            const SoloParams s = S;
+            each(dev, D, [=] __host__ __device__(u64 d) {
+                const i32 mm = m[d];
+                ch[d] = (mm == 0 || mm == 1) ? (i32)cd[co[d]] : (mm > 1 ? (i32)cbPosterior(cd + co[d], nc[d], ex, s) : -1);
+            });
+        }
+        lap("cb");
+
+        // ---- stage (c): per read Solo's record + inputRecords
+        Buf<u64> keys; keys.alloc(dev, N);
+        Buf<i32> rowCb; rowCb.alloc(dev, N);
+        Buf<u32> flagRows; flagRows.alloc(dev, (u64)W * F_N); flagRows.zero();
+        Buf<u64> fst, noCB; fst.alloc(dev, S_N); fst.zero(); noCB.alloc(dev, F_N); noCB.zero();
+        Buf<u32> cbRC, nRU; cbRC.alloc(dev, W); cbRC.zero(); nRU.alloc(dev, W); nRU.zero();
+        {
+            const RecAnn* ann = readAnn.p; const int8_t* cbmp = cbmR.p; const u32* ci = crIdx.p; const u32* um = umi.p; const u32* co = cOff.p;
+            const u32* nc = nC.p; const u32* cd = cand.p; const i32* ch = chosen.p; u64* ky = keys.p; i32* rc = rowCb.p; u32* fr = flagRows.p;
+            u64* fs = fst.p; u64* nb = noCB.p; u32* crc = cbRC.p; u32* nru = nRU.p; u64* c = cnt.p;
+            each(dev, N, [=] __host__ __device__(u64 i) {
+                const RecAnn a = ann[i];
+                const i32 cbm = cbmp[i];
+                u32 flag = recordFlag(a, cbm);
+                ky[i] = ~0ULL; rc[i] = -1;
+                if (cbm < 0) {   // record(): no CB match, counted as CBnotInPasslist, nothing written
+                    for (u32 b = 0; b < F_N; b++) if ((flag >> b) & 1) incAgg(nb, b);
+                    return;
+                }
+                bool feat = false;
+                if (a.nTr == 0) incAgg(fs, S_noUnmapped);
+                else if (a.ng == 0) incAgg(fs, S_noNoFeature);
+                else if (a.ng > 1) { incAgg(fs, S_MultiFeature); if (a.nTr > 1) incAgg(fs, S_subMultiFeatureMultiGenomic); }
+                else feat = true;
+                const u32 d = ci[i];
+                if (feat) for (u32 k = 0; k < nc[d]; k++) addU32(&crc[cd[co[d] + k]], 1);   // record(): cbReadCount for every match
+                // inputRecords()
+                const i32 cb = ch[d];
+                const bool accepted = cb >= 0;
+                if (feat) {
+                    if (cbm == 0) incAgg(fs, S_yessubWLmatchExact);
+                    else if (!accepted) incAgg(fs, S_noTooManyWLmatches);
+                }
+                if (feat && accepted) {
+                    addU32(&nru[cb], 1);
+                    ky[i] = tupleKey((u64)cb, a.gene, um[i]);
+                    flag |= 1u << F_countedU;
+                    incAgg(c, 1);
+                }
+                flag |= 1u << F_cbMatch;
+                if (cbm == 0) flag |= 1u << F_cbPerfect;
+                else if (cbm == 1) flag |= 1u << F_cbMMunique;
+                else if (accepted) flag |= 1u << F_cbMMmultiple;
+                if (accepted) {
+                    rc[i] = cb;
+                    for (u32 b = 0; b < F_N; b++) if ((flag >> b) & 1) addU32(&fr[(u64)cb * F_N + b], 1);
+                } else {
+                    for (u32 b = 0; b < F_N; b++) if ((flag >> b) & 1) incAgg(nb, b);
+                }
+            });
+        }
+        lap("reads");
+        if (keep) {
+            out.readAnn.resize(N); readAnn.to(out.readAnn.data(), N);
+            out.readCbm.resize(N); cbmR.to(out.readCbm.data(), N);
+            Buf<i32> c0; c0.alloc(dev, N);
+            {
+                const int8_t* cbmp = cbmR.p; const u32* ci = crIdx.p; const u32* co = cOff.p; const u32* nc = nC.p; const u32* cd = cand.p; i32* o = c0.p;
+                each(dev, N, [=] __host__ __device__(u64 i) { const u32 d = ci[i]; o[i] = (cbmp[i] >= 0 && nc[d] > 0) ? (i32)cd[co[d]] : -1; });
+            }
+            out.readCb0.resize(N); c0.to(out.readCb0.data(), N);
+        }
+        readAnn.release(); cbmR.release(); crIdx.release(); umi.release(); dCr3.release(); dUr3.release(); dRec.release(); dHost.release();
+        dBlob.release(); dBlobOff.release(); dSeqOff.release();
+        t0 = clk::now();   // per-read validation downloads are not a stage
+
+        // ---- the (CB, gene, UMI) of the counted reads: sort, unique; the second order (UMI halves swapped)
+        const u64 nK = cnt.get(1);
+        out.nKeys = nK;
+        sortKeys(dev, keys, N, 64, tmp);   // the reads that are not counted (~0) sort last
+        Buf<u64> tup;
+        const u64 nT = uniqueKeys(dev, keys, nK, tup, tmp);
+        out.nTuples = nT;
+        keys.release();
+        Buf<u64> k2; k2.alloc(dev, nT);
+        Buf<u32> v2; v2.alloc(dev, nT);
+        {
+            const u64* t = tup.p; u64* a = k2.p; u32* b = v2.p; const u32 umiL = S.umiL, ml = S.umiMaskLow;
+            each(dev, nT, [=] __host__ __device__(u64 j) { a[j] = swapHalvesKey(t[j], umiL, ml); b[j] = (u32)j; });
+        }
+        sortPairs(dev, k2, v2, nT, 63, tmp);
+        lap("sort");
+
+        // ---- 1MM_All per (CB, gene): Hamming-1 components (collapseUMIwith1MMlowHalf on both halves), then the counts per CB
+        Buf<u32> par; par.alloc(dev, nT);
+        {
+            u32* pr = par.p;
+            each(dev, nT, [=] __host__ __device__(u64 j) { pr[j] = (u32)j; });
+            const u64* t = tup.p; const u64 ml = S.umiMaskLow; const u64 n = nT;
+            each(dev, nT, [=] __host__ __device__(u64 j) {
+                for (u64 k = j + 1; k < n; k++) {
+                    const u64 x = t[k] ^ t[j];
+                    if (x > ml) break;   // another (CB, gene) or another upper half
+                    if (oneMM((u32)x)) ufUnion(pr, (u32)j, (u32)k);
+                }
+            });
+            const u64* a = k2.p; const u32* b = v2.p;
+            each(dev, nT, [=] __host__ __device__(u64 j) {
+                for (u64 k = j + 1; k < n; k++) {
+                    const u64 x = a[k] ^ a[j];
+                    if (x > ml) break;
+                    if (oneMM((u32)x)) ufUnion(pr, b[j], b[k]);
+                }
+            });
+        }
+        k2.release(); v2.release();
+        Buf<u32> hd; hd.alloc(dev, nT);
+        {
+            const u64* t = tup.p; u32* h = hd.p;
+            each(dev, nT, [=] __host__ __device__(u64 j) { h[j] = (j == 0 || (t[j] >> UMI_BITS) != (t[j - 1] >> UMI_BITS)) ? 1u : 0u; });
+        }
+        Buf<u32> sid;
+        inclusiveScan(dev, hd, nT, sid, tmp);
+        const u64 nSeg = nT ? sid.get(nT - 1) : 0;
+        out.nSeg = nSeg;
+        Buf<u64> segKey; segKey.alloc(dev, nSeg);
+        Buf<u32> segCnt; segCnt.alloc(dev, nSeg); segCnt.zero();
+        {
+            const u64* t = tup.p; const u32* h = hd.p; const u32* si = sid.p; const u32* pr = par.p; u64* sk = segKey.p; u32* sc = segCnt.p;
+            each(dev, nT, [=] __host__ __device__(u64 j) {
+                const u32 s = si[j] - 1;
+                if (h[j]) sk[s] = t[j] >> UMI_BITS;
+                if (pr[j] == (u32)j) addU32(&sc[s], 1);
+            });
+        }
+        Buf<u32> nUMI, nGene; nUMI.alloc(dev, W); nUMI.zero(); nGene.alloc(dev, W); nGene.zero();
+        {
+            const u64* sk = segKey.p; const u32* sc = segCnt.p; u32* nu = nUMI.p; u32* ng = nGene.p;
+            each(dev, nSeg, [=] __host__ __device__(u64 s) {
+                const u64 cb = sk[s] >> GENE_BITS;
+                addU32(&nu[cb], sc[s]);
+                addU32(&ng[cb], 1);
+            });
+        }
+        lap("collapse");
+
+        // ---- download
+        bst.to(out.bstats, B_N); fst.to(out.fstats, S_N); noCB.to(out.noCB, F_N);
+        out.nUMI.resize(W); nUMI.to(out.nUMI.data(), W);
+        out.nGene.resize(W); nGene.to(out.nGene.data(), W);
+        out.cbReadCount.resize(W); cbRC.to(out.cbReadCount.data(), W);
+        out.nReadUnique.resize(W); nRU.to(out.nReadUnique.data(), W);
+        out.flagRows.resize((u64)W * F_N); flagRows.to(out.flagRows.data(), (u64)W * F_N);
+        out.rowCb.resize(N); rowCb.to(out.rowCb.data(), N);
+        std::vector<u64> sk(nSeg); segKey.to(sk.data(), nSeg);
+        out.segCount.resize(nSeg); segCnt.to(out.segCount.data(), nSeg);
+        out.segCb.resize(nSeg); out.segGene.resize(nSeg);
+        for (u64 s = 0; s < nSeg; s++) { out.segCb[s] = (u32)(sk[s] >> GENE_BITS); out.segGene[s] = (u32)(sk[s] & ((1u << GENE_BITS) - 1)); }
+        out.nRecOverflow = cnt.get(0);
+        lap("download");
+
+        // ---- Features.stats rows that collapseUMIall adds (SoloFeature_collapseUMIall.cpp:21-25)
+        u64 yesUMIs = 0, yesCB = 0, yesWL = 0;
+        for (u32 w = 0; w < W; w++) { yesUMIs += out.nUMI[w]; yesCB += out.nGene[w] > 0; yesWL += out.nReadUnique[w]; }
+        out.fstats[S_yesUMIs] = yesUMIs; out.fstats[S_yesCellBarcodes] = yesCB;
+        out.fstats[S_yesWLmatch] = yesWL; out.fstats[S_yessubWLmatch_UniqueFeature] = yesWL;
+        char b[512];
+        snprintf(b, sizeof b, "soloRun(%s): %llu reads, %llu records (%llu exon overflow), %llu distinct CRs, %llu matches, %llu counted reads, %llu distinct (CB,gene,UMI), %llu (CB,gene)\n",
+                 dev ? "device" : "host", (unsigned long long)N, (unsigned long long)nRec, (unsigned long long)out.nRecOverflow, (unsigned long long)D,
+                 (unsigned long long)nCand, (unsigned long long)nK, (unsigned long long)nT, (unsigned long long)nSeg);
+        log += b;
+        return true;
+    } catch (const std::exception& e) {
+        log += std::string("soloRun failed: ") + e.what() + "\n";
+        return false;
+    }
+}
+
+// ================================================================================================ writers (host)
+namespace {
+bool writeFile(const std::string& p, const std::string& s, std::string& log) {
+    FILE* f = fopen(p.c_str(), "wb");
+    if (!f) { log += "cannot write " + p + "\n"; return false; }
+    const bool ok = fwrite(s.data(), 1, s.size(), f) == s.size();
+    fclose(f);
+    if (!ok) log += "short write " + p + "\n";
+    return ok;
+}
+void appendU(std::string& s, u64 v) { char b[24]; int n = snprintf(b, sizeof b, "%llu", (unsigned long long)v); s.append(b, n); }
+// SequenceFuns.cpp:280 convertNuclInt64toString
+std::string cbString(u64 v, u32 L) {
+    std::string s(L, 'N');
+    for (u32 ii = 1; ii <= L; ii++) { s[L - ii] = "ACGT"[v & 3]; v >>= 2; }
+    return s;
+}
+// SoloReadBarcode.cpp:44 / SoloReadFeature.cpp:56 statsOut: setw(50) name, setw(15) value
+std::string statsText(const char* const* names, const u64* v, u32 n) {
+    std::string s; char b[128];
+    for (u32 i = 0; i < n; i++) { snprintf(b, sizeof b, "%50s%15llu\n", names[i], (unsigned long long)v[i]); s += b; }
+    return s;
+}
+const char* const kBarNames[B_N] = {"noNoAdapter", "noNoUMI", "noNoCB", "noNinCB", "noNinUMI", "noUMIhomopolymer", "noNoWLmatch", "noTooManyMM",
+                                    "noTooManyWLmatches", "yesWLmatchExact", "yesOneWLmatchWithMM", "yesMultWLmatchWithMM"};
+const char* const kFeatNames[S_N] = {"noUnmapped", "noNoFeature", "MultiFeature", "subMultiFeatureMultiGenomic", "noTooManyWLmatches",
+                                     "noMMtoWLwithoutExact", "yesWLmatch", "yessubWLmatchExact", "yessubWLmatch_UniqueFeature", "yesCellBarcodes", "yesUMIs"};
+const char* const kFlagNames[F_N] = {"cbMatch", "cbPerfect", "cbMMunique", "cbMMmultiple", "genomeU", "genomeM", "featureU", "featureM", "exonic",
+                                     "intronic", "exonicAS", "intronicAS", "mito", "countedU", "countedM"};
+}  // namespace
+
+bool soloWrite(const std::string& pre, const SoloParams& S, const SoloModel& M, const SoloResult& r, const SoloFilterParams& FP,
+               const std::vector<u32>& order, SoloWriteInfo& info, std::string& log) {
+    const u32 W = (u32)M.wl.size();
+    const std::string g = pre + "Gene/";
+    mkdir(pre.c_str(), 0755); mkdir(g.c_str(), 0755); mkdir((g + "raw").c_str(), 0755); mkdir((g + "filtered").c_str(), 0755);
+    bool ok = true;
+    // Barcodes.stats (Solo.cpp:62), Features.stats (SoloFeature_processRecords.cpp:67)
+    ok &= writeFile(pre + "Barcodes.stats", statsText(kBarNames, r.bstats, B_N), log);
+    ok &= writeFile(g + "Features.stats", statsText(kFeatNames, r.fstats, S_N), log);
+    // the detected CBs (SoloFeature_sumThreads.cpp:82-98): cbReadCount > 0, in whitelist order
+    std::vector<u32> indCB;
+    for (u32 w = 0; w < W; w++) if (r.cbReadCount[w] > 0) indCB.push_back(w);
+    const u32 nCB = (u32)indCB.size();
+    info.nCB = nCB;
+    // segments per CB (the matrix rows are in (CB, gene) order)
+    std::vector<u64> segStart(W + 1, 0);
+    for (u64 s = 0; s < r.segCb.size(); s++) segStart[r.segCb[s] + 1]++;
+    for (u32 w = 0; w < W; w++) segStart[w + 1] += segStart[w];
+    std::vector<std::string> wlStr(W);
+    for (u32 w = 0; w < W; w++) wlStr[w] = cbString(M.wl[w], S.cbL);
+    // features.tsv (SoloFeature_outputResults.cpp:26-41)
+    std::string feat;
+    for (u32 i = 0; i < S.nGe; i++) { feat += M.geID[i]; feat += '\t'; feat += M.geName[i].empty() ? M.geID[i] : M.geName[i]; feat += "\tGene Expression\n"; }
+    auto matrix = [&](bool filt, const std::vector<char>& keep, u64 nCols) {
+        u64 nEnt = 0;
+        for (u32 icb = 0; icb < nCB; icb++) if (!filt || keep[icb]) nEnt += r.nGene[indCB[icb]];
+        std::string s = "%%MatrixMarket matrix coordinate integer general\n%\n";
+        appendU(s, S.nGe); s += ' '; appendU(s, nCols); s += ' '; appendU(s, nEnt); s += '\n';
+        s.reserve(s.size() + nEnt * 16);
+        u32 col = 0;
+        for (u32 icb = 0; icb < nCB; icb++) {
+            const u32 w = indCB[icb];
+            if (filt) { if (!keep[icb]) continue; ++col; } else col = w + 1;
+            for (u64 k = segStart[w]; k < segStart[w + 1]; k++) { appendU(s, (u64)r.segGene[k] + 1); s += ' '; appendU(s, col); s += ' '; appendU(s, r.segCount[k]); s += '\n'; }
+        }
+        return s;
+    };
+    // raw (outputResults(false))
+    {
+        std::string bc; bc.reserve((u64)W * (S.cbL + 1));
+        for (u32 w = 0; w < W; w++) { bc += wlStr[w]; bc += '\n'; }
+        ok &= writeFile(g + "raw/features.tsv", feat, log);
+        ok &= writeFile(g + "raw/barcodes.tsv", bc, log);
+        ok &= writeFile(g + "raw/matrix.mtx", matrix(false, {}, W), log);
+    }
+    // CellRanger2.2 (SoloFeature_cellFiltering.cpp:37-66)
+    std::vector<u32> nUMIperCB(nCB);
+    for (u32 icb = 0; icb < nCB; icb++) nUMIperCB[icb] = r.nUMI[indCB[icb]];
+    std::vector<u32> sorted = nUMIperCB;
+    std::sort(sorted.begin(), sorted.end(), [](const u32& a, const u32& b) { return a > b; });
+    std::vector<char> keep(nCB, 0);
+    u64 nCells = 0;
+    if (nCB >= 1) {
+        const u32 maxind = (u32)int(round(FP.nExpectedCells * (1.0 - FP.maxPercentile)));
+        const u32 nUMImax = sorted[std::min(nCB - 1, maxind)];
+        u32 nUMImin = (u32)int(round(nUMImax / FP.maxMinRatio));
+        nUMImin = std::max(nUMImin, (u32)1);
+        info.nUMImax = nUMImax; info.nUMImin = nUMImin;
+        for (u32 icb = 0; icb < nCB; icb++) if (nUMIperCB[icb] >= nUMImin) { keep[icb] = 1; nCells++; }
+    }
+    info.nCells = nCells;
+    if (nCells > 0) {   // cellFiltering returns before outputResults(true) when no cell passes
+        std::string bc;
+        for (u32 icb = 0; icb < nCB; icb++) if (keep[icb]) { bc += wlStr[indCB[icb]]; bc += '\n'; }
+        ok &= writeFile(g + "filtered/features.tsv", feat, log);
+        ok &= writeFile(g + "filtered/barcodes.tsv", bc, log);
+        ok &= writeFile(g + "filtered/matrix.mtx", matrix(true, keep, nCells), log);
+    }
+    // UMIperCellSorted.txt (SoloFeature_statsOutput.cpp:73-80)
+    {
+        std::string s;
+        for (u32 n : sorted) { if (n == 0) break; appendU(s, n); s += '\n'; }
+        ok &= writeFile(g + "UMIperCellSorted.txt", s, log);
+    }
+    // CellReads.stats (SoloFeature_statsOutput.cpp:84-116): rows in STAR's unordered_map order, given the keys' insertion order
+    {
+        std::string s = "CB";
+        for (u32 b = 0; b < F_N; b++) { s += '\t'; s += kFlagNames[b]; }
+        s += "\tnUMIunique\tnGenesUnique\tnUMImulti\tnGenesMulti\n";
+        s += "CBnotInPasslist";
+        for (u32 b = 0; b < F_N; b++) { s += '\t'; appendU(s, r.noCB[b]); }
+        s += "\t0\t0\t0\t0\n";
+        std::vector<u32> present;
+        for (u32 w = 0; w < W; w++) if (r.flagRows[(u64)w * F_N + F_cbMatch] > 0) present.push_back(w);
+        std::vector<u32> rows;
+        if (order.empty()) {
+            rows = present;
+        } else {
+            std::unordered_map<u64, u32> m;
+            m.reserve(nCB * 3 / 2);   // SoloFeature_countCBgeneUMI.cpp:52 (uint32 arithmetic)
+            for (u32 k : order) m.insert({(u64)k, 0u});
+            for (auto& kv : m) rows.push_back((u32)kv.first);
+            if (rows.size() != present.size()) {
+                char b[160]; snprintf(b, sizeof b, "CellReads.stats: %zu keys in the insertion order, %zu CBs with rows\n", rows.size(), present.size()); log += b;
+            }
+        }
+        for (u32 w : rows) {
+            s += wlStr[w];
+            for (u32 b = 0; b < F_N; b++) { s += '\t'; appendU(s, r.flagRows[(u64)w * F_N + b]); }
+            s += '\t'; appendU(s, r.nUMI[w]); s += '\t'; appendU(s, r.nGene[w]); s += "\t0\t0\n";
+        }
+        ok &= writeFile(g + "CellReads.stats", s, log);
+    }
+    return ok;
+}
+
+}  // namespace e9
