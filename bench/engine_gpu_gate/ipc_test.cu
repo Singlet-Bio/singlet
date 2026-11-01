@@ -46,11 +46,12 @@ static int client(const char* path) {
 int main(int argc, char** argv) {
     if (argc < 3) return 1;
     if (!std::strcmp(argv[1], "client")) {
-        int rc = client(argv[2]);                       // plain process
-        pid_t c = fork();                                // and from a forked child that has not touched CUDA before the fork
+        pid_t c = fork();                                // first a forked child that has not touched CUDA before the fork (the STAR prefill child)
         if (c == 0) _exit(client(argv[2]));
         int st = 0; waitpid(c, &st, 0);
-        std::printf("forked client exit %d\n", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+        std::printf("forked client exit %d
+", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+        int rc = client(argv[2]);                        // then a plain process
         return rc | (WIFEXITED(st) ? WEXITSTATUS(st) : 9);
     }
     double gb = argc > 3 ? std::atof(argv[3]) : 1; uint64_t bytes = (uint64_t) (gb * (1ull << 30)) & ~7ull;
