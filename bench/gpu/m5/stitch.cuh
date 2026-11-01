@@ -144,6 +144,11 @@ struct GenomeView {
     u64 sjGstart, sjdbOverhang, sjdbLength, sjdbN;
     const u64* sjdbStart; const u64* sjdbEnd; const u64* sjDstart; const u64* sjAstart;
     const uint8_t* sjdbMotif; const uint8_t* sjdbShiftLeft; const uint8_t* sjdbShiftRight; const uint8_t* sjdbStrand;
+#ifdef M5_G2
+    // E7 M5_G2 (device only; null on the host): the genome text 2 bits per base (word w holds positions 32w - G2OFF ..,
+    // bytes > 3 stored as 0) and a bit per 64-position block that holds a byte > 3 (N, padding, spacers)
+    const u64* G2 = nullptr; const uint32_t* NB = nullptr;
+#endif
 };
 
 // STAR's PackedArray::operator[]: an unaligned little-endian load at bit offset ii*wordLength, masked
@@ -300,7 +305,13 @@ struct Caps {
 };
 
 // read buffers: STAR's Read1[0] (bases 0..3, N = 4), Read1[1] (complement), Read1[2] (reverse complement)
+#ifdef M5_G2
+// E7 M5_G2: plus Read1[0] packed 2 bits per base, forward (p2[0], base j at bits 2(j%32) of word j/32) and reversed
+// (p2[1]: base j of the reversed read = Read1[0][L-1-j]); words past the read are 0
+template <int L> struct ReadBuf { char r[3][L + 1]; unsigned long long p2[2][L / 32 + 4]; };
+#else
 template <int L> struct ReadBuf { char r[3][L + 1]; };
+#endif
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Per-read state (ReadAlign members that mapping touches)
@@ -511,10 +522,84 @@ template <class C> HD inline bool qualitySplit(const char* r, uint L, uint maxNs
 // ---------------------------------------------------------------------------------------------------------------------
 HD inline u64 medianUint2(u64 a, u64 b) { return a / 2 + b / 2 + (a % 2 + b % 2) / 2; }
 
+#ifdef M5_G2
+// E7 M5_G2: compareSeqToGenome on the 2-bit text, 32 bases per step (device). Read1 arrays that reach the seed search are
+// {Read1[0], Read1[1], Read1[2], packed forward, packed reversed, (char*)Lread} (M5_READ1); a null [3] means the byte path.
+// Exactness: the first position where the read base and the genome byte differ is found per 32-base window; a window
+// holding a genome byte > 3 (N, padding, spacer; NB block bits) is compared byte by byte as before, so every mismatch
+// against a byte > 3 is decided by the byte code, and in the 2-bit windows every genome byte is 0..3 (the read bases in a
+// piece are 0..3: qualitySplit), where (sc > gc) is the byte comparison of the same values.
+constexpr long long G2OFF = 1024;   // position p is word (p + G2OFF) / 32 of G2; the arrays cover -G2OFF .. nGenome + G2OFF
+#define M5_READ1(name, rb, Lr) const char* name[6] = {(rb).r[0], (rb).r[1], (rb).r[2], (const char*)(rb).p2[0], (const char*)(rb).p2[1], \
+                                                     (const char*)(uintptr_t)(Lr)}
+#define M5_READ1_BYTES(name, rb) const char* name[6] = {(rb).r[0], (rb).r[1], (rb).r[2], nullptr, nullptr, nullptr}
+#ifdef __CUDA_ARCH__
+__device__ inline u64 g2Fwd(const u64* G2, i64 p) {        // genome bases p .. p+31, base p+j in bits 2j
+    const u64 gp = (u64)(p + G2OFF), w = gp >> 5; const unsigned sh = (unsigned)(gp & 31) * 2;
+    u64 v = G2[w] >> sh; if (sh) v |= G2[w + 1] << (64 - sh);
+    return v;
+}
+__device__ inline bool g2HasN(const uint32_t* NB, i64 p) { // some genome byte in p .. p+31 is > 3
+    const u64 gp = (u64)(p + G2OFF), b0 = gp >> 6, b1 = (gp + 31) >> 6;
+    return ((NB[b0 >> 5] >> (b0 & 31)) | (NB[b1 >> 5] >> (b1 & 31))) & 1;
+}
+__device__ inline u64 rdFwd(const u64* R, i64 o) {          // packed read units o .. o+31
+    const u64 w = (u64)o >> 5; const unsigned sh = (unsigned)(o & 31) * 2;
+    u64 v = R[w] >> sh; if (sh) v |= R[w + 1] << (64 - sh);
+    return v;
+}
+__device__ inline u64 rev2(u64 x) {                        // reverse the order of the 32 2-bit units
+    x = __brevll(x);
+    return ((x >> 1) & 0x5555555555555555ULL) | ((x & 0x5555555555555555ULL) << 1);
+}
+__device__ inline u64 compareSeqToGenome2(const GenomeView& g_, const char* const* s2, u64 S, u64 N, u64 L, u64 SAstr, bool dirR, bool dirG,
+                                          bool& compRes) {
+    // comparison index i (0 ..): read Read1[c][S + L + i] (dirR) or Read1[c][S - L - i], c = dirR != dirG (complement);
+    // genome G[gq + i] (dirG) or G[gq - i]
+    const u64* RA = (const u64*)s2[dirR ? 3 : 4];
+    const i64 Lr = (i64)(uintptr_t)s2[5];
+    const bool comp = dirR != dirG;
+    const i64 r0 = dirR ? (i64)(S + L) : Lr - 1 - ((i64)S - (i64)L);   // Read1[0][S-L-i] = reversed[Lr-1-S+L+i]
+    const i64 gq = dirG ? (i64)(SAstr + L) : (i64)(g_.nGenome - 1 - SAstr - L);
+    const u64 len = N - L;
+    for (u64 i = 0; i < len; i += 32) {
+        const i64 gp0 = dirG ? gq + (i64)i : gq - (i64)i - 31;   // lowest genome position of this window
+        if (g2HasN(g_.NB, gp0)) {
+            const i64 ds = dirR ? 1 : -1, dg = dirG ? 1 : -1;
+            const char* s = s2[comp ? 1 : 0] + S + (dirR ? (i64)L : -(i64)L) + (i64)i * ds;
+            const char* g = g_.G + gq + (i64)i * dg;
+            const u64 e = mn<u64>(len, i + 32);
+            for (u64 ii = i; ii < e; ii++, s += ds, g += dg) {
+                const char sc = *s, gc = *g;
+                if (sc != gc) { compRes = dirG ? sc > gc : !(sc > gc || gc > 3); return ii + L; }
+            }
+            continue;
+        }
+        u64 sw = rdFwd(RA, r0 + (i64)i); if (comp) sw = ~sw;
+        u64 gw = g2Fwd(g_.G2, gp0); if (!dirG) gw = rev2(gw);
+        u64 d = sw ^ gw; d = (d | (d >> 1)) & 0x5555555555555555ULL;
+        if (d) {
+            const unsigned j = (unsigned)(__ffsll((long long)d) - 1) >> 1;
+            if (i + j >= len) return N;
+            const unsigned sc = (unsigned)(sw >> (2 * j)) & 3, gc = (unsigned)(gw >> (2 * j)) & 3;
+            compRes = dirG ? sc > gc : sc < gc;
+            return L + i + j;
+        }
+    }
+    return N;
+}
+#endif
+#else
+#define M5_READ1(name, rb, Lr) const char* name[3] = {(rb).r[0], (rb).r[1], (rb).r[2]}
+#define M5_READ1_BYTES(name, rb) const char* name[3] = {(rb).r[0], (rb).r[1], (rb).r[2]}
+#endif
 HD inline u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u64 S, u64 N, u64 L, u64 iSA, bool dirR, bool& compRes) {
     u64 SAstr = packed_get(g_.SA, iSA, g_.saBits);
     bool dirG = (SAstr >> g_.GstrandBit) == 0;
     SAstr &= g_.GstrandMask;
+#if defined(M5_G2) && defined(__CUDA_ARCH__)
+    if (g_.G2 && s2[3]) return compareSeqToGenome2(g_, s2, S, N, L, SAstr, dirR, dirG, compRes);
+#endif
 #ifdef M5_CMPU
     // E7: the four direction cases as one loop with strides (the same bytes compared in the same order, the same result):
     // the read runs forward (dirR) or backward through Read1[0] (dirR == dirG) or its complement Read1[1]; the genome runs
@@ -1555,7 +1640,7 @@ template <class C> HD inline Status mapPhase1(const Params& P, const GenomeView&
     // oneRead: Read1[1] = complement, Read1[2] = reverse complement
     for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
     for (uint ii = 0; ii < Lread; ii++) rb.r[2][Lread - ii - 1] = rb.r[1][ii];
-    const char* Read1[3] = {rb.r[0], rb.r[1], rb.r[2]};
+    M5_READ1_BYTES(Read1, rb);
     w.Lread = Lread;
     w.outFilterMismatchNmaxTotal = mn<uint>(P.outFilterMismatchNmax, (uint)(P.outFilterMismatchNoverReadLmax * (Lread + 0)));
     // mapOneRead
@@ -1699,6 +1784,16 @@ template <class C> HD inline Status p1Setup(const Params& P, Work<C>& w, ReadBuf
     if (Lread > (uint)C::LREAD || Lread == 0) { w.ov = OV_LREAD; return Status::Overflow; }
     for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
     for (uint ii = 0; ii < Lread; ii++) rb.r[2][Lread - ii - 1] = rb.r[1][ii];
+#ifdef M5_G2
+    for (int q = 0; q < C::LREAD / 32 + 4; q++) {   // Read1[0] packed forward and reversed (units past the read: 0)
+        u64 f = 0, r = 0;
+        for (int j = 0; j < 32; j++) {
+            const uint a = (uint)q * 32 + j;
+            if (a < Lread) { f |= (u64)(R0[a] & 3) << (2 * j); r |= (u64)(R0[Lread - 1 - a] & 3) << (2 * j); }
+        }
+        rb.p2[0][q] = f; rb.p2[1][q] = r;
+    }
+#endif
     w.Lread = Lread;
     w.outFilterMismatchNmaxTotal = mn<uint>(P.outFilterMismatchNmax, (uint)(P.outFilterMismatchNoverReadLmax * (Lread + 0)));
     if (!qualitySplit(rb.r[0], Lread, P.maxNsplit, P.seedSplitMin, w)) return Status::Overflow;   // Lread > 0 here
@@ -1864,7 +1959,7 @@ template <class C> HD inline Status mapPhase1Flat(const Params& P, const GenomeV
     SeedIt it;
     Status s = p1Setup(P, w, rb, R0, Lread, it);
     if (s != Status::Ok) return s;
-    const char* Read1[3] = {rb.r[0], rb.r[1], rb.r[2]};
+    M5_READ1(Read1, rb, Lread);
     while (seedNext(P, w, it)) {
         uint L;
         seedCall(P, gv, w, Read1, it, L);

@@ -203,7 +203,7 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
         if (__all_sync(FULL, st == 2)) break;
         if (st == 1) {
             Work<C>& w = work[k];
-            const char* Read1[3] = {rbuf[k].r[0], rbuf[k].r[1], rbuf[k].r[2]};
+            M5_READ1(Read1, rbuf[k], w.Lread);
             m5::uint L;
             seedCall(P, g, w, Read1, it, L);
             if (w.ov) { status[k] = (uint8_t)Status::Overflow; st = 0; }
@@ -338,6 +338,30 @@ __global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, ui
     key[k] = nEnt[k] ? ((u64)work[k].nW << 40) | min(nEnt[k], (u64)0xFFFFFFFFFFULL) : 0;
     perm[k] = (uint32_t)k;
 }
+#ifdef M5_G2
+// E7 M5_G2: pack the byte genome (Gb = STAR's G - pad, nb bytes; position p is Gb[p + pad], outside = 5) into G2 / NB
+__device__ inline char g2Byte(const char* Gb, u64 nb, long long pad, long long p) {
+    const long long idx = p + pad;
+    return (idx >= 0 && (u64)idx < nb) ? Gb[idx] : (char)5;
+}
+__global__ void k_g2pack(const char* Gb, u64 nb, long long pad, u64 nw, u64* G2) {
+    const u64 w = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (w >= nw) return;
+    u64 v = 0;
+    for (int j = 0; j < 32; j++) v |= (u64)(g2Byte(Gb, nb, pad, (long long)(w * 32 + j) - G2OFF) & 3) << (2 * j);
+    G2[w] = v;
+}
+__global__ void k_nbpack(const char* Gb, u64 nb, long long pad, u64 nblk, uint32_t* NB) {
+    const u64 b = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (b >= nblk) return;
+    bool n = false;
+    for (int j = 0; j < 64; j++) n |= (unsigned char)g2Byte(Gb, nb, pad, (long long)(b * 64 + j) - G2OFF) > 3;
+    if (n) atomicOr(&NB[b >> 5], 1u << (b & 31));
+}
+#if !defined(M5_SEEDFLAT)
+#error "M5_G2 needs M5_SEEDFLAT (the packed read is set up by p1Setup)"
+#endif
+#endif
 static bool g_bin = false;
 __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
@@ -703,6 +727,18 @@ int main(int argc, char** argv) {
     D.chrStart = toDev(chrStart); D.chrLength = toDev(chrLength); D.chrBin = toDev(chrBin);
     D.sjdbStart = toDev(sjdbStart); D.sjdbEnd = toDev(sjdbEnd); D.sjDstart = toDev(sjDstart); D.sjAstart = toDev(sjAstart);
     D.sjdbMotif = toDev(sjdbMotif); D.sjdbShiftLeft = toDev(sjdbShiftLeft); D.sjdbShiftRight = toDev(sjdbShiftRight); D.sjdbStrand = toDev(sjdbStrand);
+#ifdef M5_G2
+    {   // E7: the genome text 2 bits per base and the N-block bits, built on the device from the byte genome
+        const u64 npos = H.nGenome + 2 * (u64)G2OFF + 128, nw = npos / 32 + 2, nblk = npos / 64 + 2, nbw = nblk / 32 + 2;
+        u64* dG2; uint32_t* dNB; CK(cudaMalloc(&dG2, nw * 8)); CK(cudaMalloc(&dNB, nbw * 4)); CK(cudaMemset(dNB, 0, nbw * 4));
+        k_g2pack<<<(unsigned)((nw + 255) / 256), 256>>>(dG, (u64)hG.size(), (long long)PAD, nw, dG2);
+        k_nbpack<<<(unsigned)((nblk + 255) / 256), 256>>>(dG, (u64)hG.size(), (long long)PAD, nblk, dNB);
+        CK(cudaDeviceSynchronize()); CK(cudaGetLastError());
+        D.G2 = dG2; D.NB = dNB;
+        unsigned long long nN = 0; { std::vector<uint32_t> h(nbw); CK(cudaMemcpy(h.data(), dNB, nbw * 4, cudaMemcpyDeviceToHost)); for (auto x : h) nN += __builtin_popcount(x); }
+        fprintf(stderr, "2-bit genome: %.2f GB, N blocks %.1f MB (%llu of %llu 64-base blocks hold a byte > 3)\n", nw * 8 / 1e9, nbw * 4 / 1e6, nN, nblk);
+    }
+#endif
     double tIndex = now() - t0;
     fprintf(stderr, "index + genome arrays loaded in %.1f s; sjdbN %llu, chr %llu\n", tIndex, H.sjdbN, H.nChr);
 
