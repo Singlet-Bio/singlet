@@ -173,12 +173,18 @@ def parse_time_v(path):
         return None
 
 
-def pileup_threads(out_dir):
-    """pileup_threads of pileup_stats.json: 1 on the stream / GPU pileup, the thread count on the sorted-BAM path (None: not found)."""
+def pileup_info(out_dir):
+    """-> dict(pileup_threads, pileup_path, whitelist_missing) from pileup_stats.json (top level; the keys are None when absent). The stream / GPU pileup has
+    pileup_threads == 1 and pileup_path != "sorted"; the sorted-BAM path has the thread count (S8)."""
     try:
-        return json.load(open(os.path.join(out_dir, "pileup_stats.json"))).get("pileup_threads")
+        d = json.load(open(os.path.join(out_dir, "pileup_stats.json")))
     except (OSError, ValueError):
-        return None
+        d = {}
+    return {k: d.get(k) for k in ("pileup_threads", "pileup_path", "whitelist_missing")}
+
+
+def pileup_threads(out_dir):
+    return pileup_info(out_dir)["pileup_threads"]
 
 
 def dir_bytes(path):
@@ -253,9 +259,11 @@ class Run(threading.Thread):
                 self.result = settle_failure(a, root, gsm, claim, man, "oom" if oom else "rc_%d" % rc, tail, self.mem_est if oom else None)
                 return
             tmp_b = dir_bytes(scr)
-            pt = pileup_threads(os.path.join(scr, "out"))
-            if pt not in (1, None):
-                log("[multi] WARNING %s: pileup_threads=%s - the sorted-BAM pileup ran, not the stream / GPU pileup (whitelists missing next to the binary?)" % (gsm, pt))
+            pi = pileup_info(os.path.join(scr, "out"))
+            pt = pi["pileup_threads"]
+            if pi["whitelist_missing"] is True or pi["pileup_path"] == "sorted" or pt not in (1, None):
+                log("[multi] WARNING %s: pileup_path=%s pileup_threads=%s whitelist_missing=%s - not the stream / GPU pileup (whitelists missing next to the binary?)" % (
+                    gsm, pi["pileup_path"], pt, pi["whitelist_missing"]))
             up = D.publish(a, man, os.path.join(scr, "out"), self.cfg, self.ccfg, scr, claim)
             pub, _n, _priv = D.checksum_outputs(os.path.join(scr, "out"))
             if self.heart.lost or not os.path.isdir(claim):
@@ -266,7 +274,7 @@ class Run(threading.Thread):
             pairs = man.get("pairs", 0)
             C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine="gpu", compute_s=round(compute_s, 1),
                    wall_s=round(time.time() - self.t0, 1), pairs=pairs, staged_bytes=man.get("bytes"), out_public_bytes=pub, publish=up,
-                   peak_rss_gb=peak, est_peak_gb=round(self.mem_est, 1), scratch_bytes=tmp_b, pileup_threads=pt, via="multi", concurrent=man.get("_n_running"))
+                   peak_rss_gb=peak, est_peak_gb=round(self.mem_est, 1), scratch_bytes=tmp_b, pileup_threads=pt, pileup_path=pi["pileup_path"], whitelist_missing=pi["whitelist_missing"], via="multi", concurrent=man.get("_n_running"))
             self.result = "done %.0fs %.3f Mpairs/s own, peak %s GB (est %.0f), scratch %.1f GB" % (
                 compute_s, pairs / 1e6 / max(compute_s, 1e-9), "%.1f" % peak if peak else "?", self.mem_est, tmp_b / 1e9)
         except Q.Preempted:

@@ -165,6 +165,8 @@ def test_pileup_threads_reader(tmp_path):
     assert M.pileup_threads(str(tmp_path)) is None
     (tmp_path / "pileup_stats.json").write_text(json.dumps({"pileup_threads": 1}))
     assert M.pileup_threads(str(tmp_path)) == 1
+    (tmp_path / "pileup_stats.json").write_text(json.dumps({"pileup_threads": 12, "pileup_path": "sorted", "whitelist_missing": False}))
+    assert M.pileup_info(str(tmp_path)) == {"pileup_threads": 12, "pileup_path": "sorted", "whitelist_missing": False}
 
 
 # ── end to end with a fake engine ───────────────────────────────────────────────────────────────────────────────────
