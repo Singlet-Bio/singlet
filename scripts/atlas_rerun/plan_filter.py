@@ -48,6 +48,10 @@ def read_unrecoverable(path=UNRECOVERABLE):
 def reasons(runs, unrecoverable=None):
     """runs: DataFrame with gsm, library_strategy, library_layout, instrument_model (one row per run) -> {gsm: reason} for the GSMs to exclude."""
     out = {}
+    runs = runs.copy()
+    for col in ("library_strategy", "library_layout", "instrument_model"):   # a run table without the column excludes nothing by that rule
+        if col not in runs:
+            runs[col] = None
     for gsm, x in runs.groupby("gsm"):
         strat = [str(v) for v in x.library_strategy.dropna()]
         if strat and all(v in NON_RNA for v in strat):
