@@ -204,7 +204,8 @@ def test_drain_end_to_end(tmp_path):
                         "--scratch", str(tmp_path / "scr"), "--mem-gb", "370", "--idle-exit-min", "0.05", "--publish", "none"],
                        capture_output=True, text=True, timeout=170, env=dict(os.environ, S9_NO_WL_CHECK="1"))
     assert r.returncode == 0, r.stdout + r.stderr
-    assert os.listdir(os.path.join(stage, "ready")) == ["GSM5"]        # 900 M pairs: left for the whole-node class, not lost, not failed
+    log = r.stdout + r.stderr
+    assert os.listdir(os.path.join(stage, "ready")) == ["GSM5"], log        # 900 M pairs: left for the whole-node class, not lost, not failed
     assert sorted(os.listdir(os.path.join(stage, "failed"))) == ["GSM3.2", "GSM4.2"]   # requeued once, then failed
     assert os.listdir(os.path.join(stage, "claimed")) == []
     for g in ("GSM3", "GSM4"):
