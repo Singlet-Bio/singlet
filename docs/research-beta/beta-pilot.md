@@ -80,7 +80,7 @@ Not queued: HTO callers, vireo/souporcell, peddy/somalier. They need a pooled or
 4. **Non-host check.** The donors are on ART for HIV-1 (expected suppressed). Kraken2 (viral k2 DB, includes HIV-1) on the cDNA reads and Singlet's non-host output for GSM8085472 are both inspected for HIV reads; few or none are expected, and the check is recorded either way.
 5. **GSM7064234: pilot harness bug (corrected 2026-11-01); the campaign gate is fine.** Diagnosis (job 795636, first 200,000 spots of SRR23617320): mate 1 is 8 nt (index), mate 2 is 151 nt with its first 16 nt in 3M-february-2018 for 93.2% of reads, mate 3 is 151 nt (cDNA). The decode gate rejected the run (`non10x_protocol_low_conf_no_wl_no_10x_geometry`, tag splitseq, `wl_match_rate=0`) because `pilot_fetch.py` passed the whitelist directory only as `$SINGLET_WHITELIST_DIR`, which `singlet download` ignores; it reads `--whitelist-dir`. The campaign path (`fetch_worker.py`) passes `--whitelist-dir` and is unaffected. S14 is separately fixing the env-var handling and the gate's fallback to splitseq on read length. The pilot fix: `pilot_fetch.py` now passes `--whitelist-dir`, GSM7064234 is rerun from its kept `.sra`, and every `.1fq` decoded before the fix is redecoded with the whitelist (`ensure_wl` in `pilot_stage.sh`) before Singlet reads it.
 6. **Protocol calls made without a whitelist.** Every sample fetched before the fix has `wl_match_rate=0` in its gate line: GSM4987144 (tags 3p-v2 and 5p-v2 across its runs), GSM5130155 and GSM5130163 (5p-v3 with a 28-nt R1), GSM5171610 (5p-v2), GSM7884577 (3p-v3), GSM8164511 (3p-v3), GSM9038586 (3p-v2); GSM4987148, GSM8183378, GSM8141311, GSM5682562 and GSM8085472 had not reached the gate when it was fixed or were still decoding. All are redecoded; the gate lines before and after are kept (`decode_wl.log` per sample) and any change of protocol tag is reported.
-7. **GSM8958776 (brain snRNA): no runs in ENA** (`sample_alias` returns nothing), so it was never fetched. It is a failure of the pilot's lookup, not of Singlet; it stays in the list as not run unless a replacement brain-nuclei sample is found.
+7. **GSM8958776 (brain snRNA): dropped, "no ENA runs"** - (`sample_alias` returns nothing), so it was never fetched. It is a failure of the pilot's lookup, not of Singlet; it stays in the list as not run unless a replacement brain-nuclei sample is found.
 
 ## Scoring (after the jobs)
 
@@ -91,3 +91,6 @@ Deliverables, filled in after scoring: per-sample × per-modality table, a gener
 ## Results
 
 (not yet available)
+
+### Note on GPU sizing (2026-11-01)
+Every GPU job is a single H100 with at most 370 GB of memory (a 1-GPU job is capped at 375 GB, and 2-GPU jobs hit the per-user GPU QOS). GSM4987148 started earlier as a 2-GPU, 440 GB job and is the only exception. If a deep sample runs out of memory on one GPU at 370 GB, it goes to the failure list with its read count and peak RSS.
