@@ -266,8 +266,8 @@ __device__ __forceinline__ void p3Read(const Params& P, const GenomeView& g, u64
     if (s == Status::Ok) s = mapFinish(P, g, w, rbuf[k], bl);
     status[o] = (uint8_t)s; outLen[o] = (uint16_t)bl.n;
 }
-template <class C>
-__global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
+template <class C, int MINB>
+__global__ void __launch_bounds__(128, MINB) k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
                      const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen, const uint32_t* perm) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
@@ -322,6 +322,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     uint32_t* dPerm = nullptr; u64* dKey = nullptr;
     const char* qe = std::getenv("SINGLET_ENGINE_GPU_QUEUE");
     const bool queue = qe != nullptr && qe[0] == '1';
+    const char* mbe = std::getenv("SINGLET_ENGINE_GPU_P3_MINB"); const int minb = mbe ? std::atoi(mbe) : 0;
     unsigned long long* dCtr = nullptr; if (queue) EG_CK(cudaMalloc(&dCtr, 8));
     if (bucket) { EG_CK(cudaMalloc(&dPerm, NB * 4)); EG_CK(cudaMalloc(&dKey, NB * 8)); }
     devNote();
@@ -348,7 +349,12 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
             EG_CK(cudaMemset(dCtr, 0, 8));
             EG_KT("p3", k_p3q<C><<<GQ, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, dCtr));
         } else {
-            EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, bucket ? dPerm : nullptr));
+            // SINGLET_ENGINE_GPU_P3_MINB=6|8: the compiler keeps the registers of k_p3 under the limit that lets that many 128-thread blocks live on an SM (occupancy; default 94 registers = 5 blocks)
+            const uint32_t* pm = bucket ? dPerm : nullptr;
+            if (minb == 6) { EG_KT("p3", k_p3<C, 6><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, pm)); }
+            else if (minb == 8) { EG_KT("p3", k_p3<C, 8><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, pm)); }
+            else if (minb == 12) { EG_KT("p3", k_p3<C, 12><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, pm)); }
+            else { EG_KT("p3", k_p3<C, 1><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, pm)); }
         }
         EG_CK(cudaGetLastError());
         if (egTraceOn() && !bucket) {   // warp-balance diagnostic (reads run in batch order): cost of the extra copies is outside the kernel timings
