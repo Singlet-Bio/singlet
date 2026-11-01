@@ -53,7 +53,7 @@ def is_restricted_member(rel: str) -> bool:
     if rel == "ase_counts.tsv":
         return True
     name = rel.rsplit("/", 1)[-1]
-    return name.startswith("snp_") or bool(_VARIANT_FILE_RE.search(name))
+    return name.startswith("snp_") or bool(_VARIANT_FILE_RE.search(name)) or name == "doublet_scores_engine.tsv"
 
 
 def is_restricted_path(arc_name: str) -> bool:
