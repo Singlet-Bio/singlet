@@ -180,9 +180,9 @@ Both are read by the in-tree codec (`include/singlet/pileup/pz_reader.h`).
 
 | File | Content |
 |------|---------|
-| `exon_counts.1pz` | Per-exon-interval UMI counts (features × all barcodes): spliced + ambiguous molecules |
+| `exon_counts.1pz` | Per-exon-interval UMI counts (features × all barcodes): molecules with at least one exon-only read (STARsolo Gene definition) |
 | `intron_counts.1pz` | Per-intron-interval UMI counts: unspliced molecules |
-| `ambiguous_counts.1pz` | Per-gene ambiguous molecules (already inside `exon_counts`); written by pipelines with the molecule-label fix, absent before |
+| `spliced_counts.1pz`, `unspliced_counts.1pz`, `ambiguous_counts.1pz` | Per-gene molecules by the alevin-fry USA label (unspliced = any intron-touching read; spliced = no intron read, a junction read; ambiguous = exon-only reads, no junction); each molecule in exactly one; written by pipelines with the molecule-label fix, absent before. `exon_counts` / `intron_counts` stay the STARsolo Gene / GeneFull split |
 | `sj_counts.1pz` | Per-splice-junction UMI counts |
 | `splice_psi.1pz` | Per-junction percent-spliced-in |
 | `vdj_gene_usage.1pz` | VDJ gene segment usage |
