@@ -214,6 +214,9 @@ tl = S["variants"].get("tail")
 if tl and tl["log"].get("TAIL"):
     print("\ntails (m5t, last rep)")
     S["tail"] = {"sum": tl["log"].get("TAILSUM", []), "batches": tl["log"]["TAIL"], "clk": tl["log"].get("TAILCLK", [])}
+    for s in tl["log"].get("TAILEVSUM", []):
+        print("  events (rep before the analysed one): " + " ".join("%s=%s" % kv for kv in s.items()))
+    S["tail"]["events"] = tl["log"].get("TAILEV", [])
     for s in tl["log"].get("TAILSUM", []):
         print("  " + " ".join("%s=%s" % kv for kv in s.items()))
     for t in tl["log"]["TAIL"]:
