@@ -123,9 +123,20 @@ Full set, kernel replay, one whole batch per lane (A and M: 262,144 reads; B: 65
 | L2 read / write KB per read | 17.0 / 21.3 | 11.9 / 29.7 | 54.2 / 65.8 | 114.4 / 273.4 | 97.9 / 263.8 | 315.7 / 852.8 |
 | DRAM read / write KB per read | 33.1 / 6.4 | 17.4 / 8.7 | 104.1 / 33.1 | 189.4 / 96.0 | 189.7 / 107.4 | 504.3 / 272.7 |
 
-k_p2 (warp per read, 256 threads, 42 registers, 62.5% theoretical occupancy): A 2.21 ms, M 8.65 ms, B 4.62 ms per batch;
-15.9-17.4 active threads per instruction, issue slots 41-45% busy, long scoreboard 51-69% (SA reads and the window-bin
-lookup). It is the only kernel that keeps half a warp busy, and it is 4.7% of M5.
+k_p2 (warp per read, 256 threads, 42 registers; same jobs):
+
+| metric | A k_p2 | M k_p2 | B k_p2 |
+|---|---|---|---|
+| duration ms / registers / limiter | 2.21 / 42 / registers (5 blocks of 256) | 8.65 / 42 / registers | 4.62 / 42 / registers |
+| occupancy theoretical / achieved % | 62.5 / 35.7 | 62.5 / 38.0 | 62.5 / 35.9 |
+| active threads per instruction | 17.3 | 15.9 | 17.4 |
+| warp cycles per issued instruction / issue slots busy % | 13.1 / 45.3 | 15.0 / 41.4 | 18.2 / 33.3 |
+| stalls 1-3 | long sb 51%, wait 19%, selected 8% | long sb 60%, wait 18%, selected 7% | long sb 69%, wait 14%, selected 6% |
+| L1 / L2 hit %, DRAM % of peak | 83.5 / 32.9, 8.9 | 74.2 / 40.1, 15.3 | 62.7 / 26.3, 29.2 |
+| global load sectors per request (per active thread) | 2.77 (0.16) | 3.21 (0.20) | 3.81 (0.22) |
+
+k_p2 scans the SA entries with the lanes of a warp (`packed_get`, `wbGet`, `entryHit`); it is the only kernel that keeps
+half a warp busy, and it is 4.7% of M5.
 
 What the table says:
 
