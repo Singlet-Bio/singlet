@@ -64,7 +64,9 @@ void ReadAlign::outputAlignments() {
         PROF_T0(tOutBarcode);
         soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
         PROF_ADD(PROF_outBarcode, tOutBarcode);
+        PROF_T0(tOutEntry);
         handoffReadEntry();
+        PROF_ADD(PROF_outEntry, tOutEntry);
 
         //transcripts: need to be run after CB/UMI are obtained to output CR/UR tags
         if ( P.quant.trSAM.yes && unmapType<0) {//Aligned.toTranscriptome output, only for mapped
@@ -453,7 +455,9 @@ void ReadAlign::outputHandoffSummary()
     PROF_T0(tOutBarcode);
     soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
     PROF_ADD(PROF_outBarcode, tOutBarcode);
+    PROF_T0(tOutEntry);
     handoffReadEntry();
+    PROF_ADD(PROF_outEntry, tOutEntry);
 
     PROF_T0(tOutSolo);
     for (int k = 0; k < 2; k++) {

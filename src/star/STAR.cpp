@@ -285,10 +285,11 @@ int star_main_impl(int argInN, char *argIn[])
         double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - profClock0).count();
         double hz = (__rdtsc() - profTsc0) / sec;
         const char *nm[PROF_N] = {"chunkRead", "chunkMutexWait", "chunkSort", "readLoad", "map", "output", "chunkWrite", "seed", "windows", "stitch",
-                                   "outMapped", "outBarcode", "outSolo", "outSAM", "outUnmapped"};
+                                   "outMapped", "outBarcode", "outSolo", "outSAM", "outUnmapped", "outEntry"};
         P.inOut->logMain << "STAR_PROFILE wall=" << sec << "s threads=" << P.runThreadN;
         for (int i = 0; i < PROF_N; i++)
             P.inOut->logMain << " " << nm[i] << "=" << g_prof[i] / hz << "s";
+        P.inOut->logMain << " pathSummary=" << g_profPath[0] << " pathCacheHit=" << g_profPath[1] << " pathMapped=" << g_profPath[2];
         const char *on[6] = {"unique", "multi", "tooManyLoci", "tooShort", "otherUnmapped", "cacheHit"};
         for (int i = 0; i < 6; i++)
             P.inOut->logMain << " " << on[i] << "=" << g_profOutcome[i][1] << "reads/" << g_profOutcome[i][0] / hz << "s"

@@ -164,6 +164,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         int oc = (fromCache || handoffSum!=nullptr) ? 5 : unmapType==-1 ? (nTr==1 ? 0 : 1) : unmapType==3 ? 2 : unmapType==1 ? 3 : 4;
         g_profOutcome[oc][0] += __rdtsc() - tMap;
         g_profOutcome[oc][1]++;
+        g_profPath[handoffSum!=nullptr ? 0 : fromCache ? 1 : 2]++;
         if (!fromCache && handoffSum==nullptr) {
             for (int k=0; k<3; k++) g_profOutcomeDetail[oc][k] += profCyc[k];
             g_profOutcomeDetail[oc][3] += profCnt[0];
