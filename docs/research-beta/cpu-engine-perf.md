@@ -162,3 +162,43 @@ The runs landed on Xeon 6230 (2.1 GHz) and 6226 (2.7 GHz) nodes, so only same-no
 whole-program PGO are about 4% *slower* than plain v3 on pbmc1k_v3 and 11% slower on neuron1k_v3; the faster pgo / pgo-lto
 rows are the faster CPU. LTO alone is within 1%. Conclusion: keep the current flags. znver3 cannot be measured on Clipper (Intel
 only); same ISA level as v3, expected gain is small. An exclusive same-node A/B would be needed to resolve anything under ~5%.
+
+## 8. Function-level profile (samprof), ranked core-s per M reads
+
+perf is blocked on Clipper (perf_event_paranoid=4), so `scripts/cpu_perf/samprof/` is an `LD_PRELOAD` sampler: one
+`CLOCK_THREAD_CPUTIME_ID` timer per thread (10 ms of that thread's CPU per sample, so all threads and both processes are covered; the
+STAR child is a fork and gets its own file), frame-pointer stack walk, `resolve.py` turns the samples into tables with `addr2line`. Binary:
+`-DSINGLET_MARCH_FLAG=-march=x86-64-v3 -g -fno-omit-frame-pointer` of 9e6f95aa (jobs 795119-795121, scavenger, `--threads 4`, stream path OK).
+Sample totals match `time -v` CPU: 2,459 / 2,512 s (pbmc1k_v3), 6,477 / 6,521 (neuron1k_v3), 11,581 / 11,749 (deep). Reads: 66.6 M, 92.9 M, 263.4 M.
+Category = the real (outermost) function holding the sampled pc, so inlined helpers count to their caller. Libc/libm/libstdc++ leaves are
+shown separately: they have no frame pointer, so the caller one frame up is approximate. Raw tables: `$W/jobs/cpu-perf/samprof/q-<sample>/profile.md`.
+
+| item (core-s per M reads) | pbmc1k_v3 | neuron1k_v3 (mouse) | deep GSM7656149 | owner |
+|---|---|---|---|---|
+| **STAR stitch/extend** (stitchPieces, stitchWindowAligns, extendAlign, Transcript copy) | 9.4 | 37.7 | 11.3 | S8 / `src/star` |
+| **STAR seed search** (compareSeqToGenome, maxMappableLength, SeqCache) | 10.3 | 14.4 | 10.5 | S8 |
+| STAR libc/libstdc++ leaves (memcpy, malloc, vector copy; oneRead, stitchWindowAligns, format_block) | 4.0 | 6.9 | 4.3 | S8 |
+| STAR clip / opal | 2.0 | 0.1 | 2.3 | S8 |
+| STAR annotate / Solo / SAM output | 1.7 | 1.2 | 2.2 | S8 |
+| STAR read / parse | 1.3 | 1.4 | 1.5 | S8 |
+| **singlet pileup / count** (count_read, IntervalTree, GeneModel, DirectionalUmiStore, finalize) | 3.0 | 0.6 | 3.9 | CPU |
+| singlet libs (malloc, memcpy, vector, hash nodes) | 1.7 | 1.8 | 2.1 | CPU |
+| singlet barcode correction (`CbCorrector::resolve`) | 0.5 | 0.1 | 0.8 | CPU |
+| singlet ambient / decontX / doublet | 0.1 | 0.1 | 1.2 | CPU, shared with GPU path |
+| singlet donor demux (VB, auto-K) | 0.3 | 0.0 | 0.9 | CPU, shared |
+| singlet non-host screen (EM) | 0.5 | 1.8 | 0.4 | CPU |
+| total (sampled) | 36.9 | 69.7 | 44.0 | |
+
+Reading it:
+
+- **STAR is 85-94% of the core-s** (single-process child). The CPU engine's own code is 4.8-10 core-s/M (parent: 445 / 442 / 2,694 CPU-s).
+  Seed search is flat at 10-14; **stitch/extend dominates on mouse (37.7 core-s/M)**: repeat-rich reads create many windows and
+  multimapper transcript copies (`Transcript::operator=`, `stitchWindowAligns`). neuron1k_v3 costs 70 core-s/M, not the 24 in section 1
+  (those rows were mis-scaled; all runs here and in section 7 agree on 6,5-6,8k CPU-s).
+- **Compiler flags cannot help** (section 7): the cost is memory latency (SA binary search in `compareSeqToGenome`) and window/stitch
+  branching, not instruction throughput.
+- **Realistic CPU-owned gains** (core-s/M, deep sample, byte-identical): pileup/count 3.9 -> ~2.9 by removing per-read vector allocations
+  and the unordered_map node chasing in `IntervalTree::query_impl` / `DirectionalUmiStore` (-1.0); `CbCorrector::resolve` 0.8 -> ~0.5 by
+  a flat table in place of hashed whitelist lookups (-0.3); singlet libc 2.1 -> ~1.5 with the same allocation fixes (-0.6); donor VB 0.9 ->
+  0.1 for single-donor samples with the auto-K K=1-vs-2 early exit (-0.8, gated on S10 for identical calls); decontX 1.2 (+ `--threads`
+  already applied). **Total about 2.5-3 of 44 core-s/M (6%)**; the rest is STAR.
