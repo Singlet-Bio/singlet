@@ -37,6 +37,8 @@
 //            slot permutation
 //  M5_SLOT0  a window's slot 0 gets only trInit's maxScore (the one field read while no transcript is recorded)
 //  M5_S3     = M5_REFX + M5_FIN1 + M5_SLOT0
+//  M5_KEEPIX the kept transcripts live in the slot pool and keep[] is an index list: keeping a window's transcript,
+//            dropping one and multMapSelect's compaction move indices instead of transcripts (needs M5_FIN1)
 //  M5_TR32   transcript fields that hold read offsets, lengths and counts stored in 32 bits (genome coordinates stay 64)
 //  M5_TR32CHECK  count every 32-bit store that would not round-trip (g_tr32bad; must stay 0)
 #ifdef M5_S3
@@ -54,6 +56,9 @@
 #ifndef M5_TR32
 #define M5_TR32
 #endif
+#endif
+#if defined(M5_KEEPIX) && !defined(M5_FIN1)
+#error "M5_KEEPIX needs M5_FIN1"
 #endif
 
 namespace m5 {
@@ -305,12 +310,20 @@ template <class C> struct Work {
     int trBestScore; uint trBestGLength; int trBestKeep;    // trBest: index into keep[] (-1 = trInit)
     uint trInitRLength;
     // windows' transcripts that can still be selected (in window order, then within-window order), and their counts
+#ifdef M5_KEEPIX
+    int keepP[C::NKEEP]; int nKeep; int keepWin[C::NKEEP];   // keep[k] = slot[keepP[k]]
+    uint8_t own[C::NWTR + 2 + C::NKEEP];                     // slot pool entry held by keep[]
+#else
     T keep[C::NKEEP]; int nKeep; int keepWin[C::NKEEP];
+#endif
     uint nWtr;                // number of windows with transcripts (STAR's nW after stitching)
     uint trNtotal;
     // stitching scratch
     T stack[C::NWA + 1];
-#ifdef M5_FIN1
+#if defined(M5_KEEPIX)
+    T slot[C::NWTR + 2 + C::NKEEP]; int slotP[C::NWTR + 1]; uint nWinTr;
+    int slotSpare;            // the physical slot outside the permutation slotP: finalization's scratch
+#elif defined(M5_FIN1)
     T slot[C::NWTR + 2]; int slotP[C::NWTR + 1]; uint nWinTr;
     int slotSpare;            // the physical slot outside the permutation slotP: finalization's scratch
 #else
@@ -331,6 +344,11 @@ template <class C> struct Work {
     unsigned long long stN[4];   // [0] recursion steps (frames visited), [1] windows stitched
 #endif
 };
+#ifdef M5_KEEPIX
+#define M5KEEP(w, k) ((w).slot[(w).keepP[k]])
+#else
+#define M5KEEP(w, k) ((w).keep[k])
+#endif
 // a transcript copy (kind as above); with M5_COPYSTATS counted, its bytes and cycles summed
 #if defined(M5_COPYSTATS) && defined(__CUDA_ARCH__)
 #define M5CPY(w, kind, dst, src) do { long long t0_ = clock64(); (dst).copyFrom(src); (w).cpClk[kind] += clock64() - t0_; \
@@ -1588,6 +1606,9 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     if (stitched) {
         // ---- stitch each window, keep its transcripts; trBest
         uint iW1 = 0;
+#ifdef M5_KEEPIX
+        for (int p = 0; p < C::NWTR + 2 + C::NKEEP; p++) w.own[p] = 0;
+#endif
         for (uint iW = 0; iW < w.nW; iW++) {
             if (w.nWA[iW] == 0) continue;
             if ((uint)w.WlastAnchor[iW] < w.nWA[iW]) w.WA[iW][w.WlastAnchor[iW]][WA_Anchor] = 2;
@@ -1600,17 +1621,28 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
             trA.roStr = trA.Str;            // revertStrand = false
             trA.maxScore = 0;
             if (w.trNtotal + P.alignTranscriptsPerWindowNmax >= P.alignTranscriptsPerReadNmax) break;   // STAR: warning, stop
+#ifdef M5_KEEPIX
+            // the window's slot positions and spare: the first pool entries that keep[] does not hold
+            for (int p = 0, j = 0; j < C::NWTR + 2; p++) if (!w.own[p]) { if (j <= C::NWTR) w.slotP[j] = p; else w.slotSpare = p; j++; }
+#else
             for (int k = 0; k <= C::NWTR; k++) w.slotP[k] = k;
-#ifdef M5_FIN1
+#endif
+#if defined(M5_FIN1) && !defined(M5_KEEPIX)
             w.slotSpare = C::NWTR + 1;
+#endif
+#ifdef M5_KEEPIX
+#define M5_SLOTAT0 w.slot[w.slotP[0]]
+#else
+#define M5_SLOTAT0 w.slot[0]
 #endif
 #ifdef M5_SLOT0
             // slot[slotP[0]] is read while nWinTr == 0 only for its maxScore (the recording test); every other read is of a
             // position < nWinTr, which a recording has written
-            w.slot[0].maxScore = trA.maxScore;
+            M5_SLOTAT0.maxScore = trA.maxScore;
 #else
-            M5CPY(w, 4, w.slot[0], trA);
+            M5CPY(w, 4, M5_SLOTAT0, trA);
 #endif
+#undef M5_SLOTAT0
             w.nWinTr = 0;
             M5STAT(w, 1);
             if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2])) return Status::Overflow;
@@ -1624,8 +1656,14 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
                 const T& t = w.slot[w.slotP[k]];
                 if (t.maxScore + P.outFilterMultimapScoreRange >= runBest || (better && k == 0)) {
                     if (w.nKeep >= C::NKEEP) { w.ov = OV_KEEP; return Status::Overflow; }
+#ifdef M5_KEEPIX
+                    // the slot itself becomes keep[nKeep] (it leaves the pool until dropped; the next window's positions
+                    // take other entries). Chr/Str/roStr: every transcript of a window has trInit's, so this is t0's.
+                    w.keepP[w.nKeep] = w.slotP[k]; w.own[w.slotP[k]] = 1;
+#else
                     M5CPY(w, 5, w.keep[w.nKeep], t);
-                    w.keep[w.nKeep].Chr = t0.Chr; w.keep[w.nKeep].Str = t0.Str; w.keep[w.nKeep].roStr = t0.roStr;   // multMapSelect copies [0]'s
+#endif
+                    M5KEEP(w, w.nKeep).Chr = t0.Chr; M5KEEP(w, w.nKeep).Str = t0.Str; M5KEEP(w, w.nKeep).roStr = t0.roStr;   // multMapSelect copies [0]'s
                     w.keepWin[w.nKeep] = (int)iW1;
                     w.nKeep++;
                 }
@@ -1635,11 +1673,18 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
             if (better) {
                 int j = 0;
                 for (int k = 0; k < w.nKeep; k++) {
-                    if (w.keep[k].maxScore + P.outFilterMultimapScoreRange >= w.trBestScore) {
+                    if (M5KEEP(w, k).maxScore + P.outFilterMultimapScoreRange >= w.trBestScore) {
                         if (k == w.trBestKeep) w.trBestKeep = j;
+#ifdef M5_KEEPIX
+                        if (j != k) { w.keepP[j] = w.keepP[k]; w.keepWin[j] = w.keepWin[k]; }
+#else
                         if (j != k) { M5CPY(w, 6, w.keep[j], w.keep[k]); w.keepWin[j] = w.keepWin[k]; }
+#endif
                         j++;
                     }
+#ifdef M5_KEEPIX
+                    else w.own[w.keepP[k]] = 0;   // dropped: back to the pool
+#endif
                 }
                 w.nKeep = j;
             }
@@ -1659,23 +1704,27 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     if (w.nW > 0) {
         w.maxScore = w.trBestScore;
         for (int k = 0; k < w.nKeep; k++) {
-            if (w.keep[k].maxScore + P.outFilterMultimapScoreRange >= w.maxScore) {
+            if (M5KEEP(w, k).maxScore + P.outFilterMultimapScoreRange >= w.maxScore) {
+#ifdef M5_KEEPIX
+                if (k != (int)w.nTr) { w.keepP[w.nTr] = w.keepP[k]; }
+#else
                 if (k != (int)w.nTr) { M5CPY(w, 7, w.keep[w.nTr], w.keep[k]); }
+#endif
                 if (k == w.trBestKeep) iBest = (int)w.nTr;
                 w.nTr++;
             }
         }
         if (!(w.nTr > P.outFilterMultimapNmax || w.nTr == 0)) {
             for (uint iTr = 0; iTr < w.nTr; iTr++) {
-                T& t = w.keep[iTr];
+                T& t = M5KEEP(w, iTr);
                 t.roStart = t.roStr == 0 ? t.rStart : Lread - t.rStart - t.rLength;
                 t.cStart = t.gStart - gv.chrStart[t.Chr];
             }
             if (w.nTr == 1) {
-                w.keep[0].primaryFlag = true;
+                M5KEEP(w, 0).primaryFlag = true;
             } else {
                 // outMultimapperOrder Old_2.4, outSAMmultNmax -1, outSAMprimaryFlag OneBestScore (checked by the driver)
-                w.keep[iBest].primaryFlag = true;
+                M5KEEP(w, iBest).primaryFlag = true;
             }
         }
     }
@@ -1684,7 +1733,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     if (w.nW == 0) {
         w.unmapType = 0;
     } else {
-        const T& b = w.keep[iBest];
+        const T& b = M5KEEP(w, iBest);
         if ((b.maxScore < P.outFilterScoreMin) || (b.maxScore < (int)(P.outFilterScoreMinOverLread * (Lread - 1)))
             || (b.nMatch < P.outFilterMatchNmin) || (b.nMatch < (uint)(P.outFilterMatchNminOverLread * (Lread - 1)))) {
             w.unmapType = 1;
@@ -1697,7 +1746,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     // ---- encode (m5_dump.h record)
     blob.putV((i64)w.nW); blob.putV((i64)w.nTr); blob.putV((i64)(w.nW > 0 ? iBest : -1));
     if (w.nW == 0) blob.putV((i64)w.trInitRLength);
-    for (uint i = 0; i < w.nTr; i++) encodeTr(blob, w.keep[i]);
+    for (uint i = 0; i < w.nTr; i++) encodeTr(blob, M5KEEP(w, i));
     M5CLK(w, 3, tc);
     if (blob.full) { w.ov = OV_BLOB; return Status::BlobFull; }
     return Status::Ok;
