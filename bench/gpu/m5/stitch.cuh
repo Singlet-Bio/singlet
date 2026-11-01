@@ -443,7 +443,7 @@ template <class C> HD inline size_t persistentBytes() {
 #define M5CPY(w, kind, dst, src) (dst).copyFrom(src)
 #define M5STAT(w, k) do { } while (0)
 #endif
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)   // -DM5_NOCLK: no phase counters (clk[8] stays 0)
 #define M5CLK(w, k, t) do { long long t1_ = clock64(); (w).clk[k] += t1_ - (t); (t) = t1_; } while (0)
 #define M5T(t) long long t = clock64()
 #define M5ADD(w, k, t) do { (w).clk[k] += clock64() - (t); } while (0)
@@ -1283,7 +1283,7 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
     typedef typename Work<C>::T T;
     M5T(trec);
     struct RecClk { Work<C>& w; long long t; HD ~RecClk() { M5ADD(w, 7, t); } };
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
     RecClk rc_{w, trec};
 #endif
     if (Score + P.outFilterMultimapScoreRange >= w.slot[w.slotP[0]].maxScore
@@ -1524,7 +1524,7 @@ template <class C> HD inline Status mapPhase1(const Params& P, const GenomeView&
                                            const char* R0, uint Lread) {
     w.ov = OV_NONE;
     long long tc = 0;
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
     tc = clock64();
 #endif
     w.stitched = false; w.nEntries = 0;
@@ -1742,7 +1742,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     const bool stitched = w.stitched;
     w.nSteps = 0;
     long long tc = 0;
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
     tc = clock64();
 #endif
     if (stitched) {
