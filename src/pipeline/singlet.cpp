@@ -2963,6 +2963,8 @@ int main(int argc, char* argv[]) {
     int  cr4_probe_reads = 200000;       // --cr4-probe-reads N: reads for the CR4 vs no-CR4 mapping-rate probe (0 = no probe, CR4 off)
     bool no_adapter_clip = false;        // --no-adapter-clip: no STAR --clip3pAdapterSeq (protocol TSO / adapter)
     std::string clip5p_probe_json;       // decision of the 5' prefix probe (provenance)
+    std::string bam_path_reason = "default";   // why the pileup reads the sorted BAM instead of the STAR stream (provenance: pileup_path_reason)
+    bool whitelist_missing = false;      // a 10x-type protocol (CB_UMI_Simple) was detected but no barcode whitelist file was found: the sorted path was taken because of it
     int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
     std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
@@ -5275,6 +5277,7 @@ int main(int argc, char* argv[]) {
     // 19% less wall, docs/research-beta/ws-w3b-bam-stream.md). STAR writes its corrected CB only into a
     // sorted BAM, so the pileup takes CB from CR (identical here: .1fq barcodes are whitelist-exact).
     // The modes below still read the sorted BAM; --sorted-bam forces it everywhere.
+    if (stream_unsorted == 0) bam_path_reason = "--sorted-bam was given";
     const bool stream_auto = (stream_unsorted == -1);   // not forced with --stream-unsorted: a wrong-strand library may restart on the sorted path
     if (stream_unsorted != 0) {
         const char* sorted_reason = nullptr;
@@ -5294,6 +5297,13 @@ int main(int argc, char* argv[]) {
         else if (tagged_bam_enabled) sorted_reason = "--tagged-bam rewrites the sorted BAM";
         else if (std::getenv("SINGLET_KEEP_STAR_BAM")) sorted_reason = "SINGLET_KEEP_STAR_BAM keeps the sorted BAM";
         if (sorted_reason) {
+            bam_path_reason = sorted_reason;
+            if (detected_soloType == "CB_UMI_Simple" && (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")) {
+                whitelist_missing = true;
+                std::cerr << "[singlet] WARNING: the protocol is a barcode-whitelist type (CB_UMI_Simple) but no whitelist file was found; the pileup takes the sorted-BAM path "
+                             "(slower, and its counts are not those of the stream path). Check --whitelist-dir / SINGLET_WHITELIST_DIR / <binary dir>/../whitelists. "
+                             "Provenance: pileup_path_reason, whitelist_missing=true." << std::endl;
+            }
             if (stream_unsorted == 1)
                 std::cerr << "[singlet] --stream-unsorted ignored: " << sorted_reason << std::endl;
             stream_unsorted = 0;
@@ -9102,6 +9112,9 @@ int main(int argc, char* argv[]) {
         : "bam_file";
     std::string extra_json =
         "  \"mode\": \"" + mode_str + "\",\n"
+        "  \"pileup_path\": \"" + std::string(parallel_pileup == 1 ? "sorted" : "stream") + "\",\n"
+        "  \"pileup_path_reason\": \"" + bam_path_reason + (strand_retried ? "; restarted on the sorted path after a wrong-strand probe" : "") + "\",\n"
+        "  \"whitelist_missing\": " + (whitelist_missing ? "true" : "false") + ",\n"
         "  \"star_threads\": " + std::to_string(star_threads) + ",\n"
         "  \"pileup_threads\": " + std::to_string(parallel_pileup == 1 ? star_threads : pileup_threads) + ",\n"
         "  \"n_barcodes\": " + std::to_string(engine_ptr->barcodes().size()) + ",\n"
