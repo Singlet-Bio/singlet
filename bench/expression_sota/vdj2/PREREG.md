@@ -205,3 +205,16 @@ denominators.
 **Dev rule.** The same as before, with the Addendum 1 ARI tolerance, on the 5 development BCR libraries. The literal verdict
 is always reported. The old defaults (`ambient_rescue=none`, `v_open_frac=0`, the references without the AIRR-C genes) are
 run on development too, so the effect of the frozen changes is separated from the baseline.
+
+**Downloaded** by jobs 795813 (bcrdev) and 795841 (bcrho). The held-out job printed only sizes and denominators.
+
+| set | library | Cell Ranger cells | reference-paired cells |
+|---|---|---|---|
+| dev | melv11_b | 4,205 | 3,903 |
+| dev | nsclc22_b | 2,977 | 1,560 |
+| dev | chx10k_b | 494 | 472 |
+| held-out | pbmc22_b | 1,363 | 1,218 |
+| held-out | cd19_b | 9,465 | 8,951 |
+| held-out | b1k_b | 1,102 | 1,071 |
+
+The new held-out set totals 11,240 reference-paired cells.
