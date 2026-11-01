@@ -181,6 +181,7 @@ struct AmbientDecontConfig {
                                         ///< the fitted trend exponent) is capped there and refit: weakly expressed native genes of a small shallow cluster
                                         ///< pass for "not expressed", which raises its c_k, which hides more native genes (hgmm1k_v3: 42 shallow mouse
                                         ///< cells at c_k 0.18 against 0.007-0.012 elsewhere). 0 = off
+    double   capped_cell_mult = 3.0;    ///< cells of a capped cluster are limited to this multiple of its capped c_k
     double   phi_pseudocount  = 1e-4;   ///< per-gene pseudocount of the native profile
     bool     equal_cell_weight = false; ///< cluster profiles average cells with equal weight instead of by UMIs
     bool     outlier_round = true;      ///< refit the clusters without cells whose rho is far above their cluster's
@@ -811,6 +812,8 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
                     if (done) break;
                 }
             }
+            // a capped cluster's own off-gene reads are what inflated its c_k: no cell of it goes beyond the outlier multiple of the capped value
+            if (std::isfinite(ck_cap[k])) r = std::min(r, std::max(cfg.capped_cell_mult * ck[k], cfg.rho_min));
             rho[j] = r;
         });
     };
