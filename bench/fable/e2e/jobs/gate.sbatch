@@ -14,7 +14,9 @@
 #   gpuEc = gpuE + SINGLET_ENGINE_GPU_E2E_CHECK=1 (the device-gathered records checked against the host-assembled ones; slower)
 #   gpuD  = --engine gpu + SINGLET_GPU_PILEUP=on, E2E unset (the default path of the same binary: must be unchanged)
 # Every run: timestamped log, 1-s sampler of the job's cgroup CPU time and the GPU, /usr/bin/time; then out_equiv.py on every pair with cpu
-# and gpuD vs gpuE. Read sequences stay in job /tmp (trap).
+# and gpuD vs gpuE. Read sequences stay in job /tmp (trap); the outputs without sequence-bearing files are kept in $RES/<mode>/out, and a
+# mode run in an earlier job is compared through OUT_<mode>=<kept dir>. T (threads, default 18) and the sbatch resources are overridable on
+# the command line (debug-gpu: 8 CPUs, 29 min; a cpu-only run needs no GPU).
 set -uo pipefail
 FAIL=0
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
@@ -63,10 +65,14 @@ for m in "${MODES[@]}"; do
   ls -la $SCR/$s/$m/out/ | grep -a "handoff" | tee -a $RES/summary.txt
   cp $SCR/$s/$m/out/*Log.final.out $O/ 2>/dev/null
   cp $SCR/$s/$m/out/read_stats.tsv $SCR/$s/$m/out/summary.json $O/ 2>/dev/null
+  # the outputs for comparisons across jobs (OUT_<mode>=<dir> in a later job): everything but files that can hold read sequences
+  [ "${KEEPOUT:-1}" = 1 ] && rsync -a --exclude='*.bam' --exclude='*.sam' --exclude='*.cram' --exclude='*.fq*' --exclude='*.fastq*' --exclude='*.1fq'       --exclude='.gpu_handoff*' --exclude='*Unmapped*' --exclude='_STARtmp*' --exclude='*.reads' --exclude='*.reads.q' $SCR/$s/$m/out/ $O/out/
 done
-cmp2() { [ -d $SCR/$s/$1/out ] && [ -d $SCR/$s/$2/out ] || { echo "-- skip $1 vs $2 (not run)" | tee -a $RES/summary.txt; return; }
-  echo "=== $s $1 vs $2" | tee -a $RES/summary.txt
-  python3 $SCR/repo/bench/star_accel/out_equiv.py $SCR/$s/$1/out $SCR/$s/$2/out > $RES/equiv-$1-$2.txt 2>&1
+# a mode's output: this job's run, else OUT_<mode> (a kept output of an earlier job, e.g. OUT_cpu=$W/jobs/fable/e2e/results/gate-<id>/cpu/out)
+odir() { if [ -d $SCR/$s/$1/out ]; then echo $SCR/$s/$1/out; else v=OUT_$1; echo "${!v:-}"; fi; }
+cmp2() { a=$(odir $1); b=$(odir $2); [ -n "$a" ] && [ -d "$a" ] && [ -n "$b" ] && [ -d "$b" ] || { echo "-- skip $1 vs $2 (not run)" | tee -a $RES/summary.txt; return; }
+  echo "=== $s $1 vs $2 ($a vs $b)" | tee -a $RES/summary.txt
+  python3 $SCR/repo/bench/star_accel/out_equiv.py $a $b > $RES/equiv-$1-$2.txt 2>&1
   grep -a '^  DIFF\|^  only in\|^files:\|^RESULT' $RES/equiv-$1-$2.txt | cut -c1-200 | head -30 | tee -a $RES/summary.txt; }
 cmp2 cpu gpuE; cmp2 cpu gpuD; cmp2 gpuD gpuE; cmp2 cpu gpuEc
 [ $FAIL = 0 ] && echo "GATE RUN OK (identity verdicts above)" | tee -a $RES/summary.txt || echo "GATE FAILED" | tee -a $RES/summary.txt
