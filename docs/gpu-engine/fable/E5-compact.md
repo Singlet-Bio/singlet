@@ -180,9 +180,8 @@ TR32 it stays at 79.
 
 The register growth explains most of it where it happens (94 registers), but the TR32 build at 79 registers still
 loses. Lane A's k_p3 is instruction-fetch bound (E1: 51% of stalls, i-cache hit 54%), and the word encoder's `put` is
-inlined at every `putV` call site of `encodeTr`: more code in a kernel that is short of i-cache. A word-wise encoder
-can still win if it is small: one non-inlined routine over an array of the record's values, or the record's fields
-staged to a contiguous buffer and varint-packed in one loop. Not done here.
+inlined at every `putV` call site of `encodeTr`: more code in a kernel that is short of i-cache. The encoder section
+after S5 tests that explanation with an encoder that is only made smaller (`M5_ENC1`).
 
 ## S5: phase state in thread-local memory (`--p3local`, `--p1local`; commit 6745dd3)
 
