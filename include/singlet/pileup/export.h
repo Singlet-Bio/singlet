@@ -610,17 +610,21 @@ inline ExportStats export_results(const PileupEngine& engine,
             calledv2::GeneCounts gx = calledv2::gene_counts(exon_csc, engine.exon_names(),
                                                               with_introns ? &intron_csc : nullptr,
                                                               with_introns ? &engine.intron_names() : nullptr);
+            // is_cell is EmptyDrops_CR on exon-only counts (STARsolo's Gene counts), the reference tool's own input
+            calledv2::GeneCounts gx_exon = calledv2::gene_counts(
+                exon_csc, engine.exon_names(), static_cast<const decltype(exon_csc)*>(nullptr),
+                static_cast<const std::vector<std::string>*>(nullptr));
             std::string proto = export_cfg.protocol_name;
             if (proto.empty() || proto == "unknown") {
                 auto it = export_cfg.user_meta.find("protocol");
                 if (it != export_cfg.user_meta.end()) proto = it->second;
             }
             calledv2::Result cv = calledv2::call(gx, knee_called, proto, calledv2::Params(),
-                                                 std::max(1, export_cfg.threads));
+                                                 std::max(1, export_cfg.threads), &gx_exon);
             cv.seconds = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t_v2).count();
             cc_result = CellCallResult{};
-            for (uint32_t j = 0; j < cv.called_v2.size(); ++j)
-                if (cv.called_v2[j]) cc_result.cell_indices.push_back(j);
+            for (uint32_t j = 0; j < cv.is_cell.size(); ++j)
+                if (cv.is_cell[j]) cc_result.cell_indices.push_back(j);
             cc_result.n_ambient = static_cast<uint32_t>(cv.n_ambient);
             cc_result.ambient_total = static_cast<double>(cv.ambient_umi);
             cell_caller_method = "called_v2";
@@ -636,7 +640,8 @@ inline ExportStats export_results(const PileupEngine& engine,
             calledv2::write_cell_calls_tsv(out_prefix + "/cell_calls.tsv", barcodes, bc_totals, cv, knee_called);
             std::cerr << "[cell_calling] called_v2: knee umi_min=" << knee_umi_min << " called=" << cv.n_called
                       << " lower=" << cv.lower << " retain=" << cv.retain_total << " alpha=" << cv.alpha
-                      << " tested=" << cv.n_tested << " called_v2=" << cv.n_called_v2 << " (+" << cv.n_added
+                      << " tested=" << cv.n_tested << " is_cell=" << cv.n_is_cell << " lowrna=" << cv.n_lowrna
+                      << " called_v2(2.1)=" << cv.n_called_v2 << " (+" << cv.n_added
                       << ")" << (cv.error.empty() ? std::string() : " note=" + cv.error) << " time=" << cv.seconds
                       << "s\n";
             used_called_v2 = true;

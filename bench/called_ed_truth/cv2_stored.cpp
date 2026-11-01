@@ -4,7 +4,7 @@
 // The pipeline's called_v2 (include/singlet/pileup/called_v2.h) on the counts a Singlet run already stored, without
 // re-aligning: reads RUN/{exon,intron}_counts.mtx.gz (+ _features / _barcodes .tsv.gz) and the `called` column of
 // RUN/cell_calls.tsv, aggregates exon + intron per gene as the pipeline does (calledv2::gene_counts), runs calledv2::call
-// and writes one row per barcode: barcode, called, called_v2, umi_total, pvalue, fdr. The parameters go to stdout as JSON.
+// and writes one row per barcode: barcode, called, is_cell (2.2), called_v2 (2.1), called_lowrna, umi_total, pvalue, fdr. The parameters go to stdout as JSON.
 //
 //   g++ -std=c++17 -O2 -pthread -Iinclude bench/called_ed_truth/cv2_stored.cpp -o cv2_stored
 //   cv2_stored RUN_DIR OUT.tsv [threads]
@@ -174,14 +174,22 @@ int main(int argc, char** argv) {
         std::fclose(f);
     }
     auto t0 = std::chrono::steady_clock::now();
-    singlet::calledv2::GeneCounts X = singlet::calledv2::gene_counts(ex, exf, &in, &inf);
-    singlet::calledv2::Result R = singlet::calledv2::call(X, called, "", singlet::calledv2::Params(), threads);
+    // CV2_EXON_ONLY=1: exon counts only (what STARsolo "Gene" counts), for the cell-calling comparison with EmptyDrops_CR
+    const bool exon_only = std::getenv("CV2_EXON_ONLY") && std::string(std::getenv("CV2_EXON_ONLY")) == "1";
+    singlet::calledv2::GeneCounts X = exon_only ? singlet::calledv2::gene_counts(ex, exf, static_cast<const Csc*>(nullptr), static_cast<const std::vector<std::string>*>(nullptr))
+                                                : singlet::calledv2::gene_counts(ex, exf, &in, &inf);
+    // CV2_EXON_ONLY=2: called_v2 (2.1) on exon + intron, is_cell (EmptyDrops_CR) on exon only: what the pipeline does
+    const bool split = std::getenv("CV2_EXON_ONLY") && std::string(std::getenv("CV2_EXON_ONLY")) == "2";
+    singlet::calledv2::GeneCounts Xe;
+    if (split) Xe = singlet::calledv2::gene_counts(ex, exf, static_cast<const Csc*>(nullptr), static_cast<const std::vector<std::string>*>(nullptr));
+    if (split) X = singlet::calledv2::gene_counts(ex, exf, &in, &inf);
+    singlet::calledv2::Result R = singlet::calledv2::call(X, called, "", singlet::calledv2::Params(), threads, split ? &Xe : nullptr);
     R.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     FILE* o = std::fopen(argv[2], "w");
-    std::fputs("barcode\tcalled\tcalled_v2\tumi_total\tpvalue\tfdr\n", o);
+    std::fputs("barcode\tcalled\tis_cell\tcalled_v2\tcalled_lowrna\tumi_total\tpvalue\tfdr\n", o);
     for (size_t k = 0; k < bcs.size(); ++k) {
-        std::fprintf(o, "%s\t%d\t%d\t%lld\t", bcs[k].c_str(), called[k] ? 1 : 0, R.called_v2[k] ? 1 : 0,
-                     static_cast<long long>(R.totals[k]));
+        std::fprintf(o, "%s\t%d\t%d\t%d\t%d\t%lld\t", bcs[k].c_str(), called[k] ? 1 : 0, R.is_cell[k] ? 1 : 0, R.called_v2[k] ? 1 : 0,
+                     (R.called_v2[k] && !R.is_cell[k]) ? 1 : 0, static_cast<long long>(R.totals[k]));
         if (std::isnan(R.pvalue[k]))
             std::fputs("NA\tNA\n", o);
         else

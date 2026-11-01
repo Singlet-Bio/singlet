@@ -52,13 +52,18 @@ namespace singlet {
 namespace calledv2 {
 
 inline constexpr const char* kMethod = "singlet-emptydrops";
-inline constexpr const char* kVersion = "2.1";
+inline constexpr const char* kVersion = "2.2";
 inline constexpr int64_t kMaxSimulatedTotal = 50000;
 
 struct Params {
     std::string lower_rule = "plateau";  ///< "plateau" or an integer
     int64_t test_min = 50;
     double fdr = 0.001;
+    /// VERSION 2.2: the call every downstream output uses (is_cell, and the cell_calls.tsv `called_v2` column) is EmptyDrops_CR's
+    /// setting: candidates above cr_test_min UMIs, BH FDR cr_fdr (STARsolo --soloCellFilter EmptyDrops_CR: umiMin 500, FDR 0.01).
+    /// The 2.1 rule (test_min, fdr above) keeps running on the same p-values: what it calls and is_cell does not is `called_lowrna`.
+    int64_t cr_test_min = 500;
+    double cr_fdr = 0.01;
     std::string retain = "knee";         ///< "knee" or "none"
     int64_t niters = 10000;
     int64_t seed = 20261023;
@@ -77,7 +82,8 @@ struct GeneCounts {
 };
 
 struct Result {
-    std::vector<uint8_t> called_v2;  ///< per barcode
+    std::vector<uint8_t> called_v2;  ///< per barcode: the 2.1 call (test_min, fdr), the superset that includes the low-RNA calls
+    std::vector<uint8_t> is_cell;    ///< per barcode: the 2.2 call (cr_test_min, cr_fdr), what the outputs use
     std::vector<double> fdr;         ///< BH FDR (NaN = not tested; double since 2.1: tail p reach 1e-150)
     std::vector<double> pvalue;      ///< Monte Carlo p (NaN = not tested)
     std::vector<double> log_prob;    ///< DM log-probability of simulated barcodes (NaN otherwise)
@@ -92,7 +98,10 @@ struct Result {
     int64_t n_tail = 0;  ///< tested barcodes whose p came from the tail extrapolation (2.1)
     double alpha = std::numeric_limits<double>::quiet_NaN();
     int64_t n_called = 0, n_called_v2 = 0, n_added = 0;
+    int64_t n_is_cell = 0, n_lowrna = 0;  ///< |is_cell|, |called_v2 and not is_cell|
     std::string error;
+    std::string is_cell_method = "knee";  ///< "emptydrops_cr" (the port), "called_v2_cr_floor" (too few barcodes for its ambient ranks) or "knee"
+    int64_t edcr_n_simple = 0, edcr_n_candidates = 0, edcr_n_extra = 0, edcr_min_umi = 0;
     double seconds = 0.0;
 };
 
@@ -1322,9 +1331,164 @@ inline std::vector<int64_t> mc_counts(const std::vector<double>& prop, double al
 
 // ───────────────────────────────────────────────────────────────────────── the call
 
+// ------------------------------------------------------------------------------------------------------------------------------
+// The code below is a C++ port of STAR 2.7.11b (MIT license, Copyright (c) Alexander Dobin; see LICENSE.STAR in src/star).
+// EmptyDrops_CR (STARsolo --soloCellFilter EmptyDrops_CR 3000 0.99 10 45000 90000 500 0.01 20000 0.01 10000), ported from
+// src/star/SoloFeature_emptyDrops_CR.cpp + SoloFeature_cellFiltering.cpp so that the call is the reference tool's own algorithm on
+// Singlet's counts. Differences from called_v2 (2.1): the ambient pool is the barcodes ranked [45000, 90000) by total (not the low-total
+// plateau), the null is multinomial on the Simple-Good-Turing profile (not Dirichlet-multinomial), candidates are the barcodes below the
+// knee set with total >= max(500, 1% of the knee set's median), at most 20,000, and the simulations (10,000 paths, path i seeded
+// 19760110 * (i + 1) on mt19937 + std::discrete_distribution, as STAR does) are tallied at the candidates' totals.
+struct EdcrParams {
+    double n_expected = 3000, max_percentile = 0.99, max_min_ratio = 10, umi_min_frac_median = 0.01, fdr = 0.01;
+    int64_t ind_min = 45000, ind_max = 90000, umi_min = 500, cand_max_n = 20000, sim_n = 10000;
+};
+
+struct EdcrResult {
+    std::vector<uint8_t> cell;    ///< knee set plus the barcodes EmptyDrops_CR adds
+    std::vector<uint8_t> simple;  ///< the knee set (CellRanger2.2 3000 0.99 10) on these counts
+    std::vector<double> padj;     ///< BH FDR of the candidates (NaN otherwise)
+    int64_t n_cb = 0, n_simple = 0, umi_min_simple = 0, n_ambient = 0, n_candidates = 0, n_extra = 0, min_umi = 0;
+    std::string note;
+};
+
+inline EdcrResult emptydrops_cr(const GeneCounts& X, const EdcrParams& P = EdcrParams(), int threads = 1) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    EdcrResult R;
+    const size_t nb = X.ncols;
+    R.cell.assign(nb, 0);
+    R.simple.assign(nb, 0);
+    R.padj.assign(nb, nan);
+    std::vector<int64_t> tot(nb, 0);
+    std::vector<uint8_t> det(X.nrows, 0);
+    for (size_t j = 0; j < nb; ++j)
+        for (int64_t q = X.indptr[j]; q < X.indptr[j + 1]; ++q) {
+            tot[j] += X.data[q];
+            if (X.data[q] > 0) det[X.indices[q]] = 1;
+        }
+    std::vector<uint32_t> order;
+    for (size_t j = 0; j < nb; ++j)
+        if (tot[j] > 0) order.push_back(static_cast<uint32_t>(j));
+    const int64_t ncb = static_cast<int64_t>(order.size());
+    R.n_cb = ncb;
+    if (ncb == 0) { R.note = "no barcodes with counts"; return R; }
+    std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return tot[a] != tot[b] ? tot[a] > tot[b] : a < b; });
+    // simple (knee) filter
+    const int64_t maxind = static_cast<int64_t>(std::llround(P.n_expected * (1.0 - P.max_percentile)));
+    const int64_t umax = tot[order[std::min<int64_t>(ncb - 1, maxind)]];
+    const int64_t umin = std::max<int64_t>(1, static_cast<int64_t>(std::llround(static_cast<double>(umax) / P.max_min_ratio)));
+    R.umi_min_simple = umin;
+    int64_t nsimple = 0;
+    while (nsimple < ncb && tot[order[nsimple]] >= umin) { R.simple[order[nsimple]] = 1; R.cell[order[nsimple]] = 1; ++nsimple; }
+    R.n_simple = nsimple;
+    if (ncb <= P.ind_min) { R.note = "fewer barcodes than the first ambient rank: no extra cells"; return R; }
+    // ambient profile from the barcodes ranked [ind_min, ind_max)
+    std::vector<int64_t> amb(X.nrows, 0);
+    const int64_t amb_end = std::min<int64_t>(ncb, P.ind_max);
+    for (int64_t r = P.ind_min; r < amb_end; ++r) {
+        const uint32_t j = order[r];
+        for (int64_t q = X.indptr[j]; q < X.indptr[j + 1]; ++q) amb[X.indices[q]] += X.data[q];
+    }
+    R.n_ambient = amb_end - P.ind_min;
+    std::vector<uint32_t> dg;  // detected genes
+    for (uint32_t g = 0; g < X.nrows; ++g)
+        if (det[g]) dg.push_back(g);
+    std::vector<int64_t> asum(dg.size());
+    bool varied = false;
+    for (size_t k = 0; k < dg.size(); ++k) { asum[k] = amb[dg[k]]; varied = varied || asum[k] != asum[0]; }
+    if (!varied) { R.note = "ambient cells contain no genes"; return R; }
+    std::vector<double> prop = good_turing_proportions(asum);
+    double norm = 0;
+    for (double v : prop) norm += v;
+    std::vector<double> logp(X.nrows, 0.0), pnon0, lognon0;  // STAR leaves log P = 0 for genes with P = 0
+    for (size_t k = 0; k < dg.size(); ++k) {
+        if (prop[k] > 0) {
+            const double v = prop[k] / norm;
+            logp[dg[k]] = std::log(v);
+            pnon0.push_back(v);
+            lognon0.push_back(std::log(v));
+        }
+    }
+    if (pnon0.empty()) { R.note = "empty ambient profile"; return R; }
+    // candidates
+    const int64_t first = nsimple;
+    const int64_t min_umi = std::max<int64_t>(P.umi_min, static_cast<int64_t>(P.umi_min_frac_median * static_cast<double>(tot[order[nsimple / 2]])));
+    R.min_umi = min_umi;
+    int64_t last = first;
+    while (last < first + P.cand_max_n && last < ncb && tot[order[last]] >= min_umi) ++last;
+    const int64_t nc = last - first;
+    R.n_candidates = nc;
+    if (nc <= 0) return R;
+    const int64_t maxc = tot[order[first]];
+    std::vector<double> lf(static_cast<size_t>(maxc) + 2, 0.0);   // log-factorial
+    for (int64_t c = 2; c <= maxc; ++c) lf[c] = lf[c - 1] + std::log(static_cast<double>(c));
+    std::vector<double> obs(nc);
+    for (int64_t i = 0; i < nc; ++i) {
+        const uint32_t j = order[first + i];
+        int64_t sum = 0;
+        double slf = 0, scl = 0;
+        for (int64_t q = X.indptr[j]; q < X.indptr[j + 1]; ++q) {
+            const int64_t c = X.data[q];
+            sum += c;
+            slf += lf[c];
+            scl += logp[X.indices[q]] * static_cast<double>(c);
+        }
+        obs[i] = lf[sum] - slf + scl;
+    }
+    // candidates by total (CSR over totals) for the tally
+    std::vector<int64_t> start(static_cast<size_t>(maxc) + 2, 0);
+    for (int64_t i = 0; i < nc; ++i) ++start[tot[order[first + i]] + 1];
+    for (size_t c = 1; c < start.size(); ++c) start[c] += start[c - 1];
+    std::vector<uint32_t> byc(nc);
+    std::vector<int64_t> fillp(start.begin(), start.end() - 1);
+    for (int64_t i = 0; i < nc; ++i) byc[fillp[tot[order[first + i]]]++] = static_cast<uint32_t>(i);
+    std::vector<double> lg(static_cast<size_t>(maxc) + 2, 0.0);   // log(i)
+    for (int64_t c = 1; c <= maxc; ++c) lg[c] = std::log(static_cast<double>(c));
+    const int nt = std::max(1, threads);
+    std::vector<std::vector<uint32_t>> nl(nt, std::vector<uint32_t>(nc, 0));
+    auto worker = [&](int tid) {
+        std::discrete_distribution<uint32_t> dist(pnon0.begin(), pnon0.end());
+        std::vector<uint32_t> cur(pnon0.size(), 0);
+        for (int64_t isim = tid; isim < P.sim_n; isim += nt) {
+            std::mt19937 rng(19760110LLU * static_cast<uint64_t>(isim + 1));
+            std::fill(cur.begin(), cur.end(), 0u);
+            double s = 0.0;
+            for (int64_t ic = 1; ic <= maxc; ++ic) {
+                const uint32_t g = dist(rng);
+                const uint32_t cg = ++cur[g];
+                s = s + lognon0[g] + lg[ic] - lg[cg];
+                for (int64_t k = start[ic]; k < start[ic + 1]; ++k)
+                    if (s < obs[byc[k]]) ++nl[tid][byc[k]];
+            }
+        }
+    };
+    if (nt == 1) {
+        worker(0);
+    } else {
+        std::vector<std::thread> pool;
+        for (int t = 1; t < nt; ++t) pool.emplace_back(worker, t);
+        worker(0);
+        for (auto& th : pool) th.join();
+    }
+    std::vector<double> pv(nc);
+    for (int64_t i = 0; i < nc; ++i) {
+        uint64_t n = 0;
+        for (int t = 0; t < nt; ++t) n += nl[t][i];
+        pv[i] = static_cast<double>(1 + n) / static_cast<double>(1 + P.sim_n);
+    }
+    std::vector<double> q = bh(pv);
+    for (int64_t i = 0; i < nc; ++i) {
+        const uint32_t j = order[first + i];
+        R.padj[j] = q[i];
+        if (q[i] <= P.fdr) { R.cell[j] = 1; ++R.n_extra; }
+    }
+    return R;
+}
+
 /// cellcall.call: called_v2 from genes x barcodes counts and the knee `called` flags.
+/// `edcr_X`: counts for the EmptyDrops_CR is_cell call (the reference tool runs on exon-only Gene counts); default X.
 inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, const std::string& protocol = "",
-                   const Params& P = Params(), int threads = 1) {
+                   const Params& P = Params(), int threads = 1, const GeneCounts* edcr_X = nullptr) {
     const double nan = std::numeric_limits<double>::quiet_NaN();
     Result R;
     R.params = P;
@@ -1337,6 +1501,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
     R.pvalue.assign(n, nan);
     R.log_prob.assign(n, nan);
     R.called_v2.assign(called.begin(), called.end());
+    R.is_cell.assign(called.begin(), called.end());
     R.totals.assign(n, 0);
     for (size_t j = 0; j < n && j < X.ncols; ++j)
         for (int64_t p = X.indptr[j]; p < X.indptr[j + 1]; ++p) R.totals[j] += X.data[p];
@@ -1344,6 +1509,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
     if (fam.first == "combinatorial" || n == 0) {
         R.method = "stored-call";
         R.n_called_v2 = R.n_called;
+        R.n_is_cell = R.n_called;
         return R;
     }
     const auto& tot = R.totals;
@@ -1364,6 +1530,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
     if (amb.size() < 10 || R.ambient_umi < 100 || ti.empty()) {
         R.error = !ti.empty() ? "ambient pool too small" : "nothing to test";
         R.n_called_v2 = R.n_called;
+        R.n_is_cell = R.n_called;
         return R;
     }
     ColumnView A = take_columns(X, amb);
@@ -1412,7 +1579,28 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
         R.pvalue[ti[i]] = pv[i];
         if (q[i] <= P.fdr) R.called_v2[ti[i]] = 1;
     }
+    {   // 2.2: BH again over the candidates above cr_test_min only, at cr_fdr (same p-values)
+        std::vector<size_t> sub;
+        std::vector<double> pvs;
+        for (size_t i = 0; i < nt; ++i)
+            if (tot[ti[i]] > P.cr_test_min) { sub.push_back(i); pvs.push_back(pv[i]); }
+        std::vector<double> qs = bh(pvs);
+        for (size_t k = 0; k < sub.size(); ++k)
+            if (qs[k] <= P.cr_fdr) R.is_cell[ti[sub[k]]] = 1;
+    }
+    R.is_cell_method = "called_v2_cr_floor";
+    {   // 2.2: the reference tool's own algorithm when the sample has barcodes at the ambient ranks it needs (45,000 and up)
+        EdcrResult er = emptydrops_cr(edcr_X ? *edcr_X : X, EdcrParams(), threads);
+        R.edcr_n_simple = er.n_simple; R.edcr_n_candidates = er.n_candidates; R.edcr_n_extra = er.n_extra; R.edcr_min_umi = er.min_umi;
+        if (er.note.empty() && er.cell.size() == n) {
+            R.is_cell = er.cell;
+            for (size_t j = 0; j < n; ++j) R.is_cell[j] = (er.cell[j] || called[j]) ? 1 : 0;   // never drop a knee cell
+            R.is_cell_method = "emptydrops_cr";
+        }
+    }
     for (size_t j = 0; j < n; ++j) {
+        R.n_is_cell += R.is_cell[j] ? 1 : 0;
+        R.n_lowrna += (R.called_v2[j] && !R.is_cell[j]) ? 1 : 0;
         R.n_called_v2 += R.called_v2[j] ? 1 : 0;
         R.n_added += (R.called_v2[j] && !called[j]) ? 1 : 0;
     }
@@ -1498,9 +1686,10 @@ GeneCounts gene_counts(const CSC& exon, const std::vector<std::string>& exon_nam
 }
 
 /// cell_calls.tsv with one row per barcode (matrix column order):
-///   barcode, is_cell (= called_v2: the call every downstream output and the .s1 `called` flag use), called_knee (the
-///   CellRanger2.2 knee set, the input of the call; it was `is_cell` and `called` before), called_v2 (1/0, the same set
-///   as is_cell), umi_exon (knee input), umi_total (exon + intron, the called_v2 input), fdr, pvalue, log_prob
+///   barcode, is_cell (the call every downstream output and the .s1 `called` flag use: EmptyDrops_CR's setting, 500 UMI floor and
+///   FDR 0.01 since 2.2), called_knee (the CellRanger2.2 knee set, the input of the call), called_v2 (1/0, the same set as
+///   is_cell), called_lowrna (1/0: barcodes the 2.1 rule called, 50 UMI floor and FDR 0.001, that is_cell does not: the
+///   low-RNA calls), umi_exon (knee input), umi_total (exon + intron, the called_v2 input), fdr (2.1 BH), pvalue, log_prob
 ///   (NA = not tested / not simulated), call_method.
 template <typename TotT>
 inline bool write_cell_calls_tsv(const std::string& path, const std::vector<std::string>& barcodes,
@@ -1508,17 +1697,17 @@ inline bool write_cell_calls_tsv(const std::string& path, const std::vector<std:
                                  const std::vector<uint8_t>& called) {
     FILE* f = std::fopen(path.c_str(), "w");
     if (!f) return false;
-    std::fputs("barcode\tis_cell\tcalled_knee\tcalled_v2\tumi_exon\tumi_total\tfdr\tpvalue\tlog_prob\tcall_method\n", f);
+    std::fputs("barcode\tis_cell\tcalled_knee\tcalled_v2\tcalled_lowrna\tumi_exon\tumi_total\tfdr\tpvalue\tlog_prob\tcall_method\n", f);
     auto num = [&](double v, const char* fmt) {
         if (std::isnan(v))
             std::fputs("NA", f);
         else
             std::fprintf(f, fmt, v);
     };
-    for (size_t j = 0; j < barcodes.size() && j < R.called_v2.size(); ++j) {
+    for (size_t j = 0; j < barcodes.size() && j < R.is_cell.size(); ++j) {
         const bool c = j < called.size() && called[j];
-        std::fprintf(f, "%s\t%s\t%d\t%d\t%llu\t%lld\t", barcodes[j].c_str(), R.called_v2[j] ? "TRUE" : "FALSE", c ? 1 : 0,
-                     R.called_v2[j] ? 1 : 0,
+        std::fprintf(f, "%s\t%s\t%d\t%d\t%d\t%llu\t%lld\t", barcodes[j].c_str(), R.is_cell[j] ? "TRUE" : "FALSE", c ? 1 : 0,
+                     R.is_cell[j] ? 1 : 0, (R.called_v2[j] && !R.is_cell[j]) ? 1 : 0,
                      static_cast<unsigned long long>(j < exon_totals.size() ? exon_totals[j] : 0),
                      static_cast<long long>(R.totals[j]));
         num(static_cast<double>(R.fdr[j]), "%.6g");
@@ -1551,6 +1740,8 @@ inline std::string params_json(const Result& R, const std::string& indent = "  "
       << indent << "  \"lower_rule\": \"" << R.params.lower_rule << "\",\n"
       << indent << "  \"test_min\": " << R.params.test_min << ",\n"
       << indent << "  \"fdr\": " << num(R.params.fdr) << ",\n"
+      << indent << "  \"cr_test_min\": " << R.params.cr_test_min << ",\n"
+      << indent << "  \"cr_fdr\": " << num(R.params.cr_fdr) << ",\n"
       << indent << "  \"retain\": \"" << R.params.retain << "\",\n"
       << indent << "  \"niters\": " << R.params.niters << ",\n"
       << indent << "  \"seed\": " << R.params.seed << ",\n"
@@ -1564,6 +1755,11 @@ inline std::string params_json(const Result& R, const std::string& indent = "  "
       << indent << "  \"n_called\": " << R.n_called << ",\n"
       << indent << "  \"n_called_v2\": " << R.n_called_v2 << ",\n"
       << indent << "  \"n_added\": " << R.n_added << ",\n"
+      << indent << "  \"n_is_cell\": " << R.n_is_cell << ",\n"
+      << indent << "  \"is_cell_method\": \"" << R.is_cell_method << "\",\n"
+      << indent << "  \"edcr\": {\"n_simple\": " << R.edcr_n_simple << ", \"n_candidates\": " << R.edcr_n_candidates << ", \"n_extra\": "
+      << R.edcr_n_extra << ", \"min_umi\": " << R.edcr_min_umi << "},\n"
+      << indent << "  \"n_lowrna\": " << R.n_lowrna << ",\n"
       << indent << "  \"error\": \"" << R.error << "\",\n"
       << indent << "  \"seconds\": " << num(R.seconds) << "\n"
       << indent << "}";

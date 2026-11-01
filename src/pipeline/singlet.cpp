@@ -8992,6 +8992,7 @@ int main(int argc, char* argv[]) {
                         for (size_t k = 0; k < h.size() && k < f.size(); ++k) {
                             if (h[k] == "is_cell") f[k] = c ? "TRUE" : "FALSE";
                             else if (h[k] == "called" || h[k] == "called_v2") f[k] = c ? "1" : "0";
+                            else if (h[k] == "called_lowrna") f[k] = "0";
                             else if (h[k] == "call_method") f[k] = "visium_tissue";
                         }
                         for (size_t k = 0; k < f.size(); ++k) outbuf += (k ? "\t" : "") + f[k];

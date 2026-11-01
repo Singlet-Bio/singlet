@@ -261,6 +261,55 @@ uses 4, and the tail extrapolation, DropletUtils keeps the floor) are intentiona
   `cellcall.call` and to `cv2_stored` on the run's own stored counts. (pbmc1k_v3 calls 1,196 rather than 1,190 because this
   branch's counts differ slightly from the `singlet-modfix` run the script used; the stored `prod-t4/t8` runs also call 1,196.)
 
+## Version 2.2: `is_cell` is EmptyDrops_CR, `called_lowrna` keeps the extra low-RNA calls
+
+Gate 2 (3eaa041c) failed 19 cell-calling rows. The scorer reads Cell Ranger's published filtered barcodes as truth (Kang: the
+authors' demuxlet table), and 2.1 deliberately calls 50-500 UMI barcodes that Cell Ranger and STARsolo EmptyDrops_CR do not, so
+its precision against that truth was low by design (nuclei2k_v2 0.772, Kang 16,524 cells vs 14,619). **The gate truth is largely
+Cell Ranger's own call and this rule copies it, so the gate partly rewards matching it.** The independent checks (below) still
+say the extras are mostly real.
+
+* `is_cell` (and the `called_v2` column the scorer reads) is now STARsolo's `--soloCellFilter EmptyDrops_CR 3000 0.99 10 45000
+  90000 500 0.01 20000 0.01 10000`, ported in `called_v2.h` (`emptydrops_cr`, from `SoloFeature_emptyDrops_CR.cpp`; STAR is MIT,
+  the notice is in the file). Knee set, then candidates with total >= max(500, 1% of the knee median) tested against the
+  Simple-Good-Turing profile of the barcodes ranked 45,000-90,000 (10,000 simulations, STAR's seeds), BH FDR 0.01. It runs on
+  **exon-only counts**, STARsolo's own input; on exon + intron counts it called up to 2% more barcodes and lost up to 3 points of precision against
+  the gate truth (Kang 0.955 vs 0.975, neuron1k_v3 0.983 vs 0.995; `scripts/gate2/cc_eval.sbatch`, 8 gate datasets). Samples without 45,000 barcodes fall back to the 2.1 test restricted to
+  candidates above 500 UMIs at FDR 0.01 (`is_cell_method` in `cell_calls.params`).
+* `called_lowrna` = the 2.1 call (exon + intron, unchanged: `Result::called_v2`, golden tests unchanged) that `is_cell` does not
+  include: the 50-500 UMI barcodes called as real cells by the empty-droplet test. Nothing is lost; use `is_cell | called_lowrna`
+  for the 2.1 set. `called_knee` is unchanged.
+
+Before/after against the gate truth (Cell Ranger; EDCR = STARsolo EmptyDrops_CR in the gate), 8 gate datasets:
+
+| dataset | 2.1 P / R / J | 2.2 P / R / J | EDCR P / R / J | called_lowrna |
+|---|---|---|---|---|
+| nuclei2k_v2 | 0.772 / 0.999 / 0.772 | 0.955 / 1.000 / 0.955 | 0.980 / 0.917 / 0.900 | 617 |
+| kang2018_ctrl | 0.885 / 1.000 / 0.885 | 0.975 / 0.998 / 0.973 | 0.974 / 0.998 / 0.972 | 1,575 |
+| neuron1k_v3 | 0.919 / 0.945 / 0.872 | 0.995 / 0.979 / 0.974 | 0.995 / 0.962 / 0.958 | 113 |
+| pbmc1k_v2 | 0.942 / 0.997 / 0.940 | 0.997 / 1.000 / 0.997 | 0.996 / 1.000 / 0.996 | 58 |
+| pbmc1k_v3 | 0.986 / 0.960 / 0.947 | 0.993 / 0.994 / 0.986 | 0.992 / 0.998 / 0.990 | 17 |
+| pbmc1k_cite_v3 | 0.963 / 0.985 / 0.949 | 0.999 / 1.000 / 0.999 | 0.999 / 1.000 / 0.999 | 26 |
+| hgmm1k_v3 | 0.981 / 0.961 / 0.943 | 0.999 / 0.997 / 0.996 | 0.997 / 1.000 / 0.997 | 22 |
+| pbmc5p_v1 | 0.969 / 0.981 / 0.951 | 1.000 / 0.899 / 0.899 | 1.000 / 0.902 / 0.902 | 943 |
+
+Remaining differences from EDCR: nuclei2k_v2 precision (0.955 vs 0.980; Singlet calls more nuclei, recall 1.00 vs 0.92; not diagnosed further) and hgmm1k_v3 / pbmc1k_v3 recall (0.997 / 0.994 vs 1.000 / 0.998).
+
+Kang b2 ctrl genotype check (dev lane only; `scripts/gate2/kang_genotype.py` on the independent genotype truth of
+bench/cellcall-independent-truth): share of barcodes that look like a real single-donor cell rather than ambient (1 = all real),
+by group and UMI bin, ratio estimator over barcodes with >= 25 informative SNP UMIs, bootstrap 95% CI.
+
+| group | UMI bin | n | real-cell fraction | single donor among hits |
+|---|---|---|---|---|
+| is_cell | 500-1000 | 1,810 | 1.11 [1.08, 1.14] | 0.97 |
+| is_cell | 1000-3000 | 10,759 | 1.02 [1.02, 1.03] | 0.92 |
+| called_lowrna | 500-1000 | 407 | 0.95 [0.83, 1.08] | 0.97 |
+| called_lowrna | 50-500 | 1,148 (489 decidable) | 0.61 [0.46, 0.76] | 0.94 |
+
+**`called_lowrna` is not a cell call:** about 61% of its 50-500 UMI calls are real cells (CI 0.46-0.76) and the rest are ambient-like; use `is_cell` for cells. The 500-1000 UMI extras are as cell-like as `is_cell` itself. At 50-500 UMIs the genotype test only decides 489 of 1,148 barcodes, and
+about 61% of the signal is explained by real cells. The matched empty-droplet pool (no caller, 50-500 UMIs, 282 barcodes in the
+truth universe, 10 decidable) is too small to give a control estimate. Consistent with the earlier 73% figure, but not stronger.
+
 ## Limitations
 
 * The authors' calls are Cell Ranger, itself OrdMag + EmptyDrops on full-depth counts (Singlet caps input at 30M reads), so
