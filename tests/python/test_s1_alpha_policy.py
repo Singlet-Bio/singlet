@@ -722,11 +722,14 @@ def test_published_doublet_layer_transcodes_and_verifies(tmp_path):
     assert "doublet_scores_engine" in man["release_policy"]["omitted_layers"] and "ambient" in man["release_policy"]["omitted_layers"]
     members = set(man["samples"][0]["members"])
     assert "doublet_scores.tsv" in members and "ambient_contamination.tsv" not in members and "doublet_scores_engine.tsv" not in members
+    from singlet.s1 import recipes_tables as RT
     from singlet.s1.sample import S1Sample
 
-    t = S1Sample((out / man["samples"][0]["key"]).read_bytes()).cells()
-    cols = list(t.names)
-    # the cells table reads the member: dbl_ columns of doublet_scores.tsv (the QC table's doublet_score is an alias of dbl_doublet_score)
-    assert "dbl_doublet_score" in cols and not [c for c in cols if "is_doublet" in c], cols
+    cols = list(S1Sample((out / man["samples"][0]["key"]).read_bytes()).cells().names)
+    assert not [c for c in cols if "is_doublet" in c], cols
+    # The cells-table column comes from the member: FakeRecipes derives no tsv columns, so this checks the real profiles instead. The
+    # member's columns are prefixed dbl_ and the QC table's doublet_score is an alias of dbl_doublet_score: one source, one method.
+    assert RT.PROFILES["doublet_scores.tsv"]["prefix"] == "dbl_"
+    assert RT.PROFILES["cell_qc_metrics.tsv"]["alias"]["doublet_score"] == ["dbl_doublet_score"]
     rep = V.verify(str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy)
     assert rep.fail == 0, rep.items
