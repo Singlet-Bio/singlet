@@ -619,8 +619,8 @@ inline ExportStats export_results(const PileupEngine& engine,
                                                  std::max(1, export_cfg.threads));
             cv.seconds = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t_v2).count();
             cc_result = CellCallResult{};
-            for (uint32_t j = 0; j < cv.called_v2.size(); ++j)
-                if (cv.called_v2[j]) cc_result.cell_indices.push_back(j);
+            for (uint32_t j = 0; j < cv.is_cell.size(); ++j)
+                if (cv.is_cell[j]) cc_result.cell_indices.push_back(j);
             cc_result.n_ambient = static_cast<uint32_t>(cv.n_ambient);
             cc_result.ambient_total = static_cast<double>(cv.ambient_umi);
             cell_caller_method = "called_v2";
@@ -636,7 +636,8 @@ inline ExportStats export_results(const PileupEngine& engine,
             calledv2::write_cell_calls_tsv(out_prefix + "/cell_calls.tsv", barcodes, bc_totals, cv, knee_called);
             std::cerr << "[cell_calling] called_v2: knee umi_min=" << knee_umi_min << " called=" << cv.n_called
                       << " lower=" << cv.lower << " retain=" << cv.retain_total << " alpha=" << cv.alpha
-                      << " tested=" << cv.n_tested << " called_v2=" << cv.n_called_v2 << " (+" << cv.n_added
+                      << " tested=" << cv.n_tested << " is_cell=" << cv.n_is_cell << " lowrna=" << cv.n_lowrna
+                      << " called_v2(2.1)=" << cv.n_called_v2 << " (+" << cv.n_added
                       << ")" << (cv.error.empty() ? std::string() : " note=" + cv.error) << " time=" << cv.seconds
                       << "s\n";
             used_called_v2 = true;
