@@ -28,8 +28,8 @@
 
 namespace e6 {
 
-typedef unsigned long long u64;
-typedef long long i64;
+typedef uint64_t u64;   // = the API's uint64_t
+typedef int64_t i64;
 
 // STAR's Parameters that the records depend on (Parameters.h types: intScore = int, uint = 64-bit)
 struct RecParams {
