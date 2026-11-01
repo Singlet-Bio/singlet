@@ -2,7 +2,7 @@
 
 Experiment E8 ("e2e") of wave 2 of the GPU aligner program. Branch `gpu/fable/e2e` (from `gpu/fable/records` = E6, 84a16500). Everything
 new runs only under `SINGLET_ENGINE_GPU_E2E=1` (with `--engine gpu` and `SINGLET_GPU_PILEUP=on`); unset, the binary takes the paths it took
-before, byte for byte (gate run `gpuD` below).
+before (gate run `gpuD` below: no E8 line, the hand-off file path, the same differences from the CPU engine as before E8).
 
 ## 0. Answer in brief
 
@@ -134,7 +134,7 @@ Runs (one binary, built at b649ce93 by job 795961; debug-gpu, H100 NVL, 8 CPUs, 
 | cpu vs gpuE | 60 | 2 | 7 | read order of `nonhost_reads.fq`, `star_Unmapped.out.mate1/2` (same records); `read_stats.tsv` timings; `star_Log.std.out` timestamps; `pileup_stats.json` provenance (`clip5p/probe/n_reads` 12194 vs 12000, `outputs/bytes_public`); `summary.json` `memory_tier` Medium vs Large |
 | cpu vs gpuD | 60 | 2 | 7 | the same seven, same values |
 | gpuD vs gpuE | 60 | 3 | 6 | read order of the same three files (same records); `read_stats.tsv` and `star_Log.std.out` timings; `pileup_stats.json` `outputs/bytes_public` (+109 bytes: `star_Log.out` +110 bytes from the E8 log lines, `ambient_contamination.json` −1 byte in its `seconds` field) |
-| cpu vs gpuEc | job 796036 (pending) | | | |
+| cpu vs gpuEc (796036, against 796010's kept `cpu` output) | 60 | 2 | 7 | the same as cpu vs gpuE (the three read-order files appear as "only in b" because the kept output leaves them out); the engine log says `E8 check: the device-gathered records equal the host-assembled records byte for byte` (31,636,557 records); pileup digest `d2aa9309…` again |
 
 - `star_Log.final.out` is identical across all runs except its four timing lines. `out_equiv.py` skips this file, so it was checked by
   `diff`.
@@ -250,7 +250,8 @@ Device and E8 step times (gpuE; gpuD in parentheses where it differs):
   - 795833: `gpuE`, `gpuD` at 572b6e36;
   - 795834: `cpu` at 572b6e36;
   - 796010: `gpuE`, `gpuD`, `cpu` at b649ce93, the gate reported here;
-  - 796036: `gpuEc` (record check) at b649ce93, compared against 796010's kept `cpu` output.
+  - 796036: `gpuEc` (record check) at b649ce93 (node g052), compared against 796010's kept `cpu` output. The check passed;
+    280.6 s wall, of which 5.75 s is the check's own gather.
 - Compare (`compare.sbatch`): 795937 compared `cpu` (795834) against `gpuE` and `gpuD` (795833).
 - Results: `$W/jobs/fable/e2e/results/gate-<job>/` (`summary.txt`, `equiv-*.txt`, per mode `run.log.ts`, `monitor.tsv`, `time.txt`,
   `starlog_engine.txt`, and `out/` without sequence-bearing files). Logs: `$W/logs/e8-gate-<job>.out`.
