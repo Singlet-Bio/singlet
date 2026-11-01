@@ -16,7 +16,7 @@
 #   gpuE3  gpuD + SINGLET_ENGINE_GPU_E2E=3             (E10 level 3: STAR's loop keeps readLoad + barcode + Solo for reads with a record)
 #   gpuE4  gpuD + SINGLET_ENGINE_GPU_E2E=4             (E10 level 4: reads with a record skip STAR's loop; Solo outputs incomplete)
 #   gpuE5  gpuD + SINGLET_ENGINE_GPU_E2E=5             (E11: level 4 + Solo counted on the device, star_Solo.out from E9's writer)
-#   gpuE5b a second gpuE5 run (run-to-run spread); gpuE5x: gpuE5 with the extra variables of XENV ("A=1 B=2")
+#   gpuE5b a second gpuE5 run (run-to-run spread); gpuE5x: gpuE5 with the extra variables of XENV ("A=1 B=2"); gpuE5x1..3: of XENV1..3
 #   base5  gpuE5 with the baseline binary ($BASEDIR/singlet-gpu); base5b: a second one
 # At level 5 the run log carries E16's "[e16] <epoch> <pid> <text>" marks (STAR's child and the pipeline); bench/fable/tail/e16_steps.py turns
 # them into the per-step table (e16.txt).
@@ -44,7 +44,7 @@ ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
   unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_ENGINE_GPU_E2E_CHECK SINGLET_ENGINE_GPU_E10_CHECK SINGLET_ENGINE_GPU_E10_R11; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
-  for kv in ${XENV:-}; do unset ${kv%%=*}; done
+  unset SINGLET_E16 SINGLET_E16_OFF; for kv in ${XENV:-} ${XENV1:-} ${XENV2:-} ${XENV3:-}; do unset ${kv%%=*}; done
   case $m in
     cpu) ENGARG="" ;;
     gpuD) export SINGLET_GPU_PILEUP=on ;;
@@ -52,7 +52,7 @@ for m in "${MODES[@]}"; do
     gpuE3) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=3 ;;
     gpuE4) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=4 ;;
     gpuE5|gpuE5b) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 ;;   # gpuE5b: a second level-5 run (run-to-run spread)
-    gpuE5x) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5; for kv in ${XENV:-}; do export "$kv"; done ;;
+    gpuE5x*) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5; xv=XENV${m#gpuE5x}; for kv in ${!xv:-}; do export "$kv"; done ;;   # gpuE5x<N>: XENV<N>
     base5|base5b) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5; BIN=$BASEDIR/singlet-gpu ;;
   esac
   ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb"
