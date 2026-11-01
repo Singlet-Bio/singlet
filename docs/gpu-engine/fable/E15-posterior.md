@@ -60,9 +60,22 @@ construction; the default paths were not gated separately here).
   tail (copy back and `cudaFreeHost`), which is within run-to-run noise; `SINGLET_E15_KEEP_ON_DEVICE=1` restores E11's behaviour.
 - **A side result for the atlas (§2d):** the pipeline's 'F' qualities change 3.3 % of the multi-match decisions against STARsolo run
   on the FASTQ (pbmc1k_v3 L001: 19,476 fewer reads with a CB, same 1,135 cells). This holds for the CPU engine and every GPU level.
-- **`gpu/fable-engine` moved during E15** (E14, at e2b0000e). It merged into this branch without conflicts (13651944) and was
-  re-gated (797017, §2e). pbmc1k_v3 at level 5 against E11's CPU outputs is unchanged: 60 / 1 / 8, Solo files identical, same
-  CellReads.stats rows. It took 178.2 s / 654.4 core-s with E14's genome load.
+- **`gpu/fable-engine` moved three times during E15 (E14, E12, E13).** Each merged into this branch without conflicts and was
+  re-gated (§2e). On the final binary (60a60f92, gate 797379, T = 18) level 5 passes gate (a) with and without E13's ingest:
+  - pbmc1k_v3 against E11's CPU outputs: 60 / 1 / 8;
+  - pbmc5p_v1 against the CPU engine: 58 / 2 / 7;
+  - in both, the Solo files are identical and CellReads.stats has the same rows.
+  - **E13's ingest maps no barcode FASTQ,** so the per-read path would have no qualities to read there. A guard (60a60f92) ignores
+    `SINGLET_E15_PERREAD=1` under ingest. If the CB qualities ever varied, level 5 would fall back to level 3. They cannot vary
+    today: the `.1fq` stores no R1 qualities.
+  - **Level 5 + ingest (T = 18):**
+
+    | sample | now (60a60f92, gate 797379) | before the merges (166ba73d, gate 796674) | CPU engine, same job |
+    |---|---|---|---|
+    | pbmc1k_v3 | 128.3 s / 565 core-s | 212.7 / 686 | — |
+    | pbmc5p_v1 | 153.9 / 526 | 199.2 / 579 | 478.9 / 2090 |
+
+    On pbmc5p_v1 that is 3.1x the CPU engine's speed in wall time, with 4.0x fewer core-s.
 
 ## 1. Rule and design
 
@@ -129,6 +142,15 @@ exact on any input that does carry R1 qualities (a future `.1fq` with them, or a
   It runs on `runThreadN` threads.
 - New guards (level 3, with the reason in `star_Log.out`): CB quality characters ≤ ' ' (STAR's `operator>>` would skip them as
   whitespace), and `outQSconversionAdd != 0` (`readLoad` would change the qualities STAR sees after the decode read them).
+- **E13's ingest** (`SINGLET_ENGINE_GPU_INGEST=1`, merged at 3a0b9c63) changes where the reads come from:
+  - The prefill decodes the `.1fq` itself, no barcode FASTQ is mapped, and the packed planes are released at the prefill's end.
+  - `e11CbQual` would then have nothing to read, and `soloRunKept` would fail after STAR's loop. That is a fatal error, because
+    STAR's Solo step is skipped at level 5.
+  - `e11Posterior` therefore checks that the barcode FASTQ is mapped (60a60f92). Without it:
+    - `SINGLET_E15_PERREAD=1` is ignored, and the E11 decode line says so;
+    - CB qualities that differ between reads give level 3, with the reason.
+  - The ingest's decode writes 'F' for every CB base, as the FASTQ decode does. The second case therefore cannot arise until the
+    `.1fq` stores R1 qualities (§5.2).
 
 ### 1e. The kept inputs during STAR's loop (E11 §5.3)
 
@@ -271,8 +293,9 @@ pbmc1k_v3's L001 lane:
 Same cells, a small loss of multi-match reads to `noTooManyWLmatches`. This is a property of the pipeline (CPU engine and every GPU
 level alike), not of level 5.
 
-### 2e. After merging `gpu/fable-engine` (E14) into this branch (job 797017, binary 13651944, T = 18, node g050)
+### 2e. After merging `gpu/fable-engine` into this branch (E14: gate 797017; E12: gate 797252; E13: gate 797379; T = 18)
 
+**E14** (gate 797017, binary 13651944, node g050).
 `origin/gpu/fable-engine` moved from 8e54be40 to e2b0000e (E14: the genome read once per sample, the CR4 probes concurrently). It
 merged without conflicts (13651944; E14 touches `src/pipeline/singlet.cpp`, `src/star/Genome*`, `GenomePreload.*`, none of E15's
 files).
@@ -281,6 +304,39 @@ files).
   (212.7 s / 685.8 core-s before the merge, on g051).
 - hgmm1k_v3 with `NB` 65,536: GPU mapping failed again (§2c), and the outputs again equal the CPU engine's (49 / 2 / 7, Solo files
   identical, CellReads.stats same 524,497 rows).
+
+**E12** (`gpu/fable-engine` at d03d6c47).
+- What it changes: the prefill's allocations without a zero-fill, and the sequence cache made only when results are inserted.
+- Where: `SeqCacheGpuPrefill.cpp` outside E15's parts, `engine_gpu.cu`, `stitch.cuh`, `engine_gpu.h`.
+- It merged without conflicts (ff8a4dbf). Build 797251 (`bin-m2`), gate 797252 (node g050):
+  - pbmc1k_v3, E11's kept CPU outputs vs level 5: 60 / 1 / 8 (the same 8), the 10 Solo files identical, the same 323,542 rows.
+    159.3 s / 659.1 core-s; the prefill took 36 s.
+  - pbmc5p_v1, CPU engine vs level 5 in the same job: 58 / 2 / 7 (E11's 7), the 10 Solo files identical, the same 355,639 rows,
+    `star_SJ.out.tab` identical (212,575 junctions). cpu 477.9 s / 2085.0 core-s, level 5 177.5 / 576.8.
+
+**E13** (`gpu/fable-engine` at fe97c8b4).
+- What it changes: with `SINGLET_ENGINE_GPU_INGEST=1` the prefill decodes the `.1fq`, and no FASTQ temp files are written.
+- Where: in `SeqCacheGpuPrefill.cpp`, the read-in and E10's barcode decode, which now also fill E11's quality counts;
+  `read_source.h`; `singlet.cpp`.
+- It merged without conflicts (3a0b9c63). The ingest leaves no barcode FASTQ for `e11CbQual`, hence the guard of §1d (60a60f92).
+- Build 797378 (`bin-m3`), gate 797379 (node g051), with two new modes: `gpuE5i` (ingest) and `gpuE5ip` (ingest +
+  `SINGLET_E15_PERREAD=1`).
+
+| sample | pair | out_equiv: identical / timing-path only / differ | 10 STAR Solo files | `Gene/CellReads.stats` (sorted) | `star_SJ.out.tab`, `Log.final.out` |
+|---|---|---|---|---|---|
+| pbmc1k_v3 | E11's kept cpu vs gpuE5 | 60 / 1 / 8 | 10 of 10 identical | same 323,542 rows | identical (126,996 junctions) |
+| | vs gpuE5i | 60 / 1 / 8 | 10 of 10 identical | same 323,542 rows | identical |
+| | vs gpuE5ip | 60 / 1 / 8 | 10 of 10 identical | same 323,542 rows | identical |
+| pbmc5p_v1 | cpu vs gpuE5 | 58 / 2 / 7 | 10 of 10 identical | same 355,639 rows | identical (212,575 junctions) |
+| | cpu vs gpuE5i | 58 / 2 / 7 | 10 of 10 identical | same 355,639 rows | identical |
+
+- The differing files are the sets of §2b. With ingest, pbmc1k_v3's `pileup_stats.json` has the CPU's probe count (12,194), so it
+  differs only in `bytes_public`.
+- Every level-5 run logs one quality factor (CB quality characters 70..70) and the same multi-match counts as before the merges:
+  - pbmc1k_v3: 1,253,320 reads, 1,096,181 given a CB;
+  - pbmc5p_v1: 484,278 reads, 298,259 given a CB.
+- `gpuE5ip` logs "SINGLET_E15_PERREAD=1 ignored: no barcode FASTQ with E13's ingest" and otherwise matches `gpuE5i`.
+- E13's own check, the decode's R11 histogram against the device's, is identical in every ingest run.
 
 ## 3. Timings
 
@@ -312,11 +368,33 @@ T = 18, short-gpu node g051 (H100 NVL), gate 796674 (binary 166ba73d). Wall time
 | | gpuE5, `NB` 65,536 (level 0; gate 797017, g050, binary 13651944) | 289.9 | 1736.9 | 4.59 | 27.52 | 83.3 GB |
 | | cpu (gate 797017, g050) | 345.6 | 1587.4 | 5.48 | 25.15 | 62.3 GB |
 | pbmc1k_v3 after the merge of E14 (gate 797017, g050, binary 13651944) | **gpuE5** | **178.2** | **654.4** | **2.68** | **9.83** | 61.0 GB |
+| pbmc1k_v3 after E14 + E12 (gate 797252, g050, binary ff8a4dbf) | **gpuE5** | **159.3** | **659.1** | **2.39** | **9.90** | 61.3 GB |
+| pbmc5p_v1 after E14 + E12 (gate 797252, g050) | cpu | 477.9 | 2085.0 | 7.97 | 34.75 | 32.3 GB |
+| | **gpuE5** | **177.5** | **576.8** | **2.96** | **9.61** | 53.5 GB |
+| pbmc1k_v3 after E14 + E12 + E13 (gate 797379, g051, binary 60a60f92) | gpuE5 | 154.6 | 662.2 | 2.32 | 9.94 | 61.3 GB |
+| | **gpuE5i** (E13's ingest) | **128.3** | **565.1** | **1.93** | **8.48** | 46.0 GB |
+| | gpuE5ip | 128.6 | 563.5 | 1.93 | 8.46 | 46.0 GB |
+| pbmc5p_v1 after E14 + E12 + E13 (gate 797379, g051) | cpu | 478.9 | 2090.4 | 7.98 | 34.84 | 32.3 GB |
+| | gpuE5 | 173.7 | 576.9 | 2.90 | 9.62 | 53.5 GB |
+| | **gpuE5i** | **153.9** | **526.0** | **2.57** | **8.77** | 39.5 GB |
 
 Level 5 compared with:
 - the default GPU path: neuron1k_v3 −55.4 s (−17.0 %) and −404.6 core-s (−33.6 %); pbmc5p_v1 −30.3 s (−13.2 %) and −266.8 core-s
   (−31.6 %); nuclei2k_v2 −68.2 s (−14.9 %) and −571.4 core-s (−32.6 %) (E11 on pbmc1k_v3: −16.9 %, −31.9 %);
 - the CPU engine: neuron1k_v3 1.92x wall, 2.72x core-s; pbmc5p_v1 2.46x, 3.74x; nuclei2k_v2 1.56x, 4.00x (pbmc1k_v3: 2.0x, 3.8x).
+
+After the merges (gate 797379, on g051 like gate 796674):
+- **Level 5 + ingest against E15's level 5 on 166ba73d:**
+  - pbmc1k_v3: −84.4 s (−39.7 %), −120.7 core-s (−17.6 %);
+  - pbmc5p_v1: −45.3 s (−22.7 %), −52.7 core-s (−9.1 %).
+- **The ingest alone, in the same job:**
+  - pbmc1k_v3: −26.3 s (−17.0 %), −97.1 core-s (−14.7 %);
+  - pbmc5p_v1: −19.8 s (−11.4 %), −50.9 core-s (−8.8 %), with maxRSS 53.5 → 39.5 GB.
+- **Against the CPU engine in the same job,** pbmc5p_v1 at level 5 + ingest is 3.11x faster in wall time and uses 3.97x fewer
+  core-s.
+- **Where it comes from** (stage breakdown, E13's `s8_stages_e13.py`):
+  - the parent's 17–20 s decode becomes a 2–3 s head scan;
+  - the prefill shrinks from 31 to 21 s on pbmc1k_v3, and pbmc5p_v1's prefill + map from 29 to 23 s.
 
 The per-read path (`gpuE5p`) costs nothing measurable: the "multi" stage goes from 1.9 to 36.6 ms on neuron1k_v3 (789,078 reads'
 qualities fetched from the barcode FASTQ in 17.1 ms) and from 1.5 to 42.1 ms on pbmc1k_v3 (1,253,320 reads in 12.1 ms). The barcode
@@ -408,6 +486,9 @@ each other, so the 0.4 s is below the run-to-run noise.
 2. **R1 qualities, if the atlas wants STARsolo's decisions on the sequencer's qualities** (§2d). The `.1fq` would have to store the CB
    qualities (2 bits per base for the 4-level binning: 4 B per read for a 16-base CB) and the decode would write them. Level 5 then
    takes the per-read path by itself (§1d). The CPU engine's outputs change too, so this is a format and pipeline decision.
+   With E13's ingest there is no barcode FASTQ. The ingest would also have to carry the CB qualities to `soloRunKept`, either by
+   keeping its R1 quality plane past the prefill or by gathering the multi-match reads' CB qualities during the decode, and
+   `e11CbQual` would read them from there. Until then, the guard of §1d sends such a run to level 3.
 3. **Solo configurations the pipeline does not use** (multimappers, EmptyDrops_CR, GeneFull/Velocyto, CB matching without
    pseudocounts or Exact) still fall back to level 3. Multi-segment chemistries (`CB_UMI_Complex`) and the legacy FASTQ path run
    `CB_samTagOut`, where E11's guard keeps level 3 as well; that path was not studied here.
@@ -416,8 +497,8 @@ each other, so the 0.4 s is below the run-to-run noise.
    keeping them on the device (`SINGLET_E15_KEEP_ON_DEVICE=1`) is the faster choice. The gain (1.4–3 GB of device memory free during
    STAR's loop) is real only when another sample's prefill shares the device; that case was not measured.
 6. **For the default switch**, beyond items 1, 4 and 5: the release-gate datasets gated at level 5 one by one (this report adds
-   neuron1k_v3, pbmc5p_v1 and nuclei2k_v2 to E11's pbmc1k_v3; hgmm1k_v3 waits for items 1 and 8), and level 5 gated again on `gpu/fable-engine` once E12, E13
-   and E16 are merged (they touch the prefill, the ingest and the tail that level 5 runs through).
+   neuron1k_v3, pbmc5p_v1 and nuclei2k_v2 to E11's pbmc1k_v3; hgmm1k_v3 waits for items 1 and 8), and level 5 gated again on `gpu/fable-engine` once E16
+   is merged (it touches the tail that level 5 runs through; E12 and E13 are merged and gated here, §2e).
 7. **Not level 5, found by the gate:** `nonhost_reads.fq` is written from the wrong reads when the non-host screen subsamples (more
    than 20 M unmapped reads; §2c). The writer must take the classification by the kept reads' names (or keep their file positions),
    not by the record's index in the whole file. `src/pipeline/singlet.cpp:1905-1921`.
@@ -432,8 +513,8 @@ each other, so the 0.4 s is below the run-to-run noise.
 | `src/engine_gpu/solo.cuh` | `cbPosteriorRead` (per read, the quality at the mismatch or the N) replaces `cbPosterior`; `ctz64` | the rule |
 | `src/engine_gpu/solo_gpu.h` | `CbQualFn`; `SoloReads::cbQual`; `SoloModel::pqTab`; `SoloResult::{nMulti, nMultiAccepted, perReadQual, readCb}`; `SoloKeep`'s host copies and thread; `soloKeepToHost`; `soloRunKept(…, cbQual)` | API of the above |
 | `src/engine_gpu/solo_gpu.cu` | the "multi" stage (flags, compaction, the quality download/upload, the kernel); stage (c) and the per-read outputs take a multi-match read's own choice; `readCb`; the log line; `soloKeepToHost`, the copy back in `soloRunKept`; `soloKeepRelease` joins the thread and frees the page-locked copies | the rule; E11 §5.3 |
-| `src/star/SeqCacheGpuPrefill.cpp` (E11 parts) | `E11State::{perRead, nQualFetched, sQualFetch}`; `e11Config` builds `pqTab` and guards `outQSconversionAdd`; `e11Posterior` without the constant-quality refusal (guard for characters ≤ ' ', `SINGLET_E15_PERREAD`); `e11CbQual`; the barcode file stays mapped until `soloRunKept` when per read; `soloKeepToHost` after `mapDistinct` (`SINGLET_E15_KEEP_ON_DEVICE`); the E15 log line; `pqStr` | the engine's side |
-| `bench/fable/posterior/jobs/{build,probe,gate}.sbatch` | build; which samples reach level 5 and why not; the multi-sample gate (`MODES_<s>`, `PAIRS_<s>`, `NB_<s>`) | deliverable |
+| `src/star/SeqCacheGpuPrefill.cpp` (E11 parts) | `E11State::{perRead, nQualFetched, sQualFetch}`; `e11Config` builds `pqTab` and guards `outQSconversionAdd`; `e11Posterior` without the constant-quality refusal (guard for characters ≤ ' ', `SINGLET_E15_PERREAD`); `e11CbQual`; the barcode file stays mapped until `soloRunKept` when per read; `soloKeepToHost` after `mapDistinct` (`SINGLET_E15_KEEP_ON_DEVICE`); the E15 log line; `pqStr`; with E13's ingest (no barcode FASTQ) `e11Posterior` ignores `SINGLET_E15_PERREAD` or refuses varying qualities, `E11State::perReadNote` | the engine's side |
+| `bench/fable/posterior/jobs/{build,probe,gate}.sbatch` | build; which samples reach level 5 and why not; the multi-sample gate (`MODES_<s>`, `PAIRS_<s>`, `NB_<s>`; modes `gpuE5i`, `gpuE5ip` with E13's ingest; E13's stage script) | deliverable |
 | `bench/fable/posterior/{post_test.cu, star_main.cpp}`, `jobs/{binned,starbuild}.sbatch` | the binned-quality check against STAR (§1f) | deliverable |
 | `docs/gpu-engine/fable/E15-posterior.md` | this report | deliverable |
 
@@ -444,13 +525,16 @@ Not changed: `include/singlet/engine_gpu.h` (nothing needed), the decode, `engin
 **Branch `gpu/fable/posterior`** (from `gpu/fable-engine` 8e54be40):
 - 46af66b7: build and probe jobs.
 - 098408d8: the per-read posterior on the device; the kept inputs in page-locked host memory during STAR's loop.
-- 166ba73d: `cbQual` gets the reads' CRs (`e11CbQual` checks its lines); the binned-quality driver. **Last E15 change to `src/`.**
+- 166ba73d: `cbQual` gets the reads' CRs (`e11CbQual` checks its lines); the binned-quality driver.
 - ad52e499, 6de3b25e, f5d91641: the gate job (`MODES_<s>`, `PAIRS_<s>`, `NB_<s>`).
 - 1bda8f09, 61af5ebf, 5b882315: the binned job through the pipeline's legacy FASTQ path (abandoned: `CB_samTagOut`, §4.4).
 - 2bb5c127: the probe takes GRCm39 for nuclei2k_v2.
 - 28ee97d9: `e15star` and the binned job on it.
 - 904de6e2: the driver's exact counts (§2a).
 - 13651944: merge of `gpu/fable-engine` at e2b0000e (E14).
+- ff8a4dbf: merge of `gpu/fable-engine` at d03d6c47 (E12).
+- 3a0b9c63: merge of `gpu/fable-engine` at fe97c8b4 (E13).
+- 60a60f92: the ingest guard in `e11Posterior`; gate modes `gpuE5i`, `gpuE5ip`. **Last E15 change to `src/`.**
 - 75c1d55e and later: this document.
 
 **Builds** (short-gpu, no GPU):
@@ -462,6 +546,8 @@ Not changed: `include/singlet/engine_gpu.h` (nothing needed), the decode, `engin
 | 796664 | 166ba73d | `bin/singlet-gpu` (gates 796674, 796865; probe 796691) |
 | 796718 | 28ee97d9 | `bin/e15star` (25 s) |
 | 796866 | 13651944 (the merge) | `bin-m1/singlet-gpu` |
+| 797251 | ff8a4dbf (merge with E12) | `bin-m2/singlet-gpu` |
+| 797378 | 60a60f92 (merge with E13, the guard) | `bin-m3/singlet-gpu` |
 
 **Probes** (debug-gpu, T = 8, level 5 stopped after the prefill): 796560 (E11's binary 673cb317; pbmc2m, pbmc5p_v1, neuron1k_v3,
 hgmm1k_v3, nuclei2k_v2 with the wrong genome), 796691 (166ba73d; nuclei2k_v2 on GRCm39, hgmm1k_v3), 797247 (13651944; hgmm1k_v3 with
@@ -477,6 +563,8 @@ pipeline's legacy path (§4.4).
 | 796674 | 166ba73d | neuron1k_v3, pbmc5p_v1: cpu gpuD gpuE5 gpuE5p; pbmc1k_v3: gpuE5 gpuE5p gpuE5k against E11's kept cpu | identity (§2b), timings (§3) |
 | 796865 | 166ba73d | nuclei2k_v2, hgmm1k_v3 (`NB_hgmm1k_v3=131072`): cpu gpuD gpuE5 | §2c |
 | 797017 | 13651944 (merge with E14) | hgmm1k_v3 (`NB_hgmm1k_v3=65536`): gpuE5 cpu; pbmc1k_v3: gpuE5 against E11's kept cpu | §2e |
+| 797252 | ff8a4dbf (merge with E12) | pbmc1k_v3: gpuE5 against E11's kept cpu; pbmc5p_v1: cpu gpuE5 | §2e, §3 |
+| 797379 | 60a60f92 (merge with E13) | pbmc1k_v3: gpuE5 gpuE5i gpuE5ip against E11's kept cpu; pbmc5p_v1: cpu gpuE5 gpuE5i | §2e, §3 |
 
 **Results:** `$W/jobs/fable/posterior/results/{gate,probe,binned}-<job>/` (`summary.txt`; per gate run `stages.txt`,
 `starlog_engine.txt`, `star_Log.out`, `CellReads.stats`, `monitor.tsv`; per binned run STAR's `star_Solo.out/`, `post_test.log`).
@@ -491,5 +579,5 @@ Logs: `$W/logs/e15-{build,starbuild,probe,binned,gate}-<job>.out`. `$W` = `/mnt/
 
 **Switches:** `SINGLET_ENGINE_GPU_E2E=5` (with `--engine gpu`, `SINGLET_GPU_PILEUP=on`) as in E11. New:
 - `SINGLET_E15_PERREAD=1`: the per-read posterior path even when one quality factor would do (a test switch; the outputs do not change
-  on `.1fq` input);
+  on `.1fq` input; ignored with E13's `SINGLET_ENGINE_GPU_INGEST=1`, which maps no barcode FASTQ);
 - `SINGLET_E15_KEEP_ON_DEVICE=1`: E11's behaviour, the kept inputs stay on the device during STAR's loop.
