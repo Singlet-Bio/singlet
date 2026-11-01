@@ -17,7 +17,7 @@
 #   gpuE4  gpuD + SINGLET_ENGINE_GPU_E2E=4             (E10 level 4: reads with a record skip STAR's loop; Solo outputs incomplete)
 #   gpuE5  gpuD + SINGLET_ENGINE_GPU_E2E=5             (E11: level 4 + Solo counted on the device, star_Solo.out from E9's writer)
 #   gpuE5b a second gpuE5 run (run-to-run spread); gpuE5x: gpuE5 with the extra variables of XENV ("A=1 B=2"); gpuE5x1..3: of XENV1..3
-#   gpuE5i gpuE5 + SINGLET_ENGINE_GPU_INGEST=1         (E13: the .1fq decoded into the prefill's packed buffers)
+#   gpuE5i gpuE5 + SINGLET_ENGINE_GPU_INGEST=1         (E13: the .1fq decoded into the prefill's packed buffers); gpuE5ib: a second one
 #   base5  gpuE5 with the baseline binary ($BASEDIR/singlet-gpu); base5b: a second one
 # At level 5 the run log carries E16's "[e16] <epoch> <pid> <text>" marks (STAR's child and the pipeline); bench/fable/tail/e16_steps.py turns
 # them into the per-step table (e16.txt).
@@ -53,7 +53,7 @@ for m in "${MODES[@]}"; do
     gpuE3) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=3 ;;
     gpuE4) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=4 ;;
     gpuE5|gpuE5b) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 ;;   # gpuE5b: a second level-5 run (run-to-run spread)
-    gpuE5i) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1 ;;
+    gpuE5i|gpuE5ib) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1 ;;
     gpuE5x*) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5; xv=XENV${m#gpuE5x}; for kv in ${!xv:-}; do export "$kv"; done ;;   # gpuE5x<N>: XENV<N>
     base5|base5b) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5; BIN=$BASEDIR/singlet-gpu ;;
   esac
@@ -73,6 +73,7 @@ for m in "${MODES[@]}"; do
   echo "$s $m: bin $BIN, env $(env | grep -E '^SINGLET_(GPU_PILEUP|ENGINE_GPU|E16)' | sort | tr '
 ' ' ')" | tee -a $RES/summary.txt
   echo "$s $m: wall $(echo "$T1 - $T0" | bc) s, core-s $(echo "($C1 - $C0)/1000000" | bc -l | cut -c1-8), start $T0 end $T1, maxRSS $(awk -F': ' '/Maximum resident/{printf "%.1f GB", $2/1048576}' $O/time.txt)" | tee -a $RES/summary.txt
+  ES=$(awk -F': ' '/Exit status/{print $2}' $O/time.txt 2>/dev/null); [ "$ES" = 0 ] && echo "EXIT STATUS 0" | tee -a $RES/summary.txt || { echo "!! GATE FAIL: exit status ${ES:-?} ($m)" | tee -a $RES/summary.txt; FAIL=1; }
   grep -aq "unsorted STAR stream" $O/run.log.ts && grep -aq "Pileup: streaming from STAR pipe" $O/run.log.ts && echo "STREAM PATH OK" | tee -a $RES/summary.txt || { echo "!! GATE FAIL: STREAM PATH NOT USED ($m)" | tee -a $RES/summary.txt; FAIL=1; }
   case $m in cpu) ;; *) if grep -aq "\[gpu_pileup\] on:" $O/run.log.ts && ! grep -aE "\[gpu_pileup\] (not run|failed|ERROR)|GPU_PILEUP ignored" $O/run.log.ts | grep -q .; then echo "GPU PILEUP OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: GPU pileup did not run cleanly ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
   grep -a -e "unsorted STAR stream" -e "streaming from STAR pipe" -e "sorted path" -e "gpu_pileup\]" -e "ignor" -e "E8" -e "E10" -e "E11" -e "cell_qc\]" $O/run.log.ts | cut -c1-400 | tee -a $RES/summary.txt
