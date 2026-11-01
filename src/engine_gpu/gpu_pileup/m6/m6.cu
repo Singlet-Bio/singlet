@@ -413,6 +413,26 @@ __global__ void k_cr_roots(const uint64_t* uk, const Agg* ag, const uint32_t* pe
         }
     for (int p = gs; p < ge; p++) rumi[perm[p]] = uk[perm[cr_find(par, p)]] & umask;
 }
+// E23: k_cr_roots' union replayed per connected component instead of per (cell, gene) group. k_cr_roots walks a group of n UMIs on one thread
+// (n * 3 * ulen binary searches over the group), so the deepest group set the kernel's time (pbmc1k_v3: 15,385 UMIs of one gene in one cell,
+// 0.5 s). Its unions are exactly stage_c's edges (one base apart in the 2-bit UMI, count_rule, the same (cell, gene); each pair once), taken
+// from the lower rank p to the higher rank q, in p order. Within one p the order does not matter: every union of step p hangs the other root
+// under find(p), which stays the root of p's set through the step. Components are independent. So replaying each component's edges sorted by
+// (component, lower rank), on one thread per component, leaves par with the roots k_cr_roots leaves; the work is the component's edges.
+static bool g_cr_replay = true;   // E23 (SINGLET_GPU_PILEUP_E23=0: k_cr_roots, as before)
+__global__ void k_cr_ekey(const uint32_t* ea, const uint32_t* eb, int ne, const uint32_t* rp, const uint32_t* lab, uint64_t* key, uint32_t* hi) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= ne) return;
+    const uint32_t pa = rp[ea[i]], pb = rp[eb[i]];
+    key[i] = ((uint64_t)lab[ea[i]] << 32) | min(pa, pb); hi[i] = max(pa, pb); }
+__global__ void k_cr_replay(const uint64_t* key, const uint32_t* hi, int ne, uint32_t* par) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= ne || (i > 0 && (key[i] >> 32) == (key[i - 1] >> 32))) return;
+    for (int j = i; j < ne && (key[j] >> 32) == (key[i] >> 32); j++) {
+        const uint32_t ri = cr_find(par, (uint32_t)key[j]), rj = cr_find(par, hi[j]); if (ri != rj) par[rj] = ri; } }
+__global__ void k_cr_rumi(const uint64_t* uk, const uint32_t* perm, const uint32_t* par, int m, uint64_t umask, uint64_t* rumi) {
+    const int p = blockIdx.x * blockDim.x + threadIdx.x; if (p >= m) return;
+    uint32_t r = (uint32_t)p; while (par[r] != r) r = par[r];
+    rumi[perm[p]] = uk[perm[r]] & umask; }
+struct CrEdges { const uint32_t* ea[2]; const uint32_t* eb[2]; int ne[2]; };   // stage_c's edges (entry indices), per half
 __global__ void k_cr_csum(const Agg* ag, const uint32_t* lab, int m, uint32_t* csum) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) atomicAdd(&csum[lab[i]], ag[i].count); }
 __global__ void k_cr_isroot(const uint32_t* lab, int m, uint8_t* f) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) f[i] = lab[i] == (uint32_t)i; }
 __global__ void k_cr_molkey(const uint64_t* uk, const uint64_t* rumi, const uint32_t* ridx, int nr, int gb, int ub, uint64_t* key) {
@@ -430,7 +450,8 @@ __global__ void k_cr_judge(const uint64_t* key, const uint32_t* ridx, const uint
     for (int t = j; t < e; t++) drop[ridx[t]] = tie || (uint32_t)((uk[ridx[t]] >> ub) & gm) != best_gene;
 }
 // drop[i] = 1 for the molecules (component roots i) the rule removes; the temporaries are released, drop stays
-static uint8_t* stage_cr(Arena& A, const uint64_t* uk, const Agg* ag, const uint32_t* lab, const uint32_t* seg, const uint32_t* sf, int m, const Layout& L) {
+static uint8_t* stage_cr(Arena& A, const uint64_t* uk, const Agg* ag, const uint32_t* lab, const uint32_t* seg, const uint32_t* sf, int m, const Layout& L, Timer* T = nullptr,
+                         const CrEdges* E = nullptr) {   // E: stage_c's edges (E23's replay); nullptr: k_cr_roots
     const int TB = 256; const int G = (m + TB - 1) / TB;
     uint8_t* drop = A.alloc<uint8_t>(m); CK(cudaMemset(drop, 0, m));
     const size_t mk_ = A.mark();
@@ -442,7 +463,24 @@ static uint8_t* stage_cr(Arena& A, const uint64_t* uk, const Agg* ag, const uint
     const uint32_t* perm = dv.Current();
     uint32_t* rp = A.alloc<uint32_t>(m); k_cr_rankpos<<<G, TB>>>(perm, m, rp);
     uint32_t* par = A.alloc<uint32_t>(m); uint64_t* rumi = A.alloc<uint64_t>(m);
+    if (T) T->mark("cr.rank");
+    if (E != nullptr) {   // E23: the replay per component (k_cr_roots' unions; see k_cr_replay)
+        k_iota<<<G, TB>>>(par, m);
+        const int ne = E->ne[0] + E->ne[1];
+        if (ne > 0) {
+            uint64_t *q0 = A.alloc<uint64_t>(ne), *q1 = A.alloc<uint64_t>(ne); uint32_t *h0 = A.alloc<uint32_t>(ne), *h1 = A.alloc<uint32_t>(ne);
+            for (int h = 0, o = 0; h < 2; o += E->ne[h], h++)
+                if (E->ne[h] > 0) k_cr_ekey<<<(E->ne[h] + TB - 1) / TB, TB>>>(E->ea[h], E->eb[h], E->ne[h], rp, lab, q0 + o, h0 + o);
+            int mb = 1; while ((1ull << mb) <= (unsigned long long)m) mb++;
+            cub::DoubleBuffer<uint64_t> dq(q0, q1); cub::DoubleBuffer<uint32_t> dh(h0, h1);
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dq, dh, ne, 0, 32 + mb); });
+            k_cr_replay<<<(ne + TB - 1) / TB, TB>>>(dq.Current(), dh.Current(), ne, par);
+        }
+        const uint64_t umask = (1ull << L.ub) - 1;
+        k_cr_rumi<<<G, TB>>>(uk, perm, par, m, umask, rumi);
+    } else
     k_cr_roots<<<G, TB>>>(uk, ag, perm, rp, sf, m, L.ub, L.ulen, L.directional ? 1 : 0, par, rumi);
+    if (T) T->mark("cr.roots");
     uint32_t* csum = A.alloc<uint32_t>(m); CK(cudaMemset(csum, 0, (size_t)m * 4)); k_cr_csum<<<G, TB>>>(ag, lab, m, csum);
     uint8_t* isr = A.alloc<uint8_t>(m); k_cr_isroot<<<G, TB>>>(lab, m, isr);
     uint32_t* ridx = A.alloc<uint32_t>(m); int* dn = A.alloc<int>(1);
@@ -479,6 +517,7 @@ static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m,
     int lob = 2 * (L.ulen / 2), hib = 2 * (L.ulen - L.ulen / 2);
     int segbits = 1; while ((1ull << segbits) <= (unsigned long long)nseg + 1) segbits++;
     long long ne_total = 0; int iters = 0;
+    CrEdges ce_{{nullptr, nullptr}, {nullptr, nullptr}, {0, 0}};   // E23: the edges, for stage_cr's replay
     if (na > 0 && L.directional) {
         uint32_t* ea[2]; uint32_t* eb[2]; int ne[2];
         for (int h = 0; h < 2; h++) {
@@ -510,6 +549,7 @@ static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m,
             k_compress<<<G, TB>>>(lab, m);
         }
         if (iters >= 200) die("connected components did not converge");
+        for (int h = 0; h < 2; h++) { ce_.ea[h] = ea[h]; ce_.eb[h] = eb[h]; ce_.ne[h] = ne[h]; }
         T.mark("c.cc");
     } else { T.mark("c.cand"); T.mark("c.cc"); }
     *stat_iters = iters;
@@ -517,7 +557,8 @@ static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m,
     uint32_t *cf = A.alloc<uint32_t>(m), *ce = A.alloc<uint32_t>(m), *ci = A.alloc<uint32_t>(m);
     k_comp_init<<<G, TB>>>(cf, ce, ci, m); k_comp_agg<<<G, TB>>>(ag, lab, m, cf, ce, ci);
     Mol M; M.m = m; M.kex = A.alloc<uint64_t>(m); M.kin = A.alloc<uint64_t>(m); M.kam = A.alloc<uint64_t>(m);
-    const uint8_t* drop = L.cr ? stage_cr(A, uk, ag, lab, seg, sf, m, L) : nullptr;
+    T.mark("c.agg");
+    const uint8_t* drop = L.cr ? stage_cr(A, uk, ag, lab, seg, sf, m, L, &T, g_cr_replay ? &ce_ : nullptr) : nullptr;
     k_emit<<<G, TB>>>(uk, lab, cf, ce, ci, m, L.gb, ub, M.kex, M.kin, M.kam, drop);
     T.mark("c.emit");
     return M;
