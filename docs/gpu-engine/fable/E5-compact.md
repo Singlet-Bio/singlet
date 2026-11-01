@@ -232,6 +232,46 @@ copy-in of the crossing state adds 2 G thread instructions per batch but few war
 better one for this code.** The mono kernel's 1.5× local win (S1) comes from convergence and instruction fetch (E1),
 which the staged kernels already have.
 
+## Encoder code size (`M5_ENC1`) and KEEPIX: final comparison (job 795560, commit da80437)
+
+BLOBW's loss pointed at code size, not stores. `M5_ENC1` keeps the byte-wise encoder and changes only how `encodeTr`
+calls it: its loops are not unrolled (`#pragma unroll 1`), and each exon row's values are gathered into a small array
+first, so `putV` is inlined at one call site instead of ~40. *Exactness:* the same values in the same order through the
+same `putV`. Cost: an 80-B local array (k_p3 frame 576 → 656 B), +4 registers without TR32, none with it.
+
+All in one job (node g052, debug-gpu; lane A median of 3, phases from the last run):
+
+| variant | lane A ms | vs baseline | phase 3 ms | lane M ms | lane B ms | GPU M distinct/s | Work A (B) | k_p3 regs, frame | identity |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---:|
+| baseline (first / last) | 247.8 / 248.4 | 1.000 | 133.6 / 133.6 | 325.6 / 324.9 | 256.6 / 256.4 | 2.40 | 46,104 | 80, 576 B | 100% |
+| ENC1 | 236.5 | 0.953 | 122.3 | 321.7 | 253.9 | 2.45 | 46,104 | 84, 656 B | 100% |
+| BLOBW + ENC1 | 239.1 | 0.964 | 124.9 | 324.7 | 251.2 | 2.44 | 46,104 | 84, 656 B | 100% |
+| S3 + S4 | 223.7 | 0.902 | 109.5 | 280.1 | 224.9 | 2.73 | 36,032 | 79, 576 B | 100% |
+| S3 + S4 + BLOBW | 232.1 | 0.936 | 118.2 | 291.2 | 230.1 | 2.64 | 36,032 | 79, 576 B | 100% |
+| S3 + S4 + BLOBW + ENC1 | 212.0 | 0.854 | 98.1 | 275.6 | 223.6 | 2.80 | 36,032 | 79, 656 B | 100% |
+| **S3 + S4 + ENC1** | **210.2** | **0.847** | **96.5** | **274.3** | **220.2** | **2.83** | 36,032 | 79, 656 B | 100% |
+| S3 + S4 + KEEPIX | 223.5 | 0.901 | 108.6 | 278.7 | 223.2 | 2.75 | 36,080 | 79, 576 B | 100% |
+| **S3 + S4 + KEEPIX + ENC1** | **210.2** | **0.847** | **95.1** | **270.5** | **222.0** | **2.83** | 36,080 | 79, 656 B | 100% |
+
+Nsight Compute, lane A `k_p3`, one batch (baseline and S3 + S4 + KEEPIX + BLOBW from job 795345):
+
+| k_p3, lane A, 1 batch | baseline | S3 + S4 | S3 + S4 + ENC1 | S3 + S4 + KEEPIX | S3 + S4 + KEEPIX + BLOBW |
+|---|---:|---:|---:|---:|---:|
+| duration (ms) | 34.54 | 29.54 | **26.58** | 29.39 | 29.03 |
+| L2 sectors read / written (M) | 417.4 / 773.4 | 284.2 / 477.5 | 229.4 / 513.2 | 268.9 / 472.9 | 285.0 / 428.7 |
+| DRAM read / write (GB) | 8.75 / 4.51 | 6.46 / 2.42 | 7.08 / 2.87 | 6.18 / 2.34 | 6.01 / 2.28 |
+| warp / thread instructions (G) | 4.06 / 7.81 | 3.80 / 7.31 | 3.85 / 7.46 | 3.83 / 7.49 | 3.87 / 7.52 |
+
+- **ENC1 is worth 12-13 ms of lane A** on top of anything, with the same instruction count (+1.4%) and slightly more
+  memory traffic (its local array). What it removes is code: lane A's k_p3 is instruction-fetch bound (E1: 51% of
+  stalls, i-cache hit 54%), and an unrolled encoder with ~40 inlined varint loops is a large share of the kernel.
+  (Inferred from E1's stall profile; the stall breakdown was not re-sampled here.)
+- **BLOBW** removes 10% of L2 write sectors but costs time in every combination (+8 ms inlined, +2 ms with ENC1).
+  Not recommended.
+- **KEEPIX** is neutral in lane A (223.5 vs 223.7 ms; 210.2 vs 210.2 with ENC1) and 1.4% faster in lane M. It removes
+  1.3 copies per read but adds pool bookkeeping. Optional.
+- S3 + S4 alone cut k_p3's L2 write sectors by 38%, DRAM bytes by 33% and k_p3 time by 14%.
+
 ## Summary
 
 | step | lane A ms (vs baseline in the same job) | phase 3 ms | lane M / B ms | stitching share of lane A thread cycles | Work A (B) | k_p3 A regs, spills | identity |
@@ -241,12 +281,14 @@ which the staged kernels already have.
 | S2 copies (795235) | 19.52 copies, 4,821 B per read; 5.4% of stitching cycles by the clock | | | | | | 100% |
 | S3 REFX + FIN1 + SLOT0 (795250) | 228.4 (0.930) | 114.5 | 289 / 237 | 35.6% | 46,112 | 80, 0 | 100% |
 | S4 TR32 (795250) | 230.2 (0.938) | 117.5 | 289 / 239 | 36.3% | 36,024 | 79, 0 | 100%, 0 bad stores |
-| **S3 + S4 (795250)** | **220.3 (0.898)** | **107.3** | **274 / 224** | 33.7% | 36,032 | 79, 0 | 100% |
-| + KEEPIX + BLOBW (795345) | 230.8 (0.925) | 115.6 | 280 / 225 | | 36,080 | 79, 0 | 100% |
+| S3 + S4 (795250 / 795560) | 220.3 (0.898) / 223.7 (0.902) | 107.3 / 109.5 | 274 / 224 | 33.7% | 36,032 | 79, 0 | 100% |
+| **S3 + S4 + ENC1 (795560)** | **210.2 (0.847)** | **96.5** | **274 / 220** | | 36,032 | 79, 0 | 100% |
+| S3 + S4 + KEEPIX + ENC1 (795560) | 210.2 (0.847) | 95.1 | 271 / 222 | | 36,080 | 79, 0 | 100% |
+| BLOBW variants (795345, 795560) | +2 to +20 ms against the same build without it | | | | | 79-94, 0 | 100% |
 | S5 `--p3local`, baseline (795345) | 289.5 (1.160) | 176.3 | 320 / 253 | | 46,104 local | 80, 0 (47,168-B frame) | 100% |
-| S5 `--p3local`, S3 + S4 + KEEPIX + BLOBW (795345) | 238.7 (0.957) | 123.3 | 279 / 227 | | 36,080 local | 72, 0 (37,136-B frame) | 100% |
+| S5 `--p3local`, S3 + S4 + KEEPIX + BLOBW (795345) | 238.7 (0.957, vs 0.925 global) | 123.3 | 279 / 227 | | 36,080 local | 72, 0 (37,136-B frame) | 100% |
 
-GPU throughput (all three lanes): 2.42 → **2.77 M distinct reads/s** with S3 + S4.
+GPU throughput (all three lanes): 2.40 → **2.83 M distinct reads/s** (+18%) with S3 + S4 + ENC1.
 
 ## Verdict
 
@@ -254,34 +296,42 @@ GPU throughput (all three lanes): 2.42 → **2.77 M distinct reads/s** with S3 +
   convergence and instruction fetch (E1's ncu: 4.3× more DRAM bytes, not fewer). In the staged lanes, local memory
   (a field-major layout at 4-byte granularity) is slower and moves 2.8× more DRAM bytes, because k_p3's dominant access
   is one thread walking its own transcript at ~2 active threads per instruction: AoS keeps that walk in few sectors.
-- **What pays is moving fewer bytes:** half the copies (S3) and 40% smaller transcripts (S4) cut k_p3's L2 write
-  sectors by 45% and its time by 16-19%, lane A by 10%, lanes M and B by 13-15%. All exact, identity 100%, no spills,
-  one register fewer.
-- **Gate (lane A ≤ 0.7×): not met** (0.90×). Phase 1 (99 ms of 245) and the scan (15 ms) are outside this experiment's
-  reach; 0.7× would need phase 3 at 59 ms (0.44×).
+- **What pays is moving fewer bytes and running less code:** half the copies (S3) and 40% smaller transcripts (S4) cut
+  k_p3's L2 write sectors by 38% and its time by 14-19%; a non-unrolled encoder (ENC1) takes another 10% off k_p3.
+  Together: lane A 0.85×, phase 3 0.72×, lane M 0.84×, lane B 0.86×. All exact, identity 100%, no spills, no extra
+  registers.
+- **Gate (lane A ≤ 0.7×): not met** (0.85×). Phase 1 (99.5 ms) and the scan (14.4 ms) are outside this experiment's
+  reach; 0.7× (174 ms) would need phase 3 at 60 ms, against 96.5 ms now.
 
 ## Recommendation
 
-1. Take **S3 + S4** (`-DM5_S3 -DM5_TR32`) into the engine: exact, −10% lane A, −15% lane M, −13% lane B, smaller
-   `Work` (lane A 46 → 36 KB, lane M 83 → 68 KB, lane B 635 → 549 KB, so larger batches fit).
+1. Take **S3 + S4 + ENC1** (`-DM5_S3 -DM5_TR32 -DM5_ENC1`) into the engine: exact, 15% off lane A, 16% off lane M, 14%
+   off lane B, and a smaller `Work` (lane A 46 → 36 KB, lane M 83 → 68 KB, lane B 635 → 549 KB, so larger batches
+   fit). KEEPIX is optional (neutral in A, 1.4% off M). Drop BLOBW.
 2. Do not pursue a field-major `Work` or local-memory phases for the staged kernels.
-3. Phase 1 is now the larger half of lane A (99 of 220 ms; E1: memory-bound, 71-79%): it is where a 0.7× lane A has to
-   come from.
-4. If the encoder is revisited (E1: 9.4% of lane A's stall samples), keep it small and out of line; the inlined word
-   encoder here lost 10-20 ms.
+3. Code size is a lever in its own right in k_p3 (ENC1's 5% of lane A came from not unrolling one function): look for
+   other unrolled or duplicated paths in finalization and recording, the fixed per-window path that E2's census
+   (`docs/gpu-engine/fable/E2-census.md`) finds dominant (81% of lane A windows have one align).
+4. E2's 99.9% caps for the narrow class (NEX 4, NKEEP 12) suggest `Tr<4>`: with TR32 a transcript would drop from 440 B
+   to ~290 B; reads with more exons would overflow to lane M, still exact.
+5. Phase 1 is now the larger half of lane A (99.5 of 210 ms; E1: memory-bound, 71-79%): a 0.7× lane A has to come
+   from there.
 
 ## Jobs and commits
 
 Branch `gpu/fable/compact`. Commits: 016f650 (copy statistics, mono budget fix, jobs), 0a05f46 (S3, S4), 8382429
 (KEEPIX), 6745dd3 (`--p1local`/`--p3local`), b82c906 (compile summary), 00a4c32 (BLOBW, ncu metrics), 51a100b (run job
-host threads).
+host threads), da80437 (ENC1).
 
 | job | what | commit | node |
 |---|---|---|---|
-| 795234, 795249, 795257, 795279, 795319 | compiles (debug-cpu; ptxas -v in `jobs/fable/compact/results/ptxas_*.txt`) | 016f650, 0a05f46, 8382429, b82c906, 00a4c32 | |
+| 795234, 795249, 795257, 795279, 795319, 795559 | compiles (debug-cpu; ptxas -v in `jobs/fable/compact/results/ptxas_*.txt`) | 016f650, 0a05f46, 8382429, b82c906, 00a4c32, da80437 | |
 | 795235 | S1 (mono global/local, 4 and 8 blocks/SM), S2 (copy statistics), staged baseline | 016f650 | g050 |
 | 795250 | S3 parts, S3, S4, S3 + S4, TR32CHECK, copy statistics under S3 | 0a05f46 | g050 |
-| 795345 | S5 (`--p3local`, `--p1local`), BLOBW, KEEPIX; ncu of k_p3 lane A | 00a4c32 | g052 (debug-gpu) |
+| 795345 | S5 (`--p3local`, `--p1local`), BLOBW, KEEPIX + BLOBW; ncu of k_p3 lane A | 00a4c32 | g052 (debug-gpu) |
+| 795560 | ENC1, BLOBW, KEEPIX, S3 + S4 in one job; ncu of k_p3 lane A | da80437 | g052 (debug-gpu) |
 
+Cancelled before running (superseded): 795286, 795320, 795362, 795363, 795561.
 Results: `/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/compact/results/<tag>_v<i>_<binary>.{log,json}`
-(tags s1s2, s3s4, d5) and `<tag>_ncu<i>_<binary>.{txt,_raw.csv,ncu-rep}`; job logs in `singlet/logs/e5-run-<job>.out`.
+(tags s1s2, s3s4, d5, d7) and `<tag>_ncu<i>_<binary>.{txt,_raw.csv,ncu-rep}`; job logs in
+`singlet/logs/e5-run-<job>.out`.
