@@ -161,6 +161,8 @@ for s in "${SAMPLES[@]}"; do
     grep -a '^  DIFF\|^  only in\|^    \|^files:\|^RESULT' $RES/equiv-$1-$2.txt | cut -c1-200 | head -60 | tee -a $RES0/summary.txt
     FL=$(grep -a '^files:' $RES/equiv-$1-$2.txt | sed -E 's/files: ([0-9]+) identical, ([0-9]+) differ only in timings\/paths, ([0-9]+) differ/\1\/\2\/\3/')
     UNX=""; for f in $(grep -a '^  DIFF ' $RES/equiv-$1-$2.txt | sed -E 's/^  DIFF ([^ :]+).*/\1/'); do case "$EXPECT_DIFF" in *" $f "*) ;; *) UNX="$UNX $f" ;; esac; done
+    # provenance.json's whitelist "name" is the path the binary resolved (<bin>/../whitelists/...): a path when the binaries' directories differ
+    grep -aq '^  DIFF provenance.json: /references/whitelist/name: [^;]*$' $RES/equiv-$1-$2.txt && UNX=${UNX/ provenance.json/} && echo "  provenance.json: the whitelist's path only (the binaries' directories)" | tee -a $RES0/summary.txt
     for f in $(grep -a '^  only in ' $RES/equiv-$1-$2.txt | sed -E 's/^  only in [ab]: //'); do UNX="$UNX only:$f"; done
     [ -n "$FL" ] || UNX="$UNX out_equiv-failed"
     if [ -n "$UNX" ]; then echo "  out_equiv: UNEXPECTED:$UNX" | tee -a $RES0/summary.txt; ok=0; else echo "  out_equiv: $FL (identical/timing-path/differ), every DIFF in E11's run-dependent set" | tee -a $RES0/summary.txt; fi
