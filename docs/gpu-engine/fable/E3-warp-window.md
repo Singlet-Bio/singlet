@@ -4,14 +4,18 @@ Branch `gpu/fable/warp-window` (from `gpu/fable-engine` cf92cdb9). Code: `bench/
 `bench/gpu/m5/m5.cu` (`k_p3a`, `k_p3w`, flags `--warp-m --warp-b --warp-a G --wmin-a T --wassign --wsort --wb-cfg
 --wthreads --no-wstats --host-emul --tag`), jobs `bench/gpu/m5/jobs/e3_compile.sbatch` (NAME=binary),
 `bench/gpu/m5/jobs/e3_run.sbatch` (RUNS=variants, NCUS=Nsight Compute profiles; baseline and variants in one job,
-identity checked in each), `bench/gpu/m5/jobs/e3_ncu_source.sbatch`. Results JSON: `bench/fable/warp-window/`.
+identity checked in each), `bench/gpu/m5/jobs/e3_ncu_source.sbatch`; on the E4 + E7 head `bench/gpu/m5/jobs/e3_cc.sbatch`
+and `e3_gate.sbatch` (copies of `bench/fable/engine/fable_{cc,gate}.sbatch` that build into and write to
+`$W/jobs/fable/warp-window/engine`). Results JSON: `bench/fable/warp-window/` (job 796113 in `gate-796113/`).
 
-STATUS: done. Exact (100% identity in every variant of every job). **On the merged code (integration head + E3, job
-795844) the warp lanes cut lanes M+B by 10%** (434.7 vs 482.8 ms, 0.900x; M5 rate 2.91 -> 3.13 M distinct reads/s), with
-big batches 0.973x of the big-batch baseline (3.25 -> 3.31 M/s). The gate (M+B <= 0.5x) is **not met**. Before the merge
-(E3 alone, sections 3.1-3.4) the best configuration only tied the baseline (568.7 vs 563.5 ms); E5's compact transcript
-state is what made the warp kernel pay (3.5). The branch carries the integration head (merge 80f366fc; every build flavour
-compiles; the E3 statistics and probes only with `-DM5_E3STATS`).
+STATUS: done. Exact (100% identity in every variant of every job). **On the integration head with E4 and E7 (job 796113,
+binary 73d245ee) the best flag set is E4's plus warp lane M: `--best-order --p3-maxreg-a 64 --batch-b 131072 --warp-m
+--wsort --wthreads 128` = 3.64 M distinct reads/s vs 3.54 for E4's flags in the same job (M+B 370.3 vs 384.9 ms,
+0.962x; 3.6).** `--wassign` is now per lane (`--wassign-a|-m|-b`); the asked-for per-lane best (k_p3a for M, in-kernel
+assignment for B) gives 3.59 M/s, because warp lane B loses to `k_p3` once E4 runs lane B as one 131,072 batch. On the
+pre-E4 merged code (job 795844) the warp lanes cut M+B by 10% (0.900x; 3.5). The gate (M+B <= 0.5x) is **not met**.
+Before any merge (E3 alone, 3.1-3.4) the best configuration only tied the baseline; E5's compact transcript state is
+what made the warp kernel pay (3.5). The E3 statistics and probes are only in `-DM5_E3STATS` builds.
 
 ## 1. Design as built
 
@@ -328,6 +332,53 @@ rises from 25% to 31% (5 blocks of 128 threads per SM); the baseline `k_p3` is b
 E3 probes are out of it. With `-DM5_E3STATS` `k_p3a` takes 72 registers (job 795831's flavour check: e3stats, tail, census,
 baseline and keepix all compile).
 
+### 3.6 On the E4 + E7 head (job 796113, binary 73d245ee): per-lane `--wassign`, warp lane M on top of E4's flags
+
+`gpu/fable-engine` merged twice: 9cf7cbc2 (E4's `--best-order`, per-lane `--p3-maxreg*`, batch knobs, `p3one` / `k_p3<C,TAIL>`
+/ `k_p3lb`, `-DM5_NOCLK`; E8's engine files) and f76ddd16 (d166001b, E7's persistent phase-1 seed kernel), fix 73d245ee. The
+E3 changes to `m5.cu` stay local: the warp lanes are a `WARP` branch around E4's phase-3 launch in `runStaged`, the
+kernels, flags and JSON fields are additions. New: `--wassign-a|-m|-b` set the in-kernel assignment per lane (`--wassign`
+still sets all three). In warp lanes E4's `--p3order`/`--p3-maxreg` do not apply (lane M orders by `--wsort`). Compile job
+796098 (`e3_cc.sbatch`): default, tail, census, baseline, e3stats, keepix and noclk build (the noclk ok-marker is missing
+only because the ptxas summary pipe hit its 20-line cut; the binary was written). Gate job 796113 (`e3_gate.sbatch` = the
+integration's `fable_gate.sbatch` with OUT in this experiment's directory; debug-gpu g050, H100 NVL; STAR truth for the
+1,991,926 distinct reads regenerated in the job). STD = `--budget-a 1024 --budget-m 2048 --budget-b 2048 --batch-a 524288
+--batch-m 393216 --batch-b 65536`, E4 = `--best-order --p3-maxreg-a 64 --batch-b 131072`.
+
+| v | binary, flags | lane A ms | lane M ms | lane B ms | M+B ms | GPU ms | M distinct reads/s |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 0 | m5b (`-DM5_BASELINE`) STD | 233.0 | 305.5 | 252.8 | 558.3 | 791.3 | 2.52 |
+| 1 | m5 STD | 186.3 | 243.4 | 219.5 | 462.9 | 649.2 | 3.07 |
+| 2 | m5 STD + E4 | 177.6 | 222.0 | 162.8 | 384.9 | 562.5 | 3.54 |
+| 3 | v2 + `--warp-m --warp-b --wassign-b --wsort --wb-cfg 1 --wthreads 128` | 177.8 | 214.0 | 162.3 | 376.3 | 554.1 | 3.59 |
+| **4** | **v2 + `--warp-m --wsort --wthreads 128`** | 177.4 | **214.4** | **156.0** | **370.3** | **547.8** | **3.64** |
+| 5 | v3 without `--batch-b 131072` (lane B in 65,536 batches) | 177.4 | 214.2 | 182.7 | 396.9 | 574.2 | 3.47 |
+
+Identity: 1,991,926 / 1,991,926 distinct reads (4,118,999 / 4,118,999 weighted; 151,095 unmapped and 1,840,831 mapped,
+all identical) in every variant. v2 reproduces the head's gate 796082 (181 / 224 / 164 ms, 3.50 M/s) within node noise.
+
+Phase 3 (ms, median run): lane M `k_p3` with E4's windows-desc order 142.7 (v2) against `k_cost` + sort + `k_p3a` 16.8 plus
+`k_p3w` 117.5 = 134.3 (v3, v4; -6%). Lane B: `k_p3` 128.3 on 90,740 reads (v2) and 121.6 on 90,389 reads (v4); `k_p3w`
+with the in-kernel assignment 0.2 + 127.5 on the same 90,389 reads (v3) and 0.2 + 144.2 in two 65,536 batches (v5).
+
+- The best flag set on the head is v4: 3.64 M distinct reads/s, +2.7% over E4's flags in the same job (+4.0% over gate
+  796082's 3.50); M+B 0.962x. Lane M is the only warp lane in it.
+- The per-lane best of job 795844 (v3: `k_p3a` for M, in-kernel assignment for B) no longer is: with E4's single
+  131,072 batch lane B's `k_p3` is faster than the warp kernel on the same reads (121.6 vs 127.5 ms, +5% for the warp),
+  as in 795844's big-batch runs (164.9 vs 158.5 ms). Warp lane B wins only in 65,536 batches (-15% in 795844), and the
+  big batch beats both (v5: 182.7 ms).
+- Of v4's 14.6 ms M+B gain over v2, lane M's kernel gives 7.6 ms; the other 6.8 ms come from routing: the warp merge
+  keeps 351 reads in lane M that the serial loop sends to lane B on a `keep[]` overflow (3.5), and `k_p3` in lane B runs
+  6.7 ms faster without them. Both routings are exact.
+- The gate (M+B <= 0.5x) is not met; E3 adds 0.962x on M+B to E4's flags.
+
+Registers (`cuobjdump -res-usage` of the default 73d245ee binary, job 796128; the same as 3.5): `k_p3w` 95 registers with
+8,944 B stack (lane M, `LaneWork<8,8,8>`), 13,808 / 32,144 B (lane B cfg 0 / 1) and 95-96 with 12,720 B (lane A, G 32/16/8);
+`k_p3a` 64, 0 B; `k_p3` 79-80 (368 / 624 / 1,712 B); E4's `k_p3lb` 64 / 72 / 80 under its caps (400-1,776 B). (The
+run printout's "6 blocks/SM resident" on warp lanes is `k_p3`'s occupancy, not `k_p3w`'s: cosmetic.) The ptxas summary of 796098 shows spill stores
+(36-88 B) only on the 400-432 and 1,744-1,776 B frames, i.e. E4's register-capped `k_p3lb` instances; the `k_p3w` frames
+listed (12,720, 13,808, 32,144 B) have none (8,944 B fell past the summary's 20-line cut; none in 795831).
+
 
 ## 4. What failed on the way, and how it was found
 
@@ -350,9 +401,10 @@ baseline and keepix all compile).
 
 ## 5. Next steps
 
-1. Take the warp lanes into the integration head as an option for lanes M and B (exact, -10% on M+B at the standard
-   batches): lane M with `k_p3a` + `k_p3w`, lane B with the in-kernel assignment. A per-lane `--wassign` (today one flag for
-   both lanes) gives the measured best of each lane, about 417.8 ms (0.865x) by the lane times of job 795844.
+1. Take warp lane M into the integration head as an option (exact; job 796113: with E4's flags `--warp-m --wsort
+   --wthreads 128` gives 3.64 vs 3.54 M distinct reads/s, M+B 0.962x). Lane B stays on `k_p3` with E4's single big batch;
+   the warp lane B (`--warp-b --wassign-b --wb-cfg 1`) only pays in small batches. Lane M's assignment + sort (16.8 ms of
+   its 134.3 ms phase 3) is the next cost to cut there (e.g. sort by E4's presort key instead of a separate `k_cost`).
 2. The lever is still the size of the per-window state (E2: 1 align and ~5 steps per window): every byte E5 removed paid
    twice in the warp kernel (124 -> 95 registers, 14 -> 8.5 KB lane contexts). Next: lane contexts small enough for shared
    memory in lane M, `__launch_bounds__` to trade registers for occupancy (31% theoretical vs the baseline's 37.5%), and a
