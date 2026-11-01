@@ -390,24 +390,48 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
         }
         lap("collapse");
 
+        // ---- the CBs with a count or a CellReads row, compacted (a CellReads row always has its cbMatch count; nUMI, nGene and
+        // nReadUnique > 0 imply cbReadCount > 0)
+        Buf<u32> pres; pres.alloc(dev, (u64)W + 1); pres.zero();
+        {
+            const u32* crc = cbRC.p; const u32* fr = flagRows.p; u32* pr = pres.p;
+            each(dev, W, [=] __host__ __device__(u64 w) { pr[w] = (crc[w] > 0 || fr[w * F_N + F_cbMatch] > 0) ? 1u : 0u; });
+        }
+        Buf<u32> pOff;
+        const u64 nP = exclusiveScan(dev, pres, W, pOff, tmp);
+        Buf<u32> pIdx, pVal; pIdx.alloc(dev, nP); pVal.alloc(dev, nP * CBV);
+        {
+            const u32* pr = pres.p; const u32* po = pOff.p; u32* pi = pIdx.p; u32* pv = pVal.p;
+            const u32* crc = cbRC.p; const u32* nu = nUMI.p; const u32* ng = nGene.p; const u32* nru = nRU.p; const u32* fr = flagRows.p;
+            each(dev, W, [=] __host__ __device__(u64 w) {
+                if (!pr[w]) return;
+                const u64 k = po[w];
+                pi[k] = (u32)w;
+                u32* v = pv + k * CBV;
+                v[CV_cbReadCount] = crc[w]; v[CV_nUMI] = nu[w]; v[CV_nGene] = ng[w]; v[CV_nReadUnique] = nru[w];
+                for (u32 b = 0; b < F_N; b++) v[CV_flags + b] = fr[w * F_N + b];
+            });
+        }
+        lap("compact");
+
         // ---- download
         bst.to(out.bstats, B_N); fst.to(out.fstats, S_N); noCB.to(out.noCB, F_N);
-        out.nUMI.resize(W); nUMI.to(out.nUMI.data(), W);
-        out.nGene.resize(W); nGene.to(out.nGene.data(), W);
-        out.cbReadCount.resize(W); cbRC.to(out.cbReadCount.data(), W);
-        out.nReadUnique.resize(W); nRU.to(out.nReadUnique.data(), W);
-        out.flagRows.resize((u64)W * F_N); flagRows.to(out.flagRows.data(), (u64)W * F_N);
-        out.rowCb.resize(N); rowCb.to(out.rowCb.data(), N);
+        out.cbIdx.resize(nP); pIdx.to(out.cbIdx.data(), nP);
+        out.cbVal.resize(nP * CBV); pVal.to(out.cbVal.data(), nP * CBV);
         std::vector<u64> sk(nSeg); segKey.to(sk.data(), nSeg);
         out.segCount.resize(nSeg); segCnt.to(out.segCount.data(), nSeg);
         out.segCb.resize(nSeg); out.segGene.resize(nSeg);
         for (u64 s = 0; s < nSeg; s++) { out.segCb[s] = (u32)(sk[s] >> GENE_BITS); out.segGene[s] = (u32)(sk[s] & ((1u << GENE_BITS) - 1)); }
         out.nRecOverflow = cnt.get(0);
         lap("download");
+        if (keep) { out.rowCb.resize(N); rowCb.to(out.rowCb.data(), N); }   // the driver's CellReads order replay (not a stage)
 
         // ---- Features.stats rows that collapseUMIall adds (SoloFeature_collapseUMIall.cpp:21-25)
         u64 yesUMIs = 0, yesCB = 0, yesWL = 0;
-        for (u32 w = 0; w < W; w++) { yesUMIs += out.nUMI[w]; yesCB += out.nGene[w] > 0; yesWL += out.nReadUnique[w]; }
+        for (u64 k = 0; k < nP; k++) {
+            const u32* v = &out.cbVal[k * CBV];
+            yesUMIs += v[CV_nUMI]; yesCB += v[CV_nGene] > 0; yesWL += v[CV_nReadUnique];
+        }
         out.fstats[S_yesUMIs] = yesUMIs; out.fstats[S_yesCellBarcodes] = yesCB;
         out.fstats[S_yesWLmatch] = yesWL; out.fstats[S_yessubWLmatch_UniqueFeature] = yesWL;
         char b[512];
@@ -432,12 +456,17 @@ bool writeFile(const std::string& p, const std::string& s, std::string& log) {
     if (!ok) log += "short write " + p + "\n";
     return ok;
 }
-void appendU(std::string& s, u64 v) { char b[24]; int n = snprintf(b, sizeof b, "%llu", (unsigned long long)v); s.append(b, n); }
+// decimal as ostream prints an unsigned integer
+inline void appendU(std::string& s, u64 v) {
+    char b[24]; int n = 0;
+    do { b[n++] = (char)('0' + v % 10); v /= 10; } while (v);
+    while (n) s += b[--n];
+}
 // SequenceFuns.cpp:280 convertNuclInt64toString
-std::string cbString(u64 v, u32 L) {
-    std::string s(L, 'N');
-    for (u32 ii = 1; ii <= L; ii++) { s[L - ii] = "ACGT"[v & 3]; v >>= 2; }
-    return s;
+inline void appendCB(std::string& s, u64 v, u32 L) {
+    char b[32];
+    for (u32 ii = 1; ii <= L; ii++) { b[L - ii] = "ACGT"[v & 3]; v >>= 2; }
+    s.append(b, L);
 }
 // SoloReadBarcode.cpp:44 / SoloReadFeature.cpp:56 statsOut: setw(50) name, setw(15) value
 std::string statsText(const char* const* names, const u64* v, u32 n) {
@@ -456,51 +485,59 @@ const char* const kFlagNames[F_N] = {"cbMatch", "cbPerfect", "cbMMunique", "cbMM
 bool soloWrite(const std::string& pre, const SoloParams& S, const SoloModel& M, const SoloResult& r, const SoloFilterParams& FP,
                const std::vector<u32>& order, SoloWriteInfo& info, std::string& log) {
     const u32 W = (u32)M.wl.size();
+    const u64 nP = r.cbIdx.size();
     const std::string g = pre + "Gene/";
     mkdir(pre.c_str(), 0755); mkdir(g.c_str(), 0755); mkdir((g + "raw").c_str(), 0755); mkdir((g + "filtered").c_str(), 0755);
     bool ok = true;
     // Barcodes.stats (Solo.cpp:62), Features.stats (SoloFeature_processRecords.cpp:67)
     ok &= writeFile(pre + "Barcodes.stats", statsText(kBarNames, r.bstats, B_N), log);
     ok &= writeFile(g + "Features.stats", statsText(kFeatNames, r.fstats, S_N), log);
-    // the detected CBs (SoloFeature_sumThreads.cpp:82-98): cbReadCount > 0, in whitelist order
-    std::vector<u32> indCB;
-    for (u32 w = 0; w < W; w++) if (r.cbReadCount[w] > 0) indCB.push_back(w);
+    // the detected CBs (SoloFeature_sumThreads.cpp:82-98): cbReadCount > 0, in whitelist order; per CB its segments (both in CB order)
+    std::vector<u32> indCB;   // index into cbIdx
+    for (u64 k = 0; k < nP; k++) if (r.cbVal[k * CBV + CV_cbReadCount] > 0) indCB.push_back((u32)k);
     const u32 nCB = (u32)indCB.size();
     info.nCB = nCB;
-    // segments per CB (the matrix rows are in (CB, gene) order)
-    std::vector<u64> segStart(W + 1, 0);
-    for (u64 s = 0; s < r.segCb.size(); s++) segStart[r.segCb[s] + 1]++;
-    for (u32 w = 0; w < W; w++) segStart[w + 1] += segStart[w];
-    std::vector<std::string> wlStr(W);
-    for (u32 w = 0; w < W; w++) wlStr[w] = cbString(M.wl[w], S.cbL);
-    // features.tsv (SoloFeature_outputResults.cpp:26-41)
+    std::vector<u64> segB(nCB + 1, 0);
+    {
+        u64 s = 0;
+        for (u32 icb = 0; icb < nCB; icb++) {
+            const u32 w = r.cbIdx[indCB[icb]];
+            while (s < r.segCb.size() && r.segCb[s] < w) s++;
+            segB[icb] = s;
+            while (s < r.segCb.size() && r.segCb[s] == w) s++;
+            if (icb + 1 == nCB) segB[nCB] = s;
+        }
+        if (s != r.segCb.size()) log += "soloWrite: matrix entries for a CB without reads\n";
+    }
+    auto segE = [&](u32 icb) { u64 s = segB[icb]; const u32 w = r.cbIdx[indCB[icb]]; while (s < r.segCb.size() && r.segCb[s] == w) s++; return s; };
+    // features.tsv (SoloFeature_outputResults.cpp:26-41; soloOutFormatFeaturesGeneField3 "Gene Expression")
     std::string feat;
     for (u32 i = 0; i < S.nGe; i++) { feat += M.geID[i]; feat += '\t'; feat += M.geName[i].empty() ? M.geID[i] : M.geName[i]; feat += "\tGene Expression\n"; }
     auto matrix = [&](bool filt, const std::vector<char>& keep, u64 nCols) {
         u64 nEnt = 0;
-        for (u32 icb = 0; icb < nCB; icb++) if (!filt || keep[icb]) nEnt += r.nGene[indCB[icb]];
+        for (u32 icb = 0; icb < nCB; icb++) if (!filt || keep[icb]) nEnt += r.cbVal[(u64)indCB[icb] * CBV + CV_nGene];
         std::string s = "%%MatrixMarket matrix coordinate integer general\n%\n";
         appendU(s, S.nGe); s += ' '; appendU(s, nCols); s += ' '; appendU(s, nEnt); s += '\n';
-        s.reserve(s.size() + nEnt * 16);
+        s.reserve(s.size() + nEnt * 20);
         u32 col = 0;
         for (u32 icb = 0; icb < nCB; icb++) {
-            const u32 w = indCB[icb];
-            if (filt) { if (!keep[icb]) continue; ++col; } else col = w + 1;
-            for (u64 k = segStart[w]; k < segStart[w + 1]; k++) { appendU(s, (u64)r.segGene[k] + 1); s += ' '; appendU(s, col); s += ' '; appendU(s, r.segCount[k]); s += '\n'; }
+            if (filt) { if (!keep[icb]) continue; ++col; } else col = r.cbIdx[indCB[icb]] + 1;
+            const u64 e = segE(icb);
+            for (u64 k = segB[icb]; k < e; k++) { appendU(s, (u64)r.segGene[k] + 1); s += ' '; appendU(s, col); s += ' '; appendU(s, r.segCount[k]); s += '\n'; }
         }
         return s;
     };
-    // raw (outputResults(false))
+    // raw (outputResults(false)): every whitelist barcode
     {
         std::string bc; bc.reserve((u64)W * (S.cbL + 1));
-        for (u32 w = 0; w < W; w++) { bc += wlStr[w]; bc += '\n'; }
+        for (u32 w = 0; w < W; w++) { appendCB(bc, M.wl[w], S.cbL); bc += '\n'; }
         ok &= writeFile(g + "raw/features.tsv", feat, log);
         ok &= writeFile(g + "raw/barcodes.tsv", bc, log);
         ok &= writeFile(g + "raw/matrix.mtx", matrix(false, {}, W), log);
     }
     // CellRanger2.2 (SoloFeature_cellFiltering.cpp:37-66)
     std::vector<u32> nUMIperCB(nCB);
-    for (u32 icb = 0; icb < nCB; icb++) nUMIperCB[icb] = r.nUMI[indCB[icb]];
+    for (u32 icb = 0; icb < nCB; icb++) nUMIperCB[icb] = r.cbVal[(u64)indCB[icb] * CBV + CV_nUMI];
     std::vector<u32> sorted = nUMIperCB;
     std::sort(sorted.begin(), sorted.end(), [](const u32& a, const u32& b) { return a > b; });
     std::vector<char> keep(nCB, 0);
@@ -516,7 +553,7 @@ bool soloWrite(const std::string& pre, const SoloParams& S, const SoloModel& M, 
     info.nCells = nCells;
     if (nCells > 0) {   // cellFiltering returns before outputResults(true) when no cell passes
         std::string bc;
-        for (u32 icb = 0; icb < nCB; icb++) if (keep[icb]) { bc += wlStr[indCB[icb]]; bc += '\n'; }
+        for (u32 icb = 0; icb < nCB; icb++) if (keep[icb]) { appendCB(bc, M.wl[r.cbIdx[indCB[icb]]], S.cbL); bc += '\n'; }
         ok &= writeFile(g + "filtered/features.tsv", feat, log);
         ok &= writeFile(g + "filtered/barcodes.tsv", bc, log);
         ok &= writeFile(g + "filtered/matrix.mtx", matrix(true, keep, nCells), log);
@@ -535,24 +572,29 @@ bool soloWrite(const std::string& pre, const SoloParams& S, const SoloModel& M, 
         s += "CBnotInPasslist";
         for (u32 b = 0; b < F_N; b++) { s += '\t'; appendU(s, r.noCB[b]); }
         s += "\t0\t0\t0\t0\n";
-        std::vector<u32> present;
-        for (u32 w = 0; w < W; w++) if (r.flagRows[(u64)w * F_N + F_cbMatch] > 0) present.push_back(w);
-        std::vector<u32> rows;
-        if (order.empty()) {
-            rows = present;
-        } else {
+        std::vector<u32> rows;   // indices into cbIdx
+        for (u64 k = 0; k < nP; k++) if (r.cbVal[k * CBV + CV_flags + F_cbMatch] > 0) rows.push_back((u32)k);
+        if (!order.empty()) {
+            const u64 nRows = rows.size();
             std::unordered_map<u64, u32> m;
-            m.reserve(nCB * 3 / 2);   // SoloFeature_countCBgeneUMI.cpp:52 (uint32 arithmetic)
+            m.reserve(nCB * 3 / 2);   // SoloFeature_countCBgeneUMI.cpp:43 (uint32 arithmetic)
             for (u32 k : order) m.insert({(u64)k, 0u});
-            for (auto& kv : m) rows.push_back((u32)kv.first);
-            if (rows.size() != present.size()) {
-                char b[160]; snprintf(b, sizeof b, "CellReads.stats: %zu keys in the insertion order, %zu CBs with rows\n", rows.size(), present.size()); log += b;
+            rows.clear();
+            for (auto& kv : m) {
+                const auto it = std::lower_bound(r.cbIdx.begin(), r.cbIdx.end(), (u32)kv.first);
+                if (it == r.cbIdx.end() || *it != (u32)kv.first) { log += "CellReads.stats: a key without a row\n"; continue; }
+                rows.push_back((u32)(it - r.cbIdx.begin()));
+            }
+            if (rows.size() != nRows) {
+                char b[160]; snprintf(b, sizeof b, "CellReads.stats: %zu keys in the insertion order, %llu CBs with rows\n", rows.size(), (unsigned long long)nRows); log += b;
             }
         }
-        for (u32 w : rows) {
-            s += wlStr[w];
-            for (u32 b = 0; b < F_N; b++) { s += '\t'; appendU(s, r.flagRows[(u64)w * F_N + b]); }
-            s += '\t'; appendU(s, r.nUMI[w]); s += '\t'; appendU(s, r.nGene[w]); s += "\t0\t0\n";
+        s.reserve(s.size() + rows.size() * 80);
+        for (u32 k : rows) {
+            const u32* v = &r.cbVal[(u64)k * CBV];
+            appendCB(s, M.wl[r.cbIdx[k]], S.cbL);
+            for (u32 b = 0; b < F_N; b++) { s += '\t'; appendU(s, v[CV_flags + b]); }
+            s += '\t'; appendU(s, v[CV_nUMI]); s += '\t'; appendU(s, v[CV_nGene]); s += "\t0\t0\n";
         }
         ok &= writeFile(g + "CellReads.stats", s, log);
     }

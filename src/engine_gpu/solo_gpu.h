@@ -38,16 +38,19 @@ struct SoloReads {                       // per read, in read order
 };
 struct SoloResult {
     u64 bstats[B_N] = {}, fstats[S_N] = {}, noCB[F_N] = {};
-    std::vector<u32> nUMI, nGene, cbReadCount, nReadUnique;   // per whitelist index
-    std::vector<u32> flagRows;                                 // [wlN][F_N]: CellReads.stats rows (counted per final CB)
+    // per CB that has a count or a CellReads row (compacted on the device), ascending whitelist index: cbIdx[k], and at cbVal[k * CBV + .]
+    // cbReadCount, nUMI, nGene, nReadUnique, then the F_N CellReads.stats counts of the CB's row
+    std::vector<u32> cbIdx, cbVal;
     std::vector<u32> segCb, segGene, segCount;                 // the raw matrix, in (CB, gene) order
-    std::vector<i32> rowCb;                                    // per read: the CB whose CellReads row counts it, -1 (CBnotInPasslist / no row)
+    std::vector<i32> rowCb;                                    // per read (keepPerRead): the CB whose CellReads row counts it, -1 none
     std::vector<RecAnn> readAnn;                               // per read (keepPerRead)
     std::vector<int8_t> readCbm;                               // per read cbMatch after the UMI check (keepPerRead)
     std::vector<i32> readCb0;                                  // per read first whitelist match (-1 none) (keepPerRead)
     u64 nDistinctCR = 0, nCand = 0, nKeys = 0, nTuples = 0, nSeg = 0, nRecOverflow = 0;
     std::vector<std::pair<std::string, double>> ms;            // stage timings (ms)
 };
+constexpr u32 CBV = 4 + F_N;
+enum : u32 { CV_cbReadCount, CV_nUMI, CV_nGene, CV_nReadUnique, CV_flags };
 bool soloRun(bool device, const SoloParams& S, const SoloModel& M, const SoloRecs& R, const SoloReads& Rd, SoloResult& out, bool keepPerRead,
              std::string& log);
 
