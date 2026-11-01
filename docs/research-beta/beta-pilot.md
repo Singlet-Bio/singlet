@@ -149,3 +149,10 @@ STARsolo is rerun with a sorted BAM (`starsolo_bam`, GeneFull) and its own filte
 | GSM7064234 | 1198 | 100 | s1cap_r |
 | GSM7884577 | 1404 | 100 | s1cap_r |
 | GSM8085472 | 1416 | 100 | s1cap_r |
+
+### Rerun incident log (2026-11-01)
+
+- Slurm runs the copy of a job script made at submit time, so the first rerun jobs still passed `--tagged-bam` after the script on disk was fixed. All 13 CPU reruns (4 had finished: pileup_threads 16, `pileup_path_reason` "--tagged-bam rewrites the sorted BAM", INVALID) and the first GPU lane head were cancelled and resubmitted (rcpu 797255-797267). Jobs submitted later by a running lane pick up the current script.
+- GPU OOM on one H100 at 370 G, sorted path (tagged-BAM sort, STAR killed by signal 9, peak RSS 384 GB): GSM7064234 (1.20 G pairs) and GSM7884577 (1.40 G pairs). Requeued on the stream path; if they run out again the CPU `--memory-tier` run is the sample's Singlet result.
+- Species detection returned `unknown` on every rerun that reached it for GSM8164511, GSM8183378, GSM5130155, GSM5171610, GSM7064234, GSM7884577; it called GSM4987144 `Mus musculus` (a mouse line is in the mix) and GSM5130163 `Homo sapiens`.
+- GSM4987144: the engine named 3 of 4 runs as differing in protocol, so the rerun used 1 run (SRR13296299).
