@@ -4007,6 +4007,13 @@ int main(int argc, char* argv[]) {
     // order-free-rules R11: STAR's CB_UMI_Simple whitelist correction for the stream, its exact histogram from pass 1
     singlet::CbCorrector cb_corrector;
     bool cb_hist_ready = false;
+    // Reads whose CR is not an exact whitelist barcode (1MM / N), by packed 3-bit barcode, weighted by duplicates: the pass-1 input of the corrected barcode universe
+    std::unordered_map<uint64_t, uint64_t> cbx_nonexact;
+    auto cbx_pack = [](const uint8_t* codes, int n) {
+        uint64_t k = 0;
+        for (int j = 0; j < n; ++j) k = (k << 3) | std::min<uint8_t>(codes[j], 4);
+        return k;
+    };
     std::vector<uint8_t> onefq_bc_dict_flat;
     uint16_t onefq_bc_length = 0;
     std::unordered_map<uint64_t, uint64_t> onefq_bc_counts;  // non-dict path (packed keys)
@@ -4596,6 +4603,7 @@ int main(int argc, char* argv[]) {
                 // R11: STAR's exact CB histogram of this block, by BC dictionary slot and (barcodes outside the dictionary) by whitelist index
                 std::unordered_map<uint32_t, uint64_t> cbx_dict;
                 std::unordered_map<int64_t, uint64_t> cbx_raw;
+                std::unordered_map<uint64_t, uint64_t> cbx_nonex;   // CR not an exact whitelist barcode
             };
 
             // R11: STAR's exact histogram (cbReadCountExact) for the stream's CB correction, as pass 1 of the FIFO path counts it: reads whose
@@ -4670,6 +4678,7 @@ int main(int argc, char* argv[]) {
                                 for (int j = 0; j < cbx_cbl; ++j) bcs[j] = kNt[std::min<uint8_t>(r1s_x[cbx_cb0 + j], 4)];
                                 const int64_t w = cb_corrector.find(bcs);
                                 if (w >= 0) fb.cbx_raw[w] += repeat;
+                                else if (cbx_cbl <= 21) fb.cbx_nonex[cbx_pack(r1s_x + cbx_cb0, cbx_cbl)] += repeat;
                             }
                         }
                     }
@@ -4750,6 +4759,7 @@ int main(int argc, char* argv[]) {
                     reads_written += fb.n_reads;
                     for (const auto& [k, n] : fb.cbx_dict) if (k < cbx_dict_sum.size()) cbx_dict_sum[k] += n;
                     for (const auto& [w, n] : fb.cbx_raw) cbx_raw_sum[w] += n;
+                    for (const auto& [k, n] : fb.cbx_nonex) cbx_nonexact[k] += n;
                     // Accumulate BC index counts (sequential — no contention)
                     if (!bc_freq.empty()) {
                         for (uint32_t idx : fb.bc_indices) {
@@ -4793,6 +4803,7 @@ int main(int argc, char* argv[]) {
                             bcs[j] = NUM_TO_ASCII[std::min<uint8_t>(dflat[static_cast<size_t>(k) * dlen + j], 4)];
                         const int64_t w = cb_corrector.find(bcs);
                         if (w >= 0) { cb_corrector.add_exact(w, cbx_dict_sum[k]); n_exact += cbx_dict_sum[k]; }
+                        else if (cbx_cbl <= 21) cbx_nonexact[cbx_pack(dflat.data() + static_cast<size_t>(k) * dlen, cbx_cbl)] += cbx_dict_sum[k];
                     }
                 }
                 for (const auto& [w, n] : cbx_raw_sum) { cb_corrector.add_exact(w, n); n_exact += n; }
@@ -4882,12 +4893,14 @@ int main(int argc, char* argv[]) {
                 && cb_corrector.load_whitelist(whitelist_file) && cb_corrector.length() == cbx_cbl;
             std::vector<std::vector<uint64_t>> cbx_dict_t(p1_threads);
             std::vector<std::unordered_map<int64_t, uint64_t>> cbx_raw_t(p1_threads);
+            std::vector<std::unordered_map<uint64_t, uint64_t>> cbx_nonex_t(p1_threads);   // CR not an exact whitelist barcode
             std::atomic<uint32_t> p1_next{0};
             auto pass1_worker = [&](int tid) {
                 std::vector<uint64_t>& freq = bc_freq_t[tid];
                 if (!bc_freq_p1.empty()) freq.assign(bc_freq_p1.size(), 0);
                 std::vector<uint64_t>& cbx_dict = cbx_dict_t[tid];
                 auto& cbx_raw = cbx_raw_t[tid];
+                auto& cbx_nonex = cbx_nonex_t[tid];
                 if (cbx_on && has_bc_dict_p1) cbx_dict.assign(bc_dict_n_p1, 0);
                 std::unordered_map<uint64_t, size_t> key_pos;
                 std::vector<std::unordered_map<uint64_t, size_t>> seg_pos(complex_extra_segs.size());
@@ -4966,6 +4979,7 @@ int main(int argc, char* argv[]) {
                                     for (int j = 0; j < cbx_cbl; ++j) bcs[j] = kNt5[std::min<uint8_t>(r1p1[cbx_cb0 + j], 4)];
                                     const int64_t w = cb_corrector.find(bcs);
                                     if (w >= 0) cbx_raw[w] += repeat_p1;
+                                    else if (cbx_cbl <= 21) cbx_nonex[cbx_pack(r1p1 + cbx_cb0, cbx_cbl)] += repeat_p1;
                                 }
                             }
                         }
@@ -4996,10 +5010,13 @@ int main(int argc, char* argv[]) {
                             bcs[j] = kNt5[std::min<uint8_t>(dflat[static_cast<size_t>(k) * dlen + j], 4)];
                         const int64_t w = cb_corrector.find(bcs);
                         if (w >= 0) { cb_corrector.add_exact(w, dsum[k]); n_exact += dsum[k]; }
+                        else if (cbx_cbl <= 21) cbx_nonexact[cbx_pack(dflat.data() + static_cast<size_t>(k) * dlen, cbx_cbl)] += dsum[k];
                     }
                 }
                 for (const auto& m : cbx_raw_t)
                     for (const auto& [w, n] : m) { cb_corrector.add_exact(w, n); n_exact += n; }
+                for (const auto& m : cbx_nonex_t)
+                    for (const auto& [k, n] : m) cbx_nonexact[k] += n;
                 cb_hist_ready = true;
                 std::cerr << "[1fq-pass1] R11 exact CB histogram: " << n_exact << " reads over a "
                           << cb_corrector.size() << "-barcode whitelist\n";
@@ -5376,7 +5393,38 @@ int main(int argc, char* argv[]) {
     // restarts on the sorted path; not with the GPU hand-off (the end-of-pass check below still applies) or a forced --stream-unsorted
     config.strand_early_abort = (stream_unsorted == 1) && stream_auto && bam_file.empty() && !getenv("SINGLET_GPU_PILEUP");
     // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
-    const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
+    // The pileup's barcode universe, one rule for the stream and the sorted path: the whitelist barcodes with >= 5 reads AFTER R11 correction
+    // (STAR's rule applied to every read of pass 1: exact reads plus the reads corrected onto the barcode), so that barcodes that only reach 5 reads once
+    // corrected reads are added are not lost, and the sorted path needs no CB-tag refresh after alignment. Without the pass-1 histogram: the old rules.
+    const bool cb_universe = cb_hist_ready && cb_corrector.loaded() && cb_corrector.length() <= 21;
+    const uint64_t bc_min_reads = (stream_unsorted == 1 || cb_universe) ? 5 : 100;
+    auto corrected_universe = [&](std::vector<std::pair<uint64_t, std::string>>& out) {
+        out.clear();
+        std::vector<uint64_t> cnt(cb_corrector.size());
+        for (size_t w = 0; w < cnt.size(); ++w) cnt[w] = cb_corrector.exact_count(static_cast<int64_t>(w));
+        static constexpr char kNtU[5] = {'A', 'C', 'G', 'T', 'N'};
+        const int L = cb_corrector.length();
+        uint64_t n_corrected = 0, n_lost = 0;
+        for (const auto& [key, n] : cbx_nonexact) {
+            char raw[32], fixed_bc[40];
+            uint64_t k = key;
+            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
+            raw[L] = '\0';
+            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
+            if (st < 0) { n_lost += n; continue; }
+            const int64_t w = cb_corrector.find(std::string(fixed_bc, L).c_str());
+            if (w >= 0) { cnt[w] += n; n_corrected += n; }
+        }
+        std::vector<char> bc(L + 1);
+        for (size_t w = 0; w < cnt.size(); ++w) {
+            if (cnt[w] < bc_min_reads) continue;
+            cb_corrector.barcode(static_cast<int64_t>(w), bc.data());
+            out.emplace_back(cnt[w], std::string(bc.data(), L));
+        }
+        std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+        std::cerr << "[singlet] barcode universe: " << out.size() << " whitelist barcodes with >= " << bc_min_reads << " reads after R11 correction ("
+                  << n_corrected << " reads corrected onto a barcode, " << n_lost << " uncorrectable)" << std::endl;
+    };
     if (engine_ptr && config.cb_from_cr) {
         std::cerr << "ERROR: pileup engine was built before the BAM source mode was decided" << std::endl;
         return 1;
@@ -5490,6 +5538,7 @@ int main(int argc, char* argv[]) {
             else
                 std::sort(sorted_bcs.begin(), sorted_bcs.end(),
                           [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (cb_universe) corrected_universe(sorted_bcs);
 
             // Write barcode file
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
@@ -5550,6 +5599,7 @@ int main(int argc, char* argv[]) {
             else
                 std::sort(sorted_bcs.begin(), sorted_bcs.end(),
                           [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (cb_universe) corrected_universe(sorted_bcs);
 
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
             std::ofstream bc_out(auto_barcode_file);
@@ -8151,7 +8201,7 @@ int main(int argc, char* argv[]) {
         // raw barcode — the barcode hash-map lookup in the pileup engine then misses,
         // yielding dramatically under-counted barcoded reads.
         if (needs_barcode_discovery && !auto_barcode_file.empty() && whitelist_auto_resolved
-            && engine_ptr) {
+            && engine_ptr && !cb_universe) {   // with the corrected universe (pass-1 R11 counts) the list is the stream's: no refresh
             StopWatch cb_scan_sw;
             std::unordered_map<std::string, uint32_t> cb_freq;
             cb_freq.reserve(50000);

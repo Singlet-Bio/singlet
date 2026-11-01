@@ -69,6 +69,8 @@ public:
         if (wl_index >= 0 && static_cast<size_t>(wl_index) < exact_.size()) exact_[wl_index] += n;
     }
     uint64_t exact_count(int64_t wl_index) const { return exact_[wl_index]; }
+    /// The whitelist barcode at `wl_index` (len() chars, no terminator).
+    void barcode(int64_t wl_index, char* out) const { unpack(wl_[wl_index], out); }
 
     /// Corrects `cb` (len() bases). On status >= 0 writes the whitelist barcode (len() chars, no terminator) to `out`.
     /// `qual` may be null: every base then counts as singlet's 'F'.
