@@ -18,7 +18,7 @@ run() {   # label, fq, genome (GRCh38-2024-A|GRCm39-2024-A|none), filters (1|0)
   [ "$g" != none ] && gd=(--genome-dir $REF/$g/star_2.7.11b --exons $REF/$g/genes/genes.gtf)
   echo "== $lab"
   ( [ "$f" = 1 ] && export SINGLET_SPECIES_FILTERS=$FILTERS; unset SINGLET_REF_BASE
-    timeout 90 $BIN $fq "${gd[@]}" --whitelist-dir $PB/whitelists --out-prefix $T/o_$lab/ --threads 4 --pipeline --engine cpu 2>&1 | grep -a "species-check\|ERROR\|missing\|requires" | cut -c1-300 | head -6 )
+    timeout 90 $BIN $fq "${gd[@]}" --out-prefix $T/o_$lab/ --threads 4 --pipeline --output-format 1pz --engine cpu 2>&1 | grep -a "species-check\|ERROR\|missing\|requires" | cut -c1-300 | head -6 )
 }
 H=$PB/data/pbmc1k_v3/pbmc1k_v3.1fq; M=$PB/data/neuron1k_v3/neuron1k_v3.1fq
 run human_on_human $H GRCh38-2024-A 1
