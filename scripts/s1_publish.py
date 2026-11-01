@@ -95,7 +95,7 @@ def run_args(a: argparse.Namespace, gse: str, scratch: Path) -> List[str]:
             "--scratch", str(scratch), "--rows-dir", str(a.rows_dir), "--ledger-dir", str(a.ledger_dir),
             "--readback", a.readback, "--public", a.public, "--commit", a.commit or os.environ.get("COMMIT", ""),
             "--members", "full"]
-    for opt, val in (("--migrate-cmd", a.migrate_cmd), ("--verify-cmd", a.verify_cmd), ("--pythonpath", a.pythonpath),
+    for opt, val in (("--alpha-policy", a.policy), ("--study-log-dir", a.study_log_dir), ("--migrate-cmd", a.migrate_cmd), ("--verify-cmd", a.verify_cmd), ("--pythonpath", a.pythonpath),
                      ("--local-root", a.local_root), ("--part-size-mib", a.part_size_mib), ("--retry-sleep", a.retry_sleep)):
         if val is not None:
             args += [opt, str(val)]
@@ -114,6 +114,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--packer-path", help="directory to put on sys.path for the packer module")
     ap.add_argument("--public", default=os.environ.get("R2_BUCKET", vc.PUBLIC_BUCKET))
     ap.add_argument("--private", help="private bucket for the restricted sidecar (restricted/<GSE>/<GSE>.restricted.singlet)")
+    ap.add_argument("--policy", help="release policy JSON (version, withheld_studies, excluded_samples; scripts/s1_campaign.py "
+                    "--alpha-policy): genotype, mtDNA allele, ancestry-call, ambient, doublet and legacy layers never reach an object")
+    ap.add_argument("--study-log-dir", help="migrate/verify output per study (kept)")
     ap.add_argument("--local-root", help="directories under this root instead of R2 (tests)")
     ap.add_argument("--scratch", default=None)
     ap.add_argument("--keep-scratch", action="store_true")

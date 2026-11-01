@@ -22,7 +22,7 @@ import sys
 import tempfile
 import time
 
-from common import emit, now, sha256_file
+from common import emit, job_slots, node_mem_gb, now, resolve_reference, sha256_file, staged_reads
 
 HEAD_READS = 1000000
 HEAD_TIMEOUT_S = 900
@@ -59,6 +59,9 @@ class Ctx:
         p = cfg.get("pipeline", {})
         self.nonhost = bool(ccfg.get("nonhost", p.get("nonhost", True)))
         self.extra = list(p.get("extra_args", []))
+        # Legacy path, kept for one release: pool a multi-run sample into one sample.1fq (`singlet encode`) instead of
+        # handing the engine the per-run .1fq files (PR #82's --runs-dir).
+        self.pooled_input = bool(p.get("pooled_input", False))
         self.env = dict(os.environ)
         if ccfg.get("sra_tools"):
             self.env["PATH"] = ccfg["sra_tools"] + ":" + self.env.get("PATH", "")
@@ -67,15 +70,16 @@ class Ctx:
         if ccfg.get("whitelist_dir"):
             self.env["SINGLET_WHITELIST_DIR"] = ccfg["whitelist_dir"]
         self.env["SINGLET_STALL_TIMEOUT"] = str(p.get("stall_timeout_s", 10800))
+        if ccfg.get("species_filters"):
+            self.env["SINGLET_SPECIES_FILTERS"] = ccfg["species_filters"]
         if self.nonhost:
             self.env["SINGLET_REF_BASE"] = self.ref_base
         else:
             self.env.pop("SINGLET_REF_BASE", None)
 
     def reference(self, organism):
-        refs = self.cfg.get("references", {})
-        name = refs.get(organism or "", refs.get("*", "auto"))
-        if name == "auto":
+        name = resolve_reference(organism, self.cfg.get("references", {}))
+        if name is None:
             return None
         d = os.path.join(self.ref_base, name)
         return {"name": name, "genome_dir": os.path.join(d, "star_2.7.11b"), "exons": os.path.join(d, "genes", "genes.gtf")}
@@ -250,16 +254,20 @@ def io_stage(ctx, row, attempt):
         for r in kept:
             if r not in final:
                 os.remove(os.path.join(sdir, r + ".1fq"))
-        # 4. pool the kept runs into one .1fq (the engine processes one input)
+        # 4. one run: it is the sample's input. Several runs: the engine reads the per-run .1fq files as one stream
+        #    (--runs-dir + screen.json, PR #82); `pipeline.pooled_input` keeps the old re-encoded pool.
         sample = os.path.join(sdir, "sample.1fq")
         pool_s = 0.0
         if len(final) == 1:
             os.replace(os.path.join(sdir, final[0] + ".1fq"), sample)
-        else:
+            reads_used, _ = read_header_reads(ctx, sample, log)
+        elif ctx.pooled_input:
             pool_s = pool_runs(ctx, [os.path.join(sdir, r + ".1fq") for r in final], sample, scr, log)
             for r in final:
                 os.remove(os.path.join(sdir, r + ".1fq"))
-        reads_used, _ = read_header_reads(ctx, sample, log)
+            reads_used, _ = read_header_reads(ctx, sample, log)
+        else:
+            reads_used = sum(read_header_reads(ctx, os.path.join(sdir, r + ".1fq"), log)[0] or 0 for r in final)
         emit(root, "downloaded", gsm, attempt=attempt, stage="io", runs_kept=final, sra_bytes=sra_total,
              staged_bytes=dir_bytes(sdir), prefetch_s=round(prefetch_s, 1), decode_s=round(decode_s, 1),
              screen_s=round(screen_s, 1), pool_s=round(pool_s, 1), io_s=round(time.time() - t_start, 1),
@@ -360,8 +368,19 @@ EXCLUDE_OUT = re.compile(r"(\.bam$|\.bai$|\.csi$|_STARtmp|\.1fq$|^Aligned|\.sam$
                          r"\.f(ast)?q(\.gz)?$)")
 
 
+# Engine exit 8: the unsorted stream's strand check failed (the reads contradict the protocol orientation).
+STRAND_CONTRADICTION = 8
+
+
+def strand_retry_cmd(cmd):
+    """The compute command for the strand retry: the same run on the sorted-BAM path (idempotent)."""
+    return cmd if "--sorted-bam" in cmd else list(cmd) + ["--sorted-bam"]
+
+
 def classify_failure(rc, text, maxrss_gb=None):
     t = text.lower()
+    if rc == STRAND_CONTRADICTION:   # still contradicting after the sorted-path retry: needs a look, not a retry
+        return "strand_contradiction"
     if rc in (137, -9) or "out of memory" in t or "oom" in t or "std::bad_alloc" in t:
         return "oom"
     if rc == 124 or "stall" in t:
@@ -383,11 +402,16 @@ def compute_stage(ctx, row, attempt, threads, shared_genome=False):
     try:
         verify_binary(ctx)
         onefq, screen = os.path.join(sdir, "sample.1fq"), os.path.join(sdir, "screen.json")
-        if not os.path.exists(onefq):
-            raise StageError("staged_reads_missing", onefq)
+        if not staged_reads(sdir):
+            raise StageError("staged_reads_missing", sdir)
         out_tmp = os.path.join(scr, "out")
         os.makedirs(out_tmp)
-        cmd = ["/usr/bin/time", "-v", "-o", os.path.join(scr, "time.txt"), ctx.bin, onefq, "--ref-base", ctx.ref_base]
+        # one single/pooled file, or the per-run files of a multi-run sample (the runs are named by screen.json)
+        reads_args = [onefq] if os.path.exists(onefq) else ["--runs-dir", sdir]
+        if reads_args[0] == "--runs-dir" and not os.path.exists(screen):
+            raise StageError("staged_reads_missing", "per-run reads without %s" % screen)
+        cmd = ["/usr/bin/time", "-v", "-o", os.path.join(scr, "time.txt"), ctx.bin] + reads_args + [
+            "--ref-base", ctx.ref_base]
         ref = ctx.reference(row.get("organism"))
         if ref:
             cmd += ["--genome-dir", ref["genome_dir"], "--exons", ref["exons"]]
@@ -397,6 +421,15 @@ def compute_stage(ctx, row, attempt, threads, shared_genome=False):
             cmd += ["--run-screen", screen]
         cmd += ctx.extra
         rc, secs, txt = run(cmd, log, env=ctx.env, cwd=scr)
+        if rc == STRAND_CONTRADICTION:
+            # The unsorted stream counted in the protocol orientation, and the reads contradict it. A pipe cannot be
+            # re-read, so rerun once on the sorted-BAM path, whose strand safety net re-reads the BAM and recounts with
+            # the opposite orientation (one orientation per library, so no mixed-strand mode).
+            emit(root, "strand_retry", gsm, attempt=attempt, stage="compute", first_s=round(secs, 1))
+            shutil.rmtree(out_tmp, ignore_errors=True)
+            os.makedirs(out_tmp)
+            rc2, secs2, txt = run(strand_retry_cmd(cmd), log, env=ctx.env, cwd=scr)
+            rc, secs = rc2, secs + secs2
         maxrss = parse_time_v(os.path.join(scr, "time.txt"))
         if rc != 0:
             raise StageError(classify_failure(rc, txt), txt)
@@ -446,16 +479,29 @@ def collect_outputs(ctx, gse, gsm, out_tmp, sdir, log):
     os.makedirs(tmp)
     priv_src = os.path.join(out_tmp, "private")
     priv_dir = None
-    if os.path.isdir(priv_src):
+    # a withheld file (singlet._restricted.is_restricted_member: donor/, mt/ except mt_summary.tsv, ase_counts, snp_*, VCFs) outside private/
+    # is private too: pack_gse filtering it from the public bundle is then a second safeguard, not the only one
+    import private_sidecar as PS
+    stray = sorted(os.path.relpath(os.path.join(dp, f), out_tmp).replace(os.sep, "/") for dp, _d, fn in os.walk(out_tmp) for f in fn
+                   if not os.path.relpath(os.path.join(dp, f), out_tmp).replace(os.sep, "/").startswith("private/")
+                   and PS.is_withheld(os.path.relpath(os.path.join(dp, f), out_tmp)))
+    if os.path.isdir(priv_src) or stray:
         priv_dir = os.path.join(ctx.private_root, gse, gsm)
         for d in (ctx.private_root, os.path.join(ctx.private_root, gse)):
             os.makedirs(d, exist_ok=True)
             os.chmod(d, 0o700)
         shutil.rmtree(priv_dir, ignore_errors=True)
-        shutil.copytree(priv_src, priv_dir)
+        if os.path.isdir(priv_src):
+            shutil.copytree(priv_src, priv_dir)
+            shutil.rmtree(priv_src)
+        else:
+            os.makedirs(priv_dir)
+        for rel in stray:
+            dst = os.path.join(priv_dir, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.move(os.path.join(out_tmp, rel), dst)
         os.chmod(priv_dir, 0o700)
         write_manifest(priv_dir, "PRIVATE.sha256")
-        shutil.rmtree(priv_src)
     for dp, dn, fn in os.walk(out_tmp):
         dn[:] = [d for d in dn if not EXCLUDE_OUT.search(d)]
         rel = os.path.relpath(dp, out_tmp)
@@ -523,6 +569,13 @@ def node_stage(ctx, batch_rows, batch_path, slots_cores, deadline, orchestrator,
             loaded.append(g)
         queue = sorted(range(len(batch_rows)), key=lambda i: -float(batch_rows[i].get("est_wall_s") or 0))
         running, free = {}, slots_cores
+        # memory packing: the resident index plus every job's private peak must fit the node (config clusters.<c>.node)
+        nc = ctx.c.get("node", {})
+        node_gb = node_mem_gb()
+        max_jobs = job_slots(node_gb, slots_cores, int(batch_rows[0].get("threads") or 4) if batch_rows else 4,
+                             float(nc.get("job_peak_gb", 33.4)), float(nc.get("shared_index_gb", 17.8)),
+                             float(nc.get("mem_fill", 0.9)))
+        print("[node] %.0f GB, %d cores -> at most %d concurrent jobs" % (node_gb, slots_cores, max_jobs), flush=True)
         while queue or running:
             started = True
             while started and queue:
@@ -530,7 +583,7 @@ def node_stage(ctx, batch_rows, batch_path, slots_cores, deadline, orchestrator,
                 for qi, i in enumerate(queue):
                     r = batch_rows[i]
                     t = int(r.get("threads") or 4)
-                    if t > free:
+                    if t > free or len(running) >= max_jobs:
                         continue
                     if now() + 1.3 * float(r.get("est_wall_s") or 3600) > deadline:
                         continue

@@ -146,6 +146,7 @@ inline std::vector<std::string> build_donor_consensus(
         if (cell >= assignments.size()) continue;
         const int d = assignments[cell].donor_id;
         if (d < 0 || d >= n_donors) continue;  // unassigned / doublet
+        if (assignments[cell].cell_status != "cell") continue;  // ambient droplets back-assigned to a donor
 
         for (int32_t k = indptr[cell]; k < indptr[cell + 1]; ++k) {
             uint32_t feat = static_cast<uint32_t>(indices[k]);
@@ -249,6 +250,124 @@ inline void write_donor_variants_vcf(
     }
     std::cerr << "[mt_event_caller] Wrote " << path
               << " (" << n_variants << " variants)\n";
+}
+
+// ============================================================================
+// Reference-based donor consensus.  Majority-of-reads consensus (above) is noisy at low depth and silently turns
+// every pool-majority difference into a "variant"; this one is the chrM reference everywhere the donor has coverage
+// (>= kMinCoveragePerLocus reads), the donor's homoplasmic alt where a haplotype call exists, 'N' elsewhere.
+// ============================================================================
+inline std::vector<std::string> build_donor_consensus_ref(
+    const std::vector<std::string>& majority_consensus,
+    const std::string& ref_sequence,
+    const std::vector<std::vector<MtHapCall>>& haplotypes)
+{
+    std::vector<std::string> cons = majority_consensus;
+    const std::string ref = normalize_mt_reference(ref_sequence);
+    if (ref.empty()) return cons;
+    for (size_t d = 0; d < cons.size(); ++d) {
+        for (uint32_t pos = 0; pos < MT_LEN && pos < cons[d].size(); ++pos) {
+            if (cons[d][pos] == 'N') continue;         // no coverage in this donor
+            if (ref[pos] != 'N') cons[d][pos] = ref[pos];
+        }
+        if (d < haplotypes.size())
+            for (const auto& h : haplotypes[d])
+                if (h.pos < cons[d].size()) cons[d][h.pos] = h.alt;
+    }
+    return cons;
+}
+
+// ============================================================================
+// Write donor{N}_mt_variants.vcf from homoplasmic haplotype calls (AF >= hom_af in the donor pseudobulk).
+// PRIVATE output (genotype-like): callers must write it under <out>/private/.
+// INFO: DP total depth, AD ref,alt, AF alt fraction, SB alt fwd,alt rev strand reads, NC cells with alt reads.
+// ============================================================================
+inline void write_donor_haplotype_vcf(
+    const std::string& dir,
+    int donor_idx,
+    const std::vector<MtHapCall>& calls,
+    const std::string& ref_build,
+    const std::string& singlet_version)
+{
+    const std::string path = dir + "/donor" + std::to_string(donor_idx) + "_mt_variants.vcf";
+    std::ofstream f(path);
+    if (!f.is_open()) {
+        std::cerr << "[mt_event_caller] WARN: cannot write " << path << "\n";
+        return;
+    }
+    f << "##fileformat=VCFv4.2\n"
+      << "##source=singlet-mt-haplotype\n"
+      << "##singlet_version=" << singlet_version << "\n"
+      << "##donor=donor" << donor_idx << "\n"
+      << "##ref_build=" << ref_build << "\n"
+      << "##contig=<ID=chrM,length=" << MT_LEN << ">\n"
+      << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Donor pseudobulk depth (MAPQ and base-quality filtered reads)\">\n"
+      << "##INFO=<ID=AD,Number=R,Type=Integer,Description=\"Reads supporting ref,alt\">\n"
+      << "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Alt allele fraction in the donor pseudobulk\">\n"
+      << "##INFO=<ID=SB,Number=2,Type=Integer,Description=\"Alt reads on forward,reverse strand\">\n"
+      << "##INFO=<ID=NC,Number=1,Type=Integer,Description=\"Donor cells with at least one alt read\">\n"
+      << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n";
+    for (const auto& h : calls) {
+        f << "chrM\t" << (h.pos + 1) << "\t.\t" << h.ref << "\t" << h.alt << "\t.\tPASS\t"
+          << "DP=" << h.dp << ";AD=" << h.ad_ref << "," << h.ad_alt << ";AF=" << h.af
+          << ";SB=" << h.alt_f << "," << h.alt_r << ";NC=" << h.n_cells_alt << "\n";
+    }
+    std::cerr << "[mt_event_caller] Wrote " << path << " (" << calls.size() << " variants)\n";
+}
+
+// ============================================================================
+// Per-donor allele fraction at the public heteroplasmic sites (PRIVATE: private/mt/het_site_donor_af.tsv).
+// The pooled caller runs before demux and cannot tell a donor's heteroplasmy from a recurrent error floor shared by
+// every donor; this table makes the distinction explicit (a real heteroplasmy is a property of one donor).
+// Columns: pos ref alt pool_af top_donor top_af second_af donor_specific then "dp:alt" per donor.
+// donor_specific = top_af >= 0.02 and top_af >= 3 * second_af.
+// ============================================================================
+inline void write_het_site_donor_af(
+    const std::string& path,
+    const MtCounts& tot,
+    const std::vector<int>& cell_group,
+    int n_groups,
+    const MtHetResult& het)
+{
+    std::ofstream f(path);
+    if (!f.is_open()) { std::cerr << "[mt_event_caller] WARN: cannot write " << path << "\n"; return; }
+    f << "pos\tref\talt\tpool_af\ttop_donor\ttop_af\tsecond_af\tdonor_specific";
+    for (int d = 0; d < n_groups; ++d) f << "\tdonor" << d;
+    f << "\n";
+    if (het.variants.empty() || n_groups <= 0 || !tot.valid()) return;
+    std::vector<int32_t> pos_row(MT_LEN, -1);
+    for (size_t v = 0; v < het.variants.size(); ++v) pos_row[het.variants[v].pos] = static_cast<int32_t>(v);
+    // per variant, per group: total depth at the position and alt count
+    std::vector<std::vector<std::array<uint64_t, 2>>> acc(het.variants.size(),
+        std::vector<std::array<uint64_t, 2>>(static_cast<size_t>(n_groups), std::array<uint64_t, 2>{0, 0}));
+    std::vector<int> alt_idx(het.variants.size());
+    for (size_t v = 0; v < het.variants.size(); ++v) alt_idx[v] = mt_base_index(het.variants[v].alt_allele);
+    for (uint32_t c = 0; c < tot.n_cells && c < cell_group.size(); ++c) {
+        const int d = cell_group[c];
+        if (d < 0 || d >= n_groups) continue;
+        for (int32_t k = tot.indptr[c]; k < tot.indptr[c + 1]; ++k) {
+            const uint32_t feat = static_cast<uint32_t>(tot.indices[k]);
+            if (feat >= MT_N_FEATURES) continue;
+            const int32_t v = pos_row[feat / 4];
+            if (v < 0) continue;
+            acc[v][d][0] += tot.data[k];
+            if (static_cast<int>(feat % 4) == alt_idx[v]) acc[v][d][1] += tot.data[k];
+        }
+    }
+    for (size_t v = 0; v < het.variants.size(); ++v) {
+        const auto& hv = het.variants[v];
+        double top = -1, second = -1; int top_d = -1;
+        for (int d = 0; d < n_groups; ++d) {
+            const double af = acc[v][d][0] >= 50 ? static_cast<double>(acc[v][d][1]) / acc[v][d][0] : -1.0;
+            if (af > top) { second = top; top = af; top_d = d; }
+            else if (af > second) second = af;
+        }
+        const bool specific = top >= 0.02 && top >= 3.0 * std::max(second, 0.0);
+        f << (hv.pos + 1) << "\t" << hv.ref_allele << "\t" << hv.alt_allele << "\t" << hv.pool_af << "\t"
+          << top_d << "\t" << top << "\t" << second << "\t" << (specific ? 1 : 0);
+        for (int d = 0; d < n_groups; ++d) f << "\t" << acc[v][d][0] << ":" << acc[v][d][1];
+        f << "\n";
+    }
 }
 
 // ============================================================================
@@ -657,7 +776,14 @@ struct MtDonorOutputStats {
 // ============================================================================
 // Top-level G6 orchestrator.
 // Call from export.h after demux_thread.join().
-// Creates mt/ subdirectory and writes all four G6 artifact families.
+// Writes (donor = demux donor, called cells only):
+//   PUBLIC  <out>/mt/mt_events.1pz, mt_summary.tsv      per-cell events relative to the donor consensus
+//   PRIVATE <out>/private/mt/donorN_mt_variants.vcf     homoplasmic haplotype calls vs the chrM reference (DP/AD/AF/SB/NC)
+//           <out>/private/mt/donorN_mt_consensus.fa     reference where covered, donor alt at haplotype sites
+//           <out>/private/mt/het_site_donor_af.tsv      per-donor AF at the public heteroplasmic sites (when `het` given)
+// Genotype-like data (haplotypes, consensus) never goes to the public directory.
+// ref_sequence: chrM reference (extract_mt_reference); without it the legacy pool-majority REF is used (warns).
+// mt_rev_csc: reverse-strand subset of mt_csc (enables the strand-concordance test of donor calls).
 // Returns basic stats for embedding in summary.json.
 // ============================================================================
 inline MtDonorOutputStats write_mt_donor_outputs(
@@ -667,7 +793,11 @@ inline MtDonorOutputStats write_mt_donor_outputs(
     const std::vector<std::string>& barcodes,
     const std::map<std::string, std::string>& user_meta,
     const std::vector<MtIndelEvent>& mt_indels = {},
-    const std::string& gtf_path = "")
+    const std::string& gtf_path = "",
+    const std::string& ref_sequence = "",
+    const SparseAccumulator<uint16_t>::CSCMatrix* mt_rev_csc = nullptr,
+    const MtCallerConfig* caller_cfg = nullptr,
+    const MtHetResult* het = nullptr)   // pooled heteroplasmic sites: adds private/mt/het_site_donor_af.tsv
 {
     MtDonorOutputStats stats;
     if (mt_csc.data.empty() || mt_csc.ncols == 0) {
@@ -691,26 +821,60 @@ inline MtDonorOutputStats write_mt_donor_outputs(
     const int n_donors = demux_result.n_donors_k;
     const auto& assignments = demux_result.assignments;
 
-    // 1. Build per-donor consensus sequences
+    // Genotype-like outputs (per-donor consensus + haplotype VCFs) are PRIVATE: <out>/private/mt/.
+    const std::string priv_dir = out_prefix + "/private/mt";
+    std::filesystem::create_directories(priv_dir);
+
+    // 1. Per-donor homoplasmic haplotype calls against the chrM reference (donor pseudobulks of called cells only)
+    const MtCallerConfig cfg = caller_cfg ? *caller_cfg : MtCallerConfig();
+    const std::string ref_norm = normalize_mt_reference(ref_sequence);
+    MtCounts tot;
+    tot.indptr = mt_csc.indptr.data(); tot.indices = mt_csc.indices.data(); tot.data = mt_csc.data.data();
+    tot.n_cells = mt_csc.ncols;
+    MtCounts rev;
+    const bool have_rev = mt_rev_csc && !mt_rev_csc->data.empty() && mt_rev_csc->ncols == mt_csc.ncols;
+    if (have_rev) {
+        rev.indptr = mt_rev_csc->indptr.data(); rev.indices = mt_rev_csc->indices.data();
+        rev.data = mt_rev_csc->data.data(); rev.n_cells = mt_rev_csc->ncols;
+    }
+    std::vector<int> cell_group(mt_csc.ncols, -1);
+    for (uint32_t c = 0; c < mt_csc.ncols && c < assignments.size(); ++c) {
+        const int d = assignments[c].donor_id;
+        if (d >= 0 && d < n_donors && assignments[c].cell_status == "cell") cell_group[c] = d;
+    }
+    std::vector<std::vector<MtHapCall>> haplotypes;
+    if (!ref_norm.empty())
+        haplotypes = call_group_haplotypes(tot, have_rev ? &rev : nullptr, cell_group, n_donors, ref_norm, cfg);
+
+    // 2. Per-donor consensus: reference where covered, donor homoplasmic alt at haplotype sites
     auto donor_cons = build_donor_consensus(
         mt_csc.indptr.data(), mt_csc.indices.data(), mt_csc.data.data(),
         mt_csc.ncols, assignments, n_donors);
+    if (!ref_norm.empty()) donor_cons = build_donor_consensus_ref(donor_cons, ref_norm, haplotypes);
 
-    // 2. Infer species reference from all cells (approximates rCRS)
-    std::string species_ref = infer_ref_from_data(
-        mt_csc.indptr.data(), mt_csc.indices.data(), mt_csc.data.data(),
-        mt_csc.ncols);
+    // Legacy fallback when no reference is available: pool majority (approximates rCRS, hides pool-vs-rCRS differences)
+    std::string species_ref;
+    if (ref_norm.empty()) {
+        std::cerr << "[mt_event_caller] WARNING: no chrM reference - per-donor VCFs fall back to pool-majority REF\n";
+        species_ref = infer_ref_from_data(
+            mt_csc.indptr.data(), mt_csc.indices.data(), mt_csc.data.data(), mt_csc.ncols);
+    }
 
-    // 3. Write per-donor FASTA + VCF
+    // 3. Write per-donor FASTA + VCF (private)
     for (int d = 0; d < n_donors; ++d) {
-        write_donor_consensus_fa(mt_dir, d, donor_cons[d], ref_build);
-        write_donor_variants_vcf(mt_dir, d, donor_cons[d], species_ref,
-                                 ref_build, singlet_version);
+        write_donor_consensus_fa(priv_dir, d, donor_cons[d], ref_build);
+        if (!ref_norm.empty())
+            write_donor_haplotype_vcf(priv_dir, d, haplotypes[d], ref_build, singlet_version);
+        else
+            write_donor_variants_vcf(priv_dir, d, donor_cons[d], species_ref, ref_build, singlet_version);
         // Count donors that have at least some consensus (not all-N)
         bool has_seq = false;
         for (char c : donor_cons[d]) { if (c != 'N') { has_seq = true; break; } }
         if (has_seq) ++stats.n_donors_with_consensus;
     }
+
+    if (het && !het->variants.empty())
+        write_het_site_donor_af(priv_dir + "/het_site_donor_af.tsv", tot, cell_group, n_donors, *het);
 
     // 4. Load mt CDS regions for codes 7/8
     auto cds_regions = load_mt_cds_regions(gtf_path);

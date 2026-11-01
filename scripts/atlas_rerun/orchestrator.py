@@ -29,6 +29,7 @@ Subcommands
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -122,13 +123,13 @@ def cmd_plan(a):
         bases = int(r.bases) if r.bases == r.bases and r.bases > 0 else None
         rows.append({
             "gsm": r.gsm_id, "gse": r.gse_id, "wave": r.wave, "study_wave": r.study_wave, "organism": r.organism or "",
-            "reference": refs.get(r.organism or "", refs.get("*", "auto")), "reads_available": reads,
+            "reference": C.resolve_reference(r.organism, refs) or "auto", "reads_available": reads,
             "depth_unknown": int(r.depth_unknown), "bases": bases, "n_runs": int(r.n_runs), "runs": r.runs,
             "run_reads": r.run_reads, "study_cells": float(r.study_cells or 0),
             "est_wall_s": round(C.compute_wall_s(reads, nonhost), 1),
             "est_core_h": round(C.compute_core_h(reads, nonhost), 4),
             "est_su": round(C.anvil_su(reads, nonhost), 4), "est_sra_bytes": int(C.sra_bytes(reads, bases)),
-            "size_class": size_class(reads, cfg),
+            "size_class": size_class(reads, cfg), "protocol_inferred": getattr(r, "protocol_inferred", None) or "",
         })
     # order: waves a -> d; studies within a wave by the wave's rule; samples by accession
     order = pol.get("order_within", {})
@@ -249,6 +250,7 @@ class Controller:
         dst = os.path.join(self.root, "bin", "singlet-" + b["sha256"][:12])
         if not os.path.exists(dst) and not self.slurm.dry:
             src = self.c.get("binary_source") or b["path"]
+            C.require_pinned_binary(src, next((w for w in (b.get("commit") or "").split() if re.fullmatch(r"[0-9a-f]{7,40}", w)), None))
             got = C.sha256_file(src)
             if got != b["sha256"]:
                 raise SystemExit("binary %s has sha256 %s, config pins %s" % (src, got, b["sha256"]))
@@ -276,6 +278,7 @@ class Controller:
             else:
                 self.submit_per_sample()
         self.handoffs()
+        self.beta_pass()
         status = self.status()
         status["tick_s"] = round(time.time() - t0, 1)
         self.L.save()
@@ -348,8 +351,7 @@ class Controller:
             self.slurm.cancel(stale)
             reason = s.get("last_reason", "")
             escalate = "timeout" if "timeout" in reason else ("oom" if "oom" in reason else None)
-            staged = os.path.exists(os.path.join(self.c.get("stage_root") or os.path.join(self.root, "stage"), g,
-                                                 "sample.1fq"))
+            staged = C.staged_reads(os.path.join(self.c.get("stage_root") or os.path.join(self.root, "stage"), g))
             from_stage = "compute" if reason.startswith("compute") and staged else "io"
             self.event("requeued", g, attempt=int(s.get("attempt", 0)) + 1, escalate=escalate, from_stage=from_stage)
 
@@ -631,6 +633,23 @@ class Controller:
             path = write_handoff(self, gse, ss)
             self.event("study_handoff", gse=gse, path=path, n_done=sum(s["state"] == "done" for s in ss),
                        n_parked=sum(s["state"] == "parked" for s in ss))
+
+    def beta_pass(self):
+        """Publish handed-off studies to Beta (config `beta.enabled`): one study per tick, a failed one again until
+        `beta.max_attempts`. `no_producer` and `refused` are not retried (the configuration has to change first)."""
+        b = self.cfg.get("beta", {})
+        if not b.get("enabled") or self.slurm.dry or self.flag("PAUSE") or self.flag("STOP"):
+            return
+        import beta
+        for gse, st in sorted(self.L.studies.items()):
+            prev = st.get("beta") or {}
+            if not st.get("handoff") or prev.get("status") in ("published", "no_producer", "refused") or                     int(prev.get("tries", 0)) >= int(b.get("max_attempts", 5)):
+                continue
+            res = beta.publish_study(self.cfg, self.c, gse, log=self.log)
+            self.event("beta_publish", gse=gse, status=res["status"], detail=res.get("detail"),
+                       samples=res.get("samples"), bytes_sent=res.get("bytes_sent"), rows=res.get("d1_rows_written"))
+            self.stats["beta_" + res["status"]] += 1
+            break
 
     def status(self):
         st = summarize(list(self.L.samples.values()), self.cluster)
@@ -966,6 +985,18 @@ def cmd_compute_stage(a):
                          shared_genome=a.shared_genome)
 
 
+def cmd_beta_publish(a):
+    import beta
+
+    cfg = C.load_config(a.config)
+    res = beta.publish_study(cfg, C.cluster_cfg(cfg, a.cluster), a.gse, dry_run=a.dry_run)
+    print(json.dumps(res))
+    if not a.dry_run:
+        C.emit(C.cluster_cfg(cfg, a.cluster)["root"], "beta_publish", None, gse=a.gse, status=res["status"],
+               detail=res.get("detail"), by="operator")
+    return 0 if res["status"] in ("published", "dry_run_ok") else 1
+
+
 def cmd_node_stage(a):
     from stages import Ctx, node_stage
 
@@ -1015,7 +1046,7 @@ def cmd_unpark(a):
         if s["state"] == "parked" and (want is None and a.reason and a.reason in (s.get("last_reason") or "") or
                                        want and g in want):
             stage_root = cfg["clusters"][a.cluster].get("stage_root") or os.path.join(root, "stage")
-            staged = os.path.exists(os.path.join(stage_root, g, "sample.1fq"))
+            staged = C.staged_reads(os.path.join(stage_root, g))
             C.emit(root, "unpark", g, by="operator", note=a.note, from_stage="compute" if staged else None)
             n += 1
     print("unparked %d samples (applied at the next tick)" % n)
@@ -1117,6 +1148,12 @@ def main(argv=None):
     q.add_argument("--cluster", required=True)
     q.add_argument("--plan")
 
+    q = sp.add_parser("beta-publish")
+    q.add_argument("--config", default=default_cfg)
+    q.add_argument("--cluster", required=True)
+    q.add_argument("--gse", required=True)
+    q.add_argument("--dry-run", action="store_true")
+
     for name in ("io-stage", "compute-stage", "node-stage"):
         q = sp.add_parser(name)
         q.add_argument("--config", default=default_cfg)
@@ -1135,7 +1172,7 @@ def main(argv=None):
     fn = {"plan": cmd_plan, "dryrun": cmd_dryrun, "tick": cmd_tick, "controller": cmd_controller,
           "status": cmd_status, "pull": cmd_pull, "reassign": cmd_reassign, "unpark": cmd_unpark,
           "rebuild": cmd_rebuild, "io-stage": cmd_io_stage, "compute-stage": cmd_compute_stage,
-          "node-stage": cmd_node_stage}.get(a.cmd)
+          "node-stage": cmd_node_stage, "beta-publish": cmd_beta_publish}.get(a.cmd)
     if fn is None:
         p.print_help()
         return 1

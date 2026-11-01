@@ -1,12 +1,6 @@
 #ifndef H_ReadAlign
 #define H_ReadAlign
 
-// R2 sequence deduplication via consecutive-read comparison.
-// 14-mer prefix sort groups identical R2 sequences together.
-// Consecutive reads with identical numeric sequence skip alignment.
-// ~15-17% per-chunk hit rate, ~384KB/thread cache footprint.
-#define OPT_DEDUP_R2
-
 #include "IncludeDefine.h"
 #include "Parameters.h"
 #include "Transcript.h"
@@ -27,23 +21,37 @@
 
 class ReadAlign {
     public:
+#ifdef STAR_PROFILE
+        unsigned long long profCyc[3] = {0,0,0}; //this read: seed, windows, stitch cycles
+        unsigned long long profCnt[3] = {0,0,0}; //this read: MMP queries, SA binary searches, SAi-only/unique shortcuts
+        unsigned long long profWin[5] = {0,0,0,0,0}; //this read: window create, flank, assign cycles; SA entries scanned in create, assign
+#endif
         ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk);//allocate arrays
         int oneRead();
 
-        ///// R2 sequence dedup via consecutive comparison (OPT_DEDUP_R2) /////
-        // 14-mer sort groups identical R2 sequences; memcmp catches adjacent dupes.
-        #ifdef OPT_DEDUP_R2
-        static const uint DEDUP_MAX_MULTI = 256;
-        bool dedupCacheValid;
-        uint64 dedupCachedNTr;
-        uint dedupCachedNW;
-        bool dedupCachedChimRecord;
-        Transcript dedupCachedTr[DEDUP_MAX_MULTI];
-        char *dedupPrevSeq;      // previous R2 numeric sequence
-        uint dedupPrevSeqLen;
-        uint64 dedupReadsSkipped;
-        void dedupResetCache();
-        #endif
+        //sequence cache (SeqCache.h): encode/restore the mapping result of a read
+        std::vector<uint8> seqCacheBlob, seqCacheEncoded;
+        bool seqCacheable();
+        bool seqCacheEncode(std::vector<uint8> &blob);
+        void seqCacheRestore(const std::vector<uint8> &blob);
+        void seqCacheRestore(const uint8 *blob);
+        //singlet --engine gpu: the BAM core fields STAR writes for a read with sequence seqNum (numeric, no clipping), from its cached
+        //result, appended to out (ReadAlign_seqCache.cpp); one call per distinct sequence instead of one per read
+        void seqCacheAlignRecords(const char *seqNum, uint L, const std::vector<uint8> &blob, std::vector<uint8> &out);
+        //the same, from a pointer to the blob (the prefill's threads no longer copy each blob first)
+        void seqCacheAlignRecords(const char *seqNum, uint L, const uint8 *blob, std::vector<uint8> &out);
+        //the BAM core fields alignBAM would write for a single-end alignment, without building the record (ReadAlign_seqCache.cpp)
+        bool seqCacheLeanAln(Transcript const &trOut, uint nTrOut, uint trChrStart, int32 &refID, int32 &pos, uint16 &flag, uint8 &mapq, uint32 &nCig, uint32 *cig);
+        //singlet GPU pileup "on": what STAR's per-read output (mapping stats, SJ.out.tab, Solo Gene) takes from the alignments of a
+        //mapped sequence, appended to out after seqCacheAlignRecords (nothing for an unmapped one). A hand-off read whose sequence has
+        //one is not restored from the cache: outputHandoffSummary replays it (seqCacheHandoffConfig: only where these are the sole
+        //consumers of the alignments)
+        void seqCacheHandoffSummary(std::vector<uint8> &out);
+        static bool seqCacheHandoffConfig(const Parameters &P);
+        const uint8 *handoffSum = nullptr;
+        Transcript handoffTr[2]; //stand-ins carrying only Chr for SoloReadFeature::record (0: a mito contig, 1: another)
+        void outputHandoffSummary();
+        void handoffReadEntry(); //the pileup's per-read entry (g_handoffReads) of a hand-off read, after getCBandUMI
 
         Genome &mapGen, &genOut; //mapped-to-genome structure
 

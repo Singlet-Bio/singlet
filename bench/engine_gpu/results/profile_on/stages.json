@@ -1,0 +1,49 @@
+{
+ "gpu": [
+  {
+   "stage": "start (arguments, probe)",
+   "wall_s": 1.2,
+   "core_s": 2.6
+  },
+  {
+   "stage": "decode reads (.1fq to FASTQ)",
+   "wall_s": 23.4,
+   "core_s": 82.9
+  },
+  {
+   "stage": "references and barcodes",
+   "wall_s": 272.8,
+   "core_s": 892.6
+  },
+  {
+   "stage": "after pileup (callers, QC)",
+   "wall_s": 0.0,
+   "core_s": 0.0
+  },
+  {
+   "stage": "BAM index",
+   "wall_s": 2.5,
+   "core_s": 2.6
+  },
+  {
+   "stage": "non-host: index load",
+   "wall_s": 0.8,
+   "core_s": 1.1
+  },
+  {
+   "stage": "non-host: classify",
+   "wall_s": 10.8,
+   "core_s": 27.2
+  },
+  {
+   "stage": "non-host: EM, writers",
+   "wall_s": 3.2,
+   "core_s": 3.4
+  },
+  {
+   "stage": "export",
+   "wall_s": 81.4,
+   "core_s": 92.5
+  }
+ ]
+}

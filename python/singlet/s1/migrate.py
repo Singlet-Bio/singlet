@@ -352,7 +352,14 @@ def migrate_sample(
         base = cells_mod.base_table(basis_barcodes, ex_c, it_c, called, wl)
         base.meta = {"called_source": called_src, "whitelist": wl_id}
         if called is not None:
-            _add_called_ed(base, basis_barcodes, ex_c, it_c, protocol, opts, gsm)
+            # called_v2 format: is_cell is the call itself and the knee set it starts from is `called_knee`; older
+            # files list the knee set as is_cell and the call is derived from it.
+            knee_list = cells_mod.parse_cell_calls_column(ccb, "called_knee")
+            knee = called
+            if knee_list is not None:
+                ks = set(knee_list)
+                knee = np.fromiter((b in ks for b in basis_barcodes), dtype=bool, count=len(basis_barcodes))
+            _add_called_ed(base, basis_barcodes, ex_c, it_c, protocol, opts, gsm, knee)
     labels = None
     if opts.labels is not None and base is not None:
         labels = _label_cells(
@@ -662,7 +669,7 @@ def _label_cells(
     return res
 
 
-def _add_called_ed(base, barcodes, exon, intron, protocol, opts: Options, gsm: str) -> None:
+def _add_called_ed(base, barcodes, exon, intron, protocol, opts: Options, gsm: str, knee=None) -> None:
     """Optional cells columns ``called_ed`` (bool) and ``called_ed_fdr`` (f32, NaN = not tested) plus the call's parameters in
     ``base.meta["called_ed"]`` (docs/called-ed.md)."""
     if opts.cell_call_ed is False:
@@ -673,7 +680,7 @@ def _add_called_ed(base, barcodes, exon, intron, protocol, opts: Options, gsm: s
     t0 = time.time()
     X = cellcall.gene_counts(exon, intron, barcodes)
     cv2, fdr, params = cellcall.call(
-        X, base.called, protocol
+        X, base.called if knee is None else knee, protocol
     )  # params go into the object: nothing run-dependent
     base.add("called_ed", cells_mod.DT_BOOL, cv2)
     base.add("called_ed_fdr", cells_mod.DT_F32, fdr)

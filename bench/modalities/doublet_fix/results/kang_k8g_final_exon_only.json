@@ -1,0 +1,36 @@
+{
+ "cells_with_truth_label": 13737,
+ "truth_doublets": 1598,
+ "truth_doublet_rate": 0.11632816481036616,
+ "new": {
+  "auroc": 0.9180667076946933,
+  "auprc": 0.6266654310105724,
+  "recall_at_truth_rate": 0.6739674593241552,
+  "native_calls": 1478,
+  "native_rate": 0.10759263303486934,
+  "native_recall": 0.6307884856070087,
+  "native_precision": 0.6820027063599459,
+  "native_f1": 0.6553966189856957
+ },
+ "scrublet": {
+  "auroc": 0.8810710645082034,
+  "auprc": 0.5875735049267682,
+  "recall_at_truth_rate": 0.6176470588235294,
+  "native_calls": 1296,
+  "native_rate": 0.0943437431753658,
+  "native_recall": 0.548811013767209,
+  "native_precision": 0.6766975308641975,
+  "native_f1": 0.6060815480304077
+ },
+ "singlet_old": {
+  "auroc": 0.829095981559452,
+  "auprc": 0.518827134060294,
+  "recall_at_truth_rate": 0.55819774718398,
+  "native_calls": 2748,
+  "native_rate": 0.20004367765887748,
+  "native_recall": 0.7058823529411765,
+  "native_precision": 0.4104803493449782,
+  "native_f1": 0.519098021168891
+ },
+ "tied_zero_fraction_new": 0.0
+}

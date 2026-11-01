@@ -92,6 +92,13 @@ PART_BYTES = 16 << 20  # a single range larger than 2 parts is split and fetched
 PREFIX_HINT = 512 << 10  # first read of a member in the two-phase plan
 PARTIAL_GAP = 256 << 10  # in the two-phase plan, ranges closer than this share a request
 SJ, MT, VDJ = "sj_counts.1pz", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"
+ATAC, GENE_ACT = "atac_peak_counts.1pz", "atac_gene_activity.1pz"
+SPATIAL_POS, SPATIAL_SUM = "spatial_positions.tsv", "spatial_summary.json"
+ADT, HTO, CRISPR = "adt_counts.1pz", "hto_counts.1pz", "crispr_counts.1pz"
+STORED_MEMBERS = (
+    SPATIAL_POS,
+    SPATIAL_SUM,
+)  # stored blobs (kind 3 zstd / kind 5 raw), not pz2 matrices
 
 
 # ================================================================================================================= modalities
@@ -103,6 +110,9 @@ class ModalitySpec:
     members: Tuple[str, ...]
     slot: str  # "X", "layers" or "obsm"
     description: str
+    optional: Tuple[
+        str, ...
+    ] = ()  # fetched with the modality when the sample has them; never required
 
 
 MODALITIES: Dict[str, ModalitySpec] = {
@@ -121,6 +131,20 @@ MODALITIES: Dict[str, ModalitySpec] = {
         ),
         ModalitySpec("mt", (MT,), "obsm", 'obsm["mt"]: chrM heteroplasmy per variant site'),
         ModalitySpec("vdj", (VDJ,), "obsm", 'obsm["vdj"]: V(D)J segment usage counts'),
+        ModalitySpec("adt", (ADT,), "obsm", 'obsm["adt"]: antibody-derived tag UMI counts per tag'),
+        ModalitySpec("hto", (HTO,), "obsm", 'obsm["hto"]: hashtag-oligo UMI counts per hashtag'),
+        ModalitySpec("crispr", (CRISPR,), "obsm", 'obsm["crispr"]: CRISPR guide UMI counts per guide'),
+        ModalitySpec("atac", (ATAC,), "obsm", 'obsm["atac"]: ATAC cut sites per peak'),
+        ModalitySpec(
+            "gene_activity", (GENE_ACT,), "obsm", 'obsm["gene_activity"]: ATAC fragments per gene'
+        ),
+        ModalitySpec(
+            "spatial",
+            (SPATIAL_POS,),
+            "obsm",
+            'obsm["spatial"] = (array_col, array_row), obs in_tissue / array_row / array_col, uns["spatial"][gsm] = summary',
+            optional=(SPATIAL_SUM,),
+        ),
     )
 }
 DEFAULT_MODALITIES = ("counts", "spliced", "unspliced")
@@ -133,6 +157,12 @@ _MODALITY_ALIASES = {
     "splice_psi": "psi",
     "mt_heteroplasmy": "mt",
     "vdj_gene_usage": "vdj",
+    "peaks": "atac",
+    "chromatin": "atac",
+    "protein": "adt",
+    "cite": "adt",
+    "hashtag": "hto",
+    "guides": "crispr",
 }
 GENE_MEMBERS = (EXON, INTRON)
 
@@ -183,6 +213,8 @@ def normalize_modalities(
 def _member_has_data(sm: "SampleRef", name: str) -> bool:
     """A readable pz2 member with at least one row and column (stubs and empty legacy members are absent)."""
     m = sm.members.get(name)
+    if name in STORED_MEMBERS:
+        return m is not None and m.kind in (3, 5) and m.len > 0
     if m is None or m.kind != 1 or m.len == 0:
         return False
     return m.meta.get("m", 1) != 0 and m.meta.get("n", 1) != 0
@@ -212,7 +244,9 @@ def _check_modalities(study: "Study", gsms: Sequence[str], mods: Sequence[str]) 
 
 
 def _members_for(mods: Sequence[str]) -> Tuple[str, ...]:
-    return tuple(dict.fromkeys(n for k in mods for n in MODALITIES[k].members))
+    return tuple(
+        dict.fromkeys(n for k in mods for n in MODALITIES[k].members + MODALITIES[k].optional)
+    )
 
 
 # ================================================================================================================= configuration
@@ -945,10 +979,17 @@ class _SampleData:
     features: Dict[str, Tuple[_Part, List[str]]] = field(
         default_factory=dict
     )  # feature-level member -> (cells x stored rows, row names)
+    spatial: Optional[Dict[str, np.ndarray]] = None  # positions columns restricted to sel
+    spatial_summary: Optional[dict] = None
 
     @property
     def empty(self) -> bool:
-        return self.spliced is None and self.unspliced is None and not self.features
+        return (
+            self.spliced is None
+            and self.unspliced is None
+            and not self.features
+            and self.spatial is None
+        )
 
 
 def _runs(
@@ -1096,7 +1137,9 @@ def _read_sample(
     src = src or study.source_for(sm)
     if members is None:
         members = ([EXON] if want_exon else []) + ([INTRON] if want_intron else [])
-    wanted = list(dict.fromkeys(members))
+    wanted_all = list(dict.fromkeys(members))
+    wanted = [n for n in wanted_all if n not in STORED_MEMBERS]
+    stored_wanted = [n for n in wanted_all if n in STORED_MEMBERS and _member_has_data(sm, n)]
     try:
         cm = sm.member(CELLS)
         if cm is None:
@@ -1110,9 +1153,11 @@ def _read_sample(
         if EXON in wanted and (em is None or em.len == 0):
             return skip(f"{EXON} is missing")
         present = [n for n in wanted if n == EXON or _member_has_data(sm, n)]
-        if not present:
+        if not present and SPATIAL_POS not in stored_wanted:
             return skip(
-                f"{wanted[0]} is missing" if len(wanted) == 1 else f"none of {wanted} is present"
+                f"{wanted_all[0]} is missing"
+                if len(wanted_all) == 1
+                else f"none of {wanted_all} is present"
             )
         refs = {n: sm.members[n] for n in present}
         total = cm.len + sum(r.len for r in refs.values())
@@ -1154,6 +1199,7 @@ def _read_sample(
             sel[0] < 0 or sel[-1] >= n_rows or (len(sel) > 1 and not (np.diff(sel) > 0).all())
         ):
             raise S1Error(f"{sm.gsm}: column selection must be ascending and inside the matrix")
+        all_barcodes = cols.get("barcode")
         cols = {
             k: (v[sel] if isinstance(v, np.ndarray) else np.asarray(v, dtype=object)[sel])
             for k, v in cols.items()
@@ -1161,6 +1207,13 @@ def _read_sample(
 
         parts: Dict[str, Optional[_Part]] = {EXON: None, INTRON: None}
         features: Dict[str, Tuple[_Part, List[str]]] = {}
+        spatial, spatial_summary = None, None
+        if stored_wanted:
+            blobs = {n: _stored_bytes(src, sm.members[n]) for n in stored_wanted}
+            if SPATIAL_POS in blobs:
+                spatial = _parse_positions(sm.gsm, blobs[SPATIAL_POS], all_barcodes, n_rows, sel)
+            if SPATIAL_SUM in blobs:
+                spatial_summary = json.loads(blobs[SPATIAL_SUM].decode("utf-8"))
         opened = []
         for name, mref in refs.items():
             if mref.len == 0:
@@ -1242,10 +1295,66 @@ def _read_sample(
             if verify:
                 _verify_matrix(study, sm, name, mref, mem, hdr)
             del mem, dec
-        return _SampleData(sm.gsm, sel, cols, parts[EXON], parts[INTRON], n_rows, features=features)
+        return _SampleData(
+            sm.gsm,
+            sel,
+            cols,
+            parts[EXON],
+            parts[INTRON],
+            n_rows,
+            features=features,
+            spatial=spatial,
+            spatial_summary=spatial_summary,
+        )
     finally:
         if own_src:
             src.close()
+
+
+def _stored_bytes(src: _Source, mref: MemberRef) -> bytes:
+    """The legacy bytes of a stored member: kind 3 is zstd, kind 5 is as written."""
+    buf = bytes(src.read(mref.off, mref.len))
+    if mref.kind == 3:
+        from .util import zstd_decompress
+
+        buf = zstd_decompress(buf)
+    return buf
+
+
+def _parse_positions(
+    gsm: str, blob: bytes, barcodes, n_rows: int, sel: np.ndarray
+) -> Dict[str, np.ndarray]:
+    """``spatial_positions.tsv`` -> columns restricted to ``sel``: ``array_row``, ``array_col`` (float, NaN where missing),
+    ``in_tissue`` (bool). The file has one row per cells-table column in column order; that is checked against the barcodes."""
+    lines = blob.decode("utf-8").rstrip("\n").split("\n")
+    head = lines[0].rstrip("\r").split("\t")
+    rows = [ln.rstrip("\r").split("\t") for ln in lines[1:]]
+    if len(rows) != n_rows:
+        raise S1Error(f"{gsm}: {SPATIAL_POS} has {len(rows)} rows, the cells table has {n_rows}")
+    for need in ("array_row", "array_col", "in_tissue"):
+        if need not in head:
+            raise S1Error(f"{gsm}: {SPATIAL_POS} has no {need!r} column (has {head})")
+    if barcodes is not None and "barcode" in head:
+        bi = head.index("barcode")
+        got = [r[bi] for r in rows]
+        want = [str(b) for b in barcodes]
+        if got != want:
+            raise S1Error(f"{gsm}: {SPATIAL_POS} rows are not in the cells-table column order")
+
+    def col(name: str) -> List[str]:
+        j = head.index(name)
+        return [r[j] if j < len(r) else "NA" for r in rows]
+
+    def num(name: str) -> np.ndarray:
+        return np.array(
+            [float(v) if v not in ("", "NA", "nan", "NaN") else np.nan for v in col(name)],
+            dtype=np.float64,
+        )[sel]
+
+    tissue = np.array(
+        [v.strip().lower() in ("1", "true", "t", "yes") for v in col("in_tissue")], dtype=bool
+    )[sel]
+    return {"array_row": num("array_row"), "array_col": num("array_col"), "in_tissue": tissue}
 
 
 def _member_gene_map(
@@ -1578,9 +1687,11 @@ def _build_anndata(
         elif verbose:
             print(f"  [singlet.s1] {lname} layer unavailable for some samples; skipped")
     names_out: Dict[str, np.ndarray] = {}
+    if "spatial" in mods:
+        _attach_spatial(adata, ok, perms, explicit)
     for k in mods:
         spec = MODALITIES[k]
-        if spec.slot != "obsm":
+        if spec.slot != "obsm" or k == "spatial":
             continue
         mat, names, missing = _feature_matrix(
             ok, perms, spec.members[0], _psi_part if k == "psi" else None
@@ -1596,6 +1707,36 @@ def _build_anndata(
     if names_out:
         adata.uns["obsm_features"] = names_out
     return adata
+
+
+def _attach_spatial(adata, ok: List[_SampleData], perms, explicit: bool) -> None:
+    """``spatial`` modality: obsm["spatial"] = (array_col, array_row) (x, y; NaN for samples without positions), obs columns
+    in_tissue / array_row / array_col, uns["spatial"][gsm] = the parsed spatial_summary.json."""
+    missing = [r.gsm for r in ok if r.spatial is None]
+    if missing:
+        warnings.warn(
+            f"spatial: {missing} have no {SPATIAL_POS}; their rows of obsm['spatial'] are NaN",
+            UserWarning,
+            stacklevel=4,
+        )
+
+    def cat(key: str, dtype, fill) -> np.ndarray:
+        blocks = []
+        for r, perm in zip(ok, perms):
+            n = len(r.sel)
+            v = r.spatial[key] if r.spatial is not None else np.full(n, fill, dtype=dtype)
+            blocks.append(v[perm] if perm is not None else v)
+        return np.concatenate(blocks) if blocks else np.zeros(0, dtype=dtype)
+
+    row = cat("array_row", np.float64, np.nan)
+    col = cat("array_col", np.float64, np.nan)
+    adata.obs["in_tissue"] = cat("in_tissue", bool, False)
+    adata.obs["array_row"] = row.astype(np.int64) if not np.isnan(row).any() else row
+    adata.obs["array_col"] = col.astype(np.int64) if not np.isnan(col).any() else col
+    adata.obsm["spatial"] = np.column_stack([col, row]).astype(np.float64)
+    summ = {r.gsm: r.spatial_summary for r in ok if r.spatial_summary is not None}
+    if summ:
+        adata.uns["spatial"] = summ
 
 
 def modality_anndata(adata, name: str):

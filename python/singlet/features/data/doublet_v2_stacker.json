@@ -1,0 +1,44 @@
+{
+ "content_hash": "54bd13abb9b179d289a63723b8f672a90c23d4d1ac2fcc005bb33e07fe4cddc9",
+ "encoder_content_hash": "8ecf307b17413d5c9a760ed996791cb688e5cc81a26609c1f50b10da60955ea1",
+ "feature_order": [
+  "umi",
+  "genes",
+  "prod",
+  "sdfl",
+  "sdflc",
+  "atlas_knn",
+  "atlas_entropy"
+ ],
+ "hgb_params": {
+  "l2_regularization": 1.0,
+  "learning_rate": 0.05,
+  "max_iter": 300,
+  "max_leaf_nodes": 15,
+  "random_state": 0
+ },
+ "n_train_cells": 181976,
+ "score": "doublet/score_v2",
+ "sklearn_version_trained": "1.6.1",
+ "train_datasets": [
+  "pbmc-1A-dm",
+  "pbmc-1B-dm",
+  "pbmc-1C-dm",
+  "pbmc-2ctrl-dm",
+  "pbmc-2stim-dm",
+  "kang21",
+  "J293t-dm",
+  "pbmc-ch",
+  "cline-ch",
+  "mkidney-ch",
+  "HEK-HMEC-MULTI",
+  "HMEC-orig-MULTI",
+  "HMEC-rep-MULTI",
+  "pdx-MULTI",
+  "nuc-MULTI",
+  "hm-6k",
+  "hm-12k"
+ ],
+ "training_inputs": "the 17 datasets' inputs as computed by this package (feats); engine score: prod.npy of the study",
+ "weights": "each dataset counts equally (1/n per cell, rescaled by n_cells/n_datasets)"
+}

@@ -1,0 +1,16 @@
+{
+ "final": {
+  "max_excess_over_observed": 0.0,
+  "min_removed": 0.0,
+  "integer": true,
+  "run": {
+   "seconds": 0.414446,
+   "nnz_corrected": 4605710,
+   "threads": 16,
+   "kappa": 20,
+   "z": 3,
+   "n_clusters": 7
+  },
+  "clusters": 7
+ }
+}

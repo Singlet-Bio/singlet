@@ -1,0 +1,8 @@
+default
+hvg1000 hvg=1000
+hvg3000 hvg=3000
+hvg5000 hvg=5000
+pcs20 pcs=20
+pcs50 pcs=50
+sim4 simratio=4
+nomap nomap=1

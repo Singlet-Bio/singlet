@@ -45,6 +45,7 @@ public:
     */
 
     unordered_map < uintCB, array<uint64,nBits> > flagCounts;
+    vector<uintCB> *order=nullptr; //if set, the keys of flagCounts in the order countsAdd first inserted them (parallel Solo input, SoloFeature_countCBgeneUMI.cpp)
     array<uint64,nBits> flagCountsNoCB={};
 
     void setBit(uint32 ibit) {
@@ -58,6 +59,8 @@ public:
     void countsAdd(uintCB cb) 
     {//adds flag bits to the count for a given cb
         auto cbInserted = flagCounts.insert({cb, {} });
+        if (order != nullptr && cbInserted.second)
+            order->push_back(cb);
         for (uint32 ibit=0; ibit<nBits; ibit++) {
             (*cbInserted.first).second[ibit] += (uint64) checkBit(ibit);
         };

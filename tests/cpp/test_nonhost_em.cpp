@@ -272,6 +272,38 @@ static void test5_min_abundance_filter() {
     PASS(name);
 }
 
+// ── Test 6: reproducible under any read order ────────────────────────────────
+// The same reads in any order (what different thread counts and reruns produce) give
+// bit-identical abundances and the same iteration count.
+static void test6_order_independent() {
+    const char* name = "test6_order_independent";
+    std::vector<MH> reads;
+    uint32_t x = 12345;
+    auto rnd = [&]() { x = x * 1664525u + 1013904223u; return x >> 8; };
+    for (int i = 0; i < 3000; ++i) {
+        const uint32_t a = rnd() % 12, b = (a + 1 + rnd() % 11) % 12;
+        const float ra = 0.3f + 0.05f * (rnd() % 12), rb = 0.3f + 0.05f * (rnd() % 12);
+        reads.push_back(i % 3 ? make_mixed(a, ra, 20 + b, rb) : make_viral(a, ra));
+    }
+    auto kmap = build_kingdom_map(reads);
+    int it0 = 0;
+    auto ref = em_deconvolve(reads, kmap, 500, 1e-6f, 1e-4f, 0.05f, 0.30f, &it0);
+    for (int rep = 0; rep < 5; ++rep) {
+        for (size_t i = reads.size() - 1; i > 0; --i) std::swap(reads[i], reads[rnd() % (i + 1)]);
+        int it1 = 0;
+        auto got = em_deconvolve(reads, kmap, 500, 1e-6f, 1e-4f, 0.05f, 0.30f, &it1);
+        bool same = it0 == it1 && got.size() == ref.size();
+        for (size_t i = 0; same && i < got.size(); ++i)
+            same = got[i].species_id == ref[i].species_id &&
+                   got[i].relative_abundance == ref[i].relative_abundance &&
+                   got[i].n_reads_assigned == ref[i].n_reads_assigned &&
+                   got[i].mean_hit_rate == ref[i].mean_hit_rate;
+        if (!same) { FAIL(name, "shuffled input changed the result"); return; }
+    }
+    if (ref.empty()) { FAIL(name, "no species reported"); return; }
+    PASS(name);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -280,6 +312,7 @@ int main() {
     test3_ambiguous_reads();
     test4_convergence();
     test5_min_abundance_filter();
+    test6_order_independent();
 
     std::cerr << "\n--- " << g_passed << "/" << (g_passed + g_failed) << " tests passed ---\n";
     return (g_failed == 0) ? 0 : 1;

@@ -15,7 +15,7 @@ struct COOEntry { int32_t row, col; uint8_t val; };
 
 static bool read_mtx(const std::string& path, int32_t& nrows, int32_t& ncols,
                      std::vector<int32_t>& indptr, std::vector<int32_t>& indices,
-                     std::vector<uint8_t>& data) {
+                     std::vector<uint16_t>& data) {
     std::ifstream f(path);
     if (!f) return false;
     std::string line;
@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
     // Read matrices
     int32_t ad_rows, ad_cols, dp_rows, dp_cols;
     std::vector<int32_t> ad_indptr, ad_indices, dp_indptr, dp_indices;
-    std::vector<uint8_t> ad_data, dp_data;
+    std::vector<uint16_t> ad_data, dp_data;
 
     if (!read_mtx(ad_path, ad_rows, ad_cols, ad_indptr, ad_indices, ad_data)) {
         std::cerr << "Failed to read AD: " << ad_path << "\n";
