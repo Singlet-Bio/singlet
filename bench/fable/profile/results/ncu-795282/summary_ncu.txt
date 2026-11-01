@@ -14,38 +14,38 @@
    pc samples: [('no_instructions', 870143, 48.1), ('long_scoreboard', 592887, 32.8), ('wait', 217571, 12.0), ('selected', 69085, 3.8), ('branch_resolving', 38077, 2.1), ('short_scoreboard', 12026, 0.7)]
    excessive: {'derived__memory_l1_wavefronts_shared_excessive': 0.0, 'derived__memory_l2_theoretical_sectors_global_excessive': 332.730155}
 -- A k_p1 top lines by Warp Stall Sampling (All Samples) (total 1532658.0); samples by file {'stitch.cuh': 99.94, 'm5.cu': 0.06}
-    1  10.6% stitch.cuh:103  u64 v = a[w] >> sh;
-    2   8.4% stitch.cuh:318  if (s[-ii] != g[-ii]) { compRes = !(s[-ii] > g[-ii] || g[-ii] > 3); return ii + L; }
-    3   8.1% stitch.cuh:313  if (s[-ii] != g[ii]) { compRes = s[-ii] > g[ii]; return ii + L; }
-    4   7.9% stitch.cuh:303  if (s[ii] != g[ii]) { compRes = s[ii] > g[ii]; return ii + L; }
-    5   7.9% stitch.cuh:308  if (s[ii] != g[-ii]) { compRes = !(s[ii] > g[-ii] || g[-ii] > 3); return ii + L; }
-    6   3.9% stitch.cuh:256  if (w.wbKey[i] == key) { w.wbVal[i] = (uint16_t)val; return true; }
-    7   3.9% stitch.cuh:391  for (int jj = 0; jj < PC_SIZE; jj++) w.PC[ii + 1][jj] = w.PC[ii][jj];
-    8   3.4% stitch.cuh:240  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uintWinBinMax;
-    9   3.1% stitch.cuh:382  if (w.PC[iP][0] <= rStart) {
-   10   2.6% stitch.cuh:1230  for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
+    1  10.6% stitch.cuh:103 thr/inst 5.09 [long_sb 95%, wait 2%]  u64 v = a[w] >> sh;
+    2   8.4% stitch.cuh:318 thr/inst 1.98 [long_sb 80%, wait 9%]  if (s[-ii] != g[-ii]) { compRes = !(s[-ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+    3   8.0% stitch.cuh:313 thr/inst 1.97 [long_sb 84%, wait 8%]  if (s[-ii] != g[ii]) { compRes = s[-ii] > g[ii]; return ii + L; }
+    4   7.9% stitch.cuh:303 thr/inst 2.1 [long_sb 81%, wait 10%]  if (s[ii] != g[ii]) { compRes = s[ii] > g[ii]; return ii + L; }
+    5   7.9% stitch.cuh:308 thr/inst 2.1 [long_sb 81%, wait 10%]  if (s[ii] != g[-ii]) { compRes = !(s[ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+    6   3.9% stitch.cuh:256 thr/inst 3.65 [long_sb 90%, wait 6%]  if (w.wbKey[i] == key) { w.wbVal[i] = (uint16_t)val; return true; }
+    7   3.8% stitch.cuh:391 thr/inst 1.37 [long_sb 81%, wait 11%]  for (int jj = 0; jj < PC_SIZE; jj++) w.PC[ii + 1][jj] = w.PC[ii][jj];
+    8   3.4% stitch.cuh:240 thr/inst 2.75 [long_sb 50%, wait 28%]  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uint
+    9   3.1% stitch.cuh:382 thr/inst 4.53 [long_sb 93%, no_inst 3%]  if (w.PC[iP][0] <= rStart) {
+   10   2.6% stitch.cuh:1230 thr/inst 31.66 [long_sb 98%, wait 1%]  for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c 
 -- A k_p2 top lines by Warp Stall Sampling (All Samples) (total 235274.0); samples by file {'stitch.cuh': 76.38, 'm5.cu': 23.11, 'device_atomic_functions.hpp': 0.51}
-    1  25.5% stitch.cuh:103  u64 v = a[w] >> sh;
-    2  12.8% stitch.cuh:245  if ((w.wbKey[i] >> 41) != w.wbEpoch) return uintWinBinMax;
-    3   7.5% m5.cu:157  const u64 s0 = w.PC[iP][PC_SAstart], cnt = w.PC[iP][PC_SAend] - s0 + 1;
-    4   7.0% stitch.cuh:240  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uintWinBinMax;
-    5   6.7% m5.cu:159  if (entryHit(P, g, w, iP, (m5::uint)(s0 + j))) atomicOr(&bits[(off + j) >> 5], 1u << ((off + j) & 31));
-    6   4.7% stitch.cuh:1385  return wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax;
-    7   4.7% stitch.cuh:466  uint sj1 = (a1 - g.sjGstart) % g.sjdbLength;
-    8   4.7% stitch.cuh:1382  if (!sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) return false;
-    9   3.7% m5.cu:158  for (u64 j = lane; j < cnt; j += 32)
-   10   3.2% m5.cu:156  for (m5::uint iP = 0; iP < w.nP; iP++) {
+    1  25.5% stitch.cuh:103 thr/inst 24.29 [long_sb 92%, wait 2%]  u64 v = a[w] >> sh;
+    2  12.8% stitch.cuh:245 thr/inst 1.48 [long_sb 70%, wait 16%]  if ((w.wbKey[i] >> 41) != w.wbEpoch) return uintWinBinMax;
+    3   7.5% m5.cu:157 thr/inst 19.45 [long_sb 80%, wait 6%]  const u64 s0 = w.PC[iP][PC_SAstart], cnt = w.PC[iP][PC_SAend] - s0 + 1;
+    4   7.0% stitch.cuh:240 thr/inst 23.14 [long_sb 43%, wait 26%]  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uint
+    5   6.6% m5.cu:159 thr/inst 18.44 [branch_resolving 44%, wait 31%]  if (entryHit(P, g, w, iP, (m5::uint)(s0 + j))) atomicOr(&bits[(off + j) >> 5], 1u << ((off + j) & 31
+    6   4.7% stitch.cuh:1385 thr/inst 25.28 [long_sb 49%, branch_resolving 23%]  return wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax;
+    7   4.7% stitch.cuh:466 thr/inst 2.81 [wait 52%, short_sb 16%]  uint sj1 = (a1 - g.sjGstart) % g.sjdbLength;
+    8   4.7% stitch.cuh:1382 thr/inst 2.81 [wait 52%, short_sb 16%]  if (!sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) return false;
+    9   3.7% m5.cu:158 thr/inst 21.3 [wait 52%, branch_resolving 20%]  for (u64 j = lane; j < cnt; j += 32)
+   10   3.3% m5.cu:156 thr/inst 15.18 [long_sb 50%, wait 22%]  for (m5::uint iP = 0; iP < w.nP; iP++) {
 -- A k_p3 top lines by Warp Stall Sampling (All Samples) (total 1881223.0); samples by file {'stitch.cuh': 98.85, 'm5.cu': 0.98, 'device_atomic_functions.hpp': 0.17}
-    1   7.8% stitch.cuh:656  if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
-    2   3.9% stitch.cuh:1191  while (u >= 0x80) { put((uint8_t)(u | 0x80)); u >>= 7; }
-    3   3.6% stitch.cuh:1194  HD void put(uint8_t b) { if (n < cap) p[n++] = b; else full = true; }
-    4   2.8% stitch.cuh:157  for (int k = 0; k < EX_SIZE; k++) exons[i][k] = o.exons[i][k];
-    5   2.7% stitch.cuh:152  nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = o.nUnique;
-    6   2.6% stitch.cuh:159  canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
-    7   2.3% stitch.cuh:149  rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength; cStart = 
-    8   1.7% stitch.cuh:150  Chr = o.Chr; Str = o.Str; roStr = o.roStr; primaryFlag = o.primaryFlag;
-    9   1.7% stitch.cuh:654  for (int i = 0; i < (int)L; i++) {
-   10   1.6% stitch.cuh:158  shiftSJ[i][0] = o.shiftSJ[i][0]; shiftSJ[i][1] = o.shiftSJ[i][1];
+    1   7.8% stitch.cuh:656 thr/inst 1.48 [long_sb 50%, wait 26%]  if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+    2   3.9% stitch.cuh:1191 thr/inst 2.78 [no_inst 89%, wait 6%]  while (u >= 0x80) { put((uint8_t)(u | 0x80)); u >>= 7; }
+    3   3.6% stitch.cuh:1194 thr/inst 2.81 [no_inst 89%, wait 6%]  HD void put(uint8_t b) { if (n < cap) p[n++] = b; else full = true; }
+    4   2.8% stitch.cuh:157 thr/inst 2.26 [no_inst 52%, long_sb 37%]  for (int k = 0; k < EX_SIZE; k++) exons[i][k] = o.exons[i][k];
+    5   2.7% stitch.cuh:152 thr/inst 2.74 [long_sb 60%, no_inst 31%]  nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = 
+    6   2.6% stitch.cuh:159 thr/inst 2.37 [long_sb 56%, no_inst 40%]  canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
+    7   2.3% stitch.cuh:149 thr/inst 2.76 [long_sb 76%, no_inst 17%]  rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength;
+    8   1.7% stitch.cuh:150 thr/inst 2.76 [long_sb 66%, no_inst 28%]  Chr = o.Chr; Str = o.Str; roStr = o.roStr; primaryFlag = o.primaryFlag;
+    9   1.7% stitch.cuh:654 thr/inst 1.56 [wait 42%, no_inst 33%]  for (int i = 0; i < (int)L; i++) {
+   10   1.6% stitch.cuh:158 thr/inst 2.42 [long_sb 59%, no_inst 38%]  shiftSJ[i][0] = o.shiftSJ[i][0]; shiftSJ[i][1] = o.shiftSJ[i][1];
 == B k_p1
    duration_ms=28.08  regs=95  occ_theor_pct=31.25  occ_achieved_pct=22.27  lim_regs_blocks=5  lim_warps_blocks=16  warp_cyc_per_inst=28.07  ipc=0.5068  simt_threads_per_inst=4.37  l1_hit_pct=74.17  l2_hit_pct=76.13  dram_read_GB=12.43  dram_write_GB=7.041  gld_sectors_per_req=4.409  gld_sectors_per_active_thread=1.009  gst_sectors_per_req=7.999  gst_sectors_per_active_thread=1.83  lld_sectors_per_req=1.99  lst_sectors_per_req=3.55  lld_requests=1.717e+06  lst_requests=6.087e+05  gld_requests=1.639e+08  gst_requests=7.056e+07  sm_active_share=0.8307  warps_eligible_per_sched=0.155  warps_active_per_sched=3.627  sm_busy_pct=10.95  mem_busy_pct=32.17  l2_thru_pct=32.17  sm_clock_ghz=1.769  branch_uniform_pct=94.17
    stalls (cycles per issued instruction, share): [('long_scoreboard', 21.975, 78.5), ('wait', 2.494, 8.9), ('lg_throttle', 1.442, 5.2), ('selected', 1.0, 3.6), ('branch_resolving', 0.418, 1.5)]
@@ -62,35 +62,35 @@
    pc samples: [('long_scoreboard', 5558284, 52.0), ('wait', 2191237, 20.5), ('no_instructions', 1557450, 14.6), ('selected', 679690, 6.4), ('branch_resolving', 414723, 3.9), ('short_scoreboard', 143560, 1.3)]
    excessive: {'derived__memory_l1_wavefronts_shared_excessive': 0.0, 'derived__memory_l2_theoretical_sectors_global_excessive': 2.467714}
 -- B k_p1 top lines by Warp Stall Sampling (All Samples) (total 2909398.0); samples by file {'stitch.cuh': 99.98, 'm5.cu': 0.02}
-    1  15.3% stitch.cuh:256  if (w.wbKey[i] == key) { w.wbVal[i] = (uint16_t)val; return true; }
-    2   7.3% stitch.cuh:251  { unsigned b = (unsigned)bin & 1023; w.wbBits[str & 1][b >> 6] |= 1ULL << (b & 63); }
-    3   7.3% stitch.cuh:240  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uintWinBinMax;
-    4   4.4% stitch.cuh:258  if (w.wbN * 4 >= C::NWB * 3) { w.ov = OV_WINBIN; return false; }
-    5   4.3% stitch.cuh:391  for (int jj = 0; jj < PC_SIZE; jj++) w.PC[ii + 1][jj] = w.PC[ii][jj];
-    6   4.2% stitch.cuh:1332  for (uint ii = 0; ii < P.winFlankNbins && wb + 1 < P.winBinN && gv.chrBin[(wb + 1) >> P.winBinChrNbits] == w.W
-    7   3.7% stitch.cuh:252  u64 key = (w.wbEpoch << 41) | (str << 40) | bin;
-    8   3.7% stitch.cuh:524  if (wbGet(w, aStr, iBin) < uintWinBinMax) { flagMergeRight = true; break; }
-    9   3.6% stitch.cuh:103  u64 v = a[w] >> sh;
-   10   3.5% stitch.cuh:1326  for (uint ii = 0; ii < P.winFlankNbins && wb > 0 && gv.chrBin[(wb - 1) >> P.winBinChrNbits] == w.WC[iWin][WC_C
+    1  15.3% stitch.cuh:256 thr/inst 7.41 [long_sb 97%, wait 2%]  if (w.wbKey[i] == key) { w.wbVal[i] = (uint16_t)val; return true; }
+    2   7.3% stitch.cuh:251 thr/inst 13.9 [long_sb 97%, wait 2%]  { unsigned b = (unsigned)bin & 1023; w.wbBits[str & 1][b >> 6] |= 1ULL << (b & 63); }
+    3   7.3% stitch.cuh:240 thr/inst 2.82 [long_sb 65%, wait 16%]  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uint
+    4   4.4% stitch.cuh:258 thr/inst 7.98 [long_sb 90%, wait 6%]  if (w.wbN * 4 >= C::NWB * 3) { w.ov = OV_WINBIN; return false; }
+    5   4.3% stitch.cuh:391 thr/inst 1.57 [long_sb 61%, lg 33%]  for (int jj = 0; jj < PC_SIZE; jj++) w.PC[ii + 1][jj] = w.PC[ii][jj];
+    6   4.2% stitch.cuh:1332 thr/inst 18.85 [long_sb 94%, wait 3%]  for (uint ii = 0; ii < P.winFlankNbins && wb + 1 < P.winBinN && gv.chrBin[(wb + 1) >> P.winBinChrNbi
+    7   3.7% stitch.cuh:252 thr/inst 11.69 [long_sb 97%, wait 1%]  u64 key = (w.wbEpoch << 41) | (str << 40) | bin;
+    8   3.7% stitch.cuh:524 thr/inst 2.82 [long_sb 47%, wait 29%]  if (wbGet(w, aStr, iBin) < uintWinBinMax) { flagMergeRight = true; break; }
+    9   3.6% stitch.cuh:103 thr/inst 5.06 [long_sb 94%, lg 2%]  u64 v = a[w] >> sh;
+   10   3.5% stitch.cuh:1326 thr/inst 18.82 [long_sb 94%, wait 3%]  for (uint ii = 0; ii < P.winFlankNbins && wb > 0 && gv.chrBin[(wb - 1) >> P.winBinChrNbits] == w.WC[
 -- B k_p2 top lines by Warp Stall Sampling (All Samples) (total 461543.0); samples by file {'stitch.cuh': 87.21, 'm5.cu': 12.43, 'device_atomic_functions.hpp': 0.36}
-    1  36.0% stitch.cuh:245  if ((w.wbKey[i] >> 41) != w.wbEpoch) return uintWinBinMax;
-    2  21.6% stitch.cuh:103  u64 v = a[w] >> sh;
-    3   8.2% stitch.cuh:1385  return wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax;
-    4   4.6% m5.cu:159  if (entryHit(P, g, w, iP, (m5::uint)(s0 + j))) atomicOr(&bits[(off + j) >> 5], 1u << ((off + j) & 31));
-    5   4.0% stitch.cuh:240  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uintWinBinMax;
-    6   3.7% m5.cu:157  const u64 s0 = w.PC[iP][PC_SAstart], cnt = w.PC[iP][PC_SAend] - s0 + 1;
-    7   2.7% stitch.cuh:466  uint sj1 = (a1 - g.sjGstart) % g.sjdbLength;
-    8   2.7% stitch.cuh:1382  if (!sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) return false;
-    9   2.4% stitch.cuh:246  if (w.wbKey[i] == key) return w.wbVal[i];
-   10   2.3% m5.cu:158  for (u64 j = lane; j < cnt; j += 32)
+    1  36.0% stitch.cuh:245 thr/inst 4.83 [long_sb 89%, wait 7%]  if ((w.wbKey[i] >> 41) != w.wbEpoch) return uintWinBinMax;
+    2  21.6% stitch.cuh:103 thr/inst 25.02 [long_sb 95%, wait 2%]  u64 v = a[w] >> sh;
+    3   8.2% stitch.cuh:1385 thr/inst 27.36 [long_sb 68%, branch_resolving 19%]  return wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax;
+    4   4.6% m5.cu:159 thr/inst 17.34 [branch_resolving 46%, wait 32%]  if (entryHit(P, g, w, iP, (m5::uint)(s0 + j))) atomicOr(&bits[(off + j) >> 5], 1u << ((off + j) & 31
+    5   4.0% stitch.cuh:240 thr/inst 25.31 [long_sb 45%, wait 31%]  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uint
+    6   3.7% m5.cu:157 thr/inst 18.77 [long_sb 84%, wait 7%]  const u64 s0 = w.PC[iP][PC_SAstart], cnt = w.PC[iP][PC_SAend] - s0 + 1;
+    7   2.7% stitch.cuh:466 thr/inst 3.1 [wait 56%, short_sb 17%]  uint sj1 = (a1 - g.sjGstart) % g.sjdbLength;
+    8   2.7% stitch.cuh:1382 thr/inst 3.1 [wait 56%, short_sb 17%]  if (!sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) return false;
+    9   2.4% stitch.cuh:246 thr/inst 5.09 [wait 50%, branch_resolving 16%]  if (w.wbKey[i] == key) return w.wbVal[i];
+   10   2.3% m5.cu:158 thr/inst 22.95 [wait 55%, branch_resolving 24%]  for (u64 j = lane; j < cnt; j += 32)
 -- B k_p3 top lines by Warp Stall Sampling (All Samples) (total 11007267.0); samples by file {'stitch.cuh': 99.64, 'm5.cu': 0.35, 'device_atomic_functions.hpp': 0.01}
-    1  12.3% stitch.cuh:656  if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
-    2   3.7% stitch.cuh:159  canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
-    3   2.8% stitch.cuh:157  for (int k = 0; k < EX_SIZE; k++) exons[i][k] = o.exons[i][k];
-    4   2.7% stitch.cuh:152  nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = o.nUnique;
-    5   2.3% stitch.cuh:749  if (R[rAend + jR1] == G[gAend + jR1] && R[rAend + jR1] != G[gBstart1 + jR1]) Score1 += scoreMatch;
-    6   2.1% stitch.cuh:654  for (int i = 0; i < (int)L; i++) {
-    7   2.1% stitch.cuh:149  rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength; cStart = 
-    8   2.0% stitch.cuh:570  if (aFrag == A[WA_iFrag] && A[WA_sjA] == sjA && a1 + A[WA_rStart] == A[WA_gStart] + aRstart
-    9   2.0% stitch.cuh:483  if (X[i3] > x) i2 = i3; else i1 = i3;
-   10   1.8% stitch.cuh:150  Chr = o.Chr; Str = o.Str; roStr = o.roStr; primaryFlag = o.primaryFlag;
+    1  12.3% stitch.cuh:656 thr/inst 1.95 [long_sb 59%, wait 27%]  if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+    2   3.7% stitch.cuh:159 thr/inst 2.43 [long_sb 80%, no_inst 15%]  canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
+    3   2.8% stitch.cuh:157 thr/inst 2.22 [long_sb 59%, no_inst 20%]  for (int k = 0; k < EX_SIZE; k++) exons[i][k] = o.exons[i][k];
+    4   2.7% stitch.cuh:152 thr/inst 2.97 [long_sb 75%, wait 10%]  nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = 
+    5   2.3% stitch.cuh:749 thr/inst 1.24 [long_sb 53%, wait 20%]  if (R[rAend + jR1] == G[gAend + jR1] && R[rAend + jR1] != G[gBstart1 + jR1]) Score1 += scoreMatch;
+    6   2.1% stitch.cuh:654 thr/inst 2.03 [wait 54%, branch_resolving 22%]  for (int i = 0; i < (int)L; i++) {
+    7   2.1% stitch.cuh:149 thr/inst 2.98 [long_sb 78%, wait 9%]  rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength;
+    8   2.0% stitch.cuh:570 thr/inst 1.15 [long_sb 86%, wait 8%]  if (aFrag == A[WA_iFrag] && A[WA_sjA] == sjA && a1 + A[WA_rStart] == A[WA_gStart] + aRstart
+    9   2.0% stitch.cuh:483 thr/inst 1.32 [long_sb 87%, wait 5%]  if (X[i3] > x) i2 = i3; else i1 = i3;
+   10   1.8% stitch.cuh:150 thr/inst 2.98 [long_sb 87%, wait 7%]  Chr = o.Chr; Str = o.Str; roStr = o.roStr; primaryFlag = o.primaryFlag;
