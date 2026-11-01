@@ -38,6 +38,11 @@ bool write_inputs(const std::string& dir, uint32_t seed, int n_reads, int max_nh
             g << chr_name(c) << "\t.\tgene\t" << s << "\t" << e + 800 << "\t.\t+\t.\tgene_id \"" << id << "\"; gene_name \"" << id << "\";\n";
             g << chr_name(c) << "\t.\texon\t" << s << "\t" << e << "\t.\t+\t.\tgene_id \"" << id << "\"; gene_name \"" << id << "\";\n";
             g << chr_name(c) << "\t.\texon\t" << e + 601 << "\t" << e + 800 << "\t.\t+\t.\tgene_id \"" << id << "\"; gene_name \"" << id << "\";\n";
+            if (k == 0 && (c % 3 == 0 || c == kChroms)) {   // a second gene on the same exon: alignments there touch two genes (overlapping genes)
+                std::string id2 = id + "_ov";
+                g << chr_name(c) << "\t.\tgene\t" << s << "\t" << e << "\t.\t+\t.\tgene_id \"" << id2 << "\"; gene_name \"" << id2 << "\";\n";
+                g << chr_name(c) << "\t.\texon\t" << s << "\t" << e << "\t.\t+\t.\tgene_id \"" << id2 << "\"; gene_name \"" << id2 << "\";\n";
+            }
         }
     }
     g.close();
