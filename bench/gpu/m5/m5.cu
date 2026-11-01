@@ -158,6 +158,7 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 //  M5_PREF     binary-search prefetch: the SA words of both next midpoints into L2 during each compare (stitch.cuh)
 //  M5_PREF2    M5_PREF plus the two SA values loaded and the genome lines of both next compares prefetched
 //  M5_PREF3    M5_PREF (or with M5_PREF2) plus the SAi words of the later iDist passes prefetched before the first
+//  M5_P1WPB    (with M5_P1SPLIT) the persistent windows kernel for lane B only (lanes A and M: thread per read)
 //  M5_SEEDSMEM (with M5_P1SPLIT) k_p1s keeps the seed iterator (SeedIt) in shared memory, 128 threads per block
 //  M5_STEPSMEM (with M5_SEEDSTEP) the stepped call's state (MmIt) in shared memory, 128 threads per block
 //  M5_SEEDSTEP (with M5_P1SPLIT) k_p1s steps maxMappableLength2strands one memory operation at a time (an SAi lookup or
@@ -182,6 +183,19 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 #if defined(M5_P1WPERS) && !defined(M5_P1SPLIT)
 #error "M5_P1WPERS needs M5_P1SPLIT"
 #endif
+#if defined(M5_P1WPB) && (!defined(M5_P1SPLIT) || defined(M5_P1FUSE))
+#error "M5_P1WPB needs M5_P1SPLIT, without M5_P1FUSE"
+#endif
+// the windows kernel of lane C: persistent (k_p1wp) or thread per read (k_p1w)
+template <class C> constexpr bool p1WinPers() {
+#if defined(M5_P1WPERS)
+    return true;
+#elif defined(M5_P1WPB)
+    return C::NW >= 128;   // lane B only
+#else
+    return false;
+#endif
+}
 #ifdef M5_P1MINB
 #define M5_P1_BOUNDS __launch_bounds__(128, M5_P1MINB)
 #else
@@ -309,7 +323,7 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
 #endif
     }
 }
-#ifdef M5_P1WPERS
+#if defined(M5_P1WPERS) || defined(M5_P1WPB)
 // windows, persistent warps (M5_P1WPERS): every iteration each lane with a read makes one step of its read's windows (one SA
 // entry of an anchor, or one window's flanks); lanes refill from the batch as in k_p1s
 template <class C>
@@ -528,9 +542,10 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     int nSm = 0, bpsS = 0; cudaDeviceGetAttribute(&nSm, cudaDevAttrMultiProcessorCount, 0);
     CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsS, k_p1s<C>, 128, 0));
     unsigned long long* dCtr; CK(cudaMalloc(&dCtr, 16));
-#ifdef M5_P1WPERS
+#if defined(M5_P1WPERS) || defined(M5_P1WPB)
     int bpsW = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsW, k_p1wp<C>, 128, 0));
-    fprintf(stderr, "  lane %s: k_p1s persistent, %d blocks of 128 per SM (%d threads); k_p1wp persistent, %d blocks per SM\n", name, bpsS, nSm * bpsS * 128, bpsW);
+    fprintf(stderr, "  lane %s: k_p1s persistent, %d blocks of 128 per SM (%d threads); %s, %d blocks per SM\n", name, bpsS, nSm * bpsS * 128,
+            p1WinPers<C>() ? "k_p1wp persistent" : "k_p1w", bpsW);
 #else
     { int b1 = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&b1, k_p1w<C>, 128, 0));
 #ifdef M5_P1FUSE
@@ -565,9 +580,11 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             cudaEventRecord(q[4]);
 #if defined(M5_P1FUSE)
             // the windows ran in k_p1s
-#elif defined(M5_P1WPERS)
-            CK(cudaMemsetAsync(dCtr + 1, 0, 8));
-            k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1);
+#elif defined(M5_P1WPERS) || defined(M5_P1WPB)
+            if (p1WinPers<C>()) {
+                CK(cudaMemsetAsync(dCtr + 1, 0, 8));
+                k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1);
+            } else k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent);
 #else
             k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent);
 #endif
@@ -667,7 +684,7 @@ static double probeP1(const Params& P, const GenomeView& D, const char* dRb, con
     int nSm = 0, bpsS = 0; cudaDeviceGetAttribute(&nSm, cudaDevAttrMultiProcessorCount, 0);
     CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsS, k_p1s<C>, 128, 0));
     unsigned long long* dCtr; CK(cudaMalloc(&dCtr, 16));
-#ifdef M5_P1WPERS
+#if defined(M5_P1WPERS) || defined(M5_P1WPB)
     int bpsW = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsW, k_p1wp<C>, 128, 0));
 #endif
 #endif
@@ -682,8 +699,9 @@ static double probeP1(const Params& P, const GenomeView& D, const char* dRb, con
             CK(cudaMemsetAsync(dCtr, 0, 16));
             k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dRb, dRoff, dRlen, nullptr, b0, nb, dWork, dRbuf, dBst, dCtr, dNent);
 #if defined(M5_P1FUSE)
-#elif defined(M5_P1WPERS)
-            k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1);
+#elif defined(M5_P1WPERS) || defined(M5_P1WPB)
+            if (p1WinPers<C>()) k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1);
+            else k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent);
 #else
             k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent);
 #endif

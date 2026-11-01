@@ -18,7 +18,7 @@ SCR=/tmp/$USER-e7cc-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/gpu/fable/seeds:refs/fable/seeds
 SHA=$(git -C $BARE rev-parse --short=7 refs/fable/seeds); echo "commit $SHA $(git -C $BARE log -1 --format=%s refs/fable/seeds)"
 git -C $BARE archive refs/fable/seeds bench/gpu/m5 | tar -x -C $SCR
-VARIANTS=${VARIANTS:-"m5p3:-DM5_PREF3;m5p23:-DM5_PREF2 -DM5_PREF3;flatqp3:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_PREF3;flatqs8p3:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8 -DM5_PREF3;flatqs8p23:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8 -DM5_PREF2 -DM5_PREF3"}
+VARIANTS=${VARIANTS:-"flatqs8b:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8 -DM5_P1WPB;flatqb:-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_P1WPB"}
 IFS=';' read -ra VS <<< "$VARIANTS"
 for v in "${VS[@]}"; do
   N=${v%%:*}; FL=${v#*:}
