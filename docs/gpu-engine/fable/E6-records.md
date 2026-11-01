@@ -36,7 +36,7 @@ for its per-read output, the pass's statistics counters, and the CR/UR/quality e
 | `bench/fable/records/records_test.cu` | driver: dump + the hand-off of the same run -> GPU records, byte-for-byte checks, timings, host port timing, hop 7 checks |
 | `bench/fable/records/r11_hist.cpp` | the engine's R11 exact CB histogram from the .1fq (as singlet's decode pass counts it), for the driver's R11 CR table |
 | `bench/fable/records/jobs/` | `build_singlet.sbatch` (singlet-gpu with the dump), `compile.sbatch` (driver), `run.sbatch` (engine run + driver, then re-runs the driver on a trigger file without re-running the engine; `FQ`, `TAG`, `TMAX` for other samples), `r11_hist.sbatch` |
-| `bench/fable/records/results/` | the final driver log and JSON of job 795356 |
+| `bench/fable/records/results/` | the final driver log (`.txt`) and JSON of job 795356 |
 
 ### 1.1 Hop 6: blob -> records (per distinct sequence)
 
