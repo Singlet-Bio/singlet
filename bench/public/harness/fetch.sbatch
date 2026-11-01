@@ -10,7 +10,7 @@
 # Download one cohort dataset into $BP/data/<id>/ and classify its FASTQs by library (libs.tsv: library, read, path).
 #   sbatch --array=1-N%4 fetch.sbatch            (N = lines of ${LIST_DIR:-$BP/work}/datasets.txt, written by submit.sh)
 #   sbatch fetch.sbatch <dataset_id>
-# Sources: 10x tar (curl); GEO/SRA runs (prefetch + fasterq-dump, or fastq-dump -X when the cohort caps the reads; NCBI is
+# Sources: 10x tar (curl); GEO/SRA runs (prefetch + fasterq-dump, then the first N reads when the cohort caps them; NCBI is
 # ~100x faster than ENA HTTPS from Clipper); Kang 2018 is a BAM only (reads rebuilt from CR/UR tags, as the genotype-pool
 # benchmark did; that copy is reused when present). Data already fetched by the pipeline-benchmark session is linked, not
 # downloaded again.
@@ -59,13 +59,16 @@ geo|sra)
     SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
     for r in "${RUNS[@]}"; do
       mkdir -p $r
+      # NCBI prefetch is fast from Clipper; streaming fastq-dump -X was too slow for large caps (timed out at 4 h)
+      prefetch -q --max-size 500G -O $SCR $r && fasterq-dump -q -e 8 --include-technical -S -t $SCR -O $SCR/fq_$r $SCR/$r
+      rm -rf $SCR/$r
       if [ -n "$CAP" ] && [ -n "$TOT" ] && [ "$CAP" -lt "$TOT" ]; then
-        # capped: the first N spots of each run, split proportionally (fastq-dump streams; no full download)
-        N=$(( CAP * 1000000 / ${#RUNS[@]} ))
-        fastq-dump -X $N --split-files --gzip -O $r $r
+        N=$(( CAP * 1000000 / ${#RUNS[@]} ))   # capped: the first N spots of each run, split evenly across runs
+        for q in $SCR/fq_$r/*.fastq; do head -n $((N * 4)) $q | pigz -p 8 > $r/$(basename $q).gz; done
       else
-        prefetch -q --max-size 500G -O $SCR $r && fasterq-dump -q -e 8 --include-technical -S -t $SCR -O $r $SCR/$r && pigz -p 8 $r/*.fastq; rm -rf $SCR/$r
+        for q in $SCR/fq_$r/*.fastq; do pigz -p 8 -c $q > $r/$(basename $q).gz; done
       fi
+      rm -rf $SCR/fq_$r
       # SRA names reads <run>_1/_2/_3; map to 10x-style names so classify() and the runners treat them alike
       for f in $r/${r}_*.fastq.gz; do i=$(basename $f .fastq.gz); i=${i##*_}; mv $f $r/${r}_S1_L001_R${i}_001.fastq.gz; done
     done

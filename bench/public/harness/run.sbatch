@@ -33,13 +33,35 @@ export SINGLET_STALL_TIMEOUT=7200   # the stall watchdog can fire during STAR's 
 pick_gex() {
   local lib=${1:-gex} files f len
   R1=(); R2=()
-  mapfile -t files < <(awk -F'\t' -v l=$lib '$1==l {print $3}' $D/libs.tsv)
-  for f in "${files[@]}"; do
-    len=$(zcat -f "$f" 2>/dev/null | sed -n 2p | tr -d '\n' | wc -c)
-    if [ "$len" -le 30 ] && [ "$len" -ge 20 ]; then R1+=("$f"); elif [ "$len" -gt 30 ]; then R2+=("$f"); fi   # <20: index reads
-  done
+  if ! awk -F'\t' -v l=$lib '$1==l && $2!="R1" && $2!="R2"' $D/libs.tsv | grep -q .; then
+    # only R1/R2 files: trust the numbering (a barcode read can be sequenced long, e.g. 101 nt in GSE230239)
+    mapfile -t R1 < <(awk -F'\t' -v l=$lib '$1==l && $2=="R1" {print $3}' $D/libs.tsv)
+    mapfile -t R2 < <(awk -F'\t' -v l=$lib '$1==l && $2=="R2" {print $3}' $D/libs.tsv)
+  else
+    # index reads present (SRA numbering varies): the barcode read is the 20-30 nt one, the cDNA read the longer one
+    mapfile -t files < <(awk -F'\t' -v l=$lib '$1==l {print $3}' $D/libs.tsv)
+    for f in "${files[@]}"; do
+      len=$( (zcat -f "$f" 2>/dev/null || true) | head -2 | tail -1 | tr -d '\n' | wc -c)
+      if [ "$len" -le 30 ] && [ "$len" -ge 20 ]; then R1+=("$f"); elif [ "$len" -gt 30 ]; then R2+=("$f"); fi   # <20: index
+    done
+  fi
   [ ${#R1[@]} -gt 0 ] && [ ${#R1[@]} -eq ${#R2[@]} ] || { echo "cannot pair $lib reads in $D/libs.tsv"; exit 3; }
   R1CSV=$(IFS=,; echo "${R1[*]}"); R2CSV=$(IFS=,; echo "${R2[*]}")
+}
+# Long 10x barcode reads (e.g. 101 nt in GSE230239): trim R1 to barcode + UMI for every tool. Singlet's encoder (02aa9b9)
+# keeps none of the reads when R1 is that long (found 2026-10-26, reported to pipeline-benchmark); STARsolo is unaffected
+# either way, so all tools still see identical bases.
+trim_r1() {
+  [[ $CHEM == 10x-* ]] || return 0
+  local len; len=$( (zcat -f "${R1[0]}" 2>/dev/null || true) | head -2 | tail -1 | tr -d '\n' | wc -c)
+  [ "$len" -gt 30 ] || return 0
+  local keep=$((CBLEN + UMILEN)) i=0 out=()
+  for f in "${R1[@]}"; do
+    i=$((i+1)); zcat "$f" | awk -v k=$keep 'NR%2==0 {print substr($0,1,k); next} {print}' | pigz -p 4 > $SCR/trimR1_$i.fastq.gz
+    out+=($SCR/trimR1_$i.fastq.gz)
+  done
+  R1=("${out[@]}"); R1CSV=$(IFS=,; echo "${R1[*]}")
+  echo "[run] R1 trimmed from $len to $keep nt" | tee -a $O/NOTE.txt
 }
 # Read cap: the first read_pairs_used_m million pairs, identical for every tool (10x tars are not pre-capped)
 cap_reads() {
@@ -55,7 +77,7 @@ cap_reads() {
 case $TOOL in
 singlet)
   [ $CHEM = smartseq2 ] && { echo "plate protocols: singlet runs one sample per cell; see tools/singlet-plate.sh"; exec bash $SRC/bench/public/harness/tools/singlet-plate.sh $ID $O; }
-  pick_gex; cap_reads
+  pick_gex; trim_r1; cap_reads
   # .1fq encoding is part of Singlet's cost and is timed separately (encode.time.txt); resources sum both
   cat "${R1[@]}" > $SCR/R1.fastq.gz; cat "${R2[@]}" > $SCR/R2.fastq.gz
   timed $O/encode.time.txt $SINGLET_BIN encode --reads $SCR/R1.fastq.gz $SCR/R2.fastq.gz -o $SCR/$ID.1fq > $O/encode.log 2>&1
@@ -74,7 +96,7 @@ singlet)
     --out-prefix $O/ --threads $T --pipeline --output-format mtx --raw-matrix $EXTRA > $O/run.log 2>&1
   ;;
 starsolo)
-  pick_gex; cap_reads; cd $O
+  pick_gex; trim_r1; cap_reads; cd $O
   case $CHEM in
     dropseq|seqwell) SOLO="--soloType CB_UMI_Simple --soloCBwhitelist None --soloCBstart 1 --soloCBlen 12 --soloUMIstart 13 --soloUMIlen 8 --soloStrand Forward" ;;
     indrop) SOLO="--soloType CB_UMI_Complex --soloCBwhitelist $WLDIR/indrop_bc1.txt $WLDIR/indrop_bc2.txt --soloCBposition 0_0_2_-1 3_1_3_8 --soloUMIposition 3_9_3_14 --soloAdapterSequence GAGTGATTGCTTGTGACGCCTT --soloAdapterMismatchesNmax 3 --soloCBmatchWLtype 1MM --soloStrand Forward" ;;
@@ -88,7 +110,7 @@ starsolo)
   ;;
 alevinfry)
   [[ $CHEM == 10x-* ]] || { echo "alevin-fry: 10x chemistries only here ($CHEM)"; exit 4; }
-  pick_gex; cap_reads
+  pick_gex; trim_r1; cap_reads
   IDX=$PB/refs/$SPECIES/af_idx
   timed $O/time.txt simpleaf quant --reads1 $R1CSV --reads2 $R2CSV --index $IDX/index \
     --t2g-map $IDX/index/t2g_3col.tsv --chemistry $AFCHEM --expected-ori $AFORI \

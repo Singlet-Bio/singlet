@@ -1,0 +1,146 @@
+{
+ "gpu": [
+  {
+   "stage": "start (arguments, probe)",
+   "wall_s": 1.2,
+   "core_s": 2.6
+  },
+  {
+   "stage": "decode reads (.1fq to FASTQ)",
+   "wall_s": 20.7,
+   "core_s": 77.7
+  },
+  {
+   "stage": "references and barcodes",
+   "wall_s": 4.3,
+   "core_s": 6.7
+  },
+  {
+   "stage": "STAR: genome load",
+   "wall_s": 9.3,
+   "core_s": 9.4
+  },
+  {
+   "stage": "STAR: GPU prefill + mapping",
+   "wall_s": 121.9,
+   "core_s": 598.8
+  },
+  {
+   "stage": "STAR: after mapping",
+   "wall_s": 1.0,
+   "core_s": 1.0
+  },
+  {
+   "stage": "STAR: BAM sort",
+   "wall_s": 132.3,
+   "core_s": 103.2
+  },
+  {
+   "stage": "BAM index",
+   "wall_s": 5.4,
+   "core_s": 15.5
+  },
+  {
+   "stage": "CB-tag barcode refresh",
+   "wall_s": 3.6,
+   "core_s": 16.8
+  },
+  {
+   "stage": "pileup (annotation, UMI, SNP, junctions, chrM)",
+   "wall_s": 34.6,
+   "core_s": 103.1
+  },
+  {
+   "stage": "after pileup (callers, QC)",
+   "wall_s": 5.5,
+   "core_s": 5.6
+  },
+  {
+   "stage": "non-host: index load",
+   "wall_s": 0.9,
+   "core_s": 1.0
+  },
+  {
+   "stage": "non-host: classify",
+   "wall_s": 10.9,
+   "core_s": 27.6
+  },
+  {
+   "stage": "non-host: EM, writers",
+   "wall_s": 3.2,
+   "core_s": 3.9
+  },
+  {
+   "stage": "export",
+   "wall_s": 88.0,
+   "core_s": 99.0
+  }
+ ],
+ "cpu": [
+  {
+   "stage": "start (arguments, probe)",
+   "wall_s": 10.0,
+   "core_s": 44.8
+  },
+  {
+   "stage": "STAR: genome load",
+   "wall_s": 9.0,
+   "core_s": 14.2
+  },
+  {
+   "stage": "STAR: GPU prefill + mapping",
+   "wall_s": 219.0,
+   "core_s": 1982.5
+  },
+  {
+   "stage": "STAR: after mapping",
+   "wall_s": 0.8,
+   "core_s": 0.8
+  },
+  {
+   "stage": "STAR: BAM sort",
+   "wall_s": 113.1,
+   "core_s": 89.0
+  },
+  {
+   "stage": "BAM index",
+   "wall_s": 5.3,
+   "core_s": 15.3
+  },
+  {
+   "stage": "CB-tag barcode refresh",
+   "wall_s": 3.7,
+   "core_s": 16.8
+  },
+  {
+   "stage": "pileup (annotation, UMI, SNP, junctions, chrM)",
+   "wall_s": 35.3,
+   "core_s": 103.8
+  },
+  {
+   "stage": "after pileup (callers, QC)",
+   "wall_s": 2.9,
+   "core_s": 2.9
+  },
+  {
+   "stage": "non-host: index load",
+   "wall_s": 40.5,
+   "core_s": 41.8
+  },
+  {
+   "stage": "non-host: classify",
+   "wall_s": 15.1,
+   "core_s": 28.8
+  },
+  {
+   "stage": "non-host: EM, writers",
+   "wall_s": 5.0,
+   "core_s": 5.3
+  },
+  {
+   "stage": "export",
+   "wall_s": 91.6,
+   "core_s": 103.6
+  }
+ ]
+}

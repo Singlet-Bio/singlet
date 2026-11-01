@@ -2,6 +2,7 @@
 #pragma once
 // singlet-pileup: ambient_profile.h
 // G-AMBIENT — Ambient RNA profile export (SoupX / CellBender compatible).
+// NOTE: the table type is AmbientProfileTable (ambient_correction.h owns singlet::AmbientProfile); both headers can be included together.
 //
 // Computes the average gene expression in empty droplets — the "soup" profile
 // that SoupX and CellBender require for ambient contamination correction.
@@ -13,7 +14,7 @@
 //   4. Export as TSV: gene_name\texpression_fraction\traw_count
 //
 // API:
-//   AmbientProfile build_ambient_profile(gene_names, counts, barcode_totals,
+//   AmbientProfileTable build_ambient_profile(gene_names, counts, barcode_totals,
 //                                        lower_umi, cell_threshold)
 //   bool write_ambient_profile(prof, filepath)
 
@@ -42,7 +43,7 @@ struct AmbientProfileConfig {
                                  ///< (0 = use cell_threshold from build call)
 };
 
-struct AmbientProfile {
+struct AmbientProfileTable {
     std::vector<std::string> gene_names;           ///< Gene names (same order as CSC rows)
     std::vector<double>      expression_fraction;  ///< Per-gene fraction in ambient pool
     std::vector<uint64_t>    raw_counts;           ///< Per-gene raw UMI sum in ambient pool
@@ -63,8 +64,8 @@ struct AmbientProfile {
 /// @param lower_umi       Min UMI for ambient pool (inclusive, default 10)
 /// @param cell_threshold  Max UMI for ambient pool (exclusive = knee threshold)
 ///
-/// @return AmbientProfile with expression fractions and raw counts.
-inline AmbientProfile build_ambient_profile(
+/// @return AmbientProfileTable with expression fractions and raw counts.
+inline AmbientProfileTable build_ambient_profile(
     const std::vector<std::string>&               gene_names,
     const SparseAccumulator<uint16_t>::CSCMatrix& counts,
     const std::vector<uint64_t>&                  barcode_totals,
@@ -72,7 +73,7 @@ inline AmbientProfile build_ambient_profile(
     uint64_t                                       lower_umi      = 10,
     uint64_t                                       cell_threshold = 0)
 {
-    AmbientProfile prof;
+    AmbientProfileTable prof;
     prof.gene_names = gene_names;
     const uint32_t n_genes = static_cast<uint32_t>(gene_names.size());
     prof.raw_counts.assign(n_genes, 0ULL);
@@ -125,7 +126,7 @@ inline AmbientProfile build_ambient_profile(
 /// Header: gene_name\texpression_fraction\traw_count
 ///
 /// @return true on success, false on IO error.
-inline bool write_ambient_profile(const AmbientProfile& prof,
+inline bool write_ambient_profile(const AmbientProfileTable& prof,
                                    const std::string&    filepath)
 {
     std::ofstream out(filepath);

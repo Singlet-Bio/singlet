@@ -161,12 +161,12 @@ add(id="norman2019_gem1", group="crispr", tier="core", title="Norman 2019 K562 C
     truth="authors' guide identities (GSE133344_filtered_cell_identities.csv.gz); induced target expression",
     licence="GEO public data (cite paper)", capabilities="crispr-guides,gex-counts", tools="singlet,cellranger,starsolo",
     why="the most re-analysed Perturb-seq dataset (GEARS, CPA, scGen); amplified guide library rather than direct capture")
-add(id="replogle2022_k562_lane4", group="crispr", tier="extended", title="Replogle 2022 K562 essential-scale Perturb-seq, lane 4 (mRNA + sgRNA)",
-    species="human", reference=G, chemistry="10x-3p-v3", source="sra", other="PRJNA831566 KD6_seq1_essential lane_4", n_cells="",
+add(id="replogle2022_k562_gg41", group="crispr", tier="extended", title="Replogle 2022 K562 essential-scale Perturb-seq, gem group 41 (mRNA + sgRNA)",
+    species="human", reference=G, chemistry="10x-3p-v3", source="sra", other="PRJNA831566 gem group 41 (KD6_raw_files.csv: lane N = gem group N); sgRNA runs SRR19331010/11/13/14", n_cells="",
     read_pairs_m=255, read_pairs_used_m=255, fastq_gb=15.9,
     truth="published cell-to-guide assignments (figshare+ 10.25452/figshare.plus.20029387, CC BY 4.0)",
     licence="CC BY 4.0", capabilities="crispr-guides", tools="singlet,cellranger",
-    why="genome-scale Perturb-seq; lane-to-GEM-group mapping must be checked before use")
+    why="genome-scale Perturb-seq, one GEM group with published guide calls")
 add(id="gse145370_tcr", group="vdj", tier="core", title="GSE145370 ESCC TCR libraries (4 samples), 10x 5' V(D)J",
     species="human", reference=G, chemistry="10x-5p-vdj", source="geo", gse="GSE145370", gsm="GSM4317423;GSM4317424;GSM4317428;GSM4317429",
     srr="SRR11094260;SRR11094261;SRR11094265;SRR11094266", truth="authors' Cell Ranger 3.0.1 filtered_contig_annotations (GEO supplementary)",
@@ -185,6 +185,12 @@ add(id="visium_mouse_brain_ant", group="spatial", tier="core", title="10x Visium
     read_pairs_m=370, read_pairs_used_m=370, fastq_gb=31.0, truth="Space Ranger 1.0 spot matrix and tissue positions; anatomy",
     licence="CC BY 4.0", capabilities="spatial,gex-counts", tools="singlet,spaceranger,starsolo",
     why="the Visium dataset in the Seurat, Squidpy and cell2location tutorials (the human lymph node set has no public reads)")
+add(id="visium_ffpe_human_breast", group="spatial", tier="core", title="10x Visium FFPE human breast cancer (Space Ranger 1.3, probe chemistry)",
+    species="human", reference=G, chemistry="10x-visium-ffpe", source="10x",
+    url=CF + "spatial-exp/1.3.0/Visium_FFPE_Human_Breast_Cancer/Visium_FFPE_Human_Breast_Cancer_fastqs.tar", fastq_gb=5.3,
+    truth="Space Ranger 1.3 published spot matrix and image-based tissue positions", licence="CC BY 4.0", capabilities="spatial",
+    tools="singlet,spaceranger", why="the only human Visium dataset 10x serves with FASTQs (lymph node, heart, brain and "
+    "fresh-frozen breast return 403); replaces the human lymph node")
 # ---- other protocols, one PBMC sample with author cell types (Ding 2020, PBMC1)
 for pid, chem, gsm, rp, gb, why in [
     ("ding2020_pbmc1_smartseq2", "smartseq2", "GSM3836772-GSM3837155 (384 cells)", 375, 14.0, "plate-based full-length protocol without UMIs"),
@@ -224,6 +230,7 @@ add(id="tabula_muris_kidney_facs", group="mouse", tier="extended", title="Tabula
 add(id="cxg16", group="curated", tier="core", title="16 GEO studies with CELLxGENE curated cell types (66 samples)", species="human+mouse",
     reference=f"{G};{M}", chemistry="mixed 10x", source="geo",
     gse="GSE125970;GSE130973;GSE131882;GSE144870;GSE157480;GSE161089;GSE164291;GSE166766;GSE184111;GSE185222;GSE185224;GSE185477;GSE201773;GSE260685;GSE270225;GSE280852",
+    gsm="GSM3587008;GSM3587009;GSM3587010;GSM3587011;GSM3587012;GSM3587013;GSM3758115;GSM3758116;GSM3758119;GSM3823939;GSM3823940;GSM3823941;GSM3823942;GSM3823943;GSM3823944;GSM4299783;GSM4299784;GSM4299785;GSM4299786;GSM4299787;GSM4299788;GSM4299789;GSM4766855;GSM4889466;GSM4889467;GSM4889468;GSM4889469;GSM5005819;GSM5005820;GSM5082289;GSM5082290;GSM5082291;GSM5082292;GSM5578032;GSM5578033;GSM5578034;GSM5578035;GSM5578036;GSM5578037;GSM5578038;GSM5578039;GSM5578040;GSM5578041;GSM5578042;GSM5578043;GSM5608427;GSM5608428;GSM5608429;GSM5608430;GSM5616002;GSM5655495;GSM5655497;GSM5655499;GSM6071111;GSM8122365;GSM8122366;GSM8122367;GSM8337506;GSM8337507;GSM8337508;GSM8337510;GSM8606565;GSM8606566;GSM8606567;GSM8606569;GSM8606570",
     n_cells=332755, truth="author labels mapped to CL by CELLxGENE curators, transferred by barcode (scripts/annotate_truth_cxg.py)",
     licence="CELLxGENE CC BY 4.0; GEO public data", capabilities="cell-type,chromosomal-sex", tools="singlet,celltypist,azimuth,singler",
     why="held out from the guide's development; truth independent of every tool")
@@ -271,6 +278,11 @@ add(id="osorio2019_lcl_mix", group="sex-ancestry", tier="core", title="Osorio 20
     licence="GEO public data (cite paper)", capabilities="genetic-ancestry,donor-demux,donor-snps,mtdna,chromosomal-sex",
     tools="singlet,vireo,souporcell,somalier,peddy,cellsnp-lite,mgatk",
     why="a two-donor pool of known 1000 Genomes individuals: demultiplexing, then ancestry per donor, end to end")
+add(id="atlas_selfreport", group="sex-ancestry", tier="core", title="Atlas donors with self-reported race or ethnicity in GEO (docs/cell_annotation.md 5.2)",
+    species="human", reference=G, chemistry="mixed 10x", source="geo", gse="see selfreport_calls.tsv (2 studies)",
+    truth="self-reported race or ethnicity in GEO characteristics", licence="GEO public data; Singlet outputs CC0",
+    capabilities="genetic-ancestry", tools="singlet",
+    why="real single-cell donors scored end to end from the atlas's own donor depth tables; corroborates the thinned MAGE results")
 add(id="mage150", group="sex-ancestry", tier="core", data_kind="derived", title="MAGE bulk RNA-seq of 1000 Genomes LCLs: 150 individuals, 26 populations (first 8M read pairs each)",
     species="human", reference=G, chemistry="bulk-rna-pe150", source="sra", other="PRJNA851328 (runs: bench/public/sexancestry/mage_subset.tsv)",
     n_cells="", read_pairs_m=3480, read_pairs_used_m=1200, fastq_gb=362,
@@ -284,6 +296,21 @@ add(id="sra_download_set", group="download", tier="core", data_kind="real", titl
     read_pairs_m=132.5, read_pairs_used_m=132.5, fastq_gb=14, truth="NCBI's own decode of the archive (prefetch + fasterq-dump)",
     licence="SRA public data", capabilities="download", tools="singlet,fasterq-dump,prefetch,aws-s3,ena-https",
     why="32 to 36 M read pairs and 1.2 to 3.4 GB each: large enough to measure throughput, small enough for repeated runs")
+# ---- Xi & Li 2021 doublet benchmark sets (Zenodo 4062232, real_datasets.zip, CC BY 4.0): public count matrices with experimental doublet labels
+XL = [("pbmc-1A-dm", "Kang 2018 lane 1A", "demuxlet genotype doublets", 3298, 120), ("pbmc-1B-dm", "Kang 2018 lane 1B", "demuxlet genotype doublets", 3790, 130),
+      ("pbmc-1C-dm", "Kang 2018 lane 1C", "demuxlet genotype doublets", 5270, 316), ("pbmc-2ctrl-dm", "Kang 2018 control lane 2.1, Cell Ranger 1.0 matrix", "demuxlet genotype doublets", 13913, 1598),
+      ("pbmc-2stim-dm", "Kang 2018 stimulated lane", "demuxlet genotype doublets", 13916, 1631), ("J293t-dm", "Kang 2018 J293t cell lines", "demuxlet genotype doublets", 500, 42),
+      ("pbmc-ch", "Stoeckius 2018 PBMC cell hashing", "cell-hashing HTO doublets", 15272, 2545), ("cline-ch", "Stoeckius 2018 cell-line cell hashing", "cell-hashing HTO doublets", 7954, 1465),
+      ("mkidney-ch", "mouse kidney cell hashing", "cell-hashing HTO doublets", 21179, 7901), ("HEK-HMEC-MULTI", "McGinnis 2019 HEK + HMEC MULTI-seq", "MULTI-seq barcode doublets", 10641, 489),
+      ("HMEC-orig-MULTI", "McGinnis 2019 HMEC MULTI-seq (original)", "MULTI-seq barcode doublets", 26426, 3568), ("HMEC-rep-MULTI", "McGinnis 2019 HMEC MULTI-seq (replicate)", "MULTI-seq barcode doublets", 10580, 3282),
+      ("pdx-MULTI", "McGinnis 2019 PDX MULTI-seq", "MULTI-seq barcode doublets", 10296, 1317), ("nuc-MULTI", "McGinnis 2019 nuclei MULTI-seq", "MULTI-seq barcode doublets", 5578, 475),
+      ("hm-6k", "10x human + mouse mix, 6k", "human + mouse species-mixing doublets", 6806, 171), ("hm-12k", "10x human + mouse mix, 12k", "human + mouse species-mixing doublets", 12820, 730)]
+for n, t, tr, nc, nd in XL:
+    add(id="xili_" + n.lower().replace("-", "_"), group="doublet-truth", tier="core", title=f"Xi & Li 2021 doublet set {n}: {t} ({nd} labelled doublets)",
+        species="mouse" if n == "mkidney-ch" else "human", reference="as deposited", chemistry="10x-3p", source="zenodo", other="10.5281/zenodo.4062232 (real_datasets.zip, " + n + ")",
+        n_cells=nc, fastq_gb=0.05, truth=tr + " from the original experiment (public count matrix, not rebuilt from reads)", licence="CC BY 4.0",
+        capabilities="doublets", tools="singlet,scrublet,scdblfinder",
+        why="real experimental doublet labels (" + tr + "); count matrices only, so the doublet score is compared on the deposited counts")
 
 with open(sys.argv[1], "w", newline="", encoding="utf-8") as fh:
     fh.write("# Singlet 1.0.0 public benchmark cohort. One row per dataset; cohort.md explains the choices and the budget.\n")

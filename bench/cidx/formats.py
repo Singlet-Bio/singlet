@@ -4,11 +4,11 @@
     python bench/cidx/synth.py --cells 4000000 --out <dir>
     python bench/cidx/formats.py <dir>            # writes <dir>/fmt/* and prints a table; node bench/cidx/scan.mjs <dir> scans them in JS
 
-Candidates (docs/format-v2-cell-index.md, "Format choice"):
+Candidates (docs/format-store-cell-index.md, "Format choice"):
   parquet-zstd     Parquet, zstd level 3, dictionary where pyarrow picks it, row groups of 131,072 rows, page index
   parquet-snappy   same, snappy
   parquet-plain    same, uncompressed, DELTA_BINARY_PACKED for the integer columns that are not dictionary-coded
-  scx-exact        custom columnar (singlet.v2.atlas SCX1): per row group per column frame-of-reference bit packing, no
+  scx-exact        custom columnar (singlet.store.atlas SCX1): per row group per column frame-of-reference bit packing, no
                    general-purpose compression; sample column run-length coded; QC counts exact
   scx-quant        same, QC counts as 1/256-octave log codes (u16)
 """
@@ -73,7 +73,7 @@ def parquet(d: dict, path: Path, compression: str, plain: bool = False) -> None:
 
 
 def main() -> None:
-    from singlet.v2 import atlas
+    from singlet.store import atlas
 
     root = Path(sys.argv[1])
     d = dict(np.load(root / "part.npz"))

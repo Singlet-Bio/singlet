@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Annotate the samples of one study: one label Parquet and one summary JSON per sample.
 
-  # v2 study (data.singlet.bio)
+  # per-sample study (data.singlet.bio)
   python scripts/annotate_sample.py --gse GSE145370 --out out/
   # legacy bundle on disk, with its restricted sidecar for ancestry
   python scripts/annotate_sample.py --gse GSE164241 --bundle /tmp/GSE164241.singlet \
@@ -32,7 +32,7 @@ def main(argv=None) -> int:
     ap.add_argument("--gse", required=True)
     ap.add_argument("--gsm", action="append", help="only these samples (repeatable)")
     ap.add_argument(
-        "--bundle", type=Path, help="legacy .singlet bundle on disk (default: read the v2 study)"
+        "--bundle", type=Path, help="legacy .singlet bundle on disk (default: read the per-sample study)"
     )
     ap.add_argument(
         "--sidecar", type=Path, help="restricted sidecar of the bundle (enables ancestry)"
@@ -66,7 +66,7 @@ def main(argv=None) -> int:
         with SingletBundle(a.bundle) as b:
             gsms = list(b.gsm_ids)
     else:
-        from singlet.v2 import client as C
+        from singlet.s1 import client as C
 
         gsms = list(C.open_study(a.gse).samples)
     if a.gsm:
@@ -89,7 +89,7 @@ def main(argv=None) -> int:
                 s = (
                     IO.read_legacy(a.bundle, gsm, sidecar=a.sidecar)
                     if a.bundle
-                    else IO.read_v2(a.gse, gsm, sidecar=a.sidecar)
+                    else IO.read_s1(a.gse, gsm, sidecar=a.sidecar)
                 )
             except ValueError as e:
                 if "no usable cells" in str(e) or "no called cells" in str(e):

@@ -1,0 +1,84 @@
+% Figure 3: how far .s1 is from the best count model, and why the rest cannot be removed. Values from generated/fig3*.tsv.
+\begin{figure*}[p]
+\centering
+% ---------------- (a) ladder ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={a\quad From CSC to \sone, payload only},
+  xbar, bar shift=0pt, width=0.3\linewidth, height=6.2cm, bar width=7pt,
+  xmin=0, xlabel={bits per non-zero (row indices and values), median},
+  ytick=data, yticklabels from table={\gen{fig3a_ladder.tsv}}{label}, y dir=reverse, enlarge y limits=0.1,
+  axis x line*=bottom, axis y line*=left,
+  nodes near coords, every node near coord/.append style={font=\sffamily\tiny, anchor=west, /pgf/number format/fixed, /pgf/number format/precision=1},
+  error bars/error bar style={ink2, line width=0.5pt}, error bars/error mark options={rotate=90, mark size=1.5pt, ink2},
+]
+\addplot[draw=none, forget plot, nodes near coords={}] table[x=median, y=pos] {\gen{fig3a_ladder.tsv}};
+\addplot[fill=gen!70, draw=none, discard if not={key}{L0_csc_i32}] table[x=median, y=pos] {\gen{fig3a_ladder.tsv}};
+\addplot[fill=gen!70, draw=none, discard if not={key}{L1_leb128}] table[x=median, y=pos] {\gen{fig3a_ladder.tsv}};
+\addplot[fill=gen!70, draw=none, discard if not={key}{L2_gaps_leb_zstd3}] table[x=median, y=pos] {\gen{fig3a_ladder.tsv}};
+\addplot[fill=gen!70, draw=none, discard if not={key}{L3_gaps_leb_zstd19}] table[x=median, y=pos] {\gen{fig3a_ladder.tsv}};
+\addplot[fill=sone, draw=none, discard if not={key}{L4_s1_payload}, error bars/.cd, x dir=both, x explicit]
+  table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig3a_ladder.tsv}};
+\addplot[fill=white, draw=ink2, dashed, discard if not={key}{floor}, error bars/.cd, x dir=both, x explicit]
+  table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig3a_ladder.tsv}};
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (b) model gains ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={b\quad What each count model would save},
+  xbar, bar shift=0pt, width=0.3\linewidth, height=6.2cm, bar width=7pt,
+  xlabel={\sone{} payload $-$ model code length, bits per non-zero},
+  ytick=data, yticklabels from table={\gen{fig3b_models.tsv}}{label}, y dir=reverse, enlarge y limits=0.15,
+  axis x line*=bottom, axis y line*=left, extra x ticks={0}, extra x tick style={grid=major, grid style={ink2, thin}},
+  error bars/error bar style={ink2, line width=0.5pt}, error bars/error mark options={rotate=90, mark size=1.5pt, ink2},
+]
+\addplot[fill=dl!75, draw=none, error bars/.cd, x dir=both, x explicit]
+  table[x=median, y=pos, x error plus=rp, x error minus=rm] {\gen{fig3b_models.tsv}};
+\end{axis}
+\end{tikzpicture}
+
+\vspace{8pt}
+% ---------------- (c) decomposition by protocol class ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={c\quad Where the bits go, by protocol class},
+  xbar stacked, width=0.32\linewidth, height=6.6cm, bar width=7pt,
+  xmin=0, xlabel={bits per non-zero of the \sone{} payload, median},
+  ytick=data, yticklabels from table={\gen{fig3c_decomp.tsv}}{label}, y dir=reverse, enlarge y limits=0.07,
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, at={(0.5,-0.22)}, anchor=north, legend columns=1, cells={anchor=west}},
+]
+\addplot[fill=ink2!55, draw=none] table[x=sampling, y=pos] {\gen{fig3c_decomp.tsv}};
+\addplot[fill=dl!70, draw=none]   table[x=state, y=pos] {\gen{fig3c_decomp.tsv}};
+\addplot[fill=sone, draw=none]    table[x=above, y=pos] {\gen{fig3c_decomp.tsv}};
+\legend{sampling of molecules (no decoder can remove), the cell's own profile (best model $-$ sampling), \sone{} above the best model}
+\end{axis}
+\end{tikzpicture}\hfill
+% ---------------- (d) second pass ----------------
+\begin{tikzpicture}
+\begin{axis}[
+  title={d\quad Compressing \sone{} again},
+  xbar, bar shift=0pt, width=0.32\linewidth, height=5.2cm, bar width=7pt,
+  xmin=0.98, xmax=1.02, xlabel={output size / \sone{} size},
+  xtick={0.98,0.99,1,1.01,1.02}, xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=2},
+  ytick=data, yticklabels from table={\gen{fig3d_second.tsv}}{label}, y dir=reverse, enlarge y limits=0.15,
+  axis x line*=bottom, axis y line*=left, extra x ticks={1}, extra x tick style={grid=major, grid style={ink2, thin}},
+]
+\addplot[only marks, mark=*, mark size=2pt, gen, error bars/.cd, x dir=both, x explicit]
+  table[x=median, y=pos, x error plus=rp, x error minus=rm] {\gen{fig3d_second.tsv}};
+\end{axis}
+\end{tikzpicture}
+\caption{\textbf{\sone{} is close to the best code a count model gives, and most of what remains is sampling.}
+\textbf{(a)} Payload (row indices and values, no names) in bits per non-zero, median over matrices, as each idea is
+added; whiskers, interquartile range. Dashed: the shortest cross-validated code length among the count models of (b),
+per matrix.
+\textbf{(b)} Bits per non-zero each model saves relative to the \sone{} payload, median and range over matrices
+(negative: the model codes the matrix in more bits than \sone). Models are fitted on half of the cells and scored on
+the other half, zeros included, with no charge for the model itself.
+\textbf{(c)} The \sone{} payload split into the entropy of the multinomial sample of each cell's molecules given its
+cluster-shrunk profile, the remaining information in the best model's code, and \sone's margin above that model.
+\textbf{(d)} Size of \sone{} after a second general-purpose compression pass, relative to \sone{} (median, range).
+Values per class in Table~\ref{tab:floor}.}
+\label{fig:floor}
+\end{figure*}

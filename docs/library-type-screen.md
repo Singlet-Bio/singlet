@@ -1,6 +1,6 @@
 # Which atlas samples are not gene-expression libraries?
 
-Screen for the v2 migration (2026-10-23). The empty-droplet study (`docs/empty-droplets.md`, draft PR #17) found that the v2 pilot
+Screen for the .s1 migration (2026-10-23). The empty-droplet study (`docs/empty-droplets.md`, draft PR #17) found that the .s1 pilot
 GSE145370 holds TCR-enriched V(D)J libraries processed as gene expression. This screen looks for the same mix-up across the whole
 atlas: V(D)J (TCR/BCR), hashtag (HTO), antibody (ADT/CITE-seq), CellPlex/MULTI-seq (CMO), CRISPR guide libraries, and also ATAC and
 other DNA libraries, deposited next to the mRNA libraries and processed as RNA.
@@ -42,7 +42,7 @@ What the table says:
 3. **892 flagged samples have an mRNA sibling that is not in the atlas** (701 distinct mRNA GSMs in 203 studies; the pilot's
    GSM4317409-22 are among them). 5,219 have their mRNA sibling in the atlas already.
 
-## Recommendations for the v2 migration
+## Recommendations for the .s1 migration
 
 1. **Exclude high and medium samples from the gene-expression migration** (8,824). Do not write them as GEX sample objects; list
    them in the study manifest as excluded with the class, so the counts stay explainable. Where the mRNA sibling is in the atlas
@@ -119,3 +119,29 @@ with the errors being GEX libraries of perturbation or hashing experiments whose
 Reproduce (laptop is enough, ~40 min, mostly downloads): export D1 to `d1_qc.parquet` (columns of `sample_qc` plus `gsm.source,
 characteristics, modality, organism`), then `python -P geo_fetch.py`, `python -P parse_soft.py`, optionally
 `python -P cd_scan.py <gse list>`, and `python -P screen.py`; set `LIBTYPE_WORK` to keep caches out of the checkout.
+
+## Per-run read screen (`singlet screen-runs`)
+
+The metadata screen above works per GSM. A GSM can also hold several SRA runs of different libraries, and pooling them mixes
+GEX with feature-barcode reads (atlas re-run plan §6 item 3). `singlet screen-runs` (`include/singlet/fq/run_screen.h`) reads
+the first 1M read pairs of each run and decides which runs to pool:
+
+    singlet screen-runs [--reads N] [--whitelist-dir DIR ...] [--json OUT] RUN1 [RUN2 ...]   # RUN = run.1fq or R1.fq.gz,R2.fq.gz
+
+* Per run: R1/R2 length modes; barcode match to each 10x whitelist (3M-february-2018, 737K-august-2016, gex_737K-arc-v1,
+  737K-april-2014; exact, and exact-or-one-mismatch on the first 100k reads); 3' vs 5' from `five_prime_evidence`
+  (protocol.h); chemistry = whitelist family + 3'/5' (`10x-3p-v3`, `10x-5p-v2`, ...; v4 reads as v3, it shares the whitelist).
+  Runs with no 10x whitelist at 30% get protocol.h `detect_protocol`'s tag instead.
+* Feature barcodes: the 100 most common R2[0:15] or R2[10:25] 15-mers hold >= 50% of reads, or the 10x capture sequences or the
+  Cas9 sgRNA scaffold are in >= 20% of R2, or a 15-base tag followed by poly(A) (TotalSeq-A/HTO/MULTI-seq) is in >= 20% of R2
+  together with >= 25% top-100 share.
+* V(D)J is **not assessable from reads**: a V(D)J library has the R1 of a 5' GEX library and fragmented cDNA in R2. It needs
+  the TR/IG share after alignment or the metadata screen above; the JSON says `vdj_assessable: false`.
+* Decision: drop unreadable and feature-barcode-like runs; when any run is 10x, drop runs whose best whitelist matches < 30%;
+  keep the runs with the majority chemistry. Majority = most reads among qualifying runs (total reads from the `.1fq` header
+  when every qualifying run has it, else sampled reads), ties by run count, then by name. Runs with < 1,000 reads are kept
+  unscreened. Exit 0 when a run is kept, 6 when none is.
+
+Campaign use: download each run of a GSM to its own `.1fq` (`singlet download SRRxxx`), run `screen-runs` on all of them, pool
+only `runs_kept` for `singlet process`, and keep the JSON with the sample. Its `runs_kept` list is what the pipeline records as
+`runs_used` provenance; `runs_dropped` with the per-run `reason` goes into the ledger.

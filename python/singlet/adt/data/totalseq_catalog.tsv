@@ -1,0 +1,648 @@
+sequence	barcode_id	formats	specificity	clone	reactivity	ensembl	kind	aliases	sources	reused
+AAACCAAAGCACCTA		BC	Siglec-10	5G6			antibody	Siglec-10	hubmap_B|hubmap_C	
+AAACTCAGGTCCTTC	C0823	ABC	CD34	SA376A4	Mouse		antibody	CD34	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+AAAGCATGACCAGTA	A0269	A	Biotin Hashtag 4				hashtag	Biotin Hashtag 4	rhumba_2018	
+AAAGCATTCTTCACG	A0304	AC	mouse Hashtag 4				hashtag	mouse Hashtag 4	rhumba_2018	
+AAAGTCACTCTGCCG	A0801	ABC	CD337 (NKp30)	P30-15	Human	ENSG00000204475	antibody	CD337|CD337 (NKp30)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AAAGTGATGCCACTG	A0600	AC	CD158f (KIR2DL5)	UP-R1	Human	ENSG00000274143	antibody	CD158f|CD158f (KIR2DL5)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+AAATCTCTCAGGCTC	A0263	A	human Hashtag 13				hashtag	human Hashtag 13	rhumba_2018	
+AAATCTGTGCCGTAC	A0905	ABC	CD107a (LAMP-1)	1D4B	Mouse	ENSMUSG00000031447	antibody	CD107a|CD107a (LAMP-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+AACAAGACCCTTGAG	A0001	ABC	CD4	RM4-5	Mouse	ENSMUSG00000023274	antibody	CD4	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD3_TotalSeqB
+AACAGACCTCTCAGA		C	CD105 (Endoglin)	SN6h			antibody	CD105 (Endoglin)	hubmap_C	
+AACCAACAGTCACGT	A0424	ABC	CD14	Sa14-2	Mouse	ENSMUSG00000051439	antibody	CD14	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AACCCAAATAGCTGA	A0121	ABC	TCR γ/δ	GL3	Mouse		antibody	TCR γ δ|TCR γ/δ	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AACCCACCGTTGTTA	A0158	ABC	CD134 (OX40)	Ber-ACT35 (ACT35)	Human	ENSG00000186827	antibody	CD134|CD134 (OX40)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AACCGCGCTTCAGAT	A0816	ABC	CD271 (NGFR)	ME20.4	Human	ENSG00000064300	antibody	CD271|CD271 (NGFR)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+AACCTAAGAGCCCGT		AB	ROR1	2A2			antibody	ROR1	hubmap_A|hubmap_B	
+AACCTAGTAGTTCGG	A0181	ABC	CD21	Bu32	Human	ENSG00000117322	antibody	CD21	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AACCTTCCGTCTAAG	A0024	ABC	CD112 (Nectin-2)	TX31	Human	ENSG00000130202	antibody	CD112|CD112 (Nectin-2)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AACCTTTGCCACTGC	A0951	AC	PE Streptavidin				antibody	Biotin|PE Streptavidin	biolegend_2020|hubmap_A|hubmap_C	
+AACGACGTAGATAGG		B	CD85d	42D1			antibody	CD85d	hubmap_B	
+AACGTATGTCCTTGC		AC	Biotin	nan			antibody	Biotin	hubmap_A|hubmap_C	
+AACTCAGTTGTGCCG	A0556	AC	CD370				antibody	CD370	hubmap_C|rhumba_2018	
+AACTCCCTATGGAGG	A0168	ABC	CD57	QA17A04	Human	ENSG00000109956	antibody	CD57|CD57 Recombinant	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AACTTCACCTCCTAG		ABC	LAP	S20006A			antibody	LAP	hubmap_A|hubmap_B|hubmap_C	
+AACTTCTGTGGTAGC	A0584	ABC	TCR Va24-Ja18 (iNKT cell)	6B11	Human		antibody	TCR Va24-Ja18 (iNKT cell)|TCR Vα24-Jα18	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AAGAACGACCTCCTT	A0275	A	Biotin Hashtag 10				hashtag	Biotin Hashtag 10	rhumba_2018	
+AAGACGCATGTCAAC	A0208	ABC	XCR1	S15046E	Human	ENSG00000173578	antibody	XCR1	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AAGAGCCGTTGTGAA		A	CD317	RS38E			antibody	CD317	hubmap_A	
+AAGATGTCCGAGCAA	A0186	A	IgA				antibody	IgA	rhumba_2018	
+AAGCTGCACCGTAAT	A0211	ABC	TCR Vγ2	UC3-10A6	Mouse		antibody	TCR Vγ2	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+AAGCTGCATTTCCTT	A0889	A	Slc7a1	SA191A10	Mouse		antibody	Slc7a1|Slc7a1 (Cat-1, ERR)	biolegend_2020|hubmap_A	
+AAGTATCGTTTCGCA	A0255	AC	human Hashtag 5				hashtag	Hashtag 5|human Hashtag 5	cellgeni_hto|rhumba_2018	
+AAGTATGCCCTACGA	A0162	ABC	CD64	10.1	Human	ENSG00000150337	antibody	CD64	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AAGTCAGGTTCGTTT	A0238	ABC	Rat IgG2a, κ Isotype Control	RTK2758			isotype	IgG2ak_Isotype_Ctrl|Isotype_RTK2758|Rat IgG2a κ Isotype Ctrl|Rat IgG2a, κ Isotype Control	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AAGTCGTGAGGCATG	A0013	ABC	Ly-6C	HK1.4	Mouse	ENSMUSG00000079018	antibody	Ly-6C	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): PD-1_TotalSeqB
+AAGTGATGGTATCTG	A0583	ABC	TCR Vγ9	B3	Human	ENSG00000213809	antibody	TCR V_9|TCR Vγ9	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AAGTTCACTCTTTGC	A0083	ABC	CD16	3G8	Human	ENSG00000203747	antibody	CD16	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AATAGCGAGCAAGTA	A0159	ABC	HLA-DR	L243	Human	ENSG00000204287	antibody	HLA-DR|HLA.DR	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AATCACGGTCCTTGT	A0398	ABC	CD115 (CSF-1R)	9-4D2-1E4	Human	ENSG00000182578	antibody	CD115|CD115 (CSF-1R)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AATCCTTCCGAATGT	A0125	ABC	CD44	BJ18	Human	ENSG00000026508	antibody	CD44	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AATCTGTAGTGCGTT	A0213	ABC	Notch 1	MHN1-519	Human	ENSG00000148400	antibody	Notch 1	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AATTAGCCGTCGAGA	A0361	ABC	CD59	p282 (H19)	Human	ENSG00000085063	antibody	CD59	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AATTCAACCGTCGCC	A0144	ABC	CD185 (CXCR5)	J252D4	Human	ENSG00000160683	antibody	CD185|CD185 (CXCR5)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AATTCCGTCAGATGA	A0842	ABC	Ly-49A	YE1/48.10.6	Mouse	ENSMUSG00000079853	antibody	Ly-49A	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+ACAATTTGAACAGCG	A0101	ABC	CD335 (NKp46)	9E2	Human	ENSG00000189430	antibody	CD335|CD335 (NKp46)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ACAATTTGTCTGCGA	A0572	AC	C5L2	1D9-M12	Human	ENSG00000134830	antibody	C5L2	biolegend_2020|hubmap_C|rhumba_2018	
+ACACTTAACGTCTGG	A0077	ABC	CD73	TY/11.8	Mouse	ENSMUSG00000032420	antibody	CD73	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ACAGCGCCGTATTTA	A0088	ABC	CD279 (PD-1)	EH12.2H7	Human	ENSG00000188389	antibody	CD279|CD279 (PD-1)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ACAGTACGACCTTCT	A0858	AC	CD46	TRA-2-10	Human	ENSG00000117335	antibody	CD46	biolegend_2020|hubmap_C	
+ACAGTCACTGGGCAA	A0941	A	CD37	M-B371	Human	ENSG00000104894	antibody	CD37	biolegend_2020|hubmap_A	
+ACATTGACGCAACTA	A0015	ABC	Ly-6G	1A8	Mouse	ENSMUSG00000022582	antibody	Ly-6G	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD127_TotalSeqB
+ACATTTCCCTTGCCT	A0915	AC	VISTA (PD-1H)	MIH63	Mouse		antibody	VISTA|VISTA (PD-1H)	biolegend_2020|hubmap_A|hubmap_C	
+ACCAATCCTTTCGTC	A0397	AC	CD193 (CCR3)	5E8	Human	ENSG00000183625	antibody	CD193|CD193 (CCR3)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+ACCAGTTGTCATTAC	A0376	A	CD195 (CCR5)	HM-CCR5	Mouse	ENSMUSG00000079227	antibody	CD195|CD195 (CCR5)	biolegend_2020|hubmap_A|rhumba_2018	
+ACCATGAGACACAGT	A0097	ABC	CD25	PC61	Mouse	ENSMUSG00000026770	antibody	CD25	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ACCCACCAGTAAGAC	A0301	AC	mouse Hashtag 1				hashtag	mouse Hashtag 1	rhumba_2018	
+ACCCGCGTTAGTATG	A0449	ABC	CD326 (Ep-CAM)	G8.8	Mouse	ENSMUSG00000045394	antibody	CD326|CD326 (Ep-CAM)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ACCCGGTATCAATTA		AC	Biotin	nan			antibody	Biotin	hubmap_A|hubmap_C	
+ACCCGTCCCTAAGAA	A0845	ABC	CD99	3B2/TA8	Human	ENSG00000002586	antibody	CD99	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C	
+ACCCTTTACCGAATA	A0591	ABC	LOX-1	15C4	Human	ENSG00000173391	antibody	LOX-1|LOX.1	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ACCGACCAGTAGACA	A0441	AC	CD71	RI7217	Mouse	ENSMUSG00000022797	antibody	CD71	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+ACCTAGAAATCAGCA	A0401	A	CD301 (CLEC10A)	H037G3	Human	ENSG00000132514	antibody	CD301|CD301 (CLEC10A)	biolegend_2020|hubmap_A|rhumba_2018	
+ACCTTCCTTCCCTGT	A0220	A	IL-10				antibody	IL-10	rhumba_2018	
+ACCTTTATGCCACGG	A0124	ABC	CD31	WM59	Human	ENSG00000261371	antibody	CD31	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ACCTTTCGACACTCG	A0360	ABC	CD357 (GITR)	108-17	Human	ENSG00000186891	antibody	CD357|CD357 (GITR)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ACGAATCAATCTGTG	A0005	ABC	CD80	2D10	Human	ENSG00000121594	antibody	CD80	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD15_TotalSeqB
+ACGCAGTATTTCCGA	A0852	AC	CD226 (DNAM-1)	10E5	Mouse	ENSMUSG00000034028	antibody	CD226|CD226 (DNAM-1)	biolegend_2020|hubmap_A|hubmap_C	
+ACGCATTCCTTGTGT	A0570	AC	CD29	HMβ1-1	Mouse	ENSMUSG00000025809	antibody	CD29|CD29_HM	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+ACGTAGTCACCTAGT	A0846	ABC	CD185 (CXCR5)	L138D7	Mouse	ENSMUSG00000047880	antibody	CD185|CD185 (CXCR5)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+ACGTTGTGGCCTTGT	A0353	ABC	CD41	HIP8	Human	ENSG00000005961	antibody	CD41	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ACTATCCGTTGTGCT	A0235	ABC	TCR Vβ8.1, 8.2	KJ16-133.18	Mouse		antibody	TCR Vβ8.1 8.2|TCR Vβ8.1, 8.2|TCR Vβ8.1,8.2	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+ACTCACTGGAGTCTC	A0016	A	Galectin-9				antibody	Galectin-9	rhumba_2018	10x pbmc_1k_protein_v3 (2018): IgG1_control_TotalSeqB
+ACTCTCACCCATTCC		C	Biotin	nan			antibody	Biotin	hubmap_C	
+ACTCTTTCGTTTACG	A0055	ABC	CD138 (Syndecan-1)	MI15	Human	ENSG00000115884	antibody	CD138|CD138 (Syndecan-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ACTGATAGACCCGCT	A0580	A	mast cell tryptase				antibody	mast cell tryptase	rhumba_2018	
+ACTGATGGACTCAGA	A0575	ABC	CD49a	TS2/7	Human	ENSG00000213949	antibody	CD49a	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ACTGCCATATCCCTA	A0847	ABC	CD278 (ICOS)	7E.17G9	Mouse	ENSMUSG00000026009	antibody	CD278|CD278 (ICOS)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+ACTTAACCCGTATGG		C	Biotin	nan			antibody	Biotin	hubmap_C	
+ACTTCCCTGTAGAAA	C1056	BC	CD258 (LIGHT)	T5-39	Human	ENSG00000125735	antibody	CD258|CD258 (LIGHT)	biolegend_2020|hubmap_B|hubmap_C	
+ACTTCCGTCGATCTT	A0167	ABC	CD35	E11	Human	ENSG00000203710	antibody	CD35	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ACTTGGATGGACACT	A0443	ABC	CD41	MWReg30	Mouse	ENSMUSG00000034664	antibody	CD41	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGAACAGTCAGTCGC		C	CD209	14E3G7			antibody	CD209	hubmap_C	
+AGAACCGCCGTAGTT	A0429	ABC	CD48	HM48-1	Mouse	ENSMUSG00000015355	antibody	CD48	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGACCAACTCATTCA	A0805	ABC	CD226 (DNAM-1)	TX25	Human	ENSG00000150637	antibody	CD226|CD226 (DNAM-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGACCCTTGCCGTTT		C	Biotin	nan			antibody	Biotin	hubmap_C	
+AGACCTCCTTACGAT	A0884	ABC	DLL1	HMD1-3	Mouse	ENSMUSG00000014773	antibody	DLL1	biolegend_2020|hubmap_B|hubmap_C	
+AGACTAATAGCTGAC	A0061	ABC	CD117 (c-kit)	104D2	Human	ENSG00000157404	antibody	CD117|CD117 (c-kit)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGAGCAATTTCAGGG		B	CD157	BP-3			antibody	CD157	hubmap_B	
+AGAGTATGTATGGGA	A0574	AC	CD235a (Glycophorin A)	HI264	Human	ENSG00000170180	antibody	CD235a|CD235a (Glycophorin A)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+AGAGTCTCCCTTTAG	A0595	ABC	CD11a	M17/4	Mouse	ENSMUSG00000030830	antibody	CD11a	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGATGGGACTCACCA	A0844	ABC	CD45RB	MEM-55	Human	ENSG00000081237	antibody	CD45RB	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+AGATTCCTTCGTGTT	A0180	ABC	CD24	ML5	Human	ENSG00000272398	antibody	CD24	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AGCAATTAACGGGAG	A0202	ABC	CD64 (FcγRI)	X54-5/7.1	Mouse	ENSMUSG00000015947	antibody	CD64|CD64 (FcγRI)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGCACCCGACATTTC		A	CD74 (CLIP) 	In1/CD74			antibody	CD74 (CLIP) 	hubmap_A	
+AGCCCGGATGTATTT	A0900	ABC	CD198 (CCR8)	L263G8	Human	ENSG00000179934	antibody	CD198|CD198 (CCR8)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+AGCGTATGTAACTCG		C	Biotin	nan			antibody	Biotin	hubmap_C	
+AGCTACGAGCAGTAG	A1018	AB	HLA-DR, DP, DQ	Tü39	Human	ENSG00000204287	antibody	HLA-DR, DP, DQ	biolegend_2020|hubmap_A|hubmap_B	
+AGCTACGCATTCAAT	A0450	ABC	IgM	RMM-1	Mouse	ENSMUSG00000076617	antibody	IgM	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGCTAGACACGTTGT	A0448	ABC	CD204 (Msr1)	1F8C33	Mouse	ENSMUSG00000025044	antibody	CD204|CD204 (Msr1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGCTCAGCCAGTATG	A0894	ABC	Ig light chain κ	MHK-49	Human	ENSG00000211592	antibody	Ig light chain _|Ig light chain κ|Ig.LightChain.k	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C	
+AGCTGTAAGTTTCGG	A0166	ABC	CD66b	6/40c	Human	ENSG00000124469	antibody	CD66b	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGCTTACCTGCACGA	A0071	ABC	CD194 (CCR4)	L291H4	Human	ENSG00000183813	antibody	CD194|CD194 (CCR4)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AGGTATGGTAGAGTA	A0901	ABC	GARP (LRRC32)	7B11	Human	ENSG00000137507	antibody	GARP|GARP (LRRC32)	biolegend_2020|hubmap_B|hubmap_C	
+AGGTCCTCTCTGGAT	A0827	ABC	CD22	OX-97	Mouse	ENSMUSG00000030577	antibody	CD22	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+AGGTTGGAGTAGACT	A0372	AC	CD61	VI-PL2	Human	ENSG00000259207	antibody	CD61	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+AGTAAGTTCAGCGTA	A0254	AC	human Hashtag 4				hashtag	Hashtag 4|human Hashtag 4	cellgeni_hto|rhumba_2018	
+AGTACCTGCATGTCA		AC	IgG1	RMG1-1			antibody	IgG1	hubmap_A|hubmap_C	
+AGTAGAGCAACTCGT	A0565	ABC	MERTK				antibody	MERTK|MERTK (Mer)	hubmap_B|hubmap_C|rhumba_2018	
+AGTATCGTCTCTGGG	A0179	ABC	CX3CR1	K0124E1	Human	ENSG00000168329	antibody	CX3CR1	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+AGTATGCCATGTCTT	A0830	ABC	CD319 (CRACC)	162.1	Human	ENSG00000026751	antibody	CD319|CD319 (CRACC)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+AGTATGGAGCCATAT	A0382	A	CD177	MEM-166	Human	ENSG00000204936	antibody	CD177	biolegend_2020|hubmap_A|rhumba_2018	
+AGTATGGGATGCAAT	A0380	ABC	CD90.1 (Thy-1.1)	OX-7	Mouse	ENSMUSG00000032011	antibody	CD90.1 (Thy-1.1)|CD90/CD90.1|rat CD90 mouse CD90.1	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGTCACCTCGAAGCT	A0115	ABC	FceRIa	MAR-1	Mouse	ENSMUSG00000005339	antibody	FceRIa|FcεRIα	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGTCCTTCCGGTATT		C	Biotin	nan			antibody	Biotin	hubmap_C	
+AGTGATCCCTATTGA		C	Biotin	nan			antibody	Biotin	hubmap_C	
+AGTGATGGAGCGAAC	A0247	ABC	CD267 (TACI)	1A1	Human	ENSG00000240505	antibody	CD267|CD267 (TACI)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGTGCGATCTGCAAC	A0426	ABC	CD192 (CCR2)	SA203G11	Mouse	ENSMUSG00000049103	antibody	CD192|CD192 (CCR2)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGTGTTTGTCCTGGT	C0388	ABC	CD152	UC10-4B9	Mouse	ENSMUSG00000026011	antibody	CD152	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGTTCAGTCAACCGA	A0148	ABC	CD197 (CCR7)	G043H7	Human	ENSG00000126353	antibody	CD197|CD197 (CCR7)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+AGTTGTCCTGTACGA	A0554	A	CD309 (VEGFR2, Flk-1)	89B3A5	Mouse	ENSMUSG00000062960	antibody	CD309|CD309 (VEGFR2, Flk-1)	biolegend_2020|rhumba_2018	
+AGTTTCCACTCAGGC	A0864	ABC	CD352 (NTB-A)	NT-7	Human	ENSG00000162739	antibody	CD352|CD352 (NTB-A)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+ATAACCGACACAGTG	A0074	ABC	CD54	YN1/1.7.4	Mouse	ENSMUSG00000037405	antibody	CD54	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ATAAGAGCCCACCAT	A0553	ABC	CD309 (VEGFR2, Flk-1)	Avas12	Mouse	ENSMUSG00000062960	antibody	CD309|CD309 (VEGFR2, Flk-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ATAGAACCCAACTTC	B1026	BC	CD229 (Ly-9)	HLy-9.1.25	Human		antibody	CD229|CD229 (Ly-9)	biolegend_2020|hubmap_B|hubmap_C	
+ATAGTACGACCCGAT		ABC	DYKDDDDK	L5			antibody	DYKDDDDK	hubmap_A|hubmap_B|hubmap_C	
+ATATGTATCACGCGA	A0092	ABC	Mouse IgG2b, κ Isotype Control	MPC-11			isotype	IgG2bk_Isotype_Ctrl|Isotype_MPC.11|Mouse IgG2b κ isotype Ctrl|Mouse IgG2b, κ Isotype Control	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ATATGTCAGAGCACC	A0871	ABC	CD162	KPL-1	Human	ENSG00000110876	antibody	CD162	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+ATCAACCGCCCTAAG	C0986	C	TCR γ/d	UC7-13D5	Mouse		antibody	TCR γ/d|TCR γ/δ	biolegend_2020|hubmap_C	
+ATCAACTTGGAGCAG	A0809	A	CD200R3	Ba13	Mouse	ENSMUSG00000036172	antibody	CD200R3	biolegend_2020|hubmap_A	
+ATCACATCGTTGCCA	A0023	ABC	CD155 (PVR)	SKII.4	Human	ENSG00000073008	antibody	CD155|CD155 (PVR)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	10x pbmc_1k_protein_v3 (2018): IgG2b_control_TotalSeqB
+ATCAGATGCCCTCAT	A0236	ABC	Rat IgG1, κ Isotype Control	RTK2071			isotype	IgG1k_Isotype_Ctrl|Isotype_RTK2071|Rat IgG1 κ isotype Ctrl|Rat IgG1, κ Isotype Control	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ATCAGCCATGTCAGT	A0093	ABC	CD19	6D5	Mouse	ENSMUSG00000030724	antibody	CD19	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ATCATTCCCGCTTAA		C	CD30	mCD30.1			antibody	CD30	hubmap_C	
+ATCCGACACGTATTA	A0559	ABC	CD63	NVG-2	Mouse	ENSMUSG00000025351	antibody	CD63	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ATCCTTCCGATTGTG	A0939	A	LAP (TGF-β1)	TW4-2F8	Human	ENSG00000105329	antibody	LAP (TGF-β1)	biolegend_2020	
+ATCCTTCTCCCTTTC	A0135	ABC	CD324 (E-Cadherin)	67A4	Human	ENSG00000039068	antibody	CD324|CD324 (E-Cadherin)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ATCGTCGAGAGCTAG	A0068	ABC	CD105	43A3	Human	ENSG00000106991	antibody	CD105|CD105_43A3	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ATCTCCGTTGTGCGA	C0907	BC	CD198 (CCR8)	SA214G2	Mouse	ENSMUSG00000042262	antibody	CD198|CD198 (CCR8)	biolegend_2020|hubmap_B|hubmap_C	
+ATCTGTATGTCACAG		BC	CCR10	6588-5			antibody	CCR10	hubmap_B|hubmap_C	
+ATGCGATCAGACCGA	C0971	C	Streptavidin				antibody	Biotin|Streptavidin	biolegend_2020|hubmap_C	
+ATGCGCCGAGAATTA	A0128	ABC	CD140a	16A1	Human	ENSG00000134853	antibody	CD140a	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ATGGACAGTTCGTGT	A0940	A	CD116	4H1	Human	ENSG00000198223	antibody	CD116	biolegend_2020|hubmap_A	
+ATGGCCTGTCATAAT	A0883	AB	CD26 (DPP-4)	H194-112	Mouse	ENSMUSG00000035000	antibody	CD26|CD26 (DPP-4)	biolegend_2020|hubmap_A|hubmap_B	
+ATGGGATTAACCGTC	A1013	A	CD365 (Tim-1)	3B3	Mouse		antibody	CD365 (Tim-1)	biolegend_2020|hubmap_A	
+ATGGTTCACGTAATC	A0151	ABC	CD152	BNI3	Human	ENSG00000163599	antibody	CD152|CD152 (CTLA-4)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ATGTACCCGGTGTGT		A	nan	MM-30			antibody		hubmap_A	
+ATGTCAACTCTGGGA	A1007	AC	CD85k (gp49 Receptor)	H1.1	Mouse	ENSMUSG00000112148	antibody	CD85k|CD85k (gp49 Receptor)	biolegend_2020|hubmap_A|hubmap_C	
+ATGTCCTACCTCAAA	A0589	A	Ly-6D				antibody	Ly-6D	rhumba_2018	
+ATGTGCGAGCAAGAT		C	Biotin	nan			antibody	Biotin	hubmap_C	
+ATTAAGAGCGTGTTG	C0204	AC	CD28	37.51	Mouse	ENSMUSG00000026012	antibody	CD28	biolegend_2020|hubmap_C|rhumba_2018	
+ATTCCGTCCCTAAGG	A0378	ABC	CD223 (LAG-3)	C9B7W	Mouse	ENSMUSG00000030124	antibody	CD223|CD223 (LAG-3)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ATTCCTCATTCCTGA	A0843	ABC	CD199 (CCR9)	L053E8	Human	ENSG00000173585	antibody	CD199|CD199 (CCR9)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+ATTCGCCTTACGCAA	A0022	ABC	CD137L (4-1BB Ligand)	5F4	Human	ENSG00000125657	antibody	CD137L|CD137L (4-1BB Ligand)	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+ATTCTTCAACCGAAG	A0187	ABC	CD79b (Igβ)	CB3-1	Human	ENSG00000007312	antibody	CD79b|CD79b (Igβ)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+ATTCTTTCCCTCTGT	A0807	AC	CD200R (OX2R)	OX-110	Mouse	ENSMUSG00000022667	antibody	CD200R|CD200R (OX2R)	biolegend_2020|hubmap_A|hubmap_C	
+ATTGACCCGCGTTAG	A0260	A	human Hashtag 10				hashtag	human Hashtag 10	rhumba_2018	
+ATTGACGACAGTCAT	A0440	ABC	CD169 (Siglec-1)	3D6.112	Mouse	ENSMUSG00000027322	antibody	CD169|CD169 (Siglec-1)|CD169 Siglec-1	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ATTGGCACTCAGATG	A0003	ABC	CD366 (Tim-3)	RMT3-23	Mouse	ENSMUSG00000020399	antibody	CD366|CD366 (Tim-3)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD8a_TotalSeqB
+ATTGTTGTCAGACCA	A0558	ABC	CD55 (DAF)	RIKO-3	Mouse	ENSMUSG00000026399	antibody	CD55|CD55 (DAF)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+ATTTCCATTCCCTGT	A0590	AC	CD305 (LAIR1)	NKTA255	Human	ENSG00000167613	antibody	CD305|CD305 (LAIR1)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+ATTTGTATGCTGGAG	A0903	ABC	CD40	3/23	Mouse	ENSMUSG00000017652	antibody	CD40	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+CAACGCCTAGAAACC	A0203	ABC	CD150 (SLAM)	TC15-12F12.2	Mouse	ENSMUSG00000015316	antibody	CD150|CD150 (SLAM)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CAACTTGGCCGAATC	A0851	ABC	CD1d (CD1.1, Ly-38)	1B1	Mouse	ENSMUSG00000028076	antibody	CD1d|CD1d (CD1.1, Ly-38)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+CAAGGTATGTCACTG	A0191	ABC	CD27	LG.3A10	Mouse, Human	ENSMUSG00000030336, ENSG00000139193	antibody	CD27	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CAATCAGACCTATGA	A0051	ABC	CD14	63D3	Human	ENSG00000170458	antibody	CD14	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CAATGGTTCACTGCC	A0129	AC	CD140b	18A2	Human	ENSG00000113721	antibody	CD140b	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+CACAGTTGTCCGTGT	A1009	AC	CD94	18d3	Mouse	ENSMUSG00000030165	antibody	CD94	biolegend_2020|hubmap_A|hubmap_C	
+CACATCGTTTGTGTA	A0917	ABC	CD95 (Fas)	SA367H8	Mouse	ENSMUSG00000024778	antibody	CD95 |CD95 (Fas)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+CACCAACGCTTCAAG		BC	CD210	1B1.3a			antibody	CD210	hubmap_B|hubmap_C	
+CACCGTCATTCAACC	A0157	ABC	CD45.2	104	Mouse	ENSMUSG00000026395	antibody	CD45.2	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CACGAGAATTTCAGT		BC	CD130	2E1B02			antibody	CD130	hubmap_B|hubmap_C	
+CACGTAGACCTTTGC	A0447	AC	CD200				antibody	CD200	hubmap_A|hubmap_C|rhumba_2018	
+CACTCCTTGTAGTCA	A0914	AC	CD273 (B7-DC, PD-L2)	TY25	Mouse		antibody	CD273|CD273 (B7-DC, PD-L2)	biolegend_2020|hubmap_A|hubmap_C	
+CACTCTCAGTCCTAT	A0563	ABC	CX3CR1	SA011F11	Mouse	ENSMUSG00000052336	antibody	CX3CR1	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CACTGCCGTCGATTA	A0822	ABC	CD142	NY2	Human	ENSG00000117525	antibody	CD142	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+CACTTAACTCTGGGT	A0817	ABC	CD109	W7C5	Human	ENSG00000156535	antibody	CD109	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+CAGAGCACCCATTAA	A0863	AC	CD257 (BAFF, BLYS)	1D6	Human	ENSG00000102524	antibody	CD257|CD257 (BAFF, BLYS)	biolegend_2020|hubmap_C	
+CAGATGATCCACCAT	A0056	ABC	CD269 (BCMA)	19F2	Human	ENSG00000048462	antibody	CD269|CD269 (BCMA)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CAGCAACTTCATTGT	C0973	C	Streptavidin				antibody	Biotin|Streptavidin	biolegend_2020|hubmap_C	
+CAGCCAGTAAGTCAC	A0898	ABC	Ig light chain λ	MHL-38	Human		antibody	Ig light chain _|Ig light chain λ|Ig.LightChain.l	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C	
+CAGCCATTCATTAGG	A0062	ABC	CD10	HI10a	Human	ENSG00000196549	antibody	CD10	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CAGCCCACTGCAATA	A0155	ABC	CD107a (LAMP-1)	H4A3	Human	ENSG00000185896	antibody	CD107a|CD107a (LAMP-1)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CAGCCCGATTAAGGT	A0057	ABC	β2-microglobulin	2M2	Human	ENSG00000166710	antibody	beta2-microglobulin|β2-microglobulin	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CAGCTCAGTGTGTTG	A0111	ABC	CD5	53-7.3	Mouse	ENSMUSG00000024669	antibody	CD5	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CAGGTCCCTTATTTC	A0432	A	CD230 (Prion)	3F4	Human	ENSG00000171867	antibody	CD230|CD230 (Prion)	biolegend_2020|rhumba_2018	
+CAGGTTGTTGTCATT	A0953	ABC	PE Streptavidin				antibody	Biotin|PE Streptavidin	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+CAGTAAGTTCGGGAC	A0355	ABC	CD137	4B4-1	Human	ENSG00000049249	antibody	CD137	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CAGTAGATGGAGCAT	A0351	ABC	CD135	BV10A4H2	Human	ENSG00000122025	antibody	CD135	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CAGTAGTCACGGTCA	A0259	A	human Hashtag 9				hashtag	Hashtag 9|human Hashtag 9	cellgeni_hto|rhumba_2018	
+CAGTCCTCTCTGTCA	A0387	AC	TSLPR (TSLP-R)	1D3	Human	ENSG00000205755	antibody	TSLPR|TSLPR (TSLP-R)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+CAGTCGTGGTAGATA	A0419	ABC	CD72	3F3	Human	ENSG00000137101	antibody	CD72	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CAGTCTCCGTAGAGT	A0384	ABC	IgD	IA6-2	Human	ENSG00000211898	antibody	IgD	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CAGTTCAGTACGCAG	A0890	A	CD137L (4-1BB Ligand)	TKS-1	Mouse	ENSMUSG00000028965	antibody	CD137L (4-1BB Ligand)	biolegend_2020	
+CAGTTCCTCAGTTCG	A0577	ABC	CD73 (Ecto-5'-nucleotidase)	AD2	Human	ENSG00000135318	antibody	CD73|CD73 (Ecto-5'-nucleotidase)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CATAAGATTCCGAGC		A	CD166	3A6			antibody	CD166	hubmap_A	
+CATATTGGCCGTAGT	A1010	AC	CD205 (DEC-205)	NLDC-145	Mouse		antibody	CD205|CD205 (DEC-205)	biolegend_2020|hubmap_A|hubmap_C	
+CATTAACAGCGCCAA	A0239	A	rat IgG2a				antibody	rat IgG2a	rhumba_2018	
+CATTAACCGCCCTTA	A0891	A	ENPP1	YE1/19.1	Mouse	ENSMUSG00000037370	antibody	ENPP1	biolegend_2020	
+CATTAACGGGATGCC	A0138	ABC	CD5	UCHT2	Human	ENSG00000110448	antibody	CD5	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CATTAGAGTCTGCCA	A0853	ABC	CD371 (CLEC12A)	50C1	Human	ENSG00000172322	antibody	CD371|CD371 (CLEC12A)|CLEC12A	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C	
+CATTCTGGGATTCCC		C	Biotin	nan			antibody	Biotin	hubmap_C	
+CATTCTTCACGGGAT	A0403	AC	CD207 (Langerin)	10E2	Human	ENSG00000116031	antibody	CD207|CD207 (Langerin)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+CATTTGTCTGCCGGT	A0152	ABC	CD223 (LAG-3)	11C3C65	Human	ENSG00000089692	antibody	CD223|CD223 (LAG-3)|CD223_(LAG-3)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CCAAAGTAAGAGCCA	A0141	ABC	CD195 (CCR5)	J418F1	Human	ENSG00000160791	antibody	CD195|CD195 (CCR5)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CCACTCATTTCCGGT	A0359	ABC	CD83	HB15e	Human	ENSG00000112149	antibody	CD83	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CCAGCTCATTAGAGC	A0156	ABC	CD95 (Fas)	DX2	Human	ENSG00000026103	antibody	CD95|CD95 (Fas)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CCAGCTCATTCAACG	A0552	ABC	CD304 (Neuropilin-1)	3E12	Mouse	ENSMUSG00000025810	antibody	CD304|CD304 (Neuropilin-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CCAGTAGGCTTATTA	A0839	ABC	Ly49H	3D10	Mouse	ENSMUSG00000089727	antibody	Ly49H	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+CCATTCAACTTCCGG	A0576	ABC	CD49d	9F10	Human	ENSG00000115232	antibody	CD49d	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CCATTCATTTGTGGC	A0850	ABC	CD49a	HMa1	Mouse	ENSMUSG00000042284	antibody	CD49a|CD49a_HM	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+CCCACTTCCCTTGTA		C	Biotin	nan			antibody	Biotin	hubmap_C	
+CCCGCAGTATAACGA		AB	MICA/MICB	6D4			antibody	MICA/MICB	hubmap_A|hubmap_B	
+CCCTAAACCGTCTCT	C1053	BC	MS4A4A	5C12/MS4A4A	Human	ENSG00000110079	antibody	MS4A4A	biolegend_2020|hubmap_B|hubmap_C	
+CCCTCTCTGGATTCT	A0315	A	mouse Hashtag 15				hashtag	mouse Hashtag 15	rhumba_2018	
+CCCTCTGGTATGGTT	A0854	AB	CD199 (CCR9)	CW-1.2	Mouse	ENSMUSG00000029530	antibody	CD199|CD199 (CCR9)	biolegend_2020|hubmap_A|hubmap_B	
+CCCTTTCACCTCGAA	A0184	ABC	CD335 (NKp46)	29A1.4	Mouse	ENSMUSG00000062524	antibody	CD335|CD335 (NKp46)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CCCTTTCCGATTCAA	A0925	A	CD253 (TRAIL)	N2B2	Mouse		antibody	CD253|CD253 (TRAIL)	biolegend_2020|hubmap_A	
+CCGATCAGCCGTTTA	A0075	ABC	CD90.2	30-H12	Mouse	ENSMUSG00000032011	antibody	CD90.2	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CCGATTGTAACAGAC	A0310	A	mouse Hashtag 10				hashtag	mouse Hashtag 10	rhumba_2018	
+CCGCACCTACATTAG	A0119	ABC	Siglec-H	551	Mouse	ENSMUSG00000051504	antibody	Siglec H|Siglec-H	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CCGGTCCTCTGTATT	A0177	AC	CD178 (Fas-L)	NOK-1	Human	ENSG00000117560	antibody	CD178|CD178 (Fas-L)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+CCGTCCTGATAGATG	C0363	ABC	CD124 (IL-4Rα)	G077F6	Human	ENSG00000077238	antibody	CD124|CD124 (IL-4Rα)	biolegend_2020|cellgeni_c_universal_v1|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CCGTGTTCCTCATTA	A0394	ABC	CD71	CY1G4	Human	ENSG00000072274	antibody	CD71	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CCTACACCTCATAAT	A0103	ABC	CD45R/B220	RA3-6B2	Mouse, Human	ENSMUSG00000026395, ENSG00000081237	antibody	CD45R|CD45R B220|CD45R/B220	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CCTATGGACTTGGAC	A0178	ABC	CD45.1	A20	Mouse	ENSMUSG00000026395	antibody	CD45.1	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CCTATTCCGATTCCG	A0410	ABC	CD38	HB-7	Human	ENSG00000004468	antibody	CD38	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CCTCTATTCAGAGCA	A0932	AC	Lymphotoxin beta Receptor (LT-βR)	31G4D8	Human	ENSG00000111321	antibody	LT-_R|Lymphotoxin beta Receptor (LT-βR)	biolegend_2020|hubmap_C	
+CCTGTCATTAAGACT	A0241	ABC	Armenian Hamster IgG Isotype Control	HTK888			isotype	Armenian Hamster IgG Isotype Control|Armenian Hamster IgG Isotype Ctrl|Isotype_HTK888	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CCTTCCCTTTCCTCT	A0433	AC	CD325 (N-Cadherin)	8C11	Human	ENSG00000170558	antibody	CD325|CD325 (N-Cadherin)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+CCTTCCGTATCCCTT	A0218	ABC	CD62P (P-Selectin)	AK4	Human	ENSG00000174175	antibody	CD62P|CD62P (P-Selectin)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CCTTGGATAACATCA	A0134	ABC	CD146	P1H12	Human	ENSG00000076706	antibody	CD146	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CCTTGTGAGGCTATG	A0896	ABC	CD85j (ILT2)	GHI/75	Human	ENSG00000104972	antibody	CD85j|CD85j (ILT2)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+CCTTTCCGTCGATCA		A	TCR vbeta8.3	1B3.3			antibody	TCR vbeta8.3	hubmap_A	
+CGAAGTCGATCCGTA	A0215	ABC	CD268 (BAFF-R)	11C1	Human	ENSG00000159958	antibody	CD268|CD268 (BAFF-R)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CGATCCCTTACCTAT	A0588	A	CD202b (Tie2/Tek)	33.1 (Ab33)	Human	ENSG00000120156	antibody	CD202b|CD202b (Tie2/Tek)	biolegend_2020|hubmap_A|rhumba_2018	
+CGATTCTTTGCGAGT		ABC	Ly108	330-AJ			antibody	Ly108	hubmap_A|hubmap_B|hubmap_C	
+CGATTTGATCTGCCT	A0828	ABC	CD307d (FcRL4)	413D12	Human	ENSG00000163518	antibody	CD307d|CD307d (FcRL4)	biolegend_2020|hubmap_B|hubmap_C	
+CGATTTGTATTCCCT	C0437	ABC	CD207 (Langerin)	4C7	Mouse, Human		antibody	CD207|CD207 (Langerin)	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+CGCAGTATTAACTTC		C	Biotin	nan			antibody	Biotin	hubmap_C	
+CGCGAACATAAGAAG	A0027	ABC	CD70	113-16	Human	ENSG00000125726	antibody	CD70	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CGCGCACCCATTAAA	A0171	ABC	CD278 (ICOS)	C398.4A	Mouse, Human	ENSMUSG00000026009, ENSG00000163600	antibody	CD278|CD278 (ICOS)|HuMsRt.CD278	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CGCGTTAGTAGAGTC	A0421	ABC	CD49b	HMa2	Mouse	ENSMUSG00000015533	antibody	CD49b|CD49b_HM	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CGCTTGGACGCTTAA	A0078	ABC	CD49d	R1-2	Mouse	ENSMUSG00000027009	antibody	CD49d	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CGGTATATCAACAGA	A0436	AC	Biotin	1D4-C5			antibody	Biotin	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+CGGTATCCGTCAGTT		C	CD226	TX42.1			antibody	CD226	hubmap_C	
+CGGTCCGTATCATTT	A0416	ABC	CD300LG (Nepmucin)	ZAQ5	Mouse	ENSMUSG00000017309	antibody	CD300LG|CD300LG (Nepmucin)	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+CGGTGTTTGTAGCAA	A0234	AB	CD68				antibody	CD68	hubmap_B|rhumba_2018	
+CGTAACGTAGAGCGA	A0224	ABC	TCR a/β	IP26	Human		antibody	TCR _/_|TCR a/β|TCR α β|TCR α/β|TCR.AB|TCR_a/b	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CGTATCCGTCTCCTA	A0557	ABC	CD38	90	Mouse	ENSMUSG00000029084	antibody	CD38	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CGTATCTGTCATTAG		ABC	Ly49G	AT8			antibody	Ly49G	hubmap_A|hubmap_B|hubmap_C	
+CGTATGCGCTTCAAG	C0972	C	Streptavidin				antibody	Biotin|Streptavidin	biolegend_2020|hubmap_C	
+CGTCATATAGTATGG	A0428	ABC	Tim-4	9F4	Human	ENSG00000145850	antibody	TIM-4|Tim-4	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CGTCCTAGTCATTGG	A0381	AB	Panendothelial Cell Antigen	MECA-32	Mouse	ENSMUSG00000034845	antibody	Panendothelial Cell Antigen	biolegend_2020|hubmap_A|hubmap_B|rhumba_2018	
+CGTCCTTTGCCTGTA		C	nan	nan			antibody		hubmap_C	
+CGTGTTTAACTTGAG	A0408	ABC	CD172a (SIRPa)	15-414	Human	ENSG00000198053	antibody	CD172a|CD172a (SIRPa)|CD172a (SIRPα)|CD172a_(SIRPa)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CGTGTTTGTTCCTCA	A0165	ABC	CD314 (NKG2D)	1D11	Human	ENSG00000213809	antibody	CD314|CD314 (NKG2D)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CGTTCCTACCTACCT	A0226	ABC	CD106	429 (MVCAM.A)	Mouse	ENSMUSG00000027962	antibody	CD106	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CGTTGCCATTAACCA	A0131	AC	Cadherin 11	16G5	Human	ENSG00000140937	antibody	Cadherin 11	biolegend_2020|hubmap_C|rhumba_2018	
+CGTTTATGGGATGGG	A0231	AC	H-2Kb bound to SIINFEKL	25-D1.16	Mouse	ENSMUSG00000061232	antibody	H-2K<sup>b</sup> bound to SIINFEKL|H-2Kb bound to SIINFEKL	biolegend_2020|hubmap_C|rhumba_2018	
+CTACATTGCGATTTG	A0313	A	mouse Hashtag 13				hashtag	mouse Hashtag 13	rhumba_2018	
+CTACGACGTAGAAGA	A0029	ABC	CD48	BJ40	Human	ENSG00000117091	antibody	CD48	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTACGCCTCCTTTCT		C	CD181	8F1/CXCR1			antibody	CD181	hubmap_C	
+CTACTTCCCTGTCAA	C0944	ABC	CD101 (BB27)	BB27	Human	ENSG00000134256	antibody	CD101|CD101 (BB27)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+CTAGACCCTTCCCTT		A	CD133	315-2C11			antibody	CD133	hubmap_A	
+CTAGATAACGACCGA		AC	PSMA	LNI-17			antibody	PSMA	hubmap_A|hubmap_C	
+CTATCGTTTGATGCA	A0814	ABC	CD205 (DEC-205)	HD30	Human	ENSG00000054219	antibody	CD205|CD205 (DEC-205)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+CTATTGGACGTATCT	A0233	ABC	Notch 3	MHN3-21	Human	ENSG00000074181	antibody	Notch 3|Notch3	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CTCAACAGTATTCTG	A0354	AC	TCR Vβ5.1, 5.2	MR9-4	Mouse		antibody	TCR V_5.1, 5.2|TCR Vβ5.1 5.2|TCR Vβ5.1, 5.2	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+CTCACCTACCTATGG	A0195	AC	CD134 (OX40)	OX-86	Mouse	ENSMUSG00000029075	antibody	CD134|CD134 (OX-40)|CD134 (OX40)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+CTCAGATGCCCTTTA	A0564	AB	Folate Receptor β (FR-β)	10/FR2	Mouse	ENSMUSG00000032725	antibody	Folate Receptor β|Folate Receptor β (FR-β)	biolegend_2020|hubmap_A|hubmap_B|rhumba_2018	
+CTCAGATGGAGTATG	A0031	ABC	CD40	5C3	Human	ENSG00000101017	antibody	CD40	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTCATTGTAACTCCT	A0034	ABC	CD3	UCHT1	Human	ENSG00000167286	antibody	CD3|CD3_UCHT1	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTCCCTAGTTCCTTT	A0872	AC	CD84	CD84.1.21	Human	ENSG00000066294	antibody	CD84	biolegend_2020|hubmap_A|hubmap_C	
+CTCCCTGTGGCTTAA	A0248	AC	CD62E	HAE-1f	Human	ENSG00000007908	antibody	CD62E	biolegend_2020|hubmap_C|rhumba_2018	
+CTCCCTTTGTAACAT	A0379	A	CD62E				antibody	CD62E	rhumba_2018	
+CTCCGAATCATGTTG	A0087	ABC	CD45RO	UCHL1	Human	ENSG00000081237	antibody	CD45RO	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTCCTACCTAAACTG	A0091	ABC	Mouse IgG2a, κ Isotype Control	MOPC-173			isotype	Isotype_MOPC.173|Mouse Ig2a, κ Isotype Control|Mouse IgG2a κ isotype Ctrl|Mouse IgG2a, κ Isotype Control	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTCCTCTGCAATTAC	A0258	A	human Hashtag 8				hashtag	Hashtag 8|human Hashtag 8	cellgeni_hto|rhumba_2018	
+CTCGTTTCCGTATCG	A0352	ABC	FceRIa	AER-37 (CRA-1)	Human	ENSG00000179639	antibody	FceRIa|FcεRIα	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTCTCCCTTTGTAGT	A0271	A	Biotin Hashtag 6				hashtag	Biotin Hashtag 6	rhumba_2018	
+CTCTCTGCATTCCTC	A0225	ABC	CD196 (CCR6)	29-2L17	Mouse	ENSMUSG00000040899	antibody	CD196|CD196 (CCR6)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CTGATAGACTTGAGT	A0217	ABC	CD54	HA58	Human	ENSG00000090339	antibody	CD54	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTGATGAGATGTCAG	C1052	ABC	CD224	KF29	Human	ENSG00000100031	antibody	CD224	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+CTGCAAATATAACGG	A0312	A	mouse Hashtag 12				hashtag	mouse Hashtag 12	rhumba_2018	
+CTGCATGAGACCAAA	A0931	A	CD131	1C1	Human		antibody	CD131	biolegend_2020|hubmap_A	
+CTGCATTTCAGTAAG	A0207	ABC	CD370 (CLEC9A/DNGR1)	8F9	Human	ENSG00000197992	antibody	CD370|CD370 (CLEC9A/DNGR1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CTGGAGCGATTAGAA	A0375	ABC	IgG Fc	M1310G05	Human	ENSG00000211896	antibody	IgG Fc	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CTGGATTTGTGTATC	A0200	ABC	CD86	GL-1	Mouse	ENSMUSG00000022901	antibody	CD86	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CTGGGCAATTACTCG	A0050	ABC	CD19	HIB19	Human	ENSG00000177455	antibody	CD19	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTGGTATGCGATTAA		ABC	CD96	3.3			antibody	CD96	hubmap_A|hubmap_B|hubmap_C	
+CTGTAGCATTTCCCT		ABC	CD74	LN2			antibody	CD74	hubmap_A|hubmap_B|hubmap_C	
+CTGTAGCCGCCTATT	A0133	ABC	CD340 (erbB2/HER-2)	24D2	Human	ENSG00000141736	antibody	CD340|CD340 (erbB2/HER-2)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CTGTATGTCCGATTG	A0264	A	human Hashtag 14				hashtag	human Hashtag 14	rhumba_2018	
+CTTACCCGGATTCTA	C0984	C	TCR Va11.1, 11.2	RR8-1	Mouse		antibody	TCR Va11.1, 11.2|TCR Vα11	biolegend_2020|hubmap_C	
+CTTACCTAGTCATTC	A0861	A	CD151 (PETA-3)	50-6	Human	ENSG00000177697	antibody	CD151|CD151 (PETA-3)	biolegend_2020|hubmap_A	
+CTTACGATTAAGAGC		C	CD147	HIM6			antibody	CD147	hubmap_C	
+CTTAGCATTTCACTG	A0902	ABC	CD328 (Siglec-7)	6-434	Human	ENSG00000168995	antibody	CD328|CD328 (Siglec-7)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+CTTATCACCCGCTTT	A0578	A	CD79a				antibody	CD79a	rhumba_2018	
+CTTATTTCCTGCCCT	A0153	ABC	KLRG1 (MAFA)	SA231A2	Human	ENSG00000139187	antibody	KLRG1|KLRG1 (MAFA)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTTCACTCTGTCAGG	A0064	ABC	CD123	6H6	Human	ENSG00000185291	antibody	CD123	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTTCCGATTCATTCA	A0139	ABC	TCR γ/δ	B1	Human		antibody	TCR γ δ|TCR γ/δ	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CTTCTCCTCAGCAAT	A0199	AC	Siglec-8				antibody	Siglec-8	hubmap_A|hubmap_C|rhumba_2018	
+CTTCTGGGATTCTGG	A0869	AC	CD365 (Tim-1)	1D12	Human	ENSG00000113249	antibody	CD365|CD365 (Tim-1)	biolegend_2020|hubmap_C	
+CTTGCCGCATGTCAT	A0303	AC	mouse Hashtag 3				hashtag	mouse Hashtag 3	rhumba_2018	
+CTTGCCTTGCGATTT	A0566	ABC	CD301b (MGL2)	URA-1	Mouse	ENSMUSG00000040950	antibody	CD301b|CD301b (MGL2)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CTTTAGCAATTAGCG		A	IL-23R	12B2B64			antibody	IL-23R	hubmap_A	
+CTTTCCCTAGTATGC	C0983	C	TCR Va8.3	KT50	Mouse		antibody	TCR Va8.3|TCR Vα8.3	biolegend_2020|hubmap_C	
+CTTTCCGGTCCTACA	A0867	ABC	CD94	DX22	Human	ENSG00000134539	antibody	CD94	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C	
+CTTTCGCCAACTCTG	A0314	A	mouse Hashtag 14				hashtag	mouse Hashtag 14	rhumba_2018	
+CTTTCGTTGCCTTGG		C	CCRL2	K097F7			antibody	CCRL2	hubmap_C	
+CTTTCTTTCACGGGA	A0560	ABC	CD68	FA-11	Mouse	ENSMUSG00000018774	antibody	CD68	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+CTTTGTACGAGCAAA	A0033	ABC	CD52	HI186	Human	ENSG00000169442	antibody	CD52	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+CTTTGTCTTTGTGAG	A0305	AC	mouse Hashtag 5				hashtag	mouse Hashtag 5	rhumba_2018	
+GAAAGTCAAAGCACT	A0004	ABC	CD279 (PD-1)	RMP1-30	Mouse	ENSMUSG00000026285	antibody	CD279|CD279 (PD-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD14_TotalSeqB
+GAAAGTCGCCAACAG	A0848	ABC	TIGIT (Vstm3)	1G9	Mouse	ENSMUSG00000071552	antibody	TIGIT|TIGIT (Vstm3)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GAACATTTCCGACAA	A0899	ABC	HLA-A2	BB7.2	Human	ENSG00000206503	antibody	HLA-A2	biolegend_2020|hubmap_B|hubmap_C	
+GAACCGTAGTATAAC	A0916	AC	CD124 (IL-4Rα)	I015F8	Mouse	ENSMUSG00000030748	antibody	CD124|CD124 (IL-4Rα)	biolegend_2020|hubmap_C	
+GAAGCTGTATCCGAA	A0893	AC	CD120b (TNF R Type II/p75)	TR75-89	Mouse	ENSMUSG00000028599	antibody	CD120b|CD120b (TNF R Type II/p75)	biolegend_2020|hubmap_A|hubmap_C	
+GACAAGTGATCTGCA	A0161	ABC	CD11b	ICRF44	Human	ENSG00000169896	antibody	CD11b	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GACAGTACCGACACT	A0948	A	CD321 (F11R)	OV-5B8	Human	ENSG00000158769	antibody	CD321|CD321 (F11R)	biolegend_2020|hubmap_A	
+GACAGTCGATGCAAC	A0804	AC	CD186 (CXCR6)	K041E5	Human	ENSG00000172215	antibody	CD186|CD186 (CXCR6)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+GACATTAAGAGCAGA		C	Biotin	nan			antibody	Biotin	hubmap_C	
+GACCCGGTGTCATTT	A0849	ABC	CD80	16-10A1	Mouse	ENSMUSG00000075122	antibody	CD80	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GACCCGTAGTTTGAT	A0592	ABC	CD158b (KIR2DL2/L3, NKAT2)	DX27	Human	ENSG00000243772	antibody	CD158b|CD158b (KIR2DL2/L3,  NKAT2)|CD158b (KIR2DL2/L3, NKAT2)|CD158b/j	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GACCTCATTGTGAAT	A0145	ABC	CD103	Ber-ACT8	Human	ENSG00000083457	antibody	CD103	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GACTGGGAGGGTATT	A0010	ABC	CD276 (B7-H3)	DCN.70	Human	ENSG00000103855	antibody	CD276|CD276 (B7-H3)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GAGATGTCCGAATTT	A0370	ABC	CD303 (BDCA-2)	201A	Human	ENSG00000198178	antibody	CD303|CD303 (BDCA-2)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GAGATGTCTGCAACT	A0404	ABC	CD63	H5C6	Human	ENSG00000135404	antibody	CD63	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GAGATGTCTTTCGCC		A	CD47	miap301			antibody	CD47	hubmap_A	
+GAGCAAGATTAAGAC	A0417	ABC	CD163	S15049I	Mouse	ENSMUSG00000008845	antibody	CD163	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GAGCCGGTATAATGC	C1051	BC	Podocalyxin	mAb 84	Human	ENSG00000128567	antibody	Podocalyxin	biolegend_2020|hubmap_B|hubmap_C	
+GAGCTACTTCACTCG	A0160	ABC	CD1c	L161	Human	ENSG00000158481	antibody	CD1c	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GAGCTTGTACCGCTT	A0438	A	KCC2				antibody	KCC2	rhumba_2018	
+GAGGATGATGCCATG		AC	CD360	17A12			antibody	CD360	hubmap_A|hubmap_C	
+GAGGCACTTAACATA	A0821	ABC	CD164	67D2	Human	ENSG00000135535	antibody	CD164	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GAGGCTTATCATTTC	A0835	ABC	CD314 (NKG2D)	CX5	Mouse	ENSMUSG00000030149	antibody	CD314|CD314 (NKG2D)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GAGGTTAGTGATGGA	A0045	ABC	CD4	SK3	Human	ENSG00000010610	antibody	CD4	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GAGTCACCAATCTGC	A0579	ABC	CD9	HI9a	Human	ENSG00000010278	antibody	CD9	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GAGTCGAGAAATCAT	A0918	ABC	HLA-E	3D12	Human	ENSG00000204592	antibody	HLA-E|HLA.E	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+GAGTCTGCCAGTATC	A0307	A	mouse Hashtag 7				hashtag	mouse Hashtag 7	rhumba_2018	
+GAGTTCCCTCAGTTC	C1057	BC	DR3 (TRAMP)	JD3	Human	ENSG00000215788	antibody	DR3|DR3 (TRAMP)	biolegend_2020|hubmap_B|hubmap_C	
+GAGTTCCCTTACCTG	A0242	ABC	CD192 (CCR2)	K036C2	Human	ENSG00000121807	antibody	CD192|CD192 (CCR2)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GAGTTCGTTGTTCCA	A0928	A	TSPAN33 (BAAM)	SA17RN1	Human		antibody	TSPAN33 (BAAM)	biolegend_2020	
+GATATTCAGTGCGAC	A0104	A	CD102	3C4 (MIC2/4)	Mouse	ENSMUSG00000001029	antibody	CD102	biolegend_2020|hubmap_A|rhumba_2018	
+GATATTCCCACCAAA		ABC	His Tag	J095G46			antibody	His Tag	hubmap_A|hubmap_B|hubmap_C	
+GATCCCTTTGTCACT	A0143	ABC	CD196 (CCR6)	G034E3	Human	ENSG00000112486	antibody	CD196|CD196 (CCR6)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GATCCGTGTTGCCTA	A0885	AC	CD270 (HVEM)	HMHV-1B18	Mouse	ENSMUSG00000042333	antibody	CD270|CD270 (HVEM)	biolegend_2020|hubmap_A|hubmap_C	
+GATCGTGTTGTGTTA	A0402	ABC	CD1a	HI149	Human	ENSG00000158477	antibody	CD1a	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GATGCAATTAGCCGG	A0895	ABC	Mac-2 (Galectin-3)	M3/38	Mouse, Human	ENSMUSG00000050335, ENSG00000131981	antibody	Mac-2|Mac-2 (Galectin-3)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GATGGACGACAATTC	A0430	A	CD171 (L1CAM)	L1-OV198.5	Human	ENSG00000198910	antibody	CD171|CD171 (L1CAM)	biolegend_2020|rhumba_2018	
+GATTAACCAGCTCAT	A0357	AC	CD43	CD43-10G7	Human	ENSG00000197471	antibody	CD43	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+GATTCCCTTGTAGCA	A0422	ABC	CD172a (SIRPa)	P84	Mouse	ENSMUSG00000037902	antibody	CD172a|CD172a (SIRPa)|CD172a (SIRPα)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GATTCCGACAGTAGA		C	IL-21R	4A9			antibody	IL-21R	hubmap_C	
+GATTCCTTTACGAGC	A0857	ABC	CD34	HM34	Mouse	ENSMUSG00000016494	antibody	CD34	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GATTCTTGACGACCT	A0095	ABC	Rat IgG2b, κ Isotype Control	RTK4530			isotype	IgG2b_k|Isotype_RTK4530|Rat IgG2b κ Isotype Ctrl|Rat IgG2b κ isotype Ctrl|Rat IgG2b, κ Isotype Control	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GCAACTCTCCTACCT	C1047	BC	HLA-F	3D11/HLA-F	Human	ENSG00000204642	antibody	HLA-F	biolegend_2020|hubmap_B|hubmap_C	
+GCACCAACAGCCATT	A0374	ABC	CD98	MEM-108	Human	ENSG00000168003	antibody	CD98	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GCACCTCATTCCTAC		C	Biotin	nan			antibody	Biotin	hubmap_C	
+GCACTCCTGCATGTA	A0154	ABC	CD27	O323	Human	ENSG00000139193	antibody	CD27	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GCACTTCATTCAGTG		A	TRA-1-81	TRA-1-81			antibody	TRA-1-81	hubmap_A	
+GCAGAAATCTCCCTT	A0054	ABC	CD34	581	Human	ENSG00000174059	antibody	CD34	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GCAGCGTATAAGTCA	A0025	A	Annexin V				antibody	Annexin V	rhumba_2018	
+GCAGTCCTACATTGA		ABC	CD88	20/70			antibody	CD88	hubmap_A|hubmap_B|hubmap_C	
+GCAGTTGTCCGATTC	A0875	A	TLR4 (CD284)/MD2 Complex	MTS510	Mouse	ENSMUSG00000039005	antibody	TLR4 (CD284)/MD2 Complex	biolegend_2020|hubmap_A	
+GCATTCTGTCACCTA	A0026	ABC	CD47	CC2C6	Human	ENSG00000196776	antibody	CD47	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GCATTGTACGATTCA	A0060	ABC	CD90 (Thy1)	5E10	Human	ENSG00000154096	antibody	CD90|CD90 (Thy1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GCATTGTAGTCACGC		AC	IgG2b	RMG2b-1			antibody	IgG2b	hubmap_A|hubmap_C	
+GCCATTCCTGCCTAA	A0803	A	CD253 (TRAIL)	RIK-2	Human	ENSG00000121858	antibody	CD253|CD253 (TRAIL)	biolegend_2020|hubmap_A|rhumba_2018	
+GCCCTTCCTCATTTC		B	CD261	DJR1			antibody	CD261	hubmap_B	
+GCCGCATGAGAAACA	C1046	ABC	CD88 (C5aR)	S5/1	Human		antibody	CD88|CD88 (C5aR)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+GCCGGACGACATTAA	A0090	ABC	Mouse IgG1, κ Isotype Control	MOPC-21			isotype	IgG1k_Isotype_Ctrl|Isotype_MOPC.21|Mouse IgG1 κ isotype Ctrl|Mouse IgG1, κ Isotype Control	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GCCGTATCTCCTTAC		B	CD85k	ZM4.1			antibody	CD85k	hubmap_B	
+GCCTAGTTTCCGTTT	A0912	ABC	GPR56	CG4	Human, Mouse		antibody	GPR56	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C	
+GCCTAGTTTGAACGC	A0826	ABC	CD307c/FcRL3	H5/FcRL3	Human	ENSG00000160856	antibody	CD307c/FcRL3	biolegend_2020|hubmap_B|hubmap_C	
+GCGAGAAATCTGCAT	A0825	ABC	CD371 (CLEC12A)	5D3/CLEC12A	Mouse	ENSMUSG00000053063	antibody	CD371|CD371 (CLEC12A)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GCGATCCCTTGAGAT	A0922	A	CD4	OKT4	Human	ENSG00000010610	antibody	CD4	biolegend_2020|hubmap_A	
+GCGATGGAGCATGTT	A0837	AC	IL-33Ra (IL1RL1, ST2)	DIH9	Mouse	ENSMUSG00000026069	antibody	IL-33Ra (IL1RL1, ST2)|IL-33Rα|IL-33Rα (IL1RL1, ST2)	biolegend_2020|hubmap_A|hubmap_C	
+GCGATGGTAGATTAT	A0140	ABC	CD183 (CXCR3)	G025H7	Human	ENSG00000186810	antibody	CD183|CD183 (CXCR3)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GCGATTCATGTCACG	A0818	ABC	CD11a/CD18 (LFA-1)	m24	Human	ENSG00000005844, ENSG00000160255	antibody	CD11a/CD18 (LFA-1)|CD18	biolegend_2020|hubmap_B|hubmap_C	
+GCGCAACTCCTTGTA	A1024	ABC	CD120b	3G7A02	Human		antibody	CD120b	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GCGCAACTTGATGAT	A0046	ABC	CD8	SK1	Human	ENSG00000153563	antibody	CD8	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GCGCGTTTGTGCTAT	A0122	ABC	TER-119/Erythroid Cells	TER-119	Mouse		antibody	TER-119|TER-119 Erythroid Cells|TER-119/Erythroid Cells	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GCGCTACTTCCTTGA	A0446	ABC	CD93	VIMD2	Human	ENSG00000125810	antibody	CD93	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GCGTATGTCAGTACC	A1006	AC	CD160	7H1	Mouse	ENSMUSG00000038304	antibody	CD160	biolegend_2020|hubmap_A|hubmap_C	
+GCGTATTTAACCCGT	A0834	AC	CD39	Duha59	Mouse	ENSMUSG00000048120	antibody	CD39	biolegend_2020|hubmap_A|hubmap_C	
+GCGTTTGTATGTACT	A0810	ABC	CD138 (Syndecan-1)	281-2	Mouse	ENSMUSG00000020592	antibody	CD138|CD138 (Syndecan-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GCTAGATAGATGCAA	A0032	ABC	CD154	24-31	Human	ENSG00000102245	antibody	CD154	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GCTAGTTTGTGCTGC	A0076	ABC	CD15 (SSEA-1)	MC-480	Mouse, Human	ENSMUSG00000049307	antibody	CD15|CD15 (SSEA-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GCTCATTACCCATTA	A0383	AC	CD55	JS11	Human	ENSG00000196352	antibody	CD55	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+GCTCCTTTACACGTA	A0196	ABC	CD235ab	HIR2	Human	ENSG00000170180	antibody	CD235ab	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GCTGCGCTTTCCATT	A0080	ABC	CD8a	RPA-T8	Human	ENSG00000153563	antibody	CD8a	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GCTGTAGTATCATGT	A0904	ABC	CD31	390	Mouse	ENSMUSG00000020717	antibody	CD31	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GCTTAACATTGGCAC	A0132	ABC	EGFR	AY13	Human	ENSG00000146648	antibody	EGFR	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GCTTACCGAATTAAC	A0311	A	mouse Hashtag 11				hashtag	mouse Hashtag 11	rhumba_2018	
+GCTTAGCTGTATCCG	A0405	AC	CD284 (TLR4)	HTA125	Human	ENSG00000136869	antibody	CD284|CD284 (TLR4)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+GCTTCCGAATTACCG	A0142	ABC	CD32	FUN-2	Human	ENSG00000143226	antibody	CD32	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GCTTCTCCTTCCTTA	A0358	ABC	CD163	GHI/61	Human	ENSG00000177575	antibody	CD163	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GCTTGGGCAATTAAG	A0836	ABC	DR3 (TNFRSF25)	4C12	Mouse	ENSMUSG00000024793	antibody	DR3|DR3 (TNFRSF25)	biolegend_2020|hubmap_B|hubmap_C	
+GCTTTCTTCAGTATG	A0371	ABC	CD49b	P1E6-C5	Human	ENSG00000164171	antibody	CD49b	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GGACGCTTTCCTTGA	A0599	ABC	CD158e1 (KIR3DL1, NKB1)	DX9	Human	ENSG00000167633	antibody	CD158e1|CD158e1 (KIR3DL1, NKB1)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GGACTAAGTTTCGTT	A0406	ABC	CD304 (Neuropilin-1)	12C2	Human	ENSG00000099250	antibody	CD304|CD304 (Neuropilin-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GGAGTCAGGGTATTA	A1008	AC	CD51	RMV-7	Mouse	ENSMUSG00000027087	antibody	CD51	biolegend_2020|hubmap_A|hubmap_C	
+GGATAACCGCGCTTT	A0163	ABC	CD141 (Thrombomodulin)	M80	Human	ENSG00000178726	antibody	CD141|CD141 (Thrombomodulin)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GGATAATTTCGATCC	A0107	AC	CD21/CD35 (CR2/CR1)	7E9	Mouse	ENSMUSG00000026616	antibody	CD21 CD35|CD21,CD35|CD21/CD35 (CR2/CR1)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+GGATGTACCGCGTAT	A0868	AC	IgE	MHE-18	Human	ENSG00000211891	antibody	IgE	biolegend_2020|hubmap_A|hubmap_C	
+GGATTTGTATCTCCC	A0249	A	IRF4				antibody	IRF4	rhumba_2018	
+GGCACTCTGTAACAT	A0193	ABC	GITR	DTA-1	mouse	ENSMUSG00000041954	antibody	CD357|CD357 (GITR)|GITR	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GGCTAGAAATCAACG		BC	CD160	BY55			antibody	CD160	hubmap_B|hubmap_C	
+GGCTTGGATTCATTT		A	HLA-B7	BB7.1			antibody	HLA-B7	hubmap_A	
+GGGACAGTTCGTTTC	A0188	AC	CD66a/c/e	ASL-32	Human	ENSG00000079385	antibody	CD66a c e|CD66a/c/e	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+GGGAGCGATTCAACT	A0237	AC	Rat IgG1, λ Isotype Control	G0114F7			isotype	Rat IgG1 λ Isotype Ctrl|Rat IgG1, λ Isotype Control	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+GGGCAATTAGCGAGT	A0802	AC	CD336 (NKp44)	P44-8	Human	ENSG00000096264	antibody	CD336|CD336 (NKp44)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+GGGCGATTTAGTGTG		A	Podoplanin	8.1.1			antibody	Podoplanin	hubmap_A	
+GGGCTTATCATTAAG	A0272	A	Biotin Hashtag 7				hashtag	Biotin Hashtag 7	rhumba_2018	
+GGGTATCCTGATAGG		A	CD144	BV13			antibody	CD144	hubmap_A	
+GGGTTGTTGTCTTTG	A0393	ABC	CD22	S-HCL-1	Human	ENSG00000012124	antibody	CD22	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GGTAACTCTGGTAGC		AC	Biotin	nan			antibody	Biotin	hubmap_A|hubmap_C	
+GGTAGCCCTAGAGTA	A0221	A	IRF5				antibody	IRF5	rhumba_2018	
+GGTAGTCATCGTGGT	A0266	A	Biotin Hashtag 1				hashtag	Biotin Hashtag 1	rhumba_2018	
+GGTATAAGAGCTACG	C0974	C	Streptavidin				antibody	Biotin|Streptavidin	biolegend_2020|hubmap_C	
+GGTATGCGACACTTA	B0227	ABC	CD122 (IL-2Rβ)	5H4	Mouse		antibody	CD122|CD122 (IL-2Rβ)	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+GGTATTTCCTGTGGT	A0113	AC	CD93 (AA4.1, early B lineage)	AA4.1	Mouse	ENSMUSG00000027435	antibody	CD93|CD93 (AA4.1, early B lineage)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+GGTCACCAGTATGAT	A0117	ABC	I-A/I-E	M5/114.15.2	Mouse	ENSMUSG00000073421	antibody	I-A I-E|I-A/I-E	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GGTCGAGAGCATTCA	A0302	AC	mouse Hashtag 2				hashtag	mouse Hashtag 2	rhumba_2018	
+GGTGGCTAGATAATG	A0396	ABC	CD26	BA5b	Human	ENSG00000197635	antibody	CD26	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GGTGTGAGCAGTTCT	A0435	A	GABRB3				antibody	GABRB3	rhumba_2018	
+GGTTACTCGTTGTGT	A0127	ABC	Podoplanin	NC-08	Human	ENSG00000162493	antibody	Podoplanin	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GGTTGCCAGATGTCA	A0256	A	human Hashtag 6				hashtag	Hashtag 6|human Hashtag 6	cellgeni_hto|rhumba_2018	
+GGTTGTCATAAGAAC		C	Biotin	nan			antibody	Biotin	hubmap_C	
+GTAACATTACTCGTC	A0118	ABC	NK-1.1	PK136	Mouse	ENSMUSG00000030325	antibody	NK-1.1	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GTAAGACGCCTATGC	A0594	ABC	CD133	S16016B	Human	ENSG00000007062	antibody	CD133	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GTACGCAGTCCTTCT	A0149	ABC	CD161	HP-3G10	Human	ENSG00000111796	antibody	CD161	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GTACTTAACGTCATC	A0888	ABC	Notch 4	HMN4-14	Mouse	ENSMUSG00000015468	antibody	Notch 4	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GTAGCAAGATTCAAG	A0098	ABC	CD135	A2F10	Mouse	ENSMUSG00000042817	antibody	CD135	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GTAGCATTGTAGTGA		AC	CD89	A59			antibody	CD89	hubmap_A|hubmap_C	
+GTAGTAGGCTAGACC	A0250	ABC	KLRG1 (MAFA)	2F1/KLRG1	Mouse, Human	ENSMUSG00000030114, ENSG00000139187	antibody	KLRG1|KLRG1 (MAFA)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GTATAATGCCCGACA		C	Biotin	nan			antibody	Biotin	hubmap_C	
+GTATAGACCAAAGCC	A0831	ABC	CD138 (Syndecan-1)	DL-101	Human	ENSG00000115884	antibody	CD138|CD138 (Syndecan-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GTATCCTTCCTTGGC	A0373	ABC	CD81 (TAPA-1)	5A6	Human	ENSG00000110651	antibody	CD81|CD81 (TAPA-1)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GTATGTCCGCTCGAT	A0182	ABC	CD3	17A2	Mouse	ENSMUSG00000002033	antibody	CD3	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GTATTCCCTCAGTCA	A0369	ABC	CD29	TS2/16	Human	ENSG00000150093	antibody	CD29	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GTATTCCGCACCTAT	A0880	A	GITR Ligand	5F1	Mouse	ENSMUSG00000066755	antibody	GITR Ligand	biolegend_2020|hubmap_A	
+GTCAACTCTTTAGCG	A0251	AC	human Hashtag 1				hashtag	Hashtag 1|human Hashtag 1	cellgeni_hto|rhumba_2018	
+GTCACCAAACCGCTA		AC	nan	nan			antibody	Biotin	hubmap_A|hubmap_C	
+GTCACGTAGTATCTT	A1012	AC	CD178	MFL3	Mouse		antibody	CD178	biolegend_2020|hubmap_A|hubmap_C	
+GTCATAAGAGCTTAC	C1021	C	GPR56	4C3	Human		antibody	GPR56	biolegend_2020|hubmap_C	
+GTCATTGCGGTCCTA	A0573	ABC	CD140a	APA5	Mouse	ENSMUSG00000029231	antibody	CD140a	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GTCATTGTATGTCTG	A0870	ABC	CD150 (SLAM)	A12 (7D4)	Human	ENSG00000117090	antibody	CD150|CD150 (SLAM)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GTCCCTGCAACTTGA	A0147	ABC	CD62L	DREG-56	Human	ENSG00000188404	antibody	CD62L	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GTCCGACTAATAGCT	A0952	ABC	PE Streptavidin				antibody	Biotin|PE Streptavidin	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GTCCGTATTCTGTCA	A0267	A	Biotin Hashtag 2				hashtag	Biotin Hashtag 2	rhumba_2018	
+GTCGTGGTGTTGTTC	A0444	AB	CD184 (CXCR4)	L276F12	Mouse	ENSMUSG00000045382	antibody	CD184|CD184 (CXCR4)|CXCR4	biolegend_2020|hubmap_A|hubmap_B|rhumba_2018	
+GTCTCTTGGCTTAAA	A0146	ABC	CD69	FN50	Human	ENSG00000110848	antibody	CD69	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GTCTTTGTCAGTGCA	A0006	ABC	CD86	IT2.2	Human	ENSG00000114013	antibody	CD86	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD16_TotalSeqB
+GTGATCCCTGGTATT		BC	CD104	346-11A			antibody	CD104	hubmap_B|hubmap_C	
+GTGATCTAAGATGCG	A0876	A	CD300c/d	TX52	Mouse	ENSMUSG00000058728	antibody	CD300c/d	biolegend_2020	
+GTGCATTCAACAGTA	A0009	ABC	CD275 (B7-H2, ICOSL)	2D3	Human	ENSG00000160223	antibody	CD275|CD275 (B7-H2, ICOSL)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD25_TotalSeqB
+GTGTGAGGCACTCTT	A0198	ABC	CD127 (IL-7Rα)	A7R34	Mouse	ENSMUSG00000003882	antibody	CD127|CD127 (IL-7Rα)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GTGTGTTGTCCTATG	A0390	ABC	CD127 (IL-7Ra)	A019D5	Human	ENSG00000168685	antibody	CD127|CD127 (IL-7Ra)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GTGTTTGTGTTCCTG		A	CD159a	16A11			antibody	CD159a	hubmap_A	
+GTTAGTGTTAGCTTG	A0172	A	CD275 (B7-H2, B7-RP1, ICOSL)	9F.8A4	Human	ENSG00000160223	antibody	CD275|CD275 (B7-H2, B7-RP1, ICOSL)	biolegend_2020|hubmap_A|rhumba_2018	
+GTTATGGACGCTTGC	A0106	ABC	CD11c	N418	Mouse	ENSMUSG00000030789	antibody	CD11c	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+GTTATGGTTCGTGTT	A0877	AC	JAML	4E10	Mouse	ENSMUSG00000048534	antibody	JAML	biolegend_2020|hubmap_A|hubmap_C	
+GTTATTGGACTAAGG	A0170	ABC	CD272 (BTLA)	MIH26	Human	ENSG00000186265	antibody	CD272|CD272 (BTLA)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GTTCACGCCGTGTTA	C0228	ABC	CD183 (CXCR3)	CXCR3-173	Mouse	ENSMUSG00000050232	antibody	CD183|CD183 (CXCR3)	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+GTTCCTATGGACGAC	A0174	ABC	CD58	TS2/9	Human	ENSG00000116815	antibody	CD58	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+GTTGGATGGTAGACT		AC	MR1	26.5			antibody	MR1	hubmap_A|hubmap_C	
+GTTGTAGACCCTTAT		AC	Notch 2	MHN2-25			antibody	Notch 2	hubmap_A|hubmap_C	
+GTTGTCCGACAATAC	A0007	ABC	CD274 (B7-H1, PD-L1)	29E.2A3	Human	ENSG00000120217	antibody	CD274|CD274 (B7-H1, PD-L1)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD56_TotalSeqB
+GTTGTGAGCACGAGA	A0955	ABC	PE Streptavidin				antibody	Biotin|PE Streptavidin	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+GTTTCCTTGACCAAG	A0069	ABC	CD201 (EPCR)	RCR-401	Human	ENSG00000101000	antibody	CD201|CD201 (EPCR)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TAACCGTACCTGCAT	A0593	AC	CD203c (E-NPP3)	NP4D6	Human	ENSG00000154269	antibody	CD203c|CD203c (E-NPP3)	biolegend_2020|hubmap_A|hubmap_C	
+TAACGACCAGCCATA	A0262	A	human Hashtag 12				hashtag	human Hashtag 12	rhumba_2018	
+TAACTCAGGGCCTAT	A0052	ABC	CD33	P67.6	Human	ENSG00000105383	antibody	CD33	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TAACTCAGTGCGAGT	A0561	ABC	CD79b (Igβ)	HM79-12	Mouse	ENSMUSG00000040592	antibody	CD79b|CD79b (Igβ)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TAAGACTTGGCCGTC	A0569	AC	CD338 (ABCG2)	5D3	Human	ENSG00000118777	antibody	CD338|CD338 (ABCG2)	biolegend_2020|hubmap_C|rhumba_2018	
+TAAGATTCAGAGCGA	A0265	A	human Hashtag 15				hashtag	human Hashtag 15	rhumba_2018	
+TAATGCCAGTTGTGC	A0094	A	CD3ε				antibody	CD3ε	rhumba_2018	
+TAATGCCCTTTCCTT		AC	C3aR	hC3aRZ8			antibody	C3aR	hubmap_A|hubmap_C	
+TACAGTCGCTTGGCA	A0270	A	Biotin Hashtag 5				hashtag	Biotin Hashtag 5	rhumba_2018	
+TACCCGTAATAGCGT	A0002	ABC	CD8a	53-6.7	Mouse	ENSMUSG00000053977	antibody	CD8a	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD4_TotalSeqB
+TACGAGCAGTATTCA	A0581	ABC	TCR Va7.2	3C10	Human		antibody	TCR V a7.2|TCR Va7.2|TCR Vα7.2|TCR.Va7.2|TCR_Va7.2	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TACGATTTGTCAGGG	A0367	ABC	CD2	TS1/8	Human	ENSG00000116824	antibody	CD2	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TACGCCTATAACTTG	A0053	ABC	CD11c	S-HCL-3	Human	ENSG00000140678	antibody	CD11c	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TACTCAGCGTGTTTG	A0206	ABC	CD169 (Sialoadhesin, Siglec-1)	7-239	Human	ENSG00000088827	antibody	CD169|CD169 (Sialoadhesin, Siglec-1)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TACTTCTGGAGCCAG	A0030	AC	CD277				antibody	CD277	rhumba_2018	
+TAGAACCGTATCCGT	A0808	AC	CD193 (CCR3)	J073E5	Mouse	ENSMUSG00000035448	antibody	CD193|CD193 (CCR3)	biolegend_2020|hubmap_A|hubmap_C	
+TAGATGGGATTCCGG		A	CD179a	HSL96			antibody	CD179a	hubmap_A	
+TAGCAGTCACTCCTA	A0813	ABC	CD9	MZ3	Mouse	ENSMUSG00000030342	antibody	CD9	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TAGCCGTTTCCTTTG	A0586	AC	CD354				antibody	CD354	hubmap_A|hubmap_C|rhumba_2018	
+TAGCGAGCCAGATGT	A0399	ABC	CD204	7C9C20	Human	ENSG00000038945	antibody	CD204	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TAGCGAGCCCGTATA	A0136	ABC	IgM	MHM-88	Human	ENSG00000211899	antibody	IgM	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TAGCTTGGGATTAAG	A1011	AC	CD155 (PVR)	TX56	Mouse	ENSMUSG00000040511	antibody	CD155|CD155 (PVR)	biolegend_2020|hubmap_A|hubmap_C	
+TAGTATGCTGGAGCG	A0887	AB	CD339 (Jagged 1)	HMJ1-29	Mouse	ENSMUSG00000027276	antibody	CD339|CD339 (Jagged 1)	biolegend_2020|hubmap_B	
+TAGTGTATGGACACG	A0116	ABC	Ly-6G/Ly-6C (Gr-1)	RB6-8C5	Mouse	ENSMUSG00000079018, ENSMUSG00000022582	antibody	Ly-6G Ly-6C|Ly-6G/Ly-6C|Ly-6G/Ly-6C (Gr-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TATAGAACGCCAGGC	A0308	A	mouse Hashtag 8				hashtag	mouse Hashtag 8	rhumba_2018	
+TATAGTTCCTCTGTG	A0923	A	NKp80	5D12	Human	ENSG00000150045	antibody	NKp80	biolegend_2020|hubmap_A	
+TATAGTTTCCGCCGT	A0596	ABC	ESAM	1G8/ESAM	Mouse	ENSMUSG00000001946	antibody	ESAM	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TATATCCCTCAACGC	A0841	ABC	Ly49D	4E5	Mouse	ENSMUSG00000079852	antibody	Ly49D	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TATATCCTTGTGAGC	A0185	ABC	CD11a	TS2/4	Human	ENSG00000005844	antibody	CD11a	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TATATCTTTGCCGCA	A0212	ABC	CD24	M1/69	Mouse	ENSMUSG00000047139	antibody	CD24	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TATCAACCAACGCTT	A0420	ABC	CD158 (KIR2DL1/S1/S3/S5)	HP-MA4	Human	ENSG00000125498	antibody	CD158|CD158 (KIR2DL1/S1/S3/S5)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TATCCCTGCCTTGCA	A0812	AC	CD105	MJ7/18	Mouse	ENSMUSG00000026814	antibody	CD105	biolegend_2020|hubmap_A|hubmap_C	
+TATCCCTTGGGATGG	A0049	ABC	CD3	SK7	Human	ENSG00000198851	antibody	CD3	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TATGATCTGCCCTTG	A0439	ABC	CD201 (EPCR)	RCR-16	Mouse	ENSMUSG00000027611	antibody	CD201|CD201 (EPCR)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TATGCGAGGCTTATC	A0058	ABC	HLA-A,B,C	W6/32	Human	ENSG00000206503	antibody	HLA-A B C|HLA-A,B,C|HLA-ABC|HLA.ABC	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TATGCTGCCACGGTA	A0306	A	mouse Hashtag 6				hashtag	mouse Hashtag 6	rhumba_2018	
+TATTGGGACACTTCT	A0385	ABC	CD18	TS1/18	Human	ENSG00000160255	antibody	CD18	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TATTTCCACCCGGTC	A0954	ABC	PE Streptavidin				antibody	Biotin|PE Streptavidin	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TCAACGCTTGGCTAG	A0008	ABC	CD273 (B7-DC, PD-L2)	24F.10C12	Human	ENSG00000197646	antibody	CD273|CD273 (B7-DC, PD-L2)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD19_TotalSeqB
+TCAACTCGGTGTTGC	A0173	A	CD206				antibody	CD206	rhumba_2018	
+TCAATCCTTCCGCTT	A0063	ABC	CD45RA	HI100	Human	ENSG00000081237	antibody	CD45RA	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCAATCTCCGTCGCT	A0431	ABC	CD170	S17007L	Mouse		antibody	CD170	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TCAATCTCCTCCTAT		AC	nan	nan			antibody	Biotin	hubmap_A|hubmap_C	
+TCAATTCCGGTAGTC	A0079	ABC	CD200 (OX2)	OX-90	Mouse	ENSMUSG00000022661	antibody	CD200|CD200 (OX2)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCACAGTTCCTTGGA	A0245	AC	CD106	STA	Human	ENSG00000162692	antibody	CD106	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TCACCAGTACCTAGT	A0392	ABC	CD15 (βEA-1)	W6D3	Human	ENSG00000196371	antibody	CD15|CD15 (βEA-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCACGCAGTCCTCAA	A0829	ABC	CD307e (FcRL5)	509f6	Human	ENSG00000143297	antibody	CD307e|CD307e (FcRL5)	biolegend_2020|hubmap_B|hubmap_C	
+TCACTGGACACTTAA	A0597	ABC	CD209 (DC-SIGN)	9E9A8	Human	ENSG00000090659	antibody	CD209|CD209 (DC-SIGN)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCAGAACGTCTAACT	A0205	ABC	CD206 (MMR)	15-2	Human	ENSG00000260314	antibody	CD206|CD206 (MMR)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCAGGGTGTGCTGTA	A0028	ABC	CD30	BY88	Human	ENSG00000120949	antibody	CD30	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCAGGTCCTTTCAAC	A0366	ABC	CD184 (CXCR4)	12G5	Human	ENSG00000121966	antibody	CD184|CD184 (CXCR4)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCAGTATTCTGGGAC		C	Biotin	nan			antibody	Biotin	hubmap_C	
+TCAGTCAGATGGTAT	A0582	ABC	TCR Vd2	B6	Human		antibody	TCR Vd2|TCR Vδ2|TCR.Vd2|TCR_Vd2	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCATATCCGTTGTCC	A0571	ABC	IgD	11-26c.2a	Mouse	ENSMUSG00000104213	antibody	IgD	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCATTTCCTCCGATT	C0246	ABC	CD122 (IL-2Rβ)	TU27	Human	ENSG00000100385	antibody	CD122|CD122 (IL-2Rβ)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCCACTCATTCTGTA	A0400	AC	CD144 (VE-cadherin)	BV9	Human	ENSG00000179776	antibody	CD144|CD144 (VE-Cadherin)|CD144 (VE-cadherin)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TCCACTCCCTGTATA	A0192	ABC	CD20	SA275A11	Mouse	ENSMUSG00000024673	antibody	CD20	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCCAGGCTAGTCATT	A0240	AC	Rat IgG2c, κ Isotype Control	RTK4174			isotype	Rat IgG2c κ Isotype Ctrl|Rat IgG2c, κ Isotype Control	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TCCATTACCCACGTT	A0568	ABC	XCR1	ZET	Mouse, Rat	ENSMUSG00000060509, ENSRNOG00000006620	antibody	XCR1	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCCCACTTCCGCTTT	C0920	BC	CD82	ASL-24	Human	ENSG00000085117	antibody	CD82	biolegend_2020|cellgeni_c_universal_v1|hubmap_B|hubmap_C|jax_b_universal	
+TCCCTGTATAGATGA	A0194	AC	CD137	17B5	Mouse	ENSMUSG00000028965	antibody	CD137	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TCCCTTGCGATTTAC	A0048	ABC	CD45	2D1	Human	ENSG00000081237	antibody	CD45	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCCCTTTATGCGAGG	A0268	A	Biotin Hashtag 3				hashtag	Biotin Hashtag 3	rhumba_2018	
+TCCGGTCACTCAGTA	A0442	ABC	Notch 1	HMN1-12	Mouse	ENSMUSG00000026923	antibody	Notch 1	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCCGTGTTAGTTTGT	A0356	AC	CD254 (TRANCE, RANKL)	MIH24	Human	ENSG00000120659	antibody	CD254|CD254 (TRANCE, RANKL)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TCCGTTTGTTGTTGT		C	Ly-51	6C3			antibody	Ly-51	hubmap_C	
+TCCTAGTACCGAAGT	A0216	ABC	CD42b	HIP1	Human	ENSG00000203618	antibody	CD42b	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCCTATGGGACTCAG	A0120	ABC	TCR β chain	H57-597	Mouse		antibody	TCR β chain	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCCTCATTCATGTAC		A	TRA-1-60-R	TRA-1-60-R			antibody	TRA-1-60-R	hubmap_A	
+TCCTGCATGTACCCA	A0423	AC	MERTK	590H11G1E3	Human	ENSG00000153208	antibody	MERTK	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TCCTTCCTTTGTAGC	B0989	ABC	CD98	RL388	Mouse		antibody	CD98	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TCCTTGGATGTACCG	A0214	ABC	Integrin β7	FIB504	Mouse, Human	ENSMUSG00000001281, ENSG00000139626	antibody	HuMs.integrin.b7|Integrin _7|Integrin β7|Integrin_b7|integrin β7	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCCTTTCCTGATAGG	A0047	ABC	CD56 (NCAM)	5.1H11	Human	ENSG00000149294	antibody	CD56|CD56 (NCAM)|CD56_(NCAM)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCGAACATTTCCAGG	A0445	ABC	TMEM119 (Extracellular)	A16075D	Human	ENSG00000183160	antibody	TMEM119|TMEM119 (Extracellular)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCGAGTCGCTTATCA	A0164	ABC	CD1d	51.1	Human	ENSG00000158473	antibody	CD1d	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCGATTCCACCAACT	A0190	ABC	CD274 (B7-H1, PD-L1)	MIH6	Mouse	ENSMUSG00000016496	antibody	CD274|CD274 (B7-H1, PD-L1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCGCTTGGATGGTAG	A0189	ABC	CD244 (2B4)	C1.7	Human	ENSG00000122223	antibody	CD244|CD244 (2B4)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCGTGGTCCCTTTCT	A0210	AC	TCR Vγ3	536	Mouse		antibody	TCR Vγ3	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TCGTTGTCAACCGCT		C	Biotin	nan			antibody	Biotin	hubmap_C	
+TCGTTTAACCAGCCT	A0209	AC	TCR Vγ1.1/Cr4	2.11	Mouse		antibody	TCR V_1.1|TCR Vγ1.1 Cr4|TCR Vγ1.1/Cr4	biolegend_2020|hubmap_C|rhumba_2018	
+TCGTTTGTGGTAACT		A	CD104	58XB4			antibody	CD104	hubmap_A	
+TCTCAGAACAGCCCT	C0924	ABC	CD252 (OX40L Ligand)	RM134L	Mouse	ENSMUSG00000026700	antibody	CD252|CD252 (OX40L Ligand)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TCTCAGACCTCCGTA	A0081	ABC	CD14	M5E2	Human	ENSG00000170458	antibody	CD14|CD14_M5E2	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCTCAGGCTTCCTAG	A0562	ABC	CD83	Michel-19	Mouse	ENSMUSG00000015396	antibody	CD83	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TCTCAGTGTTTGTGG	A0368	ABC	CD226 (DNAM-1)	11A8	Human	ENSG00000150637	antibody	CD226|CD226 (DNAM-1)|CD226_11A8	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TCTCCTATTGGGCGA		AC	Biotin	nan			antibody	Biotin	hubmap_A|hubmap_C	
+TCTCTCTGCGATTCC		C	Biotin	nan			antibody	Biotin	hubmap_C	
+TCTCTGCACCGCTTT	A0434	A	Dopamine Receptor D4				antibody	Dopamine Receptor D4	rhumba_2018	
+TCTCTTGGAAGATGA	A0108	AC	CD23	B3B4	Mouse	ENSMUSG00000005540	antibody	CD23	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TCTGTATAACCGTCT	A0897	ABC	CD23	EBVCS-5	Human	ENSG00000104921	antibody	CD23	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal	
+TCTTGGATTCAGAGC		C	CLEC5A	14H4-1-2			antibody	CLEC5A	hubmap_C	
+TGAAGGCTCATTTGT	A0014	ABC	CD11b	M1/70	Mouse, Human	ENSMUSG00000030786, ENSG00000169896	antibody	CD11b	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): TIGIT_TotalSeqB
+TGACCAGTTCCGCAT	A0911	ABC	phycoerythrin (PE)	PE001			antibody	Phycoerythrin|phycoerythrin (PE)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TGACCCGACCTTTAG	A0418	A	CD243 (ABCB1)	4E3.16	Human	ENSG00000085563	antibody	CD243|CD243 (ABCB1)	biolegend_2020|rhumba_2018	
+TGACCCTATTGAGAA	A0881	ABC	CD272 (BTLA)	6A6	Mouse	ENSMUSG00000052013	antibody	CD272|CD272 (BTLA)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TGACCTTCCTCTCCT	A0244	A	CD102	CBR-IC2/2	Human	ENSG00000108622	antibody	CD102	biolegend_2020|hubmap_A|rhumba_2018	
+TGAGAACGACCCTAA	A0386	ABC	CD28	CD28.2	Human	ENSG00000178562	antibody	CD28	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TGATAGAAACAGACC	A0020	ABC	CD270 (HVEM, TR2)	122	Human	ENSG00000157873	antibody	CD270|CD270 (HVEM, TR2)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TGATCCGAAGTCGTG	A0865	AC	VEGFR-3 (FLT-4)	9D9F9	Human	ENSG00000037280	antibody	VEGFR-3|VEGFR-3 (FLT-4)	biolegend_2020|hubmap_A|hubmap_C	
+TGATCTAAGGTATGC		C	nan	TH6			antibody		hubmap_C	
+TGATGGCCTATTGGG	A0252	AC	human Hashtag 2				hashtag	Hashtag 2|human Hashtag 2	cellgeni_hto|rhumba_2018	
+TGATGGGAGCTTATC	A0819	ABC	CD126 (IL-6Ra)	UV4	Human	ENSG00000160712	antibody	CD126|CD126 (IL-6Ra)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TGCAATTACCCGGAT	A0391	ABC	CD45	HI30	Human	ENSG00000081237	antibody	CD45|CD45_HI30	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TGCATGTCATCGGTG	A0012	ABC	CD117 (c-Kit)	2B8	Mouse	ENSMUSG00000005672	antibody	CD117|CD117 (c-Kit)|CD117 (c-kit)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	10x pbmc_1k_protein_v3 (2018): CD45RO_TotalSeqB
+TGCCAGCCCTTTGTA		C	Biotin	nan			antibody	Biotin	hubmap_C	
+TGCCAGTATCACGTA	A0866	A	CLEC1B (CLEC2)	AYP1	Human	ENSG00000165682	antibody	CLEC1B (CLEC2)	biolegend_2020|hubmap_A	
+TGCCTATGAAACAAG	A0309	A	mouse Hashtag 9				hashtag	mouse Hashtag 9	rhumba_2018	
+TGCTGGAGGGTATTC	A0567	ABC	Tim-4	RMT4-54	Mouse	ENSMUSG00000055546	antibody	Tim-4	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TGCTTCACCTCTATG		C	Biotin	nan			antibody	Biotin	hubmap_C	
+TGCTTCATTCATGTG	A0824	ABC	P2X7R	1F11	Mouse	ENSMUSG00000029468	antibody	P2X7R	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TGGAGTATCACCAAT	A0274	A	Biotin Hashtag 9				hashtag	Biotin Hashtag 9	rhumba_2018	
+TGGATTCCCGGACTT	A0066	ABC	CD7	CD7-6B7	Human	ENSG00000173762	antibody	CD7	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TGGCCTATAAATGGT	A0175	ABC	CD96 (TACTILE)	NK92.39	Human	ENSG00000153283	antibody	CD96|CD96 (TACTILE)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TGGCTATGGAGCAGA	A0096	ABC	CD45	30-F11	Mouse	ENSMUSG00000026395	antibody	CD45	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TGGCTTCAGGTCCTA	A0073	ABC	CD44	IM7	Mouse, Human	ENSMUSG00000005087, ENSG00000026508	antibody	CD44|HuMs.CD44	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TGGGCCTAAGTCATC	A0112	ABC	CD62L	MEL-14	Mouse	ENSMUSG00000026581	antibody	CD62L	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TGGTAACGACAGTCC	A0126	AC	CD133	clone 7	Human	ENSG00000007062	antibody	CD133	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TGTACCCGCTTGTGA	A0389	ABC	CD38	HIT2	Human	ENSG00000004468	antibody	CD38|CD38_HIT2	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TGTACGCATGTATGG	A1019	A	CD215 (IL-15Rα)	6B4C88	Mouse		antibody	CD215 |CD215 (IL-15Rα)	biolegend_2020|hubmap_A	
+TGTAGAGTCAGACCT	A0882	A	PIR-A/B	6C1	Mouse	ENSMUSG00000081665	antibody	PIR-A/B	biolegend_2020|hubmap_A	
+TGTATGTCTGCCTTG	A0395	ABC	B7-H4	MIH43	Human	ENSG00000134258	antibody	B7-H4	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TGTATTTACTCACCG	A0551	A	CD301a (MGL1)	LOM-8.7	Mouse	ENSMUSG00000000318	antibody	CD301a|CD301a (MGL1)	biolegend_2020|hubmap_A|rhumba_2018	
+TGTCAGGTTGTATTC		AC	CD186 (CXCR6)	SA051D1			antibody	CD186 (CXCR6)	hubmap_A|hubmap_C	
+TGTCAGTTCCTATGA	A0409	ABC	CD85g (ILT7)	17G10.2	Human	ENSG00000239961	antibody	CD85|CD85g|CD85g (ILT7)	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+TGTCCTACCCAACTT	A0169	ABC	CD366 (Tim-3)	F38-2E2	Human	ENSG00000135077	antibody	CD366|CD366 (Tim-3)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TGTCTTTCCTGCCAG	A0257	A	human Hashtag 7				hashtag	Hashtag 7|human Hashtag 7	cellgeni_hto|rhumba_2018	
+TGTGGCTAGTCAGTT	A0427	ABC	Folate Receptor β (FR-β)	94b/FOLR2	Human	ENSG00000165457	antibody	Folate Receptor β|Folate Receptor β (FR-β)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TGTGGTAGCCCTTGT	A0811	ABC	CD317 (BST2, PDCA-1)	927	Mouse	ENSMUSG00000046718	antibody	CD317|CD317 (BST2, PDCA-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TGTGTATTCCCTTGT	A0219	ABC	CD119 (IFN-γ R α chain)	GIR-208	Human	ENSG00000027697	antibody	CD119|CD119 (IFN-γ R α chain)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TGTGTGAGGCTTGAT		C	Biotin	nan			antibody	Biotin	hubmap_C	
+TGTGTGCCGTAGACT	A0229	ABC	CD62P				antibody	CD62P|CD62P (P-selectin)	hubmap_B|hubmap_C|rhumba_2018	
+TGTTCCCGCTCAACT	A0072	ABC	CD4	RPA-T4	Human	ENSG00000010610	antibody	CD4|CD4_RPA.T4	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TGTTGTAAGATGCCA	A0598	A	CD110				antibody	CD110	hubmap_A|rhumba_2018	
+TGTTTACGAGAGCCC	A0102	AC	CD294 (CRTH2)	BM16	Human	ENSG00000183134	antibody	CD294|CD294 (CRTH2)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TGTTTGTAAGTTCCC	A0937	A	CD202b	TEK4	Mouse	21687	antibody	CD202b	biolegend_2020|hubmap_A	
+TTAACCGTCTCCCTT	C0987	BC	Allophycocyanin (APC)	APC003	2nd Step		antibody	Allophycocyanin|Allophycocyanin (APC)	biolegend_2020|hubmap_B|hubmap_C	
+TTAACTTCAGCCCGT	A0114	ABC	F4/80	BM8	Mouse	ENSMUSG00000004730	antibody	F4 80|F4/80	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TTACCTGGTATCCGT	A0176	ABC	CD39	A1	Human	ENSG00000138185	antibody	CD39	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TTAGAGTCGCTTGGA	C0982	C	TCR Va8.3	B21.14	Mouse		antibody	TCR Va8.3|TCR Vα8.3	biolegend_2020|hubmap_C	
+TTAGCCCGTAGACCA		A	CD158d	mAb 33 (33)			antibody	CD158d	hubmap_A	
+TTATGGACGTATGGT	A0908	ABC	TCR Vβ13.1	H131	Human		antibody	TCR Vβ13.1	biolegend_2020|hubmap_B|hubmap_C	
+TTATTAACAGCCCAC	C0377	ABC	CD197 (CCR7)	4B12	Mouse	ENSMUSG00000037944	antibody	CD197|CD197 (CCR7)	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+TTCACCGTAGTACGA		AB	HLA-DQ	Tü169			antibody	HLA-DQ	hubmap_A|hubmap_B	
+TTCACGCAGTAAGAT	A0362	AC	CD309 (VEGFR2)	7D4-6	Human	ENSG00000128052	antibody	CD309|CD309 (VEGFR2)	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TTCATGTGTTTGTGC		BC	CD194	2G12			antibody	CD194	hubmap_B|hubmap_C	
+TTCATTAGCCCGCTG	A0201	ABC	CD103	2E7	Mouse	ENSMUSG00000005947	antibody	CD103	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TTCATTCTGTGCCGC		C	CD38	14.27			antibody	CD38	hubmap_C	
+TTCCCTACGCCGAAT	A0223	A	RORγ				antibody	RORγ	rhumba_2018	
+TTCCCTCTATGGAGC	A0230	ABC	CD8b	YTS156.7.7	Mouse	ENSMUSG00000053044	antibody	CD8b	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TTCCGAGCAAGTATC	A0123	ABC	CD326 (EpCAM)	9C4	Human	ENSG00000119888	antibody	CD326|CD326 (EpCAM)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TTCCGAGGATGATCT	A0070	ABC	CD49f	GoH3	Mouse, Human	ENSMUSG00000027111, ENSG00000091409	antibody	CD49f|HuMs.CD49f	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TTCCGCCTCTCTTTG	A0253	AC	human Hashtag 3				hashtag	Hashtag 3|human Hashtag 3	cellgeni_hto|rhumba_2018	
+TTCCGTTGTTGTGAG	A0105	ABC	CD115 (CSF-1R)	AFS98	Mouse	ENSMUSG00000024621	antibody	CD115|CD115 (CSF-1R)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TTCCTTTCCTACGCA	A0130	ABC	Ly-6A/E (Sca-1)	D7	Mouse	ENSMUSG00000075602	antibody	Ly-6A E|Ly-6A/E|Ly-6A/E (Sca-1)	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TTCGATGCTGGAGCA	A0109	ABC	CD16/32	93	Mouse	ENSMUSG00000026656	antibody	CD16 32|CD16/32	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TTCGCCGCATTGAGT	A0084	ABC	CD56 (NCAM)	QA17A16	Human	ENSG00000149294	antibody	CD56|CD56 (NCAM)|CD56Recombinant	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TTCTGGGTCCCTAGA	A0100	ABC	CD20	2H7	Human	ENSG00000156738	antibody	CD20|CD20_2H7	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TTCTTTACCCGCCTG	A0910	ABC	CD61	2C9.G2 (HMβ3-1)	Mouse, Rat	ENSMUSG00000020689, ENSRNOG00000048449	antibody	CD61|CD61_2C9.G2 (HM	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TTCTTTGCCTTGCCA	A0407	ABC	CD36	5-271	Human	ENSG00000135218	antibody	CD36	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TTGACCCGCTACGAA	C0981	AC	TCR Va2	B20.1	Mouse		antibody	TCR Va2|TCR Vα2	biolegend_2020|hubmap_A|hubmap_C	
+TTGCCGTGTGTTTAA	A0892	AC	CD2	RM2-5	Mouse	ENSMUSG00000027863	antibody	CD2	biolegend_2020|hubmap_A|hubmap_C	
+TTGCTTACCGCCAGA	A0089	ABC	TIGIT (VSTM3)	A15153G	Human	ENSG00000181847	antibody	TIGIT|TIGIT (VSTM3)|TIGIT_(VSTM3)	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TTGCTTATTTCCGCA	A0415	A	P2RY12	S16007D	Mouse	ENSMUSG00000036353	antibody	P2RY12	biolegend_2020|hubmap_A|rhumba_2018	
+TTGGAGGGTTGTGCT	A0110	AC	CD43	S11	Mouse	ENSMUSG00000051457	antibody	CD43	biolegend_2020|hubmap_A|hubmap_C|rhumba_2018	
+TTGGCCTGTAGAAAT		B	CD262	DJR2-4 (7-8)			antibody	CD262	hubmap_B	
+TTGGGCGATTAAGAA	A0232	ABC	MAdCAM-1	MECA-367	Mouse	ENSMUSG00000020310	antibody	MAdCAM-1	biolegend_2020|hubmap_B|hubmap_C|rhumba_2018	
+TTGTATCTCCCTTGG		C	CD45RB	C363-16A			antibody	CD45RB	hubmap_C	
+TTGTATTCCGCCATT	A0197	ABC	CD69	H1.2F3	Mouse	ENSMUSG00000030156	antibody	CD69	biolegend_2020|hubmap_A|hubmap_B|hubmap_C|rhumba_2018	
+TTGTCACCAACTTCC		AC	CD81	Eat-2			antibody	CD81	hubmap_A|hubmap_C	
+TTGTGAGGCTTCTCT		ABC	HA.11	16B12			antibody	HA.11	hubmap_A|hubmap_B|hubmap_C	
+TTGTTGTATCCGATC	A0862	AC	CD218a (IL-18Ra)	H44	Human	ENSG00000115604	antibody	CD218a|CD218a (IL-18Ra)	biolegend_2020|hubmap_A|hubmap_C	
+TTTAGTGATCCGACT	A0021	A	CD252				antibody	CD252	rhumba_2018	
+TTTCAACGCCCTTTC	A0364	ABC	CD13	WM15	Human	ENSG00000166825	antibody	CD13	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TTTCCTTGTAGAGCG	C0909	ABC	CD182	SA044G4	Mouse	ENSMUSG00000026180	antibody	CD182	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	
+TTTGCCGCTACGACA	A0555	AB	CD36	HM36	Mouse	ENSMUSG00000002944	antibody	CD36	biolegend_2020|hubmap_A|hubmap_B|rhumba_2018	
+TTTGTCCTGTACGCC	A0085	ABC	CD25	BC96	Human	ENSG00000134460	antibody	CD25	biolegend_2020|cellgeni_c_universal_v1|hubmap_A|hubmap_B|hubmap_C|jax_b_universal|rhumba_2018	
+TTTGTGTTGTGGTAC	C0988	ABC	FITC	FIT-22	2nd Step		antibody	FITC	biolegend_2020|hubmap_A|hubmap_B|hubmap_C	

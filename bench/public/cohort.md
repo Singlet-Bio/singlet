@@ -88,7 +88,7 @@ The earlier ancestry simulation (docs/cell_annotation.md 5.1) is not used on the
 | CITE-seq / hashing | pbmc1k_cite_v3, pbmc10k_cite_v3, stoeckius2018_hashing, tenx_cellplex_pbmc10k* | hashtag = donor, confirmed by genotype; protein markers |
 | genotype pool | kang2018_ctrl | demuxlet calls with genotypes |
 | barnyard | hgmm1k_v3, hgmm10k_v3, macosko2015_dropseq_mix | species of each read |
-| CRISPR | tenx_crispr_a375_10k, norman2019_gem1, replogle2022_k562_lane4* | published guide identities, target knock-down |
+| CRISPR | tenx_crispr_a375_10k, norman2019_gem1, replogle2022_k562_gg41* | published guide identities, target knock-down |
 | spatial | visium_mouse_brain_ant | Space Ranger, anatomy |
 | other protocols | ding2020_pbmc1_{smartseq2, dropseq, indrops, seqwell, celseq2, 10xv3}, segerstolpe2016_pancreas* | one PBMC sample, seven methods, curated cell types |
 | mouse | neuron1k_v3, heart1k_v3, (nuclei above), tabula_muris_kidney_facs* | Cell Ranger; Tabula Muris CL labels |
@@ -168,8 +168,12 @@ multiome) take under 6.5 h, so they need the `cpu` partition or a read cap to fi
 ## Known gaps and decisions
 
 - **Visium human lymph node** has no public reads ("to maintain donor anonymity"). Zach: pick another Visium dataset
-  with reads. visium_mouse_brain_ant is in the cohort; the spatial session is choosing a human Visium set with public
-  FASTQs and published Space Ranger outputs, to be added as a row.
+  with reads. visium_ffpe_human_breast (Space Ranger 1.3, FFPE probe chemistry, 5.3 GB) is the only human Visium set
+  10x serves with FASTQs; it joins visium_mouse_brain_ant.
+- **Whitelists (found by the ATAC session).** Singlet's bundled `737K-cratac-v1.txt` is byte-identical to the 3' v2 list
+  `737K-august-2016.txt`. The real scATAC list was rebuilt from 12 public Cell Ranger ATAC runs (736,795 barcodes). The
+  ARC ATAC-to-GEX pair table was rebuilt from 7 public ARC runs. Both are owned by the ATAC session and must replace the
+  bundled files before atac/multiome results are final.
 - **No public pooled scRNA-seq of many 1000 Genomes individuals exists.** Ancestry therefore uses three sources:
   - **MAGE** (Taylor et al. 2024): bulk RNA-seq of 731 1000 Genomes LCLs from all 26 populations, of which we use 150 (30
     per super-population, sex-balanced). Reads are thinned to single-cell donor depths.
@@ -178,8 +182,8 @@ multiome) take under 6.5 h, so they need the `cpu` partition or a read cap to fi
   - **The earlier simulation** (`docs/cell_annotation.md` 5.1).
   MAGE note: the HG00237 / NA11919 run swap is corrected in ENA (SRR37907958/9), and both individuals are excluded.
 - **Leakage control for ancestry.** The 150 MAGE individuals and the 4 LCL individuals are removed from the allele
-  frequency table Singlet uses, and from somalier's labelled 1000 Genomes background. peddy's built-in background cannot be
-  changed, so peddy keeps its advantage. That is conservative for Singlet.
+  frequency table Singlet uses, from somalier's labelled 1000 Genomes background, and from peddy's built-in background
+  (`sexancestry/peddy_leaveout.py` drops their rows after checking the panel order against peddy's own label vector).
 - **Stoeckius 2018** deposited no genotype calls. Truth is the hashtag, confirmed per cell by genotype demultiplexing
   (consensus of vireo and souporcell, both independent of Singlet). Its MixCellLines RNA run is empty in SRA and is not
   used.

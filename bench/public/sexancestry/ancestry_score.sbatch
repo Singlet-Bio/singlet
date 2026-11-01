@@ -14,5 +14,5 @@ export PYTHONPATH=$SRC/python
 rt python -u $SRC/bench/public/sexancestry/ancestry_score.py --mage $BP/work/ancestry/mage \
   --af $BP/work/ancestry/af_leaveout.parquet --excluded $BP/work/ancestry/excluded.txt \
   --somalier-dir $WORK/tools/bpub/somalier --gtf $REF/GRCh38-2024-A/genes/genes.gtf \
-  --artifacts $A --bcftools $BPE/bin/bcftools --bench-commit $(git -C $SRC rev-parse HEAD) --peddy-python $BPE/bin/python
+  --artifacts $A --bcftools $BPE/bin/bcftools --bench-commit $(git -C $SRC rev-parse HEAD) --peddy-python $BPE/bin/python --panel $WORK/data/1kgp_grch38/panel.txt
 rt python $SRC/bench/public/run_capability.py genetic-ancestry $A --out $BP/results/genetic-ancestry.json

@@ -2,10 +2,10 @@
 """singlet.bundle — Per-GSE .singlet bundle format (ZIP64), the legacy distribution unit.
 
 A .singlet file is a ZIP64 archive containing ALL processed GSMs for one GEO
-Series (GSE). Public distribution has moved to the v2 format (one immutable object
-per sample, docs/format-v2.md); :class:`SingletBundle` stays the reader for local
+Series (GSE). Public distribution has moved to the per-sample format (one immutable object
+per sample, docs/format-s1.md); :class:`SingletBundle` stays the reader for local
 legacy files and the packager for ``pack_gse``, and ``SingletBundle.open`` hands a
-v2 manifest, ``.s2`` object or accession to :class:`singlet.v2.bundle.V2Bundle`,
+.s1 manifest, ``.s1`` object or accession to :class:`singlet.s1.bundle.S1Bundle`,
 which has the same interface.
 
 Bundle layout::
@@ -195,6 +195,24 @@ MODALITIES: Dict[str, Modality] = {
             "Per-intron-feature UMI counts (the unspliced half of the raw matrix).",
         ),
         Modality(
+            "exon_reads",
+            "table",
+            ("exon_reads_delta.bin",),
+            "Reads minus UMIs per exon-feature entry of the called cells (aligned to exon_counts; singlet.s1.readsvals.reads_matrix rebuilds the reads matrix).",
+        ),
+        Modality(
+            "intron_reads",
+            "table",
+            ("intron_reads_delta.bin",),
+            "Reads minus UMIs per intron-feature entry of the called cells (aligned to intron_counts).",
+        ),
+        Modality(
+            "reads_per_umi_hist",
+            "table",
+            ("reads_per_umi_hist.tsv.gz",),
+            "Per called cell: molecules with 1..15 and 16+ reads (16 bins).",
+        ),
+        Modality(
             "cell_calls",
             "table",
             ("cell_calls.tsv",),
@@ -291,6 +309,12 @@ MODALITIES: Dict[str, Modality] = {
             ("nonhost/nonhost_summary.json", "nonhost_summary.json"),
             "Non-host classification summary: reads classified, top taxa, database.",
         ),
+        Modality(
+            "nonhost_confirmed_reads",
+            "binary",
+            ("nonhost/nonhost_confirmed_reads.bin",),
+            "cDNA reads of EM-confirmed non-host species (2-bit packed) with barcode, UMI and species; no read with a host k-mer.",
+        ),
         # ── Immune repertoire ─────────────────────────────────────────────
         Modality(
             "vdj_gene_usage",
@@ -347,6 +371,126 @@ MODALITIES: Dict[str, Modality] = {
         ),
         Modality(
             "star_log", "text", ("star_Log.final.out",), "STAR final alignment log for the sample."
+        ),
+        Modality(
+            "adt_counts",
+            "matrix",
+            ("adt_counts.1pz", "adt_counts.mtx"),
+            "Antibody-derived tag (ADT/CITE-seq) UMI counts per tag and cell, columns aligned to the GEX cells.",
+        ),
+        Modality(
+            "adt_features",
+            "table",
+            ("adt_features.tsv",),
+            "Tag names of the engine's adt_counts.mtx.",
+        ),
+        Modality(
+            "adt_panel",
+            "json",
+            ("adt_panel.json",),
+            "ADT/HTO panel: tag, antibody clone, sequence, specificity, ambient level.",
+        ),
+        Modality(
+            "hto_counts",
+            "matrix",
+            ("hto_counts.1pz",),
+            "Hashtag-oligo (HTO) UMI counts per hashtag and cell.",
+        ),
+        Modality(
+            "hto_classification",
+            "table",
+            ("hto_classification.tsv",),
+            "HTO demultiplexing: hashtag call, doublet flag and log-fold margins per cell.",
+        ),
+        Modality(
+            "crispr_counts",
+            "matrix",
+            ("crispr_counts.1pz",),
+            "CRISPR guide UMI counts per guide and cell, columns aligned to the GEX cells.",
+        ),
+        Modality(
+            "crispr_guides",
+            "json",
+            ("crispr_guides.json",),
+            "CRISPR guide library, per-cell guide calls summary and QC.",
+        ),
+        Modality(
+            "vdj_contigs",
+            "binary",
+            ("vdj_contigs.parquet",),
+            "Assembled V(D)J contigs (chain, V/D/J/C genes, CDR3, UMIs) with per-cell GEX column and clonotype labels.",
+        ),
+        Modality(
+            "vdj_summary",
+            "json",
+            ("vdj_summary.json",),
+            "V(D)J assembly provenance: method, reference, counting and library QC.",
+        ),
+        Modality(
+            "doublet_scores_v2",
+            "table",
+            ("doublet_scores_v2.tsv",),
+            "Second doublet score (hybrid simulation model), reported beside doublet_scores.",
+        ),
+        Modality(
+            "atac_fragments",
+            "binary",
+            ("atac_fragments.tsv.gz", "fragments.tsv.gz"),
+            "ATAC fragments (bgzip TSV, one row per fragment).",
+        ),
+        Modality(
+            "atac_fragments_index",
+            "binary",
+            ("atac_fragments.tsv.gz.tbi", "fragments.tsv.gz.tbi"),
+            "Tabix index of the ATAC fragments.",
+        ),
+        Modality(
+            "atac_peaks",
+            "table",
+            ("atac_peaks.bed", "peaks.bed"),
+            "ATAC peaks called on the sample.",
+        ),
+        Modality(
+            "atac_peak_counts",
+            "matrix",
+            ("atac_peak_counts.1pz",),
+            "ATAC cut sites per peak and cell, columns aligned to the cells table.",
+        ),
+        Modality(
+            "atac_gene_activity",
+            "matrix",
+            ("atac_gene_activity.1pz",),
+            "ATAC fragments per gene (gene activity) and cell.",
+        ),
+        Modality(
+            "atac_cells",
+            "table",
+            ("atac_cells.tsv",),
+            "ATAC cell calls.",
+        ),
+        Modality(
+            "atac_barcode_metrics",
+            "table",
+            ("atac_barcode_metrics.tsv",),
+            "Per-barcode ATAC QC metrics.",
+        ),
+        Modality(
+            "atac_summary",
+            "json",
+            ("atac_summary.json",),
+            "ATAC sample summary.",
+        ),
+        Modality(
+            "spatial_positions",
+            "table",
+            ("spatial_positions.tsv", "spatial_coordinates.tsv"),
+            "Spatial spot positions (array row/col, in tissue) per barcode.",
+        ),
+        Modality(
+            "spatial_summary",
+            "json",
+            ("spatial_summary.json",),
+            "Spatial sample summary.",
         ),
     )
 }
@@ -767,6 +911,54 @@ def _aggregate_gene_counts(out_dir: Path, gene_order: List[str], called_bcs: Lis
 # ---------------------------------------------------------------------------
 
 
+# The engine writes reads-per-UMI members for every barcode. The all-barcode reads matrices stay in the run directory (+69-73 percent in the .s1);
+# the bundle holds reads - UMIs for the called cells (_reads_delta_members) and the per-cell histogram for the called cells only (a few KB).
+_RUN_DIR_ONLY_MEMBERS = ("exon_reads.1pz", "intron_reads.1pz")
+_CALLED_ONLY_MEMBERS = ("reads_per_umi_hist.tsv.gz",)
+
+
+def _called_barcodes(out_dir: Path) -> Optional[set]:
+    """Called-cell barcodes of ``out_dir/cell_calls.tsv`` (the migrator's rule, s1.cells.parse_cell_calls); None if there is no usable call list."""
+    from singlet.s1.cells import parse_cell_calls
+
+    try:
+        called = parse_cell_calls((out_dir / "cell_calls.tsv").read_bytes())
+    except OSError:
+        return None
+    return set(called) if called is not None else None
+
+
+def _reads_member(rel: str, data: bytes, called: Optional[set]) -> Optional[bytes]:
+    """What the bundle holds of a reads-per-UMI member: None = not packed, else its bytes (the histogram restricted to the called cells)."""
+    if rel in _RUN_DIR_ONLY_MEMBERS:
+        return None
+    if rel in _CALLED_ONLY_MEMBERS:
+        if called is None:
+            return None
+        import gzip
+
+        lines = gzip.decompress(data).decode("utf-8").split("\n")
+        keep = [ln for i, ln in enumerate(lines) if ln and (i == 0 or ln.split("\t", 1)[0] in called)]
+        return gzip.compress(("\n".join(keep) + "\n").encode("utf-8"), 6, mtime=0)
+    return data
+
+
+def _reads_delta_members(out_dir: Path, called: set) -> Dict[str, bytes]:
+    """``exon_reads_delta.bin`` / ``intron_reads_delta.bin`` from the run directory's count and reads matrices (singlet.s1.readsvals); a kind whose
+    matrices do not line up (or that is missing) is left out."""
+    from singlet.s1 import readsvals as RV
+
+    out: Dict[str, bytes] = {}
+    for kind, member in RV.MEMBERS.items():
+        cf, rf = out_dir / RV.COUNTS[kind], out_dir / RV.RUN_DIR_READS[kind]
+        if not (cf.is_file() and rf.is_file()):
+            continue
+        blob = RV.from_run_dir_matrices(cf.read_bytes(), rf.read_bytes(), called)
+        if blob is not None:
+            out[member] = blob
+    return out
+
+
 def pack_gse(
     gse_id: str,
     results_dir: Union[str, Path],
@@ -1103,6 +1295,7 @@ def pack_gse(
             # germline information go to the restricted sidecar instead.
             # .1pz files are STORED (already zstd); everything else DEFLATED.
             # Dotfiles, raw reads (.1fq) and bulky disposable read-dumps are skipped.
+            called_set = _called_barcodes(out_dir) if out_dir.is_dir() else None
             if out_dir.is_dir():
                 for fpath in sorted(out_dir.rglob("*")):
                     if not fpath.is_file():
@@ -1128,6 +1321,9 @@ def pack_gse(
                             continue
                     with open(fpath, "rb") as fh:
                         data = fh.read()
+                    data = _reads_member(rel.as_posix(), data, called_set)
+                    if data is None:
+                        continue
                     compress = (
                         zipfile.ZIP_STORED if fpath.suffix == ".1pz" else zipfile.ZIP_DEFLATED
                     )
@@ -1135,6 +1331,13 @@ def pack_gse(
                     gsm_full_files.append(rel.as_posix())
                     if not restricted:
                         gsm_files.append(rel.as_posix())
+
+            # reads-per-UMI matrices go into the bundle as reads - UMIs aligned to the nonzeros of the called columns of the count matrices
+            if out_dir.is_dir() and called_set is not None:
+                for name, data in _reads_delta_members(out_dir, called_set).items():
+                    _put(f"samples/{gsm}/{name}", data, zipfile.ZIP_STORED)
+                    gsm_full_files.append(name)
+                    gsm_files.append(name)
 
             included_files[gsm] = gsm_files
             full_included[gsm] = gsm_full_files
@@ -1275,9 +1478,9 @@ def _singlet_version() -> str:
     except Exception:
         import importlib.metadata
 
-        # The distribution is "singlet-bio" on PyPI; "singlet" is what
-        # installs from before the rename were called.
-        for dist in ("singlet-bio", "singlet"):
+        # The distribution is "singlet" on PyPI; "singlet-bio" is what
+        # installs from GitHub were called before 1.1.0.
+        for dist in ("singlet", "singlet-bio"):
             try:
                 return importlib.metadata.version(dist)
             except Exception:
@@ -1381,15 +1584,15 @@ class SingletBundle:
         Returns
         -------
         SingletBundle
-            For a v2 manifest (``.json``), a ``.s2`` sample object or an accession, a
-            :class:`singlet.v2.bundle.V2Bundle` (same interface).
+            For a .s1 manifest (``.json``), a ``.s1`` sample object or an accession, a
+            :class:`singlet.s1.bundle.S1Bundle` (same interface).
         """
         if cls is SingletBundle and restricted is None:
             p = Path(str(path)).expanduser()
-            if p.exists() and p.suffix.lower() in (".json", ".s2"):
-                from singlet.v2.bundle import V2Bundle
+            if p.exists() and p.suffix.lower() in (".json", ".s1", ".s2"):
+                from singlet.s1.bundle import S1Bundle
 
-                return V2Bundle.open(p)
+                return S1Bundle.open(p)
             if not p.exists() and re.match(r"^GSE[0-9]{1,9}$", str(path).strip(), re.I):
                 from singlet._loader import open_bundle
 
@@ -1573,6 +1776,8 @@ class SingletBundle:
             import pandas as pd
 
             return pd.read_csv(_io.BytesIO(data), sep="\t")
+        if kind == "binary":
+            return data  # raw bytes; the layout is in docs/pipeline-outputs.md
         if kind != "matrix":
             raise ValueError(f"Unknown modality kind {kind!r} for {name!r}")
 

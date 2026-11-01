@@ -1,0 +1,4 @@
+node=c101.clipper.gvsu.edu cpus=48 jobid=789253 2026-10-27T16:12:15-04:00
+loadavg=0.03 0.06 1.35
+cotenant_cpus=48
+model name	: Intel(R) Xeon(R) 6730P

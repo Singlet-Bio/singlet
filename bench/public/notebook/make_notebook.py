@@ -30,7 +30,7 @@ concurrent 16-thread tasks)."""),
 ("code", """# Configuration. Defaults read everything from GitHub and data.singlet.bio; point them at local copies to work offline.
 import os
 RESULTS = os.environ.get("SINGLET_BENCH_RESULTS",
-    "https://raw.githubusercontent.com/Singlet-Bio/singlet/main/bench/public/results")   # or a local results/ directory
+    "https://singlet.bio/data/benchmarks")   # or GitHub raw bench/public/results, or a local results/ directory
 ARTIFACTS = os.environ.get("SINGLET_BENCH_ARTIFACTS", "")   # local folder with <capability>/<file>; empty = each document's URLs
 CODE = os.environ.get("SINGLET_BENCH_CODE", "")             # local clone of Singlet-Bio/singlet; empty = download at each commit
 WORKDIR = os.path.abspath(os.environ.get("SINGLET_BENCH_WORKDIR", "singlet_bench_cache"))

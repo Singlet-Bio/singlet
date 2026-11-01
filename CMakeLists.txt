@@ -32,7 +32,7 @@ target_include_directories(singlet_pz INTERFACE
 )
 target_link_libraries(singlet_pz INTERFACE ${ZSTD_LIBRARY})
 
-# singlet::pz2 — v2 sparse-matrix codec (header-only C++17; SIMD paths are runtime-dispatched, so NO -march flags are needed)
+# singlet::pz2 — store sparse-matrix codec (header-only C++17; SIMD paths are runtime-dispatched, so NO -march flags are needed)
 add_library(singlet_pz2 INTERFACE)
 add_library(Singlet::pz2 ALIAS singlet_pz2)
 target_include_directories(singlet_pz2 INTERFACE
@@ -58,6 +58,15 @@ target_include_directories(singlet_pileup INTERFACE
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(singlet_pileup INTERFACE singlet_pz singlet_fq Threads::Threads)
+
+# ─── singlet-stage: fetch-tier encoder .1fq -> .1fg2 (src/stage; docs/research-beta/download-and-staging.md). Engine headers + libzstd only. ───
+add_executable(singlet-stage src/stage/singlet_stage.cpp)
+target_include_directories(singlet-stage PRIVATE src/stage)
+target_link_libraries(singlet-stage PRIVATE singlet_fq Threads::Threads)
+target_compile_options(singlet-stage PRIVATE -msse4.2)
+add_executable(test_fg2_runset src/stage/test_fg2_runset.cpp)   # the gate for include/singlet/fq/fg2_runset.h against the .1fq RunSet
+target_link_libraries(test_fg2_runset PRIVATE singlet_fq Threads::Threads)
+target_compile_options(test_fg2_runset PRIVATE -msse4.2)
 
 # ─── Pipeline binary (optional) ──────────────────────────────────────────────
 if(SINGLET_BUILD_PIPELINE)
@@ -93,7 +102,50 @@ if(SINGLET_BUILD_PIPELINE)
         message(WARNING "HDF5 not found — h5ad/loom export disabled")
     endif()
 
+    # GPU engine (`singlet --engine gpu`, docs/engine-gpu.md): STAR's mapping of each distinct cDNA sequence on the GPU, into
+    # STAR's sequence cache; every other stage is the CPU engine's code. AUTO builds it when a CUDA compiler is found.
+    set(SINGLET_ENGINE_GPU "AUTO" CACHE STRING "GPU engine for singlet --engine gpu: AUTO, ON or OFF")
+    set(SINGLET_ENGINE_GPU_ENABLED OFF)
+    if(NOT SINGLET_ENGINE_GPU STREQUAL "OFF")
+        include(CheckLanguage)
+        check_language(CUDA)
+        if(CMAKE_CUDA_COMPILER)
+            enable_language(CUDA)
+            find_package(CUDAToolkit REQUIRED)
+            set(SINGLET_ENGINE_GPU_ENABLED ON)
+            message(STATUS "GPU engine: ON (${CMAKE_CUDA_COMPILER})")
+        elseif(SINGLET_ENGINE_GPU STREQUAL "ON")
+            message(FATAL_ERROR "SINGLET_ENGINE_GPU=ON but no CUDA compiler was found (set CMAKE_CUDA_COMPILER)")
+        else()
+            message(STATUS "GPU engine: OFF (no CUDA compiler; singlet --engine gpu falls back to the CPU engine)")
+        endif()
+    endif()
+
     add_subdirectory(src/star)
+    if(SINGLET_ENGINE_GPU_ENABLED)
+        add_library(singlet_engine_gpu STATIC src/engine_gpu/engine_gpu.cu src/engine_gpu/nonhost_gpu.cu src/engine_gpu/pileup_gpu.cu)
+        set_target_properties(singlet_engine_gpu PROPERTIES
+            CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)
+        if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "52")
+            set_target_properties(singlet_engine_gpu PROPERTIES CUDA_ARCHITECTURES "80;90")
+        endif()
+        # no fused multiply-add: the port's double arithmetic must round as STAR's does on the host
+        target_compile_options(singlet_engine_gpu PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3 -fmad=false>)
+        target_include_directories(singlet_engine_gpu PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/engine_gpu)
+        target_link_libraries(singlet_engine_gpu PUBLIC CUDA::cudart_static Threads::Threads)
+        # NVTX ranges on the host side (include/singlet/nvtx.h): header-only, compiled in when the toolkit has them, active only with SINGLET_NVTX=1
+        find_path(SINGLET_NVTX_INCLUDE nvtx3/nvToolsExt.h HINTS ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
+        if(SINGLET_NVTX_INCLUDE)
+            target_compile_definitions(singlet_engine_gpu PUBLIC SINGLET_HAVE_NVTX)
+            target_include_directories(singlet_engine_gpu PUBLIC ${SINGLET_NVTX_INCLUDE})
+            target_compile_definitions(singlet_star PRIVATE SINGLET_HAVE_NVTX)
+            target_include_directories(singlet_star PRIVATE ${SINGLET_NVTX_INCLUDE})
+        endif()
+        target_compile_definitions(singlet_star PRIVATE SINGLET_HAVE_ENGINE_GPU)
+        target_include_directories(singlet_star PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/engine_gpu)
+    endif()
     add_subdirectory(src/pipeline)
 endif()
 

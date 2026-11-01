@@ -1,8 +1,10 @@
+#include "StarProfile.h"
 #include "ReadAlignChunk.h"
 #include "ThreadControl.h"
 #include "ErrorWarning.h"
 #include "SequenceFuns.h"
 #include "GlobalVariables.h"
+#include "star_api.h"
 
 inline uint64 fastqReadOneLine(ifstream &streamIn, char *arrIn);
 inline void removeStringEndControl(string &str);
@@ -15,9 +17,20 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
             //////////////read a chunk from input files and store in memory
         if (P.outFilterBySJoutStage<2) {//read chunks from input file
 
+            PROF_T0(tMutex);
             if (P.runThreadN>1) pthread_mutex_lock(&g_threadChunks.mutexInRead);
+            PROF_ADD(PROF_chunkMutex, tMutex);
+            PROF_T0(tRead);
 
             chunkInSizeBytesTotal={0,0};
+
+            if (g_starReadSource!=nullptr) {//singlet: reads decoded in this process, already in chunk format (star_api.h)
+                uint64_t sz[2]={0,0};
+                uint64_t iRA=P.iReadAll;
+                g_starReadSource->fill(chunkIn, sz, P.chunkInSizeBytes, iRA, P.readMapNumber, P.readFilesIndex);
+                P.iReadAll=iRA;
+                chunkInSizeBytesTotal={sz[0],sz[1]};
+            } else
             
             while (chunkInSizeBytesTotal[0] < P.chunkInSizeBytes && chunkInSizeBytesTotal[1] < P.chunkInSizeBytes && P.inOut->readIn[0].good() && P.inOut->readIn[1].good()) {
                 char nextChar=P.inOut->readIn[0].peek();
@@ -235,6 +248,7 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
             for (uint imate=0; imate<P.readNends; imate++) 
                 chunkIn[imate][chunkInSizeBytesTotal[imate]]='\n';//extra empty line at the end of the chunks
 
+            PROF_ADD(PROF_chunkRead, tRead);
             if (P.runThreadN>1) pthread_mutex_unlock(&g_threadChunks.mutexInRead);
 
         } else {//read from one file per thread

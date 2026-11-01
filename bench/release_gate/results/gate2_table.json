@@ -1,0 +1,1201 @@
+{
+ "summary": {
+  "n_total": 22,
+  "n_pass": 2,
+  "n_fail": 17,
+  "n_missing": 3,
+  "n_measured_at_pin": 10,
+  "blockers": [
+   "spliced-unspliced",
+   "cell-calling",
+   "ambient-rna",
+   "hto",
+   "spatial"
+  ],
+  "should_fix": [
+   "gex-counts",
+   "non-host",
+   "atac"
+  ],
+  "re_measure": [
+   "doublets",
+   "donor-demux",
+   "donor-snps",
+   "mtdna",
+   "download",
+   "cell-type",
+   "vdj",
+   "genetic-ancestry"
+  ]
+ },
+ "rows": [
+  {
+   "capability": "gex-counts",
+   "status": "fail",
+   "n_pass": 38,
+   "n_fail": 6,
+   "n_na": 0,
+   "n": 44,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [
+    {
+     "metric": "umi_ratio_distance.exonic",
+     "dataset": "nuclei2k_v2",
+     "singlet": 0.088156,
+     "reference": 0.02327,
+     "reference_tool": "starsolo-gene",
+     "gap": 0.064886,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "umi_ratio_distance.total",
+     "dataset": "neuron1k_v3",
+     "singlet": 0.054241,
+     "reference": 0.031318,
+     "reference_tool": "starsolo-genefull",
+     "gap": 0.022923,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "adt_rna_spearman.total",
+     "dataset": "pbmc1k_cite_v3",
+     "singlet": 0.409129,
+     "reference": 0.427566,
+     "reference_tool": "starsolo-genefull",
+     "gap": 0.01843699999999998,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "gene_corr.exonic",
+     "dataset": "nuclei2k_v2",
+     "singlet": 0.911059,
+     "reference": 0.920527,
+     "reference_tool": "starsolo-gene",
+     "gap": 0.009468000000000032,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "umi_ratio_distance.total",
+     "dataset": "hgmm1k_v3",
+     "singlet": 0.017719,
+     "reference": 0.009961,
+     "reference_tool": "starsolo-genefull",
+     "gap": 0.007757999999999999,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "gene_corr.exonic",
+     "dataset": "pbmc1k_v2",
+     "singlet": 0.983561,
+     "reference": 0.984752,
+     "reference_tool": "starsolo-gene",
+     "gap": 0.001190999999999942,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "pipeline-benchmark",
+   "cls": "should-fix",
+   "note": "gate 2 on the tip candidate: exonic UMI ratio distance regressed on nuclei2k_v2 (0.088 vs 0.023) and pbmc1k_v2; not yet attributed to a tip change (suspect: the intron and USA-label rules that fixed spliced-unspliced); owner S11"
+  },
+  {
+   "capability": "spliced-unspliced",
+   "status": "fail",
+   "n_pass": 37,
+   "n_fail": 5,
+   "n_na": 0,
+   "n": 42,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [
+    {
+     "metric": "umi_ratio_distance.unspliced",
+     "dataset": "pbmc1k_v2",
+     "singlet": 0.157253,
+     "reference": 0.027429,
+     "reference_tool": "starsolo-velocyto",
+     "gap": 0.129824,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "umi_ratio_distance.unspliced",
+     "dataset": "pbmc1k_cite_v3",
+     "singlet": 0.068351,
+     "reference": 0.006375,
+     "reference_tool": "starsolo-velocyto",
+     "gap": 0.061975999999999996,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "umi_ratio_distance.spliced_ambiguous",
+     "dataset": "neuron1k_v3",
+     "singlet": 0.103274,
+     "reference": 0.054395,
+     "reference_tool": "starsolo-velocyto",
+     "gap": 0.048879000000000006,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "umi_ratio_distance.unspliced",
+     "dataset": "pbmc1k_v3",
+     "singlet": 0.055358,
+     "reference": 0.016342,
+     "reference_tool": "starsolo-velocyto",
+     "gap": 0.039015999999999995,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "umi_ratio_distance.unspliced",
+     "dataset": "neuron1k_v3",
+     "singlet": 0.026414,
+     "reference": 0.011165,
+     "reference_tool": "starsolo-velocyto",
+     "gap": 0.015249,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "intron rule (fix/intron-rule-default)",
+   "cls": "blocker",
+   "note": "gate 2: unspliced UMI ratio distance still failing (pbmc1k_v2 0.157 vs 0.027); owner S11"
+  },
+  {
+   "capability": "junctions-psi",
+   "status": "pass",
+   "n_pass": 42,
+   "n_fail": 0,
+   "n_na": 0,
+   "n": 42,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [],
+   "owner": "pipeline-benchmark",
+   "cls": "",
+   "note": "unique-only junction counting (NH==1, #140) is the default: 42/0 against the existing STARsolo reference; contract amendment (#138, STARsolo with the Beta profile) still to re-score"
+  },
+  {
+   "capability": "cell-calling",
+   "status": "fail",
+   "n_pass": 6,
+   "n_fail": 19,
+   "n_na": 0,
+   "n": 25,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [
+    {
+     "metric": "precision",
+     "dataset": "nuclei2k_v2",
+     "singlet": 0.772011,
+     "reference": 0.979564,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.207553,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "jaccard",
+     "dataset": "nuclei2k_v2",
+     "singlet": 0.771504,
+     "reference": 0.899875,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.128371,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "precision",
+     "dataset": "kang2018_ctrl",
+     "singlet": 0.884592,
+     "reference": 0.973965,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.08937299999999992,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "jaccard",
+     "dataset": "kang2018_ctrl",
+     "singlet": 0.884485,
+     "reference": 0.972083,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.08759800000000006,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "jaccard",
+     "dataset": "neuron1k_v3",
+     "singlet": 0.87234,
+     "reference": 0.957919,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.08557899999999996,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "precision",
+     "dataset": "neuron1k_v3",
+     "singlet": 0.918596,
+     "reference": 0.995231,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.07663500000000001,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "jaccard",
+     "dataset": "pbmc1k_v2",
+     "singlet": 0.939451,
+     "reference": 0.996,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.05654899999999996,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "jaccard",
+     "dataset": "hgmm1k_v3",
+     "singlet": 0.942777,
+     "reference": 0.99714,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.05436300000000005,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "precision",
+     "dataset": "pbmc1k_v2",
+     "singlet": 0.942125,
+     "reference": 0.996,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.053875000000000006,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "recall",
+     "dataset": "neuron1k_v3",
+     "singlet": 0.945427,
+     "reference": 0.997694,
+     "reference_tool": "cellbender",
+     "gap": 0.05226699999999995,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "jaccard",
+     "dataset": "pbmc1k_cite_v3",
+     "singlet": 0.948649,
+     "reference": 0.998599,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.04995000000000005,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "jaccard",
+     "dataset": "pbmc1k_v3",
+     "singlet": 0.946731,
+     "reference": 0.99026,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.04352900000000004,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "recall",
+     "dataset": "pbmc1k_v3",
+     "singlet": 0.959902,
+     "reference": 0.999182,
+     "reference_tool": "cellbender",
+     "gap": 0.03927999999999998,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "recall",
+     "dataset": "hgmm1k_v3",
+     "singlet": 0.960803,
+     "reference": 1.0,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.03919700000000004,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "precision",
+     "dataset": "pbmc1k_cite_v3",
+     "singlet": 0.962963,
+     "reference": 0.998599,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.035636,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "precision",
+     "dataset": "pbmc5p_v1",
+     "singlet": 0.969139,
+     "reference": 0.999732,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.03059299999999998,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "precision",
+     "dataset": "hgmm1k_v3",
+     "singlet": 0.980488,
+     "reference": 0.99714,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.016652,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "recall",
+     "dataset": "pbmc1k_cite_v3",
+     "singlet": 0.984572,
+     "reference": 1.0,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.015427999999999997,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "precision",
+     "dataset": "pbmc1k_v3",
+     "singlet": 0.985714,
+     "reference": 0.99187,
+     "reference_tool": "starsolo-edcr",
+     "gap": 0.00615600000000005,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "pipeline-benchmark",
+   "cls": "blocker",
+   "note": "gate 2: 19 of 25 fail; nuclei2k_v2 precision 0.77; kang2018_ctrl 16,524 Singlet cells vs truth 14,619; owner S11"
+  },
+  {
+   "capability": "ambient-rna",
+   "status": "fail",
+   "n_pass": 9,
+   "n_fail": 1,
+   "n_na": 0,
+   "n": 10,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [
+    {
+     "metric": "bias_abs_log2",
+     "dataset": "hgmm1k_v3",
+     "singlet": 0.275866,
+     "reference": 0.038008,
+     "reference_tool": "SoupX",
+     "gap": 0.237858,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "pipeline-benchmark",
+   "cls": "blocker",
+   "note": "gate 2: 9 of 10; still bias_abs_log2 on hgmm1k_v3 (0.276 vs 0.038 SoupX); owner S11"
+  },
+  {
+   "capability": "doublets",
+   "status": "fail",
+   "n_pass": 19,
+   "n_fail": 2,
+   "n_na": 0,
+   "n": 21,
+   "src": "carried",
+   "commit": "cfe5cfa2",
+   "failing": [
+    {
+     "metric": "auprc",
+     "dataset": "xili_hek_hmec_multi",
+     "singlet": 0.3759,
+     "reference": 0.425,
+     "reference_tool": "singlet-production",
+     "gap": 0.04909999999999998,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "auprc",
+     "dataset": "xili_hmec_rep_multi",
+     "singlet": 0.5749,
+     "reference": 0.5788,
+     "reference_tool": "singlet-production",
+     "gap": 0.0039000000000000146,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "doublet combiner (study/latent-qc, #43)",
+   "cls": "re-measure",
+   "note": "re-measure (carried; Python combiner, not the binary)"
+  },
+  {
+   "capability": "donor-demux",
+   "status": "fail",
+   "n_pass": 12,
+   "n_fail": 3,
+   "n_na": 0,
+   "n": 15,
+   "src": "carried",
+   "commit": "02aa9b93",
+   "failing": [
+    {
+     "metric": "ari",
+     "dataset": "kang2018_ctrl",
+     "singlet": 0.97549,
+     "reference": 0.990019,
+     "reference_tool": "souporcell",
+     "gap": 0.014529000000000014,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "min_donor_recall",
+     "dataset": "pooled",
+     "singlet": 0.924171,
+     "reference": 0.935229,
+     "reference_tool": "souporcell",
+     "gap": 0.011058000000000012,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "ari",
+     "dataset": "kang2018_stim",
+     "singlet": 0.976237,
+     "reference": 0.984756,
+     "reference_tool": "souporcell",
+     "gap": 0.008518999999999943,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "pipeline-benchmark",
+   "cls": "re-measure",
+   "note": "re-measure (S10 owns)"
+  },
+  {
+   "capability": "donor-snps",
+   "status": "fail",
+   "n_pass": 9,
+   "n_fail": 21,
+   "n_na": 0,
+   "n": 30,
+   "src": "carried",
+   "commit": "02aa9b93",
+   "failing": [
+    {
+     "metric": "genotype_concordance",
+     "dataset": "kang2018_b1_c",
+     "singlet": 0.754928,
+     "reference": 0.989744,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.2348159999999999,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance",
+     "dataset": "kang2018_stim",
+     "singlet": 0.76508,
+     "reference": 0.989791,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.224711,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance",
+     "dataset": "pooled",
+     "singlet": 0.791285,
+     "reference": 0.989627,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.19834200000000002,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance",
+     "dataset": "kang2018_ctrl",
+     "singlet": 0.813752,
+     "reference": 0.958632,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.14488,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance",
+     "dataset": "kang2018_b1_b",
+     "singlet": 0.890141,
+     "reference": 0.991523,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.10138200000000008,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance",
+     "dataset": "kang2018_b1_a",
+     "singlet": 0.907792,
+     "reference": 0.986603,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.07881099999999996,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "false_alt_rate_dp10",
+     "dataset": "kang2018_stim",
+     "singlet": 0.053894,
+     "reference": 0.004482,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.049412,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance_dp10",
+     "dataset": "kang2018_stim",
+     "singlet": 0.951408,
+     "reference": 0.993165,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.04175699999999993,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "false_alt_rate_dp10",
+     "dataset": "pooled",
+     "singlet": 0.043401,
+     "reference": 0.005032,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.038369,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "nonref_concordance_dp10",
+     "dataset": "kang2018_stim",
+     "singlet": 0.954956,
+     "reference": 0.991667,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.03671099999999994,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "false_alt_rate_dp10",
+     "dataset": "kang2018_b1_c",
+     "singlet": 0.040376,
+     "reference": 0.004808,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.035568,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance_dp10",
+     "dataset": "pooled",
+     "singlet": 0.960943,
+     "reference": 0.992519,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.03157600000000005,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance_dp10",
+     "dataset": "kang2018_b1_c",
+     "singlet": 0.965255,
+     "reference": 0.993176,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.027920999999999974,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "nonref_concordance_dp10",
+     "dataset": "pooled",
+     "singlet": 0.963833,
+     "reference": 0.99107,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.027236999999999956,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "false_alt_rate_dp10",
+     "dataset": "kang2018_b1_a",
+     "singlet": 0.033034,
+     "reference": 0.008979,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.024055,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "nonref_concordance_dp10",
+     "dataset": "kang2018_b1_c",
+     "singlet": 0.968761,
+     "reference": 0.992043,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.023282000000000025,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "false_alt_rate_dp10",
+     "dataset": "kang2018_b1_b",
+     "singlet": 0.026104,
+     "reference": 0.003836,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.022268,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance_dp10",
+     "dataset": "kang2018_b1_a",
+     "singlet": 0.969144,
+     "reference": 0.988775,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.019630999999999954,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "nonref_concordance_dp10",
+     "dataset": "kang2018_b1_a",
+     "singlet": 0.970601,
+     "reference": 0.987596,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.016994999999999982,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "genotype_concordance_dp10",
+     "dataset": "kang2018_b1_b",
+     "singlet": 0.975827,
+     "reference": 0.992784,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.016957,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "nonref_concordance_dp10",
+     "dataset": "kang2018_b1_b",
+     "singlet": 0.977221,
+     "reference": 0.990881,
+     "reference_tool": "cellsnp-pileup",
+     "gap": 0.013660000000000005,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "base qualities in .1fq (fq-read-source) + SRA Lite verdict",
+   "cls": "re-measure",
+   "note": "re-measure (S10 owns; #115 not in the gate-1 binary)",
+   "cls_override": "blocker"
+  },
+  {
+   "capability": "mtdna",
+   "status": "fail",
+   "n_pass": 12,
+   "n_fail": 6,
+   "n_na": 0,
+   "n": 18,
+   "src": "carried",
+   "commit": "02aa9b93",
+   "failing": [
+    {
+     "metric": "haplotype_precision",
+     "dataset": "kang2018_ctrl",
+     "singlet": 0.789116,
+     "reference": 0.893805,
+     "reference_tool": "mgatk",
+     "gap": 0.10468899999999992,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "haplotype_precision",
+     "dataset": "kang2018_stim",
+     "singlet": 0.850649,
+     "reference": 0.926829,
+     "reference_tool": "mgatk",
+     "gap": 0.07618000000000003,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "haplotype_recall",
+     "dataset": "kang2018_b1_b",
+     "singlet": 0.909091,
+     "reference": 0.981818,
+     "reference_tool": "mgatk",
+     "gap": 0.07272699999999999,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "haplotype_precision",
+     "dataset": "pooled",
+     "singlet": 0.886792,
+     "reference": 0.934389,
+     "reference_tool": "mgatk",
+     "gap": 0.047597,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "haplotype_precision",
+     "dataset": "kang2018_b1_b",
+     "singlet": 0.909091,
+     "reference": 0.947368,
+     "reference_tool": "mgatk",
+     "gap": 0.038277000000000005,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "haplotype_recall",
+     "dataset": "kang2018_b1_a",
+     "singlet": 0.920792,
+     "reference": 0.940594,
+     "reference_tool": "mgatk",
+     "gap": 0.019801999999999986,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "base qualities in .1fq (fq-read-source) + SRA Lite verdict",
+   "cls": "re-measure",
+   "note": "re-measure (S10 owns; not re-run on the tip)"
+  },
+  {
+   "capability": "non-host",
+   "status": "fail",
+   "n_pass": 8,
+   "n_fail": 2,
+   "n_na": 0,
+   "n": 10,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [
+    {
+     "metric": "percell_spearman_vs_oracle",
+     "dataset": "ravindra2021_dpi2",
+     "singlet": 0.9299615859176004,
+     "reference": 0.9352269140761431,
+     "reference_tool": "kraken2-viral",
+     "gap": 0.005265328158542748,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "cell_f1_vs_oracle",
+     "dataset": "ravindra2021_dpi2",
+     "singlet": 0.9416707376648755,
+     "reference": 0.9457243264349863,
+     "reference_tool": "kraken2-viral",
+     "gap": 0.00405358877011075,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "pipeline-benchmark",
+   "cls": "should-fix",
+   "note": "gate 2, re-run on the tip with Kraken2/oracle re-run: 2 of 10 fail by 0.002-0.005 against Kraken2 viral on ravindra2021_dpi2"
+  },
+  {
+   "capability": "alignment-performance",
+   "status": "fail",
+   "n_pass": 3,
+   "n_fail": 1,
+   "n_na": 0,
+   "n": 4,
+   "src": "carried",
+   "commit": "02aa9b93",
+   "failing": [
+    {
+     "metric": "thread_count_outputs_identical",
+     "dataset": "pbmc1k_v3",
+     "singlet": 0.0,
+     "reference": 1.0,
+     "reference_tool": "threshold",
+     "gap": 1.0,
+     "rule": "threshold"
+    }
+   ],
+   "owner": "engine-blockers / GPU engine",
+   "cls": "stale: failing metric passes at the pin",
+   "cls_override": "stale: failing metric passes at the pin",
+   "note": "thread_count_outputs_identical re-measured at the pin: identical, 52 of 52 data files at 4, 8 and 16 threads (pbmc1k_v3). Document and timings carried from 02aa9b9 (exclusive-node timings not re-run; S12 has a profile on shared nodes, PR #112)"
+  },
+  {
+   "capability": "download",
+   "status": "fail",
+   "n_pass": 3,
+   "n_fail": 3,
+   "n_na": 0,
+   "n": 6,
+   "src": "carried",
+   "commit": "02aa9b93",
+   "failing": [
+    {
+     "metric": "aggregate_reads_s",
+     "dataset": "sra_download_set",
+     "singlet": 611997.246206254,
+     "reference": 1132593.2435162452,
+     "reference_tool": "singlet-prefetch-local",
+     "gap": 520595.99730999116,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "per_stream_reads_s",
+     "dataset": "sra_download_set",
+     "singlet": 311091.4392829995,
+     "reference": 430416.2579393036,
+     "reference_tool": "singlet-prefetch-local",
+     "gap": 119324.8186563041,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "aggregate_mb_s",
+     "dataset": "sra_download_set",
+     "singlet": 33.67212436065735,
+     "reference": 93.60381716931536,
+     "reference_tool": "aws-s3",
+     "gap": 59.93169280865801,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "engine-blockers",
+   "cls": "re-measure",
+   "note": "re-measure (carried; S9 measured the Clipper ceiling instead, PR #108)"
+  },
+  {
+   "capability": "adt",
+   "status": "missing",
+   "src": "none",
+   "failing": [],
+   "owner": "adt-modality",
+   "cls": "missing"
+  },
+  {
+   "capability": "hto",
+   "status": "fail",
+   "n_pass": 1,
+   "n_fail": 7,
+   "n_na": 0,
+   "n": 8,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [
+    {
+     "metric": "f_score",
+     "dataset": "howitt2023_cl",
+     "singlet": 0.725972,
+     "reference": 0.874303,
+     "reference_tool": "bff-cluster",
+     "gap": 0.1483310000000001,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "f_score",
+     "dataset": "howitt2023_bal3",
+     "singlet": 0.747877,
+     "reference": 0.785027,
+     "reference_tool": "hasheddrops-optimised",
+     "gap": 0.037150000000000016,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "f_score",
+     "dataset": "howitt2023_bal2",
+     "singlet": 0.813813,
+     "reference": 0.845672,
+     "reference_tool": "hasheddrops-optimised",
+     "gap": 0.03185899999999997,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "f_score",
+     "dataset": "howitt2023_bal1",
+     "singlet": 0.919158,
+     "reference": 0.935239,
+     "reference_tool": "bff-cluster",
+     "gap": 0.016081000000000012,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "doublets_called_singlet",
+     "dataset": "howitt2023_bal1",
+     "singlet": 0.061244,
+     "reference": 0.050955,
+     "reference_tool": "demuxmix",
+     "gap": 0.010289,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "doublets_called_singlet",
+     "dataset": "howitt2023_bal2",
+     "singlet": 0.103976,
+     "reference": 0.097168,
+     "reference_tool": "demuxmix",
+     "gap": 0.006807999999999995,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "doublets_called_singlet",
+     "dataset": "howitt2023_bal3",
+     "singlet": 0.145038,
+     "reference": 0.14004,
+     "reference_tool": "demuxmix",
+     "gap": 0.0049980000000000024,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "HTO demux (adt-modality)",
+   "cls": "blocker",
+   "note": "gate 2, tip candidate: F-scores 0.919 / 0.814 / 0.748 / 0.726 on BAL1 / BAL2 / BAL3 / cell lines (7 of 8 fail); owner S11"
+  },
+  {
+   "capability": "cell-type",
+   "status": "fail",
+   "n_pass": 9,
+   "n_fail": 3,
+   "n_na": 0,
+   "n": 12,
+   "src": "carried",
+   "commit": "19caf8cd",
+   "failing": [
+    {
+     "metric": "unseen_tissue_depth2",
+     "dataset": "cxg16",
+     "singlet": 0.5073,
+     "reference": 0.6147,
+     "reference_tool": "scANVI",
+     "gap": 0.10740000000000005,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "calibration_ece",
+     "dataset": "cxg16",
+     "singlet": 0.2155,
+     "reference": 0.1351,
+     "reference_tool": "Seurat",
+     "gap": 0.0804,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "wrong_rate",
+     "dataset": "cxg16",
+     "singlet": 0.3736,
+     "reference": 0.3687,
+     "reference_tool": "Seurat",
+     "gap": 0.00489999999999996,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "ensemble-classifier",
+   "cls": "re-measure",
+   "note": "re-measure (Python model, carried)"
+  },
+  {
+   "capability": "vdj",
+   "status": "fail",
+   "n_pass": 22,
+   "n_fail": 8,
+   "n_na": 0,
+   "n": 30,
+   "src": "carried",
+   "commit": "5d39eb23",
+   "failing": [
+    {
+     "metric": "bcr_correct_pairing",
+     "dataset": "pbmc10k_5p_v2",
+     "singlet": 0.9511,
+     "reference": 0.974,
+     "reference_tool": "trust4",
+     "gap": 0.02290000000000003,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "bcr_wrong_lineage",
+     "dataset": "pbmc5p_v1",
+     "singlet": 0.0173,
+     "reference": 0.0004,
+     "reference_tool": "cellranger-vdj",
+     "gap": 0.0169,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "bcr_j_gene_agreement",
+     "dataset": "pbmc10k_5p_v2",
+     "singlet": 0.9718,
+     "reference": 0.9849,
+     "reference_tool": "trust4",
+     "gap": 0.0131,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "bcr_cdr3_nt_accuracy",
+     "dataset": "pbmc10k_5p_v2",
+     "singlet": 0.9846,
+     "reference": 0.9948,
+     "reference_tool": "trust4",
+     "gap": 0.010199999999999987,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "bcr_wrong_lineage",
+     "dataset": "pbmc10k_5p_v2",
+     "singlet": 0.0094,
+     "reference": 0.0,
+     "reference_tool": "cellranger-vdj",
+     "gap": 0.0094,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "bcr_j_gene_agreement",
+     "dataset": "pbmc5p_v1",
+     "singlet": 0.9816,
+     "reference": 0.9895,
+     "reference_tool": "trust4",
+     "gap": 0.007900000000000018,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "tcr_wrong_lineage",
+     "dataset": "pbmc5p_v1",
+     "singlet": 0.0057,
+     "reference": 0.0004,
+     "reference_tool": "cellranger-vdj",
+     "gap": 0.0053,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "tcr_wrong_lineage",
+     "dataset": "pbmc10k_5p_v2",
+     "singlet": 0.0009,
+     "reference": 0.0,
+     "reference_tool": "cellranger-vdj",
+     "gap": 0.0009,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "vdj-crispr",
+   "cls": "re-measure",
+   "note": "not at SOTA yet; work to get there is under way (Python assembler; carried)"
+  },
+  {
+   "capability": "crispr-guides",
+   "status": "incomplete",
+   "n_pass": 21,
+   "n_fail": 0,
+   "n_na": 0,
+   "n": 21,
+   "src": "carried",
+   "commit": "34a6f535",
+   "failing": [],
+   "owner": "vdj-crispr",
+   "cls": "missing",
+   "note": "re-measure (Python counter, carried)"
+  },
+  {
+   "capability": "atac",
+   "status": "fail",
+   "n_pass": 9,
+   "n_fail": 1,
+   "n_na": 0,
+   "n": 10,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [
+    {
+     "metric": "peak_f1",
+     "dataset": "pbmc_multiome10k",
+     "singlet": 0.8298,
+     "reference": 0.8373,
+     "reference_tool": "chromap+snapatac2",
+     "gap": 0.007500000000000062,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "atac-multiome-spatial",
+   "cls": "should-fix",
+   "note": "gate 2: both libraries on the tip candidate (10k completes; stall watchdog #114). peak_f1 on pbmc_multiome10k 0.830 vs 0.837"
+  },
+  {
+   "capability": "multiome",
+   "status": "pass",
+   "n_pass": 2,
+   "n_fail": 0,
+   "n_na": 0,
+   "n": 2,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [],
+   "owner": "atac-multiome-spatial",
+   "cls": "",
+   "note": "gate 2: passes on the tip candidate (10k library); the 3k development library was not re-run"
+  },
+  {
+   "capability": "spatial",
+   "status": "fail",
+   "n_pass": 7,
+   "n_fail": 3,
+   "n_na": 0,
+   "n": 10,
+   "src": "re-run",
+   "commit": "3eaa041c",
+   "failing": [
+    {
+     "metric": "spot_profile_pearson",
+     "dataset": "visium_mouse_brain_ant",
+     "singlet": 0.9806,
+     "reference": 0.9888,
+     "reference_tool": "starsolo",
+     "gap": 0.008199999999999985,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "gene_totals_spearman",
+     "dataset": "visium_mouse_brain_ant",
+     "singlet": 0.9773,
+     "reference": 0.9843,
+     "reference_tool": "starsolo",
+     "gap": 0.007000000000000006,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "spot_genes_spearman",
+     "dataset": "visium_mouse_brain_ant",
+     "singlet": 0.9999,
+     "reference": 1.0,
+     "reference_tool": "starsolo",
+     "gap": 9.999999999998899e-05,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "atac-multiome-spatial",
+   "cls": "blocker",
+   "cls_override": "blocker",
+   "note": "gate 2: Visium FFPE human breast now completes on the default path (exit 0, STREAM PATH OK; strand fallback #117); remaining failures are small gaps to STARsolo on visium_mouse_brain_ant (3 metrics)"
+  },
+  {
+   "capability": "chromosomal-sex",
+   "status": "incomplete",
+   "n_pass": 5,
+   "n_fail": 0,
+   "n_na": 0,
+   "n": 5,
+   "src": "carried",
+   "commit": "bf1f5741",
+   "failing": [],
+   "owner": "bench-public",
+   "cls": "missing",
+   "note": "re-measure (Python model, carried)"
+  },
+  {
+   "capability": "genetic-ancestry",
+   "status": "fail",
+   "n_pass": 8,
+   "n_fail": 3,
+   "n_na": 0,
+   "n": 11,
+   "src": "carried",
+   "commit": "40f0b5d2",
+   "failing": [
+    {
+     "metric": "accuracy.8m",
+     "dataset": "mage150",
+     "singlet": 0.86,
+     "reference": 0.9933,
+     "reference_tool": "peddy",
+     "gap": 0.13329999999999997,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "accuracy_top.8m",
+     "dataset": "mage150",
+     "singlet": 0.9333,
+     "reference": 0.9933,
+     "reference_tool": "peddy",
+     "gap": 0.05999999999999994,
+     "rule": "match_or_beat"
+    },
+    {
+     "metric": "accuracy.2m",
+     "dataset": "mage150",
+     "singlet": 0.86,
+     "reference": 0.9,
+     "reference_tool": "peddy",
+     "gap": 0.040000000000000036,
+     "rule": "match_or_beat"
+    }
+   ],
+   "owner": "bench-public",
+   "cls": "re-measure",
+   "note": "re-measure (Python model, carried)"
+  }
+ ]
+}

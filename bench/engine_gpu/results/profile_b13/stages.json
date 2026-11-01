@@ -1,0 +1,86 @@
+{
+ "gpu": [
+  {
+   "stage": "start (arguments, probe)",
+   "wall_s": 1.2,
+   "core_s": 2.6
+  },
+  {
+   "stage": "decode reads (.1fq to FASTQ)",
+   "wall_s": 20.5,
+   "core_s": 75.9
+  },
+  {
+   "stage": "references and barcodes",
+   "wall_s": 286.6,
+   "core_s": 898.8
+  },
+  {
+   "stage": "after pileup (callers, QC)",
+   "wall_s": 0.0,
+   "core_s": 0.0
+  },
+  {
+   "stage": "BAM index",
+   "wall_s": 2.6,
+   "core_s": 2.6
+  },
+  {
+   "stage": "non-host: index load",
+   "wall_s": 1.1,
+   "core_s": 1.3
+  },
+  {
+   "stage": "non-host: classify",
+   "wall_s": 10.9,
+   "core_s": 27.6
+  },
+  {
+   "stage": "non-host: EM, writers",
+   "wall_s": 3.1,
+   "core_s": 3.5
+  },
+  {
+   "stage": "export",
+   "wall_s": 94.0,
+   "core_s": 105.6
+  }
+ ],
+ "cpu": [
+  {
+   "stage": "start (arguments, probe)",
+   "wall_s": 312.4,
+   "core_s": 2267.6
+  },
+  {
+   "stage": "after pileup (callers, QC)",
+   "wall_s": 0.0,
+   "core_s": 0.0
+  },
+  {
+   "stage": "BAM index",
+   "wall_s": 0.0,
+   "core_s": 0.0
+  },
+  {
+   "stage": "non-host: index load",
+   "wall_s": 40.1,
+   "core_s": 41.8
+  },
+  {
+   "stage": "non-host: classify",
+   "wall_s": 15.0,
+   "core_s": 28.2
+  },
+  {
+   "stage": "non-host: EM, writers",
+   "wall_s": 4.6,
+   "core_s": 4.8
+  },
+  {
+   "stage": "export",
+   "wall_s": 93.6,
+   "core_s": 105.4
+  }
+ ]
+}

@@ -232,6 +232,58 @@ static void test_guide_names() {
     std::cout << "Test 7 PASS: guide names() in order\n";
 }
 
+// -- Test 8: a read containing two guides is ambiguous, whatever the hash order --
+
+static void test_ambiguous_guides() {
+    const char* csv =
+        "Long_1,GACGGATCGGGAGATCTCCC\n"
+        "Inner_2,GGGAGATC\n"          // occurs inside Long_1
+        "Other_3,TTTTGGGGCCCCAAAATTTT\n"
+        "Dup_4,TTTTGGGGCCCCAAAATTTT\n"; // same sequence as Other_3
+    auto path = write_temp_csv(csv);
+    GuideRef ref;
+    bool loaded = ref.load_csv(path);
+    (void)loaded;
+    std::remove(path.c_str());
+    assert(loaded && ref.size() == 4);
+
+    assert(ref.match("NNGACGGATCGGGAGATCTCCCNN") == GuideRef::kAmbiguous);  // Long_1 and Inner_2
+    assert(ref.match("AAGGGAGATCAA") == 1);                                  // Inner_2 alone
+    assert(ref.match("TTTTGGGGCCCCAAAATTTT") == GuideRef::kAmbiguous);       // duplicated sequence
+    assert(ref.match("ACGTACGT") == -1);
+    std::cout << "Test 8 PASS: ambiguous reads are never counted for a winner\n";
+}
+
+// -- Test 9: guides match in the read's sequencing orientation --
+
+static void test_bam_orientation() {
+    const char* csv = "G_1,GACGGATCGGGAGATCTCCC\nG_2,AAAACCCCGGGGTTTTAAAC\n";
+    auto path = write_temp_csv(csv);
+    GuideRef ref;
+    bool loaded = ref.load_csv(path);
+    (void)loaded;
+    std::remove(path.c_str());
+    assert(loaded);
+
+    // A forward-strand record stores the read as sequenced.
+    std::string fwd = "TTGACGGATCGGGAGATCTCCCTT";
+    std::string b1 = fwd;
+    assert(ref.match_bam(&b1[0], (int)b1.size(), false) == 0);
+
+    // A reverse-strand record stores its reverse complement; match_bam restores the read orientation.
+    std::string rev = fwd;
+    GuideRef::reverse_complement(&rev[0], (int)rev.size());
+    assert(rev != fwd);
+    std::string b2 = rev;
+    assert(ref.match(b2.data(), (int)b2.size()) == -1);                      // the raw BAM sequence does not match
+    assert(ref.match_bam(&b2[0], (int)b2.size(), true) == 0);
+
+    std::string x = "ACGTNacgt";
+    GuideRef::reverse_complement(&x[0], (int)x.size());
+    assert(x == "ACGTNACGT");
+    std::cout << "Test 9 PASS: reverse-strand BAM records are matched in read orientation\n";
+}
+
 // ── main ─────────────────────────────────────────────────────────────────
 
 int main() {
@@ -242,6 +294,8 @@ int main() {
     test_no_umi();
     test_merge();
     test_guide_names();
-    std::cout << "All 7 CRISPR guide tests passed.\n";
+    test_ambiguous_guides();
+    test_bam_orientation();
+    std::cout << "All 9 CRISPR guide tests passed.\n";
     return 0;
 }

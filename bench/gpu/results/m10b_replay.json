@@ -1,0 +1,974 @@
+{
+ "full": {
+  "export.core": {
+   "wall_s": 90.061,
+   "cpu_s": 115.257,
+   "thr_cpu_s": 15.092
+  },
+  "export.csc_conversion": {
+   "wall_s": 2.515,
+   "cpu_s": 4.952,
+   "thr_cpu_s": 0.005
+  },
+  "cell_calling": {
+   "wall_s": 4.432,
+   "cpu_s": 4.431,
+   "thr_cpu_s": 4.431
+  },
+  "ambient": {
+   "wall_s": 2.081,
+   "cpu_s": 4.171,
+   "thr_cpu_s": 2.049
+  },
+  "doublet": {
+   "wall_s": 1.71,
+   "cpu_s": 10.665,
+   "thr_cpu_s": 1.562
+  },
+  "saturation_curve": {
+   "wall_s": 1.605,
+   "cpu_s": 1.605,
+   "thr_cpu_s": 1.605
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 1.715,
+   "cpu_s": 1.715,
+   "thr_cpu_s": 1.715
+  },
+  "demux.thread": {
+   "wall_s": 72.247,
+   "cpu_s": 83.959,
+   "thr_cpu_s": 72.184
+  },
+  "autoK.total": {
+   "wall_s": 44.015,
+   "cpu_s": 52.932,
+   "thr_cpu_s": 43.977
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 27.944,
+   "cpu_s": 27.925,
+   "thr_cpu_s": 27.925
+  },
+  "join.write_threads": {
+   "wall_s": 2.529,
+   "cpu_s": 14.235,
+   "thr_cpu_s": 0.0
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 1.965,
+   "cpu_s": 1.968,
+   "thr_cpu_s": 1.931
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.218,
+   "cpu_s": 2.945,
+   "thr_cpu_s": 0.212
+  },
+  "main.total_including_teardown": {
+   "wall_s": 494.293,
+   "cpu_s": 437.178
+  },
+  "stage.pileup": {
+   "wall_s": 41.843,
+   "cpu_s": 128.482
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "t1": {
+  "export.core": {
+   "wall_s": 92.356,
+   "cpu_s": 117.709,
+   "thr_cpu_s": 20.494
+  },
+  "export.csc_conversion": {
+   "wall_s": 2.282,
+   "cpu_s": 4.737,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.54,
+   "cpu_s": 4.539,
+   "thr_cpu_s": 4.539
+  },
+  "ambient": {
+   "wall_s": 2.21,
+   "cpu_s": 4.362,
+   "thr_cpu_s": 2.173
+  },
+  "doublet": {
+   "wall_s": 2.445,
+   "cpu_s": 11.581,
+   "thr_cpu_s": 2.361
+  },
+  "saturation_curve": {
+   "wall_s": 1.548,
+   "cpu_s": 1.548,
+   "thr_cpu_s": 1.548
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 1.758,
+   "cpu_s": 1.758,
+   "thr_cpu_s": 1.758
+  },
+  "demux.thread": {
+   "wall_s": 69.43,
+   "cpu_s": 81.039,
+   "thr_cpu_s": 69.422
+  },
+  "autoK.total": {
+   "wall_s": 41.727,
+   "cpu_s": 50.719,
+   "thr_cpu_s": 41.726
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 27.433,
+   "cpu_s": 27.431,
+   "thr_cpu_s": 27.431
+  },
+  "join.write_threads": {
+   "wall_s": 2.55,
+   "cpu_s": 14.133,
+   "thr_cpu_s": 0.003
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 1.93,
+   "cpu_s": 1.932,
+   "thr_cpu_s": 1.895
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.201,
+   "cpu_s": 2.737,
+   "thr_cpu_s": 0.198
+  },
+  "main.total_including_teardown": {
+   "wall_s": 196.853,
+   "cpu_s": 223.817
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 85.391,
+   "cpu_s": 85.383
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "t4": {
+  "export.core": {
+   "wall_s": 94.222,
+   "cpu_s": 119.275,
+   "thr_cpu_s": 20.569
+  },
+  "export.csc_conversion": {
+   "wall_s": 2.452,
+   "cpu_s": 4.914,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.521,
+   "cpu_s": 4.521,
+   "thr_cpu_s": 4.521
+  },
+  "ambient": {
+   "wall_s": 2.181,
+   "cpu_s": 4.282,
+   "thr_cpu_s": 2.155
+  },
+  "doublet": {
+   "wall_s": 2.387,
+   "cpu_s": 11.291,
+   "thr_cpu_s": 2.313
+  },
+  "saturation_curve": {
+   "wall_s": 1.542,
+   "cpu_s": 1.542,
+   "thr_cpu_s": 1.542
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 1.91,
+   "cpu_s": 1.91,
+   "thr_cpu_s": 1.91
+  },
+  "demux.thread": {
+   "wall_s": 71.07,
+   "cpu_s": 82.656,
+   "thr_cpu_s": 71.055
+  },
+  "autoK.total": {
+   "wall_s": 43.014,
+   "cpu_s": 51.849,
+   "thr_cpu_s": 43.004
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 27.776,
+   "cpu_s": 27.776,
+   "thr_cpu_s": 27.776
+  },
+  "join.write_threads": {
+   "wall_s": 2.533,
+   "cpu_s": 14.09,
+   "thr_cpu_s": 0.003
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 1.963,
+   "cpu_s": 1.966,
+   "thr_cpu_s": 1.928
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.211,
+   "cpu_s": 2.881,
+   "thr_cpu_s": 0.206
+  },
+  "main.total_including_teardown": {
+   "wall_s": 198.946,
+   "cpu_s": 225.643
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 86.019,
+   "cpu_s": 86.013
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "t8": {
+  "export.core": {
+   "wall_s": 91.113,
+   "cpu_s": 115.99,
+   "thr_cpu_s": 20.689
+  },
+  "export.csc_conversion": {
+   "wall_s": 2.454,
+   "cpu_s": 4.901,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.514,
+   "cpu_s": 4.514,
+   "thr_cpu_s": 4.514
+  },
+  "ambient": {
+   "wall_s": 2.188,
+   "cpu_s": 4.25,
+   "thr_cpu_s": 2.159
+  },
+  "doublet": {
+   "wall_s": 2.368,
+   "cpu_s": 11.275,
+   "thr_cpu_s": 2.296
+  },
+  "saturation_curve": {
+   "wall_s": 1.568,
+   "cpu_s": 1.568,
+   "thr_cpu_s": 1.568
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 1.93,
+   "cpu_s": 1.93,
+   "thr_cpu_s": 1.93
+  },
+  "demux.thread": {
+   "wall_s": 67.835,
+   "cpu_s": 79.296,
+   "thr_cpu_s": 67.784
+  },
+  "autoK.total": {
+   "wall_s": 40.478,
+   "cpu_s": 49.206,
+   "thr_cpu_s": 40.445
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 27.079,
+   "cpu_s": 27.066,
+   "thr_cpu_s": 27.066
+  },
+  "join.write_threads": {
+   "wall_s": 2.527,
+   "cpu_s": 13.992,
+   "thr_cpu_s": 0.003
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 1.95,
+   "cpu_s": 1.953,
+   "thr_cpu_s": 1.913
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.21,
+   "cpu_s": 2.863,
+   "thr_cpu_s": 0.206
+  },
+  "main.total_including_teardown": {
+   "wall_s": 197.271,
+   "cpu_s": 223.773
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 87.389,
+   "cpu_s": 87.382
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "c1": {
+  "export.core": {
+   "wall_s": 91.89,
+   "cpu_s": 117.523,
+   "thr_cpu_s": 22.021
+  },
+  "export.csc_conversion": {
+   "wall_s": 3.327,
+   "cpu_s": 6.243,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.832,
+   "cpu_s": 4.831,
+   "thr_cpu_s": 4.831
+  },
+  "ambient": {
+   "wall_s": 2.905,
+   "cpu_s": 4.903,
+   "thr_cpu_s": 2.654
+  },
+  "doublet": {
+   "wall_s": 1.894,
+   "cpu_s": 10.348,
+   "thr_cpu_s": 1.761
+  },
+  "saturation_curve": {
+   "wall_s": 2.455,
+   "cpu_s": 2.455,
+   "thr_cpu_s": 2.455
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 2.018,
+   "cpu_s": 1.73,
+   "thr_cpu_s": 1.73
+  },
+  "demux.thread": {
+   "wall_s": 65.624,
+   "cpu_s": 78.385,
+   "thr_cpu_s": 65.543
+  },
+  "autoK.total": {
+   "wall_s": 38.793,
+   "cpu_s": 48.006,
+   "thr_cpu_s": 38.78
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 26.44,
+   "cpu_s": 26.439,
+   "thr_cpu_s": 26.439
+  },
+  "join.write_threads": {
+   "wall_s": 2.691,
+   "cpu_s": 15.45,
+   "thr_cpu_s": 0.001
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 2.137,
+   "cpu_s": 2.14,
+   "thr_cpu_s": 2.099
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.315,
+   "cpu_s": 3.723,
+   "thr_cpu_s": 0.25
+  },
+  "main.total_including_teardown": {
+   "wall_s": 202.924,
+   "cpu_s": 230.829
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 90.412,
+   "cpu_s": 90.411
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "c2": {
+  "export.core": {
+   "wall_s": 93.289,
+   "cpu_s": 119.81,
+   "thr_cpu_s": 22.889
+  },
+  "export.csc_conversion": {
+   "wall_s": 3.07,
+   "cpu_s": 5.984,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.823,
+   "cpu_s": 4.822,
+   "thr_cpu_s": 4.822
+  },
+  "ambient": {
+   "wall_s": 2.712,
+   "cpu_s": 4.908,
+   "thr_cpu_s": 2.612
+  },
+  "doublet": {
+   "wall_s": 2.698,
+   "cpu_s": 10.902,
+   "thr_cpu_s": 2.576
+  },
+  "saturation_curve": {
+   "wall_s": 2.38,
+   "cpu_s": 2.38,
+   "thr_cpu_s": 2.38
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 1.782,
+   "cpu_s": 1.782,
+   "thr_cpu_s": 1.782
+  },
+  "demux.thread": {
+   "wall_s": 67.073,
+   "cpu_s": 80.278,
+   "thr_cpu_s": 67.059
+  },
+  "autoK.total": {
+   "wall_s": 39.794,
+   "cpu_s": 49.668,
+   "thr_cpu_s": 39.789
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 26.932,
+   "cpu_s": 26.932,
+   "thr_cpu_s": 26.932
+  },
+  "join.write_threads": {
+   "wall_s": 2.871,
+   "cpu_s": 16.04,
+   "thr_cpu_s": 0.0
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 2.068,
+   "cpu_s": 2.072,
+   "thr_cpu_s": 2.031
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.263,
+   "cpu_s": 3.429,
+   "thr_cpu_s": 0.254
+  },
+  "main.total_including_teardown": {
+   "wall_s": 207.585,
+   "cpu_s": 236.005
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 91.272,
+   "cpu_s": 91.265
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "c3": {
+  "export.core": {
+   "wall_s": 95.952,
+   "cpu_s": 120.653,
+   "thr_cpu_s": 22.127
+  },
+  "export.csc_conversion": {
+   "wall_s": 3.375,
+   "cpu_s": 6.282,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.832,
+   "cpu_s": 4.825,
+   "thr_cpu_s": 4.825
+  },
+  "ambient": {
+   "wall_s": 2.887,
+   "cpu_s": 4.534,
+   "thr_cpu_s": 2.567
+  },
+  "doublet": {
+   "wall_s": 2.447,
+   "cpu_s": 10.442,
+   "thr_cpu_s": 2.166
+  },
+  "saturation_curve": {
+   "wall_s": 2.268,
+   "cpu_s": 2.268,
+   "thr_cpu_s": 2.268
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 1.748,
+   "cpu_s": 1.738,
+   "thr_cpu_s": 1.738
+  },
+  "demux.thread": {
+   "wall_s": 69.8,
+   "cpu_s": 81.965,
+   "thr_cpu_s": 69.718
+  },
+  "autoK.total": {
+   "wall_s": 41.951,
+   "cpu_s": 50.929,
+   "thr_cpu_s": 41.94
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 27.462,
+   "cpu_s": 27.462,
+   "thr_cpu_s": 27.462
+  },
+  "join.write_threads": {
+   "wall_s": 2.747,
+   "cpu_s": 14.9,
+   "thr_cpu_s": 0.0
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 2.098,
+   "cpu_s": 2.101,
+   "thr_cpu_s": 2.062
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.311,
+   "cpu_s": 3.34,
+   "thr_cpu_s": 0.24
+  },
+  "main.total_including_teardown": {
+   "wall_s": 210.368,
+   "cpu_s": 236.963
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 91.242,
+   "cpu_s": 91.24
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "c4": {
+  "export.core": {
+   "wall_s": 91.104,
+   "cpu_s": 116.625,
+   "thr_cpu_s": 20.92
+  },
+  "export.csc_conversion": {
+   "wall_s": 2.373,
+   "cpu_s": 4.872,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.643,
+   "cpu_s": 4.643,
+   "thr_cpu_s": 4.643
+  },
+  "ambient": {
+   "wall_s": 2.398,
+   "cpu_s": 4.283,
+   "thr_cpu_s": 2.283
+  },
+  "doublet": {
+   "wall_s": 2.303,
+   "cpu_s": 10.454,
+   "thr_cpu_s": 1.961
+  },
+  "saturation_curve": {
+   "wall_s": 1.71,
+   "cpu_s": 1.709,
+   "thr_cpu_s": 1.709
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 1.722,
+   "cpu_s": 1.718,
+   "thr_cpu_s": 1.718
+  },
+  "demux.thread": {
+   "wall_s": 67.307,
+   "cpu_s": 80.303,
+   "thr_cpu_s": 67.161
+  },
+  "autoK.total": {
+   "wall_s": 39.714,
+   "cpu_s": 49.875,
+   "thr_cpu_s": 39.639
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 27.236,
+   "cpu_s": 27.235,
+   "thr_cpu_s": 27.235
+  },
+  "join.write_threads": {
+   "wall_s": 3.309,
+   "cpu_s": 16.288,
+   "thr_cpu_s": 0.0
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 2.097,
+   "cpu_s": 2.1,
+   "thr_cpu_s": 2.06
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.282,
+   "cpu_s": 3.026,
+   "thr_cpu_s": 0.213
+  },
+  "main.total_including_teardown": {
+   "wall_s": 202.049,
+   "cpu_s": 229.81
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 89.652,
+   "cpu_s": 89.646
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "c5": {
+  "export.core": {
+   "wall_s": 93.027,
+   "cpu_s": 117.945,
+   "thr_cpu_s": 21.213
+  },
+  "export.csc_conversion": {
+   "wall_s": 2.407,
+   "cpu_s": 4.909,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.615,
+   "cpu_s": 4.614,
+   "thr_cpu_s": 4.614
+  },
+  "ambient": {
+   "wall_s": 2.566,
+   "cpu_s": 4.398,
+   "thr_cpu_s": 2.442
+  },
+  "doublet": {
+   "wall_s": 2.437,
+   "cpu_s": 10.732,
+   "thr_cpu_s": 2.066
+  },
+  "saturation_curve": {
+   "wall_s": 1.753,
+   "cpu_s": 1.752,
+   "thr_cpu_s": 1.752
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 2.185,
+   "cpu_s": 1.752,
+   "thr_cpu_s": 1.752
+  },
+  "demux.thread": {
+   "wall_s": 68.447,
+   "cpu_s": 81.166,
+   "thr_cpu_s": 68.389
+  },
+  "autoK.total": {
+   "wall_s": 39.979,
+   "cpu_s": 49.843,
+   "thr_cpu_s": 39.961
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 28.141,
+   "cpu_s": 28.139,
+   "thr_cpu_s": 28.139
+  },
+  "join.write_threads": {
+   "wall_s": 2.951,
+   "cpu_s": 15.628,
+   "thr_cpu_s": 0.0
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 2.128,
+   "cpu_s": 2.131,
+   "thr_cpu_s": 2.092
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.259,
+   "cpu_s": 3.026,
+   "thr_cpu_s": 0.219
+  },
+  "main.total_including_teardown": {
+   "wall_s": 204.994,
+   "cpu_s": 231.801
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 91.219,
+   "cpu_s": 91.215
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "c6": {
+  "export.core": {
+   "wall_s": 92.508,
+   "cpu_s": 117.598,
+   "thr_cpu_s": 20.256
+  },
+  "export.csc_conversion": {
+   "wall_s": 2.692,
+   "cpu_s": 5.169,
+   "thr_cpu_s": 0.0
+  },
+  "cell_calling": {
+   "wall_s": 4.545,
+   "cpu_s": 4.545,
+   "thr_cpu_s": 4.545
+  },
+  "ambient": {
+   "wall_s": 2.333,
+   "cpu_s": 4.238,
+   "thr_cpu_s": 2.202
+  },
+  "doublet": {
+   "wall_s": 1.834,
+   "cpu_s": 10.251,
+   "thr_cpu_s": 1.569
+  },
+  "saturation_curve": {
+   "wall_s": 1.696,
+   "cpu_s": 1.696,
+   "thr_cpu_s": 1.696
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 2.31,
+   "cpu_s": 1.735,
+   "thr_cpu_s": 1.735
+  },
+  "demux.thread": {
+   "wall_s": 68.454,
+   "cpu_s": 81.419,
+   "thr_cpu_s": 68.315
+  },
+  "autoK.total": {
+   "wall_s": 40.672,
+   "cpu_s": 50.777,
+   "thr_cpu_s": 40.587
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 27.378,
+   "cpu_s": 27.373,
+   "thr_cpu_s": 27.373
+  },
+  "join.write_threads": {
+   "wall_s": 3.38,
+   "cpu_s": 16.292,
+   "thr_cpu_s": 0.0
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 2.046,
+   "cpu_s": 2.049,
+   "thr_cpu_s": 2.011
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.298,
+   "cpu_s": 3.045,
+   "thr_cpu_s": 0.249
+  },
+  "main.total_including_teardown": {
+   "wall_s": 209.64,
+   "cpu_s": 237.015
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 90.057,
+   "cpu_s": 90.056
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "c7": {
+  "export.core": {
+   "wall_s": 93.056,
+   "cpu_s": 117.272,
+   "thr_cpu_s": 20.621
+  },
+  "export.csc_conversion": {
+   "wall_s": 2.375,
+   "cpu_s": 4.901,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.608,
+   "cpu_s": 4.607,
+   "thr_cpu_s": 4.607
+  },
+  "ambient": {
+   "wall_s": 2.446,
+   "cpu_s": 4.397,
+   "thr_cpu_s": 2.248
+  },
+  "doublet": {
+   "wall_s": 2.458,
+   "cpu_s": 10.534,
+   "thr_cpu_s": 1.796
+  },
+  "saturation_curve": {
+   "wall_s": 1.681,
+   "cpu_s": 1.681,
+   "thr_cpu_s": 1.681
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 2.17,
+   "cpu_s": 1.773,
+   "thr_cpu_s": 1.773
+  },
+  "demux.thread": {
+   "wall_s": 68.55,
+   "cpu_s": 80.827,
+   "thr_cpu_s": 68.517
+  },
+  "autoK.total": {
+   "wall_s": 40.443,
+   "cpu_s": 50.181,
+   "thr_cpu_s": 40.425
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 27.805,
+   "cpu_s": 27.804,
+   "thr_cpu_s": 27.804
+  },
+  "join.write_threads": {
+   "wall_s": 2.881,
+   "cpu_s": 15.133,
+   "thr_cpu_s": 0.0
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 2.143,
+   "cpu_s": 2.146,
+   "thr_cpu_s": 2.105
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.22,
+   "cpu_s": 2.691,
+   "thr_cpu_s": 0.206
+  },
+  "main.total_including_teardown": {
+   "wall_s": 205.294,
+   "cpu_s": 231.397
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 91.162,
+   "cpu_s": 91.161
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ },
+ "c8": {
+  "export.core": {
+   "wall_s": 94.579,
+   "cpu_s": 119.303,
+   "thr_cpu_s": 22.169
+  },
+  "export.csc_conversion": {
+   "wall_s": 3.319,
+   "cpu_s": 6.201,
+   "thr_cpu_s": 0.001
+  },
+  "cell_calling": {
+   "wall_s": 4.817,
+   "cpu_s": 4.817,
+   "thr_cpu_s": 4.817
+  },
+  "ambient": {
+   "wall_s": 2.93,
+   "cpu_s": 4.677,
+   "thr_cpu_s": 2.599
+  },
+  "doublet": {
+   "wall_s": 2.289,
+   "cpu_s": 10.464,
+   "thr_cpu_s": 2.05
+  },
+  "saturation_curve": {
+   "wall_s": 2.476,
+   "cpu_s": 2.476,
+   "thr_cpu_s": 2.476
+  },
+  "mt.call_and_write_variants": {
+   "wall_s": 2.05,
+   "cpu_s": 1.739,
+   "thr_cpu_s": 1.739
+  },
+  "demux.thread": {
+   "wall_s": 68.177,
+   "cpu_s": 80.408,
+   "thr_cpu_s": 68.137
+  },
+  "autoK.total": {
+   "wall_s": 40.483,
+   "cpu_s": 49.348,
+   "thr_cpu_s": 40.48
+  },
+  "demux.final_fit.K=1": {
+   "wall_s": 27.317,
+   "cpu_s": 27.317,
+   "thr_cpu_s": 27.317
+  },
+  "join.write_threads": {
+   "wall_s": 2.571,
+   "cpu_s": 14.753,
+   "thr_cpu_s": 0.0
+  },
+  "mt_donor_outputs(G6)": {
+   "wall_s": 2.113,
+   "cpu_s": 2.116,
+   "thr_cpu_s": 2.079
+  },
+  "demux.extract_covered_snps": {
+   "wall_s": 0.293,
+   "cpu_s": 3.529,
+   "thr_cpu_s": 0.256
+  },
+  "main.total_including_teardown": {
+   "wall_s": 205.189,
+   "cpu_s": 231.811
+  },
+  "stage.pileup_streaming": {
+   "wall_s": 90.423,
+   "cpu_s": 90.422
+  },
+  "demux_threads_arg": 1,
+  "sizes": [
+   "demux_input snp_rows=7352548 cells=119473 snp_nnz=1656215 dp_nnz=5613873 called=13101 n_donors_cfg=-1 threads=1",
+   "autoK_done k_selected=1 k_tried=4 cells=10889 snps_reduced=65369",
+   "demux_done final_k=1 doublets=0 k_trace_rows=4 assigned_cells=13101 unassigned_cells=0 ambient_assigned=91990"
+  ]
+ }
+}

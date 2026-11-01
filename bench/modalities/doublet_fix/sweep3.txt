@@ -1,0 +1,6 @@
+h8k_clf hvg=8000 clf=1
+h12k_clf hvg=12000 clf=1
+vs50_clf hvgmode=1 hvg=100000 vpctl=50 clf=1
+h20k hvg=20000
+h20k_clf hvg=20000 clf=1
+pcs50_h12k_clf hvg=12000 pcs=50 clf=1

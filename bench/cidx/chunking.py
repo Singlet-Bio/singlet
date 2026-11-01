@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-"""Bytes fetched per gathered cell under the pilot's chunking vs a non-zero-budget chunk cut (docs/format-v2-cell-index.md, 10.2).
+"""Bytes fetched per gathered cell under the pilot's chunking vs a non-zero-budget chunk cut (docs/format-store-cell-index.md, 10.2).
 
-    python -P bench/cidx/chunking.py <dir with v2/m/GSE145370.json and v2/s/...>
+    python -P bench/cidx/chunking.py <dir with store/m/GSE145370.json and store/s/...>
 
 For every sample and matrix (exon, intron) the chunk bytes are taken from the real chunk index; for the alternative cut
 ("a chunk ends when it would exceed B non-zeros or 4096 columns") the bytes of a chunk are estimated as its non-zeros times the
@@ -21,11 +21,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 
 def main() -> None:
     from singlet import _pz2
-    from singlet.v2.cells import CellsTable
-    from singlet.v2.packs import PackStore
+    from singlet.store.cells import CellsTable
+    from singlet.store.packs import PackStore
 
     root = Path(sys.argv[1])
-    m = json.loads((root / "v2/m/GSE145370.json").read_text())
+    m = json.loads((root / "store/m/GSE145370.json").read_text())
     st = PackStore()
     rng = np.random.default_rng(0)
     budgets = [None, 96_000, 48_000, 24_000, 12_000]

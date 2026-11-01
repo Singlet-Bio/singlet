@@ -1,0 +1,114 @@
+% Methods. Describes the pipeline in bench/ (PLAN.md has the operational detail). Keep in step with bench/config.yaml.
+\section{Methods}
+\label{sec:methods}
+
+\subsection{Datasets}
+We selected \nm{nDatasets} public datasets distributed as count matrices and in common use in the single-cell
+community, spanning droplet (3$'$, 5$'$, nuclei and probe-based), combinatorial-indexing, plate-based (UMI and read
+counts), multimodal (RNA with chromatin accessibility peaks or surface-protein tags) and spatial (sequencing- and
+imaging-based) protocols, from $10^3$ to above $10^6$ cells (Table~\ref{tab:datasets}). Each is downloaded from its
+primary repository at a fixed accession and file, checked against a recorded SHA-256, and converted to a canonical form:
+a CSC matrix with features as rows and cells as columns, unsigned 32-bit counts, no explicit zeros, and the feature
+identifiers and cell barcodes of the source. Matrices whose stored values are not integers are rejected rather than
+rounded. Where a dataset holds several modalities, each count matrix is a separate benchmark unit. The list, with
+accessions, licences and conversion notes, is \texttt{datasets.yaml}. Two non-biological count matrices (bulk RNA-seq
+gene counts and a bag-of-words corpus) are run as an extension.
+
+\subsection{Formats}
+Every format is written from the canonical matrix by its own library with the options a user would choose by default
+or that its documentation recommends (Table~\ref{tab:formats}): Matrix Market with gzip; the Cell Ranger HDF5 layout;
+AnnData \texttt{.h5ad} uncompressed and with gzip or lzf; AnnData Zarr; loom (only where the dense chunked layout fits
+in the run budget); R \texttt{dgCMatrix} saved with \texttt{saveRDS} using gzip or xz; a TileDB-SOMA experiment; a
+BPCells matrix directory; COO triplets in Parquet with zstd; and the CSC arrays raw and with zstd level 19. Every file is
+read back and compared with the canonical matrix, counts, identifiers and barcodes; a format that fails the comparison
+is reported as a failure, not dropped. An R \texttt{dgCMatrix} holds at most $2^{31}-1$ non-zeros, so for larger
+matrices the RDS formats cannot store the matrix and BPCells, which stores it, cannot read it into memory; both are
+reported as not applicable there, and BPCells is left out of the minibatch panel for those matrices. Size is the total bytes of all files of the format, divided by the number of
+non-zeros. \sone{} files are written by the \texttt{singlet} writer with default settings; the ``shared pack'' variant
+stores gene identifiers in a separate vocabulary file whose size is not counted, as it is shared by every dataset of the
+same annotation.
+
+\subsection{Read speed}
+Each configuration runs in a fresh process pinned to $p$ cores (headline $p=\nm{threadsHeadline}$; every format at $p=1$
+and $p=\nm{threadsHeadline}$, and \sone{}, AnnData with gzip and the raw CSC arrays also at $p \in \{1,2,4,8\}$), with
+three timed repeats; we report the median. ``Cold'' reads evict the file from the page cache
+(\texttt{posix\_fadvise(POSIX\_FADV\_DONTNEED)}) before every repeat; ``warm'' reads, at $p=\nm{threadsHeadline}$ only,
+do not, and follow one untimed warm-up read. A read longer than 60\,s is timed once. Matrices above $4\times10^8$
+non-zeros are timed cold at $p=\nm{threadsHeadline}$ from the node's disk only, for the CSC arrays, the Cell Ranger HDF5,
+AnnData uncompressed and with gzip, AnnData Zarr, TileDB-SOMA and both \sone{} variants. The timed interval is from
+opening the file to an in-memory SciPy CSC matrix (or the equivalent R object), and the rate is non-zeros per second.
+For \sone{} we also time the codec alone, from the member in memory to CSC arrays, through the Python binding and in a
+C++ program that links the header-only library, for each instruction set the CPU supports (scalar, AVX2, AVX-512) and
+for the stored (frequency) and source gene order.
+
+\subsection{Minibatch loading}
+Four datasets form the loader panel, from small to the largest tier and from droplet,
+combinatorial and plate protocols. A workload is a seeded sequence of minibatches of 512 cells, each made of eight
+blocks of 64 consecutive cells at random offsets, which is how block-shuffling loaders read~\cite{dascenzo2025scdataset}.
+Each loader must return each minibatch as a \texttt{torch.sparse\_csr\_tensor} of the exact counts. Loaders: AnnData in
+memory and in backed mode, AnnData Zarr read lazily, scDataset over backed AnnData, TileDB-SOMA ML, BPCells (R, with
+the result handed to PyTorch), and the \sone{} streaming reader in stored and source gene order. Files are served by a
+local S3-compatible object store (\texttt{rclone serve s3}) through a Toxiproxy proxy that limits bandwidth to 0.1, 1 or 10\,Gbit/s with 1\,ms latency, or
+1\,Gbit/s with 30\,ms latency, from the cluster's shared NFS filesystem, and from the node's own disk. The proxy applies
+the limit to each connection, so a reader that issues concurrent requests (TileDB-SOMA, with up to $p$; Zarr through
+fsspec) can draw more than the tier's bandwidth; the \sone{} reader issues one request at a time. Before each tier the proxy's ceiling with no
+limit is measured with a 1\,GiB transfer over one connection and over $p$, and recorded; results at a tier above the
+one-connection ceiling are flagged. Loaders that cannot read by range download the object
+first, and that time is counted; for datasets above the M tier such loaders are not run over the network tiers, and the
+transfer time of the object at the tier's bandwidth is reported instead. We record, from a new process with a cold cache, the time to open, to read the first
+minibatch and to build its tensor; then the sustained rate in cells per second over 200 minibatches after 10 warm-up
+batches; and peak resident memory. Library imports are done before timing starts. Three workload seeds per
+configuration; we report medians.
+
+\subsection{Payload ladder}
+For each matrix we computed the payload size, in bits per non-zero over row indices and values only, of: 32-bit CSC;
+LEB128 variable-length integers; row gaps and values as LEB128 in separate streams with zstd at levels 3 and 19; and the
+chunk payload of the \sone{} member (rANS tables, row keys and chunks, without header and names).
+
+\subsection{Count models and the floor}
+For each matrix we measured the code length that count models assign to it, $\sum_{g,c} -\log_2 p(x_{gc})$ over all
+entries including zeros, divided by the number of non-zeros. Cells were split in two halves at random; each model was
+fitted on one half and scored on the other, and the halves were swapped (two-fold cross-validation). We charge nothing
+for describing a model, so each number is an optimistic bound for a coder that would have to ship it. The models are:
+\emph{Poisson}, $x_{gc}\sim\mathrm{Poisson}(s_c\mu_g)$ with $s_c$ the cell's total over the mean total;
+\emph{negative binomial}, $x_{gc}\sim\mathrm{NB}(s_c\mu_g,\theta_g)$ with $\theta_g$ by moments, smoothed over mean
+expression as in sctransform~\cite{hafemeister2019normalization}; \emph{gene $\times$ depth}, a nonparametric model with,
+per gene and per quantile bin of cell depth (32 bins), a presence probability and (in 4 coarser bins) a distribution over
+values 1--63 with an Elias-gamma escape above, Krichevsky--Trofimov smoothed~\cite{krichevsky1981performance}; and
+\emph{gene $\times$ depth $\times$ cluster}, the same conditioned also on the cell's cluster. Clusters come from Leiden
+on the training half (50 principal components of log-normalised counts; at most 200{,}000 training cells, the rest
+assigned to the nearest centroid); test cells are assigned to the nearest training centroid, and each test cell is
+charged the entropy of its label. Sparse cluster contexts back off to the gene $\times$ depth estimate with a pseudo-count
+of 8. Zero terms of the parametric models are summed per gene and depth bin at the bin's mean depth; on matrices with
+at most $5\times10^7$ entries we also summed them exactly, with a largest relative difference of
+\nm{nbBinningErrPctMax}\%. The floor of a matrix is the smallest of the four code lengths.
+
+\subsection{Sampling bound}
+For 2{,}000 random test cells we set the cell's profile $\pi_c$ to its normalised counts shrunk toward its cluster
+profile with a weight fitted on the training half by binomial thinning (half of each cell's molecules are held out and
+their likelihood under the shrunk profile of the other half is maximised), and computed the entropy of
+$\mathrm{Multinomial}(N_c,\pi_c)$, with $N_c$ the cell's total count, as
+$-\log_2 N_c! + \sum_g \mathbb{E}[\log_2 x_{gc}!] - N_c \sum_g \pi_{gc}\log_2\pi_{gc}$ under
+$x_{gc}\sim\mathrm{Binomial}(N_c,\pi_{gc})$, summing the binomial expectation exactly where $N_c\pi_{gc}<30$ and by a
+second-order expansion above. This is the information in which molecules were sampled given the profile, which a
+lossless decoder must receive; we report it per non-zero and as a fraction of the \sone{} payload of the same cells.
+
+\subsection{Second-pass compression}
+Each \sone{} file was compressed again with zstd \texttt{-{}-ultra -22}, xz \texttt{-9e}, brotli \texttt{-q 11} and
+bzip2 \texttt{-9}, and on small matrices with a context-mixing compressor where available, and we report output over
+input size.
+
+\subsection{Ecosystem}
+For two datasets we timed, from a cold file, the calls of Fig.~\ref{fig:eco} and the usual reader of the same data
+(\texttt{anndata.read\_h5ad}, \texttt{scanpy.read\_10x\_h5}, Seurat \texttt{Read10X\_h5}, zellkonverter \texttt{readH5AD}), and checked that each returns
+exactly the source counts, identifiers and barcodes.
+
+\subsection{Hardware, software and reproducibility}
+All timings ran on 8 cores of shared nodes of one type (\nm{cpu}, \nm{cores} cores, \nm{memGB}\,GB memory, node-local
+\nm{localDisk}), ordinary cluster nodes rather than ones with fast local storage, with at most one of our timed jobs per
+node and other users' jobs beside it, and with software versions as in Table~\ref{tab:formats}. The pipeline is \texttt{python -m s1bench} in \texttt{papers/manuscripts/s1-format/bench} of
+the \texttt{singlet} repository: stages \texttt{fetch}, \texttt{canon}, \texttt{write}, \texttt{decode}, \texttt{ladder},
+\texttt{floor}, \texttt{second}, \texttt{minibatch}, \texttt{eco} and \texttt{report}, with all settings in
+\texttt{config.yaml} and the software environment in \texttt{environment.yml}. The \texttt{report} stage writes every
+plotted value to \texttt{generated/*.tsv} and every number in the text to \texttt{generated/numbers.tex}; the figures
+and tables of this paper are drawn by \LaTeX{} from those files, and no result is typed by hand.

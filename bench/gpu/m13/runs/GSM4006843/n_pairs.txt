@@ -1,0 +1,1 @@
+[singlet] .1fq: 66699625 reads, 134 blocks, protocol_id=2, confidence=3, codec=0
