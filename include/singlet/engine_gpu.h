@@ -124,7 +124,7 @@ inline bool e2eRequested() { return e2eLevel() >= 1; }
 //     Below level 5 the ingest stays opt-in, as before;
 //   - SINGLET_E16_TRACE unset -> 0 (E16's "[e16]" timing marks off; =1 turns them on for the step tables).
 // Without the GPU pileup nothing is set (levels 1-5 need it). The values go into the environment so that STAR's child, which the pipeline
-// forks later, and every getenv() reader see the same ones. Every part falls back on its own and says so on stderr (GPU-PATH.md §4).
+// forks later, and every getenv() reader see the same ones. Every part falls back on its own and says so on stderr (GPU-PATH.md §3).
 // Returns one line for the run's log.
 constexpr int kDefaultE2ELevel = 5;
 inline std::string applyDefaults() {

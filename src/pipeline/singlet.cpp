@@ -2865,7 +2865,7 @@ static int restart_on_sorted_path(const singlet::PileupStats& stats, bool revers
 }
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
-// E19 (docs/gpu-engine/fable/GPU-PATH.md §4): whether CUDA sees a usable device, asked of a child process (`singlet gpu-probe`, exec'd at once,
+// E19 (docs/gpu-engine/fable/GPU-PATH.md §3): whether CUDA sees a usable device, asked of a child process (`singlet gpu-probe`, exec'd at once,
 // so this process never initialises CUDA before it forks STAR) as soon as the options are read. The GPU pileup's decision needs the answer
 // before STAR runs: once the stream has been consumed without the CPU's steps, a GPU pileup that cannot get a device can only end the run
 // (exit 9). Without a usable device the pipeline keeps the CPU pileup and says so; STAR's prefill falls back on its own.

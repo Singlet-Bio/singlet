@@ -60,7 +60,7 @@ bool g_e11SoloDone = false;
 
 namespace {
 
-// E19 (docs/gpu-engine/fable/GPU-PATH.md §4): every fallback of the GPU path goes to star_Log.out as before and also, as one line, to stderr,
+// E19 (docs/gpu-engine/fable/GPU-PATH.md §3): every fallback of the GPU path goes to star_Log.out as before and also, as one line, to stderr,
 // which STAR's child shares with the pipeline (the run's log): "[engine_gpu] fallback: <the Log.out line>"
 void gpuFallback(Parameters &P, const std::string &line) {
     P.inOut->logMain << line << (line.empty() || line.back() != '\n' ? "\n" : "") << flush;
@@ -1684,7 +1684,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         e9::soloKeepRelease();
     }
     if (g_e10Level < 4) { std::vector<uint32_t>().swap(out.e10.unmappedReads); }
-    {   // E19: the level this run reached, one line in the run's log (GPU-PATH.md §4); a fallback above says why when it is below the request
+    {   // E19: the level this run reached, one line in the run's log (GPU-PATH.md §3); a fallback above says why when it is below the request
         const int reached = g_e10Level >= 3 ? g_e10Level : (e10ok && e10Level >= 2 ? 2 : (e19E8 ? 1 : 0));
         std::cerr << "[engine_gpu] level " << reached << " (requested " << e10Level << ")" << (ingest ? ", reads from the .1fq (E13 ingest)" : "")
                   << (reached == 5 ? ", Solo on the device (E11)" : "") << (reached < e10Level ? ": FELL BACK" : "") << std::endl;
