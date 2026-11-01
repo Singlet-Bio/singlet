@@ -132,7 +132,7 @@ for s in "${SAMPLES[@]}"; do
     [ $m = gpuT ] && { python3 $SCR/repo/bench/fable/tail/e16_steps.py $O > $O/e16.txt 2>&1; tee -a $RES0/summary.txt < $O/e16.txt; }
     readhash $SCR/$s/$m/out > $O/readhash.txt
     # the prefill's device peak (engine log); dev_peak is nvidia-smi's 1-s maximum, which includes the GPU pileup's arena (free memory - 3 GB)
-    LANES=$(grep -ao "lanes peak [0-9.]*" $O/starlog_engine.txt | tail -1 | awk '{printf "%.1f", $3}')
+    LANES=$(grep -ao -e "lanes peak [0-9.]*" -e "tally peak [0-9.]*" $O/starlog_engine.txt | tail -1 | awk '{printf "%.1f", $3}')
     printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$s" "$m" "${ES:-?}" "$WALL" "$CORES" "$RSS" "$DEV" "${LANES:--}" "${LV:-?}" "$ING" "$NFB" "$(hostname -s)" >> $RES0/runs.tsv
     if [ $m = cpu ] && [ "${ES:-1}" = 0 ]; then   # the sample's reference, for this gate's pairs and the later ones
       N=$RS.new-$SLURM_JOB_ID; rm -rf $N; mkdir -p $N
