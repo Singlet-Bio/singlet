@@ -16,9 +16,13 @@ Options added to `m5` (all off by default; the default binary behaves as before)
 | `--presort` | the engine's order: stable sort of the truth reads by their first 32 bases (`engine_gpu.cu` `k_prefix_key`) before mapping. Without it the harness maps in truth-file order (24 sorted runs, one per STAR thread) |
 | `--bin` | unchanged: after phase 1, phase-3 threads take the batch's reads sorted ascending by `nW << 40 \| nEntries` (cheap reads first) |
 | `--p3order K` | other phase-3 keys, stable radix sort per batch: `cost-asc` (= `--bin`), `cost-desc` (most windows first, then most SA entries; reads without phase 3 last), `nw-desc` (windows only), `locus` (genome bin of the read's first window, `WC[0][WC_gStart]`), `anchor` (genome position of the first anchor's first locus), `nwlocus` (window-count class 1, 2, 3-4, 5-8, ... descending, then the first window's bin) |
+| `--p3order-a/m/b K` | the same keys for one lane only (overrides `--p3order` for that lane) |
+| `--best-order` | E4's best exact order as one flag: `--presort --p3order-m nw-desc` (prefix order everywhere, lane M's phase 3 by window count); later flags override |
 | `--queue` | phase 3 as a persistent kernel: grid = SMs x resident blocks (occupancy API); each warp takes the next reads of the batch, in the `--p3order` order, from an atomic counter (warp-aggregated) |
 | `--fused A\|M\|B` | the lane as one persistent kernel with Work per resident thread: a warp takes the next 32 reads (prefix order) from an atomic counter, runs phase 1 (thread per read), scans the SA entries of each of the 32 reads warp-cooperatively (k_p2's loop, ballot into a per-thread bit buffer of `--fused-bits` entries, default 16,384), then phase 3 (thread per read). A read with more entries than the buffer runs `assignAll` itself (the same result). No batches, no host syncs inside the lane |
 | `--fused-bps-a/m/b N` | resident blocks per SM of the fused kernel (0 = occupancy limit): the Work memory knob |
+| `--fused-lb N` | `__launch_bounds__(128, N)` on the fused kernel (N = 1, 4, 5): fewer registers, more resident blocks |
+| `--fused-bits N` | entries of the fused kernel's per-thread SA-entry bit buffer (default 16,384) |
 | `--tail` | `%globaltimer` per block (start, end), per warp (end), the threads' busy time and when the last read was taken, per phase-3 launch |
 | `--label` | the variant's name in the log and JSON |
 
@@ -45,7 +49,9 @@ Fixed settings in every variant (the engine's): budgets 1024 / 2048 / 2048 steps
 | 795239 | build (debug-cpu, CUDA 13.3) | `m5-e552a6f32d` (64f7792ec268c121) |
 | 795240 | round 1: 16 variants + identity, g051, 665 s | `m5-e552a6f32d` |
 | 795260, 795287, 795288 | builds: `--fused-lb`; per-lane order; the base source cf92cdb987 with CUDA 13.3 | `m5-f61996240d`, `m5-8885087332` (992464e2e1642de5), `m5-cf92cdb987` (5d2436f962c276d9) |
-| 795289 | round 2: reference builds, per-lane order, batch sizes, lane B in one launch, fused at 4-5 blocks/SM | `m5-8885087332` |
+| 795289, 795304 | round 2, cancelled while pending (variants added) | - |
+| 795307 | build of b861dab5 (`--best-order`) | `m5-b861dab562` |
+| 795308 | round 2: reference builds, per-lane order, batch sizes, lane B in one launch, fused at 4-5 blocks/SM, equal-memory staged vs fused, `--best-order` | the 795307 build |
 
 Results (JSON per variant, logs): `$W/jobs/fable/order/results/<job>/`, copied to `bench/fable/order/results/<job>/`.
 Table: `python bench/fable/order/e4_table.py bench/fable/order/results/795240 v0`.
@@ -128,5 +134,56 @@ warp bal. = warp balance inside blocks):
    footprint of the largest (136-144 vs 95), warps in different phases on one SM compete for the instruction cache, and the
    scan of a group's 32 reads runs warp-serially instead of across all warps. Not verified with counters (E1's ncu runs can).
 
-ROUND2_PLACEHOLDER
+## Results, round 2 (job 795308)
+
+ROUND2_RESULTS
+
+## What to keep
+
+- **Order: prefix order (`--presort`) for every lane, plus `--p3order-m nw-desc` for lane M**, now one flag,
+  `--best-order`. Exact (a read's result never depends on its slot). Round 1: lane M 423.8 -> 391.8 ms, A and B unchanged,
+  M5 1031 -> 999 ms (1.93 -> 1.99 M distinct/s, -3.1%). In the engine this is one stable radix sort of lane M's batch by
+  window count after phase 1 (here `k_key` + a thrust stable radix sort of 64-bit keys per batch, inside the timed region).
+- **Not kept:** `--bin` (cost ascending: 1.38x slower), cost descending / longest-first (1.35-1.39x slower), genome-locality
+  orders (1.11-1.15x slower), the persistent queue inside a batch (1.6% slower, and slower again with any non-prefix order).
+  `--bin` should not be turned on in the engine.
+- **Batch size is the scheduling lever that pays**: 512k / 384k reads for A / M (v4big) -6% at +12 / +11 GB of Work.
+- **The fused persistent lane** is kept only as a memory option (`--fused`, `--fused-bps-*`, `--fused-lb`): no batch tail and
+  far less Work (A and M 5x less at 3 blocks/SM; A / M / B 15x / 16x / 3.9x less at 1 block/SM), at 1.6-1.85x the time.
+
+## Expected gain in the engine
+
+Measured on M5 (one 2 M-read set; the engine maps 16 M-read chunks with the same lane code and batch sizes):
+
+| change | M5 ms | M distinct/s | vs v0 | status |
+|---|---|---|---|---|
+| v0: engine order (prefix), fixed batches | 1031.0 | 1.93 | 1.00x | measured |
+| + lane M nw-desc (`--best-order`) | 999.0 | 1.99 | 1.03x | measured (round 1, lanes are independent) |
+| best order + persistent queue inside each batch | about 1015 | 1.96 | 1.02x | v3q: the queue adds 16 ms (+1.6%) |
+| best order + bigger batches 512k / 384k, no queue | about 942 | 2.12 | 1.09x | estimate: v4big with lane M x 391.8 / 423.8 |
+| upper bound of any phase-3 scheduling fix | about 780 | 2.55 | 1.32x | idle phase-3 warp slots of v0t: A 29, M 52, B 167 ms |
+
+So **the best ordering combined with a persistent queue in the engine is worth about 3%, not the 1.2-1.5x of the study's
+section 4.6 estimate**, and the queue contributes nothing. The reason is that the waste is not imbalance inside a batch (the
+hardware block scheduler already balances that; warp balance 0.69-0.88), it is the end of every batch and lane B: 24% of the
+phase-3 warp-slot time is idle, 2/3 of it in lane B, whose 90,740 reads fill only 0.39 of the slots for 273 ms. A queue over
+one batch cannot fill that, and a persistent kernel across batches (the fused variant) removes it but pays 1.85x per read.
+
+What would capture it, in order of expected value (none measured here):
+1. **Overlap instead of a queue**: run lane B of chunk i (and the last wave of every M batch) concurrently with lane A of
+   chunk i+1 on a second stream. Lane B is one-wave and latency-bound, so the other 61% of the slots are free; bound
+   about 167 ms of 1031 (16%), needs B's Work and A's Work resident together (about 54 GB at today's batch sizes).
+2. **Fewer, larger batches** where memory allows (round 2: lane B in one launch).
+3. **Split Work**: per-read phase-1 state (small) for the whole batch, and phase-3 scratch per resident thread, so batches can
+   be large without the 46-635 KB per read of today's Work; this is what makes the fused kernel's memory figures (0.8 / 1.4 /
+   10.7 GB) reachable without its 1.85x per-read cost.
+
+### Memory: does the engine fit a 40 GB GPU?
+
+Work per batch read is 46,072 B (A), 82,552 B (M), 635,216 B (B); at the engine's batches that is 12.2 / 21.8 / 41.7 GB, and
+the harness peaks at 64.6 GB of device memory (in lane B; about 23 GB is genome, SA, SAi, reads and outputs). The device-side
+footprint of a 94 GB run is therefore set by lane B's Work, not by the index. A 40 GB fit is plausible only by shrinking lane
+B's Work: B batches of 16k reads (10.4 GB; round 2 measures the cost: `s40`) or the fused lane B at 1 block/SM (10.7 GB,
+device peak 33.7 GB measured in round 1, 1.84x slower overall). The engine's own chunk output buffers (16 M x NBLOB, about
+10.7 GB for lane A) must shrink as well; they are not in the harness.
 
