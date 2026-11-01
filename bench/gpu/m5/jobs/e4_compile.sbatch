@@ -9,7 +9,7 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # E4 (docs/gpu-engine/fable/E4-order.md): build bench/gpu/m5 from branch gpu/fable/order (GitHub, via the bare mirror) in the
 # CUDA 13.3 image -> $W/jobs/fable/order/bin/m5-<sha>; the sha is compiled in (M5_GIT) and printed by every run.
-# BRANCH (default gpu/fable/order) and REF may be overridden.
+# BRANCH (default gpu/fable/order) and REF may be overridden; LATEST=0 leaves bin/latest.sha (the default of e4_run) alone.
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; IMG=$W/images/cuda-13-devel.sif
 O=$W/jobs/fable/order; mkdir -p $O/bin $O/results
@@ -23,7 +23,7 @@ T0=$(date +%s)
 apptainer exec -B $W -B $SCR $IMG nvcc -O3 -std=c++17 -arch=sm_90 -fmad=false -lineinfo -Xcompiler -fopenmp -Xptxas -v \
   -DM5_GIT="\"$SHA\"" -o $O/bin/m5-$SHA.new $SCR/bench/gpu/m5/m5.cu > $O/results/ptxas-$SHA.txt 2>&1 || { tail -40 $O/results/ptxas-$SHA.txt; exit 1; }
 mv $O/bin/m5-$SHA.new $O/bin/m5-$SHA
-echo "$SHA" > $O/bin/latest.sha
+if [ "${LATEST:-1}" = 1 ]; then echo "$SHA" > $O/bin/latest.sha; fi   # LATEST=0: a queued e4_run keeps the previous build
 echo "[compile] ok in $(( $(date +%s) - T0 )) s: $O/bin/m5-$SHA sha256 $(sha256sum $O/bin/m5-$SHA | cut -c1-16)"
 # registers / spills of the lane kernels (ptxas -v: "Compiling entry function" then "Used N registers")
 awk '/Compiling entry function/ {f=$0; sub(/.*function ./,"",f); sub(/. for .*/,"",f)} /Used [0-9]+ registers/ {print f" :: "$0}' $O/results/ptxas-$SHA.txt \

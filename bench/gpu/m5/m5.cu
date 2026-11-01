@@ -231,8 +231,8 @@ __global__ void k_p3q(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>
 // lane's order) from an atomic counter: phase 1 (thread per read), the assignment scan of each of the 32 reads by the whole warp
 // (k_p2's loop, marks in a per-thread bit buffer of capw words), phase 3 (thread per read). A read with more SA entries than the
 // buffer holds assigns every entry itself (assignAll, the same result).
-template <class C>
-__global__ void k_fused(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n, u64 budget,
+template <class C, int MINB>
+__global__ void __launch_bounds__(128, MINB) k_fused(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n, u64 budget,
                         Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint32_t* wbits, u64 capw, uint8_t* status, uint8_t* out, uint16_t* outLen,
                         uint8_t* why, int8_t* unmap, unsigned long long* ctr, unsigned long long* nFallback, Tail tl) {
     unsigned long long t0 = 0; tailBegin(tl, t0);
@@ -349,6 +349,7 @@ static bool g_queue = false;         // --queue: persistent phase 3 per batch
 static unsigned g_fused = 0;         // --fused A|M|B...: lanes run as one persistent kernel (bit 0 A, 1 M, 2 B)
 static int g_fusedBps[3] = {0, 0, 0};// --fused-bps-a/m/b: resident blocks per SM (0 = occupancy limit)
 static u64 g_fusedBits = 16384;      // --fused-bits: SA entries per read marked by the warp scan (more: assignAll)
+static int g_fusedLb = 1;            // --fused-lb 1|4|5: __launch_bounds__ min blocks of the fused kernel
 static int g_queueBps = 0;           // --queue-bps: resident blocks per SM of k_p3q (0 = occupancy limit)
 static bool g_tail = false;          // --tail: per-block / per-warp timing of phase 3
 static int g_nSM = 132;
@@ -403,7 +404,9 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     const int T = 128, wpb = T / 32;
     // resident blocks per SM of the phase-3 kernel in use (grid of the persistent kernels; tail statistics)
     int occ = 0;
-    if (fused) CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, k_fused<C>, T, 0));
+    // --fused-lb: register bound of the fused kernel (min resident blocks of 128 threads per SM; 1 = unbounded)
+    decltype(&k_fused<C, 1>) fk = g_fusedLb >= 5 ? k_fused<C, 5> : g_fusedLb == 4 ? k_fused<C, 4> : k_fused<C, 1>;
+    if (fused) CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, fk, T, 0));
     else if (g_queue) CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, k_p3q<C>, T, 0));
     else CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, k_p3<C>, T, 0));
     int bps = fused ? (g_fusedBps[li] ? g_fusedBps[li] : occ) : (g_queueBps ? g_queueBps : occ);
@@ -457,7 +460,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
         if (fused) {
             CK(cudaMemsetAsync(dCtr, 0, 8));
             cudaEventRecord(q[0]);
-            k_fused<C><<<(unsigned)fusedBlocks, T>>>(P, D, dRb, dRoff, dRlen, dIdx, n, budget, dWork, dRbuf, dWbits, capw, dSt, dOut, dLen, dWhy, dUn,
+            fk<<<(unsigned)fusedBlocks, T>>>(P, D, dRb, dRoff, dRlen, dIdx, n, budget, dWork, dRbuf, dWbits, capw, dSt, dOut, dLen, dWhy, dUn,
                                                     dCtr, dCtr + 1, mkTail(0));
             cudaEventRecord(q[3]);
             CK(cudaEventSynchronize(q[3])); CK(cudaGetLastError());
@@ -657,6 +660,7 @@ int main(int argc, char** argv) {
         else if (a == "--fused-bps-m") g_fusedBps[1] = atoi(argv[++i]);
         else if (a == "--fused-bps-b") g_fusedBps[2] = atoi(argv[++i]);
         else if (a == "--fused-bits") g_fusedBits = strtoull(argv[++i], nullptr, 10);
+        else if (a == "--fused-lb") g_fusedLb = atoi(argv[++i]);
         else if (a == "--tail") g_tail = true;          // phase-3 scheduling statistics (block/warp times)
         else if (a == "--label") label = argv[++i];
         else if (a == "--no-mid") noMid = true;          // lanes A, B only
@@ -669,10 +673,10 @@ int main(int argc, char** argv) {
     g_nSM = prop.multiProcessorCount;
     if (mono && (g_fused || g_queue || g_p3order || g_bin)) { fprintf(stderr, "--mono excludes the E4 scheduling options\n"); return 2; }
     // the marker that says which build runs and with which scheduling (job 790068 ran a stale binary)
-    fprintf(stderr, "m5 E4-order build %s; label %s; presort %d; p3order %s; queue %d (bps %d); fused %s%s%s (bps %d/%d/%d, bits %llu); tail %d; "
+    fprintf(stderr, "m5 E4-order build %s; label %s; presort %d; p3order %s; queue %d (bps %d); fused %s%s%s (bps %d/%d/%d, bits %llu, lb %d); tail %d; "
                     "batches %lld/%lld/%lld; budgets %lld/%lld/%lld\n", M5_GIT, label.c_str(), presort, g_bin ? "cost-asc(--bin)" : p3orderName[g_p3order],
             g_queue, g_queueBps, (g_fused & 1) ? "A" : "", (g_fused & 2) ? "M" : "", (g_fused & 4) ? "B" : "", g_fusedBps[0], g_fusedBps[1], g_fusedBps[2],
-            g_fusedBits, g_tail, nbA, nbM, nbB, budgetA, budgetM, budgetB);
+            g_fusedBits, g_fusedLb, g_tail, nbA, nbM, nbB, budgetA, budgetM, budgetB);
     fprintf(stderr, "device %s, %d SMs; sizeof Work: A %zu, B %zu, host %zu\n", prop.name, prop.multiProcessorCount,
             sizeof(Work<LaneA>), sizeof(Work<LaneB>), sizeof(Work<Heavy>));
 
@@ -969,9 +973,9 @@ int main(int argc, char** argv) {
         fprintf(f, "},\n  \"lane_a_ms\": %.3f,\n  \"lane_m_ms\": %.3f,\n  \"lane_m_reads\": %zu,\n  \"lane_b_ms\": %.3f,\n  \"lane_b_reads\": %zu,\n  \"lane_a_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_b_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_a_local\": %s,\n  \"work_bytes\": [%zu, %zu],\n  \"index_load_s\": %.1f,\n",
                 A.ms, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), A.phaseMs[0], A.phaseMs[1], A.phaseMs[2], B.phaseMs[0], B.phaseMs[1], B.phaseMs[2], localWork ? "true" : "false", sizeof(Work<LaneA>), sizeof(Work<LaneB>), tIndex);
         fprintf(f, "  \"e4\": {\"build\": \"%s\", \"label\": \"%s\", \"presort\": %s, \"p3order\": \"%s\", \"queue\": %s, \"queue_bps\": %d, \"fused\": \"%s%s%s\", "
-                   "\"fused_bps\": [%d, %d, %d], \"fused_bits\": %llu, \"tail\": %s, \"batches\": [%lld, %lld, %lld], \"budgets\": [%lld, %lld, %lld],\n    \"lanes\": {",
+                   "\"fused_bps\": [%d, %d, %d], \"fused_bits\": %llu, \"fused_lb\": %d, \"tail\": %s, \"batches\": [%lld, %lld, %lld], \"budgets\": [%lld, %lld, %lld],\n    \"lanes\": {",
                 M5_GIT, label.c_str(), presort ? "true" : "false", g_bin ? "cost-asc(--bin)" : p3orderName[g_p3order], g_queue ? "true" : "false", g_queueBps,
-                (g_fused & 1) ? "A" : "", (g_fused & 2) ? "M" : "", (g_fused & 4) ? "B" : "", g_fusedBps[0], g_fusedBps[1], g_fusedBps[2], g_fusedBits,
+                (g_fused & 1) ? "A" : "", (g_fused & 2) ? "M" : "", (g_fused & 4) ? "B" : "", g_fusedBps[0], g_fusedBps[1], g_fusedBps[2], g_fusedBits, g_fusedLb,
                 g_tail ? "true" : "false", nbA, nbM, nbB, budgetA, budgetM, budgetB);
         const LaneOut* LL[3] = {&A, &M, &B}; const char* LN[3] = {"A", "M", "B"};
         for (int k = 0; k < 3; k++) {
