@@ -15,5 +15,5 @@ git clone -q --depth 1 -b ${BRANCH:-fix/r1-untrimmed-protocol} git@github.com:Si
 ACC=${ACC:-SRR23617320}; SRA=$W/pilot/GSM7064234/sra/$ACC.sra
 fastq-dump -X 20000 --split-files -O $T $SRA 2>&1 | tail -1
 CXX=$W/envs/pbench/bin/x86_64-conda-linux-gnu-g++
-$CXX -O1 -std=c++17 -Irepo/include repo/tests/cpp/test_protocol_untrimmed_r1.cpp -o t -Wl,-rpath,$W/envs/pbench/lib 2>&1 | tail -20
+$CXX -O1 -std=c++17 -pthread -Irepo/include -I$W/envs/pbench/include repo/tests/cpp/test_protocol_untrimmed_r1.cpp -o t -L$W/envs/pbench/lib -Wl,-rpath,$W/envs/pbench/lib -lzstd -lz 2>&1 | tail -20
 S14_R1_FASTQ=$T/${ACC}_2.fastq S14_R2_FASTQ=$T/${ACC}_3.fastq S14_WL_DIR=$W/pipeline-benchmark/whitelists ./t 2>&1 | cut -c1-220
