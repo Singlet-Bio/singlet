@@ -474,16 +474,16 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             // and the per-read entries (barcode, UMI, quality counters) in a shared mapping, filled by the mapping threads
             const char *mq = getenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ");
             if (e2eRec) {   // E8: in the shared region (zero-filled: unwritten entries have flags 0); the magic last: the parent's pileup takes it
-                singlet_engine_gpu::E2EHeader &HD = *e2r.hdr();
+                singlet_engine_gpu::E2EHeader &E2H = *e2r.hdr();
                 g_handoffReads = (HandoffReadEntry *) (e2r.base + e2eE); g_handoffMinQ = atoi(mq);
                 if (e2eQOn) g_handoffQMask = (uint64 *) (e2r.base + e2eQ);
-                HD.nReads = g_handoffNReads; HD.oReadRecord = e2eR; HD.oEntries = e2eE; HD.oQMask = e2eQ;
-                HD.cbS = (uint32) P.pSolo.cbS; HD.cbL = (uint32) P.pSolo.cbL; HD.umiS = (uint32) P.pSolo.umiS; HD.umiL = (uint32) P.pSolo.umiL;
-                HD.cbumiL = (uint32) P.pSolo.cbumiL; HD.simple = 1;
+                E2H.nReads = g_handoffNReads; E2H.oReadRecord = e2eR; E2H.oEntries = e2eE; E2H.oQMask = e2eQ;
+                E2H.cbS = (uint32) P.pSolo.cbS; E2H.cbL = (uint32) P.pSolo.cbL; E2H.umiS = (uint32) P.pSolo.umiS; E2H.umiL = (uint32) P.pSolo.umiL;
+                E2H.cbumiL = (uint32) P.pSolo.cbumiL; E2H.simple = 1;
                 __sync_synchronize();
-                memcpy(HD.magic, "SGE2E001", 8);
+                memcpy(E2H.magic, "SGE2E001", 8);
                 P.inOut->logMain << "ENGINE_GPU: E8: per-read hand-off entries" << (e2eQOn ? " and low-quality masks" : "") << " in the shared region ("
-                                 << (HD.used >> 20) << " MB in use)\n";
+                                 << (E2H.used >> 20) << " MB in use)\n";
             }
             if (!e2eRec && mq != nullptr && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21) {
                 const std::string rp = std::string(hp) + ".reads";

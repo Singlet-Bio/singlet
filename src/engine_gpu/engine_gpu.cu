@@ -661,17 +661,17 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (pinned) cudaHostUnregister(RG.base + lo);
         if (!cp) { why = std::string("records copy: ") + cudaGetErrorString(cudaGetLastError()); return false; }
         const double te = now();
-        singlet_engine_gpu::E2EHeader& HD = *RG.hdr();
-        HD.nRec = R6.nRec; HD.nAln = R6.nAln; HD.nOps = R6.nOps; HD.nSeq = R6.nSeq;
-        HD.oSigs = oS; HD.oAlns = oA; HD.oOps = oO; HD.oNm = oN; HD.oSeq = oQ;
-        HD.nMateGap = R6.nMateGap; HD.nNoExon = R6.nNoExon; HD.nBadBest = R6.nBadBest; HD.nMapped = R6.nMapped;
-        HD.msGather = (tb - tg) * 1e3; HD.msBuild = (td - tb) * 1e3; HD.msD2H = (te - td) * 1e3;
+        singlet_engine_gpu::E2EHeader& E2H = *RG.hdr();
+        E2H.nRec = R6.nRec; E2H.nAln = R6.nAln; E2H.nOps = R6.nOps; E2H.nSeq = R6.nSeq;
+        E2H.oSigs = oS; E2H.oAlns = oA; E2H.oOps = oO; E2H.oNm = oN; E2H.oSeq = oQ;
+        E2H.nMateGap = R6.nMateGap; E2H.nNoExon = R6.nNoExon; E2H.nBadBest = R6.nBadBest; E2H.nMapped = R6.nMapped;
+        E2H.msGather = (tb - tg) * 1e3; E2H.msBuild = (td - tb) * 1e3; E2H.msD2H = (te - td) * 1e3;
         char l[512];
         snprintf(l, sizeof l, "engine_gpu: E8 records on the device: %llu records, %llu alignments, %llu ops, %llu seq bytes (%llu mapped, no exon %llu, "
                  "trBest=trInit %llu); gather %.0f ms (host lane upload %.1f MB), buildRecords %.0f ms (kernels %.0f/%.0f/%.0f), copy to the region %.0f ms (%s)\n",
                  (unsigned long long) R6.nRec, (unsigned long long) R6.nAln, (unsigned long long) R6.nOps, (unsigned long long) R6.nSeq,
-                 (unsigned long long) R6.nMapped, (unsigned long long) R6.nNoExon, (unsigned long long) R6.nBadBest, HD.msGather, hostBytes / 1e6, HD.msBuild,
-                 R6.msCount, R6.msScan, R6.msFill, HD.msD2H, pinned ? "page-locked" : "pageable");
+                 (unsigned long long) R6.nMapped, (unsigned long long) R6.nNoExon, (unsigned long long) R6.nBadBest, E2H.msGather, hostBytes / 1e6, E2H.msBuild,
+                 R6.msCount, R6.msScan, R6.msFill, E2H.msD2H, pinned ? "page-locked" : "pageable");
         out.log += l;
         out.e2eOk = true;
         return true;

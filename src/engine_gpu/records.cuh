@@ -185,7 +185,7 @@ struct FillSink {
 // seqCacheAlignRecords appends for this sequence
 E6HD inline void recordFill(const RecParams& P, const uint8_t* blob, const char* seq, u64 L, const u64* chrStart, uint32_t nAln,
                             uint32_t alnOff, uint32_t opsOff, u64 seqOff, SigRec* sig, AlnRec* alns, uint32_t* ops, uint8_t* seq2, uint8_t* rec,
-                            uint16_t* nm = nullptr) {   // E8: nm (optional): per alignment its nM (min(nMM, 65535)), for the per-cell QC of the pass
+                            uint16_t* nmOut = nullptr) {   // E8: nm (optional): per alignment its nM (min(nMM, 65535)), for the per-cell QC of the pass
     const uint8_t* p = blob;
     const u64 nW = (u64)getV(p), nTr = (u64)getV(p);
     getV(p);
@@ -209,7 +209,7 @@ E6HD inline void recordFill(const RecParams& P, const uint8_t* blob, const char*
         AlnRec a; a.tid = refID; a.pos = pos; a.ops_off = o; a.n_ops = nc16; a.mapq = q;
         a.flags = (uint8_t)(((flag & 0x10) ? 1 : 0) | ((flag & 0x100) ? 0 : 2));
         alns[i] = a;
-        if (nm) nm[i] = nm16;
+        if (nmOut) nmOut[i] = nm16;
         if (d) {
             put32(d, (uint32_t)refID); put32(d + 4, (uint32_t)pos); put16(d + 8, flag); d[10] = q; d[11] = 0;
             put16(d + 12, nh16); put16(d + 14, nm16); put16(d + 16, nc16);
