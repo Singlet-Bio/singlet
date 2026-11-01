@@ -169,7 +169,7 @@ def compute(artifact_dir: Path) -> dict:
             "bench/public/capabilities/clipper/singlet_public.sbatch": "harness"}),
         "reproduce": {"module": "bench/public/capabilities/spliced_unspliced.py", "function": "compute", "laptop_minutes": 2,
                       "clipper_command": "bash bench/public/capabilities/clipper/run_all.sh spliced-unspliced"},
-        "caveats": _caveats() + C.cohort_gap_caveat(CAP, ids),
+        "caveats": _caveats() + C.cohort_gap_caveat(CAP, ids + list(lr_n)),
     }
     doc["conclusion"] = _conclusion(stats, metrics, sh, len(ids))
     return C.finish(doc)
