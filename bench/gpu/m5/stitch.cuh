@@ -66,7 +66,10 @@
 // identical results. STAR's nest (one thread per read, k_p1) stays reachable: -DM5_BASELINE (with the pre-E5 paths),
 // -DM5_P1NEST (E5's defaults, the nest), the probe builds (-DM5_CENSUS, -DM5_TAIL: the flat kernels have no probes), or
 // any explicit E7 variant macro (the build is then exactly the macros given, as in the E7 experiments).
-#if !defined(M5_BASELINE) && !defined(M5_P1NEST) && !defined(M5_CENSUS) && !defined(M5_TAIL) && !defined(M5_SEEDFLAT) &&     !defined(M5_P1SPLIT) && !defined(M5_P1WPERS) && !defined(M5_P1WPB) && !defined(M5_P1FUSE) && !defined(M5_SEEDSTEP) &&     !defined(M5_STEPSMEM) && !defined(M5_SEEDSMEM) && !defined(M5_P1MINB) && !defined(M5_G2) && !defined(M5_CMPU) &&     !defined(M5_CMPNI) && !defined(M5_PREF) && !defined(M5_PREF2) && !defined(M5_PREF3)
+#if !defined(M5_BASELINE) && !defined(M5_P1NEST) && !defined(M5_CENSUS) && !defined(M5_TAIL) && !defined(M5_SEEDFLAT) && \
+    !defined(M5_P1SPLIT) && !defined(M5_P1WPERS) && !defined(M5_P1WPB) && !defined(M5_P1FUSE) && !defined(M5_SEEDSTEP) && \
+    !defined(M5_STEPSMEM) && !defined(M5_SEEDSMEM) && !defined(M5_P1MINB) && !defined(M5_G2) && !defined(M5_CMPU) && \
+    !defined(M5_CMPNI) && !defined(M5_PREF) && !defined(M5_PREF2) && !defined(M5_PREF3)
 #define M5_SEEDFLAT
 #define M5_P1SPLIT
 #define M5_SEEDSMEM

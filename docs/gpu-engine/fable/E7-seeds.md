@@ -40,7 +40,7 @@ unchanged). Each macro implies the ones it needs.
 | macro | what it changes |
 |---|---|
 | `M5_CMPU` | `compareSeqToGenome`'s four direction cases (dirR x dirG) as one loop with strides: the read runs forward or backward through `Read1[0]` or its complement `Read1[1]`, the genome forward from `SAstr + L` or backward from `nGenome - 1 - SAstr - L`; the same bytes compared in the same order, `compRes` as in the case it replaces |
-| `M5_SEEDFLAT` | phase 1 with flat loops (implies `M5_CMPU`): `p1Setup` (read set-up, `qualitySplit`, resets), `seedNext` (an explicit state machine `SeedIt` over STAR's nest: `SI_PIECE`, `SI_START`, `SI_WHILE`, `SI_LMAX`, `SI_NEXT`) that stops at each pending `maxMappableLength2strands` call with its `Shift`/`seedLength`/`iDir`/piece, `seedCall` (the single call site) and `seedAfter` (`flagDirMap`, `Lmapped += L`); `p1Windows`: the markers, then ONE loop over every SA entry of every anchor (`p1Entry`: one entry, the donor/acceptor split of sjdb inserts as a two-iteration loop around ONE `createExtendWindowsWithAlign` call site), the flanks, `nWall`, `nEntries`. `k_p1` runs `mapPhase1Flat` (thread per read) |
+| `M5_SEEDFLAT` | phase 1 with flat loops (**not** combined with `M5_CMPU`: the define meant to imply it sat in m5.cu after the include of stitch.cuh and had no effect, so every flat variant measured here used STAR's four-case compare; removed in the merge): `p1Setup` (read set-up, `qualitySplit`, resets), `seedNext` (an explicit state machine `SeedIt` over STAR's nest: `SI_PIECE`, `SI_START`, `SI_WHILE`, `SI_LMAX`, `SI_NEXT`) that stops at each pending `maxMappableLength2strands` call with its `Shift`/`seedLength`/`iDir`/piece, `seedCall` (the single call site) and `seedAfter` (`flagDirMap`, `Lmapped += L`); `p1Windows`: the markers, then ONE loop over every SA entry of every anchor (`p1Entry`: one entry, the donor/acceptor split of sjdb inserts as a two-iteration loop around ONE `createExtendWindowsWithAlign` call site), the flanks, `nWall`, `nEntries`. `k_p1` runs `mapPhase1Flat` (thread per read) |
 | `M5_P1SPLIT` | phase 1 as two kernels: `k_p1s`, persistent warps (grid = SMs x resident blocks) in which every iteration each lane holding a read makes that read's next seed call; a lane whose read is finished (no more calls, or overflow) takes the batch's next read through a warp-aggregated atomic counter (`__ballot_sync` of the lanes that need a read, one `atomicAdd` by the leader, `__shfl_sync`, rank by `__popc`), so a warp keeps 32 reads in flight until the batch runs out; then `k_p1w`, the windows, thread per read |
 | `M5_P1WPERS` | the windows kernel persistent too (`k_p1wp`): `p1Windows` as a resumable iterator (`WinIt`: one anchor SA entry, or one window's flanks, per step), lanes refill as in `k_p1s` |
 | `M5_G2` | `compareSeqToGenome` on a 2-bit genome text, 32 bases per step: `G2` (genome 2 bits per base, 0.8 GB, positions -1024 .. nGenome+1024) and `NB` (1 bit per 64-base block: some genome byte > 3 in it; 6 MB, L2-resident), built on the device at start-up; `Read1[0]` packed forward and reversed per read in `ReadBuf`. A window of 32 comparisons whose genome positions touch an `NB` block is compared byte by byte as before; otherwise XOR of the read and genome words (complemented / 2-bit-reversed for the strand), first differing unit by `__ffsll` |
@@ -73,7 +73,7 @@ Identity is checked byte for byte against STAR for every distinct read in every 
   `compRes` (for `dirG == false` the case's `!(s > g || g > 3)`). `M5_G2`: within a 32-unit window, the first index where
   the 2-bit codes differ is the first index where the bytes differ provided every genome byte in the window is 0..3
   (read bases in a piece are 0..3 by `qualitySplit`); windows whose genome positions include any byte > 3 (N, padding,
-  chromosome spacers) are compared byte by byte with the `M5_CMPU` loop. For bytes 0..3 `sc > gc` is the byte comparison,
+  chromosome spacers) are compared byte by byte with a strided loop like `M5_CMPU`'s. For bytes 0..3 `sc > gc` is the byte comparison,
   and for `dirG == false` `!(sc > gc || gc > 3)` with `gc <= 3` and `sc != gc` is `sc < gc`. Read positions beyond the
   compared length are never used (`i + j >= len` returns `N`).
 - **Stepped calls (`M5_SEEDSTEP`).** `mmAdvance` is `maxMappableLength2strands`, `maxMappableLength` and `findMultRange`
@@ -400,11 +400,14 @@ convergence.
    independent, but `L1`/`L2` and the ordering of equal-length hits must be shown to be, or reproduced.
 2. Adopt flatqs8b (`-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8 -DM5_P1WPB`) as m5's phase-1 default:
    exact, +7.1% on M5 (2.82 -> 3.02 M distinct reads/s).
-3. Shorten the windows kernel (k_p1w: ~21 ms of lane A's ~79 ms phase 1): an 8-lane group per read over the anchors'
+3. Try flatqs8b + `M5_CMPU` (exact): the strided compare alone gave 0.92x of the nest's phase 1 in round 1 (91.6 vs
+   99.3 ms) and was never combined with the flat kernels (see the `M5_SEEDFLAT` row of the design table); it must keep
+   k_p1s at 64 registers without spills to be worth it.
+4. Shorten the windows kernel (k_p1w: ~21 ms of lane A's ~79 ms phase 1): an 8-lane group per read over the anchors'
    SA entries, keeping STAR's entry order for `createExtendWindowsWithAlign` (the window-bin map is order sensitive).
-4. Phase 1 once with lane M's capacities (the probe): at most 14 ms with the faster kernels; worth it only together
+5. Phase 1 once with lane M's capacities (the probe): at most 14 ms with the faster kernels; worth it only together
    with a layout that lets lane A's phase 3 keep its small state.
-5. The 2-bit genome is not worth pursuing for phase 1 at thread-per-read granularity; it may pay off inside a
+6. The 2-bit genome is not worth pursuing for phase 1 at thread-per-read granularity; it may pay off inside a
    cooperative search (item 1), where one 32-base word per lane per step is natural.
 
 ## Process note: Clipper bridge incident
@@ -431,6 +434,7 @@ lines), 120f218 (G2), 2a404cb (P1WPERS), 3b33f7e (`--p1probe`), 5f9ace8 (SEEDSTE
 | 795852 | compile | 7b2e031 | round 2 variants |
 | 795933 | compile | f753d75 | round 3 variants |
 | 795952 | run (g051) | f74869c | rounds 2+3 + probe + ncu |
+| 796015 | compile | 09577be | round 4 register check (flatq, flatq7, flatqs, flatqs7, flatqs8, flatqg7, flatqsg8) |
 | 796016 | compile | e1a3ecb | round 4 variants |
 | 796017 | run | | cancelled before start (resubmitted with the PREF variants) |
 | 796022 | compile | 4d49bcc | PREF, PREF2 variants |

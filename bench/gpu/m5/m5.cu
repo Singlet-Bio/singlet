@@ -1517,9 +1517,7 @@ int main(int argc, char** argv) {
         bool first = true; for (int k = 0; k < 12; k++) if (whyCount[k]) { fprintf(f, "%s\"%s\": %llu", first ? "" : ", ", whyName[k], whyCount[k]); first = false; }
         fprintf(f, "},\n  \"lane_a_ms\": %.3f,\n  \"lane_m_ms\": %.3f,\n  \"lane_m_reads\": %zu,\n  \"lane_b_ms\": %.3f,\n  \"lane_b_reads\": %zu,\n  \"lane_a_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_b_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_a_local\": %s,\n  \"work_bytes\": [%zu, %zu],\n  \"index_load_s\": %.1f,\n",
                 A.ms, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), A.phaseMs[0], A.phaseMs[1], A.phaseMs[2], B.phaseMs[0], B.phaseMs[1], B.phaseMs[2], localWork ? "true" : "false", sizeof(Work<LaneA>), sizeof(Work<LaneB>), tIndex);
-        fprintf(f, "  \"lane_m_phase_ms\": [%.3f, %.3f, %.3f],
-  \"seeds_kernel_ms\": [%.3f, %.3f, %.3f],
-", M.phaseMs[0], M.phaseMs[1], M.phaseMs[2], A.phaseMs[3], M.phaseMs[3], B.phaseMs[3]);   // E7: seeds kernel (k_p1s) per lane, 0 without M5_P1SPLIT
+        fprintf(f, "  \"lane_m_phase_ms\": [%.3f, %.3f, %.3f],\n  \"seeds_kernel_ms\": [%.3f, %.3f, %.3f],\n", M.phaseMs[0], M.phaseMs[1], M.phaseMs[2], A.phaseMs[3], M.phaseMs[3], B.phaseMs[3]);   // E7: seeds kernel (k_p1s) per lane, 0 without M5_P1SPLIT
         fprintf(f, "  \"e4\": {\"build\": \"%s\", \"build_flags\": \"%s\", \"label\": \"%s\", \"presort\": %s, \"p3order\": \"%s\", \"compact\": %s, "
                    "\"p3_block\": %d, \"p3_maxreg\": %d, \"p3_maxreg_lanes\": [%d, %d, %d], \"tail\": %s, \"batches\": [%lld, %lld, %lld], \"budgets\": [%lld, %lld, %lld],\n    \"lanes\": {",
                 M5_GIT, m5BuildFlags(), label.c_str(), presort ? "true" : "false", g_bin ? "cost-asc(--bin)" : p3orderName[g_p3order], g_compact ? "true" : "false",
