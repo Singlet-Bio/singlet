@@ -91,7 +91,14 @@ struct E2ERegion {
 };
 // one per process: created by the pipeline before it forks STAR (the child inherits the fd)
 inline E2ERegion& e2eRegion() { static E2ERegion r; return r; }
-inline bool e2eRequested() { const char* e = std::getenv("SINGLET_ENGINE_GPU_E2E"); return e != nullptr && e[0] == '1'; }
+// SINGLET_ENGINE_GPU_E2E: 1 = E8; E10 (docs/gpu-engine/fable/E10-hostloop.md) adds, cumulatively:
+//   2 = the per-read entries (CR/UR, quality counters and masks, clip flags) built on the device from R1 and R2 instead of in STAR's mapping
+//       threads, and the per-read products of STAR's loop for the reads with a record computed on the device: Log.final.out's counters,
+//       SJ.out.tab's junctions, the list of unmapped reads (STAR's loop still does them too; SINGLET_ENGINE_GPU_E10_CHECK=1 compares the entries)
+//   3 = STAR's loop takes them from the device: for a read with a record it keeps only readLoad, the barcode and the Solo record
+//   4 = reads with a record are not given to STAR at all (only the reads with N and the host lane's failures are); STAR Solo misses them
+inline int e2eLevel() { const char* e = std::getenv("SINGLET_ENGINE_GPU_E2E"); return (e != nullptr && e[0] >= '1' && e[0] <= '4') ? e[0] - '0' : 0; }
+inline bool e2eRequested() { return e2eLevel() >= 1; }
 
 // STAR's read clipping for mate 1 (ClipMate::clip, --clipAdapterType Hamming), applied to every read on the GPU before dedup, so the
 // distinct sequences and the records are the clipped sequences STAR's cache is keyed by. 5': N bases, then NafterAd (STAR has no 5'
@@ -115,6 +122,18 @@ struct Input {
     // then runs before the device is released. STAR's alignBAM parameters the records need besides Params' filters:
     E2ERegion* e2e = nullptr;
     int outSAMmapqUnique = 255; uint16_t outSAMflagAND = 65535, outSAMflagOR = 0;
+    // E10 (level >= 2, with e2e): per read what the host decode packs (the target ingest format: CB+UMI key and quality bits), from which the
+    // device builds the per-read entries; and STAR's options the per-read products depend on
+    struct E10 {
+        bool on = false;
+        uint32_t nw = 0;                 // quality words per read (bit j of the read's words: base j of R2 has quality < minQ)
+        std::vector<uint64_t> aux;       // per read, stride 2 + nw: cr3, ur3 (HandoffReadEntry's packing), quality words
+        bool wantMask = true;            // the 128-bit low-quality masks (SINGLET_HANDOFF_QMASK != 0)
+        bool outSJ = true, sjAll = true; // P.outSJ.yes; outSJfilterReads == "All" (else unique reads only)
+        bool hook = false;               // g_handoffReadHook is set: sampled clipped reads get entry bit 2 and the host's detector bits 3-4
+        // R11's exact CB histogram (bench/fable/records/r11_hist.cpp): STAR's whitelist (ParametersSolo::cbWL: sorted 2-bit keys), CB and UMI lengths
+        const uint64_t* wl = nullptr; uint64_t nWL = 0; uint32_t cbL = 0, umiL = 0;
+    } e10;
 };
 
 struct Output {
@@ -128,6 +147,29 @@ struct Output {
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
     double secUpload = 0, secDedup = 0, secMapGpu = 0, secHostLane = 0;
     bool e2eOk = false;                 // E8: the records are in Input::e2e (arrays and nRec..nSeq; readRecord and magic are the caller's)
+    // E10: what the device computed for the reads with a record (valid with e10.ok)
+    struct E10 {
+        bool ok = false;
+        uint64_t oEntries = 0, oQMask = 0;          // region offsets of the per-read entries and masks (written by the device; zero for reads without a record)
+        std::vector<uint64_t> hookReads;            // reads (with a record) in the hook's sample: entry bit 2 set; the caller ORs in the detector's bits 3-4
+        // Stats (STAR's Log.final.out counters) of the reads with a record: readN, readBases, mappedReadsU, mappedReadsM, mappedMismatchesN, mappedInsN,
+        // mappedDelN, mappedInsL, mappedDelL, mappedBases, splicesN[7], splicesNsjdb, unmappedOther, unmappedShort, unmappedMismatch, unmappedMulti, unmappedAll
+        enum { S_readN, S_readBases, S_U, S_M, S_mm, S_insN, S_delN, S_insL, S_delL, S_bases, S_spl0, S_sjdb = S_spl0 + 7, S_uOther, S_uShort, S_uMismatch,
+               S_uMulti, S_uAll, S_N };
+        uint64_t stats[S_N] = {};
+        double mappedPortion = 0;
+        uint64_t nOddRec = 0;                       // records that are mapped with no transcript (never seen): their reads must stay on STAR's path
+        std::vector<uint8_t> sj;                    // the junctions of the reads with a record, collapsed (STAR's Junction layout, 27 bytes), in compareSJ order
+        uint64_t nSJ = 0, nSJentries = 0;
+        std::vector<uint32_t> unmappedReads;        // reads whose record is unmapped (STAR writes them to Unmapped.out.mate1/2), read order
+        std::vector<uint8_t> recMapped;             // per record: 1 if its reads replay a summary (mapped), 0 if unmapped
+        double msEntries = 0, msUpAux = 0, msProducts = 0, msD2H = 0;
+        // R11: per whitelist entry the reads with that exact CB and a UMI without N that is not a homopolymer (empty: not computed)
+        std::vector<uint32_t> r11;
+        uint64_t r11Total = 0;
+        double msR11 = 0;
+        std::string log;
+    } e10;
     std::string log;
 };
 

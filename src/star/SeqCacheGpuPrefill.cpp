@@ -22,7 +22,14 @@
 #include "Transcriptome.h"
 #include "OutSJ.h"
 #include "SequenceFuns.h"
+#include "ReadAlignChunk.h"
+#include "GlobalVariables.h"
+#include "Stats.h"
+#include "star_api.h"
+#include <atomic>
+#include <cctype>
 #include <cmath>
+#include <sstream>
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <sys/mman.h>
@@ -35,9 +42,40 @@
 #include <thread>
 #include <vector>
 
+// E10 (SINGLET_ENGINE_GPU_E2E >= 3, docs/gpu-engine/fable/E10-hostloop.md): what STAR's per-read loop still does for a read with a GPU record
+// (ReadAlign_oneRead.cpp, ReadAlign_outputAlignments.cpp). 0: everything (E8); 3: readLoad, the barcode and the Solo record only (the
+// device computed its Log.final.out counters, junctions and Unmapped.out records); 4: such reads are not given to STAR at all
+int g_e10Level = 0;
+
 namespace {
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
+// E10: what the host decode keeps for the host side of E10 (the unmapped reads' FASTQ records, level 4's read source): both FASTQ files
+// mapped, per read the byte offset of its name line in each (0: R2, the cDNA; 1: R1, the barcode read)
+struct E10Files {
+    const char *m[2] = {nullptr, nullptr};
+    uint64 len[2] = {0, 0};
+    std::vector<uint64> at[2];
+    void release() {
+        for (int k = 0; k < 2; k++) {
+            if (m[k] != nullptr) munmap((void *) m[k], len[k]);
+            m[k] = nullptr; len[k] = 0; std::vector<uint64>().swap(at[k]);
+        }
+    }
+};
+E10Files e10f;
+int e10MinQ = 0;
+std::string e10DecodeWhy;   // why the decode turned E10 off
+std::vector<uint8> e10sj;   // level >= 3: the device's junctions (Junction layout) for outputSJ, merged after mapping
+uint64 e10nSJ = 0;
+struct E10Check {           // SINGLET_ENGINE_GPU_E10_CHECK=1 at level 2: STAR's mapping threads write their entries here, compared after mapping
+    bool on = false;
+    std::vector<HandoffReadEntry> ent;
+    std::vector<uint64> qm;
+    const HandoffReadEntry *dev = nullptr;
+    const uint64 *devQ = nullptr;
+} e10chk;
+
 // STAR's numeric code (SequenceFuns.cpp nucl_to_num)
 inline char nucl(unsigned char c) {
     switch (c) { case 'A': case 'a': return 0; case 'C': case 'c': return 1; case 'G': case 'g': return 2; case 'T': case 't': return 3; default: return 4; }
@@ -137,14 +175,19 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
         // lines are numbered globally: each thread counts the newlines of its byte range, a prefix sum gives the index of its
         // first line, and it converts the sequence lines (index % 4 == 1) whose terminating newline lies in its range
         int T = std::max(1, nThreads);
-        std::vector<uint64> b(T + 1), cnt(T, 0);
+        std::vector<uint64> b(T + 1), cnt(T, 0), mxT(T, 0);
         for (int t = 0; t <= T; t++) b[t] = n * t / T;
+        const bool e10 = in.e10.on;   // E10: one file per mate (the caller checked)
         {
             std::vector<std::thread> th;
             for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
-                uint64 c = 0;
-                for (const char *q = m + b[t], *e = m + b[t + 1]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) c++;
-                cnt[t] = c;
+                uint64 c = 0, mx = 0;
+                const char *prev = m + b[t];
+                for (const char *q = m + b[t], *e = m + b[t + 1]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) {
+                    c++;
+                    if (e10) { mx = std::max<uint64>(mx, (uint64) (q - prev)); prev = q + 1; }
+                }
+                cnt[t] = c; mxT[t] = mx;
             });
             for (auto &x : th) x.join();
         }
@@ -154,6 +197,23 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
         bool lastUnterminated = m[n - 1] != '\n';
         if (lastUnterminated) lines++;
         if (lines % 4 != 0) { munmap((void *) m, n); close(fd); why = fn + ": not 4-line FASTQ"; return false; }
+        // E10: per read 2 + nw words (CR, UR from the barcode read: e10Barcodes; the quality bits of R2), the name-line offsets
+        uint32 nw = 0;
+        uint64_t *aux = nullptr;
+        std::vector<int> e10BadT(T, 0);
+        if (e10) {
+            uint64 mx = 0;
+            for (int t = 0; t < T; t++) mx = std::max(mx, mxT[t]);
+            nw = (uint32) std::max<uint64>(1, (mx + 63) / 64);
+            if (nw > 4) { in.e10.on = false; in.e10.nw = 0; e10DecodeWhy = "cDNA reads over 256 bases"; }
+            else {
+                in.e10.nw = nw;
+                in.e10.aux.assign((lines / 4) * (2 + (uint64) nw), 0);
+                aux = in.e10.aux.data();
+                e10f.at[0].assign(lines / 4, 0);
+            }
+        }
+        const bool e10q = e10 && aux != nullptr;
         std::vector<std::vector<char>> seqT(T);
         std::vector<std::vector<uint64>> lenT(T);
         std::vector<std::vector<uint16>> p5T(T), p3T(T);   // --clipAdapterType CellRanger4: the clip of each read, by ClipMate::clip
@@ -211,12 +271,34 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                     lenT[t].push_back(L);
                     if (cr4) { asc.push_back({ls, L}); numAt.push_back(at); if (asc.size() == 64) flush(); }
                 };
+                // E10: the quality bits of R2 (STAR's handoffReadEntry: Qual0[0][j] - 33 < minQ), every base ACGTN (the device reads code 4 as
+                // 'N' and rebuilds the read for the rRNA hook from the codes), the name-line offsets
+                bool okc[256];
+                for (int c = 0; c < 256; c++) okc[c] = c == 'A' || c == 'C' || c == 'G' || c == 'T' || c == 'N';
+                auto e10line = [&](uint64 lix, const char *ls, const char *le) {
+                    const uint64 r = lix >> 2;
+                    if ((lix & 3) == 0) { e10f.at[0][r] = (uint64) (ls - m); return; }
+                    uint64 L = le - ls;
+                    if (L > 0 && (unsigned char) ls[L - 1] < 33) L--;   // fastqReadOneLine: one trailing control character
+                    if ((lix & 3) == 1) {
+                        int bad = 0;
+                        for (uint64 k = 0; k < L; k++) bad |= !okc[(unsigned char) ls[k]];
+                        if (bad) e10BadT[t] |= 1;
+                    } else if ((lix & 3) == 3) {
+                        if (L > 64 * (uint64) nw) { e10BadT[t] |= 2; return; }
+                        uint64_t *w = aux + r * (2 + (uint64) nw) + 2;
+                        for (uint64 j = 0; j < L; j++)
+                            if ((int) (unsigned char) ls[j] - 33 < e10MinQ) w[j >> 6] |= 1ull << (j & 63);
+                    }
+                };
                 for (const char *q = m + b[t]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) {
                     if ((li & 3) == 1) take(start, q);
+                    if (e10q) e10line(li, start, q);
                     li++;
                     start = q + 1;
                 }
                 if (t == T - 1 && lastUnterminated && (li & 3) == 1) take(start, m + n);
+                if (t == T - 1 && lastUnterminated && e10q) e10line(li, start, m + n);
                 if (cr4) flush();
             });
             for (auto &x : th) x.join();
@@ -243,8 +325,205 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                 in.pre3.insert(in.pre3.end(), p3T[t].begin(), p3T[t].end());
                 in.cr4info.insert(in.cr4info.end(), infoT[t].begin(), infoT[t].end());
             }
-        munmap((void *) m, n);
+        if (e10q) {
+            int bad = 0;
+            for (int t = 0; t < T; t++) bad |= e10BadT[t];
+            if (bad) { in.e10.on = false; std::vector<uint64_t>().swap(in.e10.aux); e10f.release();
+                       e10DecodeWhy = (bad & 1) ? "a cDNA base other than ACGTN" : "a quality line longer than 256"; }
+        }
+        if (e10q && in.e10.on) { e10f.m[0] = m; e10f.len[0] = n; }   // E10 keeps R2 mapped (the unmapped reads' records, level 4's source)
+        else munmap((void *) m, n);
         close(fd);
+    }
+    return true;
+}
+
+// E10: per read the CR and UR (HandoffReadEntry's 3-bit packing of SoloReadBarcode::getCBandUMI's cbSeq, umiSeq for CB_UMI_Simple) from
+// the barcode read, into the aux words readSequences sized; R1 stays mapped and its name-line offsets are kept
+bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why, int nThreads) {
+    const std::string &fn = P.readFilesNames[1][0];
+    struct stat st;
+    if (stat(fn.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) { why = fn + " is not a regular file"; return false; }
+    int fd = open(fn.c_str(), O_RDONLY);
+    if (fd < 0) { why = "cannot open " + fn; return false; }
+    const uint64 n = (uint64) st.st_size;
+    const uint32 nw = in.e10.nw;
+    const uint64 nReads = in.e10.aux.size() / (2 + (uint64) nw);
+    if (n == 0) { close(fd); why = fn + " is empty"; return false; }
+    const char *m = (const char *) mmap(nullptr, n, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (m == MAP_FAILED) { why = "cannot map " + fn; return false; }
+    madvise((void *) m, n, MADV_SEQUENTIAL);
+    const int T = std::max(1, nThreads);
+    std::vector<uint64> b(T + 1), cnt(T, 0), first(T);
+    for (int t = 0; t <= T; t++) b[t] = n * t / T;
+    {
+        std::vector<std::thread> th;
+        for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+            uint64 c = 0;
+            for (const char *q = m + b[t], *e = m + b[t + 1]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) c++;
+            cnt[t] = c;
+        });
+        for (auto &x : th) x.join();
+    }
+    uint64 lines = 0;
+    for (int t = 0; t < T; t++) { first[t] = lines; lines += cnt[t]; }
+    const bool lastUnterminated = m[n - 1] != '\n';
+    if (lastUnterminated) lines++;
+    if (lines != 4 * nReads) { munmap((void *) m, n); why = "the barcode read file has " + std::to_string(lines / 4) + " reads, the cDNA file " + std::to_string(nReads); return false; }
+    e10f.at[1].assign(nReads, 0);
+    const uint64 bL = P.pSolo.bL, cbumiL = P.pSolo.cbumiL, cbS = P.pSolo.cbS, cbL = P.pSolo.cbL, umiS = P.pSolo.umiS, umiL = P.pSolo.umiL;
+    std::vector<int> badT(T, 0);
+    uint64_t *aux = in.e10.aux.data();
+    {
+        std::vector<std::thread> th;
+        for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+            uint64 li = first[t];
+            const char *start = m + b[t];
+            while (start > m && start[-1] != '\n') start--;
+            const char *e = m + b[t + 1];
+            auto line = [&](const char *ls, const char *le) {
+                const uint64 r = li >> 2;
+                if ((li & 3) == 0) { e10f.at[1][r] = (uint64) (ls - m); return; }
+                if ((li & 3) != 1) return;
+                uint64 L = le - ls;
+                if (L > 0 && (unsigned char) ls[L - 1] < 33) L--;
+                if (bL > 0 && L != bL) { badT[t] = 1; return; }   // STAR exits on this read
+                const uint64 S = (bL == 0 && L < cbumiL) ? cbumiL : L;   // getCBandUMI: padded with N to cbumiL
+                if (cbS - 1 > S || umiS - 1 > S) { badT[t] = 1; return; }   // substr would throw
+                auto pack = [&](uint64 s0, uint64 len) {
+                    const uint64 e0 = std::min(s0 + len, S);
+                    uint64 v = 0;
+                    for (uint64 j = s0; j < e0 && j - s0 < 21; j++) {
+                        const char c = j < L ? ls[j] : 'N';
+                        v |= (uint64) (c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4) << (3 * (j - s0));
+                    }
+                    return v;
+                };
+                uint64_t *a = aux + r * (2 + (uint64) nw);
+                a[0] = pack(cbS - 1, cbL); a[1] = pack(umiS - 1, umiL);
+            };
+            for (const char *q = m + b[t]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) {
+                line(start, q);
+                li++;
+                start = q + 1;
+            }
+            if (t == T - 1 && lastUnterminated) line(start, m + n);
+        });
+        for (auto &x : th) x.join();
+    }
+    for (int t = 0; t < T; t++) if (badT[t]) { munmap((void *) m, n); why = "a barcode read STAR would reject (length)"; return false; }
+    e10f.m[1] = m; e10f.len[1] = n;
+    return true;
+}
+
+// E10: STAR's view of read r's FASTQ record in mate file k: the name line's first token (processChunks: readID, removeStringEndControl) and
+// passFilterIllumina from R2's name line, the sequence and quality lines without one trailing control character (fastqReadOneLine)
+struct E10Rec { const char *id; uint64 idLen; char filter; const char *seq[2]; uint64 seqLen[2]; const char *qual[2]; uint64 qualLen[2]; };
+inline bool e10Record(uint64 r, E10Rec &x) {
+    for (int k = 0; k < 2; k++) {
+        const char *m = e10f.m[k], *end = m + e10f.len[k];
+        const char *l0 = m + e10f.at[k][r];
+        const char *l1 = (const char *) memchr(l0, '\n', end - l0);
+        if (l1 == nullptr) return false;
+        if (k == 0) {
+            const char *p = l0;
+            while (p < l1 && isspace((unsigned char) *p)) p++;
+            const char *q = p;
+            while (q < end && !isspace((unsigned char) *q)) q++;
+            x.id = p; x.idLen = q - p;
+            if (x.idLen > 0 && (unsigned char) p[x.idLen - 1] < 33) x.idLen--;
+            x.filter = 'N';
+            if (q < end && *q != '\n') {   // the second field: >> skips whitespace (newlines too) and reads a token
+                while (q < end && isspace((unsigned char) *q)) q++;
+                const char *f = q;
+                while (q < end && !isspace((unsigned char) *q)) q++;
+                if (q - f >= 4 && f[1] == ':' && f[2] == 'Y' && f[3] == ':') x.filter = 'Y';
+            }
+        }
+        const char *s0 = l1 + 1, *s1 = (const char *) memchr(s0, '\n', end - s0);
+        if (s1 == nullptr) return false;
+        const char *p0 = s1 + 1, *p1 = (const char *) memchr(p0, '\n', end - p0);
+        if (p1 == nullptr) return false;
+        const char *q0 = p1 + 1, *q1 = (const char *) memchr(q0, '\n', end - q0);
+        if (q1 == nullptr) q1 = end;
+        uint64 ls = s1 - s0, lq = q1 - q0;
+        if (ls > 0 && (unsigned char) s0[ls - 1] < 33) ls--;
+        if (lq > 0 && (unsigned char) q0[lq - 1] < 33) lq--;
+        x.seq[k] = s0; x.seqLen[k] = ls; x.qual[k] = q0; x.qualLen[k] = lq;
+    }
+    return true;
+}
+// the read name as readLoad keeps it: readID (or @iReadAll with outSAMreadIDnumber), cut at the first readNameSeparatorChar
+inline std::string e10ReadName(Parameters &P, uint64 r, const E10Rec &x, bool trim) {
+    std::string id = P.outSAMreadIDnumber ? "@" + std::to_string(r + 1) : std::string(x.id, x.idLen);
+    if (trim)
+        for (char c : P.readNameSeparatorChar) { const size_t k = id.find(c); if (k != std::string::npos) id.resize(k); }
+    return id;
+}
+
+// E10 level >= 3: the Unmapped.out.mate1/2 records of the reads whose record is unmapped (ReadAlign::outReadsUnmapped, single-end + barcode
+// read), formatted on all threads, appended to STAR's streams before the mapping threads start (the files' order is run-dependent anyway)
+bool e10WriteUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nThreads, std::string &why) {
+    const int T = std::max(1, nThreads);
+    const uint64 N = reads.size();
+    std::vector<std::string> out[2];
+    out[0].resize(T); out[1].resize(T);
+    std::vector<int> bad(T, 0);
+    std::vector<std::thread> th;
+    for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+        const uint64 k0 = N * t / T, k1 = N * (t + 1) / T;
+        out[0][t].reserve((k1 - k0) * 240); out[1][t].reserve((k1 - k0) * 90);
+        E10Rec x;
+        for (uint64 k = k0; k < k1; k++) {
+            const uint64 r = reads[k];
+            if (!e10Record(r, x)) { bad[t] = 1; return; }
+            const std::string nm = e10ReadName(P, r, x, true);
+            for (int im = 0; im < 2; im++) {
+                std::string &o = out[im][t];
+                o += nm; o += ' '; o += (char) ('0' + im); o += ':'; o += x.filter; o += ": \n";
+                o.append(x.seq[im], x.seqLen[im]); o += "\n+\n"; o.append(x.qual[im], x.qualLen[im]); o += '\n';
+            }
+        }
+    });
+    for (auto &x : th) x.join();
+    for (int t = 0; t < T; t++) if (bad[t]) { why = "a FASTQ record could not be read back"; return false; }
+    for (int im = 0; im < 2; im++)
+        for (int t = 0; t < T; t++) { P.inOut->outUnmappedReadsStream[im].write(out[im][t].data(), out[im][t].size()); std::string().swap(out[im][t]); }
+    return true;
+}
+
+// E10 level 4: STAR's read source (star_api.h) with only the reads that have no GPU record, in chunk format (processChunks' FASTQ branch)
+struct E10Source : StarReadSource {
+    std::string buf[2];
+    std::vector<uint64> end[2], iRead;   // per served read: where it ends in buf[0], buf[1]; its iReadAll
+    uint64 k = 0;
+    void fill(char **chunkIn, uint64_t *sz, uint64_t limit, uint64_t &iReadAll, uint64_t readMapNumber, uint32_t) override {
+        while (k < iRead.size() && sz[0] < limit && sz[1] < limit) {
+            if (iRead[k] > readMapNumber) { k = iRead.size(); break; }
+            for (int im = 0; im < 2; im++) {
+                const uint64 a = k == 0 ? 0 : end[im][k - 1], l = end[im][k] - a;
+                memcpy(chunkIn[im] + sz[im], buf[im].data() + a, l);
+                sz[im] += l;
+            }
+            iReadAll = iRead[k];
+            k++;
+        }
+    }
+};
+E10Source e10src;
+bool e10BuildSource(Parameters &P, const uint32 *readRecord, uint64 nReads, std::string &why) {
+    E10Rec x;
+    for (uint64 r = 0; r < nReads; r++) {
+        if (readRecord[r] != 0xFFFFFFFFu) continue;
+        if (!e10Record(r, x)) { why = "a FASTQ record could not be read back"; return false; }
+        const std::string line1 = e10ReadName(P, r, x, false) + ' ' + std::to_string(r + 1) + ' ' + x.filter + ' ' + std::to_string(P.readFilesIndex) + '\n';
+        for (int im = 0; im < 2; im++) {
+            std::string &o = e10src.buf[im];
+            o += line1; o.append(x.seq[im], x.seqLen[im]); o += "\n+\n"; o.append(x.qual[im], x.qualLen[im]); o += '\n';
+            e10src.end[im].push_back(o.size());
+        }
+        e10src.iRead.push_back(r + 1);
     }
     return true;
 }
@@ -286,7 +565,49 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     time_t t0 = time(nullptr);
     singlet_engine_gpu::Input in;
     if (!fillClip(P, in.clip, why)) return skip(why);
+    // E10 (SINGLET_ENGINE_GPU_E2E >= 2): where E8 runs (e2eWant's conditions below) on one cDNA and one barcode FASTQ file, the decode also
+    // keeps per read the CR/UR key and the quality bits the device builds the hand-off entries from
+    const int e10Level = singlet_engine_gpu::e2eLevel();
+    const char *e10ChkE = getenv("SINGLET_ENGINE_GPU_E10_CHECK");
+    {
+        std::string w;
+        const char *gp = getenv("SINGLET_GPU_PILEUP"), *hs = getenv("SINGLET_GPU_HANDOFF_SUMMARY"), *mq = getenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ");
+        const char *qe = getenv("SINGLET_HANDOFF_QMASK");
+        if (e10Level < 2) w = "";
+        else if (!(singlet_engine_gpu::e2eRegion().fd >= 0 && getenv("SINGLET_ENGINE_GPU_HANDOFF") != nullptr && mq != nullptr && gp != nullptr && strcmp(gp, "on") == 0
+                   && !(hs != nullptr && hs[0] == '0') && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes)
+                   && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21)) w = "E8 does not run";
+        else if (P.readFilesNames.size() != 2 || P.readFilesNames[0].size() != 1 || P.readFilesNames[1].size() != 1 || P.readNends != 2) w = "not one cDNA and one barcode FASTQ file";
+        else if (P.readFilesTypeN == 10 || P.pSolo.barcodeRead != 1 || P.pSolo.CBtype.type != 1) w = "barcode layout";
+        else if (P.outQSconversionAdd != 0) w = "outQSconversionAdd";
+        else if (P.outFilterBySJoutStage != 0) w = "outFilterType BySJout";
+        else if (P.pGe.transform.outSAM || P.pGe.transform.outYes || P.pGe.transform.outQuant) w = "genome transform";
+        else {
+            in.e10.on = true;
+            e10MinQ = atoi(mq);
+            in.e10.wantMask = !(qe != nullptr && qe[0] == '0');
+            in.e10.outSJ = P.outSJ.yes; in.e10.sjAll = P.outSJfilterReads == "All";
+            in.e10.hook = g_handoffReadHook != nullptr;
+            if (P.pSolo.cbWLyes && !P.pSolo.cbWL.empty()) {   // R11's exact CB histogram over STAR's whitelist
+                in.e10.wl = (const uint64_t *) P.pSolo.cbWL.data(); in.e10.nWL = P.pSolo.cbWL.size();
+                in.e10.cbL = (uint32) P.pSolo.cbL; in.e10.umiL = (uint32) P.pSolo.umiL;
+            }
+        }
+        if (e10Level >= 2 && !in.e10.on) P.inOut->logMain << "ENGINE_GPU: E10 (level " << e10Level << ") not used: " << w << "\n";
+    }
     if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
+    if (e10Level >= 2 && in.e10.on) {
+        std::string w;
+        const auto tb = std::chrono::steady_clock::now();
+        if (!e10Barcodes(P, in, w, (int) P.runThreadN)) { in.e10.on = false; std::vector<uint64_t>().swap(in.e10.aux); e10f.release(); }
+        P.inOut->logMain << "ENGINE_GPU: E10 decode: " << (in.e10.on ? "CR/UR keys and quality bits of " + std::to_string(in.off.size() - 1) + " reads ("
+                                                        + std::to_string(in.e10.nw) + " quality words each), barcode file "
+                                                        + std::to_string(std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count()) + " s"
+                                                      : "not used: " + w) << "\n";
+    } else if (e10Level >= 2 && !in.e10.on) {
+        if (!e10DecodeWhy.empty()) P.inOut->logMain << "ENGINE_GPU: E10 decode: not used: " << e10DecodeWhy << "\n";
+        e10f.release();
+    }
     time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
     time_t tWait = time(nullptr);
@@ -318,8 +639,22 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     in.release();
     time_t tGpu = time(nullptr);
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
-                     << " s for it, held it " << heldS << " s\n" << out.log;
-    if (!ok) return skip("GPU mapping failed");
+                     << " s for it, held it " << heldS << " s\n" << out.log << out.e10.log;
+    std::vector<uint64_t>().swap(in.e10.aux);
+    if (!ok) { e10f.release(); return skip("GPU mapping failed"); }
+    bool e10ok = out.e10.ok;   // E10: the device wrote the entries and masks into the region and computed the per-read products
+    if (const char *rp = getenv("SINGLET_ENGINE_GPU_E10_R11"); rp != nullptr && !out.e10.r11.empty()) {   // the histogram in r11_hist.cpp's format
+        FILE *f = fopen(rp, "wb");
+        uint64 nnz = 0;
+        for (uint32_t c : out.e10.r11) nnz += c != 0;
+        const uint64 h[3] = {(uint64) out.e10.r11.size(), (uint64) out.e10.r11Total, nnz};
+        bool okf = f != nullptr && fwrite("E6R11H01", 1, 8, f) == 8 && fwrite(h, 8, 3, f) == 3;
+        for (uint64 w = 0; okf && w < out.e10.r11.size(); w++)
+            if (out.e10.r11[w]) { const uint64 pr[2] = {w, out.e10.r11[w]}; okf = fwrite(pr, 8, 2, f) == 2; }
+        if (f != nullptr) okf = (fclose(f) == 0) && okf;
+        P.inOut->logMain << "ENGINE_GPU: E10: R11 exact CB histogram from the device: " << out.e10.r11Total << " reads, " << nnz << " barcodes -> " << rp
+                         << (okf ? "" : " (write FAILED)") << "\n";
+    }
     if (in.clip.pre) {   // CellRanger4: readLoad takes clippedInfo from here, clipChunk is skipped
         static std::vector<uint8> cr4keep;
         cr4keep.swap(in.cr4info);
@@ -382,11 +717,19 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         const bool e2eQOn = !(e2eQe != nullptr && e2eQe[0] == '0');
         if (e2eRec) {
             const uint64 nR = out.readRecord.size();
-            e2eR = e2r.take(std::max<uint64>(1, nR) * 4); e2eE = e2r.take(std::max<uint64>(1, nR) * sizeof(HandoffReadEntry));
-            e2eQ = e2eQOn ? e2r.take(std::max<uint64>(1, nR) * 16) : 0;
+            e2eR = e2r.take(std::max<uint64>(1, nR) * 4);
+            if (e10ok && (out.e10.oQMask != 0) == e2eQOn) { e2eE = out.e10.oEntries; e2eQ = out.e10.oQMask; }   // E10: written by the device
+            else {
+                e10ok = false;
+                e2eE = e2r.take(std::max<uint64>(1, nR) * sizeof(HandoffReadEntry));
+                e2eQ = e2eQOn ? e2r.take(std::max<uint64>(1, nR) * 16) : 0;
+            }
             if (!e2eR || !e2eE || (e2eQOn && !e2eQ)) { e2eRec = false; P.inOut->logMain << "ENGINE_GPU: E8: the shared region is full; the hand-off file path runs\n"; }
             else memcpy(e2r.base + e2eR, out.readRecord.data(), nR * 4);
         }
+        e10ok = e10ok && e2eRec;
+        // E10 level 4: no read with a record reaches STAR's loop, so no summaries are needed
+        const bool e10NoSum = e10ok && e10Level >= 4 && g_starReadSource == nullptr;
         std::vector<std::thread> th;
         for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
             Transcriptome *trT = (sumOn && tr != nullptr) ? new Transcriptome(*tr) : nullptr;
@@ -397,7 +740,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             // GBs at each doubling (untouched capacity costs no memory)
             if (!e2eRec) { part[t].reserve((size_t) (r1 - r0) * 80); partOff[t].reserve((size_t) (r1 - r0)); }
             if (sumOn) { sumPartOff[t].reserve((size_t) (r1 - r0)); sumPart[t].reserve((size_t) (r1 - r0) * 40); }   // 1.06 GB for 31.8 M records
-            for (uint64 r = r0; r < r1; r++) {
+            for (uint64 r = r0; r < (e10NoSum ? r0 : r1); r++) {
                 if (e2eRec) ra->seqCacheRestoreRecord(out.seq.data() + out.seqOff[r], out.seqOff[r + 1] - out.seqOff[r], out.blob.data() + out.blobOff[r]);
                 else {
                 partOff[t].push_back(part[t].size());
@@ -480,15 +823,42 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             const char *mq = getenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ");
             if (e2eRec) {   // E8: in the shared region (zero-filled: unwritten entries have flags 0); the magic last: the parent's pileup takes it
                 singlet_engine_gpu::E2EHeader &E2H = *e2r.hdr();
-                g_handoffReads = (HandoffReadEntry *) (e2r.base + e2eE); g_handoffMinQ = atoi(mq);
-                if (e2eQOn) g_handoffQMask = (uint64 *) (e2r.base + e2eQ);
+                g_handoffMinQ = atoi(mq);
+                if (!e10ok) {   // E8: STAR's mapping threads write the entries
+                    g_handoffReads = (HandoffReadEntry *) (e2r.base + e2eE);
+                    if (e2eQOn) g_handoffQMask = (uint64 *) (e2r.base + e2eQ);
+                } else {        // E10: the device wrote them; the rRNA hook's verdicts for the sampled reads are added here
+                    HandoffReadEntry *E = (HandoffReadEntry *) (e2r.base + e2eE);
+                    const std::vector<uint64_t> &hk = out.e10.hookReads;
+                    if (g_handoffReadHook != nullptr && !hk.empty()) {
+                        std::vector<std::thread> tv;
+                        for (int t = 0; t < nt; t++) tv.emplace_back([&, t]() {
+                            std::string sq;
+                            for (uint64 k = hk.size() * t / nt; k < hk.size() * (t + 1) / nt; k++) {
+                                const uint64 i = hk[k], L = in.off[i + 1] - in.off[i];
+                                sq.resize(L);
+                                for (uint64 j = 0; j < L; j++) sq[j] = "ACGTN"[(int) in.seq[in.off[i] + j]];
+                                E[i].flags |= g_handoffReadHook(i, sq.data(), L) & 0x1Cu;
+                            }
+                        });
+                        for (auto &x : tv) x.join();
+                    }
+                    if (e10Level == 2 && e10ChkE != nullptr && e10ChkE[0] == '1') {   // STAR's threads write theirs elsewhere, compared after mapping
+                        e10chk.on = true;
+                        e10chk.ent.assign(g_handoffNReads, HandoffReadEntry{});
+                        g_handoffReads = e10chk.ent.data();
+                        if (e2eQOn) { e10chk.qm.assign(2 * g_handoffNReads, 0); g_handoffQMask = e10chk.qm.data(); }
+                        e10chk.dev = E; e10chk.devQ = e2eQOn ? (const uint64 *) (e2r.base + e2eQ) : nullptr;
+                    }
+                }
                 E2H.nReads = g_handoffNReads; E2H.oReadRecord = e2eR; E2H.oEntries = e2eE; E2H.oQMask = e2eQ;
                 E2H.cbS = (uint32) P.pSolo.cbS; E2H.cbL = (uint32) P.pSolo.cbL; E2H.umiS = (uint32) P.pSolo.umiS; E2H.umiL = (uint32) P.pSolo.umiL;
                 E2H.cbumiL = (uint32) P.pSolo.cbumiL; E2H.simple = 1;
                 __sync_synchronize();
                 memcpy(E2H.magic, "SGE2E001", 8);
                 P.inOut->logMain << "ENGINE_GPU: E8: per-read hand-off entries" << (e2eQOn ? " and low-quality masks" : "") << " in the shared region ("
-                                 << (E2H.used >> 20) << " MB in use)\n";
+                                 << (E2H.used >> 20) << " MB in use)" << (e10ok ? ", built on the device (E10)" : "") << (e10chk.on ? "; STAR's are compared after mapping" : "")
+                                 << "\n";
             }
             if (!e2eRec && mq != nullptr && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21) {
                 const std::string rp = std::string(hp) + ".reads";
@@ -517,6 +887,45 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
         }
     }
+    // E10 level >= 3: STAR's loop takes the per-read products of the reads with a record from the device (stats, junctions, unmapped records);
+    // level 4 also keeps those reads out of STAR's loop (its read source serves the others only)
+    if (e10ok && e10Level >= 3 && g_handoffReadRecord != nullptr && g_handoffSum != nullptr) {
+        const auto t3 = std::chrono::steady_clock::now();
+        typedef singlet_engine_gpu::Output::E10 X;
+        Stats S;
+        S.resetN();
+        const uint64_t *v = out.e10.stats;
+        S.readN = v[X::S_readN]; S.readBases = v[X::S_readBases]; S.mappedReadsU = v[X::S_U]; S.mappedReadsM = v[X::S_M];
+        S.mappedMismatchesN = v[X::S_mm]; S.mappedInsN = v[X::S_insN]; S.mappedDelN = v[X::S_delN]; S.mappedInsL = v[X::S_insL]; S.mappedDelL = v[X::S_delL];
+        S.mappedBases = v[X::S_bases]; S.mappedPortion = out.e10.mappedPortion;
+        for (int k = 0; k < SJ_MOTIF_SIZE; k++) S.splicesN[k] = v[X::S_spl0 + k];
+        S.splicesNsjdb = v[X::S_sjdb];
+        S.unmappedOther = v[X::S_uOther]; S.unmappedShort = v[X::S_uShort]; S.unmappedMismatch = v[X::S_uMismatch]; S.unmappedMulti = v[X::S_uMulti];
+        S.unmappedAll = v[X::S_uAll];
+        std::string w;
+        bool ok3 = true;
+        if (P.outReadsUnmapped == "Fastx" && !e10WriteUnmapped(P, out.e10.unmappedReads, (int) P.runThreadN, w)) ok3 = false;
+        if (ok3) {
+            g_statsAll.addStats(S);
+            e10sj.swap(out.e10.sj); e10nSJ = out.e10.nSJ;
+            g_e10Level = 3;
+            if (e10Level >= 4 && g_starReadSource == nullptr) {
+                if (e10BuildSource(P, g_handoffReadRecord, g_handoffNReads, w)) { g_starReadSource = &e10src; g_e10Level = 4; }
+                else P.inOut->logMain << "ENGINE_GPU: E10 level 4 not used (" << w << "): level 3\n";
+            }
+            P.inOut->logMain << "ENGINE_GPU: E10 level " << g_e10Level << ": " << S.readN << " reads with a record (" << S.mappedReadsU << " unique, " << S.mappedReadsM
+                             << " multi, " << S.unmappedAll << " unmapped: " << out.e10.unmappedReads.size() << " Unmapped.out records written), " << e10nSJ
+                             << " junctions from the device; " << (g_e10Level == 4 ? std::to_string(e10src.iRead.size()) + " reads without a record go to STAR's loop" : "STAR's loop keeps readLoad, the barcode and the Solo record of these reads")
+                             << " (" << std::chrono::duration<double>(std::chrono::steady_clock::now() - t3).count() << " s)\n";
+        } else {
+            P.inOut->logMain << "ENGINE_GPU: E10 level 3 not used (" << w << "); STAR's loop does the per-read work\n";
+        }
+    }
+    if (g_e10Level < 4) { std::vector<uint32_t>().swap(out.e10.unmappedReads); }
+    if (deferInsert && g_e10Level >= 3) {   // E10: no read with a record looks the cache up (unmapped records: the device counted them)
+        cache->prefilled = true;
+        P.inOut->logMain << "ENGINE_GPU: no sequence results in the cache (E10 level " << g_e10Level << ")\n";
+    } else
     if (deferInsert) {   // summaries installed: the unmapped sequences only; otherwise (hand-off not written) every record
         uint64 nIns = 0;
         if (g_handoffSum != nullptr && g_handoffRecAln != nullptr) {
@@ -531,5 +940,44 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
+#endif
+}
+
+// STAR.cpp, right after the mapping threads finished: E10's after-mapping steps (the entry check at level 2; the device's junctions into the
+// first thread's junction buffer at level >= 3, collapsed, so outputSJ merges them with STAR's own)
+void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    if (e10chk.on) {
+        uint64 nRec = 0, nDiffE = 0, nDiffQ = 0, nUnwritten = 0;
+        std::ostringstream ex;
+        for (uint64 i = 0; i < g_handoffNReads; i++) {
+            if (g_handoffReadRecord[i] == 0xFFFFFFFFu) continue;
+            nRec++;
+            const HandoffReadEntry &a = e10chk.ent[i], &b = e10chk.dev[i];
+            if (a.flags == 0) nUnwritten++;
+            if (memcmp(&a, &b, sizeof(HandoffReadEntry)) != 0) {
+                if (nDiffE++ < 5)
+                    ex << " [read " << i << ": STAR cr3 " << a.cr3 << " ur3 " << a.ur3 << " lq " << a.lowQual << " ne " << a.qualNeqN << " fl " << a.flags
+                       << " | GPU cr3 " << b.cr3 << " ur3 " << b.ur3 << " lq " << b.lowQual << " ne " << b.qualNeqN << " fl " << b.flags << "]";
+            }
+            if (e10chk.devQ != nullptr && memcmp(&e10chk.qm[2 * i], &e10chk.devQ[2 * i], 16) != 0) nDiffQ++;
+        }
+        P.inOut->logMain << "ENGINE_GPU: E10 check: " << nRec << " reads with a record, entries differ " << nDiffE << ", masks differ " << nDiffQ
+                         << " (STAR wrote no entry for " << nUnwritten << ")" << ex.str() << "\n" << std::flush;
+        std::vector<HandoffReadEntry>().swap(e10chk.ent); std::vector<uint64>().swap(e10chk.qm);
+        g_handoffReads = nullptr; g_handoffQMask = nullptr; e10chk.on = false;
+    }
+    if (g_e10Level >= 3 && P.outSJ.yes && e10nSJ > 0) {
+        OutSJ *sj = RAchunk[0]->chunkOutSJ;
+        while (sj->N + e10nSJ + 2 > sj->Nstore) sj->dataSizeIncrease();
+        memcpy(sj->data + sj->N * Junction::dataSize, e10sj.data(), e10nSJ * Junction::dataSize);
+        sj->N += e10nSJ;
+        sj->collapseSJ();
+        P.inOut->logMain << "ENGINE_GPU: E10: " << e10nSJ << " device junctions merged into the junction output\n" << std::flush;
+    }
+    std::vector<uint8>().swap(e10sj);
+    e10f.release();
+#else
+    (void) P; (void) RAchunk;
 #endif
 }

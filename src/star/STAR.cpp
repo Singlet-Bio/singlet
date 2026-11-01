@@ -19,6 +19,7 @@ extern "C" void __gcov_dump(void);
 #include "ReadAlign.h"
 #include "SeqCache.h"
 void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptome *tr);
+void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk); //singlet E10 (SeqCacheGpuPrefill.cpp)
 #include "StarAccel.h"
 #include "Stats.h"
 #include "genomeGenerate.h"
@@ -280,15 +281,17 @@ int star_main_impl(int argInN, char *argIn[])
     P.inOut->logMain << timeMonthDayTime(g_statsAll.timeFinishMap) << " ..... finished mapping\n"
                      << "RAM after mapping:\n"
                      << linuxProcMemory() << flush;
+    seqCacheGpuAfterMapping(P, RAchunk); //singlet --engine gpu, E10 (SINGLET_ENGINE_GPU_E2E >= 2); nothing otherwise
 #ifdef STAR_PROFILE
     {
         double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - profClock0).count();
         double hz = (__rdtsc() - profTsc0) / sec;
         const char *nm[PROF_N] = {"chunkRead", "chunkMutexWait", "chunkSort", "readLoad", "map", "output", "chunkWrite", "seed", "windows", "stitch",
-                                   "outMapped", "outBarcode", "outSolo", "outSAM", "outUnmapped"};
+                                   "outMapped", "outBarcode", "outSolo", "outSAM", "outUnmapped", "outEntry"};
         P.inOut->logMain << "STAR_PROFILE wall=" << sec << "s threads=" << P.runThreadN;
         for (int i = 0; i < PROF_N; i++)
             P.inOut->logMain << " " << nm[i] << "=" << g_prof[i] / hz << "s";
+        P.inOut->logMain << " pathSummary=" << g_profPath[0] << " pathCacheHit=" << g_profPath[1] << " pathMapped=" << g_profPath[2];
         const char *on[6] = {"unique", "multi", "tooManyLoci", "tooShort", "otherUnmapped", "cacheHit"};
         for (int i = 0; i < 6; i++)
             P.inOut->logMain << " " << on[i] << "=" << g_profOutcome[i][1] << "reads/" << g_profOutcome[i][0] / hz << "s"

@@ -7,7 +7,9 @@
 #include <atomic>
 enum {PROF_chunkRead, PROF_chunkMutex, PROF_chunkSort, PROF_readLoad, PROF_map, PROF_output, PROF_chunkWrite,
       PROF_seed, PROF_windows, PROF_stitch,
-      PROF_outMapped, PROF_outBarcode, PROF_outSolo, PROF_outSAM, PROF_outUnmapped, PROF_N};
+      PROF_outMapped, PROF_outBarcode, PROF_outSolo, PROF_outSAM, PROF_outUnmapped, PROF_outEntry, PROF_N};
+//E10: reads by path through oneRead: 0 summary replay (GPU record with alignments), 1 cache hit (GPU record, unmapped), 2 mapped by STAR
+extern std::atomic<unsigned long long> g_profPath[3];
 extern std::atomic<unsigned long long> g_prof[PROF_N];
 //mapping cycles and read counts by outcome: 0 unique, 1 multi, 2 too many loci, 3 too short, 4 other unmapped, 5 cache hit
 extern std::atomic<unsigned long long> g_profOutcome[6][2];
