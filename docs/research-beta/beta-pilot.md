@@ -94,3 +94,6 @@ Deliverables, filled in after scoring: per-sample × per-modality table, a gener
 
 ### Note on GPU sizing (2026-11-01)
 Every GPU job is a single H100 with at most 370 GB of memory (a 1-GPU job is capped at 375 GB, and 2-GPU jobs hit the per-user GPU QOS). GSM4987148 started earlier as a 2-GPU, 440 GB job and is the only exception. If a deep sample runs out of memory on one GPU at 370 GB, it goes to the failure list with its read count and peak RSS.
+
+### Engine reruns (2026-11-01)
+Two engine fixes land after the pilot binary 337b405b: #152 (pileup thread independence, merged, tip 767f1a43) and S8's barcode-universe rule (`fix/barcode-universe`, not yet merged). Once the second merges, only the Singlet CPU and GPU jobs are rerun on that tip, from the kept `.sra` files (the `.1fq` is redecoded with the whitelist), into new run directories; those runs are scored as the pilot's Singlet result and the 337b405b runs stay as a before/after column. The clean-up jobs now delete `.1fq`, FASTQ and BAMs but keep `.sra`; the `.sra` files are deleted after the reruns finish. If staging approaches 20 TB, the samples slowest to fetch are kept and the rest are refetched.

@@ -127,7 +127,7 @@ PY
 cleanup)   # equiv check, then delete reads and BAMs; keep outputs and logs. A KEEP file in the sample dir defers the deletion (extra tools still to run).
   [ -d $P/s1cpu/out ] && [ -d $P/s1gpu/out ] && python3 $D/out_equiv.py $P/s1cpu/out $P/s1gpu/out > $P/equiv.txt 2>&1
   [ -e $P/KEEP ] && { echo "KEEP present: reads left in place"; exit 0; }
-  rm -rf $P/sra $P/stage $P/fq $P/cap1fq
+  rm -rf $P/stage $P/fq $P/cap1fq   # the .sra files stay: Singlet is rerun from them on the fixed engine; they are deleted after those reruns
   find $P \( -name '*.bam' -o -name '*.bai' \) -delete
   du -sh $P; ls $P ;;
 esac
