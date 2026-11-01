@@ -75,6 +75,68 @@ ARI's own bootstrap SD is 0.008.
 The orphan rule is in the code (off). Lone low-UMI single-chain contigs are wrong-lineage on the PBMC libraries, but often
 Cell Ranger's own contigs on the ESCC tumour libraries, so contig F1 drops beyond the tolerance there.
 
-## Held-out results
+## Held-out results (single run of the frozen code `08279d8d`; jobs 795124 / 795125 / 795126)
 
-(pending job 795126)
+The full table is in `results/heldout/heldout.md` and `heldout.json`. The metric is pairing accuracy over reference-paired
+cells, restricted to GEX cells where GEX exists, with 2,000-bootstrap 95% CIs.
+
+| group | cells | Singlet [95% CI] | TRUST4 | difference [95% CI] | pre-registered rule (>= -0.01) |
+|---|---|---|---|---|---|
+| TCR | 21,996 | 0.9193 [0.916, 0.923] | 0.9139 | +0.0054 [+0.001, +0.009] | **PASS** |
+| BCR | 7,267 | 0.8698 [0.862, 0.877] | 0.9207 | -0.0509 [-0.057, -0.045] | **FAIL (clear: the CI is entirely below -0.01)** |
+| all | 29,263 | 0.9070 [0.904, 0.910] | 0.9156 | -0.0086 [-0.012, -0.005] | PASS on the point estimate (the CI is not entirely below -0.01) |
+
+**Wrong lineage, pooled over the 7 libraries with GEX:**
+- Singlet 293/35,529 = 0.0082; Cell Ranger 70/32,587 = 0.0021.
+- The difference is +0.0061. The rule is <= 0.005, so **FAIL**.
+- 207 of Singlet's 293 come from ngpbmc3_b, where Cell Ranger also has 57/2,110.
+- Post hoc, not pre-registered: without ngpbmc3_b, Singlet has 86/33,212 = 0.0026 against Cell Ranger's 13/30,477 = 0.0004.
+
+**Pairing difference per library (Singlet minus TRUST4):**
+
+| library | difference |
+|---|---|
+| S134A | +0.018 |
+| S134B | +0.013 |
+| S159A | -0.009 |
+| S159B | +0.022 |
+| pbmc3_t | +0.015 |
+| ngpbmc3_t | +0.007 |
+| pbmc1k_t | -0.002 |
+| pbmc3_b | -0.040 |
+| ngpbmc3_b | -0.061 |
+| pbmc1k_b | -0.012 |
+| melanoma_b | -0.051 |
+
+**Secondary metrics (no pass rule):**
+- **Contig F1:** Singlet leads TRUST4 on all 11 libraries.
+- **Clonotype ARI:** Singlet leads on 10 of 11. It does not lead on pbmc3_b (0.174 vs 0.222).
+- **BCR V agreement:** about equal to TRUST4's.
+- **BCR J agreement:** below TRUST4 on all 4 BCR libraries (0.949-0.975 vs 0.978-0.994).
+- **BCR chain recovery:** about equal (for example 0.953 vs 0.952 on ngpbmc3_b). So the BCR pairing loss comes from which
+  contig or junction becomes the cell's pair, not from failing to assemble chains.
+
+The BCR loss is not diagnosed. The held-out set is now used, so any fix needs new held-out libraries. The dev set had only 2
+BCR libraries (2,077 cells); on pbmc10k_b, Singlet already trailed TRUST4 by 0.004.
+
+**Literal dev-rule verdicts, reported alongside the decisions:**
+- Clone rescue: REJECT on pbmc2_t ARI; adopted under Addendum 1.
+- AIRR-C + `v_open_frac`: REJECT, because pooled pairing does not improve; adopted on V agreement.
+- On the held-out set, no claimed ARI lead relies on the Addendum 1 tolerance. The one ARI loss, pbmc3_b, is reported as
+  a loss.
+
+### Speed (16 threads, held-out set)
+
+| tool | per library | peak memory | total for 11 libraries |
+|---|---|---|---|
+| Singlet | 0:37-8:34 wall clock | 2.4-24.9 GB | about 58 min |
+| TRUST4 | 4.8 min-1.43 h job time | – | about 8.9 h |
+
+Singlet is about 9 times faster.
+
+## Not done
+
+- The held-out BCR pairing loss and the ngpbmc3_b wrong lineage are not diagnosed. Candidates: the junction choice between
+  near-equal heavy or light contigs, J calls, and clone rescue on BCR. This needs new development BCR libraries.
+- No held-out ablation with the old defaults, to separate the frozen changes from the baseline.
+- No C++ port.
