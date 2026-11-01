@@ -16,7 +16,12 @@ BRANCH=${BRANCH:-bench/vdj-sota}
 source $WORK/jobs/vdjc/src.sh
 export PATH=$ENV/bin:$PATH PYTHONPATH=$SRC/python HOME=$WORK/cache/condahome NUMBA_CACHE_DIR=$WORK/cache/numba-vdjc
 V=$WORK/expression-sota/vdj2
-if [ "${SET:-dev}" = heldout ]; then
+if [ "${SET:-dev}" = bcrdev ]; then
+  LIBS="melv11_b:BCR:cr3 nsclc22_b:BCR:cr3 chx10k_b:BCR:cr5 pbmc2_b:BCR:cr3 pbmc10k_b:BCR:cr5"
+elif [ "${SET:-dev}" = bcrho ]; then
+  LIBS="pbmc22_b:BCR:cr3 cd19_b:BCR:cr3 b1k_b:BCR:cr5"
+elif [ "${SET:-dev}" = heldout ]; then
+  echo "the 11-library held-out set is spent (scored once, job 795126): never scored again"; exit 1
   LIBS="gse145370_S134A:TCR:cr3 gse145370_S134B:TCR:cr3 gse145370_S159A:TCR:cr3 gse145370_S159B:TCR:cr3 pbmc3_t:TCR:cr3 ngpbmc3_t:TCR:cr3 pbmc1k_t:TCR:cr5 pbmc3_b:BCR:cr3 ngpbmc3_b:BCR:cr3 pbmc1k_b:BCR:cr5 melanoma_b:BCR:cr3"
 else
   LIBS="pbmc2_t:TCR:cr3 pbmc2_b:BCR:cr3 pbmc10k_t:TCR:cr5 pbmc10k_b:BCR:cr5 gse145370_S133A:TCR:cr3 gse145370_S158A:TCR:cr3 gse145370_S149B:TCR:cr3 gse145370_S150B:TCR:cr3 gse145370_S135B:TCR:cr3"
