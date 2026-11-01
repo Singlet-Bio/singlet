@@ -26,10 +26,10 @@ import tarfile
 
 VERSION = 1
 PRESET = 6
+# engine-only files that are not a policy layer but belong with the withheld ones (no raw reads are ever listed here)
 EXTRA_LAYERS = {
-    "ambient_contamination.tsv", "ambient_contamination.json", "ambient_profile.tsv", "doublet_scores.tsv", "doublet_scores_engine.tsv", "doublet_stage.json",
-    "splice_psi.1pz", "splice_events.tsv", "sex_call.json", "ancestry_call.json",
-    "mt_heteroplasmy.mtx.gz", "mt_heteroplasmy_barcodes.tsv.gz", "mt_heteroplasmy_features.tsv.gz", "mt_variants.tsv", "mt_reference.fa",
+    "doublet_stage.json", "splice_events.tsv", "mt_reference.fa",
+    "mt_heteroplasmy.mtx.gz", "mt_heteroplasmy_barcodes.tsv.gz", "mt_heteroplasmy_features.tsv.gz",
 }
 _DONOR_PUBLIC = {"donor_assignments.tsv"}
 _MT_PUBLIC = {"mt_summary.tsv"}
@@ -51,6 +51,18 @@ def is_withheld(rel):
     return name.startswith("snp_") or bool(_VCF.search(name)) or name == "doublet_scores_engine.tsv"
 
 
+def is_policy_layer(rel):
+    """Files singlet.s1.policy.omitted_layer withholds from the public .s1 beyond the restricted ones (genotype / mtDNA / ancestry / ambient /
+    doublet / non-host per cell / legacy splice_psi / legacy sex call), mirrored here and checked against the policy in
+    tests/python/test_private_sidecar.py. Aligned reads (bam / cram / sam) are never kept: they are reads."""
+    rel = rel.replace("\\", "/")
+    name = rel.rsplit("/", 1)[-1]
+    return (rel.startswith("mt/") or rel in ("mt_heteroplasmy.1pz", "mt_variants.tsv") or "_mt_consensus" in name or "_mt_variants" in name
+            or name == "ancestry_call.json" or name.startswith("ambient_contamination.") or name == "ambient_profile.tsv"
+            or name in ("doublet_scores.tsv", "doublet_scores_engine.tsv", "sex_call.json")
+            or (rel.startswith("nonhost/") and "per_cell" in name) or rel == "splice_psi.1pz")
+
+
 def select(out_dir):
     """-> sorted relative paths of the files that go into the sidecar."""
     rels = []
@@ -59,7 +71,7 @@ def select(out_dir):
             rel = os.path.relpath(os.path.join(dp, f), out_dir).replace("\\", "/")
             if rel.endswith("PRIVATE.sha256"):
                 continue
-            if is_withheld(rel) or rel in EXTRA_LAYERS:
+            if is_withheld(rel) or is_policy_layer(rel) or rel in EXTRA_LAYERS:
                 rels.append(rel)
     return sorted(rels)
 

@@ -127,3 +127,31 @@ def test_big_matrix_uses_mtx_codec_and_verifies(out, tmp_path, monkeypatch):
     a, _ = PS._content(os.path.join(out, "private/snp_dp.mtx.gz"))
     b, _ = PS._content(str(tmp_path / "back" / "private/snp_dp.mtx.gz"))
     assert a == b
+
+
+REALISTIC = """ambient_contamination.json ambient_contamination.tsv ambient_corrected_counts.mtx.gz ambient_profile.tsv ancestry_call.json cell_calls.tsv
+cell_cycle_scores.tsv cell_qc_metrics.tsv doublet_scores.tsv doublet_scores_engine.tsv doublet_stage.json donor/donor_assignments.tsv donor/donor0_coverage.tsv
+exon_counts.1pz exon_counts.mtx.gz intron_counts.1pz mt/mt_events.1pz mt/mt_summary.tsv mt/donor0_mt_consensus.fa mt_heteroplasmy.1pz mt_heteroplasmy.mtx.gz
+mt_heteroplasmy_barcodes.tsv.gz mt_reference.fa mt_variants.tsv nonhost/nonhost_per_cell.1pz nonhost/nonhost_per_cell.tsv nonhost/nonhost_summary.json
+nonhost/nonhost_em_abundance.tsv pileup_stats.json polya_sites.tsv.gz private/snp_ad.mtx.gz private/snp_dp.mtx.gz private/snp_ad_features.tsv.gz
+private/donor/donor0.vcf private/mt_allele_counts.mtx.gz private/ase_counts.tsv ase_counts.tsv saturation_curve.tsv sex_call.json sj_counts.1pz splice_events.tsv
+splice_psi.1pz summary.json provenance.json star_SJ.out.tab star_Solo.out/Gene/raw/matrix.mtx""".split()
+
+
+def test_every_policy_withheld_file_is_in_the_sidecar(tmp_path):
+    """Whatever the release policy withholds from the public .s1 must be kept privately (the public copy is gone, and so are the reads)."""
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "python"))
+    from singlet.s1 import policy
+
+    d = str(tmp_path / "out")
+    for rel in REALISTIC:
+        _w(d, rel, b"x")
+    _w(d, "possorted.bam", b"reads")
+    got = set(PS.select(d))
+    for rel in REALISTIC:
+        if policy.omitted_layer(rel) is not None:
+            assert rel in got, "%s is withheld by the policy (layer %s) but not in the sidecar" % (rel, policy.omitted_layer(rel))
+    assert "possorted.bam" not in got                                            # reads are never kept
+    assert {"mt_heteroplasmy.1pz", "mt/mt_summary.tsv"} <= got                  # the two files the first version missed
+    for public in ("exon_counts.1pz", "cell_calls.tsv", "summary.json", "sj_counts.1pz", "nonhost/nonhost_summary.json"):
+        assert public not in got, public
