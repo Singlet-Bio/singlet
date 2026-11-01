@@ -106,7 +106,7 @@ for t in [t for t, _ in bythread.most_common(4)]:
 
 # ---- phase categories by the real function holding the pc, per process (largest pid = STAR child, first pid = singlet parent) ----
 CATS = [
-    ('STAR seed search', r'compareSeqToGenome|maxMappableLength|SeqCache|storeAligns|ReadAlign::seed|stitchAlignToTranscript_disabled'),
+    ('STAR seed search', r'compareSeqToGenome|maxMappableLength|SeqCache|storeAligns'),
     ('STAR clip/opal', r'opal|ClipCR4|searchDatabase|Clip'),
     ('STAR stitch/extend', r'stitchPieces|stitchWindowAligns|extendAlign|stitchAlignToTranscript|alignToTranscript|Transcript::|sjAlignSplit|createExtendWindows|assignAlignToWindow|multMapSelect|mappedFilter|scoreGenomic|stitchGapIndel|blocksOverlap'),
     ('STAR annotate/solo/output', r'classifyAlign|hashLookupCB|alignBAM|Solo|outputAlign|ReadAlign::output|samAttr|Transcriptome|bam_|BAM'),
@@ -121,30 +121,28 @@ CATS = [
 ]
 def cat(f):
     for name, rx in CATS:
-        if re.search(rx, f): return name
+        if re.search(rx, f):
+            return name
     return 'other'
 byp = collections.defaultdict(list)
 for name, pcs in recs:
     byp[name].append(pcs)
 pids = sorted(byp, key=lambda k: -len(byp[k]))
-L += ['
-## Phase categories per process (CPU-s)
-']
+L += ['', '## Phase categories per process (CPU-s)', '']
 for pid in pids:
-    if len(byp[pid]) * ms / 1000.0 < 5: continue
+    if len(byp[pid]) * ms / 1000.0 < 5:
+        continue
     cc = collections.Counter(cat(fn(pcs[0], 'own')) for pcs in byp[pid] if pcs)
-    L += ['
-### %s (%.0f CPU-s)
-' % (pid, sec(len(byp[pid]))), '| category | CPU-s | %% of process |', '|---|---|---|']
-    for c, k in cc.most_common(): L.append('| %s | %.0f | %.1f |' % (c, sec(k), 100 * k / len(byp[pid])))
+    L += ['### %s (%.0f CPU-s)' % (pid, sec(len(byp[pid]))), '', '| category | CPU-s | %% of process |', '|---|---|---|']
+    for c, k in cc.most_common():
+        L.append('| %s | %.0f | %.1f |' % (c, sec(k), 100 * k / len(byp[pid])))
     lc = collections.Counter()
     for pcs in byp[pid]:
         if pcs and fn(pcs[0], 'own').startswith('['):
-            nxt = next((fn(q, 'own') for q in pcs[1:] if not fn(q, 'own').startswith('[')), '?')
-            lc[nxt] += 1
-    L += ['
-library leaf time by the nearest function above it (one frame up: libc leaves keep no frame pointer)
-', '| function | CPU-s |', '|---|---|']
-    for f, k in lc.most_common(14): L.append('| `%s` | %.0f |' % (f[:110], sec(k)))
+            lc[next((fn(q, 'own') for q in pcs[1:] if not fn(q, 'own').startswith('[')), '?')] += 1
+    L += ['', 'library leaf time by the nearest function above it (one frame up: libc leaves keep no frame pointer)', '', '| function | CPU-s |', '|---|---|']
+    for f, k in lc.most_common(14):
+        L.append('| `%s` | %.0f |' % (f[:110], sec(k)))
+    L.append('')
 open(rd + '/profile.md', 'w').write('\n'.join(L) + '\n')
 print('\n'.join(L))
