@@ -97,6 +97,12 @@ struct E11State {
     // SoloReadFeature_inputRecords.cpp:87-89: exact with one constant pq only when every CB base gives the same qin)
     uint64 q30Rna = 0, nRna = 0, q30Cb = 0, nCb = 0;
     int cbQmin = 256, cbQmax = -1;
+    // E15 (docs/gpu-engine/fable/E15-posterior.md): otherwise the posterior is per read: soloRunKept asks for the CB qualities of the reads with
+    // several whitelist matches, read from the barcode FASTQ (still mapped after STAR's loop; e11CbQual). SINGLET_E15_PERREAD=1 takes this
+    // path even when one pq would do (a test of it on a run with constant qualities)
+    bool perRead = false;
+    uint64 nQualFetched = 0;
+    double sQualFetch = 0;
     uint32 qBase = 33;
     double sAdj = 0;              // the RNA count adjustment (clipped spans, reads without a record)
     int device = -1;              // the device that holds the kept inputs
@@ -124,6 +130,7 @@ bool e11Config(Parameters &P, Transcriptome *tr, std::string &why) {
     if (s.cbL > 21 || s.umiL > 12 || tr->nGe >= (1u << 17)) { why = "CB/UMI length or gene count over E9's key widths"; return false; }
     if (P.pGe.chrSet.mito.size() > 4) { why = "more than 4 mitochondrial contigs"; return false; }
     if (P.readQualityScoreBase > 255) { why = "readQualityScoreBase"; return false; }
+    if (P.outQSconversionAdd != 0) { why = "outQSconversionAdd (readLoad changes the qualities the decode reads)"; return false; }   // readLoad.cpp:104-113
     e9::SoloModel &M = e11.M;
     e9::SoloParams &S = e11.S;
     M.wl.assign(s.cbWL.begin(), s.cbWL.end());
@@ -139,23 +146,67 @@ bool e11Config(Parameters &P, Transcriptome *tr, std::string &why) {
     S.nMito = 0;
     for (uint64 c : P.pGe.chrSet.mito) S.mitoChr[S.nMito++] = (int64_t) c;
     S.pq = 0;   // after the decode (e11Posterior)
+    // E15: the posterior's factor per quality character, as SoloReadFeature_inputRecords.cpp:104-107 computes it from the character it reads back
+    // from cbMatchString (char arithmetic, the host's pow)
+    M.pqTab.assign(256, 0.0);
+    for (int c = 0; c < 256; c++) {
+        char qin = (char) c;
+        qin -= s.QSbase;
+        qin = qin < s.QSmax ? qin : s.QSmax;
+        M.pqTab[c] = std::pow(10.0, -qin / 10.0);
+    }
     e11.FP.nExpectedCells = s.cellFilter.knee.nExpectedCells; e11.FP.maxPercentile = s.cellFilter.knee.maxPercentile; e11.FP.maxMinRatio = s.cellFilter.knee.maxMinRatio;
     e11.qBase = (uint32) P.readQualityScoreBase;
     return true;
 }
-// the posterior's pq from the decode's CB qualities: STAR takes the quality character of the read's CB base at the mismatch (qin = min(q - QSbase,
-// QSmax)); one value for every read when every CB base has q >= QSbase + QSmax, or one constant character
+static std::string pqStr(double x) {   // the log's numbers as the stream writes them (6 significant digits)
+    std::ostringstream o;
+    o << x;
+    return o.str();
+}
+// the posterior's quality from the decode's CB qualities: STAR takes the quality character of the read's CB base at the mismatch (qin = min(q -
+// QSbase, QSmax)); one pq for every read when every CB base has q >= QSbase + QSmax, or one constant character; otherwise (E15) per read
+// (e11CbQual). STAR reads the character back from cbMatchString with operator>>, which skips whitespace: characters <= ' ' are not ported.
 bool e11Posterior(Parameters &P, std::string &why) {
     const ParametersSolo &s = P.pSolo;
     if (e11.cbQmax < 0) { why = "no CB qualities"; return false; }
-    if (!(e11.cbQmin >= (int) s.QSbase + (int) s.QSmax || e11.cbQmin == e11.cbQmax)) {
-        why = "CB base qualities vary below QSbase + QSmax (" + std::to_string(e11.cbQmin) + ".." + std::to_string(e11.cbQmax) + "): the posterior is per read";
-        return false;
-    }
-    char qin = (char) e11.cbQmin;
-    qin -= s.QSbase;
-    qin = qin < s.QSmax ? qin : s.QSmax;
-    e11.S.pq = std::pow(10.0, -qin / 10.0);
+    if (e11.cbQmin <= ' ') { why = "CB quality characters <= ' ' (" + std::to_string(e11.cbQmin) + ")"; return false; }
+    const bool one = e11.cbQmin >= (int) s.QSbase + (int) s.QSmax || e11.cbQmin == e11.cbQmax;
+    const char *pr = getenv("SINGLET_E15_PERREAD");
+    e11.perRead = !one || (pr != nullptr && pr[0] == '1');
+    e11.S.pq = e11.M.pqTab[(unsigned char) e11.cbQmin];   // used only when every CB base gives this qin
+    return true;
+}
+// E15: SoloReads::cbQual for soloRunKept: the CB span of read r's barcode quality line in the mapped barcode FASTQ (e10Barcodes kept the name
+// lines' offsets), with getCBandUMI's padding ('H' past the line's end when the read is shorter than cbumiL, soloBarcodeReadLength 0), on
+// runThreadN threads
+bool e11CbQual(Parameters &P, const uint32_t *idx, uint64 n, uint8_t *out, std::string &why) {
+    const auto t0 = std::chrono::steady_clock::now();
+    const char *m = e10f.m[1];
+    const uint64 len = e10f.len[1], nReads = e10f.at[1].size();
+    if (m == nullptr) { why = "the barcode FASTQ is not mapped"; return false; }
+    const uint64 cbS = P.pSolo.cbS, cbL = P.pSolo.cbL;
+    const int T = std::max(1, (int) P.runThreadN);
+    std::vector<int> bad(T, 0);
+    std::vector<std::thread> th;
+    for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+        for (uint64 k = n * t / T; k < n * (t + 1) / T; k++) {
+            const uint64 r = idx[k];
+            if (r >= nReads) { bad[t] = 1; return; }
+            const char *p = m + e10f.at[1][r], *end = m + len;
+            for (int l = 0; l < 3 && p != nullptr; l++) { p = (const char *) memchr(p, '\n', end - p); if (p != nullptr) p++; }   // name, sequence, '+'
+            if (p == nullptr) { bad[t] = 1; return; }
+            const char *e = (const char *) memchr(p, '\n', end - p);
+            uint64 L = (e != nullptr ? e : end) - p;
+            if (L > 0 && (unsigned char) p[L - 1] < 33) L--;
+            uint8_t *o = out + k * cbL;
+            for (uint64 j = 0; j < cbL; j++) o[j] = cbS - 1 + j < L ? (uint8_t) p[cbS - 1 + j] : (uint8_t) 'H';
+        }
+    });
+    for (auto &x : th) x.join();
+    for (int t = 0; t < T; t++) if (bad[t]) { why = "a read outside the barcode FASTQ"; return false; }
+    e11.nQualFetched += n;
+    e11.sQualFetch += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     return true;
 }
 
@@ -796,7 +847,9 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         else if (e11Posterior(P, w5)) { in.e10.soloModel = &e11.M; in.e10.soloParams = &e11.S; }
         if (in.e10.soloModel == nullptr) { e11.want = false; e11.why = w5; P.inOut->logMain << "ENGINE_GPU: E11 (level 5) not used: " << w5 << "\n"; }
         else P.inOut->logMain << "ENGINE_GPU: E11 decode: CB+UMI qualities " << e11.q30Cb << " of " << e11.nCb << " >= Q30, RNA (whole reads) " << e11.q30Rna << " of "
-                              << e11.nRna << ", CB quality characters " << e11.cbQmin << ".." << e11.cbQmax << " (posterior pq " << e11.S.pq << ")\n";
+                              << e11.nRna << ", CB quality characters " << e11.cbQmin << ".." << e11.cbQmax << " (posterior "
+                              << (e11.perRead ? std::string("per read: the multi-match reads' CB qualities from the barcode FASTQ after STAR's loop")
+                                              : "pq " + pqStr(e11.S.pq) + " for every read") << ")\n";
     }
     time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
@@ -841,6 +894,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         e9::soloKeepRelease();
     }
     e11.device = device;
+    // E15 (E11 §5.3): the kept inputs go to page-locked host memory on a thread while STAR's loop runs, so the device's memory is free for
+    // another sample; soloRunKept puts them back. SINGLET_E15_KEEP_ON_DEVICE=1 keeps them on the device (E11's behaviour)
+    if (e11.ready) {
+        const char *kd = getenv("SINGLET_E15_KEEP_ON_DEVICE");
+        if (!(kd != nullptr && kd[0] == '1')) e9::soloKeepToHost(device);
+    }
     if (const char *rp = getenv("SINGLET_ENGINE_GPU_E10_R11"); rp != nullptr && !out.e10.r11.empty()) {   // the histogram in r11_hist.cpp's format
         FILE *f = fopen(rp, "wb");
         uint64 nnz = 0;
@@ -1186,7 +1245,8 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         P.inOut->logMain << "ENGINE_GPU: E10: " << e10nSJ << " device junctions merged into the junction output\n" << std::flush;
     }
     std::vector<uint8>().swap(e10sj);
-    e10f.release();
+    const bool e15q = g_e10Level == 5 && e11.perRead;   // E15: the per-read posterior reads the barcode FASTQ's quality lines (e11CbQual)
+    if (!e15q) e10f.release();
     if (g_e10Level == 5) {   // E11: Solo's counting on the device (E9's soloRun on the kept inputs) and star_Solo.out/ from it
         const auto t0 = std::chrono::steady_clock::now();
         // the Gene annotation of the reads STAR's loop mapped (ReadAlign::e11Annot: read index, packed RecAnn), in read order
@@ -1221,10 +1281,13 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         const auto tl = std::chrono::steady_clock::now();
         e9::SoloResult res;
         std::string log;
+        std::function<bool(const uint32_t *, uint64, uint8_t *, std::string &)> cbQual;
+        if (e15q) cbQual = [&P](const uint32_t *idx, uint64 n, uint8_t *o, std::string &why) { return e11CbQual(P, idx, n, o, why); };
         const bool ok = nHost < (1ull << 32) && g_handoffNReads < (1ull << 32)
-            && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log);
+            && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log, cbQual);
         singlet_engine_gpu::unlockDevice(lockFd);
         const auto tr = std::chrono::steady_clock::now();
+        e10f.release();
         if (!ok) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): Solo's counting on the device failed: " + log, std::cerr,
                                P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
         // star_Solo.out/: STAR creates Gene/, raw/ and filtered/ in its Solo step (SoloFeature_processRecords.cpp, _outputResults.cpp, cellFiltering)
@@ -1247,7 +1310,12 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
                          << res.nKeys << " counted reads, " << res.nTuples << " distinct (CB,gene,UMI), " << res.nSeg << " (CB,gene); gather " << sGather
                          << " s, waited " << sec(tw, tl) << " s for the device, soloRunKept " << sec(tl, tr) << " s (ms:" << ms.str() << "), write " << sec(tr, te)
                          << " s (" << info.nCB << " CBs, " << info.nCells << " cells, nUMImax " << info.nUMImax << ", nUMImin " << info.nUMImin
-                         << "); STAR's Solo step skipped\n" << log << std::flush;
+                         << "); STAR's Solo step skipped\n";
+        P.inOut->logMain << "ENGINE_GPU: E15: posterior per read: " << res.nMulti << " reads with several whitelist matches, " << res.nMultiAccepted
+                         << " given a CB, " << (res.perReadQual ? "each candidate with the read's CB quality at its mismatch (" + std::to_string(e11.nQualFetched)
+                                                                  + " reads' CB qualities from the barcode FASTQ in " + pqStr(e11.sQualFetch) + " s)"
+                                                                : "one quality factor pq " + pqStr(e11.S.pq) + " (every CB base gives the same qin)")
+                         << "\n" << log << std::flush;
     }
 #else
     (void) P; (void) RAchunk;

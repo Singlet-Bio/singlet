@@ -36,6 +36,7 @@ __device__ inline void addU32(u32* p, u32 v) { atomicAdd((unsigned*)p, (unsigned
 __device__ inline void addU64(u64* p, u64 v) { atomicAdd((unsigned long long*)p, (unsigned long long)v); }
 __device__ inline u32 casU32(u32* p, u32 cmp, u32 v) { return atomicCAS((unsigned*)p, cmp, v); }
 __device__ inline u32 ctz32(u32 x) { return (u32)(__ffs((int)x) - 1); }
+__device__ inline u32 ctz64(u64 x) { return (u32)(__ffsll((long long)x) - 1); }
 // base[idx] += 1, aggregated over the warp's threads with the same idx (counters that most reads hit)
 __device__ inline void incAgg(u64* base, u32 idx) {
     const unsigned mask = __activemask();
@@ -48,6 +49,7 @@ inline void addU32(u32* p, u32 v) { __atomic_fetch_add(p, v, __ATOMIC_RELAXED); 
 inline void addU64(u64* p, u64 v) { __atomic_fetch_add(p, v, __ATOMIC_RELAXED); }
 inline u32 casU32(u32* p, u32 cmp, u32 v) { __atomic_compare_exchange_n(p, &cmp, v, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED); return cmp; }
 inline u32 ctz32(u32 x) { return (u32)__builtin_ctz(x); }
+inline u32 ctz64(u64 x) { return (u32)__builtin_ctzll(x); }
 #endif
 
 // ---- parameters (ParametersSolo, parametersDefault, the pipeline's STAR command line)
@@ -57,7 +59,8 @@ struct SoloParams {
     u32 wlN = 0;               // cbWLsize (sorted, deduplicated whitelist)
     u32 nGe = 0;               // Trans.nGe = featuresNumber
     float cbMinP = 0.975f;     // ParametersSolo.h:139 (float), ParametersSolo.cpp:289
-    double pq = 0;             // std::pow(10.0, -qin/10.0) for the CB quality (host glibc; SoloReadFeature_inputRecords.cpp:107)
+    double pq = 0;             // std::pow(10.0, -qin/10.0) for the CB quality (host glibc; SoloReadFeature_inputRecords.cpp:107) when every
+                               // CB base of the run gives the same qin; E15: with per-read qualities (SoloReads::cbQual) SoloModel::pqTab instead
     u32 umiMaskLow = 0;        // ParametersSolo.cpp:291
     u32 homo[4] = {0, 0, 0, 0};   // SoloReadBarcode.cpp:15-19
     i64 mitoChr[4] = {-1, -1, -1, -1};  // P.pGe.chrSet.mito (Genome.cpp:201: an absent name inserts nChr)
@@ -239,16 +242,28 @@ E9HD inline int barcodeStat(i32 cbMatch) {
         default: return B_yesMultWLmatchWithMM;
     }
 }
-// SoloReadFeature_inputRecords.cpp:91-121: the posterior over a multi-match CR (float; exact counts + 1 pseudocount, Solo.cpp:66-70);
-// returns the chosen whitelist index or -1 (noTooManyWLmatches)
-E9HD inline i64 cbPosterior(const u32* cand, u32 n, const u32* exactCnt, const SoloParams& S) {
+// SoloReadFeature_inputRecords.cpp:91-121: the posterior of one read whose CR has n > 1 whitelist matches (float; exact counts + 1 pseudocount,
+// Solo.cpp:66-70); returns the chosen whitelist index or -1 (noTooManyWLmatches). E15: per read, with candidate k's quality character as
+// matchCBtoWL writes it into cbMatchString (SoloReadBarcode_getCBandUMI.cpp:58, :71): the read's CB quality at the N (cbQual1[posN]) for a CR
+// with one N, else at the mismatch (cbQual1[cbL - 1 - ii] for the 2-bit symbol ii in which the candidate differs from the CR). qual: the read's
+// cbL CB quality characters; pqTab[c]: std::pow(10.0, -qin/10.0) for the character c, qin = min((char)c - QSbase, QSmax) in STAR's char
+// arithmetic (:104-107, the host's pow). qual == nullptr: every candidate takes S.pq (the run's CB bases all give one qin).
+E9HD inline i64 cbPosteriorRead(u64 cr3, const u32* cand, u32 n, const u32* exactCnt, const u64* wl, const uint8_t* qual, const double* pqTab,
+                                const SoloParams& S) {
+    u64 cbB1 = 0;
+    const i64 posN = qual != nullptr ? convertNucl3(cr3, S.cbL, cbB1) : -1;
     float ptot = 0.0f, pmax = 0.0f, pin;
     i64 cb = -1;
     for (u32 ii = 0; ii < n; ii++) {
         const u32 cbin = cand[ii];
         const u32 c = exactCnt[cbin] + 1u;
         if (c > 0) {
-            pin = (float)((double)c * S.pq);
+            double pq = S.pq;
+            if (qual != nullptr) {
+                const u32 pos = posN >= 0 ? (u32)posN : S.cbL - 1 - ctz64(wl[cbin] ^ cbB1) / 2;
+                pq = pqTab[qual[pos]];
+            }
+            pin = (float)((double)c * pq);
             ptot += pin;
             if (pin > pmax) { cb = cbin; pmax = pin; }
         }

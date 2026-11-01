@@ -138,7 +138,7 @@ void inclusiveScan(bool dev, const Buf<u32>& in, u64 n, Buf<u32>& out, Tmp& tmp)
     CK(cub::DeviceScan::InclusiveSum(tmp.need(b), b, in.p, out.p, (int)n));
 }
 
-E9HD inline u64 lowerBound(const u64* a, u64 n, u64 x) {
+template <class T> E9HD inline u64 lowerBound(const T* a, u64 n, T x) {
     u64 lo = 0, hi = n;
     while (lo < hi) { const u64 m = (lo + hi) >> 1; if (a[m] < x) lo = m + 1; else hi = m; }
     return lo;
@@ -182,7 +182,7 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
         if (Rd.hostAnn) dHost.from(dev, Rd.hostAnn, N);
         Buf<u32> dHostIdx; Buf<RecAnn> dHostS;   // sparse host annotations (host memory: uploaded)
         if (Rd.nHost) { dHostIdx.from(dev, Rd.hostIdx, Rd.nHost); dHostS.from(dev, Rd.hostAnnS, Rd.nHost); }
-        Buf<u64> cnt; cnt.alloc(dev, 8); cnt.zero();   // 0: records with an exon overflow, 1: counted reads, 2: reads without a record, 3: bad host index
+        Buf<u64> cnt; cnt.alloc(dev, 8); cnt.zero();   // 0: records with an exon overflow, 1: counted reads, 2: reads without a record, 3: bad host index, 4: multi-match reads the posterior gave a CB (E15)
         lap("upload");
 
         // ---- stage (b): per record its Gene annotation, per read its record's (or the host's)
@@ -268,16 +268,55 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
             });
         }
         crk.release();
-        Buf<i32> chosen; chosen.alloc(dev, D);
+        Buf<i32> chosen; chosen.alloc(dev, D);   // per distinct CR with one match: that match (several matches: per read below)
         {
-            const i32* m = dcbm.p; const u32* co = cOff.p; const u32* nc = nC.p; const u32* cd = cand.p; const u32* ex = exact.p; i32* ch = chosen.p;
-            const SoloParams s = S;
-            each(dev, D, [=] __host__ __device__(u64 d) {
-                const i32 mm = m[d];
-                ch[d] = (mm == 0 || mm == 1) ? (i32)cd[co[d]] : (mm > 1 ? (i32)cbPosterior(cd + co[d], nc[d], ex, s) : -1);
-            });
+            const i32* m = dcbm.p; const u32* co = cOff.p; const u32* cd = cand.p; i32* ch = chosen.p;
+            each(dev, D, [=] __host__ __device__(u64 d) { const i32 mm = m[d]; ch[d] = (mm == 0 || mm == 1) ? (i32)cd[co[d]] : -1; });
         }
         lap("cb");
+
+        // ---- E15: the posterior per read for the reads with several matches (cbMatch > 1 after the UMI check), in read order; each candidate
+        // takes the read's quality at its mismatch (SoloReads::cbQual) or, without per-read qualities, S.pq
+        Buf<u32> mmIdx; Buf<i32> mmCb; u64 nMM = 0;
+        {
+            Buf<u32> fl; fl.alloc(dev, N + 1);
+            const int8_t* cbmp = cbmR.p; u32* f = fl.p; const u64 n = N;
+            each(dev, N + 1, [=] __host__ __device__(u64 i) { f[i] = (i < n && cbmp[i] > 1) ? 1u : 0u; });
+            Buf<u32> fo;
+            nMM = exclusiveScan(dev, fl, N, fo, tmp);
+            mmIdx.alloc(dev, nMM);
+            const u32* fp = fl.p; const u32* op = fo.p; u32* mi = mmIdx.p;
+            each(dev, N, [=] __host__ __device__(u64 i) { if (fp[i]) mi[op[i]] = (u32)i; });
+        }
+        out.nMulti = nMM;
+        out.perReadQual = (bool)Rd.cbQual;
+        std::vector<uint8_t> hQual;   // host mode: mmQ aliases it
+        Buf<uint8_t> mmQ; Buf<double> dPq;
+        if (Rd.cbQual && nMM > 0) {
+            if (M.pqTab.size() != 256) throw std::runtime_error("per-read CB qualities without the quality table");
+            std::vector<u32> hIdx(nMM);
+            mmIdx.to(hIdx.data(), nMM);
+            hQual.resize(nMM * S.cbL);
+            std::string why;
+            if (!Rd.cbQual(hIdx.data(), nMM, hQual.data(), why)) throw std::runtime_error("CB qualities of the multi-match reads: " + why);
+            mmQ.from(dev, hQual.data(), hQual.size());
+            dPq.from(dev, M.pqTab.data(), 256);
+        }
+        mmCb.alloc(dev, nMM);
+        {
+            const u32* mi = mmIdx.p; const u32* ci = crIdx.p; const u64* cr = dcr.p; const u32* co = cOff.p; const u32* nc = nC.p; const u32* cd = cand.p;
+            const u32* ex = exact.p; const u64* wl = dWl.p; const uint8_t* q = mmQ.p; const double* pt = dPq.p; i32* mc = mmCb.p; u64* c = cnt.p;
+            const SoloParams s = S; const bool perRead = Rd.cbQual && nMM > 0;
+            each(dev, nMM, [=] __host__ __device__(u64 k) {
+                const u32 d = ci[mi[k]];
+                const i64 r = cbPosteriorRead(cr[d], cd + co[d], nc[d], ex, wl, perRead ? q + k * s.cbL : nullptr, pt, s);
+                mc[k] = (i32)r;
+                if (r >= 0) addU64(c + 4, 1);
+            });
+        }
+        mmQ.release(); dPq.release();
+        out.nMultiAccepted = cnt.get(4);
+        lap("multi");
 
         // ---- stage (c): per read Solo's record + inputRecords
         Buf<u64> keys; keys.alloc(dev, N);
@@ -289,6 +328,7 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
             const RecAnn* ann = readAnn.p; const int8_t* cbmp = cbmR.p; const u32* ci = crIdx.p; const u32* um = umi.p; const u32* co = cOff.p;
             const u32* nc = nC.p; const u32* cd = cand.p; const i32* ch = chosen.p; u64* ky = keys.p; i32* rc = rowCb.p; u32* fr = flagRows.p;
             u64* fs = fst.p; u64* nb = noCB.p; u32* crc = cbRC.p; u32* nru = nRU.p; u64* c = cnt.p;
+            const u32* mi = mmIdx.p; const i32* mc = mmCb.p; const u64 nmm = nMM;
             each(dev, N, [=] __host__ __device__(u64 i) {
                 const RecAnn a = ann[i];
                 const i32 cbm = cbmp[i];
@@ -305,8 +345,8 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
                 else feat = true;
                 const u32 d = ci[i];
                 if (feat) for (u32 k = 0; k < nc[d]; k++) addU32(&crc[cd[co[d] + k]], 1);   // record(): cbReadCount for every match
-                // inputRecords()
-                const i32 cb = ch[d];
+                // inputRecords(); a read with several matches: its own posterior (E15)
+                const i32 cb = cbm > 1 ? mc[lowerBound(mi, nmm, (u32)i)] : ch[d];
                 const bool accepted = cb >= 0;
                 if (feat) {
                     if (cbm == 0) incAgg(fs, S_yessubWLmatchExact);
@@ -340,8 +380,18 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
                 each(dev, N, [=] __host__ __device__(u64 i) { const u32 d = ci[i]; o[i] = (cbmp[i] >= 0 && nc[d] > 0) ? (i32)cd[co[d]] : -1; });
             }
             out.readCb0.resize(N); c0.to(out.readCb0.data(), N);
+            {   // E15: the CB each read gets (whether or not it is counted): its single match, or its posterior's choice
+                const int8_t* cbmp = cbmR.p; const u32* ci = crIdx.p; const i32* ch = chosen.p; const u32* mi = mmIdx.p; const i32* mc = mmCb.p;
+                const u64 nmm = nMM; i32* o = c0.p;
+                each(dev, N, [=] __host__ __device__(u64 i) {
+                    const i32 cbm = cbmp[i];
+                    o[i] = cbm < 0 ? -1 : cbm > 1 ? mc[lowerBound(mi, nmm, (u32)i)] : ch[ci[i]];
+                });
+            }
+            out.readCb.resize(N); c0.to(out.readCb.data(), N);
         }
         readAnn.release(); cbmR.release(); crIdx.release(); umi.release(); dCr3.release(); dUr3.release(); dRec.release(); dHost.release();
+        mmIdx.release(); mmCb.release();
         dBlob.release(); dBlobOff.release(); dSeqOff.release();
         t0 = clk::now();   // per-read validation downloads are not a stage
 
@@ -459,10 +509,11 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
         }
         out.fstats[S_yesUMIs] = yesUMIs; out.fstats[S_yesCellBarcodes] = yesCB;
         out.fstats[S_yesWLmatch] = yesWL; out.fstats[S_yessubWLmatch_UniqueFeature] = yesWL;
-        char b[512];
-        snprintf(b, sizeof b, "soloRun(%s): %llu reads, %llu records (%llu exon overflow), %llu distinct CRs, %llu matches, %llu counted reads, %llu distinct (CB,gene,UMI), %llu (CB,gene)\n",
+        char b[640];
+        snprintf(b, sizeof b, "soloRun(%s): %llu reads, %llu records (%llu exon overflow), %llu distinct CRs, %llu matches, %llu counted reads, %llu distinct (CB,gene,UMI), %llu (CB,gene); %llu reads with several matches (%llu given a CB by the posterior, %s)\n",
                  dev ? "device" : "host", (unsigned long long)N, (unsigned long long)nRec, (unsigned long long)out.nRecOverflow, (unsigned long long)D,
-                 (unsigned long long)nCand, (unsigned long long)nK, (unsigned long long)nT, (unsigned long long)nSeg);
+                 (unsigned long long)nCand, (unsigned long long)nK, (unsigned long long)nT, (unsigned long long)nSeg, (unsigned long long)nMM,
+                 (unsigned long long)out.nMultiAccepted, out.perReadQual ? "per-read CB qualities" : "one CB quality factor");
         log += b;
         return true;
     } catch (const std::exception& e) {
@@ -480,11 +531,47 @@ double msSince(std::chrono::steady_clock::time_point t) { return std::chrono::du
 SoloKeep& soloKeep() { return g_keep; }
 void soloKeepRelease() {
     SoloKeep& K = g_keep;
+    if (K.toHost.joinable()) K.toHost.join();
     if (K.cr3) cudaFree(K.cr3);
     if (K.ur3) cudaFree(K.ur3);
     if (K.rec) cudaFree(K.rec);
     if (K.recAnn) cudaFree(K.recAnn);
+    if (K.hcr3) cudaFreeHost(K.hcr3);
+    if (K.hur3) cudaFreeHost(K.hur3);
+    if (K.hrec) cudaFreeHost(K.hrec);
+    if (K.hrecAnn) cudaFreeHost(K.hrecAnn);
     K = SoloKeep{};
+}
+// E15 (E11 §5.3): the four kept arrays to page-locked host memory on a thread (STAR's loop runs meanwhile); the device copies are freed only
+// when every copy succeeded, otherwise the arrays stay on the device (hostWhy says why)
+void soloKeepToHost(int device) {
+    SoloKeep& K = g_keep;
+    if (!K.reads || !K.recs || K.onHost || K.toHost.joinable()) return;
+    K.toHost = std::thread([device]() {
+        SoloKeep& K = g_keep;
+        const auto t0 = std::chrono::steady_clock::now();
+        auto freeHost = [&]() {
+            if (K.hcr3) cudaFreeHost(K.hcr3);
+            if (K.hur3) cudaFreeHost(K.hur3);
+            if (K.hrec) cudaFreeHost(K.hrec);
+            if (K.hrecAnn) cudaFreeHost(K.hrecAnn);
+            K.hcr3 = K.hur3 = nullptr; K.hrec = nullptr; K.hrecAnn = nullptr;
+        };
+        const u64 n = std::max<u64>(1, K.n), nR = std::max<u64>(1, K.nRec);
+        cudaError_t e = cudaSetDevice(device);
+        if (e == cudaSuccess) e = cudaMallocHost(&K.hcr3, n * 8);
+        if (e == cudaSuccess) e = cudaMallocHost(&K.hur3, n * 8);
+        if (e == cudaSuccess) e = cudaMallocHost(&K.hrec, n * 4);
+        if (e == cudaSuccess) e = cudaMallocHost(&K.hrecAnn, nR * sizeof(RecAnn));
+        if (e == cudaSuccess) e = cudaMemcpy(K.hcr3, K.cr3, n * 8, cudaMemcpyDeviceToHost);
+        if (e == cudaSuccess) e = cudaMemcpy(K.hur3, K.ur3, n * 8, cudaMemcpyDeviceToHost);
+        if (e == cudaSuccess) e = cudaMemcpy(K.hrec, K.rec, n * 4, cudaMemcpyDeviceToHost);
+        if (e == cudaSuccess) e = cudaMemcpy(K.hrecAnn, K.recAnn, nR * sizeof(RecAnn), cudaMemcpyDeviceToHost);
+        if (e != cudaSuccess) { K.hostWhy = cudaGetErrorString(e); cudaGetLastError(); freeHost(); return; }
+        cudaFree(K.cr3); cudaFree(K.ur3); cudaFree(K.rec); cudaFree(K.recAnn);
+        K.cr3 = K.ur3 = nullptr; K.rec = nullptr; K.recAnn = nullptr;
+        K.onHost = true; K.msToHost = msSince(t0);
+    });
 }
 bool soloKeepReads(const u64* dAux, u64 stride, u64 n, std::string& log) {
     try {
@@ -540,13 +627,38 @@ bool soloKeepRecords(const SoloParams& S, const SoloModel& M, const e6::RecParam
     }
 }
 bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,
-                 std::string& log) {
+                 std::string& log, const std::function<bool(const u32*, u64, uint8_t*, std::string&)>& cbQual) {
     SoloKeep& K = g_keep;
+    if (K.toHost.joinable()) K.toHost.join();   // E15: the copy to the host is done (or failed: the arrays are still on the device)
     if (device >= 0 && cudaSetDevice(device) != cudaSuccess) { cudaGetLastError(); log += "soloRunKept: cannot select the device\n"; soloKeepRelease(); return false; }
     if (!K.reads || !K.recs) { log += "soloRunKept: the inputs were not kept on the device\n"; soloKeepRelease(); return false; }
     if (K.nOverflow) { log += "soloRunKept: " + std::to_string(K.nOverflow) + " records with more exons than the port's limit\n"; soloKeepRelease(); return false; }
+    char lb[200];
+    if (K.onHost) {   // E15: back to the device
+        const auto t0 = std::chrono::steady_clock::now();
+        const u64 n = std::max<u64>(1, K.n), nR = std::max<u64>(1, K.nRec);
+        cudaError_t e = cudaMalloc(&K.cr3, n * 8);
+        if (e == cudaSuccess) e = cudaMalloc(&K.ur3, n * 8);
+        if (e == cudaSuccess) e = cudaMalloc(&K.rec, n * 4);
+        if (e == cudaSuccess) e = cudaMalloc(&K.recAnn, nR * sizeof(RecAnn));
+        if (e == cudaSuccess) e = cudaMemcpy(K.cr3, K.hcr3, n * 8, cudaMemcpyHostToDevice);
+        if (e == cudaSuccess) e = cudaMemcpy(K.ur3, K.hur3, n * 8, cudaMemcpyHostToDevice);
+        if (e == cudaSuccess) e = cudaMemcpy(K.rec, K.hrec, n * 4, cudaMemcpyHostToDevice);
+        if (e == cudaSuccess) e = cudaMemcpy(K.recAnn, K.hrecAnn, nR * sizeof(RecAnn), cudaMemcpyHostToDevice);
+        if (e != cudaSuccess) {
+            cudaGetLastError();
+            log += std::string("soloRunKept: the kept inputs could not be put back on the device: ") + cudaGetErrorString(e) + "\n";
+            soloKeepRelease();
+            return false;
+        }
+        K.msToDev = msSince(t0);
+        snprintf(lb, sizeof lb, "soloRunKept: the kept inputs (%.2f GB) were in page-locked host memory during STAR's loop: to the host %.1f ms (thread), back %.1f ms\n",
+                 (K.n * 20.0 + K.nRec * 8.0) / 1e9, K.msToHost, K.msToDev);
+        log += lb;
+    } else if (!K.hostWhy.empty()) log += "soloRunKept: the kept inputs stayed on the device during STAR's loop (" + K.hostWhy + ")\n";
     SoloRecs R; R.nRec = K.nRec; R.dev = true; R.recAnn = K.recAnn;
     SoloReads Rd; Rd.n = K.n; Rd.dev = true; Rd.cr3 = K.cr3; Rd.ur3 = K.ur3; Rd.rec = K.rec; Rd.nHost = nHost; Rd.hostIdx = hostIdx; Rd.hostAnnS = hostAnn;
+    Rd.cbQual = cbQual;
     const bool ok = soloRun(true, S, M, R, Rd, out, false, log);
     out.nRecOverflow = K.nOverflow;
     soloKeepRelease();
