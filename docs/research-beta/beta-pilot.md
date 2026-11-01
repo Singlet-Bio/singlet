@@ -123,3 +123,8 @@ Changes against the first pass, because most first-pass Singlet runs failed (see
 
 The rerun records the species-detect line of every run (`[species-detect]` in `run.log`) even though `--genome-dir` is passed, so the table shows how often detection would have failed.
 Run directories: `/mnt/projects/debruinz_project/debruinz/singlet/pilot/<GSM>/{s1cpu,s1gpu}` (first pass) and `{s1cpu_r,s1gpu_r}` (rerun).
+
+### Reruns follow the campaign path (2026-11-01)
+
+The reruns omit `--tagged-bam` (it forces the sorted path, `pileup_threads` 16, and a 155-263 GB BAM sort) and pass `--exons $G/genes/genes.gtf` with an explicit genome. Each run records `pileup_threads.txt` and `pileup_path_reason.txt`; a run with `pileup_threads` other than 1 is INVALID.
+Tools that need a BAM (mgatk, cellsnp-lite + vireo, souporcell) take STARsolo's sorted BAM, not Singlet's. The first-pass STARsolo runs wrote no BAM (`--outSAMtype None`), so these tools need a STARsolo rerun with a sorted BAM on the 100M-pair prefix; until then their results come only from the few first-pass samples that kept a Singlet BAM and are flagged as such.

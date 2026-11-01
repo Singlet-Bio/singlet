@@ -30,6 +30,7 @@ singlet_run() {
   done
   echo "$used" > $out/runs_used.txt; echo "$SINGLET_THREADS" > $out/threads.txt
   pt=$(grep -rhoE '"pileup_threads": *[0-9]+' $out/out 2> /dev/null | head -1 | grep -oE '[0-9]+$'); echo "${pt:-unknown}" > $out/pileup_threads.txt
+  grep -rhoE '"pileup_path_reason": *"[^"]*"' $out/out 2> /dev/null | head -1 > $out/pileup_path_reason.txt
   [ "${pt:-x}" = 1 ] && echo "pileup_threads=1 (stream path)" || { echo "INVALID: pileup_threads=${pt:-unknown} (expected 1)"; touch $out/INVALID; }
   echo "singlet $eng rc=$rc threads=$SINGLET_THREADS used=$used"; grep -E "Elapsed \(wall|Maximum resident" $out/time.txt; return $rc; }
 case $ST in
