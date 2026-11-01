@@ -17,6 +17,7 @@
 #   gpuE4  gpuD + SINGLET_ENGINE_GPU_E2E=4             (E10 level 4: reads with a record skip STAR's loop; Solo outputs incomplete)
 #   gpuE5  gpuD + SINGLET_ENGINE_GPU_E2E=5             (E11: level 4 + Solo counted on the device, star_Solo.out from E9's writer)
 #   gpuE5b a second gpuE5 run (run-to-run spread); gpuE5x: gpuE5 with the extra variables of XENV ("A=1 B=2"); gpuE5x1..3: of XENV1..3
+#   gpuE5i gpuE5 + SINGLET_ENGINE_GPU_INGEST=1         (E13: the .1fq decoded into the prefill's packed buffers)
 #   base5  gpuE5 with the baseline binary ($BASEDIR/singlet-gpu); base5b: a second one
 # At level 5 the run log carries E16's "[e16] <epoch> <pid> <text>" marks (STAR's child and the pipeline); bench/fable/tail/e16_steps.py turns
 # them into the per-step table (e16.txt).
@@ -34,7 +35,7 @@ RES=$W/jobs/fable/tail/results/gate-$SLURM_JOB_ID; mkdir -p $RES
 SCR=/tmp/$USER-e16g-$SLURM_JOB_ID; mkdir -p $SCR/repo
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT INT TERM
 for i in 1 2 3; do git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/${BRANCH:-gpu/fable/tail}:refs/fable/tail-src && break; sleep 5; done
-git -C $BARE archive refs/fable/tail-src bench/star_accel/out_equiv.py bench/fable/solowire/s8_stages_e11.py bench/fable/tail/e16_steps.py | tar -x -C $SCR/repo
+git -C $BARE archive refs/fable/tail-src bench/star_accel/out_equiv.py bench/fable/solowire/s8_stages_e11.py bench/fable/tail/e16_steps.py bench/fable/tail/s8_stages_e16.py | tar -x -C $SCR/repo
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 echo "node=$(hostname) job=$SLURM_JOB_ID commit=$(cat $BINDIR/commit-gpu 2>/dev/null) base=$(cat $BASEDIR/commit-gpu 2>/dev/null) scripts=$(git -C $BARE rev-parse refs/fable/tail-src) T=$T modes=${MODES[*]} $(date -Is)" | tee $RES/summary.txt
@@ -43,7 +44,7 @@ G=$REF/GRCh38-2024-A; FQ=$PB/data/$s/$s.1fq
 ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
-  unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_ENGINE_GPU_E2E_CHECK SINGLET_ENGINE_GPU_E10_CHECK SINGLET_ENGINE_GPU_E10_R11; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
+  unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_ENGINE_GPU_E2E_CHECK SINGLET_ENGINE_GPU_E10_CHECK SINGLET_ENGINE_GPU_E10_R11 SINGLET_ENGINE_GPU_INGEST; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
   unset SINGLET_E16 SINGLET_E16_OFF; for kv in ${XENV:-} ${XENV1:-} ${XENV2:-} ${XENV3:-}; do unset ${kv%%=*}; done
   case $m in
     cpu) ENGARG="" ;;
@@ -52,6 +53,7 @@ for m in "${MODES[@]}"; do
     gpuE3) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=3 ;;
     gpuE4) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=4 ;;
     gpuE5|gpuE5b) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 ;;   # gpuE5b: a second level-5 run (run-to-run spread)
+    gpuE5i) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1 ;;
     gpuE5x*) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5; xv=XENV${m#gpuE5x}; for kv in ${!xv:-}; do export "$kv"; done ;;   # gpuE5x<N>: XENV<N>
     base5|base5b) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5; BIN=$BASEDIR/singlet-gpu ;;
   esac
@@ -80,6 +82,7 @@ for m in "${MODES[@]}"; do
   [ -f $SCR/$s/$m/CellReads.stats ] && cp $SCR/$s/$m/CellReads.stats $O/CellReads.stats && echo "  CellReads.stats kept: $(wc -l < $O/CellReads.stats) lines" | tee -a $RES/summary.txt
   cp $SCR/$s/$m/out/read_stats.tsv $SCR/$s/$m/out/summary.json $O/ 2>/dev/null
   python3 $SCR/repo/bench/fable/solowire/s8_stages_e11.py $O 66.601887 > $O/stages.txt 2>&1; tee -a $RES/summary.txt < $O/stages.txt
+  python3 $SCR/repo/bench/fable/tail/s8_stages_e16.py $O 66.601887 > $O/stages-e16.txt 2>&1; tee -a $RES/summary.txt < $O/stages-e16.txt
   python3 $SCR/repo/bench/fable/tail/e16_steps.py $O > $O/e16.txt 2>&1; tee -a $RES/summary.txt < $O/e16.txt
   [ "${KEEPOUT:-1}" = 1 ] && rsync -a --exclude='*.bam' --exclude='*.sam' --exclude='*.cram' --exclude='*.fq*' --exclude='*.fastq*' --exclude='*.1fq' \
       --exclude='.gpu_handoff*' --exclude='*Unmapped*' --exclude='_STARtmp*' --exclude='*.reads' --exclude='*.reads.q' $SCR/$s/$m/out/ $O/out/
