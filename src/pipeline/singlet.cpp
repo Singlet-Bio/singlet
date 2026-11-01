@@ -199,6 +199,23 @@ static int pre_gate(const std::string& sra_path,
     // Pass through for NONE/UNKNOWN/uncertain/any-10x tag.
     // ───────────────────────────────────────────────────────
 
+    // Without the 10x whitelists the probe cannot score a 10x candidate (it falls to the no-whitelist protocols by read length alone: a 151-nt R1 reads as split-seq).
+    // That is "uncertain", not "non-10x": pass through, loudly, rather than reject a sample the whitelist would have accepted.
+    {
+        const auto* v3 = singlet::fq::find_protocol_spec("10x-3p-v3");
+        bool have_wl = false;
+        if (v3 && !v3->whitelist_file.empty())
+            for (const auto& d : whitelist_dirs) {
+                struct stat st;
+                if (stat((d + "/" + v3->whitelist_file).c_str(), &st) == 0 && S_ISREG(st.st_mode)) { have_wl = true; break; }
+            }
+        if (!have_wl) {
+            std::cerr << "[singlet-gate] WARNING: 10x whitelist " << (v3 ? v3->whitelist_file : std::string("?"))
+                      << " not found in the whitelist dirs (--whitelist-dir, $SINGLET_WHITELIST_DIR, <binary>/../whitelists) — gate cannot tell 10x from non-10x, passing through\n";
+            return 0;
+        }
+    }
+
     // We need to collect probe spots in the same format as detect_protocol() expects.
     // detect_protocol() is templated on SpotT, which needs r1_seq, r2_seq, r1_len, r2_len.
     // The SraEncoder::SpotData struct is private, so we define a compatible local struct.
@@ -570,6 +587,14 @@ static int cmd_download(int argc, char* argv[]) {
     ecfg.block_size  = block_size;
     ecfg.r2_maxlen   = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
+    // $SINGLET_WHITELIST_DIR when the user didn't pass --whitelist-dir (the engine, the stager and the .1fg2 reader read it too). Without it the
+    // protocol gate had no 10x whitelist to score against and rejected untrimmed 10x barcode reads (R1 151 nt) as split-seq.
+    if (whitelist_dirs.empty()) {
+        if (const char* e = std::getenv("SINGLET_WHITELIST_DIR")) {
+            struct stat st;
+            if (*e && stat(e, &st) == 0 && S_ISDIR(st.st_mode)) whitelist_dirs.push_back(e);
+        }
+    }
     // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
     if (whitelist_dirs.empty()) {
         char buf[PATH_MAX];
