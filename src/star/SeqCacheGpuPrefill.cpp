@@ -60,6 +60,29 @@ bool g_e11SoloDone = false;
 
 namespace {
 
+// E19 (docs/gpu-engine/fable/GPU-PATH.md §4): every fallback of the GPU path goes to star_Log.out as before and also, as one line, to stderr,
+// which STAR's child shares with the pipeline (the run's log): "[engine_gpu] fallback: <the Log.out line>"
+void gpuFallback(Parameters &P, const std::string &line) {
+    P.inOut->logMain << line << (line.empty() || line.back() != '\n' ? "\n" : "") << flush;
+    std::string l = line;
+    while (!l.empty() && (l.back() == '\n' || l.back() == '\r')) l.pop_back();
+    std::cerr << "[engine_gpu] fallback: " << l << std::endl;
+}
+// the engine's own log (Output::log, Output::E10::log): its lines that report a part not done go to stderr too
+void gpuFallbackLines(const std::string &log) {
+    size_t a = 0;
+    while (a < log.size()) {
+        size_t b = log.find('\n', a);
+        if (b == std::string::npos) b = log.size();
+        const std::string l = log.substr(a, b - a);
+        if (l.find("not used") != std::string::npos || l.find("not built") != std::string::npos || l.find("not kept") != std::string::npos
+            || l.find("not computed") != std::string::npos || l.find("out of memory") != std::string::npos || l.find("failed") != std::string::npos
+            || l.find("FAILED") != std::string::npos)
+            std::cerr << "[engine_gpu] fallback: " << l << std::endl;
+        a = b + 1;
+    }
+}
+
 #ifdef SINGLET_HAVE_ENGINE_GPU
 // E10: what the host decode keeps for the host side of E10 (the unmapped reads' FASTQ records, level 4's read source): both FASTQ files
 // mapped, per read the byte offset of its name line in each (0: R2, the cDNA; 1: R1, the barcode read)
@@ -1110,12 +1133,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         return;
     }
 #ifndef SINGLET_HAVE_ENGINE_GPU
-    P.inOut->logMain << "ENGINE_GPU: requested, but this binary was built without CUDA (SINGLET_ENGINE_GPU=OFF): STAR maps every read\n" << flush;
+    gpuFallback(P, "ENGINE_GPU: requested, but this binary was built without CUDA (SINGLET_ENGINE_GPU=OFF): STAR maps every read");
     (void) G; (void) tr;
 #else
     auto skip = [&](const std::string &why) {
         ingRelease();
-        P.inOut->logMain << "ENGINE_GPU: not used (" << why << "): STAR maps every read\n" << flush;
+        gpuFallback(P, "ENGINE_GPU: not used (" + why + "): STAR maps every read");
     };
     std::string why;
     if (!singlet_engine_gpu::available(&why)) return skip(why);
@@ -1168,12 +1191,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 in.e10.cbL = (uint32) P.pSolo.cbL; in.e10.umiL = (uint32) P.pSolo.umiL;
             }
         }
-        if (e10Level >= 2 && !in.e10.on) P.inOut->logMain << "ENGINE_GPU: E10 (level " << e10Level << ") not used: " << w << "\n";
+        if (e10Level >= 2 && !in.e10.on) gpuFallback(P, "ENGINE_GPU: E10 (level " + std::to_string(e10Level) + ") not used: " + w);
         // E11 (level 5): the Solo configuration E9 ports; otherwise level 3, where STAR's Solo still counts every read
         if (e10Level >= 5) {
             std::string w5 = in.e10.on ? "" : "E10 not used";
             if (in.e10.on && e11Config(P, tr, w5)) e11.want = true;
-            else { e11.why = w5; P.inOut->logMain << "ENGINE_GPU: E11 (level 5) not used: " << w5 << "\n"; }
+            else { e11.why = w5; gpuFallback(P, "ENGINE_GPU: E11 (level 5) not used: " + w5); }
         }
     }
     // E13: with the pipeline's head-scan plan the reads come from the .1fq (no FASTQ files: STAR's read files are /dev/null)
@@ -1201,19 +1224,20 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         const auto tb = std::chrono::steady_clock::now();
         if (ingest) {}   // E13: the decode wrote the CR/UR keys
         else if (!e10Barcodes(P, in, w, (int) P.runThreadN)) { in.e10.on = false; decltype(in.e10.aux)().swap(in.e10.aux); e10f.release(); }
-        P.inOut->logMain << "ENGINE_GPU: E10 decode: " << (in.e10.on ? "CR/UR keys and quality bits of " + std::to_string(in.off.size() - 1) + " reads ("
+        if (in.e10.on)
+        P.inOut->logMain << "ENGINE_GPU: E10 decode: " << "CR/UR keys and quality bits of " + std::to_string(in.off.size() - 1) + " reads ("
                                                         + std::to_string(in.e10.nw) + " quality words each), barcode file "
-                                                        + std::to_string(std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count()) + " s"
-                                                      : "not used: " + w) << "\n";
+                                                        + std::to_string(std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count()) + " s" << "\n";
+        else gpuFallback(P, "ENGINE_GPU: E10 decode: not used: " + w);
     } else if (e10Level >= 2 && !in.e10.on) {
-        if (!e10DecodeWhy.empty()) P.inOut->logMain << "ENGINE_GPU: E10 decode: not used: " << e10DecodeWhy << "\n";
+        if (!e10DecodeWhy.empty()) gpuFallback(P, "ENGINE_GPU: E10 decode: not used: " + e10DecodeWhy);
         e10f.release();
     }
     if (e11.want) {   // E11: the engine keeps Solo's inputs on the device (the reads' CR/UR, the records' Gene annotation, the read -> record map)
         std::string w5;
         if (!in.e10.on) w5 = "E10 not used";
         else if (e11Posterior(P, w5)) { in.e10.soloModel = &e11.M; in.e10.soloParams = &e11.S; }
-        if (in.e10.soloModel == nullptr) { e11.want = false; e11.why = w5; P.inOut->logMain << "ENGINE_GPU: E11 (level 5) not used: " << w5 << "\n"; }
+        if (in.e10.soloModel == nullptr) { e11.want = false; e11.why = w5; gpuFallback(P, "ENGINE_GPU: E11 (level 5) not used: " + w5); }
         else P.inOut->logMain << "ENGINE_GPU: E11 decode: CB+UMI qualities " << e11.q30Cb << " of " << e11.nCb << " >= Q30, RNA (whole reads) " << e11.q30Rna << " of "
                               << e11.nRna << ", CB quality characters " << e11.cbQmin << ".." << e11.cbQmax << " (posterior "
                               << (e11.perRead ? std::string("per read: the multi-match reads' CB qualities from the barcode FASTQ after STAR's loop")
@@ -1239,7 +1263,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     if (e2eWant) {   // the memory object sized (sparse: only written pages exist) and mapped here; SINGLET_ENGINE_GPU_E2E_GB, default 512
         uint64 gb = 512;
         if (const char *g = getenv("SINGLET_ENGINE_GPU_E2E_GB")) gb = std::max<uint64>(1, strtoull(g, nullptr, 10));
-        if (!e2r.attach(gb << 30)) { e2eWant = false; P.inOut->logMain << "ENGINE_GPU: E8 not used (the shared memory object could not be mapped)" << std::endl; }
+        if (!e2r.attach(gb << 30)) { e2eWant = false; gpuFallback(P, "ENGINE_GPU: E8 not used (the shared memory object could not be mapped)"); }
     }
     if (e2eWant) { in.e2e = &e2r; in.outSAMmapqUnique = P.outSAMmapqUnique; in.outSAMflagAND = P.outSAMflagAND; in.outSAMflagOR = P.outSAMflagOR; }
     // E13: R11's exact CB histogram from the decode to the pipeline (engine_gpu_ingest.h publishR11), before the device runs: the stream's CB
@@ -1247,7 +1271,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     if (ingOn && e2r.base != nullptr && !ing.r11.empty())
         P.inOut->logMain << "ENGINE_GPU: E13: R11 exact CB histogram (" << ing.r11Total << " reads) "
                          << (singlet_engine_gpu::ingest::publishR11(e2r, ing.r11, ing.r11Total) ? "in the shared region for the pipeline" : "NOT written (region full)") << "\n";
-    else if (e2r.fd >= 0 && e2r.base == nullptr) P.inOut->logMain << "ENGINE_GPU: E8 not used (it needs the GPU pileup \"on\" with summaries and per-read entries, CB_UMI_Simple)" << std::endl;
+    else if (e2r.fd >= 0 && e2r.base == nullptr) gpuFallback(P, "ENGINE_GPU: E8 not used (it needs the GPU pileup \"on\" with summaries and per-read entries, CB_UMI_Simple)");
     bool lockReleased = false;   // mapDistinct releases the device when its device work is done (the host assembly of the records needs no GPU)
     const auto tHeld0 = std::chrono::steady_clock::now(); double heldS = 0;
     in.release = [&]() { if (!lockReleased) { lockReleased = true; heldS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tHeld0).count(); singlet_engine_gpu::unlockDevice(lockFd); } };
@@ -1265,14 +1289,26 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     };
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it, held it " << heldS << " s\n" << out.log << out.e10.log;
+    gpuFallbackLines(out.e10.log);   // E19: the engine's own fallbacks (E8's records, E10, E11's keep) on stderr too
+    if (ok) gpuFallbackLines(out.log);
     decltype(in.e10.aux)().swap(in.e10.aux);
-    if (!ok) { e10f.release(); return skip("GPU mapping failed"); }
+    if (!ok) {   // E19: with the engine's reason (its last log line, from mapDistinct's fail())
+        e10f.release();
+        std::string last;
+        for (size_t a = 0; a < out.log.size();) {
+            size_t b = out.log.find('\n', a);
+            if (b == std::string::npos) b = out.log.size();
+            if (b > a) last = out.log.substr(a, b - a);
+            a = b + 1;
+        }
+        return skip("GPU mapping failed" + (last.empty() ? std::string() : ": " + last));
+    }
     bool e10ok = out.e10.ok;   // E10: the device wrote the entries and masks into the region and computed the per-read products
     // E11: level 5 when the engine kept Solo's inputs (then no summaries: no read with a record reaches STAR's loop); otherwise level 3
     e11.ready = e11.want && e10ok && out.e10.soloKept;
     if (e11.want && !e11.ready) {
         e11.why = !e10ok ? "E10 products not made" : "the engine did not keep Solo's inputs";
-        P.inOut->logMain << "ENGINE_GPU: E11 (level 5) not used: " << e11.why << "\n";
+        gpuFallback(P, "ENGINE_GPU: E11 (level 5) not used: " + e11.why);
         e9::soloKeepRelease();
     }
     e11.device = device;
@@ -1351,6 +1387,9 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         insertRecords([](uint64) { return true; });
         cache->prefilled = true;
     }
+    // E19: whether the reads with a record were given no summaries (level 4/5); the run must then reach level 4 or 5, or stop (below)
+    bool e10NoSumMade = false;
+    bool e19E8 = false;   // E8's records in the shared region (for the level line)
     // singlet's GPU pileup (SINGLET_GPU_PILEUP): per read its record, per record the alignments STAR writes for it (core fields)
     if (const char *hp = getenv("SINGLET_ENGINE_GPU_HANDOFF")) {
         time_t th0 = time(nullptr);
@@ -1378,12 +1417,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 e2eE = e2r.take(std::max<uint64>(1, nR) * sizeof(HandoffReadEntry));
                 e2eQ = e2eQOn ? e2r.take(std::max<uint64>(1, nR) * 16) : 0;
             }
-            if (!e2eR || !e2eE || (e2eQOn && !e2eQ)) { e2eRec = false; P.inOut->logMain << "ENGINE_GPU: E8: the shared region is full; the hand-off file path runs\n"; }
+            if (!e2eR || !e2eE || (e2eQOn && !e2eQ)) { e2eRec = false; gpuFallback(P, "ENGINE_GPU: E8: the shared region is full; the hand-off file path runs"); }
             else memcpy(e2r.base + e2eR, out.readRecord.data(), nR * 4);
         }
         e10ok = e10ok && e2eRec;
         // E10 level 4: no read with a record reaches STAR's loop, so no summaries are needed
         const bool e10NoSum = e10ok && (e10Level == 4 || (e10Level >= 5 && e11.ready)) && readSourceFree();
+        e10NoSumMade = e10NoSum; e19E8 = e2eRec;
         std::vector<std::thread> th;
         // E16 (level 5): without summaries the threads would only construct (and leak) a ReadAlign, a Transcriptome copy and an OutSJ each
         const bool e16NoThreads = e10NoSum && e2eRec && singlet_tail::cut("sumthreads");
@@ -1446,7 +1486,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             P.inOut->logMain << "ENGINE_GPU: hand-off for the GPU pileup: " << nReads << " reads, " << nRec << " records, " << base
                              << " bytes in " << (time(nullptr) - th0) << " s -> " << hp << "\n";
         }
-        if (!okw) { P.inOut->logMain << "ENGINE_GPU: hand-off not written (" << hp << ")\n"; unlink(hp); }
+        if (!okw) { gpuFallback(P, "ENGINE_GPU: hand-off not written (" + std::string(hp) + ")"); unlink(hp); }
         // "on": STAR writes no BAM records for reads with a record (the pileup has their alignments)
         const char *gm = getenv("SINGLET_GPU_PILEUP");
         if (okw && gm != nullptr && strcmp(gm, "on") == 0) {
@@ -1586,7 +1626,10 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                                        (unsigned long long) e10src.maxReads); }
                 else if (e10Level >= 5) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): level 5's read source could not be built (" + w
                                                       + ") and the reads with a record have no summaries\n", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
-                else P.inOut->logMain << "ENGINE_GPU: E10 level 4 not used (" << w << "): level 3\n";
+                // E19 (E11 §5.4): level 4 made no summaries either, so level 3 would treat the reads with a record as unmapped: stop instead
+                else exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E10): level 4's read source could not be built (" + w
+                                   + ") and the reads with a record have no summaries (rerun with SINGLET_ENGINE_GPU_E2E=3)\n", std::cerr, P.inOut->logMain,
+                                   EXIT_CODE_INPUT_FILES, P);
             }
             if (g_e10Level == 5 && e16bgOn) {   // E16 bg: Unmapped.out's records and the RNA Q30 adjustment beside STAR's loop
                 e16bg.on = true;
@@ -1617,15 +1660,27 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                              << " junctions from the device; " << (g_e10Level >= 4 ? std::to_string(e10src.iRead.size()) + " reads without a record go to STAR's loop" : "STAR's loop keeps readLoad, the barcode and the Solo record of these reads")
                              << " (" << std::chrono::duration<double>(std::chrono::steady_clock::now() - t3).count() << " s)\n";
         } else {
-            P.inOut->logMain << "ENGINE_GPU: E10 level 3 not used (" << w << "); STAR's loop does the per-read work\n";
+            gpuFallback(P, "ENGINE_GPU: E10 level 3 not used (" + w + "); STAR's loop does the per-read work");
         }
     }
+    // E19 (E11 §5.4, the level-4 fallback hole): without summaries for the reads with a record, any level below 4 would replay empty summaries for
+    // them (STAR's loop would treat them as unmapped, and Solo, Log.final.out and the BAM stream would miss them): stop with an error instead
+    if (e10NoSumMade && g_e10Level < 4)
+        exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E10): level " + std::to_string(e10Level) + " made no per-read summaries for the reads"
+                      " with a GPU record, but the run fell back to level " + std::to_string(g_e10Level) + " (see the fallback lines above): its outputs would be"
+                      " incomplete (rerun with SINGLET_ENGINE_GPU_E2E=3)\n", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
     if (e11.ready && g_e10Level != 5) {   // E11: level 5 not reached (E10's region or products): STAR's Solo counts every read
-        P.inOut->logMain << "ENGINE_GPU: E11 (level 5) not used: E10 runs at level " << g_e10Level << "\n";
+        gpuFallback(P, "ENGINE_GPU: E11 (level 5) not used: E10 runs at level " + std::to_string(g_e10Level));
         e11.ready = false;
         e9::soloKeepRelease();
     }
     if (g_e10Level < 4) { std::vector<uint32_t>().swap(out.e10.unmappedReads); }
+    {   // E19: the level this run reached, one line in the run's log (GPU-PATH.md §4); a fallback above says why when it is below the request
+        const int reached = g_e10Level >= 3 ? g_e10Level : (e10ok && e10Level >= 2 ? 2 : (e19E8 ? 1 : 0));
+        std::cerr << "[engine_gpu] level " << reached << " (requested " << e10Level << ")" << (ingest ? ", reads from the .1fq (E13 ingest)" : "")
+                  << (reached == 5 ? ", Solo on the device (E11)" : "") << (reached < e10Level ? ": FELL BACK" : "") << std::endl;
+        P.inOut->logMain << "ENGINE_GPU: E19: level " << reached << " reached (requested " << e10Level << ")\n";
+    }
     tmark("E10 products");
     if (deferInsert && g_e10Level >= 3) {   // E10: no read with a record looks the cache up (unmapped records: the device counted them)
         cache->prefilled = true;

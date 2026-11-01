@@ -2752,7 +2752,21 @@ static void usage(const char* prog) {
         << "  --no-cr4               Do not use the Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap)\n"
         << "  --cr4-probe-reads N    Reads for the CR4 vs no-CR4 unique-mapping probe (default 200000; 0 = skip the probe, no CR4)\n"
         << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
-        << "  --engine cpu|gpu       gpu: map each distinct cDNA sequence on the GPU (CUDA build); same outputs (default cpu)\n\n"
+        << "  --engine cpu|gpu       gpu: map each distinct cDNA sequence on the GPU (CUDA build); same outputs (default cpu)\n"
+        << "                         With SINGLET_GPU_PILEUP=on, --engine gpu runs the whole GPU path by default\n"
+        << "                         (docs/gpu-engine/fable/GPU-PATH.md): level 5 (records, per-read products and STARsolo\n"
+        << "                         on the device; STAR maps only the reads without a GPU record), the .1fq decoded straight\n"
+        << "                         into the device's buffers (no FASTQ temp files) and E16's tail. Each part falls back on\n"
+        << "                         its own, with one \"[engine_gpu] fallback:\" or \"[1fq-ingest] not used\" line on stderr.\n"
+        << "                         Environment (read with --engine gpu):\n"
+        << "                           SINGLET_GPU_PILEUP=on          the GPU pileup (needed by everything below)\n"
+        << "                           SINGLET_ENGINE_GPU_E2E=0..5    5 (default): the full path; 0: GPU mapping only (the\n"
+        << "                                                          path before E8); 1-4: the intermediate levels (E8, E10)\n"
+        << "                           SINGLET_ENGINE_GPU_INGEST=0|1  1 (default at level 5): no FASTQ temp files; 0: they are\n"
+        << "                                                          written as before\n"
+        << "                           SINGLET_E16=0                  E16's tail changes off (level 5)\n"
+        << "                           SINGLET_E16_TRACE=1            E16's \"[e16]\" timing marks on stderr (default off)\n"
+        << "                           SINGLET_ENGINE_GPU_DEVICE=N    the GPU (default 0)\n\n"
         << "Legacy (deprecated — archive to .1fq first, then process):\n"
         << "  --reads R2 R1          FASTQ files (use 'singlet encode' instead)\n"
         << "  --sra FILE             SRA file (use 'singlet download' instead)\n"
@@ -3240,6 +3254,13 @@ int main(int argc, char* argv[]) {
                       << "\n";
         }
     }
+
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    // E19 (docs/gpu-engine/fable/GPU-PATH.md): the GPU path's defaults (level 5 + ingest + E16 with SINGLET_GPU_PILEUP=on), set in the environment
+    // before anything reads them (singlet_engine_gpu::applyDefaults in engine_gpu.h)
+    if (getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1")
+        std::cerr << "[singlet] --engine gpu: " << singlet_engine_gpu::applyDefaults() << "\n";
+#endif
 
     // ── Validate ──
     // Several runs of one sample (`A.1fq B.1fq`, `--1fq A,B`, or `--runs-dir DIR` with --runs-used / --run-screen):
@@ -4557,7 +4578,19 @@ int main(int argc, char* argv[]) {
             auto runs = std::make_shared<singlet::fq::RunSet>();
             uint8_t qphred[4] = {37, 37, 37, 37};
             uint32_t qcodes = 1;
+            // E19: also where the GPU pileup or its hand-off will not run on the stream (decided below, after this scan): the ingest was gated
+            // with E8's records only, so those runs keep the FASTQ files
+            uint32_t ir = config.intron_rules;
+            if (const char* r = getenv("SINGLET_INTRON_RULES")) ir = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
+            const char* gh = getenv("SINGLET_GPU_HANDOFF");
             if (!(gp && std::string(gp) == "on" && singlet_engine_gpu::e2eRequested())) why = "it needs SINGLET_GPU_PILEUP=on and SINGLET_ENGINE_GPU_E2E";
+            else if (onefq_r2_bound > 128) why = "cDNA reads over 128 bases: the GPU pileup will be declined";
+            else if (ir & ~(1u | 4u | 128u | 256u)) why = "intron rules the GPU pileup does not implement";
+            else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
+            else if (stream_unsorted == 0 || parallel_pileup == 1 || tagged_bam_enabled || !bam_file.empty() || getenv("SINGLET_KEEP_STAR_BAM"))
+                why = "the sorted-BAM path: no GPU pileup on STAR's stream";
+            else if (!config.out_chrm_bam.empty() || !config.guide_ref_path.empty() || (gh && std::string(gh) == "0"))
+                why = "no GPU hand-off (chrM BAM, guide reference or SINGLET_GPU_HANDOFF=0)";
             else if (is_atac_mode || is_smart_seq2_mode || is_bulk_rna_mode) why = "not a droplet scRNA assay";
             else if (reads_inverted) why = "the barcode is in R2";
             else if (use_complex_concat && !complex_concat_segs_all.empty()) why = "CB_UMI_Complex concat";
