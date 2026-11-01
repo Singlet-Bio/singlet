@@ -3,7 +3,7 @@
 
 Usage: ncu_summary.py OUTDIR [OUTDIR2 ...]   (OUTDIR = $W/jobs/fable/profile/results/ncu-<jobid>)
 Inputs per label L (A, M, B, monog, monol): ncu_L_raw.csv (--page raw --csv), ncu_L_<kernel>_src.csv (--page source --csv
---print-source cuda). Writes OUTDIR/e1_ncu_summary.json, OUTDIR/e1_ncu_kernels.csv, OUTDIR/e1_ncu_top_lines.csv and prints tables.
+--print-source cuda,sass). Writes OUTDIR/e1_ncu_summary.json, OUTDIR/e1_ncu_kernels.csv, OUTDIR/e1_ncu_top_lines.csv and prints tables.
 """
 import csv, glob, json, os, re, sys
 
@@ -163,41 +163,50 @@ def summarise(k):
 
 
 def read_source(path, topn=10):
-    """CUDA-source view CSV: rows of (line number, source, metrics...). Returns the top lines by warp-stall samples."""
+    """Source view CSV of ncu 2026.2 (--page source --csv --print-source cuda,sass): per file a "File Path" row, a "Function Name"
+    row, a header row ("Line No","Source","Address","Source",metrics...) and one row per CUDA line (Address "-") followed by its
+    SASS rows. Rows of the same (file, line) from several kernel instances are summed. Returns the top lines by warp-stall samples."""
     if not os.path.exists(path):
         return None
     rows = list(csv.reader(open(path, errors="replace")))
-    hdr = None
-    cur_file = ""
-    lines = []
+    hdr, cur_file, agg = None, "", {}
     for r in rows:
         if not r:
             continue
-        if len(r) == 1 and ("/" in r[0] or r[0].endswith((".cu", ".cuh", ".h"))):
-            cur_file = r[0].strip()
+        if r[0] == "File Path" or r[0] == "File Name":
+            cur_file = r[1].strip() if len(r) > 1 else ""
             continue
-        if r[0] in ("#", "Line", "# Line") or ("Source" in r and any("Stall" in c or "Samples" in c for c in r)):
+        if r[0] == "Line No":
             hdr = r
             continue
-        if hdr and r[0].strip().isdigit():
-            d = dict(zip(hdr, r))
-            d["_file"] = cur_file
-            lines.append(d)
-    if not lines:
-        return {"error": "no rows parsed", "head": rows[:5]}
-    scol = next((c for c in hdr if "Warp Stall Sampling (All" in c), None) or next((c for c in hdr if "Sampl" in c), None)
-    ncol = next((c for c in hdr if "Not-issued" in c or "Not Issued" in c), None)
-    tot = sum(num(l.get(scol)) or 0 for l in lines) if scol else 0
-    lines.sort(key=lambda l: -(num(l.get(scol)) or 0))
-    extra = [c for c in hdr if any(k in c for k in ("Excessive", "L2 Theoretical Sectors", "Instructions Executed", "Thread Instructions",
-                                                      "L1 Conflicts", "Memory L2", "Global Load", "Local"))]
+        if hdr is None or not r[0].strip().isdigit() or (len(r) > 2 and r[2].strip() not in ("-", "")):
+            continue
+        key = (cur_file, int(r[0]))
+        d = agg.setdefault(key, {"_src": r[1], "_v": {}})
+        for i in range(4, min(len(hdr), len(r))):
+            v = num(r[i])
+            if v is not None:
+                d["_v"][i] = d["_v"].get(i, 0) + v
+    if not agg:
+        return {"error": "no rows parsed", "head": rows[:6]}
+    cols = {h: i for i, h in enumerate(hdr) if i >= 4}
+    scol = next((h for h in cols if h.startswith("Warp Stall Sampling (All")), None)
+    ncol = next((h for h in cols if h.startswith("Warp Stall Sampling (Not")), None)
+    si, ni = cols.get(scol), cols.get(ncol)
+    tot = sum(d["_v"].get(si, 0) for d in agg.values())
+    want = [h for h in cols if any(k in h for k in ("Instructions Executed", "Avg. Threads Executed", "Divergent Branches", "L2 Theoretical Sectors",
+                                                      "L1 Wavefronts", "Excessive"))]
     top = []
-    for l in lines[:topn]:
-        v = num(l.get(scol)) or 0
-        top.append(dict(file=os.path.basename(l["_file"]) or "?", line=int(l[hdr[0]]), samples=v, share_pct=round(100 * v / tot, 2) if tot else None,
-                        not_issued=num(l.get(ncol)) if ncol else None, source=(l.get("Source", "") or "").strip()[:140],
-                        **{c: l.get(c) for c in extra}))
-    return {"stall_column": scol, "total_samples": tot, "columns": hdr, "top": top}
+    for (f, ln), d in sorted(agg.items(), key=lambda kv: -kv[1]["_v"].get(si, 0))[:topn]:
+        v = d["_v"].get(si, 0)
+        e = {h: d["_v"].get(cols[h]) for h in want}
+        top.append(dict(file=os.path.basename(f) or "?", line=ln, samples=v, share_pct=round(100 * v / tot, 2) if tot else None,
+                        not_issued=d["_v"].get(ni) if ni is not None else None, source=d["_src"].strip()[:140], **e))
+    by_file = {}
+    for (f, ln), d in agg.items():
+        by_file[os.path.basename(f)] = by_file.get(os.path.basename(f), 0) + d["_v"].get(si, 0)
+    return {"stall_column": scol, "total_samples": tot, "columns": hdr, "top": top,
+            "samples_by_file_pct": {k: round(100 * v / tot, 2) for k, v in sorted(by_file.items(), key=lambda x: -x[1])} if tot else {}}
 
 
 def main():
@@ -242,7 +251,7 @@ def main():
                 if k.get("excessive"):
                     print("   excessive:", k["excessive"])
             for kk, s in d["source"].items():
-                print("-- %s %s top lines by %s (total %s)" % (L, kk, s.get("stall_column"), s.get("total_samples")))
+                print("-- %s %s top lines by %s (total %s); samples by file %s" % (L, kk, s.get("stall_column"), s.get("total_samples"), s.get("samples_by_file_pct")))
                 if "error" in s:
                     print("   ", s["error"], s.get("head"))
                 for i, t in enumerate(s.get("top", [])):
