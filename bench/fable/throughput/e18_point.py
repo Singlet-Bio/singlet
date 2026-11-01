@@ -105,6 +105,13 @@ for r in runs:
     r["lanes"] = x.group(0) if x else None
     x = re.search(r"engine_gpu: steps \(s\): .*; total ([\d.]+)", sl)
     r["prefill_device_s"] = float(x.group(1)) if x else None
+    x = re.search(r"index upload ([\d.]+) s \(staged .*?: ([\d.]+) GB, ([\d.]+) GB/s; waited ([\d.]+) s for it\); reads and aux staged: ([\d.]+) GB, ([\d.]+) GB/s", sl)
+    r["h2d"] = f"index {x.group(3)} GB/s (waited {x.group(4)} s), reads {x.group(6)} GB/s" if x else None
+    x = re.search(r"device -> host copies staged: ([\d.]+) GB in ([\d.]+) s \(([\d.]+) GB/s\)", sl)
+    r["d2h"] = f"d2h {x.group(3)} GB/s" if x else None
+    x = re.search(r"engine_gpu: steps \(s\): (.*); total", sl)
+    st = dict((kv.rsplit(" ", 1)[0].strip(), float(kv.rsplit(" ", 1)[1])) for kv in x.group(1).split(", ") if " " in kv) if x else {}
+    r["steps"] = {k: round(sum(v for kk, v in st.items() if kk.startswith(k)), 2) for k in ("index", "reads", "e10", "clip", "dedup", "laneA", "laneM", "laneB", "lanes", "hostlane", "records", "readRecord", "e2e")} if st else {}
     x = re.search(r"E6 dump of \d+ records -> \S+ \(([\d.]+) s\)", sl)
     r["dump_s"] = float(x.group(1)) if x else None
     x = re.search(r"\[gpu_pileup\] on: GPU ([\d.]+) ms, total ([\d.]+) ms, peak ([\d.]+) GB", lg)
@@ -229,5 +236,6 @@ for r in sorted(runs, key=lambda r: r["item"]):
         print(f"        prefill device phase {r['prefill_device_s']:.2f} s; {r['lanes'] or ''}; dump {r['dump_s']} s; pileup GPU {r['pileup_gpu_ms']} ms, "
               f"peak {r['pileup_peak_gb']} GB")
         print(f"        engine memory marks (device-wide): {r['engine_mem']}")
+        print(f"        uploads: {r['h2d']}; {r['d2h']}; steps: " + " ".join(f"{k} {v}" for k, v in r["steps"].items()))
     for l in r["fallback_lines"]:
         print(f"        log: {l}")
