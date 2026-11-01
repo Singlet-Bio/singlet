@@ -19,6 +19,7 @@ namespace singlet_records_gpu {
 struct DeviceRecords {   // device arrays (owned; release()), counts and timings
     SigRec* sigs = nullptr; AlnRec* alns = nullptr; uint32_t* ops = nullptr; uint8_t* seq = nullptr;
     uint8_t* bytes = nullptr; uint64_t* bytesOff = nullptr;   // wantBytes: the hand-off records (seqCacheAlignRecords) and their offsets [nRec + 1]
+    uint16_t* nm = nullptr;                                   // wantNm (E8): per alignment its nM (min(nMM, 65535)), parallel to alns
     uint64_t nRec = 0, nAln = 0, nOps = 0, nSeq = 0, nBytes = 0;
     uint64_t nMateGap = 0, nNoExon = 0, nBadBest = 0;   // records with a transcript seqCacheLeanAln hands to alignBAM / without exons / trBest = trInit
     uint64_t nMapped = 0;                               // records with >= 1 alignment
@@ -27,7 +28,7 @@ struct DeviceRecords {   // device arrays (owned; release()), counts and timings
 // dBlob/dBlobOff: the records' blobs (record r at dBlob + dBlobOff[r]); dSeq/dSeqOff: their sequences (STAR's numeric code, 1 byte per
 // base); dChrStart: STAR's chrStart. Allocates the outputs.
 bool buildRecords(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBlobOff, const char* dSeq, const uint64_t* dSeqOff, uint64_t nRec,
-                  const uint64_t* dChrStart, bool wantBytes, DeviceRecords& out, std::string& err);
+                  const uint64_t* dChrStart, bool wantBytes, DeviceRecords& out, std::string& err, bool wantNm = false);
 void release(DeviceRecords& r);
 
 struct DeviceReads {

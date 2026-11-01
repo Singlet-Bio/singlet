@@ -2321,7 +2321,110 @@ public:
         std::cerr << "[gpu_pileup] hand-off pass: " << n_done << " reads without BAM records (barcodes and qualities from STAR's per-read entries)\n";
         return true;
     }
+    // E8 (SINGLET_ENGINE_GPU_E2E=1; docs/gpu-engine/fable/E8-e2e.md): gpu_handoff_pass_entries on the device (singlet_engine_gpu::e2ePass) from
+    // the records STAR's prefill built on the device and STAR's per-read entries, both in the shared region. The host resolves each distinct CR
+    // once (R11, barcode set, WL-ambient index: what the pass looks up per read) and runs the R4 rRNA detector on the sampled unclipped reads;
+    // every counter, per-cell array and the collector's hand-off reads come out as the host pass makes them.
+    bool gpu_handoff_pass_e2e(PileupStats& stats) {
+        const singlet_engine_gpu::E2ERegion& R = *gpu_col_->e2e();
+        const singlet_engine_gpu::E2EHeader& H = *R.hdr();
+        if (!H.simple) { std::cerr << "[gpu_pileup] hand-off: barcode layout is not CB_UMI_Simple\n"; return false; }
+        if (gpu_col_->n_handoff_reads() != 0 || gpu_col_->e2e_stream_reads() != 0) {
+            std::cerr << "[gpu_pileup] hand-off: " << (gpu_col_->n_handoff_reads() + gpu_col_->e2e_stream_reads())
+                      << " hand-off reads also came through the stream (STAR's skip set differs)\n";
+            return false;
+        }
+        const CbCorrector* const cbc = config_.cb_corrector;
+        cpu_set_t cs; int nT = std::max(1, config_.threads);
+        if (sched_getaffinity(0, sizeof(cs), &cs) == 0) nT = std::max(nT, std::min(CPU_COUNT(&cs), 32));
+        if (const char* e = std::getenv("SINGLET_HANDOFF_PASS_THREADS")) nT = std::max(1, std::atoi(e));
+        auto par = [&](uint64_t n, const std::function<void(uint64_t, uint64_t)>& fn) {
+            const int t = (int) std::min<uint64_t>((uint64_t) nT, n / 4096 + 1);
+            if (t <= 1) { fn(0, n); return; }
+            std::vector<std::thread> th; for (int k = 0; k < t; ++k) th.emplace_back([&, k] { fn(n * k / t, n * (k + 1) / t); });
+            for (auto& x : th) x.join();
+        };
+        // per distinct CR (3 bits per base, as STAR packs it): barcode column, WL-ambient index, cb_status_ index (the pass's checks, in its order)
+        auto table = [&](const std::vector<uint64_t>& keys, std::vector<singlet_engine_gpu::E2ECrVal>& vals) {
+            par(keys.size(), [&](uint64_t lo, uint64_t hi) {
+                static const char kB[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
+                std::string cr; char buf[40] = {};
+                for (uint64_t k = lo; k < hi; ++k) {
+                    cr.resize(H.cbL); for (uint32_t j = 0; j < H.cbL; j++) cr[j] = kB[(keys[k] >> (3 * j)) & 7];
+                    singlet_engine_gpu::E2ECrVal v{-2, -1, 0};
+                    bool ok = !cr.empty();
+                    if (!cbc) { for (char ch : cr) if (ch == 'N') ok = false; }
+                    else if (static_cast<int>(cr.size()) != cbc->length()) { v.status = 3; ok = false; }
+                    else {
+                        const int cst = cbc->resolve(cr.c_str(), nullptr, buf);
+                        v.status = static_cast<uint32_t>(cst + 4);
+                        if (cst < 0) ok = false; else cr.assign(buf, static_cast<size_t>(cbc->length()));
+                    }
+                    if (ok && cr[0] != '-') {
+                        const int32_t bc = bc_index_.lookup(cr.c_str());
+                        v.col = bc >= 0 ? bc : -1;
+                        if (bc < 0 && !wl_umi_counts_.empty()) { const int32_t w = wl_amb_index_.lookup(cr.c_str()); v.wl = w >= 0 ? w : -1; }
+                    }
+                    vals[k] = v;
+                }
+            });
+        };
+        singlet_engine_gpu::E2EPassIn pin;
+        pin.region = &R; pin.chrmTid = chrm_tid_; pin.minMapq = static_cast<uint8_t>(config_.min_mapq); pin.cbc = cbc != nullptr;
+        pin.wlOn = !wl_umi_counts_.empty(); pin.wlPend = has_gene_model_ && !wl_ambient_gene_counts_.empty();
+        pin.nCells = static_cast<uint32_t>(per_cell_reads_.size()); pin.nCellsQc = static_cast<uint32_t>(per_cell_qc_.size());
+        pin.nWl = static_cast<uint32_t>(wl_umi_counts_.size());
+        singlet_engine_gpu::E2EPassOut o;
+        int lock_fd = -1;
+        const int device = singlet_engine_gpu::lockDevice(&lock_fd);
+        const bool ok = singlet_engine_gpu::e2ePass(pin, device, table, o);
+        singlet_engine_gpu::unlockDevice(lock_fd);
+        if (!ok) { std::cerr << "[gpu_pileup] hand-off pass on the device failed: " << o.log << "\n"; return false; }
+        // R4: the sampled unclipped reads, the detector on the read as the BAM stores it (record sequence, reverse-complemented when reverse)
+        const auto tR = std::chrono::steady_clock::now();
+        std::atomic<uint64_t> n_rrna{0};
+        {
+            const SigRec* S = R.at<SigRec>(H.oSigs); const uint8_t* Q = R.at<uint8_t>(H.oSeq);
+            par(o.rrnaHost.size(), [&](uint64_t lo, uint64_t hi) {
+                char comp[256]; for (int i = 0; i < 256; i++) comp[i] = 'N';
+                comp[(int)'A'] = 'T'; comp[(int)'C'] = 'G'; comp[(int)'G'] = 'C'; comp[(int)'T'] = 'A';
+                std::string rseq; uint64_t c = 0;
+                for (uint64_t k = lo; k < hi; ++k) {
+                    const uint64_t rec = o.rrnaHost[k] >> 1; const bool rev = o.rrnaHost[k] & 1;
+                    const int L2 = S[rec].rlen; const uint8_t* rs = Q + S[rec].seq_off;
+                    rseq.resize(L2); for (int j = 0; j < L2; j++) rseq[j] = seq_nt16_str[(rs[j >> 1] >> ((j & 1) * 4)) & 15];
+                    if (rev) { const std::string fw = rseq; for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) fw[L2 - 1 - j]]; }
+                    if (rrna_detector_.detect(rseq)) ++c;
+                }
+                n_rrna += c;
+            });
+        }
+        const double sR = std::chrono::duration<double>(std::chrono::steady_clock::now() - tR).count();
+        stats.total_reads += o.totalAln; stats.mapped_reads += o.totalAln; stats.secondary_reads += o.secondary;
+        stats.rrna_reads_sampled += o.rrnaSampled; stats.rrna_reads += o.rrnaHook + n_rrna.load(); stats.chrm_reads += o.chrm;
+        stats.no_barcode += o.noBarcode; stats.barcoded_reads += o.barcoded; stats.multimapper_reads += o.multimapper; stats.low_mapq += o.lowMapq;
+        for (int k = 0; k < 8; k++) cb_status_[k] += o.cbStatus[k];
+        for (size_t k = 0; k < o.cellReads.size() && k < per_cell_reads_.size(); k++) per_cell_reads_[k] += o.cellReads[k];
+        for (size_t k = 0; k < o.cellUnique.size() && k < per_cell_qc_.size(); k++) {
+            CellAlignQC q; q.multimapped = o.cellMulti[k]; q.unique = o.cellUnique[k]; q.mismatches = o.cellMism[k]; q.aligned_bases = o.cellBases[k];
+            per_cell_qc_[k].merge(q);
+        }
+        for (size_t k = 0; k < o.wlCounts.size() && k < wl_umi_counts_.size(); k++) wl_umi_counts_[k] += o.wlCounts[k];
+        gpu_pileup_pending_append(o.wlPending);
+        gpu_col_->add_quality_counts64(o.lowQualSum, o.qualNeqNSum);
+        gpu_col_->add_e2e_reads(o.reads, o.clip, o.lowq, o.maskAll, static_cast<int>(H.umiL));
+        if (o.nUnwritten) { std::cerr << "[gpu_pileup] hand-off: STAR wrote no entry for " << o.nUnwritten << " hand-off reads\n"; return false; }
+        if (o.nBigClip || o.nNoHook || o.nNoKey) {
+            std::cerr << "[gpu_pileup] hand-off: " << o.nBigClip << " reads clipped by more than 255 bases, " << o.nNoHook
+                      << " sampled clipped reads without the rRNA verdict (g_handoffReadHook unset), " << o.nNoKey << " CRs missing from the table\n";
+            return false;
+        }
+        std::cerr << "[gpu_pileup] hand-off pass: " << o.nDone << " reads without BAM records (E8: on the device; " << o.clip.size() << " kept, "
+                  << o.rrnaHost.size() << " to the rRNA detector in " << sR << " s; " << o.log << ")\n";
+        return true;
+    }
     bool gpu_handoff_pass(PileupStats& stats, bool check = false) {
+        if (!check && gpu_col_ && gpu_col_->e2e() != nullptr) return gpu_handoff_pass_e2e(stats);   // E8
         const gpupileup::Handoff* H = gpu_col_ ? gpu_col_->handoff() : nullptr;
         if (!H) return true;   // no hand-off: every read came through the stream
         if (!H->simple) { std::cerr << "[gpu_pileup] hand-off: barcode layout is not CB_UMI_Simple\n"; return false; }
