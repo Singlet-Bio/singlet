@@ -79,7 +79,7 @@ prof() {   # label regex(mangled) skip count sections... -- m5 args
   for k in k_p1 k_p2 k_p3 k_lane; do
     grep -q "$k" $OUT/ncu_${L}_raw.csv || continue
     apptainer exec -B $W $IMG $NCU --import $OUT/ncu_$L.ncu-rep --kernel-name-base function --kernel-name regex:"$k" --page source --csv \
-      --print-source cuda > $OUT/ncu_${L}_${k}_src.csv 2>&1
+      --print-source cuda,sass > $OUT/ncu_${L}_${k}_src.csv 2>&1
   done
   ls -la $OUT | grep "ncu_$L" | awk '{print $5, $9}'
 }
