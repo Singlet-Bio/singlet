@@ -646,6 +646,9 @@ HD inline u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u6
     }
 }
 
+#if defined(M5_PREF3) && !defined(M5_PREF2) && !defined(M5_PREF)
+#define M5_PREF
+#endif
 #if defined(M5_PREF) || defined(M5_PREF2)
 // E7 M5_PREF: binary-search prefetch. While a binary search (maxMappableLength, findMultRange) compares at the midpoint
 // i3, the SA words of both possible next midpoints are prefetched into L2, so the next step's SA read is an L2 hit and
@@ -792,6 +795,17 @@ template <class C> HD inline uint maxMappableLength2strands(const Params& P, con
     maxLbest = 0;
     bool dirR = iDir == 0;
     uint nD = mn<uint>(pieceLengthIn, P.gSAsparseD);
+#if defined(M5_PREF3) && defined(__CUDA_ARCH__)
+    // E7 M5_PREF3: the SAi words of the passes iDist >= 1 (their first lookup, Lind = Lmax) prefetched into L2 before pass 0
+    for (uint iDist = 1; iDist < nD; iDist++) {
+        const uint pl = pieceLengthIn - iDist, Lmax = mn<uint>(P.gSAindexNbases, pl);
+        uint ind1 = 0;
+        if (dirR) { const uint ps = pieceStartIn + iDist; for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += ((uint)Read1[0][ps + ii]); } }
+        else { const uint ps = pieceStartIn - iDist; for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += (3 - ((uint)Read1[0][ps - ii])); } }
+        const u64* pp = g.SAi + (((g.saiStart[Lmax - 1] + ind1) * g.saiBits) >> 6);
+        asm volatile("prefetch.global.L2 [%0];" :: "l"(pp));
+    }
+#endif
     for (uint iDist = 0; iDist < nD; iDist++) {
         uint pieceStart;
         uint pieceLength = pieceLengthIn - iDist;
