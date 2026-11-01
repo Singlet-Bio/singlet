@@ -7,7 +7,10 @@ Branch `gpu/fable/warp-window` (from `gpu/fable-engine` cf92cdb9). Code: `bench/
 identity checked in each), `bench/gpu/m5/jobs/e3_ncu_source.sbatch`. Results JSON: `bench/fable/warp-window/`.
 
 STATUS: done. Exact (100% identity in every variant) but **no speed-up**: the best warp configuration ties the baseline
-(lanes M+B 568.7 vs 563.5 ms); the gate (M+B <= 0.5x) is not met. Section 3.3 says why.
+(lanes M+B 568.7 vs 563.5 ms); the gate (M+B <= 0.5x) is not met. Section 3.3 says why. After the ballot fix (3.4) lane B
+warp-stitched with the in-kernel assignment is 5.7% faster than the baseline lane B, lane M 5% slower. The branch carries
+the integration head (merge 80f366fc, all build flavours compile; E3 probes only with `-DM5_E3STATS`); the run on the
+merged code (job 795844) was queued when this was written (3.5).
 
 ## 1. Design as built
 
