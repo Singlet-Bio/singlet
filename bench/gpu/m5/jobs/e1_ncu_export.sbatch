@@ -22,7 +22,7 @@ for D in "$@"; do
     [ -s $D/ncu_${L}_raw.csv ] || apptainer exec -B $W $IMG $NCU --import $REP --page raw --csv > $D/ncu_${L}_raw.csv 2>&1
     for k in k_p1 k_p2 k_p3 k_lane; do
       grep -q "$k" $D/ncu_${L}_raw.csv || continue
-      apptainer exec -B $W $IMG $NCU --import $REP --kernel-name-base function --kernel-name regex:"$k" --page source --csv \
+      grep -q '^"File Path"' $D/ncu_${L}_${k}_src.csv 2>/dev/null || apptainer exec -B $W $IMG $NCU --import $REP --kernel-name-base function --kernel-name regex:"$k" --page source --csv \
         --print-source cuda,sass > $D/ncu_${L}_${k}_src.csv 2>&1
       echo "$L $k: $(wc -c < $D/ncu_${L}_${k}_src.csv) bytes, $(grep -c '^"File Path"' $D/ncu_${L}_${k}_src.csv) file blocks"
     done

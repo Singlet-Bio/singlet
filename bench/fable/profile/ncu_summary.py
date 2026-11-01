@@ -196,16 +196,29 @@ def read_source(path, topn=10):
     tot = sum(d["_v"].get(si, 0) for d in agg.values())
     want = [h for h in cols if any(k in h for k in ("Instructions Executed", "Avg. Threads Executed", "Divergent Branches", "L2 Theoretical Sectors",
                                                       "L1 Wavefronts", "Excessive"))]
-    top = []
-    for (f, ln), d in sorted(agg.items(), key=lambda kv: -kv[1]["_v"].get(si, 0))[:topn]:
+    stl = [h for h in cols if h.startswith("stall_") and "(Not Issued)" not in h]
+    ie, te = cols.get("Instructions Executed"), cols.get("Thread Instructions Executed")
+    lines = []
+    for (f, ln), d in sorted(agg.items(), key=lambda kv: -kv[1]["_v"].get(si, 0)):
         v = d["_v"].get(si, 0)
-        e = {h: d["_v"].get(cols[h]) for h in want}
-        top.append(dict(file=os.path.basename(f) or "?", line=ln, samples=v, share_pct=round(100 * v / tot, 2) if tot else None,
-                        not_issued=d["_v"].get(ni) if ni is not None else None, source=d["_src"].strip()[:140], **e))
+        if v <= 0:
+            continue
+        st = sorted(((h[6:], d["_v"].get(cols[h], 0)) for h in stl), key=lambda x: -x[1])
+        inst, tinst = d["_v"].get(ie), d["_v"].get(te)
+        lines.append(dict(file=os.path.basename(f) or "?", line=ln, samples=v, share_pct=round(100 * v / tot, 3) if tot else None,
+                          not_issued=d["_v"].get(ni) if ni is not None else None, inst_executed=inst,
+                          threads_per_inst=round(tinst / inst, 2) if inst and tinst else None,
+                          l2_sectors_global=d["_v"].get(cols.get("L2 Theoretical Sectors Global", -1)),
+                          l2_sectors_global_excessive=d["_v"].get(cols.get("L2 Theoretical Sectors Global Excessive", -1)),
+                          l2_sectors_local=d["_v"].get(cols.get("L2 Theoretical Sectors Local", -1)),
+                          stall1="%s %.0f%%" % (st[0][0], 100 * st[0][1] / v) if st and v else "",
+                          stall2="%s %.0f%%" % (st[1][0], 100 * st[1][1] / v) if len(st) > 1 and v else "",
+                          source=d["_src"].strip()[:140]))
+    top = lines[:topn]
     by_file = {}
     for (f, ln), d in agg.items():
         by_file[os.path.basename(f)] = by_file.get(os.path.basename(f), 0) + d["_v"].get(si, 0)
-    return {"stall_column": scol, "total_samples": tot, "columns": hdr, "top": top,
+    return {"stall_column": scol, "total_samples": tot, "columns": hdr, "top": top, "lines": lines,
             "samples_by_file_pct": {k: round(100 * v / tot, 2) for k, v in sorted(by_file.items(), key=lambda x: -x[1])} if tot else {}}
 
 
@@ -224,7 +237,6 @@ def main():
             res["labels"][L] = {"kernels": ks, "source": src}
             for k in ks:
                 allk.append((L, k))
-        json.dump(res, open(os.path.join(out, "e1_ncu_summary.json"), "w"), indent=1, default=str)
         cols = ["duration_ms", "regs", "occ_theor_pct", "occ_achieved_pct", "lim_regs_blocks", "lim_warps_blocks", "warp_cyc_per_inst",
                 "issue_slots_busy_pct", "ipc", "simt_threads_per_inst", "l1_hit_pct", "l2_hit_pct", "dram_thru_pct", "dram_read_GB", "dram_write_GB",
                 "gld_sectors_per_req", "gld_sectors_per_active_thread", "gst_sectors_per_req", "gst_sectors_per_active_thread", "lld_sectors_per_req",
@@ -235,13 +247,25 @@ def main():
             w.writerow(["label", "kernel"] + cols + ["top_stalls", "pcsamp_top"])
             for L, k in allk:
                 w.writerow([L, k["kernel"]] + [k.get(c) for c in cols] + [k.get("top_stalls"), k.get("pcsamp_top")])
+        with open(os.path.join(out, "e1_ncu_lines.csv"), "w", newline="") as f:
+            keys = ["file", "line", "samples", "share_pct", "not_issued", "inst_executed", "threads_per_inst", "l2_sectors_global",
+                    "l2_sectors_global_excessive", "l2_sectors_local", "stall1", "stall2", "source"]
+            w = csv.writer(f)
+            w.writerow(["label", "kernel"] + keys)
+            for L, d in res["labels"].items():
+                for k, s in d["source"].items():
+                    for t in s.get("lines", []):
+                        w.writerow([L, k] + [t.get(c) for c in keys])
+                    s.pop("lines", None)
+        json.dump(res, open(os.path.join(out, "e1_ncu_summary.json"), "w"), indent=1, default=str)
         with open(os.path.join(out, "e1_ncu_top_lines.csv"), "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["label", "kernel", "rank", "file", "line", "stall_samples", "share_pct", "not_issued", "source"])
+            w.writerow(["label", "kernel", "rank", "file", "line", "stall_samples", "share_pct", "not_issued", "threads_per_inst", "stall1", "stall2", "source"])
             for L, d in res["labels"].items():
                 for k, s in d["source"].items():
                     for i, t in enumerate(s.get("top", [])):
-                        w.writerow([L, k, i + 1, t["file"], t["line"], t["samples"], t["share_pct"], t["not_issued"], t["source"]])
+                        w.writerow([L, k, i + 1, t["file"], t["line"], t["samples"], t["share_pct"], t["not_issued"], t.get("threads_per_inst"), t.get("stall1"),
+                                    t.get("stall2"), t["source"]])
         for L, d in res["labels"].items():
             for k in d["kernels"]:
                 print("== %s %s" % (L, k["kernel"]))
@@ -255,7 +279,8 @@ def main():
                 if "error" in s:
                     print("   ", s["error"], s.get("head"))
                 for i, t in enumerate(s.get("top", [])):
-                    print("   %2d %5.1f%% %s:%d  %s" % (i + 1, t["share_pct"] or 0, t["file"], t["line"], t["source"][:110]))
+                    print("   %2d %5.1f%% %s:%d thr/inst %s [%s, %s]  %s" % (i + 1, t["share_pct"] or 0, t["file"], t["line"], t.get("threads_per_inst"),
+                                                                    t.get("stall1"), t.get("stall2"), t["source"][:100]))
 
 
 if __name__ == "__main__":
