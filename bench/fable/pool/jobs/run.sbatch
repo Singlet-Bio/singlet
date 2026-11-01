@@ -150,6 +150,17 @@ for p in "${POINTS[@]}"; do
   FORM=${BASH_REMATCH[1]}; P=${BASH_REMATCH[2]:-1}; K=${BASH_REMATCH[3]:-1}; T=${BASH_REMATCH[4]}; SL=${BASH_REMATCH[5]}; NH=${BASH_REMATCH[6]}; GP=${BASH_REMATCH[7]}
   ITEMS=($(expand "${BASH_REMATCH[9]}")); p=${p%%:*}
   if [ $FORM != a ] && [ $P -gt $NGPU ]; then echo "!! $p: $P pools but $NGPU GPUs" | tee -a $S; continue; fi
+  # MEMGUARD=1 (default): skip a pool point whose host memory, predicted from the last pool point's mem.json (fixed per pool + per
+  # sample in flight at its peak; only from a point of the same samples), would exceed 92 % of the cgroup's limit
+  US=$(printf "%s\n" "${ITEMS[@]}" | sort -u | tr '\n' ' ')   # the point's samples (the guard compares like with like)
+  if [ $FORM != a ] && [ "${MEMGUARD:-1}" = 1 ] && [ -n "${LASTMEM:-}" ] && [ -f "$LASTMEM" ] && [ "$US" = "${LASTMEMS:-}" ]; then
+    PRED=$(python3 -c "import json; m=json.load(open('$LASTMEM')); f=m['fixed_gb']/max(1,len(m['fixed'])); s=max(m.get('per_sample_at_peak_gb') or 0, m.get('per_sample_window_gb') or 0); print(round($P*f + $((P * K))*s))" 2>/dev/null)
+    LIM=$(( $(cat $CG/memory.max 2>/dev/null || echo 0) / 1073741824 ))
+    if [ -n "$PRED" ] && [ "$LIM" -gt 0 ] && [ "$PRED" -gt $((LIM * 92 / 100)) ]; then
+      echo "######## $p: SKIPPED by MEMGUARD: predicted $PRED GB (from $LASTMEM) > 92 % of the cgroup's $LIM GB" | tee -a $S; continue
+    fi
+    [ -n "$PRED" ] && echo "  $p: predicted host peak $PRED GB of the cgroup's $LIM GB (from $LASTMEM)" | tee -a $S
+  fi
   for s in $(printf "%s\n" "${ITEMS[@]}" | sort -u); do stage_input $s; done
   unset SINGLET_ENGINE_GPU_SLOTS SINGLET_ENGINE_GPU_DEVICE
   export SINGLET_ENGINE_GPU_SLOTS=$SL
@@ -198,7 +209,7 @@ for p in "${POINTS[@]}"; do
     for ((d = 0; d < P; d++)); do
       grep -a -e "genome " -e "non-host server" -e "ready in" $RES0/$p/pool$d/pool.log | cut -d' ' -f4- | cut -c1-400 | sed "s/^/  pool $d: /" | tee -a $S
       grep -a -e "resident" -e "context on" -e "declined" -e "start-up" -e "stops" $RES0/$p/pool$d/nhsrv.log 2>/dev/null | head -5 | cut -c1-300 | sed "s/^/  pool $d nhsrv: /" | tee -a $S
-      echo "  pool $d nhsrv: $(grep -ac '^\[nhsrv\] request' $RES0/$p/pool$d/nhsrv.log 2>/dev/null) requests ($(grep -ac 'index kept' $RES0/$p/pool$d/nhsrv.log 2>/dev/null) with the index kept on the device)" | tee -a $S
+      [ -f $RES0/$p/pool$d/nhsrv.log ] && echo "  pool $d nhsrv: $(grep -ac '^\[nhsrv\] request' $RES0/$p/pool$d/nhsrv.log 2>/dev/null) requests ($(grep -ac 'index kept' $RES0/$p/pool$d/nhsrv.log 2>/dev/null) with the index kept on the device)" | tee -a $S
       # E18's files per run, from the pool's report
       awk -F'\t' -v d=$d -v K=$K 'FNR==NR{g[$1]=$2; next} FNR>1{n=split($3,a,"/"); s=a[n]; sub(/\.1fq$/,"",s); rc=($12>=0)?$12:128+$13;
            printf "%s\t%d\t%s\t%s\t%s\t%d\n", g[$1], d*K+$2, s, $5, $6, rc}' $RES0/$p/pool$d/gmap.tsv $RES0/$p/pool$d/samples.tsv >> $RES0/$p/runs.tsv
@@ -217,6 +228,7 @@ for p in "${POINTS[@]}"; do
   python3 $TB/e18_locks.py $RES0/$p > $RES0/$p/locks.txt 2>&1
   python3 $TB/e18_steady.py $RES0/$p 2>&1 | sed 's/^/   /' >> $RES0/$p/point.txt
   python3 $PO/e21_mem.py $RES0/$p >> $RES0/$p/point.txt 2>&1
+  [ $FORM != a ] && [ -f $RES0/$p/mem.json ] && LASTMEM=$RES0/$p/mem.json && LASTMEMS=$US
   cut -c1-400 $RES0/$p/point.txt | tee -a $S
   # identity of every pool run (exit 0) against its references
   if [ $FORM != a ] && [ "$IDENT" = 1 ]; then
