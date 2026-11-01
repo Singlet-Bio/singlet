@@ -46,12 +46,12 @@ else   # the whole lane, as it is; the barcode reads uncompressed for the driver
   zcat $R1 > $SCR/r1.fastq; GZ1=$R1; GZ2=$R2
 fi
 echo "reads: STAR reads $GZ1 + $GZ2; $(( $(wc -l < $SCR/r1.fastq) / 4 )) barcode records for the driver ($(( $(date +%s) - T0 )) s)" | tee -a $RES/summary.txt
-# ---- STAR (CPU engine) with the per-read Solo dump
+# ---- STAR (CPU engine) with the per-read Solo dump. --reads takes the cDNA read first (it is STAR's first readFilesIn), the barcode read second
 O=$SCR/run/out; mkdir -p $O
 ( while [ ! -e $O/star_Solo.out/Gene/CellReads.stats ]; do sleep 0.2; done; ln $O/star_Solo.out/Gene/CellReads.stats $SCR/keep/CellReads.stats ) &
 WATCH=$!
 T0=$(date +%s)
-( cd $SCR/run && SINGLET_SOLO_DUMP=$SCR/solo timeout -k 30 1200 $BINDIR/singlet-gpu --reads $GZ1 $GZ2 --whitelist $PB/whitelists/$WL --barcodes $BC \
+( cd $SCR/run && SINGLET_SOLO_DUMP=$SCR/solo timeout -k 30 1200 $BINDIR/singlet-gpu --reads $GZ2 $GZ1 --whitelist $PB/whitelists/$WL --barcodes $BC \
     --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf --out-prefix $O/ --threads $T --pipeline --output-format 1pz \
     --engine cpu > $RES/run.log 2>&1 ) &
 P=$!
