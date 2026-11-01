@@ -48,6 +48,8 @@ extern bool g_e11SoloDone; //singlet E11 (SeqCacheGpuPrefill.cpp): star_Solo.out
 #include "parametersDefault.xxd"
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/tail_trace.h"   // E16: marks of the level-5 tail (stderr; nothing at other levels)
+#include <thread>
+#include <vector>
 #define E16_MARK(...) singlet_tail::mark(__VA_ARGS__)
 #else
 #define E16_MARK(...) ((void) 0)
@@ -239,6 +241,20 @@ int star_main_impl(int argInN, char *argIn[])
 
     // prepare chunks and spawn mapping threads
     ReadAlignChunk *RAchunk[P.runThreadN];
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    if (P.runThreadN > 1 && singlet_tail::cut("chunkpar"))
+    {   // E16 (level 5): one thread per chunk (each constructor allocates and fills its own buffers and copies the transcriptome; Log.out's
+        // "Opening the file" lines are written under a lock, in the order the threads reach them)
+        singlet_tail::g_chunkLogLock = true;
+        std::vector<std::thread> e16th;
+        ReadAlignChunk **e16ra = RAchunk;   // (a lambda cannot capture the variable-length array itself)
+        for (int ii = 0; ii < P.runThreadN; ii++)
+            e16th.emplace_back([&P, &genomeMain, &transcriptomeMain, e16ra, ii]() { e16ra[ii] = new ReadAlignChunk(P, genomeMain, transcriptomeMain, ii); });
+        for (auto &t : e16th) t.join();
+        singlet_tail::g_chunkLogLock = false;
+    }
+    else
+#endif
     for (int ii = 0; ii < P.runThreadN; ii++)
     {
         RAchunk[ii] = new ReadAlignChunk(P, genomeMain, transcriptomeMain, ii);

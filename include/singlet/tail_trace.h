@@ -10,6 +10,7 @@
 #include <cstring>
 #include <ctime>
 #include <dirent.h>
+#include <mutex>
 #include <string>
 #include <unistd.h>
 
@@ -85,6 +86,10 @@ inline std::string pipeWriters(unsigned long ino) {
 // STAR's mapping threads (ReadAlignChunk::processChunks): per thread its start, first chunk read, last chunk mapped, end, chunk loop left and
 // BAM buffer flushed (epoch s), and its chunk and read counts; STAR.cpp prints them after the join
 constexpr int kMaxThr = 256;
+// E16 "chunkpar": STAR's ReadAlignChunk objects constructed on one thread each; their only shared write (Log.out lines of chunkFstreamOpen)
+// takes this lock while g_chunkLogLock is set
+inline bool g_chunkLogLock = false;
+inline std::mutex g_chunkLogMu;
 inline double g_thr[kMaxThr][6];
 inline unsigned long long g_thrN[kMaxThr][2];
 } // namespace singlet_tail
