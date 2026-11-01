@@ -200,16 +200,19 @@ def _rewrite_study_meta(data: bytes, drop_gsm: Callable[[str], bool]) -> bytes:
     return (json.dumps(m, indent=2) + "\n").encode("utf-8")
 
 
-def strip_doublet_columns(data: bytes) -> bytes:
+def strip_doublet_columns(data: bytes, keep: Iterable[str] = ()) -> bytes:
     """``cell_qc_metrics.tsv`` without its doublet columns (``doublet_score``, ``is_doublet``, ...): doublet calls are a withheld
-    layer, and this table would otherwise carry them into the public cells table as ``qc_doublet_score``. Other bytes unchanged."""
+    layer, and this table would otherwise carry them into the public cells table as ``qc_doublet_score``. ``keep`` names columns
+    that stay: a policy that publishes ``doublet_scores`` keeps ``doublet_score`` (the doublet stage has already replaced the engine's
+    values with the stacker's, scripts/atlas_rerun/doublet_stage.py) so the cells table and the member agree. Other bytes unchanged."""
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
         return data
     lines = text.split("\n")
     head = [h.rstrip("\r") for h in lines[0].split("\t")]
-    drop = {i for i, h in enumerate(head) if "doublet" in h.strip().lower()}
+    keep = set(keep)
+    drop = {i for i, h in enumerate(head) if "doublet" in h.strip().lower() and h.strip() not in keep}
     if not drop:
         return data
     out = []
@@ -221,6 +224,11 @@ def strip_doublet_columns(data: bytes) -> bytes:
         f = (ln[:-1] if cr else ln).split("\t")
         out.append("\t".join(x for i, x in enumerate(f) if i not in drop) + ("\r" if cr else ""))
     return "\n".join(out).encode("utf-8")
+
+
+def _qc_keep(policy) -> tuple:
+    """The doublet column a policy keeps in the QC table: ``doublet_score`` when it publishes the ``doublet_scores`` layer."""
+    return ("doublet_score",) if "doublet_scores" in getattr(policy, "published", ()) else ()
 
 
 def _is_qc_table(path: str) -> bool:
@@ -310,10 +318,10 @@ def apply_to_bundle(
     rep.excluded_samples = sorted(excl)
     for p in [p for p in bundle.entries if _is_qc_table(p)]:
         old = bundle.read(p)
-        new = strip_doublet_columns(old)
+        new = strip_doublet_columns(old, _qc_keep(policy))
         if new != old:
             bundle.override(p, new)
-            rep.omitted_members["doublet_scores"] = rep.omitted_members.get("doublet_scores", 0) + 1
+            rep.omitted_members["doublet_scores_engine"] = rep.omitted_members.get("doublet_scores_engine", 0) + 1
     study = {p: bundle.read(p) for p in bundle.study_paths()}
     new = rewrite_study_files(study, drop, excl, policy)
     for name, data in new.items():
@@ -358,7 +366,7 @@ class FilteredLegacy:
         for n in self._names:
             if _is_qc_table(n):
                 old = inner.read(n)
-                new = strip_doublet_columns(old)
+                new = strip_doublet_columns(old, _qc_keep(policy))
                 if new != old:
                     self.override[n] = new
 

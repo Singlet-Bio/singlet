@@ -696,3 +696,29 @@ def test_sample_facts_never_carry_an_accession_into_the_manifest(tmp_path, pol):
         str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy
     )
     assert any("excluded or withheld accessions" in what for _s, _w, what in rep.items)
+
+
+def test_published_doublet_layer_transcodes_and_verifies(tmp_path):
+    """A policy with published_layers=[doublet_scores]: the member and the cells table's qc_doublet_score reach the object (one
+    method, the stage's), the engine's is_doublet call and everything else withheld stay out, and verify passes under the same view."""
+    p = tmp_path / "policy.json"
+    p.write_text(json.dumps({"version": "beta-test-1", "withheld_studies": ["GSE7"], "excluded_samples": [DROP],
+                             "published_layers": ["doublet_scores"]}))
+    policy = POL.Policy.load(str(p))
+    b = _policy_bundle(tmp_path)
+    out = tmp_path / "out"
+    opts = MG.Options(recipes=TM.FakeRecipes(), created_at="2026-10-26T00:00:00Z", log=lambda *a: None, policy=policy)
+    res = MG.migrate_bundle(str(b), str(out), None, opts)
+    MG.write_outputs(res, opts)
+    man = json.loads((out / "s1" / "m" / f"{GSE}.json").read_text("utf-8"))
+    assert "doublet_scores" not in man["release_policy"]["omitted_layers"]
+    assert "doublet_scores_engine" in man["release_policy"]["omitted_layers"] and "ambient" in man["release_policy"]["omitted_layers"]
+    members = set(man["samples"][0]["members"])
+    assert "doublet_scores.tsv" in members and "ambient_contamination.tsv" not in members and "doublet_scores_engine.tsv" not in members
+    from singlet.s1.sample import S1Sample
+
+    t = S1Sample((out / man["samples"][0]["key"]).read_bytes()).cells()
+    cols = list(t.names)
+    assert "qc_doublet_score" in cols and not [c for c in cols if "is_doublet" in c], cols
+    rep = V.verify(str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy)
+    assert rep.fail == 0, rep.items
