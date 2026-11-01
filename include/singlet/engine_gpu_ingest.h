@@ -2,9 +2,10 @@
 #pragma once
 // E13 (docs/gpu-engine/fable/E13-ingest.md; SINGLET_ENGINE_GPU_INGEST=1): on the GPU path the .1fq goes from disk into the prefill's packed
 // buffers directly. The pipeline no longer decodes it to FASTQ temp files: it scans the blocks' heads (barcode counts for barcode discovery,
-// the 5' prefix probe, the per-block read and base counts), forks STAR with no read files, and STAR's process decodes the blocks on the job's
-// threads straight into the arrays below (src/star/SeqCacheGpuIngest.cpp), starting as soon as it is forked so the decode runs beside the
-// CR4 probe and the genome load; the prefill takes the arrays when it starts. STAR's loop takes the reads the device did not cover from a read
+// the 5' prefix probe, the per-block read and base counts), decodes the blocks on the job's threads straight into the arrays below
+// (src/star/SeqCacheGpuIngest.cpp) beside its reference load, and forks STAR with no read files: STAR's process inherits the arrays
+// through fork() and the prefill takes them when it starts (the barcode products and the CellRanger4 clip are computed in STAR's process,
+// beside its CR4 probe and genome load, once their inputs are known). STAR's loop takes the reads the device did not cover from a read
 // source built from the same arrays (level 4/5), or from a chunk source over the .1fq (read_source.h) where the prefill does not run.
 // R11's exact CB histogram goes back to the pipeline through the E8 region's header (E2EHeader::r11Magic; the handshake is below).
 //
