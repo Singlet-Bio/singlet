@@ -13,14 +13,14 @@ pairs = {}
 for r in pj.get("runs", []):
     pairs[str(r.get("item", r.get("c", "")))] = r.get("pairs")
 ends = sorted(r[4] for r in runs); starts = sorted(r[3] for r in runs)
+k = len(set(r[1] for r in runs))
 t0, t1 = starts[0], ends[-1]
 def pr(i):
     v = pairs.get(str(i)) or pairs.get("c%d" % i)
     return (v / 1e6 if v and v > 1e4 else v) if v else 66.6017
 tot = sum(pr(r[0]) for r in runs)
 print(f"span {t1 - t0:.1f} s, {len(runs)} runs, {tot:.1f} M pairs: {tot / (t1 - t0):.3f} M pairs/s")
-k = len(set(r[1] for r in runs))
-a, b = ends[0], starts[-1]          # every worker busy: from the first completion to the last start
+a, b = ends[0], (ends[len(ends) - k] if len(ends) > k else ends[-1])   # every worker busy: the first completion to the first completion after the last start
 later = [r for r in runs if r[3] >= ends[0] - 1.0]
 if later and b > a:
     mw = sum(r[4] - r[3] for r in later) / len(later)
