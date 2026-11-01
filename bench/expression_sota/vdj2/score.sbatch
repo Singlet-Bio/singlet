@@ -17,7 +17,7 @@ source $WORK/jobs/vdjc/src.sh
 export PATH=$ENV/bin:$PATH PYTHONPATH=$SRC/python HOME=$WORK/cache/condahome NUMBA_CACHE_DIR=$WORK/cache/numba-vdjc
 V=$WORK/expression-sota/vdj2
 if [ "${SET:-dev}" = bcrdev ]; then
-  LIBS="melv11_b:BCR:cr3 nsclc22_b:BCR:cr3 chx10k_b:BCR:cr5 pbmc2_b:BCR:cr3 pbmc10k_b:BCR:cr5"
+  LIBS="melv11_b:BCR:cr5 nsclc22_b:BCR:cr3 chx10k_b:BCR:cr5 pbmc2_b:BCR:cr3 pbmc10k_b:BCR:cr5"
 elif [ "${SET:-dev}" = bcrho ]; then
   LIBS="pbmc22_b:BCR:cr3 cd19_b:BCR:cr3 b1k_b:BCR:cr5"
 elif [ "${SET:-dev}" = heldout ]; then
