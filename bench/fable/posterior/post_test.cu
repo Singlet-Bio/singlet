@@ -195,14 +195,15 @@ int main(int argc, char** argv) {
     S.umiMaskLow = (u32)((((u64)1) << S.umiL) - 1);
     for (u32 jj = 0; jj < 4; jj++) { S.homo[jj] = 0; for (u32 ii = 0; ii < S.umiL; ii++) S.homo[jj] = (S.homo[jj] << 2) + jj; }
     printf("[params] cbL %u umiL %u cbS %u umiS %u cbMinP %.9g\n", S.cbL, S.umiL, cbS, umiS, (double)S.cbMinP);
-    // ---- STAR's posterior, transcribed: exact counts (getCBandUMI.cpp:94, :296: every read whose CR is in the whitelist, whatever its UMI)
+    // ---- STAR's posterior, transcribed: exact counts (addStats case 0, getCBandUMI.cpp:94: the reads whose CR is in the whitelist and whose UMI
+    // passes the check, i.e. STAR's cbMatch 0; a bad UMI replaces cbMatch before addStats, :290-302, MATCH_CellRanger is not defined)
     // + 1 (Solo.cpp:66-70), cbMatchString as matchCBtoWL writes it, read back with operator>>, float arithmetic
     T = now();
     auto wlIdx = [&](u64 v) -> i64 { auto it = std::lower_bound(M.wl.begin(), M.wl.end(), v); return (it != M.wl.end() && *it == v) ? (i64)(it - M.wl.begin()) : -1; };
     std::vector<u32> cbTotal(M.wl.size(), 1);
     for (u64 i = 0; i < N; i++) {
         u64 v;
-        if (convertNuclStrToInt64(unpack3(byRead[i].cr3, cbL), v) == -1) { const i64 c = wlIdx(v); if (c >= 0) cbTotal[c]++; }
+        if (byRead[i].cbMatch == 0 && convertNuclStrToInt64(unpack3(byRead[i].cr3, cbL), v) == -1) { const i64 c = wlIdx(v); if (c >= 0) cbTotal[c]++; }
     }
     std::vector<i32> starCb(N, -2);   // per multi-match read (STAR's cbMatch > 1) STAR's posterior choice, -1 noTooManyWLmatches; -2 not one
     u64 nStarMulti = 0, nStarAcc = 0, nConstDiff = 0;
