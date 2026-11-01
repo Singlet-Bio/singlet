@@ -217,6 +217,12 @@ if tl and tl["log"].get("TAIL"):
     for s in tl["log"].get("TAILEVSUM", []):
         print("  events (rep before the analysed one): " + " ".join("%s=%s" % kv for kv in s.items()))
     S["tail"]["events"] = tl["log"].get("TAILEV", [])
+    S["tail"]["who"] = tl["log"].get("TAILWHO", [])
+    S["tail"]["top"] = tl["log"].get("TAILTOP", [])
+    for s_ in S["tail"]["who"]:
+        print("  who: " + " ".join("%s=%s" % kv for kv in s_.items()))
+    for s_ in S["tail"]["top"]:
+        print("  top: " + " ".join("%s=%s" % kv for kv in s_.items()))
     for s in tl["log"].get("TAILSUM", []):
         print("  " + " ".join("%s=%s" % kv for kv in s.items()))
     for t in tl["log"]["TAIL"]:
