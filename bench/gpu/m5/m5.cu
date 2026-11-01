@@ -379,6 +379,7 @@ static u64 g_fusedBits = 16384;      // --fused-bits: SA entries per read marked
 static int g_fusedLb = 1;            // --fused-lb 1|4|5: __launch_bounds__ min blocks of the fused kernel
 static int g_p3T = 128;              // --p3-block: threads per block of the phase-3 kernels (32: one warp per block)
 static int g_p3MaxReg = 0;           // --p3-maxreg 64|80: register cap of k_p3 (__launch_bounds__)
+static int g_p3MaxRegLane[3] = {-1, -1, -1};   // --p3-maxreg-a/m/b: per lane (overrides --p3-maxreg)
 static int g_queueBps = 0;           // --queue-bps: resident blocks per SM of k_p3q (0 = occupancy limit)
 static bool g_tail = false;          // --tail: per-block / per-warp timing of phase 3
 static int g_nSM = 132;
@@ -439,8 +440,9 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     // --p3-block / --p3-maxreg: block size and register cap of the phase-3 kernel (k_p1, k_p2 keep 128 / 256 threads)
     const int T3 = fused ? T : g_p3T, wpb3 = T3 / 32;
     decltype(&k_p3<C>) p3k = k_p3<C>;
-    if (g_p3MaxReg == 64) p3k = T3 == 32 ? k_p3lb<C, 32, 32> : k_p3lb<C, 128, 8>;
-    else if (g_p3MaxReg == 80) p3k = T3 == 32 ? k_p3lb<C, 32, 25> : k_p3lb<C, 128, 6>;
+    const int maxreg = g_p3MaxRegLane[li] >= 0 ? g_p3MaxRegLane[li] : g_p3MaxReg;
+    if (maxreg == 64) p3k = T3 == 32 ? k_p3lb<C, 32, 32> : k_p3lb<C, 128, 8>;
+    else if (maxreg == 80) p3k = T3 == 32 ? k_p3lb<C, 32, 25> : k_p3lb<C, 128, 6>;
     { cudaFuncAttributes fa; CK(cudaFuncGetAttributes(&fa, fused ? (const void*)fk : g_queue ? (const void*)k_p3q<C> : (const void*)p3k));
       L.p3Regs = fa.numRegs; L.p3Local = (int)fa.localSizeBytes; L.p3T = T3; }
     if (fused) CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, fk, T, 0));
@@ -703,9 +705,13 @@ int main(int argc, char** argv) {
         else if (a == "--fused-bps-b") g_fusedBps[2] = atoi(argv[++i]);
         else if (a == "--fused-bits") g_fusedBits = strtoull(argv[++i], nullptr, 10);
         else if (a == "--fused-lb") g_fusedLb = atoi(argv[++i]);
-        else if (a == "--tail") g_tail = true;
+        else if (a == "--tail") g_tail = true;          // phase-3 scheduling statistics (block/warp times)
         else if (a == "--p3-block") { g_p3T = atoi(argv[++i]); if (g_p3T != 32 && g_p3T != 64 && g_p3T != 128) { fprintf(stderr, "--p3-block 32|64|128\n"); return 2; } }
-        else if (a == "--p3-maxreg") { g_p3MaxReg = atoi(argv[++i]); if (g_p3MaxReg != 0 && g_p3MaxReg != 64 && g_p3MaxReg != 80) { fprintf(stderr, "--p3-maxreg 0|64|80\n"); return 2; } }          // phase-3 scheduling statistics (block/warp times)
+        else if (a == "--p3-maxreg") { g_p3MaxReg = atoi(argv[++i]); if (g_p3MaxReg != 0 && g_p3MaxReg != 64 && g_p3MaxReg != 80) { fprintf(stderr, "--p3-maxreg 0|64|80\n"); return 2; } }
+        else if (a == "--p3-maxreg-a" || a == "--p3-maxreg-m" || a == "--p3-maxreg-b") {
+            int r = atoi(argv[++i]); if (r != 0 && r != 64 && r != 80) { fprintf(stderr, "%s 0|64|80\n", a.c_str()); return 2; }
+            g_p3MaxRegLane[a.back() == 'a' ? 0 : a.back() == 'm' ? 1 : 2] = r;
+        }
         else if (a == "--label") label = argv[++i];
         else if (a == "--no-mid") noMid = true;          // lanes A, B only
         else if (a == "--input") input = argv[++i];     // "count sequence" lines (uniq -c): map these instead of the truth reads
@@ -715,13 +721,13 @@ int main(int argc, char** argv) {
     if (gdir.empty() || truth.empty()) { fprintf(stderr, "usage: m5 --genome-dir D --truth PREFIX [--json F]\n"); return 2; }
     cudaDeviceProp prop; CK(cudaGetDeviceProperties(&prop, 0));
     g_nSM = prop.multiProcessorCount;
-    if (mono && (g_fused || g_queue || g_p3order || g_bin || g_p3T != 128 || g_p3MaxReg || g_p3orderLane[0] >= 0 || g_p3orderLane[1] >= 0 || g_p3orderLane[2] >= 0)) { fprintf(stderr, "--mono excludes the E4 scheduling options\n"); return 2; }
+    if (mono && (g_fused || g_queue || g_p3order || g_bin || g_p3T != 128 || g_p3MaxReg || g_p3MaxRegLane[0] >= 0 || g_p3MaxRegLane[1] >= 0 || g_p3MaxRegLane[2] >= 0 || g_p3orderLane[0] >= 0 || g_p3orderLane[1] >= 0 || g_p3orderLane[2] >= 0)) { fprintf(stderr, "--mono excludes the E4 scheduling options\n"); return 2; }
     // the marker that says which build runs and with which scheduling (job 790068 ran a stale binary)
-    fprintf(stderr, "m5 E4-order build %s; label %s; presort %d; p3order %s (lanes %s/%s/%s); queue %d (bps %d); fused %s%s%s (bps %d/%d/%d, bits %llu, lb %d); p3 block %d maxreg %d; tail %d; "
+    fprintf(stderr, "m5 E4-order build %s; label %s; presort %d; p3order %s (lanes %s/%s/%s); queue %d (bps %d); fused %s%s%s (bps %d/%d/%d, bits %llu, lb %d); p3 block %d maxreg %d (lanes %d/%d/%d); tail %d; "
                     "batches %lld/%lld/%lld; budgets %lld/%lld/%lld\n", M5_GIT, label.c_str(), presort, g_bin ? "cost-asc(--bin)" : p3orderName[g_p3order],
             g_p3orderLane[0] >= 0 ? p3orderName[g_p3orderLane[0]] : "-", g_p3orderLane[1] >= 0 ? p3orderName[g_p3orderLane[1]] : "-",
             g_p3orderLane[2] >= 0 ? p3orderName[g_p3orderLane[2]] : "-", g_queue, g_queueBps, (g_fused & 1) ? "A" : "", (g_fused & 2) ? "M" : "", (g_fused & 4) ? "B" : "", g_fusedBps[0], g_fusedBps[1], g_fusedBps[2],
-            g_fusedBits, g_fusedLb, g_p3T, g_p3MaxReg, g_tail, nbA, nbM, nbB, budgetA, budgetM, budgetB);
+            g_fusedBits, g_fusedLb, g_p3T, g_p3MaxReg, g_p3MaxRegLane[0], g_p3MaxRegLane[1], g_p3MaxRegLane[2], g_tail, nbA, nbM, nbB, budgetA, budgetM, budgetB);
     fprintf(stderr, "device %s, %d SMs; sizeof Work: A %zu, B %zu, host %zu\n", prop.name, prop.multiProcessorCount,
             sizeof(Work<LaneA>), sizeof(Work<LaneB>), sizeof(Work<Heavy>));
 
