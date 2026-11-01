@@ -22,6 +22,7 @@
 # for pbmc1k_v3 OUT_cpu / CRS_cpu default to E11's gate 796377): out_equiv.py, the 10 STAR Solo files by cmp, the mapping statistics of
 # star_Log.final.out, SJ.out.tab, the read-order files by sorted 4-line records, and CellReads.stats by sorted rows. Stages: s8_stages_e11.py
 # with the run's input reads.
+# Per sample: MODES_<sample> and PAIRS_<sample> override MODES and PAIRS.
 # debug-gpu: sbatch -p debug-gpu -c 8 --mem=120G --time=00:29:00 --export=ALL,T=8,SAMPLES=pbmc2m,... gate.sbatch
 set -uo pipefail
 FAIL=0
@@ -44,7 +45,8 @@ for s in "${SAMPLES[@]}"; do
   case $s in neuron1k_v3|nuclei2k_v2) G=$REF/GRCm39-2024-A ;; hgmm1k_v3) G=$REF/GRCh38-GRCm39-barnyard ;; esac
   FQ=$PB/data/$s/$s.1fq
   echo "######## $s ($(ls -l $FQ | awk '{print $5}') bytes; genome $G)" | tee -a $RES0/summary.txt
-  for m in "${MODES[@]}"; do
+  mv=MODES_$s; MS=(${!mv:-${MODES[*]}}); pv=PAIRS_$s; PS="${!pv:-${PAIRS:-cpu:gpuE5}}"
+  for m in "${MS[@]}"; do
     mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
     unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_E15_PERREAD SINGLET_E15_KEEP_ON_DEVICE; BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
     case $m in
@@ -114,7 +116,7 @@ for s in "${SAMPLES[@]}"; do
       else echo "  Gene/CellReads.stats: ROWS DIFFER ($(wc -l < $ca) vs $(wc -l < $cb) lines)" | tee -a $RES0/summary.txt; FAIL=1
            diff <(tail -n +2 $ca | LC_ALL=C sort) <(tail -n +2 $cb | LC_ALL=C sort) | head -8 | cut -c1-200 | tee -a $RES0/summary.txt; fi
     else echo "  Gene/CellReads.stats: not compared (no copy for $1 or $2)" | tee -a $RES0/summary.txt; fi; }
-  for p in ${PAIRS:-cpu:gpuE5}; do cmp2 ${p%%:*} ${p##*:}; done
+  for p in $PS; do cmp2 ${p%%:*} ${p##*:}; done
   rm -rf "${SCR:?}/${s:?}"
 done
 [ $FAIL = 0 ] && echo "GATE RUN OK (identity verdicts above)" | tee -a $RES0/summary.txt || echo "GATE FAILED" | tee -a $RES0/summary.txt
