@@ -60,7 +60,8 @@ tenxu() {  # name dir/prefix-of-fca (rel. to cell-vdj) fastq-tar (rel.) gex-h5 (
   fi
   # some 10x tars hold plain FASTQ named .fastq.gz: compress those in place
   for f in $(find $o/fastqs -name "*.fastq.gz" 2>/dev/null); do
-    gzip -t $f 2>/dev/null || { pigz -p 8 -c $f > $f.tmp && mv $f.tmp $f && echo "recompressed $(basename $f)"; }
+    # (stdin: pigz skips a file argument that ends in .gz)
+    gzip -t $f 2>/dev/null || { pigz -p 8 < $f > $f.tmp && [ -s $f.tmp ] && mv $f.tmp $f && echo "recompressed $(basename $f)" || rm -f $f.tmp; }
   done
   echo "lib $name"
 }
