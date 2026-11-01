@@ -208,7 +208,7 @@ def build(out_dir, dest, gsm, gse=None, threads=4):
                 seen[sha] = rel
                 ent["stored"] = rel + (".xz" if codec == "xz" else ".mtxc")
                 ent["xz_bytes"] = len(blob)
-                ti = tarfile.TarInfo(rel + ".xz")
+                ti = tarfile.TarInfo(ent["stored"])
                 ti.size = len(blob)
                 ti.mtime = 0
                 tf.addfile(ti, io.BytesIO(blob))
