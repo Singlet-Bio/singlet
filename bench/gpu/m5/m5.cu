@@ -26,6 +26,7 @@
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
 #include <thrust/sort.h>
+#include <thrust/binary_search.h>
 #include <thrust/partition.h>
 #include <thrust/sequence.h>
 #include <numeric>
@@ -53,8 +54,17 @@ typedef Caps<      160,     4,   32,    64,   8,    1024,  8,   8,   32,    2048
 typedef Caps<      160,     8,  128,   128,  50,    4096, 20,  32,   64,    4096> LaneB;   // A's overflow; NWA = seedPerWindowNmax
 typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20> Heavy;   // host: STAR's limits (seedPerReadNmax,
                                                                                             // alignWindowsPerReadNmax, MAX_N_EXONS, alignTranscriptsPerWindowNmax)
+// warp lanes (E3): per-lane stitching context of a window (exons, aligns of the window, transcripts recorded per window).
+// Lane M's are its own capacities (no fallback); lane B's are smaller than the read's (a window above them -> the serial
+// loop on lane 0 of the warp), configuration 0 or 1 (--wb-cfg).
+typedef LaneWork<8,  8,  8> LWM;
+typedef LaneWork<8, 16,  8> LWB0;
+typedef LaneWork<12, 32, 16> LWB1;
+typedef LaneWork<8,  8,  8> LWNone;   // lane A (not warp-stitched)
+typedef LaneWork<LaneA::NEX, LaneA::NWA, LaneA::NWTR> LWA;   // lane A group-stitched (--warp-a G): its own capacities, no fallback
 // ---------------------------------------------------------------------------------------------------------------------
 __device__ unsigned long long g_clk[8], g_scan;
+__device__ unsigned long long g_ws[WS_N];   // warp-lane statistics (stitch.cuh WStatIdx)
 __device__ unsigned long long g_monoBudget;   // --mono-budget: stitching step budget of the one-kernel lanes (default 0 = none, as before)
 #ifdef M5_TAIL
 #include "../../fable/profile/tail.cuh"      // E1: per-thread start/end of k_p1/k_p3 (batch tails); not in the default build
@@ -99,6 +109,8 @@ __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, 
 
 struct LaneOut { std::vector<uint8_t> out, status, why; std::vector<uint16_t> len; std::vector<int8_t> unmap; double ms = 0; std::vector<double> runs; double phaseMs[4] = {0, 0, 0, 0};
                  double tail[8] = {0, 0, 0, 0, 0, 0, 0, 0}; double workGB = 0, usedGB = 0; u64 workThreads = 0; int occBlocks = 0; std::string mode, order; int p3T = 128, p3Regs = 0, p3Local = 0;
+                 unsigned long long clk[8] = {0}, ws[WS_N] = {0}; double scanPerRead = 0; bool warp = false;   // E3
+                 size_t laneWorkBytes = 0; int group = 0, wmin = 0; double assignMs = 0;
 #ifdef M5_CENSUS
                  std::vector<CenRead> cen; std::vector<CenWin> win; unsigned long long winN = 0;
 #endif
@@ -562,12 +574,94 @@ __global__ void __launch_bounds__(BT, MINB) k_p3lb(Params P, GenomeView g, u64 b
 // gpu/fable-engine: both slower, see docs/gpu-engine/fable/E4-order.md; their code is in bf8746492a.)
 // cost key of each read after phase 1, for --bin: windows, then SA entries to assign (reads that need no phase 3 first)
 template <class C>
-__global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, uint32_t* perm) {
+__global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, uint32_t* perm, bool desc = false) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
     key[k] = nEnt[k] ? ((u64)work[k].nW << 40) | min(nEnt[k], (u64)0xFFFFFFFFFFULL) : 0;
+    if (desc) key[k] = ~key[k];   // the most windows first
     perm[k] = (uint32_t)k;
 }
+// warp lanes (E3): phase 3 in two kernels. k_p3a: the assignment, thread per read (as k_p3); k_p3w: warp per read, the read's
+// windows stitched across the lanes (stitch.cuh warpStitch), then selection and encoding on lane 0
+template <class C>
+__global__ void k_p3a(Params P, GenomeView g, u64 n, Work<C>* work, const u64* base, const uint32_t* bits, uint8_t* status) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    Work<C>& w = work[k];
+    if ((Status)status[k] == Status::Ok && w.stitched) {
+#ifdef M5_E3STATS
+        const long long t0 = clock64();
+#endif
+        if (!assignHits(P, g, w, bits, base[k])) status[k] = (uint8_t)Status::Overflow;
+#ifdef M5_E3STATS
+        atomicAdd(&g_ws[WS_CLK_ASSIGN], (unsigned long long)(clock64() - t0));
+#endif
+    }
+}
+template <class C, class LW, int G = 32>
+__global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* nEnt,
+                      uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap, const uint32_t* perm, int stats,
+                      const u64* base, const uint32_t* bits, int inAssign) {
+    // a group of G lanes per read (G = 32: a warp); shared memory: one AssignEnt per thread (the group assignment), then
+    // C::NW window indices per group
+    extern __shared__ unsigned long long shAll[];
+    const Grp<G> gr;
+    const int lane = gr.gl, gib = threadIdx.x / G;
+    const u64 wid = (blockIdx.x * (u64)blockDim.x + threadIdx.x) / G;
+    if (wid >= n) return;   // whole groups
+    AssignEnt* E = reinterpret_cast<AssignEnt*>(shAll) + gib * G;
+    uint16_t* wl = reinterpret_cast<uint16_t*>(reinterpret_cast<AssignEnt*>(shAll) + blockDim.x) + gib * C::NW;
+    const u64 k = perm ? perm[wid] : wid;
+    Work<C>& W = work[k];
+    const u64 o = b0 + k;
+    Status s = (Status)status[k];
+    Blob bl{out + o * C::NBLOB, 0, C::NBLOB, false};
+#ifdef M5_E3STATS
+    unsigned long long* ws = stats ? g_ws : nullptr;   // E3 counters and probes (--wstats): -DM5_E3STATS builds only
+#else
+    unsigned long long* ws = nullptr; (void)stats;
+#endif
+    if (inAssign && s == Status::Ok && W.stitched) {
+        const long long ta = E3CLK();
+        if (!warpAssign(gr, P, g, W, bits, base[k], E)) s = Status::Overflow;
+        if (ws && lane == 0) atomicAdd(&ws[WS_CLK_ASSIGN], (unsigned long long)(E3CLK() - ta));
+    }
+    if (s == Status::Ok) {
+        W.stepBudget = budget;
+        if (!W.stitched || W.nW == 0) {
+            if (lane == 0) { s = mapFinish(P, g, W, rbuf[k], bl); if (ws) atomicAdd(&ws[WS_SIMPLE], 1ULL); }
+        } else {
+            LW L;
+            L.Lread = W.Lread; L.outFilterMismatchNmaxTotal = W.outFilterMismatchNmaxTotal;
+            for (int c = 0; c < 8; c++) L.clk[c] = 0;
+            WarpMerge M;
+            const int r = warpStitch<C, LW, G>(gr, P, g, W, rbuf[k], L, wl, budget, M, ws);
+#ifndef M5_NOCLK
+            for (int c = 4; c < 8; c++) { const u64 v = warpSumU64(gr, (u64)L.clk[c]); if (lane == 0) W.clk[c] += (long long)v; }
+#endif
+            if (lane == 0) {
+                const long long t0 = E3CLK();
+                if (r == WR_OVERFLOW) { s = Status::Overflow; W.ov = M.ov; }
+                else if (r == WR_FALLBACK) { s = mapFinish(P, g, W, rbuf[k], bl); if (ws) atomicAdd(&ws[WS_CLK_FALLBACK], (unsigned long long)(E3CLK() - t0)); }
+                else { s = warpSelect(P, g, W, bl, M); if (ws) atomicAdd(&ws[WS_CLK_SELECT], (unsigned long long)(E3CLK() - t0)); }
+                if (ws) atomicAdd(&ws[WS_READS], 1ULL);
+            }
+        }
+    }
+    if (lane == 0) {
+        status[k] = (uint8_t)s; why[o] = (uint8_t)W.ov; outLen[o] = (uint16_t)bl.n; unmap[o] = (int8_t)W.unmapType;
+#ifndef M5_NOCLK
+        for (int c = 0; c < 8; c++) { atomicAdd(&g_clk[c], (unsigned long long)W.clk[c]); W.clk[c] = 0; }
+#endif
+        atomicAdd(&g_scan, (unsigned long long)nEnt[k]);
+    }
+}
+static int g_wthreads = 64;     // --wthreads: block size of k_p3w (warps per block = /32)
+static bool g_wsort = false;    // --wsort: k_p3w takes the batch's reads by window count, most first
+static bool g_wstats = true;    // --no-wstats: no warp-lane histograms
+static int g_wmin = 0;          // --wmin-a T (lane A, group-stitched): reads with >= T windows to k_p3w, the others to k_p3
+static bool g_wassignLane[3] = {false, false, false};   // --wassign (every lane) / --wassign-a|m|b: the assignment inside k_p3w,
+                                                       // windows split over the lanes (stitch.cuh warpAssign); else k_p3a
 #ifdef M5_G2
 // E7 M5_G2: pack the byte genome (Gb = STAR's G - pad, nb bytes; position p is Gb[p + pad], outside = 5) into G2 / NB
 __device__ inline char g2Byte(const char* Gb, u64 nb, long long pad, long long p) {
@@ -699,6 +793,9 @@ static const char* m5BuildFlags() {
 #ifdef M5_BASELINE
         " M5_BASELINE"
 #endif
+#ifdef M5_E3STATS
+        " M5_E3STATS"
+#endif
 #ifdef M5_P1NEST
         " M5_P1NEST"
 #endif
@@ -714,12 +811,25 @@ static const char* m5BuildFlags() {
 }
 static double devUsedGB() { size_t f = 0, t = 0; cudaMemGetInfo(&f, &t); return (double)(t - f) / 1e9; }
 
-template <class C>
+template <class C, class LW = LWNone, bool WARP = false, int GRP = 32>
 static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, const u64* dRoff, const uint16_t* dRlen, const uint32_t* dIdx,
                          u64 n, u64 NB, u64 budget, int reps, cudaEvent_t e0, cudaEvent_t e1, const char* name, uint8_t cenLane = 0) {
     LaneOut L;
     const int li = name[0] == 'A' ? 0 : name[0] == 'M' ? 1 : 2;
     const int ord = g_p3orderLane[li] >= 0 ? g_p3orderLane[li] : g_p3order;
+    // E3 warp lanes (WARP): phase 3 = k_p3a (unless the in-kernel assignment, --wassign[-a|m|b]) + k_p3w, in its own order (--wsort);
+    // the E4 phase-3 order / register options apply to the thread-per-read k_p3 (lane A's --wmin-a rest)
+    const bool wasg = g_wassignLane[li];
+    cudaEvent_t qa = nullptr; double phAMs = 0;   // qa: after the assignment / sort of the warp lanes (phase 3's first part)
+    L.warp = WARP; L.laneWorkBytes = WARP ? sizeof(LW) : 0; L.group = WARP ? GRP : 0; L.wmin = WARP ? g_wmin : 0;
+    if constexpr (WARP) {   // the lanes' contexts are local memory: room for them in the per-thread stack
+        CK(cudaDeviceSetLimit(cudaLimitStackSize, std::max<size_t>(16 * 1024, sizeof(LW) + 8192)));
+        cudaEventCreate(&qa);
+        fprintf(stderr, "lane %s: warp-stitched, groups of %d lanes, lane context %zu B (exons %d, aligns %d, transcripts %d), %d threads per block%s%s",
+                name, GRP, sizeof(LW), LW::kNEX, LW::kNWA, LW::kNWTR, g_wthreads, g_wsort ? ", reads by window count" : "", wasg ? ", group assignment" : "");
+        if (g_wmin) fprintf(stderr, "; reads with < %d windows thread per read", g_wmin);
+        fprintf(stderr, "\n");
+    }
     NB = std::min<u64>(NB, std::max<u64>(n, 1));
     const int T = 128;
     // --p3-block / --p3-maxreg: block size and register cap of the phase-3 kernel (k_p1, k_p2 keep 128 / 256 threads)
@@ -730,6 +840,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     else if (maxreg == 80) p3k = g_e4tail ? (T3 == 32 ? k_p3lb<C, 32, 25, true> : k_p3lb<C, 128, 6, true>) : (T3 == 32 ? k_p3lb<C, 32, 25, false> : k_p3lb<C, 128, 6, false>);
     { cudaFuncAttributes fa; CK(cudaFuncGetAttributes(&fa, (const void*)p3k)); L.p3Regs = fa.numRegs; L.p3Local = (int)fa.localSizeBytes; L.p3T = T3; }
     int occ = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, p3k, T3, 0));   // resident phase-3 blocks per SM
+    if constexpr (WARP) { cudaFuncAttributes fa; CK(cudaFuncGetAttributes(&fa, (const void*)k_p3w<C, LW, GRP>)); L.p3Regs = fa.numRegs; L.p3Local = (int)fa.localSizeBytes; L.p3T = g_wthreads; }
     uint8_t* dOut; CK(cudaMalloc(&dOut, n * (u64)C::NBLOB));
     uint16_t* dLen; CK(cudaMalloc(&dLen, n * 2)); uint8_t* dSt; CK(cudaMalloc(&dSt, n)); uint8_t* dWhy; CK(cudaMalloc(&dWhy, n));
     int8_t* dUn; CK(cudaMalloc(&dUn, n));
@@ -756,8 +867,9 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     auto mkTail = [&](u64 bi) { Tail t{dTbs, dTbe, dTwe, dTbusy, dTlast, bi * blocksPerLaunch, bi}; return t; };
     L.workGB = NB * (double)(sizeof(Work<C>) + sizeof(ReadBuf<C::LREAD>)) / 1e9; L.workThreads = NB; L.occBlocks = occ;
     L.usedGB = devUsedGB();
-    L.mode = "staged";
-    L.order = std::string(g_bin ? "cost-asc(--bin)" : p3orderName[ord]) + (g_compact ? "+compact" : "");
+    L.mode = WARP ? "staged+warp" : "staged";
+    L.order = WARP ? std::string(g_wsort || g_wmin ? "warp:windows-desc" : "warp:none") + (wasg ? "+wassign" : "")
+                   : std::string(g_bin ? "cost-asc(--bin)" : p3orderName[ord]) + (g_compact ? "+compact" : "");
     fprintf(stderr, "lane %s (staged): %llu reads, batches of %llu, work %zu B/read (%.2f GB with read buffers); phase-3 kernel: block %d threads, "
                     "%d registers, %d B local, %d blocks/SM resident; device memory in use %.2f GB; p3order %s\n",
             name, n, NB, sizeof(Work<C>), L.workGB, T3, L.p3Regs, L.p3Local, occ, L.usedGB, L.order.c_str());
@@ -789,6 +901,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
 #endif
     for (int r = 0; r < reps + 1; r++) {
         unsigned long long z[8] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
+        if constexpr (WARP) { unsigned long long zw[WS_N] = {0}; CK(cudaMemcpyToSymbol(g_ws, zw, sizeof zw)); }
 #ifdef M5_TAIL
         tail.arm(r == reps);
 #endif
@@ -797,7 +910,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             CK(cudaMemset(dTbusy, 0, nBatches * 8)); CK(cudaMemset(dTlast, 0, nBatches * 8));
         }
         std::vector<std::pair<u64, u64>> launches;
-        double ph[4] = {0, 0, 0, 0};
+        double ph[4] = {0, 0, 0, 0}, phA = 0;
         if (dCenWinN) CK(cudaMemset(dCenWinN, 0, 8));
         cudaEventRecord(e0);
         u64 bi = 0;
@@ -834,21 +947,44 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
 #endif
             k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits, dScanCyc);
             cudaEventRecord(q[2]);
-            if (g_bin) {
-                k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm);
-                thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
-            } else if (ord) {
-                k_key<C><<<G, T>>>(ord, P, D, nb, dWork, dNent, dKey, dPerm);
-                thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
+            if constexpr (WARP) {
+                const bool split = g_wmin > 0;   // --wmin-a: reads with fewer windows stay thread per read (k_p3)
+                const bool srt = g_wsort || split, inA = wasg || split;
+                u64 nw = nb;
+                if (srt) {
+                    k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm, true);
+                    thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
+                }
+                if (split) {   // keys ascending = (windows, SA entries) descending, reads without phase 3 last: the reads with >= wmin windows first
+                    const u64 lim = ~(((u64)g_wmin) << 40);
+                    nw = (u64)(thrust::upper_bound(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), lim) - thrust::device_ptr<u64>(dKey));
+                }
+                if (!inA) k_p3a<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst);
+                cudaEventRecord(qa);
+                const int wt = g_wthreads; const unsigned GW = (unsigned)((nw * GRP + wt - 1) / wt);
+                const size_t sh = (size_t)wt * sizeof(AssignEnt) + (size_t)(wt / GRP) * C::NW * sizeof(uint16_t);
+                if (nw) k_p3w<C, LW, GRP><<<GW, wt, sh>>>(P, D, b0, nw, budget, dWork, dRbuf, dNent, dBst, dOut, dLen, dWhy, dUn,
+                                                          srt ? dPerm : nullptr, g_wstats ? 1 : 0, dBase, dBits, inA ? 1 : 0);
+                if (split && nb > nw)
+                    p3k<<<(unsigned)((nb - nw + T3 - 1) / T3), T3>>>(P, D, b0, nb - nw, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen,
+                                                                       dWhy, dUn, dPerm + nw, cn, mkTail(bi));
+            } else {
+                if (g_bin) {
+                    k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm);
+                    thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
+                } else if (ord) {
+                    k_key<C><<<G, T>>>(ord, P, D, nb, dWork, dNent, dKey, dPerm);
+                    thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
+                }
+                if (g_compact) {   // E2: 26% of lane A's phase-3 threads hold reads that overflowed in phase 1 and only idle
+                    if (!(g_bin || ord)) thrust::sequence(thrust::device_ptr<uint32_t>(dPerm), thrust::device_ptr<uint32_t>(dPerm + nb));
+                    thrust::stable_partition(thrust::device_ptr<uint32_t>(dPerm), thrust::device_ptr<uint32_t>(dPerm + nb), P1Ok{dBst});
+                }
+                const uint32_t* perm = (g_bin || ord || g_compact) ? dPerm : nullptr;
+                const unsigned G3 = (unsigned)((nb + T3 - 1) / T3);
+                p3k<<<G3, T3>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn, perm, cn, mkTail(bi));
+                launches.push_back({bi * blocksPerLaunch, G3});
             }
-            if (g_compact) {   // E2: 26% of lane A's phase-3 threads hold reads that overflowed in phase 1 and only idle
-                if (!(g_bin || ord)) thrust::sequence(thrust::device_ptr<uint32_t>(dPerm), thrust::device_ptr<uint32_t>(dPerm + nb));
-                thrust::stable_partition(thrust::device_ptr<uint32_t>(dPerm), thrust::device_ptr<uint32_t>(dPerm + nb), P1Ok{dBst});
-            }
-            const uint32_t* perm = (g_bin || ord || g_compact) ? dPerm : nullptr;
-            const unsigned G3 = (unsigned)((nb + T3 - 1) / T3);
-            p3k<<<G3, T3>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn, perm, cn, mkTail(bi));
-            launches.push_back({bi * blocksPerLaunch, G3});
 #ifdef M5_TAIL
             cudaEventRecord(tail.ev[1]);
 #endif
@@ -857,6 +993,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             CK(cudaEventSynchronize(q[3])); CK(cudaGetLastError());
             float m; cudaEventElapsedTime(&m, q[0], q[1]); ph[0] += m; cudaEventElapsedTime(&m, q[1], q[2]); ph[1] += m;
             cudaEventElapsedTime(&m, q[2], q[3]); ph[2] += m;
+            if constexpr (WARP) { cudaEventElapsedTime(&m, q[2], qa); phA += m; }
 #ifdef M5_P1SPLIT
             cudaEventElapsedTime(&m, q[0], q[4]); ph[3] += m;
 #endif
@@ -868,6 +1005,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
         cudaEventRecord(e1); CK(cudaEventSynchronize(e1));
         float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) { L.runs.push_back(m); for (int k = 0; k < 4; k++) phMs[k] += ph[k] / reps; }
         fprintf(stderr, "  lane %s run %d: %.1f ms (phase 1 %.1f, scan %.1f, phase 3 %.1f; seeds kernel %.1f)\n", name, r, m, ph[0], ph[1], ph[2], ph[3]);
+        if constexpr (WARP) { if (r > 0) phAMs += phA / reps; fprintf(stderr, "  lane %s run %d: warp phase 3 = assignment/sort %.1f + warp %.1f ms\n", name, r, phA, ph[2] - phA); }
         if (g_e4tail && r == reps) {
             std::vector<unsigned long long> bs(tailBlocks), be(tailBlocks), we(tailBlocks * wpb3), bu(nBatches), lg(nBatches);
             CK(cudaMemcpy(bs.data(), dTbs, tailBlocks * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(be.data(), dTbe, tailBlocks * 8, cudaMemcpyDeviceToHost));
@@ -880,6 +1018,8 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             L.tail[6] = ts.wmax; L.tail[7] = (double)ts.launches;
         }
     }
+    CK(cudaMemcpyFromSymbol(L.ws, g_ws, sizeof L.ws));
+    if constexpr (WARP) { CK(cudaDeviceSetLimit(cudaLimitStackSize, 16 * 1024)); cudaEventDestroy(qa); }
 #ifdef M5_TAIL
     tail.summary(); tail.release();
 #endif
@@ -895,6 +1035,23 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
 #ifdef M5_P1SPLIT
     cudaFree(dCtr);
 #endif
+    L.assignMs = phAMs;   // E3: of phase 3, the warp lanes' assignment / sort (0 for k_p3 lanes)
+    for (int k = 0; k < 8; k++) L.clk[k] = clk[k];
+    L.scanPerRead = n ? (double)scan / n : 0;
+    if (WARP && L.ws[WS_READS]) {   // E3 statistics (-DM5_E3STATS builds)
+        const unsigned long long* w = L.ws;
+        fprintf(stderr, "  lane %s warp: %llu reads (%llu simple), fallback %llu (window aligns) + %llu (lane capacity), overflow steps %llu, capacity %llu, keep %llu; "
+                "%.2f windows/read, %.1f%% lanes active, %.1f steps/read, %llu compactions\n", name, w[WS_READS], w[WS_SIMPLE], w[WS_FB_NWA], w[WS_FB_LANE],
+                w[WS_OV_STEPS], w[WS_OV_REAL], w[WS_OV_KEEP], (double)w[WS_WIN_NE] / w[WS_READS],
+                w[WS_ROUNDS] ? 100.0 * w[WS_LANES_ACTIVE] / ((double)GRP * w[WS_ROUNDS]) : 0.0, (double)w[WS_STEPS] / w[WS_READS], w[WS_COMPACT]);
+        fprintf(stderr, "  lane %s warp cycles (lane 0, summed over warps): list %llu, stitch rounds %llu, merge %llu, select+encode %llu, fallback %llu; assignment (threads) %llu\n",
+                name, w[WS_CLK_LIST], w[WS_CLK_STITCH], w[WS_CLK_MERGE], w[WS_CLK_SELECT], w[WS_CLK_FALLBACK], w[WS_CLK_ASSIGN]);
+        auto hist = [&](const char* t, int b) { fprintf(stderr, "  lane %s %s:", name, t); for (int q = 0; q < 8; q++) fprintf(stderr, " %llu", w[b + q]); fprintf(stderr, "\n"); };
+        hist("windows with aligns per read [1,2-4,5-8,9-16,17-32,33-64,65-128,>128]", WS_HIST_NW);
+        hist("aligns per window [1,2,3-4,5-8,9-16,17-32,33-50,>50]", WS_HIST_NWA);
+        hist("steps per window [<=4,<=16,<=64,<=256,<=1024,<=2048,<=8192,>8192]", WS_HIST_STEPSW);
+        hist("transcripts per window [0,1,2,3-4,5-8,9-16,17-32,>32]", WS_HIST_TRW);
+    }
     L.out.resize(n * (u64)C::NBLOB); L.status.resize(n); L.why.resize(n); L.len.resize(n); L.unmap.resize(n);
     CK(cudaMemcpy(L.out.data(), dOut, L.out.size(), cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.len.data(), dLen, n * 2, cudaMemcpyDeviceToHost));
     CK(cudaMemcpy(L.status.data(), dSt, n, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(L.why.data(), dWhy, n, cudaMemcpyDeviceToHost));
@@ -1060,7 +1217,11 @@ static std::string blobStr(const uint8_t* p, int n) {
 // value of STAR's genomic length score for gLength x, with the C library's log2 (stitchWindowAligns.cpp)
 static int glScore(double scale, u64 x) { return int(std::ceil(std::log2((double)x) * scale - 0.5)); }
 
+static std::string wassignStr() {   // lanes with the in-kernel assignment, e.g. "b" or "mb" (JSON "wassign")
+    std::string r; if (g_wassignLane[0]) r += 'a'; if (g_wassignLane[1]) r += 'm'; if (g_wassignLane[2]) r += 'b'; return r;
+}
 int main(int argc, char** argv) {
+    bool warpM = false, warpB = false, hostEmul = false; int wbCfg = 0, warpA = 0, wminA = 0; std::string tag;
     std::string gdir, truth, json, input, emit, census; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, nbM = 131072, budgetA = 0, budgetB = 0, budgetM = 0, monoBudget = 0; bool noMid = false, p1probe = false;
     bool presort = false; std::string label;
     for (int i = 1; i < argc; i++) {
@@ -1114,6 +1275,18 @@ int main(int argc, char** argv) {
         else if (a == "--mono-budget") monoBudget = atoll(argv[++i]);   // E1: step budget of the one-kernel lanes (--mono; default 0 = none)
         else if (a == "--input") input = argv[++i];     // "count sequence" lines (uniq -c): map these instead of the truth reads
         else if (a == "--emit") emit = argv[++i];       // write (sequence, result) for the sequence cache preload (inject/)
+        else if (a == "--warp-m") warpM = true;          // E3: lane M stitched warp per read (windows across lanes)
+        else if (a == "--warp-b") warpB = true;          // E3: lane B likewise
+        else if (a == "--wb-cfg") wbCfg = atoi(argv[++i]);    // lane B's per-lane capacities: 0 = LWB0, 1 = LWB1
+        else if (a == "--warp-a") warpA = atoi(argv[++i]);    // E3: lane A stitched by groups of 8, 16 or 32 lanes per read
+        else if (a == "--wmin-a") wminA = atoi(argv[++i]);    // ... only the reads with >= this many windows (the others thread per read)
+        else if (a == "--wthreads") g_wthreads = atoi(argv[++i]);
+        else if (a == "--wsort") g_wsort = true;
+        else if (a == "--wassign") g_wassignLane[0] = g_wassignLane[1] = g_wassignLane[2] = true;
+        else if (a == "--wassign-a" || a == "--wassign-m" || a == "--wassign-b") g_wassignLane[a.back() == 'a' ? 0 : a.back() == 'm' ? 1 : 2] = true;   // one lane
+        else if (a == "--no-wstats") g_wstats = false;
+        else if (a == "--host-emul") hostEmul = true;    // the warp lanes' algorithm emulated on the host for every read, vs the truth
+        else if (a == "--tag") tag = argv[++i];
         else if (a == "--census") census = argv[++i];   // E2 (build with -DM5_CENSUS): PREFIX.reads.bin, PREFIX.wins.bin, PREFIX.meta.json
         else { fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
@@ -1310,18 +1483,33 @@ int main(int argc, char** argv) {
     char* dRb = toDev(T.rb); u64* dRoff = toDev(T.roff); uint16_t* dRlen = toDev(T.rlen);
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
     CK(cudaDeviceSetLimit(cudaLimitStackSize, localWork ? (int)(sizeof(Work<LaneA>) + 4096) : 16 * 1024));
+    if (warpA && warpA != 8 && warpA != 16 && warpA != 32) { fprintf(stderr, "--warp-a: 8, 16 or 32\n"); return 2; }
+    if (warpA && P.alignTranscriptsPerWindowNmax + LaneA::NW * std::min<u64>(LWA::kNWTR, P.alignTranscriptsPerWindowNmax) >= P.alignTranscriptsPerReadNmax) {
+        fprintf(stderr, "alignTranscriptsPerReadNmax too small for the warp lanes (the window loop could stop early)\n"); return 3;
+    }
+    g_wmin = warpA ? wminA : 0;
     if (p1probe) {
         probeP1<LaneA>(P, D, dRb, dRoff, dRlen, n, (u64)nbA, reps, e0, e1, "A-all");
         probeP1<LaneM>(P, D, dRb, dRoff, dRlen, n, (u64)nbM, reps, e0, e1, "M-all");
     }
     LaneOut A = mono ? runLane<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, prop.multiProcessorCount * bps, nthr, reps, localWork, e0, e1, "A")
-                     : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A", 0);
+              : warpA == 8 ? runStaged<LaneA, LWA, true, 8>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A", 0)
+              : warpA == 16 ? runStaged<LaneA, LWA, true, 16>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A", 0)
+              : warpA == 32 ? runStaged<LaneA, LWA, true, 32>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A", 0)
+              : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A", 0);
+    g_wmin = 0;   // lanes M and B: every read of a warp lane in k_p3w
     std::vector<uint32_t> idxM, idxB;
     for (u64 i = 0; i < n; i++) if (A.status[i] != (uint8_t)Status::Ok) idxM.push_back((uint32_t)i);
     LaneOut M;
+    // warp lanes: the window loop's trNtotal break must be unreachable (every window would then be stitched in STAR)
+    auto breakFree = [&](u64 nw, u64 nwtr) { return nw * std::min<u64>(nwtr, P.alignTranscriptsPerWindowNmax) + P.alignTranscriptsPerWindowNmax < P.alignTranscriptsPerReadNmax; };
+    if ((warpM && !breakFree(LaneM::NW, LWM::kNWTR)) || (warpB && !breakFree(LaneB::NW, std::max(LWB0::kNWTR, LWB1::kNWTR)))) {
+        fprintf(stderr, "alignTranscriptsPerReadNmax too small for the warp lanes (the window loop could stop early)\n"); return 3;
+    }
     if (!idxM.empty() && !noMid) {
         uint32_t* dIdx = toDev(idxM);
-        M = runStaged<LaneM>(P, D, dRb, dRoff, dRlen, dIdx, idxM.size(), (u64)nbM, (u64)budgetM, reps, e0, e1, "M", 1);
+        M = warpM ? runStaged<LaneM, LWM, true>(P, D, dRb, dRoff, dRlen, dIdx, idxM.size(), (u64)nbM, (u64)budgetM, reps, e0, e1, "M", 1)
+                  : runStaged<LaneM>(P, D, dRb, dRoff, dRlen, dIdx, idxM.size(), (u64)nbM, (u64)budgetM, reps, e0, e1, "M", 1);
         CK(cudaFree(dIdx));
         for (u64 k = 0; k < idxM.size(); k++) if (M.status[k] != (uint8_t)Status::Ok) idxB.push_back(idxM[k]);
     } else idxB = idxM;
@@ -1330,7 +1518,9 @@ int main(int argc, char** argv) {
     if (!idxB.empty()) {
         uint32_t* dIdx = toDev(idxB);
         B = mono ? runLane<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), prop.multiProcessorCount * bpsB, nthrB, reps, false, e0, e1, "B")
-                 : runStaged<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), (u64)nbB, (u64)budgetB, reps, e0, e1, "B", 2);
+            : !warpB ? runStaged<LaneB>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), (u64)nbB, (u64)budgetB, reps, e0, e1, "B", 2)
+            : wbCfg == 1 ? runStaged<LaneB, LWB1, true>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), (u64)nbB, (u64)budgetB, reps, e0, e1, "B", 2)
+            : runStaged<LaneB, LWB0, true>(P, D, dRb, dRoff, dRlen, dIdx, idxB.size(), (u64)nbB, (u64)budgetB, reps, e0, e1, "B", 2);
         CK(cudaFree(dIdx));
     }
     double gpuMs = A.ms + M.ms + B.ms;
@@ -1385,6 +1575,65 @@ int main(int argc, char** argv) {
         delete w; delete b;
     }
     double heavySec = now() - t0;
+    // ---- host emulation of the warp lanes' algorithm (stitch.cuh hostWarpStitch) for every read: lane M's capacities, then lane
+    // B's (configuration 0), then the heavy lane; with the shadow check of the maxScoreMate argument
+    u64 emulSame = 0, emulDiff = 0, emulN = 0, emulAt[3] = {0, 0, 0}; u64 emulHs[2][WS_N] = {{0}}; double emulSec = 0;
+    if (hostEmul) {
+        double te = now();
+        std::vector<uint8_t> eq(n, 0); std::vector<uint8_t> at(n, 0);
+        #pragma omp parallel
+        {
+            u64 hsM[WS_N] = {0}, hsB[WS_N] = {0};
+            Work<LaneM>* wm = new Work<LaneM>; wm->wbEpoch = 0; wm->nScan = 0;
+            Work<LaneB>* wb = new Work<LaneB>; wb->wbEpoch = 0; wb->nScan = 0;
+            Work<Heavy>* wh = new Work<Heavy>; wh->wbEpoch = 0; wh->nScan = 0; wh->stepBudget = 0;
+            ReadBuf<LaneM::LREAD>* bm = new ReadBuf<LaneM::LREAD>; ReadBuf<LaneB::LREAD>* bb = new ReadBuf<LaneB::LREAD>;
+            ReadBuf<Heavy::LREAD>* bh = new ReadBuf<Heavy::LREAD>;
+            LaneWork<8, 8, 8, true>* lm = new LaneWork<8, 8, 8, true>[32];
+            LaneWork<8, 16, 8, true>* lb = new LaneWork<8, 16, 8, true>[32];
+            std::vector<uint8_t> buf(Heavy::NBLOB);
+            auto emul = [&](auto& w, auto& b, auto* lanes, u64 budget, u64* hs, const char* R0, m5::uint Lr, Blob& bl) -> Status {
+                Status st = mapPhase1(P, H, w, b, R0, Lr);
+                if (st != Status::Ok) return st;
+                if (w.stitched && !assignAll(P, H, w)) return Status::Overflow;
+                w.stepBudget = budget;
+                if (!w.stitched || w.nW == 0) return mapFinish(P, H, w, b, bl);
+                for (int l = 0; l < 32; l++) { lanes[l].Lread = w.Lread; lanes[l].outFilterMismatchNmaxTotal = w.outFilterMismatchNmaxTotal; }
+                WarpMerge Mg;
+                const int r = hostWarpStitch(P, H, w, b, lanes, budget, Mg, hs);
+                hs[WS_EMUL_READS]++;
+                if (r == WR_OVERFLOW) { w.ov = Mg.ov; return Status::Overflow; }
+                if (r == WR_FALLBACK) { hs[WS_FB_LANE]++; return mapFinish(P, H, w, b, bl); }
+                return warpSelect(P, H, w, bl, Mg);
+            };
+            #pragma omp for schedule(dynamic, 256)
+            for (long long i = 0; i < (long long)n; i++) {
+                const char* R0 = T.rb.data() + T.roff[i]; m5::uint Lr = T.rlen[i];
+                Blob bl{buf.data(), 0, Heavy::NBLOB, false};
+                Status st = emul(*wm, *bm, lm, (u64)budgetM, hsM, R0, Lr, bl); int8_t un = (int8_t)wm->unmapType; uint8_t a = 0;
+                if (st != Status::Ok) { bl = Blob{buf.data(), 0, Heavy::NBLOB, false}; st = emul(*wb, *bb, lb, (u64)budgetB, hsB, R0, Lr, bl); un = (int8_t)wb->unmapType; a = 1; }
+                if (st != Status::Ok) { bl = Blob{buf.data(), 0, Heavy::NBLOB, false}; st = mapRead(P, H, *wh, *bh, R0, Lr, bl); un = (int8_t)wh->unmapType; a = 2; }
+                const uint8_t* tb = T.blob.data() + T.boff[i]; int tlen = (int)(T.boff[i + 1] - T.boff[i]);
+                eq[i] = st == Status::Ok && bl.n == tlen && memcmp(buf.data(), tb, tlen) == 0 && un == T.unmap[i];
+                at[i] = a;
+            }
+            #pragma omp critical
+            { for (int q = 0; q < WS_N; q++) { emulHs[0][q] += hsM[q]; emulHs[1][q] += hsB[q]; } }
+            delete wm; delete wb; delete wh; delete bm; delete bb; delete bh; delete[] lm; delete[] lb;
+        }
+        u64 nPr = 0;
+        for (u64 i = 0; i < n; i++) {
+            emulN++; emulAt[at[i]]++;
+            if (eq[i]) emulSame++;
+            else { emulDiff++; if (nPr++ < 10) fprintf(stderr, "EMUL DIFF read %llu L=%u at=%d\n", i, T.rlen[i], at[i]); }
+        }
+        emulSec = now() - te;
+        fprintf(stderr, "host emulation of the warp lanes: %llu / %llu identical (%llu differ); resolved at M %llu, B %llu, heavy %llu; "
+                "warp-stitched M %llu, B %llu; lane fallbacks M %llu, B %llu; shadow maxScoreMate disagreements %llu + %llu, mate-only records %llu + %llu; %.1f s\n",
+                emulSame, emulN, emulDiff, emulAt[0], emulAt[1], emulAt[2], emulHs[0][WS_EMUL_READS], emulHs[1][WS_EMUL_READS],
+                emulHs[0][WS_FB_LANE], emulHs[1][WS_FB_LANE], emulHs[0][WS_SHADOW_DIFF], emulHs[1][WS_SHADOW_DIFF],
+                emulHs[0][WS_MATE_ONLY], emulHs[1][WS_MATE_ONLY], emulSec);
+    }
     auto result = [&](u64 i, const uint8_t*& p, int& len, int8_t& un, bool& ok) {
         uint32_t k = lanePos[i];
         if (lane[i] == 0) { p = A.out.data() + (u64)i * LaneA::NBLOB; len = A.len[i]; un = A.unmap[i]; ok = true; }
@@ -1496,6 +1745,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "    unmapped by STAR: %llu (%llu identical), mapped: %llu (%llu identical)\n", classN[0], classSame[0], classN[1], classSame[1]);
     fprintf(stderr, "    GPU lane A %.1f ms (%llu reads), lane M %.1f ms (%zu reads), lane B %.1f ms (%zu reads) = %.2f M distinct reads/s on the GPU\n",
             A.ms, n, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), rate / 1e6);
+    fprintf(stderr, "    E3 %s: warp A %d (wmin %d), warp M %d, warp B %d (cfg %d), wsort %d, wassign %d, wthreads %d; lane A %.1f ms, lanes M+B %.1f ms\n", tag.c_str(),
+            warpA, wminA, (int)warpM, (int)warpB, wbCfg, (int)g_wsort, (g_wassignLane[0] ? 1 : 0) | (g_wassignLane[1] ? 2 : 0) | (g_wassignLane[2] ? 4 : 0), g_wthreads, A.ms, M.ms + B.ms);
     { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
       fprintf(stderr, "    lane M overflow why:"); for (int k = 0; k < 12; k++) if (whyM[k]) fprintf(stderr, " %s=%llu", wn[k], whyM[k]); fprintf(stderr, "\n"); }
     { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
@@ -1535,6 +1786,29 @@ int main(int argc, char** argv) {
         }
         fprintf(f, "}}\n}\n");
         fclose(f);
+        // E3 additions: a second JSON next to it (<json>.e3.json) with the variant, per-lane phases, warp statistics, host emulation
+        std::string j2 = json + ".e3.json";
+        FILE* g = fopen(j2.c_str(), "w");
+        auto laneJ = [&](const char* nm, const LaneOut& L, u64 nr, bool last) {
+            fprintf(g, "  \"%s\": {\"reads\": %llu, \"ms\": %.3f, \"runs\": [", nm, nr, L.ms);
+            for (size_t k = 0; k < L.runs.size(); k++) fprintf(g, "%s%.3f", k ? ", " : "", L.runs[k]);
+            fprintf(g, "], \"phase_ms\": [%.3f, %.3f, %.3f, %.3f], \"warp\": %s, \"group\": %d, \"wmin\": %d, \"lane_context_bytes\": %zu, \"sa_entries_per_read\": %.1f, \"clk\": [",
+                    L.phaseMs[0], L.phaseMs[1], L.assignMs, L.phaseMs[2] - L.assignMs, L.warp ? "true" : "false", L.group, L.wmin, L.laneWorkBytes, L.scanPerRead);
+            for (int k = 0; k < 8; k++) fprintf(g, "%s%llu", k ? ", " : "", L.clk[k]);
+            fprintf(g, "], \"ws\": [");
+            for (int k = 0; k < WS_N; k++) fprintf(g, "%s%llu", k ? ", " : "", L.ws[k]);
+            fprintf(g, "]}%s\n", last ? "" : ",");
+        };
+        fprintf(g, "{\n  \"tag\": \"%s\", \"warp_a\": %d, \"wmin_a\": %d, \"warp_m\": %s, \"warp_b\": %s, \"wb_cfg\": %d, \"wsort\": %s, \"wassign\": \"%s\", \"wthreads\": %d, \"batch\": [%lld, %lld, %lld], \"budget\": [%lld, %lld, %lld],\n",
+                tag.c_str(), warpA, wminA, warpM ? "true" : "false", warpB ? "true" : "false", wbCfg, g_wsort ? "true" : "false", wassignStr().c_str(), g_wthreads, nbA, nbM, nbB, budgetA, budgetM, budgetB);
+        fprintf(g, "  \"distinct_reads\": %llu, \"identical_distinct\": %llu, \"gpu_ms\": %.3f, \"lanes_mb_ms\": %.3f, \"m_distinct_per_s\": %.4f, \"heavy_reads\": %zu,\n",
+                n, same, gpuMs, M.ms + B.ms, rate / 1e6, heavy.size());
+        fprintf(g, "  \"host_emul\": {\"run\": %s, \"reads\": %llu, \"identical\": %llu, \"at\": [%llu, %llu, %llu], \"warp_reads\": [%llu, %llu], \"fallback\": [%llu, %llu], \"shadow_diff\": [%llu, %llu], \"mate_only\": [%llu, %llu], \"s\": %.1f},\n",
+                hostEmul ? "true" : "false", emulN, emulSame, emulAt[0], emulAt[1], emulAt[2], emulHs[0][WS_EMUL_READS], emulHs[1][WS_EMUL_READS],
+                emulHs[0][WS_FB_LANE], emulHs[1][WS_FB_LANE], emulHs[0][WS_SHADOW_DIFF], emulHs[1][WS_SHADOW_DIFF], emulHs[0][WS_MATE_ONLY], emulHs[1][WS_MATE_ONLY], emulSec);
+        laneJ("A", A, n, false); laneJ("M", M, noMid ? 0 : idxM.size(), false); laneJ("B", B, idxB.size(), true);
+        fprintf(g, "}\n");
+        fclose(g);
     }
     return 0;
 }

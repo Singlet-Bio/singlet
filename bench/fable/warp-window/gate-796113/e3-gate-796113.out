@@ -1,0 +1,119 @@
+tag=e3gate node=g050.clipper.gvsu.edu job=796113 cpus=8 2026-11-01T01:35:42-05:00 commit=73d245ee9807eba5201620be87a1e7d06e0bdd84
+NVIDIA H100 NVL, 610.43.02
+[t] index copy 13 s
+reads=66601887 distinct=31870813 every_k=16 selected=1991926
+[t] distinct 165 s
+stardump exit=0
+[t] stardump 188 s
+=== variant 0: m5b --budget-a 1024 --budget-m 2048 --budget-b 2048 --batch-a 524288 --batch-m 393216 --batch-b 65536
+lane A (staged): 1991926 reads, batches of 524288, work 46104 B/read (24.43 GB with read buffers); phase-3 kernel: block 128 threads, 80 registers, 576 B local, 6 blocks/SM resident; device memory in use 48.24 GB; p3order none
+  lane A run 1: 233.0 ms (phase 1 99.9, scan 14.7, phase 3 118.3; seeds kernel 0.0)
+  lane A run 2: 231.9 ms (phase 1 100.0, scan 14.8, phase 3 117.1; seeds kernel 0.0)
+  lane A run 3: 233.2 ms (phase 1 100.1, scan 14.7, phase 3 118.4; seeds kernel 0.0)
+lane M (staged): 524577 reads, batches of 393216, work 82552 B/read (32.65 GB with read buffers); phase-3 kernel: block 128 threads, 80 registers, 320 B local, 6 blocks/SM resident; device memory in use 56.26 GB; p3order none
+  lane M run 1: 305.5 ms (phase 1 74.1, scan 17.2, phase 3 214.1; seeds kernel 0.0)
+  lane M run 2: 305.4 ms (phase 1 74.0, scan 17.3, phase 3 214.2; seeds kernel 0.0)
+  lane M run 3: 307.7 ms (phase 1 73.7, scan 17.2, phase 3 216.7; seeds kernel 0.0)
+lane B (staged): 90740 reads, batches of 65536, work 635248 B/read (41.66 GB with read buffers); phase-3 kernel: block 128 threads, 80 registers, 1664 B local, 6 blocks/SM resident; device memory in use 64.55 GB; p3order none
+  lane B run 1: 252.8 ms (phase 1 37.1, scan 6.8, phase 3 208.8; seeds kernel 0.0)
+  lane B run 2: 252.5 ms (phase 1 37.3, scan 6.8, phase 3 208.3; seeds kernel 0.0)
+  lane B run 3: 257.0 ms (phase 1 37.1, scan 6.9, phase 3 213.0; seeds kernel 0.0)
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 233.0 ms (1991926 reads), lane M 305.5 ms (524577 reads), lane B 252.8 ms (90740 reads) = 2.52 M distinct reads/s on the GPU
+=== variant 1: m5 --budget-a 1024 --budget-m 2048 --budget-b 2048 --batch-a 524288 --batch-m 393216 --batch-b 65536
+lane A (staged): 1991926 reads, batches of 524288, work 36032 B/read (19.14 GB with read buffers); phase-3 kernel: block 128 threads, 79 registers, 624 B local, 6 blocks/SM resident; device memory in use 42.95 GB; p3order none
+  lane A run 1: 186.2 ms (phase 1 78.2, scan 14.7, phase 3 93.2; seeds kernel 57.4)
+  lane A run 2: 186.9 ms (phase 1 78.3, scan 15.4, phase 3 93.2; seeds kernel 57.4)
+  lane A run 3: 186.3 ms (phase 1 78.4, scan 14.8, phase 3 93.1; seeds kernel 57.5)
+lane M (staged): 524577 reads, batches of 393216, work 67872 B/read (26.88 GB with read buffers); phase-3 kernel: block 128 threads, 79 registers, 368 B local, 6 blocks/SM resident; device memory in use 50.49 GB; p3order none
+  lane M run 1: 242.5 ms (phase 1 63.1, scan 17.2, phase 3 162.1; seeds kernel 23.9)
+  lane M run 2: 245.1 ms (phase 1 63.2, scan 17.2, phase 3 163.1; seeds kernel 23.8)
+  lane M run 3: 243.4 ms (phase 1 63.3, scan 17.2, phase 3 162.9; seeds kernel 23.9)
+lane B (staged): 90740 reads, batches of 65536, work 549432 B/read (36.04 GB with read buffers); phase-3 kernel: block 128 threads, 80 registers, 1712 B local, 6 blocks/SM resident; device memory in use 58.93 GB; p3order none
+  lane B run 1: 219.6 ms (phase 1 31.9, scan 6.8, phase 3 180.9; seeds kernel 10.0)
+  lane B run 2: 219.5 ms (phase 1 31.7, scan 6.8, phase 3 181.0; seeds kernel 10.1)
+  lane B run 3: 216.3 ms (phase 1 31.8, scan 6.8, phase 3 177.7; seeds kernel 10.1)
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 186.3 ms (1991926 reads), lane M 243.4 ms (524577 reads), lane B 219.5 ms (90740 reads) = 3.07 M distinct reads/s on the GPU
+=== variant 2: m5 --budget-a 1024 --budget-m 2048 --budget-b 2048 --batch-a 524288 --batch-m 393216 --batch-b 65536 --best-order --p3-maxreg-a 64 --batch-b 131072
+lane A (staged): 1991926 reads, batches of 524288, work 36032 B/read (19.14 GB with read buffers); phase-3 kernel: block 128 threads, 64 registers, 688 B local, 8 blocks/SM resident; device memory in use 42.95 GB; p3order none
+  lane A run 1: 177.2 ms (phase 1 79.0, scan 14.3, phase 3 83.8; seeds kernel 57.8)
+  lane A run 2: 177.7 ms (phase 1 79.0, scan 14.4, phase 3 84.3; seeds kernel 57.6)
+  lane A run 3: 177.6 ms (phase 1 79.3, scan 14.5, phase 3 83.9; seeds kernel 58.0)
+lane M (staged): 524577 reads, batches of 393216, work 67872 B/read (26.88 GB with read buffers); phase-3 kernel: block 128 threads, 79 registers, 368 B local, 6 blocks/SM resident; device memory in use 50.49 GB; p3order nw-desc
+  lane M run 1: 223.2 ms (phase 1 62.4, scan 17.3, phase 3 143.4; seeds kernel 23.8)
+  lane M run 2: 222.0 ms (phase 1 62.3, scan 17.3, phase 3 142.4; seeds kernel 23.8)
+  lane M run 3: 222.0 ms (phase 1 62.3, scan 17.3, phase 3 142.3; seeds kernel 23.9)
+lane B (staged): 90740 reads, batches of 90740, work 549432 B/read (49.90 GB with read buffers); phase-3 kernel: block 128 threads, 80 registers, 1712 B local, 6 blocks/SM resident; device memory in use 72.78 GB; p3order none
+  lane B run 1: 162.4 ms (phase 1 28.6, scan 5.8, phase 3 128.0; seeds kernel 6.1)
+  lane B run 2: 163.4 ms (phase 1 29.1, scan 5.8, phase 3 128.5; seeds kernel 6.2)
+  lane B run 3: 162.8 ms (phase 1 28.6, scan 5.8, phase 3 128.4; seeds kernel 6.2)
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 177.6 ms (1991926 reads), lane M 222.0 ms (524577 reads), lane B 162.8 ms (90740 reads) = 3.54 M distinct reads/s on the GPU
+=== variant 3: m5 --budget-a 1024 --budget-m 2048 --budget-b 2048 --batch-a 524288 --batch-m 393216 --batch-b 65536 --best-order --p3-maxreg-a 64 --batch-b 131072 --warp-m --warp-b --wassign-b --wsort --wb-cfg 1 --wthreads 128
+lane A (staged): 1991926 reads, batches of 524288, work 36032 B/read (19.14 GB with read buffers); phase-3 kernel: block 128 threads, 64 registers, 688 B local, 8 blocks/SM resident; device memory in use 42.95 GB; p3order none
+  lane A run 1: 177.8 ms (phase 1 78.9, scan 14.4, phase 3 84.5; seeds kernel 57.5)
+  lane A run 2: 177.9 ms (phase 1 79.0, scan 14.8, phase 3 84.1; seeds kernel 57.7)
+  lane A run 3: 176.8 ms (phase 1 78.9, scan 14.4, phase 3 83.5; seeds kernel 57.5)
+lane M (staged): 524577 reads, batches of 393216, work 67872 B/read (26.88 GB with read buffers); phase-3 kernel: block 128 threads, 95 registers, 8944 B local, 6 blocks/SM resident; device memory in use 50.58 GB; p3order warp:windows-desc
+  lane M run 1: 213.9 ms (phase 1 62.4, scan 17.3, phase 3 134.2; seeds kernel 23.8)
+  lane M run 1: warp phase 3 = assignment/sort 16.7 + warp 117.4 ms
+  lane M run 2: 214.0 ms (phase 1 62.5, scan 17.3, phase 3 134.1; seeds kernel 23.9)
+  lane M run 2: warp phase 3 = assignment/sort 16.7 + warp 117.4 ms
+  lane M run 3: 214.3 ms (phase 1 62.5, scan 17.3, phase 3 134.4; seeds kernel 23.9)
+  lane M run 3: warp phase 3 = assignment/sort 16.8 + warp 117.6 ms
+lane B (staged): 90389 reads, batches of 90389, work 549432 B/read (49.71 GB with read buffers); phase-3 kernel: block 128 threads, 95 registers, 32144 B local, 6 blocks/SM resident; device memory in use 78.60 GB; p3order warp:windows-desc+wassign
+  lane B run 1: 162.3 ms (phase 1 28.7, scan 5.8, phase 3 127.8; seeds kernel 6.3)
+  lane B run 1: warp phase 3 = assignment/sort 0.2 + warp 127.6 ms
+  lane B run 2: 161.2 ms (phase 1 28.6, scan 5.8, phase 3 126.9; seeds kernel 6.3)
+  lane B run 2: warp phase 3 = assignment/sort 0.2 + warp 126.7 ms
+  lane B run 3: 163.1 ms (phase 1 28.9, scan 5.8, phase 3 128.5; seeds kernel 6.4)
+  lane B run 3: warp phase 3 = assignment/sort 0.2 + warp 128.3 ms
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 177.8 ms (1991926 reads), lane M 214.0 ms (524577 reads), lane B 162.3 ms (90389 reads) = 3.59 M distinct reads/s on the GPU
+=== variant 4: m5 --budget-a 1024 --budget-m 2048 --budget-b 2048 --batch-a 524288 --batch-m 393216 --batch-b 65536 --best-order --p3-maxreg-a 64 --batch-b 131072 --warp-m --wsort --wthreads 128
+lane A (staged): 1991926 reads, batches of 524288, work 36032 B/read (19.14 GB with read buffers); phase-3 kernel: block 128 threads, 64 registers, 688 B local, 8 blocks/SM resident; device memory in use 42.95 GB; p3order none
+  lane A run 1: 177.4 ms (phase 1 78.9, scan 14.4, phase 3 84.1; seeds kernel 57.5)
+  lane A run 2: 177.8 ms (phase 1 78.8, scan 14.4, phase 3 84.6; seeds kernel 57.5)
+  lane A run 3: 177.3 ms (phase 1 78.8, scan 14.4, phase 3 84.0; seeds kernel 57.4)
+lane M (staged): 524577 reads, batches of 393216, work 67872 B/read (26.88 GB with read buffers); phase-3 kernel: block 128 threads, 95 registers, 8944 B local, 6 blocks/SM resident; device memory in use 50.58 GB; p3order warp:windows-desc
+  lane M run 1: 214.3 ms (phase 1 62.7, scan 17.3, phase 3 134.3; seeds kernel 23.9)
+  lane M run 1: warp phase 3 = assignment/sort 16.8 + warp 117.5 ms
+  lane M run 2: 214.5 ms (phase 1 62.7, scan 17.3, phase 3 134.4; seeds kernel 24.0)
+  lane M run 2: warp phase 3 = assignment/sort 16.8 + warp 117.6 ms
+  lane M run 3: 214.4 ms (phase 1 62.7, scan 17.3, phase 3 134.4; seeds kernel 23.9)
+  lane M run 3: warp phase 3 = assignment/sort 16.9 + warp 117.5 ms
+lane B (staged): 90389 reads, batches of 90389, work 549432 B/read (49.71 GB with read buffers); phase-3 kernel: block 128 threads, 80 registers, 1712 B local, 6 blocks/SM resident; device memory in use 72.59 GB; p3order none
+  lane B run 1: 156.0 ms (phase 1 28.7, scan 5.8, phase 3 121.5; seeds kernel 6.2)
+  lane B run 2: 156.4 ms (phase 1 28.7, scan 5.8, phase 3 122.0; seeds kernel 6.3)
+  lane B run 3: 155.9 ms (phase 1 28.7, scan 5.8, phase 3 121.4; seeds kernel 6.2)
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 177.4 ms (1991926 reads), lane M 214.4 ms (524577 reads), lane B 156.0 ms (90389 reads) = 3.64 M distinct reads/s on the GPU
+=== variant 5: m5 --budget-a 1024 --budget-m 2048 --budget-b 2048 --batch-a 524288 --batch-m 393216 --batch-b 65536 --best-order --p3-maxreg-a 64 --warp-m --warp-b --wassign-b --wsort --wb-cfg 1 --wthreads 128
+lane A (staged): 1991926 reads, batches of 524288, work 36032 B/read (19.14 GB with read buffers); phase-3 kernel: block 128 threads, 64 registers, 688 B local, 8 blocks/SM resident; device memory in use 42.95 GB; p3order none
+  lane A run 1: 177.4 ms (phase 1 79.0, scan 14.4, phase 3 83.9; seeds kernel 57.7)
+  lane A run 2: 177.7 ms (phase 1 78.8, scan 14.4, phase 3 84.4; seeds kernel 57.6)
+  lane A run 3: 177.4 ms (phase 1 79.2, scan 14.4, phase 3 83.8; seeds kernel 57.8)
+lane M (staged): 524577 reads, batches of 393216, work 67872 B/read (26.88 GB with read buffers); phase-3 kernel: block 128 threads, 95 registers, 8944 B local, 6 blocks/SM resident; device memory in use 50.58 GB; p3order warp:windows-desc
+  lane M run 1: 214.2 ms (phase 1 62.5, scan 17.3, phase 3 134.3; seeds kernel 23.9)
+  lane M run 1: warp phase 3 = assignment/sort 16.8 + warp 117.6 ms
+  lane M run 2: 214.1 ms (phase 1 62.5, scan 17.3, phase 3 134.3; seeds kernel 23.8)
+  lane M run 2: warp phase 3 = assignment/sort 16.7 + warp 117.5 ms
+  lane M run 3: 214.4 ms (phase 1 62.6, scan 17.3, phase 3 134.4; seeds kernel 23.9)
+  lane M run 3: warp phase 3 = assignment/sort 16.8 + warp 117.7 ms
+lane B (staged): 90389 reads, batches of 65536, work 549432 B/read (36.04 GB with read buffers); phase-3 kernel: block 128 threads, 95 registers, 32144 B local, 6 blocks/SM resident; device memory in use 64.93 GB; p3order warp:windows-desc+wassign
+  lane B run 1: 185.9 ms (phase 1 32.2, scan 7.0, phase 3 146.7; seeds kernel 10.2)
+  lane B run 1: warp phase 3 = assignment/sort 0.2 + warp 146.5 ms
+  lane B run 2: 182.7 ms (phase 1 32.3, scan 7.0, phase 3 143.3; seeds kernel 10.1)
+  lane B run 2: warp phase 3 = assignment/sort 0.2 + warp 143.1 ms
+  lane B run 3: 182.5 ms (phase 1 32.1, scan 7.0, phase 3 143.4; seeds kernel 10.1)
+  lane B run 3: warp phase 3 = assignment/sort 0.2 + warp 143.1 ms
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 177.4 ms (1991926 reads), lane M 214.2 ms (524577 reads), lane B 182.7 ms (90389 reads) = 3.47 M distinct reads/s on the GPU
+[t] total 353 s
