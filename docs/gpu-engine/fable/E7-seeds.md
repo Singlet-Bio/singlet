@@ -5,6 +5,21 @@ Branch `gpu/fable/seeds` (base: `gpu/fable/compact` with E5's defaults on). Code
 `bench/gpu/m5/jobs/e7_run.sbatch` (truth regenerated in the job, baseline and every variant in one job, identity for each,
 then Nsight Compute on lane A's phase-1 kernels).
 
+
+## Summary
+
+- **Gate not met.** Best exact variant, flatqs8b (`-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8 -DM5_P1WPB`):
+  lane A phase 1 **78.9 ms vs 100.1 ms = 0.79x** (gate 0.5x), lane M 0.79x, lane B 0.79x; M5 **2.82 -> 3.02 M distinct
+  reads/s (+7.1%)**. Identity 1,991,926 / 1,991,926 in every row of every run (final run 796044, commit 3040da0).
+- Warps do **not** converge: active threads per instruction 3.38 in the best seed kernel vs 3.77 in the baseline k_p1
+  (stepping one memory operation per lane per iteration: 2.2-3.9). The 0.79x comes from persistent warps with lane
+  refill (no batch tail) and occupancy (64 registers, iterator in shared memory: 8 blocks per SM, 47.8% vs 27.1%
+  achieved), i.e. more memory chains in flight in a latency-bound phase.
+- Did not help: the flat iterator thread per read (1.28x), the 2-bit packed compare (register blowup, no gain at equal
+  occupancy), stepped calls (1.16-6.5x), windows fused into the seed kernel, prefetch of the binary search's next SA
+  words, out-of-line compare, register caps with spills. Phase 1 once with lane M's capacities would save at most 37 ms
+  (baseline kernels) or 14 ms (flat kernels).
+
 ## Question
 
 Phase 1 (`k_p1`: STAR's seed search, then the windows from the anchors) is ~40% of lane A (E5: 99.5 of 244 ms) and runs
@@ -34,6 +49,11 @@ unchanged). Each macro implies the ones it needs.
 | `M5_P1FUSE` | the windows in `k_p1s` (`p1Windows` at one site, in the iteration a read's seeds complete); no windows kernel |
 | `M5_P1MINB=n` | `__launch_bounds__(128, n)` on the phase-1 kernels (register cap) |
 | `M5_CMPNI` | `compareSeqToGenome` out of line: one copy instead of five inlined ones |
+| `M5_SEEDSMEM` | (round 4) the seed iterator `SeedIt` of `k_p1s` in shared memory (56 B x 128 = 7 KB per block, ptxas: 7168 B smem) instead of registers, so that a 64-register cap fits without spills |
+| `M5_PREF` | (round 4) binary-search prefetch: while a lane compares at the midpoint of `maxMappableLength`'s or `findMultRange`'s search, the SA words of both possible next midpoints are prefetched into L2 (`prefetch.global.L2`) |
+| `M5_PREF2` | (round 4) `M5_PREF`, plus both candidate SA values loaded (`ld.global.nc`) and the genome lines of both next compares prefetched |
+| `M5_PREF3` | (round 4) `M5_PREF`, plus the SAi words of passes iDist >= 1 prefetched before pass 0 of `maxMappableLength2strands` (built in 796029, not run) |
+| `M5_P1WPB` | (final) the persistent windows kernel `k_p1wp` in lane B only (lanes A and M keep the thread-per-read `k_p1w`) |
 | `--p1probe` (run-time) | phase 1 alone over every read with lane A's and with lane M's capacities (timing, overflow count, reads beyond lane A's window capacity): the cost of running phase 1 once with lane M's window capacity |
 
 ### Exactness
@@ -272,3 +292,153 @@ count the cost of running phase 3 of the 1.48 M lane-A reads on lane M's 67.9 KB
 one (E5 showed lane A's phase 3 is sensitive to the size of its state), nor the conversion or the bookkeeping; it is an
 upper bound. With the faster flat kernels the saving shrinks to 14 ms because phase 1 with lane M's capacities is
 memory-bound on the larger `Work` (129.6 ms vs 80.7 ms with A's).
+
+## Final run: flatqs8b against the baseline (compile 796040 at fc646e6, run 796044 at 3040da0 on g052)
+
+flatqs8b = `-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8 -DM5_P1WPB`: the persistent refilling seed kernel with
+the seed iterator in shared memory and a 64-register cap (8 blocks per SM, no spills), the thread-per-read windows
+kernel in lanes A and M and the persistent windows kernel in lane B. One job, baseline and variants alternating (m5,
+flatqs8b, flatqb, flatqs8, flatqs8b, m5, flatqs8b, m5), each the median of 3 after a warm-up. Identity 1,991,926 /
+1,991,926 (100%), reads weighted 4,118,999 / 4,118,999, in **all 8 rows**. The table gives the median of the three
+baseline rows and of the three flatqs8b rows (the three runs of each agree within 0.35 ms in phase 1 and 2.4 ms in the
+lane totals).
+
+| variant | k_p1s regs (blocks/SM) | A phase 1 (k_p1s) | M phase 1 (k_p1s) | B phase 1 (k_p1s) | lane A | lane M | lane B | GPU total | M distinct/s |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| m5 (baseline, median of 3) | k_p1 95 (5) | 100.05 | 79.54 | 40.46 | 213.2 | 270.1 | 223.9 | 707.2 | 2.82 |
+| **flatqs8b** (median of 3) | 64 (8) | **78.93** (57.76) | **62.57** (24.00) | **32.01** (10.12) | **192.0** | **253.5** | **214.7** | **660.2** | **3.02** |
+| flatqs8b / baseline | | **0.789x** | 0.787x | 0.791x | 0.901x | 0.939x | 0.959x | 0.934x | **+7.1%** |
+| flatqb (no shared-memory iterator, no cap) | 72 (7) | 82.47 (61.29) | 64.63 (26.14) | 32.72 (10.78) | 195.9 | 256.2 | 217.2 | 669.3 | 2.98 |
+| flatqs8 (thread-per-read windows in lane B too) | 64 (8) | 79.10 (57.95) | 62.42 (24.01) | 45.51 (10.11) | 192.3 | 252.5 | 228.3 | 673.1 | 2.96 |
+
+Phase 1 over the three lanes: 220.1 ms -> 173.5 ms (-46.5 ms); the GPU total drops by 47.0 ms, so nothing else moved
+(scan and phase 3 within 1 ms). Individual rows: baseline lane A/M/B 213.0/270.1/223.1, 213.3/270.1/223.9,
+213.2/269.5/225.5 ms (2.82, 2.82, 2.81 M/s); flatqs8b 192.0/252.3/214.8, 191.5/253.7/214.2, 192.0/253.5/214.7 ms (3.02
+M/s each).
+
+Thread-cycle shares (seeds / windows / stitching / select+encode; in the persistent kernel a read's seed interval
+includes the iterations its warp spends on other lanes):
+
+| lane | baseline | flatqs8b |
+|---|---|---|
+| A | 58.6 / 9.9 / 31.0 / 0.5 % | 62.4 / 9.3 / 27.9 / 0.4 % |
+| M | 22.4 / 19.9 / 57.5 / 0.1 % | 24.0 / 18.6 / 57.3 / 0.1 % |
+| B | 8.2 / 19.7 / 72.0 / 0.0 % | 7.1 / 18.2 / 74.6 / 0.0 % |
+
+Registers (ptxas, 796040): flatqs8b `k_p1s` 64 registers, 128 B stack frame, 7,168 B shared memory, no spills (all
+three lanes); windows kernels 64 registers, of which one of the two per lane (the compile summary labels `k_p1w` and
+`k_p1wp` alike) has 8 B (lanes M, B) or 16 B (lane A) of spill stores and loads; `k_p3` 79 registers, unchanged. flatqb
+`k_p1s` 72 registers, windows kernels 62-64, no spills.
+
+Nsight Compute, lane A batch 2 (run 796044):
+
+| kernel | ms | regs | occupancy achieved | active threads / warp instr. | warp cycles / issued instr. | issue slots busy | IPC | top stalls | L1 hit | L2 hit | DRAM | DRAM read |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|
+| flatqs8b k_p1s | 15.46 | 64 | 47.8% | 3.38 | 21.2 | 36.6% | 1.44 | long_scoreboard 73.3%, wait 11.9% | 70.2% | 59.5% | 31.9% | 17.0 GB |
+| flatqs8b k_p1w | 5.79 | 64 | 40.9% | 4.26 | 24.5 | 27.2% | 1.07 | long_scoreboard 78.3%, wait 10.5% | 77.8% | 68.9% | 24.0% | 3.8 GB |
+| m5 k_p1 (baseline) | 26.65 | 95 | 27.1% | 3.77 | 18.2 | 24.0% | 0.95 | long_scoreboard 68.1%, wait 13.9%, no_instruction 7.9% | 80.0% | 62.6% | 20.7% | 18.1 GB |
+
+Same batch: 15.46 + 5.79 = 21.25 ms against 26.65 ms (0.80x), with **fewer** active threads per instruction in the seed
+kernel than in the baseline (3.38 vs 3.77; the baseline measured 3.56 on g051 in rounds 1-3). The gain is resident warps
+(47.8% vs 27.1% achieved occupancy, 7.75 vs 4.37 active warps per scheduler) and issue rate (IPC 1.44 vs 0.95), not
+convergence.
+
+## What failed, and why
+
+| attempt | result (lane A phase 1 vs baseline ~99-100 ms) | why (measured unless marked) |
+|---|---|---|
+| flat iterator, thread per read (`M5_SEEDFLAT` alone) | 127 ms, 1.28x | the switch-based iterator adds control flow; lanes still finish their reads at different times, so warps idle as before |
+| 2-bit compare (`M5_G2`) | slower than the same variant without it in every pair but one (stepgsm6 115 vs stepsm6 123 ms), e.g. flatqsg8 100.2 vs flatqs8 78.9 ms; 188-192 registers inline, 1.1-1.5 KB spills when capped | the packed path needs many registers and is no faster at equal occupancy (stepgsm vs stepsm, flatqsg8 vs flatqs8); likely because most compares end within a few bases of where they start (the binary search starts each compare after the already-known common prefix), so 32-base words rarely save iterations (not measured) |
+| stepped calls, one memory operation per iteration (`M5_SEEDSTEP`) | 1.8-6.5x (registers 164-204, or spills) | does not converge warps (2.2-3.9 active threads / instruction): lanes run different control flow between operations, and the warp pays for each path every iteration |
+| stepped state in shared memory (`M5_STEPSMEM`) | 1.16-1.34x | removes the register problem, not the divergence; instruction count up (IPC 1.67 vs 0.96) |
+| windows fused into the seed kernel (`M5_P1FUSE`) | 1.19x (call level), 2.2-3.7x (stepped) | the windows loop runs while 31 other lanes wait, and the fused kernel needs 96 registers |
+| `compareSeqToGenome` out of line (`M5_CMPNI`) | +5% over flatp | 96 registers and 656 B of stack, not fewer |
+| persistent windows for lanes A and M (`M5_P1WPERS`) | lane A +3 ms, lane M +23 ms | likely: the per-entry iterator's overhead exceeds the tail it removes for lanes A and M (not profiled per lane); only lane B (wide reads, long window loops) gains: 32 vs 45.5 ms |
+| register cap with spills (`M5_P1MINB=8` without `M5_SEEDSMEM`) | 95 ms (vs 82) | 48-56 B of spills in the hot loop cost more than the 8th block gains |
+| binary-search prefetch (`M5_PREF`, `M5_PREF2`) | +1-2% / +11-14% | likely: the SA words of the next midpoints mostly hit L1/L2 already (L1 hit 75-80%, L2 ~60% in every profile); the extra loads and registers (PREF2: 80 regs) cost more than they hide |
+| `M5_PREF3` | built (796029), not run | dropped once `M5_PREF` showed the SA reads are not the critical latency |
+
+## Verdict
+
+- **Gate not met.** The best variant (seeds and windows split, persistent refilling seed kernel, seed iterator in shared
+  memory, 64-register cap: flatqs8, plus persistent windows in lane B only: flatqs8b) runs lane A's phase 1 in
+  **78.9 ms vs 100.1 ms = 0.79x** (gate 0.5x, target 0.3x), lane M's in 62.6 vs 79.5 ms (0.79x), lane B's in
+  32.0 vs 40.5 ms (0.79x). M5 goes from **2.82 to 3.02 M distinct reads/s (+7.1%; GPU total 707.2 -> 660.2 ms)**.
+- **Identity 1,991,926 / 1,991,926 (100%) in every row of every run** (55 rows in 4 runs, including the
+  stepped and 2-bit ones): every transformation here is exact.
+- **The hypothesis is false for this code.** Flattening the nest to one call site, and even to one memory operation per
+  lane per iteration, does not raise active threads per instruction meaningfully: 3.3-3.5 in the call-level kernels
+  against the baseline's 3.6-3.8, 2.2-3.9 stepped; the one exception (6.1, round 1's 192-register 2-bit kernel) ran at
+  2 blocks per SM and was slower. The divergence is not an artefact of STAR's loop nest but of the data: every level has its own
+  data-dependent trip count (calls per read, iDist passes, SAi lookups, binary-search steps, findMultRange steps, compare
+  lengths), so lanes of a warp are never at the same point for long, however the loops are written. What the persistent
+  kernel buys is occupancy and the end of the batch tail: more resident warps (42-48% achieved vs 27%) keep more
+  independent memory chains in flight, and refilled lanes keep warps full until the batch runs out. The phase is latency
+  bound (long_scoreboard 64-78% of stalls) at 20-36% of DRAM bandwidth.
+
+## Surprises
+
+- Converging the *call* sequence does nothing for SIMT efficiency (6.1 active threads in round 1's 192-register kernel at 2 blocks per SM, 3.3-3.5
+  in the 7-8-block kernels, baseline 3.6-3.8); a warp-uniform outer loop is not a convergent warp when the inner loops are data dependent.
+- Splitting phase 1 into a seeds kernel and a windows kernel costs ~21 ms in lane A and makes lane B's phase 1 slower
+  (45.5 vs 40.5 ms): likely because the thread-per-read windows kernel re-reads each read's `Work` and is worst for lane B's long
+  window loops; the persistent windows kernel fixes lane B (32 ms) and hurts lanes A and M.
+- DRAM traffic is about the same for the baseline and the persistent kernels (18-21 GB read per lane-A batch in either: 20.9 GB for flatqs8b's k_p1s + k_p1w vs 18.1 GB for k_p1 in run 796044); only the latency
+  hiding differs.
+- Running phase 1 once with lane M's capacities would save 37 ms with the baseline kernels but only 14 ms with the
+  faster persistent kernels, before the cost of lane A's phase 3 on lane M's larger state.
+- Register count is the dominant variable: 72 -> 80 registers (an innocuous restructure for `M5_P1FUSE`) cost 9 ms in
+  lane A; 72 -> 64 without spills (iterator in shared memory) saved 3.5 ms.
+
+## Next steps
+
+1. **Cooperative SA search** (the only route to a 0.5x phase 1 that these measurements leave open): a warp, or an
+   8-lane group, per `maxMappableLength2strands` call, replacing the binary search by a k-ary search (k candidate
+   midpoints compared in parallel per step: log_k instead of log_2 dependent steps, coalesced SA reads) and the per-byte
+   compare by a group-parallel compare. This needs its own exactness argument: STAR's `maxMappableLength` returns the SA
+   index its particular sequence of midpoints ends on, and `findMultRange` expands from there; the final range is path
+   independent, but `L1`/`L2` and the ordering of equal-length hits must be shown to be, or reproduced.
+2. Adopt flatqs8b (`-DM5_SEEDFLAT -DM5_P1SPLIT -DM5_SEEDSMEM -DM5_P1MINB=8 -DM5_P1WPB`) as m5's phase-1 default:
+   exact, +7.1% on M5 (2.82 -> 3.02 M distinct reads/s).
+3. Shorten the windows kernel (k_p1w: ~21 ms of lane A's ~79 ms phase 1): an 8-lane group per read over the anchors'
+   SA entries, keeping STAR's entry order for `createExtendWindowsWithAlign` (the window-bin map is order sensitive).
+4. Phase 1 once with lane M's capacities (the probe): at most 14 ms with the faster kernels; worth it only together
+   with a layout that lets lane A's phase 3 keep its small state.
+5. The 2-bit genome is not worth pursuing for phase 1 at thread-per-read granularity; it may pay off inside a
+   cooperative search (item 1), where one 32-base word per lane per step is natural.
+
+## Process note: Clipper bridge incident
+
+Early in the session (about 23:18-23:35 EDT) one of my bridge commands (a loop whose `$f` expanded to nothing) started
+a program that read the shared bridge's standard input, and it consumed the queued commands of other agents (about
+eight) and my own first `sbatch` before it ended. I drained the queue, removed the stale lock, resubmitted my job, and
+from then on appended `< /dev/null` to every bridge command that could read standard input. Other agents' commands in
+that window may need to be re-run if they did not see a result.
+
+## Jobs and commits
+
+Branch `gpu/fable/seeds`. E7 commits: 8d0477f (flat phase 1, CMPU, P1SPLIT, P1MINB, jobs), 12d3340 (run job keeps DIFF
+lines), 120f218 (G2), 2a404cb (P1WPERS), 3b33f7e (`--p1probe`), 5f9ace8 (SEEDSTEP, CMPNI), 7b2e031 (P1FUSE), f74869c
+(round 2+3 run list), f753d75 (STEPSMEM), 09577be (k_p1s inline finish, SEEDSMEM), e1a3ecb (probe count fix), 4d49bcc
+(PREF, PREF2), 0f2ce51 (PREF3), fc646e6 (P1WPB), 3040da0 (final run list), 641016c and later (this write-up).
+
+| job | kind | commit | what |
+|---|---|---|---|
+| 795824 | compile | 2a404cb | round 1 variants |
+| 795825 | run (g051) | 2a404cb | round 1 + ncu |
+| 795839 | compile | | cancelled (folded into 795852) |
+| 795840, 795853 | run | | cancelled before start (resubmitted with more variants) |
+| 795852 | compile | 7b2e031 | round 2 variants |
+| 795933 | compile | f753d75 | round 3 variants |
+| 795952 | run (g051) | f74869c | rounds 2+3 + probe + ncu |
+| 796016 | compile | e1a3ecb | round 4 variants |
+| 796017 | run | | cancelled before start (resubmitted with the PREF variants) |
+| 796022 | compile | 4d49bcc | PREF, PREF2 variants |
+| 796023 | run (g052) | 4d49bcc | round 4 + probe + ncu |
+| 796029 | compile | 0f2ce51 | PREF3 (not run) |
+| 796040 | compile | fc646e6 | flatqs8b, flatqb (P1WPB) |
+| 796044 | run | 3040da0 | final: baseline vs flatqs8b, flatqb, flatqs8 alternating + ncu |
+
+Binaries: `/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/seeds/bin/`; logs
+`/mnt/projects/debruinz_project/debruinz/singlet/logs/e7-*.out`; per-variant logs and ncu summaries under
+`/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/seeds/results/`.
