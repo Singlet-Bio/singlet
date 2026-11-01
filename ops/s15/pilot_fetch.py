@@ -21,6 +21,8 @@ for acc, n in runs:
     lim.set_active(True)
     sra, info = F.fetch_run(acc, P + "/sra", 8, lambda m: print(m, flush=True), lim)
     lim.set_active(False)
+    if os.environ.get("NODECODE"):
+        open(fq + ".done", "w").close(); print("fetched only", acc, n, flush=True); continue
     rc = subprocess.run([BIN, "download", sra, "--quality", "binned", "--vdb-threads", "2", "--no-profile", "-o", fq], env=env).returncode
     if rc != 0:
         print("decode rc", rc, acc)

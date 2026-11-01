@@ -80,15 +80,24 @@ for acc in sorted(runs):
 print("R1=%s\nR2=%s\nBCLEN=%d" % (",".join(bc), ",".join(cd), L))
 PY
   cat files.env; . files.env
-  best=""; bestf=0
-  for w in 737K-august-2016.txt 3M-february-2018.txt; do
-    f=$(zcat ${R1%%,*} | awk 'NR%4==2{print substr($0,1,16)}' | head -200000 | grep -cxFf $WL/$w); echo "whitelist $w: $f/200000"
-    [ $f -gt $bestf ] && { bestf=$f; best=$w; }
-  done
-  [ $bestf -gt 20000 ] || { echo "no 10x whitelist matches (>10%): chemistry not covered by this STARsolo wrapper"; exit 5; }
-  UMI=$((BCLEN-16)); STRAND=Forward; [ "$FIVE" = 1 ] && STRAND=Reverse
+  # chemistry = what Singlet detected for this sample (protocol tag in its CPU run log; whitelist/UMI per include/singlet/fq/protocol.h); barcode-match autodetect is only the fallback
+  TAG=$(grep -ho 'protocol=[A-Za-z0-9._-]*' $P/s1cpu/run.log 2> /dev/null | head -1 | cut -d= -f2); best=""; SRC=singlet
+  case $TAG in
+    10x-3p-v3|10x-5p-v3|10x-3p-v4|10x-5p-v4) best=3M-february-2018.txt; UMI=12 ;;
+    10x-3p-v2|10x-5p-v2) best=737K-august-2016.txt; UMI=10 ;;
+    10x-arc-gex) best=gex_737K-arc-v1.txt; UMI=12 ;;
+    *) SRC=autodetect; bestf=0
+       for w in 737K-august-2016.txt 3M-february-2018.txt; do
+         f=$(zcat ${R1%%,*} | awk 'NR%4==2{print substr($0,1,16)}' | head -200000 | grep -cxFf $WL/$w); echo "whitelist $w: $f/200000"
+         [ $f -gt $bestf ] && { bestf=$f; best=$w; }
+       done
+       [ $bestf -gt 20000 ] || { echo "no 10x whitelist matches and Singlet gave no usable protocol tag ($TAG)"; exit 5; }
+       UMI=$((BCLEN-16)) ;;
+  esac
+  STRAND=Forward; case $TAG in *-5p-*) STRAND=Reverse ;; "") [ "$FIVE" = 1 ] && STRAND=Reverse ;; esac
+  echo "protocol_tag=$TAG source=$SRC"
   CMD="$W/pipeline-benchmark/bin/STAR-velodump --runThreadN 16 --genomeDir $G/star_2.7.11b --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple --soloCBwhitelist $WL/$best --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMI --soloBarcodeReadLength 0 --soloStrand $STRAND --outSAMtype None --outTmpDir $SCR/startmp --soloFeatures Gene GeneFull Velocyto SJ --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30"
-  echo "$CMD" > command.txt; echo "whitelist=$best umi=$UMI strand=$STRAND" > chem.txt
+  echo "$CMD" > command.txt; echo "whitelist=$best umi=$UMI strand=$STRAND tag=${TAG:-none} source=$SRC" > chem.txt
   export LD_LIBRARY_PATH=$ENV/lib STAR_VELO_DUMP=$SCR/velo_umis.tsv
   eval "/usr/bin/time -v -o time.txt $CMD" > run.log 2>&1; rc=$?; echo "STARsolo rc=$rc"; grep -E "Elapsed \(wall|Maximum resident" time.txt
   [ -f $SCR/velo_umis.tsv ] && gzip -1 -c $SCR/velo_umis.tsv > velo_umis.tsv.gz

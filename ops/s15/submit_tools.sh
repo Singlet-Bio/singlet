@@ -5,7 +5,7 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; D=$W/jobs/s15; TL=$D/pilot_to
 sb() { sbatch --parsable --account=debruinz --kill-on-invalid-dep=yes "$@"; }
 LOG=--output=$W/logs/%x-%j.out
 only=" $* "
-kbi=$(sb --job-name=s15-kbidx --partition=short-cpu --cpus-per-task=16 --mem=100G --time=03:59:00 $LOG $TL kbidx); echo "kbidx $kbi" | tee -a $D/toolids.tsv
+kbi=${KBI:-$(sb --job-name=s15-kbidx --partition=short-cpu --cpus-per-task=16 --mem=100G --time=03:59:00 $LOG $TL kbidx)}; echo "kbidx $kbi" | tee -a $D/toolids.tsv
 grep -v '^gpu-lane' $D/jobids.tsv | while IFS=$'\t' read -r g fe fq so sc cp; do
   case $g in GSM*) ;; *) continue;; esac
   [ "$only" = "  " ] || [[ "$only" == *" $g "* ]] || continue

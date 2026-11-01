@@ -39,17 +39,33 @@ mgatk)
   awk -F"\t" -v s="$SUF" 'NR>1 && $2=="TRUE"{print $1 s}' $S/cell_calls.tsv > $O/barcodes.txt; wc -l $O/barcodes.txt
   samtools view -@ 8 -b $B chrM > $O/chrM.bam && samtools index $O/chrM.bam; samtools view -c $O/chrM.bam
   cd $O; tm mgatk bcall -i chrM.bam -n $GSM -o out -c 8 -bt CB -b barcodes.txt -ub UB -g rCRS > mgatk.log 2>&1; rc=$?; tail -5 mgatk.log; exit $rc ;;
+vireo|souporcell)   # genotype demux of a known mixture; K = KDON (number of cell lines/donors from the study's GEO text); reads Singlet CPU's tagged BAM and cell calls
+  K=${KDON:?KDON}; E=$W/envs/gpool; export APPTAINER_BIND=/mnt/projects:/mnt/projects
+  PANEL=/mnt/projects/debruinz_project/cellarium/reference/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz
+  SAM=$W/envs/pbench/bin/samtools; S=$P/s1cpu/out; B=$(ls $S/*.bam 2> /dev/null | head -1); [ -n "$B" ] || { echo "no Singlet BAM in $S"; exit 6; }
+  [ -e $B.bai ] || $SAM index -@ 8 $B
+  TAGFMT=$($SAM view $B chr1 | head -2000 | grep -o -m1 "CB:Z:[ACGT]*[^[:space:]]*" | head -1); SUF=""; case "$TAGFMT" in *-1) SUF="-1";; esac
+  awk -F"	" -v s="$SUF" 'NR>1 && $2=="TRUE"{print $1 s}' $S/cell_calls.tsv > $O/barcodes.txt; wc -l $O/barcodes.txt; echo "K=$K threads=16" > $O/params.txt; cd $O
+  if [ $T = vireo ]; then
+    tm apptainer exec $E/cellsnp-lite.sif cellsnp-lite -s $B -b barcodes.txt -O cellsnp -R $PANEL -p 16 --minMAF 0.1 --minCOUNT 20 --gzip --cellTAG CB --UMItag UB > cellsnp.log 2>&1 || { tail -5 cellsnp.log; exit 7; }
+    $E/venv/bin/vireo -c cellsnp -o vireo_out -N $K -p 16 --randSeed 1 --noPlot > vireo.log 2>&1; rc=$?; tail -4 vireo.log; exit $rc
+  else
+    FA=$REFB/fasta/genome.fa; PV=$W/bench-public/ref/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf
+    [ -s $PV ] || { mkdir -p $W/bench-public/ref; zcat $PANEL > $PV.tmp.$$ && mv $PV.tmp.$$ $PV; }
+    $SAM view -@ 8 -b -D CB:barcodes.txt $B > $SCR/cells.bam && $SAM index -@ 8 $SCR/cells.bam
+    tm apptainer exec $W/envs/souporcell/souporcell.sif souporcell_pipeline.py -i $SCR/cells.bam -b barcodes.txt -f $FA -t 16 -o $O/out -k $K --common_variants $PV > soup.log 2>&1; rc=$?; tail -4 soup.log; exit $rc
+  fi ;;
 alevin)
   export ALEVIN_FRY_HOME=$PB/af_home PATH=$W/envs/pbench/bin:$PATH; IDX=$PB/refs/GRCh38-2024-A/af_idx
   ORI=fw; [ "$FIVE" = 1 ] && ORI=both
   tm simpleaf quant --reads1 $R1 --reads2 $R2 --index $IDX/index --t2g-map $IDX/index/t2g_3col.tsv --chemistry "1{b[16]u[$CH_umi]x:}2{r:}" --expected-ori $ORI \
       --resolution cr-like --unfiltered-pl $WLD/$CH_whitelist --threads 16 --output $O/af > $O/run.log 2>&1; rc=$?; tail -3 $O/run.log; exit $rc ;;
 kbidx)   # one shared nac index (kb-python in the mgatk_extra env)
-  export PATH=$W/envs/mgatk_extra/bin:$PATH; mkdir -p $W/pilot/kb_index; cd $W/pilot/kb_index
+  export PATH=$W/envs/adt/bin:$PATH; mkdir -p $W/pilot/kb_index; cd $W/pilot/kb_index
   [ -f index.idx ] && { echo "index exists"; exit 0; }
   kb ref --workflow nac -i index.idx -g t2g.txt -c1 cdna.txt -c2 nascent.txt -t 16 $REFB/fasta/genome.fa $REFB/genes/genes.gtf; exit $? ;;
 kb)
-  export PATH=$W/envs/mgatk_extra/bin:$PATH; X=10XV3; [ "$CH_umi" = 10 ] && X=10XV2; ST=forward; [ "$FIVE" = 1 ] && ST=unstranded
+  export PATH=$W/envs/adt/bin:$PATH; X=10XV3; [ "$CH_umi" = 10 ] && X=10XV2; ST=forward; [ "$FIVE" = 1 ] && ST=unstranded
   PAIRS=$(python3 -c "r1='$R1'.split(','); r2='$R2'.split(','); print(' '.join(x for p in zip(r1, r2) for x in p))")
   tm kb count --workflow nac -i $W/pilot/kb_index/index.idx -g $W/pilot/kb_index/t2g.txt -c1 $W/pilot/kb_index/cdna.txt -c2 $W/pilot/kb_index/nascent.txt -x $X       -w $WLD/$CH_whitelist --strand $ST -t 16 -m 100G -o $O/kb --h5ad $PAIRS > $O/run.log 2>&1; rc=$?; tail -3 $O/run.log; exit $rc ;;
 trust4)   # TCR/BCR from the 5' GEX reads: barcode+UMI from the short mate, cDNA mate as single-end input
@@ -57,6 +73,35 @@ trust4)   # TCR/BCR from the 5' GEX reads: barcode+UMI from the short mate, cDNA
   zcat ${R1//,/ } | gzip -1 > $SCR/R1.fq.gz; zcat ${R2//,/ } | gzip -1 > $SCR/R2.fq.gz
   cd $O; tm run-trust4 -f $R4/hg38_bcrtcr.fa --ref $R4/human_IMGT+C.fa -u $SCR/R2.fq.gz --readFormat bc:0:15,um:16:$((CH_umi + 15)) --barcode $SCR/R1.fq.gz --UMI $SCR/R1.fq.gz \
       --barcodeWhitelist $WL -t 16 -o TRUST --od $O > $O/run.log 2>&1; rc=$?; tail -3 $O/run.log; exit $rc ;;
+vdjlib)   # GSM = the V(D)J library's GSM (fetched with NODECODE by the submitter); paired GEX sample in GEXGSM. Singlet V(D)J (S11's run_vdj.py) and TRUST4 on the same reads.
+  export PATH=$W/envs/vdjcrispr/bin:$PATH PYTHONPATH= HOME=$W/cache/condahome NUMBA_CACHE_DIR=$W/cache/numba-vdjc; R4=$W/data/vdjc/trust4
+  python3 - <<PY || exit 4
+import json, subprocess, os
+r = json.load(open("$P/runs.json"))["runs"]; left = 100000000; os.makedirs("$P/fq", exist_ok=True)
+for acc, n in r:
+    if left <= 0: break
+    k = min(n, left); left -= k
+    subprocess.run(["$W/envs/pbench/bin/fastq-dump", "-X", str(k), "--split-files", "--gzip", "-O", "$P/fq", "$P/sra/%s.sra" % acc], check=True)
+PY
+  FD=$P/fastqs; mkdir -p $FD; python3 - <<PY
+import glob, gzip, os, collections
+runs = collections.defaultdict(dict)
+for f in sorted(glob.glob("$P/fq/*.fastq.gz")):
+    acc, n = os.path.basename(f)[:-9].rsplit("_", 1)
+    with gzip.open(f, "rt") as h: h.readline(); L = len(h.readline().strip())
+    runs[acc][n] = (f, L)
+for i, acc in enumerate(sorted(runs)):
+    fl = sorted(runs[acc].values(), key=lambda x: x[1]); bc = [x for x in fl if 24 <= x[1] <= 30][0]; cd = fl[-1]
+    os.symlink(bc[0], "$FD/%s_S1_L00%d_R1_001.fastq.gz" % (acc, i + 1)); os.symlink(cd[0], "$FD/%s_S1_L00%d_R2_001.fastq.gz" % (acc, i + 1))
+PY
+  R1F=$(ls $FD/*_R1_*.fastq.gz | head -1); best=""; bestf=0
+  for w in 737K-august-2016.txt 3M-february-2018.txt; do f=$(zcat $R1F | awk 'NR%4==2{print substr($0,1,16)}' | head -200000 | grep -cxFf $WLD/$w); echo "whitelist $w: $f"; [ $f -gt $bestf ] && { bestf=$f; best=$w; }; done
+  [ $bestf -gt 20000 ] || { echo "no whitelist matches the V(D)J library barcodes"; exit 5; }
+  source $W/jobs/vdjc/src.sh; echo "vdj src $SRC sha $SHA"
+  tm python -P $SRC/bench/vdj/run_vdj.py --fastq-dir $FD --whitelist $WLD/$best --ref $SRC/python/singlet/vdj/data/vdj_human.tsv.gz --out $O/singlet --threads 16 > $O/singlet.log 2>&1; echo "singlet vdj rc=$?"; tail -3 $O/singlet.log
+  cat $FD/*_R1_*.fastq.gz > $SCR/R1.fq.gz; cat $FD/*_R2_*.fastq.gz > $SCR/R2.fq.gz; mkdir -p $O/trust4
+  cd $O/trust4; /usr/bin/time -v -o $O/trust4.time run-trust4 -f $R4/hg38_bcrtcr.fa --ref $R4/human_IMGT+C.fa -u $SCR/R2.fq.gz --readFormat bc:0:15,um:16:25 --barcode $SCR/R1.fq.gz --UMI $SCR/R1.fq.gz      --barcodeWhitelist $WLD/$best -t 16 -o TRUST --od $O/trust4 > $O/trust4.log 2>&1; rc=$?; echo "trust4 rc=$rc"; grep -E "Elapsed \(wall|Maximum resident" $O/trust4.time; exit $rc ;;
+vdjclean) rm -rf $P/sra $P/stage $P/fq $P/fastqs; du -sh $P ;;
 finalclean)   # all competitors have ended: drop KEEP; delete the reads unless the GPU lane has not passed this sample yet (its own cleanup then deletes them)
   rm -f $P/KEEP
   if [ -e $P/.gpu_ended ]; then rm -rf $P/sra $P/stage $P/fq $P/cap1fq; find $P \( -name '*.bam' -o -name '*.bai' \) -delete; echo "reads deleted"; else echo "GPU lane not done: lane cleanup will delete"; fi

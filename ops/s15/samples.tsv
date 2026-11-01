@@ -12,3 +12,5 @@ GSM4987148	linemix_3pv3_deep	0	836	XLarge	440	bigmem	2-00:00:00	gpu	1-12:00:00
 GSM5171610	t5p_tcr_deep	1	851	XLarge	440	bigmem	2-00:00:00	gpu	1-12:00:00
 GSM7064234	retina_snmultiome_M	0	1198	XLarge	608	bigmem	3-00:00:00	gpu	2-00:00:00
 GSM7884577	retina_snmultiome_F	0	1404	XLarge	704	bigmem	4-00:00:00	gpu	2-00:00:00
+GSM8085472	hashed10_pbmc_5p_lane1	1	1416	XLarge	704	bigmem	4-00:00:00	gpu	2-00:00:00
+GSM9005866	cd45_5p_hashed_tcr	1	401	Large	208	bigmem	1-12:00:00	gpu	1-00:00:00

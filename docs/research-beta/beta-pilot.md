@@ -64,6 +64,14 @@ Competitors (`ops/s15/submit_tools.sh`, `pilot_tools.sh`), all on STARsolo's `Ge
 
 Not queued: HTO callers, vireo/souporcell, peddy/somalier. They need a pooled or hashed sample that is not in the list yet (see the gaps above). The paired TCR libraries are separate SRA experiments and are not fetched, so TRUST4 is judged on the GEX reads only.
 
+## Amendment 1 (2026-10-31, night; written before any pilot result exists)
+
+1. **Demux and genetic-doublet truth without a new sample.** GSM4987148 and GSM4987144 (GSE163781) are mixtures of Jurkat, TALL-104, EL4 and IVA12 at 1:1:1:1 (GEO sample text), so K = 4 and each line is a distinct genotype. cellsnp-lite + vireo and souporcell run on both with K = 4 (jobs listed in `$WORK/jobs/s15/toolids.tsv`). Caveat: EL4 is a mouse line, so mouse cells carry no human-panel SNPs and may land in their own cluster or in none; the species label is part of the truth. Score Singlet's demux and genetic doublets against these labels, plus line-specific marker genes where the study names them.
+2. **Two samples added.** GSM8085472 (GSE256089, "10 hashed donors", batch A chip 1 lane 1, 5', 1.42 G pairs): a pool of 10 donors, so K = 10 for vireo/souporcell. GSM9005866 (GSE298047, sample 1001, 5' CD45+ cells, 401 M pairs). Neither study or sample appears in the exclusion list.
+3. **Paired libraries.** V(D)J: GSM5171642 ("Healthydonor5_VDJ", 170 M pairs) pairs with GSM5171610 (same donor name) and GSM9005868 (sample 1001 TCR, 85 M) pairs with GSM9005866 (same sample name). Singlet V(D)J (S11's `run_vdj.py`) and TRUST4 run on the library reads (first 100 M pairs). HTO: the HTO libraries GSM8085473 (172 M) and GSM9005867 (116 M) are in SRA, but the tag-to-donor maps are **not verified**: GEO's pages are behind a CAPTCHA and the FTP family files truncate from Clipper. HTO callers are therefore not queued; the gap stays open until someone pastes the GEO sample text.
+4. **Protocol changes.** All Singlet runs use `--threads 16` (outputs can depend on thread count, a known engine bug). STARsolo takes its UMI length and whitelist from the protocol tag in Singlet's CPU run log (`include/singlet/fq/protocol.h` table) and waits for that run; it falls back to barcode matching only when no tag is available.
+5. **Known failure already seen (not a result).** GSM7064234 (retina snMultiome GEX, male): Singlet's decode gate rejects run SRR23617320 (`non10x_protocol_low_conf_no_wl_no_10x_geometry`, tag splitseq), so the sample's chain stops at fetch. It stays in the failure list.
+
 ## Scoring (after the jobs)
 
 Per sample × modality: Singlet vs each tool with the metric the matching SOTA doc uses; truth source where there is one, agreement otherwise. Compare each modality with its dev/test result and flag degradation beyond the bootstrap CI. Record every crash, timeout, OOM, missing output and CPU≠GPU difference, ranked by number of samples hit.
