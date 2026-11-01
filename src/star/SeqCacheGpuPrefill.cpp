@@ -1282,6 +1282,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     int lockFd = -1;
     int device = singlet_engine_gpu::lockDevice(&lockFd);
     time_t tLock = time(nullptr);
+    singlet_tail::mark("prefill: device %d locked", device);   // E20: the start stage's end (bench/fable/lockclip/e20_start.py)
     int hostThreads = (int) P.runThreadN;
     singlet_engine_gpu::Output out;
     // E8 (SINGLET_ENGINE_GPU_E2E=1, docs/gpu-engine/fable/E8-e2e.md): the pipeline mapped a shared region before forking STAR (e2eRegion);

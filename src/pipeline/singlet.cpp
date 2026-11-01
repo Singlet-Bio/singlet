@@ -7884,7 +7884,7 @@ int main(int argc, char* argv[]) {
                         preload_note = "genome: " + genome_load;
                     }
                     StopWatch probe_sw;
-                    struct ProbeRun { const char* tag; bool with_cr4; int threads; pid_t pid = -1; double t_end = 0; };
+                    struct ProbeRun { const char* tag; bool with_cr4; int threads; pid_t pid = -1; double t_end = 0; double cpu = -1; };
                     auto probe_start = [&](ProbeRun& r) {
                         static const std::set<std::string> drop = {
                             "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM",
@@ -7929,7 +7929,9 @@ int main(int argc, char* argv[]) {
                     };
                     auto probe_finish = [&](ProbeRun& r) -> double {
                         int ws = 0;
-                        const bool ok = r.pid > 0 && waitpid(r.pid, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+                        struct rusage ru{};   // E20: the probe's CPU (user + system), for the timing line
+                        const bool ok = r.pid > 0 && wait4(r.pid, &ws, 0, &ru) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+                        r.cpu = ru.ru_utime.tv_sec + ru.ru_stime.tv_sec + (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) / 1e6;
                         r.t_end = probe_sw.elapsed_s();
                         if (!ok) return -1.0;
                         std::ifstream lf(pdir + "/" + r.tag + "_Log.final.out");
@@ -7957,7 +7959,8 @@ int main(int argc, char* argv[]) {
                     }
                     std::cerr << "[singlet] CR4 probe timing: plain " << rp.t_end << " s, cr4 " << (probe_serial ? rc.t_end - rp.t_end : rc.t_end)
                               << " s, " << (probe_serial ? "serial" : "concurrent") << " on " << rp.threads << "+" << rc.threads
-                              << " threads, total " << probe_sw.elapsed_s() << " s; " << preload_note << "\n";
+                              << " threads, total " << probe_sw.elapsed_s() << " s; " << preload_note
+                              << "; CPU (user + system) plain " << rp.cpu << " s, cr4 " << rc.cpu << " s\n";
                     pj = ", \"probe_reads\": " + std::to_string(cr4_probe_reads) +
                          ", \"unique_pct_plain\": " + std::to_string(u_off) +
                          ", \"unique_pct_cr4\": " + std::to_string(u_on) + ", \"max_drop_pts\": " + std::to_string(kMaxDropPts);
