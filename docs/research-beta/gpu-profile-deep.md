@@ -163,6 +163,41 @@ Tried, all on the same sample and reads, k_p3 time:
 
 Reading: the idle lanes are not waiting for the slowest read of the warp (the persistent version removes that wait and keeps the same 1.9). They sit at different code points of the recursive stitch at the same moment. More resident warps do not help either. The kernel is bound by the divergence of its control flow, not by memory or by SM throughput (7% / 8%). The remaining lever is to restructure the stitch so that a warp works on one read, or so that its lanes take the same branches (warp-cooperative stitch, branches turned into selects), which is a rewrite of a 1.5 k-line port with a byte-identity gate; the ceiling is about 8.7 s of the 25 s the device is held for a 66.6 M-read sample, and the sample's wall time is 255 s, dominated by the STAR child on the host.
 
+## 10.2 Node-level bottleneck model: which bound is binding, and how much each item moves it
+
+Per GPU of an H100 node: 28 host cores and one device-lock permit. Inputs, all measured (sources in brackets); rates are million read pairs per second.
+
+| quantity | value | source |
+|---|---|---|
+| measured campaign rate, 8 samples/GPU x 12 threads, 1 permit | **2.0-2.2** (read-weighted mix: 1.97) | queue benchmark, section 8; S14's 795246 is the repeat on the current build |
+| host core-s per million pairs, whole sample | 16 (13.3 if computed from the 28 busy cores / 2.1) | section 8 |
+| device-lock utilisation at that rate | 57-72% | section 8 |
+| host-CPU bound = cores / (core-s per M) | **1.75** (16 core-s/M) to 2.1 (13.3 core-s/M) | 28 cores per GPU |
+| GPU-lock bound = rate / lock utilisation = 1 / (lock seconds per pair) | **2.9-3.7** (3.2 at 65%) | the same measurement |
+| lock seconds per pair, one-sample run, before this work | 39.4 s / 66.6 M = 0.59 us (bound 1.7) | section 2; the one-sample run holds the lock longer than the campaign average, because the 16-thread child competes for the memory system with nothing else; the campaign figure above is the one to trust |
+
+Verdict: **the host CPU is the binding bound.** The measured rate sits on it (28 of the 28 cores busy), and the lock bound is 1.4-1.8x higher. Anything that only
+shortens the lock or the GPU time (`k_p3`, `k_p1`, uploads, dedup) cannot raise the rate until the host bound has moved by that factor; it frees device time (lock
+utilisation 65% -> lower) and is worth it for latency and for the 3-GPU limit, not for node throughput. The target to move is the host core-s per pair.
+
+Where the 16 core-s per million go (pbmc1k_v3, from section 3's marks, per million pairs of the 66.6 M sample: the STAR child is 589.7 core-s = 8.9; decode, the
+CR4 probe, the parent's pileup, non-host, export, decontx and demultiplexing make up the rest) and what each planned item removes. Upper bounds, to be replaced by measured values as each lands:
+
+| item | host core-s per M removed | effect on the host bound | effect on the lock |
+|---|---|---|---|
+| CR4 opal clip on the device (read pass, section 3) | 2.4 (human, CR4 on; 0.1 mouse) | 16 -> 13.6: +18% | +clip kernel, ~0 |
+| STAR hand-off bypass (per-read pass 218.6 + hand-off records 55 core-s per 66.6 M; the solo post-map part that can be skipped is only 0.26) | up to 4.1 | 16 -> 11.9: +34%, then the lock bound (3.2) is next | 0 |
+| dedup on the device (this branch's stack) | 0.06 (3.8 core-s per sample) | +0.4% | -3.4 s of 39.4 per sample: -9% |
+| pinned multi-thread uploads (stack) | -0.03 (extra copy threads) | ~0 | -3.1 s: -8% |
+| resident SA index and non-host index | genome-load share 7.6 core-s plus the CR4 probe's second load per sample (0.1-0.3 core-s/M, dominant for samples under 100 M pairs: p10 is 29 M) | +1-2% at the median, more for small samples | -7.2 s (SA 3.05 + non-host index 4.1) of 39.4: -18% |
+| `k_p3` rewrite (warp-cooperative stitch) | 0 | 0 | at most -6 s (-15%) |
+
+Reading: after CR4-on-device and the bypass the host bound would reach ~2.8-3.0 and meet the lock bound (3.2), after which the lock items (dedup, uploads, resident
+indexes, `k_p3`) set the rate. That fixes the order: the host-side items first, the lock items second.
+
+Caveats: the host figures come from one sample (pbmc1k_v3) and the child's marks, not from the campaign mix; mouse samples spend 38 core-s per million pairs in
+stitch and extend on the CPU lane (S12's profile), so for them the bound is higher and the bypass matters more. S14's 795246 should replace the measured rate.
+
 ## 11. Gaps
 
 * The wall-clock budget has ~50 s (17%) unattributed on the 66 M-read sample; a run with marks and NVTX in the same process would close it.
