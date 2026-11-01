@@ -22,12 +22,20 @@ b = rows.get(base)
 print("| variant | options | A ms | M ms | B ms | total ms | M distinct/s | vs %s | identical | A/M/B work GB | A/M/B p3 slot fill | A/M/B lane balance | A/M/B drain |" % base)
 print("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
 for k, j in rows.items():
-    e = j["e4"]
+    e = j.get("e4")
+    if e is None:   # a reference build without the E4 fields
+        print("| %s | reference build, harness order | %.1f | %.1f | %.1f | %.1f | %.2f | %.2fx | %d/%d | | | | |" % (
+            k, j["lane_a_ms"], j["lane_m_ms"], j["lane_b_ms"], j["gpu_ms_median"], j["gpu_distinct_reads_per_s"] / 1e6,
+            (b["gpu_ms_median"] / j["gpu_ms_median"]) if b else float("nan"), j["identical_distinct"], j["distinct_reads"]))
+        continue
     opts = []
     if e["presort"]: opts.append("presort")
-    if e["p3order"] != "none": opts.append(e["p3order"])
+    lo = [lane(j, x).get("order", e["p3order"]) for x in "AMB"]
+    if len(set(lo)) > 1: opts.append("order " + "/".join(lo))
+    elif e["p3order"] != "none": opts.append(e["p3order"])
     if e["queue"]: opts.append("queue")
-    if e["fused"]: opts.append("fused " + e["fused"] + ("" if e["fused_bps"] == [0, 0, 0] else " bps " + "/".join(map(str, e["fused_bps"]))))
+    if e["fused"]: opts.append("fused " + e["fused"] + ("" if e["fused_bps"] == [0, 0, 0] else " bps " + "/".join(map(str, e["fused_bps"])))
+                               + ("" if e.get("fused_lb", 1) == 1 else " lb %d" % e["fused_lb"]))
     if e["batches"] != [262144, 262144, 65536]: opts.append("batches " + "/".join(str(x // 1024) + "k" for x in e["batches"]))
     if e["tail"]: opts.append("tail")
     L = [lane(j, x) for x in "AMB"]

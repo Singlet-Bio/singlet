@@ -45,11 +45,23 @@ DEFAULT="$DEFAULT;v1nw:--presort --p3order nw-desc --tail;v2locus:--presort --p3
 DEFAULT="$DEFAULT;v2nwlocus:--presort --p3order nwlocus --tail;v3q:--presort --queue --tail;v3qdesc:--presort --queue --p3order cost-desc --tail"
 DEFAULT="$DEFAULT;v3qnwlocus:--presort --queue --p3order nwlocus --tail;v4fA:--presort --fused A --tail;v4fAMB:--presort --fused AMB --tail"
 DEFAULT="$DEFAULT;v4fAMB1:--presort --fused AMB --fused-bps-a 1 --fused-bps-m 1 --fused-bps-b 1 --tail;v4big:--presort --batch-a 524288 --batch-m 393216"
+# round 2 (ROUND=2): reference builds (base source cf92cdb9 with CUDA 13.3; the W11 binary of 2026-10-28, CUDA 12.4.1), per-lane
+# order for lane M, bigger batches, lane B in one launch, the fused kernel at 4-5 resident blocks per SM (--fused-lb)
+R2="v0raw:;base13:@m5-cf92cdb987;w11:@$W/jobs/w11/bin/m5;v0:--presort;v5m:--presort --p3order-m nw-desc"
+R2="$R2;v4big:--presort --batch-a 524288 --batch-m 393216;v4bigB1:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072"
+R2="$R2;v5best:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072 --p3order-m nw-desc;v5bestq:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072 --p3order-m nw-desc --queue"
+R2="$R2;v4fA5:--presort --fused A --fused-lb 5 --tail;v4fA4:--presort --fused A --fused-lb 4 --tail;v4fAMB5:--presort --fused AMB --fused-lb 5 --tail"
+R2="$R2;v5mt:--presort --p3order-m nw-desc --tail;v0b:--presort"
+[ "${ROUND:-1}" = 2 ] && DEFAULT=$R2
 IFS=';' read -ra VARS <<< "${E4RUNS:-$DEFAULT}"
 for v in "${VARS[@]}"; do
-  LABEL=${v%%:*}; ARGS=${v#*:}
-  echo "=== $LABEL: $ARGS"
-  apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=24 $M5 --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3 $BASE $ARGS \
+  LABEL=${v%%:*}; ARGS=${v#*:}; BIN=$M5
+  if [[ "$ARGS" == @* ]]; then   # "@binary [args]": another build (relative names are in $O/bin)
+    BIN=${ARGS%% *}; BIN=${BIN#@}; [[ "$BIN" != /* ]] && BIN=$O/bin/$BIN
+    if [[ "$ARGS" == *" "* ]]; then ARGS=${ARGS#* }; else ARGS=""; fi
+  fi
+  echo "=== $LABEL: $ARGS (binary $BIN sha256 $(sha256sum $BIN | cut -c1-16))"
+  apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=24 $BIN --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3 $BASE $ARGS \
     --label $LABEL --json $OUT/e4_$LABEL.json > $SCR/$LABEL.log 2>&1
   echo "m5 exit=$?"
   grep -E "^m5 E4-order build|^lane [AMB] \(|schedule:|run 3:|^M5:|unmapped by STAR|GPU lane A|heavy lane|assigned every|registers|DIFF" $SCR/$LABEL.log | grep -v "^DIFF" | head -30
