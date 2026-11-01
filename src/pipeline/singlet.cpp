@@ -3486,6 +3486,26 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // ── Species CHECK (informational): the genome comes from --genome-dir (the campaign worker always passes it, from the catalogue organism) and species detection only
+    // confirms it. Runs only when $SINGLET_SPECIES_FILTERS names a directory with the Bloom filters (bench/species_detect/build_species_bloom.cpp); nothing about the run or its
+    // outputs changes, the result is one log line the worker records ("[species-check] ... AGREE|DISAGREE|UNKNOWN").
+    if (onefq_mode && !genome_dir.empty()) {
+        const char* sf = std::getenv("SINGLET_SPECIES_FILTERS");
+        if (sf && *sf) {
+            auto det = species_detect::detect(onefq_file, /*verbose=*/false, /*metadata_json_path=*/"");
+            std::string ref_name = genome_dir;   // .../<reference name>/star_2.7.11b
+            auto sl = ref_name.find_last_of('/');
+            if (sl != std::string::npos && sl + 1 < ref_name.size() && ref_name.substr(sl + 1).rfind("star", 0) == 0) ref_name.resize(sl);
+            sl = ref_name.find_last_of('/');
+            if (sl != std::string::npos) ref_name = ref_name.substr(sl + 1);
+            std::string verdict = "UNKNOWN";
+            if (det.confident() && det.method != "metadata" && !det.genome_tag.empty())
+                verdict = (ref_name.find(det.genome_tag) != std::string::npos) ? "AGREE" : "DISAGREE";
+            std::cerr << "[species-check] detected=" << (det.species.empty() ? "unknown" : det.species) << " genome=" << det.genome_tag << " confidence=" << det.confidence
+                      << " method=" << det.method << " reference=" << ref_name << " " << verdict << "\n";
+        }
+    }
+
     // ── N21: Shared-memory genome auto-detection (B-G3-2) ──
     // --genome-shared auto (default): enable on Clipper-class HPC nodes if the
     // genome is already in shared memory.  --genome-shared on/off override.
@@ -3517,7 +3537,11 @@ int main(int argc, char* argv[]) {
     // Primary path: .1fq input
     if (onefq_mode) {
         if (genome_dir.empty() || whitelist_file.empty()) {
-            std::cerr << "ERROR: .1fq processing requires --genome-dir (and optionally --whitelist)\n"
+            std::cerr << "ERROR: .1fq processing is missing "
+                      << (genome_dir.empty() ? std::string("--genome-dir (no reference was given and species auto-detection did not resolve one: check --ref-base / SINGLET_REF_BASE and, for detection, SINGLET_SPECIES_FILTERS)") : std::string())
+                      << (genome_dir.empty() && whitelist_file.empty() ? " and " : "")
+                      << (whitelist_file.empty() ? std::string("--whitelist (it could not be resolved from the .1fq header)") : std::string()) << "\n"
+                         ".1fq processing requires --genome-dir (and optionally --whitelist)\n"
                          "  Tip: Whitelist is auto-resolved from .1fq metadata. Use --whitelist None\n"
                          "  for protocols without a universal whitelist (e.g. Drop-seq)\n"
                          "  Tip: Set SINGLET_REF_BASE or use --ref-base for genome auto-detection\n";

@@ -193,26 +193,30 @@ def test_drain_end_to_end(tmp_path):
     fake.write_text(FAKE)
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     cfg = tmp_path / "config.json"
-    json.dump({"binary": {"path": str(fake)}, "clusters": {"clipper": {"root": root, "ref_base": str(tmp_path / "ref")}}}, open(cfg, "w"))
-    samples = {"GSM1": ("ok", 20), "GSM2": ("ok", 250), "GSM3": ("fail", 30), "GSM4": ("oom", 40), "GSM5": ("ok", 900)}
+    json.dump({"binary": {"path": str(fake)}, "references": {"Homo sapiens": "GRCh38-2024-A", "*": "auto"},
+               "clusters": {"clipper": {"root": root, "ref_base": str(tmp_path / "ref")}}}, open(cfg, "w"))
+    samples = {"GSM1": ("ok", 20), "GSM2": ("ok", 250), "GSM3": ("fail", 30), "GSM4": ("oom", 40), "GSM5": ("ok", 900), "GSM6": ("ok", 25)}
     for gsm, (body, mp) in samples.items():
         d = os.path.join(stage, "ready", gsm)
         os.makedirs(d)
         open(os.path.join(d, "sample.1fq"), "w").write(body)
-        json.dump({"pairs": mp * M_, "bytes": 10, "runs": ["sample"], "gse": "GSE1"}, open(os.path.join(d, "manifest.json"), "w"))
+        json.dump({"pairs": mp * M_, "bytes": 10, "runs": ["sample"], "gse": "GSE1",
+                   "organism": "Macaca mulatta; Homo sapiens" if gsm == "GSM6" else "Homo sapiens"}, open(os.path.join(d, "manifest.json"), "w"))
     r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "multi_drain.py"), "--stage", stage, "--config", str(cfg), "--concurrency", "3",
                         "--scratch", str(tmp_path / "scr"), "--mem-gb", "370", "--no-cgroup", "--idle-exit-min", "0.05", "--publish", "none"],
                        capture_output=True, text=True, timeout=170, env=dict(os.environ, S9_NO_WL_CHECK="1"))
     assert r.returncode == 0, r.stdout + r.stderr
     log = r.stdout + r.stderr
     assert os.listdir(os.path.join(stage, "ready")) == ["GSM5"], log        # 900 M pairs: left for the whole-node class, not lost, not failed
-    assert sorted(os.listdir(os.path.join(stage, "failed"))) == ["GSM3.2", "GSM4.2"]   # requeued once, then failed
+    assert sorted(os.listdir(os.path.join(stage, "failed"))) == ["GSM3.2", "GSM4.2", "GSM6.1"]   # requeued once, then failed; the mixed-species sample at once
     assert os.listdir(os.path.join(stage, "claimed")) == []
     for g in ("GSM3", "GSM4"):
         m = json.load(open(os.path.join(stage, "failed", g + ".2", "manifest.json")))
         assert m["failed_reason"] in ("rc_3", "oom") and m["attempts"] == 2
     ev = [json.load(open(os.path.join(root, "inbox", f))) for f in sorted(os.listdir(os.path.join(root, "inbox")))]
-    assert sorted(e["gsm"] for e in ev if e["event"] == "done") == ["GSM1", "GSM2"]
+    assert sorted(e["gsm"] for e in ev if e["event"] == "done") == ["GSM1", "GSM2"]   # (GSM6 is the mixed-species sample)
     assert [e for e in ev if e["gsm"] == "GSM4" and e["event"] == "requeued"][0]["reason"] == "oom"
-    assert {e["gsm"] for e in ev if e["event"] == "failed" and e.get("final")} == {"GSM3", "GSM4"}
+    assert {e["gsm"] for e in ev if e["event"] == "failed" and e.get("final")} == {"GSM3", "GSM4", "GSM6"}
+    assert [e["reason"] for e in ev if e["gsm"] == "GSM6" and e["event"] == "failed"] == ["mixed_species_unsupported"]    # no retry
+    assert "GSM6" not in [e["gsm"] for e in ev if e["event"] == "requeued"]
     assert not os.listdir(str(tmp_path / "scr"))                       # scratch cleaned
