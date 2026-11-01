@@ -106,6 +106,9 @@ struct E11State {
 // E16 "bg" (level 5): the Unmapped.out records of the reads with an unmapped record (3.3 M on pbmc1k_v3) are formatted, and the RNA Q30
 // adjustment made, on a thread beside STAR's loop (4 threads under it) instead of before the loop; seqCacheGpuAfterMapping joins it,
 // appends the records to STAR's streams (the files' record order is run-dependent anyway) and Solo's summary then takes the adjusted counts
+// E16 "free": the prefill's reads and engine output, freed after STAR's loop (freeing them beside the loop or the chunk construction slows
+// both: the kernel serialises the unmapping with the other threads' page faults)
+struct E16Held { singlet_engine_gpu::Input *in = nullptr; singlet_engine_gpu::Output *out = nullptr; } e16held;
 struct E16Bg {
     std::thread th; bool on = false, okU = true, okR = true; std::string whyU, whyR;
     std::vector<uint32_t> reads; std::vector<std::string> out[2]; double sU = 0, sR = 0;
@@ -1214,14 +1217,9 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
-    if (g_e10Level == 5 && singlet_tail::cut("free")) {   // E16 "free": the reads (decode) and the engine's output go on a thread beside STAR's loop
-        auto *fIn = new singlet_engine_gpu::Input(std::move(in));      // (the vectors' buffers move with them: nothing after this reads them,
-        auto *fOut = new singlet_engine_gpu::Output(std::move(out));   //  as nothing reads them after the return either)
-        std::thread([fIn, fOut]() {
-            const double a = singlet_tail::now();
-            delete fIn; delete fOut;
-            singlet_tail::mark("prefill (bg): reads and engine output freed in %.3f s", singlet_tail::now() - a);
-        }).detach();
+    if (g_e10Level == 5 && singlet_tail::cut("free")) {   // E16 "free": the reads (decode) and the engine's output are kept (1.1 s to free at T=18)
+        e16held.in = new singlet_engine_gpu::Input(std::move(in));      // until STAR's loop is done; seqCacheGpuAfterMapping frees them on a thread
+        e16held.out = new singlet_engine_gpu::Output(std::move(out));   // (the buffers move with them; nothing after this reads them)
     }
     singlet_tail::mark("prefill: end");
 #endif
@@ -1356,6 +1354,15 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
                          << " s, waited " << sec(tw, tl) << " s for the device, soloRunKept " << sec(tl, tr) << " s (ms:" << ms.str() << "), write " << sec(tws, te)
                          << " s (" << info.nCB << " CBs, " << info.nCells << " cells, nUMImax " << info.nUMImax << ", nUMImin " << info.nUMImin
                          << "); STAR's Solo step skipped\n" << log << std::flush;
+    }
+    if (e16held.in != nullptr || e16held.out != nullptr) {   // E16 "free": the prefill's reads and engine output, on a thread (STAR's loop is done)
+        singlet_engine_gpu::Input *fIn = e16held.in; singlet_engine_gpu::Output *fOut = e16held.out;
+        e16held = E16Held();
+        std::thread([fIn, fOut]() {
+            const double a = singlet_tail::now();
+            delete fIn; delete fOut;
+            singlet_tail::mark("after mapping (bg): the prefill's reads and engine output freed in %.3f s", singlet_tail::now() - a);
+        }).detach();
     }
 #else
     (void) P; (void) RAchunk;
