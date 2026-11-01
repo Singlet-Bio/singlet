@@ -181,26 +181,52 @@ def mtx_decode(blob):
     return head + buf.getvalue().encode()
 
 
-def _pack(job):
+XZ_CHUNK = 16 << 20   # a file bigger than two chunks is cut into independent xz streams compressed in parallel (lzma.decompress joins them)
+
+
+def _xz(data, threads):
+    if threads < 2 or len(data) < 2 * XZ_CHUNK:
+        return lzma.compress(data, preset=PRESET)
+    parts = [data[i:i + XZ_CHUNK] for i in range(0, len(data), XZ_CHUNK)]
+    with concurrent.futures.ThreadPoolExecutor(threads) as ex:
+        return b"".join(ex.map(lambda b: lzma.compress(b, preset=PRESET), parts))
+
+
+def _hash(job):
     rel, path = job
     data, was_gz = _content(path)
+    return rel, was_gz, hashlib.sha256(data).hexdigest(), len(data)
+
+
+def _pack(job):
+    """Compress one distinct content. -> (blob, codec)."""
+    path, threads = job
+    data, _gz = _content(path)
     if len(data) >= MTX_MIN_BYTES and b"%%MatrixMarket" in data[:20]:
         blob = mtx_encode(data)
         if blob is not None:
-            return rel, was_gz, hashlib.sha256(data).hexdigest(), len(data), blob, "mtx"
-    return rel, was_gz, hashlib.sha256(data).hexdigest(), len(data), lzma.compress(data, preset=PRESET), "xz"
+            return blob, "mtx"
+    return _xz(data, threads), "xz"
 
 
 def build(out_dir, dest, gsm, gse=None, threads=4):
-    """Write the sidecar tar for the sample whose engine output is out_dir. -> index dict (also stored as SIDECAR.json)."""
+    """Write the sidecar tar for the sample whose engine output is out_dir. -> index dict (also stored as SIDECAR.json).
+    Files are hashed first and only distinct contents are compressed (the snp_ad / snp_dp feature lists are 137 MB copies of each other)."""
     rels = select(out_dir)
     with concurrent.futures.ThreadPoolExecutor(max(1, threads)) as ex:
-        packed = list(ex.map(_pack, [(r, os.path.join(out_dir, r)) for r in rels]))
-    files, seen = {}, {}
+        hashed = list(ex.map(_hash, [(r, os.path.join(out_dir, r)) for r in rels]))
+        first = {}
+        for rel, _g, sha, _n in hashed:
+            first.setdefault(sha, rel)
+        order = sorted(first.items(), key=lambda kv: -next(n for r, _g, h, n in hashed if h == kv[0]))   # biggest first: they set the wall time
+        done = dict(zip([sha for sha, _ in order], ex.map(_pack, [(os.path.join(out_dir, rel), threads) for _sha, rel in order])))
+    files = {}
     tmp = dest + ".tmp"
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     with tarfile.open(tmp, "w") as tf:
-        for rel, was_gz, sha, n, blob, codec in packed:
+        seen = {}
+        for rel, was_gz, sha, n in hashed:
+            blob, codec = done[sha]
             ent = {"sha256": sha, "bytes": n, "gz": was_gz, "codec": codec}
             if sha in seen:
                 ent["dup_of"] = seen[sha]

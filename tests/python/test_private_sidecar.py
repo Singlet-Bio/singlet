@@ -96,8 +96,8 @@ def test_collect_outputs_moves_stray_withheld_files_into_private(out, tmp_path):
     assert os.path.exists(os.path.join(priv, "snp_ad.mtx.gz"))
 
 
-def _mtx(rows):
-    return ("%%MatrixMarket matrix coordinate integer general\n% c\n5 4 " + str(len(rows)) + "\n"
+def _mtx(rows, dims="5 4"):
+    return ("%%MatrixMarket matrix coordinate integer general\n% c\n" + dims + " " + str(len(rows)) + "\n"
             + "".join("%d %d %d\n" % r for r in rows)).encode()
 
 
@@ -117,7 +117,7 @@ def test_big_matrix_uses_mtx_codec_and_verifies(out, tmp_path, monkeypatch):
     monkeypatch.setattr(PS, "MTX_MIN_BYTES", 100)
     rows = [(i % 5 + 1, i // 5 + 1, i % 7 + 1) for i in range(0, 400)]
     rows.sort(key=lambda r: (r[1], r[0]))
-    _w(out, "private/snp_dp.mtx.gz", gzip.compress(_mtx(rows).replace(b"5 4 ", b"5 80 ")))
+    _w(out, "private/snp_dp.mtx.gz", gzip.compress(_mtx(rows, "5 80")))
     dest = str(tmp_path / "s.tar")
     idx = PS.build(out, dest, "GSM1")
     assert idx["files"]["private/snp_dp.mtx.gz"]["codec"] == "mtx"
