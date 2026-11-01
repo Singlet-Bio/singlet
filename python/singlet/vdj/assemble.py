@@ -104,6 +104,7 @@ class Params:
     # > 0: an IG junction removed by the cross filter comes back when it is the strongest high-confidence contig of its
     # barcode and chain and has >= this many UMIs (B cells of a clone that also has plasma cells)
     ig_top_min_umis: int = 0
+    ig_top_paired: bool = False  # ig_top_min_umis gives back a chain only where the barcode holds the partner chain too
     # > 0: an IG contig whose barcode holds no kept partner chain is ambient when its junction is in >= this many barcodes
     ig_lone_spread: int = 0
     threads: int = 8
@@ -826,6 +827,13 @@ def filter_contigs(df, params: Params):
             & (df["umis"] == top_hc)
             & (df["umis"] >= params.ig_top_min_umis)
         )
+        if params.ig_top_paired:
+            # only in a droplet that holds a B cell: the partner chain (heavy for a light chain, light for a heavy one)
+            # is kept or given back too
+            ok = df["kept"] | give
+            h = (ok & (df["chain"] == "IGH")).groupby(df["bcix"]).transform("any")
+            l_ = (ok & df["chain"].isin(("IGK", "IGL"))).groupby(df["bcix"]).transform("any")
+            give &= ((df["chain"] == "IGH") & l_) | (df["chain"].isin(("IGK", "IGL")) & h)
         df.loc[give, "kept"] = True
     if params.ig_lone_spread > 0:
         # ambient IG spread: a junction present in many droplets (a plasma clone's light chain in thousands of barcodes at
