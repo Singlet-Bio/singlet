@@ -311,6 +311,15 @@ __global__ void k_pass_scatter(PassDev d, const uint32_t* keep, const uint32_t* 
 namespace singlet_engine_gpu {
 
 namespace {
+// device -> pageable host memory, page-locked in place for the copy when the driver allows it (GBs: several times the pageable rate)
+cudaError_t d2h(void* dst, const void* src, u64 n) {
+    if (n == 0) return cudaSuccess;
+    const bool pin = n >= (64ull << 20) && cudaHostRegister(dst, n, cudaHostRegisterDefault) == cudaSuccess;
+    if (!pin) cudaGetLastError();
+    const cudaError_t e = cudaMemcpy(dst, src, n, cudaMemcpyDeviceToHost);
+    if (pin) cudaHostUnregister(dst);
+    return e;
+}
 // device buffers of one e2ePass call, freed on every return
 struct PassBufs {
     std::vector<void*> p;
@@ -417,9 +426,9 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         const double td = now();
         out.reads.resize(nKeep * 16); out.clip.resize(nKeep); out.lowq.resize(nKeep * 16);
         if (nKeep) {
-            EP_CK(cudaMemcpy(out.reads.data(), dOut, nKeep * 16, cudaMemcpyDeviceToHost));
-            EP_CK(cudaMemcpy(out.clip.data(), dClip, nKeep * 4, cudaMemcpyDeviceToHost));
-            EP_CK(cudaMemcpy(out.lowq.data(), dLowq, nKeep * 16, cudaMemcpyDeviceToHost));
+            EP_CK(d2h(out.reads.data(), dOut, nKeep * 16));
+            EP_CK(d2h(out.clip.data(), dClip, nKeep * 4));
+            EP_CK(d2h(out.lowq.data(), dLowq, nKeep * 16));
         }
         out.cellReads.resize(in.nCells); out.cellUnique.resize(in.nCellsQc); out.cellMulti.resize(in.nCellsQc);
         out.cellMism.resize(in.nCellsQc); out.cellBases.resize(in.nCellsQc); out.wlCounts.resize(in.nWl);

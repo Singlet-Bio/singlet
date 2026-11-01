@@ -300,12 +300,17 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     // where the hand-off "on" path with summaries and per-read entries runs; otherwise (or when the device build fails) that path runs as before.
     singlet_engine_gpu::E2ERegion &e2r = singlet_engine_gpu::e2eRegion();
     const char *gpE = getenv("SINGLET_GPU_PILEUP"), *hsE = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
-    const bool e2eWant = e2r.base != nullptr && singlet_engine_gpu::e2eRequested() && getenv("SINGLET_ENGINE_GPU_HANDOFF") != nullptr
+    bool e2eWant = e2r.fd >= 0 && singlet_engine_gpu::e2eRequested() && getenv("SINGLET_ENGINE_GPU_HANDOFF") != nullptr
         && getenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ") != nullptr && gpE != nullptr && strcmp(gpE, "on") == 0 && !(hsE != nullptr && hsE[0] == '0')
         && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes)
         && P.pSolo.type == P.pSolo.SoloTypes::CB_UMI_Simple && P.pSolo.cbL <= 21 && P.pSolo.umiL <= 21;
+    if (e2eWant) {   // the memory object sized (sparse: only written pages exist) and mapped here; SINGLET_ENGINE_GPU_E2E_GB, default 512
+        uint64 gb = 512;
+        if (const char *g = getenv("SINGLET_ENGINE_GPU_E2E_GB")) gb = std::max<uint64>(1, strtoull(g, nullptr, 10));
+        if (!e2r.attach(gb << 30)) { e2eWant = false; P.inOut->logMain << "ENGINE_GPU: E8 not used (the shared memory object could not be mapped)" << std::endl; }
+    }
     if (e2eWant) { in.e2e = &e2r; in.outSAMmapqUnique = P.outSAMmapqUnique; in.outSAMflagAND = P.outSAMflagAND; in.outSAMflagOR = P.outSAMflagOR; }
-    else if (e2r.base != nullptr) P.inOut->logMain << "ENGINE_GPU: E8 not used (it needs the GPU pileup \"on\" with summaries and per-read entries, CB_UMI_Simple)\n";
+    else if (e2r.fd >= 0 && e2r.base == nullptr) P.inOut->logMain << "ENGINE_GPU: E8 not used (it needs the GPU pileup \"on\" with summaries and per-read entries, CB_UMI_Simple)" << std::endl;
     bool lockReleased = false;   // mapDistinct releases the device when its device work is done (the host assembly of the records needs no GPU)
     const auto tHeld0 = std::chrono::steady_clock::now(); double heldS = 0;
     in.release = [&]() { if (!lockReleased) { lockReleased = true; heldS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tHeld0).count(); singlet_engine_gpu::unlockDevice(lockFd); } };

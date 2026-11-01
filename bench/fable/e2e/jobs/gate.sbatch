@@ -73,7 +73,13 @@ odir() { if [ -d $SCR/$s/$1/out ]; then echo $SCR/$s/$1/out; else v=OUT_$1; echo
 cmp2() { a=$(odir $1); b=$(odir $2); [ -n "$a" ] && [ -d "$a" ] && [ -n "$b" ] && [ -d "$b" ] || { echo "-- skip $1 vs $2 (not run)" | tee -a $RES/summary.txt; return; }
   echo "=== $s $1 vs $2 ($a vs $b)" | tee -a $RES/summary.txt
   python3 $SCR/repo/bench/star_accel/out_equiv.py $a $b > $RES/equiv-$1-$2.txt 2>&1
-  grep -a '^  DIFF\|^  only in\|^files:\|^RESULT' $RES/equiv-$1-$2.txt | cut -c1-200 | head -30 | tee -a $RES/summary.txt; }
+  grep -a '^  DIFF\|^  only in\|^files:\|^RESULT' $RES/equiv-$1-$2.txt | cut -c1-200 | head -30 | tee -a $RES/summary.txt
+  # the read-order files (STAR's threads write them in completion order): same records? (sorted 4-line records; only in this job's /tmp)
+  for f in nonhost_reads.fq star_Unmapped.out.mate1 star_Unmapped.out.mate2; do
+    [ -f $a/$f ] && [ -f $b/$f ] || continue
+    ha=$(paste - - - - < $a/$f | LC_ALL=C sort -S 2G | sha256sum | cut -c1-16); hb=$(paste - - - - < $b/$f | LC_ALL=C sort -S 2G | sha256sum | cut -c1-16)
+    [ "$ha" = "$hb" ] && echo "  $f: same records in another order (sorted sha256 $ha)" | tee -a $RES/summary.txt || echo "  $f: RECORDS DIFFER (sorted sha256 $ha vs $hb)" | tee -a $RES/summary.txt
+  done; }
 cmp2 cpu gpuE; cmp2 cpu gpuD; cmp2 gpuD gpuE; cmp2 cpu gpuEc
 [ $FAIL = 0 ] && echo "GATE RUN OK (identity verdicts above)" | tee -a $RES/summary.txt || echo "GATE FAILED" | tee -a $RES/summary.txt
 echo done $(date -Is) | tee -a $RES/summary.txt

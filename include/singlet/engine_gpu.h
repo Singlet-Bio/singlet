@@ -16,6 +16,8 @@
 #include <array>
 #include <fcntl.h>
 #include <sys/file.h>
+#include <sys/mman.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 namespace m5 { struct Params; struct GenomeView; }
@@ -24,9 +26,10 @@ namespace singlet_engine_gpu {
 
 // ---- E8 (SINGLET_ENGINE_GPU_E2E=1; docs/gpu-engine/fable/E8-e2e.md): the GPU pileup's input built on the device, no hand-off file.
 // The pipeline forks STAR, and STAR's prefill (mapDistinct) is where the mapping results are on the device; the pileup runs in the parent.
-// The parent maps a shared anonymous region before the fork (e2eRegion: MAP_SHARED | MAP_ANONYMOUS | MAP_NORESERVE, pages exist only once
-// written); mapDistinct builds the pileup's records on the device from its device-resident results and copies them into it, STAR's mapping
-// threads write the per-read entries into it, and the parent's pileup takes the records from it and runs the per-read pass on the device.
+// The parent creates an anonymous shared memory object (memfd) before the fork (e2eRegion().create(); nothing mapped, so the parent's
+// VmPeak, which summary.json reports as memory_tier, does not grow by a reservation); STAR's prefill sizes it (sparse) and maps it (attach),
+// mapDistinct builds the pileup's records on the device from its device-resident results and copies them into it, STAR's mapping threads
+// write the per-read entries into it, and the parent maps the bytes in use (mapUsed) and takes the records and the per-read pass from it.
 // Layout: this header at offset 0, then arrays at the byte offsets below (64-byte aligned). magic is written last by the prefill.
 struct E2EHeader {
     char magic[8];                     // "SGE2E001" once the records are complete
@@ -38,7 +41,7 @@ struct E2EHeader {
     double msGather, msBuild, msD2H;                  // device steps in mapDistinct
 };
 struct E2ERegion {
-    uint8_t* base = nullptr; uint64_t cap = 0;
+    uint8_t* base = nullptr; uint64_t cap = 0; int fd = -1;   // fd: the memfd, created by the parent before the fork (inherited by STAR)
     E2EHeader* hdr() const { return (E2EHeader*) base; }
     bool ready() const { return base != nullptr && std::memcmp(hdr()->magic, "SGE2E001", 8) == 0; }
     template <class T> T* at(uint64_t off) const { return off ? (T*) (base + off) : nullptr; }
@@ -50,8 +53,43 @@ struct E2ERegion {
     }
     // record r's alignment count (SigRec::n_aln, gpu_pileup/pileup/pileup_rec.h: 16-byte records, n_aln at byte 4)
     uint8_t recAln(uint64_t r) const { return base[hdr()->oSigs + 16 * r + 4]; }
+    // parent, before the fork: the memfd (raw syscall: the toolchain's sysroot may predate glibc's memfd_create)
+    bool create() {
+#ifndef __NR_memfd_create
+#if defined(__x86_64__)
+#define __NR_memfd_create 319
+#elif defined(__aarch64__)
+#define __NR_memfd_create 279
+#endif
+#endif
+#ifdef __NR_memfd_create
+        if (fd < 0) fd = (int) syscall(__NR_memfd_create, "singlet-e2e", 1u /* MFD_CLOEXEC */);
+#endif
+        return fd >= 0;
+    }
+    // STAR's prefill: sized (sparse: tmpfs pages exist once written) and mapped; the header initialised
+    bool attach(uint64_t bytes) {
+        if (fd < 0 || base != nullptr || ftruncate(fd, (off_t) bytes) != 0) return false;
+        void* m = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (m == MAP_FAILED) return false;
+        base = (uint8_t*) m; cap = bytes;
+        std::memset(base, 0, sizeof(E2EHeader)); hdr()->cap = cap; hdr()->used = sizeof(E2EHeader);
+        return true;
+    }
+    // parent, once the prefill wrote the magic: maps the bytes in use; false (nothing mapped) before that or without E8
+    bool mapUsed() {
+        if (base != nullptr) return ready();
+        E2EHeader h;
+        if (fd < 0 || pread(fd, &h, sizeof h, 0) != (ssize_t) sizeof h || std::memcmp(h.magic, "SGE2E001", 8) != 0) return false;
+        const uint64_t len = (h.used + 4095) & ~4095ull;
+        void* m = mmap(nullptr, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (m == MAP_FAILED) return false;
+        base = (uint8_t*) m; cap = len;
+        return true;
+    }
+    void release() { if (base != nullptr) munmap(base, cap); base = nullptr; cap = 0; if (fd >= 0) close(fd); fd = -1; }
 };
-// one per process: set by the pipeline before it forks STAR (the child inherits the mapping at the same address)
+// one per process: created by the pipeline before it forks STAR (the child inherits the fd)
 inline E2ERegion& e2eRegion() { static E2ERegion r; return r; }
 inline bool e2eRequested() { const char* e = std::getenv("SINGLET_ENGINE_GPU_E2E"); return e != nullptr && e[0] == '1'; }
 

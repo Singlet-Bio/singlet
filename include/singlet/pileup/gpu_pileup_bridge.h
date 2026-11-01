@@ -202,7 +202,7 @@ public:
         pend_.clear();
         if (ho_ok_) prepend_handoff();
         if (e2e_ != nullptr) prepend_e2e(in); else {   // E8: the device-built records go into `in` directly
-        e2e_unmap();   // E8 requested but not used (the hand-off file path ran): the region's pages are released
+        e2e_unmap();   // E8 requested but not used (the hand-off file path ran): the memory object is released
         in.sigs.assign((const uint8_t*) sigs_.data(), (const uint8_t*) (sigs_.data() + sigs_.size()));
         in.alns.assign((const uint8_t*) alns_.data(), (const uint8_t*) (alns_.data() + alns_.size()));
         in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
@@ -224,7 +224,7 @@ public:
     bool handoff_used() const { return ho_ok_ || e2e_ != nullptr; }
     // E8 (SINGLET_ENGINE_GPU_E2E=1): the shared region with the device-built records, once the prefill completed it; null otherwise
     const singlet_engine_gpu::E2ERegion* e2e() {
-        if (!e2e_tried_) { e2e_tried_ = true; singlet_engine_gpu::E2ERegion& r = singlet_engine_gpu::e2eRegion(); if (r.ready()) e2e_ = &r; }
+        if (!e2e_tried_) { e2e_tried_ = true; singlet_engine_gpu::E2ERegion& r = singlet_engine_gpu::e2eRegion(); if (r.mapUsed()) e2e_ = &r; }
         return e2e_;
     }
     uint64_t e2e_stream_reads() const { return e2e_stream_; }
@@ -391,8 +391,7 @@ private:
         e2e_unmap();
     }
     static void e2e_unmap() {
-        singlet_engine_gpu::E2ERegion& r = singlet_engine_gpu::e2eRegion();
-        if (r.base) { munmap(r.base, r.cap); r.base = nullptr; r.cap = 0; }
+        singlet_engine_gpu::e2eRegion().release();   // unmapped and the memfd closed: its pages go
     }
     const singlet_engine_gpu::E2ERegion* e2e_ = nullptr; bool e2e_tried_ = false; uint64_t e2e_stream_ = 0;
     std::string handoff_path_; Handoff ho_; bool ho_tried_ = false, ho_ok_ = false; uint64_t ho_mismatch_ = 0;
