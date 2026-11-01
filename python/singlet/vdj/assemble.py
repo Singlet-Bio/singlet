@@ -105,6 +105,7 @@ class Params:
     # barcode and chain and has >= this many UMIs (B cells of a clone that also has plasma cells)
     ig_top_min_umis: int = 0
     ig_top_paired: bool = False  # ig_top_min_umis gives back a chain only where the barcode holds the partner chain too
+    ig_top_light_only: bool = False  # ig_top_min_umis gives back light chains only (not an ambient plasma-cell IGH)
     # > 0: an IG contig whose barcode holds no kept partner chain is ambient when its junction is in >= this many barcodes
     ig_lone_spread: int = 0
     threads: int = 8
@@ -832,6 +833,8 @@ def filter_contigs(df, params: Params):
             & (df["umis"] >= params.ig_top_min_umis)
             & ~has
         )
+        if params.ig_top_light_only:
+            give &= df["chain"].isin(("IGK", "IGL"))
         if params.ig_top_paired:
             # only in a droplet that holds a B cell: the partner chain (heavy for a light chain, light for a heavy one)
             # is kept or given back too
