@@ -290,6 +290,22 @@ add(id="mage150", group="sex-ancestry", tier="core", data_kind="derived", title=
     capabilities="genetic-ancestry,chromosomal-sex", tools="singlet,somalier,peddy",
     why="the only RNA-seq of 1000 Genomes individuals from every super-population; reads are thinned to single-cell donor depths")
 
+# ---- Xi & Li 2021 doublet benchmark sets (Zenodo 4062232, real_datasets.zip, CC BY 4.0): public count matrices with experimental doublet labels
+XL = [("pbmc-1A-dm", "Kang 2018 lane 1A", "demuxlet genotype doublets", 3298, 120), ("pbmc-1B-dm", "Kang 2018 lane 1B", "demuxlet genotype doublets", 3790, 130),
+      ("pbmc-1C-dm", "Kang 2018 lane 1C", "demuxlet genotype doublets", 5270, 316), ("pbmc-2ctrl-dm", "Kang 2018 control lane 2.1, Cell Ranger 1.0 matrix", "demuxlet genotype doublets", 13913, 1598),
+      ("pbmc-2stim-dm", "Kang 2018 stimulated lane", "demuxlet genotype doublets", 13916, 1631), ("J293t-dm", "Kang 2018 J293t cell lines", "demuxlet genotype doublets", 500, 42),
+      ("pbmc-ch", "Stoeckius 2018 PBMC cell hashing", "cell-hashing HTO doublets", 15272, 2545), ("cline-ch", "Stoeckius 2018 cell-line cell hashing", "cell-hashing HTO doublets", 7954, 1465),
+      ("mkidney-ch", "mouse kidney cell hashing", "cell-hashing HTO doublets", 21179, 7901), ("HEK-HMEC-MULTI", "McGinnis 2019 HEK + HMEC MULTI-seq", "MULTI-seq barcode doublets", 10641, 489),
+      ("HMEC-orig-MULTI", "McGinnis 2019 HMEC MULTI-seq (original)", "MULTI-seq barcode doublets", 26426, 3568), ("HMEC-rep-MULTI", "McGinnis 2019 HMEC MULTI-seq (replicate)", "MULTI-seq barcode doublets", 10580, 3282),
+      ("pdx-MULTI", "McGinnis 2019 PDX MULTI-seq", "MULTI-seq barcode doublets", 10296, 1317), ("nuc-MULTI", "McGinnis 2019 nuclei MULTI-seq", "MULTI-seq barcode doublets", 5578, 475),
+      ("hm-6k", "10x human + mouse mix, 6k", "human + mouse species-mixing doublets", 6806, 171), ("hm-12k", "10x human + mouse mix, 12k", "human + mouse species-mixing doublets", 12820, 730)]
+for n, t, tr, nc, nd in XL:
+    add(id="xili_" + n.lower().replace("-", "_"), group="doublet-truth", tier="core", title=f"Xi & Li 2021 doublet set {n}: {t} ({nd} labelled doublets)",
+        species="mouse" if n == "mkidney-ch" else "human", reference="as deposited", chemistry="10x-3p", source="zenodo", other="10.5281/zenodo.4062232 (real_datasets.zip, " + n + ")",
+        n_cells=nc, fastq_gb=0.05, truth=tr + " from the original experiment (public count matrix, not rebuilt from reads)", licence="CC BY 4.0",
+        capabilities="doublets", tools="singlet,scrublet,scdblfinder",
+        why="real experimental doublet labels (" + tr + "); count matrices only, so the doublet score is compared on the deposited counts")
+
 with open(sys.argv[1], "w", newline="", encoding="utf-8") as fh:
     fh.write("# Singlet 1.0.0 public benchmark cohort. One row per dataset; cohort.md explains the choices and the budget.\n")
     w = csv.DictWriter(fh, cols, delimiter="\t", lineterminator="\n")
