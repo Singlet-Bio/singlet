@@ -399,6 +399,13 @@ __global__ void k_hits(const Rec* r, int n, unsigned long long* c) {
 // reads recorded in the molecule store per cell (per_cell_molecule_stats' total_reads): gene tuples with a UMI
 __global__ void k_cellreads(const Rec* r, int n, uint32_t* out) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n && !r[i].direct) atomicAdd(&out[r[i].bc], 1u); }
+// E16 (singlet's level 5, set by the engine wrapper): the per-alignment results leave the device as the three arrays the host keeps (gene, stat,
+// exon gene: 9 bytes per alignment) instead of the 48-byte AA records split on the host
+static bool g_e16_aasplit = false;
+__global__ void k_e16_aa_split(const AA* __restrict__ aa, int n, uint32_t* __restrict__ gene, uint8_t* __restrict__ stat, uint32_t* __restrict__ exg) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) { gene[i] = aa[i].gene; stat[i] = (uint8_t) aa[i].stat; exg[i] = aa[i].exg; }
+}
 static bool g_cell_stats = false;   // set by the engine wrapper: per-cell reads and molecules for saturation / cell QC
 struct SumU64 { __host__ __device__ uint64_t operator()(const uint64_t& a, const uint64_t& b) const { return a + b; } };
 struct SumU32 { __host__ __device__ uint32_t operator()(const uint32_t& a, const uint32_t& b) const { return a + b; } };
@@ -757,10 +764,22 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->cell_mol.data(), cell_mol, out->cell_mol.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->hits, hits, 32, cudaMemcpyDeviceToHost));
+        out->aa_gene.resize(nA); out->aa_stat.resize(nA); out->aa_exg.resize(nA);
+        uint8_t* dsplit = nullptr;   // E16: outside the arena (its 3 GB margin), so the arena's layout is unchanged; without it, the host split
+        if (g_e16_aasplit && nA > 0 && cudaMalloc(&dsplit, (size_t) nA * 9) != cudaSuccess) { cudaGetLastError(); dsplit = nullptr; }
+        if (dsplit != nullptr) {
+            uint32_t* dg = (uint32_t*) dsplit; uint32_t* de = dg + nA; uint8_t* ds = (uint8_t*) (de + nA);
+            k_e16_aa_split<<<(nA + 255) / 256, 256>>>(aa, nA, dg, ds, de);
+            CK(cudaGetLastError());
+            CK(cudaMemcpy(out->aa_gene.data(), dg, (size_t) nA * 4, cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(out->aa_exg.data(), de, (size_t) nA * 4, cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(out->aa_stat.data(), ds, (size_t) nA, cudaMemcpyDeviceToHost));
+            CK(cudaFree(dsplit));
+        } else {
         std::vector<AA> h(nA);
         if (nA) CK(cudaMemcpy(h.data(), aa, (size_t)nA * sizeof(AA), cudaMemcpyDeviceToHost));
-        out->aa_gene.resize(nA); out->aa_stat.resize(nA); out->aa_exg.resize(nA);
         for (int k = 0; k < nA; k++) { out->aa_gene[k] = h[k].gene; out->aa_stat[k] = (uint8_t)h[k].stat; out->aa_exg[k] = h[k].exg; }
+        }
     }
     { char b[96]; snprintf(b, sizeof b, "e16: merge + per-alignment D2H %.3f s", now_s() - e16m0); g_parts_log.push_back(b); }
     out->n_gene_tuples = ng_all; out->n_sjl = n_sjl; out->n_sj_tuples = n_sjt_all; out->n_snp_tuples = n_snpt_all; out->n_mt_tuples = n_mtt_all; out->n_ind_tuples = n_indt_all; out->n_junctions = nj;

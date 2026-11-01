@@ -105,6 +105,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     { unsigned long long z[5] = {0, 0, 0, 0, 0}; CK(cudaMemcpyToSymbol(g_molstat, z, sizeof z)); }
     g_cell_stats = true;
     { const char* pk = getenv("SINGLET_GPU_PILEUP_PARTS"); g_force_parts = pk ? std::max(0, std::min(atoi(pk), kMaxParts)) : 0; }
+    g_e16_aasplit = singlet_tail::cut("aasplit");   // E16 (level 5): the per-alignment results split on the device before their download
     Timer T; T.start();
     Outputs o;
     run_pipeline(A, T, in, &o);
