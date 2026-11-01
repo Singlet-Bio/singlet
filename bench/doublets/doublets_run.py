@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Batch job: the registered per-cell feature ``qc/doublet_score`` for a list of studies (singlet.doublets; docs/doublet_score.md).
+"""Batch job: the registered per-cell feature ``qc/doublet_score`` for a list of studies (legacy_doublets; docs/doublet_score.md).
 
   run       score samples and write OUT/<GSE>/<GSM>.features.qc.parquet (the feature-sidecar layout of docs/cell_features.md),
             <GSM>.features.rows.json (its sample_cell_summary rows) and <GSM>.doublets.json (internal: status, timings)
@@ -24,7 +24,8 @@ import traceback
 from dataclasses import replace
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.append(str(ROOT / "python"))
 
 INGEST_MAX_ROWS = 2000
@@ -44,8 +45,8 @@ def read_list(a):
 def cmd_run(a):
     import numpy as np
     from singlet.celltype_nn import CellTypePredictor
-    from singlet.doublets import score as S
-    from singlet.doublets.combiner import Combiner
+    from legacy_doublets import score as S
+    from legacy_doublets.combiner import Combiner
     from singlet.features import io as FIO
     from singlet.features.output import build_table, sidecar_name, write_features
 
@@ -164,8 +165,8 @@ def cmd_run(a):
 
 def cmd_registry(a):
     from singlet.celltype_nn import CellTypePredictor
-    from singlet.doublets import score as S
-    from singlet.doublets.combiner import Combiner
+    from legacy_doublets import score as S
+    from legacy_doublets.combiner import Combiner
 
     version = S.method_version(
         Combiner.load(a.combiner),

@@ -1,6 +1,6 @@
 # Expression doublet score (`qc/doublet_score`)
 
-Package `python/singlet/doublets/`, job `scripts/doublets_run.py`, evidence `bench/doublets/` and
+Package `bench/doublets/legacy_doublets/`, job `bench/doublets/doublets_run.py`, evidence `bench/doublets/` and
 `bench/public/capabilities/doublets.py`. Implements the Beta decision of `docs/beta-doublet-decision.md` (evidence: study/latent-qc,
 `docs/latent-doublet-ambient.md`). One registered, versioned `cell_feature` computed in batch on stored counts, per
 `docs/CELL-ARCHITECTURE.md` section 3: the sidecar is a per-sample Parquet joined on `(gsm, col)`, D1 gets the feature's registry row
@@ -11,7 +11,7 @@ and per-sample summaries, never a row per cell, and nothing runs in a Worker or 
 `<OUT>/<GSE>/<GSM>.features.qc.parquet` in the layout of `docs/cell_features.md` section 1 (`gsm`, `col`, `doublet_score` float32
 in [0, 1], NaN = not computed), written through `singlet.features.output` so the public-safety guard runs first. Also
 `<GSM>.features.rows.json` (the `sample_cell_summary` rows), `<GSM>.doublets.json` (internal: status, timings, peak memory,
-`method_version`) and `ingest/cell_feature.json` (`scripts/doublets_run.py registry`). Feature id `qc/doublet_score`,
+`method_version`) and `ingest/cell_feature.json` (`bench/doublets/doublets_run.py registry`). Feature id `qc/doublet_score`,
 thresholds 0.5 and 0.8.
 
 `method_version` = `singlet-doublets=<package>;combiner=<model id>;celltype-nn=<network>;dbl-run=<commit>;min_cells=100`: a new
@@ -84,10 +84,10 @@ outright still needs `combo_all` (adds scDblFinder: 0.572), i.e. R.
 
 ```
 bash bench/doublets/build_dbl_run.sh $WORK/bin/dbl-run              # inside a Slurm job
-python scripts/doublets_run.py run --gse GSE138867 --out $OUT --model .../m1_notissue/model.pt \
+python bench/doublets/doublets_run.py run --gse GSE138867 --out $OUT --model .../m1_notissue/model.pt \
     --centroids .../atlas_centroids.npz --dbl-run $WORK/bin/dbl-run/dbl_run --dbl-commit <sha> --celltype-version m1_notissue
-python scripts/doublets_run.py registry ...   # ingest/cell_feature.json
-python scripts/doublets_run.py collect --out $OUT   # ingest/sample_cell_summary.*.json (nothing is uploaded)
+python bench/doublets/doublets_run.py registry ...   # ingest/cell_feature.json
+python bench/doublets/doublets_run.py collect --out $OUT   # ingest/sample_cell_summary.*.json (nothing is uploaded)
 ```
 
 `bench/doublets/e2e.sbatch` runs the job on two store samples and the parity check (`parity_kang.py`) on Clipper. Measured on a V100S

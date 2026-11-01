@@ -12,7 +12,7 @@ methods = (
     "Data: 17 datasets with experimental doublet labels: Kang 2018 demuxlet genotype calls (lane 2.1 as Singlet counts it from the "
     "Singlet pipeline, and the five lanes of Xi & Li 2021 as Cell Ranger counts), cell hashing, MULTI-seq and human-mouse species "
     "mixing (Xi & Li 2021, Zenodo 4062232, public count matrices). Only doublets visible to the experiment are labelled. "
-    "Singlet: singlet.doublets, a gradient-boosted ensemble (300 trees, 15 leaves) over the within-sample ranks of log UMI, log "
+    "Singlet: legacy_doublets, a gradient-boosted ensemble (300 trees, 15 leaves) over the within-sample ranks of log UMI, log "
     "detected genes, the engine's doublet score (doublet_detect.h v7) and four features of the atlas cell-type network (k-NN "
     "fraction of simulated doublets in the network's embedding, cross-fitted real-versus-simulated classifier, cell-type entropy, "
     "two-centroid fit). The ensemble scoring a dataset was trained on the labels of every dataset of the other studies "
@@ -28,7 +28,7 @@ methods = (
 prov = dict(
     bench_commit=commit, status="draft", generated_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
     singlet=dict(version="1.0.0", commit=commit, branch="claude/doublet-score",
-                 binary="python: singlet.doublets (combiner gbm300-17ds-1) with dbl_run from prod/modality-fixes 4f110f283cd4"),
+                 binary="python: legacy_doublets (combiner gbm300-17ds-1) with dbl_run from prod/modality-fixes 4f110f283cd4"),
     methods=methods,
     cost=dict(singlet=round(par["timings"]["total_s"] / par["cells"] * 1e4, 1), prod=2.0, scdblfinder=43.6, scrublet=7.7),
     resources=[dict(tool="singlet", dataset="pooled", wall_s=r0["timings"]["total_s"], max_rss_gb=r0["max_rss_gb"], threads=8,

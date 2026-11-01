@@ -198,8 +198,8 @@ def compute(artifact_dir: Path) -> dict:
         "artifacts": artifact_entries(artifact_dir, CAP, {"doublets_cells.parquet": "derived", "doublets_datasets.tsv": "truth",
                                                           "provenance.json": "derived"}),
         "code": [{"path": p, "role": ro, "url": code_url(p, commit)} for p, ro in (
-            ("python/singlet/doublets/combiner.py", "implementation"), ("python/singlet/doublets/atlas.py", "implementation"),
-            ("scripts/doublets_run.py", "implementation"), ("bench/doublets/train_eval.py", "harness"),
+            ("bench/doublets/legacy_doublets/combiner.py", "implementation"), ("bench/doublets/legacy_doublets/atlas.py", "implementation"),
+            ("bench/doublets/doublets_run.py", "implementation"), ("bench/doublets/train_eval.py", "harness"),
             ("bench/public/capabilities/doublets.py", "metric"))],
         "reproduce": {"module": "bench/public/capabilities/doublets.py", "function": "compute", "laptop_minutes": 1,
                       "clipper_command": "sbatch bench/doublets/train_eval.sbatch"},

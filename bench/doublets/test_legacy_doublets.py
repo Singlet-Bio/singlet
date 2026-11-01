@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""singlet.doublets: the numpy combiner equals scikit-learn, the packaged model loads, the feature sidecar passes the guard, and
+"""legacy_doublets: the numpy combiner equals scikit-learn, the packaged model loads, the feature sidecar passes the guard, and
 samples that must not be scored (genotype pools, few cells, other organisms) get no score."""
 
 import sys
@@ -11,9 +11,10 @@ import pytest
 import scipy.sparse as sps
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from singlet.doublets import score as S  # noqa: E402
-from singlet.doublets.combiner import FEATURES, Combiner, basic_features, qmatrix  # noqa: E402
+from legacy_doublets import score as S  # noqa: E402
+from legacy_doublets.combiner import FEATURES, Combiner, basic_features, qmatrix  # noqa: E402
 
 
 def test_numpy_evaluator_matches_sklearn():

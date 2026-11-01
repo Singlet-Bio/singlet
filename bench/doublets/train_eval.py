@@ -2,7 +2,7 @@
 
 Inputs: the cached per-cell scores of the latent-qc doublet study (lqc_scores.py), real experimental labels only.
 Writes to OUT:
-  combiner_prod_atlas.npz   the combiner fitted on all 17 datasets (each dataset weighs the same); packaged with singlet.doublets
+  combiner_prod_atlas.npz   the combiner fitted on all 17 datasets (each dataset weighs the same); packaged with legacy_doublets
   doublets_cells.parquet    one row per cell: dataset, study, label, and the scores of production, scDblFinder, Scrublet and the
                             combiner (leave-one-study-out: the dataset's own study is never in its training set)
   doublets_datasets.tsv     per dataset: study, cells, doublets, truth
@@ -18,7 +18,8 @@ import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
-from singlet.doublets.combiner import FEATURES, PARAMS, Combiner, qmatrix  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from legacy_doublets.combiner import FEATURES, PARAMS, Combiner, qmatrix  # noqa: E402
 
 from lqc_scores import NAMES, STUDY, load  # noqa: E402
 

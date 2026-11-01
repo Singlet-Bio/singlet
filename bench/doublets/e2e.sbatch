@@ -1,8 +1,8 @@
 #!/bin/bash
-# End-to-end run of scripts/doublets_run.py on two real samples of the store (GSE138867, blood, 8.1k + 6.6k cells; timing, peak memory,
+# End-to-end run of bench/doublets/doublets_run.py on two real samples of the store (GSE138867, blood, 8.1k + 6.6k cells; timing, peak memory,
 # sidecar guard), then parity_kang.py (the code against the cached study scores on Kang lane 2.1).
-# The job assembles its python tree from the synced celltype-nn worktree (compiled readers) plus this branch's singlet/doublets
-# (CODE = a directory with python/singlet/doublets, scripts/doublets_run.py, bench/doublets). Submit:
+# The job assembles its python tree from the synced celltype-nn worktree (compiled readers) plus this branch's bench/doublets/legacy_doublets
+# (CODE = a directory with bench/doublets/legacy_doublets, bench/doublets/doublets_run.py, bench/doublets). Submit:
 #   sbatch --export=ALL,CODE=$WORK/jobs/dbl-train bench/doublets/e2e.sbatch
 #SBATCH --job-name=dbl-e2e
 #SBATCH --account=debruinz
@@ -25,13 +25,13 @@ mkdir -p $SCRATCH/code && tar xzf $CODE/code.tgz -C $SCRATCH/code; CODE=$SCRATCH
 # 1. the engine's doublet harness (v7 scorer of prod/modality-fixes), built on the node
 bash $CODE/bench/doublets/build_dbl_run.sh $SCRATCH/dbl
 # 2. python tree: celltype-nn worktree + the doublets package and its combiner
-PY=$SCRATCH/py; mkdir -p $PY; cp -r $BASE/python/singlet $PY/; cp -r $CODE/python/singlet/. $PY/singlet/
-mkdir -p $SCRATCH/repo; cp -r $CODE/scripts $SCRATCH/repo/; ln -s $PY $SCRATCH/repo/python
+PY=$SCRATCH/py; mkdir -p $PY; cp -r $BASE/python/singlet $PY/
+mkdir -p $SCRATCH/repo; cp -r $CODE/bench $SCRATCH/repo/; ln -s $PY $SCRATCH/repo/python
 rt() { apptainer exec --nv --bind "$WORK,/tmp" --env "PATH=$VENV/bin:/usr/local/bin:/usr/bin:/bin" \
   --env "PYTHONPATH=$PY:$TORCH" --env "OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK" --env "SINGLET_CACHE_DIR=$SCRATCH/cache" \
   --env "PYTHONWARNINGS=ignore" "$SIF" "$@"; }
 nvidia-smi -L || true
-rt python -u $SCRATCH/repo/scripts/doublets_run.py run --gse GSE138867 --gsm GSM4120733 GSM4120734 --out $OUT/sidecars \
+rt python -u $SCRATCH/repo/bench/doublets/doublets_run.py run --gse GSE138867 --gsm GSM4120733 GSM4120734 --out $OUT/sidecars \
   --model $MODEL --centroids $CEN --dbl-run $SCRATCH/dbl/dbl_run --celltype-version m1_notissue --dbl-commit "$(cat $SCRATCH/dbl/dbl_run.commit)" \
   --threads $SLURM_CPUS_PER_TASK --force
 cat $OUT/sidecars/GSE138867/GSM4120733.doublets.json $OUT/sidecars/GSE138867/GSM4120734.doublets.json
