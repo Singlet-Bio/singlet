@@ -884,7 +884,16 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     // a cache large enough for every result (entries are ~(32 + L/4 + blob) bytes; 3x for the ring, the 2-way index and
     // the shards' imbalance), unless SINGLET_STAR_SEQCACHE_MB was set
     uint64 nRec = out.seqOff.size() - 1;
-    if (getenv("SINGLET_STAR_SEQCACHE_MB") == nullptr) {
+    // GPU pileup "on" with hand-off summaries: reads of a mapped sequence replay its summary and never look it up, so only the
+    // unmapped sequences go into the cache (after the hand-off, which tells which they are)
+    const char *gpEnv = getenv("SINGLET_GPU_PILEUP"), *hsEnv = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
+    const bool deferInsert = getenv("SINGLET_ENGINE_GPU_HANDOFF") != nullptr && gpEnv != nullptr && strcmp(gpEnv, "on") == 0
+        && !(hsEnv != nullptr && hsEnv[0] == '0') && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes);
+    // E16 "cache" (level 5): no read with a record looks the cache up and none of its results go in (E10 level >= 3 with deferInsert), so
+    // the cache sized for every result (12 GB on pbmc1k_v3, a 1.5 GB index zeroed here) is not made; the one STAR made at its start serves the
+    // reads without a record (a cache hit or miss gives the same result)
+    const bool e16KeepCache = deferInsert && e10Level >= 5 && e11.ready && singlet_tail::cut("cache");
+    if (getenv("SINGLET_STAR_SEQCACHE_MB") == nullptr && !e16KeepCache) {
         uint64 need = (out.blob.size() + out.seq.size() / 4 + 40 * nRec) * 3;
         uint64 mb = std::max<uint64>(4096, (need >> 20) + 1);
         setenv("SINGLET_STAR_SEQCACHE_MB", std::to_string(mb).c_str(), 1);
@@ -910,11 +919,6 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         });
         for (auto &x : th) x.join();
     };
-    // GPU pileup "on" with hand-off summaries: reads of a mapped sequence replay its summary and never look it up, so only the
-    // unmapped sequences go into the cache (after the hand-off, which tells which they are)
-    const char *gpEnv = getenv("SINGLET_GPU_PILEUP"), *hsEnv = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
-    const bool deferInsert = getenv("SINGLET_ENGINE_GPU_HANDOFF") != nullptr && gpEnv != nullptr && strcmp(gpEnv, "on") == 0
-        && !(hsEnv != nullptr && hsEnv[0] == '0') && ReadAlign::seqCacheHandoffConfig(P) && (tr != nullptr || !P.quant.gene.yes);
     if (!deferInsert) {
         insertRecords([](uint64) { return true; });
         cache->prefilled = true;
