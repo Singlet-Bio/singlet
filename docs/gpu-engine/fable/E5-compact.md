@@ -169,4 +169,119 @@ next multiple of 8: inside the read's slot (`NBLOB` is a multiple of 8, asserted
 reads. Cost: k_p3 lane A goes from 80 to 94 registers (24 → 20 resident warps per SM at 128 threads per block); with
 TR32 it stays at 79.
 
-PLACEHOLDER-RESULTS
+**Result: a regression** (job 795345, same job as the S5 table; lane A median of 3):
+
+| variant | lane A ms | phase 3 ms (last run) | k_p3 regs | vs the variant without BLOBW |
+|---|---:|---:|---:|---|
+| baseline | 249.1 / 249.8 | 134.6 / 136.0 | 80 | |
+| BLOBW | 264.2 | 149.8 | 94 | +15 ms |
+| S3 + BLOBW | 248.6 | 134.0 | 94 | +20 ms (S3 alone: 0.93× of its baseline in job 795250) |
+| S3 + KEEPIX + TR32 + BLOBW | 230.8 | 115.6 | 79 | 0.925× against 0.898× for S3 + TR32 in job 795250 (KEEPIX and BLOBW together) |
+
+The register growth explains most of it where it happens (94 registers), but the TR32 build at 79 registers still
+loses. Lane A's k_p3 is instruction-fetch bound (E1: 51% of stalls, i-cache hit 54%), and the word encoder's `put` is
+inlined at every `putV` call site of `encodeTr`: more code in a kernel that is short of i-cache. A word-wise encoder
+can still win if it is small: one non-inlined routine over an array of the record's values, or the record's fields
+staged to a contiguous buffer and varint-packed in one loop. Not done here.
+
+## S5: phase state in thread-local memory (`--p3local`, `--p1local`; commit 6745dd3)
+
+A field-major transposition of `Work` was not built (E1's profile and S1 above say coalescing is not the cost). The
+cheap form of the same idea was: run a staged phase on a per-thread `Work` in local memory, the hardware's own
+field-major layout, which is also E1's proposal to keep k_p3's scratch out of the global array.
+
+- `--p3local`: `k_p3` copies the state that crosses kernels (everything but `WA` and the transcript arrays:
+  6.3 KB with TR32, 6.6 KB without) and the read buffers from the global `Work` into a local one, and runs phase 3
+  there. `--p1local`: `k_p1` runs phase 1 on a local `Work` and writes the crossing state back (`copyPersistent`).
+- *Exactness:* the global `Work` buffers are reused across batches without clearing, so the baseline already relies on
+  phase 3 writing `WA` and every transcript before reading it; the local copy only removes the stale bytes. Phase 1
+  starts from `wbEpoch = 0` (clears the winBin keys) and zeroed counters.
+
+Job 795345 (commit 00a4c32, node g052, debug-gpu, all in one job; lane A median of 3, phases from the last run):
+
+| variant | lane A ms | phase 1 / scan / phase 3 ms | lane M ms | lane B ms | GPU M distinct/s | k_p3 / k_p1 regs (frame) | identity |
+|---|---:|---|---:|---:|---:|---|---:|
+| baseline (first) | 249.1 | 99.8 / 14.7 / 134.6 | 317.6 | 252.4 | 2.43 | 80 / 95 | 100% |
+| baseline `--p3local` | 289.5 | 99.4 / 14.7 / **176.3** | 320.2 | 253.2 | 2.31 | 80 (47,168 B) | 100% |
+| S3 + KEEPIX + TR32 + BLOBW | 230.8 | 100.3 / 14.7 / 115.6 | 280.4 | 225.1 | 2.71 | 79 | 100% |
+| same, `--p3local` | 238.7 | 100.4 / 14.8 / 123.3 | 279.0 | 226.8 | 2.68 | 72 (37,136 B) | 100% |
+| same, `--p1local --p3local` | 248.4 | **110.5** / 14.7 / 123.4 | 279.2 | 227.1 | 2.64 | 94 (36,208 B) | 100% |
+| baseline (last) | 249.8 | 99.6 / 14.7 / 136.0 | 318.4 | 255.6 | 2.42 | 80 / 95 | 100% |
+
+**Local memory loses in the staged lane**: phase 3 +31% with 728-B transcripts, +7% with 440-B ones; phase 1 +10%.
+Nsight Compute on lane A's `k_p3` (one batch of 524,288 reads, the second `k_p3` launch) shows why:
+
+| k_p3, lane A, 1 batch | baseline | S3 + KEEPIX + TR32 + BLOBW | same, `--p3local` |
+|---|---:|---:|---:|
+| duration (ms) | 34.54 | **29.03** | 31.48 |
+| L2 sectors read / written (M) | 417.4 / 773.4 | 285.0 / **428.7** | 705.5 / 732.3 |
+| L1 global load / store sectors (M) | 761.3 / 539.9 | 559.1 / 266.5 | 771.2 / 7.4 |
+| L1 local load / store sectors (M) | 25.9 / 22.7 | 25.9 / 22.7 | 455.4 / 393.0 |
+| DRAM read / write (GB) | 8.75 / 4.51 | 6.01 / 2.28 | **23.03 / 10.58** |
+| warp / thread instructions (G) | 4.06 / 7.81 | 3.87 / 7.52 | 3.84 / 9.50 |
+| L1 / L2 hit rate | 78.5% / 81.5% | 80.4% / 79.9% | 58.1% / 57.0% |
+| registers, achieved occupancy | 80, 28.0% | 79, 27.9% | 72, 33.1% |
+
+In local memory word *i* of a thread shares a 128-B line with word *i* of 31 other threads. That is ideal when the 32
+threads access the same word together, but k_p3 runs at ~2 active threads per warp instruction and its dominant access
+is a thread walking its own transcript (copies, finalization, encoding). A 440-B transcript is ~14 sectors in the AoS
+global `Work` and 110 sectors in local memory, each sector 7/8 other threads' data that is not wanted at that moment.
+L1 and L2 hit rates fall from ~80% to ~57% and DRAM traffic grows 2.8× (E1 saw 4.3× in the mono kernel). The
+copy-in of the crossing state adds 2 G thread instructions per batch but few warp instructions (it is convergent).
+**A field-major layout in global memory has the same problem for the same access pattern; the AoS layout is the
+better one for this code.** The mono kernel's 1.5× local win (S1) comes from convergence and instruction fetch (E1),
+which the staged kernels already have.
+
+## Summary
+
+| step | lane A ms (vs baseline in the same job) | phase 3 ms | lane M / B ms | stitching share of lane A thread cycles | Work A (B) | k_p3 A regs, spills | identity |
+|---|---|---:|---|---:|---:|---|---:|
+| baseline (795250) | 245.4 (1.00) | 132 | 321 / 256 | 39.8% | 46,104 | 80, 0 | 100% |
+| S1 mono global / mono local (795235) | 978.3 / 633.7 (local 1.54× faster) | | | 44.4% / 9.4% | 46,104 | 104 / 88, 0 | 100% |
+| S2 copies (795235) | 19.52 copies, 4,821 B per read; 5.4% of stitching cycles by the clock | | | | | | 100% |
+| S3 REFX + FIN1 + SLOT0 (795250) | 228.4 (0.930) | 114.5 | 289 / 237 | 35.6% | 46,112 | 80, 0 | 100% |
+| S4 TR32 (795250) | 230.2 (0.938) | 117.5 | 289 / 239 | 36.3% | 36,024 | 79, 0 | 100%, 0 bad stores |
+| **S3 + S4 (795250)** | **220.3 (0.898)** | **107.3** | **274 / 224** | 33.7% | 36,032 | 79, 0 | 100% |
+| + KEEPIX + BLOBW (795345) | 230.8 (0.925) | 115.6 | 280 / 225 | | 36,040 | 79, 0 | 100% |
+| S5 `--p3local`, baseline (795345) | 289.5 (1.160) | 176.3 | 320 / 253 | | 46,104 local | 80, 0 (47,168-B frame) | 100% |
+| S5 `--p3local`, S3 + S4 + KEEPIX + BLOBW (795345) | 238.7 (0.957) | 123.3 | 279 / 227 | | 36,040 local | 72, 0 (37,136-B frame) | 100% |
+
+GPU throughput (all three lanes): 2.42 → **2.77 M distinct reads/s** with S3 + S4.
+
+## Verdict
+
+- **AoS hypothesis: rejected as the cost.** The mono kernel is 1.5× faster with `Work` in local memory, but through
+  convergence and instruction fetch (E1's ncu: 4.3× more DRAM bytes, not fewer). In the staged lanes, local memory
+  (a field-major layout at 4-byte granularity) is slower and moves 2.8× more DRAM bytes, because k_p3's dominant access
+  is one thread walking its own transcript at ~2 active threads per instruction: AoS keeps that walk in few sectors.
+- **What pays is moving fewer bytes:** half the copies (S3) and 40% smaller transcripts (S4) cut k_p3's L2 write
+  sectors by 45% and its time by 16-19%, lane A by 10%, lanes M and B by 13-15%. All exact, identity 100%, no spills,
+  one register fewer.
+- **Gate (lane A ≤ 0.7×): not met** (0.90×). Phase 1 (99 ms of 245) and the scan (15 ms) are outside this experiment's
+  reach; 0.7× would need phase 3 at 59 ms (0.44×).
+
+## Recommendation
+
+1. Take **S3 + S4** (`-DM5_S3 -DM5_TR32`) into the engine: exact, −10% lane A, −15% lane M, −13% lane B, smaller
+   `Work` (lane A 46 → 36 KB, lane B 635 → 549 KB, so larger batches fit).
+2. Do not pursue a field-major `Work` or local-memory phases for the staged kernels.
+3. Phase 1 is now the larger half of lane A (99 of 220 ms; E1: memory-bound, 71-79%): it is where a 0.7× lane A has to
+   come from.
+4. If the encoder is revisited (E1: 9.4% of lane A's stall samples), keep it small and out of line; the inlined word
+   encoder here lost 10-20 ms.
+
+## Jobs and commits
+
+Branch `gpu/fable/compact`. Commits: 016f650 (copy statistics, mono budget fix, jobs), 0a05f46 (S3, S4), 8382429
+(KEEPIX), 6745dd3 (`--p1local`/`--p3local`), b82c906 (compile summary), 00a4c32 (BLOBW, ncu metrics), 51a100b (run job
+host threads).
+
+| job | what | commit | node |
+|---|---|---|---|
+| 795234, 795249, 795257, 795279, 795319 | compiles (debug-cpu; ptxas -v in `jobs/fable/compact/results/ptxas_*.txt`) | 016f650, 0a05f46, 8382429, b82c906, 00a4c32 | |
+| 795235 | S1 (mono global/local, 4 and 8 blocks/SM), S2 (copy statistics), staged baseline | 016f650 | g050 |
+| 795250 | S3 parts, S3, S4, S3 + S4, TR32CHECK, copy statistics under S3 | 0a05f46 | g050 |
+| 795345 | S5 (`--p3local`, `--p1local`), BLOBW, KEEPIX; ncu of k_p3 lane A | 00a4c32 | g052 (debug-gpu) |
+
+Results: `/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/compact/results/<tag>_v<i>_<binary>.{log,json}`
+(tags s1s2, s3s4, d5) and `<tag>_ncu<i>_<binary>.{txt,_raw.csv,ncu-rep}`; job logs in `singlet/logs/e5-run-<job>.out`.
