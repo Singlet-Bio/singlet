@@ -385,6 +385,86 @@ __global__ void k_r9(const uint32_t* gs, int ng, int m, const uint32_t* u, const
         atomicAdd(&stat[0], 1ull); val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull);
     }
 }
+// ---- E23: the R9 collapse without k_r9's pair loop. k_r9 tested every pair of a (cell, feature) group on the group's one thread: O(n^2)
+// per group, so the deepest group set the kernel's time (neuron1k_v3: a junction with 14,097 UMIs in one cell, 25.8 s of the pileup's 27 s).
+// r9_collapse computes the same roots in time linear in the entries:
+//   - the pairs: two UMIs one base apart agree on one half of their base-5 digits, so the candidates are the pairs of a bucket (group, half
+//     index, half value) over the free entries; each pair that passes k_r9's test (count rule, one mismatch) is unioned at once;
+//   - the union-find hooks the larger root under the smaller with atomicCAS, so every component's root is its smallest entry, which is the
+//     root k_r9's union (root[max] = min) leaves, whatever the order the pairs arrive in;
+//   - an entry with a gene component (rid) takes the first entry of its group with the same rid, from a stable sort by (group, rid);
+//   - the outputs (isroot, or the merged class counts, the R1 vote and its statistics) as k_r9 computes them, per entry instead of per group.
+// Scratch: five dead arrays of the caller (m entries each), so the reducer's peak memory does not grow.
+struct R9Scratch { uint64_t *k0, *k1; uint32_t *v0, *v1, *g; };
+static int bits_of(uint64_t v) { int b = 1; while (b < 64 && (1ull << b) <= v) b++; return b; }
+static bool g_e23 = true;   // SINGLET_GPU_PILEUP_E23=0: the per-group kernels k_r9 and k_cr_roots, as before E23 (the A/B switch of its gate)
+__global__ void k_r9_hkey(const uint32_t* gid, const uint32_t* u, const uint32_t* rid, int m, uint32_t p5, int h, uint64_t sentinel, uint64_t* key, uint32_t* idx) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    idx[i] = (uint32_t)i;
+    if (rid != nullptr && rid[i] != 0xFFFFFFFFu) { key[i] = sentinel; return; }   // not free: no pair of k_r9's loop
+    key[i] = ((uint64_t)(gid[i] - 1) << 20) | (h == 0 ? u[i] % p5 : u[i] / p5); }
+__device__ __forceinline__ void uf_union_min(uint32_t* p, uint32_t a, uint32_t b) {   // lock-free union, the smaller root wins
+    while (true) {
+        a = root_of(p, a); b = root_of(p, b);
+        if (a == b) return;
+        if (a > b) { const uint32_t t = a; a = b; b = t; }
+        if (atomicCAS(p + b, b, a) == b) return;   // else b was hooked meanwhile: find both roots again
+    } }
+__global__ void k_r9_pairs(const uint64_t* key, const uint32_t* idx, int m, uint64_t sentinel, const uint32_t* u, const uint32_t* w, int ulen, uint32_t* root) {
+    const int j = blockIdx.x * blockDim.x + threadIdx.x; if (j >= m || key[j] == sentinel) return;
+    const uint32_t a = idx[j];
+    for (int q = j + 1; q < m && key[q] == key[j]; q++) {
+        const uint32_t b = idx[q], hi = max(w[a], w[b]), lo = min(w[a], w[b]);
+        if (hi + 1 >= 2 * lo && umi5_one_mismatch(u[a], u[b], ulen)) uf_union_min(root, a, b); } }
+__global__ void k_r9_flatten(uint32_t* root, int m) { const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) root[i] = root_of(root, i); }
+__global__ void k_r9_rkey(const uint32_t* gid, const uint32_t* rid, int m, uint64_t sentinel, uint64_t* key, uint32_t* idx) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    idx[i] = (uint32_t)i; key[i] = rid[i] == 0xFFFFFFFFu ? sentinel : (((uint64_t)(gid[i] - 1) << 32) | rid[i]); }
+__global__ void k_r9_rroot(const uint64_t* key, const uint32_t* idx, int m, uint64_t sentinel, uint32_t* root) {   // a run's first entry: its smallest index
+    const int p = blockIdx.x * blockDim.x + threadIdx.x; if (p >= m || key[p] == sentinel || (p > 0 && key[p] == key[p - 1])) return;
+    for (int q = p; q < m && key[q] == key[p]; q++) root[idx[q]] = idx[p]; }
+__global__ void k_r9_isroot(const uint32_t* root, int m, uint32_t* isroot) { const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) isroot[i] = root[i] == (uint32_t)i; }
+__global__ void k_r9_msum(const uint32_t* root, const uint64_t* mv, int m, uint32_t* msum) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    for (int k = 0; k < 3; k++) { const uint32_t c = min((uint32_t)((mv[i] >> (16 * k)) & 0xFFFF), 255u); if (c) atomicAdd(&msum[3 * (size_t)root[i] + k], c); } }
+__global__ void k_r9_vote(const uint32_t* root, const uint32_t* msum, int m, uint64_t* val, unsigned long long* stat) {   // k_r9's vote per root
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    val[i] = 0; if (root[i] != (uint32_t)i) return;
+    const uint32_t* c = msum + 3 * (size_t)i; int best = 0; for (int k = 1; k < 3; k++) if (c[k] > c[best]) best = k;
+    bool tie = false; for (int k = 0; k < 3; k++) if (k != best && c[k] == c[best]) tie = true;
+    if (tie) { atomicAdd(&stat[1], 1ull); return; }
+    if (best == 2) { atomicAdd(&stat[2], 1ull); return; }
+    atomicAdd(&stat[0], 1ull); val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull); }
+// the R9 collapse of the m entries (sorted by uh = cell | feature, then UMI; ngr groups): k_r9's outputs (root; isroot, or val / msum / stat)
+static void r9_collapse(Arena& A, const R9Scratch& S, const uint64_t* uh, int m, int ngr, const uint32_t* u, const uint32_t* w, const uint64_t* mv, int ulen,
+                        int directional, const uint32_t* rid, uint32_t* root, uint32_t* isroot, uint64_t* val, uint32_t* msum, unsigned long long* stat) {
+    const int TB = 256, G = (m + TB - 1) / TB;
+    k_gstart<<<G, TB>>>(uh, m, S.v0);   // group id + 1 of each entry
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::InclusiveSum(t, b, S.v0, S.g, m); });
+    k_iota<<<G, TB>>>(root, m);
+    uint32_t p5 = 1; for (int k = 0; k < ulen / 2; k++) p5 *= 5;   // the low half: ulen / 2 digits (< 5^6), the high half the rest (< 5^7 < 2^20)
+    if (directional) {
+        const uint64_t sent = (uint64_t)ngr << 20; const int bits = bits_of((uint64_t)ngr) + 20;
+        for (int h = 0; h < 2; h++) {
+            k_r9_hkey<<<G, TB>>>(S.g, u, rid, m, p5, h, sent, S.k0, S.v0);
+            cub::DoubleBuffer<uint64_t> dk(S.k0, S.k1); cub::DoubleBuffer<uint32_t> dv(S.v0, S.v1);
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dk, dv, m, 0, bits); });
+            k_r9_pairs<<<G, TB>>>(dk.Current(), dv.Current(), m, sent, u, w, ulen, root);
+        }
+    }
+    k_r9_flatten<<<G, TB>>>(root, m);
+    if (rid != nullptr) {
+        const uint64_t sent = (uint64_t)ngr << 32; const int bits = bits_of((uint64_t)ngr) + 32;
+        k_r9_rkey<<<G, TB>>>(S.g, rid, m, sent, S.k0, S.v0);
+        cub::DoubleBuffer<uint64_t> dk(S.k0, S.k1); cub::DoubleBuffer<uint32_t> dv(S.v0, S.v1);
+        cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dk, dv, m, 0, bits); });   // stable: ascending index per key
+        k_r9_rroot<<<G, TB>>>(dk.Current(), dv.Current(), m, sent, root);
+    }
+    if (!val) { k_r9_isroot<<<G, TB>>>(root, m, isroot); return; }
+    CK(cudaMemsetAsync(msum, 0, 3 * (size_t)m * 4));
+    k_r9_msum<<<G, TB>>>(root, mv, m, msum);
+    k_r9_vote<<<G, TB>>>(root, msum, m, val, stat);
+}
 // E23 (SINGLET_GPU_PILEUP_PROF=1, profiling only): sizes of the groups a per-group serial kernel walks (one thread per group), from the group
 // starts on the device; appended to the run's log (g_parts_log). Downloads the starts: not for production runs.
 static bool g_prof = false;
@@ -427,7 +507,6 @@ static bool g_cell_stats = false;   // set by the engine wrapper: per-cell reads
 struct SumU64 { __host__ __device__ uint64_t operator()(const uint64_t& a, const uint64_t& b) const { return a + b; } };
 struct SumU32 { __host__ __device__ uint32_t operator()(const uint32_t& a, const uint32_t& b) const { return a + b; } };
 
-static int bits_of(uint64_t v) { int b = 1; while (b < 64 && (1ull << b) <= v) b++; return b; }
 static int total_of(Arena&, const uint32_t* cnt, const uint32_t* off, int n) {      // total from the last offset + count
     if (n == 0) return 0; uint32_t a = 0, b = 0; CK(cudaMemcpy(&a, cnt + n - 1, 4, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(&b, off + n - 1, 4, cudaMemcpyDeviceToHost)); return (int)(a + b); }
 static uint32_t* scan_u32(Arena& A, const uint32_t* cnt, int n) { uint32_t* off = A.alloc<uint32_t>(std::max(n, 1)); if (n) cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::ExclusiveSum(t, b, cnt, off, n); }); return off; }
@@ -540,7 +619,9 @@ static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, 
         uint32_t *root = A.alloc<uint32_t>(m), *isroot = A.alloc<uint32_t>(m);
         uint32_t* rid = gene_components(A, gst, tg, ord, seg, n_sjt, uh, ul, m, jb, in.ulen, dn);
         T.mark("5.sj.runs");
-        k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, ul, w, nullptr, in.ulen, in.par.directional, root, isroot, nullptr, nullptr, nullptr, rid);
+        // E23: the dead arrays above as scratch (sj_hi: the sort took it; hs, first, sj_lo: the runs took them; seg: the reductions took it)
+        if (g_e23) r9_collapse(A, R9Scratch{sj_hi, hs, first, seg, sj_lo}, uh, m, ngr, ul, w, nullptr, in.ulen, in.par.directional, rid, root, isroot, nullptr, nullptr, nullptr);
+        else k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, ul, w, nullptr, in.ulen, in.par.directional, root, isroot, nullptr, nullptr, nullptr, rid);
         T.mark("5.sj.r9"); if (g_prof) { prof_groups("sj r9 (cell, junction)", gs, ngr, m); T.mark("prof"); }
         *sj_u = A.alloc<uint64_t>(m); *sj_n = A.alloc<uint32_t>(m);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, uh, *sj_u, isroot, *sj_n, dn, SumU32(), m); });
@@ -582,7 +663,9 @@ static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int n
             uint32_t *root = A.alloc<uint32_t>(m), *msum = A.alloc<uint32_t>(3 * (size_t)m);
             uint32_t* rid = gene_components(A, gst, tg, ord, seg, n_snpt, mk, mu, m, sb, in.ulen, dn);
             T.mark("6.snp.runs");
-            k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, mu, w, mv, in.ulen, in.par.directional, root, nullptr, val, msum, st, rid);
+            // E23: the dead arrays above as scratch (sn_hi: the sort took it; hs, first, sn_lo: the runs took them; seg: the reductions took it)
+            if (g_e23) r9_collapse(A, R9Scratch{sn_hi, hs, first, seg, sn_lo}, mk, m, ngr, mu, w, mv, in.ulen, in.par.directional, rid, root, nullptr, val, msum, st);
+            else k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, mu, w, mv, in.ulen, in.par.directional, root, nullptr, val, msum, st, rid);
             T.mark("6.snp.r9"); if (g_prof) { prof_groups("snp r9 (cell, SNP)", gs, ngr, m); T.mark("prof"); }
             unsigned long long s[3]; CK(cudaMemcpy(s, st, 24, cudaMemcpyDeviceToHost));
             for (int k = 0; k < 3; k++) g_snp_stat[k] += s[k];
@@ -644,6 +727,7 @@ static void prof_gene_groups(const Inputs& in, const GeneStore& g) {
 static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     const int TB = 256; const int nS = in.nS, nA = in.nA, nR = in.nR;
     { const char* pf = getenv("SINGLET_GPU_PILEUP_PROF"); g_prof = pf && *pf && *pf != '0'; g_prof_log.clear(); }
+    { const char* e = getenv("SINGLET_GPU_PILEUP_E23"); g_e23 = !(e && *e == '0'); g_cr_replay = g_e23; }
     // 1 annotate
     AA* aa = A.alloc<AA>(std::max(nA, 1));
     k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa); T.mark("1.annotate");
