@@ -76,3 +76,53 @@ def test_verify_catches_corruption(out, tmp_path):
     open(dest, "wb").write(bytes(raw))
     with pytest.raises(Exception):
         assert PS.verify(dest) == []
+
+
+def test_collect_outputs_moves_stray_withheld_files_into_private(out, tmp_path):
+    import types
+
+    import stages
+
+    _w(out, "mt/mt_events.1pz", b"e" * 50)           # restricted, but outside private/
+    _w(out, "mt/mt_summary.tsv", b"a\tb\n")          # public
+    ctx = types.SimpleNamespace(out_root=str(tmp_path / "o"), private_root=str(tmp_path / "p"))
+    log = tmp_path / "log"
+    log.write_text("x")
+    final, priv, _sha, _man = stages.collect_outputs(ctx, "GSE1", "GSM1", out, str(tmp_path), str(log))
+    pub = {os.path.relpath(os.path.join(d, f), final).replace(os.sep, "/") for d, _, fn in os.walk(final) for f in fn}
+    assert "mt/mt_events.1pz" not in pub and "donor/donor0_coverage.tsv" not in pub
+    assert "mt/mt_summary.tsv" in pub and "donor_assignments.tsv" in pub and "exon_counts.1pz" in pub
+    assert os.path.exists(os.path.join(priv, "mt", "mt_events.1pz")) and os.path.exists(os.path.join(priv, "private", "snp_ad.mtx.gz")) is False
+    assert os.path.exists(os.path.join(priv, "snp_ad.mtx.gz"))
+
+
+def _mtx(rows):
+    return ("%%MatrixMarket matrix coordinate integer general\n% c\n5 4 " + str(len(rows)) + "\n"
+            + "".join("%d %d %d\n" % r for r in rows)).encode()
+
+
+def test_mtx_coding_roundtrips_and_refuses_noncanonical():
+    pytest.importorskip("pandas")
+    rows = [(1, 1, 3), (4, 1, 1), (2, 2, 250), (5, 2, 70000), (3, 4, 9)]
+    data = _mtx(rows)
+    blob = PS.mtx_encode(data)
+    assert blob is not None and PS.mtx_decode(blob) == data
+    assert PS.mtx_encode(_mtx([(1, 2, 3), (1, 1, 3)])) is None           # columns decrease
+    assert PS.mtx_encode(data.replace(b"\n2 2 250", b"\n2  2 250")) is None   # non-canonical spacing
+    assert PS.mtx_encode(b"%%MatrixMarket matrix coordinate real general\n2 2 1\n1 1 0.5\n") is None
+
+
+def test_big_matrix_uses_mtx_codec_and_verifies(out, tmp_path, monkeypatch):
+    pytest.importorskip("pandas")
+    monkeypatch.setattr(PS, "MTX_MIN_BYTES", 100)
+    rows = [(i % 5 + 1, i // 5 + 1, i % 7 + 1) for i in range(0, 400)]
+    rows.sort(key=lambda r: (r[1], r[0]))
+    _w(out, "private/snp_dp.mtx.gz", gzip.compress(_mtx(rows).replace(b"5 4 ", b"5 80 ")))
+    dest = str(tmp_path / "s.tar")
+    idx = PS.build(out, dest, "GSM1")
+    assert idx["files"]["private/snp_dp.mtx.gz"]["codec"] == "mtx"
+    assert PS.verify(dest) == []
+    PS.extract(dest, str(tmp_path / "back"))
+    a, _ = PS._content(os.path.join(out, "private/snp_dp.mtx.gz"))
+    b, _ = PS._content(str(tmp_path / "back" / "private/snp_dp.mtx.gz"))
+    assert a == b
