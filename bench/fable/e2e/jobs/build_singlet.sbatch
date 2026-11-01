@@ -31,7 +31,7 @@ cmake -S $S -B $SCR/b -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DS
   -DCMAKE_CUDA_HOST_COMPILER=\$CXX -DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler -DCMAKE_CUDA_ARCHITECTURES="80;90" > $SCR/c.log 2>&1 \
   || { tail -40 $SCR/c.log; exit 1; }
 grep -i "GPU engine" $SCR/c.log || true
-cmake --build $SCR/b --target singlet -j 24 > $SCR/b.log 2>&1 || { grep -m30 -B3 -A8 "error" $SCR/b.log || tail -40 $SCR/b.log; exit 1; }
+cmake --build $SCR/b --target singlet -j ${SLURM_CPUS_PER_TASK:-24} > $SCR/b.log 2>&1 || { grep -m30 -B3 -A8 "error" $SCR/b.log || tail -40 $SCR/b.log; exit 1; }
 cp $SCR/b/src/pipeline/singlet $OUTD/singlet-gpu.new && mv $OUTD/singlet-gpu.new $OUTD/singlet-gpu
 EOS
 T0=$(date +%s)
