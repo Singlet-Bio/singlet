@@ -24,6 +24,7 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 #include <cmath>
 
 #ifdef __CUDACC__
@@ -42,6 +43,8 @@
 //            dropping one and multMapSelect's compaction move indices instead of transcripts (needs M5_FIN1)
 //  M5_TR32   transcript fields that hold read offsets, lengths and counts stored in 32 bits (genome coordinates stay 64)
 //  M5_TR32CHECK  count every 32-bit store that would not round-trip (g_tr32bad; must stay 0)
+//  M5_BLOBW  the output encoder gathers bytes in a register and stores 8 at a time (aligned u64 stores) instead of one
+//            byte store per byte; the same bytes, the same length, the same overflow rule
 #ifdef M5_S3
 #ifndef M5_REFX
 #define M5_REFX
@@ -278,6 +281,7 @@ template <int LREAD_, int NSPLIT_, int NP_, int NW_, int NWA_, int NWB_, int NEX
 struct Caps {
     static constexpr int LREAD = LREAD_, NSPLIT = NSPLIT_, NP = NP_, NW = NW_, NWA = NWA_, NWB = NWB_, NEX = NEX_,
                          NWTR = NWTR_, NKEEP = NKEEP_, NBLOB = NBLOB_;
+    static_assert(NBLOB_ % 8 == 0, "output slots are whole words (M5_BLOBW)");
 };
 
 // read buffers: STAR's Read1[0] (bases 0..3, N = 4), Read1[1] (complement), Read1[2] (reverse complement)
@@ -1407,7 +1411,30 @@ struct Blob {
         while (u >= 0x80) { put((uint8_t)(u | 0x80)); u >>= 7; }
         put((uint8_t)u);
     }
+#ifdef M5_BLOBW
+    // bytes n-nb .. n-1 wait in acc (byte j at bits 8j); every 8th byte stores the word at p + n - 8 (8-aligned: p is,
+    // and n - nb is a multiple of 8). flush() stores a partial word: bytes past n are 0 and stay below cap (a multiple of 8).
+    u64 acc = 0; int nb = 0;
+    HD void put(uint8_t b) {
+        if (n < cap) {
+            acc |= (u64)b << (8 * nb); n++;
+            if (++nb == 8) { st8(p + n - 8, acc); acc = 0; nb = 0; }
+        } else {
+            full = true;
+        }
+    }
+    HD void flush() { if (nb) { st8(p + n - nb, acc); acc = 0; nb = 0; } }
+    static HD void st8(uint8_t* q, u64 x) {
+#ifdef __CUDA_ARCH__
+        *reinterpret_cast<u64*>(q) = x;
+#else
+        memcpy(q, &x, 8);
+#endif
+    }
+#else
     HD void put(uint8_t b) { if (n < cap) p[n++] = b; else full = true; }
+    HD void flush() {}
+#endif
 };
 template <class T> HD inline void encodeTr(Blob& b, const T& t) {
     b.putV((i64)t.nExons);
@@ -1792,6 +1819,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     blob.putV((i64)w.nW); blob.putV((i64)w.nTr); blob.putV((i64)(w.nW > 0 ? iBest : -1));
     if (w.nW == 0) blob.putV((i64)w.trInitRLength);
     for (uint i = 0; i < w.nTr; i++) encodeTr(blob, M5KEEP(w, i));
+    blob.flush();
     M5CLK(w, 3, tc);
     if (blob.full) { w.ov = OV_BLOB; return Status::BlobFull; }
     return Status::Ok;

@@ -12,7 +12,8 @@
 # 1,991,926 sequences), truth regenerated in the job (decode, distinct, stardump), then every variant in this one job:
 #   M5RUNS="binary:args|binary:args"  (binaries in $OUT/bin, built by e5_compile.sbatch)
 # Each variant: --reps 3 (median after a warm-up) --json, identity vs STAR byte for byte. Read sequences stay in job /tmp.
-# Optional NCU="binary:args|..." profiles k_p3 of lane A (2nd launch) with Nsight Compute --set full for each entry.
+# Optional NCU="binary:args|..." profiles k_p3 of lane A (2nd launch) with Nsight Compute for each entry: NCUSET (default
+# "--set full"); NCUMET adds metrics (default: L2 read/write sectors, DRAM bytes, warp/thread instructions, local sectors).
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark
 REF=/mnt/projects/debruinz_project/cellarium/reference
@@ -49,16 +50,18 @@ for vi in "${!VARS[@]}"; do
   grep -E "sizeof Work|^lane A|lane A (run|thread|inside|cop)|^M5:|GPU lane A|lane A overflow|tr32" $L.log | grep -v "run 0:"
 done
 # Nsight Compute on lane A's phase-3 kernel (second k_p3 launch = lane A, batch 1 of the warm-up pass)
+NCUSET=${NCUSET:---set full}
+NCUMET=${NCUMET:-lts__t_sectors_op_read.sum,lts__t_sectors_op_write.sum,dram__bytes_read.sum,dram__bytes_write.sum,smsp__inst_executed.sum,smsp__thread_inst_executed.sum,l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum,l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum,l1tex__t_sectors_pipe_lsu_mem_global_op_st.sum,l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum,gpu__time_duration.sum}
 IFS='|' read -ra NV <<< "${NCU:-}"
 for ni in "${!NV[@]}"; do
   BIN=${NV[$ni]%%:*}; ARGS=${NV[$ni]#*:}; ARGS=${ARGS//@STD/$STD}
   echo "=== ncu $ni: $BIN $ARGS"
-  apptainer exec --nv -B $W -B $SCR $IMG /usr/local/cuda/bin/ncu --set full --kernel-name regex:k_p3 --launch-skip 1 --launch-count 1 \
+  apptainer exec --nv -B $W -B $SCR $IMG /usr/local/cuda/bin/ncu $NCUSET --metrics $NCUMET --kernel-name regex:k_p3 --launch-skip 1 --launch-count 1 \
     -o $SCR/ncu_$ni -f env OMP_NUM_THREADS=24 $OUT/bin/$BIN --genome-dir $SCR/idx --truth $SCR/m5/t --reps 0 $ARGS > $SCR/ncu_$ni.log 2>&1
   echo "ncu exit=$?"; tail -2 $SCR/ncu_$ni.log
   apptainer exec -B $SCR $IMG /usr/local/cuda/bin/ncu --import $SCR/ncu_$ni.ncu-rep --page details --print-units base > $RES/${TAG}_ncu${ni}_$BIN.txt 2>&1
   apptainer exec -B $SCR $IMG /usr/local/cuda/bin/ncu --import $SCR/ncu_$ni.ncu-rep --page raw --csv --print-units base > $RES/${TAG}_ncu${ni}_${BIN}_raw.csv 2>&1
   cp $SCR/ncu_$ni.ncu-rep $RES/${TAG}_ncu${ni}_$BIN.ncu-rep 2>/dev/null
-  grep -E "Duration|Registers Per|Achieved Occupancy|Theoretical Occupancy|Memory Throughput|L1/TEX Hit|L2 Hit|DRAM Throughput|Local Memory Spilling|Uncoalesced|sectors" $RES/${TAG}_ncu${ni}_$BIN.txt | head -30
+  grep -E "Duration|Registers Per|Achieved Occupancy|Theoretical Occupancy|Memory Throughput|L1/TEX Hit|L2 Hit|DRAM Throughput|lts__t_sectors|dram__bytes|inst_executed|lsu_mem|gpu__time" $RES/${TAG}_ncu${ni}_$BIN.txt | head -40
 done
 echo "[t] total $(( $(date +%s) - T0 )) s"
