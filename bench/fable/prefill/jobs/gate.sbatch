@@ -22,7 +22,8 @@
 # appears (the pipeline deletes it after parsing). Then per pair (PAIRS=a:b ...; a mode not run here is taken from OUT_<mode>, a kept out/ dir):
 # out_equiv.py, the mapping statistics of star_Log.final.out, SJ.out.tab, the read-order files by sorted 4-line records, and CellReads.stats
 # by sorted rows (CRS_<mode>: a kept copy for a mode not run here). DUMP=1: every GPU run also writes mapDistinct's records (E6 dump,
-# SINGLET_ENGINE_GPU_DUMP) to the node's /tmp, and the dumps of all GPU runs are compared byte for byte (sha256) at the end.
+# SINGLET_ENGINE_GPU_DUMP) to the node's /tmp, and the dumps of all GPU runs are compared byte for byte (sha256) at the end;
+# DUMP="mode ...": only those modes dump.
 set -uo pipefail
 FAIL=0
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
@@ -56,7 +57,7 @@ for m in "${MODES[@]}"; do
     *) echo "!! unknown mode $m" | tee -a $RES/summary.txt; continue ;;
   esac
   ev=ENV_$m; XENV=(${!ev:-})
-  [ "${DUMP:-0}" = 1 ] && [ $kind != cpu ] && XENV+=(SINGLET_ENGINE_GPU_DUMP=$SCR/dump-$m.bin)
+  if [ $kind != cpu ] && { [ "${DUMP:-0}" = 1 ] || [[ " ${DUMP:-} " == *" $m "* ]]; }; then XENV+=(SINGLET_ENGINE_GPU_DUMP=$SCR/dump-$m.bin); fi
   echo "--- $m: binary $BIN ($(sha256sum $BIN | cut -c1-16)), extra env: ${XENV[*]:-none}" | tee -a $RES/summary.txt
   ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb"
     while true; do
@@ -85,7 +86,7 @@ for m in "${MODES[@]}"; do
       --exclude='.gpu_handoff*' --exclude='*Unmapped*' --exclude='_STARtmp*' --exclude='*.reads' --exclude='*.reads.q' $SCR/$s/$m/out/ $O/out/
   [ -f $SCR/dump-$m.bin ] && echo "  E6 dump $m: $(stat -c %s $SCR/dump-$m.bin) bytes, sha256 $(sha256sum $SCR/dump-$m.bin | cut -c1-16)" | tee -a $RES/summary.txt
 done
-if [ "${DUMP:-0}" = 1 ]; then
+if [ "${DUMP:-0}" != 0 ]; then
   echo "=== mapDistinct records (E6 dumps) of the GPU runs" | tee -a $RES/summary.txt
   ref=""; for m in "${MODES[@]}"; do f=$SCR/dump-$m.bin; [ -f $f ] || continue
     if [ -z "$ref" ]; then ref=$m; echo "  reference $m" | tee -a $RES/summary.txt
