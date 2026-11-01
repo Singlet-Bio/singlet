@@ -131,7 +131,18 @@ One sample holds a device slot (an exclusive `flock` on `/tmp/singlet_engine_gpu
 prefill's device phase (`mapDistinct`; the host assembly of the records still runs under it), the hand-off pass and the pileup, the
 non-host screen, and E11's short use after STAR's loop. `SINGLET_ENGINE_GPU_SLOTS=K` (1–8) lets K samples share a device; with E17 each
 then keeps to (device − 2 GB) / K, and the non-host screen's 25–29 GB sit outside that budget. Without `SINGLET_ENGINE_GPU_DEVICE` a
-sample takes the first free slot of any device, or waits for one. E18 measures what K and thread split a node should run.
+sample takes the first free slot of any device, or waits for one.
+
+**What a node should run (E18, docs/gpu-engine/fable/E18-throughput.md; measured on g052 with 2 H100 NVL, 54 cores, 730 GB):**
+`SINGLET_ENGINE_GPU_SLOTS=2` with E17's default budget and no other memory setting; 8 samples in flight per GPU (16 per node) as a
+stream (the next sample starts as soon as one ends, not in batches) with `--threads 7` each; every worker pinned with
+`SINGLET_ENGINE_GPU_DEVICE` = worker mod 2 (unpinned workers wander between the node's GPUs and 4 of 32 lost the device in the
+non-host screen). Host memory, not the device, bounds the samples in flight: 0.6-0.7 GB per M read pairs per sample (a private
+16.8 GB genome copy per process is the largest piece), so keep the read pairs in flight under ~1,200 M per node. Measured: 4.39 M
+read pairs/s per node in steady state (3.0-3.2x the CPU engine's 1.38-1.44 on the same node; 2.74 with one slot and 6 per GPU),
+44 of 54 cores busy, 9.1 core-s per M pairs; every one of the 266 runs identical to its sample run alone. One slot is capped near
+1.8 M pairs/s per GPU because ~8 s of host work per sample runs under the device lock (the records' assembly in the prefill, the
+pileup's host pass); holding the lock only around device work would lift that to ~2.4, a persistent per-GPU process to ~3.0.
 
 ## 6. What is byte-identical and what is run-dependent
 
