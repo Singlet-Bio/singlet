@@ -59,15 +59,18 @@ for spec in "${MODES[@]}"; do
       printf "%s\t%s\t%s\n" $(date +%s.%N) $(awk '$1=="usage_usec"{printf "%.2f", $2/1e6}' $CG/cpu.stat) "$g"; sleep 1
     done ) > $O/monitor.tsv 2>/dev/null &
   MON=$!
+  ( while true; do awk -v t=$(date +%s) '$1=="anon"{a=$2} $1=="shmem"{s=$2} $1=="file"{f=$2} END{printf "%s\t%.2f\t%.2f\t%.2f\n", t, a/1e9, s/1e9, f/1e9}' $CG/memory.stat; sleep 1; done ) > $O/mem.tsv 2>/dev/null &
+  MEMW=$!
   CRS=$SCR/$s/$name/out/star_Solo.out/Gene/CellReads.stats
   ( while [ ! -e $CRS ]; do sleep 0.2; done; ln $CRS $SCR/$s/$name/CellReads.stats ) &
   WATCH=$!
   T0=$(date +%s.%N); C0=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat)
   ( cd $SCR/$s/$name && /usr/bin/time -v -o $O/time.txt timeout -k 30 3000 $BIN $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
       --out-prefix $SCR/$s/$name/out/ --threads $T --pipeline --output-format 1pz $ENGARG 2>&1 | while IFS= read -r l; do printf '%(%s)T %s\n' -1 "$l"; done > $O/run.log.ts )
-  C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON $WATCH 2>/dev/null
+  C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON $WATCH $MEMW 2>/dev/null
   for e in ${envs//,/ }; do unset "${e%%=*}"; done
   echo "$s $name: wall $(echo "$T1 - $T0" | bc) s, core-s $(echo "($C1 - $C0)/1000000" | bc -l | cut -c1-8), start $T0 end $T1, maxRSS $(awk -F': ' '/Maximum resident/{printf "%.1f GB", $2/1048576}' $O/time.txt)" | tee -a $RES/summary.txt
+  echo "  job cgroup memory (1 s samples): peak anon $(cut -f2 $O/mem.tsv | sort -g | tail -1) GB, peak shmem $(cut -f3 $O/mem.tsv | sort -g | tail -1) GB" | tee -a $RES/summary.txt
   grep -aq "unsorted STAR stream" $O/run.log.ts && grep -aq "Pileup: streaming from STAR pipe" $O/run.log.ts && echo "STREAM PATH OK" | tee -a $RES/summary.txt || { echo "!! GATE FAIL: STREAM PATH NOT USED ($name)" | tee -a $RES/summary.txt; FAIL=1; }
   case ${m%B} in cpu) ;; *) if grep -aq "\[gpu_pileup\] on:" $O/run.log.ts && ! grep -aE "\[gpu_pileup\] (not run|failed|ERROR)|GPU_PILEUP ignored" $O/run.log.ts | grep -q .; then echo "GPU PILEUP OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: GPU pileup did not run cleanly ($name)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
   grep -a -e "Genome preload" -e "Genome prefetch" -e "STAR pid" -e "CR4 probe" -e "Beta aligner" -e "E11" $O/run.log.ts | cut -c1-400 | tee -a $RES/summary.txt
