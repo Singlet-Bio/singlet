@@ -60,6 +60,20 @@
 #define M5_ENC1
 #endif
 #endif
+// E7 (docs/gpu-engine/fable/E7-seeds.md): phase 1 as "flatqs8b" by default: the seed nest as an iterator in a persistent
+// seed kernel with lane refill (M5_SEEDFLAT + M5_P1SPLIT), the iterator in shared memory with a 64-register cap
+// (M5_SEEDSMEM, M5_P1MINB=8), the persistent windows kernel in lane B only (M5_P1WPB): lane A phase 1 0.79x, +7.1% M5,
+// identical results. STAR's nest (one thread per read, k_p1) stays reachable: -DM5_BASELINE (with the pre-E5 paths),
+// -DM5_P1NEST (E5's defaults, the nest), the probe builds (-DM5_CENSUS, -DM5_TAIL: the flat kernels have no probes), or
+// any explicit E7 variant macro (the build is then exactly the macros given, as in the E7 experiments).
+#if !defined(M5_BASELINE) && !defined(M5_P1NEST) && !defined(M5_CENSUS) && !defined(M5_TAIL) && !defined(M5_SEEDFLAT) &&     !defined(M5_P1SPLIT) && !defined(M5_P1WPERS) && !defined(M5_P1WPB) && !defined(M5_P1FUSE) && !defined(M5_SEEDSTEP) &&     !defined(M5_STEPSMEM) && !defined(M5_SEEDSMEM) && !defined(M5_P1MINB) && !defined(M5_G2) && !defined(M5_CMPU) &&     !defined(M5_CMPNI) && !defined(M5_PREF) && !defined(M5_PREF2) && !defined(M5_PREF3)
+#define M5_SEEDFLAT
+#define M5_P1SPLIT
+#define M5_SEEDSMEM
+#define M5_P1MINB 8
+#define M5_P1WPB
+#define M5_E7DEFAULT   // phase 1 = flatqs8b because of these defaults (reported in the build flags)
+#endif
 #ifdef M5_S3
 #ifndef M5_REFX
 #define M5_REFX
@@ -454,7 +468,7 @@ template <class C> HD inline size_t persistentBytes() {
 #define M5CPY(w, kind, dst, src) (dst).copyFrom(src)
 #define M5STAT(w, k) do { } while (0)
 #endif
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)   // -DM5_NOCLK: no phase counters (clk[8] stays 0)
 #define M5CLK(w, k, t) do { long long t1_ = clock64(); (w).clk[k] += t1_ - (t); (t) = t1_; } while (0)
 #define M5T(t) long long t = clock64()
 #define M5ADD(w, k, t) do { (w).clk[k] += clock64() - (t); } while (0)
@@ -1455,7 +1469,7 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
     typedef typename Work<C>::T T;
     M5T(trec);
     struct RecClk { Work<C>& w; long long t; HD ~RecClk() { M5ADD(w, 7, t); } };
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
     RecClk rc_{w, trec};
 #endif
     if (Score + P.outFilterMultimapScoreRange >= w.slot[w.slotP[0]].maxScore
@@ -1696,7 +1710,7 @@ template <class C> HD inline Status mapPhase1(const Params& P, const GenomeView&
                                            const char* R0, uint Lread) {
     w.ov = OV_NONE;
     long long tc = 0;
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
     tc = clock64();
 #endif
     w.stitched = false; w.nEntries = 0;
@@ -2130,7 +2144,7 @@ template <class C> HD inline int p1Entry(const Params& P, const GenomeView& gv, 
     return st;
 }
 template <class C> HD inline Status p1Windows(const Params& P, const GenomeView& gv, Work<C>& w) {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
     long long tc = clock64();
 #endif
     const uint Lread = w.Lread;
@@ -2266,7 +2280,7 @@ template <class C> HD inline int p1WinStep(const Params& P, const GenomeView& gv
 // phase 1 as one call per read with the flat loops (the E7 counterpart of mapPhase1; same results)
 template <class C> HD inline Status mapPhase1Flat(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb,
                                                const char* R0, uint Lread) {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
     long long tc = clock64();
 #endif
     SeedIt it;
@@ -2368,7 +2382,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     const bool stitched = w.stitched;
     w.nSteps = 0;
     long long tc = 0;
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && !defined(M5_NOCLK)
     tc = clock64();
 #endif
     if (stitched) {
