@@ -819,13 +819,18 @@ def filter_contigs(df, params: Params):
         # IG mRNA per cell spans > 100x (plasma cells vs B cells), so a B cell of an expanded clone that contains plasma
         # cells holds the clone's junction at < 10% of the plasma cell's UMIs: the strongest contig of its own barcode
         # and chain is that cell's receptor, unless it is a few stray molecules (ambient IG in other droplets: 1-2 UMIs)
-        hc = df[df["high_confidence"].astype(bool)]
-        top_hc = hc.groupby(["bcix", "chain"])["umis"].transform("max").reindex(df.index)
+        # a B cell has one heavy and one light chain: the strongest of its class (heavy, or light: IGK and IGL together),
+        # and none where one of the class is kept already (a second light chain at ambient level is another cell's)
+        cls = (df["chain"] == "IGH").map({True: "H", False: "L"})
+        hc = df["high_confidence"].astype(bool)
+        top_hc = df["umis"].where(hc).groupby([df["bcix"], cls]).transform("max")
+        has = df["kept"].groupby([df["bcix"], cls]).transform("any")
         give = (
             cand
             & df["chain"].isin(("IGH", "IGK", "IGL"))
             & (df["umis"] == top_hc)
             & (df["umis"] >= params.ig_top_min_umis)
+            & ~has
         )
         if params.ig_top_paired:
             # only in a droplet that holds a B cell: the partner chain (heavy for a light chain, light for a heavy one)
