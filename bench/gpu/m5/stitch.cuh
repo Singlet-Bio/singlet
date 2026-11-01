@@ -159,6 +159,23 @@ template <int NEX> struct Tr {
             canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
         }
     }
+    // the same copy from a transcript with another exon capacity (warp lanes: a lane's window transcripts -> the read's keep[])
+    template <int N2> HD void copyFromAny(const Tr<N2>& o) {
+        nExons = o.nExons; iFrag = o.iFrag;
+        rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength; cStart = o.cStart;
+        Chr = o.Chr; Str = o.Str; roStr = o.roStr; primaryFlag = o.primaryFlag;
+        nMatch = o.nMatch; nMM = o.nMM; mappedLength = o.mappedLength; extendL = o.extendL; maxScore = o.maxScore;
+        nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = o.nUnique; nAnchor = o.nAnchor;
+        intronMotifs[0] = o.intronMotifs[0]; intronMotifs[1] = o.intronMotifs[1]; intronMotifs[2] = o.intronMotifs[2];
+        sjMotifStrand = o.sjMotifStrand; sjYes = o.sjYes;
+        uint ne = o.nExons < (uint)NEX ? o.nExons : (uint)NEX;
+        if (ne > (uint)N2) ne = (uint)N2;
+        for (uint i = 0; i < ne; i++) {
+            for (int k = 0; k < EX_SIZE; k++) exons[i][k] = o.exons[i][k];
+            shiftSJ[i][0] = o.shiftSJ[i][0]; shiftSJ[i][1] = o.shiftSJ[i][1];
+            canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
+        }
+    }
     HD void add(const Tr* t) {
         maxScore += t->maxScore; nMatch += t->nMatch; nMM += t->nMM;
         nGap += t->nGap; lGap += t->lGap; lDel += t->lDel; nDel += t->nDel; lIns += t->lIns; nIns += t->nIns;
@@ -185,6 +202,9 @@ template <int L> struct ReadBuf { char r[3][L + 1]; };
 // ---------------------------------------------------------------------------------------------------------------------
 template <class C> struct Work {
     typedef Tr<C::NEX> T;
+    // the stitching context interface (finalizeTranscript, stitchWindowAligns take any S with these and the members below)
+    static constexpr int kNWA = C::NWA, kNWTR = C::NWTR, kNEX = C::NEX;
+    static constexpr bool kShadow = false;
     // read
     uint Lread, outFilterMismatchNmaxTotal;
     uint Nsplit, splitR[3][C::NSPLIT];
@@ -956,10 +976,10 @@ HD inline int genomicLengthScore(const Params& P, uint x) {
 
 // ---------------------------------------------------------------------------------------------------------------------
 // stitchWindowAligns.cpp, finalization (the iA >= nA branch). trA is taken by value in STAR: `t` is a copy here.
-// Records into the window's slots (wTr = slotP over slot[]).
+// Records into the window's slots (wTr = slotP over slot[]). S: the stitching context (Work<C>, or a warp lane's LaneWork).
 // ---------------------------------------------------------------------------------------------------------------------
-template <class C> HD inline bool finalizeTranscript(const Params& P, const GenomeView& gv, Work<C>& w, int Score, uint tR2, uint tG2,
-                                                  typename Work<C>::T& trA, const char* R, const uint (*WA)[WA_SIZE]) {
+template <class S> HD inline bool finalizeTranscript(const Params& P, const GenomeView& gv, S& w, int Score, uint tR2, uint tG2,
+                                                  typename S::T& trA, const char* R, const uint (*WA)[WA_SIZE]) {
     const uint Lread = w.Lread;
     Ext trAstep1;
     int vOrder[2];
@@ -1059,9 +1079,19 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
         trA.iFrag = -1;
     }
     trA.maxScore = Score;   // + variationAdjust = 0 (no variation)
-    typedef typename Work<C>::T T;
+    typedef typename S::T T;
+    if constexpr (S::kShadow) if (trA.iFrag >= 0) {
+        // host check of the warp lanes' exactness argument: the decision with STAR's read-wide maxScoreMate (mSMserial, carried
+        // over the earlier windows) and with the window-local one (maxScoreMate, from 0 at the window's start) must agree
+        w.mSMserial = mx(w.mSMserial, Score);
+        bool a = Score + P.outFilterMultimapScoreRange >= w.slot[w.slotP[0]].maxScore;
+        bool bSer = Score + P.outFilterMultimapScoreRange >= w.mSMserial;
+        bool bLoc = Score + P.outFilterMultimapScoreRange >= w.maxScoreMate[trA.iFrag];
+        if (!a && bSer != bLoc) w.nShadowDiff++;
+        if (!a && bSer) w.nMateOnly++;
+    }
     M5T(trec);
-    struct RecClk { Work<C>& w; long long t; HD ~RecClk() { M5ADD(w, 7, t); } };
+    struct RecClk { S& w; long long t; HD ~RecClk() { M5ADD(w, 7, t); } };
 #ifdef __CUDA_ARCH__
     RecClk rc_{w, trec};
 #endif
@@ -1098,7 +1128,7 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
             w.slotP[iTr] = pTr;
             w.slot[w.slotP[iTr]].copyFrom(trA);
             if (w.nWinTr < P.alignTranscriptsPerWindowNmax) {
-                if (w.nWinTr + 1 > (uint)C::NWTR) { w.ov = OV_WTR; return false; }
+                if (w.nWinTr + 1 > (uint)S::kNWTR) { w.ov = OV_WTR; return false; }
                 w.nWinTr++;
             }
         }
@@ -1110,10 +1140,10 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
 // stitchWindowAligns.cpp, the recursion over aligns (include, then exclude), on an explicit stack.
 // Frame d holds STAR's arguments for the call with iA = d: trA = stack[d], Score, tR2, tG2.
 // ---------------------------------------------------------------------------------------------------------------------
-template <class C> HD inline bool stitchWindowAligns(const Params& P, const GenomeView& gv, Work<C>& w, uint nA, const uint (*WA)[WA_SIZE], const char* R) {
-    typedef typename Work<C>::T T;
+template <class S> HD inline bool stitchWindowAligns(const Params& P, const GenomeView& gv, S& w, uint nA, const uint (*WA)[WA_SIZE], const char* R) {
+    typedef typename S::T T;
     struct Frame { int Score; uint tR2, tG2; uint8_t phase; };
-    Frame fr[C::NWA + 1];
+    Frame fr[S::kNWA + 1];
     int d = 0;
     fr[0].Score = 0; fr[0].tR2 = 0; fr[0].tG2 = 0; fr[0].phase = 0;
     while (d >= 0) {
@@ -1138,7 +1168,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
             if (trA.nExons > 0) {
                 bool ovEx = false;
                 M5T(tsa);
-                dScore = stitchAlignToTranscript<T, C::NEX>(F.tR2, F.tG2, WA[iA][WA_rStart], WA[iA][WA_gStart], WA[iA][WA_Length], WA[iA][WA_iFrag],
+                dScore = stitchAlignToTranscript<T, S::kNEX>(F.tR2, F.tG2, WA[iA][WA_rStart], WA[iA][WA_gStart], WA[iA][WA_Length], WA[iA][WA_iFrag],
                                                             WA[iA][WA_sjA], P, R, gv, &trAi, w.outFilterMismatchNmaxTotal, ovEx);
                 M5ADD(w, 4, tsa);
                 if (ovEx) { w.ov = OV_EXONS; return false; }
@@ -1421,18 +1451,12 @@ template <class C> HD inline bool assignHits(const Params& P, const GenomeView& 
     return true;
 }
 
-// the rest of the read: stitching of every window, multMapSelect, mappedFilter, encoding
-template <class C> HD inline Status mapFinish(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb, Blob& blob) {
+// stitchPieces' window loop: stitching of every window in order, keep[] (the transcripts that can still pass multMapSelect's
+// score range), trBest; nW = windows with transcripts. false = overflow (w.ov)
+template <class C> HD inline bool stitchWindows(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb) {
     typedef typename Work<C>::T T;
     const char* Read1[3] = {rb.r[0], rb.r[1], rb.r[2]};
-    const uint Lread = w.Lread;
-    const bool stitched = w.stitched;
-    w.nSteps = 0;
-    long long tc = 0;
-#ifdef __CUDA_ARCH__
-    tc = clock64();
-#endif
-    if (stitched) {
+    {
         // ---- stitch each window, keep its transcripts; trBest
         uint iW1 = 0;
         for (uint iW = 0; iW < w.nW; iW++) {
@@ -1450,7 +1474,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
             for (int k = 0; k <= C::NWTR; k++) w.slotP[k] = k;
             w.slot[0].copyFrom(trA);
             w.nWinTr = 0;
-            if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2])) return Status::Overflow;
+            if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2])) return false;
             if (w.nWinTr == 0) continue;
             const T& t0 = w.slot[w.slotP[0]];
             bool better = t0.maxScore > w.trBestScore || (t0.maxScore == w.trBestScore && t0.gLength < w.trBestGLength);
@@ -1460,7 +1484,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
             for (uint k = 0; k < w.nWinTr; k++) {
                 const T& t = w.slot[w.slotP[k]];
                 if (t.maxScore + P.outFilterMultimapScoreRange >= runBest || (better && k == 0)) {
-                    if (w.nKeep >= C::NKEEP) { w.ov = OV_KEEP; return Status::Overflow; }
+                    if (w.nKeep >= C::NKEEP) { w.ov = OV_KEEP; return false; }
                     w.keep[w.nKeep].copyFrom(t);
                     w.keep[w.nKeep].Chr = t0.Chr; w.keep[w.nKeep].Str = t0.Str; w.keep[w.nKeep].roStr = t0.roStr;   // multMapSelect copies [0]'s
                     w.keepWin[w.nKeep] = (int)iW1;
@@ -1489,7 +1513,13 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
             w.nW = 0;
         }
     }
-    if (stitched) M5CLK(w, 2, tc);
+    return true;
+}
+
+// multMapSelect, mappedFilter, encoding, from nW, keep[0..nKeep), trBestScore and trBestKeep (blob.full is checked by the caller)
+template <class C> HD inline void selectEncode(const Params& P, const GenomeView& gv, Work<C>& w, Blob& blob) {
+    typedef typename Work<C>::T T;
+    const uint Lread = w.Lread;
     // ---- multMapSelect
     w.nTr = 0;
     int iBest = -1;
@@ -1535,11 +1565,295 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     blob.putV((i64)w.nW); blob.putV((i64)w.nTr); blob.putV((i64)(w.nW > 0 ? iBest : -1));
     if (w.nW == 0) blob.putV((i64)w.trInitRLength);
     for (uint i = 0; i < w.nTr; i++) encodeTr(blob, w.keep[i]);
+}
+
+// the rest of the read: stitching of every window, multMapSelect, mappedFilter, encoding
+template <class C> HD inline Status mapFinish(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb, Blob& blob) {
+    const bool stitched = w.stitched;
+    w.nSteps = 0;
+    long long tc = 0;
+#ifdef __CUDA_ARCH__
+    tc = clock64();
+#endif
+    if (stitched && !stitchWindows(P, gv, w, rb)) return Status::Overflow;
+    if (stitched) M5CLK(w, 2, tc);
+    selectEncode(P, gv, w, blob);
     M5CLK(w, 3, tc);
     if (blob.full) { w.ov = OV_BLOB; return Status::BlobFull; }
     return Status::Ok;
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Warp lanes (E3, docs/gpu-engine/fable/E3-warp-window.md): the windows of one read stitched in parallel, one window per lane
+// of a warp, byte-identical to the window loop above.
+//
+// Why the windows are independent. Within the window loop, a window's recursion reads read-wide state only through
+// maxScoreMate in finalizeTranscript's recording test, "Score + range >= wTr[0]->maxScore || Score + range >= maxScoreMate".
+// For a single-end read (the only mode this port supports; no variation) maxScoreMate has just been raised to Score and is
+// the maximum of 0 and every Score finalized so far in the read, while wTr[0] is either the window's initial transcript
+// (maxScore 0) or a transcript finalized earlier in this window (its maxScore is its Score). Hence maxScoreMate >=
+// wTr[0]->maxScore at every test, the second disjunct implies the first (range >= 0, checked by the driver), and the test is
+// "Score + range >= wTr[0]->maxScore", a function of the window alone. Each lane therefore runs its window with its own
+// maxScoreMate from 0 (the same decisions; LaneWork<..., true> counts any disagreement on the host). The only cross-window
+// state is the keep[] / trBest merge, which reduces to: trBest = the first window (in window order) whose best transcript
+// has the highest score, then the smallest gLength; the selected transcripts = every window's transcripts with
+// maxScore + range >= trBest's score, in window order then slot order. The other cross-window couplings of the loop: the
+// trNtotal break (never reached with these capacities; the driver checks), the step budget (the read's total over all
+// windows, as in the serial loop), the capacities (an overflow of the read's capacity -> Status::Overflow, the next lane; a
+// lane-local capacity smaller than the read's -> the serial loop on lane 0).
+// ---------------------------------------------------------------------------------------------------------------------
+template <int NEXL, int NWAL, int NWTRL, bool SHADOW = false> struct LaneWork {
+    typedef Tr<NEXL> T;
+    static constexpr int kNWA = NWAL, kNWTR = NWTRL, kNEX = NEXL;
+    static constexpr bool kShadow = SHADOW;
+    uint Lread, outFilterMismatchNmaxTotal;
+    int maxScoreMate[1];
+    int mSMserial; u64 nShadowDiff, nMateOnly;   // SHADOW only (host check)
+    uint nWinTr;
+    OvWhy ov;
+    u64 nSteps, stepBudget;
+    long long clk[8];
+    int slotP[NWTRL + 1];
+    T stack[NWAL + 1];
+    T slot[NWTRL + 1];
+    T fin;
+};
+
+// one lane: window iW of the read (the body of stitchWindows' loop up to the recursion), into the lane's slots
+template <class C, class LW> HD inline bool laneStitchWindow(const Params& P, const GenomeView& gv, Work<C>& W, LW& L, uint iW,
+                                                         const char* Rf, const char* Rr) {
+    if ((uint)W.WlastAnchor[iW] < W.nWA[iW]) W.WA[iW][W.WlastAnchor[iW]][WA_Anchor] = 2;
+    typename LW::T& trA = L.stack[0];
+    trA.reset();
+    trA.Chr = 0; trA.Str = 0; trA.roStr = 0; trA.cStart = 0; trA.gLength = 0; trA.nExons = 0;   // trInit
+    trA.rLength = 0;
+    trA.Chr = W.WC[iW][WC_Chr];
+    trA.Str = W.WC[iW][WC_Str];
+    trA.roStr = trA.Str;
+    trA.maxScore = 0;
+    for (int k = 0; k <= LW::kNWTR; k++) L.slotP[k] = k;
+    L.slot[0].copyFrom(trA);
+    L.nWinTr = 0;
+    L.maxScoreMate[0] = 0;
+    return stitchWindowAligns(P, gv, L, W.nWA[iW], (const uint (*)[WA_SIZE])W.WA[iW], trA.roStr == 0 ? Rf : Rr);
+}
+// the lane's transcripts that pass the running best's score range
+template <class LW> HD inline int laneCountAbove(const Params& P, const LW& L, int best) {
+    int c = 0;
+    for (uint k = 0; k < L.nWinTr; k++) c += (L.slot[L.slotP[k]].maxScore + P.outFilterMultimapScoreRange >= best) ? 1 : 0;
+    return c;
+}
+// ... appended to keep[] from position p (window order, then slot order); keepWin = iW * 256 + slot rank
+template <class C, class LW> HD inline void laneAppend(const Params& P, Work<C>& W, const LW& L, uint iW, int best, int p) {
+    const typename LW::T& t0 = L.slot[L.slotP[0]];
+    for (uint k = 0; k < L.nWinTr; k++) {
+        const typename LW::T& t = L.slot[L.slotP[k]];
+        if (t.maxScore + P.outFilterMultimapScoreRange >= best) {
+            W.keep[p].copyFromAny(t);
+            W.keep[p].Chr = t0.Chr; W.keep[p].Str = t0.Str; W.keep[p].roStr = t0.roStr;   // multMapSelect copies [0]'s
+            W.keepWin[p] = (int)(iW * 256 + k);
+            p++;
+        }
+    }
+}
+// drop kept transcripts out of the running best's range (order kept)
+template <class C> HD inline int keepCompact(const Params& P, Work<C>& W, int nKeep, int best) {
+    int j = 0;
+    for (int k = 0; k < nKeep; k++) {
+        if (W.keep[k].maxScore + P.outFilterMultimapScoreRange >= best) {
+            if (j != k) { W.keep[j].copyFrom(W.keep[k]); W.keepWin[j] = W.keepWin[k]; }
+            j++;
+        }
+    }
+    return j;
+}
+struct WarpMerge { int bestS; uint bestG; int bestWin; int nKeep; uint nW1; u64 steps; OvWhy ov; };
+enum WarpRes { WR_DONE = 0, WR_OVERFLOW = 1, WR_FALLBACK = 2 };
+// after the merge (one thread): STAR's state after stitchPieces, then multMapSelect, mappedFilter, encoding
+template <class C> HD inline Status warpSelect(const Params& P, const GenomeView& gv, Work<C>& W, Blob& blob, const WarpMerge& M) {
+    W.nW = M.nW1; W.nKeep = M.nKeep; W.trBestScore = M.bestS; W.trBestGLength = M.bestG; W.trBestKeep = -1;
+    if (M.bestWin >= 0)
+        for (int k = 0; k < M.nKeep; k++) if (W.keepWin[k] == M.bestWin * 256) { W.trBestKeep = k; break; }
+    if (W.trBestScore == 0) { W.mapMarker = MARKER_NO_GOOD_WINDOW; W.nW = 0; }
+    selectEncode(P, gv, W, blob);
+    if (blob.full) { W.ov = OV_BLOB; return Status::BlobFull; }
+    return Status::Ok;
+}
+// statistics of the warp lanes (device counters; host emulation counters)
+enum WStatIdx { WS_READS, WS_SIMPLE, WS_FB_NWA, WS_FB_LANE, WS_OV_STEPS, WS_OV_REAL, WS_OV_KEEP, WS_WIN_NE, WS_ROUNDS, WS_LANES_ACTIVE,
+                WS_STEPS, WS_COMPACT, WS_CLK_LIST, WS_CLK_STITCH, WS_CLK_MERGE, WS_CLK_SELECT, WS_CLK_ASSIGN, WS_CLK_ASSIGN_BASE,
+                WS_CLK_P3_BASE, WS_CLK_FALLBACK, WS_SHADOW_DIFF, WS_MATE_ONLY, WS_EMUL_READS,
+                WS_HIST_NW = 24, WS_HIST_NWA = 32, WS_HIST_STEPSW = 40, WS_HIST_TRW = 48, WS_N = 64 };
+HD inline int binNW(u64 x) { return x <= 1 ? 0 : x <= 4 ? 1 : x <= 8 ? 2 : x <= 16 ? 3 : x <= 32 ? 4 : x <= 64 ? 5 : x <= 128 ? 6 : 7; }
+HD inline int binNWA(u64 x) { return x <= 1 ? 0 : x <= 2 ? 1 : x <= 4 ? 2 : x <= 8 ? 3 : x <= 16 ? 4 : x <= 32 ? 5 : x <= 50 ? 6 : 7; }
+HD inline int binSteps(u64 x) { return x <= 4 ? 0 : x <= 16 ? 1 : x <= 64 ? 2 : x <= 256 ? 3 : x <= 1024 ? 4 : x <= 2048 ? 5 : x <= 8192 ? 6 : 7; }
+HD inline int binTr(u64 x) { return x == 0 ? 0 : x == 1 ? 1 : x == 2 ? 2 : x <= 4 ? 3 : x <= 8 ? 4 : x <= 16 ? 5 : x <= 32 ? 6 : 7; }
+
+// host emulation of the warp driver below (the same rounds of 32 windows, the same merge), with the shadow maxScoreMate check
+template <class C, class LW> inline int hostWarpStitch(const Params& P, const GenomeView& gv, Work<C>& W, ReadBuf<C::LREAD>& rb, LW* L,
+                                                     u64 budget, WarpMerge& M, u64* hs) {
+    const uint nW = W.nW;
+    uint wl[C::NW]; int nNE = 0; bool big = false;
+    for (uint iW = 0; iW < nW; iW++) {
+        if (W.nWA[iW] > 0) wl[nNE++] = iW;
+        if (W.nWA[iW] > (uint)LW::kNWA) big = true;
+    }
+    M.bestS = 0; M.bestG = 0; M.bestWin = -1; M.nKeep = 0; M.nW1 = 0; M.steps = 0; M.ov = OV_NONE;
+    if (big) return WR_FALLBACK;
+    const char* Rf = rb.r[0]; const char* Rr = rb.r[2];
+    int mSMser = 0;   // STAR's maxScoreMate before the next window (shadow)
+    for (int r0 = 0; r0 < nNE; r0 += 32) {
+        bool act[32], ok[32]; uint iWl[32];
+        u64 sum = 0;
+        for (int lane = 0; lane < 32; lane++) {
+            LW& l = L[lane];
+            const int idx = r0 + lane;
+            act[lane] = idx < nNE; iWl[lane] = act[lane] ? wl[idx] : 0; ok[lane] = true;
+            l.ov = OV_NONE; l.nSteps = M.steps; l.stepBudget = budget; l.nWinTr = 0;
+            l.mSMserial = mSMser; l.nShadowDiff = 0; l.nMateOnly = 0;
+            if (act[lane]) {
+                ok[lane] = laneStitchWindow(P, gv, W, l, iWl[lane], Rf, Rr);
+                mSMser = l.mSMserial;
+                sum += l.nSteps - M.steps;
+                hs[WS_SHADOW_DIFF] += l.nShadowDiff; hs[WS_MATE_ONLY] += l.nMateOnly;
+            }
+        }
+        M.steps += sum;
+        if (budget && M.steps > budget) { M.ov = OV_STEPS; return WR_OVERFLOW; }
+        bool anyBad = false;
+        for (int lane = 0; lane < 32; lane++) {
+            if (ok[lane]) continue;
+            anyBad = true;
+            const OvWhy o = L[lane].ov;
+            if ((o == OV_EXONS && LW::kNEX >= C::NEX) || (o == OV_WTR && LW::kNWTR >= C::NWTR)) { M.ov = o; return WR_OVERFLOW; }
+        }
+        if (anyBad) return WR_FALLBACK;
+        int s = -2147483647 - 1; uint g = ~0ULL; int wi = 2147483647; bool any = false;
+        for (int lane = 0; lane < 32; lane++) {
+            if (!act[lane] || L[lane].nWinTr == 0) continue;
+            any = true; M.nW1++;
+            const typename LW::T& t0 = L[lane].slot[L[lane].slotP[0]];
+            int s2 = t0.maxScore; uint g2 = t0.gLength; int w2 = (int)iWl[lane];
+            if (s2 > s || (s2 == s && (g2 < g || (g2 == g && w2 < wi)))) { s = s2; g = g2; wi = w2; }
+        }
+        if (any && (s > M.bestS || (s == M.bestS && g < M.bestG))) { M.bestS = s; M.bestG = g; M.bestWin = wi; }
+        int c[32], total = 0;
+        for (int lane = 0; lane < 32; lane++) { c[lane] = (act[lane] && L[lane].nWinTr > 0) ? laneCountAbove(P, L[lane], M.bestS) : 0; total += c[lane]; }
+        if (M.nKeep + total > C::NKEEP) {
+            M.nKeep = keepCompact(P, W, M.nKeep, M.bestS);
+            hs[WS_COMPACT]++;
+            if (M.nKeep + total > C::NKEEP) { M.ov = OV_KEEP; return WR_OVERFLOW; }
+        }
+        int p = M.nKeep;
+        for (int lane = 0; lane < 32; lane++) if (c[lane] > 0) { laneAppend(P, W, L[lane], iWl[lane], M.bestS, p); p += c[lane]; }
+        M.nKeep += total;
+    }
+    return WR_DONE;
+}
+
+#ifdef __CUDACC__
+__device__ inline void warpArgBest(int& s, uint& g, int& wi) {
+    for (int off = 16; off; off >>= 1) {
+        int s2 = __shfl_xor_sync(0xffffffffu, s, off); uint g2 = __shfl_xor_sync(0xffffffffu, g, off); int w2 = __shfl_xor_sync(0xffffffffu, wi, off);
+        if (s2 > s || (s2 == s && (g2 < g || (g2 == g && w2 < wi)))) { s = s2; g = g2; wi = w2; }
+    }
+}
+__device__ inline int warpInclScan(int x, int lane) {
+    for (int off = 1; off < 32; off <<= 1) { int y = __shfl_up_sync(0xffffffffu, x, off); if (lane >= off) x += y; }
+    return x;
+}
+__device__ inline u64 warpSumU64(u64 x) {
+    for (int off = 16; off; off >>= 1) x += __shfl_xor_sync(0xffffffffu, x, off);
+    return x;
+}
+// counts of a per-lane bin (0..7) into ws[base + bin] (lane 0 adds)
+__device__ inline void warpHist(unsigned long long* ws, int base, bool valid, int bin, int lane) {
+    for (int q = 0; q < 8; q++) {
+        unsigned m = __ballot_sync(0xffffffffu, valid && bin == q);
+        if (lane == 0 && m) atomicAdd(&ws[base + q], (unsigned long long)__popc(m));
+    }
+}
+// The warp driver: called by all 32 lanes of a warp with the same read (W after the assignment, nW > 0); wl: the warp's
+// window list (C::NW entries, shared memory); L: this lane's context (local memory). Returns WR_DONE (M holds the merge
+// for warpSelect), WR_OVERFLOW (M.ov) or WR_FALLBACK (a lane-local capacity: the caller runs mapFinish on one thread).
+template <class C, class LW>
+__device__ inline int warpStitch(const Params& P, const GenomeView& gv, Work<C>& W, ReadBuf<C::LREAD>& rb, LW& L, uint16_t* wl,
+                                 u64 budget, WarpMerge& M, unsigned long long* ws) {
+    const unsigned FULL = 0xffffffffu;
+    const int lane = threadIdx.x & 31;
+    const unsigned lt = (1u << lane) - 1;
+    long long t0 = clock64();
+    const uint nW = W.nW;
+    int nNE = 0; bool big = false;
+    for (uint c = 0; c < nW; c += 32) {
+        const uint iW = c + lane;
+        const uint na = iW < nW ? (uint)W.nWA[iW] : 0;
+        const unsigned m = __ballot_sync(FULL, na > 0);
+        if (__any_sync(FULL, na > (uint)LW::kNWA)) big = true;
+        if (na > 0) wl[nNE + __popc(m & lt)] = (uint16_t)iW;
+        if (ws) warpHist(ws, WS_HIST_NWA, na > 0, binNWA(na), lane);
+        nNE += __popc(m);
+    }
+    __syncwarp();
+    M.bestS = 0; M.bestG = 0; M.bestWin = -1; M.nKeep = 0; M.nW1 = 0; M.steps = 0; M.ov = OV_NONE;
+    if (ws && lane == 0) {
+        atomicAdd(&ws[WS_WIN_NE], (unsigned long long)nNE); atomicAdd(&ws[WS_HIST_NW + binNW(nNE)], 1ULL);
+        atomicAdd(&ws[WS_CLK_LIST], (unsigned long long)(clock64() - t0));
+    }
+    if (big) { if (ws && lane == 0) atomicAdd(&ws[WS_FB_NWA], 1ULL); return WR_FALLBACK; }
+    const char* Rf = rb.r[0]; const char* Rr = rb.r[2];
+    long long cs = 0, cm = 0;
+    for (int r0 = 0; r0 < nNE; r0 += 32) {
+        const long long ta = clock64();
+        const int idx = r0 + lane;
+        const bool act = idx < nNE;
+        const uint iW = act ? (uint)wl[idx] : 0;
+        L.ov = OV_NONE; L.nSteps = M.steps; L.stepBudget = budget; L.nWinTr = 0;
+        bool ok = true;
+        if (act) ok = laneStitchWindow(P, gv, W, L, iW, Rf, Rr);
+        const u64 my = act ? L.nSteps - M.steps : 0;
+        M.steps += warpSumU64(my);
+        const long long tb = clock64(); cs += tb - ta;
+        if (ws) { warpHist(ws, WS_HIST_STEPSW, act, binSteps(my), lane); warpHist(ws, WS_HIST_TRW, act && ok, binTr(L.nWinTr), lane); }
+        if (budget && M.steps > budget) { M.ov = OV_STEPS; if (ws && lane == 0) atomicAdd(&ws[WS_OV_STEPS], 1ULL); return WR_OVERFLOW; }
+        const unsigned bad = __ballot_sync(FULL, !ok);
+        if (bad) {
+            const bool real = !ok && ((L.ov == OV_EXONS && LW::kNEX >= C::NEX) || (L.ov == OV_WTR && LW::kNWTR >= C::NWTR));
+            const unsigned rm = __ballot_sync(FULL, real);
+            if (rm) { M.ov = (OvWhy)__shfl_sync(FULL, (int)L.ov, __ffs((int)rm) - 1); if (ws && lane == 0) atomicAdd(&ws[WS_OV_REAL], 1ULL); return WR_OVERFLOW; }
+            if (ws && lane == 0) atomicAdd(&ws[WS_FB_LANE], 1ULL);
+            return WR_FALLBACK;
+        }
+        // the round's best window: highest score, then shortest gLength, then first window (STAR's trBest update is strict)
+        const bool has = act && L.nWinTr > 0;
+        int s = -2147483647 - 1; uint g = ~0ULL; int wi = 2147483647;
+        if (has) { const typename LW::T& tb0 = L.slot[L.slotP[0]]; s = tb0.maxScore; g = tb0.gLength; wi = (int)iW; }
+        const unsigned hm = __ballot_sync(FULL, has);
+        warpArgBest(s, g, wi);
+        if (hm && (s > M.bestS || (s == M.bestS && g < M.bestG))) { M.bestS = s; M.bestG = g; M.bestWin = wi; }
+        M.nW1 += __popc(hm);
+        const int c = has ? laneCountAbove(P, L, M.bestS) : 0;
+        const int incl = warpInclScan(c, lane);
+        const int total = __shfl_sync(FULL, incl, 31);
+        if (M.nKeep + total > C::NKEEP) {
+            int nk = 0;
+            if (lane == 0) nk = keepCompact(P, W, M.nKeep, M.bestS);
+            M.nKeep = __shfl_sync(FULL, nk, 0);
+            __syncwarp();
+            if (ws && lane == 0) atomicAdd(&ws[WS_COMPACT], 1ULL);
+            if (M.nKeep + total > C::NKEEP) { M.ov = OV_KEEP; if (ws && lane == 0) atomicAdd(&ws[WS_OV_KEEP], 1ULL); return WR_OVERFLOW; }
+        }
+        if (c > 0) laneAppend(P, W, L, iW, M.bestS, M.nKeep + incl - c);
+        M.nKeep += total;
+        __syncwarp();
+        cm += clock64() - tb;
+        if (ws) { const unsigned am = __ballot_sync(FULL, act); if (lane == 0) { atomicAdd(&ws[WS_ROUNDS], 1ULL); atomicAdd(&ws[WS_LANES_ACTIVE], (unsigned long long)__popc(am)); } }
+    }
+    if (ws && lane == 0) { atomicAdd(&ws[WS_CLK_STITCH], (unsigned long long)cs); atomicAdd(&ws[WS_CLK_MERGE], (unsigned long long)cm); atomicAdd(&ws[WS_STEPS], M.steps); }
+    return WR_DONE;
+}
+#endif
 
 // one read, all phases in one call (host lane, wide GPU lane)
 template <class C> HD inline Status mapRead(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb,
