@@ -479,16 +479,29 @@ def collect_outputs(ctx, gse, gsm, out_tmp, sdir, log):
     os.makedirs(tmp)
     priv_src = os.path.join(out_tmp, "private")
     priv_dir = None
-    if os.path.isdir(priv_src):
+    # a withheld file (singlet._restricted.is_restricted_member: donor/, mt/ except mt_summary.tsv, ase_counts, snp_*, VCFs) outside private/
+    # is private too: pack_gse filtering it from the public bundle is then a second safeguard, not the only one
+    import private_sidecar as PS
+    stray = sorted(os.path.relpath(os.path.join(dp, f), out_tmp).replace(os.sep, "/") for dp, _d, fn in os.walk(out_tmp) for f in fn
+                   if not os.path.relpath(os.path.join(dp, f), out_tmp).replace(os.sep, "/").startswith("private/")
+                   and PS.is_withheld(os.path.relpath(os.path.join(dp, f), out_tmp)))
+    if os.path.isdir(priv_src) or stray:
         priv_dir = os.path.join(ctx.private_root, gse, gsm)
         for d in (ctx.private_root, os.path.join(ctx.private_root, gse)):
             os.makedirs(d, exist_ok=True)
             os.chmod(d, 0o700)
         shutil.rmtree(priv_dir, ignore_errors=True)
-        shutil.copytree(priv_src, priv_dir)
+        if os.path.isdir(priv_src):
+            shutil.copytree(priv_src, priv_dir)
+            shutil.rmtree(priv_src)
+        else:
+            os.makedirs(priv_dir)
+        for rel in stray:
+            dst = os.path.join(priv_dir, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.move(os.path.join(out_tmp, rel), dst)
         os.chmod(priv_dir, 0o700)
         write_manifest(priv_dir, "PRIVATE.sha256")
-        shutil.rmtree(priv_src)
     for dp, dn, fn in os.walk(out_tmp):
         dn[:] = [d for d in dn if not EXCLUDE_OUT.search(d)]
         rel = os.path.relpath(dp, out_tmp)
