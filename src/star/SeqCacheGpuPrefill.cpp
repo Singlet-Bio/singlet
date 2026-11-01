@@ -15,6 +15,7 @@
 #include "singlet/engine_gpu_ingest.h"   // E13: the reads from the .1fq, decoded here (SeqCacheGpuIngest.cpp)
 #include "stitch.cuh"
 #include "solo_gpu.h"   // E11: E9's Solo library (before STAR's headers, like stitch.cuh)
+#include "singlet/tail_trace.h"   // E16: marks of the level-5 tail
 #endif
 #include "SeqCache.h"
 #include "Parameters.h"
@@ -157,6 +158,19 @@ struct E11State {
     int device = -1;              // the device that holds the kept inputs
     uint64 nNoRec = 0, nClipped = 0;
 } e11;
+// E16 "bg" (level 5): the Unmapped.out records of the reads with an unmapped record (3.3 M on pbmc1k_v3) are formatted, and the RNA Q30
+// adjustment made, on a thread beside STAR's loop (4 threads under it) instead of before the loop; seqCacheGpuAfterMapping joins it,
+// appends the records to STAR's streams (the files' record order is run-dependent anyway) and Solo's summary then takes the adjusted counts
+// E16 "free": the prefill's reads and engine output, freed after STAR's loop (freeing them beside the loop or the chunk construction slows
+// both: the kernel serialises the unmapping with the other threads' page faults)
+struct E16Held { singlet_engine_gpu::Input *in = nullptr; singlet_engine_gpu::Output *out = nullptr; } e16held;
+// ingHeld: with E13's ingest the thread reads the packed reads (ingRecord, e11RnaAdjust's quality), so ingRelease waits for its join and the
+// prefill's Input (whose seq/off ingSeq/ingOff point into) is held until then
+struct E16Bg {
+    std::thread th; bool on = false, okU = true, okR = true, ingHeld = false; std::string whyU, whyR;
+    std::vector<uint32_t> reads; std::vector<std::string> out[2]; double sU = 0, sR = 0;
+    ~E16Bg() { if (th.joinable()) th.detach(); }   // a run stopped before STAR's loop ended
+} e16bg;
 // the Solo configuration E9's library reproduces byte for byte (E9-solo.md section 1); anything else: STAR's Solo counts (level 3)
 bool e11Config(Parameters &P, Transcriptome *tr, std::string &why) {
     const ParametersSolo &s = P.pSolo;
@@ -947,11 +961,12 @@ inline std::string e10ReadName(Parameters &P, uint64 r, const E10Rec &x, bool tr
 
 // E10 level >= 3: the Unmapped.out.mate1/2 records of the reads whose record is unmapped (ReadAlign::outReadsUnmapped, single-end + barcode
 // read), formatted on all threads, appended to STAR's streams before the mapping threads start (the files' order is run-dependent anyway)
-bool e10WriteUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nThreads, std::string &why) {
+// (E16: e10FormatUnmapped makes the records, e10PutUnmapped appends them to STAR's streams; at level 5 the formatting runs beside STAR's loop
+// and the records are appended after it)
+bool e10FormatUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nThreads, std::vector<std::string> (&out)[2], std::string &why) {
     const int T = std::max(1, nThreads);
     const uint64 N = reads.size();
-    std::vector<std::string> out[2];
-    out[0].resize(T); out[1].resize(T);
+    out[0].assign(T, std::string()); out[1].assign(T, std::string());
     std::vector<int> bad(T, 0);
     std::vector<std::thread> th;
     for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
@@ -971,8 +986,16 @@ bool e10WriteUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nTh
     });
     for (auto &x : th) x.join();
     for (int t = 0; t < T; t++) if (bad[t]) { why = "a FASTQ record could not be read back"; return false; }
+    return true;
+}
+void e10PutUnmapped(Parameters &P, std::vector<std::string> (&out)[2]) {
     for (int im = 0; im < 2; im++)
-        for (int t = 0; t < T; t++) { P.inOut->outUnmappedReadsStream[im].write(out[im][t].data(), out[im][t].size()); std::string().swap(out[im][t]); }
+        for (size_t t = 0; t < out[im].size(); t++) { P.inOut->outUnmappedReadsStream[im].write(out[im][t].data(), out[im][t].size()); std::string().swap(out[im][t]); }
+}
+bool e10WriteUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nThreads, std::string &why) {
+    std::vector<std::string> out[2];
+    if (!e10FormatUnmapped(P, reads, nThreads, out, why)) return false;
+    e10PutUnmapped(P, out);
     return true;
 }
 
@@ -981,8 +1004,12 @@ struct E10Source : StarReadSource {
     std::string buf[2];
     std::vector<uint64> end[2], iRead;   // per served read: where it ends in buf[0], buf[1]; its iReadAll
     uint64 k = 0;
+    // E16: reads per chunk at most (level 5: ~4 chunks per mapping thread; STAR's 15 MB chunk held ~55 k of the 157 k reads of pbmc1k_v3, so
+    // 3 of 18 threads mapped them all)
+    uint64 maxReads = ~0ull;
     void fill(char **chunkIn, uint64_t *sz, uint64_t limit, uint64_t &iReadAll, uint64_t readMapNumber, uint32_t) override {
-        while (k < iRead.size() && sz[0] < limit && sz[1] < limit) {
+        const uint64 k0 = k;
+        while (k < iRead.size() && sz[0] < limit && sz[1] < limit && k - k0 < maxReads) {
             if (iRead[k] > readMapNumber) { k = iRead.size(); break; }
             for (int im = 0; im < 2; im++) {
                 const uint64 a = k == 0 ? 0 : end[im][k - 1], l = end[im][k] - a;
@@ -1014,10 +1041,10 @@ bool e10BuildSource(Parameters &P, const uint32 *readRecord, uint64 nReads, std:
 // E11: Gene/Summary.csv's "Q30 Bases in RNA read" is STAR's qualHist (ReadAlign_oneRead.cpp:34-38): per read the cDNA quality characters in
 // [clip5, L - clip3). The decode counted whole reads; here a read with a record keeps only that span (its clip: the GPU's, which readLoad
 // would have taken) and a read without one keeps nothing (STAR's loop counts it, with its own clip)
-bool e11RnaAdjust(Parameters &P, std::string &why) {
+bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
     const auto t0 = std::chrono::steady_clock::now();
     const uint64 N = g_handoffNReads;
-    const int T = std::max(1, (int) P.runThreadN);
+    const int T = std::max(1, nThreads > 0 ? nThreads : (int) P.runThreadN);
     const unsigned q30 = e11.qBase + 30;
     if (ingOn ? ing.n != N : (e10f.m[0] == nullptr || e10f.at[0].size() != N)) { why = "the cDNA file is not mapped"; return false; }
     std::vector<uint64> dq(T, 0), dn(T, 0), nNo(T, 0), nCl(T, 0);
@@ -1226,6 +1253,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     in.release = [&]() { if (!lockReleased) { lockReleased = true; heldS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tHeld0).count(); singlet_engine_gpu::unlockDevice(lockFd); } };
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     in.release();
+    singlet_tail::mark("prefill: mapDistinct returned (device held %.3f s)", heldS);
     time_t tGpu = time(nullptr);
     // E12: wall time of the steps after the engine (the "cache inserts" of the line below)
     auto tq = std::chrono::steady_clock::now();
@@ -1303,6 +1331,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             delete cache;
             cache = c2;
         };
+        singlet_tail::mark("prefill: sequence cache re-created (%llu MB)", (unsigned long long) mb);
     };
     // insert, sharded by hash across threads (SeqCache is thread-safe per shard); keep(i) picks the records
     auto insertRecords = [&](auto keep) {
@@ -1363,7 +1392,9 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         // E10 level 4: no read with a record reaches STAR's loop, so no summaries are needed
         const bool e10NoSum = e10ok && (e10Level == 4 || (e10Level >= 5 && e11.ready)) && readSourceFree();
         std::vector<std::thread> th;
-        for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
+        // E16 (level 5): without summaries the threads would only construct (and leak) a ReadAlign, a Transcriptome copy and an OutSJ each
+        const bool e16NoThreads = e10NoSum && e2eRec && singlet_tail::cut("sumthreads");
+        for (int t = 0; t < (e16NoThreads ? 0 : nt); t++) th.emplace_back([&, t]() {
             Transcriptome *trT = (sumOn && tr != nullptr) ? new Transcriptome(*tr) : nullptr;
             ReadAlign *ra = new ReadAlign(P, G, trT, t);
             if (sumOn) ra->chunkOutSJ = new OutSJ(P.limitOutSJoneRead, P, G);   // scratch: one sequence's junctions at a time
@@ -1385,6 +1416,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
         });
         for (auto &x : th) x.join();
+        singlet_tail::mark("prefill: summary threads joined (%d threads, no summaries: %d)", nt, (int) e10NoSum);
         tmark("hand-off records");
         if (g_handoffLeanAln.load() > 0)   // SINGLET_HANDOFF_LEAN=verify
             P.inOut->logMain << "ENGINE_GPU: lean alignment fields: " << g_handoffLeanAln.load() << " alignments, " << g_handoffLeanBad.load()
@@ -1395,6 +1427,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         else
         for (int t = 0, r = 0; t < nt; t++)
             for (uint64 o : partOff[t]) recAln[r++] = part[t][o];
+        singlet_tail::mark("prefill: alignment counts of %llu records", (unsigned long long) nRec);
         FILE *f = e2eRec ? nullptr : fopen(hp, "wb");
         bool okw = e2eRec || f != nullptr;
         if (e2eRec) P.inOut->logMain << "ENGINE_GPU: E8: no hand-off file: " << nRec << " records built on the device, in the shared region; summaries in "
@@ -1489,6 +1522,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 E2H.cbumiL = (uint32) P.pSolo.cbumiL; E2H.simple = 1;
                 __sync_synchronize();
                 memcpy(E2H.magic, "SGE2E001", 8);
+                singlet_tail::mark("prefill: region complete (magic written, %llu MB in use)", (unsigned long long) (E2H.used >> 20));
                 P.inOut->logMain << "ENGINE_GPU: E8: per-read hand-off entries" << (e2eQOn ? " and low-quality masks" : "") << " in the shared region ("
                                  << (E2H.used >> 20) << " MB in use)" << (e10ok ? ", built on the device (E10)" : "") << (e10chk.on ? "; STAR's are compared after mapping" : "")
                                  << "\n";
@@ -1538,24 +1572,55 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         S.unmappedAll = v[X::S_uAll];
         std::string w;
         bool ok3 = true;
+        const size_t nUnmappedRec = out.e10.unmappedReads.size();
+        // E16 bg: level 5 either runs or stops the run (no level-3 fallback once the source is built), so the records can wait for the thread
+        const bool e16bgOn = e10Level >= 5 && e11.ready && P.outReadsUnmapped == "Fastx" && singlet_tail::cut("bg");
+        if (e16bgOn) e16bg.reads.swap(out.e10.unmappedReads);
+        else
         if (P.outReadsUnmapped == "Fastx" && !e10WriteUnmapped(P, out.e10.unmappedReads, (int) P.runThreadN, w)) ok3 = false;
+        singlet_tail::mark("prefill: %zu Unmapped.out records %s", nUnmappedRec, e16bgOn ? "left to the background thread" : "written");
         if (ok3) {
             g_statsAll.addStats(S);
             e10sj.swap(out.e10.sj); e10nSJ = out.e10.nSJ;
             g_e10Level = 3;
             if (e10Level >= 4 && readSourceFree() && (e10Level == 4 || e11.ready)) {
-                if (e10BuildSource(P, g_handoffReadRecord, g_handoffNReads, w)) { g_starReadSource = &e10src; g_e10Level = e10Level >= 5 ? 5 : 4; }
+                if (e10BuildSource(P, g_handoffReadRecord, g_handoffNReads, w)) { g_starReadSource = &e10src; g_e10Level = e10Level >= 5 ? 5 : 4;
+                    if (g_e10Level == 5 && singlet_tail::cut("chunk")) {   // E16: the reads spread over every mapping thread (~4 chunks each)
+                        const uint64 nT = std::max<uint64>(1, P.runThreadN);
+                        e10src.maxReads = std::max<uint64>(256, (e10src.iRead.size() + 4 * nT - 1) / (4 * nT));
+                    }
+                    singlet_tail::mark("prefill: read source of the reads without a record built (%zu reads, at most %llu per chunk)", e10src.iRead.size(),
+                                       (unsigned long long) e10src.maxReads); }
                 else if (e10Level >= 5) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): level 5's read source could not be built (" + w
                                                       + ") and the reads with a record have no summaries\n", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
                 else P.inOut->logMain << "ENGINE_GPU: E10 level 4 not used (" << w << "): level 3\n";
             }
+            if (g_e10Level == 5 && e16bgOn) {   // E16 bg: Unmapped.out's records and the RNA Q30 adjustment beside STAR's loop
+                e16bg.on = true;
+                e16bg.th = std::thread([&P]() {
+                    const auto a = std::chrono::steady_clock::now();
+                    e16bg.okU = e10FormatUnmapped(P, e16bg.reads, 4, e16bg.out, e16bg.whyU);
+                    const auto b = std::chrono::steady_clock::now();
+                    e16bg.okR = e11RnaAdjust(P, e16bg.whyR, 4);
+                    e16bg.sU = std::chrono::duration<double>(b - a).count();
+                    e16bg.sR = std::chrono::duration<double>(std::chrono::steady_clock::now() - b).count();
+                    singlet_tail::mark("prefill (bg): %zu Unmapped.out records formatted in %.3f s, RNA Q30 adjustment %.3f s", e16bg.reads.size(), e16bg.sU, e16bg.sR);
+                });
+            } else
             if (g_e10Level == 5) {   // E11: Gene/Summary.csv's RNA Q30 counts of the reads with a record over STAR's span [clip5, L - clip3)
                 std::string w5;
                 if (!e11RnaAdjust(P, w5)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + w5 + "\n", std::cerr, P.inOut->logMain,
                                                         EXIT_CODE_INPUT_FILES, P);
+                singlet_tail::mark("prefill: RNA Q30 adjustment done");
+            }
+            if (e16bgOn && !e16bg.on) {   // E16 bg, but level 5 did not start the thread: the records are written here, as before
+                std::string wu;
+                if (!e10WriteUnmapped(P, e16bg.reads, (int) P.runThreadN, wu)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E16): " + wu + "\n",
+                                                                                         std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+                std::vector<uint32_t>().swap(e16bg.reads);
             }
             P.inOut->logMain << "ENGINE_GPU: E10 level " << g_e10Level << ": " << S.readN << " reads with a record (" << S.mappedReadsU << " unique, " << S.mappedReadsM
-                             << " multi, " << S.unmappedAll << " unmapped: " << out.e10.unmappedReads.size() << " Unmapped.out records written), " << e10nSJ
+                             << " multi, " << S.unmappedAll << " unmapped: " << nUnmappedRec << " Unmapped.out records" << (e16bg.on ? ", written after STAR's loop" : " written") << "), " << e10nSJ
                              << " junctions from the device; " << (g_e10Level >= 4 ? std::to_string(e10src.iRead.size()) + " reads without a record go to STAR's loop" : "STAR's loop keeps readLoad, the barcode and the Solo record of these reads")
                              << " (" << std::chrono::duration<double>(std::chrono::steady_clock::now() - t3).count() << " s)\n";
         } else {
@@ -1587,9 +1652,18 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     tmark("cache inserts");
     P.inOut->logMain << "ENGINE_GPU: E12 after the engine (s): " << tqLog << "\n";
+    // E16 bg with E13's ingest: the background thread still reads the packed reads; seqCacheGpuAfterMapping releases them after its join
+    e16bg.ingHeld = e16bg.on && ingOn;
+    if (!e16bg.ingHeld)
     ingRelease();   // E13: the packed reads' host planes (their text is in Unmapped.out and level 4/5's read source by now)
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
+    const bool e16free = g_e10Level == 5 && singlet_tail::cut("free");
+    if (e16free || e16bg.ingHeld)   // E16 "free": the reads (decode) and the engine's output are kept (1.1 s to free at T=18)
+        e16held.in = new singlet_engine_gpu::Input(std::move(in));      // until STAR's loop is done; seqCacheGpuAfterMapping frees them on a thread
+    if (e16free)                    // (the buffers move with them; nothing after this reads them, except the bg thread with ingest: ingSeq, ingOff)
+        e16held.out = new singlet_engine_gpu::Output(std::move(out));
+    singlet_tail::mark("prefill: end");
 #endif
 }
 
@@ -1642,6 +1716,74 @@ void seqCacheGpuEarly(Parameters &P) {
 // first thread's junction buffer at level >= 3, collapsed, so outputSJ merges them with STAR's own)
 void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
+    singlet_tail::mark("after mapping: start");
+    // E11's Solo device part (the gather of STAR's loop annotations, soloRunKept under the device lock) as a step: E16 "solofirst" (level 5) runs it
+    // first, before the other after-mapping steps, so that it holds the device before the pipeline's pileup asks for it (the BAM stream has just
+    // closed); otherwise it runs where E11 ran it
+    struct SoloDev { bool done = false; uint64 nHost = 0, starQ30 = 0, starN = 0; double sGather = 0;
+                     std::chrono::steady_clock::time_point t0, tw, tl, tr; e9::SoloResult res; std::string log; } sd;
+    auto soloDev = [&]() {
+        const auto t0 = std::chrono::steady_clock::now(); sd.t0 = t0;
+        // the Gene annotation of the reads STAR's loop mapped (ReadAlign::e11Annot: read index, packed RecAnn), in read order
+        uint64 &nHost = sd.nHost, &starQ30 = sd.starQ30, &starN = sd.starN;
+        for (int i = 0; i < (int) P.runThreadN; i++) {
+            nHost += RAchunk[i]->RA->e11Ann.size() / 2;
+            for (uint32 ix = 0; ix < 256; ix++) {   // SoloFeature_statsOutput.cpp:25-35 over STAR's loop (the reads without a record)
+                starN += RAchunk[i]->RA->qualHist[0][ix];
+                if (ix >= e11.qBase + 30) starQ30 += RAchunk[i]->RA->qualHist[0][ix];
+            }
+        }
+        std::vector<std::pair<uint64, uint64>> ha;
+        ha.reserve(nHost);
+        for (int i = 0; i < (int) P.runThreadN; i++) {
+            std::vector<uint64> &v = RAchunk[i]->RA->e11Ann;
+            for (size_t k = 0; k + 1 < v.size(); k += 2) ha.emplace_back(v[k], v[k + 1]);
+            std::vector<uint64>().swap(v);
+        }
+        std::sort(ha.begin(), ha.end());
+        std::vector<uint32_t> hostIdx(nHost);
+        std::vector<e9::RecAnn> hostAnn(nHost);
+        for (uint64 k = 0; k < nHost; k++) {
+            hostIdx[k] = (uint32_t) ha[k].first;
+            const uint64 a = ha[k].second;
+            hostAnn[k] = e9::RecAnn{(uint32_t) a, (uint16_t) (a >> 32), (uint8_t) (a >> 48), (uint8_t) (a >> 56)};
+        }
+        std::vector<std::pair<uint64, uint64>>().swap(ha);
+        sd.sGather = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        int lockFd = -1;
+        sd.tw = std::chrono::steady_clock::now();
+        singlet_engine_gpu::lockDeviceSlot(e11.device, &lockFd);
+        sd.tl = std::chrono::steady_clock::now();
+        e9::SoloResult &res = sd.res;
+        std::string &log = sd.log;
+        e9::CbQualFn cbQual;   // E15: the per-read posterior reads the barcode FASTQ's quality lines (e11CbQual); e10f is released after this step
+        if (g_e10Level == 5 && e11.perRead)
+            cbQual = [&P](const uint32_t *idx, const uint64_t *cr3, uint64 n, uint8_t *o, std::string &why) { return e11CbQual(P, idx, cr3, n, o, why); };
+        const bool ok = nHost < (1ull << 32) && g_handoffNReads < (1ull << 32)
+            && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log, cbQual);
+        singlet_engine_gpu::unlockDevice(lockFd);
+        sd.tr = std::chrono::steady_clock::now();
+        if (!ok) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): Solo's counting on the device failed: " + log, std::cerr,
+                               P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        sd.done = true;
+        singlet_tail::mark("after mapping: Solo on the device done (gather %.3f s, device wait %.3f s, soloRunKept %.3f s)", sd.sGather,
+                           std::chrono::duration<double>(sd.tl - sd.tw).count(), std::chrono::duration<double>(sd.tr - sd.tl).count());
+    };
+    if (g_e10Level == 5 && singlet_tail::cut("solofirst")) soloDev();
+    if (e16bg.on) {   // E16 bg: the thread's records into STAR's streams (the mapping threads are done with them), its RNA counts for Solo's summary
+        if (e16bg.th.joinable()) e16bg.th.join();
+        e16bg.on = false;
+        if (!e16bg.okU) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E16): Unmapped.out records not formatted: " + e16bg.whyU + "\n",
+                                      std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        if (!e16bg.okR) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + e16bg.whyR + "\n", std::cerr, P.inOut->logMain,
+                                      EXIT_CODE_INPUT_FILES, P);
+        e10PutUnmapped(P, e16bg.out);
+        std::vector<uint32_t>().swap(e16bg.reads);
+        if (e16bg.ingHeld) { ingRelease(); e16bg.ingHeld = false; }   // E13's packed reads, kept for the thread
+        P.inOut->logMain << "ENGINE_GPU: E16: Unmapped.out records formatted beside STAR's loop in " << e16bg.sU << " s and appended after it; RNA Q30 adjustment "
+                         << e16bg.sR << " s\n" << std::flush;
+        singlet_tail::mark("after mapping: background thread joined, Unmapped.out records appended");
+    }
     if (e10chk.on) {
         uint64 nRec = 0, nDiffE = 0, nDiffQ = 0, nUnwritten = 0;
         std::ostringstream ex;
@@ -1669,53 +1811,17 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         sj->N += e10nSJ;
         sj->collapseSJ();
         P.inOut->logMain << "ENGINE_GPU: E10: " << e10nSJ << " device junctions merged into the junction output\n" << std::flush;
+        singlet_tail::mark("after mapping: device junctions merged");
     }
     std::vector<uint8>().swap(e10sj);
     const bool e15q = g_e10Level == 5 && e11.perRead;   // E15: the per-read posterior reads the barcode FASTQ's quality lines (e11CbQual)
     if (!e15q) e10f.release();
     if (g_e10Level == 5) {   // E11: Solo's counting on the device (E9's soloRun on the kept inputs) and star_Solo.out/ from it
-        const auto t0 = std::chrono::steady_clock::now();
-        // the Gene annotation of the reads STAR's loop mapped (ReadAlign::e11Annot: read index, packed RecAnn), in read order
-        uint64 nHost = 0, starQ30 = 0, starN = 0;
-        for (int i = 0; i < (int) P.runThreadN; i++) {
-            nHost += RAchunk[i]->RA->e11Ann.size() / 2;
-            for (uint32 ix = 0; ix < 256; ix++) {   // SoloFeature_statsOutput.cpp:25-35 over STAR's loop (the reads without a record)
-                starN += RAchunk[i]->RA->qualHist[0][ix];
-                if (ix >= e11.qBase + 30) starQ30 += RAchunk[i]->RA->qualHist[0][ix];
-            }
-        }
-        std::vector<std::pair<uint64, uint64>> ha;
-        ha.reserve(nHost);
-        for (int i = 0; i < (int) P.runThreadN; i++) {
-            std::vector<uint64> &v = RAchunk[i]->RA->e11Ann;
-            for (size_t k = 0; k + 1 < v.size(); k += 2) ha.emplace_back(v[k], v[k + 1]);
-            std::vector<uint64>().swap(v);
-        }
-        std::sort(ha.begin(), ha.end());
-        std::vector<uint32_t> hostIdx(nHost);
-        std::vector<e9::RecAnn> hostAnn(nHost);
-        for (uint64 k = 0; k < nHost; k++) {
-            hostIdx[k] = (uint32_t) ha[k].first;
-            const uint64 a = ha[k].second;
-            hostAnn[k] = e9::RecAnn{(uint32_t) a, (uint16_t) (a >> 32), (uint8_t) (a >> 48), (uint8_t) (a >> 56)};
-        }
-        std::vector<std::pair<uint64, uint64>>().swap(ha);
-        const double sGather = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-        int lockFd = -1;
-        const auto tw = std::chrono::steady_clock::now();
-        singlet_engine_gpu::lockDeviceSlot(e11.device, &lockFd);
-        const auto tl = std::chrono::steady_clock::now();
-        e9::SoloResult res;
-        std::string log;
-        e9::CbQualFn cbQual;
-        if (e15q) cbQual = [&P](const uint32_t *idx, const uint64_t *cr3, uint64 n, uint8_t *o, std::string &why) { return e11CbQual(P, idx, cr3, n, o, why); };
-        const bool ok = nHost < (1ull << 32) && g_handoffNReads < (1ull << 32)
-            && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log, cbQual);
-        singlet_engine_gpu::unlockDevice(lockFd);
-        const auto tr = std::chrono::steady_clock::now();
-        e10f.release();
-        if (!ok) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): Solo's counting on the device failed: " + log, std::cerr,
-                               P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        if (!sd.done) soloDev();
+        e10f.release();   // E15: kept for e11CbQual until Solo's device step (solofirst: it ran before the bg thread's join, which reads e10f too)
+        const uint64 nHost = sd.nHost, starQ30 = sd.starQ30, starN = sd.starN; const double sGather = sd.sGather;
+        const auto tw = sd.tw, tl = sd.tl, tr = sd.tr;
+        e9::SoloResult &res = sd.res; std::string &log = sd.log;
         // star_Solo.out/: STAR creates Gene/, raw/ and filtered/ in its Solo step (SoloFeature_processRecords.cpp, _outputResults.cpp, cellFiltering)
         const std::string pre = P.outFileNamePrefix + P.pSolo.outFileNames[0];
         for (const std::string &d : {pre, pre + "Gene/", pre + "Gene/raw/", pre + "Gene/filtered/"}) mkdir(d.c_str(), P.runDirPerm);
@@ -1723,8 +1829,12 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         sum.readN = g_statsAll.readN; sum.mappedU = g_statsAll.mappedReadsU; sum.mappedM = g_statsAll.mappedReadsM;
         sum.q30CbUmi = e11.q30Cb; sum.nCbUmi = e11.nCb; sum.q30Rna = e11.q30Rna + starQ30; sum.nRna = e11.nRna + starN; sum.qualBase = e11.qBase;
         e9::SoloWriteInfo info;
+        const auto tws = std::chrono::steady_clock::now();
         const bool okw = e9::soloWrite(pre, e11.S, e11.M, res, e11.FP, {}, info, log, &sum);
         const auto te = std::chrono::steady_clock::now();
+        singlet_tail::mark("after mapping: Solo gather %.3f s, device wait %.3f s, soloRunKept %.3f s, soloWrite %.3f s", sGather,
+                           std::chrono::duration<double>(tl - tw).count(), std::chrono::duration<double>(tr - tl).count(),
+                           std::chrono::duration<double>(te - tws).count());
         if (!okw) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): star_Solo.out/ not written: " + log, std::cerr, P.inOut->logMain,
                                 EXIT_CODE_INPUT_FILES, P);
         g_e11SoloDone = true;
@@ -1734,7 +1844,7 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         P.inOut->logMain << "ENGINE_GPU: E11: Solo on the device: " << g_handoffNReads << " reads (" << nHost << " annotated by STAR's loop; RNA Q30 adjustment "
                          << e11.nNoRec << " reads without a record, " << e11.nClipped << " clipped, " << e11.sAdj << " s), " << res.nDistinctCR << " distinct CRs, "
                          << res.nKeys << " counted reads, " << res.nTuples << " distinct (CB,gene,UMI), " << res.nSeg << " (CB,gene); gather " << sGather
-                         << " s, waited " << sec(tw, tl) << " s for the device, soloRunKept " << sec(tl, tr) << " s (ms:" << ms.str() << "), write " << sec(tr, te)
+                         << " s, waited " << sec(tw, tl) << " s for the device, soloRunKept " << sec(tl, tr) << " s (ms:" << ms.str() << "), write " << sec(tws, te)
                          << " s (" << info.nCB << " CBs, " << info.nCells << " cells, nUMImax " << info.nUMImax << ", nUMImin " << info.nUMImin
                          << "); STAR's Solo step skipped\n";
         P.inOut->logMain << "ENGINE_GPU: E15: posterior per read: " << res.nMulti << " reads with several whitelist matches, " << res.nMultiAccepted
@@ -1742,6 +1852,15 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
                                                                   + " reads' CB qualities from the barcode FASTQ in " + pqStr(e11.sQualFetch) + " s)"
                                                                 : "one quality factor pq " + pqStr(e11.S.pq) + " (every CB base gives the same qin)")
                          << "\n" << log << std::flush;
+    }
+    if (e16held.in != nullptr || e16held.out != nullptr) {   // E16 "free": the prefill's reads and engine output, on a thread (STAR's loop is done)
+        singlet_engine_gpu::Input *fIn = e16held.in; singlet_engine_gpu::Output *fOut = e16held.out;
+        e16held = E16Held();
+        std::thread([fIn, fOut]() {
+            const double a = singlet_tail::now();
+            delete fIn; delete fOut;
+            singlet_tail::mark("after mapping (bg): the prefill's reads and engine output freed in %.3f s", singlet_tail::now() - a);
+        }).detach();
     }
 #else
     (void) P; (void) RAchunk;

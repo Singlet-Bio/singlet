@@ -3,9 +3,13 @@
 // file: the GPU pileup's hand-off pass on the device). bench/fable/records/records_test.cu is E6's vehicle.
 #include "records_gpu.h"
 #include "singlet/engine_gpu.h"
+#include "singlet/tail_trace.h"   // E16: the level-5 switches (dlpar, regpar)
 #include <cuda_runtime.h>
+#include <sched.h>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
+#include <thread>
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
 #include <thrust/sort.h>
@@ -312,12 +316,35 @@ namespace singlet_engine_gpu {
 
 namespace {
 // device -> pageable host memory, page-locked in place for the copy when the driver allows it (GBs: several times the pageable rate)
-cudaError_t d2h(void* dst, const void* src, u64 n) {
+// (keep: it stays page-locked, E16's pileupRun uploads it again)
+// E16 (level 5): the first touch of GB-sized host memory on several threads (its page faults in parallel) before it is page-locked;
+// write: zero-fills fresh memory (a vector's reserved capacity, see the download), else reads a byte per page (the region the STAR child wrote)
+void e16Touch(uint8_t* p, u64 n, bool write) {
+    cpu_set_t cs; int T = 8;
+    if (sched_getaffinity(0, sizeof cs, &cs) == 0) T = CPU_COUNT(&cs);
+    T = std::max(1, std::min(T, 16));
+    if (n == 0) return;
+    const u64 ch = (n / T + 4095) & ~4095ull;
+    std::vector<std::thread> th;
+    for (int t = 0; t < T; t++) {
+        const u64 a = std::min(n, (u64) t * ch), b = std::min(n, a + ch);
+        if (a >= b) break;
+        th.emplace_back([=] {
+            if (write) { memset(p + a, 0, b - a); return; }
+            const volatile uint8_t* q = p; uint8_t s = 0;
+            for (u64 i = a; i < b; i += 4096) s += q[i];
+            s += q[b - 1];
+            (void) s;
+        });
+    }
+    for (auto& x : th) x.join();
+}
+cudaError_t d2h(void* dst, const void* src, u64 n, bool keep = false) {
     if (n == 0) return cudaSuccess;
     const bool pin = n >= (64ull << 20) && cudaHostRegister(dst, n, cudaHostRegisterDefault) == cudaSuccess;
     if (!pin) cudaGetLastError();
     const cudaError_t e = cudaMemcpy(dst, src, n, cudaMemcpyDeviceToHost);
-    if (pin) cudaHostUnregister(dst);
+    if (pin && !keep) cudaHostUnregister(dst);
     return e;
 }
 // device buffers of one e2ePass call, freed on every return
@@ -338,6 +365,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     const E2EHeader& H = *R.hdr();
     const u64 n = H.nReads, nRec = H.nRec, nAln = H.nAln, nOps = H.nOps;
     bool pinned = false;
+    double e16reg = 0, e16pre = -1, e16dl = -1;
     auto fail = [&](const char* what, cudaError_t e) {
         out.log += std::string(what) + ": " + cudaGetErrorString(e) + "; ";
         if (pinned) cudaHostUnregister(R.base);
@@ -346,6 +374,8 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
 #define EP_CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) return fail(#x, e_); } while (0)
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);
     if (cudaSetDevice(device) != cudaSuccess) { out.log += "cannot select device; "; return false; }
+    cudaFree(0);   // E16: the context now, timed on its own
+    const double e16ctx = now() - t0;
     PassBufs B;
     uint32_t *dRR, *dOps, *dKeep, *dPos, *dCellR, *dCellU, *dCellM, *dWl, *dClip, *dPend;
     e6::ReadEntry* dE; u64 *dQ = nullptr, *dK, *dLowq, *dRhost;
@@ -353,8 +383,12 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     unsigned long long *dCellMis, *dCellB;
     {   // the region's arrays to the device: page-locked in place when the driver allows it (the pages exist: the STAR child wrote them)
         const double tu = now();
+        // E16 "regpar" (keepPinned, level 5): this process's mapping of the region populated by several threads before the page-locking
+        if (in.keepPinned && singlet_tail::cut("regpar")) { e16Touch(R.base, std::min<u64>(R.cap, H.used), false); e16pre = now() - tu; }
+        const double tr = now();
         pinned = cudaHostRegister(R.base, std::min<u64>(R.cap, (H.used + 4095) & ~4095ull), cudaHostRegisterDefault) == cudaSuccess;
         if (!pinned) cudaGetLastError();
+        e16reg = now() - tr;
         EP_CK(B.alloc(dRR, n * 4)); EP_CK(cudaMemcpy(dRR, R.at<uint8_t>(H.oReadRecord), n * 4, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dE, n * 24)); EP_CK(cudaMemcpy(dE, R.at<uint8_t>(H.oEntries), n * 24, cudaMemcpyHostToDevice));
         if (H.oQMask) { EP_CK(B.alloc(dQ, n * 16)); EP_CK(cudaMemcpy(dQ, R.at<uint8_t>(H.oQMask), n * 16, cudaMemcpyHostToDevice)); }
@@ -385,6 +419,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     const unsigned T = 256, G = (unsigned) ((n + T - 1) / T);
     PassDev d{};
     unsigned long long pc[PC_N] = {};
+    double e16unreg = 0, e16reset = 0;
     u64 nKeep = 0;
     {
         const double te = now();
@@ -424,11 +459,17 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         EP_CK(cudaDeviceSynchronize());
         out.msScatter = (now() - ts) * 1e3;
         const double td = now();
+        if (in.keepPinned && singlet_tail::cut("dlpar")) {   // E16 "dlpar" (level 5): the kept reads' arrays first touched by several threads
+            // (their capacity, reserved and zero-filled in parallel; resize then fills pages that exist instead of faulting them in one by one)
+            auto pre = [](auto& v, u64 n) { v.reserve(n); e16Touch((uint8_t*) v.data(), n * sizeof(v[0]), true); };
+            pre(out.reads, nKeep * 16); pre(out.clip, nKeep); pre(out.lowq, nKeep * 16);
+            e16dl = now() - td;
+        }
         out.reads.resize(nKeep * 16); out.clip.resize(nKeep); out.lowq.resize(nKeep * 16);
         if (nKeep) {
-            EP_CK(d2h(out.reads.data(), dOut, nKeep * 16));
+            EP_CK(d2h(out.reads.data(), dOut, nKeep * 16, in.keepPinned));
             EP_CK(d2h(out.clip.data(), dClip, nKeep * 4));
-            EP_CK(d2h(out.lowq.data(), dLowq, nKeep * 16));
+            EP_CK(d2h(out.lowq.data(), dLowq, nKeep * 16, in.keepPinned));
         }
         out.cellReads.resize(in.nCells); out.cellUnique.resize(in.nCellsQc); out.cellMulti.resize(in.nCellsQc);
         out.cellMism.resize(in.nCellsQc); out.cellBases.resize(in.nCellsQc); out.wlCounts.resize(in.nWl);
@@ -449,7 +490,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         out.msDownload = (now() - td) * 1e3;
     }
 #undef EP_CK
-    if (pinned) cudaHostUnregister(R.base);
+    { const double tq = now(); if (pinned && !in.keepPinned) cudaHostUnregister(R.base); e16unreg = now() - tq; }
     out.totalAln = pc[PC_ALN]; out.secondary = pc[PC_SEC]; out.rrnaSampled = pc[PC_RSAMP]; out.rrnaHook = pc[PC_RHOOK]; out.chrm = pc[PC_CHRM];
     out.noBarcode = pc[PC_NOBC]; out.barcoded = pc[PC_BARCODED]; out.multimapper = pc[PC_MULTI]; out.lowMapq = pc[PC_LOWMAPQ];
     out.nDone = pc[PC_DONE]; out.nUnwritten = pc[PC_UNWRITTEN]; out.nBigClip = pc[PC_BIGCLIP]; out.nNoHook = pc[PC_NOHOOK]; out.nNoKey = pc[PC_NOKEY];
@@ -463,8 +504,14 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
              out.msDownload, out.msTotal);
     out.log += b;
     // the context goes, as pileupRun's does at its end: pileupRun then initialises the device afresh (cudaInitDevice on a live context fails)
-    B.release();
-    cudaDeviceReset();
+    { const double tq = now(); B.release(); if (!in.keepPinned) cudaDeviceReset(); e16reset = now() - tq; }   // E16 keepPinned: the context stays
+    snprintf(b, sizeof b, "; e16: context %.3f s, register %.3f s, unregister %.3f s, free + reset %.3f s%s", e16ctx, e16reg, e16unreg, e16reset,
+             in.keepPinned ? (pinned ? " (region and kept reads stay page-locked)" : " (region NOT page-locked)") : "");
+    out.log += b;
+    if (e16pre >= 0 || e16dl >= 0) {
+        snprintf(b, sizeof b, ", region populated in parallel %.3f s, kept reads' arrays touched in parallel %.3f s", e16pre, e16dl);
+        out.log += b;
+    }
     return true;
 }
 

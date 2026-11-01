@@ -1,6 +1,10 @@
 #include "samHeaders.h"
 #include <iostream>
 #include "BAMfunctions.h"
+#ifdef SINGLET_HAVE_ENGINE_GPU
+#include "singlet/tail_trace.h"   // E16: the header leaves at once at level 5
+int singlet_bgzf_hflush(void* fp);   // src/pipeline/singlet.cpp (the linked htslib's struct BGZF, not the bundled header's)
+#endif
 
 void samHeaders(Parameters &P, Genome &genomeOut, Transcriptome &transcriptomeMain) 
 {
@@ -104,5 +108,11 @@ void samHeaders(Parameters &P, Genome &genomeOut, Transcriptome &transcriptomeMa
     };
     if (P.outBAMunsorted){
         outBAMwriteHeader(P.inOut->outBAMfileUnsorted,P.samHeader,genomeOut.chrNameAll,genomeOut.chrLengthAll);
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        //singlet E16 (level 5): the header's BGZF block goes now, not with the first records after the GPU prefill, so the pipeline's pileup
+        //resolves its references (7 M SNPs) while STAR maps; the BAM's bytes after decompression are the same
+        //(bgzf_flush hands the block to the hFILE layer, whose buffer only reaches the fd when full: singlet_bgzf_hflush sends it)
+        if (singlet_tail::cut("hdr")) { bgzf_flush(P.inOut->outBAMfileUnsorted); (void) singlet_bgzf_hflush(P.inOut->outBAMfileUnsorted); }
+#endif
     };
 };
