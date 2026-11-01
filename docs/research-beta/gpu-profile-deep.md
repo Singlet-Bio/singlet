@@ -210,3 +210,26 @@ stitch and extend on the CPU lane (S12's profile), so for them the bound is high
 Ledger, 66 M: 794901 (`gate-794901-0`), 263 M: 794902; child marks 66 M: 794855; 263 M: 794854; `.1fg2` route 263 M: 794935; Nsight Compute: 794942 (`k_p3`),
 794943 (`k_p1`), numbers extracted by 794974; nsys parent trace: 794901/794880; queue and concurrency runs 794059, 794277, 794278, 794517, 794581, 794608, 794736, 794716;
 tools: `bench/engine_gpu_gate/s8_phases.sbatch` (`WRAPMODE=nsys|ncu`, `S8_TRACE=1`), `s8_queue.sbatch`, `s8_ncuq.sbatch`.
+
+## 13. Resident GPU indexes: design state (on hold, nothing built)
+
+Goal: stop uploading the 16.9 GB suffix array (3.05 s) and the 24.9 GB non-host index set (4.1 s load) for every sample: about 7 s of device-lock time per sample
+(-18% of the 39.4 s), plus the genome load in the STAR child. Effect on the binding (host CPU) bound: 1-2% at the median sample, more under 100 M pairs (section 10.2).
+
+Agreed with S14 (drain worker):
+* One index-server process per GPU, started and stopped by the drain worker (not auto-started by singlet: a SIGKILL or time limit would leave orphans);
+  `singlet gpu-index-server --device N --socket /dev/shm/singlet-gpuidx-N.sock --genome <dir>`, with an explicit evict/stop; stateless enough to be killed and restarted at any time.
+  It needs no device lock. Singlet finds it through `SINGLET_GPU_INDEX_SOCKET`, sends the genome id and the index file digest, and gets either CUDA IPC memory handles
+  or "no"; on "no", on any error and when the variable is unset it uploads as today (identical output).
+* The drain worker knows each sample's genome before dispatch (manifest `organism`, config `references`) and can hold a `current_genome` per GPU, switching when no
+  matching sample is ready or after a maximum wait; a switch drains the running samples. Human:mouse is about 9:1.
+* Memory: the prefill peaks at 64.7 GB with the SA uploaded; SA plus the non-host set resident is about 42 GB for one genome on the 94 GB H100 NVL, so human and mouse
+  together do not fit and only one genome per GPU can be resident.
+
+Feasibility measured (`bench/engine_gpu_gate/ipc_test.*`, jobs 795299 and 795318, H100 NVL, two processes of one Slurm step, bare binary): `cudaIpcOpenMemHandle` of a 43 GB
+buffer takes 0.18-0.2 s, 0 mismatches, a device read of it runs at about 3 TB/s; it works from a process forked before it initialised CUDA, as the STAR prefill child is.
+CUDA cannot be used in a child forked after the parent initialised CUDA (so the parent must not touch CUDA before the fork, as today).
+
+Open: the exact index layout to export (SA, SAi, genome sequence, the sjdb arrays; the non-host Bloom and k-mer tables), the version/digest check, the
+non-host phase in the parent process (opens the handles in a different process from the prefill child), what happens to open handles when the server is
+restarted (clients must treat a lost handle as "upload"), and the sizes for the mouse genome. None of it started.
