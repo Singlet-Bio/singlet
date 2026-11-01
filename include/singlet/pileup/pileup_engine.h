@@ -1924,8 +1924,19 @@ public:
         // zc ("zerocopy"): the pass leaves the region (this mapping) and its kept reads page-locked in a live context, and the pileup's input
         // reads them in place (Collector::finish with this mapping, which the input then owns)
         bool zc = false;
-        ~E16Early() { stop = true; if (th.joinable()) th.join(); if (reg.base != nullptr) munmap(reg.base, reg.cap); }
+        // rbg ("rrnabg"): the rRNA detector (on the reads the pass sends to the host) runs on rth after e2ePass, beside the merge, the input's
+        // build and pileupRun; gpu_pileup_apply joins it (e16_rrna_join) and adds its count. rrnaPending: the merge took this pass's results
+        std::thread rth; bool rbg = false, rrnaPending = false;
+        ~E16Early() { stop = true; if (th.joinable()) th.join(); if (rth.joinable()) rth.join(); if (reg.base != nullptr) munmap(reg.base, reg.cap); }
     } e16_;
+    void e16_rrna_join(PileupStats& stats) {
+        if (e16_.rth.joinable()) e16_.rth.join();
+        if (!e16_.rrnaPending) return;
+        e16_.rrnaPending = false;
+        stats.rrna_reads += e16_.nRrna;
+        std::cerr << "[gpu_pileup] hand-off pass: rRNA detector (E16: on a thread beside the pileup): " << e16_.nRrna << " reads in " << e16_.sR << " s\n";
+        singlet_tail::mark("parent: rRNA detector joined");
+    }
     void e16_early_start() {
         if (!gpu_covers_ || !singlet_tail::cut("early") || singlet_engine_gpu::e2eRegion().fd < 0) return;
         e16_.started = true;
@@ -1943,9 +1954,19 @@ public:
             singlet_tail::mark("parent: E16 early hand-off pass: region complete and mapped");
             e16_.ran = true;
             e16_.zc = singlet_tail::cut("zerocopy");
-            e16_.ok = gpu_handoff_device_pass(e16_.reg, e16_.o, e16_.nRrna, e16_.sR, e16_.zc);
-            if (!e16_.ok) e16_.zc = false;
+            e16_.rbg = singlet_tail::cut("rrnabg");
+            e16_.ok = gpu_handoff_device_pass(e16_.reg, e16_.o, e16_.nRrna, e16_.sR, e16_.zc, e16_.rbg);
+            if (!e16_.ok) { e16_.zc = false; e16_.rbg = false; }
             e16_.done = singlet_tail::now();
+            if (e16_.rbg) {   // the region's arrays stay mapped until the join (e16_early_join without zc; zc: the input's mapping, gpu_pileup_apply)
+                const SigRec* S = e16_.reg.at<SigRec>(e16_.reg.hdr()->oSigs); const uint8_t* Q = e16_.reg.at<uint8_t>(e16_.reg.hdr()->oSeq);
+                e16_.rth = std::thread([this, S, Q] {
+                    const double a = singlet_tail::now();
+                    e16_.nRrna = gpu_rrna_detect(S, Q, e16_.o.rrnaHost);
+                    e16_.sR = singlet_tail::now() - a;
+                    singlet_tail::mark("parent (bg): rRNA detector done in %.3f s", e16_.sR);
+                });
+            }
         });
     }
     void e16_early_join() {
@@ -1956,6 +1977,7 @@ public:
         e16_.lead = e16_.done > 0 ? singlet_tail::now() - e16_.done : 0;
         e16_.reg.fd = -1;   // the memfd stays the collector's
         if (!e16_.zc) {     // its own mapping only (zc: the pileup's input takes it over, gpu_build_input)
+            if (e16_.rth.joinable()) e16_.rth.join();   // rrnabg: it reads this mapping
             if (e16_.reg.base != nullptr) munmap(e16_.reg.base, e16_.reg.cap);
             e16_.reg.base = nullptr; e16_.reg.cap = 0;
         }
@@ -2406,7 +2428,8 @@ public:
         uint64_t nRrna = 0; double sR = 0;
         if (e16_.ran) {   // E16: done while STAR mapped (the same pass on the same region bytes, through its own mapping of them)
             if (!e16_.ok) { std::cerr << "[gpu_pileup] hand-off pass on the device failed: " << e16_.o.log << "\n"; return false; }
-            nRrna = e16_.nRrna; sR = e16_.sR;
+            if (e16_.rbg) { nRrna = 0; sR = -1; e16_.rrnaPending = true; }   // rrnabg: added by e16_rrna_join
+            else { nRrna = e16_.nRrna; sR = e16_.sR; }
             e16_.o.log += "; E16: done " + std::to_string(e16_.lead) + " s before the stream ended";
             return gpu_handoff_merge(stats, H, e16_.o, nRrna, sR, e16_.zc);
         }
@@ -2415,13 +2438,45 @@ public:
     }
     // the hand-off pass's device part (e2ePass on the region R) and the rRNA detector on the reads it sends to the host; it only reads the
     // engine's state (barcode indexes, corrector, detector, sizes fixed before the stream), so it may run on its own thread during the stream (E16)
-    bool gpu_handoff_device_pass(const singlet_engine_gpu::E2ERegion& R, singlet_engine_gpu::E2EPassOut& o, uint64_t& nRrnaOut, double& sROut,
-                                 bool keepPinned = false) {
-        const singlet_engine_gpu::E2EHeader& H = *R.hdr();
-        const CbCorrector* const cbc = config_.cb_corrector;
+    // the hand-off pass's host threads
+    int gpu_pass_threads() const {
         cpu_set_t cs; int nT = std::max(1, config_.threads);
         if (sched_getaffinity(0, sizeof(cs), &cs) == 0) nT = std::max(nT, std::min(CPU_COUNT(&cs), 32));
         if (const char* e = std::getenv("SINGLET_HANDOFF_PASS_THREADS")) nT = std::max(1, std::atoi(e));
+        return nT;
+    }
+    // R4: the sampled unclipped reads, the detector on the read as the BAM stores it (record sequence, reverse-complemented when reverse);
+    // rr: the records e2ePass sent to the host (record << 1 | reverse), S and Q the region's signatures and packed sequences
+    uint64_t gpu_rrna_detect(const SigRec* S, const uint8_t* Q, const std::vector<uint64_t>& rr) {
+        const int nT = gpu_pass_threads();
+        auto par = [&](uint64_t n, const std::function<void(uint64_t, uint64_t)>& fn) {
+            const int t = (int) std::min<uint64_t>((uint64_t) nT, n / 4096 + 1);
+            if (t <= 1) { fn(0, n); return; }
+            std::vector<std::thread> th; for (int k = 0; k < t; ++k) th.emplace_back([&, k] { fn(n * k / t, n * (k + 1) / t); });
+            for (auto& x : th) x.join();
+        };
+        std::atomic<uint64_t> n_rrna{0};
+        par(rr.size(), [&](uint64_t lo, uint64_t hi) {
+            char comp[256]; for (int i = 0; i < 256; i++) comp[i] = 'N';
+            comp[(int)'A'] = 'T'; comp[(int)'C'] = 'G'; comp[(int)'G'] = 'C'; comp[(int)'T'] = 'A';
+            std::string rseq; uint64_t c = 0;
+            for (uint64_t k = lo; k < hi; ++k) {
+                const uint64_t rec = rr[k] >> 1; const bool rev = rr[k] & 1;
+                const int L2 = S[rec].rlen; const uint8_t* rs = Q + S[rec].seq_off;
+                rseq.resize(L2); for (int j = 0; j < L2; j++) rseq[j] = seq_nt16_str[(rs[j >> 1] >> ((j & 1) * 4)) & 15];
+                if (rev) { const std::string fw = rseq; for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) fw[L2 - 1 - j]]; }
+                if (rrna_detector_.detect(rseq)) ++c;
+            }
+            n_rrna += c;
+        });
+        return n_rrna.load();
+    }
+    // (deferRrna, E16 "rrnabg": the detector is left to the caller, sROut = -1)
+    bool gpu_handoff_device_pass(const singlet_engine_gpu::E2ERegion& R, singlet_engine_gpu::E2EPassOut& o, uint64_t& nRrnaOut, double& sROut,
+                                 bool keepPinned = false, bool deferRrna = false) {
+        const singlet_engine_gpu::E2EHeader& H = *R.hdr();
+        const CbCorrector* const cbc = config_.cb_corrector;
+        const int nT = gpu_pass_threads();
         auto par = [&](uint64_t n, const std::function<void(uint64_t, uint64_t)>& fn) {
             const int t = (int) std::min<uint64_t>((uint64_t) nT, n / 4096 + 1);
             if (t <= 1) { fn(0, n); return; }
@@ -2466,27 +2521,10 @@ public:
         singlet_engine_gpu::unlockDevice(lock_fd);
         singlet_tail::mark("parent: hand-off pass: e2ePass returned (%s)", o.log.c_str());
         if (!ok) { std::cerr << "[gpu_pileup] hand-off pass on the device failed: " << o.log << "\n"; return false; }
-        // R4: the sampled unclipped reads, the detector on the read as the BAM stores it (record sequence, reverse-complemented when reverse)
+        if (deferRrna) { nRrnaOut = 0; sROut = -1; return true; }
         const auto tR = std::chrono::steady_clock::now();
-        std::atomic<uint64_t> n_rrna{0};
-        {
-            const SigRec* S = R.at<SigRec>(H.oSigs); const uint8_t* Q = R.at<uint8_t>(H.oSeq);
-            par(o.rrnaHost.size(), [&](uint64_t lo, uint64_t hi) {
-                char comp[256]; for (int i = 0; i < 256; i++) comp[i] = 'N';
-                comp[(int)'A'] = 'T'; comp[(int)'C'] = 'G'; comp[(int)'G'] = 'C'; comp[(int)'T'] = 'A';
-                std::string rseq; uint64_t c = 0;
-                for (uint64_t k = lo; k < hi; ++k) {
-                    const uint64_t rec = o.rrnaHost[k] >> 1; const bool rev = o.rrnaHost[k] & 1;
-                    const int L2 = S[rec].rlen; const uint8_t* rs = Q + S[rec].seq_off;
-                    rseq.resize(L2); for (int j = 0; j < L2; j++) rseq[j] = seq_nt16_str[(rs[j >> 1] >> ((j & 1) * 4)) & 15];
-                    if (rev) { const std::string fw = rseq; for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) fw[L2 - 1 - j]]; }
-                    if (rrna_detector_.detect(rseq)) ++c;
-                }
-                n_rrna += c;
-            });
-        }
+        nRrnaOut = gpu_rrna_detect(R.at<SigRec>(H.oSigs), R.at<uint8_t>(H.oSeq), o.rrnaHost);
         sROut = std::chrono::duration<double>(std::chrono::steady_clock::now() - tR).count();
-        nRrnaOut = n_rrna.load();
         singlet_tail::mark("parent: hand-off pass: rRNA detector done");
         return true;
     }
@@ -2520,7 +2558,8 @@ public:
             return false;
         }
         std::cerr << "[gpu_pileup] hand-off pass: " << o.nDone << " reads without BAM records (E8: on the device; " << nKept << " kept, "
-                  << o.rrnaHost.size() << " to the rRNA detector in " << sR << " s; " << o.log << ")\n";
+                  << o.rrnaHost.size() << " to the rRNA detector " << (sR < 0 ? std::string("on a thread (E16)") : "in " + std::to_string(sR) + " s") << "; "
+                  << o.log << ")\n";
         return true;
     }
     bool gpu_handoff_pass(PileupStats& stats, bool check = false) {
@@ -2714,6 +2753,8 @@ public:
         const auto tA0 = std::chrono::steady_clock::now();
         auto since = [](std::chrono::steady_clock::time_point t) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count(); };
         PileupInput in;
+        // E16 rrnabg: the detector's thread may read the region through the input's mapping (zc): joined before `in` goes on every return
+        struct E16RrnaGuard { std::thread& t; ~E16RrnaGuard() { if (t.joinable()) t.join(); } } e16rg{e16_.rth};
         if (!gpu_build_input(in)) return false;
         const double sBuild = since(tA0);
         int lock_fd = -1;
@@ -2791,6 +2832,7 @@ public:
             if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
         }
         singlet_tail::mark("parent: host pass done");
+        e16_rrna_join(stats);
         std::cerr << "[gpu_pileup] apply: build input " << sBuild << " s, pileupRun " << sRun << " s, host pass " << since(tA2) << " s" << "\n";
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
                   << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules
