@@ -390,7 +390,7 @@ The GPU is busy 21 s of the 211 s.
    Gate: a NovaSeq-binned 3' sample (for example one of the release-gate datasets) at level 5 against the CPU engine.
 2. **Other Solo configurations** fall back to level 3 today: multimappers, EmptyDrops_CR, GeneFull/Velocyto, other CB matching
    types (`1MM_multi` without pseudocounts, `Exact`). Each needs its own port. 5' runs pass the guard (E9's model takes `soloStrand`)
-   but are untested at level 5; a 5' sample (pbmc5p_v1, CR4 TSO clip) is the next gate.
+   but are untested at level 5; a 5' sample (pbmc5p_v1) is the next gate.
 3. **The device during STAR's loop.**
    - Level 5 leaves 1.59 GB allocated on the device for ~8 s while the lock is free. It then takes a slot of the same device for
      0.15 s (`lockDeviceSlot`).
