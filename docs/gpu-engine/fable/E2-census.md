@@ -4,11 +4,12 @@ Wave 1, experiment E2 of the GPU aligner program (`singlet-agents/docs/GPU_ALIGN
 questions Q2 and Q7). Branch `gpu/fable/census` (from `gpu/fable-engine` cf92cdb9). Instrumentation only: the mapping
 results are byte-identical with and without it (section 1).
 
-**Summary.** Per-read state and cost were recorded for 1.99 M (pbmc1k_v3) and 1.85 M (pbmc5p_v1) distinct reads in
-every lane each read ran in. The mapping stays byte-identical with the counters on. The main findings:
+**Summary.** Per-read state and cost were recorded for about 2 M distinct reads per sample (pbmc1k_v3, pbmc5p_v1 and nuclei2k_v2), in every lane each read
+ran in. The mapping stays byte-identical with the counters on. The main findings:
 
 - **Window count after phase 1 sets the cost.** Reads with more than 16 windows are 25.6% (24.1%) of distinct reads
-  and take 72.6% (70.1%) of all thread cycles and 79% (76%) of recursion steps. Ranking reads by `nWall` alone captures
+  and take 72.6% (70.1%) of all thread cycles and 79% (76%) of recursion steps. In nuclei2k_v2 they are 37.5% of
+  reads and take 80% of cycles. Ranking reads by `nWall` alone captures
   as many cycles as any fitted predictor.
 - **Warps are badly mixed.** With reads in today's order, k_p3 in lane A uses at most 15% of the warp's step slots.
   Sorting each batch by `nWall` (known before k_p3) raises this to 49% (36%) for steps and 99.9% for windows. This
@@ -18,9 +19,9 @@ every lane each read ran in. The mapping stays byte-identical with the counters 
 - **Phase 1 is 30–32% of all thread cycles.** k_p1 takes 40% of lane A's time. The seed search alone is 37.5% of
   lane A's thread cycles.
 - **Unmapped "too short" reads are a large cost.** They are 7% of reads but 19.5% of cycles in pbmc1k_v3, and 23% of
-  reads but 54.5% of cycles in pbmc5p_v1.
+  reads but 54.5% of cycles in pbmc5p_v1. In nuclei2k_v2 they are 23% of reads and 47% of cycles.
 
-Numbers are pbmc1k_v3, with pbmc5p_v1 in parentheses where given. The full tables are in
+Numbers are pbmc1k_v3, with pbmc5p_v1 in parentheses where given. Section 11 compares all three samples. The full tables are in
 `bench/fable/census/results/census_<sample>.md`; histograms and fits are in the matching `.json`.
 
 ## 1. Identity and overhead
@@ -343,9 +344,41 @@ Reordering happens within each launch batch, after k_p1/k_p2:
   question: re-convergence by sorting works. The remaining divergence is the recursion's own branching and the
   long-tailed steps of windows with many aligns.
 
-## 11. Third sample
+## 11. Three samples side by side
 
-nuclei2k_v2 (GRCm39) was queued (job 795348 on debug-gpu; 795331_2 on short-gpu) but had not run when this report was written; the GPU queue was held by other experiments. Re-running `census_run.sbatch` with `TASK=2` produces `census_nuclei2k_v2.{md,json}`.
+nuclei2k_v2 (mouse nuclei, GRCm39) ran as job 795348 on debug-gpu. It had 8 CPUs, so its host-lane ms is not
+comparable. Its full tables are in `census_nuclei2k_v2.md`.
+
+| quantity | pbmc1k_v3 | pbmc5p_v1 | nuclei2k_v2 |
+|---|---|---|---|
+| distinct reads (all reads) | 1,991,926 (4,118,999) | 1,850,654 (6,118,914) | 1,967,994 (2,899,428) |
+| identical to STAR, default / census build | 100% / 100% | 1,850,645 / 1,850,645 (9 `lread`) | 100% / 100% |
+| GPU ms, default / census build | 861.1 / 899.6 | 917.2 / 957.3 | 823.3 / 857.7 |
+| lane A / M / B ms (default build) | 269 / 337 / 255 | 333 / 283 / 301 | 222 / 395 / 206 |
+| reads overflowing lane A | 26.3% | 25.4% | 38.7% |
+| `nWall` p50 / p99 / max | 3 / 91 / 238 | 2 / 88 / 226 | 9 / 79 / 206 |
+| reads with `nWall` > 16: reads / cycles / steps | 25.6 / 72.6 / 79.4% | 24.1 / 70.1 / 76.2% | 37.5 / 79.9 / 80.9% |
+| thread cycles in lanes the read overflowed | 18.3% | 20.6% | 17.3% |
+| phase 1 share of thread cycles | 31.9% | 29.6% | 33.7% |
+| seeds share of lane A thread cycles | 37.5% | 34.5% | 35.4% |
+| "too short" unmapped: reads / cycles | 7.2 / 19.5% | 23.2 / 54.5% | 23.1 / 47.1% |
+| multimappers (nTr > 1): reads / cycles | 8.3 / 17.6% | 17.3 / 38.6% | 14.1 / 27.9% |
+| singletons: distinct reads / cycles | 80.0 / 87.1% | 81.5 / 91.6% | 88.0 / 95.0% |
+| critical path of a window-parallel lane (largest window / all steps) | 16.1% | 24.2% | 14.4% |
+| router, rank by `nWall` at 30 / 20 / 10% wide (oracle) | 74.7 / 59.7 / 37.4% (76.2 / 63.7 / 41.7) | 73.0 / 60.7 / 37.1% (76.4 / 65.7 / 44.8) | 66.1 / 47.2 / 27.8% (69.9 / 52.4 / 32.5) |
+| steps predicted from phase 1, log-log R² | 0.953 | 0.864 | 0.970 |
+| overflow at 99.9% caps: distinct / cycle share | 0.43 / 2.4% | 0.47 / 2.5% | 0.50 / 2.1% |
+| bucketed signatures for 50 / 80 / 95% of reads | 6 / 29 / 71 | 5 / 33 / 82 | 8 / 24 / 57 |
+| lane A step efficiency: as run → sorted by `nWall` | 14.9 → 49.1% | 14.3 → 35.5% | 17.5 → 58.4% |
+| lane M step efficiency: as run → sorted by `nWall` | 31.3 → 68.7% | 30.2 → 59.8% | 36.2 → 73.4% |
+| window-loop efficiency: as run → sorted (A / M / B) | 19.5 / 48.9 / 61.7 → 99.9 / 99.9 / 99.8% | 18.9 / 46.9 / 53.4 → 99.8 / 100 / 99.8% | 21.8 / 51.2 / 60.9 → 99.9 / 99.9 / 99.7% |
+
+The nuclei sample differs from the PBMC samples in three ways:
+
+- **More windows.** The `nWall` median is 9, and 38.7% of reads leave lane A. As a result lane M, not lane A, is the
+  most expensive lane.
+- **More "too short" work.** Reads STAR rejects as too short take 47% of the cycles.
+- **Steps are more predictable.** The design conclusions are the same in all three samples.
 
 ## Design consequences
 
@@ -449,7 +482,7 @@ After dedup, cost is set by singletons: 80% of distinct reads and 87% (92%) of c
 | 795332 | re-aggregation |
 | 795343 | re-aggregation with the SIMT section |
 | 795351 | re-aggregation with the phase table (final pbmc tables) |
-| 795348 / 795331_2 (queued) | nuclei2k_v2 run |
+| 795348 | nuclei2k_v2 run (debug-gpu, 8 CPUs, 583 s); the short-gpu task 795331_2 was cancelled unrun |
 
 **Files.**
 
