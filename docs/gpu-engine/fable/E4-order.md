@@ -1,14 +1,13 @@
 # E4: phase-3 read order and batch scheduling in M5 (wave 1, questions Q5 and Q3)
 
 Branch `gpu/fable/order` (from `gpu/fable-engine` cf92cdb9). Harness: `bench/gpu/m5/m5.cu` on the 2 M pbmc1k_v3 dump set
-(every 16th distinct cDNA sequence, 1,991,926 sequences), Clipper H100 NVL, CUDA 13.3 image. Status: done (rounds 1-4;
-round 5, job 795758, re-runs the `--e4-best` preset).
+(every 16th distinct cDNA sequence, 1,991,926 sequences), Clipper H100 NVL, CUDA 13.3 image. Status: done (rounds 1-5).
 
 ## Summary
 
 - Every variant of every round is exact: 1,991,926 / 1,991,926 distinct reads (4,118,999 / 4,118,999 weighted) identical to
-  STAR, 100% (rounds 1-4: 16 + 18 + 18 + 25 variants and 9 ncu runs).
-- **Surprise 1, the harness itself**: rounds 1-3 ran a `k_p3` with the `--tail` timing code compiled in (a warp-collective
+  STAR, 100% (rounds 1-5: 16 + 18 + 18 + 25 + 4 variants and 9 ncu runs).
+- **Surprise: the harness itself**: rounds 1-3 ran a `k_p3` with the `--tail` timing code compiled in (a warp-collective
   convergence point after each read). It costs 14 registers (94 instead of the base's 80 in lanes A and M) and **18% of M5**
   (1028 vs 870 ms) even with the timers off. Round 4 runs the base kernel (tail code only under `--tail`): v0 870.4 ms =
   base build 874.7 ms. Comparisons inside rounds 1-3 are like for like; their absolute times are 18% high.
@@ -22,12 +21,12 @@ round 5, job 795758, re-runs the `--e4-best` preset).
   shortens that.
 - **Why**: `k_p3` issues 1.94 active threads per warp instruction (6% SIMT efficiency, ncu) with 98% branch efficiency: lanes
   idle because their reads are done while one or two reads of the warp go on. Sorting by cost (E2's key) raises active
-  threads to 3.39 and cuts warp instructions by 43%, as E2 simulated, yet lane A's phase 3 takes 2.2x longer: warps made only
+  threads to 3.39 and cuts warp instructions by 43%, as E2 simulated, yet a lane-A k_p3 launch takes 2.2x longer: warps made only
   of heavy reads become the batch's critical path and the GPU idles (issue slots busy 12% -> 3%).
 - **What pays is fewer batch barriers and registers**: lane B in one launch -23% on B; batches 512k / 384k / 128k -12.6%
   (E1: -11.9%); with the best order **727.8 ms (2.74 M/s, 1.20x)**; lane A's `k_p3` capped at 64 registers -5% on A. The
-  fastest run is 715.0 ms (**2.79 M/s, 1.22x**); the per-lane best (`--e4-best`) is 712.5 ms, 2.80 M/s, at 80.6 GB of device
-  memory.
+  per-lane best is one flag, `--e4-best`: **709.3 / 711.6 ms, 2.81 / 2.80 M/s, 1.22x** against v0 863.1 / 868.5 ms in the
+  same job (round 5), at 80.6 GB of device memory.
 - **Expected engine gain of the best ordering plus a persistent queue: about 1.03x** (order +4.5%, queue -2%), not the
   1.2-1.5x of the study's section 4.6. The 1.2x above comes from batch sizes, i.e. memory.
 
@@ -92,7 +91,7 @@ Fixed settings in every variant (the engine's): budgets 1024 / 2048 / 2048 steps
 | 795645 | build of 1b2c82d8: `k_p3` without tail code unless `--tail`, `--p3-maxreg-a/m/b`, `--compact` | `m5-1b2c82d8c8` (5135a551979cd81a) |
 | 795646 | round 4 (`ROUND=4`, debug-gpu, g052): base kernel; reference build, main variants, E2's `--compact`, combinations; ncu | `m5-1b2c82d8c8` |
 | 795647 | round 4 on short-gpu, cancelled when 795646 started | - |
-| 795757, 795758 | build of 73a8bb75 (`--e4-best`) and round 5 (`ROUND=5`: v0 and `--e4-best`, twice each) | `m5-73a8bb75..` |
+| 795757, 795758 | build of the branch tip 04398779 (`--e4-best` since 73a8bb75) and round 5 (`ROUND=5`, debug-gpu, g051: v0 and `--e4-best`, twice each) | `m5-04398779c7` (baaf12c4b93a953c) |
 
 Results (JSON per variant, logs): `$W/jobs/fable/order/results/<job>/`, copied to `bench/fable/order/results/<job>/`.
 Table: `python bench/fable/order/e4_table.py bench/fable/order/results/<job> v0 [--tail]` (round 3: baseline `v0t`).
@@ -382,9 +381,21 @@ What round 4 says:
 8. **Fastest run: bestE1wr64am 715.0 ms, 2.79 M/s, 1.22x** (warp-desc + 64 registers on A, nw-desc + 64 registers on M, E1
    batches). Lanes are independent (a lane's time depends only on its own settings: A of best / v0 / v0b 270.3 / 273.3 / 270.2),
    so the per-lane best is A 224.5 (bestE1r64am), M 291.5 (bestE1), B 196.5 (bestE1): **712.5 ms, 2.80 M/s**. That is
-   `--e4-best`; round 5 (job 795758) runs it.
+   `--e4-best`.
 
-ROUND5_RESULTS
+## Results, round 5 (job 795758): `--e4-best`
+
+debug-gpu, g051, `m5-04398779c7`; v0 and `--e4-best` twice each, all 1,991,926 / 1,991,926 identical.
+
+| variant | options | A ms | M ms | B ms | total ms | M distinct/s | vs v0 | identical | A/M/B work GB | p3 regs A/M/B | A/M/B p3 slot fill | A/M/B drain |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| e4best | presort, order none/nw-desc/none, batches 1024k/512k/128k | 223.9 | 291.8 | 193.7 | 709.3 | 2.81 | 1.22x | 1991926/1991926 | 48.9/43.5/57.7 | 64/80/94 | -/-/- | -/-/- |
+| e4bestb | presort, order none/nw-desc/none, batches 1024k/512k/128k | 224.1 | 290.6 | 197.0 | 711.6 | 2.80 | 1.21x | 1991926/1991926 | 48.9/43.5/57.7 | 64/80/94 | -/-/- | -/-/- |
+| v0 | presort | 270.7 | 339.0 | 253.3 | 863.1 | 2.31 | 1.00x | 1991926/1991926 | 12.2/21.8/41.7 | 80/80/94 | -/-/- | -/-/- |
+| v0b | presort | 273.8 | 340.6 | 254.1 | 868.5 | 2.29 | 0.99x | 1991926/1991926 | 12.2/21.8/41.7 | 80/80/94 | -/-/- | -/-/- |
+
+`--e4-best` runs at **709.3 / 711.6 ms (2.81 / 2.80 M distinct/s), 1.22x** the engine configuration in the same job (v0
+863.1 / 868.5 ms), as the per-lane composite of round 4 predicted (712.5 ms).
 
 ## What to keep
 
@@ -392,8 +403,8 @@ ROUND5_RESULTS
   -3.0% on the tail kernel (rounds 1-2). For the engine: after phase 1 of a lane-M batch, one stable sort of the batch's
   phase-3 slots by window count (descending); lanes A and B keep the prefix order. Cost: `k_key` + a thrust stable radix sort
   of 64-bit keys per batch, included in the times above.
-- **`--e4-best`**: `--best-order`, lane A's `k_p3` at 64 registers, batches 1M / 512k / 128k: 712.5-715.0 ms, 2.79-2.80 M/s,
-  1.22x, at 80.6 GB of device memory (H100 NVL only). Of the 22% the order is 4.5 points, the register cap on A about 1.5, and
+- **`--e4-best`**: `--best-order`, lane A's `k_p3` at 64 registers, batches 1M / 512k / 128k: 709.3-711.6 ms, 2.80-2.81 M/s,
+  1.22x (round 5), at 80.6 GB of device memory (H100 NVL only). Of the 22% the order is 4.5 points, the register cap on A about 1.5, and
   the batch sizes the rest.
 - **Keep instrumentation out of production kernels**: warp-collective timing code after the read costs 14 registers and 18%.
   The engine's `k_p3` should be checked for the same (register count of the deployed kernel vs this base: 80 in A and M).
@@ -415,7 +426,7 @@ Measured on M5 with the base kernel (round 4; one 2 M-read set; the engine maps 
 | best order (`--best-order`) | 831.0 | 2.40 | 1.05x | measured |
 | best order + persistent queue inside each batch | about 848 | 2.35 | 1.03x | the queue costs 2.0% (measured twice, on the tail kernel) |
 | best order + batches 512k / 384k / 128k | 727.8 | 2.74 | 1.20x | measured (v5best) |
-| `--e4-best` (+ lane A at 64 registers, batches 1M / 512k / 128k) | 712.5-715.0 | 2.79-2.80 | 1.22x | measured per lane / whole (round 5 re-runs it) |
+| `--e4-best` (+ lane A at 64 registers, batches 1M / 512k / 128k) | 709.3-711.6 | 2.80-2.81 | 1.22x | measured (round 5, against v0 863.1-868.5 in the same job) |
 | bound for any phase-3 slot filling | about 595 | 3.35 | 1.46x | idle phase-3 warp-slot time (busy / span A 0.57, M 0.70, B 0.35) applied to the base kernel's phase 3 |
 
 So **combining the best ordering with a persistent queue in the engine is worth about 1.03x**: +4.5% from lane M's order,
