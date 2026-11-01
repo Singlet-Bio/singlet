@@ -279,6 +279,25 @@ def main():
            f" stitching {stitch_all.sum() / tot_casc * 100:.1f}%; phase 1 {np.where(gpu, R['cn'][:, 0], 0).sum() / tot_casc * 100:.1f}%;"
            f" assignment {np.where(gpu, R['cn'][:, 2], 0).sum() / tot_casc * 100:.1f}%. Scan (k_p2, warp cycles): {scan_all.sum() / 1e9:.1f} G.", ""]
 
+    # thread cycles per lane by phase (k_p1: seeds clk0, windows+flanks clk1, whole call cn0; k_p3: assignment cn2,
+    # stitching clk2, select+encode clk3, whole call cn3)
+    md += ["Thread cycles per lane by phase (share of the lane's k_p1 + k_p3 thread cycles):", "",
+           "| lane | k_p1 | seeds | windows + flanks | k_p3 | assignment | stitching | select + encode |", "|---|---|---|---|---|---|---|---|"]
+    ph = []
+    for li, ln in enumerate(LANES[:3]):
+        m = R["lane"] == li
+        tot = float(R["cn"][m][:, 0].sum() + R["cn"][m][:, 3].sum())
+        if tot <= 0:
+            continue
+        v = {"k_p1": R["cn"][m][:, 0].sum(), "seeds": R["clk"][m][:, 0].sum(), "windows": R["clk"][m][:, 1].sum(),
+             "k_p3": R["cn"][m][:, 3].sum(), "assignment": R["cn"][m][:, 2].sum(), "stitching": R["clk"][m][:, 2].sum(),
+             "select_encode": R["clk"][m][:, 3].sum()}
+        v = {k: float(x) / tot for k, x in v.items()}
+        ph.append(dict(lane=ln, **v))
+        md.append(f"| {ln} | " + " | ".join(f"{100 * v[k]:.1f}%" for k in ["k_p1", "seeds", "windows", "k_p3", "assignment", "stitching", "select_encode"]) + " |")
+    res["lane_phase_share"] = ph
+    md.append("")
+
     # ---- 1. distributions per final lane
     qty = {
         "nP": F["nP"], "nSplit": F["nSplit"], "maxNrep": F["maxNrep"], "nRepGtWin": F["nRepGtWin"],
