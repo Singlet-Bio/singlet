@@ -216,8 +216,31 @@ int main(int argc, char** argv) {
     }
     std::vector<uint8_t>().swap(gB);
     // ---- hop 6 check 2: the pileup's arrays vs Collector::prepend_handoff
+    t0 = now();
     std::vector<SigRec> gS = toHost(R.sigs, D.nRec); std::vector<AlnRec> gA = toHost(R.alns, R.nAln);
     std::vector<uint32_t> gOps = toHost(R.ops, R.nOps); std::vector<uint8_t> gSeq = toHost(R.seq, R.nSeq);
+    const double secDown = now() - t0;
+    const double gbArr = (16.0 * D.nRec + 16.0 * R.nAln + 4.0 * R.nOps + R.nSeq) / 1e9;
+    double secDownPin = 0, secUpPin = 0;
+    {   // the same copies through pinned buffers (what a host PileupInput or a re-upload of host-assembled blobs would cost)
+        const u64 nUp = D.blob.size() + D.seqBytes, nDn = (u64)(gbArr * 1e9) + 64;
+        uint8_t* pin = nullptr;
+        if (cudaMallocHost(&pin, std::max(nUp, nDn)) == cudaSuccess) {
+            CK(cudaDeviceSynchronize());
+            double a = now();
+            CK(cudaMemcpy(pin, R.sigs, 16 * D.nRec, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(pin + 16 * D.nRec, R.alns, 16 * R.nAln, cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(pin + 16 * (D.nRec + R.nAln), R.ops, 4 * R.nOps, cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(pin + 16 * (D.nRec + R.nAln) + 4 * R.nOps, R.seq, R.nSeq, cudaMemcpyDeviceToHost));
+            secDownPin = now() - a;
+            memcpy(pin, D.blob.data(), D.blob.size()); memcpy(pin + D.blob.size(), D.seq.data(), D.seqBytes);
+            a = now();
+            CK(cudaMemcpy(dBlob, pin, D.blob.size(), cudaMemcpyHostToDevice)); CK(cudaMemcpy(dSeq, pin + D.blob.size(), D.seqBytes, cudaMemcpyHostToDevice));
+            secUpPin = now() - a;
+            cudaFreeHost(pin);
+        }
+    }
+    printf("TRANSFER: pileup arrays %.2f GB device->host %.2f s pageable, %.3f s pinned; blobs + sequences %.2f GB host->device %.2f s pageable, %.3f s pinned\n",
+           gbArr, secDown, secDownPin, (D.blob.size() + D.seqBytes) / 1e9, secUp, secUpPin);
     u64 sigSame = 0, alnSame = 0; bool opsSame = false, seqSame = false, refOk = false; double secRef = 0;
     if (!skipRef) {
         // the bridge consumes (unlinks) its hand-off: give it a hard link of the file
@@ -501,11 +524,12 @@ int main(int argc, char** argv) {
                        "  \"data_block_identical\": %s,\n  \"sigrec_identical\": %llu,\n  \"alnrec_identical\": %llu,\n  \"ops_identical\": %s,\n  \"seq_identical\": %s,\n"
                        "  \"arrays_identical\": %s,\n  \"host_port_identical\": %s,\n  \"mate_gap\": %llu,\n  \"no_exon\": %llu,\n  \"bad_best\": %llu,\n"
                        "  \"gpu_ms_arrays\": %.3f,\n  \"gpu_ms_count\": %.3f,\n  \"gpu_ms_scan\": %.3f,\n  \"gpu_ms_fill\": %.3f,\n  \"gpu_ms_with_bytes\": %.3f,\n"
-                       "  \"gpu_call_wall_ms\": %.3f,\n  \"upload_s\": %.3f,\n  \"subset_records\": %llu,\n  \"subset_gpu_ms\": %.3f,\n  \"host_port_s\": %.3f,\n"
+                       "  \"gpu_call_wall_ms\": %.3f,\n  \"upload_s\": %.3f,\n  \"upload_pinned_s\": %.3f,\n  \"arrays_gb\": %.3f,\n  \"download_s\": %.3f,\n"
+                       "  \"download_pinned_s\": %.3f,\n  \"subset_records\": %llu,\n  \"subset_gpu_ms\": %.3f,\n  \"host_port_s\": %.3f,\n"
                        "  \"host_threads\": %d,\n  \"prepend_handoff_s\": %.3f,\n  \"reads_ok\": %s,\n  \"whitelist\": \"%s\",\n  \"r11_hist_reads\": %llu,\n  \"r11_hist_source\": \"%s\",\n",
                     prop.name, D.nRec, D.nReads, R.nMapped, R.nAln, R.nOps, R.nSeq, R.nBytes, D.blobBytes, recSame, recDiff, bytesAll ? "true" : "false",
                     sigSame, alnSame, opsSame ? "true" : "false", seqSame ? "true" : "false", refOk ? "true" : "false", hostSame ? "true" : "false",
-                    R.nMateGap, R.nNoExon, R.nBadBest, median(msA), median(msC), median(msS), median(msF), median(msT), 1e3 * median(wallB), secUp, subN, subMs,
+                    R.nMateGap, R.nNoExon, R.nBadBest, median(msA), median(msC), median(msS), median(msF), median(msT), 1e3 * median(wallB), secUp, secUpPin, gbArr, secDown, secDownPin, subN, subMs,
                     secHost, hostThreads, secRef, readsOk ? "true" : "false", wlUsed.c_str(), histReads, histSrc.c_str());
             for (int m = 0; m < 2; m++) {
                 const H7& h = h7[m];
