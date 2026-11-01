@@ -52,7 +52,7 @@ add(id="pbmc10k_5p_v2", group="10x-5p", tier="core", title="10x PBMC 10k 5' v2 w
 add(id="nuclei2k_v2", group="nuclei", tier="core", title="10x mouse brain nuclei 2k, 3' v2", species="mouse", reference=M,
     chemistry="10x-3p-v2", source="10x", url=CF + "cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar", n_cells=2059,
     read_pairs_m=153, read_pairs_used_m=153, fastq_gb=12.7, truth="10x Cell Ranger matrix", licence="CC BY 4.0",
-    capabilities="gex-counts,spliced-unspliced,junctions-psi,cell-calling,ambient-rna", tools=CORE_GEX,
+    capabilities="gex-counts,spliced-unspliced,junctions-psi,cell-calling,ambient-rna,alignment-performance", tools=CORE_GEX,
     why="intron-rich single-nucleus data, where exon-only counting loses most molecules")
 add(id="mouse_brain_nuclei5k_v31", group="nuclei", tier="core", title="10x 5k adult mouse brain nuclei (CNIK), 3' v3.1",
     species="mouse", reference=M, chemistry="10x-3p-v3", source="10x",
@@ -290,6 +290,12 @@ add(id="mage150", group="sex-ancestry", tier="core", data_kind="derived", title=
     capabilities="genetic-ancestry,chromosomal-sex", tools="singlet,somalier,peddy",
     why="the only RNA-seq of 1000 Genomes individuals from every super-population; reads are thinned to single-cell donor depths")
 
+# ---- performance benchmarks (alignment-performance deep sample, download)
+add(id="sra_download_set", group="download", tier="core", data_kind="real", title="Four 10x 3' GEX runs from the atlas re-run universe (SRA)",
+    species="human", reference="", chemistry="10x-3p-v3", source="sra", srr="SRR24098804;SRR25032524;SRR20115176;SRR23322292",
+    read_pairs_m=132.5, read_pairs_used_m=132.5, fastq_gb=14, truth="NCBI's own decode of the archive (prefetch + fasterq-dump)",
+    licence="SRA public data", capabilities="download", tools="singlet,fasterq-dump,prefetch,aws-s3,ena-https",
+    why="32 to 36 M read pairs and 1.2 to 3.4 GB each: large enough to measure throughput, small enough for repeated runs")
 # ---- Xi & Li 2021 doublet benchmark sets (Zenodo 4062232, real_datasets.zip, CC BY 4.0): public count matrices with experimental doublet labels
 XL = [("pbmc-1A-dm", "Kang 2018 lane 1A", "demuxlet genotype doublets", 3298, 120), ("pbmc-1B-dm", "Kang 2018 lane 1B", "demuxlet genotype doublets", 3790, 130),
       ("pbmc-1C-dm", "Kang 2018 lane 1C", "demuxlet genotype doublets", 5270, 316), ("pbmc-2ctrl-dm", "Kang 2018 control lane 2.1, Cell Ranger 1.0 matrix", "demuxlet genotype doublets", 13913, 1598),
