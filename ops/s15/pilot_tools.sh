@@ -73,6 +73,21 @@ trust4)   # TCR/BCR from the 5' GEX reads: barcode+UMI from the short mate, cDNA
   zcat ${R1//,/ } | gzip -1 > $SCR/R1.fq.gz; zcat ${R2//,/ } | gzip -1 > $SCR/R2.fq.gz
   cd $O; tm run-trust4 -f $R4/hg38_bcrtcr.fa --ref $R4/human_IMGT+C.fa -u $SCR/R2.fq.gz --readFormat bc:0:15,um:16:$((CH_umi + 15)) --barcode $SCR/R1.fq.gz --UMI $SCR/R1.fq.gz \
       --barcodeWhitelist $WL -t 16 -o TRUST --od $O > $O/run.log 2>&1; rc=$?; tail -3 $O/run.log; exit $rc ;;
+htocount)   # GSM = the HTO library GSM (fetched with NODECODE); GEXGSM = the pilot GEX sample whose called cells define the columns. Singlet HTO (counter + caller) on the pilot cells.
+  GP=$PL/${GEXGSM:?GEXGSM}; AT=$W/data/adt/${ATLASGSE:?}/$GSM; export PATH=$W/envs/adt/bin:$PATH PYTHONPATH=$W/src/singlet-py/claude__adt-modality-0637a6/python HOME=$W/cache/condahome
+  [ -f $AT/status.json ] || { echo "no atlas panel/offset for $GSM"; exit 6; }
+  mkdir -p $P/fq; ls $P/sra/*.sra | xargs -P 8 -I{} $W/envs/pbench/bin/fastq-dump --split-files --gzip -O $P/fq {} || exit 4
+  CC=$GP/s1cpu/out/cell_calls.tsv; [ -s $CC ] || { echo "no cell_calls.tsv in $GP/s1cpu/out"; exit 6; }
+  python3 -u $D/pilot_hto.py $AT $P/fq $CC $WLD/${HTOWL:-737K-august-2016.txt} $O > $O/run.log 2>&1; rc=$?; tail -25 $O/run.log; exit $rc ;;
+htocallers)
+  export APPTAINER_BIND=/mnt/projects:/mnt/projects; H=$O; HC=$P/tools/htocount/hto_counts.csv.gz; [ -s $HC ] || { echo "no HTO counts"; exit 6; }
+  apptainer exec $W/images/bioc-3.20.sif Rscript $D/pilot_hto_callers.R $HC $O/bioc $W/rlib/bioc-3.20 > $O/bioc.log 2>&1; tail -3 $O/bioc.log
+  apptainer exec $W/images/seurat-5.sif Rscript $D/pilot_hto_callers.R $HC $O/seurat $W/rlib/seurat-5 > $O/seurat.log 2>&1; tail -3 $O/seurat.log
+  # GMM-Demux (pip into scratch)
+  python3 -m venv $SCR/v && $SCR/v/bin/pip install -q GMM-Demux > $O/gmm_install.log 2>&1 && { zcat $HC | head -1 | tr ',' '
+' | tail -n +2 | paste -sd, > $SCR/tags.txt; zcat $HC > $SCR/hto.csv
+    (cd $O && $SCR/v/bin/GMM-demux -f $O/gmm -c $SCR/hto.csv $(cat $SCR/tags.txt) > $O/gmm.log 2>&1; echo "GMM-Demux rc=$?"; tail -3 $O/gmm.log); } || echo "GMM-Demux install failed: $(tail -2 $O/gmm_install.log)"
+  ls $O; exit 0 ;;
 vdjlib)   # GSM = the V(D)J library's GSM (fetched with NODECODE by the submitter); paired GEX sample in GEXGSM. Singlet V(D)J (S11's run_vdj.py) and TRUST4 on the same reads.
   export PATH=$W/envs/vdjcrispr/bin:$PATH PYTHONPATH= HOME=$W/cache/condahome NUMBA_CACHE_DIR=$W/cache/numba-vdjc; R4=$W/data/vdjc/trust4
   python3 - <<PY || exit 4
