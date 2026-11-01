@@ -20,7 +20,8 @@ singlet_run() {   # engine outdir [reads-args...]
   rc=$?; echo "singlet $eng rc=$rc"; grep -E "Elapsed \(wall|Maximum resident" $out/time.txt; return $rc; }
 reads_arg() { n=$(ls $1/*.1fq | wc -l); if [ $n = 1 ]; then ls $1/*.1fq; else echo "--runs-dir $1"; fi; }
 sb() { sbatch --parsable --account=debruinz --kill-on-invalid-dep=no "$@"; }
-post_gpu() {   # LANE_REST = G:fetch:scpu:starsolo:scap,...  (first = the sample after this one); SELF_* = this sample's job ids
+post_gpu() {
+  touch $P/.gpu_ended   # LANE_REST = G:fetch:scpu:starsolo:scap,...  (first = the sample after this one); SELF_* = this sample's job ids
   cid=$(sb --job-name=s15-cleanup-$GSM --partition=short-cpu --cpus-per-task=2 --mem=8G --time=01:00:00 --dependency=afterany:${SELF_C}:${SELF_S}:${SELF_P}         --output=$W/logs/%x-%j.out $D/pilot_stage.sh cleanup $GSM); echo "cleanup job $cid"
   [ -n "${LANE_REST:-}" ] || return 0
   nxt=${LANE_REST%%,*}; rest=; case $LANE_REST in *,*) rest=${LANE_REST#*,};; esac

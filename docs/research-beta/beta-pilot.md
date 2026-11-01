@@ -60,7 +60,9 @@ GPU runs use 3 serial lanes, so at most 3 GPU jobs are in the queue at once. Eac
 
 Competitors run on the 100 M-pair prefix, not the full sample; `scap` gives Singlet on the identical prefix for a matched comparison. Samples below 100 M pairs use all their reads.
 
-Not yet queued (no usable template, or needs per-sample edits; to be added before `cleanup` runs, using `KEEP`): alevin-fry, kb-python `nac`, CellBender, DropletUtils/SoupX/decontX/scDblFinder, HTO callers, TRUST4, Kraken2, vireo/souporcell/mgatk, peddy/somalier.
+Competitors (`ops/s15/submit_tools.sh`, `pilot_tools.sh`), all on STARsolo's `GeneFull` matrices or the 100 M-pair FASTQ, chained after the sample's STARsolo (or Singlet CPU for mgatk) job: DropletUtils `emptyDrops`; SoupX, decontX and scDblFinder on STARsolo's filtered cells; CellBender 0.3.2 (V100S, one at a time, so the H100 lanes stay at 3); Kraken2 on the cDNA mate (viral k2 DB, so only viral/non-host-viral truth is testable); mgatk on Singlet's chrM reads and cell calls; alevin-fry (`simpleaf`, cr-like); kb-python `nac` (one shared index); TRUST4 on the 5' GEX reads of the five 5' samples. `finalclean` (afterany of the sample's tools) removes `KEEP` and deletes the reads once the GPU lane has passed the sample.
+
+Not queued: HTO callers, vireo/souporcell, peddy/somalier. They need a pooled or hashed sample that is not in the list yet (see the gaps above). The paired TCR libraries are separate SRA experiments and are not fetched, so TRUST4 is judged on the GEX reads only.
 
 ## Scoring (after the jobs)
 
