@@ -104,6 +104,8 @@ class Params:
     # > 0: an IG junction removed by the cross filter comes back when it is the strongest high-confidence contig of its
     # barcode and chain and has >= this many UMIs (B cells of a clone that also has plasma cells)
     ig_top_min_umis: int = 0
+    # > 0: an IG contig whose barcode holds no kept partner chain is ambient when its junction is in >= this many barcodes
+    ig_lone_spread: int = 0
     threads: int = 8
 
 
@@ -825,6 +827,19 @@ def filter_contigs(df, params: Params):
             & (df["umis"] >= params.ig_top_min_umis)
         )
         df.loc[give, "kept"] = True
+    if params.ig_lone_spread > 0:
+        # ambient IG spread: a junction present in many droplets (a plasma clone's light chain in thousands of barcodes at
+        # 1-9 UMIs) is a real chain where its barcode also holds the partner chain; alone (heavy without light or light
+        # without heavy) it is ambient, the same molecule in another cell's droplet
+        ig = df["chain"].isin(("IGH", "IGK", "IGL"))
+        n_bc = df[ig].groupby(["chain", "cdr3_nt"])["bcix"].transform("nunique").reindex(df.index).fillna(0)
+        kp = df["kept"] & df["productive"].astype(bool)
+        heavy = (kp & (df["chain"] == "IGH")).groupby(df["bcix"]).transform("any")
+        light = (kp & df["chain"].isin(("IGK", "IGL"))).groupby(df["bcix"]).transform("any")
+        lone = ig & ((df["chain"] == "IGH") & ~light | df["chain"].isin(("IGK", "IGL")) & ~heavy)
+        drop = df["kept"] & lone & (n_bc >= params.ig_lone_spread)
+        df["ig_lone"] = drop
+        df.loc[drop, "kept"] = False
     if params.orphan_max_umis > 0:
         kp = df["kept"] & df["productive"].astype(bool)
         n_kp = kp.groupby(df["bcix"]).transform("sum")
