@@ -101,6 +101,9 @@ class Params:
     # > 0: a barcode whose only kept productive contig has <= this many UMIs is not a cell (a lone receptor molecule:
     # ambient mRNA or a stray molecule in a droplet of another lineage); no pair is lost, a pair needs two chains
     orphan_max_umis: int = 0
+    # > 0: an IG junction removed by the cross filter comes back when it is the strongest high-confidence contig of its
+    # barcode and chain and has >= this many UMIs (B cells of a clone that also has plasma cells)
+    ig_top_min_umis: int = 0
     threads: int = 8
 
 
@@ -809,6 +812,19 @@ def filter_contigs(df, params: Params):
     df.loc[amb, "kept"] = False
     if params.ambient_rescue in ("cell", "pair", "clone") and cand.any():
         df.loc[_ambient_rescue(df, cand.to_numpy(), params.ambient_rescue), "kept"] = True
+    if params.ig_top_min_umis > 0 and cand.any():
+        # IG mRNA per cell spans > 100x (plasma cells vs B cells), so a B cell of an expanded clone that contains plasma
+        # cells holds the clone's junction at < 10% of the plasma cell's UMIs: the strongest contig of its own barcode
+        # and chain is that cell's receptor, unless it is a few stray molecules (ambient IG in other droplets: 1-2 UMIs)
+        hc = df[df["high_confidence"].astype(bool)]
+        top_hc = hc.groupby(["bcix", "chain"])["umis"].transform("max").reindex(df.index)
+        give = (
+            cand
+            & df["chain"].isin(("IGH", "IGK", "IGL"))
+            & (df["umis"] == top_hc)
+            & (df["umis"] >= params.ig_top_min_umis)
+        )
+        df.loc[give, "kept"] = True
     if params.orphan_max_umis > 0:
         kp = df["kept"] & df["productive"].astype(bool)
         n_kp = kp.groupby(df["bcix"]).transform("sum")
