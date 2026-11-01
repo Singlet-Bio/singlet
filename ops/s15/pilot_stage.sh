@@ -34,11 +34,14 @@ ensure_wl() {   # every .1fq must have been decoded WITH --whitelist-dir (pilot_
     done
     touch $P/stage/.wl_ok; cat $P/decode_wl.log ) 9> $P/.decode.lock
 }
-reads_arg() { n=$(ls $1/*.1fq | wc -l); if [ $n = 1 ]; then ls $1/*.1fq; else echo "--runs-dir $1"; fi; }
+reads_arg() { n=$(ls $1/*.1fq | wc -l); if [ $n = 1 ]; then ls $1/*.1fq; else echo "--runs-dir $1 --runs-used $(ls $1/*.1fq | xargs -n1 basename | sed s/.1fq$// | sort | paste -sd,)"; fi; }
 sb() { sbatch --parsable --account=debruinz --kill-on-invalid-dep=no "$@"; }
 post_gpu() {
   touch $P/.gpu_ended   # LANE_REST = G:fetch:scpu:starsolo:scap,...  (first = the sample after this one); SELF_* = this sample's job ids
   cid=$(sb --job-name=s15-cleanup-$GSM --partition=short-cpu --cpus-per-task=2 --mem=8G --time=01:00:00 --dependency=afterany:${SELF_C}:${SELF_S}:${SELF_P}         --output=$W/logs/%x-%j.out $D/pilot_stage.sh cleanup $GSM); echo "cleanup job $cid"
+  if [ -z "${LANE_REST:-}" ]; then   # end of this lane: take the next sample from the shared extra queue (GPU runs that have to be redone)
+    LANE_REST=$( ( flock 8; l=$(head -1 $D/lane/extra.queue 2> /dev/null); [ -n "$l" ] && sed -i 1d $D/lane/extra.queue; echo "$l" ) 8> $D/lane/extra.lock )
+  fi
   [ -n "${LANE_REST:-}" ] || return 0
   nxt=${LANE_REST%%,*}; rest=; case $LANE_REST in *,*) rest=${LANE_REST#*,};; esac
   IFS=: read g f c s p <<< "$nxt"

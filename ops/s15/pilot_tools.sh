@@ -119,6 +119,7 @@ PY
 vdjclean) rm -rf $P/sra $P/stage $P/fq $P/fastqs; du -sh $P ;;
 finalclean)   # all competitors have ended: drop KEEP; delete the reads unless the GPU lane has not passed this sample yet (its own cleanup then deletes them)
   rm -f $P/KEEP
+  [ -d $P/s1cpu/out ] && [ -d $P/s1gpu/out ] && [ ! -s $P/equiv.txt ] && python3 $D/out_equiv.py $P/s1cpu/out $P/s1gpu/out > $P/equiv.txt 2>&1
   if [ -e $P/.gpu_ended ]; then rm -rf $P/sra $P/stage $P/fq $P/cap1fq; find $P \( -name '*.bam' -o -name '*.bai' \) -delete; echo "reads deleted"; else echo "GPU lane not done: lane cleanup will delete"; fi
   du -sh $P ;;
 esac
