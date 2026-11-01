@@ -41,7 +41,7 @@ export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_R
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 echo "node=$(hostname) job=$SLURM_JOB_ID commit=$(cat $BINDIR/commit-gpu 2>/dev/null) T=$T sample=$s modes=${MODES[*]} $(date -Is)" | tee $RES/summary.txt
 nvidia-smi --query-gpu=name,driver_version --format=csv,noheader | tee -a $RES/summary.txt
-G=$REF/GRCh38-2024-A; FQ=$PB/data/$s/$s.1fq
+G=$REF/GRCh38-2024-A; case $s in neuron1k_v3|nuclei2k_v2) G=$REF/GRCm39-2024-A ;; esac; FQ=$PB/data/$s/$s.1fq
 ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O

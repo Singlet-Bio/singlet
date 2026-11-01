@@ -4508,8 +4508,7 @@ int main(int argc, char* argv[]) {
         // each block's read and base counts for the prefill's exact allocation). R11's exact CB histogram comes from STAR's prefill (E8 region)
         // when the stream first needs it. Where a condition does not hold, or the probe finds a prefix to clip, the file decode runs as before.
         if (ingest_req && !use_fifo_decode) {
-            std::cerr << "[1fq-ingest] Scanning the .1fq's blocks (SINGLET_ENGINE_GPU_INGEST=1)
-";
+            std::cerr << "[1fq-ingest] Scanning the .1fq's blocks (SINGLET_ENGINE_GPU_INGEST=1)\n";
             StopWatch ingest_sw;
             std::string why;
             const char* gp = getenv("SINGLET_GPU_PILEUP");
