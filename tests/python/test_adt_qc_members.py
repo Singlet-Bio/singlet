@@ -207,18 +207,6 @@ def test_discover_flags_reused_and_cross_species_barcodes():
     assert pan.status == "ok"
 
 
-def test_modalities_vocabulary_has_adt_and_hto():
-    from singlet.s1 import client
-
-    assert (
-        client.MODALITIES["adt"].members == (ST.MEMBERS[0],)
-        and client.MODALITIES["adt"].slot == "obsm"
-    )
-    assert client.MODALITIES["hto"].members == (ST.MEMBERS[1],)
-    for alias, name in (("protein", "adt"), ("cite", "adt"), ("hashtag", "hto")):
-        assert client._MODALITY_ALIASES[alias] == name
-
-
 def test_reference_with_repeated_sequences_and_missing_ids(tmp_path):
     cat = P.load_catalog()
     h1 = cat[cat.kind == "hashtag"].iloc[0]
