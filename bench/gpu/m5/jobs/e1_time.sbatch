@@ -17,7 +17,7 @@ G=$REF/GRCh38-2024-A/star_2.7.11b; SD=$W/jobs/w11/bin/stardump; E=$W/jobs/fable/
 IMG=$W/images/cuda-13-devel.sif; PY=$W/images/python-3.12-bookworm.sif; NSYS=/usr/local/bin/nsys
 OUT=$E/results/time-$SLURM_JOB_ID; mkdir -p $OUT
 SCR=/tmp/$USER-e1-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT; export LC_ALL=C
-MAXD=${MAXD:-2000000}; STEPS=,${STEPS:-base,nsys,tail,sweep,mono},
+MAXD=${MAXD:-2000000}; STEPS=,$(echo ${STEPS:-base,nsys,tail,sweep,mono} | tr "+:" ",,"),   # "+" separated
 echo "job=$SLURM_JOB_ID node=$(hostname) $(date -Is) MAXD=$MAXD steps=$STEPS m5=$(cat $E/bin/m5.commit) m5t=$(cat $E/bin/m5t.commit)"
 nvidia-smi --query-gpu=name,driver_version,clocks.max.sm,memory.total --format=csv,noheader
 T0=$(date +%s)

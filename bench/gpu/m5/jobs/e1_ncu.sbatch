@@ -21,7 +21,8 @@ IMG=$W/images/cuda-13-devel.sif; PY=$W/images/python-3.12-bookworm.sif; NCU=/usr
 QI=/opt/nvidia/nsight-compute/2026.2.0/host/linux-desktop-glibc_2_11_3-x64/QdstrmImporter   # /usr/local/bin/nsys cannot find it itself
 OUT=$E/results/ncu-$SLURM_JOB_ID; mkdir -p $OUT
 SCR=/tmp/$USER-e1n-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT; export LC_ALL=C
-MAXD=${MAXD:-2000000}; STEPS=,${STEPS:-nsys,tail,A,B,M,monog,monol},; NBA=${NBA:-262144}; SET=${SET:-full}; PTO=${PTO:-2700}
+MAXD=${MAXD:-2000000}; STEPS=,$(echo ${STEPS:-nsys,tail,A,B,M,monog,monol} | tr "+:" ",,"),;   # STEPS: "+" separated (sbatch --export splits on ",")
+ NBA=${NBA:-262144}; SET=${SET:-full}; PTO=${PTO:-2700}
 echo "job=$SLURM_JOB_ID node=$(hostname) $(date -Is) MAXD=$MAXD steps=$STEPS NBA=$NBA set=$SET m5=$(cat $E/bin/m5.commit)"
 nvidia-smi --query-gpu=name,driver_version,clocks.max.sm --format=csv,noheader
 apptainer exec $IMG $NCU --version | tail -1
