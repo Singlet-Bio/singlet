@@ -14,6 +14,7 @@
 #include "singlet/engine_gpu.h"
 #include "stitch.cuh"
 #include "solo_gpu.h"   // E11: E9's Solo library (before STAR's headers, like stitch.cuh)
+#include "singlet/tail_trace.h"   // E16: marks of the level-5 tail
 #endif
 #include "SeqCache.h"
 #include "Parameters.h"
@@ -827,6 +828,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     in.release = [&]() { if (!lockReleased) { lockReleased = true; heldS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tHeld0).count(); singlet_engine_gpu::unlockDevice(lockFd); } };
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     in.release();
+    singlet_tail::mark("prefill: mapDistinct returned (device held %.3f s)", heldS);
     time_t tGpu = time(nullptr);
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it, held it " << heldS << " s\n" << out.log << out.e10.log;
@@ -871,6 +873,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             delete cache;
             cache = c2;
         };
+        singlet_tail::mark("prefill: sequence cache re-created (%llu MB)", (unsigned long long) mb);
     };
     // insert, sharded by hash across threads (SeqCache is thread-safe per shard); keep(i) picks the records
     auto insertRecords = [&](auto keep) {
@@ -951,6 +954,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
         });
         for (auto &x : th) x.join();
+        singlet_tail::mark("prefill: summary threads joined (%d threads, no summaries: %d)", nt, (int) e10NoSum);
         if (g_handoffLeanAln.load() > 0)   // SINGLET_HANDOFF_LEAN=verify
             P.inOut->logMain << "ENGINE_GPU: lean alignment fields: " << g_handoffLeanAln.load() << " alignments, " << g_handoffLeanBad.load()
                              << " differ from alignBAM's" << "\n";
@@ -960,6 +964,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         else
         for (int t = 0, r = 0; t < nt; t++)
             for (uint64 o : partOff[t]) recAln[r++] = part[t][o];
+        singlet_tail::mark("prefill: alignment counts of %llu records", (unsigned long long) nRec);
         FILE *f = e2eRec ? nullptr : fopen(hp, "wb");
         bool okw = e2eRec || f != nullptr;
         if (e2eRec) P.inOut->logMain << "ENGINE_GPU: E8: no hand-off file: " << nRec << " records built on the device, in the shared region; summaries in "
@@ -1054,6 +1059,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 E2H.cbumiL = (uint32) P.pSolo.cbumiL; E2H.simple = 1;
                 __sync_synchronize();
                 memcpy(E2H.magic, "SGE2E001", 8);
+                singlet_tail::mark("prefill: region complete (magic written, %llu MB in use)", (unsigned long long) (E2H.used >> 20));
                 P.inOut->logMain << "ENGINE_GPU: E8: per-read hand-off entries" << (e2eQOn ? " and low-quality masks" : "") << " in the shared region ("
                                  << (E2H.used >> 20) << " MB in use)" << (e10ok ? ", built on the device (E10)" : "") << (e10chk.on ? "; STAR's are compared after mapping" : "")
                                  << "\n";
@@ -1103,12 +1109,14 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         std::string w;
         bool ok3 = true;
         if (P.outReadsUnmapped == "Fastx" && !e10WriteUnmapped(P, out.e10.unmappedReads, (int) P.runThreadN, w)) ok3 = false;
+        singlet_tail::mark("prefill: %zu Unmapped.out records written", out.e10.unmappedReads.size());
         if (ok3) {
             g_statsAll.addStats(S);
             e10sj.swap(out.e10.sj); e10nSJ = out.e10.nSJ;
             g_e10Level = 3;
             if (e10Level >= 4 && g_starReadSource == nullptr && (e10Level == 4 || e11.ready)) {
                 if (e10BuildSource(P, g_handoffReadRecord, g_handoffNReads, w)) { g_starReadSource = &e10src; g_e10Level = e10Level >= 5 ? 5 : 4; }
+                singlet_tail::mark("prefill: read source of the reads without a record built (%zu reads)", e10src.iRead.size());
                 else if (e10Level >= 5) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): level 5's read source could not be built (" + w
                                                       + ") and the reads with a record have no summaries\n", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
                 else P.inOut->logMain << "ENGINE_GPU: E10 level 4 not used (" << w << "): level 3\n";
@@ -1117,6 +1125,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 std::string w5;
                 if (!e11RnaAdjust(P, w5)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + w5 + "\n", std::cerr, P.inOut->logMain,
                                                         EXIT_CODE_INPUT_FILES, P);
+                singlet_tail::mark("prefill: RNA Q30 adjustment done");
             }
             P.inOut->logMain << "ENGINE_GPU: E10 level " << g_e10Level << ": " << S.readN << " reads with a record (" << S.mappedReadsU << " unique, " << S.mappedReadsM
                              << " multi, " << S.unmappedAll << " unmapped: " << out.e10.unmappedReads.size() << " Unmapped.out records written), " << e10nSJ
@@ -1150,6 +1159,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
+    singlet_tail::mark("prefill: end");
 #endif
 }
 
@@ -1157,6 +1167,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
 // first thread's junction buffer at level >= 3, collapsed, so outputSJ merges them with STAR's own)
 void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
+    singlet_tail::mark("after mapping: start");
     if (e10chk.on) {
         uint64 nRec = 0, nDiffE = 0, nDiffQ = 0, nUnwritten = 0;
         std::ostringstream ex;
@@ -1184,6 +1195,7 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         sj->N += e10nSJ;
         sj->collapseSJ();
         P.inOut->logMain << "ENGINE_GPU: E10: " << e10nSJ << " device junctions merged into the junction output\n" << std::flush;
+        singlet_tail::mark("after mapping: device junctions merged");
     }
     std::vector<uint8>().swap(e10sj);
     e10f.release();
@@ -1236,6 +1248,9 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         e9::SoloWriteInfo info;
         const bool okw = e9::soloWrite(pre, e11.S, e11.M, res, e11.FP, {}, info, log, &sum);
         const auto te = std::chrono::steady_clock::now();
+        singlet_tail::mark("after mapping: Solo gather %.3f s, device wait %.3f s, soloRunKept %.3f s, soloWrite %.3f s",
+                           std::chrono::duration<double>(tw - t0).count(), std::chrono::duration<double>(tl - tw).count(),
+                           std::chrono::duration<double>(tr - tl).count(), std::chrono::duration<double>(te - tr).count());
         if (!okw) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): star_Solo.out/ not written: " + log, std::cerr, P.inOut->logMain,
                                 EXIT_CODE_INPUT_FILES, P);
         g_e11SoloDone = true;

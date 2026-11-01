@@ -200,6 +200,7 @@ public:
     void finish(singlet_engine_gpu::PileupInput& in) {
         for (auto& kv : pend_) { incomplete_++; finalize(kv.second); }
         pend_.clear();
+        singlet_tail::mark("collector: pending groups flushed");
         if (ho_ok_) prepend_handoff();
         if (e2e_ != nullptr) prepend_e2e(in); else {   // E8: the device-built records go into `in` directly
         e2e_unmap();   // E8 requested but not used (the hand-off file path ran): the memory object is released
@@ -214,6 +215,7 @@ public:
             if (q_ok_ && reads_q_.size() == reads_.size() && in.nSnps <= 0x7FFFFFu) {
                 in.useQual = 1; in.snpSkipN = 0;
                 in.lowq.assign((const uint8_t*) reads_q_.data(), (const uint8_t*) (reads_q_.data() + reads_q_.size()));
+                singlet_tail::mark("collector: low-quality masks copied into the input (%zu reads)", reads_q_.size());
                 std::cerr << "[gpu_pileup] per-base quality: low-quality masks for " << reads_q_.size() << " reads" << (force_q_ ? " (forced)" : "") << "\n";
             } else std::cerr << "[gpu_pileup] per-base quality needed but unavailable (masks " << (q_ok_ ? "missing for some reads" : "not representable: read over 128 bases or no STAR masks") << ")\n";
         }
@@ -379,16 +381,22 @@ private:
             if (na) std::memcpy((void*) dst.data(), a, na);
             if (nb) std::memcpy((uint8_t*) dst.data() + na, b, nb);
         };
+        singlet_tail::mark("collector: e2e: stream offsets shifted");
         cat(in.sigs, e2e_->base + H.oSigs, nR * sizeof(SigRec), sigs_.data(), sigs_.size() * sizeof(SigRec));
         cat(in.alns, e2e_->base + H.oAlns, nA * sizeof(AlnRec), alns_.data(), alns_.size() * sizeof(AlnRec));
+        singlet_tail::mark("collector: e2e: signatures and alignments copied");
         cat(in.ops, e2e_->base + H.oOps, nO * 4, ops_.data(), ops_.size() * 4);
         cat(in.seq, e2e_->base + H.oSeq, nQ, seq_.data(), seq_.size());
+        singlet_tail::mark("collector: e2e: CIGAR ops and sequences copied");
         ho_reads_.insert(ho_reads_.end(), reads_.begin(), reads_.end());
         reads_.swap(ho_reads_);
         in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
+        singlet_tail::mark("collector: e2e: reads copied into the input");
         ho_q_.insert(ho_q_.end(), reads_q_.begin(), reads_q_.end()); reads_q_.swap(ho_q_);
         std::vector<SigRec>().swap(sigs_); std::vector<AlnRec>().swap(alns_); std::vector<uint32_t>().swap(ops_); std::vector<uint8_t>().swap(seq_);
+        singlet_tail::mark("collector: e2e: masks appended, stream vectors freed");
         e2e_unmap();
+        singlet_tail::mark("collector: e2e: region unmapped and closed");
     }
     static void e2e_unmap() {
         singlet_engine_gpu::e2eRegion().release();   // unmapped and the memfd closed: its pages go

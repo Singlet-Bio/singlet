@@ -5,12 +5,19 @@
 #include "SequenceFuns.h"
 #include "GlobalVariables.h"
 #include "star_api.h"
+#ifdef SINGLET_HAVE_ENGINE_GPU
+#include "singlet/tail_trace.h"   // E16: per-thread loop marks at level 5
+#endif
 
 inline uint64 fastqReadOneLine(ifstream &streamIn, char *arrIn);
 inline void removeStringEndControl(string &str);
 
 
 void ReadAlignChunk::processChunks() {//read-map-write chunks
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    const bool e16 = singlet_tail::on() && iThread >= 0 && iThread < singlet_tail::kMaxThr;   // E16: this thread's start, first chunk, last chunk, end
+    if (e16) { singlet_tail::g_thr[iThread][0] = singlet_tail::now(); singlet_tail::g_thr[iThread][1] = singlet_tail::g_thr[iThread][2] = 0; singlet_tail::g_thrN[iThread][0] = 0; }
+#endif
     noReadsLeft=false; //true if there no more reads left in the file
     bool newFile=false; //new file marker in the input stream
     while (!noReadsLeft) {//continue until the input EOF
@@ -260,7 +267,13 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
             };
         };
 
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (e16 && !noReadsLeft && singlet_tail::g_thr[iThread][1] == 0) singlet_tail::g_thr[iThread][1] = singlet_tail::now();
+#endif
         mapChunk();
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (e16 && !noReadsLeft) { singlet_tail::g_thr[iThread][2] = singlet_tail::now(); singlet_tail::g_thrN[iThread][0]++; }
+#endif
 
         if (iThread==0 && P.runThreadN>1 && P.outSAMorder=="PairedKeepInputOrder") {//concatenate Aligned.* files
             chunkFilesCat(P.inOut->outSAM, P.outFileTmp + "/Aligned.out.sam.chunk", g_threadChunks.chunkOutN);
@@ -290,6 +303,9 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
                 pthread_mutex_unlock(&g_threadChunks.mutexOutUnmappedFastx);
         };
     };
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    if (e16) { singlet_tail::g_thr[iThread][3] = singlet_tail::now(); singlet_tail::g_thrN[iThread][1] = RA->iRead; }
+#endif
     if (P.runThreadN>1) pthread_mutex_lock(&g_threadChunks.mutexLogMain);
     P.inOut->logMain << "Completed: thread #" <<iThread <<endl;
     if (P.runThreadN>1) pthread_mutex_unlock(&g_threadChunks.mutexLogMain);

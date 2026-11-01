@@ -751,6 +751,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         }
     if (K > 1) std::stable_sort(indels.begin(), indels.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (auto& e : indels) out->indels.push_back(e.second);
+    const double e16m0 = now_s();   // E16: the host side of the final downloads (per-alignment results, junction table)
     if (g_cell_stats) {
         out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1));
         CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
@@ -761,6 +762,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         out->aa_gene.resize(nA); out->aa_stat.resize(nA); out->aa_exg.resize(nA);
         for (int k = 0; k < nA; k++) { out->aa_gene[k] = h[k].gene; out->aa_stat[k] = (uint8_t)h[k].stat; out->aa_exg[k] = h[k].exg; }
     }
+    { char b[96]; snprintf(b, sizeof b, "e16: merge + per-alignment D2H %.3f s", now_s() - e16m0); g_parts_log.push_back(b); }
     out->n_gene_tuples = ng_all; out->n_sjl = n_sjl; out->n_sj_tuples = n_sjt_all; out->n_snp_tuples = n_snpt_all; out->n_mt_tuples = n_mtt_all; out->n_ind_tuples = n_indt_all; out->n_junctions = nj;
     if (nj > 0) { std::vector<uint64_t> h1(nj); std::vector<uint32_t> h2(nj); CK(cudaMemcpy(h1.data(), t1, (size_t)nj * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(h2.data(), t2, (size_t)nj * 4, cudaMemcpyDeviceToHost));
         for (int i = 0; i < nj; i++) out->sjtab.push_back({(uint32_t)(h1[i] >> 32), (uint32_t)(h1[i] & 0xFFFFFFFFu), h2[i]}); }

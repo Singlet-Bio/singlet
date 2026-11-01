@@ -338,6 +338,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     const E2EHeader& H = *R.hdr();
     const u64 n = H.nReads, nRec = H.nRec, nAln = H.nAln, nOps = H.nOps;
     bool pinned = false;
+    double e16reg = 0;
     auto fail = [&](const char* what, cudaError_t e) {
         out.log += std::string(what) + ": " + cudaGetErrorString(e) + "; ";
         if (pinned) cudaHostUnregister(R.base);
@@ -346,6 +347,8 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
 #define EP_CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) return fail(#x, e_); } while (0)
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);
     if (cudaSetDevice(device) != cudaSuccess) { out.log += "cannot select device; "; return false; }
+    cudaFree(0);   // E16: the context now, timed on its own
+    const double e16ctx = now() - t0;
     PassBufs B;
     uint32_t *dRR, *dOps, *dKeep, *dPos, *dCellR, *dCellU, *dCellM, *dWl, *dClip, *dPend;
     e6::ReadEntry* dE; u64 *dQ = nullptr, *dK, *dLowq, *dRhost;
@@ -355,6 +358,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         const double tu = now();
         pinned = cudaHostRegister(R.base, std::min<u64>(R.cap, (H.used + 4095) & ~4095ull), cudaHostRegisterDefault) == cudaSuccess;
         if (!pinned) cudaGetLastError();
+        e16reg = now() - tu;
         EP_CK(B.alloc(dRR, n * 4)); EP_CK(cudaMemcpy(dRR, R.at<uint8_t>(H.oReadRecord), n * 4, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dE, n * 24)); EP_CK(cudaMemcpy(dE, R.at<uint8_t>(H.oEntries), n * 24, cudaMemcpyHostToDevice));
         if (H.oQMask) { EP_CK(B.alloc(dQ, n * 16)); EP_CK(cudaMemcpy(dQ, R.at<uint8_t>(H.oQMask), n * 16, cudaMemcpyHostToDevice)); }
@@ -385,6 +389,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     const unsigned T = 256, G = (unsigned) ((n + T - 1) / T);
     PassDev d{};
     unsigned long long pc[PC_N] = {};
+    double e16unreg = 0, e16reset = 0;
     u64 nKeep = 0;
     {
         const double te = now();
@@ -449,7 +454,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         out.msDownload = (now() - td) * 1e3;
     }
 #undef EP_CK
-    if (pinned) cudaHostUnregister(R.base);
+    { const double tq = now(); if (pinned) cudaHostUnregister(R.base); e16unreg = now() - tq; }
     out.totalAln = pc[PC_ALN]; out.secondary = pc[PC_SEC]; out.rrnaSampled = pc[PC_RSAMP]; out.rrnaHook = pc[PC_RHOOK]; out.chrm = pc[PC_CHRM];
     out.noBarcode = pc[PC_NOBC]; out.barcoded = pc[PC_BARCODED]; out.multimapper = pc[PC_MULTI]; out.lowMapq = pc[PC_LOWMAPQ];
     out.nDone = pc[PC_DONE]; out.nUnwritten = pc[PC_UNWRITTEN]; out.nBigClip = pc[PC_BIGCLIP]; out.nNoHook = pc[PC_NOHOOK]; out.nNoKey = pc[PC_NOKEY];
@@ -463,8 +468,9 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
              out.msDownload, out.msTotal);
     out.log += b;
     // the context goes, as pileupRun's does at its end: pileupRun then initialises the device afresh (cudaInitDevice on a live context fails)
-    B.release();
-    cudaDeviceReset();
+    { const double tq = now(); B.release(); cudaDeviceReset(); e16reset = now() - tq; }
+    snprintf(b, sizeof b, "; e16: context %.3f s, register %.3f s, unregister %.3f s, free + reset %.3f s", e16ctx, e16reg, e16unreg, e16reset);
+    out.log += b;
     return true;
 }
 

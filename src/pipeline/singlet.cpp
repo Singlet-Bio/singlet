@@ -7604,6 +7604,7 @@ int main(int argc, char* argv[]) {
                 static_cast<int>(args.size()) - 1,
                 const_cast<char**>(args.data())
             );
+            singlet_tail::mark("STAR child: _exit(%d)", rc);   // E16 (level 5 only)
             _exit(rc);
         }
 
@@ -8209,6 +8210,7 @@ int main(int argc, char* argv[]) {
         StopWatch pileup_sw;
         stats = engine_ptr->run(bam_source);
         pileup_time = pileup_sw.elapsed_s();
+        singlet_tail::mark("parent: streaming pileup returned");   // E16 (level 5 only)
         singlet::rearm_stall_watchdog("after pileup (streaming path): export");
         std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, "
                   << pileup_time << "s";
@@ -8242,6 +8244,7 @@ int main(int argc, char* argv[]) {
         if (star_pid > 0) {
             int wstatus;
             waitpid(star_pid, &wstatus, 0);
+            singlet_tail::mark("parent: STAR reaped");   // E16 (level 5 only)
             close(pipe_fd[0]);
             if (WIFEXITED(wstatus)) {
                 star_exit = WEXITSTATUS(wstatus);

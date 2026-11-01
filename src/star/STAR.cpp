@@ -46,6 +46,12 @@ extern bool g_e11SoloDone; //singlet E11 (SeqCacheGpuPrefill.cpp): star_Solo.out
 
 #include "htslib/htslib/sam.h"
 #include "parametersDefault.xxd"
+#ifdef SINGLET_HAVE_ENGINE_GPU
+#include "singlet/tail_trace.h"   // E16: marks of the level-5 tail (stderr; nothing at other levels)
+#define E16_MARK(...) singlet_tail::mark(__VA_ARGS__)
+#else
+#define E16_MARK(...) ((void) 0)
+#endif
 
 void usage(int usageType)
 {
@@ -226,6 +232,7 @@ int star_main_impl(int argInN, char *argIn[])
         g_starFastAssign = !(fa != nullptr && fa[0] == '0');
         P.inOut->logMain << "FASTASSIGN: " << (g_starFastAssign ? "on" : "off") << "\n";
     }
+    E16_MARK("STAR: prefill returned");
 #ifdef STAR_PROFILE
     auto profClock0 = std::chrono::steady_clock::now(); unsigned long long profTsc0 = __rdtsc();
 #endif
@@ -236,9 +243,31 @@ int star_main_impl(int argInN, char *argIn[])
     {
         RAchunk[ii] = new ReadAlignChunk(P, genomeMain, transcriptomeMain, ii);
     };
+    E16_MARK("STAR: %d chunks constructed", (int) P.runThreadN);
 
     if (P.runRestart.type != 1)
         mapThreadsSpawn(P, RAchunk);
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    if (singlet_tail::on()) {   // E16: per thread start, first chunk, last chunk mapped, end (s after the first thread's start); chunks, reads
+        double t0 = 1e300, f0 = 1e300, f1 = 0, l1 = 0, e1 = 0;
+        unsigned long long nc = 0, nr = 0; int busy = 0;
+        std::string per;
+        for (int i = 0; i < (int) P.runThreadN && i < singlet_tail::kMaxThr; i++) t0 = std::min(t0, singlet_tail::g_thr[i][0]);
+        for (int i = 0; i < (int) P.runThreadN && i < singlet_tail::kMaxThr; i++) {
+            const double *g = singlet_tail::g_thr[i];
+            char b[160];
+            snprintf(b, sizeof b, " t%d[%.3f %.3f %.3f %.3f c%llu r%llu]", i, g[0] - t0, g[1] > 0 ? g[1] - t0 : -1.0, g[2] > 0 ? g[2] - t0 : -1.0, g[3] - t0,
+                     singlet_tail::g_thrN[i][0], singlet_tail::g_thrN[i][1]);
+            per += b;
+            if (g[1] > 0) { busy++; f0 = std::min(f0, g[1]); f1 = std::max(f1, g[1]); l1 = std::max(l1, g[2]); }
+            e1 = std::max(e1, g[3]);
+            nc += singlet_tail::g_thrN[i][0]; nr += singlet_tail::g_thrN[i][1];
+        }
+        E16_MARK("STAR: loop: threads start %.3f, first chunk %.3f..%.3f, last chunk mapped %.3f, last thread end %.3f (epoch); %d of %d threads got chunks, %llu chunks, %llu reads;%s",
+                 t0, f0 < 1e300 ? f0 : 0, f1, l1, e1, busy, (int) P.runThreadN, nc, nr, per.c_str());
+    }
+#endif
+    E16_MARK("STAR: threads joined");
 
     if (P.outFilterBySJoutStage == 1)
     { // completed stage 1, go to stage 2
@@ -264,6 +293,7 @@ int star_main_impl(int argInN, char *argIn[])
     {
         bgzf_flush(P.inOut->outBAMfileUnsorted);
         bgzf_close(P.inOut->outBAMfileUnsorted);
+        E16_MARK("STAR: BAM stream closed");
     };
     if (P.inOut->outQuantBAMfile != NULL)
     {
@@ -283,6 +313,7 @@ int star_main_impl(int argInN, char *argIn[])
                      << "RAM after mapping:\n"
                      << linuxProcMemory() << flush;
     seqCacheGpuAfterMapping(P, RAchunk); //singlet --engine gpu, E10 (SINGLET_ENGINE_GPU_E2E >= 2); nothing otherwise
+    E16_MARK("STAR: after-mapping steps done (device junctions, Solo on the device)");
 #ifdef STAR_PROFILE
     {
         double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - profClock0).count();
@@ -316,19 +347,23 @@ int star_main_impl(int argInN, char *argIn[])
         delete g_seqCache;
         g_seqCache = nullptr;
     };
+    E16_MARK("STAR: sequence cache freed");
 
     // no need for genome anymore, free the memory
     genomeMain.freeMemory();
+    E16_MARK("STAR: genome freed");
 
     // aggregate output junctions
     // collapse splice junctions from different threads/chunks, and output them
     if (P.runRestart.type != 1 && P.outSJ.yes)
         outputSJ(RAchunk, P);
+    E16_MARK("STAR: SJ.out.tab written");
 
     soloDumpFlushAll(); // singlet E9 debug dump (SINGLET_SOLO_DUMP, off by default): the threads' per-read Solo records
 
     // solo counts
     Solo soloMain(RAchunk, P, *RAchunk[0]->chunkTr);
+    E16_MARK("STAR: Solo constructed");
     if (!g_e11SoloDone) //singlet E11 (SINGLET_ENGINE_GPU_E2E=5): counted on the device
     soloMain.processAndOutput();
 
@@ -347,6 +382,7 @@ int star_main_impl(int argInN, char *argIn[])
     };
 
     bamSortByCoordinate(P, RAchunk, *genomeMain.genomeOut.g, soloMain);
+    E16_MARK("STAR: BAM sort step done");
 
     // wiggle output
     if (P.outWigFlags.yes)
@@ -366,6 +402,7 @@ int star_main_impl(int argInN, char *argIn[])
                          << flush;
     P.inOut->logFinal.open((P.outFileNamePrefix + "Log.final.out").c_str());
     g_statsAll.reportFinal(P.inOut->logFinal);
+    E16_MARK("STAR: Log.final.out written");
     *P.inOut->logStdOut << timeMonthDayTime(g_statsAll.timeFinish) << " ..... finished successfully\n"
                         << flush;
 
@@ -375,6 +412,7 @@ int star_main_impl(int argInN, char *argIn[])
     {
         sysRemoveDir(P.outFileTmp);
     };
+    E16_MARK("STAR: temp directory removed");
 
     P.closeReadsFiles(); // this will kill the readFilesCommand processes if necessary
     // genomeMain.~Genome(); //need explicit call because of the 'delete P.inOut' below, which will destroy P.inOut->logStdOut
@@ -385,6 +423,7 @@ int star_main_impl(int argInN, char *argIn[])
     };
 
     delete P.inOut; // to close files
+    E16_MARK("STAR: files closed, returning");
 
 #ifdef SINGLET_PGO_GENERATE
     // profile-generate builds (src/star/pgo/pgo_build.sh): the pipeline's STAR child leaves with

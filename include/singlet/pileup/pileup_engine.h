@@ -51,6 +51,7 @@
 #include "vdj_counter.h"
 #include "rrna_detect.h"
 #include "polya_sites.h"
+#include "../tail_trace.h"      // E16: marks of the level-5 tail (stderr; nothing at other levels)
 #include "gpu_pileup_dump.h"   // W11: SINGLET_PILEUP_DUMP / SINGLET_STREAM_TEE debug hooks (no effect unless set)
 #include "gpu_pileup_bridge.h" // W11: SINGLET_GPU_PILEUP=compare (GPU builds only; no effect unless set)
 
@@ -525,10 +526,12 @@ public:
             hts_close(fp);
             return stats;
         }
+        singlet_tail::mark("parent: BAM header read");   // E16 (level 5 only)
 
         // Map chromosome names and resolve pending references
         build_chrom_map(hdr);
         resolve_references();
+        singlet_tail::mark("parent: references resolved");
 
         // Open chrM BAM output if requested
         // Deferred chrM BAM output: buffer reads during main loop, write after.
@@ -680,7 +683,10 @@ public:
         if (gpupileup::enabled()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end
         gpu_covers_ = gpu_col_ && gpupileup::mode() == 2;   // W11 "on": the GPU replaces the covered steps below
 #endif
+        singlet_tail::mark("parent: stream loop starts");
+        bool e16_first = singlet_tail::on();
         while (sam_read1(fp, hdr, b) >= 0) {
+            if (e16_first) { e16_first = false; singlet_tail::mark("parent: first BAM record"); }
             tee.write(hdr, b);
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (gpu_col_) {
@@ -1180,6 +1186,7 @@ public:
         PROF_BAM_IO_ACCUM;  // account for last failed sam_read1
 
         if (gpu_covers_) std::cerr << "[gpu_pileup] stream drained\n";   // S8: log timestamps place the post-stream steps
+        singlet_tail::mark("parent: stream drained (%llu records)", (unsigned long long) stats.total_reads);
         // ── Flush remaining multi-mapper buffer entries ──
         // These are reads where not all NH alignments appeared in the BAM
         uint64_t mm_flushed = 0;
@@ -1198,11 +1205,13 @@ public:
             std::cerr << "[gpu_pileup] ERROR: the hand-off pass failed (see above); rerun with SINGLET_GPU_PILEUP unset\n";
             std::exit(9);
         }
+        singlet_tail::mark("parent: hand-off pass done");
         if (gpu_covers_ && !gpu_pileup_apply(stats)) {   // W11 "on": covered accumulators and counters from the GPU
             std::cerr << "[gpu_pileup] ERROR: the GPU pileup failed after the CPU skipped its steps; rerun with SINGLET_GPU_PILEUP unset\n";
             std::exit(9);
         }
 #endif
+        singlet_tail::mark("parent: GPU pileup applied");
         // ── Order-free finalize (docs/research-beta/order-free-rules.md) ──
         fin_mark("stream done, finalize starts");
         snp_cons_.finalize(snp_ad_, snp_dp_, stats, config_.umi_dedup_directional, gene_roots(mol_store_));  // R1 over R9
@@ -1250,6 +1259,7 @@ public:
         bam_destroy1(b);
         sam_hdr_destroy(hdr);
         hts_close(fp);
+        singlet_tail::mark("parent: finalize done");
 
         auto t1 = std::chrono::high_resolution_clock::now();
         stats.wall_time_s = std::chrono::duration<double>(t1 - t0).count();
@@ -1906,6 +1916,7 @@ public:
     // this pass's records plus this engine's annotation and parameters, as the GPU pileup takes them; false if not reproducible
     bool gpu_build_input(singlet_engine_gpu::PileupInput& in) {
         using namespace singlet_engine_gpu;
+        singlet_tail::mark("parent: build input starts");
         const auto& et = gene_model_.exon_trees_view(); const auto& it = gene_model_.intron_trees_view();
         const uint32_t n_tid = static_cast<uint32_t>(tid_to_chrom_.size());
         in.exonTrees.resize(n_tid); in.intronTrees.resize(n_tid);
@@ -1926,13 +1937,16 @@ public:
         in.wantGeneMerges = (has_vdj_ && config_.umi_dedup) ? 1 : 0;   // R9 per gene for the host's V(D)J reducer
         in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
         in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
+        singlet_tail::mark("parent: build input: annotation (trees, SNPs, genes) done");
         const size_t nreads = gpu_col_->n_reads(), nsigs = gpu_col_->n_sigs(); const uint64_t inc = gpu_col_->incomplete();
         if (gpu_col_->handoff_used())
             std::cerr << "[gpu_pileup] hand-off: " << gpu_col_->n_handoff_reads() << " reads take their alignments from the GPU prefill, "
                       << gpu_col_->handoff_mismatches() << " primary alignments differ from the stream's\n";
         gpu_col_->finish(in);
+        singlet_tail::mark("parent: build input: collector finished (records in the input)");
         gpu_clip_ = gpu_col_->clips();   // gpu_host_pass rebuilds the poly(A) site of a clipped read from these, after gpu_col_ is gone
         gpu_col_.reset();
+        singlet_tail::mark("parent: build input: clips copied, collector freed");
         if (in.snpSkipN < 0) { std::cerr << "[gpu_pileup] not run: base qualities neither constant nor tied to N\n"; return false; }
         std::cerr << "[gpu_pileup] " << nreads << " reads, " << nsigs << " signatures (" << inc << " incomplete groups)\n";
         return true;
@@ -2326,6 +2340,7 @@ public:
     // once (R11, barcode set, WL-ambient index: what the pass looks up per read) and runs the R4 rRNA detector on the sampled unclipped reads;
     // every counter, per-cell array and the collector's hand-off reads come out as the host pass makes them.
     bool gpu_handoff_pass_e2e(PileupStats& stats) {
+        singlet_tail::mark("parent: hand-off pass starts (region mapped)");
         const singlet_engine_gpu::E2ERegion& R = *gpu_col_->e2e();
         const singlet_engine_gpu::E2EHeader& H = *R.hdr();
         if (!H.simple) { std::cerr << "[gpu_pileup] hand-off: barcode layout is not CB_UMI_Simple\n"; return false; }
@@ -2377,8 +2392,10 @@ public:
         singlet_engine_gpu::E2EPassOut o;
         int lock_fd = -1;
         const int device = singlet_engine_gpu::lockDevice(&lock_fd);
+        singlet_tail::mark("parent: hand-off pass: device lock taken");
         const bool ok = singlet_engine_gpu::e2ePass(pin, device, table, o);
         singlet_engine_gpu::unlockDevice(lock_fd);
+        singlet_tail::mark("parent: hand-off pass: e2ePass returned (%s)", o.log.c_str());
         if (!ok) { std::cerr << "[gpu_pileup] hand-off pass on the device failed: " << o.log << "\n"; return false; }
         // R4: the sampled unclipped reads, the detector on the read as the BAM stores it (record sequence, reverse-complemented when reverse)
         const auto tR = std::chrono::steady_clock::now();
@@ -2400,6 +2417,7 @@ public:
             });
         }
         const double sR = std::chrono::duration<double>(std::chrono::steady_clock::now() - tR).count();
+        singlet_tail::mark("parent: hand-off pass: rRNA detector done");
         stats.total_reads += o.totalAln; stats.mapped_reads += o.totalAln; stats.secondary_reads += o.secondary;
         stats.rrna_reads_sampled += o.rrnaSampled; stats.rrna_reads += o.rrnaHook + n_rrna.load(); stats.chrm_reads += o.chrm;
         stats.no_barcode += o.noBarcode; stats.barcoded_reads += o.barcoded; stats.multimapper_reads += o.multimapper; stats.low_mapq += o.lowMapq;
@@ -2412,7 +2430,9 @@ public:
         for (size_t k = 0; k < o.wlCounts.size() && k < wl_umi_counts_.size(); k++) wl_umi_counts_[k] += o.wlCounts[k];
         gpu_pileup_pending_append(o.wlPending);
         gpu_col_->add_quality_counts64(o.lowQualSum, o.qualNeqNSum);
+        singlet_tail::mark("parent: hand-off pass: counters merged");
         gpu_col_->add_e2e_reads(o.reads, o.clip, o.lowq, o.maskAll, static_cast<int>(H.umiL));
+        singlet_tail::mark("parent: hand-off pass: kept reads appended to the collector");
         if (o.nUnwritten) { std::cerr << "[gpu_pileup] hand-off: STAR wrote no entry for " << o.nUnwritten << " hand-off reads\n"; return false; }
         if (o.nBigClip || o.nNoHook || o.nNoKey) {
             std::cerr << "[gpu_pileup] hand-off: " << o.nBigClip << " reads clipped by more than 255 bases, " << o.nNoHook
@@ -2621,9 +2641,11 @@ public:
         const double sWait = since(tL0);
         PileupOutput out;
         const auto tA1 = std::chrono::steady_clock::now();
+        singlet_tail::mark("parent: pileupRun starts");
         const bool ok = pileupRun(in, device, out);
         const double sRun = since(tA1);
         unlockDevice(lock_fd);
+        singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
         std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
         gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
@@ -2665,7 +2687,9 @@ public:
             gpu_wl_pending_.clear();
         }
         const auto tA2 = std::chrono::steady_clock::now();
+        singlet_tail::mark("parent: pileup results put into the accumulators");
         if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
+        singlet_tail::mark("parent: host pass done");
         std::cerr << "[gpu_pileup] apply: build input " << sBuild << " s, pileupRun " << sRun << " s, host pass " << since(tA2) << " s" << "\n";
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
                   << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules
