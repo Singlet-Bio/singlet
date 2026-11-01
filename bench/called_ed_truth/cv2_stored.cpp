@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
     auto t0 = std::chrono::steady_clock::now();
     // CV2_EXON_ONLY=1: exon counts only (what STARsolo "Gene" counts), for the cell-calling comparison with EmptyDrops_CR
     const bool exon_only = std::getenv("CV2_EXON_ONLY") && std::string(std::getenv("CV2_EXON_ONLY")) == "1";
-    singlet::calledv2::GeneCounts X = exon_only ? singlet::calledv2::gene_counts(ex, exf, nullptr, nullptr)
+    singlet::calledv2::GeneCounts X = exon_only ? singlet::calledv2::gene_counts(ex, exf, static_cast<const Csc*>(nullptr), static_cast<const std::vector<std::string>*>(nullptr))
                                                 : singlet::calledv2::gene_counts(ex, exf, &in, &inf);
     singlet::calledv2::Result R = singlet::calledv2::call(X, called, "", singlet::calledv2::Params(), threads);
     R.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
