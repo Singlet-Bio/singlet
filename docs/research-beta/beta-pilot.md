@@ -110,3 +110,16 @@ Changes against the first pass, because most first-pass Singlet runs failed (see
 - `SINGLET_STALL_TIMEOUT=21600` (the default 1800 s stalled the tagged-BAM sort on GSM4987148 and GSM8085472).
 - Reads are re-fetched and re-decoded with the new binary into `stage_r`; the `.sra` is deleted by `rclean` after both runs.
 - Every GPU run is a single H100 (memory at most 370 G), three serial lanes.
+
+### Failure list, first pass (binary 337b405b), ranked by samples hit
+
+| # | Failure | Samples (of 13) | Owner |
+|---|---|---|---|
+| 1 | Species detection returns `unknown` on human 10x reads, so `.1fq` mode exits ".1fq processing requires --genome-dir" (CPU and GPU) | 6: GSM5130155, GSM5171610, GSM7064234, GSM7884577, GSM8164511, GSM8183378 | S14 |
+| 2 | `pileup_threads` is not 1 (16 or missing): run marked INVALID | 4 with output: GSM5130163, GSM5682562 (GPU), GSM8141311 (GPU), GSM9038586 (GPU) | S8 (fixed by #152, retested in the rerun) |
+| 3 | Tagged-BAM sort stalls past the 1800 s watchdog, exit 5 (CPU and GPU) | 2: GSM4987148, GSM8085472 | S8 |
+| 4 | `--runs-used` missing for a multi-run sample (pilot harness bug, fixed in `reads_arg`) | 2: GSM4987144 (GPU), GSM9038586 (CPU) | S15 (fixed) |
+| 5 | A run in the sample differs in protocol from run 1, so the runs cannot be pooled | 1: GSM4987144 (SRR13296300) | S14 |
+
+The rerun records the species-detect line of every run (`[species-detect]` in `run.log`) even though `--genome-dir` is passed, so the table shows how often detection would have failed.
+Run directories: `/mnt/projects/debruinz_project/debruinz/singlet/pilot/<GSM>/{s1cpu,s1gpu}` (first pass) and `{s1cpu_r,s1gpu_r}` (rerun).
