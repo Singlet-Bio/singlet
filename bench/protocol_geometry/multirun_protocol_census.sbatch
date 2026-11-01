@@ -4,22 +4,24 @@
 #SBATCH --partition=short-cpu
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=24G
-#SBATCH --time=03:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# Do the runs of one multi-run sample get different protocols from the decode gate's detector? A random sample of N multi-run GSMs (>= 2 runs, <= MAXRUNS probed each),
-# optionally only the campaign's (FILTER=human10x: organism contains Homo and the catalogue's protocol_inferred is 10x* / citeseq). For every run the first 5000 spots are read
-# from NCBI (fastq-dump -X) and detect_protocol (bench/protocol_geometry/detect_fastq.cpp, real whitelists) is run on the two longest reads. Per sample: the tags of its runs;
-# "flip" = the tags differ only in the 3p/5p flag (one family), "incompatible" = different families (whitelist / geometry). Env: N (150), MAXRUNS (6), SEED (11), FILTER, BRANCH.
+# How does the per-sample protocol vote (fetch_worker.vote_runs) play out on the campaign's multi-run samples? A random sample of N multi-run GSMs (>= 2 runs, <= MAXRUNS probed
+# each), optionally only the campaign's (FILTER=human10x: organism contains Homo and the catalogue's protocol_inferred is 10x* / citeseq). Every run is probed EXACTLY as the
+# fetch worker probes it (fetch_worker.probe_run_protocol: `singlet download <run> --max-reads 5000`, the production gate and encoder on the run's real segments), then
+# vote_runs decides. (An earlier version probed with fastq-dump, which drops technical reads and so mis-read runs whose barcode read is a technical segment.)
+# Env: N (150), MAXRUNS (6), SEED (11), FILTER, BRANCH (default fix/protocol-vote), BIN (a singlet build).
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; export PATH=$W/envs/bpub/bin:$W/envs/pbench/bin:$PATH HOME=$W/cache/condahome
+BIN=${BIN:-$W/jobs/s14/bin_bloom/singlet-cpu}
 T=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $T; trap 'rm -rf $T' EXIT
-git clone -q --depth 1 -b ${BRANCH:-fix/protocol-vote} git@github.com:Singlet-Bio/singlet.git $T/repo 2>&1 | tail -1
-$W/envs/pbench/bin/x86_64-conda-linux-gnu-g++ -O1 -std=c++17 -pthread -I$T/repo/include -I$W/envs/pbench/include $T/repo/bench/protocol_geometry/detect_fastq.cpp -o $T/detect \
-  -L$W/envs/pbench/lib -Wl,-rpath,$W/envs/pbench/lib -lzstd -lz 2>&1 | tail -5
+git clone -q --depth 1 -b ${BRANCH:-fix/protocol-vote} git@github.com:Singlet-Bio/singlet.git $T/repo 2>&1 | tail -1; (cd $T/repo && git log --oneline -1 | cut -c1-100)
 cat > $T/census.py <<'PY'
-import glob, os, random, re, subprocess, sys, concurrent.futures as cf
+import glob, os, random, sys, concurrent.futures as cf
 import pandas as pd
-W = "/mnt/projects/debruinz_project/debruinz/singlet/"; T = sys.argv[1]
+W = "/mnt/projects/debruinz_project/debruinz/singlet/"; T, BIN = sys.argv[1], sys.argv[2]
+sys.path.insert(0, T + "/repo/scripts/atlas_rerun")
+import fetch_worker as FW
 N, MAXR, SEED, FILT = int(os.environ.get("N", 150)), int(os.environ.get("MAXRUNS", 6)), int(os.environ.get("SEED", 11)), os.environ.get("FILTER", "")
 d = pd.concat([pd.read_parquet(f) for f in sorted(glob.glob(W + "data/atlas-rerun/runs*.parquet"))], ignore_index=True).drop_duplicates("run_accession")
 d = d[d.read_count > 0].copy()
@@ -33,63 +35,44 @@ if FILT == "human10x":
 g = d.groupby("gsm").agg(runs=("run_accession", list), reads=("read_count", list))
 multi = g[g.runs.map(len) >= 2]
 print("multi-run samples in the universe%s: %d" % (" (%s)" % FILT if FILT else "", len(multi)))
-rng = random.Random(SEED)
-pick = rng.sample(list(multi.index), min(N, len(multi)))
+pick = random.Random(SEED).sample(list(multi.index), min(N, len(multi)))
+reads = {r: n for gsm in multi.index for r, n in zip(multi.runs[gsm], multi.reads[gsm])}
 jobs = [(gsm, r) for gsm in pick for r in sorted(multi.runs[gsm])[:MAXR]]
 print("probing %d samples, %d runs" % (len(pick), len(jobs)), flush=True)
+env = dict(os.environ, SINGLET_WHITELIST_DIR=W + "pipeline-benchmark/whitelists")
 def probe(j):
     gsm, run = j
-    dd = "%s/%s" % (T, run); os.makedirs(dd, exist_ok=True)
+    scr = "%s/p_%s" % (T, run); os.makedirs(scr, exist_ok=True)
     try:
-        subprocess.run(["fastq-dump", "-X", "5000", "--split-files", "-O", dd, run], capture_output=True, timeout=300)
-    except Exception:
-        return None
-    fs = sorted(glob.glob(dd + "/*.fastq"))
-    if len(fs) < 2: return None
-    L = []
-    for f in fs:
-        with open(f) as fh:
-            fh.readline(); L.append(len(fh.readline().strip()))
-    top = sorted(sorted(range(len(fs)), key=lambda i: -L[i])[:2])
-    os.makedirs(T + "/fq", exist_ok=True)
-    a, b = "%s/fq/%s_a.fastq" % (T, run), "%s/fq/%s_b.fastq" % (T, run)
-    os.replace(fs[top[0]], a); os.replace(fs[top[1]], b)
-    subprocess.run(["rm", "-rf", dd])
-    return (gsm, run, a, b)
+        return gsm, run, FW.probe_run_protocol(BIN, run, scr, env, whitelist_dir=W + "pipeline-benchmark/whitelists")
+    finally:
+        os.system("rm -rf %s" % scr)
 with cf.ThreadPoolExecutor(8) as ex:
-    got = [x for x in ex.map(probe, jobs) if x]
-with open(T + "/list.tsv", "w") as fh:
-    for gsm, run, a, b in got: fh.write("%s|%s\t%s\t%s\n" % (gsm, run, a, b))
-out = subprocess.run([T + "/detect", W + "pipeline-benchmark/whitelists", T + "/list.tsv", "5000"], capture_output=True, text=True).stdout
-rows = []
-for l in out.splitlines():
-    p = l.split("\t")
-    if len(p) == 7:
-        gsm, run = p[0].split("|"); rows.append(dict(gsm=gsm, run=run, tag=p[1], conf=int(p[2]), wl=float(p[3]), r1_length=p[4], bc_len=p[5]))
-R = pd.DataFrame(rows)
+    got = list(ex.map(probe, jobs))
+R = pd.DataFrame([dict(gsm=g_, run=r, tag=c[0], conf=c[1], wl=c[2]) for g_, r, c in got])
 R.to_csv(T + "/runs.tsv", sep="\t", index=False)
-sys.path.insert(0, os.environ["SRC"])
-import fetch_worker as FW
-reads = {r: n for gsm in multi.index for r, n in zip(multi.runs[gsm], multi.reads[gsm])}
-rows2 = []
+print("runs probed: %d; without any call (probe failed or gate-rejected): %d" % (len(R), int(R.tag.isna().sum())))
+rows = []
 for gsm, x in R.groupby("gsm"):
-    if len(x) < 2: continue
-    runs = list(x.run); calls = {r.run: (r.tag, r.conf, r.wl) for r in x.itertuples()}
+    runs = list(x.run)
+    if len(runs) < 2: continue
+    calls = {r.run: (r.tag, r.conf, r.wl) for r in x.itertuples()}
     main, vote, others = FW.vote_runs(runs, calls, [reads.get(r, 0) for r in runs])
-    ex = vote["excluded_runs"]
-    rows2.append(dict(gsm=gsm, n=len(runs), status=vote["status"], incompatible=vote["incompatible"], low=len(vote["low_confidence_runs"]), n_excluded=len(ex),
-                      excl_reads=sum(e["reads"] for e in ex), sample_reads=sum(reads.get(r, 0) for r in runs), n_cand=len(others), raw_tags=sorted(set(x.tag)), conf_min=int(x.conf.min())))
-V = pd.DataFrame(rows2)
+    ex_ = vote["excluded_runs"]
+    rows.append(dict(gsm=gsm, n=len(runs), status=vote["status"], incompatible=vote["incompatible"], low=len(vote["low_confidence_runs"]), n_excluded=len(ex_),
+                     excl_reads=sum(e["reads"] for e in ex_), sample_reads=sum(reads.get(r, 0) for r in runs), n_cand=len(others),
+                     raw_tags=sorted({str(t) for t in x.tag}), confs=list(x.conf), wls=[None if w is None or w != w else round(w, 2) for w in x.wl]))
+V = pd.DataFrame(rows)
 print("samples with >= 2 probed runs: %d" % len(V))
 print("  raw: runs with different tags: %d" % int((V.raw_tags.map(len) > 1).sum()))
 print("  vote status: %s" % dict(V.status.value_counts()))
 print("  3p/5p flip settled by the vote (status voted): %d (%.1f%%)" % (int((V.status == "voted").sum()), 100 * (V.status == "voted").mean()))
-print("  with run(s) lacking a confident call that follow the main group: %d (%.1f%%)" % (int((V.low > 0).sum()), 100 * (V.low > 0).mean()))
-print("  runs without a confident call that follow the main group (whitelist rate >= half the main group's): %d samples" % int((V.low > 0).sum()))
-print("  samples with excluded runs (no confident call and a whitelist rate below half): %d (%.1f%%); excluded runs %d, their reads %.1f M of %.1f M probed-sample reads (%.2f%%)" % (
+print("  samples with run(s) lacking a confident call that follow the main group: %d" % int((V.low > 0).sum()))
+print("  samples with excluded runs (no confident call and a whitelist rate below half): %d (%.1f%%); excluded runs %d, their reads %.1f M of %.1f M (%.2f%%)" % (
     int((V.n_excluded > 0).sum()), 100 * (V.n_excluded > 0).mean(), int(V.n_excluded.sum()), V.excl_reads.sum() / 1e6, V.sample_reads.sum() / 1e6, 100 * V.excl_reads.sum() / max(V.sample_reads.sum(), 1)))
 print("  samples with companion_candidates (a confident other family, or an excluded run with >= 10%% of the reads): %d (%.1f%%)" % (int((V.n_cand > 0).sum()), 100 * (V.n_cand > 0).mean()))
-print(V[(V.n_excluded > 0) | (V.n_cand > 0)].to_string())
-print("all tags:", dict(R.tag.value_counts()))
+print("  samples where no run has a confident call (status none): %d" % int((V.status == "none").sum()))
+print(V[(V.n_excluded > 0) | (V.n_cand > 0) | (V.status == "none")].to_string())
+print("all tags:", dict(R.tag.fillna("-").value_counts()))
 PY
-SRC=$T/repo/scripts/atlas_rerun python3 $T/census.py $T
+python3 $T/census.py $T $BIN
