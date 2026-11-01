@@ -63,3 +63,16 @@ print('--- model rho vs implied removal (is the excess in rho or in the gene-lev
 rho_m = df.singlet_rho.values.astype(float)[pure]
 for nm, m in (('tail', tail), ('rest', ~tail)):
     print(f'{nm}: model rho mean {rho_m[m].mean():.5f} median {np.median(rho_m[m]):.5f}; implied removal mean {imp[m].mean():.5f}; truth mean {tr[m].mean():.5f}')
+
+print('--- clusters of the tail cells ---')
+ac = pd.read_csv('/mnt/projects/debruinz_project/debruinz/singlet/release-gate/gate2/pb/runs/hgmm1k_v3/singlet-public/ambient_contamination.tsv', sep=chr(9))
+print('ambient_contamination.tsv columns', list(ac.columns))
+bc_col = ac.columns[0]
+ac = ac.set_index(bc_col)
+pb = df.barcode.values[pure]
+ccol = next((c for c in ac.columns if 'cluster' in c.lower()), None)
+if ccol is not None:
+    cl = ac.reindex(pb)[ccol].values
+    tmp = pd.DataFrame({'cluster': cl, 'mouse': mouse_cell, 'tail': tail, 'n': n, 'rho': ac.reindex(pb)[ac.columns[0]].values if False else rho_m})
+    print(tmp.groupby('cluster').agg(cells=('mouse', 'size'), mouse_frac=('mouse', 'mean'), tail=('tail', 'sum'), median_umi=('n', 'median'), rho_med=('rho', 'median')))
+    print('tail cells by cluster:', tmp[tmp.tail].cluster.value_counts().to_dict())
