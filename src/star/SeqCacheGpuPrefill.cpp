@@ -828,6 +828,14 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     in.release();
     time_t tGpu = time(nullptr);
+    // E12: wall time of the steps after the engine (the "cache inserts" of the line below)
+    auto tq = std::chrono::steady_clock::now();
+    std::string tqLog;
+    auto tmark = [&](const char *k) {
+        const auto t = std::chrono::steady_clock::now();
+        char b[64]; snprintf(b, sizeof b, "%s %.2f, ", k, std::chrono::duration<double>(t - tq).count());
+        tqLog += b; tq = t;
+    };
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it, held it " << heldS << " s\n" << out.log << out.e10.log;
     decltype(in.e10.aux)().swap(in.e10.aux);
@@ -861,7 +869,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     // a cache large enough for every result (entries are ~(32 + L/4 + blob) bytes; 3x for the ring, the 2-way index and
     // the shards' imbalance), unless SINGLET_STAR_SEQCACHE_MB was set
     uint64 nRec = out.seqOff.size() - 1;
-    if (getenv("SINGLET_STAR_SEQCACHE_MB") == nullptr) {
+    // E12: made when results are inserted (before: here, at every level; at E10 level >= 3 nothing is inserted, and the new cache's
+    // zeroed index cost ~1 s of the prefill)
+    bool cacheSized = getenv("SINGLET_STAR_SEQCACHE_MB") != nullptr;
+    auto sizeCache = [&]() {
+        if (cacheSized) return;
+        cacheSized = true;
         uint64 need = (out.blob.size() + out.seq.size() / 4 + 40 * nRec) * 3;
         uint64 mb = std::max<uint64>(4096, (need >> 20) + 1);
         setenv("SINGLET_STAR_SEQCACHE_MB", std::to_string(mb).c_str(), 1);
@@ -874,6 +887,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     };
     // insert, sharded by hash across threads (SeqCache is thread-safe per shard); keep(i) picks the records
     auto insertRecords = [&](auto keep) {
+        sizeCache();
         int nt = std::max(1, (int) P.runThreadN);
         std::vector<std::thread> th;
         for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
@@ -886,6 +900,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         });
         for (auto &x : th) x.join();
     };
+    tmark("start");
     // GPU pileup "on" with hand-off summaries: reads of a mapped sequence replay its summary and never look it up, so only the
     // unmapped sequences go into the cache (after the hand-off, which tells which they are)
     const char *gpEnv = getenv("SINGLET_GPU_PILEUP"), *hsEnv = getenv("SINGLET_GPU_HANDOFF_SUMMARY");
@@ -951,6 +966,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
         });
         for (auto &x : th) x.join();
+        tmark("hand-off records");
         if (g_handoffLeanAln.load() > 0)   // SINGLET_HANDOFF_LEAN=verify
             P.inOut->logMain << "ENGINE_GPU: lean alignment fields: " << g_handoffLeanAln.load() << " alignments, " << g_handoffLeanBad.load()
                              << " differ from alignBAM's" << "\n";
@@ -1085,6 +1101,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             }
         }
     }
+    tmark("hand-off install");
     // E10 level >= 3: STAR's loop takes the per-read products of the reads with a record from the device (stats, junctions, unmapped records);
     // level 4 also keeps those reads out of STAR's loop (its read source serves the others only)
     if (e10ok && e10Level >= 3 && g_handoffReadRecord != nullptr && g_handoffSum != nullptr) {
@@ -1132,6 +1149,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         e9::soloKeepRelease();
     }
     if (g_e10Level < 4) { std::vector<uint32_t>().swap(out.e10.unmappedReads); }
+    tmark("E10 products");
     if (deferInsert && g_e10Level >= 3) {   // E10: no read with a record looks the cache up (unmapped records: the device counted them)
         cache->prefilled = true;
         P.inOut->logMain << "ENGINE_GPU: no sequence results in the cache (E10 level " << g_e10Level << ")\n";
@@ -1148,6 +1166,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         cache->prefilled = true;
         P.inOut->logMain << "ENGINE_GPU: " << nIns << " of " << nRec << " sequence results in the cache (the others replay hand-off summaries)\n";
     }
+    tmark("cache inserts");
+    P.inOut->logMain << "ENGINE_GPU: E12 after the engine (s): " << tqLog << "\n";
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
 #endif
