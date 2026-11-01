@@ -30,11 +30,44 @@ def node_mem_gb():
     return 0.0
 
 
-def gpu_peak_gb(reads):
-    """Largest-process RSS of one `--engine gpu` sample (the STAR child; GPU pileup on): 17.5 GB + 0.39 GB per million reads.
-    Fitted to four measured runs (S8, 1 H100, quiet node): 11.3 M -> 22.8 GB, 13.2 M -> 22.1, 66.6 M -> 43.5, 263.4 M -> 120.4 (all within 3%).
-    Beyond 263 M reads it is an extrapolation."""
-    return 17.5 + 0.39 * reads / 1e6
+# Peak-RSS model of the largest process of one `--engine gpu` sample (the STAR child; GPU pileup on): intercept + slope * M reads.
+# route "fq" (staged .1fq / temp FASTQ): 17.5 GB + 0.39 GB per M reads, fitted to four measured runs (S8, 1 H100, quiet node):
+#   11.3 M -> 22.8 GB, 13.2 M -> 22.1, 66.6 M -> 43.5, 263.4 M -> 120.4 (all within 3%). Most of the slope is a transient spike in the FASTQ read pass.
+# route "1fg2" (table-fed prefill from the staged .1fg2, no temp FASTQ, #126): no spike. 17.5 GB + 0.26 GB per M reads from two points (S8: 11.3 M -> 22.2 GB, 263.4 M -> 84.4 GB; the slope is an estimate, applies once #126 is merged;
+#   scripts/atlas_rerun/multi_drain.py logs the measured peak of every sample as `peak_rss_gb`: refit from the `done` events).
+# Node-local temp bytes per sample: the old route wrote ~320 B per read of temp FASTQ; the .1fg2 route writes none. Outputs add ~15 B per read (S8; a nuclei sample with 97% unmapped reads writes ~290 B per unmapped read, 34 GB at 119 M reads: the 20 GB scratch margin and the measured `scratch_bytes` of each done event cover it).
+MEM_MODEL = {"fq": {"base_gb": 17.5, "gb_per_m": 0.39, "tmp_gb_per_m": 0.335, "tmp_base_gb": 2.0, "ovh_base_gb": 4.0, "ovh_gb_per_m": 0.05},
+             "1fg2": {"base_gb": 17.5, "gb_per_m": 0.26, "tmp_gb_per_m": 0.015, "tmp_base_gb": 2.0, "ovh_base_gb": 4.0, "ovh_gb_per_m": 0.03}}
+
+
+def gpu_peak_gb(reads, route="fq"):
+    """Largest-process RSS of one `--engine gpu` sample, GB. Beyond 263 M reads it is an extrapolation."""
+    m = MEM_MODEL[route]
+    return m["base_gb"] + m["gb_per_m"] * reads / 1e6
+
+
+GENOME_SHARED_GB = 17.7   # the GRCh38 index attached from shared memory (`--genome-shared on`): resident once per node, counted in every process's RSS
+
+
+def gpu_cgroup_gb(reads, route="fq"):
+    """Largest process (gpu_peak_gb) plus the rest of the sample's share of the job (parent, pinned buffers): what a sample needs when it runs alone.
+    S8 measured the whole-job cgroup peak of the 263.4 M-read sample: 180.9 GB (FASTQ route) and 100.6 GB (.1fg2 route, anon 85.0 + page cache 15.4). The
+    cgroup figure includes reclaimable page cache (temp FASTQ, staged reads), which the 85% admission margin leaves room for; the model is for anon + shmem.
+    Gate part 2 (13 samples, 4 concurrent, publish dry-run): anon+shmem of the whole job peaked at 80 GB while page cache filled the 370 GB limit."""
+    m = MEM_MODEL[route]
+    return gpu_peak_gb(reads, route) + m["ovh_base_gb"] + m["ovh_gb_per_m"] * reads / 1e6
+
+
+def gpu_private_gb(reads, route="fq", shared=True):
+    """What one more sample adds to a job that already runs samples. With the genome attached from shared memory (shared=True) every process's RSS
+    contains the one shared copy (GENOME_SHARED_GB), which the job holds once: the sample adds its RSS minus that. Without sharing, all of it."""
+    return gpu_cgroup_gb(reads, route) - (GENOME_SHARED_GB if shared else 0.0)
+
+
+def gpu_tmp_gb(reads, route="fq"):
+    """Node-local scratch (/tmp) one sample holds at its peak: temp FASTQ (route "fq") plus outputs, GB."""
+    m = MEM_MODEL[route]
+    return m["tmp_base_gb"] + m["tmp_gb_per_m"] * reads / 1e6
 
 
 def memory_tier(reads):
@@ -60,6 +93,24 @@ def job_slots(node_gb, node_cores, threads, peak_gb=33.4, shared_gb=17.8, fill=0
     by_mem = int((node_gb * fill - shared_gb) // peak_gb) if node_gb else 0
     by_cpu = int(node_cores // max(1, threads))
     return max(1, min(by_mem, by_cpu)) if by_mem > 0 else max(1, by_cpu)
+
+
+def whitelist_dir_for(binary):
+    """Where singlet looks for its barcode whitelists: <real path of the binary>/../whitelists (it resolves /proc/self/exe)."""
+    return os.path.join(os.path.dirname(os.path.realpath(binary)), "..", "whitelists")
+
+
+def require_whitelists(binary, names=("3M-february-2018.txt", "737K-august-2016.txt")):
+    """Fail fast when the engine cannot find its whitelists. Without <binary dir>/../whitelists the run does not stop: it silently takes the sorted-BAM
+    pileup (pileup_threads > 1) instead of the stream / GPU pileup, a different and slower path with different memory and thread behaviour
+    (S8, 2026-10-31). $S9_NO_WL_CHECK=1 skips the check (tests with a fake engine). Raises SystemExit(3)."""
+    if os.environ.get("S9_NO_WL_CHECK"):
+        return
+    d = whitelist_dir_for(binary)
+    missing = [n for n in names if not os.path.isfile(os.path.join(d, n))]
+    if missing:
+        raise SystemExit("[atlas_rerun] FATAL: %s not found in %s (the engine %s resolves <binary dir>/../whitelists): the campaign would silently run "
+                         "the sorted-BAM pileup. Put the binary where ../whitelists exists, or symlink the directory." % (", ".join(missing), os.path.normpath(d), binary))
 
 
 def staged_reads(sdir):

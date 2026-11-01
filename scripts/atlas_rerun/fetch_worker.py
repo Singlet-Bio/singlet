@@ -34,6 +34,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import companions as CP  # noqa: E402
 import ratecap  # noqa: E402
 import stagequeue as Q  # noqa: E402
 
@@ -383,9 +384,13 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
         pairs = sum(x.get("pairs", 0) for x in runs_info)
         ru1 = resource.getrusage(resource.RUSAGE_CHILDREN) if resource else None
         child_cpu = ((ru1.ru_utime - ru0.ru_utime) + (ru1.ru_stime - ru0.ru_stime)) if resource else 0.0  # decode + screen (the fetch threads are ours, small)
+        comp = []
+        if getattr(a, "companion_table", None):   # companion libraries (ADT/HTO/CRISPR/V(D)J): a failure is recorded, never fails the GEX sample
+            comp = CP.fetch_all(a.companion_table, gsm, inc, scr, fetch_run, env, log, heartbeat=lambda: Q.heartbeat(claim), threads=a.decode_threads,
+                                streams=a.streams, limiter=a.limiter, allow_lite=a.allow_lite)
         nbytes = Q.publish(stage, gsm, inc, claim, {
             "gse": item.get("gse"), "organism": item.get("organism"), "runs": kept, "run_info": runs_info, "pairs": pairs,
-            "format": fmt, "files": staged_files,
+            "format": fmt, "files": staged_files, "companions": comp, "companion_pairs": CP.pairs_total(comp),
             "raw_bytes": raw_total, "decode_cpu_s": round(child_cpu, 1),
             "decode_core_s_per_Mpair": round(child_cpu / (pairs / 1e6), 2) if pairs else None, "fetch_total_s": round(time.time() - t_start, 1), "quality": a.quality,
             "bytes_per_pair": round(sum(x.get("staged_bytes", 0) for x in runs_info) / pairs, 2) if pairs else None,
@@ -429,6 +434,7 @@ def main():
     ap.add_argument("--format", choices=("1fq", "1fg2"), default="1fq",
                     help="staged form: 1fq (barcode-sorted .1fq per run) or 1fg2 (src/stage/fmt2.h, single-run samples straight from the SRA; others fall back to 1fq)")
     ap.add_argument("--stage-bin", help="singlet-stage binary for merging the parts of a multi-run sample (default: next to --binary)")
+    ap.add_argument("--companions", help="companions.tsv (companion_libs.py): also fetch the ADT/HTO/CRISPR/V(D)J libraries of each sample as FASTQ into its ready dir")
     ap.add_argument("--allow-lite", action="store_true", help="also accept SRA Lite (simplified qualities) when no full .sra is reachable")
     ap.add_argument("--screen", action="store_true", default=True)
     ap.add_argument("--idle-exit-min", type=float, default=30.0)
@@ -449,6 +455,7 @@ def main():
 
     Q.init(a.stage)
     Q.sweep_scratch(a.scratch, "s9-fetch-", log)
+    a.companion_table = CP.load_table(a.companions) if a.companions else None
     a.limiter = ratecap.SharedRate(a.stage, "%s-%d" % (os.uname().nodename.split(".")[0], os.getpid()))
     log("[fetch] global rate cap %.0f MB/s (stage.json rate_cap_MBps), shared by all fetch workers" % a.limiter.cap)
 
