@@ -7,7 +7,8 @@
 Why: one sample per H100 job reaches ~0.27 M pairs/s per GPU; ~8 samples sharing one GPU reach ~1.0 (S8). The account holds 3 H100s at once.
 
 Admission (Budget): a claimed sample is started only while
-  * the sum of the estimated cgroup share (largest process + overhead, common.gpu_cgroup_gb) of the running samples + this one <= mem_frac (0.85) of the job's cgroup memory limit, and
+  * the genome held once in shared memory (--genome-shared on, 17.7 GB) + the sum of the running samples' private estimates (common.gpu_private_gb: largest
+    process + overhead, minus the shared genome) + this one <= mem_frac (0.85) of the job's cgroup memory limit (anon + shmem; page cache is reclaimable), and
   * the sum of the estimated node-local scratch bytes + this one fits in the free space of --scratch minus a margin, and
   * fewer than --concurrency samples run.
 A sample whose own estimate cannot fit an empty worker is never claimed: it waits for the whole-node exclusive class (drain_worker.py,
@@ -92,13 +93,14 @@ def cgroup_limit_gb(root="/sys/fs/cgroup", proc_cgroup="/proc/self/cgroup"):
 class Budget:
     """Memory/scratch/slot accounting of the running samples. Pure bookkeeping (no I/O): the free-scratch figure is passed in."""
 
-    def __init__(self, mem_gb, tmp_gb, slots, mem_frac=MEM_FRAC, tmp_margin_gb=TMP_MARGIN_GB):
+    def __init__(self, mem_gb, tmp_gb, slots, mem_frac=MEM_FRAC, tmp_margin_gb=TMP_MARGIN_GB, shared_gb=0.0):
         self.cap_mem, self.cap_tmp, self.slots = mem_gb * mem_frac, max(0.0, tmp_gb - tmp_margin_gb), slots
-        self.run = {}    # gsm -> (mem_gb, tmp_gb)
+        self.shared = shared_gb   # the genome in shared memory: held once while any sample runs; samples are charged their private part
+        self.run = {}    # gsm -> (private mem_gb, tmp_gb)
 
     @property
     def mem_used(self):
-        return sum(m for m, _ in self.run.values())
+        return sum(m for m, _ in self.run.values()) + (self.shared if self.run else 0.0)
 
     @property
     def tmp_used(self):
@@ -106,12 +108,13 @@ class Budget:
 
     def ever_fits(self, mem):
         """Could this sample run on an empty worker? If not it belongs to the whole-node class."""
-        return mem <= self.cap_mem
+        return self.shared + mem <= self.cap_mem
 
     def fits(self, mem, tmp, solo=False):
         if solo:
             return not self.run and self.ever_fits(mem) and tmp <= self.cap_tmp
-        return (len(self.run) < self.slots and self.mem_used + mem <= self.cap_mem and self.tmp_used + tmp <= self.cap_tmp)
+        need = mem + (0.0 if self.run else self.shared)
+        return (len(self.run) < self.slots and self.mem_used + need <= self.cap_mem and self.tmp_used + tmp <= self.cap_tmp)
 
     def add(self, gsm, mem, tmp):
         self.run[gsm] = (mem, tmp)
@@ -120,11 +123,12 @@ class Budget:
         self.run.pop(gsm, None)
 
 
-def estimate(man, route):
-    """-> (cgroup_gb, scratch_gb) of a staged sample: its share of the job's cgroup peak (common.gpu_cgroup_gb), not just the largest process. A retry after an OOM kill carries a `mem_floor_gb`."""
+def estimate(man, route, shared=False):
+    """-> (private_mem_gb, scratch_gb) of a staged sample: what it adds to a job already running samples (common.gpu_private_gb; with `shared` the genome
+    held once in shared memory is not charged). A retry after an OOM kill carries a `mem_floor_gb`."""
     r = man.get("pairs", 0)
     rt = "1fg2" if man.get("format") == "1fg2" and route == "auto" else ("fq" if route == "auto" else route)
-    return max(C.gpu_cgroup_gb(r, rt), man.get("mem_floor_gb", 0.0)), C.gpu_tmp_gb(r, rt)
+    return max(C.gpu_private_gb(r, rt, shared), man.get("mem_floor_gb", 0.0)), C.gpu_tmp_gb(r, rt)
 
 
 class Admitter:
@@ -142,7 +146,7 @@ class Admitter:
             return False
         if (self.min_pairs and p < self.min_pairs) or (self.max_pairs and p > self.max_pairs):
             return False
-        mem, tmp = estimate(man, self.route)
+        mem, tmp = estimate(man, self.route, bool(self.b.shared))
         if not self.b.ever_fits(mem) or tmp > self.b.cap_tmp:
             return False       # too big for a shared worker: the whole-node class takes it
         solo = bool(man.get("solo"))
@@ -314,11 +318,12 @@ def main():
     mem = cgroup_limit_gb() or (a.mem_gb if a.mem_gb > 0 else C.node_mem_gb())
     if a.mem_gb > 0:
         mem = min(mem, a.mem_gb) if mem else a.mem_gb
-    budget = Budget(mem, free_tmp_gb(a.scratch), a.concurrency, a.mem_frac)
+    genome_shared = "--genome-shared" in a.extra and a.extra[a.extra.index("--genome-shared") + 1:][:1] == ["on"]
+    budget = Budget(mem, free_tmp_gb(a.scratch), a.concurrency, a.mem_frac, shared_gb=C.GENOME_SHARED_GB if genome_shared else 0.0)
     log("[multi] memory limit %.0f GB -> admit up to %.0f GB estimated peak; scratch %s %.0f GB free -> %.0f GB; %d slots x %d threads; route %s; "
         "a sample above %.0f M pairs goes to the whole-node class" % (
             mem, budget.cap_mem, a.scratch, free_tmp_gb(a.scratch), budget.cap_tmp, a.concurrency, a.threads, a.route,
-            max([p for p in range(10_000_000, 3_000_000_000, 10_000_000) if C.gpu_cgroup_gb(p, "fq" if a.route == "auto" else a.route) <= budget.cap_mem] or [0]) / 1e6))
+            max([p for p in range(10_000_000, 3_000_000_000, 10_000_000) if C.gpu_cgroup_gb(p, "fq" if a.route == "auto" else a.route) - (0 if genome_shared else 0) <= budget.cap_mem] or [0]) / 1e6))
 
     running, hol, stopping = {}, {}, threading.Event()
     n_done, idle_since, last_head_log = 0, time.time(), 0.0
@@ -352,7 +357,7 @@ def main():
                 idle_since = time.time()
                 gsm, claim, man = c
                 man["gsm"] = gsm
-                est_mem, est_tmp = estimate(man, a.route)
+                est_mem, est_tmp = estimate(man, a.route, bool(budget.shared))
                 budget.add(gsm, est_mem, est_tmp)
                 man["_n_running"] = len(running) + 1
                 r = Run(a, cfg, ccfg, env, gsm, claim, man, est_mem, stopping)

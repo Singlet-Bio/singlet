@@ -36,8 +36,8 @@ def node_mem_gb():
 # route "1fg2" (table-fed prefill from the staged .1fg2, no temp FASTQ, #126): no spike. 17.5 GB + 0.26 GB per M reads from two points (S8: 11.3 M -> 22.2 GB, 263.4 M -> 84.4 GB; the slope is an estimate, applies once #126 is merged;
 #   scripts/atlas_rerun/multi_drain.py logs the measured peak of every sample as `peak_rss_gb`: refit from the `done` events).
 # Node-local temp bytes per sample: the old route wrote ~320 B per read of temp FASTQ; the .1fg2 route writes none. Outputs add ~15 B per read (S8; a nuclei sample with 97% unmapped reads writes ~290 B per unmapped read, 34 GB at 119 M reads: the 20 GB scratch margin and the measured `scratch_bytes` of each done event cover it).
-MEM_MODEL = {"fq": {"base_gb": 17.5, "gb_per_m": 0.39, "tmp_gb_per_m": 0.335, "tmp_base_gb": 2.0, "ovh_base_gb": 8.0, "ovh_gb_per_m": 0.2},
-             "1fg2": {"base_gb": 17.5, "gb_per_m": 0.26, "tmp_gb_per_m": 0.015, "tmp_base_gb": 2.0, "ovh_base_gb": 8.0, "ovh_gb_per_m": 0.03}}
+MEM_MODEL = {"fq": {"base_gb": 17.5, "gb_per_m": 0.39, "tmp_gb_per_m": 0.335, "tmp_base_gb": 2.0, "ovh_base_gb": 4.0, "ovh_gb_per_m": 0.05},
+             "1fg2": {"base_gb": 17.5, "gb_per_m": 0.26, "tmp_gb_per_m": 0.015, "tmp_base_gb": 2.0, "ovh_base_gb": 4.0, "ovh_gb_per_m": 0.03}}
 
 
 def gpu_peak_gb(reads, route="fq"):
@@ -46,13 +46,22 @@ def gpu_peak_gb(reads, route="fq"):
     return m["base_gb"] + m["gb_per_m"] * reads / 1e6
 
 
+GENOME_SHARED_GB = 17.7   # the GRCh38 index attached from shared memory (`--genome-shared on`): resident once per node, counted in every process's RSS
+
+
 def gpu_cgroup_gb(reads, route="fq"):
-    """What one sample adds to the job's cgroup peak (what admission sums): the largest process (gpu_peak_gb) plus the rest of the sample's job share
-    (parent, page cache of the staged reads and temp files, pinned buffers). Measured on 263.4 M reads (S8, 1 H100): cgroup peak 180.9 GB on the FASTQ route
-    (child 120.3, overhead 60.6) and 100.6 GB on the .1fg2 route (child 84.4, overhead 16.2). The overhead's slope is unknown below 263 M: its intercept
-    (8 GB) is a guess, so small samples are over-estimated, not under."""
+    """Largest process (gpu_peak_gb) plus the rest of the sample's share of the job (parent, pinned buffers): what a sample needs when it runs alone.
+    S8 measured the whole-job cgroup peak of the 263.4 M-read sample: 180.9 GB (FASTQ route) and 100.6 GB (.1fg2 route, anon 85.0 + page cache 15.4). The
+    cgroup figure includes reclaimable page cache (temp FASTQ, staged reads), which the 85% admission margin leaves room for; the model is for anon + shmem.
+    Gate part 2 (13 samples, 4 concurrent, publish dry-run): anon+shmem of the whole job peaked at 80 GB while page cache filled the 370 GB limit."""
     m = MEM_MODEL[route]
     return gpu_peak_gb(reads, route) + m["ovh_base_gb"] + m["ovh_gb_per_m"] * reads / 1e6
+
+
+def gpu_private_gb(reads, route="fq", shared=True):
+    """What one more sample adds to a job that already runs samples. With the genome attached from shared memory (shared=True) every process's RSS
+    contains the one shared copy (GENOME_SHARED_GB), which the job holds once: the sample adds its RSS minus that. Without sharing, all of it."""
+    return gpu_cgroup_gb(reads, route) - (GENOME_SHARED_GB if shared else 0.0)
 
 
 def gpu_tmp_gb(reads, route="fq"):

@@ -28,31 +28,32 @@ def test_models_have_both_routes_and_the_fq_default_is_the_fitted_line():
     assert abs((C.gpu_tmp_gb(1e9, "fq") - C.gpu_tmp_gb(0, "fq")) - 335.0) < 1   # 320 B/read of temp FASTQ + 15 B/read of outputs
 
 
-def test_cgroup_share_matches_the_measured_job_peaks():
-    # S8, 263.4 M reads, 1 H100: whole-job cgroup peak 180.9 GB (FASTQ route), 100.6 GB (.1fg2 route)
-    assert abs(C.gpu_cgroup_gb(263.4e6, "fq") - 180.9) / 180.9 < 0.02 and abs(C.gpu_cgroup_gb(263.4e6, "1fg2") - 100.6) / 100.6 < 0.03
-    assert C.gpu_cgroup_gb(100e6, "fq") > C.gpu_peak_gb(100e6, "fq") and C.gpu_cgroup_gb(100e6, "1fg2") < C.gpu_cgroup_gb(100e6, "fq")
+def test_memory_model_against_the_measured_runs():
+    # S8, 263.4 M reads, 1 H100: whole-job cgroup peak 100.6 GB on the .1fg2 route (anon 85.0 + page cache 15.4); 180.9 GB on the FASTQ route, which includes
+    # the page cache of the temp FASTQ (reclaimable), so the model sits between the child's 120.3 GB and that figure
+    assert abs(C.gpu_cgroup_gb(263.4e6, "1fg2") - 100.6) / 100.6 < 0.05
+    assert 120.3 < C.gpu_cgroup_gb(263.4e6, "fq") < 180.9
+    assert C.gpu_private_gb(100e6, "fq", shared=True) == C.gpu_cgroup_gb(100e6, "fq") - C.GENOME_SHARED_GB
+    assert C.gpu_private_gb(100e6, "fq", shared=False) == C.gpu_cgroup_gb(100e6, "fq")
 
 
-def test_budget_admits_while_the_sum_fits_and_not_beyond_85_percent():
-    b = M.Budget(370, 373, slots=8)
+def test_budget_charges_the_shared_genome_once_and_stops_at_85_percent():
+    b = M.Budget(370, 373, slots=8, shared_gb=C.GENOME_SHARED_GB)
     assert abs(b.cap_mem - 314.5) < 1e-9
-    big = M.estimate({"pairs": 150 * M_}, "fq")[0]              # 150 M pairs: 17.5+58.5+8+30 = 114 GB each -> two fit (228), a third (342) does not
-    for i in range(3):
-        mem, tmp = M.estimate({"pairs": 150 * M_}, "fq")
-        if b.fits(mem, tmp):
-            b.add("G%d" % i, mem, tmp)
-    assert len(b.run) == 2 and abs(b.mem_used - 2 * big) < 1e-9
-    mem, tmp = M.estimate({"pairs": 30 * M_}, "fq")             # 17.5+11.7+8+6 = 43 GB: two more fit (314 - 228 = 86), a third does not
-    for i in range(10):
-        if b.fits(mem, tmp):
-            b.add("S%d" % i, mem, tmp)
-    assert len(b.run) == 4 and b.mem_used <= b.cap_mem
-    small = M.Budget(370, 373, slots=8)
+    mem, tmp = M.estimate({"pairs": 150 * M_}, "fq", shared=True)      # 150 M pairs: private 3.8 + 66 = 69.8 GB each
+    n = 0
+    while b.fits(mem, tmp):
+        b.add("G%d" % n, mem, tmp)
+        n += 1
+    assert n == 4 and abs(b.mem_used - (4 * mem + C.GENOME_SHARED_GB)) < 1e-9 and b.mem_used <= b.cap_mem     # a fifth would reach 367 GB
+    plain = M.Budget(370, 373, slots=8)                                 # genome not shared: every process is charged in full
+    mem0, _ = M.estimate({"pairs": 150 * M_}, "fq")
+    assert mem0 > mem and plain.cap_mem - plain.mem_used >= mem0
+    small = M.Budget(370, 373, slots=8, shared_gb=C.GENOME_SHARED_GB)
     for i in range(20):
-        if small.fits(*M.estimate({"pairs": 5 * M_}, "fq")):
-            small.add("S%d" % i, *M.estimate({"pairs": 5 * M_}, "fq"))
-    assert len(small.run) == 8                                  # eight 5 M-pair samples (~29 GB each = 230): the slot cap stops them
+        if small.fits(*M.estimate({"pairs": 66.6 * M_}, "fq", True)):
+            small.add("S%d" % i, *M.estimate({"pairs": 66.6 * M_}, "fq", True))
+    assert len(small.run) == 8                                          # pbmc1k-sized samples: the slot cap, not memory, stops them (8 x 33 + 17.7 = 282 GB)
 
 
 def test_scratch_budget_limits_the_temp_fastq_route():
@@ -67,9 +68,9 @@ def test_scratch_budget_limits_the_temp_fastq_route():
 
 def test_too_big_samples_belong_to_the_whole_node_class():
     b = M.Budget(370, 373, slots=8)
-    assert b.ever_fits(M.estimate({"pairs": 450 * M_}, "fq")[0]) and not b.ever_fits(M.estimate({"pairs": 520 * M_}, "fq")[0])
+    assert b.ever_fits(M.estimate({"pairs": 640 * M_}, "fq")[0]) and not b.ever_fits(M.estimate({"pairs": 700 * M_}, "fq")[0])
     assert not b.ever_fits(M.estimate({"pairs": 1_290 * M_}, "fq")[0])           # p99
-    assert b.ever_fits(M.estimate({"pairs": 800 * M_}, "1fg2")[0]) and not b.ever_fits(M.estimate({"pairs": 1_290 * M_}, "1fg2")[0])
+    assert b.ever_fits(M.estimate({"pairs": 1_000 * M_}, "1fg2")[0]) and not b.ever_fits(M.estimate({"pairs": 1_290 * M_}, "1fg2")[0])
 
 
 def test_oom_floor_and_solo_retry():
@@ -126,8 +127,8 @@ def test_launcher_shared_class_and_script():
     p = dict(L.DEFAULTS)
     assert p["multi_sample"] and p["max_h100"] == 3
     cls = p["multi_classes_gb"]
-    assert L.mem_class(250e6, cls, 0.85) == 370 and L.mem_class(480e6, cls, 0.85) == 370
-    assert L.mem_class(520e6, cls, 0.85) == 720 and L.mem_class(1.29e9, cls, 0.85) == 720
+    assert L.mem_class(250e6, cls, 0.85) == 370 and L.mem_class(640e6, cls, 0.85) == 370
+    assert L.mem_class(700e6, cls, 0.85) == 720 and L.mem_class(1.29e9, cls, 0.85) == 720
     a = types.SimpleNamespace(log_dir="/tmp", stage="/stage", config="/cfg.json")
     s = L.sbatch_script("drain-h100", a, p, 370)
     assert "multi_drain.py" in s and "#SBATCH --mem=370G" in s and "#SBATCH --gres=gpu:nvidia_h100_nvl:1" in s and "--concurrency 8" in s

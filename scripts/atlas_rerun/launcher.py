@@ -48,7 +48,7 @@ DEFAULTS = {
                                     # is the "too big for a shared worker" class: --exclusive --mem=0, one sample alone on a whole node (both GPUs reserved)
     "multi_sample": True,           # shared H100 workers run several samples at once (multi_drain.py); the whole-node class stays drain_worker.py
     "gpu_Mpairs_per_s_multi": 1.0,  # one H100 worker with ~8 samples sharing the GPU (S8's benchmark; re-measured by the S14 gate)
-    "multi_classes_gb": [370, 720],  # multi mode: shared workers (370 G: samples up to ~490 M pairs on the FASTQ route, ~1.0 B on the .1fg2 route) and the whole-node class
+    "multi_classes_gb": [370, 720],  # multi mode: shared workers (370 G: samples up to ~650 M pairs on the FASTQ route, ~1.0 B on the .1fg2 route) and the whole-node class
     "multi_mem_gb": 370,            # shared worker: 1 H100, ~28 cores, ~370 GB; admission keeps the sum of estimated peaks <= 85% of it
     "multi_cpus": 28,
     "multi_concurrency": 8,
