@@ -46,6 +46,14 @@ typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20
                                                                                             // alignWindowsPerReadNmax, MAX_N_EXONS, alignTranscriptsPerWindowNmax)
 // ---------------------------------------------------------------------------------------------------------------------
 __device__ unsigned long long g_clk[8], g_scan;
+__device__ unsigned long long g_monoBudget;   // --mono-budget: stitching step budget of the one-kernel lanes (default 0 = none, as before)
+#ifdef M5_TAIL
+#include "../../fable/profile/tail.cuh"      // E1: per-thread start/end of k_p1/k_p3 (batch tails); not in the default build
+#else
+#define TAIL_BEGIN(which, i) do { } while (0)
+#define TAIL_END(which, i) do { } while (0)
+#define TAIL_INFO(i, ne, nw, st, sc) do { } while (0)
+#endif
 template <class C>
 __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
                           u64 tid, u64 nt, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap);
@@ -65,7 +73,7 @@ __global__ void k_lane(Params P, GenomeView g, const char* rb, const u64* roff, 
 template <class C>
 __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx, u64 n,
                           u64 tid, u64 nt, Work<C>* wp, ReadBuf<C::LREAD>* bp, uint8_t* out, uint16_t* outLen, uint8_t* status, uint8_t* why, int8_t* unmap) {
-    wp->wbEpoch = 0;
+    wp->wbEpoch = 0; wp->stepBudget = g_monoBudget;
     for (int c = 0; c < 8; c++) wp->clk[c] = 0;
     wp->nScan = 0;
     for (u64 k = tid; k < n; k += nt) {
@@ -131,11 +139,13 @@ __global__ void k_p1(Params P, GenomeView g, const char* rb, const u64* roff, co
                      Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* status, u64* nEnt) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
+    TAIL_BEGIN(0, k);
     u64 i = idx ? idx[b0 + k] : b0 + k;
     Work<C>& w = work[k];
     Status s = mapPhase1(P, g, w, rbuf[k], rb + roff[i], rlen[i]);
     status[k] = (uint8_t)s;
     nEnt[k] = (s == Status::Ok && w.stitched) ? w.nEntries : 0;
+    TAIL_END(0, k);
 }
 template <class C>
 __global__ void k_p2(Params P, GenomeView g, u64 n, const Work<C>* work, const u64* nEnt, const u64* base, uint32_t* bits) {
@@ -157,6 +167,7 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (t >= n) return;
     u64 k = perm ? perm[t] : t;   // --bin: threads take the batch's reads in order of estimated cost (each read is independent)
+    TAIL_BEGIN(1, k);             // E1 tail records are indexed by read k (= thread index t without --bin)
     Work<C>& w = work[k];
     w.stepBudget = budget;
     u64 o = b0 + k;
@@ -165,8 +176,10 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     if (s == Status::Ok && w.stitched && !assignHits(P, g, w, bits, base[k])) s = Status::Overflow;
     if (s == Status::Ok) s = mapFinish(P, g, w, rbuf[k], bl);
     status[k] = (uint8_t)s; why[o] = (uint8_t)w.ov; outLen[o] = (uint16_t)bl.n; unmap[o] = (int8_t)w.unmapType;
+    TAIL_INFO(k, nEnt[k], w.nW, (uint32_t)w.nSteps, (unsigned long long)(w.clk[2] + w.clk[3]));
     for (int c = 0; c < 8; c++) { atomicAdd(&g_clk[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
     atomicAdd(&g_scan, (unsigned long long)nEnt[k]);
+    TAIL_END(1, k);
 }
 // cost key of each read after phase 1, for --bin: windows, then SA entries to assign (reads that need no phase 3 first)
 template <class C>
@@ -199,8 +212,16 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             NB * (double)sizeof(Work<C>) / 1e9);
     cudaEvent_t q[4]; for (auto& e : q) cudaEventCreate(&e);
     unsigned long long clk[8] = {0}, scan = 0; double phMs[3] = {0, 0, 0};
+#ifdef M5_TAIL
+    TailHost tail; { int sms = 0; cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0); tail.init(NB, name, sms); }
+    int bps1 = 0, bps3 = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bps1, k_p1<C>, 128, 0));
+    CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bps3, k_p3<C>, 128, 0));
+#endif
     for (int r = 0; r < reps + 1; r++) {
         unsigned long long z[8] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
+#ifdef M5_TAIL
+        tail.arm(r == reps);
+#endif
         double ph[3] = {0, 0, 0};
         cudaEventRecord(e0);
         for (u64 b0 = 0; b0 < n; b0 += NB) {
@@ -214,6 +235,9 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             u64 words = (lastB + lastN) / 32 + 2;
             if (words > bitsCap) { CK(cudaFree(dBits)); bitsCap = words * 2; CK(cudaMalloc(&dBits, bitsCap * 4)); }
             CK(cudaMemsetAsync(dBits, 0, words * 4));
+#ifdef M5_TAIL
+            cudaEventRecord(tail.ev[0]);
+#endif
             k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
             cudaEventRecord(q[2]);
             if (g_bin) {
@@ -221,16 +245,26 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
                 thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
             }
             k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn, g_bin ? dPerm : nullptr);
+#ifdef M5_TAIL
+            cudaEventRecord(tail.ev[1]);
+#endif
             k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
             cudaEventRecord(q[3]);
             CK(cudaEventSynchronize(q[3])); CK(cudaGetLastError());
             float m; cudaEventElapsedTime(&m, q[0], q[1]); ph[0] += m; cudaEventElapsedTime(&m, q[1], q[2]); ph[1] += m;
             cudaEventElapsedTime(&m, q[2], q[3]); ph[2] += m;
+#ifdef M5_TAIL
+            if (r + 1 == reps) tail.events(e0, q, (int)(b0 / NB), nb);   // event times from the rep before the analysed one (no host work in between)
+            if (r == reps) { tail.batch(0, nb, T, bps1, (int)(b0 / NB)); tail.batch(1, nb, T, bps3, (int)(b0 / NB)); }
+#endif
         }
         cudaEventRecord(e1); CK(cudaEventSynchronize(e1));
         float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) { L.runs.push_back(m); for (int k = 0; k < 3; k++) phMs[k] += ph[k] / reps; }
         fprintf(stderr, "  lane %s run %d: %.1f ms (phase 1 %.1f, scan %.1f, phase 3 %.1f)\n", name, r, m, ph[0], ph[1], ph[2]);
     }
+#ifdef M5_TAIL
+    tail.summary(); tail.release();
+#endif
     CK(cudaMemcpyFromSymbol(clk, g_clk, sizeof clk)); CK(cudaMemcpyFromSymbol(&scan, g_scan, 8));
     { double t = (double)clk[0] + clk[1] + clk[2] + clk[3]; if (t > 0)
         fprintf(stderr, "  lane %s thread cycles: seeds %.1f%%, windows %.1f%%, stitching %.1f%%, select+encode %.1f%%; %.1f SA entries per read\n",
@@ -332,7 +366,7 @@ static std::string blobStr(const uint8_t* p, int n) {
 static int glScore(double scale, u64 x) { return int(std::ceil(std::log2((double)x) * scale - 0.5)); }
 
 int main(int argc, char** argv) {
-    std::string gdir, truth, json, input, emit; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, nbM = 131072, budgetA = 0, budgetB = 0, budgetM = 0; bool noMid = false;
+    std::string gdir, truth, json, input, emit; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, nbM = 131072, budgetA = 0, budgetB = 0, budgetM = 0, monoBudget = 0; bool noMid = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--genome-dir") gdir = argv[++i];
@@ -353,11 +387,13 @@ int main(int argc, char** argv) {
         else if (a == "--batch-m") nbM = atoll(argv[++i]);
         else if (a == "--bin") g_bin = true;   // phase 3 threads take the reads of a batch sorted by window count / SA entries
         else if (a == "--no-mid") noMid = true;          // lanes A, B only
+        else if (a == "--mono-budget") monoBudget = atoll(argv[++i]);   // E1: step budget of the one-kernel lanes (--mono; default 0 = none)
         else if (a == "--input") input = argv[++i];     // "count sequence" lines (uniq -c): map these instead of the truth reads
         else if (a == "--emit") emit = argv[++i];       // write (sequence, result) for the sequence cache preload (inject/)
     }
     if (gdir.empty() || truth.empty()) { fprintf(stderr, "usage: m5 --genome-dir D --truth PREFIX [--json F]\n"); return 2; }
     cudaDeviceProp prop; CK(cudaGetDeviceProperties(&prop, 0));
+    { unsigned long long mb = (unsigned long long)monoBudget; CK(cudaMemcpyToSymbol(g_monoBudget, &mb, 8)); }
     fprintf(stderr, "device %s, %d SMs; sizeof Work: A %zu, B %zu, host %zu\n", prop.name, prop.multiProcessorCount,
             sizeof(Work<LaneA>), sizeof(Work<LaneB>), sizeof(Work<Heavy>));
 

@@ -1,0 +1,51 @@
+label,kernel,rank,file,line,stall_samples,share_pct,not_issued,threads_per_inst,stall1,stall2,source
+M,k_p1,1,stitch.cuh,256,641060.0,14.333,557898.0,5.04,long_sb 95%,wait 3%,if (w.wbKey[i] == key) { w.wbVal[i] = (uint16_t)val; return true; }
+M,k_p1,2,stitch.cuh,103,266669.0,5.962,210334.0,5.48,long_sb 96%,wait 2%,u64 v = a[w] >> sh;
+M,k_p1,3,stitch.cuh,240,250097.0,5.592,156133.0,2.66,long_sb 53%,wait 25%,{ unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uintWinBinMax; }
+M,k_p1,4,stitch.cuh,251,242200.0,5.415,220507.0,11.12,long_sb 96%,wait 2%,{ unsigned b = (unsigned)bin & 1023; w.wbBits[str & 1][b >> 6] |= 1ULL << (b & 63); }
+M,k_p1,5,stitch.cuh,308,176874.0,3.955,136217.0,2.4,long_sb 85%,wait 8%,if (s[ii] != g[-ii]) { compRes = !(s[ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+M,k_p1,6,stitch.cuh,303,174090.0,3.892,134299.0,2.41,long_sb 85%,wait 8%,if (s[ii] != g[ii]) { compRes = s[ii] > g[ii]; return ii + L; }
+M,k_p1,7,stitch.cuh,318,173239.0,3.873,133853.0,2.28,long_sb 82%,wait 8%,if (s[-ii] != g[-ii]) { compRes = !(s[-ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+M,k_p1,8,stitch.cuh,313,166947.0,3.733,129657.0,2.31,long_sb 85%,wait 7%,if (s[-ii] != g[ii]) { compRes = s[-ii] > g[ii]; return ii + L; }
+M,k_p1,9,stitch.cuh,258,158500.0,3.544,139960.0,5.72,long_sb 84%,wait 8%,if (w.wbN * 4 >= C::NWB * 3) { w.ov = OV_WINBIN; return false; }
+M,k_p1,10,stitch.cuh,391,144749.0,3.236,111089.0,1.49,long_sb 85%,wait 9%,for (int jj = 0; jj < PC_SIZE; jj++) w.PC[ii + 1][jj] = w.PC[ii][jj];
+M,k_p2,1,stitch.cuh,245,304948.0,30.513,184011.0,2.73,long_sb 80%,wait 12%,if ((w.wbKey[i] >> 41) != w.wbEpoch) return uintWinBinMax;
+M,k_p2,2,stitch.cuh,103,223872.0,22.401,142754.0,24.79,long_sb 94%,wait 2%,u64 v = a[w] >> sh;
+M,k_p2,3,stitch.cuh,1385,59492.0,5.953,35480.0,26.82,long_sb 52%,branch_resolving 27%,"return wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax;"
+M,k_p2,4,m5.cu,159,50588.0,5.062,28264.0,18.53,branch_resolving 46%,wait 30%,"if (entryHit(P, g, w, iP, (m5::uint)(s0 + j))) atomicOr(&bits[(off + j) >> 5], 1u << ((off + j) & 31));"
+M,k_p2,5,m5.cu,157,46219.0,4.625,27192.0,18.43,long_sb 81%,wait 7%,"const u64 s0 = w.PC[iP][PC_SAstart], cnt = w.PC[iP][PC_SAend] - s0 + 1;"
+M,k_p2,6,stitch.cuh,240,44251.0,4.428,21671.0,24.67,long_sb 41%,wait 30%,{ unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uintWinBinMax; }
+M,k_p2,7,stitch.cuh,246,34454.0,3.447,18857.0,4.14,wait 54%,branch_resolving 13%,if (w.wbKey[i] == key) return w.wbVal[i];
+M,k_p2,8,stitch.cuh,466,34167.0,3.419,16894.0,2.95,wait 54%,short_sb 17%,uint sj1 = (a1 - g.sjGstart) % g.sjdbLength;
+M,k_p2,9,stitch.cuh,1382,34167.0,3.419,16894.0,2.95,wait 54%,short_sb 17%,"if (!sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) return false;"
+M,k_p2,10,m5.cu,158,27289.0,2.731,14234.0,22.22,wait 54%,branch_resolving 22%,for (u64 j = lane; j < cnt; j += 32)
+M,k_p3,1,stitch.cuh,656,1250156.0,10.149,1018969.0,1.93,long_sb 60%,wait 23%,if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+M,k_p3,2,stitch.cuh,152,399642.0,3.244,338061.0,3.48,long_sb 76%,no_inst 17%,nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = o.nUnique; nAnchor = o.nAnchor;
+M,k_p3,3,stitch.cuh,157,360822.0,2.929,299507.0,2.68,long_sb 56%,no_inst 34%,for (int k = 0; k < EX_SIZE; k++) exons[i][k] = o.exons[i][k];
+M,k_p3,4,stitch.cuh,149,353104.0,2.866,299728.0,3.5,long_sb 86%,no_inst 8%,rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength; cStart = o.cStart;
+M,k_p3,5,stitch.cuh,159,352884.0,2.865,301143.0,2.9,long_sb 69%,no_inst 28%,canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
+M,k_p3,6,stitch.cuh,150,239035.0,1.94,203561.0,3.5,long_sb 78%,no_inst 16%,Chr = o.Chr; Str = o.Str; roStr = o.roStr; primaryFlag = o.primaryFlag;
+M,k_p3,7,stitch.cuh,158,228109.0,1.852,193373.0,2.96,long_sb 80%,no_inst 17%,shiftSJ[i][0] = o.shiftSJ[i][0]; shiftSJ[i][1] = o.shiftSJ[i][1];
+M,k_p3,8,stitch.cuh,151,219486.0,1.782,185610.0,3.54,long_sb 79%,no_inst 14%,nMatch = o.nMatch; nMM = o.nMM; mappedLength = o.mappedLength; extendL = o.extendL; maxScore = o.maxScore;
+M,k_p3,9,stitch.cuh,654,213635.0,1.734,166304.0,2.01,wait 46%,no_inst 23%,for (int i = 0; i < (int)L; i++) {
+M,k_p3,10,stitch.cuh,1120,207984.0,1.688,175367.0,5.34,long_sb 67%,no_inst 24%,if (w.stepBudget && ++w.nSteps > w.stepBudget) { w.ov = OV_STEPS; return false; }
+monog,k_lane,1,stitch.cuh,240,2345806.0,4.202,1666767.0,1.34,no_inst 40%,wait 25%,{ unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uintWinBinMax; }
+monog,k_lane,2,stitch.cuh,104,2287767.0,4.098,1853777.0,1.39,no_inst 53%,long_sb 36%,if (sh) v |= a[w + 1] << (64 - sh);
+monog,k_lane,3,stitch.cuh,103,1913171.0,3.427,1447664.0,1.39,long_sb 58%,no_inst 20%,u64 v = a[w] >> sh;
+monog,k_lane,4,stitch.cuh,1395,1352316.0,2.422,1044092.0,1.22,long_sb 32%,wait 23%,if (M5_TOO_MANY_ANCHORS(w)) return true;   // nothing observable follows: STAR goes on with nW = 0
+monog,k_lane,5,stitch.cuh,318,1189573.0,2.131,994995.0,1.45,no_inst 49%,long_sb 39%,if (s[-ii] != g[-ii]) { compRes = !(s[-ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+monog,k_lane,6,stitch.cuh,656,1068898.0,1.915,858794.0,1.05,no_inst 38%,long_sb 32%,if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+monog,k_lane,7,stitch.cuh,102,1033042.0,1.85,770303.0,1.39,no_inst 75%,selected 11%,"u64 b = ii * bits, w = b >> 6, sh = b & 63;"
+monog,k_lane,8,stitch.cuh,308,1002810.0,1.796,826024.0,1.47,long_sb 54%,no_inst 31%,if (s[ii] != g[-ii]) { compRes = !(s[ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+monog,k_lane,9,stitch.cuh,246,988046.0,1.77,849611.0,1.34,no_inst 92%,branch_resolving 5%,if (w.wbKey[i] == key) return w.wbVal[i];
+monog,k_lane,10,stitch.cuh,1191,960754.0,1.721,812419.0,1.41,no_inst 94%,wait 3%,while (u >= 0x80) { put((uint8_t)(u | 0x80)); u >>= 7; }
+monol,k_lane,1,stitch.cuh,240,4910349.0,8.921,3824418.0,1.67,long_sb 67%,wait 12%,{ unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uintWinBinMax; }
+monol,k_lane,2,stitch.cuh,656,2040264.0,3.707,1663106.0,1.1,long_sb 58%,no_inst 22%,if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+monol,k_lane,3,stitch.cuh,103,1998023.0,3.63,1520838.0,1.77,long_sb 60%,no_inst 18%,u64 v = a[w] >> sh;
+monol,k_lane,4,stitch.cuh,104,1646680.0,2.992,1255618.0,1.78,long_sb 68%,no_inst 15%,if (sh) v |= a[w + 1] << (64 - sh);
+monol,k_lane,5,stitch.cuh,102,1164159.0,2.115,871568.0,1.77,no_inst 74%,selected 10%,"u64 b = ii * bits, w = b >> 6, sh = b & 63;"
+monol,k_lane,6,stitch.cuh,152,1141192.0,2.073,956195.0,1.42,long_sb 79%,no_inst 17%,nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = o.nUnique; nAnchor = o.nAnchor;
+monol,k_lane,7,stitch.cuh,318,1096216.0,1.992,905724.0,1.94,long_sb 61%,no_inst 28%,if (s[-ii] != g[-ii]) { compRes = !(s[-ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+monol,k_lane,8,stitch.cuh,1393,1087803.0,1.976,803721.0,1.44,wait 39%,long_sb 29%,for (uint iSA = w.PC[iP][PC_SAstart]; iSA <= iSAend; iSA++) {
+monol,k_lane,9,stitch.cuh,308,1070949.0,1.946,879213.0,2.05,long_sb 75%,no_inst 13%,if (s[ii] != g[-ii]) { compRes = !(s[ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+monol,k_lane,10,stitch.cuh,303,1016599.0,1.847,832700.0,2.05,long_sb 77%,no_inst 11%,if (s[ii] != g[ii]) { compRes = s[ii] > g[ii]; return ii + L; }
