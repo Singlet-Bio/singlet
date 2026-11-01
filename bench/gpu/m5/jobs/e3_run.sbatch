@@ -11,7 +11,7 @@
 # E3 (warp-window): baseline lanes and the warp-stitched lanes M/B in the same job, on the standard 2 M distinct-read set of
 # pbmc1k_v3 (every 16th distinct cDNA sequence), byte for byte against STAR (stardump M5 truth regenerated here, in job /tmp).
 #   RUNS="label:extra m5 args|label:args|..."   (default: base, warp, warp+sort, warp+sort+cfg1; host emulation on "warp")
-#   BIN=path to m5 (default $W/jobs/fable/warp-window/bin/m5e3)
+#   BIN=path to m5 (default $W/jobs/fable/warp-window/bin/m5e3); NCUS: optional Nsight Compute profiles (see the end)
 # Results: $W/jobs/fable/warp-window/results/e3_<jobid>_<label>.json and .json.e3.json; the log keeps no read sequence.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark
@@ -53,4 +53,23 @@ for v in "${VARS[@]}"; do
   grep -v "^  seq" $SCR/m5_$LABEL.log | awk '/^DIFF/ {nd++} nd <= 12 || !/^(DIFF|  star|  ours)/' | grep -v "^  lane .* run [0-9]" | tail -60
   grep "run [0-9]" $SCR/m5_$LABEL.log | tr '\n' ';' | cut -c1-900; echo
 done
+# optional Nsight Compute: NCUS="label~mangled-name regex~m5 args|..." (one launch each, --set full; e.g. lane M's warp kernel:
+# "wm~k_p3wI4CapsILi160ELi4ELi32ELi64E~--warp-m"; baseline lane M: "bm~k_p3I4CapsILi160ELi4ELi32ELi64E~"). Reports: $OUT/ncu-<job>/
+NCUS=${NCUS:-}; NCU=/usr/local/cuda/bin/ncu
+if [ -n "$NCUS" ]; then
+  ND=$OUT/ncu-$SLURM_JOB_ID; mkdir -p $ND
+  IFS='|' read -ra NV <<< "$NCUS"
+  for v in "${NV[@]}"; do
+    L=${v%%~*}; r=${v#*~}; RX=${r%%~*}; ARGS=${r#*~}; t=$(date +%s)
+    echo "=== ncu $L: regex $RX -- $BASE $ARGS"
+    timeout 1200 apptainer exec --nv -B $W -B $SCR $IMG $NCU --set full --import-source yes --clock-control none --kernel-name-base mangled \
+      --kernel-name "regex:$RX" --launch-count 1 -o $ND/ncu_$L -f env OMP_NUM_THREADS=24 $SCR/m5 --genome-dir $SCR/idx --truth $SCR/m5/t \
+      --reps 0 $BASE $ARGS 2>&1 | grep -v "^  seq\|^  star\|^  ours\|^DIFF" > $ND/ncu_$L.log
+    echo "exit=${PIPESTATUS[0]} wall=$(( $(date +%s) - t )) s"; grep -E "==PROF==|==ERROR==|==WARNING==" $ND/ncu_$L.log | cut -c1-200 | head -5
+    [ -f $ND/ncu_$L.ncu-rep ] || continue
+    apptainer exec -B $W $IMG $NCU --import $ND/ncu_$L.ncu-rep --page details --csv > $ND/ncu_${L}_details.csv 2>&1
+    grep -E '"(Duration|Registers Per Thread|Achieved Occupancy|Theoretical Occupancy|Achieved Active Warps Per SM|Block Limit Registers|Block Limit Shared Mem|Block Limit Warps|Local Memory Spilling Requests|Compute \(SM\) Throughput|Memory Throughput|DRAM Throughput|L1/TEX Hit Rate|L2 Hit Rate|Warp Cycles Per Issued Instruction|Issued Warp Per Scheduler|No Eligible|Avg\. Active Threads Per Warp|Avg\. Not Predicated Off Threads Per Warp|Branch Efficiency|Dynamic Shared Memory Per Block|Threads|Grid Size|Block Size)"' \
+      $ND/ncu_${L}_details.csv | awk -F'","' '{printf "  %-45s %-10s %s\n", $(NF-2), $(NF-1), $NF}' | tr -d '"' | head -40
+  done
+fi
 echo "[t] total $(( $(date +%s) - T0 )) s"
