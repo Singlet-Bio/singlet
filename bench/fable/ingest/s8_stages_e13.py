@@ -50,7 +50,9 @@ for i, (name, _) in enumerate(MARK):
     print(f"{name:46s} {b-a:7.0f} {cs:8.1f} {cs/readsM:9.2f} {sum(u)/max(len(u),1):10.1f}")
     if name.startswith("GPU prefill"):
         m13 = re.search(r"E13: (\d+) reads decoded from the \.1fq into the packed buffers in ([0-9.]+) s", sl)
-        if m13: print(f"{'  of which the .1fq decode (E13, star_Log.out)':46s} {float(m13.group(2)):7.1f}")
+        if m13: print(f"{'  E13 phase A, decode (star_Log.out)':46s} {float(m13.group(2)):7.1f}")
+        mw = re.search(r"barcodes ([0-9.e-]+) s .*CellRanger4 clip ([0-9.e-]+) s .*(?:the prefill waited|all in the prefill:) ([0-9.e-]+) s", sl)
+        if mw: print(f"{'  E13 phases B, C; the prefill waited (s)':46s} {float(mw.group(1)):7.1f} {float(mw.group(2)):8.1f} {float(mw.group(3)):9.1f}")
         mr = re.search(r"cache filled with \d+ sequence results in \d+ s \(reading reads (\d+) s, GPU (\d+) s", sl)
         if mr: print(f"{'  reading reads / GPU (star_Log.out, whole s)':46s} {float(mr.group(1)):7.0f} {float(mr.group(2)):8.0f}")
 u = [m[2] for m in mon]

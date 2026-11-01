@@ -4507,6 +4507,7 @@ int main(int argc, char* argv[]) {
         // process needs before STAR (the barcode dictionary counts of barcode discovery, the 5' prefix probe's sample as FIFO pass 1 takes it,
         // each block's read and base counts for the prefill's exact allocation). R11's exact CB histogram comes from STAR's prefill (E8 region)
         // when the stream first needs it. Where a condition does not hold, or the probe finds a prefix to clip, the file decode runs as before.
+#ifdef SINGLET_HAVE_ENGINE_GPU
         if (ingest_req && !use_fifo_decode) {
             std::cerr << "[1fq-ingest] Scanning the .1fq's blocks (SINGLET_ENGINE_GPU_INGEST=1)\n";
             StopWatch ingest_sw;
@@ -4661,6 +4662,7 @@ int main(int argc, char* argv[]) {
                           << decode_time << "s, " << std::max(1, std::min<int>(star_threads, static_cast<int>(nb))) << "T); STAR's prefill decodes the reads (no FASTQ files)\n";
             }
         }
+#endif
 
         std::string tmpdir = "/dev/shm";
         if (const char* td = std::getenv("TMPDIR"))
@@ -7666,6 +7668,15 @@ int main(int argc, char* argv[]) {
 
             args.push_back(nullptr);
 
+#ifdef SINGLET_HAVE_ENGINE_GPU
+            // E13: the .1fq's reads are decoded for STAR's prefill from now on, beside the CR4 probe and STAR's genome load (the prefill
+            // takes them; engine_gpu_ingest.h). SINGLET_ENGINE_GPU_INGEST_EARLY=0: the prefill decodes them when it starts.
+            if (ingest_on) {
+                const char* ee = std::getenv("SINGLET_ENGINE_GPU_INGEST_EARLY");
+                if (!(ee && ee[0] == '0')) singlet_engine_gpu::ingest::startEarly(star_threads);
+            }
+#endif
+
             // CR4 probe: map the first cr4_probe_reads reads twice (with and without the Beta aligner profile; no
             // BAM, same solo arguments) and keep the profile only if its unique-mapping rate is not more than
             // 2 points below the plain run's. Anything else (probe failure, too few reads) also drops the profile.
@@ -7772,12 +7783,14 @@ int main(int argc, char* argv[]) {
             }
             // E13: STAR has no read files; every read comes from this chunk source over the .1fq (file mode's records) unless the GPU prefill
             // replaces it with the reads its device did not cover (level 4/5, built from the prefill's own decode); it starts on the first read
+#ifdef SINGLET_HAVE_ENGINE_GPU
             if (ingest_on) {
                 int dthreads = std::max(2, std::min(4, star_threads / 4));
                 if (const char* e = std::getenv("SINGLET_READ_SOURCE_THREADS"); e && std::atoi(e) > 0) dthreads = std::atoi(e);
                 g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(onefq_files, ingest_fmt, dthreads, /*cdna_first=*/true);
                 singlet_engine_gpu::ingest::plan().fallback = g_starReadSource;
             }
+#endif
 
             // Call bundled STAR directly — no exec, no external binary needed.
             int rc = star_main_impl(

@@ -14,6 +14,7 @@
 #   gpuD     --engine gpu + SINGLET_GPU_PILEUP=on        (the default GPU path)
 #   gpuE5    gpuD + SINGLET_ENGINE_GPU_E2E=5             (E11's level 5; the baseline)       gpuE5b: a second run
 #   gpuE5i   gpuE5 + SINGLET_ENGINE_GPU_INGEST=1         (E13: STAR's prefill decodes the .1fq; no FASTQ temp files)  gpuE5ib: a second run
+#   gpuE5s   gpuE5i + SINGLET_ENGINE_GPU_INGEST_EARLY=0 (the decode runs in the prefill, not from STAR's start)  gpuE5sb: a second run
 #   gpuE4i, gpuE3i   levels 4 and 3 + INGEST
 #   gpuE2i   level 2 + INGEST + SINGLET_ENGINE_GPU_E10_CHECK=1 (STAR's own hand-off entries against the device's)
 #   gpuE2c   level 2 + SINGLET_ENGINE_GPU_E10_CHECK=1 (the same check without INGEST)
@@ -45,13 +46,14 @@ G=$REF/GRCh38-2024-A; case $s in neuron1k_v3|nuclei2k_v2) G=$REF/GRCm39-2024-A ;
 ls -l $FQ | tee -a $RES/summary.txt
 for m in "${MODES[@]}"; do
   mkdir -p $SCR/$s/$m/out; O=$RES/$m; mkdir -p $O
-  unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_ENGINE_GPU_E2E_CHECK SINGLET_ENGINE_GPU_E10_CHECK SINGLET_ENGINE_GPU_E10_R11 SINGLET_ENGINE_GPU_INGEST
+  unset SINGLET_GPU_PILEUP SINGLET_ENGINE_GPU_E2E SINGLET_ENGINE_GPU_E2E_CHECK SINGLET_ENGINE_GPU_E10_CHECK SINGLET_ENGINE_GPU_E10_R11 SINGLET_ENGINE_GPU_INGEST SINGLET_ENGINE_GPU_INGEST_EARLY
   BIN=$BINDIR/singlet-gpu; ENGARG="--engine gpu"
   case $m in
     cpu) ENGARG="" ;;
     gpuD) export SINGLET_GPU_PILEUP=on ;;
     gpuE5|gpuE5b) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 ;;
     gpuE5i|gpuE5ib) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1 ;;
+    gpuE5s|gpuE5sb) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1 SINGLET_ENGINE_GPU_INGEST_EARLY=0 ;;
     gpuE4i) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=4 SINGLET_ENGINE_GPU_INGEST=1 ;;
     gpuE3i) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=3 SINGLET_ENGINE_GPU_INGEST=1 ;;
     gpuE2i) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=2 SINGLET_ENGINE_GPU_INGEST=1 SINGLET_ENGINE_GPU_E10_CHECK=1 ;;
@@ -77,7 +79,7 @@ for m in "${MODES[@]}"; do
   echo "$s $m: wall $(echo "$T1 - $T0" | bc) s, core-s $(echo "($C1 - $C0)/1000000" | bc -l | cut -c1-8), start $T0 end $T1, maxRSS $(awk -F': ' '/Maximum resident/{printf "%.1f GB", $2/1048576}' $O/time.txt), cgroup memory peak $(awk '{if ($2 > m) m = $2} END {printf "%.1f GB", m / 1073741824}' $O/mem.txt) (anon $(awk '{if ($3 > m) m = $3} END {printf "%.1f GB", m / 1073741824}' $O/mem.txt), shmem $(awk '{if ($5 > m) m = $5} END {printf "%.1f GB", m / 1073741824}' $O/mem.txt))" | tee -a $RES/summary.txt
   grep -aq "unsorted STAR stream" $O/run.log.ts && grep -aq "Pileup: streaming from STAR pipe" $O/run.log.ts && echo "STREAM PATH OK" | tee -a $RES/summary.txt || { echo "!! GATE FAIL: STREAM PATH NOT USED ($m)" | tee -a $RES/summary.txt; FAIL=1; }
   case $m in cpu) ;; *) if grep -aq "\[gpu_pileup\] on:" $O/run.log.ts && ! grep -aE "\[gpu_pileup\] (not run|failed|ERROR)|GPU_PILEUP ignored" $O/run.log.ts | grep -q .; then echo "GPU PILEUP OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: GPU pileup did not run cleanly ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
-  case $m in *i|*ib) if grep -aq "\[1fq-ingest\] Scanned" $O/run.log.ts; then echo "INGEST PATH OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: INGEST NOT USED ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
+  case $m in *i|*ib|*s|*sb) if grep -aq "\[1fq-ingest\] Scanned" $O/run.log.ts; then echo "INGEST PATH OK" | tee -a $RES/summary.txt; else echo "!! GATE FAIL: INGEST NOT USED ($m)" | tee -a $RES/summary.txt; FAIL=1; fi ;; esac
   grep -a -e "unsorted STAR stream" -e "streaming from STAR pipe" -e "sorted path" -e "gpu_pileup\]" -e "ignor" -e "E8" -e "E10" -e "E11" -e "E13" -e "1fq-ingest" -e "1fq-decode" -e ".1fq " -e "R11" -e "cell_qc\]" $O/run.log.ts | cut -c1-400 | tee -a $RES/summary.txt
   grep -ah -e "ENGINE_GPU" -e "engine_gpu:" -e "E10" -e "E11" -e "E13" -e "soloRun" -e "Solo counting" -e "loading the genome" -e "started mapping" -e "finished mapping" -e "Loading SA" -e "Loading Genome" -e "ALL DONE" $SCR/$s/$m/out/*Log.out 2>/dev/null | cut -c1-6000 | head -160 > $O/starlog_engine.txt
   cut -c1-700 $O/starlog_engine.txt | tee -a $RES/summary.txt

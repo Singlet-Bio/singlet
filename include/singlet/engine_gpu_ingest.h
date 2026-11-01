@@ -2,8 +2,9 @@
 #pragma once
 // E13 (docs/gpu-engine/fable/E13-ingest.md; SINGLET_ENGINE_GPU_INGEST=1): on the GPU path the .1fq goes from disk into the prefill's packed
 // buffers directly. The pipeline no longer decodes it to FASTQ temp files: it scans the blocks' heads (barcode counts for barcode discovery,
-// the 5' prefix probe, the per-block read and base counts), forks STAR with no read files, and STAR's prefill decodes the blocks on the job's
-// threads straight into the arrays below (src/star/SeqCacheGpuIngest.cpp). STAR's loop takes the reads the device did not cover from a read
+// the 5' prefix probe, the per-block read and base counts), forks STAR with no read files, and STAR's process decodes the blocks on the job's
+// threads straight into the arrays below (src/star/SeqCacheGpuIngest.cpp), starting as soon as it is forked so the decode runs beside the
+// CR4 probe and the genome load; the prefill takes the arrays when it starts. STAR's loop takes the reads the device did not cover from a read
 // source built from the same arrays (level 4/5), or from a chunk source over the .1fq (read_source.h) where the prefill does not run.
 // R11's exact CB histogram goes back to the pipeline through the E8 region's header (E2EHeader::r11Magic; the handshake is below).
 //
@@ -11,7 +12,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -27,7 +27,8 @@ namespace ingest {
 // ---- The prefill's packed-read input: the reads of one sample, in STAR's read order (read r is STAR's iReadAll r + 1), as a struct of arrays.
 //
 // The .1fq decode (SeqCacheGpuIngest.cpp) fills it from RunSet::decode, block by block, each block into its own ranges (the pipeline's head
-// scan gave every block's read and base counts, so every array is sized once and written once, in parallel). What a .1fg2 reader (fg2_format.h,
+// scan gave every block's read and base counts, so every array is sized once and written once, in parallel), then the per-read barcode
+// products from the barcode-read plane. What a .1fg2 reader (fg2_format.h,
 // the staged format: cDNA plane, corrected-CB index, UMI plane, quality plane per chunk) would fill instead, field by field:
 //   seq, off      its cDNA plane unpacked to STAR's numeric code, and the read lengths (no text; N is code 4)
 //   aux           E10's per-read words: CR and UR 3-bit packed from its CB and UMI planes (CR = the raw barcode the corrected index came
@@ -56,6 +57,7 @@ struct PackedReads {
     // E11's counts over the same pass: cDNA quality characters >= qBase + 30 and all; the barcode read's CB and UMI spans; CB characters
     uint64_t q30Rna = 0, nRna = 0, q30Cb = 0, nCb = 0;
     int cbQmin = 256, cbQmax = -1;
+    uint64_t qualHist[4] = {0, 0, 0, 0};     // cDNA bases per quality code (phase A; E11's RNA Q30 count from it)
     // R11: per whitelist entry (STAR's cbWL order) the reads whose CB is that entry exactly and whose UMI has no N and is not a homopolymer
     std::vector<uint64_t> r11;
     uint64_t r11Total = 0;
@@ -74,7 +76,8 @@ struct PackedReads {
         for (int k = 0; k < 4; k++) std::swap(qualPhred[k], o.qualPhred[k]);
         std::swap(r1L, o.r1L); std::swap(r1w, o.r1w); r1.swap(o.r1); first.swap(o.first); baseAt.swap(o.baseAt); qualAt.swap(o.qualAt);
         nameAt.swap(o.nameAt); std::swap(q30Rna, o.q30Rna); std::swap(nRna, o.nRna); std::swap(q30Cb, o.q30Cb); std::swap(nCb, o.nCb);
-        std::swap(cbQmin, o.cbQmin); std::swap(cbQmax, o.cbQmax); r11.swap(o.r11); std::swap(r11Total, o.r11Total); std::swap(sec, o.sec);
+        std::swap(cbQmin, o.cbQmin); std::swap(cbQmax, o.cbQmax); r11.swap(o.r11);
+        for (int k = 0; k < 4; k++) std::swap(qualHist[k], o.qualHist[k]); std::swap(r11Total, o.r11Total); std::swap(sec, o.sec);
     }
 };
 
@@ -96,22 +99,31 @@ struct Plan {
 };
 inline Plan& plan() { static Plan p; return p; }
 
-// ---- The decode (SeqCacheGpuIngest.cpp): every block of plan().runs into `out`, on `threads` threads
-struct DecodeConfig {
+// ---- The decode, in three phases (SeqCacheGpuIngest.cpp; the third, STAR's CellRanger4 clip, in SeqCacheGpuPrefill.cpp):
+//   A  decodeReads: every block of plan().runs into seq, off, the quality plane, the barcode-read plane and the quality-code counts; it
+//      needs nothing from STAR, so STAR's process starts it as soon as it is forked (startEarly), beside the CR4 probe and the genome load
+//   B  barcodes: STAR's barcode layout and whitelist (known once STAR read its parameters): E10's aux words (CR/UR keys, low-quality bits
+//      from the quality plane), E11's quality counts, R11's histogram
+//   C  the CellRanger4 clip (STAR's ClipMates): with B, on a thread STAR starts before it loads the genome (seqCacheGpuEarly)
+bool decodeReads(int threads, PackedReads& out, std::string& why);
+
+struct BarcodeConfig {
     int threads = 1;
-    bool e10 = false;                         // build aux (E10): cr3, ur3, nw quality words per read
-    uint32_t nw = 0;
+    uint32_t nw = 0;                          // E10: quality words per read (0: no aux)
     int minQ = 0;                             // E10: bit j of a read's quality words is set when base j has Phred < minQ
     uint32_t cbS0 = 0, cbL = 0, umiS0 = 0, umiL = 0, cbumiL = 0, bL = 0;   // STAR's barcode layout (CB_UMI_Simple), 0-based starts
     bool e11 = false;                         // E11's quality counts
     unsigned q30 = 63;                        // readQualityScoreBase + 30, as a quality character
     const uint64_t* wl = nullptr;             // R11: STAR's whitelist (ParametersSolo::cbWL, sorted 2-bit keys, first base highest)
     uint64_t nWL = 0;
-    // after a block's reads are in seq and off: STAR's per-read work on them (the CellRanger4 clip), on the decoding thread `tid`; reads
-    // [r0, r1), the first one starting at seq[s0] (off[r0] is written by the thread that decodes the previous block: not read here)
-    std::function<void(int tid, uint64_t r0, uint64_t r1, uint64_t s0)> perBlock;
 };
-bool decode(const DecodeConfig& cfg, PackedReads& out, std::string& why);
+bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why);
+
+// phase A in the background of STAR's process (the forked child; its CR4 probe's grandchildren do not see it: the state is per pid)
+void startEarly(int threads);
+bool earlyHere();                                                       // started in this process
+bool takeEarly(PackedReads& out, std::string& why, double& waited);    // joins; out receives the reads
+void dropEarly();                                                       // joins and frees (a prefill that stops before its decode)
 
 // ---- R11's handshake (E2EHeader::r11Magic). STAR's prefill writes the histogram into the E8 region right after its decode (publishR11);
 // the pipeline's CB corrector (cb_correct.h, set_pending) reads it the first time a correction needs the exact counts (fetchR11). That is
