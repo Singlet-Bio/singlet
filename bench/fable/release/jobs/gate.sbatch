@@ -58,7 +58,7 @@ READF="nonhost_reads.fq star_Unmapped.out.mate1 star_Unmapped.out.mate2"
 readhash() { for f in $READF; do
     if [ -f $1/$f ]; then echo "$f $(paste - - - - < $1/$f | LC_ALL=C sort -S 4G --parallel=8 -T $SCR | sha256sum | cut -c1-16) $(( $(wc -l < $1/$f) / 4 ))"
     else echo "$f absent 0"; fi; done; }
-[ -f $RES0/runs.tsv ] || printf "sample\tmode\texit\twall_s\tcore_s\tmaxrss_gb\tdev_peak_gb\tlevel\tingest\tfallback_lines\tnode\n" > $RES0/runs.tsv
+[ -f $RES0/runs.tsv ] || printf "sample\tmode\texit\twall_s\tcore_s\tmaxrss_gb\tdev_peak_gb\tlanes_peak_gb\tlevel\tingest\tfallback_lines\tnode\n" > $RES0/runs.tsv
 for s in "${SAMPLES[@]}"; do
   RES=$RES0/$s; mkdir -p $RES; RS=$REFD/$s
   G=$REF/GRCh38-2024-A
@@ -131,7 +131,9 @@ for s in "${SAMPLES[@]}"; do
     python3 $SCR/repo/bench/fable/ingest/s8_stages_e13.py $O $RM > $O/stages.txt 2>&1; tee -a $RES0/summary.txt < $O/stages.txt
     [ $m = gpuT ] && { python3 $SCR/repo/bench/fable/tail/e16_steps.py $O > $O/e16.txt 2>&1; tee -a $RES0/summary.txt < $O/e16.txt; }
     readhash $SCR/$s/$m/out > $O/readhash.txt
-    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$s" "$m" "${ES:-?}" "$WALL" "$CORES" "$RSS" "$DEV" "${LV:-?}" "$ING" "$NFB" "$(hostname -s)" >> $RES0/runs.tsv
+    # the prefill's device peak (engine log); dev_peak is nvidia-smi's 1-s maximum, which includes the GPU pileup's arena (free memory - 3 GB)
+    LANES=$(grep -ao "lanes peak [0-9.]*" $O/starlog_engine.txt | tail -1 | awk '{printf "%.1f", $3}')
+    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$s" "$m" "${ES:-?}" "$WALL" "$CORES" "$RSS" "$DEV" "${LANES:--}" "${LV:-?}" "$ING" "$NFB" "$(hostname -s)" >> $RES0/runs.tsv
     if [ $m = cpu ] && [ "${ES:-1}" = 0 ]; then   # the sample's reference, for this gate's pairs and the later ones
       N=$RS.new-$SLURM_JOB_ID; rm -rf $N; mkdir -p $N
       rsync -a "${EXCL[@]}" $SCR/$s/$m/out/ $N/out/
