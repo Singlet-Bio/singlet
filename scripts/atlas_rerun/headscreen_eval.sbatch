@@ -9,9 +9,11 @@
 # S9: cost and verdicts of the head screen (1 M pairs by VDB streaming, then screen-runs) on the runs whose real outcome is known
 # ($WORK/jobs/s9/prefilter/labels.json: staged / parked_non10x / parked_no_gex). 8 runs in parallel, 2 VDB threads each.
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; R=$W/jobs/s9; SRC=$R/src; O=$R/prefilter
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists
-BIN=$W/pipeline-benchmark/bin/mc99cpu
+BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"
 cat > $O/head_one.py <<PY
 import json, os, sys, time
 sys.path.insert(0, "$SRC")

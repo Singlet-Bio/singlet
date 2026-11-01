@@ -12,8 +12,10 @@
 # vote_runs decides. (An earlier version probed with fastq-dump, which drops technical reads and so mis-read runs whose barcode read is a technical segment.)
 # Env: N (150), MAXRUNS (6), SEED (11), FILTER, BRANCH (default fix/protocol-vote), BIN (a singlet build).
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; export PATH=$W/envs/bpub/bin:$W/envs/pbench/bin:$PATH HOME=$W/cache/condahome
-BIN=${BIN:-$W/jobs/s14/bin_bloom/singlet-cpu}
+BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"
 T=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $T; trap 'rm -rf $T' EXIT
 git clone -q --depth 1 -b ${BRANCH:-fix/protocol-vote} git@github.com:Singlet-Bio/singlet.git $T/repo 2>&1 | tail -1; (cd $T/repo && git log --oneline -1 | cut -c1-100)
 cat > $T/census.py <<'PY'

@@ -10,8 +10,10 @@
 # 10x-5p-v2; GEO: 5p v1). Passes when the manifest has protocol_vote {status voted, winner 10x-5p-v2}, every kept run decodes, and all four .1fq headers carry the same protocol.
 # Env: BRANCH (default fix/protocol-vote), GSM / RUNS / READS for another sample, NOHEAD=1 runs the fetch worker without --head-screen (the vote then probes 5000 spots of each run), OLD=1 uses the pre-vote worker (prod/campaign).
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; export PATH=$W/envs/pbench/bin:$PATH HOME=$W/cache/condahome
-BIN=${BIN:-$W/jobs/s14/bin_r1new/singlet-cpu}; WL=$W/pipeline-benchmark/whitelists
+BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"; WL=$W/pipeline-benchmark/whitelists
 T=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $T; trap 'rm -rf $T' EXIT
 BR=${BRANCH:-fix/protocol-vote}; [ -n "${OLD:-}" ] && BR=prod/campaign
 git clone -q --depth 1 -b $BR git@github.com:Singlet-Bio/singlet.git $T/repo 2>&1 | tail -1; (cd $T/repo && git log --oneline -1)

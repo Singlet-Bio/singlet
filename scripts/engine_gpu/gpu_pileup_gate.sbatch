@@ -12,8 +12,10 @@
 # compared (bench/star_accel/out_equiv.py: byte, then content; JSON fields listed), plus each run's CPU (cgroup) and wall. A second
 # "cpu" run (cpu2) gives the run-to-run baseline. Outputs in job /tmp; summaries to results/pugate-<job>/.
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
-BIN=${BIN:-$W/jobs/w11/engine/bin17/singlet-gpu}; SETS=(${SETS:-pbmc1k_v3}); T=${T:-18}; MODES=(${MODES:-cpu on cpu2})
+BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"; SETS=(${SETS:-pbmc1k_v3}); T=${T:-18}; MODES=(${MODES:-cpu on cpu2})
 BARE=$W/repos/singlet-py.git
 RES=$W/jobs/w11/engine/results/pugate-$SLURM_JOB_ID; mkdir -p $RES
 SCR=/tmp/$USER-pugate-$SLURM_JOB_ID; mkdir -p $SCR/repo

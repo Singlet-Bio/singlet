@@ -9,8 +9,10 @@
 # The engine's species check (singlet.cpp, "[species-check]") and the clearer ".1fq processing is missing ..." error, with the real binary built from fix/species-bloom (BIN) and the
 # Bloom filters in $FILTERS. singlet is stopped after 90 s: the check line is printed before the alignment starts. Env: BIN (required), FILTERS.
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; REF=/mnt/projects/debruinz_project/cellarium/reference; PB=$W/pipeline-benchmark
-BIN=${BIN:?}; FILTERS=${FILTERS:-$W/reference-extra/species_filters}
+BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"; FILTERS=${FILTERS:-$W/reference-extra/species_filters}
 T=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $T; trap 'rm -rf $T' EXIT
 export PATH=$W/envs/pbench/bin:$PATH SINGLET_WHITELIST_DIR=$PB/whitelists
 run() {   # label, fq, genome (GRCh38-2024-A|GRCm39-2024-A|none), filters (1|0)

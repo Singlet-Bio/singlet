@@ -9,6 +9,8 @@
 # S9: gate of Fg2RunSet. Rebuilds singlet-stage + test_fg2_runset from the branch, regenerates the fixtures' .1fg2 in $WORK/jobs/s9/fixtures from their .1fq (same
 # order), then per fixture: test_fg2_runset --ordered --threads 4 (decoded blocks equal the .1fq RunSet's, read for read).
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; F=$W/jobs/s9/fixtures
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists
 B=/tmp/$USER-fg2gate-$SLURM_JOB_ID; mkdir -p $B; trap 'rm -rf $B' EXIT
@@ -26,7 +28,8 @@ for R in SRR19421372 SRR19573735 SRR30477995; do
 done
 echo "== gate rc=$RC"
 # the combined path (metadata through the writer's sink): singlet download --stage-out vs the .1fq of the same run, unordered (SRA order vs barcode-sorted)
-if [ -x $W/jobs/s9/bin/singlet-cpu ]; then
+BIN=${BIN:?set BIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$BIN"
+if [ -x $BIN ]; then
   R=SRR19421372
   python3 -c "
 import sys
@@ -34,8 +37,8 @@ sys.path.insert(0, '$W/jobs/s9/src')
 import fetch_worker as F
 F.fetch_run('$R', '$B', 16, lambda m: None)
 "
-  $W/jobs/s9/bin/singlet-cpu download $B/$R.sra --quality binned --vdb-threads 2 --no-profile --whitelist-dir $SINGLET_WHITELIST_DIR -o $B/a.1fq > /dev/null 2>&1
-  $W/jobs/s9/bin/singlet-cpu download $B/$R.sra --quality binned --vdb-threads 2 --no-profile --whitelist-dir $SINGLET_WHITELIST_DIR --stage-out $B/c.1fg2 -o $B/unused.1fq > /dev/null 2>&1
+  $BIN download $B/$R.sra --quality binned --vdb-threads 2 --no-profile --whitelist-dir $SINGLET_WHITELIST_DIR -o $B/a.1fq > /dev/null 2>&1
+  $BIN download $B/$R.sra --quality binned --vdb-threads 2 --no-profile --whitelist-dir $SINGLET_WHITELIST_DIR --stage-out $B/c.1fg2 -o $B/unused.1fq > /dev/null 2>&1
   echo "== combined path vs its .1fq"
   $B/test_fg2_runset --whitelist-dir $SINGLET_WHITELIST_DIR --fg2 $B/c.1fg2 --threads 4 $B/a.1fq || RC=1
 fi

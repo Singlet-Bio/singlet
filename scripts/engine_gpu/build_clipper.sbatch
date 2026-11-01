@@ -10,13 +10,15 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Build the singlet binary with and without the GPU engine on Clipper (docs/engine-gpu.md has the generic recipe).
 # Toolchain: the pbench conda env (compilers, htslib, ncbi-vdb, zstd, hdf5) inside the CUDA 12.4 devel image (nvcc).
-# BRANCH (default gpu/engine-gpu) is fetched by URL into a private ref. Outputs: $W/jobs/w11/engine/bin/singlet-{gpu,cpu}.
+# BRANCH (default gpu/engine-gpu) is fetched by URL into a private ref. Output: $W/builds/<commit8>/{bin/singlet-{gpu,cpu},whitelists,commit} (immutable; pinned builds only, see common.require_pinned_binary).
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
-BARE=$W/repos/singlet-py.git; BR=${BRANCH:-gpu/engine-gpu}; OUTD=${OUTD:-$W/jobs/w11/engine/bin}; mkdir -p $OUTD
+BARE=$W/repos/singlet-py.git; BR=${BRANCH:-gpu/engine-gpu}
 VARIANTS=${VARIANTS:-gpu cpu}; XFLAGS=${XFLAGS:-}   # XFLAGS: extra C++ flags, e.g. -DSTAR_PROFILE (STAR's per-phase cycle counters)
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/w11/engine
 COMMIT=$(git -C $BARE rev-parse refs/w11/engine); echo "COMMIT=$COMMIT"
+# an immutable, identified build: $W/builds/<commit8>/{bin,whitelists,commit}; never a shared directory that the next build overwrites (the workers refuse it: common.require_pinned_binary)
+OUTD=$W/builds/${COMMIT:0:8}; [ ! -e $OUTD/commit ] || { echo "build $OUTD exists (commit $(cat $OUTD/commit)): builds are immutable, delete it by hand to rebuild"; exit 4; }; mkdir -p $OUTD/bin
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
 git -C $BARE archive refs/w11/engine | tar -x -C $SCR/src
 S=$SCR/src
@@ -37,10 +39,10 @@ for v in $VARIANTS; do
     || { tail -40 $SCR/c-\$v.log; exit 1; }
   grep -i "GPU engine" $SCR/c-\$v.log || true
   cmake --build $SCR/b-\$v --target singlet -j 24 > $SCR/b-\$v.log 2>&1 || { grep -m30 -B3 -A8 "error" $SCR/b-\$v.log || tail -40 $SCR/b-\$v.log; exit 1; }
-  cp $SCR/b-\$v/src/pipeline/singlet $OUTD/singlet-\$v.new && mv $OUTD/singlet-\$v.new $OUTD/singlet-\$v
+  cp $SCR/b-\$v/src/pipeline/singlet $OUTD/bin/singlet-\$v
 done
 EOS
 apptainer exec --nv -B $W -B $SCR $IMG bash $SCR/build.sh
-echo "$COMMIT" > $OUTD/commit; sha256sum $OUTD/singlet-*; [ -e $OUTD/singlet-gpu ] && { ldd $OUTD/singlet-gpu | grep -iE "cuda|not found" || true; }
-$OUTD/singlet-gpu --help 2>&1 | grep -i engine || true
+ln -sfn $W/pipeline-benchmark/whitelists $OUTD/whitelists; echo "$COMMIT" > $OUTD/commit; sha256sum $OUTD/bin/singlet-*; [ -e $OUTD/bin/singlet-gpu ] && { ldd $OUTD/bin/singlet-gpu | grep -iE "cuda|not found" || true; }
+$OUTD/bin/singlet-gpu --help 2>&1 | grep -i engine || true
 echo "[build] ok"

@@ -12,8 +12,10 @@
 # CPU-only build and (gpubin) this branch's GPU build with --engine cpu, three samples at a time; every output file compared with ref
 # (ref2 = ref again: the run-to-run baseline) byte for byte, then order-independently (sorted lines / sorted FASTQ records) for files that differ. Outputs in job /tmp.
 set -uo pipefail
+# the engine must be an immutable, identified build: <dir>-<commit>/bin/<binary> (or <dir>/<binary>) beside a `commit` file starting with that commit (never a shared mutable directory)
+pin() { local r d c; r=$(readlink -f "$1"); d=$(dirname "$r"); [ "$(basename $d)" = bin ] && d=$(dirname $d); c=$(basename $d); c=${c##*[-_]}; [[ $c =~ ^[0-9a-f]{7,40}$ ]] && [ -x "$r" ] && case "$(cat $d/commit 2>/dev/null)" in $c*) return 0;; esac; echo "ABORT: $1 is not a pinned build (<dir>-<commit>/bin/<binary> with a commit file starting with the commit)"; exit 3; }
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
-REFBIN=${REFBIN:-$W/jobs/w11/engine/bin9/singlet-cpu}; CPUBIN=${CPUBIN:-$W/jobs/w11/engine/bin8/singlet-cpu}; GPUBIN=${GPUBIN:-$W/jobs/w11/engine/bin8/singlet-gpu}
+REFBIN=${REFBIN:?set REFBIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; CPUBIN=${CPUBIN:?set CPUBIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; GPUBIN=${GPUBIN:?set GPUBIN=$W/builds/<commit8>/bin/<binary> (an immutable build from scripts/engine_gpu/build_clipper.sbatch)}; pin "$REFBIN"; pin "$CPUBIN"; pin "$GPUBIN"
 SETS=(${SETS:-GSM6996272 GSM6996274 pbmc1k_v3}); T=${T:-18}
 RES=$W/jobs/w11/engine/results/cpu_unchanged-$SLURM_JOB_ID; mkdir -p $RES
 SCR=/tmp/$USER-cpusame-$SLURM_JOB_ID; mkdir -p $SCR
