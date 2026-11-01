@@ -52,7 +52,8 @@ bits, the same link then carries about twelve times as many entries as \sone{} a
 than any other format over every common link speed (Fig.~\ref{fig:net}a). Faster links need more cores, and the decoder
 scales with them: read from a cold file on a whole \nm{core-max}-core node, \sone{} kept up with a median of
 \nm{core-8-gbit}\,Gbit/s on 8 cores, \nm{core-16-gbit}\,Gbit/s on 16, \nm{core-32-gbit}\,Gbit/s on 32 and
-\nm{core-44-gbit}\,Gbit/s on \nm{core-max} (medians over \nm{core-n} matrices).
+\nm{core-44-gbit}\,Gbit/s on \nm{core-max} (medians over \nm{core-n} matrices). Beyond about 32 cores the gain
+flattened, so links much faster than 3\,Gbit/s would need a faster decoder rather than more cores.
 
 \input{figures/fig3_floor}
 
