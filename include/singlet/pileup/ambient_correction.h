@@ -171,6 +171,17 @@ struct AmbientDecontConfig {
     double   rho_max          = 0.5;
     double   prior_strength   = 20.0;   ///< kappa: Beta prior pseudo-UMIs, prior mean = the cluster's c_k
     double   offgene_z        = 3.0;    ///< Poisson tolerance (sd) for "not expressed above ambient" genes
+    bool     depth_trend = true;        ///< empirical-Bayes prior of the per-cell rho: the ambient reads of a droplet grow with its depth as N^gamma
+                                        ///< (gamma < 1: shallow droplets are a larger share ambient, as the truth on mixtures shows), so the prior mean of
+                                        ///< rho is exp(alpha_k) N^(gamma-1), alpha_k per cluster and gamma shared, both by Poisson ML on the off-gene reads;
+                                        ///< the prior strength comes from the spread of the cells around that trend (method of moments). false = flat
+                                        ///< Gamma prior with mean c_k and off_prior_reads pseudo-reads
+    double   prior_reads_min = 1.0, prior_reads_max = 50.0;  ///< bounds of the estimated prior strength (pseudo-reads of the off-gene set)
+    double   cluster_rho_cap = 1.5;     ///< a cluster whose c_k is more than this multiple of the cross-cluster median (scaled to the cluster's depth with
+                                        ///< the fitted trend exponent) is capped there and refit: weakly expressed native genes of a small shallow cluster
+                                        ///< pass for "not expressed", which raises its c_k, which hides more native genes (hgmm1k_v3: 42 shallow mouse
+                                        ///< cells at c_k 0.18 against 0.007-0.012 elsewhere). 0 = off
+    double   capped_cell_mult = 3.0;    ///< cells of a capped cluster are limited to this multiple of its capped c_k
     double   phi_pseudocount  = 1e-4;   ///< per-gene pseudocount of the native profile
     bool     equal_cell_weight = false; ///< cluster profiles average cells with equal weight instead of by UMIs
     bool     outlier_round = true;      ///< refit the clusters without cells whose rho is far above their cluster's
@@ -201,6 +212,9 @@ struct AmbientCorrectionResult {
     uint32_t n_clusters            = 0;
     double   exon_profile_share    = 0.0;           ///< split API: share of the soup that is exon-derived
     uint32_t n_low_depth_cells     = 0;             ///< cells below low_depth_frac x median depth (kept out of the fits)
+    uint32_t n_clusters_capped     = 0;             ///< clusters whose c_k was capped at the cross-cluster consensus (cluster_rho_cap)
+    double   depth_gamma = std::numeric_limits<double>::quiet_NaN();   ///< depth trend exponent of the ambient reads (NaN: no trend fitted)
+    double   prior_reads = std::numeric_limits<double>::quiet_NaN();   ///< estimated prior strength of the per-cell rho (pseudo-reads)
     uint32_t n_outlier_cells       = 0;             ///< cells left out of the cluster statistics (doublet-like rho)
     uint32_t n_genes_detected_pool = 0;             ///< genes with >= 1 UMI in the ambient pool
     double   mean_rho              = 0.0;
@@ -604,6 +618,7 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
     // cluster contamination c_k and native profile phi (gene-major: phi[g * K + k]); cells with use[j] == 0 are
     // left out of the cluster statistics (outlier round) but are still corrected with them.
     std::vector<double> ck(K, 0.0), phi(G * K, 0.0), rho(n, 0.0), offA(K, 0.0);
+    std::vector<double> ck_cap(K, std::numeric_limits<double>::infinity());
     std::vector<char> use(n, 1), offmask(G * K, 0);
     for (size_t j = 0; j < n; ++j) if (low[j]) use[j] = 0;   // offmask[g * K + k]: gene g is "not expressed" in cluster k
     std::vector<std::vector<double>> nkv(K);
@@ -644,18 +659,29 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
                 if (nkv[k][g] >= e + cfg.offgene_z * std::sqrt(e * inflv[k]) + 1.0) { strong[g * K + k] = 1; ++n_strong[g]; }
             }
         // C. c_k, native profile, off-gene set
+        const bool est_all = cfg.estimate_features.size() != G;
+        std::vector<std::vector<char>> masks(K);
+        std::vector<char> have_mask_v(K, 0);
         parallel_for(K, thr, [&](size_t k) {
             auto& nk = nkv[k];
             const double Nk = Nkv[k], infl = inflv[k];
             std::vector<char> mask(G, 0);
             double Aeff = 0.0;
-            const bool est_all = cfg.estimate_features.size() != G;
             for (size_t g = 0; g < G; ++g)
                 if (n_strong[g] - strong[g * K + k] > 0 && (est_all || cfg.estimate_features[g])) { mask[g] = 1; Aeff += a[g]; }
             const bool have_mask = K > 1 && cfg.use_off_estimator && Aeff >= cfg.min_off_mass;
-            const double c = cluster_contamination(nk, Nk, infl, a, cfg,
-                                                   have_mask ? &mask : (est_all ? nullptr : &cfg.estimate_features));
-            ck[k] = c;
+            ck[k] = cluster_contamination(nk, Nk, infl, a, cfg,
+                                          have_mask ? &mask : (est_all ? nullptr : &cfg.estimate_features));
+            ck[k] = std::min(ck[k], ck_cap[k]);
+            masks[k] = std::move(mask);
+            have_mask_v[k] = have_mask ? 1 : 0;
+        });
+        parallel_for(K, thr, [&](size_t k) {
+            auto& nk = nkv[k];
+            const double Nk = Nkv[k], infl = inflv[k];
+            const std::vector<char>& mask = masks[k];
+            const bool have_mask = have_mask_v[k] != 0;
+            const double c = ck[k];
             double tot = 0.0, A = 0.0;
             for (size_t g = 0; g < G; ++g) {
                 // native evidence only above the ambient expectation + z sd (same cut as the "not expressed" genes of
@@ -677,16 +703,100 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
     // its cluster does not express are all ambient, X_O ~ Poisson(rho N A_O); Gamma prior (mean c_k) gives
     // rho = (X_O + s) / (N A_O + s / c_k). When the off set is too light, the mixture EM with the Beta prior.
     auto fit_cells = [&]() {
+        // off-gene reads of every cell (-1: the off-gene estimator does not apply) and the depth trend of the ambient reads
+        std::vector<double> xoff(n, -1.0), mu_cell(n, 0.0);
         parallel_for(n, thr, [&](size_t j) {
             const uint32_t k = cl[j];
-            const double N = X.tot[j];
-            const double mu = std::max(ck[k], cfg.rho_min);
-            double r = std::min(std::max(mu, cfg.rho_min), cfg.rho_max);
-            if (N > 0 && offA[k] >= cfg.min_off_mass) {
+            if (X.tot[j] > 0 && offA[k] >= cfg.min_off_mass) {
                 double xo = 0.0;
                 for (size_t e = X.ptr[j]; e < X.ptr[j + 1]; ++e)
                     if (offmask[static_cast<size_t>(X.gene[e]) * K + k]) xo += X.val[e];
-                r = (xo + cfg.off_prior_reads) / (N * offA[k] + cfg.off_prior_reads / mu);
+                xoff[j] = xo;
+            }
+        });
+        double s_prior = cfg.off_prior_reads;
+        bool trend = false;
+        if (cfg.depth_trend) {
+            std::vector<uint32_t> el;
+            for (size_t j = 0; j < n; ++j)
+                if (xoff[j] >= 0.0 && !low[j] && use[j]) el.push_back(static_cast<uint32_t>(j));
+            if (el.size() >= 50) {
+                std::vector<double> dep;
+                for (uint32_t j : el) dep.push_back(X.tot[j]);
+                std::nth_element(dep.begin(), dep.begin() + dep.size() / 2, dep.end());
+                const double Nref = dep[dep.size() / 2];
+                std::vector<double> lN(n, 0.0), alpha(K, 0.0);
+                for (size_t j = 0; j < n; ++j) lN[j] = X.tot[j] > 0 ? std::log(X.tot[j] / Nref) : 0.0;
+                // Poisson ML of xo_j ~ offA_k exp(alpha_k) (N_j / Nref)^gamma: alpha_k closed form given gamma, gamma by bisection on the score
+                auto fit_alpha = [&](double g, double* score) {
+                    std::vector<double> s1(K, 0.0), s2(K, 0.0);
+                    for (uint32_t j : el) { s1[cl[j]] += xoff[j]; s2[cl[j]] += offA[cl[j]] * std::exp(g * lN[j]); }
+                    for (uint32_t k = 0; k < K; ++k) alpha[k] = (s1[k] > 0 && s2[k] > 0) ? std::log(s1[k] / s2[k]) : -1e9;
+                    if (score) {
+                        double sc = 0.0;
+                        for (uint32_t j : el) {
+                            const uint32_t k = cl[j];
+                            if (alpha[k] > -1e8) sc += (xoff[j] - offA[k] * std::exp(alpha[k] + g * lN[j])) * lN[j];
+                        }
+                        *score = sc;
+                    }
+                };
+                double lo = 0.0, hi = 1.0, sc = 0.0;
+                fit_alpha(lo, &sc);
+                const double s_lo = sc;
+                fit_alpha(hi, &sc);
+                const double s_hi = sc;
+                double gam = s_lo <= 0.0 ? 0.0 : 1.0;   // monotone score: the bound
+                if (s_lo > 0.0 && s_hi < 0.0) {
+                    for (int it = 0; it < 40; ++it) {
+                        const double mid = 0.5 * (lo + hi);
+                        fit_alpha(mid, &sc);
+                        if (sc > 0.0) lo = mid; else hi = mid;
+                    }
+                    gam = 0.5 * (lo + hi);
+                }
+                fit_alpha(gam, nullptr);
+                // prior mean of rho: expected ambient reads over depth; strength from the spread of u = (xo / offA) / m around 1 beyond its
+                // Poisson noise 1 / (m offA), with a robust (MAD) spread so that the cells the prior is meant to tame do not weaken it
+                std::vector<double> u;
+                double pn = 0.0;
+                size_t npn = 0;
+                for (size_t j = 0; j < n; ++j) {
+                    const uint32_t k = cl[j];
+                    if (alpha[k] < -1e8) continue;
+                    const double m = std::exp(alpha[k] + gam * lN[j]);
+                    mu_cell[j] = std::min(std::max(m / std::max(X.tot[j], 1.0), cfg.rho_min), cfg.rho_max);
+                }
+                for (uint32_t j : el) {
+                    const uint32_t k = cl[j];
+                    if (alpha[k] < -1e8) continue;
+                    const double m = std::exp(alpha[k] + gam * lN[j]);
+                    u.push_back(xoff[j] / offA[k] / m);
+                    pn += 1.0 / (m * offA[k]);
+                    ++npn;
+                }
+                if (u.size() >= 50) {
+                    std::sort(u.begin(), u.end());
+                    const double med = u[u.size() / 2];
+                    std::vector<double> dv;
+                    for (double x : u) dv.push_back(std::fabs(x - med));
+                    std::sort(dv.begin(), dv.end());
+                    const double sd = 1.4826 * dv[dv.size() / 2];
+                    const double cv2 = sd * sd - pn / static_cast<double>(npn);
+                    s_prior = std::min(std::max(cv2 > 0.0 ? 1.0 / cv2 : cfg.prior_reads_max, cfg.prior_reads_min), cfg.prior_reads_max);
+                    trend = true;
+                    R.depth_gamma = gam;
+                    R.prior_reads = s_prior;
+                }
+            }
+        }
+        parallel_for(n, thr, [&](size_t j) {
+            const uint32_t k = cl[j];
+            const double N = X.tot[j];
+            const double mu = std::max(trend && mu_cell[j] > 0.0 ? mu_cell[j] : ck[k], cfg.rho_min);
+            double r = std::min(std::max(mu, cfg.rho_min), cfg.rho_max);
+            if (xoff[j] >= 0.0) {
+                r = (xoff[j] + s_prior) / (N * offA[k] + s_prior / mu);
                 r = std::min(std::max(r, cfg.rho_min), cfg.rho_max);
             } else if (N > 0) {
                 for (uint32_t it = 0; it < cfg.cell_iters; ++it) {
@@ -702,6 +812,8 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
                     if (done) break;
                 }
             }
+            // a capped cluster's own off-gene reads are what inflated its c_k: no cell of it goes beyond the outlier multiple of the capped value
+            if (std::isfinite(ck_cap[k])) r = std::min(r, std::max(cfg.capped_cell_mult * ck[k], cfg.rho_min));
             rho[j] = r;
         });
     };
@@ -724,6 +836,33 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
         });
     }
     fit_cells();
+    // Cross-cluster consistency: cap c_k at cluster_rho_cap x the cell-weighted median of c_k scaled to the reference depth with the fitted trend
+    // exponent (c_k N^(1 - gamma) is what a depth-consistent soup gives every cluster), then refit
+    if (cfg.cluster_rho_cap > 0.0 && K >= 3 && std::isfinite(R.depth_gamma)) {
+        std::vector<double> Nm(K, 0.0), wk(K, 0.0), tmp;
+        for (size_t j = 0; j < n; ++j)
+            if (!low[j] && use[j]) { Nm[cl[j]] += X.tot[j]; wk[cl[j]] += 1.0; tmp.push_back(X.tot[j]); }
+        if (tmp.size() >= 50) {
+            std::nth_element(tmp.begin(), tmp.begin() + tmp.size() / 2, tmp.end());
+            const double Nref = tmp[tmp.size() / 2];
+            std::vector<std::pair<double, double>> v;   // (scaled c_k, cells)
+            double wsum = 0.0;
+            for (uint32_t k = 0; k < K; ++k)
+                if (wk[k] >= 5 && Nm[k] > 0 && ck[k] > 0) { v.push_back({ck[k] * std::pow(Nm[k] / wk[k] / Nref, 1.0 - R.depth_gamma), wk[k]}); wsum += wk[k]; }
+            if (v.size() >= 3) {
+                std::sort(v.begin(), v.end());
+                double acc = 0.0, med = v.back().first;
+                for (auto& pr : v) { acc += pr.second; if (acc >= 0.5 * wsum) { med = pr.first; break; } }
+                bool bind = false;
+                for (uint32_t k = 0; k < K; ++k) {
+                    if (wk[k] < 5 || Nm[k] <= 0) continue;
+                    const double cap = cfg.cluster_rho_cap * med * std::pow(Nm[k] / wk[k] / Nref, R.depth_gamma - 1.0);
+                    if (ck[k] > cap) { ck_cap[k] = cap; bind = true; ++R.n_clusters_capped; }
+                }
+                if (bind) { fit_clusters(); fit_cells(); }
+            }
+        }
+    }
     // Outlier round: a doublet or damaged cell whose "ambient" fraction is far above its cluster's would drag the
     // cluster's c_k up and pollute its native profile. Flag cells with rho >> cluster median (robust z), refit without them.
     if (cfg.outlier_round) {
@@ -1254,6 +1393,9 @@ inline void write_ambient_json(const std::string& outpath, const AmbientCorrecti
       << "  \"n_cells\": " << R.contam.size() << ",\n"
       << "  \"n_clusters\": " << R.n_clusters << ",\n"
       << "  \"n_outlier_cells\": " << R.n_outlier_cells << ",\n"
+      << "  \"n_clusters_capped\": " << R.n_clusters_capped << ",\n"
+      << "  \"depth_gamma\": " << jn(R.depth_gamma) << ",\n"
+      << "  \"prior_reads\": " << jn(R.prior_reads) << ",\n"
       << "  \"n_low_depth_cells\": " << R.n_low_depth_cells << ",\n"
       << "  \"umis_observed\": " << R.umis_observed << ",\n"
       << "  \"umis_removed\": " << R.umis_removed << ",\n"
