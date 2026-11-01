@@ -21,8 +21,8 @@
 #   r<R>   rounds: K*R items (default R=1: K samples started together); the "stream" form, K workers busy for R samples each
 #   p      pin worker w to device w mod <GPUs> (SINGLET_ENGINE_GPU_DEVICE); default: the engine's first-free-slot rule
 #   f      fine sampling (0.2 s ticks, nvidia-smi every tick; default 0.5 s, nvidia-smi every second tick): the lock intervals of e18_locks.py
-#   mix    the items are MIX (default "pbmc1k_v3 pbmc5p_v1 neuron1k_v3 nuclei2k_v2"), else K*R copies of SAMPLE (pbmc1k_v3); with k1
-#          the items run alone one after another (each the reference of its sample at that T)
+#   mix    the items are MIX (default "pbmc1k_v3 pbmc5p_v1 neuron1k_v3 nuclei2k_v2") R times, else K*R copies of SAMPLE (pbmc1k_v3);
+#          with k1 the items run alone one after another (the first of each sample is its reference at that T)
 # Per point $RES/<tag>/: meta.json, runs.tsv, samples.jsonl (bench/fable/throughput/e18_sampler.py: cgroup CPU and memory, per run CPU,
 # RSS, PSS and device memory, the lock holders and waiters from /proc/locks, nvidia-smi), per run c<item>/ (time.txt, run.log.ts,
 # star_Log.out, star_Log.final.out, CellReads.stats, read_stats.tsv, summary.json), the analysis (e18_point.py -> point.txt, point.json)
@@ -129,7 +129,7 @@ for p in "${POINTS[@]}"; do
   if ! [[ $p =~ ^(mix)?k([0-9]+)t([0-9]+)s([0-9]+)(m([0-9]+))?(r([0-9]+))?(p)?(f)?$ ]]; then echo "!! bad point tag $p" | tee -a $S; continue; fi
   MIXP=${BASH_REMATCH[1]}; K=${BASH_REMATCH[2]}; T=${BASH_REMATCH[3]}; SL=${BASH_REMATCH[4]}; BG=${BASH_REMATCH[6]}; R=${BASH_REMATCH[8]:-1}; PIN=${BASH_REMATCH[9]}
   SDT=0.5; SGE=2; [ -n "${BASH_REMATCH[10]}" ] && SDT=0.2 && SGE=1
-  if [ -n "$MIXP" ]; then ITEMS=("${MIX[@]}"); else ITEMS=(); for ((j = 0; j < K * R; j++)); do ITEMS+=($SAMPLE); done; fi
+  if [ -n "$MIXP" ]; then ITEMS=(); for ((j = 0; j < R; j++)); do ITEMS+=("${MIX[@]}"); done; else ITEMS=(); for ((j = 0; j < K * R; j++)); do ITEMS+=($SAMPLE); done; fi
   for s in $(printf "%s\n" "${ITEMS[@]}" | sort -u); do stage_input $s; done
   XENV="SINGLET_ENGINE_GPU_SLOTS=$SL"; [ -n "$BG" ] && XENV+=" $(budget $BG)"
   unset SINGLET_ENGINE_GPU_SLOTS SINGLET_ENGINE_GPU_CHUNK SINGLET_ENGINE_GPU_NB SINGLET_ENGINE_GPU_NBM SINGLET_ENGINE_GPU_NBB SINGLET_GPU_PILEUP_ARENA_GB SINGLET_ENGINE_GPU_DEVICE
