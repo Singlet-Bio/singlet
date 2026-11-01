@@ -53,11 +53,14 @@ S = [("prefill tail (cache, summaries, region, Unmapped.out, read source)", "pre
      ("parent: BAM stream closed (child) -> drained", "STAR: BAM stream closed", "parent: stream drained"),
      ("parent: hand-off pass", "parent: stream drained", "parent: hand-off pass done"),
      ("  of which e2ePass", "parent: hand-off pass: device lock taken", "parent: hand-off pass: e2ePass returned"),
+     ("  of which waiting for the early pass (join)", "parent: stream drained", "parent: hand-off pass starts"),
+     ("  early pass: region mapped -> e2ePass returned", "parent: E16 early hand-off pass: region complete", "parent: hand-off pass: e2ePass returned"),
      ("parent: build input", "parent: hand-off pass done", "parent: pileupRun starts"),
      ("parent: pileupRun", "parent: pileupRun starts", "parent: pileupRun returned"),
      ("parent: results into the accumulators", "parent: pileupRun returned", "parent: pileup results put"),
      ("parent: host pass", "parent: pileup results put", "parent: host pass done"),
      ("parent: GPU pileup applied (end of the tail)", "parent: host pass done", "parent: GPU pileup applied"),
+     ("parent: host pass done -> rRNA detector joined (rrnabg)", "parent: host pass done", "parent: rRNA detector joined"),
      ("parent: finalize (collapse)", "parent: GPU pileup applied", "parent: finalize done"),
      ("parent: STAR reaped", "parent: finalize done", "parent: STAR reaped")]
 print("e16 steps (s)")
