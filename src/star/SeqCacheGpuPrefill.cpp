@@ -103,6 +103,14 @@ struct E11State {
     int device = -1;              // the device that holds the kept inputs
     uint64 nNoRec = 0, nClipped = 0;
 } e11;
+// E16 "bg" (level 5): the Unmapped.out records of the reads with an unmapped record (3.3 M on pbmc1k_v3) are formatted, and the RNA Q30
+// adjustment made, on a thread beside STAR's loop (4 threads under it) instead of before the loop; seqCacheGpuAfterMapping joins it,
+// appends the records to STAR's streams (the files' record order is run-dependent anyway) and Solo's summary then takes the adjusted counts
+struct E16Bg {
+    std::thread th; bool on = false, okU = true, okR = true; std::string whyU, whyR;
+    std::vector<uint32_t> reads; std::vector<std::string> out[2]; double sU = 0, sR = 0;
+    ~E16Bg() { if (th.joinable()) th.detach(); }   // a run stopped before STAR's loop ended
+} e16bg;
 // the Solo configuration E9's library reproduces byte for byte (E9-solo.md section 1); anything else: STAR's Solo counts (level 3)
 bool e11Config(Parameters &P, Transcriptome *tr, std::string &why) {
     const ParametersSolo &s = P.pSolo;
@@ -594,11 +602,12 @@ inline std::string e10ReadName(Parameters &P, uint64 r, const E10Rec &x, bool tr
 
 // E10 level >= 3: the Unmapped.out.mate1/2 records of the reads whose record is unmapped (ReadAlign::outReadsUnmapped, single-end + barcode
 // read), formatted on all threads, appended to STAR's streams before the mapping threads start (the files' order is run-dependent anyway)
-bool e10WriteUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nThreads, std::string &why) {
+// (E16: e10FormatUnmapped makes the records, e10PutUnmapped appends them to STAR's streams; at level 5 the formatting runs beside STAR's loop
+// and the records are appended after it)
+bool e10FormatUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nThreads, std::vector<std::string> (&out)[2], std::string &why) {
     const int T = std::max(1, nThreads);
     const uint64 N = reads.size();
-    std::vector<std::string> out[2];
-    out[0].resize(T); out[1].resize(T);
+    out[0].assign(T, std::string()); out[1].assign(T, std::string());
     std::vector<int> bad(T, 0);
     std::vector<std::thread> th;
     for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
@@ -618,8 +627,16 @@ bool e10WriteUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nTh
     });
     for (auto &x : th) x.join();
     for (int t = 0; t < T; t++) if (bad[t]) { why = "a FASTQ record could not be read back"; return false; }
+    return true;
+}
+void e10PutUnmapped(Parameters &P, std::vector<std::string> (&out)[2]) {
     for (int im = 0; im < 2; im++)
-        for (int t = 0; t < T; t++) { P.inOut->outUnmappedReadsStream[im].write(out[im][t].data(), out[im][t].size()); std::string().swap(out[im][t]); }
+        for (size_t t = 0; t < out[im].size(); t++) { P.inOut->outUnmappedReadsStream[im].write(out[im][t].data(), out[im][t].size()); std::string().swap(out[im][t]); }
+}
+bool e10WriteUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nThreads, std::string &why) {
+    std::vector<std::string> out[2];
+    if (!e10FormatUnmapped(P, reads, nThreads, out, why)) return false;
+    e10PutUnmapped(P, out);
     return true;
 }
 
@@ -665,10 +682,10 @@ bool e10BuildSource(Parameters &P, const uint32 *readRecord, uint64 nReads, std:
 // E11: Gene/Summary.csv's "Q30 Bases in RNA read" is STAR's qualHist (ReadAlign_oneRead.cpp:34-38): per read the cDNA quality characters in
 // [clip5, L - clip3). The decode counted whole reads; here a read with a record keeps only that span (its clip: the GPU's, which readLoad
 // would have taken) and a read without one keeps nothing (STAR's loop counts it, with its own clip)
-bool e11RnaAdjust(Parameters &P, std::string &why) {
+bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
     const auto t0 = std::chrono::steady_clock::now();
     const uint64 N = g_handoffNReads;
-    const int T = std::max(1, (int) P.runThreadN);
+    const int T = std::max(1, nThreads > 0 ? nThreads : (int) P.runThreadN);
     const unsigned q30 = e11.qBase + 30;
     if (e10f.m[0] == nullptr || e10f.at[0].size() != N) { why = "the cDNA file is not mapped"; return false; }
     std::vector<uint64> dq(T, 0), dn(T, 0), nNo(T, 0), nCl(T, 0);
@@ -1114,8 +1131,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         S.unmappedAll = v[X::S_uAll];
         std::string w;
         bool ok3 = true;
+        const size_t nUnmappedRec = out.e10.unmappedReads.size();
+        // E16 bg: level 5 either runs or stops the run (no level-3 fallback once the source is built), so the records can wait for the thread
+        const bool e16bgOn = e10Level >= 5 && e11.ready && P.outReadsUnmapped == "Fastx" && singlet_tail::cut("bg");
+        if (e16bgOn) e16bg.reads.swap(out.e10.unmappedReads);
+        else
         if (P.outReadsUnmapped == "Fastx" && !e10WriteUnmapped(P, out.e10.unmappedReads, (int) P.runThreadN, w)) ok3 = false;
-        singlet_tail::mark("prefill: %zu Unmapped.out records written", out.e10.unmappedReads.size());
+        singlet_tail::mark("prefill: %zu Unmapped.out records %s", nUnmappedRec, e16bgOn ? "left to the background thread" : "written");
         if (ok3) {
             g_statsAll.addStats(S);
             e10sj.swap(out.e10.sj); e10nSJ = out.e10.nSJ;
@@ -1132,14 +1154,33 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                                                       + ") and the reads with a record have no summaries\n", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
                 else P.inOut->logMain << "ENGINE_GPU: E10 level 4 not used (" << w << "): level 3\n";
             }
+            if (g_e10Level == 5 && e16bgOn) {   // E16 bg: Unmapped.out's records and the RNA Q30 adjustment beside STAR's loop
+                e16bg.on = true;
+                e16bg.th = std::thread([&P]() {
+                    const auto a = std::chrono::steady_clock::now();
+                    e16bg.okU = e10FormatUnmapped(P, e16bg.reads, 4, e16bg.out, e16bg.whyU);
+                    const auto b = std::chrono::steady_clock::now();
+                    e16bg.okR = e11RnaAdjust(P, e16bg.whyR, 4);
+                    e16bg.sU = std::chrono::duration<double>(b - a).count();
+                    e16bg.sR = std::chrono::duration<double>(std::chrono::steady_clock::now() - b).count();
+                    singlet_tail::mark("prefill (bg): %zu Unmapped.out records formatted in %.3f s, RNA Q30 adjustment %.3f s", e16bg.reads.size(), e16bg.sU, e16bg.sR);
+                });
+            } else
             if (g_e10Level == 5) {   // E11: Gene/Summary.csv's RNA Q30 counts of the reads with a record over STAR's span [clip5, L - clip3)
                 std::string w5;
                 if (!e11RnaAdjust(P, w5)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + w5 + "\n", std::cerr, P.inOut->logMain,
                                                         EXIT_CODE_INPUT_FILES, P);
                 singlet_tail::mark("prefill: RNA Q30 adjustment done");
             }
+            if (e16bgOn && !e16bg.on) {   // E16 bg, but level 5 did not start the thread: the records are written here, as before
+                std::string wu;
+                if (!e10WriteUnmapped(P, e16bg.reads, (int) P.runThreadN, wu)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E16): " + wu + "
+",
+                                                                                         std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+                std::vector<uint32_t>().swap(e16bg.reads);
+            }
             P.inOut->logMain << "ENGINE_GPU: E10 level " << g_e10Level << ": " << S.readN << " reads with a record (" << S.mappedReadsU << " unique, " << S.mappedReadsM
-                             << " multi, " << S.unmappedAll << " unmapped: " << out.e10.unmappedReads.size() << " Unmapped.out records written), " << e10nSJ
+                             << " multi, " << S.unmappedAll << " unmapped: " << nUnmappedRec << " Unmapped.out records" << (e16bg.on ? ", written after STAR's loop" : " written") << "), " << e10nSJ
                              << " junctions from the device; " << (g_e10Level >= 4 ? std::to_string(e10src.iRead.size()) + " reads without a record go to STAR's loop" : "STAR's loop keeps readLoad, the barcode and the Solo record of these reads")
                              << " (" << std::chrono::duration<double>(std::chrono::steady_clock::now() - t3).count() << " s)\n";
         } else {
@@ -1179,6 +1220,19 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
 void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
     singlet_tail::mark("after mapping: start");
+    if (e16bg.on) {   // E16 bg: the thread's records into STAR's streams (the mapping threads are done with them), its RNA counts for Solo's summary
+        if (e16bg.th.joinable()) e16bg.th.join();
+        e16bg.on = false;
+        if (!e16bg.okU) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E16): Unmapped.out records not formatted: " + e16bg.whyU + "\n",
+                                      std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+        if (!e16bg.okR) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + e16bg.whyR + "\n", std::cerr, P.inOut->logMain,
+                                      EXIT_CODE_INPUT_FILES, P);
+        e10PutUnmapped(P, e16bg.out);
+        std::vector<uint32_t>().swap(e16bg.reads);
+        P.inOut->logMain << "ENGINE_GPU: E16: Unmapped.out records formatted beside STAR's loop in " << e16bg.sU << " s and appended after it; RNA Q30 adjustment "
+                         << e16bg.sR << " s\n" << std::flush;
+        singlet_tail::mark("after mapping: background thread joined, Unmapped.out records appended");
+    }
     if (e10chk.on) {
         uint64 nRec = 0, nDiffE = 0, nDiffQ = 0, nUnwritten = 0;
         std::ostringstream ex;
