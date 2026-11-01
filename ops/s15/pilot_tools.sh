@@ -63,11 +63,11 @@ alevin)
 kbidx)   # one shared nac index (kb-python in the mgatk_extra env)
   export PATH=$W/envs/adt/bin:$PATH; mkdir -p $W/pilot/kb_index; cd $W/pilot/kb_index
   [ -f index.idx ] && { echo "index exists"; exit 0; }
-  kb ref --workflow nac -i index.idx -g t2g.txt -c1 cdna.txt -c2 nascent.txt -t 16 $REFB/fasta/genome.fa $REFB/genes/genes.gtf; exit $? ;;
+  kb ref --workflow nac -i index.idx -g t2g.txt -f1 cdna.fa -f2 nascent.fa -c1 cdna_t2c.txt -c2 nascent_t2c.txt -t 16 $REFB/fasta/genome.fa $REFB/genes/genes.gtf; exit $? ;;
 kb)
   export PATH=$W/envs/adt/bin:$PATH; X=10XV3; [ "$CH_umi" = 10 ] && X=10XV2; ST=forward; [ "$FIVE" = 1 ] && ST=unstranded
   PAIRS=$(python3 -c "r1='$R1'.split(','); r2='$R2'.split(','); print(' '.join(x for p in zip(r1, r2) for x in p))")
-  tm kb count --workflow nac -i $W/pilot/kb_index/index.idx -g $W/pilot/kb_index/t2g.txt -c1 $W/pilot/kb_index/cdna.txt -c2 $W/pilot/kb_index/nascent.txt -x $X       -w $WLD/$CH_whitelist --strand $ST -t 16 -m 100G -o $O/kb --h5ad $PAIRS > $O/run.log 2>&1; rc=$?; tail -3 $O/run.log; exit $rc ;;
+  tm kb count --workflow nac -i $W/pilot/kb_index/index.idx -g $W/pilot/kb_index/t2g.txt -c1 $W/pilot/kb_index/cdna_t2c.txt -c2 $W/pilot/kb_index/nascent_t2c.txt -x $X       -w $WLD/$CH_whitelist --strand $ST -t 16 -m 100G -o $O/kb --h5ad $PAIRS > $O/run.log 2>&1; rc=$?; tail -3 $O/run.log; exit $rc ;;
 trust4)   # TCR/BCR from the 5' GEX reads: barcode+UMI from the short mate, cDNA mate as single-end input
   export PATH=$W/envs/vdjcrispr/bin:$PATH; R4=$W/data/vdjc/trust4; WL=$WLD/$CH_whitelist
   zcat ${R1//,/ } | gzip -1 > $SCR/R1.fq.gz; zcat ${R2//,/ } | gzip -1 > $SCR/R2.fq.gz

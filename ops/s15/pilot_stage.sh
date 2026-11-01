@@ -19,6 +19,18 @@ singlet_run() {   # engine outdir [reads-args...]
   /usr/bin/time -v -o $out/time.txt $BINDIR/singlet-$eng "$@" --ref-base $REFB --out-prefix $out/out/ --threads $SINGLET_THREADS --pipeline \
      --output-format 1pz --engine $eng --memory-tier $TIER --tagged-bam > $out/run.log 2>&1
   rc=$?; echo "$SINGLET_THREADS" > $out/threads.txt; echo "singlet $eng rc=$rc threads=$SINGLET_THREADS"; grep -E "Elapsed \(wall|Maximum resident" $out/time.txt; return $rc; }
+ensure_wl() {   # every .1fq must have been decoded WITH --whitelist-dir (pilot_fetch used to pass only the env var, which singlet download ignores: wl_match_rate=0). Redo from the kept .sra once, under a lock.
+  mkdir -p $P/stage
+  ( flock 9
+    [ -e $P/stage/.wl_ok ] && exit 0
+    echo "[ensure_wl] redecoding $GSM with --whitelist-dir"
+    for sra in $P/sra/*.sra; do a=$(basename $sra .sra)
+      $BINDIR/singlet-cpu download $sra --quality binned --vdb-threads 2 --no-profile --whitelist-dir $WL -o $P/stage/$a.1fq.new 2>&1 | grep -E "singlet-gate|protocol=" | cut -c1-260 >> $P/decode_wl.log
+      [ ${PIPESTATUS[0]} = 0 ] || { echo "[ensure_wl] decode failed $a"; exit 9; }
+      mv $P/stage/$a.1fq.new $P/stage/$a.1fq; touch $P/stage/$a.1fq.done
+    done
+    touch $P/stage/.wl_ok; cat $P/decode_wl.log ) 9> $P/.decode.lock
+}
 reads_arg() { n=$(ls $1/*.1fq | wc -l); if [ $n = 1 ]; then ls $1/*.1fq; else echo "--runs-dir $1"; fi; }
 sb() { sbatch --parsable --account=debruinz --kill-on-invalid-dep=no "$@"; }
 post_gpu() {
@@ -51,15 +63,19 @@ PY
   ls -l $P/fq | head
   tot=$(python3 -c "import json;print(json.load(open('$P/runs.json'))['pairs'])")
   if [ $tot -gt $CAPPAIRS ]; then mkdir -p $P/cap1fq; a=$(python3 -c "import json;print(json.load(open('$P/runs.json'))['runs'][0][0])")
-    $BINDIR/singlet-cpu download $P/sra/$a.sra --quality binned --max-reads $CAPPAIRS --vdb-threads 2 --no-profile -o $P/cap1fq/$a.1fq; fi ;;
-scpu) assert_bin singlet-cpu; singlet_run cpu $P/s1cpu $(reads_arg $P/stage) ;;
-sgpu)   # one of 3 serial GPU lanes: run this sample, then (always) submit its cleanup and the next sample of the lane, so at most 3 GPU jobs exist at once
+    $BINDIR/singlet-cpu download $P/sra/$a.sra --quality binned --max-reads $CAPPAIRS --vdb-threads 2 --no-profile --whitelist-dir $WL -o $P/cap1fq/$a.1fq && touch $P/cap1fq/.wl_ok; fi ;;
+scpu) assert_bin singlet-cpu; ensure_wl || exit 9; singlet_run cpu $P/s1cpu $(reads_arg $P/stage) ;;
+sgpu)   # (ensure_wl below) one of 3 serial GPU lanes: run this sample, then (always) submit its cleanup and the next sample of the lane, so at most 3 GPU jobs exist at once
   . $D/lane/$GSM.env
   trap 'post_gpu; rm -rf $SCR' EXIT
   assert_bin singlet-gpu; nvidia-smi --query-gpu=name --format=csv,noheader
   ls $P/stage/*.done > /dev/null 2>&1 || { echo "no staged reads (fetch failed)"; exit 6; }
+  ensure_wl || exit 9
   singlet_run gpu $P/s1gpu $(reads_arg $P/stage) ;;
-scap) [ -d $P/cap1fq ] || { echo "full sample <= cap: no matched run needed"; exit 0; }; assert_bin singlet-cpu; singlet_run cpu $P/s1cap $(reads_arg $P/cap1fq) ;;
+scap) [ -d $P/cap1fq ] || { echo "full sample <= cap: no matched run needed"; exit 0; }; assert_bin singlet-cpu
+  if [ ! -e $P/cap1fq/.wl_ok ]; then a=$(python3 -c "import json;print(json.load(open('$P/runs.json'))['runs'][0][0])"); rm -f $P/cap1fq/*.1fq
+    $BINDIR/singlet-cpu download $P/sra/$a.sra --quality binned --max-reads $CAPPAIRS --vdb-threads 2 --no-profile --whitelist-dir $WL -o $P/cap1fq/$a.1fq 2>&1 | grep -E "singlet-gate" | cut -c1-260; touch $P/cap1fq/.wl_ok; fi
+  singlet_run cpu $P/s1cap $(reads_arg $P/cap1fq) ;;
 equiv) python3 $D/out_equiv.py $P/s1cpu/out $P/s1gpu/out 2>&1 | tee $P/equiv.txt | tail -30 ;;
 starsolo)
   cd $P; rm -rf starsolo; mkdir starsolo; cd starsolo

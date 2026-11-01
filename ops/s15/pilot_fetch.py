@@ -18,14 +18,20 @@ for acc, n in runs:
     fq = "%s/stage/%s.1fq" % (P, acc)
     if os.path.exists(fq + ".done"):
         continue
-    lim.set_active(True)
-    sra, info = F.fetch_run(acc, P + "/sra", 8, lambda m: print(m, flush=True), lim)
-    lim.set_active(False)
+    have = "%s/sra/%s.sra" % (P, acc)
+    if os.path.exists(have) and os.environ.get("REUSE_SRA"):
+        sra = have
+    else:
+      lim.set_active(True)
+      sra, info = F.fetch_run(acc, P + "/sra", 8, lambda m: print(m, flush=True), lim)
+      lim.set_active(False)
     if os.environ.get("NODECODE"):
         open(fq + ".done", "w").close(); print("fetched only", acc, n, flush=True); continue
-    rc = subprocess.run([BIN, "download", sra, "--quality", "binned", "--vdb-threads", "2", "--no-profile", "-o", fq], env=env).returncode
+    rc = subprocess.run([BIN, "download", sra, "--quality", "binned", "--vdb-threads", "2", "--no-profile", "--whitelist-dir", WL, "-o", fq], env=env).returncode
     if rc != 0:
         print("decode rc", rc, acc)
         sys.exit(20)
     open(fq + ".done", "w").close()
     print("ok", acc, n, flush=True)
+if not os.environ.get("NODECODE"):
+    open(P + "/stage/.wl_ok", "w").close()   # decoded with --whitelist-dir (see ensure_wl in pilot_stage.sh)
