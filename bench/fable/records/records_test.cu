@@ -106,13 +106,13 @@ static std::string blobStr(const uint8_t* p, u64 n) {
 static double median(std::vector<double> v) { if (v.empty()) return 0; std::sort(v.begin(), v.end()); return v[v.size() / 2]; }
 
 int main(int argc, char** argv) {
-    std::string dumpP, hoP, readsP, qP, bcP, wlP, json; int reps = 5; int hostThreads = 0; u64 subsetN = 2000000; bool skipRef = false;
+    std::string dumpP, hoP, readsP, qP, bcP, wlP, r11P, json; int reps = 5; int hostThreads = 0; u64 subsetN = 2000000; bool skipRef = false;
     int mapqU = 255, fAnd = 65535, fOr = 0;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         auto nx = [&]() { return std::string(argv[++i]); };
         if (a == "--dump") dumpP = nx(); else if (a == "--handoff") hoP = nx(); else if (a == "--reads") readsP = nx(); else if (a == "--q") qP = nx();
-        else if (a == "--barcodes") bcP = nx(); else if (a == "--whitelist") wlP = nx(); else if (a == "--json") json = nx(); else if (a == "--reps") reps = atoi(argv[++i]);
+        else if (a == "--barcodes") bcP = nx(); else if (a == "--whitelist") wlP = nx(); else if (a == "--r11-hist") r11P = nx(); else if (a == "--json") json = nx(); else if (a == "--reps") reps = atoi(argv[++i]);
         else if (a == "--host-threads") hostThreads = atoi(argv[++i]); else if (a == "--subset") subsetN = strtoull(argv[++i], nullptr, 10);
         else if (a == "--skip-ref") skipRef = true; else if (a == "--mapq-unique") mapqU = atoi(argv[++i]);
         else if (a == "--flag-and") fAnd = atoi(argv[++i]); else if (a == "--flag-or") fOr = atoi(argv[++i]);
@@ -301,7 +301,7 @@ int main(int argc, char** argv) {
     struct H7 { bool ran = false, ok = false; u64 kept = 0, same = 0, nKeys = 0, keysRej = 0, keysOut = 0; double msReads = 0, msKeys = 0, secResolve = 0, secRef = 0;
                 u64 st[8] = {}; u64 outcome[e6::RO_N] = {}; };
     H7 h7[2];
-    std::string wlUsed; u64 wlHits = 0, wlSample = 0, histReads = 0;
+    std::string wlUsed, histSrc; u64 wlHits = 0, wlSample = 0, histReads = 0;
     if (!readsP.empty() && !bcP.empty()) {
         size_t eN = 0, qN = 0; const uint8_t* em = mapFile(readsP, eN); const uint8_t* qm = qP.empty() ? nullptr : mapFile(qP, qN);
         if (!em || eN != 24 * hReads) { fprintf(stderr, "bad .reads (%zu bytes for %llu reads)\n", eN, hReads); return 6; }
@@ -346,14 +346,36 @@ int main(int argc, char** argv) {
             }
             if (!wlUsed.empty() && 2 * wlHits > wlSample) {
                 ccOk = cc.load_whitelist(wlUsed);
-                for (u64 i = 0; ccOk && i < hReads; i++) {
-                    if (!(E[i].flags & 1)) continue;
-                    const std::string cr = unpackS(E[i].cr3, cbL), ur = unpackS(E[i].ur3, umiL);
-                    if (!urOk(ur)) continue;
-                    const int64_t w = cc.find(cr.c_str());
-                    if (w >= 0) { cc.add_exact(w, 1); histReads++; }
+                // the engine's histogram (r11_hist.cpp over the .1fq: --r11-hist, else <json dir>/../r11_exact_hist.bin), else one from the entries
+                std::string hp = r11P;
+                if (hp.empty() && !json.empty()) { const size_t s = json.rfind('/'); hp = (s == std::string::npos ? std::string(".") : json.substr(0, s)) + "/../r11_exact_hist.bin"; }
+                if (ccOk && !hp.empty()) {
+                    if (FILE* hf = fopen(hp.c_str(), "rb")) {
+                        char mg[8]; u64 hh[3];
+                        if (fread(mg, 1, 8, hf) == 8 && memcmp(mg, "E6R11H01", 8) == 0 && fread(hh, 8, 3, hf) == 3 && hh[0] == cc.size()) {
+                            u64 k = 0, p[2];
+                            for (; k < hh[2] && fread(p, 8, 2, hf) == 2; k++) { cc.add_exact((int64_t)p[0], p[1]); histReads += p[1]; }
+                            histSrc = k == hh[2] && histReads == hh[1] ? hp : "";
+                            if (histSrc.empty()) fprintf(stderr, "truncated %s: histogram from the entries instead\n", hp.c_str());
+                        }
+                        fclose(hf);
+                    }
                 }
-                printf("R11: whitelist %s, exact histogram from %llu reads with an entry\n", wlUsed.c_str(), histReads);
+                if (ccOk && histSrc.empty()) {
+                    histReads = 0;
+                    singlet::CbCorrector c2; ccOk = c2.load_whitelist(wlUsed);
+                    cc = c2;
+                    for (u64 i = 0; ccOk && i < hReads; i++) {
+                        if (!(E[i].flags & 1)) continue;
+                        const std::string cr = unpackS(E[i].cr3, cbL), ur = unpackS(E[i].ur3, umiL);
+                        if (!urOk(ur)) continue;
+                        const int64_t w = cc.find(cr.c_str());
+                        if (w >= 0) { cc.add_exact(w, 1); histReads++; }
+                    }
+                    histSrc = "entries";
+                }
+                printf("R11: whitelist %s, exact histogram of %llu reads from %s\n", wlUsed.c_str(), histReads,
+                       histSrc == "entries" ? "the reads with an entry (approximate: no reads of the stream)" : histSrc.c_str());
             } else printf("R11: no whitelist (mode 1 skipped)\n");
         }
         uint32_t* dRR = toDev(D.readRecord.data(), hReads); e6::ReadEntry* dE = toDev(E, hReads); u64* dQ = Q ? toDev(Q, 2 * hReads) : nullptr;
@@ -471,11 +493,11 @@ int main(int argc, char** argv) {
                        "  \"arrays_identical\": %s,\n  \"host_port_identical\": %s,\n  \"mate_gap\": %llu,\n  \"no_exon\": %llu,\n  \"bad_best\": %llu,\n"
                        "  \"gpu_ms_arrays\": %.3f,\n  \"gpu_ms_count\": %.3f,\n  \"gpu_ms_scan\": %.3f,\n  \"gpu_ms_fill\": %.3f,\n  \"gpu_ms_with_bytes\": %.3f,\n"
                        "  \"gpu_call_wall_ms\": %.3f,\n  \"upload_s\": %.3f,\n  \"subset_records\": %llu,\n  \"subset_gpu_ms\": %.3f,\n  \"host_port_s\": %.3f,\n"
-                       "  \"host_threads\": %d,\n  \"prepend_handoff_s\": %.3f,\n  \"reads_ok\": %s,\n  \"whitelist\": \"%s\",\n  \"r11_hist_reads\": %llu,\n",
+                       "  \"host_threads\": %d,\n  \"prepend_handoff_s\": %.3f,\n  \"reads_ok\": %s,\n  \"whitelist\": \"%s\",\n  \"r11_hist_reads\": %llu,\n  \"r11_hist_source\": \"%s\",\n",
                     prop.name, D.nRec, D.nReads, R.nMapped, R.nAln, R.nOps, R.nSeq, R.nBytes, D.blobBytes, recSame, recDiff, bytesAll ? "true" : "false",
                     sigSame, alnSame, opsSame ? "true" : "false", seqSame ? "true" : "false", refOk ? "true" : "false", hostSame ? "true" : "false",
                     R.nMateGap, R.nNoExon, R.nBadBest, median(msA), median(msC), median(msS), median(msF), median(msT), 1e3 * median(wallB), secUp, subN, subMs,
-                    secHost, hostThreads, secRef, readsOk ? "true" : "false", wlUsed.c_str(), histReads);
+                    secHost, hostThreads, secRef, readsOk ? "true" : "false", wlUsed.c_str(), histReads, histSrc.c_str());
             for (int m = 0; m < 2; m++) {
                 const H7& h = h7[m];
                 fprintf(f, "  \"%s\": {\"ran\": %s, \"ok\": %s, \"reads_kept\": %llu, \"reads_identical\": %llu, \"cr_keys\": %llu, \"cr_keys_rejected\": %llu,"
