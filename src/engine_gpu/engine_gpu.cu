@@ -297,10 +297,10 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     EG_CK(cudaMalloc(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>))); EG_CK(cudaMalloc(&dBst, NB));
     EG_CK(cudaMalloc(&dNent, NB * 8)); EG_CK(cudaMalloc(&dBase, NB * 8));
     u64 bitsCap = 1 << 20; EG_CK(cudaMalloc(&dBits, bitsCap * 4));
-    // work bucketing (SINGLET_ENGINE_GPU_BUCKET=0 turns it off): stage 3 (the stitch) runs the batch's reads in the order of their stage-1 hit counts, so that
+    // work bucketing (SINGLET_ENGINE_GPU_BUCKET=1 ascending, 2 descending; off by default): stage 3 (the stitch) runs the batch's reads in the order of their stage-1 hit counts, so that
     // the reads that stop after the seed stage (no hits) fill whole warps and the others share a warp with reads of similar work
     const char* bk = std::getenv("SINGLET_ENGINE_GPU_BUCKET");
-    const bool bucket = !(bk != nullptr && bk[0] == '0');
+    const bool bucket = bk != nullptr && (bk[0] == '1' || bk[0] == '2');   // off by default: slower in the S8 measurements (k_p3 8.7 s -> 10.9 s descending on pbmc1k_v3)
     const bool bucketDesc = bk != nullptr && bk[0] == '2';   // 2: the heaviest reads first (no tail of heavy warps at the end of the grid); default: ascending
     uint32_t* dPerm = nullptr; u64* dKey = nullptr;
     if (bucket) { EG_CK(cudaMalloc(&dPerm, NB * 4)); EG_CK(cudaMalloc(&dKey, NB * 8)); }

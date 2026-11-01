@@ -134,7 +134,7 @@ Every remaining segment must be at a hardware bound within ~20%, or justified in
 | segment | at a bound? | verdict |
 |---|---|---|
 | H2D copies (11% of PCIe) | no | fix: pinned staging buffers filled by several threads (written, under test) |
-| `k_p3`, `k_p1` (7-13% of HBM, 9-21% of SM) | no | restructure: work bucketing, per-thread state out of global memory |
+| `k_p3`, `k_p1` (7-13% of HBM, 9-21% of SM) | no | the SIMT divergence of the recursive stitch bounds it (section 10.1); cheap knobs tried and exhausted; the next step is a rewrite (warp-cooperative stitch) |
 | dedup (3.8-17 s of host loops) | no | fix: per-read pass on the device (written, under test) |
 | host lane | no | open |
 | non-host index upload (24.9 GB per sample) | no | resident index |
@@ -142,6 +142,26 @@ Every remaining segment must be at a hardware bound within ~20%, or justified in
 | CR4 opal clip (163 core-s of a 116 s child) | no | move to the device |
 | STAR per-read pass | no | bypass |
 | input from disk | not measured | |
+
+### 10.1 `k_p3` (stage 3, the stitch): what bounds it, and what was tried (pbmc1k_v3, 66.6 M reads, 40.1 M in lane A)
+
+Measured with the in-engine ledger (`SINGLET_ENGINE_GPU_TRACE=1`, now with a stage-3 warp-balance line) and Nsight Compute:
+
+* 8.7 s of GPU time over 171 launches; 3.29e9 stitching steps in total. Thread cycles by phase: stitching about 49%, seed search 39%, windows 11%, selection and encoding under 1% (proportions only; the counters are not reset per batch).
+* Warp efficiency in steps (total / (32 x the sum over warps of the largest step count)): 28.7% in the order the reads run, 43.9% sorted by stage-1 hit count, 50.5% by window count, 99.9% sorted by the true step count (oracle). Only 0.9% of reads take 0 steps; the top 1% of reads hold 5.2% of the steps, so the imbalance is broad.
+* Nsight Compute: 1.9-2.1 active threads per instruction of 32, 94 registers (5 blocks of 128 per SM, 25.7% of warps active), issue slots 13.6% busy, SM 7.7%, DRAM 7%.
+
+Tried, all on the same sample and reads, k_p3 time:
+
+| change | k_p3 | result |
+|---|---|---|
+| baseline | 8.72 s | |
+| bucketing, ascending by hit count | +2.7 s | worse |
+| bucketing, descending by hit count | 10.91 s | worse (hit count predicts the step count poorly; the sort scatters the per-read state) |
+| persistent threads (one atomic read counter per batch, every lane refills when its read ends) | 8.64 s | no change; ncu still 1.93 active threads per instruction |
+| launch bounds for 6 / 8 / 12 blocks per SM | 8.70 / 8.61 / 9.97 s (default build 9.13 s in the same sweep) | no change within the run-to-run spread, worse at 12 (spills) |
+
+Reading: the idle lanes are not waiting for the slowest read of the warp (the persistent version removes that wait and keeps the same 1.9). They sit at different code points of the recursive stitch at the same moment. More resident warps do not help either. The kernel is bound by the divergence of its control flow, not by memory or by SM throughput (7% / 8%). The remaining lever is to restructure the stitch so that a warp works on one read, or so that its lanes take the same branches (warp-cooperative stitch, branches turned into selects), which is a rewrite of a 1.5 k-line port with a byte-identity gate; the ceiling is about 8.7 s of the 25 s the device is held for a 66.6 M-read sample, and the sample's wall time is 255 s, dominated by the STAR child on the host.
 
 ## 11. Gaps
 
