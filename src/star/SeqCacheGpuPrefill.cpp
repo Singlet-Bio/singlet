@@ -75,9 +75,11 @@ void gpuFallbackLines(const std::string &log) {
         size_t b = log.find('\n', a);
         if (b == std::string::npos) b = log.size();
         const std::string l = log.substr(a, b - a);
-        if (l.find("not used") != std::string::npos || l.find("not built") != std::string::npos || l.find("not kept") != std::string::npos
+        // E17's budget line describes the plan ("results not kept on the device" at levels without E8): not a fallback
+        const bool plan = l.compare(0, 18, "engine_gpu: budget") == 0;
+        if (!plan && (l.find("not used") != std::string::npos || l.find("not built") != std::string::npos || l.find("not kept") != std::string::npos
             || l.find("not computed") != std::string::npos || l.find("out of memory") != std::string::npos || l.find("failed") != std::string::npos
-            || l.find("FAILED") != std::string::npos)
+            || l.find("FAILED") != std::string::npos))
             std::cerr << "[engine_gpu] fallback: " << l << std::endl;
         a = b + 1;
     }
