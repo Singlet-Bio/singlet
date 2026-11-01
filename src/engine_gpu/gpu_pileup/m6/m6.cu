@@ -430,7 +430,7 @@ __global__ void k_cr_judge(const uint64_t* key, const uint32_t* ridx, const uint
     for (int t = j; t < e; t++) drop[ridx[t]] = tie || (uint32_t)((uk[ridx[t]] >> ub) & gm) != best_gene;
 }
 // drop[i] = 1 for the molecules (component roots i) the rule removes; the temporaries are released, drop stays
-static uint8_t* stage_cr(Arena& A, const uint64_t* uk, const Agg* ag, const uint32_t* lab, const uint32_t* seg, const uint32_t* sf, int m, const Layout& L) {
+static uint8_t* stage_cr(Arena& A, const uint64_t* uk, const Agg* ag, const uint32_t* lab, const uint32_t* seg, const uint32_t* sf, int m, const Layout& L, Timer* T = nullptr) {
     const int TB = 256; const int G = (m + TB - 1) / TB;
     uint8_t* drop = A.alloc<uint8_t>(m); CK(cudaMemset(drop, 0, m));
     const size_t mk_ = A.mark();
@@ -442,7 +442,9 @@ static uint8_t* stage_cr(Arena& A, const uint64_t* uk, const Agg* ag, const uint
     const uint32_t* perm = dv.Current();
     uint32_t* rp = A.alloc<uint32_t>(m); k_cr_rankpos<<<G, TB>>>(perm, m, rp);
     uint32_t* par = A.alloc<uint32_t>(m); uint64_t* rumi = A.alloc<uint64_t>(m);
+    if (T) T->mark("cr.rank");
     k_cr_roots<<<G, TB>>>(uk, ag, perm, rp, sf, m, L.ub, L.ulen, L.directional ? 1 : 0, par, rumi);
+    if (T) T->mark("cr.roots");
     uint32_t* csum = A.alloc<uint32_t>(m); CK(cudaMemset(csum, 0, (size_t)m * 4)); k_cr_csum<<<G, TB>>>(ag, lab, m, csum);
     uint8_t* isr = A.alloc<uint8_t>(m); k_cr_isroot<<<G, TB>>>(lab, m, isr);
     uint32_t* ridx = A.alloc<uint32_t>(m); int* dn = A.alloc<int>(1);
@@ -517,7 +519,8 @@ static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m,
     uint32_t *cf = A.alloc<uint32_t>(m), *ce = A.alloc<uint32_t>(m), *ci = A.alloc<uint32_t>(m);
     k_comp_init<<<G, TB>>>(cf, ce, ci, m); k_comp_agg<<<G, TB>>>(ag, lab, m, cf, ce, ci);
     Mol M; M.m = m; M.kex = A.alloc<uint64_t>(m); M.kin = A.alloc<uint64_t>(m); M.kam = A.alloc<uint64_t>(m);
-    const uint8_t* drop = L.cr ? stage_cr(A, uk, ag, lab, seg, sf, m, L) : nullptr;
+    T.mark("c.agg");
+    const uint8_t* drop = L.cr ? stage_cr(A, uk, ag, lab, seg, sf, m, L, &T) : nullptr;
     k_emit<<<G, TB>>>(uk, lab, cf, ce, ci, m, L.gb, ub, M.kex, M.kin, M.kam, drop);
     T.mark("c.emit");
     return M;
