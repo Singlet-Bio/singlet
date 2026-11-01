@@ -1,7 +1,7 @@
 # E18: samples in flight per GPU (throughput)
 
 Experiment E18 ("throughput") of the GPU aligner program. Branch `gpu/fable/throughput`, from `gpu/fable-engine` at 44a6e9fa (E1–E15),
-with `gpu/fable-engine` merged in at e0e1514a (E16, "tail") as c6ddd3d3. The question: how many read pairs per second does one node
+with `gpu/fable-engine` merged in at e0e1514a (E16, "tail") as c6ddd3d3 and at 503c07f7 (E17, "budget") as 5e55b702. The question: how many read pairs per second does one node
 (2 H100 NVL, 54 usable cores, 750 GB) deliver when several samples share each GPU through the engine's device slots
 (`SINGLET_ENGINE_GPU_SLOTS`), what limits it, and which configuration the campaign should run.
 
@@ -15,7 +15,7 @@ configuration E19 is making the default. E18 changed no engine code: new bench s
   | samples in flight k | 1 | 2 | 3 | 4 | 6 | 8 | limit |
   |---|---|---|---|---|---|---|---|
   | 44a6e9fa (E15) | 0.44–0.49 | 0.80 | 1.00 | 1.09–1.12 batch, **1.16** stream | **1.27** stream | – | 1.62 |
-  | merged head (E16) | 0.52 (T = 7), 0.57 (T = 9) | – | **1.10** | – | **1.40** stream (1.33 over the span) | @@ | 1.84 |
+  | merged head (E16) | 0.52 (T = 7), 0.57 (T = 9) | – | **1.10** | – | **1.40** stream (1.33 over the span) | **1.57** stream (1.44) | 1.84 |
 
   **The node (2 GPUs, 54 cores): @@ M pairs/s** at @@, against 1.38–1.44 M pairs/s for the CPU engine on the same node (54–56
   cores / 39 core-s per M).
@@ -112,7 +112,9 @@ are in GiB (the cgroup's `memory.current` peak, `nvidia-smi`).
 | k1t9s1 | – | 1 | 9 | 1 | 1 | **0.573** | 116.3 | 7.89 / 8.29 | 1.4 / 34.0 | 29 | 54 | 90.3 |
 | k3t9s1 | batch | 3 | 9 | 1 | 3 | **1.104** | 172.9 / 177.6 / 181.0 | 7.98 / 8.33 | 80.4 / 34.1 | 58 | 141 | 90.3 |
 | k6t7s1r2 | stream | 6 | 7 | 1 | 12 | **1.329 / 1.398** | 282.5 / 294.5 / 315.1 | 7.77 / 8.16 | 214.2 / 34.7 | 69 | 274 | 90.4 |
-@@C-REST@@
+| k8t7s1r2 | stream | 8 | 7 | 1 | 16 | **1.440 / 1.567** | 324.2 / 361.7 / 415.8 | 7.75 / 8.15 | 284.8 / 33.6 | 84 | 352 | 90.4 |
+| mixk1t7s1 | one at a time | 1 | 7 | 1 | 4 | **0.502** | 125.9 / 168.4 / 251.4 | 7.27 / 7.76 | 0.6 / 50.1 | 30 | 115 | 90.3 |
+| mixk6t7s1r2 | stream, 8 items | 6 | 7 | 1 | 8 | **1.130** span | 202.3 / 315.9 / 393.9 | 7.37 / 7.78 | 188.7 / 47.5 | 64 (span) | 286 | 90.2 |
 
 - **The k = 3 re-run on the merged head: 1.104 M pairs/s against 0.995 on 44a6e9fa (+11 %)**, both batch, T = 9, one GPU, 28 cores
   (different nodes, g051 and g050; the k = 1 runs differ by the same order: 0.573 against 0.474 at T = 9). The slot is held 34.1 s
@@ -121,6 +123,16 @@ are in GiB (the cgroup's `memory.current` peak, `nvidia-smi`).
   and they take the same slot.
 - Host memory per sample in flight is higher on the merged head (k = 6: 274 GB against 210 GB; anon + shmem at most 255 GB, 43 GB
   per sample): E16 keeps the prefill's data until after STAR's loop and page-locks the hand-off region.
+- **k = 8 on the merged head: 1.567 M pairs/s in steady state** (1.440 over the span), the slot held 84 % of the steady window,
+  352 GB of the half node's 370 GB cgroup (anon 290 + shmem 54). It is the largest k a half node holds.
+- **The mixed set** (pbmc1k_v3 66.6 M pairs, pbmc5p_v1 60.0, neuron1k_v3 92.9, nuclei2k_v2 118.7; 338.2 M pairs in all). Alone, the
+  samples hold the slot 37.6 / 36.9 / 60.0 / 65.7 s (sampler): 0.59 s per M pairs against 0.54 for pbmc1k_v3. neuron1k_v3's pileup
+  holds it 28.7 s (pbmc1k_v3: 4.2 s), and nuclei2k_v2's prefill 49.6 s. The slot's limit for this mix is 338.2 M / 200.2 s = **1.69 M
+  pairs/s per GPU** (pbmc1k_v3 alone: 1.84). With 6 workers and only 8 items, `mixk6t7s1r2` is mostly ramp and tail (1.130 over the
+  span; pbmc1k_v3 alone at k = 6: 1.329). Host memory per run scales with the sample: maxRSS 38.7 / 45.1 / 59.9 / 83.4 GB, ~0.65–0.70
+  GB per M read pairs with the 16.8 GB genome included.
+- The node's other half ran other jobs during job C (E17's gate jobs 797462 and 797468 on the other GPU and 18 cores, an E19 encode
+  job): separate GPUs and cores, but the same memory bus and page cache.
 
 ## 3. Identity
 
@@ -147,11 +159,25 @@ The run-dependent files, as in E11's gate:
 | 797423 A (44a6e9fa), SLOTS=1 | 13 | 63 / 3 / 3 | `pileup_stats.json` (`bytes_public`, timings), `read_stats.tsv`, `star_Log.std.out` | identical; the 3 read files byte-identical | all identical, sha256 77d7bc20008166af (E12's) |
 | 797423 A, `m43` (SLOTS=1 and 2) | 10 | 63 / 2 / 4 | the same 3 + `summary.json`'s `memory_tier` | identical | identical |
 | 797443 B (44a6e9fa) | 24 | 63 / 3 / 3 | as above | identical | identical |
-| 797460 C (merged, E16) | @@ | 60 / 3 / 6 | the same 3 + `nonhost_reads.fq`, `star_Unmapped.out.mate1/2` (same records, another order) | identical; the 3 read files hold the same sorted records | identical |
+| 797460 C (merged, E16) | 40 (4 samples) | 60 / 3 / 6 (pbmc5p_v1: 58 / 3 / 6) | the same 3 + `nonhost_reads.fq`, `star_Unmapped.out.mate1/2` (same records, another order) | identical; the 3 read files hold the same sorted records, except nuclei2k_v2's `nonhost_reads.fq` (below) | identical |
 | @@ D (merged, 2 GPUs) | @@ | @@ | @@ | @@ | @@ |
 
 On 44a6e9fa even the three read-order files came out byte-identical at every k; with E16 they are written by a background thread
 and their record order varies from run to run (E11's known run-dependent set; E16's own gate lists the same three files).
+
+**One exception, not caused by k: nuclei2k_v2's `nonhost_reads.fq` holds a different set of records in each run** (528,892,150 bytes
+alone; 528,774,096 and 528,848,534 bytes in its two runs at k = 6). Every count matrix, Solo file, `CellReads.stats`, `star_Unmapped`
+file (same records) and the non-host screen's own outputs (`nonhost/`) are identical. The cause is in the pipeline, not the engine
+(`src/pipeline/singlet.cpp`, the non-host screen):
+- the screen classifies a subsample of `star_Unmapped.out.mate1` when it holds more than 20 M reads (by read-name hash; nuclei2k_v2:
+  11.4 M kept) and skips empty sequences;
+- `nonhost_reads.fq` is then written by reading the whole of `star_Unmapped.out.mate1` again and taking the read at file position i
+  when the i-th *subsampled* read was classified (`multi_hits[idx_r]`).
+The written reads are therefore not the classified ones whenever the screen subsampled, and since E16 writes `star_Unmapped.out.mate1`
+in a run-dependent order, which reads they are changes from run to run. Samples under 20 M unmapped reads (the other three) are not
+affected: index i is then the same read in both passes, so the set is the same and only its order varies. The fix belongs to the
+pipeline (write the kept reads' names and qualities from the screen's own pass, or apply the same hash filter in the writer), outside
+E18's scope.
 
 ## 4. What the slot holds, per phase (k = 1, both heads)
 
@@ -251,7 +277,7 @@ Merged head (E16):
 | 1 | 0.521 | 0.521 | 0.522 (T = 7), 0.573 (T = 9) |
 | 3 | 1.133 | 1.149 | **1.104** (batch, T = 9) |
 | 6 | 1.465 | 1.606 | **1.398** (steady; 1.329 over the span) |
-| 8 | 1.582 | 1.782 | @@ |
+| 8 | 1.582 | 1.782 | **1.567** (steady; 1.440 over the span) |
 | 12 | 1.843 | 1.851 | |
 | ∞ | 1.843 = 66.6 M / 36.1 s | | |
 
@@ -290,14 +316,18 @@ Three consequences:
   early hand-off pass's until the pileup). The sampler's per-process device memory of the non-holders: median 0–0.7 GB in total,
   95th percentile 3.5 GB, maximum 5.0 GB at k = 6. Lane B and the pileup arena take free memory minus 3 GB, so they shrink by that
   much and nothing fails; the device peak stays 90.0–90.4 GB at every k.
-- **Host memory does.** Per sample in flight: ~35 GB at the cgroup's peak (k = 4: 153 GB; k = 6: 210 GB, of which anon 188 and
-  shmem 39), a run's PSS peak 40–45 GB. The largest single piece is the **private copy of the genome** that every process loads
-  (16.8 GB for GRCh38: `Shared memory is not used for genomes. Allocated a private copy of the genome.`): k copies of the same
-  index. The E8 hand-off region in `/dev/shm` adds ~6.5 GB per sample.
-  - A half node (28 cores, 370 GB cgroup) holds k ≤ 8–9 such samples; a whole node (750 GB) ~18. The mixed set's larger
-    samples (nuclei2k_v2, 118.7 M reads) need more (§2).
+- **Host memory does.** Per sample in flight, at the cgroup's peak (GiB, `memory.current`, of which anon + shmem cannot be
+  reclaimed):
+  - 44a6e9fa: ~35 GB (k = 4: 153 GB; k = 6: 210 GB, of which anon 188 and shmem 39); a run's PSS peak 40–45 GB;
+  - merged head (E16): ~43 GB (k = 6: 274 GB, anon + shmem 255; k = 8: 352 GB, anon 290 + shmem 54 = 344, under a 370 GB
+    cgroup). E16 keeps the prefill's host data until after STAR's loop and page-locks the hand-off region.
+  The largest single piece is the **private copy of the genome** that every process loads (16.8 GB for GRCh38: `Shared memory is
+  not used for genomes. Allocated a private copy of the genome.`): k copies of the same index. The E8 hand-off region in
+  `/dev/shm` adds ~6.5 GB per sample.
+  - A half node (28 cores, 370 GB cgroup) holds k = 8 such samples on the merged head (k = 8 ran at 352 GB); a whole node (750 GB)
+    ~16. The mixed set's larger samples (nuclei2k_v2, 118.7 M reads) need more (§2).
   - One shared genome per node (STAR's `--genomeLoad LoadAndKeep`, or E14's preload in a persistent process) would cut ~17 GB per
-    sample and raise the node's bound to ~30 samples.
+    sample and raise the node's bound to ~28 samples.
 - **Cores:** 8.0–8.4 core-s per M pairs per run at every k (T = 7: 7.7–8.0), so at the slot's limit (~1.6–1.8 M pairs/s) a GPU
   needs ~13–15 cores on average. Bursts are higher: at the start of a round the k samples decode and scan together (24 of 28
   cores at k = 6), which stretches the prefill's host steps under the slot (two runs of `k6t7s1r2` held it 32 s instead of 21 s:
@@ -377,7 +407,7 @@ The numbers it has to work with (pbmc1k_v3, GRCh38, H100 NVL 94 GB; engine memor
 
 | | target / reference | E18 measured |
 |---|---|---|
-| end to end per H100 (brief, II.1 §2.1.4) | ≥ 10 M pairs/s; P1 kill < 5 M/s | **1.40** (k = 6) – **@@** (k = 8) M pairs/s per GPU in steady state on the merged head; the slot's limit 1.84 |
+| end to end per H100 (brief, II.1 §2.1.4) | ≥ 10 M pairs/s; P1 kill < 5 M/s | **1.40** (k = 6) – **1.57** (k = 8) M pairs/s per GPU in steady state on the merged head; the slot's limit 1.84 |
 | node (II.1 §2.1.4) | ≥ 20 M pairs/s | **@@ M pairs/s** (2 GPUs, 54 cores) |
 | node, projected in Part I if cores bind | GPU path 2.65–3.07 M pairs/s | cores do not bind: the GPU slot does |
 | II.13's balance point | ~3 samples in flight per GPU at 8.5 core-s/M and ~25 GPU-s per sample | the slot is held 36–41 s per sample (not 25), and at k = 3–6 a FIFO slot sits idle 30–40 % of the time in a convoy: k = 3 gives 1.0–1.1 M pairs/s, 60 % of the limit |
@@ -457,6 +487,8 @@ All new, under `bench/fable/throughput/` (no engine code, no other bench code):
 - f3af8b8e: mix points take the MIX list R times.
 - d4a7e60e: the steady window (every worker busy).
 - 9bb39905: the queue model (`e18_sim.py`).
+- f68bfba9: this document's draft.
+- 5e55b702: merge of gpu/fable-engine 503c07f7 (E17 "budget").
 - This document is the next commit.
 
 **Builds** (short-gpu without a GPU, ~5 min):
@@ -465,6 +497,7 @@ All new, under `bench/fable/throughput/` (no engine code, no other bench code):
 |---|---|---|---|---|
 | 797401 | 7a2bbb9e | 44a6e9fa (E1–E15) | `bin/singlet-gpu` | 51e0b035… |
 | 797455 | 3b93a792 | c6ddd3d3 (+ E16) | `bin-e16/singlet-gpu` | 28fe749c… |
+| 797476 | 5e55b702 | 503c07f7 (+ E17) | `bin-e17/singlet-gpu` | 23c4c79a… |
 
 **Runs** (short-gpu, H100 NVL, `--nice=10000`):
 
@@ -473,8 +506,9 @@ All new, under `bench/fable/throughput/` (no engine code, no other bench code):
 | 797417 | g051 | debug-gpu, 1 / 8 | bin | pbmc2m `k1t4s1 k2t4s1` | script debugging; k = 2 identical to k = 1, dumps identical |
 | 797423 (A) | g050 | 1 / 28 / 370 GB | bin | `k1t28s1 k1t14s1 k1t9s1 k1t7s1 k2t14s1 k3t9s1 k4t7s1 k4t14s1 k1t14s1m43 k2t14s2m43 k3t9s2m43 k4t7s2m43` | 43:43 |
 | 797443 (B) | g050 | 1 / 28 / 370 GB | bin | `k1t7s1f k4t7s1r3 k6t7s1r2` | cancelled after `k6t7s1r2` when E16 landed (its mixed-set points are void); a build ran beside it on the same node during `k6t7s1r2` |
-| 797460 (C) | g051 | 1 / 28 / 370 GB | bin-e16 | @@ | merged head |
-| @@ (D) | @@ | 2 / 54 / 700 GB | bin-e16 | @@ | the node |
+| 797460 (C) | g051 | 1 / 28 / 370 GB | bin-e16 | `k1t7s1f k1t9s1 k3t9s1 k6t7s1r2 k8t7s1r2 mixk1t7s1 mixk6t7s1r2` | E16 head; 1:00:17; E17's gate jobs on the node's other GPU |
+| 797485 (D) | g051 | 1 / 28 / 370 GB | bin-e17 | `k1t7s1f k1t9s1 k1t14s1 k2t14s1 k2t14s2 k3t9s1 k3t9s2 k3t9s3 k4t7s1 k4t7s2` | E17 head: the k = 3 re-run, the slot points with the budget's defaults; @@ |
+| @@ (E) | @@ | 2 / 54 / @@ GB | bin-e17 | @@ | the node |
 
 **Results:** `$W/jobs/fable/throughput/results/run-<job>/`: `summary.txt` (everything below in one file), `table.md`, `dumps.tsv`,
 and per point `point.txt` / `point.json` (analysis), `locks.json`, `samples.jsonl` (the sampler), `runs.tsv`, `meta.json`,
