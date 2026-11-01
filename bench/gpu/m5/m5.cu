@@ -155,6 +155,7 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 //  M5_P1MINB=n __launch_bounds__(128, n) on the phase-1 kernels (register cap for occupancy)
 //  M5_CMPNI    compareSeqToGenome out of line (one copy instead of five inlined ones; stitch.cuh)
 //  M5_P1FUSE   (with M5_P1SPLIT) the windows in k_p1s, for each read as its seed search completes (no windows kernel)
+//  M5_SEEDSMEM (with M5_P1SPLIT) k_p1s keeps the seed iterator (SeedIt) in shared memory, 128 threads per block
 //  M5_STEPSMEM (with M5_SEEDSTEP) the stepped call's state (MmIt) in shared memory, 128 threads per block
 //  M5_SEEDSTEP (with M5_P1SPLIT) k_p1s steps maxMappableLength2strands one memory operation at a time (an SAi lookup or
 //              one compareSeqToGenome per lane per iteration, at one call site; stitch.cuh MmIt / mmAdvance)
@@ -193,7 +194,12 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
     const unsigned FULL = 0xffffffffu, lane = threadIdx.x & 31;
     u64 k = 0;
     int st = 0;            // 0: needs a read, 1: holds a read with a pending call, 2: the batch is exhausted, 3: seeds done
+#ifdef M5_SEEDSMEM
+    __shared__ SeedIt smIt[128];   // the seed iterator in shared memory (fewer registers, more resident warps)
+    SeedIt& it = smIt[threadIdx.x];
+#else
     SeedIt it;
+#endif
 #ifdef M5_SEEDSTEP
 #ifdef M5_STEPSMEM
     __shared__ MmIt smM[128];   // the call's state in shared memory (registers: temporaries only)
@@ -233,7 +239,13 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
 #ifdef M5_SEEDSTEP
                         mmBegin(P, m, it);
 #endif
-                    } else st = 3;
+                    } else {
+#ifdef M5_P1FUSE
+                        st = 3;
+#else
+                        status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc;
+#endif
+                    }
                 }
             }
         }
@@ -254,8 +266,13 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
 #endif
             } else if (r > 0) {
                 seedAfter(it, (m5::uint)m.maxLbest);
-                if (!seedNext(P, w, it)) st = 3;
-                else mmBegin(P, m, it);
+                if (!seedNext(P, w, it)) {
+#ifdef M5_P1FUSE
+                    st = 3;
+#else
+                    status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; st = 0;
+#endif
+                } else mmBegin(P, m, it);
             }
 #else
             m5::uint L;
@@ -267,22 +284,26 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
 #endif
             } else {
                 seedAfter(it, L);
-                if (!seedNext(P, w, it)) st = 3;
+                if (!seedNext(P, w, it)) {
+#ifdef M5_P1FUSE
+                    st = 3;
+#else
+                    status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; st = 0;
+#endif
+                }
             }
 #endif
         }
-        if (st == 3) {   // the read's seed search is complete (status Ok)
+#ifdef M5_P1FUSE
+        if (st == 3) {   // the read's seed search is complete (status Ok): its windows
             Work<C>& w = work[k];
             w.clk[0] += clock64() - tc;
-#ifdef M5_P1FUSE
             const Status s = p1Windows(P, g, w);
             status[k] = (uint8_t)s;
             nEnt[k] = (s == Status::Ok && w.stitched) ? w.nEntries : 0;
-#else
-            status[k] = (uint8_t)Status::Ok;
-#endif
             st = 0;
         }
+#endif
     }
 }
 #ifdef M5_P1WPERS
