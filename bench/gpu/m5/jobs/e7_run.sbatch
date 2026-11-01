@@ -42,8 +42,9 @@ for vi in "${!VARS[@]}"; do
   BIN=${VARS[$vi]%%:*}; ARGS=${VARS[$vi]#*:}; ARGS=${ARGS//@STD/$STD}; L=$RES/${TAG}_${SLURM_JOB_ID}_v${vi}_$BIN
   echo "=== variant $vi: $BIN $ARGS"
   apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=$NCPU $OUT/bin/$BIN --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3 --json $L.json $ARGS 2>&1 \
-    | grep -v "^  seq\|^  star\|^  ours\|^DIFF" > $L.log
+    > $L.log
   grep -E "sizeof Work|k_p1|^lane [AMB] |lane [AMB] run [1-3]|phases|thread cycles|^M5:|GPU lane|unmapped by|overflow why|heavy lane" $L.log | head -40
+  grep -m 3 "^DIFF" $L.log
   echo "[t] variant $vi done $(( $(date +%s) - T0 )) s"
 done
 # Nsight Compute on the phase-1 kernels of lane A
