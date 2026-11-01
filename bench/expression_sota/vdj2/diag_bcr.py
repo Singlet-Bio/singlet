@@ -236,7 +236,7 @@ def main():
         from singlet.vdj import reference as VR
         segs = VR.load(a.vdj_ref)
     res = {"lib": lib, "reference_paired_cells": len(pairs),
-           "runs": [run_one(a, lib, s, ref, pairs, rt, gex, t4, segs) for s in a.sdirs.split(",")]}
+           "runs": [run_one(a, lib, s, ref, pairs, rt, gex, t4, segs) for s in a.sdirs.replace("+", ",").split(",")]}
     s = json.dumps(res, indent=1, default=str)
     print(s)
     if a.out:
