@@ -16,7 +16,7 @@ Steps (``count_library``):
 4. **UMIs.** Within one (CB, feature), a UMI moves to its Hamming-1 neighbour with the most reads when that has more
    reads, or as many and is lexicographically larger (one step, exactly Cell Ranger's ``correct_umis``); UMIs with N are
    dropped.
-5. **Matrix.** Molecules whose CB is a column of the paired GEX sample (the v2 ``cells`` table, in ``col`` order) give
+5. **Matrix.** Molecules whose CB is a column of the paired GEX sample (the s1 ``cells`` table, in ``col`` order) give
    the features x columns matrix. Molecules on other whitelist barcodes are kept as the per-feature *ambient* profile and
    a per-barcode total histogram (empty droplets for DSB and for the QC background).
 

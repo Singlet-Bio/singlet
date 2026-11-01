@@ -195,6 +195,18 @@ MODALITIES: Dict[str, Modality] = {
             "Per-intron-feature UMI counts (the unspliced half of the raw matrix).",
         ),
         Modality(
+            "exon_reads",
+            "table",
+            ("exon_reads_delta.bin",),
+            "Reads minus UMIs per exon-feature entry of the called cells (aligned to exon_counts; singlet.s1.readsvals.reads_matrix rebuilds the reads matrix).",
+        ),
+        Modality(
+            "intron_reads",
+            "table",
+            ("intron_reads_delta.bin",),
+            "Reads minus UMIs per intron-feature entry of the called cells (aligned to intron_counts).",
+        ),
+        Modality(
             "reads_per_umi_hist",
             "table",
             ("reads_per_umi_hist.tsv.gz",),
@@ -296,6 +308,12 @@ MODALITIES: Dict[str, Modality] = {
             "json",
             ("nonhost/nonhost_summary.json", "nonhost_summary.json"),
             "Non-host classification summary: reads classified, top taxa, database.",
+        ),
+        Modality(
+            "nonhost_confirmed_reads",
+            "binary",
+            ("nonhost/nonhost_confirmed_reads.bin",),
+            "cDNA reads of EM-confirmed non-host species (2-bit packed) with barcode, UMI and species; no read with a host k-mer.",
         ),
         # ── Immune repertoire ─────────────────────────────────────────────
         Modality(
@@ -773,8 +791,8 @@ def _aggregate_gene_counts(out_dir: Path, gene_order: List[str], called_bcs: Lis
 # ---------------------------------------------------------------------------
 
 
-# The engine writes reads-per-UMI members for every barcode. The reads matrices stay in the run directory (they add +69-73 percent to the .s1);
-# the per-cell histogram is packed for the called cells only (a few KB).
+# The engine writes reads-per-UMI members for every barcode. The all-barcode reads matrices stay in the run directory (+69-73 percent in the .s1);
+# the bundle holds reads - UMIs for the called cells (_reads_delta_members) and the per-cell histogram for the called cells only (a few KB).
 _RUN_DIR_ONLY_MEMBERS = ("exon_reads.1pz", "intron_reads.1pz")
 _CALLED_ONLY_MEMBERS = ("reads_per_umi_hist.tsv.gz",)
 
@@ -803,6 +821,22 @@ def _reads_member(rel: str, data: bytes, called: Optional[set]) -> Optional[byte
         keep = [ln for i, ln in enumerate(lines) if ln and (i == 0 or ln.split("\t", 1)[0] in called)]
         return gzip.compress(("\n".join(keep) + "\n").encode("utf-8"), 6, mtime=0)
     return data
+
+
+def _reads_delta_members(out_dir: Path, called: set) -> Dict[str, bytes]:
+    """``exon_reads_delta.bin`` / ``intron_reads_delta.bin`` from the run directory's count and reads matrices (singlet.s1.readsvals); a kind whose
+    matrices do not line up (or that is missing) is left out."""
+    from singlet.s1 import readsvals as RV
+
+    out: Dict[str, bytes] = {}
+    for kind, member in RV.MEMBERS.items():
+        cf, rf = out_dir / RV.COUNTS[kind], out_dir / RV.RUN_DIR_READS[kind]
+        if not (cf.is_file() and rf.is_file()):
+            continue
+        blob = RV.from_run_dir_matrices(cf.read_bytes(), rf.read_bytes(), called)
+        if blob is not None:
+            out[member] = blob
+    return out
 
 
 def pack_gse(
@@ -1177,6 +1211,13 @@ def pack_gse(
                     gsm_full_files.append(rel.as_posix())
                     if not restricted:
                         gsm_files.append(rel.as_posix())
+
+            # reads-per-UMI matrices go into the bundle as reads - UMIs aligned to the nonzeros of the called columns of the count matrices
+            if out_dir.is_dir() and called_set is not None:
+                for name, data in _reads_delta_members(out_dir, called_set).items():
+                    _put(f"samples/{gsm}/{name}", data, zipfile.ZIP_STORED)
+                    gsm_full_files.append(name)
+                    gsm_files.append(name)
 
             included_files[gsm] = gsm_files
             full_included[gsm] = gsm_full_files
@@ -1615,6 +1656,8 @@ class SingletBundle:
             import pandas as pd
 
             return pd.read_csv(_io.BytesIO(data), sep="\t")
+        if kind == "binary":
+            return data  # raw bytes; the layout is in docs/pipeline-outputs.md
         if kind != "matrix":
             raise ValueError(f"Unknown modality kind {kind!r} for {name!r}")
 

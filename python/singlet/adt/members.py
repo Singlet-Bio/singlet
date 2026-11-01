@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""ADT/HTO as store members (``docs/format-store.md`` section 13, proposal in ``docs/adt-modality.md``).
+"""ADT/HTO as s1 members (``docs/format-s1.md`` section 13, proposal in ``docs/adt-modality.md``).
 
 Members of one sample:
 
@@ -14,7 +14,7 @@ Members of one sample:
   version), the ambient profile and the library QC verdict.
 
 The same members go either into the GEX sample object at migration (preferred while the campaign has not run) or into a
-sidecar object ``store/x/<GSM>/adt.<d16>.s2`` referenced by the study manifest (``samples[i].extra_objects.adt``), so readers
+sidecar object ``s1/x/<GSM>/adt.<d16>.s2`` referenced by the study manifest (``samples[i].extra_objects.adt``), so readers
 find them the same way.
 """
 
@@ -34,8 +34,8 @@ MEMBERS = ("adt_counts.1pz", "hto_counts.1pz", "adt_panel.json")
 
 def _csc_member(M, rownames: List[str], colnames: List[str]):
     """pz2 bytes and digest of a features x columns matrix with inline rows and columns from the cells table."""
-    from singlet.store.codec import EncodeOptions, get_codec
-    from singlet.store.matrix import Csc
+    from singlet.s1.codec import EncodeOptions, get_codec
+    from singlet.s1.matrix import Csc
 
     M = M.tocsc()
     M.sort_indices()
@@ -128,7 +128,7 @@ def build_members(
 
 def build_sidecar(gsm: str, members: Dict[str, tuple]) -> bytes:
     """A small ``.s2`` object holding only the ADT members (for samples whose GEX object is already written)."""
-    from singlet.store.container import S2Writer
+    from singlet.s1.container import S2Writer
 
     w = S2Writer(gsm)
     for name in MEMBERS:
@@ -144,8 +144,8 @@ def build_sidecar(gsm: str, members: Dict[str, tuple]) -> bytes:
 
 def read_sidecar(buf: bytes):
     """Decode an object holding the ADT members: {'adt': (scipy csc, row names), 'hto': ..., 'panel': dict}."""
-    from singlet.store.codec import decode_any
-    from singlet.store.container import S2Reader
+    from singlet.s1.codec import decode_any
+    from singlet.s1.container import S2Reader
 
     r = S2Reader(buf)
     out = {}

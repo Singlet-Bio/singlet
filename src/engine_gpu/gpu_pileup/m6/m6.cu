@@ -364,6 +364,9 @@ __global__ void k_comp_agg(const Agg* ag, const uint32_t* lab, int m, uint32_t* 
 // component (DirectionalUmiStore::Molecule::count). cr[root] accumulates them; k_emit hands them to the emitted molecule's matrix slot and bins
 // them in the per-cell histogram g_cell_hist (kHistBins per cell: k reads -> bin k-1, bin kHistBins-1 = that many or more)
 static bool g_want_reads = false;
+// mixed molecules (off unless the caller sets g_want_mixed): unspliced molecules that also have an exon-only read, keyed (cell | exon) and
+// (cell | intron) like the exon and intron matrices; the engine's mixed_exon / mixed_intron (export.h rebuilds the pre-USA exon / intron split)
+static bool g_want_mixed = false;
 constexpr int kHistBins = 16;
 __device__ uint32_t* g_cell_hist = nullptr;
 __global__ void k_comp_reads(const Agg* ag, const uint32_t* lab, int m, uint32_t* cr) {
@@ -373,17 +376,19 @@ __global__ void k_comp_reads(const Agg* ag, const uint32_t* lab, int m, uint32_t
 __device__ unsigned long long g_molstat[5];   // [4]: molecules dropped by the molecule rule (kUmiGeneCR)
 // molecules per cell (DirectionalUmiStore::per_cell_molecule_stats' unique_umis), when the caller sets it (else nullptr)
 __device__ uint32_t* g_cell_mol = nullptr;
-// per cell, when the caller sets it: unspliced molecules that also have an exon-only read (the engine's legacy_exon_extra, added to the
-// cell caller's knee input in export.h; DirectionalUmiStore::emit_molecule's on_mixed)
+// per cell, when the caller sets it: unspliced molecules that also have an exon-only read (the engine's legacy_exon_extra, the column sums
+// of its mixed_exon; DirectionalUmiStore::emit_molecule's on_mixed)
 __device__ uint32_t* g_cell_mixed = nullptr;
 // roots emit one molecule, labelled as DirectionalUmiStore::label_of (alevin-fry USA): flags 1 = exon-only read (kReadExonOnly), 2 = intron
 // read (kReadIntron), 4 = touches an exon (kReadTouchesExon), 8 = a read with a CIGAR N (kDiagSpliced). unspliced = any intron read;
 // spliced = no intron read and a junction read; ambiguous = the rest (exon-only, no junction). Exon matrix = spliced + ambiguous.
 __global__ void k_emit(const uint64_t* uk, const uint32_t* lab, const uint32_t* cf, const uint32_t* ce, const uint32_t* ci, int m, int gb, int ub,
                        uint64_t* kex, uint64_t* kin, uint64_t* kam, const uint8_t* drop,
-                       const uint32_t* cr = nullptr, uint32_t* rex = nullptr, uint32_t* rin = nullptr) {
+                       const uint32_t* cr = nullptr, uint32_t* rex = nullptr, uint32_t* rin = nullptr,
+                       uint64_t* kmxe = nullptr, uint64_t* kmxi = nullptr) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
     kex[i] = kin[i] = kam[i] = NONE64;
+    if (kmxe) kmxe[i] = kmxi[i] = NONE64;
     if (lab[i] != (uint32_t)i) return;
     uint32_t f = cf[i]; bool e = f & 1, in = f & 2, sp = f & 8;
     uint64_t cell = uk[i] >> (gb + ub), gene = (uk[i] >> ub) & ((1ull << gb) - 1);
@@ -394,6 +399,7 @@ __global__ void k_emit(const uint64_t* uk, const uint32_t* lab, const uint32_t* 
     if (in) {                                                                            // unspliced
         kin[i] = (cell << FB) | ci[i];
         if (e && g_cell_mixed) atomicAdd(&g_cell_mixed[cell], 1u);                      // legacy exonic extra
+        if (e && kmxe) { kmxe[i] = (cell << FB) | ce[i]; kmxi[i] = kin[i]; }            // mixed: the pre-USA labels' ambiguous (exon matrix)
     }
     else if (sp) kex[i] = (cell << FB) | ce[i];                                          // spliced
     else { kex[i] = (cell << FB) | ce[i]; kam[i] = (cell << FB) | gene; }               // ambiguous: exon matrix + per-gene ambiguous count
@@ -485,7 +491,7 @@ static uint8_t* stage_cr(Arena& A, const uint64_t* uk, const Agg* ag, const uint
 }
 struct IsSet { __host__ __device__ bool operator()(const uint64_t& k) const { return k != ~0ull; } };
 
-struct Mol { uint64_t *kex, *kin, *kam; int m; uint32_t *rex = nullptr, *rin = nullptr; };
+struct Mol { uint64_t *kex, *kin, *kam; int m; uint32_t *rex = nullptr, *rin = nullptr; uint64_t *kmxe = nullptr, *kmxi = nullptr; };
 static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m, const Layout& L, long long* stat_edges, long long* stat_active, int* stat_iters,
                    const uint32_t** lab_out = nullptr) {   // lab_out: the component (root entry index) of each unique (cell, gene, UMI) entry
     const int TB = 256; int G = (m + TB - 1) / TB; int ub = L.ub;
@@ -546,7 +552,8 @@ static Mol stage_c(Arena& A, Timer& T, const uint64_t* uk, const Agg* ag, int m,
         cr = A.alloc<uint32_t>(m); M.rex = A.alloc<uint32_t>(m); M.rin = A.alloc<uint32_t>(m);
         CK(cudaMemsetAsync(cr, 0, 4 * (size_t)m)); k_comp_reads<<<G, TB>>>(ag, lab, m, cr);
     }
-    k_emit<<<G, TB>>>(uk, lab, cf, ce, ci, m, L.gb, ub, M.kex, M.kin, M.kam, drop, cr, M.rex, M.rin);
+    if (g_want_mixed) { M.kmxe = A.alloc<uint64_t>(m); M.kmxi = A.alloc<uint64_t>(m); }
+    k_emit<<<G, TB>>>(uk, lab, cf, ce, ci, m, L.gb, ub, M.kex, M.kin, M.kam, drop, cr, M.rex, M.rin, M.kmxe, M.kmxi);
     T.mark("c.emit");
     return M;
 }

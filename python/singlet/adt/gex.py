@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
 """The paired gene-expression sample: its column barcodes in ``col`` order, called flags and exon counts.
 
-ADT columns must be the GEX sample's columns: the store ``cells`` table lists the columns of ``exon_counts.1pz`` (or
+ADT columns must be the GEX sample's columns: the s1 ``cells`` table lists the columns of ``exon_counts.1pz`` (or
 ``intron_counts.1pz`` when exon is empty) in order, and ``called`` comes from ``cell_calls.tsv``
-(``singlet.store.migrate``). Legacy bundles are read by byte range from ``data.singlet.bio``; nothing is downloaded whole.
+(``singlet.s1.migrate``). Legacy bundles are read by byte range from ``data.singlet.bio``; nothing is downloaded whole.
 """
 
 from __future__ import annotations
@@ -36,8 +36,8 @@ def _csc(c):
 def read_legacy(
     gse: str, gsm: str, url: Optional[str] = None, with_counts: bool = True
 ) -> GexSample:
-    from singlet.store import cells as cells_mod
-    from singlet.store.legacy import LegacyBundle, decode_1pz_bytes
+    from singlet.s1 import cells as cells_mod
+    from singlet.s1.legacy import LegacyBundle, decode_1pz_bytes
 
     url = url or f"{BASE}/data/{gse}/{gse}.singlet"
     b = LegacyBundle.open(url)

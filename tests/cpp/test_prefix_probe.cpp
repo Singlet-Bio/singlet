@@ -99,6 +99,23 @@ int main() {
         CHECK(p.prefix_len == 0, "sampled file with duplicate block: no clip");
         std::remove(path);
     }
+    // 9. content sampler: the same records for any offer order, any thread split, and with duplicated records
+    {
+        std::vector<std::vector<uint8_t>> r1s, r2s;
+        for (int i = 0; i < 50000; ++i) {
+            std::vector<uint8_t> a(28), b(91);
+            for (auto& x : a) x = static_cast<uint8_t>(r() & 3);
+            for (auto& x : b) x = static_cast<uint8_t>(r() & 3);
+            r1s.push_back(a); r2s.push_back(b);
+        }
+        ContentProbeSampler s1, s2;
+        for (size_t i = 0; i < r1s.size(); ++i) s1.offer(r1s[i].data(), r1s[i].size(), r2s[i].data(), r2s[i].size());
+        for (size_t k = r1s.size(); k-- > 0;) {                       // reverse order, every record twice
+            for (int rep = 0; rep < 2; ++rep) s2.offer(r1s[k].data(), r1s[k].size(), r2s[k].data(), r2s[k].size());
+        }
+        auto a = s1.sequences(), b = s2.sequences();
+        CHECK(a.size() == kProbeReads && a == b, "content sampler: same reads in any order, duplicates ignored");
+    }
     std::printf("test_prefix_probe: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

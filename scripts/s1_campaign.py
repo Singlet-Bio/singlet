@@ -955,6 +955,8 @@ def dumps_manifest(m: dict) -> bytes:
 MODALITY_MEMBERS: List[Tuple[str, Tuple[str, ...]]] = [
     ("exon_counts", ("exon_counts.1pz",)),
     ("intron_counts", ("intron_counts.1pz",)),
+    ("exon_reads", ("exon_reads_delta.bin",)),
+    ("intron_reads", ("intron_reads_delta.bin",)),
     ("reads_per_umi_hist", ("reads_per_umi_hist.tsv.gz",)),
     ("cell_calls", ("cell_calls.tsv",)),
     ("cell_qc", ("cell_qc_metrics.tsv",)),
@@ -968,6 +970,7 @@ MODALITY_MEMBERS: List[Tuple[str, Tuple[str, ...]]] = [
     ("sex_call", ("sex_call.json",)),
     ("nonhost_species", ("nonhost/nonhost_em_abundance.tsv", "nonhost_em_abundance.tsv")),
     ("nonhost_summary", ("nonhost/nonhost_summary.json", "nonhost_summary.json")),
+    ("nonhost_confirmed_reads", ("nonhost/nonhost_confirmed_reads.bin",)),
     ("vdj_gene_usage", ("vdj_gene_usage.1pz",)),
     ("doublet_scores", ("doublet_scores.tsv",)),
     ("cell_cycle_scores", ("cell_cycle_scores.tsv",)),

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""One V(D)J library of the atlas -> contigs, per-cell labels, QC verdict and the v2 members of its GEX sample.
+"""One V(D)J library of the atlas -> contigs, per-cell labels, QC verdict and the s1 members of its GEX sample.
 
     python -m singlet.vdj.library --r1 R1.fastq.gz [...] --r2 R2.fastq.gz [...] --gex-columns cols.txt
         --gex-called called.txt --species human --whitelist 737K-august-2016.txt --gsm GSM... --out DIR
@@ -22,7 +22,7 @@ import numpy as np
 from . import assemble as A
 from . import clonotype as CL
 from . import qc as Q
-from . import store as ST
+from . import members as ST
 
 
 def process_library(

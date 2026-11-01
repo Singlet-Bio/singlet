@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""V(D)J as store members of the GEX sample (``docs/format-store.md`` section 14), the ADT layout's rules.
+"""V(D)J as s1 members of the GEX sample (``docs/format-s1.md`` section 14), the ADT layout's rules.
 
 Members:
 
@@ -14,8 +14,8 @@ Members:
 Per-cell labels (chains, pairing, clonotype) are cell metadata: :func:`cell_labels` builds the feature sidecar
 ``<GSM>.features.vdj.parquet`` (``docs/CELL-ARCHITECTURE.md`` section 3), keyed by ``col``.
 
-The members go into the GEX sample object at migration, or into a sidecar object ``store/x/<GSM>/vdj.<d16>.s2`` referenced as
-``samples[i].extra_objects.vdj`` (the ADT route, ``docs/format-store.md`` section 13).
+The members go into the GEX sample object at migration, or into a sidecar object ``s1/x/<GSM>/vdj.<d16>.s2`` referenced as
+``samples[i].extra_objects.vdj`` (the ADT route, ``docs/format-s1.md`` section 13).
 """
 
 from __future__ import annotations
@@ -115,7 +115,7 @@ def cell_labels(cells, gex_barcodes: Sequence[str]):
 
 
 def build_sidecar(gsm: str, members: Dict[str, tuple]) -> bytes:
-    from singlet.store.container import S2Writer
+    from singlet.s1.container import S2Writer
 
     w = S2Writer(gsm)
     for name in MEMBERS:
@@ -129,7 +129,7 @@ def read_members(buf: bytes):
     """Decode an object holding the V(D)J members: {'contigs': DataFrame, 'summary': dict}."""
     import pyarrow.parquet as pq
 
-    from singlet.store.container import S2Reader
+    from singlet.s1.container import S2Reader
 
     r = S2Reader(buf)
     out = {}

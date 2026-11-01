@@ -35,6 +35,7 @@
 #include "saturation.h"
 #include "saturation_curve.h"
 #include "cell_calling.h"
+#include "../nvtx.h"
 #include "called_v2.h"
 #include "sex_calling.h"
 #include "cell_cycle.h"
@@ -301,6 +302,7 @@ inline ExportStats export_results(const PileupEngine& engine,
                                   const ExportConfig& export_cfg) {
     ExportStats result;
     auto export_t0 = std::chrono::high_resolution_clock::now();
+    singlet::NvtxChain nvexp;   // NVTX: one range per phase below (SINGLET_NVTX=1)
 
     const auto& barcodes = engine.barcodes();
     const bool use_1pz  = (export_cfg.output_format == "1pz" || export_cfg.output_format == "all");
@@ -309,10 +311,23 @@ inline ExportStats export_results(const PileupEngine& engine,
     const auto& out_prefix = export_cfg.out_prefix;
 
     // ── Phase 1: COO → CSC (parallel) ──
+    nvexp.next("export: Phase 1: COO  CSC (parallel)");
     auto csc_t0 = std::chrono::high_resolution_clock::now();
 
     SparseAccumulator<uint16_t>::CSCMatrix snp_ad_csc, snp_dp_csc;
+    // Two exon / intron splits of the same molecules (DirectionalUmiStore::emit_molecule):
+    //  - layer_exon / layer_intron (+ amb_csc): the alevin-fry USA labels (unspliced = any intron read). Used ONLY for the
+    //    published exon_counts / intron_counts / ambiguous_counts matrices and the h5ad / loom spliced / unspliced / ambiguous
+    //    layers.
+    //  - exon_csc / intron_csc: the pre-USA split, legacy exon = USA exon + mixed_exon, legacy intron = USA intron - mixed_intron
+    //    (mixed: unspliced molecules that also have an exon-only read, which the old labels counted as ambiguous in the exon
+    //    matrix). Every method validated on that split reads it: cell QC, sex, cell cycle, read stats / saturation, the cell
+    //    caller (knee, EmptyDrops, called_v2), ambient (incl. the intron-rich guard), doublets, the gene-expression matrices
+    //    (exon + intron: the same either way) and the summary metrics.
     SparseAccumulator<uint16_t>::CSCMatrix exon_csc, intron_csc, sj_csc, mt_csc, guide_csc, amb_csc;
+    SparseAccumulator<uint16_t>::CSCMatrix mixed_exon_csc, mixed_intron_csc, layer_exon_store, layer_intron_store;
+    const SparseAccumulator<uint16_t>::CSCMatrix* layer_exon = &exon_csc;     // USA labels: exon_counts and the spliced layer
+    const SparseAccumulator<uint16_t>::CSCMatrix* layer_intron = &intron_csc; // USA labels: intron_counts and the unspliced layer
     SparseAccumulator<uint32_t>::CSCMatrix exon_reads_csc, intron_reads_csc;   // reads per molecule, same layout as the UMI matrices
 
     std::vector<std::thread> csc_threads;
@@ -334,6 +349,10 @@ inline ExportStats export_results(const PileupEngine& engine,
         if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0) {
             csc_threads.emplace_back([&]() { intron_csc = engine.introns().to_csc(); });
             csc_threads.emplace_back([&]() { amb_csc = engine.ambiguous().to_csc(); });
+            if (engine.mixed_exon().nnz_raw() > 0) {
+                csc_threads.emplace_back([&]() { mixed_exon_csc = engine.mixed_exon().to_csc(); });
+                csc_threads.emplace_back([&]() { mixed_intron_csc = engine.mixed_intron().to_csc(); });
+            }
         }
         if (pileup_cfg.count_sj && !engine.sj_names().empty())
             csc_threads.emplace_back([&]() { sj_csc = engine.splice_junctions().to_csc(); });
@@ -347,6 +366,18 @@ inline ExportStats export_results(const PileupEngine& engine,
         csc_threads.emplace_back([&]() { vdj_csc = engine.vdj_counts().to_csc(); });
 
     for (auto& t : csc_threads) t.join();
+    // The pre-USA split (see the declarations above): keep the USA matrices for the published layers, and rebind exon_csc /
+    // intron_csc to the legacy ones for every other consumer. No mixed molecules: the two splits are the same matrices.
+    // At the uint16 cap (65535) legacy exon stays exact and legacy intron undercounts only a saturated entry, never wraps
+    // (csc_add_signed, sparse_accumulator.h; tests/cpp/test_csc_add_signed.cpp).
+    if (mixed_exon_csc.ncols > 0 && mixed_exon_csc.ncols == exon_csc.ncols && intron_csc.ncols == exon_csc.ncols) {
+        layer_exon_store = std::move(exon_csc); layer_intron_store = std::move(intron_csc);
+        layer_exon = &layer_exon_store; layer_intron = &layer_intron_store;
+        std::thread tl([&]() { intron_csc = csc_add_signed(layer_intron_store, mixed_intron_csc, -1); });
+        exon_csc = csc_add_signed(layer_exon_store, mixed_exon_csc, +1);
+        tl.join();
+        mixed_exon_csc = {}; mixed_intron_csc = {};
+    }
     // Ambiguous molecules per gene: always genes × barcodes, possibly all zero
     if (amb_csc.ncols != exon_csc.ncols && exon_csc.ncols > 0) {
         amb_csc = {};
@@ -362,6 +393,7 @@ inline ExportStats export_results(const PileupEngine& engine,
               << "s (" << result.n_csc_threads << " threads)\n";
 
     // ── Phase 1.5: Cell QC metrics (compute only; write deferred to Phase 1.8) ──
+    nvexp.next("export: Phase 1.5: Cell QC metrics (compute only write deferred to Phase 1.8)");
     // Computed from already-converted CSC matrices — no BAM re-processing.
     // Only runs when a GTF gene model with hierarchy is available.
     CellQCMetrics cell_qc;
@@ -375,6 +407,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.55: Sex calling (N14) ──
+    nvexp.next("export: Phase 1.55: Sex calling (N14)");
     // Runs when a GTF gene model is present and exon data is available.
     if (!pileup_cfg.exon_gtf_path.empty()
         && engine.gene_model().has_gene_hierarchy()
@@ -393,6 +426,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.57: Cell cycle scoring (N19) ──
+    nvexp.next("export: Phase 1.57: Cell cycle scoring (N19)");
     // Runs when a GTF gene model with hierarchy is present and exon data available.
     CellCycleResult cc_result_cycle;
     if (!pileup_cfg.exon_gtf_path.empty()
@@ -415,6 +449,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.58: Per-cell read statistics (N20) ──
+    nvexp.next("export: Phase 1.58: Per-cell read statistics (N20)");
     // Derived from per_cell_reads_ (pre-dedup barcoded reads) + CSC column sums.
     // Zero overhead: all data already in memory, no BAM re-processing.
     std::vector<CellReadStats> cell_read_stats;
@@ -442,6 +477,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.56: Ancestry classification (N13) ──
+    nvexp.next("export: Phase 1.56: Ancestry classification (N13)");
     // Uses the embedded AIM panel injected into the SNP pileup at load time.
     // Runs regardless of whether --snps was provided by the user.
     if (engine.aim_snp_start() != UINT32_MAX && snp_dp_csc.ncols > 0) {
@@ -468,6 +504,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.6: Sequencing saturation (N7, directional dedup path only) ──
+    nvexp.next("export: Phase 1.6: Sequencing saturation (N7, directional dedup path only)");
     // Uses the DirectionalUmiStore groups built during run() — no extra BAM pass.
     std::vector<CellSaturation> sat_cells;
     std::vector<std::pair<uint32_t, std::pair<uint64_t, uint64_t>>> gpu_sat;
@@ -499,6 +536,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.65: Sequencing saturation curve (G-SATCURVE) ──
+    nvexp.next("export: Phase 1.65: Sequencing saturation curve (G-SATCURVE)");
     // Analytical downsampling at 6 depth fractions using CellReadStats + exon CSC.
     // Zero pileup overhead — uses data already computed in Phase 1.58.
     if (!engine.per_cell_reads().empty() && exon_csc.ncols > 0
@@ -528,6 +566,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.7: Cell calling (N5, EmptyDrops-style) ──
+    nvexp.next("export: Phase 1.7: Cell calling (N5, EmptyDrops-style)");
     // Declare outside so Phase 1.75 (ambient correction) and N8 (provenance) can access them.
     std::vector<uint64_t> bc_totals;
     CellCallResult cc_result;
@@ -537,17 +576,12 @@ inline ExportStats export_results(const PileupEngine& engine,
     if (export_cfg.run_cell_calling && !pileup_cfg.exon_gtf_path.empty() && exon_csc.ncols > 0) {
         // Sum each column (barcode) of exon CSC to get per-barcode UMI totals.
         // These totals are used for barcode ranking (lower/test UMI thresholds).
+        // exon_csc is the pre-USA (legacy) exon matrix, so the knee and the umi_exon column of cell_calls.tsv stay on the exonic
+        // total they were validated on: a label change does not move the cell set.
         bc_totals.assign(exon_csc.ncols, 0);
         for (uint32_t j = 0; j < exon_csc.ncols; ++j)
             for (int32_t k = exon_csc.indptr[j]; k < exon_csc.indptr[j + 1]; ++k)
                 bc_totals[j] += static_cast<uint64_t>(exon_csc.data[k]);
-        // The knee (and the umi_exon column of cell_calls.tsv) stay on the legacy exonic total: exon + the unspliced molecules that
-        // also have an exon-only read (the molecule labels moved them from the exon matrix to the intron matrix), so a label
-        // change does not move the cell set.
-        {
-            const auto extra = engine.legacy_exon_extra();
-            for (uint32_t j = 0; j < exon_csc.ncols && j < extra.size(); ++j) bc_totals[j] += extra[j];
-        }
 
         // N22-GENE: EmptyDrops operates at GENE level (38k features), not exon level
         // (310k features).  Passing exon_csc directly causes systematic overcalling:
@@ -952,6 +986,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 1.76: Doublet detection (N12) ──
+    nvexp.next("export: Phase 1.76: Doublet detection (N12)");
     // Runs when we have called cells OR when --barcodes was provided (all barcodes
     // are treated as cells in that case, cc_result.cell_indices is empty).
     // Score: Scrublet-style simulation (8000 HVG genes of exon + intron counts, 30 PCs, simulated pair-sums, kNN) plus a
@@ -1035,6 +1070,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }  // Phase 1.76 block
 
     // ── Phase 1.8: Write unified cell_qc_metrics.tsv ──
+    nvexp.next("export: Phase 1.8: Write unified cellqcmetrics.tsv");
     // Merges data from Phase 1.5 (QC), 1.57 (cell cycle), 1.58 (read stats),
     // 1.6 (saturation), and 1.76 (doublet) into the schema-compliant TSV.
     // Aligner-level per-cell counts (lost once the BAM is deleted): STARsolo CellReads.stats (unmapped, antisense,
@@ -1143,6 +1179,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 2: mt heteroplasmy (pipeline mode) ──
+    nvexp.next("export: Phase 2: mt heteroplasmy (pipeline mode)");
     mt::MtHetResult mt_het;
     SparseAccumulator<uint16_t>::CSCMatrix mt_rev_csc;  // reverse-strand subset of mt_csc (forward = total - reverse)
     std::string mt_ref_seq;                              // chrM reference from the STAR genome (never the pool majority)
@@ -1184,6 +1221,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Phase 3: Demux + parallel writes ──
+    nvexp.next("export: Phase 3: Demux + parallel writes");
     std::thread demux_thread;
     DemuxResult demux_result;
     if (export_cfg.pipeline_mode && !pileup_cfg.snp_path.empty() && snp_ad_csc.data.size() > 0) {
@@ -1272,7 +1310,8 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // Gene model matrices
     if (!pileup_cfg.exon_gtf_path.empty()) {
-        write_threads.emplace_back([&]() { write_matrix("exon_counts", exon_csc, engine.exon_names()); });
+        // published layer: the alevin-fry USA labels (layer_exon), not the legacy exon_csc the methods read
+        write_threads.emplace_back([&]() { write_matrix("exon_counts", *layer_exon, engine.exon_names()); });
         // Reads behind each exon / intron UMI count (same rows, columns and codec, uint32): reads_per_umi = reads / UMIs
         if (engine.reads_matrix_on()) {
             write_threads.emplace_back([&]() { write_matrix("exon_reads", exon_reads_csc, engine.exon_names()); });
@@ -1300,6 +1339,8 @@ inline ExportStats export_results(const PileupEngine& engine,
         // intron_counts and can be computed on the fly by downstream tools.
         if (engine.gene_model().n_genes() > 0) {
             write_threads.emplace_back([&]() {
+                // X = exon + intron per gene: the total, the same from either split (legacy exon_csc / intron_csc here); the
+                // spliced / unspliced / ambiguous layers below are the USA labels (layer_exon / layer_intron / amb_csc)
                 const bool has_int = pileup_cfg.count_introns && intron_csc.data.size() > 0;
                 auto gene_csc = has_int
                     ? collapse_to_gene_counts(exon_csc, intron_csc, engine.gene_model())
@@ -1360,8 +1401,8 @@ inline ExportStats export_results(const PileupEngine& engine,
                     if (has_int) {
                         // Velocyto layers: each molecule in exactly one of them; X = their sum
                         auto spliced_csc   = gene_csc_minus(
-                            collapse_exon_to_gene(exon_csc, engine.gene_model()), &amb_csc);
-                        auto unspliced_csc = collapse_intron_to_gene(intron_csc, engine.gene_model());
+                            collapse_exon_to_gene(*layer_exon, engine.gene_model()), &amb_csc);
+                        auto unspliced_csc = collapse_intron_to_gene(*layer_intron, engine.gene_model());
                         auto ambiguous_csc = gene_csc_minus(amb_csc, static_cast<decltype(&amb_csc)>(nullptr));
                         h5cfg.layers.push_back({"spliced",
                             spliced_csc.indptr.data(), spliced_csc.indices.data(),
@@ -1404,8 +1445,8 @@ inline ExportStats export_results(const PileupEngine& engine,
                     lcfg.cell_barcodes = &barcodes;
                     if (has_int) {
                         auto spl  = gene_csc_minus(
-                            collapse_exon_to_gene(exon_csc, engine.gene_model()), &amb_csc);
-                        auto uspl = collapse_intron_to_gene(intron_csc, engine.gene_model());
+                            collapse_exon_to_gene(*layer_exon, engine.gene_model()), &amb_csc);
+                        auto uspl = collapse_intron_to_gene(*layer_intron, engine.gene_model());
                         auto amb  = gene_csc_minus(amb_csc, static_cast<decltype(&amb_csc)>(nullptr));
                         LoomWriteConfig::Layer spl_layer, uspl_layer, amb_layer;
                         amb_layer.name    = "ambiguous";
@@ -1497,8 +1538,9 @@ inline ExportStats export_results(const PileupEngine& engine,
                 write_matrix("ambient_corrected_counts", ambient_corrected_csc, ambient_feature_names);
             });
         if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0) {
-            write_threads.emplace_back([&]() { write_matrix("intron_counts", intron_csc, engine.intron_names()); });
-            // Ambiguous molecules (reads in both exons and introns) per gene. They are
+            // published layers: the alevin-fry USA labels (layer_intron, amb_csc), not the legacy intron_csc the methods read
+            write_threads.emplace_back([&]() { write_matrix("intron_counts", *layer_intron, engine.intron_names()); });
+            // Ambiguous molecules (exon-only reads, no junction read) per gene. They are
             // already inside exon_counts; spliced = gene(exon_counts) - ambiguous_counts.
             write_threads.emplace_back([&]() {
                 std::vector<std::string> names;
@@ -1717,6 +1759,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     std::cerr << "[export] Total: " << result.export_time_s << "s\n";
 
     // ── G-RRNA: rRNA contamination report ──
+    nvexp.next("export: G-RRNA: rRNA contamination report");
     // Written whenever pileup_stats has rRNA sampling data (always, when stats are available).
     if (export_cfg.pileup_stats != nullptr
         && export_cfg.pileup_stats->rrna_reads_sampled > 0) {
@@ -1731,6 +1774,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── N8: Provenance manifest ──
+    nvexp.next("export: N8: Provenance manifest");
     if (!export_cfg.provenance.input_file.empty()) {
         uint64_t total_umis = 0;
         for (auto v : exon_csc.data) total_umis += static_cast<uint64_t>(v);
@@ -1760,6 +1804,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     bool skip_exon_stub = false;
 
     // ── Summary JSON ── (always written; VAL2-compatible structured output)
+    nvexp.next("export: Summary JSON");
     {
         PipelineSummary summary;
         // Helper: look up user_meta key
@@ -1993,6 +2038,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── MT reference genome extraction ──
+    nvexp.next("export: MT reference genome extraction");
     // Always write mt_reference.fa — either the actual chrM sequence from the STAR
     // genome or a stub explaining why it's absent.
     if (!export_cfg.genome_dir.empty()) {
@@ -2017,6 +2063,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Standardization: write empty stubs for conditional outputs ──
+    nvexp.next("export: Standardization: write empty stubs for conditional outputs");
     // Ensures every successful run produces the EXACT same set of files.
     // Files that were already written above are skipped (exists-check).
     {
@@ -2123,6 +2170,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // ── Post-export validation ──
+    nvexp.next("export: Post-export validation");
     // Verify all required files exist and are non-empty.
     {
         auto vr = singlet::validate_output(out_prefix);

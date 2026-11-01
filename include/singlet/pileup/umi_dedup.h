@@ -525,11 +525,13 @@ public:
     ///   on_reads(intronic, feature, bc, reads) every emitted molecule, with the reads merged into it
     ///                                          (the reads-per-UMI matrix and histogram; never touches the counts)
     struct NoReads { void operator()(bool, uint32_t, uint32_t, uint32_t) const {} };
-    struct NoMixed { void operator()(uint32_t) const {} };
+    struct NoMixed { void operator()(const Molecule&) const {} };
 
-    /// `on_mixed(bc)` is called for an unspliced molecule that also has an exon-only read: the molecules the pre-USA labels
-    /// counted in the exon matrix (as ambiguous). The knee of the cell caller is validated on that legacy exonic total, so the
-    /// engine keeps a per-barcode count of them (legacy_exon_extra) and adds it back for the knee only.
+    /// `on_mixed(m)` is called for an unspliced molecule that also has an exon-only read: the molecules the pre-USA labels
+    /// counted in the exon matrix (as ambiguous, at m.exon_idx) rather than the intron matrix (at m.intron_idx). Every
+    /// method validated on the pre-USA split (knee, ambient, doublets, sex, cell cycle, QC metrics) reads the legacy pair
+    /// legacy_exon = exon + mixed_exon, legacy_intron = intron - mixed_intron, which the engine rebuilds from these
+    /// molecules (mixed_exon()/mixed_intron()); only the published exon/intron/ambiguous layers carry the USA labels.
     template <typename ExonAccT, typename IntronAccT, typename AmbFn, typename ReadsFn = NoReads, typename MixFn = NoMixed>
     static void emit_molecule(const Molecule& m, ExonAccT& exon_acc, IntronAccT& intron_acc,
                               AmbFn&& on_ambiguous, MoleculeStats& st, ReadsFn&& on_reads = ReadsFn(), MixFn&& on_mixed = MixFn()) {
@@ -539,7 +541,7 @@ public:
                 exon_acc.increment(m.exon_idx, m.bc); on_reads(false, m.exon_idx, m.bc, m.count); st.spliced++; break;
             case MoleculeLabel::Unspliced:
                 intron_acc.increment(m.intron_idx, m.bc); on_reads(true, m.intron_idx, m.bc, m.count); st.unspliced++;
-                if (m.flags & kReadExonOnly) on_mixed(m.bc);
+                if (m.flags & kReadExonOnly) on_mixed(m);
                 break;
             case MoleculeLabel::Ambiguous:
                 exon_acc.increment(m.exon_idx, m.bc); on_ambiguous(m.bc, m.gene); on_reads(false, m.exon_idx, m.bc, m.count);
