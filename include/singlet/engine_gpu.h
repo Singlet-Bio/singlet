@@ -110,8 +110,40 @@ inline E2ERegion& e2eRegion() { static E2ERegion r; return r; }
 //       the read -> record map and the records' Gene annotation on the device; after STAR's loop (which maps the reads without a record and
 //       records their annotation instead of Solo's record) soloRun counts every read on the device and writes star_Solo.out; STAR's Solo
 //       post-map step does not run. Where E9's port does not cover the Solo options, level 5 runs as level 3 (STAR's Solo sees every read).
+//   0 (or any other value) = none of these: the GPU maps the distinct sequences and STAR's loop does the rest (the path before E8)
+// The variable is read from the environment by every process (the pipeline, STAR's child, tail_trace.h). Unset, it is 0 here; the pipeline
+// sets it before anything reads it (applyDefaults below), so a run of `--engine gpu` with SINGLET_GPU_PILEUP=on is at level 5 by default.
 inline int e2eLevel() { const char* e = std::getenv("SINGLET_ENGINE_GPU_E2E"); return (e != nullptr && e[0] >= '1' && e[0] <= '5') ? e[0] - '0' : 0; }
 inline bool e2eRequested() { return e2eLevel() >= 1; }
+
+// E19 (docs/gpu-engine/fable/E19-release.md, GPU-PATH.md): the defaults of the GPU path. The pipeline calls this once, after its options and
+// before it reads any of these variables, when --engine gpu is set. With the GPU pileup on (SINGLET_GPU_PILEUP=on):
+//   - SINGLET_ENGINE_GPU_E2E unset -> 5 (E8 + E10 + E11: records, per-read products and STARsolo on the device; E16's tail cuts are on at 5);
+//     a set value is kept (0: the path before E8; 1-4 as before);
+//   - at level 5, SINGLET_ENGINE_GPU_INGEST unset -> 1 (E13: the .1fq decoded straight into the prefill's buffers); 0 keeps the FASTQ files.
+//     Below level 5 the ingest stays opt-in, as before;
+//   - SINGLET_E16_TRACE unset -> 0 (E16's "[e16]" timing marks off; =1 turns them on for the step tables).
+// Without the GPU pileup nothing is set (levels 1-5 need it). The values go into the environment so that STAR's child, which the pipeline
+// forks later, and every getenv() reader see the same ones. Every part falls back on its own and says so on stderr (GPU-PATH.md §3).
+// Returns one line for the run's log.
+constexpr int kDefaultE2ELevel = 5;
+inline std::string applyDefaults() {
+    const char* gp = std::getenv("SINGLET_GPU_PILEUP");
+    if (!(gp != nullptr && std::strcmp(gp, "on") == 0))
+        return "SINGLET_GPU_PILEUP is not \"on\": GPU mapping only (levels 1-5 and the ingest need the GPU pileup)";
+    std::string l;
+    if (std::getenv("SINGLET_ENGINE_GPU_E2E") == nullptr) {
+        setenv("SINGLET_ENGINE_GPU_E2E", std::to_string(kDefaultE2ELevel).c_str(), 1);
+        l += "level " + std::to_string(kDefaultE2ELevel) + " (default)";
+    } else l += "level " + std::to_string(e2eLevel()) + " (SINGLET_ENGINE_GPU_E2E=" + std::getenv("SINGLET_ENGINE_GPU_E2E") + ")";
+    const char* ig = std::getenv("SINGLET_ENGINE_GPU_INGEST");
+    if (ig == nullptr && e2eLevel() == 5) { setenv("SINGLET_ENGINE_GPU_INGEST", "1", 1); l += ", ingest (default)"; }
+    else if (ig != nullptr && std::strcmp(ig, "1") == 0) l += e2eLevel() >= 1 ? ", ingest (SINGLET_ENGINE_GPU_INGEST=1)" : ", no ingest (it needs a level)";
+    else l += ig != nullptr ? ", no ingest (SINGLET_ENGINE_GPU_INGEST=" + std::string(ig) + ")" : ", no ingest (opt-in below level 5)";
+    if (e2eLevel() == 5) { const char* c = std::getenv("SINGLET_E16"); l += (c != nullptr && c[0] == '0') ? ", E16's tail cuts off (SINGLET_E16=0)" : ", E16's tail"; }
+    if (std::getenv("SINGLET_E16_TRACE") == nullptr) setenv("SINGLET_E16_TRACE", "0", 1);
+    return l + "; each falls back on its own with a line on stderr";
+}
 
 // STAR's read clipping for mate 1 (ClipMate::clip, --clipAdapterType Hamming), applied to every read on the GPU before dedup, so the
 // distinct sequences and the records are the clipped sequences STAR's cache is keyed by. 5': N bases, then NafterAd (STAR has no 5'
