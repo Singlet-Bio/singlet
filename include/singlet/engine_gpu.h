@@ -301,7 +301,24 @@ struct PileupInput {
     std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
     std::vector<uint32_t> ops;
     std::vector<uint8_t> seq;
+    // E16 (docs/gpu-engine/fable/E16-tail.md; level 5): each array's leading part read in place (pre*: bytes) instead of copied to the front of
+    // the vector above, which then holds only the rest: the device-built records in the shared region (sigs, alns, ops, seq) and the hand-off
+    // pass's kept reads and masks (reads, lowq). Element i of the whole array: PileupCat. `keep` owns what the pre parts point into.
+    struct Pre { const uint8_t* p = nullptr; uint64_t n = 0; };
+    Pre preSigs, preAlns, preOps, preSeq, preReads, preLowq;
+    std::shared_ptr<void> keep;
 };
+// E16: an array of PileupInput as [pre part | vector part]; at(i) points into the part that holds element i (a record's alignments, CIGAR ops
+// and sequence are in the part its signature is in)
+template <class T> struct PileupCat {
+    const T* a = nullptr; uint64_t na = 0; const T* b = nullptr; uint64_t nb = 0;
+    const T& operator[](uint64_t i) const { return i < na ? a[i] : b[i - na]; }
+    const T* at(uint64_t i) const { return i < na ? a + i : b + (i - na); }
+    uint64_t size() const { return na + nb; }
+};
+template <class T> PileupCat<T> pileupCat(const PileupInput::Pre& pre, const void* v, uint64_t vBytes) {
+    return PileupCat<T>{(const T*) pre.p, pre.n / sizeof(T), (const T*) v, vBytes / sizeof(T)};
+}
 struct PileupOutput {
     std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
     std::vector<std::array<uint32_t, 3>> sjtab;      // junction id -> (tid, donor, acceptor), ids in (tid, donor, acceptor) order
@@ -334,6 +351,9 @@ struct E2EPassIn {
     int32_t chrmTid = -1; uint32_t minMapq = 0;          // (uint8_t) config.min_mapq
     bool cbc = false, wlOn = false, wlPend = false;      // R11 corrector present; WL-ambient counts kept; WL-ambient gene hits wanted
     uint32_t nCells = 0, nCellsQc = 0, nWl = 0;           // per_cell_reads_, per_cell_qc_, wl_umi_counts_ sizes
+    // E16: the region and the kept reads' arrays (reads, lowq) stay page-locked in a context that stays (no device reset) for pileupRun's
+    // uploads, which then run at the pinned rate; pileupRun's own device reset ends both
+    bool keepPinned = false;
 };
 struct E2EPassOut {
     std::vector<uint8_t> reads;      // ReadRec per kept read, read order (= the pass's add_handoff_read order)

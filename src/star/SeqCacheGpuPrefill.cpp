@@ -628,8 +628,12 @@ struct E10Source : StarReadSource {
     std::string buf[2];
     std::vector<uint64> end[2], iRead;   // per served read: where it ends in buf[0], buf[1]; its iReadAll
     uint64 k = 0;
+    // E16: reads per chunk at most (level 5: ~4 chunks per mapping thread; STAR's 15 MB chunk held ~55 k of the 157 k reads of pbmc1k_v3, so
+    // 3 of 18 threads mapped them all)
+    uint64 maxReads = ~0ull;
     void fill(char **chunkIn, uint64_t *sz, uint64_t limit, uint64_t &iReadAll, uint64_t readMapNumber, uint32_t) override {
-        while (k < iRead.size() && sz[0] < limit && sz[1] < limit) {
+        const uint64 k0 = k;
+        while (k < iRead.size() && sz[0] < limit && sz[1] < limit && k - k0 < maxReads) {
             if (iRead[k] > readMapNumber) { k = iRead.size(); break; }
             for (int im = 0; im < 2; im++) {
                 const uint64 a = k == 0 ? 0 : end[im][k - 1], l = end[im][k] - a;
@@ -932,7 +936,9 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         // E10 level 4: no read with a record reaches STAR's loop, so no summaries are needed
         const bool e10NoSum = e10ok && (e10Level == 4 || (e10Level >= 5 && e11.ready)) && g_starReadSource == nullptr;
         std::vector<std::thread> th;
-        for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
+        // E16 (level 5): without summaries the threads would only construct (and leak) a ReadAlign, a Transcriptome copy and an OutSJ each
+        const bool e16NoThreads = e10NoSum && e2eRec && singlet_tail::cut("sumthreads");
+        for (int t = 0; t < (e16NoThreads ? 0 : nt); t++) th.emplace_back([&, t]() {
             Transcriptome *trT = (sumOn && tr != nullptr) ? new Transcriptome(*tr) : nullptr;
             ReadAlign *ra = new ReadAlign(P, G, trT, t);
             if (sumOn) ra->chunkOutSJ = new OutSJ(P.limitOutSJoneRead, P, G);   // scratch: one sequence's junctions at a time
@@ -1116,7 +1122,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             g_e10Level = 3;
             if (e10Level >= 4 && g_starReadSource == nullptr && (e10Level == 4 || e11.ready)) {
                 if (e10BuildSource(P, g_handoffReadRecord, g_handoffNReads, w)) { g_starReadSource = &e10src; g_e10Level = e10Level >= 5 ? 5 : 4;
-                    singlet_tail::mark("prefill: read source of the reads without a record built (%zu reads)", e10src.iRead.size()); }
+                    if (g_e10Level == 5 && singlet_tail::cut("chunk")) {   // E16: the reads spread over every mapping thread (~4 chunks each)
+                        const uint64 nT = std::max<uint64>(1, P.runThreadN);
+                        e10src.maxReads = std::max<uint64>(256, (e10src.iRead.size() + 4 * nT - 1) / (4 * nT));
+                    }
+                    singlet_tail::mark("prefill: read source of the reads without a record built (%zu reads, at most %llu per chunk)", e10src.iRead.size(),
+                                       (unsigned long long) e10src.maxReads); }
                 else if (e10Level >= 5) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): level 5's read source could not be built (" + w
                                                       + ") and the reads with a record have no summaries\n", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
                 else P.inOut->logMain << "ENGINE_GPU: E10 level 4 not used (" << w << "): level 3\n";

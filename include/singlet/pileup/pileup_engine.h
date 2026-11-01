@@ -682,6 +682,7 @@ public:
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (gpupileup::enabled()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end
         gpu_covers_ = gpu_col_ && gpupileup::mode() == 2;   // W11 "on": the GPU replaces the covered steps below
+        e16_early_start();   // E16 (level 5): the hand-off pass's device part as soon as STAR's prefill completed the shared region
 #endif
         singlet_tail::mark("parent: stream loop starts");
         bool e16_first = singlet_tail::on();
@@ -1913,6 +1914,52 @@ public:
     // (exon, intron, ambiguous, junctions by contig/donor/acceptor, SNP AD/DP, chrM total/reverse, chrM indels, R1 molecule counters).
     std::unique_ptr<gpupileup::Collector> gpu_col_;
     PileupStats* gpu_stats_ = nullptr;
+    // E16 (docs/gpu-engine/fable/E16-tail.md; level 5, SINGLET_E16=0 turns it off): the hand-off pass's device part (e2ePass + rRNA detector) on a
+    // thread that waits for STAR's prefill to complete the shared region (its magic), so it runs while STAR maps the reads without a record and
+    // the stream fills the collector; gpu_handoff_pass joins it and merges its results after the stream, where the serial pass made them
+    struct E16Early {
+        std::thread th; std::atomic<bool> stop{false}; bool started = false, ran = false, ok = false;
+        singlet_engine_gpu::E2ERegion reg;   // its own mapping of the region (the collector maps the region for the stream separately)
+        singlet_engine_gpu::E2EPassOut o; uint64_t nRrna = 0; double sR = 0, done = 0, lead = 0;
+        // zc ("zerocopy"): the pass leaves the region (this mapping) and its kept reads page-locked in a live context, and the pileup's input
+        // reads them in place (Collector::finish with this mapping, which the input then owns)
+        bool zc = false;
+        ~E16Early() { stop = true; if (th.joinable()) th.join(); if (reg.base != nullptr) munmap(reg.base, reg.cap); }
+    } e16_;
+    void e16_early_start() {
+        if (!gpu_covers_ || !singlet_tail::cut("early") || singlet_engine_gpu::e2eRegion().fd < 0) return;
+        e16_.started = true;
+        e16_.th = std::thread([this] {
+            const int fd = singlet_engine_gpu::e2eRegion().fd;
+            singlet_engine_gpu::E2EHeader h;
+            while (!e16_.stop.load(std::memory_order_relaxed)) {
+                if (pread(fd, &h, sizeof h, 0) == (ssize_t) sizeof h && std::memcmp(h.magic, "SGE2E001", 8) == 0) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            if (e16_.stop.load()) return;
+            e16_.reg.fd = fd;
+            if (!e16_.reg.mapUsed()) { e16_.reg.base = nullptr; return; }
+            if (!e16_.reg.hdr()->simple) return;
+            singlet_tail::mark("parent: E16 early hand-off pass: region complete and mapped");
+            e16_.ran = true;
+            e16_.zc = singlet_tail::cut("zerocopy");
+            e16_.ok = gpu_handoff_device_pass(e16_.reg, e16_.o, e16_.nRrna, e16_.sR, e16_.zc);
+            if (!e16_.ok) e16_.zc = false;
+            e16_.done = singlet_tail::now();
+        });
+    }
+    void e16_early_join() {
+        if (!e16_.started) return;
+        e16_.stop = true;
+        if (e16_.th.joinable()) e16_.th.join();
+        e16_.started = false;
+        e16_.lead = e16_.done > 0 ? singlet_tail::now() - e16_.done : 0;
+        e16_.reg.fd = -1;   // the memfd stays the collector's
+        if (!e16_.zc) {     // its own mapping only (zc: the pileup's input takes it over, gpu_build_input)
+            if (e16_.reg.base != nullptr) munmap(e16_.reg.base, e16_.reg.cap);
+            e16_.reg.base = nullptr; e16_.reg.cap = 0;
+        }
+    }
     // this pass's records plus this engine's annotation and parameters, as the GPU pileup takes them; false if not reproducible
     bool gpu_build_input(singlet_engine_gpu::PileupInput& in) {
         using namespace singlet_engine_gpu;
@@ -1942,8 +1989,10 @@ public:
         if (gpu_col_->handoff_used())
             std::cerr << "[gpu_pileup] hand-off: " << gpu_col_->n_handoff_reads() << " reads take their alignments from the GPU prefill, "
                       << gpu_col_->handoff_mismatches() << " primary alignments differ from the stream's\n";
-        gpu_col_->finish(in);
+        gpu_col_->finish(in, e16_.zc && e16_.reg.base != nullptr ? &e16_.reg : nullptr);
+        if (in.keep) { e16_.reg.base = nullptr; e16_.reg.cap = 0; }   // E16: the second mapping is the input's now
         singlet_tail::mark("parent: build input: collector finished (records in the input)");
+        if (e16_.zc) gpu_clip_ = gpu_col_->take_clips(); else
         gpu_clip_ = gpu_col_->clips();   // gpu_host_pass rebuilds the poly(A) site of a clipped read from these, after gpu_col_ is gone
         gpu_col_.reset();
         singlet_tail::mark("parent: build input: clips copied, collector freed");
@@ -2015,11 +2064,14 @@ public:
     // strand votes (non-mito contigs), wrong_strand, multigene, cross_gene_intron counters, poly(A) records (NH 1, gene assigned,
     // forward-oriented library) and VDJ usage. Same conditions as the loop: primary, barcode in the set, past the MAPQ gate.
     bool gpu_host_pass(const singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::PileupOutput& out, PileupStats& stats) {
-        const SigRec* S = reinterpret_cast<const SigRec*>(in.sigs.data());
-        const AlnRec* A = reinterpret_cast<const AlnRec*>(in.alns.data());
-        const ReadRec* R = reinterpret_cast<const ReadRec*>(in.reads.data());
-        const size_t nR = in.reads.size() / sizeof(ReadRec);
-        if (out.alnStat.size() != in.alns.size() / sizeof(AlnRec)) { std::cerr << "[gpu_pileup] per-alignment results missing\n"; return false; }
+        // the arrays as [leading part read in place | vector] (E16; without leading parts, the vectors)
+        const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
+        const auto A = singlet_engine_gpu::pileupCat<AlnRec>(in.preAlns, in.alns.data(), in.alns.size());
+        const auto R = singlet_engine_gpu::pileupCat<ReadRec>(in.preReads, in.reads.data(), in.reads.size());
+        const auto OPS = singlet_engine_gpu::pileupCat<uint32_t>(in.preOps, in.ops.data(), in.ops.size() * 4);
+        const auto SEQ = singlet_engine_gpu::pileupCat<uint8_t>(in.preSeq, in.seq.data(), in.seq.size());
+        const size_t nR = R.size();
+        if (out.alnStat.size() != A.size()) { std::cerr << "[gpu_pileup] per-alignment results missing\n"; return false; }
         uint64_t pd[16] = {0}; const bool pdbg = std::getenv("SINGLET_POLYA_DEBUG") != nullptr;   // diagnostics: why the poly(A) rebuild keeps or drops a read
         static const char UMI_CH[5] = {'A', 'C', 'G', 'T', 'N'};
         static const uint8_t COMP[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
@@ -2061,14 +2113,15 @@ public:
             umi[std::min(ulen, 21)] = 0;
             const char* umi_str = ulen > 0 ? umi : nullptr;
             const int umi_len = ulen > 0 ? std::min(ulen, 21) : 0;
-            const uint32_t* ops = in.ops.data() + a.ops_off;
+            const uint32_t* ops = OPS.at(a.ops_off);
+            const uint8_t* rsq = SEQ.at(sg.seq_off);   // the record's sequence (in the part its signature is in)
             const bool rev = (a.flags & 1) != 0;
             // poly(A): polya_site_from_read on the BAM-orientation sequence (the collector stores the read's own orientation)
             if (nh == 1 && config_.count_polya && !config_.reverse_strand && gene != UINT32_MAX && a.n_ops >= 1) {   // BAM CIGAR of >= 2 ops (a clipped read adds soft clips)
                 const int qlen = sg.rlen;
                 auto base = [&](int j) -> uint8_t {   // BAM nt16 code of query position j
                     const int i = rev ? qlen - 1 - j : j;
-                    const uint8_t v = (in.seq[sg.seq_off + (i >> 1)] >> ((i & 1) * 4)) & 15;
+                    const uint8_t v = (rsq[i >> 1] >> ((i & 1) * 4)) & 15;
                     return rev ? COMP[v] : v;
                 };
                 uint64_t key = 0; bool ok = false;
@@ -2083,7 +2136,7 @@ public:
                     const int s3 = (o3 & 15) == BAM_CSOFT_CLIP ? (int) (o3 >> 4) : 0;
                     const int nb = a.n_ops + ((c3 > 0 && s3 == 0) ? 1 : 0) + ((c5 > 0 && (o5 & 15) != BAM_CSOFT_CLIP) ? 1 : 0);
                     const int cl = s3 + c3;
-                    auto rbase = [&](int j) -> uint8_t { return (in.seq[sg.seq_off + (j >> 1)] >> ((j & 1) * 4)) & 15; };   // record, read orientation
+                    auto rbase = [&](int j) -> uint8_t { return (rsq[j >> 1] >> ((j & 1) * 4)) & 15; };   // record, read orientation
                     if (nb < 2) L.pd[2]++; else if (cl < 6 || cl > ql) L.pd[3]++;
                     if (nb >= 2 && cl >= 6 && cl <= ql) {
                         int na = nAt; for (int j = qlen - s3; j < qlen; ++j) na += rbase(j) == 1;
@@ -2349,6 +2402,22 @@ public:
                       << " hand-off reads also came through the stream (STAR's skip set differs)\n";
             return false;
         }
+        singlet_engine_gpu::E2EPassOut oLocal;
+        uint64_t nRrna = 0; double sR = 0;
+        if (e16_.ran) {   // E16: done while STAR mapped (the same pass on the same region bytes, through its own mapping of them)
+            if (!e16_.ok) { std::cerr << "[gpu_pileup] hand-off pass on the device failed: " << e16_.o.log << "\n"; return false; }
+            nRrna = e16_.nRrna; sR = e16_.sR;
+            e16_.o.log += "; E16: done " + std::to_string(e16_.lead) + " s before the stream ended";
+            return gpu_handoff_merge(stats, H, e16_.o, nRrna, sR, e16_.zc);
+        }
+        if (!gpu_handoff_device_pass(R, oLocal, nRrna, sR)) return false;
+        return gpu_handoff_merge(stats, H, oLocal, nRrna, sR, false);
+    }
+    // the hand-off pass's device part (e2ePass on the region R) and the rRNA detector on the reads it sends to the host; it only reads the
+    // engine's state (barcode indexes, corrector, detector, sizes fixed before the stream), so it may run on its own thread during the stream (E16)
+    bool gpu_handoff_device_pass(const singlet_engine_gpu::E2ERegion& R, singlet_engine_gpu::E2EPassOut& o, uint64_t& nRrnaOut, double& sROut,
+                                 bool keepPinned = false) {
+        const singlet_engine_gpu::E2EHeader& H = *R.hdr();
         const CbCorrector* const cbc = config_.cb_corrector;
         cpu_set_t cs; int nT = std::max(1, config_.threads);
         if (sched_getaffinity(0, sizeof(cs), &cs) == 0) nT = std::max(nT, std::min(CPU_COUNT(&cs), 32));
@@ -2389,7 +2458,7 @@ public:
         pin.wlOn = !wl_umi_counts_.empty(); pin.wlPend = has_gene_model_ && !wl_ambient_gene_counts_.empty();
         pin.nCells = static_cast<uint32_t>(per_cell_reads_.size()); pin.nCellsQc = static_cast<uint32_t>(per_cell_qc_.size());
         pin.nWl = static_cast<uint32_t>(wl_umi_counts_.size());
-        singlet_engine_gpu::E2EPassOut o;
+        pin.keepPinned = keepPinned;
         int lock_fd = -1;
         const int device = singlet_engine_gpu::lockDevice(&lock_fd);
         singlet_tail::mark("parent: hand-off pass: device lock taken");
@@ -2416,10 +2485,17 @@ public:
                 n_rrna += c;
             });
         }
-        const double sR = std::chrono::duration<double>(std::chrono::steady_clock::now() - tR).count();
+        sROut = std::chrono::duration<double>(std::chrono::steady_clock::now() - tR).count();
+        nRrnaOut = n_rrna.load();
         singlet_tail::mark("parent: hand-off pass: rRNA detector done");
+        return true;
+    }
+    // the hand-off pass's results into the counters, the per-cell arrays and the collector (after the stream; they add to the stream's)
+    // (zc, E16: the kept reads are taken in place, page-locked, for pileupRun; else copied into the collector)
+    bool gpu_handoff_merge(PileupStats& stats, const singlet_engine_gpu::E2EHeader& H, singlet_engine_gpu::E2EPassOut& o, uint64_t nRrna, double sR,
+                           bool zc) {
         stats.total_reads += o.totalAln; stats.mapped_reads += o.totalAln; stats.secondary_reads += o.secondary;
-        stats.rrna_reads_sampled += o.rrnaSampled; stats.rrna_reads += o.rrnaHook + n_rrna.load(); stats.chrm_reads += o.chrm;
+        stats.rrna_reads_sampled += o.rrnaSampled; stats.rrna_reads += o.rrnaHook + nRrna; stats.chrm_reads += o.chrm;
         stats.no_barcode += o.noBarcode; stats.barcoded_reads += o.barcoded; stats.multimapper_reads += o.multimapper; stats.low_mapq += o.lowMapq;
         for (int k = 0; k < 8; k++) cb_status_[k] += o.cbStatus[k];
         for (size_t k = 0; k < o.cellReads.size() && k < per_cell_reads_.size(); k++) per_cell_reads_[k] += o.cellReads[k];
@@ -2431,7 +2507,11 @@ public:
         gpu_pileup_pending_append(o.wlPending);
         gpu_col_->add_quality_counts64(o.lowQualSum, o.qualNeqNSum);
         singlet_tail::mark("parent: hand-off pass: counters merged");
-        gpu_col_->add_e2e_reads(o.reads, o.clip, o.lowq, o.maskAll, static_cast<int>(H.umiL));
+        const size_t nKept = o.clip.size();
+        if (!(zc && gpu_col_->take_e2e_reads(std::move(o.reads), std::move(o.clip), std::move(o.lowq), o.maskAll, static_cast<int>(H.umiL)))) {
+            if (zc) e16_.zc = false;   // the vectors stay in e16_.o (page-locked until pileupRun's device reset)
+            gpu_col_->add_e2e_reads(o.reads, o.clip, o.lowq, o.maskAll, static_cast<int>(H.umiL));
+        }
         singlet_tail::mark("parent: hand-off pass: kept reads appended to the collector");
         if (o.nUnwritten) { std::cerr << "[gpu_pileup] hand-off: STAR wrote no entry for " << o.nUnwritten << " hand-off reads\n"; return false; }
         if (o.nBigClip || o.nNoHook || o.nNoKey) {
@@ -2439,11 +2519,12 @@ public:
                       << " sampled clipped reads without the rRNA verdict (g_handoffReadHook unset), " << o.nNoKey << " CRs missing from the table\n";
             return false;
         }
-        std::cerr << "[gpu_pileup] hand-off pass: " << o.nDone << " reads without BAM records (E8: on the device; " << o.clip.size() << " kept, "
+        std::cerr << "[gpu_pileup] hand-off pass: " << o.nDone << " reads without BAM records (E8: on the device; " << nKept << " kept, "
                   << o.rrnaHost.size() << " to the rRNA detector in " << sR << " s; " << o.log << ")\n";
         return true;
     }
     bool gpu_handoff_pass(PileupStats& stats, bool check = false) {
+        e16_early_join();   // E16: the early device pass is done (or never ran: then gpu_handoff_pass_e2e runs it here)
         if (!check && gpu_col_ && gpu_col_->e2e() != nullptr) return gpu_handoff_pass_e2e(stats);   // E8
         const gpupileup::Handoff* H = gpu_col_ ? gpu_col_->handoff() : nullptr;
         if (!H) return true;   // no hand-off: every read came through the stream
@@ -2679,7 +2760,7 @@ public:
         gpu_merges_.swap(out.geneMerges);
         stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
         if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
-            const SigRec* S = reinterpret_cast<const SigRec*>(in.sigs.data());
+            const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
             for (const auto& [rec, k] : gpu_wl_pending_) {
                 const uint32_t g = out.alnExonGene[S[rec].aln_off + k];
                 if (g != UINT32_MAX && g < wl_ambient_gene_counts_.size()) wl_ambient_gene_counts_[g]++;

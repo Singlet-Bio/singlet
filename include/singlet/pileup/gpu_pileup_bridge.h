@@ -197,11 +197,14 @@ public:
     }
 
     // flushes incomplete multimapper groups (resolved anyway, as the engine does) and moves the records into `in`
-    void finish(singlet_engine_gpu::PileupInput& in) {
+    // zc (E16, level 5): a second mapping of the shared region (base, cap; it becomes the input's: unmapped when the input goes) whose records
+    // the input reads in place, with the kept reads take_e2e_reads took (PileupInput::Pre); null: the records are copied into the input
+    void finish(singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::E2ERegion* zc = nullptr) {
         for (auto& kv : pend_) { incomplete_++; finalize(kv.second); }
         pend_.clear();
         singlet_tail::mark("collector: pending groups flushed");
         if (ho_ok_) prepend_handoff();
+        if (e2e_ != nullptr && zc != nullptr && zc_) prepend_e2e_zc(in, *zc); else
         if (e2e_ != nullptr) prepend_e2e(in); else {   // E8: the device-built records go into `in` directly
         e2e_unmap();   // E8 requested but not used (the hand-off file path ran): the memory object is released
         in.sigs.assign((const uint8_t*) sigs_.data(), (const uint8_t*) (sigs_.data() + sigs_.size()));
@@ -212,16 +215,17 @@ public:
         if (no_umi_ > 0) in.snpSkipN = -1;   // reads without a UMI: not reproducible from the packed UMI (never seen in the campaign data)
         if (umi_len_ > 0) in.umiLen = umi_len_;
         if ((in.snpSkipN < 0 || force_q_) && no_umi_ == 0) {   // per-base quality: the SNP and chrM filters read each base's own quality
-            if (q_ok_ && reads_q_.size() == reads_.size() && in.nSnps <= 0x7FFFFFu) {
+            if (q_ok_ && reads_q_.size() == reads_.size() && zc_q_n_ == zc_n_ && in.nSnps <= 0x7FFFFFu) {
                 in.useQual = 1; in.snpSkipN = 0;
                 in.lowq.assign((const uint8_t*) reads_q_.data(), (const uint8_t*) (reads_q_.data() + reads_q_.size()));
+                if (zc_keep_) in.preLowq = {zc_keep_->q.data(), zc_keep_->q.size()};   // E16: the kept reads' masks in front, in place
                 singlet_tail::mark("collector: low-quality masks copied into the input (%zu reads)", reads_q_.size());
                 std::cerr << "[gpu_pileup] per-base quality: low-quality masks for " << reads_q_.size() << " reads" << (force_q_ ? " (forced)" : "") << "\n";
             } else std::cerr << "[gpu_pileup] per-base quality needed but unavailable (masks " << (q_ok_ ? "missing for some reads" : "not representable: read over 128 bases or no STAR masks") << ")\n";
         }
     }
-    size_t n_reads() const { return reads_.size() + ho_reads_.size(); }
-    size_t n_handoff_reads() const { return ho_reads_.size(); }
+    size_t n_reads() const { return reads_.size() + ho_reads_.size() + zc_n_; }
+    size_t n_handoff_reads() const { return ho_reads_.size() + zc_n_; }
     uint64_t handoff_mismatches() const { return ho_mismatch_; }
     bool handoff_used() const { return ho_ok_ || e2e_ != nullptr; }
     // E8 (SINGLET_ENGINE_GPU_E2E=1): the shared region with the device-built records, once the prefill completed it; null otherwise
@@ -241,6 +245,22 @@ public:
         if (!mask_all) q_ok_ = false;
         for (uint32_t c : clip) if (c) n_clipped_++;
     }
+    // E16 (level 5): as add_e2e_reads, but the pass's vectors are taken, not copied (the reads and masks stay where the pass downloaded them,
+    // page-locked for pileupRun; finish(in, zc) puts them in front of the stream's reads). Only when no hand-off read came before.
+    bool take_e2e_reads(std::vector<uint8_t>&& reads, std::vector<uint32_t>&& clip, std::vector<uint8_t>&& lowq, bool mask_all, int umi_len) {
+        if (!ho_reads_.empty() || !ho_clip_.empty() || zc_) return false;
+        const size_t n = clip.size();
+        if (n && umi_len_ < 0) umi_len_ = umi_len;
+        zc_ = true; zc_n_ = n; zc_q_n_ = lowq.size() / sizeof(QM);
+        zc_keep_ = std::make_shared<ZcKeep>();
+        zc_keep_->reads = std::move(reads); zc_keep_->q = std::move(lowq);
+        ho_clip_ = std::move(clip);
+        if (!mask_all) q_ok_ = false;
+        for (uint32_t c : ho_clip_) if (c) n_clipped_++;
+        return true;
+    }
+    // the clip flags, moved out (E16: the collector goes right after)
+    std::vector<uint32_t> take_clips() { return std::move(ho_clip_); }
     // the hand-off (loaded on first use); null if there is none
     const Handoff* handoff() {
         if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
@@ -398,6 +418,32 @@ private:
         e2e_unmap();
         singlet_tail::mark("collector: e2e: region unmapped and closed");
     }
+    // E16: prepend_e2e without the copies: the region's records (through the second mapping zc, which the input then owns) and the kept reads
+    // (take_e2e_reads) are the input's leading parts, in place; the vectors get the stream's part, shifted as prepend_e2e shifts it
+    void prepend_e2e_zc(singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::E2ERegion& zc) {
+        const singlet_engine_gpu::E2EHeader& H = *zc.hdr();
+        const uint64_t nR = H.nRec, nA = H.nAln, nO = H.nOps, nQ = H.nSeq;
+        for (auto& s : sigs_) { s.aln_off += (uint32_t) nA; s.seq_off += nQ; }
+        for (auto& a : alns_) a.ops_off += (uint32_t) nO;
+        for (auto& r : reads_) r.sig += (uint32_t) nR;
+        in.preSigs = {zc.base + H.oSigs, nR * sizeof(SigRec)}; in.preAlns = {zc.base + H.oAlns, nA * sizeof(AlnRec)};
+        in.preOps = {zc.base + H.oOps, nO * 4}; in.preSeq = {zc.base + H.oSeq, nQ};
+        in.sigs.assign((const uint8_t*) sigs_.data(), (const uint8_t*) (sigs_.data() + sigs_.size()));
+        in.alns.assign((const uint8_t*) alns_.data(), (const uint8_t*) (alns_.data() + alns_.size()));
+        in.ops.swap(ops_); in.seq.swap(seq_);
+        in.preReads = {zc_keep_->reads.data(), zc_keep_->reads.size()};
+        in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
+        zc_keep_->base = zc.base; zc_keep_->cap = zc.cap;   // the second mapping goes with the input
+        in.keep = zc_keep_;
+        std::vector<SigRec>().swap(sigs_); std::vector<AlnRec>().swap(alns_);
+        singlet_tail::mark("collector: e2e (E16): the region's records and the kept reads in place, the stream's part copied");
+        e2e_unmap();   // the collector's own mapping and the memfd; the second mapping keeps the pages
+    }
+    struct ZcKeep {   // E16: what the input's leading parts point into
+        std::vector<uint8_t> reads, q; uint8_t* base = nullptr; uint64_t cap = 0;
+        ~ZcKeep() { if (base != nullptr) munmap(base, cap); }
+    };
+    std::shared_ptr<ZcKeep> zc_keep_; bool zc_ = false; size_t zc_n_ = 0, zc_q_n_ = 0;
     static void e2e_unmap() {
         singlet_engine_gpu::e2eRegion().release();   // unmapped and the memfd closed: its pages go
     }

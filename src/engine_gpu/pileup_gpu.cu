@@ -24,6 +24,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     std::string e16; double e16t = t0;
     auto e16step = [&](const char* nm) { const double t = now_s(); char b[64]; snprintf(b, sizeof b, "%s %.3f, ", nm, t - e16t); e16 += b; e16t = t; };
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);
+    cudaGetLastError();   // E16: the hand-off pass may have kept its context (E2EPassIn::keepPinned): then the initialisation fails, harmlessly
     if (cudaSetDevice(device) != cudaSuccess) { po.log = "cannot select device"; return false; }
     cudaFree(0);   // the context now, so that its creation is timed on its own
     e16step("context");
@@ -42,7 +43,9 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     for (size_t t = 0; t < pi.snps.size(); t++) { an.snp[t].resize(pi.snps[t].size()); if (!an.snp[t].empty()) memcpy(an.snp[t].data(), pi.snps[t].data(), an.snp[t].size() * sizeof(SnpRow)); }
     an.e2g = pi.exonToGene; an.i2g = pi.intronToGene; an.gstr = pi.geneStrand;
     { uint32_t mx = 0; for (auto& v : an.snp) for (auto& sr : v) mx = std::max(mx, sr.idx + 1); par.n_snps = std::max(par.n_snps, mx); }
-    const size_t nS = pi.sigs.size() / sizeof(SigRec), nA = pi.alns.size() / sizeof(AlnRec), nR = pi.reads.size() / sizeof(ReadRec);
+    // E16: an array's leading part may be read in place (PileupInput::Pre), the vector holding the rest
+    const size_t nS = (pi.preSigs.n + pi.sigs.size()) / sizeof(SigRec), nA = (pi.preAlns.n + pi.alns.size()) / sizeof(AlnRec),
+                 nR = (pi.preReads.n + pi.reads.size()) / sizeof(ReadRec);
     e16step("annotation copied");
     // ---- device memory: one arena, sized from the free memory (the research program reserved 80 GB; pbmc1k_v3 peaks at ~25 GB
     // without the annotation bug)
@@ -76,9 +79,26 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     }
     e16step("annotation H2D");
     auto devBytes = [&](const std::vector<uint8_t>& v) { uint8_t* d = A.alloc<uint8_t>(std::max<size_t>(1, v.size())); if (!v.empty()) CK(cudaMemcpy(d, v.data(), v.size(), cudaMemcpyHostToDevice)); return d; };
+    // E16: [pre part | vector part] into one device array (the same bytes, the same arena allocation as the vector alone would take)
+    auto devCat = [&](const PileupInput::Pre& pre, const void* v, size_t vb, size_t elem) {
+        uint8_t* d = A.alloc<uint8_t>(std::max<size_t>(1, pre.n + vb));
+        if (pre.n) CK(cudaMemcpy(d, pre.p, pre.n, cudaMemcpyHostToDevice));
+        if (vb) CK(cudaMemcpy(d + pre.n, v, vb, cudaMemcpyHostToDevice));
+        (void) elem; return d;
+    };
+    const bool cat = pi.preSigs.n || pi.preAlns.n || pi.preOps.n || pi.preSeq.n || pi.preReads.n || pi.preLowq.n;
+    if (!cat) {
     in.S = (SigRec*)devBytes(pi.sigs); in.Al = (AlnRec*)devBytes(pi.alns); in.R = (ReadRec*)devBytes(pi.reads);
     in.ops = to_dev(A, pi.ops); in.seq = devBytes(pi.seq);
     in.Q = pi.useQual ? (const uint64_t*) devBytes(pi.lowq) : nullptr;   // 16 bytes per read (PileupInput::lowq)
+    } else {
+    in.S = (SigRec*) devCat(pi.preSigs, pi.sigs.data(), pi.sigs.size(), sizeof(SigRec));
+    in.Al = (AlnRec*) devCat(pi.preAlns, pi.alns.data(), pi.alns.size(), sizeof(AlnRec));
+    in.R = (ReadRec*) devCat(pi.preReads, pi.reads.data(), pi.reads.size(), sizeof(ReadRec));
+    in.ops = (uint32_t*) devCat(pi.preOps, pi.ops.data(), pi.ops.size() * 4, 4);
+    in.seq = devCat(pi.preSeq, pi.seq.data(), pi.seq.size(), 1);
+    in.Q = pi.useQual ? (const uint64_t*) devCat(pi.preLowq, pi.lowq.data(), pi.lowq.size(), 16) : nullptr;
+    }
     e16step("records H2D");
     // ---- one run with outputs
     { unsigned long long z[5] = {0, 0, 0, 0, 0}; CK(cudaMemcpyToSymbol(g_molstat, z, sizeof z)); }

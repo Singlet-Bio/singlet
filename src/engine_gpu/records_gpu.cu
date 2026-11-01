@@ -312,12 +312,13 @@ namespace singlet_engine_gpu {
 
 namespace {
 // device -> pageable host memory, page-locked in place for the copy when the driver allows it (GBs: several times the pageable rate)
-cudaError_t d2h(void* dst, const void* src, u64 n) {
+// (keep: it stays page-locked, E16's pileupRun uploads it again)
+cudaError_t d2h(void* dst, const void* src, u64 n, bool keep = false) {
     if (n == 0) return cudaSuccess;
     const bool pin = n >= (64ull << 20) && cudaHostRegister(dst, n, cudaHostRegisterDefault) == cudaSuccess;
     if (!pin) cudaGetLastError();
     const cudaError_t e = cudaMemcpy(dst, src, n, cudaMemcpyDeviceToHost);
-    if (pin) cudaHostUnregister(dst);
+    if (pin && !keep) cudaHostUnregister(dst);
     return e;
 }
 // device buffers of one e2ePass call, freed on every return
@@ -431,9 +432,9 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         const double td = now();
         out.reads.resize(nKeep * 16); out.clip.resize(nKeep); out.lowq.resize(nKeep * 16);
         if (nKeep) {
-            EP_CK(d2h(out.reads.data(), dOut, nKeep * 16));
+            EP_CK(d2h(out.reads.data(), dOut, nKeep * 16, in.keepPinned));
             EP_CK(d2h(out.clip.data(), dClip, nKeep * 4));
-            EP_CK(d2h(out.lowq.data(), dLowq, nKeep * 16));
+            EP_CK(d2h(out.lowq.data(), dLowq, nKeep * 16, in.keepPinned));
         }
         out.cellReads.resize(in.nCells); out.cellUnique.resize(in.nCellsQc); out.cellMulti.resize(in.nCellsQc);
         out.cellMism.resize(in.nCellsQc); out.cellBases.resize(in.nCellsQc); out.wlCounts.resize(in.nWl);
@@ -454,7 +455,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         out.msDownload = (now() - td) * 1e3;
     }
 #undef EP_CK
-    { const double tq = now(); if (pinned) cudaHostUnregister(R.base); e16unreg = now() - tq; }
+    { const double tq = now(); if (pinned && !in.keepPinned) cudaHostUnregister(R.base); e16unreg = now() - tq; }
     out.totalAln = pc[PC_ALN]; out.secondary = pc[PC_SEC]; out.rrnaSampled = pc[PC_RSAMP]; out.rrnaHook = pc[PC_RHOOK]; out.chrm = pc[PC_CHRM];
     out.noBarcode = pc[PC_NOBC]; out.barcoded = pc[PC_BARCODED]; out.multimapper = pc[PC_MULTI]; out.lowMapq = pc[PC_LOWMAPQ];
     out.nDone = pc[PC_DONE]; out.nUnwritten = pc[PC_UNWRITTEN]; out.nBigClip = pc[PC_BIGCLIP]; out.nNoHook = pc[PC_NOHOOK]; out.nNoKey = pc[PC_NOKEY];
@@ -468,8 +469,9 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
              out.msDownload, out.msTotal);
     out.log += b;
     // the context goes, as pileupRun's does at its end: pileupRun then initialises the device afresh (cudaInitDevice on a live context fails)
-    { const double tq = now(); B.release(); cudaDeviceReset(); e16reset = now() - tq; }
-    snprintf(b, sizeof b, "; e16: context %.3f s, register %.3f s, unregister %.3f s, free + reset %.3f s", e16ctx, e16reg, e16unreg, e16reset);
+    { const double tq = now(); B.release(); if (!in.keepPinned) cudaDeviceReset(); e16reset = now() - tq; }   // E16 keepPinned: the context stays
+    snprintf(b, sizeof b, "; e16: context %.3f s, register %.3f s, unregister %.3f s, free + reset %.3f s%s", e16ctx, e16reg, e16unreg, e16reset,
+             in.keepPinned ? (pinned ? " (region and kept reads stay page-locked)" : " (region NOT page-locked)") : "");
     out.log += b;
     return true;
 }
