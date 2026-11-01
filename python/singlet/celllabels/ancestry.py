@@ -15,15 +15,19 @@ allelic expression is not always balanced, so each site's depth is capped at ``D
 the likelihood is formed: one deeply covered site cannot outvote many shallow ones. ``q`` maximises the likelihood on the
 simplex (L-BFGS on softmax logits, analytic gradient).
 
-The call is the super-population with the largest proportion when that proportion is at least ``Q_MIN``; otherwise the donor
-is reported as admixed (HANCESTRO:0306). ``AMR`` in 1000 Genomes is itself admixed (European, African and Indigenous American),
+The call is the label rule's super-population when its probability is at least ``tau`` (``data/ancestry_label_model.json``: a
+multinomial logistic regression on ``q`` trained on leave-out 1000 Genomes reference individuals, so that Puerto Rican, Colombian
+and African-American donors get the group 1000 Genomes gives them); otherwise the donor is reported as admixed (HANCESTRO:0306).
+With ``use_label_model=False`` (or without the file) the call is the largest proportion when it is at least ``Q_MIN``. ``AMR`` in 1000 Genomes is itself admixed (European, African and Indigenous American),
 so Latin American donors are expected to land on AMR or to be reported as admixed. Labels map to HANCESTRO 2025-10-14 genetic
 ancestry categories (children of HANCESTRO:0004 'ancestry category'), not to the self-identified geography-based terms.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
@@ -165,9 +169,59 @@ def mid_allele_fraction(ad: np.ndarray, dp: np.ndarray, min_dp: int = MID_AF_DP)
     return float((((f > 0.15) & (f < 0.35)) | ((f > 0.65) & (f < 0.85))).mean())
 
 
-def _group(q: np.ndarray, q_min: float) -> str:
+_MODEL_PATH = Path(__file__).with_name("data") / "ancestry_label_model.json"
+_MODEL_CACHE: Dict[str, Optional[dict]] = {}
+
+
+def label_model() -> Optional[dict]:
+    """The shipped label rule (``data/ancestry_label_model.json``), or None when the file is absent. It maps the proportions ``q``
+    to the 1000 Genomes super-population by multinomial logistic regression trained on leave-out reference individuals, so that
+    groups the five-vertex model sees only as mixtures (Puerto Rican, Colombian, African-American) get the label 1000 Genomes gives
+    them; the rule still abstains ('admixed') below probability ``tau``."""
+    if "m" not in _MODEL_CACHE:
+        try:
+            m = json.loads(_MODEL_PATH.read_text(encoding="utf-8"))
+            m["_coef"] = np.asarray(m["coef"], np.float64)
+            m["_icpt"] = np.asarray(m["intercept"], np.float64)
+        except (OSError, ValueError, KeyError):
+            m = None
+        _MODEL_CACHE["m"] = m
+    return _MODEL_CACHE["m"]
+
+
+def _label_features(q: np.ndarray, clip: float) -> np.ndarray:
+    q = np.clip(np.asarray(q, np.float64), clip, 1.0)
+    # POPS order: AFR, AMR, EAS, EUR, SAS; log-ratios of the others to EUR
+    return np.concatenate([q, np.sqrt(q), np.log(q[[0, 1, 2, 4]] / q[3])])
+
+
+def _nn_l1(q: np.ndarray, model: dict) -> float:
+    """L1 distance from ``q`` to the nearest reference individual's proportions (the shipped ``ref_q``)."""
+    if "_ref" not in model:
+        model["_ref"] = np.asarray(model["ref_q"], np.float64)
+    return float(np.abs(model["_ref"] - np.asarray(q, np.float64)).sum(1).min())
+
+
+def label_probabilities(q: np.ndarray, model: Optional[dict] = None) -> Optional[np.ndarray]:
+    """Probability of each super-population (POPS order) under the label rule; None without a model."""
+    m = model or label_model()
+    if m is None:
+        return None
+    z = m["_coef"] @ _label_features(q, m["q_clip"]) + m["_icpt"]
+    e = np.exp(z - z.max())
+    return e / e.sum()
+
+
+def _group(q: np.ndarray, q_min: float, model: Optional[dict] = None) -> str:
+    if model is not None:
+        p = label_probabilities(q, model)
+        k = int(np.argmax(p))
+        if p[k] < model["tau"] or _nn_l1(q, model) > model["ood_l1"]:
+            return "admixed"
+        return model["classes"][k]
     k = int(np.argmax(q))
     return POPS[k] if q[k] >= q_min else "admixed"
+
 
 
 def infer_ancestry(
@@ -179,6 +233,7 @@ def infer_ancestry(
     min_sites: int = MIN_SITES,
     n_boot: int = 20,
     seed: int = 0,
+    use_label_model: bool = True,
 ) -> AncestryCall:
     """Ancestry of one donor. ``ad``/``dp``: alternate and total depth per site; ``freqs``: sites x 5 alternate-allele
     frequencies in :data:`POPS` order, for the same sites and the same alternate allele."""
@@ -200,7 +255,8 @@ def infer_ancestry(
     L = _site_terms(ad[ok], dp[ok], het_fraction(ad[ok], dp[ok]))
     F = F[ok]
     q = fit_q(F, L)
-    grp = _group(q, q_min)
+    model = label_model() if use_label_model else None
+    grp = _group(q, q_min, model)
     stab = None
     if n_boot:
         rng = np.random.default_rng(seed)
@@ -208,7 +264,7 @@ def infer_ancestry(
         m = min(n_sites, BOOT_SITES)  # stability saturates long before this many sites
         for _ in range(n_boot):
             i = rng.integers(0, n_sites, m)
-            same += _group(fit_q(F[i], L[i], start=q), q_min) == grp
+            same += _group(fit_q(F[i], L[i], start=q), q_min, model) == grp
         stab = same / n_boot
     return AncestryCall(
         grp, float(q.max()), {p: float(v) for p, v in zip(POPS, q)}, n_sites, stab, mid
