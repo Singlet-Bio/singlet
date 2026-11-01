@@ -11,10 +11,15 @@
 # S8: prod/campaign tip; also builds singlet-prof (-DSTAR_PROFILE). BRANCH (default gpu/engine-gpu) is fetched by URL into a private ref. Outputs: $W/jobs/w11/engine/bin/singlet-{gpu,cpu}.
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
-TAG=${TAG:-campaign}; BARE=$W/repos/singlet-py.git; BR=${BRANCH:-prod/campaign}; OUTD=${OUTD:-$W/jobs/s8/bin}; mkdir -p $OUTD
-VARIANTS=${VARIANTS:-gpu prof}; XFLAGS=; OUTD=${OUTD:-$W/jobs/s8/bin}; mkdir -p $OUTD   # XFLAGS: extra C++ flags, e.g. -DSTAR_PROFILE (STAR's per-phase cycle counters)
+TAG=${TAG:-campaign}; BARE=$W/repos/singlet-py.git; BR=${BRANCH:-prod/campaign}
+# OUTD is required and must be a directory named after the built commit (checked below): a build never writes to a shared or fixed directory
+: "${OUTD:?set OUTD=\$W/jobs/<who>/bin_<sha8>}"
+VARIANTS=${VARIANTS:-gpu prof}; XFLAGS=   # XFLAGS: extra C++ flags, e.g. -DSTAR_PROFILE (STAR's per-phase cycle counters)
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/s8/$TAG
 COMMIT=$(git -C $BARE rev-parse refs/s8/$TAG); echo "COMMIT=$COMMIT"
+case "$OUTD" in *"_${COMMIT:0:8}") ;; *) echo "refusing: OUTD=$OUTD does not end in _${COMMIT:0:8}"; exit 2 ;; esac
+[ -e "$OUTD/commit" ] && { echo "refusing: $OUTD already holds a build ($(cat $OUTD/commit))"; exit 2; }
+mkdir -p $OUTD
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
 git -C $BARE archive refs/s8/$TAG | tar -x -C $SCR/src
 S=$SCR/src
