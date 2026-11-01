@@ -94,8 +94,7 @@ void egReport(std::string& log) {
             log += lb;
             snprintf(lb, sizeof lb, "engine_gpu trace: thread cycles by phase (G): seeds %.2f, windows %.2f, stitching %.2f (stitchAlign %.2f, finalize %.2f, copies %.2f, record %.2f), selection+encoding %.2f; %.0f cycles per stitching step"
                      , d.clk[0] / 1e9, d.clk[1] / 1e9, d.clk[2] / 1e9, d.clk[4] / 1e9, d.clk[5] / 1e9, d.clk[6] / 1e9, d.clk[7] / 1e9, d.clk[3] / 1e9, d.clk[2] / std::max(1.0, d.total));
-            log += lb; log += "
-";
+            log += lb; log += "\n";
         }
     }
     std::map<std::string, EgKRow> kr;
