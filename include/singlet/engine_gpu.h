@@ -338,9 +338,14 @@ struct PileupOutput {
     std::vector<uint8_t> alnStat;
     double msGpu = 0, msTotal = 0, peakGB = 0;
     std::string log;
+    // E16 "resetbg" (level 5): pileupRun left the device's context (and the inputs page-locked in it) in place; the caller keeps the device
+    // lock and calls pileupRelease(device) (then unlocks) before the input's memory goes
+    bool resetDeferred = false;
 };
 // Runs the pileup on `device`. NOTE: the kernels' CUDA error checks still exit the process (research code); callers isolate it.
 bool pileupRun(const PileupInput& in, int device, PileupOutput& out);
+// E16: the device reset pileupRun deferred (PileupOutput::resetDeferred), from any thread
+void pileupRelease(int device);
 
 // ---- E8: the hand-off pass of the GPU pileup on the device (records_gpu.cu): PileupEngine::gpu_handoff_pass_entries' per-read rule and every
 // count it keeps, for the reads of E2E records, from the region's arrays. The CR table (R11 correction, barcode set, WL-ambient index) is the

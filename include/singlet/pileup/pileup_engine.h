@@ -2766,7 +2766,9 @@ public:
         singlet_tail::mark("parent: pileupRun starts");
         const bool ok = pileupRun(in, device, out);
         const double sRun = since(tA1);
-        unlockDevice(lock_fd);
+        // E16 resetbg: the context (with the input's page-locked memory) is reset on a thread at the end, which then unlocks the device
+        const bool e16rb = ok && out.resetDeferred;
+        if (!e16rb) unlockDevice(lock_fd);
         singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
         std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
@@ -2837,10 +2839,20 @@ public:
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
                   << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules
                   << (out.log.empty() ? "" : "; ") << out.log << "\n";
-        if (singlet_tail::cut("free2")) {   // E16 "free2" (level 5): the input (the region's second mapping, the records) and the output freed on a thread
+        // E16 "free2" (level 5): the input (the region's second mapping, the records) and the output freed on a thread; with resetbg the
+        // device's context goes first on that thread (the input's memory is page-locked in it), under the device lock pileupRun took
+        if (singlet_tail::cut("free2") || e16rb) {
             auto* fIn = new PileupInput(std::move(in)); auto* fOut = new PileupOutput(std::move(out));
-            std::thread([fIn, fOut] { const double a = singlet_tail::now(); delete fIn; delete fOut;
-                                      singlet_tail::mark("parent (bg): pileup input and output freed in %.3f s", singlet_tail::now() - a); }).detach();
+            std::thread([fIn, fOut, e16rb, device, lock_fd] {
+                const double a = singlet_tail::now();
+                if (e16rb) {
+                    pileupRelease(device);
+                    unlockDevice(lock_fd);
+                    singlet_tail::mark("parent (bg): device reset in %.3f s, device unlocked", singlet_tail::now() - a);
+                }
+                const double b = singlet_tail::now();
+                delete fIn; delete fOut;
+                singlet_tail::mark("parent (bg): pileup input and output freed in %.3f s", singlet_tail::now() - b); }).detach();
         }
         return true;
     }

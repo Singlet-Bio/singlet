@@ -153,8 +153,9 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     e16step("outputs copied");
     cudaFree(A.base);
     e16step("arena freed");
-    cudaDeviceReset();
-    e16step("device reset");
+    if (singlet_tail::cut("resetbg")) po.resetDeferred = true;   // E16 "resetbg" (level 5): the caller's thread resets it (pileupRelease)
+    else cudaDeviceReset();
+    e16step(po.resetDeferred ? "device reset deferred" : "device reset");
     if (!e16cp.empty()) { for (auto& t : e16cp) t.join(); e16step("tuple copies joined"); }
     po.msTotal = (now_s() - t0) * 1e3;
     po.log += "e16 steps (s): " + e16 + "; ";
@@ -171,6 +172,11 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     }
     }
     return false;
+}
+
+void pileupRelease(int device) {
+    cudaSetDevice(device);
+    cudaDeviceReset();
 }
 
 } // namespace singlet_engine_gpu
