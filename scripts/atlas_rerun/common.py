@@ -113,6 +113,19 @@ def require_whitelists(binary, names=("3M-february-2018.txt", "737K-august-2016.
                          "the sorted-BAM pileup. Put the binary where ../whitelists exists, or symlink the directory." % (", ".join(missing), os.path.normpath(d), binary))
 
 
+def species_check(log_path):
+    """-> dict(verdict, line) from the engine's "[species-check] ... AGREE|DISAGREE|UNKNOWN" log line (singlet logs it when $SINGLET_SPECIES_FILTERS is set and a genome was
+    given), or None. Species detection only confirms the catalogue organism: a DISAGREE is recorded and flagged, never acted on."""
+    try:
+        with open(log_path, errors="replace") as fh:
+            for line in fh:
+                if line.startswith("[species-check]"):
+                    return {"verdict": line.strip().rsplit(" ", 1)[-1], "line": line.strip()[:300]}
+    except OSError:
+        pass
+    return None
+
+
 class OrganismUnmapped(Exception):
     """The catalogue organism of a sample maps to no reference: the sample cannot be aligned (and must not fall back to species auto-detection).
     .reason is the failed_reason the worker records: "organism_unmapped" or "mixed_species_unsupported"."""

@@ -70,6 +70,8 @@ class Ctx:
         if ccfg.get("whitelist_dir"):
             self.env["SINGLET_WHITELIST_DIR"] = ccfg["whitelist_dir"]
         self.env["SINGLET_STALL_TIMEOUT"] = str(p.get("stall_timeout_s", 10800))
+        if ccfg.get("species_filters"):
+            self.env["SINGLET_SPECIES_FILTERS"] = ccfg["species_filters"]
         if self.nonhost:
             self.env["SINGLET_REF_BASE"] = self.ref_base
         else:

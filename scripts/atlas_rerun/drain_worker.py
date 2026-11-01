@@ -201,6 +201,9 @@ def finish_phase(a, cfg, ccfg, job):
     try:
         out_dir = os.path.join(scr, "out")
         up = publish(a, man, out_dir, cfg, ccfg, scr, claim)
+        sc = C.species_check(os.path.join(scr, "singlet.log"))
+        if sc and sc["verdict"] == "DISAGREE":
+            log("[drain] WARNING %s: %s" % (gsm, sc["line"]))
         pub, n, priv = checksum_outputs(out_dir)
         if heart.lost or not os.path.isdir(claim):
             return "claim lost during publish: staged reads left to the new owner"
@@ -208,7 +211,7 @@ def finish_phase(a, cfg, ccfg, job):
         Q.finish(a.stage, gsm, claim)  # staged reads deleted only now: outputs are uploaded (or hooked) and checked
         C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine=a.engine, compute_s=round(job.compute_s, 1),
                wall_s=round(time.time() - job.t0, 1), pairs=man.get("pairs"), staged_bytes=man.get("bytes"), out_public_bytes=pub,
-               publish=up, via="drain")
+               publish=up, species_check=sc, via="drain")
         return "done (publish %.0fs after compute)" % (time.time() - job.t0 - job.compute_s)
     except Exception as e:  # noqa: BLE001
         C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="exception", detail=repr(e)[:1500])
@@ -258,6 +261,8 @@ def main():
     if ccfg.get("whitelist_dir"):
         env["SINGLET_WHITELIST_DIR"] = ccfg["whitelist_dir"]
     env["SINGLET_REF_BASE"] = ccfg["ref_base"]
+    if ccfg.get("species_filters"):   # Bloom filters of the species check (bench/species_detect); the engine logs "[species-check] ... AGREE|DISAGREE|UNKNOWN"
+        env["SINGLET_SPECIES_FILTERS"] = ccfg["species_filters"]
     Q.init(a.stage)
     Q.sweep_scratch(a.scratch, "s9-drain-", log)
     Q.install_sigterm()

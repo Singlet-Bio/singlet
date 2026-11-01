@@ -257,6 +257,9 @@ class Run(threading.Thread):
             pt = pileup_threads(os.path.join(scr, "out"))
             if pt not in (1, None):
                 log("[multi] WARNING %s: pileup_threads=%s - the sorted-BAM pileup ran, not the stream / GPU pileup (whitelists missing next to the binary?)" % (gsm, pt))
+            sc = C.species_check(os.path.join(scr, "singlet.log"))
+            if sc and sc["verdict"] == "DISAGREE":
+                log("[multi] WARNING %s: %s" % (gsm, sc["line"]))
             up = D.publish(a, man, os.path.join(scr, "out"), self.cfg, self.ccfg, scr, claim)
             pub, _n, _priv = D.checksum_outputs(os.path.join(scr, "out"))
             if self.heart.lost or not os.path.isdir(claim):
@@ -325,6 +328,8 @@ def main():
     if ccfg.get("whitelist_dir"):
         env["SINGLET_WHITELIST_DIR"] = ccfg["whitelist_dir"]
     env["SINGLET_REF_BASE"] = ccfg["ref_base"]
+    if ccfg.get("species_filters"):   # Bloom filters of the species check (bench/species_detect); the engine logs "[species-check] ... AGREE|DISAGREE|UNKNOWN"
+        env["SINGLET_SPECIES_FILTERS"] = ccfg["species_filters"]
     env.update(kv.split("=", 1) for kv in a.engine_env)
     os.makedirs(a.scratch, exist_ok=True)
     Q.init(a.stage)
