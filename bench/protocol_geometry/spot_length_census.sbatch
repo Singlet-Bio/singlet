@@ -55,6 +55,13 @@ def probe(row):
         seqs = [l.strip() for i, l in enumerate(open(f)) if i % 4 == 1]
         if seqs:
             reads.append((collections.Counter(len(s) for s in seqs).most_common(1)[0][0], seqs))
+    files_sorted = sorted(glob.glob(dd + "/*.fastq"))
+    if len(files_sorted) >= 2 and len(reads) == len(files_sorted):
+        top2 = sorted(sorted(range(len(reads)), key=lambda i: -reads[i][0])[:2])      # the gate: the two longest reads, in spot order
+        os.makedirs(T + "/fq", exist_ok=True)
+        for tag, i in zip("ab", top2):
+            os.replace(files_sorted[i], "%s/fq/%s_%s.fastq" % (T, row.run, tag))
+        out["pair"] = True
     subprocess.run(["rm", "-rf", dd])
     out["lens"] = [l for l, _ in reads]
     best = (0.0, None, 0)
@@ -81,5 +88,30 @@ for st, pop in (("long", len(long_)), ("short", len(short))):
     print("%s stratum: %d samples in the universe, %d probed (%d without data): 10x (>=50%% WL at offset 0) %d (%.1f%%), untrimmed 10x %d (%.1f%%) -> ~%d samples" % (
         st, pop, len(r), int((r.lens.map(len) == 0).sum()), r.tenx.sum(), 100 * r.tenx.mean(), r.untrimmed.sum(), 100 * r.untrimmed.mean(), est))
 print("ESTIMATE: ~%d of %d samples (%.2f%%) have an untrimmed 10x barcode read" % (tot, len(g), 100 * tot / len(g)))
+
+# The decode gate's own protocol inference (detect_protocol, unchanged) on the probed spots of every 10x-looking probe, with the real whitelists
+with open(T + "/list.tsv", "w") as fh:
+    for r in R[R.tenx].itertuples():
+        if os.path.exists("%s/fq/%s_a.fastq" % (T, r.run)):
+            fh.write("%s\t%s/fq/%s_a.fastq\t%s/fq/%s_b.fastq\n" % (r.gsm, T, r.run, T, r.run))
+print("detector input: %d probes" % sum(1 for _ in open(T + "/list.tsv")))
+cxx = W + "envs/pbench/bin/x86_64-conda-linux-gnu-g++"
+b = subprocess.run([cxx, "-O1", "-std=c++17", "-pthread", "-I" + T + "/repo/include", "-I" + W + "envs/pbench/include", T + "/repo/bench/protocol_geometry/detect_fastq.cpp",
+                    "-o", T + "/detect", "-L" + W + "envs/pbench/lib", "-Wl,-rpath," + W + "envs/pbench/lib", "-lzstd", "-lz"], capture_output=True, text=True)
+print(b.stderr[-1500:])
+out = subprocess.run([T + "/detect", W + "pipeline-benchmark/whitelists", T + "/list.tsv", "5000"], capture_output=True, text=True).stdout
+D = pd.DataFrame([l.split("\t") for l in out.splitlines() if l.count("\t") == 6], columns=["gsm", "tag", "conf", "wl", "r1_length", "bc_len", "trim"])
+D = D.merge(R[["gsm", "stratum", "untrimmed"]], on="gsm")
+D["conf"] = D.conf.astype(int); D["trim"] = D.trim.astype(int)
+D["tenx_tag"] = D.tag.str.startswith("10x") | D.tag.str.startswith("cite-seq")
+D.to_csv(T + "/detect.tsv", sep="\t", index=False)
+print("detect_protocol (with whitelists) on the 10x-looking probes:")
+for flag in (True, False):
+    x = D[D.untrimmed == flag]
+    print("  %s: %d probes; 10x tag %d; 10x tag at MEDIUM+ %d; trimmed by the encoder %d; NOT a 10x tag %d  %s" % (
+        "long barcode read" if flag else "normal barcode read", len(x), x.tenx_tag.sum(), (x.tenx_tag & (x.conf >= 2)).sum(), x.trim.sum(), (~x.tenx_tag).sum(),
+        dict(x[~x.tenx_tag].tag.value_counts()) if (~x.tenx_tag).any() else ""))
+print(D[(D.untrimmed) & ((~D.tenx_tag) | (D.conf < 2))].to_string())
 PY
+git clone -q --depth 1 -b ${BRANCH:-fix/r1-untrimmed-protocol} git@github.com:Singlet-Bio/singlet.git $T/repo 2>&1 | tail -1
 python3 $T/census.py $T
