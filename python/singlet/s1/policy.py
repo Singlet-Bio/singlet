@@ -38,7 +38,8 @@ OMITTED_LAYERS = (
     "mtdna_alleles",  # mt/* (mt_summary.tsv included: its per-cell mts_* columns), mt_heteroplasmy.1pz, mt_variants.tsv, *_mt_consensus*, *_mt_variants*
     "ancestry_call",  # ancestry_call.json (50-marker call; replaced by the validated per-cell label)
     "ambient",  # ambient_contamination.*, ambient_profile.tsv
-    "doublet_scores",  # doublet_scores.tsv, and the doublet columns of cell_qc_metrics.tsv (qc_doublet_score)
+    "doublet_scores",  # doublet_scores.tsv, unless the policy publishes it ("published_layers"); see doublet_scores_engine
+    "doublet_scores_engine",  # doublet_scores_engine.tsv and the engine's doublet columns of cell_qc_metrics.tsv (qc_doublet_score), always
     "nonhost_per_cell",  # nonhost/*per_cell* (the sample-level nonhost summary and abundance stay)
     "splice_psi_legacy",  # splice_psi.1pz (0/1 values; clients compute true PSI from sj_counts, D8)
     "sex_call_legacy",  # sex_call.json (legacy pipeline call; replaced by the validated per-cell sex_chrom labels)
@@ -49,11 +50,13 @@ _READS = re.compile(r"\.(bam|bai|cram|crai|sam)$", re.IGNORECASE)
 _GSM = re.compile(r"GSM\d+")
 
 
-def omitted_layer(rel: str) -> Optional[str]:
+def omitted_layer(rel: str, published: Iterable[str] = ()) -> Optional[str]:
     """The layer a sample member (path inside ``samples/<GSM>/``) belongs to when the policy withholds it, else None.
 
     This is a superset of :func:`singlet._restricted.is_restricted_member` (tested), so a bundle that still holds restricted members
-    can be transcoded under the policy without any of them reaching a public object."""
+    can be transcoded under the policy without any of them reaching a public object. ``published`` names layers a policy lifts
+    (``Policy.published``): only ``doublet_scores`` may be lifted, and its member then has to be the stacker's score
+    (scripts/atlas_rerun/doublet_stage.py), never the engine's."""
     rel = rel.replace("\\", "/")
     name = rel.rsplit("/", 1)[-1]
     if rel.startswith("donor/"):
@@ -77,8 +80,10 @@ def omitted_layer(rel: str) -> Optional[str]:
         return "ancestry_call"
     if name.startswith("ambient_contamination.") or name == "ambient_profile.tsv":
         return "ambient"
-    if name in ("doublet_scores.tsv", "doublet_scores_engine.tsv"):
-        return "doublet_scores"
+    if name == "doublet_scores_engine.tsv":
+        return "doublet_scores_engine"
+    if name == "doublet_scores.tsv":
+        return None if "doublet_scores" in published else "doublet_scores"
     if rel.startswith("nonhost/") and "per_cell" in name:
         return "nonhost_per_cell"
     if rel == "splice_psi.1pz":
@@ -95,6 +100,7 @@ class Policy:
     excluded: Set[str]
     sha256: str = ""
     name: str = "alpha"
+    published: frozenset = frozenset()   # layers of OMITTED_LAYERS this policy lifts (JSON "published_layers"); only "doublet_scores" is liftable
 
     @classmethod
     def load(cls, path: str) -> "Policy":
@@ -111,7 +117,10 @@ class Policy:
         ]
         if bad:
             raise ValueError("policy file has malformed accessions, e.g. %r" % bad[:3])
-        return cls(v, set(ws), set(es), hashlib.sha256(raw).hexdigest())
+        pub = d.get("published_layers", [])
+        if not isinstance(pub, list) or [x for x in pub if x != "doublet_scores"]:
+            raise ValueError('published_layers may only name "doublet_scores"')
+        return cls(v, set(ws), set(es), hashlib.sha256(raw).hexdigest(), published=frozenset(pub))
 
     def withholds(self, gse: str) -> bool:
         return gse in self.withheld
@@ -121,7 +130,8 @@ class Policy:
 
     def manifest_block(self) -> dict:
         """What the public manifest says about the policy: version and generic layer names only."""
-        return {"name": self.name, "version": self.version, "omitted_layers": list(OMITTED_LAYERS)}
+        return {"name": self.name, "version": self.version,
+                "omitted_layers": [x for x in OMITTED_LAYERS if x not in self.published]}
 
 
 @dataclass
@@ -157,7 +167,7 @@ class PolicyReport:
 
 # ------------------------------------------------------------------------------------------------ study files
 def _rewrite_manifest_json(
-    data: bytes, drop_gsm: Callable[[str], bool], drop_path: Callable[[str], bool], version: str
+    data: bytes, drop_gsm: Callable[[str], bool], drop_path: Callable[[str], bool], version: str, pub: Iterable[str] = ()
 ) -> bytes:
     m = json.loads(data.decode("utf-8"))
     if not isinstance(m, dict):
@@ -169,7 +179,7 @@ def _rewrite_manifest_json(
     inc = m.get("included_files")
     if isinstance(inc, dict):
         m["included_files"] = {
-            g: [r for r in (v if isinstance(v, list) else []) if omitted_layer(str(r)) is None]
+            g: [r for r in (v if isinstance(v, list) else []) if omitted_layer(str(r), pub) is None]
             for g, v in inc.items()
             if not drop_gsm(str(g))
         }
@@ -240,7 +250,7 @@ def plan(names: Iterable[str], policy: Policy) -> Tuple[Dict[str, str], Set[str]
             drop[p] = "excluded_sample"
             excl.add(g)
             continue
-        lay = omitted_layer(rel)
+        lay = omitted_layer(rel, policy.published)
         if lay is not None:
             drop[p] = lay
     return drop, excl
@@ -257,12 +267,12 @@ def rewrite_study_files(
 
     def dp(path: str) -> bool:
         s = _sample_of(path)
-        return path in drop or (s is not None and (dg(s[0]) or omitted_layer(s[1]) is not None))
+        return path in drop or (s is not None and (dg(s[0]) or omitted_layer(s[1], policy.published) is not None))
 
     for name, data in study.items():
         try:
             if name == "manifest.json":
-                new = _rewrite_manifest_json(data, dg, dp, policy.version)
+                new = _rewrite_manifest_json(data, dg, dp, policy.version, policy.published)
             elif name == "study_meta.json":
                 new = _rewrite_study_meta(data, dg)
             else:
