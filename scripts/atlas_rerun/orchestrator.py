@@ -128,7 +128,7 @@ def cmd_plan(a):
             "est_wall_s": round(C.compute_wall_s(reads, nonhost), 1),
             "est_core_h": round(C.compute_core_h(reads, nonhost), 4),
             "est_su": round(C.anvil_su(reads, nonhost), 4), "est_sra_bytes": int(C.sra_bytes(reads, bases)),
-            "size_class": size_class(reads, cfg),
+            "size_class": size_class(reads, cfg), "protocol_inferred": getattr(r, "protocol_inferred", None) or "",
         })
     # order: waves a -> d; studies within a wave by the wave's rule; samples by accession
     order = pol.get("order_within", {})

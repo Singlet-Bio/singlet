@@ -75,3 +75,14 @@ def test_head_screen_reports_the_call_and_passes_the_whitelist(monkeypatch, tmp_
     assert verdict == "keep" and info == {"protocol": "10x-3p-v2", "confidence": 3}
     assert calls[0][calls[0].index("--whitelist-dir") + 1] == "/wl"
     F.head_screen("/bin/singlet", "SRR1", str(tmp_path), {})        # the old call still works
+
+
+def test_catalogue_cross_check():
+    assert F.catalogue_chemistry("10xv3") == ("3p", "v3") and F.catalogue_chemistry("10xv3_5prime") == ("5p", "v3")
+    assert F.catalogue_chemistry("citeseq") == ("3p", None) and F.catalogue_chemistry("smartseq2") == (None, None) and F.catalogue_chemistry(None) == (None, None)
+    assert F.check_against_catalogue("10x-5p-v3", "10xv3_5prime") == {"tag": "10x-5p-v3", "catalogue": "10xv3_5prime", "disagrees": False}
+    assert F.check_against_catalogue("10x-3p-v3", "10xv3_5prime")["disagrees"] is True        # 3'/5' disagrees
+    assert F.check_against_catalogue("10x-3p-v2", "10xv3")["disagrees"] is True               # version disagrees
+    assert F.check_against_catalogue("10x-5p-v2", "10xv2")["disagrees"] is True               # catalogue says 3' v2, the call 5' v2
+    assert F.check_against_catalogue("10x-3p-v3", "citeseq")["disagrees"] is False
+    assert F.check_against_catalogue("celseq2", "10xv3") is None and F.check_against_catalogue("10x-3p-v3", "smartseq2") is None and F.check_against_catalogue(None, "10xv3") is None

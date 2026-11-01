@@ -244,6 +244,31 @@ def vote_protocol(calls, weights):
     return {"status": "incompatible", "winner": None, "tags": tags, "family": None, "weight": w}
 
 
+def catalogue_chemistry(protocol_inferred):
+    """-> (end, version) from the catalogue's `protocol_inferred` ('10xv3' -> ('3p', 'v3'), '10xv3_5prime' -> ('5p', 'v3'), 'citeseq' -> ('3p', None)); (None, None) if it says nothing."""
+    p = (protocol_inferred or "").lower()
+    if not p:
+        return None, None
+    m = re.search(r"v(\d)", p)
+    ver = "v" + m.group(1) if m else None
+    if "5prime" in p or "5p" in p:
+        return "5p", ver
+    if p.startswith("10xv") or p == "citeseq":
+        return "3p", ver
+    return None, None
+
+
+def check_against_catalogue(tag, protocol_inferred):
+    """Cross-check a sample's protocol call (the vote's winner, or the one run's call) with the catalogue's guess. -> dict(tag, catalogue, disagrees) or None when either side
+    says nothing. The call decides; a disagreement is only recorded and flagged."""
+    end, ver = catalogue_chemistry(protocol_inferred)
+    m = re.match(r"10x-(3p|5p)-(v\d)$", tag or "")
+    if not m or (end is None and ver is None):
+        return None
+    bad = (end is not None and end != m.group(1)) or (ver is not None and ver != m.group(2))
+    return {"tag": tag, "catalogue": protocol_inferred, "disagrees": bool(bad)}
+
+
 def decode_run(binary, sra, out, quality, vdb_threads, env, log_path, protocol=None):
     cmd = [binary, "download", sra, "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out]
     if protocol:   # the sample-level vote (vote_protocol): decode this run with the sample's protocol, not its own call
@@ -332,9 +357,10 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
     runs_info, raw_total = [], 0
     fmt, staged_files, parts, fallback_1fq = "1fq", [], [], False
     protocol_vote, force_protocol = None, None
+    calls = {}
     try:
         if a.head_screen:
-            verdicts, calls = {}, {}
+            verdicts = {}
             for r in item["runs"]:
                 hinfo = {}
                 verdicts[r], hs = head_screen(binary, r, scr, env, keep_json=os.path.join(scr, "head_screen.json") if a.format == "1fg2" else None, info=hinfo,
@@ -451,6 +477,13 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
             "stage_ratio": round(sum(x.get("staged_bytes", 0) for x in runs_info) / raw_total, 3) if raw_total else None}
         if protocol_vote:   # absent for single-run samples and without --head-screen: the default manifest is unchanged
             man["protocol_vote"] = protocol_vote
+        if calls:           # catalogue cross-check of the sample's call (the vote's winner, else the single kept run's call); only when the item carries protocol_inferred
+            call = (protocol_vote or {}).get("winner") or next((calls[r][0] for r in kept if calls.get(r) and calls[r][0]), None)
+            chk = check_against_catalogue(call, item.get("protocol_inferred"))
+            if chk:
+                man["protocol_check"] = chk
+                if chk["disagrees"]:
+                    log("[vote] %s: FLAG protocol %s disagrees with the catalogue (%s)" % (gsm, chk["tag"], chk["catalogue"]))
         if getattr(a, "companion_table", None):   # absent otherwise: the default manifest is unchanged
             man.update(companions=comp, companion_pairs=CP.pairs_total(comp))
         nbytes = Q.publish(stage, gsm, inc, claim, man)
