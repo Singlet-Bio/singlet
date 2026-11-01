@@ -10,6 +10,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <memory>
+#include <new>
+#include <type_traits>
 #include <utility>
 #include <string>
 #include <vector>
@@ -116,6 +119,17 @@ struct Clip {
     bool pre = false;                // the clip lengths come from the host (Input::pre5 / pre3): --clipAdapterType CellRanger4
 };
 
+// an allocator that default-initializes (resize does not zero-fill): the decode's large per-read arrays are first touched by the parsing
+// threads that write every element, instead of a serial fill first (E11 step 4)
+template <class T> struct NoInitAlloc : std::allocator<T> {
+    template <class U> struct rebind { using other = NoInitAlloc<U>; };
+    NoInitAlloc() = default;
+    template <class U> NoInitAlloc(const NoInitAlloc<U>&) noexcept {}
+    template <class U> void construct(U* p) noexcept(std::is_nothrow_default_constructible<U>::value) { ::new ((void*) p) U; }
+    template <class U, class... A> void construct(U* p, A&&... a) { ::new ((void*) p) U(std::forward<A>(a)...); }
+};
+template <class T> using NoInitVector = std::vector<T, NoInitAlloc<T>>;
+
 struct Input {
     std::vector<char> seq;           // concatenated sequences, STAR's numeric code (A0 C1 G2 T3, other 4)
     std::vector<uint64_t> off{0};    // seq[off[i] .. off[i+1]) is sequence i
@@ -132,7 +146,7 @@ struct Input {
     struct E10 {
         bool on = false;
         uint32_t nw = 0;                 // quality words per read (bit j of the read's words: base j of R2 has quality < minQ)
-        std::vector<uint64_t> aux;       // per read, stride 2 + nw: cr3, ur3 (HandoffReadEntry's packing), quality words
+        NoInitVector<uint64_t> aux;      // per read, stride 2 + nw: cr3, ur3 (HandoffReadEntry's packing), quality words (every word written by the decode)
         bool wantMask = true;            // the 128-bit low-quality masks (SINGLET_HANDOFF_QMASK != 0)
         bool outSJ = true, sjAll = true; // P.outSJ.yes; outSJfilterReads == "All" (else unique reads only)
         bool hook = false;               // g_handoffReadHook is set: sampled clipped reads get entry bit 2 and the host's detector bits 3-4

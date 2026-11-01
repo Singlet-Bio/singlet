@@ -63,11 +63,11 @@ namespace {
 struct E10Files {
     const char *m[2] = {nullptr, nullptr};
     uint64 len[2] = {0, 0};
-    std::vector<uint64> at[2];
+    singlet_engine_gpu::NoInitVector<uint64> at[2];   // every element written by the decode (no serial zero-fill first)
     void release() {
         for (int k = 0; k < 2; k++) {
             if (m[k] != nullptr) munmap((void *) m[k], len[k]);
-            m[k] = nullptr; len[k] = 0; std::vector<uint64>().swap(at[k]);
+            m[k] = nullptr; len[k] = 0; singlet_engine_gpu::NoInitVector<uint64>().swap(at[k]);
         }
     }
 };
@@ -294,9 +294,10 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
             if (nw > 4) { in.e10.on = false; in.e10.nw = 0; e10DecodeWhy = "cDNA reads over 256 bases"; }
             else {
                 in.e10.nw = nw;
-                in.e10.aux.assign((lines / 4) * (2 + (uint64) nw), 0);
+                // not zero-filled here (2 GB on one core): the parsing threads write every word (the quality words zeroed per read first)
+                in.e10.aux.resize((lines / 4) * (2 + (uint64) nw));
                 aux = in.e10.aux.data();
-                e10f.at[0].assign(lines / 4, 0);
+                e10f.at[0].resize(lines / 4);
             }
         }
         const bool e10q = e10 && aux != nullptr;
@@ -373,6 +374,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                     } else if ((lix & 3) == 3) {
                         if (L > 64 * (uint64) nw) { e10BadT[t] |= 2; return; }
                         uint64_t *w = aux + r * (2 + (uint64) nw) + 2;
+                        for (uint32 k = 0; k < nw; k++) w[k] = 0;
                         for (uint64 j = 0; j < L; j++)
                             if ((int) (unsigned char) ls[j] - 33 < e10MinQ) w[j >> 6] |= 1ull << (j & 63);
                         if (e11q) {
@@ -420,7 +422,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
             int bad = 0;
             for (int t = 0; t < T; t++) bad |= e10BadT[t];
             if (e11q) for (int t = 0; t < T; t++) { e11.q30Rna += e11q30T[t]; e11.nRna += e11nT[t]; }
-            if (bad) { in.e10.on = false; std::vector<uint64_t>().swap(in.e10.aux); e10f.release();
+            if (bad) { in.e10.on = false; decltype(in.e10.aux)().swap(in.e10.aux); e10f.release();
                        e10DecodeWhy = (bad & 1) ? "a cDNA base other than ACGTN" : "a quality line longer than 256"; }
         }
         if (e10q && in.e10.on) { e10f.m[0] = m; e10f.len[0] = n; }   // E10 keeps R2 mapped (the unmapped reads' records, level 4's source)
@@ -463,7 +465,7 @@ bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
     const bool lastUnterminated = m[n - 1] != '\n';
     if (lastUnterminated) lines++;
     if (lines != 4 * nReads) { munmap((void *) m, n); why = "the barcode read file has " + std::to_string(lines / 4) + " reads, the cDNA file " + std::to_string(nReads); return false; }
-    e10f.at[1].assign(nReads, 0);
+    e10f.at[1].resize(nReads);   // every element written below (each read has a name line)
     const uint64 bL = P.pSolo.bL, cbumiL = P.pSolo.cbumiL, cbS = P.pSolo.cbS, cbL = P.pSolo.cbL, umiS = P.pSolo.umiS, umiL = P.pSolo.umiL;
     std::vector<int> badT(T, 0);
     uint64_t *aux = in.e10.aux.data();
@@ -770,7 +772,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     if (e10Level >= 2 && in.e10.on) {
         std::string w;
         const auto tb = std::chrono::steady_clock::now();
-        if (!e10Barcodes(P, in, w, (int) P.runThreadN)) { in.e10.on = false; std::vector<uint64_t>().swap(in.e10.aux); e10f.release(); }
+        if (!e10Barcodes(P, in, w, (int) P.runThreadN)) { in.e10.on = false; decltype(in.e10.aux)().swap(in.e10.aux); e10f.release(); }
         P.inOut->logMain << "ENGINE_GPU: E10 decode: " << (in.e10.on ? "CR/UR keys and quality bits of " + std::to_string(in.off.size() - 1) + " reads ("
                                                         + std::to_string(in.e10.nw) + " quality words each), barcode file "
                                                         + std::to_string(std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count()) + " s"
@@ -819,7 +821,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     time_t tGpu = time(nullptr);
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it, held it " << heldS << " s\n" << out.log << out.e10.log;
-    std::vector<uint64_t>().swap(in.e10.aux);
+    decltype(in.e10.aux)().swap(in.e10.aux);
     if (!ok) { e10f.release(); return skip("GPU mapping failed"); }
     bool e10ok = out.e10.ok;   // E10: the device wrote the entries and masks into the region and computed the per-read products
     // E11: level 5 when the engine kept Solo's inputs (then no summaries: no read with a record reaches STAR's loop); otherwise level 3
