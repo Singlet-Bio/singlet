@@ -77,7 +77,7 @@ def omitted_layer(rel: str) -> Optional[str]:
         return "ancestry_call"
     if name.startswith("ambient_contamination.") or name == "ambient_profile.tsv":
         return "ambient"
-    if name == "doublet_scores.tsv":
+    if name in ("doublet_scores.tsv", "doublet_scores_engine.tsv"):
         return "doublet_scores"
     if rel.startswith("nonhost/") and "per_cell" in name:
         return "nonhost_per_cell"
