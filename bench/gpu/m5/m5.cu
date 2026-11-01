@@ -155,6 +155,8 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 //  M5_P1MINB=n __launch_bounds__(128, n) on the phase-1 kernels (register cap for occupancy)
 //  M5_CMPNI    compareSeqToGenome out of line (one copy instead of five inlined ones; stitch.cuh)
 //  M5_P1FUSE   (with M5_P1SPLIT) the windows in k_p1s, for each read as its seed search completes (no windows kernel)
+//  M5_PREF     binary-search prefetch: the SA words of both next midpoints into L2 during each compare (stitch.cuh)
+//  M5_PREF2    M5_PREF plus the two SA values loaded and the genome lines of both next compares prefetched
 //  M5_SEEDSMEM (with M5_P1SPLIT) k_p1s keeps the seed iterator (SeedIt) in shared memory, 128 threads per block
 //  M5_STEPSMEM (with M5_SEEDSTEP) the stepped call's state (MmIt) in shared memory, 128 threads per block
 //  M5_SEEDSTEP (with M5_P1SPLIT) k_p1s steps maxMappableLength2strands one memory operation at a time (an SAi lookup or

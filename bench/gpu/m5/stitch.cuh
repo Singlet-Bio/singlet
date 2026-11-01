@@ -646,6 +646,51 @@ HD inline u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u6
     }
 }
 
+#if defined(M5_PREF) || defined(M5_PREF2)
+// E7 M5_PREF: binary-search prefetch. While a binary search (maxMappableLength, findMultRange) compares at the midpoint
+// i3, the SA words of both possible next midpoints are prefetched into L2, so the next step's SA read is an L2 hit and
+// only its genome read goes to DRAM. M5_PREF2 also loads those two SA values and, once the current compare is done,
+// prefetches the genome lines the next compare will start at (both children). Prefetches change no value.
+HD inline void prefSA(const GenomeView& g, u64 iSA) {
+#ifdef __CUDA_ARCH__
+    const u64* p = g.SA + ((iSA * g.saBits) >> 6);
+    asm volatile("prefetch.global.L2 [%0];" :: "l"(p));
+#else
+    (void)g; (void)iSA;
+#endif
+}
+HD inline u64 ldSA(const GenomeView& g, u64 iSA) {   // packed_get with the loads pinned where they are issued
+#ifdef __CUDA_ARCH__
+    const u64 b = iSA * g.saBits, w = b >> 6, sh = b & 63;
+    u64 a0, a1 = 0;
+    asm volatile("ld.global.nc.u64 %0, [%1];" : "=l"(a0) : "l"(g.SA + w));
+    if (sh) asm volatile("ld.global.nc.u64 %0, [%1];" : "=l"(a1) : "l"(g.SA + w + 1));   // as packed_get: word w+1 only if needed
+    u64 v = a0 >> sh; if (sh) v |= a1 << (64 - sh);
+    return v & ((1ULL << g.saBits) - 1);
+#else
+    return packed_get(g.SA, iSA, g.saBits);
+#endif
+}
+HD inline void prefG(const GenomeView& g, u64 SAv, u64 L) {   // the genome line compareSeqToGenome starts at
+#ifdef __CUDA_ARCH__
+    const bool dirG = (SAv >> g.GstrandBit) == 0; const u64 SAstr = SAv & g.GstrandMask;
+    const char* p = g.G + (dirG ? SAstr + L : g.nGenome - 1 - SAstr - L);
+    asm volatile("prefetch.global.L2 [%0];" :: "l"(p));
+#else
+    (void)g; (void)SAv; (void)L;
+#endif
+}
+#ifdef M5_PREF2
+#define M5_PREF_CHILDREN(a, mid, b, L)     const u64 pfA_ = medianUint2(a, mid), pfB_ = medianUint2(mid, b); const u64 pfSa_ = ldSA(g, pfA_), pfSb_ = ldSA(g, pfB_);
+#define M5_PREF_AFTER(L) { prefG(g, pfSa_, L); prefG(g, pfSb_, L); }
+#else
+#define M5_PREF_CHILDREN(a, mid, b, L) { prefSA(g, medianUint2(a, mid)); prefSA(g, medianUint2(mid, b)); }
+#define M5_PREF_AFTER(L)
+#endif
+#else
+#define M5_PREF_CHILDREN(a, mid, b, L)
+#define M5_PREF_AFTER(L)
+#endif
 HD inline u64 findMultRange(const GenomeView& g, u64 i3, u64 L3, u64 i1, u64 L1, u64 i1a, u64 L1a, u64 i1b, u64 L1b,
                             const char* const* s, bool dirR, u64 S) {
     bool compRes;
@@ -653,7 +698,9 @@ HD inline u64 findMultRange(const GenomeView& g, u64 i3, u64 L3, u64 i1, u64 L1,
     else if (L1a < L1) { L1b = L1a; i1b = i1a; i1a = i1; }
     while ((i1b + 1 < i1a) | (i1b > i1a + 1)) {
         u64 i1c = medianUint2(i1a, i1b);
+        M5_PREF_CHILDREN(i1a, i1c, i1b, L1b)
         u64 L1c = compareSeqToGenome(g, s, S, L3, L1b, i1c, dirR, compRes);
+        M5_PREF_AFTER(L1b)
         if (L1c == L3) i1a = i1c;
         else { i1b = i1c; L1b = L1c; }
     }
@@ -663,6 +710,9 @@ HD inline u64 findMultRange(const GenomeView& g, u64 i3, u64 L3, u64 i1, u64 L1,
 HD inline u64 maxMappableLength(const GenomeView& g, const char* const* s, u64 S, u64 N, u64 i1, u64 i2, bool dirR, u64& L, u64* ind) {
     bool compRes;
     u64 L1, L2, i3, L3, L1a, L1b, L2a, L2b, i1a, i1b, i2a, i2b;
+#if defined(M5_PREF) || defined(M5_PREF2)
+    prefSA(g, i2);   // the second compare's SA word while the first runs
+#endif
     L1 = compareSeqToGenome(g, s, S, N, L, i1, dirR, compRes);
     L2 = compareSeqToGenome(g, s, S, N, L, i2, dirR, compRes);
     L = L1 < L2 ? L1 : L2;
@@ -671,7 +721,9 @@ HD inline u64 maxMappableLength(const GenomeView& g, const char* const* s, u64 S
     i3 = i1; L3 = L1;
     while (i1 + 1 < i2) {
         i3 = medianUint2(i1, i2);
+        M5_PREF_CHILDREN(i1, i3, i2, L)
         L3 = compareSeqToGenome(g, s, S, N, L, i3, dirR, compRes);
+        M5_PREF_AFTER(L)
         if (L3 == N) break;
         if (compRes) {
             if (L3 > L1) { L1b = L1a; L1a = L1; i1b = i1a; i1a = i1; }
