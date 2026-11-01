@@ -103,5 +103,48 @@ for t in [t for t, _ in bythread.most_common(4)]:
     L += ['\n## Own functions on thread `%s` (%.0f CPU-s)\n' % (t, sec(bythread[t])), '| function | CPU-s | %% of thread |', '|---|---|---|']
     for f, k in c.most_common(15):
         L.append('| `%s` | %.0f | %.1f |' % (f[:110], sec(k), 100 * k / bythread[t]))
+
+# ---- phase categories by the real function holding the pc, per process (largest pid = STAR child, first pid = singlet parent) ----
+CATS = [
+    ('STAR seed search', r'compareSeqToGenome|maxMappableLength|SeqCache|storeAligns|ReadAlign::seed|stitchAlignToTranscript_disabled'),
+    ('STAR clip/opal', r'opal|ClipCR4|searchDatabase|Clip'),
+    ('STAR stitch/extend', r'stitchPieces|stitchWindowAligns|extendAlign|stitchAlignToTranscript|alignToTranscript|Transcript::|sjAlignSplit|createExtendWindows|assignAlignToWindow|multMapSelect|mappedFilter|scoreGenomic|stitchGapIndel|blocksOverlap'),
+    ('STAR annotate/solo/output', r'classifyAlign|hashLookupCB|alignBAM|Solo|outputAlign|ReadAlign::output|samAttr|Transcriptome|bam_|BAM'),
+    ('STAR read/parse', r'oneRead|mapChunk|processChunks|ReadAlignChunk|revComplement|readLoad|ReadAlign::'),
+    ('singlet pileup/count', r'PileupEngine|IntervalTree|GeneModel|DirectionalUmi|SparseAccumulator|SnpConsensus|UmiFeature|inline_scan|BarcodeIndex|umi_|extract_splice|pileup_|refine_read'),
+    ('singlet barcode correction', r'CbCorrector'),
+    ('singlet donor demux (VB/auto-K)', r'run_vb|fit_vb|DonorDemux|donor|Donor|vb_|parallel_det_chunks'),
+    ('singlet ambient/decontX/doublet', r'decontx|ambient|doublet|Doublet'),
+    ('singlet non-host screen', r'nonhost'),
+    ('singlet called_v2/export/other', r'calledv2|export_|singlet::'),
+    ('libc/libm/libstdc++/other libs (leaf)', r'^\[lib|^\[\?\]'),
+]
+def cat(f):
+    for name, rx in CATS:
+        if re.search(rx, f): return name
+    return 'other'
+byp = collections.defaultdict(list)
+for name, pcs in recs:
+    byp[name].append(pcs)
+pids = sorted(byp, key=lambda k: -len(byp[k]))
+L += ['
+## Phase categories per process (CPU-s)
+']
+for pid in pids:
+    if len(byp[pid]) * ms / 1000.0 < 5: continue
+    cc = collections.Counter(cat(fn(pcs[0], 'own')) for pcs in byp[pid] if pcs)
+    L += ['
+### %s (%.0f CPU-s)
+' % (pid, sec(len(byp[pid]))), '| category | CPU-s | %% of process |', '|---|---|---|']
+    for c, k in cc.most_common(): L.append('| %s | %.0f | %.1f |' % (c, sec(k), 100 * k / len(byp[pid])))
+    lc = collections.Counter()
+    for pcs in byp[pid]:
+        if pcs and fn(pcs[0], 'own').startswith('['):
+            nxt = next((fn(q, 'own') for q in pcs[1:] if not fn(q, 'own').startswith('[')), '?')
+            lc[nxt] += 1
+    L += ['
+library leaf time by the nearest function above it (one frame up: libc leaves keep no frame pointer)
+', '| function | CPU-s |', '|---|---|']
+    for f, k in lc.most_common(14): L.append('| `%s` | %.0f |' % (f[:110], sec(k)))
 open(rd + '/profile.md', 'w').write('\n'.join(L) + '\n')
 print('\n'.join(L))
