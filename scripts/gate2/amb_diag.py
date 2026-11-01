@@ -73,6 +73,6 @@ pb = df.barcode.values[pure]
 ccol = next((c for c in ac.columns if 'cluster' in c.lower()), None)
 if ccol is not None:
     cl = ac.reindex(pb)[ccol].values
-    tmp = pd.DataFrame({'cluster': cl, 'mouse': mouse_cell, 'tail': tail, 'n': n, 'rho': ac.reindex(pb)[ac.columns[0]].values if False else rho_m})
-    print(tmp.groupby('cluster').agg(cells=('mouse', 'size'), mouse_frac=('mouse', 'mean'), tail=('tail', 'sum'), median_umi=('n', 'median'), rho_med=('rho', 'median')))
-    print('tail cells by cluster:', tmp[tmp.tail].cluster.value_counts().to_dict())
+    tmp = pd.DataFrame({'cluster': cl, 'mouse': mouse_cell, 'is_tail': tail, 'n': n, 'rho': ac.reindex(pb)[ac.columns[0]].values if False else rho_m})
+    print(tmp.groupby('cluster').agg(cells=('mouse', 'size'), mouse_frac=('mouse', 'mean'), tail=('is_tail', 'sum'), median_umi=('n', 'median'), rho_med=('rho', 'median')))
+    print('tail cells by cluster:', tmp[tmp['is_tail']].cluster.value_counts().to_dict())
