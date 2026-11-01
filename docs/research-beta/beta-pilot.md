@@ -97,3 +97,16 @@ Every GPU job is a single H100 with at most 370 GB of memory (a 1-GPU job is cap
 
 ### Engine reruns (2026-11-01)
 Two engine fixes land after the pilot binary 337b405b: #152 (pileup thread independence, merged, tip 767f1a43) and S8's barcode-universe rule (`fix/barcode-universe`, not yet merged). Once the second merges, only the Singlet CPU and GPU jobs are rerun on that tip, from the kept `.sra` files (the `.1fq` is redecoded with the whitelist), into new run directories; those runs are scored as the pilot's Singlet result and the 337b405b runs stay as a before/after column. The clean-up jobs now delete `.1fq`, FASTQ and BAMs but keep `.sra`; the `.sra` files are deleted after the reruns finish. If staging approaches 20 TB, the samples slowest to fetch are kept and the rest are refetched.
+
+### Engine reruns: submitted (2026-11-01)
+
+Pilot Singlet result = the rerun on prod/campaign **2a3b0d61** (#153 barcode universe, #152 pileup threads, #140, #135, #128, #124, #123 and others).
+Built by job 796137 into `$W/jobs/s15/bin/2a3b0d61` (CPU, and GPU for sm_80/90). Scripts: `ops/s15/pilot_rerun.sh`, `submit_rerun.sh`.
+The first-pass runs (337b405b) stay as the before column. Outputs: `s1cpu_r`, `s1gpu_r`, `equiv_r.txt`; both engines use `--threads 16` and must report `pileup_threads` 1.
+
+Changes against the first pass, because most first-pass Singlet runs failed (see the failure list):
+- `--genome-dir` is passed explicitly (the 337b405b run exited with ".1fq processing requires --genome-dir" after species detection returned `unknown` on 8 of 13 samples).
+- Runs pooled into one sample must share a protocol. When the engine names a run that differs, the rerun drops it, records it in `runs_dropped.txt` and retries.
+- `SINGLET_STALL_TIMEOUT=21600` (the default 1800 s stalled the tagged-BAM sort on GSM4987148 and GSM8085472).
+- Reads are re-fetched and re-decoded with the new binary into `stage_r`; the `.sra` is deleted by `rclean` after both runs.
+- Every GPU run is a single H100 (memory at most 370 G), three serial lanes.

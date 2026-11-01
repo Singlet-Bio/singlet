@@ -11,12 +11,12 @@
 # S8: prod/campaign tip; also builds singlet-prof (-DSTAR_PROFILE). BRANCH (default gpu/engine-gpu) is fetched by URL into a private ref. Outputs: $W/jobs/w11/engine/bin/singlet-{gpu,cpu}.
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
-TAG=${TAG:-campaign}; BARE=$W/repos/singlet-py.git; BR=prod/campaign; OUTD=$W/jobs/s15/bin/337b405b; mkdir -p $OUTD
+TAG=${TAG:-campaign}; BARE=$W/repos/singlet-py.git; BR=prod/campaign; SHA=${SHA:-337b405b}; OUTD=$W/jobs/s15/bin/${SHA:0:8}; mkdir -p $OUTD   # SHA=<full or 8-char commit> via sbatch --export
 VARIANTS="cpu gpu"; XFLAGS=; mkdir -p $OUTD
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/s9/$TAG
-COMMIT=$(git -C $BARE rev-parse refs/s9/$TAG); echo "COMMIT=$COMMIT"; [ "${COMMIT:0:8}" = 337b405b ] || { echo "WRONG COMMIT $COMMIT"; exit 3; }
+COMMIT=$(git -C $BARE rev-parse "${SHA}^{commit}"); echo "COMMIT=$COMMIT"; [ "${COMMIT:0:8}" = "${SHA:0:8}" ] || { echo "WRONG COMMIT $COMMIT"; exit 3; }
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
-git -C $BARE archive refs/s9/$TAG | tar -x -C $SCR/src
+git -C $BARE archive $COMMIT | tar -x -C $SCR/src
 S=$SCR/src
 grep -rl --include=CMakeLists.txt -e "-march=native" $S | xargs -r sed -i 's/-march=native/-march=x86-64-v3/' || true
 grep -q "sam_hdr_destroy(bam_hdr_t" $S/src/star/bam_cat.c || \
