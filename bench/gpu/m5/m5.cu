@@ -83,7 +83,7 @@ __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, 
 }
 
 struct LaneOut { std::vector<uint8_t> out, status, why; std::vector<uint16_t> len; std::vector<int8_t> unmap; double ms = 0; std::vector<double> runs; double phaseMs[3] = {0, 0, 0};
-                 double tail[8] = {0, 0, 0, 0, 0, 0, 0, 0}; double workGB = 0, usedGB = 0; u64 workThreads = 0, fallback = 0; int occBlocks = 0; std::string mode, order; };
+                 double tail[8] = {0, 0, 0, 0, 0, 0, 0, 0}; double workGB = 0, usedGB = 0; u64 workThreads = 0, fallback = 0; int occBlocks = 0; std::string mode, order; int p3T = 128, p3Regs = 0, p3Local = 0; };
 
 static double medianv(std::vector<double> v) { std::sort(v.begin(), v.end()); return v.empty() ? 0 : v[v.size() / 2]; }
 
@@ -202,6 +202,19 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     }
     if (tl.blkStart) tailEnd(tl, t < n ? gtime() - t0 : 0);
 }
+// --p3-maxreg: the same phase 3 under __launch_bounds__(BT, MINB), i.e. at most 65536 / (BT x MINB) registers per thread
+template <class C, int BT, int MINB>
+__global__ void __launch_bounds__(BT, MINB) k_p3lb(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf,
+                     const u64* nEnt, const u64* base, const uint32_t* bits, uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why,
+                     int8_t* unmap, const uint32_t* perm, Tail tl) {
+    unsigned long long t0 = 0; tailBegin(tl, t0);
+    u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (t < n) {
+        u64 k = perm ? perm[t] : t;
+        p3one<C>(P, g, b0, k, budget, work, rbuf, nEnt, base, bits, status, out, outLen, why, unmap);
+    }
+    if (tl.blkStart) tailEnd(tl, t < n ? gtime() - t0 : 0);
+}
 // --queue: persistent phase 3. A grid of resident blocks; each warp takes the next reads of the batch (in perm order) from an
 // atomic counter until none are left, so the batch no longer waits for its slowest block. Results are written by read index.
 template <class C>
@@ -314,8 +327,8 @@ __global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, ui
     perm[k] = (uint32_t)k;
 }
 // --p3order: other keys for the order in which phase-3 threads take a batch's reads (stable sort: ties keep the batch order)
-enum P3Order { P3_NONE = 0, P3_COST_ASC, P3_COST_DESC, P3_LOCUS, P3_ANCHOR, P3_NWLOCUS, P3_NW_DESC };
-static const char* p3orderName[] = {"none", "cost-asc", "cost-desc", "locus", "anchor", "nwlocus", "nw-desc"};
+enum P3Order { P3_NONE = 0, P3_COST_ASC, P3_COST_DESC, P3_LOCUS, P3_ANCHOR, P3_NWLOCUS, P3_NW_DESC, P3_SIG };
+static const char* p3orderName[] = {"none", "cost-asc", "cost-desc", "locus", "anchor", "nwlocus", "nw-desc", "sig"};
 template <class C>
 __global__ void k_key(int mode, Params P, GenomeView g, u64 n, const Work<C>* work, const u64* nEnt, u64* key, uint32_t* perm) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
@@ -340,6 +353,9 @@ __global__ void k_key(int mode, Params P, GenomeView g, u64 n, const Work<C>* wo
     } else if (mode == P3_NWLOCUS) {                                         // window-count class (1, 2, 3-4, 5-8, ...) descending, then bin
         u64 cls = nW ? 1 + (64 - __clzll((long long)(nW - 1))) : 0;
         v = ((15 - cls) << 44) | (nW ? (u64)w.WC[0][WC_gStart] : 0xFFFFFFFFFFFULL);
+    } else if (mode == P3_SIG) {   // control-flow signature known before phase 3: (stitched, nW, nP, nA), descending; ties keep prefix order
+        u64 sig = ne ? ((u64)min((unsigned)w.nW, 255u) << 56) | ((u64)min((unsigned)w.nP, 255u) << 48) | ((u64)min((unsigned)w.nA, 65535u) << 32) : 0;
+        v = ~sig;
     }
     key[k] = v;
 }
@@ -351,6 +367,8 @@ static unsigned g_fused = 0;         // --fused A|M|B...: lanes run as one persi
 static int g_fusedBps[3] = {0, 0, 0};// --fused-bps-a/m/b: resident blocks per SM (0 = occupancy limit)
 static u64 g_fusedBits = 16384;      // --fused-bits: SA entries per read marked by the warp scan (more: assignAll)
 static int g_fusedLb = 1;            // --fused-lb 1|4|5: __launch_bounds__ min blocks of the fused kernel
+static int g_p3T = 128;              // --p3-block: threads per block of the phase-3 kernels (32: one warp per block)
+static int g_p3MaxReg = 0;           // --p3-maxreg 64|80: register cap of k_p3 (__launch_bounds__)
 static int g_queueBps = 0;           // --queue-bps: resident blocks per SM of k_p3q (0 = occupancy limit)
 static bool g_tail = false;          // --tail: per-block / per-warp timing of phase 3
 static int g_nSM = 132;
@@ -408,9 +426,16 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     int occ = 0;
     // --fused-lb: register bound of the fused kernel (min resident blocks of 128 threads per SM; 1 = unbounded)
     decltype(&k_fused<C, 1>) fk = g_fusedLb >= 5 ? k_fused<C, 5> : g_fusedLb == 4 ? k_fused<C, 4> : k_fused<C, 1>;
+    // --p3-block / --p3-maxreg: block size and register cap of the phase-3 kernel (k_p1, k_p2 keep 128 / 256 threads)
+    const int T3 = fused ? T : g_p3T, wpb3 = T3 / 32;
+    decltype(&k_p3<C>) p3k = k_p3<C>;
+    if (g_p3MaxReg == 64) p3k = T3 == 32 ? k_p3lb<C, 32, 32> : k_p3lb<C, 128, 8>;
+    else if (g_p3MaxReg == 80) p3k = T3 == 32 ? k_p3lb<C, 32, 25> : k_p3lb<C, 128, 6>;
+    { cudaFuncAttributes fa; CK(cudaFuncGetAttributes(&fa, fused ? (const void*)fk : g_queue ? (const void*)k_p3q<C> : (const void*)p3k));
+      L.p3Regs = fa.numRegs; L.p3Local = (int)fa.localSizeBytes; L.p3T = T3; }
     if (fused) CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, fk, T, 0));
-    else if (g_queue) CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, k_p3q<C>, T, 0));
-    else CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, k_p3<C>, T, 0));
+    else if (g_queue) CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, k_p3q<C>, T3, 0));
+    else CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occ, p3k, T3, 0));
     int bps = fused ? (g_fusedBps[li] ? g_fusedBps[li] : occ) : (g_queueBps ? g_queueBps : occ);
     bps = std::max(1, std::min(bps, std::max(occ, 1)));
     const u64 persistBlocks = (u64)g_nSM * bps;
@@ -432,11 +457,11 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     unsigned long long* dCtr; CK(cudaMalloc(&dCtr, 16)); CK(cudaMemset(dCtr, 0, 16));
     // scheduling statistics: the blocks of every launch of one run side by side
     const u64 nBatches = fused ? 1 : (n + NB - 1) / NB;
-    const u64 blocksPerLaunch = fused ? fusedBlocks : g_queue ? std::min<u64>(persistBlocks, (NB + T - 1) / T) : (NB + T - 1) / T;
+    const u64 blocksPerLaunch = fused ? fusedBlocks : g_queue ? std::min<u64>(persistBlocks, (NB + T3 - 1) / T3) : (NB + T3 - 1) / T3;
     const u64 tailBlocks = nBatches * blocksPerLaunch;
     unsigned long long *dTbs = nullptr, *dTbe = nullptr, *dTwe = nullptr, *dTbusy = nullptr, *dTlast = nullptr;
     if (g_tail) {
-        CK(cudaMalloc(&dTbs, tailBlocks * 8)); CK(cudaMalloc(&dTbe, tailBlocks * 8)); CK(cudaMalloc(&dTwe, tailBlocks * wpb * 8));
+        CK(cudaMalloc(&dTbs, tailBlocks * 8)); CK(cudaMalloc(&dTbe, tailBlocks * 8)); CK(cudaMalloc(&dTwe, tailBlocks * wpb3 * 8));
         CK(cudaMalloc(&dTbusy, nBatches * 8)); CK(cudaMalloc(&dTlast, nBatches * 8));
     }
     auto mkTail = [&](u64 bi) { Tail t{dTbs, dTbe, dTwe, dTbusy, dTlast, bi * blocksPerLaunch, bi}; return t; };
@@ -445,15 +470,15 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     L.mode = fused ? "fused" : g_queue ? "queue" : "staged";
     L.order = fused ? "prefix(fused)" : g_bin ? "cost-asc(--bin)" : p3orderName[ord];
     fprintf(stderr, "lane %s (%s): %llu reads, %s %llu, work %zu B (%llu x, %.2f GB with read buffers); phase-3 kernel: %d blocks/SM resident, "
-                    "persistent grid %d/SM; device memory in use %.2f GB; p3order %s%s\n",
+                    "persistent grid %d/SM; device memory in use %.2f GB; p3order %s%s; phase-3 block %d threads, %d registers, %d B local\n",
             name, L.mode.c_str(), n, fused ? "resident threads" : "batches of", fused ? nWork : NB, sizeof(Work<C>), nWork, L.workGB, occ, bps, L.usedGB,
-            g_bin ? "cost-asc (--bin)" : p3orderName[ord], fused ? " (not used: fused)" : "");
+            g_bin ? "cost-asc (--bin)" : p3orderName[ord], fused ? " (not used: fused)" : "", T3, L.p3Regs, L.p3Local);
     cudaEvent_t q[4]; for (auto& e : q) cudaEventCreate(&e);
     unsigned long long clk[8] = {0}, scan = 0; double phMs[3] = {0, 0, 0};
     for (int r = 0; r < reps + 1; r++) {
         unsigned long long z[8] = {0}; CK(cudaMemcpyToSymbol(g_clk, z, sizeof z)); CK(cudaMemcpyToSymbol(g_scan, z, 8));
         if (g_tail) {
-            CK(cudaMemset(dTbs, 0, tailBlocks * 8)); CK(cudaMemset(dTbe, 0, tailBlocks * 8)); CK(cudaMemset(dTwe, 0, tailBlocks * wpb * 8));
+            CK(cudaMemset(dTbs, 0, tailBlocks * 8)); CK(cudaMemset(dTbe, 0, tailBlocks * 8)); CK(cudaMemset(dTwe, 0, tailBlocks * wpb3 * 8));
             CK(cudaMemset(dTbusy, 0, nBatches * 8)); CK(cudaMemset(dTlast, 0, nBatches * 8));
         }
         CK(cudaMemset(dCtr + 1, 0, 8));
@@ -492,14 +517,15 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
                     thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
                 }
                 const uint32_t* perm = (g_bin || ord) ? dPerm : nullptr;
+                const unsigned G3 = (unsigned)((nb + T3 - 1) / T3);
                 if (g_queue) {
-                    unsigned Gq = (unsigned)std::min<u64>(persistBlocks, G);
+                    unsigned Gq = (unsigned)std::min<u64>(persistBlocks, G3);
                     CK(cudaMemsetAsync(dCtr, 0, 8));
-                    k_p3q<C><<<Gq, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn, perm, dCtr, mkTail(bi));
+                    k_p3q<C><<<Gq, T3>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn, perm, dCtr, mkTail(bi));
                     launches.push_back({bi * blocksPerLaunch, Gq});
                 } else {
-                    k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn, perm, mkTail(bi));
-                    launches.push_back({bi * blocksPerLaunch, G});
+                    p3k<<<G3, T3>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn, perm, mkTail(bi));
+                    launches.push_back({bi * blocksPerLaunch, G3});
                 }
                 k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
                 cudaEventRecord(q[3]);
@@ -512,13 +538,13 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
         float m; cudaEventElapsedTime(&m, e0, e1); if (r > 0) { L.runs.push_back(m); for (int k = 0; k < 3; k++) phMs[k] += ph[k] / reps; }
         fprintf(stderr, "  lane %s run %d: %.1f ms (phase 1 %.1f, scan %.1f, phase 3 %.1f)\n", name, r, m, ph[0], ph[1], ph[2]);
         if (g_tail && r == reps) {
-            std::vector<unsigned long long> bs(tailBlocks), be(tailBlocks), we(tailBlocks * wpb), bu(nBatches), lg(nBatches);
+            std::vector<unsigned long long> bs(tailBlocks), be(tailBlocks), we(tailBlocks * wpb3), bu(nBatches), lg(nBatches);
             CK(cudaMemcpy(bs.data(), dTbs, tailBlocks * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(be.data(), dTbe, tailBlocks * 8, cudaMemcpyDeviceToHost));
-            CK(cudaMemcpy(we.data(), dTwe, tailBlocks * wpb * 8, cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(we.data(), dTwe, tailBlocks * wpb3 * 8, cudaMemcpyDeviceToHost));
             CK(cudaMemcpy(bu.data(), dTbusy, nBatches * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(lg.data(), dTlast, nBatches * 8, cudaMemcpyDeviceToHost));
             const bool persistent = fused || g_queue;
-            const int wmax = (int)((persistent ? (fused ? fusedBlocks : std::min<u64>(persistBlocks, (NB + T - 1) / T)) : (u64)occ * g_nSM) * wpb);
-            TailStats ts = tailStats(bs, be, we, bu, lg, launches, wpb, wmax, persistent);
+            const int wmax = (int)((persistent ? (fused ? fusedBlocks : std::min<u64>(persistBlocks, (NB + T3 - 1) / T3)) : (u64)occ * g_nSM) * wpb3);
+            TailStats ts = tailStats(bs, be, we, bu, lg, launches, wpb3, wmax, persistent);
             printTail(name, ts);
             L.tail[0] = ts.spanMs; L.tail[1] = ts.fill; L.tail[2] = ts.warpBal; L.tail[3] = ts.laneBal; L.tail[4] = ts.drain; L.tail[5] = ts.util;
             L.tail[6] = ts.wmax; L.tail[7] = (double)ts.launches;
@@ -667,7 +693,9 @@ int main(int argc, char** argv) {
         else if (a == "--fused-bps-b") g_fusedBps[2] = atoi(argv[++i]);
         else if (a == "--fused-bits") g_fusedBits = strtoull(argv[++i], nullptr, 10);
         else if (a == "--fused-lb") g_fusedLb = atoi(argv[++i]);
-        else if (a == "--tail") g_tail = true;          // phase-3 scheduling statistics (block/warp times)
+        else if (a == "--tail") g_tail = true;
+        else if (a == "--p3-block") { g_p3T = atoi(argv[++i]); if (g_p3T != 32 && g_p3T != 64 && g_p3T != 128) { fprintf(stderr, "--p3-block 32|64|128\n"); return 2; } }
+        else if (a == "--p3-maxreg") { g_p3MaxReg = atoi(argv[++i]); if (g_p3MaxReg != 0 && g_p3MaxReg != 64 && g_p3MaxReg != 80) { fprintf(stderr, "--p3-maxreg 0|64|80\n"); return 2; } }          // phase-3 scheduling statistics (block/warp times)
         else if (a == "--label") label = argv[++i];
         else if (a == "--no-mid") noMid = true;          // lanes A, B only
         else if (a == "--input") input = argv[++i];     // "count sequence" lines (uniq -c): map these instead of the truth reads
@@ -677,13 +705,13 @@ int main(int argc, char** argv) {
     if (gdir.empty() || truth.empty()) { fprintf(stderr, "usage: m5 --genome-dir D --truth PREFIX [--json F]\n"); return 2; }
     cudaDeviceProp prop; CK(cudaGetDeviceProperties(&prop, 0));
     g_nSM = prop.multiProcessorCount;
-    if (mono && (g_fused || g_queue || g_p3order || g_bin || g_p3orderLane[0] >= 0 || g_p3orderLane[1] >= 0 || g_p3orderLane[2] >= 0)) { fprintf(stderr, "--mono excludes the E4 scheduling options\n"); return 2; }
+    if (mono && (g_fused || g_queue || g_p3order || g_bin || g_p3T != 128 || g_p3MaxReg || g_p3orderLane[0] >= 0 || g_p3orderLane[1] >= 0 || g_p3orderLane[2] >= 0)) { fprintf(stderr, "--mono excludes the E4 scheduling options\n"); return 2; }
     // the marker that says which build runs and with which scheduling (job 790068 ran a stale binary)
-    fprintf(stderr, "m5 E4-order build %s; label %s; presort %d; p3order %s (lanes %s/%s/%s); queue %d (bps %d); fused %s%s%s (bps %d/%d/%d, bits %llu, lb %d); tail %d; "
+    fprintf(stderr, "m5 E4-order build %s; label %s; presort %d; p3order %s (lanes %s/%s/%s); queue %d (bps %d); fused %s%s%s (bps %d/%d/%d, bits %llu, lb %d); p3 block %d maxreg %d; tail %d; "
                     "batches %lld/%lld/%lld; budgets %lld/%lld/%lld\n", M5_GIT, label.c_str(), presort, g_bin ? "cost-asc(--bin)" : p3orderName[g_p3order],
             g_p3orderLane[0] >= 0 ? p3orderName[g_p3orderLane[0]] : "-", g_p3orderLane[1] >= 0 ? p3orderName[g_p3orderLane[1]] : "-",
             g_p3orderLane[2] >= 0 ? p3orderName[g_p3orderLane[2]] : "-", g_queue, g_queueBps, (g_fused & 1) ? "A" : "", (g_fused & 2) ? "M" : "", (g_fused & 4) ? "B" : "", g_fusedBps[0], g_fusedBps[1], g_fusedBps[2],
-            g_fusedBits, g_fusedLb, g_tail, nbA, nbM, nbB, budgetA, budgetM, budgetB);
+            g_fusedBits, g_fusedLb, g_p3T, g_p3MaxReg, g_tail, nbA, nbM, nbB, budgetA, budgetM, budgetB);
     fprintf(stderr, "device %s, %d SMs; sizeof Work: A %zu, B %zu, host %zu\n", prop.name, prop.multiProcessorCount,
             sizeof(Work<LaneA>), sizeof(Work<LaneB>), sizeof(Work<Heavy>));
 
@@ -980,19 +1008,19 @@ int main(int argc, char** argv) {
         fprintf(f, "},\n  \"lane_a_ms\": %.3f,\n  \"lane_m_ms\": %.3f,\n  \"lane_m_reads\": %zu,\n  \"lane_b_ms\": %.3f,\n  \"lane_b_reads\": %zu,\n  \"lane_a_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_b_phase_ms\": [%.3f, %.3f, %.3f],\n  \"lane_a_local\": %s,\n  \"work_bytes\": [%zu, %zu],\n  \"index_load_s\": %.1f,\n",
                 A.ms, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), A.phaseMs[0], A.phaseMs[1], A.phaseMs[2], B.phaseMs[0], B.phaseMs[1], B.phaseMs[2], localWork ? "true" : "false", sizeof(Work<LaneA>), sizeof(Work<LaneB>), tIndex);
         fprintf(f, "  \"e4\": {\"build\": \"%s\", \"label\": \"%s\", \"presort\": %s, \"p3order\": \"%s\", \"queue\": %s, \"queue_bps\": %d, \"fused\": \"%s%s%s\", "
-                   "\"fused_bps\": [%d, %d, %d], \"fused_bits\": %llu, \"fused_lb\": %d, \"tail\": %s, \"batches\": [%lld, %lld, %lld], \"budgets\": [%lld, %lld, %lld],\n    \"lanes\": {",
+                   "\"fused_bps\": [%d, %d, %d], \"fused_bits\": %llu, \"fused_lb\": %d, \"p3_block\": %d, \"p3_maxreg\": %d, \"tail\": %s, \"batches\": [%lld, %lld, %lld], \"budgets\": [%lld, %lld, %lld],\n    \"lanes\": {",
                 M5_GIT, label.c_str(), presort ? "true" : "false", g_bin ? "cost-asc(--bin)" : p3orderName[g_p3order], g_queue ? "true" : "false", g_queueBps,
                 (g_fused & 1) ? "A" : "", (g_fused & 2) ? "M" : "", (g_fused & 4) ? "B" : "", g_fusedBps[0], g_fusedBps[1], g_fusedBps[2], g_fusedBits, g_fusedLb,
-                g_tail ? "true" : "false", nbA, nbM, nbB, budgetA, budgetM, budgetB);
+                g_p3T, g_p3MaxReg, g_tail ? "true" : "false", nbA, nbM, nbB, budgetA, budgetM, budgetB);
         const LaneOut* LL[3] = {&A, &M, &B}; const char* LN[3] = {"A", "M", "B"};
         for (int k = 0; k < 3; k++) {
             const LaneOut& X = *LL[k];
             fprintf(f, "%s\n      \"%s\": {\"mode\": \"%s\", \"order\": \"%s\", \"ms\": %.3f, \"runs\": [", k ? "," : "", LN[k], X.mode.c_str(), X.order.c_str(), X.ms);
             for (size_t r = 0; r < X.runs.size(); r++) fprintf(f, "%s%.3f", r ? ", " : "", X.runs[r]);
             fprintf(f, "], \"phase_ms\": [%.3f, %.3f, %.3f], \"work_gb\": %.3f, \"work_threads\": %llu, \"device_used_gb\": %.3f, \"occ_blocks_per_sm\": %d, "
-                       "\"fused_fallback_reads\": %llu,\n        \"tail\": {\"span_ms\": %.3f, \"slot_fill\": %.4f, \"warp_balance\": %.4f, \"lane_balance\": %.4f, "
+                       "\"p3_block\": %d, \"p3_regs\": %d, \"p3_local_bytes\": %d, \"fused_fallback_reads\": %llu,\n        \"tail\": {\"span_ms\": %.3f, \"slot_fill\": %.4f, \"warp_balance\": %.4f, \"lane_balance\": %.4f, "
                        "\"drain_share\": %.4f, \"thread_slot_util\": %.4f, \"resident_warps\": %.0f, \"launches\": %.0f}}",
-                    X.phaseMs[0], X.phaseMs[1], X.phaseMs[2], X.workGB, X.workThreads, X.usedGB, X.occBlocks, X.fallback,
+                    X.phaseMs[0], X.phaseMs[1], X.phaseMs[2], X.workGB, X.workThreads, X.usedGB, X.occBlocks, X.p3T, X.p3Regs, X.p3Local, X.fallback,
                     X.tail[0], X.tail[1], X.tail[2], X.tail[3], X.tail[4], X.tail[5], X.tail[6], X.tail[7]);
         }
         fprintf(f, "}}\n}\n");
