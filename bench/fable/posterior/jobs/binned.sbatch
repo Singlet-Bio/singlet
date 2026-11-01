@@ -9,15 +9,15 @@
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # E15 (docs/gpu-engine/fable/E15-posterior.md): the per-read CB posterior against STAR on binned NovaSeq barcode qualities. The pipeline's
-# .1fq never carries the barcode read's qualities (STAR sees 'F' for every base), so the binned case is built here: the first NREADS reads of
-# the sample's original L001 FASTQs (uncompressed, in /tmp) through `singlet --reads R1 R2 --engine cpu` (STAR reads them as they are) with
+# .1fq never carries the barcode read's qualities (STAR sees 'F' for every base), so the binned case is built here: the L001 lane (or its first NREADS reads) of
+# the sample's original FASTQs through `singlet --reads R1 R2 --engine cpu` (STAR reads them gzipped, qualities as they are; the driver reads the barcode reads uncompressed in /tmp) with
 # SINGLET_SOLO_DUMP, then bench/fable/posterior/post_test.cu (compiled here from BRANCH) runs E9's library on STAR's per-read Solo inputs with
 # the reads' CB qualities (perread) and with one 'F' quality (const, the control) and compares per read and per file with STAR's star_Solo.out.
 # Read-level data (FASTQs, dump) stay in /tmp; results/binned-<job>/ keeps STAR's star_Solo.out, its logs, the driver's log.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif; ENV=$W/envs/pbench; BARE=$W/repos/singlet-py.git
-BINDIR=${BINDIR:-$W/jobs/fable/posterior/bin}; T=${T:-8}; NREADS=${NREADS:-6000000}; BR=${BRANCH:-gpu/fable/posterior}
+BINDIR=${BINDIR:-$W/jobs/fable/posterior/bin}; T=${T:-8}; NREADS=${NREADS:-0}; BR=${BRANCH:-gpu/fable/posterior}
 s=${SAMPLE:-pbmc1k_v3}; WL=${WL:-3M-february-2018.txt}; UMIL=${UMIL:-12}; G=${G:-$REF/GRCh38-2024-A}
 # the legacy FASTQ path wants a cell list for the pileup (--barcodes; STAR's Solo does not read it): E11's CPU-engine cells of pbmc1k_v3
 BC=${BC:-$W/jobs/fable/solowire/results/gate-796377/cpu/out/star_Solo.out/Gene/filtered/barcodes.tsv}
@@ -39,14 +39,19 @@ echo "compiled in $(( $(date +%s) - T0 )) s" | tee -a $RES/summary.txt
 # ---- the reads (original qualities)
 R1=$(grep -m1 "_L001_R1_" $PB/data/$s/gex_fastqs.txt); R2=${R1/_R1_/_R2_}
 T0=$(date +%s)
-zcat $R1 | head -n $((4 * NREADS)) > $SCR/r1.fastq & zcat $R2 | head -n $((4 * NREADS)) > $SCR/r2.fastq & wait
-echo "reads: $R1 + R2, $(( $(wc -l < $SCR/r1.fastq) / 4 )) / $(( $(wc -l < $SCR/r2.fastq) / 4 )) records in $(( $(date +%s) - T0 )) s" | tee -a $RES/summary.txt
+if [ $NREADS -gt 0 ]; then   # the first NREADS reads, gzipped again (the legacy path always gives STAR --readFilesCommand zcat)
+  zcat $R1 | head -n $((4 * NREADS)) | tee $SCR/r1.fastq | gzip -1 > $SCR/r1.fastq.gz & zcat $R2 | head -n $((4 * NREADS)) | gzip -1 > $SCR/r2.fastq.gz & wait
+  GZ1=$SCR/r1.fastq.gz; GZ2=$SCR/r2.fastq.gz
+else   # the whole lane, as it is; the barcode reads uncompressed for the driver
+  zcat $R1 > $SCR/r1.fastq; GZ1=$R1; GZ2=$R2
+fi
+echo "reads: STAR reads $GZ1 + $GZ2; $(( $(wc -l < $SCR/r1.fastq) / 4 )) barcode records for the driver ($(( $(date +%s) - T0 )) s)" | tee -a $RES/summary.txt
 # ---- STAR (CPU engine) with the per-read Solo dump
 O=$SCR/run/out; mkdir -p $O
 ( while [ ! -e $O/star_Solo.out/Gene/CellReads.stats ]; do sleep 0.2; done; ln $O/star_Solo.out/Gene/CellReads.stats $SCR/keep/CellReads.stats ) &
 WATCH=$!
 T0=$(date +%s)
-( cd $SCR/run && SINGLET_SOLO_DUMP=$SCR/solo timeout -k 30 1200 $BINDIR/singlet-gpu --reads $SCR/r1.fastq $SCR/r2.fastq --whitelist $PB/whitelists/$WL --barcodes $BC \
+( cd $SCR/run && SINGLET_SOLO_DUMP=$SCR/solo timeout -k 30 1200 $BINDIR/singlet-gpu --reads $GZ1 $GZ2 --whitelist $PB/whitelists/$WL --barcodes $BC \
     --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf --out-prefix $O/ --threads $T --pipeline --output-format 1pz \
     --engine cpu > $RES/run.log 2>&1 ) &
 P=$!
