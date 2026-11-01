@@ -586,3 +586,26 @@ file and its index (not loaded into memory; the client returns a path / byte-ran
 `modalities=`: `spatial` -> `spatial_positions.tsv`; Python `obsm["spatial"]` = `(array_col, array_row)` (scanpy /
 squidpy convention: x, y), `obs["in_tissue"]`, `obs["array_row"]`, `obs["array_col"]`, `uns["spatial"]` with the summary
 (and the image when present); R `colData` columns and `spatialCoords` for SpatialExperiment.
+
+## 15. Registered modality members (companion libraries, ATAC, spatial)
+
+Every output the pipeline can write for a sample is a registered modality, so it is listed in `modalities` (D1 `s1_sample.modalities`) and
+found by name. The registry is `bundle.MODALITIES` (Python, source of truth), `scripts/s1_campaign.py::MODALITY_MEMBERS` and the
+website's `functions/_shared/modalities.ts`; `tests/python/test_s1_campaign_catalog.py` keeps them equal. Members that are not in the
+legacy bundle (this section) carry flag bit 0 clear. A member that lands in `out/` is carried by `pack_gse` (it packs `out/` whole), so
+registering the name is what makes it visible.
+
+| modality | member(s) | written by |
+|---|---|---|
+| `adt_counts`, `adt_features`, `adt_panel` | `adt_counts.1pz` (or the engine's `adt_counts.mtx`), `adt_features.tsv`, `adt_panel.json` | `singlet.adt.members` (companion ADT library) |
+| `hto_counts`, `hto_classification` | `hto_counts.1pz`, `hto_classification.tsv` | `singlet.adt.members`; the engine's hashtag caller |
+| `crispr_counts`, `crispr_guides` | `crispr_counts.1pz`, `crispr_guides.json` | `singlet.crispr.members` (companion guide library) |
+| `vdj_contigs`, `vdj_summary` | `vdj_contigs.parquet`, `vdj_summary.json` | `singlet.vdj.members` (companion V(D)J library; V-gene usage stays `vdj_gene_usage`) |
+| `doublet_scores_v2` | `doublet_scores_v2.tsv` | `scripts/doublet_v2.py`; beside the engine's `doublet_scores`, which is unchanged |
+| `atac_fragments`, `atac_fragments_index`, `atac_peaks`, `atac_cells`, `atac_barcode_metrics`, `atac_summary` | `atac_fragments.tsv.gz` (engine name `fragments.tsv.gz`), its `.tbi`, `atac_peaks.bed` (`peaks.bed`), ... | engine ATAC path |
+| `atac_peak_counts`, `atac_gene_activity` | `atac_peak_counts.1pz`, `atac_gene_activity.1pz` | section 14 aligned members |
+| `spatial_positions`, `spatial_summary` | `spatial_positions.tsv` (engine name `spatial_coordinates.tsv`), `spatial_summary.json` | engine Visium path; section 14 |
+
+Companion-library matrices (`adt_counts`, `hto_counts`, `crispr_counts`) have the GEX sample's `cells` rows as columns. Clients:
+`modalities=["adt"]` (aliases `protein`, `cite`), `"hto"` (`hashtag`), `"crispr"` (`guides`) land in `obsm`.
+Genotypes are never a modality here; V(D)J contigs hold no donor genotype.
