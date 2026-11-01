@@ -51,6 +51,7 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <poll.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
@@ -2859,6 +2860,62 @@ static int restart_on_sorted_path(const singlet::PileupStats& stats, bool revers
     return 8;
 }
 
+#ifdef SINGLET_HAVE_ENGINE_GPU
+// E19 (docs/gpu-engine/fable/GPU-PATH.md §4): whether CUDA sees a usable device, asked of a child process (`singlet gpu-probe`, exec'd at once,
+// so this process never initialises CUDA before it forks STAR) as soon as the options are read. The GPU pileup's decision needs the answer
+// before STAR runs: once the stream has been consumed without the CPU's steps, a GPU pileup that cannot get a device can only end the run
+// (exit 9). Without a usable device the pipeline keeps the CPU pileup and says so; STAR's prefill falls back on its own.
+namespace e19probe {
+inline pid_t& pid() { static pid_t p = -1; return p; }
+inline int& fd() { static int f = -1; return f; }
+inline std::chrono::steady_clock::time_point& t0() { static std::chrono::steady_clock::time_point t; return t; }
+inline void start() {
+    int pp[2];
+    if (pid() > 0 || pipe(pp) != 0) return;
+    const pid_t c = fork();
+    if (c == 0) {
+        dup2(pp[1], 1); close(pp[0]); close(pp[1]);
+        execl("/proc/self/exe", "singlet", "gpu-probe", (char*) nullptr);
+        _exit(127);
+    }
+    close(pp[1]);
+    if (c < 0) { close(pp[0]); return; }
+    fcntl(pp[0], F_SETFD, FD_CLOEXEC);
+    pid() = c; fd() = pp[0]; t0() = std::chrono::steady_clock::now();
+}
+// the probe's answer (waits for it, at most 120 s); true when it was not started (no GPU pileup asked for)
+inline bool usable(std::string& why) {
+    static bool done = false, ok = true;
+    static std::string w;
+    if (!done && pid() > 0) {
+        done = true;
+        const auto ta = std::chrono::steady_clock::now();
+        std::string out;
+        char b[512];
+        for (;;) {
+            struct pollfd q = {fd(), POLLIN, 0};
+            const int r = poll(&q, 1, 120000);
+            if (r <= 0) { kill(pid(), SIGKILL); out = "\x01"; break; }
+            const ssize_t n = read(fd(), b, sizeof b);
+            if (n <= 0) break;
+            out.append(b, (size_t) n);
+        }
+        close(fd());
+        waitpid(pid(), nullptr, 0);
+        while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
+        ok = out == "ok";
+        w = ok ? "" : out == "\x01" ? "the probe did not answer in 120 s" : out.empty() ? "the probe failed" : out;
+        const auto tb = std::chrono::steady_clock::now();
+        std::cerr << "[singlet] GPU probe: " << (ok ? "a usable device" : "no usable GPU (" + w + ")") << " (" << std::fixed << std::setprecision(2)
+                  << std::chrono::duration<double>(tb - t0()).count() << " s; waited " << std::chrono::duration<double>(tb - ta).count() << " s)"
+                  << std::defaultfloat << std::endl;
+    }
+    why = w;
+    return ok;
+}
+}   // namespace e19probe
+#endif
+
 int main(int argc, char* argv[]) {
     g_argc = argc; g_argv = argv;   // restart_on_sorted_path re-executes this command
     singlet::fq::register_fg2();   // a staged .1fg2 is read through Reader / RunSet like a .1fq
@@ -2868,6 +2925,14 @@ int main(int argc, char* argv[]) {
         try {
             if (sub == "download")
                 return cmd_download(argc - 2, argv + 2);
+#ifdef SINGLET_HAVE_ENGINE_GPU
+            if (sub == "gpu-probe") {   // E19: "ok" (exit 0) when CUDA sees a usable device, else the reason (exit 1); the pipeline's probe
+                std::string w;
+                const bool ok = singlet_engine_gpu::available(&w);
+                std::cout << (ok ? std::string("ok") : w) << std::endl;
+                return ok ? 0 : 1;
+            }
+#endif
             if (sub == "encode")
                 return cmd_encode(argc - 2, argv + 2);
             if (sub == "atac")
@@ -3259,6 +3324,7 @@ int main(int argc, char* argv[]) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
     // E19 (docs/gpu-engine/fable/GPU-PATH.md): the GPU path's defaults (level 5 + ingest + E16 with SINGLET_GPU_PILEUP=on), set in the environment
     // before anything reads them (singlet_engine_gpu::applyDefaults in engine_gpu.h)
+    if (getenv("SINGLET_GPU_PILEUP")) e19probe::start();   // the GPU pileup's device check (e19probe above), answered before STAR runs
     if (getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1")
         std::cerr << "[singlet] --engine gpu: " << singlet_engine_gpu::applyDefaults() << "\n";
 #endif
@@ -4585,6 +4651,7 @@ int main(int argc, char* argv[]) {
             if (const char* r = getenv("SINGLET_INTRON_RULES")) ir = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
             const char* gh = getenv("SINGLET_GPU_HANDOFF");
             if (!(gp && std::string(gp) == "on" && singlet_engine_gpu::e2eRequested())) why = "it needs SINGLET_GPU_PILEUP=on and SINGLET_ENGINE_GPU_E2E";
+            else if (std::string pw; !e19probe::usable(pw)) why = "no usable GPU (" + pw + "): the GPU pileup will be declined";
             else if (onefq_r2_bound > 128) why = "cDNA reads over 128 bases: the GPU pileup will be declined";
             else if (ir & ~(1u | 4u | 128u | 256u)) why = "intron rules the GPU pileup does not implement";
             else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
@@ -5557,8 +5624,13 @@ int main(int argc, char* argv[]) {
     // fallback), keep the pileup on the CPU; the GPU still maps the reads.
     if (getenv("SINGLET_GPU_PILEUP")) {
         const char* why = nullptr;
+        std::string pw;
         if (onefq_r2_bound > 128) why = "reads over 128 bases (the per-base-quality mask holds 128)";
         else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
+        else if (!e19probe::usable(pw)) {   // E19: no device for it (the probe above); STAR's prefill falls back on its own
+            std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: no usable GPU (" << pw << "); the CPU pileup runs\n";
+            unsetenv("SINGLET_GPU_PILEUP");
+        }
         if (why) {
             std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: " << why << "; the CPU pileup runs on the GPU-mapped reads\n";
             unsetenv("SINGLET_GPU_PILEUP");
