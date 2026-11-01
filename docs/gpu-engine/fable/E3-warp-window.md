@@ -6,11 +6,12 @@ Branch `gpu/fable/warp-window` (from `gpu/fable-engine` cf92cdb9). Code: `bench/
 `bench/gpu/m5/jobs/e3_run.sbatch` (RUNS=variants, NCUS=Nsight Compute profiles; baseline and variants in one job,
 identity checked in each), `bench/gpu/m5/jobs/e3_ncu_source.sbatch`. Results JSON: `bench/fable/warp-window/`.
 
-STATUS: done. Exact (100% identity in every variant) but **no speed-up**: the best warp configuration ties the baseline
-(lanes M+B 568.7 vs 563.5 ms); the gate (M+B <= 0.5x) is not met. Section 3.3 says why. After the ballot fix (3.4) lane B
-warp-stitched with the in-kernel assignment is 5.7% faster than the baseline lane B, lane M 5% slower. The branch carries
-the integration head (merge 80f366fc, all build flavours compile; E3 probes only with `-DM5_E3STATS`); the run on the
-merged code (job 795844) was queued when this was written (3.5).
+STATUS: done. Exact (100% identity in every variant of every job). **On the merged code (integration head + E3, job
+795844) the warp lanes cut lanes M+B by 10%** (434.7 vs 482.8 ms, 0.900x; M5 rate 2.91 -> 3.13 M distinct reads/s), with
+big batches 0.973x of the big-batch baseline (3.25 -> 3.31 M/s). The gate (M+B <= 0.5x) is **not met**. Before the merge
+(E3 alone, sections 3.1-3.4) the best configuration only tied the baseline (568.7 vs 563.5 ms); E5's compact transcript
+state is what made the warp kernel pay (3.5). The branch carries the integration head (merge 80f366fc; every build flavour
+compiles; the E3 statistics and probes only with `-DM5_E3STATS`).
 
 ## 1. Design as built
 
@@ -129,7 +130,8 @@ Jobs (all `#SBATCH --nice=10000`; logs `$W/logs/<name>-<id>.out`, JSON `$W/jobs/
 `bench/fable/warp-window/`): compiles 795255 (ca8b980f, failed, section 4), 795258 (1ea23874), 795276 (54e934ff), 795311
 (41a4187d = the measured binary), 795731 (8288c0a0); runs 795259 (no output, section 4), **795338** (core variants, lane A),
 **795637** (statistics off, best configuration, block sizes, batch sizes), **795580** (Nsight Compute, debug-gpu), 795739
-(ballot fix), 795654 / 795662 (Nsight report exports).
+(ballot fix), 795654 / 795662 (Nsight report exports); after the merge: compile **795831** (80f366fc = m5e3m, all
+flavours), run **795844** (merged code: baseline vs warp lanes, Nsight Compute of lane M).
 
 Identity: **every run of every variant, 1,991,926 / 1,991,926 distinct reads identical to STAR** (4,118,999 / 4,118,999
 weighted), mapped and unmapped. The host emulation of the warp algorithm (`--host-emul`, job 795338, `wasg`) reproduces all
@@ -257,15 +259,59 @@ capacity); lane B 75.0 windows per read, 80.5% busy, 584 steps per read, 1,005 +
 (window above 32 aligns, lane capacity). The combination that the lanes suggest, lane M as the baseline and lane B
 warp-stitched, would be 315.5 + 239.9 = 555.4 ms (0.975x); it is measured directly on the merged code (3.5, `mixed`).
 
-### 3.5 On the merged code (job 795844, binary 80f366fc = m5e3m)
+### 3.5 On the merged code (job 795844, binary 80f366fc = m5e3m): the warp lanes now win 10%
 
-Run job 795844 (short-gpu, `e3_run.sbatch`, BIN=m5e3m) measures base, best128, wasgbest, `mixed` (lane M baseline, lane B
-`--warp-b --wassign --wsort --wb-cfg 1 --wthreads 128`), basebig, wasgbestbig and a second base (noise), plus Nsight
-Compute of lane M (`k_p3` vs `k_p3w --wassign`). At the time of writing it was still queued behind higher-priority GPU jobs
-of the same account (QOSMaxGRESPerUser, priority 1 with `--nice=10000`). Its results land in
-`$W/jobs/fable/warp-window/results/e3_795844_<label>.json(.e3.json)` and the log in `$W/logs/e3-runm-795844.out`;
-`python bench/fable/warp-window/e3_table.py <dir> 795844` prints the table above from them. The integration head's own
-baseline for comparison: job 795737, lanes A / M / B 212.6 / 268.2 / 222.7 ms, 2.83 M distinct reads/s.
+Same set and STAR truth regenerated in the job (g051, H100 NVL); the default build (E5's exact variants on, no E3 probes).
+The integration head's own baseline (job 795737: A / M / B 212.6 / 268.2 / 222.7 ms, 2.83 M distinct reads/s) is
+reproduced within node noise by `base` and `base2`.
+
+| variant | flags beyond the defaults | lane A ms | lane M ms | lane B ms | M+B ms | M+B / base | GPU ms | M distinct reads/s |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| base | | 201.8 | 259.9 | 222.8 | **482.8** | 1.000 | 684.5 | **2.910** |
+| base2 | (repeat) | 201.4 | 259.8 | 221.0 | 480.8 | 0.996 | 682.2 | 2.920 |
+| **best128** | `--warp-m --warp-b --wsort --wb-cfg 1 --wthreads 128` (`k_p3a`) | 201.5 | **228.7** | 206.0 | **434.7** | **0.900** | 636.2 | **3.131** |
+| wasgbest | the same + `--wassign` | 201.5 | 247.0 | **189.1** | 436.0 | 0.903 | 637.5 | 3.124 |
+| mixed | lane B only: `--warp-b --wassign --wsort --wb-cfg 1 --wthreads 128` | 201.7 | 260.5 | 189.7 | 450.1 | 0.932 | 651.9 | 3.056 |
+| basebig | big batches | 192.1 | 261.7 | 158.5 | 420.2 | 0.870 | 612.3 | 3.253 |
+| wasgbestbig | wasgbest + big batches | 192.5 | 244.0 | 164.9 | 408.9 | 0.847 (0.973 vs basebig) | 601.4 | 3.312 |
+
+Identity: 1,991,926 / 1,991,926 distinct reads (4,118,999 / 4,118,999 weighted) in every variant. When lane M is
+warp-stitched, 351 fewer reads reach lane B (90,389 vs 90,740: the warp merge compacts `keep[]` before it declares a keep
+overflow, the serial loop does not; both are exact, the overflow only routes a read to the next lane); `mixed` (all 90,740
+reads in lane B) shows it does not matter (lane B 189.7 vs 189.1 ms).
+
+Phase split (ms, median runs; p1 / scan / assign / p3 or warp):
+
+| lane | base | best128 | wasgbest |
+|---|---|---|---|
+| M | 76 / 17 / - / 167 | 77 / 17 / 17 / **117** | 77 / 17 / - / 152 |
+| B | 39 / 7 / - / 176 | 38 / 7 / 40 / 121 | 39 / 7 / - / **143** |
+
+**On the merged code the warp lanes are 10% faster on M+B (434.7 vs 482.8 ms; 0.900x), and the M5 rate rises from 2.91 to
+3.13 M distinct reads/s (+7.6%); with big batches 3.25 -> 3.31.** The gate (<= 0.5x) is still not met. The best per lane
+is lane M with `k_p3a` (228.7 ms, -12%) and lane B with the in-kernel assignment (189.1 ms, -15%); both in one run would
+be about 228.7 + 189.1 = 417.8 ms (0.865x), which needs a per-lane `--wassign` (one flag today; a small follow-up).
+
+Why the balance turned: E5 shrank exactly the state the warp kernel moves. Lane M's lane context fell from 14,008 to 8,544
+B (lane B cfg 1: 49,984 -> 30,408 B), `k_p3w` from 124 to 95 registers, and its stitching from 210 to 117 ms, while the
+baseline `k_p3` (which also gained from E5) went from 220 to 167 ms. Nsight Compute, first lane M batch (393,216 reads):
+
+| | `k_p3` lane M (base) | `k_p3w` lane M (`--wassign --wsort`, 128 threads) |
+|---|---:|---:|
+| duration | 122.2 ms | **112.0 ms** (assignment included) |
+| registers, theoretical / achieved occupancy | 79, 37.5% / 30.0% (19.2 warps) | 95, 31.3% / 24.1% (15.4 warps) |
+| warp instructions executed | 20.45 G | 19.77 G |
+| avg. active threads per warp instruction | 2.20 | **5.37** |
+| L1 hit rate / L2 hit rate | 77.8% / 72.5% | 58.2% / 65.0% |
+| issued warps per scheduler per cycle, no eligible | 0.20, 80.1% | 0.19, 80.8% |
+| memory throughput | 605.5 GB/s | 617.6 GB/s |
+
+Against the pre-merge profile (3.3): the warp kernel's warp instructions fell from 22.84 G to 19.77 G (now fewer than the
+baseline's) and its duration from 210.9 to 112.0 ms, while the SIMT gain stayed (2.2 -> 5.4 active lanes). The remaining
+costs are the same as before (lower occupancy, L1 hit 58% vs 78%), now smaller than the gain.
+
+(The per-lane cycle printout of the warp lanes shows nonsense shares such as "stitchAlignToTranscript 18162%": `k_p3w`
+adds the lanes' inner stitching cycles `clk[4..7]` but not the enclosing `clk[2]`. Cosmetic; the timings are events.)
 
 Register / spill report of the merged default build (compile job 795831, ptxas `-O3 -arch=sm_90`, no E3 probes):
 
@@ -304,15 +350,16 @@ baseline and keepix all compile).
 
 ## 5. Next steps
 
-1. Do not pursue window-per-lane stitching as built for lanes M/B: at best it ties the thread-per-read kernel. The
-   per-window cost is dominated by fixed work on transcript structs (E2, and here: 1 align and ~5 steps per window), so
-   the lever is the size of that state, not the parallel schedule: combine with E5's compact transcript state, after
-   which lane contexts small enough for registers / L1 could change the balance (the 3x SIMT gain is real; it is eaten by
-   local-memory traffic and occupancy).
-2. If revisited: a cooperative finalisation (lanes of a warp share one window's finalisation/recording, not one window
-   each), lane contexts in shared memory for lane M (14 KB x 32 does not fit; a compact transcript would), and
-   `__launch_bounds__` to trade registers for occupancy.
-3. Lane A: no group variant wins (25-58% slower); pre-classification by window count works mechanically (`--wmin-a`
-   split, one sorted permutation for both kernels) and could carry another phase-3 kernel.
-4. Overlapping lanes and carrying lane A's phase-1 state into lanes M/B (E1/E2: 13.7% of M5) are independent of this
-   result and remain the larger wins; bigger batches alone gave -10.4% here (M+B 504 vs 564 ms).
+1. Take the warp lanes into the integration head as an option for lanes M and B (exact, -10% on M+B at the standard
+   batches): lane M with `k_p3a` + `k_p3w`, lane B with the in-kernel assignment. A per-lane `--wassign` (today one flag for
+   both lanes) gives the measured best of each lane, about 417.8 ms (0.865x) by the lane times of job 795844.
+2. The lever is still the size of the per-window state (E2: 1 align and ~5 steps per window): every byte E5 removed paid
+   twice in the warp kernel (124 -> 95 registers, 14 -> 8.5 KB lane contexts). Next: lane contexts small enough for shared
+   memory in lane M, `__launch_bounds__` to trade registers for occupancy (31% theoretical vs the baseline's 37.5%), and a
+   cooperative finalisation (lanes sharing one window's finalisation/recording).
+3. Lane A (few windows): no group variant won before the merge (25-58% slower); not re-measured on the merged code. The
+   pre-classification by window count (`--wmin-a`, one sorted permutation for `k_p3w` and `k_p3`) works mechanically and
+   is the way to send lane A's many-window reads to the warp kernel; worth one re-run on the merged code.
+4. Independent of this experiment and still the larger wins: overlapping the lanes (A's tail with M's start), carrying lane
+   A's phase-1 state into lanes M/B (E1/E2: 13.7% of M5; not done here), and big batches (basebig 0.870x alone, 0.847x with
+   the warp lanes).
