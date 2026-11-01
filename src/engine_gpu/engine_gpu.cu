@@ -255,8 +255,11 @@ __global__ void k_diag(u64 n, const Work<C>* work, u64* steps, u64* nw, unsigned
     for (int i = 0; i < 8; i++) atomicAdd(&clk[i], (unsigned long long) work[k].clk[i]);
 }
 template <class C>
-__device__ __forceinline__ void p3Read(const Params& P, const GenomeView& g, u64 b0, u64 k, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
-                                       const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen) {
+__global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
+                     const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen, const uint32_t* perm) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    if (perm) k = perm[k];   // work bucketing: thread t finishes read perm[t] of the batch (reads with the same amount of work share a warp); results land at the read's own slot
     Work<C>& w = work[k];
     w.stepBudget = budget;
     u64 o = b0 + k;
@@ -265,25 +268,6 @@ __device__ __forceinline__ void p3Read(const Params& P, const GenomeView& g, u64
     if (s == Status::Ok && w.stitched && !assignHits(P, g, w, bits, base[k])) s = Status::Overflow;
     if (s == Status::Ok) s = mapFinish(P, g, w, rbuf[k], bl);
     status[o] = (uint8_t)s; outLen[o] = (uint16_t)bl.n;
-}
-template <class C>
-__global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
-                     const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen, const uint32_t* perm) {
-    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
-    if (k >= n) return;
-    if (perm) k = perm[k];   // work bucketing: thread t finishes read perm[t] of the batch (reads with the same amount of work share a warp); results land at the read's own slot
-    p3Read<C>(P, g, b0, k, budget, work, rbuf, base, bits, bstatus, status, out, outLen);
-}
-// persistent threads (SINGLET_ENGINE_GPU_QUEUE=1): a fixed grid; every thread takes the next unprocessed read of the batch when its own read is done, so a warp
-// stays full while the batch lasts instead of waiting for its slowest read. The result of read k lands at read k's own slot, so the output is unchanged.
-template <class C>
-__global__ void k_p3q(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
-                      const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen, unsigned long long* ctr) {
-    for (;;) {
-        const u64 k = atomicAdd(ctr, 1ULL);
-        if (k >= n) return;
-        p3Read<C>(P, g, b0, k, budget, work, rbuf, base, bits, bstatus, status, out, outLen);
-    }
 }
 
 struct ToU64 { __host__ __device__ u64 operator()(uint16_t x) const { return (u64)x; } };
@@ -313,16 +297,12 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     EG_CK(cudaMalloc(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>))); EG_CK(cudaMalloc(&dBst, NB));
     EG_CK(cudaMalloc(&dNent, NB * 8)); EG_CK(cudaMalloc(&dBase, NB * 8));
     u64 bitsCap = 1 << 20; EG_CK(cudaMalloc(&dBits, bitsCap * 4));
-    // work bucketing (SINGLET_ENGINE_GPU_BUCKET=1 ascending, 2 descending; off by default, slower in the S8 measurements): stage 3 (the stitch) runs the batch's reads in the order of their stage-1 hit counts, so that
+    // work bucketing (SINGLET_ENGINE_GPU_BUCKET=0 turns it off): stage 3 (the stitch) runs the batch's reads in the order of their stage-1 hit counts, so that
     // the reads that stop after the seed stage (no hits) fill whole warps and the others share a warp with reads of similar work
     const char* bk = std::getenv("SINGLET_ENGINE_GPU_BUCKET");
-    const char* qe0 = std::getenv("SINGLET_ENGINE_GPU_QUEUE");
-    const bool bucket = bk != nullptr && (bk[0] == '1' || bk[0] == '2') && !(qe0 != nullptr && qe0[0] == '1');   // off by default (S8: slower on pbmc1k_v3, k_p3 8.7 s -> 10.9 s)
+    const bool bucket = !(bk != nullptr && bk[0] == '0');
     const bool bucketDesc = bk != nullptr && bk[0] == '2';   // 2: the heaviest reads first (no tail of heavy warps at the end of the grid); default: ascending
     uint32_t* dPerm = nullptr; u64* dKey = nullptr;
-    const char* qe = std::getenv("SINGLET_ENGINE_GPU_QUEUE");
-    const bool queue = qe != nullptr && qe[0] == '1';
-    unsigned long long* dCtr = nullptr; if (queue) EG_CK(cudaMalloc(&dCtr, 8));
     if (bucket) { EG_CK(cudaMalloc(&dPerm, NB * 4)); EG_CK(cudaMalloc(&dKey, NB * 8)); }
     devNote();
     for (u64 b0 = 0; b0 < n; b0 += NB) {
@@ -341,15 +321,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
                             if (bucketDesc) thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm), thrust::greater<u64>());
                             else thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm)));
         }
-        if (queue) {
-            int mb = 0; cudaOccupancyMaxActiveBlocksPerMultiprocessor(&mb, k_p3q<C>, T, 0);
-            int sms = 0; cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
-            unsigned GQ = (unsigned) std::min<u64>(G, (u64) std::max(1, mb) * std::max(1, sms));
-            EG_CK(cudaMemset(dCtr, 0, 8));
-            EG_KT("p3", k_p3q<C><<<GQ, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, dCtr));
-        } else {
-            EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, bucket ? dPerm : nullptr));
-        }
+        EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen, bucket ? dPerm : nullptr));
         EG_CK(cudaGetLastError());
         if (egTraceOn() && !bucket) {   // warp-balance diagnostic (reads run in batch order): cost of the extra copies is outside the kernel timings
             u64 *dSteps, *dNW; unsigned long long* dClk; EG_CK(cudaMalloc(&dSteps, nb * 8)); EG_CK(cudaMalloc(&dNW, nb * 8)); EG_CK(cudaMalloc(&dClk, 64)); EG_CK(cudaMemset(dClk, 0, 64));
@@ -382,7 +354,6 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     cudaFree(dIdx); cudaFree(dOut); cudaFree(dSt); cudaFree(dLen); cudaFree(dWork); cudaFree(dRbuf); cudaFree(dBst); cudaFree(dNent);
     cudaFree(dBase); cudaFree(dBits);
     if (dPerm) cudaFree(dPerm);
-    if (dCtr) cudaFree(dCtr);
     if (dKey) cudaFree(dKey);
     return true;
 }
