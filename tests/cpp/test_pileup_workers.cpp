@@ -27,7 +27,7 @@ std::string chr_name(int c) { return c == kChroms ? "chrM" : "chr" + std::to_str
 
 struct Aln { int chrom; int pos; };
 
-bool write_inputs(const std::string& dir, uint32_t seed, int n_reads) {
+bool write_inputs(const std::string& dir, uint32_t seed, int n_reads, int max_nh) {
     std::mt19937 rng(seed);
     std::ofstream g(dir + "/mini.gtf");
     for (int c = 0; c <= kChroms; ++c) {
@@ -66,6 +66,7 @@ bool write_inputs(const std::string& dir, uint32_t seed, int n_reads) {
         const char* bc = bcs[rng() % 4];
         int kind = static_cast<int>(rng() % 10);
         int nh = kind < 3 ? 1 : (kind < 8 ? 2 : (kind < 9 ? 3 : 4));
+        if (nh > max_nh) nh = 2;
         std::vector<Aln> alns;
         for (int a = 0; a < nh; ++a) alns.push_back(pick_aln(false));
         if (nh >= 2 && rng() % 2) alns[rng() % nh].chrom = kChroms;   // a chrM alignment: the NUMT-like tie
@@ -112,15 +113,17 @@ Result run_once(const std::string& dir, int workers) {
 int main() {
     std::string dir = "/tmp/test_pileup_workers_" + std::to_string(getpid());
     std::system(("mkdir -p " + dir).c_str());
+    for (int max_nh : {2, 4})
     for (uint32_t seed : {1u, 2u, 3u}) {
-        if (!write_inputs(dir, seed, 6000)) { std::cout << "SKIP: samtools not available\n"; break; }
+        const std::string tag = "NH<=" + std::to_string(max_nh) + " seed " + std::to_string(seed);
+        if (!write_inputs(dir, seed, 6000, max_nh)) { std::cout << "SKIP: samtools not available\n"; break; }
         Result ref = run_once(dir, 1);
-        CHECK(ref.st["exon_hits"] > 0 && ref.st["mt_numt_rescued"] > 0, "seed " + std::to_string(seed) + ": the sample has counted reads and NUMT rescues");
+        CHECK(ref.st["exon_hits"] > 0 && ref.st["mt_numt_rescued"] > 0, tag + ": the sample has counted reads and NUMT rescues");
         for (int w : {2, 3, 4, 5, 7, 8, 13}) {
             Result r = run_once(dir, w);
             for (auto& [k, v] : ref.st)
-                CHECK(r.st[k] == v, "seed " + std::to_string(seed) + ", " + std::to_string(w) + " workers: " + k + " " + std::to_string(r.st[k]) + " vs 1 worker " + std::to_string(v));
-            CHECK(r.genes == ref.genes, "seed " + std::to_string(seed) + ", " + std::to_string(w) + " workers: per-gene exon counts");
+                CHECK(r.st[k] == v, tag + ", " + std::to_string(w) + " workers: " + k + " " + std::to_string(r.st[k]) + " vs 1 worker " + std::to_string(v));
+            CHECK(r.genes == ref.genes, tag + ", " + std::to_string(w) + " workers: per-gene exon counts");
         }
     }
     std::system(("rm -rf " + dir).c_str());
