@@ -20,6 +20,7 @@ extern "C" void __gcov_dump(void);
 #include "SeqCache.h"
 void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptome *tr);
 void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk); //singlet E10 (SeqCacheGpuPrefill.cpp)
+void seqCacheGpuEarly(Parameters &P); //singlet E13: the decoded reads' barcode pass (and clip) for the prefill, beside the genome load (SeqCacheGpuPrefill.cpp)
 extern bool g_e11SoloDone; //singlet E11 (SeqCacheGpuPrefill.cpp): star_Solo.out/ was written from the device's counts
 #include "StarAccel.h"
 #include "Stats.h"
@@ -157,6 +158,8 @@ int star_main_impl(int argInN, char *argIn[])
 
     // this will execute --runMode soloCellFiltering and exit
     Solo soloCellFilter(P, *transcriptomeMain);
+
+    seqCacheGpuEarly(P); //singlet --engine gpu, E13 (SINGLET_ENGINE_GPU_INGEST=1): the reads' barcodes and clip on a thread while the genome loads
 
     ////////////////////////////////////////////////////////////////////////
     ///////////////////////////////// Genome

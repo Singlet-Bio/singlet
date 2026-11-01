@@ -23,6 +23,9 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <functional>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -68,7 +71,19 @@ public:
     void add_exact(int64_t wl_index, uint64_t n) {
         if (wl_index >= 0 && static_cast<size_t>(wl_index) < exact_.size()) exact_[wl_index] += n;
     }
-    uint64_t exact_count(int64_t wl_index) const { return exact_[wl_index]; }
+    uint64_t exact_count(int64_t wl_index) const { settle(); return exact_[wl_index]; }
+    const std::vector<uint64_t>& exact() const { settle(); return exact_; }
+
+    /// E13 (SINGLET_ENGINE_GPU_INGEST=1, singlet/engine_gpu_ingest.h): the exact counts may arrive after the corrector is handed to the
+    /// pileup, from STAR's GPU prefill. `fill` runs once (thread-safe) on the first correction that needs a count (a CR with two or more
+    /// candidates), or on settle(); until then exact hits and single candidates resolve as usual.
+    void set_pending(std::function<void(CbCorrector&)> fill) {
+        pending_ = std::make_shared<Pending>();
+        pending_->fill = std::move(fill);
+    }
+    void settle() const {
+        if (pending_) std::call_once(pending_->once, [this] { pending_->fill(const_cast<CbCorrector&>(*this)); });
+    }
 
     /// Corrects `cb` (len() bases). On status >= 0 writes the whitelist barcode (len() chars, no terminator) to `out`.
     /// `qual` may be null: every base then counts as singlet's 'F'.
@@ -97,6 +112,7 @@ public:
         }
         if (nc == 0) return kNoMatch;
         if (nc == 1) { unpack(wl_[cand_[0].idx], out); return kOneCandidate; }
+        settle();
         float ptot = 0.0f, pmax = 0.0f, pin;
         int64_t best = -1;
         for (size_t k = 0; k < nc; ++k) {
@@ -143,9 +159,12 @@ private:
         return (it != wl_.end() && *it == v) ? static_cast<int64_t>(it - wl_.begin()) : -1;
     }
 
+    struct Pending { std::once_flag once; std::function<void(CbCorrector&)> fill; };
+
     int len_ = 0;
     std::vector<uint64_t> wl_;
     std::vector<uint64_t> exact_;
+    std::shared_ptr<Pending> pending_;
 };
 
 } // namespace singlet
