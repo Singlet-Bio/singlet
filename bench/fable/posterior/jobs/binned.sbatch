@@ -19,6 +19,8 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF
 IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif; ENV=$W/envs/pbench; BARE=$W/repos/singlet-py.git
 BINDIR=${BINDIR:-$W/jobs/fable/posterior/bin}; T=${T:-8}; NREADS=${NREADS:-6000000}; BR=${BRANCH:-gpu/fable/posterior}
 s=${SAMPLE:-pbmc1k_v3}; WL=${WL:-3M-february-2018.txt}; UMIL=${UMIL:-12}; G=${G:-$REF/GRCh38-2024-A}
+# the legacy FASTQ path wants a cell list for the pileup (--barcodes; STAR's Solo does not read it): E11's CPU-engine cells of pbmc1k_v3
+BC=${BC:-$W/jobs/fable/solowire/results/gate-796377/cpu/out/star_Solo.out/Gene/filtered/barcodes.tsv}
 RES=$W/jobs/fable/posterior/results/binned-$SLURM_JOB_ID; mkdir -p $RES
 SCR=/tmp/$USER-e15d-$SLURM_JOB_ID; mkdir -p $SCR/src $SCR/hts $SCR/solo $SCR/keep
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT INT TERM
@@ -44,7 +46,7 @@ O=$SCR/run/out; mkdir -p $O
 ( while [ ! -e $O/star_Solo.out/Gene/CellReads.stats ]; do sleep 0.2; done; ln $O/star_Solo.out/Gene/CellReads.stats $SCR/keep/CellReads.stats ) &
 WATCH=$!
 T0=$(date +%s)
-( cd $SCR/run && SINGLET_SOLO_DUMP=$SCR/solo timeout -k 30 1200 $BINDIR/singlet-gpu --reads $SCR/r1.fastq $SCR/r2.fastq --whitelist $PB/whitelists/$WL \
+( cd $SCR/run && SINGLET_SOLO_DUMP=$SCR/solo timeout -k 30 1200 $BINDIR/singlet-gpu --reads $SCR/r1.fastq $SCR/r2.fastq --whitelist $PB/whitelists/$WL --barcodes $BC \
     --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf --out-prefix $O/ --threads $T --pipeline --output-format 1pz \
     --engine cpu > $RES/run.log 2>&1 ) &
 P=$!
