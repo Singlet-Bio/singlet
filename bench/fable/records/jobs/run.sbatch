@@ -53,7 +53,7 @@ run_driver() {
   rm -rf $SCR/src; mkdir -p $SCR/src
   git -C $BARE archive refs/fable/records src/engine_gpu include/singlet bench/fable/records | tar -x -C $SCR/src
   local S=$SCR/src
-  apptainer exec -B $W -B $SCR $IMG nvcc -O3 -std=c++17 -arch=sm_90 -fmad=false -lineinfo -Xcompiler -fopenmp -I$S/src/engine_gpu -I$S/include -I$SCR/hts \
+  apptainer exec -B $W -B $SCR $IMG nvcc -O3 -std=c++17 -arch=sm_90 -fmad=false -lineinfo -Xcompiler -fopenmp -Xcompiler -Wno-format -I$S/src/engine_gpu -I$S/include -I$SCR/hts \
     -o $SCR/records_test $S/bench/fable/records/records_test.cu $S/src/engine_gpu/records_gpu.cu > $RES/compile-$SHA.log 2>&1 \
     || { echo "driver $SHA: compile FAILED" | tee -a $RES/summary.txt; tail -30 $RES/compile-$SHA.log; LAST=$SHA; return; }
   local Q=""; [ -e $SCR/keep/.gpu_handoff.bin.reads.q ] && Q="--q $SCR/keep/.gpu_handoff.bin.reads.q"
