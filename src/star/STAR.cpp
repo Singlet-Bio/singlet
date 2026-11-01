@@ -19,6 +19,7 @@ extern "C" void __gcov_dump(void);
 #include "ReadAlign.h"
 #include "SeqCache.h"
 void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptome *tr);
+void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk); //singlet E10 (SeqCacheGpuPrefill.cpp)
 #include "StarAccel.h"
 #include "Stats.h"
 #include "genomeGenerate.h"
@@ -280,6 +281,7 @@ int star_main_impl(int argInN, char *argIn[])
     P.inOut->logMain << timeMonthDayTime(g_statsAll.timeFinishMap) << " ..... finished mapping\n"
                      << "RAM after mapping:\n"
                      << linuxProcMemory() << flush;
+    seqCacheGpuAfterMapping(P, RAchunk); //singlet --engine gpu, E10 (SINGLET_ENGINE_GPU_E2E >= 2); nothing otherwise
 #ifdef STAR_PROFILE
     {
         double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - profClock0).count();

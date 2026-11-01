@@ -10,6 +10,7 @@
 #include "singlet/engine_gpu.h"
 #include "stitch.cuh"
 #include "records_gpu.h"   // E8: the pileup's records from the device-resident results (SINGLET_ENGINE_GPU_E2E=1)
+#include "hostloop_gpu.h"  // E10: per-read entries and the per-read products of STAR's loop (SINGLET_ENGINE_GPU_E2E >= 2)
 #include <cuda_runtime.h>
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
@@ -362,6 +363,32 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     out.nReads = n;
     char* dSeq; u64* dOff;
     if (!upload(in.seq.data(), in.seq.size(), dSeq, err) || !upload((const u64*)in.off.data(), n + 1, dOff, err)) return fail(err);
+    // E10 (SINGLET_ENGINE_GPU_E2E >= 2): per read its hand-off entry and low-quality mask, from the original read (before the clip replaces it),
+    // its clip and what the host decode packed (aux); kept on the device until the records exist (products() zeroes the reads without one)
+    bool e10 = in.e10.on && in.e2e != nullptr && in.e2e->base != nullptr && n > 0 && in.e10.nw >= 1 && in.e10.aux.size() == n * (2 + (u64)in.e10.nw);
+    e6::ReadEntry* dEnt = nullptr; uint64_t* dQm = nullptr; uint64_t* dAux = nullptr; bool e10Done = false;
+    auto e10Off = [&](const std::string& why) {
+        if (e10) out.e10.log += "engine_gpu: E10 not used (" + why + "); STAR's loop does the per-read work\n";
+        e10 = false; cudaGetLastError();
+        if (dEnt) cudaFree(dEnt); if (dQm) cudaFree(dQm); if (dAux) cudaFree(dAux); dEnt = nullptr; dQm = nullptr; dAux = nullptr;
+    };
+    if (in.e10.on && !e10) out.e10.log += "engine_gpu: E10 not used (no shared region or no host decode)\n";
+    if (e10) {
+        const double ta = now();
+        if (cudaMalloc(&dEnt, n * sizeof(e6::ReadEntry)) != cudaSuccess || (in.e10.wantMask && cudaMalloc(&dQm, n * 16) != cudaSuccess)
+            || cudaMalloc(&dAux, in.e10.aux.size() * 8) != cudaSuccess) e10Off("out of device memory");
+        else if (cudaMemcpy(dAux, in.e10.aux.data(), in.e10.aux.size() * 8, cudaMemcpyHostToDevice) != cudaSuccess) e10Off("aux upload");
+        out.e10.msUpAux = (now() - ta) * 1e3;
+    }
+    auto e10Entries = [&](const u64* cs, const u64* cl) {
+        e10Done = true;
+        if (!e10) return;
+        float ms = 0; std::string w;
+        if (!singlet_hostloop_gpu::entries(dSeq, (const uint64_t*) dOff, (const uint64_t*) cs, (const uint64_t*) cl, n, dAux, in.e10.nw, in.e10.hook, dEnt, dQm,
+                                           ms, w)) { e10Off("entries: " + w); return; }
+        out.e10.msEntries = ms;
+        cudaFree(dAux); dAux = nullptr;
+    };
     // clipping: the reads become their clipped sequences (device copy compacted; on the host each read's span is (cs, length))
     std::vector<u64> hcs, hoffC;
     if (in.clip.on && n > 0) {
@@ -377,6 +404,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         u64 *dCs, *dCl, *dOffC; char* dSeqC;
         if (cudaMalloc(&dCs, n * 8) || cudaMalloc(&dCl, n * 8) || cudaMalloc(&dOffC, (n + 1) * 8)) return fail("out of device memory (clip)");
         k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl);
+        if (e10) e10Entries(dCs, dCl);   // E10: the original reads and their clip
         cudaMemset(dOffC, 0, 8);
         thrust::inclusive_scan(thrust::device_ptr<u64>(dCl), thrust::device_ptr<u64>(dCl + n), thrust::device_ptr<u64>(dOffC + 1));
         u64 tot = 0;
@@ -405,6 +433,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         snprintf(line, sizeof line, "engine_gpu: clipping: %llu of %llu reads clipped, %.2f s\n", (unsigned long long)nClipped, (unsigned long long)n, now() - tc);
         out.log += line;
     }
+    if (e10 && !e10Done) e10Entries(nullptr, nullptr);   // E10: no clipping
     memMark("reads+clip");
     // a read's (clipped) sequence on the host
     auto rseq = [&](u64 i) { return hcs.empty() ? in.seq.data() + in.off[i] : in.seq.data() + hcs[i]; };
@@ -668,6 +697,40 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         E2H.oSigs = oS; E2H.oAlns = oA; E2H.oOps = oO; E2H.oNm = oN; E2H.oSeq = oQ;
         E2H.nMateGap = R6.nMateGap; E2H.nNoExon = R6.nNoExon; E2H.nBadBest = R6.nBadBest; E2H.nMapped = R6.nMapped;
         E2H.msGather = (tb - tg) * 1e3; E2H.msBuild = (td - tb) * 1e3; E2H.msD2H = (te - td) * 1e3;
+        if (e10) {   // E10: the per-read products of the reads with a record, then the entries and masks into the region
+            uint32_t* dRR = (uint32_t*) dal(n * 4);
+            std::string w;
+            if (!dRR || cudaMemcpy(dRR, out.readRecord.data(), n * 4, cudaMemcpyHostToDevice) != cudaSuccess) e10Off("readRecord upload");
+            else if (!singlet_hostloop_gpu::products(RP, dBlob, (const uint64_t*) dBOff, (const uint64_t*) dSOff, nRec, dRR, n, dEnt, dQm, in.e10.outSJ,
+                                                     in.e10.sjAll, out.e10, w)) e10Off("products: " + w);
+            else if (out.e10.nOddRec) e10Off(std::to_string(out.e10.nOddRec) + " records mapped without a transcript");
+            else {
+                const double t0e = now();
+                const u64 oEn = RG.take(n * sizeof(e6::ReadEntry)), oQm = dQm ? RG.take(n * 16) : 0;
+                if (!oEn || (dQm && !oQm)) e10Off("the shared region is full");
+                else {
+                    const u64 lo2 = oEn & ~4095ull, hi2 = std::min<u64>(RG.cap, (RG.hdr()->used + 4095) & ~4095ull);
+                    parallelFor((hi2 - lo2) >> 12, hostThreads, [&](u64 a, u64 b) { for (u64 q = a; q < b; q++) { volatile uint8_t* x = RG.base + lo2 + (q << 12); *x = *x; } });
+                    const bool pin2 = cudaHostRegister(RG.base + lo2, hi2 - lo2, cudaHostRegisterDefault) == cudaSuccess;
+                    if (!pin2) cudaGetLastError();
+                    const bool cp2 = cudaMemcpy(RG.base + oEn, dEnt, n * sizeof(e6::ReadEntry), cudaMemcpyDeviceToHost) == cudaSuccess
+                                     && (!dQm || cudaMemcpy(RG.base + oQm, dQm, n * 16, cudaMemcpyDeviceToHost) == cudaSuccess);
+                    if (pin2) cudaHostUnregister(RG.base + lo2);
+                    if (!cp2) e10Off("entries copy");
+                    else {
+                        out.e10.oEntries = oEn; out.e10.oQMask = oQm; out.e10.ok = true;
+                        out.e10.msD2H = (now() - t0e) * 1e3;
+                        char l2[400];
+                        snprintf(l2, sizeof l2, "engine_gpu: E10 on the device: entries %.1f ms (aux upload %.0f ms), products %.1f ms (%llu junction entries -> %llu junctions, "
+                                 "%llu unmapped reads, %llu hook reads), entries/masks to the region %.0f ms (%s)\n", out.e10.msEntries, out.e10.msUpAux,
+                                 out.e10.msProducts, (unsigned long long) out.e10.nSJentries, (unsigned long long) out.e10.nSJ,
+                                 (unsigned long long) out.e10.unmappedReads.size(), (unsigned long long) out.e10.hookReads.size(), out.e10.msD2H,
+                                 pin2 ? "page-locked" : "pageable");
+                        out.e10.log += l2;
+                    }
+                }
+            }
+        }
         char l[512];
         snprintf(l, sizeof l, "engine_gpu: E8 records on the device: %llu records, %llu alignments, %llu ops, %llu seq bytes (%llu mapped, no exon %llu, "
                  "trBest=trInit %llu); gather %.0f ms (host lane upload %.1f MB), buildRecords %.0f ms (kernels %.0f/%.0f/%.0f), copy to the region %.0f ms (%s)\n",
@@ -678,12 +741,21 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         out.e2eOk = true;
         return true;
     };
+    // per read: its record (sequence-cache result) or NONE; final once every hostPart ran
+    auto fillReadRecord = [&]() {
+        std::vector<uint32_t> posOf(n, NONE);
+        parallelFor(rep.size(), hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) posOf[rep[k]] = (uint32_t)k; });
+        out.readRecord.assign(n, NONE);
+        parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { for (u64 i = lo; i < hi; i++) { const uint32_t r = readRep[i]; if (r != NONE) out.readRecord[i] = recOfPos[posOf[r]]; } });
+    };
     // E8: the host lane and the host records first (the device still held), then the records on the device from the device-resident results
     if (e2e) {
         for (auto& cr : chunks) { if (!hostPart(cr)) return fail(err); std::vector<uint32_t>().swap(cr.repc); }
+        if (e10) fillReadRecord();   // E10: the products need it on the device
         cudaFree(dG1); cudaFree(dSA); cudaFree(dSAi); dG1 = nullptr; dSA = nullptr; dSAi = nullptr;   // the index is no longer needed: room for the records
         std::string e2eWhy;
-        if (!e2eBuild(e2eWhy)) out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n";
+        if (!e2eBuild(e2eWhy)) { out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records"); }
+        { const bool ok10 = out.e10.ok; e10 = false; e10Off(""); out.e10.ok = ok10; }   // frees the device entries
         for (auto& cr : chunks) for (Lane* L : {&cr.A, &cr.M, &cr.B}) { cudaFree(L->dOut); cudaFree(L->dOff); L->dOut = nullptr; L->dOff = nullptr; }
         std::vector<u64>().swap(recSrc); std::vector<uint32_t>().swap(recRead);
     }
@@ -694,12 +766,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     cudaFree(dsm); cudaFree(dsl); cudaFree(dsr); cudaFree(dst);
     if (in.release) in.release();
     if (!e2e) for (auto& cr : chunks) { if (!hostPart(cr)) return fail(err); std::vector<uint32_t>().swap(cr.repc); }
-    {   // per read: its record (sequence-cache result) or NONE
-        std::vector<uint32_t> posOf(n, NONE);
-        parallelFor(rep.size(), hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) posOf[rep[k]] = (uint32_t)k; });
-        out.readRecord.assign(n, NONE);
-        parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { for (u64 i = lo; i < hi; i++) { const uint32_t r = readRep[i]; if (r != NONE) out.readRecord[i] = recOfPos[posOf[r]]; } });
-    }
+    if (out.readRecord.size() != n) fillReadRecord();
     out.log += "engine_gpu: device memory (GB in use): " + memLog + "lanes peak " + std::to_string(g_devPeakGB) + "\n";
     char line[512];
     snprintf(line, sizeof line, "engine_gpu: %llu reads, %llu distinct (%llu with N), mapped on the GPU %llu, host lane %llu (%.2f s), not mapped %llu; "

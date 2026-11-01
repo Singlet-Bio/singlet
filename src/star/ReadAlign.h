@@ -52,6 +52,8 @@ class ReadAlign {
         void seqCacheHandoffSummary(std::vector<uint8> &out);
         static bool seqCacheHandoffConfig(const Parameters &P);
         const uint8 *handoffSum = nullptr;
+        //singlet E10 (g_e10Level >= 3): this read has a GPU record; the device computed its stats, junctions and Unmapped.out record
+        bool e10Skip = false;
         Transcript handoffTr[2]; //stand-ins carrying only Chr for SoloReadFeature::record (0: a mito contig, 1: another)
         void outputHandoffSummary();
         void handoffReadEntry(); //the pileup's per-read entry (g_handoffReads) of a hand-off read, after getCBandUMI

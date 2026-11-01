@@ -8,6 +8,8 @@
 
 #include "SeqCache.h"
 
+extern int g_e10Level; //singlet E10 (SeqCacheGpuPrefill.cpp)
+
 int ReadAlign::oneRead() {//process one read: load, map, write
 
     //load read name, sequence, quality from the streams into internal arrays
@@ -76,8 +78,14 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         Read1[2][Lread-ii-1]=Read1[1][ii];
     };
 
+    //singlet E10 (SINGLET_ENGINE_GPU_E2E=3): a read with a GPU record: its Log.final.out counters, junctions and Unmapped.out record were made
+    //on the device (SeqCacheGpuPrefill.cpp); this loop keeps readLoad, the barcode and the Solo record
+    e10Skip = g_e10Level >= 3 && g_handoffReadRecord != nullptr && iReadAll >= 1 && iReadAll - 1 < g_handoffNReads
+        && g_handoffReadRecord[iReadAll - 1] != 0xFFFFFFFFu;
+    if (!e10Skip) {
     statsRA.readN++;
     statsRA.readBases += readLength[0]+readLength[1];
+    };
 
     //max number of mismatches allowed for this read
     outFilterMismatchNmaxTotal=min(P.outFilterMismatchNmax, (uint) (P.outFilterMismatchNoverReadLmax*(readLength[0]+readLength[1])));
@@ -94,9 +102,16 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     PROF_T0(tMap);
     bool fromCache = false;
     uint64 seqHash = 0;
-    bool cacheable = handoffSum == nullptr && g_seqCache != nullptr && seqCacheable();
+    bool cacheable = handoffSum == nullptr && !e10Skip && g_seqCache != nullptr && seqCacheable();
     if (handoffSum != nullptr) {
         unmapType = -1;
+        chimRecord = false;
+        peOv.yes = false;
+    } else if (e10Skip) {//E10: a read whose record is unmapped (a mapped record has a summary): not looked up
+        unmapType = 0;
+        nW = 0;
+        nTr = 0;
+        trBest = trInit;
         chimRecord = false;
         peOv.yes = false;
     } else if (cacheable) {
@@ -107,8 +122,8 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         g_seqCache->nUncacheable++;
     };
 
-    if (handoffSum != nullptr) {
-        //outputHandoffSummary sets nTr, the stand-in alignments and trBest
+    if (handoffSum != nullptr || e10Skip) {
+        //outputHandoffSummary sets nTr, the stand-in alignments and trBest; E10: outputAlignments does the barcode and the Solo record
     } else if (fromCache) {
         seqCacheRestore(seqCacheBlob);
         mappedFilter();
@@ -159,13 +174,13 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     PROF_ADD(PROF_map, tMap);
 #ifdef STAR_PROFILE
     unsigned long long profMapCyc = __rdtsc() - tMap;
-    int profUnique = (!fromCache && handoffSum==nullptr && unmapType==-1 && nTr==1) ? 1 : 0;
+    int profUnique = (!fromCache && handoffSum==nullptr && !e10Skip && unmapType==-1 && nTr==1) ? 1 : 0;
     {
-        int oc = (fromCache || handoffSum!=nullptr) ? 5 : unmapType==-1 ? (nTr==1 ? 0 : 1) : unmapType==3 ? 2 : unmapType==1 ? 3 : 4;
+        int oc = (fromCache || handoffSum!=nullptr || e10Skip) ? 5 : unmapType==-1 ? (nTr==1 ? 0 : 1) : unmapType==3 ? 2 : unmapType==1 ? 3 : 4;
         g_profOutcome[oc][0] += __rdtsc() - tMap;
         g_profOutcome[oc][1]++;
-        g_profPath[handoffSum!=nullptr ? 0 : fromCache ? 1 : 2]++;
-        if (!fromCache && handoffSum==nullptr) {
+        g_profPath[handoffSum!=nullptr ? 0 : (fromCache || e10Skip) ? 1 : 2]++;
+        if (!fromCache && handoffSum==nullptr && !e10Skip) {
             for (int k=0; k<3; k++) g_profOutcomeDetail[oc][k] += profCyc[k];
             g_profOutcomeDetail[oc][3] += profCnt[0];
             g_profOutcomeDetail[oc][4] += profCnt[1];

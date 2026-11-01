@@ -20,6 +20,11 @@ void ReadAlign::outputAlignments() {
         ReadAlign::outputHandoffSummary();
         return;
     };
+    if (e10Skip) {//singlet E10: an unmapped read with a GPU record: counted and written to Unmapped.out on the device; the barcode and the Solo record
+        soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
+        soloRead->record(0, trMult, iReadAll, readAnnot);
+        return;
+    };
 
     ReadAlign::outFilterBySJout();//sets outFilterBySJoutPass=false if read is held for the 2nd stage of outFilterBySJout
     
@@ -425,8 +430,10 @@ void ReadAlign::outputHandoffSummary()
     p += 4 * ng;
     af.ovType = ov;
     if (nTr > 1) {//multimappers
-        statsRA.mappedReadsM++;
+        if (!e10Skip) statsRA.mappedReadsM++;
         unmapType = -2;
+    } else if (e10Skip) {//E10: counted on the device
+        p += 18 + SJ_MOTIF_SIZE + 1;
     } else {//unique mappers: Stats::transcriptStats
         statsRA.mappedReadsU++;
         uint16 a[3];
@@ -446,7 +453,7 @@ void ReadAlign::outputHandoffSummary()
     uint16 nsj;
     memcpy(&nsj, p, 2);
     p += 2;
-    if (nsj > 0 && chunkOutSJ != nullptr) {//recordSJ's records for this read
+    if (nsj > 0 && chunkOutSJ != nullptr && !e10Skip) {//recordSJ's records for this read (E10: the device's junctions)
         memcpy(chunkOutSJ->data + chunkOutSJ->N * Junction::dataSize, p, (size_t) nsj * Junction::dataSize);
         chunkOutSJ->N += nsj;
     };
