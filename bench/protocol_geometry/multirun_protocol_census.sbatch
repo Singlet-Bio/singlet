@@ -68,24 +68,24 @@ for l in out.splitlines():
         gsm, run = p[0].split("|"); rows.append(dict(gsm=gsm, run=run, tag=p[1], conf=int(p[2]), wl=float(p[3]), r1_length=p[4], bc_len=p[5]))
 R = pd.DataFrame(rows)
 R.to_csv(T + "/runs.tsv", sep="\t", index=False)
-fam = lambda t: re.sub(r"-(3p|5p)-", "-", t)
+sys.path.insert(0, os.environ["SRC"])
+import fetch_worker as FW
 reads = {r: n for gsm in multi.index for r, n in zip(multi.runs[gsm], multi.reads[gsm])}
-k = R.groupby("gsm").agg(n=("run", "count"), tags=("tag", lambda s: sorted(set(s))), fams=("tag", lambda s: sorted({fam(t) for t in s})), minconf=("conf", "min"))
-k = k[k.n >= 2]
-flip = k[(k.tags.map(len) > 1) & (k.fams.map(len) == 1)]
-inc = k[k.fams.map(len) > 1]
-print("samples with >= 2 probed runs: %d" % len(k))
-print("  3p/5p flip (one family, different tags): %d (%.1f%%)" % (len(flip), 100 * len(flip) / max(len(k), 1)))
-print("  incompatible (different families):       %d (%.1f%%)" % (len(inc), 100 * len(inc) / max(len(k), 1)))
-print("  with a run below MEDIUM confidence:      %d" % int((k.minconf < 2).sum()))
-print("flip samples:"); print(R[R.gsm.isin(flip.index)].sort_values(["gsm", "run"]).to_string())
-print("incompatible samples:")
-for gsm in inc.index:
-    x = R[R.gsm == gsm]
-    by = {}
-    for r in x.itertuples(): by.setdefault(fam(r.tag), []).append((r.run, r.tag, int(reads.get(r.run, 0))))
-    main = max(by, key=lambda f: sum(n for _, _, n in by[f]))
-    print(" ", gsm, "main=%s" % main, {f: [(a, b) for a, b, _ in v] for f, v in by.items()})
+rows2 = []
+for gsm, x in R.groupby("gsm"):
+    if len(x) < 2: continue
+    runs = list(x.run); calls = {r.run: (r.tag, r.conf) for r in x.itertuples()}
+    main, vote, others = FW.vote_runs(runs, calls, [reads.get(r, 0) for r in runs])
+    rows2.append(dict(gsm=gsm, n=len(runs), status=vote["status"], incompatible=vote["incompatible"], low=len(vote["low_confidence_runs"]), n_other_runs=len(vote.get("other_runs", [])),
+                      raw_tags=sorted(set(x.tag)), conf_min=int(x.conf.min())))
+V = pd.DataFrame(rows2)
+print("samples with >= 2 probed runs: %d" % len(V))
+print("  raw: runs with different tags: %d" % int((V.raw_tags.map(len) > 1).sum()))
+print("  vote status: %s" % dict(V.status.value_counts()))
+print("  3p/5p flip settled by the vote (status voted): %d (%.1f%%)" % (int((V.status == "voted").sum()), 100 * (V.status == "voted").mean()))
+print("  with run(s) lacking a confident call that follow the main group: %d (%.1f%%)" % (int((V.low > 0).sum()), 100 * (V.low > 0).mean()))
+print("  genuinely different families (confident calls) -> companion_candidates: %d (%.1f%%)" % (int(V.incompatible.sum()), 100 * V.incompatible.mean()))
+print(V[V.incompatible].to_string())
 print("all tags:", dict(R.tag.value_counts()))
 PY
-python3 $T/census.py $T
+SRC=$T/repo/scripts/atlas_rerun python3 $T/census.py $T

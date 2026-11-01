@@ -269,14 +269,19 @@ def check_against_catalogue(tag, protocol_inferred):
     return {"tag": tag, "catalogue": protocol_inferred, "disagrees": bool(bad)}
 
 
+MIN_VOTE_CONFIDENCE = 2   # Confidence::MEDIUM: a LOW / NONE call (whitelist hit rate ~0, e.g. 'dropseq' or '10x-3p-v1' at 5%) is a failed detection of a run, not a different library
+
+
 def vote_runs(runs, calls, run_reads):
     """The sample-level protocol decision for a multi-run sample. calls: {run: (tag, confidence)}; run_reads: reads per run in `runs` order (may be empty).
-    -> (main_runs, vote, other_groups). Runs are grouped by protocol FAMILY (same whitelist and geometry; the 3p/5p flag is not part of it). The group with the most reads is the
-    GEX sample (`main_runs`, in the original order; runs without a call stay with it); within it a 3'/5' disagreement is settled by vote_protocol (reads-weighted). Other families
-    are different libraries under one GSM (a feature library next to the GEX, for instance): they are not decoded here and come back as `other_groups`, entries a companion
-    classifier can pick up (companion_candidates in the manifest). vote["incompatible"] is True then."""
+    -> (main_runs, vote, other_groups). Only calls at MEDIUM or better take part. They are grouped by protocol FAMILY (same whitelist and geometry; the 3p/5p flag is not part of it);
+    the group with the most reads is the GEX sample (`main_runs`, original order). Runs without a call or with a LOW call stay with it (`vote["low_confidence_runs"]`: they belong to the
+    GSM and are decoded with the sample's protocol). Within the main group a 3'/5' disagreement is settled by vote_protocol (reads-weighted). Other families with a confident
+    call are different libraries under one GSM (a feature library next to the GEX, for instance): they are not decoded here and come back as `other_groups`, entries a companion
+    classifier can pick up (companion_candidates in the manifest); vote["incompatible"] is True then."""
     w = {r: max(int(n or 0), 1) for r, n in zip(runs, run_reads or [])}
-    tags = {r: calls[r][0] for r in runs if calls.get(r) and calls[r][0]}
+    conf = {r: calls[r] for r in runs if calls.get(r) and calls[r][0] and (calls[r][1] or 0) >= MIN_VOTE_CONFIDENCE}
+    tags = {r: c[0] for r, c in conf.items()}
     groups = {}
     for r, t in tags.items():
         groups.setdefault(protocol_family(t), []).append(r)
@@ -291,6 +296,7 @@ def vote_runs(runs, calls, run_reads):
         others.append({"lib_gsm": None, "lib_type": None, "status": "unclassified", "protocol_family": f, "protocol_tags": {r: tags[r] for r in rs}, "runs": rs,
                        "reads": sum(int(n or 0) for r, n in zip(runs, run_reads or []) if r in rs)})
     vote["incompatible"] = bool(others)
+    vote["low_confidence_runs"] = [r for r in main if r not in tags] if tags else []
     if others:
         vote["main_family"] = main_fam
         vote["other_runs"] = [r for o in others for r in o["runs"]]
@@ -434,6 +440,9 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
             if vote["status"] == "voted":
                 force_protocol = vote["winner"]
                 log("[vote] %s: runs disagree on the 3'/5' flag %s -> every run decoded as %s" % (gsm, vote["tags"], force_protocol))
+            elif vote["status"] == "agree" and vote["low_confidence_runs"]:
+                force_protocol = vote["winner"]   # the runs the detector could not call are lanes of the same library: decode them as the others
+                log("[vote] %s: runs %s have no confident call -> decoded as %s like the rest" % (gsm, vote["low_confidence_runs"], force_protocol))
         for r in item["runs"]:
             Q.heartbeat(claim)
             if a.limiter:

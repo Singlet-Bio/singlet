@@ -139,3 +139,18 @@ def test_plan_items_carry_run_reads_and_the_catalogue_protocol(tmp_path):
     assert Q.main(["from-plan", plan, out, "--gsm", "GSM1"]) == 0
     import json
     assert json.loads(open(out).read())["protocol_inferred"] == "10xv3_5prime"
+
+
+def test_low_confidence_calls_do_not_form_a_family():
+    # census of the campaign's multi-run samples: the 'different protocol' runs are LOW calls (dropseq / marsseq2 / 10x-3p-v1 at whitelist rate ~0.05): a failed detection, not another library
+    calls = {"A": ("10x-3p-v2", 3), "B": ("10x-3p-v2", 3), "C": ("10x-3p-v2", 3), "D": ("10x-3p-v1", 1)}
+    main, vote, others = F.vote_runs(["A", "B", "C", "D"], calls, [10, 10, 10, 3])
+    assert main == ["A", "B", "C", "D"] and others == [] and vote["incompatible"] is False
+    assert vote["status"] == "agree" and vote["winner"] == "10x-3p-v2" and vote["low_confidence_runs"] == ["D"]
+    # a confident call in another family is a different library
+    calls["D"] = ("10x-3p-v3", 3)
+    main, vote, others = F.vote_runs(["A", "B", "C", "D"], calls, [10, 10, 10, 3])
+    assert main == ["A", "B", "C"] and vote["incompatible"] is True and others[0]["runs"] == ["D"] and vote["low_confidence_runs"] == []
+    # nothing confident at all: no decision, every run stays (as before the vote existed)
+    main, vote, others = F.vote_runs(["A", "B"], {"A": ("dropseq", 1), "B": ("celseq2", 1)}, [5, 5])
+    assert main == ["A", "B"] and vote["status"] == "none" and others == [] and vote["low_confidence_runs"] == []
