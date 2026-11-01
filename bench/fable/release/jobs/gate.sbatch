@@ -115,7 +115,8 @@ for s in "${SAMPLES[@]}"; do
          else ING=$(grep -ao "\[1fq-ingest\] not used ([^)]*)" $O/run.log.ts | tail -1 | sed -E 's/.*not used \((.*)\)/declined: \1/'); ING=${ING:-no}; fi
          echo "LEVEL ${LV:-?}; INGEST $ING" | tee -a $RES0/summary.txt ;;
     esac
-    grep -a -e "\[engine_gpu\] fallback" -e "\[1fq-ingest\] not used" -e "SINGLET_GPU_PILEUP ignored" -e "E8: no shared memory" -e "FATAL" -e "FELL BACK" $O/run.log.ts | cut -c1-600 > $O/fallbacks.txt
+    grep -a -e "\[engine_gpu\] fallback" -e "\[1fq-ingest\] not used" -e "SINGLET_GPU_PILEUP ignored" -e "E8: no shared memory" -e "prefill wrote none" -e "FATAL" -e "FELL BACK" \
+         -e "\[gpu_pileup\] ERROR" -e "\[gpu_pileup\] not run" -e "\[gpu_pileup\] failed" -e "screening on the CPU" -e "built without CUDA" $O/run.log.ts | cut -c1-600 > $O/fallbacks.txt
     NFB=$(grep -ac . $O/fallbacks.txt); echo "FALLBACK LINES: $NFB" | tee -a $RES0/summary.txt; cut -c1-400 $O/fallbacks.txt | tee -a $RES0/summary.txt
     grep -a -e "\[singlet\] --engine gpu" -e "\[engine_gpu\]" -e "\[1fq-ingest\]" -e "\.1fq scanned" -e "\.1fq decoded" -e "\[singlet\] \.1fq" -e "unsorted STAR stream" \
          -e "sorted path" -e "gpu_pileup\]" -e "ignor" -e "E8" -e "E10" -e "E11" -e "E13" -e "E16" -e "cell_qc\]" $O/run.log.ts | grep -av "^[0-9]* \[e16\] " | cut -c1-400 > $O/engine_lines.txt
