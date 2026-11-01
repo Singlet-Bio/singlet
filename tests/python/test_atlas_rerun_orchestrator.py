@@ -528,10 +528,14 @@ def test_beta_policy_withholds_what_alpha_withholds_and_reaches_s1_publish():
     from singlet.s1 import policy as POL
 
     pol = POL.Policy.load(os.path.join(HERE, "..", "..", "scripts", "atlas_rerun", "beta-policy.json"))
-    assert pol.version.startswith("beta-") and pol.manifest_block()["omitted_layers"] == list(POL.OMITTED_LAYERS)
+    assert pol.version.startswith("beta-")
+    # Beta withholds what Alpha does except the layers it publishes (only the stacker's doublet_scores)
+    assert pol.manifest_block()["omitted_layers"] == [x for x in POL.OMITTED_LAYERS if x not in pol.published]
+    assert pol.published == frozenset({"doublet_scores"})
     for rel in ("mt_heteroplasmy.1pz", "mt_variants.tsv", "mt/mt_summary.tsv", "ancestry_call.json", "donor/snp_counts.tsv",
-                "snp_allele_counts.tsv", "x.vcf.gz", "possorted.bam", "ambient_profile.tsv", "doublet_scores.tsv"):
+                "snp_allele_counts.tsv", "x.vcf.gz", "possorted.bam", "ambient_profile.tsv", "doublet_scores_engine.tsv"):
         assert POL.omitted_layer(rel), rel
+    assert POL.omitted_layer("doublet_scores.tsv", pol.published) is None and POL.omitted_layer("doublet_scores.tsv")
     assert POL.omitted_layer("exon_counts.1pz") is None and POL.omitted_layer("donor/donor_assignments.tsv") is None
     import argparse
 
