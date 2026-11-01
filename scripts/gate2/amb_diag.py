@@ -58,3 +58,8 @@ for nm, m in (('tail', tail), ('rest', ~tail)):
 cols = [c for c in df.columns if c.startswith('singlet')]
 print('singlet columns', cols)
 if 'singlet_cluster' in df.columns: print(df.loc[pure].assign(tail=tail).groupby(['tail'])['singlet_cluster'].value_counts().head(20))
+
+print('--- model rho vs implied removal (is the excess in rho or in the gene-level allocation?) ---')
+rho_m = df.singlet_rho.values.astype(float)[pure]
+for nm, m in (('tail', tail), ('rest', ~tail)):
+    print(f'{nm}: model rho mean {rho_m[m].mean():.5f} median {np.median(rho_m[m]):.5f}; implied removal mean {imp[m].mean():.5f}; truth mean {tr[m].mean():.5f}')
