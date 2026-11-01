@@ -8,7 +8,7 @@ libraries, single-end reads (no read can hold barcode and cDNA), AB 5500xl / SOL
 open) to be rejected by the gate. The rules use only the run tables (ENA / SRA metadata), which the plan already has:
 
   non_rna_assay:<strategy>      every run's library_strategy is a non-RNA assay (ATAC-seq, ChIP-Seq, Bisulfite-Seq, Hi-C, ...); a GSM that also has an RNA-Seq run stays (multiome);
-  single_end                    every run is SINGLE layout;
+  single_end                    every run is SINGLE layout with a median spot length < 80 nt (longer single reads can hold barcode and cDNA concatenated);
   plate_or_longread_instrument  every run was sequenced on AB 5500xl / SOLiD / Ion Torrent / 454 / Helicos / PacBio / Nanopore;
   unrecoverable:<reason>        the GSM is listed in unrecoverable.tsv (its deposited reads cannot be processed, with the evidence).
 
@@ -22,8 +22,10 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 UNRECOVERABLE = os.path.join(HERE, "unrecoverable.tsv")
 
-NON_RNA = {"ATAC-seq", "ChIP-Seq", "Bisulfite-Seq", "MNase-Seq", "DNase-Hypersensitivity", "Hi-C", "CLIP-Seq", "MeDIP-Seq", "MRE-Seq", "FAIRE-seq", "ChIA-PET", "WGS", "WXS", "WGA",
-           "AMPLICON", "Tn-Seq", "SELEX", "miRNA-Seq", "Synthetic-Long-Read", "Targeted-Capture", "CTS", "RAD-Seq", "POOLCLONE", "CLONE", "FINISHING"}
+NON_RNA = {"ATAC-seq", "ChIP-Seq", "Bisulfite-Seq", "MNase-Seq", "DNase-Hypersensitivity", "Hi-C", "CLIP-Seq", "MeDIP-Seq", "MRE-Seq", "FAIRE-seq", "ChIA-PET"}
+# not AMPLICON / Targeted-Capture / WGS ...: 150 catalogue-10x GSMs carry those strategies and were processed as scRNA (submitters mislabel 10x libraries)
+SINGLE_MAX_SPOT = 80   # a SINGLE-layout run only rules itself out below this median spot length (bases): 26-28 nt of barcode+UMI plus a usable cDNA read need more. Catalogue-10x SINGLE rows by
+#                        spot length: <= 80 nt: 1512 rejected / 78 done, > 80 nt: 276 rejected / 389 done (SRA stores many 10x runs as one concatenated read)
 BAD_INSTRUMENTS = ("AB 5500", "AB SOLiD", "SOLiD", "Ion Torrent", "Ion S5", "Ion Proton", "454 GS", "Helicos", "PacBio", "Sequel", "Oxford Nanopore", "MinION", "GridION", "PromethION")
 
 
@@ -52,7 +54,8 @@ def reasons(runs, unrecoverable=None):
             out[gsm] = "non_rna_assay:" + sorted(set(strat))[0]
             continue
         lay = [str(v).upper() for v in x.library_layout.dropna()]
-        if lay and all(v == "SINGLE" for v in lay):
+        spot = (x.base_count / x.read_count.where(x.read_count > 0)).dropna() if "base_count" in x and "read_count" in x else []
+        if lay and all(v == "SINGLE" for v in lay) and len(spot) and float(spot.median()) < SINGLE_MAX_SPOT:
             out[gsm] = "single_end"
             continue
         ins = [str(v) for v in x.instrument_model.dropna()]
