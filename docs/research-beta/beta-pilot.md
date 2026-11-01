@@ -128,3 +128,24 @@ Run directories: `/mnt/projects/debruinz_project/debruinz/singlet/pilot/<GSM>/{s
 
 The reruns omit `--tagged-bam` (it forces the sorted path, `pileup_threads` 16, and a 155-263 GB BAM sort) and pass `--exons $G/genes/genes.gtf` with an explicit genome. Each run records `pileup_threads.txt` and `pileup_path_reason.txt`; a run with `pileup_threads` other than 1 is INVALID.
 Tools that need a BAM (mgatk, cellsnp-lite + vireo, souporcell) take STARsolo's sorted BAM, not Singlet's. The first-pass STARsolo runs wrote no BAM (`--outSAMtype None`), so these tools need a STARsolo rerun with a sorted BAM on the 100M-pair prefix; until then their results come only from the few first-pass samples that kept a Singlet BAM and are flagged as such.
+
+### Reads seen by each side (fairness)
+
+Singlet's main run (`s1cpu_r`, `s1gpu_r`) sees all reads. STARsolo and every open tool see the first 100 M pairs. Where a sample is deeper, a Singlet CPU run on the same prefix (`s1cap_r`, new binary, stream path) is the like-for-like side for the competitor, genotype and mtDNA comparisons.
+STARsolo is rerun with a sorted BAM (`starsolo_bam`, GeneFull) and its own filtered cell calls; mgatk, cellsnp-lite + vireo and souporcell read that BAM, not Singlet's.
+
+| Sample | pairs (M) | tools see (M) | matched Singlet prefix run |
+|---|---|---|---|
+| GSM5682562 | 69 | 69 | s1cpu_r (all reads) |
+| GSM8141311 | 88 | 88 | s1cpu_r (all reads) |
+| GSM9038586 | 109 | 100 | s1cap_r |
+| GSM5130155 | 236 | 100 | s1cap_r |
+| GSM5130163 | 262 | 100 | s1cap_r |
+| GSM8183378 | 266 | 100 | s1cap_r |
+| GSM4987144 | 312 | 100 | s1cap_r |
+| GSM8164511 | 355 | 100 | s1cap_r |
+| GSM4987148 | 836 | 100 | s1cap_r |
+| GSM5171610 | 851 | 100 | s1cap_r |
+| GSM7064234 | 1198 | 100 | s1cap_r |
+| GSM7884577 | 1404 | 100 | s1cap_r |
+| GSM8085472 | 1416 | 100 | s1cap_r |

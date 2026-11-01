@@ -84,7 +84,9 @@ scap) [ -d $P/cap1fq ] || { echo "full sample <= cap: no matched run needed"; ex
   singlet_run cpu $P/s1cap $(reads_arg $P/cap1fq) ;;
 equiv) python3 $D/out_equiv.py $P/s1cpu/out $P/s1gpu/out 2>&1 | tee $P/equiv.txt | tail -30 ;;
 starsolo)
-  cd $P; rm -rf starsolo; mkdir starsolo; cd starsolo
+  # BAMRUN=1 (engine rerun, pilot_rerun.sh rstar): same chemistry as the first STARsolo run, sorted BAM for mgatk/cellsnp/vireo/souporcell, GeneFull only, into starsolo_bam
+  SD=starsolo; [ -n "${BAMRUN:-}" ] && SD=starsolo_bam
+  cd $P; rm -rf $SD; mkdir $SD; cd $SD
   # barcode read = the 24-30 nt file, cDNA read = the longest file, per run, by the first read's length
   python3 - <<PY > files.env
 import gzip, glob, collections
@@ -104,6 +106,7 @@ PY
   cat files.env; . files.env
   # chemistry = what Singlet detected for this sample (protocol tag in its CPU run log; whitelist/UMI per include/singlet/fq/protocol.h); barcode-match autodetect is only the fallback
   TAG=$(grep -ho 'protocol=[A-Za-z0-9._-]*' $P/s1cpu/run.log 2> /dev/null | head -1 | cut -d= -f2); best=""; SRC=singlet
+  [ -n "${BAMRUN:-}" ] && { TAG=$(sed -n 's/.*tag=\([^ ]*\).*//p' $P/starsolo/chem.txt 2> /dev/null | head -1); [ "$TAG" = none ] && TAG=; }
   case $TAG in
     10x-3p-v3|10x-5p-v3|10x-3p-v4|10x-5p-v4) best=3M-february-2018.txt; UMI=12 ;;
     10x-3p-v2|10x-5p-v2) best=737K-august-2016.txt; UMI=10 ;;
@@ -118,7 +121,8 @@ PY
   esac
   STRAND=Forward; case $TAG in *-5p-*) STRAND=Reverse ;; "") [ "$FIVE" = 1 ] && STRAND=Reverse ;; esac
   echo "protocol_tag=$TAG source=$SRC"
-  CMD="$W/pipeline-benchmark/bin/STAR-velodump --runThreadN 16 --genomeDir $G/star_2.7.11b --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple --soloCBwhitelist $WL/$best --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMI --soloBarcodeReadLength 0 --soloStrand $STRAND --outSAMtype None --outTmpDir $SCR/startmp --soloFeatures Gene GeneFull Velocyto SJ --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30"
+  FEAT="Gene GeneFull Velocyto SJ"; SAMT=None; [ -n "${BAMRUN:-}" ] && { FEAT=GeneFull; SAMT="BAM SortedByCoordinate --outSAMattributes NH HI nM AS CR UR CB UB GX GN sS sQ sM --limitBAMsortRAM 60000000000"; }
+  CMD="$W/pipeline-benchmark/bin/STAR-velodump --runThreadN 16 --genomeDir $G/star_2.7.11b --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple --soloCBwhitelist $WL/$best --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMI --soloBarcodeReadLength 0 --soloStrand $STRAND --outSAMtype $SAMT --outTmpDir $SCR/startmp --soloFeatures $FEAT --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30"
   echo "$CMD" > command.txt; echo "whitelist=$best umi=$UMI strand=$STRAND tag=${TAG:-none} source=$SRC" > chem.txt
   export LD_LIBRARY_PATH=$ENV/lib STAR_VELO_DUMP=$SCR/velo_umis.tsv
   eval "/usr/bin/time -v -o time.txt $CMD" > run.log 2>&1; rc=$?; echo "STARsolo rc=$rc"; grep -E "Elapsed \(wall|Maximum resident" time.txt

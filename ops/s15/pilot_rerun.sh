@@ -15,7 +15,7 @@ echo "== s15 rerun $ST $GSM node=$(hostname) $(date -Is)"
 sb() { sbatch --parsable --account=debruinz --kill-on-invalid-dep=no "$@"; }
 # engine outdir runs...   Pooled runs must share a protocol: when the engine names a run that differs, drop it (recorded in runs_dropped.txt) and retry.
 singlet_run() {
-  eng=$1; out=$2; shift 2; rm -rf $out; mkdir -p $out; GD=; ST1=$P/stage_r
+  eng=$1; out=$2; shift 2; rm -rf $out; mkdir -p $out; GD=; ST1=${STG:-$P/stage_r}
   used=$(ls $ST1/*.1fq | xargs -n1 basename | sed s/.1fq$// | sort | paste -sd,); : > $out/runs_dropped.txt
   while :; do
     if [ "$(echo $used | tr , '\n' | wc -l)" = 1 ]; then ra="$ST1/$used.1fq"; else ra="--runs-dir $ST1 --runs-used $used"; fi
@@ -33,14 +33,38 @@ singlet_run() {
   grep -rhoE '"pileup_path_reason": *"[^"]*"' $out/out 2> /dev/null | head -1 > $out/pileup_path_reason.txt
   [ "${pt:-x}" = 1 ] && echo "pileup_threads=1 (stream path)" || { echo "INVALID: pileup_threads=${pt:-unknown} (expected 1)"; touch $out/INVALID; }
   echo "singlet $eng rc=$rc threads=$SINGLET_THREADS used=$used"; grep -E "Elapsed \(wall|Maximum resident" $out/time.txt; return $rc; }
+drop_sra_if_done() {   # the .sra goes only when everything that reads it has delivered (whichever of rclean / rbamclean runs last gets to do it)
+  ok=1; for e in s1cpu_r s1gpu_r; do [ -d $P/$e/out ] && [ ! -e $P/$e/INVALID ] || ok=0; done
+  [ -s $P/starsolo_bam/Aligned.sortedByCoord.out.bam ] || ok=0
+  tot=$(python3 -c "import json;print(json.load(open('$P/runs.json'))['pairs'])"); [ $tot -le 100000000 ] || [ -s $P/s1cap_r/pileup_threads.txt ] || ok=0
+  if [ $ok = 1 ]; then rm -rf $P/stage_r; [ -e $P/KEEPSRA ] || rm -rf $P/sra; echo ".sra dropped"; else echo "not everything delivered yet or a run failed: .sra and stage_r kept"; fi; }
 case $ST in
 rfetch)   # .sra (kept ones are reused), then decode with the new binary into stage_r
   mkdir -p $D/capdir; [ -f $D/capdir/stage.json ] || echo '{"rate_cap_MBps": 450}' > $D/capdir/stage.json
   STAGE=stage_r REUSE_SRA=1 python3 -u $D/pilot_fetch.py $GSM $P $D/src $BINDIR/singlet-cpu $WL $D/capdir; rc=$?; du -sh $P/sra $P/stage_r; exit $rc ;;
+rstar)   # STARsolo with a sorted BAM on the first 100 M pairs (the competitor input), reads dumped from the kept .sra
+  CAPPAIRS=100000000; rm -rf $P/fq; mkdir -p $P/fq
+  python3 - <<PY || exit 4
+import json, subprocess, os
+r = json.load(open("$P/runs.json"))["runs"]; left = $CAPPAIRS
+for acc, n in r:
+    if left <= 0: break
+    k = min(n, left); left -= k
+    subprocess.run(["$ENV/bin/fastq-dump", "-X", str(k), "--split-files", "--gzip", "-O", "$P/fq", "$P/sra/%s.sra" % acc], check=True)
+PY
+  BAMRUN=1 bash $D/pilot_stage.sh starsolo $GSM; rc=$?; ls -l $P/starsolo_bam | head; exit $rc ;;
+rcap)   # Singlet CPU on the same 100 M-pair prefix (new binary, stream path): the like-for-like side of the genotype / mtDNA / competitor comparisons. Skipped when the sample has <= 100 M pairs.
+  tot=$(python3 -c "import json;print(json.load(open('$P/runs.json'))['pairs'])"); [ $tot -gt 100000000 ] || { echo "sample <= 100M pairs: s1cpu_r is the matched run"; exit 0; }
+  rm -rf $P/cap1fq_r; mkdir -p $P/cap1fq_r; left=100000000
+  for acc in $(python3 -c "import json;print(' '.join(a for a,n in json.load(open('$P/runs.json'))['runs']))"); do [ $left -gt 0 ] || break
+    n=$(python3 -c "import json;print(dict(map(tuple,json.load(open('$P/runs.json'))['runs']))['$acc'])"); k=$(( n < left ? n : left )); left=$((left-k))
+    $BINDIR/singlet-cpu download $P/sra/$acc.sra --quality binned --max-reads $k --vdb-threads 2 --no-profile --whitelist-dir $WL -o $P/cap1fq_r/$acc.1fq 2>&1 | grep -E "singlet-gate" | cut -c1-200
+  done
+  STG=$P/cap1fq_r singlet_run cpu $P/s1cap_r ;;
 rcpu) ls $P/stage_r/*.done > /dev/null 2>&1 || { echo "no staged reads"; exit 6; }; singlet_run cpu $P/s1cpu_r ;;
 rgpu)   # one of 3 serial GPU lanes: after this sample, submit its clean-up and the next sample of the lane (at most 3 GPU jobs exist at once)
   . $D/lane/r_$GSM.env
-  post() { cid=$(sb --job-name=s15-rclean-$GSM --partition=short-cpu --cpus-per-task=2 --mem=8G --time=01:00:00 --dependency=afterany:${SELF_C} --output=$W/logs/%x-%j.out $D/pilot_rerun.sh rclean $GSM); echo "rclean job $cid"
+  post() { cid=$(sb --job-name=s15-rclean-$GSM --partition=short-cpu --cpus-per-task=2 --mem=8G --time=01:00:00 --dependency=afterany:${SELF_C//+/:} --output=$W/logs/%x-%j.out $D/pilot_rerun.sh rclean $GSM); echo "rclean job $cid"
     [ -n "${LANE_REST:-}" ] || return 0
     nxt=${LANE_REST%%,*}; rest=; case $LANE_REST in *,*) rest=${LANE_REST#*,};; esac; IFS=: read g f c <<< "$nxt"
     r=$(awk -F'\t' -v g=$g '$1==g' $D/samples.tsv); mem=$(echo "$r" | cut -f6); pg=$(echo "$r" | cut -f9); tg=$(echo "$r" | cut -f10)
@@ -52,9 +76,8 @@ SELF_C=%s
   nvidia-smi --query-gpu=name --format=csv,noheader
   ls $P/stage_r/*.done > /dev/null 2>&1 || { echo "no staged reads (rfetch failed)"; exit 6; }
   singlet_run gpu $P/s1gpu_r ;;
+rbamclean) drop_sra_if_done; rm -rf $P/fq $P/cap1fq_r; find $P \( -name '*.bam' -o -name '*.bai' \) -delete; du -sh $P ;;   # after the BAM tools
 rclean)   # (the first-pass reads stage/fq/cap1fq belong to the competitor tools' own clean-up)  equiv of the two new runs; the .sra goes now (unless KEEPSRA: slowest to fetch, kept for another rerun); results and logs stay
   [ -d $P/s1cpu_r/out ] && [ -d $P/s1gpu_r/out ] && python3 $D/out_equiv.py $P/s1cpu_r/out $P/s1gpu_r/out > $P/equiv_r.txt 2>&1
-  ok=1; for e in s1cpu_r s1gpu_r; do [ -d $P/$e/out ] && [ ! -e $P/$e/INVALID ] || ok=0; done
-  if [ $ok = 1 ]; then rm -rf $P/stage_r; [ -e $P/KEEPSRA ] || rm -rf $P/sra; else echo "a rerun did not deliver: .sra and stage_r kept"; fi
-  find $P \( -name '*.bam' -o -name '*.bai' \) -delete; du -sh $P; ls $P ;;
+  drop_sra_if_done; du -sh $P; ls $P ;;   # the STARsolo BAM stays for the BAM tools; rbamclean removes it
 esac

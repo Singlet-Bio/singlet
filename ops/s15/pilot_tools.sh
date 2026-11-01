@@ -33,19 +33,19 @@ kraken)   # viral k2 DB (the one S-nonhost used): reads of the cDNA mate; classi
   gzip -f $O/classified_reads.tsv; tail -3 $O/run.log; head -12 $O/report.txt; exit $rc ;;
 mgatk)
   export PATH=$W/envs/mtl/bin:$PATH PYTHONPATH=$W/envs/mgatk_extra; ulimit -n $(ulimit -Hn) 2> /dev/null
-  S=$P/s1cpu/out; B=$(ls $S/*.bam 2> /dev/null | head -1); [ -n "$B" ] || { echo "no Singlet BAM in $S"; exit 6; }
+  S=$P/starsolo_bam; B=$S/Aligned.sortedByCoord.out.bam; [ -s "$B" ] || { echo "no STARsolo BAM in $S"; exit 6; }
   [ -e $B.bai ] || samtools index -@ 8 $B
   TAGFMT=$(samtools view $B chr1 | head -2000 | grep -o -m1 "CB:Z:[ACGT]*[^[:space:]]*" | head -1); SUF=""; case "$TAGFMT" in *-1) SUF="-1";; esac
-  awk -F"\t" -v s="$SUF" 'NR>1 && $2=="TRUE"{print $1 s}' $S/cell_calls.tsv > $O/barcodes.txt; wc -l $O/barcodes.txt
+  awk -v s="$SUF" '{print $1 s}' $S/Solo.out/GeneFull/filtered/barcodes.tsv > $O/barcodes.txt; wc -l $O/barcodes.txt
   samtools view -@ 8 -b $B chrM > $O/chrM.bam && samtools index $O/chrM.bam; samtools view -c $O/chrM.bam
   cd $O; tm mgatk bcall -i chrM.bam -n $GSM -o out -c 8 -bt CB -b barcodes.txt -ub UB -g rCRS > mgatk.log 2>&1; rc=$?; tail -5 mgatk.log; exit $rc ;;
 vireo|souporcell)   # genotype demux of a known mixture; K = KDON (number of cell lines/donors from the study's GEO text); reads Singlet CPU's tagged BAM and cell calls
   K=${KDON:?KDON}; E=$W/envs/gpool; export APPTAINER_BIND=/mnt/projects:/mnt/projects
   PANEL=/mnt/projects/debruinz_project/cellarium/reference/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz
-  SAM=$W/envs/pbench/bin/samtools; S=$P/s1cpu/out; B=$(ls $S/*.bam 2> /dev/null | head -1); [ -n "$B" ] || { echo "no Singlet BAM in $S"; exit 6; }
+  SAM=$W/envs/pbench/bin/samtools; S=$P/starsolo_bam; B=$S/Aligned.sortedByCoord.out.bam; [ -s "$B" ] || { echo "no STARsolo BAM in $S"; exit 6; }
   [ -e $B.bai ] || $SAM index -@ 8 $B
   TAGFMT=$($SAM view $B chr1 | head -2000 | grep -o -m1 "CB:Z:[ACGT]*[^[:space:]]*" | head -1); SUF=""; case "$TAGFMT" in *-1) SUF="-1";; esac
-  awk -F"	" -v s="$SUF" 'NR>1 && $2=="TRUE"{print $1 s}' $S/cell_calls.tsv > $O/barcodes.txt; wc -l $O/barcodes.txt; echo "K=$K threads=16" > $O/params.txt; cd $O
+  awk -v s="$SUF" '{print $1 s}' $S/Solo.out/GeneFull/filtered/barcodes.tsv > $O/barcodes.txt; wc -l $O/barcodes.txt; echo "K=$K threads=16" > $O/params.txt; cd $O
   if [ $T = vireo ]; then
     tm apptainer exec $E/cellsnp-lite.sif cellsnp-lite -s $B -b barcodes.txt -O cellsnp -R $PANEL -p 16 --minMAF 0.1 --minCOUNT 20 --gzip --cellTAG CB --UMItag UB > cellsnp.log 2>&1 || { tail -5 cellsnp.log; exit 7; }
     $E/venv/bin/vireo -c cellsnp -o vireo_out -N $K -p 16 --randSeed 1 --noPlot > vireo.log 2>&1; rc=$?; tail -4 vireo.log; exit $rc
