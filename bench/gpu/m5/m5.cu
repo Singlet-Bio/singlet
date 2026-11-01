@@ -154,6 +154,7 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 //  M5_G2       compareSeqToGenome on a 2-bit genome text (stitch.cuh; needs M5_SEEDFLAT)
 //  M5_P1MINB=n __launch_bounds__(128, n) on the phase-1 kernels (register cap for occupancy)
 //  M5_CMPNI    compareSeqToGenome out of line (one copy instead of five inlined ones; stitch.cuh)
+//  M5_P1FUSE   (with M5_P1SPLIT) the windows in k_p1s, for each read as its seed search completes (no windows kernel)
 //  M5_SEEDSTEP (with M5_P1SPLIT) k_p1s steps maxMappableLength2strands one memory operation at a time (an SAi lookup or
 //              one compareSeqToGenome per lane per iteration, at one call site; stitch.cuh MmIt / mmAdvance)
 #ifdef M5_SEEDFLAT
@@ -163,6 +164,9 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 #if defined(M5_CENSUS) || defined(M5_TAIL)
 #error "M5_SEEDFLAT: no census / tail probes"
 #endif
+#endif
+#if defined(M5_P1FUSE) && (!defined(M5_P1SPLIT) || defined(M5_P1WPERS))
+#error "M5_P1FUSE needs M5_P1SPLIT, without M5_P1WPERS"
 #endif
 #if defined(M5_SEEDSTEP) && !defined(M5_P1SPLIT)
 #error "M5_SEEDSTEP needs M5_P1SPLIT"
@@ -180,20 +184,23 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 #endif
 #ifdef M5_P1SPLIT
 // seeds: persistent warps; every iteration each lane with a read makes its read's next maxMappableLength2strands call
+// (M5_SEEDSTEP: the next memory operation of that call). M5_P1FUSE: a read whose seed search is complete gets its windows
+// in this kernel (p1Windows at one site, in the iteration its seeds finish) and no windows kernel runs.
 template <class C>
 __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const u64* roff, const uint16_t* rlen, const uint32_t* idx,
-                                   u64 b0, u64 n, Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* status, unsigned long long* ctr) {
+                                   u64 b0, u64 n, Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* status, unsigned long long* ctr, u64* nEnt) {
     const unsigned FULL = 0xffffffffu, lane = threadIdx.x & 31;
     u64 k = 0;
-    int st = 0;            // 0: needs a read, 1: holds a read with a pending call, 2: the batch is exhausted
+    int st = 0;            // 0: needs a read, 1: holds a read with a pending call, 2: the batch is exhausted, 3: seeds done
     SeedIt it;
 #ifdef M5_SEEDSTEP
     MmIt m;
 #endif
     long long tc = 0;
+    (void)nEnt;
     for (;;) {
-        // refill: the lanes without a read take the batch's next reads (consecutive per warp); a read without any call
-        // (or one that overflows at set-up) is finished at once and its lane takes another
+        // refill: the lanes without a read take the batch's next reads (consecutive per warp); a read that overflows at
+        // set-up is finished at once and its lane takes another; a read without any call goes to state 3
         for (;;) {
             const unsigned need = __ballot_sync(FULL, st == 0);
             if (!need) break;
@@ -209,13 +216,17 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
                     const u64 i = idx ? idx[b0 + k] : b0 + k;
                     Work<C>& w = work[k];
                     const Status s = p1Setup(P, w, rbuf[k], rb + roff[i], rlen[i], it);
-                    if (s != Status::Ok) status[k] = (uint8_t)s;
-                    else if (seedNext(P, w, it)) {
+                    if (s != Status::Ok) {
+                        status[k] = (uint8_t)s;
+#ifdef M5_P1FUSE
+                        nEnt[k] = 0;
+#endif
+                    } else if (seedNext(P, w, it)) {
                         st = 1;
 #ifdef M5_SEEDSTEP
                         mmBegin(P, m, it);
 #endif
-                    } else { status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; }
+                    } else st = 3;
                 }
             }
         }
@@ -229,21 +240,41 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
             bool cr = false;
             const u64 v = mmOp(g, Read1, m, cr);
             const int r = mmAdvance(P, g, w, Read1, m, v, cr);
-            if (r < 0) { status[k] = (uint8_t)Status::Overflow; st = 0; }
-            else if (r > 0) {
+            if (r < 0) {
+                status[k] = (uint8_t)Status::Overflow; st = 0;
+#ifdef M5_P1FUSE
+                nEnt[k] = 0;
+#endif
+            } else if (r > 0) {
                 seedAfter(it, (m5::uint)m.maxLbest);
-                if (!seedNext(P, w, it)) { status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; st = 0; }
+                if (!seedNext(P, w, it)) st = 3;
                 else mmBegin(P, m, it);
             }
-            continue;
-#endif
+#else
             m5::uint L;
             seedCall(P, g, w, Read1, it, L);
-            if (w.ov) { status[k] = (uint8_t)Status::Overflow; st = 0; }
-            else {
+            if (w.ov) {
+                status[k] = (uint8_t)Status::Overflow; st = 0;
+#ifdef M5_P1FUSE
+                nEnt[k] = 0;
+#endif
+            } else {
                 seedAfter(it, L);
-                if (!seedNext(P, w, it)) { status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; st = 0; }
+                if (!seedNext(P, w, it)) st = 3;
             }
+#endif
+        }
+        if (st == 3) {   // the read's seed search is complete (status Ok)
+            Work<C>& w = work[k];
+            w.clk[0] += clock64() - tc;
+#ifdef M5_P1FUSE
+            const Status s = p1Windows(P, g, w);
+            status[k] = (uint8_t)s;
+            nEnt[k] = (s == Status::Ok && w.stitched) ? w.nEntries : 0;
+#else
+            status[k] = (uint8_t)Status::Ok;
+#endif
+            st = 0;
         }
     }
 }
@@ -471,7 +502,11 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
     fprintf(stderr, "  lane %s: k_p1s persistent, %d blocks of 128 per SM (%d threads); k_p1wp persistent, %d blocks per SM\n", name, bpsS, nSm * bpsS * 128, bpsW);
 #else
     { int b1 = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&b1, k_p1w<C>, 128, 0));
+#ifdef M5_P1FUSE
+      (void)b1; fprintf(stderr, "  lane %s: k_p1s persistent with the windows fused, %d blocks of 128 per SM (%d threads)\n", name, bpsS, nSm * bpsS * 128); }
+#else
       fprintf(stderr, "  lane %s: k_p1s persistent, %d blocks of 128 per SM (%d threads); k_p1w %d blocks per SM\n", name, bpsS, nSm * bpsS * 128, b1); }
+#endif
 #endif
 #else
     { int b1 = 0; CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&b1, k_p1<C>, 128, 0)); fprintf(stderr, "  lane %s: k_p1 %d blocks of 128 per SM\n", name, b1); }
@@ -495,9 +530,11 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
 #ifdef M5_P1SPLIT
             CK(cudaMemsetAsync(dCtr, 0, 8));
             cudaEventRecord(q[0]);
-            k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dRb, dRoff, dRlen, dIdx, b0, nb, dWork, dRbuf, dBst, dCtr);
+            k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dRb, dRoff, dRlen, dIdx, b0, nb, dWork, dRbuf, dBst, dCtr, dNent);
             cudaEventRecord(q[4]);
-#ifdef M5_P1WPERS
+#if defined(M5_P1FUSE)
+            // the windows ran in k_p1s
+#elif defined(M5_P1WPERS)
             CK(cudaMemsetAsync(dCtr + 1, 0, 8));
             k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1);
 #else
@@ -612,8 +649,9 @@ static double probeP1(const Params& P, const GenomeView& D, const char* dRb, con
             int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
 #ifdef M5_P1SPLIT
             CK(cudaMemsetAsync(dCtr, 0, 16));
-            k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dRb, dRoff, dRlen, nullptr, b0, nb, dWork, dRbuf, dBst, dCtr);
-#ifdef M5_P1WPERS
+            k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dRb, dRoff, dRlen, nullptr, b0, nb, dWork, dRbuf, dBst, dCtr, dNent);
+#if defined(M5_P1FUSE)
+#elif defined(M5_P1WPERS)
             k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1);
 #else
             k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent);

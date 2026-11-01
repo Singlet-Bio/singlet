@@ -1882,7 +1882,8 @@ struct MmIt {
     u64 i1, i2, i3, i1a, i1b, i2a, i2b, fa, fb;          // maxMappableLength / findMultRange (SA indices)
     u64 iSA1, iSA2, opIdx;                                // the pass's SAi values; the pending SAi index or SA index
     uint32_t L, L1, L2, L3, L1a, L1b, L2a, L2b, fLb;      // maxMappableLength / findMultRange (lengths)
-    uint32_t pieceStartIn, pieceLengthIn, iFrag, nD, iDist, maxLbest, pieceStart, pieceLength, Lind, maxL, ind1, opN, opL;
+    uint32_t pieceStartIn, pieceLengthIn, iFrag, nD, iDist, maxLbest, pieceStart, pieceLength, Lind, maxL, opN, opL;
+    u64 ind1;
     uint8_t iDir, ph, opK; bool dirR, good;              // opK: 0 SAi lookup, 1 compare, 2 none (a call's start)
     u64 rNrep[4], rI0[4], rI1[4]; uint32_t rMaxL[4];     // per pass (gSAsparseD <= 4)
 };
@@ -1920,7 +1921,7 @@ pass:   // for (iDist = 0; iDist < nD; iDist++) {
             m.pieceStart = m.pieceStartIn - m.iDist;
             for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += (3 - ((uint)Read1[0][m.pieceStart - ii])); }
         }
-        m.ind1 = (uint32_t)ind1; m.Lind = (uint32_t)Lmax; m.iSA1 = 0;
+        m.ind1 = ind1; m.Lind = (uint32_t)Lmax; m.iSA1 = 0;
         if (m.Lind > 0) MM_SAI(g.saiStart[(uint)m.Lind - 1] + (uint)m.ind1, MS_SAI1);
         goto sai1done;
     }
