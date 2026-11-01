@@ -134,7 +134,7 @@ def test_policy_file_is_validated(tmp_path):
 
 
 # ------------------------------------------------------------------------------------------------ synthetic bundle with every class
-def _policy_bundle(tmp_path: Path, leak: bool = False) -> Path:
+def _policy_bundle(tmp_path: Path, leak: bool = False, dbl_rows: bool = False) -> Path:
     b = TM.make_bundle(tmp_path, gse=GSE, gsms=(KEEP, DROP))
     # rewrite the study files with sample lists, then add the members the policy withholds (zipfile "a" appends; the old
     # study files are replaced by writing a fresh archive)
@@ -241,7 +241,14 @@ def _policy_bundle(tmp_path: Path, leak: bool = False) -> Path:
                 data = json.dumps(d).encode()
             z.writestr(info, data)
         for g in (KEEP, DROP):
-            for r, d in extra.items():
+            ex = dict(extra)
+            if dbl_rows:   # doublet tables over the sample's own called barcodes: the engine's column in the QC table, the stage's in doublet_scores.tsv
+                cc = next(d for i, d in items if i.filename == f"samples/{g}/cell_calls.tsv").decode().split("\n")
+                bcs = [ln.split("\t")[0] for ln in cc[1:] if ln][:5]
+                rows = "".join("%s\t%d\t%.4f\n" % (b, 100 + i, 0.1 * (i + 1)) for i, b in enumerate(bcs))
+                ex["doublet_scores.tsv"] = ("barcode\ttotal_umis\tdoublet_score\n" + rows).encode()
+                ex["cell_qc_metrics.tsv"] = ("barcode\tn_umi\tdoublet_score\n" + rows).encode()
+            for r, d in ex.items():
                 z.writestr(f"samples/{g}/{r}", d)
     return b
 
@@ -705,7 +712,7 @@ def test_published_doublet_layer_transcodes_and_verifies(tmp_path):
     p.write_text(json.dumps({"version": "beta-test-1", "withheld_studies": ["GSE7"], "excluded_samples": [DROP],
                              "published_layers": ["doublet_scores"]}))
     policy = POL.Policy.load(str(p))
-    b = _policy_bundle(tmp_path)
+    b = _policy_bundle(tmp_path, dbl_rows=True)
     out = tmp_path / "out"
     opts = MG.Options(recipes=TM.FakeRecipes(), created_at="2026-10-26T00:00:00Z", log=lambda *a: None, policy=policy)
     res = MG.migrate_bundle(str(b), str(out), None, opts)
@@ -719,6 +726,7 @@ def test_published_doublet_layer_transcodes_and_verifies(tmp_path):
 
     t = S1Sample((out / man["samples"][0]["key"]).read_bytes()).cells()
     cols = list(t.names)
-    assert "qc_doublet_score" in cols and not [c for c in cols if "is_doublet" in c], cols
+    # the cells table reads the member: dbl_ columns of doublet_scores.tsv (the QC table's doublet_score is an alias of dbl_doublet_score)
+    assert "dbl_doublet_score" in cols and not [c for c in cols if "is_doublet" in c], cols
     rep = V.verify(str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy)
     assert rep.fail == 0, rep.items
