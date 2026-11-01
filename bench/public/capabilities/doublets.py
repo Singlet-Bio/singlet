@@ -27,9 +27,22 @@ COMP = [t for t in TOOLS if t != "singlet"]
 KANG = ["kang2018_ctrl", "xili_pbmc_1a_dm", "xili_pbmc_1b_dm", "xili_pbmc_1c_dm", "xili_pbmc_2ctrl_dm", "xili_pbmc_2stim_dm"]
 # analysis dataset name -> cohort id (kang21 is lane 2.1 as Singlet counts it, the cohort's kang2018_ctrl)
 COHORT_ID = {"kang21": "kang2018_ctrl"}
+# v2 mode (gate-binary counts): accessions of the cohort datasets it can score
+GATE_ACC = {
+    "kang2018_ctrl": {"gse": "GSE96583", "gsm": ["GSM2560248"], "srr": ["SRR5398238"]},
+    "hgmm1k_v3": {"url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"},
+}
+
+
+def _cohort_ids() -> set:
+    f = Path(__file__).resolve().parent.parent / "cohort.tsv"
+    return {ln.split("	")[0] for ln in f.read_text().splitlines() if ln and not ln.startswith("#")}
 
 
 def cid(name: str) -> str:
+    """Cohort id of an analysis dataset name; v2 mode (gate-binary counts) names its datasets by cohort id already."""
+    if name in _cohort_ids():
+        return name
     return COHORT_ID.get(name) or "xili_" + name.lower().replace("-", "_")
 
 
@@ -75,6 +88,8 @@ def compute(artifact_dir: Path) -> dict:
             res[k][n] = {t: f(y, c[col].to_numpy()) for t, col in TOOLS.items()}
     arr = {k: {t: np.array([res[k][n][t] for n in names]) for t in TOOLS} for k in res}
     kang_idx = [i for i, n in enumerate(names) if cid(n) in KANG]
+    NDS = len(names)
+    v2 = prov.get("mode") == "v2"
 
     metrics = []
 
@@ -98,16 +113,17 @@ def compute(artifact_dir: Path) -> dict:
             m["notes"] = notes
         metrics.append(m)
 
-    pooled("auprc_mean", "Mean AUPRC over the 17 datasets (leave-one-study-out)", arr["auprc"],
+    pooled("auprc_mean", f"Mean AUPRC over the {NDS} datasets" + ("" if v2 else " (leave-one-study-out)"), arr["auprc"],
            notes="each dataset counts once; the CI is a bootstrap over datasets")
-    pooled("auprc_mean_kang", "Mean AUPRC over the Kang 2018 lanes (genotype truth)", arr["auprc"], kang_idx,
-           notes="lane 2.1 as Singlet counts it plus the five Cell Ranger lanes of Xi & Li; the combiner never saw any Kang lane here")
+    if kang_idx:
+        pooled("auprc_mean_kang", "Mean AUPRC over the Kang 2018 lanes (genotype truth)", arr["auprc"], kang_idx,
+               notes="lane 2.1 as Singlet counts it plus the five Cell Ranger lanes of Xi & Li; the combiner never saw any Kang lane here")
     studies = dsinfo["study"].to_numpy()
     by_study = {t: np.array([arr["auprc"][t][studies == u].mean() for u in dict.fromkeys(studies)]) for t in TOOLS}
     pooled("auprc_mean_by_study", f"Mean AUPRC over the {len(by_study['singlet'])} studies (leave-one-study-out)", by_study,
            notes="each study counts once (the six Kang lanes are one study, the five MULTI-seq sets another, the two 10x hgmm sets "
                  "a third); the CI is a bootstrap over studies")
-    pooled("auroc_mean", "Mean AUROC over the 17 datasets (leave-one-study-out)", arr["auroc"])
+    pooled("auroc_mean", f"Mean AUROC over the {NDS} datasets" + ("" if v2 else " (leave-one-study-out)"), arr["auroc"])
 
     for k, label in (("auprc", "AUPRC"),):
         for i, n in enumerate(names):
@@ -121,12 +137,12 @@ def compute(artifact_dir: Path) -> dict:
             metrics.append(m)
 
     sel_lanes = kang_idx
-    k21 = names.index("kang21")
+    k21 = names.index("kang21") if "kang21" in names else None
     n_better = int((arr["auprc"]["singlet"] > arr["auprc"]["singlet-production"]).sum())
     sg, pr, sd = (arr["auprc"][t].mean() for t in ("singlet", "singlet-production", "scDblFinder"))
-    conclusion = (
-        f"Leave-one-study-out on 17 real-label datasets, Singlet's expression doublet score has mean AUPRC {sg:.3f}, against "
-        f"{pr:.3f} for its previous scorer (better on {n_better}/17) and {sd:.3f} for scDblFinder, a statistical tie without R. "
+    conclusion = prov["conclusion"] if v2 and "conclusion" in prov else (
+        f"Leave-one-study-out on {NDS} real-label datasets, Singlet's expression doublet score has mean AUPRC {sg:.3f}, against "
+        f"{pr:.3f} for its previous scorer (better on {n_better}/{NDS}) and {sd:.3f} for scDblFinder, a statistical tie without R. "
         f"On the Kang lanes it reaches {arr['auprc']['singlet'][sel_lanes].mean():.3f} against "
         f"{arr['auprc']['scDblFinder'][sel_lanes].mean():.3f}; on lane 2.1 as Singlet counts it, {arr['auprc']['singlet'][k21]:.3f} "
         f"against {arr['auprc']['scDblFinder'][k21]:.3f}. Genotype doublets remain the call for pools with two or more donors.")
@@ -135,8 +151,8 @@ def compute(artifact_dir: Path) -> dict:
     lose_sdf = [n for n in names if "scDblFinder" in wins[n]]
 
     tools = [
-        {"name": "singlet", "version": "1.0.0", "role": "singlet",
-         "params": "singlet.doublets: gradient boosting (300 trees, 15 leaves) on within-sample ranks of log UMI, log genes, "
+        {"name": "singlet", "version": prov.get("tool_version", "1.0.0"), "role": "singlet",
+         "params": prov["singlet_params"] if v2 else "singlet.doublets: gradient boosting (300 trees, 15 leaves) on within-sample ranks of log UMI, log genes, "
                    "the engine's doublet score and four atlas-network features; trained on the labels of the other studies"},
         {"name": "singlet-production", "version": "doublet_detect.h v7 (prod/modality-fixes 4f110f2)", "role": "competitor",
          "params": "detect_doublets through the dbl_run harness, gene level, default settings"},
@@ -150,7 +166,7 @@ def compute(artifact_dir: Path) -> dict:
     for n in names:
         row = dsinfo.loc[n]
         d = {"id": cid(n), "title": f"{n}: {int(row['doublets'])} labelled doublets in {int(row['cells'])} cells",
-             "accessions": {"gse": "GSE96583", "gsm": ["GSM2560248"]} if n == "kang21" else {"other": ["10.5281/zenodo.4062232"]},
+             "accessions": GATE_ACC.get(cid(n)) or ({"gse": "GSE96583", "gsm": ["GSM2560248"]} if n == "kang21" else {"other": ["10.5281/zenodo.4062232"]}),
              "truth": row["truth"], "data_kind": "real", "n_cells": int(row["cells"])}
         datasets.append(d)
 
@@ -192,8 +208,8 @@ def compute(artifact_dir: Path) -> dict:
              "note": "the call for pools with two or more donors; Kang 2.1 AUROC 0.969 / AUPRC 0.897"},
             {"tool": "scDblFinder", "output": "genotype doublets (donor_assignments prob_doublet)", "supported": "no"},
             {"tool": "Scrublet", "output": "genotype doublets (donor_assignments prob_doublet)", "supported": "no"}],
-        "caveats": prov.get("caveats", []) + [
-            f"scDblFinder is ahead of Singlet on {len(lose_sdf)} of 17 datasets ({', '.join(lose_sdf)}); the pooled mean is a tie, "
+        "caveats": prov.get("caveats", []) + ([] if v2 else [
+            f"scDblFinder is ahead of Singlet on {len(lose_sdf)} of {NDS} datasets ({', '.join(lose_sdf)}); the pooled mean is a tie, "
             "not a win. The per-dataset gate is the previous Singlet scorer; the pooled and Kang-lane means gate against the best "
             "competitor with a tolerance from the bootstrap over datasets.",
             "Datasets where the previous Singlet scorer is ahead of the combiner: " + ", ".join(lose_prod) + ". These are the failing per-dataset metrics.",
@@ -209,6 +225,6 @@ def compute(artifact_dir: Path) -> dict:
             "tolerance from the bootstrap over six studies, which is wide.",
             "The combiner was chosen after comparing feature sets on these same 17 datasets (bench/doublets/cheap_features.py), "
             "so the pooled numbers carry a small selection effect; adding Scrublet as a feature gave 0.563 pooled and 0.575 on the "
-            "Kang lanes, below the shipped combiner's 0.585 there, and was not adopted."],
+            "Kang lanes, below the shipped combiner's 0.585 there, and was not adopted."]),
     }
     return C.finalize(doc)
