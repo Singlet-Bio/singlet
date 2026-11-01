@@ -166,6 +166,210 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     status[o] = (uint8_t)s; outLen[o] = (uint16_t)bl.n;
 }
 
+// ---- E12 (docs/gpu-engine/fable/E12-prefill.md): the m5 harness's best exact configuration (bench/gpu/m5/m5.cu, gate job of
+// bench/fable/engine/fable_gate.sbatch: --best-order --p3-maxreg-a 64 --batch-b 131072 --warp-m --wsort --wthreads 128), ported
+// kernel by kernel from m5.cu without its probes (census, tail, clocks summed into globals, why / unmapType outputs). The read
+// length comes from the offsets (m5: a uint16 array). Phase 1 is E7's "flatqs8b" (stitch.cuh's defaults): k_p1s, persistent
+// warps with the seed iterator in shared memory and lane refill, then the windows thread per read (k_p1w) or, in lane B,
+// persistent (k_p1wp). Phase 3: lane A thread per read under a 64-register cap (k_p3lb), lane M warp per read (k_p3a, then
+// k_p3w over the batch sorted by window count, most first), lane B thread per read (k_p3e). The old kernels above (k_p1:
+// STAR's nest; k_p3) stay for SINGLET_ENGINE_GPU_CFG=old.
+#if !defined(M5_P1SPLIT) || !defined(M5_SEEDSMEM) || !defined(M5_P1WPB) || !defined(M5_P1MINB) || defined(M5_P1FUSE) || defined(M5_SEEDSTEP) || defined(M5_G2)
+#error "E12 lanes: stitch.cuh's E7 default phase 1 (flatqs8b) expected"
+#endif
+#define E12_P1_BOUNDS __launch_bounds__(128, M5_P1MINB)
+#ifdef M5_NOCLK
+#define E12_P1T() 0LL
+#define E12_P1ADD(w, k, t) do { (void)(t); } while (0)
+#else
+#define E12_P1T() clock64()
+#define E12_P1ADD(w, k, t) do { (w).clk[k] += clock64() - (t); } while (0)
+#endif
+template <class C> constexpr bool p1WinPers() { return C::NW >= 128; }   // M5_P1WPB: the persistent windows kernel in lane B only
+// seeds: persistent warps; every iteration each lane with a read makes its read's next maxMappableLength2strands call; lanes
+// without a read take the batch's next reads (warp-aggregated atomic counter ctr)
+template <class C>
+__global__ void E12_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const u64* roff, const uint32_t* idx, u64 b0, u64 n,
+                                    Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* status, unsigned long long* ctr) {
+    const unsigned FULL = 0xffffffffu, lane = threadIdx.x & 31;
+    u64 k = 0;
+    int st = 0;            // 0: needs a read, 1: holds a read with a pending call, 2: the batch is exhausted
+    __shared__ SeedIt smIt[128];
+    SeedIt& it = smIt[threadIdx.x];
+    long long tc = 0;
+    for (;;) {
+        for (;;) {
+            const unsigned need = __ballot_sync(FULL, st == 0);
+            if (!need) break;
+            const int leader = __ffs((int)need) - 1;
+            unsigned long long base = 0;
+            if ((int)lane == leader) base = atomicAdd(ctr, (unsigned long long)__popc(need));
+            base = __shfl_sync(FULL, base, leader);
+            if (st == 0) {
+                k = base + __popc(need & ((1u << lane) - 1));
+                if (k >= n) st = 2;
+                else {
+                    tc = E12_P1T();
+                    const u64 i = idx[b0 + k];
+                    Work<C>& w = work[k];
+                    const Status s = p1Setup(P, w, rbuf[k], rb + roff[i], (m5::uint)(roff[i + 1] - roff[i]), it);
+                    if (s != Status::Ok) status[k] = (uint8_t)s;
+                    else if (seedNext(P, w, it)) st = 1;
+                    else { status[k] = (uint8_t)Status::Ok; E12_P1ADD(w, 0, tc); }
+                }
+            }
+        }
+        if (__all_sync(FULL, st == 2)) break;
+        if (st == 1) {
+            Work<C>& w = work[k];
+            M5_READ1(Read1, rbuf[k], w.Lread);
+            m5::uint L;
+            seedCall(P, g, w, Read1, it, L);
+            if (w.ov) { status[k] = (uint8_t)Status::Overflow; st = 0; }
+            else {
+                seedAfter(it, L);
+                if (!seedNext(P, w, it)) { status[k] = (uint8_t)Status::Ok; E12_P1ADD(w, 0, tc); st = 0; }
+            }
+        }
+    }
+}
+// windows, persistent warps: every iteration each lane with a read makes one step of its read's windows
+template <class C>
+__global__ void E12_P1_BOUNDS k_p1wp(Params P, GenomeView g, u64 n, Work<C>* work, uint8_t* status, u64* nEnt, unsigned long long* ctr) {
+    const unsigned FULL = 0xffffffffu, lane = threadIdx.x & 31;
+    u64 k = 0;
+    int st = 0;
+    WinIt it;
+    long long tc = 0;
+    for (;;) {
+        for (;;) {
+            const unsigned need = __ballot_sync(FULL, st == 0);
+            if (!need) break;
+            const int leader = __ffs((int)need) - 1;
+            unsigned long long base = 0;
+            if ((int)lane == leader) base = atomicAdd(ctr, (unsigned long long)__popc(need));
+            base = __shfl_sync(FULL, base, leader);
+            if (st == 0) {
+                k = base + __popc(need & ((1u << lane) - 1));
+                if (k >= n) st = 2;
+                else if ((Status)status[k] != Status::Ok) nEnt[k] = 0;
+                else {
+                    tc = E12_P1T();
+                    if (p1WinBegin(P, work[k], it)) st = 1;
+                    else nEnt[k] = 0;   // not stitched: status stays Ok
+                }
+            }
+        }
+        if (__all_sync(FULL, st == 2)) break;
+        if (st == 1) {
+            Work<C>& w = work[k];
+            const int r = p1WinStep(P, g, w, it);
+            if (r < 0) { status[k] = (uint8_t)Status::Overflow; nEnt[k] = 0; st = 0; }
+            else if (r > 0) { nEnt[k] = w.nEntries; E12_P1ADD(w, 1, tc); st = 0; }
+        }
+    }
+}
+// windows from the anchors and flanks, thread per read (reads that overflowed in k_p1s are skipped)
+template <class C>
+__global__ void E12_P1_BOUNDS k_p1w(Params P, GenomeView g, u64 n, Work<C>* work, uint8_t* status, u64* nEnt) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    Work<C>& w = work[k];
+    Status s = (Status)status[k];
+    if (s == Status::Ok) s = p1Windows(P, g, w);
+    status[k] = (uint8_t)s;
+    nEnt[k] = (s == Status::Ok && w.stitched) ? w.nEntries : 0;
+}
+// phase 3 of read k of the batch, thread per read; its status stays in the batch's bst (k_copy_status moves it)
+template <class C>
+__device__ __forceinline__ void p3one(const Params& P, const GenomeView& g, u64 b0, u64 k, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf,
+                                      const u64* base, const uint32_t* bits, uint8_t* bst, uint8_t* out, uint16_t* outLen) {
+    Work<C>& w = work[k];
+    w.stepBudget = budget;
+    const u64 o = b0 + k;
+    Status s = (Status)bst[k];
+    Blob bl{out + o * C::NBLOB, 0, C::NBLOB, false};
+    if (s == Status::Ok && w.stitched && !assignHits(P, g, w, bits, base[k])) s = Status::Overflow;
+    if (s == Status::Ok) s = mapFinish(P, g, w, rbuf[k], bl);
+    bst[k] = (uint8_t)s; outLen[o] = (uint16_t)bl.n;
+}
+template <class C>
+__global__ void k_p3e(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
+                      const uint32_t* bits, uint8_t* bst, uint8_t* out, uint16_t* outLen) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    p3one<C>(P, g, b0, k, budget, work, rbuf, base, bits, bst, out, outLen);
+}
+// the same under __launch_bounds__(BT, MINB): at most 65536 / (BT x MINB) registers per thread (128 x 8: 64)
+template <class C, int BT, int MINB>
+__global__ void __launch_bounds__(BT, MINB) k_p3lb(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf,
+                                                   const u64* base, const uint32_t* bits, uint8_t* bst, uint8_t* out, uint16_t* outLen) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    p3one<C>(P, g, b0, k, budget, work, rbuf, base, bits, bst, out, outLen);
+}
+// the warp lane's order: windows, then SA entries to assign, descending (reads that need no phase 3 last)
+template <class C>
+__global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, uint32_t* perm) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    key[k] = ~(nEnt[k] ? ((u64)work[k].nW << 40) | min(nEnt[k], (u64)0xFFFFFFFFFFULL) : 0);
+    perm[k] = (uint32_t)k;
+}
+// warp lane (E3): the assignment thread per read, then k_p3w: warp per read, the read's windows stitched across the lanes
+// (stitch.cuh warpStitch), selection and encoding on lane 0
+template <class C>
+__global__ void k_p3a(Params P, GenomeView g, u64 n, Work<C>* work, const u64* base, const uint32_t* bits, uint8_t* bst) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    Work<C>& w = work[k];
+    if ((Status)bst[k] == Status::Ok && w.stitched && !assignHits(P, g, w, bits, base[k])) bst[k] = (uint8_t)Status::Overflow;
+}
+template <class C, class LW>
+__global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* bst,
+                      uint8_t* out, uint16_t* outLen, const uint32_t* perm) {
+    // shared memory as m5's (one AssignEnt per thread for the group assignment, unused here; then C::NW window indices per warp)
+    extern __shared__ unsigned long long shAll[];
+    constexpr int G = 32;
+    const Grp<G> gr;
+    const int lane = gr.gl, gib = threadIdx.x / G;
+    const u64 wid = (blockIdx.x * (u64)blockDim.x + threadIdx.x) / G;
+    if (wid >= n) return;   // whole warps
+    uint16_t* wl = reinterpret_cast<uint16_t*>(reinterpret_cast<AssignEnt*>(shAll) + blockDim.x) + gib * C::NW;
+    const u64 k = perm ? perm[wid] : wid;
+    Work<C>& W = work[k];
+    const u64 o = b0 + k;
+    Status s = (Status)bst[k];
+    Blob bl{out + o * C::NBLOB, 0, C::NBLOB, false};
+    if (s == Status::Ok) {
+        W.stepBudget = budget;
+        if (!W.stitched || W.nW == 0) {
+            if (lane == 0) s = mapFinish(P, g, W, rbuf[k], bl);
+        } else {
+            LW L;
+            L.Lread = W.Lread; L.outFilterMismatchNmaxTotal = W.outFilterMismatchNmaxTotal;
+            for (int c = 0; c < 8; c++) L.clk[c] = 0;
+            WarpMerge M;
+            const int r = warpStitch<C, LW, G>(gr, P, g, W, rbuf[k], L, wl, budget, M, nullptr);
+#ifndef M5_NOCLK
+            for (int c = 4; c < 8; c++) { const u64 v = warpSumU64(gr, (u64)L.clk[c]); if (lane == 0) W.clk[c] += (long long)v; }
+#endif
+            if (lane == 0) {
+                if (r == WR_OVERFLOW) { s = Status::Overflow; W.ov = M.ov; }
+                else if (r == WR_FALLBACK) s = mapFinish(P, g, W, rbuf[k], bl);
+                else s = warpSelect(P, g, W, bl, M);
+            }
+        }
+    }
+    if (lane == 0) { bst[k] = (uint8_t)s; outLen[o] = (uint16_t)bl.n; }
+}
+__global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k < n) dst[k] = s[k];
+}
+typedef LaneWork<8, 8, 8> LWM;   // lane M's per-lane stitching context (m5's LWM: its own capacities, no fallback)
+static int g_wthreads = 128;     // k_p3w block size (m5 --wthreads)
+
 struct ToU64 { __host__ __device__ u64 operator()(uint16_t x) const { return (u64)x; } };
 // out packed: read k at off[k], len[k] bytes. E8 (keepDev): the packed bytes and offsets also stay on the device (dOut, dOff; freed by the caller)
 struct Lane { std::vector<uint8_t> out, status; std::vector<uint16_t> len; std::vector<u64> off; uint8_t* dOut = nullptr; u64* dOff = nullptr; };
@@ -189,9 +393,12 @@ static std::string stepLine() {
     return s;
 }
 
-template <class C>
+// one lane over reads idx in batches of NB (one Work per read in flight). NEW: E12's kernels (above; WARP: phase 3 warp per read,
+// MAXREG 64: phase 3 under the register cap); otherwise the engine's kernels before E12 (SINGLET_ENGINE_GPU_CFG=old)
+static std::string g_laneLog;   // E12: per lane and chunk, its configuration (logged once by mapDistinct)
+template <class C, bool WARP = false, int MAXREG = 0>
 bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* dOff, const std::vector<uint32_t>& idx, u64 NB, u64 budget,
-             Lane& L, std::string& err, bool keepDev = false, const char* nm = "?") {
+             Lane& L, std::string& err, bool keepDev, const char* nm, bool NEW) {
     const double tA = now();
     const std::string sn = std::string("lane") + nm;
     u64 n = idx.size();
@@ -205,22 +412,69 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     EG_CK(cudaMalloc(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>))); EG_CK(cudaMalloc(&dBst, NB));
     EG_CK(cudaMalloc(&dNent, NB * 8)); EG_CK(cudaMalloc(&dBase, NB * 8));
     u64 bitsCap = 1 << 20; EG_CK(cudaMalloc(&dBits, bitsCap * 4));
+    // E12: the seed / windows kernels' counters, the warp lane's sort keys and order, the persistent kernels' grids
+    unsigned long long* dCtr = nullptr; u64* dKey = nullptr; uint32_t* dPerm = nullptr;
+    int nSm = 0, bpsS = 0, bpsW = 0; size_t stack0 = 0;
+    if (NEW) {
+        EG_CK(cudaMalloc(&dCtr, 16));
+        if (WARP) { EG_CK(cudaMalloc(&dKey, NB * 8)); EG_CK(cudaMalloc(&dPerm, NB * 4)); }
+        int dev = 0; cudaGetDevice(&dev); cudaDeviceGetAttribute(&nSm, cudaDevAttrMultiProcessorCount, dev);
+        EG_CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsS, k_p1s<C>, 128, 0));
+        if constexpr (p1WinPers<C>()) EG_CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsW, k_p1wp<C>, 128, 0));
+        if constexpr (WARP) {   // the lanes' stitching contexts are local memory: room for them in the per-thread stack (as m5)
+            cudaDeviceGetLimit(&stack0, cudaLimitStackSize);
+            EG_CK(cudaDeviceSetLimit(cudaLimitStackSize, std::max<size_t>(16 * 1024, sizeof(LWM) + 8192)));
+        }
+        int regs = 0;
+        { cudaFuncAttributes fa{};
+          if constexpr (WARP) cudaFuncGetAttributes(&fa, (const void*)k_p3w<C, LWM>);
+          else if constexpr (MAXREG == 64) cudaFuncGetAttributes(&fa, (const void*)k_p3lb<C, 128, 8>);
+          else cudaFuncGetAttributes(&fa, (const void*)k_p3e<C>);
+          regs = fa.numRegs; }
+        char b[320];
+        snprintf(b, sizeof b, "%s %llu reads, batches of %llu (%.1f GB of Work), k_p1s %d blocks/SM, %s, phase 3 %s (%d registers); ", nm,
+                 (unsigned long long)n, (unsigned long long)NB, NB * (double)(sizeof(Work<C>) + sizeof(ReadBuf<C::LREAD>)) / 1e9, bpsS,
+                 p1WinPers<C>() ? "k_p1wp persistent" : "k_p1w", WARP ? "warp per read, by windows desc" : MAXREG == 64 ? "capped at 64 registers" : "thread per read", regs);
+        g_laneLog += b;
+    }
     devNote();
     const double tK = now(); stepAdd(sn + ".alloc", tK - tA);
     for (u64 b0 = 0; b0 < n; b0 += NB) {
         u64 nb = std::min(NB, n - b0);
         int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
-        k_p1<C><<<G, T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dNent);
+        if (!NEW) k_p1<C><<<G, T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dNent);
+        else {
+            EG_CK(cudaMemsetAsync(dCtr, 0, 16));
+            k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dCtr);
+            if constexpr (p1WinPers<C>()) k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1);
+            else k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent);
+        }
         thrust::exclusive_scan(thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dBase));
         u64 lastB, lastN; EG_CK(cudaMemcpy(&lastB, dBase + nb - 1, 8, cudaMemcpyDeviceToHost)); EG_CK(cudaMemcpy(&lastN, dNent + nb - 1, 8, cudaMemcpyDeviceToHost));
         u64 words = (lastB + lastN) / 32 + 2;
         if (words > bitsCap) { cudaFree(dBits); bitsCap = words * 2; EG_CK(cudaMalloc(&dBits, bitsCap * 4)); }
         EG_CK(cudaMemset(dBits, 0, words * 4));
         k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
-        k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen);
+        if (!NEW) k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen);
+        else {
+            if constexpr (WARP) {
+                k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm);
+                thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
+                k_p3a<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst);
+                const int wt = g_wthreads; const unsigned GW = (unsigned)((nb * 32 + wt - 1) / wt);
+                const size_t sh = (size_t)wt * sizeof(AssignEnt) + (size_t)(wt / 32) * C::NW * sizeof(uint16_t);
+                k_p3w<C, LWM><<<GW, wt, sh>>>(P, D, b0, nb, budget, dWork, dRbuf, dBst, dOut, dLen, dPerm);
+            } else if constexpr (MAXREG == 64) k_p3lb<C, 128, 8><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen);
+            else k_p3e<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen);
+            k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
+        }
         EG_CK(cudaGetLastError());
     }
     EG_CK(cudaDeviceSynchronize());
+    if (dCtr) cudaFree(dCtr);
+    if (dKey) cudaFree(dKey);
+    if (dPerm) cudaFree(dPerm);
+    if (stack0) cudaDeviceSetLimit(cudaLimitStackSize, stack0);
     const double tP = now(); stepAdd(sn + ".kernels", tP - tK);
     {   // copy only the bytes of the results (the slots are 640-4096 bytes, results ~70)
         u64* dPoff; EG_CK(cudaMalloc(&dPoff, (n + 1) * 8)); EG_CK(cudaMemset(dPoff, 0, (n + 1) * 8));
@@ -545,27 +799,47 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // E8 (SINGLET_ENGINE_GPU_E2E=1): the lanes keep their packed results on the device; per record its source and read (k_rec_len)
     const bool e2e = in.e2e != nullptr && in.e2e->base != nullptr;
     std::vector<u64> recSrc; std::vector<uint32_t> recRead; u64 chunksDone = 0;
+    // E12: the lanes' configuration. Default: the m5 harness's best exact configuration (lane A: 524288 reads per batch, phase 3
+    // under 64 registers; lane M: 393216, warp per read, the batch by window count; lane B: 131072 or as many as the free device
+    // memory holds). SINGLET_ENGINE_GPU_CFG=old: the engine before E12 (k_p1 / k_p3 thread per read; 262144 / 262144 / 65536).
+    // SINGLET_ENGINE_GPU_NB / _NBM / _NBB set the batches of lanes A / M / B; SINGLET_ENGINE_GPU_WARPM=0: lane M thread per read.
+    const char* cfgE = std::getenv("SINGLET_ENGINE_GPU_CFG");
+    const bool NEW = !(cfgE && std::string(cfgE) == "old");
+    const char* wmE = std::getenv("SINGLET_ENGINE_GPU_WARPM");
+    // the warp lane's window loop must never reach STAR's trNtotal break (every window is then stitched, as in STAR)
+    const bool warpM = NEW && !(wmE && std::string(wmE) == "0")
+        && (u64)LaneM::NW * std::min<u64>((u64)LWM::kNWTR, P.alignTranscriptsPerWindowNmax) + P.alignTranscriptsPerWindowNmax < P.alignTranscriptsPerReadNmax;
+    auto envU = [](const char* k, u64 d, u64 lo) { const char* v = std::getenv(k); return v ? std::max<u64>(lo, std::strtoull(v, nullptr, 10)) : d; };
+    const u64 nbA = envU("SINGLET_ENGINE_GPU_NB", NEW ? 524288 : 262144, 4096), nbM = envU("SINGLET_ENGINE_GPU_NBM", NEW ? 393216 : 262144, 4096);
+    const bool nbBset = std::getenv("SINGLET_ENGINE_GPU_NBB") != nullptr;
+    const u64 nbB0 = envU("SINGLET_ENGINE_GPU_NBB", NEW ? 131072 : 65536, 1024);
+    g_laneLog.clear();
     auto gpuPart = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
         // ---- lanes
         double tc0 = now();
         Lane A, M, B;
         memMark("before-laneA");
-        // reads in flight in lane A: its Work + ReadBuf are ~150 KB each (40 GB at 262144); SINGLET_ENGINE_GPU_NB trades device memory for occupancy
-        u64 nbA = 262144;
-        if (const char* ne = std::getenv("SINGLET_ENGINE_GPU_NB")) nbA = std::max<u64>(4096, std::strtoull(ne, nullptr, 10));
-        if (!runLane<LaneA>(P, D, dSeq, dOff, repc, nbA, 1024, A, err, e2e, "A")) return false;
+        // reads in flight per lane (nbA, nbM, nbB): Work + ReadBuf per read are 36 KB (A), 68 KB (M), 550 KB (B)
+        if (!runLane<LaneA, false, 64>(P, D, dSeq, dOff, repc, nbA, 1024, A, err, e2e, "A", NEW)) return false;
         double th = now();
         std::vector<uint32_t> repM, posM;
         for (u64 k = 0; k < repc.size(); k++) if (A.status[k] != (uint8_t)Status::Ok) { repM.push_back(repc[k]); posM.push_back((uint32_t)k); }
         stepAdd("lanes.host", now() - th);
-        if (!runLane<LaneM>(P, D, dSeq, dOff, repM, 262144, 2048, M, err, e2e, "M")) return false;
+        if (!(warpM ? runLane<LaneM, true>(P, D, dSeq, dOff, repM, nbM, 2048, M, err, e2e, "M", NEW)
+                    : runLane<LaneM>(P, D, dSeq, dOff, repM, nbM, 2048, M, err, e2e, "M", NEW))) return false;
         th = now();
         std::vector<uint32_t> repB, posB;
         for (u64 k = 0; k < repM.size(); k++) if (M.status[k] != (uint8_t)Status::Ok) { repB.push_back(repM[k]); posB.push_back(posM[k]); }
         stepAdd("lanes.host", now() - th);
-        u64 nbB = 65536;   // the heavy lane's reads in flight: its Work is the largest device allocation of the prefill (SINGLET_ENGINE_GPU_NBB)
-        if (const char* nbe = std::getenv("SINGLET_ENGINE_GPU_NBB")) nbB = std::max<u64>(1024, std::strtoull(nbe, nullptr, 10));
-        if (!runLane<LaneB>(P, D, dSeq, dOff, repB, nbB, 2048, B, err, e2e, "B")) return false;
+        u64 nbB = nbB0;   // the heavy lane's reads in flight: its Work is the largest device allocation of the prefill
+        if (NEW && !nbBset && !repB.empty()) {   // E12: up to nbB0, as many as the free device memory holds (3 GB spare)
+            size_t f = 0, t = 0; cudaMemGetInfo(&f, &t);
+            const u64 fixed = repB.size() * (u64)(LaneB::NBLOB + 4 + 1 + 2 + 8 + 8) + (3ull << 30);
+            const u64 per = sizeof(Work<LaneB>) + sizeof(ReadBuf<LaneB::LREAD>) + 1 + 8 + 8;
+            const u64 fit = f > fixed ? (f - fixed) / per / 1024 * 1024 : 0;
+            nbB = std::max<u64>(8192, std::min<u64>(nbB0, fit));
+        }
+        if (!runLane<LaneB>(P, D, dSeq, dOff, repB, nbB, 2048, B, err, e2e, "B", NEW)) return false;
         out.secMapGpu += now() - tc0;
         th = now();
         // where each result is: 0 = A, 1 = M, 2 = B, 3 = host
@@ -867,6 +1141,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
              (unsigned long long)out.nWithN, (unsigned long long)nGpuMapped, (unsigned long long)out.nHostLane, out.secHostLane,
              (unsigned long long)out.nFailed, out.secUpload, out.secDedup, out.secMapGpu);
     out.log += line;
+    out.log += std::string("engine_gpu: E12 lanes (") + (NEW ? "new" : "old: SINGLET_ENGINE_GPU_CFG=old") + "): batches " + std::to_string(nbA) + " / "
+               + std::to_string(nbM) + " / " + std::to_string(nbB0) + (warpM ? ", lane M warp per read" : "") + "; " + g_laneLog + "\n";
     out.log += "engine_gpu: steps (s): " + stepLine() + "; total " + std::to_string(now() - tF0) + "\n";
     if (const char* dp = std::getenv("SINGLET_ENGINE_GPU_DUMP")) {   // E6 debug dump (off by default; see dumpOutput)
         const double td = now();
