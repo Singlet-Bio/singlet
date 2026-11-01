@@ -315,7 +315,8 @@ namespace {
 struct PassBufs {
     std::vector<void*> p;
     template <class T> cudaError_t alloc(T*& d, u64 bytes) { void* v = nullptr; cudaError_t e = cudaMalloc(&v, bytes + 16); if (e == cudaSuccess) p.push_back(v); d = (T*) v; return e; }
-    ~PassBufs() { for (void* v : p) cudaFree(v); }
+    void release() { for (void* v : p) cudaFree(v); p.clear(); }
+    ~PassBufs() { release(); }
 };
 }
 
@@ -452,6 +453,9 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
              out.msUpload, pinned ? "pinned" : "pageable", out.msKeys, (unsigned long long) out.nKeys, out.msTable, out.msEval, out.msScatter,
              out.msDownload, out.msTotal);
     out.log += b;
+    // the context goes, as pileupRun's does at its end: pileupRun then initialises the device afresh (cudaInitDevice on a live context fails)
+    B.release();
+    cudaDeviceReset();
     return true;
 }
 
