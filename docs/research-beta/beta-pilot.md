@@ -156,3 +156,7 @@ STARsolo is rerun with a sorted BAM (`starsolo_bam`, GeneFull) and its own filte
 - GPU OOM on one H100 at 370 G, sorted path (tagged-BAM sort, STAR killed by signal 9, peak RSS 384 GB): GSM7064234 (1.20 G pairs) and GSM7884577 (1.40 G pairs). Requeued on the stream path; if they run out again the CPU `--memory-tier` run is the sample's Singlet result.
 - Species detection returned `unknown` on every rerun that reached it for GSM8164511, GSM8183378, GSM5130155, GSM5171610, GSM7064234, GSM7884577; it called GSM4987144 `Mus musculus` (a mouse line is in the mix) and GSM5130163 `Homo sapiens`.
 - GSM4987144: the engine named 3 of 4 runs as differing in protocol, so the rerun used 1 run (SRR13296299).
+
+### Binary change (2026-11-01)
+
+2a3b0d61 is not the Beta candidate (it lacks #164 EmptyDrops_CR cell calls, #165 exon/intron and USA matrices, #160/#170 protocol vote, #161 species filters, #175 GTF next to `--genome-dir`). The pilot's Singlet result is the rerun on **0ea48783** (build job 797270, `bin/0ea48783`), one binary for all 13 samples. Outputs: `s1cpu_0ea48783`, `s1gpu_0ea48783`, `s1cap_0ea48783`, `equiv_0ea48783.txt`, reads in `stage_0ea48783`. `--exons` is still passed. 2a3b0d61 outputs `s1cpu_r`, `s1gpu_r` exist only for the few runs that finished and are not scored. The STARsolo BAM side (`rstar`, mgatk, vireo, souporcell) does not use the Singlet binary and keeps running.
