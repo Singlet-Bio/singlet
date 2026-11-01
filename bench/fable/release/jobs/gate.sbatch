@@ -52,6 +52,10 @@ nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader | 
 # E11 §2a's run-dependent files once the read files are set aside: timings (read_stats.tsv, star_Log.std.out), the file path's clip5p probe count
 # and bytes_public (pileup_stats.json), memory_tier (summary.json); provenance.json and ambient_contamination.json differ in timings/paths only
 EXPECT_DIFF=" ${EXPECT_DIFF:-pileup_stats.json read_stats.tsv star_Log.std.out summary.json} "
+# A known pipeline bug, not the engine (E15 §2c, §5.7): with more than 20 M unmapped reads the non-host screen subsamples, and the writer
+# takes the classification by the record's index in the whole star_Unmapped.out.mate1, so nonhost_reads.fq holds other reads per engine (the
+# same count). KNOWN_<sample> lists such read files; their read count must still match, and the verdict names them.
+KNOWN_nuclei2k_v2=${KNOWN_nuclei2k_v2-nonhost_reads.fq}
 EXCL=(--exclude='*.bam' --exclude='*.sam' --exclude='*.cram' --exclude='*.fq*' --exclude='*.fastq*' --exclude='*.1fq' --exclude='.gpu_handoff*'
       --exclude='*Unmapped*' --exclude='_STARtmp*' --exclude='*.reads' --exclude='*.reads.q')
 READF="nonhost_reads.fq star_Unmapped.out.mate1 star_Unmapped.out.mate2"
@@ -155,7 +159,7 @@ for s in "${SAMPLES[@]}"; do
             *) if [ -f $RES/$1/CellReads.stats ]; then echo $RES/$1/CellReads.stats; else v=CRS_$1; echo "${!v:-}"; fi ;; esac; }
   rhf() { case $1 in cpu) echo $RS/readhash.txt ;; *) echo $RES/$1/readhash.txt ;; esac; }
   cmp2() { a=$(odir $1); b=$(odir $2); [ -n "$a" ] && [ -d "$a" ] && [ -n "$b" ] && [ -d "$b" ] || { echo "-- skip $s $1 vs $2 (not run)" | tee -a $RES0/summary.txt; return; }
-    local ok=1
+    local ok=1 kn=""
     echo "=== $s $1 vs $2 ($a vs $b)" | tee -a $RES0/summary.txt
     python3 $SCR/repo/bench/star_accel/out_equiv.py $a $b > $RES/equiv-$1-$2.txt 2>&1
     grep -a '^  DIFF\|^  only in\|^    \|^files:\|^RESULT' $RES/equiv-$1-$2.txt | cut -c1-200 | head -60 | tee -a $RES0/summary.txt
@@ -177,8 +181,12 @@ for s in "${SAMPLES[@]}"; do
     if cmp -s $a/star_SJ.out.tab $b/star_SJ.out.tab; then echo "  star_SJ.out.tab: identical ($(wc -l < $a/star_SJ.out.tab) junctions)" | tee -a $RES0/summary.txt; else echo "  star_SJ.out.tab: DIFFERS" | tee -a $RES0/summary.txt; ok=0; fi
     ra=$(rhf $1); rb=$(rhf $2)
     if [ -f "$ra" ] && [ -f "$rb" ]; then
+      local kv=KNOWN_$s; local KN=" ${!kv:-} "
       for f in $READF; do ha=$(awk -v f=$f '$1==f{print $2" "$3}' $ra); hb=$(awk -v f=$f '$1==f{print $2" "$3}' $rb)
-        if [ "$ha" = "$hb" ]; then echo "  $f: same records (sorted sha256 and reads: $ha)" | tee -a $RES0/summary.txt; else echo "  $f: RECORDS DIFFER ($ha vs $hb)" | tee -a $RES0/summary.txt; ok=0; fi; done
+        if [ "$ha" = "$hb" ]; then echo "  $f: same records (sorted sha256 and reads: $ha)" | tee -a $RES0/summary.txt
+        elif [[ "$KN" == *" $f "* ]] && [ -n "$ha" ] && [ "${ha##* }" = "${hb##* }" ]; then
+          echo "  $f: other records, same count (the known non-host writer bug, E15 §5.7: $ha vs $hb)" | tee -a $RES0/summary.txt; kn="$kn $f"
+        else echo "  $f: RECORDS DIFFER ($ha vs $hb)" | tee -a $RES0/summary.txt; ok=0; fi; done
     else echo "  read files: not compared (no sorted hashes for $1 or $2)" | tee -a $RES0/summary.txt; fi
     ca=$(crs $1); cb=$(crs $2)
     if [ -n "$ca" ] && [ -f "$ca" ] && [ -n "$cb" ] && [ -f "$cb" ]; then
@@ -187,9 +195,9 @@ for s in "${SAMPLES[@]}"; do
       else echo "  Gene/CellReads.stats: ROWS DIFFER ($(wc -l < $ca) vs $(wc -l < $cb) lines)" | tee -a $RES0/summary.txt; ok=0
            diff <(tail -n +2 $ca | LC_ALL=C sort) <(tail -n +2 $cb | LC_ALL=C sort) | head -8 | cut -c1-200 | tee -a $RES0/summary.txt; fi
     else echo "  Gene/CellReads.stats: not compared (no copy for $1 or $2)" | tee -a $RES0/summary.txt; fi
-    if [ $ok = 1 ]; then echo "VERDICT $s $1:$2 IDENTICAL (except E11's run-dependent files; out_equiv $FL)" | tee -a $RES0/summary.txt
+    if [ $ok = 1 ]; then echo "VERDICT $s $1:$2 IDENTICAL (except E11's run-dependent files${kn:+ and the known non-host writer bug in$kn}; out_equiv $FL)" | tee -a $RES0/summary.txt
     else echo "VERDICT $s $1:$2 NOT IDENTICAL" | tee -a $RES0/summary.txt; FAIL=1; fi
-    printf "%s\t%s:%s\t%s\t%s\n" $s $1 $2 "$([ $ok = 1 ] && echo IDENTICAL || echo DIFFERENT)" "$FL" >> $RES0/verdicts.tsv; }
+    printf "%s\t%s:%s\t%s\t%s\t%s\n" $s $1 $2 "$([ $ok = 1 ] && echo IDENTICAL || echo DIFFERENT)" "$FL" "${kn:+known:${kn# }}" >> $RES0/verdicts.tsv; }
   for p in $PS; do cmp2 ${p%%:*} ${p##*:}; done
   rm -rf "${SCR:?}/${s:?}"
 done
