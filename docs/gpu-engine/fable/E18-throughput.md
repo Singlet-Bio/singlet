@@ -134,6 +134,29 @@ are in GiB (the cgroup's `memory.current` peak, `nvidia-smi`).
 - The node's other half ran other jobs during job C (E17's gate jobs 797462 and 797468 on the other GPU and 18 cores, an E19 encode
   job): separate GPUs and cores, but the same memory bus and page cache.
 
+**E17 head 5e55b702 (E15 + E16 + E17's budget), job 797485 (D), node g051:**
+
+| point | form | k | T | slots | runs | **pairs/s (M)** | wall s min / mean / max | core-s/M runs / cgroup | lock wait / held s | held % | host peak GB | device peak GB |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| k1t7s1f | – | 1 | 7 | 1 | 1 | **0.520** | 128.1 | 7.79 / 8.90 | 0.2 / 38.4 | 30 | 52 | 89.6 |
+| k1t9s1 | – | 1 | 9 | 1 | 1 | **0.557** | 119.6 | 7.91 / 8.32 | 2.0 / 35.6 | 29 | 54 | 89.3 |
+| k1t14s1 | – | 1 | 14 | 1 | 1 | **0.607** | 109.6 | 8.17 / 8.53 | 1.5 / 32.4 | 29 | 56 | 89.3 |
+| k2t14s1 | batch | 2 | 14 | 1 | 2 | **0.969** | 134.9 / 136.2 / 137.5 | 8.36 / 8.69 | 34.4 / 31.5 | 45 | 100 | 89.4 |
+| k2t14s2 | batch | 2 | 14 | 2 | 2 | **0.987** | 129.3 / 132.2 / 135.0 | 8.61 / 8.92 | 0.8 / 50.7 | 43 | 102 | 86.5 |
+| k3t9s1 | batch | 3 | 9 | 1 | 3 | **1.096** | 173.1 / 178.1 / 182.3 | 8.02 / 8.37 | 78.7 / 33.8 | 57 | 142 | 90.1 |
+| k3t9s2 | batch | 3 | 9 | 2 | 3 | **1.210** | 153.5 / 158.7 / 165.1 | 8.19 / 8.51 | 31.6 / 45.7 | 48 | 139 | 87.4 |
+| k3t9s3 | batch | 3 | 9 | 3 | 3 | **1.206** | 155.7 / 159.7 / 165.7 | 8.71 / 9.04 | 2.3 / 72.8 | 52 | 145 | 87.1 |
+| k4t7s1 | batch | 4 | 7 | 1 | 4 | **1.164** | 216.7 / 222.7 / 228.9 | 7.77 / 8.15 | 128.8 / 34.5 | 62 | 184 | 90.1 |
+| k4t7s2 | batch | 4 | 7 | 2 | 4 | **1.361** | 149.6 / 181.7 / 195.7 | 7.94 / 8.26 | 41.9 / 45.2 | 56 | 155 | 86.3 |
+
+- **The k = 3 point on three heads** (batch, T = 9, one GPU, 28 cores): 0.995 (44a6e9fa), 1.104 (E16), 1.096 (E17). E17's budget
+  does not change the rate at `SLOTS=1`: its default (91.1 GB, and no more than the free memory less 2 GB) gives the lanes almost
+  what E12's "free − 3 GB" gave. The slot is held 33.8 s per run at k = 3 (E16: 34.1). The single k = 1 runs held it 38.4 s at T = 7
+  (E16: 36.1) and 35.6 s at T = 9 (E16: 34.0), with the prefill's lanes and `e2e.build` 0.3–0.6 s slower each; one run per point,
+  so this is within a run's spread.
+- **With E17, two slots pay (§5c): +10 % at k = 3 and +17 % at k = 4** against `SLOTS=1` in the same job, using only
+  `SINGLET_ENGINE_GPU_SLOTS=2`.
+
 ## 3. Identity
 
 Every run of a point with k > 1 is compared with the k = 1 run of the same sample at the same T in the same job (the reference; job C
@@ -160,7 +183,9 @@ The run-dependent files, as in E11's gate:
 | 797423 A, `m43` (SLOTS=1 and 2) | 10 | 63 / 2 / 4 | the same 3 + `summary.json`'s `memory_tier` | identical | identical |
 | 797443 B (44a6e9fa) | 24 | 63 / 3 / 3 | as above | identical | identical |
 | 797460 C (merged, E16) | 40 (4 samples) | 60 / 3 / 6 (pbmc5p_v1: 58 / 3 / 6) | the same 3 + `nonhost_reads.fq`, `star_Unmapped.out.mate1/2` (same records, another order) | identical; the 3 read files hold the same sorted records, except nuclei2k_v2's `nonhost_reads.fq` (below) | identical |
-| @@ D (merged, 2 GPUs) | @@ | @@ | @@ | @@ | @@ |
+| 797485 D (E17), SLOTS = 1, 2, 3 | 21 | 60 / 3 / 6; with 3 slots 60 / 2 / 7 | as job C; with 3 slots also `summary.json`'s `memory_tier` (Large → Medium: the 30.4 GB budget lowers the process's VmPeak) | identical; the 3 read files hold the same sorted records | identical (10 points) |
+| 797491 F (E17), SLOTS = 1, 2 | @@ | @@ | @@ | @@ | @@ |
+| @@ E (E17, the node) | @@ | @@ | @@ | @@ | @@ |
 
 On 44a6e9fa even the three read-order files came out byte-identical at every k; with E16 they are written by a background thread
 and their record order varies from run to run (E11's known run-dependent set; E16's own gate lists the same three files).
@@ -292,22 +317,32 @@ Three consequences:
 - **Batch starts cost 5–10 %** against the stream form at the same k (k = 4: 1.093–1.120 batch, 1.159 stream): the ramp (31 s
   before the first prefill) and the tail (53 s after the last non-host) are paid once per batch.
 
-### 5c. Two slots per GPU (`SLOTS=2`, the `m43` split) do not pay
+### 5c. Two slots per GPU: no gain with a hand-made split on 44a6e9fa, +10–17 % with E17's budget
 
-| k | SLOTS=1 (default memory) | SLOTS=2 + `m43` | prefill held per run, SLOTS=2 |
-|---|---|---|---|
-| 1 | 0.486 (T = 14) | 0.455 (SLOTS=1 + `m43`) | 27.4 s alone (18.2 s without `m43`) |
-| 2 | 0.802 | 0.807 | 40.8 / 42.7 s (both at once) |
-| 3 | 0.995 | 0.993 | 40.5 / 40.0 / 24.8 s |
-| 4 | 1.093 (T = 7), 1.120 (T = 14) | 1.178 | 36.7 / 27.8 / 36.2 / 26.3 s |
+`SINGLET_ENGINE_GPU_SLOTS=2` lets two samples hold the device at once. Each must then stay within about half the device. On 44a6e9fa
+that took the hand-made split `m43` (§7); on the E17 head the budget does it alone, (device memory − 2 GB) / slots: 45.5 GB for two
+slots, 30.4 GB for three (job 797485). All points below are batch, one GPU, 28 cores, M pairs/s:
 
-- Without MPS, two processes' kernels on one device time-slice: two prefills at once take 36–43 s each instead of 18–25 s, so the
-  device does the same work in the same time. What a second slot can overlap is one sample's host work under its slot with
-  another's kernels, which is why k = 4 gains 5–8 %.
-- The memory split costs on its own: alone, the prefill holds 27.4 s instead of 18.2 s, because lane B's Work at 21,504 reads per
-  batch (instead of free memory) runs 7.5 s instead of 3.0 s, and the 4 M-read chunk adds rounds.
-- A second slot also needs every phase inside half the device (§7), which only the `m43` hand split achieves today.
-- Fixing the holds (§4) is worth more than a second slot, and keeps the device memory free for one sample's large lanes.
+| k | 44a6e9fa SLOTS=1 | 44a6e9fa SLOTS=2 + `m43` | E17 head SLOTS=1 | **E17 head SLOTS=2** (45.5 GB) | E17 head SLOTS=3 (30.4 GB) |
+|---|---|---|---|---|---|
+| 1 | 0.486 (T = 14) | 0.455 (SLOTS=1 + `m43`) | 0.607 (T = 14) | – | – |
+| 2 (T = 14) | 0.802 | 0.807 | 0.969 | **0.987** (+2 %) | – |
+| 3 (T = 9) | 0.995 | 0.993 | 1.096 | **1.210** (+10 %) | 1.206 (+10 %) |
+| 4 (T = 7) | 1.093 (1.120 at T = 14) | 1.178 (+8 %) | 1.164 | **1.361** (+17 %) | – |
+
+- **Two prefills at once time-slice the device:** each takes 35–36 s when both run together (k2t14s2) against 17.5 s alone, and
+  three at once take 53–59 s each (k3t9s3). Without MPS the device does the same kernel work in the same time.
+- **What a second slot buys is overlap:** one sample's host work under its slot (the prefill's host lane and records, the pileup's
+  puts and host pass, ~8 s per sample on E16+, §4) and its transfers run while the other's kernels do. A FIFO slot also leaves the
+  device idle in the convoy (§5b); with two slots a second sample can start a device phase in those gaps.
+- **Why `m43` did not pay and the budget does:** `m43` slowed the prefill alone from 18.2 to 27.4 s (lane B's batch of 21,504 reads ran
+  7.5 s instead of 3.0 s; a 4 M chunk). E17's plan at 45.5 GB keeps larger batches (chunk 3.96 M in 8 chunks, NB 438,272 / 180,224 /
+  31,744), costing a few seconds instead of nine (E17 measured +5.3 s at 40 GB). On the merged head the rest of a sample's life is
+  also shorter (E16's tail), so the slot binds more at the same k.
+- **Three slots fit but add nothing over two at k = 3**: lean mode at 30.4 GB (13 chunks of 2.4 M) and three-way time-slicing.
+- **Device memory:** 44.8–45.1 GB per process with two slots and 29.7–30.8 GB with three (the non-host screen's 28.5 GB outside the
+  budget), 86.3–87.4 GB for the device. No sample failed or fell back; every output identical to the k = 1 run (§3).
+- At larger k the comparison is in steady state on one GPU (job F, §2) and on the node (job E).
 
 ### 5d. What bounds k: host memory
 
