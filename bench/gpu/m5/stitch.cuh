@@ -1817,6 +1817,7 @@ __device__ inline bool warpAssign(const Grp<G>& gr, const Params& P, const Genom
             if (j < cnt) { const u64 b = off + j; mk = (bits[b >> 5] >> (b & 31)) & 1u; }
             const unsigned m = gr.ballot(mk);
             if (!m) continue;
+            uint16_t oD = NONE, oA = NONE;   // this lane's entry: the windows of its parts (NONE: no window)
             if (mk) {
                 AssignEnt& e = E[lane];
                 e.wD = NONE; e.wA = NONE;
@@ -1841,14 +1842,15 @@ __device__ inline bool warpAssign(const Grp<G>& gr, const Params& P, const Genom
                     e.a1D = a1; e.LD = (uint32_t)aLength; e.rD = (uint32_t)aRstart; e.sj = (uint)-1;
                     if (wD != uintWinBinMax) e.wD = (uint16_t)wD;
                 }
+                oD = e.wD; oA = e.wA;
             }
             gr.sync();
-            unsigned myD = 0, myA = 0;
-            for (int q = 0; q < G; q++) {
-                if (!((m >> q) & 1u)) continue;
-                const AssignEnt& e = E[q];
-                if (e.wD != NONE && (e.wD & (G - 1)) == lane) myD |= 1u << q;
-                if (e.wA != NONE && (e.wA & (G - 1)) == lane) myA |= 1u << q;
+            // the entries whose parts fall into this lane's windows (owner lane = window % G), from ballots on the owner bits
+            unsigned myD = gr.ballot(oD != NONE), myA = gr.ballot(oA != NONE);
+            for (int b = 0; (1 << b) < G; b++) {
+                const unsigned bD = gr.ballot(oD != NONE && ((oD >> b) & 1)), bA = gr.ballot(oA != NONE && ((oA >> b) & 1));
+                myD &= ((lane >> b) & 1) ? bD : ~bD;
+                myA &= ((lane >> b) & 1) ? bA : ~bA;
             }
             unsigned my = myD | myA;
             while (my && ok) {
