@@ -209,8 +209,45 @@ def fetch_run(acc, dest_dir, streams, log, limiter=None, allow_lite=False):
     raise FetchError("all_sources_failed: %r" % last)
 
 
-def decode_run(binary, sra, out, quality, vdb_threads, env, log_path):
+PROTO_LINE = re.compile(r"\[singlet-download\] Protocol: (\S+) \(confidence: (\d+)\)")
+
+
+def parse_protocol(text):
+    """-> (tag, confidence) from the 'Protocol:' line `singlet download` prints, or (None, None)."""
+    m = PROTO_LINE.search(text or "")
+    return (m.group(1), int(m.group(2))) if m else (None, None)
+
+
+def protocol_family(tag):
+    """'10x-3p-v2' and '10x-5p-v2' are one family: same whitelist, same barcode / UMI geometry, they differ only in which end of the transcript read 2 starts at
+    (a heuristic of the detector: poly(A) vs poly(T) at the start of the cDNA read)."""
+    return re.sub(r"-(3p|5p)-", "-", tag or "")
+
+
+def vote_protocol(calls, weights):
+    """One protocol per sample. calls: {run: tag}; weights: {run: reads}. -> dict(status, winner, tags, family, weight):
+      agree        every run has the same tag: nothing to do;
+      voted        the tags differ only in the 3'/5' flag (one family): the tag with the most reads wins (ties: the alphabetically first), and every run is decoded with it;
+      incompatible the runs differ in whitelist or geometry (different families): genuinely different libraries under one GSM, never pooled by guessing: winner None;
+      none         no run reported a tag."""
+    tags = {r: t for r, t in calls.items() if t}
+    if not tags:
+        return {"status": "none", "winner": None, "tags": {}, "family": None, "weight": {}}
+    fams = {protocol_family(t) for t in tags.values()}
+    w = {}
+    for r, t in tags.items():
+        w[t] = w.get(t, 0) + max(int(weights.get(r, 0) or 0), 1)
+    if len(set(tags.values())) == 1:
+        return {"status": "agree", "winner": next(iter(tags.values())), "tags": tags, "family": next(iter(fams)), "weight": w}
+    if len(fams) == 1:
+        return {"status": "voted", "winner": sorted(w, key=lambda t: (-w[t], t))[0], "tags": tags, "family": next(iter(fams)), "weight": w}
+    return {"status": "incompatible", "winner": None, "tags": tags, "family": None, "weight": w}
+
+
+def decode_run(binary, sra, out, quality, vdb_threads, env, log_path, protocol=None):
     cmd = [binary, "download", sra, "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out]
+    if protocol:   # the sample-level vote (vote_protocol): decode this run with the sample's protocol, not its own call
+        cmd += ["--protocol", protocol]
     if quality and quality != "none":
         cmd += ["--quality", quality]
     t0 = time.time()
@@ -219,7 +256,7 @@ def decode_run(binary, sra, out, quality, vdb_threads, env, log_path):
     return rc, time.time() - t0
 
 
-def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=600, keep_json=None):
+def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=600, keep_json=None, info=None, whitelist_dir=None):
     """Screen the first `reads` pairs of a run BEFORE fetching it: VDB-streams just that head (`singlet download --max-reads`), then
     `screen-runs`. -> ('keep'|'non10x'|'no_gex'|'unknown', seconds). 'unknown' (stream failed/timed out) means: fetch and let the full-run
     screen decide. SRA files are columnar, so a byte range cannot give the head; this costs one short VDB stream, about the price
@@ -227,8 +264,11 @@ def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=6
     t0 = time.time()
     out = os.path.join(scr, run + ".head.1fq")
     try:
-        rc = subprocess.run([binary, "download", run, "--max-reads", str(reads), "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out],
-                            env=env, capture_output=True, timeout=timeout).returncode
+        pr = subprocess.run([binary, "download", run, "--max-reads", str(reads), "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out] +
+                            (["--whitelist-dir", whitelist_dir] if whitelist_dir else []), env=env, capture_output=True, timeout=timeout)
+        rc = pr.returncode
+        if info is not None:
+            info["protocol"], info["confidence"] = parse_protocol(pr.stderr.decode("utf-8", "replace"))
     except subprocess.TimeoutExpired:
         return "unknown", time.time() - t0
     if rc == 2:
@@ -246,11 +286,11 @@ def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=6
     return ("no_gex" if rc == 6 else "keep" if rc == 0 else "unknown"), time.time() - t0
 
 
-def stage_run(binary, sra, out, quality, vdb_threads, whitelist_dir, env, scr, part=False):
+def stage_run(binary, sra, out, quality, vdb_threads, whitelist_dir, env, scr, part=False, protocol=None):
     """`singlet download <local .sra> --stage-out OUT`: SRA -> .1fg2 in one pass (no .1fq, no barcode sort). -> (rc, seconds, report dict|None).
     rc 2 = the non-10x gate (a verdict); rc 6 = protocol not stageable (no universal R1 whitelist): the caller falls back to the .1fq path."""
     cmd = [binary, "download", sra, "--quality", quality, "--vdb-threads", str(vdb_threads), "--no-profile", "--stage-out", out,
-           "-o", os.path.join(scr, "unused.1fq")] + (["--stage-part"] if part else []) + (["--whitelist-dir", whitelist_dir] if whitelist_dir else [])
+           "-o", os.path.join(scr, "unused.1fq")] + (["--stage-part"] if part else []) + (["--whitelist-dir", whitelist_dir] if whitelist_dir else []) + (["--protocol", protocol] if protocol else [])
     t0 = time.time()
     p = subprocess.run(cmd, env=env, capture_output=True, text=True)
     rep = None
@@ -291,18 +331,32 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
     ru0 = resource.getrusage(resource.RUSAGE_CHILDREN) if resource else None
     runs_info, raw_total = [], 0
     fmt, staged_files, parts, fallback_1fq = "1fq", [], [], False
+    protocol_vote, force_protocol = None, None
     try:
         if a.head_screen:
-            verdicts = {}
+            verdicts, calls = {}, {}
             for r in item["runs"]:
-                verdicts[r], hs = head_screen(binary, r, scr, env, keep_json=os.path.join(scr, "head_screen.json") if a.format == "1fg2" else None)
+                hinfo = {}
+                verdicts[r], hs = head_screen(binary, r, scr, env, keep_json=os.path.join(scr, "head_screen.json") if a.format == "1fg2" else None, info=hinfo,
+                                              whitelist_dir=a.whitelist_dir)
+                calls[r] = (hinfo.get("protocol"), hinfo.get("confidence"))
                 Q.heartbeat(claim)
                 log("[head] %s %s %.0f s" % (r, verdicts[r], hs))
             keep_runs = [r for r in item["runs"] if verdicts[r] in ("keep", "unknown")]
             if not keep_runs:
                 Q.give_back_todo(stage, gsm, claim, retry=False)
                 return "parked_head_" + ("non10x" if "non10x" in verdicts.values() else "no_gex")
+            rr = dict(zip(item["runs"], item.get("run_reads") or []))   # reads per run, for the vote weights
             item = dict(item, runs=keep_runs)
+            if len(keep_runs) > 1:
+                vote = vote_protocol({r: calls[r][0] for r in keep_runs}, rr)
+                vote["calls"] = {r: list(calls[r]) for r in keep_runs}
+                protocol_vote = vote
+                if vote["status"] == "voted":
+                    force_protocol = vote["winner"]
+                    log("[vote] %s: runs disagree on the 3'/5' flag %s -> every run decoded as %s" % (gsm, vote["tags"], force_protocol))
+                elif vote["status"] == "incompatible":
+                    log("[vote] %s: runs differ in whitelist/geometry %s - not pooled by guessing" % (gsm, vote["tags"]))
         for r in item["runs"]:
             Q.heartbeat(claim)
             if a.limiter:
@@ -320,7 +374,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
                 # (one exact-barcode histogram, one distinct-sequence table: the pooled R11 correction of the .1fq route)
                 multi = len(item["runs"]) > 1
                 g = os.path.join(scr, "part_" + r) if multi else os.path.join(inc, "sample.1fg2")
-                rc, dsec, rep = stage_run(binary, sra, g, a.quality, a.decode_threads, a.whitelist_dir, env, scr, part=multi)
+                rc, dsec, rep = stage_run(binary, sra, g, a.quality, a.decode_threads, a.whitelist_dir, env, scr, part=multi, protocol=force_protocol)
                 if rc == 0 and rep:
                     staged, fmt = True, "1fg2"
                     info.update(pairs=rep["n_reads"])
@@ -341,7 +395,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
                     except OSError:
                         pass
             if rc is None:
-                rc, dsec = decode_run(binary, sra, out, a.quality, a.decode_threads, env, os.path.join(scr, "decode.log"))
+                rc, dsec = decode_run(binary, sra, out, a.quality, a.decode_threads, env, os.path.join(scr, "decode.log"), protocol=force_protocol)
             os.remove(sra)
             if rc not in (0, 2):  # 2 = the download's non-10x gate: a verdict, not an error; the run is simply not staged
                 raise FetchError("decode_failed rc=%s %s" % (rc, open(os.path.join(scr, "decode.log")).read()[-400:]))
@@ -395,6 +449,8 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
             "decode_core_s_per_Mpair": round(child_cpu / (pairs / 1e6), 2) if pairs else None, "fetch_total_s": round(time.time() - t_start, 1), "quality": a.quality,
             "bytes_per_pair": round(sum(x.get("staged_bytes", 0) for x in runs_info) / pairs, 2) if pairs else None,
             "stage_ratio": round(sum(x.get("staged_bytes", 0) for x in runs_info) / raw_total, 3) if raw_total else None}
+        if protocol_vote:   # absent for single-run samples and without --head-screen: the default manifest is unchanged
+            man["protocol_vote"] = protocol_vote
         if getattr(a, "companion_table", None):   # absent otherwise: the default manifest is unchanged
             man.update(companions=comp, companion_pairs=CP.pairs_total(comp))
         nbytes = Q.publish(stage, gsm, inc, claim, man)
