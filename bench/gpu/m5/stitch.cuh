@@ -222,7 +222,25 @@ template <class C> struct Work {
     u64 nSteps, stepBudget;    // stitching recursion steps of this read; budget (0 = none): over it, the read goes to the next lane
     long long clk[8];          // cycles: seeds, windows + assignment, stitching, selection + encoding; inside stitching:
                                // [4] stitchAlignToTranscript, [5] finalization, [6] transcript copies, [7] recording (device only)
+#ifdef M5_CENSUS
+    // E2 census (docs/gpu-engine/fable/E2-census.md): statistics only, never read by the mapping itself
+    u64 cnStitch, cnFinal, cnRec;   // stitchAlignToTranscript calls, finalizations (leaves), transcripts recorded
+    u64 cnHits;                     // SA entries that hit a window (assignEntry calls that can do something)
+    uint cnMaxEx;                   // largest nExons of a transcript passed to stitchAlignToTranscript (cap NEX needs > this)
+    uint cnMaxWA;                   // peak aligns in one window during assignment (cap NWA)
+    uint cnKeepMax, cnWinTrMax;     // peak transcripts kept across windows (NKEEP), per window (NWTR)
+    uint cnWinStitched;             // windows that went through stitchWindowAligns
+    bool cnFinish;                  // mapFinish ran for this read (the per-window arrays below are this read's)
+    long long cn[4];                // cycles: [0] phase 1 (k_p1, whole call), [1] assignment scan (k_p2, warp), [2] assignment, [3] phase 3 total
+    uint32_t cnWinSteps[C::NW], cnWinCyc[C::NW];   // per window: recursion steps, cycles of stitchWindowAligns
+    uint16_t cnWinTr[C::NW];                   // per window: transcripts recorded (nWinTr after the window)
+#endif
 };
+#ifdef M5_CENSUS
+#define M5CN(...) do { __VA_ARGS__; } while (0)
+#else
+#define M5CN(...) do { } while (0)
+#endif
 #ifdef __CUDA_ARCH__
 #define M5CLK(w, k, t) do { long long t1_ = clock64(); (w).clk[k] += t1_ - (t); (t) = t1_; } while (0)
 #define M5T(t) long long t = clock64()
@@ -617,6 +635,7 @@ template <class C> HD inline bool assignAlignToWindow(const Params& P, Work<C>& 
         A[WA_rStart] = aRstart; A[WA_Length] = aLength; A[WA_gStart] = a1; A[WA_Nrep] = aNrep;
         A[WA_Anchor] = (uint)(int)aAnchor; A[WA_iFrag] = aFrag; A[WA_sjA] = sjA;
         w.nWA[iW]++;
+        M5CN(if (w.nWA[iW] > w.cnMaxWA) w.cnMaxWA = (uint)w.nWA[iW]);
         if (aAnchor && (uint)w.WlastAnchor[iW] < iA) w.WlastAnchor[iW] = (i64)iA;
     }
     return true;
@@ -1068,6 +1087,7 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
     if (Score + P.outFilterMultimapScoreRange >= w.slot[w.slotP[0]].maxScore
         || (trA.iFrag >= 0 && Score + P.outFilterMultimapScoreRange >= w.maxScoreMate[trA.iFrag])) {
         uint iTr = 0;
+        M5CN(w.cnRec++);
         trA.mappedLength = 0;
         for (uint iex = 0; iex < trA.nExons; iex++) trA.mappedLength += trA.exons[iex][EX_L];
         while (iTr < w.nWinTr) {
@@ -1117,13 +1137,19 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
     int d = 0;
     fr[0].Score = 0; fr[0].tR2 = 0; fr[0].tG2 = 0; fr[0].phase = 0;
     while (d >= 0) {
+#ifdef M5_CENSUS
+        ++w.nSteps;   // counted with or without a budget
+        if (w.stepBudget && w.nSteps > w.stepBudget) { w.ov = OV_STEPS; return false; }
+#else
         if (w.stepBudget && ++w.nSteps > w.stepBudget) { w.ov = OV_STEPS; return false; }
+#endif
         Frame& F = fr[d];
         uint iA = (uint)d;
         T& trA = w.stack[d];
         if (F.phase == 0) {
             if (iA >= nA && F.tR2 == 0) { d--; continue; }
             if (iA >= nA) {
+                M5CN(w.cnFinal++);
                 M5T(tf);
                 w.fin.copyFrom(trA);
                 bool okf = finalizeTranscript(P, gv, w, F.Score, F.tR2, F.tG2, w.fin, R, WA);
@@ -1137,6 +1163,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
             { M5T(tcp); trAi.copyFrom(trA); M5ADD(w, 6, tcp); }
             if (trA.nExons > 0) {
                 bool ovEx = false;
+                M5CN(w.cnStitch++; if (trA.nExons > w.cnMaxEx) w.cnMaxEx = (uint)trA.nExons);
                 M5T(tsa);
                 dScore = stitchAlignToTranscript<T, C::NEX>(F.tR2, F.tG2, WA[iA][WA_rStart], WA[iA][WA_gStart], WA[iA][WA_Length], WA[iA][WA_iFrag],
                                                             WA[iA][WA_sjA], P, R, gv, &trAi, w.outFilterMismatchNmaxTotal, ovEx);
@@ -1225,6 +1252,14 @@ template <class C> HD inline Status mapPhase1(const Params& P, const GenomeView&
     tc = clock64();
 #endif
     w.stitched = false; w.nEntries = 0;
+#ifdef M5_CENSUS
+    // census: no statistic of the previous read in this Work survives an early overflow (each is set again before the
+    // mapping reads it, so these resets do not change results)
+    w.nSteps = 0; w.Nsplit = 0; w.nP = 0; w.nW = 0; w.nWall = 0; w.nKeep = 0; w.trNtotal = 0; w.nTr = 0; w.nWinTr = 0; w.wbN = 0;
+    w.mapMarker = 0; w.unmapType = -2;
+    w.cnStitch = w.cnFinal = w.cnRec = w.cnHits = 0; w.cnMaxEx = w.cnMaxWA = w.cnKeepMax = w.cnWinTrMax = w.cnWinStitched = 0;
+    w.cn[0] = w.cn[1] = w.cn[2] = w.cn[3] = 0; w.cnFinish = false;
+#endif
     if (Lread > (uint)C::LREAD || Lread == 0) { w.ov = OV_LREAD; return Status::Overflow; }
     // oneRead: Read1[1] = complement, Read1[2] = reverse complement
     for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
@@ -1391,6 +1426,7 @@ template <class C> HD inline bool assignAll(const Params& P, const GenomeView& g
         const uint iSAend = w.PC[iP][PC_SAend];
         w.nScan += iSAend - w.PC[iP][PC_SAstart] + 1;
         for (uint iSA = w.PC[iP][PC_SAstart]; iSA <= iSAend; iSA++) {
+            M5CN(if (entryHit(P, gv, w, iP, iSA)) w.cnHits++);
             if (!assignEntry(P, gv, w, iP, iSA)) return false;
             if (M5_TOO_MANY_ANCHORS(w)) return true;   // nothing observable follows: STAR goes on with nW = 0
         }
@@ -1411,6 +1447,7 @@ template <class C> HD inline bool assignHits(const Params& P, const GenomeView& 
                 int t = ctz32(word);
                 word &= word - 1;
                 uint iSA = w.PC[iP][PC_SAstart] + (b + t - off);
+                M5CN(w.cnHits++);
                 if (!assignEntry(P, gv, w, iP, iSA)) return false;
                 if (M5_TOO_MANY_ANCHORS(w)) return true;
             }
@@ -1435,6 +1472,10 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
     if (stitched) {
         // ---- stitch each window, keep its transcripts; trBest
         uint iW1 = 0;
+#ifdef M5_CENSUS
+        w.cnFinish = true;
+        for (uint iW = 0; iW < w.nWall; iW++) { w.cnWinSteps[iW] = 0; w.cnWinCyc[iW] = 0; w.cnWinTr[iW] = 0; }
+#endif
         for (uint iW = 0; iW < w.nW; iW++) {
             if (w.nWA[iW] == 0) continue;
             if ((uint)w.WlastAnchor[iW] < w.nWA[iW]) w.WA[iW][w.WlastAnchor[iW]][WA_Anchor] = 2;
@@ -1450,7 +1491,23 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
             for (int k = 0; k <= C::NWTR; k++) w.slotP[k] = k;
             w.slot[0].copyFrom(trA);
             w.nWinTr = 0;
+#ifdef M5_CENSUS
+            const u64 cnS0 = w.nSteps;
+            long long cnT0 = 0;
+#ifdef __CUDA_ARCH__
+            cnT0 = clock64();
+#endif
+            const bool cnOk = stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2]);
+            w.cnWinSteps[iW] = (uint32_t)mn<u64>(w.nSteps - cnS0, 0xFFFFFFFFull);
+#ifdef __CUDA_ARCH__
+            w.cnWinCyc[iW] = (uint32_t)mn<long long>(clock64() - cnT0, 0xFFFFFFFFll);
+#endif
+            w.cnWinTr[iW] = (uint16_t)w.nWinTr; w.cnWinStitched++;
+            if (w.nWinTr > w.cnWinTrMax) w.cnWinTrMax = w.nWinTr;
+            if (!cnOk) return Status::Overflow;
+#else
             if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2])) return Status::Overflow;
+#endif
             if (w.nWinTr == 0) continue;
             const T& t0 = w.slot[w.slotP[0]];
             bool better = t0.maxScore > w.trBestScore || (t0.maxScore == w.trBestScore && t0.gLength < w.trBestGLength);
@@ -1467,6 +1524,7 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
                     w.nKeep++;
                 }
             }
+            M5CN(if ((uint)w.nKeep > w.cnKeepMax) w.cnKeepMax = (uint)w.nKeep);
             if (better) { w.trBestScore = t0.maxScore; w.trBestGLength = t0.gLength; w.trBestKeep = nKeep0; }
             // drop earlier kept transcripts that fell out of range (never trBest: it has the running best score)
             if (better) {
