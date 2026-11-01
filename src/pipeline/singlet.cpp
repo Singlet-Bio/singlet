@@ -5332,6 +5332,23 @@ int main(int argc, char* argv[]) {
         setenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ", std::to_string(config.min_baseq).c_str(), 1);
         // a clipped read's rRNA verdict on the whole read, computed by STAR's mapping threads (the forked aligner inherits it)
         g_handoffReadHook = &singlet::PileupEngine::handoff_read_hook;
+        // E8 (SINGLET_ENGINE_GPU_E2E=1, docs/gpu-engine/fable/E8-e2e.md): a shared region the forked STAR inherits at the same address;
+        // its prefill builds the pileup's records on the device into it (no hand-off file). Pages exist only once written (MAP_NORESERVE).
+        if (singlet_engine_gpu::e2eRequested() && std::string(getenv("SINGLET_GPU_PILEUP")) == "on") {
+            uint64_t gb = 512;
+            if (const char* g = getenv("SINGLET_ENGINE_GPU_E2E_GB")) gb = std::max<uint64_t>(1, std::strtoull(g, nullptr, 10));
+            const uint64_t cap = gb << 30;
+            void* m = mmap(nullptr, cap, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+            if (m != MAP_FAILED) {
+                singlet_engine_gpu::E2ERegion& r = singlet_engine_gpu::e2eRegion();
+                r.base = (uint8_t*) m; r.cap = cap;
+                std::memset(r.hdr(), 0, sizeof(singlet_engine_gpu::E2EHeader));
+                r.hdr()->cap = cap; r.hdr()->used = sizeof(singlet_engine_gpu::E2EHeader);
+                std::cerr << "[gpu_pileup] E8: records built on the device (shared region, " << gb << " GB reserved)\n";
+            } else {
+                std::cerr << "[gpu_pileup] E8: shared region not mapped (" << strerror(errno) << "); the hand-off file path is used\n";
+            }
+        }
     }
 #endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5

@@ -184,7 +184,8 @@ struct FillSink {
 // ---- hop 6, fill pass: nAln alignments (from the count pass) -> AlnRec[nAln], ops, SigRec, nt16 sequence; rec (optional) = the record bytes
 // seqCacheAlignRecords appends for this sequence
 E6HD inline void recordFill(const RecParams& P, const uint8_t* blob, const char* seq, u64 L, const u64* chrStart, uint32_t nAln,
-                            uint32_t alnOff, uint32_t opsOff, u64 seqOff, SigRec* sig, AlnRec* alns, uint32_t* ops, uint8_t* seq2, uint8_t* rec) {
+                            uint32_t alnOff, uint32_t opsOff, u64 seqOff, SigRec* sig, AlnRec* alns, uint32_t* ops, uint8_t* seq2, uint8_t* rec,
+                            uint16_t* nm = nullptr) {   // E8: nm (optional): per alignment its nM (min(nMM, 65535)), for the per-cell QC of the pass
     const uint8_t* p = blob;
     const u64 nW = (u64)getV(p), nTr = (u64)getV(p);
     getV(p);
@@ -208,6 +209,7 @@ E6HD inline void recordFill(const RecParams& P, const uint8_t* blob, const char*
         AlnRec a; a.tid = refID; a.pos = pos; a.ops_off = o; a.n_ops = nc16; a.mapq = q;
         a.flags = (uint8_t)(((flag & 0x10) ? 1 : 0) | ((flag & 0x100) ? 0 : 2));
         alns[i] = a;
+        if (nm) nm[i] = nm16;
         if (d) {
             put32(d, (uint32_t)refID); put32(d + 4, (uint32_t)pos); put16(d + 8, flag); d[10] = q; d[11] = 0;
             put16(d + 12, nh16); put16(d + 14, nm16); put16(d + 16, nc16);
@@ -273,6 +275,96 @@ E6HD inline ReadOutcome readEval(uint32_t rec, const SigRec* sigs, const AlnRec*
     if (col < 0) return RO_NOTINSET;
     bc = col; u3 = u;
     return RO_KEEP;
+}
+
+// ---- E8 (docs/gpu-engine/fable/E8-e2e.md): the whole per-read rule of PileupEngine::gpu_handoff_pass_entries for one read, i.e. what it
+// counts as well as the ReadRec it keeps, in the order its checks run, from the device records (SigRec / AlnRec of the read's record), the
+// read's entry and the CR table. The host applies the counts; the R4 rRNA detector stays on the host for the sampled unclipped reads.
+// PileupEngine::hash_qname("r<i>"): FNV-1a over the read's name, murmur finaliser (the R4 sample is 1 read in 64)
+E6HD inline u64 qnameHashR(u64 i) {
+    char t[24]; int n = 0; u64 v = i;
+    do { t[n++] = (char) ('0' + v % 10); v /= 10; } while (v);
+    u64 h = 14695981039346656037ULL;
+    h ^= (uint8_t) 'r'; h *= 1099511628211ULL;
+    while (n > 0) { h ^= (uint8_t) t[--n]; h *= 1099511628211ULL; }
+    h ^= h >> 33; h *= 0xff51afd7ed558ccdULL; h ^= h >> 33;
+    return h;
+}
+// per distinct CR (crKey): the barcode column (>= 0; -1 not in the barcode set; -2 no barcode: CR rejected by R11, or with N without R11),
+// the WL-ambient index of the (corrected) CR when not in the set (-1 none), and the cb_status_ index the pass counts for it (R11 only)
+struct CrVal { int32_t col, wl; uint32_t status; };
+struct PassParams { uint32_t cbL, umiL; int32_t chrmTid; uint32_t minMapq; uint32_t cbc, wlOn, wlPend; };   // minMapq: (uint8_t) config.min_mapq
+enum PassKind : uint8_t { PK_NOREC = 0, PK_UNMAPPED, PK_NOPRIMARY, PK_UNWRITTEN, PK_BIGCLIP, PK_NOHOOK, PK_NOBARCODE, PK_NOTINSET, PK_NOKEY, PK_KEEP, PK_N };
+struct PassRes {
+    uint8_t kind;
+    uint8_t rrna;      // bit 0 in the R4 sample, bit 1 rRNA by the hook's verdict (clipped read), bit 2 the host's detector decides (unclipped read)
+    uint8_t chrm, rev, multi, lowMapq, wlCount;
+    int8_t cbStatus;   // cb_status_ index counted, -1 none
+    uint32_t nAln, nSec, pk, clip;
+    int32_t col, wl;
+    u64 u3;
+};
+E6HD inline const CrVal* crFind(const u64* keys, const CrVal* vals, u64 n, u64 k) {
+    u64 lo = 0, hi = n;
+    while (lo < hi) { const u64 m = (lo + hi) >> 1; if (keys[m] < k) lo = m + 1; else hi = m; }
+    return (lo < n && keys[lo] == k) ? vals + lo : nullptr;
+}
+E6HD inline void readPass(u64 i, uint32_t rec, const SigRec* sigs, const AlnRec* alns, const ReadEntry& e, const PassParams& pp, const u64* keys,
+                          const CrVal* vals, u64 nKeys, PassRes& r) {
+    r.kind = PK_NOREC; r.rrna = 0; r.chrm = 0; r.rev = 0; r.multi = 0; r.lowMapq = 0; r.wlCount = 0; r.cbStatus = -1;
+    r.nAln = 0; r.nSec = 0; r.pk = 0; r.clip = 0; r.col = -1; r.wl = -1; r.u3 = 0;
+    if (rec == 0xFFFFFFFFu) return;                       // read with N (or not mapped on the GPU): it came through the stream
+    const SigRec s = sigs[rec];
+    if (s.n_aln == 0) { r.kind = PK_UNMAPPED; return; }   // unmapped: STAR writes no record
+    int pk = -1;
+    for (uint32_t k = 0; k < s.n_aln; k++) { if (!(alns[s.aln_off + k].flags & 2)) r.nSec++; else if (pk < 0) pk = (int) k; }
+    r.nAln = s.n_aln;                                     // total_reads, mapped_reads += n; secondary_reads += nsec
+    if (pk < 0) { r.kind = PK_NOPRIMARY; return; }
+    r.pk = (uint32_t) pk;
+    const AlnRec a = alns[s.aln_off + pk];
+    if (!(e.flags & 1)) { r.kind = PK_UNWRITTEN; return; }
+    const uint32_t clip = (e.flags & 0xFFFF00u) ? e.flags : 0u;
+    if (clip & 32u) { r.kind = PK_BIGCLIP; return; }
+    const int L2 = (int) s.rlen + (int) ((clip >> 8) & 255) + (int) ((clip >> 16) & 255);
+    r.rev = (a.flags & 1) ? 1 : 0;
+    if (L2 >= 21 && (qnameHashR(i) & 63) == 0) {
+        r.rrna |= 1;
+        if (clip) {
+            if (!(clip & 4u)) { r.kind = PK_NOHOOK; return; }
+            if (clip & (r.rev ? 16u : 8u)) r.rrna |= 2;
+        } else r.rrna |= 4;
+    }
+    if (a.tid == pp.chrmTid) r.chrm = 1;
+    // UR as the pass checks the unpacked string (codes 4..7 are N): non-empty, no N, not a homopolymer; then the CR's table entry
+    bool ok = pp.cbL > 0 && pp.umiL > 0;
+    bool homo = true; uint32_t c0 = 0; u64 u = 0;
+    for (uint32_t j = 0; j < pp.umiL; j++) {
+        uint32_t c = (uint32_t) ((e.ur3 >> (3 * j)) & 7); if (c > 4) c = 4;
+        if (j == 0) c0 = c;
+        if (c == 4) ok = false;
+        if (c != c0) homo = false;
+        if (j < 21) u |= (u64) c << (3 * j);
+    }
+    if (homo) ok = false;
+    if (!ok) { if (pp.cbc) r.cbStatus = 1; r.kind = PK_NOBARCODE; return; }
+    const CrVal* v = crFind(keys, vals, nKeys, crKey(e, pp.cbL));
+    if (v == nullptr) { r.kind = PK_NOKEY; return; }      // never: the table holds every CR of a read with a record
+    if (pp.cbc) r.cbStatus = (int8_t) v->status;
+    if (v->col == -2) { r.kind = PK_NOBARCODE; return; }
+    if (v->col < 0) {
+        r.kind = PK_NOTINSET;
+        if (pp.wlOn && a.mapq >= pp.minMapq && v->wl >= 0) { r.wl = v->wl; r.wlCount = 1; }
+        return;
+    }
+    r.kind = PK_KEEP; r.col = v->col; r.u3 = u; r.clip = clip;
+    r.multi = s.nh > 1 ? 1 : 0;
+    r.lowMapq = a.mapq < pp.minMapq ? 1 : 0;
+}
+// the primary's aligned length (M, =, X ops), for the per-cell QC of a unique read
+E6HD inline u64 matchLen(const AlnRec& a, const uint32_t* ops) {
+    u64 m = 0;
+    for (uint32_t c = 0; c < a.n_ops; c++) { const uint32_t v = ops[a.ops_off + c], op = v & 15; if (op == 0 || op == 7 || op == 8) m += v >> 4; }
+    return m;
 }
 
 } // namespace e6

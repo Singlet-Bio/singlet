@@ -130,6 +130,12 @@ public:
         if (b->core.flag & (BAM_FUNMAP | BAM_FSUPPLEMENTARY)) return;
         if (bc < 0) return;
         const bool sec = (b->core.flag & BAM_FSECONDARY) != 0;
+        if (e2e() != nullptr) {   // E8: a read with a device-built record never comes through the stream ("on": STAR writes none); counted, the pass fails
+            const char* qn = bam_get_qname(b); const singlet_engine_gpu::E2EHeader& H = *e2e_->hdr();
+            uint64_t idx = 0; bool num = qn[0] == 'r' && qn[1] != 0;
+            for (const char* q = qn + 1; num && *q; ++q) { if (*q < '0' || *q > '9') num = false; else idx = idx * 10 + (uint64_t) (*q - '0'); }
+            if (num && idx < H.nReads && e2e_->at<uint32_t>(H.oReadRecord)[idx] != 0xFFFFFFFFu) { e2e_stream_++; return; }
+        }
         if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
         if (ho_ok_) {   // reads with a GPU record: the alignments come from the hand-off; the stream gives barcode, UMI, qualities
             const char* qn = bam_get_qname(b);
@@ -195,10 +201,12 @@ public:
         for (auto& kv : pend_) { incomplete_++; finalize(kv.second); }
         pend_.clear();
         if (ho_ok_) prepend_handoff();
+        if (e2e_ != nullptr) prepend_e2e(in); else {   // E8: the device-built records go into `in` directly
+        e2e_unmap();   // E8 requested but not used (the hand-off file path ran): the region's pages are released
         in.sigs.assign((const uint8_t*) sigs_.data(), (const uint8_t*) (sigs_.data() + sigs_.size()));
         in.alns.assign((const uint8_t*) alns_.data(), (const uint8_t*) (alns_.data() + alns_.size()));
         in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
-        in.ops.swap(ops_); in.seq.swap(seq_);
+        in.ops.swap(ops_); in.seq.swap(seq_); }
         in.snpSkipN = (lowqual_bases_ == 0 ? 0 : (qual_neq_n_ == 0 ? 1 : -1));
         if (no_umi_ > 0) in.snpSkipN = -1;   // reads without a UMI: not reproducible from the packed UMI (never seen in the campaign data)
         if (umi_len_ > 0) in.umiLen = umi_len_;
@@ -213,7 +221,24 @@ public:
     size_t n_reads() const { return reads_.size() + ho_reads_.size(); }
     size_t n_handoff_reads() const { return ho_reads_.size(); }
     uint64_t handoff_mismatches() const { return ho_mismatch_; }
-    bool handoff_used() const { return ho_ok_; }
+    bool handoff_used() const { return ho_ok_ || e2e_ != nullptr; }
+    // E8 (SINGLET_ENGINE_GPU_E2E=1): the shared region with the device-built records, once the prefill completed it; null otherwise
+    const singlet_engine_gpu::E2ERegion* e2e() {
+        if (!e2e_tried_) { e2e_tried_ = true; singlet_engine_gpu::E2ERegion& r = singlet_engine_gpu::e2eRegion(); if (r.ready()) e2e_ = &r; }
+        return e2e_;
+    }
+    uint64_t e2e_stream_reads() const { return e2e_stream_; }
+    // E8: the device pass's kept reads (ReadRec bytes, read order), their clip flags and low-quality masks (16 bytes each; maskAll: every
+    // read had one), as add_handoff_read_u3 would have appended them one by one
+    void add_e2e_reads(const std::vector<uint8_t>& reads, const std::vector<uint32_t>& clip, const std::vector<uint8_t>& lowq, bool mask_all, int umi_len) {
+        const size_t n = clip.size(), r0 = ho_reads_.size();
+        if (n && umi_len_ < 0) umi_len_ = umi_len;
+        ho_reads_.resize(r0 + n); if (n) std::memcpy((void*) (ho_reads_.data() + r0), reads.data(), n * sizeof(ReadRec));
+        ho_clip_.insert(ho_clip_.end(), clip.begin(), clip.end());
+        const size_t q0 = ho_q_.size(); ho_q_.resize(q0 + n); if (n) std::memcpy((void*) (ho_q_.data() + q0), lowq.data(), n * sizeof(QM));
+        if (!mask_all) q_ok_ = false;
+        for (uint32_t c : clip) if (c) n_clipped_++;
+    }
     // the hand-off (loaded on first use); null if there is none
     const Handoff* handoff() {
         if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
@@ -341,6 +366,35 @@ private:
         ho_.unmap();
         unlink(handoff_path_.c_str());
     }
+    // E8: the device-built records (shared region) become signatures 0..nRec-1, as prepend_handoff makes them from the file (E6: the same
+    // arrays); the stream's own follow, shifted. Written into `in` directly; the region is released afterwards.
+    void prepend_e2e(singlet_engine_gpu::PileupInput& in) {
+        const singlet_engine_gpu::E2EHeader& H = *e2e_->hdr();
+        const uint64_t nR = H.nRec, nA = H.nAln, nO = H.nOps, nQ = H.nSeq;
+        for (auto& s : sigs_) { s.aln_off += (uint32_t) nA; s.seq_off += nQ; }
+        for (auto& a : alns_) a.ops_off += (uint32_t) nO;
+        for (auto& r : reads_) r.sig += (uint32_t) nR;
+        auto cat = [](auto& dst, const void* a, size_t na, const void* b, size_t nb) {
+            dst.resize((na + nb) / sizeof(dst[0]));
+            if (na) std::memcpy((void*) dst.data(), a, na);
+            if (nb) std::memcpy((uint8_t*) dst.data() + na, b, nb);
+        };
+        cat(in.sigs, e2e_->base + H.oSigs, nR * sizeof(SigRec), sigs_.data(), sigs_.size() * sizeof(SigRec));
+        cat(in.alns, e2e_->base + H.oAlns, nA * sizeof(AlnRec), alns_.data(), alns_.size() * sizeof(AlnRec));
+        cat(in.ops, e2e_->base + H.oOps, nO * 4, ops_.data(), ops_.size() * 4);
+        cat(in.seq, e2e_->base + H.oSeq, nQ, seq_.data(), seq_.size());
+        ho_reads_.insert(ho_reads_.end(), reads_.begin(), reads_.end());
+        reads_.swap(ho_reads_);
+        in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
+        ho_q_.insert(ho_q_.end(), reads_q_.begin(), reads_q_.end()); reads_q_.swap(ho_q_);
+        std::vector<SigRec>().swap(sigs_); std::vector<AlnRec>().swap(alns_); std::vector<uint32_t>().swap(ops_); std::vector<uint8_t>().swap(seq_);
+        e2e_unmap();
+    }
+    static void e2e_unmap() {
+        singlet_engine_gpu::E2ERegion& r = singlet_engine_gpu::e2eRegion();
+        if (r.base) { munmap(r.base, r.cap); r.base = nullptr; r.cap = 0; }
+    }
+    const singlet_engine_gpu::E2ERegion* e2e_ = nullptr; bool e2e_tried_ = false; uint64_t e2e_stream_ = 0;
     std::string handoff_path_; Handoff ho_; bool ho_tried_ = false, ho_ok_ = false; uint64_t ho_mismatch_ = 0;
     std::vector<ReadRec> ho_reads_;
     std::vector<QM> reads_q_, ho_q_; bool q_ok_ = true, force_q_ = false;   // per-read low-quality masks, parallel to reads_ and ho_reads_

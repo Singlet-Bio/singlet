@@ -8,7 +8,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
+#include <utility>
 #include <string>
 #include <vector>
 #include <array>
@@ -19,6 +21,39 @@
 namespace m5 { struct Params; struct GenomeView; }
 
 namespace singlet_engine_gpu {
+
+// ---- E8 (SINGLET_ENGINE_GPU_E2E=1; docs/gpu-engine/fable/E8-e2e.md): the GPU pileup's input built on the device, no hand-off file.
+// The pipeline forks STAR, and STAR's prefill (mapDistinct) is where the mapping results are on the device; the pileup runs in the parent.
+// The parent maps a shared anonymous region before the fork (e2eRegion: MAP_SHARED | MAP_ANONYMOUS | MAP_NORESERVE, pages exist only once
+// written); mapDistinct builds the pileup's records on the device from its device-resident results and copies them into it, STAR's mapping
+// threads write the per-read entries into it, and the parent's pileup takes the records from it and runs the per-read pass on the device.
+// Layout: this header at offset 0, then arrays at the byte offsets below (64-byte aligned). magic is written last by the prefill.
+struct E2EHeader {
+    char magic[8];                     // "SGE2E001" once the records are complete
+    uint64_t cap, used;                // region bytes, bytes in use
+    uint64_t nReads, nRec, nAln, nOps, nSeq;
+    uint32_t cbS, cbL, umiS, umiL, cbumiL, simple;    // STAR's barcode layout (CB_UMI_Simple), as in the SGHOFF02 hand-off
+    uint64_t oReadRecord, oSigs, oAlns, oOps, oNm, oSeq, oEntries, oQMask;   // byte offsets (oQMask 0: no masks)
+    uint64_t nMateGap, nNoExon, nBadBest, nMapped;    // buildRecords' status counts
+    double msGather, msBuild, msD2H;                  // device steps in mapDistinct
+};
+struct E2ERegion {
+    uint8_t* base = nullptr; uint64_t cap = 0;
+    E2EHeader* hdr() const { return (E2EHeader*) base; }
+    bool ready() const { return base != nullptr && std::memcmp(hdr()->magic, "SGE2E001", 8) == 0; }
+    template <class T> T* at(uint64_t off) const { return off ? (T*) (base + off) : nullptr; }
+    // reserves bytes (64-byte aligned) after what is in use; 0 if the region is full
+    uint64_t take(uint64_t bytes) {
+        E2EHeader* h = hdr(); const uint64_t o = (h->used + 63) & ~63ull;
+        if (o + bytes > cap) return 0;
+        h->used = o + bytes; return o;
+    }
+    // record r's alignment count (SigRec::n_aln, gpu_pileup/pileup/pileup_rec.h: 16-byte records, n_aln at byte 4)
+    uint8_t recAln(uint64_t r) const { return base[hdr()->oSigs + 16 * r + 4]; }
+};
+// one per process: set by the pipeline before it forks STAR (the child inherits the mapping at the same address)
+inline E2ERegion& e2eRegion() { static E2ERegion r; return r; }
+inline bool e2eRequested() { const char* e = std::getenv("SINGLET_ENGINE_GPU_E2E"); return e != nullptr && e[0] == '1'; }
 
 // STAR's read clipping for mate 1 (ClipMate::clip, --clipAdapterType Hamming), applied to every read on the GPU before dedup, so the
 // distinct sequences and the records are the clipped sequences STAR's cache is keyed by. 5': N bases, then NafterAd (STAR has no 5'
@@ -38,6 +73,10 @@ struct Input {
     std::vector<uint16_t> pre5, pre3;   // with clip.pre: per read the bases STAR's CPU clip removes from its 5' and 3' ends
     std::function<void()> release;      // called by mapDistinct once its last device work is done (the caller's device lock); the host assembly of the records runs after it
     std::vector<uint8_t> cr4info;       // not read by the engine: per read STAR's CellRanger4 5' clip (what clipChunk would leave in the FASTQ)
+    // E8: with e2e set, mapDistinct also builds the pileup's records on the device and copies them into e2e (E2EHeader); the host lane
+    // then runs before the device is released. STAR's alignBAM parameters the records need besides Params' filters:
+    E2ERegion* e2e = nullptr;
+    int outSAMmapqUnique = 255; uint16_t outSAMflagAND = 65535, outSAMflagOR = 0;
 };
 
 struct Output {
@@ -50,6 +89,7 @@ struct Output {
     std::vector<uint32_t> readRecord;   // per input read: index of its record above, or 0xFFFFFFFF (sequence with N, or not mapped)
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
     double secUpload = 0, secDedup = 0, secMapGpu = 0, secHostLane = 0;
+    bool e2eOk = false;                 // E8: the records are in Input::e2e (arrays and nRec..nSeq; readRecord and magic are the caller's)
     std::string log;
 };
 
@@ -166,5 +206,37 @@ struct PileupOutput {
 };
 // Runs the pileup on `device`. NOTE: the kernels' CUDA error checks still exit the process (research code); callers isolate it.
 bool pileupRun(const PileupInput& in, int device, PileupOutput& out);
+
+// ---- E8: the hand-off pass of the GPU pileup on the device (records_gpu.cu): PileupEngine::gpu_handoff_pass_entries' per-read rule and every
+// count it keeps, for the reads of E2E records, from the region's arrays. The CR table (R11 correction, barcode set, WL-ambient index) is the
+// caller's: crTable gets the distinct CR keys (3 bits per base as HandoffReadEntry packs them, sorted) and fills per key {col, wl, status}.
+struct E2ECrVal { int32_t col, wl; uint32_t status; };   // = e6::CrVal
+struct E2EPassIn {
+    const E2ERegion* region = nullptr;
+    int32_t chrmTid = -1; uint32_t minMapq = 0;          // (uint8_t) config.min_mapq
+    bool cbc = false, wlOn = false, wlPend = false;      // R11 corrector present; WL-ambient counts kept; WL-ambient gene hits wanted
+    uint32_t nCells = 0, nCellsQc = 0, nWl = 0;           // per_cell_reads_, per_cell_qc_, wl_umi_counts_ sizes
+};
+struct E2EPassOut {
+    std::vector<uint8_t> reads;      // ReadRec per kept read, read order (= the pass's add_handoff_read order)
+    std::vector<uint32_t> clip;      // per kept read: its entry flags when clipped, else 0 (Collector::clips)
+    std::vector<uint8_t> lowq;       // 16 bytes per kept read (zero where the read has no mask)
+    bool maskAll = true;             // every kept read had a mask
+    uint64_t lowQualSum = 0, qualNeqNSum = 0;
+    // PileupStats: total_reads, mapped_reads (+= alignments), secondary_reads, rrna_reads_sampled, rrna_reads (clipped reads, by the hook),
+    // chrm_reads, no_barcode, barcoded_reads, multimapper_reads, low_mapq
+    uint64_t totalAln = 0, secondary = 0, rrnaSampled = 0, rrnaHook = 0, chrm = 0, noBarcode = 0, barcoded = 0, multimapper = 0, lowMapq = 0;
+    uint64_t nDone = 0, nUnwritten = 0, nBigClip = 0, nNoHook = 0, nNoKey = 0, nNotInSet = 0;
+    uint64_t cbStatus[8] = {};
+    std::vector<uint32_t> cellReads, cellUnique, cellMulti; std::vector<uint64_t> cellMism, cellBases;   // per barcode column
+    std::vector<uint32_t> wlCounts;                       // per WL-ambient index
+    std::vector<std::pair<uint32_t, uint32_t>> wlPending; // (record, primary's alignment index), read order
+    std::vector<uint64_t> rrnaHost;                       // sampled unclipped reads: record << 1 | reverse (the host runs the detector)
+    uint64_t nKeys = 0;
+    double msKeys = 0, msTable = 0, msEval = 0, msScatter = 0, msUpload = 0, msDownload = 0, msTotal = 0;
+    std::string log;
+};
+bool e2ePass(const E2EPassIn& in, int device,
+             const std::function<void(const std::vector<uint64_t>& keys, std::vector<E2ECrVal>& vals)>& crTable, E2EPassOut& out);
 
 } // namespace singlet_engine_gpu
