@@ -11,7 +11,7 @@ For every sample of a study that has sex in its GEO metadata (``--sex-labels``, 
   ``cellxy.R``) runs on it. It stays on Clipper.
 
 Counts are exon + intron at gene level, as served. Legacy bundles are read with ``singlet.celllabels.io.read_legacy``,
-v2 studies with ``read_v2``: the same readers the atlas annotation used.
+store studies with ``read_s1``: the same readers the atlas annotation used.
 
     python bench/public/sexancestry/sex_extract.py --gse GSE145370 --sex-labels sex_labels.json --out $BP/work/sex --scratch $TMP
 """
@@ -91,7 +91,7 @@ def main(argv=None) -> int:
     ap.add_argument("--gsm", nargs="*", help="restrict to these samples (default: every labelled sample of the study)")
     a = ap.parse_args(argv)
 
-    from annotate_campaign import DATA_BASE, _download, _has_v2
+    from annotate_campaign import DATA_BASE, _download, _has_store
     from singlet.celllabels import io as IO
     from singlet.celllabels import sex as SX
 
@@ -99,11 +99,11 @@ def main(argv=None) -> int:
     (a.out / "cells").mkdir(parents=True, exist_ok=True)
     work = a.scratch / a.gse
     work.mkdir(parents=True, exist_ok=True)
-    v2 = _has_v2(a.gse)
+    v2 = _has_store(a.gse)
     bundle = None
     try:
         if v2:
-            from singlet.v2 import client as C
+            from singlet.s1 import client as C
             gsms = [g for g in C.open_study(a.gse).samples if g in truth]
         else:
             bundle = work / f"{a.gse}.singlet"
@@ -117,7 +117,7 @@ def main(argv=None) -> int:
         for gsm in gsms:
             t0 = time.time()
             try:
-                s = IO.read_v2(a.gse, gsm) if v2 else IO.read_legacy(bundle, gsm)
+                s = IO.read_s1(a.gse, gsm) if v2 else IO.read_legacy(bundle, gsm)
             except Exception as e:  # noqa: BLE001  (one bad sample must not stop the study)
                 (a.out / "cells" / f"{gsm}.error.txt").write_text(f"{type(e).__name__}: {e}\n")
                 print(f"{gsm}: read failed: {e}", flush=True)
