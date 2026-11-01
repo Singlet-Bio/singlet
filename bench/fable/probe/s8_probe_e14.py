@@ -62,7 +62,8 @@ if tim:
     print(f"probe timing: {tim}")
 rows = []
 for tag in ("plain", "cr4"):
-    p = star_marks(f"{d}/out/cr4_probe/{tag}_Log.out", f"{d}/out/cr4_probe/{tag}_Log.final.out")
+    pd = f"{d}/out/cr4_probe" if os.path.isdir(f"{d}/out/cr4_probe") else f"{d}/cr4_probe"
+    p = star_marks(f"{pd}/{tag}_Log.out", f"{pd}/{tag}_Log.final.out")
     if p:
         rows.append((tag, p))
 print(f"{'process':8s} {'start':>6s} {'params+WL':>9s} {'genome':>6s} {'g->map':>6s} {'map+Solo':>8s} {'end':>6s}   (s after STAR pid; spans in s)")
