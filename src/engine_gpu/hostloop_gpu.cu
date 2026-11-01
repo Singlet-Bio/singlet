@@ -198,8 +198,11 @@ __global__ void k_rec(e6::RecParams P, const uint8_t* blob, const uint64_t* bOff
     if ((threadIdx.x & 31) == 0 && portion != 0) atomicAdd(&g_portion, portion);
 }
 
-// per junction entry (record order, transcript order, exon order): key = start << 32 | gap, the record, overhang | motif << 16 | annot << 24
-__global__ void k_sjfill(const uint8_t* blob, const uint64_t* bOff, uint64_t nRec, const uint32_t* nJ, const uint64_t* jOff, uint64_t* keys,
+// per junction entry (record order, transcript order, exon order): key = start << gb | gap, the record, overhang | motif << 16 | annot << 24.
+// E17: gb, the gap's bits, is 32 on a genome below 2^32 bases (E10's key, start << 32 | gap) and 64 - (the bits of the genome's end) above,
+// so that the key sorts as (start, gap) on any genome; an entry whose start or gap does not fit is counted (the caller then leaves the
+// products to STAR's loop)
+__global__ void k_sjfill(const uint8_t* blob, const uint64_t* bOff, uint64_t nRec, const uint32_t* nJ, const uint64_t* jOff, int gb, uint64_t* keys,
                          uint32_t* recs, uint32_t* vals) {
     const uint64_t r = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x;
     if (r >= nRec || nJ[r] == 0) return;
@@ -220,8 +223,8 @@ __global__ void k_sjfill(const uint8_t* blob, const uint64_t* bOff, uint64_t nRe
                 const uint64_t start = Gp + Lp;
                 const uint32_t gap = (uint32_t)(G - start);
                 const uint32_t ov32 = (uint32_t)Lp < (uint32_t)Lx ? (uint32_t)Lp : (uint32_t)Lx;
-                if (start >> 32) atomicAdd(&g_stat[E10::S_N + 1], 1ULL);
-                keys[o] = start << 32 | gap; recs[o] = (uint32_t)r;
+                if ((start >> (64 - gb)) || ((uint64_t)gap >> gb)) atomicAdd(&g_stat[E10::S_N + 1], 1ULL);
+                keys[o] = start << gb | gap; recs[o] = (uint32_t)r;
                 vals[o] = (uint32_t)(uint16_t)ov32 | (uint32_t)(uint8_t)(char)cp << 16 | (uint32_t)(uint8_t)ap << 24;
                 o++;
             }
@@ -291,7 +294,7 @@ bool r11(const uint64_t* dAux, uint32_t nw, uint64_t n, const uint64_t* dWL, uin
 }
 
 bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOff, const uint64_t* dSOff, uint64_t nRec, const uint32_t* dRR, uint64_t n,
-              e6::ReadEntry* dEnt, uint64_t* dMask, bool outSJ, bool sjAll, E10& out, std::string& err) {
+              e6::ReadEntry* dEnt, uint64_t* dMask, bool outSJ, bool sjAll, E10& out, std::string& err, uint64_t genomeEnd) {
     DevBufs db;
     auto dal = [&](uint64_t bytes) -> void* { void* p = nullptr; if (cudaMalloc(&p, bytes + 64) != cudaSuccess) { cudaGetLastError(); return nullptr; } db.p.push_back(p); return p; };
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1); cudaEventRecord(e0);
@@ -305,7 +308,7 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
     HL_CK(cudaMemcpyToSymbol(g_stat, z, sizeof z)); HL_CK(cudaMemcpyToSymbol(g_portion, &zp, sizeof zp));
     k_rec<<<GR, 256>>>(P, dBlob, dBOff, dSOff, nRec, mult, outSJ, sjAll, rm, ru, nJ);
     HL_CK(cudaGetLastError());
-    k_zero<<<GN, 256>>>(dRR, n, dEnt, dMask);
+    if (dEnt) k_zero<<<GN, 256>>>(dRR, n, dEnt, dMask);   // E17: without dEnt (the entries already in the region) the caller zeroes them
     ull st[E10::S_N + 2];
     HL_CK(cudaMemcpyFromSymbol(st, g_stat, sizeof st)); HL_CK(cudaMemcpyFromSymbol(&out.mappedPortion, g_portion, sizeof(double)));
     for (int k = 0; k < E10::S_N; k++) out.stats[k] = st[k];
@@ -319,10 +322,17 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
     if (nE > 0) {
         uint64_t* keys = (uint64_t*)dal(nE * 8); uint32_t* recs = (uint32_t*)dal(nE * 4); uint32_t* vals = (uint32_t*)dal(nE * 4);
         if (!keys || !recs || !vals) { err = "out of device memory (E10 junctions)"; return false; }
-        k_sjfill<<<GR, 256>>>(dBlob, dBOff, nRec, nJ, jOff, keys, recs, vals);
+        // E17: the gap's bits in the key: 32 below 2^32 bases (E10's key), else 64 - the bits of the genome's end (31 on the 5.8 G-base barnyard)
+        const int sb = genomeEnd ? 64 - __builtin_clzll(genomeEnd) : 32, gb = sb <= 32 ? 32 : 64 - sb;
+        out.sjGapBits = gb;
+        k_sjfill<<<GR, 256>>>(dBlob, dBOff, nRec, nJ, jOff, gb, keys, recs, vals);
         HL_CK(cudaGetLastError());
         HL_CK(cudaMemcpyFromSymbol(st, g_stat, sizeof st));
-        if (st[E10::S_N + 1]) { err = "junction start beyond 32 bits"; return false; }
+        if (st[E10::S_N + 1]) {
+            err = std::to_string(st[E10::S_N + 1]) + " junctions with a start beyond " + std::to_string(64 - gb) + " bits or a gap beyond " + std::to_string(gb)
+                  + " bits (the sort key)";
+            return false;
+        }
         thrust::device_ptr<uint64_t> K(keys); thrust::device_ptr<uint32_t> R(recs), V(vals);
         thrust::stable_sort_by_key(K, K + nE, thrust::make_zip_iterator(thrust::make_tuple(R, V)));   // record order kept within a key
         uint64_t* k1 = (uint64_t*)dal(nE * 8); uint32_t* r1 = (uint32_t*)dal(nE * 4); uint32_t* v1 = (uint32_t*)dal(nE * 4);
@@ -348,7 +358,7 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
         out.sj.assign((nJu + 1) * DS, 0);
         for (uint64_t k = 0; k < nJu; k++) {
             uint8_t* d = out.sj.data() + k * DS;
-            const uint64_t start = hk[k] >> 32; const uint32_t gap = (uint32_t)hk[k];
+            const uint64_t start = hk[k] >> gb; const uint32_t gap = (uint32_t)(hk[k] & (gb >= 32 ? 0xFFFFFFFFull : (1ull << gb) - 1));
             const char motif = (char)(uint8_t)(hv[k] >> 16), annot = (char)(uint8_t)(hv[k] >> 24);
             const char strand = (char)(motif == 0 ? 0 : (motif + 1) % 2 + 1);
             const uint16_t ov = (uint16_t)hv[k];
@@ -373,7 +383,7 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
             for (uint64_t k = 0; k < nUm; k++) out.unmappedReads[k] = (uint32_t)h[k];
         }
         HookRead ph{dRR, dEnt};
-        const uint64_t nH = (uint64_t)thrust::count_if(thrust::device, c0, c0 + n, ph);
+        const uint64_t nH = dEnt ? (uint64_t)thrust::count_if(thrust::device, c0, c0 + n, ph) : 0;   // E17: without dEnt, the caller makes the list
         out.hookReads.resize(nH);
         if (nH) {
             uint64_t* li = (uint64_t*)dal(nH * 8);

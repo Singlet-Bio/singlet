@@ -27,7 +27,10 @@ bool r11(const uint64_t* dAux, uint32_t nw, uint64_t n, const uint64_t* dWL, uin
 
 // dBlob/dBOff/dSOff: the records (gathered, device); dRR: per read its record or 0xFFFFFFFF; fills E10 (stats, sj, unmappedReads, hookReads,
 // recMapped); zeroes the entries/masks of reads without a record. Device buffers it allocates are freed before it returns.
+// E17: genomeEnd (chrStart[nChr]) sets the junction sort key's split (start << gb | gap: gb = 32 below 2^32 bases, else 64 - its bits); with
+// dEnt null (the entries and masks already copied to the host) neither the zeroing nor the hook list is made here (the caller does both)
 bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOff, const uint64_t* dSOff, uint64_t nRec, const uint32_t* dRR, uint64_t n,
-              e6::ReadEntry* dEnt, uint64_t* dMask, bool outSJ, bool sjAll, singlet_engine_gpu::Output::E10& out, std::string& err);
+              e6::ReadEntry* dEnt, uint64_t* dMask, bool outSJ, bool sjAll, singlet_engine_gpu::Output::E10& out, std::string& err,
+              uint64_t genomeEnd = 0);
 
 } // namespace singlet_hostloop_gpu

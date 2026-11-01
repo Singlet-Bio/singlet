@@ -220,6 +220,7 @@ struct Output {
         uint64_t nOddRec = 0;                       // records that are mapped with no transcript (never seen): their reads must stay on STAR's path
         std::vector<uint8_t> sj;                    // the junctions of the reads with a record, collapsed (STAR's Junction layout, 27 bytes), in compareSJ order
         uint64_t nSJ = 0, nSJentries = 0;
+        int sjGapBits = 32;                         // E17: the junction sort key's gap bits (start << sjGapBits | gap; 31 on genomes above 2^32 bases)
         std::vector<uint32_t> unmappedReads;        // reads whose record is unmapped (STAR writes them to Unmapped.out.mate1/2), read order
         std::vector<uint8_t> recMapped;             // per record: 1 if its reads replay a summary (mapped), 0 if unmapped
         double msEntries = 0, msUpAux = 0, msProducts = 0, msD2H = 0;
@@ -231,6 +232,10 @@ struct Output {
         bool soloKept = false;
         std::string log;
     } e10;
+    // E17: the sample did not fit the device memory budget (memBudget): mapDistinct failed before the allocation that would exceed it, and the
+    // caller stops the run with budgetWhy (SINGLET_ENGINE_GPU_MEM_FALLBACK=cpu: STAR maps every read instead)
+    bool budgetFail = false;
+    std::string budgetWhy;
     std::string log;
 };
 
@@ -245,10 +250,21 @@ std::string deviceId(int device);   // PCI bus id, e.g. 0000:4e:00.0
 bool mapDistinct(const m5::Params& P, const m5::GenomeView& host, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device,
                  int hostThreads, Output& out);
 
+// E17 (docs/gpu-engine/fable/E17-budget.md): one sample's device memory budget in bytes on a device of `total` bytes. SINGLET_ENGINE_GPU_MEM_GB
+// (GB of 2^30 bytes; 0: no budget, E12's behaviour: lane B and the pileup's arena take the free memory less 3 GB), else (total - 2 GB) /
+// SINGLET_ENGINE_GPU_SLOTS. It bounds what the sample's process holds on the device in each phase: the prefill (context, index, reads, lanes,
+// records, E10/E11 products and keep: mapDistinct sizes its chunk and lane batches from it) and the pileup (its arena). The non-host screen's
+// index (24.9 GB, fixed) is outside it.
+inline uint64_t memBudget(uint64_t total) {
+    if (const char* g = std::getenv("SINGLET_ENGINE_GPU_MEM_GB")) { const double v = std::atof(g); return v > 0 ? (uint64_t) (v * (double) (1ull << 30)) : 0; }
+    const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
+    const uint64_t slots = sl != nullptr ? (uint64_t) std::min(8, std::max(1, std::atoi(sl))) : 1, margin = 2ull << 30;
+    return (total > margin ? total - margin : total) / slots;
+}
 // Samples per GPU: SINGLET_ENGINE_GPU_SLOTS (default 1 = one sample at a time) exclusive locks per device, named by PCI bus id so jobs that see different
-// GPUs under the same index do not wait for each other (slot k > 0 has ".k" appended to the lock file name). With more than one slot the caller must keep its
-// device memory within (device memory - margin) / slots: the prefill's chunk size (SINGLET_ENGINE_GPU_CHUNK) and the pileup's arena (SINGLET_GPU_PILEUP_ARENA_GB)
-// are the knobs. SINGLET_ENGINE_GPU_DEVICE pins the device; otherwise the first free slot of the first device is taken, or the process waits for a slot of device
+// GPUs under the same index do not wait for each other (slot k > 0 has ".k" appended to the lock file name). Each sample keeps its device memory within
+// memBudget (above: (device memory - 2 GB) / slots unless SINGLET_ENGINE_GPU_MEM_GB sets it). SINGLET_ENGINE_GPU_DEVICE pins the device; otherwise the first
+// free slot of the first device is taken, or the process waits for a slot of device
 // (pid mod devices). Returns the device; *lockFd is closed by unlockDevice.
 inline int lockDevice(int* lockFd) {
     auto lockPath = [](int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };

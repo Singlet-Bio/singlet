@@ -1292,6 +1292,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     gpuFallbackLines(out.e10.log);   // E19: the engine's own fallbacks (E8's records, E10, E11's keep) on stderr too
     if (ok) gpuFallbackLines(out.log);
     decltype(in.e10.aux)().swap(in.e10.aux);
+    if (!ok && out.budgetFail) {   // E17: the sample does not fit the device memory budget: stop with the reason, unless the CPU is wanted instead
+        const char* fb = std::getenv("SINGLET_ENGINE_GPU_MEM_FALLBACK");
+        if (!(fb && std::string(fb) == "cpu"))
+            exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E17): the sample does not fit the device memory budget: " + out.budgetWhy + "\n",
+                          std::cerr, P.inOut->logMain, EXIT_CODE_PARAMETER, P);
+        gpuFallback(P, "ENGINE_GPU: E17: SINGLET_ENGINE_GPU_MEM_FALLBACK=cpu: STAR maps every read (" + out.budgetWhy + ")");
+    }
     if (!ok) {   // E19: with the engine's reason (its last log line, from mapDistinct's fail())
         e10f.release();
         std::string last;
