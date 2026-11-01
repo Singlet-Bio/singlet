@@ -239,7 +239,11 @@ contamination, cell QC metrics) so those TSV members can be derived by recipe. T
 not tested): the stored call plus the uncalled barcodes EmptyDrops separates from ambient RNA (`singlet.s1.cellcall`, design and
 validation in docs/called-ed.md); the cells member's metadata and its manifest entry carry the call's parameters as `called_ed`
 (method, version, ambient bound, alpha, pool size, FDR, seed, `validated`). `called` stays the stored call and the default
-selection. Content digest = SHA-256 over `"CEL2CANON1"` + for each
+selection.
+Pipeline outputs of version 2.2 (`cell_calls.tsv`, `docs/called-ed.md`): `is_cell` and `called_v2` are STARsolo's EmptyDrops_CR call on
+exon-only counts (what the scorer and the default selection read), `called_knee` the knee set, and `called_lowrna` (0/1) the extra
+50-500 UMI barcodes the 2.1 empty-droplet test calls (exon + intron) that `is_cell` does not. A `cells` table that stores
+`called_lowrna` as an optional bitmap keeps those low-RNA cells selectable without changing `called`. Content digest = SHA-256 over `"CEL2CANON1"` + for each
 column in name order: name, dtype, raw little-endian values.
 
 ## 6. Packs
