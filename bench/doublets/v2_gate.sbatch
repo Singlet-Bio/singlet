@@ -10,9 +10,10 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 set -euo pipefail
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
-source $WORK/src/singlet-agents/main/hpc/clipper/in_runtime.sh
+ENV=$WORK/envs/vdjcrispr   # numpy, scipy, pandas, pyarrow, scikit-learn, numba
+export PATH=$ENV/bin:$PATH HOME=$WORK/cache/condahome NUMBA_CACHE_DIR=$WORK/cache/numba-vdjc
 [ -n "${SRC:-}" ] || { BRANCH=${BRANCH:-s11/gate3-harness}; source $WORK/jobs/vdjc/src.sh; }   # immutable copy of the branch tip
 export OPENBLAS_NUM_THREADS=$SLURM_CPUS_PER_TASK PYTHONPATH=$SRC/python
 mkdir -p "$OUT"
-in_runtime python -u $SRC/bench/doublets/v2_gate.py --dataset $DS --study $STUDY --run $RUN --table $TABLE --out $OUT --threads $SLURM_CPUS_PER_TASK ${TRUTH:+--truth "$TRUTH"}
-in_runtime bash -c "cd $SRC && python bench/public/run_capability.py doublets $OUT --out $OUT/doublets.json && python bench/public/contract.py validate $OUT/doublets.json --cohort bench/public/cohort.tsv"
+python -P -u $SRC/bench/doublets/v2_gate.py --dataset $DS --study $STUDY --run $RUN --table $TABLE --out $OUT --threads $SLURM_CPUS_PER_TASK ${TRUTH:+--truth "$TRUTH"}
+bash -c "cd $SRC && python -P bench/public/run_capability.py doublets $OUT --out $OUT/doublets.json && python -P bench/public/contract.py validate $OUT/doublets.json --cohort bench/public/cohort.tsv"
