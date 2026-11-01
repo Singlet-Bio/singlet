@@ -15,6 +15,8 @@ then Nsight Compute on lane A's phase-1 kernels).
   (stepping one memory operation per lane per iteration: 2.2-3.9). The 0.79x comes from persistent warps with lane
   refill (no batch tail) and occupancy (64 registers, iterator in shared memory: 8 blocks per SM, 47.8% vs 27.1%
   achieved), i.e. more memory chains in flight in a latency-bound phase.
+- Merged with `gpu/fable-engine` and on by default (`-DM5_P1NEST` / `-DM5_BASELINE` for the nest): gate 796082, identity
+  100% in all 7 rows; 2.81 -> 3.02 M/s at the standard settings, **3.29 -> 3.50 M/s with E4's flags** (head: 3.30).
 - Did not help: the flat iterator thread per read (1.28x), the 2-bit packed compare (register blowup, no gain at equal
   occupancy), stepped calls (1.16-6.5x), windows fused into the seed kernel, prefetch of the binary search's next SA
   words, out-of-line compare, register caps with spills. Phase 1 once with lane M's capacities would save at most 37 ms
@@ -343,6 +345,31 @@ kernel than in the baseline (3.38 vs 3.77; the baseline measured 3.56 on g051 in
 (47.8% vs 27.1% achieved occupancy, 7.75 vs 4.37 active warps per scheduler) and issue rate (IPC 1.44 vs 0.95), not
 convergence.
 
+## Merged with gpu/fable-engine: flatqs8b as the default (gate 796082, commit e613b1f, node g050)
+
+`gpu/fable-engine` (7ed4e9f: E4's `--best-order`, per-lane phase-3 register caps, batch knobs, `-DM5_NOCLK`; E8's engine
+files) merged into `gpu/fable/seeds` (3027187, fix e613b1f). flatqs8b is now the default build (stitch.cuh, next to E5's
+defaults); STAR's nest stays reachable with `-DM5_BASELINE` (pre-E5 as well), `-DM5_P1NEST` (every other default, the
+nest: "m5n" below), the probe builds (`-DM5_TAIL`, `-DM5_CENSUS`), or any explicit E7 macro. The E7 kernels' cycle
+counters honour `-DM5_NOCLK`. All five builds compile (fable_cc 796075; 796067 failed on a broken string in the merge,
+fixed in e613b1f). Gate: `bench/fable/engine/fable_gate.sbatch` with `OUT=$W/jobs/fable/seeds/engine` (binaries and
+results kept apart from the head's), one job, median of 3 per variant, identity 1,991,926 / 1,991,926 (100%), reads
+weighted 4,118,999 / 4,118,999, in **all 7 rows**. E4 flags = `--best-order --p3-maxreg-a 64 --batch-b 131072`.
+
+| variant | lane A | lane M | lane B | GPU total | M distinct/s | A / M / B phase 1 | head (795837) |
+|---|---:|---:|---:|---:|---:|---|---:|
+| m5b (`-DM5_BASELINE`) | 248.4 | 324.8 | 253.3 | 826.5 | 2.41 | 99.7 / 77.0 / 39.4 | 2.42 |
+| m5n (`-DM5_P1NEST`), @STD | 211.7 | 274.0 | 222.2 | 707.9 | 2.81 | 99.7 / 81.3 / 39.2 | 2.83 (m5) |
+| **m5 (default = flatqs8b), @STD** | **190.3** | **255.0** | **214.1** | **659.4** | **3.02** | 78.8 / 62.5 / 32.0 | 2.83 |
+| m5n + E4 flags (2 runs) | 201.1 / 201.0 | 236.9 / 237.0 | 167.7 / 167.3 | 605.7 / 605.3 | 3.29 / 3.29 | 98.7 / 74.8 / 32.1 | 3.30 |
+| **m5 + E4 flags (2 runs)** | **181.3 / 181.1** | **224.9 / 223.9** | **164.2 / 164.7** | **570.4 / 569.7** | **3.49 / 3.50** | 78.8 / 62.5 / 28.8 | 3.30 |
+
+E7 on top of everything else: +7.4% at the standard settings (2.81 -> 3.02, -48.5 ms) and +6.2% with E4's flags (3.29
+-> 3.50, -35.5 ms); the nest builds reproduce the head's numbers (2.81 vs 2.83, 3.29 vs 3.30). Phase 1 with E4's flags:
+lane A 78.8 vs 98.7 ms (0.80x), lane M 62.5 vs 74.8 ms (0.84x; `--best-order` presorts lane M's reads, which helps the
+nest's phase 1 but not the persistent kernel's), lane B 28.8 vs 32.1 ms (0.90x; batches of 131,072). Phase 3 and the scan
+are unchanged (within 1 ms) except lane A's phase 3 under `--p3-maxreg-a 64` (87.5-87.8 ms in both builds).
+
 ## What failed, and why
 
 | attempt | result (lane A phase 1 vs baseline ~99-100 ms) | why (measured unless marked) |
@@ -442,6 +469,10 @@ lines), 120f218 (G2), 2a404cb (P1WPERS), 3b33f7e (`--p1probe`), 5f9ace8 (SEEDSTE
 | 796029 | compile | 0f2ce51 | PREF3 (not run) |
 | 796040 | compile | fc646e6 | flatqs8b, flatqb (P1WPB) |
 | 796044 | run | 3040da0 | final: baseline vs flatqs8b, flatqb, flatqs8 alternating + ncu |
+| 796067 | compile (fable_cc) | 3027187 | merged branch: failed (a broken string literal from the merge) |
+| 796068 | run (fable_gate) | | ran without binaries after 796067 (no results) |
+| 796075 | compile (fable_cc) | e613b1f | merged branch: default, tail, census, baseline, nest builds |
+| 796082 | run (fable_gate, g050) | e613b1f | merged gate: m5b, m5, m5 + E4 flags, m5n, m5n + E4 flags |
 
 Binaries: `/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/seeds/bin/`; logs
 `/mnt/projects/debruinz_project/debruinz/singlet/logs/e7-*.out`; per-variant logs and ncu summaries under
