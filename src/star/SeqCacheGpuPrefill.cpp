@@ -77,6 +77,7 @@ E10Files e10f;
 // above; their host planes (cDNA quality, barcode read) stay here until the prefill returns, the sequences are in Input (ingSeq, ingOff)
 singlet_engine_gpu::ingest::PackedReads ing;
 bool ingOn = false;
+double ingClipS = 0;   // E13: thread-seconds of the CellRanger4 clip on the decoding threads
 const char *ingSeq = nullptr;
 const uint64_t *ingOff = nullptr;
 void ingRelease() { ing.release(); ingOn = false; ingSeq = nullptr; ingOff = nullptr; }
@@ -467,10 +468,12 @@ bool ingestReads(Parameters &P, singlet_engine_gpu::Input &in, std::string &why)
     // CellRanger4: STAR's ClipMate::clipChunk (opal alignment of the TSO, 64 reads at a time) and readLoad's ClipMate::clip, as readSequences
     // runs them, on each block's reads right after the decoding thread wrote them
     std::vector<std::vector<std::vector<ClipMate>>> cmvT(T);
+    std::vector<double> clipT(T, 0.0);
     if (in.clip.pre) {
         in.pre5.resize(N); in.pre3.resize(N); in.cr4info.resize(N);
-        c.perBlock = [&](int tid, uint64_t r0, uint64_t r1) {
+        c.perBlock = [&](int tid, uint64_t r0, uint64_t r1, uint64_t s0) {
             std::vector<std::vector<ClipMate>> &cmv = cmvT[tid];
+            const auto tc0 = std::chrono::steady_clock::now();
             if (cmv.empty()) P.pClip.initializeClipMates(cmv);
             ClipCR4 *cr = cmv[0][0].cr4;
             const uint64 W = (uint64) pl.maxR2 + 1;
@@ -480,8 +483,11 @@ bool ingestReads(Parameters &P, singlet_engine_gpu::Input &in, std::string &why)
             const uint64_t *of = ing.off.data();
             for (uint64 r = r0; r < r1; r += 64) {
                 const int nb = (int) std::min<uint64>(64, r1 - r);
+                // a read's start: off[r] of the previous read, but the block's first read starts at s0 (off[r0] belongs to the previous
+                // block's thread, which may not have written it yet)
+                auto at = [&](uint64 q) { return q == r0 ? (uint64) s0 : (uint64) of[q]; };
                 for (int k = 0; k < nb; k++) {
-                    const uint64 a = of[r + k], L = of[r + k + 1] - a;
+                    const uint64 a = at(r + k), L = of[r + k + 1] - a;
                     char *d = asc.data() + k * W;
                     for (uint64 j = 0; j < L && j < W; j++) d[j] = kNt[(int) sq[a + j] & 7];
                     cr->opalFillOneSeq(k, d, (uint32) std::min<uint64>(L, W));
@@ -491,7 +497,7 @@ bool ingestReads(Parameters &P, singlet_engine_gpu::Input &in, std::string &why)
                     const int Lm = cr->opalRes[k].endLocationTarget + 1, S = cr->opalRes[k].score;
                     const bool L0 = S < 20 || (S == 20 && Lm > 26) || (S == 21 && Lm > 30);
                     const uint8 info = (uint8) (L0 ? 0 : Lm);
-                    const uint64 a = of[r + k], L = of[r + k + 1] - a;
+                    const uint64 a = at(r + k), L = of[r + k + 1] - a;
                     uint c5 = 0, c3 = 0;
                     if (L <= DEF_readSeqLengthMax) {
                         memcpy(cbuf.data(), sq + a, L);
@@ -503,9 +509,13 @@ bool ingestReads(Parameters &P, singlet_engine_gpu::Input &in, std::string &why)
                     in.pre5[r + k] = (uint16) std::min<uint>(c5, 65535); in.pre3[r + k] = (uint16) std::min<uint>(c3, 65535); in.cr4info[r + k] = info;
                 }
             }
+            clipT[tid] += std::chrono::duration<double>(std::chrono::steady_clock::now() - tc0).count();
         };
     }
-    if (!ig::decode(c, ing, why)) {
+    ingClipS = 0;
+    const bool decoded = ig::decode(c, ing, why);
+    for (double x : clipT) ingClipS += x;
+    if (!decoded) {
         std::vector<uint16>().swap(in.pre5); std::vector<uint16>().swap(in.pre3); std::vector<uint8>().swap(in.cr4info);
         return false;
     }
@@ -906,7 +916,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         if (!ingestReads(P, in, why)) return skip("E13 decode: " + why);
         P.inOut->logMain << "ENGINE_GPU: E13: " << ing.n << " reads decoded from the .1fq into the packed buffers in " << ing.sec << " s (" << P.runThreadN
                          << " threads; " << in.seq.size() << " cDNA bases, " << ing.qual.size() << " quality bytes, " << ing.r1.size() * 8 << " barcode-read bytes; R11 "
-                         << ing.r11Total << " reads" << (in.clip.pre ? "; CellRanger4 clip on the decoding threads" : "") << ")\n";
+                         << ing.r11Total << " reads" << (in.clip.pre ? "; CellRanger4 clip on the decoding threads, " + std::to_string(ingClipS) + " thread-s" : "") << ")\n";
     } else
     if (!readSequences(P, in, why, (int) P.runThreadN)) return skip(why);
     if (e10Level >= 2 && in.e10.on) {

@@ -178,7 +178,7 @@ bool decode(const DecodeConfig& cfg, PackedReads& out, std::string& why) {
             flush();
             if ((k & 3) != 0) qd[k >> 2] = qacc;
             if (r != rEnd || pos != posEnd) { fail("block " + std::to_string(b) + " has fewer reads or bases than the head scan counted"); return; }
-            if (cfg.perBlock) cfg.perBlock(tid, pl.first[b], rEnd);
+            if (cfg.perBlock) cfg.perBlock(tid, pl.first[b], rEnd, pl.baseAt[b]);
         }
         acc[tid] = a;
     };

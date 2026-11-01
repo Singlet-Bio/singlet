@@ -107,8 +107,9 @@ struct DecodeConfig {
     unsigned q30 = 63;                        // readQualityScoreBase + 30, as a quality character
     const uint64_t* wl = nullptr;             // R11: STAR's whitelist (ParametersSolo::cbWL, sorted 2-bit keys, first base highest)
     uint64_t nWL = 0;
-    // after a block's reads are in seq and off: STAR's per-read work on them (the CellRanger4 clip), on the decoding thread `tid`
-    std::function<void(int tid, uint64_t r0, uint64_t r1)> perBlock;
+    // after a block's reads are in seq and off: STAR's per-read work on them (the CellRanger4 clip), on the decoding thread `tid`; reads
+    // [r0, r1), the first one starting at seq[s0] (off[r0] is written by the thread that decodes the previous block: not read here)
+    std::function<void(int tid, uint64_t r0, uint64_t r1, uint64_t s0)> perBlock;
 };
 bool decode(const DecodeConfig& cfg, PackedReads& out, std::string& why);
 
