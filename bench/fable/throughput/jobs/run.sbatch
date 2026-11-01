@@ -147,6 +147,7 @@ for p in "${POINTS[@]}"; do
   du -sh $SCR/$p 2>/dev/null | sed 's/^/  \/tmp use of the point: /' | tee -a $S; df -h /tmp | tail -1 | sed 's/^/  /' | tee -a $S
   python3 $SCR/repo/bench/fable/throughput/e18_point.py $RES0/$p > $RES0/$p/point.txt 2>&1
   [ -f $SCR/repo/bench/fable/throughput/e18_locks.py ] && python3 $SCR/repo/bench/fable/throughput/e18_locks.py $RES0/$p >> $RES0/$p/point.txt 2>&1
+  [ -f $SCR/repo/bench/fable/throughput/e18_steady.py ] && python3 $SCR/repo/bench/fable/throughput/e18_steady.py $RES0/$p 2>&1 | sed 's/^/   /' >> $RES0/$p/point.txt
   cut -c1-400 $RES0/$p/point.txt | tee -a $S
   # identity, the dump, references
   while IFS=$'\t' read -r i w s t0 t1 rc; do
