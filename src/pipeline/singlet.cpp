@@ -2870,6 +2870,19 @@ int main(int argc, char* argv[]) {
                 return singlet::fq::screen_runs_main(argc - 2, argv + 2);
             if (sub == "build-host-filter")
                 return cmd_build_host_filter(argc - 2, argv + 2);
+            if (sub == "star") {   // the bundled STAR on its own: `singlet star <STAR arguments>` (measurements, E14)
+                // SINGLET_GENOME_PRELOAD_THREADS=N: read the index first with star_genome_preload (as the pipeline does)
+                if (const char* pt = std::getenv("SINGLET_GENOME_PRELOAD_THREADS"); pt && std::atoi(pt) > 0) {
+                    for (int i = 2; i + 1 < argc; ++i)
+                        if (std::string(argv[i]) == "--genomeDir") {
+                            std::string lg;
+                            const bool ok = star_genome_preload(argv[i + 1], std::atoi(pt), lg);
+                            std::cerr << "[singlet star] genome preload " << (ok ? "" : "failed: ") << lg << "\n";
+                            break;
+                        }
+                }
+                return star_main_impl(argc - 1, argv + 1);
+            }
         } catch (const std::exception& e) {
             std::cerr << "ERROR: " << e.what() << "\n";
             return 1;
@@ -3821,10 +3834,31 @@ int main(int argc, char* argv[]) {
     std::cerr << "[singlet] Loading pileup references...\n";
     StopWatch ref_sw;
 
+    // E14 (docs/gpu-engine/fable/E14-probe.md): the genome index is read once per sample, here, in the background while the
+    // .1fq is decoded and the references load: star_genome_preload reads Genome, SA and SAindex with parallel readers into
+    // private memory in STAR's own layout (transparent hugepages). The STAR child forked below, the two CR4 probes it
+    // forks and its main run take those arrays (copy-on-write, nothing is copied) instead of each reading 17.6 GB on one
+    // core (8 s per process before). The bytes are the files' bytes: no output changes. The parent drops its references
+    // once STAR is forked. SINGLET_GENOME_PRELOAD=0: the old page-cache prefetch, and every STAR process loads its own copy.
+    struct GenomePreloadJob {
+        std::thread t;
+        std::string log;
+        bool ok = false;
+        void join() { if (t.joinable()) t.join(); }
+        ~GenomePreloadJob() { join(); }
+    } genome_preload;
+    const char* gpl_env = std::getenv("SINGLET_GENOME_PRELOAD");
+    const bool genome_preload_on = !(gpl_env && gpl_env[0] == '0');
+    if (genome_load == "NoSharedMemory" && !genome_dir.empty() && genome_preload_on && !sra_mode) {
+        const int pthreads = std::max(2, std::min(8, (star_threads > 0 ? star_threads : 8) / 2));
+        genome_preload.t = std::thread([&gp = genome_preload, dir = genome_dir, pthreads]() {
+            gp.ok = star_genome_preload(dir, pthreads, gp.log);
+        });
+    }
     // Overlap STAR's genome load with Pass 1 and the reference load: read the private genome's index files once in
     // the background so STAR's own read of them comes from the page cache. Reads only; changes no output.
     // SINGLET_GENOME_PREFETCH=0 turns it off.
-    if (genome_load == "NoSharedMemory" && !genome_dir.empty()) {
+    if (genome_load == "NoSharedMemory" && !genome_dir.empty() && !genome_preload.t.joinable()) {
         const char* pf = std::getenv("SINGLET_GENOME_PREFETCH");
         if (!(pf && pf[0] == '0')) {
             std::thread([dir = genome_dir]() {
@@ -6387,7 +6421,14 @@ int main(int argc, char* argv[]) {
                 setrlimit(RLIMIT_NOFILE, &rl);  // inherited by fork'd STAR child
             }
         }
+        if (genome_preload.t.joinable()) {   // E14: the index must be complete before STAR is forked with it
+            StopWatch gw;
+            genome_preload.join();
+            std::cerr << "[singlet] Genome preload: " << (genome_preload.ok ? "" : "failed (STAR loads the files): ")
+                      << genome_preload.log << "; waited " << gw.elapsed_s() << " s for it at the STAR fork\n";
+        }
         star_pid = fork();
+        if (star_pid != 0) star_genome_preload_release();   // E14: the parent's references; the STAR child keeps the pages
         if (star_pid < 0) {
             std::cerr << "ERROR: fork() failed: " << strerror(errno) << "\n";
             return 1;
@@ -7515,7 +7556,27 @@ int main(int argc, char* argv[]) {
                     // chunk mode: the same in-process source as the main run; fifo mode: the probe decodes the first
                     // reads of the .1fq itself, so the fifos stay untouched for the main stream; file mode: real files
                     const bool probe_src = use_chunk_source || use_fifo_decode;
-                    auto probe = [&](bool with_cr4, const char* tag) -> double {
+                    // E14 (docs/gpu-engine/fable/E14-probe.md): the two probes run at the same time on half of the threads
+                    // each, with STAR's input chunks cut to ~2 MB per mate so that 200k reads make ~25 chunks for the
+                    // threads instead of 4 (the default 15 MB chunk holds ~60k reads), and both take the genome that was
+                    // read once for the sample (star_genome_preload: in the parent, else here). A read maps the same way
+                    // whatever thread and chunk it lands in, so the unique-mapping rates are the same.
+                    // SINGLET_CR4_PROBE=serial: the probes one after the other on all threads with STAR's default chunks.
+                    const char* pm_env = std::getenv("SINGLET_CR4_PROBE");
+                    const bool probe_serial = pm_env && std::string(pm_env) == "serial";
+                    const bool probe_extra_iobuf = std::any_of(star_extra.begin(), star_extra.end(),
+                        [](const std::string& a) { return a.rfind("--limitIObufferSize", 0) == 0; });
+                    std::string preload_note = "genome: each probe loads its own";
+                    if (!probe_serial && genome_load == "NoSharedMemory" && genome_preload_on) {
+                        std::string lg;   // no-op when the parent's preload was inherited
+                        const bool ok = star_genome_preload(genome_dir, star_threads, lg);
+                        preload_note = std::string("genome preload: ") + (ok ? "" : "failed: ") + lg;
+                    } else if (genome_load != "NoSharedMemory") {
+                        preload_note = "genome: " + genome_load;
+                    }
+                    StopWatch probe_sw;
+                    struct ProbeRun { const char* tag; bool with_cr4; int threads; pid_t pid = -1; double t_end = 0; };
+                    auto probe_start = [&](ProbeRun& r) {
                         static const std::set<std::string> drop = {
                             "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM",
                             "--outBAMsortingBinsN", "--outBAMsortingThreadN", "--outFileNamePrefix", "--outTmpDir",
@@ -7523,7 +7584,7 @@ int main(int argc, char* argv[]) {
                         std::vector<std::string> pa;
                         bool skipping = false;
                         for (size_t i = 1; i + 1 < args.size(); ++i) {   // args[0] = "STAR", args.back() = nullptr
-                            if (!with_cr4 && i >= cr4_beg && i < cr4_end) continue;
+                            if (!r.with_cr4 && i >= cr4_beg && i < cr4_end) continue;
                             std::string t = args[i];
                             if (t.rfind("--", 0) == 0) skipping = drop.count(t) > 0;
                             if (!skipping) pa.push_back(t);
@@ -7532,29 +7593,37 @@ int main(int argc, char* argv[]) {
                                 skipping = true;
                             }
                         }
-                        const std::string prefix = pdir + "/" + tag + "_";
+                        for (size_t i = 0; i + 1 < pa.size(); ++i)
+                            if (pa[i] == "--runThreadN") pa[i + 1] = std::to_string(r.threads);
+                        const std::string prefix = pdir + "/" + r.tag + "_";
                         for (const char* t : {"--outSAMtype", "None", "--readMapNumber"}) pa.push_back(t);
                         pa.push_back(std::to_string(cr4_probe_reads));
+                        if (!probe_serial && !probe_extra_iobuf)
+                            for (const char* t : {"--limitIObufferSize", "4000000", "50000000"}) pa.push_back(t);
                         pa.push_back("--outFileNamePrefix"); pa.push_back(prefix);
                         std::vector<char*> pv;
                         pv.push_back(const_cast<char*>("STAR"));
                         for (auto& t : pa) pv.push_back(const_cast<char*>(t.c_str()));
                         pv.push_back(nullptr);
-                        pid_t pp = fork();
-                        if (pp == 0) {
+                        r.pid = fork();
+                        if (r.pid == 0) {
                             int dn = open("/dev/null", O_WRONLY);
                             if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }   // STAR's progress lines must not reach the BAM pipe
                             unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF");   // the probe maps 200k reads on the CPU, not through the GPU prefill
                             if (probe_src) {
-                                int dthreads = std::max(2, std::min(4, star_threads / 4));
+                                int dthreads = std::max(2, std::min(4, r.threads / 4));
                                 g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(
                                     onefq_files, read_fmt, dthreads, /*cdna_first=*/true);
                             }
                             _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
                         }
+                    };
+                    auto probe_finish = [&](ProbeRun& r) -> double {
                         int ws = 0;
-                        if (pp < 0 || waitpid(pp, &ws, 0) < 0 || !WIFEXITED(ws) || WEXITSTATUS(ws) != 0) return -1.0;
-                        std::ifstream lf(prefix + "Log.final.out");
+                        const bool ok = r.pid > 0 && waitpid(r.pid, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+                        r.t_end = probe_sw.elapsed_s();
+                        if (!ok) return -1.0;
+                        std::ifstream lf(pdir + "/" + r.tag + "_Log.final.out");
                         std::string ln;
                         double inreads = 0, uniq = -1.0;
                         while (std::getline(lf, ln)) {
@@ -7566,8 +7635,20 @@ int main(int argc, char* argv[]) {
                         if (inreads < 1000) return -1.0;   // too few reads for a rate
                         return uniq;
                     };
-                    const double u_off = probe(false, "plain");
-                    const double u_on  = probe(true,  "cr4");
+                    const int t_half = std::max(1, star_threads / 2);
+                    ProbeRun rp{"plain", false, probe_serial ? star_threads : t_half};
+                    ProbeRun rc{"cr4", true, probe_serial ? star_threads : std::max(1, star_threads - t_half)};
+                    double u_off = -1.0, u_on = -1.0;
+                    if (probe_serial) {
+                        probe_start(rp); u_off = probe_finish(rp);
+                        probe_start(rc); u_on = probe_finish(rc);
+                    } else {
+                        probe_start(rp); probe_start(rc);
+                        u_off = probe_finish(rp); u_on = probe_finish(rc);
+                    }
+                    std::cerr << "[singlet] CR4 probe timing: plain " << rp.t_end << " s, cr4 " << (probe_serial ? rc.t_end - rp.t_end : rc.t_end)
+                              << " s, " << (probe_serial ? "serial" : "concurrent") << " on " << rp.threads << "+" << rc.threads
+                              << " threads, total " << probe_sw.elapsed_s() << " s; " << preload_note << "\n";
                     pj = ", \"probe_reads\": " + std::to_string(cr4_probe_reads) +
                          ", \"unique_pct_plain\": " + std::to_string(u_off) +
                          ", \"unique_pct_cr4\": " + std::to_string(u_on) + ", \"max_drop_pts\": " + std::to_string(kMaxDropPts);
