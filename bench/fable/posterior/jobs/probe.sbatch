@@ -23,7 +23,7 @@ trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT INT TERM
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
 echo "node=$(hostname) job=$SLURM_JOB_ID bin=$BINDIR commit=$(cat $BINDIR/commit-gpu 2>/dev/null) T=$T $(date -Is)" | tee $RES/summary.txt
 for s in "${SAMPLES[@]}"; do
-  G=$REF/GRCh38-2024-A; [ $s = neuron1k_v3 ] && G=$REF/GRCm39-2024-A; [ $s = hgmm1k_v3 ] && G=$REF/GRCh38-GRCm39-barnyard
+  G=$REF/GRCh38-2024-A; case $s in neuron1k_v3|nuclei2k_v2) G=$REF/GRCm39-2024-A ;; esac; [ $s = hgmm1k_v3 ] && G=$REF/GRCh38-GRCm39-barnyard
   FQ=$PB/data/$s/$s.1fq; O=$SCR/$s; mkdir -p $O/out
   echo "=== $s ($(ls -l $FQ | awk '{print $5}') bytes, genome $G)" | tee -a $RES/summary.txt
   r1=$(grep -m1 "_R1_" $PB/data/$s/gex_fastqs.txt 2>/dev/null)
