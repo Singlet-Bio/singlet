@@ -1,32 +1,84 @@
-% Figure 1: the headline. Every value is read from generated/fig1*.tsv and generated/fig1a_boxes.tex (written by
-% `python -m s1bench report`). One tikzpicture with the axes placed on a grid, so that panels share edges: a and b are
-% square and side by side, c (two axes) sits under a and d under b, with the same height.
-% \figbox{pos}{q1}{median}{q3}{low whisker}{high whisker}{colour}: one horizontal box of panel a, in axis coordinates.
+% Figure 1: the headline. (a) a schematic of what .s1 does differently; (b-g) every value read from generated/*.tsv and
+% generated/*_boxes.tex (written by `python -m s1bench report`). One tikzpicture with the axes on a grid: b and c share
+% their rows (one per format), d is square, e and f share their rows (one per loader) under b and c, g sits under d.
+% \figbox{pos}{q1}{median}{q3}{low whisker}{high whisker}{colour}: one horizontal box, in axis coordinates.
 \newcommand{\figbox}[7]{%
   \draw[#7!80!black, line width=0.5pt] (axis cs:#5,#1) -- (axis cs:#2,#1);
   \draw[#7!80!black, line width=0.5pt] (axis cs:#4,#1) -- (axis cs:#6,#1);
   \draw[#7!80!black, fill=#7, fill opacity=0.18, line width=0.5pt] (axis cs:#2,{#1-0.32}) rectangle (axis cs:#4,{#1+0.32});
   \draw[#7!70!black, line width=1.2pt] (axis cs:#3,{#1-0.32}) -- (axis cs:#3,{#1+0.32});}
-% an axis break across a bar that leaves the scale: two slanted strokes on a white gap at (#1, row #2) in axis units
-\newcommand{\figbreak}[2]{%
-  \fill[white] ($(axis cs:#1,{#2-0.34})+(-1.5pt,0)$) rectangle ($(axis cs:#1,{#2+0.34})+(1.5pt,0)$);
-  \draw[ink2, line width=0.5pt] ($(axis cs:#1,{#2+0.34})+(-3pt,0)$) -- ($(axis cs:#1,{#2-0.34})+(0pt,0)$);
-  \draw[ink2, line width=0.5pt] ($(axis cs:#1,{#2+0.34})+(0pt,0)$) -- ($(axis cs:#1,{#2-0.34})+(3pt,0)$);
-}
-\begin{figure*}[tbp]
+\begin{figure*}[t]
 \centering
-\pgfmathsetlengthmacro{\figS}{0.34\linewidth}      % side of the square panels a and b
-\pgfmathsetlengthmacro{\figH}{0.52*\figS}          % height of panels c and d
-\pgfmathsetlengthmacro{\figG}{1.75cm}              % horizontal gap: the y label and tick labels of b and d
-\pgfmathsetlengthmacro{\figV}{1.45cm}              % vertical gap: the x labels of a and b and the titles of c and d
-\pgfmathsetlengthmacro{\figCw}{0.46*\figS}         % width of each half of panel c
-\begin{tikzpicture}
-% ---------------- (a) compression ratio of every matrix against uncompressed CSC ----------------
-\begin{axis}[name=pa, at={(0,0)}, anchor=north west, scale only axis, width=\figS, height=\figS,
-  title={a\quad Compression of every matrix},
-  xmin=0, xmax=17, xtick={0,2,...,16}, xlabel={compression ratio against 32-bit CSC arrays ($\times$)},
-  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig1a_size.tsv}}{label}, y dir=reverse, enlarge y limits=0.04,
-  axis x line*=bottom, axis y line*=left, clip=false]
+\pgfmathsetlengthmacro{\figY}{2.15cm}             % y tick labels of b and e
+\pgfmathsetlengthmacro{\figW}{0.225\linewidth}    % width of b, c, e and f
+\pgfmathsetlengthmacro{\figGap}{0.25cm}           % between b and c, e and f (shared rows)
+\pgfmathsetlengthmacro{\figD}{0.27\linewidth}     % side of the square panel d
+\pgfmathsetlengthmacro{\figDG}{1.5cm}             % before d and g: their y labels
+\pgfmathsetlengthmacro{\figH}{3.0cm}              % height of e, f and g
+\pgfmathsetlengthmacro{\figV}{1.75cm}             % between rows: x labels below, titles above
+\begin{tikzpicture}[
+  sbox/.style={draw=gen!80!black, fill=gen!12, rounded corners=1.5pt, inner sep=3.5pt, align=center,
+    font=\sffamily\scriptsize, text=ink2},
+  obox/.style={draw=sone!85!black, fill=sone!12, rounded corners=1.5pt, inner sep=3.5pt, align=center,
+    font=\sffamily\scriptsize, text=ink2},
+  note/.style={font=\sffamily\tiny, text=ink2, align=center},
+  arr/.style={-{Stealth[length=3.5pt]}, thick, ink2!80},
+  rowlbl/.style={font=\sffamily\small\bfseries, anchor=west},
+]
+\pgfplotsset{every axis title/.append style={at={(0,1)}, anchor=south west, xshift=-4pt, text depth=0.3ex, text height=1.6ex}}
+% ======================= (a) what .s1 does differently =======================
+\node[anchor=north west, font=\sffamily\small\bfseries, text=ink2, inner sep=0pt] at (0,0) {a\quad What \sone{} does differently};
+\node[font=\sffamily\scriptsize\bfseries, text=ink2] at (5.25,-0.55) {1. Describe the counts, not just their bytes};
+\node[font=\sffamily\scriptsize\bfseries, text=ink2] at (13.4,-0.55) {2. Know where every cell is before reading};
+\draw[line width=0.4pt, gen!40] (9.25,-0.35) -- (9.25,-3.65);
+\node[rowlbl, text=gen!80!black] at (0,-1.45) {Standard};
+\node[rowlbl, text=sone!85!black] at (0,-2.85) {\sone};
+% --- storing, standard: every count as two 32-bit numbers, then a byte compressor ---
+\foreach \i in {0,...,5} {
+  \pgfmathsetmacro{\shade}{mod(\i,2)==0 ? 30 : 12}
+  \fill[gen!\shade, draw=gen!80!black, line width=0.3pt] ({1.75+0.42*\i},-1.25) rectangle ++(0.40,-0.40);
+}
+\node[note, anchor=north] at (3.0,-1.7) {each count: a 32-bit gene\\index and a 32-bit value};
+\draw[arr] (4.35,-1.45) -- (4.85,-1.45);
+\node[sbox, anchor=west] (gz) at (4.9,-1.45) {gzip, zstd\\[-1pt]{\tiny compress bytes}};
+\draw[arr] (gz.east) -- ++(0.45,0);
+\node[anchor=west, font=\sffamily\scriptsize, text=ink2, align=left] at ($(gz.east)+(0.5,0)$) {\textbf{\nm{size-h5ad_gzip}} bits\\[-1pt]per count{\tiny $^\ast$}};
+% --- storing, .s1: genes numbered by how often they are seen, small steps and counts, a model of the counts ---
+\foreach \v [count=\i from 0] in {1,1,3,2,1,1} {
+  \node[draw=sone!85!black, fill=sone!12, minimum width=0.27cm, minimum height=0.40cm, inner sep=0pt,
+    font=\sffamily\tiny, text=ink2] at ({1.89+0.29*\i},-2.85) {\v};
+}
+\node[note, anchor=north] at (2.62,-3.1) {small steps between genes,\\small counts};
+\draw[arr] (3.65,-2.85) -- (4.15,-2.85);
+\node[obox, anchor=west] (md) at (4.2,-2.85) {short codes for likely values\\[-1pt]{\tiny from a model of the counts}};
+\draw[arr] (md.east) -- ++(0.45,0);
+\node[anchor=west, font=\sffamily\scriptsize, text=ink2, align=left] at ($(md.east)+(0.5,0)$) {\textbf{\nm{size-s1}} bits\\[-1pt]per count};
+% --- reading, standard: one round trip after another ---
+\def\rtt{0.62}\def\dec{0.38}
+\foreach \k in {0,1,2} {
+  \pgfmathsetmacro{\xs}{10.0+\k*(\rtt+\dec+0.08)}
+  \draw[gen!80!black, line width=0.5pt, -{Stealth[length=3pt]}] (\xs,-1.45) -- ++(\rtt,0);
+  \fill[gen!55, rounded corners=0.8pt] ({\xs+\rtt},-1.29) rectangle ++(\dec,-0.32);
+}
+\node[note, anchor=west, align=left] at (13.45,-1.45) {fetch a chunk, wait a round trip,\\decode, repeat; or download\\the whole file first};
+% --- reading, .s1: the index first, then every block of a minibatch at once, decoded on every core ---
+\fill[sone!85!black, rounded corners=0.8pt] (10.0,-2.52) rectangle ++(0.34,-0.66);
+\node[note, anchor=south] at (10.17,-2.47) {index};
+\foreach \l in {0,1,2,3} {
+  \draw[sone!85!black, line width=0.5pt, -{Stealth[length=3pt]}] (10.42,{-2.60-0.165*\l}) -- ++(\rtt,0);
+  \fill[sone!60, rounded corners=0.6pt] ({10.42+\rtt},{-2.535-0.165*\l}) rectangle ++(0.24,-0.13);
+}
+\node[note, anchor=west, align=left] at (13.45,-2.85) {read the index once, then fetch\\all of a minibatch's blocks at\\once and decode them on every core};
+\draw[gen!60, densely dotted, line width=0.4pt] (11.30,-2.35) -- (11.30,-3.32);
+\draw[gen!60, densely dotted, line width=0.4pt] (13.24,-1.05) -- (13.24,-3.32);
+\draw[-{Stealth[length=3pt]}, gen!70, line width=0.4pt] (10.0,-3.45) -- (13.3,-3.45) node[right, note, text=gen] {time};
+\node[note, anchor=north west, text=gen!90!black] at (1.75,-3.55) {$^\ast$\,gzip-compressed AnnData, median over \nm{nMatrices} matrices};
+% ======================= (b) size: compression ratio of every matrix =======================
+\begin{axis}[name=pb, at={(\figY,-4.75cm)}, anchor=north west, scale only axis, width=\figW, height=\figD,
+  title={b\quad Smallest files},
+  xmin=0, xmax=17, xtick={0,4,...,16}, xlabel={compression against 32-bit CSC ($\times$)},
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig1a_size.tsv}}{label}, y dir=reverse,
+  ymin=-0.6, ymax=15.6, axis x line*=bottom, axis y line*=left, clip=false]
 \addplot[draw=none, forget plot] table[x=ratio_median, y=pos] {\gen{fig1a_size.tsv}};   % sets the y ticks
 \draw[gen!60, line width=0.4pt, dashed] (axis cs:1,-0.5) -- (axis cs:1,15.5);
 \input{\gen{fig1a_boxes.tex}}
@@ -34,71 +86,93 @@
   \addplot[only marks, mark=*, mark size=0.75pt, c-#1, opacity=0.6, discard if not={format}{#1}] table[x=ratio, y=y] {\gen{fig1a_points.tsv}};
 }
 \end{axis}
-% ---------------- (b) size vs speed with R_eff iso-lines (figures/fig1b_panel.tex) ----------------
-\def\fbLog{0}\def\fbPts{1}\def\fbTitle{b\quad Smaller and faster, four cores}\def\fbInPicture{1}
-\def\fbAxisOpts{name=pb, at={($(pa.north east)+(\figG,0)$)}, anchor=north west, scale only axis, width=\figS, height=\figS}
+% ======================= (c) speed: read rate of every matrix on four cores =======================
+\begin{axis}[name=pc, at={($(pb.north east)+(\figGap,0)$)}, anchor=north west, scale only axis, width=\figW, height=\figD,
+  title={c\quad Fastest to read},
+  xmin=0, xmax=260, xtick={0,50,...,250},
+  xlabel={million non-zeros/s, 4 cores},
+  ytick={0,...,15}, yticklabels={}, ytick style={draw=none}, y dir=reverse, ymin=-0.6, ymax=15.6,
+  axis x line*=bottom, axis y line*=left, clip=false]
+\input{\gen{fig1_speed_boxes.tex}}
+\expandafter\pgfplotsinvokeforeach\expandafter{\otherformats,s1}{
+  \addplot[only marks, mark=*, mark size=0.75pt, c-#1, opacity=0.6, discard if not={format}{#1}] table[x=mnnzs, y=y] {\gen{fig1_speed_points.tsv}};
+}
+\end{axis}
+% ======================= (d) size against speed (figures/fig1b_panel.tex) =======================
+\def\fbLog{0}\def\fbPts{1}\def\fbTitle{d\quad Smaller and faster at once}\def\fbInPicture{1}
+\def\fbAxisOpts{name=pd, at={($(pc.north east)+(\figDG,0)$)}, anchor=north west, scale only axis, width=\figD, height=\figD}
 \input{figures/fig1b_panel}
-% ---------------- (c) time to the first minibatch, then per minibatch ----------------
-% Bars fill half of each row (bar width 0.5 in axis units, rows 1 apart), so gaps equal bars. TileDB-SOMA ML leaves both
-% scales: its bar is cut by an axis break and labelled inside with its value.
-\pgfplotsset{fig1c/.style={xbar, bar shift=0pt, bar width=0.5, ymin=-0.5, ymax=3.5, y dir=reverse,
-  scale only axis, width=\figCw, height=\figH, axis x line*=bottom, axis y line*=left, clip=false,
-  ytick={0,1,2,3}, ytick style={draw=none}},
-  fig1cval/.style={nodes near coords style={font=\sffamily\tiny, anchor=west, text=ink2}},
-  fig1cin/.style={nodes near coords style={font=\sffamily\tiny, anchor=east, text=white}}}
-\begin{axis}[fig1c, name=pc, at={($(pa.south west)+(0,-\figV)$)}, anchor=north west,
-  title={c\quad First minibatch\ldots}, xmin=0, xmax=0.5, xtick={0,0.2,0.4}, xlabel={seconds},
-  yticklabels from table={\gen{fig1b_ttfm.tsv}}{label},
-  point meta=explicit, nodes near coords={\pgfmathprintnumber[fixed, fixed zerofill, precision=2, assume math mode=true]{\pgfplotspointmeta}\,s}]
-\pgfplotsinvokeforeach{s1,zarr3,zarr}{
-  \addplot[fill=c-#1, draw=none, fig1cval, discard if not y={fmt}{#1}] table[x=total, y=pos, meta=total] {\gen{fig1b_ttfm.tsv}};
+% ======================= (e, f) a PyTorch training loader at 1 Gbit/s =======================
+\pgfplotsset{fig1mb/.style={xbar, bar shift=0pt, bar width=0.5, ymin=-0.5, ymax=3.5, y dir=reverse,
+  scale only axis, width=\figW, height=\figH, axis x line*=bottom, axis y line*=left, clip=false,
+  ytick={0,1,2,3}, ytick style={draw=none},
+  error bars/error bar style={ink2, line width=0.6pt}, error bars/error mark options={rotate=90, mark size=2pt, ink2}},
+  fig1val/.style={nodes near coords, point meta=explicit, every node near coord/.append style={font=\sffamily\tiny,
+  anchor=west, text=ink2, inner sep=2pt}}}
+\begin{axis}[xmode=log, log origin=infty, fig1mb, name=pe, at={($(pb.south west)+(0,-\figV)$)}, anchor=north west,
+  title={e\quad First PyTorch minibatch},
+  xmin=0.02, xmax=40, xtick={0.1,1,10}, xticklabels={0.1,1,10}, xlabel={seconds (log scale)},
+  yticklabels from table={\gen{fig1_mb.tsv}}{label}]
+\pgfplotsinvokeforeach{s1,zarr3,zarr,soma}{
+  \addplot[fill=c-#1, draw=none, discard if not y={fmt}{#1}, error bars/.cd, x dir=both, x explicit]
+    table[x=first, y=pos, x error plus expr=\thisrow{first_hi}-\thisrow{first}, x error minus expr=\thisrow{first}-\thisrow{first_lo}] {\gen{fig1_mb.tsv}};
 }
-\addplot[fill=c-soma, draw=none, fig1cin, discard if not y={fmt}{soma}] table[x expr={0.5}, y=pos, meta=total] {\gen{fig1b_ttfm.tsv}};
-\figbreak{0.33}{3}
+\addplot[draw=none, fig1val, nodes near coords={\pgfmathprintnumber[fixed, fixed zerofill, precision=2]{\pgfplotspointmeta}\,s}]
+  table[x=first_hi, y=pos, meta=first] {\gen{fig1_mb.tsv}};
 \end{axis}
-\begin{axis}[fig1c, name=pc2, at={($(pc.north east)+(0.08*\figS,0)$)}, anchor=north west,
-  title={\ldots then each minibatch}, xmin=0, xmax=400, xtick={0,200,400}, xlabel={milliseconds}, yticklabels={},
-  point meta=explicit, nodes near coords={\pgfmathprintnumber[fixed, precision=0, assume math mode=true]{\pgfplotspointmeta}\,ms}]
-\pgfplotsinvokeforeach{s1,zarr3,zarr}{
-  \addplot[fill=c-#1, draw=none, fig1cval, discard if not y={fmt}{#1}] table[x expr={1000*\thisrow{per_batch}}, y=pos, meta expr={1000*\thisrow{per_batch}}] {\gen{fig1b_ttfm.tsv}};
+\begin{axis}[xmode=log, log origin=infty, fig1mb, name=pf, at={($(pe.north east)+(\figGap,0)$)}, anchor=north west,
+  title={f\quad Each later minibatch},
+  xmin=2, xmax=4000, xtick={10,100,1000}, xticklabels={10,100,1000}, xlabel={milliseconds (log scale)}, yticklabels={}]
+\pgfplotsinvokeforeach{s1,zarr3,zarr,soma}{
+  \addplot[fill=c-#1, draw=none, discard if not y={fmt}{#1}, error bars/.cd, x dir=both, x explicit]
+    table[x=batch_ms, y=pos, x error plus expr=\thisrow{batch_hi}-\thisrow{batch_ms}, x error minus expr=\thisrow{batch_ms}-\thisrow{batch_lo}] {\gen{fig1_mb.tsv}};
 }
-\addplot[fill=c-soma, draw=none, fig1cin, discard if not y={fmt}{soma}] table[x expr={400}, y=pos, meta expr={1000*\thisrow{per_batch}}] {\gen{fig1b_ttfm.tsv}};
-\figbreak{260}{3}
+\addplot[draw=none, fig1val, nodes near coords={\pgfmathprintnumber[fixed, precision=0]{\pgfplotspointmeta}\,ms}]
+  table[x=batch_hi, y=pos, meta=batch_ms] {\gen{fig1_mb.tsv}};
 \end{axis}
-% ---------------- (d) speed-up over one core, formats that decode in parallel ----------------
-\begin{axis}[name=pd, at={($(pb.south west)+(0,-\figV)$)}, anchor=north west, scale only axis, width=\figS, height=\figH,
-  title={d\quad Parallel decoding},
-  xmode=log, log basis x=2, ymode=log, log basis y=2, xmin=0.85, xmax=9.5, ymin=0.9, ymax=9,
-  xtick={1,2,4,8}, xticklabels={1,2,4,8}, ytick={1,2,4,8}, yticklabels={1$\times$,2$\times$,4$\times$,8$\times$},
-  xlabel={cores}, ylabel={read rate $\div$ one core},
-  axis x line*=bottom, axis y line*=left, unbounded coords=jump,
-  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.02,0.98)}, anchor=north west, legend columns=1, cells={anchor=west}}]
-\addplot[gen!70, densely dotted, no marks, forget plot] table[x=threads, y=ideal] {\gen{fig1d_speedup.tsv}}
-  node[pos=0.55, sloped, above, font=\sffamily\tiny, text=gen] {ideal};
-\addplot[c-s1, very thick, mark=*, mark size=1.6pt] table[x=threads, y=s1] {\gen{fig1d_speedup.tsv}};
-\addplot[c-soma, thick, mark=triangle*, mark size=1.5pt] table[x=threads, y=soma] {\gen{fig1d_speedup.tsv}};
-\addplot[c-mtx_gz, thick, mark=square*, mark size=1.2pt] table[x=threads, y=mtx_gz] {\gen{fig1d_speedup.tsv}};
-\addplot[c-parquet_coo, thick, mark=diamond*, mark size=1.5pt] table[x=threads, y=parquet_coo] {\gen{fig1d_speedup.tsv}};
-\addplot[c-zarr3, thick, mark=pentagon*, mark size=1.4pt] table[x=threads, y=zarr3] {\gen{fig1d_speedup.tsv}};
-\legend{\sone, TileDB-SOMA, MTX.gz, Parquet COO, {Zarr v3, sharded}}
+% ======================= (g) read rate against cores =======================
+\begin{axis}[name=pg, at={($(pf.north east)+(\figDG,0)$)}, anchor=north west, scale only axis, width=\figD, height=\figH,
+  title={g\quad Gains the most from more cores},
+  xmode=log, log basis x=2, ymode=log, xmin=0.9, xmax=48, ymin=5, ymax=1500,
+  xtick={1,2,4,8,16,32,44}, xticklabels={1,2,4,8,16,32,44}, ytick={10,100,1000}, yticklabels={10,100,1000},
+  xlabel={cores}, ylabel={million non-zeros/s},
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(1.0,0.0)}, anchor=south east, legend columns=2,
+    cells={anchor=west}, row sep=-2pt, column sep=4pt}]
+\addplot[name path=sq3, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=q3] {\gen{fig1_scaling.tsv}};
+\addplot[name path=sq1, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=q1] {\gen{fig1_scaling.tsv}};
+\addplot[c-s1, fill opacity=0.18, draw=none, forget plot] fill between[of=sq3 and sq1];
+\addplot[c-s1, very thick, mark=*, mark size=1.5pt, discard if not={format}{s1}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addlegendentry{\sone}
+\addplot[c-soma, thick, mark=*, mark size=1.0pt, discard if not={format}{soma}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addlegendentry{TileDB-SOMA}
+\addplot[c-zarr3, thick, mark=*, mark size=1.0pt, discard if not={format}{zarr3}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addlegendentry{Zarr v3}
+\addplot[c-parquet_coo, thick, mark=*, mark size=1.0pt, discard if not={format}{parquet_coo}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addlegendentry{Parquet}
+\addplot[c-mtx_gz, thick, mark=*, mark size=1.0pt, discard if not={format}{mtx_gz}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addlegendentry{MTX.gz}
+\addplot[c-csc_i32, thick, mark=*, mark size=1.0pt, discard if not={format}{csc_i32}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addlegendentry{CSC, int32}
+\addplot[c-h5ad_gzip, thick, mark=*, mark size=1.0pt, discard if not={format}{h5ad_gzip}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addlegendentry{h5ad gzip}
 \end{axis}
 \end{tikzpicture}
-\caption{\textbf{\sone{} files are the smallest on every matrix and, on four cores, the fastest to read on
-\nm{dec-s1-fastest-count} of \nm{dec-paired-n}.}
-\textbf{(a)} Compression ratio of each format's file (counts, gene identifiers and barcodes) against uncompressed CSC
-arrays with 32-bit indices and values, one point per matrix (\nm{nMatrices} matrices); boxes, quartiles and median;
-whiskers, the most extreme matrices within 1.5 interquartile ranges. \sone{} compresses a median of \nm{cr-s1}$\times$
-(\nm{cr-s1-lo}--\nm{cr-s1-hi}$\times$), gzip-compressed AnnData \nm{cr-h5ad_gzip}$\times$.
-\textbf{(b)} Size against read rate from a cold file into an in-memory sparse matrix on \nm{threadsHeadline} cores: one
-faint point per matrix and format, large points the medians. Dashed lines join sizes and decode rates that deliver the same
-number of non-zeros per second over a 1\,Gbit/s link (Eq.~\ref{eq:reff}); up and to the left is better. On one core
-\sone{} reads \nm{dec-s1-t1} million non-zeros per second, behind uncompressed arrays (Table~\ref{tab:main}). Log axes:
-Supplementary Fig.~\ref{S-fig:sfig1b}.
-\textbf{(c)} Seconds from a new process to the first 512-cell training minibatch, decoded into a PyTorch sparse tensor,
-and milliseconds per minibatch after that; \nm{fig1b-dataset} read from an object store over a \nm{fig1b-tier} link,
-median of three seeds. Bars cut by an axis break carry their value inside. Loaders that download the whole file first are
-in Supplementary Table~\ref{S-tab:minibatch}.
-\textbf{(d)} Read rate from a cold file relative to one core, median of per-matrix ratios, for the \nm{par-formats-n} of
-\nm{par-formats-of} formats whose readers use more than one core.}
+\caption{\textbf{\sone{} files are the smallest and, on four cores, the fastest to read.}
+\textbf{(a)} The two ideas behind \sone, sketched; Fig.~\ref{fig:how} shows the layout.
+\textbf{(b)} Compression of each format's file (counts, gene identifiers and barcodes) against uncompressed CSC arrays with
+32-bit indices and values, one point per matrix (\nm{nMatrices} matrices); boxes, quartiles and median; whiskers, the most
+extreme matrices within 1.5 interquartile ranges.
+\textbf{(c)} Read rate of the same files from a cold page cache into an in-memory sparse matrix on \nm{threadsHeadline}
+cores, rows as in (b).
+\textbf{(d)} Medians of (b) and (c) as bits per non-zero against read rate; faint points, single matrices. Dashed lines
+join formats that deliver the same number of non-zeros per second over a 1\,Gbit/s link (Eq.~\ref{eq:reff}); up and to
+the left is better.
+\textbf{(e, f)} PyTorch training loaders reading 512-cell minibatches of \nm{fig1b-dataset} from an emulated object store
+at 1\,Gbit/s, each decoded into a sparse tensor: (e) seconds from a new process to the first minibatch, median and range
+of three seeds; (f) milliseconds for each later minibatch, median and 5th--95th percentiles of \nm{mb3-batches}
+minibatches from three seeds.
+\textbf{(g)} Read rate from a cold file against cores on a 48-core node, median over \nm{scale-s1-n} matrices; band,
+interquartile range of \sone. The readers of uncompressed CSC and gzip-compressed AnnData use one core.}
 \label{fig:wow}
 \end{figure*}

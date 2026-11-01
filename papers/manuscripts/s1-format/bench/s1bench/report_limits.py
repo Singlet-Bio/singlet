@@ -25,7 +25,7 @@ KERNEL_LABELS = {
 }
 NATIVE = "pz2_avx2_native"   # the .s1 member in its stored gene order (s1order stage): row ids plus one permutation, no sort
 SOURCE = "pz2_avx2_source"   # the .s1 member in source gene order (a sort per cell): reported as a number, not plotted
-KERNEL_ANCHORS = {"raw_u32": "north", "fixed_bytes": "north west", "leb128_gaps": "north", "streamvbyte_gaps": "south west",
+KERNEL_ANCHORS = {"raw_u32": "north", "fixed_bytes": "south", "leb128_gaps": "north", "streamvbyte_gaps": "south west",
                   "bitpack256_gaps": "east", "rans0_gaps": "north west", "zstd3_leb_gaps": "west", "zstd19_leb_gaps": "east",
                   "pz2_avx2": "north west", "pz2_avx2_native": "south east"}
 ENTROPY = ("rans0_gaps", "zstd3_leb_gaps", "zstd19_leb_gaps")   # entropy-coded streams: the fastest sets the practical optimum
@@ -219,37 +219,56 @@ def kernels_section(cfg: Config, N: Numbers, out: Path) -> None:
 
 
 def write_panel(cfg: Config, N: Numbers, out: Path) -> None:
-    """(d) seconds and extra memory to write the largest matrix of the write-cost panel, fastest first."""
+    """(d) the cost of writing, relative to writing uncompressed CSC arrays of the same matrix: seconds and memory beyond
+    the input, each a fold change over csc_i32 on every write-cost dataset; per format the median and range over them."""
     from .report import FORMAT_LABELS, _group
 
     rows = [r for r in _stage(cfg, "writecost") if r.get("status") == "ok"]
     if not rows:
         return
-    by = defaultdict(list)
+    by = defaultdict(dict)
     for r in rows:
-        by[r["dataset"]].append(r)
-    ds = max(by, key=lambda d: max(_f(r.get("nnz")) or 0 for r in by[d])) if any(_f(r.get("nnz")) for r in rows) else "hlca_core"
-    tab = []
-    for r in by.get(ds, []):
         if r["format"] in ("s1_pack", "loom"):
             continue
         extra = max(_f(r["peak_rss_mb"]), _f(r.get("peak_child_rss_mb")) or 0) - _f(r["baseline_rss_mb"])
-        tab.append({"format": r["format"], "label": FORMAT_LABELS.get(r["format"], r["format"]), "group": _group(r["format"]),
-                    "s": _f(r["write_s"]), "gb": max(0.0, extra) / 1024})
-    tab.sort(key=lambda t: t["s"])
-    for i, t in enumerate(tab):
-        t["pos"] = i
-        t["note"] = f"{t['gb']:.0f} GB"
-    _write(tab, out / "figlim_write.tsv", ["pos", "format", "label", "group", "s", "gb", "note"])
-    N.put("figlim-write-dataset", {"hlca_core": "HLCA core"}.get(ds, ds.replace("_", r"\_")))
-    s1 = next((t for t in tab if t["format"] == "s1"), None)
+        by[r["dataset"]][r["format"]] = (_f(r["write_s"]), max(extra, 1.0))   # at least 1 MB, for the log scale
+    folds = defaultdict(list)
+    for ds, u in by.items():
+        if "csc_i32" not in u:
+            continue
+        cs, cm = u["csc_i32"]
+        for f, (s, m) in u.items():
+            folds[f].append((s / cs, m / cm))
+    # where each label sits beside its point (time across, memory up); most to the right, a few elsewhere
+    side = {"zarr": "south", "h5ad_none": "north west", "h5ad_lzf": "south", "bpcells": "north", "tenx_h5": "north west",
+            "h5ad_gzip": "south west", "mtx_gz": "east"}
+    tab = []
+    for f, v in folds.items():
+        ts, ms = [a for a, _ in v], [b for _, b in v]
+        tab.append({"format": f, "label": FORMAT_LABELS.get(f, f), "group": _group(f), "n": len(v),
+                    "t": float(np.median(ts)), "t_lo": min(ts), "t_hi": max(ts),
+                    "m": float(np.median(ms)), "m_lo": min(ms), "m_hi": max(ms), "anchor": side.get(f, "west")})
+    tab.sort(key=lambda r: r["t"])
+    _write(tab, out / "figlim_write.tsv", ["format", "label", "group", "n", "t", "t_lo", "t_hi", "m", "m_lo", "m_hi", "anchor"])
+    s1 = next((r for r in tab if r["format"] == "s1"), None)
+    N.put("figlim-write-n", len(by), "{:d}")
     if s1:
-        N.put("figlim-write-s1-rank", 1 + [t["format"] for t in tab].index("s1"), "{:d}")
-        N.put("figlim-write-n", len(tab), "{:d}")
-        gz = next((t for t in tab if t["format"] == "h5ad_gzip"), None)
+        N.put("figlim-write-s1-t", s1["t"], "{:.0f}")
+        N.put("figlim-write-s1-t-lo", s1["t_lo"], "{:.0f}")
+        N.put("figlim-write-s1-t-hi", s1["t_hi"], "{:.0f}")
+        N.put("figlim-write-s1-m", s1["m"], "{:.0f}")
+        N.put("figlim-write-s1-m-lo", s1["m_lo"], "{:.0f}")
+        N.put("figlim-write-s1-m-hi", s1["m_hi"], "{:.0f}")
+        N.put("figlim-write-s1-rank", 1 + [r["format"] for r in tab].index("s1"), "{:d}")
+        gz = next((r for r in tab if r["format"] == "h5ad_gzip"), None)
         if gz:
-            N.put("figlim-write-s1-vs-gzip-mem", s1["gb"] / gz["gb"], "{:.1f}")
-            N.put("figlim-write-s1-vs-gzip-time", gz["s"] / s1["s"], "{:.1f}")
+            N.put("figlim-write-gz-t", gz["t"], "{:.0f}")
+            N.put("figlim-write-gz-m", gz["m"], "{:.1f}")
+    cells = {r["dataset"]: int(r["cells"]) for r in _stage(cfg, "stats")} if _stage(cfg, "stats") else {}
+    sizes = sorted(cells[d] for d in by if d in cells)
+    if sizes:
+        N.put("figlim-write-cells-lo", sizes[0], "{:,}")
+        N.put("figlim-write-cells-hi", sizes[-1], "{:,}")
 
 
 def redundancy_section(cfg: Config, N: Numbers, out: Path) -> None:

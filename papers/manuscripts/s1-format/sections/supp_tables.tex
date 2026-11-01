@@ -4,9 +4,9 @@
 
 \begin{table}[h]
 \centering\small
-\caption{Formats compared. Cell subset: some cells can be read without the whole matrix. Remote: read by HTTP range or
-object-store request without a local copy. Versions as run; for \texttt{singlet}, the release whose code ran (the runs
-record their commits as 1.3.0 and 1.3.1).}
+\caption{Formats compared. Cell subset: some cells readable without the whole matrix. Remote: read by HTTP range or
+object-store request without a local copy. Versions as run; for \texttt{singlet}, the release matching the commits that
+ran.}
 \label{tab:formats}
 \begin{tabularx}{\linewidth}{@{}l l l c c X@{}}
 \toprule
@@ -89,9 +89,8 @@ measured (no VBMI2).}
 \centering\small
 \caption{Seconds from a cold process to the first 512-cell minibatch as a sparse tensor, median over four datasets and
 three seeds. Network tiers: an object store with limited total bandwidth, 1\,ms latency unless stated.
-\textsuperscript{e}: includes the object's transfer time at the tier's bandwidth in place of a run, for loaders that
-download whole objects, above the M tier. ``\sone, source gene order'': the same loader sorting each cell's genes back
-into source order instead of reading them in stored order.}
+\textsuperscript{e}: whole-object loader above the M tier; the object's transfer time at the tier's bandwidth replaces a
+run. ``Source gene order'': each cell's genes sorted back into source order.}
 \label{tab:minibatch}
 \pgfplotstabletypeset[
   columns={loader,local,nfs,s3_10g,s3_1g,s3_1g_wan,s3_0.1g},

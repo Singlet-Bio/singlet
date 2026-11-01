@@ -238,6 +238,23 @@ def r2_section(cfg: Config, N: Numbers, out: Path) -> None:
     pts = [{"lid": r["lid"], "first": r["first"], "cps": r["cps"], "label": short[r["lid"]][0], "anchor": short[r["lid"]][1],
             "group": short[r["lid"]][2], "fmt": short[r["lid"]][3]} for r in tab if r["dataset"] == "HLCA core" and r["lid"] in short]
     _write(pts, out / "figr2.tsv", ["lid", "first", "cps", "label", "anchor", "group", "fmt"])
+    # Fig. 3d guide lines: every (first, rate) on a line takes the same time to deliver one epoch of the matrix,
+    # first + cells / rate, through the .s1 point and through the downloaded h5ad file
+    cells = stats.get("hlca_core")
+    by = {p["lid"]: p for p in pts}
+    s, h = by.get("s1_stream@32x4"), by.get("anndata_inmem")
+    if cells and s and h and s["cps"] and h["cps"]:
+        curves = []
+        for key, p in (("s1", s), ("h5ad", h)):
+            T = p["first"] + cells / p["cps"]
+            N.put(f"r2-epoch-{key}", T, "{:.0f}")
+            for x in np.geomspace(0.3, T * 0.995, 120):
+                curves.append({"curve": key, "first": float(x), "cps": cells / (T - x)})
+        N.put("r2-epoch-cells", cells, "{:,}")
+        # epochs after which the downloaded file catches up: first_h + k c / cps_h = first_s + k c / cps_s
+        k = (h["first"] - s["first"]) / (cells / s["cps"] - cells / h["cps"])
+        N.put("r2-epoch-crossover", k, "{:.1f}")
+        _write(curves, out / "figr2_epoch.tsv", ["curve", "first", "cps"])
 
 
 def _group(rows):
@@ -298,8 +315,159 @@ def cores_section(cfg: Config, N: Numbers, out: Path) -> None:
     _write(tab, out / "fig_cores.tsv", ["threads", "mnnzs", "gbit", "n"])
 
 
+def scaling_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """Fig. 1g: read rate from a cold file against cores, 1 to 44 on an exclusive bigmem node, for .s1 and the formats
+    whose readers use more than one core (stage sweep44p), with uncompressed CSC and gzip-compressed AnnData (sweep44) as
+    single-core references. Per format: median and quartiles over the matrices measured at every core count."""
+    rows = [r for r in _rows(cfg, "sweep44/decode", ".sweep") + _rows(cfg, "sweep44p/decode", ".sweep")
+            if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "cold" and r.get("mode") in ("", "native", None)]
+    if not rows:
+        return
+    tab = []
+    for fmt in ("s1", "soma", "zarr3", "parquet_coo", "mtx_gz", "csc_i32", "h5ad_gzip"):
+        v = defaultdict(dict)
+        for r in rows:
+            if r["format"] == fmt and _f(r["mnnz_per_s"]):
+                v[r["dataset"] + "." + r["matrix"]][int(r["threads"])] = _f(r["mnnz_per_s"])
+        ps = sorted({p for d in v.values() for p in d})
+        full = [d for d in v.values() if all(p in d for p in ps)]
+        if not full:
+            continue
+        for p in ps:
+            x = [d[p] for d in full]
+            tab.append({"format": fmt, "threads": p, "mnnzs": float(np.median(x)), "q1": float(np.percentile(x, 25)),
+                        "q3": float(np.percentile(x, 75)), "speedup": float(np.median([d[p] / d[ps[0]] for d in full])),
+                        "n": len(full)})
+        last = tab[-1]
+        N.put(f"scale-{fmt}-max", last["speedup"], "{:.1f}")
+        N.put(f"scale-{fmt}-n", last["n"], "{:d}")
+    _write(tab, out / "fig1_scaling.tsv", ["format", "threads", "mnnzs", "q1", "q3", "speedup", "n"])
+
+
+def minibatch_spread_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """Fig. 1e-f: the streaming loaders at 1 Gbit/s (stage mb3: three seeds, each with its sustained loop). First
+    minibatch: median of the seeds, whiskers their range. Each later minibatch: median of every timed minibatch of the
+    three seeds, whiskers the 5th and 95th percentiles."""
+    rows = [r for r in _rows(cfg, "mb3/minibatch") if r.get("tier") == "s3_1g" and r.get("status") == "ok"]
+    if not rows:
+        return
+    show = [("s1_stream", r"\textbf{.s1}", "s1"), ("zarr3_shard", "Zarr v3 sharded", "zarr3"),
+            ("anndata_zarr_lazy", "AnnData Zarr", "zarr"), ("soma_ml", "TileDB-SOMA ML", "soma")]
+    tab = []
+    for i, (ld, label, fmt) in enumerate(show):
+        rs = [r for r in rows if r["loader"] == ld]
+        first = [_f(r["first_batch_s"]) for r in rs if _f(r.get("first_batch_s"))]
+        per = [float(x) for r in rs if r.get("batch_s") not in (None, "", "NA") for x in r["batch_s"].split(",")]
+        if not first or not per:
+            continue
+        rec = {"pos": i, "loader": ld, "label": label, "fmt": fmt,
+               "first": float(np.median(first)), "first_lo": min(first), "first_hi": max(first),
+               "batch_ms": 1000 * float(np.median(per)), "batch_lo": 1000 * float(np.percentile(per, 5)),
+               "batch_hi": 1000 * float(np.percentile(per, 95)), "seeds": len(first), "batches": len(per)}
+        tab.append(rec)
+        N.put(f"mb3-{ld}-first", rec["first"], "{:.2f}")
+        N.put(f"mb3-{ld}-batch", rec["batch_ms"], "{:.0f}")
+    if tab:
+        N.put("mb3-batches", min(r["batches"] for r in tab), "{:,}")
+    _write(tab, out / "fig1_mb.tsv", ["pos", "loader", "label", "fmt", "first", "first_lo", "first_hi", "batch_ms",
+                                      "batch_lo", "batch_hi", "seeds", "batches"])
+
+
+def speed_boxes_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """Fig. 1c: the read rate of every matrix from a cold file on the headline cores, per format, in the row order of the
+    size panel (generated/fig1a_size.tsv, written earlier in the same report) so the two panels share their rows."""
+    import zlib
+    order = out / "fig1a_size.tsv"
+    if not order.exists():
+        return
+    pos = {r["format"]: int(r["pos"]) for r in read_tsv(order)}
+    H = int(cfg["threads"]["headline"])
+    rows = [r for r in _stage(cfg, "decode") if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "cold"
+            and int(r["threads"]) == H and r["format"] in pos and (r["format"] != "s1" or r.get("mode") == "native")
+            and r.get("storage", "local") == "local" and r.get("run", "main") == "main" and _f(r.get("mnnz_per_s"))]
+    pts, boxes = [], []
+    for f, i in sorted(pos.items(), key=lambda kv: kv[1]):
+        v = [(r["dataset"] + "/" + r["matrix"], _f(r["mnnz_per_s"])) for r in rows if r["format"] == f]
+        if not v:
+            continue
+        for k, x in v:
+            jit = (zlib.crc32(k.encode()) % 1000 / 999 - 0.5) * 0.5
+            pts.append({"pos": i, "y": i + jit, "format": f, "mnnzs": x})
+        a_ = np.array([x for _, x in v])
+        q1, med, q3 = np.quantile(a_, [0.25, 0.5, 0.75])
+        inside = a_[(a_ >= q1 - 1.5 * (q3 - q1)) & (a_ <= q3 + 1.5 * (q3 - q1))]
+        boxes.append(f"\\figbox{{{i}}}{{{q1:.4f}}}{{{med:.4f}}}{{{q3:.4f}}}{{{inside.min():.4f}}}{{{inside.max():.4f}}}{{c-{f}}}")
+        N.put(f"speed-{f}", med, "{:.0f}")
+    _write(pts, out / "fig1_speed_points.tsv", ["pos", "y", "format", "mnnzs"])
+    (out / "fig1_speed_boxes.tex").write_text("% Generated by `python -m s1bench report` (report_r3.speed_boxes_section). "
+                                             "Do not edit.\n" + "\n".join(boxes) + "\n")
+
+
+# Fig. 1d geometry, as in figures/fig1b_panel.tex: the square axis (side in cm) and its data ranges
+FIG1D_SIDE, FIG1D_X, FIG1D_Y = 4.9, (0.0, 70.0), (0.0, 260.0)
+
+
+def place_labels(pts: dict, labels: dict, w_cm: float, h_cm: float, obstacles=()) -> dict:
+    """In-place labels for points given in cm: for each point the anchor (the side of the label that faces the point) and
+    the label's offset from the point, chosen to overlap other labels, markers and obstacles as little as possible
+    (greedy, most crowded point first, then refined for a few passes). Labels are set in 5-point type."""
+    cw, ch, rm = 0.08, 0.16, 0.075                           # cm per character, label height, marker radius
+    marks = [(x - rm, y - rm, x + rm, y + rm) for x, y in pts.values()] + list(obstacles)
+    width = {f: cw * len(labels[f].replace("\\textbf{", "").replace("}", "")) + 0.04 for f in pts}
+    dirs = {"west": (1, 0), "east": (-1, 0), "south": (0, 1), "north": (0, -1),
+            "south west": (1, 1), "north west": (1, -1), "south east": (-1, 1), "north east": (-1, -1)}
+    gaps = (0.10, 0.22, 0.36)                                   # distance from the point's centre to the label (cm)
+
+    def box(f, a, g):
+        (x, y), (dx, dy), w = pts[f], dirs[a], width[f]
+        ax, ay = x + dx * g * (0.75 if dy else 1), y + dy * g * (0.75 if dx else 1)   # the anchor's position
+        x0 = ax if dx > 0 else ax - w if dx < 0 else ax - w / 2
+        y0 = ay if dy > 0 else ay - ch if dy < 0 else ay - ch / 2
+        return (x0, y0, x0 + w, y0 + ch), (ax - x, ay - y)
+
+    def ov(a, b):
+        return max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(0, min(a[3], b[3]) - max(a[1], b[1]))
+
+    def cost(f, b, a, g, placed):
+        c = sum(ov(b, q) for h, q in placed.items() if h != f) * 60 + sum(ov(b, m) for m in marks) * 40
+        c += 8 * (max(0, -b[0]) + max(0, b[2] - w_cm) + max(0, -b[1]) + max(0, b[3] - h_cm))
+        return c + 0.01 * g + 0.002 * (" " in a) + 0.001 * (dirs[a][0] == 0)   # prefer close, straight beside
+
+    crowd = {f: sum(1 for g in pts if g != f and abs(pts[g][0] - pts[f][0]) < 0.9 and abs(pts[g][1] - pts[f][1]) < 0.5)
+             for f in pts}
+    placed, choice = {}, {}
+    for _ in range(4):
+        for f in sorted(pts, key=lambda f: -crowd[f]):
+            choice[f] = min((cost(f, box(f, a, g)[0], a, g, placed), a, g) for a in dirs for g in gaps)[1:]
+            placed[f] = box(f, *choice[f])[0]
+    return {f: (a, box(f, a, g)[1]) for f, (a, g) in choice.items()}
+
+
+def tradeoff_labels_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """Fig. 1d on linear axes: every median labelled in place, close to its point (generated/fig1d_labels.tex)."""
+    src = out / "fig1c_tradeoff.tsv"
+    if not src.exists():
+        return
+    rows = read_tsv(src)
+    S, (x0, x1), (y0, y1) = FIG1D_SIDE, FIG1D_X, FIG1D_Y
+    data = {r["format"]: (float(r["bits"]), float(r["mnnzs"])) for r in rows}
+    pts = {f: ((x - x0) / (x1 - x0) * S, (y - y0) / (y1 - y0) * S) for f, (x, y) in data.items()}
+    note = (S - 2.1, S - 0.95, S, S - 0.5)                        # the dashed-line note in the top right corner
+    place = place_labels(pts, {r["format"]: r["label"] for r in rows}, S, S, [note])
+    lines = ["% Generated by `python -m s1bench report` (report_r3.tradeoff_labels_section). Do not edit."]
+    for r in rows:
+        a, (sx, sy) = place[r["format"]]
+        lines.append(f"\\node[fblabel, anchor={a}, xshift={sx:.3f}cm, yshift={sy:.3f}cm] "
+                     f"at (axis cs:{data[r['format']][0]:.3f},{data[r['format']][1]:.3f}) {{{r['label']}}};")
+    (out / "fig1d_labels.tex").write_text("\n".join(lines) + "\n")
+
+
 def run(cfg: Config, N: Numbers, out: Path) -> None:
     cores_section(cfg, N, out)
+    tradeoff_labels_section(cfg, N, out)
+    speed_boxes_section(cfg, N, out)
+    minibatch_spread_section(cfg, N, out)
+    scaling_section(cfg, N, out)
     protocol_section(cfg, N, out)
     access_section(cfg, N, out)
     netsweep_section(cfg, N, out)

@@ -10,10 +10,10 @@
 \section{Format specification}
 \label{spec:sec}\label{sec:spec}
 
-This section specifies the \sone{} sample object and the member that encodes its count matrices. It is normative: \emph{must} states a requirement on writers or readers. Paragraphs marked
-\emph{informative} describe what the reference writer does; a decoder does not need them, but an encoder that wants
-byte-identical output does. The reference implementation is the header-only C++ library in the \texttt{singlet} repository and
-the Python package \texttt{singlet.s1}. Where this text and that code disagree, the code is authoritative.
+This section specifies the \sone{} sample object and its count-matrix member. \emph{Must} states a requirement on
+writers or readers; paragraphs marked \emph{informative} describe the reference writer. The reference implementation is
+the header-only C++ library in the \texttt{singlet} repository and the Python package \texttt{singlet.s1}; where this
+text and that code disagree, the code is authoritative.
 
 \subsection{Conventions}
 \label{spec:conv}
@@ -23,9 +23,8 @@ the last); readers reject an encoding longer than 10 bytes or one that runs past
 signed $d$ is $\mathrm{zz}(d)=(2d)\oplus(d\gg 63)$ (arithmetic shift). A \emph{STREAM} is
 \texttt{u32 raw\_len}, \texttt{u32 zstd\_len}, then one zstd frame of \texttt{zstd\_len} bytes that must decompress to
 exactly \texttt{raw\_len} bytes. An empty payload is stored as \texttt{0,0} with no frame; a STREAM in which exactly
-one length is zero is invalid. Reference writers record the content size in the frame and do not set the optional
-zstd content checksum; the compression level (19 by default) is not part of the format, and frame bytes can differ
-between zstd versions.
+one length is zero is invalid. Reference writers record the content size and set no zstd checksum; the level (19 by
+default) is not part of the format, and frame bytes can differ between zstd versions.
 % src: common.h:70-100 (put_stream/get_stream); util.py:81 (write_content_size=True, write_checksum=False); common.h:73 ZSTD_compress (no checksum)
 CRC-32 is that of ISO~3309 and zlib (reflected polynomial \texttt{0xEDB88320}, initial value and final XOR
 \texttt{0xFFFFFFFF}). $\mathrm{digest16}(b)$ is the first 16 bytes of $\mathrm{SHA\text{-}256}(b)$. Text is UTF-8;
@@ -138,7 +137,6 @@ SHA-256 against the index after a download). Pack bodies are specified by the re
 The digit \texttt{2} in the magics \texttt{SINGLET2}, \texttt{PZ2M}, \texttt{SPK2} and \texttt{CEL2} is the container
 generation, not a version. Each structure has its own \texttt{u16} version, currently 1; readers reject other versions
 of the object and of matrix members. Unknown codec ids are rejected. Reserved bytes are written as zero.
-Codec parameters live in the member header (Table~\ref{spec:tab:pz2hdr}), so new parameter values do not need a new version.
 % src: format-s1.md line 61; container.h:46 (version), 49 (codec), pz2.h:52 (kFormatVersion = 1)
 
 % ---------------------------------------------------------------------------------------------------------------------
@@ -226,13 +224,12 @@ one STREAM of NUL-joined \texttt{key}, \texttt{value} strings, ascending by the 
 The \emph{prefix} is header, \texttt{chunk\_index}, \texttt{tables} and \texttt{rows}: bytes
 $[0,\,256+24(\texttt{n\_chunks}+1)+|\texttt{tables}|+|\texttt{rows}|)$, the maximum end of those sections. It is all
 a reader needs to plan and decode any set of columns; names and key/values lie after the chunks. To read a set $J$ of
-columns a reader (i)~fetches the prefix (the reference Python client requests the first 512\,KiB of the member together with
-the cells table, and the rest of the prefix if it is longer; how much a reader fetches up front is not part of the format); (ii)~maps each $j\in J$ to its chunk; (iii)~merges consecutive chunk ids into runs
+columns a reader (i)~fetches the prefix (how much it fetches up front is not part of the format); (ii)~maps each
+$j\in J$ to its chunk; (iii)~merges consecutive chunk ids into runs
 $[c_0,c_1]$ (the reference client also merges runs whose gap is small); (iv)~fetches, for each run, the one contiguous
 range $[\texttt{chunks.off}+\texttt{off}_{c_0},\ \texttt{chunks.off}+\texttt{off}_{c_1+1})$, shifted by the member's
 offset in the object (from the member table or the manifest); (v)~decodes each chunk and keeps the wanted columns.
-The column counts of a chunk (Section~\ref{spec:chunk}) can be decoded alone, which gives exact output sizes before the
-entries are decoded.
+A chunk's column counts (Section~\ref{spec:chunk}) decode alone and give exact output sizes.
 % src: pz2.h:241-246 (prefix_len), 323-330 (ColumnPlan); api.h:33-47 (plan_columns), 300-317 (column_counts), 319-372 (decode_columns)
 % src: client.py:93 (PARTIAL_GAP 256 KiB), 954-970 (_runs); container.py:243 (prefetch 65536); codec.py:514
 % Measured (not in the text): 179 atlas pz2 prefixes in a local cache had prefix 45-135 KB (median 90 KB), of which
@@ -297,8 +294,7 @@ Every $x<2^{32}$ is split into a class $\gamma(x)\in[0,123]$ and $b(\gamma)$ ext
 \beta(\gamma)=\bigl((\gamma\bmod 4)+4\,[\gamma\ge 4]\bigr)\,2^{b(\gamma)},\qquad x=\beta(\gamma(x))+\epsilon,\quad 0\le\epsilon<2^{b(\gamma(x))}.
 \label{spec:eq:cls}
 \end{gather}
-Classes 0--7 are exact; above that there are four classes per octave, and class 123 ends at $2^{32}-1$, so no escape
-symbol is needed for large gaps, counts or values. Extra fields of up to 29 bits are coded as raw fields inside the
+Classes 0--7 are exact, then four per octave; class 123 ends at $2^{32}-1$, so there is no escape symbol. Extra fields of up to 29 bits are coded as raw fields inside the
 rANS state (Section~\ref{spec:rans}); a field wider than 16 bits is split into its low 16 bits, decoded first, and its
 high $b-16$ bits.
 % src: rans1.h:13-20, 22-44 (g_cls, ClsTab), 243-249 (put_bits: high part pushed first)
@@ -308,9 +304,8 @@ Walk a column's entries in ascending stored id with $P=0$ at the column start. F
 coded value $v$, the gap is $g=r-P\ge0$, the flag is $\phi=[v\neq 1]$, the gap symbol is
 $\sigma=2\gamma(g)+\phi\in[0,247]$ with extra bits $\epsilon(g)$, and then $P\leftarrow r+1$. If $\phi=1$ the
 \emph{residual} $q=0$ for $v=0$ and $q=v-1$ for $v\ge2$ is coded as its class $\rho=\gamma(q)\in[0,123]$ and extra
-bits $\epsilon(q)$. The decoder inverts this as $v=1$ if $\phi=0$, else $v=0$ if $q=0$ and $v=q+1$ otherwise. Counts
-of 1 therefore cost one symbol and no residual; counts of 2--8 a residual with no extra bits; counts of 9 and above
-residual extra bits. A chunk also codes the entry count $k_j$ of each of its columns as $\gamma(k_j)$ and $\epsilon(k_j)$.
+bits $\epsilon(q)$. The decoder inverts this as $v=1$ if $\phi=0$, else $v=0$ if $q=0$ and $v=q+1$ otherwise. A chunk
+also codes the entry count $k_j$ of each of its columns as $\gamma(k_j)$ and $\epsilon(k_j)$.
 The alphabets are 124 (TC, column-count classes), 248 (TG, gap symbols) and 124 (TR, residual classes).
 % src: rans1_enc.h:97-121 (scan_columns); rans1_dec.h:213-216 (value assembly); rans1.h:16 (kAlpha = 248)
 
@@ -337,9 +332,7 @@ TR context
 \label{spec:eq:ctxr}
 \end{equation}
 Column counts use the single context of TC. $\mathrm{pos}(0)=0$ and $\mathrm{pos}(r)\le 41$ for $r<2^{21}$, so the
-21 position buckets of TR cover every row of a codec-1 matrix. The limit $m\le 2^{21}-1$ is part of the format (a
-reader rejects larger $m$ for codec 1); the class alphabet itself covers every 32-bit gap. The limit $N<2^{28}$ per
-chunk lets the vector decoders keep $d$ in bits 28--31 of each lane's remaining-entry counter.
+21 position buckets of TR cover every row of a codec-1 matrix.
 % src: rans1.h:17-20 (kResPos 21, kResCtx 84, kMaxChunkN), 46-52 (posb_raw, dk_of), 54-74 (Cfg); rans1_enc.h:101-116; rans1_dec.h:165-166, 191-194
 
 \begin{table}[htbp]
@@ -381,9 +374,7 @@ X\leftarrow f_s\,\lfloor X/2^{p}\rfloor+u-C_s;\qquad \text{if }X<2^{16}:\ X\left
 where $w$ is the next unread little-endian \texttt{u16} of the stream (the \emph{refill}). A raw field of $b\le16$ bits
 is $\epsilon=X\bmod 2^{b}$, then $X\leftarrow\lfloor X/2^{b}\rfloor$ and a refill; $b=0$ reads nothing. A field of
 $17\le b\le 32$ bits is a 16-bit field followed by a $(b-16)$-bit field, $\epsilon=\epsilon_{\mathrm{lo}}+2^{16}\epsilon_{\mathrm{hi}}$.
-One refill always restores $X\ge 2^{16}$. Per symbol the decoder thus performs a table lookup, a shift and mask, a
-multiply, an add and a conditional refill; per entry it decodes one TG symbol, up to two raw fields, and, when $\phi=1$,
-one TR symbol and up to two more raw fields.
+One refill always restores $X\ge 2^{16}$.
 \emph{Informative (encoder):} symbols are pushed in exact reverse decode order; before pushing $s$, if
 $X\ge f_s\,2^{32-p}$ the encoder emits $X\bmod 2^{16}$ and sets $X\leftarrow\lfloor X/2^{16}\rfloor$; then
 $X\leftarrow 2^{p}\lfloor X/f_s\rfloor+(X\bmod f_s)+C_s$. A raw field of $b\ge1$ bits emits a word when
@@ -425,10 +416,8 @@ by its refill, so the shared word stream is consumed in (step, phase, lane) orde
 \end{enumerate}
 B2 and C3 are separate phases (all lanes' B before any lane's B2). Afterwards the word pointer must be exactly at the
 end of $w[n_w]$ and every state must equal $2^{16}$; a decoder may stop as soon as the pointer passes the end. A reader
-must reject a decoded id $r\ge m$ before using it as an index (the reference C++ decoder does so in canonical mode
-only). Vector decoders load words ahead, so the reference decoder copies a chunk that ends within 1024 bytes of the end
-of the available bytes into a zero-padded buffer. A writer must not leave bytes after $w[n_w]$ (the reference reader
-does not check).
+must reject a decoded id $r\ge m$ before using it as an index (Table~\ref{spec:tab:integrity}). A writer must not leave
+bytes after $w[n_w]$ (the reference reader does not check).
 % src: rans1_dec.h:4-15 (normative loop), 23 (kPad 1024), 143-234 (scalar reference), 229-233 (end checks); api.h:251-258 (padding, check), 158 (id < m, canonical only)
 % src: rans1_enc.h:208-230 (encoder: steps descending; phases C3,C2,C1,B2,B,A; lanes descending)
 
@@ -441,8 +430,7 @@ $\mathrm{LEB}(s-s_{\mathrm{prev}})\,\mathrm{LEB}(f_s)$, with $\xi_{\mathrm{prev}
 A reader must reject: $n_{\mathrm{used}}$ above the context count; a zero delta after the first context or symbol; a
 context or symbol out of range; $n_{\mathrm{sym}}=0$ or above the alphabet size; $f_s=0$ or $f_s>2^{p}-1$; or
 frequencies of a context that do not sum to exactly $2^{p}$. $C_s$ is the sum of the frequencies of the smaller symbols
-of the context. Contexts not listed have no symbols; a valid stream never uses them. Because $f_s\le 2^{p}-1$, every
-used context has at least two symbols.
+of the context. Contexts not listed have no symbols; a valid stream never uses them.
 % src: rans1.h:162-181 (serialize_tables), 183-222 (parse_tables and its checks), 186 (decode entry sym<<24 | freq<<12 | bias)
 \emph{Informative (quantisation):} the writer counts symbols over the whole member, then for counts $c_i$ with total
 $T$ sets $f_i=\max(1,\lfloor c_i2^{p}/T\rfloor)$ for $c_i>0$; while $\sum f<2^{p}$ it adds one to the first symbol
@@ -479,7 +467,6 @@ and a matrix with names kind 4 hashes a count of 0. An all-zero digest means ``n
 % ---------------------------------------------------------------------------------------------------------------------
 \subsection{Integrity}
 \label{spec:integrity}
-Table~\ref{spec:tab:integrity} lists every check the format provides and when the reference readers apply it.
 
 \begin{table}[htbp]
 \centering\footnotesize\setlength{\tabcolsep}{4pt}
@@ -505,39 +492,30 @@ Pack digest16 & a pack file & every pack read \\
 \end{table}
 
 \paragraph{What the end-state check detects.}
-An error in an initial state, or in a word bit that a symbol decode consumes, makes the decode diverge; it is then
-detected unless all $L$ final states happen to equal $2^{16}$ and the word count still matches (the code does not
-quantify the probability of a miss). Raw extra bits share the states with the symbols but are read out of them
-unchanged, so the check cannot detect: (i)~an error in a word bit that is consumed by a raw field, since
-the field is shifted out of the state unchanged. For residual extra bits (counts of 9 and above) the decoded value
-changes and nothing else does; for gap extra bits the stored id changes, and with it every later id of that lane in
-that column, and the error escapes whenever the changed id leaves the position contexts of the following symbols
-unchanged. (ii)~errors in the $\mathit{pp0}$ values, which are not entropy coded and shift the ids of a lane's first
-column. (iii)~errors in the row keys, which always give a valid permutation, so canonical ids are wrong without notice.
-(iv)~errors in names and key/values, which have no check of their own. (v)~any error in a chunk with $N=0$, whose lane
-states are not examined. Codec-2 chunks have no end-state check, and their zstd frames carry no checksum.
+An error in an initial state, or in a word bit consumed by a symbol decode, makes the decode diverge and is detected
+unless all $L$ final states happen to equal $2^{16}$ with the word count matching (the probability of a miss is not
+quantified). The check cannot detect: (i)~an error in a word bit consumed by a raw field, which is shifted out of the
+state unchanged: a residual extra bit (counts of 9 and above) changes only the value; a gap extra bit changes the stored
+id and every later id of that lane in that column, and escapes whenever the position contexts of the following symbols
+are unchanged; (ii)~errors in the $\mathit{pp0}$ values (not entropy coded; they shift the ids of a lane's first
+column); (iii)~errors in the row keys, which always give a valid permutation; (iv)~errors in names and key/values;
+(v)~any error in a chunk with $N=0$. Codec-2 chunks have no end-state check, and their zstd frames no checksum.
 % src: rans1_dec.h:171-178, 199-212 (raw fields leave the state); 126 (pp0 read raw); api.h:68 (any keys -> perm); 258 (N == 0 skips the kernel)
 
 \paragraph{Full and partial reads.}
-A full decode checks every chunk but recomputes the canonical digest only when asked to; an object downloaded whole
-can be checked against its SHA-256 and its digest16 name. A range reader checks the header CRC, the chunk index, the
-tables and the streams of the chunks it fetched (the reference client also checks each response's
-\texttt{Content-Range} and that the member header carries the manifest's digest, an identity check, not a content
-check). It cannot verify the canonical digest (it needs every column and the logical names) or the object hash (it
-needs every byte), and it cannot detect the errors (i)--(iv) in the bytes it read.
+A range reader checks the header CRC, the chunk index, the tables and the streams of the chunks it fetched (the
+reference client also checks each response's \texttt{Content-Range} and that the member header carries the manifest's
+digest, an identity check, not a content check). It cannot verify the canonical digest or the object hash, which need
+every column and every byte, nor detect errors (i)--(iv) in the bytes it read.
 
 % ---------------------------------------------------------------------------------------------------------------------
 \subsection{SIMD decoding and dispatch}
 \label{spec:simd}
 The scalar loop of Section~\ref{spec:chunk} is the definition; the vector kernels must produce identical stored ids,
-values and accept/reject decisions for every valid stream (Table~\ref{spec:tab:isa}). Each kernel keeps $L/8$ (AVX2) or
-$L/16$ (AVX-512) vectors of lanes in flight and runs the same phases in the same order; within a phase, the refilling
-lanes of a vector take consecutive words in ascending lane order (a permutation from a 256-entry table on AVX2, a
-16-bit expand on AVX-512), so the word stream is consumed exactly as in the scalar order. All arithmetic is 32-bit
-integer except $\lambda(\cdot)$ in $\mathrm{pos}$ and $\kappa_{\mathrm{raw}}$, which the kernels read from the exponent
-of an integer-to-float conversion; this is exact for arguments below $2^{24}$, and valid streams have arguments below
-$2^{21}+2$. Output passes through $8\times8$ or $16\times16$ transposes into each lane's contiguous slice, which does
-not change values. All kernels support $L\in\{16,32,64\}$.
+values and accept/reject decisions for every valid stream (Table~\ref{spec:tab:isa}). All arithmetic is
+32-bit integer except $\lambda(\cdot)$ in $\mathrm{pos}$ and $\kappa_{\mathrm{raw}}$, read from the exponent of an
+integer-to-float conversion, which is exact below $2^{24}$ (valid streams stay below $2^{21}+2$). All kernels support
+$L\in\{16,32,64\}$.
 % src: rans1_avx2.h:1-5, 14-35 (refill LUT), 39-42 (posb via cvtepi32_ps), 175-178 (kraw via exponent), 255-257 (end checks)
 % src: rans1_avx512.h:1-5, 16-21 (expand_epi16 + pdep), 22-25 (posb via cvtepu32_ps), 153-157 (lzcnt), 233-235 (end checks)
 
@@ -558,30 +536,11 @@ AVX-512 & everything for AVX2, ZMM and opmask state ($\mathrm{XCR0}\wedge\texttt
 \end{table}
 
 \paragraph{Dispatch.}
-No compiler architecture flag is needed: the kernels are compiled with per-function target attributes (AVX2 kernel:
-\texttt{avx2}, \texttt{bmi}, \texttt{bmi2}, \texttt{popcnt}, \texttt{lzcnt}; AVX-512 kernel: those plus
-\texttt{avx512f}, \texttt{bw}, \texttt{vl}, \texttt{dq}, \texttt{cd}, \texttt{vbmi2}) and called only after the run-time
-check. The default is the best supported kernel (AVX-512, then AVX2, then scalar). The environment variable
-\texttt{PZ2\_ISA} (\texttt{scalar}, \texttt{avx2} or \texttt{avx512}), read once per process, can select a lower kernel
-but never one the CPU lacks (unknown values are ignored); a per-call option does the same, and an unsupported request
-falls back to the best supported kernel below it. On non-x86 targets, or when built with \texttt{PZ2\_SCALAR\_ONLY},
-only the scalar kernel exists. SHA-256 for the canonical digest has a separate SHA-NI path, also chosen at run time and
-never used with \texttt{PZ2\_ISA=scalar}.
+Kernels are compiled with per-function target attributes, so no architecture flag is needed, and run only after the run-time check. Default: the best supported
+kernel (AVX-512, AVX2, scalar). \texttt{PZ2\_ISA} (\texttt{scalar}, \texttt{avx2}, \texttt{avx512}; read once per
+process, unknown values ignored) or a per-call option can select a lower kernel, never one the CPU lacks; an
+unsupported request falls back to the best supported kernel below it. On non-x86 targets or with
+\texttt{PZ2\_SCALAR\_ONLY} only the scalar kernel exists. SHA-256 has a separate SHA-NI path, chosen at run time and
+not used with \texttt{PZ2\_ISA=scalar}.
 % src: pz2.h:20-22; isa.h:76-80 (compiled paths), 102-128; sha256.h:1-3
 
-% ---------------------------------------------------------------------------------------------------------------------
-\paragraph{Proposed test vectors.}
-We propose to publish with this specification small members and objects, each as its bytes (hex), the decompressed
-payload of every STREAM (so a decoder can be tested independently of the zstd version that wrote the frames), and the
-expected results: header fields, chunk index, $\pi$, the tables as (context, symbol, frequency) lists, per chunk
-$n_{wc}$, $n_w$, column counts, $\mathit{pp0}$ list and initial states, the native and canonical CSC arrays, the
-canonical digest, and the plan (chunk runs, byte ranges) for a few column sets. Inputs: empty matrices ($m$, $n$ or
-$\mathit{nnz}$ zero) in both codecs; $1\times1$ matrices with values 0, 1, 2, 8, 9 and $2^{32}-1$; chunks with
-$N<L$, $N=L$, $N=L+1$, lanes that start inside a column and lanes that cross empty columns; gaps and residuals wider
-than 16 bits (phases B2 and C3: $m>2^{19}$, a value above $2^{19}$); every \texttt{ctx\_kind}, $L\in\{16,32,64\}$,
-$p_b,p_v\in\{8,12\}$, $\kappa\in\{0,4,8\}$; a boundary forced by the 49{,}152-entry budget and one column above it;
-$m=2^{21}-1$ in codec 1 and $m=2^{21}$ (codec 2); value type 4 with and without \texttt{flags} bit 0; every names kind
-and a key/value section; and an object with all five member kinds, padding and an empty body. Negative vectors give
-the expected verdict for single-bit errors in the header, the chunk index, a table and a TG-coded word (all rejected),
-and in a residual extra bit and a row key (both accepted, with a changed value or permutation and a changed canonical
-digest), so that the limits of Section~\ref{spec:integrity} are tested as well as the checks.

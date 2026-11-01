@@ -13,8 +13,8 @@
 ]
 % ---------- column headers ----------
 \node[hdr] at (0,0.75) {Your data};
-\node[hdr] at (5.6,0.75) {\sone{} files};
-\node[hdr] at (11.0,0.75) {Where you work};
+\node[hdr] at (6.3,0.75) {\sone{} files};
+\node[hdr] at (11.8,0.75) {Where you work};
 
 % ---------- sources ----------
 \node[src] (cr) at (0,0)     {Cell Ranger HDF5 / MTX};
@@ -28,28 +28,28 @@
 \foreach \s in {cr,ss,ad,sr,sp} \draw[arr] (\s.east) -- (wr.west);
 
 % ---------- the objects ----------
-\node[hub, minimum width=2.9cm, minimum height=2.3cm] (obj) at (5.6,-1.7) {};
-\node[font=\sffamily\scriptsize\bfseries, text=sone!80!black] at (5.6,-0.82) {disk or object store};
-\node[draw=sone, fill=white, minimum width=2.4cm, font=\sffamily\tiny] at (5.6,-1.2) {dataset manifest (.json)};
-\node[draw=sone, fill=sone!30, minimum width=2.4cm, font=\sffamily\tiny] at (5.6,-1.6) {sample objects (.s1)};
-\node[draw=gen, fill=gen!15, minimum width=2.4cm, font=\sffamily\tiny] at (5.6,-2.0) {packs: genes, barcodes};
-\node[font=\sffamily\tiny, text=ink2] at (5.6,-2.5) {HTTP range reads};
+\node[hub, minimum width=2.9cm, minimum height=2.3cm] (obj) at (6.3,-1.7) {};
+\node[font=\sffamily\scriptsize\bfseries, text=sone!80!black] at (6.3,-0.82) {disk or object store};
+\node[draw=sone, fill=white, minimum width=2.4cm, font=\sffamily\tiny] at (6.3,-1.2) {dataset manifest (.json)};
+\node[draw=sone, fill=sone!30, minimum width=2.4cm, font=\sffamily\tiny] at (6.3,-1.6) {sample objects (.s1)};
+\node[draw=gen, fill=gen!15, minimum width=2.4cm, font=\sffamily\tiny] at (6.3,-2.0) {packs: genes, barcodes};
+\node[font=\sffamily\tiny, text=ink2] at (6.3,-2.5) {HTTP range reads};
 \draw[arr] (wr.east) -- (obj.west);
 
 % ---------- readers ----------
-\node[out=sone] (py)  at (10.0,0.0)  {\textbf{AnnData} (Python)};
-\node[out=tens] (pt)  at (10.0,-1.0) {\textbf{PyTorch} sparse minibatches};
-\node[out=dl]   (sce) at (10.0,-2.0) {\textbf{SingleCellExperiment} (R)};
-\node[out=dl]   (seu) at (10.0,-3.0) {\textbf{Seurat} (R)};
-\node[out=gen]  (cpp) at (10.0,-4.0) {\textbf{C++} CSC arrays};
+\node[out=sone] (py)  at (10.8,0.0)  {\textbf{AnnData} (Python)};
+\node[out=sone] (pt)  at (10.8,-1.0) {\textbf{PyTorch} sparse minibatches};
+\node[out=sone]   (sce) at (10.8,-2.0) {\textbf{SingleCellExperiment} (R)};
+\node[out=sone]   (seu) at (10.8,-3.0) {\textbf{Seurat} (R)};
+\node[out=sone]  (cpp) at (10.8,-4.0) {\textbf{C++} CSC arrays};
 \foreach \o in {py,pt,sce,seu,cpp} \draw[arr] (obj.east) -- (\o.west);
 
 % ---------- code beside each reader ----------
-\node[code] at (11.8,0.0)  {import singlet\\adata = singlet.load("pbmc10k.s1")};
-\node[code] at (11.8,-1.0) {from singlet.torch import S1Cells\\ds = S1Cells("https://.../pbmc10k.s1", batch\_size=512)\\for b in DataLoader(ds, batch\_size=None): b["X"]};
-\node[code] at (11.8,-2.0) {sce <- singlet::load("pbmc10k.s1", as = "sce")};
-\node[code] at (11.8,-3.0) {so \ <- singlet::load("pbmc10k.s1", as = "seurat")};
-\node[code] at (11.8,-4.0) {// header-only C++ library:\\// decode cells c0..c1 into CSC arrays};
+\node[code] at (12.6,0.0)  {import singlet\\adata = singlet.load("pbmc10k.s1")};
+\node[code] at (12.6,-1.0) {from singlet.torch import S1Cells\\ds = S1Cells("https://.../pbmc10k.s1", batch\_size=512)\\for b in DataLoader(ds, batch\_size=None): b["X"]};
+\node[code] at (12.6,-2.0) {sce <- singlet::load("pbmc10k.s1", as = "sce")};
+\node[code] at (12.6,-3.0) {so \ <- singlet::load("pbmc10k.s1", as = "seurat")};
+\node[code] at (12.6,-4.0) {// header-only C++ library:\\// decode cells c0..c1 into CSC arrays};
 
 % ---------- writer calls ----------
 \node[code] at (-1.45,-4.6) {singlet.write\_s1(adata, "sample.s1")\ \ \ \ \ \ \ \ \# Python\\singlet::write\_s1(sce, "sample.s1")\ \ \ \ \ \ \ \ \ \# R};

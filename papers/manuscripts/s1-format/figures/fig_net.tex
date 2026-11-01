@@ -86,6 +86,11 @@
     every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=2pt}}]
 \fill[c-s1!7] (axis cs:0.3,1e4) rectangle (axis cs:1,6e5);
 \node[font=\sffamily\tiny, text=c-s1!80!black, anchor=north west, align=left] at (axis cs:0.31,5.5e5) {fast to start\\and to stream};
+% lines of equal time to one epoch (first minibatch + cells / rate) through the .s1 point and the downloaded h5ad file
+\addplot[c-s1, densely dashed, thick, no marks, discard if not={curve}{s1}] table[x=first, y=cps] {\gen{figr2_epoch.tsv}}
+  node[pos=0.62, sloped, below, font=\sffamily\tiny, text=c-s1!80!black] {one epoch in \nm{r2-epoch-s1}\,s};
+\addplot[c-h5ad_gzip, densely dashed, thick, no marks, discard if not={curve}{h5ad}] table[x=first, y=cps] {\gen{figr2_epoch.tsv}}
+  node[pos=0.45, sloped, below, font=\sffamily\tiny, text=c-h5ad_gzip!80!black] {one epoch in \nm{r2-epoch-h5ad}\,s};
 \pgfplotsinvokeforeach{h5ad_gzip,zarr,zarr3,s1}{
   \addplot[only marks, lbl, mark=*, mark size=2.2pt, c-#1, discard if not={fmt}{#1}] table[x=first, y=cps, meta=label] {\gen{figr2.tsv}};
 }
@@ -103,7 +108,9 @@ three link speeds (1\,ms latency); dashed, the link's capacity in \sone{} cells.
 \textbf{(c)} The same store at 1\,Gbit/s with a round-trip delay added to every request, \nm{ns-dataset}; \sone{} with the
 \texttt{singlet} \nm{rel-singlet_py} defaults (32 range requests in flight, the next four minibatches requested ahead).
 \textbf{(d)} Cloudflare R2 read over the public internet from a cluster node (about \nm{r2-hlca_core-rtt}\,ms per
-request), \nm{fig1b-dataset}, median of three seeds; the h5ad file is downloaded whole before the first minibatch. Costs per
+request), \nm{fig1b-dataset}, median of three seeds; the h5ad file is downloaded whole before the first minibatch. Dashed:
+loaders on a line deliver one epoch (\nm{r2-epoch-cells} cells) in the same time; the downloaded file catches up with
+\sone{} only after about \nm{r2-epoch-crossover} epochs, if it fits in memory. Costs per
 epoch: Supplementary Table~\ref{S-tab:r2}; latency distributions, round trips and block size: Supplementary
 Fig.~\ref{S-fig:snet}.}
 \label{fig:net}

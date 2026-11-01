@@ -2,48 +2,36 @@
 \section{Introduction}
 \label{sec:intro}
 
-\IEEEPARstart{T}{he} Gene Expression Omnibus~\cite{barrett2013geo} already holds sequencing data from more than three
-billion single cells, and the field keeps growing: reference atlases hold tens of millions of
-cells~\cite{svensson2018exponential,sikkema2023integrated,czi2025cellxgene} and a single perturbation screen has reached a
-hundred million~\cite{zhang2025tahoe}. Several efforts are now reprocessing this archive into uniform, AI-ready datasets
-that atlases serve to thousands of users and that machine-learning models stream minibatch by minibatch, reading every
-cell many times~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}. Those data live in cloud object storage and
-cross a network before they are used, so the data structure that holds them, not the model or the processor, has become
-the bottleneck of this infrastructure.
+\IEEEPARstart{H}{ow} many bits does a single cell need? The question used to be academic. The Gene Expression
+Omnibus~\cite{barrett2013geo} now holds sequencing data from more than three billion cells, reference atlases serve tens of
+millions~\cite{svensson2018exponential,sikkema2023integrated,czi2025cellxgene}, a single perturbation screen has reached a
+hundred million~\cite{zhang2025tahoe}, and machine learning models are trained by streaming such collections from cloud
+storage, minibatch by minibatch, many times over~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}. Every one of
+those minibatches crosses a network. When it does, the bits each cell takes and the round trips needed to find it, not the
+model or the processor, set how fast training runs and what each epoch costs.
 
-What a link delivers per second is set by two things a format controls: how many bits each cell takes and how many round
-trips a reader needs to find them. The first has a floor, the information the counts actually contain, and the formats in
-use stay far above it. AnnData~\cite{virshup2024anndata}, the 10x Genomics HDF5 file, loom, Zarr and
-TileDB-SOMA~\cite{tiledbsoma} store a matrix of whole-number counts as generic arrays and compress them with tools such
-as gzip or zstd, which see only bytes. What limits how fast single-cell data can be delivered today is therefore mostly
-how they are encoded, not the network.
+Today's formats spend those bits generously. AnnData~\cite{virshup2024anndata}, the 10x Genomics HDF5 file, loom, Zarr and
+TileDB-SOMA~\cite{tiledbsoma} store whole-number counts as generic arrays and hand them to compressors such as gzip or
+zstd, which see only bytes. Yet count matrices are anything but arbitrary. Most non-zero counts are exactly one; a cell's
+sequencing depth sets the expected count of every gene in it; and if genes are numbered from most to least often
+detected, the positions of a cell's non-zero entries become a short list of small steps. Sequencing reads went through the
+same transition when CRAM replaced gzip with models of the data~\cite{bonfield2022cram}.
 
-Count matrices are far from arbitrary. Most non-zero counts are exactly one; how deeply a cell was sequenced sets the
-expected count of every gene in it; and if genes are numbered from most to least frequently detected, the positions of a
-cell's non-zero entries become a short list of small steps. A code that knows these regularities can describe the same
-matrix in far fewer bits, as domain-specific formats for sequencing reads did when they replaced gzip with models of their
-data~\cite{bonfield2022cram}. But fewer bits help only if they can be decoded as fast as the link delivers them. Two
-limits therefore matter together: how few bits a lossless code can spend on the counts, and how fast a code that small can
-be decoded.
-
-We measured both limits on real data and built a format that approaches them. The result is \sone, an open format for
-single-cell count matrices, read and written from Python, R and C++ by the \texttt{singlet} package. Fig.~\ref{fig:wow}
-summarises the outcome. This paper makes four contributions:
+A model of the counts can shrink a file, but a smaller file helps only if it can be decoded as fast as the link delivers
+it. So we asked two questions together: how few bits can a lossless code spend on single-cell counts, and how fast can a
+code that small be decoded? We measured both limits on \nm{nMatrices} public matrices and built \sone, an open format that
+approaches them, read and written from Python, R and C++ by the \texttt{singlet} package (Fig.~\ref{fig:wow}). We found
+that:
 \begin{itemize}
-\item \emph{Limits.} We estimate the information floor of \nm{nMatrices} public count matrices with cross-validated count
-  models, and the speed frontier of the integer codes a format could adopt, each decoding the same matrices on one core
-  (Section~\ref{sec:floor}).
-\item \emph{A format.} \sone{} models the counts with a static, context-conditioned entropy coder, stores cells in
-  independently decodable blocks behind an index, and names every file by its content (Section~\ref{sec:format}).
-\item \emph{A benchmark.} We compare \sone{} with fifteen storage formats and settings on matrices from
-  \nm{nProtocolClasses} protocol classes, from cold reads to training loaders on emulated and real cloud storage, with
-  every number produced by one open pipeline (Section~\ref{sec:setup}).
-\item \emph{Findings.} \sone{} files are the smallest on every matrix and within a few percent of the best count models we
-  fitted; no
-  measured code was both as small and faster to decode; and from cloud storage \sone{} keeps a network link busy where
-  chunked formats leave it idle (Section~\ref{sec:results}). We also report its costs.
+\item \sone{} files were the smallest on every matrix, \nm{ratio-h5ad_gzip} times smaller than gzip-compressed AnnData and
+  within a few percent of the best count models we fitted;
+\item on four cores, \sone{} was also the fastest format to read on \nm{dec-s1-fastest-count} of \nm{dec-paired-n}
+  matrices, and no integer code we measured was both as small and faster to decode;
+\item from cloud storage, a PyTorch loader received its first \sone{} minibatch in under a second and then kept a
+  1\,Gbit/s link busy where chunked formats left it idle.
 \end{itemize}
-The codec was developed iteratively with Claude 5.5-generation models (Anthropic), with every candidate change measured
-against the limits above.
+We also report what \sone{} costs: a decoder that is slower per core, a writer that is slower and needs more memory, and
+no traversal of the data in place. The codec was developed iteratively with Claude 5.5-generation models (Anthropic),
+with every candidate change measured against the limits above.
 
 \input{figures/fig1_wow}

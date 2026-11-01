@@ -1,6 +1,6 @@
 codec	label	group	bits	mnnzs	anchor
 raw_u32	raw arrays	fast	64	628.372	north
-fixed_bytes	fixed-width bytes	fast	32	907.903	north west
+fixed_bytes	fixed-width bytes	fast	32	907.903	south
 leb128_gaps	LEB128	fast	16.181	424.133	north
 streamvbyte_gaps	Stream VByte	fast	20.0412	550.665	south west
 bitpack256_gaps	SIMD bit-packing	fast	14.0042	518.83	east
