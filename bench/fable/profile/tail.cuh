@@ -22,10 +22,13 @@ struct TailHost {
     const char* lane = "";
     int sms = 0;
     unsigned long long clkPrev[8] = {0};
+    cudaEvent_t ev[2];         // per batch: before k_p2, after k_p3 (m5.cu records q[0..3] around the phases)
+    float prevEnd = 0;         // ms from the rep's start event to the end of the previous batch
+    double evSum[6] = {0, 0, 0, 0, 0, 0};
     // lane totals per kernel: span, thread-, warp-, block-slot areas (ns x threads), slot x span, drain
     double tSpan[2] = {0, 0}, tThr[2] = {0, 0}, tWarp[2] = {0, 0}, tBlk[2] = {0, 0}, tSlot[2] = {0, 0}, tDrain[2] = {0, 0}, tCyc[2] = {0, 0};
     void init(unsigned long long NB, const char* name, int nsm) {
-        lane = name; sms = nsm;
+        lane = name; sms = nsm; cudaEventCreate(&ev[0]); cudaEventCreate(&ev[1]);
         for (int k = 0; k < 2; k++) cudaMalloc(&d[k], NB * sizeof(TailRec));
         h.resize(NB);
     }
@@ -33,6 +36,7 @@ struct TailHost {
         TailRec* p[2] = {on ? d[0] : nullptr, on ? d[1] : nullptr};
         cudaMemcpyToSymbol(g_tail, p, sizeof p);
         if (on) cudaMemcpyFromSymbol(clkPrev, g_clk, sizeof clkPrev);
+        prevEnd = 0;
     }
     void release() { arm(false); for (int k = 0; k < 2; k++) if (d[k]) cudaFree(d[k]); d[0] = d[1] = nullptr; }
     // one kernel of one batch: nb threads used (grid ceil(nb/T) x T), bps resident blocks per SM (occupancy API)
@@ -85,7 +89,20 @@ struct TailHost {
             for (int k = 0; k < 8; k++) clkPrev[k] = c[k];
         }
     }
+    // event times of one batch (ms): gap since the previous batch's end, k_p1, scan + 2 sync copies + memset, k_p2, k_p3, copy_status
+    void events(cudaEvent_t e0, const cudaEvent_t* q, int ib, unsigned long long nb) {
+        float t0, t1, ta, t2, tb, t3;
+        cudaEventElapsedTime(&t0, e0, q[0]); cudaEventElapsedTime(&t1, e0, q[1]); cudaEventElapsedTime(&ta, e0, ev[0]);
+        cudaEventElapsedTime(&t2, e0, q[2]); cudaEventElapsedTime(&tb, e0, ev[1]); cudaEventElapsedTime(&t3, e0, q[3]);
+        double v[6] = {t0 - prevEnd, t1 - t0, ta - t1, t2 - ta, tb - t2, t3 - tb};
+        fprintf(stderr, "TAILEV lane=%s batch=%d n=%llu gap_ms=%.4f p1_ms=%.4f scan_sync_ms=%.4f p2_ms=%.4f p3_ms=%.4f cs_ms=%.4f\n",
+                lane, ib, nb, v[0], v[1], v[2], v[3], v[4], v[5]);
+        for (int k = 0; k < 6; k++) evSum[k] += v[k];
+        prevEnd = t3;
+    }
     void summary() {
+        fprintf(stderr, "TAILEVSUM lane=%s gap_ms=%.3f p1_ms=%.3f scan_sync_ms=%.3f p2_ms=%.3f p3_ms=%.3f cs_ms=%.3f\n",
+                lane, evSum[0], evSum[1], evSum[2], evSum[3], evSum[4], evSum[5]);
         for (int k = 0; k < 2; k++) if (tSlot[k] > 0)
             fprintf(stderr, "TAILSUM lane=%s kernel=k_p%d span_ms=%.3f busy_thr=%.4f busy_warp=%.4f busy_blk=%.4f drain_share=%.4f clk_ghz=%.3f\n",
                     lane, k ? 3 : 1, tSpan[k] / 1e6, tThr[k] / tSlot[k], tWarp[k] / tSlot[k], tBlk[k] / tSlot[k], tDrain[k] / tSpan[k], tCyc[k] / tThr[k]);

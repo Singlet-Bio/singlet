@@ -233,6 +233,9 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             u64 words = (lastB + lastN) / 32 + 2;
             if (words > bitsCap) { CK(cudaFree(dBits)); bitsCap = words * 2; CK(cudaMalloc(&dBits, bitsCap * 4)); }
             CK(cudaMemsetAsync(dBits, 0, words * 4));
+#ifdef M5_TAIL
+            cudaEventRecord(tail.ev[0]);
+#endif
             k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
             cudaEventRecord(q[2]);
             if (g_bin) {
@@ -240,12 +243,16 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
                 thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
             }
             k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen, dWhy, dUn, g_bin ? dPerm : nullptr);
+#ifdef M5_TAIL
+            cudaEventRecord(tail.ev[1]);
+#endif
             k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
             cudaEventRecord(q[3]);
             CK(cudaEventSynchronize(q[3])); CK(cudaGetLastError());
             float m; cudaEventElapsedTime(&m, q[0], q[1]); ph[0] += m; cudaEventElapsedTime(&m, q[1], q[2]); ph[1] += m;
             cudaEventElapsedTime(&m, q[2], q[3]); ph[2] += m;
 #ifdef M5_TAIL
+            if (r + 1 == reps) tail.events(e0, q, (int)(b0 / NB), nb);   // event times from the rep before the analysed one (no host work in between)
             if (r == reps) { tail.batch(0, nb, T, bps1, (int)(b0 / NB)); tail.batch(1, nb, T, bps3, (int)(b0 / NB)); }
 #endif
         }
