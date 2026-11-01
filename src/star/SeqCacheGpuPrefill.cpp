@@ -361,6 +361,8 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                 };
                 // E10: the quality bits of R2 (STAR's handoffReadEntry: Qual0[0][j] - 33 < minQ), every base ACGTN (the device reads code 4 as
                 // 'N' and rebuilds the read for the rRNA hook from the codes), the name-line offsets
+                // E11: thread-local counts, stored once per thread (per-read updates of e11q30T[t] would share cache lines between threads)
+                uint64 l30 = 0, lnq = 0;
                 bool okc[256];
                 for (int c = 0; c < 256; c++) okc[c] = c == 'A' || c == 'C' || c == 'G' || c == 'T' || c == 'N';
                 auto e10line = [&](uint64 lix, const char *ls, const char *le) {
@@ -381,7 +383,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                         if (e11q) {
                             uint64 c = 0;
                             for (uint64 j = 0; j < L; j++) c += (unsigned char) ls[j] >= e11q30;
-                            e11q30T[t] += c; e11nT[t] += L;
+                            l30 += c; lnq += L;
                         }
                     }
                 };
@@ -394,6 +396,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                 if (t == T - 1 && lastUnterminated && (li & 3) == 1) take(start, m + n);
                 if (t == T - 1 && lastUnterminated && e10q) e10line(li, start, m + n);
                 if (cr4) flush();
+                e11q30T[t] = l30; e11nT[t] = lnq;
             });
             for (auto &x : th) x.join();
         }
@@ -483,6 +486,10 @@ bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
             const char *start = m + b[t];
             while (start > m && start[-1] != '\n') start--;
             const char *e = m + b[t + 1];
+            // E11: thread-local quality counts, stored once per thread (per-character updates of qminT[t]/qmaxT[t] and per-read ones of
+            // q30T[t]/nqT[t] share cache lines between the threads: 38.6 s instead of 1 s for this pass in gate 796377)
+            uint64 lq30 = 0, lnq = 0;
+            int lqmin = 256, lqmax = -1;
             auto line = [&](const char *ls, const char *le) {
                 const uint64 r = li >> 2;
                 if ((li & 3) == 0) { e10f.at[1][r] = (uint64) (ls - m); return; }
@@ -495,10 +502,10 @@ bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
                     for (uint64 j = cbS - 1; j < std::min(cbS - 1 + cbL, S); j++) {
                         const unsigned q = qc(j);
                         c += q >= e11q30; nq++;
-                        qminT[t] = std::min(qminT[t], (int) q); qmaxT[t] = std::max(qmaxT[t], (int) q);
+                        lqmin = std::min(lqmin, (int) q); lqmax = std::max(lqmax, (int) q);
                     }
                     for (uint64 j = umiS - 1; j < std::min(umiS - 1 + umiL, S); j++) { c += qc(j) >= e11q30; nq++; }
-                    q30T[t] += c; nqT[t] += nq;
+                    lq30 += c; lnq += nq;
                     return;
                 }
                 if ((li & 3) != 1) return;
@@ -525,6 +532,7 @@ bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
                 start = q + 1;
             }
             if (t == T - 1 && lastUnterminated) line(start, m + n);
+            q30T[t] = lq30; nqT[t] = lnq; qminT[t] = lqmin; qmaxT[t] = lqmax;
         });
         for (auto &x : th) x.join();
     }
