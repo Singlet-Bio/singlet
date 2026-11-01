@@ -22,7 +22,7 @@ inline double now() { timespec ts; clock_gettime(CLOCK_REALTIME, &ts); return (d
 inline void mark(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 inline void mark(const char* fmt, ...) {
     if (!on()) return;
-    char b[900];
+    char b[4096];
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(b, sizeof b, fmt, ap);
