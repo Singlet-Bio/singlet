@@ -153,6 +153,9 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 //              flanks per lane per iteration, lanes refilled from the batch)
 //  M5_G2       compareSeqToGenome on a 2-bit genome text (stitch.cuh; needs M5_SEEDFLAT)
 //  M5_P1MINB=n __launch_bounds__(128, n) on the phase-1 kernels (register cap for occupancy)
+//  M5_CMPNI    compareSeqToGenome out of line (one copy instead of five inlined ones; stitch.cuh)
+//  M5_SEEDSTEP (with M5_P1SPLIT) k_p1s steps maxMappableLength2strands one memory operation at a time (an SAi lookup or
+//              one compareSeqToGenome per lane per iteration, at one call site; stitch.cuh MmIt / mmAdvance)
 #ifdef M5_SEEDFLAT
 #ifndef M5_CMPU
 #define M5_CMPU
@@ -160,6 +163,9 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 #if defined(M5_CENSUS) || defined(M5_TAIL)
 #error "M5_SEEDFLAT: no census / tail probes"
 #endif
+#endif
+#if defined(M5_SEEDSTEP) && !defined(M5_P1SPLIT)
+#error "M5_SEEDSTEP needs M5_P1SPLIT"
 #endif
 #if defined(M5_P1SPLIT) && !defined(M5_SEEDFLAT)
 #error "M5_P1SPLIT needs M5_SEEDFLAT"
@@ -181,6 +187,9 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
     u64 k = 0;
     int st = 0;            // 0: needs a read, 1: holds a read with a pending call, 2: the batch is exhausted
     SeedIt it;
+#ifdef M5_SEEDSTEP
+    MmIt m;
+#endif
     long long tc = 0;
     for (;;) {
         // refill: the lanes without a read take the batch's next reads (consecutive per warp); a read without any call
@@ -201,8 +210,12 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
                     Work<C>& w = work[k];
                     const Status s = p1Setup(P, w, rbuf[k], rb + roff[i], rlen[i], it);
                     if (s != Status::Ok) status[k] = (uint8_t)s;
-                    else if (seedNext(P, w, it)) st = 1;
-                    else { status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; }
+                    else if (seedNext(P, w, it)) {
+                        st = 1;
+#ifdef M5_SEEDSTEP
+                        mmBegin(P, m, it);
+#endif
+                    } else { status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; }
                 }
             }
         }
@@ -210,6 +223,20 @@ __global__ void M5_P1_BOUNDS k_p1s(Params P, GenomeView g, const char* rb, const
         if (st == 1) {
             Work<C>& w = work[k];
             M5_READ1(Read1, rbuf[k], w.Lread);
+#ifdef M5_SEEDSTEP
+            // one memory operation of the read's current maxMappableLength2strands call, then its control flow up to
+            // the next operation; a complete call moves the seed iterator on (the next call starts with no operation)
+            bool cr = false;
+            const u64 v = mmOp(g, Read1, m, cr);
+            const int r = mmAdvance(P, g, w, Read1, m, v, cr);
+            if (r < 0) { status[k] = (uint8_t)Status::Overflow; st = 0; }
+            else if (r > 0) {
+                seedAfter(it, (m5::uint)m.maxLbest);
+                if (!seedNext(P, w, it)) { status[k] = (uint8_t)Status::Ok; w.clk[0] += clock64() - tc; st = 0; }
+                else mmBegin(P, m, it);
+            }
+            continue;
+#endif
             m5::uint L;
             seedCall(P, g, w, Read1, it, L);
             if (w.ov) { status[k] = (uint8_t)Status::Overflow; st = 0; }

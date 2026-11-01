@@ -593,7 +593,13 @@ __device__ inline u64 compareSeqToGenome2(const GenomeView& g_, const char* cons
 #define M5_READ1(name, rb, Lr) const char* name[3] = {(rb).r[0], (rb).r[1], (rb).r[2]}
 #define M5_READ1_BYTES(name, rb) const char* name[3] = {(rb).r[0], (rb).r[1], (rb).r[2]}
 #endif
+#ifdef M5_CMPNI
+// E7 M5_CMPNI: one out-of-line copy of compareSeqToGenome instead of five inlined ones (maxMappableLength x3,
+// findMultRange, maxMappableLength2strands): lanes at different call sites run the same instructions inside it
+static HD __noinline__ u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u64 S, u64 N, u64 L, u64 iSA, bool dirR, bool& compRes) {
+#else
 HD inline u64 compareSeqToGenome(const GenomeView& g_, const char* const* s2, u64 S, u64 N, u64 L, u64 iSA, bool dirR, bool& compRes) {
+#endif
     u64 SAstr = packed_get(g_.SA, iSA, g_.saBits);
     bool dirG = (SAstr >> g_.GstrandBit) == 0;
     SAstr &= g_.GstrandMask;
@@ -1785,8 +1791,10 @@ template <class C> HD inline Status p1Setup(const Params& P, Work<C>& w, ReadBuf
     for (uint ii = 0; ii < Lread; ii++) { char c = R0[ii]; rb.r[0][ii] = c; rb.r[1][ii] = c < 4 ? 3 - c : c; }
     for (uint ii = 0; ii < Lread; ii++) rb.r[2][Lread - ii - 1] = rb.r[1][ii];
 #ifdef M5_G2
+#pragma unroll 1
     for (int q = 0; q < C::LREAD / 32 + 4; q++) {   // Read1[0] packed forward and reversed (units past the read: 0)
         u64 f = 0, r = 0;
+#pragma unroll 4
         for (int j = 0; j < 32; j++) {
             const uint a = (uint)q * 32 + j;
             if (a < Lread) { f |= (u64)(R0[a] & 3) << (2 * j); r |= (u64)(R0[Lread - 1 - a] & 3) << (2 * j); }
@@ -1862,6 +1870,175 @@ HD inline void seedAfter(SeedIt& it, uint L) {
 template <class C> HD inline void seedCall(const Params& P, const GenomeView& gv, Work<C>& w, const char* const* Read1, const SeedIt& it, uint& L) {
     maxMappableLength2strands(P, gv, w, Read1, (uint)it.Shift, (uint)it.seedLength, (uint)it.iDir, L, (uint)it.pF);
 }
+#ifdef M5_SEEDSTEP
+// E7 M5_SEEDSTEP: maxMappableLength2strands (with maxMappableLength and both findMultRange calls) as a resumable state
+// machine in which every step is ONE memory operation: an SAi lookup or one compareSeqToGenome. A persistent kernel runs
+// one step per lane per iteration (the operation at one call site, mmOp), then mmAdvance, which consumes the result and
+// runs the control flow up to the next operation. The statements are those of maxMappableLength2strands,
+// maxMappableLength and findMultRange in their order, with the same values (lengths fit 32 bits: they are <= the piece
+// length); the passes' results are kept per iDist and storeAligns runs after the last pass, in iDist order, as in STAR.
+enum : uint8_t { MS_BEGIN, MS_SAI1, MS_SAI2, MS_CMP1, MS_L1, MS_L2, MS_LOOP, MS_F1, MS_F2 };
+struct MmIt {
+    u64 i1, i2, i3, i1a, i1b, i2a, i2b, fa, fb;          // maxMappableLength / findMultRange (SA indices)
+    u64 iSA1, iSA2, opIdx;                                // the pass's SAi values; the pending SAi index or SA index
+    uint32_t L, L1, L2, L3, L1a, L1b, L2a, L2b, fLb;      // maxMappableLength / findMultRange (lengths)
+    uint32_t pieceStartIn, pieceLengthIn, iFrag, nD, iDist, maxLbest, pieceStart, pieceLength, Lind, maxL, ind1, opN, opL;
+    uint8_t iDir, ph, opK; bool dirR, good;              // opK: 0 SAi lookup, 1 compare, 2 none (a call's start)
+    u64 rNrep[4], rI0[4], rI1[4]; uint32_t rMaxL[4];     // per pass (gSAsparseD <= 4)
+};
+HD inline void mmBegin(const Params& P, MmIt& m, const SeedIt& it) {
+    m.pieceStartIn = it.Shift; m.pieceLengthIn = it.seedLength; m.iDir = (uint8_t)it.iDir; m.iFrag = it.pF;
+    m.maxLbest = 0; m.dirR = it.iDir == 0; m.nD = (uint32_t)mn<uint>((uint)it.seedLength, P.gSAsparseD); m.iDist = 0; m.ph = MS_BEGIN; m.opK = 2;
+}
+// consume the result of the pending operation (v; cr = compRes of a compare) and run to the next one: 0 = an operation is
+// pending (m.opK, m.opIdx, m.opN, m.opL), 1 = the call is complete (m.maxLbest = maxMappableLength2strands' maxLbest),
+// -1 = overflow (storeAligns)
+template <class C> HD inline int mmAdvance(const Params& P, const GenomeView& g, Work<C>& w, const char* const* Read1, MmIt& m, u64 v, bool cr) {
+#define MM_SAI(idx, phase) { m.opK = 0; m.opIdx = (idx); m.ph = (phase); return 0; }
+#define MM_CMP(n, l, isa, phase) { m.opK = 1; m.opN = (uint32_t)(n); m.opL = (uint32_t)(l); m.opIdx = (isa); m.ph = (phase); return 0; }
+    switch (m.ph) {
+    case MS_SAI1: goto sai1;
+    case MS_SAI2: goto sai2;
+    case MS_CMP1: goto cmp1;
+    case MS_L1: goto l1;
+    case MS_L2: goto l2;
+    case MS_LOOP: goto loop;
+    case MS_F1: goto f1r;
+    case MS_F2: goto f2r;
+    default: goto pass;
+    }
+pass:   // for (iDist = 0; iDist < nD; iDist++) {
+    if (m.iDist >= m.nD) goto store;
+    {
+        m.pieceLength = m.pieceLengthIn - m.iDist;
+        const uint Lmax = mn<uint>(P.gSAindexNbases, (uint)m.pieceLength);
+        uint ind1 = 0;
+        if (m.dirR) {
+            m.pieceStart = m.pieceStartIn + m.iDist;
+            for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += ((uint)Read1[0][m.pieceStart + ii]); }
+        } else {
+            m.pieceStart = m.pieceStartIn - m.iDist;
+            for (uint ii = 0; ii < Lmax; ii++) { ind1 <<= 2LLU; ind1 += (3 - ((uint)Read1[0][m.pieceStart - ii])); }
+        }
+        m.ind1 = (uint32_t)ind1; m.Lind = (uint32_t)Lmax; m.iSA1 = 0;
+        if (m.Lind > 0) MM_SAI(g.saiStart[(uint)m.Lind - 1] + (uint)m.ind1, MS_SAI1);
+        goto sai1done;
+    }
+sai1:   // while (Lind > 0) { iSA1 = SAi[...]; if (present) break; --Lind; ind1 >>= 2; }
+    m.iSA1 = v;
+    if ((m.iSA1 & g.SAiMarkAbsentMaskC) == 0) goto sai1done;
+    --m.Lind; m.ind1 = m.ind1 >> 2;
+    if (m.Lind > 0) MM_SAI(g.saiStart[(uint)m.Lind - 1] + (uint)m.ind1, MS_SAI1);
+sai1done:
+    m.good = true;
+    if (g.saiStart[(uint)m.Lind - 1] + (uint)m.ind1 + 1 < g.saiStart[m.Lind]) MM_SAI(g.saiStart[(uint)m.Lind - 1] + (uint)m.ind1 + 1, MS_SAI2);
+    m.iSA2 = g.nSA - 1; m.good = false;
+    goto decide;
+sai2:
+    if ((v & g.SAiMarkAbsentMaskC) == 0) m.iSA2 = (v & g.SAiMarkNmask) - 1;
+    else { m.iSA2 = g.nSA - 1; m.good = false; }
+decide:
+    {
+        const bool noN = (m.iSA1 & g.SAiMarkNmaskC) == 0;
+        if ((uint)m.Lind < P.gSAindexNbases && noN && m.good) {
+            m.rI0[m.iDist] = m.iSA1; m.rI1[m.iDist] = m.iSA2; m.rNrep[m.iDist] = m.iSA2 - m.iSA1 + 1; m.maxL = m.Lind;
+            goto passEnd;
+        } else if (m.iSA1 == m.iSA2 && noN && m.good) {
+            m.rI0[m.iDist] = m.iSA1; m.rI1[m.iDist] = m.iSA1; m.rNrep[m.iDist] = 1;
+            MM_CMP(m.pieceLength, m.Lind, m.iSA1, MS_CMP1);
+        } else {   // maxMappableLength(i1 = iSA1 & SAiMarkNmask, i2 = iSA2, L = maxL)
+            m.L = (m.good && noN) ? m.Lind : 0;
+            m.i1 = m.iSA1 & g.SAiMarkNmask; m.i2 = m.iSA2;
+            MM_CMP(m.pieceLength, m.L, m.i1, MS_L1);
+        }
+    }
+cmp1:
+    m.maxL = (uint32_t)v;
+    goto passEnd;
+l1:
+    m.L1 = (uint32_t)v;
+    MM_CMP(m.pieceLength, m.L, m.i2, MS_L2);
+l2:
+    m.L2 = (uint32_t)v;
+    m.L = m.L1 < m.L2 ? m.L1 : m.L2;
+    m.L1a = m.L1; m.L1b = m.L1; m.i1a = m.i1; m.i1b = m.i1;
+    m.L2a = m.L2; m.L2b = m.L2; m.i2a = m.i2; m.i2b = m.i2;
+    m.i3 = m.i1; m.L3 = m.L1;
+loopTop:   // while (i1 + 1 < i2) {
+    if (m.i1 + 1 < m.i2) {
+        m.i3 = medianUint2(m.i1, m.i2);
+        MM_CMP(m.pieceLength, m.L, m.i3, MS_LOOP);
+    }
+    goto loopEnd;
+loop:
+    m.L3 = (uint32_t)v;
+    if (m.L3 == m.pieceLength) goto loopEnd;
+    if (cr) {
+        if (m.L3 > m.L1) { m.L1b = m.L1a; m.L1a = m.L1; m.i1b = m.i1a; m.i1a = m.i1; }
+        m.i1 = m.i3; m.L1 = m.L3;
+    } else {
+        if (m.L3 > m.L2) { m.L2b = m.L2a; m.L2a = m.L2; m.i2b = m.i2a; m.i2a = m.i2; }
+        m.i2 = m.i3; m.L2 = m.L3;
+    }
+    m.L = m.L1 < m.L2 ? m.L1 : m.L2;
+    goto loopTop;
+loopEnd:
+    if (m.L3 < m.pieceLength) {
+        if (m.L1 > m.L2) { m.i3 = m.i1; m.L3 = m.L1; } else { m.i3 = m.i2; m.L3 = m.L2; }
+    }
+    {   // findMultRange(i3, L3, i1, L1, i1a, L1a, i1b, L1b)
+        u64 a = m.i1a, b = m.i1b; uint32_t Lb = m.L1b;
+        if (m.L1 < m.L3) { Lb = m.L1; b = m.i1; a = m.i3; }
+        else if (m.L1a < m.L1) { Lb = m.L1a; b = m.i1a; a = m.i1; }
+        m.fa = a; m.fb = b; m.fLb = Lb;
+    }
+f1Top:
+    if ((m.fb + 1 < m.fa) | (m.fb > m.fa + 1)) MM_CMP(m.L3, m.fLb, medianUint2(m.fa, m.fb), MS_F1);
+    m.i1 = m.fa;
+    {   // findMultRange(i3, L3, i2, L2, i2a, L2a, i2b, L2b)
+        u64 a = m.i2a, b = m.i2b; uint32_t Lb = m.L2b;
+        if (m.L2 < m.L3) { Lb = m.L2; b = m.i2; a = m.i3; }
+        else if (m.L2a < m.L2) { Lb = m.L2a; b = m.i2a; a = m.i2; }
+        m.fa = a; m.fb = b; m.fLb = Lb;
+    }
+    goto f2Top;
+f1r:
+    if ((uint32_t)v == m.L3) m.fa = m.opIdx; else { m.fb = m.opIdx; m.fLb = (uint32_t)v; }
+    goto f1Top;
+f2Top:
+    if ((m.fb + 1 < m.fa) | (m.fb > m.fa + 1)) MM_CMP(m.L3, m.fLb, medianUint2(m.fa, m.fb), MS_F2);
+    m.i2 = m.fa;
+    m.L = m.L3;
+    m.rI0[m.iDist] = m.i1; m.rI1[m.iDist] = m.i2; m.rNrep[m.iDist] = m.i2 - m.i1 + 1; m.maxL = m.L;
+    goto passEnd;
+f2r:
+    if ((uint32_t)v == m.L3) m.fa = m.opIdx; else { m.fb = m.opIdx; m.fLb = (uint32_t)v; }
+    goto f2Top;
+passEnd:
+    if (m.maxL + m.iDist > m.maxLbest) m.maxLbest = m.maxL + m.iDist;
+    m.rMaxL[m.iDist] = m.maxL;
+    m.iDist++;
+    goto pass;
+store:
+    for (uint iDist = 0; iDist < m.nD; iDist++) {
+        if (((uint)m.rMaxL[iDist] + iDist) == (uint)m.maxLbest) {
+            const uint ind[2] = {m.rI0[iDist], m.rI1[iDist]};
+            if (!storeAligns(P, w, (uint)m.iDir, (m.dirR ? (uint)m.pieceStartIn + iDist : (uint)m.pieceStartIn - iDist), m.rNrep[iDist], (uint)m.rMaxL[iDist], ind,
+                             (uint)m.iFrag))
+                return -1;
+        }
+    }
+    return 1;
+#undef MM_SAI
+#undef MM_CMP
+}
+// the pending operation (one call site per kernel; none at a call's start); cr = compRes of a compare
+HD inline u64 mmOp(const GenomeView& g, const char* const* Read1, const MmIt& m, bool& cr) {
+    if (m.opK == 1) return compareSeqToGenome(g, Read1, m.pieceStart, m.opN, m.opL, m.opIdx, m.dirR, cr);
+    if (m.opK == 0) return packed_get(g.SAi, m.opIdx, g.saiBits);
+    return 0;
+}
+#endif
 // the windows from one SA entry of an anchor (the body of stitchPieces' iSA loop); returns createExtendWindowsWithAlign's
 // last status (< 0 overflow, EXIT_TOO_MANY_WINDOWS: STAR leaves this piece's iSA loop)
 template <class C> HD inline int p1Entry(const Params& P, const GenomeView& gv, Work<C>& w, uint iSA, uint aDir, uint aLength) {
