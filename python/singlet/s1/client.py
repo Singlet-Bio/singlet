@@ -94,6 +94,7 @@ PARTIAL_GAP = 256 << 10  # in the two-phase plan, ranges closer than this share 
 SJ, MT, VDJ = "sj_counts.1pz", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"
 ATAC, GENE_ACT = "atac_peak_counts.1pz", "atac_gene_activity.1pz"
 SPATIAL_POS, SPATIAL_SUM = "spatial_positions.tsv", "spatial_summary.json"
+ADT, HTO, CRISPR = "adt_counts.1pz", "hto_counts.1pz", "crispr_counts.1pz"
 STORED_MEMBERS = (
     SPATIAL_POS,
     SPATIAL_SUM,
@@ -130,6 +131,9 @@ MODALITIES: Dict[str, ModalitySpec] = {
         ),
         ModalitySpec("mt", (MT,), "obsm", 'obsm["mt"]: chrM heteroplasmy per variant site'),
         ModalitySpec("vdj", (VDJ,), "obsm", 'obsm["vdj"]: V(D)J segment usage counts'),
+        ModalitySpec("adt", (ADT,), "obsm", 'obsm["adt"]: antibody-derived tag UMI counts per tag'),
+        ModalitySpec("hto", (HTO,), "obsm", 'obsm["hto"]: hashtag-oligo UMI counts per hashtag'),
+        ModalitySpec("crispr", (CRISPR,), "obsm", 'obsm["crispr"]: CRISPR guide UMI counts per guide'),
         ModalitySpec("atac", (ATAC,), "obsm", 'obsm["atac"]: ATAC cut sites per peak'),
         ModalitySpec(
             "gene_activity", (GENE_ACT,), "obsm", 'obsm["gene_activity"]: ATAC fragments per gene'
@@ -155,6 +159,10 @@ _MODALITY_ALIASES = {
     "vdj_gene_usage": "vdj",
     "peaks": "atac",
     "chromatin": "atac",
+    "protein": "adt",
+    "cite": "adt",
+    "hashtag": "hto",
+    "guides": "crispr",
 }
 GENE_MEMBERS = (EXON, INTRON)
 

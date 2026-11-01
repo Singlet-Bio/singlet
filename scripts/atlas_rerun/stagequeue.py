@@ -323,6 +323,24 @@ def sweep_scratch(base, prefix, log=print):
     return n
 
 
+ITEM_FIELDS = ("gsm", "gse", "organism", "runs", "run_reads", "protocol_inferred")
+
+
+def plan_items(plan_path, gsms=None, limit=0):
+    """Todo items (the JSONL records `enqueue` takes) from a plan.tsv.gz: gsm, gse, organism, runs, run_reads and protocol_inferred. The fetch worker needs `run_reads` for the
+    reads-weighted protocol vote and `protocol_inferred` for the catalogue cross-check of its call; an item without them still works, the vote then weighs runs equally and the
+    cross-check is skipped."""
+    import common as C
+    out = []
+    for r in C.read_plan(plan_path):
+        if gsms and r["gsm"] not in gsms:
+            continue
+        out.append({k: r.get(k) for k in ITEM_FIELDS})
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
 # ── operator CLI ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def main(argv=None):
@@ -334,11 +352,23 @@ def main(argv=None):
     e = sp.add_parser("enqueue", help="add todo items from a JSONL file ({gsm, gse, organism, runs[]} per line)")
     e.add_argument("stage")
     e.add_argument("jsonl")
+    f = sp.add_parser("from-plan", help="write enqueue JSONL from a plan.tsv.gz (gsm, gse, organism, runs, run_reads, protocol_inferred)")
+    f.add_argument("plan")
+    f.add_argument("out")
+    f.add_argument("--gsm", help="comma-separated GSMs only")
+    f.add_argument("--limit", type=int, default=0)
     d = sp.add_parser("drain-stub", help="test aid: claim ready samples and delete them after --delay s (no compute)")
     d.add_argument("stage")
     d.add_argument("--delay", type=float, default=3.0)
     d.add_argument("--idle-exit-s", type=float, default=120)
     a = ap.parse_args(argv)
+    if a.cmd == "from-plan":
+        items = plan_items(a.plan, set(a.gsm.split(",")) if a.gsm else None, a.limit)
+        with open(a.out, "w", newline="\n") as fh:
+            for it in items:
+                fh.write(json.dumps(it) + "\n")
+        print("wrote", len(items), "items to", a.out)
+        return 0
     init(a.stage)
     if a.cmd == "status":
         b = backlog(a.stage)

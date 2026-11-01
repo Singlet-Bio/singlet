@@ -199,6 +199,23 @@ static int pre_gate(const std::string& sra_path,
     // Pass through for NONE/UNKNOWN/uncertain/any-10x tag.
     // ───────────────────────────────────────────────────────
 
+    // Without the 10x whitelists the probe cannot score a 10x candidate (it falls to the no-whitelist protocols by read length alone: a 151-nt R1 reads as split-seq).
+    // That is "uncertain", not "non-10x": pass through, loudly, rather than reject a sample the whitelist would have accepted.
+    {
+        const auto* v3 = singlet::fq::find_protocol_spec("10x-3p-v3");
+        bool have_wl = false;
+        if (v3 && !v3->whitelist_file.empty())
+            for (const auto& d : whitelist_dirs) {
+                struct stat st;
+                if (stat((d + "/" + v3->whitelist_file).c_str(), &st) == 0 && S_ISREG(st.st_mode)) { have_wl = true; break; }
+            }
+        if (!have_wl) {
+            std::cerr << "[singlet-gate] WARNING: 10x whitelist " << (v3 ? v3->whitelist_file : std::string("?"))
+                      << " not found in the whitelist dirs (--whitelist-dir, $SINGLET_WHITELIST_DIR, <binary>/../whitelists) — gate cannot tell 10x from non-10x, passing through\n";
+            return 0;
+        }
+    }
+
     // We need to collect probe spots in the same format as detect_protocol() expects.
     // detect_protocol() is templated on SpotT, which needs r1_seq, r2_seq, r1_len, r2_len.
     // The SraEncoder::SpotData struct is private, so we define a compatible local struct.
@@ -570,6 +587,14 @@ static int cmd_download(int argc, char* argv[]) {
     ecfg.block_size  = block_size;
     ecfg.r2_maxlen   = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
+    // $SINGLET_WHITELIST_DIR when the user didn't pass --whitelist-dir (the engine, the stager and the .1fg2 reader read it too). Without it the
+    // protocol gate had no 10x whitelist to score against and rejected untrimmed 10x barcode reads (R1 151 nt) as split-seq.
+    if (whitelist_dirs.empty()) {
+        if (const char* e = std::getenv("SINGLET_WHITELIST_DIR")) {
+            struct stat st;
+            if (*e && stat(e, &st) == 0 && S_ISDIR(st.st_mode)) whitelist_dirs.push_back(e);
+        }
+    }
     // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
     if (whitelist_dirs.empty()) {
         char buf[PATH_MAX];
@@ -2938,6 +2963,8 @@ int main(int argc, char* argv[]) {
     int  cr4_probe_reads = 200000;       // --cr4-probe-reads N: reads for the CR4 vs no-CR4 mapping-rate probe (0 = no probe, CR4 off)
     bool no_adapter_clip = false;        // --no-adapter-clip: no STAR --clip3pAdapterSeq (protocol TSO / adapter)
     std::string clip5p_probe_json;       // decision of the 5' prefix probe (provenance)
+    std::string bam_path_reason = "default";   // why the pileup reads the sorted BAM instead of the STAR stream (provenance: pileup_path_reason)
+    bool whitelist_missing = false;      // a 10x-type protocol (CB_UMI_Simple) was detected but no barcode whitelist file was found: the sorted path was taken because of it
     int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
     std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
@@ -3459,6 +3486,26 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // ── Species CHECK (informational): the genome comes from --genome-dir (the campaign worker always passes it, from the catalogue organism) and species detection only
+    // confirms it. Runs only when $SINGLET_SPECIES_FILTERS names a directory with the Bloom filters (bench/species_detect/build_species_bloom.cpp); nothing about the run or its
+    // outputs changes, the result is one log line the worker records ("[species-check] ... AGREE|DISAGREE|UNKNOWN").
+    if (onefq_mode && !genome_dir.empty()) {
+        const char* sf = std::getenv("SINGLET_SPECIES_FILTERS");
+        if (sf && *sf) {
+            auto det = species_detect::detect(onefq_file, /*verbose=*/false, /*metadata_json_path=*/"");
+            std::string ref_name = genome_dir;   // .../<reference name>/star_2.7.11b
+            auto sl = ref_name.find_last_of('/');
+            if (sl != std::string::npos && sl + 1 < ref_name.size() && ref_name.substr(sl + 1).rfind("star", 0) == 0) ref_name.resize(sl);
+            sl = ref_name.find_last_of('/');
+            if (sl != std::string::npos) ref_name = ref_name.substr(sl + 1);
+            std::string verdict = "UNKNOWN";
+            if (det.confident() && det.method != "metadata" && !det.genome_tag.empty())
+                verdict = (ref_name.find(det.genome_tag) != std::string::npos) ? "AGREE" : "DISAGREE";
+            std::cerr << "[species-check] detected=" << (det.species.empty() ? "unknown" : det.species) << " genome=" << det.genome_tag << " confidence=" << det.confidence
+                      << " method=" << det.method << " reference=" << ref_name << " " << verdict << "\n";
+        }
+    }
+
     // ── N21: Shared-memory genome auto-detection (B-G3-2) ──
     // --genome-shared auto (default): enable on Clipper-class HPC nodes if the
     // genome is already in shared memory.  --genome-shared on/off override.
@@ -3490,7 +3537,11 @@ int main(int argc, char* argv[]) {
     // Primary path: .1fq input
     if (onefq_mode) {
         if (genome_dir.empty() || whitelist_file.empty()) {
-            std::cerr << "ERROR: .1fq processing requires --genome-dir (and optionally --whitelist)\n"
+            std::cerr << "ERROR: .1fq processing is missing "
+                      << (genome_dir.empty() ? std::string("--genome-dir (no reference was given and species auto-detection did not resolve one: check --ref-base / SINGLET_REF_BASE and, for detection, SINGLET_SPECIES_FILTERS)") : std::string())
+                      << (genome_dir.empty() && whitelist_file.empty() ? " and " : "")
+                      << (whitelist_file.empty() ? std::string("--whitelist (it could not be resolved from the .1fq header)") : std::string()) << "\n"
+                         ".1fq processing requires --genome-dir (and optionally --whitelist)\n"
                          "  Tip: Whitelist is auto-resolved from .1fq metadata. Use --whitelist None\n"
                          "  for protocols without a universal whitelist (e.g. Drop-seq)\n"
                          "  Tip: Set SINGLET_REF_BASE or use --ref-base for genome auto-detection\n";
@@ -3980,6 +4031,13 @@ int main(int argc, char* argv[]) {
     // order-free-rules R11: STAR's CB_UMI_Simple whitelist correction for the stream, its exact histogram from pass 1
     singlet::CbCorrector cb_corrector;
     bool cb_hist_ready = false;
+    // Reads whose CR is not an exact whitelist barcode (1MM / N), by packed 3-bit barcode, weighted by duplicates: the pass-1 input of the corrected barcode universe
+    std::unordered_map<uint64_t, uint64_t> cbx_nonexact;
+    auto cbx_pack = [](const uint8_t* codes, int n) {
+        uint64_t k = 0;
+        for (int j = 0; j < n; ++j) k = (k << 3) | std::min<uint8_t>(codes[j], 4);
+        return k;
+    };
     std::vector<uint8_t> onefq_bc_dict_flat;
     uint16_t onefq_bc_length = 0;
     std::unordered_map<uint64_t, uint64_t> onefq_bc_counts;  // non-dict path (packed keys)
@@ -4569,6 +4627,7 @@ int main(int argc, char* argv[]) {
                 // R11: STAR's exact CB histogram of this block, by BC dictionary slot and (barcodes outside the dictionary) by whitelist index
                 std::unordered_map<uint32_t, uint64_t> cbx_dict;
                 std::unordered_map<int64_t, uint64_t> cbx_raw;
+                std::unordered_map<uint64_t, uint64_t> cbx_nonex;   // CR not an exact whitelist barcode
             };
 
             // R11: STAR's exact histogram (cbReadCountExact) for the stream's CB correction, as pass 1 of the FIFO path counts it: reads whose
@@ -4643,6 +4702,7 @@ int main(int argc, char* argv[]) {
                                 for (int j = 0; j < cbx_cbl; ++j) bcs[j] = kNt[std::min<uint8_t>(r1s_x[cbx_cb0 + j], 4)];
                                 const int64_t w = cb_corrector.find(bcs);
                                 if (w >= 0) fb.cbx_raw[w] += repeat;
+                                else if (cbx_cbl <= 21) fb.cbx_nonex[cbx_pack(r1s_x + cbx_cb0, cbx_cbl)] += repeat;
                             }
                         }
                     }
@@ -4723,6 +4783,7 @@ int main(int argc, char* argv[]) {
                     reads_written += fb.n_reads;
                     for (const auto& [k, n] : fb.cbx_dict) if (k < cbx_dict_sum.size()) cbx_dict_sum[k] += n;
                     for (const auto& [w, n] : fb.cbx_raw) cbx_raw_sum[w] += n;
+                    for (const auto& [k, n] : fb.cbx_nonex) cbx_nonexact[k] += n;
                     // Accumulate BC index counts (sequential — no contention)
                     if (!bc_freq.empty()) {
                         for (uint32_t idx : fb.bc_indices) {
@@ -4766,6 +4827,7 @@ int main(int argc, char* argv[]) {
                             bcs[j] = NUM_TO_ASCII[std::min<uint8_t>(dflat[static_cast<size_t>(k) * dlen + j], 4)];
                         const int64_t w = cb_corrector.find(bcs);
                         if (w >= 0) { cb_corrector.add_exact(w, cbx_dict_sum[k]); n_exact += cbx_dict_sum[k]; }
+                        else if (cbx_cbl <= 21) cbx_nonexact[cbx_pack(dflat.data() + static_cast<size_t>(k) * dlen, cbx_cbl)] += cbx_dict_sum[k];
                     }
                 }
                 for (const auto& [w, n] : cbx_raw_sum) { cb_corrector.add_exact(w, n); n_exact += n; }
@@ -4855,12 +4917,14 @@ int main(int argc, char* argv[]) {
                 && cb_corrector.load_whitelist(whitelist_file) && cb_corrector.length() == cbx_cbl;
             std::vector<std::vector<uint64_t>> cbx_dict_t(p1_threads);
             std::vector<std::unordered_map<int64_t, uint64_t>> cbx_raw_t(p1_threads);
+            std::vector<std::unordered_map<uint64_t, uint64_t>> cbx_nonex_t(p1_threads);   // CR not an exact whitelist barcode
             std::atomic<uint32_t> p1_next{0};
             auto pass1_worker = [&](int tid) {
                 std::vector<uint64_t>& freq = bc_freq_t[tid];
                 if (!bc_freq_p1.empty()) freq.assign(bc_freq_p1.size(), 0);
                 std::vector<uint64_t>& cbx_dict = cbx_dict_t[tid];
                 auto& cbx_raw = cbx_raw_t[tid];
+                auto& cbx_nonex = cbx_nonex_t[tid];
                 if (cbx_on && has_bc_dict_p1) cbx_dict.assign(bc_dict_n_p1, 0);
                 std::unordered_map<uint64_t, size_t> key_pos;
                 std::vector<std::unordered_map<uint64_t, size_t>> seg_pos(complex_extra_segs.size());
@@ -4939,6 +5003,7 @@ int main(int argc, char* argv[]) {
                                     for (int j = 0; j < cbx_cbl; ++j) bcs[j] = kNt5[std::min<uint8_t>(r1p1[cbx_cb0 + j], 4)];
                                     const int64_t w = cb_corrector.find(bcs);
                                     if (w >= 0) cbx_raw[w] += repeat_p1;
+                                    else if (cbx_cbl <= 21) cbx_nonex[cbx_pack(r1p1 + cbx_cb0, cbx_cbl)] += repeat_p1;
                                 }
                             }
                         }
@@ -4969,10 +5034,13 @@ int main(int argc, char* argv[]) {
                             bcs[j] = kNt5[std::min<uint8_t>(dflat[static_cast<size_t>(k) * dlen + j], 4)];
                         const int64_t w = cb_corrector.find(bcs);
                         if (w >= 0) { cb_corrector.add_exact(w, dsum[k]); n_exact += dsum[k]; }
+                        else if (cbx_cbl <= 21) cbx_nonexact[cbx_pack(dflat.data() + static_cast<size_t>(k) * dlen, cbx_cbl)] += dsum[k];
                     }
                 }
                 for (const auto& m : cbx_raw_t)
                     for (const auto& [w, n] : m) { cb_corrector.add_exact(w, n); n_exact += n; }
+                for (const auto& m : cbx_nonex_t)
+                    for (const auto& [k, n] : m) cbx_nonexact[k] += n;
                 cb_hist_ready = true;
                 std::cerr << "[1fq-pass1] R11 exact CB histogram: " << n_exact << " reads over a "
                           << cb_corrector.size() << "-barcode whitelist\n";
@@ -5250,6 +5318,7 @@ int main(int argc, char* argv[]) {
     // 19% less wall, docs/research-beta/ws-w3b-bam-stream.md). STAR writes its corrected CB only into a
     // sorted BAM, so the pileup takes CB from CR (identical here: .1fq barcodes are whitelist-exact).
     // The modes below still read the sorted BAM; --sorted-bam forces it everywhere.
+    if (stream_unsorted == 0) bam_path_reason = "--sorted-bam was given";
     const bool stream_auto = (stream_unsorted == -1);   // not forced with --stream-unsorted: a wrong-strand library may restart on the sorted path
     if (stream_unsorted != 0) {
         const char* sorted_reason = nullptr;
@@ -5269,6 +5338,13 @@ int main(int argc, char* argv[]) {
         else if (tagged_bam_enabled) sorted_reason = "--tagged-bam rewrites the sorted BAM";
         else if (std::getenv("SINGLET_KEEP_STAR_BAM")) sorted_reason = "SINGLET_KEEP_STAR_BAM keeps the sorted BAM";
         if (sorted_reason) {
+            bam_path_reason = sorted_reason;
+            if (detected_soloType == "CB_UMI_Simple" && (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")) {
+                whitelist_missing = true;
+                std::cerr << "[singlet] WARNING: the protocol is a barcode-whitelist type (CB_UMI_Simple) but no whitelist file was found; the pileup takes the sorted-BAM path "
+                             "(slower, and its counts are not those of the stream path). Check --whitelist-dir / SINGLET_WHITELIST_DIR / <binary dir>/../whitelists. "
+                             "Provenance: pileup_path_reason, whitelist_missing=true." << std::endl;
+            }
             if (stream_unsorted == 1)
                 std::cerr << "[singlet] --stream-unsorted ignored: " << sorted_reason << std::endl;
             stream_unsorted = 0;
@@ -5341,7 +5417,38 @@ int main(int argc, char* argv[]) {
     // restarts on the sorted path; not with the GPU hand-off (the end-of-pass check below still applies) or a forced --stream-unsorted
     config.strand_early_abort = (stream_unsorted == 1) && stream_auto && bam_file.empty() && !getenv("SINGLET_GPU_PILEUP");
     // Phase 0.9 barcode discovery threshold (raw reads per barcode): see the BC-dictionary fast path
-    const uint64_t bc_min_reads = (stream_unsorted == 1) ? 5 : 100;
+    // The pileup's barcode universe, one rule for the stream and the sorted path: the whitelist barcodes with >= 5 reads AFTER R11 correction
+    // (STAR's rule applied to every read of pass 1: exact reads plus the reads corrected onto the barcode), so that barcodes that only reach 5 reads once
+    // corrected reads are added are not lost, and the sorted path needs no CB-tag refresh after alignment. Without the pass-1 histogram: the old rules.
+    const bool cb_universe = cb_hist_ready && cb_corrector.loaded() && cb_corrector.length() <= 21;
+    const uint64_t bc_min_reads = (stream_unsorted == 1 || cb_universe) ? 5 : 100;
+    auto corrected_universe = [&](std::vector<std::pair<uint64_t, std::string>>& out) {
+        out.clear();
+        std::vector<uint64_t> cnt(cb_corrector.size());
+        for (size_t w = 0; w < cnt.size(); ++w) cnt[w] = cb_corrector.exact_count(static_cast<int64_t>(w));
+        static constexpr char kNtU[5] = {'A', 'C', 'G', 'T', 'N'};
+        const int L = cb_corrector.length();
+        uint64_t n_corrected = 0, n_lost = 0;
+        for (const auto& [key, n] : cbx_nonexact) {
+            char raw[32], fixed_bc[40];
+            uint64_t k = key;
+            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
+            raw[L] = '\0';
+            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
+            if (st < 0) { n_lost += n; continue; }
+            const int64_t w = cb_corrector.find(std::string(fixed_bc, L).c_str());
+            if (w >= 0) { cnt[w] += n; n_corrected += n; }
+        }
+        std::vector<char> bc(L + 1);
+        for (size_t w = 0; w < cnt.size(); ++w) {
+            if (cnt[w] < bc_min_reads) continue;
+            cb_corrector.barcode(static_cast<int64_t>(w), bc.data());
+            out.emplace_back(cnt[w], std::string(bc.data(), L));
+        }
+        std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+        std::cerr << "[singlet] barcode universe: " << out.size() << " whitelist barcodes with >= " << bc_min_reads << " reads after R11 correction ("
+                  << n_corrected << " reads corrected onto a barcode, " << n_lost << " uncorrectable)" << std::endl;
+    };
     if (engine_ptr && config.cb_from_cr) {
         std::cerr << "ERROR: pileup engine was built before the BAM source mode was decided" << std::endl;
         return 1;
@@ -5455,6 +5562,7 @@ int main(int argc, char* argv[]) {
             else
                 std::sort(sorted_bcs.begin(), sorted_bcs.end(),
                           [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (cb_universe) corrected_universe(sorted_bcs);
 
             // Write barcode file
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
@@ -5515,6 +5623,7 @@ int main(int argc, char* argv[]) {
             else
                 std::sort(sorted_bcs.begin(), sorted_bcs.end(),
                           [](const auto& a, const auto& b) { return a.first > b.first; });
+            if (cb_universe) corrected_universe(sorted_bcs);
 
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
             std::ofstream bc_out(auto_barcode_file);
@@ -8116,7 +8225,7 @@ int main(int argc, char* argv[]) {
         // raw barcode — the barcode hash-map lookup in the pileup engine then misses,
         // yielding dramatically under-counted barcoded reads.
         if (needs_barcode_discovery && !auto_barcode_file.empty() && whitelist_auto_resolved
-            && engine_ptr) {
+            && engine_ptr && !cb_universe) {   // with the corrected universe (pass-1 R11 counts) the list is the stream's: no refresh
             StopWatch cb_scan_sw;
             std::unordered_map<std::string, uint32_t> cb_freq;
             cb_freq.reserve(50000);
@@ -9077,6 +9186,9 @@ int main(int argc, char* argv[]) {
         : "bam_file";
     std::string extra_json =
         "  \"mode\": \"" + mode_str + "\",\n"
+        "  \"pileup_path\": \"" + std::string(parallel_pileup == 1 ? "sorted" : "stream") + "\",\n"
+        "  \"pileup_path_reason\": \"" + bam_path_reason + (strand_retried ? "; restarted on the sorted path after a wrong-strand probe" : "") + "\",\n"
+        "  \"whitelist_missing\": " + (whitelist_missing ? "true" : "false") + ",\n"
         "  \"star_threads\": " + std::to_string(star_threads) + ",\n"
         "  \"pileup_threads\": " + std::to_string(parallel_pileup == 1 ? star_threads : pileup_threads) + ",\n"
         "  \"n_barcodes\": " + std::to_string(engine_ptr->barcodes().size()) + ",\n"

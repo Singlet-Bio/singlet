@@ -21,7 +21,7 @@ export PATH=$ENV/bin:$PATH PYTHONPATH=$SRC/python HOME=$WORK/cache/condahome NUM
 IFS="+" read -ra SPECS <<< "$LIBSPEC"
 IFS=":" read -r DS CHAINS CONV <<< "${SPECS[$SLURM_ARRAY_TASK_ID]}"
 D=$WORK/data/vdjc/$DS
-O=$WORK/expression-sota/vdj2/runs/$DS; mkdir -p $O
+O=${VROOT:-$WORK/expression-sota/vdj2}/runs/$DS; mkdir -p $O
 T=16
 WL=$WORK/pipeline-benchmark/whitelists/737K-august-2016.txt
 SCRATCH=/tmp/$USER-$SLURM_JOB_ID-$SLURM_ARRAY_TASK_ID; mkdir -p $SCRATCH; trap 'rm -rf $SCRATCH' EXIT

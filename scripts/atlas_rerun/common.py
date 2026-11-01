@@ -30,11 +30,44 @@ def node_mem_gb():
     return 0.0
 
 
-def gpu_peak_gb(reads):
-    """Largest-process RSS of one `--engine gpu` sample (the STAR child; GPU pileup on): 17.5 GB + 0.39 GB per million reads.
-    Fitted to four measured runs (S8, 1 H100, quiet node): 11.3 M -> 22.8 GB, 13.2 M -> 22.1, 66.6 M -> 43.5, 263.4 M -> 120.4 (all within 3%).
-    Beyond 263 M reads it is an extrapolation."""
-    return 17.5 + 0.39 * reads / 1e6
+# Peak-RSS model of the largest process of one `--engine gpu` sample (the STAR child; GPU pileup on): intercept + slope * M reads.
+# route "fq" (staged .1fq / temp FASTQ): 17.5 GB + 0.39 GB per M reads, fitted to four measured runs (S8, 1 H100, quiet node):
+#   11.3 M -> 22.8 GB, 13.2 M -> 22.1, 66.6 M -> 43.5, 263.4 M -> 120.4 (all within 3%). Most of the slope is a transient spike in the FASTQ read pass.
+# route "1fg2" (table-fed prefill from the staged .1fg2, no temp FASTQ, #126): no spike. 17.5 GB + 0.26 GB per M reads from two points (S8: 11.3 M -> 22.2 GB, 263.4 M -> 84.4 GB; the slope is an estimate, applies once #126 is merged;
+#   scripts/atlas_rerun/multi_drain.py logs the measured peak of every sample as `peak_rss_gb`: refit from the `done` events).
+# Node-local temp bytes per sample: the old route wrote ~320 B per read of temp FASTQ; the .1fg2 route writes none. Outputs add ~15 B per read (S8; a nuclei sample with 97% unmapped reads writes ~290 B per unmapped read, 34 GB at 119 M reads: the 20 GB scratch margin and the measured `scratch_bytes` of each done event cover it).
+MEM_MODEL = {"fq": {"base_gb": 17.5, "gb_per_m": 0.39, "tmp_gb_per_m": 0.335, "tmp_base_gb": 2.0, "ovh_base_gb": 4.0, "ovh_gb_per_m": 0.05},
+             "1fg2": {"base_gb": 17.5, "gb_per_m": 0.26, "tmp_gb_per_m": 0.015, "tmp_base_gb": 2.0, "ovh_base_gb": 4.0, "ovh_gb_per_m": 0.03}}
+
+
+def gpu_peak_gb(reads, route="fq"):
+    """Largest-process RSS of one `--engine gpu` sample, GB. Beyond 263 M reads it is an extrapolation."""
+    m = MEM_MODEL[route]
+    return m["base_gb"] + m["gb_per_m"] * reads / 1e6
+
+
+GENOME_SHARED_GB = 17.7   # the GRCh38 index attached from shared memory (`--genome-shared on`): resident once per node, counted in every process's RSS
+
+
+def gpu_cgroup_gb(reads, route="fq"):
+    """Largest process (gpu_peak_gb) plus the rest of the sample's share of the job (parent, pinned buffers): what a sample needs when it runs alone.
+    S8 measured the whole-job cgroup peak of the 263.4 M-read sample: 180.9 GB (FASTQ route) and 100.6 GB (.1fg2 route, anon 85.0 + page cache 15.4). The
+    cgroup figure includes reclaimable page cache (temp FASTQ, staged reads), which the 85% admission margin leaves room for; the model is for anon + shmem.
+    Gate part 2 (13 samples, 4 concurrent, publish dry-run): anon+shmem of the whole job peaked at 80 GB while page cache filled the 370 GB limit."""
+    m = MEM_MODEL[route]
+    return gpu_peak_gb(reads, route) + m["ovh_base_gb"] + m["ovh_gb_per_m"] * reads / 1e6
+
+
+def gpu_private_gb(reads, route="fq", shared=True):
+    """What one more sample adds to a job that already runs samples. With the genome attached from shared memory (shared=True) every process's RSS
+    contains the one shared copy (GENOME_SHARED_GB), which the job holds once: the sample adds its RSS minus that. Without sharing, all of it."""
+    return gpu_cgroup_gb(reads, route) - (GENOME_SHARED_GB if shared else 0.0)
+
+
+def gpu_tmp_gb(reads, route="fq"):
+    """Node-local scratch (/tmp) one sample holds at its peak: temp FASTQ (route "fq") plus outputs, GB."""
+    m = MEM_MODEL[route]
+    return m["tmp_base_gb"] + m["tmp_gb_per_m"] * reads / 1e6
 
 
 def memory_tier(reads):
@@ -60,6 +93,112 @@ def job_slots(node_gb, node_cores, threads, peak_gb=33.4, shared_gb=17.8, fill=0
     by_mem = int((node_gb * fill - shared_gb) // peak_gb) if node_gb else 0
     by_cpu = int(node_cores // max(1, threads))
     return max(1, min(by_mem, by_cpu)) if by_mem > 0 else max(1, by_cpu)
+
+
+def whitelist_dir_for(binary):
+    """Where singlet looks for its barcode whitelists: <real path of the binary>/../whitelists (it resolves /proc/self/exe)."""
+    return os.path.join(os.path.dirname(os.path.realpath(binary)), "..", "whitelists")
+
+
+def require_whitelists(binary, names=("3M-february-2018.txt", "737K-august-2016.txt")):
+    """Fail fast when the engine cannot find its whitelists. Without <binary dir>/../whitelists the run does not stop: it silently takes the sorted-BAM
+    pileup (pileup_threads > 1) instead of the stream / GPU pileup, a different and slower path with different memory and thread behaviour
+    (S8, 2026-10-31). $S9_NO_WL_CHECK=1 skips the check (tests with a fake engine). Raises SystemExit(3)."""
+    if os.environ.get("S9_NO_WL_CHECK"):
+        return
+    d = whitelist_dir_for(binary)
+    missing = [n for n in names if not os.path.isfile(os.path.join(d, n))]
+    if missing:
+        raise SystemExit("[atlas_rerun] FATAL: %s not found in %s (the engine %s resolves <binary dir>/../whitelists): the campaign would silently run "
+                         "the sorted-BAM pileup. Put the binary where ../whitelists exists, or symlink the directory." % (", ".join(missing), os.path.normpath(d), binary))
+
+
+def species_check(log_path):
+    """-> dict(verdict, line) from the engine's "[species-check] ... AGREE|DISAGREE|UNKNOWN" log line (singlet logs it when $SINGLET_SPECIES_FILTERS is set and a genome was
+    given), or None. Species detection only confirms the catalogue organism: a DISAGREE is recorded and flagged, never acted on."""
+    try:
+        with open(log_path, errors="replace") as fh:
+            for line in fh:
+                if line.startswith("[species-check]"):
+                    return {"verdict": line.strip().rsplit(" ", 1)[-1], "line": line.strip()[:300]}
+    except OSError:
+        pass
+    return None
+
+
+class OrganismUnmapped(Exception):
+    """The catalogue organism of a sample maps to no reference: the sample cannot be aligned (and must not fall back to species auto-detection).
+    .reason is the failed_reason the worker records: "organism_unmapped" or "mixed_species_unsupported"."""
+
+    def __init__(self, msg, reason="organism_unmapped"):
+        super().__init__(msg)
+        self.reason = reason
+
+
+# catalogue organism strings are ';'-separated lists of whatever GEO says; these tokens name no organism that was sequenced
+ORGANISM_NOISE = {"", "blank sample", "synthetic construct", "unidentified", "unclassified sequences"}
+ORGANISM_ALIASES = {"homo": "Homo sapiens", "human": "Homo sapiens", "mouse": "Mus musculus", "mus": "Mus musculus"}
+# "Homo sapiens/Mus musculus xenograft" names both
+ORGANISM_SPLIT = {"homo sapiens/mus musculus xenograft": ("Homo sapiens", "Mus musculus")}
+# Organisms next to human that are NOT mammals (pathogens, plasmids, birds, fish, reptiles, amphibians, insects): their reads are picked up by the non-host screen and the
+# sample is aligned to the human (or mouse) reference alone. Every other organism (primates, rodents, pigs, ... and any name not listed here) is "another mammal or unknown":
+# aligning those reads to GRCh38 alone would give confident wrong counts.
+NON_MAMMAL_MARKERS = ("virus", "phage", "plasmid", "herpes", "coronavirus", "bacteri", "vector", "construct")
+NON_MAMMAL_SPECIES = {
+    "Escherichia coli", "Toxoplasma gondii", "Plasmodium vivax", "Plasmodium falciparum", "Encephalitozoon intestinalis", "Gallus gallus", "Danio rerio",
+    "Melopsittacus undulatus", "Ctenopharyngodon idella", "Oreochromis mossambicus", "Ambystoma mexicanum", "Serinus canaria", "Channa argus", "Pantherophis guttatus",
+    "Anas platyrhynchos", "Pogona vitticeps", "Trachemys scripta elegans", "Drosophila melanogaster", "Xenopus laevis", "Xenopus tropicalis", "Caenorhabditis elegans",
+    "Saccharomyces cerevisiae", "Candida albicans", "Staphylococcus aureus", "Salmonella enterica", "Mycobacterium tuberculosis"}
+CORE_ORGANISMS = frozenset({"Homo sapiens", "Mus musculus"})
+
+
+def _organism_tokens(organism):
+    out = set()
+    for t in (organism or "").split(";"):
+        t = t.strip()
+        if t.lower() in ORGANISM_NOISE:
+            continue
+        if t.lower() in ORGANISM_SPLIT:
+            out.update(ORGANISM_SPLIT[t.lower()])
+        else:
+            out.add(ORGANISM_ALIASES.get(t.lower(), t))
+    return out
+
+
+def _is_non_mammal(t):
+    return t in NON_MAMMAL_SPECIES or any(m in t.lower() for m in NON_MAMMAL_MARKERS)
+
+
+def organism_set(organism):
+    """-> frozenset of organism names in a catalogue organism string: 'Mus musculus; Homo sapiens' and 'Homo sapiens; Mus musculus' are the same set,
+    'blank sample; Homo sapiens' is {'Homo sapiens'}, 'Homo; Homo sapiens' is {'Homo sapiens'}."""
+    return frozenset(_organism_tokens(organism))
+
+
+def reference_status(organism, refs):
+    """-> (reference name, None) or (None, reason). Order: an exact key of `refs`; otherwise the organism set with the non-mammal tokens (pathogens, plasmids, birds,
+    fish, ...) removed is compared with the set of every key. Another mammal next to human or mouse (or a name that is not known to be a non-mammal) gives
+    (None, "mixed_species_unsupported"); no human or mouse at all, or a set no key covers, gives (None, "organism_unmapped"). The `*` default ("auto") is never used: the
+    worker does not rely on species auto-detection (S14: its Bloom filters were not installed, 6 of 12 pilot runs came back 'unknown')."""
+    refs = refs or {}
+    o = (organism or "").strip()
+    if o in refs and refs[o] != "auto":
+        return refs[o], None
+    tokens = _organism_tokens(o)
+    core = frozenset(tokens & CORE_ORGANISMS)
+    if any(not _is_non_mammal(t) for t in tokens - CORE_ORGANISMS):
+        return None, "mixed_species_unsupported"
+    if not core:
+        return None, "organism_unmapped"
+    for k, v in refs.items():
+        if k != "*" and v != "auto" and organism_set(k) == core:
+            return v, None
+    return None, "organism_unmapped"
+
+
+def resolve_reference(organism, refs):
+    """The reference directory name (a value of config `references`) for a catalogue organism string, or None (see reference_status for why)."""
+    return reference_status(organism, refs)[0]
 
 
 def staged_reads(sdir):
@@ -142,7 +281,7 @@ def cluster_cfg(cfg, cluster):
 PLAN_COLUMNS = [
     "priority", "gsm", "gse", "wave", "study_wave", "study_rank", "sample_rank", "organism", "reference", "reads_available",
     "depth_unknown", "bases", "n_runs", "runs", "run_reads", "est_wall_s", "est_core_h", "est_su", "est_sra_bytes",
-    "size_class", "cluster",
+    "size_class", "cluster", "protocol_inferred",
 ]
 INT_COLS = {"priority", "study_rank", "sample_rank", "reads_available", "depth_unknown", "bases", "n_runs",
             "est_sra_bytes"}

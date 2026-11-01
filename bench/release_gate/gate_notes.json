@@ -1,71 +1,71 @@
 {
-  "gex-counts": {
-    "note": "3 of 44 fail. hgmm1k_v3 total UMI ratio 0.0177 vs 0.0100; with R11 off 0.0104 (section 4)"
-  },
-  "spliced-unspliced": {
-    "note": "unspliced UMI totals per cell 7.5x farther from STARsolo Velocyto than the tools are from each other (pbmc1k_v2)"
-  },
-  "junctions-psi": {
-    "note": "mouse neuron1k_v3 per-cell junction totals correlate 0.92 with STARsolo SJ (0.9996 for the tools)"
-  },
-  "cell-calling": {
-    "note": "19 of 25 fail; nuclei2k_v2 precision 0.77 (called_v2 over-calls in nuclei)"
-  },
-  "ambient-rna": {
-    "note": "1 of 10 fails: contamination-estimate bias on hgmm1k_v3"
-  },
-  "hto": {
-    "note": "#87 re-measured at the pin (header compiled from the pin, held-out settings): F-scores 0.919 / 0.814 / 0.748 / 0.726 on BAL1 / BAL2 / BAL3 / cell lines, as before"
-  },
-  "non-host": {
-    "note": "2 of 10 fail by 0.002-0.005 against Kraken2 viral on the infected sample"
-  },
-  "spatial": {
-    "cls_override": "blocker",
-    "note": "Visium FFPE human breast aborts on the default stream path ('99% of nuclear reads are antisense ... rerun with --sorted-bam'); the numbers here are the --sorted-bam run. The 5 failing metrics are small gaps to STARsolo"
-  },
-  "atac": {
-    "note": "5k library on d9834b8a; 10k library on 22b5782f (tip + stall-watchdog fix, PR #114): on d9834b8a the 10k run dies with exit 5 (blocker, fixed in #114)"
-  },
-  "multiome": {
-    "note": "passes; same 10k run and caveat as atac; the 3k development library was not re-run"
-  },
-  "alignment-performance": {
-    "cls_override": "stale: failing metric passes at the pin",
-    "note": "thread_count_outputs_identical re-measured at the pin: identical, 52 of 52 data files at 4, 8 and 16 threads (pbmc1k_v3). Document and timings carried from 02aa9b9 (exclusive-node timings not re-run; S12 has a profile on shared nodes, PR #112)"
-  },
-  "download": {
-    "note": "carried; S9 measured the Clipper ceiling and the local decode (PR #108) instead of re-running dl_bench: 0.65-0.96 GB/s aggregate, 45-60 MB/s per stream, decode 2.6-3.0 core-s per M pairs on d9834b8a"
-  },
-  "donor-demux": {
-    "note": "S10 on d9834b8a (auto-K, binned .1fq, competitors re-run on its BAMs; JSON not written): K exact on 5/5 pools, ARI 0.976-0.999 vs 0.948-0.995 for vireo/souporcell given the true K; doublet F1 0.77-0.87"
-  },
-  "donor-snps": {
-    "note": "S10 on d9834b8a (JSON not written): concordance 0.9863 vs cellsnp 0.9901 and vireo 0.9772 at equal DP>=10 sites; with PR #115 (R12 cut 0.9 to 0.99) 0.9899. The gate binary does not have #115. Carried document is the 02aa9b9 one",
-    "cls_override": "blocker"
-  },
-  "mtdna": {
-    "note": "not re-run"
-  },
-  "doublets": {
-    "note": "Python combiner (not the binary); carried"
-  },
-  "adt": {
-    "note": "no result file exists on any branch"
-  },
-  "cell-type": {
-    "note": "Python model (not the binary); carried"
-  },
-  "vdj": {
-    "note": "Python assembler (not the binary); interim document; carried"
-  },
-  "crispr-guides": {
-    "note": "Python counter (not the binary); carried. #91 re-measured at the pin: guide match rate 0.340 -> 0.681 with half the reads stored reverse (A375 library, 2 M read pairs)"
-  },
-  "chromosomal-sex": {
-    "note": "Python model (not the binary); carried"
-  },
-  "genetic-ancestry": {
-    "note": "Python model (not the binary); carried"
-  }
+ "gex-counts": {
+  "note": "gate 3 on 2a3b0d61: 38/6, same as gate 2; exonic and total UMI-ratio rows vs STARsolo (nuclei2k_v2, pbmc1k_v2, neuron1k_v3). S8 identified the cause: exon/intron counts carry USA labels while STARsolo Gene mixes them; S8 restores the legacy split"
+ },
+ "spliced-unspliced": {
+  "note": "gate 3: 37/5, unspliced UMI-ratio distance vs STARsolo Velocyto. Same cause as gex-counts (S8). Primary metric moves to long-read agreement with Velocyto beside it once S8 out-of-sample result is in"
+ },
+ "junctions-psi": {
+  "note": "gate 3: 42/0 against the existing STARsolo reference (unique-only default, #140); contract amendment #138 not yet re-scored"
+ },
+ "cell-calling": {
+  "note": "gate 3: 5/20 (kang2018_ctrl now scored); nuclei2k_v2 precision 0.77, kang2018_ctrl 16,524 vs truth 14,619; owner S12"
+ },
+ "ambient-rna": {
+  "note": "gate 3: 9/1, bias_abs_log2 on hgmm1k_v3 0.276 vs SoupX 0.038; owner S12. Not published until it passes"
+ },
+ "hto": {
+  "note": "gate 3 on 2a3b0d61 (same caller as gate 2); owner S11 (fix developed on Howitt dev split only; match_or_beat may not be reachable)"
+ },
+ "non-host": {
+  "note": "gate 3: re-run on 2a3b0d61 with Kraken2 and oracle re-run: 2 of 10 fail by 0.002-0.005 against Kraken2 viral on ravindra2021_dpi2"
+ },
+ "spatial": {
+  "cls_override": "blocker",
+  "note": "gate 3: Visium FFPE completes on the default path; three small gaps to STARsolo on visium_mouse_brain_ant; owner S12"
+ },
+ "atac": {
+  "note": "gate 3: both libraries on 2a3b0d61. peak_f1 pbmc_multiome10k vs chromap+snapatac2"
+ },
+ "multiome": {
+  "note": "gate 3: 10k library on 2a3b0d61; the 3k library was not run (no data found on Clipper)"
+ },
+ "alignment-performance": {
+  "cls_override": "stale: failing metric passes at the pin",
+  "note": "thread_count_outputs_identical re-measured on 2a3b0d61: 59 of 59 data files identical at 4, 8 and 16 threads (pbmc1k_v3). Exclusive-node timings (Singlet 3 datasets x 2 reps, jobs 796260-796265) were queued and did not start; document and timings carried from 02aa9b9"
+ },
+ "download": {
+  "note": "re-measure (carried from 02aa9b9; S9 measured the Clipper ceiling instead, PR #108); no download harness on the tip"
+ },
+ "donor-demux": {
+  "note": "S10, one run on 2a3b0d61 (singlet-gpu, CPU engine), 7 pools; Kang vireo/souporcell outputs from earlier runs"
+ },
+ "donor-snps": {
+  "note": "S10 run on 2a3b0d61: 3 of 25 fail, all within 0.002 of cellsnp-pileup, ahead of vireo; Kang truth biased toward cellsnp; tolerances not edited",
+  "cls_override": "blocker"
+ },
+ "mtdna": {
+  "note": "S10 run on 2a3b0d61: 7 of 18 fail (precision vs mgatk, recall b1_a/b1_b, BPDCN AUROC 0.794289 vs 0.794303 at tolerance 0); no mtDNA release"
+ },
+ "doublets": {
+  "note": "doublet v2 (#122, in the tip) scored in S11 v2-mode on hgmm1k_v3 only (5 truth doublets, AUPRC not informative); contract harness (17 datasets, old combiner) not run at the tip. S11 research harness: v2 ties scDblFinder, engine score below it. Publish only as comparable to scDblFinder once wired"
+ },
+ "adt": {
+  "note": "no result: S16 reports the ADT driver is not built; no result file exists on any branch"
+ },
+ "cell-type": {
+  "note": "re-measure (Python model, carried from 19caf8cd; scripts/celltype_nn compete jobs not run in this gate)"
+ },
+ "vdj": {
+  "note": "S11 held-out repro on the tip python (2a3b0d61): TCR pairing 0.9193 vs TRUST4 0.9139 pass; BCR 0.8698 vs 0.9207 fail; wrong lineage 0.0082 vs Cell Ranger 0.0021 fail. Not SOTA; no contract JSON"
+ },
+ "crispr-guides": {
+  "note": "re-measure (carried from 34a6f535, Python counter, harness on claude/vdj-crispr-benchmark-721d3a, not on the tip); S16: only 2 campaign samples have a paired guide library"
+ },
+ "chromosomal-sex": {
+  "note": "recorded benchmark (171 samples, 472,363 cells), model unchanged; cell accuracy 0.9698 (0.9976 without 5 samples whose GEO label reads dispute); the tip harness no longer imports (annotate_campaign._has_v2) so not re-run"
+ },
+ "genetic-ancestry": {
+  "note": "re-run from the tip scripts (#146 label rule) on the gate-3 binary, MAGE 150 (150 individuals, reads aligned with 2a3b0d61): accuracy.8m 0.973 (was 0.86), accuracy_top.8m 0.933 vs peddy 0.993; 2m and 0.5m pass. The result document is NOT contract-valid (derived data needs corroborated_by: no gating metric rests on real data); numbers are reported, the row cannot pass until the harness is fixed"
+ }
 }

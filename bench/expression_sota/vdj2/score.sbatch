@@ -15,7 +15,7 @@ ENV=$WORK/envs/vdjcrispr
 BRANCH=${BRANCH:-bench/vdj-sota}
 source $WORK/jobs/vdjc/src.sh
 export PATH=$ENV/bin:$PATH PYTHONPATH=$SRC/python HOME=$WORK/cache/condahome NUMBA_CACHE_DIR=$WORK/cache/numba-vdjc
-V=$WORK/expression-sota/vdj2
+V=${VROOT:-$WORK/expression-sota/vdj2}
 if [ "${SET:-dev}" = bcrdev ]; then
   LIBS="melv11_b:BCR:cr5 nsclc22_b:BCR:cr3 chx10k_b:BCR:cr5 pbmc2_b:BCR:cr3 pbmc10k_b:BCR:cr5"
 elif [ "${SET:-dev}" = bcrho ]; then

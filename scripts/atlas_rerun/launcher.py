@@ -46,6 +46,16 @@ DEFAULTS = {
     "gpu_mem_classes_gb": [96, 176, 248, 344, 720],  # --mem of the H100 workers; a sample goes to the smallest class that holds common.gpu_job_mem_gb(pairs)
                                     # (96 G: up to ~115 M pairs, 176 G: ~290 M, 248 G: ~430 M, 344 G: ~640 M). The last class (>= common.GPU_EXCLUSIVE_GB)
                                     # is the "too big for a shared worker" class: --exclusive --mem=0, one sample alone on a whole node (both GPUs reserved)
+    "multi_sample": True,           # shared H100 workers run several samples at once (multi_drain.py); the whole-node class stays drain_worker.py
+    "gpu_Mpairs_per_s_multi": 1.0,  # one H100 worker with ~8 samples sharing the GPU (S8's benchmark; re-measured by the S14 gate)
+    "multi_classes_gb": [370, 720],  # multi mode: shared workers (370 G: samples up to ~650 M pairs on the FASTQ route, ~1.0 B on the .1fg2 route) and the whole-node class
+    "multi_mem_gb": 370,            # shared worker: 1 H100, ~28 cores, ~370 GB; admission keeps the sum of estimated peaks <= 85% of it
+    "multi_cpus": 28,
+    "multi_concurrency": 8,
+    "multi_threads": 12,            # per sample (S8: best at 8 samples per GPU)
+    "multi_route": "auto",          # memory/scratch model per sample: "1fg2" for samples staged as .1fg2 (table-fed prefill, #126), else "fq" (temp FASTQ)
+    "multi_extra_args": "--genome-shared on",  # engine arguments of the shared workers (S8's benchmark setting)
+    "multi_scratch": "/tmp",        # node-local disk (373 GB); /dev/shm would count against the job's memory
     "max_v100": 4,
     "fallback_wait_h": 1.0,         # a pending H100 job older than this counts as no capacity
     "overflow_h": 3.0,              # pairs the capacity cannot clear in this many hours go to the next pool
@@ -98,9 +108,10 @@ def count_jobs(user, name, now=None):
     return res
 
 
-def mem_class(pairs, classes):
-    """The smallest memory class (GB) that holds a sample of `pairs` read pairs (the largest if none does)."""
-    need = C.gpu_job_mem_gb(pairs)
+def mem_class(pairs, classes, multi=None, route="fq"):
+    """The smallest memory class (GB) that holds a sample of `pairs` read pairs (the largest if none does). With multi (the fraction of a worker's
+    memory its admission may fill, 0.85) a class holds the sample when its estimated peak fits that fraction: the sample then runs next to others."""
+    need = C.gpu_job_mem_gb(pairs) if not multi else C.gpu_cgroup_gb(pairs, route) / multi
     return next((c for c in sorted(classes) if c >= need), max(classes))
 
 
@@ -120,7 +131,7 @@ def pick_classes(n, demand, running):
 def plan(p, bl, have):
     """Pure decision function. bl = stagequeue.backlog(); have['h100'|'v100'|'cpu'] = count_jobs(...); have['fetch'] = int.
     -> how many of each worker to submit."""
-    h_rate = p["gpu_Mpairs_per_s"] * 1e6
+    h_rate = p["gpu_Mpairs_per_s_multi" if p.get("multi_sample") else "gpu_Mpairs_per_s"] * 1e6
     v_rate = h_rate * p["v100_rel"]
     c_rate = p["cpu_Mpairs_per_core_s"] * 1e6 * p["cpu_cores"]
     pairs, horizon = bl["pairs"], p["overflow_h"] * 3600
@@ -178,11 +189,18 @@ def sbatch_script(kind, a, p, mem_gb=None):
     elif kind in ("drain-h100", "drain-v100"):
         gres = p["h100_gres"] if kind == "drain-h100" else p["v100_gres"]
         part = p["h100_partition"] if kind == "drain-h100" else p["v100_partition"]
+        multi = bool(kind == "drain-h100" and p.get("multi_sample") and not whole_node)
         hdr = ["#SBATCH --partition=%s" % part, "#SBATCH --gres=%s" % gres,
-               "#SBATCH --cpus-per-task=%d" % p["gpu_cpus"], "#SBATCH --mem=%s" % ("0" if whole_node else "%dG" % (mem_gb or 128)),
+               "#SBATCH --cpus-per-task=%d" % (p["multi_cpus"] if multi else p["gpu_cpus"]),
+               "#SBATCH --mem=%s" % ("0" if whole_node else "%dG" % (p["multi_mem_gb"] if multi else (mem_gb or 128))),
                "#SBATCH --time=%s" % p["gpu_time"], "#SBATCH --signal=B:TERM@60"] + (["#SBATCH --exclusive"] if whole_node else [])
-        body = ["%s %s/drain_worker.py %s --engine gpu --threads %d --idle-exit-min %s --scratch /dev/shm --mem-gb %d --publish %s%s &" %
-                (py, here, common, p["gpu_cpus"], p["idle_exit_min"], mem_gb or 128, p["publish"], s1_args(p))]
+        if multi:
+            body = ["%s %s/multi_drain.py %s --concurrency %d --threads %d --idle-exit-min %s --scratch %s --mem-gb %d --route %s --extra-args \"%s\" --publish %s%s &" %
+                    (py, here, common, p["multi_concurrency"], p["multi_threads"], p["idle_exit_min"], p["multi_scratch"], p["multi_mem_gb"],
+                     p["multi_route"], p["multi_extra_args"], p["publish"], s1_args(p))]
+        else:
+            body = ["%s %s/drain_worker.py %s --engine gpu --threads %d --idle-exit-min %s --scratch /dev/shm --mem-gb %d --publish %s%s &" %
+                    (py, here, common, p["gpu_cpus"], p["idle_exit_min"], mem_gb or 128, p["publish"], s1_args(p))]
         if p["publish"] == "s1":
             body.insert(0, token_export())
     else:
@@ -247,8 +265,10 @@ def main():
         if os.path.exists(os.path.join(a.stage, "PAUSE")):
             print("[launcher] PAUSE flag: nothing submitted")
         else:
-            bl = Q.backlog(a.stage, classify=lambda m: mem_class(m.get("pairs", 0), p["gpu_mem_classes_gb"]))
-            by_cls = {c: count_jobs(user, "s9-drain-h100-c%d" % c) for c in p["gpu_mem_classes_gb"]}
+            classes = p["multi_classes_gb"] if p.get("multi_sample") else p["gpu_mem_classes_gb"]
+            mf = 0.85 if p.get("multi_sample") else None
+            bl = Q.backlog(a.stage, classify=lambda m: mem_class(m.get("pairs", 0), classes, mf, p["multi_route"]))
+            by_cls = {c: count_jobs(user, "s9-drain-h100-c%d" % c) for c in classes}
             legacy = count_jobs(user, "s9-drain-h100")   # workers started before the classes
             have = {"h100": {"run": legacy["run"] + sum(x["run"] for x in by_cls.values()), "pend": legacy["pend"] + sum(x["pend"] for x in by_cls.values()),
                              "ages": legacy["ages"] + [t for x in by_cls.values() for t in x["ages"]]},

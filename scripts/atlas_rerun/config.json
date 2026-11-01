@@ -46,7 +46,7 @@
       "account": "debruinz",
       "root": "/mnt/projects/debruinz_project/debruinz/singlet/atlas-rerun/campaign",
       "scratch": "/tmp",
-      "ref_base": "/mnt/projects/debruinz_project/cellarium/reference",
+      "ref_base": "/mnt/projects/debruinz_project/cellarium/reference", "species_filters": "/mnt/projects/debruinz_project/debruinz/singlet/reference-extra/species_filters",
       "whitelist_dir": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists",
       "sra_tools": "/mnt/projects/debruinz_project/debruinz/singlet/envs/pbench/bin",
       "ncbi_home": "/mnt/projects/debruinz_project/debruinz/singlet/cache/condahome",

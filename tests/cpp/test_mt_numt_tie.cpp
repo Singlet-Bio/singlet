@@ -78,8 +78,8 @@ std::map<std::string, int> exon_by_gene(const singlet::PileupEngine& e) {
     return out;
 }
 
-void run_case(const std::string& dir, bool parallel, bool mt_prefer) {
-    std::string tag = std::string(parallel ? "run_parallel" : "run") + (mt_prefer ? " / kMtPrefer" : " / rules 0");
+void run_case(const std::string& dir, bool parallel, bool mt_prefer, int workers = 3) {
+    std::string tag = std::string(parallel ? "run_parallel(" + std::to_string(workers) + ")" : "run") + (mt_prefer ? " / kMtPrefer" : " / rules 0");
     std::cout << "\n=== " << tag << " ===\n";
     singlet::PileupConfig cfg;
     cfg.barcode_path = dir + "/barcodes.tsv";
@@ -92,7 +92,7 @@ void run_case(const std::string& dir, bool parallel, bool mt_prefer) {
     cfg.intron_rules = mt_prefer ? singlet::intron_rule::kMtPrefer : 0;
     singlet::PileupEngine e(cfg);
     if (!e.load_references()) { CHECK(false, tag + ": load_references"); return; }
-    auto st = parallel ? e.run_parallel(dir + "/t.bam", 3) : e.run(dir + "/t.bam");
+    auto st = parallel ? e.run_parallel(dir + "/t.bam", workers) : e.run(dir + "/t.bam");
     auto g = exon_by_gene(e);
     CHECK(g["MT1"] == (mt_prefer ? 1 : 0), tag + ": NUMT-primary tie counted for mt-Atp6 only with kMtPrefer");
     CHECK(g["MT2"] == (mt_prefer ? 2 : 1), tag + ": chrM-primary tie + unique read for mt-Co3");
@@ -108,8 +108,10 @@ int main() {
     if (!write_inputs(dir)) {
         std::cout << "SKIP: samtools not available\n";
     } else {
-        for (bool par : {false, true})
-            for (bool mt : {true, false}) run_case(dir, par, mt);
+        for (bool mt : {true, false}) run_case(dir, false, mt);
+        // the parallel pileup must not depend on how the chromosomes are spread over the workers (1: one worker holds all; 2-4: mixtures)
+        for (int w : {1, 2, 3, 4})
+            for (bool mt : {true, false}) run_case(dir, true, mt, w);
     }
     std::system(("rm -rf " + dir).c_str());
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";

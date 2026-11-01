@@ -219,7 +219,16 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                 refine_primary(x, P);
                 if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; } break; }
         } else {
-            bool amb = false, pa = false; uint32_t fg = MAXU, sec = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
+            bool amb = false, pa = false, nuc = false; uint32_t fg = MAXU, sec = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
+            // the genes the alignments touch, order-free (the engine's note_gene): fg/sec = the two smallest distinct genes, nuc = some non-chrM gene was touched
+            auto note = [&](uint32_t g) {
+                if (g == MAXU) return;
+                if (!is_mt(g)) nuc = true;
+                if (g == fg || g == sec) return;
+                if (fg == MAXU) { fg = g; return; }
+                amb = true;
+                if (g < fg) { sec = fg; fg = g; } else if (sec == MAXU || g < sec) sec = g;
+            };
             uint32_t mg = MAXU, mex = MAXU, min_ = MAXU, mfl = 0;                                                    // the chrM gene's alignment (kMtPrefer)
             for (int k = 0; k < sg.n_aln; k++) {
                 AA x = aa[sg.aln_off + k];
@@ -232,19 +241,19 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                     }
                     if (x.multi) {
                         amb = true;
-                        if (sec == MAXU && x.pg_a != MAXU) { if (fg == MAXU) fg = x.pg_a; if (x.pg_b != MAXU) sec = x.pg_b; }
+                        if (x.pg_a != MAXU) { note(x.pg_a); if (x.pg_b != MAXU) note(x.pg_b); }
                     }
-                    if (x.aln_gene != MAXU) { if (fg == MAXU) fg = x.aln_gene; else if (x.aln_gene != fg) { amb = true; if (sec == MAXU) sec = x.aln_gene; } }
+                    note(x.aln_gene);
                 } else {
                     if (x.multi) amb = true;
                     else if (x.gene != MAXU) {
-                        if (fg == MAXU) fg = x.gene; else if (x.gene != fg) { amb = true; if (sec == MAXU) sec = x.gene; }
+                        note(x.gene);
                         if (!pa && (gi == MAXU || x.exon < ex)) { gi = x.gene; ex = x.exon; fl = 5; }   // R7: else the smallest secondary exon
                         if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = MAXU; mfl = 5; }
                     }
                 }
             }
-            if (amb && mg != MAXU && fg != MAXU && sec != MAXU && is_mt(fg) != is_mt(sec)) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
+            if (amb && mg != MAXU && nuc) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
             else if (!amb && fg != MAXU && gi != MAXU) { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
         }
     }

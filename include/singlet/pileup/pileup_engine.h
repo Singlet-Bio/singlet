@@ -640,8 +640,9 @@ public:
             uint8_t seen = 0;
             bool gene_ambiguous = false;
             bool primary_assigned = false;      // gene/exon came from the primary alignment
-            uint32_t first_gene  = UINT32_MAX;   // first non-intergenic gene seen
-            uint32_t second_gene = UINT32_MAX;   // conflicting gene for EM rescue
+            uint32_t first_gene  = UINT32_MAX;   // the smallest gene any alignment touched (note_gene: not the first one met)
+            uint32_t second_gene = UINT32_MAX;   // the second smallest distinct gene, for EM rescue
+            bool has_nuc = false;                // some alignment touched a non-chrM gene (intron_rule::kMtPrefer)
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
@@ -788,14 +789,7 @@ public:
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
                                     } else if (hit.gene_idx != UINT32_MAX) {
-                                        if (it->second.first_gene == UINT32_MAX) {
-                                            it->second.first_gene = hit.gene_idx;
-                                        } else if (hit.gene_idx != it->second.first_gene) {
-                                            it->second.gene_ambiguous = true;
-                                            // G-EM: record second candidate for rescue
-                                            if (it->second.second_gene == UINT32_MAX)
-                                                it->second.second_gene = hit.gene_idx;
-                                        }
+                                        note_gene(it->second, hit.gene_idx);
                                         // Without a primary assignment, the smallest exon over the
                                         // secondaries, not the first seen (order-free-rules R7)
                                         if (!it->second.primary_assigned &&
@@ -820,7 +814,7 @@ public:
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
                                     } else if (hit.gene_idx != UINT32_MAX) {
-                                        entry.first_gene = hit.gene_idx;
+                                        note_gene(entry, hit.gene_idx);
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
@@ -1116,15 +1110,15 @@ public:
                     // If primary position overlaps multiple genes, mark as ambiguous
                     if (primary_multigene) {
                         entry.gene_ambiguous = true;
-                        // G-EM: extract two candidate genes from exon_overlaps for rescue
-                        if (entry.second_gene == UINT32_MAX && !exon_overlaps.empty()) {
+                        // G-EM: two candidate genes of the alignment (the first, and the first one that differs) from exon_overlaps
+                        if (!exon_overlaps.empty()) {
                             uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]);
                             if (ga != UINT32_MAX) {
-                                if (entry.first_gene == UINT32_MAX) entry.first_gene = ga;
+                                note_gene(entry, ga);
                                 for (size_t _i = 1; _i < exon_overlaps.size(); ++_i) {
                                     uint32_t gb = gene_model_.exon_to_gene(exon_overlaps[_i]);
                                     if (gb != UINT32_MAX && gb != ga) {
-                                        entry.second_gene = gb; break;
+                                        note_gene(entry, gb); break;
                                     }
                                 }
                             }
@@ -1133,16 +1127,7 @@ public:
 
                     // Track gene across alignments (use exon gene preferentially)
                     uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
-                    if (aln_gene != UINT32_MAX) {
-                        if (entry.first_gene == UINT32_MAX) {
-                            entry.first_gene = aln_gene;
-                        } else if (aln_gene != entry.first_gene) {
-                            entry.gene_ambiguous = true;
-                            // G-EM: aln_gene is the conflicting second candidate
-                            if (entry.second_gene == UINT32_MAX)
-                                entry.second_gene = aln_gene;
-                        }
-                    }
+                    note_gene(entry, aln_gene);
 
                     // Check if all alignments seen
                     if (entry.seen >= entry.nh && entry.nh > 0) {
@@ -1385,7 +1370,8 @@ public:
             bool gene_ambiguous = false;
             bool primary_assigned = false;
             uint32_t first_gene  = UINT32_MAX;
-            uint32_t second_gene = UINT32_MAX;  // conflicting gene for EM rescue
+            uint32_t second_gene = UINT32_MAX;  // the second smallest distinct gene, for EM rescue (note_gene)
+            bool has_nuc = false;
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
@@ -1626,23 +1612,19 @@ public:
                         m.umi_len = wentry.umi_len;
                         std::memcpy(m.umi, wentry.umi, wentry.umi_len);
                     }
+                    // the genes the worker's alignments touched, in an order-free form (note_gene): the merge must not depend on the worker order
+                    note_gene(m, wentry.first_gene);
+                    note_gene(m, wentry.second_gene);
+                    if (wentry.has_nuc) m.has_nuc = true;
                     if (wentry.gene_ambiguous) {
                         m.gene_ambiguous = true;
-                        // G-EM: propagate known candidates from worker entry
-                        if (m.second_gene == UINT32_MAX && wentry.second_gene != UINT32_MAX)
-                            m.second_gene = wentry.second_gene;
                     } else {
                         uint32_t eg = (wentry.gene_idx != UINT32_MAX) ? wentry.gene_idx
                                     : (wentry.first_gene != UINT32_MAX) ? wentry.first_gene
                                     : UINT32_MAX;
                         if (eg != UINT32_MAX) {
-                            if (m.first_gene == UINT32_MAX) {
-                                m.first_gene = eg;
-                            }
-                            if (eg != m.first_gene) {
-                                m.gene_ambiguous = true;
-                                // G-EM: save conflicting gene as second candidate
-                                if (m.second_gene == UINT32_MAX) m.second_gene = eg;
+                            note_gene(m, eg);
+                            if (m.gene_ambiguous) {
                                 m.gene_idx = UINT32_MAX;
                                 m.exon_idx = UINT32_MAX;
                             } else if (wentry.gene_idx != UINT32_MAX && !m.primary_assigned &&
@@ -1665,9 +1647,7 @@ public:
             PileupStats xw_stats;
             for (auto& [qh, m] : global_mm) {
                 // intron_rule::kMtPrefer (see resolve_mm_parallel): chrM gene vs. its nuclear copy
-                if (m.gene_ambiguous && m.bc_idx >= 0 && m.mt_gene != UINT32_MAX &&
-                    m.first_gene != UINT32_MAX && m.second_gene != UINT32_MAX &&
-                    is_mt_gene(m.first_gene) != is_mt_gene(m.second_gene)) {
+                if (m.bc_idx >= 0 && mt_numt_tie(m)) {
                     const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
                     int target = 0;
                     for (int w = 0; w < n_workers; ++w)
@@ -3880,10 +3860,23 @@ private:
     // ... a read aligning equally to a chrM gene and a nuclear gene (NUMT) comes from the mitochondrial genome
     // (hundreds of copies per cell vs. one nuclear copy), so it is counted for the chrM gene instead of dropped
     // as gene-ambiguous.
+    // The genes a multimapper's alignments touch are tracked without regard to the order the alignments are met in (record order of the stream, chromosome
+    // order of the sorted BAM, worker order of the cross-worker merge): first_gene and second_gene are the two smallest distinct genes, has_nuc says that
+    // some alignment touched a non-chrM gene, and more than one distinct gene makes the read gene-ambiguous. The tie and the EM candidates then do not
+    // depend on how the work was split. (Before: the first two genes met; for three or more alignments the chrM tie and the EM pair depended on the order.)
+    template <class E>
+    void note_gene(E& e, uint32_t g) const {
+        if (g == UINT32_MAX) return;
+        if (!is_mt_gene(g)) e.has_nuc = true;
+        if (g == e.first_gene || g == e.second_gene) return;
+        if (e.first_gene == UINT32_MAX) { e.first_gene = g; return; }
+        e.gene_ambiguous = true;
+        if (g < e.first_gene) { e.second_gene = e.first_gene; e.first_gene = g; }
+        else if (e.second_gene == UINT32_MAX || g < e.second_gene) e.second_gene = g;
+    }
     template <class E>
     bool mt_numt_tie(const E& e) const {
-        return e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.first_gene != UINT32_MAX &&
-               e.second_gene != UINT32_MAX && is_mt_gene(e.first_gene) != is_mt_gene(e.second_gene);
+        return e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.has_nuc;
     }
     template <class E>
     static ReadFeatures mt_rescue_features(const E& e) {
@@ -4344,14 +4337,7 @@ private:
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
                                     } else if (hit.gene_idx != UINT32_MAX) {
-                                        if (it->second.first_gene == UINT32_MAX)
-                                            it->second.first_gene = hit.gene_idx;
-                                        else if (hit.gene_idx != it->second.first_gene) {
-                                            it->second.gene_ambiguous = true;
-                                            // G-EM: record second candidate for rescue
-                                            if (it->second.second_gene == UINT32_MAX)
-                                                it->second.second_gene = hit.gene_idx;
-                                        }
+                                        note_gene(it->second, hit.gene_idx);
                                         note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
                                         // Without a primary assignment, the smallest exon over the
                                         // secondaries, not the first seen (order-free-rules R7)
@@ -4375,7 +4361,7 @@ private:
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
                                     } else if (hit.gene_idx != UINT32_MAX) {
-                                        entry.first_gene = hit.gene_idx;
+                                        note_gene(entry, hit.gene_idx);
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
@@ -4630,15 +4616,15 @@ private:
                 }
                 if (primary_multigene) {
                     entry.gene_ambiguous = true;
-                    // G-EM: extract two candidate genes from wc.exon_overlaps for rescue
-                    if (entry.second_gene == UINT32_MAX && !wc.exon_overlaps.empty()) {
+                    // G-EM: two candidate genes of the alignment (the first, and the first one that differs) from wc.exon_overlaps
+                    if (!wc.exon_overlaps.empty()) {
                         uint32_t ga = gene_model_.exon_to_gene(wc.exon_overlaps[0]);
                         if (ga != UINT32_MAX) {
-                            if (entry.first_gene == UINT32_MAX) entry.first_gene = ga;
+                            note_gene(entry, ga);
                             for (size_t _i = 1; _i < wc.exon_overlaps.size(); ++_i) {
                                 uint32_t gb = gene_model_.exon_to_gene(wc.exon_overlaps[_i]);
                                 if (gb != UINT32_MAX && gb != ga) {
-                                    entry.second_gene = gb; break;
+                                    note_gene(entry, gb); break;
                                 }
                             }
                         }
@@ -4646,15 +4632,7 @@ private:
                 }
 
                 uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
-                if (aln_gene != UINT32_MAX) {
-                    if (entry.first_gene == UINT32_MAX) entry.first_gene = aln_gene;
-                    else if (aln_gene != entry.first_gene) {
-                        entry.gene_ambiguous = true;
-                        // G-EM: aln_gene is the conflicting second candidate
-                        if (entry.second_gene == UINT32_MAX)
-                            entry.second_gene = aln_gene;
-                    }
-                }
+                note_gene(entry, aln_gene);
 
                 if (entry.seen >= entry.nh && entry.nh > 0) {
                     resolve_mm_parallel(wc, entry);
