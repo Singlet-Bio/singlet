@@ -122,7 +122,7 @@ def cmd_plan(a):
         bases = int(r.bases) if r.bases == r.bases and r.bases > 0 else None
         rows.append({
             "gsm": r.gsm_id, "gse": r.gse_id, "wave": r.wave, "study_wave": r.study_wave, "organism": r.organism or "",
-            "reference": refs.get(r.organism or "", refs.get("*", "auto")), "reads_available": reads,
+            "reference": C.resolve_reference(r.organism, refs) or "auto", "reads_available": reads,
             "depth_unknown": int(r.depth_unknown), "bases": bases, "n_runs": int(r.n_runs), "runs": r.runs,
             "run_reads": r.run_reads, "study_cells": float(r.study_cells or 0),
             "est_wall_s": round(C.compute_wall_s(reads, nonhost), 1),
