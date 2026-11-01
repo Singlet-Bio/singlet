@@ -45,28 +45,32 @@ DEFAULT="$DEFAULT;v1nw:--presort --p3order nw-desc --tail;v2locus:--presort --p3
 DEFAULT="$DEFAULT;v2nwlocus:--presort --p3order nwlocus --tail;v3q:--presort --queue --tail;v3qdesc:--presort --queue --p3order cost-desc --tail"
 DEFAULT="$DEFAULT;v3qnwlocus:--presort --queue --p3order nwlocus --tail;v4fA:--presort --fused A --tail;v4fAMB:--presort --fused AMB --tail"
 DEFAULT="$DEFAULT;v4fAMB1:--presort --fused AMB --fused-bps-a 1 --fused-bps-m 1 --fused-bps-b 1 --tail;v4big:--presort --batch-a 524288 --batch-m 393216"
-# round 2 (ROUND=2). First the E1 follow-ups: one warp per phase-3 block (--p3-block 32, finished warps free their slot),
-# longest-first from an atomic counter with 32-thread blocks, the control-flow signature order (sig), register caps 64 / 80.
-# Then reference builds (base source cf92cdb9 with CUDA 13.3; the W11 binary of 2026-10-28, CUDA 12.4.1), the best order,
-# bigger batches (E1's 1M / 512k / 128k too), lane B in one launch, the fused kernel at 5 blocks/SM, equal-memory staged vs fused.
-R2="v0t:--presort --tail;b32:--presort --p3-block 32 --tail;b32desc:--presort --p3-block 32 --p3order cost-desc --tail"
-R2="$R2;q32desc:--presort --queue --p3-block 32 --p3order cost-desc --tail;qdesc:--presort --queue --p3order cost-desc --tail"
-R2="$R2;sig:--presort --p3order sig --tail;sigm:--presort --p3order-m sig --tail;r64:--presort --p3-maxreg 64 --tail"
-R2="$R2;r80:--presort --p3-maxreg 80 --tail;b32r64:--presort --p3-block 32 --p3-maxreg 64 --tail"
-R2="$R2;v0raw:;base13:@m5-cf92cdb987;w11:@$W/jobs/w11/bin/m5;v0:--presort;best:--best-order;bestb32:--best-order --p3-block 32 --tail"
+# round 2 (ROUND=2): reference builds (base source cf92cdb9 with CUDA 13.3; the W11 binary of 2026-10-28, CUDA 12.4.1), per-lane
+# order for lane M, bigger batches, lane B in one launch, the fused kernel at 4-5 resident blocks per SM (--fused-lb)
+R2="v0raw:;base13:@m5-cf92cdb987;w11:@$W/jobs/w11/bin/m5;v0:--presort;v5m:--presort --p3order-m nw-desc"
 R2="$R2;v4big:--presort --batch-a 524288 --batch-m 393216;v4bigB1:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072"
-R2="$R2;v5best:--best-order --batch-a 524288 --batch-m 393216 --batch-b 131072;v5bestq:--best-order --batch-a 524288 --batch-m 393216 --batch-b 131072 --queue"
-R2="$R2;bestE1:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072;bestE1b32:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-block 32"
-R2="$R2;v4fA5:--presort --fused A --fused-lb 5 --tail"
+R2="$R2;v5best:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072 --p3order-m nw-desc;v5bestq:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072 --p3order-m nw-desc --queue"
+R2="$R2;v4fA5:--presort --fused A --fused-lb 5 --tail;v4fA4:--presort --fused A --fused-lb 4 --tail;v4fAMB5:--presort --fused AMB --fused-lb 5 --tail"
+R2="$R2;v5mt:--presort --p3order-m nw-desc --tail"
 # equal Work memory (a 40 GB-class budget: ~3 / ~3 / ~10.5 GB for A / M / B): staged small batches vs fused at 4 / 2 / 1 blocks/SM
 R2="$R2;s40:--presort --batch-a 65536 --batch-m 32768 --batch-b 16384 --p3order-m nw-desc --tail"
 R2="$R2;f40:--presort --fused AMB --fused-bps-a 4 --fused-bps-m 2 --fused-bps-b 1 --fused-lb 4 --tail"
-R2="$R2;f40a:--presort --fused A --fused-bps-a 4 --fused-lb 4 --batch-m 32768 --batch-b 16384 --p3order-m nw-desc --tail;v0b:--presort"
-# ncu (ROUND=2 or E4NCU="label|args|k_p3 launches to skip;..."): one phase-3 launch per entry, --set full plus the
-# active-threads-per-instruction metrics. With --reps 1 lane A runs 2 x 8 k_p3 launches, so skip 1 = A's 2nd, skip 16 = M's 1st.
-NCUL=""; [ "${ROUND:-1}" = 2 ] && NCUL="v0A|--presort|1;v0M|--presort|16;sigA|--presort --p3order sig|1;sigM|--presort --p3order sig|16;b32A|--presort --p3-block 32|1"
+R2="$R2;f40a:--presort --fused A --fused-bps-a 4 --fused-lb 4 --batch-m 32768 --batch-b 16384 --p3order-m nw-desc --tail;best:--best-order;v0b:--presort"
+# round 3 (ROUND=3), the E1 follow-ups: one warp per phase-3 block (--p3-block 32: a finished warp frees its slot), longest-
+# first from an atomic counter with 32-thread blocks, the control-flow signature order (sig), register caps 64 / 80, and the
+# best order with E1's batch sizes (1M / 512k / 128k). Plus ncu passes on k_p3 (active threads per instruction).
+R3="v0t:--presort --tail;b32:--presort --p3-block 32 --tail;b32desc:--presort --p3-block 32 --p3order cost-desc --tail"
+R3="$R3;q32desc:--presort --queue --p3-block 32 --p3order cost-desc --tail;qdesc:--presort --queue --p3order cost-desc --tail"
+R3="$R3;sig:--presort --p3order sig --tail;sigm:--presort --p3order-m sig --tail;r64:--presort --p3-maxreg 64 --tail"
+R3="$R3;r80:--presort --p3-maxreg 80 --tail;b32r64:--presort --p3-block 32 --p3-maxreg 64 --tail;best:--best-order --tail"
+R3="$R3;bestb32:--best-order --p3-block 32 --tail;bestE1:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072"
+R3="$R3;bestE1b32:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-block 32;v0b:--presort"
+# ncu (ROUND=3, or E4NCU="label|args|k_p3 launches to skip;..."): one phase-3 launch per entry, --set full plus the
+# active-threads-per-instruction metrics. With --reps 1 lane A runs 2 x 8 k_p3 launches: skip 1 = A's 2nd, skip 16 = M's 1st.
+NCUL=""; [ "${ROUND:-1}" = 3 ] && NCUL="v0A|--presort|1;v0M|--presort|16;sigA|--presort --p3order sig|1;sigM|--presort --p3order sig|16;b32A|--presort --p3-block 32|1"
 NCUL=${E4NCU-$NCUL}
 [ "${ROUND:-1}" = 2 ] && DEFAULT=$R2
+[ "${ROUND:-1}" = 3 ] && DEFAULT=$R3
 IFS=';' read -ra VARS <<< "${E4RUNS:-$DEFAULT}"
 for v in "${VARS[@]}"; do
   LABEL=${v%%:*}; ARGS=${v#*:}; BIN=$M5
