@@ -23,6 +23,7 @@
 // the driver checks these parameters.
 #pragma once
 #include <cstdint>
+#include <cstddef>
 #include <cmath>
 
 #ifdef __CUDACC__
@@ -344,6 +345,50 @@ template <class C> struct Work {
     unsigned long long stN[4];   // [0] recursion steps (frames visited), [1] windows stitched
 #endif
 };
+// The per-read state that crosses the staged kernels (phase 1 -> assignment scan -> phase 3): all of Work except the
+// phase-3 scratch (WA, filled by the assignment in phase 3; the transcript arrays), which is written there before it is
+// read. Copied in 8-byte words (every member boundary below is 8-byte aligned). Used to run phase 1 or phase 3 on a
+// per-thread copy of Work in local memory (m5 --p1local / --p3local), where the hardware interleaves the threads of a
+// warp word by word, i.e. a field-major (SoA) layout without changing the source.
+template <class C> HD inline void copyPersistent(Work<C>& d, const Work<C>& s) {
+    typedef Work<C> W;
+    const size_t skipO[] = {offsetof(W, WA),
+#ifndef M5_KEEPIX
+                            offsetof(W, keep),
+#endif
+                            offsetof(W, stack), offsetof(W, slot),
+#ifndef M5_FIN1
+                            offsetof(W, fin),
+#endif
+                            sizeof(W)};
+    const size_t skipN[] = {sizeof(s.WA),
+#ifndef M5_KEEPIX
+                            sizeof(s.keep),
+#endif
+                            sizeof(s.stack), sizeof(s.slot),
+#ifndef M5_FIN1
+                            sizeof(s.fin),
+#endif
+                            0};
+    const u64* sp = reinterpret_cast<const u64*>(&s);
+    u64* dp = reinterpret_cast<u64*>(&d);
+    size_t o = 0;
+    for (int r = 0; r < (int)(sizeof(skipO) / sizeof(skipO[0])); r++) {
+        for (size_t i = o / 8; i < skipO[r] / 8; i++) dp[i] = sp[i];
+        o = skipO[r] + skipN[r];
+    }
+}
+template <class C> HD inline size_t persistentBytes() {
+    typedef Work<C> W;
+    return sizeof(W) - sizeof(W::WA) - sizeof(W::stack) - sizeof(W::slot)
+#ifndef M5_KEEPIX
+           - sizeof(W::keep)
+#endif
+#ifndef M5_FIN1
+           - sizeof(W::fin)
+#endif
+        ;
+}
 #ifdef M5_KEEPIX
 #define M5KEEP(w, k) ((w).slot[(w).keepP[k]])
 #else
