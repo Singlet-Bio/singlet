@@ -1196,6 +1196,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     };
     // clipping: the reads become their clipped sequences (device copy compacted; on the host each read's span is (cs, length))
     singlet_engine_gpu::NoInitVector<u64> hcs, hoffC;   // every element copied from the device
+    std::function<void()> clipHostFill;   // E20: set by the clip below and run there, or after the release with the split
     if (in.clip.on && n > 0) {
         double tc = now();
         char* dAd = nullptr;
@@ -1278,23 +1279,27 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         dfree(dSeq); dfree(dOff); dfree(dCs); dfree(dCl); dfree(dAd); dfree(dP5); dfree(dP3);
         dSeq = dSeqC; dOff = dOffC;
         step("clip.free");
-        u64 nClipped = 0;
-        out.clip5.resize(n); out.clip3.resize(n);
-        std::atomic<u64> nClip{0};
-        parallelFor(n, hostThreads, [&](u64 lo, u64 hi) {
-            u64 cnt = 0;
-            for (u64 i = lo; i < hi; i++) {
-                const u64 L0 = in.off[i + 1] - in.off[i], L = hoffC[i + 1] - hoffC[i], c5 = hcs[i] - in.off[i];
-                out.clip5[i] = (uint16_t) std::min<u64>(c5, 65535); out.clip3[i] = (uint16_t) std::min<u64>(L0 - L - c5, 65535);
-                cnt += L != L0;
-            }
-            nClip += cnt;
-        });
-        nClipped = nClip;
-        step("clip.host");
-        char line[200];
-        snprintf(line, sizeof line, "engine_gpu: clipping: %llu of %llu reads clipped, %.2f s\n", (unsigned long long)nClipped, (unsigned long long)n, now() - tc);
-        out.log += line;
+        // the host's per-read clip lengths (read after mapDistinct only); E20 split: after the device is released (the split block below)
+        clipHostFill = [&, tc]() {
+            const double th = now();
+            out.clip5.resize(n); out.clip3.resize(n);
+            std::atomic<u64> nClip{0};
+            parallelFor(n, hostThreads, [&](u64 lo, u64 hi) {
+                u64 cnt = 0;
+                for (u64 i = lo; i < hi; i++) {
+                    const u64 L0 = in.off[i + 1] - in.off[i], L = hoffC[i + 1] - hoffC[i], c5 = hcs[i] - in.off[i];
+                    out.clip5[i] = (uint16_t) std::min<u64>(c5, 65535); out.clip3[i] = (uint16_t) std::min<u64>(L0 - L - c5, 65535);
+                    cnt += L != L0;
+                }
+                nClip += cnt;
+            });
+            const u64 nClipped = nClip;
+            char line[200];
+            snprintf(line, sizeof line, "engine_gpu: clipping: %llu of %llu reads clipped, %.2f s%s\n", (unsigned long long)nClipped, (unsigned long long)n,
+                     split ? now() - th : now() - tc, split ? " (the host's lengths; E20: after the device was released)" : "");
+            out.log += line;
+        };
+        if (!split) { clipHostFill(); step("clip.host"); }
     }
     if (e10 && !e10Done) e10Entries(nullptr, nullptr);   // E10: no clipping
     if (lean || split) entToRegion();
@@ -2016,6 +2021,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         step("split.free");
         memMark("released");
         in.release(); out.split = true;
+        if (clipHostFill) { const double th = now(); clipHostFill(); stepAdd("clip.host", now() - th); tS = now(); }
         if (!hostAll()) return fail(err);
         tS = now();
         if (e10) fillReadRecord();   // E10: the products need it on the device
@@ -2048,6 +2054,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         decltype(recSrc)().swap(recSrc); decltype(recRead)().swap(recRead);
         step("e2e.free");
     }
+    if (clipHostFill && out.clip5.size() != n) clipHostFill();   // E20: never left out
     // the last device work is done: free the device buffers and let the next sample have the GPU while this one assembles its records
     cudaDeviceSynchronize();
     if (!e2e) for (auto& cr : chunks) for (Lane* L : {&cr.A, &cr.M, &cr.B}) { dfree(L->dOut); dfree(L->dOff); L->dOut = nullptr; L->dOff = nullptr; }

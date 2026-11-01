@@ -2777,11 +2777,15 @@ public:
         struct RstJoin { std::thread t; ~RstJoin() { if (t.joinable()) t.join(); } } e20rst;   // joined before `in` goes, on every return
         if (!e16rb) unlockDevice(lock_fd);
         else if (e20ul) e20rst.t = std::thread([device, lock_fd, &tUnl, &sReset] {
+            // pileupRun freed its arena: what the reset still does is host work (the context's teardown, unpinning the input), so the
+            // device is unlocked first (SINGLET_GPU_PILEUP_UNLOCK=reset: the reset first, then the unlock)
+            static const bool resetFirst = [] { const char* e = std::getenv("SINGLET_GPU_PILEUP_UNLOCK"); return e != nullptr && std::string(e) == "reset"; }();
+            if (!resetFirst) { unlockDevice(lock_fd); tUnl = std::chrono::steady_clock::now(); }
             const auto r0 = std::chrono::steady_clock::now();
             pileupRelease(device);
-            unlockDevice(lock_fd);
-            tUnl = std::chrono::steady_clock::now(); sReset = std::chrono::duration<double>(tUnl - r0).count();
-            singlet_tail::mark("parent (E20): device reset in %.3f s right after pileupRun, device unlocked", sReset); });
+            sReset = std::chrono::duration<double>(std::chrono::steady_clock::now() - r0).count();
+            if (resetFirst) { unlockDevice(lock_fd); tUnl = std::chrono::steady_clock::now(); }
+            singlet_tail::mark("parent (E20): device %s, reset in %.3f s, right after pileupRun", resetFirst ? "reset, then unlocked" : "unlocked, then reset", sReset); });
         singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
         if (!e20ul) std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
@@ -2851,7 +2855,7 @@ public:
         if (e20ul) {   // E20: the hold is pileupRun and the reset (done on its thread long before the host pass ends)
             e20rst.t.join();
             std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << std::chrono::duration<double>(tUnl - tA1).count() << " s (E20: pileupRun "
-                      << sRun << " s, then the device reset " << sReset << " s on a thread beside the puts and the host pass)\n";
+                      << sRun << " s; the device reset " << sReset << " s on a thread beside the puts and the host pass, after the unlock unless SINGLET_GPU_PILEUP_UNLOCK=reset)\n";
         }
         std::cerr << "[gpu_pileup] apply: build input " << sBuild << " s, pileupRun " << sRun << " s, host pass " << since(tA2) << " s" << "\n";
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
