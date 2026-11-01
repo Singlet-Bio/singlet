@@ -10,10 +10,10 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Integration gate of gpu/fable-engine: the merged m5 (default build) against the -DM5_BASELINE build on the standard 2 M
 # distinct set of pbmc1k_v3 (truth regenerated here), identity byte for byte and lane timings (median of 3). Binaries from
-# fable_cc.sbatch ($W/jobs/fable/engine/bin). M5RUNS overrides the variant list ("binary:args|...", @STD = standard batches).
+# fable_cc.sbatch ($OUT/bin, OUT default $W/jobs/fable/engine). M5RUNS overrides the variant list ("binary:args|...", @STD = standard batches).
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
-DEC=$PB/bin/singlet-w3; SD=$W/jobs/w11/bin/stardump; IMG=$W/images/cuda-13-devel.sif; OUT=$W/jobs/fable/engine; RES=$OUT/results; mkdir -p $RES
+DEC=$PB/bin/singlet-w3; SD=$W/jobs/w11/bin/stardump; IMG=$W/images/cuda-13-devel.sif; OUT=${OUT:-$W/jobs/fable/engine}; RES=$OUT/results; mkdir -p $RES
 MAXD=${MAXD:-2000000}; TAG=${TAG:-gate}; NCPU=${SLURM_CPUS_PER_TASK:-8}; SORTMEM=${SORTMEM:-30G}
 STD="--budget-a 1024 --budget-m 2048 --budget-b 2048 --batch-a 524288 --batch-m 393216 --batch-b 65536"
 F=$PB/data/pbmc1k_v3/pbmc1k_v3.1fq; G=$REF/GRCh38-2024-A/star_2.7.11b
