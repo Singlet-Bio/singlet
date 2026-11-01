@@ -650,6 +650,8 @@ int main(int argc, char** argv) {
         else if (a == "--batch-m") nbM = atoll(argv[++i]);
         else if (a == "--bin") g_bin = true;   // phase 3 threads take the reads of a batch sorted by window count / SA entries
         // E4 (docs/gpu-engine/fable/E4-order.md)
+        else if (a == "--best-order") { presort = true; g_p3orderLane[1] = P3_NW_DESC; }   // E4's best exact order: prefix order,
+                                                        // phase 3 of lane M by window count (stable, desc); later flags override
         else if (a == "--presort") presort = true;      // map the reads in the engine's order: stable sort by the first 32 bases
         else if (a == "--p3order" || a == "--p3order-a" || a == "--p3order-m" || a == "--p3order-b") {   // order of the phase-3 threads in a batch
             std::string v = argv[++i]; int o = -1;
