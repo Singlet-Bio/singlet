@@ -35,3 +35,14 @@ for i in range(5):
     print(f'depth quintile {i+1}: UMIs {qs[i]:.0f}-{qs[i+1]:.0f} n={int(m.sum())} truth {tr[m].mean():.5f} singlet {imp[m].mean():.5f} ratio {imp[m].mean()/tr[m].mean():.2f} | soupx {d["soupx"]["imp"][m].mean()/tr[m].mean():.2f}')
 print('singlet implied: min %.5f p10 %.5f median %.5f p90 %.5f max %.5f; truth median %.5f p90 %.5f' % (imp.min(), *np.quantile(imp, [.1, .5, .9]), imp.max(), np.median(tr), np.quantile(tr, .9)))
 print('corr(log n, log imp) singlet %.3f soupx %.3f truth %.3f' % tuple(np.corrcoef(np.log(n), np.log(np.maximum(x, 1e-6)))[0, 1] for x in (imp, d['soupx']['imp'], tr)))
+
+print('--- species x depth quintile: mean singlet / mean truth, and median of per-cell ratio ---')
+for sp, spm in (('human', ~mouse_cell), ('mouse', mouse_cell)):
+    row = []
+    for i in range(5):
+        m = spm & (n >= qs[i]) & (n <= qs[i + 1])
+        row.append(f'{imp[m].mean()/tr[m].mean():.2f}/{np.median(imp[m]/np.maximum(tr[m],1e-6)):.2f}(n={int(m.sum())})')
+    print(sp, ' '.join(row))
+print('cells with implied > 3x truth:', int((imp > 3 * tr).sum()), ' their share of total implied mass: %.2f' % (imp[imp > 3 * tr].sum() / imp.sum()))
+print('mouse cells: truth mean %.5f; mean implied excluding the 20 highest implied: %.5f' % (tr[mouse_cell].mean(), np.sort(imp[mouse_cell])[:-20].mean()))
+print('own_b/other_b means: other-species UMIs per pure cell %.1f  removed by singlet (implied*n) %.1f  truth*n*other_share %.1f' % (d['other_b'].mean(), (imp * n).mean(), 0))
