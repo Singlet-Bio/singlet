@@ -1950,6 +1950,75 @@ template <class C> HD inline Status p1Windows(const Params& P, const GenomeView&
     w.stitched = stitched;
     return Status::Ok;
 }
+// p1Windows as a resumable iterator (persistent window kernel, M5_P1WPERS): one SA entry of an anchor, or one window's
+// flanks, per step; the same statements in the same order as p1Windows
+enum : uint8_t { WI_ENTRY, WI_FLANK };
+struct WinIt { u64 iSA, iSAend; uint32_t iP, nP, aDir, aLength, iWin; uint8_t ph; };
+template <class C> HD inline void p1WinSeek(const Params& P, Work<C>& w, WinIt& it) {   // the next anchor piece from iP on
+    while (it.iP < it.nP && w.PC[it.iP][PC_Nrep] > P.winAnchorMultimapNmax) it.iP++;
+    if (it.iP >= it.nP) { it.ph = WI_FLANK; it.iWin = 0; return; }
+    it.iSA = w.PC[it.iP][PC_SAstart]; it.iSAend = w.PC[it.iP][PC_SAend];
+    it.aDir = (uint32_t)w.PC[it.iP][PC_Dir]; it.aLength = (uint32_t)w.PC[it.iP][PC_Length];
+    w.nScan += it.iSAend - it.iSA + 1;
+}
+// the markers; false: no window to make (w.stitched = false, nothing else to do), true: the iterator is at its first step
+template <class C> HD inline bool p1WinBegin(const Params& P, Work<C>& w, WinIt& it) {
+    const uint Lread = w.Lread;
+    bool stitched = false;
+    if (Lread < P.outFilterMatchNmin) {
+        w.mapMarker = MARKER_READ_TOO_SHORT; w.trInitRLength = 0; w.nW = 0;
+    } else if (w.Nsplit == 0) {
+        w.mapMarker = MARKER_NO_GOOD_PIECES; w.trInitRLength = w.splitR[1][0]; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA == 0) {
+        w.mapMarker = MARKER_ALL_PIECES_EXCEED_seedMultimapNmax; w.trInitRLength = w.multNminL; w.nW = 0;
+    } else if (w.Nsplit > 0 && w.nA > 0) {
+        stitched = true;
+    }
+    if (!stitched) { w.stitched = false; return false; }
+    if (w.wbEpoch == 0 || w.wbEpoch >= (1ULL << 22) - 1) { for (int i = 0; i < C::NWB; i++) w.wbKey[i] = 0; w.wbEpoch = 1; }
+    else w.wbEpoch++;
+    w.wbN = 0;
+    for (int i = 0; i < 16; i++) { w.wbBits[0][i] = 0; w.wbBits[1][i] = 0; }
+    w.nW = 0;
+    it.nP = (uint32_t)w.nP; it.iP = 0; it.ph = WI_ENTRY;
+    p1WinSeek(P, w, it);
+    return true;
+}
+// one step: -1 overflow, 0 more steps, 1 done (w.stitched = true, nWall, nEntries set)
+template <class C> HD inline int p1WinStep(const Params& P, const GenomeView& gv, Work<C>& w, WinIt& it) {
+    if (it.ph == WI_ENTRY) {
+        const int st = p1Entry(P, gv, w, (uint)it.iSA, it.aDir, it.aLength);
+        if (st < 0) return -1;
+        if (st == EXIT_TOO_MANY_WINDOWS || it.iSA == it.iSAend) { it.iP++; p1WinSeek(P, w, it); }
+        else it.iSA++;
+        if (it.ph == WI_ENTRY || it.iWin < w.nW) return 0;
+    } else if (it.iWin < w.nW) {
+        const uint iWin = it.iWin;
+        if (w.WC[iWin][WC_gStart] <= w.WC[iWin][WC_gEnd]) {
+            uint wb = w.WC[iWin][WC_gStart];
+            for (uint ii = 0; ii < P.winFlankNbins && wb > 0 && gv.chrBin[(wb - 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                wb--;
+                if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return -1;
+            }
+            w.WC[iWin][WC_gStart] = wb;
+            wb = w.WC[iWin][WC_gEnd];
+            for (uint ii = 0; ii < P.winFlankNbins && wb + 1 < P.winBinN && gv.chrBin[(wb + 1) >> P.winBinChrNbits] == w.WC[iWin][WC_Chr]; ii++) {
+                wb++;
+                if (!wbSet(w, w.WC[iWin][WC_Str], wb, iWin)) return -1;
+            }
+            w.WC[iWin][WC_gEnd] = wb;
+        }
+        w.nWA[iWin] = 0; w.WALrec[iWin] = 0; w.WlastAnchor[iWin] = -1;
+        it.iWin++;
+        if (it.iWin < w.nW) return 0;
+    }
+    w.nWall = w.nW;
+    w.nEntries = 0;
+    for (uint iP2 = 0; iP2 < w.nP; iP2++) w.nEntries += w.PC[iP2][PC_SAend] - w.PC[iP2][PC_SAstart] + 1;
+    w.stitched = true;
+    return 1;
+}
+
 // phase 1 as one call per read with the flat loops (the E7 counterpart of mapPhase1; same results)
 template <class C> HD inline Status mapPhase1Flat(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb,
                                                const char* R0, uint Lread) {
