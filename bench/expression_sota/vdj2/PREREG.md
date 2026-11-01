@@ -156,3 +156,52 @@ Cell Ranger V agreement on pbmc2_b / pbmc10k_b.
 - The anchor follows the convention of each library's Cell Ranger version (`vdj_human_imgtcys.tsv.gz` for CR >= 5).
 - The held-out run uses these defaults, with no `PARAMS`, at the frozen SHA recorded in `RESULTS.md`.
 - Held-out pass rule: unchanged, with the Addendum 1 ARI tolerance applied in the same way.
+
+
+## Addendum 3 (2026-11-01): BCR study, pre-registered before any download or run of its libraries
+
+**Why.** The single held-out run of the frozen code (`08279d8d`, RESULTS.md) failed on BCR. Pooled BCR pairing was
+Singlet minus TRUST4 = -0.051 [-0.057, -0.045]. Pooled wrong lineage was +0.0061 against Cell Ranger, with 207 of 293 contigs
+in ngpbmc3_b.
+
+**The 11 libraries of that run are spent.** They are never scored again and never looked at for diagnosis.
+
+**Fresh libraries.** All are 10x Genomics public datasets with Cell Ranger contigs as the truth, and none has been run by
+this study before. All URLs are under `cf.10xgenomics.com/samples/cell-vdj`, checked by HTTP HEAD. The anchor follows rule 3:
+cr3 for Cell Ranger < 5, cr5 for Cell Ranger >= 5.
+
+Development (diagnosis and tuning allowed):
+
+| library | dataset | Cell Ranger | anchor | GEX | note |
+|---|---|---|---|---|---|
+| melv11_b | 4.0.0 `sc5p_v1p1_hs_melanoma_10k` (5' v1.1) | 4.0 | cr3 | yes | Probably the same tumour as the spent melanoma_b (v2 chemistry), so development only. |
+| nsclc22_b | 2.2.0 `vdj_v1_hs_nsclc_b` (NSCLC tumour, 5' v1) | 2.2 | cr3 | yes (CR 2 h5) | |
+| chx10k_b | 6.1.0 `10k_PBMC_5pv2_nextgem_Chromium_X` (VDJ-B member of the multiplex tar) | 6.1 | cr5 | yes | Probably the same PBMC donor as the burned ctrl10k_b (Chromium Controller run), so development only. |
+| pbmc2_b, pbmc10k_b | as before | | | | Existing development libraries. |
+
+New held-out (run once, after the freeze):
+
+| library | dataset | Cell Ranger | anchor | GEX |
+|---|---|---|---|---|
+| pbmc22_b | 2.2.0 `vdj_v1_hs_pbmc_b` (healthy PBMC, 5' v1) | 2.2 | cr3 | yes (CR 2 h5) |
+| cd19_b | 2.2.0 `vdj_v1_hs_cd19_b` (CD19+ B cells, 5' v1) | 2.2 | cr3 | no |
+| b1k_b | 5.0.0 `sc5p_v2_hs_B_1k_multi_5gex_b` (B cells, 5' v2) | 5.0 | cr5 | yes |
+
+Notes on the held-out set:
+- None of the three is in the spent 11, the burned 6, development, or S15's pilot (which has no 10x-hosted data).
+- No fresh human BCR library from Cell Ranger 3.x was found on the 10x site. Those had the largest spent-set losses.
+- Of 10x's 20k HT library, the FASTQs are not served, so it is not used.
+- pbmc22_b and cd19_b come from the same Cell Ranger 2.2 release. They may share a donor.
+
+**Downloads.** `download.sbatch SET=bcrdev` and `SET=bcrho`. The held-out download prints only file sizes and the
+denominators.
+
+**Metric and pass rules for the new held-out set (unchanged from this PREREG).**
+- Pairing accuracy with 2,000 bootstrap resamples (seed 0) over the BCR group. Pass when Singlet minus TRUST4 >= -0.01 on the
+  pooled point estimate. A 95% CI entirely below -0.01 is a clear fail.
+- Wrong lineage pooled over pbmc22_b and b1k_b: Singlet minus Cell Ranger <= 0.005.
+- Secondary: contig F1 and ARI against TRUST4 per library, V and J agreement, and speed.
+
+**Dev rule.** The same as before, with the Addendum 1 ARI tolerance, on the 5 development BCR libraries. The literal verdict
+is always reported. The old defaults (`ambient_rescue=none`, `v_open_frac=0`, the references without the AIRR-C genes) are
+run on development too, so the effect of the frozen changes is separated from the baseline.

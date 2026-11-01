@@ -48,7 +48,43 @@ tenx() {  # name ver dataset lib(t|b) [gex h5 name]
   fi
   echo "lib $name $ver/$ds $lib"
 }
-if [ "${SET:-dev}" = dev ]; then
+tenxu() {  # name dir/prefix-of-fca (rel. to cell-vdj) fastq-tar (rel.) gex-h5 (rel. or -) [tar member wildcard]
+  local name=$1 o=$D/$1 X=https://cf.10xgenomics.com/samples/cell-vdj
+  mkdir -p $o
+  get $X/$2 $o/filtered_contig_annotations.csv
+  [ "$4" = - ] || get $X/$4 $o/gex_filtered.h5
+  if [ ! -d $o/fastqs ]; then
+    mkdir -p $o/fastqs.part
+    # streamed: multi-library tars (GEX + V(D)J, up to 43 GB) are never stored, only the V(D)J-B member is extracted
+    curl -fsSL --retry 5 $X/$3 | tar -x -C $o/fastqs.part --wildcards "${5:-*}" && mv $o/fastqs.part $o/fastqs || { echo "MISSING fastqs $3"; rm -rf $o/fastqs.part; }
+  fi
+  echo "lib $name"
+}
+if [ "${SET:-dev}" = bcrdev ] || [ "${SET:-dev}" = bcrho ]; then
+  # BCR study (PREREG.md Addendum 3): fresh human BCR libraries, data fetch only
+  if [ $SET = bcrdev ]; then
+    tenxu melv11_b 4.0.0/sc5p_v1p1_hs_melanoma_10k/sc5p_v1p1_hs_melanoma_10k_b_filtered_contig_annotations.csv \
+      4.0.0/sc5p_v1p1_hs_melanoma_10k/sc5p_v1p1_hs_melanoma_10k_b_fastqs.tar \
+      4.0.0/sc5p_v1p1_hs_melanoma_10k/sc5p_v1p1_hs_melanoma_10k_filtered_feature_bc_matrix.h5
+    tenxu nsclc22_b 2.2.0/vdj_v1_hs_nsclc_b/vdj_v1_hs_nsclc_b_filtered_contig_annotations.csv \
+      2.2.0/vdj_v1_hs_nsclc_b/vdj_v1_hs_nsclc_b_fastqs.tar \
+      2.2.0/vdj_v1_hs_nsclc_5gex/vdj_v1_hs_nsclc_5gex_filtered_gene_bc_matrices_h5.h5
+    C=10k_PBMC_5pv2_nextgem_Chromium_X
+    tenxu chx10k_b 6.1.0/${C}_$C/${C}_${C}_vdj_b_filtered_contig_annotations.csv \
+      6.1.0/${C}_Multiplex/${C}_Multiplex_fastqs.tar 6.1.0/${C}_$C/${C}_${C}_count_sample_feature_bc_matrix.h5 "*vdj_b*"
+    L="melv11_b nsclc22_b chx10k_b"
+  else
+    tenxu pbmc22_b 2.2.0/vdj_v1_hs_pbmc_b/vdj_v1_hs_pbmc_b_filtered_contig_annotations.csv \
+      2.2.0/vdj_v1_hs_pbmc_b/vdj_v1_hs_pbmc_b_fastqs.tar \
+      2.2.0/vdj_v1_hs_pbmc_5gex/vdj_v1_hs_pbmc_5gex_filtered_gene_bc_matrices_h5.h5
+    tenxu cd19_b 2.2.0/vdj_v1_hs_cd19_b/vdj_v1_hs_cd19_b_filtered_contig_annotations.csv \
+      2.2.0/vdj_v1_hs_cd19_b/vdj_v1_hs_cd19_b_fastqs.tar -
+    B=sc5p_v2_hs_B_1k_multi_5gex_b
+    tenxu b1k_b 5.0.0/$B/${B}_vdj_b_filtered_contig_annotations.csv 5.0.0/$B/${B}_fastqs.tar \
+      5.0.0/$B/${B}_count_filtered_feature_bc_matrix.h5 "*[Vv][Dd][Jj]*"
+    L="pbmc22_b cd19_b b1k_b"
+  fi
+elif [ "${SET:-dev}" = dev ]; then
   gse S149B GSM4317433 SRR11094270
   gse S150B GSM4317434 SRR11094271
   gse S135B GSM4317432 SRR11094269

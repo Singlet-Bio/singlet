@@ -11,7 +11,8 @@ ap.add_argument("out")
 ap.add_argument("--min-umis", type=int, default=0)
 a = ap.parse_args()
 with h5py.File(a.h5, "r") as f:
-    m = f["matrix"]
+    # Cell Ranger >= 3: group "matrix"; Cell Ranger 2.x: one group per genome (no feature_type: all Gene Expression)
+    m = f["matrix"] if "matrix" in f else f[next(k for k in f if "barcodes" in f[k])]
     bc = [b.decode() for b in m["barcodes"][:]]
     if a.min_umis:
         ft = np.array([t.decode() for t in m["features"]["feature_type"][:]])
