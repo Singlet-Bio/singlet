@@ -201,7 +201,7 @@ def test_drain_end_to_end(tmp_path):
         open(os.path.join(d, "sample.1fq"), "w").write(body)
         json.dump({"pairs": mp * M_, "bytes": 10, "runs": ["sample"], "gse": "GSE1"}, open(os.path.join(d, "manifest.json"), "w"))
     r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "multi_drain.py"), "--stage", stage, "--config", str(cfg), "--concurrency", "3",
-                        "--scratch", str(tmp_path / "scr"), "--mem-gb", "370", "--idle-exit-min", "0.05", "--publish", "none"],
+                        "--scratch", str(tmp_path / "scr"), "--mem-gb", "370", "--no-cgroup", "--idle-exit-min", "0.05", "--publish", "none"],
                        capture_output=True, text=True, timeout=170, env=dict(os.environ, S9_NO_WL_CHECK="1"))
     assert r.returncode == 0, r.stdout + r.stderr
     log = r.stdout + r.stderr

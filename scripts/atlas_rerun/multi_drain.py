@@ -298,6 +298,7 @@ def main():
     ap.add_argument("--scratch", default=os.environ.get("TMPDIR", "/tmp"))
     ap.add_argument("--mem-gb", type=float, default=-1, help="job memory in GB when no cgroup limit is visible (default: Slurm allocation)")
     ap.add_argument("--mem-frac", type=float, default=MEM_FRAC)
+    ap.add_argument("--no-cgroup", action="store_true", help="take the memory limit from --mem-gb only, not the job's cgroup (tests)")
     ap.add_argument("--route", choices=("fq", "1fg2", "auto"), default="fq", help="memory/scratch model: staged .1fq (temp FASTQ) or the .1fg2 table-fed route")
     ap.add_argument("--max-attempts", type=int, default=2, help="claims per sample before it is marked failed (default: requeued once)")
     ap.add_argument("--idle-exit-min", type=float, default=10.0)
@@ -327,7 +328,7 @@ def main():
     Q.sweep_scratch(a.scratch, "s9-drain-", log)
     Q.install_sigterm()
 
-    mem = cgroup_limit_gb() or (a.mem_gb if a.mem_gb > 0 else C.node_mem_gb())
+    mem = (None if a.no_cgroup else cgroup_limit_gb()) or (a.mem_gb if a.mem_gb > 0 else C.node_mem_gb())
     if a.mem_gb > 0:
         mem = min(mem, a.mem_gb) if mem else a.mem_gb
     genome_shared = "--genome-shared" in a.extra and a.extra[a.extra.index("--genome-shared") + 1:][:1] == ["on"]
