@@ -158,11 +158,12 @@ struct Input {
 };
 
 struct Output {
-    // one record per distinct sequence without N: sequence (numeric), mapping result (sequence-cache encoding)
-    std::vector<char> seq;
-    std::vector<uint64_t> seqOff{0};
-    std::vector<uint8_t> blob;
-    std::vector<uint64_t> blobOff{0};
+    // one record per distinct sequence without N: sequence (numeric), mapping result (sequence-cache encoding). E12: allocated once at their
+    // final size without a zero-fill (every element is written by mapDistinct's parallel copies)
+    NoInitVector<char> seq;
+    NoInitVector<uint64_t> seqOff{0};
+    NoInitVector<uint8_t> blob;
+    NoInitVector<uint64_t> blobOff{0};
     std::vector<uint16_t> clip5, clip3;   // per input read when clipping is on: bases clipped from its 5' and 3' ends
     std::vector<uint32_t> readRecord;   // per input read: index of its record above, or 0xFFFFFFFF (sequence with N, or not mapped)
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
