@@ -10,14 +10,25 @@
 //              Gene/UMIperCellSorted.txt, Gene/CellReads.stats).
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <thread>
 #include <vector>
 #include "solo.cuh"
 
 namespace e9 {
 
+// E15: the CB quality characters of the reads whose CR matches several whitelist entries with one mismatch (after the UMI check), which the
+// posterior takes per read. Called once, after the CB stage, with those reads (idx ascending; cr3[k]: read idx[k]'s CR as soloRun has it; host
+// memory): writes cbL characters per read to out[k * cbL ..] (what STAR's getCBandUMI has in cbQual: the barcode read's quality line, 'H' past
+// its end) and returns true, or false with why (the caller checks that the line it read has the read's CR)
+using CbQualFn = std::function<bool(const u32* idx, const u64* cr3, u64 n, uint8_t* out, std::string& why)>;
+
 struct SoloModel {                       // host arrays (Transcriptome.cpp, ParametersSolo.cpp)
     std::vector<u64> wl;                 // sorted, deduplicated whitelist (2 bits per base, first base highest)
+    // E15: per quality character c (0..255) the posterior's factor std::pow(10.0, -qin/10.0), qin = min((char)c - QSbase, QSmax) in STAR's char
+    // arithmetic (SoloReadFeature_inputRecords.cpp:104-107; ParametersSolo.cpp:287-288), computed with the host's pow; needed with SoloReads::cbQual
+    std::vector<double> pqTab;
     std::vector<u64> trS, trE, trEmax;
     std::vector<u32> trExI, trGene, exSE;
     std::vector<uint16_t> trExN;
@@ -43,6 +54,7 @@ struct SoloReads {                       // per read, in read order
     u64 nHost = 0;                       // or sparse, in host memory: hostAnnS[k] is the annotation of read hostIdx[k] (a read without a record)
     const u32* hostIdx = nullptr;
     const RecAnn* hostAnnS = nullptr;
+    CbQualFn cbQual;   // E15 (CbQualFn); not set: every candidate takes SoloParams::pq (the run's CB bases all give one qin)
 };
 struct SoloResult {
     u64 bstats[B_N] = {}, fstats[S_N] = {}, noCB[F_N] = {};
@@ -55,6 +67,9 @@ struct SoloResult {
     std::vector<int8_t> readCbm;                               // per read cbMatch after the UMI check (keepPerRead)
     std::vector<i32> readCb0;                                  // per read first whitelist match (-1 none) (keepPerRead)
     u64 nDistinctCR = 0, nCand = 0, nKeys = 0, nTuples = 0, nSeg = 0, nRecOverflow = 0;
+    u64 nMulti = 0, nMultiAccepted = 0;                        // E15: reads with several matches; their posterior chose a CB
+    bool perReadQual = false;                                  // E15: their posterior took the reads' own CB qualities (SoloReads::cbQual)
+    std::vector<i32> readCb;                                   // E15, per read (keepPerRead): the CB the read gets (single match or posterior), -1 none
     std::vector<std::pair<std::string, double>> ms;            // stage timings (ms)
 };
 constexpr u32 CBV = 4 + F_N;
@@ -96,6 +111,14 @@ struct SoloKeep {
     u32* rec = nullptr;                  // device, per read: its record or 0xFFFFFFFF
     RecAnn* recAnn = nullptr;            // device, per record
     double msReads = 0, msRecs = 0;      // the two steps (ms, device included)
+    // E15 (E11 §5.3): soloKeepToHost moves the four arrays to page-locked host memory on a thread while STAR's loop runs (the device's memory is
+    // free for another sample); soloRunKept puts them back on the device. Until the thread is joined, only it touches the fields below and the
+    // device pointers above.
+    std::thread toHost;
+    bool onHost = false;                 // the arrays are in h* (the device copies freed)
+    u64 *hcr3 = nullptr, *hur3 = nullptr; u32* hrec = nullptr; RecAnn* hrecAnn = nullptr;
+    double msToHost = 0, msToDev = 0;    // the copies (ms; to the host: page-locked allocation included)
+    std::string hostWhy;                 // why the arrays stayed on the device
 };
 SoloKeep& soloKeep();
 // per read CR and UR from E10's aux words (device; `stride` words per read, cr3 and ur3 first) into contiguous device arrays
@@ -103,10 +126,12 @@ bool soloKeepReads(const u64* dAux, u64 stride, u64 n, std::string& log);
 // per record its Gene annotation (stage (b) on the blobs, while they are on the device) and a copy of the read -> record map (device)
 bool soloKeepRecords(const SoloParams& S, const SoloModel& M, const e6::RecParams& RP, const uint8_t* dBlob, const u64* dBlobOff, const u64* dSeqOff,
                      u64 nRec, const u32* dRec, u64 n, std::string& log);
-void soloKeepRelease();
-// soloRun(device) on the kept arrays (on `device`, selected for the calling thread) plus the annotation of the reads the host mapped (sparse,
-// host memory, ascending read index); releases the kept arrays
+void soloKeepRelease();   // joins soloKeepToHost's thread first
+// E15: start the thread that moves the kept arrays to page-locked host memory (on `device`); when a step fails they stay on the device
+void soloKeepToHost(int device);
+// soloRun(device) on the kept arrays (on `device`, selected for the calling thread; back from the host first after soloKeepToHost) plus the
+// annotation of the reads the host mapped (sparse, host memory, ascending read index); cbQual: SoloReads::cbQual (E15); releases the kept arrays
 bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,
-                 std::string& log);
+                 std::string& log, const CbQualFn& cbQual = {});
 
 }  // namespace e9
