@@ -37,6 +37,7 @@ echo "node=$(hostname) job=$SLURM_JOB_ID new=$(cat $BINDIR/commit-gpu 2>/dev/nul
 nvidia-smi --query-gpu=name,driver_version --format=csv,noheader | tee -a $RES/summary.txt
 G=$REF/$GEN; FQ=$PB/data/$s/$s.1fq
 ls -l $FQ | tee -a $RES/summary.txt
+for p in ${PRESTAGE:-}; do python3 $SCR/repo/bench/fable/probe/s8_probe_e14.py $p > $p/probe_stage.txt 2>&1; echo "probe stage of $p:" | tee -a $RES/summary.txt; tee -a $RES/summary.txt < $p/probe_stage.txt; done
 t0=$(date +%s.%N); cat $G/star_2.7.11b/Genome $G/star_2.7.11b/SA $G/star_2.7.11b/SAindex > /dev/null   # same page cache for every run
 echo "index into the page cache: $(echo "$(date +%s.%N) - $t0" | bc) s" | tee -a $RES/summary.txt
 for spec in "${MODES[@]}"; do
@@ -76,9 +77,9 @@ for spec in "${MODES[@]}"; do
   cp $SCR/$s/$name/out/read_stats.tsv $SCR/$s/$name/out/summary.json $SCR/$s/$name/out/cr4_probe.json $O/ 2>/dev/null
   echo "  cr4_probe.json: $(cat $O/cr4_probe.json 2>/dev/null)" | tee -a $RES/summary.txt
   python3 $SCR/repo/bench/fable/solowire/s8_stages_e11.py $O $READSM > $O/stages.txt 2>&1; tee -a $RES/summary.txt < $O/stages.txt
-  python3 $SCR/repo/bench/fable/probe/s8_probe_e14.py $O > $O/probe_stage.txt 2>&1; tee -a $RES/summary.txt < $O/probe_stage.txt
   [ "${KEEPOUT:-1}" = 1 ] && rsync -a --exclude='*.bam' --exclude='*.sam' --exclude='*.cram' --exclude='*.fq*' --exclude='*.fastq*' --exclude='*.1fq' \
       --exclude='.gpu_handoff*' --exclude='*Unmapped*' --exclude='_STARtmp*' --exclude='*.reads' --exclude='*.reads.q' $SCR/$s/$name/out/ $O/out/
+  python3 $SCR/repo/bench/fable/probe/s8_probe_e14.py $O > $O/probe_stage.txt 2>&1; tee -a $RES/summary.txt < $O/probe_stage.txt
 done
 odir() { if [ -d $SCR/$s/$1/out ]; then echo $SCR/$s/$1/out; else v=OUT_$1; echo "${!v:-}"; fi; }
 crs() { if [ -f $RES/$1/CellReads.stats ]; then echo $RES/$1/CellReads.stats; else v=CRS_$1; echo "${!v:-}"; fi; }
