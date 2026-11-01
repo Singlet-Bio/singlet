@@ -65,10 +65,11 @@ def singlet_cmd(a, ccfg, cfg, claim, man, out_tmp):
         reads = [fq[0]] if len(fq) == 1 and not os.path.exists(screen) else ["--runs-dir", claim]
     cmd = ["/usr/bin/time", "-v", "-o", os.path.join(out_tmp, "time.txt"), binary] + reads
     cmd += ["--ref-base", ccfg["ref_base"]]
-    ref = cfg.get("references", {}).get(man.get("organism") or "", cfg.get("references", {}).get("*", "auto"))
-    if ref and ref != "auto":
-        d = os.path.join(ccfg["ref_base"], ref)
-        cmd += ["--genome-dir", os.path.join(d, "star_2.7.11b"), "--exons", os.path.join(d, "genes", "genes.gtf")]
+    ref = C.resolve_reference(man.get("organism"), cfg.get("references", {}))
+    if ref is None:   # never species auto-detection: it needs Bloom filters that are not installed (6 of 12 pilot runs came back 'unknown')
+        raise C.OrganismUnmapped("organism %r maps to no reference in config `references`" % (man.get("organism"),))
+    d = os.path.join(ccfg["ref_base"], ref)
+    cmd += ["--genome-dir", os.path.join(d, "star_2.7.11b"), "--exons", os.path.join(d, "genes", "genes.gtf")]
     cmd += ["--out-prefix", os.path.join(out_tmp, "out") + "/", "--threads", str(a.threads), "--pipeline", "--output-format", "1pz",
             "--engine", a.engine]
     if man.get("pairs"):
@@ -166,6 +167,13 @@ def compute_phase(a, cfg, ccfg, env, gsm, claim, man):
         keep = True
         return "computed %.0fs %.3f Mpairs/s" % (compute_s, man.get("pairs", 0) / 1e6 / max(compute_s, 1e-9)), \
             Job(gsm, claim, man, scr, heart, proc, t0, compute_s)
+    except C.OrganismUnmapped as e:
+        C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="organism_unmapped", detail=str(e), final=True, via="drain")
+        man["failed_reason"] = "organism_unmapped: %s" % e
+        with open(os.path.join(claim, "manifest.json"), "w") as f:
+            json.dump(man, f)
+        Q.release(a.stage, gsm, claim, failed=True)   # a retry would fail the same way
+        return "failed (final): organism unmapped", None
     except Q.Preempted:
         # Slurm preempted this job or hit the time limit: stop the child, give the sample back with the attempt refunded.
         heart.stop.set()

@@ -22,7 +22,7 @@ import sys
 import tempfile
 import time
 
-from common import emit, job_slots, node_mem_gb, now, sha256_file, staged_reads
+from common import emit, job_slots, node_mem_gb, now, resolve_reference, sha256_file, staged_reads
 
 HEAD_READS = 1000000
 HEAD_TIMEOUT_S = 900
@@ -76,9 +76,8 @@ class Ctx:
             self.env.pop("SINGLET_REF_BASE", None)
 
     def reference(self, organism):
-        refs = self.cfg.get("references", {})
-        name = refs.get(organism or "", refs.get("*", "auto"))
-        if name == "auto":
+        name = resolve_reference(organism, self.cfg.get("references", {}))
+        if name is None:
             return None
         d = os.path.join(self.ref_base, name)
         return {"name": name, "genome_dir": os.path.join(d, "star_2.7.11b"), "exons": os.path.join(d, "genes", "genes.gtf")}

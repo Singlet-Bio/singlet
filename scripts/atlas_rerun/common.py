@@ -113,6 +113,45 @@ def require_whitelists(binary, names=("3M-february-2018.txt", "737K-august-2016.
                          "the sorted-BAM pileup. Put the binary where ../whitelists exists, or symlink the directory." % (", ".join(missing), os.path.normpath(d), binary))
 
 
+class OrganismUnmapped(Exception):
+    """The catalogue organism of a sample maps to no reference: the sample cannot be aligned (and must not fall back to species auto-detection)."""
+
+
+# catalogue organism strings are ';'-separated lists of whatever GEO says; these tokens name no organism that was sequenced
+ORGANISM_NOISE = {"", "blank sample", "synthetic construct", "unidentified", "unclassified sequences"}
+ORGANISM_ALIASES = {"homo": "Homo sapiens", "human": "Homo sapiens", "mouse": "Mus musculus"}
+
+
+def organism_set(organism):
+    """-> frozenset of organism names in a catalogue organism string: 'Mus musculus; Homo sapiens' and 'Homo sapiens; Mus musculus' are the same set,
+    'blank sample; Homo sapiens' is {'Homo sapiens'}, 'Homo; Homo sapiens' is {'Homo sapiens'}."""
+    out = set()
+    for t in (organism or "").split(";"):
+        t = t.strip()
+        if t.lower() in ORGANISM_NOISE:
+            continue
+        out.add(ORGANISM_ALIASES.get(t.lower(), t))
+    return frozenset(out)
+
+
+def resolve_reference(organism, refs):
+    """The reference directory name (a key's value in config `references`) for a catalogue organism string, or None when it maps to none.
+    An exact key wins; otherwise the organism SET (order and noise tokens ignored) is compared with the set of every key. A sample with an organism that is
+    in no key (e.g. 'Macaca mulatta; Homo sapiens') is NOT given the '*' default: the worker never relies on species auto-detection (S14: its Bloom filters
+    are not installed, 6 of 12 pilot runs came back 'unknown')."""
+    refs = refs or {}
+    o = (organism or "").strip()
+    if o in refs and refs[o] != "auto":
+        return refs[o]
+    want = organism_set(o)
+    if not want:
+        return None
+    for k, v in refs.items():
+        if k != "*" and v != "auto" and organism_set(k) == want:
+            return v
+    return None
+
+
 def staged_reads(sdir):
     """True when a sample's staged reads are on disk: the pooled sample.1fq or the per-run <run>.1fq files."""
     if os.path.exists(os.path.join(sdir, "sample.1fq")):
