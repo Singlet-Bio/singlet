@@ -50,7 +50,7 @@ __device__ unsigned long long g_monoBudget;   // --mono-budget: stitching step b
 #ifdef M5_TAIL
 #include "../../fable/profile/tail.cuh"      // E1: per-thread start/end of k_p1/k_p3 (batch tails); not in the default build
 #else
-#define TAIL_BEGIN
+#define TAIL_BEGIN(which, i) do { } while (0)
 #define TAIL_END(which, i) do { } while (0)
 #endif
 template <class C>
@@ -138,7 +138,7 @@ __global__ void k_p1(Params P, GenomeView g, const char* rb, const u64* roff, co
                      Work<C>* work, ReadBuf<C::LREAD>* rbuf, uint8_t* status, u64* nEnt) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
-    TAIL_BEGIN
+    TAIL_BEGIN(0, k);
     u64 i = idx ? idx[b0 + k] : b0 + k;
     Work<C>& w = work[k];
     Status s = mapPhase1(P, g, w, rbuf[k], rb + roff[i], rlen[i]);
@@ -165,8 +165,8 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
                      const uint32_t* bits, uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap, const uint32_t* perm) {
     u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (t >= n) return;
-    TAIL_BEGIN
     u64 k = perm ? perm[t] : t;   // --bin: threads take the batch's reads in order of estimated cost (each read is independent)
+    TAIL_BEGIN(1, k);             // E1 tail records are indexed by read k (= thread index t without --bin)
     Work<C>& w = work[k];
     w.stepBudget = budget;
     u64 o = b0 + k;
@@ -177,7 +177,7 @@ __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>*
     status[k] = (uint8_t)s; why[o] = (uint8_t)w.ov; outLen[o] = (uint16_t)bl.n; unmap[o] = (int8_t)w.unmapType;
     for (int c = 0; c < 8; c++) { atomicAdd(&g_clk[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
     atomicAdd(&g_scan, (unsigned long long)nEnt[k]);
-    TAIL_END(1, t);
+    TAIL_END(1, k);
 }
 // cost key of each read after phase 1, for --bin: windows, then SA entries to assign (reads that need no phase 3 first)
 template <class C>

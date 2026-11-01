@@ -7,13 +7,14 @@
 #pragma once
 #include <vector>
 #include <algorithm>
-struct TailRec { unsigned long long t0, t1, cyc; uint32_t sm, pad; };
+struct TailRec { unsigned long long t0, t1, c0, c1; uint32_t sm, pad; };
 __device__ TailRec* g_tail[2];   // [0] k_p1, [1] k_p3: one record per thread of the current batch (nullptr: off)
 __device__ __forceinline__ unsigned long long tail_gt() { unsigned long long t; asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(t)); return t; }
 __device__ __forceinline__ uint32_t tail_sm() { uint32_t s; asm volatile("mov.u32 %0, %%smid;" : "=r"(s)); return s; }
-#define TAIL_BEGIN const unsigned long long tg0_ = tail_gt(); const long long tc0_ = clock64();
-#define TAIL_END(which, i) do { const long long tc1_ = clock64(); TailRec* a_ = g_tail[which]; \
-    if (a_) a_[i] = TailRec{tg0_, tail_gt(), (unsigned long long)(tc1_ - tc0_), tail_sm(), 0}; } while (0)
+// start and end go straight to memory (nothing stays live across the kernel body, so registers and occupancy stay as in m5)
+#define TAIL_BEGIN(which, i) do { TailRec* a_ = g_tail[which]; if (a_) { a_[i].t0 = tail_gt(); a_[i].c0 = clock64(); } } while (0)
+#define TAIL_END(which, i) do { TailRec* a_ = g_tail[which]; \
+    if (a_) { const long long c_ = clock64(); a_[i].t1 = tail_gt(); a_[i].c1 = (unsigned long long)c_; a_[i].sm = tail_sm(); } } while (0)
 
 struct TailHost {
     TailRec* d[2] = {nullptr, nullptr};
@@ -42,7 +43,7 @@ struct TailHost {
         double thr = 0, cyc = 0, longest = 0, warpA = 0, blkA = 0;
         for (unsigned long long i = 0; i < nb; i++) {
             tmin = std::min(tmin, h[i].t0); tmax = std::max(tmax, h[i].t1);
-            double dd = (double)(h[i].t1 - h[i].t0); thr += dd; cyc += (double)h[i].cyc; longest = std::max(longest, dd);
+            double dd = (double)(h[i].t1 - h[i].t0); thr += dd; cyc += (double)(h[i].c1 - h[i].c0); longest = std::max(longest, dd);
         }
         for (unsigned long long w0 = 0; w0 < nb; w0 += 32) {
             unsigned long long a = ~0ULL, b = 0;
