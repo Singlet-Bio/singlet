@@ -192,10 +192,11 @@ def dir_bytes(path):
     return n
 
 
-def settle_failure(a, root, gsm, claim, man, reason, detail="", oom_est=None):
-    """Requeue the claim once; on the last attempt move it to failed/ with the reason. Never silent: an event is written either way."""
+def settle_failure(a, root, gsm, claim, man, reason, detail="", oom_est=None, final=False):
+    """Requeue the claim once; on the last attempt (or with final=True: a retry would fail the same way) move it to failed/ with the reason. Never silent: an event is
+    written either way."""
     attempts = man.get("attempts", 1)
-    final = attempts >= a.max_attempts
+    final = final or attempts >= a.max_attempts
     try:
         if os.path.isdir(claim):
             man = json.load(open(os.path.join(claim, "manifest.json")))
@@ -275,6 +276,8 @@ class Run(threading.Thread):
         except Q.Preempted:
             keep_claim = True
             self.result = "stopped"
+        except C.OrganismUnmapped as e:   # organism_unmapped / mixed_species_unsupported: no retry
+            self.result = settle_failure(a, root, gsm, claim, man, e.reason, str(e), final=True)
         except Exception as e:  # noqa: BLE001
             self.result = settle_failure(a, root, gsm, claim, man, "exception", repr(e))
         finally:
