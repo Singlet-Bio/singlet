@@ -64,7 +64,10 @@ R3="$R3;q32desc:--presort --queue --p3-block 32 --p3order cost-desc --tail;qdesc
 R3="$R3;sig:--presort --p3order sig --tail;sigm:--presort --p3order-m sig --tail;r64:--presort --p3-maxreg 64 --tail"
 R3="$R3;r80:--presort --p3-maxreg 80 --tail;b32r64:--presort --p3-block 32 --p3-maxreg 64 --tail;best:--best-order --tail"
 R3="$R3;bestb32:--best-order --p3-block 32 --tail;bestE1:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072"
-R3="$R3;bestE1b32:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-block 32;v0b:--presort"
+R3="$R3;bestE1b32:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-block 32"
+# warp-granular longest-first: prefix-order warps kept whole, run heaviest first (fixed grid, one warp per block, queue)
+R3="$R3;wdesc:--presort --p3order warp-desc --tail;b32wdesc:--presort --p3-block 32 --p3order warp-desc --tail"
+R3="$R3;qwdesc:--presort --queue --p3order warp-desc --tail;v0b:--presort"
 # ncu (ROUND=3, or E4NCU="label|args|k_p3 launches to skip;..."): one phase-3 launch per entry, --set full plus the
 # active-threads-per-instruction metrics. With --reps 1 lane A runs 2 x 8 k_p3 launches: skip 1 = A's 2nd, skip 16 = M's 1st.
 NCUL=""; [ "${ROUND:-1}" = 3 ] && NCUL="v0A|--presort|1;v0M|--presort|16;sigA|--presort --p3order sig|1;sigM|--presort --p3order sig|16;b32A|--presort --p3-block 32|1"

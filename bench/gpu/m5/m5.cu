@@ -327,8 +327,8 @@ __global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, ui
     perm[k] = (uint32_t)k;
 }
 // --p3order: other keys for the order in which phase-3 threads take a batch's reads (stable sort: ties keep the batch order)
-enum P3Order { P3_NONE = 0, P3_COST_ASC, P3_COST_DESC, P3_LOCUS, P3_ANCHOR, P3_NWLOCUS, P3_NW_DESC, P3_SIG };
-static const char* p3orderName[] = {"none", "cost-asc", "cost-desc", "locus", "anchor", "nwlocus", "nw-desc", "sig"};
+enum P3Order { P3_NONE = 0, P3_COST_ASC, P3_COST_DESC, P3_LOCUS, P3_ANCHOR, P3_NWLOCUS, P3_NW_DESC, P3_SIG, P3_WARP_DESC };
+static const char* p3orderName[] = {"none", "cost-asc", "cost-desc", "locus", "anchor", "nwlocus", "nw-desc", "sig", "warp-desc"};
 template <class C>
 __global__ void k_key(int mode, Params P, GenomeView g, u64 n, const Work<C>* work, const u64* nEnt, u64* key, uint32_t* perm) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
@@ -356,6 +356,16 @@ __global__ void k_key(int mode, Params P, GenomeView g, u64 n, const Work<C>* wo
     } else if (mode == P3_SIG) {   // control-flow signature known before phase 3: (stitched, nW, nP, nA), descending; ties keep prefix order
         u64 sig = ne ? ((u64)min((unsigned)w.nW, 255u) << 56) | ((u64)min((unsigned)w.nP, 255u) << 48) | ((u64)min((unsigned)w.nA, 65535u) << 32) : 0;
         v = ~sig;
+    } else if (mode == P3_WARP_DESC) {
+        // longest-first at warp granularity: the warps of the prefix order (32 consecutive reads) keep their reads and their order,
+        // and run in descending order of the sum of their reads' windows (then SA entries). A partial last warp stays last, so
+        // every warp of the sorted batch is again 32 aligned reads of one prefix-order warp.
+        const bool partial = (n & 31) && (k >> 5) == ((n - 1) >> 5);   // warp-uniform; a full warp has all 32 lanes here
+        if (partial) v = ~0ULL;
+        else {
+            unsigned sw = __reduce_add_sync(0xFFFFFFFFu, (unsigned)nW), se = __reduce_add_sync(0xFFFFFFFFu, (unsigned)min(ne, (u64)(1u << 26)));
+            v = ((u64)(0xFFFFu - min(sw, 0xFFFFu)) << 48) | ((u64)(0xFFFFu - min(se >> 6, 0xFFFFu)) << 32) | (k >> 5);
+        }
     }
     key[k] = v;
 }
