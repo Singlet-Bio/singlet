@@ -441,6 +441,29 @@ def pairs_in(binary, onefq, env):
         return 0
 
 
+def park_item(stage, gsm, claim, inc, item, reason, protocol_vote=None, companion_candidates=None, calls=None):
+    """Park a sample that has no GEX to stage (reason: parked_head_non10x | parked_head_no_gex | parked_non10x | parked_no_gex): remove the half-written incoming dir (it holds the staged
+    reads of the runs fetched so far) and leave failed/<GSM>.fetch/item.json with a `parked` record. A feature-barcode-only GSM must stay discoverable by the companion classification
+    (companions.tsv): `parked.companion_candidates` has the same shape as the manifest's companion_candidates (runs of another protocol family, or excluded runs with >= 10% of the
+    reads), `parked.protocol_vote` the vote (calls with confidence and whitelist rate, excluded_runs), `parked.calls` the per-run (tag, confidence, whitelist rate)."""
+    shutil.rmtree(inc, ignore_errors=True)
+    rec = {"reason": reason}
+    if companion_candidates:
+        rec["companion_candidates"] = companion_candidates
+    if protocol_vote:
+        rec["protocol_vote"] = protocol_vote
+    if calls:
+        rec["calls"] = {r: list(c) for r, c in calls.items()}
+    item["parked"] = rec
+    try:
+        with open(os.path.join(claim, "item.json"), "w") as fh:
+            json.dump(item, fh)
+    except OSError:
+        pass
+    Q.give_back_todo(stage, gsm, claim, retry=False)
+    return reason
+
+
 def process_item(a, stage, gsm, claim, item, env, binary, log):
     worker = "%s-%d" % (os.uname().nodename.split(".")[0], os.getpid())
     inc = Q.new_incoming(stage, gsm, worker)
@@ -465,8 +488,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
                 log("[head] %s %s %.0f s" % (r, verdicts[r], hs))
             keep_runs = [r for r in item["runs"] if verdicts[r] in ("keep", "unknown")]
             if not keep_runs:
-                Q.give_back_todo(stage, gsm, claim, retry=False)
-                return "parked_head_" + ("non10x" if "non10x" in verdicts.values() else "no_gex")
+                return park_item(stage, gsm, claim, inc, item, "parked_head_" + ("non10x" if "non10x" in verdicts.values() else "no_gex"), calls=calls)
             item = dict(item, runs=keep_runs, run_reads=[n for r, n in zip(item["runs"], item.get("run_reads") or []) if r in keep_runs])
         elif len(item["runs"]) > 1:   # no head screen: the vote still needs each run's call, from a 5000-spot probe
             for r in item["runs"]:
@@ -552,8 +574,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
                 os.remove(pth)
         kept = [x["run"] for x in runs_info if not x["gated"]]
         if not kept:
-            Q.give_back_todo(stage, gsm, claim, retry=False)
-            return "parked_non10x"
+            return park_item(stage, gsm, claim, inc, item, "parked_non10x", protocol_vote, companion_candidates, calls)
         if fmt == "1fg2":
             hj = os.path.join(scr, "head_screen.json")
             if os.path.exists(hj):
@@ -562,8 +583,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
             rc = subprocess.run([binary, "screen-runs", "--json", os.path.join(inc, "screen.json")] +
                                 [os.path.join(inc, r + ".1fq") for r in kept], env=env, capture_output=True).returncode
             if rc == 6:
-                Q.give_back_todo(stage, gsm, claim, retry=False)
-                return "parked_no_gex"
+                return park_item(stage, gsm, claim, inc, item, "parked_no_gex", protocol_vote, companion_candidates, calls)
         pairs = sum(x.get("pairs", 0) for x in runs_info)
         ru1 = resource.getrusage(resource.RUSAGE_CHILDREN) if resource else None
         child_cpu = ((ru1.ru_utime - ru0.ru_utime) + (ru1.ru_stime - ru0.ru_stime)) if resource else 0.0  # decode + screen (the fetch threads are ours, small)
