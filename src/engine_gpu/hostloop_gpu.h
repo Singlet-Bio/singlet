@@ -20,6 +20,11 @@ namespace singlet_hostloop_gpu {
 bool entries(const char* dSeq, const uint64_t* dOff, const uint64_t* dCs, const uint64_t* dCl, uint64_t n, const uint64_t* dAux, uint32_t nw,
              bool hook, e6::ReadEntry* dEnt, uint64_t* dMask, float& ms, std::string& err);
 
+// R11's exact CB histogram over every read (bench/fable/records/r11_hist.cpp's rule on the CR/UR keys of dAux): hist[nWL] (zeroed here) per
+// whitelist entry (dWL: STAR's cbWL, sorted)
+bool r11(const uint64_t* dAux, uint32_t nw, uint64_t n, const uint64_t* dWL, uint64_t nWL, uint32_t cbL, uint32_t umiL, uint32_t* dHist, float& ms,
+         std::string& err);
+
 // dBlob/dBOff/dSOff: the records (gathered, device); dRR: per read its record or 0xFFFFFFFF; fills E10 (stats, sj, unmappedReads, hookReads,
 // recMapped); zeroes the entries/masks of reads without a record. Device buffers it allocates are freed before it returns.
 bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOff, const uint64_t* dSOff, uint64_t nRec, const uint32_t* dRR, uint64_t n,

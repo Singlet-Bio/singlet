@@ -131,6 +131,8 @@ struct Input {
         bool wantMask = true;            // the 128-bit low-quality masks (SINGLET_HANDOFF_QMASK != 0)
         bool outSJ = true, sjAll = true; // P.outSJ.yes; outSJfilterReads == "All" (else unique reads only)
         bool hook = false;               // g_handoffReadHook is set: sampled clipped reads get entry bit 2 and the host's detector bits 3-4
+        // R11's exact CB histogram (bench/fable/records/r11_hist.cpp): STAR's whitelist (ParametersSolo::cbWL: sorted 2-bit keys), CB and UMI lengths
+        const uint64_t* wl = nullptr; uint64_t nWL = 0; uint32_t cbL = 0, umiL = 0;
     } e10;
 };
 
@@ -162,6 +164,10 @@ struct Output {
         std::vector<uint32_t> unmappedReads;        // reads whose record is unmapped (STAR writes them to Unmapped.out.mate1/2), read order
         std::vector<uint8_t> recMapped;             // per record: 1 if its reads replay a summary (mapped), 0 if unmapped
         double msEntries = 0, msUpAux = 0, msProducts = 0, msD2H = 0;
+        // R11: per whitelist entry the reads with that exact CB and a UMI without N that is not a homopolymer (empty: not computed)
+        std::vector<uint32_t> r11;
+        uint64_t r11Total = 0;
+        double msR11 = 0;
         std::string log;
     } e10;
     std::string log;

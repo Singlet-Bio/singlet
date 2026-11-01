@@ -199,7 +199,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
         if (lines % 4 != 0) { munmap((void *) m, n); close(fd); why = fn + ": not 4-line FASTQ"; return false; }
         // E10: per read 2 + nw words (CR, UR from the barcode read: e10Barcodes; the quality bits of R2), the name-line offsets
         uint32 nw = 0;
-        uint64 *aux = nullptr;
+        uint64_t *aux = nullptr;
         std::vector<int> e10BadT(T, 0);
         if (e10) {
             uint64 mx = 0;
@@ -286,7 +286,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
                         if (bad) e10BadT[t] |= 1;
                     } else if ((lix & 3) == 3) {
                         if (L > 64 * (uint64) nw) { e10BadT[t] |= 2; return; }
-                        uint64 *w = aux + r * (2 + (uint64) nw) + 2;
+                        uint64_t *w = aux + r * (2 + (uint64) nw) + 2;
                         for (uint64 j = 0; j < L; j++)
                             if ((int) (unsigned char) ls[j] - 33 < e10MinQ) w[j >> 6] |= 1ull << (j & 63);
                     }
@@ -328,7 +328,7 @@ bool readSequences(Parameters &P, singlet_engine_gpu::Input &in, std::string &wh
         if (e10q) {
             int bad = 0;
             for (int t = 0; t < T; t++) bad |= e10BadT[t];
-            if (bad) { in.e10.on = false; std::vector<uint64>().swap(in.e10.aux); e10f.release();
+            if (bad) { in.e10.on = false; std::vector<uint64_t>().swap(in.e10.aux); e10f.release();
                        e10DecodeWhy = (bad & 1) ? "a cDNA base other than ACGTN" : "a quality line longer than 256"; }
         }
         if (e10q && in.e10.on) { e10f.m[0] = m; e10f.len[0] = n; }   // E10 keeps R2 mapped (the unmapped reads' records, level 4's source)
@@ -374,7 +374,7 @@ bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
     e10f.at[1].assign(nReads, 0);
     const uint64 bL = P.pSolo.bL, cbumiL = P.pSolo.cbumiL, cbS = P.pSolo.cbS, cbL = P.pSolo.cbL, umiS = P.pSolo.umiS, umiL = P.pSolo.umiL;
     std::vector<int> badT(T, 0);
-    uint64 *aux = in.e10.aux.data();
+    uint64_t *aux = in.e10.aux.data();
     {
         std::vector<std::thread> th;
         for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
@@ -400,7 +400,7 @@ bool e10Barcodes(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
                     }
                     return v;
                 };
-                uint64 *a = aux + r * (2 + (uint64) nw);
+                uint64_t *a = aux + r * (2 + (uint64) nw);
                 a[0] = pack(cbS - 1, cbL); a[1] = pack(umiS - 1, umiL);
             };
             for (const char *q = m + b[t]; (q = (const char *) memchr(q, '\n', e - q)) != nullptr; q++) {
@@ -588,6 +588,10 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             in.e10.wantMask = !(qe != nullptr && qe[0] == '0');
             in.e10.outSJ = P.outSJ.yes; in.e10.sjAll = P.outSJfilterReads == "All";
             in.e10.hook = g_handoffReadHook != nullptr;
+            if (P.pSolo.cbWLyes && !P.pSolo.cbWL.empty()) {   // R11's exact CB histogram over STAR's whitelist
+                in.e10.wl = (const uint64_t *) P.pSolo.cbWL.data(); in.e10.nWL = P.pSolo.cbWL.size();
+                in.e10.cbL = (uint32) P.pSolo.cbL; in.e10.umiL = (uint32) P.pSolo.umiL;
+            }
         }
         if (e10Level >= 2 && !in.e10.on) P.inOut->logMain << "ENGINE_GPU: E10 (level " << e10Level << ") not used: " << w << "\n";
     }
@@ -595,7 +599,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     if (e10Level >= 2 && in.e10.on) {
         std::string w;
         const auto tb = std::chrono::steady_clock::now();
-        if (!e10Barcodes(P, in, w, (int) P.runThreadN)) { in.e10.on = false; std::vector<uint64>().swap(in.e10.aux); e10f.release(); }
+        if (!e10Barcodes(P, in, w, (int) P.runThreadN)) { in.e10.on = false; std::vector<uint64_t>().swap(in.e10.aux); e10f.release(); }
         P.inOut->logMain << "ENGINE_GPU: E10 decode: " << (in.e10.on ? "CR/UR keys and quality bits of " + std::to_string(in.off.size() - 1) + " reads ("
                                                         + std::to_string(in.e10.nw) + " quality words each), barcode file "
                                                         + std::to_string(std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count()) + " s"
@@ -636,9 +640,21 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     time_t tGpu = time(nullptr);
     P.inOut->logMain << "ENGINE_GPU: device " << device << " (" << singlet_engine_gpu::deviceId(device) << "), waited " << (tLock - tWait)
                      << " s for it, held it " << heldS << " s\n" << out.log << out.e10.log;
-    std::vector<uint64>().swap(in.e10.aux);
+    std::vector<uint64_t>().swap(in.e10.aux);
     if (!ok) { e10f.release(); return skip("GPU mapping failed"); }
     bool e10ok = out.e10.ok;   // E10: the device wrote the entries and masks into the region and computed the per-read products
+    if (const char *rp = getenv("SINGLET_ENGINE_GPU_E10_R11"); rp != nullptr && !out.e10.r11.empty()) {   // the histogram in r11_hist.cpp's format
+        FILE *f = fopen(rp, "wb");
+        uint64 nnz = 0;
+        for (uint32_t c : out.e10.r11) nnz += c != 0;
+        const uint64 h[3] = {(uint64) out.e10.r11.size(), (uint64) out.e10.r11Total, nnz};
+        bool okf = f != nullptr && fwrite("E6R11H01", 1, 8, f) == 8 && fwrite(h, 8, 3, f) == 3;
+        for (uint64 w = 0; okf && w < out.e10.r11.size(); w++)
+            if (out.e10.r11[w]) { const uint64 pr[2] = {w, out.e10.r11[w]}; okf = fwrite(pr, 8, 2, f) == 2; }
+        if (f != nullptr) okf = (fclose(f) == 0) && okf;
+        P.inOut->logMain << "ENGINE_GPU: E10: R11 exact CB histogram from the device: " << out.e10.r11Total << " reads, " << nnz << " barcodes -> " << rp
+                         << (okf ? "" : " (write FAILED)") << "\n";
+    }
     if (in.clip.pre) {   // CellRanger4: readLoad takes clippedInfo from here, clipChunk is skipped
         static std::vector<uint8> cr4keep;
         cr4keep.swap(in.cr4info);
@@ -878,7 +894,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         typedef singlet_engine_gpu::Output::E10 X;
         Stats S;
         S.resetN();
-        const uint64 *v = out.e10.stats;
+        const uint64_t *v = out.e10.stats;
         S.readN = v[X::S_readN]; S.readBases = v[X::S_readBases]; S.mappedReadsU = v[X::S_U]; S.mappedReadsM = v[X::S_M];
         S.mappedMismatchesN = v[X::S_mm]; S.mappedInsN = v[X::S_insN]; S.mappedDelN = v[X::S_delN]; S.mappedInsL = v[X::S_insL]; S.mappedDelL = v[X::S_delL];
         S.mappedBases = v[X::S_bases]; S.mappedPortion = out.e10.mappedPortion;

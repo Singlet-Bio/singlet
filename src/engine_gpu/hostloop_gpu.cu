@@ -78,6 +78,31 @@ __global__ void k_entries(const char* seq, const uint64_t* off, const uint64_t* 
     E[i] = e;
 }
 
+// R11 (r11_hist.cpp): a UMI without N that is not a homopolymer, an N-free CB that is an exact whitelist entry (STAR's 2-bit key, first base high)
+__global__ void k_r11(const uint64_t* aux, uint32_t nw, uint64_t n, const uint64_t* wl, uint64_t nWL, uint32_t cbL, uint32_t umiL, uint32_t* hist) {
+    const uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const uint64_t* a = aux + i * (2 + (uint64_t)nw);
+    const uint64_t cr = a[0], ur = a[1];
+    const uint32_t u0 = (uint32_t)(ur & 7);
+    bool homo = true;
+    for (uint32_t j = 0; j < umiL; j++) {
+        const uint32_t c = (uint32_t)((ur >> (3 * j)) & 7);
+        if (c > 3) return;
+        homo = homo && c == u0;
+    }
+    if (homo) return;
+    uint64_t key = 0;
+    for (uint32_t j = 0; j < cbL; j++) {
+        const uint64_t c = (cr >> (3 * j)) & 7;
+        if (c > 3) return;
+        key = key << 2 | c;
+    }
+    uint64_t lo = 0, hi = nWL;
+    while (lo < hi) { const uint64_t mid = (lo + hi) >> 1; if (wl[mid] < key) lo = mid + 1; else hi = mid; }
+    if (lo < nWL && wl[lo] == key) atomicAdd(&hist[lo], 1u);
+}
+
 __global__ void k_mult(const uint32_t* rr, uint64_t n, uint32_t* mult) {
     const uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x;
     if (i < n && rr[i] != 0xFFFFFFFFu) atomicAdd(&mult[rr[i]], 1u);
@@ -245,6 +270,19 @@ bool entries(const char* dSeq, const uint64_t* dOff, const uint64_t* dCs, const 
     cudaEvent_t a, b; cudaEventCreate(&a); cudaEventCreate(&b);
     cudaEventRecord(a);
     k_entries<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dCs, dCl, n, dAux, nw, hook, dEnt, dMask);
+    cudaEventRecord(b);
+    HL_CK(cudaEventSynchronize(b));
+    HL_CK(cudaGetLastError());
+    cudaEventElapsedTime(&ms, a, b); cudaEventDestroy(a); cudaEventDestroy(b);
+    return true;
+}
+
+bool r11(const uint64_t* dAux, uint32_t nw, uint64_t n, const uint64_t* dWL, uint64_t nWL, uint32_t cbL, uint32_t umiL, uint32_t* dHist, float& ms,
+         std::string& err) {
+    cudaEvent_t a, b; cudaEventCreate(&a); cudaEventCreate(&b);
+    cudaEventRecord(a);
+    HL_CK(cudaMemset(dHist, 0, nWL * 4));
+    if (n > 0) k_r11<<<(unsigned)((n + 255) / 256), 256>>>(dAux, nw, n, dWL, nWL, cbL, umiL, dHist);
     cudaEventRecord(b);
     HL_CK(cudaEventSynchronize(b));
     HL_CK(cudaGetLastError());

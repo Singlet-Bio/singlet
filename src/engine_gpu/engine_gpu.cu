@@ -387,6 +387,18 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!singlet_hostloop_gpu::entries(dSeq, (const uint64_t*) dOff, (const uint64_t*) cs, (const uint64_t*) cl, n, dAux, in.e10.nw, in.e10.hook, dEnt, dQm,
                                            ms, w)) { e10Off("entries: " + w); return; }
         out.e10.msEntries = ms;
+        if (in.e10.wl != nullptr && in.e10.nWL > 0) {   // R11's exact CB histogram from the same keys (failure only loses the histogram)
+            uint64_t* dWL = nullptr; uint32_t* dH = nullptr; float msr = 0; std::string wr;
+            if (cudaMalloc(&dWL, in.e10.nWL * 8) == cudaSuccess && cudaMalloc(&dH, in.e10.nWL * 4) == cudaSuccess
+                && cudaMemcpy(dWL, in.e10.wl, in.e10.nWL * 8, cudaMemcpyHostToDevice) == cudaSuccess
+                && singlet_hostloop_gpu::r11(dAux, in.e10.nw, n, dWL, in.e10.nWL, in.e10.cbL, in.e10.umiL, dH, msr, wr)) {
+                out.e10.r11.resize(in.e10.nWL);
+                if (cudaMemcpy(out.e10.r11.data(), dH, in.e10.nWL * 4, cudaMemcpyDeviceToHost) != cudaSuccess) out.e10.r11.clear();
+                for (uint32_t c : out.e10.r11) out.e10.r11Total += c;
+                out.e10.msR11 = msr;
+            } else { cudaGetLastError(); out.e10.log += "engine_gpu: E10: R11 histogram not computed (" + wr + ")\n"; }
+            if (dWL) cudaFree(dWL); if (dH) cudaFree(dH);
+        }
         cudaFree(dAux); dAux = nullptr;
     };
     // clipping: the reads become their clipped sequences (device copy compacted; on the host each read's span is (cs, length))
@@ -721,8 +733,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                         out.e10.oEntries = oEn; out.e10.oQMask = oQm; out.e10.ok = true;
                         out.e10.msD2H = (now() - t0e) * 1e3;
                         char l2[400];
-                        snprintf(l2, sizeof l2, "engine_gpu: E10 on the device: entries %.1f ms (aux upload %.0f ms), products %.1f ms (%llu junction entries -> %llu junctions, "
+                        snprintf(l2, sizeof l2, "engine_gpu: E10 on the device: entries %.1f ms (aux upload %.0f ms), R11 histogram %.1f ms (%llu reads), "
+                                 "products %.1f ms (%llu junction entries -> %llu junctions, "
                                  "%llu unmapped reads, %llu hook reads), entries/masks to the region %.0f ms (%s)\n", out.e10.msEntries, out.e10.msUpAux,
+                                 out.e10.msR11, (unsigned long long) out.e10.r11Total,
                                  out.e10.msProducts, (unsigned long long) out.e10.nSJentries, (unsigned long long) out.e10.nSJ,
                                  (unsigned long long) out.e10.unmappedReads.size(), (unsigned long long) out.e10.hookReads.size(), out.e10.msD2H,
                                  pin2 ? "page-locked" : "pageable");
