@@ -67,12 +67,12 @@ def test_head_screen_reports_the_call_and_passes_the_whitelist(monkeypatch, tmp_
         calls.append(cmd)
         if cmd[1] == "download":
             open(cmd[cmd.index("-o") + 1], "w").write("x")
-            return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"[singlet-download] Protocol: 10x-3p-v2 (confidence: 3)\n")
+            return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"[singlet-gate] PASS_10X x.sra tag=10x-3p-v2 confidence=3 wl_match_rate=0.9 gate_s=1\n[singlet-download] Protocol: 10x-3p-v2 (confidence: 3)\n")
         return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
     monkeypatch.setattr(F.subprocess, "run", fake_run)
     info = {}
     verdict, _ = F.head_screen("/bin/singlet", "SRR1", str(tmp_path), {}, info=info, whitelist_dir="/wl")
-    assert verdict == "keep" and info == {"protocol": "10x-3p-v2", "confidence": 3}
+    assert verdict == "keep" and info == {"protocol": "10x-3p-v2", "confidence": 3, "wl": 0.9}
     assert calls[0][calls[0].index("--whitelist-dir") + 1] == "/wl"
     F.head_screen("/bin/singlet", "SRR1", str(tmp_path), {})        # the old call still works
 
@@ -113,16 +113,16 @@ def test_probe_run_protocol_without_a_head_screen(monkeypatch, tmp_path):
     def fake_run(cmd, **kw):
         seen.append(cmd)
         open(cmd[cmd.index("-o") + 1], "w").write("x")
-        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"[singlet-download] Protocol: 10x-5p-v2 (confidence: 3)\n")
+        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"[singlet-gate] PASS_10X x.sra tag=10x-5p-v2 confidence=3 wl_match_rate=0.88 gate_s=1\n[singlet-download] Protocol: 10x-5p-v2 (confidence: 3)\n")
     monkeypatch.setattr(F.subprocess, "run", fake_run)
-    assert F.probe_run_protocol("/bin/singlet", "SRR1", str(tmp_path), {}, whitelist_dir="/wl") == ("10x-5p-v2", 3)
+    assert F.probe_run_protocol("/bin/singlet", "SRR1", str(tmp_path), {}, whitelist_dir="/wl") == ("10x-5p-v2", 3, 0.88)
     assert seen[0][seen[0].index("--max-reads") + 1] == "5000" and seen[0][seen[0].index("--whitelist-dir") + 1] == "/wl"
     assert not os.path.exists(str(tmp_path / "SRR1.probe.1fq"))      # the probe output is removed
 
     def timeout_run(cmd, **kw):
         raise subprocess.TimeoutExpired(cmd, 1)
     monkeypatch.setattr(F.subprocess, "run", timeout_run)
-    assert F.probe_run_protocol("/bin/singlet", "SRR1", str(tmp_path), {}) == (None, None)
+    assert F.probe_run_protocol("/bin/singlet", "SRR1", str(tmp_path), {}) == (None, None, None)
 
 
 def test_plan_items_carry_run_reads_and_the_catalogue_protocol(tmp_path):
@@ -154,3 +154,33 @@ def test_low_confidence_calls_do_not_form_a_family():
     # nothing confident at all: no decision, every run stays (as before the vote existed)
     main, vote, others = F.vote_runs(["A", "B"], {"A": ("dropseq", 1), "B": ("celseq2", 1)}, [5, 5])
     assert main == ["A", "B"] and vote["status"] == "none" and others == [] and vote["low_confidence_runs"] == []
+
+
+def test_parse_wl_rate_from_the_gate_line():
+    assert F.parse_wl_rate("x\n[singlet-gate] PASS_10X /a/b.sra tag=10x-3p-v2 confidence=3 wl_match_rate=0.9012 gate_s=0.33\n") == 0.9012
+    assert F.parse_wl_rate("[singlet-gate] UNCERTAIN /a.sra tag=dropseq confidence=1 wl_match_rate=0 r1=20bp r2=50bp gate_s=0.1 \u2014 passing through\n") == 0.0
+    assert F.parse_wl_rate("[singlet-gate] REJECT a tag=splitseq confidence=1 wl_match_rate=0.001 r1=1bp") == 0.001
+    assert F.parse_wl_rate("nothing") is None and F.parse_wl_rate(None) is None
+
+
+def test_low_runs_follow_only_with_a_comparable_whitelist_rate():
+    runs = ["A", "B", "C", "D"]
+    base = {"A": ("10x-3p-v2", 3, 0.90), "B": ("10x-3p-v2", 3, 0.92), "C": ("10x-3p-v2", 3, 0.91)}
+    # D: LOW call but a whitelist rate of 0.60 (>= half of ~0.91): a lane of the same library
+    main, vote, others = F.vote_runs(runs, dict(base, D=("10x-3p-v1", 1, 0.60)), [10, 10, 10, 5])
+    assert main == runs and vote["low_confidence_runs"] == ["D"] and vote["excluded_runs"] == [] and others == []
+    # D at 0.05: another file layout or library: excluded, not pooled (5 of 35 reads = 14%: also offered to the companion classifier)
+    main, vote, others = F.vote_runs(runs, dict(base, D=("10x-3p-v1", 1, 0.05)), [10, 10, 10, 5])
+    assert main == ["A", "B", "C"] and vote["low_confidence_runs"] == []
+    (ex,) = vote["excluded_runs"]
+    assert ex["run"] == "D" and ex["wl_match_rate"] == 0.05 and ex["tag"] == "10x-3p-v1" and ex["reads"] == 5 and ex["main_wl_match_rate"] == 0.91
+    assert vote["incompatible"] is True and others[0]["runs"] == ["D"] and others[0]["protocol_family"] is None and others[0]["wl_match_rate"] == 0.05
+    # a small excluded run (1 of 31 reads = 3%) is excluded but not a companion candidate
+    main, vote, others = F.vote_runs(runs, dict(base, D=("dropseq", 1, 0.0)), [10, 10, 10, 1])
+    assert main == ["A", "B", "C"] and len(vote["excluded_runs"]) == 1 and others == [] and vote["incompatible"] is False
+    # a run with no call at all (probe failed) or no rate follows
+    main, vote, others = F.vote_runs(runs, dict(base, D=(None, None, None)), [10, 10, 10, 5])
+    assert main == runs and vote["excluded_runs"] == []
+    # nothing confident: no decision, nothing excluded
+    main, vote, others = F.vote_runs(["A", "B"], {"A": ("dropseq", 1, 0.0), "B": ("celseq2", 1, 0.0)}, [5, 5])
+    assert main == ["A", "B"] and vote["excluded_runs"] == [] and vote["status"] == "none"

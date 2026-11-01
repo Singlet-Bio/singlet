@@ -74,18 +74,22 @@ reads = {r: n for gsm in multi.index for r, n in zip(multi.runs[gsm], multi.read
 rows2 = []
 for gsm, x in R.groupby("gsm"):
     if len(x) < 2: continue
-    runs = list(x.run); calls = {r.run: (r.tag, r.conf) for r in x.itertuples()}
+    runs = list(x.run); calls = {r.run: (r.tag, r.conf, r.wl) for r in x.itertuples()}
     main, vote, others = FW.vote_runs(runs, calls, [reads.get(r, 0) for r in runs])
-    rows2.append(dict(gsm=gsm, n=len(runs), status=vote["status"], incompatible=vote["incompatible"], low=len(vote["low_confidence_runs"]), n_other_runs=len(vote.get("other_runs", [])),
-                      raw_tags=sorted(set(x.tag)), conf_min=int(x.conf.min())))
+    ex = vote["excluded_runs"]
+    rows2.append(dict(gsm=gsm, n=len(runs), status=vote["status"], incompatible=vote["incompatible"], low=len(vote["low_confidence_runs"]), n_excluded=len(ex),
+                      excl_reads=sum(e["reads"] for e in ex), sample_reads=sum(reads.get(r, 0) for r in runs), n_cand=len(others), raw_tags=sorted(set(x.tag)), conf_min=int(x.conf.min())))
 V = pd.DataFrame(rows2)
 print("samples with >= 2 probed runs: %d" % len(V))
 print("  raw: runs with different tags: %d" % int((V.raw_tags.map(len) > 1).sum()))
 print("  vote status: %s" % dict(V.status.value_counts()))
 print("  3p/5p flip settled by the vote (status voted): %d (%.1f%%)" % (int((V.status == "voted").sum()), 100 * (V.status == "voted").mean()))
 print("  with run(s) lacking a confident call that follow the main group: %d (%.1f%%)" % (int((V.low > 0).sum()), 100 * (V.low > 0).mean()))
-print("  genuinely different families (confident calls) -> companion_candidates: %d (%.1f%%)" % (int(V.incompatible.sum()), 100 * V.incompatible.mean()))
-print(V[V.incompatible].to_string())
+print("  runs without a confident call that follow the main group (whitelist rate >= half the main group's): %d samples" % int((V.low > 0).sum()))
+print("  samples with excluded runs (no confident call and a whitelist rate below half): %d (%.1f%%); excluded runs %d, their reads %.1f M of %.1f M probed-sample reads (%.2f%%)" % (
+    int((V.n_excluded > 0).sum()), 100 * (V.n_excluded > 0).mean(), int(V.n_excluded.sum()), V.excl_reads.sum() / 1e6, V.sample_reads.sum() / 1e6, 100 * V.excl_reads.sum() / max(V.sample_reads.sum(), 1)))
+print("  samples with companion_candidates (a confident other family, or an excluded run with >= 10%% of the reads): %d (%.1f%%)" % (int((V.n_cand > 0).sum()), 100 * (V.n_cand > 0).mean()))
+print(V[(V.n_excluded > 0) | (V.n_cand > 0)].to_string())
 print("all tags:", dict(R.tag.value_counts()))
 PY
 SRC=$T/repo/scripts/atlas_rerun python3 $T/census.py $T

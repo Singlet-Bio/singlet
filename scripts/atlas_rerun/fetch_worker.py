@@ -218,6 +218,19 @@ def parse_protocol(text):
     return (m.group(1), int(m.group(2))) if m else (None, None)
 
 
+GATE_LINE = re.compile(r"\[singlet-gate\] (\w+) .*?wl_match_rate=([0-9.eE+-]+)")
+
+
+def parse_wl_rate(text):
+    """-> the whitelist hit rate of the gate's protocol call ('[singlet-gate] PASS_10X|UNCERTAIN|REJECT ... wl_match_rate=0.9'), or None. A true lane of a 10x library has about the
+    same rate as its sibling lanes (~0.9); a rate ~0.05 means another file layout or another library."""
+    m = GATE_LINE.search(text or "")
+    try:
+        return float(m.group(2)) if m else None
+    except ValueError:
+        return None
+
+
 def protocol_family(tag):
     """'10x-3p-v2' and '10x-5p-v2' are one family: same whitelist, same barcode / UMI geometry, they differ only in which end of the transcript read 2 starts at
     (a heuristic of the detector: poly(A) vs poly(T) at the start of the cDNA read)."""
@@ -272,21 +285,42 @@ def check_against_catalogue(tag, protocol_inferred):
 MIN_VOTE_CONFIDENCE = 2   # Confidence::MEDIUM: a LOW / NONE call (whitelist hit rate ~0, e.g. 'dropseq' or '10x-3p-v1' at 5%) is a failed detection of a run, not a different library
 
 
+EXCLUDE_BELOW = 0.5        # a run without a confident call follows the sample only if its whitelist rate is at least this fraction of the main group's
+COMPANION_READ_FRAC = 0.10  # an excluded run holding at least this fraction of the sample's reads is also listed in companion_candidates
+
+
 def vote_runs(runs, calls, run_reads):
-    """The sample-level protocol decision for a multi-run sample. calls: {run: (tag, confidence)}; run_reads: reads per run in `runs` order (may be empty).
-    -> (main_runs, vote, other_groups). Only calls at MEDIUM or better take part. They are grouped by protocol FAMILY (same whitelist and geometry; the 3p/5p flag is not part of it);
-    the group with the most reads is the GEX sample (`main_runs`, original order). Runs without a call or with a LOW call stay with it (`vote["low_confidence_runs"]`: they belong to the
-    GSM and are decoded with the sample's protocol). Within the main group a 3'/5' disagreement is settled by vote_protocol (reads-weighted). Other families with a confident
-    call are different libraries under one GSM (a feature library next to the GEX, for instance): they are not decoded here and come back as `other_groups`, entries a companion
-    classifier can pick up (companion_candidates in the manifest); vote["incompatible"] is True then."""
-    w = {r: max(int(n or 0), 1) for r, n in zip(runs, run_reads or [])}
+    """The sample-level protocol decision for a multi-run sample. calls: {run: (tag, confidence[, whitelist rate])}; run_reads: reads per run in `runs` order (may be empty).
+    -> (main_runs, vote, other_groups). Only calls at MEDIUM or better take part in the vote. They are grouped by protocol FAMILY (same whitelist and geometry; the 3p/5p flag is not
+    part of it); the group with the most reads is the GEX sample. A run WITHOUT a confident call follows it (`low_confidence_runs`, decoded with the sample's protocol) only when its
+    whitelist rate is at least half the main group's: a true lane of a 10x library hits the whitelist about as often as its sibling lanes (~0.9), a run at ~0.05 is another file layout
+    (barcode read missing or truncated, index reads as R1, ...) or another library, and decoding it with the sample's protocol would drop 95% of its reads or add mismatched barcodes.
+    Those runs are EXCLUDED (`vote["excluded_runs"]`: run, call, whitelist rate, reads) and, when they hold >= 10% of the sample's reads, also returned as `other_groups`. Other
+    families with a confident call are different libraries under one GSM (a feature library next to the GEX, for instance): not decoded here, returned as `other_groups`
+    (companion_candidates in the manifest). A run whose whitelist rate is unknown (no gate line) follows. Runs excluded or in another family are never in `main_runs`."""
+    nreads = {r: int(n or 0) for r, n in zip(runs, run_reads or [])}
+    w = {r: max(n, 1) for r, n in nreads.items()}
     conf = {r: calls[r] for r in runs if calls.get(r) and calls[r][0] and (calls[r][1] or 0) >= MIN_VOTE_CONFIDENCE}
     tags = {r: c[0] for r, c in conf.items()}
+    wl = lambda r: calls[r][2] if calls.get(r) and len(calls[r]) > 2 else None
     groups = {}
     for r, t in tags.items():
         groups.setdefault(protocol_family(t), []).append(r)
     main_fam = max(groups, key=lambda f: (sum(w.get(r, 1) for r in groups[f]), f)) if groups else None
-    main = [r for r in runs if r not in tags or protocol_family(tags[r]) == main_fam]
+    main_conf = [r for r in groups.get(main_fam, [])]
+    rates = [(wl(r), w.get(r, 1)) for r in main_conf if wl(r) is not None]
+    main_wl = sum(x * y for x, y in rates) / sum(y for _, y in rates) if rates else None
+    followers, excluded = [], []
+    for r in runs:
+        if r in tags:
+            continue
+        rate = wl(r)
+        if tags and rate is not None and main_wl is not None and rate < EXCLUDE_BELOW * main_wl:
+            excluded.append({"run": r, "tag": calls[r][0] if calls.get(r) else None, "confidence": calls[r][1] if calls.get(r) else None, "wl_match_rate": rate,
+                             "main_wl_match_rate": round(main_wl, 3), "reads": nreads.get(r, 0), "reason": "no confident call and a whitelist rate below half the main group's"})
+        else:
+            followers.append(r)
+    main = [r for r in runs if (r in groups.get(main_fam, [])) or r in followers] if tags else list(runs)
     vote = vote_protocol({r: tags[r] for r in main if r in tags}, w)
     others = []
     for f in sorted(groups):
@@ -294,9 +328,15 @@ def vote_runs(runs, calls, run_reads):
             continue
         rs = [r for r in runs if r in groups[f]]
         others.append({"lib_gsm": None, "lib_type": None, "status": "unclassified", "protocol_family": f, "protocol_tags": {r: tags[r] for r in rs}, "runs": rs,
-                       "reads": sum(int(n or 0) for r, n in zip(runs, run_reads or []) if r in rs)})
+                       "reads": sum(nreads.get(r, 0) for r in rs)})
+    total = sum(nreads.values())
+    for e in excluded:
+        if total and e["reads"] >= COMPANION_READ_FRAC * total:
+            others.append({"lib_gsm": None, "lib_type": None, "status": "unclassified", "protocol_family": None, "protocol_tags": {e["run"]: e["tag"]}, "runs": [e["run"]],
+                           "reads": e["reads"], "reason": e["reason"], "wl_match_rate": e["wl_match_rate"]})
     vote["incompatible"] = bool(others)
-    vote["low_confidence_runs"] = [r for r in main if r not in tags] if tags else []
+    vote["low_confidence_runs"] = [r for r in followers] if tags else []
+    vote["excluded_runs"] = excluded
     if others:
         vote["main_family"] = main_fam
         vote["other_runs"] = [r for o in others for r in o["runs"]]
@@ -305,20 +345,21 @@ def vote_runs(runs, calls, run_reads):
 
 
 def probe_run_protocol(binary, run, scr, env, whitelist_dir=None, spots=5000, vdb_threads=2, timeout=600):
-    """The first `spots` spots of a run through `singlet download` (its gate and protocol detection probe 5000 spots) without fetching the run: -> (tag, confidence) or (None, None).
+    """The first `spots` spots of a run through `singlet download` (its gate and protocol detection probe 5000 spots) without fetching the run: -> (tag, confidence, wl_match_rate) or (None, None, None).
     Used for the sample vote when the head screen is off."""
     out = os.path.join(scr, run + ".probe.1fq")
     try:
         pr = subprocess.run([binary, "download", run, "--max-reads", str(spots), "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out] +
                             (["--whitelist-dir", whitelist_dir] if whitelist_dir else []), env=env, capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return None, None
+        return None, None, None
     finally:
         try:
             os.remove(out)
         except OSError:
             pass
-    return parse_protocol(pr.stderr.decode("utf-8", "replace"))
+    txt = pr.stderr.decode("utf-8", "replace")
+    return parse_protocol(txt) + (parse_wl_rate(txt),)
 
 
 def decode_run(binary, sra, out, quality, vdb_threads, env, log_path, protocol=None):
@@ -345,7 +386,9 @@ def head_screen(binary, run, scr, env, reads=1_000_000, vdb_threads=2, timeout=6
                             (["--whitelist-dir", whitelist_dir] if whitelist_dir else []), env=env, capture_output=True, timeout=timeout)
         rc = pr.returncode
         if info is not None:
-            info["protocol"], info["confidence"] = parse_protocol(pr.stderr.decode("utf-8", "replace"))
+            txt = pr.stderr.decode("utf-8", "replace")
+            info["protocol"], info["confidence"] = parse_protocol(txt)
+            info["wl"] = parse_wl_rate(txt)
     except subprocess.TimeoutExpired:
         return "unknown", time.time() - t0
     if rc == 2:
@@ -417,7 +460,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
                 hinfo = {}
                 verdicts[r], hs = head_screen(binary, r, scr, env, keep_json=os.path.join(scr, "head_screen.json") if a.format == "1fg2" else None, info=hinfo,
                                               whitelist_dir=a.whitelist_dir)
-                calls[r] = (hinfo.get("protocol"), hinfo.get("confidence"))
+                calls[r] = (hinfo.get("protocol"), hinfo.get("confidence"), hinfo.get("wl"))
                 Q.heartbeat(claim)
                 log("[head] %s %s %.0f s" % (r, verdicts[r], hs))
             keep_runs = [r for r in item["runs"] if verdicts[r] in ("keep", "unknown")]
@@ -432,10 +475,10 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
         if len(item["runs"]) > 1:
             main, vote, others = vote_runs(item["runs"], calls, item.get("run_reads") or [])
             protocol_vote = vote
-            if others:
+            if others or vote["excluded_runs"]:
                 companion_candidates = others
-                log("[vote] %s: runs of different protocol families %s: the largest group %s is the GEX sample, %s are handed to the companion classifier" % (
-                    gsm, vote["calls"], main, vote["other_runs"]))
+                log("[vote] %s: runs %s: the GEX sample is %s; handed to the companion classifier: %s; excluded from pooling: %s" % (
+                    gsm, vote["calls"], main, vote.get("other_runs", []), [e["run"] for e in vote["excluded_runs"]]))
                 item = dict(item, runs=main)
             if vote["status"] == "voted":
                 force_protocol = vote["winner"]
@@ -539,6 +582,8 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
             man["protocol_vote"] = protocol_vote
             if companion_candidates:   # runs of another protocol family under this GSM: not staged here; the interface to the companion classification
                 man["companion_candidates"] = companion_candidates
+            if protocol_vote.get("excluded_runs"):   # runs with no confident call and a whitelist rate far below the siblings': not pooled, not fetched
+                man["excluded_runs"] = protocol_vote["excluded_runs"]
         if calls:           # catalogue cross-check of the sample's call (the vote's winner, else the single kept run's call); only when the item carries protocol_inferred
             call = (protocol_vote or {}).get("winner") or next((calls[r][0] for r in kept if calls.get(r) and calls[r][0]), None)
             chk = check_against_catalogue(call, item.get("protocol_inferred"))
