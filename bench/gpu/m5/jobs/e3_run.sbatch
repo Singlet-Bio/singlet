@@ -25,7 +25,7 @@ RUNS=${RUNS:-"base:|warp:--warp-m --warp-b --host-emul|warpsort:--warp-m --warp-
 SCR=/tmp/$USER-e3-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 echo "node=$(hostname) job=$SLURM_JOB_ID $(date -Is) MAXD=$MAXD"; nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
 echo "m5 commit $(cat $BIN.commit 2>/dev/null) sha256 $(sha256sum $BIN | cut -c1-16); stardump commit $(cat $SD.commit)"
-cp $BIN $SCR/m5
+cp $BIN $SCR/m5e3   # (not $SCR/m5: that is the truth directory)
 T0=$(date +%s)
 mkdir -p $SCR/idx && cp $G/Genome $G/SA $G/SAindex $G/*.txt $G/*.tab $SCR/idx/ 2>/dev/null
 echo "[t] index copy $(( $(date +%s) - T0 )) s"
@@ -41,12 +41,13 @@ mkdir -p $SCR/m5 $SCR/star
 SINGLET_STAR_SEQCACHE_MB=0 STARDUMP_M5=$SCR/m5/t $SD --runMode alignReads --genomeDir $SCR/idx --readFilesIn $SCR/distinct.fq \
   --outSAMtype None --outFilterScoreMin 10 --runThreadN 24 --genomeLoad NoSharedMemory --outFileNamePrefix $SCR/star/ > $SCR/star.out 2>&1
 echo "stardump exit=$?"; tail -2 $SCR/star.out; rm -f $SCR/distinct.fq
+[ -f $SCR/m5/t.params.txt ] || { echo "no STAR truth: stop"; exit 1; }
 echo "[t] stardump $(( $(date +%s) - T0 )) s"
 IFS='|' read -ra VARS <<< "$RUNS"
 for v in "${VARS[@]}"; do
   LABEL=${v%%:*}; ARGS=${v#*:}
   echo "=== $LABEL: $BASE $ARGS"
-  apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=24 $SCR/m5 --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3 \
+  apptainer exec --nv -B $W -B $SCR $IMG env OMP_NUM_THREADS=24 $SCR/m5e3 --genome-dir $SCR/idx --truth $SCR/m5/t --reps 3 \
     --json $OUT/e3_${SLURM_JOB_ID}_$LABEL.json --tag $LABEL $BASE $ARGS > $SCR/m5_$LABEL.log 2>&1
   echo "m5 exit=$?"
   # no read sequences in the log: drop the "  seq" lines of DIFF records (blob values and indices are kept, at most 12 records)
@@ -63,7 +64,7 @@ if [ -n "$NCUS" ]; then
     L=${v%%~*}; r=${v#*~}; RX=${r%%~*}; ARGS=${r#*~}; t=$(date +%s)
     echo "=== ncu $L: regex $RX -- $BASE $ARGS"
     timeout 1200 apptainer exec --nv -B $W -B $SCR $IMG $NCU --set full --import-source yes --clock-control none --kernel-name-base mangled \
-      --kernel-name "regex:$RX" --launch-count 1 -o $ND/ncu_$L -f env OMP_NUM_THREADS=24 $SCR/m5 --genome-dir $SCR/idx --truth $SCR/m5/t \
+      --kernel-name "regex:$RX" --launch-count 1 -o $ND/ncu_$L -f env OMP_NUM_THREADS=24 $SCR/m5e3 --genome-dir $SCR/idx --truth $SCR/m5/t \
       --reps 0 $BASE $ARGS 2>&1 | grep -v "^  seq\|^  star\|^  ours\|^DIFF" > $ND/ncu_$L.log
     echo "exit=${PIPESTATUS[0]} wall=$(( $(date +%s) - t )) s"; grep -E "==PROF==|==ERROR==|==WARNING==" $ND/ncu_$L.log | cut -c1-200 | head -5
     [ -f $ND/ncu_$L.ncu-rep ] || continue
