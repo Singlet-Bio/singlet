@@ -241,6 +241,34 @@ template <class T> bool upload(const T* h, u64 n, T*& d, std::string& err, u64 p
     return true;
 }
 
+// E6 (bench/fable/records, docs/gpu-engine/fable/E6-records.md): SINGLET_ENGINE_GPU_DUMP=<path> writes mapDistinct's output (the records'
+// sequences and sequence-cache blobs, readRecord, the clip lengths), the filter parameters the hand-off records depend on (mappedFilter) and
+// chrStart, so that the GPU record builder can be checked byte for byte against the hand-off of the same run. Debug only; unset (the
+// default) nothing is written and nothing changes. Layout (little endian): "SGEDUMP1", u64 nRec, nReads, seqBytes, blobBytes, nChr, nClip;
+// i64 outFilterScoreMin; f64 outFilterScoreMinOverLread; u64 outFilterMatchNmin; f64 outFilterMatchNminOverLread; u64 outFilterMismatchNmax;
+// f64 outFilterMismatchNoverLmax, outFilterMismatchNoverReadLmax; u64 outFilterMultimapNmax, outSAMmultNmax; u64 chrStart[nChr + 1];
+// u64 seqOff[nRec + 1]; seq[seqBytes]; u64 blobOff[nRec + 1]; blob[blobBytes]; u32 readRecord[nReads]; u16 clip5[nClip], clip3[nClip].
+void dumpOutput(const char* path, const Params& P, const GenomeView& H, const singlet_engine_gpu::Output& out) {
+    FILE* f = std::fopen(path, "wb");
+    if (!f) return;
+    bool ok = true;
+    auto put = [&](const void* p, u64 n) { if (ok && n) ok = std::fwrite(p, 1, n, f) == n; };
+    const u64 hdr[6] = {(u64) out.seqOff.size() - 1, (u64) out.readRecord.size(), (u64) out.seq.size(), (u64) out.blob.size(), (u64) H.nChr,
+                        (u64) out.clip5.size()};
+    put("SGEDUMP1", 8); put(hdr, sizeof hdr);
+    const long long sMin = P.outFilterScoreMin; const double sOver = P.outFilterScoreMinOverLread; const u64 mMin = P.outFilterMatchNmin;
+    const double mOver = P.outFilterMatchNminOverLread; const u64 mmMax = P.outFilterMismatchNmax;
+    const double mmL = P.outFilterMismatchNoverLmax, mmRL = P.outFilterMismatchNoverReadLmax; const u64 mult = P.outFilterMultimapNmax, outMult = P.outSAMmultNmax;
+    put(&sMin, 8); put(&sOver, 8); put(&mMin, 8); put(&mOver, 8); put(&mmMax, 8); put(&mmL, 8); put(&mmRL, 8); put(&mult, 8); put(&outMult, 8);
+    put(H.chrStart, 8 * (H.nChr + 1));
+    put(out.seqOff.data(), 8 * out.seqOff.size()); put(out.seq.data(), out.seq.size());
+    put(out.blobOff.data(), 8 * out.blobOff.size()); put(out.blob.data(), out.blob.size());
+    put(out.readRecord.data(), 4 * out.readRecord.size());
+    put(out.clip5.data(), 2 * out.clip5.size()); put(out.clip3.data(), 2 * out.clip3.size());
+    ok = (std::fclose(f) == 0) && ok;
+    if (!ok) std::remove(path);
+}
+
 } // namespace
 
 namespace singlet_engine_gpu {
@@ -523,6 +551,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
              (unsigned long long)out.nWithN, (unsigned long long)nGpuMapped, (unsigned long long)out.nHostLane, out.secHostLane,
              (unsigned long long)out.nFailed, out.secUpload, out.secDedup, out.secMapGpu);
     out.log += line;
+    if (const char* dp = std::getenv("SINGLET_ENGINE_GPU_DUMP")) {   // E6 debug dump (off by default; see dumpOutput)
+        const double td = now();
+        dumpOutput(dp, P, H, out);
+        snprintf(line, sizeof line, "engine_gpu: E6 dump of %llu records -> %s (%.1f s)\n", (unsigned long long)(out.seqOff.size() - 1), dp, now() - td);
+        out.log += line;
+    }
     return true;
 }
 
