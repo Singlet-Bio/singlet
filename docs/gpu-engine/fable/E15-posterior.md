@@ -4,11 +4,65 @@ Experiment E15 ("posterior") of the GPU aligner program. Branch `gpu/fable/poste
 make level 5 (`SINGLET_ENGINE_GPU_E2E=5`, E11's STARsolo on the device) general enough for the atlas, so that it runs, byte-identical
 to the CPU engine, on samples with binned NovaSeq barcode qualities and on a 5' sample instead of falling back to level 3.
 
-With the variable unset or set to 1–4 the binary runs the code it ran before (the changes are in the level-5 path and E9's library).
+With the variable unset or set to 1–4 the binary runs the code it ran before: the changes are reached only at level 5 (by
+construction; the default paths were not gated separately here).
 
 ## 0. Answer in brief
 
-@@ANSWER@@
+- **Binned barcode qualities never blocked level 5 in the pipeline (§1b).**
+  - `.1fq` stores the qualities of R2 only, and every decode writes 'F' for R1. STAR therefore sees CB qualities 70..70 on every
+    sample, and E11's constant-quality guard never fires in a pipeline run.
+  - With E11's own binary, level 5 already ran on pbmc2m, pbmc5p_v1 and neuron1k_v3 (probe 796560). The original R1 FASTQs are
+    binned NovaSeq ('F', ':', ',', '#'), but those qualities do not reach STAR.
+- **The per-read posterior is ported anyway, exact, and checked against STAR on real binned qualities (§1c–1f, §2a).**
+  - A plain STAR from the vendored sources ran on pbmc1k_v3's original L001 FASTQs: 33,436,697 reads, 5.9 % of the CB bases not 'F',
+    626,729 reads with several whitelist matches.
+  - E9's library with the reads' CB qualities, on the host and on the device:
+    - every read's cbMatch, first match, Solo flag and posterior CB are STAR's;
+    - **10 of 10 Solo files are byte-identical to STAR's**, including CellReads.stats.
+  - The control, one 'F' quality for every base (what the pipeline does), gives 20,492 other decisions and 5 of 10 files differ.
+  - In the engine, level 5 takes the per-read path by itself when the decode's CB qualities vary. It reads the multi-match reads'
+    qualities from the mapped barcode FASTQ after STAR's loop, and checks each line's CR against the read's.
+- **Gates at T = 18, CPU engine vs level 5 (§2b, §2c), all with 10 of 10 STAR Solo files identical and the same CellReads.stats rows:**
+
+  | sample | reads | out_equiv identical / timing-path / differ | CellReads.stats rows |
+  |---|---|---|---|
+  | neuron1k_v3 (3' v3, mouse) | 92.9 M | 60 / 2 / 7 | 600,534 |
+  | **pbmc5p_v1 (5' v1)** | 60.0 M | 58 / 2 / 7 | 355,639 |
+  | nuclei2k_v2 (v2, mouse nuclei) | 118.7 M | 60 / 2 / 7 | 411,195 |
+  | pbmc1k_v3 (against E11's kept CPU outputs) | 66.6 M | 60 / 1 / 8 | 323,542 |
+
+  - The differing files are E11's run-dependent set: record order (3 files, same records), timings (2), `pileup_stats.json`'s probe
+    count and `summary.json`'s memory tier. For pbmc1k_v3 they are the 3 files the kept copy lacks, plus the whitelist path in
+    `provenance.json`.
+  - The exception is nuclei2k_v2's `nonhost_reads.fq`, which holds different records. That is a pipeline bug in the non-host writer
+    when it subsamples (§2c), not level 5.
+  - The per-read path forced on (`SINGLET_E15_PERREAD=1`) gives the same verdicts on neuron1k_v3, pbmc5p_v1 and pbmc1k_v3.
+- **Timings at T = 18 (§3):**
+
+  | sample | cpu | gpuD | **level 5** | vs gpuD |
+  |---|---|---|---|---|
+  | neuron1k_v3 | 520.4 s / 2180 core-s | 326.7 / 1206 | **271.3 / 801** | −17.0 % wall, −33.6 % core-s |
+  | pbmc5p_v1 | 489.8 / 2164 | 229.5 / 846 | **199.2 / 579** | −13.2 %, −31.6 % |
+  | nuclei2k_v2 | 611.2 / 4712 | 459.2 / 1751 | **391.0 / 1179** | −14.9 %, −32.6 % |
+  | pbmc1k_v3 (cpu, gpuD: E11) | 424.5 / 2607 | 253.4 / 997 | **212.7 / 686** | −16.1 %, −31.2 % |
+
+  Against the CPU engine level 5 is 1.6–2.5x faster in wall time and uses 2.7–4.0x fewer core-s.
+- **What still falls back: hgmm1k_v3 (human + mouse barnyard), for two reasons outside Solo (§2c).**
+  - GPU mapping runs out of device memory in lane A (`cudaMalloc(&dWork, …)`) at every GPU level, also with lane A at a half and
+    a quarter of its size. The run is then level 0: STAR maps every read.
+  - With smaller lanes (`NB` 32,768, `NBB` 16,384, chunk 8 M) the mapping fits (lanes peak 85.9 GB). Then E10 refuses: it packs
+    junction starts into 32 bits, and the barnyard genome has about 5.8 G bases. Without E10's products, levels 3–5 are not made.
+  - The ports it needs: a device memory budget in `engine_gpu.cu`'s lanes (§5.1) and 64-bit junction starts in E10 (§5.8).
+  - Level 5 also needs about 11 GB more device memory than the default GPU path while it maps (nuclei2k_v2 peaks at 89.8 of
+    94 GB).
+- **E11 §5.3 is in:** the kept Solo inputs (1.35–3.0 GB) sit in page-locked host memory during STAR's loop. It costs about 0.4 s on the
+  tail (copy back and `cudaFreeHost`), which is within run-to-run noise; `SINGLET_E15_KEEP_ON_DEVICE=1` restores E11's behaviour.
+- **A side result for the atlas (§2d):** the pipeline's 'F' qualities change 3.3 % of the multi-match decisions against STARsolo run
+  on the FASTQ (pbmc1k_v3 L001: 19,476 fewer reads with a CB, same 1,135 cells). This holds for the CPU engine and every GPU level.
+- **`gpu/fable-engine` moved during E15** (E14, at e2b0000e). It merged into this branch without conflicts (13651944) and was
+  re-gated (797017, §2e). pbmc1k_v3 at level 5 against E11's CPU outputs is unchanged: 60 / 1 / 8, Solo files identical, same
+  CellReads.stats rows. It took 178.2 s / 654.4 core-s with E14's genome load.
 
 ## 1. Rule and design
 
@@ -121,7 +175,8 @@ dump; the driver checked that every read's CR in the barcode FASTQ equals the du
 | `cbQual`'s CRs vs the reads' | 0 differ | 0 differ | (not called) |
 | STAR's 10 Solo files (`Barcodes.stats`, `Features.stats`, raw and filtered `barcodes/features/matrix`, `UMIperCellSorted.txt`, `CellReads.stats`) | **10 of 10 identical** | **10 of 10 identical** | 5 of 10 identical |
 
-`Summary.csv` is not among the 10: it needs the mapping statistics that the engine hands `soloWrite` at level 5, which the driver does not have. The gates (§2b) compare it.
+`Summary.csv` is not among the 10: it needs the mapping statistics that the engine hands `soloWrite` at level 5, which the driver does
+not have. The gates (§2b) compare it.
 
 The first run of this job (796726, driver 166ba73d) gave the same 10 of 10 files and 3 per-read differences. They were in the driver's
 transcription, not in the library: it counted the exact CRs of reads with a bad UMI. In STAR a bad UMI replaces `cbMatch` before
@@ -157,7 +212,7 @@ The device decided the same CBs as STAR for every multi-match read in every run 
 `cbMMmultiple` and `noTooManyWLmatches` per CB, are identical). Reads with several matches: 789,078 (neuron1k_v3, 614,647 given a CB),
 484,278 (pbmc5p_v1, 298,259), 1,253,320 (pbmc1k_v3, 1,096,181).
 
-### 2c. nuclei2k_v2 and hgmm1k_v3 (job 796865)
+### 2c. nuclei2k_v2 and hgmm1k_v3 (gates 796865, 797017; probe 797247)
 
 Binary 166ba73d, T = 18, node g051.
 
@@ -178,7 +233,20 @@ FASTQ): level 5 ran. CPU engine vs level 5:
 `SINGLET_ENGINE_GPU_NB=131072` (half of lane A's default): `engine_gpu: cudaMalloc(&dWork, NB * sizeof(Work<C>)): out of memory`,
 then "ENGINE_GPU: not used (GPU mapping failed): STAR maps every read". Both runs are level 0 and slower than the CPU engine in core-s
 (§3). Their outputs are still the CPU engine's (49 identical, 2 timing/path only, the same 7 run-dependent; Solo files identical;
-CellReads.stats same 524,497 rows). @@HGMM@@
+CellReads.stats same 524,497 rows). 
+
+Where the memory goes (1-s `nvidia-smi` samples in the gate's `monitor.tsv`): the barnyard index takes the device to 53 GB (GRCm39:
+24.7 GB), the reads to about 60 GB, and lane A's allocations to 85.1 GB (gpuD, `NB` 131,072), 89.4 GB (gpuE5, `NB` 131,072) and
+89.7 GB (gpuE5, `NB` 65,536, gate 797017) when `dWork` fails.
+
+**Probe 797247** (merged binary 13651944, T = 8) with `SINGLET_ENGINE_GPU_NB=32768`, `SINGLET_ENGINE_GPU_NBB=16384` and
+`SINGLET_ENGINE_GPU_CHUNK=8388608`: the GPU mapping fits (`engine_gpu: device memory`: index 53.2 GB, reads + clip 62.3 GB, lanes peak
+85.9 GB; 24,130,301 distinct sequences mapped in 10.3 s). Then the second limit: "engine_gpu: E10 not used (products: junction start
+beyond 32 bits)" and "ENGINE_GPU: E11 (level 5) not used: E10 products not made". The run goes on as the default GPU path does (E8's
+records and the sequence cache; STAR's loop does the per-read work). E10 packs a junction's genome start into the upper 32 bits of a
+64-bit sort key (`src/engine_gpu/hostloop_gpu.cu:223`, `:325`, `:351`), and the barnyard genome (GRCh38 + GRCm39, about 5.8 G bases) is longer than 2^32. So
+levels 3 to 5 cannot run on this index at all, whatever the memory. Solo on the device was not reached; its own coordinates are untested
+beyond 32 bits.
 
 Device memory in the mapping lanes (`engine_gpu: device memory` line, nuclei2k_v2): gpuD index 25.6, reads + clip 36.6 GB, lanes peak
 78.7 GB; level 5 reads + clip 42.8 GB, then 42.8 → 48.7 GB over the five chunks (E8 keeps each chunk's packed results on the device),
@@ -203,7 +271,16 @@ pbmc1k_v3's L001 lane:
 Same cells, a small loss of multi-match reads to `noTooManyWLmatches`. This is a property of the pipeline (CPU engine and every GPU
 level alike), not of level 5.
 
-@@MERGE@@
+### 2e. After merging `gpu/fable-engine` (E14) into this branch (job 797017, binary 13651944, T = 18, node g050)
+
+`origin/gpu/fable-engine` moved from 8e54be40 to e2b0000e (E14: the genome read once per sample, the CR4 probes concurrently). It
+merged without conflicts (13651944; E14 touches `src/pipeline/singlet.cpp`, `src/star/Genome*`, `GenomePreload.*`, none of E15's
+files).
+- pbmc1k_v3, E11's kept CPU outputs vs level 5: 60 identical, 1 timing/path only, the same 8; the 10 Solo files identical;
+  CellReads.stats same 323,542 rows; `star_SJ.out.tab` and the mapping statistics identical. Level 5 took 178.2 s / 654.4 core-s
+  (212.7 s / 685.8 core-s before the merge, on g051).
+- hgmm1k_v3 with `NB` 65,536: GPU mapping failed again (§2c), and the outputs again equal the CPU engine's (49 / 2 / 7, Solo files
+  identical, CellReads.stats same 524,497 rows).
 
 ## 3. Timings
 
@@ -232,12 +309,14 @@ T = 18, short-gpu node g051 (H100 NVL), gate 796674 (binary 166ba73d). Wall time
 | hgmm1k_v3 (63.11; gate 796865, g051) | cpu | 431.7 | 1682.8 | 6.84 | 26.67 | 62.2 GB |
 | | gpuD, `NB` 131,072 (GPU mapping failed: level 0) | 361.2 | 1729.9 | 5.72 | 27.41 | 78.1 GB |
 | | gpuE5, `NB` 131,072 (GPU mapping failed: level 0) | 373.0 | 1783.1 | 5.91 | 28.26 | 83.3 GB |
-@@T3@@
+| | gpuE5, `NB` 65,536 (level 0; gate 797017, g050, binary 13651944) | 289.9 | 1736.9 | 4.59 | 27.52 | 83.3 GB |
+| | cpu (gate 797017, g050) | 345.6 | 1587.4 | 5.48 | 25.15 | 62.3 GB |
+| pbmc1k_v3 after the merge of E14 (gate 797017, g050, binary 13651944) | **gpuE5** | **178.2** | **654.4** | **2.68** | **9.83** | 61.0 GB |
 
 Level 5 compared with:
 - the default GPU path: neuron1k_v3 −55.4 s (−17.0 %) and −404.6 core-s (−33.6 %); pbmc5p_v1 −30.3 s (−13.2 %) and −266.8 core-s
-  (−31.6 %) (E11 on pbmc1k_v3: −16.9 %, −31.9 %);
-- the CPU engine: neuron1k_v3 1.92x wall, 2.72x core-s; pbmc5p_v1 2.46x, 3.74x (pbmc1k_v3: 2.0x, 3.8x).
+  (−31.6 %); nuclei2k_v2 −68.2 s (−14.9 %) and −571.4 core-s (−32.6 %) (E11 on pbmc1k_v3: −16.9 %, −31.9 %);
+- the CPU engine: neuron1k_v3 1.92x wall, 2.72x core-s; pbmc5p_v1 2.46x, 3.74x; nuclei2k_v2 1.56x, 4.00x (pbmc1k_v3: 2.0x, 3.8x).
 
 The per-read path (`gpuE5p`) costs nothing measurable: the "multi" stage goes from 1.9 to 36.6 ms on neuron1k_v3 (789,078 reads'
 qualities fetched from the barcode FASTQ in 17.1 ms) and from 1.5 to 42.1 ms on pbmc1k_v3 (1,253,320 reads in 12.1 ms). The barcode
@@ -260,11 +339,16 @@ FASTQ's unmapping moves from right after STAR's loop to after `soloRunKept`, whi
 | demux/ancestry/writers | 11 / 48.6 | 11 / 46.9 | 11 / 47.9 | 17 / 78.2 | 18 / 80.2 | 17 / 77.4 |
 | total | 327 / 1205.4 | 271 / 800.9 | 274 / 802.5 | 229 / 844.8 | 198 / 578.0 | 199 / 578.4 |
 
-The "startup" row (≤ 1 s) is left out; the totals include it. (*) For pbmc5p_v1's gpuD the script found no prefill-end marker and put STAR's start, the prefill and STAR's loop in one 81 s row.
+The "startup" row (≤ 1 s) is left out; the totals include it. (*) For pbmc5p_v1's gpuD the script found no prefill-end marker
+and put STAR's start, the prefill and STAR's loop in one 81 s row.
 
 **STAR's Solo step** ("started/finished Solo counting"): neuron1k_v3 60 s (cpu), 17 s (gpuD); pbmc5p_v1 26 s (cpu), 3 s (gpuD); not run
 at level 5. In its place, after the loop: `soloRunKept` 0.79 s and the 11 files 1.03 s (neuron1k_v3), 0.43 s and 0.21 s (pbmc5p_v1),
-0.56 s and 0.65 s (pbmc1k_v3).
+0.56 s and 0.65 s (pbmc1k_v3), 0.92 s and 0.50 s (nuclei2k_v2, whose Solo step took 63 s on the CPU engine and 11 s on gpuD).
+
+**nuclei2k_v2** (stages, wall s / core-s): gpuD spends 249 / 1156 in STAR's load, prefill and loop together (the script found no
+prefill-end marker); level 5 spends 35 / 43 in STAR's start, 143 / 558 in the prefill (reading reads 29 s, GPU 98 s, cache inserts
+16 s) and 23 / 99 in STAR's loop on the 1,885,914 reads without a record (1.6 %). Non-host takes 78 s in both (11.4 M subsampled unmapped reads).
 
 **The kept inputs in page-locked host memory during STAR's loop (§1e):**
 
@@ -273,11 +357,12 @@ at level 5. In its place, after the loop: `soloRunKept` 0.79 s and the 11 files 
 | neuron1k_v3 | 2.13 GB | 1,382 ms | 174 ms |
 | pbmc5p_v1 | 1.35 GB | 877 ms | 111 ms |
 | pbmc1k_v3 | 1.59 GB | 1,031 ms | 130 ms |
-| nuclei2k_v2 (probe) | 3.00 GB | | |
+| nuclei2k_v2 (gate 796865) | 3.00 GB | 1,943 ms | 245 ms |
 
 The device memory is free for another sample during STAR's loop (E11 §5.3). The price is on the tail of a single run: `soloRunKept`
 takes 0.56 s against 0.16 s with the inputs left on the device (pbmc1k_v3, gpuE5 vs gpuE5k). That is the copy back (130 ms) and
-`cudaFreeHost` of the page-locked copies in `soloKeepRelease` (about 0.27 s, by difference: soloRun's own stages are 0.14 s in both runs). The three pbmc1k_v3 level-5 runs are within 3.7 s of
+`cudaFreeHost` of the page-locked copies in `soloKeepRelease` (about 0.27 s, by difference: soloRun's own stages are 0.14 s in both runs).
+The three pbmc1k_v3 level-5 runs are within 3.7 s of
 each other, so the 0.4 s is below the run-to-run noise.
 
 ## 4. Surprises
@@ -302,7 +387,8 @@ each other, so the 0.4 s is below the run-to-run noise.
    the copy back (about 0.27 s by difference, against 130 ms; §3).
 7. **A pipeline bug surfaced on nuclei2k_v2:** with more than 20 M unmapped reads, `nonhost_reads.fq` holds reads other than the
    classified ones, and different ones per engine (§2c, §5.7). The other gated samples have at most 4.8 M unmapped reads.
-8. **Halving lane A was not enough for the barnyard index** (§2c): device memory, not Solo, is what keeps hgmm1k_v3 off the GPU.
+8. **The barnyard index hits two limits, neither of them Solo** (§2c): the lanes' device memory (lane A at a half and a quarter of
+   its size still fails; it fits with lane A at 1/8, lane B at 1/4 and half-size chunks), then E10's 32-bit junction starts.
 
 ## 5. What remains before level 5 can be the default of `--engine gpu`
 
@@ -311,12 +397,14 @@ each other, so the 0.4 s is below the run-to-run noise.
      each lane also allocates its result slots for the whole chunk. Nothing compares this with the free memory.
    - A failed `cudaMalloc` abandons GPU mapping for the whole run: "ENGINE_GPU: not used (GPU mapping failed): STAR maps every read".
      That is level 0, not level 3: STAR maps all reads on the CPU, as in the CPU engine.
-   - hgmm1k_v3 (the human + mouse barnyard index, about twice GRCh38's) fails at lane A's `dWork` at every GPU level (probes 796560,
-     796691; gate 796865, also with `NB` halved to 131,072). @@HGMM2@@ nuclei2k_v2 (118.7 M reads, 79.8 M distinct sequences)
-     maps, with the lanes peaking at 89.8 of 94 GB at level 5 and 78.7 GB on the default GPU path: E8's and E10's device-resident
-     results cost level 5 about 11 GB during mapping (§2c).
+   - hgmm1k_v3 (the human + mouse barnyard index, 53 GB on the device against GRCm39's 25.6 GB) fails at lane A's `dWork` at
+     every GPU level (probes 796560, 796691; gates 796865 and 797017, also with `NB` at 131,072 and 65,536). With smaller lanes
+     (`NB` 32,768, `NBB` 16,384, chunk 8 M; probe 797247) it maps, with the lanes peaking at 85.9 GB, and hits the second limit:
+     E10's 32-bit junction starts (§2c, item 8).
+   - nuclei2k_v2 (118.7 M reads, 79.8 M distinct sequences) maps, with the lanes peaking at 89.8 of 94 GB at level 5 and 78.7 GB on
+     the default GPU path. E8's and E10's device-resident results cost level 5 about 11 GB during mapping (§2c).
    - The port: size `NB` (and the chunk) from `cudaMemGetInfo` once the index and the reads are on the device, or halve `NB` and retry
-     on `cudaErrorMemoryAllocation`. `SINGLET_ENGINE_GPU_NB` / `SINGLET_ENGINE_GPU_NBB` are the manual knobs today (§2c).
+     on `cudaErrorMemoryAllocation`. `SINGLET_ENGINE_GPU_NB`, `_NBB` and `_CHUNK` are the manual knobs today (§2c).
 2. **R1 qualities, if the atlas wants STARsolo's decisions on the sequencer's qualities** (§2d). The `.1fq` would have to store the CB
    qualities (2 bits per base for the 4-level binning: 4 B per read for a 16-base CB) and the decode would write them. Level 5 then
    takes the per-read path by itself (§1d). The CPU engine's outputs change too, so this is a format and pipeline decision.
@@ -328,11 +416,14 @@ each other, so the 0.4 s is below the run-to-run noise.
    keeping them on the device (`SINGLET_E15_KEEP_ON_DEVICE=1`) is the faster choice. The gain (1.4–3 GB of device memory free during
    STAR's loop) is real only when another sample's prefill shares the device; that case was not measured.
 6. **For the default switch**, beyond items 1, 4 and 5: the release-gate datasets gated at level 5 one by one (this report adds
-   neuron1k_v3, pbmc5p_v1 and nuclei2k_v2 to E11's pbmc1k_v3; hgmm1k_v3 waits for item 1), and level 5 gated again on `gpu/fable-engine` once E12, E13
+   neuron1k_v3, pbmc5p_v1 and nuclei2k_v2 to E11's pbmc1k_v3; hgmm1k_v3 waits for items 1 and 8), and level 5 gated again on `gpu/fable-engine` once E12, E13
    and E16 are merged (they touch the prefill, the ingest and the tail that level 5 runs through).
 7. **Not level 5, found by the gate:** `nonhost_reads.fq` is written from the wrong reads when the non-host screen subsamples (more
    than 20 M unmapped reads; §2c). The writer must take the classification by the kept reads' names (or keep their file positions),
    not by the record's index in the whole file. `src/pipeline/singlet.cpp:1905-1921`.
+8. **E10's 32-bit junction starts** (`src/engine_gpu/hostloop_gpu.cu`, outside E15's files) keep levels 3–5 off any index longer
+   than 2^32 bases (the barnyard, §2c). The port: a sort key with the full 64-bit start (start and gap as two keys, or a 128-bit
+   key). Then hgmm1k_v3 can be gated at level 5 with item 1's knobs; Solo on the device has not run on such an index yet.
 
 ## 6. Files touched, and why
 
@@ -353,14 +444,14 @@ Not changed: `include/singlet/engine_gpu.h` (nothing needed), the decode, `engin
 **Branch `gpu/fable/posterior`** (from `gpu/fable-engine` 8e54be40):
 - 46af66b7: build and probe jobs.
 - 098408d8: the per-read posterior on the device; the kept inputs in page-locked host memory during STAR's loop.
-- 166ba73d: `cbQual` gets the reads' CRs (`e11CbQual` checks its lines); the binned-quality driver. **Last change to `src/`.**
+- 166ba73d: `cbQual` gets the reads' CRs (`e11CbQual` checks its lines); the binned-quality driver. **Last E15 change to `src/`.**
 - ad52e499, 6de3b25e, f5d91641: the gate job (`MODES_<s>`, `PAIRS_<s>`, `NB_<s>`).
 - 1bda8f09, 61af5ebf, 5b882315: the binned job through the pipeline's legacy FASTQ path (abandoned: `CB_samTagOut`, §4.4).
 - 2bb5c127: the probe takes GRCm39 for nuclei2k_v2.
 - 28ee97d9: `e15star` and the binned job on it.
 - 904de6e2: the driver's exact counts (§2a).
 - 13651944: merge of `gpu/fable-engine` at e2b0000e (E14).
-- This document is the next commit.
+- 75c1d55e and later: this document.
 
 **Builds** (short-gpu, no GPU):
 
@@ -373,7 +464,8 @@ Not changed: `include/singlet/engine_gpu.h` (nothing needed), the decode, `engin
 | 796866 | 13651944 (the merge) | `bin-m1/singlet-gpu` |
 
 **Probes** (debug-gpu, T = 8, level 5 stopped after the prefill): 796560 (E11's binary 673cb317; pbmc2m, pbmc5p_v1, neuron1k_v3,
-hgmm1k_v3, nuclei2k_v2 with the wrong genome), 796691 (166ba73d; nuclei2k_v2 on GRCm39, hgmm1k_v3).
+hgmm1k_v3, nuclei2k_v2 with the wrong genome), 796691 (166ba73d; nuclei2k_v2 on GRCm39, hgmm1k_v3), 797247 (13651944; hgmm1k_v3 with
+`SINGLET_ENGINE_GPU_NB=32768`, `_NBB=16384`, `_CHUNK=8388608`).
 
 **Binned-quality check** (debug-gpu, T = 8): 796790 (final), 796726 (the driver's transcription bug). 796663, 796680, 796689 tried the
 pipeline's legacy path (§4.4).
@@ -384,7 +476,7 @@ pipeline's legacy path (§4.4).
 |---|---|---|---|
 | 796674 | 166ba73d | neuron1k_v3, pbmc5p_v1: cpu gpuD gpuE5 gpuE5p; pbmc1k_v3: gpuE5 gpuE5p gpuE5k against E11's kept cpu | identity (§2b), timings (§3) |
 | 796865 | 166ba73d | nuclei2k_v2, hgmm1k_v3 (`NB_hgmm1k_v3=131072`): cpu gpuD gpuE5 | §2c |
-@@REGATEJOB@@
+| 797017 | 13651944 (merge with E14) | hgmm1k_v3 (`NB_hgmm1k_v3=65536`): gpuE5 cpu; pbmc1k_v3: gpuE5 against E11's kept cpu | §2e |
 
 **Results:** `$W/jobs/fable/posterior/results/{gate,probe,binned}-<job>/` (`summary.txt`; per gate run `stages.txt`,
 `starlog_engine.txt`, `star_Log.out`, `CellReads.stats`, `monitor.tsv`; per binned run STAR's `star_Solo.out/`, `post_test.log`).
