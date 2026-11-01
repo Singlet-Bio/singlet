@@ -15,9 +15,11 @@ Options added to `m5` (all off by default; the default binary behaves as before)
 |---|---|
 | `--presort` | the engine's order: stable sort of the truth reads by their first 32 bases (`engine_gpu.cu` `k_prefix_key`) before mapping. Without it the harness maps in truth-file order (24 sorted runs, one per STAR thread) |
 | `--bin` | unchanged: after phase 1, phase-3 threads take the batch's reads sorted ascending by `nW << 40 \| nEntries` (cheap reads first) |
-| `--p3order K` | other phase-3 keys, stable radix sort per batch: `cost-asc` (= `--bin`), `cost-desc` (most windows first, then most SA entries; reads without phase 3 last), `nw-desc` (windows only), `locus` (genome bin of the read's first window, `WC[0][WC_gStart]`), `anchor` (genome position of the first anchor's first locus), `nwlocus` (window-count class 1, 2, 3-4, 5-8, ... descending, then the first window's bin) |
+| `--p3order K` | other phase-3 keys, stable radix sort per batch: `cost-asc` (= `--bin`), `cost-desc` (most windows first, then most SA entries; reads without phase 3 last), `nw-desc` (windows only), `locus` (genome bin of the read's first window, `WC[0][WC_gStart]`), `anchor` (genome position of the first anchor's first locus), `nwlocus` (window-count class 1, 2, 3-4, 5-8, ... descending, then the first window's bin), `sig` (the control-flow signature known before phase 3: stitched, nW, nP, nA, descending; ties keep prefix order), `warp-desc` (the warps of the prefix order, 32 consecutive reads, kept whole and in order, run heaviest first by the sum of their windows, then SA entries: longest-first at warp granularity without breaking coherence) |
 | `--p3order-a/m/b K` | the same keys for one lane only (overrides `--p3order` for that lane) |
 | `--best-order` | E4's best exact order as one flag: `--presort --p3order-m nw-desc` (prefix order everywhere, lane M's phase 3 by window count); later flags override |
+| `--p3-block N` | threads per block of the phase-3 kernels (32, 64, 128; default 128). 32 = one warp per block: a finished warp frees its slot instead of waiting for the other 3 warps of its block |
+| `--p3-maxreg R` | `k_p3` under `__launch_bounds__` capping registers at 64 or 80 (94 without; ptxas: 64 = 148-160 B spills, 80 = 60-68 B; with 32-thread blocks the 80 cap compiles to 72) |
 | `--queue` | phase 3 as a persistent kernel: grid = SMs x resident blocks (occupancy API); each warp takes the next reads of the batch, in the `--p3order` order, from an atomic counter (warp-aggregated) |
 | `--fused A\|M\|B` | the lane as one persistent kernel with Work per resident thread: a warp takes the next 32 reads (prefix order) from an atomic counter, runs phase 1 (thread per read), scans the SA entries of each of the 32 reads warp-cooperatively (k_p2's loop, ballot into a per-thread bit buffer of `--fused-bits` entries, default 16,384), then phase 3 (thread per read). A read with more entries than the buffer runs `assignAll` itself (the same result). No batches, no host syncs inside the lane |
 | `--fused-bps-a/m/b N` | resident blocks per SM of the fused kernel (0 = occupancy limit): the Work memory knob |
@@ -51,7 +53,10 @@ Fixed settings in every variant (the engine's): budgets 1024 / 2048 / 2048 steps
 | 795260, 795287, 795288 | builds: `--fused-lb`; per-lane order; the base source cf92cdb987 with CUDA 13.3 | `m5-f61996240d`, `m5-8885087332` (992464e2e1642de5), `m5-cf92cdb987` (5d2436f962c276d9) |
 | 795289, 795304 | round 2, cancelled while pending (variants added) | - |
 | 795307 | build of b861dab5 (`--best-order`) | `m5-b861dab562` |
-| 795308 | round 2: reference builds, per-lane order, batch sizes, lane B in one launch, fused at 4-5 blocks/SM, equal-memory staged vs fused, `--best-order` | the 795307 build |
+| 795328, 795334 | builds of 857bd885 (`--p3-block`, `--p3-maxreg`, `sig`) and f8c2ae0d (`warp-desc`) | `m5-857bd88594` (d0b8de7959f02947), `m5-f8c2ae0d12` (618f8fa46e39354a) |
+| 795308 | round 2 (`ROUND=2`, script of b861dab5): reference builds, per-lane order, batch sizes, lane B in one launch, fused at 4-5 blocks/SM, equal-memory staged vs fused, `--best-order` | the latest build when it starts |
+| 795329 | round 3, cancelled while pending (warp-desc added) | - |
+| 795335 | round 3 (`ROUND=3`): the E1 follow-ups (32-thread blocks, longest-first from a counter, `sig`, `warp-desc`, register caps, E1's batch sizes) and ncu passes on `k_p3` | `m5-f8c2ae0d12` |
 
 Results (JSON per variant, logs): `$W/jobs/fable/order/results/<job>/`, copied to `bench/fable/order/results/<job>/`.
 Table: `python bench/fable/order/e4_table.py bench/fable/order/results/795240 v0`.
