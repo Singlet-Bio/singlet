@@ -187,11 +187,29 @@ def compute_phase(a, cfg, ccfg, env, gsm, claim, man):
             shutil.rmtree(scr, ignore_errors=True)
 
 
+def write_private_sidecar(a, ccfg, man, out_dir):
+    """Keep the sample's withheld layers (genotype, chrM alleles, ambient, doublets, splice_psi, sex / ancestry calls) in a private tar under the
+    campaign root, outside every public path, BEFORE the scratch (and with it private/) is deleted. Raises on any failure: a sample whose
+    withheld layers could not be kept must not finish (the reads are gone afterwards). -> record for the done event."""
+    import private_sidecar as PS
+    base = ccfg.get("private_sidecar_dir") or os.path.join(ccfg["root"], "private-sidecars")
+    dest = os.path.join(base, man.get("gse") or "NA", man["gsm"] + ".private.tar")
+    t0 = time.time()
+    idx = PS.build(out_dir, dest, man["gsm"], man.get("gse"), threads=a.threads)
+    bad = PS.verify(dest)
+    if bad:
+        os.remove(dest)
+        raise RuntimeError("private sidecar failed its read-back: %s" % bad[:3])
+    return {"path": dest, "bytes": os.path.getsize(dest), "files": len(idx["files"]), "raw_bytes": sum(e["bytes"] for e in idx["files"].values()),
+            "build_s": round(time.time() - t0, 1)}
+
+
 def finish_phase(a, cfg, ccfg, job):
     """Publish (per-sample Beta upload), then delete the staged reads and the scratch. Runs in a thread beside the next compute."""
     root, gsm, claim, man, scr, heart = ccfg["root"], job.gsm, job.claim, job.man, job.scr, job.heart
     try:
         out_dir = os.path.join(scr, "out")
+        side = None if getattr(a, "no_private_sidecar", False) else write_private_sidecar(a, ccfg, man, out_dir)
         up = publish(a, man, out_dir, cfg, ccfg, scr, claim)
         pub, n, priv = checksum_outputs(out_dir)
         if heart.lost or not os.path.isdir(claim):
@@ -200,7 +218,7 @@ def finish_phase(a, cfg, ccfg, job):
         Q.finish(a.stage, gsm, claim)  # staged reads deleted only now: outputs are uploaded (or hooked) and checked
         C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine=a.engine, compute_s=round(job.compute_s, 1),
                wall_s=round(time.time() - job.t0, 1), pairs=man.get("pairs"), staged_bytes=man.get("bytes"), out_public_bytes=pub,
-               publish=up, via="drain")
+               publish=up, private_sidecar=side, via="drain")
         return "done (publish %.0fs after compute)" % (time.time() - job.t0 - job.compute_s)
     except Exception as e:  # noqa: BLE001
         C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="exception", detail=repr(e)[:1500])
@@ -226,6 +244,7 @@ def accept_sample(m, min_pairs=0, max_pairs=0, mem_gb=0, accept_1fg2=False, engi
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage", required=True)
+    ap.add_argument("--no-private-sidecar", action="store_true", help="skip the per-sample private sidecar (tests only: without it the withheld layers are lost)")
     ap.add_argument("--engine", choices=("gpu", "cpu"), required=True)
     ap.add_argument("--config", required=True)
     ap.add_argument("--cluster", default="clipper")
