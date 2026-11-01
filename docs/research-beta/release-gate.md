@@ -53,6 +53,47 @@ document (measured on 2a3b0d61, or carried from earlier) and says so in the `mea
 | chromosomal-sex | incomplete | 5/0 | carried, 2a3b0d61 |  | missing | recorded benchmark (171 samples, 472,363 cells), model unchanged; cell accuracy 0.9698 (0.9976 without 5 samples whose GEO label reads dispute); the tip harness no longer imports (annotate_campaign._has_v2) so not re-run |
 | genetic-ancestry | fail | 8/2 | carried, 2a3b0d61 | `accuracy_top.8m` mage150: 0.9329 vs 0.9933 (peddy) | re-measure | re-run from the tip scripts (#146 label rule) on the gate-3 binary, MAGE 150 (150 individuals, reads aligned with 2a3b0d61): accuracy.8m 0.973 (was 0.86), accuracy_top.8m 0.933 vs peddy 0.993; 2m and 0.5m pass. The result document is NOT contract-valid (derived data needs corroborated_by: no gating metric rests on real data); numbers are reported, the row cannot pass until the harness is fixed |
 
+## Every row's status (gate 4 table, with publication)
+
+| capability | status | measured on | publication |
+|---|---|---|---|
+| gex-counts | fail 41/3 | 18eb391c |  |
+| spliced-unspliced | pass 3/0 | 18eb391c |  |
+| junctions-psi | pass 42/0 | 18eb391c |  |
+| cell-calling | fail 21/4 | 18eb391c |  |
+| ambient-rna | fail / withheld 8/2 | 18eb391c | withheld (row fails) |
+| doublets | missing / withheld 4/0 | carried, 1bcfef0d | withheld until v2 is wired; then "comparable to scDblFinder" |
+| donor-demux | pass 15/0 | carried, 2a3b0d61 |  |
+| donor-snps | fail / withheld 22/3 | carried, 2a3b0d61 | genotypes never served |
+| mtdna | fail / withheld 11/7 | carried, 2a3b0d61 | withheld (no mtDNA release) |
+| non-host | fail 8/2 | 18eb391c |  |
+| alignment-performance | fail 3/1 | carried, 02aa9b93 |  |
+| download | fail 3/3 | carried, 02aa9b93 |  |
+| adt | missing  | none |  |
+| hto | fail 1/7 | 18eb391c |  |
+| cell-type | fail 9/3 | carried, 19caf8cd |  |
+| vdj | fail 22/8 | carried, 5d39eb23 | contigs and clonotypes published; BCR pairing below TRUST4 |
+| crispr-guides | missing 21/0 | carried, 34a6f535 |  |
+| atac | fail 9/1 | carried, 2a3b0d61 |  |
+| multiome | pass 2/0 | carried, 2a3b0d61 |  |
+| spatial | fail 7/3 | carried, 2a3b0d61 |  |
+| chromosomal-sex | missing 5/0 | carried, 2a3b0d61 | labels served; legacy sex_call withheld |
+| genetic-ancestry | fail 8/2 | carried, 2a3b0d61 | inferred labels may be served; row cannot pass until corroborated |
+
+Counts: {'fail': 14, 'pass': 4, 'missing': 4}. Rows measured on 18eb391c: counts family, cell-calling, ambient-rna, hto, non-host; the rest are earlier documents.
+
+## Leftovers for Thursday (11-05)
+
+- **GPU vs CPU at 18eb391c:** the GPU runs (SINGLET_GPU_PILEUP=on) and the diff job (797159) were queued behind the kang2018_ctrl GPU run; result file `release-gate4/results/gpu_vs_cpu.json` on Clipper. Gate 3's diff: all 8 datasets identical except `read_stats.tsv`.
+- **Ambient (S12, draft #176):** 8/2; rerun on the merged fix. **Spatial (S12)**, **HTO (S11, may not reach match-or-beat)**, **genotype tail (S10: donor-snps 3 fails, mtdna 7 fails)**.
+- **Ancestry:** the lcl_gse230239 run (job 796946) and `lcl_score.py`, plus S10's `selfreport.sbatch` inputs, give the real-data metrics the contract needs (`corroborated_by`); osorio2019_lcl_mix is done. Then re-score genetic-ancestry. Delete the cell-line reads afterwards.
+- **Doublets:** only S11's v2 mode on hgmm1k_v3 (about 5 truth doublets, uninformative). Needs the contract harness (#159, 17 datasets) run with v2 wired.
+- **No driver or harness on the tip:** adt (S16), crispr-guides (S16), cell-type, download (needs the #168 harness run), vdj contract JSON (S11).
+- **Alignment-performance timings:** exclusive-node jobs 796260-796265 queued (projected 5 Nov); carried from 02aa9b9.
+- **Contract amendments:** #172 (spliced-unspliced long-read metric, draft, stacked on #138) and #138 (junctions-psi STARsolo reference, 8-dataset MODE=reference runs not done).
+- **Chromosomal sex:** 131 samples / 16 studies (3 studies not served: GSE145370, GSE209832, GSE220764); mark complete after the cohort row is redefined.
+- **Gate 5:** a full re-measure of all 22 rows at the freeze SHA.
+
 ## Gate 3: prod/campaign 2a3b0d61 (all 22 attempted on one binary)
 
 Binary: `release-gate/bin/2a3b0d61/singlet-cpu` and `singlet-gpu` (sha256 of singlet-gpu d95c8d30...). Candidate 2a3b0d61c247aa8cc8de5102b16114dbf4c802c8 is prod/campaign with
