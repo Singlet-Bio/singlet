@@ -42,7 +42,7 @@ int main() {
 
     // (1) A1 and A2 differ at bases 0 and 1; B takes base 0 from A2 and base 1 from A1, one mismatch to each.
     {
-        const uint64_t A1 = 0, A2 = 0b1111, B = 0b0100;   // 2 bits per base, base 0 in the low bits
+        const uint64_t A1 = 0, A2 = 0b1111, B = 0b0011;   // 2 bits per base, base 0 in the low bits
         std::vector<uint64_t> pk{A1, A2, B};
         std::vector<uint32_t> ct{100, 80, 1};
         std::vector<int> own, parent(3);
