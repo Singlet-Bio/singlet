@@ -51,7 +51,11 @@ R2="v0raw:;base13:@m5-cf92cdb987;w11:@$W/jobs/w11/bin/m5;v0:--presort;v5m:--pres
 R2="$R2;v4big:--presort --batch-a 524288 --batch-m 393216;v4bigB1:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072"
 R2="$R2;v5best:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072 --p3order-m nw-desc;v5bestq:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072 --p3order-m nw-desc --queue"
 R2="$R2;v4fA5:--presort --fused A --fused-lb 5 --tail;v4fA4:--presort --fused A --fused-lb 4 --tail;v4fAMB5:--presort --fused AMB --fused-lb 5 --tail"
-R2="$R2;v5mt:--presort --p3order-m nw-desc --tail;v0b:--presort"
+R2="$R2;v5mt:--presort --p3order-m nw-desc --tail"
+# equal Work memory (a 40 GB-class budget: ~3 / ~3 / ~10.5 GB for A / M / B): staged small batches vs fused at 4 / 2 / 1 blocks/SM
+R2="$R2;s40:--presort --batch-a 65536 --batch-m 32768 --batch-b 16384 --p3order-m nw-desc --tail"
+R2="$R2;f40:--presort --fused AMB --fused-bps-a 4 --fused-bps-m 2 --fused-bps-b 1 --fused-lb 4 --tail"
+R2="$R2;f40a:--presort --fused A --fused-bps-a 4 --fused-lb 4 --batch-m 32768 --batch-b 16384 --p3order-m nw-desc --tail;v0b:--presort"
 [ "${ROUND:-1}" = 2 ] && DEFAULT=$R2
 IFS=';' read -ra VARS <<< "${E4RUNS:-$DEFAULT}"
 for v in "${VARS[@]}"; do
