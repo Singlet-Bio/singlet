@@ -1,0 +1,171 @@
+device NVIDIA H100 NVL, 132 SMs; sizeof Work: A 46104, B 635248, host 45382896
+genomic length score: 10 breakpoints
+index + genome arrays loaded in 19.3 s; sjdbN 386483, chr 194
+truth: 1991926 distinct reads (4118999 reads), loaded in 0.6 s
+lane A (staged): 1991926 reads, batches of 262144, work 46104 B/read (12.09 GB)
+  lane A run 0: 268.6 ms (phase 1 106.6, scan 17.1, phase 3 144.8)
+  lane A run 1: 267.3 ms (phase 1 106.1, scan 16.8, phase 3 144.4)
+TAILEV lane=A batch=0 n=262144 gap_ms=0.0014 p1_ms=13.8896 scan_sync_ms=0.0470 p2_ms=1.8233 p3_ms=15.6640 cs_ms=0.0050
+TAILEV lane=A batch=1 n=262144 gap_ms=0.0160 p1_ms=13.8665 scan_sync_ms=0.0481 p2_ms=2.2205 p3_ms=17.6658 cs_ms=0.0051
+TAILEV lane=A batch=2 n=262144 gap_ms=0.0146 p1_ms=14.5774 scan_sync_ms=0.0461 p2_ms=2.3437 p3_ms=20.3100 cs_ms=0.0050
+TAILEV lane=A batch=3 n=262144 gap_ms=0.0140 p1_ms=14.4260 scan_sync_ms=0.0475 p2_ms=2.0928 p3_ms=20.8405 cs_ms=0.0050
+TAILEV lane=A batch=4 n=262144 gap_ms=0.0592 p1_ms=13.8127 scan_sync_ms=0.0853 p2_ms=2.5918 p3_ms=19.8767 cs_ms=0.0050
+TAILEV lane=A batch=5 n=262144 gap_ms=0.0166 p1_ms=14.0565 scan_sync_ms=0.0472 p2_ms=2.1221 p3_ms=19.8881 cs_ms=0.0051
+TAILEV lane=A batch=6 n=262144 gap_ms=0.0145 p1_ms=13.3781 scan_sync_ms=0.0477 p2_ms=1.9574 p3_ms=18.6384 cs_ms=0.0050
+TAILEV lane=A batch=7 n=156918 gap_ms=0.0141 p1_ms=8.0956 scan_sync_ms=0.0460 p2_ms=1.3146 p3_ms=10.8302 cs_ms=0.0043
+  lane A run 2: 266.9 ms (phase 1 106.1, scan 16.9, phase 3 143.8)
+TAIL lane=A batch=0 kernel=k_p1 n=262144 T=128 bps=5 slots=84480 span_ms=13.870 busy_thr=0.7868 busy_warp=0.7868 busy_blk=0.8773 drain_ms=3.152 drain_share=0.2272 fin_p50=0.5445 fin_p90=0.8683 fin_p99=0.9624 fin_p999=0.9908 longest_share=0.4568 clk_ghz=1.778 curve=1.000,1.000,1.000,0.994,0.884,0.720,0.893,0.982,0.991,0.904,0.830,0.891,0.919,0.962,0.961,0.849,0.552,0.281,0.106,0.018
+TAIL lane=A batch=0 kernel=k_p3 n=262144 T=128 bps=6 slots=101376 span_ms=15.581 busy_thr=0.5469 busy_warp=0.5469 busy_blk=0.7824 drain_ms=6.971 drain_share=0.4474 fin_p50=0.3976 fin_p90=0.6991 fin_p99=0.7881 fin_p999=0.8777 longest_share=0.8794 clk_ghz=1.777 curve=0.999,0.996,0.959,0.829,0.675,0.687,0.721,0.742,0.756,0.808,0.834,0.763,0.591,0.372,0.152,0.040,0.010,0.003,0.000,0.000
+TAILWHO lane=A batch=0 stitch_select_share_all=0.4436 stitch_select_share_top1pct=0.4689 top1pct_thread_time_share=0.0318
+TAILTOP lane=A batch=0 rank=0 ms=13.702 start_ms=0.000 nEnt=8 nW=7 steps=35 stitch_select_ms=9.285 rest_ms=4.409
+TAILTOP lane=A batch=0 rank=1 ms=13.702 start_ms=0.000 nEnt=12025 nW=0 steps=0 stitch_select_ms=0.006 rest_ms=13.687
+TAILTOP lane=A batch=0 rank=2 ms=13.702 start_ms=0.000 nEnt=0 nW=16 steps=5 stitch_select_ms=0.000 rest_ms=13.694
+TAILTOP lane=A batch=0 rank=3 ms=13.702 start_ms=0.000 nEnt=0 nW=16 steps=5 stitch_select_ms=0.000 rest_ms=13.694
+TAILTOP lane=A batch=0 rank=4 ms=13.702 start_ms=0.000 nEnt=4157 nW=7 steps=189 stitch_select_ms=9.285 rest_ms=4.409
+TAILCLK lane=A batch=0 n=262144 seeds=1355792213264 windows=152106314847 stitching=665810434293 select=15223047407 sat=11561520313 fin=73816994824 copies=7244318286 rec=15437697802
+TAIL lane=A batch=1 kernel=k_p1 n=262144 T=128 bps=5 slots=84480 span_ms=13.775 busy_thr=0.7861 busy_warp=0.7861 busy_blk=0.8824 drain_ms=2.849 drain_share=0.2068 fin_p50=0.5596 fin_p90=0.8627 fin_p99=0.9590 fin_p999=0.9864 longest_share=0.5228 clk_ghz=1.778 curve=1.000,1.000,1.000,0.996,0.911,0.741,0.868,0.972,0.989,0.949,0.813,0.799,0.908,0.968,0.960,0.885,0.601,0.251,0.097,0.014
+TAIL lane=A batch=1 kernel=k_p3 n=262144 T=128 bps=6 slots=101376 span_ms=17.759 busy_thr=0.6388 busy_warp=0.6388 busy_blk=0.8858 drain_ms=5.609 drain_share=0.3158 fin_p50=0.5003 fin_p90=0.8055 fin_p99=0.8791 fin_p999=0.9461 longest_share=0.9391 clk_ghz=1.777 curve=0.992,0.979,0.915,0.825,0.730,0.745,0.777,0.795,0.787,0.786,0.779,0.784,0.798,0.788,0.660,0.427,0.168,0.035,0.007,0.001
+TAILWHO lane=A batch=1 stitch_select_share_all=0.5035 stitch_select_share_top1pct=0.4341 top1pct_thread_time_share=0.0284
+TAILTOP lane=A batch=1 rank=0 ms=16.678 start_ms=0.000 nEnt=3 nW=1 steps=5 stitch_select_ms=14.381 rest_ms=2.347
+TAILTOP lane=A batch=1 rank=1 ms=16.678 start_ms=0.000 nEnt=3018 nW=1 steps=5 stitch_select_ms=14.381 rest_ms=2.347
+TAILTOP lane=A batch=1 rank=2 ms=16.678 start_ms=0.000 nEnt=3018 nW=1 steps=5 stitch_select_ms=14.381 rest_ms=2.347
+TAILTOP lane=A batch=1 rank=3 ms=16.678 start_ms=0.000 nEnt=3020 nW=3 steps=15 stitch_select_ms=5.352 rest_ms=11.376
+TAILTOP lane=A batch=1 rank=4 ms=16.678 start_ms=0.000 nEnt=3018 nW=1 steps=13 stitch_select_ms=14.381 rest_ms=2.347
+TAILCLK lane=A batch=1 n=262144 seeds=1308532593194 windows=216652624040 stitching=1006573347930 select=22598925496 sat=18457725787 fin=104772604847 copies=10593961447 rec=21723107957
+TAIL lane=A batch=2 kernel=k_p1 n=262144 T=128 bps=5 slots=84480 span_ms=14.603 busy_thr=0.7551 busy_warp=0.7551 busy_blk=0.8419 drain_ms=3.606 drain_share=0.2469 fin_p50=0.5243 fin_p90=0.8251 fin_p99=0.9531 fin_p999=0.9808 longest_share=0.4018 clk_ghz=1.778 curve=1.000,1.000,1.000,0.989,0.866,0.749,0.919,0.994,0.985,0.876,0.799,0.864,0.959,0.983,0.909,0.673,0.320,0.131,0.074,0.010
+TAIL lane=A batch=2 kernel=k_p3 n=262144 T=128 bps=6 slots=101376 span_ms=20.466 busy_thr=0.5661 busy_warp=0.5661 busy_blk=0.7976 drain_ms=8.220 drain_share=0.4016 fin_p50=0.4430 fin_p90=0.7208 fin_p99=0.8138 fin_p999=0.9033 longest_share=0.8102 clk_ghz=1.778 curve=1.000,0.989,0.888,0.722,0.733,0.774,0.797,0.792,0.779,0.766,0.784,0.776,0.689,0.484,0.243,0.079,0.019,0.005,0.002,0.000
+TAILWHO lane=A batch=2 stitch_select_share_all=0.4727 stitch_select_share_top1pct=0.4484 top1pct_thread_time_share=0.0287
+TAILTOP lane=A batch=2 rank=0 ms=16.581 start_ms=0.000 nEnt=0 nW=16 steps=132 stitch_select_ms=0.000 rest_ms=16.568
+TAILTOP lane=A batch=2 rank=1 ms=16.581 start_ms=0.000 nEnt=0 nW=16 steps=5 stitch_select_ms=0.000 rest_ms=16.568
+TAILTOP lane=A batch=2 rank=2 ms=16.581 start_ms=0.000 nEnt=10 nW=2 steps=28 stitch_select_ms=11.464 rest_ms=5.103
+TAILTOP lane=A batch=2 rank=3 ms=16.581 start_ms=0.000 nEnt=10 nW=2 steps=36 stitch_select_ms=11.464 rest_ms=5.103
+TAILTOP lane=A batch=2 rank=4 ms=16.581 start_ms=0.000 nEnt=8774 nW=14 steps=280 stitch_select_ms=13.987 rest_ms=2.581
+TAILCLK lane=A batch=2 n=262144 seeds=1320351694181 windows=221623225608 stitching=964389092199 select=22399107982 sat=18427558383 fin=110103960425 copies=10561397676 rec=22010108574
+TAIL lane=A batch=3 kernel=k_p1 n=262144 T=128 bps=5 slots=84480 span_ms=14.445 busy_thr=0.7573 busy_warp=0.7573 busy_blk=0.8464 drain_ms=3.415 drain_share=0.2364 fin_p50=0.5462 fin_p90=0.8315 fin_p99=0.9343 fin_p999=0.9679 longest_share=0.5271 clk_ghz=1.777 curve=1.000,1.000,1.000,0.992,0.896,0.784,0.859,0.963,0.985,0.908,0.819,0.857,0.918,0.970,0.922,0.717,0.360,0.144,0.049,0.003
+TAIL lane=A batch=3 kernel=k_p3 n=262144 T=128 bps=6 slots=101376 span_ms=21.191 busy_thr=0.5383 busy_warp=0.5383 busy_blk=0.7660 drain_ms=8.708 drain_share=0.4109 fin_p50=0.4385 fin_p90=0.6867 fin_p99=0.7541 fin_p999=0.8105 longest_share=1.0000 clk_ghz=1.778 curve=1.000,0.987,0.898,0.707,0.713,0.766,0.799,0.786,0.769,0.765,0.765,0.762,0.619,0.330,0.083,0.013,0.002,0.001,0.000,0.000
+TAILWHO lane=A batch=3 stitch_select_share_all=0.4780 stitch_select_share_top1pct=0.4506 top1pct_thread_time_share=0.0294
+TAILTOP lane=A batch=3 rank=0 ms=21.191 start_ms=0.000 nEnt=3 nW=1 steps=5 stitch_select_ms=1.603 rest_ms=19.578
+TAILTOP lane=A batch=3 rank=1 ms=21.191 start_ms=0.000 nEnt=0 nW=16 steps=5 stitch_select_ms=0.000 rest_ms=21.181
+TAILTOP lane=A batch=3 rank=2 ms=21.191 start_ms=0.000 nEnt=0 nW=16 steps=36 stitch_select_ms=0.000 rest_ms=21.181
+TAILTOP lane=A batch=3 rank=3 ms=21.191 start_ms=0.000 nEnt=0 nW=16 steps=5 stitch_select_ms=0.000 rest_ms=21.181
+TAILTOP lane=A batch=3 rank=4 ms=21.191 start_ms=0.000 nEnt=0 nW=16 steps=71 stitch_select_ms=0.000 rest_ms=21.181
+TAILCLK lane=A batch=3 n=262144 seeds=1308445810185 windows=220932426244 stitching=960461931673 select=22504017212 sat=17911129191 fin=99562745222 copies=9885699647 rec=18960917161
+TAIL lane=A batch=4 kernel=k_p1 n=262144 T=128 bps=5 slots=84480 span_ms=13.811 busy_thr=0.7806 busy_warp=0.7806 busy_blk=0.8695 drain_ms=3.074 drain_share=0.2226 fin_p50=0.5437 fin_p90=0.8513 fin_p99=0.9539 fin_p999=0.9825 longest_share=0.3921 clk_ghz=1.778 curve=1.000,1.000,1.000,0.994,0.885,0.754,0.903,0.991,0.990,0.909,0.811,0.847,0.957,0.988,0.948,0.836,0.513,0.194,0.080,0.011
+TAIL lane=A batch=4 kernel=k_p3 n=262144 T=128 bps=6 slots=101376 span_ms=19.870 busy_thr=0.6403 busy_warp=0.6403 busy_blk=0.8866 drain_ms=6.201 drain_share=0.3121 fin_p50=0.4849 fin_p90=0.8056 fin_p99=0.8913 fin_p999=0.9498 longest_share=0.8271 clk_ghz=1.777 curve=1.000,0.995,0.920,0.737,0.715,0.765,0.788,0.804,0.794,0.791,0.794,0.809,0.803,0.784,0.658,0.423,0.172,0.046,0.007,0.001
+TAILWHO lane=A batch=4 stitch_select_share_all=0.4885 stitch_select_share_top1pct=0.4543 top1pct_thread_time_share=0.0262
+TAILTOP lane=A batch=4 rank=0 ms=16.435 start_ms=0.000 nEnt=5 nW=2 steps=10 stitch_select_ms=3.784 rest_ms=12.636
+TAILTOP lane=A batch=4 rank=1 ms=16.435 start_ms=0.000 nEnt=4 nW=2 steps=10 stitch_select_ms=3.784 rest_ms=12.636
+TAILTOP lane=A batch=4 rank=2 ms=16.435 start_ms=0.000 nEnt=3 nW=1 steps=5 stitch_select_ms=1.549 rest_ms=14.871
+TAILTOP lane=A batch=4 rank=3 ms=16.435 start_ms=0.000 nEnt=3 nW=1 steps=5 stitch_select_ms=1.549 rest_ms=14.871
+TAILTOP lane=A batch=4 rank=4 ms=16.435 start_ms=0.000 nEnt=0 nW=16 steps=10 stitch_select_ms=0.000 rest_ms=16.420
+TAILCLK lane=A batch=4 n=262144 seeds=1285481050046 windows=225394194953 stitching=1096396283879 select=23523136165 sat=25174116563 fin=118406361819 copies=12770247673 rec=23861624865
+TAIL lane=A batch=5 kernel=k_p1 n=262144 T=128 bps=5 slots=84480 span_ms=14.175 busy_thr=0.7666 busy_warp=0.7666 busy_blk=0.8547 drain_ms=3.311 drain_share=0.2336 fin_p50=0.5413 fin_p90=0.8442 fin_p99=0.9443 fin_p999=0.9711 longest_share=0.5164 clk_ghz=1.778 curve=1.000,1.000,1.000,0.989,0.850,0.757,0.929,0.995,0.990,0.903,0.807,0.875,0.930,0.976,0.923,0.719,0.412,0.200,0.072,0.005
+TAIL lane=A batch=5 kernel=k_p3 n=262144 T=128 bps=6 slots=101376 span_ms=19.950 busy_thr=0.5849 busy_warp=0.5849 busy_blk=0.8332 drain_ms=7.275 drain_share=0.3647 fin_p50=0.4709 fin_p90=0.7458 fin_p99=0.8341 fin_p999=0.9342 longest_share=0.8790 clk_ghz=1.778 curve=1.000,0.995,0.920,0.756,0.697,0.768,0.787,0.792,0.773,0.761,0.765,0.760,0.757,0.613,0.372,0.133,0.034,0.009,0.003,0.001
+TAILWHO lane=A batch=5 stitch_select_share_all=0.4680 stitch_select_share_top1pct=0.3950 top1pct_thread_time_share=0.0296
+TAILTOP lane=A batch=5 rank=0 ms=17.536 start_ms=0.000 nEnt=2361 nW=3 steps=43 stitch_select_ms=4.822 rest_ms=12.703
+TAILTOP lane=A batch=5 rank=1 ms=17.536 start_ms=0.000 nEnt=0 nW=16 steps=61 stitch_select_ms=0.000 rest_ms=17.525
+TAILTOP lane=A batch=5 rank=2 ms=17.536 start_ms=0.000 nEnt=12586 nW=1 steps=11 stitch_select_ms=1.814 rest_ms=15.711
+TAILTOP lane=A batch=5 rank=3 ms=17.536 start_ms=0.000 nEnt=12593 nW=8 steps=214 stitch_select_ms=11.853 rest_ms=5.672
+TAILTOP lane=A batch=5 rank=4 ms=17.536 start_ms=0.000 nEnt=6405 nW=8 steps=60 stitch_select_ms=11.853 rest_ms=5.672
+TAILCLK lane=A batch=5 n=262144 seeds=1299633197204 windows=216545371823 stitching=962305088005 select=22005714711 sat=17866818167 fin=102826860942 copies=10350721373 rec=19956841896
+TAIL lane=A batch=6 kernel=k_p1 n=262144 T=128 bps=5 slots=84480 span_ms=13.383 busy_thr=0.7585 busy_warp=0.7585 busy_blk=0.8526 drain_ms=3.159 drain_share=0.2360 fin_p50=0.5295 fin_p90=0.8335 fin_p99=0.9494 fin_p999=0.9857 longest_share=0.4833 clk_ghz=1.777 curve=1.000,1.000,1.000,0.993,0.886,0.751,0.891,0.977,0.984,0.877,0.778,0.876,0.951,0.970,0.906,0.711,0.364,0.168,0.077,0.010
+TAIL lane=A batch=6 kernel=k_p3 n=262144 T=128 bps=6 slots=101376 span_ms=18.700 busy_thr=0.5792 busy_warp=0.5792 busy_blk=0.8079 drain_ms=7.206 drain_share=0.3853 fin_p50=0.4517 fin_p90=0.7314 fin_p99=0.8200 fin_p999=0.9012 longest_share=0.8228 clk_ghz=1.777 curve=1.000,0.996,0.930,0.751,0.702,0.768,0.782,0.783,0.771,0.787,0.811,0.802,0.744,0.544,0.290,0.095,0.022,0.005,0.002,0.000
+TAILWHO lane=A batch=6 stitch_select_share_all=0.5349 stitch_select_share_top1pct=0.4270 top1pct_thread_time_share=0.0286
+TAILTOP lane=A batch=6 rank=0 ms=15.387 start_ms=0.000 nEnt=0 nW=16 steps=38 stitch_select_ms=0.000 rest_ms=15.375
+TAILTOP lane=A batch=6 rank=1 ms=15.387 start_ms=0.000 nEnt=3 nW=1 steps=5 stitch_select_ms=1.950 rest_ms=13.426
+TAILTOP lane=A batch=6 rank=2 ms=15.387 start_ms=0.000 nEnt=6 nW=4 steps=20 stitch_select_ms=5.489 rest_ms=9.886
+TAILTOP lane=A batch=6 rank=3 ms=15.387 start_ms=0.000 nEnt=0 nW=16 steps=10 stitch_select_ms=0.000 rest_ms=15.375
+TAILTOP lane=A batch=6 rank=4 ms=15.387 start_ms=0.000 nEnt=3 nW=1 steps=5 stitch_select_ms=1.950 rest_ms=13.426
+TAILCLK lane=A batch=6 n=262144 seeds=1214645065525 windows=220391402518 stitching=1020103565735 select=23710886102 sat=15115260743 fin=107910321596 copies=9924539155 rec=23030668870
+TAIL lane=A batch=7 kernel=k_p1 n=156918 T=128 bps=5 slots=84480 span_ms=8.162 busy_thr=0.7172 busy_warp=0.7172 busy_blk=0.8073 drain_ms=3.908 drain_share=0.4788 fin_p50=0.5069 fin_p90=0.8331 fin_p99=0.9069 fin_p999=0.9684 longest_share=0.7316 clk_ghz=1.777 curve=1.000,1.000,1.000,1.000,1.000,0.991,0.949,0.807,0.730,0.821,0.887,0.866,0.858,0.839,0.757,0.535,0.235,0.058,0.012,0.001
+TAIL lane=A batch=7 kernel=k_p3 n=156918 T=128 bps=6 slots=101376 span_ms=10.728 busy_thr=0.5313 busy_warp=0.5313 busy_blk=0.7207 drain_ms=5.565 drain_share=0.5188 fin_p50=0.4882 fin_p90=0.6980 fin_p99=0.8018 fin_p999=0.9355 longest_share=0.9747 clk_ghz=1.776 curve=1.000,1.000,0.996,0.974,0.900,0.773,0.693,0.715,0.749,0.771,0.701,0.579,0.411,0.224,0.089,0.031,0.011,0.005,0.002,0.000
+TAILWHO lane=A batch=7 stitch_select_share_all=0.5706 stitch_select_share_top1pct=0.4964 top1pct_thread_time_share=0.0227
+TAILTOP lane=A batch=7 rank=0 ms=10.456 start_ms=0.000 nEnt=0 nW=16 steps=87 stitch_select_ms=0.000 rest_ms=10.471
+TAILTOP lane=A batch=7 rank=1 ms=10.456 start_ms=0.000 nEnt=5 nW=3 steps=15 stitch_select_ms=5.149 rest_ms=5.323
+TAILTOP lane=A batch=7 rank=2 ms=10.456 start_ms=0.000 nEnt=4323 nW=11 steps=95 stitch_select_ms=8.331 rest_ms=2.140
+TAILTOP lane=A batch=7 rank=3 ms=10.456 start_ms=0.000 nEnt=0 nW=16 steps=23 stitch_select_ms=0.000 rest_ms=10.471
+TAILTOP lane=A batch=7 rank=4 ms=10.456 start_ms=0.000 nEnt=3 nW=1 steps=5 stitch_select_ms=1.063 rest_ms=9.408
+TAILCLK lane=A batch=7 n=156918 seeds=710694752727 windows=124263358353 stitching=573067607493 select=12527391183 sat=7521694498 fin=61340073131 copies=5429275730 rec=13829727351
+  lane A run 3: 652.1 ms (phase 1 106.3, scan 16.9, phase 3 144.3)
+TAILEVSUM lane=A gap_ms=0.150 p1_ms=106.103 scan_sync_ms=0.415 p2_ms=16.466 p3_ms=143.714 cs_ms=0.039
+TAILSUM lane=A kernel=k_p1 span_ms=106.224 busy_thr=0.7659 busy_warp=0.7659 busy_blk=0.8564 drain_share=0.2492 clk_ghz=1.778
+TAILSUM lane=A kernel=k_p3 span_ms=144.246 busy_thr=0.5808 busy_warp=0.5808 busy_blk=0.8150 drain_share=0.3865 clk_ghz=1.777
+  lane A thread cycles: seeds 52.1%, windows 8.5%, stitching 38.5%, select+encode 0.9%; 450.5 SA entries per read
+  lane A inside stitching: stitchAlignToTranscript 1.8%, finalization 10.7% (of which recording 2.2%), copies 1.1%
+lane M (staged): 524577 reads, batches of 262144, work 82552 B/read (21.64 GB)
+  lane M run 0: 345.4 ms (phase 1 83.1, scan 21.1, phase 3 241.1)
+  lane M run 1: 337.1 ms (phase 1 78.8, scan 17.7, phase 3 240.5)
+TAILEV lane=M batch=0 n=262144 gap_ms=0.0014 p1_ms=34.8900 scan_sync_ms=0.0643 p2_ms=8.3474 p3_ms=111.3435 cs_ms=0.0050
+TAILEV lane=M batch=1 n=262144 gap_ms=0.0232 p1_ms=38.7854 scan_sync_ms=0.0715 p2_ms=8.7029 p3_ms=111.4576 cs_ms=0.0049
+TAILEV lane=M batch=2 n=289 gap_ms=0.0167 p1_ms=5.0174 scan_sync_ms=0.0400 p2_ms=0.5170 p3_ms=15.5304 cs_ms=0.0033
+  lane M run 2: 334.8 ms (phase 1 78.7, scan 17.7, phase 3 238.3)
+TAIL lane=M batch=0 kernel=k_p1 n=262144 T=128 bps=5 slots=84480 span_ms=35.011 busy_thr=0.8261 busy_warp=0.8261 busy_blk=0.8846 drain_ms=8.065 drain_share=0.2304 fin_p50=0.5891 fin_p90=0.9005 fin_p99=0.9698 fin_p999=0.9879 longest_share=0.5163 clk_ghz=1.778 curve=1.000,1.000,0.997,0.971,0.892,0.865,0.935,0.924,0.962,0.942,0.946,0.904,0.939,0.931,0.963,0.907,0.734,0.475,0.205,0.030
+TAIL lane=M batch=0 kernel=k_p3 n=262144 T=128 bps=6 slots=101376 span_ms=112.766 busy_thr=0.7403 busy_warp=0.7403 busy_blk=0.8715 drain_ms=31.000 drain_share=0.2749 fin_p50=0.5713 fin_p90=0.8737 fin_p99=0.9343 fin_p999=0.9645 longest_share=0.6745 clk_ghz=1.778 curve=0.999,0.999,0.998,0.989,0.918,0.797,0.829,0.845,0.862,0.893,0.905,0.859,0.832,0.832,0.816,0.661,0.473,0.247,0.050,0.002
+TAILWHO lane=M batch=0 stitch_select_share_all=0.5796 stitch_select_share_top1pct=0.5530 top1pct_thread_time_share=0.0186
+TAILTOP lane=M batch=0 rank=0 ms=76.062 start_ms=0.000 nEnt=3764 nW=38 steps=228 stitch_select_ms=49.571 rest_ms=26.384
+TAILTOP lane=M batch=0 rank=1 ms=76.062 start_ms=0.000 nEnt=126 nW=49 steps=263 stitch_select_ms=55.592 rest_ms=20.363
+TAILTOP lane=M batch=0 rank=2 ms=76.062 start_ms=0.000 nEnt=0 nW=64 steps=0 stitch_select_ms=0.000 rest_ms=75.956
+TAILTOP lane=M batch=0 rank=3 ms=76.062 start_ms=0.000 nEnt=15282 nW=60 steps=1108 stitch_select_ms=61.073 rest_ms=14.883
+TAILTOP lane=M batch=0 rank=4 ms=76.062 start_ms=0.000 nEnt=12427 nW=55 steps=887 stitch_select_ms=59.516 rest_ms=16.439
+TAILCLK lane=M batch=0 n=262144 seeds=2123565398116 windows=1676509808545 stitching=8698371348684 select=23818881127 sat=190508290041 fin=2008874727924 copies=147805108439 rec=531662429664
+TAIL lane=M batch=1 kernel=k_p1 n=262144 T=128 bps=5 slots=84480 span_ms=38.803 busy_thr=0.8409 busy_warp=0.8409 busy_blk=0.9012 drain_ms=8.100 drain_share=0.2088 fin_p50=0.6026 fin_p90=0.8980 fin_p99=0.9780 fin_p999=0.9925 longest_share=0.5247 clk_ghz=1.778 curve=1.000,1.000,1.000,0.978,0.925,0.862,0.865,0.999,0.993,0.958,0.916,0.849,0.905,1.000,0.984,0.949,0.858,0.613,0.121,0.045
+TAIL lane=M batch=1 kernel=k_p3 n=262144 T=128 bps=6 slots=101376 span_ms=109.878 busy_thr=0.7438 busy_warp=0.7438 busy_blk=0.8970 drain_ms=30.597 drain_share=0.2785 fin_p50=0.5932 fin_p90=0.8901 fin_p99=0.9434 fin_p999=0.9729 longest_share=0.6841 clk_ghz=1.778 curve=1.000,1.000,1.000,0.994,0.926,0.734,0.746,0.830,0.898,0.935,0.911,0.833,0.786,0.799,0.800,0.690,0.557,0.347,0.086,0.004
+TAILWHO lane=M batch=1 stitch_select_share_all=0.5466 stitch_select_share_top1pct=0.5491 top1pct_thread_time_share=0.0183
+TAILTOP lane=M batch=1 rank=0 ms=75.164 start_ms=0.000 nEnt=5934 nW=40 steps=472 stitch_select_ms=56.079 rest_ms=19.000
+TAILTOP lane=M batch=1 rank=1 ms=75.164 start_ms=0.000 nEnt=0 nW=64 steps=222 stitch_select_ms=0.000 rest_ms=75.079
+TAILTOP lane=M batch=1 rank=2 ms=75.164 start_ms=0.000 nEnt=62 nW=59 steps=301 stitch_select_ms=66.527 rest_ms=8.552
+TAILTOP lane=M batch=1 rank=3 ms=75.164 start_ms=0.000 nEnt=9268 nW=50 steps=824 stitch_select_ms=62.152 rest_ms=12.927
+TAILTOP lane=M batch=1 rank=4 ms=75.164 start_ms=0.000 nEnt=58 nW=54 steps=282 stitch_select_ms=65.615 rest_ms=9.464
+TAILCLK lane=M batch=1 n=262144 seeds=2002624604126 windows=2053482838404 stitching=8031713067843 select=21965901964 sat=211502646761 fin=1516024284294 copies=107041694385 rec=286298522568
+TAIL lane=M batch=2 kernel=k_p1 n=289 T=128 bps=5 slots=84480 span_ms=5.011 busy_thr=0.0032 busy_warp=0.0032 busy_blk=0.0042 drain_ms=5.011 drain_share=1.0000 fin_p50=0.9542 fin_p90=1.0000 fin_p99=1.0000 fin_p999=1.0000 longest_share=1.0000 clk_ghz=1.777 curve=0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.002,0.001
+TAIL lane=M batch=2 kernel=k_p3 n=289 T=128 bps=6 slots=101376 span_ms=15.526 busy_thr=0.0022 busy_warp=0.0023 busy_blk=0.0031 drain_ms=15.526 drain_share=1.0000 fin_p50=0.7980 fin_p90=1.0000 fin_p99=1.0000 fin_p999=1.0000 longest_share=1.0000 clk_ghz=1.777 curve=0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.002,0.002,0.002,0.002,0.002,0.001,0.001,0.001,0.001
+TAILWHO lane=M batch=2 stitch_select_share_all=0.5385 stitch_select_share_top1pct=0.4301 top1pct_thread_time_share=0.0088
+TAILTOP lane=M batch=2 rank=0 ms=15.526 start_ms=0.000 nEnt=9684 nW=50 steps=790 stitch_select_ms=13.355 rest_ms=2.171
+TAILTOP lane=M batch=2 rank=1 ms=15.526 start_ms=0.000 nEnt=181 nW=14 steps=0 stitch_select_ms=0.000 rest_ms=15.526
+TAILTOP lane=M batch=2 rank=2 ms=15.526 start_ms=0.000 nEnt=971 nW=17 steps=103 stitch_select_ms=7.222 rest_ms=8.304
+TAILTOP lane=M batch=2 rank=3 ms=15.526 start_ms=0.000 nEnt=14002 nW=34 steps=798 stitch_select_ms=11.083 rest_ms=4.442
+TAILTOP lane=M batch=2 rank=4 ms=15.526 start_ms=0.000 nEnt=192 nW=26 steps=156 stitch_select_ms=9.555 rest_ms=5.971
+TAILCLK lane=M batch=2 n=289 seeds=1287969802 windows=821517546 stitching=3362700691 select=3655961 sat=115154666 fin=715302223 copies=32362191 rec=98057182
+  lane M run 3: 437.3 ms (phase 1 78.9, scan 17.7, phase 3 238.2)
+TAILEVSUM lane=M gap_ms=0.041 p1_ms=78.693 scan_sync_ms=0.176 p2_ms=17.567 p3_ms=238.331 cs_ms=0.013
+TAILSUM lane=M kernel=k_p1 span_ms=78.825 busy_thr=0.7811 busy_warp=0.7811 busy_blk=0.8368 drain_share=0.2687 clk_ghz=1.778
+TAILSUM lane=M kernel=k_p3 span_ms=238.170 busy_thr=0.6938 busy_warp=0.6938 busy_blk=0.8267 drain_share=0.3238 clk_ghz=1.778
+  lane M thread cycles: seeds 16.8%, windows 15.1%, stitching 67.9%, select+encode 0.2%; 1933.0 SA entries per read
+  lane M inside stitching: stitchAlignToTranscript 2.4%, finalization 21.1% (of which recording 4.9%), copies 1.5%
+lane B (staged): 90740 reads, batches of 65536, work 635248 B/read (41.63 GB)
+  lane B run 0: 258.4 ms (phase 1 44.0, scan 7.6, phase 3 206.9)
+  lane B run 1: 252.4 ms (phase 1 39.5, scan 7.0, phase 3 205.9)
+TAILEV lane=B batch=0 n=65536 gap_ms=0.0014 p1_ms=25.0790 scan_sync_ms=0.0537 p2_ms=4.6532 p3_ms=121.1211 cs_ms=0.0041
+TAILEV lane=B batch=1 n=25204 gap_ms=0.0167 p1_ms=14.3521 scan_sync_ms=0.0579 p2_ms=2.2780 p3_ms=87.1786 cs_ms=0.0041
+  lane B run 2: 254.8 ms (phase 1 39.4, scan 7.0, phase 3 208.3)
+TAIL lane=B batch=0 kernel=k_p1 n=65536 T=128 bps=5 slots=84480 span_ms=25.170 busy_thr=0.5595 busy_warp=0.5595 busy_blk=0.6000 drain_ms=25.169 drain_share=1.0000 fin_p50=0.7695 fin_p90=0.8013 fin_p99=0.8146 fin_p999=0.8302 longest_share=1.0000 clk_ghz=1.777 curve=0.776,0.776,0.776,0.775,0.773,0.770,0.766,0.758,0.738,0.722,0.707,0.688,0.663,0.621,0.541,0.326,0.013,0.001,0.001,0.001
+TAIL lane=B batch=0 kernel=k_p3 n=65536 T=128 bps=5 slots=84480 span_ms=123.280 busy_thr=0.4502 busy_warp=0.4502 busy_blk=0.5194 drain_ms=123.280 drain_share=1.0000 fin_p50=0.5849 fin_p90=0.7151 fin_p99=0.8403 fin_p999=0.9277 longest_share=1.0000 clk_ghz=1.779 curve=0.776,0.776,0.775,0.775,0.772,0.769,0.760,0.746,0.712,0.652,0.556,0.417,0.266,0.144,0.068,0.028,0.010,0.004,0.001,0.000
+TAILWHO lane=B batch=0 stitch_select_share_all=0.7350 stitch_select_share_top1pct=0.5999 top1pct_thread_time_share=0.0152
+TAILTOP lane=B batch=0 rank=0 ms=123.280 start_ms=0.000 nEnt=102 nW=28 steps=2049 stitch_select_ms=0.000 rest_ms=123.647
+TAILTOP lane=B batch=0 rank=1 ms=123.280 start_ms=0.000 nEnt=72 nW=65 steps=325 stitch_select_ms=46.212 rest_ms=77.435
+TAILTOP lane=B batch=0 rank=2 ms=123.280 start_ms=0.000 nEnt=7664 nW=126 steps=1798 stitch_select_ms=54.808 rest_ms=68.839
+TAILTOP lane=B batch=0 rank=3 ms=123.280 start_ms=0.000 nEnt=3318 nW=24 steps=350 stitch_select_ms=28.134 rest_ms=95.513
+TAILTOP lane=B batch=0 rank=4 ms=123.280 start_ms=0.000 nEnt=6566 nW=120 steps=1298 stitch_select_ms=54.503 rest_ms=69.144
+TAILCLK lane=B batch=0 n=65536 seeds=529130627316 windows=1362850077809 stitching=6125183392918 select=4563162969 sat=163959616360 fin=843664952458 copies=65489311111 rec=139728326348
+TAIL lane=B batch=1 kernel=k_p1 n=25204 T=128 bps=5 slots=84480 span_ms=14.461 busy_thr=0.1848 busy_warp=0.1849 busy_blk=0.1986 drain_ms=14.461 drain_share=1.0000 fin_p50=0.6806 fin_p90=0.7369 fin_p99=0.7785 fin_p999=1.0000 longest_share=1.0000 clk_ghz=1.778 curve=0.298,0.298,0.298,0.294,0.289,0.281,0.274,0.267,0.260,0.252,0.243,0.223,0.201,0.154,0.059,0.004,0.001,0.000,0.000,0.000
+TAIL lane=B batch=1 kernel=k_p3 n=25204 T=128 bps=5 slots=84480 span_ms=87.379 busy_thr=0.1654 busy_warp=0.1655 busy_blk=0.1961 drain_ms=87.379 drain_share=1.0000 fin_p50=0.5563 fin_p90=0.7429 fin_p99=0.9334 fin_p999=1.0000 longest_share=1.0000 clk_ghz=1.779 curve=0.297,0.288,0.286,0.283,0.282,0.280,0.278,0.273,0.260,0.231,0.184,0.131,0.091,0.060,0.037,0.023,0.015,0.007,0.003,0.001
+TAILWHO lane=B batch=1 stitch_select_share_all=0.6789 stitch_select_share_top1pct=0.5008 top1pct_thread_time_share=0.0174
+TAILTOP lane=B batch=1 rank=0 ms=87.379 start_ms=0.000 nEnt=7724 nW=78 steps=1262 stitch_select_ms=72.057 rest_ms=15.194
+TAILTOP lane=B batch=1 rank=1 ms=87.379 start_ms=0.000 nEnt=4751 nW=22 steps=292 stitch_select_ms=50.812 rest_ms=36.438
+TAILTOP lane=B batch=1 rank=2 ms=87.379 start_ms=0.000 nEnt=3090 nW=17 steps=335 stitch_select_ms=47.181 rest_ms=40.070
+TAILTOP lane=B batch=1 rank=3 ms=87.379 start_ms=0.000 nEnt=2794 nW=80 steps=2049 stitch_select_ms=0.000 rest_ms=87.251
+TAILTOP lane=B batch=1 rank=4 ms=87.379 start_ms=0.000 nEnt=1282 nW=92 steps=1410 stitch_select_ms=72.674 rest_ms=14.577
+TAILCLK lane=B batch=1 n=25204 seeds=148718769187 windows=219240826997 stitching=1473809028131 select=638579283 sat=45990758225 fin=211713027598 copies=16459347534 rec=30995194700
+  lane B run 3: 277.3 ms (phase 1 39.7, scan 7.0, phase 3 210.7)
+TAILEVSUM lane=B gap_ms=0.018 p1_ms=39.431 scan_sync_ms=0.112 p2_ms=6.931 p3_ms=208.300 cs_ms=0.008
+TAILSUM lane=B kernel=k_p1 span_ms=39.630 busy_thr=0.4228 busy_warp=0.4228 busy_blk=0.4535 drain_share=1.0000 clk_ghz=1.778
+TAILSUM lane=B kernel=k_p3 span_ms=210.659 busy_thr=0.3321 busy_warp=0.3321 busy_blk=0.3853 drain_share=1.0000 clk_ghz=1.779
+  lane B thread cycles: seeds 6.9%, windows 16.0%, stitching 77.0%, select+encode 0.1%; 3116.9 SA entries per read
+  lane B inside stitching: stitchAlignToTranscript 2.8%, finalization 13.9% (of which recording 2.2%), copies 1.1%
+
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 267.3 ms (1991926 reads), lane M 337.1 ms (524577 reads), lane B 254.8 ms (90740 reads) = 2.32 M distinct reads/s on the GPU
+    lane M overflow why: win=75712 wa=13739 wtr=43 keep=1246
+    lane A overflow why: win=510638 wa=2792 winbin=1 wtr=546 keep=10574 steps=26
+    heavy lane: 5304 reads (0.2663%), 0.38 s on 24 host threads, failures 0; why: win=2622 wtr=143 keep=316 steps=2223

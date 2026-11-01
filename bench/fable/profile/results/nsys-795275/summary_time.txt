@@ -1,0 +1,17 @@
+variant                                A ms     M ms     B ms   GPU ms  identical %   A GB   M GB   B GB  M/B reads
+nsys                                  269.7    338.8    256.0    864.6   100.000000  12.09  21.64  41.63  524577/90740
+
+nsys (base run; mean of reps 1..3 per lane; ms)
+  lane A: 4 reps, 8 batches, span 269.87; p1 106.40, scan 0.05, d2h 0.02, memset 0.05, p2 16.34, p3 146.33, copy_status 0.02; gaps 0.666 (before p1 0.137, before scan 0.023, before d2h 0.315, before memset 0.123, before p2 0.029, before p3 0.023, before copy_status 0.015); regs {'p1': '95', 'p2': '42', 'p3': '80'}
+      k_p3 per batch ms: 15.65, 18.20, 20.74, 21.95, 19.77, 20.04, 19.15, 10.85
+      k_p1 per batch ms: 13.83, 13.79, 14.62, 14.57, 13.88, 14.13, 13.44, 8.14 | k_p2: 1.83, 2.22, 2.33, 2.00, 2.59, 2.12, 1.97, 1.30
+  lane M: 4 reps, 3 batches, span 339.27; p1 78.69, scan 0.02, d2h 0.01, memset 0.05, p2 17.56, p3 242.71, copy_status 0.01; gaps 0.230 (before p1 0.043, before scan 0.008, before d2h 0.110, before memset 0.045, before p2 0.009, before p3 0.009, before copy_status 0.005); regs {'p1': '95', 'p2': '42', 'p3': '80'}
+      k_p3 per batch ms: 114.26, 113.08, 15.36
+      k_p1 per batch ms: 34.84, 38.86, 5.00 | k_p2: 8.38, 8.68, 0.51
+  lane B: 4 reps, 2 batches, span 255.24; p1 39.76, scan 0.01, d2h 0.00, memset 0.02, p2 6.86, p3 208.44, copy_status 0.00; gaps 0.146 (before p1 0.019, before scan 0.006, before d2h 0.079, before memset 0.030, before p2 0.003, before p3 0.006, before copy_status 0.004); regs {'p1': '95', 'p2': '42', 'p3': '94'}
+      k_p3 per batch ms: 121.71, 86.72
+      k_p1 per batch ms: 25.26, 14.50 | k_p2: 4.59, 2.27
+  all lanes span 864.4 ms; shares: p1 26.0%, scan 0.0%, d2h 0.0%, memset 0.0%, p2 4.7%, p3 69.1%, copy_status 0.0%, gaps 0.12%
+  op counts: {'h2d': 44, 'memset': 55, 'p1': 52, 'scan': 104, 'd2h': 125, 'p2': 52, 'p3': 52, 'copy_status': 52}
+
+wrote /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/profile/results/ncu-795275/e1_time_summary.json

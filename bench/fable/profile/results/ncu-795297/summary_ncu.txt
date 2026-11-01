@@ -1,0 +1,80 @@
+== M k_p1
+   duration_ms=38.91  regs=95  occ_theor_pct=31.25  occ_achieved_pct=28.11  lim_regs_blocks=5  lim_warps_blocks=16  warp_cyc_per_inst=21.73  issue_slots_busy_pct=20.79  ipc=0.8288  simt_threads_per_inst=3.9  l1_hit_pct=74.03  l2_hit_pct=62.26  dram_thru_pct=23.47  dram_read_GB=27.28  dram_write_GB=8.686  gld_sectors_per_req=3.631  gld_sectors_per_active_thread=0.9311  gst_sectors_per_req=3.691  gst_sectors_per_active_thread=0.9464  lld_sectors_per_req=1.987  lst_sectors_per_req=3.523  lld_requests=6.232e+06  lst_requests=2.337e+06  gld_requests=4.55e+08  gst_requests=1.649e+08  sm_active_share=0.9269  warps_eligible_per_sched=0.2589  warps_active_per_sched=4.516  sm_busy_pct=20.2  mem_busy_pct=31.12  l2_thru_pct=31.12  sm_clock_ghz=1.78  branch_uniform_pct=93.19
+   stalls (cycles per issued instruction, share): [('long_scoreboard', 16.888, 77.8), ('wait', 2.508, 11.6), ('selected', 1.0, 4.6), ('branch_resolving', 0.42, 1.9), ('no_instruction', 0.378, 1.7)]
+   pc samples: [('long_scoreboard', 3233344, 77.7), ('wait', 491357, 11.8), ('selected', 195734, 4.7), ('branch_resolving', 80859, 1.9), ('no_instructions', 71496, 1.7), ('not_selected', 42648, 1.0)]
+   excessive: {'derived__memory_l1_wavefronts_shared_excessive': 0.0, 'derived__memory_l2_theoretical_sectors_global_excessive': 1.442999}
+== M k_p2
+   duration_ms=8.649  regs=42  occ_theor_pct=62.5  occ_achieved_pct=38.01  lim_regs_blocks=5  lim_warps_blocks=8  warp_cyc_per_inst=15.01  issue_slots_busy_pct=41.37  ipc=1.605  simt_threads_per_inst=15.88  l1_hit_pct=74.24  l2_hit_pct=40.14  dram_thru_pct=15.33  dram_read_GB=5.176  dram_write_GB=0.04765  gld_sectors_per_req=3.212  gld_sectors_per_active_thread=0.2023  lld_requests=0  lst_requests=0  gld_requests=1.884e+08  gst_requests=0  sm_active_share=0.9612  warps_eligible_per_sched=0.6713  warps_active_per_sched=6.21  sm_busy_pct=40.02  mem_busy_pct=21.69  l2_thru_pct=20.07  sm_clock_ghz=1.786  branch_uniform_pct=72.77
+   stalls (cycles per issued instruction, share): [('long_scoreboard', 8.996, 59.9), ('wait', 2.692, 17.9), ('selected', 1.0, 6.7), ('branch_resolving', 0.892, 5.9), ('not_selected', 0.624, 4.2)]
+   pc samples: [('long_scoreboard', 576543, 60.3), ('wait', 176413, 18.5), ('selected', 65238, 6.8), ('branch_resolving', 58307, 6.1), ('not_selected', 32643, 3.4), ('math_pipe_throttle', 24733, 2.6)]
+   excessive: {'derived__memory_l1_wavefronts_shared_excessive': 0.0, 'derived__memory_l2_theoretical_sectors_global_excessive': 0.102897}
+== M k_p3
+   duration_ms=113.4  regs=80  occ_theor_pct=37.5  occ_achieved_pct=29.88  lim_regs_blocks=6  lim_warps_blocks=16  warp_cyc_per_inst=27.55  issue_slots_busy_pct=17.84  ipc=0.6953  simt_threads_per_inst=2.03  l1_hit_pct=76.67  l2_hit_pct=76.25  dram_thru_pct=16.76  dram_read_GB=49.65  dram_write_GB=25.18  gld_sectors_per_req=2.429  gld_sectors_per_active_thread=1.197  gst_sectors_per_req=3.562  gst_sectors_per_active_thread=1.755  lld_sectors_per_req=1.857  lst_sectors_per_req=1.769  lld_requests=5.842e+07  lst_requests=5.076e+07  gld_requests=1.471e+09  gst_requests=6.997e+08  sm_active_share=0.9205  warps_eligible_per_sched=0.2005  warps_active_per_sched=4.915  sm_busy_pct=16.01  mem_busy_pct=31.24  l2_thru_pct=31.24  sm_clock_ghz=1.771  branch_uniform_pct=95.87
+   stalls (cycles per issued instruction, share): [('long_scoreboard', 12.839, 46.7), ('no_instruction', 9.386, 34.1), ('wait', 3.255, 11.8), ('selected', 1.0, 3.6), ('branch_resolving', 0.601, 2.2)]
+   pc samples: [('long_scoreboard', 5512283, 46.2), ('no_instructions', 3882385, 32.5), ('wait', 1576437, 13.2), ('selected', 483810, 4.1), ('branch_resolving', 289299, 2.4), ('short_scoreboard', 92136, 0.8)]
+   excessive: {'derived__memory_l1_wavefronts_shared_excessive': 0.0, 'derived__memory_l2_theoretical_sectors_global_excessive': 3.295422}
+-- M k_p1 top lines by Warp Stall Sampling (All Samples) (total 4472533.0); samples by file {'stitch.cuh': 99.96, 'm5.cu': 0.04}
+    1  14.3% stitch.cuh:256 thr/inst 5.04 [long_sb 95%, wait 3%]  if (w.wbKey[i] == key) { w.wbVal[i] = (uint16_t)val; return true; }
+    2   6.0% stitch.cuh:103 thr/inst 5.48 [long_sb 96%, wait 2%]  u64 v = a[w] >> sh;
+    3   5.6% stitch.cuh:240 thr/inst 2.66 [long_sb 53%, wait 25%]  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uint
+    4   5.4% stitch.cuh:251 thr/inst 11.12 [long_sb 96%, wait 2%]  { unsigned b = (unsigned)bin & 1023; w.wbBits[str & 1][b >> 6] |= 1ULL << (b & 63); }
+    5   4.0% stitch.cuh:308 thr/inst 2.4 [long_sb 85%, wait 8%]  if (s[ii] != g[-ii]) { compRes = !(s[ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+    6   3.9% stitch.cuh:303 thr/inst 2.41 [long_sb 85%, wait 8%]  if (s[ii] != g[ii]) { compRes = s[ii] > g[ii]; return ii + L; }
+    7   3.9% stitch.cuh:318 thr/inst 2.28 [long_sb 82%, wait 8%]  if (s[-ii] != g[-ii]) { compRes = !(s[-ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+    8   3.7% stitch.cuh:313 thr/inst 2.31 [long_sb 85%, wait 7%]  if (s[-ii] != g[ii]) { compRes = s[-ii] > g[ii]; return ii + L; }
+    9   3.5% stitch.cuh:258 thr/inst 5.72 [long_sb 84%, wait 8%]  if (w.wbN * 4 >= C::NWB * 3) { w.ov = OV_WINBIN; return false; }
+   10   3.2% stitch.cuh:391 thr/inst 1.49 [long_sb 85%, wait 9%]  for (int jj = 0; jj < PC_SIZE; jj++) w.PC[ii + 1][jj] = w.PC[ii][jj];
+-- M k_p2 top lines by Warp Stall Sampling (All Samples) (total 999402.0); samples by file {'stitch.cuh': 84.72, 'm5.cu': 14.87, 'device_atomic_functions.hpp': 0.41}
+    1  30.5% stitch.cuh:245 thr/inst 2.73 [long_sb 80%, wait 12%]  if ((w.wbKey[i] >> 41) != w.wbEpoch) return uintWinBinMax;
+    2  22.4% stitch.cuh:103 thr/inst 24.79 [long_sb 94%, wait 2%]  u64 v = a[w] >> sh;
+    3   6.0% stitch.cuh:1385 thr/inst 26.82 [long_sb 52%, branch_resolving 27%]  return wbGet(w, aStr, a1 >> P.winBinNbits) != uintWinBinMax;
+    4   5.1% m5.cu:159 thr/inst 18.53 [branch_resolving 46%, wait 30%]  if (entryHit(P, g, w, iP, (m5::uint)(s0 + j))) atomicOr(&bits[(off + j) >> 5], 1u << ((off + j) & 31
+    5   4.6% m5.cu:157 thr/inst 18.43 [long_sb 81%, wait 7%]  const u64 s0 = w.PC[iP][PC_SAstart], cnt = w.PC[iP][PC_SAend] - s0 + 1;
+    6   4.4% stitch.cuh:240 thr/inst 24.67 [long_sb 41%, wait 30%]  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uint
+    7   3.4% stitch.cuh:246 thr/inst 4.14 [wait 54%, branch_resolving 13%]  if (w.wbKey[i] == key) return w.wbVal[i];
+    8   3.4% stitch.cuh:466 thr/inst 2.95 [wait 54%, short_sb 17%]  uint sj1 = (a1 - g.sjGstart) % g.sjdbLength;
+    9   3.4% stitch.cuh:1382 thr/inst 2.95 [wait 54%, short_sb 17%]  if (!sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) return false;
+   10   2.7% m5.cu:158 thr/inst 22.22 [wait 54%, branch_resolving 22%]  for (u64 j = lane; j < cnt; j += 32)
+-- M k_p3 top lines by Warp Stall Sampling (All Samples) (total 12318437.0); samples by file {'stitch.cuh': 99.6, 'm5.cu': 0.37, 'device_atomic_functions.hpp': 0.03}
+    1  10.1% stitch.cuh:656 thr/inst 1.93 [long_sb 60%, wait 23%]  if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+    2   3.2% stitch.cuh:152 thr/inst 3.48 [long_sb 76%, no_inst 17%]  nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = 
+    3   2.9% stitch.cuh:157 thr/inst 2.68 [long_sb 56%, no_inst 34%]  for (int k = 0; k < EX_SIZE; k++) exons[i][k] = o.exons[i][k];
+    4   2.9% stitch.cuh:149 thr/inst 3.5 [long_sb 86%, no_inst 8%]  rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength;
+    5   2.9% stitch.cuh:159 thr/inst 2.9 [long_sb 69%, no_inst 28%]  canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
+    6   1.9% stitch.cuh:150 thr/inst 3.5 [long_sb 78%, no_inst 16%]  Chr = o.Chr; Str = o.Str; roStr = o.roStr; primaryFlag = o.primaryFlag;
+    7   1.9% stitch.cuh:158 thr/inst 2.96 [long_sb 80%, no_inst 17%]  shiftSJ[i][0] = o.shiftSJ[i][0]; shiftSJ[i][1] = o.shiftSJ[i][1];
+    8   1.8% stitch.cuh:151 thr/inst 3.54 [long_sb 79%, no_inst 14%]  nMatch = o.nMatch; nMM = o.nMM; mappedLength = o.mappedLength; extendL = o.extendL; maxScore = o.max
+    9   1.7% stitch.cuh:654 thr/inst 2.01 [wait 46%, no_inst 23%]  for (int i = 0; i < (int)L; i++) {
+   10   1.7% stitch.cuh:1120 thr/inst 5.34 [long_sb 67%, no_inst 24%]  if (w.stepBudget && ++w.nSteps > w.stepBudget) { w.ov = OV_STEPS; return false; }
+== monog k_lane
+   duration_ms=1010  regs=104  occ_theor_pct=25  occ_achieved_pct=21.71  lim_regs_blocks=4  lim_warps_blocks=16  warp_cyc_per_inst=20.85  issue_slots_busy_pct=17.42  ipc=0.6657  simt_threads_per_inst=1.44  l1_hit_pct=91.51  l2_hit_pct=89.04  dram_thru_pct=2.054  dram_read_GB=65.9  dram_write_GB=15.87  gld_sectors_per_req=1.324  gld_sectors_per_active_thread=0.9191  gst_sectors_per_req=1.495  gst_sectors_per_active_thread=1.038  lld_sectors_per_req=1.204  lst_sectors_per_req=1.262  lld_requests=1.96e+08  lst_requests=1.993e+08  gld_requests=1.225e+10  gst_requests=2.375e+09  warps_eligible_per_sched=0.2061  warps_active_per_sched=3.631  sm_busy_pct=16.18  mem_busy_pct=7.255  l2_thru_pct=6.036  sm_clock_ghz=1.781  branch_uniform_pct=98.44
+   stalls (cycles per issued instruction, share): [('no_instruction', 13.463, 64.6), ('long_scoreboard', 3.386, 16.2), ('wait', 2.154, 10.3), ('selected', 1.0, 4.8), ('branch_resolving', 0.425, 2.0)]
+   pc samples: [('no_instructions', 33928511, 65.0), ('long_scoreboard', 8603603, 16.5), ('wait', 5140837, 9.8), ('selected', 2389312, 4.6), ('branch_resolving', 1047600, 2.0), ('not_selected', 489624, 0.9)]
+   excessive: {'derived__memory_l1_wavefronts_shared_excessive': 0.0, 'derived__memory_l2_theoretical_sectors_global_excessive': 4.58866}
+-- monog k_lane top lines by Warp Stall Sampling (All Samples) (total 55831324.0); samples by file {'stitch.cuh': 99.73, 'm5.cu': 0.27, 'device_atomic_functions.hpp': 0.0}
+    1   4.2% stitch.cuh:240 thr/inst 1.34 [no_inst 40%, wait 25%]  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uint
+    2   4.1% stitch.cuh:104 thr/inst 1.39 [no_inst 53%, long_sb 36%]  if (sh) v |= a[w + 1] << (64 - sh);
+    3   3.4% stitch.cuh:103 thr/inst 1.39 [long_sb 58%, no_inst 20%]  u64 v = a[w] >> sh;
+    4   2.4% stitch.cuh:1395 thr/inst 1.22 [long_sb 32%, wait 23%]  if (M5_TOO_MANY_ANCHORS(w)) return true;   // nothing observable follows: STAR goes on with nW = 0
+    5   2.1% stitch.cuh:318 thr/inst 1.45 [no_inst 49%, long_sb 39%]  if (s[-ii] != g[-ii]) { compRes = !(s[-ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+    6   1.9% stitch.cuh:656 thr/inst 1.05 [no_inst 38%, long_sb 32%]  if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+    7   1.9% stitch.cuh:102 thr/inst 1.39 [no_inst 75%, selected 11%]  u64 b = ii * bits, w = b >> 6, sh = b & 63;
+    8   1.8% stitch.cuh:308 thr/inst 1.47 [long_sb 54%, no_inst 31%]  if (s[ii] != g[-ii]) { compRes = !(s[ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+    9   1.8% stitch.cuh:246 thr/inst 1.34 [no_inst 92%, branch_resolving 5%]  if (w.wbKey[i] == key) return w.wbVal[i];
+   10   1.7% stitch.cuh:1191 thr/inst 1.41 [no_inst 94%, wait 3%]  while (u >= 0x80) { put((uint8_t)(u | 0x80)); u >>= 7; }
+== monol k_lane
+   duration_ms=614.4  regs=88  occ_theor_pct=31.25  occ_achieved_pct=23.59  lim_regs_blocks=5  lim_warps_blocks=16  warp_cyc_per_inst=19.82  issue_slots_busy_pct=19.42  ipc=0.7615  simt_threads_per_inst=1.85  l1_hit_pct=77.15  l2_hit_pct=66.69  dram_thru_pct=14.4  dram_read_GB=253.2  dram_write_GB=95.41  gld_sectors_per_req=1.578  gld_sectors_per_active_thread=0.8532  gst_sectors_per_req=1.845  gst_sectors_per_active_thread=0.9972  lld_sectors_per_req=1.243  lst_sectors_per_req=1.35  lld_requests=1.582e+10  lst_requests=3.334e+09  gld_requests=2.187e+09  gst_requests=4.83e+07  warps_eligible_per_sched=0.2316  warps_active_per_sched=3.85  sm_busy_pct=18.9  mem_busy_pct=16.07  l2_thru_pct=17.67  sm_clock_ghz=1.782  branch_uniform_pct=97.53
+   stalls (cycles per issued instruction, share): [('long_scoreboard', 8.048, 40.6), ('no_instruction', 7.801, 39.4), ('wait', 2.194, 11.1), ('selected', 1.0, 5.0), ('branch_resolving', 0.367, 1.9)]
+   pc samples: [('long_scoreboard', 21182274, 40.6), ('no_instructions', 20920454, 40.1), ('wait', 5572849, 10.7), ('selected', 2539877, 4.9), ('branch_resolving', 933669, 1.8), ('not_selected', 499116, 1.0)]
+   excessive: {'derived__memory_l1_wavefronts_shared_excessive': 0.0, 'derived__memory_l2_theoretical_sectors_global_excessive': 1.188346}
+-- monol k_lane top lines by Warp Stall Sampling (All Samples) (total 55043858.0); samples by file {'stitch.cuh': 99.92, 'm5.cu': 0.08, 'device_atomic_functions.hpp': 0.0}
+    1   8.9% stitch.cuh:240 thr/inst 1.67 [long_sb 67%, wait 12%]  { unsigned b = (unsigned)bin & 1023; if (!((w.wbBits[str & 1][b >> 6] >> (b & 63)) & 1)) return uint
+    2   3.7% stitch.cuh:656 thr/inst 1.1 [long_sb 58%, no_inst 22%]  if ((gStart + iG) == (uint)(-1) || G[iG] == 5 || (u64)R[iS] == MARK_FRAG_SPACER_BASE) break;
+    3   3.6% stitch.cuh:103 thr/inst 1.77 [long_sb 60%, no_inst 18%]  u64 v = a[w] >> sh;
+    4   3.0% stitch.cuh:104 thr/inst 1.78 [long_sb 68%, no_inst 15%]  if (sh) v |= a[w + 1] << (64 - sh);
+    5   2.1% stitch.cuh:102 thr/inst 1.77 [no_inst 74%, selected 10%]  u64 b = ii * bits, w = b >> 6, sh = b & 63;
+    6   2.1% stitch.cuh:152 thr/inst 1.42 [long_sb 79%, no_inst 17%]  nGap = o.nGap; lGap = o.lGap; nDel = o.nDel; nIns = o.nIns; lDel = o.lDel; lIns = o.lIns; nUnique = 
+    7   2.0% stitch.cuh:318 thr/inst 1.94 [long_sb 61%, no_inst 28%]  if (s[-ii] != g[-ii]) { compRes = !(s[-ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+    8   2.0% stitch.cuh:1393 thr/inst 1.44 [wait 39%, long_sb 29%]  for (uint iSA = w.PC[iP][PC_SAstart]; iSA <= iSAend; iSA++) {
+    9   1.9% stitch.cuh:308 thr/inst 2.05 [long_sb 75%, no_inst 13%]  if (s[ii] != g[-ii]) { compRes = !(s[ii] > g[-ii] || g[-ii] > 3); return ii + L; }
+   10   1.8% stitch.cuh:303 thr/inst 2.05 [long_sb 77%, no_inst 11%]  if (s[ii] != g[ii]) { compRes = s[ii] > g[ii]; return ii + L; }
