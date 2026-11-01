@@ -31,6 +31,31 @@
 #define HD
 #endif
 
+// E5 (compact) variants, compile-time, each exact (docs/gpu-engine/fable/E5-compact.md):
+//  M5_REFX   the exclude branch of stitchWindowAligns references its parent's transcript instead of copying it
+//  M5_FIN1   finalization works on a spare slot (one copy instead of trA -> fin -> slot); recording swaps it into the
+//            slot permutation
+//  M5_SLOT0  a window's slot 0 gets only trInit's maxScore (the one field read while no transcript is recorded)
+//  M5_S3     = M5_REFX + M5_FIN1 + M5_SLOT0
+//  M5_TR32   transcript fields that hold read offsets, lengths and counts stored in 32 bits (genome coordinates stay 64)
+//  M5_TR32CHECK  count every 32-bit store that would not round-trip (g_tr32bad; must stay 0)
+#ifdef M5_S3
+#ifndef M5_REFX
+#define M5_REFX
+#endif
+#ifndef M5_FIN1
+#define M5_FIN1
+#endif
+#ifndef M5_SLOT0
+#define M5_SLOT0
+#endif
+#endif
+#ifdef M5_TR32CHECK
+#ifndef M5_TR32
+#define M5_TR32
+#endif
+#endif
+
 namespace m5 {
 
 typedef unsigned long long u64;
@@ -117,24 +142,84 @@ template <class T> HD inline T mx(T a, T b) { return a > b ? a : b; }
 template <class T> HD inline void swp(T& a, T& b) { T t = a; a = b; b = t; }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// M5_TR32: a transcript field that holds a STAR `uint` (64-bit) read offset, length or count, stored in 32 bits. Written by
+// truncation, read back sign-extended, so every value v with -2^31 <= (i64)v < 2^31 round-trips exactly, including the
+// 64-bit wrap-arounds STAR's unsigned arithmetic produces for small negative intermediates (sjA = (uint)-1, x += (uint)-1).
+// Arithmetic on a field happens in 64 bits on the read-back value, as in STAR. Values: read positions and lengths
+// (<= Lread <= 650), base counts (<= Lread), exon/junction counts (<= MAX_N_EXONS), gap lengths (< a window's span,
+// < 2^24), sjdb indices, chromosome indices. M5_TR32CHECK counts every store that would not round-trip (g_tr32bad).
+// ---------------------------------------------------------------------------------------------------------------------
+#ifdef M5_TR32
+#ifdef M5_TR32CHECK
+#ifdef __CUDACC__
+__device__ unsigned long long g_tr32bad;
+#endif
+inline unsigned long long h_tr32bad = 0;
+HD inline void tr32Bad() {
+#ifdef __CUDA_ARCH__
+    atomicAdd(&g_tr32bad, 1ULL);
+#else
+    __atomic_fetch_add(&h_tr32bad, 1ULL, __ATOMIC_RELAXED);
+#endif
+}
+#define M5_TR32_STORE(v, x) do { (v) = (int32_t)(i64)(x); if ((uint)(i64)(v) != (x)) tr32Bad(); } while (0)
+#else
+#define M5_TR32_STORE(v, x) ((v) = (int32_t)(i64)(x))
+#endif
+struct U32 {
+    int32_t v;
+    HD operator uint() const { return (uint)(i64)v; }
+    HD U32& operator=(uint x) { M5_TR32_STORE(v, x); return *this; }
+    HD U32& operator+=(uint x) { return *this = (uint)*this + x; }
+    HD U32& operator-=(uint x) { return *this = (uint)*this - x; }
+    HD U32& operator++() { return *this += 1; }
+    HD uint operator++(int) { uint o = *this; *this += 1; return o; }
+};
+typedef U32 sfield;
+// an exon row: EX_G 64-bit, EX_R, EX_L, EX_iFrag, EX_sjA 32-bit; row[k] as in STAR's uint exons[][EX_SIZE]
+struct ExRow {
+    uint g; U32 r, l, f, s;
+    HD uint get(int k) const { return k == EX_G ? g : k == EX_R ? (uint)r : k == EX_L ? (uint)l : k == EX_iFrag ? (uint)f : (uint)s; }
+    HD void set(int k, uint x) { if (k == EX_G) g = x; else if (k == EX_R) r = x; else if (k == EX_L) l = x; else if (k == EX_iFrag) f = x; else s = x; }
+    struct Ref {
+        ExRow& e; int k;
+        HD operator uint() const { return e.get(k); }
+        HD Ref& operator=(uint x) { e.set(k, x); return *this; }
+        HD Ref& operator=(const Ref& o) { e.set(k, o.e.get(o.k)); return *this; }
+        HD Ref& operator+=(uint x) { e.set(k, e.get(k) + x); return *this; }
+        HD Ref& operator-=(uint x) { e.set(k, e.get(k) - x); return *this; }
+    };
+    HD Ref operator[](int k) { return Ref{*this, k}; }
+    HD uint operator[](int k) const { return get(k); }
+};
+#else
+typedef uint sfield;
+#endif
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Transcript (Transcript.h): the fields seed stitching and multMapSelect write; exons capped at NEX (STAR: MAX_N_EXONS 20)
 // ---------------------------------------------------------------------------------------------------------------------
 template <int NEX> struct Tr {
+#ifdef M5_TR32
+    ExRow exons[NEX];
+#else
     uint exons[NEX][EX_SIZE];
-    uint shiftSJ[NEX][2];
+#endif
+    sfield shiftSJ[NEX][2];
     int canonSJ[NEX];
     uint8_t sjAnnot[NEX], sjStr[NEX];
-    uint intronMotifs[3];
+    sfield intronMotifs[3];
     uint8_t sjMotifStrand; bool sjYes;
-    uint nExons;
+    sfield nExons;
     int iFrag;
-    uint rStart, roStart, rLength, gStart, gLength, cStart;
-    uint Chr, Str, roStr;
+    sfield rStart, roStart, rLength;
+    uint gStart, gLength, cStart;
+    sfield Chr, Str, roStr;
     bool primaryFlag;
-    uint nMatch, nMM, mappedLength, extendL;
+    sfield nMatch, nMM, mappedLength, extendL;
     int maxScore;
-    uint nGap, lGap, nDel, nIns, lDel, lIns;
-    uint nUnique, nAnchor;
+    sfield nGap, lGap, nDel, nIns, lDel, lIns;
+    sfield nUnique, nAnchor;
     HD void reset() {
         extendL = 0; primaryFlag = false;
         rStart = 0; roStart = 0; rLength = 0; gStart = 0; gLength = 0;
@@ -154,15 +239,19 @@ template <int NEX> struct Tr {
         sjMotifStrand = o.sjMotifStrand; sjYes = o.sjYes;
         uint ne = o.nExons < (uint)NEX ? o.nExons : (uint)NEX;
         for (uint i = 0; i < ne; i++) {
+#ifdef M5_TR32
+            exons[i] = o.exons[i];
+#else
             for (int k = 0; k < EX_SIZE; k++) exons[i][k] = o.exons[i][k];
+#endif
             shiftSJ[i][0] = o.shiftSJ[i][0]; shiftSJ[i][1] = o.shiftSJ[i][1];
             canonSJ[i] = o.canonSJ[i]; sjAnnot[i] = o.sjAnnot[i]; sjStr[i] = o.sjStr[i];
         }
     }
     // bytes copyFrom moves (statistics, M5_COPYSTATS): the scalar fields, then per live exon row
     HD int copyBytes() const {
-        constexpr int hdr = sizeof(nExons) + sizeof(iFrag) + 9 * sizeof(rStart) + sizeof(primaryFlag) + 4 * sizeof(nMatch) + sizeof(maxScore)
-                          + 8 * sizeof(nGap) + sizeof(intronMotifs) + sizeof(sjMotifStrand) + sizeof(sjYes);
+        constexpr int hdr = sizeof(nExons) + sizeof(iFrag) + 3 * sizeof(rStart) + 3 * sizeof(gStart) + 3 * sizeof(Chr) + sizeof(primaryFlag)
+                          + 4 * sizeof(nMatch) + sizeof(maxScore) + 8 * sizeof(nGap) + sizeof(intronMotifs) + sizeof(sjMotifStrand) + sizeof(sjYes);
         constexpr int row = sizeof(exons[0]) + sizeof(shiftSJ[0]) + sizeof(canonSJ[0]) + sizeof(sjAnnot[0]) + sizeof(sjStr[0]);
         int ne = nExons < (uint)NEX ? (int)nExons : NEX;
         return hdr + ne * row;
@@ -221,8 +310,13 @@ template <class C> struct Work {
     uint trNtotal;
     // stitching scratch
     T stack[C::NWA + 1];
+#ifdef M5_FIN1
+    T slot[C::NWTR + 2]; int slotP[C::NWTR + 1]; uint nWinTr;
+    int slotSpare;            // the physical slot outside the permutation slotP: finalization's scratch
+#else
     T slot[C::NWTR + 1]; int slotP[C::NWTR + 1]; uint nWinTr;
     T fin;                    // finalize scratch (trA copy at iA>=nA)
+#endif
     // multMapSelect
     uint nTr; int maxScore; int unmapType;
     OvWhy ov;
@@ -1121,8 +1215,14 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
             }
             int pTr = w.slotP[w.nWinTr];
             for (int ii = (int)w.nWinTr; ii > int(iTr); ii--) w.slotP[ii] = w.slotP[ii - 1];
+#ifdef M5_FIN1
+            // trA is slot[slotSpare] (stitchWindowAligns): position iTr takes it; pTr, whose content STAR overwrites here
+            // and which leaves the live positions, becomes the next spare
+            w.slotP[iTr] = w.slotSpare; w.slotSpare = pTr;
+#else
             w.slotP[iTr] = pTr;
             M5CPY(w, 3, w.slot[w.slotP[iTr]], trA);
+#endif
             if (w.nWinTr < P.alignTranscriptsPerWindowNmax) {
                 if (w.nWinTr + 1 > (uint)C::NWTR) { w.ov = OV_WTR; return false; }
                 w.nWinTr++;
@@ -1135,25 +1235,45 @@ template <class C> HD inline bool finalizeTranscript(const Params& P, const Geno
 // ---------------------------------------------------------------------------------------------------------------------
 // stitchWindowAligns.cpp, the recursion over aligns (include, then exclude), on an explicit stack.
 // Frame d holds STAR's arguments for the call with iA = d: trA = stack[d], Score, tR2, tG2.
+// M5_REFX: frame d's trA is stack[src] with src <= d: an include child owns a fresh copy (src = d), an exclude child shares
+// its parent's (src = parent's src). stack[k] is written only by the include step of frame k-1, so while frame d is
+// active (its descendants write stack[d+1..] only) stack[src] <= stack[d] stays unchanged: every frame reads exactly the
+// transcript the copy would have held.
 // ---------------------------------------------------------------------------------------------------------------------
 template <class C> HD inline bool stitchWindowAligns(const Params& P, const GenomeView& gv, Work<C>& w, uint nA, const uint (*WA)[WA_SIZE], const char* R) {
     typedef typename Work<C>::T T;
+#ifdef M5_REFX
+    struct Frame { int Score; uint tR2, tG2; uint8_t phase; uint8_t src; };
+#define M5_SETSRC(N, v) ((N).src = (uint8_t)(v))
+#else
     struct Frame { int Score; uint tR2, tG2; uint8_t phase; };
+#define M5_SETSRC(N, v) do { } while (0)
+#endif
     Frame fr[C::NWA + 1];
     int d = 0;
-    fr[0].Score = 0; fr[0].tR2 = 0; fr[0].tG2 = 0; fr[0].phase = 0;
+    fr[0].Score = 0; fr[0].tR2 = 0; fr[0].tG2 = 0; fr[0].phase = 0; M5_SETSRC(fr[0], 0);
     while (d >= 0) {
         if (w.stepBudget && ++w.nSteps > w.stepBudget) { w.ov = OV_STEPS; return false; }
         M5STAT(w, 0);
         Frame& F = fr[d];
         uint iA = (uint)d;
+#ifdef M5_REFX
+        T& trA = w.stack[F.src];
+#else
         T& trA = w.stack[d];
+#endif
         if (F.phase == 0) {
             if (iA >= nA && F.tR2 == 0) { d--; continue; }
             if (iA >= nA) {
                 M5T(tf);
+#ifdef M5_FIN1
+                T& cand = w.slot[w.slotSpare];
+                M5CPY(w, 2, cand, trA);
+                bool okf = finalizeTranscript(P, gv, w, F.Score, F.tR2, F.tG2, cand, R, WA);
+#else
                 M5CPY(w, 2, w.fin, trA);
                 bool okf = finalizeTranscript(P, gv, w, F.Score, F.tR2, F.tG2, w.fin, R, WA);
+#endif
                 M5ADD(w, 5, tf);
                 if (!okf) return false;
                 d--; continue;
@@ -1187,7 +1307,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
                 N.Score = F.Score + dScore;
                 N.tR2 = WA[iA][WA_rStart] + WA[iA][WA_Length] - 1;
                 N.tG2 = WA[iA][WA_gStart] + WA[iA][WA_Length] - 1;
-                N.phase = 0;
+                N.phase = 0; M5_SETSRC(N, d + 1);
                 d++;
                 continue;
             }
@@ -1195,10 +1315,15 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
         if (F.phase == 1) {
             F.phase = 2;
             if (WA[iA][WA_Anchor] != 2 || trA.nAnchor > 0) {
+#ifdef M5_REFX
+                Frame& N = fr[d + 1];
+                N.Score = F.Score; N.tR2 = F.tR2; N.tG2 = F.tG2; N.phase = 0; M5_SETSRC(N, F.src);
+#else
                 T& next = w.stack[d + 1];
                 { M5T(tcp); M5CPY(w, 1, next, trA); M5ADD(w, 6, tcp); }
                 Frame& N = fr[d + 1];
                 N.Score = F.Score; N.tR2 = F.tR2; N.tG2 = F.tG2; N.phase = 0;
+#endif
                 d++;
                 continue;
             }
@@ -1206,6 +1331,7 @@ template <class C> HD inline bool stitchWindowAligns(const Params& P, const Geno
         d--;
     }
     return true;
+#undef M5_SETSRC
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1475,7 +1601,16 @@ template <class C> HD inline Status mapFinish(const Params& P, const GenomeView&
             trA.maxScore = 0;
             if (w.trNtotal + P.alignTranscriptsPerWindowNmax >= P.alignTranscriptsPerReadNmax) break;   // STAR: warning, stop
             for (int k = 0; k <= C::NWTR; k++) w.slotP[k] = k;
+#ifdef M5_FIN1
+            w.slotSpare = C::NWTR + 1;
+#endif
+#ifdef M5_SLOT0
+            // slot[slotP[0]] is read while nWinTr == 0 only for its maxScore (the recording test); every other read is of a
+            // position < nWinTr, which a recording has written
+            w.slot[0].maxScore = trA.maxScore;
+#else
             M5CPY(w, 4, w.slot[0], trA);
+#endif
             w.nWinTr = 0;
             M5STAT(w, 1);
             if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2])) return Status::Overflow;

@@ -412,8 +412,8 @@ int main(int argc, char** argv) {
     }
     if (gdir.empty() || truth.empty()) { fprintf(stderr, "usage: m5 --genome-dir D --truth PREFIX [--json F]\n"); return 2; }
     cudaDeviceProp prop; CK(cudaGetDeviceProperties(&prop, 0));
-    fprintf(stderr, "device %s, %d SMs; sizeof Work: A %zu, B %zu, host %zu\n", prop.name, prop.multiProcessorCount,
-            sizeof(Work<LaneA>), sizeof(Work<LaneB>), sizeof(Work<Heavy>));
+    fprintf(stderr, "device %s, %d SMs; sizeof Work: A %zu, B %zu, host %zu; sizeof Tr<8> %zu\n", prop.name, prop.multiProcessorCount,
+            sizeof(Work<LaneA>), sizeof(Work<LaneB>), sizeof(Work<Heavy>), sizeof(Tr<8>));
 
     // ---- parameters
     ParamFile pf; pf.load(truth + ".params.txt");
@@ -581,6 +581,9 @@ int main(int argc, char** argv) {
         CK(cudaFree(dIdx));
     }
     double gpuMs = A.ms + M.ms + B.ms;
+#ifdef M5_TR32CHECK
+    { unsigned long long bad = 0; CK(cudaMemcpyFromSymbol(&bad, g_tr32bad, 8)); fprintf(stderr, "tr32 check: %llu device stores did not round-trip\n", bad); }
+#endif
     // where each read's result is: lane 0 = A (index i), 1 = B (index in idxB), 2 = host (index in heavy)
     std::vector<uint8_t> lane(n, 0); std::vector<uint32_t> lanePos(n);
     for (u64 i = 0; i < n; i++) lanePos[i] = (uint32_t)i;
@@ -614,6 +617,9 @@ int main(int argc, char** argv) {
         delete w; delete b;
     }
     double heavySec = now() - t0;
+#ifdef M5_TR32CHECK
+    fprintf(stderr, "tr32 check: %llu host stores did not round-trip\n", h_tr32bad);
+#endif
     auto result = [&](u64 i, const uint8_t*& p, int& len, int8_t& un, bool& ok) {
         uint32_t k = lanePos[i];
         if (lane[i] == 0) { p = A.out.data() + (u64)i * LaneA::NBLOB; len = A.len[i]; un = A.unmap[i]; ok = true; }
