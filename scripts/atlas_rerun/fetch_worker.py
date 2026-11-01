@@ -269,6 +269,52 @@ def check_against_catalogue(tag, protocol_inferred):
     return {"tag": tag, "catalogue": protocol_inferred, "disagrees": bool(bad)}
 
 
+def vote_runs(runs, calls, run_reads):
+    """The sample-level protocol decision for a multi-run sample. calls: {run: (tag, confidence)}; run_reads: reads per run in `runs` order (may be empty).
+    -> (main_runs, vote, other_groups). Runs are grouped by protocol FAMILY (same whitelist and geometry; the 3p/5p flag is not part of it). The group with the most reads is the
+    GEX sample (`main_runs`, in the original order; runs without a call stay with it); within it a 3'/5' disagreement is settled by vote_protocol (reads-weighted). Other families
+    are different libraries under one GSM (a feature library next to the GEX, for instance): they are not decoded here and come back as `other_groups`, entries a companion
+    classifier can pick up (companion_candidates in the manifest). vote["incompatible"] is True then."""
+    w = {r: max(int(n or 0), 1) for r, n in zip(runs, run_reads or [])}
+    tags = {r: calls[r][0] for r in runs if calls.get(r) and calls[r][0]}
+    groups = {}
+    for r, t in tags.items():
+        groups.setdefault(protocol_family(t), []).append(r)
+    main_fam = max(groups, key=lambda f: (sum(w.get(r, 1) for r in groups[f]), f)) if groups else None
+    main = [r for r in runs if r not in tags or protocol_family(tags[r]) == main_fam]
+    vote = vote_protocol({r: tags[r] for r in main if r in tags}, w)
+    others = []
+    for f in sorted(groups):
+        if f == main_fam:
+            continue
+        rs = [r for r in runs if r in groups[f]]
+        others.append({"lib_gsm": None, "lib_type": None, "status": "unclassified", "protocol_family": f, "protocol_tags": {r: tags[r] for r in rs}, "runs": rs,
+                       "reads": sum(int(n or 0) for r, n in zip(runs, run_reads or []) if r in rs)})
+    vote["incompatible"] = bool(others)
+    if others:
+        vote["main_family"] = main_fam
+        vote["other_runs"] = [r for o in others for r in o["runs"]]
+    vote["calls"] = {r: list(calls[r]) for r in runs if calls.get(r)}
+    return main, vote, others
+
+
+def probe_run_protocol(binary, run, scr, env, whitelist_dir=None, spots=5000, vdb_threads=2, timeout=600):
+    """The first `spots` spots of a run through `singlet download` (its gate and protocol detection probe 5000 spots) without fetching the run: -> (tag, confidence) or (None, None).
+    Used for the sample vote when the head screen is off."""
+    out = os.path.join(scr, run + ".probe.1fq")
+    try:
+        pr = subprocess.run([binary, "download", run, "--max-reads", str(spots), "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out] +
+                            (["--whitelist-dir", whitelist_dir] if whitelist_dir else []), env=env, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, None
+    finally:
+        try:
+            os.remove(out)
+        except OSError:
+            pass
+    return parse_protocol(pr.stderr.decode("utf-8", "replace"))
+
+
 def decode_run(binary, sra, out, quality, vdb_threads, env, log_path, protocol=None):
     cmd = [binary, "download", sra, "--vdb-threads", str(vdb_threads), "--no-profile", "-o", out]
     if protocol:   # the sample-level vote (vote_protocol): decode this run with the sample's protocol, not its own call
@@ -356,7 +402,7 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
     ru0 = resource.getrusage(resource.RUSAGE_CHILDREN) if resource else None
     runs_info, raw_total = [], 0
     fmt, staged_files, parts, fallback_1fq = "1fq", [], [], False
-    protocol_vote, force_protocol = None, None
+    protocol_vote, force_protocol, companion_candidates = None, None, []
     calls = {}
     try:
         if a.head_screen:
@@ -372,17 +418,22 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
             if not keep_runs:
                 Q.give_back_todo(stage, gsm, claim, retry=False)
                 return "parked_head_" + ("non10x" if "non10x" in verdicts.values() else "no_gex")
-            rr = dict(zip(item["runs"], item.get("run_reads") or []))   # reads per run, for the vote weights
-            item = dict(item, runs=keep_runs)
-            if len(keep_runs) > 1:
-                vote = vote_protocol({r: calls[r][0] for r in keep_runs}, rr)
-                vote["calls"] = {r: list(calls[r]) for r in keep_runs}
-                protocol_vote = vote
-                if vote["status"] == "voted":
-                    force_protocol = vote["winner"]
-                    log("[vote] %s: runs disagree on the 3'/5' flag %s -> every run decoded as %s" % (gsm, vote["tags"], force_protocol))
-                elif vote["status"] == "incompatible":
-                    log("[vote] %s: runs differ in whitelist/geometry %s - not pooled by guessing" % (gsm, vote["tags"]))
+            item = dict(item, runs=keep_runs, run_reads=[n for r, n in zip(item["runs"], item.get("run_reads") or []) if r in keep_runs])
+        elif len(item["runs"]) > 1:   # no head screen: the vote still needs each run's call, from a 5000-spot probe
+            for r in item["runs"]:
+                calls[r] = probe_run_protocol(binary, r, scr, env, whitelist_dir=a.whitelist_dir)
+                Q.heartbeat(claim)
+        if len(item["runs"]) > 1:
+            main, vote, others = vote_runs(item["runs"], calls, item.get("run_reads") or [])
+            protocol_vote = vote
+            if others:
+                companion_candidates = others
+                log("[vote] %s: runs of different protocol families %s: the largest group %s is the GEX sample, %s are handed to the companion classifier" % (
+                    gsm, vote["calls"], main, vote["other_runs"]))
+                item = dict(item, runs=main)
+            if vote["status"] == "voted":
+                force_protocol = vote["winner"]
+                log("[vote] %s: runs disagree on the 3'/5' flag %s -> every run decoded as %s" % (gsm, vote["tags"], force_protocol))
         for r in item["runs"]:
             Q.heartbeat(claim)
             if a.limiter:
@@ -477,6 +528,8 @@ def process_item(a, stage, gsm, claim, item, env, binary, log):
             "stage_ratio": round(sum(x.get("staged_bytes", 0) for x in runs_info) / raw_total, 3) if raw_total else None}
         if protocol_vote:   # absent for single-run samples and without --head-screen: the default manifest is unchanged
             man["protocol_vote"] = protocol_vote
+            if companion_candidates:   # runs of another protocol family under this GSM: not staged here; the interface to the companion classification
+                man["companion_candidates"] = companion_candidates
         if calls:           # catalogue cross-check of the sample's call (the vote's winner, else the single kept run's call); only when the item carries protocol_inferred
             call = (protocol_vote or {}).get("winner") or next((calls[r][0] for r in kept if calls.get(r) and calls[r][0]), None)
             chk = check_against_catalogue(call, item.get("protocol_inferred"))

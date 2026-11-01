@@ -86,3 +86,56 @@ def test_catalogue_cross_check():
     assert F.check_against_catalogue("10x-5p-v2", "10xv2")["disagrees"] is True               # catalogue says 3' v2, the call 5' v2
     assert F.check_against_catalogue("10x-3p-v3", "citeseq")["disagrees"] is False
     assert F.check_against_catalogue("celseq2", "10xv3") is None and F.check_against_catalogue("10x-3p-v3", "smartseq2") is None and F.check_against_catalogue(None, "10xv3") is None
+
+
+def test_vote_runs_picks_the_largest_family_and_hands_the_rest_over():
+    runs = ["R1", "R2", "R3", "R4"]
+    calls = {"R1": ("10x-3p-v3", 3), "R2": ("10x-3p-v3", 3), "R3": ("10x-5p-v3", 2), "R4": ("10x-3p-v2", 3)}
+    main, vote, others = F.vote_runs(runs, calls, [100, 100, 150, 30])
+    assert main == ["R1", "R2", "R3"] and vote["status"] == "voted" and vote["winner"] == "10x-3p-v3"   # 200 reads of 3p-v3 vs 150 of 5p-v3
+    assert vote["incompatible"] is True and vote["main_family"] == "10x-v3" and vote["other_runs"] == ["R4"]
+    assert others == [{"lib_gsm": None, "lib_type": None, "status": "unclassified", "protocol_family": "10x-v2", "protocol_tags": {"R4": "10x-3p-v2"}, "runs": ["R4"], "reads": 30}]
+    assert vote["calls"]["R4"] == ["10x-3p-v2", 3]
+    # the GEX group is the one with the most reads, not the most runs
+    main, vote, others = F.vote_runs(["A", "B", "C"], {"A": ("10x-3p-v3", 3), "B": ("10x-3p-v2", 3), "C": ("10x-3p-v2", 3)}, [900, 10, 10])
+    assert main == ["A"] and others[0]["runs"] == ["B", "C"] and others[0]["reads"] == 20
+    # one family: nothing handed over; a run without a call stays with the main group
+    main, vote, others = F.vote_runs(["A", "B", "C"], {"A": ("10x-3p-v3", 3), "B": (None, None)}, [1, 1, 1])
+    assert main == ["A", "B", "C"] and others == [] and vote["incompatible"] is False and vote["status"] == "agree"
+    # no calls at all (e.g. every probe failed): everything stays, status none
+    main, vote, others = F.vote_runs(["A", "B"], {}, [])
+    assert main == ["A", "B"] and vote["status"] == "none" and others == []
+
+
+def test_probe_run_protocol_without_a_head_screen(monkeypatch, tmp_path):
+    seen = []
+
+    def fake_run(cmd, **kw):
+        seen.append(cmd)
+        open(cmd[cmd.index("-o") + 1], "w").write("x")
+        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"[singlet-download] Protocol: 10x-5p-v2 (confidence: 3)\n")
+    monkeypatch.setattr(F.subprocess, "run", fake_run)
+    assert F.probe_run_protocol("/bin/singlet", "SRR1", str(tmp_path), {}, whitelist_dir="/wl") == ("10x-5p-v2", 3)
+    assert seen[0][seen[0].index("--max-reads") + 1] == "5000" and seen[0][seen[0].index("--whitelist-dir") + 1] == "/wl"
+    assert not os.path.exists(str(tmp_path / "SRR1.probe.1fq"))      # the probe output is removed
+
+    def timeout_run(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd, 1)
+    monkeypatch.setattr(F.subprocess, "run", timeout_run)
+    assert F.probe_run_protocol("/bin/singlet", "SRR1", str(tmp_path), {}) == (None, None)
+
+
+def test_plan_items_carry_run_reads_and_the_catalogue_protocol(tmp_path):
+    import common as C
+    import stagequeue as Q
+    rows = [dict(priority=1, gsm="GSM1", gse="GSE1", organism="Homo sapiens", runs="SRR1,SRR2", run_reads="10,20", protocol_inferred="10xv3_5prime"),
+            dict(priority=2, gsm="GSM2", gse="GSE1", organism="Homo sapiens", runs="SRR3", run_reads="5", protocol_inferred="")]
+    plan = str(tmp_path / "plan.tsv.gz")
+    C.write_plan(plan, rows, {"v": 1})
+    items = Q.plan_items(plan)
+    assert items[0] == {"gsm": "GSM1", "gse": "GSE1", "organism": "Homo sapiens", "runs": ["SRR1", "SRR2"], "run_reads": [10, 20], "protocol_inferred": "10xv3_5prime"}
+    assert [i["gsm"] for i in Q.plan_items(plan, {"GSM2"})] == ["GSM2"] and len(Q.plan_items(plan, limit=1)) == 1
+    out = str(tmp_path / "todo.jsonl")
+    assert Q.main(["from-plan", plan, out, "--gsm", "GSM1"]) == 0
+    import json
+    assert json.loads(open(out).read())["protocol_inferred"] == "10xv3_5prime"
