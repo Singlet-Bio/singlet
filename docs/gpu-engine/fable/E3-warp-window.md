@@ -254,9 +254,30 @@ capacity); lane B 75.0 windows per read, 80.5% busy, 584 steps per read, 1,005 +
 (window above 32 aligns, lane capacity). The combination that the lanes suggest, lane M as the baseline and lane B
 warp-stitched, would be 315.5 + 239.9 = 555.4 ms (0.975x); it is measured directly on the merged code (3.5, `mixed`).
 
-### 3.5 On the merged code (job 795844, binary 80f366fc)
+### 3.5 On the merged code (job 795844, binary 80f366fc = m5e3m)
 
-(pending: the job waits for a GPU)
+Run job 795844 (short-gpu, `e3_run.sbatch`, BIN=m5e3m) measures base, best128, wasgbest, `mixed` (lane M baseline, lane B
+`--warp-b --wassign --wsort --wb-cfg 1 --wthreads 128`), basebig, wasgbestbig and a second base (noise), plus Nsight
+Compute of lane M (`k_p3` vs `k_p3w --wassign`). At the time of writing it was still queued behind higher-priority GPU jobs
+of the same account (QOSMaxGRESPerUser, priority 1 with `--nice=10000`). Its results land in
+`$W/jobs/fable/warp-window/results/e3_795844_<label>.json(.e3.json)` and the log in `$W/logs/e3-runm-795844.out`;
+`python bench/fable/warp-window/e3_table.py <dir> 795844` prints the table above from them. The integration head's own
+baseline for comparison: job 795737, lanes A / M / B 212.6 / 268.2 / 222.7 ms, 2.83 M distinct reads/s.
+
+Register / spill report of the merged default build (compile job 795831, ptxas `-O3 -arch=sm_90`, no E3 probes):
+
+| kernel | lane A | lane M | lane B |
+|---|---|---|---|
+| `k_p3` (baseline) | 79 regs, 624 B stack | 79, 368 B | 80, 1,712 B |
+| `k_p3w` | 95-96 (G 32/16/8), 12,720 B | 95, 8,944 B (LaneWork<8,8,8>) | 95, 13,808 B (cfg 0) / 32,144 B (cfg 1) |
+| `k_p3a` | 64, 0 B | 64 | 64 |
+| `k_p1`, `k_p2` | 95, 42 | 95, 42 | 95, 42 |
+
+No spill anywhere. Against the measured pre-merge binary (41a4187d): `k_p3w` 124 -> 95 registers and lane M's stack
+14,320 -> 8,944 B (E5's 32-bit exon rows and FIN1 slots shrink the lane contexts 38%), so its register-limited occupancy
+rises from 25% to 31% (5 blocks of 128 threads per SM); the baseline `k_p3` is back at 79-80 registers (37.5%) once the
+E3 probes are out of it. With `-DM5_E3STATS` `k_p3a` takes 72 registers (job 795831's flavour check: e3stats, tail, census,
+baseline and keepix all compile).
 
 
 ## 4. What failed on the way, and how it was found
