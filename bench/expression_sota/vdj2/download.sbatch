@@ -58,6 +58,10 @@ tenxu() {  # name dir/prefix-of-fca (rel. to cell-vdj) fastq-tar (rel.) gex-h5 (
     # streamed: multi-library tars (GEX + V(D)J, up to 43 GB) are never stored, only the V(D)J-B member is extracted
     curl -fsSL --retry 5 $X/$3 | tar -x -C $o/fastqs.part --wildcards "${5:-*}" && mv $o/fastqs.part $o/fastqs || { echo "MISSING fastqs $3"; rm -rf $o/fastqs.part; }
   fi
+  # some 10x tars hold plain FASTQ named .fastq.gz: compress those in place
+  for f in $(find $o/fastqs -name "*.fastq.gz" 2>/dev/null); do
+    gzip -t $f 2>/dev/null || { pigz -p 8 -c $f > $f.tmp && mv $f.tmp $f && echo "recompressed $(basename $f)"; }
+  done
   echo "lib $name"
 }
 if [ "${SET:-dev}" = bcrdev ] || [ "${SET:-dev}" = bcrho ]; then
