@@ -1,8 +1,9 @@
 # E13: the .1fq straight into the prefill's packed buffers (ingest)
 
 Experiment E13 ("ingest") of the GPU aligner program. Branch `gpu/fable/ingest`, from `gpu/fable-engine` at 8e54be40 (the E11 head),
-with `gpu/fable-engine` at e2b0000e (E14, "probe") merged in at 11a19707. On the GPU path, with `SINGLET_ENGINE_GPU_INGEST=1`, the
-.1fq goes from disk into the prefill's packed buffers: no FASTQ temp files, no second text parse. The switch is off by default; with
+with `gpu/fable-engine` merged in twice: at e2b0000e (E14, "probe") in 11a19707, and at d03d6c47 (E12, "prefill") in 1c25e24e. On the GPU
+path, with `SINGLET_ENGINE_GPU_INGEST=1`, the .1fq goes from disk into the prefill's packed buffers:
+no FASTQ temp files, no second text parse. The switch is off by default; with
 it unset the binary runs the code it ran before (§2b).
 
 ## 0. Answer in brief
@@ -61,7 +62,17 @@ it unset the binary runs the code it ran before (§2b).
   - Its CB corrector fetches R11 lazily (`set_pending` / `settle`) the first time a barcode has two or more candidates, which is
     after STAR's prefill has returned.
   - Fallback: a head scan of the .1fq in R11 mode.
-- **E12 merged (1c25e24e):** the re-gate (797219, T = 18) is queued; §2e and §3f will hold its results.
+- **With E12 merged** (1c25e24e; gate 797219, T = 18, node g052; §2e, §3f):
+  - level 5 takes 153.6 s / 656 core-s without ingest and **127.9 s / 561 with it**: **−25.6 s (−16.7 %), −95 core-s**. The saving
+    is about the same as without E12, so the two experiments add up.
+  - The prefill is 20 s, with no read-in.
+  - Gate (a) gives the same verdicts as in §2a:
+    - CPU vs level 5 + ingest: 60 identical, E11's 7;
+    - level 5 without vs with ingest: 63 identical;
+    - with the switch unset, against E11's kept outputs: 60 identical;
+    - R11 identical.
+  - Against E11's level 5, E12, E13 and E14 together save −82.6 s (−39 %). Level 5 with ingest is 3.09 times faster than the CPU
+    engine of the same job.
 
 ## 1. Design
 
@@ -250,6 +261,22 @@ histogram matches the device's: 0 entries differ.
   - gpuE5 vs gpuE5i and gpuE5i vs gpuE5ib: 63 identical each;
   - the three runs without the switch vs E11's kept outputs: 60 identical each.
 
+### 2e. After merging E12 (gate 797219, T = 18, node g052, binary 1c25e24e `bin6/`)
+
+`origin/gpu/fable-engine` moved during this experiment: E12 ("prefill", d03d6c47) was merged into it. This branch merged it at
+1c25e24e (§7) and re-ran the gate.
+
+| comparison | out_equiv | `star_SJ.out.tab`, `star_Log.final.out` | read files (sorted records) | `Gene/CellReads.stats` | what differs |
+|---|---|---|---|---|---|
+| **cpu vs gpuE5i** | **60 identical**, 2 timing/path only, 7 differ | identical (126,996 junctions); identical | same records (c115c73474e99993, 766e191fcc6181a5, 31fc9ef1d3d55a89); order differs | same 323,542 rows (sorted) | E11's 7, as in §2a |
+| **gpuE5 vs gpuE5i** | **63 identical**, 3 timing/path only, 3 differ | identical; identical | byte-identical | **byte-identical in file order** | `n_reads` 12,000 → 12,194, `bytes_public`, timings |
+| **gpuE5i vs gpuE5ib** | **63 identical**, 3 timing/path only, 3 differ | identical; identical | byte-identical | byte-identical in file order | `bytes_public`, timings |
+| **gpuE5i vs gpuE5s** | **63 identical**, 3 timing/path only, 3 differ | identical; identical | byte-identical | byte-identical in file order | `bytes_public`, timings |
+| **gpuD, gpuE5, cpu vs E11's kept outputs** | **60 identical** each, 2 timing/path only, 7 differ | identical; identical | – | same rows (gpuE5: byte-identical in file order) | the 3 files the kept copy lacks, the whitelist path (`ingest/bin6/`), `bytes_public`, timings |
+
+R11 is byte-identical to E11's reference in all 7 runs. So E12's engine and E13's ingest together keep every output that §2a
+checked.
+
 ## 3. Timings
 
 ### 3a. pbmc1k_v3, T = 18, node g051 (gate 796992; one job, binary 12c54287, E14 merged)
@@ -366,6 +393,48 @@ E13 rows come from `star_Log.out`.
 - **796870** (T = 8, 3a5cad85; the decode in STAR's process during the serial CR4 probe): gpuE5i took 199.3 s against 209.7 s for
   the sync variant (−10.4 s), at the same core-s. E14 then removed most of that window (§4).
 
+### 3f. After merging E12 (gate 797219, T = 18, node g052, binary 1c25e24e; one job)
+
+| run | wall s | core-s | wall s/M | core-s/M | maxRSS |
+|---|---|---|---|---|---|
+| gpuE5 (level 5: E12 + E14) | 153.8 | 653.8 | 2.31 | 9.82 | 61.3 GB |
+| gpuE5b | 153.3 | 657.4 | 2.30 | 9.87 | 61.3 GB |
+| **gpuE5i (+ ingest)** | **127.9** | **559.8** | **1.92** | **8.41** | **46.1 GB** |
+| **gpuE5ib** | **127.9** | **561.3** | **1.92** | **8.43** | **46.0 GB** |
+| gpuE5s (ingest, all in the prefill) | 132.2 | 566.7 | 1.98 | 8.51 | 46.1 GB |
+| gpuD | 198.5 | 967.1 | 2.98 | 14.52 | 43.5 GB |
+| cpu | 395.0 | 2,482.4 | 5.93 | 37.27 | 29.6 GB |
+
+**Ingest on top of E12** (means of two runs: 127.9 s / 560.5 core-s against 153.6 s / 655.6):
+- **−25.6 s (−16.7 %) and −95.1 core-s (−14.5 %)**, about the same as without E12 (−26.8 s, −101 core-s). The two experiments
+  add up.
+- The early path is worth 4.3 s (gpuE5s).
+- Level 5 with ingest is 3.09 times faster than the CPU engine of the same job.
+- Against E11's level 5 (210.6 s on g050), E12, E13 and E14 together save −82.6 s (−39 %).
+
+**Stages** (wall s / core-s, as in §3b):
+
+| stage | gpuE5 | gpuE5b | **gpuE5i** | **gpuE5ib** | gpuE5s |
+|---|---|---|---|---|---|
+| decode .1fq → FASTQ + R11; with ingest the head scan | 21 / 91.6 | 19 / 86.7 | **3 / 23.0** | **3 / 22.4** | 3 / 24.0 |
+| probe/ref load | 4 / 6.5 | 5 / 7.8 | 7 / 65.4 | 7 / 65.7 | 5 / 12.6 |
+| STAR load, CR4 probe, start (before the prefill) | 6 / 20.7 | 4 / 19.1 | 7 / 103.2 | 7 / 104.0 | 4 / 18.5 |
+| GPU prefill | 30 / 294.8 | 31 / 295.3 | **20 / 126.2** | **20 / 125.6** | 29 / 269.2 |
+| … reading reads / GPU (whole s) | 12 / 16 | 12 / 17 | **0** / 17 | **0** / 17 | 10 / 16 |
+| … E13 B, C (s); the prefill waited (s) | – | – | 1.6, 7.9; 0.3 | 1.7, 7.8; 0.3 | 1.1, 5.0; 9.8 (all in it) |
+| STAR per-read host pass | 8 / 19.4 | 9 / 20.6 | 9 / 22.4 | 9 / 22.5 | 9 / 20.5 |
+| STAR stream into pileup | 9 / 16.8 | 8 / 15.3 | 9 / 17.1 | 8 / 15.8 | 9 / 17.2 |
+| GPU-pileup hand-off (with GPU pileup + collapse) | 17 / 30.3 | 18 / 35.3 | 17 / 33.3 | 17 / 27.4 | 17 / 35.0 |
+| non-host | 20 / 43.0 | 20 / 42.6 | 17 / 40.5 | 18 / 47.6 | 17 / 39.2 |
+| export, QC, callers | 18 / 36.7 | 18 / 37.9 | 18 / 36.7 | 17 / 34.9 | 18 / 38.6 |
+| demux/ancestry/writers | 20 / 90.9 | 20 / 90.2 | 21 / 91.8 | 21 / 94.4 | 20 / 90.9 |
+| **total** (with startup) | 154 / 653.5 | 153 / 656.6 | **128 / 559.6** | **127 / 560.3** | 131 / 565.7 |
+
+**What changed with E12's engine:**
+- **The prefill is 20 s with ingest**: 0 s of reading reads, 17 s of GPU and 3 s of bookkeeping. It was 30–31 s without ingest.
+- **The CellRanger4 clip (7.8 s) now sets the length of the "STAR start" stage** (7 s, against 4–6 s without ingest). It runs in
+  STAR's process from the fork, and the prefill waits 0.3 s for it. It is the next host step on the path to the prefill (§5).
+
 ## 4. Surprises
 
 - **The CellRanger4 clip, not the decode, is the prefill's read-in.** At T = 18 the decode takes about 3.5 s and the barcode pass
@@ -409,7 +478,7 @@ E13 rows come from `star_Log.out`.
   - a barcode read over 63 bases;
   - a constant 5' prefix to clip (the decode could apply it);
   - CB_UMI_Complex, barcodes in R2, non-droplet assays.
-- **The CellRanger4 clip is still the largest host cost before the prefill**: about 70–90 thread-s after the dedup on pbmc1k_v3.
+- **The CellRanger4 clip is still the largest host cost before the prefill**: about 70–90 thread-s after the dedup on pbmc1k_v3. With E12 merged it sets the length of the stage before the prefill (§3f).
   The device could run it: it is a small local alignment of one 30-base TSO against each distinct 91-base read, on reads the device
   already holds. That would also bring the prefill's remaining wait to zero at any thread count.
 - **The early phases at low thread counts.** At T = 8 they only move CPU work in front of the prefill (§3c). Two options:
@@ -426,8 +495,8 @@ E13 rows come from `star_Log.out`.
 
 ## 6. Files touched outside `src/engine_gpu/`, and why
 
-All of E13 is outside `src/engine_gpu/`: the engine's interface (`include/singlet/engine_gpu.h`) only changed `Input::seq/off` to
-`NoInitVector`, and the engine itself is untouched.
+All of E13 is outside `src/engine_gpu/`. In the engine's interface (`include/singlet/engine_gpu.h`) only `Input::seq/off` changed (to
+`NoInitVector`), plus the R11 fields in the region header `E2EHeader`; the engine itself is untouched.
 
 | file | change | why |
 |---|---|---|
