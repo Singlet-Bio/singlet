@@ -232,3 +232,17 @@ def test_mixture_calls_singlets_and_doublets():
     s = np.setdiff1d(np.arange(n), d)
     assert (call[s] == true[s]).mean() > 0.97 and (call[d] == -2).mean() > 0.9
     assert post.shape == X.shape and ((score >= 0) & (score <= 1)).all()
+
+
+def test_modalities_vocabulary_has_adt_hto_and_crispr():
+    from singlet.crispr import members as CS
+    from singlet.s1 import client
+
+    assert (
+        client.MODALITIES["adt"].members == (ST.MEMBERS[0],)
+        and client.MODALITIES["adt"].slot == "obsm"
+    )
+    assert client.MODALITIES["hto"].members == (ST.MEMBERS[1],)
+    assert client.MODALITIES["crispr"].members == (CS.MEMBERS[0],)
+    for alias, name in (("protein", "adt"), ("cite", "adt"), ("hashtag", "hto"), ("guides", "crispr")):
+        assert client._MODALITY_ALIASES[alias] == name

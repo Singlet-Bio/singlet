@@ -372,6 +372,126 @@ MODALITIES: Dict[str, Modality] = {
         Modality(
             "star_log", "text", ("star_Log.final.out",), "STAR final alignment log for the sample."
         ),
+        Modality(
+            "adt_counts",
+            "matrix",
+            ("adt_counts.1pz", "adt_counts.mtx"),
+            "Antibody-derived tag (ADT/CITE-seq) UMI counts per tag and cell, columns aligned to the GEX cells.",
+        ),
+        Modality(
+            "adt_features",
+            "table",
+            ("adt_features.tsv",),
+            "Tag names of the engine's adt_counts.mtx.",
+        ),
+        Modality(
+            "adt_panel",
+            "json",
+            ("adt_panel.json",),
+            "ADT/HTO panel: tag, antibody clone, sequence, specificity, ambient level.",
+        ),
+        Modality(
+            "hto_counts",
+            "matrix",
+            ("hto_counts.1pz",),
+            "Hashtag-oligo (HTO) UMI counts per hashtag and cell.",
+        ),
+        Modality(
+            "hto_classification",
+            "table",
+            ("hto_classification.tsv",),
+            "HTO demultiplexing: hashtag call, doublet flag and log-fold margins per cell.",
+        ),
+        Modality(
+            "crispr_counts",
+            "matrix",
+            ("crispr_counts.1pz",),
+            "CRISPR guide UMI counts per guide and cell, columns aligned to the GEX cells.",
+        ),
+        Modality(
+            "crispr_guides",
+            "json",
+            ("crispr_guides.json",),
+            "CRISPR guide library, per-cell guide calls summary and QC.",
+        ),
+        Modality(
+            "vdj_contigs",
+            "binary",
+            ("vdj_contigs.parquet",),
+            "Assembled V(D)J contigs (chain, V/D/J/C genes, CDR3, UMIs) with per-cell GEX column and clonotype labels.",
+        ),
+        Modality(
+            "vdj_summary",
+            "json",
+            ("vdj_summary.json",),
+            "V(D)J assembly provenance: method, reference, counting and library QC.",
+        ),
+        Modality(
+            "doublet_scores_v2",
+            "table",
+            ("doublet_scores_v2.tsv",),
+            "Second doublet score (hybrid simulation model), reported beside doublet_scores.",
+        ),
+        Modality(
+            "atac_fragments",
+            "binary",
+            ("atac_fragments.tsv.gz", "fragments.tsv.gz"),
+            "ATAC fragments (bgzip TSV, one row per fragment).",
+        ),
+        Modality(
+            "atac_fragments_index",
+            "binary",
+            ("atac_fragments.tsv.gz.tbi", "fragments.tsv.gz.tbi"),
+            "Tabix index of the ATAC fragments.",
+        ),
+        Modality(
+            "atac_peaks",
+            "table",
+            ("atac_peaks.bed", "peaks.bed"),
+            "ATAC peaks called on the sample.",
+        ),
+        Modality(
+            "atac_peak_counts",
+            "matrix",
+            ("atac_peak_counts.1pz",),
+            "ATAC cut sites per peak and cell, columns aligned to the cells table.",
+        ),
+        Modality(
+            "atac_gene_activity",
+            "matrix",
+            ("atac_gene_activity.1pz",),
+            "ATAC fragments per gene (gene activity) and cell.",
+        ),
+        Modality(
+            "atac_cells",
+            "table",
+            ("atac_cells.tsv",),
+            "ATAC cell calls.",
+        ),
+        Modality(
+            "atac_barcode_metrics",
+            "table",
+            ("atac_barcode_metrics.tsv",),
+            "Per-barcode ATAC QC metrics.",
+        ),
+        Modality(
+            "atac_summary",
+            "json",
+            ("atac_summary.json",),
+            "ATAC sample summary.",
+        ),
+        Modality(
+            "spatial_positions",
+            "table",
+            ("spatial_positions.tsv", "spatial_coordinates.tsv"),
+            "Spatial spot positions (array row/col, in tissue) per barcode.",
+        ),
+        Modality(
+            "spatial_summary",
+            "json",
+            ("spatial_summary.json",),
+            "Spatial sample summary.",
+        ),
     )
 }
 

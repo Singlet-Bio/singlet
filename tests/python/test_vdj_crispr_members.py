@@ -153,3 +153,14 @@ def test_vdj_library_entry_point(tmp_path):
     back = VS.read_members(VS.build_sidecar("GSM0", out["members"]))
     assert (back["contigs"]["col"] >= 0).all()
     assert len(out["labels"]) == len(cbs)
+
+
+def test_registered_members_cover_every_package_member():
+    """Every member the adt / crispr / vdj packages write is a registered modality member (bundle.MODALITIES)."""
+    from singlet import bundle
+    from singlet.adt import members as AM
+
+    registered = {m for mod in bundle.MODALITIES.values() for m in mod.members}
+    for pkg in (AM, CS, VS):
+        for name in pkg.MEMBERS:
+            assert name in registered, name
