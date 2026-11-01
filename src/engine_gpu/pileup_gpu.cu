@@ -43,14 +43,18 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     size_t freeB = 0, totB = 0; cudaMemGetInfo(&freeB, &totB);
     // a sample whose working set exceeds the device (GSM7656149: 223 M barcoded reads needed ~100 GB of 94) runs again in unified
     // memory twice the device's size: the part beyond the device pages to the host, the results are the same
+    size_t arenaB = 0;   // E17: the device arena's size (logged)
     for (int attempt = 0; attempt < 2; attempt++) {
     Arena A;
     try {
     if (attempt == 0) {
         size_t arena = freeB > (size_t(3) << 30) ? freeB - (size_t(3) << 30) : freeB / 2;
+        // E17 (docs/gpu-engine/fable/E17-budget.md): within the sample's device memory budget (singlet_engine_gpu::memBudget; less 3 GB for
+        // this process's context and STAR's, which may still hold the E11 keep), not the free memory another sample's prefill races for
+        if (const uint64_t bud = singlet_engine_gpu::memBudget(totB)) arena = std::min<size_t>(arena, bud > (uint64_t(3) << 30) ? bud - (uint64_t(3) << 30) : bud / 2);
         // SINGLET_GPU_PILEUP_ARENA_GB: cap the arena (samples sharing the GPU; the partitions K adapt to it)
         if (const char* ag = getenv("SINGLET_GPU_PILEUP_ARENA_GB")) arena = std::min<size_t>(arena, (size_t) (atof(ag) * (1ull << 30)));
-        A.init(arena);
+        A.init(arena); arenaB = arena;
     }
     else A.init_managed(2 * totB);
     Inputs in; in.nS = (int)nS; in.nA = (int)nA; in.nR = (int)nR; in.ncells = (int)par.n_barcodes; in.ulen = pi.umiLen; in.par = par; in.wantMerges = pi.wantGeneMerges;
@@ -104,6 +108,8 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     }
     po.snpMolecules = g_snp_stat[0]; po.snpAmbiguous = g_snp_stat[1]; po.snpOther = g_snp_stat[2];
     po.peakGB = A.peak / 1e9;
+    if (attempt == 0) { char ab[96]; snprintf(ab, sizeof ab, "arena %.1f GB (E17 budget %.1f GB), peak %.1f GB; ", arenaB / 1073741824.0,
+                                              singlet_engine_gpu::memBudget(totB) / 1073741824.0, A.peak / 1073741824.0); po.log += ab; }
     po.log += "cell partitions: " + std::to_string(g_parts_used) + (g_force_parts > 0 ? " (forced)" : "") + "; ";
     for (auto& l : g_parts_log) po.log += l + "; ";
     cudaFree(A.base);
