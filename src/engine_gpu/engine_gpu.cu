@@ -62,7 +62,7 @@ cudaError_t egMemcpy(int line, void* dst, const void* src, size_t n, cudaMemcpyK
 #define EG_KT(tag, ...) do { cudaEvent_t a_, b_; const bool on_ = egTraceOn(); if (on_) { cudaEventCreate(&a_); cudaEventCreate(&b_); cudaEventRecord(a_); } __VA_ARGS__; if (on_) { cudaEventRecord(b_); egPending().push_back({tag, a_, b_}); } } while (0)
 // warp balance of stage 3 (SINGLET_ENGINE_GPU_TRACE): per read the stitching steps (nSteps); a warp takes as long as its slowest read, so the sum over warps of
 // the largest steps is the time in step units. Efficiency = total / (32 x that sum), for the batch's reads in the order they run, in the best possible order
-// (oracle: sorted by steps) and sorted by the stage-1 hit count (the bucketing key), ascending.
+// (oracle: sorted by steps) and sorted by the stage-1 hit count, ascending.
 struct EgDiag { double clk[8] = {0, 0, 0, 0, 0, 0, 0, 0}; double total = 0, wOrig = 0, wOracle = 0, wNent = 0, wNW = 0; u64 reads = 0, zero = 0; double top1 = 0; };
 EgDiag& egDiag() { static EgDiag d; return d; }
 double egWarpMax(const std::vector<u64>& v) { double s = 0; for (size_t i = 0; i < v.size(); i += 32) { u64 m = 0; for (size_t j = i; j < std::min(v.size(), i + 32); j++) m = std::max(m, v[j]); s += (double) m; } return s; }
@@ -289,7 +289,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         EG_KT("p2", k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits));
         EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen));
         EG_CK(cudaGetLastError());
-        if (egTraceOn() && !bucket) {   // warp-balance diagnostic (reads run in batch order): cost of the extra copies is outside the kernel timings
+        if (egTraceOn()) {   // warp-balance diagnostic (reads run in batch order): cost of the extra copies is outside the kernel timings
             u64 *dSteps, *dNW; unsigned long long* dClk; EG_CK(cudaMalloc(&dSteps, nb * 8)); EG_CK(cudaMalloc(&dNW, nb * 8)); EG_CK(cudaMalloc(&dClk, 64)); EG_CK(cudaMemset(dClk, 0, 64));
             k_diag<C><<<G, T>>>(nb, dWork, dSteps, dNW, dClk);
             { unsigned long long hc[8]; EG_CK(cudaMemcpy(hc, dClk, 64, cudaMemcpyDeviceToHost)); for (int i = 0; i < 8; i++) egDiag().clk[i] += (double) hc[i]; }
