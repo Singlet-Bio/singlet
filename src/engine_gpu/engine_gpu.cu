@@ -125,13 +125,27 @@ __global__ void k_gather_clip(const char* seq, const u64* cs, const u64* offC, u
     for (u64 k = 0, L = offC[i + 1] - offC[i]; k < L; k++) out[offC[i] + k] = seq[cs[i] + k];
 }
 
-// E12: the dedup's products on the device (before: three arrays to the host and two serial passes over the reads there). Per sorted
-// position its group's first position (heads, then an inclusive max-scan), per read its representative (the group's first read; NONE
-// for a sequence with N), and the representatives without N in hash order (stream compaction)
-__global__ void k_headpos(const uint32_t* head, u64 n, uint32_t* hp) {
+// E12: the group boundaries without k_groups' walk back to the group's first read (quadratic in a group's size; a sample's most frequent
+// sequences have many copies). k_heads: the boundaries and per sorted position k or 0 (an inclusive max-scan then gives each
+// position its group's first position); k_collide: the byte-for-byte check of every member against its group's first read, as k_groups
+__global__ void k_heads(const u64* h1, const u64* h2, u64 n, uint32_t* head, uint32_t* hp) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
-    if (k < n) hp[k] = head[k] ? (uint32_t)k : 0u;
+    if (k >= n) return;
+    const bool first = k == 0 || h1[k] != h1[k - 1] || h2[k] != h2[k - 1];
+    head[k] = first ? 1 : 0; hp[k] = first ? (uint32_t)k : 0u;
 }
+__global__ void k_collide(const char* seq, const u64* off, const uint32_t* order, const uint32_t* hp, u64 n, unsigned long long* collisions) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n || hp[k] == k) return;
+    const uint32_t a = order[hp[k]], b = order[k];
+    const u64 la = off[a + 1] - off[a], lb = off[b + 1] - off[b];
+    bool same = la == lb;
+    for (u64 t = 0; same && t < la; t++) same = seq[off[a] + t] == seq[off[b] + t];
+    if (!same) atomicAdd(collisions, 1ULL);
+}
+// E12: the dedup's products on the device (before: three arrays to the host and two serial passes over the reads there). Per sorted
+// position its group's first position (k_heads, then an inclusive max-scan), per read its representative (the group's first read; NONE
+// for a sequence with N), and the representatives without N in hash order (stream compaction)
 __global__ void k_readrep(const uint32_t* order, const uint32_t* hp, const uint8_t* hasN, u64 n, uint32_t* readRep) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
@@ -900,6 +914,16 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     auto keys = thrust::make_zip_iterator(thrust::make_tuple(thrust::device_ptr<u64>(dH1), thrust::device_ptr<u64>(dH2)));
     thrust::sort_by_key(keys, keys + n, thrust::device_ptr<uint32_t>(dOrder));
     cudaMemset(dColl, 0, 8);
+    // E12: rep, readRep and the counts on the device (SINGLET_ENGINE_GPU_DEDUP=host, or CFG=old: on the host, as before)
+    const char* ddE = std::getenv("SINGLET_ENGINE_GPU_DEDUP");
+    const bool dedupDev = NEW0 && !(ddE && std::string(ddE) == "host");
+    uint32_t* dHp = nullptr;   // E12: per sorted position its group's first position
+    if (dedupDev) {
+        if (cudaMalloc(&dHp, n * 4)) return fail("out of device memory (dedup)");
+        k_heads<<<(unsigned)((n + 255) / 256), 256>>>(dH1, dH2, n, dHead, dHp);
+        thrust::inclusive_scan(thrust::device_ptr<uint32_t>(dHp), thrust::device_ptr<uint32_t>(dHp + n), thrust::device_ptr<uint32_t>(dHp), thrust::maximum<uint32_t>());
+        k_collide<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dOrder, dHp, n, dColl);
+    } else
     k_groups<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dH1, dH2, dOrder, n, dHead, dColl);
     unsigned long long coll = 0;
     if (cudaMemcpy(&coll, dColl, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("dedup copy");
@@ -909,15 +933,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // per read: the representative read of its distinct sequence (NONE for sequences with N, which STAR maps itself)
     const uint32_t NONE = 0xFFFFFFFFu;
     singlet_engine_gpu::NoInitVector<uint32_t> readRep(n);
-    // E12: rep, readRep and the counts on the device (SINGLET_ENGINE_GPU_DEDUP=host, or CFG=old: on the host, as before)
-    const char* ddE = std::getenv("SINGLET_ENGINE_GPU_DEDUP");
-    const bool dedupDev = NEW0 && !(ddE && std::string(ddE) == "host");
     if (dedupDev) {
-        uint32_t* dHp; uint32_t* dRR; uint32_t* dRep;
-        if (cudaMalloc(&dHp, n * 4) || cudaMalloc(&dRR, n * 4) || cudaMalloc(&dRep, n * 4)) return fail("out of device memory (dedup)");
+        uint32_t* dRR; uint32_t* dRep;
+        if (cudaMalloc(&dRR, n * 4) || cudaMalloc(&dRep, n * 4)) return fail("out of device memory (dedup)");
         const unsigned G = (unsigned)((n + 255) / 256);
-        k_headpos<<<G, 256>>>(dHead, n, dHp);
-        thrust::inclusive_scan(thrust::device_ptr<uint32_t>(dHp), thrust::device_ptr<uint32_t>(dHp + n), thrust::device_ptr<uint32_t>(dHp), thrust::maximum<uint32_t>());
         k_readrep<<<G, 256>>>(dOrder, dHp, dN, n, dRR);
         const u64 nDist = thrust::reduce(thrust::device_ptr<uint32_t>(dHead), thrust::device_ptr<uint32_t>(dHead + n), (u64)0);
         const u64 nRep = (u64)(thrust::copy_if(thrust::device_ptr<uint32_t>(dOrder), thrust::device_ptr<uint32_t>(dOrder + n), thrust::counting_iterator<u64>(0),
