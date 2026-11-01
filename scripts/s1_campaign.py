@@ -970,6 +970,7 @@ MODALITY_MEMBERS: List[Tuple[str, Tuple[str, ...]]] = [
     ("sex_call", ("sex_call.json",)),
     ("nonhost_species", ("nonhost/nonhost_em_abundance.tsv", "nonhost_em_abundance.tsv")),
     ("nonhost_summary", ("nonhost/nonhost_summary.json", "nonhost_summary.json")),
+    ("nonhost_confirmed_reads", ("nonhost/nonhost_confirmed_reads.bin",)),
     ("vdj_gene_usage", ("vdj_gene_usage.1pz",)),
     ("doublet_scores", ("doublet_scores.tsv",)),
     ("cell_cycle_scores", ("cell_cycle_scores.tsv",)),

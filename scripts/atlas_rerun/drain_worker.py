@@ -71,6 +71,8 @@ def singlet_cmd(a, ccfg, cfg, claim, man, out_tmp):
         cmd += ["--genome-dir", os.path.join(d, "star_2.7.11b"), "--exons", os.path.join(d, "genes", "genes.gtf")]
     cmd += ["--out-prefix", os.path.join(out_tmp, "out") + "/", "--threads", str(a.threads), "--pipeline", "--output-format", "1pz",
             "--engine", a.engine]
+    if man.get("pairs"):
+        cmd += ["--memory-tier", C.memory_tier(man["pairs"])]   # the .s1 holds summary.json: its memory_tier comes from the sample, not from this process
     if os.path.exists(screen):
         cmd += ["--run-screen", screen]
     return cmd + list(cfg.get("pipeline", {}).get("extra_args", [])) + a.extra

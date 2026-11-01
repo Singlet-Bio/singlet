@@ -8,9 +8,12 @@
 // sequences through the lane cascade A → M → B (GPU, staged) → host lane (STAR's limits, same code), and return
 // (sequence, result) records.
 #include "singlet/engine_gpu.h"
+#include "singlet/nvtx.h"
 #include "stitch.cuh"
 #include <cuda_runtime.h>
+#include <thrust/copy.h>
 #include <thrust/device_ptr.h>
+#include <thrust/reduce.h>
 #include <thrust/scan.h>
 #include <thrust/sort.h>
 #include <thrust/sequence.h>
@@ -22,6 +25,8 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -33,6 +38,82 @@ namespace {
 #define EG_CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) { err = std::string(#x) + ": " + cudaGetErrorString(e_); return false; } } while (0)
 
 double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+
+// SINGLET_ENGINE_GPU_TRACE=1: the transfer ledger and the kernel times of this file, in the log. The prefill runs in the forked STAR child, which nsys
+// does not follow, so this is its profile: every cudaMemcpy (calls, bytes, host seconds, pinned or pageable host side) by source line, and the GPU time of
+// each kernel launch below (cudaEvents) by name. Off: one branch per call.
+bool egTraceOn() { static const bool on = std::getenv("SINGLET_ENGINE_GPU_TRACE") != nullptr; return on; }
+struct EgRow { unsigned long long n = 0, bytes = 0; double sec = 0; bool pinned = false; int kind = 0; };
+struct EgKRow { unsigned long long n = 0; double ms = 0; };
+struct EgPending { const char* tag; cudaEvent_t a, b; };
+std::map<int, EgRow>& egRows() { static std::map<int, EgRow> m; return m; }
+std::vector<EgPending>& egPending() { static std::vector<EgPending> v; return v; }
+cudaError_t egMemcpy(int line, void* dst, const void* src, size_t n, cudaMemcpyKind k) {
+    if (!egTraceOn()) return ::cudaMemcpy(dst, src, n, k);
+    const double t = now();
+    const cudaError_t r = ::cudaMemcpy(dst, src, n, k);
+    const double dt = now() - t;
+    bool pinned = false;
+    const void* h = k == cudaMemcpyHostToDevice ? src : (k == cudaMemcpyDeviceToHost ? dst : nullptr);
+    if (h != nullptr) { cudaPointerAttributes a; if (cudaPointerGetAttributes(&a, h) == cudaSuccess) pinned = a.type == cudaMemoryTypeHost; cudaGetLastError(); }
+    EgRow& w = egRows()[line];
+    w.n++; w.bytes += n; w.sec += dt; w.pinned = pinned; w.kind = (int) k;
+    return r;
+}
+#define cudaMemcpy(d, s, n, k) egMemcpy(__LINE__, (d), (s), (n), (k))
+#define EG_KT(tag, ...) do { cudaEvent_t a_, b_; const bool on_ = egTraceOn(); if (on_) { cudaEventCreate(&a_); cudaEventCreate(&b_); cudaEventRecord(a_); } __VA_ARGS__; if (on_) { cudaEventRecord(b_); egPending().push_back({tag, a_, b_}); } } while (0)
+// warp balance of stage 3 (SINGLET_ENGINE_GPU_TRACE): per read the stitching steps (nSteps); a warp takes as long as its slowest read, so the sum over warps of
+// the largest steps is the time in step units. Efficiency = total / (32 x that sum), for the batch's reads in the order they run, in the best possible order
+// (oracle: sorted by steps) and sorted by the stage-1 hit count, ascending.
+struct EgDiag { double clk[8] = {0, 0, 0, 0, 0, 0, 0, 0}; double total = 0, wOrig = 0, wOracle = 0, wNent = 0, wNW = 0; u64 reads = 0, zero = 0; double top1 = 0; };
+EgDiag& egDiag() { static EgDiag d; return d; }
+double egWarpMax(const std::vector<u64>& v) { double s = 0; for (size_t i = 0; i < v.size(); i += 32) { u64 m = 0; for (size_t j = i; j < std::min(v.size(), i + 32); j++) m = std::max(m, v[j]); s += (double) m; } return s; }
+void egDiagBatch(const std::vector<u64>& steps, const std::vector<u64>& nent, const std::vector<u64>& nw) {
+    EgDiag& d = egDiag();
+    const size_t n = steps.size();
+    for (u64 x : steps) { d.total += (double) x; d.zero += x == 0; }
+    d.reads += n; d.wOrig += egWarpMax(steps);
+    std::vector<u64> t = steps; std::sort(t.begin(), t.end()); d.wOracle += egWarpMax(t);
+    for (size_t i = n - n / 100; i < n; i++) d.top1 += (double) t[i];
+    std::vector<uint32_t> ix(n); for (size_t i = 0; i < n; i++) ix[i] = (uint32_t) i;
+    std::stable_sort(ix.begin(), ix.end(), [&](uint32_t a, uint32_t b) { return nent[a] < nent[b]; });
+    for (size_t i = 0; i < n; i++) t[i] = steps[ix[i]];
+    d.wNent += egWarpMax(t);
+    std::stable_sort(ix.begin(), ix.end(), [&](uint32_t a, uint32_t b) { return nw[a] < nw[b]; });
+    for (size_t i = 0; i < n; i++) t[i] = steps[ix[i]];
+    d.wNW += egWarpMax(t);
+}
+void egReport(std::string& log) {
+    if (!egTraceOn()) return;
+    char l[256];
+    {
+        const EgDiag& d = egDiag();
+        if (d.reads) {
+            char lb[512]; snprintf(lb, sizeof lb, "engine_gpu trace: stage-3 warp balance: %llu reads, %.4g steps total (%.1f%% of reads 0 steps, top 1%% of reads %.1f%% of steps); warp efficiency original order %.1f%%, "
+                     "sorted by hits %.1f%%, by windows %.1f%%, oracle by steps %.1f%%\n", d.reads, d.total, 100.0 * d.zero / d.reads, 100.0 * d.top1 / std::max(1.0, d.total),
+                     100.0 * d.total / (32 * std::max(1.0, d.wOrig)), 100.0 * d.total / (32 * std::max(1.0, d.wNent)), 100.0 * d.total / (32 * std::max(1.0, d.wNW)),
+                     100.0 * d.total / (32 * std::max(1.0, d.wOracle)));
+            log += lb;
+            snprintf(lb, sizeof lb, "engine_gpu trace: thread cycles by phase (G): seeds %.2f, windows %.2f, stitching %.2f (stitchAlign %.2f, finalize %.2f, copies %.2f, record %.2f), selection+encoding %.2f; %.0f cycles per stitching step"
+                     , d.clk[0] / 1e9, d.clk[1] / 1e9, d.clk[2] / 1e9, d.clk[4] / 1e9, d.clk[5] / 1e9, d.clk[6] / 1e9, d.clk[7] / 1e9, d.clk[3] / 1e9, d.clk[2] / std::max(1.0, d.total));
+            log += lb; log += "\n";
+        }
+    }
+    std::map<std::string, EgKRow> kr;
+    for (auto& e : egPending()) { float ms = 0; cudaEventSynchronize(e.b); cudaEventElapsedTime(&ms, e.a, e.b); kr[e.tag].n++; kr[e.tag].ms += ms; cudaEventDestroy(e.a); cudaEventDestroy(e.b); }
+    egPending().clear();
+    for (auto& kv : kr) { snprintf(l, sizeof l, "engine_gpu trace: kernel %s: %llu launches, %.1f ms GPU time\n", kv.first.c_str(), kv.second.n, kv.second.ms); log += l; }
+    std::vector<std::pair<int, EgRow>> v(egRows().begin(), egRows().end());
+    std::sort(v.begin(), v.end(), [](const auto& x, const auto& y) { return x.second.sec > y.second.sec; });
+    for (auto& kv : v) {
+        const EgRow& w = kv.second;
+        snprintf(l, sizeof l, "engine_gpu trace: cudaMemcpy line %d %s: %llu calls, %.3f GB, %.3f s host, %.2f GB/s, %s host memory\n", kv.first,
+                 w.kind == cudaMemcpyHostToDevice ? "H2D" : (w.kind == cudaMemcpyDeviceToHost ? "D2H" : "other"), w.n, w.bytes / 1e9, w.sec,
+                 w.sec > 0 ? w.bytes / 1e9 / w.sec : 0.0, w.pinned ? "pinned" : "pageable");
+        log += l;
+    }
+    egRows().clear();
+}
 
 //                 LREAD NSPLIT    NP     NW  NWA      NWB NEX NWTR NKEEP    NBLOB
 typedef Caps<      160,     4,   32,    16,  16,     256,  8,   8,    8,     640> LaneA;
@@ -69,6 +150,24 @@ __global__ void k_groups(const char* seq, const u64* off, const u64* h1, const u
         for (u64 t = 0; same && t < la; t++) same = seq[off[a] + t] == seq[off[b] + t];
         if (!same) atomicAdd(collisions, 1ULL);
     }
+}
+
+// the per-read pass of the dedup (after the sort and k_groups): per sorted position its read is order[k], head[k] marks the first of a group
+__global__ void k_dd_flags(const uint32_t* order, const uint32_t* head, const uint8_t* hasN, u64 n, uint8_t* repFlag, uint8_t* nFlag) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    const bool h = head[k] != 0, w = hasN[order[k]] != 0;
+    repFlag[k] = h && !w; nFlag[k] = h && w;
+}
+__global__ void k_dd_repofgroup(const uint32_t* order, const uint32_t* head, const uint32_t* g, const uint8_t* hasN, u64 n, uint32_t* repOfGroup) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n || !head[k]) return;
+    repOfGroup[g[k] - 1] = hasN[order[k]] ? 0xFFFFFFFFu : order[k];
+}
+__global__ void k_dd_readrep(const uint32_t* order, const uint32_t* g, const uint32_t* repOfGroup, u64 n, uint32_t* readRep) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    readRep[order[k]] = repOfGroup[g[k] - 1];
 }
 
 // ---- clipping (STAR's ClipMate::clip for mate 1, Hamming adapter type; SequenceFuns.cpp localSearch), per read: the clipped
@@ -149,6 +248,13 @@ __global__ void k_p2(Params P, GenomeView g, u64 n, const Work<C>* work, const u
     }
 }
 template <class C>
+__global__ void k_diag(u64 n, const Work<C>* work, u64* steps, u64* nw, unsigned long long* clk) {
+    u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    steps[k] = work[k].nSteps; nw[k] = work[k].nW;
+    for (int i = 0; i < 8; i++) atomicAdd(&clk[i], (unsigned long long) work[k].clk[i]);
+}
+template <class C>
 __global__ void k_p3(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
                      const uint32_t* bits, uint8_t* bstatus, uint8_t* status, uint8_t* out, uint16_t* outLen) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
@@ -194,15 +300,26 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     for (u64 b0 = 0; b0 < n; b0 += NB) {
         u64 nb = std::min(NB, n - b0);
         int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
-        k_p1<C><<<G, T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dNent);
+        EG_KT("p1", k_p1<C><<<G, T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dNent));
         thrust::exclusive_scan(thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dBase));
         u64 lastB, lastN; EG_CK(cudaMemcpy(&lastB, dBase + nb - 1, 8, cudaMemcpyDeviceToHost)); EG_CK(cudaMemcpy(&lastN, dNent + nb - 1, 8, cudaMemcpyDeviceToHost));
         u64 words = (lastB + lastN) / 32 + 2;
         if (words > bitsCap) { cudaFree(dBits); bitsCap = words * 2; EG_CK(cudaMalloc(&dBits, bitsCap * 4)); }
         EG_CK(cudaMemset(dBits, 0, words * 4));
-        k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
-        k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen);
+        EG_KT("p2", k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits));
+        EG_KT("p3", k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen));
         EG_CK(cudaGetLastError());
+        if (egTraceOn()) {   // warp-balance diagnostic (reads run in batch order): cost of the extra copies is outside the kernel timings
+            u64 *dSteps, *dNW; unsigned long long* dClk; EG_CK(cudaMalloc(&dSteps, nb * 8)); EG_CK(cudaMalloc(&dNW, nb * 8)); EG_CK(cudaMalloc(&dClk, 64)); EG_CK(cudaMemset(dClk, 0, 64));
+            k_diag<C><<<G, T>>>(nb, dWork, dSteps, dNW, dClk);
+            { unsigned long long hc[8]; EG_CK(cudaMemcpy(hc, dClk, 64, cudaMemcpyDeviceToHost)); for (int i = 0; i < 8; i++) egDiag().clk[i] += (double) hc[i]; }
+            cudaFree(dClk);
+            std::vector<u64> hs(nb), hn(nb), hw(nb);
+            EG_CK(cudaMemcpy(hs.data(), dSteps, nb * 8, cudaMemcpyDeviceToHost)); EG_CK(cudaMemcpy(hw.data(), dNW, nb * 8, cudaMemcpyDeviceToHost));
+            EG_CK(cudaMemcpy(hn.data(), dNent, nb * 8, cudaMemcpyDeviceToHost));
+            egDiagBatch(hs, hn, hw);
+            cudaFree(dSteps); cudaFree(dNW);
+        }
     }
     EG_CK(cudaDeviceSynchronize());
     {   // copy only the bytes of the results (the slots are 640-4096 bytes, results ~70)
@@ -212,7 +329,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         u64 total; EG_CK(cudaMemcpy(&total, dPoff + n, 8, cudaMemcpyDeviceToHost));
         uint8_t* dPacked; EG_CK(cudaMalloc(&dPacked, total + 1));
         devNote();
-        k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked);
+        EG_KT("pack", k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked));
         EG_CK(cudaGetLastError());
         L.out.resize(total);
         EG_CK(cudaMemcpy(L.out.data(), dPacked, total, cudaMemcpyDeviceToHost));
@@ -234,10 +351,72 @@ template <class F> static void parallelFor(u64 n, int nt, F fn) {
     for (auto& x : th) x.join();
 }
 
+// Large host->device copies at the PCIe rate. cudaMemcpy from pageable memory runs through the driver's staging buffers at ~5.7 GB/s (S8 ledger, one thread of
+// memcpy); here several threads fill pinned buffers (64 MB x 4) while cudaMemcpyAsync drains them on a stream, so the copy and the filling overlap.
+// SINGLET_ENGINE_GPU_FASTUP=0 turns it off. Byte-for-byte the same data reaches the device.
+struct PinStage {
+    static constexpr int NB = 4;
+    static constexpr size_t SZ = 64u << 20;
+    char* buf[NB] = {nullptr, nullptr, nullptr, nullptr};
+    cudaEvent_t ev[NB] = {nullptr, nullptr, nullptr, nullptr};
+    cudaStream_t st = nullptr;
+    bool ok = false;
+    int nt = 8;
+    double secInit = 0;
+    bool init(int threads) {
+        if (ok) return true;
+        const char* off = std::getenv("SINGLET_ENGINE_GPU_FASTUP");
+        if (off != nullptr && off[0] == '0') return false;
+        const double t0 = now();
+        nt = std::max(2, std::min(threads, 16));
+        for (int i = 0; i < NB; i++) {
+            if (cudaHostAlloc((void**) &buf[i], SZ, cudaHostAllocDefault) != cudaSuccess) { buf[i] = nullptr; release(); return false; }
+            if (cudaEventCreateWithFlags(&ev[i], cudaEventDisableTiming) != cudaSuccess) { ev[i] = nullptr; release(); return false; }
+        }
+        if (cudaStreamCreateWithFlags(&st, cudaStreamNonBlocking) != cudaSuccess) { st = nullptr; release(); return false; }
+        secInit = now() - t0;
+        ok = true;
+        return true;
+    }
+    void release() {
+        ok = false;
+        for (int i = 0; i < NB; i++) {
+            if (ev[i]) { cudaEventDestroy(ev[i]); ev[i] = nullptr; }
+            if (buf[i]) { cudaFreeHost(buf[i]); buf[i] = nullptr; }
+        }
+        if (st) { cudaStreamDestroy(st); st = nullptr; }
+    }
+    // d[0..n) = h[0..n); returns after the data is on the device
+    bool copy(void* d, const void* h, size_t n) {
+        const double t0 = now();
+        bool used[NB] = {false, false, false, false};
+        size_t off = 0; int k = 0;
+        while (off < n) {
+            const size_t c = std::min(SZ, n - off);
+            if (used[k] && cudaEventSynchronize(ev[k]) != cudaSuccess) return false;
+            const char* src = (const char*) h + off; char* dst = buf[k];
+            parallelFor(c, nt, [&](u64 lo, u64 hi) { std::memcpy(dst + lo, src + lo, hi - lo); });
+            if (cudaMemcpyAsync((char*) d + off, buf[k], c, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
+            if (cudaEventRecord(ev[k], st) != cudaSuccess) return false;
+            used[k] = true; off += c; k = (k + 1) % NB;
+        }
+        if (cudaStreamSynchronize(st) != cudaSuccess) return false;
+        if (egTraceOn()) { EgRow& w = egRows()[-1]; w.n++; w.bytes += n; w.sec += now() - t0; w.pinned = true; w.kind = (int) cudaMemcpyHostToDevice; }
+        return true;
+    }
+};
+PinStage& pinStage() { static PinStage p; return p; }
+
 template <class T> bool upload(const T* h, u64 n, T*& d, std::string& err, u64 pad = 0) {
     EG_CK(cudaMalloc(&d, (n + pad) * sizeof(T) + 8));
     if (pad) EG_CK(cudaMemset(d, 0, (n + pad) * sizeof(T) + 8));
-    if (n) EG_CK(cudaMemcpy(d, h, n * sizeof(T), cudaMemcpyHostToDevice));
+    if (n) {
+        if (n * sizeof(T) >= (32u << 20) && pinStage().ok) {
+            if (!pinStage().copy(d, h, n * sizeof(T))) { err = "fast upload: " + std::string(cudaGetErrorString(cudaGetLastError())); return false; }
+        } else {
+            EG_CK(cudaMemcpy(d, h, n * sizeof(T), cudaMemcpyHostToDevice));
+        }
+    }
     return true;
 }
 
@@ -267,15 +446,19 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                  Output& out) {
     std::string err;
     // on failure, release everything this process holds on the device (STAR then maps every read on the CPU)
-    auto fail = [&](const std::string& e) { out.log += "engine_gpu: " + e + "\n"; cudaDeviceReset(); return false; };
+    auto fail = [&](const std::string& e) { out.log += "engine_gpu: " + e + "\n"; pinStage().release(); cudaDeviceReset(); return false; };
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: a waiting host thread sleeps, not spins
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
+    pinStage().init(hostThreads);
+    if (pinStage().ok) { char l[96]; snprintf(l, sizeof l, "engine_gpu: pinned staging buffers ready in %.2f s\n", pinStage().secInit); out.log += l; }
+    singlet::NvtxChain nvch; nvch.next("mapDistinct: setup");
     // device memory in use at the phases of the call (logged: what a sample needs when several share a GPU)
     std::string memLog;
     auto memMark = [&](const char* what) { size_t f = 0, t = 0; cudaMemGetInfo(&f, &t); char b[64]; snprintf(b, sizeof b, "%s %.1f, ", what, (double) (t - f) / (1u << 30)); memLog += b; };
     memMark("start");
     // ---- index (G with 200 bytes of padding on each side, as STAR's G1)
+    nvch.next("mapDistinct: index upload");
     const u64 PAD = 200;
     GenomeView D = H;
     char* dG1; u64* dSA; u64* dSAi;
@@ -305,6 +488,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     D.chrStart = dcs; D.chrLength = dcl; D.chrBin = dcb; D.sjdbStart = dss; D.sjdbEnd = dse; D.sjDstart = dsd; D.sjAstart = dsa;
     D.sjdbMotif = dsm; D.sjdbShiftLeft = dsl; D.sjdbShiftRight = dsr; D.sjdbStrand = dst;
     // ---- reads
+    nvch.next("mapDistinct: read upload + clip");
     u64 n = in.off.size() - 1;
     out.nReads = n;
     char* dSeq; u64* dOff;
@@ -323,13 +507,13 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t)in.clip.ad3.size(), in.clip.adMMp, dAd, dP5, dP3};
         u64 *dCs, *dCl, *dOffC; char* dSeqC;
         if (cudaMalloc(&dCs, n * 8) || cudaMalloc(&dCl, n * 8) || cudaMalloc(&dOffC, (n + 1) * 8)) return fail("out of device memory (clip)");
-        k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl);
+        EG_KT("clip", k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl));
         cudaMemset(dOffC, 0, 8);
         thrust::inclusive_scan(thrust::device_ptr<u64>(dCl), thrust::device_ptr<u64>(dCl + n), thrust::device_ptr<u64>(dOffC + 1));
         u64 tot = 0;
         if (cudaMemcpy(&tot, dOffC + n, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
         if (cudaMalloc(&dSeqC, tot + 8)) return fail("out of device memory (clipped reads)");
-        k_gather_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dCs, dOffC, n, dSeqC);
+        EG_KT("gather_clip", k_gather_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dCs, dOffC, n, dSeqC));
         hcs.resize(n); hoffC.resize(n + 1);
         if (cudaMemcpy(hcs.data(), dCs, n * 8, cudaMemcpyDeviceToHost) != cudaSuccess
             || cudaMemcpy(hoffC.data(), dOffC, (n + 1) * 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
@@ -359,50 +543,87 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     cudaDeviceSynchronize();
     out.secUpload = now() - t0;
     // ---- dedup
+    nvch.next("mapDistinct: dedup");
     t0 = now();
     u64 *dH1, *dH2; uint8_t* dN; uint32_t *dOrder, *dHead; unsigned long long* dColl;
     if (cudaMalloc(&dH1, n * 8) || cudaMalloc(&dH2, n * 8) || cudaMalloc(&dN, n) || cudaMalloc(&dOrder, n * 4) || cudaMalloc(&dHead, n * 4)
         || cudaMalloc(&dColl, 8)) return fail("out of device memory (dedup)");
-    k_hash<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, dH1, dH2, dN);
+    EG_KT("hash", k_hash<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, dH1, dH2, dN));
     thrust::sequence(thrust::device_ptr<uint32_t>(dOrder), thrust::device_ptr<uint32_t>(dOrder + n));
     auto keys = thrust::make_zip_iterator(thrust::make_tuple(thrust::device_ptr<u64>(dH1), thrust::device_ptr<u64>(dH2)));
     thrust::sort_by_key(keys, keys + n, thrust::device_ptr<uint32_t>(dOrder));
     cudaMemset(dColl, 0, 8);
-    k_groups<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dH1, dH2, dOrder, n, dHead, dColl);
+    EG_KT("groups", k_groups<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dH1, dH2, dOrder, n, dHead, dColl));
     unsigned long long coll = 0;
     if (cudaMemcpy(&coll, dColl, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("dedup copy");
     if (coll) return fail("hash collision between different sequences (" + std::to_string(coll) + "): GPU path not used");
-    std::vector<uint32_t> order(n), head(n); std::vector<uint8_t> hasN(n);
-    cudaMemcpy(order.data(), dOrder, n * 4, cudaMemcpyDeviceToHost); cudaMemcpy(head.data(), dHead, n * 4, cudaMemcpyDeviceToHost);
-    cudaMemcpy(hasN.data(), dN, n, cudaMemcpyDeviceToHost);
-    cudaFree(dH1); cudaFree(dH2); cudaFree(dN); cudaFree(dOrder); cudaFree(dHead); cudaFree(dColl);
-    std::vector<uint32_t> rep;   // one read per distinct sequence without N
-    for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
-    // per read: the representative read of its distinct sequence (NONE for sequences with N, which STAR maps itself)
+    // The per-read pass of the dedup on the device (the host loops over every read cost 3.8 s of 25 s of the lock on pbmc1k_v3 and 17 s of 96 s on a 263 M-read
+    // sample, against 0.04 s / 0.16 s of kernels): the group heads, the sequences without N, the representative read of every group and of every read,
+    // and the order the distinct sequences are mapped in (first 32 bases) are computed on the GPU; only rep, readRep and the two counts come back.
+    // SINGLET_ENGINE_GPU_HOSTDEDUP=1 runs the former host loops (the identity reference).
     const uint32_t NONE = 0xFFFFFFFFu;
-    std::vector<uint32_t> readRep(n, NONE);
-    { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = hasN[order[k]] ? NONE : order[k]; readRep[order[k]] = cur; } }
-    // map them in sequence order (first 32 bases), not hash order: neighbouring threads then search the same SA ranges and loci
-    // (2.7x faster on pbmc1k_v3). Each sequence's result does not depend on the order.
-    if (!rep.empty()) {   // keys (first 32 bases) and the stable sort on the device
-        uint32_t* dRep; u64* dKey;
-        if (cudaMalloc(&dRep, rep.size() * 4) || cudaMalloc(&dKey, rep.size() * 8)) return fail("out of device memory (order)");
-        cudaMemcpy(dRep, rep.data(), rep.size() * 4, cudaMemcpyHostToDevice);
-        k_prefix_key<<<(unsigned)((rep.size() + 255) / 256), 256>>>(dSeq, dOff, dRep, rep.size(), dKey);
-        thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + rep.size()), thrust::device_ptr<uint32_t>(dRep));
-        if (cudaMemcpy(rep.data(), dRep, rep.size() * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
-        cudaFree(dRep); cudaFree(dKey);
+    std::vector<uint32_t> rep;   // one read per distinct sequence without N, in mapping order
+    std::vector<uint32_t> readRep;   // per read: the representative read of its distinct sequence (NONE for sequences with N, which STAR maps itself)
+    if (std::getenv("SINGLET_ENGINE_GPU_HOSTDEDUP") != nullptr) {
+        std::vector<uint32_t> order(n), head(n); std::vector<uint8_t> hasN(n);
+        cudaMemcpy(order.data(), dOrder, n * 4, cudaMemcpyDeviceToHost); cudaMemcpy(head.data(), dHead, n * 4, cudaMemcpyDeviceToHost);
+        cudaMemcpy(hasN.data(), dN, n, cudaMemcpyDeviceToHost);
+        for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
+        readRep.assign(n, NONE);
+        { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = hasN[order[k]] ? NONE : order[k]; readRep[order[k]] = cur; } }
+        if (!rep.empty()) {
+            uint32_t* dRep; u64* dKey;
+            if (cudaMalloc(&dRep, rep.size() * 4) || cudaMalloc(&dKey, rep.size() * 8)) return fail("out of device memory (order)");
+            cudaMemcpy(dRep, rep.data(), rep.size() * 4, cudaMemcpyHostToDevice);
+            EG_KT("prefix_key", k_prefix_key<<<(unsigned)((rep.size() + 255) / 256), 256>>>(dSeq, dOff, dRep, rep.size(), dKey));
+            thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + rep.size()), thrust::device_ptr<uint32_t>(dRep));
+            if (cudaMemcpy(rep.data(), dRep, rep.size() * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
+            cudaFree(dRep); cudaFree(dKey);
+        }
+    } else if (n > 0) {
+        uint8_t *dFlag; uint32_t *dG, *dRepOfGroup, *dReadRep, *dRep; u64* dKey;
+        if (cudaMalloc(&dFlag, 2 * n) || cudaMalloc(&dG, n * 4) || cudaMalloc(&dReadRep, n * 4) || cudaMalloc(&dRep, n * 4)) return fail("out of device memory (dedup pass)");
+        uint8_t *dRepFlag = dFlag, *dNFlag = dFlag + n;
+        const unsigned nb = (unsigned)((n + 255) / 256);
+        EG_KT("dd_flags", k_dd_flags<<<nb, 256>>>(dOrder, dHead, dN, n, dRepFlag, dNFlag));
+        thrust::inclusive_scan(thrust::device_ptr<uint32_t>(dHead), thrust::device_ptr<uint32_t>(dHead + n), thrust::device_ptr<uint32_t>(dG));
+        uint32_t nGroups = 0;
+        if (cudaMemcpy(&nGroups, dG + n - 1, 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("dedup copy");
+        if (cudaMalloc(&dRepOfGroup, (u64) nGroups * 4 + 4)) return fail("out of device memory (dedup groups)");
+        EG_KT("dd_groups", k_dd_repofgroup<<<nb, 256>>>(dOrder, dHead, dG, dN, n, dRepOfGroup));
+        EG_KT("dd_readrep", k_dd_readrep<<<nb, 256>>>(dOrder, dG, dRepOfGroup, n, dReadRep));
+        const u64 nRep = (u64) thrust::reduce(thrust::device_ptr<uint8_t>(dRepFlag), thrust::device_ptr<uint8_t>(dRepFlag + n), (u64) 0);
+        out.nWithN = (u64) thrust::reduce(thrust::device_ptr<uint8_t>(dNFlag), thrust::device_ptr<uint8_t>(dNFlag + n), (u64) 0);
+        out.nDistinct = (u64) nGroups;
+        thrust::copy_if(thrust::device_ptr<uint32_t>(dOrder), thrust::device_ptr<uint32_t>(dOrder + n), thrust::device_ptr<uint8_t>(dRepFlag),
+                        thrust::device_ptr<uint32_t>(dRep), thrust::identity<uint8_t>());
+        readRep.resize(n);
+        if (cudaMemcpy(readRep.data(), dReadRep, n * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("readRep copy");
+        rep.resize(nRep);
+        if (nRep > 0) {
+            if (cudaMalloc(&dKey, nRep * 8)) return fail("out of device memory (order)");
+            EG_KT("prefix_key", k_prefix_key<<<(unsigned)((nRep + 255) / 256), 256>>>(dSeq, dOff, dRep, nRep, dKey));
+            thrust::stable_sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nRep), thrust::device_ptr<uint32_t>(dRep));
+            if (cudaMemcpy(rep.data(), dRep, nRep * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("order copy");
+            cudaFree(dKey);
+        }
+        cudaFree(dFlag); cudaFree(dG); cudaFree(dRepOfGroup); cudaFree(dReadRep); cudaFree(dRep);
+    } else {
+        readRep.assign(n, NONE);
     }
+    cudaFree(dH1); cudaFree(dH2); cudaFree(dN); cudaFree(dOrder); cudaFree(dHead); cudaFree(dColl);
     out.secDedup = now() - t0;
     memMark("dedup");
     std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
+    nvch.end();
     u64 nGpuMapped = 0;
     // a chunk of distinct sequences in two halves: the device lanes (gpuPart, under the caller's device lock) and the host lane and records
     // (hostPart, after in.release(): they hold the GPU for nothing)
     struct ChunkRes { std::vector<uint32_t> repc; Lane A, M, B; std::vector<uint8_t> lane; std::vector<uint32_t> lpos, repH, posH; u64 c0 = 0; };
     std::vector<ChunkRes> chunks;
     auto gpuPart = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
+        SINGLET_NVTX("mapDistinct: lanes of one chunk (GPU)");
         // ---- lanes
         double tc0 = now();
         Lane A, M, B;
@@ -434,6 +655,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         return true;
     };
     auto hostPart = [&](ChunkRes& cr) -> bool {
+        SINGLET_NVTX("mapDistinct: host lane + records of one chunk");
         const std::vector<uint32_t>& repc = cr.repc; const u64 c0 = cr.c0; Lane &A = cr.A, &M = cr.M, &B = cr.B;
         const std::vector<uint8_t>& lane = cr.lane; const std::vector<uint32_t>& lpos = cr.lpos; const std::vector<uint32_t>& repH = cr.repH;
         // ---- host lane (STAR's limits)
@@ -504,7 +726,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!gpuPart(repc, c0)) return fail(err);
     }
     // the last device work is done: free the device buffers and let the next sample have the GPU while this one assembles its records
-    cudaDeviceSynchronize();
+    nvch.end();
+    { SINGLET_NVTX("mapDistinct: final sync + free"); cudaDeviceSynchronize(); }
     cudaFree(dG1); cudaFree(dSA); cudaFree(dSAi); cudaFree(dSeq); cudaFree(dOff);
     cudaFree(dcs); cudaFree(dcl); cudaFree(dcb); cudaFree(dss); cudaFree(dse); cudaFree(dsd); cudaFree(dsa);
     cudaFree(dsm); cudaFree(dsl); cudaFree(dsr); cudaFree(dst);
@@ -523,6 +746,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
              (unsigned long long)out.nWithN, (unsigned long long)nGpuMapped, (unsigned long long)out.nHostLane, out.secHostLane,
              (unsigned long long)out.nFailed, out.secUpload, out.secDedup, out.secMapGpu);
     out.log += line;
+    pinStage().release();
+    egReport(out.log);
     return true;
 }
 
