@@ -1753,40 +1753,55 @@ template <class C, class LW> inline int hostWarpStitch(const Params& P, const Ge
 }
 
 #ifdef __CUDACC__
-__device__ inline void warpArgBest(int& s, uint& g, int& wi) {
-    for (int off = 16; off; off >>= 1) {
-        int s2 = __shfl_xor_sync(0xffffffffu, s, off); uint g2 = __shfl_xor_sync(0xffffffffu, g, off); int w2 = __shfl_xor_sync(0xffffffffu, wi, off);
+// A group of G lanes (G = 8, 16 or 32) of one warp working on one read: the warp holds 32 / G reads. Ballots are returned
+// relative to the group's first lane; shuffles use width G (source lanes relative to the group).
+template <int G> struct Grp {
+    unsigned mask; int gl, gb;   // the group's lanes in the warp; this lane in the group; the group's first lane
+    __device__ Grp() {
+        const int lane = threadIdx.x & 31;
+        gl = lane & (G - 1); gb = lane - gl;
+        if constexpr (G == 32) mask = 0xffffffffu; else mask = ((1u << G) - 1) << gb;
+    }
+    __device__ unsigned ballot(bool p) const { return __ballot_sync(mask, p) >> gb; }
+    __device__ bool any(bool p) const { return __any_sync(mask, p); }
+    __device__ bool all(bool p) const { return __all_sync(mask, p); }
+    __device__ void sync() const { __syncwarp(mask); }
+    template <class T> __device__ T bcast(T v, int src) const { return __shfl_sync(mask, v, src, G); }
+};
+template <int G> __device__ inline void warpArgBest(const Grp<G>& gr, int& s, uint& g, int& wi) {
+    for (int off = G / 2; off; off >>= 1) {
+        int s2 = __shfl_xor_sync(gr.mask, s, off, G); uint g2 = __shfl_xor_sync(gr.mask, g, off, G); int w2 = __shfl_xor_sync(gr.mask, wi, off, G);
         if (s2 > s || (s2 == s && (g2 < g || (g2 == g && w2 < wi)))) { s = s2; g = g2; wi = w2; }
     }
 }
-__device__ inline int warpInclScan(int x, int lane) {
-    for (int off = 1; off < 32; off <<= 1) { int y = __shfl_up_sync(0xffffffffu, x, off); if (lane >= off) x += y; }
+template <int G> __device__ inline int warpInclScan(const Grp<G>& gr, int x) {
+    for (int off = 1; off < G; off <<= 1) { int y = __shfl_up_sync(gr.mask, x, off, G); if (gr.gl >= off) x += y; }
     return x;
 }
-__device__ inline u64 warpSumU64(u64 x) {
-    for (int off = 16; off; off >>= 1) x += __shfl_xor_sync(0xffffffffu, x, off);
+template <int G> __device__ inline u64 warpSumU64(const Grp<G>& gr, u64 x) {
+    for (int off = G / 2; off; off >>= 1) x += __shfl_xor_sync(gr.mask, x, off, G);
     return x;
 }
-// counts of a per-lane bin (0..7) into ws[base + bin] (lane 0 adds)
-__device__ inline void warpHist(unsigned long long* ws, int base, bool valid, int bin, int lane) {
+// counts of a per-lane bin (0..7) into ws[base + bin] (the group's first lane adds)
+template <int G> __device__ inline void warpHist(const Grp<G>& gr, unsigned long long* ws, int base, bool valid, int bin) {
     for (int q = 0; q < 8; q++) {
-        unsigned m = __ballot_sync(0xffffffffu, valid && bin == q);
-        if (lane == 0 && m) atomicAdd(&ws[base + q], (unsigned long long)__popc(m));
+        unsigned m = gr.ballot(valid && bin == q);
+        if (gr.gl == 0 && m) atomicAdd(&ws[base + q], (unsigned long long)__popc(m));
     }
 }
-// The assignment (assignHits) with the windows split over the lanes: window iW belongs to lane iW & 31. The warp walks the
-// read's marked SA entries 32 at a time in STAR's order (pieces, then SA order); lane q decodes the chunk's q-th entry into
-// E[q] (shared memory, one per lane); then every lane applies, in entry order, the parts (sjdb donor before acceptor) that
-// fall into its own windows. A window's aligns (WA, nWA, WALrec) depend only on the entries that fall into it, in their
-// order, and nothing else changes winBin or another window's state, so every window ends with STAR's aligns. After
-// MARKER_TOO_MANY_ANCHORS_PER_WINDOW (nW = 0) nothing is observable (the caller sees nW = 0); an overflow in an entry STAR
-// would not have reached after that marker sends the read to the next lane (exact there).
+// The assignment (assignHits) with the windows split over the group's lanes: window iW belongs to lane iW % G. The group
+// walks the read's marked SA entries G at a time in STAR's order (pieces, then SA order); lane q decodes the chunk's q-th
+// entry into E[q] (shared memory, one per lane); then every lane applies, in entry order, the parts (sjdb donor before
+// acceptor) that fall into its own windows. A window's aligns (WA, nWA, WALrec, WlastAnchor) depend only on the entries that
+// fall into it, in their order, and nothing else changes winBin or another window's state, so every window ends with
+// STAR's aligns. After MARKER_TOO_MANY_ANCHORS_PER_WINDOW (nW = 0) nothing is observable (the caller sees nW = 0); an
+// overflow in an entry STAR would not have reached after that marker sends the read to the next lane (exact there).
 struct AssignEnt { u64 a1D, a1A, sj; uint32_t LD, LA, rD, rA; uint16_t wD, wA; uint8_t str; };
-template <class C>
-__device__ inline bool warpAssign(const Params& P, const GenomeView& gv, Work<C>& W, const uint32_t* bits, u64 base, AssignEnt* E) {
-    const unsigned FULL = 0xffffffffu;
-    const int lane = threadIdx.x & 31;
+template <class C, int G>
+__device__ inline bool warpAssign(const Grp<G>& gr, const Params& P, const GenomeView& gv, Work<C>& W, const uint32_t* bits, u64 base,
+                                  AssignEnt* E) {
     const uint16_t NONE = 0xFFFF;
+    const int lane = gr.gl;
     bool ok = true;
     u64 off = base;
     const uint nP = W.nP;
@@ -1796,11 +1811,11 @@ __device__ inline bool warpAssign(const Params& P, const GenomeView& gv, Work<C>
         const uint aNrep = W.PC[iP][PC_Nrep], aFrag = W.PC[iP][PC_iFrag], aLength = W.PC[iP][PC_Length], aDir = W.PC[iP][PC_Dir];
         const bool aAnchor = (aNrep <= P.winAnchorMultimapNmax);
         const uint rS0 = W.PC[iP][PC_rStart], rS1 = W.Lread - (aLength + rS0);
-        for (u64 c = 0; c < cnt; c += 32) {
+        for (u64 c = 0; c < cnt; c += G) {
             const u64 j = c + lane;
             bool mk = false;
             if (j < cnt) { const u64 b = off + j; mk = (bits[b >> 5] >> (b & 31)) & 1u; }
-            const unsigned m = __ballot_sync(FULL, mk);
+            const unsigned m = gr.ballot(mk);
             if (!m) continue;
             if (mk) {
                 AssignEnt& e = E[lane];
@@ -1827,13 +1842,13 @@ __device__ inline bool warpAssign(const Params& P, const GenomeView& gv, Work<C>
                     if (wD != uintWinBinMax) e.wD = (uint16_t)wD;
                 }
             }
-            __syncwarp();
+            gr.sync();
             unsigned myD = 0, myA = 0;
-            for (int q = 0; q < 32; q++) {
+            for (int q = 0; q < G; q++) {
                 if (!((m >> q) & 1u)) continue;
                 const AssignEnt& e = E[q];
-                if (e.wD != NONE && (e.wD & 31) == lane) myD |= 1u << q;
-                if (e.wA != NONE && (e.wA & 31) == lane) myA |= 1u << q;
+                if (e.wD != NONE && (e.wD & (G - 1)) == lane) myD |= 1u << q;
+                if (e.wA != NONE && (e.wA & (G - 1)) == lane) myA |= 1u << q;
             }
             unsigned my = myD | myA;
             while (my && ok) {
@@ -1842,45 +1857,46 @@ __device__ inline bool warpAssign(const Params& P, const GenomeView& gv, Work<C>
                 if ((myD >> q) & 1u) ok = assignAlignToWindow(P, W, e.a1D, e.LD, e.str, aNrep, aFrag, e.rD, aAnchor, e.sj);
                 if (ok && ((myA >> q) & 1u)) ok = assignAlignToWindow(P, W, e.a1A, e.LA, e.str, aNrep, aFrag, e.rA, aAnchor, e.sj);
             }
-            __syncwarp();
-            if (!__all_sync(FULL, ok)) return false;
+            gr.sync();
+            if (!gr.all(ok)) return false;
             if (M5_TOO_MANY_ANCHORS(W)) return true;   // nothing observable follows (STAR goes on with nW = 0)
         }
         off += cnt;
     }
     return true;
 }
-// The warp driver: called by all 32 lanes of a warp with the same read (W after the assignment, nW > 0); wl: the warp's
+// The group driver: called by all G lanes of a group with the same read (W after the assignment, nW > 0); wl: the group's
 // window list (C::NW entries, shared memory); L: this lane's context (local memory). Returns WR_DONE (M holds the merge
 // for warpSelect), WR_OVERFLOW (M.ov) or WR_FALLBACK (a lane-local capacity: the caller runs mapFinish on one thread).
-template <class C, class LW>
-__device__ inline int warpStitch(const Params& P, const GenomeView& gv, Work<C>& W, ReadBuf<C::LREAD>& rb, LW& L, uint16_t* wl,
-                                 u64 budget, WarpMerge& M, unsigned long long* ws) {
-    const unsigned FULL = 0xffffffffu;
-    const int lane = threadIdx.x & 31;
+// G = 32 is the warp per read of lanes M and B.
+template <class C, class LW, int G>
+__device__ inline int warpStitch(const Grp<G>& gr, const Params& P, const GenomeView& gv, Work<C>& W, ReadBuf<C::LREAD>& rb, LW& L,
+                                 uint16_t* wl, u64 budget, WarpMerge& M, unsigned long long* ws) {
+    const int lane = gr.gl;
+    const bool lead = lane == 0;
     const unsigned lt = (1u << lane) - 1;
     long long t0 = clock64();
     const uint nW = W.nW;
     int nNE = 0; bool big = false;
-    for (uint c = 0; c < nW; c += 32) {
+    for (uint c = 0; c < nW; c += G) {
         const uint iW = c + lane;
         const uint na = iW < nW ? (uint)W.nWA[iW] : 0;
-        const unsigned m = __ballot_sync(FULL, na > 0);
-        if (__any_sync(FULL, na > (uint)LW::kNWA)) big = true;
+        const unsigned m = gr.ballot(na > 0);
+        if (gr.any(na > (uint)LW::kNWA)) big = true;
         if (na > 0) wl[nNE + __popc(m & lt)] = (uint16_t)iW;
-        if (ws) warpHist(ws, WS_HIST_NWA, na > 0, binNWA(na), lane);
+        if (ws) warpHist(gr, ws, WS_HIST_NWA, na > 0, binNWA(na));
         nNE += __popc(m);
     }
-    __syncwarp();
+    gr.sync();
     M.bestS = 0; M.bestG = 0; M.bestWin = -1; M.nKeep = 0; M.nW1 = 0; M.steps = 0; M.ov = OV_NONE;
-    if (ws && lane == 0) {
+    if (ws && lead) {
         atomicAdd(&ws[WS_WIN_NE], (unsigned long long)nNE); atomicAdd(&ws[WS_HIST_NW + binNW(nNE)], 1ULL);
         atomicAdd(&ws[WS_CLK_LIST], (unsigned long long)(clock64() - t0));
     }
-    if (big) { if (ws && lane == 0) atomicAdd(&ws[WS_FB_NWA], 1ULL); return WR_FALLBACK; }
+    if (big) { if (ws && lead) atomicAdd(&ws[WS_FB_NWA], 1ULL); return WR_FALLBACK; }
     const char* Rf = rb.r[0]; const char* Rr = rb.r[2];
     long long cs = 0, cm = 0;
-    for (int r0 = 0; r0 < nNE; r0 += 32) {
+    for (int r0 = 0; r0 < nNE; r0 += G) {
         const long long ta = clock64();
         const int idx = r0 + lane;
         const bool act = idx < nNE;
@@ -1889,44 +1905,44 @@ __device__ inline int warpStitch(const Params& P, const GenomeView& gv, Work<C>&
         bool ok = true;
         if (act) ok = laneStitchWindow(P, gv, W, L, iW, Rf, Rr);
         const u64 my = act ? L.nSteps - M.steps : 0;
-        M.steps += warpSumU64(my);
+        M.steps += warpSumU64(gr, my);
         const long long tb = clock64(); cs += tb - ta;
-        if (ws) { warpHist(ws, WS_HIST_STEPSW, act, binSteps(my), lane); warpHist(ws, WS_HIST_TRW, act && ok, binTr(L.nWinTr), lane); }
-        if (budget && M.steps > budget) { M.ov = OV_STEPS; if (ws && lane == 0) atomicAdd(&ws[WS_OV_STEPS], 1ULL); return WR_OVERFLOW; }
-        const unsigned bad = __ballot_sync(FULL, !ok);
+        if (ws) { warpHist(gr, ws, WS_HIST_STEPSW, act, binSteps(my)); warpHist(gr, ws, WS_HIST_TRW, act && ok, binTr(L.nWinTr)); }
+        if (budget && M.steps > budget) { M.ov = OV_STEPS; if (ws && lead) atomicAdd(&ws[WS_OV_STEPS], 1ULL); return WR_OVERFLOW; }
+        const unsigned bad = gr.ballot(!ok);
         if (bad) {
             const bool real = !ok && ((L.ov == OV_EXONS && LW::kNEX >= C::NEX) || (L.ov == OV_WTR && LW::kNWTR >= C::NWTR));
-            const unsigned rm = __ballot_sync(FULL, real);
-            if (rm) { M.ov = (OvWhy)__shfl_sync(FULL, (int)L.ov, __ffs((int)rm) - 1); if (ws && lane == 0) atomicAdd(&ws[WS_OV_REAL], 1ULL); return WR_OVERFLOW; }
-            if (ws && lane == 0) atomicAdd(&ws[WS_FB_LANE], 1ULL);
+            const unsigned rm = gr.ballot(real);
+            if (rm) { M.ov = (OvWhy)gr.bcast((int)L.ov, __ffs((int)rm) - 1); if (ws && lead) atomicAdd(&ws[WS_OV_REAL], 1ULL); return WR_OVERFLOW; }
+            if (ws && lead) atomicAdd(&ws[WS_FB_LANE], 1ULL);
             return WR_FALLBACK;
         }
         // the round's best window: highest score, then shortest gLength, then first window (STAR's trBest update is strict)
         const bool has = act && L.nWinTr > 0;
         int s = -2147483647 - 1; uint g = ~0ULL; int wi = 2147483647;
         if (has) { const typename LW::T& tb0 = L.slot[L.slotP[0]]; s = tb0.maxScore; g = tb0.gLength; wi = (int)iW; }
-        const unsigned hm = __ballot_sync(FULL, has);
-        warpArgBest(s, g, wi);
+        const unsigned hm = gr.ballot(has);
+        warpArgBest(gr, s, g, wi);
         if (hm && (s > M.bestS || (s == M.bestS && g < M.bestG))) { M.bestS = s; M.bestG = g; M.bestWin = wi; }
         M.nW1 += __popc(hm);
         const int c = has ? laneCountAbove(P, L, M.bestS) : 0;
-        const int incl = warpInclScan(c, lane);
-        const int total = __shfl_sync(FULL, incl, 31);
+        const int incl = warpInclScan(gr, c);
+        const int total = gr.bcast(incl, G - 1);
         if (M.nKeep + total > C::NKEEP) {
             int nk = 0;
-            if (lane == 0) nk = keepCompact(P, W, M.nKeep, M.bestS);
-            M.nKeep = __shfl_sync(FULL, nk, 0);
-            __syncwarp();
-            if (ws && lane == 0) atomicAdd(&ws[WS_COMPACT], 1ULL);
-            if (M.nKeep + total > C::NKEEP) { M.ov = OV_KEEP; if (ws && lane == 0) atomicAdd(&ws[WS_OV_KEEP], 1ULL); return WR_OVERFLOW; }
+            if (lead) nk = keepCompact(P, W, M.nKeep, M.bestS);
+            M.nKeep = gr.bcast(nk, 0);
+            gr.sync();
+            if (ws && lead) atomicAdd(&ws[WS_COMPACT], 1ULL);
+            if (M.nKeep + total > C::NKEEP) { M.ov = OV_KEEP; if (ws && lead) atomicAdd(&ws[WS_OV_KEEP], 1ULL); return WR_OVERFLOW; }
         }
         if (c > 0) laneAppend(P, W, L, iW, M.bestS, M.nKeep + incl - c);
         M.nKeep += total;
-        __syncwarp();
+        gr.sync();
         cm += clock64() - tb;
-        if (ws) { const unsigned am = __ballot_sync(FULL, act); if (lane == 0) { atomicAdd(&ws[WS_ROUNDS], 1ULL); atomicAdd(&ws[WS_LANES_ACTIVE], (unsigned long long)__popc(am)); } }
+        if (ws) { const unsigned am = gr.ballot(act); if (lead) { atomicAdd(&ws[WS_ROUNDS], 1ULL); atomicAdd(&ws[WS_LANES_ACTIVE], (unsigned long long)__popc(am)); } }
     }
-    if (ws && lane == 0) { atomicAdd(&ws[WS_CLK_STITCH], (unsigned long long)cs); atomicAdd(&ws[WS_CLK_MERGE], (unsigned long long)cm); atomicAdd(&ws[WS_STEPS], M.steps); }
+    if (ws && lead) { atomicAdd(&ws[WS_CLK_STITCH], (unsigned long long)cs); atomicAdd(&ws[WS_CLK_MERGE], (unsigned long long)cm); atomicAdd(&ws[WS_STEPS], M.steps); }
     return WR_DONE;
 }
 #endif

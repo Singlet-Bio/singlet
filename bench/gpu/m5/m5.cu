@@ -26,6 +26,7 @@
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
 #include <thrust/sort.h>
+#include <thrust/binary_search.h>
 #include "stitch.cuh"
 
 using namespace m5;
@@ -51,6 +52,7 @@ typedef LaneWork<8,  8,  8> LWM;
 typedef LaneWork<8, 16,  8> LWB0;
 typedef LaneWork<12, 32, 16> LWB1;
 typedef LaneWork<8,  8,  8> LWNone;   // lane A (not warp-stitched)
+typedef LaneWork<LaneA::NEX, LaneA::NWA, LaneA::NWTR> LWA;   // lane A group-stitched (--warp-a G): its own capacities, no fallback
 // ---------------------------------------------------------------------------------------------------------------------
 __device__ unsigned long long g_clk[8], g_scan;
 __device__ unsigned long long g_ws[WS_N];   // warp-lane statistics (stitch.cuh WStatIdx)
@@ -88,7 +90,7 @@ __device__ void lane_loop(const Params& P, const GenomeView& g, const char* rb, 
 
 struct LaneOut { std::vector<uint8_t> out, status, why; std::vector<uint16_t> len; std::vector<int8_t> unmap; double ms = 0; std::vector<double> runs;
                  double phaseMs[4] = {0, 0, 0, 0}; unsigned long long clk[8] = {0}, ws[WS_N] = {0}; double scanPerRead = 0; bool warp = false;
-                 size_t laneWorkBytes = 0; };
+                 size_t laneWorkBytes = 0; int group = 0, wmin = 0; };
 
 static double medianv(std::vector<double> v) { std::sort(v.begin(), v.end()); return v.empty() ? 0 : v[v.size() / 2]; }
 
@@ -203,17 +205,19 @@ __global__ void k_p3a(Params P, GenomeView g, u64 n, Work<C>* work, const u64* b
         atomicAdd(&g_ws[WS_CLK_ASSIGN], (unsigned long long)(clock64() - t0));
     }
 }
-template <class C, class LW>
+template <class C, class LW, int G = 32>
 __global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* nEnt,
                       uint8_t* status, uint8_t* out, uint16_t* outLen, uint8_t* why, int8_t* unmap, const uint32_t* perm, int stats,
                       const u64* base, const uint32_t* bits, int inAssign) {
-    // shared memory: per warp, 32 AssignEnt (warp assignment), then C::NW window indices
+    // a group of G lanes per read (G = 32: a warp); shared memory: one AssignEnt per thread (the group assignment), then
+    // C::NW window indices per group
     extern __shared__ unsigned long long shAll[];
-    const int lane = threadIdx.x & 31, wib = threadIdx.x >> 5;
-    const u64 wid = (blockIdx.x * (u64)blockDim.x + threadIdx.x) >> 5;
-    if (wid >= n) return;   // whole warps
-    AssignEnt* E = reinterpret_cast<AssignEnt*>(shAll) + wib * 32;
-    uint16_t* wl = reinterpret_cast<uint16_t*>(reinterpret_cast<AssignEnt*>(shAll) + (blockDim.x >> 5) * 32) + wib * C::NW;
+    const Grp<G> gr;
+    const int lane = gr.gl, gib = threadIdx.x / G;
+    const u64 wid = (blockIdx.x * (u64)blockDim.x + threadIdx.x) / G;
+    if (wid >= n) return;   // whole groups
+    AssignEnt* E = reinterpret_cast<AssignEnt*>(shAll) + gib * G;
+    uint16_t* wl = reinterpret_cast<uint16_t*>(reinterpret_cast<AssignEnt*>(shAll) + blockDim.x) + gib * C::NW;
     const u64 k = perm ? perm[wid] : wid;
     Work<C>& W = work[k];
     const u64 o = b0 + k;
@@ -222,7 +226,7 @@ __global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>
     unsigned long long* ws = stats ? g_ws : nullptr;
     if (inAssign && s == Status::Ok && W.stitched) {
         const long long ta = clock64();
-        if (!warpAssign(P, g, W, bits, base[k], E)) s = Status::Overflow;
+        if (!warpAssign(gr, P, g, W, bits, base[k], E)) s = Status::Overflow;
         if (ws && lane == 0) atomicAdd(&ws[WS_CLK_ASSIGN], (unsigned long long)(clock64() - ta));
     }
     if (s == Status::Ok) {
@@ -234,8 +238,8 @@ __global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>
             L.Lread = W.Lread; L.outFilterMismatchNmaxTotal = W.outFilterMismatchNmaxTotal;
             for (int c = 0; c < 8; c++) L.clk[c] = 0;
             WarpMerge M;
-            const int r = warpStitch<C, LW>(P, g, W, rbuf[k], L, wl, budget, M, ws);
-            for (int c = 4; c < 8; c++) { const u64 v = warpSumU64((u64)L.clk[c]); if (lane == 0) W.clk[c] += (long long)v; }
+            const int r = warpStitch<C, LW, G>(gr, P, g, W, rbuf[k], L, wl, budget, M, ws);
+            for (int c = 4; c < 8; c++) { const u64 v = warpSumU64(gr, (u64)L.clk[c]); if (lane == 0) W.clk[c] += (long long)v; }
             if (lane == 0) {
                 const long long t0 = clock64();
                 if (r == WR_OVERFLOW) { s = Status::Overflow; W.ov = M.ov; }
@@ -254,6 +258,7 @@ __global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>
 static int g_wthreads = 64;     // --wthreads: block size of k_p3w (warps per block = /32)
 static bool g_wsort = false;    // --wsort: k_p3w takes the batch's reads by window count, most first
 static bool g_wstats = true;    // --no-wstats: no warp-lane histograms
+static int g_wmin = 0;          // --wmin-a T (lane A, group-stitched): reads with >= T windows to k_p3w, the others to k_p3
 static bool g_wassign = false;  // --wassign: the assignment inside k_p3w, windows split over the lanes (stitch.cuh warpAssign)
 static bool g_bin = false;
 __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
@@ -261,15 +266,17 @@ __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
     if (k < n) dst[k] = s[k];
 }
 
-template <class C, class LW = LWNone, bool WARP = false>
+template <class C, class LW = LWNone, bool WARP = false, int GRP = 32>
 static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, const u64* dRoff, const uint16_t* dRlen, const uint32_t* dIdx,
                          u64 n, u64 NB, u64 budget, int reps, cudaEvent_t e0, cudaEvent_t e1, const char* name) {
     LaneOut L;
-    L.warp = WARP; L.laneWorkBytes = WARP ? sizeof(LW) : 0;
+    L.warp = WARP; L.laneWorkBytes = WARP ? sizeof(LW) : 0; L.group = WARP ? GRP : 0; L.wmin = WARP ? g_wmin : 0;
     if constexpr (WARP) {   // the lanes' contexts are local memory: room for them in the per-thread stack
         CK(cudaDeviceSetLimit(cudaLimitStackSize, std::max<size_t>(16 * 1024, sizeof(LW) + 8192)));
-        fprintf(stderr, "lane %s: warp-stitched, lane context %zu B (exons %d, aligns %d, transcripts %d), %d threads per block%s\n", name,
-                sizeof(LW), LW::kNEX, LW::kNWA, LW::kNWTR, g_wthreads, g_wsort ? ", reads by window count" : "");
+        fprintf(stderr, "lane %s: warp-stitched, groups of %d lanes, lane context %zu B (exons %d, aligns %d, transcripts %d), %d threads per block%s%s",
+                name, GRP, sizeof(LW), LW::kNEX, LW::kNWA, LW::kNWTR, g_wthreads, g_wsort ? ", reads by window count" : "", g_wassign ? ", group assignment" : "");
+        if (g_wmin) fprintf(stderr, "; reads with < %d windows thread per read", g_wmin);
+        fprintf(stderr, "\n");
     }
     NB = std::min<u64>(NB, std::max<u64>(n, 1));
     uint8_t* dOut; CK(cudaMalloc(&dOut, n * (u64)C::NBLOB));
@@ -303,16 +310,26 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
             k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
             cudaEventRecord(q[2]);
             if constexpr (WARP) {
-                if (g_wsort) {
+                const bool split = g_wmin > 0;   // --wmin-a: reads with fewer windows stay thread per read (k_p3)
+                const bool srt = g_wsort || split, inA = g_wassign || split;
+                u64 nw = nb;
+                if (srt) {
                     k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm, true);
                     thrust::sort_by_key(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
                 }
-                if (!g_wassign) k_p3a<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst);
+                if (split) {   // keys ascending = (windows, SA entries) descending, reads without phase 3 last: the reads with >= wmin windows first
+                    const u64 lim = ~(((u64)g_wmin) << 40);
+                    nw = (u64)(thrust::upper_bound(thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), lim) - thrust::device_ptr<u64>(dKey));
+                }
+                if (!inA) k_p3a<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst);
                 cudaEventRecord(q[3]);
-                const int wt = g_wthreads; const unsigned GW = (unsigned)((nb * 32 + wt - 1) / wt);
-                const size_t sh = (wt / 32) * (32 * sizeof(AssignEnt) + C::NW * sizeof(uint16_t));
-                k_p3w<C, LW><<<GW, wt, sh>>>(P, D, b0, nb, budget, dWork, dRbuf, dNent, dBst, dOut, dLen, dWhy, dUn,
-                                             g_wsort ? dPerm : nullptr, g_wstats ? 1 : 0, dBase, dBits, g_wassign ? 1 : 0);
+                const int wt = g_wthreads; const unsigned GW = (unsigned)((nw * GRP + wt - 1) / wt);
+                const size_t sh = (size_t)wt * sizeof(AssignEnt) + (size_t)(wt / GRP) * C::NW * sizeof(uint16_t);
+                if (nw) k_p3w<C, LW, GRP><<<GW, wt, sh>>>(P, D, b0, nw, budget, dWork, dRbuf, dNent, dBst, dOut, dLen, dWhy, dUn,
+                                                          srt ? dPerm : nullptr, g_wstats ? 1 : 0, dBase, dBits, inA ? 1 : 0);
+                if (split && nb > nw)
+                    k_p3<C><<<(unsigned)((nb - nw + T - 1) / T), T>>>(P, D, b0, nb - nw, budget, dWork, dRbuf, dNent, dBase, dBits, dBst, dOut, dLen,
+                                                                       dWhy, dUn, dPerm + nw);
             } else {
                 if (g_bin) {
                     k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm);
@@ -349,7 +366,7 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
         fprintf(stderr, "  lane %s warp: %llu reads (%llu simple), fallback %llu (window aligns) + %llu (lane capacity), overflow steps %llu, capacity %llu, keep %llu; "
                 "%.2f windows/read, %.1f%% lanes active, %.1f steps/read, %llu compactions\n", name, w[WS_READS], w[WS_SIMPLE], w[WS_FB_NWA], w[WS_FB_LANE],
                 w[WS_OV_STEPS], w[WS_OV_REAL], w[WS_OV_KEEP], w[WS_READS] ? (double)w[WS_WIN_NE] / w[WS_READS] : 0.0,
-                w[WS_ROUNDS] ? 100.0 * w[WS_LANES_ACTIVE] / (32.0 * w[WS_ROUNDS]) : 0.0, w[WS_READS] ? (double)w[WS_STEPS] / w[WS_READS] : 0.0, w[WS_COMPACT]);
+                w[WS_ROUNDS] ? 100.0 * w[WS_LANES_ACTIVE] / ((double)GRP * w[WS_ROUNDS]) : 0.0, w[WS_READS] ? (double)w[WS_STEPS] / w[WS_READS] : 0.0, w[WS_COMPACT]);
         fprintf(stderr, "  lane %s warp cycles (lane 0, summed over warps): list %llu, stitch rounds %llu, merge %llu, select+encode %llu, fallback %llu; assignment (threads) %llu\n",
                 name, w[WS_CLK_LIST], w[WS_CLK_STITCH], w[WS_CLK_MERGE], w[WS_CLK_SELECT], w[WS_CLK_FALLBACK], w[WS_CLK_ASSIGN]);
         auto hist = [&](const char* t, int b) { fprintf(stderr, "  lane %s %s:", name, t); for (int q = 0; q < 8; q++) fprintf(stderr, " %llu", w[b + q]); fprintf(stderr, "\n"); };
@@ -357,7 +374,8 @@ static LaneOut runStaged(const Params& P, const GenomeView& D, const char* dRb, 
         hist("aligns per window [1,2,3-4,5-8,9-16,17-32,33-50,>50]", WS_HIST_NWA);
         hist("steps per window [<=4,<=16,<=64,<=256,<=1024,<=2048,<=8192,>8192]", WS_HIST_STEPSW);
         hist("transcripts per window [0,1,2,3-4,5-8,9-16,17-32,>32]", WS_HIST_TRW);
-    } else if (L.ws[WS_CLK_P3_BASE]) {
+    }
+    if (L.ws[WS_CLK_P3_BASE]) {
         fprintf(stderr, "  lane %s phase 3 thread cycles: assignment %.1f%%, the rest (stitching, selection, encoding) %.1f%%\n", name,
                 100.0 * L.ws[WS_CLK_ASSIGN_BASE] / L.ws[WS_CLK_P3_BASE], 100.0 - 100.0 * L.ws[WS_CLK_ASSIGN_BASE] / L.ws[WS_CLK_P3_BASE]);
     }
@@ -455,7 +473,7 @@ static int glScore(double scale, u64 x) { return int(std::ceil(std::log2((double
 
 int main(int argc, char** argv) {
     std::string gdir, truth, json, input, emit; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, nbM = 131072, budgetA = 0, budgetB = 0, budgetM = 0; bool noMid = false;
-    bool warpM = false, warpB = false, hostEmul = false; int wbCfg = 0; std::string tag;
+    bool warpM = false, warpB = false, hostEmul = false; int wbCfg = 0, warpA = 0, wminA = 0; std::string tag;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--genome-dir") gdir = argv[++i];
@@ -480,7 +498,9 @@ int main(int argc, char** argv) {
         else if (a == "--emit") emit = argv[++i];       // write (sequence, result) for the sequence cache preload (inject/)
         else if (a == "--warp-m") warpM = true;          // E3: lane M stitched warp per read (windows across lanes)
         else if (a == "--warp-b") warpB = true;          // E3: lane B likewise
-        else if (a == "--wb-cfg") wbCfg = atoi(argv[++i]);   // lane B's per-lane capacities: 0 = LWB0, 1 = LWB1
+        else if (a == "--wb-cfg") wbCfg = atoi(argv[++i]);
+        else if (a == "--warp-a") warpA = atoi(argv[++i]);    // E3: lane A stitched by groups of 8, 16 or 32 lanes per read
+        else if (a == "--wmin-a") wminA = atoi(argv[++i]);    // ... only the reads with >= this many windows (the others thread per read)   // lane B's per-lane capacities: 0 = LWB0, 1 = LWB1
         else if (a == "--wthreads") g_wthreads = atoi(argv[++i]);
         else if (a == "--wsort") g_wsort = true;
         else if (a == "--wassign") g_wassign = true;
@@ -639,8 +659,17 @@ int main(int argc, char** argv) {
     char* dRb = toDev(T.rb); u64* dRoff = toDev(T.roff); uint16_t* dRlen = toDev(T.rlen);
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
     CK(cudaDeviceSetLimit(cudaLimitStackSize, localWork ? (int)(sizeof(Work<LaneA>) + 4096) : 16 * 1024));
+    if (warpA && warpA != 8 && warpA != 16 && warpA != 32) { fprintf(stderr, "--warp-a: 8, 16 or 32\n"); return 2; }
+    if (warpA && P.alignTranscriptsPerWindowNmax + LaneA::NW * std::min<u64>(LWA::kNWTR, P.alignTranscriptsPerWindowNmax) >= P.alignTranscriptsPerReadNmax) {
+        fprintf(stderr, "alignTranscriptsPerReadNmax too small for the warp lanes (the window loop could stop early)\n"); return 3;
+    }
+    g_wmin = warpA ? wminA : 0;
     LaneOut A = mono ? runLane<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, prop.multiProcessorCount * bps, nthr, reps, localWork, e0, e1, "A")
-                     : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A");
+              : warpA == 8 ? runStaged<LaneA, LWA, true, 8>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A")
+              : warpA == 16 ? runStaged<LaneA, LWA, true, 16>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A")
+              : warpA == 32 ? runStaged<LaneA, LWA, true, 32>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A")
+              : runStaged<LaneA>(P, D, dRb, dRoff, dRlen, nullptr, n, (u64)nbA, (u64)budgetA, reps, e0, e1, "A");
+    g_wmin = 0;   // lanes M and B: every read of a warp lane in k_p3w
     std::vector<uint32_t> idxM, idxB;
     for (u64 i = 0; i < n; i++) if (A.status[i] != (uint8_t)Status::Ok) idxM.push_back((uint32_t)i);
     LaneOut M;
@@ -810,8 +839,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "    unmapped by STAR: %llu (%llu identical), mapped: %llu (%llu identical)\n", classN[0], classSame[0], classN[1], classSame[1]);
     fprintf(stderr, "    GPU lane A %.1f ms (%llu reads), lane M %.1f ms (%zu reads), lane B %.1f ms (%zu reads) = %.2f M distinct reads/s on the GPU\n",
             A.ms, n, M.ms, noMid ? (size_t)0 : idxM.size(), B.ms, idxB.size(), rate / 1e6);
-    fprintf(stderr, "    E3 %s: warp M %d, warp B %d (cfg %d), wsort %d, wassign %d, wthreads %d; lanes M+B %.1f ms\n", tag.c_str(), (int)warpM, (int)warpB, wbCfg,
-            (int)g_wsort, (int)g_wassign, g_wthreads, M.ms + B.ms);
+    fprintf(stderr, "    E3 %s: warp A %d (wmin %d), warp M %d, warp B %d (cfg %d), wsort %d, wassign %d, wthreads %d; lane A %.1f ms, lanes M+B %.1f ms\n", tag.c_str(),
+            warpA, wminA, (int)warpM, (int)warpB, wbCfg, (int)g_wsort, (int)g_wassign, g_wthreads, A.ms, M.ms + B.ms);
     { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
       fprintf(stderr, "    lane M overflow why:"); for (int k = 0; k < 12; k++) if (whyM[k]) fprintf(stderr, " %s=%llu", wn[k], whyM[k]); fprintf(stderr, "\n"); }
     { const char* wn[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
@@ -840,15 +869,15 @@ int main(int argc, char** argv) {
         auto laneJ = [&](const char* nm, const LaneOut& L, u64 nr, bool last) {
             fprintf(g, "  \"%s\": {\"reads\": %llu, \"ms\": %.3f, \"runs\": [", nm, nr, L.ms);
             for (size_t k = 0; k < L.runs.size(); k++) fprintf(g, "%s%.3f", k ? ", " : "", L.runs[k]);
-            fprintf(g, "], \"phase_ms\": [%.3f, %.3f, %.3f, %.3f], \"warp\": %s, \"lane_context_bytes\": %zu, \"sa_entries_per_read\": %.1f, \"clk\": [",
-                    L.phaseMs[0], L.phaseMs[1], L.phaseMs[2], L.phaseMs[3], L.warp ? "true" : "false", L.laneWorkBytes, L.scanPerRead);
+            fprintf(g, "], \"phase_ms\": [%.3f, %.3f, %.3f, %.3f], \"warp\": %s, \"group\": %d, \"wmin\": %d, \"lane_context_bytes\": %zu, \"sa_entries_per_read\": %.1f, \"clk\": [",
+                    L.phaseMs[0], L.phaseMs[1], L.phaseMs[2], L.phaseMs[3], L.warp ? "true" : "false", L.group, L.wmin, L.laneWorkBytes, L.scanPerRead);
             for (int k = 0; k < 8; k++) fprintf(g, "%s%llu", k ? ", " : "", L.clk[k]);
             fprintf(g, "], \"ws\": [");
             for (int k = 0; k < WS_N; k++) fprintf(g, "%s%llu", k ? ", " : "", L.ws[k]);
             fprintf(g, "]}%s\n", last ? "" : ",");
         };
-        fprintf(g, "{\n  \"tag\": \"%s\", \"warp_m\": %s, \"warp_b\": %s, \"wb_cfg\": %d, \"wsort\": %s, \"wassign\": %s, \"wthreads\": %d, \"batch\": [%lld, %lld, %lld], \"budget\": [%lld, %lld, %lld],\n",
-                tag.c_str(), warpM ? "true" : "false", warpB ? "true" : "false", wbCfg, g_wsort ? "true" : "false", g_wassign ? "true" : "false", g_wthreads, nbA, nbM, nbB, budgetA, budgetM, budgetB);
+        fprintf(g, "{\n  \"tag\": \"%s\", \"warp_a\": %d, \"wmin_a\": %d, \"warp_m\": %s, \"warp_b\": %s, \"wb_cfg\": %d, \"wsort\": %s, \"wassign\": %s, \"wthreads\": %d, \"batch\": [%lld, %lld, %lld], \"budget\": [%lld, %lld, %lld],\n",
+                tag.c_str(), warpA, wminA, warpM ? "true" : "false", warpB ? "true" : "false", wbCfg, g_wsort ? "true" : "false", g_wassign ? "true" : "false", g_wthreads, nbA, nbM, nbB, budgetA, budgetM, budgetB);
         fprintf(g, "  \"distinct_reads\": %llu, \"identical_distinct\": %llu, \"gpu_ms\": %.3f, \"lanes_mb_ms\": %.3f, \"m_distinct_per_s\": %.4f, \"heavy_reads\": %zu,\n",
                 n, same, gpuMs, M.ms + B.ms, rate / 1e6, heavy.size());
         fprintf(g, "  \"host_emul\": {\"run\": %s, \"reads\": %llu, \"identical\": %llu, \"at\": [%llu, %llu, %llu], \"warp_reads\": [%llu, %llu], \"fallback\": [%llu, %llu], \"shadow_diff\": [%llu, %llu], \"mate_only\": [%llu, %llu], \"s\": %.1f},\n",
