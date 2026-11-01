@@ -104,9 +104,10 @@ done
 for st in $STAGES; do
   t0=$SECONDS
   case $st in
+    # SWEEP_FORMATS (comma-separated) replaces the formats of the thread sweep
     # matrices above config decode.big_nnz get the reduced protocol inside the decode stage itself (no sweep, no NFS tier,
     # decode.big_formats only); @big here only limits which files are copied to the node
-    sweep) s1b "${SET[@]}" --set 'storages=[{name: local}]' decode --datasets "$D" --sweep --formats s1,h5ad_gzip,csc_i32 $FORCE ;;
+    sweep) s1b "${SET[@]}" --set 'storages=[{name: local}]' decode --datasets "$D" --sweep --formats "${SWEEP_FORMATS:-s1,h5ad_gzip,csc_i32}" $FORCE ;;
     # S1_TIERS (comma-separated tier names) reruns only those tiers and keeps the other tiers' rows
     minibatch) s1b "${SET[@]}" minibatch --datasets "$D" ${S1_TIERS:+--tiers "$S1_TIERS"} $FORCE ;;
     zarr3) ;;   # written above
