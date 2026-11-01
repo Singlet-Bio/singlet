@@ -2920,7 +2920,16 @@ inline bool usable(std::string& why) {
 }   // namespace e19probe
 #endif
 
+// E21 (docs/gpu-engine/fable/E21-pool.md): `singlet gpu-pool` (gpu_pool.cpp) is one resident process per GPU; it forks one process per
+// sample of its queue, which runs singlet_main (the `singlet` command, below) with that sample's arguments.
+int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**));
+static int singlet_main(int argc, char* argv[]);
 int main(int argc, char* argv[]) {
+    if (argc >= 2 && std::string(argv[1]) == "gpu-pool") return singlet_gpu_pool(argc - 2, argv + 2, &singlet_main);
+    return singlet_main(argc, argv);
+}
+
+static int singlet_main(int argc, char* argv[]) {
     g_argc = argc; g_argv = argv;   // restart_on_sorted_path re-executes this command
     singlet::fq::register_fg2();   // a staged .1fg2 is read through Reader / RunSet like a .1fq
     // ── Subcommand dispatch ──

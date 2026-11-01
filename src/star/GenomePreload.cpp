@@ -80,10 +80,15 @@ uint64_t anonHugeKB() {   // AnonHugePages of this process (smaps_rollup), for t
 
 bool star_genome_preload(const std::string& dir, int threads, std::string& log) {
     if (g_genomePreload != nullptr) {
-        char b[96];
-        snprintf(b, sizeof b, "already in memory (read in %.2f s, before this process was forked)", g_genomePreload->seconds);
-        log = b;
-        return true;
+        struct stat sd{};
+        if (stat(dir.c_str(), &sd) == 0 && sd.st_dev == g_genomePreload->dev && sd.st_ino == g_genomePreload->ino) {
+            char b[160];
+            snprintf(b, sizeof b, "already in memory (read in %.2f s, before this process was forked%s)", g_genomePreload->seconds,
+                     g_genomePreload->resident ? ", by the gpu-pool process" : "");
+            log = b;
+            return true;
+        }
+        star_genome_preload_release();   // E21: another index directory (a gpu-pool worker's sample of another genome): read this one
     }
     const auto t0 = std::chrono::steady_clock::now();
     auto* S = new GenomePreloadState;
@@ -148,6 +153,44 @@ bool star_genome_preload(const std::string& dir, int threads, std::string& log) 
              (double) anonHugeKB() / (1 << 20));
     log = b;
     return true;
+}
+
+// E21 (docs/gpu-engine/fable/E21-pool.md): `singlet gpu-pool` reads each genome of its queue once, before it forks the samples' processes,
+// and keeps it for its whole life (star_genome_preload_resident). A forked sample process selects the one for its --genome-dir
+// (star_genome_preload_select): from then on it is that process's preload, exactly as if the process had read it itself (the STAR child
+// takes it, the process drops its references after the STAR fork); the pages stay shared copy-on-write with the pool and every
+// other sample. The pool itself never maps STAR or touches the arrays again.
+namespace { std::vector<GenomePreloadState*>* g_resident = nullptr; }
+
+bool star_genome_preload_resident(const std::string& dir, int threads, std::string& log) {
+    GenomePreloadState* own = g_genomePreload;
+    g_genomePreload = nullptr;
+    const bool ok = star_genome_preload(dir, threads, log);
+    if (ok) {
+        if (g_resident == nullptr) g_resident = new std::vector<GenomePreloadState*>;
+        g_genomePreload->resident = true;
+        g_resident->push_back(g_genomePreload);
+    }
+    g_genomePreload = own;
+    return ok;
+}
+
+bool star_genome_preload_select(const std::string& dir, std::string& log) {
+    struct stat sd{};
+    if (g_resident == nullptr || g_resident->empty()) { log = "no resident genome"; return false; }
+    if (stat(dir.c_str(), &sd) != 0) { log = "no index directory " + dir; return false; }
+    for (GenomePreloadState* S : *g_resident)
+        if (S->dev == sd.st_dev && S->ino == sd.st_ino) {
+            if (g_genomePreload != nullptr && g_genomePreload != S) star_genome_preload_release();
+            g_genomePreload = new GenomePreloadState(*S);   // this process's state over the shared arrays (take/release delete the state)
+            char b[160];
+            snprintf(b, sizeof b, "resident in the gpu-pool process (%.0f MB, read in %.2f s)",
+                     (double) (S->nGenome + S->nSAbyte + S->saiBytes) / (1 << 20), S->seconds);
+            log = b;
+            return true;
+        }
+    log = "not resident (the pool holds " + std::to_string(g_resident->size()) + " other genome(s))";
+    return false;
 }
 
 void star_genome_preload_release() {

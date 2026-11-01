@@ -326,6 +326,11 @@ struct NonhostResult {
 // loads the three indexes and the Bloom filter into HBM (loadThreads reader threads), classifies `reads` and frees the device.
 // false on any failure (the caller then runs the CPU screen).
 bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out);
+// E21 (docs/gpu-engine/fable/E21-pool.md): with SINGLET_NONHOST_SERVER set (by `singlet gpu-pool`: a Unix socket), nonhostClassify first asks
+// the pool's server, which keeps the indexes and the Bloom filter in page-locked host memory and a context on the device, to classify the reads
+// (same kernels, same results); on any failure it loads the index itself as above. nonhostServe is that server: it binds `sock`, writes one
+// byte to readyFd, reads `warm` (when warm.bloom is set; else the first request's files) and serves until killed. Returns only on an error.
+int nonhostServe(const std::string& sock, int device, int loadThreads, const NonhostPaths& warm, int readyFd);
 
 // ---- pileup (pileup_gpu.cu; kernels in src/engine_gpu/gpu_pileup/, from PR #61 bench/gpu/pileup): the exon / intron / ambiguous
 // matrices, junctions, SNP AD/DP (order-free-rules R1 consensus), chrM allele counts and indels, from per-signature alignment records.
