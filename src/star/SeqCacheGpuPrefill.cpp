@@ -113,7 +113,8 @@ bool e11Config(Parameters &P, Transcriptome *tr, std::string &why) {
         why = "soloCBmatchWLtype other than 1MM_multi_Nbase_pseudocounts"; return false;
     }
     if (s.umiDedup.types.size() != 1 || s.umiDedup.types[0] != UMIdedup::All) { why = "soloUMIdedup other than 1MM_All"; return false; }
-    if (s.multiMap.yes.multi || s.multiMap.types.size() != 1 || s.multiMap.types[0] != MultiMappers::Unique) { why = "soloMultiMappers other than Unique"; return false; }
+    // MultiMappers::initialize records only the types other than Unique: soloMultiMappers Unique (the default) leaves types empty and N = 0
+    if (s.multiMap.yes.multi || s.multiMap.yes.N != 0 || !s.multiMap.types.empty()) { why = "soloMultiMappers other than Unique"; return false; }
     if (s.umiFiltering.yes || s.umiFiltering.MultiGeneUMI || s.umiFiltering.MultiGeneUMI_All || s.umiFiltering.MultiGeneUMI_CR) { why = "soloUMIfiltering"; return false; }
     if (s.cellFilter.type.empty() || s.cellFilter.type[0] != "CellRanger2.2") { why = "soloCellFilter other than CellRanger2.2"; return false; }
     if (!s.readStats.yes) { why = "no soloCellReadStats"; return false; }
