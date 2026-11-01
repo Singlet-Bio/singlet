@@ -1332,6 +1332,7 @@ inline std::vector<int64_t> mc_counts(const std::vector<double>& prop, double al
 // ───────────────────────────────────────────────────────────────────────── the call
 
 // ------------------------------------------------------------------------------------------------------------------------------
+// The code below is a C++ port of STAR 2.7.11b (MIT license, Copyright (c) Alexander Dobin; see LICENSE.STAR in src/star).
 // EmptyDrops_CR (STARsolo --soloCellFilter EmptyDrops_CR 3000 0.99 10 45000 90000 500 0.01 20000 0.01 10000), ported from
 // src/star/SoloFeature_emptyDrops_CR.cpp + SoloFeature_cellFiltering.cpp so that the call is the reference tool's own algorithm on
 // Singlet's counts. Differences from called_v2 (2.1): the ambient pool is the barcodes ranked [45000, 90000) by total (not the low-total
