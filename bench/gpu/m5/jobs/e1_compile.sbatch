@@ -23,8 +23,9 @@ apptainer exec $IMG nvcc --version | tail -2
 cc() { local out=$1; shift
   apptainer exec -B $W $IMG nvcc -O3 -std=c++17 -arch=sm_90 -fmad=false -lineinfo -Xcompiler -fopenmp -Xptxas -v "$@" \
     -o $E/bin/$out.new $S/bench/gpu/m5/m5.cu > $R/ptxas_$out.raw 2>&1; }
-cc m5 & P1=$!; cc m5t -DM5_TAIL & P2=$!
-wait $P1; X1=$?; wait $P2; X2=$?
+BUILD=,${BUILD:-m5,m5t},; P1=; P2=
+[[ $BUILD == *,m5,* ]] && { cc m5 & P1=$!; }; [[ $BUILD == *,m5t,* ]] && { cc m5t -DM5_TAIL & P2=$!; }
+X1=9; X2=9; [ -n "$P1" ] && { wait $P1; X1=$?; }; [ -n "$P2" ] && { wait $P2; X2=$?; }
 echo "nvcc exit m5=$X1 m5t=$X2"
 for b in m5 m5t; do
   apptainer exec $IMG bash -c "c++filt < $R/ptxas_$b.raw" > $R/ptxas_$b.txt 2>/dev/null || cp $R/ptxas_$b.raw $R/ptxas_$b.txt
