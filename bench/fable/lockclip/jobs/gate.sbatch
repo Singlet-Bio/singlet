@@ -21,6 +21,7 @@
 #   gpuI0   gpu + SINGLET_ENGINE_GPU_INGEST=0 (level 5 with the FASTQ temp files)
 #   gpuL<N> gpu + SINGLET_ENGINE_GPU_E2E=N
 #   gpuX<N> gpu + the variables of XENV<N> ("A=1 B=2")
+#   cpuN    (E20) the CPU engine of $BINDIR/singlet-gpu as an ordinary mode (compared like the others; the kept reference stays)
 # Every run: timestamped log, 1 s sampler of the job's cgroup CPU time and the GPU, /usr/bin/time; Gene/CellReads.stats hard-linked the moment
 # it appears (the pipeline deletes it after parsing); its exit status; the defaults line, the level reached and every fallback line
 # ("[engine_gpu] fallback:", "[1fq-ingest] not used", "SINGLET_GPU_PILEUP ignored", ENGINE_GPU ... not used in star_Log.out) in fallbacks.txt and
@@ -87,6 +88,7 @@ for s in "${SAMPLES[@]}"; do
     case $m in h?*) BIN=$BINDIR/singlet-head; mm=${m#h} ;; esac
     case $mm in
       cpu) ENGARG="" ;;
+      cpuN) ENGARG="" ;;   # E20: the CPU engine of this binary, kept in this gate only (never replaces the reference)
       gpu) export SINGLET_GPU_PILEUP=on ;;
       gpuT) export SINGLET_GPU_PILEUP=on SINGLET_E16_TRACE=1 ;;
       gpuO0) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=0 ;;
