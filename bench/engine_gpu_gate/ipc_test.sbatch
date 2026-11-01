@@ -10,6 +10,7 @@
 # S8: CUDA IPC between two processes of the same Slurm step (the bare binary, no container), as the resident-index server would use it. See ipc_test.cu.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; SCR=/tmp/$USER-ipc-$SLURM_JOB_ID; mkdir -p $SCR; trap 'kill $(jobs -p) 2>/dev/null; rm -rf $SCR' EXIT
+BARE=$W/repos/singlet-py.git; git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/${BRANCH:-perf/gpu-instrumentation}:refs/s8/ipc
 SRC=$SCR/src; mkdir -p $SRC; git -C $W/repos/singlet-py.git archive refs/s8/${TAG:-ipc} bench/engine_gpu_gate/ipc_test.cu | tar -x -C $SRC
 export PATH=/usr/local/cuda/bin:$PATH
 nvcc -O2 -o $SCR/ipc_test $SRC/bench/engine_gpu_gate/ipc_test.cu 2>&1 | tail -5
