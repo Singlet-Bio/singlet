@@ -321,6 +321,8 @@ int star_main_impl(int argInN, char *argIn[])
     if (P.runRestart.type != 1 && P.outSJ.yes)
         outputSJ(RAchunk, P);
 
+    soloDumpFlushAll(); // singlet E9 debug dump (SINGLET_SOLO_DUMP, off by default): the threads' per-read Solo records
+
     // solo counts
     Solo soloMain(RAchunk, P, *RAchunk[0]->chunkTr);
     soloMain.processAndOutput();

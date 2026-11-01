@@ -1,0 +1,131 @@
+node=g050.clipper.gvsu.edu job=796074 commit=b1fa696b2642fd4f1301c00a76cf7784628d22b2 T=8 runs=dump plain 2026-11-01T01:45:14-04:00
+NVIDIA H100 NVL, 610.43.02
+pbmc1k_v3 dump: wall 295.943551971 s, maxRSS 43.5 GB
+1793511938 [gpu_pileup] E8: records built on the device (shared memory object for STAR's prefill)
+1793512128 [gpu_pileup] hand-off pass: 63143563 reads without BAM records (E8: on the device; 61294166 kept, 926859 to the rRNA detector in 0.685263 s; upload 1474 ms (pinned), distinct CRs 17 ms (897422), CR table 387 ms, eval 20 ms, scatter 7 ms, download 2063 ms, total 4326 ms)
+1793512149 [gpu_pileup] on: GPU 2154.74 ms, total 9673.37 ms, peak 26.387 GB; molecules 15324458, junctions 121515, R1 molecules 4719909; digest d2aa9309f99531a62bcd9bf0ce4ba0e43d0faca2d72460c97e9ca7f772952052; partition select 58.1 ms (in the GPU time), host fetch between partitions 1455.3 ms; cell
+STAR --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --readFilesIn /tmp/singlet_1fq_1392652/R2.fastq /tmp/singlet_1fq_1392652/R1.fastq --soloType CB_UMI_Simple --soloCBwhitelist /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/
+STAR   --runMode alignReads      --runThreadN 8   --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b   --genomeLoad NoSharedMemory   --readFilesIn /tmp/singlet_1fq_1392652/R2.fastq   /tmp/singlet_1fq_1392652/R1.fastq      --outFileNamePrefix /tmp/debruinz-e9t-7
+ParametersSolo: --soloCellFilterType CellRanger2.2 filtering parameters:  3000 0.99 10
+ENGINE_GPU: device 0 (0000_42_00_0), waited 0 s for it, held it 40.4442 s
+engine_gpu: index upload 3.09 s (pageable, 0.00 s to pin)
+engine_gpu: clipping: 4206727 of 66601887 reads clipped, 1.11 s
+engine_gpu: E8 records on the device: 31636557 records, 32045370 alignments, 41974619 ops, 1406636366 seq bytes (28797315 mapped, no exon 0, trBest=trInit 0); gather 180 ms (host lane upload 41.4 MB), buildRecords 41 ms (kernels 15/4/18), copy to the region 916 ms (page-locked)
+engine_gpu: device memory (GB in use): start 0.5, index 16.9, reads+clip 22.9, dedup 22.9, before-laneA 22.9, before-laneA 24.3, lanes peak 66.787964
+engine_gpu: 66601887 reads, 31741646 distinct (105089 with N), mapped on the GPU 31550987, host lane 85570 (5.08 s), not mapped 0; upload 5.36 s, dedup 3.66 s, GPU mapping 15.22 s
+engine_gpu: E6 dump of 31636557 records -> /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/scratch/truth-796074/engine.dump (9.4 s)
+ENGINE_GPU: E8: no hand-off file: 31636557 records built on the device, in the shared region; summaries in 6 s
+ENGINE_GPU: no BAM records for the reads of the 31636557 hand-off records
+ENGINE_GPU: hand-off summaries for STAR's per-read output: 1037490972 bytes
+ENGINE_GPU: E8: per-read hand-off entries and low-quality masks in the shared region (5329 MB in use)
+ENGINE_GPU: 2839242 of 31636557 sequence results in the cache (the others replay hand-off summaries)
+ENGINE_GPU: cache filled with 31636557 sequence results in 85 s (reading reads 25 s, GPU 51 s, cache inserts 9 s; device 0)
+Nov 01 01:48:24 ..... started Solo counting
+Nov 01 01:48:24 ... Starting Solo post-map for Gene
+Nov 01 01:48:24 ... Finished allocating arrays for Solo 0.422619 GiB
+Nov 01 01:48:29 ... Finished reading reads from Solo files nCB=333210, nReadPerCBmax=223078, yesWLmatch=0
+RAM for solo feature Gene
+Nov 01 01:48:38 ... Solo: writing raw matrix
+Solo output directory directory created: /tmp/debruinz-e9t-796074/pbmc1k_v3/dump/out//star_Solo.out/Gene//raw/
+Nov 01 01:48:39 ... Solo: cell filtering
+Solo output directory directory created: /tmp/debruinz-e9t-796074/pbmc1k_v3/dump/out//star_Solo.out/Gene/filtered/
+RAM after completing solo:
+Nov 01 01:48:39 ..... finished Solo counting
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/results/truth-796074/dump/star_Solo.out:
+total 4
+drwx--S--- 3 debruinz debruinz_project  52 Nov  1 01:50 .
+drwxr-sr-x 3 debruinz debruinz_project 131 Nov  1 01:50 ..
+-rw-r--r-- 1 debruinz debruinz_project 792 Nov  1 01:50 Barcodes.stats
+drwx--S--- 4 debruinz debruinz_project 153 Nov  1 01:50 Gene
+
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/results/truth-796074/dump/star_Solo.out/Gene:
+total 18424
+drwx--S--- 4 debruinz debruinz_project      153 Nov  1 01:50 .
+drwx--S--- 3 debruinz debruinz_project       52 Nov  1 01:50 ..
+-rw-r--r-- 1 debruinz debruinz_project 18353470 Nov  1 01:50 CellReads.stats
+-rw-r--r-- 1 debruinz debruinz_project      726 Nov  1 01:50 Features.stats
+-rw-r--r-- 1 debruinz debruinz_project      647 Nov  1 01:50 Summary.csv
+-rw-r--r-- 1 debruinz debruinz_project   503185 Nov  1 01:50 UMIperCellSorted.txt
+drwx--S--- 2 debruinz debruinz_project       80 Nov  1 01:50 filtered
+drwx--S--- 2 debruinz debruinz_project       80 Nov  1 01:50 raw
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/scratch/truth-796074:
+total 5911744
+drwxr-sr-x 3 debruinz debruinz_project         49 Nov  1 01:47 .
+drwxr-sr-x 3 debruinz debruinz_project         34 Nov  1 01:45 ..
+-rw-r--r-- 1 debruinz debruinz_project 6053620001 Nov  1 01:47 engine.dump
+drwxr-sr-x 2 debruinz debruinz_project        186 Nov  1 01:47 solo
+
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/scratch/truth-796074/solo:
+total 3121984
+drwxr-sr-x 2 debruinz debruinz_project       186 Nov  1 01:47 .
+drwxr-sr-x 3 debruinz debruinz_project        49 Nov  1 01:47 ..
+-rw-r--r-- 1 debruinz debruinz_project 396356928 Nov  1 01:48 solo_0.bin
+-rw-r--r-- 1 debruinz debruinz_project 402059232 Nov  1 01:48 solo_1.bin
+-rw-r--r-- 1 debruinz debruinz_project 395168832 Nov  1 01:48 solo_2.bin
+-rw-r--r-- 1 debruinz debruinz_project 422691168 Nov  1 01:48 solo_3.bin
+-rw-r--r-- 1 debruinz debruinz_project 395194896 Nov  1 01:48 solo_4.bin
+-rw-r--r-- 1 debruinz debruinz_project 402045888 Nov  1 01:48 solo_5.bin
+-rw-r--r-- 1 debruinz debruinz_project 388238448 Nov  1 01:48 solo_6.bin
+-rw-r--r-- 1 debruinz debruinz_project 395135184 Nov  1 01:48 solo_7.bin
+8.7G	/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/scratch/truth-796074
+pbmc1k_v3 plain: wall 294.474184959 s, maxRSS 43.5 GB
+1793512243 [gpu_pileup] E8: records built on the device (shared memory object for STAR's prefill)
+1793512429 [gpu_pileup] hand-off pass: 63143563 reads without BAM records (E8: on the device; 61294166 kept, 926859 to the rRNA detector in 0.655558 s; upload 1331 ms (pinned), distinct CRs 14 ms (897422), CR table 361 ms, eval 20 ms, scatter 7 ms, download 1552 ms, total 3621 ms)
+1793512447 [gpu_pileup] on: GPU 2144.61 ms, total 8818.72 ms, peak 26.387 GB; molecules 15324458, junctions 121515, R1 molecules 4719909; digest d2aa9309f99531a62bcd9bf0ce4ba0e43d0faca2d72460c97e9ca7f772952052; partition select 58.1 ms (in the GPU time), host fetch between partitions 1095.4 ms; cell
+STAR --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --readFilesIn /tmp/singlet_1fq_1457833/R2.fastq /tmp/singlet_1fq_1457833/R1.fastq --soloType CB_UMI_Simple --soloCBwhitelist /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/
+STAR   --runMode alignReads      --runThreadN 8   --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b   --genomeLoad NoSharedMemory   --readFilesIn /tmp/singlet_1fq_1457833/R2.fastq   /tmp/singlet_1fq_1457833/R1.fastq      --outFileNamePrefix /tmp/debruinz-e9t-7
+ParametersSolo: --soloCellFilterType CellRanger2.2 filtering parameters:  3000 0.99 10
+ENGINE_GPU: device 0 (0000_42_00_0), waited 0 s for it, held it 42.4514 s
+engine_gpu: index upload 3.46 s (pageable, 0.00 s to pin)
+engine_gpu: clipping: 4206727 of 66601887 reads clipped, 1.28 s
+engine_gpu: E8 records on the device: 31636557 records, 32045370 alignments, 41974619 ops, 1406636366 seq bytes (28797315 mapped, no exon 0, trBest=trInit 0); gather 183 ms (host lane upload 41.4 MB), buildRecords 39 ms (kernels 15/4/18), copy to the region 985 ms (page-locked)
+engine_gpu: device memory (GB in use): start 0.5, index 16.9, reads+clip 22.9, dedup 22.9, before-laneA 22.9, before-laneA 24.3, lanes peak 66.787964
+engine_gpu: 66601887 reads, 31741646 distinct (105089 with N), mapped on the GPU 31550987, host lane 85570 (5.35 s), not mapped 0; upload 5.89 s, dedup 3.77 s, GPU mapping 15.32 s
+ENGINE_GPU: E8: no hand-off file: 31636557 records built on the device, in the shared region; summaries in 5 s
+ENGINE_GPU: no BAM records for the reads of the 31636557 hand-off records
+ENGINE_GPU: hand-off summaries for STAR's per-read output: 1037490972 bytes
+ENGINE_GPU: E8: per-read hand-off entries and low-quality masks in the shared region (5329 MB in use)
+ENGINE_GPU: 2839242 of 31636557 sequence results in the cache (the others replay hand-off summaries)
+ENGINE_GPU: cache filled with 31636557 sequence results in 78 s (reading reads 25 s, GPU 44 s, cache inserts 9 s; device 0)
+Nov 01 01:53:26 ..... started Solo counting
+Nov 01 01:53:26 ... Starting Solo post-map for Gene
+Nov 01 01:53:26 ... Finished allocating arrays for Solo 0.422619 GiB
+Nov 01 01:53:32 ... Finished reading reads from Solo files nCB=333210, nReadPerCBmax=223078, yesWLmatch=0
+RAM for solo feature Gene
+Nov 01 01:53:40 ... Solo: writing raw matrix
+Solo output directory directory created: /tmp/debruinz-e9t-796074/pbmc1k_v3/plain/out//star_Solo.out/Gene//raw/
+Nov 01 01:53:41 ... Solo: cell filtering
+Solo output directory directory created: /tmp/debruinz-e9t-796074/pbmc1k_v3/plain/out//star_Solo.out/Gene/filtered/
+RAM after completing solo:
+Nov 01 01:53:42 ..... finished Solo counting
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/results/truth-796074/plain/star_Solo.out:
+total 4
+drwx--S--- 3 debruinz debruinz_project  52 Nov  1 01:55 .
+drwxr-sr-x 3 debruinz debruinz_project 131 Nov  1 01:55 ..
+-rw-r--r-- 1 debruinz debruinz_project 792 Nov  1 01:55 Barcodes.stats
+drwx--S--- 4 debruinz debruinz_project 153 Nov  1 01:55 Gene
+
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/results/truth-796074/plain/star_Solo.out/Gene:
+total 18424
+drwx--S--- 4 debruinz debruinz_project      153 Nov  1 01:55 .
+drwx--S--- 3 debruinz debruinz_project       52 Nov  1 01:55 ..
+-rw-r--r-- 1 debruinz debruinz_project 18353470 Nov  1 01:55 CellReads.stats
+-rw-r--r-- 1 debruinz debruinz_project      726 Nov  1 01:55 Features.stats
+-rw-r--r-- 1 debruinz debruinz_project      647 Nov  1 01:55 Summary.csv
+-rw-r--r-- 1 debruinz debruinz_project   503185 Nov  1 01:55 UMIperCellSorted.txt
+drwx--S--- 2 debruinz debruinz_project       80 Nov  1 01:55 filtered
+drwx--S--- 2 debruinz debruinz_project       80 Nov  1 01:55 raw
+Barcodes.stats: dump=3a7e81d411e1f077 plain=3a7e81d411e1f077 e8=3a7e81d411e1f077
+Gene/Features.stats: dump=06c8b566bdc53a58 plain=06c8b566bdc53a58 e8=06c8b566bdc53a58
+Gene/Summary.csv: dump=256beed2b0652b66 plain=256beed2b0652b66 e8=256beed2b0652b66
+Gene/UMIperCellSorted.txt: dump=3c96290e224fcf44 plain=3c96290e224fcf44 e8=3c96290e224fcf44
+Gene/raw/barcodes.tsv: dump=5e3969f11d28615c plain=5e3969f11d28615c e8=5e3969f11d28615c
+Gene/raw/features.tsv: dump=447849e4e7672eb1 plain=447849e4e7672eb1 e8=447849e4e7672eb1
+Gene/raw/matrix.mtx: dump=111b3b28eebf5856 plain=111b3b28eebf5856 e8=111b3b28eebf5856
+Gene/filtered/barcodes.tsv: dump=f150e771c6029cd6 plain=f150e771c6029cd6 e8=f150e771c6029cd6
+Gene/filtered/features.tsv: dump=447849e4e7672eb1 plain=447849e4e7672eb1 e8=447849e4e7672eb1
+Gene/filtered/matrix.mtx: dump=07ad4c6c6d954fae plain=07ad4c6c6d954fae e8=07ad4c6c6d954fae
+Gene/CellReads.stats: dump=60c588eb89d3001f plain=4dc0572517187ed3
+CellReads.stats dump: 323543 lines, sorted rows a4a92b97b5d141cb
+CellReads.stats plain: 323543 lines, sorted rows a4a92b97b5d141cb
+done 2026-11-01T01:55:08-04:00
