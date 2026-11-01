@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <dirent.h>
+#include <string>
 #include <unistd.h>
 
 namespace singlet_tail {
@@ -53,9 +55,36 @@ inline void mark(const char* fmt, ...) {
     va_end(ap);
     std::fprintf(stderr, "[e16] %.3f %d %s\n", now(), (int) getpid(), b);
 }
-// STAR's mapping threads (ReadAlignChunk::processChunks): per thread its start, first chunk read, last chunk mapped and end (epoch s), and
-// its chunk and read counts; STAR.cpp prints them after the join
+// the processes holding the write end of the pipe with inode ino (/proc/<pid>/fd links "pipe:[ino]" whose fdinfo flags say O_WRONLY):
+// " pid (comm) fd" per holder, " none" if no process does (E16: STAR's BAM pipe after STAR closed it)
+inline std::string pipeWriters(unsigned long ino) {
+    std::string r; char want[64]; std::snprintf(want, sizeof want, "pipe:[%lu]", ino);
+    DIR* d = opendir("/proc"); if (d == nullptr) return " ?";
+    while (dirent* e = readdir(d)) {
+        if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+        char p[64]; std::snprintf(p, sizeof p, "/proc/%.20s/fd", e->d_name);
+        DIR* f = opendir(p); if (f == nullptr) continue;
+        while (dirent* x = readdir(f)) {
+            if (x->d_name[0] == '.') continue;
+            char l[128], t[128]; std::snprintf(l, sizeof l, "%s/%.20s", p, x->d_name);
+            const ssize_t n = readlink(l, t, sizeof t - 1); if (n <= 0) continue; t[n] = 0;
+            if (std::strcmp(t, want) != 0) continue;
+            char fi[128]; std::snprintf(fi, sizeof fi, "/proc/%.20s/fdinfo/%.20s", e->d_name, x->d_name);
+            unsigned flags = 0; char line[256];
+            if (FILE* g = std::fopen(fi, "r")) { while (std::fgets(line, sizeof line, g)) if (std::sscanf(line, "flags: %o", &flags) == 1) break; std::fclose(g); }
+            if ((flags & 3) != 1) continue;   // the read end
+            char cp[64], comm[64] = "?"; std::snprintf(cp, sizeof cp, "/proc/%.20s/comm", e->d_name);
+            if (FILE* g = std::fopen(cp, "r")) { if (std::fgets(comm, sizeof comm, g)) comm[std::strcspn(comm, "\n")] = 0; std::fclose(g); }
+            r += std::string(" ") + e->d_name + " (" + comm + ") fd " + x->d_name;
+        }
+        closedir(f);
+    }
+    closedir(d);
+    return r.empty() ? std::string(" none") : r;
+}
+// STAR's mapping threads (ReadAlignChunk::processChunks): per thread its start, first chunk read, last chunk mapped, end, chunk loop left and
+// BAM buffer flushed (epoch s), and its chunk and read counts; STAR.cpp prints them after the join
 constexpr int kMaxThr = 256;
-inline double g_thr[kMaxThr][4];
+inline double g_thr[kMaxThr][6];
 inline unsigned long long g_thrN[kMaxThr][2];
 } // namespace singlet_tail

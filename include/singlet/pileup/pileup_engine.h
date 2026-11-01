@@ -2729,8 +2729,15 @@ public:
         singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
         std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
+        if (singlet_tail::cut("puts")) {   // E16 "puts" (level 5): one thread per accumulator (each fills its own vectors in the same order)
+            std::thread p1([&] { gpu_put(exon_acc_, out.exon); }), p2([&] { gpu_put(intron_acc_, out.intron); }), p3([&] { gpu_put(amb_acc_, out.amb); }),
+                p4([&] { gpu_put(snp_ad_, out.snpAd); }), p5([&] { gpu_put(snp_dp_, out.snpDp); }), p6([&] { gpu_put(mt_acc_rev_, out.mtRev); });
+            gpu_put(mt_acc_, out.mt);
+            p1.join(); p2.join(); p3.join(); p4.join(); p5.join(); p6.join();
+        } else {
         gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
         gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);
+        }
         sj_names_.clear(); sj_index_.clear();
         // the GPU's table has every junction of every signature (hand-off records include reads without a cell barcode); the CPU
         // names a junction when a counted read has it, so keep the junctions with a count, in table (R7) order
@@ -2775,6 +2782,11 @@ public:
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
                   << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules
                   << (out.log.empty() ? "" : "; ") << out.log << "\n";
+        if (singlet_tail::cut("free2")) {   // E16 "free2" (level 5): the input (the region's second mapping, the records) and the output freed on a thread
+            auto* fIn = new PileupInput(std::move(in)); auto* fOut = new PileupOutput(std::move(out));
+            std::thread([fIn, fOut] { const double a = singlet_tail::now(); delete fIn; delete fOut;
+                                      singlet_tail::mark("parent (bg): pileup input and output freed in %.3f s", singlet_tail::now() - a); }).detach();
+        }
         return true;
     }
 #endif

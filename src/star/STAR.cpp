@@ -256,8 +256,8 @@ int star_main_impl(int argInN, char *argIn[])
         for (int i = 0; i < (int) P.runThreadN && i < singlet_tail::kMaxThr; i++) {
             const double *g = singlet_tail::g_thr[i];
             char b[160];
-            snprintf(b, sizeof b, " t%d[%.3f %.3f %.3f %.3f c%llu r%llu]", i, g[0] - t0, g[1] > 0 ? g[1] - t0 : -1.0, g[2] > 0 ? g[2] - t0 : -1.0, g[3] - t0,
-                     singlet_tail::g_thrN[i][0], singlet_tail::g_thrN[i][1]);
+            snprintf(b, sizeof b, " t%d[%.3f %.3f %.3f %.3f loop %.3f flush %.3f c%llu r%llu]", i, g[0] - t0, g[1] > 0 ? g[1] - t0 : -1.0, g[2] > 0 ? g[2] - t0 : -1.0,
+                     g[3] - t0, g[4] > 0 ? g[4] - t0 : -1.0, g[5] > 0 ? g[5] - t0 : -1.0, singlet_tail::g_thrN[i][0], singlet_tail::g_thrN[i][1]);
             per += b;
             if (g[1] > 0) { busy++; f0 = std::min(f0, g[1]); f1 = std::max(f1, g[1]); l1 = std::max(l1, g[2]); }
             e1 = std::max(e1, g[3]);
@@ -291,9 +291,15 @@ int star_main_impl(int argInN, char *argIn[])
     // close some BAM files
     if (P.inOut->outBAMfileUnsorted != NULL)
     {
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        struct stat e16st; const bool e16fifo = singlet_tail::on() && fstat(STDOUT_FILENO, &e16st) == 0 && S_ISFIFO(e16st.st_mode);
+#endif
         bgzf_flush(P.inOut->outBAMfileUnsorted);
         bgzf_close(P.inOut->outBAMfileUnsorted);
         E16_MARK("STAR: BAM stream closed");
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (e16fifo) E16_MARK("STAR: BAM pipe's write end now held by:%s", singlet_tail::pipeWriters((unsigned long) e16st.st_ino).c_str());
+#endif
     };
     if (P.inOut->outQuantBAMfile != NULL)
     {

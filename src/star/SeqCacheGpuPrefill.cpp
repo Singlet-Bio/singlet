@@ -1214,6 +1214,15 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     P.inOut->logMain << "ENGINE_GPU: cache filled with " << nRec << " sequence results in " << (time(nullptr) - t0) << " s (reading reads "
                      << (tRead - t0) << " s, GPU " << (tGpu - tLock) << " s, cache inserts " << (time(nullptr) - tGpu) << " s; device " << device << ")\n" << flush;
+    if (g_e10Level == 5 && singlet_tail::cut("free")) {   // E16 "free": the reads (decode) and the engine's output go on a thread beside STAR's loop
+        auto *fIn = new singlet_engine_gpu::Input(std::move(in));      // (the vectors' buffers move with them: nothing after this reads them,
+        auto *fOut = new singlet_engine_gpu::Output(std::move(out));   //  as nothing reads them after the return either)
+        std::thread([fIn, fOut]() {
+            const double a = singlet_tail::now();
+            delete fIn; delete fOut;
+            singlet_tail::mark("prefill (bg): reads and engine output freed in %.3f s", singlet_tail::now() - a);
+        }).detach();
+    }
     singlet_tail::mark("prefill: end");
 #endif
 }

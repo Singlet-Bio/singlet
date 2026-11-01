@@ -5,6 +5,7 @@
 #define PILEUP_NO_MAIN
 #include "gpu_pileup/pileup/pileup.cu"
 #include "singlet/engine_gpu.h"
+#include "singlet/tail_trace.h"   // E16: the level-5 switches (digest)
 
 static_assert(sizeof(IV) == sizeof(singlet_engine_gpu::PileupIv), "IV layout");
 static_assert(sizeof(SnpRow) == sizeof(singlet_engine_gpu::PileupSnpRow), "SnpRow layout");
@@ -110,7 +111,9 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     e16step("run_pipeline");
     { unsigned long long ms[5]; CK(cudaMemcpyFromSymbol(ms, g_molstat, sizeof ms));
       po.molDropped = ms[4]; po.molSpliced = ms[0]; po.molUnspliced = ms[1]; po.molAmbiguous = ms[2]; po.molLegacyDouble = ms[3]; }
-    {   // digest of everything the run returns (the partition-invariance gate compares it across K)
+    // E16 "digest" (level 5): skipped; it hashes every output tuple (4.3 GB of chrM tuples on pbmc1k_v3: 2.4 s) for a log line only
+    if (singlet_tail::cut("digest")) po.log += "digest skipped (E16); ";
+    else {   // digest of everything the run returns (the partition-invariance gate compares it across K)
         Sha256 h; h.update(sha_out(o).data(), 64);
         { auto ind = o.indels; std::sort(ind.begin(), ind.end()); h.update(ind.data(), ind.size() * 16); }   // as a set: their order follows the stream's read order h.update(o.cell_reads.data(), o.cell_reads.size() * 4); h.update(o.cell_mol.data(), o.cell_mol.size() * 4);
         h.update(o.hits, sizeof o.hits); h.update(&o.sj_raw_sum, 8); h.update(g_snp_stat, sizeof g_snp_stat);

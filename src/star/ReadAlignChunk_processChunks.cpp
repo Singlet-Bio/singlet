@@ -16,7 +16,8 @@ inline void removeStringEndControl(string &str);
 void ReadAlignChunk::processChunks() {//read-map-write chunks
 #ifdef SINGLET_HAVE_ENGINE_GPU
     const bool e16 = singlet_tail::on() && iThread >= 0 && iThread < singlet_tail::kMaxThr;   // E16: this thread's start, first chunk, last chunk, end
-    if (e16) { singlet_tail::g_thr[iThread][0] = singlet_tail::now(); singlet_tail::g_thr[iThread][1] = singlet_tail::g_thr[iThread][2] = 0; singlet_tail::g_thrN[iThread][0] = 0; }
+    if (e16) { singlet_tail::g_thr[iThread][0] = singlet_tail::now(); singlet_tail::g_thr[iThread][1] = singlet_tail::g_thr[iThread][2] = 0; singlet_tail::g_thrN[iThread][0] = 0;
+               singlet_tail::g_thr[iThread][4] = singlet_tail::g_thr[iThread][5] = 0; }
 #endif
     noReadsLeft=false; //true if there no more reads left in the file
     bool newFile=false; //new file marker in the input stream
@@ -280,11 +281,17 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
         };
 
     };//cycle over input chunks
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    if (e16) singlet_tail::g_thr[iThread][4] = singlet_tail::now();
+#endif
 
     if (P.outFilterBySJoutStage!=1 && RA->iRead>0) {//not the first stage of the 2-stage mapping
         if (P.outBAMunsorted) chunkOutBAMunsorted->unsortedFlush();
         if (P.outBAMcoord) chunkOutBAMcoord->coordFlush();
         if (chunkOutBAMquant!=NULL) chunkOutBAMquant->unsortedFlush();
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (e16) singlet_tail::g_thr[iThread][5] = singlet_tail::now();
+#endif
 
         //the thread is finished mapping reads, concatenate the temp files into output files
         if (P.pCh.segmentMin>0) {
