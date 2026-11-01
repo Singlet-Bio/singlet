@@ -45,7 +45,7 @@ for m in "${MODES[@]}"; do
     gpuE) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=1 ;;
     gpuE3) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=3 ;;
     gpuE4) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=4 ;;
-    gpuE5) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 ;;
+    gpuE5|gpuE5b) export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 ;;   # gpuE5b: a second level-5 run (run-to-run spread)
   esac
   ( echo -e "t\tcpu_s\tgpu_util\tgpu_mem_mb"
     while true; do
