@@ -18,7 +18,10 @@ singlet_run() {   # engine outdir [reads-args...]
   eng=$1; out=$2; shift 2; rm -rf $out; mkdir -p $out
   /usr/bin/time -v -o $out/time.txt $BINDIR/singlet-$eng "$@" --ref-base $REFB --out-prefix $out/out/ --threads $SINGLET_THREADS --pipeline \
      --output-format 1pz --engine $eng --memory-tier $TIER --tagged-bam > $out/run.log 2>&1
-  rc=$?; echo "$SINGLET_THREADS" > $out/threads.txt; echo "singlet $eng rc=$rc threads=$SINGLET_THREADS"; grep -E "Elapsed \(wall|Maximum resident" $out/time.txt; return $rc; }
+  rc=$?; echo "$SINGLET_THREADS" > $out/threads.txt
+  pt=$(grep -rhoE '"pileup_threads": *[0-9]+' $out/out 2> /dev/null | head -1 | grep -oE '[0-9]+$'); echo "${pt:-unknown}" > $out/pileup_threads.txt
+  [ "${pt:-x}" = 1 ] && echo "pileup_threads=1 (stream path)" || { echo "INVALID: pileup_threads=${pt:-unknown} (expected 1, the stream path); whitelists dir present: $(ls -d $BINDIR/../whitelists 2>&1)"; touch $out/INVALID; }
+  echo "singlet $eng rc=$rc threads=$SINGLET_THREADS"; grep -E "Elapsed \(wall|Maximum resident" $out/time.txt; return $rc; }
 ensure_wl() {   # every .1fq must have been decoded WITH --whitelist-dir (pilot_fetch used to pass only the env var, which singlet download ignores: wl_match_rate=0). Redo from the kept .sra once, under a lock.
   mkdir -p $P/stage
   ( flock 9
