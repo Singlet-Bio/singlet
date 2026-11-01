@@ -3656,10 +3656,30 @@ int main(int argc, char* argv[]) {
         (whitelist_file != "None" && whitelist_file != "none"))) {
         std::cerr << "ERROR: --barcodes is required (or use --whitelist None for auto-discovery)\n"; return 1;
     }
+    // An explicit --genome-dir of a reference layout ({species_dir}/star_*/ next to {species_dir}/genes/genes.gtf) gives the gene model too, as the species
+    // auto-detect does: without this the campaign worker, which always passes --genome-dir, would need --exons on every call.
+    auto genome_dir_parent = [&]() {
+        std::string d = genome_dir;
+        while (d.size() > 1 && d.back() == '/') d.pop_back();
+        const auto sep = d.rfind('/');
+        return sep == std::string::npos ? std::string() : d.substr(0, sep);
+    };
+    if (!is_atac_mode && config.exon_gtf_path.empty() && config.snp_path.empty() && !genome_dir.empty() && !genome_dir_parent().empty()) {   // only where the run would otherwise stop: a --snps run keeps its behaviour
+        const std::string gtf_candidate = genome_dir_parent() + "/genes/genes.gtf";
+        struct stat gtf_st;
+        if (stat(gtf_candidate.c_str(), &gtf_st) == 0) {
+            config.exon_gtf_path = gtf_candidate;
+            std::cerr << "[singlet] GTF next to --genome-dir: " << config.exon_gtf_path << "\n";
+        }
+    }
     if (!is_atac_mode && !is_smart_seq2_mode && !is_bulk_rna_mode &&
         !(is_cite_seq_mode && !feature_ref_path.empty() && config.exon_gtf_path.empty()) &&
         config.exon_gtf_path.empty() && config.snp_path.empty()) {
-        std::cerr << "ERROR: At least one of --exons or --snps required\n"; return 1;
+        std::cerr << "ERROR: At least one of --exons or --snps required: pass --exons GENES.gtf (the gene model that counts need)"
+                  << (genome_dir.empty() ? ", or --genome-dir DIR so that DIR/../genes/genes.gtf is found"
+                                         : ", or put it at " + genome_dir_parent() + "/genes/genes.gtf (not found there)")
+                  << ", or --snps VCF for a genotype-only run\n";
+        return 1;
     }
     // Smart-seq2 / Bulk RNA require a GTF (gene model for counting)
     if ((is_smart_seq2_mode || is_bulk_rna_mode) && config.exon_gtf_path.empty()) {
