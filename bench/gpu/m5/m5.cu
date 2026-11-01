@@ -716,6 +716,10 @@ int main(int argc, char** argv) {
         // E4 (docs/gpu-engine/fable/E4-order.md)
         else if (a == "--best-order") { presort = true; g_p3orderLane[1] = P3_NW_DESC; }   // E4's best exact order: prefix order,
                                                         // phase 3 of lane M by window count (stable, desc); later flags override
+        else if (a == "--e4-best") {   // E4's fastest exact configuration (job 795646): --best-order, lane A's k_p3 capped at 64
+            presort = true; g_p3orderLane[1] = P3_NW_DESC; g_p3MaxRegLane[0] = 64;   // registers, batches 1M / 512k / 128k (lane B
+            nbA = 1048576; nbM = 524288; nbB = 131072;                             // in one launch); Work 48.9 / 43.5 / 57.7 GB
+        }
         else if (a == "--presort") presort = true;      // map the reads in the engine's order: stable sort by the first 32 bases
         else if (a == "--p3order" || a == "--p3order-a" || a == "--p3order-m" || a == "--p3order-b") {   // order of the phase-3 threads in a batch
             std::string v = argv[++i]; int o = -1;

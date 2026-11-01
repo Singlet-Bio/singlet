@@ -84,7 +84,11 @@ R4="$R4;v4bigB1:--presort --batch-a 524288 --batch-m 393216 --batch-b 131072;v5b
 R4="$R4;bestE1:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072;bestE1r64am:--best-order --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-maxreg-a 64 --p3-maxreg-m 64"
 R4="$R4;bestE1wr64am:--best-order --p3order-a warp-desc --batch-a 1048576 --batch-m 524288 --batch-b 131072 --p3-maxreg-a 64 --p3-maxreg-m 64;bestE1cmp:--best-order --compact --batch-a 1048576 --batch-m 524288 --batch-b 131072;v0b:--presort"
 [ "${ROUND:-1}" = 4 ] && NCUL="v0A|--presort|1;v1binA|--presort --bin|1;cmpA|--presort --compact|1;v0M|--presort|16" && NCUL=${E4NCU-$NCUL}
+# round 5 (ROUND=5): the --e4-best preset (= --best-order --p3-maxreg-a 64 --batch-a 1048576 --batch-m 524288 --batch-b 131072)
+# against the baseline, twice each
+R5="v0:--presort;e4best:--e4-best;v0b:--presort;e4bestb:--e4-best"
 [ "${ROUND:-1}" = 2 ] && DEFAULT=$R2
+[ "${ROUND:-1}" = 5 ] && DEFAULT=$R5
 [ "${ROUND:-1}" = 4 ] && DEFAULT=$R4
 [ "${ROUND:-1}" = 3 ] && DEFAULT=$R3
 IFS=';' read -ra VARS <<< "${E4RUNS:-$DEFAULT}"
