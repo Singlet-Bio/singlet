@@ -55,9 +55,9 @@ fetch. **Verdict on AoS: not the cost.** A field-major transposition (S5 as pose
 the cheap version, phase-local state in thread-local memory, which E1 also proposes for its own reasons (k_p3's
 scratch never needs to be in a global array).
 
-The staged lanes are already 4× faster than mono global (244 vs 978 ms) because they run one thread per read over
-batches of 524,288 reads (full occupancy, no persistent-thread tail), so S1's 1.54× says how much the layout costs the
-stitching code, not what it costs the staged lane. S5 measures that directly.
+The staged lanes are already 4× faster than mono global (244 vs 978 ms): three smaller kernels, one thread per read over
+batches of 524,288 reads, with the SA-entry marking done warp-parallel. S1's 1.54× therefore says what the layout
+change does to the mono kernel, not to the staged lane; S5 measures the staged lane directly.
 
 ## S2: transcript copies in lane A (job 795235, `M5_COPYSTATS`)
 
@@ -150,7 +150,7 @@ frame, 0 spill stores/loads); thread-cycle stitching share: 39.8% (base), 35.6% 
 
 - Copies (S3 + statistics): include 4.577, exclude 0, finalize 3.537, record 0, slot init 0, keep 1.144, keep drop
   0.177 per read: **9.44 copies and 2,407 B per read, half the baseline's 19.52 and 4,821 B.** KEEPIX removes the keep
-  copies as well (1.32 per read; measured in job 795320).
+  copies as well (1.32 per read); its time is in the BLOBW and summary tables.
 - **Phase 3 of lane A: 132.4 → 107.3 ms (−19%)**; lane A 245.4 → 220.3 ms (−10%, 0.90×); lanes M (−15%) and B (−13%)
   gain as much or more, since they copy more per read. GPU throughput 2.42 → 2.77 M distinct reads/s (+14%).
 - The parts add up roughly (REFX −10 ms, FIN1 −9.4 ms, S3 −17 ms, TR32 −15 ms, S3 + S4 −25 ms): two cheaper copies of a
@@ -191,7 +191,7 @@ cheap form of the same idea was: run a staged phase on a per-thread `Work` in lo
 field-major layout, which is also E1's proposal to keep k_p3's scratch out of the global array.
 
 - `--p3local`: `k_p3` copies the state that crosses kernels (everything but `WA` and the transcript arrays:
-  6.3 KB with TR32, 6.6 KB without) and the read buffers from the global `Work` into a local one, and runs phase 3
+  6,288 B per lane A read; 6,344 B with KEEPIX's index arrays) and the read buffers from the global `Work` into a local one, and runs phase 3
   there. `--p1local`: `k_p1` runs phase 1 on a local `Work` and writes the crossing state back (`copyPersistent`).
 - *Exactness:* the global `Work` buffers are reused across batches without clearing, so the baseline already relies on
   phase 3 writing `WA` and every transcript before reading it; the local copy only removes the stale bytes. Phase 1
@@ -242,9 +242,9 @@ which the staged kernels already have.
 | S3 REFX + FIN1 + SLOT0 (795250) | 228.4 (0.930) | 114.5 | 289 / 237 | 35.6% | 46,112 | 80, 0 | 100% |
 | S4 TR32 (795250) | 230.2 (0.938) | 117.5 | 289 / 239 | 36.3% | 36,024 | 79, 0 | 100%, 0 bad stores |
 | **S3 + S4 (795250)** | **220.3 (0.898)** | **107.3** | **274 / 224** | 33.7% | 36,032 | 79, 0 | 100% |
-| + KEEPIX + BLOBW (795345) | 230.8 (0.925) | 115.6 | 280 / 225 | | 36,040 | 79, 0 | 100% |
+| + KEEPIX + BLOBW (795345) | 230.8 (0.925) | 115.6 | 280 / 225 | | 36,080 | 79, 0 | 100% |
 | S5 `--p3local`, baseline (795345) | 289.5 (1.160) | 176.3 | 320 / 253 | | 46,104 local | 80, 0 (47,168-B frame) | 100% |
-| S5 `--p3local`, S3 + S4 + KEEPIX + BLOBW (795345) | 238.7 (0.957) | 123.3 | 279 / 227 | | 36,040 local | 72, 0 (37,136-B frame) | 100% |
+| S5 `--p3local`, S3 + S4 + KEEPIX + BLOBW (795345) | 238.7 (0.957) | 123.3 | 279 / 227 | | 36,080 local | 72, 0 (37,136-B frame) | 100% |
 
 GPU throughput (all three lanes): 2.42 → **2.77 M distinct reads/s** with S3 + S4.
 
@@ -263,7 +263,7 @@ GPU throughput (all three lanes): 2.42 → **2.77 M distinct reads/s** with S3 +
 ## Recommendation
 
 1. Take **S3 + S4** (`-DM5_S3 -DM5_TR32`) into the engine: exact, −10% lane A, −15% lane M, −13% lane B, smaller
-   `Work` (lane A 46 → 36 KB, lane B 635 → 549 KB, so larger batches fit).
+   `Work` (lane A 46 → 36 KB, lane M 83 → 68 KB, lane B 635 → 549 KB, so larger batches fit).
 2. Do not pursue a field-major `Work` or local-memory phases for the staged kernels.
 3. Phase 1 is now the larger half of lane A (99 of 220 ms; E1: memory-bound, 71-79%): it is where a 0.7× lane A has to
    come from.
