@@ -1221,7 +1221,6 @@ static std::string wassignStr() {   // lanes with the in-kernel assignment, e.g.
     std::string r; if (g_wassignLane[0]) r += 'a'; if (g_wassignLane[1]) r += 'm'; if (g_wassignLane[2]) r += 'b'; return r;
 }
 int main(int argc, char** argv) {
-    std::string gdir, truth, json, input, emit, census; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, nbM = 131072, budgetA = 0, budgetB = 0, budgetM = 0, monoBudget = 0; bool noMid = false;
     bool warpM = false, warpB = false, hostEmul = false; int wbCfg = 0, warpA = 0, wminA = 0; std::string tag;
     std::string gdir, truth, json, input, emit, census; int reps = 3, bps = 4, nthr = 128, bpsB = 1, nthrB = 64; bool localWork = false, mono = false; long long nbA = 131072, nbB = 32768, nbM = 131072, budgetA = 0, budgetB = 0, budgetM = 0, monoBudget = 0; bool noMid = false, p1probe = false;
     bool presort = false; std::string label;
