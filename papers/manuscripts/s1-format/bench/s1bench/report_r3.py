@@ -1,4 +1,4 @@
-"""Report sections for the review-round-3 measurements: the primed cold-read protocol, random-access costs (access),
+"""Report sections for the later measurements: the primed cold-read protocol, random-access costs (access),
 latency, requests in flight and DataLoader workers (netsweep), the real object store (netsweep --r2) and write cost
 (writecost). Called from report.run; writes generated/fig*_r3 / tab*_r3 TSVs and \\nm{} numbers."""
 

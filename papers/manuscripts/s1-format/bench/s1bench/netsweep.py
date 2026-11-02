@@ -1,4 +1,4 @@
-"""Stage `netsweep` (review round 3): what round-trip time, requests in flight and DataLoader workers do to the readers that
+"""Stage `netsweep`: what round-trip time, requests in flight and DataLoader workers do to the readers that
 fetch by range, and the same readers against a real object store.
 
 Emulated grids, on the store of netem.py at `netsweep.gbit` with bwproxy counting the bytes and requests it serves:

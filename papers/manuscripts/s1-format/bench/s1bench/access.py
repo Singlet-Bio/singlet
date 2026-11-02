@@ -1,4 +1,4 @@
-"""Stage `access` (review round 3): what one random minibatch costs a reader that fetches by range, from each format's own
+"""Stage `access`: what one random minibatch costs a reader that fetches by range, from each format's own
 index, with nothing timed: the bytes it must fetch, the separate byte ranges (requests, adjacent ranges merged), and the
 bytes of the index it reads first. The workload is the minibatch stage's (seed 0, `access.n_batches` batches of
 `minibatch.batch_size` cells in blocks of `minibatch.block_size`).
