@@ -11,7 +11,7 @@ zstd~\cite{deutsch1996deflate,collet2021zstd}. Formats built for scale add struc
 serves the CELLxGENE Census~\cite{czi2025cellxgene}, BPCells~\cite{parks2025bpcells} bit-packs deltas and values for
 streaming reads, and Parquet~\cite{parquet} distributes the largest training corpora~\cite{tahoe100m_hf}. Our earlier VCSC
 and IVCSC layouts store each distinct value of a column once and delta-encode and byte-pack its row indices, shrinking
-single-cell matrices several-fold below CSC in memory~\cite{ruiter2024vcsc}. None of these uses an entropy coder with a
+single-cell matrices several-fold below CSC in memory~\cite{ruiter2024vcsc,wolfgang2024vcsc}. None of these uses an entropy coder with a
 model of the counts.
 
 \para{Compressing integers}Inverted indexes face the same problem as CSC row indices: sorted integer lists with small gaps.

@@ -11,8 +11,11 @@ in size, on the trend of existing codes in decoding speed, and at the speed of a
 In cloud storage, the bits per cell, the round trips per minibatch and the fees per request and per byte set both the speed
 and the cost of every epoch. A format that is small, fast to decode and readable in part moves the bottleneck from storage
 back to the model: a training loader started from a remote \sone{} file in under a second and kept the link busy without
-downloading or converting anything first. Because each sample file is named by a hash of its contents, a link or a
-citation identifies exactly the bytes that were analysed.
+downloading or converting anything first. The same latency matters even more to an AI agent working in a loop: an
+agent that pulls the cells of one study, analyses them and decides what to fetch next waits on storage at every step, and a
+second per fetch instead of a minute per download is the difference between iterating within one response and not
+iterating at all. Because each sample file is named by a hash of its contents, a link or a citation identifies exactly the
+bytes that were analysed, so an agent's analysis can be checked and repeated.
 
 \para{Costs and limitations}\sone's decoder spends more time per entry than byte- or bit-aligned codes, so it keeps up with
 a link only when there are enough cores for it: above about \nm{frac-cross-gbit}\,Gbit/s per decoding core, a larger but

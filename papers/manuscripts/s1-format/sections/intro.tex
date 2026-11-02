@@ -3,12 +3,15 @@
 \label{sec:intro}
 
 \IEEEPARstart{H}{ow} many bits does a single cell need? The question used to be academic. The Gene Expression
-Omnibus~\cite{barrett2013geo} now holds sequencing data from more than three billion cells, reference atlases serve tens of
+Omnibus~\cite{barrett2013geo} now holds sequencing data from more than three billion cells~\cite{seqout}, reference atlases serve tens of
 millions~\cite{svensson2018exponential,sikkema2023integrated,czi2025cellxgene}, a single perturbation screen has reached a
 hundred million~\cite{zhang2025tahoe}, and machine learning models are trained by streaming such collections from cloud
-storage, minibatch by minibatch, many times over~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}. Every one of
-those minibatches crosses a network. When it does, the bits each cell takes and the round trips needed to find it, not the
-model or the processor, set how fast training runs and what each epoch costs.
+storage, minibatch by minibatch, many times over~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}. AI agents,
+too, now find, fetch and analyse public data on their own, deciding after each result what to fetch next. Every one of
+those minibatches and fetches crosses a network. When it does, the bits each cell takes and the round trips needed to find
+it, not the model or the processor, set how fast training runs, what each epoch costs, and whether an agent can answer
+within a conversation or must wait minutes for each step. What makes data AI-ready, we argue, is less how it is annotated
+than how quickly a model can get the cells it needs.
 
 Today's formats spend those bits generously. AnnData~\cite{virshup2024anndata}, the 10x Genomics HDF5 file, loom, Zarr and
 TileDB-SOMA~\cite{tiledbsoma} store whole-number counts as generic arrays and hand them to compressors such as gzip or
