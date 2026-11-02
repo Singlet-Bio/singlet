@@ -1,0 +1,75 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+pbmc_multiome	rna	sweep	local	soma	1	cold	file		auto	23508033	ok	1.593514	1.592925	1.607061	14.752318	3	1.620608,1.592335,1.593514	
+pbmc_multiome	rna	sweep	local	soma	2	cold	file		auto	23508033	ok	1.082268	1.043048	1.134474	21.721081	3	1.082268,1.186679,1.003827	
+pbmc_multiome	rna	sweep	local	soma	4	cold	file		auto	23508033	ok	0.855491	0.811643	0.895771	27.47898	3	0.936051,0.855491,0.767794	
+pbmc_multiome	rna	sweep	local	soma	4	warm	file		auto	23508033	ok	0.956389	0.886364	0.998387	24.579993	3	1.040386,0.956389,0.816339	
+pbmc_multiome	rna	sweep	local	soma	8	cold	file		auto	23508033	ok	0.644386	0.640818	0.650042	36.481278	3	0.637249,0.655697,0.644386	
+pbmc_multiome	rna	sweep	local	soma	16	cold	file		auto	23508033	ok	0.616863	0.594901	0.622661	38.109003	3	0.572940,0.616863,0.628459	
+pbmc_multiome	rna	sweep	local	soma	32	cold	file		auto	23508033	ok	0.564198	0.562609	0.591411	41.666282	3	0.618624,0.564198,0.561021	
+pbmc_multiome	rna	sweep	local	soma	44	cold	file		auto	23508033	ok	0.586457	0.573594	0.59423	40.084854	3	0.602003,0.560730,0.586457	
+pbmc_multiome	rna	sweep	local	mtx_gz	1	cold	file		auto	23508033	ok	3.703888	3.701685	3.728807	6.346854	3	3.753726,3.703888,3.699482	
+pbmc_multiome	rna	sweep	local	mtx_gz	2	cold	file		auto	23508033	ok	2.691132	2.629575	2.838375	8.73537	3	2.985618,2.568018,2.691132	
+pbmc_multiome	rna	sweep	local	mtx_gz	4	cold	file		auto	23508033	ok	2.355299	2.352521	2.458574	9.980914	3	2.561849,2.349744,2.355299	
+pbmc_multiome	rna	sweep	local	mtx_gz	4	warm	file		auto	23508033	ok	2.343906	2.319455	2.4322	10.029427	3	2.343906,2.295005,2.520495	
+pbmc_multiome	rna	sweep	local	mtx_gz	8	cold	file		auto	23508033	ok	2.256515	2.237156	2.260243	10.417851	3	2.256515,2.217797,2.263971	
+pbmc_multiome	rna	sweep	local	mtx_gz	16	cold	file		auto	23508033	ok	2.191925	2.182008	2.199106	10.724837	3	2.206286,2.191925,2.172092	
+pbmc_multiome	rna	sweep	local	mtx_gz	32	cold	file		auto	23508033	ok	2.183706	2.159707	2.189292	10.7652	3	2.183706,2.135709,2.194879	
+pbmc_multiome	rna	sweep	local	mtx_gz	44	cold	file		auto	23508033	ok	2.163335	2.157163	2.16957	10.866573	3	2.163335,2.150992,2.175805	
+pbmc_multiome	rna	sweep	local	parquet_coo	1	cold	file		auto	23508033	ok	0.788387	0.755565	0.808879	29.817891	3	0.829370,0.788387,0.722743	
+pbmc_multiome	rna	sweep	local	parquet_coo	2	cold	file		auto	23508033	ok	0.65378	0.621111	0.662123	35.9571	3	0.653780,0.588442,0.670466	
+pbmc_multiome	rna	sweep	local	parquet_coo	4	cold	file		auto	23508033	ok	0.602273	0.592481	0.631621	39.032196	3	0.602273,0.582689,0.660968	
+pbmc_multiome	rna	sweep	local	parquet_coo	4	warm	file		auto	23508033	ok	0.565865	0.561432	0.577266	41.543533	3	0.556999,0.588667,0.565865	
+pbmc_multiome	rna	sweep	local	parquet_coo	8	cold	file		auto	23508033	ok	0.666415	0.65539	0.689393	35.275356	3	0.644365,0.666415,0.712370	
+pbmc_multiome	rna	sweep	local	parquet_coo	16	cold	file		auto	23508033	ok	0.671533	0.669227	0.693367	35.006543	3	0.671533,0.666922,0.715201	
+pbmc_multiome	rna	sweep	local	parquet_coo	32	cold	file		auto	23508033	ok	0.700313	0.656471	0.713524	33.567915	3	0.612630,0.700313,0.726735	
+pbmc_multiome	rna	sweep	local	parquet_coo	44	cold	file		auto	23508033	ok	0.654475	0.65304	0.694495	35.918908	3	0.654475,0.651604,0.734515	
+pbmc_multiome	rna	sweep	local	zarr3	1	cold	file		auto	23508033	ok	0.419791	0.418867	0.421315	55.999358	3	0.419791,0.422838,0.417944	
+pbmc_multiome	rna	sweep	local	zarr3	2	cold	file		auto	23508033	ok	0.413683	0.411818	0.418896	56.826208	3	0.424109,0.413683,0.409952	
+pbmc_multiome	rna	sweep	local	zarr3	4	cold	file		auto	23508033	ok	0.402354	0.386701	0.416953	58.426263	3	0.431552,0.402354,0.371048	
+pbmc_multiome	rna	sweep	local	zarr3	4	warm	file		auto	23508033	ok	0.425005	0.396802	0.433039	55.312319	3	0.441073,0.425005,0.368599	
+pbmc_multiome	rna	sweep	local	zarr3	8	cold	file		auto	23508033	ok	0.609998	0.522744	0.629774	38.537884	3	0.435490,0.609998,0.649549	
+pbmc_multiome	rna	sweep	local	zarr3	16	cold	file		auto	23508033	ok	0.53316	0.477915	0.550563	44.091883	3	0.422670,0.533160,0.567965	
+pbmc_multiome	rna	sweep	local	zarr3	32	cold	file		auto	23508033	ok	0.540008	0.484925	0.552201	43.532711	3	0.429842,0.540008,0.564394	
+pbmc_multiome	rna	sweep	local	zarr3	44	cold	file		auto	23508033	ok	0.542059	0.488055	0.564071	43.367994	3	0.434050,0.542059,0.586083	
+pbmc_multiome	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	23508033	ok	0.999537	0.99842	0.999629	23.518922	3	0.999722,0.999537,0.997303	scalar
+pbmc_multiome	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	23508033	ok	0.273484	0.27347	0.27352	85.957617	3	0.273556,0.273456,0.273484	avx2
+pbmc_multiome	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	23508033	ok	0.274105	0.274003	0.274181	85.762876	3	0.274258,0.273902,0.274105	avx2
+pbmc_multiome	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	23508033	ok	1.197029	1.196054	1.197446	19.63865	3	1.197863,1.197029,1.195079	scalar
+pbmc_multiome	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	23508033	ok	0.463634	0.463608	0.46461	50.703859	3	0.463634,0.463583,0.465586	avx2
+pbmc_multiome	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	23508033	ok	0.461799	0.461794	0.462297	50.905335	3	0.461799,0.462795,0.461789	avx2
+pbmc_multiome	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	23508033	ok	0.521809	0.521181	0.522148	45.05103	3	0.522488,0.521809,0.520552	scalar
+pbmc_multiome	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	23508033	ok	0.149579	0.14953	0.149808	157.161319	3	0.149481,0.149579,0.150037	avx2
+pbmc_multiome	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	23508033	ok	0.149957	0.149667	0.150267	156.765159	3	0.150578,0.149957,0.149376	avx2
+pbmc_multiome	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	23508033	ok	0.624288	0.622968	0.625228	37.65575	3	0.624288,0.626167,0.621648	scalar
+pbmc_multiome	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	23508033	ok	0.24592	0.245822	0.359038	95.592197	3	0.472157,0.245725,0.245920	avx2
+pbmc_multiome	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	23508033	ok	0.245298	0.245279	0.24742	95.834589	3	0.245298,0.249542,0.245259	avx2
+pbmc_multiome	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	23508033	ok	0.261436	0.26123	0.262143	89.918883	3	0.262850,0.261436,0.261024	scalar
+pbmc_multiome	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	23508033	ok	0.076763	0.076631	0.077047	306.241718	3	0.077332,0.076763,0.076499	avx2
+pbmc_multiome	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	23508033	ok	0.076388	0.076236	0.076589	307.745104	3	0.076790,0.076388,0.076084	avx2
+pbmc_multiome	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	23508033	ok	0.314695	0.31338	0.315368	74.701006	3	0.316041,0.314695,0.312065	scalar
+pbmc_multiome	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	23508033	ok	0.124332	0.12412	0.124583	189.074679	3	0.124332,0.124835,0.123908	avx2
+pbmc_multiome	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	23508033	ok	0.123959	0.123915	0.124039	189.643616	3	0.124119,0.123872,0.123959	avx2
+pbmc_multiome	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	23508033	ok	0.133053	0.132845	0.133253	176.681721	3	0.133053,0.133453,0.132637	scalar
+pbmc_multiome	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	23508033	ok	0.039179	0.039169	0.039304	600.016157	3	0.039179,0.039429,0.039160	avx2
+pbmc_multiome	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	23508033	ok	0.038949	0.038899	0.039129	603.559347	3	0.039310,0.038949,0.038848	avx2
+pbmc_multiome	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	23508033	ok	0.158881	0.158812	0.159164	147.960002	3	0.159448,0.158744,0.158881	scalar
+pbmc_multiome	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	23508033	ok	0.063115	0.063092	0.063337	372.463487	3	0.063558,0.063070,0.063115	avx2
+pbmc_multiome	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	23508033	ok	0.063634	0.063409	0.063647	369.425669	3	0.063660,0.063184,0.063634	avx2
+pbmc_multiome	rna	sweep	memory	s1	16	memory	codec_cpp	native	scalar	23508033	ok	0.068318	0.068316	0.068479	344.097207	3	0.068641,0.068314,0.068318	scalar
+pbmc_multiome	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx2	23508033	ok	0.02078	0.02072	0.020803	1131.281665	3	0.020659,0.020825,0.020780	avx2
+pbmc_multiome	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx512	23508033	ok	0.020672	0.020601	0.020699	1137.191999	3	0.020727,0.020530,0.020672	avx2
+pbmc_multiome	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	scalar	23508033	ok	0.081805	0.081585	0.081835	287.366701	3	0.081805,0.081365,0.081865	scalar
+pbmc_multiome	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx2	23508033	ok	0.032591	0.032532	0.03265	721.30444	3	0.032709,0.032591,0.032472	avx2
+pbmc_multiome	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx512	23508033	ok	0.032637	0.032599	0.032688	720.287802	3	0.032739,0.032637,0.032561	avx2
+pbmc_multiome	rna	sweep	memory	s1	32	memory	codec_cpp	native	scalar	23508033	ok	0.035849	0.035786	0.035875	655.75143	3	0.035724,0.035849,0.035900	scalar
+pbmc_multiome	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx2	23508033	ok	0.012734	0.012684	0.012776	1846.083948	3	0.012818,0.012734,0.012633	avx2
+pbmc_multiome	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx512	23508033	ok	0.012798	0.012739	0.012848	1836.852086	3	0.012897,0.012798,0.012680	avx2
+pbmc_multiome	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	scalar	23508033	ok	0.042112	0.041927	0.042116	558.226468	3	0.042112,0.041743,0.042119	scalar
+pbmc_multiome	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx2	23508033	ok	0.018101	0.018091	0.018154	1298.714601	3	0.018101,0.018082,0.018207	avx2
+pbmc_multiome	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx512	23508033	ok	0.018294	0.018128	0.018426	1285.013283	3	0.018294,0.018559,0.017961	avx2
+pbmc_multiome	rna	sweep	memory	s1	44	memory	codec_cpp	native	scalar	23508033	ok	0.027756	0.027726	0.027825	846.953199	3	0.027895,0.027695,0.027756	scalar
+pbmc_multiome	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx2	23508033	ok	0.011589	0.011492	0.012543	2028.478126	3	0.011589,0.013497,0.011396	avx2
+pbmc_multiome	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx512	23508033	ok	0.01184	0.011736	0.014115	1985.47576	3	0.011632,0.011840,0.016389	avx2
+pbmc_multiome	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	scalar	23508033	ok	0.03227	0.032248	0.032935	728.479486	3	0.033600,0.032270,0.032227	scalar
+pbmc_multiome	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx2	23508033	ok	0.014714	0.014687	0.014878	1597.664333	3	0.015043,0.014661,0.014714	avx2
+pbmc_multiome	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx512	23508033	ok	0.014731	0.014687	0.0148	1595.820582	3	0.014870,0.014731,0.014643	avx2

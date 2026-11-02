@@ -3,9 +3,12 @@
 Manuscript and benchmark for the `.s1` count-matrix format. Every figure, table and number in the paper is produced
 by one pipeline from public datasets; nothing in the `.tex` files is typed by hand.
 
-**Status:** the plan, the dataset list, the pipeline and the manuscript are ready. No dataset has been downloaded and
-no benchmark has been run, so `generated/` holds header-only tables and the PDF shows each missing number as a red
-`[??key]`. `PLAN.md` is the handoff document for running it on a cluster.
+**Status:** the benchmark has run on Clipper (GVSU), 2026-10-29/30: 27 datasets, 29 matrices, plus two out-of-domain
+extensions, timed on 8 cores of shared bigmem nodes (Xeon Gold 6226, spinning RAID). `generated/` holds the final
+numbers and tables, `results/` the per-stage results behind them (with host records in `results/env/` and the
+environment locks), and the manuscript builds with no missing values. `PLAN.md` is the original work order; where the
+run departed from it (CPU nodes instead of an H100 host, the trimmed timing protocol, the bandwidth proxy), the methods
+section and `REVIEW_RESPONSE.md` describe what was done.
 
 ## Layout
 

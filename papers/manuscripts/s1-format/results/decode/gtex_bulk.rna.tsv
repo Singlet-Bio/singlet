@@ -1,0 +1,39 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+gtex_bulk	rna	main	local	csc_i32	4	cold	file		auto	515414926	ok	8.704991	7.423912	9.819446	59.209129	3	8.704991,10.933900,6.142833	
+gtex_bulk	rna	main	local	csc_i32	4	warm	file		auto	515414926	ok	1.551701	1.550947	1.562565	332.161265	3	1.573429,1.550192,1.551701	
+gtex_bulk	rna	main	local	tenx_h5	4	cold	file		auto	515414926	ok	22.008281	21.972889	22.016385	23.419136	3	22.024489,22.008281,21.937496	
+gtex_bulk	rna	main	local	tenx_h5	4	warm	file		auto	515414926	ok	21.708982	21.656893	21.877174	23.742013	3	21.604804,21.708982,22.045366	
+gtex_bulk	rna	main	local	h5ad_none	4	cold	file		auto	515414926	ok	5.94431	5.943809	6.374197	86.707272	3	6.804085,5.944310,5.943308	
+gtex_bulk	rna	main	local	h5ad_none	4	warm	file		auto	515414926	ok	1.925931	1.92366	1.935838	267.618522	3	1.945745,1.921389,1.925931	
+gtex_bulk	rna	main	local	h5ad_gzip	4	cold	file		auto	515414926	ok	18.453255	18.452022	18.743071	27.930841	3	19.032887,18.450790,18.453255	
+gtex_bulk	rna	main	local	h5ad_gzip	4	warm	file		auto	515414926	ok	17.6689	17.668132	17.677309	29.170742	3	17.685717,17.668900,17.667363	
+gtex_bulk	rna	main	local	zarr	4	cold	file		auto	515414926	ok	4.5507	4.53582	4.935564	113.260572	3	5.320428,4.520939,4.550700	
+gtex_bulk	rna	main	local	zarr	4	warm	file		auto	515414926	ok	1.920459	1.910551	1.956195	268.381166	3	1.991931,1.920459,1.900644	
+gtex_bulk	rna	main	local	soma	4	cold	file		auto	515414926	ok	12.003827	11.890635	12.240087	42.937549	3	12.476347,11.777442,12.003827	
+gtex_bulk	rna	main	local	soma	4	warm	file		auto	515414926	ok	11.565999	11.364838	11.605652	44.562941	3	11.163676,11.645305,11.565999	
+gtex_bulk	rna	main	local	s1	4	cold	file	native	auto	515414926	ok	2.61081	2.60333	3.42118	197.415745	3	4.231550,2.610810,2.595851	avx2
+gtex_bulk	rna	main	local	s1	4	cold	file	canonical	auto	515414926	ok	3.24918	3.242559	3.921935	158.629255	3	4.594690,3.235939,3.249180	avx2
+gtex_bulk	rna	main	local	s1	4	warm	file	native	auto	515414926	ok	2.182431	2.177568	2.192389	236.165539	3	2.202348,2.182431,2.172706	avx2
+gtex_bulk	rna	main	local	s1	4	warm	file	canonical	auto	515414926	ok	2.828135	2.825226	2.828293	182.245508	3	2.822317,2.828135,2.828452	avx2
+gtex_bulk	rna	main	local	s1	4	warm	codec	native	scalar	515414926	ok	4.808709	4.804973	4.836495	107.18363	3	4.801236,4.864281,4.808709	scalar
+gtex_bulk	rna	main	local	s1	4	warm	codec	native	avx2	515414926	ok	1.745079	1.744613	1.75616	295.353309	3	1.767240,1.745079,1.744147	avx2
+gtex_bulk	rna	main	local	s1	4	warm	codec	native	avx512	515414926	ok	1.749515	1.747722	1.763977	294.604456	3	1.749515,1.745929,1.778439	avx2
+gtex_bulk	rna	main	local	s1	4	warm	codec	canonical	scalar	515414926	ok	5.447432	5.446487	5.474591	94.616136	3	5.445543,5.501750,5.447432	scalar
+gtex_bulk	rna	main	local	s1	4	warm	codec	canonical	avx2	515414926	ok	2.398563	2.388471	2.402826	214.884863	3	2.378378,2.398563,2.407088	avx2
+gtex_bulk	rna	main	local	s1	4	warm	codec	canonical	avx512	515414926	ok	2.40234	2.392746	2.404093	214.546995	3	2.383151,2.402340,2.405846	avx2
+gtex_bulk	rna	main	local	s1_pack	4	cold	file	native	auto	515414926	ok	2.597203	2.592503	3.274498	198.449993	3	3.951794,2.597203,2.587803	avx2
+gtex_bulk	rna	main	local	s1_pack	4	cold	file	canonical	auto	515414926	ok	3.237478	3.23545	3.968067	159.20262	3	4.698657,3.237478,3.233422	avx2
+gtex_bulk	rna	main	local	s1_pack	4	warm	file	native	auto	515414926	ok	2.169103	2.163174	2.176161	237.616661	3	2.183220,2.169103,2.157245	avx2
+gtex_bulk	rna	main	local	s1_pack	4	warm	file	canonical	auto	515414926	ok	2.813676	2.807377	2.815646	183.182019	3	2.801078,2.813676,2.817616	avx2
+gtex_bulk	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	515414926	ok	18.957287	18.956187	19.057308	27.188222	3	19.157328,18.955086,18.957287	scalar
+gtex_bulk	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	515414926	ok	5.719655	5.719018	5.721803	90.11294	3	5.723951,5.719655,5.718381	avx2
+gtex_bulk	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	515414926	ok	5.808596	5.807722	5.809915	88.733134	3	5.811235,5.808596,5.806849	avx2
+gtex_bulk	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	515414926	ok	21.338	21.278401	21.341352	24.154791	3	21.218801,21.338000,21.344705	scalar
+gtex_bulk	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	515414926	ok	8.011126	8.00835	8.01581	64.337389	3	8.005574,8.011126,8.020494	avx2
+gtex_bulk	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	515414926	ok	8.016641	8.014585	8.029523	64.293128	3	8.016641,8.042406,8.012529	avx2
+gtex_bulk	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	515414926	ok	4.730508	4.725561	4.732363	108.955513	3	4.720613,4.730508,4.734217	scalar
+gtex_bulk	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	515414926	ok	1.442291	1.442265	1.442582	357.358485	3	1.442239,1.442873,1.442291	avx2
+gtex_bulk	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	515414926	ok	1.439561	1.43944	1.439846	358.036183	3	1.439561,1.440130,1.439318	avx2
+gtex_bulk	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	515414926	ok	5.372702	5.369476	5.375765	95.932163	3	5.378829,5.366249,5.372702	scalar
+gtex_bulk	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	515414926	ok	2.044121	2.03686	2.048164	252.145018	3	2.029600,2.044121,2.052207	avx2
+gtex_bulk	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	515414926	ok	2.069154	2.049603	2.077618	249.094522	3	2.030052,2.069154,2.086083	avx2

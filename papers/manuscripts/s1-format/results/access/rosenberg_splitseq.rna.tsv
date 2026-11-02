@@ -1,0 +1,7 @@
+dataset	matrix	format	batches	bytes_per_batch	requests_per_batch	requests_p90	needed_per_batch	overread	index_bytes	file_bytes	chunk_elems
+rosenberg_splitseq	rna	s1	200	511471.0	8.0	8.0	265563.598424	1.93236	84723	80869999	NA
+rosenberg_splitseq	rna	h5ad_gzip	200	1584039.5	22.0	24.0	941764.224015	1.699177	510335	286788070	29979
+rosenberg_splitseq	rna	h5ad_lzf	200	2829965.5	22.0	24.0	1722548.032104	1.6669	624256	524554037	29979
+rosenberg_splitseq	rna	h5ad_none	200	5212044.0	22.0	24.0	3253136.769148	1.627354	624256	990652216	29979
+rosenberg_splitseq	rna	tenx_h5	200	850976.5	23.0	25.0	604112.156112	1.412316	312901	183965535	29979
+rosenberg_splitseq	rna	zarr	200	9264479.5	20.0	22.0	748793.974594	12.142588	322806	228024354	479651

@@ -1,0 +1,7 @@
+codec	bits	mnnzs
+pz2_avx2	5.32381	82.8485
+zstd19_leb_gaps	7.53744	187.075
+zstd3_leb_gaps	8.19576	200.116
+bitpack256_gaps	14.0042	518.83
+streamvbyte_gaps	20.0412	550.665
+fixed_bytes	32	907.903

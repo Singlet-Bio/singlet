@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+visium_lymph_node	rna	spatial_seq	21210753	10	3.666374	3.543928	3.846282	3.784223	3.4129	3.784052	3.846085	300000.0	3.89961

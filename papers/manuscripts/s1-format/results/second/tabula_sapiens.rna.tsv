@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+tabula_sapiens	rna	zstd22	732961912	732677079	0.999611
+tabula_sapiens	rna	xz9e	732961912	732648064	0.999572
+tabula_sapiens	rna	brotli11	732961912	732621582	0.999536
+tabula_sapiens	rna	bzip2_9	732961912	736029409	1.004185

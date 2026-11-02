@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+rosenberg_splitseq	rna	main	nfs	csc_i32	4	cold	file		auto	122790641	ok	0.792338	0.787286	0.920522	154.972634	3	1.048707,0.792338,0.782235	
+rosenberg_splitseq	rna	main	nfs	mtx_gz	4	cold	file		auto	122790641	ok	9.338966	9.318831	9.480606	13.148206	3	9.622246,9.338966,9.298696	
+rosenberg_splitseq	rna	main	nfs	tenx_h5	4	cold	file		auto	122790641	ok	4.697862	4.696308	4.706926	26.13756	3	4.715990,4.697862,4.694754	
+rosenberg_splitseq	rna	main	nfs	h5ad_none	4	cold	file		auto	122790641	ok	1.230182	1.220341	1.345035	99.815009	3	1.459888,1.230182,1.210501	
+rosenberg_splitseq	rna	main	nfs	h5ad_gzip	4	cold	file		auto	122790641	ok	3.946084	3.93504	3.95398	31.117084	3	3.961876,3.946084,3.923995	
+rosenberg_splitseq	rna	main	nfs	h5ad_lzf	4	cold	file		auto	122790641	ok	2.382199	2.375691	2.44458	51.545078	3	2.506960,2.369183,2.382199	
+rosenberg_splitseq	rna	main	nfs	zarr	4	cold	file		auto	122790641	ok	0.907426	0.906927	1.274832	135.317508	3	1.642238,0.906427,0.907426	
+rosenberg_splitseq	rna	main	nfs	soma	4	cold	file		auto	122790641	ok	2.847782	2.846057	2.860944	43.117989	3	2.874105,2.844332,2.847782	
+rosenberg_splitseq	rna	main	nfs	parquet_coo	4	cold	file		auto	122790641	ok	2.851273	2.78331	3.010756	43.065196	3	3.170238,2.851273,2.715347	
+rosenberg_splitseq	rna	main	nfs	csc_zstd19	4	cold	file		auto	122790641	ok	1.650694	1.644166	1.662075	74.387286	3	1.673456,1.650694,1.637638	
+rosenberg_splitseq	rna	main	nfs	rds_gz	4	cold	file		auto	122790641	ok	6.055064	6.043269	6.251779	20.279	3	6.448494,6.055064,6.031474	
+rosenberg_splitseq	rna	main	nfs	rds_xz	4	cold	file		auto	122790641	ok	8.69487	8.650351	8.773246	14.122194	3	8.694870,8.851623,8.605833	
+rosenberg_splitseq	rna	main	nfs	bpcells	4	cold	file		auto	122790641	ok	16.402242	16.267404	16.907183	7.486211	3	17.412123,16.132565,16.402242	
+rosenberg_splitseq	rna	main	nfs	s1	4	cold	file	native	auto	122790641	ok	0.502812	0.50188	0.561192	244.20784	3	0.619573,0.502812,0.500949	avx2
+rosenberg_splitseq	rna	main	nfs	s1	4	cold	file	canonical	auto	122790641	ok	0.707755	0.706681	0.709265	173.49319	3	0.707755,0.710774,0.705607	avx2
+rosenberg_splitseq	rna	main	nfs	s1_pack	4	cold	file	native	auto	122790641	ok	0.503744	0.502296	0.521967	243.75601	3	0.540191,0.503744,0.500847	avx2
+rosenberg_splitseq	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	122790641	ok	0.707804	0.707769	0.709683	173.481027	3	0.707733,0.711562,0.707804	avx2
+rosenberg_splitseq	rna	main	nfs	zarr3	4	cold	file		auto	122790641	ok	1.631957	1.630587	1.682418	75.24135	3	1.732879,1.629218,1.631957	

@@ -1,0 +1,117 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+hao_citeseq	rna	sweep	local	s1	1	cold	file	native	auto	354321830	ok	6.017077	5.042533	7.353498	58.886035	3	6.017077,4.067989,8.689919	avx2
+hao_citeseq	rna	sweep	local	s1	1	cold	file	canonical	auto	354321830	ok	6.292773	6.268898	6.395004	56.306152	3	6.245023,6.497235,6.292773	avx2
+hao_citeseq	rna	sweep	local	s1	2	cold	file	native	auto	354321830	ok	2.541645	2.537216	2.562783	139.40651	3	2.541645,2.532786,2.583921	avx2
+hao_citeseq	rna	sweep	local	s1	2	cold	file	canonical	auto	354321830	ok	3.690397	3.665332	3.701056	96.011854	3	3.640266,3.690397,3.711715	avx2
+hao_citeseq	rna	sweep	local	s1	4	cold	file	native	auto	354321830	ok	1.523354	1.518628	1.706696	232.593228	3	1.523354,1.890039,1.513901	avx2
+hao_citeseq	rna	sweep	local	s1	4	cold	file	canonical	auto	354321830	ok	2.06653	2.063114	2.086151	171.457409	3	2.066530,2.059699,2.105772	avx2
+hao_citeseq	rna	sweep	local	s1	4	warm	file	native	auto	354321830	ok	1.424194	1.423706	1.447964	248.787553	3	1.424194,1.423217,1.471733	avx2
+hao_citeseq	rna	sweep	local	s1	4	warm	file	canonical	auto	354321830	ok	2.095503	2.062557	4.257318	169.086766	3	2.029611,2.095503,6.419132	avx2
+hao_citeseq	rna	sweep	local	s1	8	cold	file	native	auto	354321830	ok	0.934047	0.932983	0.938845	379.340669	3	0.943643,0.934047,0.931919	avx2
+hao_citeseq	rna	sweep	local	s1	8	cold	file	canonical	auto	354321830	ok	1.199454	1.194622	1.211321	295.402559	3	1.199454,1.189790,1.223187	avx2
+hao_citeseq	rna	sweep	local	s1	16	cold	file	native	auto	354321830	ok	0.615334	0.612929	0.618009	575.820252	3	0.620684,0.610524,0.615334	avx2
+hao_citeseq	rna	sweep	local	s1	16	cold	file	canonical	auto	354321830	ok	0.750557	0.746822	0.761134	472.078782	3	0.750557,0.743088,0.771711	avx2
+hao_citeseq	rna	sweep	local	s1	32	cold	file	native	auto	354321830	ok	0.478166	0.477451	0.482669	741.001475	3	0.487171,0.478166,0.476736	avx2
+hao_citeseq	rna	sweep	local	s1	32	cold	file	canonical	auto	354321830	ok	0.552493	0.549271	0.558992	641.314282	3	0.565490,0.552493,0.546049	avx2
+hao_citeseq	rna	sweep	local	s1	44	cold	file	native	auto	354321830	ok	0.481471	0.480319	0.490819	735.914597	3	0.481471,0.500167,0.479167	avx2
+hao_citeseq	rna	sweep	local	s1	44	cold	file	canonical	auto	354321830	ok	0.531067	0.526024	0.536126	667.188372	3	0.541185,0.531067,0.520982	avx2
+hao_citeseq	rna	sweep	local	s1	1	warm	codec	native	scalar	354321830	ok	13.105833	13.098028	13.25458	27.03543	3	13.403327,13.105833,13.090223	scalar
+hao_citeseq	rna	sweep	local	s1	1	warm	codec	native	avx2	354321830	ok	3.824575	3.821649	3.846114	92.643453	3	3.818724,3.867653,3.824575	avx2
+hao_citeseq	rna	sweep	local	s1	1	warm	codec	native	avx512	354321830	ok	3.82298	3.817628	3.844324	92.682115	3	3.812277,3.865668,3.822980	avx2
+hao_citeseq	rna	sweep	local	s1	1	warm	codec	canonical	scalar	354321830	ok	15.343995	15.335787	15.368283	23.091889	3	15.392572,15.327580,15.343995	scalar
+hao_citeseq	rna	sweep	local	s1	1	warm	codec	canonical	avx2	354321830	ok	5.990887	5.98325	6.017543	59.143467	3	6.044200,5.975613,5.990887	avx2
+hao_citeseq	rna	sweep	local	s1	1	warm	codec	canonical	avx512	354321830	ok	6.004992	6.001173	6.030749	59.004551	3	6.056507,5.997355,6.004992	avx2
+hao_citeseq	rna	sweep	local	s1	2	warm	codec	native	scalar	354321830	ok	13.289475	10.324671	13.30284	26.661839	3	7.359867,13.316206,13.289475	scalar
+hao_citeseq	rna	sweep	local	s1	2	warm	codec	native	avx2	354321830	ok	2.339573	2.323718	3.171899	151.447237	3	2.307862,2.339573,4.004225	avx2
+hao_citeseq	rna	sweep	local	s1	2	warm	codec	native	avx512	354321830	ok	3.482517	2.918604	3.751799	101.743021	3	2.354690,3.482517,4.021081	avx2
+hao_citeseq	rna	sweep	local	s1	2	warm	codec	canonical	scalar	354321830	ok	15.608408	15.584238	15.626769	22.700703	3	15.608408,15.560067,15.645130	scalar
+hao_citeseq	rna	sweep	local	s1	2	warm	codec	canonical	avx2	354321830	ok	3.576997	3.52922	4.876004	99.055671	3	3.576997,3.481442,6.175011	avx2
+hao_citeseq	rna	sweep	local	s1	2	warm	codec	canonical	avx512	354321830	ok	3.464165	3.462325	4.832687	102.282025	3	3.460485,3.464165,6.201208	avx2
+hao_citeseq	rna	sweep	local	s1	4	warm	codec	native	scalar	354321830	ok	3.887926	3.856613	8.749667	91.133892	3	3.825299,3.887926,13.611408	scalar
+hao_citeseq	rna	sweep	local	s1	4	warm	codec	native	avx2	354321830	ok	1.273877	1.273638	1.273884	278.144532	3	1.273892,1.273400,1.273877	avx2
+hao_citeseq	rna	sweep	local	s1	4	warm	codec	native	avx512	354321830	ok	1.276889	1.275637	1.282735	277.488353	3	1.276889,1.274384,1.288581	avx2
+hao_citeseq	rna	sweep	local	s1	4	warm	codec	canonical	scalar	354321830	ok	4.448742	4.417934	10.087115	79.645406	3	4.387127,4.448742,15.725487	scalar
+hao_citeseq	rna	sweep	local	s1	4	warm	codec	canonical	avx2	354321830	ok	1.84489	1.842771	1.850393	192.055829	3	1.855897,1.840651,1.844890	avx2
+hao_citeseq	rna	sweep	local	s1	4	warm	codec	canonical	avx512	354321830	ok	1.817085	1.815302	2.091251	194.994603	3	2.365416,1.813519,1.817085	avx2
+hao_citeseq	rna	sweep	local	s1	8	warm	codec	native	scalar	354321830	ok	1.97072	1.951783	2.118496	179.793068	3	1.932847,1.970720,2.266272	scalar
+hao_citeseq	rna	sweep	local	s1	8	warm	codec	native	avx2	354321830	ok	0.689316	0.688242	0.690698	514.019492	3	0.692080,0.689316,0.687168	avx2
+hao_citeseq	rna	sweep	local	s1	8	warm	codec	native	avx512	354321830	ok	0.690262	0.689975	0.732975	513.314842	3	0.689687,0.775687,0.690262	avx2
+hao_citeseq	rna	sweep	local	s1	8	warm	codec	canonical	scalar	354321830	ok	2.23484	2.228861	2.304635	158.544623	3	2.222882,2.234840,2.374430	scalar
+hao_citeseq	rna	sweep	local	s1	8	warm	codec	canonical	avx2	354321830	ok	0.956415	0.955623	0.963895	370.468573	3	0.956415,0.971374,0.954831	avx2
+hao_citeseq	rna	sweep	local	s1	8	warm	codec	canonical	avx512	354321830	ok	0.947047	0.946771	0.950901	374.133224	3	0.954755,0.946495,0.947047	avx2
+hao_citeseq	rna	sweep	local	s1	16	warm	codec	native	scalar	354321830	ok	0.991905	0.991235	0.992644	357.21346	3	0.993383,0.990565,0.991905	scalar
+hao_citeseq	rna	sweep	local	s1	16	warm	codec	native	avx2	354321830	ok	0.362814	0.361913	0.36466	976.593379	3	0.366505,0.362814,0.361012	avx2
+hao_citeseq	rna	sweep	local	s1	16	warm	codec	native	avx512	354321830	ok	0.3627	0.361846	0.365782	976.89977	3	0.368864,0.360992,0.362700	avx2
+hao_citeseq	rna	sweep	local	s1	16	warm	codec	canonical	scalar	354321830	ok	1.131699	1.129234	1.131972	313.088313	3	1.132244,1.126768,1.131699	scalar
+hao_citeseq	rna	sweep	local	s1	16	warm	codec	canonical	avx2	354321830	ok	0.493162	0.491487	0.49328	718.469556	3	0.493398,0.489812,0.493162	avx2
+hao_citeseq	rna	sweep	local	s1	16	warm	codec	canonical	avx512	354321830	ok	0.493234	0.492423	0.495099	718.365205	3	0.496965,0.493234,0.491613	avx2
+hao_citeseq	rna	sweep	local	s1	32	warm	codec	native	scalar	354321830	ok	0.522438	0.522321	0.522833	678.208982	3	0.523228,0.522438,0.522205	scalar
+hao_citeseq	rna	sweep	local	s1	32	warm	codec	native	avx2	354321830	ok	0.222835	0.222752	0.222882	1590.066162	3	0.222835,0.222669,0.222929	avx2
+hao_citeseq	rna	sweep	local	s1	32	warm	codec	native	avx512	354321830	ok	0.223996	0.223675	0.224392	1581.8227	3	0.223996,0.224788,0.223355	avx2
+hao_citeseq	rna	sweep	local	s1	32	warm	codec	canonical	scalar	354321830	ok	0.591594	0.591371	0.591979	598.92745	3	0.592365,0.591149,0.591594	scalar
+hao_citeseq	rna	sweep	local	s1	32	warm	codec	canonical	avx2	354321830	ok	0.286533	0.285703	0.286699	1236.582269	3	0.286864,0.286533,0.284874	avx2
+hao_citeseq	rna	sweep	local	s1	32	warm	codec	canonical	avx512	354321830	ok	0.286162	0.286053	0.288335	1238.185457	3	0.290507,0.286162,0.285943	avx2
+hao_citeseq	rna	sweep	local	s1	44	warm	codec	native	scalar	354321830	ok	0.409741	0.408856	0.410474	864.746052	3	0.407970,0.411207,0.409741	scalar
+hao_citeseq	rna	sweep	local	s1	44	warm	codec	native	avx2	354321830	ok	0.214542	0.214089	0.215257	1651.530292	3	0.215973,0.213637,0.214542	avx2
+hao_citeseq	rna	sweep	local	s1	44	warm	codec	native	avx512	354321830	ok	0.215074	0.214386	0.215217	1647.439288	3	0.215360,0.215074,0.213697	avx2
+hao_citeseq	rna	sweep	local	s1	44	warm	codec	canonical	scalar	354321830	ok	0.479527	0.475998	0.483093	738.898533	3	0.472470,0.479527,0.486658	scalar
+hao_citeseq	rna	sweep	local	s1	44	warm	codec	canonical	avx2	354321830	ok	0.259121	0.258172	0.259165	1367.398453	3	0.259121,0.259209,0.257224	avx2
+hao_citeseq	rna	sweep	local	s1	44	warm	codec	canonical	avx512	354321830	ok	0.264314	0.263973	0.265927	1340.532037	3	0.264314,0.267539,0.263632	avx2
+hao_citeseq	rna	sweep	local	h5ad_gzip	1	cold	file		auto	354321830	ok	11.234339	11.232243	11.281815	31.539179	3	11.329291,11.234339,11.230147	
+hao_citeseq	rna	sweep	local	h5ad_gzip	2	cold	file		auto	354321830	ok	11.242517	11.240776	11.25961	31.516237	3	11.276703,11.239034,11.242517	
+hao_citeseq	rna	sweep	local	h5ad_gzip	4	cold	file		auto	354321830	ok	11.242435	11.241028	11.388928	31.516466	3	11.535420,11.242435,11.239621	
+hao_citeseq	rna	sweep	local	h5ad_gzip	4	warm	file		auto	354321830	ok	10.973534	10.97228	10.979576	32.288761	3	10.973534,10.985617,10.971025	
+hao_citeseq	rna	sweep	local	h5ad_gzip	8	cold	file		auto	354321830	ok	11.266737	11.264257	11.299245	31.448487	3	11.331753,11.266737,11.261777	
+hao_citeseq	rna	sweep	local	h5ad_gzip	16	cold	file		auto	354321830	ok	11.253085	11.242937	11.286266	31.486639	3	11.319446,11.232788,11.253085	
+hao_citeseq	rna	sweep	local	h5ad_gzip	32	cold	file		auto	354321830	ok	11.27409	11.260677	11.279961	31.427976	3	11.285833,11.247265,11.274090	
+hao_citeseq	rna	sweep	local	h5ad_gzip	44	cold	file		auto	354321830	ok	11.257001	11.254956	11.276493	31.475687	3	11.295986,11.257001,11.252912	
+hao_citeseq	rna	sweep	local	csc_i32	1	cold	file		auto	354321830	ok	3.580943	3.578364	3.581641	98.946504	3	3.582339,3.580943,3.575784	
+hao_citeseq	rna	sweep	local	csc_i32	2	cold	file		auto	354321830	ok	3.588175	3.585568	3.625224	98.747093	3	3.582962,3.588175,3.662274	
+hao_citeseq	rna	sweep	local	csc_i32	4	cold	file		auto	354321830	ok	3.568352	3.567659	3.574558	99.295637	3	3.580764,3.568352,3.566965	
+hao_citeseq	rna	sweep	local	csc_i32	4	warm	file		auto	354321830	ok	1.361781	1.361207	1.366144	260.190049	3	1.370506,1.361781,1.360632	
+hao_citeseq	rna	sweep	local	csc_i32	8	cold	file		auto	354321830	ok	3.593292	3.590232	3.599087	98.606478	3	3.604882,3.593292,3.587173	
+hao_citeseq	rna	sweep	local	csc_i32	16	cold	file		auto	354321830	ok	3.603268	3.595671	3.604072	98.333477	3	3.603268,3.604875,3.588074	
+hao_citeseq	rna	sweep	local	csc_i32	32	cold	file		auto	354321830	ok	3.609563	3.605036	3.612467	98.161977	3	3.615372,3.609563,3.600510	
+hao_citeseq	rna	sweep	local	csc_i32	44	cold	file		auto	354321830	ok	3.611326	3.597478	3.611584	98.114048	3	3.611326,3.583631,3.611842	
+hao_citeseq	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	354321830	ok	13.321499	13.310055	13.444055	26.597745	3	13.298611,13.321499,13.566612	scalar
+hao_citeseq	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	354321830	ok	3.69677	3.692913	3.704843	95.846328	3	3.696770,3.712917,3.689057	avx2
+hao_citeseq	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	354321830	ok	3.882999	3.878715	3.890727	91.249529	3	3.882999,3.898456,3.874430	avx2
+hao_citeseq	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	354321830	ok	15.643557	15.64031	15.753764	22.649697	3	15.637062,15.863971,15.643557	scalar
+hao_citeseq	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	354321830	ok	5.949083	5.948905	5.959482	59.559066	3	5.969881,5.949083,5.948727	avx2
+hao_citeseq	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	354321830	ok	5.92505	5.924336	5.935957	59.800648	3	5.946865,5.925050,5.923622	avx2
+hao_citeseq	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	354321830	ok	13.82676	13.76015	13.871699	25.625803	3	13.693540,13.826760,13.916638	scalar
+hao_citeseq	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	354321830	ok	2.044804	2.034785	2.047982	173.279116	3	2.044804,2.024766,2.051160	avx2
+hao_citeseq	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	354321830	ok	2.043407	2.033065	2.043513	173.397581	3	2.043619,2.022723,2.043407	avx2
+hao_citeseq	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	354321830	ok	16.190311	16.136164	16.210807	21.884807	3	16.082017,16.190311,16.231302	scalar
+hao_citeseq	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	354321830	ok	3.594673	3.475777	3.907625	98.568585	3	3.356881,4.220578,3.594673	avx2
+hao_citeseq	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	354321830	ok	6.043413	4.694378	6.155968	58.629425	3	3.345343,6.268522,6.043413	avx2
+hao_citeseq	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	354321830	ok	7.702243	5.71329	10.741612	46.002422	3	3.724336,13.780981,7.702243	scalar
+hao_citeseq	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	354321830	ok	1.105	1.09263	1.120842	320.65324	3	1.105000,1.136683,1.080259	avx2
+hao_citeseq	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	354321830	ok	1.104841	1.092417	1.119661	320.699386	3	1.104841,1.134482,1.079994	avx2
+hao_citeseq	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	354321830	ok	16.140481	10.235807	16.25504	21.952371	3	4.331133,16.140481,16.369600	scalar
+hao_citeseq	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	354321830	ok	1.669579	1.662331	1.706564	212.222261	3	1.743549,1.655083,1.669579	avx2
+hao_citeseq	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	354321830	ok	1.673629	1.666813	1.710732	211.708706	3	1.747835,1.659996,1.673629	avx2
+hao_citeseq	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	354321830	ok	1.869326	1.864692	2.151003	189.545232	3	1.860057,1.869326,2.432680	scalar
+hao_citeseq	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	354321830	ok	0.532073	0.531882	0.532312	665.9271	3	0.532550,0.532073,0.531691	avx2
+hao_citeseq	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	354321830	ok	0.532294	0.532203	0.532343	665.650618	3	0.532294,0.532112,0.532392	avx2
+hao_citeseq	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	354321830	ok	2.354805	2.25459	2.360225	150.467589	3	2.154376,2.365644,2.354805	scalar
+hao_citeseq	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	354321830	ok	0.819788	0.819695	0.820089	432.211535	3	0.820390,0.819602,0.819788	avx2
+hao_citeseq	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	354321830	ok	0.820633	0.820294	0.8216	431.76649	3	0.822568,0.819954,0.820633	avx2
+hao_citeseq	rna	sweep	memory	s1	16	memory	codec_cpp	native	scalar	354321830	ok	0.924669	0.923744	0.924679	383.187746	3	0.924669,0.924689,0.922818	scalar
+hao_citeseq	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx2	354321830	ok	0.277308	0.277245	0.277529	1277.719467	3	0.277751,0.277181,0.277308	avx2
+hao_citeseq	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx512	354321830	ok	0.277008	0.276838	0.277199	1279.103239	3	0.277391,0.277008,0.276669	avx2
+hao_citeseq	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	scalar	354321830	ok	1.085626	1.082946	1.088817	326.375593	3	1.080266,1.092009,1.085626	scalar
+hao_citeseq	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx2	354321830	ok	0.41897	0.418913	0.419148	845.697377	3	0.418970,0.419325,0.418856	avx2
+hao_citeseq	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx512	354321830	ok	0.416979	0.416948	0.417403	849.73543	3	0.416979,0.417826,0.416918	avx2
+hao_citeseq	rna	sweep	memory	s1	32	memory	codec_cpp	native	scalar	354321830	ok	0.467966	0.467817	0.468041	757.152934	3	0.467668,0.468117,0.467966	scalar
+hao_citeseq	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx2	354321830	ok	0.172227	0.172162	0.172287	2057.295488	3	0.172227,0.172097,0.172346	avx2
+hao_citeseq	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx512	354321830	ok	0.171798	0.171792	0.171893	2062.432799	3	0.171987,0.171798,0.171786	avx2
+hao_citeseq	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	scalar	354321830	ok	0.538919	0.538872	0.539121	657.46769	3	0.538919,0.539322,0.538825	scalar
+hao_citeseq	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx2	354321830	ok	0.224411	0.224307	0.224447	1578.89689	3	0.224411,0.224484,0.224203	avx2
+hao_citeseq	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx512	354321830	ok	0.224702	0.224677	0.224757	1576.852142	3	0.224812,0.224652,0.224702	avx2
+hao_citeseq	rna	sweep	memory	s1	44	memory	codec_cpp	native	scalar	354321830	ok	0.342713	0.342634	0.342962	1033.873328	3	0.342713,0.342555,0.343210	scalar
+hao_citeseq	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx2	354321830	ok	0.159999	0.159975	0.160081	2214.525278	3	0.159952,0.159999,0.160162	avx2
+hao_citeseq	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx512	354321830	ok	0.159758	0.159717	0.159933	2217.86596	3	0.160107,0.159758,0.159675	avx2
+hao_citeseq	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	scalar	354321830	ok	0.397088	0.396975	0.397203	892.300523	3	0.396862,0.397088,0.397317	scalar
+hao_citeseq	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx2	354321830	ok	0.191573	0.191501	0.191893	1849.539497	3	0.191430,0.192213,0.191573	avx2
+hao_citeseq	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx512	354321830	ok	0.185035	0.184982	0.185036	1914.890858	3	0.185035,0.185037,0.184930	avx2

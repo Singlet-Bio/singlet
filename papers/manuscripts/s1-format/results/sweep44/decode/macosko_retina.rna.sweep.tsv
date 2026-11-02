@@ -1,0 +1,117 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+macosko_retina	rna	sweep	local	s1	1	cold	file	native	auto	37879696	ok	0.538348	0.535186	0.541903	70.362902	3	0.545458,0.538348,0.532024	avx2
+macosko_retina	rna	sweep	local	s1	1	cold	file	canonical	auto	37879696	ok	0.704631	0.703035	0.741898	53.758227	3	0.779165,0.704631,0.701440	avx2
+macosko_retina	rna	sweep	local	s1	2	cold	file	native	auto	37879696	ok	0.296005	0.291132	0.297139	127.969826	3	0.296005,0.298273,0.286259	avx2
+macosko_retina	rna	sweep	local	s1	2	cold	file	canonical	auto	37879696	ok	0.419062	0.413607	0.419127	90.391702	3	0.419062,0.419193,0.408152	avx2
+macosko_retina	rna	sweep	local	s1	4	cold	file	native	auto	37879696	ok	0.184041	0.181841	0.18459	205.821775	3	0.185139,0.184041,0.179640	avx2
+macosko_retina	rna	sweep	local	s1	4	cold	file	canonical	auto	37879696	ok	0.245801	0.244851	0.24969	154.107224	3	0.245801,0.253579,0.243901	avx2
+macosko_retina	rna	sweep	local	s1	4	warm	file	native	auto	37879696	ok	0.160839	0.160593	0.162949	235.513559	3	0.165059,0.160347,0.160839	avx2
+macosko_retina	rna	sweep	local	s1	4	warm	file	canonical	auto	37879696	ok	0.227584	0.224484	0.233328	166.442893	3	0.239072,0.227584,0.221384	avx2
+macosko_retina	rna	sweep	local	s1	8	cold	file	native	auto	37879696	ok	0.123892	0.120283	0.125107	305.748557	3	0.123892,0.126323,0.116675	avx2
+macosko_retina	rna	sweep	local	s1	8	cold	file	canonical	auto	37879696	ok	0.151529	0.148089	0.165753	249.98359	3	0.179977,0.151529,0.144649	avx2
+macosko_retina	rna	sweep	local	s1	16	cold	file	native	auto	37879696	ok	0.086784	0.083167	0.088642	436.48401	3	0.090501,0.086784,0.079550	avx2
+macosko_retina	rna	sweep	local	s1	16	cold	file	canonical	auto	37879696	ok	0.1017	0.098728	0.102837	372.4639	3	0.103974,0.101700,0.095757	avx2
+macosko_retina	rna	sweep	local	s1	32	cold	file	native	auto	37879696	ok	0.07088	0.067852	0.072811	534.421294	3	0.074742,0.070880,0.064823	avx2
+macosko_retina	rna	sweep	local	s1	32	cold	file	canonical	auto	37879696	ok	0.081046	0.078627	0.082267	467.384209	3	0.083488,0.081046,0.076208	avx2
+macosko_retina	rna	sweep	local	s1	44	cold	file	native	auto	37879696	ok	0.071091	0.067159	0.072104	532.836723	3	0.073117,0.071091,0.063228	avx2
+macosko_retina	rna	sweep	local	s1	44	cold	file	canonical	auto	37879696	ok	0.076629	0.073387	0.077987	494.325352	3	0.079344,0.076629,0.070146	avx2
+macosko_retina	rna	sweep	local	s1	1	warm	codec	native	scalar	37879696	ok	1.320629	1.32014	1.326921	28.683068	3	1.333214,1.320629,1.319651	scalar
+macosko_retina	rna	sweep	local	s1	1	warm	codec	native	avx2	37879696	ok	0.41242	0.411272	0.414131	91.847277	3	0.412420,0.410124,0.415842	avx2
+macosko_retina	rna	sweep	local	s1	1	warm	codec	native	avx512	37879696	ok	0.411566	0.410956	0.414423	92.037916	3	0.411566,0.410346,0.417280	avx2
+macosko_retina	rna	sweep	local	s1	1	warm	codec	canonical	scalar	37879696	ok	1.579482	1.579318	1.585794	23.982351	3	1.592106,1.579482,1.579153	scalar
+macosko_retina	rna	sweep	local	s1	1	warm	codec	canonical	avx2	37879696	ok	0.66786	0.667046	0.671506	56.71798	3	0.666231,0.675152,0.667860	avx2
+macosko_retina	rna	sweep	local	s1	1	warm	codec	canonical	avx512	37879696	ok	0.666698	0.665679	0.669872	56.816902	3	0.664660,0.673047,0.666698	avx2
+macosko_retina	rna	sweep	local	s1	2	warm	codec	native	scalar	37879696	ok	0.748854	0.747616	0.751994	50.583573	3	0.748854,0.755134,0.746378	scalar
+macosko_retina	rna	sweep	local	s1	2	warm	codec	native	avx2	37879696	ok	0.252852	0.252485	0.25398	149.809864	3	0.255107,0.252852,0.252118	avx2
+macosko_retina	rna	sweep	local	s1	2	warm	codec	native	avx512	37879696	ok	0.252419	0.251936	0.253323	150.066615	3	0.254226,0.252419,0.251453	avx2
+macosko_retina	rna	sweep	local	s1	2	warm	codec	canonical	scalar	37879696	ok	0.881431	0.881268	1.24031	42.975244	3	0.881431,0.881106,1.599189	scalar
+macosko_retina	rna	sweep	local	s1	2	warm	codec	canonical	avx2	37879696	ok	0.396436	0.391718	0.398781	95.550488	3	0.396436,0.387000,0.401125	avx2
+macosko_retina	rna	sweep	local	s1	2	warm	codec	canonical	avx512	37879696	ok	0.382954	0.380091	0.39046	98.914363	3	0.382954,0.377227,0.397965	avx2
+macosko_retina	rna	sweep	local	s1	4	warm	codec	native	scalar	37879696	ok	0.403121	0.402622	0.405451	93.965964	3	0.403121,0.402123,0.407781	scalar
+macosko_retina	rna	sweep	local	s1	4	warm	codec	native	avx2	37879696	ok	0.141542	0.141295	0.142359	267.622285	3	0.141542,0.143177,0.141049	avx2
+macosko_retina	rna	sweep	local	s1	4	warm	codec	native	avx512	37879696	ok	0.141365	0.140937	0.142163	267.956874	3	0.140510,0.142961,0.141365	avx2
+macosko_retina	rna	sweep	local	s1	4	warm	codec	canonical	scalar	37879696	ok	0.469196	0.468135	0.472515	80.733162	3	0.469196,0.467073,0.475834	scalar
+macosko_retina	rna	sweep	local	s1	4	warm	codec	canonical	avx2	37879696	ok	0.203387	0.202654	0.205081	186.244821	3	0.206776,0.203387,0.201922	avx2
+macosko_retina	rna	sweep	local	s1	4	warm	codec	canonical	avx512	37879696	ok	0.207576	0.207388	0.208232	182.485573	3	0.208888,0.207576,0.207199	avx2
+macosko_retina	rna	sweep	local	s1	8	warm	codec	native	scalar	37879696	ok	0.207074	0.206547	0.207697	182.9283	3	0.208321,0.207074,0.206019	scalar
+macosko_retina	rna	sweep	local	s1	8	warm	codec	native	avx2	37879696	ok	0.079398	0.079269	0.079415	477.086925	3	0.079432,0.079139,0.079398	avx2
+macosko_retina	rna	sweep	local	s1	8	warm	codec	native	avx512	37879696	ok	0.079095	0.07905	0.079535	478.913082	3	0.079975,0.079005,0.079095	avx2
+macosko_retina	rna	sweep	local	s1	8	warm	codec	canonical	scalar	37879696	ok	0.238813	0.238359	0.239263	158.616298	3	0.239712,0.238813,0.237904	scalar
+macosko_retina	rna	sweep	local	s1	8	warm	codec	canonical	avx2	37879696	ok	0.107874	0.107497	0.10887	351.146305	3	0.107874,0.107120,0.109865	avx2
+macosko_retina	rna	sweep	local	s1	8	warm	codec	canonical	avx512	37879696	ok	0.108696	0.108222	0.110011	348.491241	3	0.108696,0.107747,0.111327	avx2
+macosko_retina	rna	sweep	local	s1	16	warm	codec	native	scalar	37879696	ok	0.108172	0.107933	0.108235	350.180767	3	0.108172,0.108298,0.107695	scalar
+macosko_retina	rna	sweep	local	s1	16	warm	codec	native	avx2	37879696	ok	0.043457	0.043224	0.04375	871.653766	3	0.044044,0.042990,0.043457	avx2
+macosko_retina	rna	sweep	local	s1	16	warm	codec	native	avx512	37879696	ok	0.04323	0.043222	0.043459	876.237923	3	0.043688,0.043230,0.043215	avx2
+macosko_retina	rna	sweep	local	s1	16	warm	codec	canonical	scalar	37879696	ok	0.125187	0.1251	0.125815	302.585927	3	0.125013,0.125187,0.126444	scalar
+macosko_retina	rna	sweep	local	s1	16	warm	codec	canonical	avx2	37879696	ok	0.059551	0.05876	0.059771	636.085606	3	0.059551,0.057969,0.059990	avx2
+macosko_retina	rna	sweep	local	s1	16	warm	codec	canonical	avx512	37879696	ok	0.058012	0.057997	0.058471	652.96293	3	0.058931,0.057982,0.058012	avx2
+macosko_retina	rna	sweep	local	s1	32	warm	codec	native	scalar	37879696	ok	0.059711	0.059578	0.061052	634.383715	3	0.062393,0.059711,0.059444	scalar
+macosko_retina	rna	sweep	local	s1	32	warm	codec	native	avx2	37879696	ok	0.029969	0.029743	0.030045	1263.961439	3	0.030122,0.029969,0.029516	avx2
+macosko_retina	rna	sweep	local	s1	32	warm	codec	native	avx512	37879696	ok	0.030189	0.029802	0.03055	1254.77095	3	0.030911,0.030189,0.029416	avx2
+macosko_retina	rna	sweep	local	s1	32	warm	codec	canonical	scalar	37879696	ok	0.067865	0.067797	0.06804	558.165073	3	0.068216,0.067729,0.067865	scalar
+macosko_retina	rna	sweep	local	s1	32	warm	codec	canonical	avx2	37879696	ok	0.037522	0.037249	0.044836	1009.52384	3	0.037522,0.036976,0.052151	avx2
+macosko_retina	rna	sweep	local	s1	32	warm	codec	canonical	avx512	37879696	ok	0.036332	0.036313	0.037501	1042.587689	3	0.038669,0.036332,0.036294	avx2
+macosko_retina	rna	sweep	local	s1	44	warm	codec	native	scalar	37879696	ok	0.051459	0.051403	0.052086	736.109121	3	0.052712,0.051459,0.051346	scalar
+macosko_retina	rna	sweep	local	s1	44	warm	codec	native	avx2	37879696	ok	0.028922	0.028314	0.029085	1309.703968	3	0.029247,0.028922,0.027706	avx2
+macosko_retina	rna	sweep	local	s1	44	warm	codec	native	avx512	37879696	ok	0.028094	0.028073	0.029263	1348.334346	3	0.030432,0.028094,0.028053	avx2
+macosko_retina	rna	sweep	local	s1	44	warm	codec	canonical	scalar	37879696	ok	0.059525	0.059506	0.060274	636.361596	3	0.061022,0.059525,0.059486	scalar
+macosko_retina	rna	sweep	local	s1	44	warm	codec	canonical	avx2	37879696	ok	0.03622	0.035879	0.036222	1045.834952	3	0.036224,0.035537,0.036220	avx2
+macosko_retina	rna	sweep	local	s1	44	warm	codec	canonical	avx512	37879696	ok	0.037357	0.036916	0.03755	1013.98204	3	0.037743,0.036475,0.037357	avx2
+macosko_retina	rna	sweep	local	h5ad_gzip	1	cold	file		auto	37879696	ok	1.254781	1.254496	1.259838	30.188301	3	1.264896,1.254781,1.254212	
+macosko_retina	rna	sweep	local	h5ad_gzip	2	cold	file		auto	37879696	ok	1.256414	1.255208	1.258825	30.149067	3	1.261236,1.254003,1.256414	
+macosko_retina	rna	sweep	local	h5ad_gzip	4	cold	file		auto	37879696	ok	1.261004	1.258441	1.265014	30.03932	3	1.269024,1.255879,1.261004	
+macosko_retina	rna	sweep	local	h5ad_gzip	4	warm	file		auto	37879696	ok	1.227683	1.22746	1.229016	30.85463	3	1.227683,1.230349,1.227237	
+macosko_retina	rna	sweep	local	h5ad_gzip	8	cold	file		auto	37879696	ok	1.360947	1.359999	1.364994	27.833344	3	1.369041,1.359051,1.360947	
+macosko_retina	rna	sweep	local	h5ad_gzip	16	cold	file		auto	37879696	ok	1.253137	1.25292	1.257189	30.227888	3	1.261241,1.253137,1.252703	
+macosko_retina	rna	sweep	local	h5ad_gzip	32	cold	file		auto	37879696	ok	1.259949	1.259261	1.264475	30.064463	3	1.269002,1.258573,1.259949	
+macosko_retina	rna	sweep	local	h5ad_gzip	44	cold	file		auto	37879696	ok	1.258253	1.256861	1.262536	30.104992	3	1.266818,1.255469,1.258253	
+macosko_retina	rna	sweep	local	csc_i32	1	cold	file		auto	37879696	ok	0.273087	0.272322	0.275032	138.709116	3	0.276976,0.273087,0.271557	
+macosko_retina	rna	sweep	local	csc_i32	2	cold	file		auto	37879696	ok	0.274312	0.273559	0.275252	138.089835	3	0.274312,0.276193,0.272805	
+macosko_retina	rna	sweep	local	csc_i32	4	cold	file		auto	37879696	ok	0.273066	0.271903	0.273828	138.719938	3	0.273066,0.274591,0.270740	
+macosko_retina	rna	sweep	local	csc_i32	4	warm	file		auto	37879696	ok	0.149741	0.149224	0.150841	252.96842	3	0.151941,0.149741,0.148707	
+macosko_retina	rna	sweep	local	csc_i32	8	cold	file		auto	37879696	ok	0.279753	0.278003	0.281582	135.404188	3	0.283412,0.279753,0.276253	
+macosko_retina	rna	sweep	local	csc_i32	16	cold	file		auto	37879696	ok	0.278878	0.276696	0.281449	135.828929	3	0.284020,0.278878,0.274514	
+macosko_retina	rna	sweep	local	csc_i32	32	cold	file		auto	37879696	ok	0.282975	0.279451	0.284655	133.862178	3	0.286335,0.282975,0.275927	
+macosko_retina	rna	sweep	local	csc_i32	44	cold	file		auto	37879696	ok	0.280166	0.277501	0.282467	135.204348	3	0.284768,0.280166,0.274836	
+macosko_retina	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	37879696	ok	1.385543	1.364145	1.417266	27.339242	3	1.342747,1.385543,1.448989	scalar
+macosko_retina	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	37879696	ok	0.390567	0.389189	0.405432	96.986422	3	0.420298,0.390567,0.387811	avx2
+macosko_retina	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	37879696	ok	0.390252	0.390248	0.390271	97.064707	3	0.390291,0.390252,0.390245	avx2
+macosko_retina	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	37879696	ok	1.607915	1.607876	1.610807	23.55827	3	1.613699,1.607836,1.607915	scalar
+macosko_retina	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	37879696	ok	0.650138	0.649779	0.651095	58.264085	3	0.649420,0.652052,0.650138	avx2
+macosko_retina	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	37879696	ok	0.65497	0.654955	0.656414	57.834246	3	0.654970,0.657858,0.654939	avx2
+macosko_retina	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	37879696	ok	0.708483	0.707991	0.713056	53.465921	3	0.708483,0.707500,0.717628	scalar
+macosko_retina	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	37879696	ok	0.213759	0.213375	0.21406	177.207491	3	0.214360,0.213759,0.212991	avx2
+macosko_retina	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	37879696	ok	0.214376	0.214327	0.21449	176.697466	3	0.214604,0.214277,0.214376	avx2
+macosko_retina	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	37879696	ok	0.849612	0.848291	0.850647	44.5847	3	0.849612,0.846969,0.851682	scalar
+macosko_retina	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	37879696	ok	0.353024	0.35131	0.353703	107.300625	3	0.354381,0.349596,0.353024	avx2
+macosko_retina	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	37879696	ok	0.35717	0.355083	0.3627	106.055089	3	0.357170,0.352997,0.368231	avx2
+macosko_retina	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	37879696	ok	0.374242	0.373579	0.375908	101.217116	3	0.377575,0.374242,0.372916	scalar
+macosko_retina	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	37879696	ok	0.115572	0.115543	0.11576	327.758419	3	0.115514,0.115572,0.115948	avx2
+macosko_retina	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	37879696	ok	0.115323	0.115302	0.115574	328.4661	3	0.115826,0.115323,0.115281	avx2
+macosko_retina	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	37879696	ok	0.445351	0.444427	0.445886	85.055823	3	0.446421,0.443502,0.445351	scalar
+macosko_retina	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	37879696	ok	0.186499	0.185437	0.188682	203.109379	3	0.190865,0.184375,0.186499	avx2
+macosko_retina	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	37879696	ok	0.187167	0.185711	0.188821	202.38448	3	0.190475,0.187167,0.184255	avx2
+macosko_retina	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	37879696	ok	0.190876	0.190868	0.191292	198.451854	3	0.191707,0.190876,0.190861	scalar
+macosko_retina	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	37879696	ok	0.059008	0.058897	0.059076	641.941703	3	0.058786,0.059143,0.059008	avx2
+macosko_retina	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	37879696	ok	0.05941	0.059344	0.068449	637.59798	3	0.059279,0.059410,0.077489	avx2
+macosko_retina	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	37879696	ok	0.226061	0.225931	0.226077	167.564047	3	0.226092,0.225800,0.226061	scalar
+macosko_retina	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	37879696	ok	0.09368	0.093432	0.093691	404.352007	3	0.093184,0.093680,0.093702	avx2
+macosko_retina	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	37879696	ok	0.094003	0.093818	0.094101	402.962629	3	0.093633,0.094003,0.094198	avx2
+macosko_retina	rna	sweep	memory	s1	16	memory	codec_cpp	native	scalar	37879696	ok	0.096016	0.095811	0.096077	394.514414	3	0.096137,0.095607,0.096016	scalar
+macosko_retina	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx2	37879696	ok	0.031447	0.031309	0.031576	1204.556746	3	0.031705,0.031447,0.031170	avx2
+macosko_retina	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx512	37879696	ok	0.031549	0.031511	0.031782	1200.662335	3	0.032015,0.031549,0.031474	avx2
+macosko_retina	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	scalar	37879696	ok	0.114342	0.114328	0.114416	331.284183	3	0.114489,0.114315,0.114342	scalar
+macosko_retina	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx2	37879696	ok	0.051448	0.050055	0.051513	736.271497	3	0.051448,0.048661,0.051577	avx2
+macosko_retina	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx512	37879696	ok	0.04827	0.048247	0.048299	784.746136	3	0.048328,0.048225,0.048270	avx2
+macosko_retina	rna	sweep	memory	s1	32	memory	codec_cpp	native	scalar	37879696	ok	0.051918	0.051861	0.051949	729.606225	3	0.051918,0.051804,0.051981	scalar
+macosko_retina	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx2	37879696	ok	0.020624	0.020501	0.020736	1836.680372	3	0.020847,0.020624,0.020378	avx2
+macosko_retina	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx512	37879696	ok	0.020316	0.020238	0.020389	1864.5253	3	0.020461,0.020316,0.020160	avx2
+macosko_retina	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	scalar	37879696	ok	0.061176	0.06111	0.061222	619.192101	3	0.061268,0.061176,0.061045	scalar
+macosko_retina	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx2	37879696	ok	0.028221	0.027935	0.038087	1342.252082	3	0.047954,0.028221,0.027649	avx2
+macosko_retina	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx512	37879696	ok	0.027683	0.027506	0.02781	1368.337825	3	0.027936,0.027683,0.027328	avx2
+macosko_retina	rna	sweep	memory	s1	44	memory	codec_cpp	native	scalar	37879696	ok	0.042398	0.042297	0.042526	893.4312	3	0.042654,0.042398,0.042195	scalar
+macosko_retina	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx2	37879696	ok	0.019486	0.019428	0.019546	1943.944165	3	0.019605,0.019486,0.019370	avx2
+macosko_retina	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx512	37879696	ok	0.019039	0.018933	0.019279	1989.584327	3	0.019518,0.019039,0.018827	avx2
+macosko_retina	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	scalar	37879696	ok	0.048246	0.048129	0.048655	785.136509	3	0.048246,0.048012,0.049063	scalar
+macosko_retina	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx2	37879696	ok	0.023383	0.023232	0.023418	1619.967327	3	0.023453,0.023383,0.023080	avx2
+macosko_retina	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx512	37879696	ok	0.024511	0.02424	0.024705	1545.41618	3	0.024899,0.024511,0.023968	avx2

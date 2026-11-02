@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+hao_citeseq	adt	zstd22	23591774	23583970	0.999669
+hao_citeseq	adt	xz9e	23591774	23583872	0.999665
+hao_citeseq	adt	brotli11	23591774	23591815	1.000002
+hao_citeseq	adt	bzip2_9	23591774	23694276	1.004345

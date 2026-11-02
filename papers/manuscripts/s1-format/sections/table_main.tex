@@ -1,0 +1,45 @@
+% Table 2 (main text): every format on the same matrices, from generated/tab_main.tsv (report.summary_section and
+% report_limits.redundancy_section). Cells arrive formatted (medians with interquartile ranges).
+\begin{table*}[tbp]
+\centering
+\caption{Every format on the same \nm{sumNsize} matrices}
+\label{tab:main}
+\scriptsize\setlength{\tabcolsep}{3.5pt}
+\begin{adjustbox}{max width=\linewidth}%   shrinks the table only where the page is narrower (bioRxiv)
+\pgfplotstabletypeset[
+  string type,
+  columns={format,bits,rel,cr,smallest,read,fastest,warm,fastestw,read1,fastest1,redund},
+  every head row/.style={before row={\toprule
+    & \multicolumn{4}{c}{Size} & \multicolumn{4}{c}{Read rate, four cores} & \multicolumn{2}{c}{One core, cold} & \\
+    \cmidrule(lr){2-5}\cmidrule(lr){6-9}\cmidrule(lr){10-11}}, after row=\midrule},
+  every last row/.style={after row=\bottomrule},
+  columns/format/.style={column name=Format, column type=l},
+  columns/bits/.style={column name={Bits per non-zero}, column type=r},
+  columns/rel/.style={column name={Size $\div$ \sone}, column type=r},
+  columns/cr/.style={column name={Compression}, column type=r},
+  columns/smallest/.style={column name={Smallest}, column type=r},
+  columns/read/.style={column name={Cold}, column type=r},
+  columns/fastest/.style={column name={Fastest}, column type=r},
+  columns/warm/.style={column name={Warm}, column type=r},
+  columns/fastestw/.style={column name={Fastest}, column type=r},
+  columns/read1/.style={column name={Read rate}, column type=r},
+  columns/fastest1/.style={column name={Fastest}, column type=r},
+  columns/redund/.style={column name={Above model}, column type=r},
+]{\gen{tab_main.tsv}}%
+\end{adjustbox}
+\par\vspace{3pt}
+\begin{minipage}{\linewidth}\scriptsize
+Bits per non-zero: median (interquartile range) over matrices, for the whole file with gene identifiers and barcodes.
+Size $\div$ \sone: median over matrices of the file's size relative to the \sone{} file of the same matrix; every ratio
+in this paper is a median of per-matrix ratios. Compression: the same for uncompressed CSC arrays with 32-bit indices and
+values relative to the file. Read rate: million non-zeros per second into an in-memory sparse matrix as read by each
+format's library (Supplementary Table~\ref{S-tab:formats}), median (interquartile range); cold, from the node's spinning
+disk after dropping the page cache; warm, from the page cache. Fastest: matrices on which the format read fastest; no
+\sone{} win was by less than 3\%, the spread of repeated cold reads. One core: the \nm{dec-paired1-n} matrices measured
+on one core for every format. \sone{} is read in its stored gene order; the indented row reads it in the source gene
+order, ranked against the other formats alone. Above model: the share of the file above the best of four
+cross-validated count models (Section~\ref{sec:floor}), $1-L/S$, where $S$ is the file's size and $L$ that model's code
+length on the same matrix, which excludes the model's own parameters; median over matrices. R formats hold the
+\nm{sumNr} matrices below $2^{31}$ non-zeros and loom the \nm{sumNloom} it can store densely.
+\end{minipage}
+\end{table*}

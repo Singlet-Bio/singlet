@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+paul_marsseq	rna	plate_umi	S	umi	27297	2730	4910514	0.065895	3618.289744	3101.0	1732.0	0.647084	161	2.011588

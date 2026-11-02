@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+abc_merfish_zhuang1	rna	spatial_imaging	437227228	34	8.407046	6.020008	5.81631	5.01994	4.163331	5.016409	5.810057	300.0	6.102165

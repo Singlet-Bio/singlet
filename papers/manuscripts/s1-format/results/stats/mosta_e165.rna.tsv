@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+mosta_e165	rna	spatial_seq	M	umi	28204	121767	211994186	0.061728	5074.878785	5215.0	1846.0	0.568706	4080	2.914951

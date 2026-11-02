@@ -1,0 +1,18 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+tabula_sapiens	rna	h5ad_none	general	1119354356	58482	412848	ok	8992579080	64.269757	0	19.310768	4	NA
+tabula_sapiens	rna	csc_i32	general	1119354356	58482	412848	ok	8977138307	64.159402	0	18.841143	4	NA
+tabula_sapiens	rna	mtx_gz	general	1119354356	58482	412848	ok	3612681641	25.819753	0	749.413466	4	NA
+tabula_sapiens	rna	tenx_h5	general	1119354356	58482	412848	ok	1727168292	12.344032	0	135.007424	4	NA
+tabula_sapiens	rna	h5ad_gzip	general	1119354356	58482	412848	ok	2644932503	18.903272	0	196.053372	4	NA
+tabula_sapiens	rna	h5ad_lzf	general	1119354356	58482	412848	ok	5763675389	41.192856	0	35.648674	4	NA
+tabula_sapiens	rna	zarr	general	1119354356	58482	412848	ok	2231429411	15.947975	0	24.057883	4	NA
+tabula_sapiens	rna	loom	general	1119354356	58482	412848	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 58482x412848 entries exceeds 2e+09
+tabula_sapiens	rna	soma	domain	1119354356	58482	412848	ok	2148795100	15.357389	0	681.783814	4	NA
+tabula_sapiens	rna	parquet_coo	general	1119354356	58482	412848	ok	2685451797	19.192863	0	61.323962	4	NA
+tabula_sapiens	rna	csc_zstd19	general	1119354356	58482	412848	ok	1292926220	9.240514	0	1744.188536	4	NA
+tabula_sapiens	rna	rds_gz	general	1119354356	58482	412848	ok	2752688798	19.673404	0	653.873301	4	NA
+tabula_sapiens	rna	rds_xz	general	1119354356	58482	412848	ok	1195570892	8.544718	0	6197.75539	4	NA
+tabula_sapiens	rna	bpcells	domain	1119354356	58482	412848	ok	2318217957	16.568251	0	54.441834	4	NA
+tabula_sapiens	rna	s1	s1	1119354356	58482	412848	ok	732961912	5.238462	0	113.129573	4	NA
+tabula_sapiens	rna	s1_pack	s1	1119354356	58482	412848	ok	732813138	5.237399	935712	117.442785	4	NA
+tabula_sapiens	rna	zarr3	general	1119354356	58482	412848	ok	1816197512	12.980322	0	34.8219	4	NA

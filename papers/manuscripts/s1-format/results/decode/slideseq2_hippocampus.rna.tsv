@@ -1,0 +1,82 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+slideseq2_hippocampus	rna	main	local	csc_i32	1	cold	file		auto	22396657	ok	0.195668	0.193833	0.19725	114.462417	3	0.198833,0.195668,0.191998	
+slideseq2_hippocampus	rna	main	local	csc_i32	4	cold	file		auto	22396657	ok	0.195813	0.195045	0.198334	114.377962	3	0.200856,0.194278,0.195813	
+slideseq2_hippocampus	rna	main	local	csc_i32	4	warm	file		auto	22396657	ok	0.071543	0.071028	0.07254	313.050248	3	0.073536,0.071543,0.070513	
+slideseq2_hippocampus	rna	main	local	mtx_gz	1	cold	file		auto	22396657	ok	3.068487	3.066609	3.070389	7.298925	3	3.072290,3.068487,3.064730	
+slideseq2_hippocampus	rna	main	local	mtx_gz	4	cold	file		auto	22396657	ok	1.862948	1.847577	1.872277	12.022156	3	1.832206,1.862948,1.881605	
+slideseq2_hippocampus	rna	main	local	mtx_gz	4	warm	file		auto	22396657	ok	1.822771	1.813334	1.835923	12.287148	3	1.822771,1.803898,1.849074	
+slideseq2_hippocampus	rna	main	local	tenx_h5	1	cold	file		auto	22396657	ok	0.858407	0.857134	0.859411	26.090956	3	0.860415,0.855862,0.858407	
+slideseq2_hippocampus	rna	main	local	tenx_h5	4	cold	file		auto	22396657	ok	0.858226	0.857694	0.860202	26.096441	3	0.862177,0.857162,0.858226	
+slideseq2_hippocampus	rna	main	local	tenx_h5	4	warm	file		auto	22396657	ok	0.841397	0.840941	0.843773	26.618409	3	0.840484,0.846148,0.841397	
+slideseq2_hippocampus	rna	main	local	h5ad_none	1	cold	file		auto	22396657	ok	0.318209	0.31386	0.320995	70.383411	3	0.318209,0.309511,0.323780	
+slideseq2_hippocampus	rna	main	local	h5ad_none	4	cold	file		auto	22396657	ok	0.319235	0.316813	0.320447	70.15729	3	0.319235,0.321659,0.314392	
+slideseq2_hippocampus	rna	main	local	h5ad_none	4	warm	file		auto	22396657	ok	0.135829	0.135819	0.137373	164.889093	3	0.138918,0.135810,0.135829	
+slideseq2_hippocampus	rna	main	local	h5ad_gzip	1	cold	file		auto	22396657	ok	0.746043	0.744211	0.746102	30.020601	3	0.746162,0.746043,0.742378	
+slideseq2_hippocampus	rna	main	local	h5ad_gzip	4	cold	file		auto	22396657	ok	0.77282	0.759452	0.774509	28.980427	3	0.746084,0.772820,0.776197	
+slideseq2_hippocampus	rna	main	local	h5ad_gzip	4	warm	file		auto	22396657	ok	0.718123	0.716107	0.718666	31.187784	3	0.719210,0.714091,0.718123	
+slideseq2_hippocampus	rna	main	local	h5ad_lzf	1	cold	file		auto	22396657	ok	0.442141	0.439526	0.442388	50.655053	3	0.442636,0.436912,0.442141	
+slideseq2_hippocampus	rna	main	local	h5ad_lzf	4	cold	file		auto	22396657	ok	0.442548	0.441214	0.457507	50.60844	3	0.442548,0.439880,0.472466	
+slideseq2_hippocampus	rna	main	local	h5ad_lzf	4	warm	file		auto	22396657	ok	0.39877	0.398006	0.402726	56.164398	3	0.398770,0.397242,0.406682	
+slideseq2_hippocampus	rna	main	local	zarr	1	cold	file		auto	22396657	ok	0.244396	0.243139	0.245178	91.640686	3	0.245959,0.241881,0.244396	
+slideseq2_hippocampus	rna	main	local	zarr	4	cold	file		auto	22396657	ok	0.265982	0.253507	0.270793	84.203622	3	0.241031,0.275603,0.265982	
+slideseq2_hippocampus	rna	main	local	zarr	4	warm	file		auto	22396657	ok	0.212627	0.208577	0.222485	105.332886	3	0.204527,0.232343,0.212627	
+slideseq2_hippocampus	rna	main	local	loom	1	cold	file		auto	22396657	ok	21.7108	21.71078	21.994452	1.031591	3	21.710761,22.278105,21.710800	
+slideseq2_hippocampus	rna	main	local	loom	4	cold	file		auto	22396657	ok	22.244179	22.214256	22.645913	1.006855	3	22.184332,23.047647,22.244179	
+slideseq2_hippocampus	rna	main	local	loom	4	warm	file		auto	22396657	ok	21.844928	21.835055	21.939947	1.025257	3	21.844928,22.034966,21.825183	
+slideseq2_hippocampus	rna	main	local	soma	1	cold	file		auto	22396657	ok	1.408503	1.408272	1.426482	15.901042	3	1.444461,1.408042,1.408503	
+slideseq2_hippocampus	rna	main	local	soma	4	cold	file		auto	22396657	ok	0.652834	0.631922	0.658965	34.306803	3	0.652834,0.611010,0.665096	
+slideseq2_hippocampus	rna	main	local	soma	4	warm	file		auto	22396657	ok	0.607598	0.596349	0.617532	36.860987	3	0.627467,0.607598,0.585100	
+slideseq2_hippocampus	rna	main	local	parquet_coo	1	cold	file		auto	22396657	ok	0.759488	0.732086	0.782245	29.489139	3	0.805001,0.759488,0.704684	
+slideseq2_hippocampus	rna	main	local	parquet_coo	4	cold	file		auto	22396657	ok	0.601572	0.58306	0.620316	37.230225	3	0.601572,0.564549,0.639060	
+slideseq2_hippocampus	rna	main	local	parquet_coo	4	warm	file		auto	22396657	ok	0.532651	0.527299	0.567833	42.047547	3	0.521947,0.603016,0.532651	
+slideseq2_hippocampus	rna	main	local	csc_zstd19	1	cold	file		auto	22396657	ok	0.333756	0.332233	0.336956	67.104788	3	0.340155,0.333756,0.330709	
+slideseq2_hippocampus	rna	main	local	csc_zstd19	4	cold	file		auto	22396657	ok	0.389629	0.384572	0.39435	57.482064	3	0.389629,0.379516,0.399071	
+slideseq2_hippocampus	rna	main	local	csc_zstd19	4	warm	file		auto	22396657	ok	0.310114	0.309372	0.312753	72.220701	3	0.315391,0.308630,0.310114	
+slideseq2_hippocampus	rna	main	local	rds_gz	1	cold	file		auto	22396657	ok	1.170754	1.126543	1.216139	19.130107	3	1.261524,1.082331,1.170754	
+slideseq2_hippocampus	rna	main	local	rds_gz	4	cold	file		auto	22396657	ok	1.25057	1.194888	1.258515	17.909158	3	1.266460,1.139206,1.250570	
+slideseq2_hippocampus	rna	main	local	rds_gz	4	warm	file		auto	22396657	ok	1.069868	1.067231	1.114004	20.934041	3	1.069868,1.158141,1.064593	
+slideseq2_hippocampus	rna	main	local	rds_xz	1	cold	file		auto	22396657	ok	1.750677	1.705703	1.796315	12.79314	3	1.841953,1.660729,1.750677	
+slideseq2_hippocampus	rna	main	local	rds_xz	4	cold	file		auto	22396657	ok	1.751158	1.706394	1.799941	12.789623	3	1.848723,1.661629,1.751158	
+slideseq2_hippocampus	rna	main	local	rds_xz	4	warm	file		auto	22396657	ok	1.641771	1.639557	1.688029	13.641764	3	1.641771,1.734286,1.637342	
+slideseq2_hippocampus	rna	main	local	bpcells	1	cold	file		auto	22396657	ok	2.735766	2.72164	3.269059	8.186614	3	3.802352,2.735766,2.707515	
+slideseq2_hippocampus	rna	main	local	bpcells	4	cold	file		auto	22396657	ok	2.804733	2.792064	3.338315	7.985308	3	3.871898,2.804733,2.779396	
+slideseq2_hippocampus	rna	main	local	bpcells	4	warm	file		auto	22396657	ok	2.746241	2.745991	2.764447	8.155386	3	2.782653,2.745742,2.746241	
+slideseq2_hippocampus	rna	main	local	s1	1	cold	file	native	auto	22396657	ok	0.266803	0.264333	0.268274	83.944617	3	0.266803,0.269746,0.261863	avx2
+slideseq2_hippocampus	rna	main	local	s1	1	cold	file	canonical	auto	22396657	ok	0.41802	0.416324	0.42088	53.577944	3	0.418020,0.423740,0.414627	avx2
+slideseq2_hippocampus	rna	main	local	s1	4	cold	file	native	auto	22396657	ok	0.125118	0.123817	0.125747	179.004756	3	0.126376,0.125118,0.122517	avx2
+slideseq2_hippocampus	rna	main	local	s1	4	cold	file	canonical	auto	22396657	ok	0.167794	0.158934	0.170389	133.476971	3	0.150074,0.172984,0.167794	avx2
+slideseq2_hippocampus	rna	main	local	s1	4	warm	file	native	auto	22396657	ok	0.083066	0.082924	0.089536	269.626132	3	0.096006,0.082783,0.083066	avx2
+slideseq2_hippocampus	rna	main	local	s1	4	warm	file	canonical	auto	22396657	ok	0.11988	0.118778	0.121703	186.825078	3	0.123525,0.117675,0.119880	avx2
+slideseq2_hippocampus	rna	main	local	s1	1	warm	codec	native	scalar	22396657	ok	0.729276	0.728625	0.732549	30.710829	3	0.735822,0.727975,0.729276	scalar
+slideseq2_hippocampus	rna	main	local	s1	1	warm	codec	native	avx2	22396657	ok	0.239579	0.237752	0.239806	93.483575	3	0.240033,0.239579,0.235926	avx2
+slideseq2_hippocampus	rna	main	local	s1	1	warm	codec	native	avx512	22396657	ok	0.239561	0.237707	0.240031	93.490295	3	0.240500,0.239561,0.235852	avx2
+slideseq2_hippocampus	rna	main	local	s1	1	warm	codec	canonical	scalar	22396657	ok	0.883015	0.88216	0.886049	25.363852	3	0.889083,0.883015,0.881306	scalar
+slideseq2_hippocampus	rna	main	local	s1	1	warm	codec	canonical	avx2	22396657	ok	0.394974	0.393347	0.396628	56.704101	3	0.398282,0.391719,0.394974	avx2
+slideseq2_hippocampus	rna	main	local	s1	1	warm	codec	canonical	avx512	22396657	ok	0.393025	0.391374	0.394439	56.985316	3	0.395854,0.389722,0.393025	avx2
+slideseq2_hippocampus	rna	main	local	s1	4	warm	codec	native	scalar	22396657	ok	0.193618	0.193499	0.193853	115.674674	3	0.193381,0.194088,0.193618	scalar
+slideseq2_hippocampus	rna	main	local	s1	4	warm	codec	native	avx2	22396657	ok	0.072922	0.07263	0.072961	307.131898	3	0.072999,0.072922,0.072337	avx2
+slideseq2_hippocampus	rna	main	local	s1	4	warm	codec	native	avx512	22396657	ok	0.07296	0.072546	0.07308	306.972455	3	0.073200,0.072132,0.072960	avx2
+slideseq2_hippocampus	rna	main	local	s1	4	warm	codec	canonical	scalar	22396657	ok	0.231624	0.231299	0.231633	96.694118	3	0.231624,0.231642,0.230974	scalar
+slideseq2_hippocampus	rna	main	local	s1	4	warm	codec	canonical	avx2	22396657	ok	0.107454	0.106913	0.107507	208.430762	3	0.107559,0.106371,0.107454	avx2
+slideseq2_hippocampus	rna	main	local	s1	4	warm	codec	canonical	avx512	22396657	ok	0.106871	0.106657	0.107129	209.56649	3	0.107386,0.106442,0.106871	avx2
+slideseq2_hippocampus	rna	main	local	s1_pack	1	cold	file	native	auto	22396657	ok	0.266583	0.264599	0.268213	84.013881	3	0.266583,0.269844,0.262615	avx2
+slideseq2_hippocampus	rna	main	local	s1_pack	1	cold	file	canonical	auto	22396657	ok	0.417435	0.414806	0.420995	53.653032	3	0.417435,0.424556,0.412176	avx2
+slideseq2_hippocampus	rna	main	local	s1_pack	4	cold	file	native	auto	22396657	ok	0.101198	0.098764	0.102749	221.314574	3	0.104300,0.101198,0.096330	avx2
+slideseq2_hippocampus	rna	main	local	s1_pack	4	cold	file	canonical	auto	22396657	ok	0.137067	0.134868	0.138559	163.398974	3	0.140050,0.137067,0.132669	avx2
+slideseq2_hippocampus	rna	main	local	s1_pack	4	warm	file	native	auto	22396657	ok	0.083101	0.082746	0.086127	269.512651	3	0.089154,0.083101,0.082391	avx2
+slideseq2_hippocampus	rna	main	local	s1_pack	4	warm	file	canonical	auto	22396657	ok	0.123024	0.121591	0.124513	182.051433	3	0.126002,0.120158,0.123024	avx2
+slideseq2_hippocampus	rna	main	local	zarr3	1	cold	file		auto	22396657	ok	0.380125	0.375043	0.381399	58.919129	3	0.380125,0.382672,0.369960	
+slideseq2_hippocampus	rna	main	local	zarr3	4	cold	file		auto	22396657	ok	0.338172	0.329473	0.34991	66.228636	3	0.320773,0.338172,0.361649	
+slideseq2_hippocampus	rna	main	local	zarr3	4	warm	file		auto	22396657	ok	0.374718	0.362685	0.402854	59.769443	3	0.350652,0.430991,0.374718	
+slideseq2_hippocampus	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	22396657	ok	0.735942	0.735127	0.736033	30.432639	3	0.736124,0.734312,0.735942	scalar
+slideseq2_hippocampus	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	22396657	ok	0.222017	0.222	0.222097	100.878117	3	0.221982,0.222177,0.222017	avx2
+slideseq2_hippocampus	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	22396657	ok	0.225223	0.224934	0.22525	99.44214	3	0.225277,0.225223,0.224644	avx2
+slideseq2_hippocampus	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	22396657	ok	0.903284	0.902616	0.903567	24.794701	3	0.901947,0.903850,0.903284	scalar
+slideseq2_hippocampus	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	22396657	ok	0.385247	0.385173	0.385263	58.135838	3	0.385247,0.385278,0.385099	avx2
+slideseq2_hippocampus	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	22396657	ok	0.387633	0.387557	0.387796	57.777994	3	0.387481,0.387633,0.387959	avx2
+slideseq2_hippocampus	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	22396657	ok	0.186651	0.186468	0.186928	119.992162	3	0.186284,0.187204,0.186651	scalar
+slideseq2_hippocampus	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	22396657	ok	0.057639	0.057584	0.057682	388.567758	3	0.057528,0.057725,0.057639	avx2
+slideseq2_hippocampus	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	22396657	ok	0.05782	0.057814	0.057833	387.351384	3	0.057845,0.057807,0.057820	avx2
+slideseq2_hippocampus	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	22396657	ok	0.228294	0.228266	0.228303	98.104449	3	0.228238,0.228294,0.228312	scalar
+slideseq2_hippocampus	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	22396657	ok	0.098998	0.098967	0.099075	226.233429	3	0.098998,0.098936,0.099152	avx2
+slideseq2_hippocampus	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	22396657	ok	0.10515	0.101787	0.107994	212.997214	3	0.105150,0.098423,0.110838	avx2

@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+paul_marsseq	rna	zstd22	2702946	2700955	0.999263
+paul_marsseq	rna	xz9e	2702946	2702100	0.999687
+paul_marsseq	rna	brotli11	2702946	2702954	1.000003
+paul_marsseq	rna	bzip2_9	2702946	2714522	1.004283

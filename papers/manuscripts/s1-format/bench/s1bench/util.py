@@ -308,7 +308,14 @@ def repeat(fn, repeats: int, warmup: int, before=None, long_s: Optional[float] =
         fn()
         dt = time.perf_counter() - t0
         if long_s and dt > long_s:
-            return [dt]
+            if i >= warmup:
+                return [dt]
+            # a long warm-up run: the next run is the only timed one (a warm-up time is never reported)
+            if before:
+                before()
+            t0 = time.perf_counter()
+            fn()
+            return [time.perf_counter() - t0]
         if i >= warmup:
             out.append(dt)
     return out

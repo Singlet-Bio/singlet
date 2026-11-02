@@ -1,0 +1,82 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+paul_marsseq	rna	main	local	csc_i32	1	cold	file		auto	4910514	ok	0.02935	0.029199	0.029982	167.310537	3	0.030614,0.029350,0.029049	
+paul_marsseq	rna	main	local	csc_i32	4	cold	file		auto	4910514	ok	0.029738	0.029496	0.030526	165.12857	3	0.031315,0.029738,0.029254	
+paul_marsseq	rna	main	local	csc_i32	4	warm	file		auto	4910514	ok	0.017142	0.017135	0.017551	286.458722	3	0.017961,0.017128,0.017142	
+paul_marsseq	rna	main	local	mtx_gz	1	cold	file		auto	4910514	ok	0.675326	0.674914	0.676164	7.271321	3	0.677002,0.674501,0.675326	
+paul_marsseq	rna	main	local	mtx_gz	4	cold	file		auto	4910514	ok	0.459984	0.457608	0.487753	10.675394	3	0.515522,0.459984,0.455232	
+paul_marsseq	rna	main	local	mtx_gz	4	warm	file		auto	4910514	ok	0.44909	0.446692	0.449515	10.934364	3	0.444294,0.449939,0.449090	
+paul_marsseq	rna	main	local	tenx_h5	1	cold	file		auto	4910514	ok	0.229512	0.227799	0.231292	21.39546	3	0.233071,0.229512,0.226087	
+paul_marsseq	rna	main	local	tenx_h5	4	cold	file		auto	4910514	ok	0.228406	0.226269	0.231204	21.499046	3	0.234002,0.228406,0.224132	
+paul_marsseq	rna	main	local	tenx_h5	4	warm	file		auto	4910514	ok	0.220933	0.220705	0.222651	22.226244	3	0.224368,0.220933,0.220477	
+paul_marsseq	rna	main	local	h5ad_none	1	cold	file		auto	4910514	ok	0.060964	0.059466	0.061726	80.547993	3	0.062489,0.060964,0.057968	
+paul_marsseq	rna	main	local	h5ad_none	4	cold	file		auto	4910514	ok	0.061356	0.060199	0.062385	80.033128	3	0.063414,0.061356,0.059043	
+paul_marsseq	rna	main	local	h5ad_none	4	warm	file		auto	4910514	ok	0.043738	0.043733	0.044051	112.271391	3	0.044364,0.043728,0.043738	
+paul_marsseq	rna	main	local	h5ad_gzip	1	cold	file		auto	4910514	ok	0.200714	0.200705	0.201356	24.465219	3	0.200696,0.201998,0.200714	
+paul_marsseq	rna	main	local	h5ad_gzip	4	cold	file		auto	4910514	ok	0.185274	0.184855	0.186893	26.504104	3	0.188513,0.185274,0.184437	
+paul_marsseq	rna	main	local	h5ad_gzip	4	warm	file		auto	4910514	ok	0.179344	0.179311	0.179732	27.380412	3	0.180121,0.179344,0.179279	
+paul_marsseq	rna	main	local	h5ad_lzf	1	cold	file		auto	4910514	ok	0.113817	0.113705	0.115364	43.143896	3	0.116911,0.113817,0.113593	
+paul_marsseq	rna	main	local	h5ad_lzf	4	cold	file		auto	4910514	ok	0.113601	0.113488	0.115288	43.226069	3	0.116976,0.113375,0.113601	
+paul_marsseq	rna	main	local	h5ad_lzf	4	warm	file		auto	4910514	ok	0.104016	0.103903	0.104181	47.209317	3	0.104346,0.104016,0.103790	
+paul_marsseq	rna	main	local	zarr	1	cold	file		auto	4910514	ok	0.068536	0.067612	0.069024	71.648494	3	0.069512,0.068536,0.066688	
+paul_marsseq	rna	main	local	zarr	4	cold	file		auto	4910514	ok	0.067179	0.066697	0.067847	73.096337	3	0.068516,0.066215,0.067179	
+paul_marsseq	rna	main	local	zarr	4	warm	file		auto	4910514	ok	0.044389	0.04432	0.044614	110.62497	3	0.044838,0.044389,0.044251	
+paul_marsseq	rna	main	local	loom	1	cold	file		auto	4910514	ok	1.721162	1.693473	1.72223	2.853023	3	1.723297,1.721162,1.665784	
+paul_marsseq	rna	main	local	loom	4	cold	file		auto	4910514	ok	1.667782	1.666138	1.704088	2.944338	3	1.740395,1.667782,1.664494	
+paul_marsseq	rna	main	local	loom	4	warm	file		auto	4910514	ok	1.623957	1.617958	1.634267	3.023795	3	1.623957,1.611959,1.644577	
+paul_marsseq	rna	main	local	soma	1	cold	file		auto	4910514	ok	0.373095	0.372453	0.376585	13.16156	3	0.380075,0.371810,0.373095	
+paul_marsseq	rna	main	local	soma	4	cold	file		auto	4910514	ok	0.184447	0.178954	0.18816	26.622849	3	0.173460,0.184447,0.191873	
+paul_marsseq	rna	main	local	soma	4	warm	file		auto	4910514	ok	0.176673	0.169931	0.178788	27.794299	3	0.180903,0.176673,0.163189	
+paul_marsseq	rna	main	local	parquet_coo	1	cold	file		auto	4910514	ok	0.168225	0.164163	0.179339	29.190211	3	0.190453,0.168225,0.160101	
+paul_marsseq	rna	main	local	parquet_coo	4	cold	file		auto	4910514	ok	0.149867	0.146376	0.155758	32.765883	3	0.161650,0.149867,0.142885	
+paul_marsseq	rna	main	local	parquet_coo	4	warm	file		auto	4910514	ok	0.135368	0.134622	0.137682	36.275385	3	0.133877,0.135368,0.139995	
+paul_marsseq	rna	main	local	csc_zstd19	1	cold	file		auto	4910514	ok	0.06832	0.065769	0.076549	71.87468	3	0.084778,0.068320,0.063217	
+paul_marsseq	rna	main	local	csc_zstd19	4	cold	file		auto	4910514	ok	0.063264	0.063111	0.064011	77.618792	3	0.064757,0.062958,0.063264	
+paul_marsseq	rna	main	local	csc_zstd19	4	warm	file		auto	4910514	ok	0.058231	0.058194	0.058489	84.32863	3	0.058747,0.058158,0.058231	
+paul_marsseq	rna	main	local	rds_gz	1	cold	file		auto	4910514	ok	0.248441	0.24238	0.292108	19.765352	3	0.335776,0.248441,0.236320	
+paul_marsseq	rna	main	local	rds_gz	4	cold	file		auto	4910514	ok	0.248415	0.242254	0.292275	19.767382	3	0.336135,0.248415,0.236094	
+paul_marsseq	rna	main	local	rds_gz	4	warm	file		auto	4910514	ok	0.233065	0.232403	0.23907	21.0693	3	0.245076,0.231742,0.233065	
+paul_marsseq	rna	main	local	rds_xz	1	cold	file		auto	4910514	ok	0.334565	0.327456	0.378907	14.677292	3	0.423248,0.334565,0.320347	
+paul_marsseq	rna	main	local	rds_xz	4	cold	file		auto	4910514	ok	0.333709	0.32676	0.378118	14.714979	3	0.422527,0.333709,0.319811	
+paul_marsseq	rna	main	local	rds_xz	4	warm	file		auto	4910514	ok	0.317893	0.317045	0.324302	15.447064	3	0.330711,0.317893,0.316198	
+paul_marsseq	rna	main	local	bpcells	1	cold	file		auto	4910514	ok	0.6693	0.558264	0.850335	7.336795	3	1.031369,0.447229,0.669300	
+paul_marsseq	rna	main	local	bpcells	4	cold	file		auto	4910514	ok	0.713353	0.597543	0.889346	6.883711	3	1.065338,0.481734,0.713353	
+paul_marsseq	rna	main	local	bpcells	4	warm	file		auto	4910514	ok	0.449309	0.448059	0.560044	10.929027	3	0.449309,0.670779,0.446808	
+paul_marsseq	rna	main	local	s1	1	cold	file	native	auto	4910514	ok	0.062011	0.061929	0.062541	79.187604	3	0.063071,0.061847,0.062011	avx2
+paul_marsseq	rna	main	local	s1	1	cold	file	canonical	auto	4910514	ok	0.090328	0.090083	0.09045	54.362886	3	0.090571,0.089838,0.090328	avx2
+paul_marsseq	rna	main	local	s1	4	cold	file	native	auto	4910514	ok	0.027659	0.027383	0.028094	177.536837	3	0.028529,0.027659,0.027107	avx2
+paul_marsseq	rna	main	local	s1	4	cold	file	canonical	auto	4910514	ok	0.035221	0.035133	0.035852	139.42193	3	0.036483,0.035221,0.035046	avx2
+paul_marsseq	rna	main	local	s1	4	warm	file	native	auto	4910514	ok	0.024559	0.024494	0.024629	199.950119	3	0.024559,0.024699,0.024429	avx2
+paul_marsseq	rna	main	local	s1	4	warm	file	canonical	auto	4910514	ok	0.031316	0.030899	0.031617	156.807215	3	0.031918,0.031316,0.030482	avx2
+paul_marsseq	rna	main	local	s1	1	warm	codec	native	scalar	4910514	ok	0.179257	0.179073	0.181526	27.393669	3	0.178889,0.183796,0.179257	scalar
+paul_marsseq	rna	main	local	s1	1	warm	codec	native	avx2	4910514	ok	0.054491	0.054439	0.054776	90.116015	3	0.055060,0.054386,0.054491	avx2
+paul_marsseq	rna	main	local	s1	1	warm	codec	native	avx512	4910514	ok	0.054539	0.054526	0.054799	90.036156	3	0.055058,0.054513,0.054539	avx2
+paul_marsseq	rna	main	local	s1	1	warm	codec	canonical	scalar	4910514	ok	0.20791	0.207302	0.210129	23.618412	3	0.212347,0.207910,0.206693	scalar
+paul_marsseq	rna	main	local	s1	1	warm	codec	canonical	avx2	4910514	ok	0.083821	0.083743	0.083897	58.583411	3	0.083666,0.083821,0.083973	avx2
+paul_marsseq	rna	main	local	s1	1	warm	codec	canonical	avx512	4910514	ok	0.084399	0.084372	0.084444	58.181959	3	0.084345,0.084399,0.084488	avx2
+paul_marsseq	rna	main	local	s1	4	warm	codec	native	scalar	4910514	ok	0.046982	0.046894	0.047118	104.520116	3	0.047255,0.046982,0.046807	scalar
+paul_marsseq	rna	main	local	s1	4	warm	codec	native	avx2	4910514	ok	0.018592	0.018588	0.018737	264.124584	3	0.018882,0.018585,0.018592	avx2
+paul_marsseq	rna	main	local	s1	4	warm	codec	native	avx512	4910514	ok	0.018631	0.018377	0.01887	263.565164	3	0.019108,0.018631,0.018123	avx2
+paul_marsseq	rna	main	local	s1	4	warm	codec	canonical	scalar	4910514	ok	0.055563	0.055508	0.055707	88.377931	3	0.055454,0.055851,0.055563	scalar
+paul_marsseq	rna	main	local	s1	4	warm	codec	canonical	avx2	4910514	ok	0.024451	0.024386	0.024758	200.8348	3	0.025066,0.024451,0.024322	avx2
+paul_marsseq	rna	main	local	s1	4	warm	codec	canonical	avx512	4910514	ok	0.025884	0.02582	0.026068	189.714273	3	0.025884,0.026252,0.025756	avx2
+paul_marsseq	rna	main	local	s1_pack	1	cold	file	native	auto	4910514	ok	0.062043	0.061991	0.062283	79.146356	3	0.062522,0.062043,0.061939	avx2
+paul_marsseq	rna	main	local	s1_pack	1	cold	file	canonical	auto	4910514	ok	0.088567	0.088455	0.089246	55.443953	3	0.089925,0.088343,0.088567	avx2
+paul_marsseq	rna	main	local	s1_pack	4	cold	file	native	auto	4910514	ok	0.025518	0.025324	0.026671	192.431205	3	0.027825,0.025518,0.025129	avx2
+paul_marsseq	rna	main	local	s1_pack	4	cold	file	canonical	auto	4910514	ok	0.031494	0.031451	0.033104	155.918709	3	0.034713,0.031494,0.031409	avx2
+paul_marsseq	rna	main	local	s1_pack	4	warm	file	native	auto	4910514	ok	0.023075	0.023003	0.023102	212.808946	3	0.023075,0.022930,0.023130	avx2
+paul_marsseq	rna	main	local	s1_pack	4	warm	file	canonical	auto	4910514	ok	0.02965	0.029173	0.029768	165.613901	3	0.029885,0.029650,0.028695	avx2
+paul_marsseq	rna	main	local	zarr3	1	cold	file		auto	4910514	ok	0.100517	0.095881	0.103328	48.852392	3	0.106139,0.100517,0.091244	
+paul_marsseq	rna	main	local	zarr3	4	cold	file		auto	4910514	ok	0.104126	0.10064	0.108958	47.159172	3	0.097154,0.113790,0.104126	
+paul_marsseq	rna	main	local	zarr3	4	warm	file		auto	4910514	ok	0.092482	0.092459	0.095029	53.096706	3	0.097576,0.092436,0.092482	
+paul_marsseq	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	4910514	ok	0.178618	0.178567	0.178666	27.491709	3	0.178714,0.178618,0.178516	scalar
+paul_marsseq	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	4910514	ok	0.050555	0.050547	0.050604	97.132114	3	0.050652,0.050538,0.050555	avx2
+paul_marsseq	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	4910514	ok	0.051199	0.05116	0.051262	95.91035	3	0.051325,0.051199,0.051122	avx2
+paul_marsseq	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	4910514	ok	0.208126	0.208082	0.208278	23.593948	3	0.208429,0.208126,0.208038	scalar
+paul_marsseq	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	4910514	ok	0.078994	0.078961	0.079005	62.163126	3	0.079015,0.078994,0.078928	avx2
+paul_marsseq	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	4910514	ok	0.079157	0.079116	0.079187	62.03512	3	0.079217,0.079157,0.079075	avx2
+paul_marsseq	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	4910514	ok	0.045982	0.045936	0.046024	106.792093	3	0.045890,0.045982,0.046065	scalar
+paul_marsseq	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	4910514	ok	0.015103	0.015042	0.015149	325.135006	3	0.015196,0.015103,0.014981	avx2
+paul_marsseq	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	4910514	ok	0.01507	0.014984	0.015097	325.846981	3	0.015124,0.015070,0.014898	avx2
+paul_marsseq	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	4910514	ok	0.053486	0.053447	0.053639	91.809333	3	0.053486,0.053409,0.053793	scalar
+paul_marsseq	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	4910514	ok	0.021877	0.021861	0.022115	224.460118	3	0.022354,0.021845,0.021877	avx2
+paul_marsseq	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	4910514	ok	0.022285	0.02228	0.022449	220.350639	3	0.022613,0.022285,0.022274	avx2

@@ -1,0 +1,69 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+xenium_breast_rep1	rna	sweep	local	s1	1	cold	file	native	auto	10604415	ok	0.155075	0.154361	0.157325	68.382375	3	0.155075,0.153646,0.159575	avx2
+xenium_breast_rep1	rna	sweep	local	s1	1	cold	file	canonical	auto	10604415	ok	0.211092	0.210551	0.213262	50.235879	3	0.211092,0.215431,0.210009	avx2
+xenium_breast_rep1	rna	sweep	local	s1	2	cold	file	native	auto	10604415	ok	0.128111	0.114996	0.139849	82.774916	3	0.128111,0.151586,0.101882	avx2
+xenium_breast_rep1	rna	sweep	local	s1	2	cold	file	canonical	auto	10604415	ok	0.215948	0.176608	0.222479	49.10625	3	0.215948,0.229009,0.137267	avx2
+xenium_breast_rep1	rna	sweep	local	s1	4	cold	file	native	auto	10604415	ok	0.07611	0.072605	0.078487	139.330464	3	0.080865,0.076110,0.069100	avx2
+xenium_breast_rep1	rna	sweep	local	s1	4	cold	file	canonical	auto	10604415	ok	0.096227	0.091823	0.096489	110.202466	3	0.087420,0.096227,0.096752	avx2
+xenium_breast_rep1	rna	sweep	local	s1	4	warm	file	native	auto	10604415	ok	0.063386	0.063275	0.064064	167.298612	3	0.063386,0.064741,0.063163	avx2
+xenium_breast_rep1	rna	sweep	local	s1	4	warm	file	canonical	auto	10604415	ok	0.090284	0.090243	0.090608	117.456447	3	0.090931,0.090284,0.090203	avx2
+xenium_breast_rep1	rna	sweep	local	s1	8	cold	file	native	auto	10604415	ok	0.058935	0.05886	0.059914	179.934314	3	0.060894,0.058935,0.058785	avx2
+xenium_breast_rep1	rna	sweep	local	s1	8	cold	file	canonical	auto	10604415	ok	0.068424	0.067943	0.069694	154.981756	3	0.070965,0.068424,0.067462	avx2
+xenium_breast_rep1	rna	sweep	local	s1	1	warm	codec	native	scalar	10604415	ok	0.450486	0.449757	0.453847	23.539941	3	0.457207,0.449028,0.450486	scalar
+xenium_breast_rep1	rna	sweep	local	s1	1	warm	codec	native	avx2	10604415	ok	0.126435	0.126136	0.12948	83.87216	3	0.126435,0.125837,0.132525	avx2
+xenium_breast_rep1	rna	sweep	local	s1	1	warm	codec	native	avx512	10604415	ok	0.126409	0.126353	0.129387	83.890016	3	0.126409,0.126298,0.132366	avx2
+xenium_breast_rep1	rna	sweep	local	s1	1	warm	codec	canonical	scalar	10604415	ok	0.507123	0.505658	0.507242	20.910931	3	0.507361,0.504193,0.507123	scalar
+xenium_breast_rep1	rna	sweep	local	s1	1	warm	codec	canonical	avx2	10604415	ok	0.182039	0.182026	0.184991	58.253452	3	0.182039,0.187942,0.182013	avx2
+xenium_breast_rep1	rna	sweep	local	s1	1	warm	codec	canonical	avx512	10604415	ok	0.181669	0.18165	0.184529	58.372319	3	0.181669,0.187389,0.181632	avx2
+xenium_breast_rep1	rna	sweep	local	s1	2	warm	codec	native	scalar	10604415	ok	0.233386	0.231767	0.237902	45.437171	3	0.242418,0.233386,0.230148	scalar
+xenium_breast_rep1	rna	sweep	local	s1	2	warm	codec	native	avx2	10604415	ok	0.093909	0.089439	0.109703	112.92278	3	0.084970,0.093909,0.125498	avx2
+xenium_breast_rep1	rna	sweep	local	s1	2	warm	codec	native	avx512	10604415	ok	0.080926	0.077961	0.104781	131.038626	3	0.074996,0.128636,0.080926	avx2
+xenium_breast_rep1	rna	sweep	local	s1	2	warm	codec	canonical	scalar	10604415	ok	0.406944	0.346313	0.446723	26.058686	3	0.486502,0.285682,0.406944	scalar
+xenium_breast_rep1	rna	sweep	local	s1	2	warm	codec	canonical	avx2	10604415	ok	0.095773	0.095499	0.095906	110.724187	3	0.096039,0.095773,0.095225	avx2
+xenium_breast_rep1	rna	sweep	local	s1	2	warm	codec	canonical	avx512	10604415	ok	0.111073	0.103132	0.143578	95.472177	3	0.095191,0.111073,0.176083	avx2
+xenium_breast_rep1	rna	sweep	local	s1	4	warm	codec	native	scalar	10604415	ok	0.152589	0.136608	0.154237	69.496468	3	0.120627,0.152589,0.155885	scalar
+xenium_breast_rep1	rna	sweep	local	s1	4	warm	codec	native	avx2	10604415	ok	0.04634	0.041697	0.048013	228.837588	3	0.049685,0.046340,0.037054	avx2
+xenium_breast_rep1	rna	sweep	local	s1	4	warm	codec	native	avx512	10604415	ok	0.051647	0.051461	0.05183	205.326623	3	0.051647,0.051276,0.052012	avx2
+xenium_breast_rep1	rna	sweep	local	s1	4	warm	codec	canonical	scalar	10604415	ok	0.165256	0.155753	0.169294	64.169533	3	0.165256,0.173332,0.146250	scalar
+xenium_breast_rep1	rna	sweep	local	s1	4	warm	codec	canonical	avx2	10604415	ok	0.067188	0.066855	0.067257	157.831757	3	0.067326,0.067188,0.066522	avx2
+xenium_breast_rep1	rna	sweep	local	s1	4	warm	codec	canonical	avx512	10604415	ok	0.06652	0.066497	0.066635	159.416447	3	0.066750,0.066473,0.066520	avx2
+xenium_breast_rep1	rna	sweep	local	s1	8	warm	codec	native	scalar	10604415	ok	0.081419	0.077313	0.082687	130.244976	3	0.083955,0.081419,0.073207	scalar
+xenium_breast_rep1	rna	sweep	local	s1	8	warm	codec	native	avx2	10604415	ok	0.030095	0.030029	0.030255	352.370046	3	0.030095,0.030416,0.029963	avx2
+xenium_breast_rep1	rna	sweep	local	s1	8	warm	codec	native	avx512	10604415	ok	0.03042	0.030398	0.030549	348.602396	3	0.030677,0.030420,0.030376	avx2
+xenium_breast_rep1	rna	sweep	local	s1	8	warm	codec	canonical	scalar	10604415	ok	0.089052	0.08493	0.089507	119.081608	3	0.089052,0.089963,0.080809	scalar
+xenium_breast_rep1	rna	sweep	local	s1	8	warm	codec	canonical	avx2	10604415	ok	0.040427	0.040263	0.041197	262.309481	3	0.040098,0.040427,0.041966	avx2
+xenium_breast_rep1	rna	sweep	local	s1	8	warm	codec	canonical	avx512	10604415	ok	0.034125	0.033749	0.034912	310.754282	3	0.035700,0.034125,0.033373	avx2
+xenium_breast_rep1	rna	sweep	local	h5ad_gzip	1	cold	file		auto	10604415	ok	0.427558	0.424459	0.428117	24.80231	3	0.428677,0.421361,0.427558	
+xenium_breast_rep1	rna	sweep	local	h5ad_gzip	2	cold	file		auto	10604415	ok	0.427315	0.424475	0.427955	24.816377	3	0.427315,0.421635,0.428595	
+xenium_breast_rep1	rna	sweep	local	h5ad_gzip	4	cold	file		auto	10604415	ok	0.431807	0.427535	0.432354	24.558203	3	0.431807,0.423263,0.432901	
+xenium_breast_rep1	rna	sweep	local	h5ad_gzip	4	warm	file		auto	10604415	ok	0.401497	0.400739	0.405395	26.412203	3	0.401497,0.399982,0.409294	
+xenium_breast_rep1	rna	sweep	local	h5ad_gzip	8	cold	file		auto	10604415	ok	0.425049	0.421263	0.425405	24.948685	3	0.425049,0.417478,0.425761	
+xenium_breast_rep1	rna	sweep	local	csc_i32	1	cold	file		auto	10604415	ok	0.070384	0.070046	0.071477	150.66467	3	0.072569,0.070384,0.069707	
+xenium_breast_rep1	rna	sweep	local	csc_i32	2	cold	file		auto	10604415	ok	0.070557	0.070434	0.072666	150.296085	3	0.074775,0.070557,0.070311	
+xenium_breast_rep1	rna	sweep	local	csc_i32	4	cold	file		auto	10604415	ok	0.072035	0.071248	0.072737	147.212514	3	0.073439,0.072035,0.070462	
+xenium_breast_rep1	rna	sweep	local	csc_i32	4	warm	file		auto	10604415	ok	0.043535	0.04301	0.044255	243.585353	3	0.043535,0.044976,0.042485	
+xenium_breast_rep1	rna	sweep	local	csc_i32	8	cold	file		auto	10604415	ok	0.070358	0.070263	0.071211	150.720646	3	0.072064,0.070169,0.070358	
+xenium_breast_rep1	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	10604415	ok	0.425822	0.425748	0.426044	24.903399	3	0.425822,0.426267,0.425673	scalar
+xenium_breast_rep1	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	10604415	ok	0.126353	0.126292	0.126368	83.926895	3	0.126230,0.126384,0.126353	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	10604415	ok	0.125479	0.125429	0.125536	84.511472	3	0.125593,0.125379,0.125479	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	10604415	ok	0.484612	0.48449	0.485479	21.882279	3	0.484367,0.484612,0.486345	scalar
+xenium_breast_rep1	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	10604415	ok	0.180626	0.180559	0.180683	58.709239	3	0.180739,0.180491,0.180626	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	10604415	ok	0.181427	0.181302	0.181451	58.450038	3	0.181475,0.181427,0.181177	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	10604415	ok	0.215239	0.215022	0.215497	49.268093	3	0.215239,0.215754,0.214805	scalar
+xenium_breast_rep1	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	10604415	ok	0.063854	0.06384	0.06386	166.072838	3	0.063854,0.063867,0.063826	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	10604415	ok	0.064167	0.064161	0.064177	165.262752	3	0.064154,0.064167,0.064188	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	10604415	ok	0.243869	0.243846	0.243944	43.484063	3	0.243823,0.244018,0.243869	scalar
+xenium_breast_rep1	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	10604415	ok	0.092939	0.092932	0.093042	114.100808	3	0.092925,0.093145,0.092939	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	10604415	ok	0.091964	0.091932	0.091972	115.310502	3	0.091964,0.091981,0.091900	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	10604415	ok	0.108328	0.108326	0.108335	97.891727	3	0.108342,0.108328,0.108325	scalar
+xenium_breast_rep1	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	10604415	ok	0.032759	0.03275	0.033213	323.709973	3	0.033666,0.032759,0.032741	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	10604415	ok	0.03296	0.03296	0.032983	321.735892	3	0.033006,0.032959,0.032960	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	10604415	ok	0.122394	0.122341	0.122413	86.641625	3	0.122431,0.122394,0.122287	scalar
+xenium_breast_rep1	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	10604415	ok	0.04658	0.046554	0.047455	227.660262	3	0.046580,0.046529,0.048331	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	10604415	ok	0.046559	0.046542	0.0467	227.762946	3	0.046840,0.046559,0.046525	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	10604415	ok	0.072499	0.072336	0.075012	146.269811	3	0.072173,0.077525,0.072499	scalar
+xenium_breast_rep1	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	10604415	ok	0.021245	0.02085	0.022951	499.148741	3	0.024658,0.021245,0.020455	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	10604415	ok	0.024846	0.024564	0.026132	426.805723	3	0.024282,0.027417,0.024846	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	10604415	ok	0.079447	0.074152	0.081375	133.477853	3	0.068857,0.079447,0.083303	scalar
+xenium_breast_rep1	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	10604415	ok	0.037199	0.036929	0.037426	285.072583	3	0.037653,0.037199,0.036658	avx2
+xenium_breast_rep1	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	10604415	ok	0.035365	0.033904	0.037986	299.856214	3	0.035365,0.032442,0.040606	avx2

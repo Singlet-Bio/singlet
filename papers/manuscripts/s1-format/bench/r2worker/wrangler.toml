@@ -1,0 +1,9 @@
+# The benchmark's real object store (netsweep --r2): a private R2 bucket served by range through this Worker.
+name = "s1bench-r2"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "s1bench"

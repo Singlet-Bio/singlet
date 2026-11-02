@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+smartseq3_pbmc	rna	plate_umi	S	umi	38630	3129	6423798	0.053145	9641.533078	8210.0	1792.0	0.409697	1844	4.696343

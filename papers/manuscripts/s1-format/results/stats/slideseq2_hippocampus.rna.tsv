@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+slideseq2_hippocampus	rna	spatial_seq	M	umi	23264	53208	22396657	0.018093	607.265073	302.0	235.0	0.800505	1917	1.442687

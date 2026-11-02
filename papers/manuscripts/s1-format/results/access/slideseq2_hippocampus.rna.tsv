@@ -1,0 +1,7 @@
+dataset	matrix	format	batches	bytes_per_batch	requests_per_batch	requests_p90	needed_per_batch	overread	index_bytes	file_bytes	chunk_elems
+slideseq2_hippocampus	rna	s1	200	327406.5	8.0	8.0	148761.244048	2.225727	41060	15923543	NA
+slideseq2_hippocampus	rna	h5ad_gzip	200	946357.0	20.0	22.0	490496.115914	1.916676	141393	52503164	21872
+slideseq2_hippocampus	rna	h5ad_lzf	200	1633850.5	20.0	22.0	890415.53059	1.817592	209118	95310913	21872
+slideseq2_hippocampus	rna	h5ad_none	200	3256000.0	20.0	22.0	1709667.016931	1.881662	212864	183004360	21872
+slideseq2_hippocampus	rna	tenx_h5	200	476276.0	22.0	24.0	306739.186162	1.54086	85245	32833650	21872
+slideseq2_hippocampus	rna	zarr	200	6128026.0	15.0	19.0	378914.376265	16.572443	86991	40559350	349948

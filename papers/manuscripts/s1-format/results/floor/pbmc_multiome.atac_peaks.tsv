@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+pbmc_multiome	atac_peaks	multimodal	85596796	5	8.006867	6.451539	5.287253	5.062889	4.723429	5.056232	5.280957	10000.0	5.227633

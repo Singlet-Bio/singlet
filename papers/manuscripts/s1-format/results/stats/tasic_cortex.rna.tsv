@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+tasic_cortex	rna	plate_reads	M	reads	45768	23178	214290227	0.202006	1658713.521054	1719962.0	9525.0	0.085863	399744	179.409311

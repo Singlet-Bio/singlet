@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+smartseq3_pbmc	rna	plate_umi	6423798	13	9.179151	6.19763	6.656798	6.491623	4.09354	6.491623	6.656798	3000.0	6.207084

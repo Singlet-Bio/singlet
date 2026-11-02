@@ -7,7 +7,7 @@ import traceback
 from pathlib import Path
 
 from . import formats
-from .util import Config, Unit, disk_bytes, load_canon, log, now, result_path, write_tsv
+from .util import Config, Unit, disk_bytes, load_canon, log, now, read_tsv, result_path, write_tsv
 
 
 def format_dir(cfg: Config, u: Unit) -> Path:
@@ -19,14 +19,19 @@ def run(cfg: Config, units: list[Unit], fmt_ids: list[str], force: bool = False,
     fmts = formats.get(fmt_ids)
     for u in units:
         out = result_path(cfg, "write", u)
-        if out.exists() and not force:
+        # rows of formats not written now are kept: a format added later (zarr3) is written on its own
+        old = [r for r in read_tsv(out) if r.get("format") not in fmt_ids] if out.exists() else []
+        have = {r.get("format") for r in read_tsv(out)} if out.exists() else set()
+        todo = [f for f in fmts if force or f.id not in have]
+        if not todo:
             log(f"{u.key}: write results exist")
             continue
+        old += [r for r in read_tsv(out) if r.get("format") in fmt_ids and r.get("format") not in {f.id for f in todo}] if out.exists() else []
         c = load_canon(cfg, u)
         base = format_dir(cfg, u)
         base.mkdir(parents=True, exist_ok=True)
-        rows = []
-        for f in fmts:
+        rows = list(old)
+        for f in todo:
             row = {"dataset": u.id, "matrix": u.name, "format": f.id, "group": f.group, "nnz": c.nnz, "genes": c.m, "cells": c.n}
             why = f.applicable(c, cfg)
             if why:

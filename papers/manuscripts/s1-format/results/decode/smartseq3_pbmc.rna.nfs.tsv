@@ -1,0 +1,20 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+smartseq3_pbmc	rna	main	nfs	csc_i32	4	cold	file		auto	6423798	ok	0.04659	0.046247	0.047485	137.878593	3	0.048379,0.046590,0.045904	
+smartseq3_pbmc	rna	main	nfs	mtx_gz	4	cold	file		auto	6423798	ok	0.60535	0.603164	0.606661	10.611718	3	0.607972,0.600978,0.605350	
+smartseq3_pbmc	rna	main	nfs	tenx_h5	4	cold	file		auto	6423798	ok	0.272006	0.269485	0.273743	23.616355	3	0.275479,0.272006,0.266964	
+smartseq3_pbmc	rna	main	nfs	h5ad_none	4	cold	file		auto	6423798	ok	0.09416	0.092022	0.096516	68.222235	3	0.098871,0.094160,0.089883	
+smartseq3_pbmc	rna	main	nfs	h5ad_gzip	4	cold	file		auto	6423798	ok	0.262893	0.26228	0.264134	24.435012	3	0.265374,0.262893,0.261667	
+smartseq3_pbmc	rna	main	nfs	h5ad_lzf	4	cold	file		auto	6423798	ok	0.151982	0.151889	0.155269	42.266867	3	0.158556,0.151982,0.151795	
+smartseq3_pbmc	rna	main	nfs	zarr	4	cold	file		auto	6423798	ok	0.078347	0.078127	0.080971	81.991348	3	0.083594,0.078347,0.077907	
+smartseq3_pbmc	rna	main	nfs	loom	4	cold	file		auto	6423798	ok	2.721335	2.695378	2.736571	2.360532	3	2.751807,2.669422,2.721335	
+smartseq3_pbmc	rna	main	nfs	soma	4	cold	file		auto	6423798	ok	0.254534	0.245808	0.261912	25.237475	3	0.237082,0.269291,0.254534	
+smartseq3_pbmc	rna	main	nfs	parquet_coo	4	cold	file		auto	6423798	ok	0.191142	0.189584	0.192583	33.607425	3	0.188026,0.194025,0.191142	
+smartseq3_pbmc	rna	main	nfs	csc_zstd19	4	cold	file		auto	6423798	ok	0.096936	0.096614	0.097933	66.268475	3	0.098930,0.096292,0.096936	
+smartseq3_pbmc	rna	main	nfs	rds_gz	4	cold	file		auto	6423798	ok	0.371225	0.356237	0.427045	17.304319	3	0.482865,0.371225,0.341249	
+smartseq3_pbmc	rna	main	nfs	rds_xz	4	cold	file		auto	6423798	ok	0.53084	0.520769	0.575031	12.101202	3	0.619222,0.530840,0.510699	
+smartseq3_pbmc	rna	main	nfs	bpcells	4	cold	file		auto	6423798	ok	0.872929	0.745758	1.151643	7.358898	3	1.430356,0.872929,0.618587	
+smartseq3_pbmc	rna	main	nfs	s1	4	cold	file	native	auto	6423798	ok	0.035968	0.035914	0.037306	178.596268	3	0.038645,0.035859,0.035968	avx2
+smartseq3_pbmc	rna	main	nfs	s1	4	cold	file	canonical	auto	6423798	ok	0.046305	0.04505	0.047216	138.728274	3	0.048126,0.046305,0.043795	avx2
+smartseq3_pbmc	rna	main	nfs	s1_pack	4	cold	file	native	auto	6423798	ok	0.033573	0.033438	0.034939	191.339801	3	0.036305,0.033304,0.033573	avx2
+smartseq3_pbmc	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	6423798	ok	0.04246	0.042399	0.044615	151.291199	3	0.046771,0.042460,0.042338	avx2
+smartseq3_pbmc	rna	main	nfs	zarr3	4	cold	file		auto	6423798	ok	0.107088	0.1066	0.111334	59.986299	3	0.107088,0.115580,0.106112	

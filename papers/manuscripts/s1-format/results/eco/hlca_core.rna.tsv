@@ -1,0 +1,10 @@
+dataset	lang	call	median_s	q1_s	q3_s	n	equal
+hlca_core	Python	anndata.read_h5ad	36.847014	36.845528	36.858264	3	True
+hlca_core	Python	scanpy.read_10x_h5	52.809696	52.802112	52.886483	3	True
+hlca_core	Python	singlet.load	30.638515	30.631584	30.710093	3	True
+hlca_core	C++	pz2::Matrix::open + decode (member in memory)	3.12911	3.116819	3.254774	3	
+hlca_core	R	Seurat::Read10X_h5	232.3108	231.1498	237.60135	3	True
+hlca_core	R	CreateSeuratObject(Read10X_h5)	300.3687	294.42675	301.5868	3	True
+hlca_core	R	zellkonverter::readH5AD	76.5444	75.7556	76.653	3	True
+hlca_core	R	singlet::load(as='sce')	31.9307	31.9235	32.82625	3	True
+hlca_core	R	singlet::load(as='seurat')	84.2683	84.074	84.54895	3	True

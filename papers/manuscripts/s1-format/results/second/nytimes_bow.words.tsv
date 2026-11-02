@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+nytimes_bow	words	zstd22	70002998	69771899	0.996699
+nytimes_bow	words	xz9e	70002998	69770332	0.996676
+nytimes_bow	words	brotli11	70002998	69786551	0.996908
+nytimes_bow	words	bzip2_9	70002998	70136804	1.001911

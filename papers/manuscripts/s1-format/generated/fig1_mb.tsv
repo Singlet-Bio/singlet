@@ -1,0 +1,5 @@
+pos	loader	label	fmt	first	first_lo	first_hi	batch_ms	batch_lo	batch_hi	seeds	batches
+0	s1_stream	\textbf{.s1}	s1	0.060366	0.059467	0.060548	8.8	7.4095	10.131	3	600
+1	zarr3_shard	Zarr v3 sharded	zarr3	0.271194	0.261204	0.306392	55.42	48.1395	70.2135	3	600
+2	anndata_zarr_lazy	AnnData Zarr	zarr	0.357171	0.351428	0.374218	300.23	268.739	340.222	3	600
+3	soma_ml	TileDB-SOMA ML	soma	12.3486	12.0979	12.8631	958.33	837.486	1148.81	3	600

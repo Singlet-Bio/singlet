@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	nb_exact_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+xenium_breast_rep1	rna	spatial_imaging	10604415	25	6.355694	5.064452	4.829642	4.30095	5.063411	3.68599	4.297088	4.825276	300.0	5.171426

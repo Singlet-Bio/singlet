@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+baron_pancreas	rna	streams	16171764	4.614017	2.050975	6.633657	NA	NA	NA	NA	NA
+baron_pancreas	rna	raw_u32	16171764	NA	NA	NA	129374112	3.354526	2.826634	64.0	NA
+baron_pancreas	rna	fixed_bytes	16171764	NA	NA	NA	64687056	5.619569	3.804517	32.0	NA
+baron_pancreas	rna	leb128_gaps	16171764	NA	NA	NA	32403625	3.692312	3.474096	16.029729	NA
+baron_pancreas	rna	streamvbyte_gaps	16171764	NA	NA	NA	40452283	3.439376	2.906676	20.011315	NA
+baron_pancreas	rna	rans0_gaps	16171764	NA	NA	NA	13704583	7.998727	7.99399	6.779512	NA
+baron_pancreas	rna	bitpack256_gaps	16171764	NA	NA	NA	27615190	5.68491	5.300685	13.660941	NA
+baron_pancreas	rna	zstd3_leb_gaps	16171764	NA	NA	NA	15212537	7.996378	7.988887	7.525481	NA
+baron_pancreas	rna	zstd19_leb_gaps	16171764	NA	NA	NA	13806209	7.995444	7.983235	6.829785	NA
+baron_pancreas	rna	pz2_avx2	16171764	NA	NA	NA	10106372	7.999227	7.992276	4.999515	10099739

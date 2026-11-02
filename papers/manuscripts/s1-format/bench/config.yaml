@@ -4,9 +4,12 @@ data_dir: ${S1BENCH_DATA:-../data}        # raw downloads, canonical matrices an
 results_dir: ../results                   # TSV results (committed)
 generated_dir: ../generated               # tables and numbers.tex read by the manuscript (committed)
 datasets: ../datasets.yaml
+# The released singlet versions the paper cites. The run measured commits whose package code (python/, src/, include/,
+# r/) is identical to these releases; results/env/*.json records the measured commit's own version string.
+release: {singlet_py: 1.3.3, singlet_r: 1.2.2}
 
 formats: [csc_i32, mtx_gz, tenx_h5, h5ad_none, h5ad_gzip, h5ad_lzf, zarr, loom, soma, parquet_coo, csc_zstd19,
-          rds_gz, rds_xz, bpcells, s1, s1_pack]
+          rds_gz, rds_xz, bpcells, s1, s1_pack, zarr3]
 loom_max_entries: 2.0e9                   # loom stores dense chunks; skip above this many matrix entries
 
 threads:
@@ -22,6 +25,11 @@ long_run_s: 60                            # a timed run longer than this is not 
 storages:
   - {name: local}
   - {name: nfs, root: "${S1BENCH_NFS_DATA:-}", threads: [4], caches: [cold]}
+
+decode:
+  prime: true                             # import and set up each library on a tiny file before the timed reads
+  big_nnz: 4.0e8                          # above this many non-zeros: big_formats only, headline threads, local disk, no sweep
+  big_formats: [csc_i32, tenx_h5, h5ad_none, h5ad_gzip, zarr, soma, s1, s1_pack, zarr3]
 
 s1:
   isas: [scalar, avx2, avx512]
@@ -54,8 +62,9 @@ minibatch:
   # Download-first loaders on slow links are not run above this size tier; the row records the computed transfer
   # time of the file (bytes * 8 / link rate) as est_download_s instead. Tier order: S < M < L < XL.
   skip_download_above_tier: {s3_0.1g: M, s3_1g: M, s3_10g: M, s3_1g_wan: M}   # estimated, not run, above M
-  workers: [0, 2, 4]
-  loaders: [anndata_inmem, anndata_backed, scdataset, anndata_zarr_lazy, soma_ml, bpcells, s1_stream, s1_stream_canonical]
+  fetch_factor: 1                         # scDataset: one batch per fetch (matched to the block workload)
+  loaders: [anndata_inmem, anndata_backed, scdataset, anndata_zarr_lazy, soma_ml, bpcells, s1_stream, s1_stream_canonical,
+            s1_stream_seq, zarr3_shard, scdataset_default]
   tiers:
     - {name: local}                       # node-local disk: the timed jobs copy the files there first (data_dir)
     - {name: nfs, root: "${S1BENCH_NFS_DATA:-}"}   # the shared project filesystem, read in place
@@ -76,6 +85,26 @@ netem:
   bucket: s1bench
   access_key: s1bench
   secret_key: s1bench-secret
+
+# Review round 3. access: random-minibatch costs from each format's index; chunk_sweep re-encodes .s1 at these budgets.
+access:
+  n_batches: 200
+  chunk_sweep: [4096, 16384, 49152, 131072, 393216]
+  sweep_datasets: [pbmc10k_v3, tabula_muris_facs, hlca_core]
+
+# netsweep: added round-trip times and requests in flight at one link rate; DataLoader workers; the real store (R2).
+netsweep:
+  gbit: 1
+  rtt_ms: [0, 5, 10, 30, 100, 200]
+  loaders: [s1_stream, anndata_zarr_lazy, soma_ml, zarr3_shard]
+  inflight_rtt_ms: [30, 100]
+  inflight: [[1, 0], [2, 1], [4, 1], [8, 1], [16, 2], [32, 4], [64, 8]]   # [io_threads, minibatches ahead]
+  workers: [0, 2, 4]
+  workers_rtt_ms: 1
+  n_batches: 60
+  warmup_batches: 5
+  r2_loaders: [s1_stream, anndata_zarr_lazy, zarr3_shard, anndata_inmem]
+  r2_inflight: [[32, 4], [64, 8]]                # [io_threads, minibatches ahead] for s1_stream on the real store
 
 eco:
   datasets: [pbmc10k_v3, hlca_core]

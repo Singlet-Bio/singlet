@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+nytimes_bow	words	69679427	64.0	29.294632	10.166974	9.478845	8.000261	8.037128	1

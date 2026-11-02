@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+pbmc_multiome	rna	streams	23508033	5.545515	1.82424	7.356507	NA	NA	NA	NA	NA
+pbmc_multiome	rna	raw_u32	23508033	NA	NA	NA	188064264	3.409463	2.879336	64.0	NA
+pbmc_multiome	rna	fixed_bytes	23508033	NA	NA	NA	94032132	5.727632	3.671356	32.0	NA
+pbmc_multiome	rna	leb128_gaps	23508033	NA	NA	NA	47188130	4.158998	3.882237	16.058555	NA
+pbmc_multiome	rna	streamvbyte_gaps	23508033	NA	NA	NA	58787665	3.906692	3.220526	20.005983	NA
+pbmc_multiome	rna	rans0_gaps	23508033	NA	NA	NA	21937768	7.999127	7.996695	7.465624	NA
+pbmc_multiome	rna	bitpack256_gaps	23508033	NA	NA	NA	38663802	6.146559	5.671137	13.157648	NA
+pbmc_multiome	rna	zstd3_leb_gaps	23508033	NA	NA	NA	24086086	7.99587	7.985618	8.196717	NA
+pbmc_multiome	rna	zstd19_leb_gaps	23508033	NA	NA	NA	22406806	7.995713	7.985675	7.625242	NA
+pbmc_multiome	rna	pz2_avx2	23508033	NA	NA	NA	14500543	7.999219	7.993793	4.934668	14494409

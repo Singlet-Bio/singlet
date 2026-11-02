@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+xenium_breast_rep1	rna	streams	10604415	3.504666	2.582399	6.071178	NA	NA	NA	NA	NA
+xenium_breast_rep1	rna	raw_u32	10604415	NA	NA	NA	84835320	2.326592	2.15671	64.0	NA
+xenium_breast_rep1	rna	fixed_bytes	10604415	NA	NA	NA	31813245	4.769246	3.517605	24.0	NA
+xenium_breast_rep1	rna	leb128_gaps	10604415	NA	NA	NA	21209916	3.247381	3.183336	16.000819	NA
+xenium_breast_rep1	rna	streamvbyte_gaps	10604415	NA	NA	NA	26511238	3.034328	2.694068	20.000151	NA
+xenium_breast_rep1	rna	rans0_gaps	10604415	NA	NA	NA	8206977	7.999444	7.993485	6.191366	NA
+xenium_breast_rep1	rna	bitpack256_gaps	10604415	NA	NA	NA	14311120	5.963755	5.719888	10.796349	NA
+xenium_breast_rep1	rna	zstd3_leb_gaps	10604415	NA	NA	NA	9445093	7.997838	7.992165	7.125404	NA
+xenium_breast_rep1	rna	zstd19_leb_gaps	10604415	NA	NA	NA	8092790	7.99251	7.979758	6.105223	NA
+xenium_breast_rep1	rna	pz2_avx2	10604415	NA	NA	NA	6910431	7.999143	7.97968	5.213248	6880764
