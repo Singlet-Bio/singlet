@@ -1,8 +1,7 @@
 % .s1 manuscript, preprint (bioRxiv/arXiv) layout: plain single-column article with the same sections, figures and
-% tables as the TCBB version (main.tex), followed by the supplementary material and the format specification in the
-% same PDF. The main text refers to the supplement as S-<label> and the supplement to the main text as M-<label>, as in
-% the separate TCBB documents; here both prefixes are read back from this document's own .aux by xr, so build twice:
-%   latexmk -pdf biorxiv.tex   (then once more)
+% tables as the TCBB version (main.tex). The supplementary material (supplement.tex, Supplementary File 1) and the format
+% specification (spec.tex, Supplementary File 2) are the same separate documents as for TCBB; the main text refers to
+% the supplement as S-<label> through xr from supplement.aux, so build supplement.tex first, then this file twice.
 \documentclass[11pt,letterpaper]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{newtxtext}
@@ -12,8 +11,7 @@
 \usepackage[nocompress]{cite}
 \usepackage{xr}
 \usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
-\externaldocument[S-]{biorxiv}   % this document's own labels, as S-<label> (main text -> supplement)
-\externaldocument[M-]{biorxiv}   % and as M-<label> (supplement -> main text)
+\externaldocument[S-]{supplement}   % supplement labels as S-<label>
 \usepackage{placeins}
 % let a tall figure share its page with text (one column: the IEEEtran figure* environments become full-page floats
 % under the default fractions)
@@ -51,8 +49,8 @@ benchmark pipeline that produces every figure, table and number in this paper
 (\texttt{papers/manuscripts/s1-format/bench}) are open source under the MIT license, with the per-stage results behind the
 figures in \texttt{papers/manuscripts/s1-format/results}. The version used for this preprint is tagged
 \texttt{s1-paper-biorxiv}: \url{https://github.com/Singlet-Bio/singlet/tree/s1-paper-biorxiv/papers/manuscripts/s1-format}.
-The supplementary material and the format specification follow
-the references.
+The supplementary material (Supplementary File~1) and the format
+specification (Supplementary File~2) are separate files.
 
 \section*{Acknowledgments}
 Computations ran on the Clipper cluster at Grand Valley State University; the author thanks the GVSU HPC team for their
@@ -64,24 +62,4 @@ its input exactly, and every result is produced by the open pipeline.
 
 \bibliographystyle{IEEEtran}
 \bibliography{refs}
-
-% ---------------------------------------------------------------- supplementary material (S-numbered)
-\clearpage
-\setcounter{section}{0}\setcounter{figure}{0}\setcounter{table}{0}\setcounter{equation}{0}
-\renewcommand{\thesection}{S\arabic{section}}
-\renewcommand{\thetable}{S\arabic{table}}
-\renewcommand{\thefigure}{S\arabic{figure}}
-\renewcommand{\theequation}{S\arabic{equation}}
-\begin{center}{\Large Supplementary material}\end{center}
-
-\input{sections/supp_results}
-\input{figures/fig_supp_net}
-\input{figures/fig_supp_floor}
-\FloatBarrier
-\input{sections/supp_limitations}
-\input{sections/supp_methods}
-\clearpage
-\input{sections/supp_tables}
-\clearpage
-\input{sections/supplement_spec}
 \end{document}
