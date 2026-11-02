@@ -25,7 +25,7 @@
     error bars/error bar style={line width=0.5pt, opacity=0.8}, error bars/error mark=none},
 }
 % iso-lines of Eq. (1) at B = 1 Gbit/s: R_eff = R  <=>  D = 1/(1/R - b/1000), D and R in million non-zeros/s, b in bits;
-% each ends, labelled, at the top of the plot
+% each ends, labeled, at the top of the plot
 \expandafter\pgfplotsinvokeforeach\expandafter{\fbiso}{
   \addplot[domain=\fbxlo:{1000*(1/#1-1/\fbtop)}, samples=150, dashed, sone!55, forget plot] {1/(1/#1 - x/1000)}
     node[pos=1, anchor=south west, font=\sffamily\tiny, text=sone!80!black, inner sep=1pt] {#1\,M/s};

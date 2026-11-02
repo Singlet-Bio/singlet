@@ -1,6 +1,6 @@
 % Figure 3: reading over a network. Every value is read from generated/fignet_*.tsv and generated/figr2.tsv (written by
 % `python -m s1bench report`, network_section, netsweep_section and r2_section). More panels: fig_supp_net.tex.
-% Panels on a 2 x 2 grid with one legend on the right for all four: each loader has the colour of the format it reads.
+% Panels on a 2 x 2 grid with one legend on the right for all four: each loader has the color of the format it reads.
 \begin{figure*}[tbp]
 \centering
 \pgfmathsetlengthmacro{\netW}{0.33\linewidth}   % axis width
@@ -60,9 +60,12 @@
   title={b\quad Measured training loaders},
   xmode=log, ymode=log, xmin=0.03, xmax=30, ymin=50, ymax=400000,
   xlabel={link bandwidth (Gbit/s)}, ylabel={cells per second into the model}, xtick={0.1,1,10}, xticklabels={0.1,1,10}]
-\addplot[c-s1, very thick, mark=*, mark size=1.8pt, discard if not={loader}{s1_stream}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
-\addplot[c-zarr, thick, mark=square*, mark size=1.4pt, discard if not={loader}{anndata_zarr_lazy}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
-\addplot[c-soma, thick, mark=triangle*, mark size=1.6pt, discard if not={loader}{soma_ml}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}};
+\addplot[c-s1, very thick, mark=*, mark size=1.8pt, discard if not={loader}{s1_stream}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}}
+  node[pos=0.75, anchor=north, font=\sffamily\tiny\bfseries, text=c-s1!85!black, inner sep=3pt] {\sone};
+\addplot[c-zarr, thick, mark=square*, mark size=1.4pt, discard if not={loader}{anndata_zarr_lazy}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}}
+  node[pos=0.75, anchor=north, font=\sffamily\tiny, text=c-zarr!70!black, inner sep=3pt] {AnnData Zarr};
+\addplot[c-soma, thick, mark=triangle*, mark size=1.6pt, discard if not={loader}{soma_ml}] table[x=gbit, y=cells_per_s] {\gen{fignet_loaders.tsv}}
+  node[pos=0.75, anchor=north, font=\sffamily\tiny, text=c-soma!70!black, inner sep=3pt] {TileDB-SOMA ML};
 \addplot[c-s1, dashed, no marks] table[x=gbit, y=net] {\gen{fignet_ceilings.tsv}}
   node[pos=0.2, sloped, above, font=\sffamily\tiny, text=c-s1] {link capacity, in \sone{} cells};
 \end{axis}
@@ -72,10 +75,14 @@
   xmode=log, ymode=log, xmin=0.4, xmax=260, ymin=100, ymax=2e5,
   xtick={0.5,5,10,30,100,200}, xticklabels={0,5,10,30,100,200}, ytick={1e2,1e3,1e4,1e5},
   xlabel={added round-trip time (ms)}, ylabel={cells per second into the model}, clip=false]
-\addplot[c-s1, very thick, mark=*, mark size=1.6pt] table[x=rtt, y=s1_stream_cps] {\gen{fignet_rtt.tsv}};
-\addplot[c-zarr, thick, mark=square*, mark size=1.3pt] table[x=rtt, y=anndata_zarr_lazy_cps] {\gen{fignet_rtt.tsv}};
-\addplot[c-zarr3, thick, mark=diamond*, mark size=1.8pt] table[x=rtt, y=zarr3_shard_cps] {\gen{fignet_rtt.tsv}};
-\addplot[c-soma, thick, mark=triangle*, mark size=1.6pt] table[x=rtt, y=soma_ml_cps] {\gen{fignet_rtt.tsv}};
+\addplot[c-s1, very thick, mark=*, mark size=1.6pt] table[x=rtt, y=s1_stream_cps] {\gen{fignet_rtt.tsv}}
+  node[pos=0, anchor=south west, font=\sffamily\tiny\bfseries, text=c-s1!85!black, inner sep=3pt] {\sone};
+\addplot[c-zarr, thick, mark=square*, mark size=1.3pt] table[x=rtt, y=anndata_zarr_lazy_cps] {\gen{fignet_rtt.tsv}}
+  node[pos=0, anchor=south west, font=\sffamily\tiny, text=c-zarr!70!black, inner sep=3pt] {AnnData Zarr};
+\addplot[c-zarr3, thick, mark=diamond*, mark size=1.8pt] table[x=rtt, y=zarr3_shard_cps] {\gen{fignet_rtt.tsv}}
+  node[pos=0, anchor=south west, font=\sffamily\tiny, text=c-zarr3!70!black, inner sep=3pt] {Zarr v3, sharded};
+\addplot[c-soma, thick, mark=triangle*, mark size=1.6pt] table[x=rtt, y=soma_ml_cps] {\gen{fignet_rtt.tsv}}
+  node[pos=0, anchor=south west, font=\sffamily\tiny, text=c-soma!70!black, inner sep=3pt] {TileDB-SOMA ML};
 \end{axis}
 % ---------------- (d) a real object store ----------------
 \begin{axis}[netax, name=nd, at={($(nb.south west)+(0,-\netV)$)}, anchor=north west,
@@ -86,11 +93,12 @@
     every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=2pt}}]
 \fill[c-s1!7] (axis cs:0.3,1e4) rectangle (axis cs:1,6e5);
 \node[font=\sffamily\tiny, text=c-s1!80!black, anchor=north west, align=left] at (axis cs:0.31,5.5e5) {fast to start\\and to stream};
-% lines of equal time to one epoch (first minibatch + cells / rate) through the .s1 point and the downloaded h5ad file
-\addplot[c-s1, densely dashed, thick, no marks, discard if not={curve}{s1}] table[x=first, y=cps] {\gen{figr2_epoch.tsv}}
-  node[pos=0.62, sloped, below, font=\sffamily\tiny, text=c-s1!80!black] {one epoch in \nm{r2-epoch-s1}\,s};
-\addplot[c-h5ad_gzip, densely dashed, thick, no marks, discard if not={curve}{h5ad}] table[x=first, y=cps] {\gen{figr2_epoch.tsv}}
-  node[pos=0.45, sloped, below, font=\sffamily\tiny, text=c-h5ad_gzip!80!black] {one epoch in \nm{r2-epoch-h5ad}\,s};
+% lines of equal time to one epoch through the .s1 point, the downloaded h5ad file and AnnData Zarr; labels from
+% generated/figr2_epoch_labels.tex, horizontal, below each line's flat part from 2 s
+\addplot[c-s1, densely dashed, thick, no marks, discard if not={curve}{s1}] table[x=first, y=cps] {\gen{figr2_epoch.tsv}};
+\addplot[c-h5ad_gzip, densely dashed, thick, no marks, discard if not={curve}{h5ad}] table[x=first, y=cps] {\gen{figr2_epoch.tsv}};
+\addplot[c-zarr, densely dashed, thick, no marks, discard if not={curve}{zarr}] table[x=first, y=cps] {\gen{figr2_epoch.tsv}};
+\input{\gen{figr2_epoch_labels.tex}}
 \pgfplotsinvokeforeach{h5ad_gzip,zarr,zarr3,s1}{
   \addplot[only marks, lbl, mark=*, mark size=2.2pt, c-#1, discard if not={fmt}{#1}] table[x=first, y=cps, meta=label] {\gen{figr2.tsv}};
 }
@@ -98,19 +106,23 @@
 \node[anchor=north west, inner sep=0pt] at ($(nb.north east)+(0.35cm,0)$) {\pgfplotslegendfromname{netlegend}};
 \end{tikzpicture}
 \caption{\textbf{\sone{} reads at the speed of the network up to 1\,Gbit/s on four cores, including from a real cloud
-object store.} Every loader decodes what it fetches into PyTorch sparse tensors; colours are those of the formats read.
+object store.} Every loader decodes what it fetches into PyTorch sparse tensors; colors are those of the formats read.
 \textbf{(a)} Non-zeros a link of a given bandwidth delivers in each format, from its median size and decode rate on
 \nm{threadsHeadline} cores (Eq.~\ref{eq:reff}). Each curve rises with the link until the decoder becomes the limit;
 \sone{} carries the most non-zeros over every link up to about \nm{wire-crossover-gbit}\,Gbit/s, where uncompressed arrays
 catch up.
 \textbf{(b)} Cells per second delivered into a PyTorch model from \nm{fig1b-dataset} through an emulated object store at
 three link speeds (1\,ms latency); dashed, the link's capacity in \sone{} cells.
-\textbf{(c)} The same store at 1\,Gbit/s with a round-trip delay added to every request, \nm{ns-dataset}; \sone{} with the
-\texttt{singlet} \nm{rel-singlet_py} defaults (32 range requests in flight, the next four minibatches requested ahead).
+\textbf{(c)} The same store at 1\,Gbit/s with a round-trip delay added to every request, \nm{ns-dataset}. The round trip
+is the time from sending a request to receiving the first byte of its answer, set by distance and the storage service, not
+by computing: a few milliseconds within a data center, tens of milliseconds from cloud storage over the internet. A loader
+that waits for one request before sending the next pays it on every request; \sone{} with the \texttt{singlet}
+\nm{rel-singlet_py} defaults keeps 32 range requests in flight and requests the next four minibatches ahead.
 \textbf{(d)} Cloudflare R2 read over the public internet from a cluster node (about \nm{r2-hlca_core-rtt}\,ms per
 request), \nm{fig1b-dataset}, median of three seeds; the h5ad file is downloaded whole before the first minibatch. Dashed:
-loaders on a line deliver one epoch (\nm{r2-epoch-cells} cells) in the same time; the downloaded file catches up with
-\sone{} only after about \nm{r2-epoch-crossover} epochs, if it fits in memory. Costs per
+loaders on a line deliver one epoch (\nm{r2-epoch-cells} cells) in the same time, through the \sone{}, downloaded h5ad and
+AnnData Zarr points; the downloaded file catches up with \sone{} only after about \nm{r2-epoch-crossover} epochs, if it fits
+in memory. Costs per
 epoch: Supplementary Table~\ref{S-tab:r2}; latency distributions, round trips and block size: Supplementary
 Fig.~\ref{S-fig:snet}.}
 \label{fig:net}

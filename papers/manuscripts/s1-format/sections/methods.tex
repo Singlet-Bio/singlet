@@ -3,8 +3,9 @@
 \label{sec:setup}\label{sec:mmethods}
 
 Every number, table and figure in this paper is produced by one pipeline from public data
-(\texttt{papers/manuscripts/s1-format/bench} in the \texttt{singlet} repository); the Supplementary Methods give the full
-protocol.
+(\texttt{papers/manuscripts/s1-format/bench} in the \texttt{singlet} repository); the Supplementary Methods
+(Section~\ref{S-sec:methods}) give the full protocol, Supplementary Section~\ref{S-sec:sresults} the detailed results, and
+Supplementary File~2 the format specification.
 
 \para{Data}\nm{nMatrices} count matrices from \nm{nDatasets} public datasets in \nm{nProtocolClasses} protocol classes
 (droplet, plate-based, combinatorial, multimodal and spatial data, from a thousand to more than a million cells;
@@ -32,7 +33,7 @@ were fitted on half of each matrix's cells and scored on the other half, zeros
 included~\cite{hafemeister2019normalization,townes2019feature}. The shortest code length among them, charged nothing for
 the models' own parameters, is our reference for the floor; it is a reference, not a bound.
 
-\para{Speed frontier}A C++ benchmark encoded each matrix's row-index steps and values with raw 32-bit arrays, fixed-width
+\para{Speed frontier}A C++ benchmark (Supplementary Section~\ref{S-sec:mkernels}) encoded each matrix's row-index steps and values with raw 32-bit arrays, fixed-width
 bytes, LEB128 varints, Stream VByte~\cite{lemire2018stream}, SIMD bit-packing~\cite{lemire2015decoding}, an order-0 rANS
 coder~\cite{duda2013asymmetric}, and zstd at levels 3 and 19, and decoded each, and the \sone{} member, on one pinned core
 (AVX2), checked against the input. Only writing the output arrays gives the rate no decoder can exceed by much; the

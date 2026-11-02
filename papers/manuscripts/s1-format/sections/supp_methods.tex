@@ -4,17 +4,17 @@
 
 \subsection{Datasets, formats and the lossless check}
 \begin{itemize}\itemsep 1pt
-\item \emph{Datasets} (Table~\ref{tab:datasets}; accessions, licences, conversion notes in \texttt{datasets.yaml}): fixed
+\item \emph{Datasets} (Table~\ref{tab:datasets}; accessions, licenses, conversion notes in \texttt{datasets.yaml}): fixed
   accession and file, checked against a recorded SHA-256, converted to canonical CSC (features $\times$ cells, u32 counts,
-  no explicit zeros, source identifiers and barcodes). Non-integer matrices are rejected, not rounded. Each matrix of a
-  multimodal dataset is a separate unit.
+  explicit zeros removed, source identifiers and barcodes). Non-integer matrices are rejected. Each matrix of a multimodal
+  dataset is a separate unit.
 \item \emph{Formats} (Table~\ref{tab:formats}): each library's default or documented recommended options;
   \texttt{dgCMatrix} via \texttt{saveRDS}; loom only where its dense chunks fit the run budget; \sone{} with writer
-  defaults (shared-pack variant: vocabulary file not counted). Size: bytes of all files per non-zero. Generic-codec
+  defaults (shared-pack variant: vocabulary file excluded). Size: bytes of all files per non-zero. Generic-codec
   control: Zarr v3 (zarr-python 3.1), CSR \texttt{data}/\texttt{indices} in inner chunks of 49,152 elements, shards of
   64, Blosc zstd-5 with bit shuffling in the narrowest unsigned type, \texttt{indptr} one chunk, names gzipped.
 \item \emph{Lossless check}: every file is read back and compared with the canonical matrix, names included; failures
-  are reported, not dropped. RDS and BPCells are not run above $2^{31}-1$ non-zeros (Section~\ref{sec:slimits}).
+  are reported. RDS and BPCells run only up to $2^{31}-1$ non-zeros (Section~\ref{sec:slimits}).
 \end{itemize}
 
 \subsection{Read speed}
@@ -46,14 +46,14 @@
   TileDB-SOMA ML prefetches with its own reader; others read sequentially.
 \item \emph{Measures}: new process, cold cache, imports done; time to open, first minibatch and its tensor (three seeds,
   medians); for one seed, sustained rate over 200 minibatches after 10 warm-up, and peak resident memory. Ratios of
-  sustained rates use datasets above $211\times512$ cells (no cell read twice). Link share: sustained rate $\times$
+  sustained rates use datasets above $211\times512$ cells (each cell read at most once). Link share: sustained rate $\times$
   bytes per cell $/$ bandwidth. On local disk only the first \sone{} run per file (reported) is cold, because of the RAID
   cache.
 \item \emph{Emulated store}: \texttt{rclone serve s3} at 0.1, 1 or 10\,Gbit/s with 1\,ms latency, or 1\,Gbit/s with
   30\,ms. One token bucket over all connections (\texttt{bwproxy.py}; capacity the larger of 5\,ms of rate and
   64\,KiB), so concurrent readers share the tier; Toxiproxy adds latency to every response. Delivered over $p$
   connections (1\,GiB, no latency): \nm{delivered-s3_0.1g}, \nm{delivered-s3_1g}, \nm{delivered-s3_10g}\,Gbit/s;
-  tiers not reached are flagged (\nm{cappedTiers}). Loaders without range reads download first (counted); above the M
+  tiers that fall short are flagged (\nm{cappedTiers}). Loaders without range reads download first (counted); above the M
   tier their transfer time at the tier's bandwidth replaces a run (\textsuperscript{e}, Table~\ref{tab:minibatch}).
 \item \emph{Sweeps} (store at 1\,Gbit/s, one fresh process per point, first minibatch then 60 timed after 5 warm-up):
   latency 0, 5, 10, 30, 100, 200\,ms; \sone{} at 30 and 100\,ms with 1--64 requests and 0--8 minibatches ahead.
@@ -73,7 +73,7 @@
   and in eight ranges. Loaders as above, three seeds; \sone{} also with 32 and 64 requests, 4 and 8 ahead.
 \item \emph{Epoch cost}: (cells$/$512) minibatches $\times$ requests and bytes per minibatch counted at the emulated store
   without latency; R2 Class B \$0.36 per million, no egress; S3 Standard us-east-1 \texttt{GET} \$0.004 per 10,000,
-  transfer \$0.09 per GB (30 October 2026, no free tiers). The h5ad download is one request.
+  transfer \$0.09 per GB (30 October 2026, free tiers excluded). The h5ad download is one request.
 \item \emph{Writing} (Table~\ref{tab:writecost}): fresh process, primed, canonical matrix in memory to local disk; memory
   is peak resident memory of the process and children minus that before writing.
 \end{itemize}
@@ -101,7 +101,7 @@
 \subsection{Count-model floor}
 \begin{itemize}\itemsep 1pt
 \item \emph{Code length}: $\sum_{g,c}-\log_2 p(x_{gc})$ over all entries, zeros included, per non-zero; two-fold
-  cross-validation over a random split of cells (fit one half, score the other, swap); model cost not charged. Floor:
+  cross-validation over a random split of cells (fit one half, score the other, swap); model cost excluded. Floor:
   the shortest of four models.
 \item \emph{Poisson} $x_{gc}\sim\mathrm{Poisson}(s_c\mu_g)$, $s_c$ the cell's total over the mean total.
   \emph{NB} $x_{gc}\sim\mathrm{NB}(s_c\mu_g,\theta_g)$, $\theta_g$ by moments, smoothed over mean expression as in
@@ -114,7 +114,7 @@
 \item \emph{Zero terms} of the parametric models are summed per gene and depth bin at the bin's mean depth (at most
   \nm{nbBinningErrPctMax}\% from the exact sum on matrices of up to $5\times10^7$ entries).
 \item \emph{Sampling entropy} (UMI matrices, 2{,}000 test cells): profile $\pi_c=(x_c+\alpha\,\bar\pi_{k(c)})/(N_c+\alpha)$
-  shrunk toward training-half cluster profiles, $\alpha$ maximising the likelihood of a held-out binomial half of each
+  shrunk toward training-half cluster profiles, $\alpha$ maximizing the likelihood of a held-out binomial half of each
   cell's molecules~\cite{batson2019molecular,neufeld2024inference}. Entropy of $\mathrm{Multinomial}(N_c,\pi_c)$:
   $-\log_2 N_c!+\sum_g\mathbb{E}[\log_2 x_{gc}!]-N_c\sum_g\pi_{gc}\log_2\pi_{gc}$,
   $x_{gc}\sim\mathrm{Binomial}(N_c,\pi_{gc})$, exact where $N_c\pi_{gc}<30$, second-order expansion above. Not a bound
@@ -130,4 +130,4 @@ over it, and zellkonverter \texttt{readH5AD}; Python output compared with the ca
 \nm{memGB}\,GB, node-local \nm{localDisk}), at most one of our timed jobs per node. \emph{Code}: \texttt{python -m
 s1bench} in \texttt{papers/manuscripts/s1-format/bench} of the \texttt{singlet} repository; settings
 \texttt{config.yaml}, environment \texttt{environment.yml}, versions that ran in \texttt{results/}. Every plotted value
-and number is written by the \texttt{report} stage (\texttt{generated/}); none is typed by hand.
+and number is written by the \texttt{report} stage (\texttt{generated/}).

@@ -16,7 +16,7 @@ equal one (Table~\ref{tab:datasets}).
 \item \emph{Cold read} (Table~\ref{tab:decode}): \sone{} \nm{dec-s1-cold-t4} million non-zeros per second (source
   gene order \nm{dec-s1canonical-cold-t4}), AnnData Zarr \nm{dec-zarr-cold-t4}, gzip AnnData
   \nm{dec-h5ad_gzip-cold-t4}. Against the fastest other format per matrix, a median of \nm{dec-speedup-each}$\times$
-  (\nm{dec-speedup-each-lo}--\nm{dec-speedup-each-hi}); where \sone{} is not fastest, the matrix has at most
+  (\nm{dec-speedup-each-lo}--\nm{dec-speedup-each-hi}); where another format is faster, the matrix has at most
   \nm{dec-s1-slower-max-mnnz} million non-zeros and fixed per-file costs (names) dominate.
 \item \emph{Cores}: from one to four cores \sone{} speeds up \nm{speedup-s1-t4}$\times$ (eight: \nm{speedup-s1-t8}),
   TileDB-SOMA \nm{speedup-soma-t4}$\times$, MTX.gz \nm{speedup-mtx_gz-t4}$\times$. The codec consumes
@@ -28,11 +28,11 @@ equal one (Table~\ref{tab:datasets}).
 \begin{itemize}\itemsep 1pt
 \item Stored bits consumed per second (Fig.~\ref{fig:snet}a): \sone{} reader \nm{net-knee-s1}\,Gbit/s, codec alone
   \nm{net-knee-s1-per-core}\,Gbit/s per core; fastest other format under 12 bits per non-zero,
-  \nm{net-knee-compact-best-name}, \nm{net-knee-compact-best}\,Gbit/s (not readable in part).
+  \nm{net-knee-compact-best-name}, \nm{net-knee-compact-best}\,Gbit/s (whole-file reads only).
 \item Against uncompressed arrays (Eq.~\ref{M-eq:reff}), \sone{} delivers more non-zeros on \nm{wire-wins-1} of
   \nm{wire-n-1} matrices at 1\,Gbit/s and \nm{wire-wins-10} of \nm{wire-n-10} at 10\,Gbit/s (median gains
   \nm{wire-gain-1}$\times$, \nm{wire-gain-10}$\times$); on \nm{wire-crossover-never} of \nm{wire-crossover-n}
-  matrices the arrays never catch up, because \sone{} decodes faster even from memory.
+  matrices \sone{} stays ahead at every bandwidth, because it decodes faster even from memory.
 \end{itemize}
 
 \subsection{Minibatch loading}
@@ -53,8 +53,8 @@ equal one (Table~\ref{tab:datasets}).
   30\,ms). At 30\,ms, 8 requests at once fill \nm{inf-30-share-8}\% of the link and \nm{inf-30-best-io} fill
   \nm{inf-30-best-share}\%, \nm{inf-30-gain}$\times$ one at a time (Fig.~\ref{fig:snet}d). \texttt{singlet} 1.3.3
   defaults to 32 requests and four minibatches ahead; Table~\ref{tab:minibatch} used 8 and 1.
-\item \emph{DataLoader workers} raise scDataset's rate but not \texttt{S1Cells}', whose decoder already uses every core
-  outside Python's interpreter lock (Table~\ref{tab:workers}).
+\item \emph{DataLoader workers} raise scDataset's rate; \texttt{S1Cells}' stays level, since its decoder already uses
+  every core outside Python's interpreter lock (Table~\ref{tab:workers}).
 \end{itemize}
 
 \subsection{Random access and a real object store}

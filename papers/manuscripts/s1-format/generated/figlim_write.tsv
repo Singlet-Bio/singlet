@@ -2,7 +2,7 @@ format	label	group	n	t	t_lo	t_hi	m	m_lo	m_hi	anchor
 csc_i32	CSC, int32	general	3	1	1	1	1	1	1	west
 zarr	AnnData Zarr	general	3	1.18752	0.948593	1.71546	2.52713	2.09404	4.90939	south
 h5ad_none	h5ad (none)	general	3	1.33361	1.20132	1.38804	2.54343	2.0938	4.98957	north west
-h5ad_lzf	h5ad lzf	general	3	3.689	3.04819	3.88308	2.54805	2.09421	5.0066	south
+h5ad_lzf	h5ad lzf	general	3	3.689	3.04819	3.88308	2.54805	2.09421	5.0066	south west
 zarr3	Zarr v3 sharded	general	3	4.95828	3.73015	5.2698	3.93949	3.05351	5.38994	west
 parquet_coo	Parquet COO	general	3	6.27563	5.50034	6.72814	1.20109	1.05029	2.11199	west
 bpcells	BPCells	domain	3	7.52237	3.3133	23.5246	2.29844	2.0405	4.7357	north

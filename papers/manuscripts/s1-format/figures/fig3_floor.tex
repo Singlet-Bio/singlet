@@ -1,11 +1,11 @@
 % Figure 4: how close .s1 is to the limits of size and decoding speed, and what it costs to write. Values from
 % generated/fig3a_ladder.tsv (ladder stage) and generated/figlim_*.tsv (kernels and writecost stages, report_limits.py).
 % More: fig_supp_floor.tex.
-\begin{figure*}[t]
+\begin{figure*}[tbp]
 \centering
-\pgfmathsetlengthmacro{\flX}{3.35cm}            % left of a and c: a's row labels
-\pgfmathsetlengthmacro{\flA}{5.7cm}             % side of every (square) panel
+\pgfmathsetlengthmacro{\flX}{2.75cm}            % left of a and c: a's row labels
 \pgfmathsetlengthmacro{\flG}{1.9cm}             % between the columns: the y labels of b and d
+\pgfmathsetlengthmacro{\flA}{min(5.7cm,(\linewidth-\flX-\flG-0.5cm)/2)}   % side of every (square) panel, inside the margins
 \pgfmathsetlengthmacro{\flB}{\flA}
 \pgfmathsetlengthmacro{\flH}{\flA}
 \pgfmathsetlengthmacro{\flHH}{\flA}
@@ -60,7 +60,7 @@
 \addplot[dec!80!black, dashed, line width=0.6pt, no marks, forget plot] table[x=bits, y=mnnzs] {\gen{figlim_storeline.tsv}}
   node[pos=0.1, anchor=north west, font=\sffamily\tiny, text=dec!80!black] {writing the output only};
 \addplot[only marks, mark=star, mark size=3.5pt, ink2, thick, forget plot] table[x=bits, y=mnnzs] {\gen{figlim_ideal.tsv}}
-  node[anchor=south west, font=\sffamily\tiny, text=ink2, xshift=1pt] {ideal: model size, output speed};
+  node[anchor=south west, font=\sffamily\tiny, text=ink2, xshift=1pt, align=left] {ideal: model size,\\output speed};
 \addplot[only marks, lbl, mark=*, mark size=1.9pt, gen, draw=white, line width=0.3pt, discard if not={group}{fast}]
   table[x=bits, y=mnnzs, meta=label] {\gen{figlim_plane.tsv}};
 \addplot[only marks, lbl, mark=*, mark size=1.9pt, dec, draw=white, line width=0.3pt, discard if not={group}{entropy}]
@@ -75,17 +75,18 @@
   xtick={0.01,0.1,1,10}, xticklabels={0.01,0.1,1,10}, ytick={0,0.25,0.5,0.75,1}, yticklabels={0,25,50,75,100\%},
   xlabel={link bandwidth per decoding core (Gbit/s)}, ylabel={share of the ideal code's rate},
   axis x line*=bottom, axis y line*=left, clip=false,
-  legend style={font=\sffamily\tiny, draw=none, fill=white, fill opacity=0.85, text opacity=1, at={(0.02,0.03)},
-    anchor=south west, legend columns=1, cells={anchor=west}},
+  /tikz/lnlbl/.style={font=\sffamily\tiny, inner sep=1.5pt, fill=white, fill opacity=0.85, text opacity=1},
 ]
-\addplot[sone, line width=1.6pt, no marks] table[x=x, y=pz2_avx2] {\gen{figlim_frac.tsv}};
-\addplot[sone, dashed, thick, no marks] table[x=x, y=practical] {\gen{figlim_frac.tsv}};
-\addplot[dec, thick, no marks] table[x=x, y=zstd19_leb_gaps] {\gen{figlim_frac.tsv}};
+\addplot[sone, line width=1.6pt, no marks] table[x=x, y=pz2_avx2] {\gen{figlim_frac.tsv}}
+  node[pos=0.78, anchor=north east, lnlbl, text=sone!85!black] {\textbf{\sone}};
+\addplot[sone, dashed, thick, no marks] table[x=x, y=practical] {\gen{figlim_frac.tsv}}
+  node[pos=0.72, anchor=south west, lnlbl, text=sone!85!black] {\sone's size at zstd's speed};
+\addplot[dec, thick, no marks] table[x=x, y=zstd19_leb_gaps] {\gen{figlim_frac.tsv}}
+  node[pos=0.12, anchor=south west, lnlbl, text=dec!85!black] {zstd-19};
 \addplot[ycomb, gen!60, line width=0.4pt, no marks, forget plot] table[x=x, y expr=1.02] {\gen{figlim_marks.tsv}};
 \addplot[only marks, mark=none, nodes near coords, point meta=explicit symbolic, forget plot,
   every node near coord/.append style={font=\sffamily\tiny, text=gen, rotate=90, anchor=north east, inner sep=1.5pt}]
   table[x=x, y expr=1.0, meta=label] {\gen{figlim_marks.tsv}};
-\legend{\sone, {\sone's size at zstd's speed}, {zstd-19}}
 \end{axis}
 % ---------------- (d) the cost of writing, as fold changes over writing uncompressed CSC ----------------
 \begin{axis}[name=fd, at={($(fb.south west)+(0,-\flV)$)}, anchor=north west, scale only axis, width=\flB, height=\flHH,
@@ -115,7 +116,7 @@
 matrices; whiskers, interquartile range. Dashed: the floor, the shortest code length of four count models fitted on half of
 each matrix's cells and scored on the other half (a reference, not a bound); it is a median of \nm{s1AboveFloorPct}\%
 below \sone.
-\textbf{(b)} Integer codes (grey: byte- and bit-aligned; yellow: entropy-coded) and \sone, each encoding the matrix's own
+\textbf{(b)} Integer codes (gray: byte- and bit-aligned; yellow: entropy-coded) and \sone, each encoding the matrix's own
 row indices and values and decoding them on one core, checked bit for bit; \nm{kern-n} matrices, faint points single
 matrices, large points medians. Dotted: the link speed one core keeps up with. Green: the floor; yellow: the rate of
 only writing the decoded arrays. Star: the ideal code, where the two meet. Purple dashed: the trend of the fastest other
@@ -124,7 +125,7 @@ decodes at \nm{trend-s1-pct}\% of the rate it predicts for \sone's size (95\% in
 \nm{trend-s1-lo}--\nm{trend-s1-hi}\%).
 \textbf{(c)} Non-zeros per second a link delivers (Eq.~\ref{eq:reff}, decoder on all cores) relative to the ideal code of
 (b), against the link bandwidth each decoding core serves; median of per-matrix ratios. Dashed: a code as small as
-\sone{} that decoded as fast as zstd. Grey ticks mark familiar set-ups.
+\sone{} that decoded as fast as zstd. Gray ticks mark familiar set-ups.
 \textbf{(d)} Time to write a matrix held in memory, and the memory each writer needs beyond its input, each relative to
 writing uncompressed CSC arrays of the same matrix; median over \nm{figlim-write-n} matrices of
 \nm{figlim-write-cells-lo} to \nm{figlim-write-cells-hi} cells, lines their range.}

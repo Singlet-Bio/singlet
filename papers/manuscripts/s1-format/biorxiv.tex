@@ -15,6 +15,10 @@
 \externaldocument[S-]{biorxiv}   % this document's own labels, as S-<label> (main text -> supplement)
 \externaldocument[M-]{biorxiv}   % and as M-<label> (supplement -> main text)
 \usepackage{placeins}
+% let a tall figure share its page with text (one column: the IEEEtran figure* environments become full-page floats
+% under the default fractions)
+\renewcommand{\topfraction}{0.9}\renewcommand{\bottomfraction}{0.8}\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.85}\renewcommand{\dbltopfraction}{0.9}\renewcommand{\dblfloatpagefraction}{0.85}
 \newcommand{\IEEEPARstart}[2]{#1#2}   % the sections are shared with the IEEEtran version
 \newcommand{\para}[1]{\par\smallskip\noindent\textbf{#1.}\ }
 
@@ -40,7 +44,7 @@
 \input{sections/methods}
 
 \section*{Data and code availability}
-All datasets are public; accessions, file names, licences and SHA-256 checksums are in \texttt{datasets.yaml} and
+All datasets are public; accessions, file names, licenses and SHA-256 checksums are in \texttt{datasets.yaml} and
 Supplementary Table~\ref{S-tab:datasets}. The \sone{} codec, its Python, R and C++ interfaces (\texttt{singlet}
 \nm{rel-singlet_py} for Python and \nm{rel-singlet_r} for R, \url{https://github.com/Singlet-Bio/singlet}), and the
 benchmark pipeline that produces every figure, table and number in this paper

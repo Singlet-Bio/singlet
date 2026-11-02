@@ -43,7 +43,7 @@ TIER_LABELS = {"s3_0.1g": "0.1 Gbit/s", "s3_1g": "1 Gbit/s", "s3_10g": "10 Gbit/
 # the one .s1 configuration the paper reports: the default reader, genes in their stored order (one permutation per file,
 # returned with the gene names), one file per matrix
 S1_MODE = "native"
-# the storage format behind each loader, for its colour (figures/formatcolors.tex)
+# the storage format behind each loader, for its color (figures/formatcolors.tex)
 LOADER_FORMAT = {"s1_stream": "s1", "s1_stream_canonical": "s1", "s1_stream_seq": "s1", "zarr3_shard": "zarr3",
                  "anndata_zarr_lazy": "zarr", "soma_ml": "soma", "anndata_inmem": "h5ad_gzip", "anndata_backed": "h5ad_gzip",
                  "scdataset": "h5ad_gzip", "scdataset_default": "h5ad_gzip", "bpcells": "bpcells"}
@@ -54,7 +54,7 @@ CLASS_LABELS = {
 }
 LADDER = [("L0_csc_i32", "CSC as 32-bit integers"), ("L1_leb128", "variable-length integers"),
           ("L2_gaps_leb_zstd3", "gaps + LEB128 + zstd-3"), ("L3_gaps_leb_zstd19", "gaps + LEB128 + zstd-19"),
-          ("L4_s1_payload", "\\textbf{.s1}"), ("floor", "best count model (cross-validated)")]
+          ("L4_s1_payload", "\\textbf{.s1}"), ("floor", "best count model")]
 MODELS = [("poisson", "Poisson, per gene"), ("nb", "negative binomial, per gene"), ("gene_depth", "per gene $\\times$ depth"),
           ("cluster", "per gene $\\times$ depth $\\times$ cluster")]
 CODERS = [("zstd22", "zstd -22"), ("xz9e", "xz -9e"), ("brotli11", "brotli -11"), ("bzip2_9", "bzip2 -9"), ("cm", "context mixing")]

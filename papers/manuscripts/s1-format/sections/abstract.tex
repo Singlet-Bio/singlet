@@ -1,8 +1,9 @@
 % Abstract, shared by main.tex (TCBB) and biorxiv.tex. About 250 words.
 The Gene Expression Omnibus holds sequencing data from more than three billion cells. Machine learning models now train
-on millions of them at a time, streamed from cloud storage in minibatches, and AI agents fetch and analyse public data
+on millions of them at a time, streamed from cloud storage in minibatches, and AI agents fetch and analyze public data
 themselves, waiting on every fetch as they iterate. For both, the bottleneck is moving and decoding count matrices, not
-computing on them: smaller files that open with low latency are what make data AI-ready. We measured how few bits these
+computing on them: alongside systematic annotation, small files that open with low latency are what make data
+AI-ready. We measured how few bits these
 counts need and how fast they can be decoded, then built \sone{} to approach both limits, using Claude 5.5-generation
 models (Anthropic). A \sone{} dataset is a manifest of content-addressed sample files, each opening with an index to
 blocks of cells, so a reader fetches only the cells it needs by HTTP range request. Within a block, each cell becomes
@@ -12,4 +13,5 @@ smaller than the best alternative and within a few percent of cross-validated co
 bits are molecular sampling, irreducible given each cell's expression rates. On four cores \sone{} read fastest on
 \nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices, and from a real cloud object store it delivered a first PyTorch
 minibatch in under a second and streamed cells tens of times faster than Zarr, though per core its decoder is slower than
-byte-oriented codes.
+byte-oriented codes. \sone{} brings single-cell count matrices close to the limits of size and speed, ready to be shared
+quickly and read in part by models and agents alike.

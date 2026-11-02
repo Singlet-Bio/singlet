@@ -240,7 +240,7 @@ def write_panel(cfg: Config, N: Numbers, out: Path) -> None:
         for f, (s, m) in u.items():
             folds[f].append((s / cs, m / cm))
     # where each label sits beside its point (time across, memory up); most to the right, a few elsewhere
-    side = {"zarr": "south", "h5ad_none": "north west", "h5ad_lzf": "south", "bpcells": "north", "tenx_h5": "north west",
+    side = {"zarr": "south", "h5ad_none": "north west", "h5ad_lzf": "south west", "bpcells": "north", "tenx_h5": "north west",
             "h5ad_gzip": "south west", "mtx_gz": "east"}
     tab = []
     for f, v in folds.items():

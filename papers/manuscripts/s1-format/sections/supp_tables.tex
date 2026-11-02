@@ -4,8 +4,8 @@
 
 \begin{table}[h]
 \centering\small
-\caption{Formats compared. Cell subset: some cells readable without the whole matrix. Remote: read by HTTP range or
-object-store request without a local copy. Versions as run; for \texttt{singlet}, the release matching the commits that
+\caption{Formats compared. Cell subset: some cells readable from part of the file. Remote: read in place by HTTP range
+or object-store request. Versions as run; for \texttt{singlet}, the release matching the commits that
 ran.}
 \label{tab:formats}
 \begin{tabularx}{\linewidth}{@{}l l l c c X@{}}
@@ -73,8 +73,8 @@ one. Counts/cell: median. Accessions in \texttt{datasets.yaml}.}
 \caption{Read rate from local disk to an in-memory sparse matrix, million non-zeros per second, median over matrices;
 \sone{} in its stored gene order (\nm{dec-s1canonical-cold-t4} on \nm{threadsHeadline} cores cold in source order). Codec
 alone (member in memory, C++), 1 / \nm{threadsHeadline} cores: AVX2 \nm{codec_cpp-native-avx2-t1} /
-\nm{codec_cpp-native-avx2-t4}, scalar \nm{codec_cpp-native-scalar-t1} / \nm{codec_cpp-native-scalar-t4}. AVX-512 not
-measured (no VBMI2).}
+\nm{codec_cpp-native-avx2-t4}, scalar \nm{codec_cpp-native-scalar-t1} / \nm{codec_cpp-native-scalar-t4}. AVX-512
+untested (the CPU lacks VBMI2).}
 \label{tab:decode}
 \pgfplotstabletypeset[
   columns={format,cold_t1,cold_th,warm_th},

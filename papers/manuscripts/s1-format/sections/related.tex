@@ -23,7 +23,7 @@ small codes for inverted indexes~\cite{moffat2017ans,moffat2020large,pibiri2021t
 \sone.
 
 \para{Models of genomic data}CRAM~3.1 replaced BAM's gzip blocks with per-field models and 32-way interleaved
-rANS~\cite{bonfield2022cram}; benchmarks of read compressors found that how each field is modelled matters more than the
+rANS~\cite{bonfield2022cram}; benchmarks of read compressors found that how each field is modeled matters more than the
 back-end coder~\cite{numanagic2016comparison,hernaez2019genomic}, and genotype matrices have compressors of their
 own~\cite{danek2018gtc,lan2021genozip}. For counts, UMI data are close to Poisson samples of a cell's molecules given its
 depth~\cite{townes2019feature,kim2020demystifying}, with a negative binomial for biological
@@ -34,4 +34,4 @@ genes~\cite{furusawa2003zipf}. These models say what a coder can exploit, and wh
 cells and shuffles them in a buffer~\cite{dascenzo2025scdataset}, the Census provides a loader over
 TileDB-SOMA~\cite{tiledbsomaml}, and cloud-native formats such as Zarr cut round trips, each of which waits tens of
 milliseconds, with independently addressable chunks~\cite{abernathey2021cloud,durner2023exploiting}. These loaders
-optimise access over existing encodings; \sone{} changes the encoding.
+optimize access over existing encodings; \sone{} changes the encoding.

@@ -16,9 +16,9 @@
 \def\zoomwedge#1#2#3#4{\begin{scope}[on background layer]\fill[sone!5] (#1)--(#3)--(#4)--(#2)--cycle;\draw[wl] (#1)--(#3) (#2)--(#4);\end{scope}}
 % one row of the table of contents in (b): y, style, name, start, length
 \def\tocrow#1#2#3#4#5{%
-  \node[cell,#2,minimum width=1.95cm,anchor=north west] at (6.75,#1) {#3};
-  \node[cell,#2,minimum width=0.80cm,anchor=north west,align=center] at (8.70,#1) {#4};
-  \node[cell,#2,minimum width=0.80cm,anchor=north west,align=center] at (9.50,#1) {#5};}
+  \node[cell,#2,minimum width=1.95cm,anchor=north west] at (7.15,#1) {#3};
+  \node[cell,#2,minimum width=0.80cm,anchor=north west,align=center] at (9.10,#1) {#4};
+  \node[cell,#2,minimum width=0.80cm,anchor=north west,align=center] at (9.90,#1) {#5};}
 % legend chips for the note in (d): blue symbol, amber symbol
 \def\chipkey#1#2{{\setlength{\fboxsep}{0pt}\fcolorbox{#1}{#2}{\rule{0pt}{5.5pt}\hspace{8pt}}}}
 \begin{tikzpicture}[
@@ -56,27 +56,27 @@
   {Each file is named by a hash of its bytes, so a link always means the same data.};
 
 % =============================================================== (b) one sample file
-\draw[frame] (4.5,0.02) rectangle (16.4,-3.4);
+\draw[frame] (4.5,0.02) rectangle (16.4,-3.95);
 \ptitle{4.62,-0.08}{b}{6cm}{One sample file}
 % the file as stored
-\node[seg, st,  minimum width=0.95cm, minimum height=0.62cm] (hdrB) at (4.65,-3.22) {header};
-\node[seg, st,  minimum width=1.30cm, minimum height=0.62cm] (tocB) at (hdrB.south east) {table of\\contents};
+\node[seg, st,  minimum width=0.95cm, minimum height=0.88cm] (hdrB) at (4.65,-3.8) {header};
+\node[seg, st,  minimum width=1.30cm, minimum height=0.88cm] (tocB) at (hdrB.south east) {table of\\contents};
 \node[seg,      minimum width=0.40cm, minimum height=0.62cm, text=gray] (brkB) at (tocB.south east) {//};
-\node[seg, st,  minimum width=1.55cm, minimum height=0.62cm] (celB) at (brkB.south east) {cells\\table};
-\node[seg, hot, minimum width=1.80cm, minimum height=0.62cm] (cntB) at (celB.south east) {\textbf{exon counts}};
-\node[seg, st,  minimum width=1.80cm, minimum height=0.62cm] (intB) at (cntB.south east) {intron counts};
-\node[seg, ghost, minimum width=2.15cm, minimum height=0.62cm] (derB) at (intB.south east) {cell calls\\recipe, 0 bytes};
+\node[seg, st,  minimum width=1.55cm, minimum height=0.88cm] (celB) at (brkB.south east) {cells\\table};
+\node[seg, hot, minimum width=1.80cm, minimum height=0.88cm] (cntB) at (celB.south east) {\textbf{exon counts}};
+\node[seg, st,  minimum width=1.80cm, minimum height=0.88cm] (intB) at (cntB.south east) {intron counts};
+\node[seg, ghost, minimum width=2.15cm, minimum height=0.88cm] (derB) at (intB.south east) {cell calls\\recipe, 0 bytes};
 % zoom: header and table of contents
 \node[box, st, anchor=north west, minimum width=1.85cm, minimum height=1.66cm] (hdrZ) at (4.65,-0.5)
   {\textbf{header}\\[1pt]{\tiny 64 bytes}\\[2pt]file type\\sample ID\\file length};
-\node[cell, anchor=north west, minimum width=1.95cm, font=\sffamily\scriptsize\bfseries] at (6.75,-0.5) {table of contents};
-\node[hd, anchor=north] at (9.10,-0.6) {start};
-\node[hd, anchor=north] at (9.90,-0.6) {length};
+\node[cell, anchor=north west, minimum width=1.95cm, font=\sffamily\scriptsize\bfseries] at (7.15,-0.5) {table of contents};
+\node[hd, anchor=north] at (9.50,-0.6) {start};
+\node[hd, anchor=north] at (10.30,-0.6) {length};
 \tocrow{-0.83}{st}{cells}{\textit{o}\textsubscript{1}}{\textit{l}\textsubscript{1}}
 \tocrow{-1.19}{hot}{exon counts}{\textit{o}\textsubscript{2}}{\textit{l}\textsubscript{2}}
 \tocrow{-1.55}{st}{intron counts}{\textit{o}\textsubscript{3}}{\textit{l}\textsubscript{3}}
 \tocrow{-1.91}{ghost}{cell calls}{0}{0}
-\zoomwedge{hdrB.north west}{tocB.north east}{4.65,-2.24}{10.3,-2.24}
+\zoomwedge{hdrB.north west}{tocB.north east}{4.65,-2.3}{10.7,-2.3}
 % shared packs
 \node[note, anchor=north west, text width=3.8cm, text=black] at (12.3,-0.5)
   {\textbf{shared packs}\\\textcolor{ink2}{stored once, downloaded once}};
@@ -86,22 +86,23 @@
 \draw[->, dashed, ink2, line width=0.4pt] ($(intB.north)+(0.3,0)$) -- ($(pkG.south)+(0.1,0)$);
 
 % =============================================================== (c) one count matrix
+\begin{scope}[yshift=-0.55cm]
 \draw[frame] (0,-3.9) rectangle (16.4,-6.7);
 \ptitle{0.12,-4.0}{c}{12cm}{One count matrix: a small prefix, then blocks of cells}
-\node[seg, hot, minimum width=0.95cm, minimum height=0.72cm] (hdrC) at (0.15,-6.1) {header};
-\node[seg, hot, minimum width=2.30cm, minimum height=0.72cm] (idxC) at (hdrC.south east) {};
+\node[seg, hot, minimum width=0.95cm, minimum height=0.86cm] (hdrC) at (0.15,-6.1) {header};
+\node[seg, hot, minimum width=2.30cm, minimum height=0.86cm] (idxC) at (hdrC.south east) {};
 \node[text=white, inner sep=0pt] at ($(idxC.north)+(0,-0.2)$) {block index};
 \foreach \i in {0,...,8} \draw[white, line width=0.3pt] ($(idxC.south west)+(0.25+0.21*\i,0.1)$) rectangle ++(0.15,0.15);
-\node[seg, hot, minimum width=1.30cm, minimum height=0.72cm] (tabC) at (idxC.south east) {code\\tables};
-\node[seg, hot, minimum width=1.20cm, minimum height=0.72cm] (ordC) at (tabC.south east) {gene\\order};
-\node[seg, st,  minimum width=0.85cm, minimum height=0.72cm] (b1) at (ordC.south east) {block\\1};
-\node[seg, hot, minimum width=0.85cm, minimum height=0.72cm] (b2) at (b1.south east) {block\\2};
-\node[seg, hot, minimum width=0.85cm, minimum height=0.72cm] (b3) at (b2.south east) {block\\3};
-\node[seg, st,  minimum width=0.55cm, minimum height=0.72cm] (bd1) at (b3.south east) {$\cdots$};
-\node[seg, hot, minimum width=0.85cm, minimum height=0.72cm] (bk) at (bd1.south east) {block\\\textit{k}};
-\node[seg, st,  minimum width=0.55cm, minimum height=0.72cm] (bd2) at (bk.south east) {$\cdots$};
-\node[seg, st,  minimum width=0.85cm, minimum height=0.72cm] (bK) at (bd2.south east) {block\\\textit{K}};
-\node[seg, idle, minimum width=1.30cm, minimum height=0.72cm] (nmC) at (bK.south east) {names};
+\node[seg, hot, minimum width=1.30cm, minimum height=0.86cm] (tabC) at (idxC.south east) {code\\tables};
+\node[seg, hot, minimum width=1.20cm, minimum height=0.86cm] (ordC) at (tabC.south east) {gene\\order};
+\node[seg, st,  minimum width=0.85cm, minimum height=0.86cm] (b1) at (ordC.south east) {block\\1};
+\node[seg, hot, minimum width=0.85cm, minimum height=0.86cm] (b2) at (b1.south east) {block\\2};
+\node[seg, hot, minimum width=0.85cm, minimum height=0.86cm] (b3) at (b2.south east) {block\\3};
+\node[seg, st,  minimum width=0.55cm, minimum height=0.86cm] (bd1) at (b3.south east) {$\cdots$};
+\node[seg, hot, minimum width=0.85cm, minimum height=0.86cm] (bk) at (bd1.south east) {block\\\textit{k}};
+\node[seg, st,  minimum width=0.55cm, minimum height=0.86cm] (bd2) at (bk.south east) {$\cdots$};
+\node[seg, st,  minimum width=0.85cm, minimum height=0.86cm] (bK) at (bd2.south east) {block\\\textit{K}};
+\node[seg, idle, minimum width=1.30cm, minimum height=0.86cm] (nmC) at (bK.south east) {names};
 % the prefix
 \draw[decorate, decoration={brace, amplitude=3pt}, ink2, line width=0.4pt] ($(hdrC.north west)+(0.02,0.06)$) -- ($(ordC.north east)+(-0.02,0.06)$)
   node[midway, above=5pt, note, align=center, text=black] {\textbf{prefix} (request 1): read once,\\enough to plan any read};
@@ -122,10 +123,10 @@
 \node[anchor=west, inner sep=0pt] at (13.75,-4.93) {fetched};
 \draw[st] (13.4,-5.44) rectangle ++(0.22,0.22);
 \node[anchor=west, inner sep=0pt] at (13.75,-5.33) {not fetched};
-\node[note, anchor=north west, text width=2.9cm] at (13.4,-5.7) {Blocks hold consecutive cells; each decodes alone.};
+\node[note, anchor=north west, text width=2.9cm] at (13.4,-5.7) {Blocks hold consecutive cells; each decodes mbox{independently}.};
 
 % =============================================================== (d) inside one block
-\draw[frame] (0,-7.2) rectangle (16.4,-12.2);
+\draw[frame] (0,-7.2) rectangle (16.4,-12.75);
 \ptitle{0.12,-7.3}{d}{16cm}{Inside one block: each cell becomes small numbers, then short codes}
 % --- station 1: one cell's counts
 \stitle{0.15,-7.72}{2.3cm}{1}{One cell's counts}
@@ -191,17 +192,18 @@
 \node[note, anchor=north west, text width=2.55cm] at (13.75,-9.98)
   {AVX2 decodes 8 at once, AVX-512 16. Each coder must end where encoding began: a \mbox{built-in} check.};
 % --- the block as stored
-\node[anchor=west, inner sep=0pt, text=ink2] at (0.15,-11.83) {stored as};
-\node[seg, st, minimum width=0.85cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f1) at (1.35,-12.06) {sizes};
+\node[anchor=west, inner sep=0pt, text=ink2] at (0.15,-12.33) {stored as};
+\node[seg, st, minimum width=0.85cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f1) at (1.35,-12.56) {sizes};
 \node[seg, st, minimum width=2.9cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f2) at (f1.south east) {genes detected per cell};
 \node[seg, st, minimum width=2.1cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f3) at (f2.south east) {coder start points};
 \node[seg, st, minimum width=2.3cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f4) at (f3.south east) {32 coder states};
 \node[seg, st, minimum width=6.75cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f5) at (f4.south east) {one stream of 16-bit words, shared by all coders};
 
+\end{scope}
 % =============================================================== zoom wedges
-\zoomwedge{cntB.south west}{cntB.south east}{0,-3.9}{16.4,-3.9}
-\zoomwedge{bk.south west}{bk.south east}{0,-7.2}{16.4,-7.2}
-\zoomwedge{s1.north east}{s1.south east}{4.5,0.02}{4.5,-3.4}
+\zoomwedge{cntB.south west}{cntB.south east}{0,-4.45}{16.4,-4.45}
+\zoomwedge{bk.south west}{bk.south east}{0,-7.75}{16.4,-7.75}
+\zoomwedge{s1.north east}{s1.south east}{4.5,0.02}{4.5,-3.95}
 \end{tikzpicture}
 \caption{\textbf{How \sone{} stores single-cell counts.}
 \textbf{(a)} A dataset lists per-sample files, each named by a hash of its bytes.
