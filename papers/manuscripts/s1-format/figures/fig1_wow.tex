@@ -14,7 +14,8 @@
 \pgfmathsetlengthmacro{\figGap}{0.9cm}            % between b and c, e and f (shared rows)
 \pgfmathsetlengthmacro{\figD}{4.9cm}              % side of the square panel d (as placed by report_r3.FIG1D_SIDE)
 \pgfmathsetlengthmacro{\figDG}{1.5cm}             % before d and g: their y labels
-\pgfmathsetlengthmacro{\figW}{(\figT-\figY-\figGap-\figDG-\figD-0.25cm)/2}   % width of b, c, e and f: rows fill \figT
+\pgfmathsetlengthmacro{\figW}{(\figT-\figY-\figGap-\figDG-\figD-0.25cm)/2}   % width of b and c: rows fill \figT
+\pgfmathsetlengthmacro{\figWef}{\figW-0.85cm}   % e and f are narrower, so the labels of g's lines fit on its right
 \ifdefined\IEEEtransversionmajor                  % TCBB: the figure and caption fill a page
   \pgfmathsetlengthmacro{\figH}{4.2cm}            % height of e, f and g
   \pgfmathsetlengthmacro{\figV}{2.0cm}            % between rows: x labels below, titles above
@@ -129,12 +130,12 @@
 }
 \end{axis}
 % ======================= (d) size against speed (figures/fig1b_panel.tex) =======================
-\def\fbLog{0}\def\fbPts{1}\def\fbTitle{d\quad Smaller and faster at once}\def\fbInPicture{1}
+\def\fbLog{0}\def\fbPts{0}\def\fbTitle{d\quad Smaller and faster at once}\def\fbInPicture{1}
 \def\fbAxisOpts{name=pd, at={($(pc.north east)+(\figDG,0)$)}, anchor=north west, scale only axis, width=\figD, height=\figD}
 \input{figures/fig1b_panel}
 % ======================= (e, f) a PyTorch training loader at 1 Gbit/s =======================
 \pgfplotsset{fig1mb/.style={xbar, bar shift=0pt, bar width=0.5, ymin=-0.5, ymax=3.5, y dir=reverse,
-  scale only axis, width=\figW, height=\figH, axis x line*=bottom, axis y line*=left, clip=false,
+  scale only axis, width=\figWef, height=\figH, axis x line*=bottom, axis y line*=left, clip=false,
   ytick={0,1,2,3}, ytick style={draw=none},
   error bars/error bar style={ink2, line width=0.6pt}, error bars/error mark options={rotate=90, mark size=2pt, ink2}},
   fig1val/.style={nodes near coords, point meta=explicit, every node near coord/.append style={font=\sffamily\tiny,
@@ -160,38 +161,30 @@
 \addplot[draw=none, fig1val, nodes near coords={\pgfmathprintnumber[fixed, precision=0]{\pgfplotspointmeta}\,ms}]
   table[x=batch_hi, y=pos, meta=batch_ms] {\gen{fig1_mb.tsv}};
 \end{axis}
-% ======================= (g) read rate against cores =======================
+% ======================= (g) read rate against cores: .s1 teal, the others gray and labeled =======================
 \begin{axis}[name=pg, at={($(pf.north east)+(\figDG,0)$)}, anchor=north west, scale only axis, width=\figD, height=\figH,
   title={g\quad Best parallel efficiency},
-  xmin=0, xmax=46, ymin=0, ymax=14, xtick={1,8,16,24,32,44}, ytick={0,2,...,14},
+  xmin=0, xmax=46, ymin=0, ymax=10, xtick={1,8,16,24,32,44}, ytick={0,2,...,10},
   xlabel={cores}, ylabel={speed-up over one core},
   axis x line*=bottom, axis y line*=left,
-  legend style={font=\sffamily\tiny, draw=none, fill=white, fill opacity=0.85, text opacity=1, at={(1.0,1.0)},
-    anchor=north east, legend columns=2, cells={anchor=west}, row sep=-2pt, column sep=3pt},
-  legend image post style={xscale=0.55}]
-\addplot[gen!70, dashed, line width=0.6pt, domain=1:14, samples=2, forget plot] {x};
+  after end axis/.code={\input{\gen{fig1g_labels.tex}}}]   % each line labeled at its right end
+\addplot[gen!70, dashed, line width=0.6pt, domain=1:10, samples=2, forget plot] {x};
 \node[anchor=north west, font=\sffamily\tiny, text=gen!90!black, inner sep=1.5pt] at (axis cs:8,8) {1:1};
 \addplot[name path=sq3, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=sp_q3] {\gen{fig1_scaling.tsv}};
 \addplot[name path=sq1, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=sp_q1] {\gen{fig1_scaling.tsv}};
 \addplot[c-s1, fill opacity=0.18, draw=none, forget plot] fill between[of=sq3 and sq1];
 \addplot[c-s1, very thick, mark=*, mark size=1.5pt, discard if not={format}{s1}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
-\addlegendentry{\sone}
 \addplot[c-soma, thick, mark=*, mark size=1.0pt, discard if not={format}{soma}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
-\addlegendentry{TileDB-SOMA}
 \addplot[c-zarr3, thick, mark=*, mark size=1.0pt, discard if not={format}{zarr3}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
-\addlegendentry{Zarr v3}
 \addplot[c-parquet_coo, thick, mark=*, mark size=1.0pt, discard if not={format}{parquet_coo}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
-\addlegendentry{Parquet}
 \addplot[c-mtx_gz, thick, mark=*, mark size=1.0pt, discard if not={format}{mtx_gz}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
-\addlegendentry{MTX.gz}
 \addplot[c-csc_i32, thick, mark=*, mark size=1.0pt, discard if not={format}{csc_i32}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
-\addlegendentry{CSC, int32}
 \addplot[c-h5ad_gzip, thick, mark=*, mark size=1.0pt, discard if not={format}{h5ad_gzip}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
-\addlegendentry{h5ad gzip}
 \end{axis}
 \end{tikzpicture}%
 \end{adjustbox}
-\caption{\textbf{\sone{} files are the smallest and, on four cores, the fastest to read.}
+\caption{\textbf{\sone{} files are the smallest and, on four cores, the fastest to read.} \sone{} in teal, every other
+format in gray.
 \textbf{(a)} The two ideas behind \sone. Left: six counts of one cell, stored as compressed sparse column (CSC) arrays
 with a byte compressor, as in gzip-compressed AnnData, and as \sone{} does, with genes numbered from most to least often detected, the steps between them and the counts merged into one
 stream of small symbols, and short codes from a model of the counts. Right: reading a minibatch. Fig.~\ref{fig:how} shows
@@ -201,7 +194,7 @@ the layout.
 extreme matrices within 1.5 interquartile ranges.
 \textbf{(c)} Read rate of the same files from a cold page cache into an in-memory sparse matrix on \nm{threadsHeadline}
 cores, rows as in (b).
-\textbf{(d)} Medians of (b) and (c) as bits per non-zero against read rate; faint points, single matrices. Dashed lines
+\textbf{(d)} Medians of (b) and (c) as bits per non-zero against read rate; lines, interquartile ranges. Dashed lines
 join formats that deliver the same number of non-zeros per second over a 1\,Gbit/s link (Eq.~\ref{eq:reff}); up and to
 the left is better.
 \textbf{(e, f)} PyTorch training loaders reading 512-cell minibatches of \nm{fig1b-dataset} from an emulated object store

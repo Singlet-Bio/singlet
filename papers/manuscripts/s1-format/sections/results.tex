@@ -54,7 +54,7 @@ network} when the link, not the decoder, is the limit.
 
 On four cores the \sone{} decoder handles about as many entries per second (\nm{net-s1-mnnzs} million) as a 1\,Gbit/s
 link carries in \sone{} form (\nm{net-s1-at-1g} million), and the same link carries about twelve times as many entries as
-it would as uncompressed arrays (Fig.~\ref{fig:net}a). Without AVX2, as on ARM processors, the portable decoder reads
+it would as uncompressed arrays (Fig.~\ref{fig:net}b). Without AVX2, as on ARM processors, the portable decoder reads
 \nm{codec_cpp-native-scalar-t1} million entries per second per core instead of \nm{codec_cpp-native-avx2-t1}, so the same
 link needs about twice as many cores. Faster links need more cores: on a
 whole node, \sone{} kept up with a median of \nm{core-8-gbit}\,Gbit/s on 8 cores, \nm{core-16-gbit}\,Gbit/s on 16 and
@@ -69,7 +69,7 @@ at 1\,Gbit/s, the \sone{} loader returned its first minibatch in \nm{mb3-s1_stre
 Table~\ref{S-tab:minibatch}). It used \nm{linkuse-s3_1g}\% of the link and delivered as many cells at 10\,Gbit/s: the
 decoder alone reaches \nm{net-ds-decoder-cells} cells per second from memory, so the rest of the loader, its requests and
 the tensors it builds on the same four cores, sets the rate. The loaders of AnnData and TileDB-SOMA delivered thirty to a
-hundred times fewer cells (Fig.~\ref{fig:net}b; Supplementary Table~\ref{S-tab:workers}). The competing loaders were set
+hundred times fewer cells (Fig.~\ref{fig:net}a; Supplementary Table~\ref{S-tab:workers}). The competing loaders were set
 up for this workload: sharded Zarr v3 stored the matrix in chunks of \sone's block size and fetched all of a minibatch's
 slices at once with up to 64 requests in flight, and TileDB-SOMA ML used its own prefetching reader with as many I/O and
 compute threads as cores (Supplementary Section~\ref{S-sec:methods}). Latency matters as much as bandwidth. Each request waits a round trip, the time for the request

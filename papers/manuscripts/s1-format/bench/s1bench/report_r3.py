@@ -581,6 +581,72 @@ def compute_bound_section(cfg: Config, N: Numbers, out: Path) -> None:
     _write(rows, out / "tab_compute.tsv", ["model", "prec", "gflop", "cps", "gbit_s1", "gbit_gz", "gpus_s1", "gpus_gz", "cores"])
 
 
+def _repel(targets: list[float], gap: float, lo: float, hi: float) -> list[float]:
+    """1-D label placement: positions as close as possible to ``targets`` (any order) with at least ``gap`` between
+    neighbours, inside [lo, hi]. Overlapping labels merge into groups spaced by ``gap`` around their mean target."""
+    order = sorted(range(len(targets)), key=lambda i: targets[i])
+    groups = [[i] for i in order]                     # each group: label indices in ascending target order
+
+    def place(g):
+        c = float(np.mean([targets[i] for i in g]))
+        start = c - gap * (len(g) - 1) / 2
+        start = min(max(start, lo), hi - gap * (len(g) - 1))
+        return start
+
+    merged = True
+    while merged:
+        merged = False
+        for k in range(len(groups) - 1):
+            a, b = groups[k], groups[k + 1]
+            if place(a) + gap * len(a) > place(b) + 1e-12:
+                groups[k:k + 2] = [a + b]
+                merged = True
+                break
+    pos = [0.0] * len(targets)
+    for g in groups:
+        s = place(g)
+        for j, i in enumerate(g):
+            pos[i] = s + j * gap
+    return pos
+
+
+def _label_lines(rows: list[tuple[str, float, float]], gap: float, lo: float, hi: float, log: bool, path: Path) -> None:
+    """Direct labels at the right end of a panel's lines: rows are (format, x end, y end) in axis units; each label is
+    moved vertically by _repel (in log10 units on a log axis) and joined to its line's end by a short leader."""
+    ys = [np.log10(y) if log else y for _f_, _x, y in rows]
+    pos = _repel(ys, gap, lo, hi)
+    out = ["% Direct labels at the right end of each line (report_r3._label_lines). Do not edit."]
+    for (fmt, x, y), q in zip(rows, pos):
+        yl = 10 ** q if log else q
+        lab = "\\textbf{\\sone}" if fmt == "s1" else FORMAT_LABELS.get(fmt, fmt)
+        col = "sone!85!black" if fmt == "s1" else "ink2!80"
+        out.append("\\draw[gen!55, line width=0.3pt] (axis cs:%g,%g) -- ++(0.12cm,0) -- ($(axis cs:%g,%g)+(0.3cm,0)$) "
+                   "node[anchor=west, font=\\sffamily\\tiny, text=%s, inner sep=1pt] {%s};" % (x, y, x, yl, col, lab))
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def direct_labels_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """Labels in place of legends where every format but .s1 is gray: Fig. 2g (speed-up against cores, at the most
+    cores) and Fig. 3b (what a link delivers, at the fastest link). Gaps are sized for the smaller (bioRxiv) panels."""
+    sc = out / "fig1_scaling.tsv"
+    if sc.exists():
+        last = {}
+        for r in read_tsv(sc):
+            if _f(r.get("speedup")) is not None:
+                last[r["format"]] = (int(r["threads"]), _f(r["speedup"]))
+        rows = [(f, float(x), y) for f, (x, y) in last.items()]
+        if rows:
+            _label_lines(rows, gap=0.82, lo=0.1, hi=9.9, log=False, path=out / "fig1g_labels.tex")
+    cv = out / "fignet_curves.tsv"
+    if cv.exists():
+        cur = [r for r in read_tsv(cv) if _f(r.get("gbit")) is not None]
+        if cur:
+            end = max(cur, key=lambda r: _f(r["gbit"]))
+            fmts = [k for k in end if k not in ("gbit", "s1_net", "s1_dec") and _f(end[k])]
+            rows = [(f, _f(end["gbit"]), _f(end[f])) for f in fmts]
+            _label_lines(rows, gap=0.185, lo=np.log10(0.35), hi=np.log10(1400), log=True, path=out / "fignet_labels.tex")
+
+
 def run(cfg: Config, N: Numbers, out: Path) -> None:
     billion_cells_section(cfg, N, out)
     compute_bound_section(cfg, N, out)
@@ -594,3 +660,4 @@ def run(cfg: Config, N: Numbers, out: Path) -> None:
     netsweep_section(cfg, N, out)
     r2_section(cfg, N, out)
     writecost_section(cfg, N, out)
+    direct_labels_section(cfg, N, out)
