@@ -43,7 +43,10 @@
   shuffle buffer). Python loaders return \texttt{torch.sparse\_csr\_tensor}; BPCells an R sparse matrix.
 \item \emph{\sone{} reader} (\texttt{singlet.torch.S1Stream}): byte ranges from the chunk index, up to eight requests at
   once (\texttt{singlet} 1.3.2; 1.3.3 sends 32) or one at a time; the next minibatch requested while one decodes.
-  TileDB-SOMA ML prefetches with its own reader; others read sequentially.
+  Sharded Zarr v3 fetches all of a minibatch's slices at once on a thread pool (zarr-python \texttt{async.concurrency}
+  64, worker threads equal to the cores), over the generic-codec layout above, whose chunks match \sone's blocks;
+  TileDB-SOMA ML prefetches with its own reader (I/O and compute concurrency equal to the cores); the AnnData and
+  scDataset loaders read their slices one after another.
 \item \emph{Measures}: new process, cold cache, imports done; time to open, first minibatch and its tensor (three seeds,
   medians); for one seed, sustained rate over 200 minibatches after 10 warm-up, and peak resident memory. Ratios of
   sustained rates use datasets above $211\times512$ cells (each cell read at most once). Link share: sustained rate $\times$
@@ -131,3 +134,19 @@ over it, and zellkonverter \texttt{readH5AD}; Python output compared with the ca
 s1bench} in \texttt{papers/manuscripts/s1-format/bench} of the \texttt{singlet} repository; settings
 \texttt{config.yaml}, environment \texttt{environment.yml}, versions that ran in \texttt{results/}. Every plotted value
 and number is written by the \texttt{report} stage (\texttt{generated/}).
+
+\subsection{Training compute estimates}
+\label{sec:mcompute}
+Training FLOPs per cell (Table~\ref{tab:compute}) follow from published architectures: Geneformer V1 (6 layers, width
+256, feed-forward 512, 2,048 genes per cell)~\cite{theodoris2023transfer}; scGPT (12 layers, width 512, feed-forward 512,
+1,200 genes)~\cite{cui2024scgpt}; scVI and scANVI at the scvi-tools defaults (one hidden layer of 128, latent dimension
+10, a zero-inflated negative binomial with a scale and a dropout head)~\cite{lopez2018deep,xu2021scanvi}, over 20,000 or
+2,000 genes; and a dense autoencoder of 1,024, 256 and 64 units, mirrored, over 20,000 genes. A transformer's forward pass
+over $n$ tokens costs $2Nn + 4Ln^2d$ FLOPs for $N$ non-embedding parameters, $L$ layers and width $d$ (matrix products and
+attention); a dense network's costs $2P$ for $P$ weights; training costs three forward passes. GPU throughput is
+\nm{comp-util}\% of an NVIDIA H100 SXM's dense peak~\cite{nvidia2022h100}, BF16 for the transformers and the autoencoder
+and FP32 for scVI, which trains in 32-bit by default. Bytes per cell are the median over the benchmark matrices of each
+file's size over its cells (\nm{bn-s1-bpc} for \sone, \nm{bn-gz-bpc} for gzip-compressed AnnData); decoding cores use
+the one-core AVX2 codec rate at the median \nm{comp-nnz-cell} non-zeros per cell (\nm{comp-cells-core} thousand cells per
+second per core). The estimates ignore data augmentation, tokenization, mixed workloads and model-specific overheads.
+

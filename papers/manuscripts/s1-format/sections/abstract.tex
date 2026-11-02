@@ -3,14 +3,15 @@ The Gene Expression Omnibus holds sequencing data from more than three billion c
 on millions of them at a time, streamed from cloud storage in minibatches, and AI agents fetch and analyze public data
 themselves, waiting on every fetch as they iterate. Both spend much of their time moving and decoding count matrices,
 so alongside systematic annotation, small files that open with low latency are what make data AI-ready. We measured how few bits these
-counts need and how fast they can be decoded, then built \sone{} to approach both limits, using Claude 5.5-generation
+counts need and how fast they can be decoded, then built \sone{} to approach both, using Claude 5.5-generation
 models (Anthropic). A \sone{} dataset is a manifest of content-addressed sample files, each opening with an index to
 blocks of cells, so a reader fetches only the cells it needs by HTTP range request. Within a block, each cell becomes
 small steps between genes and small counts, which an rANS coder encodes with tables chosen by the cell's depth, in 32
 SIMD lanes. On \nm{nMatrices} public matrices, \sone{} files were the smallest on every one, \nm{ratioBestOther} times
-smaller than the best alternative and within a few percent of cross-validated count models; in UMI data most remaining
-bits are molecular sampling, irreducible given each cell's expression rates. On four cores \sone{} read fastest on
-\nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices, and from a real cloud object store it delivered a first PyTorch
-minibatch in under a second and streamed cells tens of times faster than Zarr, though per core its decoder is slower than
-byte-oriented codes. \sone{} brings single-cell count matrices close to the limits of size and speed, ready to be shared
+smaller than the best alternative and within a median of \nm{redund-s1}\% of the best of four cross-validated count
+models we evaluated, which store none of their own parameters; under these models most of the remaining bits in UMI data
+record molecular sampling. Read cold from disk on four cores, \sone{} was the fastest format on \nm{dec-s1-fastest-count}
+of \nm{dec-paired-n} matrices, and from a real cloud object store it delivered a first PyTorch minibatch in under a second
+and streamed cells tens of times faster than AnnData Zarr, though per core its decoder is slower than byte-oriented
+codes. \sone{} brings single-cell count matrices near the limits of size and speed, ready to be shared
 quickly and read in part by models and agents alike.

@@ -190,7 +190,7 @@
 \foreach \w in {0,...,3} \draw[st] (15.3+0.22*\w,-9.295) rectangle ++(0.2,0.2);
 \node[hd, anchor=north] at (15.73,-9.42) {16-bit words};
 \node[note, anchor=north west, text width=2.55cm] at (13.75,-9.98)
-  {AVX2 decodes 8 at once, AVX-512 16. Each coder must end where encoding began: a \mbox{built-in} check.};
+  {AVX2 decodes 8 at once. Each coder must end where encoding began: a \mbox{built-in} check.};
 % --- the block as stored
 \node[anchor=west, inner sep=0pt, text=ink2] at (0.15,-12.33) {stored as};
 \node[seg, st, minimum width=0.85cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f1) at (1.35,-12.56) {sizes};

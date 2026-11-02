@@ -1,44 +1,53 @@
 % =====================================================================================================================
-% Supplementary Section S1: normative specification of the .s1 sample object and its count-matrix member.
+% Supplementary Section S1: normative specification of the .s1 sample object, its members, packs and study manifest.
 %
-% Source of truth: repository singlet-bio-s1paper, codec sources unchanged between 7be33c37 and 199bea71.
+% Implementation checked against: repository singlet-bio-s1paper, codec sources unchanged between 7be33c37 and 199bea71;
+% container, cells, packs, junctions and manifest code as of 5220fc68.
 %   C++  : include/singlet/pz2/pz2.h and include/singlet/pz2/detail/*.h
-%   Python: python/singlet/s1/{container,codec,matrix,util,client,sample,packs,cells}.py
-% Comments "% src: file:line" give the code that fixes each value, so it can be checked.
-% Needs only amsmath, booktabs, tabularx (and the main text's \sone macro).
+%   Python: python/singlet/s1/{container,codec,matrix,util,client,sample,packs,junctions,cells,manifest,migrate,recipes}.py
+% Comments "% src: file:line" give the code that implements each paragraph, so it can be checked.
+% Needs only amsmath, booktabs, tabularx, array (and the main text's \sone macro).
 % =====================================================================================================================
 \section{Format specification}
 \label{spec:sec}\label{sec:spec}
 
-This section specifies the \sone{} sample object and its count-matrix member. \emph{Must} states a requirement on
-writers or readers; paragraphs marked \emph{informative} describe the reference writer. The reference implementation is
-the header-only C++ library in the \texttt{singlet} repository and the Python package \texttt{singlet.s1}; where this
-text and that code disagree, the code is authoritative.
+This section specifies the \sone{} sample object, its members, the packs they reference and the study manifest that
+lists the objects of a study. This specification is normative. The reference implementation, the header-only C++
+library in the \texttt{singlet} repository and the Python package \texttt{singlet.s1}, conforms to it; a
+disagreement between the two is a defect to be reported. Paragraphs marked \emph{informative} describe choices of the reference writer or reader and state no requirement.
 
 \subsection{Conventions}
 \label{spec:conv}
+The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be interpreted as described in RFC~2119 when they
+appear in upper case. A \emph{writer} produces objects, packs or manifests; a \emph{reader} consumes them. A reader that
+\emph{rejects} a structure reports an error and returns no data decoded from it; ``rejected'' in a table states a MUST
+requirement on readers.
+
 All integers are unsigned and little-endian unless stated otherwise. $\lambda(x)=\lfloor\log_2 x\rfloor$ for $x\ge 1$.
 $\mathrm{LEB}(x)$ is unsigned LEB128 (7 bits per byte, least significant group first, bit 7 set on every byte but
-the last); readers reject an encoding longer than 10 bytes or one that runs past its stream. The zigzag map on a 64-bit
-signed $d$ is $\mathrm{zz}(d)=(2d)\oplus(d\gg 63)$ (arithmetic shift). A \emph{STREAM} is
-\texttt{u32 raw\_len}, \texttt{u32 zstd\_len}, then one zstd frame of \texttt{zstd\_len} bytes that must decompress to
-exactly \texttt{raw\_len} bytes. An empty payload is stored as \texttt{0,0} with no frame; a STREAM in which exactly
-one length is zero is invalid. Reference writers record the content size and omit the zstd checksum; the level (19 by
-default) is a writer choice, and frame bytes can differ between zstd versions.
+the last); readers MUST reject an encoding longer than 10 bytes or one that runs past its stream. The zigzag map on a
+64-bit signed $d$ is $\mathrm{zz}(d)=(2d)\oplus(d\gg 63)$ (arithmetic shift). A \emph{STREAM} is
+\texttt{u32 raw\_len}, \texttt{u32 zstd\_len}, then one zstd frame of \texttt{zstd\_len} bytes that MUST decompress to
+exactly \texttt{raw\_len} bytes. An empty payload is stored as \texttt{0,0} with no frame; readers MUST reject a STREAM
+in which exactly one length is zero. \emph{Informative:} reference writers record the content size and omit the zstd
+checksum; the level (19 by default) is a writer choice, and frame bytes can differ between zstd versions.
 % src: common.h:70-100 (put_stream/get_stream); util.py:81 (write_content_size=True, write_checksum=False); common.h:73 ZSTD_compress (no checksum)
 CRC-32 is that of ISO~3309 and zlib (reflected polynomial \texttt{0xEDB88320}, initial value and final XOR
-\texttt{0xFFFFFFFF}). $\mathrm{digest16}(b)$ is the first 16 bytes of $\mathrm{SHA\text{-}256}(b)$. Text is UTF-8;
-a \emph{NUL-joined} list is the concatenation of its strings, each followed by one zero byte.
-% src: common.h:24-37 (crc32); util.py:44-46 (d16)
+\texttt{0xFFFFFFFF}). $\mathrm{digest16}(b)$ is the first 16 bytes of $\mathrm{SHA\text{-}256}(b)$; \emph{hex} is
+lowercase hexadecimal, so a digest16 is written as 32 hex digits. Text is UTF-8. A \emph{NUL-joined} list is the
+concatenation of its strings, each followed by one zero byte; a \emph{NUL-separated} list has one zero byte between
+consecutive strings and none at the end. \emph{Canonical JSON} is a JSON value encoded in UTF-8 with object keys sorted
+by code point, no whitespace between tokens, and non-ASCII characters written as UTF-8 rather than escaped.
+% src: common.h:24-37 (crc32); util.py:44-46 (d16), 57-64 (canon_json: sort_keys, separators (",",":"), ensure_ascii=False), 145-163 (join_nul, split_nul)
 
 % ---------------------------------------------------------------------------------------------------------------------
 \subsection{The sample object}
 \label{spec:container}
 A sample object is a 64-byte file header, a member table, and the member bodies (Tables~\ref{spec:tab:filehdr}
 and~\ref{spec:tab:entry}). It is immutable and content addressed: it is published under the key
-\texttt{s1/s/<GSM>/<h>.s1}, where \texttt{<h>} is the lowercase hex of $\mathrm{digest16}$ of the whole object, and
-the study manifest lists its length and full SHA-256.
-% src: docs/format-s1.md section 2; verify.py:503-512 (sha256 and "object name is not its digest16")
+\texttt{s1/s/<GSM>/<h>.s1}, where \texttt{<h>} is the hex of $\mathrm{digest16}$ of the whole object, and the study
+manifest (Section~\ref{spec:manifest}) lists its length and full SHA-256.
+% src: docs/format-s1.md section 2; migrate.py:461 (key); verify.py:503-512 (sha256 and "object name is not its digest16")
 
 \begin{table}[htbp]
 \centering\footnotesize\setlength{\tabcolsep}{4pt}
@@ -49,13 +58,13 @@ the study manifest lists its length and full SHA-256.
 \toprule
 Offset & Size & Field & Value and reader rule \\
 \midrule
-0  & 8  & \texttt{magic}      & ASCII \texttt{SINGLET2}; any other value is rejected \\
-8  & 2  & \texttt{version}    & 1; any other value is rejected \\
-10 & 2  & \texttt{flags}      & 0 (not checked by the reference reader) \\
+0  & 8  & \texttt{magic}      & ASCII \texttt{SINGLET2}; other values rejected \\
+8  & 2  & \texttt{version}    & 1; other values rejected \\
+10 & 2  & \texttt{flags}      & writers MUST write 0; readers MAY ignore the field \\
 12 & 4  & \texttt{n\_members} & number of member-table entries \\
-16 & 8  & \texttt{table\_off} & 64; any other value is rejected \\
+16 & 8  & \texttt{table\_off} & 64; other values rejected \\
 24 & 8  & \texttt{table\_len} & byte length of the member table; $\texttt{table\_off}+\texttt{table\_len}\le\texttt{file\_len}$ \\
-32 & 8  & \texttt{file\_len}  & byte length of the object; a reader that knows the true length rejects a mismatch \\
+32 & 8  & \texttt{file\_len}  & byte length of the object; a reader that knows the true length MUST reject a mismatch \\
 40 & 16 & \texttt{sample\_id} & ASCII, at most 16 bytes, NUL padded \\
 56 & 8  & reserved            & zero \\
 \bottomrule
@@ -89,55 +98,110 @@ $52+\ell$ & $\mu$ & \texttt{meta} & JSON object (UTF-8), empty when $\mu=0$ \\
 \paragraph{Layout rules.}
 The first body starts at $\lceil(64+\texttt{table\_len})/64\rceil\cdot 64$; every body starts at a multiple of 64,
 in table order, separated by zero padding; the object ends at the end of the last body (no trailing padding).
-A member with no body (kind 4, or an empty body) has $\texttt{off}=\texttt{len}=0$. A reader must reject an object
+A member with no body (kind 4, or an empty body) has $\texttt{off}=\texttt{len}=0$. A reader MUST reject an object
 whose member table does not parse to exactly \texttt{table\_len} bytes, has duplicate names, a kind-4 entry with a body,
 a body that is not 64-byte aligned, a non-empty body that starts inside the header or table, or a body that runs past
-\texttt{file\_len}. \texttt{meta} is canonical JSON (sorted keys, compact separators) and decoding a
-body ignores it. The file header and the member table are covered by the object digest alone.
-% src: util.py:22 (ALIGN=64), 57-64 (align_up, canon_json); container.py:160-209 (build), 298-310 (reader checks)
+\texttt{file\_len}. Writers MUST write \texttt{meta} as canonical JSON. Decoding a body never depends on \texttt{meta};
+two keys carry meaning for the logical content, \texttt{recipe} of kind 4 (Section~\ref{spec:derived}) and
+\texttt{names.rows.member} of kind 1 (Section~\ref{spec:names}).
+% src: util.py:22 (ALIGN=64), 57-64 (align_up, canon_json); container.py:160-209 (build), 298-310 (reader checks); sample.py:96-112 (names.rows.member)
 
 \begin{table}[htbp]
 \centering\footnotesize\setlength{\tabcolsep}{4pt}
 \caption{Member kinds. ``Regenerated bytes'' are the bytes of the legacy bundle member that the entry stands for.}
 \label{spec:tab:kinds}
-% src: container.py:12, 36-41, 113-157; migrate.py:846-869 (digest and crc of derived members); cells.py:24-25, 199-206
+% src: container.py:12, 36-41, 113-157; migrate.py:846-869 (digest and crc of derived members); cells.py:199-206 (digest)
 \begin{tabularx}{\linewidth}{@{}clXX@{}}
 \toprule
 Kind & Name & Body & \texttt{digest} \\
 \midrule
 1 & matrix  & one matrix member (Section~\ref{spec:pz2}) & canonical matrix digest (Section~\ref{spec:digest}); equals the digest in the member header \\
-2 & cells   & cells table, magic \texttt{CEL2}, one row per matrix column & SHA-256 over \texttt{CEL2CANON1} and, per column in byte order of the name, name, NUL, dtype byte, logical values \\
-3 & stored  & one zstd frame of the regenerated bytes; \texttt{meta.zstd\_level} records the level & digest16 of the regenerated bytes \\
-4 & derived & none; \texttt{meta} holds \texttt{recipe}, \texttt{params}, \texttt{needs} & digest16 of the regenerated bytes, or the canonical matrix digest when the member is a legacy matrix \\
+2 & cells   & cells table (Section~\ref{spec:cells}), one row per matrix column & cells-table digest (Section~\ref{spec:cells}) \\
+3 & stored  & one zstd frame that decompresses to the regenerated bytes & digest16 of the regenerated bytes \\
+4 & derived & none; \texttt{meta} holds \texttt{recipe}, \texttt{params}, \texttt{needs} (Section~\ref{spec:derived}) & digest16 of the regenerated bytes, or the canonical matrix digest when the member is a legacy matrix \\
 5 & raw     & the regenerated bytes as they are (written instead of kind 3 when zstd does not shrink them) & digest16 of the bytes \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
+\paragraph{Reserved \texttt{meta} keys.}
+Table~\ref{spec:tab:meta} lists the keys that writers use in \texttt{meta}. A writer MUST NOT give a listed key another
+meaning; a reader MUST ignore keys it does not recognize. Apart from the two keys named under \emph{Layout rules}, the keys
+are informative: they record provenance and copies of values that the body also holds.
+% src: migrate.py:188-199, 836-846, 852-872, 892, 909-925 (matrix, derived, stored, aux), 776-790 (cells), 201-202 (of); write.py:167 (modality); container.py:124-128 (zstd_level)
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Reserved keys of the member \texttt{meta} object.}
+\label{spec:tab:meta}
+% src: migrate.py:128-148 (_row_names_for: "inline", "none", {pack, member}), 205-224 (_col_names_for: "cells", {pack}), 188-196 (junctions); migrate.py:295-297 (ctx), 353 (called_source, whitelist), 651-656 (labels), 680 (called_ed)
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.25\linewidth}cX@{}}
+\toprule
+Key & Kinds & Meaning \\
+\midrule
+\texttt{names} & 1 & object \{\texttt{rows}, \texttt{cols}\}; each is \texttt{"inline"}, \texttt{"none"}, \texttt{"cells"} (columns), \{\texttt{pack}: id, \texttt{member}: \texttt{exon}, \texttt{intron} or \texttt{genes}\} (rows), \{\texttt{pack}: id\} (columns), or \{\texttt{junctions}: id, \texttt{build}\} (rows that are junction ids); ids are 32 hex digits \\
+\texttt{m}, \texttt{n}, \texttt{nnz}, \texttt{chunk\_cols} & 1 & copies of the member-header fields \\
+\texttt{legacy\_vt\_code} & 1, 4 & value-type code of the legacy matrix \\
+\texttt{legacy\_size}, \texttt{legacy\_crc32} & 1 & size and CRC-32 of the legacy bundle member the matrix replaces \\
+\texttt{modality} & 1 & \texttt{"counts"} in objects written by \texttt{write\_s1} \\
+\texttt{aux} & 1, 3, 5 & \texttt{true}: an auxiliary member, present only as the input of a recipe \\
+\texttt{of} & 3, 5 & name of the matrix member that a \texttt{.local} or \texttt{.legacy\_order} member belongs to (Section~\ref{spec:junctions}) \\
+\texttt{zstd\_level} & 3 & zstd level of the body \\
+\texttt{note} & 3, 5 & why the writer stored the bytes instead of coding or deriving them \\
+\texttt{n\_rows}, \texttt{columns} & 2 & row count and column names of the cells table \\
+\texttt{whitelist} & 2 & hex id of the barcode whitelist pack of the sample, or \texttt{null} \\
+\texttt{called\_source} & 2 & origin of the \texttt{called} column: \texttt{"cell\_calls.tsv"} or \texttt{"all"} \\
+\texttt{called\_ed} & 2 & parameters of the cell call stored in the \texttt{called\_ed} columns \\
+\texttt{labels} & 2 & \texttt{annot\_version}, \texttt{model\_version}, \texttt{columns} and \texttt{cell\_type} of the label columns \\
+\texttt{ctx} & 2, 4 & sample facts given to recipes (\texttt{reference\_build}, \texttt{protocol\_name}) \\
+\texttt{recipe}, \texttt{params}, \texttt{needs} & 4 & recipe id, its parameters and its inputs (Section~\ref{spec:derived}) \\
+\texttt{pipeline} & 4 & \texttt{git\_sha} and \texttt{singlet\_version} of the pipeline run \\
+\texttt{bytes\_exact} & 4 & \texttt{true} when \texttt{out\_len} and \texttt{crc32} describe the regenerated bytes \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
 \paragraph{Derived members and recipes.}
-A kind-4 member has no body. \texttt{meta.recipe} is a versioned recipe id (e.g.\ \texttt{psi-v1-rint}) whose
-implementation is frozen, \texttt{meta.params} its parameters and \texttt{meta.needs} its inputs (members, packs,
-or auxiliaries named \texttt{matrix:}, \texttt{blob:} or \texttt{vector:}\emph{name}). A writer emits a derived entry
-only after running the recipe on that very sample and comparing the output with the original, and stores the member
-(kind 3 or 5) otherwise. \texttt{out\_len} and \texttt{crc32} describe the regenerated bytes when the comparison was
-byte for byte, and are 0 when only the canonical matrix was compared (\texttt{meta.bytes\_exact} false). The reference
-implementation defines the recipes; kind-1 and kind-2 members decode independently of them.
-% src: recipes.py:4-27; migrate.py:850-869; container.py:146-157
+\label{spec:derived}
+A kind-4 member has no body. \texttt{meta.recipe} is a versioned recipe id (an id never changes behavior; a change of
+behavior gets a new id), \texttt{meta.params} its parameters (a JSON object) and \texttt{meta.needs} its inputs (member
+names, cells columns as \texttt{cells:}\emph{column}, packs as \texttt{pack:}\emph{role}, or auxiliary members named
+\texttt{matrix:}, \texttt{blob:} or \texttt{vector:}\emph{name}). A writer MUST emit a derived entry only after running
+the recipe on that very sample and comparing the output with the original, and stores the member (kind 3 or 5)
+otherwise. \texttt{out\_len} and \texttt{crc32} describe the regenerated bytes when the comparison was byte for byte, and
+are 0 when only the canonical matrix was compared (\texttt{meta.bytes\_exact} false).
+% src: recipes.py:4-27; migrate.py:850-869; container.py:146-157; recipes_ctx / context.py:385-414 (regeneration)
+\emph{Conformance.} Recipe semantics are outside the conformance requirements of this version: a conforming reader
+need not implement any recipe. A reader that does not implement the recipe named by a kind-4 entry MUST report that
+member as unavailable and MUST NOT return other bytes in its place; it MUST still read every other member, since members
+of kinds 1, 2, 3 and 5 decode without recipes. A reader that does implement the recipe MAY check the result against
+\texttt{out\_len} and \texttt{crc32} when they are non-zero, or against \texttt{digest}.
+\emph{Informative:} Table~\ref{spec:tab:recipes} lists the recipe ids of the reference implementation.
+% src: recipes.py:180-193 (regenerate: LookupError "unknown recipe"); rcp_adapter.py:1-14; verify.py:654 (offline check of regenerated bytes)
 
-\paragraph{Packs and references.}
-Gene vocabularies and barcode whitelists shared between samples live in immutable \emph{packs}: magic \texttt{SPK2},
-\texttt{u16} version 1, \texttt{u16} kind (1 row vocabulary, 2 whitelist, 3 composite; 4 and 5 junction tables),
-\texttt{u32} header length, canonical JSON header, body. The pack id is $\mathrm{digest16}$ of the pack file; a matrix
-stores its first 8 bytes. A reader resolves the prefix to the unique pack whose id starts with it (ambiguity is an
-error), locally or through \texttt{s1/ref/index.json}, and must check the pack's digest16 against its id (and its
-SHA-256 against the index after a download). The reference implementation specifies pack bodies.
-% src: packs.py:4-20, 43-60, 824-870 (prefix resolution, id and sha256 checks); format-s1.md section 6
-
-\paragraph{Versioning.}
-The digit \texttt{2} in the magics \texttt{SINGLET2}, \texttt{PZ2M}, \texttt{SPK2} and \texttt{CEL2} marks the container
-generation. Each structure has its own \texttt{u16} version, currently 1; readers reject other versions
-of the object and of matrix members. Unknown codec ids are rejected. Reserved bytes are written as zero.
-% src: format-s1.md line 61; container.h:46 (version), 49 (codec), pz2.h:52 (kFormatVersion = 1)
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Recipe ids of the reference implementation (informative).}
+\label{spec:tab:recipes}
+% src: recipes.py:83-123 (registry), builtin_recipes.py:12-14
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.36\linewidth}X@{}}
+\toprule
+Recipe id & Regenerates \\
+\midrule
+\texttt{psi-v1-rint}, \texttt{psi-v1-trunc}, \texttt{psi-v1-stub} & \texttt{splice\_psi.1pz} from \texttt{sj\_counts.1pz} (PSI rounded, truncated, or the constant stub) \\
+\texttt{cellcalls-v1} & \texttt{cell\_calls.tsv} from the cells table \\
+\texttt{tsvcols-v1} & per-cell TSV files from typed cells-table columns \\
+\texttt{whitelist-sorted-v1} & STARsolo \texttt{raw/barcodes.tsv}, the sorted protocol whitelist \\
+\texttt{features-v1} & STARsolo \texttt{features.tsv} from the gene table \\
+\texttt{mtx-text-v1}, \texttt{mtx-filter-v1} & STARsolo \texttt{matrix.mtx} text from a matrix; the filtered matrix and barcodes from the raw matrix and the called set \\
+\texttt{ambient-v1} & \texttt{ambient\_profile.tsv} from an integer vector \\
+\texttt{geneexpr-v1} & \texttt{gene\_expression.tsv} (count, effective length, TPM, FPKM) \\
+\texttt{splice-events-v1} & \texttt{splice\_events.tsv} from the junction names \\
+\texttt{vocab-json-v1} & the study-level \texttt{feature\_vocab.json} from the vocabulary pack \\
+\texttt{stub-v1} & the 151-byte $0\times 0$ \texttt{.1pz} stub \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
 % ---------------------------------------------------------------------------------------------------------------------
 \subsection{The matrix member}
@@ -172,7 +236,7 @@ Offset & Size & Field & Value and reader rule \\
 25  & 1  & \texttt{row\_order} & 1 = class order (required for codec 1), 0 = canonical (required for codec 2) \\
 26  & 1  & \texttt{classes\_per\_octave} & $\kappa\in[0,8]$; informative (the decoder uses the stored keys) \\
 27  & 1  & \texttt{flags}   & bit 0: value type 4 coded as integers (Section~\ref{spec:values}); other bits 0 \\
-28  & 4  & \texttt{chunk\_cols} & nominal maximum columns per chunk; readers must not rely on it \\
+28  & 4  & \texttt{chunk\_cols} & nominal maximum columns per chunk; readers MUST NOT rely on it \\
 32  & 4  & \texttt{n\_chunks} & number of chunks \\
 36  & 1  & \texttt{lanes}   & $L\in\{16,32,64\}$ (codec 1; ignored by codec 2) \\
 37  & 1  & \texttt{prob\_bits} & $p_b\in[8,12]$, precision of the gap table TG (codec 1) \\
@@ -190,10 +254,10 @@ Offset & Size & Field & Value and reader rule \\
 \end{tabularx}
 \end{table}
 
-A reader must reject a header with a wrong magic, version, CRC, codec, value type or names kind, with
+A reader MUST reject a header with a wrong magic, version, CRC, codec, value type or names kind, with
 $\texttt{rows\_kind}=3$, with a non-empty section outside $[256,\texttt{total\_len}]$, with
 $\texttt{chunk\_index.len}\neq 24(\texttt{n\_chunks}+1)$, with codec 1 and $m\ge 2^{21}$, or with a \texttt{row\_order}
-that does not match the codec. For codec 1 it must also reject $L\notin\{16,32,64\}$, $p_b$ or $p_v$ outside $[8,12]$,
+that does not match the codec. For codec 1 it MUST also reject $L\notin\{16,32,64\}$, $p_b$ or $p_v$ outside $[8,12]$,
 and $\texttt{ctx\_kind}>4$.
 % src: container.h:42-73; api.h:59,70 (row_order); rans1_dec.h:35-37 (lanes, bits, ctx_kind)
 
@@ -202,7 +266,7 @@ $\texttt{n\_chunks}+1$ records of 24 bytes: \texttt{u64 off} (relative to the st
 \texttt{u32 len}, \texttt{u32 first\_col}, \texttt{u64 nnz\_before}. Chunk $c$ holds columns
 $[\texttt{first\_col}_c,\texttt{first\_col}_{c+1})$ and $\texttt{nnz\_before}_{c+1}-\texttt{nnz\_before}_c$ entries in
 bytes $[\texttt{off}_c,\texttt{off}_c+\texttt{len}_c)$. The last record is a sentinel
-$\{\texttt{chunks.len},0,n,\mathit{nnz}\}$. A reader must check that record 0 is $\{0,\cdot,0,0\}$, that
+$\{\texttt{chunks.len},0,n,\mathit{nnz}\}$. A reader MUST check that record 0 is $\{0,\cdot,0,0\}$, that
 \texttt{first\_col} strictly increases, \texttt{nnz\_before} does not decrease, $\texttt{off}_{c+1}=\texttt{off}_c+\texttt{len}_c$,
 and the sentinel. Chunks may have different widths; the chunk of column $j$ is the largest $c$ with
 $\texttt{first\_col}_c\le j$ (binary search).
@@ -215,9 +279,10 @@ the row keys in canonical row order (Section~\ref{spec:order}); exactly $m$ valu
 \texttt{cols} and \texttt{extra} hold the column and the row names, by names kind: 0 \emph{Inline}, one STREAM of the
 NUL-joined names (exactly $n$, resp.\ $m$, names); 1 \emph{Pack}, the names are the pack's list in pack order, empty
 section; 2 \emph{PackSubset}, one STREAM of $\mathrm{LEB}(\mathrm{zz}(i_t-i_{t-1}))$ for $t=0,1,\dots$ with $i_{-1}=0$,
-name $t$ being entry $i_t\in[0,2^{32})$ of the pack; 3 \emph{Cells} (columns only), the barcode column of the sample's
-\texttt{cells} member, empty section; 4 \emph{None}, no names. \texttt{kv} is empty or \texttt{u32 npairs} followed by
-one STREAM of NUL-joined \texttt{key}, \texttt{value} strings, ascending by the bytes of the key.
+name $t$ being entry $i_t\in[0,2^{32})$ of the pack's list; 3 \emph{Cells} (columns only), the barcode column of the
+sample's \texttt{cells} member, empty section; 4 \emph{None}, no names. Section~\ref{spec:names} defines the list of a
+pack and the barcode column. \texttt{kv} is empty or \texttt{u32 npairs} followed by one STREAM of NUL-joined
+\texttt{key}, \texttt{value} strings, ascending by the bytes of the key.
 % src: container.h:104-152 (names parts); api.h:80-107 (row names in extra, column names in cols, kv); rans1_enc.h:287-291 (rows)
 
 \paragraph{Prefix and range planning.}
@@ -236,7 +301,7 @@ A chunk's column counts (Section~\ref{spec:chunk}) decode alone and give exact o
 % row keys 40-115 KB (m = 165k-311k), tables 3.6-17 KB, chunk index 0.3-7 KB.
 
 \paragraph{Chunk boundaries and limits.}
-A reader must accept any chunk with fewer than $2^{28}$ entries and must reject a chunk whose column counts reach
+A reader MUST accept any chunk with fewer than $2^{28}$ entries and MUST reject a chunk whose column counts reach
 $2^{28}$ or do not sum to its count from the chunk index. Chunk widths are writer choices.
 \emph{Informative:} starting at column $j$, the reference writer takes $e=\min(n,\,j+\texttt{chunk\_cols})$; if the
 chunk would hold more than $B$ entries it ends instead at the last column boundary $k\le e$ that keeps at most $B$
@@ -252,13 +317,16 @@ $\mathit{nnz}$ is 0).
 \paragraph{Values.}
 \label{spec:values}
 Both codecs code unsigned 32-bit \emph{coded values}. For value types 1--3 the coded value is the count itself;
-writers must not store a value above the range of the declared type (the reference reader does not check it). For
-value type 4 with \texttt{flags} bit 0 set, every entry is a non-negative integer $v<2^{24}$ whose binary32 bit
-pattern round-trips (excluding \texttt{-0.0} and NaN) and the coded value is $v$; with bit 0 clear (codec 2 only)
-the coded value is the binary32 bit pattern. Explicit zero values are legal in both codecs. Codec 1 accepts every
-coded value below $2^{32}$, any $m\le 2^{21}-1$, and value types 1--3 or 4 with bit 0; codec 2 accepts everything,
-including $m$ up to $2^{32}-1$. Empty matrices ($m$, $n$ or $\mathit{nnz}$ zero) are legal.
+writers MUST NOT store a value above the range of the declared type, and readers MAY omit that check. For value type 4
+with \texttt{flags} bit 0 set, every entry is a non-negative integer $v<2^{24}$ whose binary32 bit pattern round-trips
+(excluding \texttt{-0.0} and NaN) and the coded value is $v$; with bit 0 clear (codec 2 only) the coded value is the
+binary32 bit pattern. Explicit zero values are legal in both codecs. Codec 1 accepts every coded value below $2^{32}$
+and value types 1--3 or 4 with bit 0; codec 2 accepts every value type. Empty matrices ($m$, $n$ or $\mathit{nnz}$ zero)
+are legal.
 % src: values.h:4-8, 15-32; api.h:476-511 (analyze), 653 (rans_ok); rans1.h:14, 23-24 (classes cover every u32)
+\emph{Feature limit.} Codec 1 represents at most $m=2^{21}-1=2{,}097{,}151$ rows (features). A writer MUST code a matrix
+with $m\ge 2^{21}$ rows with codec 2, which accepts any $m\le 2^{32}-1$.
+% src: pz2.h:55 (kRansMaxRows = 2^21 - 1); container.h:73 (reader check); api.h:653-654 (rans_ok, codec 1 refused)
 
 % ---------------------------------------------------------------------------------------------------------------------
 \subsection{Row order (codec 1)}
@@ -284,7 +352,7 @@ which is the original matrix. For codec 2 the two are identical and $\pi$ is the
 % src: pz2.h:24-27 (native vs canonical)
 
 % ---------------------------------------------------------------------------------------------------------------------
-\subsection{Symbolisation (codec 1)}
+\subsection{Symbolization (codec 1)}
 \label{spec:sym}
 \paragraph{Log-linear classes.}
 Every $x<2^{32}$ is split into a class $\gamma(x)\in[0,123]$ and $b(\gamma)$ extra bits:
@@ -390,8 +458,8 @@ Each codec-1 chunk is the byte string
 \]
 \emph{Column counts.} Starting from $X=X^{c}$ and reading the $n_{wc}$ words $w^{c}$, for each of the chunk's $n_c$
 columns in order decode a TC symbol $\gamma$ ($p=12$), then $b(\gamma)$ raw bits, and set $k_j=\beta(\gamma)+\epsilon$.
-Afterwards $X$ must equal $2^{16}$, exactly $n_{wc}$ words must have been read, the running sum of the $k_j$ must stay
-below $2^{28}$, and $N=\sum_j k_j$ must equal the chunk's count from the index.
+Afterwards $X$ MUST equal $2^{16}$, exactly $n_{wc}$ words MUST have been read, the running sum of the $k_j$ MUST stay
+below $2^{28}$, and $N=\sum_j k_j$ MUST equal the chunk's count from the index; a reader MUST reject the chunk otherwise.
 % src: rans1_enc.h:168-239 (encode_chunk layout), 181-194 (counts: single lane, 12-bit TC); rans1_dec.h:59-93 (chunk_counts), 95-139 (setup_chunk)
 
 \emph{Lanes.} The chunk's $N$ entries, in column-major stored order (element $e$), are split into $L$ contiguous
@@ -402,7 +470,7 @@ holding $e_0(l)$ and $o$ the offset of $e_0(l)$ in it. The lane starts with $\ma
 $k=k_j$ (contexts always use the full count of the column), and $P=\mathit{pp0}$ if $o>0$, else 0. The $\mathit{pp0}$
 values (the stored id of the previous entry of that column, plus one) are stored for the lanes with $o>0$, in ascending
 lane order. The lane's initial state is $X[l]$; lanes with $\mathit{cnt}(l)=0$ keep $X[l]=2^{16}$, and all $L$ states
-are present even when $N=0$. The bytes after the $\mathit{pp0}$ values must hold at least $4L+2n_w$ bytes.
+are present even when $N=0$. The bytes after the $\mathit{pp0}$ values MUST hold at least $4L+2n_w$ bytes.
 
 \emph{Decode schedule.} For $s=0,\dots,\mathit{steps}-1$, the phases below run in this order, each visiting lanes
 $l=0,\dots,L-1$ in ascending order and skipping lanes with $s\ge\mathit{cnt}(l)$; every operation is followed at once
@@ -414,10 +482,10 @@ by its refill, so the shared word stream is consumed in (step, phase, lane) orde
 \item[C2] if $\phi$: read $\min(b(\rho),16)$ raw bits; \textbf{C3} if $\phi$ and $b(\rho)>16$, read $b(\rho)-16$ more; $q=\beta(\rho)+\epsilon$;
 \item[E] emit stored id $r$ and value $v$ at element $e_0(l)+s$; $P\leftarrow r+1$; $\mathit{rem}\leftarrow\mathit{rem}-1$; if $\mathit{rem}=0$ and $s+1<\mathit{cnt}(l)$, move to the next column with $k>0$: $\mathit{rem}\leftarrow k$, $P\leftarrow0$.
 \end{enumerate}
-B2 and C3 are separate phases (all lanes' B before any lane's B2). Afterwards the word pointer must be exactly at the
-end of $w[n_w]$ and every state must equal $2^{16}$; a decoder may stop as soon as the pointer passes the end. A reader
-must reject a decoded id $r\ge m$ before using it as an index (Table~\ref{spec:tab:integrity}). A writer must not leave
-bytes after $w[n_w]$ (the reference reader does not check).
+B2 and C3 are separate phases (all lanes' B before any lane's B2). Afterwards the word pointer MUST be exactly at the
+end of $w[n_w]$ and every state MUST equal $2^{16}$; a reader MUST reject the chunk otherwise, and MAY stop decoding as
+soon as the pointer passes the end. A reader MUST reject a decoded id $r\ge m$ before using it as an index
+(Table~\ref{spec:tab:integrity}). Writers MUST NOT leave bytes after $w[n_w]$; readers MAY ignore such bytes.
 % src: rans1_dec.h:4-15 (normative loop), 23 (kPad 1024), 143-234 (scalar reference), 229-233 (end checks); api.h:251-258 (padding, check), 158 (id < m, canonical only)
 % src: rans1_enc.h:208-230 (encoder: steps descending; phases C3,C2,C1,B2,B,A; lanes descending)
 
@@ -427,7 +495,7 @@ The \texttt{tables} section holds three STREAMs, TC then TG then TR. Each payloa
 followed, for each used context $\xi$ in increasing order, by $\mathrm{LEB}(\xi-\xi_{\mathrm{prev}})$,
 $\mathrm{LEB}(n_{\mathrm{sym}})$ and, for each symbol with non-zero frequency in increasing order,
 $\mathrm{LEB}(s-s_{\mathrm{prev}})\,\mathrm{LEB}(f_s)$, with $\xi_{\mathrm{prev}}=s_{\mathrm{prev}}=0$ before the first.
-A reader must reject: $n_{\mathrm{used}}$ above the context count; a zero delta after the first context or symbol; a
+A reader MUST reject: $n_{\mathrm{used}}$ above the context count; a zero delta after the first context or symbol; a
 context or symbol out of range; $n_{\mathrm{sym}}=0$ or above the alphabet size; $f_s=0$ or $f_s>2^{p}-1$; or
 frequencies of a context that do not sum to exactly $2^{p}$. $C_s$ is the sum of the frequencies of the smaller symbols
 of the context. Contexts not listed have no symbols; a valid stream never uses them.
@@ -446,11 +514,21 @@ Codec 2 stores canonical row ids ($\texttt{row\_order}=0$; \texttt{tables} and \
 STREAMs: \emph{counts}, $\mathrm{LEB}(k_j)$ for each column; \emph{gaps}, for each column and entry
 $\mathrm{LEB}(r-r_{\mathrm{prev}}-1)$ with $r_{\mathrm{prev}}=-1$ at the column start; \emph{values}, $\mathrm{LEB}(v)$
 per entry for value types 1--3 and for type 4 with \texttt{flags} bit 0, or the 4-byte bit pattern of each value
-otherwise. A reader must check that the counts sum to the index count, every id is below $m$, no stream has trailing
-bytes, and (raw f32) the value stream has $4N$ bytes. \emph{Informative:} with codec \texttt{auto} the writer uses codec 1
-when $m\le2^{21}-1$ and the values are not raw f32; it also builds the codec-2 member when the codec-1 member is
-smaller than 65{,}536 bytes and keeps whichever is strictly smaller. Codec 2 is used otherwise.
-% src: codec2.h:1-10 (layout), 15-32 (encode), 51-84 (decode checks); api.h:653-669 (auto choice, 65536)
+otherwise. A reader MUST check that the counts sum to the index count, every id is below $m$, every count and value is
+below $2^{32}$, no stream payload has trailing bytes, and (raw f32) the value stream has $4N$ bytes.
+\emph{Informative:} with codec \texttt{auto} the writer uses codec 1 when $m\le2^{21}-1$ and the values are not raw
+f32; it also builds the codec-2 member when the codec-1 member is smaller than 65{,}536 bytes and keeps whichever is
+strictly smaller. Codec 2 is used otherwise.
+% src: codec2.h:1-10 (layout), 15-32 (encode), 36-84 (decode checks); api.h:653-669 (auto choice, 65536)
+
+\paragraph{Integrity of codec-2 chunks.}
+A codec-2 chunk has no checksum and no end state, and its zstd frames are written without the zstd content checksum.
+What applies to it is the STREAM length rules (each frame MUST decompress to exactly its \texttt{raw\_len}), zstd's own
+frame validation, LEB128 bounds, and the checks above. These detect truncation, a change of any length field, and
+corruptions that break the LEB128 or zstd structure or produce an id of $m$ or more. A corruption inside a frame that
+still decodes to well-formed streams of the stated lengths yields wrong ids or values that only the canonical digest
+(Section~\ref{spec:digest}) detects.
+% src: codec2.h:51-84; common.h:84-100 (get_stream: raw_len equality, no checksum); util.py:81 (write_checksum=False)
 
 % ---------------------------------------------------------------------------------------------------------------------
 \subsection{Canonical digest}
@@ -460,33 +538,317 @@ The canonical digest is $\mathrm{digest16}$ of the byte string: the 9 ASCII byte
 \texttt{u32}~$k_j$, then the $k_j$ canonical row ids as \texttt{u32} in ascending order, then their $k_j$ values as
 \texttt{u32} (types 1--3: the count; type 4: the binary32 bit pattern); \texttt{u32} number of row names and the
 NUL-joined row names; the same for column names; then for each key/value pair in ascending byte order of the key: key,
-NUL, value, NUL (no count). Names are the \emph{logical} names, also when they are stored as a pack or cells reference,
-and a matrix with names kind 4 hashes a count of 0. An all-zero digest means ``not computed''.
-% src: api.h:396-436 (canonical_digest); matrix.py:110-158 (Python, identical); values.h:64 (digest value of F32Int)
+NUL, value, NUL (no count). Names are the \emph{logical} names (Section~\ref{spec:names}), also when they are stored as a
+pack or cells reference, and a matrix with names kind 4 hashes a count of 0. For a matrix whose rows are junction ids
+with a \texttt{.legacy\_order} member (Section~\ref{spec:junctions}), the digest is that of the logical matrix in the
+legacy row order. An all-zero digest means ``not computed''.
+% src: api.h:396-436 (canonical_digest); matrix.py:110-158 (Python, identical); values.h:64 (digest value of F32Int); migrate.py:153-199 (junction rows: digest of the legacy matrix)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{The cells table (kind 2)}
+\label{spec:cells}
+The cells table holds one row per matrix column of the sample, in matrix column order, stored column by column.
+Offsets in this section are relative to the member start. Layout: magic \texttt{CEL2}, \texttt{u16 version} (1; other
+values rejected), \texttt{u16 n\_cols}, \texttt{u32 n\_rows}, then $\texttt{n\_cols}$ directory entries
+\{\texttt{u16 name\_len}, \texttt{name} (UTF-8), \texttt{u8 dtype}, \texttt{u8 enc}, \texttt{u64 off}, \texttt{u64 len}\},
+then the column bodies. Column names are unique. Each non-empty body starts at a multiple of 64, in directory order,
+separated by zero padding; the table ends at the end of the last body; an empty body has $\texttt{off}=\texttt{len}=0$.
+Table~\ref{spec:tab:cells} gives the body of each \texttt{dtype}. Bit packing writes value $t$ of a $b$-bit array at bit
+positions $tb,\dots,tb+b-1$, least significant bit first, and bit position $p$ is bit $p\bmod 8$ of byte $\lfloor
+p/8\rfloor$; unused bits of the last byte are zero.
+% src: cells.py:1-24 (layout), 41-43, 222-245 (encode), 339-372 (CellsReader), 397-418 (_decode_column), 103-117 (_pack_bits/_unpack_bits)
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Cells-table column types and bodies. \texttt{enc}: 0 raw, 1 one zstd frame of the raw bytes, 2 one zstd frame of
+the wrapping first differences (value 0 itself, then $x_i-x_{i-1}$ modulo $2^{w}$ for a $w$-bit type).}
+\label{spec:tab:cells}
+% src: cells.py:41-43 (dtype codes), 272-296 (_encode_column), 299-314 (_encode_barcodes), 317-336 (_decode_barcodes), 397-418
+\begin{tabularx}{\linewidth}{@{}clcX@{}}
+\toprule
+\texttt{dtype} & Type & \texttt{enc} & Body \\
+\midrule
+1, 2, 3, 4 & u8, u16, u32, i32 & 0, 1, 2 & $\texttt{n\_rows}$ little-endian values \\
+5, 6 & f32, f64 & 0, 1 & $\texttt{n\_rows}$ little-endian IEEE-754 values \\
+7 & bool & 0, 1 & bit-packed, one bit per row ($\lceil\texttt{n\_rows}/8\rceil$ bytes) \\
+8 & string & 0, 1 & NUL-joined UTF-8 strings \\
+9 & barcode & 0 & \texttt{u8 mode}, then: mode 0, one zstd frame of the NUL-joined barcodes (no frame when $\texttt{n\_rows}=0$); mode 1, an 8-byte whitelist pack id prefix, \texttt{u8}~$b$, and the bit-packed $b$-bit indices into the whitelist's list (Section~\ref{spec:packs}); mode 2, \texttt{u8}~$k\in[1,32]$ and the bit-packed $2k$-bit codes of $k$-base barcodes, coded as in a whitelist pack \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+A reader MUST reject a column whose decoded length differs from \texttt{n\_rows}, an unknown \texttt{dtype}, and an
+unknown barcode mode; it MAY read only the columns it needs. A writer MUST use only the \texttt{dtype}--\texttt{enc}
+pairs of Table~\ref{spec:tab:cells}. \emph{Informative:} the reference writer keeps for each numeric column the smallest
+encoding (the lowest \texttt{enc} on ties), mode 1 when a whitelist pack holds every barcode, with
+$b=\max(\lambda(W-1)+1,1)$ for a whitelist of $W$ entries, mode 2 when all barcodes are $k$-base ACGT strings, and
+mode 0 otherwise.
+% src: cells.py:272-314 (writer choices), 350-355 (version check), 404-418 (length check, unknown dtype), 336 (unknown mode)
+
+\paragraph{Columns.}
+A cells table written for a sample's count matrices carries the columns \texttt{barcode} (dtype 9), \texttt{called}
+(bool, the cell call) and the u32 columns \texttt{n\_umi\_exon}, \texttt{n\_umi\_intron} (column sums of the exon and
+intron count matrices) and \texttt{n\_feat\_exon}, \texttt{n\_feat\_intron} (their stored entries per column). Further
+columns are optional; the reference writer adds per-cell tables of the legacy bundle, \texttt{called\_ed} (bool) and
+\texttt{called\_ed\_fdr} (f32, NaN for untested barcodes), and label columns. Matrices with $\texttt{cols\_kind}=3$
+refer to the member named \texttt{cells}; their $n$ MUST equal its \texttt{n\_rows}, and a reader MUST reject a mismatch.
+% src: cells.py:57 (REQUIRED), 433-470 (base_table); migrate.py:665-680 (called_ed); client.py:1195-1199 (n == n_rows)
+
+\paragraph{Cells-table digest.}
+The \texttt{digest} of a kind-2 entry is $\mathrm{digest16}$ of: the 10 ASCII bytes \texttt{CEL2CANON1}, then, for each
+column in ascending byte order of its UTF-8 name, the name, one NUL, the \texttt{dtype} byte and the logical values:
+numeric values little-endian in their type, bool as one byte (0 or 1) per row, strings and barcodes NUL-joined (barcodes
+as strings, also when coded against a whitelist).
+% src: cells.py:199-206 (digest), 264-269 (_logical_bytes)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Packs}
+\label{spec:packs}
+Gene vocabularies, barcode whitelists and the splice-junction table are shared between samples in immutable
+\emph{packs}, published as \texttt{s1/ref/<id>.pack}. A pack file is magic \texttt{SPK2}, \texttt{u16 version} (1; other
+values rejected), \texttt{u16 kind}, \texttt{u32 header\_len}, the header (a canonical JSON object of
+\texttt{header\_len} bytes) and the body (the rest of the file). The pack id is $\mathrm{digest16}$ of the whole file.
+Kinds: 1 row vocabulary, 2 barcode whitelist, 3 composite vocabulary, 4 junction segment, 5 junction table version.
+Each body is selected by the header field \texttt{coder} (kinds 1, 3, 4); a reader MUST reject an unknown kind or coder.
+% src: packs.py:1-20, 58-73 (wrap/parse), 447-478 (VocabPack: kinds and coders), 872-890 (PackStore.get); junctions.py:9-22, 318-345
+
+\paragraph{Resolution.}
+A matrix stores the first 8 bytes of a pack id, and a mode-1 barcode column the same; a pack that references another
+pack stores its full 16-byte id. A reader resolves a prefix to the unique pack whose id starts with it (ambiguity is an
+error), locally or through the pack index \texttt{s1/ref/index.json}, and MUST check the pack's digest16 against its id
+(and, after a download, its SHA-256 and length against the index). The index is a JSON object \{\texttt{format}:
+\texttt{"singlet-s1-packs"}, \texttt{version}: 1, \texttt{packs}: [\dots]\}; each entry holds \texttt{id} (32 hex),
+\texttt{kind} (\texttt{vocab}, \texttt{whitelist}, \texttt{junction-segment} or \texttt{junction-version}),
+\texttt{bytes} and \texttt{sha256} (64 hex), and optionally \texttt{build}, \texttt{member}, \texttt{n},
+\texttt{protocol}, \texttt{aliases}, \texttt{k} and \texttt{ship}.
+% src: packs.py:824-863 (_resolve, _fetch_remote: sha256 and id checks), 865-870 (read: id check), 970-985 (index); client.py:350-365; migrate.py:1456-1460 (index kinds)
+
+\paragraph{Integer streams.}
+Pack bodies use three containers. A \emph{P-stream} is \texttt{u8 mode}, \texttt{u32}~$n$, \texttt{u32 clen} and one
+zstd frame of \texttt{clen} bytes whose payload is $\mathrm{LEB}$ of the $n$ values (mode 0) or four byte planes of $n$
+bytes each, byte 0 of every value first (mode 1). A \emph{P-blob} is \texttt{u32 clen} and one zstd frame of
+\texttt{clen} bytes. A \emph{J-stream} is \texttt{u8}~$w\in[1,4]$, \texttt{u32}~$n$, \texttt{u32 clen} and one zstd
+frame whose payload is exactly $wn$ bytes: $w$ byte planes of the 32-bit values, low byte first; readers MUST reject
+another $w$ or payload length. In J-streams, $\mathrm{zz}_{32}(d)=(2d\bmod 2^{32})\oplus(d\gg 31)$ for a 32-bit signed
+$d$, and differences are taken modulo $2^{32}$.
+% src: packs.py:95-123 (_pack_stream/_unpack_stream, _pack_blob/_unpack_blob); junctions.py:159-193 (_enc_stream/_dec_stream, _zigzag)
+
+\paragraph{Row vocabulary, coder \texttt{SVP0} (kind 1, \texttt{member} \texttt{exon}).}
+The header holds \texttt{build}, \texttt{member}, \texttt{coder}, \texttt{n} (exon names), \texttt{n\_genes},
+\texttt{n\_intron} and \texttt{sha256\_names} (hex SHA-256 of the NUL-joined exon names). The body is: ASCII
+\texttt{SVP0}; \texttt{u16} version 1, \texttt{u16} flags 0, \texttt{u8 prefix\_len}, \texttt{u8 width}, \texttt{u16}
+$C$ (chromosomes), \texttt{u32}~$G$ (genes), \texttt{u32}~$E$ (exons); \texttt{u8 build\_len} and the build string;
+the gene-id prefix (\texttt{prefix\_len} bytes); the schema version (8 bytes, NUL padded); then in order the P-stream
+$d$ ($G$ values), the P-blob of gene kinds ($G$ bytes), the P-blob of the NUL-separated explicit symbols, the P-blob of
+the $C$ NUL-separated chromosome names, and the P-streams \texttt{gch} ($G$), \texttt{nex} ($G$), \texttt{gstart} ($G$),
+\texttt{elen} ($E$) and \texttt{egap} ($E-G$), with no trailing bytes. A reader MUST reject counts that differ from
+$G$, $E$ and $C$. Gene $g$ has number $u_0=d_0$, $u_g=u_{g-1}+d_g+1$, gene id $I_g$ = prefix followed by $u_g$ in
+decimal, left-padded with zeros to \texttt{width} digits, chromosome $c_g$ = chromosome name \texttt{gch}$_g$, and
+$\texttt{nex}_g+1$ exons. Its symbol $y_g$ is empty (kind 0), $I_g$ (kind 1) or the next explicit symbol (kind 2,
+taken in gene order). Exons are numbered across genes in gene order; the first exon of gene $g$ starts at
+$\texttt{gstart}_g$, exon $e$ ends at $t_e=s_e+\texttt{elen}_e$, and the next exon of the same gene starts at
+$t_e+\texttt{egap}$, the \texttt{egap} values being taken in order for every exon except the last of each gene. With
+$H_g=I_g$\texttt{\_}$y_g$\texttt{\_}, an optional tag $\tau$ (empty here) and decimal integers, the name of exon $e$
+of gene $g$ is $H_g\,\tau\,c_g$\texttt{:}$s_e$\texttt{-}$t_e$ and the name of the intron after it is
+$H_g$\,\texttt{intron\_}\,$\tau\,c_g$\texttt{:}$t_e$\texttt{-}$(t_e+\texttt{egap}_e)$. The pack's \emph{exon list} is
+every exon name in exon order, its \emph{intron list} every intron name in the same order, and its \emph{gene table}
+the pairs ($I_g$, $y_g$ for kind 2, else $I_g$).
+% src: packs.py:257-325 (encode_struct/decode_struct), 346-423 (_gene_table, _arrays, _heads, _names_exon, _names_intron), 712-727 (build_exon_pack header)
+
+\paragraph{Derived and composite vocabularies.}
+Kind 1 with \texttt{coder} \texttt{SVPD} (\texttt{member} \texttt{intron}; header \texttt{build}, \texttt{n},
+\texttt{derived\_from}) has as body the 16-byte id of an \texttt{SVP0} pack; its list is that pack's intron list. Kind 3
+(\texttt{coder} \texttt{SPKC}; header \texttt{build}, \texttt{member}, \texttt{n}, \texttt{sha256\_names}) has the body
+\texttt{u8}~$P$ and, for each part, a 16-byte pack id, \texttt{u8 tag\_len} and a tag; its list is the concatenation, in
+part order, of each part's list for the composite's \texttt{member}, expanded with the tag $\tau$ (the outer tag
+followed by the part's tag when parts nest), and its gene table the concatenation of the parts' gene tables. The header
+field \texttt{n} is the length of the pack's list.
+% src: packs.py:729-755 (build_intron_pack, build_composite), 480-521 (_exon_source, _components, _expand), 579-587 (gene_table)
+
+\paragraph{Barcode whitelist (kind 2).}
+The header holds \texttt{k}, \texttt{n}, \texttt{protocol}, \texttt{names} (protocol aliases) and
+\texttt{sha256\_names} (hex SHA-256 of the barcodes, each followed by a newline). The body is \texttt{u8}~$k$,
+\texttt{u32}~$n$, \texttt{u8 mode} (0; other values rejected), then one zstd frame of $\mathrm{LEB}(c_0)$,
+$\mathrm{LEB}(c_i-c_{i-1})$ for $i=1,\dots,n-1$. The codes $c_i$ strictly increase; base $j$ of a barcode (from the
+first) is bits $2(k-1-j)$ and $2(k-1-j)+1$ of its code, with A, C, G, T coded 0--3, so code order is lexicographic
+order. The pack's list is the $n$ barcodes in code order.
+% src: packs.py:606-640 (barcodes_to_codes, codes_to_sarray), 644-662 (Whitelist), 686-709 (build_whitelist)
+
+\paragraph{Junction table (kinds 4 and 5).}
+\label{spec:junctions}
+A junction is $(\mathit{chrom},\mathit{start},\mathit{end})$ with the intron $[\mathit{start},\mathit{end})$ in
+0-based coordinates; its name is \emph{chrom}\texttt{:}\emph{start}\texttt{-}\emph{end} in decimal. A \emph{segment}
+(kind 4, \texttt{coder} \texttt{JX1}; header \texttt{build}, \texttt{coords}, \texttt{id\_lo}, \texttt{n},
+\texttt{tier}, \texttt{chroms}) holds table ids $[\texttt{id\_lo},\texttt{id\_lo}+n)$ in genomic order. Its body, a
+\emph{segment body}, is \texttt{u32}~$n$ and six J-streams: chromosome runs (pairs of an index into \texttt{chroms} and
+a row count), start differences ($\mathit{start}_i-\mathit{start}_{i-1}$, $\mathit{start}_{-1}=0$), lengths
+($\mathit{end}-\mathit{start}$), attributes (bits 0--1 strand: 0 unknown, 1 $+$, 2 $-$; bits 2--4 splice motif; bit 5
+annotated; bit 6 donor and bit 7 acceptor at an annotated exon boundary), genes ($\mathrm{zz}_{32}$ of the differences
+of gene index $+1$ into the build's gene table, 0 for none, starting from 0), and transcript counts (saturating at
+255). The run counts MUST sum to $n$. A \emph{version} (kind 5; header \texttt{build}, \texttt{version}, \texttt{n},
+\texttt{segments}; empty body) lists segments \{\texttt{id}, \texttt{id\_lo}, \texttt{n}, \texttt{tier},
+\texttt{bytes}\} that cover ids $[0,n)$ contiguously; a later version keeps every segment of an earlier one, so an id
+never changes meaning. Table id $t<n$ is row $t-\texttt{id\_lo}$ of the segment that holds it; a reader fetches that
+segment by its full id and MUST check its digest16.
+% src: junctions.py:1-22 (layout), 122-130 (names), 195-251 (encode_body/decode_body), 254-315 (build_segment, build_version), 318-370 (Segment, JunctionTable.segment), 376-414 (lookup)
+
+\paragraph{Junction rows of a sample.}
+A matrix whose rows are junctions references a version with $\texttt{rows\_kind}=2$. Its pack indices strictly
+increase; an index $i<2^{31}$ is table id $i$, and $i\ge2^{31}$ is row $i-2^{31}$ of the sample's own junction list,
+stored in the member \emph{matrix}\texttt{.local} (kind 3 or 5): \texttt{u16}~$C$, \texttt{u32 names\_len}, the $C$
+NUL-separated chromosome names (\texttt{names\_len} bytes), then a segment body. When the member
+\emph{matrix}\texttt{.legacy\_order} (kind 3 or 5) is present, its body is one J-stream of
+$\mathrm{zz}_{32}(\mathit{perm}_r-\mathit{perm}_{r-1})$ with $\mathit{perm}_{-1}=0$; $\mathit{perm}$ MUST be a
+permutation of $[0,m)$, and the logical matrix is the stored one with stored row $r$ moved to row $\mathit{perm}_r$
+(ids sorted again within each column), its names moved likewise.
+% src: junctions.py:13-17, 614-626 (sample_rows), 629-657 (encode_local, decode_local, encode_perm, decode_perm), 659-707 (row_names, permute_rows, to_legacy); sample.py:127-146
+
+\paragraph{Names by reference.}
+\label{spec:names}
+The logical names of a matrix with names kind 1 or 2 come from the pack's list as follows. Rows MAY reference a kind-1
+or kind-3 vocabulary, whose list is its exon list (\texttt{member} \texttt{exon}) or intron list (\texttt{intron}); when
+the matrix's \texttt{meta.names.rows.member} is \texttt{genes}, the list is instead the gene ids $I_g$ of the pack's gene
+table, and a reader MUST use it. Rows MAY reference a kind-5 junction version with kind 2 only. Columns MAY reference a
+kind-2 whitelist; with kind 1 column $j$ is the $j$-th barcode of the list. A reader MUST reject a row reference to a
+whitelist, a column reference to any other pack kind, and a resolved name list whose length differs from $m$ (rows).
+With $\texttt{cols\_kind}=3$ the column names are the \texttt{barcode} column of the \texttt{cells} member.
+% src: sample.py:93-126 (_resolve: genes member, whitelist checks, length check); client.py:1050-1068 (_member_row_names); migrate.py:128-148, 205-224
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Study manifest}
+\label{spec:manifest}
+A study manifest, published as \texttt{s1/m/<GSE>.json}, lists the sample objects of one study with their lengths,
+SHA-256 and member offsets. It is a JSON object (UTF-8); it is the only mutable object, and a reader MUST ignore keys it
+does not recognize. Table~\ref{spec:tab:manifest} lists the keys; ``req.'' marks keys a writer MUST write.
+\emph{Informative:} the reference writer emits it with an indent of 1 and a final newline.
+% src: manifest.py:1-14, 95-118 (build_manifest), 121-122 (dumps_manifest); client.py:573-581 (_validate_manifest), 276-307 (_member_ref, _sample_ref); migrate.py:1015-1062 (_manifest_member), 1339-1366 (legacy, packs)
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Keys of the study manifest, of a sample entry and of a member entry.}
+\label{spec:tab:manifest}
+% src: manifest.py:95-118, 132-144 (sample_entry); migrate.py:491-492 (extras), 552-614 (provenance, junction_support), 1284 (annotations), 1371-1395 (_manifest_packs), 1484-1493 (release_policy, annotations_default, transcode)
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.22\linewidth}lcX@{}}
+\toprule
+Key & Type & Req. & Meaning \\
+\midrule
+\multicolumn{4}{@{}l}{\emph{Manifest}} \\
+\texttt{format} & string & yes & \texttt{"singlet-s1"} \\
+\texttt{manifest\_version} & integer & yes & 1; a reader MUST reject a value above the highest it supports \\
+\texttt{gse} & string & yes & study accession \\
+\texttt{rev} & string & yes & 16 hex digits, defined below \\
+\texttt{samples} & array & yes & sample entries \\
+\texttt{study\_files} & object & yes & study-level files by name; each entry defined below \\
+\texttt{created\_at}, \texttt{reference\_build} & string & no & creation time; reference build \\
+\texttt{pipeline} & object & no & \texttt{git\_sha}, \texttt{singlet\_version} \\
+\texttt{packs} & object & no & pack ids (32 hex) by role: \texttt{exon}, \texttt{intron}, \texttt{genes}, \texttt{whitelist}, \texttt{junctions}; each an id, a list of ids, or \texttt{null} \\
+\texttt{legacy} & object & no & the legacy bundle the study was migrated from (\texttt{key}, \texttt{etag}, \texttt{bytes}, \texttt{migrated\_at}, \texttt{ledger}) \\
+\texttt{release\_policy}, \texttt{annotations\_default}, \texttt{transcode} & various & no & release-policy version, default annotation version, transcode layout \\
+\midrule
+\multicolumn{4}{@{}l}{\emph{Sample entry}} \\
+\texttt{gsm} & string & yes & sample accession \\
+\texttt{key} & string & yes & object key \texttt{s1/s/<GSM>/<h>.s1} \\
+\texttt{bytes} & integer & yes & object length \\
+\texttt{sha256} & string & yes & SHA-256 of the object, 64 hex \\
+\texttt{members} & object & yes & member entries by member name, one per member-table entry \\
+\texttt{n\_columns}, \texttt{n\_called} & integer & no & cells-table rows; called cells \\
+\texttt{stats} & object & no & \texttt{median\_umi}, \texttt{median\_genes} over called cells \\
+\texttt{provenance}, \texttt{junction\_support}, \texttt{annotations} & object & no & reads used and available, strand and library-type checks; junction support; label sidecars by annotation version \\
+\midrule
+\multicolumn{4}{@{}l}{\emph{Member entry}} \\
+\texttt{kind}, \texttt{flags}, \texttt{off}, \texttt{len} & integer & yes & as in the member table; \texttt{off} from the object start \\
+\texttt{digest} & string & yes & member-table \texttt{digest}, 32 hex \\
+\texttt{out\_len}, \texttt{crc32} & integer & kinds 3--5 & as in the member table \\
+\texttt{m}, \texttt{n}, \texttt{nnz}, \texttt{codec}, \texttt{chunk\_cols}, \texttt{n\_chunks} & integer & kind 1 & copies of the member header \\
+\texttt{chunk\_index} & [int, int] & kind 1 & offset from the object start and length of the chunk index \\
+\texttt{names} & object & kind 1 & \texttt{meta.names} (Table~\ref{spec:tab:meta}) \\
+\texttt{recipe}, \texttt{params}, \texttt{needs} & various & kind 4 & \texttt{meta} of the entry \\
+\texttt{columns}, \texttt{n\_rows}, \texttt{whitelist}, \texttt{called\_source} & various & kind 2 & \texttt{meta} of the entry; also \texttt{called\_ed} and \texttt{labels} when present \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Consistency.}
+The \texttt{kind}, \texttt{off}, \texttt{len} and \texttt{digest} of every member entry MUST equal those of the member
+table, and \texttt{bytes} and \texttt{sha256} MUST describe the object named by \texttt{key}. \texttt{rev} is the first
+16 hex digits of the SHA-256 of: \texttt{SGMREV1} and a newline; each sample key, in ascending order, followed by a
+newline; and for each study file in ascending order of its name, the name, one NUL, the hex SHA-256 of the file and a
+newline. It does not depend on timestamps.
+% src: manifest.py:85-92 (compute_rev); verify.py:393-397 (rev check), 500-528 (object and member checks)
+
+\paragraph{Study files.}
+Each \texttt{study\_files} entry holds \texttt{size}, \texttt{crc32} and \texttt{sha256} (hex) of the file and exactly
+one representation: \texttt{recipe}, \texttt{params} and \texttt{needs} (derived, Section~\ref{spec:derived});
+\texttt{json} and \texttt{dumps} (the parsed JSON and the \texttt{indent}, \texttt{ensure\_ascii}, \texttt{sort\_keys}
+and \texttt{separators} that Python's \texttt{json.dumps} needs to reproduce the bytes); or \texttt{zstd\_b64} (base64
+of one zstd frame of the bytes). A reader that rebuilds a study file MUST check its size and CRC-32.
+% src: manifest.py:24-35 (_DUMPS_VARIANTS), 46-82 (study_file_entry, study_file_bytes)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Versioning and compatibility}
+\label{spec:versions}
+The digit \texttt{2} in the magics \texttt{SINGLET2}, \texttt{PZ2M}, \texttt{SPK2} and \texttt{CEL2} marks the container
+generation (generation 1 is the legacy \texttt{.singlet} bundle); a different magic is a different format. Within a
+generation each structure carries its own \texttt{u16} version, currently 1 everywhere: the file header, the matrix
+member, the pack wrapper and the cells table. JSON documents carry an integer version: \texttt{manifest\_version} of the
+study manifest and \texttt{version} of the pack index. A reader MUST reject a structure whose binary version it does
+not know, a manifest whose \texttt{manifest\_version} is above the highest it supports, and an unknown codec id, value
+type, names kind, pack kind, pack coder, cells \texttt{dtype} or barcode mode. Writers MUST write reserved bytes and
+unassigned flag bits as zero; readers MAY ignore them.
+% src: container.py:271-272; container.h:46-48; packs.py:63-73; cells.py:350-355; client.py:84, 576-579 (MANIFEST_VERSION_MAX); docs/format-s1.md section 3 (generation)
+
+\paragraph{Forward compatibility.}
+The member-table entry has the same layout for every kind, so a reader can parse an object that contains members of a
+kind it does not know. Such a reader MUST apply the layout rules to those entries, MUST otherwise skip them, MUST read
+the members it does know, and MUST report an error when a skipped member is requested. The same holds for derived
+members whose recipe it does not implement (Section~\ref{spec:derived}), for cells columns it does not need and for
+JSON keys it does not recognize. New member kinds, recipes, cells columns and JSON keys can therefore be added without
+a new version; a change to any binary layout above requires a new version number of that structure.
+% src: container.py:286-310 (any kind is parsed; only kind 4 is special-cased), 349-354 (legacy_blob refuses other kinds); sample.py:39-40, 60-62 (matrix members by kind); client.py:276-307 (unknown keys kept, not used)
 
 % ---------------------------------------------------------------------------------------------------------------------
 \subsection{Integrity}
 \label{spec:integrity}
+Three notions are kept apart. \emph{Object identity} establishes which bytes are meant: a sample object is named by the
+digest16 of all its bytes and listed in the manifest with its length and SHA-256; a pack is named by the digest16 of
+its file and listed in the pack index with its length and SHA-256. \emph{Byte integrity} establishes that bytes read
+are the bytes written: CRC-32 of the matrix member header and of regenerated bytes, the structural checks, and the
+end-state checks of codec 1. \emph{Logical integrity} establishes that the decoded content is the content the writer
+encoded: the canonical matrix digest (Section~\ref{spec:digest}) and the cells-table digest (Section~\ref{spec:cells}),
+which cover values, names and key/values. The \texttt{digest} fields of the member table, the manifest and the matrix
+header \emph{name} logical content; comparing them identifies the matrix being read and checks none of its bytes.
+Version~1 has no per-chunk checksum and no checksum of the file header, the member table, the side sections or the
+cells table; its zstd frames carry no content checksum. Table~\ref{spec:tab:integrity} lists each mechanism.
+% src: container.py:252-310 (no CRC of header or table); codec.py / container.h:47 (header CRC only); util.py:81 (no zstd checksum)
 
 \begin{table}[htbp]
 \centering\footnotesize\setlength{\tabcolsep}{4pt}
-\caption{Integrity mechanisms and where the reference implementation applies them.}
+\caption{Integrity mechanisms, what they cover, the reader requirement and where the reference implementation applies
+them.}
 \label{spec:tab:integrity}
 % src: container.h:47, 66-94; rans1.h:197-219; rans1_dec.h:90, 105-106, 229-233; api.h:158, 258; codec2.h:58-83
-% src: container.py:348-360 (legacy_blob); sample.py:156-158; client.py:17-18, 724, 1202-1205, 1242-1243, 1279-1305, 2173; packs.py:852, 868
-\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.26\linewidth}>{\raggedright\arraybackslash}p{0.27\linewidth}X@{}}
+% src: container.py:348-360 (legacy_blob); sample.py:156-158; client.py:17-18, 724, 1202-1205, 1242-1243, 1279-1305, 2173; packs.py:857, 868; verify.py:654, 737
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.25\linewidth}>{\raggedright\arraybackslash}p{0.25\linewidth}X@{}}
 \toprule
-Mechanism & Covers & Applied \\
+Mechanism & Covers & Requirement; reference use \\
 \midrule
-CRC-32 of the matrix member header & header bytes 0--251 & every open \\
-Structural checks & section bounds, chunk index, table rules, LEB and STREAM bounds & every open \\
-Count-stream end state & column counts of a chunk & every decoded chunk, and every count-only read \\
-Lane-stream end state ($X_l=2^{16}$, exact word count) & entropy-coded part of a chunk & every decoded chunk with $N>0$ \\
-Row id below $m$ & decoded ids & codec 2 always; codec 1 in canonical mode only \\
-CRC-32 and length & regenerated bytes of kinds 3 and 5 & when the bytes are regenerated \\
-Canonical digest (header and member table) & the whole logical matrix, names and key/values & only on request: \texttt{verify=True} or \texttt{SINGLET\_S1\_VERIFY=1} in the client (skipped unless rows are a pack and columns cells or a pack), \texttt{verify\_matrix\_digest}, the writer's self-check, the offline verifier \\
-Object digest16 and SHA-256 & every byte of the object & whole-object download (on by default), offline verifier \\
-Pack digest16 & a pack file & every pack read \\
+\multicolumn{3}{@{}l}{\emph{Object identity}} \\
+Object digest16 (key) and SHA-256 and length (manifest) & every byte of the object, including file header and member table & SHOULD on a whole-object download; download (on by default), offline verifier \\
+Pack digest16 (id) and SHA-256 and length (index) & every byte of a pack & digest16 MUST on every pack read, SHA-256 MUST after a download; always \\
+Member digest in manifest, member table and matrix header & names the logical matrix; no bytes & MAY; the client compares header and manifest on every ranged matrix read \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Byte integrity}} \\
+CRC-32 of the matrix member header & header bytes 0--251 & MUST; every open \\
+Structural checks & section bounds, chunk index, table rules, LEB, STREAM and J-stream lengths, codec-2 sums & MUST; every open and decode \\
+Count-stream end state & column counts of a codec-1 chunk & MUST; every decoded chunk and every count-only read \\
+Lane-stream end state ($X_l=2^{16}$, exact word count) & entropy-coded part of a codec-1 chunk & MUST; every decoded chunk with $N>0$ \\
+Row id below $m$ & decoded ids & MUST before indexing; codec 2 always, codec 1 in canonical mode \\
+CRC-32 and length & regenerated bytes of kinds 3 and 5 & MUST when the bytes are regenerated; always \\
+CRC-32 and length, or digest & regenerated bytes or matrix of kind 4 & MAY; offline verifier \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Logical integrity}} \\
+Canonical matrix digest & the whole logical matrix, names and key/values & MAY; on request: \texttt{verify=True} or \texttt{SINGLET\_S1\_VERIFY=1} in the client (when rows are a pack and columns cells or a pack), \texttt{verify\_matrix\_digest}, the writer's self-check, the offline verifier \\
+Cells-table digest & every column of the cells table & MAY; offline verifier \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -494,53 +856,42 @@ Pack digest16 & a pack file & every pack read \\
 \paragraph{What the end-state check detects.}
 An error in an initial state, or in a word bit consumed by a symbol decode, makes the decode diverge and is detected
 unless all $L$ final states happen to equal $2^{16}$ with the word count matching (the probability of a miss is not
-quantified). The check cannot detect: (i)~an error in a word bit consumed by a raw field, which is shifted out of the
+quantified). The check misses: (i)~an error in a word bit consumed by a raw field, which is shifted out of the
 state unchanged: a residual extra bit (counts of 9 and above) changes only the value; a gap extra bit changes the stored
 id and every later id of that lane in that column, and escapes whenever the position contexts of the following symbols
 are unchanged; (ii)~errors in the $\mathit{pp0}$ values (not entropy coded; they shift the ids of a lane's first
 column); (iii)~errors in the row keys, which always give a valid permutation; (iv)~errors in names and key/values;
-(v)~any error in a chunk with $N=0$. Codec-2 chunks have no end-state check, and their zstd frames no checksum.
+(v)~any error in a chunk with $N=0$. Codec-2 chunks have no end state (Section~\ref{spec:codec2}).
 % src: rans1_dec.h:171-178, 199-212 (raw fields leave the state); 126 (pp0 read raw); api.h:68 (any keys -> perm); 258 (N == 0 skips the kernel)
 
 \paragraph{Full and partial reads.}
-A range reader checks the header CRC, the chunk index, the tables and the streams of the chunks it fetched (the
-reference client also checks each response's \texttt{Content-Range} and that the member header carries the manifest's
-digest, an identity check, not a content check). It cannot verify the canonical digest or the object hash, which need
-every column and every byte, nor detect errors (i)--(iv) in the bytes it read.
+A reader that holds the whole object can verify all three notions. A range (partial) reader that fetches a matrix
+member's prefix and some chunk runs can verify the header CRC, the structure of the chunk index, tables and row keys,
+the structural and end-state checks of every chunk it decodes, and that the header digest equals the manifest's
+(identity). It cannot verify the object digest16 or SHA-256, the canonical matrix digest or the cells-table digest,
+which need bytes it does not fetch, and it cannot detect errors (i)--(v) in the bytes it read, errors in the file
+header or member table (the reference client takes offsets from the manifest and does not read the table), errors in a
+cells-table column that still decodes to \texttt{n\_rows} values, or wrong ids or values in a codec-2 chunk whose
+streams stay well formed. \emph{Informative:} the reference client also checks the status and \texttt{Content-Range}
+of every ranged response against the manifest's object length.
+% src: client.py:10-18 (ranged checks; member table not read), 1195-1205 (header digest vs manifest); cells.py:387-410 (no checksum)
 
 % ---------------------------------------------------------------------------------------------------------------------
-\subsection{SIMD decoding and dispatch}
+\subsection{Decoder implementations}
 \label{spec:simd}
-The scalar loop of Section~\ref{spec:chunk} is the definition; the vector kernels must produce identical stored ids,
-values and accept/reject decisions for every valid stream (Table~\ref{spec:tab:isa}). All arithmetic is
-32-bit integer except $\lambda(\cdot)$ in $\mathrm{pos}$ and $\kappa_{\mathrm{raw}}$, read from the exponent of an
-integer-to-float conversion, which is exact below $2^{24}$ (valid streams stay below $2^{21}+2$). All kernels support
-$L\in\{16,32,64\}$.
-% src: rans1_avx2.h:1-5, 14-35 (refill LUT), 39-42 (posb via cvtepi32_ps), 175-178 (kraw via exponent), 255-257 (end checks)
-% src: rans1_avx512.h:1-5, 16-21 (expand_epi16 + pdep), 22-25 (posb via cvtepu32_ps), 153-157 (lzcnt), 233-235 (end checks)
+The scalar loop of Section~\ref{spec:chunk} defines codec-1 decoding. A decoder MAY use any instruction set or degree
+of parallelism (scalar code, AVX2, or other vector instructions); every decoder MUST produce the same stored ids,
+values and column counts as that loop for every valid stream, and the same accept or reject decision for every input.
+All codec-1 arithmetic is on 32-bit unsigned integers; $\lambda(\cdot)$ in $\mathrm{pos}$ and $\kappa_{\mathrm{raw}}$ MAY
+be computed by any exact method, for example from the exponent of an integer-to-binary32 conversion, which is exact
+below $2^{24}$ (valid streams stay below $2^{21}+2$). All decoders support $L\in\{16,32,64\}$.
+% src: rans1_dec.h:4-15, 143-234 (scalar reference); rans1_avx2.h:1-5 (bit-exact with decode_chunk_scalar), 39-42 (posb via cvtepi32_ps), 175-178 (kraw via exponent), 255-257 (end checks)
 
-\begin{table}[htbp]
-\centering\footnotesize\setlength{\tabcolsep}{4pt}
-\caption{Decoder kernels and the CPU features each needs at run time.}
-\label{spec:tab:isa}
-% src: isa.h:20-24, 47-72 (detect_cpu), 95-128 (supported/best/selected/resolve); simd.h:14-26 (target attributes)
-\begin{tabularx}{\linewidth}{@{}l>{\raggedright\arraybackslash}p{0.38\linewidth}X@{}}
-\toprule
-Kernel & Required (CPUID and XGETBV) & Main instructions \\
-\midrule
-scalar  & none & reference loop \\
-AVX2    & AVX, OSXSAVE, YMM state enabled ($\mathrm{XCR0}\wedge\texttt{0x6}=\texttt{0x6}$), AVX2, BMI2, POPCNT & gathers, \texttt{vpermd} refills, \texttt{vcvtdq2ps} \\
-AVX-512 & everything for AVX2, ZMM and opmask state ($\mathrm{XCR0}\wedge\texttt{0xE6}=\texttt{0xE6}$), AVX-512 F, BW, DQ, CD, VL and \textbf{VBMI2} & \texttt{vpexpandw} (VBMI2) with \texttt{pdep} (BMI2) masks, masked gathers, \texttt{vplzcntd} (CD), \texttt{vcvtudq2ps} \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-\paragraph{Dispatch.}
-Kernels are compiled with per-function target attributes, so no architecture flag is needed, and run only after the run-time check. Default: the best supported
-kernel (AVX-512, AVX2, scalar). \texttt{PZ2\_ISA} (\texttt{scalar}, \texttt{avx2}, \texttt{avx512}; read once per
-process, unknown values ignored) or a per-call option can select a lower kernel; an
-unsupported request falls back to the best supported kernel below it. On non-x86 targets or with
-\texttt{PZ2\_SCALAR\_ONLY} only the scalar kernel exists. SHA-256 has a separate SHA-NI path, chosen at run time and
-disabled by \texttt{PZ2\_ISA=scalar}.
-% src: pz2.h:20-22; isa.h:76-80 (compiled paths), 102-128; sha256.h:1-3
-
+\emph{Informative.} The reference library contains the scalar loop and an AVX2 kernel; the AVX2 kernel needs AVX2,
+BMI2 and POPCNT and the YMM state enabled by the operating system ($\mathrm{XCR0}\wedge\texttt{0x6}=\texttt{0x6}$), and
+uses gathers, \texttt{vpermd} refills through a lookup table and \texttt{vcvtdq2ps} for $\lambda$. Kernels are
+compiled with per-function target attributes, so no architecture flag is needed, and the fastest kernel the CPU
+supports is chosen at run time. \texttt{PZ2\_ISA=scalar} or a per-call option selects the scalar loop; on non-x86 targets
+or with \texttt{PZ2\_SCALAR\_ONLY} only the scalar loop exists. SHA-256 for the canonical digest has a separate path
+for the x86 SHA extensions, chosen at run time and disabled by \texttt{PZ2\_ISA=scalar}.
+% src: pz2.h:20-22; isa.h:15-20, 47-72 (detect_cpu), 76-80 (compiled paths), 102-128 (supported/best/selected/resolve); simd.h:14-26 (target attributes); sha256.h:1-3

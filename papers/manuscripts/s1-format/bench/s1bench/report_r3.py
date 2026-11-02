@@ -503,8 +503,87 @@ def billion_cells_section(cfg: Config, N: Numbers, out: Path) -> None:
         N.put(f"bn-{key}-bpc", float(np.median(per[fmt])), "{:,.0f}")
 
 
+# Training compute per cell for published single-cell models, to ask whether training is bound by the GPU or by data
+# delivery. Architectures: Geneformer V1 (6 layers, width 256, feed-forward 512, 2,048 genes per cell), scGPT (12 layers,
+# width 512, feed-forward 512, 1,200 genes), scVI/scANVI with scvi-tools defaults (one hidden layer of 128, latent 10,
+# zero-inflated negative binomial: a scale and a dropout head), and a plain dense autoencoder (1,024-256-64, mirrored).
+# A transformer pass costs 2 N n + 4 L n^2 d FLOPs for N non-embedding parameters over n tokens (matrix products and
+# attention); a dense network 2 P per cell; training is three passes (forward and backward). GPU: NVIDIA H100 SXM, dense
+# BF16 989 TFLOP/s (FP32 67 TFLOP/s for scVI, which trains in 32-bit by default), at 40% of peak.
+H100 = {"bf16": 989.4e12, "fp32": 66.9e12}
+GPU_UTIL = 0.40
+COMPUTE_MODELS = [   # key, label, kind, shape, precision
+    ("geneformer", "Geneformer V1", "tf", dict(L=6, d=256, ff=512, n=2048), "bf16"),
+    ("scgpt", "scGPT", "tf", dict(L=12, d=512, ff=512, n=1200), "bf16"),
+    ("ae", "Autoencoder, 20,000 genes", "dense", dict(G=20000, layers=(1024, 256, 64)), "bf16"),
+    ("scvi", "scVI / scANVI, 20,000 genes", "scvi", dict(G=20000, H=128, Z=10), "fp32"),
+    ("scvihvg", "scVI / scANVI, 2,000 genes", "scvi", dict(G=2000, H=128, Z=10), "fp32"),
+]
+
+
+def _train_flops(kind: str, s: dict) -> float:
+    if kind == "tf":
+        n_par = s["L"] * (4 * s["d"] ** 2 + 2 * s["d"] * s["ff"])
+        return 3 * (2 * n_par * s["n"] + 4 * s["L"] * s["n"] ** 2 * s["d"])
+    if kind == "dense":
+        dims = (s["G"], *s["layers"])
+        p = sum(a * b for a, b in zip(dims, dims[1:]))
+        return 3 * 2 * (2 * p)                       # encoder and mirrored decoder
+    p = 3 * s["G"] * s["H"] + 3 * s["H"] * s["Z"]   # scVI: encoder G-H-(2Z), decoder Z-H-(2G)
+    return 3 * 2 * p
+
+
+def compute_bound_section(cfg: Config, N: Numbers, out: Path) -> None:
+    """For each model: training FLOPs per cell, cells per second one H100 can train on, and what feeding it takes: link
+    bandwidth at the median bytes per cell of .s1 and of gzip-compressed AnnData, the number of GPUs one 1 Gbit/s link
+    keeps busy, and the cores .s1 needs to decode that many cells (the one-core AVX2 codec rate from memory, at the median
+    non-zeros per cell)."""
+    per, nz = defaultdict(list), []
+    for r in _stage(cfg, "write"):
+        if r.get("status") == "ok" and _f(r.get("bytes")) and _f(r.get("cells")):
+            per[r["format"]].append(_f(r["bytes"]) / _f(r["cells"]))
+            if r["format"] == "s1" and _f(r.get("nnz")):
+                nz.append(_f(r["nnz"]) / _f(r["cells"]))
+    core = [_f(r["mnnz_per_s"]) for r in _stage(cfg, "decode") if r.get("status") == "ok" and r["format"] == "s1"
+            and r["what"] == "codec_cpp" and r["mode"] == "native" and r.get("isa") == "avx2" and r["threads"] == "1"]
+    if not per.get("s1") or not per.get("h5ad_gzip") or not nz or not core:
+        return
+    bpc = {"s1": float(np.median(per["s1"])), "gz": float(np.median(per["h5ad_gzip"]))}
+    cells_core = float(np.median(core)) * 1e6 / float(np.median(nz))
+    N.put("comp-nnz-cell", float(np.median(nz)), "{:,.0f}")
+    N.put("comp-cells-core", cells_core / 1e3, "{:.0f}")
+    N.put("comp-util", GPU_UTIL * 100, "{:.0f}")
+    rows = []
+    for key, label, kind, shape, prec in COMPUTE_MODELS:
+        fl = _train_flops(kind, shape)
+        cps = H100[prec] * GPU_UTIL / fl
+        rec = {"model": label, "gflop": fl / 1e9, "cps": cps, "prec": prec.upper(),
+               "gbit_s1": cps * bpc["s1"] * 8 / 1e9, "gbit_gz": cps * bpc["gz"] * 8 / 1e9,
+               "gpus_s1": 1e9 / 8 / bpc["s1"] / cps, "gpus_gz": 1e9 / 8 / bpc["gz"] / cps, "cores": cps / cells_core}
+        rows.append(rec)
+        N.put(f"comp-{key}-gflop", rec["gflop"], "{:.3g}")
+        N.put(f"comp-{key}-cps", cps, "{:,.0f}" if cps < 1e5 else "{:,.0f}")
+        N.put(f"comp-{key}-kcps", cps / 1e3, "{:,.0f}")
+        N.put(f"comp-{key}-mcps", cps / 1e6, "{:.1f}")
+        N.put(f"comp-{key}-gbit-s1", rec["gbit_s1"], "{:.2g}")
+        N.put(f"comp-{key}-gbit-gz", rec["gbit_gz"], "{:.2g}")
+        N.put(f"comp-{key}-gpus-s1", rec["gpus_s1"], "{:.0f}" if rec["gpus_s1"] >= 1 else "{:.2f}")
+        N.put(f"comp-{key}-gpus-gz", rec["gpus_gz"], "{:.0f}" if rec["gpus_gz"] >= 1 else "{:.2f}")
+        N.put(f"comp-{key}-cores", rec["cores"], "{:.1f}" if rec["cores"] < 10 else "{:.0f}")
+    N.put("bn-ratio", bpc["gz"] / bpc["s1"], "{:.1f}")
+    # what .s1 stores besides the entropy-coded payload (tables, chunk index, headers), per non-zero: the ladder's member
+    # minus its payload, median over matrices, and as a share of the member
+    lad = [r for r in _stage(cfg, "ladder") if _f(r.get("L4_s1_member")) and _f(r.get("L4_s1_payload"))]
+    if lad:
+        ov = [_f(r["L4_s1_member"]) - _f(r["L4_s1_payload"]) for r in lad]
+        N.put("s1-overhead-bpn", float(np.median(ov)), "{:.2f}")
+        N.put("s1-overhead-pct", float(np.median([100 * o / _f(r["L4_s1_member"]) for o, r in zip(ov, lad)])), "{:.1f}")
+    _write(rows, out / "tab_compute.tsv", ["model", "prec", "gflop", "cps", "gbit_s1", "gbit_gz", "gpus_s1", "gpus_gz", "cores"])
+
+
 def run(cfg: Config, N: Numbers, out: Path) -> None:
     billion_cells_section(cfg, N, out)
+    compute_bound_section(cfg, N, out)
     cores_section(cfg, N, out)
     tradeoff_labels_section(cfg, N, out)
     speed_boxes_section(cfg, N, out)

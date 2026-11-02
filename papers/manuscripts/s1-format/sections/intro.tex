@@ -27,14 +27,14 @@ approaches them (Fig.~\ref{fig:how}), read and written from Python, R and C++ by
 that (Fig.~\ref{fig:wow}):
 \begin{itemize}
 \item \sone{} files were the smallest on every matrix, \nm{ratio-h5ad_gzip} times smaller than gzip-compressed AnnData and
-  within a few percent of the best count models we were able to discover;
-\item on four cores, \sone{} was also the fastest format to read on \nm{dec-s1-fastest-count} of \nm{dec-paired-n}
-  matrices, and no integer code we measured was both as small and faster to decode;
-\item from cloud storage, a PyTorch loader received its first \sone{} minibatch in under a second and then kept a
-  1\,Gbit/s link busy where chunked formats left it idle.
+  within a median of \nm{redund-s1}\% of the best count model we evaluated;
+\item read cold from disk on four cores, \sone{} was also the fastest format on \nm{dec-s1-fastest-count} of
+  \nm{dec-paired-n} matrices, and no integer code we measured was both as small and faster to decode;
+\item from cloud storage, a PyTorch loader received its first \sone{} minibatch in under a second and then delivered
+  several times to a hundred times more cells per second than loaders of chunked formats.
 \end{itemize}
-We also report what \sone{} costs: a decoder that is slower per core, a writer that is slower and needs more memory, and
-no traversal of the data in place. The codec was developed iteratively with Claude 5.5-generation models (Anthropic),
-with every candidate change measured against the limits above.
+We also report what \sone{} costs: a decoder that is slower per core, so that uncompressed arrays already in memory read
+faster, a writer that is slower and needs more memory, and no traversal of the data in place. The codec was developed iteratively with Claude 5.5-generation models (Anthropic),
+with every candidate change measured against the references above.
 
 \input{figures/fig2_how}

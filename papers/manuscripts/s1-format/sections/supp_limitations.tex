@@ -4,25 +4,35 @@
 
 \begin{itemize}\itemsep 1pt
 \item \emph{Hardware.} One node type, 8 shared cores, three repeats; the RAID controller cache survives cold reads.
-  Absolute rates depend on CPU and disk; comparisons share node and file. AVX-512 untested (the CPU lacks VBMI2); on CPUs
-  lacking AVX2 (e.g.\ ARM) the scalar kernel runs at about a third of the AVX2 rate.
+  Absolute rates depend on CPU and disk; comparisons share node and file. CPU: \nm{cpu} (AVX2); disk: spinning, behind a
+  RAID controller. On CPUs without AVX2 (e.g.\ ARM) the portable kernel runs at about a third of the AVX2 rate
+  (\nm{codec_cpp-native-scalar-t1} against \nm{codec_cpp-native-avx2-t1} million non-zeros per second per core), so a
+  given link needs about twice the cores. Warm reads favor uncompressed arrays (Table~\ref{M-tab:main}).
 \item \emph{Large matrices.} Above $4\times10^8$ non-zeros: a subset of formats, one thread count, local disk. RDS and
   BPCells run only up to $2^{31}-1$ non-zeros (benchmark reads them into a \texttt{dgCMatrix}). A genome-wide Perturb-seq
   screen (6.3 billion non-zeros) was excluded: writing the comparison formats exceeded memory and time.
 \item \emph{Networks.} Emulated tiers: one shared bandwidth limit, fixed added latency; the 10\,Gbit/s tier exceeds what
-  the setup delivers. R2: one node, one path, one time of day; list prices.
+  the setup delivers. R2: one node, one path, one time of day; list prices. Object stores limit request rates and
+  charge per request; \sone{} sends up to 32 requests at once per reader, so many readers of one object add up.
 \item \emph{Baselines and floor.} One generic-codec configuration; per-matrix zstd dictionaries and latent-variable count
-  models (scVI, GLM-PCA~\cite{lopez2018deep,townes2019feature}) untested. The floor omits parameter cost and is not a
-  bound. The ladder's last step (the \sone{} payload) combines gene reordering, context modeling and the entropy coder.
+  models (scVI, GLM-PCA~\cite{lopez2018deep,townes2019feature}) untested, as are models of gene--gene or cell--cell
+  dependence. The floor is the best of four models, omits their parameter cost and is not a bound; \sone's own tables,
+  index and headers are counted (\nm{s1-overhead-bpn} bits per non-zero, \nm{s1-overhead-pct}\% of the file). The ladder's last step (the \sone{} payload) combines gene reordering, context modeling and the entropy coder.
 \item \emph{Decoding speed per core.} One core keeps up with about \nm{kern-s1-knee-gbit}\,Gbit/s
-  (Fig.~\ref{M-fig:floor}b). The textbook codes are our AVX2 implementations (zstd is the library). The trend is an
+  (Fig.~\ref{M-fig:floor}b). The textbook codes are our own implementations, vectorized with AVX2 where the code
+  allows (zstd is the library); order-0 rANS is a scalar four-state coder. The trend is an
   empirical fit extrapolated beyond the smallest code; leaving out any one code moves \sone's ratio between
   \nm{trend-s1-loo-lo} and \nm{trend-s1-loo-hi}\%.
 \item \emph{Scope.} Non-negative integers below $2^{32}$ (one non-integer dataset excluded; the float codec untested).
   Count matrices and names only; \texttt{obs}, \texttt{var}, \texttt{obsm} and \texttt{uns} are out of scope. One gene
   across all cells needs a full decode; adding cells means a new object.
-\item \emph{Integrity and properties.} No per-chunk checksum; the rANS end-state check misses errors in raw extra bits.
-  Of the properties in Table~\ref{M-tab:props}, only the lossless round trip was evaluated.
-\item \emph{Writing.} One run per matrix, from memory; the \sone{} writer needed about three times AnnData's memory
-  beyond the input on the largest.
+\item \emph{Integrity and properties.} Version~1 has no per-chunk checksum. A whole object is verified by its name and
+  SHA-256; a range reader verifies the header CRC and each decoded chunk's end states, which miss errors in raw extra bits
+  and row keys (Supplementary File~2). Per-chunk digests in the dataset manifest would cover range reads without changing
+  the objects. Of the properties in Table~\ref{M-tab:props}, only the lossless round trip was evaluated.
+\item \emph{Writing.} One run per matrix, from memory, so time and memory ratios are approximate; the \sone{} writer
+  needed about three times AnnData's memory beyond the input on the largest. It encodes a whole matrix in memory; atlases
+  are written one sample at a time.
+\item \emph{Training.} The effect on model training (Discussion) is estimated from model sizes
+  (Section~\ref{sec:mcompute}), not measured.
 \end{itemize}

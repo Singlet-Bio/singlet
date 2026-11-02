@@ -10,27 +10,35 @@ the smallest file every time (Fig.~\ref{fig:wow}b, Table~\ref{tab:main}): a medi
 uncompressed CSC arrays, \nm{ratio-h5ad_gzip} times smaller than gzip-compressed AnnData, the most common way single-cell
 data are shared, and \nm{ratioBestOther} times smaller than the best alternative on each matrix. The gain does not come
 from a stronger compressor: zstd at its strongest level, and a sharded Zarr layout with \sone's block size, both left files
-about twice as large. It comes from describing the counts. Measured against the best count model we were able to
-discover, three quarters of a gzip-compressed AnnData file is redundant, and at least \nm{redund-other-min}\% of every
-other format; for \sone{} the median is \nm{redund-s1}\% (Supplementary Tables~\ref{S-tab:size}
+about twice as large. It comes from describing the counts. Measured against the best count model we evaluated, three
+quarters of a gzip-compressed AnnData file lies above that model's code length, and at least \nm{redund-other-min}\% of
+every other format; for \sone{} the median is \nm{redund-s1}\%, and the tables, block index and headers it stores beside
+the coded counts take \nm{s1-overhead-pct}\% of the file (Supplementary Tables~\ref{S-tab:size}
 and~\ref{S-tab:redundancy}).
 
 \input{sections/table_main}
 
 \subsection{Smaller files that are also faster to read}
 
-A smaller file usually costs more time to decompress. Not here: read from a cold file into an in-memory sparse matrix on
-four cores, fewer than a current laptop has, \sone{} was the fastest format on \nm{dec-s1-fastest-count} of
-\nm{dec-paired-n} matrices and the only one that was both small and fast (Fig.~\ref{fig:wow}c--d; Supplementary
-Table~\ref{S-tab:decode}). The advantage comes
-from parallel decoding. On one core \sone{} read \nm{dec-s1-t1} million non-zeros per second, third behind uncompressed
+A smaller file usually costs more time to decompress. Not here: read from a cold file on the node's disk into an
+in-memory sparse matrix on four cores, fewer than a current laptop has, \sone{} was the fastest format on
+\nm{dec-s1-fastest-count} of \nm{dec-paired-n} matrices, each time by more than the 3\% spread of repeated reads, and the
+only one that was both small and fast (Fig.~\ref{fig:wow}c--d; Supplementary Table~\ref{S-tab:decode}). Its lead over the
+fastest other format was a median of \nm{dec-lead} times per matrix (95\% bootstrap interval
+\nm{dec-lead-lo}--\nm{dec-lead-hi}). These rates are those of each format's library (Supplementary
+Table~\ref{S-tab:formats}), so they compare readers as much as formats, and they depend on where the file lies: from the
+page cache, where the disk no longer limits uncompressed arrays, CSC arrays read fastest on \nm{dec-warm-leader-wins} of
+\nm{dec-warm-n} matrices (\nm{dec-warm-leader-rate} against \nm{dec-s1-warm} million non-zeros per second for \sone;
+Table~\ref{tab:main}). \sone{} also returns each cell's genes in its stored order (Section~\ref{sec:format}); asked for
+the source order, it was still the fastest cold read on \nm{dec-s1src-fastest} of \nm{dec-paired-n} matrices, by a median
+of \nm{dec-lead-src} times (\nm{dec-lead-src-lo}--\nm{dec-lead-src-hi}). The advantage comes from parallel decoding. On one core \sone{} read \nm{dec-s1-t1} million non-zeros per second, third behind uncompressed
 CSC arrays and AnnData Zarr (Table~\ref{tab:main}): its decoder spends more time per entry than byte-oriented codes, but
 every block decodes on its own core. Most formats barely use more cores: from 1 to \nm{core-max} cores TileDB-SOMA read
-\nm{scale-soma-max} times faster and no other format we tested more than \nm{scale-rest-max} times, while \sone{} read
+\nm{scale-soma-max} times faster and no other reader we tested more than \nm{scale-rest-max} times, while \sone{} read
 \nm{scale-s1-max} times faster, \nm{scale-s1-top} million non-zeros per second, \nm{scale-s1-lead} times the next format
 (Fig.~\ref{fig:wow}g).
 
-\subsection{\sone{} reads at the speed of the network up to 1\,Gbit/s}
+\subsection{\sone{} delivers the most cells over a network link}
 \label{sec:network}
 
 What does a smaller file buy when the data come over a network? For a format storing $b$ bits per non-zero entry and
@@ -44,9 +52,11 @@ network} when the link, not the decoder, is the limit.
 
 \input{figures/fig_net}
 
-On four cores \sone{} decodes about as many entries per second (\nm{net-s1-mnnzs} million) as a 1\,Gbit/s link carries in
-\sone{} form (\nm{net-s1-at-1g} million), so up to about 1\,Gbit/s the link is the limit, and the same link carries about
-twelve times as many entries as it would as uncompressed arrays (Fig.~\ref{fig:net}a). Faster links need more cores: on a
+On four cores the \sone{} decoder handles about as many entries per second (\nm{net-s1-mnnzs} million) as a 1\,Gbit/s
+link carries in \sone{} form (\nm{net-s1-at-1g} million), and the same link carries about twelve times as many entries as
+it would as uncompressed arrays (Fig.~\ref{fig:net}a). Without AVX2, as on ARM processors, the portable decoder reads
+\nm{codec_cpp-native-scalar-t1} million entries per second per core instead of \nm{codec_cpp-native-avx2-t1}, so the same
+link needs about twice as many cores. Faster links need more cores: on a
 whole node, \sone{} kept up with a median of \nm{core-8-gbit}\,Gbit/s on 8 cores, \nm{core-16-gbit}\,Gbit/s on 16 and
 \nm{core-44-gbit}\,Gbit/s on \nm{core-max} (\nm{core-n} matrices). Beyond about 32 cores the gain flattened, so much faster
 links would need a faster decoder rather than more cores.
@@ -56,15 +66,20 @@ cells have arrived and been decompressed into PyTorch sparse tensors. Reading 51
 at 1\,Gbit/s, the \sone{} loader returned its first minibatch in \nm{mb3-s1_stream-first}\,s and each later one in about
 \nm{mb3-s1_stream-batch}\,ms, against \nm{mb3-zarr3_shard-batch}\,ms for sharded Zarr and
 \nm{mb3-anndata_zarr_lazy-batch}\,ms for AnnData Zarr (Fig.~\ref{fig:wow}e--f; Supplementary
-Table~\ref{S-tab:minibatch}). It filled most of the link, while the
-loaders of AnnData and TileDB-SOMA delivered thirty to a hundred times fewer cells (Fig.~\ref{fig:net}b; Supplementary
-Table~\ref{S-tab:workers}). Latency matters as much as bandwidth. Each request waits a round trip, the time for the request
+Table~\ref{S-tab:minibatch}). It used \nm{linkuse-s3_1g}\% of the link and delivered as many cells at 10\,Gbit/s: the
+decoder alone reaches \nm{net-ds-decoder-cells} cells per second from memory, so the rest of the loader, its requests and
+the tensors it builds on the same four cores, sets the rate. The loaders of AnnData and TileDB-SOMA delivered thirty to a
+hundred times fewer cells (Fig.~\ref{fig:net}b; Supplementary Table~\ref{S-tab:workers}). The competing loaders were set
+up for this workload: sharded Zarr v3 stored the matrix in chunks of \sone's block size and fetched all of a minibatch's
+slices at once with up to 64 requests in flight, and TileDB-SOMA ML used its own prefetching reader with as many I/O and
+compute threads as cores (Supplementary Section~\ref{S-sec:methods}). Latency matters as much as bandwidth. Each request waits a round trip, the time for the request
 to reach the storage service and the first byte of its answer to come back, which depends on distance and the service,
 not on the reader's processor; cloud storage adds tens of milliseconds to each, and a format that needs several
 requests in a row per minibatch pays it several times (Supplementary Table~\ref{S-tab:access}). Because the
 index locates every block before any is read, the \sone{} reader sends all of a minibatch's requests at once and requests
 the next minibatches while one decodes: with the \texttt{singlet} defaults it kept \nm{ns-s1_stream-cps-30} cells per
-second at 30\,ms per round trip, against \nm{ns-s1_stream-cps-0} with no added delay (Fig.~\ref{fig:net}c).
+second at 30\,ms per round trip, against \nm{ns-s1_stream-cps-0} with no added delay, while sharded Zarr fell from
+\nm{ns-zarr3_shard-cps-0} to \nm{ns-zarr3_shard-cps-30} (Fig.~\ref{fig:net}c).
 
 Would it be faster to download the whole file first? On Cloudflare R2, read over the public internet, the first \sone{}
 minibatch of a 580,000-cell lung atlas arrived in under a second, while downloading the gzip-compressed AnnData file took
@@ -74,28 +89,32 @@ well over a minute (Fig.~\ref{fig:net}d). Streaming \sone{} delivered a whole ep
 of random minibatches would also cost about twenty times less in transfer and request fees than with AnnData Zarr
 (Supplementary Table~\ref{S-tab:r2}).
 
-\subsection{How close is \sone{} to the limits?}
+\subsection{How close is \sone{} to the best models and codes?}
 \label{sec:floor}
 
 \input{figures/fig3_floor}
 
 How much smaller could a file be? Following the payload of a matrix as ideas are added (Fig.~\ref{fig:floor}a), storing the
 steps between entries and compressing them with the strongest general-purpose compressor shrinks the file a lot, but
-modeling the counts, as \sone{} does, removes nearly a third of what is left. The best count model we were able to
-discover, though it was charged nothing for its own parameters, was only a few percent shorter than \sone{}
-(Supplementary Section~\ref{S-sec:sfloor}, Table~\ref{S-tab:floor} and Fig.~\ref{S-fig:sfloor}). In UMI data most of the remaining
-bits record which molecules happened to be captured: given a cell's expression rates this is a random sample, and no
-lossless format can avoid storing it. Nor is anything left for a byte-level compressor, since zstd-19 does not shrink an
-\sone{} bitstream at all (Supplementary Table~\ref{S-tab:entropy}). A richer model, of dependence between genes or between neighboring cells, could lower the
-reference; relative to the models we tested, a lossless format could improve on \sone{} by single-digit percentages at
-most.
+modeling the counts, as \sone{} does, removes nearly a third of what is left. The best of four count models we
+evaluated (Poisson, negative binomial, and two models conditioned on sequencing depth and on cell clusters), fitted on
+half of each matrix's cells, scored on the other half and charged nothing for its own parameters, was a median of
+\nm{redund-s1}\% shorter than the whole \sone{} file (range \nm{redund-s1-lo}\% to \nm{redund-s1-hi}\%; Supplementary
+Section~\ref{S-sec:sfloor}, Table~\ref{S-tab:floor} and Fig.~\ref{S-fig:sfloor}). This is a reference, not a lower bound:
+models of the dependence between genes or between neighboring cells, or latent-variable models such as
+scVI~\cite{lopez2018deep}, could lower it, and we did not test them. Under the models we tested, most of the remaining bits
+in UMI data record which molecules happened to be captured, a random sample given each cell's expression rates that a
+lossless format must store, although the rates themselves are only estimated. Nor is anything left for a byte-level
+compressor, since zstd-19 does not shrink an \sone{} bitstream at all (Supplementary Table~\ref{S-tab:entropy}).
 
 How fast could a code this small be decoded? On one core the integer codes trade size for speed along a clear frontier
 (Fig.~\ref{fig:floor}b): byte- and bit-aligned codes decode almost as fast as a core can write the output but store three
 to twelve times more bits, and entropy coders reach small sizes at a fraction of that speed. No code we measured was both
 as small as \sone{} and faster. Extrapolated to \sone's size, the trend of the other codes predicts the rate a code that
 small could be expected to reach, and \sone{} decodes at \nm{trend-s1-pct}\% of it (95\% interval
-\nm{trend-s1-lo}--\nm{trend-s1-hi}\%): within the uncertainty, it lies on the trend.
+\nm{trend-s1-lo}--\nm{trend-s1-hi}\%): within the uncertainty, it lies on the trend. The other codes are our own
+implementations, vectorized with AVX2 where the code allows, except zstd, which is the library, and the order-0 rANS
+coder is scalar; the trend is therefore indicative, and faster implementations of these codes would raise it.
 
 What matters in practice is the delivered rate (Eq.~\ref{eq:reff}), and relative to the ideal code it depends on how much
 bandwidth each decoding core must serve (Fig.~\ref{fig:floor}c). When cores are plentiful relative to the link, as when a
@@ -110,7 +129,9 @@ Writing is the price of a small file (Fig.~\ref{fig:floor}d). Across \nm{figlim-
 times as long as writing uncompressed CSC arrays and \nm{figlim-write-s1-m} times as much memory beyond the input, and
 neither ratio grew with the size of the matrix (Supplementary Table~\ref{S-tab:writecost}). That is faster than gzip-compressed AnnData (\nm{figlim-write-gz-t} times
 CSC) or TileDB-SOMA and about as fast as the 10x HDF5 file, but slower than formats that store raw or lightly compressed
-arrays, with about three times the memory of AnnData's writer. A matrix is written once and read many times.
+arrays, with about three times the memory of AnnData's writer. The writer encodes a whole matrix in memory; an atlas
+is written one sample at a time, so its memory follows the largest sample, not the atlas. A matrix is written once and
+read many times.
 
 \subsection{\sone{} is integrated with the single-cell software ecosystem}
 

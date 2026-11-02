@@ -8,7 +8,7 @@
 \toprule
 Format & Reads in part over HTTP & Integrity & Content hash & Several matrices + cell table & Integers \tabularnewline
 \midrule
-\textbf{\sone} & yes: block index in the prefix, one range per run of cells & object named by its SHA-256 prefix; header CRC-32; content hash per member & yes & yes, plus recipes and shared packs & yes \tabularnewline
+\textbf{\sone} & yes: block index in the prefix, one range per run of cells & whole object: named by its SHA-256 prefix; per read: header CRC-32 and the entropy coder's end-state check per block (no per-block checksum) & yes & yes, plus recipes and shared packs & yes \tabularnewline
 h5ad, 10x HDF5, loom & with chunked datasets and an HDF5 range driver & Fletcher-32 per chunk (opt.) & no & yes (h5ad, loom) & no \tabularnewline
 AnnData Zarr & yes: one object per chunk & CRC32C codec (opt., Zarr v3) & no & yes & no \tabularnewline
 TileDB-SOMA & yes, through the TileDB library & checksum filters (opt.) & no & yes & no \tabularnewline

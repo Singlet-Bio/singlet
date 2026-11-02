@@ -298,10 +298,11 @@ def redundancy_section(cfg: Config, N: Numbers, out: Path) -> None:
         with open(out / "tab_summary.tsv", newline="") as fh:
             rows = list(csv.DictReader(fh, delimiter="\t"))
         for r in rows:
-            r["redund"] = share.get(r["format"], np.nan)
+            r["redund"] = "" if r["format"].startswith("\\quad") or r["format"] not in share else f"{share[r['format']]:.0f}\\%"
             if r["format"] in (FORMAT_LABELS["rds_xz"], FORMAT_LABELS["loom"]):
                 N.put("sumNr" if r["format"] == FORMAT_LABELS["rds_xz"] else "sumNloom", int(r["n"]), "{:d}")
-        _write(rows, out / "tab_main.tsv", ["format", "bits", "rel", "cr", "smallest", "read", "fastest", "read1", "fastest1", "redund", "n"])
+        _write(rows, out / "tab_main.tsv", ["format", "bits", "rel", "cr", "smallest", "read", "fastest", "warm", "fastestw",
+                                            "read1", "fastest1", "redund", "n"])
     others = [t for t, f in zip(tab, sorted(by, key=lambda f: -float(np.median([v[2] for v in by[f]])))) if not f.startswith("s1")]
     if others:
         low = min(others, key=lambda t: t["pct"])

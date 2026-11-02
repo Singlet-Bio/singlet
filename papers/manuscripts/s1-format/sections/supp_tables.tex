@@ -73,8 +73,8 @@ one. Counts/cell: median. Accessions in \texttt{datasets.yaml}.}
 \caption{Read rate from local disk to an in-memory sparse matrix, million non-zeros per second, median over matrices;
 \sone{} in its stored gene order (\nm{dec-s1canonical-cold-t4} on \nm{threadsHeadline} cores cold in source order). Codec
 alone (member in memory, C++), 1 / \nm{threadsHeadline} cores: AVX2 \nm{codec_cpp-native-avx2-t1} /
-\nm{codec_cpp-native-avx2-t4}, scalar \nm{codec_cpp-native-scalar-t1} / \nm{codec_cpp-native-scalar-t4}. AVX-512
-untested (the CPU lacks VBMI2).}
+\nm{codec_cpp-native-avx2-t4}, portable (scalar) \nm{codec_cpp-native-scalar-t1} /
+\nm{codec_cpp-native-scalar-t4}.}
 \label{tab:decode}
 \pgfplotstabletypeset[
   columns={format,cold_t1,cold_th,warm_th},
@@ -187,19 +187,41 @@ from local disk and the store at 1\,Gbit/s.}
 
 \begin{table}[h]
 \centering\small
-\caption{Redundancy against the best count model: whole-file bits per non-zero, bits above that floor, and the share
-$1-\text{floor}/\text{bits}$ (median, min, max over matrices). The floor is not a bound, so a share can be negative.}
+\caption{Bits above the count-model reference (the best of four cross-validated count models): whole-file bits per
+non-zero, bits above the reference, and the share of the file above it, $1-\text{reference}/\text{bits}$ (median, min, max
+over matrices). The reference is not a bound, so a share can be negative.}
 \label{tab:redundancy}
 \pgfplotstabletypeset[
   columns={format,n,bits,excess,pct,pct_lo,pct_hi},
   columns/format/.style={string type, column name=Format, column type=l},
   columns/n/.style={column name=$n$, int detect},
   columns/bits/.style={column name=Bits, fixed, fixed zerofill, precision=1},
-  columns/excess/.style={column name=Above floor, fixed, precision=1},
+  columns/excess/.style={column name=Above reference, fixed, precision=1},
   columns/pct/.style={column name=Share (\%), fixed, precision=0},
   columns/pct_lo/.style={column name=Min, fixed, precision=0},
   columns/pct_hi/.style={column name=Max, fixed, precision=0},
 ]{\gen{tab_redundancy.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Training compute per cell and what feeding one GPU takes (Section~\ref{sec:mcompute}): training FLOPs per cell,
+cells per second one H100 trains on at \nm{comp-util}\% of peak, link bandwidth needed at the median bytes per cell of
+\sone{} and of gzip-compressed AnnData, GPUs one 1\,Gbit/s link feeds, and AVX2 cores \sone{} needs to decode for one GPU.}
+\label{tab:compute}
+\setlength{\tabcolsep}{3pt}
+\pgfplotstabletypeset[
+  columns={model,prec,gflop,cps,gbit_s1,gbit_gz,gpus_s1,gpus_gz,cores},
+  columns/model/.style={string type, column name=Model, column type=l},
+  columns/prec/.style={string type, column name=Prec.},
+  columns/gflop/.style={column name=GFLOP, sci, sci zerofill, precision=1},
+  columns/cps/.style={column name=Cells/s, sci, sci zerofill, precision=1},
+  columns/gbit_s1/.style={column name={Gbit/s, \sone}, fixed relative, precision=2},
+  columns/gbit_gz/.style={column name={Gbit/s, gz}, fixed relative, precision=2},
+  columns/gpus_s1/.style={column name={GPUs, \sone}, fixed relative, precision=2},
+  columns/gpus_gz/.style={column name={GPUs, gz}, fixed relative, precision=2},
+  columns/cores/.style={column name=Cores, fixed relative, precision=2},
+]{\gen{tab_compute.tsv}}
 \end{table}
 
 \IfFileExists{\gen{tab_entropy.tsv}}{%

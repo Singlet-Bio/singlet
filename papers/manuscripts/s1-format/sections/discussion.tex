@@ -20,6 +20,28 @@ second per fetch instead of a minute per download is the difference between iter
 iterating at all. Because each sample file is named by a hash of its contents, a link or a citation identifies exactly the
 bytes that were analyzed, so an agent's analysis can be checked and repeated.
 
+Does faster loading make training faster? That depends on how much computation each cell costs, which we estimated from
+published architectures (Supplementary Table~\ref{S-tab:compute}). Training on one cell costs about
+\nm{comp-geneformer-gflop}\,GFLOP for Geneformer~\cite{theodoris2023transfer} and \nm{comp-scgpt-gflop}\,GFLOP for
+scGPT~\cite{cui2024scgpt}, but only \nm{comp-ae-gflop}\,GFLOP for a dense autoencoder over 20,000 genes and
+\nm{comp-scvi-gflop}\,GFLOP for scVI or scANVI~\cite{lopez2018deep,xu2021scanvi} at their default sizes. At
+\nm{comp-util}\% of an H100's peak~\cite{nvidia2022h100}, near the best utilization reported for training large
+transformers~\cite{chowdhery2023palm}, one GPU trains these transformers on \nm{comp-scgpt-cps} to
+\nm{comp-geneformer-cps} cells per second, and one 1\,Gbit/s link feeds \nm{comp-geneformer-gpus-s1} to
+\nm{comp-scgpt-gpus-s1} such GPUs with \sone{} but \nm{comp-geneformer-gpus-gz} to \nm{comp-scgpt-gpus-gz} with
+gzip-compressed AnnData. On a single GPU they are compute-bound with any format, and storage becomes the bottleneck when
+tens of GPUs share a link, \nm{bn-ratio} times sooner without \sone. Smaller models are the opposite: one GPU could train
+scVI on \nm{comp-scvi-mcps} million cells per second and the autoencoder on \nm{comp-ae-mcps} million, which takes
+\nm{comp-scvi-gbit-s1} to \nm{comp-ae-gbit-s1}\,Gbit/s as \sone{} and \nm{comp-scvi-gbit-gz} to
+\nm{comp-ae-gbit-gz}\,Gbit/s as gzip-compressed AnnData, more than most storage links deliver. Such models wait on their
+data, and a format \nm{bn-ratio} times smaller lets them train up to \nm{bn-ratio} times faster from the same link, given
+\nm{comp-scvi-cores} to \nm{comp-ae-cores} cores to decode it. These are estimates from model sizes, not measured training
+runs.
+
+\input{sections/table_when}
+\sone{} is a format for storing and moving counts, and Table~\ref{tab:when} sums up where it helps and where an
+established container serves better.
+
 \para{Costs and limitations}\sone's decoder spends more time per entry than byte- or bit-aligned codes, so it keeps up with
 a link only when there are enough cores for it: above about \nm{frac-cross-gbit}\,Gbit/s per decoding core, a larger but
 faster code delivers more, and going faster at the same size would take a new kind of decoder, not a smaller file. Its
@@ -27,13 +49,25 @@ writer is slower than those of uncompressed formats and needs several times thei
 only, not the annotations of an AnnData object, so it complements rather than replaces such containers. And it is a format
 for storing and moving counts, not for computing on them in place: unlike uncompressed HDF5 or Zarr arrays, its entries
 cannot be memory-mapped and traversed without decoding. Because blocks decode independently and quickly, an out-of-core
-analysis can instead stream a matrix block by block, holding only the cells it is working on. Our timings come from one
-type of cluster node, and the network experiments from one emulated object store and one real one, read from one place
-(Supplementary Section~\ref{S-sec:slimits}).
+analysis can instead stream a matrix block by block, holding only the cells it is working on.
+
+Our timings come from one type of cluster node (\nm{cpu}, AVX2) reading a spinning disk. Processors without AVX2, such as
+ARM processors, run the portable decoder at about a third of the rate, and on faster disks uncompressed arrays would gain
+as they do from the page cache. The network experiments used one emulated object store and one real one, read from one
+place; object stores also limit request rates and charge per request, which favors formats that fetch a minibatch in few
+requests (Supplementary Section~\ref{S-sec:slimits}). Each matrix stores its own gene permutation and gene identifiers, so
+matrices built on different genome annotations are aligned by identifier when read together. \sone{} keeps the counts
+exactly but not their analysis context: annotations, embeddings and processing history belong to AnnData, MuData or an
+atlas's metadata tables, joined to the counts by sample and barcode. Finally, integrity has three levels. A downloaded
+object is checked against its name, a hash of all its bytes; every read checks the header's CRC and the entropy coder's
+end states in each block it decodes; and a hash of the decoded matrix confirms on request that two files hold the same
+data. A reader of a few blocks cannot check the object's hash, and version~1 of the format has no per-block checksum, so
+a corrupted raw bit or row key in a fetched block can pass unnoticed (Supplementary File~2). Publishing a digest of every
+block in the dataset manifest would let partial readers verify each block they fetch without changing the sample files.
 
 \para{Conclusion}\label{sec:conclusion}Count matrices are the one object that every single-cell analysis, and every model
-trained on single-cell data, reads. \sone{} stores them close to their information content, decodes them as fast as the
-trade-off between size and speed allows, reads them in part from anywhere, and returns exactly the original counts to
+trained on single-cell data, reads. \sone{} stores them close to the best count models we could fit, decodes them about as fast as codes of
+their size allow, reads them in part from anywhere, and returns exactly the original counts to
 Python, R and C++. We propose it as a standard encoding for count matrices in archives, atlases and training pipelines,
 and \texttt{pip install singlet} is all it takes to try it. The same structure, many small counts with heavy-tailed
 frequencies, appears beyond single cells: bulk RNA-seq counts and a text corpus stored as word counts were also less than

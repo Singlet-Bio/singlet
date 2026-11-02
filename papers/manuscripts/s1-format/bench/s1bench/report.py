@@ -345,51 +345,121 @@ def decode_section(cfg: Config, N: Numbers, out: Path, size_stats: dict) -> None
 
 
 def summary_section(cfg: Config, N: Numbers, out: Path) -> None:
-    """One row per format: median size, geometric-mean size relative to .s1, the matrices on which it is the smallest file,
-    median cold read rate on the headline cores, and the matrices on which it reads fastest (all formats on the same
-    matrices; .s1 in source gene order)."""
+    """Table 2, one row per format on the same matrices: median size with its interquartile range, the median per-matrix
+    size relative to .s1, the median compression against 32-bit CSC, the matrices on which it is the smallest file, the
+    median cold read rate on the headline cores (with interquartile range) and the matrices on which it reads fastest, the
+    median warm read rate on the headline cores, and the median cold read rate on one core with its fastest count. .s1 is
+    read in its stored gene order; one more row gives .s1 read in the source gene order, ranked against the other formats
+    alone. Every ratio in the paper is the median of per-matrix ratios."""
     w = [r for r in _stage(cfg, "write") if r.get("status") == "ok"]
     H = int(cfg["threads"]["headline"])
     size = defaultdict(dict)
     for r in w:
         size[(r["dataset"], r["matrix"])][r["format"]] = _f(r["bytes"]) * 8 / _f(r["nnz"])
-    rate, rate1 = defaultdict(dict), defaultdict(dict)   # cold reads on the headline cores and on one core
+    # cold reads on the headline cores and on one core, warm reads on the headline cores; .s1 in both gene orders
+    rate, rate1, warm = defaultdict(dict), defaultdict(dict), defaultdict(dict)
     for r in _headline_decode(cfg):
-        if r.get("status") == "ok" and r["what"] == "file" and r["cache"] == "cold" and int(r["threads"]) in (1, H) \
-                and (r["format"] != "s1" or r["mode"] == S1_MODE):
-            (rate if int(r["threads"]) == H else rate1)[(r["dataset"], r["matrix"])][r["format"]] = _f(r["mnnz_per_s"])
+        if r.get("status") != "ok" or r["what"] != "file" or int(r["threads"]) not in (1, H):
+            continue
+        f = r["format"]
+        if f == "s1":
+            f = "s1" if r["mode"] == S1_MODE else "s1_src"
+        k = (r["dataset"], r["matrix"])
+        if r["cache"] == "cold":
+            (rate if int(r["threads"]) == H else rate1)[k][f] = _f(r["mnnz_per_s"])
+        elif r["cache"] == "warm" and int(r["threads"]) == H:
+            warm[k][f] = _f(r["mnnz_per_s"])
     fmts = [f for f in cfg["formats"] if f != "s1_pack" and any(f in u for u in size.values())]
-    win_size, win_rate = defaultdict(int), defaultdict(int)
+
+    def wins(rr, pool):
+        """Matrices on which each format of `pool` reads fastest among `pool`, and the margins of the winners."""
+        cnt, margin = defaultdict(int), defaultdict(list)
+        for u in rr.values():
+            c = sorted(((v, f) for f, v in u.items() if f in pool and v), reverse=True)
+            if c:
+                cnt[c[0][1]] += 1
+                if len(c) > 1:
+                    margin[c[0][1]].append(c[0][0] / c[1][0] - 1)
+        return cnt, margin
+
+    win_size = defaultdict(int)
     for u in size.values():
         c = {f: v for f, v in u.items() if f in fmts and v}
         if c:
             win_size[min(c, key=c.get)] += 1
-    win_rate1 = defaultdict(int)
-    for rr, wins in ((rate, win_rate), (rate1, win_rate1)):
-        for u in rr.values():
-            c = {f: v for f, v in u.items() if f in fmts and v}
-            if c:
-                wins[max(c, key=c.get)] += 1
+    pool_src = [f if f != "s1" else "s1_src" for f in fmts]
+    win_rate, margin = wins(rate, fmts)
+    win_rate1, _ = wins(rate1, fmts)
+    win_warm, _ = wins(warm, fmts)
+    win_src, _ = wins(rate, pool_src)
+    win_src1, _ = wins(rate1, pool_src)
     n_size = sum(1 for u in size.values() if any(f in u for f in fmts))
     n_rate = sum(1 for u in rate.values() if u)
+    n_rate1 = sum(1 for u in rate1.values() if u)
+    n_warm = sum(1 for u in warm.values() if u)
+
+    def iqr(s, fmt):
+        return "" if s["median"] is None else f"{fmt.format(s['median'])} ({fmt.format(s['q1'])}--{fmt.format(s['q3'])})"
+
     rows = []
-    for f in fmts:
-        rel = [u[f] / u["s1"] for u in size.values() if u.get(f) and u.get("s1")]
-        gm = float(np.exp(np.mean(np.log(rel)))) if rel else None
-        cr = [u["csc_i32"] / u[f] for u in size.values() if u.get(f) and u.get("csc_i32")]
-        rows.append({"format": FORMAT_LABELS.get(f, f), "bits": _stats(u.get(f) for u in size.values())["median"],
-                     "rel": gm, "cr": _stats(cr)["median"], "smallest": f"{win_size.get(f, 0)}/{n_size}",
-                     "read": _stats(u.get(f) for u in rate.values())["median"], "fastest": f"{win_rate.get(f, 0)}/{n_rate}",
-                     "read1": _stats(u.get(f) for u in rate1.values())["median"],
-                     "fastest1": f"{win_rate1.get(f, 0)}/{sum(1 for u in rate1.values() if u)}", "n": len(rel)})
+    for f in fmts + ["s1_src"]:
+        src = f == "s1_src"
+        rel = [] if src else [u[f] / u["s1"] for u in size.values() if u.get(f) and u.get("s1")]
+        cr = [] if src else [u["csc_i32"] / u[f] for u in size.values() if u.get(f) and u.get("csc_i32")]
+        sb = _stats(u.get(f) for u in size.values())
+        r4, r1, rw = (_stats(u.get(f) for u in rr.values()) for rr in (rate, rate1, warm))
+        rows.append({"format": "\\quad source gene order" if src else FORMAT_LABELS.get(f, f),
+                     "bits": "" if src else iqr(sb, "{:.1f}"),
+                     "rel": "" if src else f"{_stats(rel)['median']:.1f}$\\times$",
+                     "cr": "" if src else f"{_stats(cr)['median']:.1f}$\\times$",
+                     "smallest": "" if src else f"{win_size.get(f, 0)}/{n_size}",
+                     "read": iqr(r4, "{:.0f}"),
+                     "fastest": f"{(win_src if src else win_rate).get(f, 0)}/{n_rate}",
+                     "warm": "" if rw["median"] is None else f"{rw['median']:.0f}",
+                     "fastestw": "" if src else f"{win_warm.get(f, 0)}/{n_warm}",
+                     "read1": "" if r1["median"] is None else f"{r1['median']:.0f}",
+                     "fastest1": f"{(win_src1 if src else win_rate1).get(f, 0)}/{n_rate1}",
+                     "n": len(rel), "_bits": sb["median"] or 1e9})
         if f == "s1":
             N.put("dec-s1-fastest1-count", win_rate1.get(f, 0))
-            N.put("dec-s1-t1", rows[-1]["read1"], "{:.0f}")
-            N.put("dec-paired1-n", sum(1 for u in rate1.values() if u))
-    rows.sort(key=lambda r: r["bits"] or 1e9)
-    _write(rows, out / "tab_summary.tsv", ["format", "bits", "rel", "cr", "smallest", "read", "fastest", "read1", "fastest1", "n"])
+            N.put("dec-s1-t1", r1["median"], "{:.0f}")
+            N.put("dec-paired1-n", n_rate1)
+            N.put("dec-s1-warm-fastest", win_warm.get(f, 0))
+            N.put("dec-warm-n", n_warm)
+            N.put("dec-s1-warm", rw["median"], "{:.0f}")
+            N.put("dec-s1-close-wins", sum(1 for m in margin.get("s1", []) if m < 0.03))
+        if src:
+            N.put("dec-s1src-fastest", win_src.get("s1_src", 0))
+            N.put("dec-s1src-t4", r4["median"], "{:.0f}")
+    for f in fmts:   # the warm leader, for the text
+        if win_warm.get(f, 0) == max(win_warm.values(), default=0) and f != "s1":
+            N.put("dec-warm-leader", FORMAT_LABELS.get(f, f).replace("\\textbf{", "").replace("}", ""))
+            N.put("dec-warm-leader-rate", _stats(u.get(f) for u in warm.values())["median"], "{:.0f}")
+            N.put("dec-warm-leader-wins", win_warm[f])
+            break
+    s1row = rows.pop()                    # the source-order row goes right under .s1
+    rows.sort(key=lambda r: r["_bits"])
+    rows.insert(1 + [r["format"] for r in rows].index(FORMAT_LABELS.get("s1", "s1")), s1row)
+    _write(rows, out / "tab_summary.tsv", ["format", "bits", "rel", "cr", "smallest", "read", "fastest", "warm", "fastestw",
+                                           "read1", "fastest1", "n"])
     N.put("sumNsize", n_size)
     N.put("sumNread", n_rate)
+    # .s1 read in the source gene order against the best other format, paired by matrix (median ratio and bootstrap 95% CI)
+    lead = defaultdict(list)
+    for u in rate.values():
+        o = [v for g, v in u.items() if g in fmts and g != "s1" and v]
+        if o:
+            for g in ("s1", "s1_src"):
+                if u.get(g):
+                    lead[g].append(u[g] / max(o))
+    rng = np.random.default_rng(1)
+    for g, key in (("s1", "dec-lead"), ("s1_src", "dec-lead-src")):
+        x = np.array(lead[g])
+        if len(x):
+            bs = np.median(rng.choice(x, (5000, len(x))), axis=1)
+            N.put(key, float(np.median(x)), "{:.2f}")
+            N.put(key + "-lo", float(np.quantile(bs, 0.025)), "{:.2f}")
+            N.put(key + "-hi", float(np.quantile(bs, 0.975)), "{:.2f}")
 
 
 def scaling_section(cfg: Config, N: Numbers, out: Path) -> None:
@@ -835,7 +905,8 @@ def env_section(cfg: Config, N: Numbers) -> None:
     if not p.exists():
         return
     e = json.loads(p.read_text())
-    N.put("cpu", _tex_escape(e.get("cpu") or ""))
+    cpu = re.sub(r"\((R|TM)\)|\s+CPU\b|\s*@.*$", "", e.get("cpu") or "")
+    N.put("cpu", _tex_escape(re.sub(r"\s+", " ", cpu).strip()))
     N.put("cores", e.get("cores"))
     N.put("memGB", e.get("mem_gb"), "{:.0f}")
     if e.get("gpu"):

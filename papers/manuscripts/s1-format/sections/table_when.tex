@@ -1,0 +1,22 @@
+% Main-text table (Discussion): where .s1 helps and where an established container serves better.
+\begin{table}[tbp]
+\centering
+\caption{Where \sone{} helps, and where another container serves better}
+\label{tab:when}
+\footnotesize
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{3.35cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Use & Suited format \\
+\midrule
+Archiving, sharing & \sone: smallest, named by content \\
+Training from remote storage & \sone: partial reads, few requests \\
+An agent fetching cells & \sone: first cells within a second \\
+Analysis in memory & any: \sone{} loads into AnnData, SciPy, Seurat \\
+Repeated reads from memory & uncompressed CSC or h5ad \\
+In-place, memory-mapped compute & uncompressed HDF5 or Zarr \\
+One gene across all cells & gene-indexed (TileDB-SOMA) \\
+Edits, appended cells & AnnData, Zarr, TileDB-SOMA (\sone{} is immutable) \\
+Annotations, embeddings, layers & AnnData or MuData, beside \sone{} \\
+\bottomrule
+\end{tabularx}
+\end{table}
