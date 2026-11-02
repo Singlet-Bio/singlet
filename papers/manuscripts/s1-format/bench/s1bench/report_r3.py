@@ -620,7 +620,7 @@ def _label_lines(rows: list[tuple[str, float, float]], gap: float, lo: float, hi
         yl = 10 ** q if log else q
         lab = "\\textbf{\\sone}" if fmt == "s1" else FORMAT_LABELS.get(fmt, fmt)
         col = "sone!85!black" if fmt == "s1" else "ink2!80"
-        out.append("\\draw[gen!55, line width=0.3pt] (axis cs:%g,%g) -- ++(0.12cm,0) -- ($(axis cs:%g,%g)+(0.3cm,0)$) "
+        out.append("\\draw[gen!55, line width=0.3pt] ($(axis cs:%g,%g)+(0.07cm,0)$) -- ++(0.1cm,0) -- ($(axis cs:%g,%g)+(0.32cm,0)$) "
                    "node[anchor=west, font=\\sffamily\\tiny, text=%s, inner sep=1pt] {%s};" % (x, y, x, yl, col, lab))
     path.write_text("\n".join(out) + "\n", encoding="utf-8")
 

@@ -15,7 +15,7 @@
 \pgfmathsetlengthmacro{\figD}{4.9cm}              % side of the square panel d (as placed by report_r3.FIG1D_SIDE)
 \pgfmathsetlengthmacro{\figDG}{1.5cm}             % before d and g: their y labels
 \pgfmathsetlengthmacro{\figW}{(\figT-\figY-\figGap-\figDG-\figD-0.25cm)/2}   % width of b and c: rows fill \figT
-\pgfmathsetlengthmacro{\figWef}{\figW-0.85cm}   % e and f are narrower, so the labels of g's lines fit on its right
+\pgfmathsetlengthmacro{\figG}{\figD-1.6cm}     % width of g: its y axis under d's, its line labels on the right
 \ifdefined\IEEEtransversionmajor                  % TCBB: the figure and caption fill a page
   \pgfmathsetlengthmacro{\figH}{4.2cm}            % height of e, f and g
   \pgfmathsetlengthmacro{\figV}{2.0cm}            % between rows: x labels below, titles above
@@ -135,7 +135,7 @@
 \input{figures/fig1b_panel}
 % ======================= (e, f) a PyTorch training loader at 1 Gbit/s =======================
 \pgfplotsset{fig1mb/.style={xbar, bar shift=0pt, bar width=0.5, ymin=-0.5, ymax=3.5, y dir=reverse,
-  scale only axis, width=\figWef, height=\figH, axis x line*=bottom, axis y line*=left, clip=false,
+  scale only axis, width=\figW, height=\figH, axis x line*=bottom, axis y line*=left, clip=false,
   ytick={0,1,2,3}, ytick style={draw=none},
   error bars/error bar style={ink2, line width=0.6pt}, error bars/error mark options={rotate=90, mark size=2pt, ink2}},
   fig1val/.style={nodes near coords, point meta=explicit, every node near coord/.append style={font=\sffamily\tiny,
@@ -162,7 +162,7 @@
   table[x=batch_hi, y=pos, meta=batch_ms] {\gen{fig1_mb.tsv}};
 \end{axis}
 % ======================= (g) read rate against cores: .s1 teal, the others gray and labeled =======================
-\begin{axis}[name=pg, at={($(pf.north east)+(\figDG,0)$)}, anchor=north west, scale only axis, width=\figD, height=\figH,
+\begin{axis}[name=pg, at={(pd.west |- pf.north)}, anchor=north west, scale only axis, width=\figG, height=\figH,
   title={g\quad Best parallel efficiency},
   xmin=0, xmax=46, ymin=0, ymax=10, xtick={1,8,16,24,32,44}, ytick={0,2,...,10},
   xlabel={cores}, ylabel={speed-up over one core},
