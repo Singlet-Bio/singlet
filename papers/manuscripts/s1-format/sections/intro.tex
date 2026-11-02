@@ -23,8 +23,8 @@ themselves~\cite{bonfield2022cram}.
 A model of the counts can shrink a file, but a smaller file helps only if it can be decoded as fast as the link delivers
 it. So we asked two questions together: how few bits can a lossless code spend on single-cell counts, and how fast can a
 code that small be decoded? We measured both limits on \nm{nMatrices} public matrices and built \sone, an open format that
-approaches them, read and written from Python, R and C++ by the \texttt{singlet} package (Fig.~\ref{fig:wow}). We found
-that:
+approaches them (Fig.~\ref{fig:how}), read and written from Python, R and C++ by the \texttt{singlet} package. We found
+that (Fig.~\ref{fig:wow}):
 \begin{itemize}
 \item \sone{} files were the smallest on every matrix, \nm{ratio-h5ad_gzip} times smaller than gzip-compressed AnnData and
   within a few percent of the best count models we were able to discover;
@@ -37,4 +37,4 @@ We also report what \sone{} costs: a decoder that is slower per core, a writer t
 no traversal of the data in place. The codec was developed iteratively with Claude 5.5-generation models (Anthropic),
 with every candidate change measured against the limits above.
 
-\input{figures/fig1_wow}
+\input{figures/fig2_how}

@@ -9,6 +9,7 @@
   \draw[#7!70!black, line width=1.2pt] (axis cs:#3,{#1-0.32}) -- (axis cs:#3,{#1+0.32});}
 \begin{figure*}[tbp]
 \centering
+\begin{adjustbox}{max width=\linewidth}
 \pgfmathsetlengthmacro{\figY}{2.15cm}             % y tick labels of b and e
 \pgfmathsetlengthmacro{\figW}{0.225\linewidth}    % width of b, c, e and f
 \pgfmathsetlengthmacro{\figGap}{0.75cm}           % between b and c, e and f (shared rows)
@@ -128,7 +129,7 @@
   fig1val/.style={nodes near coords, point meta=explicit, every node near coord/.append style={font=\sffamily\tiny,
   anchor=west, text=ink2, inner sep=2pt}}}
 \begin{axis}[xmode=log, log origin=infty, fig1mb, name=pe, at={($(pb.south west)+(0,-\figV)$)}, anchor=north west,
-  title={e\quad First PyTorch minibatch}, title style={xshift={1pt-\figY}},
+  title={e\quad Loads first PyTorch minibatch fastest}, title style={xshift={1pt-\figY}},
   xmin=0.02, xmax=40, xtick={0.1,1,10}, xticklabels={0.1,1,10}, xlabel={seconds (log scale)},
   yticklabels from table={\gen{fig1_mb.tsv}}{label}]
 \pgfplotsinvokeforeach{s1,zarr3,zarr,soma}{
@@ -139,7 +140,7 @@
   table[x=first_hi, y=pos, meta=first] {\gen{fig1_mb.tsv}};
 \end{axis}
 \begin{axis}[xmode=log, log origin=infty, fig1mb, name=pf, at={($(pe.north east)+(\figGap,0)$)}, anchor=north west,
-  title={f\quad Each later minibatch},
+  title={f\quad and later minibatches},
   xmin=2, xmax=4000, xtick={10,100,1000}, xticklabels={10,100,1000}, xlabel={milliseconds (log scale)}, yticklabels={}]
 \pgfplotsinvokeforeach{s1,zarr3,zarr,soma}{
   \addplot[fill=c-#1, draw=none, discard if not y={fmt}{#1}, error bars/.cd, x dir=both, x explicit]
@@ -150,32 +151,35 @@
 \end{axis}
 % ======================= (g) read rate against cores =======================
 \begin{axis}[name=pg, at={($(pf.north east)+(\figDG,0)$)}, anchor=north west, scale only axis, width=\figD, height=\figH,
-  title={g\quad Gains the most from more cores},
-  xmode=log, log basis x=2, ymode=log, xmin=0.9, xmax=48, ymin=4, ymax=8000,
-  xtick={1,2,4,8,16,32,44}, xticklabels={1,2,4,8,16,32,44}, ytick={10,100,1000}, yticklabels={10,100,1000},
-  xlabel={cores}, ylabel={million non-zeros/s},
+  title={g\quad Best parallel efficiency},
+  xmin=0, xmax=46, ymin=0, ymax=14, xtick={1,8,16,24,32,44}, ytick={0,2,...,14},
+  xlabel={cores}, ylabel={speed-up over one core},
   axis x line*=bottom, axis y line*=left,
-  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.0,1.0)}, anchor=north west, legend columns=3,
-    cells={anchor=west}, row sep=-2pt, column sep=3pt}, legend image post style={xscale=0.55}]
-\addplot[name path=sq3, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=q3] {\gen{fig1_scaling.tsv}};
-\addplot[name path=sq1, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=q1] {\gen{fig1_scaling.tsv}};
+  legend style={font=\sffamily\tiny, draw=none, fill=white, fill opacity=0.85, text opacity=1, at={(1.0,1.0)},
+    anchor=north east, legend columns=2, cells={anchor=west}, row sep=-2pt, column sep=3pt},
+  legend image post style={xscale=0.55}]
+\addplot[gen!70, dashed, line width=0.6pt, domain=1:14, samples=2, forget plot] {x};
+\node[anchor=north west, font=\sffamily\tiny, text=gen!90!black, inner sep=1.5pt] at (axis cs:8,8) {1:1};
+\addplot[name path=sq3, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=sp_q3] {\gen{fig1_scaling.tsv}};
+\addplot[name path=sq1, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=sp_q1] {\gen{fig1_scaling.tsv}};
 \addplot[c-s1, fill opacity=0.18, draw=none, forget plot] fill between[of=sq3 and sq1];
-\addplot[c-s1, very thick, mark=*, mark size=1.5pt, discard if not={format}{s1}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addplot[c-s1, very thick, mark=*, mark size=1.5pt, discard if not={format}{s1}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
 \addlegendentry{\sone}
-\addplot[c-soma, thick, mark=*, mark size=1.0pt, discard if not={format}{soma}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addplot[c-soma, thick, mark=*, mark size=1.0pt, discard if not={format}{soma}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
 \addlegendentry{TileDB-SOMA}
-\addplot[c-zarr3, thick, mark=*, mark size=1.0pt, discard if not={format}{zarr3}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addplot[c-zarr3, thick, mark=*, mark size=1.0pt, discard if not={format}{zarr3}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
 \addlegendentry{Zarr v3}
-\addplot[c-parquet_coo, thick, mark=*, mark size=1.0pt, discard if not={format}{parquet_coo}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addplot[c-parquet_coo, thick, mark=*, mark size=1.0pt, discard if not={format}{parquet_coo}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
 \addlegendentry{Parquet}
-\addplot[c-mtx_gz, thick, mark=*, mark size=1.0pt, discard if not={format}{mtx_gz}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addplot[c-mtx_gz, thick, mark=*, mark size=1.0pt, discard if not={format}{mtx_gz}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
 \addlegendentry{MTX.gz}
-\addplot[c-csc_i32, thick, mark=*, mark size=1.0pt, discard if not={format}{csc_i32}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addplot[c-csc_i32, thick, mark=*, mark size=1.0pt, discard if not={format}{csc_i32}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
 \addlegendentry{CSC, int32}
-\addplot[c-h5ad_gzip, thick, mark=*, mark size=1.0pt, discard if not={format}{h5ad_gzip}] table[x=threads, y=mnnzs] {\gen{fig1_scaling.tsv}};
+\addplot[c-h5ad_gzip, thick, mark=*, mark size=1.0pt, discard if not={format}{h5ad_gzip}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
 \addlegendentry{h5ad gzip}
 \end{axis}
 \end{tikzpicture}
+\end{adjustbox}
 \caption{\textbf{\sone{} files are the smallest and, on four cores, the fastest to read.}
 \textbf{(a)} The two ideas behind \sone. Left: six counts of one cell, stored as standard formats store them and as
 \sone{} does, with genes numbered from most to least often detected, the steps between them and the counts merged into one
@@ -193,8 +197,9 @@ the left is better.
 at 1\,Gbit/s, each decoded into a sparse tensor: (e) seconds from a new process to the first minibatch, median and range
 of three seeds; (f) milliseconds for each later minibatch, median and 5th--95th percentiles of \nm{mb3-batches}
 minibatches from three seeds.
-\textbf{(g)} Read rate from a cold file against cores on a 48-core node, median over \nm{scale-s1-n} matrices; band,
-interquartile range of \sone. Shown are the formats whose readers can use several cores, with uncompressed CSC and
-gzip-compressed AnnData for reference.}
+\textbf{(g)} Speed-up of the read rate from a cold file over one core against cores on a 48-core node, median over
+\nm{scale-s1-n} matrices of each matrix's own speed-up; band, interquartile range of \sone; dashed gray, the 1:1 line of
+perfect scaling. Shown are the formats whose readers can use several cores, with uncompressed CSC and gzip-compressed
+AnnData for reference.}
 \label{fig:wow}
 \end{figure*}

@@ -329,7 +329,7 @@ def cores_section(cfg: Config, N: Numbers, out: Path) -> None:
 
 
 def scaling_section(cfg: Config, N: Numbers, out: Path) -> None:
-    """Fig. 1g: read rate from a cold file against cores, 1 to 44 on an exclusive bigmem node, for .s1 and the formats
+    """Fig. 2g: read rate and speed-up from a cold file against cores, 1 to 44 on an exclusive bigmem node, for .s1 and the formats
     whose readers use more than one core (stage sweep44p), with uncompressed CSC and gzip-compressed AnnData (sweep44) as
     single-core references. Per format: median and quartiles over the matrices measured at every core count."""
     rows = [r for r in _rows(cfg, "sweep44/decode", ".sweep") + _rows(cfg, "sweep44p/decode", ".sweep")
@@ -348,9 +348,10 @@ def scaling_section(cfg: Config, N: Numbers, out: Path) -> None:
             continue
         for p in ps:
             x = [d[p] for d in full]
+            s = [d[p] / d[ps[0]] for d in full]
             tab.append({"format": fmt, "threads": p, "mnnzs": float(np.median(x)), "q1": float(np.percentile(x, 25)),
-                        "q3": float(np.percentile(x, 75)), "speedup": float(np.median([d[p] / d[ps[0]] for d in full])),
-                        "n": len(full)})
+                        "q3": float(np.percentile(x, 75)), "speedup": float(np.median(s)),
+                        "sp_q1": float(np.percentile(s, 25)), "sp_q3": float(np.percentile(s, 75)), "n": len(full)})
         last = tab[-1]
         N.put(f"scale-{fmt}-max", last["speedup"], "{:.1f}")
         N.put(f"scale-{fmt}-top", last["mnnzs"], "{:.0f}")
@@ -362,7 +363,7 @@ def scaling_section(cfg: Config, N: Numbers, out: Path) -> None:
         rest = [r["speedup"] for f, r in top.items() if f not in ("s1", "soma")]
         if rest:
             N.put("scale-rest-max", max(rest), "{:.1f}")
-    _write(tab, out / "fig1_scaling.tsv", ["format", "threads", "mnnzs", "q1", "q3", "speedup", "n"])
+    _write(tab, out / "fig1_scaling.tsv", ["format", "threads", "mnnzs", "q1", "q3", "speedup", "sp_q1", "sp_q3", "n"])
 
 
 def minibatch_spread_section(cfg: Config, N: Numbers, out: Path) -> None:

@@ -1,9 +1,8 @@
 % Abstract, shared by main.tex (TCBB) and biorxiv.tex. About 250 words.
 The Gene Expression Omnibus holds sequencing data from more than three billion cells. Machine learning models now train
 on millions of them at a time, streamed from cloud storage in minibatches, and AI agents fetch and analyze public data
-themselves, waiting on every fetch as they iterate. For both, the bottleneck is moving and decoding count matrices, not
-computing on them: alongside systematic annotation, small files that open with low latency are what make data
-AI-ready. We measured how few bits these
+themselves, waiting on every fetch as they iterate. Both spend much of their time moving and decoding count matrices,
+so alongside systematic annotation, small files that open with low latency are what make data AI-ready. We measured how few bits these
 counts need and how fast they can be decoded, then built \sone{} to approach both limits, using Claude 5.5-generation
 models (Anthropic). A \sone{} dataset is a manifest of content-addressed sample files, each opening with an index to
 blocks of cells, so a reader fetches only the cells it needs by HTTP range request. Within a block, each cell becomes
