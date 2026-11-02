@@ -86,17 +86,23 @@ test_that("write_s1 rejects non-counts and unnamed matrices", {
 # an exon vocabulary pack the Python package ships (mRatBN7.2: 243,603 exon rows, 30,562 genes)
 rat_exon <- "94e3bff7460f96e92311ff009efae582"
 
-# A local data host (SINGLET_DATA_BASE) serving the rat pack from the Python package in this checkout, and an empty cache, so
-# write_s1(gene_pack =) fetches it as it would from data.singlet.bio. Returns the pack's gene ids.
+# An empty cache and a data host (SINGLET_DATA_BASE) that serves the rat pack, so write_s1(gene_pack =) fetches it: a local
+# directory with the pack from the Python package of this checkout, else (R CMD check runs a copy without it)
+# data.singlet.bio itself. Returns the pack's gene ids.
 local_pack_host <- function(env = parent.frame()) {
     skip_if_not_installed("withr")
     src <- test_path("..", "..", "..", "python", "singlet", "s1", "packs")
     pack <- file.path(src, paste0(rat_exon, ".pack"))
-    if (!file.exists(pack)) skip("the Python package's packs are not in this checkout")
-    host <- withr::local_tempdir(.local_envir = env)
-    ref <- file.path(host, "s1", "ref")
-    dir.create(ref, recursive = TRUE)
-    file.copy(c(pack, file.path(src, "index.json")), ref)
+    if (file.exists(pack)) {
+        host <- withr::local_tempdir(.local_envir = env)
+        ref <- file.path(host, "s1", "ref")
+        dir.create(ref, recursive = TRUE)
+        file.copy(c(pack, file.path(src, "index.json")), ref)
+    } else {
+        skip_on_cran()
+        skip_if_offline("data.singlet.bio")
+        host <- "https://data.singlet.bio"
+    }
     withr::local_envvar(SINGLET_DATA_BASE = host, SINGLET_CACHE_DIR = withr::local_tempdir(.local_envir = env), .local_envir = env)
     singlet:::.s1_clear_memory()
     withr::defer(singlet:::.s1_clear_memory(), envir = env)
