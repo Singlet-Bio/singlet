@@ -34,20 +34,72 @@ _ATLAS_MEMBERS = ("exon_counts.1pz", "intron_counts.1pz", "cells")
 PathLike = Union[str, os.PathLike]
 
 
-def _pack_ref(gene_pack) -> Optional[bytes]:
-    """An 8-byte vocabulary-pack id from bytes or 16 hex characters (None: names stored inline)."""
-    if gene_pack is None:
-        return None
+_PACK_ID_ERROR = "gene_pack must be a vocabulary pack id: 16 to 32 hex characters, or 8 to 16 bytes"
+
+
+def _pack_hex(gene_pack) -> str:
+    """The hex id (or id prefix of at least 8 bytes) of a vocabulary pack given as bytes or hex characters."""
     if isinstance(gene_pack, (bytes, bytearray)):
         pid = bytes(gene_pack)
     else:
         try:
             pid = bytes.fromhex(str(gene_pack))
         except ValueError:
-            raise ValueError("gene_pack must be 8 bytes or 16 hex characters") from None
-    if len(pid) != 8:
-        raise ValueError("gene_pack must be 8 bytes or 16 hex characters")
-    return pid
+            raise ValueError(_PACK_ID_ERROR) from None
+    if not 8 <= len(pid) <= 16:
+        raise ValueError(_PACK_ID_ERROR)
+    return pid.hex()
+
+
+def _find_pack(hexid: str):
+    """The pack with this id (prefix) from the installed packs, else downloaded into the user cache; ValueError if neither."""
+    from .packs import PackError, PackStore, default_store
+
+    store = default_store()
+    try:
+        return store.get(hexid)
+    except PackError:
+        pass
+    try:
+        pk = PackStore(store.dirs, download=True, remote=store.remote).get(hexid)
+    except (PackError, OSError) as e:
+        raise ValueError(
+            "gene_pack %s: the vocabulary pack is not installed and could not be downloaded (%s); store the gene ids "
+            "inline with gene_pack=None" % (hexid, e)
+        ) from e
+    store.rescan()
+    return pk
+
+
+def pack_rows(gene_pack, genes: Sequence[str]) -> tuple[bytes, dict]:
+    """(8-byte id for the pz2 header, ``meta.names.rows``) for gene ids stored as a reference to a vocabulary pack.
+
+    The ids must be the pack's gene table in order (a gene-level matrix: ``member`` ``"genes"``) or its row names in order
+    (an exon- or intron-level matrix: ``member`` the pack's member), as ``migrate._row_names_for`` writes them for the atlas.
+    Anything else raises ValueError: a reference replaces the ids, so ids the pack does not hold would be lost.
+    """
+    from .packs import VocabPack
+
+    hexid = _pack_hex(gene_pack)
+    pk = _find_pack(hexid)
+    if not isinstance(pk, VocabPack):
+        raise ValueError("gene_pack %s is not a vocabulary pack" % hexid)
+    genes = list(genes)
+    table = [g for g, _n in pk.gene_table()]
+    if genes == table:
+        member = "genes"
+    elif len(genes) == pk.n() and genes == pk.names():
+        member = pk.member
+    else:
+        where = ""
+        if len(genes) == len(table):
+            k = next(i for i, (a, b) in enumerate(zip(genes, table)) if a != b)
+            where = " (gene id %d is %r, the pack's is %r)" % (k + 1, genes[k], table[k])
+        raise ValueError(
+            "gene_pack %s holds %d genes and %d %s rows; the %d gene ids given are neither, in that order%s. Store them "
+            "inline with gene_pack=None" % (pk.id.hex(), len(table), pk.n(), pk.member, len(genes), where)
+        )
+    return pk.id[:8], {"pack": pk.id.hex(), "member": member}
 
 
 def _as_cells_by_genes(x, genes, barcodes, layer):
@@ -114,17 +166,23 @@ def _canonical_csc(xs, genes, barcodes) -> Csc:
     )
 
 
-def encode_counts(csc: Csc, *, gene_pack=None, threads: int = 4) -> tuple[bytes, bytes]:
-    """The pz2 member and canonical digest of a canonical CSC (gene ids inline, or as a reference to ``gene_pack``)."""
-    pid = _pack_ref(gene_pack)
+def encode_counts(csc: Csc, *, gene_pack=None, threads: int = 4) -> tuple[bytes, bytes, dict]:
+    """The pz2 member, canonical digest and member meta of a canonical CSC (gene ids inline, or as a reference to
+    ``gene_pack``, checked by :func:`pack_rows`)."""
+    meta: dict = {"modality": "counts"}
+    row_names: object = "inline"
+    if gene_pack is not None:
+        pid, rows = pack_rows(gene_pack, csc.rownames)
+        row_names = ("pack", pid)
+        meta["names"] = {"rows": rows}
     digest = canonical_digest(csc)
     opts = EncodeOptions(
-        row_names="inline" if pid is None else ("pack", pid),
+        row_names=row_names,
         col_names="inline",
         threads=int(threads),
         digest=digest,
     )
-    return NativeCodec("auto").encode(csc, opts), digest
+    return NativeCodec("auto").encode(csc, opts), digest, meta
 
 
 def write_s1(
@@ -155,16 +213,19 @@ def write_s1(
     member
         Name of the matrix member.
     gene_pack
-        Store the gene ids as a reference to a vocabulary pack (8 bytes, or 16 hex characters) instead of inline. The
-        reader then needs that pack, or the gene ids given to :func:`read_s1`.
+        Store the gene ids as a reference to a vocabulary pack (its id, or an id prefix of at least 16 hex characters)
+        instead of inline. The ids must be the pack's gene table in order (a gene-level matrix) or its row names in order
+        (exon or intron level); anything else raises ValueError. The pack is taken from the installed packs, or downloaded
+        from data.singlet.bio; ValueError if it cannot be. A reader needs the same pack, or the gene ids passed to
+        :func:`read_s1`.
     threads
         Encoder threads. The output does not depend on it.
     """
     xs, genes, barcodes = _as_cells_by_genes(x, genes, barcodes, layer)
     csc = _canonical_csc(xs, genes, barcodes)
-    body, digest = encode_counts(csc, gene_pack=gene_pack, threads=threads)
+    body, digest, meta = encode_counts(csc, gene_pack=gene_pack, threads=threads)
     w = C.S2Writer(sample_id)
-    w.add_matrix(member, body, digest, {"modality": "counts"})
+    w.add_matrix(member, body, digest, meta)
     out = Path(path).expanduser()
     tmp = out.with_name(out.name + ".part")
     tmp.write_bytes(w.build())
@@ -208,7 +269,8 @@ def read_s1(
     import anndata as ad
     import scipy.sparse as sp
 
-    from .sample import S1Sample
+    from .packs import PackError
+    from .sample import S1Error, S1Sample
 
     s = S1Sample(str(path))
     if member not in s.members:
@@ -219,13 +281,19 @@ def read_s1(
         if genes is not None:
             rows = [str(g) for g in genes]
         else:
+            pack = (csc.row_ref or {}).get("pack")
             try:
                 s._resolve(csc, s.reader.members[member], None)
                 rows = csc.rownames
-            except Exception as e:  # noqa: BLE001 - pack not installed
+            except PackError as e:
                 raise ValueError(
                     "the gene ids of %s are in vocabulary pack %s, which is not installed; pass genes="
-                    % (path, (csc.row_ref or {}).get("pack"))
+                    % (path, pack)
+                ) from e
+            except S1Error as e:  # the pack is there but does not describe these rows
+                raise ValueError(
+                    "%s: the gene ids cannot be taken from vocabulary pack %s: %s; pass genes="
+                    % (path, pack, e)
                 ) from e
     cols = csc.colnames
     if rows is None or cols is None:

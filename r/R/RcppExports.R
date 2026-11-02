@@ -125,9 +125,11 @@ pz_read_1pz_raw <- function(path) {
 }
 
 #' Encode a canonical CSC (genes x cells) as a .s1 sample object with one pz2 member; returns the object bytes.
+#' `gene_pack` is "" (row names inline) or a full 32-hex pack id; `rows_member` the pack list the row names are ("genes" or the
+#' pack's member); `rows_sha256`, when not "", the sha256 the NUL-terminated row names must have (the pack's sha256_names).
 #' @keywords internal
-s1_write_ <- function(p, i, x, m, n, rownames, colnames, sample_id, member, gene_pack, threads) {
-    .Call(`_singlet_s1_write_`, p, i, x, m, n, rownames, colnames, sample_id, member, gene_pack, threads)
+s1_write_ <- function(p, i, x, m, n, rownames, colnames, sample_id, member, gene_pack, rows_member, rows_sha256, threads) {
+    .Call(`_singlet_s1_write_`, p, i, x, m, n, rownames, colnames, sample_id, member, gene_pack, rows_member, rows_sha256, threads)
 }
 
 #' Members of a .s1 sample object from its first bytes (header and member table): name, kind, offset, length, digest.

@@ -214,16 +214,124 @@ def test_fixture(tmp_path):
         assert np.array_equal(a.X.toarray(), x.T)
 
 
-def test_gene_pack_reference(tmp_path):
-    x, genes, cells = random_counts(40, 30, 0.3, seed=7)
-    pid = "0123456789abcdef"
-    singlet.write_s1(x, tmp_path / "p.s1", genes=genes, barcodes=cells, gene_pack=pid)
+#: an exon vocabulary pack shipped with the package (mRatBN7.2: 243,603 exon rows, 30,562 genes)
+RAT_EXON = "94e3bff7460f96e92311ff009efae582"
+
+
+def _shipped_pack(pid):
+    from singlet.s1.packs import PackError, default_store
+
+    try:
+        return default_store().get(pid)
+    except PackError:
+        pytest.skip("pack %s is not installed" % pid)
+
+
+def _no_download(monkeypatch, tmp_path):
+    """Point the pack download at an empty directory, so a pack that is not installed cannot be fetched."""
+    from singlet.s1.packs import default_store
+
+    monkeypatch.setattr(default_store(), "remote", (tmp_path / "no-remote").as_uri() + "/")
+
+
+def test_gene_pack_gene_level_round_trip(tmp_path):
+    """Gene ids = the pack's gene table: names.rows.member is "genes", and read_s1 needs no genes= when the pack is installed."""
+    pk = _shipped_pack(RAT_EXON)
+    genes = [g for g, _n in pk.gene_table()]
+    assert len(genes) == 30562
+    x, _g, cells = random_counts(25, len(genes), 0.002, seed=7)
+    p = singlet.write_s1(x, tmp_path / "g.s1", genes=genes, barcodes=cells, gene_pack=RAT_EXON[:16])
     inline = singlet.write_s1(x, tmp_path / "i.s1", genes=genes, barcodes=cells)
-    assert (tmp_path / "p.s1").stat().st_size < inline.stat().st_size  # names not stored
-    b = singlet.read_s1(tmp_path / "p.s1", genes=genes)
-    assert list(b.var_names) == genes and np.array_equal(b.X.toarray(), x.toarray())
-    with pytest.raises(ValueError, match="vocabulary pack"):
-        singlet.read_s1(tmp_path / "p.s1")
+    assert p.stat().st_size < inline.stat().st_size  # names not stored
+    meta = S2Reader(str(p)).members["counts"].meta
+    assert meta == {"modality": "counts", "names": {"rows": {"pack": RAT_EXON, "member": "genes"}}}
+    for b in (singlet.read_s1(p), singlet.load(str(p))):
+        assert list(b.var_names) == genes and list(b.obs_names) == cells
+        assert np.array_equal(b.X.toarray(), x.toarray())
+    assert S2Reader(str(p)).members["counts"].digest == S2Reader(str(inline)).members["counts"].digest
+
+
+def test_gene_pack_exon_level_round_trip(tmp_path):
+    """Gene ids = the pack's rows: names.rows.member is the pack's member ("exon")."""
+    pk = _shipped_pack(RAT_EXON)
+    rows = pk.names()
+    assert len(rows) == 243603
+    x, _g, cells = random_counts(6, len(rows), 0.0005, seed=8)
+    p = singlet.write_s1(x, tmp_path / "e.s1", genes=rows, barcodes=cells, gene_pack=RAT_EXON)
+    meta = S2Reader(str(p)).members["counts"].meta
+    assert meta["names"] == {"rows": {"pack": RAT_EXON, "member": "exon"}}
+    b = singlet.read_s1(p)
+    assert list(b.var_names) == rows and np.array_equal(b.X.toarray(), x.toarray())
+
+
+def test_gene_pack_rejects_ids_the_pack_does_not_hold(tmp_path):
+    """A reference replaces the ids, so ids that are not the pack's gene table or rows are refused, not dropped."""
+    pk = _shipped_pack(RAT_EXON)
+    genes = [g for g, _n in pk.gene_table()]
+    x, own, cells = random_counts(10, len(genes), 0.002, seed=9)
+    swapped = list(genes)
+    swapped[0], swapped[1] = swapped[1], swapped[0]
+    for bad, msg in (
+        (own, "neither"),  # ids of another vocabulary
+        (swapped, "gene id 1 is"),  # the pack's genes in another order
+        (genes[:-1] + ["ENSRNOG99999999999"], "gene id 30562 is"),
+    ):
+        with pytest.raises(ValueError, match=msg):
+            singlet.write_s1(x, tmp_path / "bad.s1", genes=bad, barcodes=cells, gene_pack=RAT_EXON)
+        assert not (tmp_path / "bad.s1").exists()
+    with pytest.raises(ValueError, match="neither"):  # a matrix of a few genes cannot refer to a pack
+        singlet.write_s1(x[:, :3], tmp_path / "bad.s1", genes=genes[:3], barcodes=cells, gene_pack=RAT_EXON)
+    from singlet.s1.packs import default_store
+
+    wl = next(e["id"] for e in default_store().entries() if e["kind"] == "whitelist")
+    with pytest.raises(ValueError, match="not a vocabulary pack"):  # a barcode whitelist
+        singlet.write_s1(x, tmp_path / "bad.s1", genes=genes, barcodes=cells, gene_pack=wl)
+    for pid in ("0123", "zz" * 8, b"\x01" * 4):
+        with pytest.raises(ValueError, match="16 to 32 hex"):
+            singlet.write_s1(x, tmp_path / "bad.s1", genes=genes, barcodes=cells, gene_pack=pid)
+
+
+def test_gene_pack_not_installed(tmp_path, monkeypatch):
+    """write_s1 refuses a pack it can neither find nor download; read_s1 names the missing pack and takes genes=."""
+    from singlet.s1 import sample as sample_mod
+    from singlet.s1.packs import PackStore
+
+    _no_download(monkeypatch, tmp_path)
+    x, genes, cells = random_counts(40, 30, 0.3, seed=10)
+    with pytest.raises(ValueError, match="not installed and could not be downloaded"):
+        singlet.write_s1(x, tmp_path / "p.s1", genes=genes, barcodes=cells, gene_pack="0123456789abcdef")
+    assert not (tmp_path / "p.s1").exists()
+
+    pk = _shipped_pack(RAT_EXON)
+    table = [g for g, _n in pk.gene_table()]
+    x, _g, cells = random_counts(8, len(table), 0.002, seed=11)
+    p = singlet.write_s1(x, tmp_path / "g.s1", genes=table, barcodes=cells, gene_pack=RAT_EXON)
+    empty = PackStore(dirs=[str(tmp_path / "no-packs")])
+    monkeypatch.setattr(sample_mod, "default_store", lambda: empty)
+    with pytest.raises(ValueError, match="vocabulary pack %s, which is not installed" % RAT_EXON[:16]):
+        singlet.read_s1(p)
+    b = singlet.read_s1(p, genes=table)
+    assert list(b.var_names) == table and np.array_equal(b.X.toarray(), x.toarray())
+
+
+def test_read_reports_a_row_count_mismatch(tmp_path):
+    """An object whose pack reference has no names.rows (as write_s1 < 1.3.4 wrote gene-level matrices) is read as the
+    pack's exon rows, which do not fit; read_s1 says so instead of claiming the pack is missing."""
+    pk = _shipped_pack(RAT_EXON)
+    table = [g for g, _n in pk.gene_table()]
+    x, _g, cells = random_counts(5, len(table), 0.002, seed=12)
+    csc = W._canonical_csc(sp.csr_matrix(x), table, cells)
+    dg = canonical_digest(csc)
+    body = NativeCodec("auto").encode(
+        csc, EncodeOptions(row_names=("pack", pk.id[:8]), col_names="inline", digest=dg)
+    )
+    w = S2Writer("old")
+    w.add_matrix("counts", body, dg, {"modality": "counts"})
+    (tmp_path / "old.s1").write_bytes(w.build())
+    with pytest.raises(ValueError, match="243603 names, matrix 'counts' has 30562 rows") as e:
+        singlet.read_s1(tmp_path / "old.s1")
+    assert "not installed" not in str(e.value)
+    assert list(singlet.read_s1(tmp_path / "old.s1", genes=table).var_names) == table
 
 
 @pytest.mark.parametrize(

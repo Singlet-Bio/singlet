@@ -83,12 +83,58 @@ test_that("write_s1 rejects non-counts and unnamed matrices", {
     expect_error(write_s1(un, tempfile(fileext = ".s1")), "row names")
 })
 
-test_that("a gene pack reference needs genes = to read", {
-    m <- random_counts(30, 20, 0.3, seed = 3)
+# an exon vocabulary pack the Python package ships (mRatBN7.2: 243,603 exon rows, 30,562 genes)
+rat_exon <- "94e3bff7460f96e92311ff009efae582"
+
+# A local data host (SINGLET_DATA_BASE) serving the rat pack from the Python package in this checkout, and an empty cache, so
+# write_s1(gene_pack =) fetches it as it would from data.singlet.bio. Returns the pack's gene ids.
+local_pack_host <- function(env = parent.frame()) {
+    skip_if_not_installed("withr")
+    src <- test_path("..", "..", "..", "python", "singlet", "s1", "packs")
+    pack <- file.path(src, paste0(rat_exon, ".pack"))
+    if (!file.exists(pack)) skip("the Python package's packs are not in this checkout")
+    host <- withr::local_tempdir(.local_envir = env)
+    ref <- file.path(host, "s1", "ref")
+    dir.create(ref, recursive = TRUE)
+    file.copy(c(pack, file.path(src, "index.json")), ref)
+    withr::local_envvar(SINGLET_DATA_BASE = host, SINGLET_CACHE_DIR = withr::local_tempdir(.local_envir = env), .local_envir = env)
+    singlet:::.s1_clear_memory()
+    withr::defer(singlet:::.s1_clear_memory(), envir = env)
+    singlet:::.s1_vocab(list(transport = singlet:::.s1_transport(), root = singlet:::.s1_root()), rat_exon)$gene_id
+}
+
+has_meta <- function(path, json) length(grepRaw(json, readBin(path, "raw", file.size(path)), fixed = TRUE)) == 1L
+
+test_that("a gene-level matrix refers to the pack's gene table (names.rows.member \"genes\")", {
+    genes <- local_pack_host()
+    expect_length(genes, 30562L)
+    m <- random_counts(length(genes), 12, 0.002, seed = 3)
+    rownames(m) <- genes
     f <- tempfile(fileext = ".s1")
-    write_s1(m, f, gene_pack = "0123456789abcdef")
-    expect_error(read_s1(f), "vocabulary pack")
-    expect_identical(as.matrix(read_s1(f, genes = rownames(m))), as.matrix(m))
+    write_s1(m, f, gene_pack = substr(rat_exon, 1, 16))
+    expect_true(has_meta(f, sprintf('{"modality":"counts","names":{"rows":{"member":"genes","pack":"%s"}}}', rat_exon)))
+    g <- tempfile(fileext = ".s1")
+    write_s1(m, g)
+    expect_lt(file.size(f), file.size(g))  # names not stored
+    expect_true(has_meta(g, '{"modality":"counts"}'))
+    expect_error(read_s1(f), "vocabulary pack")  # R's read_s1 does not resolve packs
+    expect_identical(as.matrix(read_s1(f, genes = genes)), as.matrix(m))
+})
+
+test_that("gene ids the pack does not hold are refused, not dropped", {
+    genes <- local_pack_host()
+    m <- random_counts(length(genes), 5, 0.002, seed = 4)
+    f <- tempfile(fileext = ".s1")
+    expect_error(write_s1(m, f, gene_pack = rat_exon), "neither")  # ids of another vocabulary
+    swapped <- genes
+    swapped[1:2] <- genes[2:1]
+    rownames(m) <- swapped
+    expect_error(write_s1(m, f, gene_pack = rat_exon), "gene id 1 is")
+    exons <- random_counts(243603, 2, 0.001, seed = 5)  # as many ids as the pack has exon rows, but not its rows
+    expect_error(write_s1(exons, f, gene_pack = rat_exon), "not the exon rows of pack")
+    expect_error(write_s1(m, f, gene_pack = "0123456789abcdef"), "could not be downloaded")
+    expect_error(write_s1(m, f, gene_pack = "0123"), "16 to 32 hex")
+    expect_false(file.exists(f))
 })
 
 test_that("SingleCellExperiment in, SingleCellExperiment out, and load() reads the file", {
