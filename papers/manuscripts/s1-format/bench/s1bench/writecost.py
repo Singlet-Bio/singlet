@@ -1,4 +1,4 @@
-"""Stage `writecost` (review round 3): seconds and peak memory to write each format from a matrix in memory, on the timing
+"""Stage `writecost`: seconds and peak memory to write each format from a matrix in memory, on the timing
 host. Each (matrix, format) runs in a fresh process pinned to `threads.headline` cores: the canonical matrix is loaded
 first (untimed; its resident memory is recorded as the baseline), the format's library is primed on a tiny matrix, then
 one write to the node's disk is timed and the file deleted. Peak memory is the process's maximum resident set (children
