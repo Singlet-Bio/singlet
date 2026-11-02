@@ -9,14 +9,22 @@
   \draw[#7!70!black, line width=1.2pt] (axis cs:#3,{#1-0.32}) -- (axis cs:#3,{#1+0.32});}
 \begin{figure*}[tbp]
 \centering
-\begin{adjustbox}{max width=\linewidth}
+\pgfmathsetlengthmacro{\figT}{max(\linewidth,18.1cm)}   % design width: panel a needs 18.1 cm; scaled to fit below
 \pgfmathsetlengthmacro{\figY}{2.15cm}             % y tick labels of b and e
-\pgfmathsetlengthmacro{\figW}{0.225\linewidth}    % width of b, c, e and f
-\pgfmathsetlengthmacro{\figGap}{0.75cm}           % between b and c, e and f (shared rows)
-\pgfmathsetlengthmacro{\figD}{0.27\linewidth}     % side of the square panel d
+\pgfmathsetlengthmacro{\figGap}{0.9cm}            % between b and c, e and f (shared rows)
+\pgfmathsetlengthmacro{\figD}{4.9cm}              % side of the square panel d (as placed by report_r3.FIG1D_SIDE)
 \pgfmathsetlengthmacro{\figDG}{1.5cm}             % before d and g: their y labels
-\pgfmathsetlengthmacro{\figH}{3.0cm}              % height of e, f and g
-\pgfmathsetlengthmacro{\figV}{1.75cm}             % between rows: x labels below, titles above
+\pgfmathsetlengthmacro{\figW}{(\figT-\figY-\figGap-\figDG-\figD-0.25cm)/2}   % width of b, c, e and f: rows fill \figT
+\ifdefined\IEEEtransversionmajor                  % TCBB: the figure and caption fill a page
+  \pgfmathsetlengthmacro{\figH}{4.2cm}            % height of e, f and g
+  \pgfmathsetlengthmacro{\figV}{2.0cm}            % between rows: x labels below, titles above
+  \pgfmathsetlengthmacro{\figA}{5.6cm}            % top of the figure to the top of b and c
+\else
+  \pgfmathsetlengthmacro{\figH}{3.0cm}
+  \pgfmathsetlengthmacro{\figV}{1.75cm}
+  \pgfmathsetlengthmacro{\figA}{5.2cm}
+\fi
+\begin{adjustbox}{max width=\linewidth}%
 \begin{tikzpicture}[
   sbox/.style={draw=gen!80!black, fill=gen!12, rounded corners=1.5pt, inner sep=3.5pt, align=center,
     font=\sffamily\scriptsize, text=ink2},
@@ -31,11 +39,11 @@
 % Left: the same six counts of one cell, stored the standard way (gene index and count as 32-bit numbers, then a byte
 % compressor) and the .s1 way (genes numbered most-detected first, steps between them, one symbol stream, a model).
 % Right: reading a minibatch, one chunk per round trip against the index first and every block at once.
-\node[anchor=north west, font=\sffamily\small\bfseries, text=ink2, inner sep=0pt] at (0,0) {a\quad What \sone{} does differently};
-\node[font=\sffamily\scriptsize\bfseries, text=ink2] at (6.1,-0.6) {1. Describe the counts, not just their bytes};
-\node[font=\sffamily\scriptsize\bfseries, text=ink2, align=center] at (15.3,-0.6) {2. Fetch a minibatch's cells in one round of requests};
-\draw[line width=0.4pt, gen!40] (12.25,-0.4) -- (12.25,-4.15);
-\node[rowlbl, text=gen!80!black] at (0,-1.55) {Standard};
+\node[anchor=north west, font=\sffamily\small\bfseries, text=black, inner sep=0pt] at (0,0) {a\quad What \sone{} does differently};
+\node[font=\sffamily\scriptsize\bfseries, text=black] at (5.6,-0.6) {1. Describe the counts, not just their bytes};
+\node[font=\sffamily\scriptsize\bfseries, text=black, align=center] at (15.0,-0.6) {2. Fetch a minibatch's cells in one round of requests};
+\draw[line width=0.4pt, gen!40] (11.65,-0.4) -- (11.65,-4.15);
+\node[rowlbl, text=gen!80!black] at (0,-1.55) {CSC};
 \node[rowlbl, text=sone!85!black] at (0,-3.15) {\sone};
 \tikzset{
   cel/.style={draw=#1!85!black, fill=#1!12, minimum width=0.27cm, minimum height=0.34cm, inner sep=0pt,
@@ -44,8 +52,10 @@
     font=\sffamily\tiny, text=ink2},
   alb/.style={font=\sffamily\tiny, text=gen!90!black, anchor=east, inner sep=1pt},
   stg/.style={font=\sffamily\tiny, text=ink2, align=center, anchor=north},
+  hl/.style={anchor=west, font=\sffamily\scriptsize, text=ink2, align=left},
 }
-% --- storing, standard: each count as a 32-bit gene index and a 32-bit count, then a byte compressor ---
+\begin{scope}[xshift=-0.5cm]
+% --- storing, CSC: each count as a 32-bit gene index and a 32-bit count, then a byte compressor ---
 \node[alb] at (2.25,-1.33) {gene};
 \node[alb] at (2.25,-1.77) {count};
 \foreach \g [count=\i from 0] in {41,103,220,778,912,1554} \node[wcel] at ({2.54+0.48*\i},-1.33) {\g};
@@ -54,7 +64,7 @@
 \draw[arr] (5.3,-1.55) -- (8.95,-1.55);
 \node[sbox, anchor=west, minimum width=1.55cm] (gz) at (9.0,-1.55) {gzip, zstd\\[-1pt]{\tiny compress bytes}};
 \draw[arr] (gz.east) -- (10.85,-1.55);
-\node[anchor=west, font=\sffamily\scriptsize, text=ink2, align=left] at (10.9,-1.55) {\textbf{\nm{size-h5ad_gzip}} bits\\[-1pt]per count{\tiny $^\ast$}};
+\node[hl] at (10.9,-1.55) {\textbf{\nm{size-h5ad_gzip}}{\tiny $^\ast$}\\[-1pt]bits/count};
 % --- storing, .s1: genes numbered by how often they are detected, steps between them, one symbol stream, a model ---
 \node[alb] at (2.25,-2.93) {gene no.};
 \node[alb] at (2.25,-3.37) {count};
@@ -71,29 +81,30 @@
 \draw[arr] (8.82,-3.15) -- (8.97,-3.15);
 \node[obox, anchor=west, minimum width=1.55cm] (md) at (9.0,-3.15) {short codes\\[-1pt]{\tiny from a model of}\\[-2pt]{\tiny the counts}};
 \draw[arr] (md.east) -- (10.85,-3.15);
-\node[anchor=west, font=\sffamily\scriptsize, text=ink2, align=left] at (10.9,-3.15) {\textbf{\nm{size-s1}} bits\\[-1pt]per count};
-% --- reading, standard: one round trip after another ---
-\def\rtA{0.55}\def\dcA{0.32}
+\node[hl] at (10.9,-3.15) {\textbf{\nm{size-s1}}\\[-1pt]bits/count};
+\end{scope}
+% --- reading, CSC: one round trip after another (fetch arrow, then decode box) ---
+\def\pX{11.95}\def\rtA{0.72}\def\dcA{0.36}\def\cyc{1.16}
 \foreach \k in {0,1,2} {
-  \pgfmathsetmacro{\xs}{12.5+\k*(\rtA+\dcA+0.05)}
+  \pgfmathsetmacro{\xs}{\pX+\k*\cyc}
   \draw[gen!80!black, line width=0.5pt, -{Stealth[length=3pt]}] (\xs,-1.55) -- ++(\rtA,0);
-  \fill[gen!55, rounded corners=0.8pt] ({\xs+\rtA},-1.39) rectangle ++(\dcA,-0.32);
+  \fill[gen!55, rounded corners=0.8pt] ({\xs+\rtA+0.02},-1.39) rectangle ++(\dcA,-0.32);
 }
-\node[note, anchor=west, align=left] at (15.35,-1.55) {one chunk at a time: fetch,\\wait a round trip, decode,\\repeat; or download the\\whole file first};
+\node[note, anchor=west, align=left] at ({\pX+3*\cyc+0.3},-1.55) {one chunk at a time: fetch,\\wait a round trip, decode,\\repeat; or download the\\whole file first};
 % --- reading, .s1: the index first, then every block of a minibatch at once, decoded on every core ---
-\fill[sone!85!black, rounded corners=0.8pt] (12.5,-2.82) rectangle ++(0.3,-0.66);
-\node[note, anchor=south] at (12.65,-2.78) {index};
+\fill[sone!85!black, rounded corners=0.8pt] (\pX,-2.82) rectangle ++(0.3,-0.66);
+\node[note, anchor=south] at ({\pX+0.15},-2.78) {index};
 \foreach \l in {0,1,2,3} {
-  \draw[sone!85!black, line width=0.5pt, -{Stealth[length=3pt]}] (12.88,{-2.9-0.165*\l}) -- ++(\rtA,0);
-  \fill[sone!60, rounded corners=0.6pt] ({12.88+\rtA},{-2.835-0.165*\l}) rectangle ++(0.24,-0.13);
+  \draw[sone!85!black, line width=0.5pt, -{Stealth[length=3pt]}] ({\pX+0.4},{-2.9-0.165*\l}) -- ++(\rtA,0);
+  \fill[sone!60, rounded corners=0.6pt] ({\pX+0.42+\rtA},{-2.835-0.165*\l}) rectangle ++(0.28,-0.13);
 }
-\node[note, anchor=west, align=left] at (15.35,-3.15) {read the index once, then\\fetch all of a minibatch's\\blocks at once and decode\\them on every core};
-\draw[gen!60, densely dotted, line width=0.4pt] (13.67,-2.7) -- (13.67,-3.62);
-\draw[gen!60, densely dotted, line width=0.4pt] (15.21,-1.15) -- (15.21,-3.62);
-\draw[-{Stealth[length=3pt]}, gen!70, line width=0.4pt] (12.5,-3.75) -- (15.25,-3.75) node[below left, note, text=gen, inner sep=1pt] {time};
+\node[note, anchor=west, align=left] at ({\pX+3*\cyc+0.3},-3.15) {read the index once, then\\fetch all of a minibatch's\\blocks at once and decode\\them on every core};
+\draw[gen!60, densely dotted, line width=0.4pt] ({\pX+0.42+\rtA+0.33},-2.7) -- ({\pX+0.42+\rtA+0.33},-3.62);
+\draw[gen!60, densely dotted, line width=0.4pt] ({\pX+3*\cyc},-1.15) -- ({\pX+3*\cyc},-3.62);
+\draw[-{Stealth[length=3pt]}, gen!70, line width=0.4pt] (\pX,-3.75) -- ({\pX+3*\cyc+0.05},-3.75) node[below left, note, text=gen, inner sep=1pt] {time};
 \node[note, anchor=north west, text=gen!90!black] at (0,-4.05) {$^\ast$\,gzip-compressed AnnData, median over \nm{nMatrices} matrices};
 % ======================= (b) size: compression ratio of every matrix =======================
-\begin{axis}[name=pb, at={(\figY,-5.2cm)}, anchor=north west, scale only axis, width=\figW, height=\figD,
+\begin{axis}[name=pb, at={(\figY,-\figA)}, anchor=north west, scale only axis, width=\figW, height=\figD,
   title={b\quad Smallest files}, title style={xshift={1pt-\figY}},
   xmin=0, xmax=17, xtick={0,4,...,16}, xlabel={compression against 32-bit CSC ($\times$)},
   ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig1a_size.tsv}}{label}, y dir=reverse,
@@ -178,11 +189,11 @@
 \addplot[c-h5ad_gzip, thick, mark=*, mark size=1.0pt, discard if not={format}{h5ad_gzip}] table[x=threads, y=speedup] {\gen{fig1_scaling.tsv}};
 \addlegendentry{h5ad gzip}
 \end{axis}
-\end{tikzpicture}
+\end{tikzpicture}%
 \end{adjustbox}
 \caption{\textbf{\sone{} files are the smallest and, on four cores, the fastest to read.}
-\textbf{(a)} The two ideas behind \sone. Left: six counts of one cell, stored as standard formats store them and as
-\sone{} does, with genes numbered from most to least often detected, the steps between them and the counts merged into one
+\textbf{(a)} The two ideas behind \sone. Left: six counts of one cell, stored as compressed sparse column (CSC) arrays
+with a byte compressor, as in gzip-compressed AnnData, and as \sone{} does, with genes numbered from most to least often detected, the steps between them and the counts merged into one
 stream of small symbols, and short codes from a model of the counts. Right: reading a minibatch. Fig.~\ref{fig:how} shows
 the layout.
 \textbf{(b)} Compression of each format's file (counts, gene identifiers and barcodes) against uncompressed CSC arrays with
