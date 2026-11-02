@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+macosko_retina	rna	droplet_other	37879696	14	5.654914	5.354445	5.401566	5.260289	4.764562	5.239939	5.381934	10000.0	5.420811

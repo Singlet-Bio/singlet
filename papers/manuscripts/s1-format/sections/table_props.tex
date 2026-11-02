@@ -1,0 +1,26 @@
+% Main-text table: what a stored count matrix offers besides size and read speed.
+\begin{table*}[tbp]
+\centering
+\caption{Properties beyond size and speed, as each format is specified}
+\label{tab:props}
+\footnotesize
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{2.7cm} >{\raggedright}X >{\raggedright}X c >{\raggedright}p{3.3cm} c@{}}
+\toprule
+Format & Reads in part over HTTP & Integrity & Content hash & Several matrices + cell table & Integers \tabularnewline
+\midrule
+\textbf{\sone} & yes: block index in the prefix, one range per run of cells & object named by its SHA-256 prefix; header CRC-32; content hash per member & yes & yes, plus recipes and shared packs & yes \tabularnewline
+h5ad, 10x HDF5, loom & with chunked datasets and an HDF5 range driver & Fletcher-32 per chunk (opt.) & no & yes (h5ad, loom) & no \tabularnewline
+AnnData Zarr & yes: one object per chunk & CRC32C codec (opt., Zarr v3) & no & yes & no \tabularnewline
+TileDB-SOMA & yes, through the TileDB library & checksum filters (opt.) & no & yes & no \tabularnewline
+Parquet COO & yes: row groups and pages & page CRC-32 (opt.) & no & no & no \tabularnewline
+BPCells & no (local directory) & no & no & no & no \tabularnewline
+rds, MTX.gz & no (whole file) & gzip/xz stream checksums & no & no (rds: one object) & no \tabularnewline
+\bottomrule
+\end{tabularx}
+\par\vspace{3pt}
+\begin{minipage}{\linewidth}\scriptsize
+Reads in part over HTTP: some cells by range request from plain storage, with no server software. Integrity: checks a
+reader can apply to the bytes. Content hash: a hash of the decoded matrix (its values, gene identifiers and barcodes) that does not depend on how it is encoded, so two files can be checked to hold the same data without comparing them byte for byte. Integers: the
+format or its writer rejects matrices that are not non-negative integer counts. opt.: an option writers rarely enable.
+\end{minipage}
+\end{table*}

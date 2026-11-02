@@ -1,0 +1,37 @@
+% Related work (main text): prior work only; results of this paper are in results.tex.
+\section{Related work}
+\label{sec:related}
+
+\para{Storing count matrices}On disk, almost every single-cell toolkit stores the compressed sparse column (CSC) layout of
+its in-memory matrices~\cite{bates2024matrix,virtanen2020scipy}: 32-bit row indices and 32- or 64-bit values, 64 to 96
+bits per non-zero, however small the counts are. Matrix Market~\cite{boisvert1997matrix} writes them as text; the 10x HDF5
+file~\cite{zheng2017massively,tenx_h5}, loom~\cite{loompy} and AnnData~\cite{virshup2024anndata} (in HDF5~\cite{hdf5} or
+Zarr~\cite{zarr}) store chunked arrays, compressed by byte-level filters such as gzip, LZF, Blosc or
+zstd~\cite{deutsch1996deflate,collet2021zstd}. Formats built for scale add structure: TileDB-SOMA~\cite{papadopoulos2016tiledb,tiledbsoma}
+serves the CELLxGENE Census~\cite{czi2025cellxgene}, BPCells~\cite{parks2025bpcells} bit-packs deltas and values for
+streaming reads, and Parquet~\cite{parquet} distributes the largest training corpora~\cite{tahoe100m_hf}. Our earlier VCSC
+and IVCSC layouts store each distinct value of a column once and delta-encode and byte-pack its row indices, shrinking
+single-cell matrices several-fold below CSC in memory~\cite{ruiter2024vcsc}. None of these uses an entropy coder with a
+model of the counts.
+
+\para{Compressing integers}Inverted indexes face the same problem as CSC row indices: sorted integer lists with small gaps.
+Byte- and bit-aligned codes~\cite{lemire2018stream,lemire2015decoding} decode billions of integers per second because they
+ignore the distribution of the values; entropy coders spend close to $-\log_2 p$ bits per symbol~\cite{cover2006elements}
+at a higher cost per symbol. Asymmetric numeral systems~\cite{duda2013asymmetric} with interleaved states decode several
+symbols at once on SIMD units~\cite{giesen2014interleaved}, and ANS with contexts closes much of the gap between fast and
+small codes for inverted indexes~\cite{moffat2017ans,moffat2020large,pibiri2021techniques}, the closest precedent for
+\sone.
+
+\para{Models of genomic data}CRAM~3.1 replaced BAM's gzip blocks with per-field models and 32-way interleaved
+rANS~\cite{bonfield2022cram}; benchmarks of read compressors found that how each field is modelled matters more than the
+back-end coder~\cite{numanagic2016comparison,hernaez2019genomic}, and genotype matrices have compressors of their
+own~\cite{danek2018gtc,lan2021genozip}. For counts, UMI data are close to Poisson samples of a cell's molecules given its
+depth~\cite{townes2019feature,kim2020demystifying}, with a negative binomial for biological
+variation~\cite{svensson2020droplet,hafemeister2019normalization} and heavy-tailed expression across
+genes~\cite{furusawa2003zipf}. These models say what a coder can exploit, and which bits no lossless code can remove.
+
+\para{Feeding models}Training draws random minibatches of cells many times over. scDataset fetches blocks of contiguous
+cells and shuffles them in a buffer~\cite{dascenzo2025scdataset}, the Census provides a loader over
+TileDB-SOMA~\cite{tiledbsomaml}, and cloud-native formats such as Zarr cut round trips, each of which waits tens of
+milliseconds, with independently addressable chunks~\cite{abernathey2021cloud,durner2023exploiting}. These loaders
+optimise access over existing encodings; \sone{} changes the encoding.

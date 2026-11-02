@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+abc_merfish_zhuang1	rna	spatial_imaging	XL	transcripts	1122	4167870	437227228	0.093498	266.246848	203.0	94.0	0.573941	489	2.537999

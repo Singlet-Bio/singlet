@@ -1,6 +1,7 @@
 # Experiment plan: the .s1 manuscript benchmark
 
-This is the work order for the agent that runs the benchmark on a cluster. Nothing here has been downloaded or run.
+This is the work order for the agent that runs the benchmark on a cluster. It has been run (see README.md for the
+status and where the run departed from this plan; the manuscript's methods describe what was actually done).
 Every number in the manuscript must come out of this pipeline; the manuscript only reads
 `generated/numbers.tex` and the `generated/*.tsv` tables, and both are written only by `python -m s1bench report`.
 

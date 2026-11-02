@@ -1,113 +1,214 @@
-% Figure 2: how .s1 stores a count matrix, from the dataset down to the bit stream. Schematic, no data values.
-\begin{figure*}[p]
+% Figure 2: how .s1 stores single-cell counts, as four panels joined by zoom wedges, lettered as sections/format.tex
+% cites them: (a) a dataset, (b) one sample file (header, member table, shared packs), (c) one count-matrix member
+% (prefix, chunks, range requests), (d) one chunk. Plain words stand in for spec terms: "table of contents" is the
+% member table, "block" a chunk, "code tables" the entropy tables, "gene order" the row keys, "symbol" the gap symbol
+% (sigma, amber: the residual rho), "coders" the rANS lanes. Sizes, the prefix, the request pattern, the 12 x 40
+% contexts (ctx_kind 0) and the chunk byte order follow sections/supplement_spec.tex. Genes, counts and ranks in (d)
+% are a worked example of those rules, not data. Request labels in (c) follow the reference client
+% (python/singlet/s1/client.py: the first request carries the prefix, then one request per run of chunks).
+\begin{figure*}[tbp]
 \centering
+% panel title with a hanging indent after the panel letter
+\def\ptitle#1#2#3#4{\node[ptit, text width=#3] at (#1) {\hyphenpenalty=10000\exhyphenpenalty=10000\hangindent=0.36cm\hangafter=1\makebox[0.36cm][l]{\small #2}#4};}
+% station title in panel d
+\def\stitle#1#2#3#4{\node[stit, text width=#2] at (#1) {\hyphenpenalty=10000\exhyphenpenalty=10000\hangindent=0.28cm\hangafter=1\makebox[0.28cm][l]{\bfseries #3}#4};}
+% zoom wedge from a parent element's corners (#1, #2) to a child panel's corners (#3, #4)
+\def\zoomwedge#1#2#3#4{\begin{scope}[on background layer]\fill[sone!5] (#1)--(#3)--(#4)--(#2)--cycle;\draw[wl] (#1)--(#3) (#2)--(#4);\end{scope}}
+% one row of the table of contents in (b): y, style, name, start, length
+\def\tocrow#1#2#3#4#5{%
+  \node[cell,#2,minimum width=1.95cm,anchor=north west] at (6.75,#1) {#3};
+  \node[cell,#2,minimum width=0.80cm,anchor=north west,align=center] at (8.70,#1) {#4};
+  \node[cell,#2,minimum width=0.80cm,anchor=north west,align=center] at (9.50,#1) {#5};}
+% legend chips for the note in (d): blue symbol, amber symbol
+\def\chipkey#1#2{{\setlength{\fboxsep}{0pt}\fcolorbox{#1}{#2}{\rule{0pt}{5.5pt}\hspace{8pt}}}}
 \begin{tikzpicture}[
+  x=1cm, y=1cm,
   font=\sffamily\scriptsize,
-  box/.style={draw=#1!80!black, fill=#1!12, rounded corners=1.5pt, align=center, inner sep=3pt, minimum height=0.9cm},
-  box/.default=sone,
-  seg/.style={draw=white, line width=0.6pt, fill=#1, minimum height=0.75cm, inner sep=1pt, align=center, font=\sffamily\tiny},
-  lbl/.style={font=\sffamily\small\bfseries, anchor=west},
-  arr/.style={-{Stealth[length=4pt]}, thick, ink2},
-  note/.style={font=\sffamily\tiny, text=ink2, align=left},
+  >={Stealth[length=3pt,width=2.4pt]},
+  st/.style={draw=sone!80!black, fill=sone!14, line width=0.4pt},
+  hot/.style={draw=sone!80!black, fill=sone!75, text=white, line width=0.4pt},
+  idle/.style={draw=gray!55, fill=gray!15, line width=0.4pt},
+  ghost/.style={draw=gray!60, dashed, fill=white, text=ink2, line width=0.4pt},
+  amb/.style={draw=dec!80!black, fill=dec!30, line width=0.4pt},
+  seg/.style={rectangle, inner sep=3pt, outer sep=0pt, align=center, anchor=south west},
+  box/.style={rectangle, inner sep=4pt, outer sep=0pt, align=center, rounded corners=1pt},
+  cell/.style={rectangle, inner sep=3pt, outer sep=0pt, align=left, minimum height=0.36cm, text depth=0.5pt},
+  frame/.style={draw=gray!35, rounded corners=2pt, line width=0.5pt},
+  ptit/.style={font=\sffamily\scriptsize\bfseries, anchor=north west, inner sep=0pt, align=left},
+  stit/.style={font=\sffamily\scriptsize, anchor=north west, inner sep=0pt, align=left},
+  note/.style={text=ink2, inner sep=0pt, align=left},
+  hd/.style={font=\sffamily\tiny, text=ink2, inner sep=0pt},
+  wl/.style={draw=gray!55, line width=0.4pt},
+  arr/.style={->, ink2, line width=0.45pt},
+  chip/.style={rectangle, inner sep=0pt, outer sep=0pt, minimum height=0.27cm, minimum width=0.36cm, line width=0.4pt},
 ]
 
-% ================= (a) study level =================
-\node[lbl] at (0,0) {a\quad A dataset is a manifest, a few sample objects and shared packs};
-\node[box, minimum width=2.6cm] (man) at (1.6,-1.1) {\textbf{dataset manifest}\\JSON, a few KB\\offsets of every member};
-\node[box, minimum width=2.1cm] (s1) at (5.1,-0.6) {sample 1\textbf{.s1}};
-\node[box, minimum width=2.1cm] (s2) at (5.1,-1.6) {sample 2\textbf{.s1}};
-\node[font=\sffamily\small] at (6.55,-1.1) {$\cdots$};
-\draw[arr] (man.east) -- (s1.west);
-\draw[arr] (man.east) -- (s2.west);
-\node[box=gen, minimum width=3.1cm, dashed] (pk1) at (9.6,-0.6) {\textbf{gene vocabulary pack}\\one per annotation};
-\node[box=gen, minimum width=3.1cm, dashed] (pk2) at (9.6,-1.6) {\textbf{barcode whitelist pack}\\one per chemistry};
-\draw[arr, dashed, gen] (s1.east) -- (pk1.west);
-\draw[arr, dashed, gen] (s2.east) -- (pk2.west);
-\node[note, anchor=west] at (11.3,-1.1) {shared by every sample:\\downloaded once, cached};
-\node[note] at (5.1,-2.3) {immutable, named by SHA-256 of the content};
+% =============================================================== (a) a dataset
+\ptitle{0,0}{a}{4.1cm}{A dataset}
+\node[box, st, anchor=north west, minimum width=1.75cm, minimum height=1.84cm] (man) at (0,-0.62)
+  {\textbf{manifest}\\[2pt]lists every\\sample file};
+\node[box, hot, anchor=north west, minimum width=1.6cm, minimum height=0.36cm] (s1) at (2.2,-0.62) {sample 1\textbf{.s1}};
+\node[box, st,  anchor=north west, minimum width=1.6cm, minimum height=0.36cm] (s2) at (2.2,-1.18) {sample 2\textbf{.s1}};
+\node at (3.0,-1.83) {$\vdots$};
+\node[box, st,  anchor=north west, minimum width=1.6cm, minimum height=0.36cm] (sN) at (2.2,-2.04) {sample \textit{N}\textbf{.s1}};
+\foreach \s in {s1,s2,sN} \draw[arr] (man.east) -- (\s.west);
+\node[note, anchor=north west, text width=3.75cm] at (0,-2.72)
+  {Each file is named by a hash of its bytes, so a link always means the same data.};
 
-% ================= (b) sample object =================
-\node[lbl] at (0,-3.0) {b\quad A sample object stores only what cannot be recomputed};
-\begin{scope}[yshift=-3.95cm]
-\node[seg=ink2!55, minimum width=1.2cm, anchor=west] (h) at (0,0) {header +\\member table};
-\node[seg=dl!55, minimum width=2.5cm, anchor=west] (c) at (h.east) {\textbf{cells table}\\barcode index,\\cell metadata};
-\node[seg=sone!55, minimum width=4.2cm, anchor=west] (ex) at (c.east) {\textbf{counts} (pz2)};
-\node[seg=sone!35, minimum width=3.0cm, anchor=west] (in) at (ex.east) {further modalities (pz2)};
-\node[seg=white, draw=gen, dashed, minimum width=3.6cm, anchor=west, text=ink2] (rc) at (in.east) {\textbf{recipes} for derived tables\\(e.g.\ QC metrics): \textit{0 bytes}};
-\node[note, anchor=north west, text width=16cm] at (0,-0.5) {Never stored: gene names and barcodes (packs), row permutation, column pointers and sums (derived from the matrix), every member a recipe regenerates byte for byte; the writer verifies each recipe on the sample before it drops the original.};
+% =============================================================== (b) one sample file
+\draw[frame] (4.5,0.02) rectangle (16.4,-3.4);
+\ptitle{4.62,-0.08}{b}{6cm}{One sample file}
+% the file as stored
+\node[seg, st,  minimum width=0.95cm, minimum height=0.62cm] (hdrB) at (4.65,-3.22) {header};
+\node[seg, st,  minimum width=1.30cm, minimum height=0.62cm] (tocB) at (hdrB.south east) {table of\\contents};
+\node[seg,      minimum width=0.40cm, minimum height=0.62cm, text=gray] (brkB) at (tocB.south east) {//};
+\node[seg, st,  minimum width=1.55cm, minimum height=0.62cm] (celB) at (brkB.south east) {cells\\table};
+\node[seg, hot, minimum width=1.80cm, minimum height=0.62cm] (cntB) at (celB.south east) {\textbf{exon counts}};
+\node[seg, st,  minimum width=1.80cm, minimum height=0.62cm] (intB) at (cntB.south east) {intron counts};
+\node[seg, ghost, minimum width=2.15cm, minimum height=0.62cm] (derB) at (intB.south east) {cell calls\\recipe, 0 bytes};
+% zoom: header and table of contents
+\node[box, st, anchor=north west, minimum width=1.85cm, minimum height=1.66cm] (hdrZ) at (4.65,-0.5)
+  {\textbf{header}\\[1pt]{\tiny 64 bytes}\\[2pt]file type\\sample ID\\file length};
+\node[cell, anchor=north west, minimum width=1.95cm, font=\sffamily\scriptsize\bfseries] at (6.75,-0.5) {table of contents};
+\node[hd, anchor=north] at (9.10,-0.6) {start};
+\node[hd, anchor=north] at (9.90,-0.6) {length};
+\tocrow{-0.83}{st}{cells}{\textit{o}\textsubscript{1}}{\textit{l}\textsubscript{1}}
+\tocrow{-1.19}{hot}{exon counts}{\textit{o}\textsubscript{2}}{\textit{l}\textsubscript{2}}
+\tocrow{-1.55}{st}{intron counts}{\textit{o}\textsubscript{3}}{\textit{l}\textsubscript{3}}
+\tocrow{-1.91}{ghost}{cell calls}{0}{0}
+\zoomwedge{hdrB.north west}{tocB.north east}{4.65,-2.24}{10.3,-2.24}
+% shared packs
+\node[note, anchor=north west, text width=3.8cm, text=black] at (12.3,-0.5)
+  {\textbf{shared packs}\\\textcolor{ink2}{stored once, downloaded once}};
+\node[box, ghost, anchor=north west, minimum width=1.8cm, minimum height=0.5cm, text height=1.6ex, text depth=0.45ex] (pkG) at (12.3,-1.3) {gene names};
+\node[box, ghost, anchor=north west, minimum width=1.9cm, minimum height=0.5cm, text height=1.6ex, text depth=0.45ex] (pkB) at (14.3,-1.3) {barcode lists};
+\draw[->, dashed, ink2, line width=0.4pt] ($(cntB.north east)+(-0.35,0)$) -- ($(pkG.south west)+(0.35,0)$);
+\draw[->, dashed, ink2, line width=0.4pt] ($(intB.north)+(0.3,0)$) -- ($(pkG.south)+(0.1,0)$);
+
+% =============================================================== (c) one count matrix
+\draw[frame] (0,-3.9) rectangle (16.4,-6.7);
+\ptitle{0.12,-4.0}{c}{12cm}{One count matrix: a small prefix, then blocks of cells}
+\node[seg, hot, minimum width=0.95cm, minimum height=0.72cm] (hdrC) at (0.15,-6.1) {header};
+\node[seg, hot, minimum width=2.30cm, minimum height=0.72cm] (idxC) at (hdrC.south east) {};
+\node[text=white, inner sep=0pt] at ($(idxC.north)+(0,-0.2)$) {block index};
+\foreach \i in {0,...,8} \draw[white, line width=0.3pt] ($(idxC.south west)+(0.25+0.21*\i,0.1)$) rectangle ++(0.15,0.15);
+\node[seg, hot, minimum width=1.30cm, minimum height=0.72cm] (tabC) at (idxC.south east) {code\\tables};
+\node[seg, hot, minimum width=1.20cm, minimum height=0.72cm] (ordC) at (tabC.south east) {gene\\order};
+\node[seg, st,  minimum width=0.85cm, minimum height=0.72cm] (b1) at (ordC.south east) {block\\1};
+\node[seg, hot, minimum width=0.85cm, minimum height=0.72cm] (b2) at (b1.south east) {block\\2};
+\node[seg, hot, minimum width=0.85cm, minimum height=0.72cm] (b3) at (b2.south east) {block\\3};
+\node[seg, st,  minimum width=0.55cm, minimum height=0.72cm] (bd1) at (b3.south east) {$\cdots$};
+\node[seg, hot, minimum width=0.85cm, minimum height=0.72cm] (bk) at (bd1.south east) {block\\\textit{k}};
+\node[seg, st,  minimum width=0.55cm, minimum height=0.72cm] (bd2) at (bk.south east) {$\cdots$};
+\node[seg, st,  minimum width=0.85cm, minimum height=0.72cm] (bK) at (bd2.south east) {block\\\textit{K}};
+\node[seg, idle, minimum width=1.30cm, minimum height=0.72cm] (nmC) at (bK.south east) {names};
+% the prefix
+\draw[decorate, decoration={brace, amplitude=3pt}, ink2, line width=0.4pt] ($(hdrC.north west)+(0.02,0.06)$) -- ($(ordC.north east)+(-0.02,0.06)$)
+  node[midway, above=5pt, note, align=center, text=black] {\textbf{prefix} (request 1): read once,\\enough to plan any read};
+% the wanted cells and one request per run of blocks
+\foreach \x in {7.20,7.33,7.47,7.62,7.80,7.95,8.10,8.32,9.55,9.80}
+  \draw[sone!85!black, line width=0.8pt] (\x,-5.33) -- (\x,-5.19);
+\draw[decorate, decoration={brace, amplitude=2.5pt}, ink2, line width=0.4pt] ($(b2.north west)+(0.02,0.3)$) -- ($(b3.north east)+(-0.02,0.3)$)
+  node[midway, above=4pt, inner sep=0pt] {request 2};
+\draw[decorate, decoration={brace, amplitude=2.5pt}, ink2, line width=0.4pt] ($(bk.north west)+(0.02,0.3)$) -- ($(bk.north east)+(-0.02,0.3)$)
+  node[midway, above=4pt, inner sep=0pt] {request 3};
+% index entries point at block starts
+\draw[->, sone!80!black, line width=0.35pt] (2.2,-6.1) .. controls (3.2,-6.45) and (6.2,-6.45) .. ($(b2.south west)+(0.04,0)$);
+\draw[->, sone!80!black, line width=0.35pt] (2.2,-6.1) .. controls (3.4,-6.6) and (7.0,-6.6) .. ($(b3.south west)+(0.04,0)$);
+% legend
+\draw[sone!85!black, line width=0.9pt] (13.46,-4.64) -- (13.46,-4.46) (13.56,-4.64) -- (13.56,-4.46);
+\node[anchor=west, inner sep=0pt] at (13.75,-4.55) {cells you want};
+\draw[hot] (13.4,-5.04) rectangle ++(0.22,0.22);
+\node[anchor=west, inner sep=0pt] at (13.75,-4.93) {fetched};
+\draw[st] (13.4,-5.44) rectangle ++(0.22,0.22);
+\node[anchor=west, inner sep=0pt] at (13.75,-5.33) {not fetched};
+\node[note, anchor=north west, text width=2.9cm] at (13.4,-5.7) {Blocks hold consecutive cells; each decodes alone.};
+
+% =============================================================== (d) inside one block
+\draw[frame] (0,-7.2) rectangle (16.4,-12.2);
+\ptitle{0.12,-7.3}{d}{16cm}{Inside one block: each cell becomes small numbers, then short codes}
+% --- station 1: one cell's counts
+\stitle{0.15,-7.72}{2.3cm}{1}{One cell's counts}
+\node[hd, anchor=east] at (1.3,-8.46) {gene};
+\node[hd] at (1.75,-8.46) {count};
+\foreach \g/\v [count=\i from 0] in {ACTB/1,CD3E/2,MALAT1/3,MS4A1/1,RPL13/1} {
+  \node[anchor=east, inner sep=0pt] at (1.3,{-8.74-0.34*\i}) {\g};
+  \node[chip, st] at (1.75,{-8.74-0.34*\i}) {\v};}
+\node[note, anchor=north west] at (0.15,-10.42) {zeros not stored};
+\draw[arr] (2.4,-9.42) -- (2.75,-9.42);
+% --- station 2: genes numbered by detection
+\stitle{2.9,-7.72}{3.6cm}{2}{Genes numbered, most often detected first}
+\node[hd, anchor=east] at (3.95,-8.46) {gene};
+\node[hd, anchor=west] at (4.05,-8.46) {cells detecting it};
+\node[hd] at (5.85,-8.46) {no.};
+\node[hd] at (6.3,-8.46) {count};
+\foreach \g/\w/\d/\v [count=\i from 0] in {MALAT1/1.45/0/3,ACTB/1.3/1/1,RPL13/1.15/2/1,CD3E/0.55/9/2,MS4A1/0.25/31/1} {
+  \node[anchor=east, inner sep=0pt] at (3.95,{-8.74-0.34*\i}) {\g};
+  \fill[gray!45] (4.05,{-8.80-0.34*\i}) rectangle ++(\w,0.12);
+  \node[font=\sffamily\scriptsize\bfseries, text=sone!80!black, inner sep=0pt] at (5.85,{-8.74-0.34*\i}) {\d};
+  \node[chip, st] at (6.3,{-8.74-0.34*\i}) {\v};}
+\node[note, anchor=north west, text width=3.6cm] at (2.9,-10.42) {one numbering for the whole matrix: the gene order in the prefix};
+\draw[arr] (6.6,-9.42) -- (6.95,-9.42);
+% --- station 3: steps and counts become symbols
+\stitle{7.1,-7.72}{3.0cm}{3}{Small steps and small counts}
+\node[hd] at (7.3,-8.46) {no.};
+\node[hd] at (7.8,-8.46) {step};
+\node[hd] at (8.33,-8.46) {count};
+\node[hd, anchor=west] at (8.72,-8.46) {symbols};
+\foreach \d/\s/\v/\two [count=\i from 0] in {0/0/3/1,1/0/1/0,2/0/1/0,9/6/2/1,31/21/1/0} {
+  \node[inner sep=0pt] at (7.3,{-8.74-0.34*\i}) {\d};
+  \node[inner sep=0pt] at (7.8,{-8.74-0.34*\i}) {\s};
+  \node[inner sep=0pt] at (8.33,{-8.74-0.34*\i}) {\v};
+  \node[chip, st, anchor=west] at (8.72,{-8.74-0.34*\i}) {};
+  \ifnum\two=1 \node[chip, amb, anchor=west] at (9.14,{-8.74-0.34*\i}) {};\fi}
+\node[note, anchor=north west, text width=3.0cm] at (7.1,-10.42)
+  {step = genes skipped\\[1pt]
+   \chipkey{sone!80!black}{sone!14}\ one per gene\\[1pt]
+   \chipkey{dec!80!black}{dec!30}\ one more if count $\neq$\,1};
+\draw[arr] (9.7,-9.42) -- (10.05,-9.42);
+% --- station 4: a code table chosen by context
+\stitle{10.2,-7.72}{3.0cm}{4}{Short codes for common symbols}
+\begin{scope}[shift={(11.2,-9.8)}]
+  \fill[sone!14] (0,0) rectangle (2.0,1.08);
+  \draw[white, line width=0.15pt, xstep=0.05, ystep=0.09] (0,0) grid (2.0,1.08);
+  \draw[sone!80!black, line width=0.4pt] (0,0) rectangle (2.0,1.08);
+  \draw[sone!80!black, line width=0.9pt] (5*0.05,2*0.09) rectangle ++(0.05,0.09);
 \end{scope}
-
-% ================= (c) pz2 member =================
-\node[lbl] at (0,-5.45) {c\quad A matrix member: a small prefix plans any read, chunks decode independently};
-\begin{scope}[yshift=-6.85cm]
-\node[seg=ink2!60, minimum width=1.2cm, anchor=west] (ph) at (0,0) {header\\256 B};
-\node[seg=ink2!45, minimum width=1.3cm, anchor=west] (pi) at (ph.east) {chunk index\\24 B / chunk};
-\node[seg=ink2!35, minimum width=1.3cm, anchor=west] (pt) at (pi.east) {rANS\\tables};
-\node[seg=ink2!25, minimum width=1.1cm, anchor=west] (pr) at (pt.east) {row\\keys};
-\node[seg=sone!45, minimum width=1.9cm, anchor=west] (k1) at (pr.east) {chunk 1};
-\node[seg=sone!70, minimum width=1.9cm, anchor=west, text=white] (k2) at (k1.east) {\textbf{chunk 2}};
-\node[seg=sone!70, minimum width=1.9cm, anchor=west, text=white] (k3) at (k2.east) {\textbf{chunk 3}};
-\node[seg=sone!45, minimum width=1.6cm, anchor=west] (k4) at (k3.east) {$\cdots$};
-\node[seg=sone!45, minimum width=1.6cm, anchor=west] (k5) at (k4.east) {chunk $K$};
-\draw[decorate, decoration={brace, amplitude=4pt}] (ph.north west) ++(0,0.05) -- ($(pr.north east)+(0,0.05)$) node[midway, above=4pt, note, align=center] {request 1: the prefix (a few KB)};
-\draw[decorate, decoration={brace, amplitude=4pt}] (k2.north west) ++(0,0.05) -- ($(k3.north east)+(0,0.05)$) node[midway, above=4pt, note, align=center] {request 2: only the chunks with the wanted cells};
-\node[note, anchor=north west] at (0,-0.5) {Each chunk holds at most 49{,}152 non-zeros of consecutive cells (the default) and is decoded on its own; $p$ threads decode $p$ chunks at once.};
-\end{scope}
-
-% ================= (d) codec =================
-\node[lbl] at (0,-8.3) {d\quad Inside a chunk: one cell's counts become a few small symbols, coded by static rANS in 32 lanes};
-\begin{scope}[yshift=-10.0cm]
-% step 1: a cell's column
-\node[note, anchor=south, align=center] at (0.55,0.95) {\textbf{1} a cell};
-\foreach \g/\v [count=\i from 0] in {CD3E/1,MALAT1/7,ACTB/3,LYZ/0,RPL13/2,MS4A1/1}{
-  \node[font=\sffamily\tiny, anchor=east] at (0.45,0.6-\i*0.27) {\g};
-  \ifnum\v=0 \node[draw=gen!60, minimum size=0.25cm, inner sep=0, font=\sffamily\tiny, text=gen] at (0.7,0.6-\i*0.27) {\v};
-  \else \node[draw=sone, fill=sone!25, minimum size=0.25cm, inner sep=0, font=\sffamily\tiny] at (0.7,0.6-\i*0.27) {\v};\fi}
-\draw[arr] (1.0,0) -- (1.6,0);
-% step 2: reordered
-\node[note, anchor=south, align=center] at (2.35,0.95) {\textbf{2} rows by frequency};
-\foreach \g/\v [count=\i from 0] in {MALAT1/7,ACTB/3,RPL13/2,CD3E/1,LYZ/0,MS4A1/1}{
-  \node[font=\sffamily\tiny, anchor=east] at (2.3,0.6-\i*0.27) {\i\ \g};
-  \ifnum\v=0 \node[draw=gen!60, minimum size=0.25cm, inner sep=0, font=\sffamily\tiny, text=gen] at (2.55,0.6-\i*0.27) {\v};
-  \else \node[draw=sone, fill=sone!25, minimum size=0.25cm, inner sep=0, font=\sffamily\tiny] at (2.55,0.6-\i*0.27) {\v};\fi}
-\draw[arr] (2.85,0) -- (3.45,0);
-% step 3: symbols
-\node[note, anchor=south, align=center] at (4.55,0.95) {\textbf{3} gap to previous row,\\flag ``count $>$ 1'', residual};
-\node[font=\sffamily\tiny, align=left, anchor=west] at (3.55,0.05) {
-\begin{tabular}{@{}l@{\ }l@{\ }l@{}}
-row 0 & gap 0, flag 1 & resid 6\\
-row 1 & gap 0, flag 1 & resid 2\\
-row 2 & gap 0, flag 1 & resid 1\\
-row 3 & gap 0, flag 0 & \\
-row 5 & gap 1, flag 0 & \\
-\end{tabular}};
-\draw[arr] (5.75,0) -- (6.35,0);
-% step 4: context picks a table
-\node[note, anchor=south, align=center] at (7.35,0.95) {\textbf{4} context picks a table:\\(cell depth, position in list)};
-\foreach \r in {0,...,3} \foreach \c in {0,...,4} {
-  \pgfmathsetmacro{\sh}{12+8*\r+6*\c}
-  \fill[sone!\sh] (6.55+\c*0.32,0.45-\r*0.27) rectangle ++(0.3,-0.25);}
-\draw[dom, line width=1pt] (6.55+2*0.32,0.45-1*0.27) rectangle ++(0.3,-0.25);
-\node[note, align=center] at (7.35,-0.95) {tables counted once per\\matrix and stored};
-\draw[arr] (8.35,0) -- (8.95,0);
-% step 5: 32 lanes
-\node[note, anchor=south, align=center] at (10.2,0.95) {\textbf{5} 32 rANS lanes, one shared\\16-bit word stream};
+\node[hd, align=right, anchor=east] at (11.12,-9.26) {genes\\detected\\in cell:\\12 classes};
+\node[hd, anchor=north, align=center] at (12.2,-9.88) {position in gene list:\\40 buckets};
+\node[note, anchor=north west, text width=3.1cm] at (10.2,-10.42)
+  {one table per box, stored once in the prefix; common symbols cost few bits};
+\draw[arr] (13.25,-9.42) -- (13.6,-9.42);
+% --- station 5: 32 coders, one word stream
+\stitle{13.75,-7.72}{2.55cm}{5}{32 rANS coders side by side (8 shown)}
 \foreach \l in {0,...,7} {
-  \draw[sone!70, line width=0.9pt] (9.1,0.55-\l*0.15) -- (10.4,0.55-\l*0.15);
-}
-\node[note] at (9.75,-0.75) {8 of 32 lanes shown};
-\draw[ink2, thick] (10.4,0.6) -- (10.6,0) -- (10.4,-0.6);
-\draw[arr] (10.6,0) -- (11.1,0);
-\foreach \w in {0,...,9} \fill[sone!\the\numexpr 30+7*\w\relax] (11.15+\w*0.22,0.12) rectangle ++(0.2,-0.24);
-\node[note] at (12.25,-0.45) {chunk bytes};
-% decode line
-\draw[-{Stealth[length=4pt]}, thick, dom] (13.3,-1.25) -- (0.2,-1.25) node[midway, below=1pt, font=\sffamily\tiny, text=dom!80!black] {decode, per symbol: one table lookup, one multiply, one add; output written straight into the caller's CSC arrays; every lane state must end where it started, an integrity check of each chunk};
-\end{scope}
+  \draw[sone!70, line width=0.8pt] (14.3,{-8.74-0.13*\l}) -- (14.95,{-8.74-0.13*\l});
+  \draw[sone!45, line width=0.4pt] (14.95,{-8.74-0.13*\l}) -- (15.25,-9.195);}
+\node[hd, anchor=east] at (14.25,-8.74) {coder 1};
+\node[hd, anchor=east] at (14.25,-9.65) {coder 8};
+\foreach \w in {0,...,3} \draw[st] (15.3+0.22*\w,-9.295) rectangle ++(0.2,0.2);
+\node[hd, anchor=north] at (15.73,-9.42) {16-bit words};
+\node[note, anchor=north west, text width=2.55cm] at (13.75,-9.98)
+  {AVX2 decodes 8 at once, AVX-512 16. Each coder must end where encoding began: a \mbox{built-in} check.};
+% --- the block as stored
+\node[anchor=west, inner sep=0pt, text=ink2] at (0.15,-11.83) {stored as};
+\node[seg, st, minimum width=0.85cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f1) at (1.35,-12.06) {sizes};
+\node[seg, st, minimum width=2.9cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f2) at (f1.south east) {genes detected per cell};
+\node[seg, st, minimum width=2.1cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f3) at (f2.south east) {coder start points};
+\node[seg, st, minimum width=2.3cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f4) at (f3.south east) {32 coder states};
+\node[seg, st, minimum width=6.75cm, minimum height=0.46cm, text height=1.6ex, text depth=0.45ex] (f5) at (f4.south east) {one stream of 16-bit words, shared by all coders};
+
+% =============================================================== zoom wedges
+\zoomwedge{cntB.south west}{cntB.south east}{0,-3.9}{16.4,-3.9}
+\zoomwedge{bk.south west}{bk.south east}{0,-7.2}{16.4,-7.2}
+\zoomwedge{s1.north east}{s1.south east}{4.5,0.02}{4.5,-3.4}
 \end{tikzpicture}
 \caption{\textbf{How \sone{} stores single-cell counts.}
-\textbf{(a)} A dataset is a small manifest that points to one immutable sample object per sample. Gene identifiers and barcode whitelists can be moved into shared packs that a reader fetches once.
-\textbf{(b)} A sample object contains a cells table and one matrix member per count modality. Everything that can be recomputed is replaced by a recipe that the writer has verified on that sample.
-\textbf{(c)} A matrix member starts with a prefix (header, chunk index, entropy tables, row keys) that lets a reader plan any read; chunks of at most 49{,}152 non-zeros follow and decode independently, so any set of cells costs two range requests.
-\textbf{(d)} The codec. (1--2) Rows are numbered by how many cells express them, so frequent genes come first and the gaps between a cell's non-zeros are small. (3) Each non-zero becomes one symbol (gap class and a flag for counts above one) and, for counts above one, a residual. (4) The cell's depth and the position in its list select a probability table. (5) Thirty-two interleaved static rANS lanes write one stream; decoding is branch-free table arithmetic that SIMD units run eight or sixteen lanes at a time.}
+\textbf{(a)} A dataset lists per-sample files, each named by a hash of its bytes.
+\textbf{(b)} A header and table of contents locate each part; gene names and barcodes sit in shared packs, and
+derivable tables are recipes verified on that sample.
+\textbf{(c)} A small prefix plans any read, so a reader fetches only the blocks (chunks) of cells it needs.
+\textbf{(d)} Genes numbered by detection turn each cell into small steps and counts, coded in few bits with tables
+chosen by context.}
 \label{fig:how}
 \end{figure*}

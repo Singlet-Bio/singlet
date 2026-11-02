@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+visium_lymph_node	rna	zstd22	10451324	10445299	0.999424
+visium_lymph_node	rna	xz9e	10451324	10445552	0.999448
+visium_lymph_node	rna	brotli11	10451324	10451344	1.000002
+visium_lymph_node	rna	bzip2_9	10451324	10495883	1.004263

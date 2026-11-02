@@ -1,0 +1,16 @@
+format	label	group	n	t	t_lo	t_hi	m	m_lo	m_hi	anchor
+csc_i32	CSC, int32	general	3	1	1	1	1	1	1	west
+zarr	AnnData Zarr	general	3	1.18752	0.948593	1.71546	2.52713	2.09404	4.90939	south
+h5ad_none	h5ad (none)	general	3	1.33361	1.20132	1.38804	2.54343	2.0938	4.98957	north west
+h5ad_lzf	h5ad lzf	general	3	3.689	3.04819	3.88308	2.54805	2.09421	5.0066	south
+zarr3	Zarr v3 sharded	general	3	4.95828	3.73015	5.2698	3.93949	3.05351	5.38994	west
+parquet_coo	Parquet COO	general	3	6.27563	5.50034	6.72814	1.20109	1.05029	2.11199	west
+bpcells	BPCells	domain	3	7.52237	3.3133	23.5246	2.29844	2.0405	4.7357	north
+s1	\textbf{.s1}	s1	3	13.5244	11.1462	13.5941	7.62404	7.09284	10.9869	west
+tenx_h5	10x HDF5	general	3	14.0282	12.8053	18.4701	2.08224	2.034	2.19499	north west
+h5ad_gzip	h5ad gzip	general	3	22.3267	19.2306	30.6232	2.54482	2.09371	4.99202	south west
+rds_gz	rds (gzip)	general	3	81.2528	67.8387	136.652	2.13615	2.01185	2.79055	west
+mtx_gz	MTX.gz	general	3	93.7475	71.0724	137.113	7.99065	7.93891	7.99925	east
+soma	TileDB-SOMA	domain	3	105.61	85.7787	134.288	16.9769	3.9459	28.2303	west
+csc_zstd19	CSC + zstd-19	general	3	208.842	147.226	245.963	3.42223	3.00063	5.94608	west
+rds_xz	rds (xz)	general	3	667.791	556.275	1161.91	2.30401	2.03328	3.75948	west

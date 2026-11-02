@@ -48,7 +48,10 @@ int main(int argc, char** argv) {
         double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         if (k >= warm) times += (times.empty() ? "" : ",") + std::to_string(s);
     }
-    std::printf("{\"nnz\":%llu,\"threads\":%d,\"isa\":\"%s\",\"mode\":\"%s\",\"times\":[%s]}\n", (unsigned long long)nnz, opt.threads,
-                isa.c_str(), mode.c_str(), times.c_str());
+    // isa: what was asked for; isa_used: the kernel that ran (a request the CPU cannot serve falls back, e.g. AVX-512
+    // without VBMI2 runs AVX2)
+    std::printf("{\"nnz\":%llu,\"threads\":%d,\"isa\":\"%s\",\"isa_used\":\"%s\",\"mode\":\"%s\",\"times\":[%s]}\n",
+                (unsigned long long)nnz, opt.threads, isa.c_str(), pz::isa_name(pz::resolve_isa(opt.isa)), mode.c_str(),
+                times.c_str());
     return 0;
 }

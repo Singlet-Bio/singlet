@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+slideseq2_hippocampus	rna	zstd22	15923543	15913659	0.999379
+slideseq2_hippocampus	rna	xz9e	15923543	15914060	0.999404
+slideseq2_hippocampus	rna	brotli11	15923543	15923572	1.000002
+slideseq2_hippocampus	rna	bzip2_9	15923543	15991241	1.004251

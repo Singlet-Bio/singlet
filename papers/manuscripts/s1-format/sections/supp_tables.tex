@@ -1,0 +1,236 @@
+% Supplementary tables. Every value is read from generated/*.tsv or is a \nm{key} from generated/numbers.tex.
+\section{Supplementary tables}
+\label{sec:stables}
+
+\begin{table}[h]
+\centering\small
+\caption{Formats compared. Cell subset: some cells readable without the whole matrix. Remote: read by HTTP range or
+object-store request without a local copy. Versions as run; for \texttt{singlet}, the release matching the commits that
+ran.}
+\label{tab:formats}
+\begin{tabularx}{\linewidth}{@{}l l l c c X@{}}
+\toprule
+Format & Library (version) & Compression & Cell subset & Remote & Languages \\
+\midrule
+Matrix Market & \texttt{scipy.io} (\nm{ver-scipy}) & gzip & no & no & any \\
+10x HDF5 & \texttt{h5py} (\nm{ver-h5py}) & gzip-4 + shuffle & per chunk & no & Python, R \\
+AnnData \texttt{.h5ad} & \texttt{anndata} (\nm{ver-anndata}) & none / gzip / lzf & backed mode & no & Python \\
+AnnData Zarr & \texttt{zarr} (\nm{ver-zarr}) & Blosc & per chunk & yes & Python \\
+loom & \texttt{loompy} (\nm{ver-loompy}) & gzip, dense chunks & per chunk & no & Python, R \\
+\texttt{dgCMatrix} \texttt{.rds} & R (\nm{ver-R}) \texttt{Matrix} & gzip / xz & no & no & R \\
+TileDB-SOMA & \texttt{tiledbsoma} (\nm{ver-tiledbsoma}) & zstd filters & yes & yes & Python, R \\
+BPCells & \texttt{BPCells} (\nm{ver-BPCells}) & bit-packing + delta & yes & no & R \\
+Parquet COO & \texttt{pyarrow} (\nm{ver-pyarrow}) & zstd & row groups & yes & any \\
+CSC + zstd-19 & \texttt{zstandard} (\nm{ver-zstandard}) & zstd-19 & no & no & any \\
+\textbf{\sone} & \texttt{singlet} (\nm{rel-singlet_py}) & static rANS, 32 lanes & yes (chunk) & yes & Python, R, C++ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[h]
+\centering\scriptsize
+\caption{Benchmark matrices. Tier: S $<$20k cells, M $<$200k, L $<$2M, XL above. Ones: fraction of non-zeros equal to
+one. Counts/cell: median. Accessions in \texttt{datasets.yaml}.}
+\label{tab:datasets}
+\setlength{\tabcolsep}{3.5pt}
+\pgfplotstabletypeset[
+  columns={dataset,matrix,class,tier,cells,genes,nnz,density,frac_ones,counts_per_cell,ref},
+  columns/ref/.style={string type, column name=Ref., column type=l},
+  columns/dataset/.style={string type, column name=Dataset, column type=l},
+  columns/matrix/.style={string type, column name=Matrix, column type=l},
+  columns/class/.style={string type, column name=Protocol class, column type=l},
+  columns/tier/.style={string type, column name=Tier},
+  columns/cells/.style={column name=Cells, int detect, 1000 sep={\text{,}}},
+  columns/genes/.style={column name=Features, int detect, 1000 sep={\text{,}}},
+  columns/nnz/.style={column name=Non-zeros, sci, sci zerofill, precision=2},
+  columns/density/.style={column name=Density, fixed, precision=3},
+  columns/frac_ones/.style={column name=Ones, fixed, precision=2},
+  columns/counts_per_cell/.style={column name=Counts/cell, fixed, precision=0, 1000 sep={\text{,}}},
+]{\gen{tab_datasets.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\scriptsize
+\caption{Bits per non-zero, whole file with gene identifiers and barcodes.}
+\label{tab:size}
+\pgfplotstabletypeset[
+  columns={dataset,mtx_gz,tenx_h5,h5ad_gzip,zarr,soma,rds_xz,bpcells,csc_zstd19,s1},
+  columns/dataset/.style={string type, column name=Matrix, column type=l},
+  columns/mtx_gz/.style={column name=MTX.gz, fixed, precision=1},
+  columns/tenx_h5/.style={column name=10x h5, fixed, precision=1},
+  columns/h5ad_gzip/.style={column name=h5ad gz, fixed, precision=1},
+  columns/zarr/.style={column name=Zarr, fixed, precision=1},
+  columns/soma/.style={column name=SOMA, fixed, precision=1},
+  columns/rds_xz/.style={column name=rds xz, fixed, precision=1},
+  columns/bpcells/.style={column name=BPCells, fixed, precision=1},
+  columns/csc_zstd19/.style={column name=CSC+zstd, fixed, precision=1},
+  columns/s1/.style={column name=\textbf{.s1}, fixed, precision=2},
+]{\gen{tab_size.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Read rate from local disk to an in-memory sparse matrix, million non-zeros per second, median over matrices;
+\sone{} in its stored gene order (\nm{dec-s1canonical-cold-t4} on \nm{threadsHeadline} cores cold in source order). Codec
+alone (member in memory, C++), 1 / \nm{threadsHeadline} cores: AVX2 \nm{codec_cpp-native-avx2-t1} /
+\nm{codec_cpp-native-avx2-t4}, scalar \nm{codec_cpp-native-scalar-t1} / \nm{codec_cpp-native-scalar-t4}. AVX-512 not
+measured (no VBMI2).}
+\label{tab:decode}
+\pgfplotstabletypeset[
+  columns={format,cold_t1,cold_th,warm_th},
+  columns/format/.style={string type, column name=Format, column type=l},
+  columns/cold_t1/.style={column name=1 core cold, fixed, precision=0},
+  columns/cold_th/.style={column name=\nm{threadsHeadline} cores cold, fixed, precision=0},
+  columns/warm_th/.style={column name=\nm{threadsHeadline} cores warm, fixed, precision=0},
+]{\gen{tab_decode.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Seconds from a cold process to the first 512-cell minibatch as a sparse tensor, median over four datasets and
+three seeds. Network tiers: an object store with limited total bandwidth, 1\,ms latency unless stated.
+\textsuperscript{e}: whole-object loader above the M tier; the object's transfer time at the tier's bandwidth replaces a
+run. ``Source gene order'': each cell's genes sorted back into source order.}
+\label{tab:minibatch}
+\pgfplotstabletypeset[
+  columns={loader,local,nfs,s3_10g,s3_1g,s3_1g_wan,s3_0.1g},
+  columns/loader/.style={string type, column name=Loader, column type=l},
+  columns/s3_0.1g/.style={column name=0.1 Gbit/s, string type, column type=r},
+  columns/s3_1g/.style={column name=1 Gbit/s, string type, column type=r},
+  columns/s3_10g/.style={column name=10 Gbit/s, string type, column type=r},
+  columns/s3_1g_wan/.style={column name={1 Gbit/s, 30 ms}, string type, column type=r},
+  columns/nfs/.style={column name=NFS, string type, column type=r},
+  columns/local/.style={column name=Local disk, string type, column type=r},
+]{\gen{tab_minibatch.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Cost of fetching a random 512-cell minibatch, from each format's chunk index; median over \nm{accN} matrices
+and 200 minibatches each. Over-read: bytes fetched over the bytes of the minibatch's non-zeros in that file. Index: bytes
+read first to locate chunks.}
+\label{tab:access}
+\pgfplotstabletypeset[
+  columns={format,kib,req,overread,index_kib},
+  columns/format/.style={string type, column name=Format, column type=l},
+  columns/kib/.style={column name=KiB per minibatch, fixed, precision=0, 1000 sep={\text{,}}},
+  columns/req/.style={column name=Requests, fixed, precision=0},
+  columns/overread/.style={column name=Over-read, fixed, precision=2},
+  columns/index_kib/.style={column name=Index (KiB), fixed, precision=0, 1000 sep={\text{,}}},
+]{\gen{tab_access.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Cloudflare R2 over the internet: first minibatch (median of three seeds) and sustained cells per second, and
+one epoch's bytes, requests and cost at R2's and S3's list prices.}
+\label{tab:r2}
+\pgfplotstabletypeset[
+  columns={dataset,loader,first,cps,gb_epoch,req_epoch,usd_r2,usd_s3},
+  columns/dataset/.style={string type, column name=Matrix, column type=l},
+  columns/loader/.style={string type, column name=Loader, column type=l},
+  columns/first/.style={column name=First (s), fixed, precision=2},
+  columns/cps/.style={column name=Cells/s, fixed, precision=0, 1000 sep={\text{,}}},
+  columns/gb_epoch/.style={column name=GiB/epoch, fixed, precision=2},
+  columns/req_epoch/.style={column name=Requests/epoch, fixed, precision=0, 1000 sep={\text{,}}},
+  columns/usd_r2/.style={column name=R2 \$, fixed, precision=3},
+  columns/usd_s3/.style={column name=S3 \$, fixed, precision=3},
+]{\gen{tab_r2.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Sustained cells per second with DataLoader workers sharing \nm{threadsHeadline} cores equally, \nm{ns-dataset},
+from local disk and the store at 1\,Gbit/s.}
+\label{tab:workers}
+\pgfplotstabletypeset[
+  columns={loader,where,w0,w2,w4},
+  columns/loader/.style={string type, column name=Loader, column type=l},
+  columns/where/.style={string type, column name=Source, column type=l},
+  columns/w0/.style={string type, column name=No workers, column type=r},
+  columns/w2/.style={string type, column name=2 workers, column type=r},
+  columns/w4/.style={string type, column name=4 workers, column type=r},
+]{\gen{tab_workers_wide.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Writing from the matrix in memory: seconds and peak memory beyond the matrix, one run each.}
+\label{tab:writecost}
+\pgfplotstabletypeset[
+  columns={format,hlca_core_s,hlca_core_gb,tabula_muris_facs_s,tabula_muris_facs_gb,pbmc10k_v3_s,pbmc10k_v3_gb},
+  columns/format/.style={string type, column name=Format, column type=l},
+  columns/hlca_core_s/.style={column name={HLCA core s}, fixed, fixed zerofill, precision=1, 1000 sep={\text{,}}},
+  columns/hlca_core_gb/.style={column name={memory GB}, fixed, fixed zerofill, precision=2, 1000 sep={\text{,}}},
+  columns/tabula_muris_facs_s/.style={column name={TM FACS s}, fixed, fixed zerofill, precision=1, 1000 sep={\text{,}}},
+  columns/tabula_muris_facs_gb/.style={column name={memory GB}, fixed, fixed zerofill, precision=2, 1000 sep={\text{,}}},
+  columns/pbmc10k_v3_s/.style={column name={PBMC 10k s}, fixed, fixed zerofill, precision=1, 1000 sep={\text{,}}},
+  columns/pbmc10k_v3_gb/.style={column name={memory GB}, fixed, fixed zerofill, precision=2, 1000 sep={\text{,}}},
+]{\gen{tab_writecost_wide.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{\sone{} payload and cross-validated count-model code lengths, bits per non-zero, median per protocol class.}
+\label{tab:floor}
+\pgfplotstabletypeset[
+  columns={class,n,s1,poisson,nb,gene_depth,cluster},
+  columns/class/.style={string type, column name=Protocol class, column type=l},
+  columns/n/.style={column name=$n$, int detect},
+  columns/s1/.style={column name=\textbf{.s1}, fixed, precision=2},
+  columns/poisson/.style={column name=Poisson, fixed, precision=2},
+  columns/nb/.style={column name=NB, fixed, precision=2},
+  columns/gene_depth/.style={column name=gene\,$\times$\,depth, fixed, precision=2},
+  columns/cluster/.style={column name=+\,cluster, fixed, precision=2},
+]{\gen{tab_floor.tsv}}
+\end{table}
+
+\begin{table}[h]
+\centering\small
+\caption{Redundancy against the best count model: whole-file bits per non-zero, bits above that floor, and the share
+$1-\text{floor}/\text{bits}$ (median, min, max over matrices). The floor is not a bound, so a share can be negative.}
+\label{tab:redundancy}
+\pgfplotstabletypeset[
+  columns={format,n,bits,excess,pct,pct_lo,pct_hi},
+  columns/format/.style={string type, column name=Format, column type=l},
+  columns/n/.style={column name=$n$, int detect},
+  columns/bits/.style={column name=Bits, fixed, fixed zerofill, precision=1},
+  columns/excess/.style={column name=Above floor, fixed, precision=1},
+  columns/pct/.style={column name=Share (\%), fixed, precision=0},
+  columns/pct_lo/.style={column name=Min, fixed, precision=0},
+  columns/pct_hi/.style={column name=Max, fixed, precision=0},
+]{\gen{tab_redundancy.tsv}}
+\end{table}
+
+\IfFileExists{\gen{tab_entropy.tsv}}{%
+\begin{table}[h]
+\centering\small
+\caption{What is left to compress in each code's output (Fig.~\ref{M-fig:floor}b): bits per non-zero, order-0 and
+order-1 byte entropy (bits per byte), and the share an order-1 byte coder could remove ($1-H_1/8$); medians over
+\nm{ent-n} matrices. Zstd-19 leaves \nm{ent-s1-zstd-pct}\% of the \sone{} member. The order-0 entropy of the step and
+value streams is \nm{ent-h0-streams} bits per non-zero (\nm{ent-h0-pair} as pairs), \nm{ent-h0-vs-floor} times the floor.}
+\label{tab:entropy}
+\pgfplotstabletypeset[
+  columns={codec,bits,h0,h1,left},
+  columns/codec/.style={string type, column name=Code, column type=l},
+  columns/bits/.style={column name=Bits, fixed, fixed zerofill, precision=1},
+  columns/h0/.style={column name=$H_0$, fixed, fixed zerofill, precision=2},
+  columns/h1/.style={column name=$H_1$, fixed, fixed zerofill, precision=2},
+  columns/left/.style={column name=Removable (\%), fixed, precision=0},
+]{\gen{tab_entropy.tsv}}
+\end{table}}{}
+
+\begin{table}[h]
+\centering\small
+\caption{The calls of Fig.~\ref{M-fig:eco}: seconds from a cold file to the object (median), and whether it holds
+exactly the source counts.}
+\label{tab:eco}
+\pgfplotstabletypeset[
+  columns={dataset,lang,call,seconds,equal},
+  columns/dataset/.style={string type, column name=Dataset, column type=l},
+  columns/lang/.style={string type, column name=Language, column type=l},
+  columns/call/.style={string type, column name=Call, column type=l},
+  columns/seconds/.style={column name=Seconds, fixed, precision=2},
+  columns/equal/.style={string type, column name=Exact},
+]{\gen{tab_eco.tsv}}
+\end{table}

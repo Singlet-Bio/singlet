@@ -1,0 +1,21 @@
+% One colour per storage format, muted toward a neutral grey-green so that .s1 (singlet.bio teal) stands out; the same in every panel that shows formats (Fig. 1 and the supplement). Families share
+% a hue: HDF5 files orange to brown, Zarr blues, R files red, plain arrays grey; .s1 is singlet.bio teal. Colour names are
+% c-<format id>, the ids of the `format` column of generated/*.tsv.
+\definecolor{c-s1}{HTML}{0E8C7E}
+\definecolor{c-h5ad_none}{HTML}{CBB091}
+\definecolor{c-h5ad_lzf}{HTML}{C39B6A}
+\definecolor{c-h5ad_gzip}{HTML}{AE825B}
+\definecolor{c-tenx_h5}{HTML}{8E725A}
+\definecolor{c-loom}{HTML}{B7A789}
+\definecolor{c-zarr}{HTML}{7EA4C0}
+\definecolor{c-zarr3}{HTML}{5E7CA2}
+\definecolor{c-soma}{HTML}{988BB8}
+\definecolor{c-bpcells}{HTML}{757CA9}
+\definecolor{c-parquet_coo}{HTML}{9EA870}
+\definecolor{c-mtx_gz}{HTML}{878C8B}
+\definecolor{c-csc_i32}{HTML}{A7ACAB}
+\definecolor{c-csc_zstd19}{HTML}{BFB165}
+\definecolor{c-rds_gz}{HTML}{BB8B9C}
+\definecolor{c-rds_xz}{HTML}{A06B82}
+% every format but .s1, for loops over plots
+\def\otherformats{h5ad_none,h5ad_lzf,h5ad_gzip,tenx_h5,loom,zarr,zarr3,soma,bpcells,parquet_coo,mtx_gz,csc_i32,csc_zstd19,rds_gz,rds_xz}

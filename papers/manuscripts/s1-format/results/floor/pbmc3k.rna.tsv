@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	nb_exact_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+pbmc3k	rna	droplet_3p	2286884	8	5.57122	5.152925	6.258698	5.798995	5.15176	4.423597	5.798995	6.258698	10000.0	5.161626

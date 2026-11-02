@@ -85,6 +85,9 @@ def run(cfg: Config, units: list[Unit], force: bool = False) -> None:
                 tmp.replace(dst)
             digest = sha256(dst)
             size = dst.stat().st_size
-            if i == 0 and want and digest != want:
-                raise SystemExit(f"{d['id']}: sha256 mismatch for {dst.name}: {digest} != {want}")
+            rec = (d["source"].get("checksums") or {}).get(dst.name) or ({"sha256": want} if i == 0 and want else {})
+            if rec.get("sha256") and digest != rec["sha256"]:
+                raise SystemExit(f"{d['id']}: sha256 mismatch for {dst.name}: {digest} != {rec['sha256']}")
+            if rec.get("bytes") and size != int(rec["bytes"]):
+                raise SystemExit(f"{d['id']}: {dst.name} is {size} bytes, recorded {rec['bytes']}")
             print(f"{d['id']}\t{dst.name}\tsha256={digest}\tbytes={size}")

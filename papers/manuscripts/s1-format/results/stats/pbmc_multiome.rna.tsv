@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+pbmc_multiome	rna	multimodal	S	umi	36601	11909	23508033	0.053932	4402.244101	3776.0	1826.0	0.645846	5585	2.230145

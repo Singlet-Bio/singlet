@@ -1,0 +1,111 @@
+% Supplementary Figure: more on reading over a network (main Fig. 3). Values from generated/fignet_*.tsv and figacc_chunk.tsv.
+\begin{figure*}[p]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  title={a\quad Which links each format's decoder keeps up with},
+  width=0.47\linewidth, height=5.6cm, xmode=log, ymode=log, xmin=3, xmax=100, ymin=0.03, ymax=60,
+  xlabel={stored bits per non-zero $b$}, ylabel={bits decoded per second (Gbit/s)},
+  xtick={5,10,20,50,100}, xticklabels={5,10,20,50,100}, ytick={0.1,1,10}, yticklabels={0.1,1,10},
+  axis x line*=bottom, axis y line*=left, clip mode=individual,
+  lbl/.style={nodes near coords, point meta=explicit symbolic, visualization depends on={value \thisrow{anchor}\as\lblanchor},
+    every node near coord/.append style={font=\sffamily\tiny, anchor=\lblanchor, text=ink2, inner sep=1.5pt}},
+]
+\fill[sone!7] (axis cs:3,1) rectangle (axis cs:8,60);
+\pgfplotsinvokeforeach{0.1,1,10}{
+  \draw[gen!70, dashed, line width=0.4pt] (axis cs:3,#1) -- (axis cs:100,#1);
+  \node[font=\sffamily\tiny, text=gen!80!black, anchor=north east, inner sep=1pt] at (axis cs:100,#1) {#1\,Gbit/s link};}
+\addplot[only marks, mark=*, mark size=0.8pt, gen!40, discard if not={group}{general}] table[x=bits, y=gbit] {\gen{fignet_roof_pts.tsv}};
+\addplot[only marks, mark=*, mark size=0.8pt, dom!40, discard if not={group}{domain}] table[x=bits, y=gbit] {\gen{fignet_roof_pts.tsv}};
+\addplot[only marks, mark=*, mark size=0.8pt, sone!45, discard if not={group}{s1}] table[x=bits, y=gbit] {\gen{fignet_roof_pts.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=1.9pt, gen!80!black, discard if not={whole}{0}, discard if not y={group}{general}]
+  table[x=bits, y=gbit, meta=label] {\gen{fignet_roof.tsv}};
+\addplot[only marks, lbl, mark=square*, mark size=1.8pt, gen!80!black, discard if not={whole}{1}]
+  table[x=bits, y=gbit, meta=label] {\gen{fignet_roof.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=1.9pt, dom, discard if not={group}{domain}] table[x=bits, y=gbit, meta=label] {\gen{fignet_roof.tsv}};
+\addplot[only marks, lbl, mark=*, mark size=2.8pt, sone, discard if not={group}{s1}] table[x=bits, y=gbit, meta=label] {\gen{fignet_roof.tsv}};
+\node[font=\sffamily\tiny, text=sone, anchor=north west, align=left] at (axis cs:3.1,55) {small and keeps up:\\the network sets the rate};
+\end{axis}
+\end{tikzpicture}\hfill
+\begin{tikzpicture}
+\begin{axis}[
+  title={b\quad Round trips set the first minibatch},
+  width=0.47\linewidth, height=5.6cm, xmin=0, xmax=100, ymin=0,
+  xlabel={round-trip latency (ms), 1\,Gbit/s link}, ylabel={seconds to the first minibatch},
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.02,0.98)}, anchor=north west, cells={anchor=west}},
+]
+\fill[gen!10] (axis cs:10,0) rectangle (axis cs:100,1.8);
+\addplot[sone, thick, no marks, forget plot, discard if not={loader}{s1_stream}, discard if not y={measured}{0}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[sone!55, thick, dotted, no marks, forget plot, discard if not={loader}{s1_stream_seq}, discard if not y={measured}{0}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[dec, no marks, forget plot, discard if not={loader}{anndata_zarr_lazy}, discard if not y={measured}{0}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[sone, only marks, mark=*, mark size=2pt, discard if not={loader}{s1_stream}, discard if not y={measured}{1}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[sone!55, only marks, mark=o, mark size=2pt, discard if not={loader}{s1_stream_seq}, discard if not y={measured}{1}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\addplot[dec, only marks, mark=triangle*, mark size=2pt, discard if not={loader}{anndata_zarr_lazy}, discard if not y={measured}{1}] table[x=rtt_ms, y=first_s] {\gen{fignet_latency.tsv}};
+\legend{{\textbf{.s1}: \nm{net-rtts-s1_stream} round trips in sequence}, {.s1, one request at a time: \nm{net-rtts-s1_stream_seq}}, {AnnData Zarr: \nm{net-rtts-anndata_zarr_lazy}}}
+\node[font=\sffamily\tiny, text=gen!80!black, anchor=south west, align=left] at (axis cs:12,0.02) {cloud object stores:\\tens of ms to a first byte};
+\end{axis}
+\end{tikzpicture}
+
+\vspace{4pt}
+\begin{tikzpicture}
+\begin{axis}[
+  title={c\quad Time per minibatch, 30\,ms round trip},
+  width=0.47\linewidth, height=5.6cm, xmode=log, xmin=0.005, xmax=30, ymin=0, ymax=1,
+  xlabel={seconds per 512-cell minibatch}, ylabel={fraction of minibatches},
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.98,0.04)}, anchor=south east, cells={anchor=west}},
+]
+\addplot[sone, very thick, const plot, discard if not={loader}{s1_stream}] table[x=s, y=q] {\gen{fignet_cdf.tsv}};
+\addplot[dl, thick, const plot, discard if not={loader}{anndata_zarr_lazy}] table[x=s, y=q] {\gen{fignet_cdf.tsv}};
+\addplot[tens, thick, const plot, discard if not={loader}{zarr3_shard}] table[x=s, y=q] {\gen{fignet_cdf.tsv}};
+\addplot[dom, thick, const plot, discard if not={loader}{soma_ml}] table[x=s, y=q] {\gen{fignet_cdf.tsv}};
+\legend{\sone, AnnData Zarr, Zarr v3 sharded, TileDB-SOMA ML}
+\end{axis}
+\end{tikzpicture}\hfill
+\begin{tikzpicture}
+\begin{axis}[
+  title={d\quad \sone{} reader: requests in flight},
+  width=0.47\linewidth, height=5.6cm, xmode=log, log basis x=2, xmin=0.8, xmax=80, ymin=0, ymax=105,
+  xtick={1,2,4,8,16,32,64}, xticklabels={1,2,4,8,16,32,64},
+  xlabel={requests at once (\texttt{io\_threads})}, ylabel={share of the 1\,Gbit/s link used (\%)},
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.98,0.05)}, anchor=south east, cells={anchor=west}},
+]
+\addplot[sone, very thick, mark=*, mark size=1.6pt, discard if not={rtt}{30}, y filter/.expression={100*y}] table[x=io, y=share] {\gen{fignet_inflight.tsv}};
+\addplot[sone!55, thick, dashed, mark=o, mark size=1.6pt, discard if not={rtt}{100}, y filter/.expression={100*y}] table[x=io, y=share] {\gen{fignet_inflight.tsv}};
+\legend{30\,ms round trip, 100\,ms round trip}
+\end{axis}
+\end{tikzpicture}
+
+\vspace{4pt}
+\begin{tikzpicture}
+\begin{axis}[
+  title={e\quad \sone{} chunk size: bytes fetched against file size},
+  width=0.47\linewidth, height=5.6cm, xmode=log, xmin=3000, xmax=5e5, ymin=0.9, ymax=3,
+  xtick={4096,16384,49152,131072,393216}, xticklabels={4k,16k,49k,131k,393k},
+  xlabel={chunk budget (non-zeros)}, ylabel={bytes fetched $\div$ bytes of the cells},
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.02,0.98)}, anchor=north west, cells={anchor=west}},
+]
+\addplot[sone, very thick, mark=*, mark size=1.5pt, discard if not={dataset}{hlca_core}] table[x=chunk, y=overread] {\gen{figacc_chunk.tsv}};
+\addplot[sone!70, thick, mark=square*, mark size=1.3pt, discard if not={dataset}{tabula_muris_facs}] table[x=chunk, y=overread] {\gen{figacc_chunk.tsv}};
+\addplot[sone!45, thick, mark=triangle*, mark size=1.5pt, discard if not={dataset}{pbmc10k_v3}] table[x=chunk, y=overread] {\gen{figacc_chunk.tsv}};
+\draw[gen!60, dashed] (axis cs:49152,0.9) -- (axis cs:49152,3) node[pos=0.96, anchor=north west, font=\sffamily\tiny, text=gen] {default};
+\legend{HLCA core, Tabula Muris FACS, PBMC 10k}
+\end{axis}
+\end{tikzpicture}
+\caption{\textbf{Reading over a network: decoder speed, round trips, latency and chunk size.}
+\textbf{(a)} Size against the stored bits each reader consumes per second, $D_p b$, on \nm{threadsHeadline} cores; a
+format is network-bound on every link below its point. Large points, medians; small, single matrices; squares, formats
+that cannot be read in part. Shaded: under 8 bits per non-zero and fast enough for 1\,Gbit/s.
+\textbf{(b)} Seconds to the first 512-cell minibatch at 1 and 30\,ms round trips (median over four datasets); the slope
+counts the round trips paid in sequence.
+\textbf{(c)} Time per minibatch at a 30\,ms round trip and 1\,Gbit/s, \nm{ns-dataset} (60 minibatches after 5 warm-up).
+\textbf{(d)} The \sone{} reader with 1 to 64 requests at once and up to 8 minibatches ahead: share of the 1\,Gbit/s link
+used, at 30 and 100\,ms.
+\textbf{(e)} Three matrices re-encoded with chunk budgets of 4,096 to 393,216 non-zeros: bytes a random minibatch fetches
+over the cells' share of the file. Chunks of 393,216 change the size of \nm{ns-dataset} by
+\nm{chunk-hlca_core-393216-size}\% and raise this to \nm{chunk-hlca_core-393216-overread}.}
+\label{fig:snet}
+\end{figure*}

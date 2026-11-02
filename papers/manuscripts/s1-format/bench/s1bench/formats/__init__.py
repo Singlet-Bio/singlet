@@ -2,7 +2,10 @@
 
 A format implements
     write(c: Canon, path: Path, threads: int) -> None
-    read(path: Path, threads: int) -> Canon            (exact round trip; also what `decode` times)
+    load(path: Path, threads: int) -> object           (what its library returns: a SciPy matrix and names, or AnnData;
+                                                        this alone is what `decode` times)
+    to_canon(obj) -> Canon                             (conversion and checks, untimed; read() = to_canon(load()) is the
+                                                        exact round trip of the write stage)
     applicable(c: Canon, cfg) -> Optional[str]         (None, or the reason it is skipped for this matrix)
 `path` is a file or a directory (`is_dir`). Stored bytes are everything under `path`, names included. Shared side files
 that a format downloads once and caches (the .s1 gene vocabulary pack) are reported in `shared_bytes`, not in the size.
@@ -35,8 +38,14 @@ class Format:
     def write(self, c: Canon, path: Path, threads: int) -> None:
         raise NotImplementedError
 
-    def read(self, path: Path, threads: int) -> Canon:
+    def load(self, path: Path, threads: int, **kw) -> object:
         raise NotImplementedError
+
+    def to_canon(self, obj) -> Canon:
+        raise NotImplementedError
+
+    def read(self, path: Path, threads: int, **kw) -> Canon:
+        return self.to_canon(self.load(path, threads, **kw))
 
     def shared_bytes(self, path: Path) -> int:
         return 0

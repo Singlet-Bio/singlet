@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+replogle_k562_gw	rna	droplet_3p	L	umi	8248	1989578	6289447209	0.383268	11677.670976	11304.0	3215.0	0.548072	3426	3.694067

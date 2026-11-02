@@ -1,0 +1,79 @@
+% .s1 manuscript, preprint (bioRxiv/arXiv) layout: plain single-column article with the same sections, figures and
+% tables as the TCBB version (main.tex), followed by the supplementary material and the format specification in the
+% same PDF. The main text refers to the supplement as S-<label> and the supplement to the main text as M-<label>, as in
+% the separate TCBB documents; here both prefixes are read back from this document's own .aux by xr, so build twice:
+%   latexmk -pdf biorxiv.tex   (then once more)
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{newtxtext}
+\input{preamble}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\usepackage[nocompress]{cite}
+\usepackage{xr}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\externaldocument[S-]{biorxiv}   % this document's own labels, as S-<label> (main text -> supplement)
+\externaldocument[M-]{biorxiv}   % and as M-<label> (supplement -> main text)
+\usepackage{placeins}
+\newcommand{\IEEEPARstart}[2]{#1#2}   % the sections are shared with the IEEEtran version
+\newcommand{\para}[1]{\par\smallskip\noindent\textbf{#1.}\ }
+
+\title{How Small and How Fast Can Single-Cell Count Matrices Be? The \sone{} Format Approaches Both Limits}
+\author{Zachary J.\ DeBruine\\[2pt]
+  \small Department of Information Sciences and Technology, College of Computing, Grand Valley State University,
+  Allendale, MI, USA\\
+  \small Correspondence: \href{mailto:zacharydebruine@gmail.com}{zacharydebruine@gmail.com}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+
+\input{sections/intro}
+\input{sections/related}
+\input{sections/format}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/methods}
+
+\section*{Data and code availability}
+All datasets are public; accessions, file names, licences and SHA-256 checksums are in \texttt{datasets.yaml} and
+Supplementary Table~\ref{S-tab:datasets}. The \sone{} codec, its Python, R and C++ interfaces (\texttt{singlet}
+\nm{rel-singlet_py} for Python and \nm{rel-singlet_r} for R, \url{https://github.com/Singlet-Bio/singlet}), and the
+benchmark pipeline that produces every figure, table and number in this paper
+(\texttt{papers/manuscripts/s1-format/bench}) are open source under the MIT license, with the per-stage results behind the
+figures in \texttt{papers/manuscripts/s1-format/results}. The supplementary material and the format specification follow
+the references.
+
+\section*{Acknowledgments}
+Computations ran on the Clipper cluster at Grand Valley State University; the author thanks the GVSU HPC team for their
+support. This work received no specific funding. The \sone{} codec and the benchmark pipeline were developed with
+Claude 5.5-generation models (Anthropic). Every codec change was kept only if measured on real matrices and reproduced
+its input exactly, and every result is produced by the open pipeline.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+% ---------------------------------------------------------------- supplementary material (S-numbered)
+\clearpage
+\setcounter{section}{0}\setcounter{figure}{0}\setcounter{table}{0}\setcounter{equation}{0}
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\theequation}{S\arabic{equation}}
+\begin{center}{\Large Supplementary material}\end{center}
+
+\input{sections/supp_results}
+\input{figures/fig_supp_net}
+\input{figures/fig_supp_floor}
+\FloatBarrier
+\input{sections/supp_limitations}
+\input{sections/supp_methods}
+\clearpage
+\input{sections/supp_tables}
+\clearpage
+\input{sections/supplement_spec}
+\end{document}

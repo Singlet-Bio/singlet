@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+mca_microwell	rna	droplet_other	L	umi	39282	423946	266059719	0.015976	1144.376178	835.0	528.0	0.748248	607	1.823477

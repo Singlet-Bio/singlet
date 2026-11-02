@@ -1,0 +1,88 @@
+% Detailed results (supplement). Every number is \nm{key} from generated/numbers.tex. The numbers behind the main-text
+% statements that are not already in a table or figure; no restatement of the main text.
+\section{Detailed results}
+\label{sec:sresults}
+
+Timings use \nm{threadsHeadline} cores of a \nm{cpu} node unless stated (Section~\ref{sec:methods}); \sone{} is read in
+its stored gene order, the reader's default. In the panel, \nm{fracOnesMinPct}--\nm{fracOnesMaxPct}\% of non-zeros
+equal one (Table~\ref{tab:datasets}).
+
+\subsection{Size and read speed}
+\begin{itemize}\itemsep 1pt
+\item \emph{Size} (Table~\ref{tab:size}): \sone{} median \nm{s1BpnMedian} bits per non-zero (range
+  \nm{s1BpnMin}--\nm{s1BpnMax}), names included. Smallest other file: \nm{bestOtherFormat}, on
+  \nm{bestOtherFormatCount} matrices. Generic-codec controls: CSC + zstd-19 \nm{size-csc_zstd19}, Zarr v3 with
+  \sone-sized chunks \nm{size-zarr3}. Gene identifiers in a shared pack: \nm{size-s1_pack}.
+\item \emph{Cold read} (Table~\ref{tab:decode}): \sone{} \nm{dec-s1-cold-t4} million non-zeros per second (source
+  gene order \nm{dec-s1canonical-cold-t4}), AnnData Zarr \nm{dec-zarr-cold-t4}, gzip AnnData
+  \nm{dec-h5ad_gzip-cold-t4}. Against the fastest other format per matrix, a median of \nm{dec-speedup-each}$\times$
+  (\nm{dec-speedup-each-lo}--\nm{dec-speedup-each-hi}); where \sone{} is not fastest, the matrix has at most
+  \nm{dec-s1-slower-max-mnnz} million non-zeros and fixed per-file costs (names) dominate.
+\item \emph{Cores}: from one to four cores \sone{} speeds up \nm{speedup-s1-t4}$\times$ (eight: \nm{speedup-s1-t8}),
+  TileDB-SOMA \nm{speedup-soma-t4}$\times$, MTX.gz \nm{speedup-mtx_gz-t4}$\times$. The codec consumes
+  \nm{scale-s1codec-gbit-t1}, \nm{scale-s1codec-gbit-t4} and \nm{scale-s1codec-gbit-t8}\,Gbit/s of stored bits on 1, 4
+  and 8 cores. Uncompressed arrays are disk-bound; gzip AnnData decodes on one thread.
+\end{itemize}
+
+\subsection{Network-bound reading}
+\begin{itemize}\itemsep 1pt
+\item Stored bits consumed per second (Fig.~\ref{fig:snet}a): \sone{} reader \nm{net-knee-s1}\,Gbit/s, codec alone
+  \nm{net-knee-s1-per-core}\,Gbit/s per core; fastest other format under 12 bits per non-zero,
+  \nm{net-knee-compact-best-name}, \nm{net-knee-compact-best}\,Gbit/s (not readable in part).
+\item Against uncompressed arrays (Eq.~\ref{M-eq:reff}), \sone{} delivers more non-zeros on \nm{wire-wins-1} of
+  \nm{wire-n-1} matrices at 1\,Gbit/s and \nm{wire-wins-10} of \nm{wire-n-10} at 10\,Gbit/s (median gains
+  \nm{wire-gain-1}$\times$, \nm{wire-gain-10}$\times$); on \nm{wire-crossover-never} of \nm{wire-crossover-n}
+  matrices the arrays never catch up, because \sone{} decodes faster even from memory.
+\end{itemize}
+
+\subsection{Minibatch loading}
+\begin{itemize}\itemsep 1pt
+\item \emph{Storage tiers} (\nm{fig1b-dataset}, Table~\ref{tab:minibatch}): \nm{thr-s1_stream-s3_0.1g},
+  \nm{thr-s1_stream-s3_1g} and \nm{thr-s1_stream-s3_10g} cells per second at 0.1, 1 and 10\,Gbit/s (link use
+  \nm{linkuse-s3_0.1g}\% and \nm{linkuse-s3_1g}\% at the two slower tiers); node disk, a seek per block,
+  \nm{thr-s1_stream-local}; shared NFS \nm{thr-s1_stream-nfs}. At 10\,Gbit/s decoding limits: each 64-cell block decodes
+  its whole surrounding chunks, below the full-matrix rate from memory (\nm{net-ds-decoder-cells} cells per second).
+  First minibatch \nm{ttfm-s1}\,s, against \nm{ttfm-best-other}\,s for \nm{ttfm-best-other-name}.
+\item \emph{Latency} (1\,Gbit/s, 30\,ms; Fig.~\ref{fig:snet}b): first minibatch \nm{ttfm-wan-s1_stream}\,s, one request
+  at a time \nm{ttfm-wan-s1_stream_seq}\,s, AnnData Zarr \nm{ttfm-wan-anndata_zarr_lazy}\,s. Concurrent requests raise
+  sustained throughput \nm{concurrency-gain-sustained}$\times$ (median of \nm{concurrency-gain-sustained-n} datasets
+  large enough that each cell is read once).
+\item \emph{Sustained at 30\,ms} (\nm{ns-dataset}, Fig.~\ref{fig:snet}c): \sone{} \nm{ns-s1_stream-cps-30} cells per
+  second, AnnData Zarr \nm{ns-anndata_zarr_lazy-cps-30}, sharded Zarr v3 \nm{ns-zarr3_shard-cps-30}, TileDB-SOMA ML
+  \nm{ns-soma_ml-cps-30}. A full link needs bandwidth $\times$ round trip in flight (3.75\,MB at 1\,Gbit/s and
+  30\,ms). At 30\,ms, 8 requests at once fill \nm{inf-30-share-8}\% of the link and \nm{inf-30-best-io} fill
+  \nm{inf-30-best-share}\%, \nm{inf-30-gain}$\times$ one at a time (Fig.~\ref{fig:snet}d). \texttt{singlet} 1.3.3
+  defaults to 32 requests and four minibatches ahead; Table~\ref{tab:minibatch} used 8 and 1.
+\item \emph{DataLoader workers} raise scDataset's rate but not \texttt{S1Cells}', whose decoder already uses every core
+  outside Python's interpreter lock (Table~\ref{tab:workers}).
+\end{itemize}
+
+\subsection{Random access and a real object store}
+\begin{itemize}\itemsep 1pt
+\item \emph{Access cost} (Table~\ref{tab:access}): \sone{} over-reads because blocks start and end inside chunks that are
+  fetched whole. On \nm{ns-dataset}, chunks of 4,096 non-zeros instead of 49,152 cut the over-read from
+  \nm{chunk-hlca_core-49152-overread} to \nm{chunk-hlca_core-4096-overread} for a file
+  \nm{chunk-hlca_core-4096-size}\% larger (Fig.~\ref{fig:snet}e).
+\item \emph{Cloudflare R2} (Table~\ref{tab:r2}): a one-byte range request took a median of \nm{r2-hlca_core-rtt}\,ms,
+  \nm{r2-hlca_core-edge}\,ms of it to the Worker; one connection read \nm{r2-hlca_core-gbit1}\,Gbit/s. R2 charges only
+  for requests.
+\end{itemize}
+
+\subsection{Distance to the count-model floor}
+\label{sec:sfloor}
+\begin{itemize}\itemsep 1pt
+\item Payload ladder (Fig.~\ref{M-fig:floor}a): 32-bit CSC \nm{ladder-L0_csc_i32} bits per non-zero, LEB128
+  \nm{ladder-L1_leb128}, row gaps + zstd-19 \nm{ladder-L3_gaps_leb_zstd19}, \sone{} payload \nm{ladder-L4_s1_payload}.
+\item Best cross-validated count model against \sone{}: \nm{s1AboveFloorPctLo} to \nm{s1AboveFloorPctHi}\% shorter;
+  negative on both read-count matrices (Fig.~\ref{fig:sfloor}a, Table~\ref{tab:floor}). Cluster labels are worth
+  \nm{sharedBpnMedian} bits per non-zero.
+\item A second general-purpose pass returns \nm{secondMin}--\nm{secondMax} of the \sone{} size (Fig.~\ref{fig:sfloor}b).
+\item Sampling entropy of the captured molecules (\nm{samplingN} UMI matrices): median \nm{samplingPctMedian}\% of the
+  payload (\nm{samplingPctLo}--\nm{samplingPctHi}\%; Fig.~\ref{fig:sfloor}c).
+\end{itemize}
+
+\subsection{Beyond single cells}
+\label{sec:beyond}
+On bulk RNA-seq gene counts and a bag-of-words corpus, \sone{} is \nm{ext-gtex_bulk-ratio-h5ad_gzip}$\times$ and
+\nm{ext-nytimes_bow-ratio-h5ad_gzip}$\times$ smaller than gzip AnnData; both have heavy-tailed rank-frequency laws and
+many small counts.

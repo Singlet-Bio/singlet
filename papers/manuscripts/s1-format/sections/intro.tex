@@ -1,0 +1,37 @@
+% Introduction (main text). Numbers belong in the figures and their captions; the text states what they show.
+\section{Introduction}
+\label{sec:intro}
+
+\IEEEPARstart{H}{ow} many bits does a single cell need? The question used to be academic. The Gene Expression
+Omnibus~\cite{barrett2013geo} now holds sequencing data from more than three billion cells, reference atlases serve tens of
+millions~\cite{svensson2018exponential,sikkema2023integrated,czi2025cellxgene}, a single perturbation screen has reached a
+hundred million~\cite{zhang2025tahoe}, and machine learning models are trained by streaming such collections from cloud
+storage, minibatch by minibatch, many times over~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}. Every one of
+those minibatches crosses a network. When it does, the bits each cell takes and the round trips needed to find it, not the
+model or the processor, set how fast training runs and what each epoch costs.
+
+Today's formats spend those bits generously. AnnData~\cite{virshup2024anndata}, the 10x Genomics HDF5 file, loom, Zarr and
+TileDB-SOMA~\cite{tiledbsoma} store whole-number counts as generic arrays and hand them to compressors such as gzip or
+zstd, which see only bytes. Yet count matrices are anything but arbitrary. Most non-zero counts are exactly one; a cell's
+sequencing depth sets the expected count of every gene in it; and if genes are numbered from most to least often
+detected, the positions of a cell's non-zero entries become a short list of small steps. Sequencing reads went through the
+same transition when CRAM replaced gzip with models of the data~\cite{bonfield2022cram}.
+
+A model of the counts can shrink a file, but a smaller file helps only if it can be decoded as fast as the link delivers
+it. So we asked two questions together: how few bits can a lossless code spend on single-cell counts, and how fast can a
+code that small be decoded? We measured both limits on \nm{nMatrices} public matrices and built \sone, an open format that
+approaches them, read and written from Python, R and C++ by the \texttt{singlet} package (Fig.~\ref{fig:wow}). We found
+that:
+\begin{itemize}
+\item \sone{} files were the smallest on every matrix, \nm{ratio-h5ad_gzip} times smaller than gzip-compressed AnnData and
+  within a few percent of the best count models we fitted;
+\item on four cores, \sone{} was also the fastest format to read on \nm{dec-s1-fastest-count} of \nm{dec-paired-n}
+  matrices, and no integer code we measured was both as small and faster to decode;
+\item from cloud storage, a PyTorch loader received its first \sone{} minibatch in under a second and then kept a
+  1\,Gbit/s link busy where chunked formats left it idle.
+\end{itemize}
+We also report what \sone{} costs: a decoder that is slower per core, a writer that is slower and needs more memory, and
+no traversal of the data in place. The codec was developed iteratively with Claude 5.5-generation models (Anthropic),
+with every candidate change measured against the limits above.
+
+\input{figures/fig1_wow}

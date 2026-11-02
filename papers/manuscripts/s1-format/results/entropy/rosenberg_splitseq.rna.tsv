@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+rosenberg_splitseq	rna	streams	122790641	6.011298	1.443712	7.437377	NA	NA	NA	NA	NA
+rosenberg_splitseq	rna	raw_u32	122790641	NA	NA	NA	982325128	3.330046	2.721582	64.0	NA
+rosenberg_splitseq	rna	fixed_bytes	122790641	NA	NA	NA	491162564	5.566598	3.418924	32.0	NA
+rosenberg_splitseq	rna	leb128_gaps	122790641	NA	NA	NA	250324996	4.224896	3.877576	16.30906	NA
+rosenberg_splitseq	rna	streamvbyte_gaps	122790641	NA	NA	NA	308670512	3.964088	3.258507	20.110361	NA
+rosenberg_splitseq	rna	rans0_gaps	122790641	NA	NA	NA	116252796	7.996807	7.993217	7.574049	NA
+rosenberg_splitseq	rna	bitpack256_gaps	122790641	NA	NA	NA	220003958	6.011732	5.449988	14.333598	NA
+rosenberg_splitseq	rna	zstd3_leb_gaps	122790641	NA	NA	NA	128226834	7.996871	7.985486	8.354176	NA
+rosenberg_splitseq	rna	zstd19_leb_gaps	122790641	NA	NA	NA	119170580	7.997273	7.988927	7.764147	NA
+rosenberg_splitseq	rna	pz2_avx2	122790641	NA	NA	NA	80869807	7.999229	7.996708	5.268793	80764783

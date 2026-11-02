@@ -1,0 +1,19 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+visium_hd_crc	rna	main	nfs	csc_i32	4	cold	file		auto	214633705	ok	1.76396	1.625598	1.97163	121.677222	3	2.179299,1.763960,1.487236	
+visium_hd_crc	rna	main	nfs	mtx_gz	4	cold	file		auto	214633705	ok	17.208362	17.047218	17.293007	12.47264	3	17.377652,16.886075,17.208362	
+visium_hd_crc	rna	main	nfs	tenx_h5	4	cold	file		auto	214633705	ok	8.332002	8.320022	8.408838	25.760159	3	8.332002,8.485674,8.308043	
+visium_hd_crc	rna	main	nfs	h5ad_none	4	cold	file		auto	214633705	ok	2.481611	2.47499	3.05448	86.489657	3	3.627348,2.481611,2.468369	
+visium_hd_crc	rna	main	nfs	h5ad_gzip	4	cold	file		auto	214633705	ok	7.027678	7.026579	7.164275	30.541196	3	7.300871,7.027678,7.025480	
+visium_hd_crc	rna	main	nfs	h5ad_lzf	4	cold	file		auto	214633705	ok	4.132123	4.072618	4.639448	51.942725	3	5.146774,4.132123,4.013113	
+visium_hd_crc	rna	main	nfs	zarr	4	cold	file		auto	214633705	ok	1.857	1.819475	2.367968	115.5809	3	2.878936,1.857000,1.781950	
+visium_hd_crc	rna	main	nfs	soma	4	cold	file		auto	214633705	ok	6.847128	6.846206	6.881629	31.346532	3	6.916131,6.847128,6.845285	
+visium_hd_crc	rna	main	nfs	parquet_coo	4	cold	file		auto	214633705	ok	8.972887	8.25095	9.695748	23.92025	3	10.418608,7.529014,8.972887	
+visium_hd_crc	rna	main	nfs	csc_zstd19	4	cold	file		auto	214633705	ok	3.482451	3.479666	3.520425	61.63295	3	3.558400,3.476881,3.482451	
+visium_hd_crc	rna	main	nfs	rds_gz	4	cold	file		auto	214633705	ok	11.287572	11.182342	11.307452	19.015046	3	11.287572,11.327332,11.077111	
+visium_hd_crc	rna	main	nfs	rds_xz	4	cold	file		auto	214633705	ok	17.198751	17.124498	17.369431	12.47961	3	17.198751,17.050244,17.540111	
+visium_hd_crc	rna	main	nfs	bpcells	4	cold	file		auto	214633705	ok	56.203846	55.89429	56.282313	3.818844	3	56.360780,56.203846,55.584735	
+visium_hd_crc	rna	main	nfs	s1	4	cold	file	native	auto	214633705	ok	1.546918	1.425289	1.571971	138.749204	3	1.597023,1.546918,1.303659	avx2
+visium_hd_crc	rna	main	nfs	s1	4	cold	file	canonical	auto	214633705	ok	1.722556	1.719753	1.731093	124.60189	3	1.739630,1.722556,1.716950	avx2
+visium_hd_crc	rna	main	nfs	s1_pack	4	cold	file	native	auto	214633705	ok	1.296255	1.290772	1.329492	165.579855	3	1.362728,1.285290,1.296255	avx2
+visium_hd_crc	rna	main	nfs	s1_pack	4	cold	file	canonical	auto	214633705	ok	1.716622	1.709576	1.728716	125.032578	3	1.740810,1.702530,1.716622	avx2
+visium_hd_crc	rna	main	nfs	zarr3	4	cold	file		auto	214633705	ok	3.49165	3.422424	3.994365	61.470564	3	4.497079,3.491650,3.353198	

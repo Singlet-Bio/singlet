@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	nb_exact_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+hao_citeseq	adt	multimodal	33599680	25	20.637919	5.003301	4.771248	4.49816	4.999835	3.450564	4.49761	4.770691	1000.0	5.518691

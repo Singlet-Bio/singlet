@@ -1,0 +1,69 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+visium_lymph_node	rna	sweep	local	s1	1	cold	file	native	auto	21210753	ok	0.239606	0.237546	0.240977	88.523498	3	0.239606,0.242348,0.235486	avx2
+visium_lymph_node	rna	sweep	local	s1	1	cold	file	canonical	auto	21210753	ok	0.348299	0.345422	0.35053	60.898151	3	0.348299,0.352762,0.342545	avx2
+visium_lymph_node	rna	sweep	local	s1	2	cold	file	native	auto	21210753	ok	0.140181	0.138568	0.140518	151.309392	3	0.140181,0.140856,0.136955	avx2
+visium_lymph_node	rna	sweep	local	s1	2	cold	file	canonical	auto	21210753	ok	0.193107	0.192966	0.19446	109.839622	3	0.195814,0.193107,0.192826	avx2
+visium_lymph_node	rna	sweep	local	s1	4	cold	file	native	auto	21210753	ok	0.085029	0.083402	0.086458	249.451927	3	0.087887,0.085029,0.081775	avx2
+visium_lymph_node	rna	sweep	local	s1	4	cold	file	canonical	auto	21210753	ok	0.111797	0.109512	0.112821	189.725641	3	0.113845,0.111797,0.107227	avx2
+visium_lymph_node	rna	sweep	local	s1	4	warm	file	native	auto	21210753	ok	0.07844	0.076717	0.080072	270.40826	3	0.081704,0.078440,0.074995	avx2
+visium_lymph_node	rna	sweep	local	s1	4	warm	file	canonical	auto	21210753	ok	0.107756	0.104092	0.107855	196.840762	3	0.107953,0.100429,0.107756	avx2
+visium_lymph_node	rna	sweep	local	s1	8	cold	file	native	auto	21210753	ok	0.05906	0.056356	0.06046	359.140722	3	0.061860,0.059060,0.053653	avx2
+visium_lymph_node	rna	sweep	local	s1	8	cold	file	canonical	auto	21210753	ok	0.073342	0.068937	0.073833	289.203204	3	0.073342,0.074325,0.064531	avx2
+visium_lymph_node	rna	sweep	local	s1	1	warm	codec	native	scalar	21210753	ok	0.800683	0.800314	0.803767	26.49082	3	0.806852,0.799945,0.800683	scalar
+visium_lymph_node	rna	sweep	local	s1	1	warm	codec	native	avx2	21210753	ok	0.224185	0.223293	0.225835	94.612564	3	0.227484,0.224185,0.222401	avx2
+visium_lymph_node	rna	sweep	local	s1	1	warm	codec	native	avx512	21210753	ok	0.225063	0.223933	0.226023	94.243537	3	0.226982,0.225063,0.222803	avx2
+visium_lymph_node	rna	sweep	local	s1	1	warm	codec	canonical	scalar	21210753	ok	0.907166	0.90701	0.91029	23.38134	3	0.913414,0.907166,0.906854	scalar
+visium_lymph_node	rna	sweep	local	s1	1	warm	codec	canonical	avx2	21210753	ok	0.333076	0.332801	0.335931	63.68141	3	0.338785,0.333076,0.332525	avx2
+visium_lymph_node	rna	sweep	local	s1	1	warm	codec	canonical	avx512	21210753	ok	0.339991	0.336681	0.35077	62.386228	3	0.361549,0.339991,0.333371	avx2
+visium_lymph_node	rna	sweep	local	s1	2	warm	codec	native	scalar	21210753	ok	0.413689	0.412361	0.413983	51.272234	3	0.413689,0.411034,0.414277	scalar
+visium_lymph_node	rna	sweep	local	s1	2	warm	codec	native	avx2	21210753	ok	0.125045	0.124606	0.12614	169.624941	3	0.125045,0.124167,0.127236	avx2
+visium_lymph_node	rna	sweep	local	s1	2	warm	codec	native	avx512	21210753	ok	0.125627	0.124784	0.125755	168.839056	3	0.123941,0.125627,0.125882	avx2
+visium_lymph_node	rna	sweep	local	s1	2	warm	codec	canonical	scalar	21210753	ok	0.467202	0.466131	0.467284	45.399561	3	0.467202,0.465060,0.467366	scalar
+visium_lymph_node	rna	sweep	local	s1	2	warm	codec	canonical	avx2	21210753	ok	0.177287	0.176498	0.177464	119.641091	3	0.177641,0.177287,0.175710	avx2
+visium_lymph_node	rna	sweep	local	s1	2	warm	codec	canonical	avx512	21210753	ok	0.17803	0.177045	0.178207	119.141406	3	0.178384,0.178030,0.176060	avx2
+visium_lymph_node	rna	sweep	local	s1	4	warm	codec	native	scalar	21210753	ok	0.212413	0.211537	0.212427	99.856063	3	0.212441,0.212413,0.210660	scalar
+visium_lymph_node	rna	sweep	local	s1	4	warm	codec	native	avx2	21210753	ok	0.069431	0.069302	0.069639	305.492424	3	0.069847,0.069431,0.069173	avx2
+visium_lymph_node	rna	sweep	local	s1	4	warm	codec	native	avx512	21210753	ok	0.068389	0.068369	0.068718	310.149195	3	0.069048,0.068389,0.068349	avx2
+visium_lymph_node	rna	sweep	local	s1	4	warm	codec	canonical	scalar	21210753	ok	0.238079	0.23758	0.238255	89.091216	3	0.238430,0.238079,0.237080	scalar
+visium_lymph_node	rna	sweep	local	s1	4	warm	codec	canonical	avx2	21210753	ok	0.093746	0.093726	0.093908	226.256962	3	0.094069,0.093746,0.093705	avx2
+visium_lymph_node	rna	sweep	local	s1	4	warm	codec	canonical	avx512	21210753	ok	0.093937	0.093785	0.094044	225.798706	3	0.094152,0.093632,0.093937	avx2
+visium_lymph_node	rna	sweep	local	s1	8	warm	codec	native	scalar	21210753	ok	0.112151	0.112025	0.112241	189.12689	3	0.111899,0.112151,0.112331	scalar
+visium_lymph_node	rna	sweep	local	s1	8	warm	codec	native	avx2	21210753	ok	0.042978	0.042314	0.043256	493.526459	3	0.043535,0.041650,0.042978	avx2
+visium_lymph_node	rna	sweep	local	s1	8	warm	codec	native	avx512	21210753	ok	0.042737	0.042549	0.042968	496.303539	3	0.042737,0.042361,0.043199	avx2
+visium_lymph_node	rna	sweep	local	s1	8	warm	codec	canonical	scalar	21210753	ok	0.12486	0.124853	0.125111	169.875829	3	0.124860,0.124847,0.125361	scalar
+visium_lymph_node	rna	sweep	local	s1	8	warm	codec	canonical	avx2	21210753	ok	0.053388	0.053084	0.05342	397.29793	3	0.053388,0.052780,0.053452	avx2
+visium_lymph_node	rna	sweep	local	s1	8	warm	codec	canonical	avx512	21210753	ok	0.052872	0.052752	0.053236	401.169661	3	0.053599,0.052632,0.052872	avx2
+visium_lymph_node	rna	sweep	local	h5ad_gzip	1	cold	file		auto	21210753	ok	0.687908	0.686452	0.688953	30.833719	3	0.687908,0.689999,0.684997	
+visium_lymph_node	rna	sweep	local	h5ad_gzip	2	cold	file		auto	21210753	ok	0.688243	0.686732	0.689336	30.818692	3	0.688243,0.690428,0.685221	
+visium_lymph_node	rna	sweep	local	h5ad_gzip	4	cold	file		auto	21210753	ok	0.688988	0.687098	0.689599	30.785371	3	0.688988,0.690211,0.685208	
+visium_lymph_node	rna	sweep	local	h5ad_gzip	4	warm	file		auto	21210753	ok	0.668487	0.666599	0.669481	31.729476	3	0.670475,0.664711,0.668487	
+visium_lymph_node	rna	sweep	local	h5ad_gzip	8	cold	file		auto	21210753	ok	0.685647	0.683682	0.686414	30.935377	3	0.685647,0.687181,0.681717	
+visium_lymph_node	rna	sweep	local	csc_i32	1	cold	file		auto	21210753	ok	0.162793	0.161013	0.163259	130.292403	3	0.163725,0.162793,0.159232	
+visium_lymph_node	rna	sweep	local	csc_i32	2	cold	file		auto	21210753	ok	0.159564	0.15942	0.161773	132.929118	3	0.163982,0.159564,0.159277	
+visium_lymph_node	rna	sweep	local	csc_i32	4	cold	file		auto	21210753	ok	0.159946	0.159766	0.160667	132.611822	3	0.161387,0.159585,0.159946	
+visium_lymph_node	rna	sweep	local	csc_i32	4	warm	file		auto	21210753	ok	0.0682	0.068115	0.068542	311.006828	3	0.068883,0.068031,0.068200	
+visium_lymph_node	rna	sweep	local	csc_i32	8	cold	file		auto	21210753	ok	0.161626	0.161584	0.162072	131.233185	3	0.161541,0.161626,0.162518	
+visium_lymph_node	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	21210753	ok	0.803188	0.801296	0.803365	26.408205	3	0.799404,0.803188,0.803541	scalar
+visium_lymph_node	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	21210753	ok	0.219686	0.219616	0.219689	96.550317	3	0.219686,0.219691,0.219547	avx2
+visium_lymph_node	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	21210753	ok	0.221495	0.221392	0.221525	95.761769	3	0.221495,0.221556,0.221289	avx2
+visium_lymph_node	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	21210753	ok	0.91884	0.917656	0.918848	23.084273	3	0.916473,0.918856,0.918840	scalar
+visium_lymph_node	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	21210753	ok	0.330429	0.330406	0.330481	64.19156	3	0.330533,0.330382,0.330429	avx2
+visium_lymph_node	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	21210753	ok	0.331642	0.331561	0.331677	63.956776	3	0.331642,0.331479,0.331712	avx2
+visium_lymph_node	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	21210753	ok	0.40287	0.402142	0.40336	52.649125	3	0.403850,0.402870,0.401414	scalar
+visium_lymph_node	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	21210753	ok	0.111034	0.111028	0.11106	191.029351	3	0.111086,0.111021,0.111034	avx2
+visium_lymph_node	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	21210753	ok	0.110687	0.110627	0.110771	191.628222	3	0.110687,0.110567,0.110855	avx2
+visium_lymph_node	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	21210753	ok	0.459646	0.459634	0.459773	46.145845	3	0.459900,0.459646,0.459621	scalar
+visium_lymph_node	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	21210753	ok	0.165202	0.165197	0.165327	128.392834	3	0.165452,0.165202,0.165192	avx2
+visium_lymph_node	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	21210753	ok	0.165825	0.165818	0.165859	127.910466	3	0.165825,0.165892,0.165810	avx2
+visium_lymph_node	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	21210753	ok	0.200584	0.200412	0.20086	105.74499	3	0.200584,0.201137,0.200240	scalar
+visium_lymph_node	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	21210753	ok	0.055972	0.055955	0.055983	378.952923	3	0.055994,0.055972,0.055937	avx2
+visium_lymph_node	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	21210753	ok	0.056077	0.056067	0.056114	378.243362	3	0.056151,0.056077,0.056057	avx2
+visium_lymph_node	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	21210753	ok	0.230792	0.230654	0.230807	91.904195	3	0.230823,0.230515,0.230792	scalar
+visium_lymph_node	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	21210753	ok	0.083324	0.083286	0.083446	254.557546	3	0.083568,0.083249,0.083324	avx2
+visium_lymph_node	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	21210753	ok	0.083253	0.083215	0.083271	254.774639	3	0.083290,0.083178,0.083253	avx2
+visium_lymph_node	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	21210753	ok	0.101043	0.100974	0.101169	209.918084	3	0.101043,0.101296,0.100905	scalar
+visium_lymph_node	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	21210753	ok	0.029395	0.029358	0.02947	721.576901	3	0.029545,0.029395,0.029321	avx2
+visium_lymph_node	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	21210753	ok	0.029423	0.02919	0.029541	720.890222	3	0.029659,0.029423,0.028957	avx2
+visium_lymph_node	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	21210753	ok	0.116268	0.116217	0.116268	182.429843	3	0.116268,0.116166,0.116269	scalar
+visium_lymph_node	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	21210753	ok	0.042191	0.04219	0.042281	502.731696	3	0.042372,0.042189,0.042191	avx2
+visium_lymph_node	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	21210753	ok	0.042269	0.042263	0.042357	501.803993	3	0.042446,0.042256,0.042269	avx2

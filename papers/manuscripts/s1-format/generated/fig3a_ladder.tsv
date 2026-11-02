@@ -1,7 +1,7 @@
 pos	key	label	median	q1	q3	lo	hi	n	em	ep	rm	rp
-0	L0_csc_i32	CSC as 32-bit integers						0				
-1	L1_leb128	variable-length integers						0				
-2	L2_gaps_leb_zstd3	gaps + LEB128 + zstd-3						0				
-3	L3_gaps_leb_zstd19	gaps + LEB128 + zstd-19						0				
-4	L4_s1_payload	\textbf{.s1}						0				
-5	floor	best count model (cross-validated)						0				
+0	L0_csc_i32	CSC as 32-bit integers	64	64	64	64	64	29	0	0	0	0
+1	L1_leb128	variable-length integers	27.385	25.246	28.2047	19.7821	31.6741	29	2.13902	0.819662	7.60293	4.2891
+2	L2_gaps_leb_zstd3	gaps + LEB128 + zstd-3	8.20355	7.72066	8.52634	6.38014	12.9859	29	0.482892	0.322784	1.82342	4.78239
+3	L3_gaps_leb_zstd19	gaps + LEB128 + zstd-19	7.50028	7.06038	7.91168	5.79324	12.6065	29	0.439901	0.411403	1.70704	5.10622
+4	L4_s1_payload	\textbf{.s1}	5.22454	4.88826	5.58327	3.89961	11.0292	29	0.336273	0.358733	1.32493	5.80463
+5	floor	best count model (cross-validated)	4.88993	4.43911	5.17703	3.54393	11.9795	29	0.45082	0.287095	1.346	7.08957

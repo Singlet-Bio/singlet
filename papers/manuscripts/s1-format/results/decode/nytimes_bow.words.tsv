@@ -1,0 +1,76 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+nytimes_bow	words	main	local	csc_i32	1	cold	file		auto	69679427	ok	0.528114	0.526486	0.528276	131.940091	3	0.528114,0.524858,0.528438	
+nytimes_bow	words	main	local	csc_i32	4	cold	file		auto	69679427	ok	0.536215	0.534012	0.540543	129.946776	3	0.544870,0.536215,0.531808	
+nytimes_bow	words	main	local	csc_i32	4	warm	file		auto	69679427	ok	0.219744	0.219378	0.22303	317.094099	3	0.226315,0.219744,0.219013	
+nytimes_bow	words	main	local	mtx_gz	1	cold	file		auto	69679427	ok	10.201001	10.140805	10.246525	6.830646	3	10.201001,10.292049,10.080608	
+nytimes_bow	words	main	local	mtx_gz	4	cold	file		auto	69679427	ok	6.010436	5.945553	6.02668	11.593074	3	6.042925,6.010436,5.880670	
+nytimes_bow	words	main	local	mtx_gz	4	warm	file		auto	69679427	ok	5.840114	5.82794	5.950854	11.931175	3	5.815766,5.840114,6.061593	
+nytimes_bow	words	main	local	tenx_h5	1	cold	file		auto	69679427	ok	2.742948	2.742698	2.76545	25.403113	3	2.787952,2.742948,2.742447	
+nytimes_bow	words	main	local	tenx_h5	4	cold	file		auto	69679427	ok	2.742084	2.741818	2.766782	25.411123	3	2.791479,2.742084,2.741553	
+nytimes_bow	words	main	local	tenx_h5	4	warm	file		auto	69679427	ok	2.693266	2.692979	2.693993	25.871717	3	2.694719,2.692691,2.693266	
+nytimes_bow	words	main	local	h5ad_none	1	cold	file		auto	69679427	ok	1.104542	1.101389	1.502935	63.08446	3	1.901327,1.104542,1.098236	
+nytimes_bow	words	main	local	h5ad_none	4	cold	file		auto	69679427	ok	1.10514	1.100859	1.442649	63.050322	3	1.780158,1.105140,1.096578	
+nytimes_bow	words	main	local	h5ad_none	4	warm	file		auto	69679427	ok	0.5151	0.513203	0.519521	135.273653	3	0.515100,0.523943,0.511305	
+nytimes_bow	words	main	local	h5ad_gzip	1	cold	file		auto	69679427	ok	2.43969	2.436603	2.781063	28.560774	3	3.122435,2.439690,2.433515	
+nytimes_bow	words	main	local	h5ad_gzip	4	cold	file		auto	69679427	ok	2.648828	2.556229	2.891914	26.305759	3	3.135000,2.463631,2.648828	
+nytimes_bow	words	main	local	h5ad_gzip	4	warm	file		auto	69679427	ok	2.350483	2.350078	2.35261	29.644726	3	2.354736,2.350483,2.349673	
+nytimes_bow	words	main	local	h5ad_lzf	1	cold	file		auto	69679427	ok	1.462489	1.460573	1.813721	47.644414	3	2.164953,1.458658,1.462489	
+nytimes_bow	words	main	local	h5ad_lzf	4	cold	file		auto	69679427	ok	1.471631	1.468301	1.815076	47.34844	3	2.158521,1.464972,1.471631	
+nytimes_bow	words	main	local	h5ad_lzf	4	warm	file		auto	69679427	ok	1.343616	1.341842	1.344927	51.859613	3	1.343616,1.346238,1.340068	
+nytimes_bow	words	main	local	zarr	1	cold	file		auto	69679427	ok	0.665721	0.660477	1.021196	104.66755	3	1.376670,0.665721,0.655232	
+nytimes_bow	words	main	local	zarr	4	cold	file		auto	69679427	ok	0.686928	0.684703	0.996995	101.436239	3	1.307062,0.682477,0.686928	
+nytimes_bow	words	main	local	zarr	4	warm	file		auto	69679427	ok	0.703028	0.682945	0.705437	99.113284	3	0.703028,0.707846,0.662862	
+nytimes_bow	words	main	local	soma	1	cold	file		auto	69679427	ok	5.628008	5.613681	6.024477	12.380833	3	6.420947,5.599355,5.628008	
+nytimes_bow	words	main	local	soma	4	cold	file		auto	69679427	ok	2.238776	2.218483	2.649899	31.123893	3	3.061021,2.198190,2.238776	
+nytimes_bow	words	main	local	soma	4	warm	file		auto	69679427	ok	1.952127	1.927787	1.994583	35.694099	3	1.952127,1.903446,2.037039	
+nytimes_bow	words	main	local	parquet_coo	1	cold	file		auto	69679427	ok	2.612618	2.611934	2.813142	26.670351	3	3.013666,2.611251,2.612618	
+nytimes_bow	words	main	local	parquet_coo	4	cold	file		auto	69679427	ok	1.966482	1.901454	2.135869	35.433547	3	2.305256,1.966482,1.836427	
+nytimes_bow	words	main	local	parquet_coo	4	warm	file		auto	69679427	ok	1.720645	1.704623	1.740226	40.496106	3	1.720645,1.759807,1.688601	
+nytimes_bow	words	main	local	csc_zstd19	1	cold	file		auto	69679427	ok	0.914251	0.91306	0.918505	76.214777	3	0.922760,0.914251,0.911869	
+nytimes_bow	words	main	local	csc_zstd19	4	cold	file		auto	69679427	ok	0.911221	0.9079	0.914956	76.468208	3	0.918692,0.911221,0.904578	
+nytimes_bow	words	main	local	csc_zstd19	4	warm	file		auto	69679427	ok	0.840504	0.839952	0.840729	82.901993	3	0.840955,0.840504,0.839400	
+nytimes_bow	words	main	local	rds_gz	1	cold	file		auto	69679427	ok	3.629498	3.616088	3.6456	19.198089	3	3.629498,3.602677,3.661703	
+nytimes_bow	words	main	local	rds_gz	4	cold	file		auto	69679427	ok	3.523578	3.521168	3.576688	19.775192	3	3.629798,3.523578,3.518759	
+nytimes_bow	words	main	local	rds_gz	4	warm	file		auto	69679427	ok	3.475109	3.473403	3.475119	20.051006	3	3.475128,3.475109,3.471698	
+nytimes_bow	words	main	local	rds_xz	1	cold	file		auto	69679427	ok	5.214216	5.208815	5.303727	13.363355	3	5.393237,5.214216,5.203413	
+nytimes_bow	words	main	local	rds_xz	4	cold	file		auto	69679427	ok	5.215531	5.210744	5.276088	13.359986	3	5.336644,5.215531,5.205957	
+nytimes_bow	words	main	local	rds_xz	4	warm	file		auto	69679427	ok	5.138042	5.136773	5.141169	13.561475	3	5.144297,5.135505,5.138042	
+nytimes_bow	words	main	local	bpcells	1	cold	file		auto	69679427	ok	12.02532	11.974182	13.735631	5.794393	3	15.445942,11.923043,12.025320	
+nytimes_bow	words	main	local	bpcells	4	cold	file		auto	69679427	ok	11.964808	11.953546	13.70987	5.823698	3	15.454931,11.964808,11.942284	
+nytimes_bow	words	main	local	bpcells	4	warm	file		auto	69679427	ok	11.874431	11.848366	11.878013	5.868022	3	11.874431,11.881595,11.822301	
+nytimes_bow	words	main	local	s1	1	cold	file	native	auto	69679427	ok	0.934307	0.925614	1.904916	74.578702	3	2.875524,0.916921,0.934307	avx2
+nytimes_bow	words	main	local	s1	1	cold	file	canonical	auto	69679427	ok	1.552217	1.547951	2.383674	44.890265	3	3.215131,1.552217,1.543686	avx2
+nytimes_bow	words	main	local	s1	4	cold	file	native	auto	69679427	ok	0.36786	0.365995	1.215135	189.418459	3	2.062410,0.364131,0.367860	avx2
+nytimes_bow	words	main	local	s1	4	cold	file	canonical	auto	69679427	ok	0.512183	0.510399	1.167384	136.043919	3	1.822585,0.508615,0.512183	avx2
+nytimes_bow	words	main	local	s1	4	warm	file	native	auto	69679427	ok	0.331532	0.331239	0.335483	210.173746	3	0.339433,0.331532,0.330945	avx2
+nytimes_bow	words	main	local	s1	4	warm	file	canonical	auto	69679427	ok	0.465113	0.464374	0.47269	149.81186	3	0.463635,0.465113,0.480268	avx2
+nytimes_bow	words	main	local	s1	1	warm	codec	native	scalar	69679427	ok	2.434512	2.433755	2.44831	28.621518	3	2.462108,2.434512,2.432998	scalar
+nytimes_bow	words	main	local	s1	1	warm	codec	native	avx2	69679427	ok	0.795574	0.792303	0.800836	87.583824	3	0.789032,0.795574,0.806099	avx2
+nytimes_bow	words	main	local	s1	1	warm	codec	native	avx512	69679427	ok	0.792479	0.790275	0.797768	87.92594	3	0.788071,0.792479,0.803057	avx2
+nytimes_bow	words	main	local	s1	1	warm	codec	canonical	scalar	69679427	ok	3.086512	3.082559	3.09657	22.575457	3	3.106627,3.078606,3.086512	scalar
+nytimes_bow	words	main	local	s1	1	warm	codec	canonical	avx2	69679427	ok	1.440233	1.434348	1.440285	48.380665	3	1.440233,1.440336,1.428463	avx2
+nytimes_bow	words	main	local	s1	1	warm	codec	canonical	avx512	69679427	ok	1.414695	1.409743	1.417048	49.254017	3	1.414695,1.419400,1.404791	avx2
+nytimes_bow	words	main	local	s1	4	warm	codec	native	scalar	69679427	ok	0.643035	0.639909	0.646821	108.360162	3	0.650607,0.636784,0.643035	scalar
+nytimes_bow	words	main	local	s1	4	warm	codec	native	avx2	69679427	ok	0.23104	0.23021	0.231144	301.590414	3	0.231040,0.229381,0.231248	avx2
+nytimes_bow	words	main	local	s1	4	warm	codec	native	avx512	69679427	ok	0.2306	0.229994	0.230768	302.166141	3	0.230935,0.230600,0.229389	avx2
+nytimes_bow	words	main	local	s1	4	warm	codec	canonical	scalar	69679427	ok	0.794553	0.794119	0.804002	87.696421	3	0.793686,0.794553,0.813452	scalar
+nytimes_bow	words	main	local	s1	4	warm	codec	canonical	avx2	69679427	ok	0.376687	0.376383	0.377344	184.979608	3	0.376079,0.378001,0.376687	avx2
+nytimes_bow	words	main	local	s1	4	warm	codec	canonical	avx512	69679427	ok	0.377118	0.376917	0.377668	184.76826	3	0.377118,0.376715,0.378218	avx2
+nytimes_bow	words	main	local	s1_pack	1	cold	file	native	auto	69679427	ok	0.917725	0.916015	1.649293	75.926264	3	2.380862,0.914305,0.917725	avx2
+nytimes_bow	words	main	local	s1_pack	1	cold	file	canonical	auto	69679427	ok	1.544215	1.534519	2.360502	45.122893	3	3.176789,1.544215,1.524824	avx2
+nytimes_bow	words	main	local	s1_pack	4	cold	file	native	auto	69679427	ok	0.37568	0.364352	1.176489	185.475645	3	1.977298,0.375680,0.353024	avx2
+nytimes_bow	words	main	local	s1_pack	4	cold	file	canonical	auto	69679427	ok	0.503865	0.502187	1.410372	138.28998	3	2.316879,0.503865,0.500510	avx2
+nytimes_bow	words	main	local	s1_pack	4	warm	file	native	auto	69679427	ok	0.306942	0.306566	0.310708	227.011847	3	0.314475,0.306942,0.306191	avx2
+nytimes_bow	words	main	local	s1_pack	4	warm	file	canonical	auto	69679427	ok	0.45362	0.452866	0.456526	153.607399	3	0.459432,0.452113,0.453620	avx2
+nytimes_bow	words	main	memory	s1	1	memory	codec_cpp	native	scalar	69679427	ok	2.622127	2.569045	2.637218	26.573628	3	2.515964,2.652310,2.622127	scalar
+nytimes_bow	words	main	memory	s1	1	memory	codec_cpp	native	avx2	69679427	ok	0.748632	0.747078	0.748809	93.075673	3	0.748987,0.745525,0.748632	avx2
+nytimes_bow	words	main	memory	s1	1	memory	codec_cpp	native	avx512	69679427	ok	0.754585	0.752861	0.754612	92.341389	3	0.754585,0.751137,0.754640	avx2
+nytimes_bow	words	main	memory	s1	1	memory	codec_cpp	canonical	scalar	69679427	ok	3.228912	3.22874	3.230256	21.579847	3	3.228568,3.231599,3.228912	scalar
+nytimes_bow	words	main	memory	s1	1	memory	codec_cpp	canonical	avx2	69679427	ok	1.414467	1.414338	1.417679	49.261967	3	1.420892,1.414210,1.414467	avx2
+nytimes_bow	words	main	memory	s1	1	memory	codec_cpp	canonical	avx512	69679427	ok	1.422892	1.422587	1.425959	48.970285	3	1.429025,1.422892,1.422282	avx2
+nytimes_bow	words	main	memory	s1	4	memory	codec_cpp	native	scalar	69679427	ok	0.637297	0.637145	0.637374	109.335878	3	0.636994,0.637452,0.637297	scalar
+nytimes_bow	words	main	memory	s1	4	memory	codec_cpp	native	avx2	69679427	ok	0.193913	0.193895	0.193932	359.333449	3	0.193950,0.193877,0.193913	avx2
+nytimes_bow	words	main	memory	s1	4	memory	codec_cpp	native	avx512	69679427	ok	0.193625	0.19361	0.193659	359.867925	3	0.193692,0.193625,0.193595	avx2
+nytimes_bow	words	main	memory	s1	4	memory	codec_cpp	canonical	scalar	69679427	ok	0.81606	0.815538	0.817036	85.385176	3	0.818013,0.816060,0.815017	scalar
+nytimes_bow	words	main	memory	s1	4	memory	codec_cpp	canonical	avx2	69679427	ok	0.367604	0.367579	0.367625	189.550242	3	0.367604,0.367554,0.367646	avx2
+nytimes_bow	words	main	memory	s1	4	memory	codec_cpp	canonical	avx512	69679427	ok	0.365011	0.364775	0.366315	190.896787	3	0.367619,0.364538,0.365011	avx2

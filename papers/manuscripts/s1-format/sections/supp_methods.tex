@@ -1,0 +1,133 @@
+% Methods. Describes the pipeline in bench/ (PLAN.md has the operational detail). Keep in step with bench/config.yaml.
+\section{Supplementary methods}
+\label{sec:methods}
+
+\subsection{Datasets, formats and the lossless check}
+\begin{itemize}\itemsep 1pt
+\item \emph{Datasets} (Table~\ref{tab:datasets}; accessions, licences, conversion notes in \texttt{datasets.yaml}): fixed
+  accession and file, checked against a recorded SHA-256, converted to canonical CSC (features $\times$ cells, u32 counts,
+  no explicit zeros, source identifiers and barcodes). Non-integer matrices are rejected, not rounded. Each matrix of a
+  multimodal dataset is a separate unit.
+\item \emph{Formats} (Table~\ref{tab:formats}): each library's default or documented recommended options;
+  \texttt{dgCMatrix} via \texttt{saveRDS}; loom only where its dense chunks fit the run budget; \sone{} with writer
+  defaults (shared-pack variant: vocabulary file not counted). Size: bytes of all files per non-zero. Generic-codec
+  control: Zarr v3 (zarr-python 3.1), CSR \texttt{data}/\texttt{indices} in inner chunks of 49,152 elements, shards of
+  64, Blosc zstd-5 with bit shuffling in the narrowest unsigned type, \texttt{indptr} one chunk, names gzipped.
+\item \emph{Lossless check}: every file is read back and compared with the canonical matrix, names included; failures
+  are reported, not dropped. RDS and BPCells are not run above $2^{31}-1$ non-zeros (Section~\ref{sec:slimits}).
+\end{itemize}
+
+\subsection{Read speed}
+\begin{itemize}\itemsep 1pt
+\item \emph{Pinning and repeats}: fresh process pinned to $p$ cores; every format at $p=1$ and $p=\nm{threadsHeadline}$;
+  \sone{}, gzip AnnData and raw CSC also at $p\in\{1,2,4,8\}$. Three timed repeats, median reported, all kept (Python
+  reads over 60\,s timed once).
+\item \emph{Priming}: an untimed write and read of a $60\times40$ matrix in the same format first (R formats load BPCells
+  first). The first cold repeat then takes a median of \nm{prot-first-over-median} times the median of three
+  (\nm{prot-n} configurations).
+\item \emph{Cold cache}: \texttt{posix\_fadvise(POSIX\_FADV\_DONTNEED)} before every repeat. The disk controller's cache
+  cannot be flushed from a job (a just-written file reads at about 5\,GB/s after 16\,GB of other I/O, 1.4\,GB/s from
+  disk) and is in the same state for every repeat and format. Warm: $p=\nm{threadsHeadline}$, after one untimed read.
+\item \emph{Timed interval}: file open to the library's object (SciPy matrix with names, AnnData, R equivalent). \sone{}
+  in stored gene order (names permuted) and source order. Codec alone: member in memory to CSC arrays (Python binding
+  and C++), per instruction set and gene order, recording the kernel that ran.
+\item \emph{Above $4\times10^8$ non-zeros}: cold and warm at $p=\nm{threadsHeadline}$, local disk, for CSC, Cell Ranger
+  HDF5, AnnData (none, gzip, Zarr), TileDB-SOMA and \sone{}.
+\end{itemize}
+
+\subsection{Minibatch loading and network emulation}
+\begin{itemize}\itemsep 1pt
+\item \emph{Workload}: four datasets (small to the largest tier; droplet, combinatorial, plate). A seeded sequence of
+  512-cell minibatches, each eight blocks of 64 consecutive cells at random offsets~\cite{dascenzo2025scdataset}.
+  scDataset and TileDB-SOMA ML samplers set to the same workload (blocks of 64, one minibatch per read, no larger
+  shuffle buffer). Python loaders return \texttt{torch.sparse\_csr\_tensor}; BPCells an R sparse matrix.
+\item \emph{\sone{} reader} (\texttt{singlet.torch.S1Stream}): byte ranges from the chunk index, up to eight requests at
+  once (\texttt{singlet} 1.3.2; 1.3.3 sends 32) or one at a time; the next minibatch requested while one decodes.
+  TileDB-SOMA ML prefetches with its own reader; others read sequentially.
+\item \emph{Measures}: new process, cold cache, imports done; time to open, first minibatch and its tensor (three seeds,
+  medians); for one seed, sustained rate over 200 minibatches after 10 warm-up, and peak resident memory. Ratios of
+  sustained rates use datasets above $211\times512$ cells (no cell read twice). Link share: sustained rate $\times$
+  bytes per cell $/$ bandwidth. On local disk only the first \sone{} run per file (reported) is cold, because of the RAID
+  cache.
+\item \emph{Emulated store}: \texttt{rclone serve s3} at 0.1, 1 or 10\,Gbit/s with 1\,ms latency, or 1\,Gbit/s with
+  30\,ms. One token bucket over all connections (\texttt{bwproxy.py}; capacity the larger of 5\,ms of rate and
+  64\,KiB), so concurrent readers share the tier; Toxiproxy adds latency to every response. Delivered over $p$
+  connections (1\,GiB, no latency): \nm{delivered-s3_0.1g}, \nm{delivered-s3_1g}, \nm{delivered-s3_10g}\,Gbit/s;
+  tiers not reached are flagged (\nm{cappedTiers}). Loaders without range reads download first (counted); above the M
+  tier their transfer time at the tier's bandwidth replaces a run (\textsuperscript{e}, Table~\ref{tab:minibatch}).
+\item \emph{Sweeps} (store at 1\,Gbit/s, one fresh process per point, first minibatch then 60 timed after 5 warm-up):
+  latency 0, 5, 10, 30, 100, 200\,ms; \sone{} at 30 and 100\,ms with 1--64 requests and 0--8 minibatches ahead.
+  DataLoader: \texttt{S1Cells} (1.3.3 defaults) and scDataset with 0, 2, 4 workers (equal core shares,
+  \texttt{prefetch\_factor} 2), local disk and store at 1\,ms; scDataset also with its default \texttt{fetch\_factor} 16.
+\item \emph{Access costs}, computed for 200 minibatches per matrix: \sone{} from the chunk index (adjacent ranges
+  merged), HDF5 from chunk tables (\texttt{h5py} \texttt{get\_chunk\_info}), AnnData Zarr from chunk object sizes; one
+  request per contiguous range or object. Over-read: bytes fetched $/$ (minibatch non-zeros $\times$ file bytes per
+  non-zero). Chunk sweep: three members re-encoded with budgets of 4,096 to 393,216 non-zeros.
+\end{itemize}
+
+\subsection{Cloudflare R2 and writing}
+\begin{itemize}\itemsep 1pt
+\item \emph{Setup}: from the timing node over the public internet, through a Cloudflare Worker serving the bucket by range
+  (\texttt{GET} with \texttt{Range}, \texttt{HEAD}; \texttt{bench/r2worker}), as an unsigned reader reads a public
+  bucket. Link: 20 one-byte range requests to an object and 20 to a Worker-only route; the \sone{} file on one connection
+  and in eight ranges. Loaders as above, three seeds; \sone{} also with 32 and 64 requests, 4 and 8 ahead.
+\item \emph{Epoch cost}: (cells$/$512) minibatches $\times$ requests and bytes per minibatch counted at the emulated store
+  without latency; R2 Class B \$0.36 per million, no egress; S3 Standard us-east-1 \texttt{GET} \$0.004 per 10,000,
+  transfer \$0.09 per GB (30 October 2026, no free tiers). The h5ad download is one request.
+\item \emph{Writing} (Table~\ref{tab:writecost}): fresh process, primed, canonical matrix in memory to local disk; memory
+  is peak resident memory of the process and children minus that before writing.
+\end{itemize}
+
+\subsection{Payload ladder and decoding limits}
+\label{sec:mkernels}
+\begin{itemize}\itemsep 1pt
+\item \emph{Ladder}, over row indices and values only: 32-bit CSC; LEB128; row gaps and values as separate LEB128 streams
+  with zstd-3 and zstd-19; the \sone{} payload (tables, row keys, chunks).
+\item \emph{Kernels} (\texttt{bench/cpp/kernel\_bench.cpp}, \texttt{-O3 -march=x86-64-v3}; \nm{kern-n} matrices up to
+  $4\times10^8$ non-zeros): steps (row $-$ previous row $-$ 1) and values as two streams. Fixed-width: narrowest whole
+  bytes; Stream VByte: two-bit length codes; bit-packing: blocks of 256, eight 32-bit lanes, one width per block, AVX2;
+  rANS: order 0, static 12-bit table per stream, four states, symbols $\min(x,255)$ plus an LEB128 escape stream; zstd-3
+  and -19 on the LEB128 streams. Timed work includes the pass back to row indices; the first decode is compared byte for
+  byte. \sone{}: whole member, AVX2, source order. \texttt{store\_bound}: \texttt{memset} of the outputs. One pinned core,
+  seven repeats after two warm-ups, median; all matrices in one job on one node.
+\item \emph{Stored order} (\texttt{s1order} stage, same node, later): source- and stored-order decodes, the latter
+  checked equal after mapping and sorting. Source-order rates were \nm{s1order-rerun-pct}\% of the first run's, so the
+  stored-order rate is the first run's source-order rate times the within-run ratio.
+\item \emph{Fig.~\ref{M-fig:floor}c}: $R=(b/B+1/(pD_1))^{-1}$ (Eq.~\ref{M-eq:reff}), so $R/p$ depends only on $B/p$.
+  Ideal code: best model's length at the \texttt{store\_bound} rate. Practical optimum: \sone's size at the fastest
+  entropy-coded stream's rate (rANS or zstd). Curves: medians of per-matrix ratios to the ideal.
+\end{itemize}
+
+\subsection{Count-model floor}
+\begin{itemize}\itemsep 1pt
+\item \emph{Code length}: $\sum_{g,c}-\log_2 p(x_{gc})$ over all entries, zeros included, per non-zero; two-fold
+  cross-validation over a random split of cells (fit one half, score the other, swap); model cost not charged. Floor:
+  the shortest of four models.
+\item \emph{Poisson} $x_{gc}\sim\mathrm{Poisson}(s_c\mu_g)$, $s_c$ the cell's total over the mean total.
+  \emph{NB} $x_{gc}\sim\mathrm{NB}(s_c\mu_g,\theta_g)$, $\theta_g$ by moments, smoothed over mean expression as in
+  sctransform~\cite{hafemeister2019normalization}.
+\item \emph{Gene $\times$ depth}: per gene and depth-quantile bin (32) a presence probability, and (4 coarser bins) a
+  distribution over 1--63 with an Elias-gamma escape, Krichevsky--Trofimov smoothed~\cite{krichevsky1981performance}.
+  \emph{$\times$ cluster}: also conditioned on Leiden clusters~\cite{traag2019louvain} of the training half (50 PCs of
+  log-normalised counts; at most 200{,}000 training cells, others to the nearest centroid); test cells take the nearest
+  training centroid and pay its label's entropy; sparse contexts back off with a pseudo-count of 8.
+\item \emph{Zero terms} of the parametric models are summed per gene and depth bin at the bin's mean depth (at most
+  \nm{nbBinningErrPctMax}\% from the exact sum on matrices of up to $5\times10^7$ entries).
+\item \emph{Sampling entropy} (UMI matrices, 2{,}000 test cells): profile $\pi_c=(x_c+\alpha\,\bar\pi_{k(c)})/(N_c+\alpha)$
+  shrunk toward training-half cluster profiles, $\alpha$ maximising the likelihood of a held-out binomial half of each
+  cell's molecules~\cite{batson2019molecular,neufeld2024inference}. Entropy of $\mathrm{Multinomial}(N_c,\pi_c)$:
+  $-\log_2 N_c!+\sum_g\mathbb{E}[\log_2 x_{gc}!]-N_c\sum_g\pi_{gc}\log_2\pi_{gc}$,
+  $x_{gc}\sim\mathrm{Binomial}(N_c,\pi_{gc})$, exact where $N_c\pi_{gc}<30$, second-order expansion above. Not a bound
+  ($\pi_c$ uses the cell's own counts).
+\item \emph{Second pass}: zstd \texttt{-{}-ultra -22}, xz \texttt{-9e}, brotli \texttt{-q 11}, bzip2 \texttt{-9}.
+\end{itemize}
+
+\subsection{Ecosystem, hardware and reproducibility}
+\emph{Ecosystem} (Table~\ref{tab:eco}): two datasets, cold file, the calls of Fig.~\ref{M-fig:eco} against
+\texttt{anndata.read\_h5ad}, \texttt{scanpy.read\_10x\_h5}, Seurat \texttt{Read10X\_h5} and \texttt{CreateSeuratObject}
+over it, and zellkonverter \texttt{readH5AD}; Python output compared with the canonical matrix, R output with
+\texttt{Read10X\_h5}'s. \emph{Hardware}: 8 cores of a shared node of one type (\nm{cpu}, \nm{cores} cores,
+\nm{memGB}\,GB, node-local \nm{localDisk}), at most one of our timed jobs per node. \emph{Code}: \texttt{python -m
+s1bench} in \texttt{papers/manuscripts/s1-format/bench} of the \texttt{singlet} repository; settings
+\texttt{config.yaml}, environment \texttt{environment.yml}, versions that ran in \texttt{results/}. Every plotted value
+and number is written by the \texttt{report} stage (\texttt{generated/}); none is typed by hand.

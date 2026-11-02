@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+tabula_muris_facs	rna	plate_reads	143478092	51	551.810345	11.979503	12.962206	12.940156	5.149585	12.956663	12.970664	1000.0	11.029171

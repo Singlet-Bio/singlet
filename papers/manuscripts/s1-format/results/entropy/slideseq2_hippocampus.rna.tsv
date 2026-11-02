@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+slideseq2_hippocampus	rna	streams	22396657	6.444062	1.094867	7.510208	NA	NA	NA	NA	NA
+slideseq2_hippocampus	rna	raw_u32	22396657	NA	NA	NA	179173256	3.294776	2.693647	64.0	NA
+slideseq2_hippocampus	rna	fixed_bytes	22396657	NA	NA	NA	89586628	5.496205	3.43226	32.0	NA
+slideseq2_hippocampus	rna	leb128_gaps	22396657	NA	NA	NA	46592976	4.249335	3.840892	16.642832	NA
+slideseq2_hippocampus	rna	streamvbyte_gaps	22396657	NA	NA	NA	56807309	4.01916	3.260038	20.291353	NA
+slideseq2_hippocampus	rna	rans0_gaps	22396657	NA	NA	NA	21632980	7.988069	7.977035	7.727218	NA
+slideseq2_hippocampus	rna	bitpack256_gaps	22396657	NA	NA	NA	39877774	6.123438	5.431877	14.244188	NA
+slideseq2_hippocampus	rna	zstd3_leb_gaps	22396657	NA	NA	NA	22942046	7.998285	7.990884	8.194811	NA
+slideseq2_hippocampus	rna	zstd19_leb_gaps	22396657	NA	NA	NA	21302545	7.998021	7.989854	7.609187	NA
+slideseq2_hippocampus	rna	pz2_avx2	22396657	NA	NA	NA	15923351	7.999242	7.994209	5.68776	15913584

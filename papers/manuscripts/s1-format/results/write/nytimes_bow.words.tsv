@@ -1,0 +1,17 @@
+dataset	matrix	format	group	nnz	genes	cells	status	bytes	bits_per_nnz	shared_bytes	write_s	write_threads	note
+nytimes_bow	words	h5ad_none	general	69679427	102660	300000	ok	575091976	66.027176	0	2.380123	4	NA
+nytimes_bow	words	csc_i32	general	69679427	102660	300000	ok	562834868	64.619919	0	1.414455	4	NA
+nytimes_bow	words	mtx_gz	general	69679427	102660	300000	ok	244001958	28.014232	0	59.968332	4	NA
+nytimes_bow	words	tenx_h5	general	69679427	102660	300000	ok	114990344	13.202215	0	8.059405	4	NA
+nytimes_bow	words	h5ad_gzip	general	69679427	102660	300000	ok	170754244	19.604552	0	11.488291	4	NA
+nytimes_bow	words	h5ad_lzf	general	69679427	102660	300000	ok	274292070	31.491886	0	2.397748	4	NA
+nytimes_bow	words	zarr	general	69679427	102660	300000	ok	143235648	16.445101	0	2.854957	4	NA
+nytimes_bow	words	loom	general	69679427	102660	300000	not_applicable	NA	NA	NA	NA	NA	loom stores dense chunks; 102660x300000 entries exceeds 2e+09
+nytimes_bow	words	soma	domain	69679427	102660	300000	ok	156501020	17.968118	0	41.978824	4	NA
+nytimes_bow	words	parquet_coo	general	69679427	102660	300000	ok	149264628	17.137297	0	3.919414	4	NA
+nytimes_bow	words	csc_zstd19	general	69679427	102660	300000	ok	92262533	10.5928	0	86.081201	4	NA
+nytimes_bow	words	rds_gz	general	69679427	102660	300000	ok	153389086	17.610832	0	38.814927	4	NA
+nytimes_bow	words	rds_xz	general	69679427	102660	300000	ok	83648296	9.603787	0	221.400047	4	NA
+nytimes_bow	words	bpcells	domain	69679427	102660	300000	ok	174701730	20.057769	0	8.005321	4	NA
+nytimes_bow	words	s1	s1	69679427	102660	300000	ok	70002998	8.03715	0	9.460923	4	NA
+nytimes_bow	words	s1_pack	s1	69679427	102660	300000	ok	69949069	8.030958	710170	7.549419	4	NA

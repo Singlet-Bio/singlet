@@ -1,0 +1,52 @@
+% Shared by main.tex (IEEEtran, the TCBB submission), supplement.tex and spec.tex: packages that work under both
+% IEEEtran and article, the generated-number macros, house colours and pgfplots settings.
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage[scale=0.9]{plex-sans}   % figure text in IBM Plex, the singlet.bio typefaces
+\usepackage[scale=0.86]{plex-mono}
+\usepackage{microtype}
+\usepackage{booktabs,tabularx,array}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,decorations.pathreplacing,backgrounds}
+\usepackage{pgfplots}
+\usepackage{pgfplotstable}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{fillbetween}
+
+% ---------- generated numbers ----------
+\newcommand{\defnum}[2]{\expandafter\def\csname s1n@#1\endcsname{#2}}
+\newcommand{\nm}[1]{\ifcsname s1n@#1\endcsname\csname s1n@#1\endcsname\else\textcolor{red!75!black}{\text{\sffamily\footnotesize[??\detokenize{#1}]}}\fi}
+\InputIfFileExists{generated/numbers.tex}{}{}
+\newcommand{\gen}[1]{generated/#1}   % path of a generated table
+
+% ---------- house style ----------
+\newcommand{\sone}{\texttt{.s1}}
+% singlet.bio brand (singlet.bio/brand): teal for .s1, ink and grey-green neutrals, violet and amber accents
+\definecolor{sone}{HTML}{0E8C7E}   % teal 500
+\definecolor{gen}{HTML}{6B7C78}    % neutral, between muted and cell
+\definecolor{dom}{HTML}{C2410C}
+\definecolor{dl}{HTML}{B42318}     % limits: the floor of the count models
+\definecolor{dec}{HTML}{B45309}    % amber: entropy coders, the output bound
+\definecolor{tens}{HTML}{7C5CFF}   % violet: fitted trends
+\definecolor{ink2}{HTML}{2B3F3C}   % ink 2
+\input{figures/formatcolors}
+\emergencystretch=3em
+\renewcommand{\topfraction}{0.95}\renewcommand{\textfraction}{0.05}\renewcommand{\floatpagefraction}{0.7}
+\renewcommand{\dbltopfraction}{0.95}\renewcommand{\dblfloatpagefraction}{0.7}
+
+% pgfplots: read tab-separated tables; keep only rows whose column #1 equals #2 (x or y filter)
+\pgfplotsset{
+  table/col sep=tab,
+  discard if not/.style 2 args={x filter/.append code={\edef\tempa{\thisrow{#1}}\edef\tempb{#2}\ifx\tempa\tempb\else\def\pgfmathresult{nan}\fi}},
+  discard if not y/.style 2 args={y filter/.append code={\edef\tempa{\thisrow{#1}}\edef\tempb{#2}\ifx\tempa\tempb\else\def\pgfmathresult{nan}\fi}},
+  every axis/.append style={font=\sffamily\scriptsize, label style={font=\sffamily\scriptsize},
+    axis line style={ink2!85}, every tick/.style={ink2!85},
+    /pgf/number format/assume math mode=true,   % numbers in the figure font, not math digits
+    tick label style={font=\sffamily\tiny}, title style={font=\sffamily\small\bfseries, align=left}},
+}
+\pgfplotstableset{col sep=tab, empty cells with={--}, every head row/.style={before row=\toprule, after row=\midrule},
+  every last row/.style={after row=\bottomrule}}
+
+\newcommand{\placeholder}[1]{\textcolor{red!75!black}{[#1]}}   % text still to be supplied by the author

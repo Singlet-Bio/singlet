@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+xenium_breast_rep1	rna	zstd22	6910623	6880806	0.995685
+xenium_breast_rep1	rna	xz9e	6910623	6880932	0.995704
+xenium_breast_rep1	rna	brotli11	6910623	6882322	0.995905
+xenium_breast_rep1	rna	bzip2_9	6910623	6916197	1.000807

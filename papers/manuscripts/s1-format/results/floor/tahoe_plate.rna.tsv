@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+tahoe_plate	rna	combinatorial	8276063161	44	5.049472	4.883478	4.828675	4.592599	4.436533	4.592636	4.83036	30000.0	4.998937

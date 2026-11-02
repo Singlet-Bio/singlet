@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+brain1m	rna	2624828308	64.0	27.425768	7.920718	7.194459	4.467459	4.481206	1

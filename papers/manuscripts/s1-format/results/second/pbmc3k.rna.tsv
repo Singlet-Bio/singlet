@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+pbmc3k	rna	zstd22	1570714	1569930	0.999501
+pbmc3k	rna	xz9e	1570714	1570680	0.999978
+pbmc3k	rna	brotli11	1570714	1570719	1.000003
+pbmc3k	rna	bzip2_9	1570714	1577668	1.004427

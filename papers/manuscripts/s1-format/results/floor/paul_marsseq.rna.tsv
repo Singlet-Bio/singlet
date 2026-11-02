@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	nb_exact_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+paul_marsseq	rna	plate_umi	4910514	9	4.169453	4.098842	4.731208	4.470506	4.097965	3.788607	4.470506	4.731208	30000.0	4.290541

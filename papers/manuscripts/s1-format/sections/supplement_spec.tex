@@ -1,0 +1,546 @@
+% =====================================================================================================================
+% Supplementary Section S1: normative specification of the .s1 sample object and its count-matrix member.
+%
+% Source of truth: repository singlet-bio-s1paper, codec sources unchanged between 7be33c37 and 199bea71.
+%   C++  : include/singlet/pz2/pz2.h and include/singlet/pz2/detail/*.h
+%   Python: python/singlet/s1/{container,codec,matrix,util,client,sample,packs,cells}.py
+% Comments "% src: file:line" give the code that fixes each value, so it can be checked.
+% Needs only amsmath, booktabs, tabularx (and the main text's \sone macro).
+% =====================================================================================================================
+\section{Format specification}
+\label{spec:sec}\label{sec:spec}
+
+This section specifies the \sone{} sample object and its count-matrix member. \emph{Must} states a requirement on
+writers or readers; paragraphs marked \emph{informative} describe the reference writer. The reference implementation is
+the header-only C++ library in the \texttt{singlet} repository and the Python package \texttt{singlet.s1}; where this
+text and that code disagree, the code is authoritative.
+
+\subsection{Conventions}
+\label{spec:conv}
+All integers are unsigned and little-endian unless stated otherwise. $\lambda(x)=\lfloor\log_2 x\rfloor$ for $x\ge 1$.
+$\mathrm{LEB}(x)$ is unsigned LEB128 (7 bits per byte, least significant group first, bit 7 set on every byte but
+the last); readers reject an encoding longer than 10 bytes or one that runs past its stream. The zigzag map on a 64-bit
+signed $d$ is $\mathrm{zz}(d)=(2d)\oplus(d\gg 63)$ (arithmetic shift). A \emph{STREAM} is
+\texttt{u32 raw\_len}, \texttt{u32 zstd\_len}, then one zstd frame of \texttt{zstd\_len} bytes that must decompress to
+exactly \texttt{raw\_len} bytes. An empty payload is stored as \texttt{0,0} with no frame; a STREAM in which exactly
+one length is zero is invalid. Reference writers record the content size and set no zstd checksum; the level (19 by
+default) is not part of the format, and frame bytes can differ between zstd versions.
+% src: common.h:70-100 (put_stream/get_stream); util.py:81 (write_content_size=True, write_checksum=False); common.h:73 ZSTD_compress (no checksum)
+CRC-32 is that of ISO~3309 and zlib (reflected polynomial \texttt{0xEDB88320}, initial value and final XOR
+\texttt{0xFFFFFFFF}). $\mathrm{digest16}(b)$ is the first 16 bytes of $\mathrm{SHA\text{-}256}(b)$. Text is UTF-8;
+a \emph{NUL-joined} list is the concatenation of its strings, each followed by one zero byte.
+% src: common.h:24-37 (crc32); util.py:44-46 (d16)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{The sample object}
+\label{spec:container}
+A sample object is a 64-byte file header, a member table, and the member bodies (Tables~\ref{spec:tab:filehdr}
+and~\ref{spec:tab:entry}). It is immutable and content addressed: it is published under the key
+\texttt{s1/s/<GSM>/<h>.s1}, where \texttt{<h>} is the lowercase hex of $\mathrm{digest16}$ of the whole object, and
+the study manifest lists its length and full SHA-256.
+% src: docs/format-s1.md section 2; verify.py:503-512 (sha256 and "object name is not its digest16")
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{\sone{} file header (64 bytes).}
+\label{spec:tab:filehdr}
+% src: container.py:6-7, 30-34 (struct "<8sHHIQQQ16s8s"), 192-202 (writer), 258-279 (reader checks)
+\begin{tabularx}{\linewidth}{@{}rrlX@{}}
+\toprule
+Offset & Size & Field & Value and reader rule \\
+\midrule
+0  & 8  & \texttt{magic}      & ASCII \texttt{SINGLET2}; any other value is rejected \\
+8  & 2  & \texttt{version}    & 1; any other value is rejected \\
+10 & 2  & \texttt{flags}      & 0 (not checked by the reference reader) \\
+12 & 4  & \texttt{n\_members} & number of member-table entries \\
+16 & 8  & \texttt{table\_off} & 64; any other value is rejected \\
+24 & 8  & \texttt{table\_len} & byte length of the member table; $\texttt{table\_off}+\texttt{table\_len}\le\texttt{file\_len}$ \\
+32 & 8  & \texttt{file\_len}  & byte length of the object; a reader that knows the true length rejects a mismatch \\
+40 & 16 & \texttt{sample\_id} & ASCII, at most 16 bytes, NUL padded \\
+56 & 8  & reserved            & zero \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Member-table entry ($52+\texttt{name\_len}+\texttt{meta\_len}$ bytes). Entries follow each other with no padding.}
+\label{spec:tab:entry}
+% src: container.py:8-9, 46 (_ENTRY_FIXED "<BBQQQI16sI" = 50 bytes), 180-185 (writer), 284-310 (reader)
+\begin{tabularx}{\linewidth}{@{}rrlX@{}}
+\toprule
+Offset & Size & Field & Meaning \\
+\midrule
+0     & 2  & \texttt{name\_len} & length of \texttt{name} in bytes \\
+2     & $\ell$ & \texttt{name}  & UTF-8, unique within the object (e.g.\ \texttt{exon\_counts.1pz}, \texttt{cells}) \\
+$2+\ell$  & 1 & \texttt{kind}  & member kind, Table~\ref{spec:tab:kinds} \\
+$3+\ell$  & 1 & \texttt{flags} & bit 0: regenerates a member of the legacy bundle; bit 1: needed to build AnnData; others 0 \\
+$4+\ell$  & 8 & \texttt{off}   & offset of the body from the object start (0 when there is no body) \\
+$12+\ell$ & 8 & \texttt{len}   & body length (0 when there is no body) \\
+$20+\ell$ & 8 & \texttt{out\_len} & length of the regenerated bytes (kinds 3, 4, 5), else 0 \\
+$28+\ell$ & 4 & \texttt{crc32}  & CRC-32 of the regenerated bytes (kinds 3, 4, 5), else 0 \\
+$32+\ell$ & 16 & \texttt{digest} & digest16 of the member's canonical content, Table~\ref{spec:tab:kinds} \\
+$48+\ell$ & 4 & \texttt{meta\_len} & length of \texttt{meta} \\
+$52+\ell$ & $\mu$ & \texttt{meta} & JSON object (UTF-8), empty when $\mu=0$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Layout rules.}
+The first body starts at $\lceil(64+\texttt{table\_len})/64\rceil\cdot 64$; every body starts at a multiple of 64,
+in table order, separated by zero padding; the object ends at the end of the last body (no trailing padding).
+A member with no body (kind 4, or an empty body) has $\texttt{off}=\texttt{len}=0$. A reader must reject an object
+whose member table does not parse to exactly \texttt{table\_len} bytes, has duplicate names, a kind-4 entry with a body,
+a body that is not 64-byte aligned, a non-empty body that starts inside the header or table, or a body that runs past
+\texttt{file\_len}. \texttt{meta} is canonical JSON (sorted keys, compact separators) and is never needed to decode a
+body. Neither the file header nor the member table has a checksum of its own; both rely on the object digest.
+% src: util.py:22 (ALIGN=64), 57-64 (align_up, canon_json); container.py:160-209 (build), 298-310 (reader checks)
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Member kinds. ``Regenerated bytes'' are the bytes of the legacy bundle member that the entry stands for.}
+\label{spec:tab:kinds}
+% src: container.py:12, 36-41, 113-157; migrate.py:846-869 (digest and crc of derived members); cells.py:24-25, 199-206
+\begin{tabularx}{\linewidth}{@{}clXX@{}}
+\toprule
+Kind & Name & Body & \texttt{digest} \\
+\midrule
+1 & matrix  & one matrix member (Section~\ref{spec:pz2}) & canonical matrix digest (Section~\ref{spec:digest}); equals the digest in the member header \\
+2 & cells   & cells table, magic \texttt{CEL2}, one row per matrix column & SHA-256 over \texttt{CEL2CANON1} and, per column in byte order of the name, name, NUL, dtype byte, logical values \\
+3 & stored  & one zstd frame of the regenerated bytes; \texttt{meta.zstd\_level} records the level & digest16 of the regenerated bytes \\
+4 & derived & none; \texttt{meta} holds \texttt{recipe}, \texttt{params}, \texttt{needs} & digest16 of the regenerated bytes, or the canonical matrix digest when the member is a legacy matrix \\
+5 & raw     & the regenerated bytes as they are (written instead of kind 3 when zstd does not shrink them) & digest16 of the bytes \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Derived members and recipes.}
+A kind-4 member has no body. \texttt{meta.recipe} is a versioned recipe id (e.g.\ \texttt{psi-v1-rint}) whose
+implementation never changes, \texttt{meta.params} its parameters and \texttt{meta.needs} its inputs (members, packs,
+or auxiliaries named \texttt{matrix:}, \texttt{blob:} or \texttt{vector:}\emph{name}). A writer emits a derived entry
+only after running the recipe on that very sample and comparing the output with the original, and stores the member
+(kind 3 or 5) otherwise. \texttt{out\_len} and \texttt{crc32} describe the regenerated bytes when the comparison was
+byte for byte, and are 0 when only the canonical matrix was compared (\texttt{meta.bytes\_exact} false). Recipes are
+defined by the reference implementation, not here; none is needed to decode a kind-1 or kind-2 member.
+% src: recipes.py:4-27; migrate.py:850-869; container.py:146-157
+
+\paragraph{Packs and references.}
+Gene vocabularies and barcode whitelists shared between samples live in immutable \emph{packs}: magic \texttt{SPK2},
+\texttt{u16} version 1, \texttt{u16} kind (1 row vocabulary, 2 whitelist, 3 composite; 4 and 5 junction tables),
+\texttt{u32} header length, canonical JSON header, body. The pack id is $\mathrm{digest16}$ of the pack file; a matrix
+stores its first 8 bytes. A reader resolves the prefix to the unique pack whose id starts with it (ambiguity is an
+error), locally or through \texttt{s1/ref/index.json}, and must check the pack's digest16 against its id (and its
+SHA-256 against the index after a download). Pack bodies are specified by the reference implementation, not here.
+% src: packs.py:4-20, 43-60, 824-870 (prefix resolution, id and sha256 checks); format-s1.md section 6
+
+\paragraph{Versioning.}
+The digit \texttt{2} in the magics \texttt{SINGLET2}, \texttt{PZ2M}, \texttt{SPK2} and \texttt{CEL2} is the container
+generation, not a version. Each structure has its own \texttt{u16} version, currently 1; readers reject other versions
+of the object and of matrix members. Unknown codec ids are rejected. Reserved bytes are written as zero.
+% src: format-s1.md line 61; container.h:46 (version), 49 (codec), pz2.h:52 (kFormatVersion = 1)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{The matrix member}
+\label{spec:pz2}
+A matrix member holds one matrix in compressed sparse column (CSC) form: $m$ rows (features), $n$ columns
+(barcodes or cells) and $\mathit{nnz}$ stored entries, cut into column chunks that decode independently. Offsets in
+this section are relative to the member start. Byte order of the parts:
+\[
+\text{header (256)}\;|\;\texttt{chunk\_index}\;|\;\texttt{tables}\;|\;\texttt{rows}\;|\;\texttt{chunks}\;|\;\texttt{cols}\;|\;\texttt{kv}\;|\;\texttt{extra}.
+\]
+Writers pack the sections back to back without padding; a section of length 0 has the offset it would have had.
+Two codecs share this container: codec 1 (lane rANS, Sections~\ref{spec:order}--\ref{spec:rans}) and codec 2
+(generic, Section~\ref{spec:codec2}).
+% src: pz2.h:6-8; api.h:599-608 (assemble/place)
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Matrix member header (256 bytes). Bytes 194--251 are reserved and zero.}
+\label{spec:tab:pz2hdr}
+% src: container.h:12-17 (offsets), 18-36 (write_header), 40-74 (read_header); pz2.h:66-96
+\begin{tabularx}{\linewidth}{@{}rrlX@{}}
+\toprule
+Offset & Size & Field & Value and reader rule \\
+\midrule
+0   & 4  & \texttt{magic}   & ASCII \texttt{PZ2M} \\
+4   & 2  & \texttt{version} & 1 \\
+6   & 2  & \texttt{codec}   & 1 = lane rANS, 2 = generic; other values rejected \\
+8   & 4  & $m$              & rows; codec 1 requires $m\le 2^{21}-1$ \\
+12  & 4  & $n$              & columns \\
+16  & 8  & $\mathit{nnz}$   & stored entries (explicit zero values count) \\
+24  & 1  & \texttt{value\_type} & 1 u8, 2 u16, 3 u32, 4 f32; other values rejected \\
+25  & 1  & \texttt{row\_order} & 1 = class order (required for codec 1), 0 = canonical (required for codec 2) \\
+26  & 1  & \texttt{classes\_per\_octave} & $\kappa\in[0,8]$; informative (the decoder uses the stored keys) \\
+27  & 1  & \texttt{flags}   & bit 0: value type 4 coded as integers (Section~\ref{spec:values}); other bits 0 \\
+28  & 4  & \texttt{chunk\_cols} & nominal maximum columns per chunk; readers must not rely on it \\
+32  & 4  & \texttt{n\_chunks} & number of chunks \\
+36  & 1  & \texttt{lanes}   & $L\in\{16,32,64\}$ (codec 1; ignored by codec 2) \\
+37  & 1  & \texttt{prob\_bits} & $p_b\in[8,12]$, precision of the gap table TG (codec 1) \\
+38  & 1  & \texttt{value\_prob\_bits} & $p_v\in[8,12]$, precision of the residual table TR (codec 1) \\
+39  & 1  & \texttt{ctx\_kind} & context configuration 0--4 (codec 1), Table~\ref{spec:tab:ctx} \\
+40  & 8  & \texttt{row\_names\_id} & pack id prefix when \texttt{rows\_kind} is 1 or 2, else zero \\
+48  & 8  & \texttt{col\_names\_id} & pack id prefix when \texttt{cols\_kind} is 1 or 2; bytes \texttt{43 45 4C 4C 53 00 00 00} (ASCII CELLS and three NULs) when it is 3; else zero \\
+56  & 16 & \texttt{digest}  & canonical digest (Section~\ref{spec:digest}); all zero if the writer did not compute it \\
+72  & 112 & sections & 7 pairs \{\texttt{u64 off}, \texttt{u64 len}\} in the order \texttt{rows}, \texttt{cols}, \texttt{kv}, \texttt{tables}, \texttt{chunk\_index}, \texttt{chunks}, \texttt{extra} \\
+184 & 8  & \texttt{total\_len} & byte length of the member \\
+192 & 1  & \texttt{rows\_kind} & names kind of the rows, 0--4 except 3 \\
+193 & 1  & \texttt{cols\_kind} & names kind of the columns, 0--4 \\
+252 & 4  & \texttt{header\_crc} & CRC-32 of bytes 0--251 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+A reader must reject a header with a wrong magic, version, CRC, codec, value type or names kind, with
+$\texttt{rows\_kind}=3$, with a non-empty section outside $[256,\texttt{total\_len}]$, with
+$\texttt{chunk\_index.len}\neq 24(\texttt{n\_chunks}+1)$, with codec 1 and $m\ge 2^{21}$, or with a \texttt{row\_order}
+that does not match the codec. For codec 1 it must also reject $L\notin\{16,32,64\}$, $p_b$ or $p_v$ outside $[8,12]$,
+and $\texttt{ctx\_kind}>4$.
+% src: container.h:42-73; api.h:59,70 (row_order); rans1_dec.h:35-37 (lanes, bits, ctx_kind)
+
+\paragraph{Chunk index.}
+$\texttt{n\_chunks}+1$ records of 24 bytes: \texttt{u64 off} (relative to the start of \texttt{chunks}),
+\texttt{u32 len}, \texttt{u32 first\_col}, \texttt{u64 nnz\_before}. Chunk $c$ holds columns
+$[\texttt{first\_col}_c,\texttt{first\_col}_{c+1})$ and $\texttt{nnz\_before}_{c+1}-\texttt{nnz\_before}_c$ entries in
+bytes $[\texttt{off}_c,\texttt{off}_c+\texttt{len}_c)$. The last record is a sentinel
+$\{\texttt{chunks.len},0,n,\mathit{nnz}\}$. A reader must check that record 0 is $\{0,\cdot,0,0\}$, that
+\texttt{first\_col} strictly increases, \texttt{nnz\_before} does not decrease, $\texttt{off}_{c+1}=\texttt{off}_c+\texttt{len}_c$,
+and the sentinel. Chunks may have different widths; the chunk of column $j$ is the largest $c$ with
+$\texttt{first\_col}_c\le j$ (binary search).
+% src: pz2.h:252-270; container.h:76-95 (read_chunk_index), 100-102 (write)
+
+\paragraph{Side sections.}
+\texttt{tables} (codec 1 only, else empty): three STREAMs holding the tables TC, TG, TR (Section~\ref{spec:tables}).
+\texttt{rows} (codec 1 only, else empty): one STREAM whose payload is $\mathrm{LEB}(\mathit{key}_0)\cdots\mathrm{LEB}(\mathit{key}_{m-1})$,
+the row keys in canonical row order (Section~\ref{spec:order}); exactly $m$ values below $2^{32}$, no trailing bytes.
+\texttt{cols} and \texttt{extra} hold the column and the row names, by names kind: 0 \emph{Inline}, one STREAM of the
+NUL-joined names (exactly $n$, resp.\ $m$, names); 1 \emph{Pack}, the names are the pack's list in pack order, nothing
+stored; 2 \emph{PackSubset}, one STREAM of $\mathrm{LEB}(\mathrm{zz}(i_t-i_{t-1}))$ for $t=0,1,\dots$ with $i_{-1}=0$,
+name $t$ being entry $i_t\in[0,2^{32})$ of the pack; 3 \emph{Cells} (columns only), the barcode column of the sample's
+\texttt{cells} member, nothing stored; 4 \emph{None}, no names. \texttt{kv} is empty or \texttt{u32 npairs} followed by
+one STREAM of NUL-joined \texttt{key}, \texttt{value} strings, ascending by the bytes of the key.
+% src: container.h:104-152 (names parts); api.h:80-107 (row names in extra, column names in cols, kv); rans1_enc.h:287-291 (rows)
+
+\paragraph{Prefix and range planning.}
+The \emph{prefix} is header, \texttt{chunk\_index}, \texttt{tables} and \texttt{rows}: bytes
+$[0,\,256+24(\texttt{n\_chunks}+1)+|\texttt{tables}|+|\texttt{rows}|)$, the maximum end of those sections. It is all
+a reader needs to plan and decode any set of columns; names and key/values lie after the chunks. To read a set $J$ of
+columns a reader (i)~fetches the prefix (how much it fetches up front is not part of the format); (ii)~maps each
+$j\in J$ to its chunk; (iii)~merges consecutive chunk ids into runs
+$[c_0,c_1]$ (the reference client also merges runs whose gap is small); (iv)~fetches, for each run, the one contiguous
+range $[\texttt{chunks.off}+\texttt{off}_{c_0},\ \texttt{chunks.off}+\texttt{off}_{c_1+1})$, shifted by the member's
+offset in the object (from the member table or the manifest); (v)~decodes each chunk and keeps the wanted columns.
+A chunk's column counts (Section~\ref{spec:chunk}) decode alone and give exact output sizes.
+% src: pz2.h:241-246 (prefix_len), 323-330 (ColumnPlan); api.h:33-47 (plan_columns), 300-317 (column_counts), 319-372 (decode_columns)
+% src: client.py:93 (PARTIAL_GAP 256 KiB), 954-970 (_runs); container.py:243 (prefetch 65536); codec.py:514
+% Measured (not in the text): 179 atlas pz2 prefixes in a local cache had prefix 45-135 KB (median 90 KB), of which
+% row keys 40-115 KB (m = 165k-311k), tables 3.6-17 KB, chunk index 0.3-7 KB.
+
+\paragraph{Chunk boundaries and limits.}
+A reader must accept any chunk with fewer than $2^{28}$ entries and must reject a chunk whose column counts reach
+$2^{28}$ or do not sum to its count from the chunk index. Chunk widths are writer choices.
+\emph{Informative:} starting at column $j$, the reference writer takes $e=\min(n,\,j+\texttt{chunk\_cols})$; if the
+chunk would hold more than $B$ entries it ends instead at the last column boundary $k\le e$ that keeps at most $B$
+entries, but after at least one column; it then halves the width while the chunk holds more than $2^{27}$ entries and
+spans more than one column. The default budget is $B=49{,}152$ (a single column with more entries is a chunk of its own;
+objects written without a budget have fixed-width chunks), and the default \texttt{chunk\_cols} is the power of two
+$c\in[128,4096]$ obtained by doubling $c=128$ while $1.414\,c<49{,}152/\max(\mathit{nnz}/n,1)$ (1024 when $n$ or
+$\mathit{nnz}$ is 0).
+% src: pz2.h:56 (kMaxChunkNnz 2^27), 60 (kDefaultChunkNnzMax 49152); rans1.h:20 (kMaxChunkN 2^28); rans1_enc.h:176, 257-276 (plan_chunks), 312
+% src: rans1_dec.h:105-106 (reader limit and sum check); common.h:132-141 (default_chunk_cols, 49152)
+% NB: the pure-Python codec-2 writer uses 98,304 in default_chunk_cols (codec.py:96-104); the budget B is the same.
+
+\paragraph{Values.}
+\label{spec:values}
+Both codecs code unsigned 32-bit \emph{coded values}. For value types 1--3 the coded value is the count itself;
+writers must not store a value above the range of the declared type (the reference reader does not check it). For
+value type 4 with \texttt{flags} bit 0 set, every entry is a non-negative integer $v<2^{24}$ whose binary32 bit
+pattern round-trips (\texttt{-0.0} and NaN never qualify) and the coded value is $v$; with bit 0 clear (codec 2 only)
+the coded value is the binary32 bit pattern. Explicit zero values are legal in both codecs. Codec 1 accepts every
+coded value below $2^{32}$, any $m\le 2^{21}-1$, and value types 1--3 or 4 with bit 0; codec 2 accepts everything,
+including $m$ up to $2^{32}-1$. Empty matrices ($m$, $n$ or $\mathit{nnz}$ zero) are legal.
+% src: values.h:4-8, 15-32; api.h:476-511 (analyse), 653 (rans_ok); rans1.h:14, 23-24 (classes cover every u32)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Row order (codec 1)}
+\label{spec:order}
+Codec 1 stores rows in \emph{class order}. For canonical row $i$ with $\mathit{cnt}_i$ entries in the whole matrix
+the writer stores
+\begin{equation}
+\mathit{key}_i=\begin{cases}
+0 & \mathit{cnt}_i=0,\\
+\mathit{cnt}_i & \kappa=0,\\
+1+\kappa\,\lambda(\mathit{cnt}_i)+\left\lfloor \kappa\,(\mathit{cnt}_i-2^{\lambda(\mathit{cnt}_i)})/2^{\lambda(\mathit{cnt}_i)}\right\rfloor & \text{otherwise,}
+\end{cases}
+\label{spec:eq:key}
+\end{equation}
+($\kappa=\texttt{classes\_per\_octave}$, 4 by default, so four classes per doubling of $\mathit{cnt}$) in the
+\texttt{rows} section. The decoder derives the permutation and does not recompute keys: stored id $s$ is the rank of
+canonical row $i$ when rows are sorted by key descending and, within a key, by canonical id ascending (a stable sort),
+and $\pi(s)=i$. Any key vector therefore defines a valid permutation; no permutation is stored. Codec 1 works in
+stored ids throughout. A decoder offers \emph{native} output (stored ids, ascending in every column, plus $\pi$) and
+\emph{canonical} output (ids mapped through $\pi$, then each column sorted ascending; ids are unique within a column),
+which is the original matrix. For codec 2 the two are identical and $\pi$ is the identity.
+% src: rans1.h:258-285 (row_key, perm_from_keys: counting sort, key descending, id ascending); api.h:62-68 (keys read), 149-207 (canonicalize)
+% src: pz2.h:24-27 (native vs canonical)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Symbolisation (codec 1)}
+\label{spec:sym}
+\paragraph{Log-linear classes.}
+Every $x<2^{32}$ is split into a class $\gamma(x)\in[0,123]$ and $b(\gamma)$ extra bits:
+\begin{gather}
+\gamma(x)=\begin{cases} x & x<8,\\ 4\lambda(x)-4+\left(\lfloor x/2^{\lambda(x)-2}\rfloor \bmod 4\right) & x\ge 8,\end{cases}
+\qquad b(\gamma)=\max(\lfloor\gamma/4\rfloor-1,\,0),\notag\\
+\beta(\gamma)=\bigl((\gamma\bmod 4)+4\,[\gamma\ge 4]\bigr)\,2^{b(\gamma)},\qquad x=\beta(\gamma(x))+\epsilon,\quad 0\le\epsilon<2^{b(\gamma(x))}.
+\label{spec:eq:cls}
+\end{gather}
+Classes 0--7 are exact, then four per octave; class 123 ends at $2^{32}-1$, so there is no escape symbol. Extra fields of up to 29 bits are coded as raw fields inside the
+rANS state (Section~\ref{spec:rans}); a field wider than 16 bits is split into its low 16 bits, decoded first, and its
+high $b-16$ bits.
+% src: rans1.h:13-20, 22-44 (g_cls, ClsTab), 243-249 (put_bits: high part pushed first)
+
+\paragraph{Entries to symbols.}
+Walk a column's entries in ascending stored id with $P=0$ at the column start. For the entry with stored id $r$ and
+coded value $v$, the gap is $g=r-P\ge0$, the flag is $\phi=[v\neq 1]$, the gap symbol is
+$\sigma=2\gamma(g)+\phi\in[0,247]$ with extra bits $\epsilon(g)$, and then $P\leftarrow r+1$. If $\phi=1$ the
+\emph{residual} $q=0$ for $v=0$ and $q=v-1$ for $v\ge2$ is coded as its class $\rho=\gamma(q)\in[0,123]$ and extra
+bits $\epsilon(q)$. The decoder inverts this as $v=1$ if $\phi=0$, else $v=0$ if $q=0$ and $v=q+1$ otherwise. A chunk
+also codes the entry count $k_j$ of each of its columns as $\gamma(k_j)$ and $\epsilon(k_j)$.
+The alphabets are 124 (TC, column-count classes), 248 (TG, gap symbols) and 124 (TR, residual classes).
+% src: rans1_enc.h:97-121 (scan_columns); rans1_dec.h:213-216 (value assembly); rans1.h:16 (kAlpha = 248)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Context model (codec 1)}
+\label{spec:ctx}
+Contexts use only quantities the decoder knows before the symbol: the entry count $k$ of the current column and the
+position reached in the stored row order. With
+\begin{align}
+\kappa_{\mathrm{raw}}(k)&=\lambda(k+1), \qquad d(k)=\min\bigl(\lfloor 11\,\kappa_{\mathrm{raw}}(k)/32\rfloor,\,3\bigr),\notag\\
+\mathrm{pos}(p)&=2\lambda(p+2)+\left(\lfloor (p+2)/2^{\lambda(p+2)-1}\rfloor\bmod 2\right)-2 \qquad(\text{two buckets per octave of }p+2),
+\label{spec:eq:posb}
+\end{align}
+the gap symbol of an entry is coded in TG context
+\begin{equation}
+\xi_G=\min\bigl(\kappa_{\mathrm{raw}}(k)\gg s_k,\ k_{\max}\bigr)\,(c_{\max}+1)+\min\bigl(\mathrm{pos}(P)\gg s_p,\ c_{\max}\bigr),
+\label{spec:eq:ctxg}
+\end{equation}
+where $P$ is the previous stored id of the column plus one (0 at the column start) and $(s_p,c_{\max},s_k,k_{\max})$
+come from \texttt{ctx\_kind} (Table~\ref{spec:tab:ctx}). The residual class of an entry with stored id $r$ is coded in
+TR context
+\begin{equation}
+\xi_R=4\min\bigl(\lfloor\mathrm{pos}(r)/2\rfloor,\,20\bigr)+d(k)\in[0,83].
+\label{spec:eq:ctxr}
+\end{equation}
+Column counts use the single context of TC. $\mathrm{pos}(0)=0$ and $\mathrm{pos}(r)\le 41$ for $r<2^{21}$, so the
+21 position buckets of TR cover every row of a codec-1 matrix.
+% src: rans1.h:17-20 (kResPos 21, kResCtx 84, kMaxChunkN), 46-52 (posb_raw, dk_of), 54-74 (Cfg); rans1_enc.h:101-116; rans1_dec.h:165-166, 191-194
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Context configurations of codec 1 (\texttt{ctx\_kind}) and the size of each entropy table.}
+\label{spec:tab:ctx}
+% src: rans1.h:56-68 (Cfg::make), 69-73 (npc, nctx, pcls, kcls, kbase); rans1_enc.h:328-333 (TC 12 bits, TG, TR)
+\begin{tabularx}{\linewidth}{@{}cccccX@{}}
+\toprule
+\texttt{ctx\_kind} & $s_p$ & $c_{\max}$ & $s_k$ & $k_{\max}$ & TG contexts $(c_{\max}+1)(k_{\max}+1)$ \\
+\midrule
+0 & 0 & 39 & 0 & 11 & 480 (40 position $\times$ 12 depth classes) \\
+1 & 0 & 39 & 1 & 5  & 240 \\
+2 & 1 & 19 & 1 & 5  & 120 \\
+3 & 0 & 39 & 0 & 0  & 40 (position only) \\
+4 & 1 & 19 & 0 & 0  & 20 (position only) \\
+\midrule
+\multicolumn{6}{@{}p{\linewidth}@{}}{TC: 1 context, 124 symbols, 12 probability bits. TG: contexts as above, 248 symbols, $p_b$ bits. TR: 84 contexts, 124 symbols, $p_v$ bits.} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\emph{Informative:} the reference writer uses \texttt{ctx\_kind} 0 when $\mathit{nnz}\ge 2\times10^6$ and otherwise
+the kind with the smallest estimated gap-stream size (ideal static code length plus extra bits plus serialised TG),
+the lowest kind on ties. One set of three tables serves the whole member.
+% src: rans1_enc.h:125-153 (estimate_bytes), 297-307 (selection; strict < keeps the lowest kind)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{rANS coding (codec 1)}
+\label{spec:rans}
+\paragraph{State and renormalisation.}
+Each coder state $X$ is a 32-bit unsigned integer kept in $[2^{16},2^{32})$; renormalisation moves one 16-bit word.
+To decode a symbol from a table of precision $p$ in context $\xi$, with $u=X\bmod 2^{p}$ and the symbol $s$ whose
+slots $[C_s,C_s+f_s)$ contain $u$:
+\begin{equation}
+X\leftarrow f_s\,\lfloor X/2^{p}\rfloor+u-C_s;\qquad \text{if }X<2^{16}:\ X\leftarrow 2^{16}X+w,
+\label{spec:eq:dec}
+\end{equation}
+where $w$ is the next unread little-endian \texttt{u16} of the stream (the \emph{refill}). A raw field of $b\le16$ bits
+is $\epsilon=X\bmod 2^{b}$, then $X\leftarrow\lfloor X/2^{b}\rfloor$ and a refill; $b=0$ reads nothing. A field of
+$17\le b\le 32$ bits is a 16-bit field followed by a $(b-16)$-bit field, $\epsilon=\epsilon_{\mathrm{lo}}+2^{16}\epsilon_{\mathrm{hi}}$.
+One refill always restores $X\ge 2^{16}$.
+\emph{Informative (encoder):} symbols are pushed in exact reverse decode order; before pushing $s$, if
+$X\ge f_s\,2^{32-p}$ the encoder emits $X\bmod 2^{16}$ and sets $X\leftarrow\lfloor X/2^{16}\rfloor$; then
+$X\leftarrow 2^{p}\lfloor X/f_s\rfloor+(X\bmod f_s)+C_s$. A raw field of $b\ge1$ bits emits a word when
+$X\ge 2^{32-b}$ and then sets $X\leftarrow 2^{b}X+\epsilon$. Every state starts at $X=2^{16}$; the emitted words,
+reversed, form the word stream and the final encoder states are stored as the decoder's initial states.
+% src: rans1.h:13 (kL = 2^16), 224-256 (LockEnc: init kL, put, put_uniform, put_bits, finish); rans1_dec.h:4-15, 161 (refill)
+
+\paragraph{Chunk stream.}
+\label{spec:chunk}
+Each codec-1 chunk is the byte string
+\[
+\mathrm{LEB}(n_{wc})\ \mathrm{LEB}(n_w)\ \ \texttt{u32}\,X^{c}\ \ \texttt{u16}\,w^{c}[n_{wc}]\ \ \mathrm{LEB}(\mathit{pp0})^{*}\ \ \texttt{u32}\,X[L]\ \ \texttt{u16}\,w[n_w].
+\]
+\emph{Column counts.} Starting from $X=X^{c}$ and reading the $n_{wc}$ words $w^{c}$, for each of the chunk's $n_c$
+columns in order decode a TC symbol $\gamma$ ($p=12$), then $b(\gamma)$ raw bits, and set $k_j=\beta(\gamma)+\epsilon$.
+Afterwards $X$ must equal $2^{16}$, exactly $n_{wc}$ words must have been read, the running sum of the $k_j$ must stay
+below $2^{28}$, and $N=\sum_j k_j$ must equal the chunk's count from the index.
+% src: rans1_enc.h:168-239 (encode_chunk layout), 181-194 (counts: single lane, 12-bit TC); rans1_dec.h:59-93 (chunk_counts), 95-139 (setup_chunk)
+
+\emph{Lanes.} The chunk's $N$ entries, in column-major stored order (element $e$), are split into $L$ contiguous
+slices: with $S=\lfloor N/L\rfloor$ and $t=N\bmod L$, lane $l$ owns elements $e_0(l)=lS+\min(l,t)$ to
+$e_0(l)+\mathit{cnt}(l)-1$ with $\mathit{cnt}(l)=S+[l<t]$, and the chunk takes $\mathit{steps}=S+[t>0]$ steps. A slice
+may start inside a column and may span several columns. For lane $l$ with $\mathit{cnt}(l)>0$ let $j$ be the column
+holding $e_0(l)$ and $o$ the offset of $e_0(l)$ in it. The lane starts with $\mathit{rem}=k_j-o$, column count
+$k=k_j$ (contexts always use the full count of the column), and $P=\mathit{pp0}$ if $o>0$, else 0. The $\mathit{pp0}$
+values (the stored id of the previous entry of that column, plus one) are stored for the lanes with $o>0$, in ascending
+lane order. The lane's initial state is $X[l]$; lanes with $\mathit{cnt}(l)=0$ keep $X[l]=2^{16}$, and all $L$ states
+are present even when $N=0$. The bytes after the $\mathit{pp0}$ values must hold at least $4L+2n_w$ bytes.
+
+\emph{Decode schedule.} For $s=0,\dots,\mathit{steps}-1$, the phases below run in this order, each visiting lanes
+$l=0,\dots,L-1$ in ascending order and skipping lanes with $s\ge\mathit{cnt}(l)$; every operation is followed at once
+by its refill, so the shared word stream is consumed in (step, phase, lane) order:
+\begin{enumerate}\setlength{\itemsep}{0pt}
+\item[A] decode $\sigma$ from TG in context $\xi_G$ (Eq.~\ref{spec:eq:ctxg}) with $p=p_b$; $\gamma=\lfloor\sigma/2\rfloor$, $\phi=\sigma\bmod2$;
+\item[B] read $\min(b(\gamma),16)$ raw bits; \textbf{B2} if $b(\gamma)>16$, read $b(\gamma)-16$ more; then $r=P+\beta(\gamma)+\epsilon$;
+\item[C1] if $\phi$: decode $\rho$ from TR in context $\xi_R$ (Eq.~\ref{spec:eq:ctxr}, with this $r$) with $p=p_v$;
+\item[C2] if $\phi$: read $\min(b(\rho),16)$ raw bits; \textbf{C3} if $\phi$ and $b(\rho)>16$, read $b(\rho)-16$ more; $q=\beta(\rho)+\epsilon$;
+\item[E] emit stored id $r$ and value $v$ at element $e_0(l)+s$; $P\leftarrow r+1$; $\mathit{rem}\leftarrow\mathit{rem}-1$; if $\mathit{rem}=0$ and $s+1<\mathit{cnt}(l)$, move to the next column with $k>0$: $\mathit{rem}\leftarrow k$, $P\leftarrow0$.
+\end{enumerate}
+B2 and C3 are separate phases (all lanes' B before any lane's B2). Afterwards the word pointer must be exactly at the
+end of $w[n_w]$ and every state must equal $2^{16}$; a decoder may stop as soon as the pointer passes the end. A reader
+must reject a decoded id $r\ge m$ before using it as an index (Table~\ref{spec:tab:integrity}). A writer must not leave
+bytes after $w[n_w]$ (the reference reader does not check).
+% src: rans1_dec.h:4-15 (normative loop), 23 (kPad 1024), 143-234 (scalar reference), 229-233 (end checks); api.h:251-258 (padding, check), 158 (id < m, canonical only)
+% src: rans1_enc.h:208-230 (encoder: steps descending; phases C3,C2,C1,B2,B,A; lanes descending)
+
+\paragraph{Frequency tables.}
+\label{spec:tables}
+The \texttt{tables} section holds three STREAMs, TC then TG then TR. Each payload is $\mathrm{LEB}(n_{\mathrm{used}})$
+followed, for each used context $\xi$ in increasing order, by $\mathrm{LEB}(\xi-\xi_{\mathrm{prev}})$,
+$\mathrm{LEB}(n_{\mathrm{sym}})$ and, for each symbol with non-zero frequency in increasing order,
+$\mathrm{LEB}(s-s_{\mathrm{prev}})\,\mathrm{LEB}(f_s)$, with $\xi_{\mathrm{prev}}=s_{\mathrm{prev}}=0$ before the first.
+A reader must reject: $n_{\mathrm{used}}$ above the context count; a zero delta after the first context or symbol; a
+context or symbol out of range; $n_{\mathrm{sym}}=0$ or above the alphabet size; $f_s=0$ or $f_s>2^{p}-1$; or
+frequencies of a context that do not sum to exactly $2^{p}$. $C_s$ is the sum of the frequencies of the smaller symbols
+of the context. Contexts not listed have no symbols; a valid stream never uses them.
+% src: rans1.h:162-181 (serialize_tables), 183-222 (parse_tables and its checks), 186 (decode entry sym<<24 | freq<<12 | bias)
+\emph{Informative (quantisation):} the writer counts symbols over the whole member, then for counts $c_i$ with total
+$T$ sets $f_i=\max(1,\lfloor c_i2^{p}/T\rfloor)$ for $c_i>0$; while $\sum f<2^{p}$ it adds one to the first symbol
+maximising $c_i(\ell(f_i+1)-\ell(f_i))$, while $\sum f>2^{p}$ it removes one from the first symbol with $f_i>1$
+minimising $c_i(\ell(f_i)-\ell(f_i-1))$, where $\ell$ is a fixed Q32 table of $\log_2$ and the products are compared in
+IEEE-754 binary64. A context with a single symbol $s$ gets $f_s=2^{p}-1$ and frequency 1 for symbol 0 (or 1 if $s=0$).
+% src: rans1.h:76-94 (lg_table), 97-135 (normalize_freqs; double gains), 143-161; rans1_enc.h:315-333 (histograms over all chunks)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Codec 2 (generic fallback)}
+\label{spec:codec2}
+Codec 2 stores canonical row ids ($\texttt{row\_order}=0$; \texttt{tables} and \texttt{rows} empty). A chunk is three
+STREAMs: \emph{counts}, $\mathrm{LEB}(k_j)$ for each column; \emph{gaps}, for each column and entry
+$\mathrm{LEB}(r-r_{\mathrm{prev}}-1)$ with $r_{\mathrm{prev}}=-1$ at the column start; \emph{values}, $\mathrm{LEB}(v)$
+per entry for value types 1--3 and for type 4 with \texttt{flags} bit 0, or the 4-byte bit pattern of each value
+otherwise. A reader must check that the counts sum to the index count, every id is below $m$, no stream has trailing
+bytes, and (raw f32) the value stream has $4N$ bytes. \emph{Informative:} with codec \texttt{auto} the writer uses codec 1
+when $m\le2^{21}-1$ and the values are not raw f32; it also builds the codec-2 member when the codec-1 member is
+smaller than 65{,}536 bytes and keeps whichever is strictly smaller. Codec 2 is used otherwise.
+% src: codec2.h:1-10 (layout), 15-32 (encode), 51-84 (decode checks); api.h:653-669 (auto choice, 65536)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Canonical digest}
+\label{spec:digest}
+The canonical digest is $\mathrm{digest16}$ of the byte string: the 9 ASCII bytes \texttt{PZ2CANON1}; \texttt{u32}~$m$,
+\texttt{u32}~$n$, \texttt{u64}~$\mathit{nnz}$, \texttt{u8}~\texttt{value\_type}; for each column $j=0,\dots,n-1$:
+\texttt{u32}~$k_j$, then the $k_j$ canonical row ids as \texttt{u32} in ascending order, then their $k_j$ values as
+\texttt{u32} (types 1--3: the count; type 4: the binary32 bit pattern); \texttt{u32} number of row names and the
+NUL-joined row names; the same for column names; then for each key/value pair in ascending byte order of the key: key,
+NUL, value, NUL (no count). Names are the \emph{logical} names, also when they are stored as a pack or cells reference,
+and a matrix with names kind 4 hashes a count of 0. An all-zero digest means ``not computed''.
+% src: api.h:396-436 (canonical_digest); matrix.py:110-158 (Python, identical); values.h:64 (digest value of F32Int)
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Integrity}
+\label{spec:integrity}
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Integrity mechanisms and where the reference implementation applies them.}
+\label{spec:tab:integrity}
+% src: container.h:47, 66-94; rans1.h:197-219; rans1_dec.h:90, 105-106, 229-233; api.h:158, 258; codec2.h:58-83
+% src: container.py:348-360 (legacy_blob); sample.py:156-158; client.py:17-18, 724, 1202-1205, 1242-1243, 1279-1305, 2173; packs.py:852, 868
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.26\linewidth}>{\raggedright\arraybackslash}p{0.27\linewidth}X@{}}
+\toprule
+Mechanism & Covers & Applied \\
+\midrule
+CRC-32 of the matrix member header & header bytes 0--251 & every open \\
+Structural checks & section bounds, chunk index, table rules, LEB and STREAM bounds & every open \\
+Count-stream end state & column counts of a chunk & every decoded chunk, and every count-only read \\
+Lane-stream end state ($X_l=2^{16}$, exact word count) & entropy-coded part of a chunk & every decoded chunk with $N>0$ \\
+Row id below $m$ & decoded ids & codec 2 always; codec 1 in canonical mode only \\
+CRC-32 and length & regenerated bytes of kinds 3 and 5 & when the bytes are regenerated \\
+Canonical digest (header and member table) & the whole logical matrix, names and key/values & only on request: \texttt{verify=True} or \texttt{SINGLET\_S1\_VERIFY=1} in the client (skipped unless rows are a pack and columns cells or a pack), \texttt{verify\_matrix\_digest}, the writer's self-check, the offline verifier \\
+Object digest16 and SHA-256 & every byte of the object & whole-object download (on by default), offline verifier \\
+Pack digest16 & a pack file & every pack read \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{What the end-state check detects.}
+An error in an initial state, or in a word bit consumed by a symbol decode, makes the decode diverge and is detected
+unless all $L$ final states happen to equal $2^{16}$ with the word count matching (the probability of a miss is not
+quantified). The check cannot detect: (i)~an error in a word bit consumed by a raw field, which is shifted out of the
+state unchanged: a residual extra bit (counts of 9 and above) changes only the value; a gap extra bit changes the stored
+id and every later id of that lane in that column, and escapes whenever the position contexts of the following symbols
+are unchanged; (ii)~errors in the $\mathit{pp0}$ values (not entropy coded; they shift the ids of a lane's first
+column); (iii)~errors in the row keys, which always give a valid permutation; (iv)~errors in names and key/values;
+(v)~any error in a chunk with $N=0$. Codec-2 chunks have no end-state check, and their zstd frames no checksum.
+% src: rans1_dec.h:171-178, 199-212 (raw fields leave the state); 126 (pp0 read raw); api.h:68 (any keys -> perm); 258 (N == 0 skips the kernel)
+
+\paragraph{Full and partial reads.}
+A range reader checks the header CRC, the chunk index, the tables and the streams of the chunks it fetched (the
+reference client also checks each response's \texttt{Content-Range} and that the member header carries the manifest's
+digest, an identity check, not a content check). It cannot verify the canonical digest or the object hash, which need
+every column and every byte, nor detect errors (i)--(iv) in the bytes it read.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{SIMD decoding and dispatch}
+\label{spec:simd}
+The scalar loop of Section~\ref{spec:chunk} is the definition; the vector kernels must produce identical stored ids,
+values and accept/reject decisions for every valid stream (Table~\ref{spec:tab:isa}). All arithmetic is
+32-bit integer except $\lambda(\cdot)$ in $\mathrm{pos}$ and $\kappa_{\mathrm{raw}}$, read from the exponent of an
+integer-to-float conversion, which is exact below $2^{24}$ (valid streams stay below $2^{21}+2$). All kernels support
+$L\in\{16,32,64\}$.
+% src: rans1_avx2.h:1-5, 14-35 (refill LUT), 39-42 (posb via cvtepi32_ps), 175-178 (kraw via exponent), 255-257 (end checks)
+% src: rans1_avx512.h:1-5, 16-21 (expand_epi16 + pdep), 22-25 (posb via cvtepu32_ps), 153-157 (lzcnt), 233-235 (end checks)
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Decoder kernels and the CPU features each needs at run time.}
+\label{spec:tab:isa}
+% src: isa.h:20-24, 47-72 (detect_cpu), 95-128 (supported/best/selected/resolve); simd.h:14-26 (target attributes)
+\begin{tabularx}{\linewidth}{@{}l>{\raggedright\arraybackslash}p{0.38\linewidth}X@{}}
+\toprule
+Kernel & Required (CPUID and XGETBV) & Main instructions \\
+\midrule
+scalar  & none & reference loop \\
+AVX2    & AVX, OSXSAVE, YMM state enabled ($\mathrm{XCR0}\wedge\texttt{0x6}=\texttt{0x6}$), AVX2, BMI2, POPCNT & gathers, \texttt{vpermd} refills, \texttt{vcvtdq2ps} \\
+AVX-512 & everything for AVX2, ZMM and opmask state ($\mathrm{XCR0}\wedge\texttt{0xE6}=\texttt{0xE6}$), AVX-512 F, BW, DQ, CD, VL and \textbf{VBMI2} & \texttt{vpexpandw} (VBMI2) with \texttt{pdep} (BMI2) masks, masked gathers, \texttt{vplzcntd} (CD), \texttt{vcvtudq2ps} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Dispatch.}
+Kernels are compiled with per-function target attributes, so no architecture flag is needed, and run only after the run-time check. Default: the best supported
+kernel (AVX-512, AVX2, scalar). \texttt{PZ2\_ISA} (\texttt{scalar}, \texttt{avx2}, \texttt{avx512}; read once per
+process, unknown values ignored) or a per-call option can select a lower kernel, never one the CPU lacks; an
+unsupported request falls back to the best supported kernel below it. On non-x86 targets or with
+\texttt{PZ2\_SCALAR\_ONLY} only the scalar kernel exists. SHA-256 has a separate SHA-NI path, chosen at run time and
+not used with \texttt{PZ2\_ISA=scalar}.
+% src: pz2.h:20-22; isa.h:76-80 (compiled paths), 102-128; sha256.h:1-3
+

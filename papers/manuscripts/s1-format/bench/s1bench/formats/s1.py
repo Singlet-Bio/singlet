@@ -46,8 +46,9 @@ class S1(Format):
         p = self._pack_path(path)
         return p.stat().st_size if self.use_pack and p.exists() else 0
 
-    def read(self, path, threads, mode: str = "canonical", isa=None) -> Canon:
-        """Whole-matrix decode through the compiled codec; `mode='canonical'` restores the source row order."""
+    def load(self, path, threads, mode: str = "canonical", isa=None):
+        """Whole-matrix decode through the compiled codec into CSC arrays with gene ids and barcodes, which is what
+        `decode` times; `mode='canonical'` restores the source row order (the order every other format returns)."""
         from singlet import _pz2  # type: ignore
         from singlet.s1.container import S2Reader
 
@@ -61,6 +62,10 @@ class S1(Format):
         if genes is None and self.use_pack:
             genes = self._pack_path(path).read_text().splitlines()
         barcodes = cols.get("names") if isinstance(cols, dict) else cols
+        return out, genes, barcodes
+
+    def to_canon(self, obj) -> Canon:
+        out, genes, barcodes = obj
         return Canon(
             indptr=np.asarray(out["indptr"], dtype=np.int64),
             indices=np.asarray(out["indices"], dtype=np.uint32),

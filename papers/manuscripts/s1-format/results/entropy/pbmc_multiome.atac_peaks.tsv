@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+pbmc_multiome	atac_peaks	streams	85596796	5.191895	1.667652	6.854593	NA	NA	NA	NA	NA
+pbmc_multiome	atac_peaks	raw_u32	85596796	NA	NA	NA	684774368	3.65185	3.234542	64.0	NA
+pbmc_multiome	atac_peaks	fixed_bytes	85596796	NA	NA	NA	513580776	4.550683	3.901622	48.0	NA
+pbmc_multiome	atac_peaks	leb128_gaps	85596796	NA	NA	NA	171644737	3.938476	3.639592	16.042165	NA
+pbmc_multiome	atac_peaks	streamvbyte_gaps	85596796	NA	NA	NA	214111226	3.717967	3.036026	20.011144	NA
+pbmc_multiome	atac_peaks	rans0_gaps	85596796	NA	NA	NA	74457557	7.998934	7.997485	6.958911	NA
+pbmc_multiome	atac_peaks	bitpack256_gaps	85596796	NA	NA	NA	122465094	6.247371	5.782676	11.445764	NA
+pbmc_multiome	atac_peaks	zstd3_leb_gaps	85596796	NA	NA	NA	82584712	7.994382	7.986	7.718486	NA
+pbmc_multiome	atac_peaks	zstd19_leb_gaps	85596796	NA	NA	NA	76521163	7.99306	7.982159	7.151778	NA
+pbmc_multiome	atac_peaks	pz2_avx2	85596796	NA	NA	NA	56604448	7.998649	7.99567	5.290333	56581967

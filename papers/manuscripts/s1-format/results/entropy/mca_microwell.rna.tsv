@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+mca_microwell	rna	streams	266059719	6.150965	1.431756	7.54066	NA	NA	NA	NA	NA
+mca_microwell	rna	raw_u32	266059719	NA	NA	NA	2128477752	3.296228	2.72599	64.0	NA
+mca_microwell	rna	fixed_bytes	266059719	NA	NA	NA	1064238876	5.502085	3.500873	32.0	NA
+mca_microwell	rna	leb128_gaps	266059719	NA	NA	NA	546601031	4.238205	3.860451	16.435439	NA
+mca_microwell	rna	streamvbyte_gaps	266059719	NA	NA	NA	671010611	3.972997	3.247337	20.176241	NA
+mca_microwell	rna	rans0_gaps	266059719	NA	NA	NA	256944386	7.995195	7.990119	7.725916	NA
+mca_microwell	rna	bitpack256_gaps	266059719	NA	NA	NA	498230352	5.905777	5.313826	14.981008	NA
+mca_microwell	rna	zstd3_leb_gaps	266059719	NA	NA	NA	273581068	7.998426	7.993031	8.226155	NA
+mca_microwell	rna	zstd19_leb_gaps	266059719	NA	NA	NA	249846109	7.998569	7.994474	7.512482	NA
+mca_microwell	rna	pz2_avx2	266059719	NA	NA	NA	190054610	7.999308	7.997342	5.714645	189990984

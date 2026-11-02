@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+tabula_sapiens	rna	droplet_3p	L	umi	58482	412848	1119354356	0.046361	12947.222767	8390.0	2308.0	0.575124	110884	4.775284

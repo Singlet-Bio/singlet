@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+nytimes_bow	words	text	L	counts	102660	300000	69679427	0.002262	331.807083	306.0	217.0	0.802384	212	1.428573
