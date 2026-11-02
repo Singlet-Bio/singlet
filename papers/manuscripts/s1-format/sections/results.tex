@@ -23,8 +23,10 @@ four cores, fewer than a current laptop has, \sone{} was the fastest format on \
 \nm{dec-paired-n} matrices and the only one that was both small and fast (Fig.~\ref{fig:wow}c--d). The advantage comes
 from parallel decoding. On one core \sone{} read \nm{dec-s1-t1} million non-zeros per second, third behind uncompressed
 CSC arrays and AnnData Zarr (Table~\ref{tab:main}): its decoder spends more time per entry than byte-oriented codes, but
-every block decodes on its own core. Most formats do not decode in parallel at all, and on a whole \nm{core-max}-core node
-\sone{} read \nm{scale-s1-max} times faster than on one core (Fig.~\ref{fig:wow}g).
+every block decodes on its own core. Most formats barely use more cores: from 1 to \nm{core-max} cores TileDB-SOMA read
+\nm{scale-soma-max} times faster and no other format we tested more than \nm{scale-rest-max} times, while \sone{} read
+\nm{scale-s1-max} times faster, \nm{scale-s1-top} million non-zeros per second, \nm{scale-s1-lead} times the next format
+(Fig.~\ref{fig:wow}g).
 
 \subsection{\sone{} reads at the speed of the network up to 1\,Gbit/s}
 \label{sec:network}

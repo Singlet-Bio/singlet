@@ -340,7 +340,15 @@ def scaling_section(cfg: Config, N: Numbers, out: Path) -> None:
                         "n": len(full)})
         last = tab[-1]
         N.put(f"scale-{fmt}-max", last["speedup"], "{:.1f}")
+        N.put(f"scale-{fmt}-top", last["mnnzs"], "{:.0f}")
         N.put(f"scale-{fmt}-n", last["n"], "{:d}")
+    # at the most cores: .s1's lead over the fastest other format, and the largest gain among the formats after .s1 and SOMA
+    top = {r["format"]: r for r in tab if r["threads"] == max(q["threads"] for q in tab if q["format"] == r["format"])}
+    if "s1" in top and len(top) > 1:
+        N.put("scale-s1-lead", top["s1"]["mnnzs"] / max(r["mnnzs"] for f, r in top.items() if f != "s1"), "{:.1f}")
+        rest = [r["speedup"] for f, r in top.items() if f not in ("s1", "soma")]
+        if rest:
+            N.put("scale-rest-max", max(rest), "{:.1f}")
     _write(tab, out / "fig1_scaling.tsv", ["format", "threads", "mnnzs", "q1", "q3", "speedup", "n"])
 
 

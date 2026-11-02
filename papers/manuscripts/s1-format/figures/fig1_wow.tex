@@ -133,12 +133,12 @@
 % ======================= (g) read rate against cores =======================
 \begin{axis}[name=pg, at={($(pf.north east)+(\figDG,0)$)}, anchor=north west, scale only axis, width=\figD, height=\figH,
   title={g\quad Gains the most from more cores},
-  xmode=log, log basis x=2, ymode=log, xmin=0.9, xmax=48, ymin=5, ymax=1500,
+  xmode=log, log basis x=2, ymode=log, xmin=0.9, xmax=48, ymin=4, ymax=8000,
   xtick={1,2,4,8,16,32,44}, xticklabels={1,2,4,8,16,32,44}, ytick={10,100,1000}, yticklabels={10,100,1000},
   xlabel={cores}, ylabel={million non-zeros/s},
   axis x line*=bottom, axis y line*=left,
-  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(1.0,0.0)}, anchor=south east, legend columns=2,
-    cells={anchor=west}, row sep=-2pt, column sep=4pt}]
+  legend style={font=\sffamily\tiny, draw=none, fill=none, at={(0.0,1.0)}, anchor=north west, legend columns=3,
+    cells={anchor=west}, row sep=-2pt, column sep=3pt}, legend image post style={xscale=0.55}]
 \addplot[name path=sq3, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=q3] {\gen{fig1_scaling.tsv}};
 \addplot[name path=sq1, draw=none, forget plot, discard if not={format}{s1}] table[x=threads, y=q1] {\gen{fig1_scaling.tsv}};
 \addplot[c-s1, fill opacity=0.18, draw=none, forget plot] fill between[of=sq3 and sq1];
@@ -173,6 +173,7 @@ at 1\,Gbit/s, each decoded into a sparse tensor: (e) seconds from a new process 
 of three seeds; (f) milliseconds for each later minibatch, median and 5th--95th percentiles of \nm{mb3-batches}
 minibatches from three seeds.
 \textbf{(g)} Read rate from a cold file against cores on a 48-core node, median over \nm{scale-s1-n} matrices; band,
-interquartile range of \sone. The readers of uncompressed CSC and gzip-compressed AnnData use one core.}
+interquartile range of \sone. Shown are the formats whose readers can use several cores, with uncompressed CSC and
+gzip-compressed AnnData for reference.}
 \label{fig:wow}
 \end{figure*}
