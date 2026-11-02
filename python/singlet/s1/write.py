@@ -55,7 +55,8 @@ def _find_pack(hexid: str):
     """The pack with this id (prefix) from the installed packs, else downloaded into the user cache; ValueError if neither."""
     from .packs import PackError, PackStore, default_store
 
-    store = default_store()  # may already download (migrate turns that on), so a fetch error can come from either get
+    # the shared store may already download (migrate turns that on), so a fetch error can come from either get
+    store = default_store()
     try:
         try:
             return store.get(hexid)
@@ -98,7 +99,8 @@ def pack_rows(gene_pack, genes: Sequence[str]) -> tuple[bytes, dict]:
             where = " (gene id %d is %r, the pack's is %r)" % (k + 1, genes[k], table[k])
         raise ValueError(
             "gene_pack %s holds %d genes and %d %s rows; the %d gene ids given are neither, in that order%s. Store them "
-            "inline with gene_pack=None" % (pk.id.hex(), len(table), pk.n(), pk.member, len(genes), where)
+            "inline with gene_pack=None"
+            % (pk.id.hex(), len(table), pk.n(), pk.member, len(genes), where)
         )
     return pk.id[:8], {"pack": pk.id.hex(), "member": member}
 

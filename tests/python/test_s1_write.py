@@ -248,7 +248,9 @@ def test_gene_pack_gene_level_round_trip(tmp_path):
     for b in (singlet.read_s1(p), singlet.load(str(p))):
         assert list(b.var_names) == genes and list(b.obs_names) == cells
         assert np.array_equal(b.X.toarray(), x.toarray())
-    assert S2Reader(str(p)).members["counts"].digest == S2Reader(str(inline)).members["counts"].digest
+    assert (
+        S2Reader(str(p)).members["counts"].digest == S2Reader(str(inline)).members["counts"].digest
+    )
 
 
 def test_gene_pack_exon_level_round_trip(tmp_path):
@@ -279,8 +281,12 @@ def test_gene_pack_rejects_ids_the_pack_does_not_hold(tmp_path):
         with pytest.raises(ValueError, match=msg):
             singlet.write_s1(x, tmp_path / "bad.s1", genes=bad, barcodes=cells, gene_pack=RAT_EXON)
         assert not (tmp_path / "bad.s1").exists()
-    with pytest.raises(ValueError, match="neither"):  # a matrix of a few genes cannot refer to a pack
-        singlet.write_s1(x[:, :3], tmp_path / "bad.s1", genes=genes[:3], barcodes=cells, gene_pack=RAT_EXON)
+    with pytest.raises(
+        ValueError, match="neither"
+    ):  # a matrix of a few genes cannot refer to a pack
+        singlet.write_s1(
+            x[:, :3], tmp_path / "bad.s1", genes=genes[:3], barcodes=cells, gene_pack=RAT_EXON
+        )
     from singlet.s1.packs import default_store
 
     wl = next(e["id"] for e in default_store().entries() if e["kind"] == "whitelist")
@@ -298,10 +304,15 @@ def test_gene_pack_not_installed(tmp_path, monkeypatch):
 
     _no_download(monkeypatch, tmp_path)
     x, genes, cells = random_counts(40, 30, 0.3, seed=10)
-    for download in (False, True):  # the shared store downloads itself once migrate has run in the process
+    for download in (
+        False,
+        True,
+    ):  # the shared store downloads itself once migrate has run in the process
         monkeypatch.setattr(default_store(), "download", download)
         with pytest.raises(ValueError, match="not installed and could not be downloaded"):
-            singlet.write_s1(x, tmp_path / "p.s1", genes=genes, barcodes=cells, gene_pack="0123456789abcdef")
+            singlet.write_s1(
+                x, tmp_path / "p.s1", genes=genes, barcodes=cells, gene_pack="0123456789abcdef"
+            )
         assert not (tmp_path / "p.s1").exists()
 
     pk = _shipped_pack(RAT_EXON)
@@ -310,7 +321,9 @@ def test_gene_pack_not_installed(tmp_path, monkeypatch):
     p = singlet.write_s1(x, tmp_path / "g.s1", genes=table, barcodes=cells, gene_pack=RAT_EXON)
     empty = PackStore(dirs=[str(tmp_path / "no-packs")])
     monkeypatch.setattr(sample_mod, "default_store", lambda: empty)
-    with pytest.raises(ValueError, match="vocabulary pack %s, which is not installed" % RAT_EXON[:16]):
+    with pytest.raises(
+        ValueError, match="vocabulary pack %s, which is not installed" % RAT_EXON[:16]
+    ):
         singlet.read_s1(p)
     b = singlet.read_s1(p, genes=table)
     assert list(b.var_names) == table and np.array_equal(b.X.toarray(), x.toarray())
