@@ -55,12 +55,13 @@ def _find_pack(hexid: str):
     """The pack with this id (prefix) from the installed packs, else downloaded into the user cache; ValueError if neither."""
     from .packs import PackError, PackStore, default_store
 
-    store = default_store()
+    store = default_store()  # may already download (migrate turns that on), so a fetch error can come from either get
     try:
-        return store.get(hexid)
-    except PackError:
-        pass
-    try:
+        try:
+            return store.get(hexid)
+        except PackError:
+            if store.download:
+                raise
         pk = PackStore(store.dirs, download=True, remote=store.remote).get(hexid)
     except (PackError, OSError) as e:
         raise ValueError(

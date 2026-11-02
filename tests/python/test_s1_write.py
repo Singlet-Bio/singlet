@@ -294,13 +294,15 @@ def test_gene_pack_rejects_ids_the_pack_does_not_hold(tmp_path):
 def test_gene_pack_not_installed(tmp_path, monkeypatch):
     """write_s1 refuses a pack it can neither find nor download; read_s1 names the missing pack and takes genes=."""
     from singlet.s1 import sample as sample_mod
-    from singlet.s1.packs import PackStore
+    from singlet.s1.packs import PackStore, default_store
 
     _no_download(monkeypatch, tmp_path)
     x, genes, cells = random_counts(40, 30, 0.3, seed=10)
-    with pytest.raises(ValueError, match="not installed and could not be downloaded"):
-        singlet.write_s1(x, tmp_path / "p.s1", genes=genes, barcodes=cells, gene_pack="0123456789abcdef")
-    assert not (tmp_path / "p.s1").exists()
+    for download in (False, True):  # the shared store downloads itself once migrate has run in the process
+        monkeypatch.setattr(default_store(), "download", download)
+        with pytest.raises(ValueError, match="not installed and could not be downloaded"):
+            singlet.write_s1(x, tmp_path / "p.s1", genes=genes, barcodes=cells, gene_pack="0123456789abcdef")
+        assert not (tmp_path / "p.s1").exists()
 
     pk = _shipped_pack(RAT_EXON)
     table = [g for g, _n in pk.gene_table()]
