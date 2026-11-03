@@ -6,7 +6,7 @@ gsm, P, SRC, BIN, WL, CAP = sys.argv[1:7]
 STAGE = os.environ.get("STAGE", "stage")   # the engine reruns decode into stage_r with the new binary
 sys.path.insert(0, SRC)
 import fetch_worker as F, ratecap
-q = urllib.parse.quote('sample_alias="%s"' % gsm)
+q = urllib.parse.quote(('(' + " OR ".join('run_accession="%s"' % x for x in os.environ["SRRS"].split(",")) + ')') if os.environ.get("SRRS") else 'sample_alias="%s"' % gsm)   # SRRS: explicit run list (benchmark-store datasets)
 u = "https://www.ebi.ac.uk/ena/portal/api/search?result=read_run&format=tsv&fields=run_accession,read_count,library_layout&query=" + q
 rows = list(csv.DictReader(urllib.request.urlopen(u, timeout=120).read().decode().splitlines(), delimiter="\t"))
 runs = sorted((r["run_accession"], int(r["read_count"] or 0)) for r in rows)

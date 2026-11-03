@@ -6,7 +6,7 @@ set -uo pipefail
 T=$1; GSM=${2:-}
 W=/mnt/projects/debruinz_project/debruinz/singlet; PL=$W/pilot; P=$PL/$GSM; D=$W/jobs/s15; PB=$W/pipeline-benchmark
 REFB=/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A; WLD=$PB/whitelists
-row=$(awk -F'\t' -v g=$GSM '$1==g' $D/samples.tsv); FIVE=$(echo "$row" | cut -f3)
+row=$(awk -F'\t' -v g=$GSM '$1==g' $D/samples.tsv); FIVE=${FIVE_ENV:-$(echo "$row" | cut -f3)}
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 export HOME=$W/cache/condahome XDG_CACHE_HOME=$W/cache MPLCONFIGDIR=$W/cache/mpl APPTAINER_CACHEDIR=$W/cache/apptainer
 command -v apptainer > /dev/null 2>&1 || { source /etc/profile.d/lmod.sh 2> /dev/null; module load apptainer 2> /dev/null; }
@@ -16,6 +16,13 @@ O=$P/tools/$T; [ "$T" = kbidx ] || { rm -rf $O; mkdir -p $O; }
 [ -f $P/starsolo/chem.txt ] && eval "$(sed 's/ /\n/g' $P/starsolo/chem.txt | sed 's/^/CH_/')"   # CH_whitelist, CH_umi, CH_strand
 GF=$P/starsolo/Solo.out/GeneFull
 tm() { /usr/bin/time -v -o $O/time.txt "$@"; rc=$?; grep -E "Elapsed \(wall|Maximum resident" $O/time.txt; return $rc; }
+# benchmark store: a finished run registers itself (outputs linked, run.json, index.tsv row). DSID/SMP default to the pilot's names.
+DSID=${DSID:-pilot_$GSM}; SMP=${SMP:-$GSM}; STORE=${STORE:-$W/benchmark-store}; export STORE
+TVER=$(awk -F'	' -v t=$T '$1==t{print $2}' $STORE/tool_versions.tsv 2> /dev/null); TVER=${TVER:-unrecorded}
+reg() { rc=$?; [ $rc = 0 ] || return; case $T in kbidx|finalclean|vdjclean|vdjlib|htocount) return;; esac; [ -n "$GSM" ] || return
+  sh=$(sha256sum $D/pilot_tools.sh | cut -c1-12); mkdir -p $STORE/_scripts; cp -n $D/pilot_tools.sh $STORE/_scripts/pilot_tools.$sh.sh
+  python3 $D/store_register.py "$DSID" "$SMP" "$T" "$TVER" "$O" --cmd "pilot_tools.sh $T $GSM  (stage definition: _scripts/pilot_tools.$sh.sh)" --input-dir $P; }
+trap 'reg; rm -rf $SCR' EXIT
 case $T in
 rtools)
   export PATH=$W/envs/ambient/bin:$PATH OMP_NUM_THREADS=8
@@ -23,8 +30,12 @@ rtools)
 edrops)
   tm apptainer exec --bind $W --bind /tmp $W/images/bioc-3.20.sif Rscript $D/pilot_edrops.R $GF/raw $O $W/rlib/bioc-3.20 > $O/run.log 2>&1; rc=$?; tail -5 $O/run.log; cat $O/summary.tsv 2> /dev/null; exit $rc ;;
 cellbender)
-  NCALL=$(wc -l < $GF/filtered/barcodes.tsv); TOT=$((NCALL * 4 + 20000)); echo "expected $NCALL total-droplets $TOT"
-  cd $SCR; tm apptainer exec --nv --bind $W --bind /tmp $W/images/cellbender-0.3.2.sif cellbender remove-background --cuda --input $GF/raw --output $SCR/cb.h5 \
+  NCALL=$(wc -l < $GF/filtered/barcodes.tsv); TOT=$((NCALL * 4 + 20000))
+  # CellBender needs droplets with >= 5 UMIs beyond the cells to estimate the background: cap total-droplets-included by that count (STARsolo raw lists every barcode that saw a read)
+  NB5=$(awk 'NR>3{u[$2]+=$3} END{n=0; for(b in u) if(u[b]>=5) n++; print n}' $GF/raw/matrix.mtx); [ $TOT -gt $((NB5 - 500)) ] && TOT=$((NB5 - 500)); echo "expected $NCALL total-droplets $TOT (droplets with >=5 UMI: $NB5)"
+  [ $TOT -gt $((NCALL * 2)) ] || { echo "too few background droplets for CellBender ($NB5 with >=5 UMI, $NCALL cells)"; exit 7; }
+  mkdir -p $SCR/cbin; ln -sf $GF/raw/matrix.mtx $SCR/cbin/matrix.mtx; ln -sf $GF/raw/barcodes.tsv $SCR/cbin/barcodes.tsv; if [ -e $GF/raw/genes.tsv ]; then ln -sf $GF/raw/genes.tsv $SCR/cbin/genes.tsv; else cut -f1,2 $GF/raw/features.tsv > $SCR/cbin/genes.tsv; fi
+  cd $SCR; tm apptainer exec --nv --bind $W --bind /tmp $W/images/cellbender-0.3.2.sif cellbender remove-background --cuda --input $SCR/cbin --output $SCR/cb.h5 \
       --expected-cells $NCALL --total-droplets-included $TOT --epochs 150 > $O/run.log 2>&1; rc=$?; tail -5 $O/run.log
   cp $SCR/cb_cell_barcodes.csv $O/ 2> /dev/null; cp $SCR/cb.h5 $O/cb.h5 2> /dev/null; cp $SCR/cb_metrics.csv $O/ 2> /dev/null; exit $rc ;;
 kraken)   # viral k2 DB (the one S-nonhost used): reads of the cDNA mate; classified reads are kept, the rest summarised in the report
@@ -53,7 +64,10 @@ vireo|souporcell)   # genotype demux of a known mixture; K = KDON (number of cel
     FA=$REFB/fasta/genome.fa; PV=$W/bench-public/ref/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf
     [ -s $PV ] || { mkdir -p $W/bench-public/ref; zcat $PANEL > $PV.tmp.$$ && mv $PV.tmp.$$ $PV; }
     $SAM view -@ 8 -b -D CB:barcodes.txt $B > $SCR/cells.bam && $SAM index -@ 8 $SCR/cells.bam
-    tm apptainer exec $W/envs/souporcell/souporcell.sif souporcell_pipeline.py -i $SCR/cells.bam -b barcodes.txt -f $FA -t 16 -o $O/out -k $K --common_variants $PV > soup.log 2>&1; rc=$?; tail -4 soup.log; exit $rc
+    tm apptainer exec $W/envs/souporcell/souporcell.sif souporcell_pipeline.py -i $SCR/cells.bam -b barcodes.txt -f $FA -t 16 -o $O/out -k $K --common_variants $PV > soup.log 2>&1; rc=$?; tail -4 soup.log
+    # the last step (consensus.py: cluster genotypes + ambient estimate) needs g++ for cython, which the sif lacks; the demultiplexing result is clusters.tsv, written before it
+    if [ $rc != 0 ] && [ -s $O/out/clusters.tsv ] && [ -e $O/out/troublet.done ] || [ $rc != 0 ] && [ -s $O/out/clusters.tsv ] && [ $(wc -l < $O/out/clusters.tsv) -gt $(wc -l < $O/barcodes.txt) ]; then echo "consensus step failed (no g++ in sif); clusters.tsv complete: treated as done"; rc=0; fi
+    exit $rc
   fi ;;
 alevin)
   export ALEVIN_FRY_HOME=$PB/af_home PATH=$W/envs/pbench/bin:$PATH; IDX=$PB/refs/GRCh38-2024-A/af_idx

@@ -160,3 +160,17 @@ STARsolo is rerun with a sorted BAM (`starsolo_bam`, GeneFull) and its own filte
 ### Binary change (2026-11-01)
 
 2a3b0d61 is not the Beta candidate (it lacks #164 EmptyDrops_CR cell calls, #165 exon/intron and USA matrices, #160/#170 protocol vote, #161 species filters, #175 GTF next to `--genome-dir`). The pilot's Singlet result is the rerun on **0ea48783** (build job 797270, `bin/0ea48783`), one binary for all 13 samples. Outputs: `s1cpu_0ea48783`, `s1gpu_0ea48783`, `s1cap_0ea48783`, `equiv_0ea48783.txt`, reads in `stage_0ea48783`. `--exons` is still passed. 2a3b0d61 outputs `s1cpu_r`, `s1gpu_r` exist only for the few runs that finished and are not scored. The STARsolo BAM side (`rstar`, mgatk, vireo, souporcell) does not use the Singlet binary and keeps running.
+
+## Benchmark store and Leftovers for Thursday (2026-11-02)
+
+Store at `$WORK/benchmark-store/` on Clipper: `datasets.tsv` (86 rows; `fetch` = sra | url | bam | pilot | later, `fetch_note` gives the reason for every `later`), `index.tsv` (one row per finished run), `<dataset>/<sample>/<tool>/<version>/` (symlinked outputs + `run.json`). Scripts: `ops/s15/store/` (`build_datasets.py`, `submit_store.sh`, `store_register.py`, `submit_big.sh`, `pilot_big.sh`) and the stage/tool scripts in `ops/s15/`. Reads and BAMs are deleted by each chain's last job, only when every tool in the chain ended OK. Wave 1 estimate: ~2,000 core-hours, ~550 GB transient reads, ~150 GB kept outputs; second batch (Kang x4 via BAM, 2 LCL, Ding 10x v3 library A, 3 more SRRs): ~600 core-hours, ~150 GB transient.
+
+Open items:
+- **GSM7064234 Singlet GPU run out of memory twice** (797046, 797331): 1,198,074,594 pairs, single H100 node with 370 G; killed at 22–23 min with 387.9 GB peak RSS (sorted-BAM path; the stream path was tried on the second attempt and died the same way). The CPU run (797286) finished (3 h 19 min). Engine owner: S8. Not fixed here.
+- **Reference tools for GSM7064234 and GSM4987148** rerun from the kept `.sra` (first 100 M pairs; STARsolo on bigmem, 24 h; chains in `jobs/s15/bigids.tsv`). The first-pass mgatk jobs (GSM5171610, GSM7064234) timed out at 4 h on `short-cpu` after their BAM had been deleted; GSM5171610 mgatk still to be redone (needs a refetch).
+- **souporcell**: `consensus.py` (genotype VCF + ambient estimate) fails because the sif has no `g++`; the clustering (`clusters.tsv`) is complete and is what the store keeps (GSM4987144, GSM4987148, GSM8085472 registered).
+- **CellBender** failed with a ZeroDivisionError whenever the raw matrix had fewer than `total-droplets-included` droplets with >= 5 UMIs; the stage now caps that number and skips with a message when there are too few background droplets.
+- **sra_download_set** was one SRR (SRR24098804) with 73 % of reads "too short" on STARsolo (mapping 26 %): unexplained; split into one dataset per SRR.
+- **Kang 2018 (GSE96583)**: the SRA runs hold only the 98-nt cDNA read; the barcodes live in the submitted BAMs (CR/UR tags, v1 chemistry, 14-nt barcode + 10-nt UMI). Reads are rebuilt from the BAMs (mapped primary reads only), STARsolo `--soloCBlen 14`, kb and alevin skipped for v1.
+- **pbmc5k_v4_d1** needs the GEM-X v4 whitelist (shipped only with 10x software). Multiome/ATAC datasets need ATAC tools that are not set up. Other `later` rows: see `fetch_note`.
+- Tools not set up: DoubletFinder, scds, Scrublet, popscle demuxlet/freemuxlet, demuxmix, HTODemux/hashedDrops, velocyto standalone, SnapATAC2/chromap, TRUST4 only on 5' VDJ sets.

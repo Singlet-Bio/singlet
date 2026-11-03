@@ -1,0 +1,5 @@
+kang2018_b1_a	SRA run holds only the 98-nt cDNA read (no barcode/UMI read): cannot be aligned with STARsolo or Singlet
+kang2018_b1_b	same
+kang2018_b1_c	same
+kang2018_ctrl	same (SRA run is cDNA-only); needs the authors BAM/raw FASTQ
+pbmc5k_v4_d1	GEM-X 3-prime v4 barcode whitelist (3M-3pgex-may-2023) is not in the local whitelists; its source is 10x software
