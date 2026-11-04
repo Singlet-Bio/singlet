@@ -25,6 +25,8 @@
 #include "pileup_rec.h"
 #include <fstream>
 #include <sstream>
+#include <functional>
+#include <thread>
 #include <tuple>
 #include <cmath>
 #include <cstdio>
@@ -425,6 +427,100 @@ __global__ void k_r9(const uint32_t* gs, int ng, int m, const uint32_t* u, const
         atomicAdd(&stat[0], 1ull); val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull);
     }
 }
+// ---- E23: the R9 collapse without k_r9's pair loop. k_r9 tested every pair of a (cell, feature) group on the group's one thread: O(n^2)
+// per group, so the deepest group set the kernel's time (neuron1k_v3: a junction with 14,097 UMIs in one cell, 25.8 s of the pileup's 27 s).
+// r9_collapse computes the same roots in time linear in the entries:
+//   - the pairs: two UMIs one base apart agree on one half of their base-5 digits, so the candidates are the pairs of a bucket (group, half
+//     index, half value) over the free entries; each pair that passes k_r9's test (count rule, one mismatch) is unioned at once;
+//   - the union-find hooks the larger root under the smaller with atomicCAS, so every component's root is its smallest entry, which is the
+//     root k_r9's union (root[max] = min) leaves, whatever the order the pairs arrive in;
+//   - an entry with a gene component (rid) takes the first entry of its group with the same rid, from a stable sort by (group, rid);
+//   - the outputs (isroot, or the merged class counts, the R1 vote and its statistics) as k_r9 computes them, per entry instead of per group.
+// Scratch: five dead arrays of the caller (m entries each), so the reducer's peak memory does not grow.
+struct R9Scratch { uint64_t *k0, *k1; uint32_t *v0, *v1, *g; };
+static int bits_of(uint64_t v) { int b = 1; while (b < 64 && (1ull << b) <= v) b++; return b; }
+static bool g_e23 = true;   // SINGLET_GPU_PILEUP_E23=0: the per-group kernels k_r9 and k_cr_roots, as before E23 (the A/B switch of its gate)
+__global__ void k_r9_hkey(const uint32_t* gid, const uint32_t* u, const uint32_t* rid, int m, uint32_t p5, int h, uint64_t sentinel, uint64_t* key, uint32_t* idx) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    idx[i] = (uint32_t)i;
+    if (rid != nullptr && rid[i] != 0xFFFFFFFFu) { key[i] = sentinel; return; }   // not free: no pair of k_r9's loop
+    key[i] = ((uint64_t)(gid[i] - 1) << 20) | (h == 0 ? u[i] % p5 : u[i] / p5); }
+__device__ __forceinline__ void uf_union_min(uint32_t* p, uint32_t a, uint32_t b) {   // lock-free union, the smaller root wins
+    while (true) {
+        a = root_of(p, a); b = root_of(p, b);
+        if (a == b) return;
+        if (a > b) { const uint32_t t = a; a = b; b = t; }
+        if (atomicCAS(p + b, b, a) == b) return;   // else b was hooked meanwhile: find both roots again
+    } }
+__global__ void k_r9_pairs(const uint64_t* key, const uint32_t* idx, int m, uint64_t sentinel, const uint32_t* u, const uint32_t* w, int ulen, uint32_t* root) {
+    const int j = blockIdx.x * blockDim.x + threadIdx.x; if (j >= m || key[j] == sentinel) return;
+    const uint32_t a = idx[j];
+    for (int q = j + 1; q < m && key[q] == key[j]; q++) {
+        const uint32_t b = idx[q], hi = max(w[a], w[b]), lo = min(w[a], w[b]);
+        if (hi + 1 >= 2 * lo && umi5_one_mismatch(u[a], u[b], ulen)) uf_union_min(root, a, b); } }
+__global__ void k_r9_flatten(uint32_t* root, int m) { const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) root[i] = root_of(root, i); }
+__global__ void k_r9_rkey(const uint32_t* gid, const uint32_t* rid, int m, uint64_t sentinel, uint64_t* key, uint32_t* idx) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    idx[i] = (uint32_t)i; key[i] = rid[i] == 0xFFFFFFFFu ? sentinel : (((uint64_t)(gid[i] - 1) << 32) | rid[i]); }
+__global__ void k_r9_rroot(const uint64_t* key, const uint32_t* idx, int m, uint64_t sentinel, uint32_t* root) {   // a run's first entry: its smallest index
+    const int p = blockIdx.x * blockDim.x + threadIdx.x; if (p >= m || key[p] == sentinel || (p > 0 && key[p] == key[p - 1])) return;
+    for (int q = p; q < m && key[q] == key[p]; q++) root[idx[q]] = idx[p]; }
+__global__ void k_r9_isroot(const uint32_t* root, int m, uint32_t* isroot) { const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) isroot[i] = root[i] == (uint32_t)i; }
+__global__ void k_r9_msum(const uint32_t* root, const uint64_t* mv, int m, uint32_t* msum) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    for (int k = 0; k < 3; k++) { const uint32_t c = min((uint32_t)((mv[i] >> (16 * k)) & 0xFFFF), 255u); if (c) atomicAdd(&msum[3 * (size_t)root[i] + k], c); } }
+__global__ void k_r9_vote(const uint32_t* root, const uint32_t* msum, int m, uint64_t* val, unsigned long long* stat) {   // k_r9's vote per root
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    val[i] = 0; if (root[i] != (uint32_t)i) return;
+    const uint32_t* c = msum + 3 * (size_t)i; int best = 0; for (int k = 1; k < 3; k++) if (c[k] > c[best]) best = k;
+    bool tie = false; for (int k = 0; k < 3; k++) if (k != best && c[k] == c[best]) tie = true;
+    if (tie) { atomicAdd(&stat[1], 1ull); return; }
+    if (best == 2) { atomicAdd(&stat[2], 1ull); return; }
+    atomicAdd(&stat[0], 1ull); val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull); }
+// the R9 collapse of the m entries (sorted by uh = cell | feature, then UMI; ngr groups): k_r9's outputs (root; isroot, or val / msum / stat)
+static void r9_collapse(Arena& A, const R9Scratch& S, const uint64_t* uh, int m, int ngr, const uint32_t* u, const uint32_t* w, const uint64_t* mv, int ulen,
+                        int directional, const uint32_t* rid, uint32_t* root, uint32_t* isroot, uint64_t* val, uint32_t* msum, unsigned long long* stat) {
+    const int TB = 256, G = (m + TB - 1) / TB;
+    k_gstart<<<G, TB>>>(uh, m, S.v0);   // group id + 1 of each entry
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::InclusiveSum(t, b, S.v0, S.g, m); });
+    k_iota<<<G, TB>>>(root, m);
+    uint32_t p5 = 1; for (int k = 0; k < ulen / 2; k++) p5 *= 5;   // the low half: ulen / 2 digits (< 5^6), the high half the rest (< 5^7 < 2^20)
+    if (directional) {
+        const uint64_t sent = (uint64_t)ngr << 20; const int bits = bits_of((uint64_t)ngr) + 20;
+        for (int h = 0; h < 2; h++) {
+            k_r9_hkey<<<G, TB>>>(S.g, u, rid, m, p5, h, sent, S.k0, S.v0);
+            cub::DoubleBuffer<uint64_t> dk(S.k0, S.k1); cub::DoubleBuffer<uint32_t> dv(S.v0, S.v1);
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dk, dv, m, 0, bits); });
+            k_r9_pairs<<<G, TB>>>(dk.Current(), dv.Current(), m, sent, u, w, ulen, root);
+        }
+    }
+    k_r9_flatten<<<G, TB>>>(root, m);
+    if (rid != nullptr) {
+        const uint64_t sent = (uint64_t)ngr << 32; const int bits = bits_of((uint64_t)ngr) + 32;
+        k_r9_rkey<<<G, TB>>>(S.g, rid, m, sent, S.k0, S.v0);
+        cub::DoubleBuffer<uint64_t> dk(S.k0, S.k1); cub::DoubleBuffer<uint32_t> dv(S.v0, S.v1);
+        cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dk, dv, m, 0, bits); });   // stable: ascending index per key
+        k_r9_rroot<<<G, TB>>>(dk.Current(), dv.Current(), m, sent, root);
+    }
+    if (!val) { k_r9_isroot<<<G, TB>>>(root, m, isroot); return; }
+    CK(cudaMemsetAsync(msum, 0, 3 * (size_t)m * 4));
+    k_r9_msum<<<G, TB>>>(root, mv, m, msum);
+    k_r9_vote<<<G, TB>>>(root, msum, m, val, stat);
+}
+// E23 (SINGLET_GPU_PILEUP_PROF=1, profiling only): sizes of the groups a per-group serial kernel walks (one thread per group), from the group
+// starts on the device; appended to the run's log (g_parts_log). Downloads the starts: not for production runs.
+static bool g_prof = false;
+static std::vector<std::string> g_prof_log;
+static void prof_groups(const char* name, const uint32_t* d_starts, int ng, int m) {
+    if (!g_prof || ng <= 0) return;
+    std::vector<uint32_t> s(ng); CK(cudaMemcpy(s.data(), d_starts, (size_t)ng * 4, cudaMemcpyDeviceToHost));
+    std::vector<uint32_t> z(ng); double sq = 0; long long n1k = 0, n10k = 0;
+    for (int g = 0; g < ng; g++) { z[g] = (g + 1 < ng ? s[g + 1] : (uint32_t)m) - s[g]; sq += (double)z[g] * z[g]; n1k += z[g] >= 1000; n10k += z[g] >= 10000; }
+    std::vector<uint32_t> t = z; const size_t k = std::min<size_t>(5, t.size()); std::partial_sort(t.begin(), t.begin() + k, t.end(), std::greater<uint32_t>());
+    char b[320]; snprintf(b, sizeof b, "prof %s: %d groups, %d entries, max %u (top %u %u %u %u), sum n^2 %.3g, groups >= 1000: %lld, >= 10000: %lld",
+                          name, ng, m, t[0], k > 1 ? t[1] : 0, k > 2 ? t[2] : 0, k > 3 ? t[3] : 0, k > 4 ? t[4] : 0, sq, n1k, n10k);
+    g_prof_log.push_back(b);
+}
 // group starts of the m unique entries (sorted by uh): returns the number of groups, starts in *gs
 static int group_starts(Arena& A, const uint64_t* uh, int m, uint32_t** gs) {
     const int TB = 256; uint32_t* f = A.alloc<uint32_t>(m); k_gstart<<<(m + TB - 1) / TB, TB>>>(uh, m, f);
@@ -441,11 +537,18 @@ __global__ void k_hits(const Rec* r, int n, unsigned long long* c) {
 // reads recorded in the molecule store per cell (per_cell_molecule_stats' total_reads): gene tuples with a UMI
 __global__ void k_cellreads(const Rec* r, int n, uint32_t* out) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n && !r[i].direct) atomicAdd(&out[r[i].bc], 1u); }
+// E16 (singlet's level 5, set by the engine wrapper): the per-alignment results leave the device as the three arrays the host keeps (gene, stat,
+// exon gene: 9 bytes per alignment) instead of the 48-byte AA records split on the host
+static bool g_e16_aasplit = false;
+static bool g_e16_fetchpar = false;   // E16 "fetchpar" (singlet, level 5): a partition's outputs downloaded and converted on one thread each
+__global__ void k_e16_aa_split(const AA* __restrict__ aa, int n, uint32_t* __restrict__ gene, uint8_t* __restrict__ stat, uint32_t* __restrict__ exg) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) { gene[i] = aa[i].gene; stat[i] = (uint8_t) aa[i].stat; exg[i] = aa[i].exg; }
+}
 static bool g_cell_stats = false;   // set by the engine wrapper: per-cell reads and molecules for saturation / cell QC
 struct SumU64 { __host__ __device__ uint64_t operator()(const uint64_t& a, const uint64_t& b) const { return a + b; } };
 struct SumU32 { __host__ __device__ uint32_t operator()(const uint32_t& a, const uint32_t& b) const { return a + b; } };
 
-static int bits_of(uint64_t v) { int b = 1; while (b < 64 && (1ull << b) <= v) b++; return b; }
 static int total_of(Arena&, const uint32_t* cnt, const uint32_t* off, int n) {      // total from the last offset + count
     if (n == 0) return 0; uint32_t a = 0, b = 0; CK(cudaMemcpy(&a, cnt + n - 1, 4, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(&b, off + n - 1, 4, cudaMemcpyDeviceToHost)); return (int)(a + b); }
 static uint32_t* scan_u32(Arena& A, const uint32_t* cnt, int n) { uint32_t* off = A.alloc<uint32_t>(std::max(n, 1)); if (n) cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::ExclusiveSum(t, b, cnt, off, n); }); return off; }
@@ -554,7 +657,9 @@ static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, 
         uint64_t* sj_hi = A.alloc<uint64_t>(n_sjt); uint32_t* sj_lo = A.alloc<uint32_t>(n_sjt);
         uint32_t* tg = gst ? A.alloc<uint32_t>(n_sjt) : nullptr;
         k_fill_hilo<<<GR, TB>>>(R, nR, r_sj, o_sj, c_sj, l_jid, 0, jb, in.ulen, sj_hi, sj_lo, nullptr, in.S, G, tg);
+        T.mark("5.sj.fill");
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sj_hi, sj_lo, n_sjt, cb + jb, ub5, &hs); const int G = (n_sjt + TB - 1) / TB;
+        T.mark("5.sj.sort");
         uint32_t* first = A.alloc<uint32_t>(n_sjt); k_runflag<<<G, TB>>>(hs, sj_lo, ord, n_sjt, first);
         uint32_t* seg = A.alloc<uint32_t>(n_sjt);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::InclusiveSum(t, b, first, seg, n_sjt); });
@@ -565,7 +670,11 @@ static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, 
         uint32_t* gs; int ngr = group_starts(A, uh, m, &gs);
         uint32_t *root = A.alloc<uint32_t>(m), *isroot = A.alloc<uint32_t>(m);
         uint32_t* rid = gene_components(A, gst, tg, ord, seg, n_sjt, uh, ul, m, jb, in.ulen, dn);
-        k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, ul, w, nullptr, in.ulen, in.par.directional, root, isroot, nullptr, nullptr, nullptr, rid);
+        T.mark("5.sj.runs");
+        // E23: the dead arrays above as scratch (sj_hi: the sort took it; hs, first, sj_lo: the runs took them; seg: the reductions took it)
+        if (g_e23) r9_collapse(A, R9Scratch{sj_hi, hs, first, seg, sj_lo}, uh, m, ngr, ul, w, nullptr, in.ulen, in.par.directional, rid, root, isroot, nullptr, nullptr, nullptr);
+        else k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, ul, w, nullptr, in.ulen, in.par.directional, root, isroot, nullptr, nullptr, nullptr, rid);
+        T.mark("5.sj.r9"); if (g_prof) { prof_groups("sj r9 (cell, junction)", gs, ngr, m); T.mark("prof"); }
         *sj_u = A.alloc<uint64_t>(m); *sj_n = A.alloc<uint32_t>(m);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, uh, *sj_u, isroot, *sj_n, dn, SumU32(), m); });
         CK(cudaMemcpy(&n_sju, dn, 4, cudaMemcpyDeviceToHost));
@@ -582,7 +691,9 @@ static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int n
         uint64_t* sn_hi = A.alloc<uint64_t>(n_snpt); uint32_t* sn_lo = A.alloc<uint32_t>(n_snpt); uint8_t* sn_alt = A.alloc<uint8_t>(n_snpt);
         uint32_t* tg = (gst && !g_snp_first) ? A.alloc<uint32_t>(n_snpt) : nullptr;
         k_fill_hilo<<<GR, TB>>>(R, nR, r_snp, o_snp, c_snp, l_snp, 1, sb, in.ulen, sn_hi, sn_lo, sn_alt, in.S, G, tg, Qp);
+        T.mark("6.snp.fill");
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sn_hi, sn_lo, n_snpt, cb + sb, ub5, &hs); const int G = (n_snpt + TB - 1) / TB;
+        T.mark("6.snp.sort");
         uint32_t* first = A.alloc<uint32_t>(n_snpt); k_runflag<<<G, TB>>>(hs, sn_lo, ord, n_snpt, first);
         *sn_u = A.alloc<uint64_t>(n_snpt); *sn_v = A.alloc<uint64_t>(n_snpt); int* dn = A.alloc<int>(4);
         uint64_t* v = A.alloc<uint64_t>(n_snpt);
@@ -603,7 +714,11 @@ static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int n
             uint32_t* gs; int ngr = group_starts(A, mk, m, &gs);
             uint32_t *root = A.alloc<uint32_t>(m), *msum = A.alloc<uint32_t>(3 * (size_t)m);
             uint32_t* rid = gene_components(A, gst, tg, ord, seg, n_snpt, mk, mu, m, sb, in.ulen, dn);
-            k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, mu, w, mv, in.ulen, in.par.directional, root, nullptr, val, msum, st, rid);
+            T.mark("6.snp.runs");
+            // E23: the dead arrays above as scratch (sn_hi: the sort took it; hs, first, sn_lo: the runs took them; seg: the reductions took it)
+            if (g_e23) r9_collapse(A, R9Scratch{sn_hi, hs, first, seg, sn_lo}, mk, m, ngr, mu, w, mv, in.ulen, in.par.directional, rid, root, nullptr, val, msum, st);
+            else k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, mu, w, mv, in.ulen, in.par.directional, root, nullptr, val, msum, st, rid);
+            T.mark("6.snp.r9"); if (g_prof) { prof_groups("snp r9 (cell, SNP)", gs, ngr, m); T.mark("prof"); }
             unsigned long long s[3]; CK(cudaMemcpy(s, st, 24, cudaMemcpyDeviceToHost));
             for (int k = 0; k < 3; k++) g_snp_stat[k] += s[k];
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, mk, *sn_u, val, *sn_v, dn, SumU64(), m); });
@@ -620,17 +735,51 @@ static int red_mt(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int nR
     int n_mtu = 0;
     if (n_mtt > 0) {
         uint64_t* mt_key = A.alloc<uint64_t>(n_mtt); k_fill_mt<<<GR, TB>>>(R, in.Al, in.S, nR, r_mt, o_mt, c_mt, l_mt, mt_key, Qp);
+        T.mark("7.mt.fill");
         uint64_t* k1 = A.alloc<uint64_t>(n_mtt); cub::DoubleBuffer<uint64_t> dk(mt_key, k1);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortKeys(t, b, dk, n_mtt, 0, cb + 18); });
+        T.mark("7.mt.sort");
         *mt_u = A.alloc<uint64_t>(n_mtt); *mt_n = A.alloc<uint32_t>(n_mtt); int* dn = A.alloc<int>(4);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRunLengthEncode::Encode(t, b, dk.Current(), *mt_u, *mt_n, dn, n_mtt); });
         CK(cudaMemcpy(&n_mtu, dn, 4, cudaMemcpyDeviceToHost));
+        T.mark("7.mt.rle");
+        if (g_prof) { char b[160]; snprintf(b, sizeof b, "prof mt: %d tuples, %d distinct (cell, position, base, strand), key bits %d", n_mtt, n_mtu, cb + 18); g_prof_log.push_back(b); }
     }
     return n_mtu;
 }
 
+// E23 (SINGLET_GPU_PILEUP_PROF=1): the gene store's (cell, gene) groups (stage_c's segments: k_cr_roots walks each on one thread) and the
+// directional collapse's candidate buckets (segment, half UMI: k_edge_count's runs), from the sorted unique keys downloaded to the host
+static void prof_gene_groups(const Inputs& in, const GeneStore& g) {
+    if (!g_prof || g.m <= 0) return;
+    std::vector<uint64_t> uk(g.m); CK(cudaMemcpy(uk.data(), g.uk, (size_t)g.m * 8, cudaMemcpyDeviceToHost));
+    std::vector<uint8_t> gmt(in.ngmt); if (in.ngmt) CK(cudaMemcpy(gmt.data(), in.gmt, in.ngmt, cudaMemcpyDeviceToHost));
+    const uint64_t gm = (1ull << g.gb) - 1;
+    struct Grp { uint32_t n; uint64_t key; }; std::vector<Grp> gr; long long mt_entries = 0, mt_groups = 0; double sq = 0, sqmt = 0;
+    for (int i = 0; i < g.m;) { int j = i; while (j < g.m && (uk[j] >> g.ub) == (uk[i] >> g.ub)) j++; gr.push_back(Grp{(uint32_t)(j - i), uk[i] >> g.ub});
+        const uint32_t gene = (uint32_t)((uk[i] >> g.ub) & gm); const bool mt = gene < gmt.size() && gmt[gene]; sq += (double)(j - i) * (j - i);
+        if (mt) { mt_entries += j - i; mt_groups++; sqmt += (double)(j - i) * (j - i); } i = j; }
+    std::vector<Grp> t = gr; const size_t k = std::min<size_t>(8, t.size());
+    std::partial_sort(t.begin(), t.begin() + k, t.end(), [](const Grp& a, const Grp& b) { return a.n > b.n; });
+    std::string top; for (size_t q = 0; q < k; q++) { const uint32_t gene = (uint32_t)(t[q].key & gm); char b[96];
+        snprintf(b, sizeof b, "%s%u (cell %llu gene %u%s)", q ? ", " : "", t[q].n, (unsigned long long)(t[q].key >> g.gb), gene, gene < gmt.size() && gmt[gene] ? " chrM" : ""); top += b; }
+    // the directional collapse's candidate buckets: (segment, low half) and (segment, high half) of the UMI; k_edge_count does b(b-1)/2 per bucket
+    const int lob = 2 * (in.ulen / 2); double bsq[2] = {0, 0}; uint32_t bmx[2] = {0, 0};
+    for (int h = 0; h < 2; h++) {
+        std::vector<uint64_t> kk(g.m); size_t seg = 0; for (int i = 0; i < g.m; i++) { if (i && (uk[i] >> g.ub) != (uk[i - 1] >> g.ub)) seg++;
+            const uint64_t u = uk[i] & ((1ull << g.ub) - 1); kk[i] = (seg << 32) | (h == 0 ? (u & ((1ull << lob) - 1)) : (u >> lob)); }
+        std::sort(kk.begin(), kk.end());
+        for (size_t i = 0; i < kk.size();) { size_t j = i; while (j < kk.size() && kk[j] == kk[i]) j++; bsq[h] += (double)(j - i) * (j - i - 1) / 2; bmx[h] = std::max(bmx[h], (uint32_t)(j - i)); i = j; } }
+    char b[700]; snprintf(b, sizeof b, "prof gene (cell, gene) groups: %zu groups, %d entries (UMIs), sum n^2 %.3g; chrM genes %lld groups, %lld entries, sum n^2 %.3g; "
+                          "largest %s; edge buckets (low/high half): max %u/%u, pairs %.3g/%.3g",
+                          gr.size(), g.m, sq, mt_groups, mt_entries, sqmt, top.c_str(), bmx[0], bmx[1], bsq[0], bsq[1]);
+    g_prof_log.push_back(b);
+}
+
 static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     const int TB = 256; const int nS = in.nS, nA = in.nA, nR = in.nR;
+    { const char* pf = getenv("SINGLET_GPU_PILEUP_PROF"); g_prof = pf && *pf && *pf != '0'; g_prof_log.clear(); }
+    { const char* e = getenv("SINGLET_GPU_PILEUP_E23"); g_e23 = !(e && *e == '0'); g_cr_replay = g_e23; }
     // 1 annotate
     AA* aa = A.alloc<AA>(std::max(nA, 1));
     k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa, in.GM); T.mark("1.annotate");
@@ -742,6 +891,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         CsrDev C[3]; CsrDev32 RD[2]; CsrDev MX[2]; GeneStore gst{nullptr, nullptr, 0, 0, 0};
         red_gene(A, T, in, recs, ng, C, &gst, g_want_reads ? RD : nullptr, g_want_mixed ? MX : nullptr);
         const GeneStore* gsp = (in.par.umi_dedup && gst.m > 0) ? &gst : nullptr;   // R9 per gene: the junction and SNP molecules take their roots from it
+        if (g_prof) { T.mark("gene"); prof_gene_groups(in, gst); T.mark("prof"); }
         if (out && in.wantMerges && gst.m > 0) {   // the host V(D)J reducer needs the same roots: the entries the collapse merged into another
             const int Gm = (gst.m + TB - 1) / TB; uint32_t* mf = A.alloc<uint32_t>(gst.m); k_mflag<<<Gm, TB>>>(gst.lab, gst.m, mf);
             uint32_t* midx = A.alloc<uint32_t>(gst.m); int* mn = A.alloc<int>(1);
@@ -775,9 +925,11 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         if (!out) continue;
         // ---------------- fetch this partition's cells (host; its span is marked "fetch" and left out of the GPU time) ----------------
         for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
-        if (ng > 0) {
-            auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells); v.insert(v.end(), t.begin(), t.end()); };
-            add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]);
+        // (E16: the steps as lambdas, called in this order, or with g_e16_fetchpar on threads: each fills its own outputs in the same order)
+        auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells);
+                                                              if (g_e16_fetchpar && v.empty()) v.swap(t); else v.insert(v.end(), t.begin(), t.end()); };
+        auto fExtra = [&]() {   // campaign's extra outputs: the pre-USA exon / intron split and the reads-per-molecule sums
+            if (ng <= 0) return;
             if (g_want_mixed) { add(out->mixed_exon, MX[0]); add(out->mixed_intron, MX[1]); }
             if (g_want_reads) {
                 auto addr = [&](std::vector<T3>& v, const CsrDev32& c) {
@@ -788,26 +940,51 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                 };
                 addr(out->exon_reads, RD[0]); addr(out->intron_reads, RD[1]);
             }
-        }
+        };
+        auto fSj = [&]() {
         if (n_sju > 0) { std::vector<uint64_t> k(n_sju); std::vector<uint32_t> c(n_sju); CK(cudaMemcpy(k.data(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_sju; i++) out->sj_raw_sum += c[i];
             for (int i = 0; i < n_sju; i++) out->sj.push_back(T3{(uint32_t)(k[i] >> jb), (uint32_t)(k[i] & ((1ull << jb) - 1)), std::min(c[i], 65535u)}); }
+        };
+        auto fSn = [&]() {
         if (n_snu > 0) { std::vector<uint64_t> k(n_snu), v(n_snu); CK(cudaMemcpy(k.data(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.data(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_snu; i++) { T3 a{(uint32_t)(k[i] >> sb), (uint32_t)(k[i] & ((1ull << sb) - 1)), 0}; uint32_t dp = (uint32_t)(v[i] & 0xFFFFFFFFu), ad = (uint32_t)(v[i] >> 32);
                 if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); out->snp_ad.push_back(a); } } }
+        };
+        auto fMt = [&]() {
         if (n_mtu > 0) { std::vector<uint64_t> k(n_mtu); std::vector<uint32_t> c(n_mtu); CK(cudaMemcpy(k.data(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_mtu;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
                 uint64_t bk = k[i] >> 1; uint64_t tot = 0, rv = 0; int j = i;
                 while (j < n_mtu && (k[j] >> 1) == bk) { tot += c[j]; if (k[j] & 1) rv += c[j]; j++; }
                 uint32_t cell = (uint32_t)(bk >> 17), feat = (uint32_t)(bk & ((1u << 17) - 1));
                 out->mt.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(tot, 65535)}); if (rv > 0) out->mt_rev.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(rv, 65535)}); i = j; } }
+        };
+        auto fInd = [&]() {
         if (n_indt > 0) { std::vector<uint32_t> b(n_indt), ri(n_indt); std::vector<IND> d(n_indt); CK(cudaMemcpy(b.data(), in_bc, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
             CK(cudaMemcpy(d.data(), in_ind, (size_t)n_indt * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(ri.data(), in_ri, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_indt; i++) indels.push_back({ri[i], {b[i], d[i].pos, d[i].lenins >> 1, d[i].lenins & 1}}); }
+        };
+        if (g_e16_fetchpar) {
+            int dev = 0; cudaGetDevice(&dev);
+            std::vector<std::thread> fth;
+            auto run = [&](std::function<void()> f) { fth.emplace_back([dev, f]() { cudaSetDevice(dev); f(); }); };
+            if (ng > 0) { run([&]() { add(out->exon, C[0]); }); run([&]() { add(out->intron, C[1]); }); run([&]() { add(out->amb, C[2]); }); }
+            run(fExtra); run(fSj); run(fSn); run(fMt); run(fInd);
+            for (auto& t : fth) t.join();
+        } else {
+            if (ng > 0) { add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]); }
+            fExtra(); fSj(); fSn(); fMt(); fInd();
+        }
         T.mark("fetch");
     }
     A.reset(base2); A.peak = peak_all;
     T.finish();
+    {   // E23: the GPU time per stage (ms, every partition summed; "fetch" is the host)
+        std::string st = "stages (ms):"; char b[64];
+        for (const auto& kv : T.acc) { snprintf(b, sizeof b, " %s %.1f", kv.first.c_str(), kv.second); st += b; }
+        g_parts_log.push_back(st);
+        for (auto& l : g_prof_log) g_parts_log.push_back(l);
+    }
     if (g_cell_stats) { uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_mol, &z, sizeof(z))); CK(cudaMemcpyToSymbol(g_cell_mixed, &z, sizeof(z))); }
     if (g_want_reads) {
         uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_hist, &z, sizeof(z)));
@@ -822,6 +999,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             }
         }
     }
+
     if (!out) return;
     // ---- canonical merge: cells are disjoint across partitions; each matrix is sorted by (cell, row), indels by read (the K = 1 order)
     // each partition's rows are sorted already: merge them (K = 1: nothing to do)
@@ -834,17 +1012,31 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     if (K > 1) std::stable_sort(indels.begin(), indels.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (auto& e : indels) out->indels.push_back(e.second);
     for (auto* v : {&out->exon_reads, &out->intron_reads, &out->mixed_exon, &out->mixed_intron}) std::sort(v->begin(), v->end(), byCell);
+    const double e16m0 = now_s();   // E16: the host side of the final downloads (per-alignment results, junction table)
     if (g_cell_stats) {
         out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1)); out->cell_mixed.resize(std::max(in.ncells, 1));
         CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->cell_mol.data(), cell_mol, out->cell_mol.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->cell_mixed.data(), cell_mixed, out->cell_mixed.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->hits, hits, 32, cudaMemcpyDeviceToHost));
+        out->aa_gene.resize(nA); out->aa_stat.resize(nA); out->aa_exg.resize(nA);
+        uint8_t* dsplit = nullptr;   // E16: outside the arena (its 3 GB margin), so the arena's layout is unchanged; without it, the host split
+        if (g_e16_aasplit && nA > 0 && cudaMalloc(&dsplit, (size_t) nA * 9) != cudaSuccess) { cudaGetLastError(); dsplit = nullptr; }
+        if (dsplit != nullptr) {
+            uint32_t* dg = (uint32_t*) dsplit; uint32_t* de = dg + nA; uint8_t* ds = (uint8_t*) (de + nA);
+            k_e16_aa_split<<<(nA + 255) / 256, 256>>>(aa, nA, dg, ds, de);
+            CK(cudaGetLastError());
+            CK(cudaMemcpy(out->aa_gene.data(), dg, (size_t) nA * 4, cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(out->aa_exg.data(), de, (size_t) nA * 4, cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(out->aa_stat.data(), ds, (size_t) nA, cudaMemcpyDeviceToHost));
+            CK(cudaFree(dsplit));
+        } else {
         std::vector<AA> h(nA);
         if (nA) CK(cudaMemcpy(h.data(), aa, (size_t)nA * sizeof(AA), cudaMemcpyDeviceToHost));
-        out->aa_gene.resize(nA); out->aa_stat.resize(nA); out->aa_exg.resize(nA);
         for (int k = 0; k < nA; k++) { out->aa_gene[k] = h[k].gene; out->aa_stat[k] = (uint8_t)h[k].stat; out->aa_exg[k] = h[k].exg; }
+        }
     }
+    { char b[96]; snprintf(b, sizeof b, "e16: merge + per-alignment D2H %.3f s", now_s() - e16m0); g_parts_log.push_back(b); }
     out->n_gene_tuples = ng_all; out->n_sjl = n_sjl; out->n_sj_tuples = n_sjt_all; out->n_snp_tuples = n_snpt_all; out->n_mt_tuples = n_mtt_all; out->n_ind_tuples = n_indt_all; out->n_junctions = nj;
     if (nj > 0) { std::vector<uint64_t> h1(nj); std::vector<uint32_t> h2(nj); CK(cudaMemcpy(h1.data(), t1, (size_t)nj * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(h2.data(), t2, (size_t)nj * 4, cudaMemcpyDeviceToHost));
         for (int i = 0; i < nj; i++) out->sjtab.push_back({(uint32_t)(h1[i] >> 32), (uint32_t)(h1[i] & 0xFFFFFFFFu), h2[i]}); }

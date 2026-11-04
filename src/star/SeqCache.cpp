@@ -31,6 +31,7 @@ std::atomic<unsigned long long> g_profOutcome[6][2];
 std::atomic<unsigned long long> g_profClass[7][2];
 std::atomic<unsigned long long> g_profClassDetail[7][5];
 std::atomic<unsigned long long> g_profOutcomeDetail[6][12];
+std::atomic<unsigned long long> g_profPath[3];
 #endif
 
 namespace {

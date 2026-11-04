@@ -1,0 +1,60 @@
+variant                                A ms     M ms     B ms   GPU ms  identical %   A GB   M GB   B GB  M/B reads
+base                                  268.6    337.4    254.7    860.7   100.000000  12.09  21.64  41.63  524577/90740
+mono_g_b0                             964.3    340.0   1639.3   2943.5   100.000000   3.12  21.64   5.37  524552/90715
+mono_g_b1024                         1002.6    338.2   1417.2   2758.1   100.000000   3.12  21.64   5.37  524577/90740
+mono_g_b1024_bps1                    1513.4    336.8   1404.0   3254.2   100.000000   0.78  21.64   5.37  524577/90740
+mono_g_b1024_bps16                    733.0    336.7   1398.9   2468.7   100.000000  12.46  21.64   5.37  524577/90740
+mono_g_b1024_bps2                    1133.5    338.7   1401.5   2873.7   100.000000   1.56  21.64   5.37  524577/90740
+mono_g_b1024_bps8                     879.1    337.9   1417.3   2634.3   100.000000   6.23  21.64   5.37  524577/90740
+mono_l_b0                             626.7    339.5   1643.6   2609.9   100.000000   3.12  21.64   5.37  524552/90715
+mono_l_b1024                          626.7    338.4   1399.2   2364.2   100.000000   3.12  21.64   5.37  524577/90740
+mono_l_b1024_bps2                     654.4    338.4   1405.5   2398.3   100.000000   1.56  21.64   5.37  524577/90740
+mono_l_b1024_bps8                     620.8    338.5   1418.5   2377.9   100.000000   6.23  21.64   5.37  524577/90740
+nb_a1048576_m524288_b131072           236.1    324.9    197.6    758.6   100.000000  48.34  43.28  57.64  524577/90740
+nb_a131072_m131072_b32768             318.1    373.5    328.0   1019.6   100.000000   6.04  10.82  20.82  524577/90740
+nb_a32768_m32768_b8192                649.4    632.7   1016.1   2298.1   100.000000   1.51   2.71   5.20  524577/90740
+nb_a524288_m524288_b131072            245.4    323.7    198.1    767.2   100.000000  24.17  43.28  57.64  524577/90740
+nb_a65536_m65536_b16384               417.5    433.8    558.6   1409.9   100.000000   3.02   5.41  10.41  524577/90740
+nsys                                  268.6    337.1    257.1    862.9   100.000000  12.09  21.64  41.63  524577/90740
+tail                                  269.2    339.3    257.3    865.7   100.000000  12.09  21.64  41.63  524577/90740
+
+base: per-lane phase ms (phase 1, scan = thrust scan + syncs + k_p2, phase 3) and thread-cycle shares
+  lane A: reads 1991926 batch 262144 work 46104 B/read; median 268.6 ms; phases [105.7, 16.833, 145.933]; cycles {'seeds': 51.6, 'windows': 8.4, 'stitching': 39.1, 'select': 0.9}; SA/read 450.5; inside stitching {'sat': 1.8, 'finalize': 10.7, 'recording': 2.2, 'copies': 1.1}
+  lane M: reads 524577 batch 262144 work 82552 B/read; median 337.4 ms; phases [79.167, 17.9, 240.867]; cycles {'seeds': 16.4, 'windows': 15.1, 'stitching': 68.3, 'select': 0.2}; SA/read 1933.0; inside stitching {'sat': 2.4, 'finalize': 21.1, 'recording': 4.9, 'copies': 1.5}
+  lane B: reads 90740 batch 65536 work 635248 B/read; median 254.7 ms; phases [38.767, 6.8, 209.1]; cycles {'seeds': 7.0, 'windows': 15.1, 'stitching': 77.8, 'select': 0.1}; SA/read 3116.9; inside stitching {'sat': 2.8, 'finalize': 13.8, 'recording': 2.2, 'copies': 1.1}
+
+tails (m5t, last rep)
+  lane=A kernel=k_p1 span_ms=105.917 busy_thr=0.7696 busy_warp=0.7696 busy_blk=0.8606 drain_share=0.2499 clk_ghz=1.780
+  lane=A kernel=k_p3 span_ms=146.293 busy_thr=0.5808 busy_warp=0.5808 busy_blk=0.8134 drain_share=0.3885 clk_ghz=1.780
+  lane=M kernel=k_p1 span_ms=79.884 busy_thr=0.7731 busy_warp=0.7731 busy_blk=0.8295 drain_share=0.2689 clk_ghz=1.780
+  lane=M kernel=k_p3 span_ms=238.939 busy_thr=0.6952 busy_warp=0.6952 busy_blk=0.8292 drain_share=0.3269 clk_ghz=1.781
+  lane=B kernel=k_p1 span_ms=39.031 busy_thr=0.4051 busy_warp=0.4052 busy_blk=0.4345 drain_share=1.0000 clk_ghz=1.781
+  lane=B kernel=k_p3 span_ms=208.232 busy_thr=0.3341 busy_warp=0.3341 busy_blk=0.3867 drain_share=1.0000 clk_ghz=1.781
+  A b0 k_p1 n=262144 slots=84480 span=13.866 busy thr/warp/blk=0.7883/0.7883/0.8789 drain=0.2251 fin p50/p90/p99/p999=0.5457/0.8701/0.9642/0.9924 longest=0.4504 clk=1.780
+  A b0 k_p3 n=262144 slots=101376 span=16.170 busy thr/warp/blk=0.5287/0.5287/0.7560 drain=0.4596 fin p50/p90/p99/p999=0.3849/0.6804/0.7672/0.8357 longest=0.8732 clk=1.780
+  A b1 k_p1 n=262144 slots=84480 span=13.881 busy thr/warp/blk=0.7822/0.7822/0.8784 drain=0.2124 fin p50/p90/p99/p999=0.5570/0.8577/0.9514/0.9788 longest=0.5253 clk=1.780
+  A b1 k_p3 n=262144 slots=101376 span=18.134 busy thr/warp/blk=0.6305/0.6305/0.8745 drain=0.3234 fin p50/p90/p99/p999=0.4933/0.7980/0.8742/0.9365 longest=0.9128 clk=1.781
+  A b2 k_p1 n=262144 slots=84480 span=14.260 busy thr/warp/blk=0.7743/0.7743/0.8637 drain=0.2350 fin p50/p90/p99/p999=0.5413/0.8484/0.9510/0.9809 longest=0.5673 clk=1.780
+  A b2 k_p3 n=262144 slots=101376 span=20.327 busy thr/warp/blk=0.5727/0.5727/0.8177 drain=0.3850 fin p50/p90/p99/p999=0.4519/0.7322/0.8162/0.9031 longest=0.8794 clk=1.780
+  A b3 k_p1 n=262144 slots=84480 span=14.707 busy thr/warp/blk=0.7676/0.7676/0.8526 drain=0.2574 fin p50/p90/p99/p999=0.5283/0.8426/0.9239/0.9555 longest=0.3954 clk=1.780
+  A b3 k_p3 n=262144 slots=101376 span=21.276 busy thr/warp/blk=0.5725/0.5725/0.7994 drain=0.3905 fin p50/p90/p99/p999=0.4478/0.7217/0.7976/0.8725 longest=0.8591 clk=1.781
+  A b4 k_p1 n=262144 slots=84480 span=13.538 busy thr/warp/blk=0.7782/0.7782/0.8719 drain=0.2234 fin p50/p90/p99/p999=0.5404/0.8536/0.9586/0.9854 longest=0.3984 clk=1.780
+  A b4 k_p3 n=262144 slots=101376 span=19.250 busy thr/warp/blk=0.5961/0.5961/0.8385 drain=0.3588 fin p50/p90/p99/p999=0.4625/0.7571/0.8386/0.9100 longest=0.8629 clk=1.780
+  A b5 k_p1 n=262144 slots=84480 span=13.987 busy thr/warp/blk=0.7736/0.7736/0.8638 drain=0.2193 fin p50/p90/p99/p999=0.5429/0.8456/0.9597/0.9852 longest=0.3868 clk=1.780
+  A b5 k_p3 n=262144 slots=101376 span=21.523 busy thr/warp/blk=0.6052/0.6052/0.8414 drain=0.3487 fin p50/p90/p99/p999=0.4895/0.7633/0.8441/0.9177 longest=0.8093 clk=1.781
+  A b6 k_p1 n=262144 slots=84480 span=13.497 busy thr/warp/blk=0.7541/0.7541/0.8474 drain=0.2407 fin p50/p90/p99/p999=0.5274/0.8298/0.9439/0.9811 longest=0.4893 clk=1.780
+  A b6 k_p3 n=262144 slots=101376 span=18.826 busy thr/warp/blk=0.5796/0.5796/0.8090 drain=0.3915 fin p50/p90/p99/p999=0.4532/0.7324/0.8191/0.9092 longest=0.8381 clk=1.780
+  A b7 k_p1 n=156918 slots=84480 span=8.179 busy thr/warp/blk=0.7165/0.7166/0.8065 drain=0.4790 fin p50/p90/p99/p999=0.5074/0.8327/0.9080/0.9647 longest=0.7473 clk=1.779
+  A b7 k_p3 n=156918 slots=101376 span=10.785 busy thr/warp/blk=0.5329/0.5329/0.7231 drain=0.5205 fin p50/p90/p99/p999=0.4870/0.6999/0.8090/0.9503 longest=0.9642 clk=1.779
+  M b0 k_p1 n=262144 slots=84480 span=35.182 busy thr/warp/blk=0.8175/0.8175/0.8749 drain=0.2410 fin p50/p90/p99/p999=0.5845/0.8974/0.9527/0.9769 longest=0.5107 clk=1.780
+  M b0 k_p3 n=262144 slots=101376 span=110.317 busy thr/warp/blk=0.7509/0.7509/0.8849 drain=0.2700 fin p50/p90/p99/p999=0.5804/0.8847/0.9469/0.9864 longest=0.7252 clk=1.781
+  M b1 k_p1 n=262144 slots=84480 span=39.682 busy thr/warp/blk=0.8311/0.8311/0.8936 drain=0.2013 fin p50/p90/p99/p999=0.5923/0.8855/0.9744/0.9875 longest=0.5311 clk=1.780
+  M b1 k_p3 n=262144 slots=101376 span=113.077 busy thr/warp/blk=0.7362/0.7362/0.8884 drain=0.2899 fin p50/p90/p99/p999=0.5926/0.8803/0.9311/0.9569 longest=0.6844 clk=1.781
+  M b2 k_p1 n=289 slots=84480 span=5.019 busy thr/warp/blk=0.0032/0.0032/0.0042 drain=1.0000 fin p50/p90/p99/p999=0.9573/1.0000/1.0000/1.0000 longest=1.0000 clk=1.785
+  M b2 k_p3 n=289 slots=101376 span=15.546 busy thr/warp/blk=0.0022/0.0023/0.0031 drain=1.0000 fin p50/p90/p99/p999=0.7984/1.0000/1.0000/1.0000 longest=1.0000 clk=1.785
+  B b0 k_p1 n=65536 slots=84480 span=24.385 busy thr/warp/blk=0.5273/0.5273/0.5650 drain=1.0000 fin p50/p90/p99/p999=0.7457/0.7948/0.8155/0.9118 longest=1.0000 clk=1.781
+  B b0 k_p3 n=65536 slots=84480 span=122.161 busy thr/warp/blk=0.4461/0.4461/0.5123 drain=1.0000 fin p50/p90/p99/p999=0.5868/0.7271/0.8677/0.9545 longest=1.0000 clk=1.781
+  B b1 k_p1 n=25204 slots=84480 span=14.646 busy thr/warp/blk=0.2017/0.2017/0.2172 drain=1.0000 fin p50/p90/p99/p999=0.6970/0.7499/0.7787/1.0000 longest=1.0000 clk=1.781
+  B b1 k_p3 n=25204 slots=84480 span=86.071 busy thr/warp/blk=0.1752/0.1753/0.2086 drain=1.0000 fin p50/p90/p99/p999=0.5811/0.7383/0.9025/1.0000 longest=1.0000 clk=1.782
+
+wrote /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/profile/results/time-795242/e1_time_summary.json

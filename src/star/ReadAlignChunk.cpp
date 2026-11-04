@@ -1,6 +1,9 @@
 #include "ReadAlignChunk.h"
 #include <pthread.h>
 #include "ErrorWarning.h"
+#ifdef SINGLET_HAVE_ENGINE_GPU
+#include "singlet/tail_trace.h"   // E16 chunkpar: chunkFstreamOpen's log lines under a lock while the chunks are constructed in parallel
+#endif
 
 ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk) : P(Pin), mapGen(genomeIn) {//initialize chunk
 
@@ -114,6 +117,10 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
 
 ///////////////
 void ReadAlignChunk::chunkFstreamOpen(string filePrefix, int iChunk, fstream &fstreamOut) {//open fstreams for chunks
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    std::unique_lock<std::mutex> e16lk;
+    if (singlet_tail::g_chunkLogLock) e16lk = std::unique_lock<std::mutex>(singlet_tail::g_chunkLogMu);
+#endif
     ostringstream fNameStream1;
     fNameStream1 << filePrefix << iChunk;
     string fName1=fNameStream1.str();

@@ -130,6 +130,12 @@ public:
         if (b->core.flag & (BAM_FUNMAP | BAM_FSUPPLEMENTARY)) return;
         if (bc < 0) return;
         const bool sec = (b->core.flag & BAM_FSECONDARY) != 0;
+        if (e2e() != nullptr) {   // E8: a read with a device-built record never comes through the stream ("on": STAR writes none); counted, the pass fails
+            const char* qn = bam_get_qname(b); const singlet_engine_gpu::E2EHeader& H = *e2e_->hdr();
+            uint64_t idx = 0; bool num = qn[0] == 'r' && qn[1] != 0;
+            for (const char* q = qn + 1; num && *q; ++q) { if (*q < '0' || *q > '9') num = false; else idx = idx * 10 + (uint64_t) (*q - '0'); }
+            if (num && idx < H.nReads && e2e_->at<uint32_t>(H.oReadRecord)[idx] != 0xFFFFFFFFu) { e2e_stream_++; return; }
+        }
         if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
         if (ho_ok_) {   // reads with a GPU record: the alignments come from the hand-off; the stream gives barcode, UMI, qualities
             const char* qn = bam_get_qname(b);
@@ -191,29 +197,70 @@ public:
     }
 
     // flushes incomplete multimapper groups (resolved anyway, as the engine does) and moves the records into `in`
-    void finish(singlet_engine_gpu::PileupInput& in) {
+    // zc (E16, level 5): a second mapping of the shared region (base, cap; it becomes the input's: unmapped when the input goes) whose records
+    // the input reads in place, with the kept reads take_e2e_reads took (PileupInput::Pre); null: the records are copied into the input
+    void finish(singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::E2ERegion* zc = nullptr) {
         for (auto& kv : pend_) { incomplete_++; finalize(kv.second); }
         pend_.clear();
+        singlet_tail::mark("collector: pending groups flushed");
         if (ho_ok_) prepend_handoff();
+        if (e2e_ != nullptr && zc != nullptr && zc_) prepend_e2e_zc(in, *zc); else
+        if (e2e_ != nullptr) prepend_e2e(in); else {   // E8: the device-built records go into `in` directly
+        e2e_unmap();   // E8 requested but not used (the hand-off file path ran): the memory object is released
         in.sigs.assign((const uint8_t*) sigs_.data(), (const uint8_t*) (sigs_.data() + sigs_.size()));
         in.alns.assign((const uint8_t*) alns_.data(), (const uint8_t*) (alns_.data() + alns_.size()));
         in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
-        in.ops.swap(ops_); in.seq.swap(seq_);
+        in.ops.swap(ops_); in.seq.swap(seq_); }
         in.snpSkipN = (lowqual_bases_ == 0 ? 0 : (qual_neq_n_ == 0 ? 1 : -1));
         if (no_umi_ > 0) in.snpSkipN = -1;   // reads without a UMI: not reproducible from the packed UMI (never seen in the campaign data)
         if (umi_len_ > 0) in.umiLen = umi_len_;
         if ((in.snpSkipN < 0 || force_q_) && no_umi_ == 0) {   // per-base quality: the SNP and chrM filters read each base's own quality
-            if (q_ok_ && reads_q_.size() == reads_.size() && in.nSnps <= 0x7FFFFFu) {
+            if (q_ok_ && reads_q_.size() == reads_.size() && zc_q_n_ == zc_n_ && in.nSnps <= 0x7FFFFFu) {
                 in.useQual = 1; in.snpSkipN = 0;
                 in.lowq.assign((const uint8_t*) reads_q_.data(), (const uint8_t*) (reads_q_.data() + reads_q_.size()));
+                if (zc_keep_) in.preLowq = {zc_keep_->q.data(), zc_keep_->q.size()};   // E16: the kept reads' masks in front, in place
+                singlet_tail::mark("collector: low-quality masks copied into the input (%zu reads)", reads_q_.size());
                 std::cerr << "[gpu_pileup] per-base quality: low-quality masks for " << reads_q_.size() << " reads" << (force_q_ ? " (forced)" : "") << "\n";
             } else std::cerr << "[gpu_pileup] per-base quality needed but unavailable (masks " << (q_ok_ ? "missing for some reads" : "not representable: read over 128 bases or no STAR masks") << ")\n";
         }
     }
-    size_t n_reads() const { return reads_.size() + ho_reads_.size(); }
-    size_t n_handoff_reads() const { return ho_reads_.size(); }
+    size_t n_reads() const { return reads_.size() + ho_reads_.size() + zc_n_; }
+    size_t n_handoff_reads() const { return ho_reads_.size() + zc_n_; }
     uint64_t handoff_mismatches() const { return ho_mismatch_; }
-    bool handoff_used() const { return ho_ok_; }
+    bool handoff_used() const { return ho_ok_ || e2e_ != nullptr; }
+    // E8 (SINGLET_ENGINE_GPU_E2E=1): the shared region with the device-built records, once the prefill completed it; null otherwise
+    const singlet_engine_gpu::E2ERegion* e2e() {
+        if (!e2e_tried_) { e2e_tried_ = true; singlet_engine_gpu::E2ERegion& r = singlet_engine_gpu::e2eRegion(); if (r.mapUsed()) e2e_ = &r; }
+        return e2e_;
+    }
+    uint64_t e2e_stream_reads() const { return e2e_stream_; }
+    // E8: the device pass's kept reads (ReadRec bytes, read order), their clip flags and low-quality masks (16 bytes each; maskAll: every
+    // read had one), as add_handoff_read_u3 would have appended them one by one
+    void add_e2e_reads(const std::vector<uint8_t>& reads, const std::vector<uint32_t>& clip, const std::vector<uint8_t>& lowq, bool mask_all, int umi_len) {
+        const size_t n = clip.size(), r0 = ho_reads_.size();
+        if (n && umi_len_ < 0) umi_len_ = umi_len;
+        ho_reads_.resize(r0 + n); if (n) std::memcpy((void*) (ho_reads_.data() + r0), reads.data(), n * sizeof(ReadRec));
+        ho_clip_.insert(ho_clip_.end(), clip.begin(), clip.end());
+        const size_t q0 = ho_q_.size(); ho_q_.resize(q0 + n); if (n) std::memcpy((void*) (ho_q_.data() + q0), lowq.data(), n * sizeof(QM));
+        if (!mask_all) q_ok_ = false;
+        for (uint32_t c : clip) if (c) n_clipped_++;
+    }
+    // E16 (level 5): as add_e2e_reads, but the pass's vectors are taken, not copied (the reads and masks stay where the pass downloaded them,
+    // page-locked for pileupRun; finish(in, zc) puts them in front of the stream's reads). Only when no hand-off read came before.
+    bool take_e2e_reads(std::vector<uint8_t>&& reads, std::vector<uint32_t>&& clip, std::vector<uint8_t>&& lowq, bool mask_all, int umi_len) {
+        if (!ho_reads_.empty() || !ho_clip_.empty() || zc_) return false;
+        const size_t n = clip.size();
+        if (n && umi_len_ < 0) umi_len_ = umi_len;
+        zc_ = true; zc_n_ = n; zc_q_n_ = lowq.size() / sizeof(QM);
+        zc_keep_ = std::make_shared<ZcKeep>();
+        zc_keep_->reads = std::move(reads); zc_keep_->q = std::move(lowq);
+        ho_clip_ = std::move(clip);
+        if (!mask_all) q_ok_ = false;
+        for (uint32_t c : ho_clip_) if (c) n_clipped_++;
+        return true;
+    }
+    // the clip flags, moved out (E16: the collector goes right after)
+    std::vector<uint32_t> take_clips() { return std::move(ho_clip_); }
     // the hand-off (loaded on first use); null if there is none
     const Handoff* handoff() {
         if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
@@ -341,6 +388,66 @@ private:
         ho_.unmap();
         unlink(handoff_path_.c_str());
     }
+    // E8: the device-built records (shared region) become signatures 0..nRec-1, as prepend_handoff makes them from the file (E6: the same
+    // arrays); the stream's own follow, shifted. Written into `in` directly; the region is released afterwards.
+    void prepend_e2e(singlet_engine_gpu::PileupInput& in) {
+        const singlet_engine_gpu::E2EHeader& H = *e2e_->hdr();
+        const uint64_t nR = H.nRec, nA = H.nAln, nO = H.nOps, nQ = H.nSeq;
+        for (auto& s : sigs_) { s.aln_off += (uint32_t) nA; s.seq_off += nQ; }
+        for (auto& a : alns_) a.ops_off += (uint32_t) nO;
+        for (auto& r : reads_) r.sig += (uint32_t) nR;
+        auto cat = [](auto& dst, const void* a, size_t na, const void* b, size_t nb) {
+            dst.resize((na + nb) / sizeof(dst[0]));
+            if (na) std::memcpy((void*) dst.data(), a, na);
+            if (nb) std::memcpy((uint8_t*) dst.data() + na, b, nb);
+        };
+        singlet_tail::mark("collector: e2e: stream offsets shifted");
+        cat(in.sigs, e2e_->base + H.oSigs, nR * sizeof(SigRec), sigs_.data(), sigs_.size() * sizeof(SigRec));
+        cat(in.alns, e2e_->base + H.oAlns, nA * sizeof(AlnRec), alns_.data(), alns_.size() * sizeof(AlnRec));
+        singlet_tail::mark("collector: e2e: signatures and alignments copied");
+        cat(in.ops, e2e_->base + H.oOps, nO * 4, ops_.data(), ops_.size() * 4);
+        cat(in.seq, e2e_->base + H.oSeq, nQ, seq_.data(), seq_.size());
+        singlet_tail::mark("collector: e2e: CIGAR ops and sequences copied");
+        ho_reads_.insert(ho_reads_.end(), reads_.begin(), reads_.end());
+        reads_.swap(ho_reads_);
+        in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
+        singlet_tail::mark("collector: e2e: reads copied into the input");
+        ho_q_.insert(ho_q_.end(), reads_q_.begin(), reads_q_.end()); reads_q_.swap(ho_q_);
+        std::vector<SigRec>().swap(sigs_); std::vector<AlnRec>().swap(alns_); std::vector<uint32_t>().swap(ops_); std::vector<uint8_t>().swap(seq_);
+        singlet_tail::mark("collector: e2e: masks appended, stream vectors freed");
+        e2e_unmap();
+        singlet_tail::mark("collector: e2e: region unmapped and closed");
+    }
+    // E16: prepend_e2e without the copies: the region's records (through the second mapping zc, which the input then owns) and the kept reads
+    // (take_e2e_reads) are the input's leading parts, in place; the vectors get the stream's part, shifted as prepend_e2e shifts it
+    void prepend_e2e_zc(singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::E2ERegion& zc) {
+        const singlet_engine_gpu::E2EHeader& H = *zc.hdr();
+        const uint64_t nR = H.nRec, nA = H.nAln, nO = H.nOps, nQ = H.nSeq;
+        for (auto& s : sigs_) { s.aln_off += (uint32_t) nA; s.seq_off += nQ; }
+        for (auto& a : alns_) a.ops_off += (uint32_t) nO;
+        for (auto& r : reads_) r.sig += (uint32_t) nR;
+        in.preSigs = {zc.base + H.oSigs, nR * sizeof(SigRec)}; in.preAlns = {zc.base + H.oAlns, nA * sizeof(AlnRec)};
+        in.preOps = {zc.base + H.oOps, nO * 4}; in.preSeq = {zc.base + H.oSeq, nQ};
+        in.sigs.assign((const uint8_t*) sigs_.data(), (const uint8_t*) (sigs_.data() + sigs_.size()));
+        in.alns.assign((const uint8_t*) alns_.data(), (const uint8_t*) (alns_.data() + alns_.size()));
+        in.ops.swap(ops_); in.seq.swap(seq_);
+        in.preReads = {zc_keep_->reads.data(), zc_keep_->reads.size()};
+        in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
+        zc_keep_->base = zc.base; zc_keep_->cap = zc.cap;   // the second mapping goes with the input
+        in.keep = zc_keep_;
+        std::vector<SigRec>().swap(sigs_); std::vector<AlnRec>().swap(alns_);
+        singlet_tail::mark("collector: e2e (E16): the region's records and the kept reads in place, the stream's part copied");
+        e2e_unmap();   // the collector's own mapping and the memfd; the second mapping keeps the pages
+    }
+    struct ZcKeep {   // E16: what the input's leading parts point into
+        std::vector<uint8_t> reads, q; uint8_t* base = nullptr; uint64_t cap = 0;
+        ~ZcKeep() { if (base != nullptr) munmap(base, cap); }
+    };
+    std::shared_ptr<ZcKeep> zc_keep_; bool zc_ = false; size_t zc_n_ = 0, zc_q_n_ = 0;
+    static void e2e_unmap() {
+        singlet_engine_gpu::e2eRegion().release();   // unmapped and the memfd closed: its pages go
+    }
+    const singlet_engine_gpu::E2ERegion* e2e_ = nullptr; bool e2e_tried_ = false; uint64_t e2e_stream_ = 0;
     std::string handoff_path_; Handoff ho_; bool ho_tried_ = false, ho_ok_ = false; uint64_t ho_mismatch_ = 0;
     std::vector<ReadRec> ho_reads_;
     std::vector<QM> reads_q_, ho_q_; bool q_ok_ = true, force_q_ = false;   // per-read low-quality masks, parallel to reads_ and ho_reads_

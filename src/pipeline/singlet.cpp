@@ -51,6 +51,7 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <poll.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
@@ -69,6 +70,7 @@
 #include "singlet/pileup/nonhost/nonhost_confirmed_reads.h"
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
+#include "singlet/engine_gpu_ingest.h"   // E13: the GPU prefill decodes the .1fq itself
 #endif
 #include "singlet/pileup/tiny_dataset_guard.h"
 #include "singlet/fq/prefix_probe.h"
@@ -109,6 +111,13 @@ extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsign
 #include "singlet/fq/read_source.h"  // RunSet, format_block, StarChunkSourceT: the one .1fq decoder
 #include "singlet/fq/concat.h"       // concat_1fq: runs as one file, for consumers that read a single .1fq
 #include "singlet/version.h"        // singlet::kVersion
+#include <htslib/bgzf.h>
+#include <htslib/hfile.h>
+
+// E16 (level 5, docs/gpu-engine/fable/E16-tail.md; STAR's samHeaders "hdr" cut): sends what a BGZF writer's hFILE holds in its buffer to the fd
+// (bgzf_flush stops at the hFILE layer). Defined here because STAR's sources see its bundled, older bgzf.h, whose struct BGZF is not the
+// linked htslib's: the field is read with this htslib's layout.
+int singlet_bgzf_hflush(void* fp) { return fp != nullptr ? hflush(static_cast<BGZF*>(fp)->fp) : -1; }
 
 // ── Timing helper ──
 struct StopWatch {
@@ -2764,7 +2773,26 @@ static void usage(const char* prog) {
         << "  --no-cr4               Do not use the Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap)\n"
         << "  --cr4-probe-reads N    Reads for the CR4 vs no-CR4 unique-mapping probe (default 200000; 0 = skip the probe, no CR4)\n"
         << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
-        << "  --engine cpu|gpu       gpu: map each distinct cDNA sequence on the GPU (CUDA build); same outputs (default cpu)\n\n"
+        << "  --engine cpu|gpu       gpu: map each distinct cDNA sequence on the GPU (CUDA build); same outputs (default cpu)\n"
+        << "                         With SINGLET_GPU_PILEUP=on, --engine gpu runs the whole GPU path by default\n"
+        << "                         (docs/gpu-engine/fable/GPU-PATH.md): level 5 (records, per-read products and STARsolo\n"
+        << "                         on the device; STAR maps only the reads without a GPU record), the .1fq decoded straight\n"
+        << "                         into the device's buffers (no FASTQ temp files) and E16's tail. Each part falls back on\n"
+        << "                         its own, with one \"[engine_gpu] fallback:\" or \"[1fq-ingest] not used\" line on stderr.\n"
+        << "                         Environment (read with --engine gpu):\n"
+        << "                           SINGLET_GPU_PILEUP=on          the GPU pileup (needed by everything below)\n"
+        << "                           SINGLET_ENGINE_GPU_E2E=0..5    5 (default): the full path; 0: GPU mapping only (the\n"
+        << "                                                          path before E8); 1-4: the intermediate levels (E8, E10)\n"
+        << "                           SINGLET_ENGINE_GPU_INGEST=0|1  1 (default at level 5): no FASTQ temp files; 0: they are\n"
+        << "                                                          written as before\n"
+        << "                           SINGLET_E16=0                  E16's tail changes off (level 5)\n"
+        << "                           SINGLET_E16_TRACE=1            E16's \"[e16]\" timing marks on stderr (default off)\n"
+        << "                           SINGLET_ENGINE_GPU_DEVICE=N    pins the GPU (default: the first free slot of any GPU)\n"
+        << "                           SINGLET_ENGINE_GPU_SLOTS=K     samples sharing one GPU (default 1)\n"
+        << "                           SINGLET_ENGINE_GPU_MEM_GB=G    one sample's device memory budget (default (device - 2 GB) /\n"
+        << "                                                          slots; 0: none). A sample that cannot fit stops with a FATAL\n"
+        << "                                                          line, or with SINGLET_ENGINE_GPU_MEM_FALLBACK=cpu STAR maps\n"
+        << "                                                          every read instead\n\n"
         << "Legacy (deprecated — archive to .1fq first, then process):\n"
         << "  --reads R2 R1          FASTQ files (use 'singlet encode' instead)\n"
         << "  --sra FILE             SRA file (use 'singlet download' instead)\n"
@@ -2856,6 +2884,62 @@ static int restart_on_sorted_path(const singlet::PileupStats& stats, bool revers
     return 8;
 }
 
+#ifdef SINGLET_HAVE_ENGINE_GPU
+// E19 (docs/gpu-engine/fable/GPU-PATH.md §3): whether CUDA sees a usable device, asked of a child process (`singlet gpu-probe`, exec'd at once,
+// so this process never initialises CUDA before it forks STAR) as soon as the options are read. The GPU pileup's decision needs the answer
+// before STAR runs: once the stream has been consumed without the CPU's steps, a GPU pileup that cannot get a device can only end the run
+// (exit 9). Without a usable device the pipeline keeps the CPU pileup and says so; STAR's prefill falls back on its own.
+namespace e19probe {
+inline pid_t& pid() { static pid_t p = -1; return p; }
+inline int& fd() { static int f = -1; return f; }
+inline std::chrono::steady_clock::time_point& t0() { static std::chrono::steady_clock::time_point t; return t; }
+inline void start() {
+    int pp[2];
+    if (pid() > 0 || pipe(pp) != 0) return;
+    const pid_t c = fork();
+    if (c == 0) {
+        dup2(pp[1], 1); close(pp[0]); close(pp[1]);
+        execl("/proc/self/exe", "singlet", "gpu-probe", (char*) nullptr);
+        _exit(127);
+    }
+    close(pp[1]);
+    if (c < 0) { close(pp[0]); return; }
+    fcntl(pp[0], F_SETFD, FD_CLOEXEC);
+    pid() = c; fd() = pp[0]; t0() = std::chrono::steady_clock::now();
+}
+// the probe's answer (waits for it, at most 120 s); true when it was not started (no GPU pileup asked for)
+inline bool usable(std::string& why) {
+    static bool done = false, ok = true;
+    static std::string w;
+    if (!done && pid() > 0) {
+        done = true;
+        const auto ta = std::chrono::steady_clock::now();
+        std::string out;
+        char b[512];
+        for (;;) {
+            struct pollfd q = {fd(), POLLIN, 0};
+            const int r = poll(&q, 1, 120000);
+            if (r <= 0) { kill(pid(), SIGKILL); out = "\x01"; break; }
+            const ssize_t n = read(fd(), b, sizeof b);
+            if (n <= 0) break;
+            out.append(b, (size_t) n);
+        }
+        close(fd());
+        waitpid(pid(), nullptr, 0);
+        while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
+        ok = out == "ok";
+        w = ok ? "" : out == "\x01" ? "the probe did not answer in 120 s" : out.empty() ? "the probe failed" : out;
+        const auto tb = std::chrono::steady_clock::now();
+        std::cerr << "[singlet] GPU probe: " << (ok ? "a usable device" : "no usable GPU (" + w + ")") << " (" << std::fixed << std::setprecision(2)
+                  << std::chrono::duration<double>(tb - t0()).count() << " s; waited " << std::chrono::duration<double>(tb - ta).count() << " s)"
+                  << std::defaultfloat << std::endl;
+    }
+    why = w;
+    return ok;
+}
+}   // namespace e19probe
+#endif
+
 int main(int argc, char* argv[]) {
     g_argc = argc; g_argv = argv;   // restart_on_sorted_path re-executes this command
     singlet::fq::register_fg2();   // a staged .1fg2 is read through Reader / RunSet like a .1fq
@@ -2865,6 +2949,14 @@ int main(int argc, char* argv[]) {
         try {
             if (sub == "download")
                 return cmd_download(argc - 2, argv + 2);
+#ifdef SINGLET_HAVE_ENGINE_GPU
+            if (sub == "gpu-probe") {   // E19: "ok" (exit 0) when CUDA sees a usable device, else the reason (exit 1); the pipeline's probe
+                std::string w;
+                const bool ok = singlet_engine_gpu::available(&w);
+                std::cout << (ok ? std::string("ok") : w) << std::endl;
+                return ok ? 0 : 1;
+            }
+#endif
             if (sub == "encode")
                 return cmd_encode(argc - 2, argv + 2);
             if (sub == "atac")
@@ -2883,6 +2975,19 @@ int main(int argc, char* argv[]) {
                 return singlet::fq::screen_runs_main(argc - 2, argv + 2);
             if (sub == "build-host-filter")
                 return cmd_build_host_filter(argc - 2, argv + 2);
+            if (sub == "star") {   // the bundled STAR on its own: `singlet star <STAR arguments>` (measurements, E14)
+                // SINGLET_GENOME_PRELOAD_THREADS=N: read the index first with star_genome_preload (as the pipeline does)
+                if (const char* pt = std::getenv("SINGLET_GENOME_PRELOAD_THREADS"); pt && std::atoi(pt) > 0) {
+                    for (int i = 2; i + 1 < argc; ++i)
+                        if (std::string(argv[i]) == "--genomeDir") {
+                            std::string lg;
+                            const bool ok = star_genome_preload(argv[i + 1], std::atoi(pt), lg);
+                            std::cerr << "[singlet star] genome preload " << (ok ? "" : "failed: ") << lg << "\n";
+                            break;
+                        }
+                }
+                return star_main_impl(argc - 1, argv + 1);
+            }
         } catch (const std::exception& e) {
             std::cerr << "ERROR: " << e.what() << "\n";
             return 1;
@@ -3245,6 +3350,14 @@ int main(int argc, char* argv[]) {
                       << "\n";
         }
     }
+
+#ifdef SINGLET_HAVE_ENGINE_GPU
+    // E19 (docs/gpu-engine/fable/GPU-PATH.md): the GPU path's defaults (level 5 + ingest + E16 with SINGLET_GPU_PILEUP=on), set in the environment
+    // before anything reads them (singlet_engine_gpu::applyDefaults in engine_gpu.h)
+    if (getenv("SINGLET_GPU_PILEUP")) e19probe::start();   // the GPU pileup's device check (e19probe above), answered before STAR runs
+    if (getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1")
+        std::cerr << "[singlet] --engine gpu: " << singlet_engine_gpu::applyDefaults() << "\n";
+#endif
 
     // ── Validate ──
     // Several runs of one sample (`A.1fq B.1fq`, `--1fq A,B`, or `--runs-dir DIR` with --runs-used / --run-screen):
@@ -3885,10 +3998,31 @@ int main(int argc, char* argv[]) {
     std::cerr << "[singlet] Loading pileup references...\n";
     StopWatch ref_sw;
 
+    // E14 (docs/gpu-engine/fable/E14-probe.md): the genome index is read once per sample, here, in the background while the
+    // .1fq is decoded and the references load: star_genome_preload reads Genome, SA and SAindex with parallel readers into
+    // private memory in STAR's own layout (transparent hugepages). The STAR child forked below, the two CR4 probes it
+    // forks and its main run take those arrays (copy-on-write, nothing is copied) instead of each reading 17.6 GB on one
+    // core (8 s per process before). The bytes are the files' bytes: no output changes. The parent drops its references
+    // once STAR is forked. SINGLET_GENOME_PRELOAD=0: the old page-cache prefetch, and every STAR process loads its own copy.
+    struct GenomePreloadJob {
+        std::thread t;
+        std::string log;
+        bool ok = false;
+        void join() { if (t.joinable()) t.join(); }
+        ~GenomePreloadJob() { join(); }
+    } genome_preload;
+    const char* gpl_env = std::getenv("SINGLET_GENOME_PRELOAD");
+    const bool genome_preload_on = !(gpl_env && gpl_env[0] == '0');
+    if (genome_load == "NoSharedMemory" && !genome_dir.empty() && genome_preload_on && !sra_mode) {
+        const int pthreads = std::max(2, std::min(8, (star_threads > 0 ? star_threads : 8) / 2));
+        genome_preload.t = std::thread([&gp = genome_preload, dir = genome_dir, pthreads]() {
+            gp.ok = star_genome_preload(dir, pthreads, gp.log);
+        });
+    }
     // Overlap STAR's genome load with Pass 1 and the reference load: read the private genome's index files once in
     // the background so STAR's own read of them comes from the page cache. Reads only; changes no output.
     // SINGLET_GENOME_PREFETCH=0 turns it off.
-    if (genome_load == "NoSharedMemory" && !genome_dir.empty()) {
+    if (genome_load == "NoSharedMemory" && !genome_dir.empty() && !genome_preload.t.joinable()) {
         const char* pf = std::getenv("SINGLET_GENOME_PREFETCH");
         if (!(pf && pf[0] == '0')) {
             std::thread([dir = genome_dir]() {
@@ -4085,6 +4219,11 @@ int main(int argc, char* argv[]) {
     std::string fifo_r2_path;          // original R2 stream FIFO path
     std::vector<std::string> fifo_first25_r2;  // R2 seqs of the prefix probe (ContentProbeSampler), both decode modes
     singlet::fq::ContentProbeSampler probe_sampler;
+    // E13 (docs/gpu-engine/fable/E13-ingest.md): SINGLET_ENGINE_GPU_INGEST=1 on the GPU path: no FASTQ temp files; STAR's prefill decodes
+    // the .1fq into its packed buffers (singlet/engine_gpu_ingest.h); this process scans the blocks' heads only
+    const bool ingest_req = engine_gpu_reads && onefq_mode && getenv("SINGLET_ENGINE_GPU_INGEST") && std::string(getenv("SINGLET_ENGINE_GPU_INGEST")) == "1";
+    bool ingest_on = false;
+    singlet::fq::FormatOptions ingest_fmt;   // the read source STAR gets: file mode's records (no 5' clip, no R2 length guard)
 
     // Hoisted from inner decode block so per-segment whitelist discovery
     // (Phase 0.9+) can read them after the onefq_mode block closes.
@@ -4580,6 +4719,185 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // E13 (docs/gpu-engine/fable/E13-ingest.md; SINGLET_ENGINE_GPU_INGEST=1): STAR's GPU prefill decodes the .1fq into its packed buffers
+        // itself (singlet/engine_gpu_ingest.h), so no FASTQ temp files are written: only the blocks' heads are read here, for what this
+        // process needs before STAR (the barcode dictionary counts of barcode discovery, the 5' prefix probe's sample as FIFO pass 1 takes it,
+        // each block's read and base counts for the prefill's exact allocation). R11's exact CB histogram comes from STAR's prefill (E8 region)
+        // when the stream first needs it. Where a condition does not hold, or the probe finds a prefix to clip, the file decode runs as before.
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (ingest_req && !use_fifo_decode) {
+            std::cerr << "[1fq-ingest] Scanning the .1fq's blocks (SINGLET_ENGINE_GPU_INGEST=1)\n";
+            StopWatch ingest_sw;
+            std::string why;
+            const char* gp = getenv("SINGLET_GPU_PILEUP");
+            auto runs = std::make_shared<singlet::fq::RunSet>();
+            uint8_t qphred[4] = {37, 37, 37, 37};
+            uint32_t qcodes = 1;
+            // E19: also where the GPU pileup or its hand-off will not run on the stream (decided below, after this scan): the ingest was gated
+            // with E8's records only, so those runs keep the FASTQ files
+            uint32_t ir = config.intron_rules;
+            if (const char* r = getenv("SINGLET_INTRON_RULES")) ir = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
+            const char* gh = getenv("SINGLET_GPU_HANDOFF");
+            if (!(gp && std::string(gp) == "on" && singlet_engine_gpu::e2eRequested())) why = "it needs SINGLET_GPU_PILEUP=on and SINGLET_ENGINE_GPU_E2E";
+            else if (std::string pw; !e19probe::usable(pw)) why = "no usable GPU (" + pw + "): the GPU pileup will be declined";
+            else if (onefq_r2_bound > 128) why = "cDNA reads over 128 bases: the GPU pileup will be declined";
+            else if (ir & ~(1u | 4u | 128u | 256u)) why = "intron rules the GPU pileup does not implement";
+            else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
+            else if (stream_unsorted == 0 || parallel_pileup == 1 || tagged_bam_enabled || !bam_file.empty() || getenv("SINGLET_KEEP_STAR_BAM"))
+                why = "the sorted-BAM path: no GPU pileup on STAR's stream";
+            else if (!config.out_chrm_bam.empty() || !config.guide_ref_path.empty() || (gh && std::string(gh) == "0"))
+                why = "no GPU hand-off (chrM BAM, guide reference or SINGLET_GPU_HANDOFF=0)";
+            else if (is_atac_mode || is_smart_seq2_mode || is_bulk_rna_mode) why = "not a droplet scRNA assay";
+            else if (reads_inverted) why = "the barcode is in R2";
+            else if (use_complex_concat && !complex_concat_segs_all.empty()) why = "CB_UMI_Complex concat";
+            else if (detected_soloType != "CB_UMI_Simple" || !complex_extra_segs.empty()) why = "not CB_UMI_Simple";
+            else if (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none") why = "no barcode whitelist";
+            else if (detected_bc_len <= 0 || detected_bc_len > 21 || umi_len <= 0 || umi_len > 21) why = "CB or UMI length";
+            if (why.empty()) {
+                try { runs->open(onefq_files); } catch (const std::exception& e) { why = e.what(); }
+            }
+            if (why.empty() && runs->head_scan_supported(&why)) {
+                const auto& h0 = runs->header();
+                const auto qm = static_cast<singlet::fq::QualMode>(h0.qual_mode);
+                if (h0.flags & singlet::fq::Flags::DEDUPED) why = "duplicate counts";
+                else if (h0.stream_lengths[0] > 63) why = "barcode read over 63 bases";
+                else if (qm == singlet::fq::QualMode::BINNED4) { const uint8_t c[4] = {6, 15, 25, 37}; std::memcpy(qphred, c, 4); qcodes = 4; }
+                else if (qm == singlet::fq::QualMode::ILLUMINA4) { std::memcpy(qphred, singlet::fq::qual::kIlmn4Phred, 4); qcodes = 4; }
+                else if (qm == singlet::fq::QualMode::BINNED2) { qphred[0] = 10; qphred[1] = 30; qcodes = 3; }   // code 2: 'F' (a read without quality)
+                else if (qm != singlet::fq::QualMode::NONE) why = "per-base quality stored in full";
+                if (why.empty() && !(cb_corrector.load_whitelist(whitelist_file) && cb_corrector.length() == detected_bc_len))
+                    why = "the whitelist is unusable for " + std::to_string(detected_bc_len) + "-base barcodes";
+            }
+            singlet::fq::RunSet::HeadScanOptions so;
+            std::vector<singlet::fq::RunSet::BlockHead> heads;
+            std::vector<uint64_t> freq;
+            std::vector<std::string> probe;
+            uint64_t stored = 0;
+            if (why.empty()) {
+                const uint32_t nb = runs->block_count();
+                const uint32_t dict_n = runs->bc_dict_size();
+                freq.assign(static_cast<size_t>(dict_n) + 1, 0);
+                so.probe_per_block = std::max<uint32_t>(1u, (12000u + std::max<uint32_t>(nb, 1u) - 1u) / std::max<uint32_t>(nb, 1u));
+                so.bc_freq = freq.data();
+                heads.resize(nb);
+                std::atomic<uint32_t> nxt{0};
+                std::mutex emu;
+                std::string err;
+                auto work = [&]() {
+                    for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
+                        try { runs->scan_head(b, so, heads[b]); }
+                        catch (const std::exception& e) { std::lock_guard<std::mutex> lk(emu); if (err.empty()) err = e.what(); }
+                    }
+                };
+                const int nt = std::max(1, std::min<int>(star_threads > 0 ? star_threads : 1, static_cast<int>(std::max<uint32_t>(nb, 1u))));
+                std::vector<std::thread> pool;
+                for (int t = 1; t < nt; ++t) pool.emplace_back(work);
+                work();
+                for (auto& t : pool) t.join();
+                if (!err.empty()) why = "head scan: " + err;
+                for (auto& h : heads) {
+                    stored += h.n_stored;
+                    for (auto& s : h.probe) { if (probe.size() >= 20000) break; probe.push_back(std::move(s)); }
+                    std::vector<std::string>().swap(h.probe);
+                }
+                // the 5' clip as the sanity check below decides it from the same sample: the prefill gives STAR the reads unclipped
+                int clip = r2_clip5p;
+                if (no_clip5p) clip = 0;
+                else if (!probe.empty()) clip = std::max(clip, singlet::fq::detect_constant_prefix(probe).prefix_len);
+                if (why.empty() && clip > 0) why = "a constant 5' prefix to clip (" + std::to_string(clip) + " bp)";
+            }
+            if (!why.empty()) {
+                std::cerr << "[1fq-ingest] not used (" << why << "): the .1fq is decoded to FASTQ files\n";
+            } else {
+                auto& pl = singlet_engine_gpu::ingest::plan();
+                const uint32_t nb = runs->block_count();
+                pl.paths = onefq_files; pl.nBlocks = nb;
+                pl.first.assign(static_cast<size_t>(nb) + 1, 0); pl.baseAt.assign(static_cast<size_t>(nb) + 1, 0); pl.nameAt.assign(static_cast<size_t>(nb) + 1, 0);
+                for (uint32_t b = 0; b < nb; ++b) {
+                    pl.first[b + 1] = pl.first[b] + heads[b].n_out;
+                    pl.baseAt[b + 1] = pl.baseAt[b] + heads[b].bases_out;
+                    pl.nameAt[b] = runs->block_read_offset(b);
+                    pl.maxR2 = std::max(pl.maxR2, heads[b].max_r2);
+                }
+                pl.nameAt[nb] = stored;
+                pl.r1L = runs->header().stream_lengths[0];
+                pl.dictN = runs->bc_dict_size();
+                std::memcpy(pl.qualPhred, qphred, 4); pl.qualCodes = qcodes;
+                pl.runs = runs;
+                pl.on = true;
+                ingest_on = true;
+                ingest_fmt.bc_dict_n = runs->bc_dict_size();   // file mode's FormatOptions: no 5' clip, no R2 length guard
+                onefq_bc_dict_n = runs->bc_dict_size();
+                onefq_bc_freq = std::move(freq);
+                onefq_bc_dict_flat = runs->bc_dict_flat();
+                onefq_bc_length = runs->bc_length();
+                fifo_first25_r2 = std::move(probe);
+                // R11: the corrector is handed to the pileup now; its exact counts are read on first use (cb_correct.h set_pending): from the
+                // E8 region, where STAR's prefill wrote them right after its decode, or else (no region, no prefill decode) from the .1fq here
+                const int cb0 = detected_cb_start - 1, cbl = detected_bc_len;
+                const int umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, umil = umi_len;
+                const int nt = std::max(1, star_threads);
+                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt](singlet::CbCorrector& c) {
+                    StopWatch sw;
+                    std::vector<std::pair<uint64_t, uint64_t>> pairs;
+                    uint64_t nwl = 0, tot = 0;
+                    const int fd = singlet_engine_gpu::ingest::plan().r11Fd;
+                    if (singlet_engine_gpu::ingest::fetchR11(fd, pairs, nwl, tot) && nwl == c.size()) {
+                        for (const auto& [w, n] : pairs) c.add_exact(static_cast<int64_t>(w), n);
+                        std::cerr << "[1fq-ingest] R11 exact CB histogram from STAR's prefill (E8 region): " << tot << " reads, " << pairs.size()
+                                  << " barcodes, read in " << sw.elapsed_s() << "s\n";
+                        return;
+                    }
+                    singlet::fq::RunSet::HeadScanOptions o;
+                    std::vector<uint64_t> dict(runs->bc_dict_size(), 0);
+                    o.r11 = true; o.cb0 = cb0; o.cbl = cbl; o.umi0 = umi0; o.umil = umil; o.r11_dict = dict.data();
+                    const uint32_t nb = runs->block_count();
+                    std::vector<std::vector<std::string>> raws(nb);
+                    std::atomic<uint32_t> nxt{0};
+                    std::atomic<bool> bad{false};
+                    auto work = [&]() {
+                        singlet::fq::RunSet::BlockHead h;
+                        for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
+                            try { runs->scan_head(b, o, h); raws[b].swap(h.r11_raw); } catch (...) { bad = true; }
+                        }
+                    };
+                    std::vector<std::thread> pool;
+                    for (int t = 1; t < std::min<int>(nt, static_cast<int>(std::max<uint32_t>(nb, 1u))); ++t) pool.emplace_back(work);
+                    work();
+                    for (auto& t : pool) t.join();
+                    if (bad) { std::cerr << "[1fq-ingest] ERROR: R11's histogram could not be read from the .1fq\n"; _exit(1); }
+                    static constexpr char kNt[5] = {'A', 'C', 'G', 'T', 'N'};
+                    uint64_t n_exact = 0;
+                    const auto& dflat = runs->bc_dict_flat();
+                    const uint16_t dlen = runs->bc_length();
+                    if (dlen == static_cast<uint16_t>(cbl)) {
+                        char bcs[32];
+                        for (size_t k = 0; k < dict.size(); ++k) {
+                            if (!dict[k]) continue;
+                            for (int j = 0; j < cbl; ++j) bcs[j] = kNt[std::min<uint8_t>(dflat[k * dlen + j], 4)];
+                            const int64_t w = c.find(bcs);
+                            if (w >= 0) { c.add_exact(w, dict[k]); n_exact += dict[k]; }
+                        }
+                    }
+                    for (const auto& v : raws)
+                        for (const auto& cb : v) { const int64_t w = c.find(cb.c_str()); if (w >= 0) { c.add_exact(w, 1); ++n_exact; } }
+                    std::cerr << "[1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): " << n_exact << " reads over a "
+                              << c.size() << "-barcode whitelist, " << sw.elapsed_s() << "s\n";
+                });
+                cb_hist_ready = true;
+                decode_time = ingest_sw.elapsed_s();
+                decode_reads_out = stored;
+                std::cerr << "[1fq-ingest] Scanned " << nb << " blocks: " << pl.reads() << " reads (" << stored << " stored), " << pl.bases()
+                          << " cDNA bases, longest " << pl.maxR2 << "; " << fifo_first25_r2.size() << " reads in the 5' probe sample ("
+                          << decode_time << "s, " << std::max(1, std::min<int>(star_threads, static_cast<int>(nb))) << "T); STAR's prefill decodes the reads (no FASTQ files)\n";
+                // the decode into the prefill's packed buffers starts now, beside the reference load; STAR's process inherits it (joinParent
+                // at the fork). SINGLET_ENGINE_GPU_INGEST_EARLY=0: STAR's prefill decodes the .1fq when it starts.
+                const char* ee = std::getenv("SINGLET_ENGINE_GPU_INGEST_EARLY");
+                if (!(ee && ee[0] == '0')) singlet_engine_gpu::ingest::startParent(star_threads);
+            }
+        }
+#endif
+
         std::string tmpdir = "/dev/shm";
         if (const char* td = std::getenv("TMPDIR"))
             tmpdir = td;
@@ -4587,10 +4905,12 @@ int main(int argc, char* argv[]) {
         mkdir_p(decode_dir);
         std::string r1_tmp = decode_dir + "/R1.fastq";
         std::string r2_tmp = decode_dir + "/R2.fastq";
-        setenv("SINGLET_DECODE_R1", r1_tmp.c_str(), 1);   // W11 GPU pileup "on": barcodes and UMIs of hand-off reads
-        setenv("SINGLET_DECODE_R2", r2_tmp.c_str(), 1);
+        if (!ingest_on) {   // E13: there are no FASTQ files to read back
+            setenv("SINGLET_DECODE_R1", r1_tmp.c_str(), 1);   // W11 GPU pileup "on": barcodes and UMIs of hand-off reads
+            setenv("SINGLET_DECODE_R2", r2_tmp.c_str(), 1);
+        }
 
-        if (!use_fifo_decode) {
+        if (!use_fifo_decode && !ingest_on) {
             // ── File mode: decode all blocks to FASTQ files on /dev/shm ──
             StopWatch decode_sw;
             FILE* r1_fp = fopen(r1_tmp.c_str(), "w");
@@ -5103,8 +5423,8 @@ int main(int argc, char* argv[]) {
             size_t max_r2_len = 0;
             std::vector<std::string> probe_seqs;
 
-            if (use_fifo_decode) {
-                // FIFO mode: use sequences captured in Pass 1 (no file to open)
+            if (use_fifo_decode || ingest_on) {
+                // FIFO mode: use sequences captured in Pass 1 (no file to open); E13: the head scan's sample, taken the same way
                 probe_seqs = fifo_first25_r2;
                 for (const auto& s : probe_seqs) {
                     has_seq = true;
@@ -5328,8 +5648,8 @@ int main(int argc, char* argv[]) {
             }  // end !use_fifo_decode else branch
         }
 
-        singlet::nvtx_mark("main: .1fq decoded to temp files");
-        std::cerr << "[singlet] .1fq decoded to temp files\n";
+        if (ingest_on) std::cerr << "[singlet] .1fq scanned: STAR's prefill decodes the reads (E13, no temp files)\n";
+        else std::cerr << "[singlet] .1fq decoded to temp files\n";
     }
 
     // ── BAM source mode: decided here because the engine copies config (cb_from_cr) when it is built ──
@@ -5399,8 +5719,13 @@ int main(int argc, char* argv[]) {
     // fallback), keep the pileup on the CPU; the GPU still maps the reads.
     if (getenv("SINGLET_GPU_PILEUP")) {
         const char* why = nullptr;
+        std::string pw;
         if (onefq_r2_bound > 128) why = "reads over 128 bases (the per-base-quality mask holds 128)";
         else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
+        else if (!e19probe::usable(pw)) {   // E19: no device for it (the probe above); STAR's prefill falls back on its own
+            std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: no usable GPU (" << pw << "); the CPU pileup runs\n";
+            unsetenv("SINGLET_GPU_PILEUP");
+        }
         if (why) {
             std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: " << why << "; the CPU pileup runs on the GPU-mapped reads\n";
             unsetenv("SINGLET_GPU_PILEUP");
@@ -5430,6 +5755,15 @@ int main(int argc, char* argv[]) {
         setenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ", std::to_string(config.min_baseq).c_str(), 1);
         // a clipped read's rRNA verdict on the whole read, computed by STAR's mapping threads (the forked aligner inherits it)
         g_handoffReadHook = &singlet::PileupEngine::handoff_read_hook;
+        // E8 (SINGLET_ENGINE_GPU_E2E=1, docs/gpu-engine/fable/E8-e2e.md): a shared memory object (memfd) the forked STAR inherits; its
+        // prefill maps it and builds the pileup's records on the device into it (no hand-off file); this process maps it after the prefill.
+        if (singlet_engine_gpu::e2eRequested() && std::string(getenv("SINGLET_GPU_PILEUP")) == "on") {
+            if (singlet_engine_gpu::e2eRegion().create()) {
+                std::cerr << "[gpu_pileup] E8: records built on the device (shared memory object for STAR's prefill)\n";
+                if (ingest_on) singlet_engine_gpu::ingest::plan().r11Fd = dup(singlet_engine_gpu::e2eRegion().fd);   // E13: R11's histogram
+            }
+            else std::cerr << "[gpu_pileup] E8: no shared memory object (" << strerror(errno) << "); the hand-off file path is used\n";
+        }
     }
 #endif
     config.strand_prior_only = (stream_unsorted == 1);   // order-free-rules R5
@@ -6508,7 +6842,25 @@ int main(int argc, char* argv[]) {
                 setrlimit(RLIMIT_NOFILE, &rl);  // inherited by fork'd STAR child
             }
         }
+        if (genome_preload.t.joinable()) {   // E14: the index must be complete before STAR is forked with it
+            StopWatch gw;
+            genome_preload.join();
+            std::cerr << "[singlet] Genome preload: " << (genome_preload.ok ? "" : "failed (STAR loads the files): ")
+                      << genome_preload.log << "; waited " << gw.elapsed_s() << " s for it at the STAR fork\n";
+        }
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (ingest_on) {   // E13: the packed reads must be complete before STAR is forked with them
+            double waited = 0;
+            std::string lg;
+            singlet_engine_gpu::ingest::joinParent(waited, lg);
+            if (!lg.empty()) std::cerr << "[1fq-ingest] " << lg << "; waited " << waited << " s for it at the STAR fork\n";
+        }
+#endif
         star_pid = fork();
+        if (star_pid != 0) star_genome_preload_release();   // E14: the parent's references; the STAR child keeps the pages
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (star_pid != 0) singlet_engine_gpu::ingest::releaseParent();   // E13: likewise the packed reads
+#endif
         if (star_pid < 0) {
             std::cerr << "ERROR: fork() failed: " << strerror(errno) << "\n";
             return 1;
@@ -6572,8 +6924,8 @@ int main(int argc, char* argv[]) {
                 // scRNA / CITE-seq / etc: R2.fastq = cDNA, R1.fastq = barcode.
                 // STARsolo requires --readFilesIn cDNA barcode (barcode read last).
                 // Chunk source: STAR opens the two files but takes its reads from g_starReadSource.
-                args.push_back(use_chunk_source ? "/dev/null" : reads_r2.c_str());
-                args.push_back(use_chunk_source ? "/dev/null" : reads_r1.c_str());
+                args.push_back(use_chunk_source || ingest_on ? "/dev/null" : reads_r2.c_str());
+                args.push_back(use_chunk_source || ingest_on ? "/dev/null" : reads_r1.c_str());
             }
 
             // For gzipped FASTQ files, use zcat via --readFilesCommand.
@@ -7622,6 +7974,16 @@ int main(int argc, char* argv[]) {
 
             args.push_back(nullptr);
 
+#ifdef SINGLET_HAVE_ENGINE_GPU
+            // E13: the .1fq's reads (decoded by this process's parent before the fork, else from now on) go to STAR's prefill, and with
+            // the Beta profile STAR's CellRanger4 clip runs on them right away, beside the CR4 probe (engine_gpu_ingest.h).
+            // SINGLET_ENGINE_GPU_INGEST_EARLY=0: the prefill decodes and clips them when it starts.
+            if (ingest_on) {
+                const char* ee = std::getenv("SINGLET_ENGINE_GPU_INGEST_EARLY");
+                if (!(ee && ee[0] == '0')) singlet_engine_gpu::ingest::startEarly(star_threads, cr4_status == "on");
+            }
+#endif
+
             // CR4 probe: map the first cr4_probe_reads reads twice (with and without the Beta aligner profile; no
             // BAM, same solo arguments) and keep the profile only if its unique-mapping rate is not more than
             // 2 points below the plain run's. Anything else (probe failure, too few reads) also drops the profile.
@@ -7635,8 +7997,28 @@ int main(int argc, char* argv[]) {
                     mkdir(pdir.c_str(), 0755);
                     // chunk mode: the same in-process source as the main run; fifo mode: the probe decodes the first
                     // reads of the .1fq itself, so the fifos stay untouched for the main stream; file mode: real files
-                    const bool probe_src = use_chunk_source || use_fifo_decode;
-                    auto probe = [&](bool with_cr4, const char* tag) -> double {
+                    const bool probe_src = use_chunk_source || use_fifo_decode || ingest_on;   // E13: no FASTQ files either
+                    // E14 (docs/gpu-engine/fable/E14-probe.md): the two probes run at the same time on half of the threads
+                    // each, with STAR's input chunks cut to ~2 MB per mate so that 200k reads make ~25 chunks for the
+                    // threads instead of 4 (the default 15 MB chunk holds ~60k reads), and both take the genome that was
+                    // read once for the sample (star_genome_preload: in the parent, else here). A read maps the same way
+                    // whatever thread and chunk it lands in, so the unique-mapping rates are the same.
+                    // SINGLET_CR4_PROBE=serial: the probes one after the other on all threads with STAR's default chunks.
+                    const char* pm_env = std::getenv("SINGLET_CR4_PROBE");
+                    const bool probe_serial = pm_env && std::string(pm_env) == "serial";
+                    const bool probe_extra_iobuf = std::any_of(star_extra.begin(), star_extra.end(),
+                        [](const std::string& a) { return a.rfind("--limitIObufferSize", 0) == 0; });
+                    std::string preload_note = "genome: each probe loads its own";
+                    if (!probe_serial && genome_load == "NoSharedMemory" && genome_preload_on) {
+                        std::string lg;   // no-op when the parent's preload was inherited
+                        const bool ok = star_genome_preload(genome_dir, star_threads, lg);
+                        preload_note = std::string("genome preload: ") + (ok ? "" : "failed: ") + lg;
+                    } else if (genome_load != "NoSharedMemory") {
+                        preload_note = "genome: " + genome_load;
+                    }
+                    StopWatch probe_sw;
+                    struct ProbeRun { const char* tag; bool with_cr4; int threads; pid_t pid = -1; double t_end = 0; };
+                    auto probe_start = [&](ProbeRun& r) {
                         static const std::set<std::string> drop = {
                             "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM",
                             "--outBAMsortingBinsN", "--outBAMsortingThreadN", "--outFileNamePrefix", "--outTmpDir",
@@ -7644,7 +8026,7 @@ int main(int argc, char* argv[]) {
                         std::vector<std::string> pa;
                         bool skipping = false;
                         for (size_t i = 1; i + 1 < args.size(); ++i) {   // args[0] = "STAR", args.back() = nullptr
-                            if (!with_cr4 && i >= cr4_beg && i < cr4_end) continue;
+                            if (!r.with_cr4 && i >= cr4_beg && i < cr4_end) continue;
                             std::string t = args[i];
                             if (t.rfind("--", 0) == 0) skipping = drop.count(t) > 0;
                             if (!skipping) pa.push_back(t);
@@ -7653,29 +8035,37 @@ int main(int argc, char* argv[]) {
                                 skipping = true;
                             }
                         }
-                        const std::string prefix = pdir + "/" + tag + "_";
+                        for (size_t i = 0; i + 1 < pa.size(); ++i)
+                            if (pa[i] == "--runThreadN") pa[i + 1] = std::to_string(r.threads);
+                        const std::string prefix = pdir + "/" + r.tag + "_";
                         for (const char* t : {"--outSAMtype", "None", "--readMapNumber"}) pa.push_back(t);
                         pa.push_back(std::to_string(cr4_probe_reads));
+                        if (!probe_serial && !probe_extra_iobuf)
+                            for (const char* t : {"--limitIObufferSize", "4000000", "50000000"}) pa.push_back(t);
                         pa.push_back("--outFileNamePrefix"); pa.push_back(prefix);
                         std::vector<char*> pv;
                         pv.push_back(const_cast<char*>("STAR"));
                         for (auto& t : pa) pv.push_back(const_cast<char*>(t.c_str()));
                         pv.push_back(nullptr);
-                        pid_t pp = fork();
-                        if (pp == 0) {
+                        r.pid = fork();
+                        if (r.pid == 0) {
                             int dn = open("/dev/null", O_WRONLY);
                             if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }   // STAR's progress lines must not reach the BAM pipe
                             unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF");   // the probe maps 200k reads on the CPU, not through the GPU prefill
                             if (probe_src) {
-                                int dthreads = std::max(2, std::min(4, star_threads / 4));
+                                int dthreads = std::max(2, std::min(4, r.threads / 4));
                                 g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(
-                                    onefq_files, read_fmt, dthreads, /*cdna_first=*/true);
+                                    onefq_files, ingest_on ? ingest_fmt : read_fmt, dthreads, /*cdna_first=*/true);
                             }
                             _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
                         }
+                    };
+                    auto probe_finish = [&](ProbeRun& r) -> double {
                         int ws = 0;
-                        if (pp < 0 || waitpid(pp, &ws, 0) < 0 || !WIFEXITED(ws) || WEXITSTATUS(ws) != 0) return -1.0;
-                        std::ifstream lf(prefix + "Log.final.out");
+                        const bool ok = r.pid > 0 && waitpid(r.pid, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+                        r.t_end = probe_sw.elapsed_s();
+                        if (!ok) return -1.0;
+                        std::ifstream lf(pdir + "/" + r.tag + "_Log.final.out");
                         std::string ln;
                         double inreads = 0, uniq = -1.0;
                         while (std::getline(lf, ln)) {
@@ -7687,8 +8077,20 @@ int main(int argc, char* argv[]) {
                         if (inreads < 1000) return -1.0;   // too few reads for a rate
                         return uniq;
                     };
-                    const double u_off = probe(false, "plain");
-                    const double u_on  = probe(true,  "cr4");
+                    const int t_half = std::max(1, star_threads / 2);
+                    ProbeRun rp{"plain", false, probe_serial ? star_threads : t_half};
+                    ProbeRun rc{"cr4", true, probe_serial ? star_threads : std::max(1, star_threads - t_half)};
+                    double u_off = -1.0, u_on = -1.0;
+                    if (probe_serial) {
+                        probe_start(rp); u_off = probe_finish(rp);
+                        probe_start(rc); u_on = probe_finish(rc);
+                    } else {
+                        probe_start(rp); probe_start(rc);
+                        u_off = probe_finish(rp); u_on = probe_finish(rc);
+                    }
+                    std::cerr << "[singlet] CR4 probe timing: plain " << rp.t_end << " s, cr4 " << (probe_serial ? rc.t_end - rp.t_end : rc.t_end)
+                              << " s, " << (probe_serial ? "serial" : "concurrent") << " on " << rp.threads << "+" << rc.threads
+                              << " threads, total " << probe_sw.elapsed_s() << " s; " << preload_note << "\n";
                     pj = ", \"probe_reads\": " + std::to_string(cr4_probe_reads) +
                          ", \"unique_pct_plain\": " + std::to_string(u_off) +
                          ", \"unique_pct_cr4\": " + std::to_string(u_on) + ", \"max_drop_pts\": " + std::to_string(kMaxDropPts);
@@ -7726,12 +8128,23 @@ int main(int argc, char* argv[]) {
                 g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(
                     onefq_files, read_fmt, dthreads, /*cdna_first=*/true);
             }
+            // E13: STAR has no read files; every read comes from this chunk source over the .1fq (file mode's records) unless the GPU prefill
+            // replaces it with the reads its device did not cover (level 4/5, built from the prefill's own decode); it starts on the first read
+#ifdef SINGLET_HAVE_ENGINE_GPU
+            if (ingest_on) {
+                int dthreads = std::max(2, std::min(4, star_threads / 4));
+                if (const char* e = std::getenv("SINGLET_READ_SOURCE_THREADS"); e && std::atoi(e) > 0) dthreads = std::atoi(e);
+                g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(onefq_files, ingest_fmt, dthreads, /*cdna_first=*/true);
+                singlet_engine_gpu::ingest::plan().fallback = g_starReadSource;
+            }
+#endif
 
             // Call bundled STAR directly — no exec, no external binary needed.
             int rc = star_main_impl(
                 static_cast<int>(args.size()) - 1,
                 const_cast<char**>(args.data())
             );
+            singlet_tail::mark("STAR child: _exit(%d)", rc);   // E16 (level 5 only)
             _exit(rc);
         }
 
@@ -8338,6 +8751,7 @@ int main(int argc, char* argv[]) {
         StopWatch pileup_sw;
         stats = engine_ptr->run(bam_source);
         pileup_time = pileup_sw.elapsed_s();
+        singlet_tail::mark("parent: streaming pileup returned");   // E16 (level 5 only)
         singlet::rearm_stall_watchdog("after pileup (streaming path): export");
         std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, "
                   << pileup_time << "s";
@@ -8371,6 +8785,7 @@ int main(int argc, char* argv[]) {
         if (star_pid > 0) {
             int wstatus;
             waitpid(star_pid, &wstatus, 0);
+            singlet_tail::mark("parent: STAR reaped");   // E16 (level 5 only)
             close(pipe_fd[0]);
             if (WIFEXITED(wstatus)) {
                 star_exit = WEXITSTATUS(wstatus);
@@ -8406,6 +8821,20 @@ int main(int argc, char* argv[]) {
                       << "% of nuclear reads are antisense to the protocol orientation; rerun with --sorted-bam (strand safety net)" << std::endl;
             return 8;  // strand_contradiction
         }
+    }
+
+    // E13 gate: SINGLET_R11_DUMP=<file> writes the stream CB corrector's exact histogram (R11) in bench/fable/records/r11_hist.cpp's format
+    if (const char* rp = std::getenv("SINGLET_R11_DUMP"); rp != nullptr && config.cb_corrector != nullptr) {
+        const std::vector<uint64_t>& ex = config.cb_corrector->exact();
+        uint64_t nnz = 0, tot = 0;
+        for (uint64_t c : ex) { nnz += c != 0; tot += c; }
+        FILE* f = std::fopen(rp, "wb");
+        const uint64_t h[3] = {static_cast<uint64_t>(ex.size()), tot, nnz};
+        bool okf = f != nullptr && std::fwrite("E6R11H01", 1, 8, f) == 8 && std::fwrite(h, 8, 3, f) == 3;
+        for (uint64_t w = 0; okf && w < ex.size(); ++w)
+            if (ex[w]) { const uint64_t pr[2] = {w, ex[w]}; okf = std::fwrite(pr, 8, 2, f) == 2; }
+        if (f != nullptr) okf = (std::fclose(f) == 0) && okf;
+        std::cerr << "[singlet] R11 histogram: " << tot << " reads, " << nnz << " barcodes -> " << rp << (okf ? "" : " (write FAILED)") << "\n";
     }
 
     // ── BUG-MAPPING-GUARD: Warn on very low mapping rate (wrong genome) ──
