@@ -57,6 +57,13 @@ for c, t0 in sorted(runs.items(), key=lambda x: int(x[0][1:])):
         rows.append({"start": round(ta - t0, 1), "len": round(tb - ta, 2), "util_mean": round(sum(util) / len(util), 1) if util else None,
                      "util_gt0_s": round(busy, 2), "mem_first": mem[0] if mem else None, "mem_peak": max(mem) if mem else None,
                      "cpu_cores": round(rate, 2) if rate is not None else None})
+    if len(rows) == len(LBL) + 1:
+        # E20 split: the prefill holds the device twice (the lanes, then the records' device phase after the host assembly)
+        p2 = rows[1]; p2["phase"] = "prefill2"
+        rows = [rows[0]] + rows[2:]
+        sp = True
+    else:
+        sp = False
     if len(rows) == len(LBL):
         # first: the prefill, last: non-host; of the three between them the pileup has the largest device memory (its arena), and of
         # the other two the hand-off pass is the longer (E16 runs it early, during STAR's loop, so it may come before Solo)
@@ -65,6 +72,8 @@ for c, t0 in sorted(runs.items(), key=lambda x: int(x[0][1:])):
         mid[-1]["phase"] = "pileup"
         h, so = sorted(mid[:2], key=lambda r: r["len"], reverse=True)
         h["phase"] = "handoff"; so["phase"] = "solo"
+    if sp:
+        rows = [rows[0], p2] + rows[1:]
     out[c] = rows
 json.dump(out, open(f"{D}/locks.json", "w"), indent=1)
 print(f"== lock intervals per run (sampler; tick {S[1]['t'] - S[0]['t']:.2f} s)" if len(S) > 1 else "== no samples")
