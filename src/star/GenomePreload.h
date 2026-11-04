@@ -13,6 +13,7 @@ struct GenomePreloadState {
     uint64_t nGenome = 0, nSAbyte = 0, saiHdr = 0, saiBytes = 0;
     char *G1 = nullptr, *SA = nullptr, *SAi = nullptr;   // new[] arrays: G1 = 200 + nGenome + 200, SA = nSAbyte + 64, SAi = saiBytes + 64
     double seconds = 0;
+    bool resident = false;    // E21: read by `singlet gpu-pool` for the processes it forks (star_genome_preload_resident)
 };
 extern GenomePreloadState* g_genomePreload;   // this process's copy (a forked child has its own pointer to the shared pages)
 

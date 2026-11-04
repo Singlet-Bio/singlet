@@ -1,5 +1,5 @@
 # singlet binary
-add_executable(singlet singlet.cpp)
+add_executable(singlet singlet.cpp gpu_pool.cpp)   # gpu_pool.cpp: `singlet gpu-pool` (E21)
 target_link_libraries(singlet PRIVATE
     singlet_pileup
     singlet_fq
