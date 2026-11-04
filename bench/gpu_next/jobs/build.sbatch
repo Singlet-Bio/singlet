@@ -14,8 +14,12 @@ set -euo pipefail
 : "${BR:?}" "${NAME:?}"
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
 BARE=$W/repos/singlet-py.git; OUTD=$W/jobs/gpu-next/bin/$NAME; [ -e $OUTD/singlet-gpu ] && { echo "refusing to overwrite $OUTD"; exit 2; }; mkdir -p $OUTD
-git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/gn/$NAME || git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" $BR && git -C $BARE update-ref refs/gn/$NAME FETCH_HEAD
+URL="$(git -C $BARE config remote.origin.url)"
+WANT=$(git ls-remote "$URL" refs/heads/$BR | cut -f1); [ -n "$WANT" ] || { echo "no branch $BR"; exit 3; }
+# one fetch at a time (concurrent builds share the bare clone), into a ref named by NAME, then check it is the branch tip that was asked for
+( flock 9; git -C $BARE fetch -q "$URL" +refs/heads/$BR:refs/gn/$NAME ) 9>$BARE/.gn-fetch.lock
 COMMIT=$(git -C $BARE rev-parse refs/gn/$NAME); echo "COMMIT=$COMMIT NAME=$NAME"
+[ "$COMMIT" = "$WANT" ] || { echo "fetched $COMMIT, branch tip is $WANT"; exit 3; }
 SCR=/tmp/$USER-gnb-$SLURM_JOB_ID; mkdir -p $SCR/src; trap 'rm -rf $SCR' EXIT
 git -C $BARE archive refs/gn/$NAME | tar -x -C $SCR/src
 S=$SCR/src

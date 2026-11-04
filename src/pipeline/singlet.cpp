@@ -4846,7 +4846,7 @@ static int singlet_main(int argc, char* argv[]) {
                 const int cb0 = detected_cb_start - 1, cbl = detected_bc_len;
                 const int umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, umil = umi_len;
                 const int nt = std::max(1, star_threads);
-                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt](singlet::CbCorrector& c) {
+                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt, &cbx_nonexact, cbx_pack](singlet::CbCorrector& c) {
                     StopWatch sw;
                     std::vector<std::pair<uint64_t, uint64_t>> pairs;
                     uint64_t nwl = 0, tot = 0;
@@ -4886,10 +4886,19 @@ static int singlet_main(int argc, char* argv[]) {
                             for (int j = 0; j < cbl; ++j) bcs[j] = kNt[std::min<uint8_t>(dflat[k * dlen + j], 4)];
                             const int64_t w = c.find(bcs);
                             if (w >= 0) { c.add_exact(w, dict[k]); n_exact += dict[k]; }
+                            else if (cbl <= 21) cbx_nonexact[cbx_pack(dflat.data() + k * dlen, cbl)] += dict[k];   // #153: the pass-1 input of the corrected barcode universe
                         }
                     }
                     for (const auto& v : raws)
-                        for (const auto& cb : v) { const int64_t w = c.find(cb.c_str()); if (w >= 0) { c.add_exact(w, 1); ++n_exact; } }
+                        for (const auto& cb : v) {
+                            const int64_t w = c.find(cb.c_str());
+                            if (w >= 0) { c.add_exact(w, 1); ++n_exact; }
+                            else if (cbl <= 21) {
+                                uint8_t cd[32];
+                                for (int j = 0; j < cbl; ++j) { const char ch = cb[j]; cd[j] = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; }
+                                cbx_nonexact[cbx_pack(cd, cbl)] += 1;
+                            }
+                        }
                     std::cerr << "[1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): " << n_exact << " reads over a "
                               << c.size() << "-barcode whitelist, " << sw.elapsed_s() << "s\n";
                 });
