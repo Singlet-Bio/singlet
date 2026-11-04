@@ -1362,15 +1362,13 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     bool tableMode = false;
     if (const char *fg2 = getenv("SINGLET_ENGINE_GPU_FG2"); fg2 != nullptr && fg2[0] != 0 && getenv("SINGLET_ENGINE_GPU_FG2_OFF") == nullptr) {
         if (singlet_engine_gpu::ingest::plan().on || e10Level >= 2) {
-            P.inOut->logMain << "ENGINE_GPU: sequence table not used (E13 ingest or E10 level >= 2 is on): reading the FASTQ
-" << flush;
+            P.inOut->logMain << "ENGINE_GPU: sequence table not used (E13 ingest or E10 level >= 2 is on): reading the FASTQ\n" << flush;
         } else {
             std::string w2;
             singlet::fq::Fg2RunSet rs;
             if (openTable(rs, fg2, w2) && readTable(P, in, w2, (int) P.runThreadN, rs, unitOfRead) && checkTableHead(P, rs, unitOfRead, w2)) tableMode = true;
             else {
-                P.inOut->logMain << "ENGINE_GPU: sequence table not used (" << w2 << "): reading the FASTQ
-" << flush;
+                P.inOut->logMain << "ENGINE_GPU: sequence table not used (" << w2 << "): reading the FASTQ\n" << flush;
                 in = singlet_engine_gpu::Input(); unitOfRead.clear();
                 if (!fillClip(P, in.clip, why)) return skip(why);
             }
