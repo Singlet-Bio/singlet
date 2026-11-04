@@ -6,6 +6,7 @@ ST=$1; GSM=$2
 W=/mnt/projects/debruinz_project/debruinz/singlet; PL=$W/pilot; P=$PL/$GSM; D=$W/jobs/s15
 SINGLET_THREADS=16   # the same for cpu, gpu and matched-prefix runs: outputs can depend on thread count (known engine bug, S8)
 COMMIT=337b405b; BINDIR=$D/bin/$COMMIT; REFB=/mnt/projects/debruinz_project/cellarium/reference; G=$REFB/GRCh38-2024-A
+case ${SPECIES:-human} in mouse) G=$REFB/GRCm39-2024-A ;; human+mouse|mouse+human) G=$REFB/GRCh38-GRCm39-barnyard ;; esac   # reference by species (store datasets); default human
 WL=$W/pipeline-benchmark/whitelists; ENV=$W/envs/pbench; CAPPAIRS=100000000
 row=$(awk -F'\t' -v g=$GSM '$1==g' $D/samples.tsv); FIVE=${FIVE_ENV:-$(echo "$row" | cut -f3)}; TIER=$(echo "$row" | cut -f5)
 export SINGLET_WHITELIST_DIR=$WL PATH=$ENV/bin:$PATH
@@ -135,18 +136,19 @@ PY
   if [ -n "${STORE_RUN:-}" ]; then ln -sfn starsolo_bam $P/starsolo; [ $rc = 0 ] && python3 $D/store_register.py "${DSID:-$GSM}" "${SMP:-$GSM}" STARsolo "${TVER:-2.7.11b-velodump}" $P/starsolo_bam/Solo.out --cmd-file command.txt --time-file time.txt --input-dir $P; fi
   exit $rc ;;
 fetchurl)   # benchmark store: a 10x fastq tar streamed from URL; GEX R1/R2 are linked into fq/ as <stem>_1 / <stem>_2 (the names the starsolo stage expects)
-  mkdir -p $P/tar $P/fq; curl -sL --retry 5 --retry-delay 20 "${URL:?URL}" | tar -x -C $P/tar --wildcards '*_R1_*' '*_R2_*' || exit 5
+  mkdir -p $P/tar $P/fq; T=$P/tar.dl; SZ=$(curl -sIL "${URL:?URL}" | tr -d '\r' | awk 'tolower($1)=="content-length:"{print $2}' | tail -1)   # resumable: download the whole tar first (curl -C -), then pull the R1/R2 members
+  for try in 1 2 3 4 5 6 7 8 9 10 11 12; do [ "$(stat -c %s $T 2> /dev/null || echo 0)" = "$SZ" ] && break; curl -sL -C - --retry 5 --retry-delay 30 -o $T "$URL"; done
+  [ "$(stat -c %s $T)" = "$SZ" ] || { echo "download incomplete ($(stat -c %s $T) of $SZ)"; exit 5; }
+  tar -xf $T -C $P/tar --wildcards '*_R1_*' '*_R2_*' || exit 5; rm -f $T
   for f in $(find $P/tar -name '*_R[12]_001.fastq.gz' | grep -viE '_(antibody|adt|vdj|cmo|hto|atac|crispr|cellplex)_S[0-9]+_L|_I[12]_'); do b=$(basename $f); r=$(echo $b | grep -oE '_R[12]_' | tr -d '_R'); ln -sf $f $P/fq/$(echo $b | sed -E 's/_R[12]_001.fastq.gz//')_$r.fastq.gz; done
   echo '{"pairs": 0, "runs": []}' > $P/runs.json; ls $P/fq | head; du -shL $P/fq ;;
-fetchbam)   # benchmark store: a submitter's 10x-style BAM (CR/CQ/UR/UQ tags kept) streamed from BAMURL and turned back into reads: R1 = CR+UR (barcode+UMI) and R2 = the cDNA read, primary alignments only
-  mkdir -p $P/fq; set -o pipefail; ACC=${ACC:?ACC}
-  curl -s --retry 5 --retry-delay 20 "${BAMURL:?BAMURL}" | $W/envs/pbench/bin/samtools fastq -@ 4 -F 2304 -T CR,CQ,UR,UQ - 2> $P/fetchbam.err | awk -F'\t' -v r1="gzip -1 > $P/fq/${ACC}_1.fastq.gz" -v r2="gzip -1 > $P/fq/${ACC}_2.fastq.gz" '
-    NR%4==1 {nm=$1; cr="";cq="";ur="";uq=""; for(i=2;i<=NF;i++){t=substr($i,1,2); v=substr($i,6); if(t=="CR")cr=v; else if(t=="CQ")cq=v; else if(t=="UR")ur=v; else if(t=="UQ")uq=v}; next}
-    NR%4==2 {sq=$0; next}
-    NR%4==0 {if(cr!="" && ur!="" && cq!="" && uq!=""){n++; print nm"\n"cr ur"\n+\n"cq uq | r1; print nm"\n"sq"\n+\n"$0 | r2}}
-    END {print n+0 > "/dev/stderr"}' 2> $P/fetchbam.count || exit 5
-  N=$(tail -1 $P/fetchbam.count); echo "{\"pairs\": $N, \"runs\": [[\"$ACC\", $N]]}" > $P/runs.json; ls -l $P/fq; echo "reads kept: $N" ;;
-storeclean) rm -rf $P/sra $P/fq $P/tar $P/stage $P/cap1fq; find $P \( -name '*.bam' -o -name '*.bai' \) -delete; du -sh $P ;;
+fetchbam)   # benchmark store: a submitter's 10x-style BAM (CR/CQ/UR/UQ tags kept): resumable download first, then reads rebuilt as R1 = CR+UR and R2 = cDNA (primary alignments only)
+  mkdir -p $P/fq $P/bamdl; ACC=${ACC:?ACC}; B=$P/bamdl/$ACC.bam; SZ=$(curl -sI "${BAMURL:?BAMURL}" | tr -d '\r' | awk 'tolower($1)=="content-length:"{print $2}' | tail -1)
+  for try in 1 2 3 4 5 6 7 8 9 10 11 12; do [ "$(stat -c %s $B 2> /dev/null || echo 0)" = "$SZ" ] && break; curl -s -C - --retry 5 --retry-delay 30 -o $B "$BAMURL"; done
+  [ "$(stat -c %s $B)" = "$SZ" ] || { echo "download incomplete ($(stat -c %s $B) of $SZ)"; exit 5; }; echo "downloaded $SZ bytes"
+  set -o pipefail; $W/envs/pbench/bin/samtools fastq -@ 4 -F 2304 -T CR,CQ,UR,UQ $B 2> $P/fetchbam.err | python3 $D/bam2fq_cr.py $P/fq/${ACC}_1.fastq.gz $P/fq/${ACC}_2.fastq.gz 2> $P/fetchbam.count || { tail -3 $P/fetchbam.err; exit 5; }
+  N=$(tail -1 $P/fetchbam.count); echo "{\"pairs\": $N, \"runs\": [[\"$ACC\", $N]]}" > $P/runs.json; rm -rf $P/bamdl; ls -l $P/fq; echo "reads kept: $N" ;;
+storeclean) rm -rf $P/sra $P/fq $P/tar $P/tar.dl $P/bamdl $P/stage $P/cap1fq; find $P \( -name '*.bam' -o -name '*.bai' \) -delete; du -sh $P ;;
 cleanup)   # equiv check, then delete reads and BAMs; keep outputs and logs. A KEEP file in the sample dir defers the deletion (extra tools still to run).
   [ -d $P/s1cpu/out ] && [ -d $P/s1gpu/out ] && python3 $D/out_equiv.py $P/s1cpu/out $P/s1gpu/out > $P/equiv.txt 2>&1
   [ -e $P/KEEP ] && { echo "KEEP present: reads left in place"; exit 0; }

@@ -64,6 +64,8 @@ vireo|souporcell)   # genotype demux of a known mixture; K = KDON (number of cel
     FA=$REFB/fasta/genome.fa; PV=$W/bench-public/ref/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf
     [ -s $PV ] || { mkdir -p $W/bench-public/ref; zcat $PANEL > $PV.tmp.$$ && mv $PV.tmp.$$ $PV; }
     $SAM view -@ 8 -b -D CB:barcodes.txt $B > $SCR/cells.bam && $SAM index -@ 8 $SCR/cells.bam
+    # consensus.py compiles a Stan model with pystan and the sif has no compiler: bind a conda gcc 11 (micromamba env under $WORK, gxx_linux-64=11)
+    export APPTAINERENV_CXX=$W/envs/gcc11/bin/x86_64-conda-linux-gnu-g++ APPTAINERENV_CC=$W/envs/gcc11/bin/x86_64-conda-linux-gnu-gcc APPTAINERENV_LD_LIBRARY_PATH=$W/envs/gcc11/lib
     tm apptainer exec $W/envs/souporcell/souporcell.sif souporcell_pipeline.py -i $SCR/cells.bam -b barcodes.txt -f $FA -t 16 -o $O/out -k $K --common_variants $PV > soup.log 2>&1; rc=$?; tail -4 soup.log
     # the last step (consensus.py: cluster genotypes + ambient estimate) needs g++ for cython, which the sif lacks; the demultiplexing result is clusters.tsv, written before it
     if [ $rc != 0 ] && [ -s $O/out/clusters.tsv ] && [ -e $O/out/troublet.done ] || [ $rc != 0 ] && [ -s $O/out/clusters.tsv ] && [ $(wc -l < $O/out/clusters.tsv) -gt $(wc -l < $O/barcodes.txt) ]; then echo "consensus step failed (no g++ in sif); clusters.tsv complete: treated as done"; rc=0; fi
