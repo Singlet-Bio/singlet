@@ -38,7 +38,7 @@ awk -F'\t' 'NR>1 && ($13=="sra"||$13=="url"||$13=="bam"){print $11"\t"$1"\t"$2"\
     [ "$TOOLS" = all ] || [[ ",$TOOLS," == *",$t,"* ]] || return
     tl=$(printf "%02d:00:00" $hrs); [ $hrs -le 3 ] && tl=03:59:00
     gr=; rp=cpu; rg=; [ -n "$gres" ] && { gr="--gres=$gres"; rp=gpu; rg="--gres=$gres"; }
-    m2=$((m * 2)); [ $m2 -ge 200 ] && [ -z "$gres" ] && rp=bigmem; [ $m2 -gt 480 ] && m2=480
+    m2=$((m * 2)); [ $m2 -ge 200 ] && [ -z "$gres" ] && rp=bigmem; [ $m2 -gt 480 ] && m2=480; [ -n "$gres" ] && m2=$m   # GPU nodes: same memory, 48 h
     single=; [ "$t" = cellbender ] && single=",singleton"
     j=$(sb --export=$ENVX$ex --job-name=s15-s-$t-$id --partition=$pt $gr --cpus-per-task=$c --mem=${m}G --time=$tl --dependency=afterok:$s$single $LOG $TL $t $id) || return
     r=$(sb --export=$ENVX$ex --job-name=s15-s-$t-retry-$id --partition=$rp $rg --cpus-per-task=$c --mem=${m2}G --time=48:00:00 --dependency=afternotok:$j$single $LOG $TL $t $id)
