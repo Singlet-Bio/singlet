@@ -153,8 +153,13 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // E16 "copypar" (level 5): the eight tuple arrays copied on threads, beside the rest of this and the device's release (joined at the end)
     std::vector<std::thread> e16cp;
     if (singlet_tail::cut("copypar")) {
-        const std::pair<const std::vector<T3>*, std::vector<PileupTriplet>*> cp[8] = {{&o.exon, &po.exon}, {&o.intron, &po.intron}, {&o.amb, &po.amb},
-            {&o.sj, &po.sj}, {&o.snp_ad, &po.snpAd}, {&o.snp_dp, &po.snpDp}, {&o.mt, &po.mt}, {&o.mt_rev, &po.mtRev}};
+        std::vector<std::pair<const std::vector<T3>*, std::vector<PileupTriplet>*>> cp = {{&o.exon, &po.exon}, {&o.intron, &po.intron}, {&o.amb, &po.amb},
+            {&o.sj, &po.sj}, {&o.snp_ad, &po.snpAd}, {&o.snp_dp, &po.snpDp}, {&o.mt, &po.mt}, {&o.mt_rev, &po.mtRev},
+            {&o.mixed_exon, &po.mixedExon}, {&o.mixed_intron, &po.mixedIntron}};   // campaign's pre-USA exon / intron split
+        if (pi.wantReads) {   // campaign's reads per molecule
+            cp.push_back({&o.exon_reads, &po.exonReads}); cp.push_back({&o.intron_reads, &po.intronReads});
+            po.histCell.swap(o.hist_cell); po.hist.swap(o.hist);
+        }
         for (const auto& c : cp) e16cp.emplace_back([c]() { copyT3(*c.first, *c.second); });
     } else {
     copyT3(o.exon, po.exon); copyT3(o.intron, po.intron); copyT3(o.amb, po.amb); copyT3(o.sj, po.sj);
