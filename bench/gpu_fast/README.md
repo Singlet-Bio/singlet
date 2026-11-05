@@ -12,22 +12,41 @@ Everything here is provisional. The rule values are in one place each (`abcore.D
 | Tier | Needs | Time | Measures | Cannot detect |
 |---|---|---|---|---|
 | 0 `model.py` | laptop | seconds | node rate at k and slots, with what-if edits | anything the template run did not show. See the validation notes. |
-| 1 `ab.py --tier 1` | `debug-gpu`, 8 CPUs | about 25 min | one sample alone, arms ABBA: wall, core-s/M, lock held, device and host peak, stage core-s, identity, fallback | contention. Lock wait, device memory fallback under load, convoys. |
-| 2 `ab.py --tier 2` | one H100, 28 CPUs | about 1 h | k=8 runs in flight, 2 slots, 24 runs per leg, ABBA on one node: progress rate, core-s/M, lock held and wait | rare failures. E20's out-of-memory fallback showed in 1 of 16 runs. Other samples. Identity of most runs. |
+| 1 `ab.py --tier 1` | `debug-gpu`, 8 CPUs | about 25 min | one sample alone, arms ABBA. The demand vector (hold by phase, core-s per run and per M, device and host peak, wall), stage core-s, identity, fallback, and the predicted node rate by limit | contention. Lock wait, device memory fallback under load, convoys. |
+| 2 `ab.py --tier 2` | one H100, 28 CPUs | about 1 h | a batch check. k=8 runs in flight, 2 slots, 24 runs per leg, several arms in a palindrome order on one node: progress rate, core-s/M, lock held and wait, measured against the tier 1 prediction | rare failures. E20's out-of-memory fallback showed in 1 of 16 runs. Other samples. Identity of most runs. |
 | 3 batch 1 | whole H100 node time | 4 to 6 h | everything, every run checked | nothing left. It is the reference. |
 
 Tier 1 and 2 use the same sample (pbmc1k_v3), T=7 and 2 device slots by default. Identity is checked against a kept CPU reference.
 The default reference is `$W/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3`. It covers one sample at one commit.
 An idea that changes output on purpose needs `--intended-output-change`. The table then reports the identity loss and the verdict ignores it.
 
+## Demand first
+
+The lane measures demand, not rate under load. The node rate is set by what one run asks of the node. Tier 1 measures those demands alone, with low noise.
+
+Demand vector of an arm, from one run alone: hold seconds by phase (prefill, handoff, solo, pileup, nonhost) and in total, core-s per run and per M pairs, device peak GB, host peak GB and wall.
+
+Limits on the sustained node rate in M pairs per second, from the demand vector (`demand.py`, `model.py limits`).
+
+- Core limit: allocated cores over core-s per M.
+- Lock limit: slots times pairs per run over hold seconds.
+- Memory limit: runs that fit in (device minus 2 GB), times pairs per run over hold seconds. It binds only when fewer runs fit than there are slots.
+
+The predicted node rate is the smallest limit. The table names the binding limit and the predicted change. It also prints the device headroom with all slots held. A small headroom flags the device out of memory risk (E20: 2.2 GB, s3: 3.4 GB).
+
+These numbers are a ranking screen. Use the change between arms. The absolute rate is not a prediction. The measured sustained rate of s3 at k=8 is about 2.0, and the core limit says 3.1.
+
 ## Rules
 
-Tier 1 (provisional, options of `ab.py`).
+Tier 1, the demand rule (default, `--rule demand`, values in `demand.RULE`).
 
 - REJECT: B lost identity or fell back and A did not.
-- PROMOTE: core-s/M or lock held improves by at least `--promote-gain` (5%), and the gain exceeds the run-to-run spread of the two runs per arm.
+- PROMOTE: the predicted node rate rises by 5% or more (`--node-gain`) on the binding limit, with identity kept and no fallback. The rise must exceed the run-to-run spread of the binding input.
 - INCONCLUSIVE: everything else.
-- Validity first. A fallback or identity loss in A, or no identity check, gives INCONCLUSIVE. `--regress-guard` can block a promotion when the other measure gets worse. It is off.
+- Validity first. A fallback or identity loss in A, or no identity check, gives INCONCLUSIVE.
+- `--rule gain` is the first rule: PROMOTE when core-s/M or lock held improves by `--promote-gain` (5%) and the gain exceeds the spread of the two runs per arm. `--regress-guard` can block a promotion when the other measure worsens. It is off.
+
+Tier 2 (provisional, `abcore.TIER2_RULE`, noise from the A/A runs). Tier 2 is a batch check. See the next section.
 
 Tier 2 (provisional, `abcore.TIER2_RULE`, noise from the A/A runs).
 
@@ -40,6 +59,34 @@ Tier 2 (provisional, `abcore.TIER2_RULE`, noise from the A/A runs).
 - Core-s/M can miss a change that only shortens lock wait. The rate path covers that.
 
 The verdict line names the rule that fired. `verdict.json` holds the numbers.
+
+## Batch check (tier 2) and campaigns
+
+Tier 2 runs several changes that tier 1 promoted in one load job. It reports measured against predicted.
+
+```
+python bench/gpu_fast/ab.py --tier 2 --name stack \
+  --a bin=$W/jobs/gpu-next/bin/s3 --b bin=$W/jobs/gpu-next/bin/e20w \
+  --arm C=bin=$W/jobs/gpu-next/bin/s3,env="SINGLET_Y=1" --arm D=bin=...,env="SINGLET_X=1 SINGLET_Y=1" \
+  --predict B=out/<tier 1 dir of B> --predict C=out/<tier 1 dir of C> --predict D=out/<dir of B>,out/<dir of C>
+```
+
+- Arms A to H. A is the baseline. The default order is a palindrome over the arms (ABCCBA).
+- Factorial design: give each change alone and the stack, as arms B, C and D above. Stacked arms have several `--predict` directories. Their demand ratios multiply.
+- Every arm other than A gets its own verdict against A with the tier 2 rule. The table lists the predicted node rate change, then the measured progress rate, core-s/M, lock held and span rate changes, fallback runs, identity and the verdict. It also lists every leg.
+- A batch check never stops early on the separation of two arms. It stops at the first fallback.
+
+A campaign is a list of A/B pairs that runs by itself.
+
+```
+python bench/gpu_fast/ab.py --campaign campaign.json [--dry-run]
+python bench/gpu_fast/ab.py --collect bench/gpu_fast/out/campaign-<name>-<time>
+```
+
+- The file format is in `campaign.py`. Each step is a tier 1 pair or a tier 2 batch check. A step can name tier 1 steps whose demand gives its predicted change.
+- `--campaign` submits every step in one session as one Slurm chain. A step starts after the previous one ends, in any end state, or after the steps it names. The queue does not need the laptop.
+- Each job writes its own `result.json` on Clipper and uses the scripts commit it was submitted with. Pushing later does not disturb queued steps.
+- `--collect` reads the results later, writes each step's table and `verdict.json` and prints one summary. Run it again to see steps that had not finished. If the bridge is down it says so and exits.
 
 ## Run
 
@@ -76,6 +123,9 @@ A dropped bridge is treated as unknown state. `ab.py` retries for `--bridge-grac
 | File | Use |
 |---|---|
 | `ab.py` | the command. Submits, waits, prints the table and verdict, writes `verdict.json`. |
+| `demand.py` | demand vector, node rate limits, the demand rule, stacked predictions. |
+| `campaign.py` | `--campaign` (one Slurm chain) and `--collect`. |
+| `fetch_points.py` | copies the raw `point.json` of every leg of a finished run into its out directory. |
 | `abcore.py` | arm parsing, verdict rules, table. Also `decide`, which the tier 2 job calls. |
 | `collect.py`, `watch.py` | job side. Build `result.json`. Watch for a fallback during a leg. |
 | `jobs/t1.sbatch`, `jobs/t2.sbatch` | the two jobs. They fetch scripts from the branch and check that they equal the submitted copy. |
