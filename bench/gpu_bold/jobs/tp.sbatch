@@ -94,7 +94,12 @@ start_mps() {   # CUDA MPS daemon for the rest of the job (kernels of different 
   export CUDA_MPS_PIPE_DIRECTORY=/tmp/gbmps-$SLURM_JOB_ID CUDA_MPS_LOG_DIRECTORY=$RES0/mps-log; mkdir -p $CUDA_MPS_PIPE_DIRECTORY $CUDA_MPS_LOG_DIRECTORY
   nvidia-cuda-mps-control -d && MPS_ON=1; echo "MPS daemon started: $CUDA_MPS_PIPE_DIRECTORY ($(date -Is))" | tee -a $S
 }
+stop_mps() {
+  [ -z "${MPS_ON:-}" ] && return 0
+  echo quit | nvidia-cuda-mps-control; MPS_ON=""; unset CUDA_MPS_PIPE_DIRECTORY CUDA_MPS_LOG_DIRECTORY; sleep 3; echo "MPS daemon stopped ($(date -Is))" | tee -a $S
+}
 cfg_set() {
+  case $1 in *mps*) ;; *) stop_mps ;; esac
   CFG_ARGS=""; CFG_ENV=""
   case $1 in
     base) ;;
@@ -107,6 +112,12 @@ cfg_set() {
     admmps) CFG_ENV="SINGLET_GPU_ADMIT=1"; start_mps ;;                                  # the same with CUDA MPS (concurrent kernels of several processes)
     admtuned) CFG_ENV="SINGLET_GPU_ADMIT=1 SINGLET_ADMIT_CAP_GB=92.5 SINGLET_ADMIT_IDLE_GB=0 SINGLET_ENGINE_GPU_MEM_GB=36 SINGLET_ADMIT_EST_PREFILL_GB=36 SINGLET_GPU_PILEUP_ARENA_GB=28 SINGLET_ADMIT_EST_PILEUP_GB=28 SINGLET_ADMIT_EST_NONHOST_GB=29 SINGLET_ADMIT_EST_HANDOFF_GB=6 SINGLET_ADMIT_EST_SOLO_GB=2.5" ;;   # estimates from measured peaks (solo run 800349 and E17 line): prefill 34.8 GB normal plan, pileup peak 26.3 GB, non-host index 24.9 GB, kept 1.6 GB
     admmap) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_GPU_ADMIT=1 SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;
+    mps) start_mps ;;                                                                     # CUDA MPS, slot lock unchanged
+    m45) CFG_ENV="SINGLET_ENGINE_GPU_MEM_GB=45" ;;                                        # device budget of a 2-slot node
+    m91) CFG_ENV="SINGLET_ENGINE_GPU_MEM_GB=91" ;;
+    bsort) CFG_ENV="SINGLET_BOLD_BSORT=1" ;;                                              # gpu/bold-kern (build b5)
+    b64) CFG_ENV="SINGLET_BOLD_B64=1" ;;
+    bsortb64) CFG_ENV="SINGLET_BOLD_BSORT=1 SINGLET_BOLD_B64=1" ;;
     nohc) CFG_ENV="SINGLET_BENCH_NOHOSTCOPY=1" ;;                                        # prototype: no host copy of lane results and records (needs build b1)
     nohc_alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
     nohc_map) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;

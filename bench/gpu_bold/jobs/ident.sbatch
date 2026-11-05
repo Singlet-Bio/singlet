@@ -36,8 +36,13 @@ run() {   # arm label env...
   grep -a "NOHOSTCOPY\|\[engine_gpu\] level\|device .* held it\|E12 device -> host" $R/$arm.log $D/out/star_Log.out | cut -c1-260 | tee -a $R/$arm.marks
 }
 run A X_ARM=A
+if [ "${MPS_B:-0}" = 1 ]; then   # arm B under CUDA MPS (all processes of the arm run as this user)
+  export CUDA_MPS_PIPE_DIRECTORY=/tmp/gbmps-$SLURM_JOB_ID CUDA_MPS_LOG_DIRECTORY=$R/mps-log; mkdir -p $CUDA_MPS_PIPE_DIRECTORY $CUDA_MPS_LOG_DIRECTORY
+  nvidia-cuda-mps-control -d && echo "MPS daemon started for arm B"
+fi
 # shellcheck disable=SC2086
 run B X_ARM=B $SWITCH
+[ "${MPS_B:-0}" = 1 ] && { echo quit | nvidia-cuda-mps-control; echo "MPS daemon stopped"; ls $R/mps-log 2>/dev/null; tail -5 $R/mps-log/control.log 2>/dev/null; tail -5 $R/mps-log/server.log 2>/dev/null; }
 a=$SCR/A/out; b=$SCR/B/out; ok=1
 EXPECT_DIFF=" pileup_stats.json read_stats.tsv star_Log.std.out summary.json nonhost_reads.fq star_Unmapped.out.mate1 star_Unmapped.out.mate2 "   # the three read files are compared by sorted record hash below (their order differs by design)
 python3 $SCR/bench/star_accel/out_equiv.py $a $b > $R/equiv.txt 2>&1
