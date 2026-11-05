@@ -10,5 +10,5 @@ BIN=${1:?BIN}; COMMIT=${2:?COMMIT}; ES=${3:-}
 J=$W/jobs/gpu-paths/jobs; N=${NIDS:-16}
 EX="ALL,BIN=$BIN,COMMIT=$COMMIT${ES:+,EXPECT_SCRIPTS=$ES}"
 REFS=$(sbatch --parsable --array=0-$((N-1))%${REFPAR:-6} -p short-cpu --gres=none --mem=64G --time=03:00:00 --job-name=gpup-refs --export=$EX,MODES=cpu $J/paths.sbatch)
-GPU=$(sbatch --parsable --dependency=afterany:$REFS --job-name=gpu-paths --export=$EX,MODES=gpu $J/paths.sbatch)
+GPU=$(sbatch --parsable --dependency=afterany:$REFS${EXTRA_DEP:+,afterany:$EXTRA_DEP} --job-name=gpu-paths --export=$EX,MODES=gpu $J/paths.sbatch)
 echo "refs=$REFS gpu=$GPU"
