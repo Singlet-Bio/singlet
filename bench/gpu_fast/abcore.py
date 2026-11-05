@@ -353,6 +353,9 @@ def render(res, verdict, warnings=()):
              f"sample {P.get('sample', '?')} T={P.get('T', '?')} slots={P.get('slots', '?')}"
              + (f" k={P['k']} runs per leg={P['runs']}" if res.get("tier") == 2 else ""))
     L.append(f"order {' '.join(l['arm'] for l in res.get('legs', []))}")
+    cn = contaminated_legs(res)
+    if cn:
+        L.append("note: CO-TENANT. These legs shared the node with another job: " + ", ".join(f"leg {l['leg']} ({l['arm']})" for l in cn) + ". Read their numbers with care.")
     for n in list(res.get("notes", [])) + list(warnings):
         L.append(f"note: {n}")
     L.append("")
@@ -401,6 +404,17 @@ def render(res, verdict, warnings=()):
     return "\n".join(L)
 
 
+def contaminated_legs(res):
+    """Legs that shared the node with another job. tp_point.py counts the other jobs of the node in the squeue snapshots (other_jobs_max)."""
+    return [l for l in res.get("legs", []) if (num(l.get("metrics", {}).get("other_jobs_max")) or 0) > 0]
+
+
+def clean_result(res):
+    """The result without the legs that shared the node. An arm left with no leg gives V1 in the verdict."""
+    bad = {l["leg"] for l in contaminated_legs(res)}
+    return dict(res, legs=[l for l in res.get("legs", []) if l["leg"] not in bad])
+
+
 def arms_of(res):
     return sorted({l.get("arm") for l in res.get("legs", [])})
 
@@ -438,6 +452,9 @@ def render_batch(res, verdicts, warnings=()):
     L.append(f"tier 2 batch check job {res.get('job', '?')} node {res.get('node', '?')} scripts `{res.get('scripts', '?')}` ref `{res.get('ref', '?')}` "
              f"sample {P.get('sample', '?')} T={P.get('T', '?')} slots={P.get('slots', '?')} k={P.get('k', '?')} runs per leg={P.get('runs', '?')}")
     L.append(f"order {' '.join(l['arm'] for l in res.get('legs', []))}")
+    cn = contaminated_legs(res)
+    if cn:
+        L.append("note: CO-TENANT. These legs shared the node with another job: " + ", ".join(f"leg {l['leg']} ({l['arm']})" for l in cn) + ". Read their numbers with care.")
     for n in list(res.get("notes", [])) + list(warnings):
         L.append(f"note: {n}")
     L += ["", "Measured against predicted. Predicted is the node rate change from tier 1 demand vectors. Measured is the change of the progress rate against arm A.", "",

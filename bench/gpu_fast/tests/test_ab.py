@@ -180,3 +180,14 @@ def test_tier1_default_rule_is_the_demand_rule(tmp_path):
     ab.main(["--tier", "1", "--a", BIN_A, "--b", BIN_B, "--name", "idea", "--out", str(tmp_path / "o"), "--poll", "0"], remote=Fake(res), out_fn=lambda x: None)
     v = json.load(open(tmp_path / "o" / "verdict.json"))
     assert v["verdict"] == "PROMOTE" and v["rule"] == "T1D-3" and v["params"]["node_gain"] == 0.05
+
+
+def test_after_adds_a_dependency(tmp_path, capsys):
+    assert ab.main(argv(tmp_path, 2, ["--dry-run", "--after", "800408"])) == 0
+    assert "--dependency=afterany:800408" in capsys.readouterr().out
+    assert ab.main(argv(tmp_path, 2, ["--dry-run", "--after", "80x"])) == 2
+
+
+def test_after_rejects_non_numbers(tmp_path):
+    f = Fake()
+    assert ab.main(argv(tmp_path, 2, ["--after", "abc"]), remote=f, out_fn=lambda x: None) == 2

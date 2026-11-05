@@ -187,6 +187,7 @@ def parser():
     p.add_argument("--predict", action="append", default=[], help="batch check: LETTER=OUTDIR[,OUTDIR...] tier 1 out directories whose demand ratios give the predicted node rate change of that arm")
     p.add_argument("--campaign", help="JSON file with a list of A/B steps. Submits one Slurm chain with dependencies. Nothing waits on the laptop")
     p.add_argument("--collect", help="campaign directory (or its campaign.json). Reads the results of its steps and prints verdicts")
+    p.add_argument("--after", help="job ids, comma separated. The job starts after they end in any state (sbatch --dependency=afterany)")
     p.add_argument("--node", help="sbatch -w")
     p.add_argument("--exclude", help="sbatch --exclude. No default. Use --node to pick a node")
     g = p.add_argument_group("tier 1 rule")
@@ -245,6 +246,7 @@ def validate(a):
         raise Fatal("--ref: absolute path of plain characters")
     if a.node and a.exclude:
         raise Fatal("--node and --exclude together")
+    after_ids(a)
     if a.k < 1 or a.runs <= 2 * a.k:
         print(f"note: runs per leg ({a.runs}) is not above 2k ({2 * a.k}). The windowed rate will be NA.", file=sys.stderr)
 
@@ -270,6 +272,13 @@ def make_plan(a, head, stamp):
     return {"a": a, "arms": arms, "notes": notes, "run": run, "jobname": jobname, "sbatch_local": sbatch_local, "spec": spec, "state": state}
 
 
+def after_ids(a):
+    ids = [x for x in (a.after or "").split(",") if x]
+    if not all(re.fullmatch(r"\d+", x) for x in ids):
+        raise Fatal("--after: comma separated job ids")
+    return ids or None
+
+
 def head_problems(head, dirty, rem):
     problems = []
     if not head or len(head) != 40:
@@ -291,7 +300,7 @@ def print_plan(plan, head, problems, dependency=None):
     print("# --- commands ---")
     print(f"clipper put {plan['sbatch_local']} {plan['run']}/t{a.tier}.sbatch")
     print(f"clipper put <spec.sh> {plan['run']}/spec.sh")
-    print(f"clipper run {shlex.quote(sbatch_command(a, plan['run'], plan['jobname'], dependency))}")
+    print(f"clipper run {shlex.quote(sbatch_command(a, plan['run'], plan['jobname'], dependency or after_ids(a)))}")
     print(f"# log {W}/logs/{plan['jobname']}-<jobid>.out   result {plan['run']}/res/result.json")
 
 
@@ -346,7 +355,7 @@ def main(argv=None, remote=None, out_fn=print):
     state = dict(plan["state"], args=argv if argv is not None else sys.argv[1:])
     save_state(out, state)
     try:
-        state["job"] = submit_plan(remote, plan, out)
+        state["job"] = submit_plan(remote, plan, out, after_ids(a))
     except BridgeDown as e:
         print(f"the bridge dropped during the submission ({e}). Job state unknown. Resume with: python {sys.argv[0]} --resume {out}", file=sys.stderr)
         return 3
@@ -476,6 +485,11 @@ def report(out, state, res, final, out_fn=print, camp_dir=None):
         v = abcore.tier1_verdict(res, rp, intended, state.get("rule_kind", "gain"))
     else:
         v = abcore.tier2_verdict(res, rp, intended)
+    clean_line = None
+    if abcore.contaminated_legs(res):
+        cr = abcore.clean_result(res)
+        vc = (abcore.tier1_verdict(cr, rp, intended, state.get("rule_kind", "gain")) if state["tier"] == 1 else abcore.tier2_verdict(cr, rp, intended))
+        clean_line = {"verdict": vc["verdict"], "rule": vc["rule"], "why": vc["why"], "legs_left": [l["leg"] for l in cr["legs"]]}
     if final != "COMPLETED":
         v.setdefault("notes", []).append(f"job ended as {final}")
     table = abcore.render(res, v, notes)
@@ -487,6 +501,10 @@ def report(out, state, res, final, out_fn=print, camp_dir=None):
         d = v["demand"]
         vj["demand"] = {"A": d["A"], "B": d["B"], "limits_A": d["limits_A"], "limits_B": d["limits_B"], "predicted_node_change": d["change"],
                         "change_by_limit": d["change_by_limit"]}
+    if clean_line:
+        vj["without_contaminated"] = clean_line
+        table += f"\n\nWithout the co-tenant legs: **{clean_line['verdict']}** (rule {clean_line['rule']}) {clean_line['why']}"
+        open(os.path.join(out, "table.md"), "w").write(table + "\n")
     json.dump(vj, open(os.path.join(out, "verdict.json"), "w"), indent=1)
     out_fn(table)
     out_fn(f"\nfiles in {out}: table.md verdict.json result.json")

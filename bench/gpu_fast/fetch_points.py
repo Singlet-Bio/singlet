@@ -20,7 +20,7 @@ def main(out):
     for l in legs:
         d = os.path.join(out, "legs", l)
         os.makedirs(d, exist_ok=True)
-        for f in ("point.json", "results.tsv", "runs.tsv", "fallback.txt"):
+        for f in ("point.json", "results.tsv", "runs.tsv", "fallback.txt", "cotenants.log"):
             subprocess.run(CL + ["get", f"{res}/{l}/{f}", os.path.abspath(os.path.join(d, f))], capture_output=True)
     print(f"{out}: {len(legs)} legs copied")
 
