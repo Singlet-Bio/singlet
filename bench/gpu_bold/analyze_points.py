@@ -29,45 +29,38 @@ def progress(runs, ws, we):
 
 
 def dmon_means(path, t0, t1):
-    """mean sm%, mem%, rx MB/s, tx MB/s, power W between t0 and t1 (epoch s) from nvidia-smi dmon -o T output"""
+    """column means of an nvidia-smi dmon -o T log between t0 and t1 (epoch s). Names come from the first '#' line."""
+    import datetime
     if not os.path.exists(path):
         return None
-    hdr = None
+    names = None
     rows = []
     for l in open(path, errors="replace"):
         if l.startswith("#"):
-            hdr = l.split()[1:] if "Time" in l or "gpu" in l else hdr
+            if names is None:
+                names = l.lstrip("#").split()
             continue
         f = l.split()
-        if len(f) < 10:
-            continue
-        rows.append(f)
-    if not rows:
+        if names and len(f) == len(names):
+            rows.append(f)
+    if not names or not rows:
         return None
-    # the header line of dmon -o T starts with "# Date Time gpu pwr ..."; recover names from the first '#' line that has 'sm'
-    names = None
-    for l in open(path, errors="replace"):
-        if l.startswith("#") and " sm " in l + " ":
-            names = l.split()[1:]
-            break
-    if not names:
-        return None
-    out = {n: [] for n in ("sm", "mem", "rxpci", "txpci", "pwr")}
-    import datetime
+    day = datetime.datetime.fromtimestamp(t0).date()
+    acc = {n: [] for n in names[1:]}
     for f in rows:
         try:
-            d = dict(zip(names, f))
-            ts = datetime.datetime.strptime(d["Date"] + " " + d["Time"], "%Y%m%d %H:%M:%S").timestamp()
+            h, m, sec = [int(x) for x in f[0].split(":")]
+            ts = datetime.datetime.combine(day, datetime.time(h, m, sec)).timestamp()
         except Exception:
             continue
         if ts < t0 or ts > t1:
             continue
-        for n in out:
+        for n, v in zip(names[1:], f[1:]):
             try:
-                out[n].append(float(d[n]))
-            except Exception:
+                acc[n].append(float(v))
+            except ValueError:
                 pass
-    return {n: (st.mean(v) if v else float("nan")) for n, v in out.items()}
+    return {n: (st.mean(v) if v else float("nan")) for n, v in acc.items()}
 
 
 def main():
@@ -97,13 +90,14 @@ def main():
                 for n, v in (r.get("stages") or {}).items():
                     stages.setdefault(n, []).append(v)
             dm = dmon_means(os.path.join(pd, "dmon.log"), P["first_start"], P["last_end"])
+            gm = dmon_means(os.path.join(pd, "gpm.log"), P["first_start"], P["last_end"])
             rows.append(dict(
                 point=P["tag"], cfg=meta.get("cfg", "base"), k=k, T=P["T"], slots=P["slots"], n=len(runs),
                 prog=prog, win=res.get("win_rate", "NA"), span=res.get("span_rate", "NA"), cs_M=res.get("core_s_per_M", "NA"),
                 cores=res.get("cores_win", "NA"), held=res.get("lock_held_s", "NA"), wait=res.get("lock_wait_s", "NA"),
                 util=res.get("gpu_util", "NA"), wall=m("wall"), core_s=m("core_s"), host=res.get("host_peak_gb", "NA"),
                 dev=res.get("dev_peak_gb", "NA"), failed=res.get("failed_runs", "?"), fb=res.get("fallback_runs", "?"),
-                stages={n: st.mean(v) for n, v in stages.items()}, dm=dm, job=res.get("job", os.path.basename(rd)), node=res.get("node", "?")))
+                stages={n: st.mean(v) for n, v in stages.items()}, dm=dm, gm=gm, job=res.get("job", os.path.basename(rd)), node=res.get("node", "?")))
     f = lambda v, p=2: ("NA" if v is None or v != v else (f"{v:.{p}f}" if isinstance(v, float) else str(v)))
     print("| job | node | point | cfg | k | T | slots | runs | progress M pairs/s | window | span | core-s/M | cores busy | lock held s | lock wait s | gpu util % | dmon sm % | per-sample wall s | core-s/run | host GB | dev GB | failed | fallback |")
     print("|" + "---|" * 23)
@@ -122,7 +116,8 @@ def main():
     print("Device copy load (dmon, mean MB/s over the span) and power:")
     for r in rows:
         dm = r["dm"] or {}
-        print(f"  {r['point']}: rx {f(dm.get('rxpci'), 0)} tx {f(dm.get('txpci'), 0)} MB/s, sm {f(dm.get('sm'), 0)}%, mem {f(dm.get('mem'), 0)}%, {f(dm.get('pwr'), 0)} W")
+        print(f"  {r['point']}: rx {f(dm.get('rxpci'), 0)} tx {f(dm.get('txpci'), 0)} MB/s, sm {f(dm.get('sm'), 0)}%, mem {f(dm.get('mem'), 0)}%, {f(dm.get('pwr'), 0)} W"
+              + (" | GPM " + ", ".join(f"{k} {v:.1f}" for k, v in (r["gm"] or {}).items() if k not in ("gpu", "Idx")) if r.get("gm") else ""))
 
 
 if __name__ == "__main__":

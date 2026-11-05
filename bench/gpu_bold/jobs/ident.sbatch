@@ -39,7 +39,7 @@ run A X_ARM=A
 # shellcheck disable=SC2086
 run B X_ARM=B $SWITCH
 a=$SCR/A/out; b=$SCR/B/out; ok=1
-EXPECT_DIFF=" pileup_stats.json read_stats.tsv star_Log.std.out summary.json "
+EXPECT_DIFF=" pileup_stats.json read_stats.tsv star_Log.std.out summary.json nonhost_reads.fq star_Unmapped.out.mate1 star_Unmapped.out.mate2 "   # the three read files are compared by sorted record hash below (their order differs by design)
 python3 $SCR/bench/star_accel/out_equiv.py $a $b > $R/equiv.txt 2>&1
 grep -a '^  DIFF\|^  only in\|^files:\|^RESULT' $R/equiv.txt | cut -c1-220
 for f in $(grep -a '^  DIFF ' $R/equiv.txt | sed -E 's/^  DIFF ([^ :]+).*/\1/'); do case "$EXPECT_DIFF" in *" $f "*) ;; *) echo "UNEXPECTED DIFF $f"; ok=0 ;; esac; done

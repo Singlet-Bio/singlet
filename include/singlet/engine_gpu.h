@@ -320,7 +320,7 @@ inline int admitAcquire(int device, uint64_t est, const char* phase, double* wai
         if (slot < 0) {
             for (int i = 0; i < 96; i++) if (T->e[i].pid == 0) { slot = i; break; }
             if (slot < 0) { flock(fd, LOCK_UN); usleep(20000); continue; }
-            AdmitEntry& m = T->e[slot]; m.pid = getpid(); m.kind = 1; m.bytes = est; m.waiting = 1; m.ticket = T->next++; myTicket = m.ticket;
+            AdmitEntry& m = T->e[slot]; m.pid = getpid(); m.kind = 1; m.bytes = est; m.waiting = 1; m.ticket = T->next++; myTicket = m.ticket; m.pad = (std::strcmp(phase, "prefill") == 0) ? 1 : 0;
         }
         uint64_t sum = 0; int nUse = 0; bool older = false;
         for (int i = 0; i < 96; i++) {
@@ -351,13 +351,16 @@ inline void admitRelease(int device, int handle) {
     if (fd < 0) return;
     AdmitTable* T = (AdmitTable*) mmap(nullptr, sizeof(AdmitTable), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (T == MAP_FAILED) { close(fd); return; }
-    const uint64_t idle = admitBytes(admitGB("SINGLET_ADMIT_IDLE_GB", 2.5));
     flock(fd, LOCK_EX);
     const int slot = handle & ~kAdmitBase;
-    if (slot >= 0 && slot < 96 && T->e[slot].pid == getpid()) { T->e[slot].pid = 0; T->e[slot].bytes = 0; T->e[slot].waiting = 0; }
+    int phaseCode = 0;
+    if (slot >= 0 && slot < 96 && T->e[slot].pid == getpid()) { phaseCode = T->e[slot].pad; T->e[slot].pid = 0; T->e[slot].bytes = 0; T->e[slot].waiting = 0; T->e[slot].pad = 0; }
+    // what the process really keeps on the device after the phase: after the prefill the STAR child holds its context and E11's kept Solo inputs (0.52 + 0.99 GB)
+    // until its Solo step. Any other phase ends with the context gone or nothing kept (SINGLET_ADMIT_IDLE_GB, default 0).
+    const uint64_t idle = admitBytes(phaseCode == 1 ? admitGB("SINGLET_ADMIT_IDLE_AFTER_PREFILL_GB", 1.6) : admitGB("SINGLET_ADMIT_IDLE_GB", 0.0));
     bool have = false;
-    for (int i = 0; i < 96; i++) if (T->e[i].pid == getpid()) have = true;
-    if (!have) for (int i = 0; i < 96; i++) if (T->e[i].pid == 0) { T->e[i].pid = getpid(); T->e[i].kind = 2; T->e[i].bytes = idle; T->e[i].waiting = 0; break; }
+    for (int i = 0; i < 96; i++) if (T->e[i].pid == getpid() && T->e[i].kind == 2) have = true;
+    if (idle > 0 && !have) for (int i = 0; i < 96; i++) if (T->e[i].pid == 0) { T->e[i].pid = getpid(); T->e[i].kind = 2; T->e[i].bytes = idle; T->e[i].waiting = 0; break; }
     flock(fd, LOCK_UN);
     munmap(T, sizeof(AdmitTable)); close(fd);
 }

@@ -89,6 +89,11 @@ echo "node=$(hostname) job=$SLURM_JOB_ID cpus=$SLURM_CPUS_PER_TASK gpus=$NGPU cp
   cat /sys/kernel/mm/transparent_hugepage/enabled; ls -l /tmp/singlet_engine_gpu_*.lock 2>/dev/null; } 2>&1 | sed 's/^/  /' | tee -a $S
 
 # stage ceiling configs. CFG_ARGS go on the singlet command line, CFG_ENV are exported for the point. Outputs are incomplete or changed on purpose.
+start_mps() {   # CUDA MPS daemon for the rest of the job (kernels of different processes can then run at the same time)
+  [ -n "${MPS_ON:-}" ] && return 0
+  export CUDA_MPS_PIPE_DIRECTORY=/tmp/gbmps-$SLURM_JOB_ID CUDA_MPS_LOG_DIRECTORY=$RES0/mps-log; mkdir -p $CUDA_MPS_PIPE_DIRECTORY $CUDA_MPS_LOG_DIRECTORY
+  nvidia-cuda-mps-control -d && MPS_ON=1; echo "MPS daemon started: $CUDA_MPS_PIPE_DIRECTORY ($(date -Is))" | tee -a $S
+}
 cfg_set() {
   CFG_ARGS=""; CFG_ENV=""
   case $1 in
@@ -98,6 +103,10 @@ cfg_set() {
     nodn) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen" ;;
     alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip" ;;
     maponly) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;  # ends after pileup + STAR
+    adm) CFG_ENV="SINGLET_GPU_ADMIT=1" ;;                                                 # gpu/bold-admit build b2: memory-aware admission instead of slot locks
+    admmps) CFG_ENV="SINGLET_GPU_ADMIT=1"; start_mps ;;                                  # the same with CUDA MPS (concurrent kernels of several processes)
+    admtuned) CFG_ENV="SINGLET_GPU_ADMIT=1 SINGLET_ADMIT_CAP_GB=92.5 SINGLET_ADMIT_IDLE_GB=0 SINGLET_ENGINE_GPU_MEM_GB=36 SINGLET_ADMIT_EST_PREFILL_GB=36 SINGLET_GPU_PILEUP_ARENA_GB=28 SINGLET_ADMIT_EST_PILEUP_GB=28 SINGLET_ADMIT_EST_NONHOST_GB=29 SINGLET_ADMIT_EST_HANDOFF_GB=6 SINGLET_ADMIT_EST_SOLO_GB=2.5" ;;   # estimates from measured peaks (solo run 800349 and E17 line): prefill 34.8 GB normal plan, pileup peak 26.3 GB, non-host index 24.9 GB, kept 1.6 GB
+    admmap) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_GPU_ADMIT=1 SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;
     nohc) CFG_ENV="SINGLET_BENCH_NOHOSTCOPY=1" ;;                                        # prototype: no host copy of lane results and records (needs build b1)
     nohc_alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
     nohc_map) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
@@ -132,7 +141,7 @@ run_item() {   # point item worker sample T
   ( while [ ! -e $CRS ]; do sleep 0.2; done; ln $CRS $D/CellReads.stats ) 2>/dev/null &
   local WATCH=$!
   local NS=""
-  case " ${NSYS_ITEMS:-} " in *" $i "*) NS="${NSYS_BIN:-/usr/local/cuda/bin/nsys} profile -o $O/prof --force-overwrite=true --trace=cuda,nvtx --sample=none --cpuctxsw=none --gpu-metrics-devices=all --gpu-metrics-frequency=${NSYS_GM_HZ:-10000}" ;; esac
+  case " ${NSYS_ITEMS:-} " in *" $i "*) NS="${NSYS_BIN:-/usr/local/cuda/bin/nsys} profile -o $O/prof --force-overwrite=true --trace=$(echo ${NSYS_TRACE:-cuda+nvtx} | tr + ,) ${NSYS_EXTRA:-} --sample=none --cpuctxsw=none --gpu-metrics-devices=all --gpu-metrics-frequency=${NSYS_GM_HZ:-10000}" ;; esac
   local T0; T0=$(date +%s.%N)
   ( cd $D && env "${XE[@]}" /usr/bin/time -v -o $O/time.txt timeout -k 30 3000 $NS $BIN $SCR/data/$s.1fq --ref-base $REF --genome-dir $G/star_2.7.11b \
       --exons $G/genes/genes.gtf --out-prefix $D/out/ --threads $T --pipeline --output-format 1pz --engine gpu $EXTRA_ARGS 2>&1 \
@@ -253,7 +262,7 @@ ensure_alone() {   # sample T slots
 }
 
 for pp in "${POINTS[@]}"; do
-  PT=${pp%%@*}; CFG=base; [[ $pp == *@* ]] && CFG=${pp#*@}; p=${pp//@/_}
+  PT=${pp%%@*}; CFG=base; [[ $pp == *@* ]] && CFG=${pp#*@}; CFG=${CFG%%#*}; p=${pp//[@#]/_}
   cfg_set $CFG || continue
   EXTRA_ARGS="$CFG_ARGS"
   if ! [[ $PT =~ ^(mix)?k([0-9]+)t([0-9]+)s([0-9]+)(m([0-9]+))?(r([0-9]+))?(p)?(f)?$ ]]; then echo "!! bad point tag $PT" | tee -a $S; continue; fi
@@ -270,6 +279,7 @@ for pp in "${POINTS[@]}"; do
   export $XENV
   for kv in $CFG_ENV; do export "$kv"; done
   if [ "$IDENT" = 1 ]; then for s in $(printf "%s\n" "${ITEMS[@]}" | sort -u); do ensure_alone $s $T $SL; done; fi
+  rm -f /tmp/singlet_admit_*.tab
   mkdir -p $SCR/$p $RES0/$p; echo 0 > $SCR/$p/queue; : > $RES0/$p/runs.tsv; : > $RES0/$p/ident.tsv; : > $RES0/$p/identity.lines
   printf '{"tag":"%s","k":%d,"T":%d,"slots":%d,"rounds":%d,"runs":%d,"pin":"%s","items":"%s","env":"%s","node":"%s","gpus":%d,"cfg":"%s","cfg_args":"%s","cfg_env":"%s"}\n' $p $K $T $SL $R $NI "$PIN" "${ITEMS[*]}" "$XENV" "$(hostname)" $NGPU "$CFG" "$CFG_ARGS" "$CFG_ENV" > $RES0/$p/meta.json
   echo "######## $p: $K in flight, T=$T, $NI runs, items ${ITEMS[*]:0:3}...; $XENV${PIN:+; pinned}; cfg=$CFG args=[$CFG_ARGS] env=[$CFG_ENV]; $(date -Is)" | tee -a $S
@@ -314,6 +324,7 @@ for pp in "${POINTS[@]}"; do
   sort -V $RES0/$p/identity.lines 2>/dev/null | tee -a $S
   collect_dump $p
   python3 $GB/tp_point.py $RES0/$p 2>&1 | tee -a $S $RES0/$p/results.txt
+  python3 $W/jobs/gpu-bold/jobs/admit_stats.py $RES0/$p > $RES0/$p/admit.txt 2>&1; sed 's/^/  admit: /' $RES0/$p/admit.txt | tee -a $S
   [ -f $RES0/results.tsv ] || head -1 $RES0/$p/results.tsv > $RES0/results.tsv
   tail -n +2 $RES0/$p/results.tsv >> $RES0/results.tsv
   rm -rf "${SCR:?}/${p:?}"
@@ -337,5 +348,6 @@ if [ -n "${NSYS_ITEMS:-}" ]; then
     echo "  summary: $d/nsys_summary.txt" | tee -a $S
   done
 fi
+[ -n "${MPS_ON:-}" ] && { echo quit | nvidia-cuda-mps-control; echo "MPS daemon stopped" | tee -a $S; }
 echo "PROVENANCE job=$SLURM_JOB_ID node=$(hostname -s) bin=$BIN sha256=$BSHA commit=$COMMIT scripts=$SCRIPTS" | tee -a $S
 echo done $(date -Is) | tee -a $S
