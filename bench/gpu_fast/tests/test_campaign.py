@@ -149,3 +149,10 @@ def test_batch_check_with_several_arms_through_ab(tmp_path):
 
 def test_arm_option_is_for_tier2_only(tmp_path):
     assert ab.main(["--tier", "1", "--a", S3, "--b", S3, "--arm", "C=" + S3, "--name", "x", "--dry-run"]) == 2
+
+
+def test_the_example_campaign_loads_and_dry_runs(capsys):
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "campaigns", "example-e20w.json")
+    assert ab.main(["--campaign", p, "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert out.count("######## step") == 3 and "ARMS=ABCD" in out and "ORDER=ABCDDCBA" in out

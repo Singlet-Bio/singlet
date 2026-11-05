@@ -1,0 +1,19 @@
+{
+  "name": "e20w-stack",
+  "defaults": {"node": "g051", "T": 7, "slots": 2},
+  "steps": [
+    {"id": "t1-e20w", "tier": 1,
+     "a": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3,commit=e42c0636",
+     "b": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e20w,commit=aeef7a5e"},
+    {"id": "t1-donors", "tier": 1, "opts": {"intended-output-change": true},
+     "a": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3,commit=e42c0636",
+     "b": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3,commit=e42c0636,args=--n-donors 1"},
+    {"id": "batch", "tier": 2, "order": "ABCDDCBA", "opts": {"intended-output-change": true},
+     "arms": {
+       "A": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3,commit=e42c0636",
+       "B": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e20w,commit=aeef7a5e",
+       "C": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3,commit=e42c0636,args=--n-donors 1",
+       "D": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e20w,commit=aeef7a5e,args=--n-donors 1"},
+     "predict": {"B": ["t1-e20w"], "C": ["t1-donors"], "D": ["t1-e20w", "t1-donors"]}}
+  ]
+}
