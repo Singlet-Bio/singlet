@@ -1,0 +1,54 @@
+{
+ "points": [
+  {
+   "name": "tp-800257 s3 (batch 1)",
+   "point": "b1-800257.compact.json",
+   "profile": "s3-k1.compact.json"
+  },
+  {
+   "name": "tp-800258 s3 (batch 1)",
+   "point": "b1-800258.compact.json",
+   "profile": "s3-k1.compact.json"
+  },
+  {
+   "name": "tp-s3",
+   "point": "s3-k8.compact.json",
+   "profile": "s3-k1.compact.json"
+  },
+  {
+   "name": "tp-s3r2",
+   "point": "s3r2-k8.compact.json",
+   "profile": "s3-k1.compact.json"
+  },
+  {
+   "name": "tp-s3r3",
+   "point": "s3r3-k8.compact.json",
+   "profile": "s3-k1.compact.json"
+  },
+  {
+   "name": "tp-s3r4",
+   "point": "s3r4-k8.compact.json",
+   "profile": "s3-k1.compact.json"
+  },
+  {
+   "name": "tp-base (2 slots, T7)",
+   "point": "base-k8.compact.json",
+   "profile": "base-k1.compact.json"
+  },
+  {
+   "name": "tp-base2 (1 slot, T12)",
+   "point": "base2-k8.compact.json",
+   "profile": "base2-k1.compact.json"
+  },
+  {
+   "name": "tp-base3 (1 slot, T12)",
+   "point": "base3-k8.compact.json",
+   "profile": "base2-k1.compact.json"
+  },
+  {
+   "name": "tp-base4 (1 slot, T12)",
+   "point": "base4-k8.compact.json",
+   "profile": "base2-k1.compact.json"
+  }
+ ]
+}
