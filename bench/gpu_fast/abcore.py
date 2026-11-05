@@ -299,6 +299,7 @@ def tier2_verdict(res, rule=None, intended_change=False):
       T2-7 anything else                                                       -> INCONCLUSIVE
     REJECT rules come before PROMOTE rules."""
     rule = dict(TIER2_RULE, **(rule or {}))
+    idn = "Identity change declared" if intended_change else "Identity kept"
     A, B = arm_summary(res, "A"), arm_summary(res, "B")
     out = {"tier": 2, "params": {**rule, "intended_change": intended_change}, "A": A, "B": B}
     va, vb = arm_values(res, "A", "progress_rate"), arm_values(res, "B", "progress_rate")
@@ -323,11 +324,11 @@ def tier2_verdict(res, rule=None, intended_change=False):
     elif co <= -rule["core_gain"] and pr <= 0:
         out.update(verdict="REJECT", rule="T2-3", why=f"core-s/M rises {pct(-co)} with no rate gain ({pct(pr)})")
     elif co >= rule["core_gain"]:
-        out.update(verdict="PROMOTE", rule="T2-4", why=f"core-s/M falls {pct(-co)}, past {100 * rule['core_gain']:.0f}%. Identity kept, no fallback")
+        out.update(verdict="PROMOTE", rule="T2-4", why=f"core-s/M falls {pct(-co)}, past {100 * rule['core_gain']:.0f}%. {idn}, no fallback")
     elif pr >= rule["rate_gain"]:
-        out.update(verdict="PROMOTE", rule="T2-5", why=f"the progress rate rises {pct(pr)}, past {100 * rule['rate_gain']:.0f}%. Identity kept, no fallback")
+        out.update(verdict="PROMOTE", rule="T2-5", why=f"the progress rate rises {pct(pr)}, past {100 * rule['rate_gain']:.0f}%. {idn}, no fallback")
     elif lk is not None and lk >= rule["lock_held_gain"]:
-        out.update(verdict="PROMOTE", rule="T2-6", why=f"lock held falls {pct(-lk)}, past {100 * rule['lock_held_gain']:.0f}%. Identity kept, no fallback")
+        out.update(verdict="PROMOTE", rule="T2-6", why=f"lock held falls {pct(-lk)}, past {100 * rule['lock_held_gain']:.0f}%. {idn}, no fallback")
     else:
         out.update(verdict="INCONCLUSIVE", rule="T2-7", why=f"progress rate {pct(pr)}, core-s/M {pct(-co)}, lock held {pct(-lk) if lk is not None else 'NA'}: none passes a threshold")
     return out

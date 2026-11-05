@@ -414,6 +414,8 @@ def fit_load(alone, loaded, cores=28.0, slots=2, device_gb=93.6, exclude=()):
                     continue
                 if (l.get("fallback") or {}).get("runs") or (l.get("metrics") or {}).get("failed_runs"):
                     continue
+                if abcore.contaminated_legs({"legs": [l]}):
+                    continue   # the leg shared the node with another job
                 out.append((d, l))
         return out
 

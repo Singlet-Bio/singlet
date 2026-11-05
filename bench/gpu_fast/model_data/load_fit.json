@@ -1,0 +1,37 @@
+{
+ "load_core": 1.0996764837126283,
+ "load_hold": 1.1028247096092925,
+ "efficiency": 0.6621540582126844,
+ "efficiency_cv": 0.07023943875906268,
+ "binding": "cores",
+ "binding_limit": 2.8404767943190463,
+ "alone": {
+  "core_s_per_M": 8.964,
+  "hold_s": 37.88,
+  "legs": 5
+ },
+ "loaded": {
+  "core_s_per_M": 9.8575,
+  "lock_held_s": 41.775,
+  "legs": 4
+ },
+ "efficiency_per_leg": [
+  0.644857484028332,
+  0.6881729099903886,
+  0.6054710216102558,
+  0.7101148172217606
+ ],
+ "cores": 28.0,
+ "slots": 2,
+ "device_gb": 93.6,
+ "source": {
+  "alone": [
+   "cal-s3-s3-t1-20261105T151750Z",
+   "cal-s3-e20w-t1-20261105T183824Z:A"
+  ],
+  "loaded": [
+   "cal-s3-s3-t2-20261105T153134Z"
+  ],
+  "excluded": []
+ }
+}

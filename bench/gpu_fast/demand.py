@@ -138,6 +138,7 @@ def tier1_demand_verdict(res, p=None, intended_change=False):
     STACK (T1D-5) replaces T1D-2 and T1D-4 when the binding limit does not fall and a limit that does not bind rises by stack_gain or more.
     It is not promoted alone. It is listed for the batch check together with the changes that lift the binding limit."""
     rule = dict(RULE, **(p or {}))
+    idn = "Identity change declared" if intended_change else "Identity kept"
     A, B = abcore.arm_summary(res, "A"), abcore.arm_summary(res, "B")
     out = {"tier": 1, "rule_kind": "demand", "params": {**rule, "intended_change": intended_change}, "A": A, "B": B}
     pc = predicted_change(res, rule)
@@ -159,7 +160,7 @@ def tier1_demand_verdict(res, p=None, intended_change=False):
     elif ch >= rule["node_gain"] and rule["respect_spread"] and ch <= out["spread"][key]:
         out.update(verdict="INCONCLUSIVE", rule="T1D-2", why=f"{desc} is inside the run-to-run spread {100 * out['spread'][key]:.1f}% of {key}")
     elif ch >= rule["node_gain"]:
-        out.update(verdict="PROMOTE", rule="T1D-3", why=f"{desc}, at least {100 * rule['node_gain']:.0f}%. Identity kept, no fallback")
+        out.update(verdict="PROMOTE", rule="T1D-3", why=f"{desc}, at least {100 * rule['node_gain']:.0f}%. {idn}, no fallback")
     else:
         out.update(verdict="INCONCLUSIVE", rule="T1D-4", why=f"{desc}, below {100 * rule['node_gain']:.0f}%")
     if out["verdict"] == "INCONCLUSIVE" and ch is not None and ch >= -0.01:
@@ -168,7 +169,7 @@ def tier1_demand_verdict(res, p=None, intended_change=False):
         best = max(other, key=other.get) if other else None
         if best and other[best] >= rule["stack_gain"]:
             out.update(verdict="STACK", rule="T1D-5", why=f"{desc}. The {best} limit rises {abcore.pct(other[best])}, at least {100 * rule['stack_gain']:.0f}%, but it does not bind. "
-                                                        f"Not promoted alone. List it for the batch check with changes that lift the {bind} limit. Identity kept, no fallback")
+                                                        f"Not promoted alone. List it for the batch check with changes that lift the {bind} limit. {idn}, no fallback")
     return out
 
 
