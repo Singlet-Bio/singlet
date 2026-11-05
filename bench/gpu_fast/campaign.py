@@ -231,6 +231,15 @@ def collect(ab, a, remote, out_fn=print):
     out_fn("|---|---|---|---|---|---|")
     for r in rows:
         out_fn("| " + " | ".join(str(x) for x in r) + " |")
+    cand = []
+    for st in manifest["steps"]:
+        vp = os.path.join(camp_dir, st["dir"], "verdict.json")
+        if os.path.exists(vp):
+            v = json.load(open(vp))
+            if not v.get("batch") and v.get("tier") == 1 and v.get("verdict") in ("PROMOTE", "STACK"):
+                cand.append(f"{st['id']} ({v['verdict']})")
+    if cand:
+        out_fn("\nCandidates for the batch check (PROMOTE lifts the binding limit. STACK lifts a limit that does not bind yet): " + ", ".join(cand))
     out_fn("\nEach step directory has table.md, verdict.json and result.json.")
     if unknown:
         print("the bridge dropped while collecting. Run --collect again later.", file=sys.stderr)

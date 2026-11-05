@@ -34,6 +34,8 @@ Limits on the sustained node rate in M pairs per second, from the demand vector 
 
 The predicted node rate is the smallest limit. The table names the binding limit and the predicted change. It also prints the device headroom with all slots held. A small headroom flags the device out of memory risk (E20: 2.2 GB, s3: 3.4 GB).
 
+Load factor and efficiency. One run alone costs less than a run under k=8 load. For s3 the core-s/M is 8.96 alone and 9.86 under load, and the hold is 38.2 s alone and 41.8 s under load. The limits are also upper bounds, because the measured sustained rate is below the binding limit. `python bench/gpu_fast/model.py loadfit --alone <tier 1 dirs> --loaded <tier 2 dirs> --write` fits the two load factors and the efficiency (measured progress rate over the binding limit) on legs of one binary. It leaves out legs with a fallback. `demand.py` reads `model_data/load_fit.json`. Every prediction prints both numbers. Predictions stay ratios between arms, so the factors cancel unless the binding limit changes.
+
 These numbers are a ranking screen. Use the change between arms. The absolute rate is not a prediction. The measured sustained rate of s3 at k=8 is about 2.0, and the core limit says 3.1.
 
 ## Rules
@@ -42,6 +44,7 @@ Tier 1, the demand rule (default, `--rule demand`, values in `demand.RULE`).
 
 - REJECT: B lost identity or fell back and A did not.
 - PROMOTE: the predicted node rate rises by 5% or more (`--node-gain`) on the binding limit, with identity kept and no fallback. The rise must exceed the run-to-run spread of the binding input.
+- STACK: the binding limit does not fall and a limit that does not bind rises by 10% or more (`--stack-gain`), with identity kept and no fallback. It is not promoted alone. It is listed for the batch check with the changes that lift the binding limit. The lock limit of e20w (+42% while cores bind) is the example.
 - INCONCLUSIVE: everything else.
 - Validity first. A fallback or identity loss in A, or no identity check, gives INCONCLUSIVE.
 - `--rule gain` is the first rule: PROMOTE when core-s/M or lock held improves by `--promote-gain` (5%) and the gain exceeds the spread of the two runs per arm. `--regress-guard` can block a promotion when the other measure worsens. It is off.
