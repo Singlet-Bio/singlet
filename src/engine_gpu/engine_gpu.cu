@@ -350,6 +350,40 @@ __global__ void __launch_bounds__(BT, MINB) k_p3lb(Params P, GenomeView g, u64 b
     if (k >= n) return;
     p3one<C>(P, g, b0, k, budget, work, rbuf, base, bits, bst, out, outLen);
 }
+// gpu/bold-kern: sizeof of the members of Work<C> (SINGLET_BOLD_WORKSIZES=1, printed once into the engine log)
+template <class C> static std::string workSizes() {
+    typedef Work<C> W; W* w = nullptr; std::string r; char b[160];
+    auto add = [&](const char* n, size_t v) { snprintf(b, sizeof b, "%s %zu; ", n, v); r += b; };
+    add("Work", sizeof(W)); add("ReadBuf", sizeof(ReadBuf<C::LREAD>)); add("Tr", sizeof(typename W::T));
+    add("splitR", sizeof(w->splitR)); add("PC", sizeof(w->PC)); add("WC", sizeof(w->WC));
+    add("nWA+WALrec+WlastAnchor", sizeof(w->nWA) + sizeof(w->WALrec) + sizeof(w->WlastAnchor)); add("WA", sizeof(w->WA));
+    add("wbKey", sizeof(w->wbKey)); add("wbVal", sizeof(w->wbVal)); add("wbBits", sizeof(w->wbBits));
+#ifdef M5_KEEPIX
+    add("keepP+keepWin+own", sizeof(w->keepP) + sizeof(w->keepWin) + sizeof(w->own));
+#else
+    add("keep", sizeof(w->keep)); add("keepWin", sizeof(w->keepWin));
+#endif
+    add("stack", sizeof(w->stack)); add("slot", sizeof(w->slot)); add("clk", sizeof(w->clk));
+#if !defined(M5_KEEPIX) && !defined(M5_FIN1)
+    add("fin", sizeof(w->fin));
+#endif
+    return r;
+}
+// gpu/bold-kern: the same phase 3, thread t takes read perm[t] (the cost order); every index, status and output slot stays that of read k
+template <class C>
+__global__ void k_p3es(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
+                       const uint32_t* bits, uint8_t* bst, uint8_t* out, uint16_t* outLen, const uint32_t* perm) {
+    const u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (t >= n) return;
+    p3one<C>(P, g, b0, perm[t], budget, work, rbuf, base, bits, bst, out, outLen);
+}
+template <class C, int BT, int MINB>
+__global__ void __launch_bounds__(BT, MINB) k_p3lbs(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf,
+                                                    const u64* base, const uint32_t* bits, uint8_t* bst, uint8_t* out, uint16_t* outLen, const uint32_t* perm) {
+    const u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (t >= n) return;
+    p3one<C>(P, g, b0, perm[t], budget, work, rbuf, base, bits, bst, out, outLen);
+}
 // the warp lane's order: windows, then SA entries to assign, descending (reads that need no phase 3 last)
 template <class C>
 __global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, uint32_t* perm) {
@@ -411,6 +445,9 @@ __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
 }
 typedef LaneWork<8, 8, 8> LWM;   // lane M's per-lane stitching context (m5's LWM: its own capacities, no fallback)
 static int g_wthreads = 128;     // k_p3w block size (m5 --wthreads)
+// gpu/bold-kern toggles for lane B's phase 3 (measurement prototypes, one env each; results are unchanged by construction: only which thread takes which read changes)
+static const bool g_bSort = std::getenv("SINGLET_BOLD_BSORT") != nullptr && std::atoi(std::getenv("SINGLET_BOLD_BSORT")) > 0;   // cost-sort lane B (lane M's k_cost + sort_by_key) before k_p3e
+static const bool g_b64 = std::getenv("SINGLET_BOLD_B64") != nullptr && std::atoi(std::getenv("SINGLET_BOLD_B64")) > 0;       // lane B phase 3 under the 64-register cap (k_p3lb<C,128,8>)
 
 struct ToU64 { __host__ __device__ u64 operator()(uint16_t x) const { return (u64)x; } };
 // out packed: read k at off[k], len[k] bytes. E8 (keepDev): the packed bytes and offsets also stay on the device (dOut, dOff; freed by the caller)
@@ -561,7 +598,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     int nSm = 0, bpsS = 0, bpsW = 0; size_t stack0 = 0; u64 stackRes = 0;
     if (NEW) {
         EG_CK(dmal(&dCtr, 16));
-        if (WARP) { EG_CK(dmal(&dKey, NB * 8)); EG_CK(dmal(&dPerm, NB * 4)); }
+        if (WARP || (p1WinPers<C>() && g_bSort)) { EG_CK(dmal(&dKey, NB * 8)); EG_CK(dmal(&dPerm, NB * 4)); }
         int dev = 0; cudaGetDevice(&dev); cudaDeviceGetAttribute(&nSm, cudaDevAttrMultiProcessorCount, dev);
         EG_CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsS, k_p1s<C>, 128, 0));
         if constexpr (p1WinPers<C>()) EG_CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsW, k_p1wp<C>, 128, 0));
@@ -577,6 +614,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         { cudaFuncAttributes fa{};
           if constexpr (WARP) cudaFuncGetAttributes(&fa, (const void*)k_p3w<C, LWM>);
           else if constexpr (MAXREG == 64) cudaFuncGetAttributes(&fa, (const void*)k_p3lb<C, 128, 8>);
+          else if (p1WinPers<C>() && g_b64) cudaFuncGetAttributes(&fa, (const void*)k_p3lb<C, 128, 8>);
           else cudaFuncGetAttributes(&fa, (const void*)k_p3e<C>);
           regs = fa.numRegs; }
         char b[400];
@@ -585,6 +623,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
                  p1WinPers<C>() ? "k_p1wp persistent" : "k_p1w", WARP ? "warp per read, by windows desc" : MAXREG == 64 ? "capped at 64 registers" : "thread per read", regs,
                  WARP ? (", stack " + std::to_string(stackRes >> 20) + " MiB").c_str() : "");
         g_laneLog += b;
+        if (p1WinPers<C>()) g_laneLog += std::string("gpu/bold-kern lane B: cost sort ") + (g_bSort ? "ON" : "off") + ", 64-register k_p3lb " + (g_b64 ? "ON" : "off") + "; ";
     }
     devNote();
     const double tK = now(); stepAdd(sn + ".alloc", tK - tA);
@@ -614,6 +653,15 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
                 const size_t sh = (size_t)wt * sizeof(AssignEnt) + (size_t)(wt / 32) * C::NW * sizeof(uint16_t);
                 k_p3w<C, LWM><<<GW, wt, sh>>>(P, D, b0, nb, budget, dWork, dRbuf, dBst, dOut, dLen, dPerm);
             } else if constexpr (MAXREG == 64) k_p3lb<C, 128, 8><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen);
+            else if constexpr (p1WinPers<C>()) {   // lane B: gpu/bold-kern toggles
+                if (g_bSort) {
+                    k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm);
+                    thrust::sort_by_key(TP, thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
+                    if (g_b64) k_p3lbs<C, 128, 8><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen, dPerm);
+                    else k_p3es<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen, dPerm);
+                } else if (g_b64) k_p3lb<C, 128, 8><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen);
+                else k_p3e<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen);
+            }
             else k_p3e<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen);
             k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
         }
@@ -886,6 +934,7 @@ int deviceCount() { int n = 0; if (cudaGetDeviceCount(&n) != cudaSuccess) return
 bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
                  Output& out) {
     std::string err;
+    if (std::getenv("SINGLET_BOLD_WORKSIZES")) out.log += "engine_gpu: gpu/bold-kern Work sizes in bytes. lane A: " + workSizes<LaneA>() + "| lane M: " + workSizes<LaneM>() + "| lane B: " + workSizes<LaneB>() + "\n";
     Stager SR, SI;   // E12: staged uploads of the reads (this thread) and of the index (idxTh); declared first: destroyed after the join
     D2H DR;          // E12: staged device -> host copies (g_d2h while mapDistinct runs)
     struct D2HReset { ~D2HReset() { g_d2h = nullptr; } } d2hReset;
