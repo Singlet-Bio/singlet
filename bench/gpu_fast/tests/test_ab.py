@@ -103,6 +103,7 @@ def test_full_flow_tier1_promote(tmp_path, capsys):
     assert any("VERDICT: PROMOTE" in x for x in out)
     assert len(f.puts) == 2 and f.puts[0].endswith("t1.sbatch") and f.puts[1].endswith("spec.sh")
     assert "# written by ab.py" in open(o / "spec.sh").read()
+    assert b"" + bytes([13]) not in open(o / "spec.sh", "rb").read()
 
 
 def test_tier2_rule_parameters_reach_the_verdict(tmp_path):
