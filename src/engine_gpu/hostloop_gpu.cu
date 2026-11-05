@@ -1,5 +1,6 @@
 // E10: the per-read products of STAR's loop for the reads with a GPU record, on the device (API and rules: hostloop_gpu.h).
 #include "hostloop_gpu.h"
+#include "singlet/qmask_words.h"   // P3-ENG-14
 #include <cuda_runtime.h>
 #include <thrust/device_ptr.h>
 #include <thrust/execution_policy.h>
@@ -38,7 +39,7 @@ __device__ inline uint64_t hashR(uint64_t i) {
 // Qual0[0][j] - 33 < minQ = bit j of the read's quality words (host decode); Read0[0][j] == 'N' = code 4 (the host checked that every base
 // of code 4 is an 'N'); (Read0[0][j] | 32) == 'a' = code 0; clipMates' clippedN = the GPU clip (readLoad takes g_handoffClip5/3, uint16).
 __global__ void k_entries(const char* seq, const uint64_t* off, const uint64_t* cs, const uint64_t* cl, uint64_t n, const uint64_t* aux, uint32_t nw,
-                          bool hook, e6::ReadEntry* E, uint64_t* M) {
+                          bool hook, e6::ReadEntry* E, uint64_t* M, uint32_t qw) {
     const uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x;
     if (i >= n) return;
     const uint64_t o = off[i], L = off[i + 1] - o;
@@ -57,14 +58,15 @@ __global__ void k_entries(const char* seq, const uint64_t* off, const uint64_t* 
     e.lowQual = (uint16_t)(lq < 65535 ? lq : 65535); e.qualNeqN = (uint16_t)(ne < 65535 ? ne : 65535);
     uint32_t fl = 1;
     if (M) {
-        uint64_t m0 = 0, m1 = 0;
-        if (c5 + c3 > L || L - c5 - c3 > 128) {
+        // P3-ENG-14: qw words per read (2 up to 128 bases, the earlier layout)
+        uint64_t* m = M + (uint64_t)qw * i;
+        for (uint32_t w = 0; w < qw; w++) m[w] = 0;
+        if (c5 + c3 > L || L - c5 - c3 > 64ull * qw) {
             fl |= 64;
         } else {
             for (uint64_t j = c5; j < L - c3; j++)
-                if ((q[j >> 6] >> (j & 63)) & 1) { const uint64_t b = j - c5; if (b < 64) m0 |= 1ull << b; else m1 |= 1ull << (b - 64); }
+                if ((q[j >> 6] >> (j & 63)) & 1) { const uint64_t b = j - c5; m[b >> 6] |= 1ull << (b & 63); }
         }
-        M[2 * i] = m0; M[2 * i + 1] = m1;
     }
     if (c5 + c3 > 0) {
         uint32_t nA = 0;
@@ -107,11 +109,11 @@ __global__ void k_mult(const uint32_t* rr, uint64_t n, uint32_t* mult) {
     const uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x;
     if (i < n && rr[i] != 0xFFFFFFFFu) atomicAdd(&mult[rr[i]], 1u);
 }
-__global__ void k_zero(const uint32_t* rr, uint64_t n, e6::ReadEntry* E, uint64_t* M) {
+__global__ void k_zero(const uint32_t* rr, uint64_t n, e6::ReadEntry* E, uint64_t* M, uint32_t qw) {
     const uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x;
     if (i >= n || rr[i] != 0xFFFFFFFFu) return;
     E[i] = e6::ReadEntry{0, 0, 0, 0, 0};
-    if (M) { M[2 * i] = 0; M[2 * i + 1] = 0; }
+    if (M) for (uint32_t w = 0; w < qw; w++) M[(uint64_t)qw * i + w] = 0;
 }
 
 // one record's blob (seqCacheEncode layout, decoded as seqCacheRestore does): the scalar fields of a transcript in forEachScalar order
@@ -272,7 +274,7 @@ bool entries(const char* dSeq, const uint64_t* dOff, const uint64_t* dCs, const 
     if (n == 0) { ms = 0; return true; }
     cudaEvent_t a, b; cudaEventCreate(&a); cudaEventCreate(&b);
     cudaEventRecord(a);
-    k_entries<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dCs, dCl, n, dAux, nw, hook, dEnt, dMask);
+    k_entries<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dCs, dCl, n, dAux, nw, hook, dEnt, dMask, singlet_qmask::words());
     cudaEventRecord(b);
     HL_CK(cudaEventSynchronize(b));
     HL_CK(cudaGetLastError());
@@ -308,7 +310,7 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
     HL_CK(cudaMemcpyToSymbol(g_stat, z, sizeof z)); HL_CK(cudaMemcpyToSymbol(g_portion, &zp, sizeof zp));
     k_rec<<<GR, 256>>>(P, dBlob, dBOff, dSOff, nRec, mult, outSJ, sjAll, rm, ru, nJ);
     HL_CK(cudaGetLastError());
-    if (dEnt) k_zero<<<GN, 256>>>(dRR, n, dEnt, dMask);   // E17: without dEnt (the entries already in the region) the caller zeroes them
+    if (dEnt) k_zero<<<GN, 256>>>(dRR, n, dEnt, dMask, singlet_qmask::words());   // E17: without dEnt (the entries already in the region) the caller zeroes them
     ull st[E10::S_N + 2];
     HL_CK(cudaMemcpyFromSymbol(st, g_stat, sizeof st)); HL_CK(cudaMemcpyFromSymbol(&out.mappedPortion, g_portion, sizeof(double)));
     for (int k = 0; k < E10::S_N; k++) out.stats[k] = st[k];

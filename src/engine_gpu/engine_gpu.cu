@@ -10,6 +10,7 @@
 #include "singlet/engine_gpu.h"
 #include "stitch.cuh"
 #include "records_gpu.h"   // E8: the pileup's records from the device-resident results (SINGLET_ENGINE_GPU_E2E=1)
+#include "singlet/qmask_words.h"   // P3-ENG-14
 #include "hostloop_gpu.h"  // E10: per-read entries and the per-read products of STAR's loop (SINGLET_ENGINE_GPU_E2E >= 2)
 #include "solo_gpu.h"      // E11: STARsolo's inputs kept on the device for soloRun after STAR's loop (SINGLET_ENGINE_GPU_E2E=5)
 #include <cuda_runtime.h>
@@ -45,6 +46,9 @@ using namespace m5;
 namespace {
 
 #define EG_CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) { err = std::string(#x) + ": " + cudaGetErrorString(e_); return false; } } while (0)
+
+// P3-ENG-14: bytes of one read's low-quality mask (16 up to 128 bases, the earlier layout)
+inline u64 qmBytes() { return 8ull * singlet_qmask::words(); }
 
 double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
@@ -953,7 +957,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const bool e10W = in.e10.on && in.e2e != nullptr && in.e2e->base != nullptr && n0 > 0 && in.e10.nw >= 1 && in.e10.aux.size() == n0 * (2 + (u64)in.e10.nw);
     const u64 IDX = budRound(H.nGenome + 2 * PAD + 8) + budRound(saBytes + 72) + budRound(saiBytes + 72);
     const u64 TAB = ((u64)H.nChr * 2 + 1 + H.chrBinN + (u64)H.sjdbN * 4) * 8 + (u64)H.sjdbN * 4 + (24ull << 20);
-    const u64 AUX = e10W ? in.e10.aux.size() * 8 : 0, ENT = e10W ? n0 * 24 : 0, QM = e10W && in.e10.wantMask ? n0 * 16 : 0;
+    const u64 AUX = e10W ? in.e10.aux.size() * 8 : 0, ENT = e10W ? n0 * 24 : 0, QM = e10W && in.e10.wantMask ? n0 * qmBytes() : 0;
     const u64 KEEP = e10W && in.e10.soloModel != nullptr ? n0 * 16 : 0;
     const u64 CLIP = in.clip.on ? n0 * 28 + S0 : 0;   // per read its clipped span, length, offset and host clip lengths; the clipped copy
     const u64 RD = S0 + 8 * n0;
@@ -1060,7 +1064,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     if (in.e10.on && !e10) out.e10.log += "engine_gpu: E10 not used (no shared region or no host decode)\n";
     if (e10) {
         const double ta = now();
-        if (dmal(&dEnt, n * sizeof(e6::ReadEntry)) != cudaSuccess || (in.e10.wantMask && dmal(&dQm, n * 16) != cudaSuccess)
+        if (dmal(&dEnt, n * sizeof(e6::ReadEntry)) != cudaSuccess || (in.e10.wantMask && dmal(&dQm, n * qmBytes()) != cudaSuccess)
             || dmal(&dAux, in.e10.aux.size() * 8) != cudaSuccess) e10Off("out of device memory");
         else if (staged ? !(SR.copy(dAux, in.e10.aux.data(), in.e10.aux.size() * 8) && SR.finish())
                         : cudaMemcpy(dAux, in.e10.aux.data(), in.e10.aux.size() * 8, cudaMemcpyHostToDevice) != cudaSuccess) e10Off("aux upload");
@@ -1098,12 +1102,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!e10 || entHost) return;
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
         const double t0e = now();
-        const u64 oEn = RG.take(n * sizeof(e6::ReadEntry)), oQm = dQm ? RG.take(n * 16) : 0;
+        const u64 oEn = RG.take(n * sizeof(e6::ReadEntry)), oQm = dQm ? RG.take(n * qmBytes()) : 0;
         if (!oEn || (dQm && !oQm)) { e10Off("the shared region is full"); return; }
         if (cudaStreamSynchronize(0) != cudaSuccess) { e10Off("entries"); return; }
-        const bool cp = g_d2h ? g_d2h->copy(RG.base + oEn, dEnt, n * sizeof(e6::ReadEntry)) && (!dQm || g_d2h->copy(RG.base + oQm, dQm, n * 16))
+        const bool cp = g_d2h ? g_d2h->copy(RG.base + oEn, dEnt, n * sizeof(e6::ReadEntry)) && (!dQm || g_d2h->copy(RG.base + oQm, dQm, n * qmBytes()))
                               : cudaMemcpy(RG.base + oEn, dEnt, n * sizeof(e6::ReadEntry), cudaMemcpyDeviceToHost) == cudaSuccess
-                                && (!dQm || cudaMemcpy(RG.base + oQm, dQm, n * 16, cudaMemcpyDeviceToHost) == cudaSuccess);
+                                && (!dQm || cudaMemcpy(RG.base + oQm, dQm, n * qmBytes(), cudaMemcpyDeviceToHost) == cudaSuccess);
         if (!cp) { e10Off("entries copy"); return; }
         dfree(dEnt); dfree(dQm); dEnt = nullptr; dQm = nullptr;
         entHost = true; entOff = oEn; qmOff = oQm;
@@ -1791,7 +1795,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                     std::vector<std::thread> th;
                     for (int t = 0; t < nt; t++) th.emplace_back([&, t]() {
                         for (u64 i = n * t / nt, e = n * (t + 1) / nt; i < e; i++) {
-                            if (out.readRecord[i] == NONE) { E[i] = e6::ReadEntry{0, 0, 0, 0, 0}; if (Mq) { Mq[2 * i] = 0; Mq[2 * i + 1] = 0; } }
+                            if (out.readRecord[i] == NONE) { E[i] = e6::ReadEntry{0, 0, 0, 0, 0}; if (Mq) { const u64 qw = qmBytes() / 8; for (u64 w = 0; w < qw; w++) Mq[qw * i + w] = 0; } }
                             else if (E[i].flags & 4u) hk[t].push_back(i);
                         }
                     });
@@ -1800,19 +1804,19 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                     for (auto& v : hk) out.e10.hookReads.insert(out.e10.hookReads.end(), v.begin(), v.end());
                     stepAdd("e2e.entries.host", now() - t0e);
                 }
-                const u64 oEn = entHost ? entOff : RG.take(n * sizeof(e6::ReadEntry)), oQm = entHost ? qmOff : dQm ? RG.take(n * 16) : 0;
+                const u64 oEn = entHost ? entOff : RG.take(n * sizeof(e6::ReadEntry)), oQm = entHost ? qmOff : dQm ? RG.take(n * qmBytes()) : 0;
                 if (!oEn || (!entHost && dQm && !oQm)) e10Off("the shared region is full");
                 else {
                     bool pin2 = false, cp2 = entHost;
                     if (entHost) {}
-                    else if (g_d2h) cp2 = g_d2h->copy(RG.base + oEn, dEnt, n * sizeof(e6::ReadEntry)) && (!dQm || g_d2h->copy(RG.base + oQm, dQm, n * 16));
+                    else if (g_d2h) cp2 = g_d2h->copy(RG.base + oEn, dEnt, n * sizeof(e6::ReadEntry)) && (!dQm || g_d2h->copy(RG.base + oQm, dQm, n * qmBytes()));
                     else {
                     const u64 lo2 = oEn & ~4095ull, hi2 = std::min<u64>(RG.cap, (RG.hdr()->used + 4095) & ~4095ull);
                     parallelFor((hi2 - lo2) >> 12, hostThreads, [&](u64 a, u64 b) { for (u64 q = a; q < b; q++) { volatile uint8_t* x = RG.base + lo2 + (q << 12); *x = *x; } });
                     pin2 = cudaHostRegister(RG.base + lo2, hi2 - lo2, cudaHostRegisterDefault) == cudaSuccess;
                     if (!pin2) cudaGetLastError();
                     cp2 = cudaMemcpy(RG.base + oEn, dEnt, n * sizeof(e6::ReadEntry), cudaMemcpyDeviceToHost) == cudaSuccess
-                                     && (!dQm || cudaMemcpy(RG.base + oQm, dQm, n * 16, cudaMemcpyDeviceToHost) == cudaSuccess);
+                                     && (!dQm || cudaMemcpy(RG.base + oQm, dQm, n * qmBytes(), cudaMemcpyDeviceToHost) == cudaSuccess);
                     if (pin2) cudaHostUnregister(RG.base + lo2);
                     }
                     if (!cp2) e10Off("entries copy");

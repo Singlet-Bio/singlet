@@ -366,7 +366,7 @@ struct PileupInput {
     std::vector<std::vector<PileupSnpRow>> snps;
     int stranded = 1, reverseStrand = 0, minMapq = 20, minBaseq = 10, countIntrons = 1, countSj = 1, countMt = 0, umiDedup = 1, directional = 1,
         umiLen = 12, chrmTid = -1, hasGeneModel = 1, snpSkipN = 0;
-    // per-base quality: useQual = 1 when the reads' qualities are neither constant nor tied to N (snpSkipN would be -1); lowq then holds 16 bytes per read
+    // per-base quality: useQual = 1 when the reads' qualities are neither constant nor tied to N (snpSkipN would be -1); lowq then holds singlet_qmask::words() words per read
     // (same order as `reads`): bit i = base i of the record sequence, in the record's (original read) orientation, has quality < minBaseq
     int useQual = 0;
     std::vector<uint8_t> lowq;
@@ -457,7 +457,7 @@ struct E2EPassIn {
 struct E2EPassOut {
     std::vector<uint8_t> reads;      // ReadRec per kept read, read order (= the pass's add_handoff_read order)
     std::vector<uint32_t> clip;      // per kept read: its entry flags when clipped, else 0 (Collector::clips)
-    std::vector<uint8_t> lowq;       // 16 bytes per kept read (zero where the read has no mask)
+    std::vector<uint8_t> lowq;       // singlet_qmask::words() words per kept read (zero where the read has no mask)
     bool maskAll = true;             // every kept read had a mask
     uint64_t lowQualSum = 0, qualNeqNSum = 0;
     // PileupStats: total_reads, mapped_reads (+= alignments), secondary_reads, rrna_reads_sampled, rrna_reads (clipped reads, by the hook),

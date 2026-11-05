@@ -468,9 +468,10 @@ void ReadAlign::handoffReadEntry()
     uint32 fl = 1;
     if (g_handoffQMask != nullptr) {//the low-quality mask of the record: the read without its clipped ends, original orientation
         const uint64 c5q = clipMates[0][0].clippedN, c3q = clipMates[0][1].clippedN, Lq = readLengthOriginal[0];
-        uint64 *qm = g_handoffQMask + 2 * (iReadAll - 1);
-        qm[0] = 0; qm[1] = 0;
-        if (c5q + c3q > Lq || Lq - c5q - c3q > 128) {
+        const uint64 qw = g_handoffQWords;
+        uint64 *qm = g_handoffQMask + qw * (iReadAll - 1);
+        for (uint64 w = 0; w < qw; w++) qm[w] = 0;
+        if (c5q + c3q > Lq || Lq - c5q - c3q > 64 * qw) {
             fl |= 64;//no mask
         } else {
             for (uint64 j = c5q; j < Lq - c3q; j++)

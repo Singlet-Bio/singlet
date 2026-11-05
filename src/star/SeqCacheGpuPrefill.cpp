@@ -12,6 +12,7 @@
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include <chrono>
 #include "singlet/engine_gpu.h"
+#include "singlet/qmask_words.h"   // P3-ENG-14
 #include "singlet/fq/fg2_runset.h"
 #include "singlet/engine_gpu_ingest.h"   // E13: the reads from the .1fq, decoded here (SeqCacheGpuIngest.cpp)
 #include "stitch.cuh"
@@ -1605,6 +1606,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         uint64 e2eR = 0, e2eE = 0, e2eQ = 0;
         const char *e2eQe = getenv("SINGLET_HANDOFF_QMASK");
         const bool e2eQOn = !(e2eQe != nullptr && e2eQe[0] == '0');
+        g_handoffQWords = singlet_qmask::words();   // P3-ENG-14: mask words per read (2: up to 128 bases)
         if (e2eRec) {
             const uint64 nR = out.readRecord.size();
             e2eR = e2r.take(std::max<uint64>(1, nR) * 4);
@@ -1612,7 +1614,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             else {
                 e10ok = false;
                 e2eE = e2r.take(std::max<uint64>(1, nR) * sizeof(HandoffReadEntry));
-                e2eQ = e2eQOn ? e2r.take(std::max<uint64>(1, nR) * 16) : 0;
+                e2eQ = e2eQOn ? e2r.take(std::max<uint64>(1, nR) * 8 * g_handoffQWords) : 0;
             }
             if (!e2eR || !e2eE || (e2eQOn && !e2eQ)) { e2eRec = false; gpuFallback(P, "ENGINE_GPU: E8: the shared region is full; the hand-off file path runs"); }
             else memcpy(e2r.base + e2eR, out.readRecord.data(), nR * 4);
@@ -1743,7 +1745,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                         e10chk.on = true;
                         e10chk.ent.assign(g_handoffNReads, HandoffReadEntry{});
                         g_handoffReads = e10chk.ent.data();
-                        if (e2eQOn) { e10chk.qm.assign(2 * g_handoffNReads, 0); g_handoffQMask = e10chk.qm.data(); }
+                        if (e2eQOn) { e10chk.qm.assign((uint64) g_handoffQWords * g_handoffNReads, 0); g_handoffQMask = e10chk.qm.data(); }
                         e10chk.dev = E; e10chk.devQ = e2eQOn ? (const uint64 *) (e2r.base + e2eQ) : nullptr;
                     }
                 }
@@ -1770,7 +1772,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                     const char *qe = getenv("SINGLET_HANDOFF_QMASK");   // per-base quality masks for the GPU pileup (=0: off)
                     if (!(qe != nullptr && qe[0] == '0')) {
                         const std::string qp = rp + ".q";
-                        const size_t qbytes = std::max<size_t>(16, g_handoffNReads * 16);
+                        g_handoffQWords = singlet_qmask::words();
+                        const size_t qbytes = std::max<size_t>(16, g_handoffNReads * 8 * g_handoffQWords);
                         int qfd = open(qp.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
                         void *qm = MAP_FAILED;
                         if (qfd >= 0 && ftruncate(qfd, (off_t) qbytes) == 0) qm = mmap(nullptr, qbytes, PROT_READ | PROT_WRITE, MAP_SHARED, qfd, 0);
@@ -2042,7 +2045,7 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
                     ex << " [read " << i << ": STAR cr3 " << a.cr3 << " ur3 " << a.ur3 << " lq " << a.lowQual << " ne " << a.qualNeqN << " fl " << a.flags
                        << " | GPU cr3 " << b.cr3 << " ur3 " << b.ur3 << " lq " << b.lowQual << " ne " << b.qualNeqN << " fl " << b.flags << "]";
             }
-            if (e10chk.devQ != nullptr && memcmp(&e10chk.qm[2 * i], &e10chk.devQ[2 * i], 16) != 0) nDiffQ++;
+            if (e10chk.devQ != nullptr && memcmp(&e10chk.qm[(uint64) g_handoffQWords * i], &e10chk.devQ[(uint64) g_handoffQWords * i], 8 * g_handoffQWords) != 0) nDiffQ++;
         }
         P.inOut->logMain << "ENGINE_GPU: E10 check: " << nRec << " reads with a record, entries differ " << nDiffE << ", masks differ " << nDiffQ
                          << " (STAR wrote no entry for " << nUnwritten << ")" << ex.str() << "\n" << std::flush;

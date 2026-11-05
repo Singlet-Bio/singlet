@@ -8,6 +8,7 @@
 #pragma once
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
+#include "singlet/qmask_words.h"   // P3-ENG-14: mask width
 #include "gpu_pileup/pileup/pileup_rec.h"   // src/engine_gpu is on the include path of GPU builds
 #include <htslib/sam.h>
 #include <fcntl.h>
@@ -60,13 +61,14 @@ struct LineReader {
 // lowest), and the cDNA read's base-quality counters; flags bit 0 set when STAR wrote it
 struct ReadEntry { uint64_t cr3, ur3; uint16_t low_qual, qual_neq_n; uint32_t flags; };
 static_assert(sizeof(ReadEntry) == 24, "ReadEntry layout is STAR's HandoffReadEntry");
-// per-base quality of a read, for the SNP and chrM base filters: bit i = base i of the record sequence (original read orientation, 5' clip removed) has quality < min_baseq
-struct QM { uint64_t m[2]; };
+// per-base quality of a read, for the SNP and chrM base filters: bit i = base i of the record sequence (original read orientation, 5' clip removed) has quality < min_baseq.
+// One read's mask; arrays of masks are flat uint64 vectors with singlet_qmask::words() words per read (P3-ENG-14; 2 words up to 128 bases, as before)
+struct QM { uint64_t m[singlet_qmask::kMaxWords]; };
 struct Handoff {
     const uint8_t* map = nullptr; size_t size = 0;
     uint64_t n_reads = 0, n_rec = 0; const uint32_t* read_rec = nullptr; const uint64_t* rec_off = nullptr; const uint8_t* data = nullptr;
     uint32_t cbS = 0, cbL = 0, umiS = 0, umiL = 0, cbumiL = 0, simple = 0;   // STAR's barcode layout (v2)
-    const QM* qmask = nullptr; size_t q_size = 0; std::string q_path;   // "on": <path>.reads.q, 16 bytes per read, written by STAR's mapping threads
+    const uint64_t* qmask = nullptr; size_t q_size = 0; std::string q_path;   // "on": <path>.reads.q, singlet_qmask::words() words per read, written by STAR's mapping threads
     const ReadEntry* reads = nullptr; size_t reads_size = 0; std::string reads_path;   // "on": <path>.reads, written by STAR's mapping threads
     // the per-read entries, once STAR has exited ("on" only); false if there are none
     bool load_reads() {
@@ -84,11 +86,11 @@ struct Handoff {
         if (qmask) return true;
         if (q_path.empty()) return false;
         int fd = open(q_path.c_str(), O_RDONLY); if (fd < 0) return false;
-        struct stat st; if (fstat(fd, &st) != 0 || (uint64_t) st.st_size != n_reads * sizeof(QM) || n_reads == 0) { close(fd); return false; }
+        struct stat st; if (fstat(fd, &st) != 0 || (uint64_t) st.st_size != n_reads * 8 * singlet_qmask::words() || n_reads == 0) { close(fd); return false; }
         void* m = mmap(nullptr, (size_t) st.st_size, PROT_READ, MAP_PRIVATE, fd, 0); close(fd);
         if (m == MAP_FAILED) return false;
         madvise(m, (size_t) st.st_size, MADV_SEQUENTIAL);
-        qmask = (const QM*) m; q_size = (size_t) st.st_size;
+        qmask = (const uint64_t*) m; q_size = (size_t) st.st_size;
         return true;
     }
     bool load(const char* path) {
@@ -123,7 +125,9 @@ public:
         if (const char* q = std::getenv("SINGLET_GPU_PILEUP_QUAL")) force_q_ = std::strcmp(q, "force") == 0;
         pend_.reserve(1 << 20);
         if (const char* hp = std::getenv("SINGLET_ENGINE_GPU_HANDOFF")) handoff_path_ = hp;
+        qw_ = singlet_qmask::words();   // set by singlet before the collector exists
     }
+    uint32_t q_words() const { return qw_; }
 
     // one record of the stream; bc = the engine's barcode column for it (-1: no CB or not in the barcode set)
     void add(const bam1_t* b, int32_t bc) {
@@ -155,7 +159,7 @@ public:
                 qual_check(b);
                 const uint32_t rec = ho_.read_rec[idx];
                 check_primary(b, rec);
-                ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(0); ho_q_.push_back(bam_mask(b));
+                ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(0); push_q(ho_q_, bam_mask(b).m);
                 ho_idx_.push_back(idx);
                 return;
             }
@@ -215,13 +219,13 @@ public:
         if (no_umi_ > 0) in.snpSkipN = -1;   // reads without a UMI: not reproducible from the packed UMI (never seen in the campaign data)
         if (umi_len_ > 0) in.umiLen = umi_len_;
         if ((in.snpSkipN < 0 || force_q_) && no_umi_ == 0) {   // per-base quality: the SNP and chrM filters read each base's own quality
-            if (q_ok_ && reads_q_.size() == reads_.size() && zc_q_n_ == zc_n_ && in.nSnps <= 0x7FFFFFu) {
+            if (q_ok_ && reads_q_.size() == reads_.size() * qw_ && zc_q_n_ == zc_n_) {
                 in.useQual = 1; in.snpSkipN = 0;
                 in.lowq.assign((const uint8_t*) reads_q_.data(), (const uint8_t*) (reads_q_.data() + reads_q_.size()));
                 if (zc_keep_) in.preLowq = {zc_keep_->q.data(), zc_keep_->q.size()};   // E16: the kept reads' masks in front, in place
-                singlet_tail::mark("collector: low-quality masks copied into the input (%zu reads)", reads_q_.size());
-                std::cerr << "[gpu_pileup] per-base quality: low-quality masks for " << reads_q_.size() << " reads" << (force_q_ ? " (forced)" : "") << "\n";
-            } else std::cerr << "[gpu_pileup] per-base quality needed but unavailable (masks " << (q_ok_ ? "missing for some reads" : "not representable: read over 128 bases or no STAR masks") << ")\n";
+                singlet_tail::mark("collector: low-quality masks copied into the input (%zu reads)", reads_.size());
+                std::cerr << "[gpu_pileup] per-base quality: low-quality masks for " << reads_.size() << " reads, " << qw_ << " words each" << (force_q_ ? " (forced)" : "") << "\n";
+            } else std::cerr << "[gpu_pileup] per-base quality needed but unavailable (masks " << (q_ok_ ? "missing for some reads" : "not representable: read longer than the mask or no STAR masks") << ")\n";
         }
     }
     size_t n_reads() const { return reads_.size() + ho_reads_.size() + zc_n_; }
@@ -241,7 +245,7 @@ public:
         if (n && umi_len_ < 0) umi_len_ = umi_len;
         ho_reads_.resize(r0 + n); if (n) std::memcpy((void*) (ho_reads_.data() + r0), reads.data(), n * sizeof(ReadRec));
         ho_clip_.insert(ho_clip_.end(), clip.begin(), clip.end());
-        const size_t q0 = ho_q_.size(); ho_q_.resize(q0 + n); if (n) std::memcpy((void*) (ho_q_.data() + q0), lowq.data(), n * sizeof(QM));
+        const size_t q0 = ho_q_.size(); ho_q_.resize(q0 + n * qw_); if (n) std::memcpy((void*) (ho_q_.data() + q0), lowq.data(), n * 8 * qw_);
         if (!mask_all) q_ok_ = false;
         for (uint32_t c : clip) if (c) n_clipped_++;
     }
@@ -251,7 +255,7 @@ public:
         if (!ho_reads_.empty() || !ho_clip_.empty() || zc_) return false;
         const size_t n = clip.size();
         if (n && umi_len_ < 0) umi_len_ = umi_len;
-        zc_ = true; zc_n_ = n; zc_q_n_ = lowq.size() / sizeof(QM);
+        zc_ = true; zc_n_ = n; zc_q_n_ = lowq.size() / (8 * qw_);
         zc_keep_ = std::make_shared<ZcKeep>();
         zc_keep_->reads = std::move(reads); zc_keep_->q = std::move(lowq);
         ho_clip_ = std::move(clip);
@@ -269,7 +273,7 @@ public:
     // "on", after STAR has exited: map STAR's per-read entries (handoff()->reads); false if there are none
     bool load_handoff_reads() { return handoff() != nullptr && ho_.load_reads(); }
     // STAR's per-read low-quality masks (the hand-off's .reads.q); null if there are none
-    const QM* handoff_qmask() { return handoff() != nullptr && ho_.load_q() ? ho_.qmask : nullptr; }
+    const uint64_t* handoff_qmask() { return handoff() != nullptr && ho_.load_q() ? ho_.qmask : nullptr; }   // q_words() words per read
     // a hand-off read that STAR wrote no BAM record for ("on"): its record, barcode column and UMI (A0 C1 G2 T3 N4, 3 bits each)
     // clip: the read's entry flags when it was clipped (STAR's HandoffReadEntry: clip lengths and the 3' tail), else 0
     void add_handoff_read(uint32_t rec, int32_t bc, const char* umi, int umi_len, uint32_t clip = 0) {
@@ -280,10 +284,10 @@ public:
         if (clip) n_clipped_++;
     }
     // the same with the UMI already packed (the parallel hand-off pass packs it in its workers)
-    void add_handoff_read_u3(uint32_t rec, int32_t bc, uint64_t u3, int umi_len, uint32_t clip = 0, const QM* qm = nullptr) {
+    void add_handoff_read_u3(uint32_t rec, int32_t bc, uint64_t u3, int umi_len, uint32_t clip = 0, const uint64_t* qm = nullptr) {   // qm: q_words() words
         if (umi_len_ < 0) umi_len_ = umi_len;
         ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(clip);
-        if (qm) ho_q_.push_back(*qm); else { ho_q_.push_back(QM{{0, 0}}); q_ok_ = false; }
+        push_q(ho_q_, qm); if (!qm) q_ok_ = false;
         if (clip) n_clipped_++;
     }
     // per read of the final input (hand-off reads first): its clip flags, 0 when not clipped
@@ -292,9 +296,9 @@ public:
     uint64_t n_clipped() const { return n_clipped_; }
     // the low-quality mask of a BAM record, in the read's original orientation (the signature stores the read that way); qualities missing: nothing is low
     QM bam_mask(const bam1_t* b) {
-        QM q{{0, 0}}; const int L = b->core.l_qseq; const uint8_t* ql = bam_get_qual(b);
+        QM q{}; const int L = b->core.l_qseq; const uint8_t* ql = bam_get_qual(b);
         if (L <= 0 || ql[0] == 0xff) return q;
-        if (L > 128) { q_ok_ = false; return q; }
+        if (L > (int) (64 * qw_)) { q_ok_ = false; return q; }
         const bool rev = (b->core.flag & BAM_FREVERSE) != 0;
         for (int i = 0; i < L; i++) if (ql[rev ? L - 1 - i : i] < min_baseq_) q.m[i >> 6] |= 1ull << (i & 63);
         return q;
@@ -450,7 +454,9 @@ private:
     const singlet_engine_gpu::E2ERegion* e2e_ = nullptr; bool e2e_tried_ = false; uint64_t e2e_stream_ = 0;
     std::string handoff_path_; Handoff ho_; bool ho_tried_ = false, ho_ok_ = false; uint64_t ho_mismatch_ = 0;
     std::vector<ReadRec> ho_reads_;
-    std::vector<QM> reads_q_, ho_q_; bool q_ok_ = true, force_q_ = false;   // per-read low-quality masks, parallel to reads_ and ho_reads_
+    std::vector<uint64_t> reads_q_, ho_q_; bool q_ok_ = true, force_q_ = false;   // per-read low-quality masks (qw_ words each), parallel to reads_ and ho_reads_
+    uint32_t qw_ = 2;
+    void push_q(std::vector<uint64_t>& v, const uint64_t* m) { if (m) v.insert(v.end(), m, m + qw_); else v.resize(v.size() + qw_, 0); }
     std::vector<uint32_t> ho_clip_; uint64_t n_clipped_ = 0;
     std::vector<uint64_t> ho_idx_;
 public:
@@ -486,7 +492,7 @@ private:
         }
     }
     struct Aln { int32_t tid, pos; uint8_t flags, mapq; std::vector<uint32_t> ops; };
-    struct Group { std::vector<Aln> alns; int seen = 0, nh = 0, primary = -1; int32_t bc = -1; uint64_t umi3 = 0; std::vector<uint8_t> seq; QM qm{{0, 0}}; };
+    struct Group { std::vector<Aln> alns; int seen = 0, nh = 0, primary = -1; int32_t bc = -1; uint64_t umi3 = 0; std::vector<uint8_t> seq; QM qm{}; };
     // FNV-1a over the qname: groups a multimapper's alignments (64-bit, as the engine's mm_buffer)
     static uint64_t qname_hash(const char* q) { uint64_t h = 14695981039346656037ULL; for (; *q; ++q) { h ^= (uint8_t) *q; h *= 1099511628211ULL; } return h; }
     struct H128 { uint64_t a, b; bool operator==(const H128& o) const { return a == o.a && b == o.b; } };
@@ -513,7 +519,7 @@ private:
             for (uint32_t i = 0; i < rlen; i += 2) seq_.push_back((uint8_t) (g.seq[i] | ((i + 1 < rlen ? g.seq[i + 1] : 0) << 4)));
             sigs_.push_back(s);
         }
-        reads_.push_back(ReadRec{sid, g.bc, g.umi3}); reads_q_.push_back(g.qm);
+        reads_.push_back(ReadRec{sid, g.bc, g.umi3}); push_q(reads_q_, g.qm.m);
     }
 
     int min_baseq_; int umi_len_ = -1;

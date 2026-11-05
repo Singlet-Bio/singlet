@@ -5,6 +5,7 @@
 #define PILEUP_NO_MAIN
 #include "gpu_pileup/pileup/pileup.cu"
 #include "singlet/engine_gpu.h"
+#include "singlet/qmask_words.h"   // P3-ENG-14
 #include "singlet/tail_trace.h"   // E16: the level-5 switches (digest)
 
 static_assert(sizeof(IV) == sizeof(singlet_engine_gpu::PileupIv), "IV layout");
@@ -69,7 +70,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     else A.init_managed(2 * totB);
     e16step("arena");
     Inputs in; in.nS = (int)nS; in.nA = (int)nA; in.nR = (int)nR; in.ncells = (int)par.n_barcodes; in.ulen = pi.umiLen; in.par = par; in.wantMerges = pi.wantGeneMerges;
-    in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, pi.snpSkipN, pi.intronRules, pi.useQual};
+    in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, pi.snpSkipN, pi.intronRules, pi.useQual, (int) singlet_qmask::words()};
     in.EX = upload_tree(A, an.ex); in.IN = upload_tree(A, an.in); in.e2g = to_dev(A, an.e2g); in.i2g = to_dev(A, an.i2g); in.gstr = to_dev(A, an.gstr);
     in.gmt = to_dev(A, pi.geneIsMt); in.ngmt = (uint32_t)pi.geneIsMt.size();
     if ((pi.intronRules & 8) && !pi.geneStart.empty()) {   // kFlank: the gene bodies and their merged exons
@@ -99,14 +100,14 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     if (!cat) {
     in.S = (SigRec*)devBytes(pi.sigs); in.Al = (AlnRec*)devBytes(pi.alns); in.R = (ReadRec*)devBytes(pi.reads);
     in.ops = to_dev(A, pi.ops); in.seq = devBytes(pi.seq);
-    in.Q = pi.useQual ? (const uint64_t*) devBytes(pi.lowq) : nullptr;   // 16 bytes per read (PileupInput::lowq)
+    in.Q = pi.useQual ? (const uint64_t*) devBytes(pi.lowq) : nullptr;   // singlet_qmask::words() words per read (PileupInput::lowq)
     } else {
     in.S = (SigRec*) devCat(pi.preSigs, pi.sigs.data(), pi.sigs.size(), sizeof(SigRec));
     in.Al = (AlnRec*) devCat(pi.preAlns, pi.alns.data(), pi.alns.size(), sizeof(AlnRec));
     in.R = (ReadRec*) devCat(pi.preReads, pi.reads.data(), pi.reads.size(), sizeof(ReadRec));
     in.ops = (uint32_t*) devCat(pi.preOps, pi.ops.data(), pi.ops.size() * 4, 4);
     in.seq = devCat(pi.preSeq, pi.seq.data(), pi.seq.size(), 1);
-    in.Q = pi.useQual ? (const uint64_t*) devCat(pi.preLowq, pi.lowq.data(), pi.lowq.size(), 16) : nullptr;
+    in.Q = pi.useQual ? (const uint64_t*) devCat(pi.preLowq, pi.lowq.data(), pi.lowq.size(), 8 * singlet_qmask::words()) : nullptr;
     }
     e16step("records H2D");
     // ---- one run with outputs
