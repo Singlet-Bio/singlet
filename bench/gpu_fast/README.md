@@ -89,6 +89,8 @@ A dropped bridge is treated as unknown state. `ab.py` retries for `--bridge-grac
 
 The pbench toolchain has no ccache. `MODE=auto` uses ccache when one appears and otherwise a persistent source and build tree in `$W/cache/gf-build`. A new commit is copied over the tree file by file. Only files with changed content get a new time stamp, so only they and their dependents are recompiled. Builds are serialized by a lock on the tree. `MEASURE=1` times a clean build, a build with no change and a rebuild after a one-file patch that exists only in the job.
 
+Measured on `short-bigmem` with 24 CPUs at e42c0636 with the patch in `src/engine_gpu/records_gpu.cu`. Three jobs gave the same numbers. A clean build of the singlet target took 247 to 249 s. A rebuild with no change took 22 s. A rebuild after the one-file patch took 23 s. The 162 STAR objects are compiled again at every rebuild, so the floor is about 20 s. The cause is not found. The CUDA objects and the final link are what the tree saves.
+
 ## Tier 0 notes
 
 The model needs one k=1 run of the same binary with its sampler file. It cuts the run at its device holds and stage boundaries. Hold segments take a slot. All segments share the cores. `gamma` slows two holders on the device. Only `gamma` is fitted. The validation table lists errors for several choices of it and says which one was used.

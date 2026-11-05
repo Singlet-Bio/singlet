@@ -130,8 +130,10 @@ one_build() {   # label: copy the tree, build, record seconds
   local t1=$SECONDS
   apptainer exec -B $W -B $SCR -B ${CACHE:-$SCR} $IMG bash $SCR/build.sh
   local t2=$SECONDS
-  TIMES="$TIMES\"$label\":{\"sync_s\":$((t1 - t0)),\"build_s\":$((t2 - t1))},"
-  echo "[build] $label: sync $((t1 - t0)) s, configure and build $((t2 - t1)) s (mode $RES)"
+  cp $SCR/b.log $OUTD/build-$label.log 2>/dev/null || true
+  local nobj; nobj=$(grep -cE "Building (C|CXX|CUDA) object" $SCR/b.log || true)
+  TIMES="$TIMES\"$label\":{\"sync_s\":$((t1 - t0)),\"build_s\":$((t2 - t1)),\"objects_compiled\":${nobj:-0}},"
+  echo "[build] $label: sync $((t1 - t0)) s, configure and build $((t2 - t1)) s, $nobj objects compiled (mode $RES)"
 }
 patch_tree() {   # the throwaway change: it changes the preprocessed text, so a compiler cache cannot hit it
   printf '\nnamespace { [[maybe_unused]] const int gf_probe_%s = %s; }\n' "${PATCH_ID:-1}" "${PATCH_ID:-1}" >> $S/$PATCH_FILE
@@ -142,7 +144,8 @@ if [ "$MEASURE" = 1 ]; then
   one_build nochange
   patch_tree; one_build rebuild_after_one_file_patch
   printf '{"sha":"%s","mode":"%s","patch_file":"%s","job":"%s",%s"node":"%s"}\n' $SHA $RES "$PATCH_FILE" $SLURM_JOB_ID "$TIMES" "$(hostname -s)" > $OUTD/build-measure.json
-  [ $RES != tree ] || rm -rf $CACHE
+  exec 8>&-
+  [ $RES != tree ] || rm -rf $CACHE || true
   cat $OUTD/build-measure.json
   exit 0
 fi
