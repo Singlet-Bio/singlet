@@ -70,6 +70,7 @@
 #include "singlet/pileup/nonhost/nonhost_confirmed_reads.h"
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
+#include "singlet/qmask_words.h"   // P3-ENG-14: per-read low-quality mask width
 #include "singlet/engine_gpu_ingest.h"   // E13: the GPU prefill decodes the .1fq itself
 #endif
 #include "singlet/pileup/tiny_dataset_guard.h"
@@ -4765,7 +4766,7 @@ int main(int argc, char* argv[]) {
             const char* gh = getenv("SINGLET_GPU_HANDOFF");
             if (!(gp && std::string(gp) == "on" && singlet_engine_gpu::e2eRequested())) why = "it needs SINGLET_GPU_PILEUP=on and SINGLET_ENGINE_GPU_E2E";
             else if (std::string pw; !e19probe::usable(pw)) why = "no usable GPU (" + pw + "): the GPU pileup will be declined";
-            else if (onefq_r2_bound > 128) why = "cDNA reads over 128 bases: the GPU pileup will be declined";
+            else if (onefq_r2_bound > (int) singlet_qmask::maxBases()) why = "cDNA reads over " + std::to_string(singlet_qmask::maxBases()) + " bases: the GPU pileup will be declined";
             else if (ir & ~(1u | 4u | 8u | 128u | 256u)) why = "intron rules the GPU pileup does not implement";   // the rules of kGpuRules below: campaign added kFlank (8) to the default 397
             else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
             else if (stream_unsorted == 0 || parallel_pileup == 1 || tagged_bam_enabled || !bam_file.empty() || getenv("SINGLET_KEEP_STAR_BAM"))
@@ -5749,12 +5750,15 @@ int main(int argc, char* argv[]) {
         }
     }
     // The decision to run the GPU pileup is made here, before the CPU skips its steps: once the stream has been consumed without them a decline can only end
-    // the run (exit 9). Reads the per-base-quality masks cannot hold (over 128 bases), or SINGLET_GPU_PILEUP_FORCE_DECLINE=1 (the regression test of this
-    // fallback), keep the pileup on the CPU; the GPU still maps the reads.
+    // the run (exit 9). Reads the per-base-quality masks cannot hold (over singlet_qmask::maxBases()), or SINGLET_GPU_PILEUP_FORCE_DECLINE=1 (the regression
+    // test of this fallback), keep the pileup on the CPU; the GPU still maps the reads.
+    // P3-ENG-14: the mask width follows the cDNA read-length bound (2 words up to 128 bases, as before). The forked STAR and the pileup read it from the env.
+    // Set for every sample: a pool process (E21) runs samples of different read lengths one after another.
+    setenv("SINGLET_HANDOFF_QWORDS", std::to_string(singlet_qmask::wordsFor(std::min<int>(onefq_r2_bound, (int) singlet_qmask::maxBases()))).c_str(), 1);
     if (getenv("SINGLET_GPU_PILEUP")) {
         const char* why = nullptr;
         std::string pw;
-        if (onefq_r2_bound > 128) why = "reads over 128 bases (the per-base-quality mask holds 128)";
+        if (onefq_r2_bound > (int) singlet_qmask::maxBases()) why = "reads over the per-base-quality mask's 512 bases";
         else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
         else if (!e19probe::usable(pw)) {   // E19: no device for it (the probe above); STAR's prefill falls back on its own
             std::cerr << "[singlet] SINGLET_GPU_PILEUP ignored: no usable GPU (" << pw << "); the CPU pileup runs\n";

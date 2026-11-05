@@ -1,5 +1,5 @@
 // E10 (docs/gpu-engine/fable/E10-hostloop.md): what STAR's per-read loop still produces for the reads with a GPU record, on the device.
-//   entries():  per read the GPU pileup's hand-off entry (STAR's ReadAlign::handoffReadEntry: CR/UR, quality counters, 128-bit low-quality mask,
+//   entries():  per read the GPU pileup's hand-off entry (STAR's ReadAlign::handoffReadEntry: CR/UR, quality counters, low-quality mask of singlet_qmask::words() words,
 //               clip flags, the rRNA hook's sample bit) from the original R2 (STAR's numeric code), the clip of k_clip and what the host decode
 //               packed per read (CR/UR key, quality bits);
 //   products(): per record its read multiplicity, then the Log.final.out counters (Stats: oneRead, mappedFilter, outputAlignments /
@@ -16,7 +16,7 @@
 namespace singlet_hostloop_gpu {
 
 // dSeq/dOff: the original reads (before clipping); dCs/dCl: per read the clipped span (absolute start, length), or null (no clipping);
-// dAux: per read 2 + nw words (cr3, ur3, quality bits); dEnt: 24 bytes per read; dMask: 16 bytes per read or null
+// dAux: per read 2 + nw words (cr3, ur3, quality bits); dEnt: 24 bytes per read; dMask: 8 * singlet_qmask::words() bytes per read or null
 bool entries(const char* dSeq, const uint64_t* dOff, const uint64_t* dCs, const uint64_t* dCl, uint64_t n, const uint64_t* dAux, uint32_t nw,
              bool hook, e6::ReadEntry* dEnt, uint64_t* dMask, float& ms, std::string& err);
 
