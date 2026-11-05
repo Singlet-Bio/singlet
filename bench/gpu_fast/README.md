@@ -81,7 +81,7 @@ A dropped bridge is treated as unknown state. `ab.py` retries for `--bridge-grac
 | `jobs/t1.sbatch`, `jobs/t2.sbatch` | the two jobs. They fetch scripts from the branch and check that they equal the submitted copy. |
 | `jobs/lib_ident.sh`, `jobs/lib_run.sh` | identity block copied verbatim from `tp.sbatch`, and run helpers modified from it. A test checks the verbatim part. |
 | `jobs/fast_build.sbatch` | singlet target only, pinned commit, no ctest. |
-| `model.py`, `model_data/` | tier 0 and the kept inputs. `model_data/validation.md` is the validation table. |
+| `model.py`, `model_data/` | tier 0 (a ranking screen only, not an absolute prediction) and the kept inputs. `model_data/validation.md` is the validation table. |
 | `SWITCHES.md` | runtime environment switches, by stage. |
 | `tests/` | `python -m pytest bench/gpu_fast/tests`. `smoke_lib_run.sh` runs in WSL or Linux. |
 

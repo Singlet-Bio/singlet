@@ -380,10 +380,16 @@ def markdown(rows):
             L.append("| " + " | ".join(str(x) for x in head) + f" | {lab} | {v['gamma']:.2f} | {f(v['progress_rate'])} | {pc(v['err_prog'])} | {f(v['win_rate'])} | {pc(v['err_win'])} | "
                      f"{f(v['span_rate'])} | {pc(v['err_span'])} | {f(v['mean_wait_s'], 0)} | {f(v['mean_hold_s'], 0)} |")
             first = False
-    return "\n".join(L)
+    return "
+".join(L) + "
+
+" + RANKING_ONLY
 
 
 # --- command line -----------------------------------------------------------------------------------------------------------------------------
+RANKING_ONLY = "Tier 0 is a ranking screen only. Use the change between base and edited runs. The absolute rate is not a prediction."
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -420,6 +426,7 @@ def main(argv=None):
         sc = parse_scales(a.scale, pr["template"])
         base = predict(pr, a.k, a.slots, a.runs, a.cpus, g, (), a.order, a.seeds)
         new = predict(pr, a.k, a.slots, a.runs, a.cpus, g, sc, a.order, a.seeds) if sc else base
+        print(RANKING_ONLY)
         print(f"profile {pr['name']} (T={pr['T']}, slots {pr['slots']}) k={a.k} slots={a.slots} runs={a.runs} cpus={a.cpus:g} gamma={g:.3f} edits={a.scale or 'none'}")
         run0 = pr["runs"][0]
         c = caps(pr.get("cgroup_core_s_per_M"), run0.get("sampler_hold_s"), a.cpus, a.slots, pr["pairs_M_per_run"])
@@ -430,6 +437,8 @@ def main(argv=None):
             print(f"  {key:12s} base {'NA' if b is None else f'{b:.3f}'}  edited {'NA' if n is None else f'{n:.3f}'}{ch}")
         return 0
     rows = validate(a.data, a.cpus)
+    if not a.markdown:
+        print(RANKING_ONLY)
     if a.markdown:
         print(markdown(rows))
     else:

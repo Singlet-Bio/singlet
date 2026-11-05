@@ -58,7 +58,7 @@ def test_dry_run_prints_spec_and_sbatch_and_touches_nothing(tmp_path, capsys):
 def test_dry_run_tier2_has_load_and_rule(tmp_path, capsys):
     rc = ab.main(argv(tmp_path, 2, ["--dry-run"]), remote=Fake(up=False))
     cap = capsys.readouterr()
-    assert rc == 0 and "K=8" in cap.out and "NRUNS=24" in cap.out and "--exclude=g050" in cap.out and "SEP_RATE=0.09" in cap.out
+    assert rc == 0 and "K=8" in cap.out and "NRUNS=24" in cap.out and "--exclude" not in cap.out and "SEP_RATE=0.09" in cap.out
     assert "provisional rule" in cap.err
 
 

@@ -179,7 +179,7 @@ def parser():
     p.add_argument("--ref", help=f"reference sample directory with out/, CellReads.stats, readhash.txt. Default {DEFAULT_REF} (only for pbmc1k_v3 at T=7)")
     p.add_argument("--intended-output-change", action="store_true", help="the idea changes output on purpose. Identity loss is reported and does not reject")
     p.add_argument("--node", help="sbatch -w")
-    p.add_argument("--exclude", help="sbatch --exclude (tier 2 default g050, as tp.sbatch)")
+    p.add_argument("--exclude", help="sbatch --exclude. No default. Use --node to pick a node")
     g = p.add_argument_group("tier 1 rule")
     g.add_argument("--promote-gain", type=float, default=0.05, help="promote when core-s/M or lock held improves by at least this fraction")
     g.add_argument("--no-spread-guard", action="store_true", help="do not require the gain to exceed the run-to-run spread of the two runs per arm")
@@ -221,8 +221,6 @@ def validate(a):
         raise Fatal("--ref: absolute path of plain characters")
     if a.node and a.exclude:
         raise Fatal("--node and --exclude together")
-    if a.tier == 2 and a.exclude is None and not a.node:
-        a.exclude = "g050"
     if a.k < 1 or a.runs <= 2 * a.k:
         print(f"note: runs per leg ({a.runs}) is not above 2k ({2 * a.k}). The windowed rate will be NA.", file=sys.stderr)
 
