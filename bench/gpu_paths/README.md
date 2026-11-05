@@ -39,3 +39,16 @@ jobs/submit_paths.sh $W/jobs/gpu-device/bin/c92a494br c92a494b
 - The engine mask has a minimum of 2 words (128 bases). A width of 1 word cannot occur. The input `mask2short` has reads of 60 bases and checks that the width clamps to 2.
 - The sorted BAM is compared only when a run leaves it in the output. The restart path removes it at the end, so that comparison may report "not written".
 - Synthetic inputs: `mask3syn` and `mask2short`. Seed 20261105, share 0.25. Their `stats.json` counts the lowered bases.
+
+## Results at 6c4f1697 (5 Nov, node g052, T=8)
+
+| Binary | Job | Result | Run time |
+|---|---|---|---|
+| c92a494br (c92a494b) | 800495 | 14 of 16 pass. `strand100` and `strand150` time out at 240 s (exit 124) after the restart on the sorted path. | 979 s with two 240 s hangs |
+| s3 (e42c0636) | 800496 | 11 of 16 pass. `strand100` times out. `strand150`, `v5p150`, `mask3syn` and `long_q4` fail the path check by design: s3 declines reads over 128 bases. Their output matches the oracle. | 801 s with one 240 s hang |
+
+The restart hang is not new in c92a494b: s3 shows it on `strand100`. Without the hangs the corpus takes about 8 minutes of GPU time.
+
+## Rules for the shared nodes
+
+Do not run the corpus on a node that holds a timing job of another session (`gf1-*`, `gf2-*`, `gbold-*`). Check `squeue -w <node>` first and pass `EXCLUDE=<nodes>` to `submit_paths.sh`.
