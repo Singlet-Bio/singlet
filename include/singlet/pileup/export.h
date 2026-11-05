@@ -62,6 +62,15 @@
 
 namespace singlet {
 
+// MEASUREMENT ONLY (gpu/bold): SINGLET_BENCH_SKIP=ambient,doublet,... switches an export phase off so a throughput run can
+// measure the node as if that phase cost nothing. Outputs of such a run are incomplete and must never be compared or kept.
+inline bool bench_skip(const char* name) {
+    const char* v = std::getenv("SINGLET_BENCH_SKIP");
+    if (!v || !*v) return false;
+    const std::string s = std::string(",") + v + ",";
+    return s.find(std::string(",") + name + ",") != std::string::npos;
+}
+
 /// Gene-level sparse matrix in CSC format.
 /// Canonical layout lives in sparse_accumulator.h as
 /// SparseAccumulator<OutT>::CSCMatrix; GeneCSC is just an alias of it.
@@ -896,7 +905,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     singlet::AmbientDecontConfig amb_saved_cfg;
     bool amb_saved_have = false;
     if (!cc_result.cell_indices.empty() && exon_csc.ncols > 0 && !bc_totals.empty()
-        && engine.gene_model().n_genes() > 0) {
+        && engine.gene_model().n_genes() > 0 && !bench_skip("ambient")) {
         auto t_amb0 = std::chrono::high_resolution_clock::now();
         const bool amb_has_int = pileup_cfg.count_introns && intron_csc.data.size() > 0
                                  && intron_csc.ncols == exon_csc.ncols;
@@ -1024,7 +1033,7 @@ inline ExportStats export_results(const PileupEngine& engine,
                 std::iota(dbl_cell_indices.begin(), dbl_cell_indices.end(), 0u);
             }
         }
-        if (!dbl_cell_indices.empty() && exon_csc.ncols > 0) {
+        if (!dbl_cell_indices.empty() && exon_csc.ncols > 0 && !bench_skip("doublet")) {
             auto t_dbl0 = std::chrono::high_resolution_clock::now();
             // v7 scorer: exon intervals are folded to genes inside detect_doublets (called cells only), the multiplet
             // rate is the 10x rule from the cell count (0.8% per 1,000 cells, <= 25%) and the call is capped by it.

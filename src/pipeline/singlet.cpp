@@ -8001,7 +8001,13 @@ int main(int argc, char* argv[]) {
                 const double kMaxDropPts = 2.0;
                 std::string pj;   // JSON body after the "enabled" key
                 bool keep = false;
-                if (cr4_status == "on") {
+                // MEASUREMENT ONLY (gpu/bold): SINGLET_CR4_PROBE=skip keeps the profile without running the two probe passes
+                const char* bench_probe_env = std::getenv("SINGLET_CR4_PROBE");
+                const bool bench_probe_skip = bench_probe_env && std::string(bench_probe_env) == "skip";
+                if (cr4_status == "on" && bench_probe_skip) {
+                    keep = true;
+                    std::cerr << "[bench] CR4 probe skipped (SINGLET_CR4_PROBE=skip): profile kept\n";
+                } else if (cr4_status == "on") {
                     const std::string pdir = out_prefix + "/cr4_probe";
                     mkdir(pdir.c_str(), 0755);
                     // chunk mode: the same in-process source as the main run; fifo mode: the probe decodes the first
@@ -8908,6 +8914,14 @@ int main(int argc, char* argv[]) {
         std::cerr << "[singlet] ERROR: No reads processed\n";
         return 1;
     }
+    // MEASUREMENT ONLY (gpu/bold): SINGLET_BENCH_EXIT_AFTER=star ends the run here, before the non-host screen, the export and
+    // the demux, so a throughput run measures the node as if every host stage after the pileup cost nothing.
+    // Outputs are incomplete. Never compare or keep them.
+    const std::string bench_exit_after = std::getenv("SINGLET_BENCH_EXIT_AFTER") ? std::getenv("SINGLET_BENCH_EXIT_AFTER") : "";
+    if (bench_exit_after == "star") {
+        std::cerr << "[bench] SINGLET_BENCH_EXIT_AFTER=star: exiting after the pileup and STAR (outputs incomplete)\n" << std::flush;
+        std::_Exit(0);
+    }
 
     // ── NONHOST-UNMAPPED-CAPTURE: Screen STAR unmapped reads (EM deconvolution) ─
     // When any nonhost index is provided, STAR wrote unmapped cDNA reads to
@@ -8929,6 +8943,10 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    if (bench_exit_after == "nonhost") {
+        std::cerr << "[bench] SINGLET_BENCH_EXIT_AFTER=nonhost: exiting before the export (outputs incomplete)\n" << std::flush;
+        std::_Exit(0);
+    }
     mem_mark("before export");
     // ── Phase 3: Export ──
     singlet::rearm_stall_watchdog("export");
