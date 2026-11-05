@@ -56,6 +56,7 @@ RES0=$W/jobs/gpu-batch1/results/gate-$SLURM_JOB_ID; mkdir -p $RES0
 COMMIT=$(cat $BINDIR/commit-gpu 2>/dev/null || true)
 case $COMMIT in $EXPECT_COMMIT*) ;; *) echo "REFUSED: $BINDIR records commit '${COMMIT:-none}', EXPECT_COMMIT is $EXPECT_COMMIT" | tee $RES0/summary.txt; exit 2 ;; esac
 BSHA=$(sha256sum $BINDIR/singlet-gpu | cut -d' ' -f1); EMBED=no; grep -aqF "$COMMIT" $BINDIR/singlet-gpu && EMBED=yes
+[ $EMBED = yes ] || [ "${ALLOW_NO_EMBED:-0}" = 1 ] || { echo "REFUSED: the commit $COMMIT is not inside the binary (ALLOW_NO_EMBED=1 skips this check)" | tee $RES0/summary.txt; exit 2; }
 # the long-read slice needs 370G (STATUS-2026-11 section 6.6). The other samples run in the default 200G.
 case " ${SAMPLES[*]} " in *" gsm7064234s "*) [ ${SLURM_MEM_PER_NODE:-0} -ge 378880 ] || { echo "REFUSED: gsm7064234s needs sbatch --mem=370G (the job has ${SLURM_MEM_PER_NODE:-?} MB)" | tee $RES0/summary.txt; exit 2; } ;; esac
 REFD=$W/jobs/gpu-batch1/ref/${COMMIT:0:8}/T$T; mkdir -p $REFD
@@ -165,7 +166,7 @@ for s in "${SAMPLES[@]}"; do
     cp $SCR/$s/$m/out/*Log.final.out $SCR/$s/$m/out/*Log.out $O/ 2>/dev/null
     if [ $m != cpu ]; then
       sort -u $O/qwords_env.raw 2>/dev/null > $O/qwords_env.txt
-      python3 $GB/maskstatus.py "$s $m" $O $O/qwords_env.txt | tee -a $RES0/summary.txt $O/mask.txt
+      python3 $GB/maskstatus.py "$s $m" $O $O/qwords_env.txt $FQ | tee -a $RES0/summary.txt $O/mask.txt
       case $m in gpuO0|gpuI0|gpuL[0-4]) echo "FALLBACK CHECK $s $m: not applied (an opt-out mode)" | tee -a $RES0/summary.txt ;;
         *) python3 $GB/fallback.py $O > $O/fallback_check.txt 2>&1
            NBAD=$(awk -F'\t' '$1=="SUMMARY"{print $2}' $O/fallback_check.txt); NOKF=$(awk -F'\t' '$1=="SUMMARY"{print $3}' $O/fallback_check.txt)

@@ -54,6 +54,7 @@ COMMIT=$(cat $BINDIR/commit-gpu 2>/dev/null || true)
 BSHA=$(sha256sum $BIN | cut -d' ' -f1)
 case $COMMIT in $EXPECT_COMMIT*) ;; *) echo "REFUSED: $BINDIR records commit '${COMMIT:-none}', EXPECT_COMMIT is $EXPECT_COMMIT" | tee $S; exit 2 ;; esac
 EMBED=no; grep -aqF "$COMMIT" $BIN && EMBED=yes
+[ $EMBED = yes ] || [ "${ALLOW_NO_EMBED:-0}" = 1 ] || { echo "REFUSED: the commit $COMMIT is not inside the binary (ALLOW_NO_EMBED=1 skips this check)" | tee $S; exit 2; }
 [ -e $BINDIR/../whitelists ] || ln -s $PB/whitelists $BINDIR/../whitelists
 
 # --- scripts from the bench/gpu-batch1 branch, one fetch at a time, with a commit check (as build.sbatch does) ------------------------
