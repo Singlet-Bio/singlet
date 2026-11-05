@@ -380,10 +380,7 @@ def markdown(rows):
             L.append("| " + " | ".join(str(x) for x in head) + f" | {lab} | {v['gamma']:.2f} | {f(v['progress_rate'])} | {pc(v['err_prog'])} | {f(v['win_rate'])} | {pc(v['err_win'])} | "
                      f"{f(v['span_rate'])} | {pc(v['err_span'])} | {f(v['mean_wait_s'], 0)} | {f(v['mean_hold_s'], 0)} |")
             first = False
-    return "
-".join(L) + "
-
-" + RANKING_ONLY
+    return "\n".join(L) + "\n\n" + RANKING_ONLY
 
 
 # --- command line -----------------------------------------------------------------------------------------------------------------------------
