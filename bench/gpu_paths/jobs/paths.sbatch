@@ -14,6 +14,7 @@
 #   T        threads, default 8 (the debug-gpu QOS allows 8 CPUs)
 #   ONLY     comma list of corpus ids, default all of corpus/manifest.tsv
 #   MODES    "cpu gpu" (default). "cpu" only builds the kept CPU references (run it on short-cpu with --gres=none).
+#   RUN_TIMEOUT  seconds per engine run, default 240 (a hung run is a result, exit 124)
 #   REFRESH_REF=1  runs the CPU mode again and replaces the reference
 #   EXPECT_SCRIPTS  commit prefix of the bench/gpu-paths branch that the job must fetch
 # Per input: the CPU run of BIN is the oracle, kept under $W/jobs/gpu-paths/ref/<commit8>/T<T>/<id>. The GPU run (--engine gpu, SINGLET_GPU_PILEUP=on)
@@ -62,7 +63,7 @@ run_one() {
   ( while [ ! -e $SCR/$id/$m/out/star_Solo.out/Gene/CellReads.stats ]; do sleep 0.2; done; ln $SCR/$id/$m/out/star_Solo.out/Gene/CellReads.stats $SCR/$id/$m/CellReads.stats ) 2>/dev/null &
   local WATCH=$!
   local T0=$(date +%s.%N)
-  ( cd $SCR/$id/$m && /usr/bin/time -v -o $OD/time.txt timeout -k 30 ${RUN_TIMEOUT:-900} $BINDIR/singlet-gpu $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
+  ( cd $SCR/$id/$m && /usr/bin/time -v -o $OD/time.txt timeout -k 30 ${RUN_TIMEOUT:-240} $BINDIR/singlet-gpu $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
       --out-prefix $SCR/$id/$m/out/ --threads $T --pipeline --output-format 1pz $ENGARG 2>&1 | while IFS= read -r l; do printf '%(%s)T %s\n' -1 "$l"; done > $OD/run.log.ts )
   kill $WATCH 2>/dev/null
   RUN_WALL=$(echo "$(date +%s.%N) - $T0" | bc | cut -c1-7)
