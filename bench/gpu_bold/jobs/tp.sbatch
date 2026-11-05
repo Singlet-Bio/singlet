@@ -98,6 +98,9 @@ cfg_set() {
     nodn) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen" ;;
     alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip" ;;
     maponly) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;  # ends after pileup + STAR
+    nohc) CFG_ENV="SINGLET_BENCH_NOHOSTCOPY=1" ;;                                        # prototype: no host copy of lane results and records (needs build b1)
+    nohc_alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
+    nohc_map) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
     *) echo "!! unknown config $1" >&2; return 1 ;;
   esac
 }

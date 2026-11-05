@@ -469,6 +469,9 @@ struct D2H {
     ~D2H() { release(); }
 };
 static D2H* g_d2h = nullptr;   // set by mapDistinct while it runs (runLane's copies)
+// MEASUREMENT PROTOTYPE (gpu/bold, SINGLET_BENCH_NOHOSTCOPY=1): at level 5 with the lanes' results resident on the device, nothing on the host reads the
+// lanes' packed result bytes or the records' out.seq / out.blob (E8 gathers on the device, the cache gets no sequence results). Skip those copies.
+static bool g_skipHostRes = false;
 
 // packs the lane's fixed-size result slots (slot k at k * slot) into consecutive bytes at off[k]
 __global__ void k_pack(const uint8_t* slots, u64 slot, const uint16_t* len, const u64* off, u64 n, uint8_t* packed) {
@@ -643,11 +646,16 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         devNote();
         k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked);
         EG_CK(cudaGetLastError());
+        if (keepDev && g_skipHostRes) {   // gpu/bold: the packed bytes stay on the device only; the offsets still come back (laneOf indexes them)
+            if (g_d2h) { if (!g_d2h->copy(L.off.data(), dPoff, (n + 1) * 8)) { err = "lane offsets copy"; return false; } }
+            else EG_CK(cudaMemcpy(L.off.data(), dPoff, (n + 1) * 8, cudaMemcpyDeviceToHost));
+        } else {
         L.out.resize(total);
         if (g_d2h) { if (!g_d2h->copy(L.out.data(), dPacked, total) || !g_d2h->copy(L.off.data(), dPoff, (n + 1) * 8)) { err = "lane results copy"; return false; } }
         else {
         EG_CK(cudaMemcpy(L.out.data(), dPacked, total, cudaMemcpyDeviceToHost));
         EG_CK(cudaMemcpy(L.off.data(), dPoff, (n + 1) * 8, cudaMemcpyDeviceToHost));
+        }
         }
         if (keepDev) { L.dOut = dPacked; L.dOff = dPoff; }
         else { dfree(dPoff); dfree(dPacked); }
@@ -888,7 +896,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     std::string err;
     Stager SR, SI;   // E12: staged uploads of the reads (this thread) and of the index (idxTh); declared first: destroyed after the join
     D2H DR;          // E12: staged device -> host copies (g_d2h while mapDistinct runs)
-    struct D2HReset { ~D2HReset() { g_d2h = nullptr; } } d2hReset;
+    struct D2HReset { ~D2HReset() { g_d2h = nullptr; g_skipHostRes = false; } } d2hReset;
     bool idxOk = true; double tIdxEnd = 0;
     std::thread idxTh;   // E12: the index upload (staged, on its own stream) while the reads are uploaded, clipped and deduplicated
     struct JoinOnExit { std::thread& t; ~JoinOnExit() { if (t.joinable()) t.join(); } } idxJoin{idxTh};
@@ -1604,8 +1612,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                 const u64 i = repc[k], L = rlen(i), rec = r0 + cr.rank[k];
                 recOfPos[c0 + k] = (uint32_t)rec;
                 if (e2e) { recSrc[rec] = chunkIx << 40 | (u64)cr.lane[k] << 32 | (u64)cr.lpos[k]; recRead[rec] = (uint32_t)(c0 + k); }   // E17: by position
-                std::memcpy(out.seq.data() + s0 + cr.sOff[k], rseq(i), L); out.seqOff[rec + 1] = s0 + cr.sOff[k] + L;
-                std::memcpy(out.blob.data() + b0 + cr.bOff[k], p, len); out.blobOff[rec + 1] = b0 + cr.bOff[k] + len;
+                if (!g_skipHostRes) std::memcpy(out.seq.data() + s0 + cr.sOff[k], rseq(i), L);
+                out.seqOff[rec + 1] = s0 + cr.sOff[k] + L;
+                if (!g_skipHostRes) std::memcpy(out.blob.data() + b0 + cr.bOff[k], p, len);
+                out.blobOff[rec + 1] = b0 + cr.bOff[k] + len;
             }
         });
         nGpuMapped += repc.size() - cr.repH.size();
@@ -1633,6 +1643,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         return true;
     };
     tS = now();
+    g_skipHostRes = std::getenv("SINGLET_BENCH_NOHOSTCOPY") != nullptr && std::string(std::getenv("SINGLET_BENCH_NOHOSTCOPY")) == "1" && resident && e2e && e10
+                    && in.e10.soloModel != nullptr && !lean && !std::getenv("SINGLET_ENGINE_GPU_E2E_CHECK") && !std::getenv("SINGLET_ENGINE_GPU_DUMP");
+    if (g_skipHostRes) out.log += "engine_gpu: gpu/bold NOHOSTCOPY: the lanes' packed results and the records' host copies are skipped\n";
     chunks.reserve(nChunks);
     for (u64 c0 = 0; c0 < rep.size(); c0 += CHUNK) {
         std::vector<uint32_t> repc(rep.begin() + c0, rep.begin() + std::min<u64>(rep.size(), c0 + CHUNK));
@@ -1642,6 +1655,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // E8: the pileup's records built on the device (E6 buildRecords) from the device-resident results and copied into the shared region
     // (in.e2e). Runs after hostPart (the host lane's results and the record order exist). false: the region is left without magic and the
     // hand-off file path runs as before.
+    if (g_skipHostRes && !(resident && allRes)) return fail("gpu/bold NOHOSTCOPY: a lane ran in parts, the host records are missing (rerun without it)");
     bool gatherDev = false;   // E17: E8's gather from the device-resident results (else the host-assembled records are uploaded)
     auto e2eBuild = [&](std::string& why) -> bool {
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
@@ -1880,7 +1894,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         }
         step("index.free");
         std::string e2eWhy;
-        if (!e2eBuild(e2eWhy)) { out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records"); }
+        if (!e2eBuild(e2eWhy)) {
+            if (g_skipHostRes) return fail("gpu/bold NOHOSTCOPY: the device records were not built (" + e2eWhy + "), the host records are missing");
+            out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records");
+        }
         step("e2e.build");
         { const bool ok10 = out.e10.ok; e10 = false; e10Off(""); out.e10.ok = ok10; }   // frees the device entries
         for (auto& cr : chunks) for (Lane* L : {&cr.A, &cr.M, &cr.B}) { dfree(L->dOut); dfree(L->dOff); L->dOut = nullptr; L->dOff = nullptr; }
