@@ -41,7 +41,8 @@ def test_demand_rule_promotes_on_the_binding_limit_only():
     assert (v["verdict"], v["rule"]) == ("PROMOTE", "T1D-3") and v["demand"]["change"] == pytest.approx(0.147, abs=1e-3)
     # lock hold falls a lot but cores bind in both arms and core-s/M does not move: no change in the node rate
     v = demand.tier1_demand_verdict(t1((8.94, 39.1), (8.94, 27.6)))
-    assert (v["verdict"], v["rule"]) == ("INCONCLUSIVE", "T1D-4") and v["demand"]["change"] == pytest.approx(0.0)
+    assert (v["verdict"], v["rule"]) == ("STACK", "T1D-5") and v["demand"]["change"] == pytest.approx(0.0)
+    assert "does not bind" in v["why"] and "batch check" in v["why"]
 
 
 def test_demand_rule_s3_against_s3_is_inconclusive():
@@ -78,3 +79,35 @@ def test_leg_demand_from_point():
                    "locks": {"prefill": {"held": 23.0}, "solo": {"held": 0.6}, "pileup": {"held": 2.3}, "nonhost": {"held": 4.4}}}]}
     d = demand.leg_demand(P, {"core_s_per_M": 9.0, "dev_peak_gb": 44.0, "host_peak_gb": 53.0})
     assert d["hold_prefill"] == 23.0 and d["hold_handoff"] == 0.0 and d["hold_s"] == 38.0 and d["core_s_per_M"] == 9.0 and d["pairs_M"] == pytest.approx(66.0)
+
+
+def test_stack_needs_a_non_binding_limit_to_rise_by_ten_percent_and_the_binding_one_not_to_fall():
+    small = demand.tier1_demand_verdict(t1((8.94, 39.1), (8.94, 36.0)))      # lock limit +8.6 percent
+    assert small["verdict"] == "INCONCLUSIVE"
+    assert demand.tier1_demand_verdict(t1((8.94, 39.1), (8.94, 36.0)), {"stack_gain": 0.05})["verdict"] == "STACK"
+    worse = demand.tier1_demand_verdict(t1((8.94, 39.1), (9.5, 20.0)))        # cores bind and fall 6 percent
+    assert worse["verdict"] == "INCONCLUSIVE"
+
+
+def test_promote_beats_stack_and_validity_beats_both():
+    assert demand.tier1_demand_verdict(t1((8.94, 39.1), (7.79, 27.6)))["verdict"] == "PROMOTE"
+    res = t1((8.94, 39.1), (8.94, 27.6))
+    res["legs"][1]["fallback"]["runs"] = 1
+    assert demand.tier1_demand_verdict(res)["rule"] == "V2"
+
+
+def test_load_factor_scales_the_limits_and_cancels_in_ratios():
+    d = {"pairs_M": 66.6, "hold_s": 40.0, "core_s_per_M": 9.0, "dev_peak_gb": 44.0}
+    a = demand.limits(d, 28, 2, 93.6)
+    b = demand.limits(d, 28, 2, 93.6, 1.1, 1.08)
+    assert b["core"] == pytest.approx(a["core"] / 1.1) and b["lock"] == pytest.approx(a["lock"] / 1.08)
+    r1 = demand.tier1_demand_verdict(t1((8.94, 39.1), (7.79, 27.6)), {"load_core": 1.0, "load_hold": 1.0})["demand"]["change"]
+    r2 = demand.tier1_demand_verdict(t1((8.94, 39.1), (7.79, 27.6)), {"load_core": 1.1, "load_hold": 1.08})["demand"]["change"]
+    assert r1 == pytest.approx(r2)
+
+
+def test_render_prints_load_factor_and_efficiency():
+    res = t1((8.94, 39.1), (7.79, 27.6))
+    v = demand.tier1_demand_verdict(res, {"load_core": 1.1, "load_hold": 1.08, "efficiency": 0.66})
+    t = demand.render_demand(res, v)
+    assert "x1.100" in t and "x1.080" in t and "0.660" in t and "Read the ratio" in t

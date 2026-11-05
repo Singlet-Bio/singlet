@@ -387,6 +387,72 @@ def markdown(rows):
 RANKING_ONLY = "Tier 0 is a ranking screen only. Use the change between base and edited runs. The absolute rate is not a prediction."
 
 
+def split_dir_arms(item):
+    """'DIR' or 'DIR:AB' -> (dir, set of arm letters or None for all). A Windows drive letter before the colon is not an arm list."""
+    m = re.fullmatch(r"(.+):([A-H]+)", item)
+    return (m.group(1), set(m.group(2))) if m else (item, None)
+
+
+def fit_load(alone, loaded, cores=28.0, slots=2, device_gb=93.6, exclude=()):
+    """Fit the two load factors and the efficiency ratio on legs of the same binary.
+    alone:  tier 1 out directories (single run demand). loaded: tier 2 out directories (k=8 load). Each item is DIR or DIR:ARMS.
+    load_core = mean core-s/M loaded over alone. load_hold = mean lock held loaded over alone.
+    efficiency = measured progress rate over the binding limit of the alone demand with the load factors. Legs with a fallback or a failed run are left out.
+    exclude: 'DIR:LEGDIR' strings of legs to leave out, for example legs that shared the node with another job."""
+    import demand
+    bad = set(exclude)
+
+    def legs_of(items):
+        out = []
+        for it in items:
+            d, arms = split_dir_arms(it)
+            res = demand.load_result(d)
+            for l in res.get("legs", []):
+                if arms is not None and l["arm"] not in arms:
+                    continue
+                if f"{os.path.basename(d.rstrip('/'))}:{l.get('dir')}" in bad or f"{d}:{l.get('dir')}" in bad:
+                    continue
+                if (l.get("fallback") or {}).get("runs") or (l.get("metrics") or {}).get("failed_runs"):
+                    continue
+                out.append((d, l))
+        return out
+
+    A, L = legs_of(alone), legs_of(loaded)
+    mean = lambda xs: sum(xs) / len(xs) if xs else None  # noqa: E731
+    a_core = mean([l["demand"]["core_s_per_M"] for _, l in A if (l.get("demand") or {}).get("core_s_per_M")])
+    a_hold = mean([l["demand"]["hold_s"] for _, l in A if (l.get("demand") or {}).get("hold_s")])
+    l_core = mean([l["metrics"]["core_s_per_M"] for _, l in L if l["metrics"].get("core_s_per_M")])
+    l_hold = mean([l["metrics"]["lock_held_s"] for _, l in L if l["metrics"].get("lock_held_s")])
+    if not (a_core and a_hold and l_core and l_hold):
+        raise SystemExit("not enough legs with core-s/M and lock held in both sets")
+    lc, lh = l_core / a_core, l_hold / a_hold
+    base = {"pairs_M": mean([l["demand"]["pairs_M"] for _, l in A]), "hold_s": a_hold, "core_s_per_M": a_core, "dev_peak_gb": max(l["demand"]["dev_peak_gb"] for _, l in A)}
+    lim = demand.limits(base, cores, slots, device_gb, lc, lh)
+    effs = [l["metrics"]["progress_rate"] / lim["node"] for _, l in L if l["metrics"].get("progress_rate")]
+    eff = mean(effs)
+    sd = (sum((x - eff) ** 2 for x in effs) / (len(effs) - 1)) ** 0.5 if len(effs) > 1 else None
+    return {"load_core": lc, "load_hold": lh, "efficiency": eff, "efficiency_cv": (sd / eff) if sd else None, "binding": lim["binding"], "binding_limit": lim["node"],
+            "alone": {"core_s_per_M": a_core, "hold_s": a_hold, "legs": len(A)}, "loaded": {"core_s_per_M": l_core, "lock_held_s": l_hold, "legs": len(L)},
+            "efficiency_per_leg": effs, "cores": cores, "slots": slots, "device_gb": device_gb,
+            "source": {"alone": [os.path.basename(x.rstrip("/")) for x in alone], "loaded": [os.path.basename(x.rstrip("/")) for x in loaded], "excluded": sorted(bad)}}
+
+
+def run_loadfit(a):
+    f = fit_load(a.alone, a.loaded, a.cores, a.slots, a.device_gb, a.exclude_leg)
+    print(RANKING_ONLY)
+    print(f"alone  : {f['alone']['legs']} legs, core-s/M {f['alone']['core_s_per_M']:.3f}, hold {f['alone']['hold_s']:.2f} s")
+    print(f"loaded : {f['loaded']['legs']} legs, core-s/M {f['loaded']['core_s_per_M']:.3f}, hold {f['loaded']['lock_held_s']:.2f} s")
+    print(f"load factor core {f['load_core']:.3f}, hold {f['load_hold']:.3f}")
+    cv = f["efficiency_cv"]
+    print(f"binding limit with load factors: {f['binding_limit']:.3f} ({f['binding']}). Efficiency {f['efficiency']:.3f}" + (f", leg to leg CV {100 * cv:.1f}%" if cv else ""))
+    print("efficiency per loaded leg: " + " ".join(f"{x:.3f}" for x in f["efficiency_per_leg"]))
+    if a.write:
+        import demand
+        json.dump(f, open(demand.LOAD_FIT_FILE, "w"), indent=1)
+        print(f"wrote {demand.LOAD_FIT_FILE}")
+    return 0
+
+
 def run_limits(a):
     """Demand vector and node rate limits of fast lane out directories. A ranking screen, never an absolute prediction."""
     import demand
@@ -434,6 +500,14 @@ def main(argv=None):
     p.add_argument("--scale", action="append", default=[])
     p.add_argument("--order", choices=("fifo", "random"), default="fifo")
     p.add_argument("--seeds", type=int, default=1)
+    lf = sub.add_parser("loadfit", help="fit the load factors and the efficiency ratio on legs of the same binary")
+    lf.add_argument("--alone", nargs="+", required=True, help="tier 1 out directories, DIR or DIR:ARMS")
+    lf.add_argument("--loaded", nargs="+", required=True, help="tier 2 out directories, DIR or DIR:ARMS")
+    lf.add_argument("--exclude-leg", action="append", default=[], help="DIRNAME:LEGDIR of a leg to leave out, for example one that shared the node")
+    lf.add_argument("--cores", type=float, default=28.0)
+    lf.add_argument("--slots", type=int, default=2)
+    lf.add_argument("--device-gb", type=float, default=93.6)
+    lf.add_argument("--write", action="store_true", help="write model_data/load_fit.json, which demand.py reads")
     lm = sub.add_parser("limits", help="demand vector and node rate limits of a fast lane out directory, for both arms")
     lm.add_argument("out_dirs", nargs="+")
     lm.add_argument("--cores", type=float, default=28.0)
@@ -449,6 +523,8 @@ def main(argv=None):
         json.dump(extract(a.point, a.samples, a.results_tsv), open(a.out, "w"), separators=(",", ":"))
         print(f"wrote {a.out}")
         return 0
+    if a.cmd == "loadfit":
+        return run_loadfit(a)
     if a.cmd == "limits":
         return run_limits(a)
     if a.cmd == "predict":

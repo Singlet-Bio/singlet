@@ -87,3 +87,30 @@ def test_validate_runs_on_the_kept_data():
     rows = model.validate(DATA)
     assert len(rows) == 10 and all("gamma 0" in r["variants"] for r in rows)
     assert "binds" in model.markdown(rows)
+
+
+def test_load_fit_on_synthetic_legs(tmp_path):
+    import json as _j
+    from helpers import leg, result
+
+    def mk(name, legs, tier):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "result.json").write_text(_j.dumps(result(legs, tier)))
+        return str(d)
+
+    def alone_leg(i, arm, core, hold):
+        l = leg(i, arm, core=core, held=hold)
+        l["demand"] = {"core_s_per_M": core, "hold_s": hold, "pairs_M": 66.6, "dev_peak_gb": 44.0}
+        return l
+
+    def loaded_leg(i, arm, core, hold, prog, fb=0):
+        l = leg(i, arm, core=core, held=hold, fb=fb)
+        l["metrics"]["progress_rate"] = prog
+        return l
+    a = mk("a", [alone_leg(1, "A", 9.0, 40.0), alone_leg(2, "B", 9.0, 40.0)], 1)
+    b = mk("b", [loaded_leg(1, "A", 9.9, 43.2, 1.9), loaded_leg(2, "B", 9.9, 43.2, 2.0), loaded_leg(3, "B", 20.0, 90.0, 1.0, fb=1)], 2)
+    f = model.fit_load([a], [b], 28.0, 2, 93.6)
+    assert f["load_core"] == pytest.approx(1.1) and f["load_hold"] == pytest.approx(1.08) and f["loaded"]["legs"] == 2   # the fallback leg is left out
+    assert f["binding"] == "cores" and f["efficiency"] == pytest.approx(1.95 / (28 / 9.9))
+    assert model.fit_load([a], [b + ":A"], 28.0, 2, 93.6)["loaded"]["legs"] == 1

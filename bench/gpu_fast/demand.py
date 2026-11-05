@@ -19,7 +19,9 @@ The predicted node rate is the smallest of the three. The binding limit is the o
 Provisional rule (demand rule, tier 1): PROMOTE when the predicted node rate rises by RULE["node_gain"] or more,
 identity kept and no fallback. Validity rules V1 to V6 of abcore come first.
 """
+import json
 import math
+import os
 import sys
 
 import abcore
@@ -28,7 +30,13 @@ PHASES = ("prefill", "handoff", "solo", "pileup", "nonhost")
 FIELDS = ("hold_prefill", "hold_handoff", "hold_solo", "hold_pileup", "hold_nonhost", "hold_s", "core_s_run", "core_s_per_M", "pairs_M", "dev_peak_gb",
           "host_peak_gb", "wall_s")
 # The provisional demand rule. One place. ab.py can override each value.
-RULE = {"node_gain": 0.05, "respect_spread": True, "cores": 28.0, "device_gb": 93.6}
+RULE = {"node_gain": 0.05, "stack_gain": 0.10, "respect_spread": True, "cores": 28.0, "device_gb": 93.6, "load_core": 1.0, "load_hold": 1.0, "efficiency": None}
+LOAD_FIT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model_data", "load_fit.json")
+try:   # fitted by `model.py loadfit --write`. Load factors scale the single-run demands to what k=8 load costs. Efficiency is measured rate over binding limit.
+    _fit = json.load(open(LOAD_FIT_FILE))
+    RULE.update({k: _fit[k] for k in ("load_core", "load_hold", "efficiency") if _fit.get(k)})
+except (OSError, ValueError):
+    _fit = {}
 DEFAULT_PAIRS_M = 66.6
 
 
@@ -75,9 +83,11 @@ def arm_demand(res, arm):
     return out
 
 
-def limits(d, cores, slots, device_gb):
+def limits(d, cores, slots, device_gb, load_core=1.0, load_hold=1.0):
     """Limits on the node rate for one demand vector. Returns core, lock, memory limits, runs that fit, node rate and the binding limit."""
     pairs, hold, cs = d.get("pairs_M") or DEFAULT_PAIRS_M, d.get("hold_s"), d.get("core_s_per_M")
+    hold = hold * load_hold if hold else hold   # load factors: what k=8 load costs on top of the single-run demand
+    cs = cs * load_core if cs else cs
     core = cores / cs if cs else None
     lock = slots * pairs / hold if hold else None
     peak = d.get("dev_peak_gb")
@@ -94,10 +104,12 @@ def predicted_change(res, rule=None, slots=None):
     rule = dict(RULE, **(rule or {}))
     slots = slots or int(res.get("params", {}).get("slots") or 2)
     dA, dB = arm_demand(res, "A"), arm_demand(res, "B")
-    lA, lB = limits(dA, rule["cores"], slots, rule["device_gb"]), limits(dB, rule["cores"], slots, rule["device_gb"])
+    lk = (rule["load_core"], rule["load_hold"])
+    lA, lB = limits(dA, rule["cores"], slots, rule["device_gb"], *lk), limits(dB, rule["cores"], slots, rule["device_gb"], *lk)
     ch = (lB["node"] / lA["node"] - 1.0) if lA["node"] and lB["node"] else None
     per = {k: ((lB[k] / lA[k] - 1.0) if lA[k] and lB[k] else None) for k in ("core", "lock", "memory")}
-    return {"A": dA, "B": dB, "limits_A": lA, "limits_B": lB, "change": ch, "change_by_limit": per, "slots": slots, "cores": rule["cores"], "device_gb": rule["device_gb"]}
+    return {"A": dA, "B": dB, "limits_A": lA, "limits_B": lB, "change": ch, "change_by_limit": per, "slots": slots, "cores": rule["cores"], "device_gb": rule["device_gb"],
+            "load_core": rule["load_core"], "load_hold": rule["load_hold"], "efficiency": rule["efficiency"]}
 
 
 def stacked_change(results, rule=None):
@@ -112,7 +124,8 @@ def stacked_change(results, rule=None):
         for k in ("core_s_per_M", "hold_s", "dev_peak_gb"):
             if a.get(k) and b.get(k) and d.get(k):
                 d[k] = d[k] * b[k] / a[k]
-    l0, l1 = limits(base, rule["cores"], slots, rule["device_gb"]), limits(d, rule["cores"], slots, rule["device_gb"])
+    lk = (rule["load_core"], rule["load_hold"])
+    l0, l1 = limits(base, rule["cores"], slots, rule["device_gb"], *lk), limits(d, rule["cores"], slots, rule["device_gb"], *lk)
     return (l1["node"] / l0["node"] - 1.0) if l0["node"] and l1["node"] else None
 
 
@@ -121,7 +134,9 @@ def tier1_demand_verdict(res, p=None, intended_change=False):
       T1D-1 the predicted node rate could not be formed                      -> INCONCLUSIVE
       T1D-2 the predicted rise is at or below the run-to-run spread of the binding input -> INCONCLUSIVE
       T1D-3 the predicted node rate rises by node_gain or more                -> PROMOTE
-      T1D-4 anything else                                                     -> INCONCLUSIVE"""
+      T1D-4 anything else                                                     -> INCONCLUSIVE
+    STACK (T1D-5) replaces T1D-2 and T1D-4 when the binding limit does not fall and a limit that does not bind rises by stack_gain or more.
+    It is not promoted alone. It is listed for the batch check together with the changes that lift the binding limit."""
     rule = dict(RULE, **(p or {}))
     A, B = abcore.arm_summary(res, "A"), abcore.arm_summary(res, "B")
     out = {"tier": 1, "rule_kind": "demand", "params": {**rule, "intended_change": intended_change}, "A": A, "B": B}
@@ -147,6 +162,13 @@ def tier1_demand_verdict(res, p=None, intended_change=False):
         out.update(verdict="PROMOTE", rule="T1D-3", why=f"{desc}, at least {100 * rule['node_gain']:.0f}%. Identity kept, no fallback")
     else:
         out.update(verdict="INCONCLUSIVE", rule="T1D-4", why=f"{desc}, below {100 * rule['node_gain']:.0f}%")
+    if out["verdict"] == "INCONCLUSIVE" and ch is not None and ch >= -0.01:
+        bname = {"cores": "core", "lock": "lock", "memory": "memory"}.get(bind)
+        other = {k: c for k, c in pc["change_by_limit"].items() if k != bname and c is not None}
+        best = max(other, key=other.get) if other else None
+        if best and other[best] >= rule["stack_gain"]:
+            out.update(verdict="STACK", rule="T1D-5", why=f"{desc}. The {best} limit rises {abcore.pct(other[best])}, at least {100 * rule['stack_gain']:.0f}%, but it does not bind. "
+                                                        f"Not promoted alone. List it for the batch check with changes that lift the {bind} limit. Identity kept, no fallback")
     return out
 
 
@@ -181,6 +203,11 @@ def render_demand(res, verdict):
         L.append(f"| {lab} | {f(pc['limits_A'][k], 3)} | {f(pc['limits_B'][k], 3)} | {abcore.pct(pc['change_by_limit'][k])} |")
     L.append(f"| device headroom with all slots held, GB | {f(pc['limits_A']['headroom_gb'], 1)} | {f(pc['limits_B']['headroom_gb'], 1)} | |")
     L.append(f"| **node rate (smallest)** | {f(pc['limits_A']['node'], 3)} ({pc['limits_A']['binding']}) | {f(pc['limits_B']['node'], 3)} ({pc['limits_B']['binding']}) | **{abcore.pct(pc['change'])}** |")
+    eff = pc.get("efficiency")
+    lc, lh = pc.get("load_core", 1.0), pc.get("load_hold", 1.0)
+    L += ["", f"Load factor (fitted, the limits above include it): core-s x{lc:.3f}, hold x{lh:.3f}. Efficiency (measured progress rate over the binding limit): "
+              + ("not fitted." if not eff else f"{eff:.3f}. Sustained rate estimate at k=8: A {pc['limits_A']['node'] * eff:.2f}, B {pc['limits_B']['node'] * eff:.2f} M pairs/s. "
+                 "Read the ratio, not the level.")]
     return "\n".join(L)
 
 
