@@ -56,6 +56,8 @@ set -uo pipefail
 export PATH=$ENV/bin:/usr/local/cuda/bin:\$PATH CONDA_PREFIX=$ENV CMAKE_PREFIX_PATH=$ENV PKG_CONFIG_PATH=$ENV/lib/pkgconfig:$ENV/share/pkgconfig
 export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gnu-g++ LD_LIBRARY_PATH=$ENV/lib CMAKE_POLICY_VERSION_MINIMUM=3.5
 export LDFLAGS="-L$ENV/lib -Wl,-rpath,$ENV/lib"
+# the test targets need zstd.h from the env (build.sbatch's CPU test build of c92a494b failed on it: job 800221, 31 of 156 tests not built)
+export CPLUS_INCLUDE_PATH=$ENV/include C_INCLUDE_PATH=$ENV/include LIBRARY_PATH=$ENV/lib
 \$CXX --version | head -1; nvcc --version | tail -1; nvidia-smi -L
 cmake -S $S -B $SCR/b -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_BUILD_TESTS=ON -DSINGLET_GIT_COMMIT=$COMMIT -DSINGLET_ENGINE_GPU=ON \
   -DCMAKE_CXX_FLAGS="${EXTRA_CXX:-}" -DCMAKE_CUDA_HOST_COMPILER=\$CXX -DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler -DCMAKE_CUDA_ARCHITECTURES="90" > $SCR/c.log 2>&1 || { tail -40 $SCR/c.log; echo "CONFIGURE FAILED"; exit 1; }
