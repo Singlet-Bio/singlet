@@ -60,9 +60,15 @@ URL="$(git -C $BARE config remote.origin.url)"
 WANT=$(git ls-remote "$URL" refs/heads/$SBR | cut -f1); [ -n "$WANT" ] || refuse "no scripts branch $SBR"
 ( flock 9; git -C $BARE fetch -q "$URL" +refs/heads/$SBR:$SREF ) 9>$BARE/.gn-fetch.lock
 SFULL=$(git -C $BARE rev-parse $SREF); [ "$SFULL" = "$WANT" ] || refuse "fetched $SFULL, branch tip is $WANT"
+# PIN_SCRIPTS (a full commit on the branch) makes a queued job use the scripts it was submitted with even when the branch has moved on since
+if [ -n "${PIN_SCRIPTS:-}" ]; then
+  git -C $BARE cat-file -e "$PIN_SCRIPTS^{commit}" 2>/dev/null || refuse "pinned scripts commit $PIN_SCRIPTS is not on $SBR"
+  git -C $BARE merge-base --is-ancestor "$PIN_SCRIPTS" $SREF || refuse "pinned scripts commit $PIN_SCRIPTS is not in the history of $SBR"
+  SFULL=$PIN_SCRIPTS
+fi
 [ -z "${EXPECT_SCRIPTS:-}" ] || [[ $SFULL == $EXPECT_SCRIPTS* ]] || refuse "scripts commit $SFULL, EXPECT_SCRIPTS is $EXPECT_SCRIPTS"
 SCRIPTS=${SFULL:0:8}
-git -C $BARE archive $SREF bench/star_accel/out_equiv.py bench/fable/throughput bench/gpu_batch1 bench/gpu_fast | tar -x -C $SCR/repo
+git -C $BARE archive $SFULL bench/star_accel/out_equiv.py bench/fable/throughput bench/gpu_batch1 bench/gpu_fast | tar -x -C $SCR/repo
 GB=$SCR/repo/bench/gpu_batch1; TPD=$SCR/repo/bench/fable/throughput; GF=$SCR/repo/bench/gpu_fast
 if [ -n "${SBATCH_SHA:-}" ]; then
   have=$(sha256sum $GF/jobs/t1.sbatch | cut -d' ' -f1)

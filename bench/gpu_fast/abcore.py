@@ -272,6 +272,8 @@ def separation(res, rule=None):
     """Is B clearly better or clearly worse than A on the progress rate, by the rule's threshold, with the legs present so far?
     Better: the lowest B leg beats the highest A leg by more than rate_gain. Worse is the mirror. Needs three legs, so one arm has been seen twice."""
     rule = rule or TIER2_RULE
+    if len(arms_of(res)) > 2:
+        return None   # a batch check never stops early on the separation of two arms
     if len([l for l in res.get("legs", []) if l.get("completed", True)]) < 3:
         return None
     ra = [x for x in (num(l.get("metrics", {}).get("progress_rate")) for l in arm_legs(res, "A")) if x is not None]
@@ -396,6 +398,63 @@ def render(res, verdict, warnings=()):
     L.append(f"**VERDICT: {verdict['verdict']}** (rule {verdict['rule']}) {verdict['why']}")
     pr = verdict["params"]
     L.append("Parameters: " + ", ".join(f"{k}={'unset' if v is None else v}" for k, v in pr.items()))
+    return "\n".join(L)
+
+
+def arms_of(res):
+    return sorted({l.get("arm") for l in res.get("legs", [])})
+
+
+def pair_result(res, arm):
+    """A result that holds only the legs of arm A and the given arm, the latter relabelled B. The two arm rules then apply to a batch check."""
+    legs = []
+    for l in res.get("legs", []):
+        if l.get("arm") == "A":
+            legs.append(l)
+        elif l.get("arm") == arm:
+            legs.append(dict(l, arm="B"))
+    return dict(res, legs=legs)
+
+
+def batch_verdicts(res, rule=None, intended_change=False, predicted=None):
+    """Tier 2 as a batch check: every arm other than A against A, with the tier 2 rule. predicted: arm -> predicted node rate change (or None)."""
+    out = {}
+    for x in [a for a in arms_of(res) if a != "A"]:
+        v = tier2_verdict(pair_result(res, x), rule, intended_change)
+        v["predicted_change"] = (predicted or {}).get(x)
+        out[x] = v
+    return out
+
+
+def render_batch(res, verdicts, warnings=()):
+    """Markdown for a batch check: provenance of every arm, then measured against predicted per arm."""
+    L = []
+    for arm in arms_of(res):
+        legs = arm_legs(res, arm)
+        pv = legs[0].get("prov", {})
+        L.append(f"**{arm}** bin `{pv.get('bin', '?')}` commit `{pv.get('commit', '?')}` sha256 `{(pv.get('sha256') or '?')[:16]}` embedded {pv.get('embedded', '?')} "
+                 f"env `{pv.get('env') or '-'}` args `{pv.get('args') or '-'}`")
+    P = res.get("params", {})
+    L.append(f"tier 2 batch check job {res.get('job', '?')} node {res.get('node', '?')} scripts `{res.get('scripts', '?')}` ref `{res.get('ref', '?')}` "
+             f"sample {P.get('sample', '?')} T={P.get('T', '?')} slots={P.get('slots', '?')} k={P.get('k', '?')} runs per leg={P.get('runs', '?')}")
+    L.append(f"order {' '.join(l['arm'] for l in res.get('legs', []))}")
+    for n in list(res.get("notes", [])) + list(warnings):
+        L.append(f"note: {n}")
+    L += ["", "Measured against predicted. Predicted is the node rate change from tier 1 demand vectors. Measured is the change of the progress rate against arm A.", "",
+          "| arm | predicted node rate | measured progress rate | measured core-s/M | measured lock held | measured span rate | fallback runs | identity | verdict |",
+          "|---|---|---|---|---|---|---|---|---|"]
+    A = arm_summary(res, "A")
+    for x, v in verdicts.items():
+        B = v["B"]
+        sg = gain_higher_better(A["span_rate"], B["span_rate"])
+        L.append(f"| {x} | {pct(v.get('predicted_change'))} | {pct(v['gain']['progress_rate'])} | {pct(v['gain']['core_s_per_M'])} | {pct(v['gain']['lock_held_s'])} | "
+                 f"{pct(sg)} | {B['fallback_runs']} | {B['ident_identical']}/{B['ident_checked']} | {v['verdict']} ({v['rule']}) |")
+    L += ["", "Per leg, progress rate and span rate (M pairs/s), core-s/M, lock held s", "", "| leg | arm | progress | span | core-s/M | lock held | lock wait |", "|---|---|---|---|---|---|---|"]
+    for l in res.get("legs", []):
+        m = l.get("metrics", {})
+        L.append(f"| {l['leg']} | {l['arm']} | {f(num(m.get('progress_rate')), 3)} | {f(num(m.get('span_rate')), 3)} | {f(num(m.get('core_s_per_M')))} | "
+                 f"{f(num(m.get('lock_held_s')), 1)} | {f(num(m.get('lock_wait_s')), 1)} |")
+    L += ["", "Tier 2 rule values: " + json.dumps({k: v for k, v in next(iter(verdicts.values()))["params"].items()}) if verdicts else ""]
     return "\n".join(L)
 
 

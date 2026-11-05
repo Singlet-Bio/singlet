@@ -67,6 +67,9 @@ def arm_demand(res, arm):
         v = [abcore.num(r.get(f)) for r in rows if abcore.num(r.get(f)) is not None]
         out[f] = (max(v) if f.endswith("peak_gb") else sum(v) / len(v)) if v else None
     out["pairs_M"] = out["pairs_M"] or DEFAULT_PAIRS_M
+    slots = int(res.get("params", {}).get("slots") or 1)
+    if res.get("tier") == 2 and out["dev_peak_gb"] and slots > 1:
+        out["dev_peak_gb"] /= slots   # in a loaded leg the device peak is the sum over the holders. Per run it is about the peak over the slots
     out["spread"] = {"core_s_per_M": abcore.spread([abcore.num(r.get("core_s_per_M")) for r in rows]),
                      "hold_s": abcore.spread([abcore.num(r.get("hold_s")) for r in rows])}
     return out
@@ -95,6 +98,22 @@ def predicted_change(res, rule=None, slots=None):
     ch = (lB["node"] / lA["node"] - 1.0) if lA["node"] and lB["node"] else None
     per = {k: ((lB[k] / lA[k] - 1.0) if lA[k] and lB[k] else None) for k in ("core", "lock", "memory")}
     return {"A": dA, "B": dB, "limits_A": lA, "limits_B": lB, "change": ch, "change_by_limit": per, "slots": slots, "cores": rule["cores"], "device_gb": rule["device_gb"]}
+
+
+def stacked_change(results, rule=None):
+    """Predicted node rate change of an arm that stacks several tier 1 changes. results: tier 1 results, each with arm A (baseline) and B (one change).
+    The demand ratios B over A multiply on the demand of the first baseline. A single result gives its own predicted change."""
+    rule = dict(RULE, **(rule or {}))
+    slots = int(results[0].get("params", {}).get("slots") or 2)
+    base = arm_demand(results[0], "A")
+    d = dict(base)
+    for res in results:
+        a, b = arm_demand(res, "A"), arm_demand(res, "B")
+        for k in ("core_s_per_M", "hold_s", "dev_peak_gb"):
+            if a.get(k) and b.get(k) and d.get(k):
+                d[k] = d[k] * b[k] / a[k]
+    l0, l1 = limits(base, rule["cores"], slots, rule["device_gb"]), limits(d, rule["cores"], slots, rule["device_gb"])
+    return (l1["node"] / l0["node"] - 1.0) if l0["node"] and l1["node"] else None
 
 
 def tier1_demand_verdict(res, p=None, intended_change=False):

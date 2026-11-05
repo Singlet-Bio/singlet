@@ -35,17 +35,19 @@ RES0=$RUN/res; mkdir -p $RES0; S=$RES0/summary.txt; : > $S
 BARE=$W/repos/singlet-py.git; SBR=${SCRIPTS_BRANCH:-bench/gpu-fast}
 echo "tier 2 rule values come from abcore.TIER2_RULE on the scripts branch. Early stop uses SEP_RATE=${SEP_RATE:-default}." | tee -a $S
 
-arm_load() {   # A or B -> BIN BINDIR COMMIT_WANT ARM_ENV ARM_ARGS
-  case $1 in
-    A) BIN=$BIN_A/singlet-gpu; BINDIR=$BIN_A; COMMIT_WANT=$COMMIT_A; ARM_ENV=(${ENV_A[@]+"${ENV_A[@]}"}); ARM_ARGS=(${ARGS_A[@]+"${ARGS_A[@]}"}) ;;
-    B) BIN=$BIN_B/singlet-gpu; BINDIR=$BIN_B; COMMIT_WANT=$COMMIT_B; ARM_ENV=(${ENV_B[@]+"${ENV_B[@]}"}); ARM_ARGS=(${ARGS_B[@]+"${ARGS_B[@]}"}) ;;
-  esac
+arm_load() {   # arm letter -> BIN BINDIR COMMIT_WANT ARM_ENV ARM_ARGS, from the variables BIN_<letter> COMMIT_<letter> ENV_<letter> ARGS_<letter> of the spec
+  local v
+  v=BIN_$1; BINDIR=${!v}; BIN=$BINDIR/singlet-gpu
+  v=COMMIT_$1; COMMIT_WANT=${!v}
+  eval "ARM_ENV=(\${ENV_$1[@]+\"\${ENV_$1[@]}\"})"
+  eval "ARM_ARGS=(\${ARGS_$1[@]+\"\${ARGS_$1[@]}\"})"
 }
 refuse() { echo "REFUSED: $*" | tee -a $S; echo "$*" > $RES0/REFUSED; exit 2; }
 
 # --- provenance of both binaries, before anything runs ----------------------------------------------------------------------------------
 : > $RES0/arms.tsv; printf "arm\tbin\tsha256\tcommit\tembedded\tenv\targs\n" >> $RES0/arms.tsv
-for arm in A B; do
+ARMS=${ARMS:-AB}
+for arm in $(echo $ARMS | fold -w1); do
   arm_load $arm
   [ -f $BIN ] || refuse "no binary $BIN"
   COMMIT=$(cat $BINDIR/commit-gpu 2>/dev/null || true)
@@ -67,9 +69,15 @@ URL="$(git -C $BARE config remote.origin.url)"
 WANT=$(git ls-remote "$URL" refs/heads/$SBR | cut -f1); [ -n "$WANT" ] || refuse "no scripts branch $SBR"
 ( flock 9; git -C $BARE fetch -q "$URL" +refs/heads/$SBR:$SREF ) 9>$BARE/.gn-fetch.lock
 SFULL=$(git -C $BARE rev-parse $SREF); [ "$SFULL" = "$WANT" ] || refuse "fetched $SFULL, branch tip is $WANT"
+# PIN_SCRIPTS (a full commit on the branch) makes a queued job use the scripts it was submitted with even when the branch has moved on since
+if [ -n "${PIN_SCRIPTS:-}" ]; then
+  git -C $BARE cat-file -e "$PIN_SCRIPTS^{commit}" 2>/dev/null || refuse "pinned scripts commit $PIN_SCRIPTS is not on $SBR"
+  git -C $BARE merge-base --is-ancestor "$PIN_SCRIPTS" $SREF || refuse "pinned scripts commit $PIN_SCRIPTS is not in the history of $SBR"
+  SFULL=$PIN_SCRIPTS
+fi
 [ -z "${EXPECT_SCRIPTS:-}" ] || [[ $SFULL == $EXPECT_SCRIPTS* ]] || refuse "scripts commit $SFULL, EXPECT_SCRIPTS is $EXPECT_SCRIPTS"
 SCRIPTS=${SFULL:0:8}
-git -C $BARE archive $SREF bench/star_accel/out_equiv.py bench/fable/throughput bench/gpu_batch1 bench/gpu_fast | tar -x -C $SCR/repo
+git -C $BARE archive $SFULL bench/star_accel/out_equiv.py bench/fable/throughput bench/gpu_batch1 bench/gpu_fast | tar -x -C $SCR/repo
 GB=$SCR/repo/bench/gpu_batch1; TPD=$SCR/repo/bench/fable/throughput; GF=$SCR/repo/bench/gpu_fast
 if [ -n "${SBATCH_SHA:-}" ]; then
   have=$(sha256sum $GF/jobs/t2.sbatch | cut -d' ' -f1)

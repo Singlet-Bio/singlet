@@ -88,21 +88,25 @@ def arr(items):
     return "(" + " ".join(q(i) for i in items) + ")"
 
 
-def build_spec(a, armA, armB, run, scripts, sbatch_sha):
+def build_spec(a, arms, run, scripts, sbatch_sha):
+    """arms: letter -> parsed arm. The spec is a shell file the job sources."""
     L = ["# written by ab.py. Do not edit.",
-         f"NAME={q(a.name)}", f"RUN={q(run)}", f"SAMPLE={q(a.sample)}", f"T={a.T}", f"SLOTS={a.slots}", f"ORDER={q(a.order)}",
+         f"NAME={q(a.name)}", f"RUN={q(run)}", f"SAMPLE={q(a.sample)}", f"T={a.T}", f"SLOTS={a.slots}", f"ORDER={q(a.order)}", f"ARMS={q(''.join(sorted(arms)))}",
          f"REFDIR={q(a.ref)}", f"INTENDED={1 if a.intended_output_change else 0}", f"SBATCH_SHA={q(sbatch_sha)}",
-         f"SCRIPTS_BRANCH={q(BRANCH)}", f"EXPECT_SCRIPTS={q(scripts[:12])}"]
+         f"SCRIPTS_BRANCH={q(BRANCH)}", f"EXPECT_SCRIPTS={q(scripts[:12])}", f"PIN_SCRIPTS={q(scripts)}"]
     if a.tier == 2:
         L += [f"K={a.k}", f"NRUNS={a.runs}", f"IDENT_N={a.ident_n}", f"STOP_ON_FALLBACK={0 if a.no_stop_on_fallback else 1}",
               f"SEP_RATE={rule_params(a)['rate_gain']}"]
-    for nm, arm in (("A", armA), ("B", armB)):
+    for nm in sorted(arms):
+        arm = arms[nm]
         L += [f"BIN_{nm}={q(arm['bin'])}", f"COMMIT_{nm}={q(arm['commit'])}", f"ENV_{nm}={arr([f'{k}={v}' for k, v in arm['env']])}", f"ARGS_{nm}={arr(arm['args'])}"]
     return "\n".join(L) + "\n"
 
 
-def sbatch_command(a, run, jobname):
+def sbatch_command(a, run, jobname, dependency=None):
     parts = ["sbatch", "--parsable", f"--job-name={jobname}", f"--export=ALL,SPEC={run}/spec.sh"]
+    if dependency:
+        parts.append(f"--dependency=afterany:{':'.join(dependency)}")
     if a.node:
         parts.append(f"-w {a.node}")
     if a.exclude:
@@ -179,6 +183,10 @@ def parser():
     p.add_argument("--order", default="ABBA", help="arm order of the legs")
     p.add_argument("--ref", help=f"reference sample directory with out/, CellReads.stats, readhash.txt. Default {DEFAULT_REF} (only for pbmc1k_v3 at T=7)")
     p.add_argument("--intended-output-change", action="store_true", help="the idea changes output on purpose. Identity loss is reported and does not reject")
+    p.add_argument("--arm", action="append", default=[], help="a further arm of a tier 2 batch check, LETTER=SPEC with LETTER from C to H. Arm A is the baseline")
+    p.add_argument("--predict", action="append", default=[], help="batch check: LETTER=OUTDIR[,OUTDIR...] tier 1 out directories whose demand ratios give the predicted node rate change of that arm")
+    p.add_argument("--campaign", help="JSON file with a list of A/B steps. Submits one Slurm chain with dependencies. Nothing waits on the laptop")
+    p.add_argument("--collect", help="campaign directory (or its campaign.json). Reads the results of its steps and prints verdicts")
     p.add_argument("--node", help="sbatch -w")
     p.add_argument("--exclude", help="sbatch --exclude. No default. Use --node to pick a node")
     g = p.add_argument_group("tier 1 rule")
@@ -212,8 +220,19 @@ def validate(a):
         raise Fatal("--tier, --a, --b and --name are required")
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,40}", a.name):
         raise Fatal("--name: letters, digits, . _ - and at most 40 characters")
-    if not re.fullmatch(r"[AB]+", a.order) or set(a.order) != {"A", "B"}:
-        raise Fatal("--order: letters A and B, both present, for example ABBA")
+    a.extra_arms = {}
+    for it in a.arm:
+        m = re.fullmatch(r"([C-H])=(.+)", it, re.S)
+        if not m or m.group(1) in a.extra_arms:
+            raise Fatal(f"--arm '{it}': use LETTER=SPEC with LETTER from C to H, each once")
+        a.extra_arms[m.group(1)] = m.group(2)
+    if a.extra_arms and a.tier != 2:
+        raise Fatal("--arm is for tier 2 batch checks")
+    letters = {"A", "B"} | set(a.extra_arms)
+    if a.order == "ABBA" and a.extra_arms:   # the default order grows into a palindrome over all arms: A B C ... C B A
+        a.order = "".join(sorted(letters)) + "".join(sorted(letters, reverse=True))
+    if not re.fullmatch(r"[A-H]+", a.order) or set(a.order) != letters:
+        raise Fatal("--order: the letters of the arms, all present, for example ABBA or ABCCBA")
     if not re.fullmatch(r"[A-Za-z0-9_]+", a.sample):
         raise Fatal("--sample: plain name")
     if a.ref is not None:
@@ -230,30 +249,28 @@ def validate(a):
         print(f"note: runs per leg ({a.runs}) is not above 2k ({2 * a.k}). The windowed rate will be NA.", file=sys.stderr)
 
 
-def main(argv=None, remote=None, out_fn=print):
-    a = parser().parse_args(argv)
-    if a.resume:
-        return resume(a, remote or Remote(), out_fn)
-    try:
-        validate(a)
-        armA, armB = abcore.parse_arm(a.a), abcore.parse_arm(a.b)
-    except (Fatal, abcore.SpecError) as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
-    notes = abcore.arm_notes(armA, "A") + abcore.arm_notes(armB, "B")
+def make_plan(a, head, stamp):
+    """Everything a step needs before anything is sent: validated arms, notes, remote run directory, spec text and the sbatch command."""
+    validate(a)
+    arms = {"A": abcore.parse_arm(a.a), "B": abcore.parse_arm(a.b)}
+    for x, t in a.extra_arms.items():
+        arms[x] = abcore.parse_arm(t)
+    notes = [n for x in sorted(arms) for n in abcore.arm_notes(arms[x], x)]
     if a.intended_output_change:
         notes.append("an output change was declared. Identity loss is shown and does not reject.")
     if a.tier == 2:
         notes.append("tier 2 uses the provisional rule " + json.dumps(rule_params(a)) + ". Span rate is shown but never decides.")
-    for n in notes:
-        print(n, file=sys.stderr)
-    head, dirty, rem = local_state()
-    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run = f"{W}/jobs/gpu-fast/runs/{a.name}-t{a.tier}-{stamp}"
     jobname = f"gf{a.tier}-{a.name}"[:40]
     sbatch_local = os.path.join(HERE, "jobs", f"t{a.tier}.sbatch")
-    spec = build_spec(a, armA, armB, run, head, sha256_file(sbatch_local))
-    cmd = sbatch_command(a, run, jobname)
+    spec = build_spec(a, arms, run, head, sha256_file(sbatch_local))
+    state = {"name": a.name, "tier": a.tier, "run": run, "jobname": jobname, "job": None, "scripts": head, "notes": notes, "submitted": None, "ref": a.ref,
+             "intended": a.intended_output_change, "rule_params": rule_params(a), "rule_kind": getattr(a, "rule", "gain") if a.tier == 1 else "tier2",
+             "arms": sorted(arms), "predict": predict_map(a)}
+    return {"a": a, "arms": arms, "notes": notes, "run": run, "jobname": jobname, "sbatch_local": sbatch_local, "spec": spec, "state": state}
+
+
+def head_problems(head, dirty, rem):
     problems = []
     if not head or len(head) != 40:
         problems.append("no git head")
@@ -261,17 +278,61 @@ def main(argv=None, remote=None, out_fn=print):
         problems.append("uncommitted changes under bench/gpu_fast")
     if rem != head:
         problems.append(f"HEAD {head[:8]} is not the tip of origin/{BRANCH} ({rem[:8] or 'missing'}). Push it first")
+    return problems
+
+
+def print_plan(plan, head, problems, dependency=None):
+    a = plan["a"]
+    print(f"# dry run. tier {a.tier}. Nothing is sent.")
+    print(f"# scripts commit {head[:12]}" + ("" if not problems else f". A real run would refuse: {'; '.join(problems)}"))
+    print(f"# remote run directory {plan['run']}")
+    print("# --- spec.sh ---")
+    print(plan["spec"], end="")
+    print("# --- commands ---")
+    print(f"clipper put {plan['sbatch_local']} {plan['run']}/t{a.tier}.sbatch")
+    print(f"clipper put <spec.sh> {plan['run']}/spec.sh")
+    print(f"clipper run {shlex.quote(sbatch_command(a, plan['run'], plan['jobname'], dependency))}")
+    print(f"# log {W}/logs/{plan['jobname']}-<jobid>.out   result {plan['run']}/res/result.json")
+
+
+def submit_plan(remote, plan, out, dependency=None):
+    """Put the job script and the spec on Clipper and submit. Returns the job id. Raises BridgeDown or Fatal."""
+    a, run = plan["a"], plan["run"]
+    os.makedirs(out, exist_ok=True)
+    spec_path = os.path.join(out, "spec.sh")
+    open(spec_path, "w", newline="\n").write(plan["spec"])
+    remote.run(f"mkdir -p {run}")
+    remote.put(plan["sbatch_local"], f"{run}/t{a.tier}.sbatch")
+    remote.put(spec_path, f"{run}/spec.sh")
+    rc, so, se = remote.run(sbatch_command(a, run, plan["jobname"], dependency))
+    m = re.search(r"^(\d+)", so.strip())
+    if not m:
+        raise Fatal(f"sbatch did not return a job id: {so.strip()[:300]} {se.strip()[:300]}")
+    return m.group(1)
+
+
+def main(argv=None, remote=None, out_fn=print):
+    a = parser().parse_args(argv)
+    if a.collect or a.campaign:
+        import campaign
+        mod = sys.modules[__name__]
+        if a.collect:
+            return campaign.collect(mod, a, remote or Remote(), out_fn)
+        return campaign.run(mod, a, remote, out_fn)
+    if a.resume:
+        return resume(a, remote or Remote(), out_fn)
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    head, dirty, rem = local_state()
+    try:
+        plan = make_plan(a, head, stamp)
+    except (Fatal, abcore.SpecError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    for n in plan["notes"]:
+        print(n, file=sys.stderr)
+    problems = head_problems(head, dirty, rem)
     if a.dry_run:
-        print(f"# dry run. tier {a.tier}. Nothing is sent.")
-        print(f"# scripts commit {head[:12]}" + ("" if not problems else f". A real run would refuse: {'; '.join(problems)}"))
-        print(f"# remote run directory {run}")
-        print("# --- spec.sh ---")
-        print(spec, end="")
-        print("# --- commands ---")
-        print(f"clipper put {sbatch_local} {run}/t{a.tier}.sbatch")
-        print(f"clipper put <spec.sh> {run}/spec.sh")
-        print(f"clipper run {shlex.quote(cmd)}")
-        print(f"# log {W}/logs/{jobname}-<jobid>.out   result {run}/res/result.json")
+        print_plan(plan, head, problems)
         return 0
     if problems:
         print("error: " + "; ".join(problems), file=sys.stderr)
@@ -282,27 +343,31 @@ def main(argv=None, remote=None, out_fn=print):
         return 2
     out = a.out or os.path.join(HERE, "out", f"{a.name}-t{a.tier}-{stamp}")
     os.makedirs(out, exist_ok=True)
-    state = {"name": a.name, "tier": a.tier, "run": run, "jobname": jobname, "job": None, "scripts": head, "args": argv if argv is not None else sys.argv[1:],
-             "notes": notes, "submitted": None, "ref": a.ref, "intended": a.intended_output_change,
-             "rule_params": rule_params(a), "rule_kind": getattr(a, "rule", "gain") if a.tier == 1 else "tier2"}
+    state = dict(plan["state"], args=argv if argv is not None else sys.argv[1:])
     save_state(out, state)
-    open(os.path.join(out, "spec.sh"), "w", newline="\n").write(spec)
     try:
-        remote.run(f"mkdir -p {run}")
-        remote.put(sbatch_local, f"{run}/t{a.tier}.sbatch")
-        remote.put(os.path.join(out, "spec.sh"), f"{run}/spec.sh")
-        rc, so, se = remote.run(cmd)
+        state["job"] = submit_plan(remote, plan, out)
     except BridgeDown as e:
         print(f"the bridge dropped during the submission ({e}). Job state unknown. Resume with: python {sys.argv[0]} --resume {out}", file=sys.stderr)
         return 3
-    m = re.search(r"^(\d+)", so.strip())
-    if not m:
-        print(f"error: sbatch did not return a job id: {so.strip()[:300]} {se.strip()[:300]}", file=sys.stderr)
+    except Fatal as e:
+        print(f"error: {e}", file=sys.stderr)
         return 2
-    state["job"], state["submitted"] = m.group(1), time.time()
+    state["submitted"] = time.time()
     save_state(out, state)
-    out_fn(f"submitted job {state['job']} ({jobname}). Run directory {run}")
+    out_fn(f"submitted job {state['job']} ({plan['jobname']}). Run directory {plan['run']}")
     return finish(out, state, a, remote, out_fn)
+
+
+def predict_map(a):
+    """--predict LETTER=DIR[,DIR...] -> {letter: [dirs]}"""
+    out = {}
+    for it in a.predict:
+        m = re.fullmatch(r"([B-H])=(.+)", it, re.S)
+        if not m:
+            raise Fatal(f"--predict '{it}': use LETTER=OUTDIR[,OUTDIR...]")
+        out[m.group(1)] = [abcore.unmsys(x) if re.match(r"^[A-Za-z]:", x) else x for x in m.group(2).split(",")]
+    return out
 
 
 def rule_params(a):
@@ -374,21 +439,54 @@ def fetch_result(remote, run, jobname, job):
     return None, so.strip()
 
 
-def report(out, state, res, final, out_fn=print):
+def resolve_predicted(state, camp_dir=None):
+    """Predicted node rate change per arm for a batch check, from tier 1 demand vectors. state['predict'] maps an arm letter to out directories.
+    In a campaign an entry may be a step id. It then names camp_dir/steps/<id>."""
+    out = {}
+    for arm, dirs in (state.get("predict") or {}).items():
+        results = []
+        for d in dirs:
+            p = os.path.join(camp_dir, "steps", d) if camp_dir and not os.path.isdir(d) else d
+            if os.path.exists(os.path.join(p, "result.json")):
+                results.append(demand.load_result(p))
+        out[arm] = demand.stacked_change(results, state.get("rule_params")) if len(results) == len(dirs) and results else None
+    return out
+
+
+def report(out, state, res, final, out_fn=print, camp_dir=None):
     rp = state["rule_params"]
     intended = bool(state.get("intended"))
+    notes = state.get("notes", []) + ([f"job ended as {final}"] if final != "COMPLETED" else [])
+    json.dump(res, open(os.path.join(out, "result.json"), "w"), indent=1)
+    if state["tier"] == 2 and len(abcore.arms_of(res)) > 2:
+        pred = resolve_predicted(state, camp_dir)
+        vs = abcore.batch_verdicts(res, rp, intended, pred)
+        table = abcore.render_batch(res, vs, notes)
+        open(os.path.join(out, "table.md"), "w").write(table + "\n")
+        vj = {"batch": True, "tier": 2, "name": state["name"], "job": state["job"], "run_dir": state["run"], "scripts": state["scripts"], "job_state": final,
+              "predicted": pred, "arms": {x: {"verdict": v["verdict"], "rule": v["rule"], "why": v["why"], "gain": v["gain"], "predicted_change": v["predicted_change"],
+                                              "B": strip(v["B"])} for x, v in vs.items()}, "A": strip(next(iter(vs.values()))["A"]) if vs else {}}
+        json.dump(vj, open(os.path.join(out, "verdict.json"), "w"), indent=1)
+        out_fn(table)
+        for x, v in vs.items():
+            out_fn(f"**VERDICT arm {x}: {v['verdict']}** (rule {v['rule']}) {v['why']}")
+        out_fn(f"\nfiles in {out}: table.md verdict.json result.json")
+        return 0
     if state["tier"] == 1:
         v = abcore.tier1_verdict(res, rp, intended, state.get("rule_kind", "gain"))
     else:
         v = abcore.tier2_verdict(res, rp, intended)
     if final != "COMPLETED":
         v.setdefault("notes", []).append(f"job ended as {final}")
-    table = abcore.render(res, v, state.get("notes", []) + ([f"job ended as {final}"] if final != "COMPLETED" else []))
-    json.dump(res, open(os.path.join(out, "result.json"), "w"), indent=1)
+    table = abcore.render(res, v, notes)
     open(os.path.join(out, "table.md"), "w").write(table + "\n")
     vj = {"verdict": v["verdict"], "rule": v["rule"], "why": v["why"], "tier": v["tier"], "params": v["params"], "gain": v.get("gain"), "spread": v.get("spread"),
           "name": state["name"], "job": state["job"], "run_dir": state["run"], "scripts": state["scripts"], "job_state": final,
           "A": strip(v["A"]), "B": strip(v["B"])}
+    if v.get("demand"):
+        d = v["demand"]
+        vj["demand"] = {"A": d["A"], "B": d["B"], "limits_A": d["limits_A"], "limits_B": d["limits_B"], "predicted_node_change": d["change"],
+                        "change_by_limit": d["change_by_limit"]}
     json.dump(vj, open(os.path.join(out, "verdict.json"), "w"), indent=1)
     out_fn(table)
     out_fn(f"\nfiles in {out}: table.md verdict.json result.json")
