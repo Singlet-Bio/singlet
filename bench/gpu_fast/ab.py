@@ -281,7 +281,8 @@ def main(argv=None, remote=None, out_fn=print):
              "notes": notes, "submitted": None, "ref": a.ref, "intended": a.intended_output_change,
              "rule_params": rule_params(a)}
     save_state(out, state)
-    open(os.path.join(out, "spec.sh"), "w").write(spec)
+    open(os.path.join(out, "spec.sh"), "w", newline="
+").write(spec)
     try:
         remote.run(f"mkdir -p {run}")
         remote.put(sbatch_local, f"{run}/t{a.tier}.sbatch")

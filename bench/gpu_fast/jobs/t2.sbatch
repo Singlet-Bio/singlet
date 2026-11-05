@@ -29,7 +29,7 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF
 DATA2=$W/jobs/fable/release/data
 SPEC=${SPEC:?SPEC: the spec file written by ab.py}; [ -f "$SPEC" ] || { echo "no spec file $SPEC"; exit 2; }
 # shellcheck disable=SC1090
-. "$SPEC"
+. <(tr -d '' < "$SPEC")   # the spec is written with LF. Dropping a CR costs nothing and a stray one breaks every path
 case $RUN in $W/jobs/gpu-fast/*) ;; *) echo "RUN must lie under $W/jobs/gpu-fast"; exit 2 ;; esac
 RES0=$RUN/res; mkdir -p $RES0; S=$RES0/summary.txt; : > $S
 BARE=$W/repos/singlet-py.git; SBR=${SCRIPTS_BRANCH:-bench/gpu-fast}
