@@ -32,7 +32,7 @@ bool buildRecords(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* 
 void release(DeviceRecords& r);
 
 struct DeviceReads {
-    ReadRec* reads = nullptr; uint64_t* lowq = nullptr;   // lowq: 2 words per read (PileupInput::lowq), only when a mask array was given
+    ReadRec* reads = nullptr; uint64_t* lowq = nullptr;   // lowq: singlet_qmask::words() words per read (PileupInput::lowq), only when a mask array was given
     uint64_t nOut = 0;
     uint64_t outcome[e6::RO_N] = {};                      // reads per ReadOutcome
     uint64_t lowQualSum = 0, qualNeqNSum = 0;             // the kept reads' quality counters (Collector::add_quality_counts64)

@@ -3,6 +3,7 @@
 // file: the GPU pileup's hand-off pass on the device). bench/fable/records/records_test.cu is E6's vehicle.
 #include "records_gpu.h"
 #include "singlet/engine_gpu.h"
+#include "singlet/qmask_words.h"   // P3-ENG-14
 #include "singlet/tail_trace.h"   // E16: the level-5 switches (dlpar, regpar)
 #include <cuda_runtime.h>
 #include <sched.h>
@@ -90,7 +91,7 @@ __global__ void k_eval(const uint32_t* rr, const e6::ReadEntry* E, u64 n, const 
 
 __global__ void k_scatter(const uint32_t* rr, const e6::ReadEntry* E, const u64* Q, u64 n, const SigRec* sigs, const AlnRec* alns, uint32_t cbL,
                           uint32_t umiL, const u64* keys, const int32_t* vals, u64 nKeys, const uint32_t* keep, const uint32_t* pos, ReadRec* out,
-                          u64* lowq) {
+                          u64* lowq, uint32_t qw) {
     const u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (i >= n || !keep[i]) return;
     const e6::ReadEntry e = E[i];
@@ -101,7 +102,7 @@ __global__ void k_scatter(const uint32_t* rr, const e6::ReadEntry* E, const u64*
     out[k] = x;
     if (lowq) {
         const bool has = !(e.flags & 64u);
-        lowq[2 * (u64)k] = has ? Q[2 * i] : 0; lowq[2 * (u64)k + 1] = has ? Q[2 * i + 1] : 0;
+        for (uint32_t w = 0; w < qw; w++) lowq[qw * (u64)k + w] = has ? Q[qw * i + w] : 0;
     }
 }
 
@@ -198,9 +199,9 @@ bool expandReads(const uint32_t* dReadRecord, const e6::ReadEntry* dE, const uin
       for (int k = 0; k < e6::RO_N; k++) out.outcome[k] = s[k];
       out.lowQualSum = s[e6::RO_N]; out.qualNeqNSum = s[e6::RO_N + 1]; out.maskAll = s[e6::RO_N + 2] == 0; }
     RG_CK(cudaMalloc(&out.reads, std::max<u64>(1, out.nOut) * sizeof(ReadRec)));
-    if (dQ) RG_CK(cudaMalloc(&out.lowq, std::max<u64>(1, out.nOut) * 16));
+    if (dQ) RG_CK(cudaMalloc(&out.lowq, std::max<u64>(1, out.nOut) * 8 * singlet_qmask::words()));
     ev.start();
-    k_scatter<<<G, T>>>(dReadRecord, dE, dQ, nReads, R.sigs, R.alns, cbL, umiL, dKeys, dVals, nKeys, dKeep, dPos, out.reads, out.lowq);
+    k_scatter<<<G, T>>>(dReadRecord, dE, dQ, nReads, R.sigs, R.alns, cbL, umiL, dKeys, dVals, nKeys, dKeep, dPos, out.reads, out.lowq, singlet_qmask::words());
     RG_CK(cudaGetLastError());
     out.msScatter = ev.stop();
     RG_CK(cudaDeviceSynchronize());
@@ -224,7 +225,7 @@ enum : int { PC_ALN = 0, PC_SEC, PC_RSAMP, PC_RHOOK, PC_CHRM, PC_NOBC, PC_BARCOD
 __device__ unsigned long long g_pc[PC_N];
 
 struct PassDev {
-    const uint32_t* rr; const e6::ReadEntry* E; const u64* Q; u64 n;
+    const uint32_t* rr; const e6::ReadEntry* E; const u64* Q; u64 n; uint32_t qw;   // qw: mask words per read (P3-ENG-14)
     const SigRec* sigs; const AlnRec* alns; const uint32_t* ops; const uint16_t* nm;
     e6::PassParams pp; const u64* keys; const e6::CrVal* vals; u64 nKeys;
     uint32_t* cellReads; uint32_t* cellUnique; uint32_t* cellMulti; unsigned long long* cellMism; unsigned long long* cellBases;
@@ -307,7 +308,7 @@ __global__ void k_pass_scatter(PassDev d, const uint32_t* keep, const uint32_t* 
     ReadRec x; x.sig = d.rr[i]; x.bc = r.col; x.umi3 = r.u3;
     out[k] = x; clip[k] = r.clip;
     const bool has = d.Q != nullptr && !(e.flags & 64u);
-    lowq[2 * (u64) k] = has ? d.Q[2 * i] : 0; lowq[2 * (u64) k + 1] = has ? d.Q[2 * i + 1] : 0;
+    for (uint32_t w = 0; w < d.qw; w++) lowq[d.qw * (u64) k + w] = has ? d.Q[d.qw * i + w] : 0;
 }
 
 } // namespace
@@ -379,6 +380,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     PassBufs B;
     uint32_t *dRR, *dOps, *dKeep, *dPos, *dCellR, *dCellU, *dCellM, *dWl, *dClip, *dPend;
     e6::ReadEntry* dE; u64 *dQ = nullptr, *dK, *dLowq, *dRhost;
+    const uint32_t QW = singlet_qmask::words(); const u64 QB = 8ull * QW;   // P3-ENG-14: mask words and bytes per read
     SigRec* dS; AlnRec* dA; uint16_t* dNm; e6::CrVal* dV; ReadRec* dOut;
     unsigned long long *dCellMis, *dCellB;
     {   // the region's arrays to the device: page-locked in place when the driver allows it (the pages exist: the STAR child wrote them)
@@ -391,7 +393,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         e16reg = now() - tr;
         EP_CK(B.alloc(dRR, n * 4)); EP_CK(cudaMemcpy(dRR, R.at<uint8_t>(H.oReadRecord), n * 4, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dE, n * 24)); EP_CK(cudaMemcpy(dE, R.at<uint8_t>(H.oEntries), n * 24, cudaMemcpyHostToDevice));
-        if (H.oQMask) { EP_CK(B.alloc(dQ, n * 16)); EP_CK(cudaMemcpy(dQ, R.at<uint8_t>(H.oQMask), n * 16, cudaMemcpyHostToDevice)); }
+        if (H.oQMask) { EP_CK(B.alloc(dQ, n * QB)); EP_CK(cudaMemcpy(dQ, R.at<uint8_t>(H.oQMask), n * QB, cudaMemcpyHostToDevice)); }
         EP_CK(B.alloc(dS, nRec * 16)); EP_CK(cudaMemcpy(dS, R.at<uint8_t>(H.oSigs), nRec * 16, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dA, nAln * 16)); EP_CK(cudaMemcpy(dA, R.at<uint8_t>(H.oAlns), nAln * 16, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dOps, nOps * 4)); EP_CK(cudaMemcpy(dOps, R.at<uint8_t>(H.oOps), nOps * 4, cudaMemcpyHostToDevice));
@@ -431,7 +433,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         EP_CK(B.alloc(dCellB, nq * 8)); EP_CK(cudaMemset(dCellB, 0, nq * 8 + 8));
         EP_CK(B.alloc(dWl, nw * 4)); EP_CK(cudaMemset(dWl, 0, nw * 4 + 4));
         EP_CK(B.alloc(dKeep, n * 4)); EP_CK(B.alloc(dPos, n * 4));
-        d.rr = dRR; d.E = dE; d.Q = dQ; d.n = n; d.sigs = dS; d.alns = dA; d.ops = dOps; d.nm = dNm;
+        d.rr = dRR; d.E = dE; d.Q = dQ; d.n = n; d.qw = QW; d.sigs = dS; d.alns = dA; d.ops = dOps; d.nm = dNm;
         d.pp = e6::PassParams{H.cbL, H.umiL, in.chrmTid, in.minMapq, in.cbc ? 1u : 0u, in.wlOn ? 1u : 0u, in.wlPend ? 1u : 0u};
         d.keys = dK; d.vals = dV; d.nKeys = keys.size();
         d.cellReads = dCellR; d.cellUnique = dCellU; d.cellMulti = dCellM; d.cellMism = dCellMis; d.cellBases = dCellB;
@@ -451,7 +453,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     {
         const double ts = now();
         const u64 nPend = pc[PC_PEND], nRhost = pc[PC_RHOST];
-        EP_CK(B.alloc(dOut, nKeep * 16)); EP_CK(B.alloc(dClip, nKeep * 4)); EP_CK(B.alloc(dLowq, nKeep * 16));
+        EP_CK(B.alloc(dOut, nKeep * 16)); EP_CK(B.alloc(dClip, nKeep * 4)); EP_CK(B.alloc(dLowq, nKeep * QB));
         EP_CK(B.alloc(dPend, nPend * 8)); EP_CK(B.alloc(dRhost, nRhost * 8));
         { unsigned long long z[2] = {0, 0}; EP_CK(cudaMemcpyToSymbol(g_app, z, sizeof z)); }
         if (n) k_pass_scatter<<<G, T>>>(d, dKeep, dPos, dOut, dClip, dLowq, dPend, nPend, dRhost, nRhost);
@@ -462,14 +464,14 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         if (in.keepPinned && singlet_tail::cut("dlpar")) {   // E16 "dlpar" (level 5): the kept reads' arrays first touched by several threads
             // (their capacity, reserved and zero-filled in parallel; resize then fills pages that exist instead of faulting them in one by one)
             auto pre = [](auto& v, u64 n) { v.reserve(n); e16Touch((uint8_t*) v.data(), n * sizeof(v[0]), true); };
-            pre(out.reads, nKeep * 16); pre(out.clip, nKeep); pre(out.lowq, nKeep * 16);
+            pre(out.reads, nKeep * 16); pre(out.clip, nKeep); pre(out.lowq, nKeep * QB);
             e16dl = now() - td;
         }
-        out.reads.resize(nKeep * 16); out.clip.resize(nKeep); out.lowq.resize(nKeep * 16);
+        out.reads.resize(nKeep * 16); out.clip.resize(nKeep); out.lowq.resize(nKeep * QB);
         if (nKeep) {
             EP_CK(d2h(out.reads.data(), dOut, nKeep * 16, in.keepPinned));
             EP_CK(d2h(out.clip.data(), dClip, nKeep * 4));
-            EP_CK(d2h(out.lowq.data(), dLowq, nKeep * 16, in.keepPinned));
+            EP_CK(d2h(out.lowq.data(), dLowq, nKeep * QB, in.keepPinned));
         }
         out.cellReads.resize(in.nCells); out.cellUnique.resize(in.nCellsQc); out.cellMulti.resize(in.nCellsQc);
         out.cellMism.resize(in.nCellsQc); out.cellBases.resize(in.nCellsQc); out.wlCounts.resize(in.nWl);
