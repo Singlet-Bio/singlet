@@ -6,6 +6,7 @@
 #SBATCH --cpus-per-task=28
 #SBATCH --mem=370G
 #SBATCH --time=03:55:00
+#SBATCH --exclude=g050
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Throughput harness of GPU batch 1 (bench/gpu_batch1/README.md). It started as tp-run.sbatch (E18, docs/gpu-engine/fable/E18-throughput.md):
@@ -161,7 +162,7 @@ compare_out() {
   cmp -s <(tail -n +5 $a/star_Log.final.out) <(tail -n +5 $b/star_Log.final.out) || { echo "  star_Log.final.out STATISTICS DIFFER" >> $d; ok=0; }
   cmp -s $a/star_SJ.out.tab $b/star_SJ.out.tab || { echo "  star_SJ.out.tab DIFFERS" >> $d; ok=0; }
   if [ -f "$rha" ] && [ -f "$rhb" ]; then
-    local kv=KNOWN_$s KN=" ${!kv:-} "
+    local kv=KNOWN_$s; local KN=" ${!kv:-} "
     for f in $READF; do
       local ha hb; ha=$(awk -v f=$f '$1==f{print $2" "$3}' $rha); hb=$(awk -v f=$f '$1==f{print $2" "$3}' $rhb)
       if [ "$ha" = "$hb" ]; then :
