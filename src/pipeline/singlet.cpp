@@ -102,6 +102,7 @@
 #include "singlet/fq/fastq_encoder.h"
 #include "singlet/fq/run_screen.h"
 #include "singlet/pileup/run_provenance.h"
+#include "singlet/pileup/run_restart.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
 #ifdef SINGLET_HAVE_ENGINE_GPU
 // STAR's per-read hand-off hook (src/star/SeqCache.h; STAR's uint32 / uint64 are unsigned int / unsigned long long)
@@ -2860,6 +2861,9 @@ static int cmd_atac(int argc, char* argv[]) {
 // Stream path, library far from the protocol orientation: the pipe cannot be read twice, so re-execute this same command on the sorted
 // path (--sorted-bam), whose strand probe handles any chemistry. Partial STAR output of the stopped pass is removed first. Returns only
 // if the exec fails (exit code 8, strand_contradiction, as before).
+// The restarted run gets the environment of main()'s entry (singlet::entry_env), plus SINGLET_STREAM_STRAND_RESTART=1. Variables this
+// pass set for the stream (SINGLET_ENGINE_GPU_HANDOFF and its _MINQ, SINGLET_DECODE_R1/R2, SINGLET_ENGINE_GPU_FG2, the GPU defaults)
+// would otherwise reach the sorted path: with the hand-off variable STAR leaves the hand-off reads out of the sorted BAM (gate 800361).
 static int g_argc = 0;
 static char** g_argv = nullptr;
 static int restart_on_sorted_path(const singlet::PileupStats& stats, bool reverse, const std::string& out_prefix, int argc, char** argv,
@@ -2872,16 +2876,34 @@ static int restart_on_sorted_path(const singlet::PileupStats& stats, bool revers
     std::error_code ec;
     for (const auto& e : fs::directory_iterator(out_prefix, ec)) {   // STAR's files of the stopped pass: star_*, the GPU hand-off file
         const std::string n = e.path().filename().string();
-        if (n.rfind("star_", 0) == 0 || n == ".gpu_handoff.bin") fs::remove_all(e.path(), ec);
+        if (n.rfind("star_", 0) == 0) fs::remove_all(e.path(), ec);
     }
+    singlet::remove_handoff_files(out_prefix);   // .gpu_handoff.bin and its .reads / .reads.q side files
     std::vector<char*> nargv(argv, argv + argc);
     static char sorted_flag[] = "--sorted-bam";
     nargv.push_back(sorted_flag);
     nargv.push_back(nullptr);
-    setenv("SINGLET_STREAM_STRAND_RESTART", "1", 1);
-    execv("/proc/self/exe", nargv.data());
+    static std::vector<std::string> env;
+    env = singlet::restart_env(singlet::entry_env(), {"SINGLET_STREAM_STRAND_RESTART=1"});
+    std::vector<char*> nenv;
+    for (auto& kv : env) nenv.push_back(kv.data());
+    nenv.push_back(nullptr);
+    if (singlet::entry_env().taken()) execve("/proc/self/exe", nargv.data(), nenv.data());
     std::cerr << "[singlet] ERROR: restart on the sorted path failed; rerun with --sorted-bam" << std::endl;
     return 8;
+}
+
+// The hand-off files of this run are removed when the process exits by any route (atexit). Only the process that set them up removes
+// them: the forked STAR child inherits the handler and must leave the files to the pileup.
+static std::string g_handoff_dir;
+static pid_t g_handoff_owner = -1;
+static void remove_handoff_at_exit() {
+    if (getpid() == g_handoff_owner && !g_handoff_dir.empty()) singlet::remove_handoff_files(g_handoff_dir);
+}
+[[maybe_unused]] static void handoff_cleanup_at_exit(const std::string& out_dir) {
+    if (g_handoff_owner < 0) std::atexit(remove_handoff_at_exit);
+    g_handoff_dir = out_dir;
+    g_handoff_owner = getpid();
 }
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
@@ -2941,7 +2963,8 @@ inline bool usable(std::string& why) {
 #endif
 
 int main(int argc, char* argv[]) {
-    g_argc = argc; g_argv = argv;   // restart_on_sorted_path re-executes this command
+    singlet::entry_env().take();   // restart_on_sorted_path re-executes this command with this environment
+    g_argc = argc; g_argv = argv;   // and these arguments
     singlet::fq::register_fg2();   // a staged .1fg2 is read through Reader / RunSet like a .1fq
     // ── Subcommand dispatch ──
     if (argc >= 2) {
@@ -3979,6 +4002,8 @@ int main(int argc, char* argv[]) {
     //   3 = star_fatal (STAR exited non-zero or killed by signal)
     //   4 = zero_cells (0 cells called; exported stub outputs)
     //   5 = stalled (SIGALRM watchdog fired — no progress for SINGLET_STALL_TIMEOUT s)
+    //   8 = strand_contradiction (stream path, --stream-unsorted forced; rerun with --sorted-bam)
+    //  10 = pileup_shortfall (the pileup saw under half of STAR's uniquely mapped reads; run_restart.h)
     {
         const unsigned stall_secs = singlet::stall_timeout_secs();   // every re-arm below uses the same timeout
         struct sigaction sa_alarm{};
@@ -5754,12 +5779,19 @@ int main(int argc, char* argv[]) {
         setenv("SINGLET_ENGINE_GPU_FG2", fg2_path.c_str(), 1);
     }
     // W11 GPU pileup on the stream path: the GPU prefill hands the per-sequence alignments to the pileup (SINGLET_ENGINE_GPU_HANDOFF)
+    if (stream_unsorted != 1 && getenv("SINGLET_ENGINE_GPU_HANDOFF")) {
+        // the hand-off is a stream-path state: with it, STAR leaves the hand-off reads out of the sorted BAM, and the pileup reads that BAM
+        std::cerr << "[singlet] SINGLET_ENGINE_GPU_HANDOFF ignored: the sorted path reads every alignment from the BAM\n";
+        unsetenv("SINGLET_ENGINE_GPU_HANDOFF");
+        unsetenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ");
+    }
     if (stream_unsorted == 1 && getenv("SINGLET_GPU_PILEUP") && getenv("SINGLET_ENGINE_GPU") && !getenv("SINGLET_ENGINE_GPU_HANDOFF")
         && config.out_chrm_bam.empty() && config.guide_ref_path.empty()
         && !(getenv("SINGLET_GPU_HANDOFF") && std::string(getenv("SINGLET_GPU_HANDOFF")) == "0")) {
         static std::string handoff_path;
         handoff_path = out_prefix + "/.gpu_handoff.bin";
         setenv("SINGLET_ENGINE_GPU_HANDOFF", handoff_path.c_str(), 1);
+        handoff_cleanup_at_exit(out_prefix);   // .gpu_handoff.bin*: removed however this process ends
         // "on": STAR's mapping threads count each hand-off read's bases below the pileup's base-quality threshold
         setenv("SINGLET_ENGINE_GPU_HANDOFF_MINQ", std::to_string(config.min_baseq).c_str(), 1);
         // a clipped read's rRNA verdict on the whole read, computed by STAR's mapping threads (the forked aligner inherits it)
@@ -8821,6 +8853,11 @@ int main(int argc, char* argv[]) {
         // Stream (order-free-rules R5): the pass was counted in the protocol orientation. A pipe cannot be
         // re-read, so a library whose reads contradict that orientation goes to the sorted path, where the
         // strand safety net re-reads the BAM. Exit 8 = strand_contradiction: rerun with --sorted-bam.
+        // SINGLET_TEST_FORCE_STRAND_RESTART=1: restart whatever the strand counts (the regression test of the restart, tests/cpp)
+        const bool force_restart = stream_unsorted == 1 && stream_auto && getenv("SINGLET_TEST_FORCE_STRAND_RESTART")
+                                   && std::string(getenv("SINGLET_TEST_FORCE_STRAND_RESTART")) == "1";
+        if (force_restart)
+            return restart_on_sorted_path(stats, engine_ptr->reverse_strand(), out_prefix, g_argc, g_argv, "forced by SINGLET_TEST_FORCE_STRAND_RESTART");
         if (stream_unsorted == 1 && config.stranded && config.auto_strand
             && stats.strand_sense + stats.strand_antisense >= singlet::kStrandRetryMinReads
             && singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) > singlet::kStrandRetryFrac) {
@@ -8851,11 +8888,16 @@ int main(int argc, char* argv[]) {
     // This catches wrong-genome runs that silently produce empty output.
     // star_mapping_rate is also used below to gate nonhost EM screening.
     double star_mapping_rate = -1.0;  // -1 = not parsed (BAM-input path)
+    uint64_t star_unique_reads = 0;   // "Uniquely mapped reads number" (0 = not parsed)
     if (star_pid > 0 || !bam_file.empty()) {
         std::string log_path = out_prefix + "/star_Log.final.out";
         if (FILE* lf = std::fopen(log_path.c_str(), "r")) {
             char line[256];
             while (std::fgets(line, sizeof(line), lf)) {
+                if (std::strstr(line, "Uniquely mapped reads number")) {
+                    if (const char* pipe = std::strrchr(line, '|')) star_unique_reads = std::strtoull(pipe + 1, nullptr, 10);
+                    continue;
+                }
                 if (std::strstr(line, "Uniquely mapped reads %")) {
                     // Format: "   Uniquely mapped reads % |	0.00%" (tab or spaces after |)
                     const char* pipe = std::strrchr(line, '|');
@@ -8872,6 +8914,18 @@ int main(int argc, char* argv[]) {
             }
             std::fclose(lf);
         }
+    }
+
+    // ── Pileup input check: every read STAR mapped uniquely gives the pileup at least one record (a BAM record, or a GPU hand-off
+    // alignment), so a pileup far below STAR's count lost reads between the two. Gate 800361 (a strand restart that kept the GPU
+    // hand-off): 143,514 pileup records for 39.5 M, exit 0. Exit 10 = pileup_shortfall, before any output is written;
+    // SINGLET_ALLOW_PILEUP_SHORTFALL=1 makes it a warning.
+    if (star_pid > 0 && singlet::pileup_shortfall(star_unique_reads, stats.mapped_reads)) {
+        const bool allow = getenv("SINGLET_ALLOW_PILEUP_SHORTFALL") && std::string(getenv("SINGLET_ALLOW_PILEUP_SHORTFALL")) == "1";
+        std::cerr << "[singlet] " << (allow ? "WARNING" : "ERROR") << ": the pileup read " << stats.mapped_reads << " mapped records, but STAR mapped "
+                  << star_unique_reads << " reads uniquely (star_Log.final.out); below " << singlet::kPileupShortfallFrac
+                  << " of them, reads were lost between STAR and the pileup" << (allow ? " (SINGLET_ALLOW_PILEUP_SHORTFALL=1)" : "") << "\n";
+        if (!allow) return 10;   // pileup_shortfall
     }
 
     // ── Wait for SRA demuxer + cleanup FIFOs ──
@@ -8891,6 +8945,10 @@ int main(int argc, char* argv[]) {
         unlink(r2_fifo_path.c_str());
         rmdir(fifo_dir.c_str());
     }
+
+    // The GPU hand-off files: the pileup removes them once read; whatever is left (a declined or failed GPU pileup) goes here
+    if (const size_t n = singlet::remove_handoff_files(out_prefix))
+        std::cerr << "[singlet] removed " << n << " GPU hand-off file(s) left in " << out_prefix << "\n";
 
     // Cleanup .1fq temp FASTQ files
     if (onefq_mode) {
@@ -9740,6 +9798,7 @@ int main(int argc, char* argv[]) {
     //   3 = star_fatal (STAR exited non-zero or killed by signal)
     //   4 = zero_cells (cell calling ran but found 0 cells)
     //   5 = stalled (SIGALRM watchdog fired)
+    //   8 = strand_contradiction, 10 = pileup_shortfall (above)
     if (export_stats.exit_code != 0) {
         std::cerr << "[singlet] EXIT " << export_stats.exit_code
                   << " (zero_cells: cell calling produced 0 cells)\n";

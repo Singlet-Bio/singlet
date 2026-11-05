@@ -107,6 +107,21 @@ if(TARGET singlet_engine_gpu)
 endif()
 add_pileup_test(test_strand_detect)
 add_pileup_test(test_stream_strand_restart)
+# Gate 800361: the restart on the sorted path must start from main()'s environment (no GPU hand-off), remove the hand-off files and
+# never list them; a pileup far below STAR's uniquely mapped reads fails the run (run_restart.h).
+add_pileup_test(test_strand_restart_env)
+# The same restart through the singlet binary (SINGLET_TEST_FORCE_STRAND_RESTART=1): CPU engine, and with a GPU build also --engine gpu
+# with SINGLET_GPU_PILEUP=on, compared with the CPU run. Needs SINGLET_E2E_1FQ and SINGLET_E2E_GENOME; skipped (77) without them.
+if(TARGET singlet)
+    if(TARGET singlet_engine_gpu)
+        set(_restart_e2e_mode gpu)
+    else()
+        set(_restart_e2e_mode cpu)
+    endif()
+    add_test(NAME test_strand_restart_e2e
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test_strand_restart_e2e.sh $<TARGET_FILE:singlet> ${_restart_e2e_mode})
+    set_tests_properties(test_strand_restart_e2e PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3600)
+endif()
 add_pileup_test(test_run_screen)
 add_pileup_test(test_tpm_fpkm)
 add_pileup_test(test_atac_peaks)
