@@ -508,8 +508,7 @@ static cudaError_t dmalv(void** p, u64 b) {
     if (e == cudaErrorMemoryAllocation && singlet_engine_gpu::admitOn()) {   // gpu/bold-admit: wait for room (other processes' memory is not in the tally) instead of a fallback
         const double t0 = now(); int n = 0;
         while (e == cudaErrorMemoryAllocation && n < 6000) { cudaGetLastError(); usleep(50000); n++; e = cudaMalloc(p, b); }
-        fprintf(stderr, "[admit] cudaMalloc of %.2f GB hit device OOM, waited %.2f s for room (%s)
-", (double) b / (1ull << 30), now() - t0, e == cudaSuccess ? "got it" : "gave up");
+        fprintf(stderr, "[admit] cudaMalloc of %.2f GB hit device OOM, waited %.2f s for room (%s)\n", (double) b / (1ull << 30), now() - t0, e == cudaSuccess ? "got it" : "gave up");
     }
     if (e != cudaSuccess) { *p = nullptr; return e; }
     const u64 r = budRound(b); g_bud.sz[*p] = r; g_bud.used += r; g_bud.note();
