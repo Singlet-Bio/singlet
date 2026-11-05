@@ -65,6 +65,8 @@ Example, 40 runs at k=8 on a named node:
 cd $W/jobs/gpu-batch1 && BINDIR=$W/jobs/gpu-next/bin/s3 EXPECT_COMMIT=e42c0636 SAMPLE=pbmc1k_v3 POINTS=k8t7s2r5 sbatch -w <node> jobs/tp.sbatch
 ```
 
+A window needs more than 2k runs. With 2k runs or fewer `win_rate` is `NA`.
+
 The reference for pbmc1k_v3 at T=7 must exist before the job. Run the gate with `T=7 SAMPLES=pbmc1k_v3 MODES=cpu`.
 
 ### results.tsv columns
@@ -91,7 +93,7 @@ One row per point. `RES0/results.tsv` holds all points of the job.
 
 ## gpu_ctest.sbatch
 
-Builds a commit with `-DSINGLET_ENGINE_GPU=ON`, runs `test_gpu_pileup_labels` on an H100 and then the whole suite. Parameters are `REV` (branch or full commit), `EXPECT_COMMIT` and `ONLY_GPU_TEST=1` for a quick check. The log ends with `GPU TEST test_gpu_pileup_labels: PASS|FAIL|SKIP` and `CTEST SUITE: ...`. Results are in `$W/jobs/gpu-batch1/ctest-<commit8>/`.
+Builds a commit with `-DSINGLET_ENGINE_GPU=ON` in the CUDA image. Then it runs `test_gpu_pileup_labels` and the whole suite on the node itself. Inside the image the test binaries need a newer glibc than the image has. Parameters are `REV` (branch or full commit), `EXPECT_COMMIT` and `ONLY_GPU_TEST=1` for a quick check. The log ends with `GPU TEST test_gpu_pileup_labels: PASS|FAIL|SKIP` and `CTEST SUITE: ...`. Results are in `$W/jobs/gpu-batch1/ctest-<commit8>/`.
 
 ```
 cd $W/jobs/gpu-batch1 && REV=<full commit> EXPECT_COMMIT=<commit8> sbatch jobs/gpu_ctest.sbatch
