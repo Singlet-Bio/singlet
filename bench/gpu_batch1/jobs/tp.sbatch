@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=e18-run
+#SBATCH --job-name=gb1-tp
 #SBATCH --account=debruinz
 #SBATCH --partition=short-gpu
 #SBATCH --gres=gpu:nvidia_h100_nvl:1
@@ -8,47 +8,75 @@
 #SBATCH --time=03:55:00
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# E18 (docs/gpu-engine/fable/E18-throughput.md): several samples in flight on the job's GPU(s), level 5 + ingest (the command line and
-# environment of E15's bench/fable/posterior/jobs/gate.sbatch mode gpuE5i), with the engine's device slots. Structure of
-# bench/atlas_rerun/perf_run.sbatch's x4_private mode (k concurrent copies, each with its own private genome), plus a sampler, the
-# lock logs, identity checks and the engine dumps. Binary of bench/fable/throughput/jobs/build.sbatch in $BINDIR (singlet-gpu).
+# Throughput harness of GPU batch 1 (bench/gpu_batch1/README.md). It started as tp-run.sbatch (E18, docs/gpu-engine/fable/E18-throughput.md):
+# several samples in flight on the job's GPU, level 5 + ingest, the engine's device slots.
 #
-# POINTS="tag ..." run in order. A tag is [mix]k<K>t<T>s<S>[m<GB>][r<R>][p]:
-#   k<K>   samples in flight (workers; each runs its items one after another, taking the next item from a shared queue)
-#   t<T>   threads per sample (--threads)
-#   s<S>   SINGLET_ENGINE_GPU_SLOTS=S (S processes may hold the device at once; S=1: every device phase of every sample is serialised)
-#   m<GB>  a device memory split for S > 1 with the existing knobs (only m43 is defined: see budget() below)
-#   r<R>   rounds: K*R items (default R=1: K samples started together); the "stream" form, K workers busy for R samples each
-#   p      pin worker w to device w mod <GPUs> (SINGLET_ENGINE_GPU_DEVICE); default: the engine's first-free-slot rule
-#   f      fine sampling (0.2 s ticks, nvidia-smi every tick; default 0.5 s, nvidia-smi every second tick): the lock intervals of e18_locks.py
-#   mix    the items are MIX (default "pbmc1k_v3 pbmc5p_v1 neuron1k_v3 nuclei2k_v2") R times, else K*R copies of SAMPLE (pbmc1k_v3);
-#          with k1 the items run alone one after another (the first of each sample is its reference at that T)
-# Per point $RES/<tag>/: meta.json, runs.tsv, samples.jsonl (bench/fable/throughput/e18_sampler.py: cgroup CPU and memory, per run CPU,
-# RSS, PSS and device memory, the lock holders and waiters from /proc/locks, nvidia-smi), per run c<item>/ (time.txt, run.log.ts,
-# star_Log.out, star_Log.final.out, CellReads.stats, read_stats.tsv, summary.json), the analysis (e18_point.py -> point.txt, point.json)
-# and identity.txt. Identity: every run against the reference of its sample at the same T (the first k=1 run of that sample and T in
-# this job; REF_<sample>_t<T>=<dir> names a kept one), with out_equiv.py, star_Log.final.out's statistics, SJ.out.tab, the read-order
-# files by sorted records and CellReads.stats by sorted rows. DUMP=1 (default): item 0 of each point writes mapDistinct's records (E6
-# dump, SINGLET_ENGINE_GPU_DUMP), hashed and removed; the hashes per sample are compared at the end.
-# debug-gpu: sbatch -p debug-gpu -c 8 --mem=120G --time=00:29:00 --export=ALL,SAMPLE=pbmc2m,POINTS="k1t4s1 k2t4s1" run.sbatch
+# Parameters (sbatch --export=ALL,NAME=value,...):
+#   BINDIR         required. Directory with singlet-gpu and commit-gpu. Never taken from a default.
+#   EXPECT_COMMIT  required. The job stops unless commit-gpu in BINDIR starts with this (8 or more hex digits).
+#   POINTS         tags in order. Tag = [mix]k<K>t<T>s<S>[m<GB>][r<R>][p][f]. k: runs in flight. t: threads per run. s: device slots.
+#                  r: rounds, K*R runs in the queue (default 1). m43: device memory split. p: pin worker to GPU. f: fine sampling.
+#                  k8t7s2r5 is 40 runs with 8 in flight.
+#   NRUNS          optional. Total runs in the queue of every point. It replaces K*R. NRUNS=40 equals k8 with r5.
+#   SAMPLE         sample of the queue (default pbmc1k_v3). MIX: the samples of a mix tag.
+#   CPU_REF        directory with the CPU references of this binary, as written by gate.sbatch.
+#                  Default $W/jobs/gpu-batch1/ref/<commit8>. Run <CPU_REF>/T<T>/<sample>/out is the reference.
+#   SCRIPTS_BRANCH branch of the scripts (default bench/gpu-batch1). EXPECT_SCRIPTS: optional commit prefix that the branch tip must have.
+#   DUMP, IDENT, IDPAR: as in E18 (DUMP=1 hashes mapDistinct records of item 0, IDENT=0 skips identity, IDPAR comparisons in parallel).
+#   RES0           results directory. Default $W/jobs/gpu-batch1/results/tp-<job>. It must lie under $W/jobs/gpu-batch1.
+#
+# What it does beyond E18.
+#  1. Provenance: the first line of the log and every results.tsv row carry job, node, binary, sha256, build commit, scripts commit, T.
+#  2. Windowed rate and the whole-run measures in <point>/results.tsv (tp_point.py). The old span rate and steady number are still printed.
+#  3. Fallback runs are counted (fallback.py allow-list, level 5, GPU pileup). The point prints "POINT FAILED: n fallback runs". The job goes on.
+#  4. Identity of every run against a run alone at the same T and slots, and against the CPU reference. Each run's outputs are deleted after the comparison.
+#  5. Co-tenants: squeue of the node at the start and end of each point and once a minute.
+#
+# Alone run: before a point the job runs each sample of the point once alone (one run, the point's T and slots) unless it has done so already.
+# Its outputs are kept in node-local /tmp, in pruned form, until the job ends.
+# debug-gpu: sbatch -p debug-gpu -c 8 --mem=120G --time=00:29:00 --export=ALL,BINDIR=...,EXPECT_COMMIT=...,SAMPLE=pbmc2m,POINTS="k2t4s1r3" tp.sbatch
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
-BINDIR=${BINDIR:-$W/jobs/fable/throughput/bin}; BIN=$BINDIR/singlet-gpu
-BARE=$W/repos/singlet-py.git; BR=${BRANCH:-gpu/fable/throughput}
+BINDIR=${BINDIR:?BINDIR: the directory with singlet-gpu and commit-gpu}; BIN=$BINDIR/singlet-gpu
+EXPECT_COMMIT=${EXPECT_COMMIT:?EXPECT_COMMIT: the commit that BINDIR must hold}
+[ ${#EXPECT_COMMIT} -ge 8 ] || { echo "EXPECT_COMMIT needs 8 or more hex digits"; exit 2; }
+DATA2=$W/jobs/fable/release/data
+BARE=$W/repos/singlet-py.git; SBR=${SCRIPTS_BRANCH:-bench/gpu-batch1}
 POINTS=(${POINTS:-k1t28s1 k2t14s1 k3t9s1 k4t7s1}); SAMPLE=${SAMPLE:-pbmc1k_v3}; MIX=(${MIX:-pbmc1k_v3 pbmc5p_v1 neuron1k_v3 nuclei2k_v2})
-DUMP=${DUMP:-1}; IDENT=${IDENT:-1}
+DUMP=${DUMP:-1}; IDENT=${IDENT:-1}; NRUNS=${NRUNS:-}
+RES0=${RES0:-$W/jobs/gpu-batch1/results/tp-$SLURM_JOB_ID}
+case $RES0 in $W/jobs/gpu-batch1/*) ;; *) echo "RES0 must lie under $W/jobs/gpu-batch1"; exit 2 ;; esac
+mkdir -p $RES0; S=$RES0/summary.txt
+
+# --- provenance of the binary: the build record must match EXPECT_COMMIT -------------------------------------------------------------
+[ -f $BIN ] || { echo "no binary $BIN"; exit 2; }
+COMMIT=$(cat $BINDIR/commit-gpu 2>/dev/null || true)
+BSHA=$(sha256sum $BIN | cut -d' ' -f1)
+case $COMMIT in $EXPECT_COMMIT*) ;; *) echo "REFUSED: $BINDIR records commit '${COMMIT:-none}', EXPECT_COMMIT is $EXPECT_COMMIT" | tee $S; exit 2 ;; esac
+EMBED=no; grep -aqF "$COMMIT" $BIN && EMBED=yes
 [ -e $BINDIR/../whitelists ] || ln -s $PB/whitelists $BINDIR/../whitelists
-RES0=${RES0:-$W/jobs/fable/throughput/results/run-$SLURM_JOB_ID}; mkdir -p $RES0
-SCR=/tmp/$USER-e18-$SLURM_JOB_ID; mkdir -p $SCR/repo $SCR/data $SCR/ref
-trap 'kill $(jobs -p) 2>/dev/null; rm -rf "${SCR:?}"' EXIT INT TERM
-git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/fable/throughput-run
-git -C $BARE archive refs/fable/throughput-run bench/star_accel/out_equiv.py bench/fable/throughput | tar -x -C $SCR/repo
+
+# --- scripts from the bench/gpu-batch1 branch, one fetch at a time, with a commit check (as build.sbatch does) ------------------------
+SCR=/tmp/$USER-gb1tp-$SLURM_JOB_ID; mkdir -p $SCR/repo $SCR/data $SCR/ref
+SREF=refs/gb1/tp-$SLURM_JOB_ID
+trap 'kill $(jobs -p) 2>/dev/null; git -C $BARE update-ref -d $SREF 2>/dev/null; rm -rf "${SCR:?}"' EXIT INT TERM
+URL="$(git -C $BARE config remote.origin.url)"
+WANT=$(git ls-remote "$URL" refs/heads/$SBR | cut -f1); [ -n "$WANT" ] || { echo "no scripts branch $SBR"; exit 3; }
+( flock 9; git -C $BARE fetch -q "$URL" +refs/heads/$SBR:$SREF ) 9>$BARE/.gn-fetch.lock
+SFULL=$(git -C $BARE rev-parse $SREF); [ "$SFULL" = "$WANT" ] || { echo "fetched $SFULL, branch tip is $WANT"; exit 3; }
+[ -z "${EXPECT_SCRIPTS:-}" ] || [[ $SFULL == $EXPECT_SCRIPTS* ]] || { echo "scripts commit $SFULL, EXPECT_SCRIPTS is $EXPECT_SCRIPTS"; exit 3; }
+SCRIPTS=${SFULL:0:8}
+git -C $BARE archive $SREF bench/star_accel/out_equiv.py bench/fable/throughput bench/gpu_batch1 | tar -x -C $SCR/repo
+GB=$SCR/repo/bench/gpu_batch1; TPD=$SCR/repo/bench/fable/throughput
+export PROV_JOB=$SLURM_JOB_ID PROV_NODE=$(hostname -s) PROV_BIN=$BIN PROV_SHA256=$BSHA PROV_COMMIT=$COMMIT PROV_SCRIPTS=$SCRIPTS
+
+CPU_REF=${CPU_REF:-$W/jobs/gpu-batch1/ref/${COMMIT:0:8}}
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
 export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 NGPU=$(nvidia-smi -L | wc -l)
-S=$RES0/summary.txt
-echo "node=$(hostname) job=$SLURM_JOB_ID cpus=$SLURM_CPUS_PER_TASK gpus=$NGPU bin=$BIN commit=$(cat $BINDIR/commit-gpu 2>/dev/null) ($(sha256sum $BIN | cut -c1-16)) scripts=$(git -C $BARE rev-parse --short=8 refs/fable/throughput-run) points=${POINTS[*]} $(date -Is)" | tee $S
+echo "PROVENANCE job=$SLURM_JOB_ID node=$(hostname -s) bin=$BIN sha256=$BSHA commit=$COMMIT expect=$EXPECT_COMMIT embedded=$EMBED scripts=$SCRIPTS T=points:${POINTS[*]} $(date -Is)" | tee $S
+echo "node=$(hostname) job=$SLURM_JOB_ID cpus=$SLURM_CPUS_PER_TASK gpus=$NGPU cpu_ref=$CPU_REF points=${POINTS[*]} nruns=${NRUNS:-by-tag} sample=$SAMPLE" | tee -a $S
 { nvidia-smi --query-gpu=index,name,pci.bus_id,memory.total,driver_version --format=csv,noheader; lscpu | grep -E "^Model name|^CPU\(s\)|^NUMA node[0-9]"; free -g | head -2
   df -h /tmp /dev/shm | tail -n +1; findmnt -n -o SOURCE,FSTYPE,SIZE /tmp 2>/dev/null; echo "cgroup $CG memory.max $(cat $CG/memory.max 2>/dev/null)"
   cat /sys/kernel/mm/transparent_hugepage/enabled; ls -l /tmp/singlet_engine_gpu_*.lock 2>/dev/null; } 2>&1 | sed 's/^/  /' | tee -a $S
@@ -62,7 +90,11 @@ budget() { case $1 in
   *) echo "!! budget m$1 undefined" >&2; echo "" ;;
 esac; }
 
-stage_input() { [ -f $SCR/data/$1.1fq ] || { cp $PB/data/$1/$1.1fq $SCR/data/$1.1fq.part && mv $SCR/data/$1.1fq.part $SCR/data/$1.1fq; }; }
+stage_input() {
+  [ -f $SCR/data/$1.1fq ] && return
+  local src=$PB/data/$1/$1.1fq; [ -f $src ] || src=$DATA2/$1/$1.1fq
+  cp $src $SCR/data/$1.1fq.part && mv $SCR/data/$1.1fq.part $SCR/data/$1.1fq
+}
 
 next_item() { ( flock -x 9; n=$(cat $1); echo $((n + 1)) > $1; echo $n ) 9>>$1.lock; }
 
@@ -96,78 +128,157 @@ worker() {   # point worker T
   done
 }
 
-# identity of run c<i> of point p against the reference of its sample at the same T
-ident() {   # point item sample T
-  local p=$1 i=$2 s=$3 T=$4 a b ca cb v
-  b=$SCR/$p/c$i/out; cb=$RES0/$p/c$i/CellReads.stats
-  v=REF_${s}_t$T; a=${!v:-$SCR/ref/$s-t$T/out}; ca=$(dirname $a)/CellReads.stats
-  [ -f $ca ] || ca=$(dirname $(dirname $a))/CellReads.stats
-  if [ ! -d $a ]; then echo "  c$i ($s): no reference at T=$T" | tee -a $RES0/$p/identity.txt; return; fi
-  local I=$RES0/$p/c$i/identity.txt   # per run (the runs of a point are checked IDPAR at a time); concatenated afterwards
-  echo "=== $p c$i ($s, T=$T) vs $a" >> $I
-  python3 $SCR/repo/bench/star_accel/out_equiv.py $a $b > $RES0/$p/c$i/equiv.txt 2>&1
-  grep -a '^  DIFF\|^  only in\|^files:\|^RESULT' $RES0/$p/c$i/equiv.txt | cut -c1-220 >> $I
-  local st sj recs crs
-  if cmp -s <(tail -n +5 $a/star_Log.final.out) <(tail -n +5 $b/star_Log.final.out); then st="stats identical"; else st="STATS DIFFER"; fi
-  if cmp -s $a/star_SJ.out.tab $b/star_SJ.out.tab; then sj="SJ identical"; else sj="SJ DIFFERS"; fi
-  recs=""
-  for f in nonhost_reads.fq star_Unmapped.out.mate1 star_Unmapped.out.mate2; do
-    [ -f $a/$f ] && [ -f $b/$f ] || { recs+=" $f:absent"; continue; }
-    if cmp -s $a/$f $b/$f; then recs+=" $f:byte-identical"; continue; fi
-    ha=$(paste - - - - < $a/$f | LC_ALL=C sort -S 4G --parallel=4 | sha256sum | cut -c1-16); hb=$(paste - - - - < $b/$f | LC_ALL=C sort -S 4G --parallel=4 | sha256sum | cut -c1-16)
-    [ "$ha" = "$hb" ] && recs+=" $f:same-records" || recs+=" $f:RECORDS-DIFFER"
+# --- identity ------------------------------------------------------------------------------------------------------------------------
+# E11 section 2a's run-dependent files once the read files are set aside (as the gate): timings, the file path's clip5p probe count, bytes_public, memory_tier.
+# fieldcheck.py (gate.sbatch) looks into them. This harness uses the same by-name list as the gate.
+EXPECT_DIFF=" ${EXPECT_DIFF:-pileup_stats.json read_stats.tsv star_Log.std.out summary.json} "
+KNOWN_nuclei2k_v2=${KNOWN_nuclei2k_v2-nonhost_reads.fq}   # the known non-host writer bug of the gate (E15 section 5.7)
+READF="nonhost_reads.fq star_Unmapped.out.mate1 star_Unmapped.out.mate2"
+prune() { find $1 \( -name '*.bam' -o -name '*.sam' -o -name '*.cram' -o -name '*.fq*' -o -name '*.fastq*' -o -name '*.1fq' -o -name '.gpu_handoff*' -o -name '*Unmapped*' \
+                     -o -name '_STARtmp*' -o -name '*.reads' -o -name '*.reads.q' \) -prune -exec rm -rf {} + 2>/dev/null; }
+readhash() { for f in $READF; do
+    if [ -f $1/$f ]; then echo "$f $(paste - - - - < $1/$f | LC_ALL=C sort -S 4G --parallel=4 -T $SCR | sha256sum | cut -c1-16) $(( $(wc -l < $1/$f) / 4 ))"
+    else echo "$f absent 0"; fi; done; }
+
+# compare_out LABEL A_OUT A_CRS A_RH B_OUT B_CRS B_RH DETAILFILE   -> 0 when identical, 1 when not (same checks as the gate's pair comparison)
+compare_out() {
+  local lab=$1 a=$2 ca=$3 rha=$4 b=$5 cb=$6 rhb=$7 d=$8 ok=1 f
+  echo "=== $lab: $b vs $a" >> $d
+  if [ ! -d "$a" ]; then echo "  no reference ($a)" >> $d; return 2; fi
+  python3 $SCR/repo/bench/star_accel/out_equiv.py $a $b > $d.equiv 2>&1
+  grep -a '^  DIFF\|^  only in\|^files:\|^RESULT' $d.equiv | cut -c1-220 >> $d
+  local UNX=""
+  for f in $(grep -a '^  DIFF ' $d.equiv | sed -E 's/^  DIFF ([^ :]+).*/\1/'); do case "$EXPECT_DIFF" in *" $f "*) ;; *) UNX="$UNX $f" ;; esac; done
+  grep -aq '^  DIFF provenance.json: /references/whitelist/name: [^;]*$' $d.equiv && UNX=${UNX/ provenance.json/}
+  for f in $(grep -a '^  only in ' $d.equiv | sed -E 's/^  only in [ab]: //'); do UNX="$UNX only:$f"; done
+  grep -aq '^files:' $d.equiv || UNX="$UNX out_equiv-failed"
+  [ -n "$UNX" ] && { echo "  out_equiv UNEXPECTED:$UNX" >> $d; ok=0; }
+  for f in Barcodes.stats Gene/Features.stats Gene/Summary.csv Gene/UMIperCellSorted.txt Gene/raw/barcodes.tsv Gene/raw/features.tsv Gene/raw/matrix.mtx \
+           Gene/filtered/barcodes.tsv Gene/filtered/features.tsv Gene/filtered/matrix.mtx; do
+    cmp -s $a/star_Solo.out/$f $b/star_Solo.out/$f || { echo "  star_Solo.out/$f DIFFERS" >> $d; ok=0; }
   done
+  cmp -s <(tail -n +5 $a/star_Log.final.out) <(tail -n +5 $b/star_Log.final.out) || { echo "  star_Log.final.out STATISTICS DIFFER" >> $d; ok=0; }
+  cmp -s $a/star_SJ.out.tab $b/star_SJ.out.tab || { echo "  star_SJ.out.tab DIFFERS" >> $d; ok=0; }
+  if [ -f "$rha" ] && [ -f "$rhb" ]; then
+    local kv=KNOWN_$s KN=" ${!kv:-} "
+    for f in $READF; do
+      local ha hb; ha=$(awk -v f=$f '$1==f{print $2" "$3}' $rha); hb=$(awk -v f=$f '$1==f{print $2" "$3}' $rhb)
+      if [ "$ha" = "$hb" ]; then :
+      elif [[ "$KN" == *" $f "* ]] && [ -n "$ha" ] && [ "${ha##* }" = "${hb##* }" ]; then echo "  $f: other records, same count (known non-host writer bug)" >> $d
+      else echo "  $f: RECORDS DIFFER ($ha vs $hb)" >> $d; ok=0; fi
+    done
+  else echo "  read files: not compared (no hashes)" >> $d; ok=0; fi
   if [ -f "$ca" ] && [ -f "$cb" ]; then
-    if cmp -s $ca $cb; then crs="CellReads.stats byte-identical"
-    elif cmp -s <(head -1 $ca) <(head -1 $cb) && cmp -s <(tail -n +2 $ca | LC_ALL=C sort) <(tail -n +2 $cb | LC_ALL=C sort); then crs="CellReads.stats same rows (order differs)"
-    else crs="CellReads.stats ROWS DIFFER"; fi
-  else crs="CellReads.stats not compared"; fi
-  echo "  c$i ($s): $(grep -a '^files:' $RES0/$p/c$i/equiv.txt | cut -c8-) [$(grep -a '^  DIFF' $RES0/$p/c$i/equiv.txt | sed -E 's/^  DIFF ([^ :]+).*/\1/' | tr '\n' ' ')]; $st; $sj;$recs; $crs" >> $I
+    { cmp -s <(head -1 $ca) <(head -1 $cb) && cmp -s <(tail -n +2 $ca | LC_ALL=C sort) <(tail -n +2 $cb | LC_ALL=C sort); } || { echo "  CellReads.stats ROWS DIFFER" >> $d; ok=0; }
+  else echo "  CellReads.stats: not compared" >> $d; ok=0; fi
+  [ $ok = 1 ] && { echo "  IDENTICAL" >> $d; return 0; } || { echo "  NOT IDENTICAL" >> $d; return 1; }
 }
 
-for p in "${POINTS[@]}"; do
-  if ! [[ $p =~ ^(mix)?k([0-9]+)t([0-9]+)s([0-9]+)(m([0-9]+))?(r([0-9]+))?(p)?(f)?$ ]]; then echo "!! bad point tag $p" | tee -a $S; continue; fi
-  MIXP=${BASH_REMATCH[1]}; K=${BASH_REMATCH[2]}; T=${BASH_REMATCH[3]}; SL=${BASH_REMATCH[4]}; BG=${BASH_REMATCH[6]}; R=${BASH_REMATCH[8]:-1}; PIN=${BASH_REMATCH[9]}
-  SDT=0.5; SGE=2; [ -n "${BASH_REMATCH[10]}" ] && SDT=0.2 && SGE=1
-  if [ -n "$MIXP" ]; then ITEMS=(); for ((j = 0; j < R; j++)); do ITEMS+=("${MIX[@]}"); done; else ITEMS=(); for ((j = 0; j < K * R; j++)); do ITEMS+=($SAMPLE); done; fi
-  for s in $(printf "%s\n" "${ITEMS[@]}" | sort -u); do stage_input $s; done
-  XENV="SINGLET_ENGINE_GPU_SLOTS=$SL"; [ -n "$BG" ] && XENV+=" $(budget $BG)"
-  unset SINGLET_ENGINE_GPU_SLOTS SINGLET_ENGINE_GPU_CHUNK SINGLET_ENGINE_GPU_NB SINGLET_ENGINE_GPU_NBM SINGLET_ENGINE_GPU_NBB SINGLET_GPU_PILEUP_ARENA_GB SINGLET_ENGINE_GPU_DEVICE
-  export $XENV
-  mkdir -p $SCR/$p $RES0/$p; echo 0 > $SCR/$p/queue; : > $RES0/$p/runs.tsv
-  printf '{"tag":"%s","k":%d,"T":%d,"slots":%d,"rounds":%d,"pin":"%s","items":"%s","env":"%s","node":"%s","gpus":%d}\n' $p $K $T $SL $R "$PIN" "${ITEMS[*]}" "$XENV" "$(hostname)" $NGPU > $RES0/$p/meta.json
-  echo "######## $p: $K in flight, T=$T, items ${ITEMS[*]}; $XENV${PIN:+; pinned}; $(date -Is)" | tee -a $S
-  python3 $SCR/repo/bench/fable/throughput/e18_sampler.py $RES0/$p/samples.jsonl $CG $SDT $SGE 2>$RES0/$p/sampler.err &
-  SMP=$!
-  sleep 1
-  WP=()
-  for ((w = 0; w < K; w++)); do worker $p $w $T & WP+=($!); done
-  wait "${WP[@]}"
-  sleep 1; kill $SMP 2>/dev/null; wait $SMP 2>/dev/null
-  du -sh $SCR/$p 2>/dev/null | sed 's/^/  \/tmp use of the point: /' | tee -a $S; df -h /tmp | tail -1 | sed 's/^/  /' | tee -a $S
-  python3 $SCR/repo/bench/fable/throughput/e18_point.py $RES0/$p > $RES0/$p/point.txt 2>&1
-  [ -f $SCR/repo/bench/fable/throughput/e18_locks.py ] && python3 $SCR/repo/bench/fable/throughput/e18_locks.py $RES0/$p >> $RES0/$p/point.txt 2>&1
-  [ -f $SCR/repo/bench/fable/throughput/e18_steady.py ] && python3 $SCR/repo/bench/fable/throughput/e18_steady.py $RES0/$p 2>&1 | sed 's/^/   /' >> $RES0/$p/point.txt
-  cut -c1-400 $RES0/$p/point.txt | tee -a $S
-  # identity, the dump, references
-  while IFS=$'\t' read -r i w s t0 t1 rc; do
-    [ "$i" = item ] && continue
-    if [ $K = 1 ] && [ ! -d $SCR/ref/$s-t$T ] && [ $rc = 0 ]; then
-      mkdir -p $SCR/ref/$s-t$T && mv $SCR/$p/c$i/out $SCR/ref/$s-t$T/out && cp $RES0/$p/c$i/CellReads.stats $SCR/ref/$s-t$T/ 2>/dev/null
-      echo "  c$i ($s): kept as the reference for $s at T=$T" | tee -a $S
-    elif [ "$IDENT" = 1 ]; then
-      while [ $(jobs -rp | wc -l) -ge ${IDPAR:-4} ]; do sleep 1; done
-      ident $p $i $s $T &
-    fi
-  done < <(sort -n $RES0/$p/runs.tsv)
-  wait
-  for f in $(ls $RES0/$p/c*/identity.txt 2>/dev/null | sort -V); do cat $f >> $RES0/$p/identity.txt; grep -a "^  c[0-9]* (" $f | tee -a $S; done
+# identity of run c<i> of point p against the alone run (same sample, T, slots) and the CPU reference; deletes the run's outputs afterwards
+ident_run() {   # point item sample T slots
+  local p=$1 i=$2 s=$3 T=$4 SL=$5
+  local b=$SCR/$p/c$i/out cb=$RES0/$p/c$i/CellReads.stats d=$RES0/$p/c$i/identity.txt
+  local al=$SCR/ref/$s-t$T-s$SL cpu=$CPU_REF/T$T/$s r
+  : > $d
+  readhash $b > $RES0/$p/c$i/readhash.txt; prune $b
+  if [ -d $al/out ]; then compare_out alone $al/out $al/CellReads.stats $al/readhash.txt $b $cb $RES0/$p/c$i/readhash.txt $d; r=$?
+    printf "%d\talone\t%d\n" $i $([ $r = 0 ] && echo 1 || echo 0) >> $RES0/$p/ident.tsv
+  else echo "  no alone run for $s at T=$T slots=$SL" >> $d; fi
+  if [ -d $cpu/out ]; then compare_out cpu $cpu/out $cpu/CellReads.stats $cpu/readhash.txt $b $cb $RES0/$p/c$i/readhash.txt $d; r=$?
+    printf "%d\tcpu\t%d\n" $i $([ $r = 0 ] && echo 1 || echo 0) >> $RES0/$p/ident.tsv
+  else echo "  NO CPU REFERENCE at $cpu (run gate.sbatch with MODES=cpu for this binary and T)" >> $d; fi
+  echo "  c$i ($s): $(grep -a 'IDENTICAL' $d | tr '\n' ' ')" >> $RES0/$p/identity.lines
+  rm -rf $SCR/$p/c$i
+}
+
+collect_dump() {   # point
+  local p=$1 f c s
   for f in $SCR/dump-$p-c*.bin; do
     [ -f $f ] || continue
     c=$(basename $f .bin); c=${c##*-}; s=$(awk -F'\t' -v i=${c#c} '$1==i{print $3}' $RES0/$p/runs.tsv)
     printf "%s\t%s\t%s\t%s\t%s\n" $p $c $s $(stat -c %s $f) $(sha256sum $f | cut -c1-64) >> $RES0/dumps.tsv; rm -f $f
     echo "  E6 dump $p $c ($s): $(tail -1 $RES0/dumps.tsv | cut -f4) bytes, sha256 $(tail -1 $RES0/dumps.tsv | cut -f5 | cut -c1-16)" | tee -a $S
   done
+}
+
+# a run alone at the same T and slots, kept (pruned) as the reference of the point's runs
+ensure_alone() {   # sample T slots
+  local s=$1 T=$2 SL=$3 key=$1-t$2-s$3
+  [ -d $SCR/ref/$key/out ] && return
+  local p=alone-$key keep=$PIN; PIN=""
+  stage_input $s; mkdir -p $SCR/$p $RES0/$p; echo 0 > $SCR/$p/queue; : > $RES0/$p/runs.tsv
+  echo "######## $p: one run alone, T=$T, slots=$SL; $(date -Is)" | tee -a $S
+  run_item $p 0 0 $s $T
+  local rc; rc=$(awk -F'\t' '{print $6}' $RES0/$p/runs.tsv | head -1)
+  if [ "${rc:-1}" = 0 ]; then
+    mkdir -p $SCR/ref/$key; mv $SCR/$p/c0/out $SCR/ref/$key/out; cp $RES0/$p/c0/CellReads.stats $SCR/ref/$key/ 2>/dev/null
+    readhash $SCR/ref/$key/out > $SCR/ref/$key/readhash.txt; prune $SCR/ref/$key/out
+    echo "  alone run $key: exit 0, wall $(awk -F'\t' '{printf "%.1f", $5-$4}' $RES0/$p/runs.tsv) s, kept as the reference" | tee -a $S
+    # the alone run against the CPU reference as well
+    local cpu=$CPU_REF/T$T/$s d=$RES0/$p/c0/identity.txt; : > $d
+    if [ -d $cpu/out ]; then compare_out cpu $cpu/out $cpu/CellReads.stats $cpu/readhash.txt $SCR/ref/$key/out $SCR/ref/$key/CellReads.stats $SCR/ref/$key/readhash.txt $d
+      echo "  alone run $key vs the CPU reference: $(grep -a 'IDENTICAL' $d | tr '\n' ' ')" | tee -a $S
+    else echo "  alone run $key: NO CPU REFERENCE at $cpu" | tee -a $S; fi
+  else echo "!! alone run $key failed (exit $rc): no reference for it" | tee -a $S; fi
+  collect_dump $p; rm -rf $SCR/$p; PIN=$keep
+}
+
+for p in "${POINTS[@]}"; do
+  if ! [[ $p =~ ^(mix)?k([0-9]+)t([0-9]+)s([0-9]+)(m([0-9]+))?(r([0-9]+))?(p)?(f)?$ ]]; then echo "!! bad point tag $p" | tee -a $S; continue; fi
+  MIXP=${BASH_REMATCH[1]}; K=${BASH_REMATCH[2]}; T=${BASH_REMATCH[3]}; SL=${BASH_REMATCH[4]}; BG=${BASH_REMATCH[6]}; R=${BASH_REMATCH[8]:-1}; PIN=${BASH_REMATCH[9]}
+  SDT=0.5; SGE=2; [ -n "${BASH_REMATCH[10]}" ] && SDT=0.2 && SGE=1
+  NI=$((K * R)); [ -n "$NRUNS" ] && NI=$NRUNS
+  ITEMS=()
+  if [ -n "$MIXP" ]; then   # the mix repeated R times (E18), or NRUNS items cycling through it
+    if [ -n "$NRUNS" ]; then for ((j = 0; j < NI; j++)); do ITEMS+=("${MIX[$((j % ${#MIX[@]}))]}"); done; else for ((j = 0; j < R; j++)); do ITEMS+=("${MIX[@]}"); done; NI=${#ITEMS[@]}; fi
+  else for ((j = 0; j < NI; j++)); do ITEMS+=($SAMPLE); done; fi
+  for s in $(printf "%s\n" "${ITEMS[@]}" | sort -u); do stage_input $s; done
+  XENV="SINGLET_ENGINE_GPU_SLOTS=$SL"; [ -n "$BG" ] && XENV+=" $(budget $BG)"
+  unset SINGLET_ENGINE_GPU_SLOTS SINGLET_ENGINE_GPU_CHUNK SINGLET_ENGINE_GPU_NB SINGLET_ENGINE_GPU_NBM SINGLET_ENGINE_GPU_NBB SINGLET_GPU_PILEUP_ARENA_GB SINGLET_ENGINE_GPU_DEVICE
+  export $XENV
+  if [ "$IDENT" = 1 ]; then for s in $(printf "%s\n" "${ITEMS[@]}" | sort -u); do ensure_alone $s $T $SL; done; fi
+  mkdir -p $SCR/$p $RES0/$p; echo 0 > $SCR/$p/queue; : > $RES0/$p/runs.tsv; : > $RES0/$p/ident.tsv; : > $RES0/$p/identity.lines
+  printf '{"tag":"%s","k":%d,"T":%d,"slots":%d,"rounds":%d,"runs":%d,"pin":"%s","items":"%s","env":"%s","node":"%s","gpus":%d}\n' $p $K $T $SL $R $NI "$PIN" "${ITEMS[*]}" "$XENV" "$(hostname)" $NGPU > $RES0/$p/meta.json
+  echo "######## $p: $K in flight, T=$T, $NI runs, items ${ITEMS[*]:0:3}...; $XENV${PIN:+; pinned}; $(date -Is)" | tee -a $S
+  # co-tenants: the node's jobs at the start, once a minute, and at the end
+  CT=$RES0/$p/cotenants.log; : > $CT
+  ctsnap() { { echo "## $1 $(date -Is)"; squeue -w $(hostname -s) -o "%i %u %j %C %b" 2>&1; } >> $CT; }
+  ctsnap start
+  cat $CT | sed 's/^/  /' | tee -a $S
+  ( while sleep 60; do ctsnap minute; done ) &
+  CTP=$!
+  python3 $TPD/e18_sampler.py $RES0/$p/samples.jsonl $CG $SDT $SGE 2>$RES0/$p/sampler.err &
+  SMP=$!
+  sleep 1
+  WP=()
+  for ((w = 0; w < K; w++)); do worker $p $w $T & WP+=($!); done
+  wait "${WP[@]}"
+  sleep 1; kill $SMP $CTP 2>/dev/null; wait $SMP 2>/dev/null
+  ctsnap end
+  du -sh $SCR/$p 2>/dev/null | sed 's/^/  \/tmp use of the point before identity: /' | tee -a $S; df -h /tmp | tail -1 | sed 's/^/  /' | tee -a $S
+  python3 $TPD/e18_point.py $RES0/$p > $RES0/$p/point.txt 2>&1
+  [ -f $TPD/e18_locks.py ] && python3 $TPD/e18_locks.py $RES0/$p >> $RES0/$p/point.txt 2>&1
+  [ -f $TPD/e18_steady.py ] && python3 $TPD/e18_steady.py $RES0/$p 2>&1 | sed 's/^/   /' >> $RES0/$p/point.txt
+  cut -c1-400 $RES0/$p/point.txt | tee -a $S
+  # identity, the dump, references
+  while IFS=$'\t' read -r i w s t0 t1 rc; do
+    [ "$i" = item ] && continue
+    if [ $K = 1 ] && [ ! -d $SCR/ref/$s-t$T-s$SL/out ] && [ $rc = 0 ]; then
+      mkdir -p $SCR/ref/$s-t$T-s$SL && mv $SCR/$p/c$i/out $SCR/ref/$s-t$T-s$SL/out && cp $RES0/$p/c$i/CellReads.stats $SCR/ref/$s-t$T-s$SL/ 2>/dev/null
+      readhash $SCR/ref/$s-t$T-s$SL/out > $SCR/ref/$s-t$T-s$SL/readhash.txt; prune $SCR/ref/$s-t$T-s$SL/out
+      echo "  c$i ($s): kept as the reference for $s at T=$T, slots=$SL" | tee -a $S
+    elif [ "$IDENT" = 1 ] && [ $rc = 0 ]; then
+      while [ $(jobs -rp | wc -l) -ge ${IDPAR:-4} ]; do sleep 1; done
+      ident_run $p $i $s $T $SL &
+    fi
+  done < <(sort -n $RES0/$p/runs.tsv)
+  wait
+  for f in $(ls $RES0/$p/c*/identity.txt 2>/dev/null | sort -V); do cat $f >> $RES0/$p/identity.txt; done
+  sort -V $RES0/$p/identity.lines 2>/dev/null | tee -a $S
+  collect_dump $p
+  python3 $GB/tp_point.py $RES0/$p 2>&1 | tee -a $S $RES0/$p/results.txt
+  [ -f $RES0/results.tsv ] || head -1 $RES0/$p/results.tsv > $RES0/results.tsv
+  tail -n +2 $RES0/$p/results.tsv >> $RES0/results.tsv
   rm -rf "${SCR:?}/${p:?}"
 done
 echo "=== mapDistinct records (E6 dumps) per sample" | tee -a $S
@@ -176,5 +287,7 @@ echo "=== mapDistinct records (E6 dumps) per sample" | tee -a $S
   [ $u = 1 ] && echo "  $s: $n dumps, all IDENTICAL (sha256 $(awk -F'\t' -v s=$s '$3==s{print substr($5,1,16); exit}' $RES0/dumps.tsv))" | tee -a $S \
              || echo "  $s: $n dumps, $u DIFFERENT hashes" | tee -a $S
 done
-python3 $SCR/repo/bench/fable/throughput/e18_point.py --table $RES0 > $RES0/table.md 2>&1; tee -a $S < $RES0/table.md
+python3 $TPD/e18_point.py --table $RES0 > $RES0/table.md 2>&1; tee -a $S < $RES0/table.md
+echo "=== results.tsv" | tee -a $S; column -t -s $'\t' $RES0/results.tsv 2>/dev/null | tee -a $S
+echo "PROVENANCE job=$SLURM_JOB_ID node=$(hostname -s) bin=$BIN sha256=$BSHA commit=$COMMIT scripts=$SCRIPTS" | tee -a $S
 echo done $(date -Is) | tee -a $S

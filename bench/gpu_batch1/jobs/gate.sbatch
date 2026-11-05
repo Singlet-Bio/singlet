@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=gd-gate
+#SBATCH --job-name=gb1-gate
 #SBATCH --account=debruinz
 #SBATCH --partition=short-gpu
 #SBATCH --gres=gpu:nvidia_h100_nvl:1
@@ -9,7 +9,16 @@
 #SBATCH --exclude=g050
 #SBATCH --nice=10000
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# perf/gpu-device gate (P3-ENG-14 onward), a copy of E19 (docs/gpu-engine/fable/E19-release.md): the all-sample gate of the GPU path's defaults, from E15's bench/fable/posterior/jobs/gate.sbatch
+# GPU batch 1 gate (bench/gpu_batch1/README.md), from bench/gpu_device/jobs/gate.sbatch. Changes against that gate:
+#   - EXPECT_COMMIT is required: the job stops unless BINDIR's commit-gpu starts with it. The first log line and every table row carry the provenance.
+#   - The CPU references are keyed by the binary's commit: $W/jobs/gpu-batch1/ref/<commit8>/T<T>/<sample>. The CPU run is that binary's CPU mode.
+#   - Ten samples by default, with the antibody library of pbmc1k_cite_v3 mapped as RNA (pbmc1k_cite_v3_adt, its .1fq is under $W/jobs/fable/release/data).
+#     The long-read slice is a separate choice: SAMPLES=gsm7064234s, with sbatch --mem=370G (the job stops with less).
+#   - FIELDDIFF lines and one "FIELD CHECK: n unexplained" line per pair (fieldcheck.py). They never change the verdict line.
+#   - GATE FALLBACK <sample> for every disallowed fallback line of a GPU run (fallback.py allow-list). It fails the gate.
+#   - One MASK line per GPU run: is the low-quality mask active, and how wide (maskstatus.py).
+#   - Scripts come from the bench/gpu-batch1 branch with a commit check, one fetch at a time.
+# Original header: perf/gpu-device gate (P3-ENG-14 onward), a copy of E19 (docs/gpu-engine/fable/E19-release.md): the all-sample gate of the GPU path's defaults, from E15's bench/fable/posterior/jobs/gate.sbatch
 # and E16's bench/fable/tail/jobs/gate.sbatch. Binary of bench/fable/release/jobs/build.sbatch in $BINDIR (singlet-gpu). Per sample in SAMPLES
 # (default: every sample under pipeline-benchmark/data; the .1fq from there, else from $W/jobs/fable/release/data/<s>/ written by encode.sbatch;
 # genome by sample: GRCm39 for the mouse samples, the barnyard for hgmm1k_v3, else GRCh38), modes (MODES, in order; MODES_<sample> overrides):
@@ -33,22 +42,41 @@
 # files, and CellReads.stats by sorted rows. Stages: E13's s8_stages_e13.py with the run's input reads.
 # debug-gpu: sbatch -p debug-gpu -c 8 --mem=120G --time=00:29:00 --export=ALL,T=8,SAMPLES=pbmc2m,MODES="cpu gpu" gate.sbatch
 set -uo pipefail
-FAIL=0
+FAIL=0; FIELDBAD=0
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 BINDIR=${BINDIR:?BINDIR: the directory with singlet-gpu}; T=${T:-18}
-SAMPLES=(${SAMPLES:-pbmc2m pbmc10m pbmc1k_v3 pbmc1k_v2 pbmc1k_cite_v3 pbmc5p_v1 neuron1k_v3 hgmm1k_v3 nuclei2k_v2}); MODES=(${MODES:-cpu gpu})
-REFD=${REFD:-$W/jobs/gpu-device/ref}/T$T; DATA2=$W/jobs/fable/release/data; E11=$W/jobs/fable/solowire/results/gate-796377
-BARE=$W/repos/singlet-py.git; BR=${BRANCH:-perf/gpu-device}
+EXPECT_COMMIT=${EXPECT_COMMIT:?EXPECT_COMMIT: the commit that BINDIR must hold}
+[ ${#EXPECT_COMMIT} -ge 8 ] || { echo "EXPECT_COMMIT needs 8 or more hex digits"; exit 2; }
+SAMPLES=(${SAMPLES:-pbmc2m pbmc10m pbmc1k_v3 pbmc1k_v2 pbmc1k_cite_v3 pbmc1k_cite_v3_adt pbmc5p_v1 neuron1k_v3 hgmm1k_v3 nuclei2k_v2}); MODES=(${MODES:-cpu gpu})
+DATA2=$W/jobs/fable/release/data; E11=$W/jobs/fable/solowire/results/gate-796377
+BARE=$W/repos/singlet-py.git; SBR=${SCRIPTS_BRANCH:-bench/gpu-batch1}
+RES0=$W/jobs/gpu-batch1/results/gate-$SLURM_JOB_ID; mkdir -p $RES0
+# provenance of the binary: its build record must match EXPECT_COMMIT
+[ -f $BINDIR/singlet-gpu ] || { echo "no binary $BINDIR/singlet-gpu"; exit 2; }
+COMMIT=$(cat $BINDIR/commit-gpu 2>/dev/null || true)
+case $COMMIT in $EXPECT_COMMIT*) ;; *) echo "REFUSED: $BINDIR records commit '${COMMIT:-none}', EXPECT_COMMIT is $EXPECT_COMMIT" | tee $RES0/summary.txt; exit 2 ;; esac
+BSHA=$(sha256sum $BINDIR/singlet-gpu | cut -d' ' -f1); EMBED=no; grep -aqF "$COMMIT" $BINDIR/singlet-gpu && EMBED=yes
+# the long-read slice needs 370G (STATUS-2026-11 section 6.6). The other samples run in the default 200G.
+case " ${SAMPLES[*]} " in *" gsm7064234s "*) [ ${SLURM_MEM_PER_NODE:-0} -ge 378880 ] || { echo "REFUSED: gsm7064234s needs sbatch --mem=370G (the job has ${SLURM_MEM_PER_NODE:-?} MB)" | tee $RES0/summary.txt; exit 2; } ;; esac
+REFD=$W/jobs/gpu-batch1/ref/${COMMIT:0:8}/T$T; mkdir -p $REFD
 [ -e $BINDIR/../whitelists ] || ln -s $PB/whitelists $BINDIR/../whitelists
-RES0=$W/jobs/gpu-device/results/gate-$SLURM_JOB_ID; mkdir -p $RES0 $REFD
-SCR=/tmp/$USER-gdg-$SLURM_JOB_ID; mkdir -p $SCR/repo
-trap 'kill $(jobs -p) 2>/dev/null; rm -rf "${SCR:?}"' EXIT INT TERM
-for i in 1 2 3; do git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/gd/gate-$SLURM_JOB_ID && break; sleep 5; done
-git -C $BARE archive refs/gd/gate-$SLURM_JOB_ID bench/star_accel/out_equiv.py bench/fable/ingest/s8_stages_e13.py bench/fable/tail/e16_steps.py | tar -x -C $SCR/repo
+SCR=/tmp/$USER-gb1g-$SLURM_JOB_ID; mkdir -p $SCR/repo
+SREF=refs/gb1/gate-$SLURM_JOB_ID
+trap 'kill $(jobs -p) 2>/dev/null; git -C $BARE update-ref -d $SREF 2>/dev/null; rm -rf "${SCR:?}"' EXIT INT TERM
+# scripts from the bench/gpu-batch1 branch: one fetch at a time (concurrent fetches raced before), then check that the tip is what was asked for
+URL="$(git -C $BARE config remote.origin.url)"
+WANT=$(git ls-remote "$URL" refs/heads/$SBR | cut -f1); [ -n "$WANT" ] || { echo "no scripts branch $SBR"; exit 3; }
+( flock 9; git -C $BARE fetch -q "$URL" +refs/heads/$SBR:$SREF ) 9>$BARE/.gn-fetch.lock
+SFULL=$(git -C $BARE rev-parse $SREF); [ "$SFULL" = "$WANT" ] || { echo "fetched $SFULL, branch tip is $WANT"; exit 3; }
+[ -z "${EXPECT_SCRIPTS:-}" ] || [[ $SFULL == $EXPECT_SCRIPTS* ]] || { echo "scripts commit $SFULL, EXPECT_SCRIPTS is $EXPECT_SCRIPTS"; exit 3; }
+SCRIPTS=${SFULL:0:8}
+git -C $BARE archive $SREF bench/star_accel/out_equiv.py bench/fable/ingest/s8_stages_e13.py bench/fable/tail/e16_steps.py bench/gpu_batch1 | tar -x -C $SCR/repo
+GB=$SCR/repo/bench/gpu_batch1
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
-COMMIT=$(cat $BINDIR/commit-gpu 2>/dev/null)
-echo "node=$(hostname) job=$SLURM_JOB_ID bin=$BINDIR commit=$COMMIT scripts=$(git -C $BARE rev-parse --short=8 refs/gd/gate-$SLURM_JOB_ID) T=$T samples=${SAMPLES[*]} modes=${MODES[*]} refs=$REFD $(date -Is)" | tee $RES0/summary.txt
+PROVC=$(printf '%s\t' $SLURM_JOB_ID $(hostname -s) $BINDIR/singlet-gpu $BSHA $COMMIT $SCRIPTS $T); PROVC=${PROVC%?}   # job node bin bin_sha256 build_commit scripts_commit T: the last columns of every table
+echo "PROVENANCE job=$SLURM_JOB_ID node=$(hostname -s) bin=$BINDIR/singlet-gpu sha256=$BSHA commit=$COMMIT expect=$EXPECT_COMMIT embedded=$EMBED scripts=$SCRIPTS T=$T $(date -Is)" | tee $RES0/summary.txt
+echo "node=$(hostname) job=$SLURM_JOB_ID bin=$BINDIR commit=$COMMIT scripts=$SCRIPTS T=$T samples=${SAMPLES[*]} modes=${MODES[*]} refs=$REFD $(date -Is)" | tee -a $RES0/summary.txt
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader | tee -a $RES0/summary.txt
 # E11 §2a's run-dependent files once the read files are set aside: timings (read_stats.tsv, star_Log.std.out), the file path's clip5p probe count
 # and bytes_public (pileup_stats.json), memory_tier (summary.json); provenance.json and ambient_contamination.json differ in timings/paths only
@@ -63,7 +91,7 @@ READF="nonhost_reads.fq star_Unmapped.out.mate1 star_Unmapped.out.mate2"
 readhash() { for f in $READF; do
     if [ -f $1/$f ]; then echo "$f $(paste - - - - < $1/$f | LC_ALL=C sort -S 4G --parallel=8 -T $SCR | sha256sum | cut -c1-16) $(( $(wc -l < $1/$f) / 4 ))"
     else echo "$f absent 0"; fi; done; }
-[ -f $RES0/runs.tsv ] || printf "sample\tmode\texit\twall_s\tcore_s\tmaxrss_gb\tdev_peak_gb\tlanes_peak_gb\tlevel\tingest\tfallback_lines\tnode\n" > $RES0/runs.tsv
+[ -f $RES0/runs.tsv ] || printf "sample\tmode\texit\twall_s\tcore_s\tmaxrss_gb\tdev_peak_gb\tlanes_peak_gb\tlevel\tingest\tfallback_lines\tnode\tjob\tnode_p\tbin\tbin_sha256\tbuild_commit\tscripts_commit\tT\n" > $RES0/runs.tsv
 for s in "${SAMPLES[@]}"; do
   RES=$RES0/$s; mkdir -p $RES; RS=$REFD/$s
   G=$REF/GRCh38-2024-A
@@ -76,7 +104,7 @@ for s in "${SAMPLES[@]}"; do
   mv=MODES_$s; MS=(${!mv:-${MODES[*]}}); pv=PAIRS_$s; PS="${!pv:-${PAIRS:-cpu:gpu}}"
   for m in "${MS[@]}"; do
     O=$RES/$m
-    if [ $m = cpu ] && [ -f $RS/DONE ] && [ "${REFRESH_REF:-0}" != 1 ]; then
+    if [ $m = cpu ] && [ -f $RS/DONE ] && grep -q "commit $COMMIT " $RS/DONE && [ "${REFRESH_REF:-0}" != 1 ]; then
       echo "$s cpu: the kept reference $RS ($(head -1 $RS/DONE))" | tee -a $RES0/summary.txt; cat $RS/run.txt | tee -a $RES0/summary.txt
       grep -a "^$s	cpu	" $RS/runs.tsv | sed 's/	cpu	/	cpu(kept)	/' >> $RES0/runs.tsv; continue
     fi
@@ -100,13 +128,16 @@ for s in "${SAMPLES[@]}"; do
         printf "%s\t%s\t%s\n" $(date +%s.%N) $(awk '$1=="usage_usec"{printf "%.2f", $2/1e6}' $CG/cpu.stat) "$g"; sleep 1
       done ) > $O/monitor.tsv 2>/dev/null &
     MON=$!
+    # SINGLET_HANDOFF_QWORDS is set inside the process (setenv) and not logged: look for it in /proc/<pid>/environ of every process, best effort
+    ( while true; do for f in /proc/[0-9]*/environ; do tr '\0' '\n' < $f 2>/dev/null | sed -n 's/^SINGLET_HANDOFF_QWORDS=//p'; done | sort -u >> $O/qwords_env.raw; sleep 2; done ) 2>/dev/null &
+    QWP=$!
     CRS=$SCR/$s/$m/out/star_Solo.out/Gene/CellReads.stats
     ( while [ ! -e $CRS ]; do sleep 0.2; done; ln $CRS $SCR/$s/$m/CellReads.stats ) &
     WATCH=$!
     T0=$(date +%s.%N); C0=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat)
     ( cd $SCR/$s/$m && /usr/bin/time -v -o $O/time.txt timeout -k 30 ${RUN_TIMEOUT:-5400} $BIN $FQ --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
         --out-prefix $SCR/$s/$m/out/ --threads $T --pipeline --output-format 1pz $ENGARG 2>&1 | while IFS= read -r l; do printf '%(%s)T %s\n' -1 "$l"; done > $O/run.log.ts )
-    C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON $WATCH 2>/dev/null
+    C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON $WATCH $QWP 2>/dev/null
     WALL=$(echo "$T1 - $T0" | bc | cut -c1-7); CORES=$(echo "($C1 - $C0)/1000000" | bc -l | cut -c1-7)
     RSS=$(awk -F': ' '/Maximum resident/{printf "%.1f", $2/1048576}' $O/time.txt); DEV=$(awk -F'\t' 'NR>1 && $4>m{m=$4} END{printf "%.1f", m/1024}' $O/monitor.tsv)
     ES=$(awk -F': ' '/Exit status/{print $2}' $O/time.txt 2>/dev/null)
@@ -132,6 +163,20 @@ for s in "${SAMPLES[@]}"; do
          -e "finished mapping" -e "Loading SA" -e "Loading Genome" -e "ALL DONE" $SCR/$s/$m/out/*Log.out 2>/dev/null | cut -c1-6000 | head -160 > $O/starlog_engine.txt
     grep -a -e "not used" -e "not built" -e "FATAL" $O/starlog_engine.txt | grep -av "Shared memory is not used" | cut -c1-400 | sed 's/^/  star_Log.out: /' | tee -a $RES0/summary.txt $O/fallbacks.txt
     cp $SCR/$s/$m/out/*Log.final.out $SCR/$s/$m/out/*Log.out $O/ 2>/dev/null
+    if [ $m != cpu ]; then
+      sort -u $O/qwords_env.raw 2>/dev/null > $O/qwords_env.txt
+      python3 $GB/maskstatus.py "$s $m" $O $O/qwords_env.txt | tee -a $RES0/summary.txt $O/mask.txt
+      case $m in gpuO0|gpuI0|gpuL[0-4]) echo "FALLBACK CHECK $s $m: not applied (an opt-out mode)" | tee -a $RES0/summary.txt ;;
+        *) python3 $GB/fallback.py $O > $O/fallback_check.txt 2>&1
+           NBAD=$(awk -F'\t' '$1=="SUMMARY"{print $2}' $O/fallback_check.txt); NOKF=$(awk -F'\t' '$1=="SUMMARY"{print $3}' $O/fallback_check.txt)
+           echo "FALLBACK CHECK $s $m: ${NBAD:-?} disallowed, ${NOKF:-?} allowed (informational) lines" | tee -a $RES0/summary.txt
+           grep -a '^ALLOWED' $O/fallback_check.txt | cut -c1-300 | sed 's/^/  /' | tee -a $RES0/summary.txt
+           if [ "${NBAD:-1}" != 0 ]; then
+             echo "GATE FALLBACK $s ($m): ${NBAD:-?} disallowed lines" | tee -a $RES0/summary.txt
+             grep -a '^DISALLOWED' $O/fallback_check.txt | cut -c1-400 | sed 's/^/  /' | tee -a $RES0/summary.txt; FAIL=1
+           fi ;;
+      esac
+    fi
     [ -f $SCR/$s/$m/CellReads.stats ] && cp $SCR/$s/$m/CellReads.stats $O/CellReads.stats && echo "  CellReads.stats kept: $(wc -l < $O/CellReads.stats) lines" | tee -a $RES0/summary.txt
     cp $SCR/$s/$m/out/read_stats.tsv $SCR/$s/$m/out/summary.json $O/ 2>/dev/null
     RM=$(awk -F'|' '/Number of input reads/{gsub(/[ \t]/,"",$2); printf "%.6f", $2/1e6}' $O/star_Log.final.out 2>/dev/null); RM=${RM:-1}
@@ -140,7 +185,7 @@ for s in "${SAMPLES[@]}"; do
     readhash $SCR/$s/$m/out > $O/readhash.txt
     # the prefill's device peak (engine log); dev_peak is nvidia-smi's 1-s maximum, which includes the GPU pileup's arena (free memory - 3 GB)
     LANES=$(grep -ao -e "lanes peak [0-9.]*" -e "tally peak [0-9.]*" $O/starlog_engine.txt | tail -1 | awk '{printf "%.1f", $3}')
-    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$s" "$m" "${ES:-?}" "$WALL" "$CORES" "$RSS" "$DEV" "${LANES:--}" "${LV:-?}" "$ING" "$NFB" "$(hostname -s)" >> $RES0/runs.tsv
+    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%b\n" "$s" "$m" "${ES:-?}" "$WALL" "$CORES" "$RSS" "$DEV" "${LANES:--}" "${LV:-?}" "$ING" "$NFB" "$(hostname -s)" "$PROVC" >> $RES0/runs.tsv
     if [ $m = cpu ] && [ "${ES:-1}" = 0 ]; then   # the sample's reference, for this gate's pairs and the later ones
       N=$RS.new-$SLURM_JOB_ID; rm -rf $N; mkdir -p $N
       rsync -a "${EXCL[@]}" $SCR/$s/$m/out/ $N/out/
@@ -156,7 +201,7 @@ for s in "${SAMPLES[@]}"; do
     fi
     rm -rf $SCR/$s/$m/out
   done
-  odir() { case $1 in cpu) [ -f $RS/DONE ] && echo $RS/out ;; e11gpuD) echo "${OUT_e11gpuD:-$E11/gpuD/out}" ;;
+  odir() { case $1 in cpu) [ -f $RS/DONE ] && grep -q "commit $COMMIT " $RS/DONE && echo $RS/out ;; e11gpuD) echo "${OUT_e11gpuD:-$E11/gpuD/out}" ;;
              *) if [ -d $SCR/$s/$1/cmp ]; then echo $SCR/$s/$1/cmp; else v=OUT_$1; echo "${!v:-}"; fi ;; esac; }
   crs() { case $1 in cpu) echo $RS/CellReads.stats ;; e11gpuD) echo "${CRS_e11gpuD:-$E11/gpuD/CellReads.stats}" ;;
             *) if [ -f $RES/$1/CellReads.stats ]; then echo $RES/$1/CellReads.stats; else v=CRS_$1; echo "${!v:-}"; fi ;; esac; }
@@ -200,11 +245,18 @@ for s in "${SAMPLES[@]}"; do
     else echo "  Gene/CellReads.stats: not compared (no copy for $1 or $2)" | tee -a $RES0/summary.txt; fi
     if [ $ok = 1 ]; then echo "VERDICT $s $1:$2 IDENTICAL (except E11's run-dependent files${kn:+ and the known non-host writer bug in$kn}; out_equiv $FL)" | tee -a $RES0/summary.txt
     else echo "VERDICT $s $1:$2 NOT IDENTICAL" | tee -a $RES0/summary.txt; FAIL=1; fi
-    printf "%s\t%s:%s\t%s\t%s\t%s\n" $s $1 $2 "$([ $ok = 1 ] && echo IDENTICAL || echo DIFFERENT)" "$FL" "${kn:+known:${kn# }}" >> $RES0/verdicts.tsv; }
+    # field-level look into the files that are excused by name (never changes the verdict above)
+    echo "  field check $s $1:$2 (read_stats.tsv, pileup_stats.json, summary.json, provenance.json, ambient_contamination.json)" | tee -a $RES0/summary.txt
+    FC=$(python3 $GB/fieldcheck.py $a $b 2>&1); echo "$FC" | tee -a $RES0/summary.txt $RES/fieldcheck-$1-$2.txt
+    FN=$(echo "$FC" | sed -n 's/^FIELD CHECK: \([0-9]*\) unexplained.*/\1/p'); FIELDBAD=$((FIELDBAD + ${FN:-1}))
+    [ -f $RES0/verdicts.tsv ] || printf "sample\tpair\tverdict\tout_equiv\tknown\tfield_unexplained\tjob\tnode\tbin\tbin_sha256\tbuild_commit\tscripts_commit\tT\n" > $RES0/verdicts.tsv
+    printf "%s\t%s:%s\t%s\t%s\t%s\t%s\t%b\n" $s $1 $2 "$([ $ok = 1 ] && echo IDENTICAL || echo DIFFERENT)" "$FL" "${kn:+known:${kn# }}" "${FN:-?}" "$PROVC" >> $RES0/verdicts.tsv; }
   for p in $PS; do cmp2 ${p%%:*} ${p##*:}; done
   rm -rf "${SCR:?}/${s:?}"
 done
 echo "######## runs" | tee -a $RES0/summary.txt; column -t -s $'\t' $RES0/runs.tsv | tee -a $RES0/summary.txt
 echo "######## verdicts" | tee -a $RES0/summary.txt; [ -f $RES0/verdicts.tsv ] && column -t -s $'\t' $RES0/verdicts.tsv | tee -a $RES0/summary.txt
 [ $FAIL = 0 ] && echo "GATE RUN OK (identity verdicts above)" | tee -a $RES0/summary.txt || echo "GATE FAILED" | tee -a $RES0/summary.txt
+echo "FIELD CHECK TOTAL: $FIELDBAD unexplained (the field lists above. Not part of the verdict.)" | tee -a $RES0/summary.txt
+echo "PROVENANCE job=$SLURM_JOB_ID node=$(hostname -s) bin=$BINDIR/singlet-gpu sha256=$BSHA commit=$COMMIT scripts=$SCRIPTS T=$T" | tee -a $RES0/summary.txt
 echo done $(date -Is) | tee -a $RES0/summary.txt
