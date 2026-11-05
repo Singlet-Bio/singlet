@@ -51,18 +51,26 @@ grep -rl --include=CMakeLists.txt -e "-march=native" $S | xargs -r sed -i 's/-ma
 grep -q "sam_hdr_destroy(bam_hdr_t" $S/src/star/bam_cat.c || \
   sed -i '/^#include "htslib\/htslib\/sam.h"/a extern "C" void sam_hdr_destroy(bam_hdr_t *h);' $S/src/star/bam_cat.c
 if [ "${ONLY_GPU_TEST:-0}" = 1 ]; then TARGETS="--target test_gpu_pileup_labels"; else TARGETS=""; fi
-cat > $SCR/run.sh <<EOS
+# Stage 1, in the CUDA devel image: configure and build (the recipe of build.sbatch).
+cat > $SCR/build.sh <<EOS
 set -uo pipefail
 export PATH=$ENV/bin:/usr/local/cuda/bin:\$PATH CONDA_PREFIX=$ENV CMAKE_PREFIX_PATH=$ENV PKG_CONFIG_PATH=$ENV/lib/pkgconfig:$ENV/share/pkgconfig
 export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gnu-g++ LD_LIBRARY_PATH=$ENV/lib CMAKE_POLICY_VERSION_MINIMUM=3.5
 export LDFLAGS="-L$ENV/lib -Wl,-rpath,$ENV/lib"
-# the test targets need zstd.h from the env (build.sbatch's CPU test build of c92a494b failed on it: job 800221, 31 of 156 tests not built)
+# the test targets need zstd.h from the env (build.sbatch's CPU test build of c92a494b failed on it: job 800221, tests not built)
 export CPLUS_INCLUDE_PATH=$ENV/include C_INCLUDE_PATH=$ENV/include LIBRARY_PATH=$ENV/lib
-\$CXX --version | head -1; nvcc --version | tail -1; nvidia-smi -L
+\$CXX --version | head -1; nvcc --version | tail -1
 cmake -S $S -B $SCR/b -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_BUILD_TESTS=ON -DSINGLET_GIT_COMMIT=$COMMIT -DSINGLET_ENGINE_GPU=ON \
   -DCMAKE_CXX_FLAGS="${EXTRA_CXX:-}" -DCMAKE_CUDA_HOST_COMPILER=\$CXX -DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler -DCMAKE_CUDA_ARCHITECTURES="90" > $SCR/c.log 2>&1 || { tail -40 $SCR/c.log; echo "CONFIGURE FAILED"; exit 1; }
 grep -E "GPU engine:" $SCR/c.log
 cmake --build $SCR/b -j ${SLURM_CPUS_PER_TASK:-24} $TARGETS -- -k > $SCR/b.log 2>&1 || { grep -m40 -B2 -A8 "rror" $SCR/b.log | tail -60; echo "[build] SOME TARGETS FAILED TO BUILD"; }
+EOS
+# Stage 2, on the node itself: the tests need the node's driver, and the binaries are linked against the env's newer glibc, as the singlet binary is
+# (run inside the Ubuntu 22.04 image the test binary stops with "GLIBC_2.38 not found", and nvidia-smi finds no driver library).
+cat > $SCR/run.sh <<EOS
+set -uo pipefail
+export PATH=$ENV/bin:\$PATH LD_LIBRARY_PATH=$ENV/lib
+nvidia-smi -L
 T=\$(find $SCR/b -name test_gpu_pileup_labels -type f | head -1)
 if [ -z "\$T" ]; then echo "GPU TEST test_gpu_pileup_labels: FAIL (not built)"; exit 1; fi
 cd \$(dirname \$T)
@@ -86,7 +94,7 @@ if [ \$rc = 0 ] && [ \$FAILN = 0 ]; then exit 0; elif [ \$rc = 77 ] && [ \$FAILN
 EOS
 T0=$(date +%s)
 set +e
-apptainer exec --nv -B $W -B $SCR $IMG bash $SCR/run.sh 2>&1 | tee -a $SUM
+{ apptainer exec -B $W -B $SCR $IMG bash $SCR/build.sh && bash $SCR/run.sh; } 2>&1 | tee -a $SUM
 RC=${PIPESTATUS[0]}
 set -e
 echo "[gpu_ctest] ${COMMIT:0:8} exit $RC in $(( $(date +%s) - T0 )) s" | tee -a $SUM
