@@ -1705,7 +1705,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         if (use_gpu) {
             StopWatch gpu_sw;
             int lock_fd = -1;
-            const int device = singlet_engine_gpu::lockDevice(&lock_fd);
+            const int device = singlet_engine_gpu::lockDevice(&lock_fd, singlet_engine_gpu::admitBytes(singlet_engine_gpu::admitGB("SINGLET_ADMIT_EST_NONHOST_GB", 30.0)), "nonhost");
             const double waited = gpu_sw.elapsed_s();
             singlet_engine_gpu::NonhostResult gr;
             const bool ok = singlet_engine_gpu::nonhostClassify(

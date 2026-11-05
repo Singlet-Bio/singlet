@@ -1421,7 +1421,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
     time_t tWait = time(nullptr);
     int lockFd = -1;
-    int device = singlet_engine_gpu::lockDevice(&lockFd);
+    int device = singlet_engine_gpu::lockDevice(&lockFd, singlet_engine_gpu::admitBytes(singlet_engine_gpu::admitGB("SINGLET_ADMIT_EST_PREFILL_GB", (double) singlet_engine_gpu::admitBudgetBytes() / (double) (1ull << 30))), "prefill");
     time_t tLock = time(nullptr);
     int hostThreads = (int) P.runThreadN;
     singlet_engine_gpu::Output out;

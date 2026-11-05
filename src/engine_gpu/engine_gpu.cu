@@ -504,7 +504,13 @@ struct Budget {
 static Budget g_bud;
 static inline u64 budRound(u64 b) { return b < (1u << 20) ? (b + 511) & ~511ull : (b + (2u << 20) - 1) & ~((2ull << 20) - 1); }   // the driver's granularity
 static cudaError_t dmalv(void** p, u64 b) {
-    const cudaError_t e = cudaMalloc(p, b);
+    cudaError_t e = cudaMalloc(p, b);
+    if (e == cudaErrorMemoryAllocation && singlet_engine_gpu::admitOn()) {   // gpu/bold-admit: wait for room (other processes' memory is not in the tally) instead of a fallback
+        const double t0 = now(); int n = 0;
+        while (e == cudaErrorMemoryAllocation && n < 6000) { cudaGetLastError(); usleep(50000); n++; e = cudaMalloc(p, b); }
+        fprintf(stderr, "[admit] cudaMalloc of %.2f GB hit device OOM, waited %.2f s for room (%s)
+", (double) b / (1ull << 30), now() - t0, e == cudaSuccess ? "got it" : "gave up");
+    }
     if (e != cudaSuccess) { *p = nullptr; return e; }
     const u64 r = budRound(b); g_bud.sz[*p] = r; g_bud.used += r; g_bud.note();
     return e;

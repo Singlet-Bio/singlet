@@ -21,6 +21,11 @@
 #include <vector>
 #include <array>
 #include <fcntl.h>
+#include <chrono>
+#include <iostream>
+#include <csignal>
+#include <cerrno>
+#include <sys/stat.h>
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
@@ -272,6 +277,83 @@ inline uint64_t memBudget(uint64_t total) {
 // NVTX: the wait for the lock and its hold (from lockDevice to unlockDevice, which may run in another thread) are ranges of their own
 inline std::map<int, unsigned long long>& lockRanges() { static std::map<int, unsigned long long> m; return m; }
 inline std::mutex& lockRangesMutex() { static std::mutex m; return m; }
+
+// ---- gpu/bold-admit (PROTOTYPE, SINGLET_GPU_ADMIT=1): memory-aware admission in place of the per-process slot lock -----------------------------
+// A process asks for the device with an estimate of the device memory its phase needs. It is admitted when the sum of the reservations of every
+// process on the device (plus a small idle reservation for each process that keeps a context and E11's kept inputs between phases) plus its estimate
+// fits SINGLET_ADMIT_CAP_GB (default 91). Admission is FIFO among waiters, except that a request of at most 8 GB may pass a waiting larger one.
+// Waiting is a poll (20 ms), never a CPU fallback. The table is a file in /tmp shared by every process on the node (mmap + flock as a short mutex).
+// Nothing holds an exclusive device: hold time is the phase itself, several processes use the device at once (time-sliced, or concurrent under MPS).
+inline bool admitOn() { const char* e = std::getenv("SINGLET_GPU_ADMIT"); return e != nullptr && e[0] == '1'; }
+struct AdmitEntry { int32_t pid; int32_t kind; uint64_t bytes; uint64_t ticket; int32_t waiting; int32_t pad; };   // kind 1: a phase, 2: idle
+struct AdmitTable { uint64_t next; uint64_t pad[3]; AdmitEntry e[96]; };
+constexpr int kAdmitBase = 0x40000000;
+inline double admitGB(const char* env, double dflt) { const char* v = std::getenv(env); return v != nullptr ? std::atof(v) : dflt; }
+inline uint64_t admitBytes(double gb) { return (uint64_t) (gb * (double) (1ull << 30)); }
+inline uint64_t admitBudgetBytes() {   // the sample's E17 budget, as memBudget derives it, from the nominal device size
+    const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
+    const double slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
+    return admitBytes((admitGB("SINGLET_ADMIT_TOTAL_GB", 93.0) - 2.0) / slots);
+}
+inline int admitAcquire(int device, uint64_t est, const char* phase, double* waitedOut) {
+    const std::string path = "/tmp/singlet_admit_" + deviceId(device) + ".tab";
+    int fd = open(path.c_str(), O_CREAT | O_RDWR, 0666);
+    if (fd < 0) return -1;
+    { struct stat st; if (fstat(fd, &st) == 0 && (size_t) st.st_size < sizeof(AdmitTable)) { flock(fd, LOCK_EX); if (ftruncate(fd, sizeof(AdmitTable)) != 0) {} flock(fd, LOCK_UN); } }
+    AdmitTable* T = (AdmitTable*) mmap(nullptr, sizeof(AdmitTable), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (T == MAP_FAILED) { close(fd); return -1; }
+    const uint64_t cap = admitBytes(admitGB("SINGLET_ADMIT_CAP_GB", 91.0)), idle = admitBytes(admitGB("SINGLET_ADMIT_IDLE_GB", 2.5)), bf = admitBytes(8.0);
+    const auto t0 = std::chrono::steady_clock::now();
+    int slot = -1; uint64_t myTicket = 0; uint64_t sumBefore = 0; int users = 0; bool first = true;
+    for (;;) {
+        flock(fd, LOCK_EX);
+        for (int i = 0; i < 96; i++) {   // drop the entries of dead processes
+            AdmitEntry& x = T->e[i];
+            if (x.pid != 0 && kill(x.pid, 0) != 0 && errno == ESRCH) { x.pid = 0; x.bytes = 0; x.waiting = 0; }
+        }
+        for (int i = 0; i < 96; i++) if (T->e[i].pid == getpid() && T->e[i].kind == 2) { T->e[i].pid = 0; T->e[i].bytes = 0; }   // the idle reservation gives way to the phase's
+        if (slot < 0) {
+            for (int i = 0; i < 96; i++) if (T->e[i].pid == 0) { slot = i; break; }
+            if (slot < 0) { flock(fd, LOCK_UN); usleep(20000); continue; }
+            AdmitEntry& m = T->e[slot]; m.pid = getpid(); m.kind = 1; m.bytes = est; m.waiting = 1; m.ticket = T->next++; myTicket = m.ticket;
+        }
+        uint64_t sum = 0; int nUse = 0; bool older = false;
+        for (int i = 0; i < 96; i++) {
+            const AdmitEntry& x = T->e[i];
+            if (x.pid == 0 || i == slot) continue;
+            if (x.waiting) { if (x.ticket < myTicket) older = true; continue; }
+            sum += x.bytes; nUse++;
+        }
+        if (first) { sumBefore = sum; users = nUse; first = false; }
+        if (sum + est <= cap && (!older || est <= bf)) { T->e[slot].waiting = 0; T->e[slot].bytes = est; flock(fd, LOCK_UN); break; }
+        flock(fd, LOCK_UN);
+        usleep(20000);
+    }
+    const double waited = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    if (waitedOut) *waitedOut = waited;
+    std::cerr << "[admit] pid " << getpid() << " " << phase << " est " << (double) est / (1ull << 30) << " GB, waited " << waited << " s, others reserved "
+              << (double) sumBefore / (1ull << 30) << " GB in " << users << " entries (at arrival), cap " << (double) cap / (1ull << 30) << " GB\n" << std::flush;
+    munmap(T, sizeof(AdmitTable)); close(fd);
+    return kAdmitBase | slot;
+}
+inline void admitRelease(int device, int handle) {
+    const std::string path = "/tmp/singlet_admit_" + deviceId(device) + ".tab";
+    int fd = open(path.c_str(), O_RDWR);
+    if (fd < 0) return;
+    AdmitTable* T = (AdmitTable*) mmap(nullptr, sizeof(AdmitTable), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (T == MAP_FAILED) { close(fd); return; }
+    const uint64_t idle = admitBytes(admitGB("SINGLET_ADMIT_IDLE_GB", 2.5));
+    flock(fd, LOCK_EX);
+    const int slot = handle & ~kAdmitBase;
+    if (slot >= 0 && slot < 96 && T->e[slot].pid == getpid()) { T->e[slot].pid = 0; T->e[slot].bytes = 0; T->e[slot].waiting = 0; }
+    bool have = false;
+    for (int i = 0; i < 96; i++) if (T->e[i].pid == getpid()) have = true;
+    if (!have) for (int i = 0; i < 96; i++) if (T->e[i].pid == 0) { T->e[i].pid = getpid(); T->e[i].kind = 2; T->e[i].bytes = idle; T->e[i].waiting = 0; break; }
+    flock(fd, LOCK_UN);
+    munmap(T, sizeof(AdmitTable)); close(fd);
+}
+inline int& admitDevice() { static int d = 0; return d; }
+inline std::map<int, int>& admitHandles() { static std::map<int, int> m; return m; }   // handle -> device
 inline int lockDeviceImpl(int* lockFd) {
     auto lockPath = [](int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
@@ -302,8 +384,16 @@ inline int lockDeviceImpl(int* lockFd) {
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
     return device;
 }
-inline int lockDevice(int* lockFd) {
+inline int lockDevice(int* lockFd, uint64_t est = 0, const char* phase = "phase") {
     int d;
+    if (admitOn()) {   // gpu/bold-admit
+        const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
+        d = dv != nullptr ? std::atoi(dv) : 0;
+        if (est == 0) est = admitBytes(3.0);
+        double w = 0; *lockFd = admitAcquire(d, est, phase, &w);
+        if (*lockFd >= 0) admitHandles()[*lockFd] = d;
+        return d;
+    }
     { singlet::NvtxRange nvWait("device lock: wait"); d = lockDeviceImpl(lockFd); }
     if (*lockFd >= 0) {
         const unsigned long long id = singlet::nvtx_start("device lock: held");
@@ -312,6 +402,11 @@ inline int lockDevice(int* lockFd) {
     return d;
 }
 inline void unlockDevice(int lockFd) {
+    if (lockFd >= kAdmitBase) {   // gpu/bold-admit
+        int dev = 0; { std::lock_guard<std::mutex> g(lockRangesMutex()); auto it = admitHandles().find(lockFd); if (it != admitHandles().end()) { dev = it->second; admitHandles().erase(it); } }
+        admitRelease(dev, lockFd);
+        return;
+    }
     if (lockFd >= 0) {
         unsigned long long id = 0;
         { std::lock_guard<std::mutex> g(lockRangesMutex()); auto it = lockRanges().find(lockFd); if (it != lockRanges().end()) { id = it->second; lockRanges().erase(it); } }
@@ -322,7 +417,13 @@ inline void unlockDevice(int lockFd) {
 }
 // a slot of one given device (E11: the sample's second, short use of the device that holds its kept Solo inputs, after STAR's loop): the first
 // free slot, or a wait for slot (pid mod slots). *lockFd is closed by unlockDevice.
-inline void lockDeviceSlot(int device, int* lockFd) {
+inline void lockDeviceSlot(int device, int* lockFd, uint64_t est = 0, const char* phase = "solo") {
+    if (admitOn()) {   // gpu/bold-admit
+        if (est == 0) est = admitBytes(admitGB("SINGLET_ADMIT_EST_SOLO_GB", 3.0));
+        double w = 0; *lockFd = admitAcquire(device, est, phase, &w);
+        if (*lockFd >= 0) { std::lock_guard<std::mutex> g(lockRangesMutex()); admitHandles()[*lockFd] = device; }
+        return;
+    }
     const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
     const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
     auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };

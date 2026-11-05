@@ -2554,7 +2554,7 @@ public:
         pin.nWl = static_cast<uint32_t>(wl_umi_counts_.size());
         pin.keepPinned = keepPinned;
         int lock_fd = -1;
-        const int device = singlet_engine_gpu::lockDevice(&lock_fd);
+        const int device = singlet_engine_gpu::lockDevice(&lock_fd, singlet_engine_gpu::admitBytes(singlet_engine_gpu::admitGB("SINGLET_ADMIT_EST_HANDOFF_GB", 8.0)), "handoff");
         singlet_tail::mark("parent: hand-off pass: device lock taken");
         const bool ok = singlet_engine_gpu::e2ePass(pin, device, table, o);
         singlet_engine_gpu::unlockDevice(lock_fd);
@@ -2798,7 +2798,7 @@ public:
         const double sBuild = since(tA0);
         int lock_fd = -1;
         const auto tL0 = std::chrono::steady_clock::now();
-        const int device = lockDevice(&lock_fd);
+        const int device = lockDevice(&lock_fd, singlet_engine_gpu::admitBytes(singlet_engine_gpu::admitGB("SINGLET_ADMIT_EST_PILEUP_GB", std::min(36.0, (double) singlet_engine_gpu::admitBudgetBytes() / (double) (1ull << 30)))), "pileup");
         const double sWait = since(tL0);
         PileupOutput out;
         const auto tA1 = std::chrono::steady_clock::now();
