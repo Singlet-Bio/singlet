@@ -7,7 +7,7 @@
 # 10x library exercises the restart. MODE cpu runs the CPU engine; MODE gpu also runs --engine gpu with SINGLET_GPU_PILEUP=on and
 # compares the two runs.
 #
-# Each run must: exit 0; log the restart; leave no .gpu_handoff* file in the output folder; list none in provenance.json; and give a
+# Each run must: exit 0 within SINGLET_E2E_TIMEOUT seconds (default 1200; the GPU restart used to hang on the device lock); log the restart; leave no .gpu_handoff* file in the output folder; list none in provenance.json; and give a
 # pileup that saw at least STAR's uniquely mapped reads. In MODE gpu the two runs must have the same pileup read count and the same
 # star_Solo.out Gene matrix and barcodes.
 #
@@ -31,12 +31,17 @@ fail() { echo "FAIL: $*"; FAIL=1; }
 run() {   # run NAME [extra args...]
   local n=$1; shift
   mkdir -p "$D/$n/out"
-  ( cd "$D/$n" && SINGLET_TEST_FORCE_STRAND_RESTART=1 "$BIN" "$SINGLET_E2E_1FQ" ${SINGLET_E2E_REF_BASE:+--ref-base "$SINGLET_E2E_REF_BASE"} \
+  ( cd "$D/$n" && SINGLET_TEST_FORCE_STRAND_RESTART=1 timeout -k 30 "${SINGLET_E2E_TIMEOUT:-1200}" "$BIN" "$SINGLET_E2E_1FQ" ${SINGLET_E2E_REF_BASE:+--ref-base "$SINGLET_E2E_REF_BASE"} \
       --genome-dir "$G/star_2.7.11b" --exons "$G/genes/genes.gtf" --out-prefix "$D/$n/out/" --threads "$T" --pipeline \
-      --output-format 1pz "$@" > "$D/$n/run.log" 2>&1 )
+      --output-format 1pz ${SINGLET_WHITELIST_DIR:+--whitelist-dir "$SINGLET_WHITELIST_DIR"} "$@" > "$D/$n/run.log" 2>&1 )
   local rc=$?
   echo "$n: exit $rc"
+  [ $rc = 124 ] && fail "$n: no exit within ${SINGLET_E2E_TIMEOUT:-1200} s (a hang)"
   [ $rc = 0 ] || { fail "$n exited $rc"; tail -20 "$D/$n/run.log"; }
+  if ! grep -aq "unsorted STAR stream" "$D/$n/run.log"; then
+    fail "$n: the first pass was not on the stream path, so nothing could restart"
+    grep -a -E "BAM:|sorted|whitelist|--stream-unsorted ignored" "$D/$n/run.log" | head -5 | cut -c1-300 | sed 's/^/    /'
+  fi
   grep -aq "restarting on the sorted path" "$D/$n/run.log" || fail "$n: the restart did not happen"
   grep -aq "pileup read .* mapped records, but STAR mapped" "$D/$n/run.log" && fail "$n: pileup shortfall ($(grep -a 'pileup read' "$D/$n/run.log" | tail -1))"
   local left; left=$(ls -A "$D/$n/out" | grep '^\.gpu_handoff' || true)
@@ -55,10 +60,11 @@ run() {   # run NAME [extra args...]
 run cpu --engine cpu
 if [ "$MODE" = gpu ]; then
   SINGLET_GPU_PILEUP=on run gpu --engine gpu
-  grep -aq "unsorted STAR stream" "$D/gpu/run.log" || fail "gpu: the first pass was not on the stream path"
   cmp -s "$D/cpu/pileup_reads" "$D/gpu/pileup_reads" || fail "pileup reads differ: cpu $(cat "$D/cpu/pileup_reads") gpu $(cat "$D/gpu/pileup_reads")"
   for f in Gene/raw/matrix.mtx Gene/raw/barcodes.tsv Gene/filtered/barcodes.tsv Gene/filtered/matrix.mtx; do
-    cmp -s "$D/cpu/out/star_Solo.out/$f" "$D/gpu/out/star_Solo.out/$f" && echo "star_Solo.out/$f: identical" || fail "star_Solo.out/$f differs between cpu and gpu"
+    if [ ! -f "$D/cpu/out/star_Solo.out/$f" ]; then fail "star_Solo.out/$f: missing in the cpu run"
+    elif cmp -s "$D/cpu/out/star_Solo.out/$f" "$D/gpu/out/star_Solo.out/$f"; then echo "star_Solo.out/$f: identical"
+    else fail "star_Solo.out/$f differs between cpu and gpu"; fi
   done
 fi
 [ "${SINGLET_E2E_KEEP:-0}" = 1 ] && echo "outputs kept in $D"
