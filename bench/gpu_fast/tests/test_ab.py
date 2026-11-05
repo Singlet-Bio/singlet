@@ -44,7 +44,8 @@ def clean_git(monkeypatch):
 
 
 def argv(tmp_path, tier=1, extra=()):
-    return ["--tier", str(tier), "--a", BIN_A, "--b", BIN_B, "--name", "idea", "--out", str(tmp_path / "o"), "--poll", "0", *extra]
+    rule = ["--rule", "gain"] if tier == 1 and "--rule" not in extra else []   # the old tier 1 rule, which these synthetic results were written for
+    return ["--tier", str(tier), "--a", BIN_A, "--b", BIN_B, "--name", "idea", "--out", str(tmp_path / "o"), "--poll", "0", *rule, *extra]
 
 
 def test_dry_run_prints_spec_and_sbatch_and_touches_nothing(tmp_path, capsys):
@@ -170,3 +171,12 @@ def test_parse_state():
     assert ab.parse_state("") == ""
     assert ab.parse_state("  COMPLETED  \n") == "COMPLETED"
     assert ab.parse_state("CANCELLED+\n") == "CANCELLED"
+
+
+def test_tier1_default_rule_is_the_demand_rule(tmp_path):
+    from test_demand import dleg
+    from helpers import result
+    res = result([dleg(1, "A", 8.94, 39.1), dleg(2, "B", 7.79, 27.6), dleg(3, "B", 7.79, 27.6), dleg(4, "A", 8.94, 39.1)], 1)
+    ab.main(["--tier", "1", "--a", BIN_A, "--b", BIN_B, "--name", "idea", "--out", str(tmp_path / "o"), "--poll", "0"], remote=Fake(res), out_fn=lambda x: None)
+    v = json.load(open(tmp_path / "o" / "verdict.json"))
+    assert v["verdict"] == "PROMOTE" and v["rule"] == "T1D-3" and v["params"]["node_gain"] == 0.05

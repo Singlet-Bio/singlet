@@ -14,6 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import abcore  # noqa: E402
+import demand  # noqa: E402
 
 
 def read_tsv(path):
@@ -85,6 +86,7 @@ def collect(res):
             leg["stage_core_s"] = {k: sum(v) / len(v) for k, v in acc.items()}
             k = len({r.get("worker") for r in P.get("runs", [])}) or 1
             leg["metrics"]["progress_rate"] = abcore.progress_rate(P.get("runs", []), k)
+            leg["demand"] = demand.leg_demand(P, leg["metrics"])
         sp = f"{D}/STOPPED"
         if os.path.exists(sp):
             leg["stopped"] = open(sp).read().strip()

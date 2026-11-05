@@ -387,6 +387,34 @@ def markdown(rows):
 RANKING_ONLY = "Tier 0 is a ranking screen only. Use the change between base and edited runs. The absolute rate is not a prediction."
 
 
+def run_limits(a):
+    """Demand vector and node rate limits of fast lane out directories. A ranking screen, never an absolute prediction."""
+    import demand
+    rows = []
+    for d in a.out_dirs:
+        res = demand.load_result(d)
+        v = demand.tier1_demand_verdict(res, {"cores": a.cores, "device_gb": a.device_gb})
+        g = abcore.tier1_verdict(res, None, False, "gain")
+        name = os.path.basename(d.rstrip("/"))
+        if a.rule_table:
+            pc = v["demand"]
+            pr = lambda x: "NA" if x is None else f"{100 * x:+.1f}%"  # noqa: E731
+            rows.append(f"| {name} | {pr(pc['change_by_limit']['core'])} | {pr(pc['change_by_limit']['lock'])} | {pc['limits_A']['binding']} | "
+                        f"{pr(pc['change'])} | {v['verdict']} ({v['rule']}) | {g['verdict']} ({g['rule']}) |")
+        else:
+            print(f"== {name}")
+            print(RANKING_ONLY)
+            print(demand.render_demand(res, v))
+            print(f"\nDemand rule: {v['verdict']} ({v['rule']}) {v['why']}")
+            print(f"Gain rule:   {g['verdict']} ({g['rule']}) {g['why']}")
+    if a.rule_table:
+        print("| run | core limit change | lock limit change | A binds on | predicted node change | demand rule | gain rule |")
+        print("|---|---|---|---|---|---|---|")
+        print("\n".join(rows))
+        print("\n" + RANKING_ONLY)
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -406,6 +434,12 @@ def main(argv=None):
     p.add_argument("--scale", action="append", default=[])
     p.add_argument("--order", choices=("fifo", "random"), default="fifo")
     p.add_argument("--seeds", type=int, default=1)
+    lm = sub.add_parser("limits", help="demand vector and node rate limits of a fast lane out directory, for both arms")
+    lm.add_argument("out_dirs", nargs="+")
+    lm.add_argument("--cores", type=float, default=28.0)
+    lm.add_argument("--slots", type=int)
+    lm.add_argument("--device-gb", type=float, default=93.6)
+    lm.add_argument("--rule-table", action="store_true", help="one row per directory: both rules side by side")
     v = sub.add_parser("validate")
     v.add_argument("--data", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "model_data"))
     v.add_argument("--cpus", type=float, default=28.0)
@@ -415,6 +449,8 @@ def main(argv=None):
         json.dump(extract(a.point, a.samples, a.results_tsv), open(a.out, "w"), separators=(",", ":"))
         print(f"wrote {a.out}")
         return 0
+    if a.cmd == "limits":
+        return run_limits(a)
     if a.cmd == "predict":
         pr = json.load(open(a.profile))
         if "template" not in pr:

@@ -199,7 +199,15 @@ def validity(res, A, B, intended_change):
 
 
 # --- tier 1 ---------------------------------------------------------------------------------------------------------------------------
-def tier1_verdict(res, p=None, intended_change=False):
+def tier1_verdict(res, p=None, intended_change=False, kind="gain"):
+    """kind gain: the first provisional rule (core-s/M or lock held gain). kind demand: the demand rule of demand.py (predicted node rate)."""
+    if kind == "demand":
+        import demand
+        return demand.tier1_demand_verdict(res, p, intended_change)
+    return tier1_gain_verdict(res, p, intended_change)
+
+
+def tier1_gain_verdict(res, p=None, intended_change=False):
     p = dict(DEFAULT_TIER1, **(p or {}))
     A, B = arm_summary(res, "A"), arm_summary(res, "B")
     out = {"tier": 1, "params": {**p, "intended_change": intended_change}, "A": A, "B": B}
@@ -381,6 +389,9 @@ def render(res, verdict, warnings=()):
     if stopped:
         L.append("")
         L.append("Stopped early: " + "; ".join(stopped))
+    if res.get("tier") == 1:
+        import demand
+        L.append(demand.render_demand(res, verdict))
     L.append("")
     L.append(f"**VERDICT: {verdict['verdict']}** (rule {verdict['rule']}) {verdict['why']}")
     pr = verdict["params"]

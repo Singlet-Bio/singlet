@@ -30,6 +30,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import abcore  # noqa: E402
+import demand  # noqa: E402
 
 W = "/mnt/projects/debruinz_project/debruinz/singlet"
 CLIPPER = os.path.join(os.path.expanduser("~"), ".claude", "skills", "clipper", "clipper.py")
@@ -181,6 +182,10 @@ def parser():
     p.add_argument("--node", help="sbatch -w")
     p.add_argument("--exclude", help="sbatch --exclude. No default. Use --node to pick a node")
     g = p.add_argument_group("tier 1 rule")
+    g.add_argument("--rule", choices=("demand", "gain"), default="demand", help="demand: predicted node rate from the demand vector (default). gain: core-s/M or lock held gain")
+    g.add_argument("--node-gain", type=float, help=f"demand rule: promote when the predicted node rate rises by this fraction. Default {demand.RULE['node_gain']}")
+    g.add_argument("--cores", type=float, help=f"demand rule: cores of the load job. Default {demand.RULE['cores']:g}")
+    g.add_argument("--device-gb", type=float, help=f"demand rule: device memory in GB. Default {demand.RULE['device_gb']}")
     g.add_argument("--promote-gain", type=float, default=0.05, help="promote when core-s/M or lock held improves by at least this fraction")
     g.add_argument("--no-spread-guard", action="store_true", help="do not require the gain to exceed the run-to-run spread of the two runs per arm")
     g.add_argument("--regress-guard", type=float, help="block a promotion when the other measure worsens by more than this fraction. Off by default")
@@ -279,7 +284,7 @@ def main(argv=None, remote=None, out_fn=print):
     os.makedirs(out, exist_ok=True)
     state = {"name": a.name, "tier": a.tier, "run": run, "jobname": jobname, "job": None, "scripts": head, "args": argv if argv is not None else sys.argv[1:],
              "notes": notes, "submitted": None, "ref": a.ref, "intended": a.intended_output_change,
-             "rule_params": rule_params(a)}
+             "rule_params": rule_params(a), "rule_kind": getattr(a, "rule", "gain") if a.tier == 1 else "tier2"}
     save_state(out, state)
     open(os.path.join(out, "spec.sh"), "w", newline="\n").write(spec)
     try:
@@ -301,6 +306,13 @@ def main(argv=None, remote=None, out_fn=print):
 
 
 def rule_params(a):
+    if a.tier == 1 and a.rule == "demand":
+        r = dict(demand.RULE)
+        for k, v in (("node_gain", a.node_gain), ("cores", a.cores), ("device_gb", a.device_gb)):
+            if v is not None:
+                r[k] = v
+        r["respect_spread"] = not a.no_spread_guard
+        return r
     if a.tier == 1:
         return {"promote_gain": a.promote_gain, "respect_spread": not a.no_spread_guard, "regress_guard": a.regress_guard}
     r = dict(abcore.TIER2_RULE)
@@ -366,7 +378,7 @@ def report(out, state, res, final, out_fn=print):
     rp = state["rule_params"]
     intended = bool(state.get("intended"))
     if state["tier"] == 1:
-        v = abcore.tier1_verdict(res, rp, intended)
+        v = abcore.tier1_verdict(res, rp, intended, state.get("rule_kind", "gain"))
     else:
         v = abcore.tier2_verdict(res, rp, intended)
     if final != "COMPLETED":
