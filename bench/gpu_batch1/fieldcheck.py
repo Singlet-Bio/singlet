@@ -27,7 +27,7 @@ ALLOW = [
     ("pileup_stats.json", r"^/provenance/clip5p/probe/n_reads$", "clip5p_probe_n",
      "the clip5p probe reads the first reads it sees. The file path of the GPU run and the CPU stream see a different count (E11 section 2a, noted in the gate)."),
     ("provenance.json", r"^/host/", "host",
-     "node name and RAM of the machine that ran the job."),
+     "node name of the machine, and ram_gb, which holds the run's peak RSS (26.4 against 103.6 on pbmc2m, the same as summary.json peak_rss_gb)."),
     ("provenance.json", r"^/references/whitelist/name$", "whitelist_path",
      "the whitelist name is the path that the binary resolved from its own directory."),
 ]

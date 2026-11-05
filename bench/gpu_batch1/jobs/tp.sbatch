@@ -216,6 +216,9 @@ ensure_alone() {   # sample T slots
     mkdir -p $SCR/ref/$key; mv $SCR/$p/c0/out $SCR/ref/$key/out; cp $RES0/$p/c0/CellReads.stats $SCR/ref/$key/ 2>/dev/null
     readhash $SCR/ref/$key/out > $SCR/ref/$key/readhash.txt; prune $SCR/ref/$key/out
     echo "  alone run $key: exit 0, wall $(awk -F'\t' '{printf "%.1f", $5-$4}' $RES0/$p/runs.tsv) s, kept as the reference" | tee -a $S
+    local fb l5=no; fb=$(python3 $GB/fallback.py $RES0/$p/c0 | awk -F'	' '$1=="SUMMARY"{print $2}')
+    grep -aq "E11: Solo on the device" $RES0/$p/c0/star_Log.out 2>/dev/null && l5=yes
+    echo "  alone run $key: disallowed fallback lines ${fb:-?}, level 5 $l5$([ "${fb:-1}" != 0 ] || [ $l5 = no ] && echo ' !! THE REFERENCE RUN FELL BACK, identity below proves little')" | tee -a $S
     # the alone run against the CPU reference as well
     local cpu=$CPU_REF/T$T/$s d=$RES0/$p/c0/identity.txt; : > $d
     if [ -d $cpu/out ]; then compare_out cpu $cpu/out $cpu/CellReads.stats $cpu/readhash.txt $SCR/ref/$key/out $SCR/ref/$key/CellReads.stats $SCR/ref/$key/readhash.txt $d

@@ -148,7 +148,7 @@ if win_rate is not None:
     print(f"   windowed: ({ws - first:.1f}, {we - first:.1f}] s = {win_s:.1f} s, {win_n} completions, {win_rate:.3f} M pairs/s; "
           f"cores busy {na(cores_win, '{:.1f}')} in the window against {na(cores_span, '{:.1f}')} over the span")
 else:
-    print(f"   windowed: NA ({'the window is empty, the last run starts before the k-th completion' if win_s is not None else 'fewer than k completions'}; "
+    print(f"   windowed: NA ({'the window is empty, the last run starts at or before the k-th completion' if win_s is not None else 'fewer than k completions'}; "
           f"use more runs than 2k for a window)")
 print(f"   lock wait {lock_wait:.1f} s per run = {100 * lock_wait / mean_wall:.1f} % of the mean wall {mean_wall:.1f} s, held {lock_held:.1f} s; "
       f"other jobs on the node, most in any minute: {other}")
