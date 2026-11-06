@@ -335,8 +335,10 @@ struct Ext { uint extendL; int maxScore; uint nMatch, nMM; };
 // ---------------------------------------------------------------------------------------------------------------------
 // Capacities. Main lane: small, per thread; heavy lane: STAR's limits.
 // ---------------------------------------------------------------------------------------------------------------------
-template <int LREAD_, int NSPLIT_, int NP_, int NW_, int NWA_, int NWB_, int NEX_, int NWTR_, int NKEEP_, int NBLOB_>
+// COMPACT_: the windows' aligns (WA) live in a pool outside Work (Work::waP), each window's row at waOff[iW] with room for waOff[iW+1]-waOff[iW] aligns
+template <int LREAD_, int NSPLIT_, int NP_, int NW_, int NWA_, int NWB_, int NEX_, int NWTR_, int NKEEP_, int NBLOB_, bool COMPACT_ = false>
 struct Caps {
+    static constexpr bool COMPACT = COMPACT_;
     static constexpr int LREAD = LREAD_, NSPLIT = NSPLIT_, NP = NP_, NW = NW_, NWA = NWA_, NWB = NWB_, NEX = NEX_,
                          NWTR = NWTR_, NKEEP = NKEEP_, NBLOB = NBLOB_;
     static_assert(NBLOB_ % 8 == 0, "output slots are whole words (M5_BLOBW)");
@@ -371,7 +373,10 @@ template <class C> struct Work {
     uint WC[C::NW][WC_SIZE];
     uint nWA[C::NW], WALrec[C::NW];
     i64 WlastAnchor[C::NW];   // STAR: uint, set to -1, compared as uint (WlastAnchor[iW]<nWA[iW] / <iA)
-    uint WA[C::NW][C::NWA][WA_SIZE];
+    uint WA[C::COMPACT ? 1 : C::NW][C::COMPACT ? 1 : C::NWA][WA_SIZE];   // COMPACT: placeholder, the aligns are in waP
+    uint* waP; uint waOff[C::COMPACT ? C::NW + 1 : 1];   // COMPACT: window iW's aligns start at waP + waOff[iW] * WA_SIZE, capacity waOff[iW+1] - waOff[iW]
+    HD uint (*waRow(uint iW))[WA_SIZE] { if constexpr (C::COMPACT) return reinterpret_cast<uint (*)[WA_SIZE]>(waP + (u64)waOff[iW] * WA_SIZE); else return WA[iW]; }
+    HD uint waCap(uint iW) const { if constexpr (C::COMPACT) return waOff[iW + 1] - waOff[iW]; else return (uint)C::NWA; }
     // winBin: key = (str << 40) | bin, value = window index; absent = uintWinBinMax
     u64 wbKey[C::NWB]; uint16_t wbVal[C::NWB]; int wbN; u64 wbEpoch;
     u64 wbBits[2][16];         // filter: bit (bin & 1023) of strand str is set if some bin with these low bits was written
@@ -996,26 +1001,27 @@ template <class C> HD inline bool assignAlignToWindow(const Params& P, Work<C>& 
                                                    uint aFrag, uint aRstart, bool aAnchor, uint sjA) {
     uint iW = wbGet(w, aStr, a1 >> P.winBinNbits);
     if (iW == uintWinBinMax || (!aAnchor && aLength < w.WALrec[iW])) return true;
+    uint (*wrow)[WA_SIZE] = w.waRow(iW);
     {
         uint iA;
         for (iA = 0; iA < w.nWA[iW]; iA++) {
-            const uint* A = w.WA[iW][iA];
+            const uint* A = wrow[iA];
             if (aFrag == A[WA_iFrag] && A[WA_sjA] == sjA && a1 + A[WA_rStart] == A[WA_gStart] + aRstart
                 && ((aRstart >= A[WA_rStart] && aRstart < A[WA_rStart] + A[WA_Length])
                     || (aRstart + aLength >= A[WA_rStart] && aRstart + aLength < A[WA_rStart] + A[WA_Length]))) break;
         }
         if (iA < w.nWA[iW]) {
-            if (aLength > w.WA[iW][iA][WA_Length]) {
+            if (aLength > wrow[iA][WA_Length]) {
                 uint iA0;
                 for (iA0 = 0; iA0 < w.nWA[iW]; iA0++)
-                    if (iA0 != iA && aRstart < w.WA[iW][iA0][WA_rStart]) break;
+                    if (iA0 != iA && aRstart < wrow[iA0][WA_rStart]) break;
                 if (iA0 > iA) --iA0;
                 if (iA0 < iA) {
-                    for (uint iA1 = iA; iA1 > iA0; iA1--) for (int ii = 0; ii < WA_SIZE; ii++) w.WA[iW][iA1][ii] = w.WA[iW][iA1 - 1][ii];
+                    for (uint iA1 = iA; iA1 > iA0; iA1--) for (int ii = 0; ii < WA_SIZE; ii++) wrow[iA1][ii] = wrow[iA1 - 1][ii];
                 } else if (iA0 > iA) {
-                    for (uint iA1 = iA; iA1 < iA0; iA1++) for (int ii = 0; ii < WA_SIZE; ii++) w.WA[iW][iA1][ii] = w.WA[iW][iA1 + 1][ii];
+                    for (uint iA1 = iA; iA1 < iA0; iA1++) for (int ii = 0; ii < WA_SIZE; ii++) wrow[iA1][ii] = wrow[iA1 + 1][ii];
                 }
-                uint* A = w.WA[iW][iA0];
+                uint* A = wrow[iA0];
                 A[WA_rStart] = aRstart; A[WA_Length] = aLength; A[WA_gStart] = a1; A[WA_Nrep] = aNrep;
                 A[WA_Anchor] = (uint)(int)aAnchor; A[WA_iFrag] = aFrag; A[WA_sjA] = sjA;
             }
@@ -1025,7 +1031,7 @@ template <class C> HD inline bool assignAlignToWindow(const Params& P, Work<C>& 
     if (w.nWA[iW] == P.seedPerWindowNmax) {
         w.WALrec[iW] = w.Lread + 1;
         for (uint iA = 0; iA < w.nWA[iW]; iA++)
-            if (w.WA[iW][iA][WA_Anchor] != 1) w.WALrec[iW] = mn(w.WALrec[iW], w.WA[iW][iA][WA_Length]);
+            if (wrow[iA][WA_Anchor] != 1) w.WALrec[iW] = mn(w.WALrec[iW], wrow[iA][WA_Length]);
         if (w.WALrec[iW] == w.Lread + 1) {
             w.mapMarker = MARKER_TOO_MANY_ANCHORS_PER_WINDOW;
             w.nW = 0;
@@ -1034,19 +1040,19 @@ template <class C> HD inline bool assignAlignToWindow(const Params& P, Work<C>& 
         if (!aAnchor && aLength < w.WALrec[iW]) return true;
         uint iA1 = 0;
         for (uint iA = 0; iA < w.nWA[iW]; iA++) {
-            if (w.WA[iW][iA][WA_Anchor] == 1 || w.WA[iW][iA][WA_Length] > w.WALrec[iW]) {
-                for (int ii = 0; ii < WA_SIZE; ii++) w.WA[iW][iA1][ii] = w.WA[iW][iA][ii];
+            if (wrow[iA][WA_Anchor] == 1 || wrow[iA][WA_Length] > w.WALrec[iW]) {
+                for (int ii = 0; ii < WA_SIZE; ii++) wrow[iA1][ii] = wrow[iA][ii];
                 iA1++;
             }
         }
         w.nWA[iW] = iA1;
     }
     if (aAnchor || aLength > w.WALrec[iW]) {
-        if (w.nWA[iW] >= (uint)C::NWA) { w.ov = OV_WA; return false; }   // (STAR: BUG exit at seedPerWindowNmax, unreachable)
+        if (w.nWA[iW] >= w.waCap(iW)) { w.ov = OV_WA; return false; }   // (STAR: BUG exit at seedPerWindowNmax, unreachable)
         uint iA;
-        for (iA = 0; iA < w.nWA[iW]; iA++) if (aRstart < w.WA[iW][iA][WA_rStart]) break;
-        for (uint iA1 = w.nWA[iW]; iA1 > iA; iA1--) for (int ii = 0; ii < WA_SIZE; ii++) w.WA[iW][iA1][ii] = w.WA[iW][iA1 - 1][ii];
-        uint* A = w.WA[iW][iA];
+        for (iA = 0; iA < w.nWA[iW]; iA++) if (aRstart < wrow[iA][WA_rStart]) break;
+        for (uint iA1 = w.nWA[iW]; iA1 > iA; iA1--) for (int ii = 0; ii < WA_SIZE; ii++) wrow[iA1][ii] = wrow[iA1 - 1][ii];
+        uint* A = wrow[iA];
         A[WA_rStart] = aRstart; A[WA_Length] = aLength; A[WA_gStart] = a1; A[WA_Nrep] = aNrep;
         A[WA_Anchor] = (uint)(int)aAnchor; A[WA_iFrag] = aFrag; A[WA_sjA] = sjA;
         w.nWA[iW]++;
@@ -2411,6 +2417,41 @@ template <class C> HD inline bool assignHits(const Params& P, const GenomeView& 
     return true;
 }
 
+// COMPACT lanes (Caps::COMPACT): the capacities of the windows' align rows, from the entries assignHits will assign. Each call of
+// assignAlignToWindow that reaches window iW adds at most one align to it, so the number of such calls bounds its aligns; a row has
+// room for min(that number, NWA) aligns, the overflow test of assignAlignToWindow (nWA >= waCap) then fires exactly when it fired
+// with NWA rows. Fills waOff (row starts, in aligns) and returns the read's total aligns.
+template <class C> HD inline u64 planWA(const Params& P, const GenomeView& gv, Work<C>& w, const uint32_t* bits, u64 base) {
+    for (uint i = 0; i <= w.nWall; i++) w.waOff[i] = 0;
+    u64 off = base;
+    for (uint iP = 0; iP < w.nP; iP++) {
+        const u64 cnt = w.PC[iP][PC_SAend] - w.PC[iP][PC_SAstart] + 1;
+        const uint aLength = w.PC[iP][PC_Length], aDir = w.PC[iP][PC_Dir];
+        for (u64 b = off; b < off + cnt; b++) {
+            if (!((bits[b >> 5] >> (b & 31)) & 1u)) continue;
+            uint a1 = packed_get(gv.SA, (uint)(w.PC[iP][PC_SAstart] + (b - off)), gv.saBits);
+            const uint s = a1 >> gv.GstrandBit;
+            a1 &= gv.GstrandMask;
+            if (s == 1) a1 = gv.nGenome - (aLength + a1);
+            const uint aStr = (aDir == 0) ? s : 1 - s;
+            if (a1 >= gv.sjGstart) {
+                uint a1D, aLengthD, a1A, aLengthA, isj1;
+                if (sjAlignSplit(a1, aLength, gv, a1D, aLengthD, a1A, aLengthA, isj1)) {
+                    const uint wD = wbGet(w, aStr, a1D >> P.winBinNbits), wA = wbGet(w, aStr, a1A >> P.winBinNbits);
+                    if (wD != uintWinBinMax) w.waOff[wD + 1]++;
+                    if (wA != uintWinBinMax) w.waOff[wA + 1]++;
+                }
+            } else {
+                const uint wI = wbGet(w, aStr, a1 >> P.winBinNbits);
+                if (wI != uintWinBinMax) w.waOff[wI + 1]++;
+            }
+        }
+        off += cnt;
+    }
+    for (uint i = 0; i < w.nWall; i++) w.waOff[i + 1] = w.waOff[i] + mn<uint>(w.waOff[i + 1], (uint)C::NWA);
+    return w.waOff[w.nWall];
+}
+
 // stitchPieces' window loop: stitching of every window in order, keep[] (the transcripts that can still pass multMapSelect's
 // score range), trBest; nW = windows with transcripts. false = overflow (w.ov)
 template <class C> HD inline bool stitchWindows(const Params& P, const GenomeView& gv, Work<C>& w, ReadBuf<C::LREAD>& rb) {
@@ -2428,7 +2469,7 @@ template <class C> HD inline bool stitchWindows(const Params& P, const GenomeVie
 #endif
         for (uint iW = 0; iW < w.nW; iW++) {
             if (w.nWA[iW] == 0) continue;
-            if ((uint)w.WlastAnchor[iW] < w.nWA[iW]) w.WA[iW][w.WlastAnchor[iW]][WA_Anchor] = 2;
+            if ((uint)w.WlastAnchor[iW] < w.nWA[iW]) w.waRow(iW)[w.WlastAnchor[iW]][WA_Anchor] = 2;
             T& trA = w.stack[0];
             trA.reset();
             trA.Chr = 0; trA.Str = 0; trA.roStr = 0; trA.cStart = 0; trA.gLength = 0; trA.nExons = 0;   // trInit
@@ -2468,7 +2509,7 @@ template <class C> HD inline bool stitchWindows(const Params& P, const GenomeVie
 #ifdef __CUDA_ARCH__
             cnT0 = clock64();
 #endif
-            const bool cnOk = stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2]);
+            const bool cnOk = stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.waRow(iW), Read1[trA.roStr == 0 ? 0 : 2]);
             w.cnWinSteps[iW] = (uint32_t)mn<u64>(w.nSteps - cnS0, 0xFFFFFFFFull);
 #ifdef __CUDA_ARCH__
             w.cnWinCyc[iW] = (uint32_t)mn<long long>(clock64() - cnT0, 0xFFFFFFFFll);
@@ -2477,7 +2518,7 @@ template <class C> HD inline bool stitchWindows(const Params& P, const GenomeVie
             if (w.nWinTr > w.cnWinTrMax) w.cnWinTrMax = w.nWinTr;
             if (!cnOk) return false;
 #else
-            if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.WA[iW], Read1[trA.roStr == 0 ? 0 : 2])) return false;
+            if (!stitchWindowAligns(P, gv, w, w.nWA[iW], (const uint (*)[WA_SIZE])w.waRow(iW), Read1[trA.roStr == 0 ? 0 : 2])) return false;
 #endif
             if (w.nWinTr == 0) continue;
             const T& t0 = w.slot[w.slotP[0]];
@@ -2667,7 +2708,7 @@ template <class C> HD inline Tr<C::NEX>& keepAt(Work<C>& W, int p) {
 // one lane: window iW of the read (the body of stitchWindows' loop up to the recursion), into the lane's slots
 template <class C, class LW> HD inline bool laneStitchWindow(const Params& P, const GenomeView& gv, Work<C>& W, LW& L, uint iW,
                                                          const char* Rf, const char* Rr) {
-    if ((uint)W.WlastAnchor[iW] < W.nWA[iW]) W.WA[iW][W.WlastAnchor[iW]][WA_Anchor] = 2;
+    if ((uint)W.WlastAnchor[iW] < W.nWA[iW]) W.waRow(iW)[W.WlastAnchor[iW]][WA_Anchor] = 2;
     typename LW::T& trA = L.stack[0];
     trA.reset();
     trA.Chr = 0; trA.Str = 0; trA.roStr = 0; trA.cStart = 0; trA.gLength = 0; trA.nExons = 0;   // trInit
@@ -2687,7 +2728,7 @@ template <class C, class LW> HD inline bool laneStitchWindow(const Params& P, co
 #endif
     L.nWinTr = 0;
     L.maxScoreMate[0] = 0;
-    return stitchWindowAligns(P, gv, L, W.nWA[iW], (const uint (*)[WA_SIZE])W.WA[iW], trA.roStr == 0 ? Rf : Rr);
+    return stitchWindowAligns(P, gv, L, W.nWA[iW], (const uint (*)[WA_SIZE])W.waRow(iW), trA.roStr == 0 ? Rf : Rr);
 }
 // the lane's transcripts that pass the running best's score range
 template <class LW> HD inline int laneCountAbove(const Params& P, const LW& L, int best) {
