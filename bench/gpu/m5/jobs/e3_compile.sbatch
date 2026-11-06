@@ -21,8 +21,8 @@ git -C $BARE archive refs/fable/warp-window bench/gpu/m5 bench/fable/profile/tai
 echo "commit $SHA node $(hostname) $(date -Is)"
 T0=$(date +%s)
 NV="apptainer exec -B $W $IMG nvcc -O3 -std=c++17 -arch=sm_90 -fmad=false -lineinfo -Xcompiler -fopenmp -Xptxas -v"
-if [ -n "$CHECK" ]; then   # the merge gate's flavours (E1 tail, E2 census, E5 baseline and KEEPIX, E3 statistics), in parallel
-  for F in "e3stats:-DM5_E3STATS" "tail:-DM5_TAIL" "census:-DM5_CENSUS" "baseline:-DM5_BASELINE" "keepix:-DM5_KEEPIX"; do
+if [ -n "$CHECK" ]; then   # the merge gate's flavours (E1 tail, E2 census, E5 baseline, E3 statistics), in parallel
+  for F in "e3stats:-DM5_E3STATS" "tail:-DM5_TAIL" "census:-DM5_CENSUS" "baseline:-DM5_BASELINE"; do
     ( $NV ${F#*:} -o $SRC/m5_${F%%:*} $SRC/bench/gpu/m5/m5.cu > $E/bin/ptxas_${SHA}_${F%%:*}.txt 2>&1 && echo "[check ${F%%:*}] ok" \
       || { grep -E "error" $E/bin/ptxas_${SHA}_${F%%:*}.txt | head -20; echo "[check ${F%%:*}] FAILED"; } ) &
   done

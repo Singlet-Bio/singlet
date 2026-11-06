@@ -166,26 +166,14 @@ static LaneOut runLane(const Params& P, const GenomeView& D, const char* dRb, co
 // E7 (seeds, docs/gpu-engine/fable/E7-seeds.md), compile-time, each exact. Default build: M5_SEEDFLAT + M5_P1SPLIT +
 // M5_SEEDSMEM + M5_P1MINB=8 + M5_P1WPB ("flatqs8b", set in stitch.cuh); STAR's nest (k_p1) with -DM5_BASELINE,
 // -DM5_P1NEST, -DM5_CENSUS / -DM5_TAIL, or when any E7 macro below is given explicitly (then exactly those macros).
-//  M5_CMPU     compareSeqToGenome's four direction cases as one strided loop (stitch.cuh; separate from M5_SEEDFLAT)
 //  M5_SEEDFLAT phase 1 with flat loops: the seed-loop nest as an iterator, one maxMappableLength2strands call per loop
 //              iteration at one call site; the window creation as one loop over the anchors' SA entries
 //  M5_P1SPLIT  (with M5_SEEDFLAT) phase 1 as two kernels: k_p1s, persistent warps that make one seed call per lane per
 //              iteration and refill a lane with the batch's next read as soon as its read is done (warp-aggregated
 //              atomic counter), then k_p1w, the windows (thread per read)
-//  M5_P1WPERS  (with M5_P1SPLIT) the windows kernel persistent as well (k_p1wp: one anchor SA entry or one window's
-//              flanks per lane per iteration, lanes refilled from the batch)
-//  M5_G2       compareSeqToGenome on a 2-bit genome text (stitch.cuh; needs M5_SEEDFLAT)
 //  M5_P1MINB=n __launch_bounds__(128, n) on the phase-1 kernels (register cap for occupancy)
-//  M5_CMPNI    compareSeqToGenome out of line (one copy instead of five inlined ones; stitch.cuh)
-//  M5_P1FUSE   (with M5_P1SPLIT) the windows in k_p1s, for each read as its seed search completes (no windows kernel)
-//  M5_PREF     binary-search prefetch: the SA words of both next midpoints into L2 during each compare (stitch.cuh)
-//  M5_PREF2    M5_PREF plus the two SA values loaded and the genome lines of both next compares prefetched
-//  M5_PREF3    M5_PREF (or with M5_PREF2) plus the SAi words of the later iDist passes prefetched before the first
 //  M5_P1WPB    (with M5_P1SPLIT) the persistent windows kernel for lane B only (lanes A and M: thread per read)
 //  M5_SEEDSMEM (with M5_P1SPLIT) k_p1s keeps the seed iterator (SeedIt) in shared memory, 128 threads per block
-//  M5_STEPSMEM (with M5_SEEDSTEP) the stepped call's state (MmIt) in shared memory, 128 threads per block
-//  M5_SEEDSTEP (with M5_P1SPLIT) k_p1s steps maxMappableLength2strands one memory operation at a time (an SAi lookup or
-//              one compareSeqToGenome per lane per iteration, at one call site; stitch.cuh MmIt / mmAdvance)
 #ifdef M5_SEEDFLAT
 #if defined(M5_CENSUS) || defined(M5_TAIL)
 #error "M5_SEEDFLAT: no census / tail probes"
