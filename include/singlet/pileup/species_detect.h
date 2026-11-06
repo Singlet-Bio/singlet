@@ -70,10 +70,11 @@ static constexpr float MIN_Z_SQUARED       = 100.0f; // z^2 > 100 ↔ z > 10 (p 
 // Human + mouse mixtures (barnyard, cell-line mixes, xenografts). Each sampled read is classified by its species-specific
 // k-mers: it belongs to a species when it has at least MIX_READ_MIN_EXCESS more filter hits in that species than in the other
 // and at most half as many in the other. A sample whose minor species holds at least MIX_MIN_FRACTION of the classified reads
-// (and at least MIX_MIN_READS of them) is a mixture and is routed to the barnyard reference. Pure samples sit below 1% (pilot
-// and gate calibration, bench/species_detect/species_check.cpp), the 1:1 lines of GSE163781 near 40%.
+// (and at least MIX_MIN_READS of them) is a mixture and is routed to the barnyard reference. Calibration on 5,000 reads per file
+// (bench/species_detect/species_check.cpp, 2026-11-06): 17 pure human or mouse libraries 0.003-0.064 (5' and deep T-cell
+// libraries highest), hgmm1k_v3 0.34, the GSE163781 human + mouse line mixtures 0.23-0.35. The cut sits between the two.
 static constexpr int   MIX_READ_MIN_EXCESS = 10;
-static constexpr float MIX_MIN_FRACTION    = 0.10f;
+static constexpr float MIX_MIN_FRACTION    = 0.15f;
 static constexpr int   MIX_MIN_READS       = 50;
 
 // ── Result ────────────────────────────────────────────────────────────────────
