@@ -67,6 +67,14 @@ static constexpr float CONFIDENCE_THRESH   = 0.001f; // min hit-rate to call spe
 static constexpr float HIGH_CONF_THRESH    = 0.01f;  // "high confidence" threshold
 static constexpr float MIN_RATIO           = 1.5f;   // fast path for distant species
 static constexpr float MIN_Z_SQUARED       = 100.0f; // z^2 > 100 ↔ z > 10 (p < 1e-23)
+// Human + mouse mixtures (barnyard, cell-line mixes, xenografts). Each sampled read is classified by its species-specific
+// k-mers: it belongs to a species when it has at least MIX_READ_MIN_EXCESS more filter hits in that species than in the other
+// and at most half as many in the other. A sample whose minor species holds at least MIX_MIN_FRACTION of the classified reads
+// (and at least MIX_MIN_READS of them) is a mixture and is routed to the barnyard reference. Pure samples sit below 1% (pilot
+// and gate calibration, bench/species_detect/species_check.cpp), the 1:1 lines of GSE163781 near 40%.
+static constexpr int   MIX_READ_MIN_EXCESS = 10;
+static constexpr float MIX_MIN_FRACTION    = 0.10f;
+static constexpr int   MIX_MIN_READS       = 50;
 
 // ── Result ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +87,13 @@ struct DetectionResult {
     int         reads_sampled = 0;
     int         kmers_tested  = 0;
     int         kmers_hit     = 0;
+    int         reads_human   = 0;     // Bloom path: reads classified human-specific (see MIX_*)
+    int         reads_mouse   = 0;     // ... and mouse-specific
+
+    float minor_species_fraction() const {
+        const int n = reads_human + reads_mouse;
+        return n > 0 ? static_cast<float>(std::min(reads_human, reads_mouse)) / static_cast<float>(n) : 0.0f;
+    }
 
     bool confident() const { return confidence >= CONFIDENCE_THRESH || method == "metadata"; }
     bool high_confidence() const { return confidence >= HIGH_CONF_THRESH || method == "metadata"; }
@@ -130,6 +145,9 @@ struct DetectionResult {
         if (method == "kmer" || method == "bloom")
             std::fprintf(stderr, " (%d hits / %d kmers sampled from %d reads)",
                          kmers_hit, kmers_tested, reads_sampled);
+        if (method == "bloom")
+            std::fprintf(stderr, " reads human=%d mouse=%d minor=%.3f",
+                         reads_human, reads_mouse, minor_species_fraction());
         std::fprintf(stderr, "\n");
     }
 };
@@ -516,7 +534,8 @@ inline int count_hits_numeric(const uint8_t* seq, uint16_t len,
 ///                         non-empty, a WARNING is emitted and the JSON organism
 ///                         is used directly.
 inline DetectionResult detect(const std::string& onefq_path, bool verbose = true,
-                               const std::string& extra_json_path = "") {
+                               const std::string& extra_json_path = "",
+                               const std::string& ref_base = "") {
     DetectionResult result;
     result.method = "none";
     result.confidence = 0.0f;
@@ -699,6 +718,14 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
         std::vector<std::string> bloom_dirs;
         if (const char* env = std::getenv("SINGLET_SPECIES_FILTERS"))
             bloom_dirs.push_back(env);
+        // <reference base>/species_filters (--ref-base, else $SINGLET_REF_BASE): the filters travel with the references, so a
+        // run that auto-resolves its genome from the reference base also finds them (the pilot fell back to the small
+        // diagnostic k-mer set without them and called a human + mouse mixture "mouse").
+        {
+            std::string rb = ref_base;
+            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+            if (!rb.empty()) bloom_dirs.push_back(rb + "/species_filters");
+        }
         // Add path relative to this header's install location
         // (determined at build time via __FILE__ — strip filename)
         {
@@ -756,8 +783,12 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
                             len  = static_cast<uint16_t>(len - arc_clip);
                         }
                         if (len < static_cast<uint16_t>(KMER_K)) continue;
-                        human_hits  += bf_human.count_hits_numeric(seq, len, KMER_K);
-                        mouse_hits  += bf_mouse.count_hits_numeric(seq, len, KMER_K);
+                        const int hh = bf_human.count_hits_numeric(seq, len, KMER_K);
+                        const int mm = bf_mouse.count_hits_numeric(seq, len, KMER_K);
+                        human_hits  += hh;
+                        mouse_hits  += mm;
+                        if (hh - mm >= MIX_READ_MIN_EXCESS && 2 * mm <= hh) ++result.reads_human;
+                        else if (mm - hh >= MIX_READ_MIN_EXCESS && 2 * hh <= mm) ++result.reads_mouse;
                         total_kmers += std::max(0, (int)len - KMER_K + 1);
                         ++reads_done;
                     }
@@ -789,7 +820,20 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
                                       z_sq >= MIN_Z_SQUARED &&
                                       winner_rate > loser_rate);
 
-                    if ((fast_call || ztest_call) && h_rate > m_rate) {
+                    const int n_cls = result.reads_human + result.reads_mouse;
+                    const bool mixture = n_cls > 0 &&
+                        std::min(result.reads_human, result.reads_mouse) >= MIX_MIN_READS &&
+                        result.minor_species_fraction() >= MIX_MIN_FRACTION;
+                    if (mixture) {
+                        result.genome_tag  = "GRCh38-GRCm39-barnyard";
+                        result.species     = "Homo sapiens; Mus musculus";
+                        result.taxon_id    = "9606;10090";
+                        // share of sampled reads that carry a species call: high when the call rests on many reads
+                        result.confidence  = std::max(HIGH_CONF_THRESH,
+                                                      static_cast<float>(n_cls) / static_cast<float>(std::max(1, reads_done)));
+                        result.kmers_hit   = human_hits + mouse_hits;
+                        result.method      = "bloom";
+                    } else if ((fast_call || ztest_call) && h_rate > m_rate) {
                         result.genome_tag  = "GRCh38";
                         result.species     = "Homo sapiens";
                         result.taxon_id    = "9606";

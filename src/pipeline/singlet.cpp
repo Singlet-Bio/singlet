@@ -3591,7 +3591,7 @@ int main(int argc, char* argv[]) {
         }
         if (!ref_base.empty()) {
             auto det = species_detect::detect(onefq_file, /*verbose=*/true,
-                                               metadata_json_path);
+                                               metadata_json_path, ref_base);
             if (det.confident()) {
                 std::string candidate = det.suggested_star_dir(ref_base);
                 if (!candidate.empty()) {
@@ -3628,7 +3628,7 @@ int main(int argc, char* argv[]) {
     if (onefq_mode && !genome_dir.empty()) {
         const char* sf = std::getenv("SINGLET_SPECIES_FILTERS");
         if (sf && *sf) {
-            auto det = species_detect::detect(onefq_file, /*verbose=*/false, /*metadata_json_path=*/"");
+            auto det = species_detect::detect(onefq_file, /*verbose=*/false, /*metadata_json_path=*/"", ref_base);
             std::string ref_name = genome_dir;   // .../<reference name>/star_2.7.11b
             auto sl = ref_name.find_last_of('/');
             if (sl != std::string::npos && sl + 1 < ref_name.size() && ref_name.substr(sl + 1).rfind("star", 0) == 0) ref_name.resize(sl);
@@ -3638,7 +3638,8 @@ int main(int argc, char* argv[]) {
             if (det.confident() && det.method != "metadata" && !det.genome_tag.empty())
                 verdict = (ref_name.find(det.genome_tag) != std::string::npos) ? "AGREE" : "DISAGREE";
             std::cerr << "[species-check] detected=" << (det.species.empty() ? "unknown" : det.species) << " genome=" << det.genome_tag << " confidence=" << det.confidence
-                      << " method=" << det.method << " reference=" << ref_name << " " << verdict << "\n";
+                      << " method=" << det.method << " reads_human=" << det.reads_human << " reads_mouse=" << det.reads_mouse
+                      << " reference=" << ref_name << " " << verdict << "\n";
         }
     }
 
@@ -3895,8 +3896,8 @@ int main(int argc, char* argv[]) {
     if (pipeline_mode) config.count_polya = true;  // poly(A) site usage (3' protocols; skipped when reverse_strand)
     // Default SNP panel in --pipeline mode (atlas re-run: donor demux and genotype doublets need it, and BAMs are
     // deleted after each sample). Human: 1000G phase 3 AF >= 5% (chr-prefixed); mouse: Ensembl GRCm39 common SNPs.
-    // Resolved under --ref-base / SINGLET_REF_BASE as <ref_base>/pileup_indices/<panel>. Mixed-species references
-    // (barnyard) and other species get none. snp_ad / snp_dp go to <out>/private/ (never public).
+    // Resolved under --ref-base / SINGLET_REF_BASE as <ref_base>/pileup_indices/<panel>. The human + mouse barnyard
+    // reference gets both panels combined; other species get none. snp_ad / snp_dp go to <out>/private/ (never public).
     if (pipeline_mode && config.snp_path.empty() && !no_default_snps && !genome_dir.empty()) {
         std::string rb = ref_base;
         if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
@@ -3905,6 +3906,9 @@ int main(int argc, char* argv[]) {
         std::string panel;
         if (human && !mouse) panel = "genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz";
         else if (mouse && !human) panel = "mus_musculus.vcf.gz";
+        // Barnyard (GRCh38-GRCm39-barnyard, contigs GRCh38___chrN / GRCm39___N): both panels with the contigs renamed
+        // (scripts/build_barnyard_snp_panel.sh), so mixtures of human and mouse lines are demultiplexed in one model.
+        else if (human && mouse) panel = "barnyard_GRCh38_GRCm39.vcf.gz";
         if (!rb.empty() && !panel.empty()) {
             std::string cand = rb + "/pileup_indices/" + panel;
             struct stat sst{};
