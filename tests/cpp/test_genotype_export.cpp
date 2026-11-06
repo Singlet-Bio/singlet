@@ -57,8 +57,8 @@ int main() {
             if (gt != singlet::call_donor_genotype(ad, dp)) { std::cout << "FAIL gt ad=" << ad << " dp=" << dp << " " << f << "\n"; ++n_fail; }
         }
     CHECK(G::donor_fields(0, 0) == "./.", "no depth");
-    CHECK(G::donor_fields(0, 30).== "0/0:89:30,0:30:0,89,599", "hom-ref 30 " + G::donor_fields(0, 30));
-    CHECK(G::donor_fields(1, 10).== "./.:10:9,1:10:0,10,160", "1 of 10 is no-call with GQ 10: " + G::donor_fields(1, 10));
+    CHECK(G::donor_fields(0, 30) == "0/0:89:30,0:30:0,89,599", "hom-ref 30 " + G::donor_fields(0, 30));
+    CHECK(G::donor_fields(1, 10) == "./.:10:9,1:10:0,10,160", "1 of 10 is no-call with GQ 10: " + G::donor_fields(1, 10));
 
     // 2. 4 SNPs x 5 barcodes; barcodes 0, 2, 3 are called cells; barcode 4 is ambient back-assigned to donor 0
     const std::vector<std::string> snps = {"chr1:100:A>G", "chr1:200:C>T", "chr2:50:G>A", "chr2:60:T>C"};
