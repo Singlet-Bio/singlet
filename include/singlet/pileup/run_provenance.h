@@ -166,7 +166,7 @@ inline bool is_private_output(const std::string& rel) {
 }
 
 /// Inventory of the files in a run directory: {"n_public", "n_private", "bytes_public", "bytes_private", "files":
-/// [{"path", "bytes", "visibility"}]}. BAM files and STAR temporaries are left out.
+/// [{"path", "bytes", "visibility"}]}. BAM files, STAR temporaries and the GPU hand-off files (.gpu_handoff*) are left out.
 inline std::string outputs_inventory_json(const std::string& out_dir) {
     namespace fs = std::filesystem;
     std::vector<std::pair<std::string, uint64_t>> files;
@@ -177,6 +177,7 @@ inline std::string outputs_inventory_json(const std::string& out_dir) {
         std::string rel = fs::relative(it->path(), root, ec).generic_string();
         if (ec) { ec.clear(); continue; }
         if (rel.find("_STARtmp") != std::string::npos) continue;
+        if (rel.rfind(".gpu_handoff", 0) == 0) continue;   // engine temporaries, removed at the end of the run
         if (rel.size() > 4 && (rel.compare(rel.size() - 4, 4, ".bam") == 0 || rel.compare(rel.size() - 4, 4, ".bai") == 0))
             continue;
         files.emplace_back(rel, static_cast<uint64_t>(it->file_size(ec)));

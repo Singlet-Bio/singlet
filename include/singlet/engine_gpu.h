@@ -269,6 +269,8 @@ inline uint64_t memBudget(uint64_t total) {
 // memBudget (above: (device memory - 2 GB) / slots unless SINGLET_ENGINE_GPU_MEM_GB sets it). SINGLET_ENGINE_GPU_DEVICE pins the device; otherwise the first
 // free slot of the first device is taken, or the process waits for a slot of device
 // (pid mod devices). Returns the device; *lockFd is closed by unlockDevice.
+// The lock files are opened O_CLOEXEC. The stream path's strand restart execs the same process while the GPU pileup's background thread
+// may still hold the lock (E16 resetbg); without close-on-exec the restarted process kept that flock and its STAR waited for it forever.
 // NVTX: the wait for the lock and its hold (from lockDevice to unlockDevice, which may run in another thread) are ranges of their own
 inline std::map<int, unsigned long long>& lockRanges() { static std::map<int, unsigned long long> m; return m; }
 inline std::mutex& lockRangesMutex() { static std::mutex m; return m; }
@@ -283,22 +285,22 @@ inline int lockDeviceImpl(int* lockFd) {
     if (dv != nullptr) {
         device = std::atoi(dv);
         for (int k = 0; k < slots; k++) {
-            int fd = open(lockPath(device, k).c_str(), O_CREAT | O_RDWR, 0666);
+            int fd = open(lockPath(device, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return device; }
             if (fd >= 0) close(fd);
         }
-        *lockFd = open(lockPath(device, (int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR, 0666);
+        *lockFd = open(lockPath(device, (int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
         if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
         return device;
     }
     for (int k = 0; k < slots; k++)
         for (int d = 0; d < nDev; d++) {
-            int fd = open(lockPath(d, k).c_str(), O_CREAT | O_RDWR, 0666);
+            int fd = open(lockPath(d, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return d; }
             if (fd >= 0) close(fd);
         }
     device = (int) (getpid() % nDev);
-    *lockFd = open(lockPath(device, (int) ((getpid() / nDev) % slots)).c_str(), O_CREAT | O_RDWR, 0666);
+    *lockFd = open(lockPath(device, (int) ((getpid() / nDev) % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
     return device;
 }
@@ -328,11 +330,11 @@ inline void lockDeviceSlot(int device, int* lockFd) {
     auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     *lockFd = -1;
     for (int k = 0; k < slots; k++) {
-        int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR, 0666);
+        int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
         if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return; }
         if (fd >= 0) close(fd);
     }
-    *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR, 0666);
+    *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
 }
 
