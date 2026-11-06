@@ -2542,11 +2542,11 @@ static int cmd_nonhost(int argc, char* argv[]) {
             double gb = static_cast<double>(src_st.st_size) / 1073741824.0;
             std::cerr << "[singlet nonhost] Copying " << name << " (" << gb << " GiB) ...\n";
             StopWatch sw;
-            // Use cp via system() — this is a one-time setup operation; cp uses kernel splice/sendfile
-            std::string cp_cmd = "cp " + src + " " + dst;
-            int rc = system(cp_cmd.c_str());
-            if (rc != 0) {
-                std::cerr << "[singlet nonhost] ERROR: cp failed for " << name << " (rc=" << rc << ")\n";
+            // Copy in-process (libstdc++ uses copy_file_range/sendfile); overwrite like cp does
+            std::error_code ec;
+            std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
+            if (ec) {
+                std::cerr << "[singlet nonhost] ERROR: copy failed for " << name << " (" << ec.message() << ")\n";
                 overall_rc = 1;
             } else {
                 std::cerr << "[singlet nonhost] Cached " << name
