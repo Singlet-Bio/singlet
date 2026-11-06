@@ -2369,6 +2369,7 @@ class SraEncoder {
             if (protocol_id > 0) {
                 for (const auto& spec : known_protocols()) {
                     if (spec.protocol_id == protocol_id) {
+                        cb_start = spec.bc_offset + 1;   // 1-based for STAR
                         cb_len = spec.bc_len;
                         umi_start = spec.umi_offset + 1;  // 1-based for STAR
                         umi_len = spec.umi_len;
