@@ -106,7 +106,7 @@ def main(spec, outdir):
         L += ["", "## Build", "", f"commit {c.group(1) if c else 'NA'}", f"sha256 {s.group(1) if s else 'NA'}", f"result: {'ok' if '[build]' in t and ' ok in ' in t else 'FAILED, see ' + LOGS + '/gbold-build-' + d['build'] + '.out'}"]
     if "ident" in d:
         t, rows = ident_verdicts(d["ident"])
-        L += ["", "## Identity against b0 (CPU engine oracle in the same run)", "", "Arms: ref (b0), base (WSHRINK off), wshrink (on), bstream, both.", ""]
+        L += ["", "## Identity against b0 (CPU engine oracle in the same run)", "", "Arms: ref (b0), base (WSHRINK off), wshrink (on).", ""]
         L += ["- " + r for r in rows] or ["- no verdict lines, see the log"]
     if "paths" in d:
         t = read(f"{RES.replace('gpu-integ', 'gpu-paths')}/paths-{d['paths']}/summary.txt")

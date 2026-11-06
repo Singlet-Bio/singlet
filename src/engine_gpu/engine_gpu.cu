@@ -33,7 +33,6 @@
 #include <cstring>
 #include <string>
 #include <thread>
-#include <future>
 #include <vector>
 #include <condition_variable>
 #include <deque>
@@ -610,7 +609,7 @@ struct Budget {
     }
 };
 static Budget g_bud;
-static std::mutex g_budMu;   // gpu/bold-kern2: lane B on its own host thread (BSTREAM) shares the tally, the step times and the lane log
+static std::mutex g_budMu;   // guards the tally, the step times and the lane log
 static int g_waSlice = 160;   // aligns per read of lane B's pool (SINGLET_BOLD_WASLICE)
 static inline u64 budRound(u64 b) { return b < (1u << 20) ? (b + 511) & ~511ull : (b + (2u << 20) - 1) & ~((2ull << 20) - 1); }   // the driver's granularity
 static cudaError_t dmalv(void** p, u64 b) {
@@ -658,12 +657,11 @@ static void logAdd(const char* b) { std::lock_guard<std::mutex> lk(g_budMu); g_l
 typedef std::function<void(u64 b0, u64 nb, const uint8_t* status)> BatchFn;
 template <class C, bool WARP = false, int MAXREG = 0>
 bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* dOff, const std::vector<uint32_t>& idx, u64 NB, u64 budget,
-             Lane& L, std::string& err, bool keepDev, const char* nm, bool NEW, const BatchFn* onBatch = nullptr, cudaStream_t st = 0,
-             const std::function<void()>* onAlloc = nullptr) {
+             Lane& L, std::string& err, bool keepDev, const char* nm, bool NEW, const BatchFn* onBatch = nullptr, cudaStream_t st = 0) {
     const double tA = now();
     const std::string sn = std::string("lane") + nm;
     { std::lock_guard<std::mutex> lk(g_budMu); g_bud.at = sn; }
-    // st: the stream of every launch and copy (0: the legacy stream, as before; lane B's own stream under SINGLET_BOLD_BSTREAM)
+    // st: the stream of every launch and copy (0: the legacy stream; no caller passes another stream since BSTREAM was removed)
     auto d2h = [&](void* h, const void* d, size_t nbytes) -> cudaError_t { cudaError_t e = cudaMemcpyAsync(h, d, nbytes, cudaMemcpyDeviceToHost, st); return e != cudaSuccess ? e : cudaStreamSynchronize(st); };
     u64 n = idx.size();
     L.status.assign(n, (uint8_t)Status::Overflow); L.len.assign(n, 0); L.off.resize(n + 1); L.off[0] = 0;   // off: every entry copied below
@@ -686,7 +684,6 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         EG_CK(dmal(&dPool, poolAl * WA_SIZE * sizeof(m5::uint)));
         EG_CK(dmal(&dNeed, NB * 8)); EG_CK(dmal(&dWb, NB * 8)); EG_CK(dmal(&dWkey, NB * 8)); EG_CK(dmal(&dPend, NB)); EG_CK(dmal(&dWcnt, 8));
     }
-    if (onAlloc && *onAlloc) (*onAlloc)();   // the lane's buffers are in the tally
     // E12: the seed / windows kernels' counters, the warp lane's sort keys and order, the persistent kernels' grids
     unsigned long long* dCtr = nullptr; u64* dKey = nullptr; uint32_t* dPerm = nullptr;
     int nSm = 0, bpsS = 0, bpsW = 0; size_t stack0 = 0; u64 stackRes = 0;
@@ -846,10 +843,9 @@ static bool lanePlan(u64 m, u64 avail, u64 slot, u64 per, u64 nb0, u64 nbMin, u6
 // nothing stays on the device (the records' gather uploads the packed results again). onBatch sees batch offsets within idx.
 template <class C, bool WARP = false, int MAXREG = 0>
 bool runLaneParts(const Params& P, const GenomeView& D, const char* dSeq, const u64* dOff, const std::vector<uint32_t>& idx, u64 NB, u64 part,
-                  u64 budget, Lane& L, std::string& err, bool keepDev, const char* nm, bool NEW, const BatchFn* onBatch, u64& nParts, cudaStream_t st = 0,
-                  const std::function<void()>* onAlloc = nullptr) {
+                  u64 budget, Lane& L, std::string& err, bool keepDev, const char* nm, bool NEW, const BatchFn* onBatch, u64& nParts, cudaStream_t st = 0) {
     const u64 n = idx.size();
-    if (part == 0 || part >= n) { nParts = 1; return runLane<C, WARP, MAXREG>(P, D, dSeq, dOff, idx, NB, budget, L, err, keepDev, nm, NEW, onBatch, st, onAlloc); }
+    if (part == 0 || part >= n) { nParts = 1; return runLane<C, WARP, MAXREG>(P, D, dSeq, dOff, idx, NB, budget, L, err, keepDev, nm, NEW, onBatch, st); }
     nParts = 0;
     L.status.clear(); L.len.clear(); L.out.clear(); L.off.assign(1, 0); L.dOut = nullptr; L.dOff = nullptr;
     L.status.reserve(n); L.len.reserve(n); L.off.reserve(n + 1);
@@ -1564,10 +1560,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 nRep = rep.size();
     constexpr u64 slotA = laneSlotB<LaneA>(), slotM = laneSlotB<LaneM>(), slotB = laneSlotB<LaneB>();
     constexpr u64 perA = lanePerB<LaneA, false>(), perMw = lanePerB<LaneM, true>(), perMt = lanePerB<LaneM, false>(), perB0 = lanePerB<LaneB, false>();
-    // gpu/bold-kern2: SINGLET_BOLD_WSHRINK=1: lane B on LaneBc (aligns in a pool, 25 bytes per read of its bookkeeping, g_waSlice aligns of pool per read);
-    // SINGLET_BOLD_BSTREAM=1: lane B's batches on their own stream and host thread, overlapping the next chunk's lanes A and M
+    // gpu/bold-kern2: SINGLET_BOLD_WSHRINK=1: lane B on LaneBc (aligns in a pool, 25 bytes per read of its bookkeeping, g_waSlice aligns of pool per read)
     auto envOn = [](const char* k) { const char* v = std::getenv(k); return v && v[0] == '1'; };
-    const bool wshrink = NEW && envOn("SINGLET_BOLD_WSHRINK"), bstream = NEW && cap != 0 && envOn("SINGLET_BOLD_BSTREAM");
+    const bool wshrink = NEW && envOn("SINGLET_BOLD_WSHRINK");
     if (const char* wsE = std::getenv("SINGLET_BOLD_WASLICE")) g_waSlice = (int)std::max<u64>(8, std::strtoull(wsE, nullptr, 10));
     const u64 perB = wshrink ? lanePerB<LaneBc, false>() + 25 + (u64)g_waSlice * WA_SIZE * sizeof(m5::uint) : perB0;
     const u64 RES = 112;   // E8: per sequence its packed result and offsets kept on the device for the records' gather (~70 bytes of result on pbmc1k_v3)
@@ -1588,7 +1583,6 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         const u64 st1 = std::max<size_t>(16 * 1024, sizeof(LWM) + 8192);
         stackNeed = st1 > st0 ? (st1 - st0) * (u64)nSm * (u64)mt : 0;
     }
-    if (bstream && !ceE && nRep >= 3 * (1u << 18)) CHUNK = std::min<u64>(CHUNK, std::max<u64>(1u << 18, ((nRep + 2) / 3 + 4095) / 4096 * 4096));   // at least three chunks, so lane B overlaps something
     std::string budLog, planLog;
     u64 nbMlog = nbM, nbBlog = nbB0; bool wMlog = warpM;
     if (cap) {
@@ -1641,7 +1635,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     g_laneLog.clear();
     // gpu/bold-kern2: the chunk whose lane B is (or just was) on the device: what its entry in chunks needs besides B's result
     struct PendB { Lane A, M, B; std::vector<uint32_t> repc, repB, posB, posM, ixB; u64 c0 = 0, ci = 0, nbB = 0, nPB = 1, qn = 0, nbAc = 0, nPA = 1, nbMc = 0, nPM = 1, nRepM = 0, nRepc = 0;
-                   double tc0 = 0; bool ok = true, async = false, wM = false, signalled = false; std::string err; BatchFn onB; std::thread th; };
+                   double tc0 = 0; bool ok = true, wM = false; std::string err; BatchFn onB; };
     std::unique_ptr<PendB> pendB;
     std::function<bool()> drainB;
     auto gpuPart = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
@@ -1680,7 +1674,6 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         for (u64 k = 0; k < repc.size(); k++) ixA[k] = (uint32_t)(base + k);
         // reads in flight per lane (nbA, nbM, nbB): Work + ReadBuf per read are 36 KB (A), 68 KB (M), 550 KB (B)
         u64 nbAc = nbA, partA = 0, nPA = 1, nPM = 1, nPB = 1;
-        if (pendB && cap && !lanePlan(repc.size(), availNow(), slotA, perA, nbA, nbAset ? nbA : 4096, 4096, nbAc, partA)) { if (!drainB()) return false; }   // lane B of the last chunk holds what A needs
         if (cap && !lanePlan(repc.size(), availNow(), slotA, perA, nbA, nbAset ? nbA : 4096, 4096, nbAc, partA)) return noFit("A", repc.size(), availNow());
         if (!runLaneParts<LaneA, false, 64>(P, D, dS, dO, ixA, nbAc, partA, 1024, A, err, resident, "A", NEW, nullptr, nPA)) return false;
         if (nPA > 1) { allRes = false; resident = false; }
@@ -1689,11 +1682,6 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         for (u64 k = 0; k < repc.size(); k++) if (A.status[k] != (uint8_t)Status::Ok) { repM.push_back(repc[k]); posM.push_back((uint32_t)k); ixM.push_back((uint32_t)(base + k)); }
         stepAdd("lanes.host", now() - th);
         bool wM = warpM; u64 nbMc = nbM, partM = 0;
-        if (pendB && cap && !repM.empty()) {   // lane B of the last chunk still on the device: it ends first when M would not fit next to it
-            u64 nb = 0, part = 0, nbT = 0, partT = 0; const u64 av = availNow();
-            const bool warpOk = wM && av > stackNeed && lanePlan(repM.size(), av - stackNeed, slotM, perMw, nbM, nbMset ? nbM : 4096, 4096, nb, part) && part == 0 && (nbMset || nb >= std::min<u64>(32768, repM.size()));
-            if (!(wM ? warpOk : lanePlan(repM.size(), av, slotM, perMt, nbM, nbMset ? nbM : 4096, 4096, nbT, partT))) { if (!drainB()) return false; }
-        }
         if (cap && !repM.empty()) {   // E17: the warp lane when its stack and a batch of 32768 (or all of lane M) fit next to all its slots; else thread per read
             const u64 av = availNow();
             u64 nb = 0, part = 0;
@@ -1720,18 +1708,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             const u64 fit = f > fixed ? (f - fixed) / per / 1024 * 1024 : 0;
             nbB = std::max<u64>(8192, std::min<u64>(nbB0, fit));
         }
-        if (!drainB()) return false;   // the last chunk's lane B (it overlapped this chunk's lanes A and M), its chunk entry pushed before this one's
-        // BSTREAM: lane B of this chunk runs on its own stream and thread while the next chunk's lanes A and M run, when the chunk has a successor, B needs no
-        // parts and the budget holds both: B is planned in the room left after the next chunk's lane A (else it runs here, as before)
-        bool asyncB = bstream && !lean && !repB.empty() && partB == 0 && c0 + CHUNK < nRep;
-        if (asyncB) {
-            const u64 nextM = std::min<u64>(CHUNK, nRep - c0 - CHUNK), av = availNow(), resA = laneNeed(nextM, nbA, slotA, perA);
-            u64 nb2 = 0, part2 = 0;
-            if (av > resA && lanePlan(repB.size(), av - resA, slotB, perB, nbB0, nbBset ? nbB0 : 1024, 1024, nb2, part2) && part2 == 0) nbB = nb2; else asyncB = false;
-        }
         pendB.reset(new PendB);
         PendB& X = *pendB;
-        X.A = std::move(A); X.M = std::move(M); X.repc = repc; X.repB = repB; X.posB = posB; X.posM = posM; X.ixB = std::move(ixB); X.c0 = c0; X.ci = chunks.size(); X.nbB = nbB; X.tc0 = tc0; X.async = asyncB;
+        X.A = std::move(A); X.M = std::move(M); X.repc = repc; X.repB = repB; X.posB = posB; X.posM = posM; X.ixB = std::move(ixB); X.c0 = c0; X.ci = chunks.size(); X.nbB = nbB; X.tc0 = tc0;
         X.nbAc = nbAc; X.nPA = nPA; X.nbMc = nbMc; X.nPM = nPM; X.wM = wM; X.nRepM = repM.size(); X.nRepc = repc.size();
         if (pool) {
             hres[X.ci].reset(new HostRes); hres[X.ci]->out.resize(X.repB.size()); hres[X.ci]->st.assign(X.repB.size(), 0);
@@ -1743,35 +1722,18 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             };
         }
         const bool keepB = resident;
-        auto runB = [&P, &D, wshrink, NEW, dS, dO, partB, keepB, pl = pool.get(), xp = &X](cudaStream_t st, const std::function<void()>* onAl) -> bool {   // by value: it outlives this call under BSTREAM
-            if (wshrink) return runLaneParts<LaneBc>(P, D, dS, dO, xp->ixB, xp->nbB, partB, 2048, xp->B, xp->err, keepB, "B", NEW, pl ? &xp->onB : nullptr, xp->nPB, st, onAl);
-            return runLaneParts<LaneB>(P, D, dS, dO, xp->ixB, xp->nbB, partB, 2048, xp->B, xp->err, keepB, "B", NEW, pl ? &xp->onB : nullptr, xp->nPB, st, onAl);
+        auto runB = [&]() -> bool {
+            if (wshrink) return runLaneParts<LaneBc>(P, D, dS, dO, X.ixB, X.nbB, partB, 2048, X.B, X.err, keepB, "B", NEW, pool ? &X.onB : nullptr, X.nPB);
+            return runLaneParts<LaneB>(P, D, dS, dO, X.ixB, X.nbB, partB, 2048, X.B, X.err, keepB, "B", NEW, pool ? &X.onB : nullptr, X.nPB);
         };
-        if (!asyncB) {
-            if (!runB(0, nullptr)) return false;
-            if (!drainB()) return false;
-            return true;
-        }
-        {
-            auto allocd = std::make_shared<std::promise<void>>(); std::future<void> fut = allocd->get_future();
-            std::function<void()> onAl = [allocd, xp = &X]() { if (!xp->signalled) { xp->signalled = true; allocd->set_value(); } };
-            int dev = 0; cudaGetDevice(&dev);
-            X.th = std::thread([runB, allocd, xp = &X, dev, onAl]() {
-                cudaSetDevice(dev);
-                cudaStream_t sB = nullptr; cudaStreamCreateWithFlags(&sB, cudaStreamNonBlocking);
-                xp->ok = runB(sB, &onAl);
-                if (sB) cudaStreamDestroy(sB);
-                if (!xp->signalled) { xp->signalled = true; allocd->set_value(); }
-            });
-            fut.wait();   // lane B's buffers are in the tally before this thread plans the next chunk's lanes
-        }
+        if (!runB()) return false;
+        if (!drainB()) return false;
         return true;
     };
     // lane B's result of the pending chunk joined: the chunk's plan line, its lane map and its entry in chunks
     drainB = [&]() -> bool {
         if (!pendB) return true;
         PendB& X = *pendB;
-        if (X.th.joinable()) X.th.join();
         if (!X.ok) { err = X.err; pendB.reset(); return false; }
         const std::vector<uint32_t>& repc = X.repc; const std::vector<uint32_t>& repB = X.repB; const std::vector<uint32_t>& posB = X.posB; const std::vector<uint32_t>& posM = X.posM;
         Lane A = std::move(X.A), M = std::move(X.M), B = std::move(X.B);
@@ -1779,10 +1741,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (nPB > 1) { allRes = false; resident = false; }
         {
             char pl[320];
-            snprintf(pl, sizeof pl, "chunk %llu: A %llu x %llu%s, M %llu x %llu %s%s, B %llu x %llu%s%s; ", (unsigned long long)(c0 / CHUNK),
+            snprintf(pl, sizeof pl, "chunk %llu: A %llu x %llu%s, M %llu x %llu %s%s, B %llu x %llu%s; ", (unsigned long long)(c0 / CHUNK),
                      (unsigned long long)X.nRepc, (unsigned long long)X.nbAc, X.nPA > 1 ? (" in " + std::to_string(X.nPA) + " parts").c_str() : "",
                      (unsigned long long)X.nRepM, (unsigned long long)X.nbMc, X.wM ? "warp" : "thread", X.nPM > 1 ? (" in " + std::to_string(X.nPM) + " parts").c_str() : "",
-                     (unsigned long long)repB.size(), (unsigned long long)nbB, nPB > 1 ? (" in " + std::to_string(nPB) + " parts").c_str() : "", X.async ? " async" : "");
+                     (unsigned long long)repB.size(), (unsigned long long)nbB, nPB > 1 ? (" in " + std::to_string(nPB) + " parts").c_str() : "");
             planLog += pl;
             if (c0 == 0) { nbMlog = X.nbMc; nbBlog = nbB; wMlog = X.wM; }
         }
@@ -1914,7 +1876,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     chunks.reserve(nChunks);
     for (u64 c0 = 0; c0 < rep.size(); c0 += CHUNK) {
         std::vector<uint32_t> repc(rep.begin() + c0, rep.begin() + std::min<u64>(rep.size(), c0 + CHUNK));
-        if (!gpuPart(repc, c0)) { if (pendB && pendB->th.joinable()) pendB->th.join(); return budFail ? failBudget(err) : fail(err); }
+        if (!gpuPart(repc, c0)) { return budFail ? failBudget(err) : fail(err); }
     }
     if (!drainB()) return fail(err);
     tS = now();
@@ -2231,7 +2193,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
              (unsigned long long)out.nFailed, out.secUpload, out.secDedup, out.secMapGpu);
     out.log += line;
     out.log += std::string("engine_gpu: E12 lanes (") + (NEW ? "new" : "old: SINGLET_ENGINE_GPU_CFG=old") + "): batches " + std::to_string(nbA) + " / "
-               + std::to_string(nbM) + " / " + std::to_string(nbB0) + (warpM ? ", lane M warp per read" : "") + "; kern2 wshrink=" + (wshrink ? "1" : "0") + " bstream=" + (bstream ? "1" : "0") + " waslice=" + std::to_string(g_waSlice) + "; " + g_laneLog + "\n";
+               + std::to_string(nbM) + " / " + std::to_string(nbB0) + (warpM ? ", lane M warp per read" : "") + "; kern2 wshrink=" + (wshrink ? "1" : "0") + " waslice=" + std::to_string(g_waSlice) + "; " + g_laneLog + "\n";
     if (g_d2h) {
         char ld[160];
         snprintf(ld, sizeof ld, "engine_gpu: E12 device -> host copies staged: %.2f GB in %.2f s (%.1f GB/s)\n", DR.bytes / 1e9, DR.sec, DR.bytes / 1e9 / std::max(1e-9, DR.sec));

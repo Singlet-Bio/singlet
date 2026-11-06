@@ -13,7 +13,7 @@
 # Example POINTS: "k8t7s2r5@b0 k8t7s2r5@wshrink k8t7s3r5@mpswshrink k8t7s2r5@b0#2". Set ALLOW_NO_EMBED=1 when the build does not embed its commit.
 # Original header of tp2.sbatch follows.
 # gpu/bold-kern2: this is gpu/bold-kern's tp.sbatch with results under $W/jobs/gpu-kern2, exclusive node (any of g050 g051 g052), and the configs
-# wshrink bstream both (SINGLET_BOLD_WSHRINK / _BSTREAM) and their mps variants. Points repeat as tag#2 for an A/B/B/A design inside one job.
+# wshrink (SINGLET_BOLD_WSHRINK) and its mps variant. (The bstream configs were removed with the BSTREAM code.) Points repeat as tag#2 for an A/B/B/A design inside one job.
 # GPU BOLD copy of the batch 1 throughput harness (bench/gpu_batch1/tp.sbatch at 0fdec57f), for STAGE CEILING runs of gpu/bold.
 # Differences: results under $W/jobs/gpu-bold, identity off by default (ceiling runs change outputs on purpose), per-run outputs deleted at once,
 # point tags may carry a config: k8t7s2r3@alloff (configs: base nodemux nonh nodn alloff maponly, see cfg_set below), nvidia-smi dmon per point.
@@ -115,12 +115,8 @@ cfg_set() {
     base) ;;
     b0) ARM_BIN=$REFBIN ;;                                                               # the reference binary, no switches
     wshrink) CFG_ENV="SINGLET_BOLD_WSHRINK=1" ;;
-    bstream) CFG_ENV="SINGLET_BOLD_BSTREAM=1" ;;
-    both) CFG_ENV="SINGLET_BOLD_WSHRINK=1 SINGLET_BOLD_BSTREAM=1" ;;
     mpsbase) start_mps ;;
     mpswshrink) CFG_ENV="SINGLET_BOLD_WSHRINK=1"; start_mps ;;
-    mpsbstream) CFG_ENV="SINGLET_BOLD_BSTREAM=1"; start_mps ;;
-    mpsboth) CFG_ENV="SINGLET_BOLD_WSHRINK=1 SINGLET_BOLD_BSTREAM=1"; start_mps ;;
     nodemux) CFG_ARGS="--n-donors 1" ;;                                                  # auto-K and VB skipped (K=1 synthesized)
     nonh) CFG_ARGS="--no-viral-screen --no-microbial-screen" ;;                          # non-host screen and EM skipped
     nodn) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen" ;;
