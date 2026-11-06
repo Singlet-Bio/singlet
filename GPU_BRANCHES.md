@@ -105,3 +105,21 @@ Not GPU work (merged into prod/campaign or closed, no action from this train): `
 Folded: 45. Fold next: 3. Archive: 16. Delete: 0 (none proposed yet; folded branches with an archive tag or full reachability are safe to delete after the gold gate passes).
 
 The tags `archive/gpu-2026-11-06/<branch>` pin 71 branches. The branches without a tag are merged into prod/campaign (reachable from it) or are `perf/gpu-candidate-pr2`.
+
+## Fold order and written TODOs
+
+Each item enters gpu/frontier as its own commit or pull request with its gate.
+
+1. The non-host GPU screen falls back to the CPU in many runs at 2 and 3 slots, the b0 reference included (jobs 800983 to 800985). Find the cause first, because the fallback contaminates every timing run. Diagnostic: job 802058.
+2. `perf/gpu-device` (#193): the 512-base lift and the P3-MEM-03 memory work, with the gates in its row. This makes corpus 16 of 16 possible.
+3. The minimal transfer ledger and NVTX ranges from `perf/nvtx-host-ranges`, by cherry-pick only.
+4. The VMM shared index from `gpu/bold-shidx-fix`, with the 3-slot MPS arm and identity at 2 and 3 slots.
+5. Keep one device dedup and delete the other. Remove any code the deleted branches leave dead.
+
+**TODO, not started: the k_resolve exon-multimapper fix.** No source exists for it. It blocks the merge into prod/campaign. The resolver work owns it.
+
+## Deletion log
+
+No branch has been deleted. Decision D-49 closes branches only after the gold branch passes its gates. When a branch is deleted, its row is added here with the tip SHA, so that `git branch <name> <sha>` restores it.
+
+Dry run of the deletion check on 2026-11-06, for the 64 branches above: a branch passes when its tip is an ancestor of gpu/frontier or of prod/campaign, or when `archive/gpu-2026-11-06/<branch>` points at the same tip. 62 pass. Two do not: `perf/gpu-candidate-pr2` (no tag, one commit ahead of gpu/frontier) and `perf/gpu-device` (its tag points at an older tip; it is a fold-next branch). Five branches head an open pull request: `gpu/fable-engine`, `gpu/fable/beta-notes`, `perf/gpu-candidate-pr2`, `perf/gpu-device`, `perf/gpu-next`.
