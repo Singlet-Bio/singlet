@@ -280,3 +280,18 @@ The mixture holds four lines. Singlet labels 8,017 cells with two donors (4,012 
 - GEM-X v4 and Flex are blocked. Replacements queued: `pbmc5k_protein_v3_nextgem`, `pbmc5k_v3` and `hodgkin_ngsc3_v31` (10x URLs, HTTP 200). A genotype-pooled donor library (Neavin 2023 village) is the proposed replacement for the Flex demultiplexing truth.
 - BAM inputs queued through the existing BAM route: `lebrigand2020_scnaumi_190c` and `_951c`, `russell2018_uninfected` and `_8h`, `dm_fca2022_male_head`. The Russell and FCA BAM tags were not checked before queueing.
 - Not yet routed: Smart-seq2 and plate methods, spatial (STARsolo only, no Space Ranger), the Mereu sets (a dog reference must be built), sci-RNA, SPLiT-seq, inDrops, CEL-Seq2, ICELL8, SCRB-seq, ddSEQ and the long-read sets.
+
+### Reproducing the line-mixture result
+
+Sample: `pilot_GSM4987148` (GSM4987148, GSE163781, four-line mixture, 836 M pairs, matched 100 M-pair prefix). All paths are on Clipper under `/mnt/projects/debruinz_project/debruinz/singlet/`.
+
+| Output | Path |
+|---|---|
+| Singlet matched run (cell calls, `donor_assignments.tsv`, `doublet_scores.tsv`) | `pilot/GSM4987148/s1cap_0ea48783/out/` |
+| Singlet full run | `pilot/GSM4987148/s1cpu_0ea48783/out/` |
+| souporcell (`clusters.tsv`, ambient RNA, cluster genotypes) | `pilot/GSM4987148/tools/souporcell/out/`, store entry `benchmark-store/pilot_GSM4987148/GSM4987148/souporcell/` |
+| vireo (`vireo_out/donor_ids.tsv`) | `pilot/GSM4987148/tools/vireo/`, store entry `benchmark-store/pilot_GSM4987148/GSM4987148/vireo/` |
+| STARsolo calls and matrices | `pilot/GSM4987148/starsolo_bam/Solo.out/GeneFull/`, store entry `benchmark-store/pilot_GSM4987148/GSM4987148/STARsolo/` |
+| CellBender cell barcodes | `pilot/GSM4987148/tools/cellbender/cb_cell_barcodes.csv` |
+
+The numbers in the diagnosis come from `python3 ops/s15/diag_pilot.py <pilot dir>`, which reads these files and prints the contingency tables. Vireo and souporcell used the STARsolo BAM and `K=4`.
