@@ -261,3 +261,22 @@ Singlet runs above 100 M pairs are scored on the matched 100 M-pair prefix that 
 - **Demultiplexing.** On GSM8085472 (hashed PBMC, 10 donors) Singlet agrees with souporcell and vireo (ARI 0.997 and 0.997). On GSM4987148 (known line mixture) agreement is low (0.07 and 0.14) while souporcell and vireo agree with each other at 0.55. GSM4987144 has no matched Singlet run to score.
 - **Speed and memory.** Singlet GPU is faster than CPU on every sample that completed both. CPU and GPU outputs differ in 1 to 3 files per sample. In the case I read (GSM5682562) the differences are a byte count and timing fields. I did not inspect the others. Singlet CPU uses 1.4 to 5 times the memory of STARsolo.
 - **Not scored.** V(D)J, HTO calls, mtDNA heteroplasmy and splice outputs have no scoring script yet. The 13 samples were not re-run after the Kang and v1 fixes, since those are store datasets.
+
+### Diagnosis of the two cell-call divergences (2026-11-06)
+
+Method: `ops/s15/diag_pilot.py` on the matched 100 M-pair Singlet runs (`s1cap_0ea48783`) and the STARsolo EmptyDrops_CR calls. Both Singlet runs report every call as `called_v2`.
+
+**GSM7884577 (single-nucleus multiome, 57,055 Singlet cells against 16,033 STARsolo cells).** Both tools share 15,815 cells with a median of 1,541 UMIs. The 41,240 extra Singlet cells sit at a UMI floor, with a median of 436 and a 10th to 90th percentile range of 389 to 520. STARsolo stops at 643 UMIs. DropletUtils emptyDrops at FDR 0.001 calls 45,222 cells, which is much closer to Singlet than to STARsolo. Singlet rejects only 218 of the STARsolo cells. The divergence is therefore a difference in the low-UMI cutoff, not a disagreement on well-covered cells. CellBender produced no output on this sample (its input folder was wrong at the time), so there is no third opinion. Action for the engine owner: check the `called_v2` lower bound on nuclei libraries with a large empty-droplet tail.
+
+**GSM4987148 (deep line mixture, 8,017 against 6,494).** The tools share 4,739 cells. Singlet's 3,278 extras are high-UMI cells (median 5,694). STARsolo's 1,755 extras are low-UMI barcodes (median 155) that Singlet marks as not cells. CellBender calls 10,253 cells and contains all 6,494 STARsolo cells and 7,784 of Singlet's 8,017. Here the evidence favors Singlet: its extras are well covered, and STARsolo's extras look like ambient barcodes. The low Jaccard (0.49) reflects EmptyDrops_CR choices more than a Singlet error.
+
+### Line-mixture demultiplexing (GSM4987148)
+
+The mixture holds four lines. Singlet labels 8,017 cells with two donors (4,012 and 3,399), 537 unassigned and 69 doublets. Vireo finds four donors (3,256, 1,582, 1,171 and 132 cells). Souporcell finds four clusters (1,450, 1,339, 1,220 and 305 cells) and leaves 1,806 cells unassigned. On 2,810 shared singlet cells the adjusted Rand index is 0.55 between souporcell and vireo, 0.07 between Singlet and souporcell, and 0.14 between Singlet and vireo. Souporcell splits one vireo donor into two clusters, so neither reference tool is clean here. Singlet's two-donor result under-clusters a four-line mixture. Without per-cell truth the reference tools are better than Singlet on this sample, but only by agreement with each other.
+
+### Routes (2026-11-06 evening)
+
+- Drop-seq and Seq-Well route tested (job 801027): STARsolo with a 12 nt barcode, 8 nt UMI and no whitelist ran on 2 M macosko reads and estimated 1,009 cells. The macosko and gierahn chains had already finished on this route.
+- GEM-X v4 and Flex are blocked. Replacements queued: `pbmc5k_protein_v3_nextgem`, `pbmc5k_v3` and `hodgkin_ngsc3_v31` (10x URLs, HTTP 200). A genotype-pooled donor library (Neavin 2023 village) is the proposed replacement for the Flex demultiplexing truth.
+- BAM inputs queued through the existing BAM route: `lebrigand2020_scnaumi_190c` and `_951c`, `russell2018_uninfected` and `_8h`, `dm_fca2022_male_head`. The Russell and FCA BAM tags were not checked before queueing.
+- Not yet routed: Smart-seq2 and plate methods, spatial (STARsolo only, no Space Ranger), the Mereu sets (a dog reference must be built), sci-RNA, SPLiT-seq, inDrops, CEL-Seq2, ICELL8, SCRB-seq, ddSEQ and the long-read sets.
