@@ -123,8 +123,7 @@ static bool shAcquire(const std::string& genomeDir, const GenomeView& H, u64 saB
             d += " p" + std::to_string(i) + "=" + (e == cudaSuccess ? "type " + std::to_string((int) at.type) + " dev " + std::to_string(at.device) : std::string("attr error ") + cudaGetErrorString(e)) + (e == cudaSuccess && at.devicePointer != S.p[i] ? " devptr differs" : "");
             if (e != cudaSuccess) cudaGetLastError();
         }
-        log += d + "
-";
+        log += d + "\n";
     }
     std::string why;
     const char* hg = H.G - SH_PAD;
@@ -140,8 +139,7 @@ static bool shAcquire(const std::string& genomeDir, const GenomeView& H, u64 saB
         }
         cudaDeviceSynchronize();
         for (int i = 0; i < 3; i++) { cudaIpcCloseMemHandle(S.p[i]); g_ipcPtrs.erase(std::remove(g_ipcPtrs.begin(), g_ipcPtrs.end(), S.p[i]), g_ipcPtrs.end()); S.p[i] = q[i]; }
-        S.priv = true; log += "engine_gpu: shared index: CONTROL private device copy of the imported index in " + std::to_string(now() - tc) + " s
-";
+        S.priv = true; log += "engine_gpu: shared index: CONTROL private device copy of the imported index in " + std::to_string(now() - tc) + " s\n";
     }
     S.bytes = budRound(rq.nG) + budRound(rq.saB) + budRound(rq.saiB); S.on = true;
     char l[300]; snprintf(l, sizeof l, "engine_gpu: shared index: imported G, SA, SAi (%.2f GB) from the holder in %.2f s, sampled content check %.2f s: no private upload\n",
