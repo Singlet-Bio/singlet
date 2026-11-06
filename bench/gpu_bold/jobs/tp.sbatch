@@ -112,6 +112,7 @@ cfg_set() {
     admmps) CFG_ENV="SINGLET_GPU_ADMIT=1"; start_mps ;;                                  # the same with CUDA MPS (concurrent kernels of several processes)
     admtuned) CFG_ENV="SINGLET_GPU_ADMIT=1 SINGLET_ADMIT_CAP_GB=92.5 SINGLET_ADMIT_IDLE_GB=0 SINGLET_ENGINE_GPU_MEM_GB=36 SINGLET_ADMIT_EST_PREFILL_GB=36 SINGLET_GPU_PILEUP_ARENA_GB=28 SINGLET_ADMIT_EST_PILEUP_GB=28 SINGLET_ADMIT_EST_NONHOST_GB=29 SINGLET_ADMIT_EST_HANDOFF_GB=6 SINGLET_ADMIT_EST_SOLO_GB=2.5" ;;   # estimates from measured peaks (solo run 800349 and E17 line): prefill 34.8 GB normal plan, pileup peak 26.3 GB, non-host index 24.9 GB, kept 1.6 GB
     admmap) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_GPU_ADMIT=1 SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;
+    mpsbsort) CFG_ENV="SINGLET_BOLD_BSORT=1"; start_mps ;;                                  # MPS plus the lane B cost sort (build b5)
     mps) start_mps ;;                                                                     # CUDA MPS, slot lock unchanged
     m45) CFG_ENV="SINGLET_ENGINE_GPU_MEM_GB=45" ;;                                        # device budget of a 2-slot node
     m91) CFG_ENV="SINGLET_ENGINE_GPU_MEM_GB=91" ;;
