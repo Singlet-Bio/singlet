@@ -29,6 +29,7 @@
 #include "mtx_writer.h"
 #include "pz_writer.h"
 #include "donor_demux.h"
+#include "genotype_export.h"
 #include "mt_heteroplasmy.h"
 #include "mt_event_caller.h"
 #include "provenance.h"
@@ -1302,6 +1303,15 @@ inline ExportStats export_results(const PileupEngine& engine,
         write_threads.emplace_back([&]() { write_matrix("private/snp_ad", snp_ad_csc, engine.snp_names()); });
         write_threads.emplace_back([&]() { write_matrix("private/snp_dp", snp_dp_csc, engine.snp_names()); });
     }
+    // D-52: the per-cell callable-SNP matrices of the called cells in the cellsnp-lite layout (vireo reads it), private.
+    if (!pileup_cfg.snp_path.empty() && !cc_result.cell_indices.empty() && snp_dp_csc.ncols > 0) {
+        write_threads.emplace_back([&]() {
+            const long long n = genotype::write_cellsnp_dir(out_prefix + "/private/genotype/cellsnp", snp_ad_csc, snp_dp_csc,
+                                                            cc_result.cell_indices, barcodes, engine.snp_names());
+            if (n < 0) record_failed_write("private/genotype/cellsnp");
+            else std::cerr << "[genotype] cellsnp layout: " << n << " callable sites x " << cc_result.cell_indices.size() << " cells\n";
+        });
+    }
 
     // N15: ASE — per-cell, per-SNP allele counts (both pipeline and non-pipeline).
     // Uses the already-computed snp_ad_csc / snp_dp_csc; no extra BAM pass.
@@ -1741,6 +1751,13 @@ inline ExportStats export_results(const PileupEngine& engine,
             std::filesystem::create_directories(out_prefix + "/private/donor");
             write_donor_vcfs(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
             write_donor_coverages(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
+        }
+        // D-52: one multi-sample VCF per sample (GT:GQ:AD:DP:PL per donor, called cells only), private.
+        if (demux_result.n_donors_k > 0) {
+            const long long n = genotype::write_donors_vcf(out_prefix + "/private/genotype/donors.vcf.gz", demux_result,
+                                                           snp_ad_csc, snp_dp_csc, cc_result.cell_indices, engine.snp_names());
+            if (n < 0) { record_failed_write("private/genotype/donors.vcf.gz"); result.failed_writes = failed_writes; }
+            else std::cerr << "[genotype] donors.vcf.gz: " << n << " sites x " << demux_result.n_donors_k << " donors\n";
         }
 
         // ── G6: Donor-aware mitochondrial outputs ──
