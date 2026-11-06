@@ -106,25 +106,39 @@ shared_note() {   # LABEL: what the sharing did in this run's log
   grep -a 'shared index:' $l 2>/dev/null | cut -c1-300 | sed 's/^/    /' | tee -a $V
 }
 
-# 1. CPU engine of the new binary, 2. b0 on the GPU
-run cpu $SH cpu; keep cpu
-run b0 $B0 gpu 1; keep b0
-cmpv b0 cpu
-# 3. two processes at once, one holder (started by the first process), 2 slots
+# imports LABELS: every label must have imported the shared index (>= 1 line); else fail loudly (IMPORT FAIL, exit 1)
+need_imports() {
+  local bad=0 lab n
+  for lab in "$@"; do
+    n=$(grep -ac 'shared index: imported' $RES0/$lab/star_Log.out 2>/dev/null); n=${n:-0}
+    echo "  $lab: imported=$n" | tee -a $V
+    [ "$n" -ge 1 ] || { echo "IMPORT FAIL $lab: SINGLET_GPU_SHARED_INDEX=1 but imported=0" | tee -a $V; bad=1; }
+  done
+  [ $bad = 0 ] || { grep -ah "shared index:\|gpu-holder" $RES0/*/star_Log.out /tmp/singlet_gpu_holder.*.log 2>/dev/null | cut -c1-300 | sort | uniq -c | head -10 | tee -a $V; echo "IDENTITY: FAIL (the shared index was not used)" | tee -a $V; exit 1; }
+}
+rm -f /tmp/singlet_gpu_holder.* 2>/dev/null
+# 1. two processes at once, one holder (started by the first process), 2 slots. Both must import, or the job stops here.
 export SINGLET_GPU_SHARED_INDEX=1 SINGLET_GPU_SHARED_INDEX_IDLE_S=120
 for lab in sh1 sh2; do run $lab $SH gpu 2 & done; wait
-for lab in sh1 sh2; do keep $lab; cmpv $lab cpu; cmpv $lab b0; shared_note $lab; done
 cat /tmp/singlet_gpu_holder.*.log 2>/dev/null | cut -c1-300 | sed 's/^/  holder log: /' | tee -a $V
 $SH/singlet-gpu gpu-holder --stop --genome-dir $HOLDER_GENOME --device 0; sleep 10
-# 4. the same under MPS
+need_imports sh1 sh2
+# 2. CPU engine of the new binary, 3. b0 on the GPU, both without the feature
+( unset SINGLET_GPU_SHARED_INDEX SINGLET_GPU_SHARED_INDEX_IDLE_S; run cpu $SH cpu; run b0 $B0 gpu 1 )
+keep cpu; keep b0
+cmpv b0 cpu
+for lab in sh1 sh2; do keep $lab; cmpv $lab cpu; cmpv $lab b0; shared_note $lab; done
+# 4. the same under MPS (also the CUDA IPC check under MPS)
+rm -f /tmp/singlet_gpu_holder.* 2>/dev/null
 export CUDA_MPS_PIPE_DIRECTORY=/tmp/$USER-mps-$SLURM_JOB_ID/pipe CUDA_MPS_LOG_DIRECTORY=/tmp/$USER-mps-$SLURM_JOB_ID/log
 mkdir -p $CUDA_MPS_PIPE_DIRECTORY $CUDA_MPS_LOG_DIRECTORY
 nvidia-cuda-mps-control -d && echo "MPS daemon started" | tee -a $V
 sleep 3
 for lab in mps1 mps2; do run $lab $SH gpu 2 & done; wait
-for lab in mps1 mps2; do keep $lab; cmpv $lab cpu; cmpv $lab b0; shared_note $lab; done
 cat /tmp/singlet_gpu_holder.*.log 2>/dev/null | tail -5 | cut -c1-300 | sed 's/^/  holder log: /' | tee -a $V
 cp $CUDA_MPS_LOG_DIRECTORY/*.log $RES0/ 2>/dev/null
 $SH/singlet-gpu gpu-holder --stop --genome-dir $HOLDER_GENOME --device 0
+for lab in mps1 mps2; do keep $lab; cmpv $lab cpu; cmpv $lab b0; shared_note $lab; done
+need_imports mps1 mps2
 if [ "$(grep -ac ': IDENTICAL$\|:IDENTICAL$' $V)" != 9 ] || grep -aq 'NOTIDENTICAL\|: exit [1-9]' $V; then echo "IDENTITY: FAIL" | tee -a $V; else echo "IDENTITY: PASS (every comparison identical, every run exit 0)" | tee -a $V; fi
 echo done $(date -Is) | tee -a $V

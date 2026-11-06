@@ -17,6 +17,7 @@
 # MPS daemon with pipe and log directories in the job's /tmp. Per arm: arm.txt with the mode lines (lean or normal), the device memory peak
 # (nvidia-smi once a second), the sharing lines of the logs and the harness' results table.
 set -uo pipefail
+export ALLOW_NO_EMBED=1   # the binaries record their commit in commit-gpu (checked); the full hash is not inside the binary
 W=/mnt/projects/debruinz_project/debruinz/singlet; REF=/mnt/projects/debruinz_project/cellarium/reference
 SH=${SH:-$W/jobs/gpu-shidx/bin/shidx}; B0=${B0:-$W/jobs/gpu-bold/bin/b0}; TP=${TP:-$W/jobs/gpu-shidx/jobs/tp.sbatch}
 RES=$W/jobs/gpu-shidx/results/overnight/timing-$SLURM_JOB_ID; mkdir -p $RES; S=$RES/summary.txt
@@ -65,6 +66,10 @@ arm() {
   for f in $R/tp/*/point.txt; do echo "-- $f" >> $A; cut -c1-300 $f >> $A; done
   [ -f $R/tp/results.tsv ] && { echo "-- results.tsv"; column -t -s $'\t' $R/tp/results.tsv; } >> $A
   cat $A | tee -a $S
+  if [ $shared = 1 ]; then
+    local imp; imp=$(cat $logs 2>/dev/null | grep -ac 'shared index: imported'); imp=${imp:-0}
+    [ "$imp" -ge 1 ] || { echo "IMPORT FAIL arm $name: SINGLET_GPU_SHARED_INDEX=1 but imported=0; the later arms are not run" | tee -a $S; exit 1; }
+  fi
 }
 arm A  $B0 $B0_COMMIT k8t7s2r3 0 0
 arm B  $SH $SH_COMMIT k8t7s2r3 1 0

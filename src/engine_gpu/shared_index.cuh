@@ -159,17 +159,18 @@ int holderMain(int argc, char** argv) {
         else if (a == "--stop") stop = true;
     }
     if (gd.empty()) { fprintf(stderr, "gpu-holder: --genome-dir is required\n"); return 2; }
+    if (!stop) {   // nothing inherited from the starting process (pipes of its caller must reach EOF when the caller ends).
+        // This runs before the first CUDA call: the driver's own descriptors (/dev/nvidia*) are opened by that call, and closing them broke every later cudaMalloc.
+        std::vector<int> fds;
+        if (DIR* d = opendir("/proc/self/fd")) { const int dfd = dirfd(d); while (dirent* e = readdir(d)) { const int fd = atoi(e->d_name); if (fd > 2 && fd != dfd) fds.push_back(fd); } closedir(d); }
+        for (int fd : fds) close(fd);
+    }
     if (cudaSetDevice(device) != cudaSuccess) { fprintf(stderr, "gpu-holder: cannot select device %d\n", device); return 1; }
     const std::string key = shKey(gd, deviceId(device)), sock = shPath(key, "sock"), info = shPath(key, "info");
     if (stop) {
         FILE* f = fopen(info.c_str(), "r"); if (!f) return 0;
         long pid = 0; if (fscanf(f, "%ld", &pid) == 1 && pid > 0) kill((pid_t) pid, SIGTERM);
         fclose(f); return 0;
-    }
-    {   // nothing inherited from the starting process (pipes of its caller must reach EOF when the caller ends)
-        std::vector<int> fds;
-        if (DIR* d = opendir("/proc/self/fd")) { const int dfd = dirfd(d); while (dirent* e = readdir(d)) { const int fd = atoi(e->d_name); if (fd > 2 && fd != dfd) fds.push_back(fd); } closedir(d); }
-        for (int fd : fds) close(fd);
     }
     signal(SIGTERM, shSig); signal(SIGINT, shSig); signal(SIGUSR1, shEvictSig); signal(SIGPIPE, SIG_IGN);
     const double t0 = now();
@@ -186,7 +187,7 @@ int holderMain(int argc, char** argv) {
         if (!cudaMalloc(&dG, allocG) && !cudaMalloc(&dSA, allocSA) && !cudaMalloc(&dSAi, allocSAi)) break;
         cudaGetLastError(); cudaFree(dG); cudaFree(dSA); cudaFree(dSAi); dG = dSA = dSAi = nullptr; sleep(1);
     }
-    if (!dG || !dSA || !dSAi) { fprintf(stderr, "gpu-holder: out of device memory for the index (%.2f GB)\n", b2gb(allocG + allocSA + allocSAi)); return 1; }
+    if (!dG || !dSA || !dSAi) { size_t fr = 0, tt = 0; cudaMemGetInfo(&fr, &tt); fprintf(stderr, "gpu-holder: cannot allocate the index (%.2f GB): %s; device free %.1f of %.1f GB\n", b2gb(allocG + allocSA + allocSAi), cudaGetErrorString(cudaGetLastError()), b2gb(fr), b2gb(tt)); return 1; }
     cudaMemset(dG, 0, allocG); cudaMemset(dSA, 0, allocSA); cudaMemset(dSAi, 0, allocSAi);
     cudaMemset(dG, 5, SH_PAD); cudaMemset((char*) dG + SH_PAD + nGen, 5, SH_PAD);   // STAR's tail of the largest symbol (GENOME_spacingChar) around G
     const u64 CH = 256ull << 20; char* pin = nullptr;
