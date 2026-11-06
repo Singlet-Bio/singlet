@@ -10,6 +10,10 @@ this file holds counts only.
 | `private/genotype/donors.vcf.gz` | one VCF per sample with a column per demux donor, GT:GQ:AD:DP:PL. UMI counts summed over the called cells assigned to the donor with prob_max >= 0.9. GT is R12 (binomial, error 0.01, flat prior, posterior >= 0.99), and GQ and PL come from the same likelihoods |
 | `private/genotype/cellsnp/` | the cellsnp-lite layout of the called cells at sites with DP >= 20 over those cells. `vireo -c` reads it. OTH is empty because the engine keeps no other-allele count per cell |
 
+`private/` is created owner-only (0700) before anything is written into it, and the export ends by setting every directory below it to
+0700 and every file to 0600. `$WORK` on Clipper is group project space, so genotype files are never readable by the group, also after a
+mode-keeping copy. The campaign's genotype keeper (`scripts/atlas_rerun/genotype_keep.py`) and the backfill write 0700 / 0600 as well.
+
 The writers run after the shared export, so the CPU and GPU paths write the same bytes. The engine's earlier outputs are unchanged
 (`private/donor/donor{k}.vcf`, `private/snp_{ad,dp}.1pz`, `private/ase_counts.tsv`).
 
