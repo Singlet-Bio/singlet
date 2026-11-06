@@ -444,7 +444,7 @@ __global__ void k_wkey(u64 n, const u64* need, const uint8_t* pend, u64* key, un
 template <class C>
 __global__ void k_p3c(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
                       const uint32_t* bits, uint8_t* bst, uint8_t* out, uint16_t* outLen, uint8_t* pend, const u64* need, const u64* wb,
-                      uint* pool, u64 poolAl) {
+                      m5::uint* pool, u64 poolAl) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n || !pend[k]) return;
     const u64 nd = need[k];
@@ -679,11 +679,11 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     u64 bitsCap = 1 << 20; EG_CK(dmal(&dBits, bitsCap * 4));
     // COMPACT (lane B, SINGLET_BOLD_WSHRINK): the aligns' pool (room for the largest single read, else g_waSlice per read in flight), the reads' needs,
     // their rows' starts, the pending flags, the scan keys and a counter
-    uint* dPool = nullptr; u64 *dNeed = nullptr, *dWb = nullptr, *dWkey = nullptr; uint8_t* dPend = nullptr; unsigned long long* dWcnt = nullptr; u64 poolAl = 0;
+    m5::uint* dPool = nullptr; u64 *dNeed = nullptr, *dWb = nullptr, *dWkey = nullptr; uint8_t* dPend = nullptr; unsigned long long* dWcnt = nullptr; u64 poolAl = 0;
     u64 nRounds = 0, nDeferred = 0;
     if constexpr (C::COMPACT) {
         poolAl = std::max<u64>(NB * (u64)g_waSlice, (u64)C::NW * C::NWA);
-        EG_CK(dmal(&dPool, poolAl * WA_SIZE * sizeof(uint)));
+        EG_CK(dmal(&dPool, poolAl * WA_SIZE * sizeof(m5::uint)));
         EG_CK(dmal(&dNeed, NB * 8)); EG_CK(dmal(&dWb, NB * 8)); EG_CK(dmal(&dWkey, NB * 8)); EG_CK(dmal(&dPend, NB)); EG_CK(dmal(&dWcnt, 8));
     }
     if (onAlloc && *onAlloc) (*onAlloc)();   // the lane's buffers are in the tally
@@ -718,9 +718,9 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
                  WARP ? (", stack " + std::to_string(stackRes >> 20) + " MiB").c_str() : "");
         logAdd(b);
         if constexpr (C::COMPACT) {
-            snprintf(b, sizeof b, "[wshrink: per read %llu bytes = Work %llu + ReadBuf %llu + pool %llu + 25, batch %llu, pool %llu aligns (%.2f GB)] ", (unsigned long long)(sizeof(Work<C>) + sizeof(ReadBuf<C::LREAD>) + (u64)g_waSlice * WA_SIZE * sizeof(uint) + 25),
-                     (unsigned long long)sizeof(Work<C>), (unsigned long long)sizeof(ReadBuf<C::LREAD>), (unsigned long long)((u64)g_waSlice * WA_SIZE * sizeof(uint)), (unsigned long long)NB,
-                     (unsigned long long)poolAl, poolAl * WA_SIZE * sizeof(uint) / 1e9);
+            snprintf(b, sizeof b, "[wshrink: per read %llu bytes = Work %llu + ReadBuf %llu + pool %llu + 25, batch %llu, pool %llu aligns (%.2f GB)] ", (unsigned long long)(sizeof(Work<C>) + sizeof(ReadBuf<C::LREAD>) + (u64)g_waSlice * WA_SIZE * sizeof(m5::uint) + 25),
+                     (unsigned long long)sizeof(Work<C>), (unsigned long long)sizeof(ReadBuf<C::LREAD>), (unsigned long long)((u64)g_waSlice * WA_SIZE * sizeof(m5::uint)), (unsigned long long)NB,
+                     (unsigned long long)poolAl, poolAl * WA_SIZE * sizeof(m5::uint) / 1e9);
             logAdd(b);
         }
     }
@@ -1569,7 +1569,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     auto envOn = [](const char* k) { const char* v = std::getenv(k); return v && v[0] == '1'; };
     const bool wshrink = NEW && envOn("SINGLET_BOLD_WSHRINK"), bstream = NEW && cap != 0 && envOn("SINGLET_BOLD_BSTREAM");
     if (const char* wsE = std::getenv("SINGLET_BOLD_WASLICE")) g_waSlice = (int)std::max<u64>(8, std::strtoull(wsE, nullptr, 10));
-    const u64 perB = wshrink ? lanePerB<LaneBc, false>() + 25 + (u64)g_waSlice * WA_SIZE * sizeof(uint) : perB0;
+    const u64 perB = wshrink ? lanePerB<LaneBc, false>() + 25 + (u64)g_waSlice * WA_SIZE * sizeof(m5::uint) : perB0;
     const u64 RES = 112;   // E8: per sequence its packed result and offsets kept on the device for the records' gather (~70 bytes of result on pbmc1k_v3)
     bool resident = in.e2e != nullptr && in.e2e->base != nullptr && !split;   // E8: the lanes keep their packed results on the device (E17 lean: not)
     bool allRes = true;     // E17: every lane's results stayed on the device (none ran in parts)
@@ -1791,7 +1791,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         // where each result is: 0 = A, 1 = M, 2 = B, 3 = host
         std::vector<uint8_t> lane(repc.size(), 0); std::vector<uint32_t> lpos(repc.size());
         for (u64 k = 0; k < repc.size(); k++) lpos[k] = (uint32_t)k;
-        for (u64 k = 0; k < repM.size(); k++) { lane[posM[k]] = 1; lpos[posM[k]] = (uint32_t)k; }
+        for (u64 k = 0; k < posM.size(); k++) { lane[posM[k]] = 1; lpos[posM[k]] = (uint32_t)k; }
         std::vector<uint32_t> repH, posH;
         for (u64 k = 0; k < repB.size(); k++) {
             lane[posB[k]] = 2; lpos[posB[k]] = (uint32_t)k;
