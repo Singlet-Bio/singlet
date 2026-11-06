@@ -51,7 +51,7 @@ struct GzOut {
 /// call_donor_genotype's rule (same expressions, same result).
 inline std::string donor_fields(uint32_t ad, uint32_t dp)
 {
-    if (dp == 0) return "./.";
+    if (dp == 0) return "./.:.:0,0:0:.";   // every FORMAT field present: some readers index the fields without the VCF's dropping rule
     if (ad > dp) ad = dp;
     const double err = kGenoErr;
     const double a = static_cast<double>(ad), r = static_cast<double>(dp - ad);

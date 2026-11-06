@@ -66,7 +66,7 @@ def parse_snp(name):
 def donor_fields(ad, dp):
     """genotype_export.h donor_fields, the same expressions in the same order."""
     if dp == 0:
-        return "./."
+        return "./.:.:0,0:0:."
     ad = min(ad, dp)
     a, r = float(ad), float(dp - ad)
     l = [r * math.log1p(-ERR) + a * math.log(ERR), float(dp) * math.log(0.5), a * math.log1p(-ERR) + r * math.log(ERR)]
