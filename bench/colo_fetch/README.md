@@ -20,6 +20,12 @@ Default campaign (A/B/A/B on one node in one job):
 POINTS="k8t7s2_a k8t7s2c2 k8t7s2_b k8t7s2c4" NRUNS=24 SAMPLE=pbmc1k_v3 BINDIR=$W/jobs/gpu-next/bin/s3 EXPECT_COMMIT=e42c0636
 ```
 
+## Smoke test (job 800867, CPU node, 2 slots, 7 min)
+
+13 runs decoded, 2 failed fast (SRR19515882 has no readable data). A slot fetched a 2 GB `.sra` in about 22 s and decoded 50 M pairs in
+about 30 s with 2 VDB threads. Two slots decoded 1.78 M pairs/s on 2.8 cores at 71 MB/s, peak RSS under 1 GB per decoder.
+The fetch loop costs 1.57 core-s per M pairs: it skips `screen-runs`, which S9's 3.0 includes.
+
 ## Reading the result
 
 `colo_summary.py` writes `summary.md` / `summary.json` in the results directory. Per fetch point: `drain_vs_base_pct` (drain rate
