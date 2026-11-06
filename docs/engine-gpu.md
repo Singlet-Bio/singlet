@@ -4,11 +4,16 @@ The `singlet` binary can map reads on an NVIDIA GPU. `--engine gpu` gives the sa
 file by file, and runs anywhere the CPU build runs: without a GPU, or in a build without CUDA, it maps on the CPU and says so in
 the STAR log.
 
-Status (W11, 2026-10-28): the GPU maps every distinct cDNA sequence of a sample with a line-by-line port of STAR 2.7.11b's
+**Current state.** This page describes the first release of the mapping stage (W11, 2026-10-28). The GPU path has grown since then.
+With `SINGLET_GPU_PILEUP=on` the GPU also builds the per-read records, STARsolo gene counts, the pileup and the non-host screen.
+The operator page is `docs/gpu-engine/fable/GPU-PATH.md`. The kernel reference is `docs/gpu-engine/KERNEL-REFERENCE.md`. The run-time
+reference (device lock, slots, switches, build) is `docs/gpu-engine/RUNTIME-REFERENCE.md`. Where this page and those pages differ, they win.
+
+Status of the first release (W11, 2026-10-28): the GPU maps every distinct cDNA sequence of a sample with a line-by-line port of STAR 2.7.11b's
 mapping (seed search, windows, stitching, extension, scoring, multimapper selection, filters); STAR's mapping state for each
 sequence is byte-identical to STAR's on every sequence tested, and a whole sample run through the engine had 0 differences in
-STAR's own verification (66.0 M reads). Every other stage (barcodes, BAM, pileup, cell calling, export, non-host screen, demux)
-is the CPU engine's code in this release. Evidence and measurements: `docs/gpu-engine/exploration.md` §12.12–12.17 on the
+STAR's own verification (66.0 M reads). In that release every other stage (barcodes, BAM, pileup, cell calling, export, non-host screen, demux)
+was the CPU engine's code. Evidence and measurements: `docs/gpu-engine/exploration.md` §12.12–12.17 on the
 research branch (W11, PR Singlet-Bio/singlet#61) and the measurement section of this PR.
 
 ## How it works
@@ -26,7 +31,7 @@ engine already uses it: a read whose sequence was mapped before takes the stored
 
 The GPU path is used when the cache key is the raw read sequence: single-end cDNA from regular files, no read clipping
 (`--clip3pAdapterSeq`, `--clip5pNbases`), the multimapper and filter options the campaign uses. Otherwise STAR maps every read
-and the log says why (`ENGINE_GPU: not used (...)`). 3′ samples qualify; 5′ samples with adapter clipping do not yet.
+and the log says why (`ENGINE_GPU: not used (...)`). 3′ samples qualify. The CellRanger4 clip of 5′ samples runs on the device (`k_cr4`, see `KERNEL-REFERENCE.md`) on the integrated GPU path.
 
 ## Build
 
@@ -51,8 +56,9 @@ singlet SAMPLE.1fq --pipeline --ref-base REF --genome-dir REF/GRCh38-2024-A/star
     --out-prefix out/ --threads 24 --engine gpu
 ```
 
-- `SINGLET_ENGINE_GPU_DEVICE=N` selects the GPU (default 0). Two samples per GPU fit on a 94 GB H100 NVL (the genome index takes
-  ~18 GB of GPU memory per process while the sample is mapped).
+- `SINGLET_ENGINE_GPU_DEVICE=N` pins the GPU. Without it the first free slot of the first device is taken. `SINGLET_ENGINE_GPU_SLOTS=K`
+  lets K samples share a GPU. Each process holds its own copy of the genome index (about 17 to 18 GB). The device budget is
+  (device memory minus 2 GB) divided by K. See `RUNTIME-REFERENCE.md`.
 - `SINGLET_STAR_SEQCACHE_MB` sizes STAR's cache; with `--engine gpu` it defaults to ~0.6× the cDNA FASTQ size (4–96 GB) so that
   every distinct sequence fits.
 - The STAR log (`star_Log.out`) reports `engine_gpu: ... reads, ... distinct, ...` and `ENGINE_GPU: cache filled with ...`, and
